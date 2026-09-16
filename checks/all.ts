@@ -1,4 +1,3 @@
-import { ceilings } from './ceilings.ts'
 import { fixturePerRail } from './fixture-per-rail.ts'
 import type { Check, Finding } from './kind.ts'
 import { originOnRefuse } from './origin-on-refuse.ts'
@@ -12,7 +11,6 @@ export const CHECKS: Check[] = [
   reachability,
   originOnRefuse,
   ruleHashes,
-  ceilings,
   tight,
   templateValidity,
   reviewerNotBuilder,

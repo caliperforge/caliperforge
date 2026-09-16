@@ -45,7 +45,7 @@ function gateless(steps: z.infer<typeof StepList>, path: string): Finding[] {
 }
 
 function order(steps: z.infer<typeof StepList>, path: string): Finding[] {
-  if (!path.includes('pr-path')) return []
+  if (!path.includes('pr_path')) return []
   const want = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].join(',')
   return steps.map((s) => s.step).join(',') === want ? [] : [finding(path, 'pr_path steps are not 0-9 in order')]
 }

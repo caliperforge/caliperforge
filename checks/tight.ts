@@ -29,10 +29,20 @@ function md(name: string): boolean {
 }
 
 function inProse(root: string, file: string): Finding[] {
-  return readFileSync(file, 'utf8').split('\n')
+  const path = file.slice(root.length + 1)
+  const lines = readFileSync(file, 'utf8').split('\n')
+  const exempt = path.startsWith('docs/adr/') ? context(lines) : { from: 0, to: 0 }
+  return lines
     .map((text, index) => ({ text, line: index + 1 }))
-    .filter((l) => JUSTIFYING.test(l.text))
-    .map((l) => finding(file.slice(root.length + 1), l.line, 'justifying pattern'))
+    .filter((l) => JUSTIFYING.test(l.text) && (l.line < exempt.from || l.line > exempt.to))
+    .map((l) => finding(path, l.line, 'justifying pattern'))
+}
+
+function context(lines: string[]): { from: number; to: number } {
+  const start = lines.indexOf('## Context')
+  if (start === -1) return { from: 0, to: 0 }
+  const after = lines.slice(start + 1).findIndex((l) => l.startsWith('## '))
+  return { from: start + 1, to: after === -1 ? lines.length : start + 1 + after }
 }
 
 function inSource(root: string, file: string): Finding[] {

@@ -16,4 +16,5 @@ the lockfile is the record. No line below is a version claim.
 - `vitest` — test runner; fixtures are tests.
 - `eslint` — the strictest-linter ceiling in the rail manifest, no exceptions file.
 - `typescript-eslint` — type-aware rules; `eslint` alone cannot read the types.
-- one CLI lib — the `cf` command surface. Exactly one; S2 names it here at pin time.
+- `@eslint/js` — `eslint`'s own rule presets, the base layer of the config.
+- `commander` — the `cf` command surface. The one CLI lib; zero runtime dependencies of its own.

@@ -8,7 +8,6 @@ the lockfile is the record. No line below is a version claim.
 
 - `typescript` — `tsc --noEmit` under `strict`; the one language.
 - `@types/node` — Node LTS surface typed under `strict`.
-- `@anthropic-ai/claude-agent-sdk` — the first provider behind the provider interface.
 - `better-sqlite3` — synchronous SQLite driver for plain `.sql` migrations; no ORM.
 - `@types/better-sqlite3` — `better-sqlite3` ships no types.
 - `zod` — validation at every boundary: rules load, manifests, provider responses, CLI input.

@@ -39,7 +39,7 @@ function probe(db: Db, p: { name: string; sql: string[] }): Finding[] {
 
 function run(plan: number, step: number, seat: string): string {
   return `INSERT INTO runs (plan, step, seat, provider, model, effort, input_tokens, cache_tokens, output_tokens, seconds, exit)
-VALUES (${String(plan)}, ${String(step)}, '${seat}', 'anthropic-api', 'm', 'e', 0, 0, 0, 0, 0)`
+VALUES (${String(plan)}, ${String(step)}, '${seat}', 'anthropic-api', 'm', 'low', 0, 0, 0, 0, 0)`
 }
 
 function finding(message: string): Finding {

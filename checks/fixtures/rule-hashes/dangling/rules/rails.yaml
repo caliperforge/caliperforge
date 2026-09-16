@@ -1,0 +1,4 @@
+ceilings:
+  function_lines: 40
+  nesting: 3
+rails: []

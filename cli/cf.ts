@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { Command } from 'commander'
 import { readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { dump, migrate, open } from '../store/index.ts'
 
@@ -16,8 +16,9 @@ cf.command('migrate').action(() => {
 })
 
 cf.command('dump').argument('[out]', 'file to write the dump to', 'cf.dump.sql').action((out: string) => {
-  dump(open(join(root, 'cf.db')), join(root, out))
-  process.stdout.write(`dumped to ${out}\n`)
+  const path = resolve(root, out)
+  dump(open(join(root, 'cf.db')), path)
+  process.stdout.write(`dumped to ${path}\n`)
 })
 
 cf.parse()

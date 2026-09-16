@@ -15,5 +15,6 @@ not be traced to the row that produced it, and a rule could be edited without re
 - `schema/0001_init.sql`: `rules` holds `content_hash`; `runs.seat`, `deliverables.seat` and
   `verdicts.rail_id` are FKs into it. A record cannot reference a rule that was not loaded.
 - No table in the schema holds a report; a site number is the SELECT (P8 done-when).
-- Every table's only free-text column is one `evidence` link, `CHECK (evidence GLOB 'https://*')`.
+- Every table's only free-text column is one `evidence` reference. `schema/0002_rulings.sql` widens the
+  CHECK from `https://*` alone to a `https://` URL or a repo-relative path (no scheme, no leading `/`, no `..`).
 - `checks/rule-hashes`: a `rules` row whose hash differs from the file at HEAD is red.

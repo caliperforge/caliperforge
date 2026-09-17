@@ -3,3 +3,10 @@ ceilings:
   nesting: 3
 rails:
   - completion-audit
+  - secret-scan
+  - authority
+  - tight
+  - test-weakened
+  - identifiers
+  - ci-green
+  - ready

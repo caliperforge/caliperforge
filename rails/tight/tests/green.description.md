@@ -1,0 +1,1 @@
+Loader for seat manifests.

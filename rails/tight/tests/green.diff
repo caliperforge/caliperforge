@@ -1,0 +1,9 @@
+diff --git a/src/helper.ts b/src/helper.ts
+--- /dev/null
++++ b/src/helper.ts
+@@ -0,0 +1,5 @@
++import { readFileSync } from 'node:fs'
++
++export function load(path: string): string {
++  return readFileSync(path, 'utf8')
++}

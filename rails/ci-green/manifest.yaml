@@ -1,0 +1,4 @@
+rail: ci-green
+gate: ready
+step: 6
+defect_class: ci.red

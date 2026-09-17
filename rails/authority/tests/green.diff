@@ -1,0 +1,7 @@
+diff --git a/src/hello.ts b/src/hello.ts
+--- a/src/hello.ts
++++ b/src/hello.ts
+@@ -1,1 +1,2 @@
+-export const hello = 'hi'
++export const hello = 'hello'
++export const bye = 'bye'

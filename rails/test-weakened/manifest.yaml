@@ -1,0 +1,4 @@
+rail: test-weakened
+gate: pre_review
+step: 3
+defect_class: test.weakened

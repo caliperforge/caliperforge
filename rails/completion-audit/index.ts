@@ -4,6 +4,9 @@ import { join } from 'node:path'
 import { parse } from 'yaml'
 import { z } from 'zod'
 import type { Db } from '../../store/index.ts'
+import type { Verdict } from '../../store/verdict.ts'
+
+export type { Verdict }
 
 const Manifest = z.object({
   rail: z.literal('completion-audit'),
@@ -20,22 +23,13 @@ const Envelope = z.object({
   })).min(1),
 })
 
-export interface Verdict {
-  outcome: 'pass' | 'refuse'
-  origin_kind: 'rail' | null
-  origin_ref: string | null
-  subject_digest: string
-  spans: string[]
-  message: string
-}
-
 export function audit(handback: string, expected: string[]): Verdict {
   const rows = carried(handback)
   const subject = createHash('sha256').update(handback).digest('hex')
   const spans = expected.filter((id) => (rows.get(id) ?? '').trim() === '')
-  if (spans.length === 0) return { outcome: 'pass', origin_kind: null, origin_ref: null, subject_digest: subject, spans, message: `${String(expected.length)} done-condition(s) carried with a pointer` }
+  if (spans.length === 0) return { outcome: 'pass', defect_class: null, origin_kind: null, origin_ref: null, subject_digest: subject, spans, message: `${String(expected.length)} done-condition(s) carried with a pointer` }
   return {
-    outcome: 'refuse',
+    outcome: 'refuse', defect_class: null,
     origin_kind: 'rail',
     origin_ref: 'completion-audit',
     subject_digest: subject,

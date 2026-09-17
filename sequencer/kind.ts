@@ -1,5 +1,8 @@
+import type { Verdict } from '../store/verdict.ts'
+
+/** What a step produced. `outcome` is the routing decision; `spans` is what a refusal names. */
 export interface Outcome {
-  outcome: 'pass' | 'refuse' | 'needs_ceo'
+  outcome: Verdict['outcome']
   spans: string[]
   note: string
 }
@@ -9,7 +12,8 @@ export interface Fired {
   plan: number
   step: number
   name: string
-  outcome: 'pass' | 'refuse' | 'needs_ceo'
+  outcome: Verdict['outcome']
   state: string
+  spans: string[]
   note: string
 }

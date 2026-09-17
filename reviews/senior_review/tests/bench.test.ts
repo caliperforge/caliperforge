@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { fresh, rejects } from '../../../checks/sqlite.ts'
@@ -9,6 +10,7 @@ import { judge, loadReviews, specHash } from '../../bench.ts'
 import { read } from '../../verdict.ts'
 
 const root = join(import.meta.dirname, '../../..')
+const TRANSCRIPT = join(tmpdir(), 'cf-review.transcript.jsonl')
 const repo = '/tmp/cf-review'
 
 function fixture(review: string, name: string): string {
@@ -18,7 +20,7 @@ function fixture(review: string, name: string): string {
 function replies(text: string): Provider {
   return {
     name: 'claude-agent-sdk',
-    fire: () => Promise.resolve({ text, usage: { input: 5, cache: 6, output: 7 }, seconds: 0.5, exit: 0, stop_reason: 'end_turn', denials: 0 }),
+    fire: (p) => Promise.resolve({ text, transcript_path: p.transcript, usage: { input: 5, cache: 6, output: 7 }, seconds: 0.5, exit: 0, stop_reason: 'end_turn', denials: 0 }),
   }
 }
 
@@ -35,12 +37,12 @@ function seeded(over: Record<string, unknown> = {}): Record<string, unknown> {
 
 test('the review refuses the seeded defect naming the span, and passes the clean diff', async () => {
   const { db, plan } = bench(root)
-  const refused = await judge(db, root, 'code_quality', plan, seeded(), replies(fixture('code_quality', 'seeded.reply.md')))
+  const refused = await judge(db, root, 'code_quality', plan, seeded(), replies(fixture('code_quality', 'seeded.reply.md')), TRANSCRIPT)
   expect(refused.outcome).toMatchObject({ outcome: 'refuse', defect_class: 'correctness', spans: ['src/stats.ts:2'], origin_kind: 'ruling', origin_ref: 'reviewers.verdict' })
   expect(db.prepare('SELECT gate, kind, outcome, origin_kind, origin_ref, tokens FROM verdicts WHERE id = ?').get(refused.verdict))
     .toEqual({ gate: 'review', kind: 'review', outcome: 'refuse', origin_kind: 'ruling', origin_ref: 'reviewers.verdict', tokens: 18 })
 
-  const clean = await judge(db, root, 'code_quality', plan, seeded({ diff: fixture('code_quality', 'clean.diff') }), replies(fixture('code_quality', 'clean.reply.md')))
+  const clean = await judge(db, root, 'code_quality', plan, seeded({ diff: fixture('code_quality', 'clean.diff') }), replies(fixture('code_quality', 'clean.reply.md')), TRANSCRIPT)
   expect(clean.outcome).toMatchObject({ outcome: 'pass', spans: [], defect_class: null })
 })
 
@@ -48,7 +50,7 @@ test('senior review reads the first verdict and names what the first verdict mis
   const { db, plan } = bench(root)
   const sent: string[] = []
   const capture: Provider = { name: 'claude-agent-sdk', fire: (p) => { sent.push(p.prompt); return replies(fixture('senior_review', 'escape.reply.md')).fire(p) } }
-  const second = await judge(db, root, 'senior_review', plan, seeded({ verdict: fixture('senior_review', 'first.verdict.md') }), capture)
+  const second = await judge(db, root, 'senior_review', plan, seeded({ verdict: fixture('senior_review', 'first.verdict.md') }), capture, TRANSCRIPT)
   expect(sent[0]).toContain('# First verdict')
   expect(sent[0]).toContain('src/stats.ts:2')
   expect(second.outcome.spans).toEqual(['src/stats.ts:4'])
@@ -57,22 +59,22 @@ test('senior review reads the first verdict and names what the first verdict mis
 
 test('reviewer != builder is refused before the provider fires; the trigger still guards the rows', async () => {
   const { db, plan } = bench(root)
-  const builder = `INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_tokens, output_tokens, seconds, exit)
-    VALUES (${String(plan)}, 2, 'code_quality', '${specHash(root, 'code_quality')}', 'claude-agent-sdk', 'm', 'high', 0, 0, 0, 0, 0)`
+  const builder = `INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_tokens, output_tokens, seconds, exit, transcript_path)
+    VALUES (${String(plan)}, 2, 'code_quality', '${specHash(root, 'code_quality')}', 'claude-agent-sdk', 'm', 'high', 0, 0, 0, 0, 0, 'x.transcript.jsonl')`
   db.exec(builder)
   const never: Provider = { name: 'claude-agent-sdk', fire: () => { throw new Error('the provider was fired on a barred packet') } }
-  const barred = await judge(db, root, 'code_quality', plan, seeded(), never)
+  const barred = await judge(db, root, 'code_quality', plan, seeded(), never, TRANSCRIPT)
   expect(barred.run).toBeNull()
   expect(db.prepare('SELECT outcome, origin_kind, origin_ref, tokens FROM verdicts WHERE id = ?').get(barred.verdict))
     .toEqual({ outcome: 'refuse', origin_kind: 'ruling', origin_ref: 'runs.reviewer_not_builder', tokens: 0 })
   expect(db.prepare('SELECT count(*) AS n FROM runs WHERE plan = ?').get(plan)).toEqual({ n: 1 })
 
   const fresh_ = bench(root)
-  const first = await judge(fresh_.db, root, 'code_quality', fresh_.plan, seeded(), replies(fixture('code_quality', 'seeded.reply.md')))
+  const first = await judge(fresh_.db, root, 'code_quality', fresh_.plan, seeded(), replies(fixture('code_quality', 'seeded.reply.md')), TRANSCRIPT)
   expect(first.run).not.toBeNull()
   expect(rejects(fresh_.db, `UPDATE runs SET seat = 'code_quality' WHERE id = ${String(first.run ?? 0)} AND step = 4`)).toBe(false)
-  expect(rejects(fresh_.db, `INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_tokens, output_tokens, seconds, exit)
-    VALUES (${String(fresh_.plan)}, 5, 'code_quality', '${specHash(root, 'code_quality')}', 'claude-agent-sdk', 'm', 'high', 0, 0, 0, 0, 0)`)).toBe(true)
+  expect(rejects(fresh_.db, `INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_tokens, output_tokens, seconds, exit, transcript_path)
+    VALUES (${String(fresh_.plan)}, 5, 'code_quality', '${specHash(root, 'code_quality')}', 'claude-agent-sdk', 'm', 'high', 0, 0, 0, 0, 0, 'x.transcript.jsonl')`)).toBe(true)
 })
 
 test('a reviewer reply with no readable verdict fence is a failed run, not a verdict', async () => {
@@ -80,7 +82,7 @@ test('a reviewer reply with no readable verdict fence is a failed run, not a ver
     expect(read(reply, 'subject')).toBeNull()
   }
   const { db, plan } = bench(root)
-  await expect(judge(db, root, 'code_quality', plan, seeded(), replies('looks fine to me')))
+  await expect(judge(db, root, 'code_quality', plan, seeded(), replies('looks fine to me'), TRANSCRIPT))
     .rejects.toThrow('reviewers.verdict_fence')
   expect(db.prepare('SELECT exit FROM runs WHERE plan = ?').all(plan)).toEqual([{ exit: 1 }])
   expect(db.prepare('SELECT count(*) AS n FROM verdicts WHERE plan = ?').get(plan)).toEqual({ n: 0 })
@@ -89,7 +91,7 @@ test('a reviewer reply with no readable verdict fence is a failed run, not a ver
 test('a packet the bench refuses writes a refusal verdict and fires no provider', async () => {
   const { db, plan } = bench(root)
   const never: Provider = { name: 'claude-agent-sdk', fire: () => { throw new Error('the provider was fired on a refused packet') } }
-  const out = await judge(db, root, 'code_quality', plan, seeded({ repo: '/Users/michael/Documents/Claude/Projects/crypto-contributor' }), never)
+  const out = await judge(db, root, 'code_quality', plan, seeded({ repo: '/Users/michael/Documents/Claude/Projects/crypto-contributor' }), never, TRANSCRIPT)
   expect(out.run).toBeNull()
   expect(db.prepare('SELECT outcome, origin_kind, origin_ref FROM verdicts WHERE id = ?').get(out.verdict))
     .toEqual({ outcome: 'refuse', origin_kind: 'ruling', origin_ref: 'reviewers.maintainers_view' })

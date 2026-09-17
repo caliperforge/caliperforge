@@ -1,18 +1,14 @@
 import { cpSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { fresh } from '../../checks/sqlite.ts'
 import type { Provider } from '../../providers/kind.ts'
 import type { Db } from '../../store/index.ts'
 import { PlanRow, type PipeRow } from '../../store/plans.ts'
+import { targetDigest } from '../steps.ts'
 import { put } from '../workspace.ts'
 
 const repo = join(import.meta.dirname, '../..')
-
-const BENCH = `export function judge() {
-  return Promise.resolve({ outcome: { outcome: 'pass', spans: [] } })
-}
-`
 
 export interface World {
   db: Db
@@ -22,19 +18,33 @@ export interface World {
   target: number
 }
 
-export function stub(text: string, exit = 0): Provider {
+export const PASS = '---\noutcome: pass\n---\n'
+export const REFUSE = '---\noutcome: refuse\nclass: correctness\nspans:\n  - src/hello.ts:1\n---\n'
+
+/**
+ * One provider standing in for both roles. A reviewer packet is the one with
+ * no write tool — `runner/packet.ts:Review` refuses a reviewer that holds one —
+ * so the stub answers those with a verdict fence and the builder with `text`.
+ */
+export function stub(text: string, exit = 0, review = PASS): Provider {
   return {
     name: 'claude-agent-sdk',
-    fire: () => Promise.resolve({
-      text, usage: { input: 10, cache: 20, output: 30 }, seconds: 0.5, exit,
+    fire: (packet) => {
+      mkdirSync(dirname(packet.transcript), { recursive: true })
+      writeFileSync(packet.transcript, '{"type":"result"}\n')
+      return Promise.resolve({
+      text: packet.tools.includes('Write') ? text : review,
+      transcript_path: packet.transcript,
+      usage: { input: 10, cache: 20, output: 30 }, seconds: 0.5, exit,
       stop_reason: exit === 0 ? 'end_turn' : 'hook_stopped', denials: exit,
-    }),
+      })
+    },
   }
 }
 
 export function world(pulse: 'warm' | 'cold' = 'warm', day = new Date().toISOString().slice(0, 10)): World {
   const root = mkdtempSync(join(tmpdir(), 'cf-seq-'))
-  for (const dir of ['rules', 'seats']) cpSync(join(repo, dir), join(root, dir), { recursive: true })
+  for (const dir of ['rules', 'seats', 'reviews', 'rails']) cpSync(join(repo, dir), join(root, dir), { recursive: true })
   const db = fresh(join(repo, 'schema'))
   const merge = pulse === 'warm' ? day : '2000-01-01'
   db.prepare(`INSERT INTO accounts (id, repo, measured_at, maintainers, doors, last_outsider_merge,
@@ -50,17 +60,11 @@ export function world(pulse: 'warm' | 'cold' = 'warm', day = new Date().toISOStr
   return { db, root, pipe: pipeRow(db), plan: 1, target: 1 }
 }
 
-export function bench(root: string): void {
-  for (const name of ['code_quality', 'senior_review']) {
-    mkdirSync(join(root, 'reviews', name), { recursive: true })
-    writeFileSync(join(root, 'reviews', name, 'manifest.yaml'), `review: ${name}\n`)
-  }
-  writeFileSync(join(root, 'reviews/bench.ts'), BENCH)
-}
-
 export function approve(db: Db, target: number): void {
+  const t = db.prepare('SELECT repo, issue_no, evidence_measured_at FROM targets WHERE id = ?').get(target) as
+    { repo: string; issue_no: number; evidence_measured_at: string }
   db.prepare(`INSERT INTO approvals (subject_kind, subject_id, subject_digest, who, approved_at)
-    VALUES ('target', ?, ?, 'ceo', '2026-09-17T00:00:00.000Z')`).run(target, 'a'.repeat(64))
+    VALUES ('target', ?, ?, 'ceo', '2026-09-17T00:00:00.000Z')`).run(target, targetDigest(t))
 }
 
 export function plan(db: Db, id: number): PlanRow {

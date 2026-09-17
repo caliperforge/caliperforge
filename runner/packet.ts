@@ -51,6 +51,7 @@ export function benchPacket(
   root: string,
   name: string,
   input: unknown,
+  transcript: string,
 ): { packet: Packet } | { refusal: Refusal } {
   const manifest = reviewManifest(root, name)
   const bench = Bench.safeParse(input)
@@ -58,14 +59,15 @@ export function benchPacket(
   if ((bench.data.verdict !== undefined) !== manifest.reads_verdict) return { refusal: shape('verdict') }
   const outside = admits(bench.data.repo)
   if (outside !== null) return { refusal: outside }
-  return { packet: assembled(root, name, manifest, bench.data) }
+  return { packet: assembled(root, name, manifest, bench.data, transcript) }
 }
 
-function assembled(root: string, name: string, manifest: Review, bench: Bench): Packet {
+function assembled(root: string, name: string, manifest: Review, bench: Bench, transcript: string): Packet {
   const prior = bench.verdict === undefined ? '' : `\n\n# First verdict\n\n${bench.verdict}`
   return {
     prompt: `${tight(root)}\n\n${spec(root, name)}\n\n# Issue\n\n${bench.issue}\n\n# Diff\n\n${bench.diff}${prior}`,
     cwd: bench.repo,
+    transcript,
     model: manifest.model,
     effort: manifest.effort,
     tools: manifest.tools,

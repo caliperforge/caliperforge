@@ -31,9 +31,9 @@ export function ciGreen(head: Head, text: Text, gh: Gh = shell): Verdict {
   const ours = head.fork.split('/')[0] ?? head.fork
   const spans = [...run(head, gh), ...upstream(text, ours)]
   const subject_digest = createHash('sha256').update(`${head.fork}\n${head.branch}\n${head.sha}`).digest('hex')
-  if (spans.length === 0) return { outcome: 'pass', origin_kind: null, origin_ref: null, subject_digest, spans, message: `${head.fork}@${head.sha} is green and names no upstream number` }
+  if (spans.length === 0) return { outcome: 'pass', defect_class: null, origin_kind: null, origin_ref: null, subject_digest, spans, message: `${head.fork}@${head.sha} is green and names no upstream number` }
   return {
-    outcome: 'refuse',
+    outcome: 'refuse', defect_class: null,
     origin_kind: 'rail',
     origin_ref: 'ci-green',
     subject_digest,

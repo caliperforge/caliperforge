@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-import { createHash } from 'node:crypto'
 import { Command } from 'commander'
 import { readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
@@ -7,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { claudeAgentSdk } from '../providers/claude-agent-sdk/index.ts'
 import { fire } from '../runner/index.ts'
 import { tick } from '../sequencer/index.ts'
-import { blocked } from '../sequencer/steps.ts'
+import { blocked, targetDigest } from '../sequencer/steps.ts'
 import { dump, migrate, open as openDb, type Db } from '../store/index.ts'
 import { PlanRow } from '../store/plans.ts'
 import { awaiting, day, halted, open as openPlans, runsOf, section, verdictsOf } from './brief.ts'
@@ -95,9 +94,7 @@ approve.command('target').argument('<id>').action((id: string) => {
     { repo: string; issue_no: number; evidence_measured_at: string } | undefined
   if (t === undefined) throw new Error(`no target ${id}`)
   const at = new Date().toISOString()
-  const digest = createHash('sha256').update(`${t.repo}#${String(t.issue_no)}@${t.evidence_measured_at}`).digest('hex')
-  handle.prepare(`INSERT INTO rulings (subject, value, origin_kind, origin_ref, who, date, issue_no, supersedes)
-    VALUES (?, 'eligible', 'ruling', 'step1.ruling', 'ceo', ?, ?, NULL)`).run(`target.${t.repo}#${String(t.issue_no)}`, at.slice(0, 10), t.issue_no)
+  const digest = targetDigest(t)
   handle.prepare(`INSERT OR IGNORE INTO approvals (subject_kind, subject_id, subject_digest, who, approved_at)
     VALUES ('target', ?, ?, 'ceo', ?)`).run(Number(id), digest, at)
   out(`target ${id} approved\t${digest.slice(0, 12)}\n`)
@@ -119,7 +116,10 @@ cf.command('brief').action(() => {
 cf.command('tick').action(async () => {
   const fired = await tick(db(), root, claudeAgentSdk)
   if (fired.length === 0) out('nothing to fire\n')
-  for (const f of fired) out(`${f.pipe}\tplan ${String(f.plan)}\tstep ${String(f.step)} ${f.name}\t${f.outcome}\t${f.state}\t${f.note}\n`)
+  for (const f of fired) {
+    out(`${f.pipe}\tplan ${String(f.plan)}\tstep ${String(f.step)} ${f.name}\t${f.outcome}\t${f.state}\t${f.note}\n`)
+    for (const span of f.spans) out(`  span\t${span}\n`)
+  }
 })
 
 try {

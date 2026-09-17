@@ -12,10 +12,10 @@ export function weakened(diff: string, suite: 'green' | 'red'): Verdict {
   const spans = parse(diff).filter((f) => TEST_FILE.test(f.path)).flatMap(judge)
   const subject_digest = createHash('sha256').update(`${diff}\n${suite}`).digest('hex')
   if (spans.length === 0 || suite === 'red') {
-    return { outcome: 'pass', origin_kind: null, origin_ref: null, subject_digest, spans, message: message(spans.length, suite) }
+    return { outcome: 'pass', defect_class: null, origin_kind: null, origin_ref: null, subject_digest, spans, message: message(spans.length, suite) }
   }
   return {
-    outcome: 'refuse',
+    outcome: 'refuse', defect_class: null,
     origin_kind: 'rail',
     origin_ref: 'test-weakened',
     subject_digest,

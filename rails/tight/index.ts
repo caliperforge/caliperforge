@@ -19,9 +19,9 @@ export function tight(root: string, subject: Subject): Verdict {
     ...named('description', inProse(subject.description, files.map((f) => f.path))),
   ]
   const subject_digest = createHash('sha256').update(`${subject.diff}\n${subject.description}`).digest('hex')
-  if (spans.length === 0) return { outcome: 'pass', origin_kind: null, origin_ref: null, subject_digest, spans, message: `${String(files.length)} file(s) and the description are Tight` }
+  if (spans.length === 0) return { outcome: 'pass', defect_class: null, origin_kind: null, origin_ref: null, subject_digest, spans, message: `${String(files.length)} file(s) and the description are Tight` }
   return {
-    outcome: 'refuse',
+    outcome: 'refuse', defect_class: null,
     origin_kind: 'rail',
     origin_ref: 'tight',
     subject_digest,

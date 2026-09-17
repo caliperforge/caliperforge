@@ -12,6 +12,7 @@ import type { Db } from '../../../store/index.ts'
 import { judge, loadReviews } from '../../bench.ts'
 
 const root = join(import.meta.dirname, '../../..')
+const TRANSCRIPT = join(tmpdir(), 'cf-review.transcript.jsonl')
 const evidence = 'https://github.com/caliperforge/caliperforge/issues/8'
 
 const HANDBACK = `---
@@ -38,7 +39,7 @@ function body(diff: string): string {
 function replies(text: string): Provider {
   return {
     name: 'claude-agent-sdk',
-    fire: () => Promise.resolve({ text, usage: { input: 9, cache: 0, output: 4 }, seconds: 0.2, exit: 0, stop_reason: 'end_turn', denials: 0 }),
+    fire: (p) => Promise.resolve({ text, transcript_path: p.transcript, usage: { input: 9, cache: 0, output: 4 }, seconds: 0.2, exit: 0, stop_reason: 'end_turn', denials: 0 }),
   }
 }
 
@@ -74,7 +75,7 @@ test('seeded defect: builder, rail, review refuses the span, fix, re-gate, dispo
   const plan = await built(db, repo)
   const packet = { repo, issue: fixture('issue.md'), diff: fixture('seeded.diff') }
 
-  const refused = await judge(db, root, 'code_quality', plan, packet, replies(fixture('seeded.reply.md')))
+  const refused = await judge(db, root, 'code_quality', plan, packet, replies(fixture('seeded.reply.md')), TRANSCRIPT)
   expect(refused.outcome).toMatchObject({ outcome: 'refuse', defect_class: 'correctness', spans: ['src/stats.ts:2'], origin_kind: 'ruling', origin_ref: 'reviewers.verdict' })
 
   const before = span(repo, 2)
@@ -82,7 +83,7 @@ test('seeded defect: builder, rail, review refuses the span, fix, re-gate, dispo
   const after = span(repo, 2)
   expect(after).not.toBe(before)
 
-  const regate = await judge(db, root, 'code_quality', plan, { ...packet, diff: fixture('clean.diff') }, replies(fixture('clean.reply.md')))
+  const regate = await judge(db, root, 'code_quality', plan, { ...packet, diff: fixture('clean.diff') }, replies(fixture('clean.reply.md')), TRANSCRIPT)
   expect(regate.outcome.outcome).toBe('pass')
 
   const id = settle(db, { verdict_id: refused.verdict, defect_class: 'correctness', evidence }, before, after, regate.outcome.outcome)
@@ -99,7 +100,7 @@ test('clean run: no refusal anywhere and nothing to settle', async () => {
   const { db } = bench()
   const repo = checkout(fixture('clean.diff'))
   const plan = await built(db, repo)
-  const clean = await judge(db, root, 'code_quality', plan, { repo, issue: fixture('issue.md'), diff: fixture('clean.diff') }, replies(fixture('clean.reply.md')))
+  const clean = await judge(db, root, 'code_quality', plan, { repo, issue: fixture('issue.md'), diff: fixture('clean.diff') }, replies(fixture('clean.reply.md')), TRANSCRIPT)
   expect(clean.outcome.outcome).toBe('pass')
   expect(db.prepare("SELECT count(*) AS n FROM verdicts WHERE plan = ? AND outcome <> 'pass'").get(plan)).toEqual({ n: 0 })
   expect(db.prepare('SELECT count(*) AS n FROM dispositions').get()).toEqual({ n: 0 })

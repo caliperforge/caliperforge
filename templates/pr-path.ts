@@ -26,8 +26,6 @@ export const steps: Step[] = [
   { step: 7, name: 'batch', seat: OWNER, fires: 'ceo', runs: 'approval', gate: false, writes_verdict: false, verdict_gate: null },
 ]
 
-export const READY = 6
-
 export function at(step: number): Step {
   const found = steps.find((s) => s.step === step)
   if (found === undefined) throw new Error(`pr-path has no step ${String(step)}`)

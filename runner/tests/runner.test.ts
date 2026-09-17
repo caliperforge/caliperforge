@@ -11,11 +11,12 @@ import { load, rules, seat } from '../rules.ts'
 
 const root = join(import.meta.dirname, '../..')
 const cwd = '/tmp/cf-seat'
+const TRANSCRIPT = '/tmp/cf-seat/run.transcript.jsonl'
 
 const stub: Provider = {
   name: 'claude-agent-sdk',
   fire: (p) => Promise.resolve({
-    text: p.prompt, usage: { input: 11, cache: 22, output: 33 }, seconds: 1.5, exit: 0, stop_reason: 'end_turn', denials: 0,
+    text: p.prompt, transcript_path: p.transcript, usage: { input: 11, cache: 22, output: 33 }, seconds: 1.5, exit: 0, stop_reason: 'end_turn', denials: 0,
   }),
 }
 
@@ -33,7 +34,7 @@ test('a write inside write_paths is allowed and one outside is refused with an o
 })
 
 test('the provider gate denies a refused write and lets everything else through', () => {
-  const p = packet(seat(root, 'typescript_specialist').manifest, 'prompt', 'tight', 'issue', cwd)
+  const p = packet(seat(root, 'typescript_specialist').manifest, 'prompt', 'tight', 'issue', cwd, TRANSCRIPT)
   const pre = (tool: string, file: string): HookInput =>
     ({ hook_event_name: 'PreToolUse', tool_name: tool, tool_input: { file_path: file }, tool_use_id: 't', session_id: 's', transcript_path: '', cwd })
   expect(gate(p, pre('Write', 'src/hello.ts'))).toEqual({ continue: true })
@@ -45,7 +46,7 @@ test('the provider gate denies a refused write and lets everything else through'
 })
 
 test('the packet carries the Tight spec, the seat prompt and the issue', () => {
-  const p = packet(seat(root, 'typescript_specialist').manifest, 'SEAT', 'TIGHT', 'ISSUE', cwd)
+  const p = packet(seat(root, 'typescript_specialist').manifest, 'SEAT', 'TIGHT', 'ISSUE', cwd, TRANSCRIPT)
   expect(p.prompt.indexOf('TIGHT')).toBeLessThan(p.prompt.indexOf('SEAT'))
   expect(p.prompt.indexOf('SEAT')).toBeLessThan(p.prompt.indexOf('ISSUE'))
   expect(p.model).toBe('claude-opus-5')
@@ -88,8 +89,8 @@ test('the runs rule_hash check refuses 64 characters that are not all hex', () =
   load(db, root)
   const plan = String(planRow(db))
   const insert = (hash: string): string =>
-    `INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_tokens, output_tokens, seconds, exit)
-     VALUES (${plan}, 2, 'typescript_specialist', '${hash}', 'claude-agent-sdk', 'm', 'high', 0, 0, 0, 0, 0)`
+    `INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_tokens, output_tokens, seconds, exit, transcript_path)
+     VALUES (${plan}, 2, 'typescript_specialist', '${hash}', 'claude-agent-sdk', 'm', 'high', 0, 0, 0, 0, 0, 'x.transcript.jsonl')`
   expect(rejects(db, insert(`0${'z'.repeat(63)}`))).toBe(true)
   expect(rejects(db, insert('a'.repeat(64)))).toBe(false)
 })

@@ -7,6 +7,7 @@ export interface Refusal {
 export interface Packet {
   prompt: string
   cwd: string
+  transcript: string
   model: string
   effort: 'low' | 'medium' | 'high' | 'xhigh' | 'max'
   tools: string[]
@@ -15,6 +16,7 @@ export interface Packet {
 
 export interface Fired {
   text: string
+  transcript_path: string
   usage: { input: number; cache: number; output: number }
   seconds: number
   exit: number

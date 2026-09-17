@@ -1,3 +1,5 @@
+import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs'
+import { dirname } from 'node:path'
 import { query, type HookInput, type SDKResultMessage, type SyncHookJSONOutput } from '@anthropic-ai/claude-agent-sdk'
 import type { Fired, Packet, Provider } from '../kind.ts'
 
@@ -8,6 +10,7 @@ export const claudeAgentSdk: Provider = { name: 'claude-agent-sdk', fire }
 async function fire(packet: Packet): Promise<Fired> {
   const started = Date.now()
   const refused: string[] = []
+  const transcript = openTranscript(packet)
   const run = query({
     prompt: packet.prompt,
     options: {
@@ -25,9 +28,17 @@ async function fire(packet: Packet): Promise<Fired> {
     },
   })
   for await (const message of run) {
-    if (message.type === 'result') return fired(message, started, refused)
+    transcript(message)
+    if (message.type === 'result') return { ...fired(message, started, refused), transcript_path: packet.transcript }
   }
   throw new Error('claude-agent-sdk closed without a result message')
+}
+
+/** The stream as it arrived, one JSON message per line, before any reading of it. */
+function openTranscript(packet: Packet): (message: unknown) => void {
+  mkdirSync(dirname(packet.transcript), { recursive: true })
+  writeFileSync(packet.transcript, '')
+  return (message) => { appendFileSync(packet.transcript, `${JSON.stringify(message)}\n`) }
 }
 
 export function gate(packet: Packet, input: HookInput): SyncHookJSONOutput {
@@ -45,7 +56,7 @@ export function gate(packet: Packet, input: HookInput): SyncHookJSONOutput {
   }
 }
 
-export function fired(message: SDKResultMessage, started: number, refused: string[]): Fired {
+export function fired(message: SDKResultMessage, started: number, refused: string[]): Omit<Fired, 'transcript_path'> {
   const usage = Object.values(message.modelUsage).reduce(
     (n, u) => ({
       input: n.input + u.inputTokens,

@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { day, halted, open as openPlans, runsOf, verdictsOf } from '../../cli/brief.ts'
 import { account, parse } from '../../cli/queue.ts'
@@ -6,7 +8,8 @@ import { steps } from '../../templates/pr-path.ts'
 import { tick } from '../index.ts'
 import { blocked } from '../steps.ts'
 import { doneIds } from '../workspace.ts'
-import { approve, bench, plan, stub, world } from './world.ts'
+import { benchPacket } from '../../runner/packet.ts'
+import { approve, plan, REFUSE, stub, world } from './world.ts'
 
 const CARRIED = 'built\n\n---\ndone:\n  - id: D1\n    status: done\n    pointer: src/hello.ts:1\n---\n'
 const UNPOINTED = 'built\n\n---\ndone:\n  - id: D1\n    status: done\n    pointer:\n---\n'
@@ -75,31 +78,70 @@ test('a rail refusal names spans, sends the plan back one step, then to blocked_
   expect(verdict).toEqual({ outcome: 'refuse', origin_ref: 'completion-audit' })
 })
 
-test('an absent review bench stops the plan at needs_ceo naming the span it cannot reach', async () => {
+test('the sequencer hands the bench a maintainer view, and a wrong shape refuses before any model', async () => {
   const w = world()
   approve(w.db, w.target)
   for (const step of [0, 1, 2, 3]) expect((await tick(w.db, w.root, stub(CARRIED)))[0]?.step).toBe(step)
-  const fired = (await tick(w.db, w.root, stub(CARRIED)))[0]
-  expect(fired).toMatchObject({ step: 4, outcome: 'needs_ceo', state: 'blocked_on_ceo' })
-  expect(fired?.note).toMatch(/reviews\/code_quality is not in the tree/)
+  expect((await tick(w.db, w.root, stub(CARRIED)))[0]).toMatchObject({ step: 4, outcome: 'pass', state: 'running' })
+  const row = w.db.prepare("SELECT gate, kind, outcome FROM verdicts WHERE step = 4").get()
+  expect(row).toEqual({ gate: 'review', kind: 'review', outcome: 'pass' })
+  const bare = benchPacket(w.root, 'code_quality', 'a handback is not a maintainer view', '/tmp/x.transcript.jsonl')
+  expect(bare).toHaveProperty('refusal')
+})
+
+test('a reviewer refusal carries its spans to the builder instead of dropping them', async () => {
+  const w = world()
+  approve(w.db, w.target)
+  for (let at = 0; at < 4; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  const fired = (await tick(w.db, w.root, stub(CARRIED, 0, REFUSE)))[0]
+  expect(fired).toMatchObject({ step: 4, outcome: 'refuse', state: 'retried' })
+  expect(fired?.spans).toEqual(['src/hello.ts:1'])
+  expect(readFileSync(join(w.root, '.cf/work/1/refusal.md'), 'utf8')).toMatch(/src\/hello\.ts:1/)
 })
 
 test('six ticks walk a plan from measure to Ready on one seat run and no tokens spent deciding', async () => {
   const w = world()
   approve(w.db, w.target)
-  bench(w.root)
   const walked: string[] = []
-  for (const step of [0, 1, 2, 3, 4, 5]) {
+  for (const at of [0, 1, 2, 3, 4, 5]) {
     const fired = (await tick(w.db, w.root, stub(CARRIED)))[0]
-    expect(fired).toMatchObject({ step, outcome: 'pass' })
+    expect(fired).toMatchObject({ step: at, outcome: 'pass' })
     walked.push(fired?.name ?? '')
   }
   expect(walked).toEqual(['measure', 'ruling', 'build', 'rails', 'review', 'senior'])
   expect(plan(w.db, 1).step).toBe(6)
   expect(blocked(w.db, plan(w.db, 1), '2026-09-17')).toBe('awaiting the ready proof')
   expect(await tick(w.db, w.root, stub(CARRIED))).toEqual([])
-  expect(w.db.prepare('SELECT count(*) AS n, sum(input_tokens + cache_tokens + output_tokens) AS t FROM runs').get())
-    .toEqual({ n: 1, t: 60 })
+  expect(w.db.prepare("SELECT count(*) AS n FROM runs WHERE seat = 'typescript_specialist'").get()).toEqual({ n: 1 })
+})
+
+test('step 6 fires the ready rail and records its verdict rather than passing by construction', async () => {
+  const w = world()
+  approve(w.db, w.target)
+  for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  expect(plan(w.db, 1).step).toBe(6)
+  expect(blocked(w.db, plan(w.db, 1), '2026-09-17')).toBe('awaiting the ready proof')
+  w.db.prepare(`INSERT INTO deliverables (plan_id, step, seat, diff_digest, state, tests_pass,
+    byte_identical_elsewhere, fork_ci_green, bot_clean, target_warm, evidence)
+    VALUES (1, 2, 'typescript_specialist', ?, 'gated', 1, 1, 1, 1, 1, 'https://github.com/acme/widget/pull/1')`)
+    .run('b'.repeat(64))
+  const fired = (await tick(w.db, w.root, stub(CARRIED)))[0]
+  expect(fired).toMatchObject({ step: 6, name: 'ready', outcome: 'pass', state: 'running' })
+  expect(w.db.prepare("SELECT gate, kind, outcome FROM verdicts WHERE rail_id = 'ready'").get())
+    .toEqual({ gate: 'ready', kind: 'rail', outcome: 'pass' })
+})
+
+test('every run row points at a transcript the provider wrote', async () => {
+  const w = world()
+  approve(w.db, w.target)
+  for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  const rows = w.db.prepare('SELECT seat, step, transcript_path FROM runs ORDER BY id').all() as
+    { seat: string; step: number; transcript_path: string }[]
+  expect(rows.map((r) => r.step)).toEqual([2, 4, 5])
+  for (const r of rows) {
+    expect(r.transcript_path).toMatch(/\.transcript\.jsonl$/)
+    expect(existsSync(r.transcript_path)).toBe(true)
+  }
 })
 
 test('pr-path is measure to batch, 0 to 7, and every gate step writes a verdict', () => {

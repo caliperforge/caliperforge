@@ -5,6 +5,7 @@ import { at, type Step } from '../templates/pr-path.ts'
 import type { Fired, Outcome } from './kind.ts'
 import { fireReview, fireSeat } from './seat.ts'
 import { blocked, kernel } from './steps.ts'
+import { put } from './workspace.ts'
 
 export async function tick(db: Db, root: string, provider: Provider, now: Date = new Date()): Promise<Fired[]> {
   const today = now.toISOString().slice(0, 10)
@@ -29,7 +30,8 @@ async function one(db: Db, root: string, pipe: PipeRow, plan: PlanRow, provider:
     step: step.step,
     name: step.name,
     outcome: outcome.outcome,
-    state: settle(db, plan, step, outcome),
+    state: settle(db, root, plan, step, outcome),
+    spans: outcome.spans,
     note: outcome.note,
   }
 }
@@ -40,12 +42,22 @@ function fire(db: Db, root: string, plan: PlanRow, step: Step, provider: Provide
   return Promise.resolve(kernel(db, root, plan))
 }
 
-function settle(db: Db, plan: PlanRow, step: Step, outcome: Outcome): string {
+function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcome): string {
   if (outcome.outcome === 'needs_ceo') {
     needsCeo(db, plan)
     return 'blocked_on_ceo'
   }
-  if (outcome.outcome === 'refuse') return back(db, plan)
-  advance(db, plan, step.step + 1)
-  return 'running'
+  if (outcome.outcome !== 'refuse') {
+    advance(db, plan, step.step + 1)
+    return 'running'
+  }
+  // The map's retry is "refusal names spans -> back to the builder". Spans that
+  // stop here make the rebuild blind, so they go to disk before the plan moves.
+  put(root, plan.id, 'refusal.md', refusalText(step, outcome))
+  return back(db, plan)
+}
+
+function refusalText(step: Step, outcome: Outcome): string {
+  const spans = outcome.spans.length === 0 ? '  (none named)' : outcome.spans.map((s) => `  - ${s}`).join('\n')
+  return `step ${String(step.step)} ${step.name} refused by ${step.runs}\n\n${outcome.note}\n\nspans:\n${spans}\n`
 }

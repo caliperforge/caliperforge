@@ -1,0 +1,9 @@
+diff --git a/src/client.ts b/src/client.ts
+--- a/src/client.ts
++++ b/src/client.ts
+@@ -3,6 +3,8 @@ import { request } from './http.ts'
+ 
+ export function client(env: Env): Client {
+-  return new Client({ region: 'us-east-1' })
++  return new Client({ region: env.region, accessKeyId: env.accessKeyId })
+ }

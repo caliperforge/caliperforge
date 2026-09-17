@@ -1,0 +1,16 @@
+diff --git a/.env b/.env
+new file mode 100644
+--- /dev/null
++++ b/.env
+@@ -0,0 +1,2 @@
++DATABASE_URL=postgres://localhost/cf
++SESSION_SECRET=hunter2
+diff --git a/src/client.ts b/src/client.ts
+--- a/src/client.ts
++++ b/src/client.ts
+@@ -3,6 +3,8 @@ import { request } from './http.ts'
+ 
+ export function client(): Client {
+-  return new Client({ region: 'us-east-1' })
++  return new Client({ region: 'us-east-1', accessKeyId: 'AKIAIOSFODNN7EXAMPLE' })
+ }

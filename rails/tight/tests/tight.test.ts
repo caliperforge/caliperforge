@@ -1,0 +1,68 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { expect, test } from 'vitest'
+import { fresh } from '../../../checks/sqlite.ts'
+import { planRow } from '../../../runner/index.ts'
+import { load } from '../../../runner/rules.ts'
+import { record } from '../../record.ts'
+import { tight, type Subject } from '../index.ts'
+
+const root = join(import.meta.dirname, '../../..')
+
+function fixture(name: string): string {
+  return readFileSync(join(import.meta.dirname, name), 'utf8')
+}
+
+function subject(colour: string): Subject {
+  return {
+    diff: fixture(`${colour}.diff`),
+    sources: { 'src/helper.ts': fixture(`${colour}.source.txt`) },
+    description: fixture(`${colour}.description.md`),
+  }
+}
+
+test('refuses the nine Tight breaches over a diff, naming every span', () => {
+  const verdict = tight(root, subject('red'))
+  expect(verdict.outcome).toBe('refuse')
+  expect(verdict.origin_kind).toBe('rail')
+  expect(verdict.origin_ref).toBe('tight')
+  expect(verdict.spans).toEqual([
+    'src/helper.ts:2 tight.unused_import',
+    'src/helper.ts:4 tight.justifying',
+    'src/helper.ts:9 tight.restating',
+    'src/helper.ts:10 tight.dead_helper',
+    'src/helper.ts:14 tight.nesting',
+    'description:1 tight.preamble',
+    'description:3 tight.hedge',
+    'description:3 tight.summary',
+  ])
+})
+
+test('passes a diff and description that are Tight', () => {
+  const verdict = tight(root, subject('green'))
+  expect(verdict.outcome).toBe('pass')
+  expect(verdict.spans).toEqual([])
+})
+
+test('refuses a function longer than the manifest ceiling', () => {
+  const body = [...Array(45).keys()].map((i) => `  const v${String(i)} = ${String(i)}`).join('\n')
+  const source = `export function long(): number {\n${body}\n  return v0\n}\n`
+  const diff = `--- /dev/null\n+++ b/src/long.ts\n@@ -0,0 +1,48 @@\n${source.split('\n').map((l) => `+${l}`).join('\n')}`
+  const verdict = tight(root, { diff, sources: { 'src/long.ts': source }, description: 'Long.' })
+  expect(verdict.spans).toEqual(['src/long.ts:1 tight.length'])
+})
+
+test('ignores a breach on a line the diff did not add', () => {
+  const source = '// because it is old\nexport const x = 1\n'
+  const diff = '--- a/src/old.ts\n+++ b/src/old.ts\n@@ -1,2 +1,2 @@\n // because it is old\n-export const x = 0\n+export const x = 1\n'
+  expect(tight(root, { diff, sources: { 'src/old.ts': source }, description: 'x.' }).outcome).toBe('pass')
+})
+
+test('writes a verdicts row the store accepts', () => {
+  const db = fresh(join(root, 'schema'))
+  load(db, root)
+  const plan = planRow(db)
+  const id = record(db, join(import.meta.dirname, '..'), plan, tight(root, subject('red')), 0.01)
+  const row = db.prepare('SELECT gate, kind, outcome, rail_id, origin_kind, origin_ref FROM verdicts WHERE id = ?').get(id)
+  expect(row).toEqual({ gate: 'pre_review', kind: 'rail', outcome: 'refuse', rail_id: 'tight', origin_kind: 'rail', origin_ref: 'tight' })
+})

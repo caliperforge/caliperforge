@@ -3,6 +3,9 @@ import { join } from 'node:path'
 import { parse } from 'yaml'
 import { z } from 'zod'
 import type { Db } from '../store/index.ts'
+import type { Verdict } from '../store/verdict.ts'
+
+export type { Verdict }
 
 const Manifest = z.object({
   rail: z.string().min(1),
@@ -10,15 +13,6 @@ const Manifest = z.object({
   step: z.int().min(0).max(9),
   defect_class: z.string().min(1),
 })
-
-export interface Verdict {
-  outcome: 'pass' | 'refuse'
-  origin_kind: 'rail' | null
-  origin_ref: string | null
-  subject_digest: string
-  spans: string[]
-  message: string
-}
 
 export function record(db: Db, dir: string, plan: number, verdict: Verdict, seconds: number): number {
   const manifest = Manifest.parse(parse(readFileSync(join(dir, 'manifest.yaml'), 'utf8')))

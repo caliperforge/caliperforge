@@ -25,6 +25,7 @@ function ci(outcome: 'pass' | 'refuse'): Verdict {
   const refused = outcome === 'refuse'
   return {
     outcome,
+    defect_class: null,
     origin_kind: refused ? 'rail' : null,
     origin_ref: refused ? 'ci-green' : null,
     subject_digest: '0'.repeat(64),

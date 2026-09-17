@@ -11,7 +11,8 @@ CREATE TABLE runs (
   cache_tokens  INTEGER NOT NULL,
   output_tokens INTEGER NOT NULL,
   seconds       REAL NOT NULL,
-  exit          INTEGER NOT NULL
+  exit          INTEGER NOT NULL,
+  transcript_path TEXT NOT NULL
 );
 CREATE TRIGGER runs_reviewer_not_builder BEFORE INSERT ON runs
 WHEN NEW.step IN (4, 5) AND EXISTS (

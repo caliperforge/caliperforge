@@ -10,13 +10,18 @@ const WRITERS = new Set(['Write', 'Edit', 'NotebookEdit', 'Bash', 'MultiEdit'])
 
 const OUTSIDE = /(^|\/)(crypto-contributor|agents|ops|knowledge|plans|escalations)(\/|$)|(^|\/)T-[A-Z][A-Z0-9-]*\.md$/
 
+/** `Bash(gradle:*)` is still Bash: a tool's permission pattern does not change which tool it is. */
+function bare(tool: string): string {
+  return tool.split('(')[0] ?? tool
+}
+
 export const Review = z.object({
   review: z.string(),
   gate: z.enum(['review', 'senior_review']),
   step: z.int().min(4).max(5),
   model: z.string(),
   effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']),
-  tools: z.array(z.string()).min(1).refine((t) => !t.some((name) => WRITERS.has(name)), {
+  tools: z.array(z.string()).min(1).refine((t) => !t.some((name) => WRITERS.has(bare(name))), {
     message: `a reviewer may not hold ${[...WRITERS].join(', ')}`,
   }),
   write_paths: z.tuple([]),
@@ -51,6 +56,7 @@ export function benchPacket(
   root: string,
   name: string,
   input: unknown,
+  transcript: string,
 ): { packet: Packet } | { refusal: Refusal } {
   const manifest = reviewManifest(root, name)
   const bench = Bench.safeParse(input)
@@ -58,14 +64,15 @@ export function benchPacket(
   if ((bench.data.verdict !== undefined) !== manifest.reads_verdict) return { refusal: shape('verdict') }
   const outside = admits(bench.data.repo)
   if (outside !== null) return { refusal: outside }
-  return { packet: assembled(root, name, manifest, bench.data) }
+  return { packet: assembled(root, name, manifest, bench.data, transcript) }
 }
 
-function assembled(root: string, name: string, manifest: Review, bench: Bench): Packet {
+function assembled(root: string, name: string, manifest: Review, bench: Bench, transcript: string): Packet {
   const prior = bench.verdict === undefined ? '' : `\n\n# First verdict\n\n${bench.verdict}`
   return {
     prompt: `${tight(root)}\n\n${spec(root, name)}\n\n# Issue\n\n${bench.issue}\n\n# Diff\n\n${bench.diff}${prior}`,
     cwd: bench.repo,
+    transcript,
     model: manifest.model,
     effort: manifest.effort,
     tools: manifest.tools,

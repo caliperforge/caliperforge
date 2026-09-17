@@ -1,5 +1,5 @@
 import { realpathSync } from 'node:fs'
-import { relative, resolve } from 'node:path'
+import { join, relative, resolve } from 'node:path'
 import type { Packet, Provider, Refusal } from '../providers/kind.ts'
 import type { Db } from '../store/index.ts'
 import { load, seat, tight, type Seat } from './rules.ts'
@@ -19,10 +19,11 @@ function real(path: string): string {
   }
 }
 
-export function packet(manifest: Seat, prompt: string, spec: string, issue: string, cwd: string): Packet {
+export function packet(manifest: Seat, prompt: string, spec: string, issue: string, cwd: string, transcript: string): Packet {
   return {
     prompt: `${spec}\n\n${prompt}\n\n# Issue\n\n${issue}`,
     cwd,
+    transcript,
     model: manifest.model,
     effort: manifest.effort,
     tools: manifest.tools,
@@ -41,12 +42,13 @@ export async function fire(
   load(db, root)
   const { manifest, prompt, hash } = seat(root, name)
   const plan = planRow(db)
-  const fired = await provider.fire(packet(manifest, prompt, tight(root), issue, cwd))
+  const transcript = join(root, '.cf/work', String(plan), 'step-2.transcript.jsonl')
+  const fired = await provider.fire(packet(manifest, prompt, tight(root), issue, cwd, transcript))
   const row = db.prepare(`INSERT INTO runs
-    (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_tokens, output_tokens, seconds, exit)
-    VALUES (?, 2, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_tokens, output_tokens, seconds, exit, transcript_path)
+    VALUES (?, 2, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(plan, name, hash, provider.name, manifest.model, manifest.effort,
-      fired.usage.input, fired.usage.cache, fired.usage.output, fired.seconds, fired.exit)
+      fired.usage.input, fired.usage.cache, fired.usage.output, fired.seconds, fired.exit, fired.transcript_path)
   return { id: Number(row.lastInsertRowid), text: fired.text }
 }
 

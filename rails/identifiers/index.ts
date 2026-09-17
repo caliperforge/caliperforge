@@ -23,9 +23,9 @@ export function identifiers(root: string, text: string): Verdict {
   const missing = said.flatMap((l) => [...paths(root, ours, l), ...adrs(root, l)])
   const spans = missing.map((m) => `text:${String(m.line)} identifier.unresolved`)
   const subject_digest = createHash('sha256').update(text).digest('hex')
-  if (spans.length === 0) return { outcome: 'pass', origin_kind: null, origin_ref: null, subject_digest, spans, message: `every identifier named across ${String(said.length)} line(s) resolves against its source` }
+  if (spans.length === 0) return { outcome: 'pass', defect_class: null, origin_kind: null, origin_ref: null, subject_digest, spans, message: `every identifier named across ${String(said.length)} line(s) resolves against its source` }
   return {
-    outcome: 'refuse',
+    outcome: 'refuse', defect_class: null,
     origin_kind: 'rail',
     origin_ref: 'identifiers',
     subject_digest,

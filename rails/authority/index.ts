@@ -14,9 +14,9 @@ export function authority(root: string, name: string, diff: string): Verdict {
     return refuse(root, writePaths, f.path) === null ? [] : [`${f.path}:1 authority.write_paths`]
   })
   const subject_digest = createHash('sha256').update(diff).digest('hex')
-  if (spans.length === 0) return { outcome: 'pass', origin_kind: null, origin_ref: null, subject_digest, spans, message: `${String(files.length)} file(s) inside ${writePaths.join(', ')}` }
+  if (spans.length === 0) return { outcome: 'pass', defect_class: null, origin_kind: null, origin_ref: null, subject_digest, spans, message: `${String(files.length)} file(s) inside ${writePaths.join(', ')}` }
   return {
-    outcome: 'refuse',
+    outcome: 'refuse', defect_class: null,
     origin_kind: 'rail',
     origin_ref: 'authority',
     subject_digest,

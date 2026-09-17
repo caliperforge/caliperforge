@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import type { Provider } from '../providers/kind.ts'
 import { benchPacket, reviewManifest } from '../runner/packet.ts'
 import type { Db } from '../store/index.ts'
+import { byRun } from '../store/transcript.ts'
 import { subdirs } from '../checks/tree.ts'
 import { read, type Verdict } from './verdict.ts'
 
@@ -26,9 +27,10 @@ export async function judge(
   plan: number,
   input: unknown,
   provider: Provider,
+  transcript: string,
 ): Promise<{ run: number | null; verdict: number; outcome: Verdict }> {
   const manifest = reviewManifest(root, name)
-  const built = benchPacket(root, name, input)
+  const built = benchPacket(root, name, input, transcript)
   if ('refusal' in built) {
     const outcome = barred(built.refusal.path, input)
     return { run: null, verdict: record(db, root, name, plan, outcome, 0, 0), outcome }
@@ -40,10 +42,12 @@ export async function judge(
   const fired = await provider.fire(built.packet)
   const outcome = read(fired.text, built.packet.prompt)
   const run = db.prepare(`INSERT INTO runs
-    (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_tokens, output_tokens, seconds, exit)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_tokens, output_tokens, seconds, exit, transcript_path)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(plan, manifest.step, name, specHash(root, name), provider.name, manifest.model, manifest.effort,
-      fired.usage.input, fired.usage.cache, fired.usage.output, fired.seconds, outcome === null ? 1 : fired.exit)
+      fired.usage.input, fired.usage.cache, fired.usage.output, fired.seconds,
+      outcome === null ? 1 : fired.exit, fired.transcript_path)
+  byRun(db, Number(run.lastInsertRowid), fired.transcript_path)
   if (outcome === null) throw new Error('reviewers.verdict_fence')
   const tokens = fired.usage.input + fired.usage.cache + fired.usage.output
   return { run: Number(run.lastInsertRowid), verdict: record(db, root, name, plan, outcome, tokens, fired.seconds), outcome }
@@ -63,6 +67,7 @@ function barred(span: string, input: unknown): Verdict {
     subject_digest: digest(input),
     origin_kind: 'ruling',
     origin_ref: 'reviewers.maintainers_view',
+    message: `the reviewer packet is not a maintainer's view: ${span}`,
   }
 }
 
@@ -74,6 +79,7 @@ function barredAsBuilder(span: string, input: unknown): Verdict {
     subject_digest: digest(input),
     origin_kind: 'ruling',
     origin_ref: 'runs.reviewer_not_builder',
+    message: `${span} already ran as the builder on this plan`,
   }
 }
 

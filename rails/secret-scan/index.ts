@@ -22,9 +22,9 @@ export function scan(diff: string): Verdict {
     ...files.flatMap((f) => f.added).flatMap(matched),
   ]
   const subject_digest = createHash('sha256').update(diff).digest('hex')
-  if (spans.length === 0) return { outcome: 'pass', origin_kind: null, origin_ref: null, subject_digest, spans, message: `${String(files.length)} file(s) carry no key, token or .env` }
+  if (spans.length === 0) return { outcome: 'pass', defect_class: null, origin_kind: null, origin_ref: null, subject_digest, spans, message: `${String(files.length)} file(s) carry no key, token or .env` }
   return {
-    outcome: 'refuse',
+    outcome: 'refuse', defect_class: null,
     origin_kind: 'rail',
     origin_ref: 'secret-scan',
     subject_digest,

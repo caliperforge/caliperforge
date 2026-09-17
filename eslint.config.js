@@ -6,7 +6,7 @@ import { manifest } from './checks/manifest.ts'
 const { ceilings } = manifest(import.meta.dirname)
 
 export default defineConfig(
-  { ignores: ['checks/fixtures/'] },
+  { ignores: ['checks/fixtures/', '.cf/'] },
   js.configs.recommended,
   tseslint.configs.strictTypeChecked,
   tseslint.configs.stylisticTypeChecked,

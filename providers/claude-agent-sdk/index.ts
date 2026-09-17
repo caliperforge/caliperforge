@@ -1,17 +1,28 @@
+import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs'
+import { dirname } from 'node:path'
 import { query, type HookInput, type SDKResultMessage, type SyncHookJSONOutput } from '@anthropic-ai/claude-agent-sdk'
+import { credential } from '../credential.ts'
 import type { Fired, Packet, Provider } from '../kind.ts'
 
 const WRITES = new Set(['Write', 'Edit', 'NotebookEdit'])
+
+/** The `Bash(<pattern>)` entries of a tool list. A seat that names none may run no command. */
+const RULE = /^Bash\((.+)\)$/
+
+/** Chaining, substitution and redirection reach a second command the pattern never admitted. */
+const CHAINED = /[;&|`$<>\n()]/
 
 export const claudeAgentSdk: Provider = { name: 'claude-agent-sdk', fire }
 
 async function fire(packet: Packet): Promise<Fired> {
   const started = Date.now()
   const refused: string[] = []
+  const transcript = openTranscript(packet)
   const run = query({
     prompt: packet.prompt,
     options: {
       cwd: packet.cwd,
+      env: credential().env,
       model: packet.model,
       effort: packet.effort,
       allowedTools: packet.tools,
@@ -25,19 +36,50 @@ async function fire(packet: Packet): Promise<Fired> {
     },
   })
   for await (const message of run) {
-    if (message.type === 'result') return fired(message, started, refused)
+    transcript(message)
+    if (message.type === 'result') return { ...fired(message, started, refused), transcript_path: packet.transcript }
   }
   throw new Error('claude-agent-sdk closed without a result message')
 }
 
+/** The stream as it arrived, one JSON message per line, before any reading of it. */
+function openTranscript(packet: Packet): (message: unknown) => void {
+  mkdirSync(dirname(packet.transcript), { recursive: true })
+  writeFileSync(packet.transcript, '')
+  return (message) => { appendFileSync(packet.transcript, `${JSON.stringify(message)}\n`) }
+}
+
 export function gate(packet: Packet, input: HookInput): SyncHookJSONOutput {
-  const path = input.hook_event_name === 'PreToolUse' && WRITES.has(input.tool_name)
-    ? (input.tool_input as { file_path?: unknown }).file_path
-    : undefined
-  if (typeof path !== 'string') return { continue: true }
+  if (input.hook_event_name !== 'PreToolUse') return { continue: true }
+  const denied = input.tool_name === 'Bash'
+    ? ranOutside(packet.tools, input.tool_input)
+    : wroteOutside(packet, input.tool_name, input.tool_input)
+  return denied === null ? { continue: true } : stop(denied)
+}
+
+function wroteOutside(packet: Packet, tool: string, args: unknown): string | null {
+  if (!WRITES.has(tool)) return null
+  const path = (args as { file_path?: unknown }).file_path
+  if (typeof path !== 'string') return null
   const refusal = packet.refuse(path)
-  if (refusal === null) return { continue: true }
-  const reason = `${refusal.origin_kind}:${refusal.origin_ref} refuses a write to ${refusal.path}`
+  return refusal === null ? null : `${refusal.origin_kind}:${refusal.origin_ref} refuses a write to ${refusal.path}`
+}
+
+function ranOutside(tools: string[], args: unknown): string | null {
+  const said = (args as { command?: unknown }).command
+  const command = typeof said === 'string' ? said.trim() : ''
+  const patterns = tools.flatMap((tool) => RULE.exec(tool)?.[1] ?? [])
+  if (!CHAINED.test(command) && patterns.some((pattern) => admits(pattern, command))) return null
+  return `ruling:seat.tools refuses the command ${JSON.stringify(command)}`
+}
+
+function admits(pattern: string, command: string): boolean {
+  if (!pattern.endsWith(':*')) return command === pattern
+  const prefix = pattern.slice(0, -2)
+  return command === prefix || command.startsWith(`${prefix} `)
+}
+
+function stop(reason: string): SyncHookJSONOutput {
   return {
     continue: false,
     stopReason: reason,
@@ -45,7 +87,7 @@ export function gate(packet: Packet, input: HookInput): SyncHookJSONOutput {
   }
 }
 
-export function fired(message: SDKResultMessage, started: number, refused: string[]): Fired {
+export function fired(message: SDKResultMessage, started: number, refused: string[]): Omit<Fired, 'transcript_path'> {
   const usage = Object.values(message.modelUsage).reduce(
     (n, u) => ({
       input: n.input + u.inputTokens,

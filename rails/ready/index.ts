@@ -27,10 +27,10 @@ export function ready(db: Db, proof: Proof): Verdict {
   ]
   const subject_digest = digest(proof)
   if (spans.length === 0) {
-    return { outcome: 'pass', origin_kind: null, origin_ref: null, subject_digest, spans, message: `${proof.repo} is warm and green, confined to ${String(proof.spans.length)} named span(s)` }
+    return { outcome: 'pass', defect_class: null, origin_kind: null, origin_ref: null, subject_digest, spans, message: `${proof.repo} is warm and green, confined to ${String(proof.spans.length)} named span(s)` }
   }
   return {
-    outcome: 'refuse',
+    outcome: 'refuse', defect_class: null,
     origin_kind: 'rail',
     origin_ref: 'ready',
     subject_digest,

@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { HookInput } from '@anthropic-ai/claude-agent-sdk'
 import { expect, test } from 'vitest'
@@ -7,6 +8,7 @@ import { Review, admits, benchPacket, reviewManifest, spec } from '../../../runn
 import { tight } from '../../../runner/rules.ts'
 
 const root = join(import.meta.dirname, '../../..')
+const TRANSCRIPT = join(tmpdir(), 'cf-review.transcript.jsonl')
 const repo = '/tmp/cf-review'
 
 function fixture(name: string): string {
@@ -18,7 +20,7 @@ function bench(over: Record<string, unknown> = {}): Record<string, unknown> {
 }
 
 function built(input: unknown): { packet: { prompt: string; cwd: string; tools: string[]; refuse: (p: string) => unknown } } {
-  const out = benchPacket(root, 'code_quality', input)
+  const out = benchPacket(root, 'code_quality', input, TRANSCRIPT)
   if ('refusal' in out) throw new Error(`refused: ${out.refusal.origin_ref}`)
   return out
 }
@@ -39,16 +41,16 @@ test('a ticket path and a crypto-contributor path are refused with an origin', (
     'ops/decisions.md',
   ]) {
     expect(admits(path)).toMatchObject({ origin_kind: 'ruling', origin_ref: 'reviewers.maintainers_view' })
-    expect(benchPacket(root, 'code_quality', bench({ repo: path }))).toMatchObject({ refusal: { path } })
+    expect(benchPacket(root, 'code_quality', bench({ repo: path }), TRANSCRIPT)).toMatchObject({ refusal: { path } })
   }
   expect(admits(repo)).toBeNull()
 })
 
 test('a fifth source is refused, and the first verdict only where the manifest reads one', () => {
-  expect(benchPacket(root, 'code_quality', bench({ ticket: 'T-X' }))).toMatchObject({ refusal: { path: 'ticket' } })
-  expect(benchPacket(root, 'code_quality', bench({ card: 'agents/coo/CARD.md' }))).toMatchObject({ refusal: { path: 'card' } })
-  expect(benchPacket(root, 'code_quality', bench({ verdict: 'refuse' }))).toMatchObject({ refusal: { path: 'verdict' } })
-  expect(benchPacket(root, 'senior_review', bench())).toMatchObject({ refusal: { path: 'verdict' } })
+  expect(benchPacket(root, 'code_quality', bench({ ticket: 'T-X' }), TRANSCRIPT)).toMatchObject({ refusal: { path: 'ticket' } })
+  expect(benchPacket(root, 'code_quality', bench({ card: 'agents/coo/CARD.md' }), TRANSCRIPT)).toMatchObject({ refusal: { path: 'card' } })
+  expect(benchPacket(root, 'code_quality', bench({ verdict: 'refuse' }), TRANSCRIPT)).toMatchObject({ refusal: { path: 'verdict' } })
+  expect(benchPacket(root, 'senior_review', bench(), TRANSCRIPT)).toMatchObject({ refusal: { path: 'verdict' } })
 })
 
 test('the reviewer manifest declares no write path and holds no write tool', () => {

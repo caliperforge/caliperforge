@@ -1,0 +1,7 @@
+{
+  "repo": "upstream-org/project",
+  "at": "2026-09-17",
+  "tests_pass": true,
+  "byte_identical_elsewhere": true,
+  "spans": ["src/loader.ts:12-31"]
+}

@@ -1,0 +1,4 @@
+rail: ready
+gate: ready
+step: 6
+defect_class: stale.verdict

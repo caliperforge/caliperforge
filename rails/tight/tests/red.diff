@@ -1,0 +1,28 @@
+diff --git a/src/helper.ts b/src/helper.ts
+--- /dev/null
++++ b/src/helper.ts
+@@ -0,0 +1,24 @@
++import { readFileSync } from 'node:fs'
++import { join } from 'node:path'
++
++// because the loader needs it
++export function load(path: string): string {
++  return readFileSync(path, 'utf8')
++}
++
++// read the file
++function readTheFile(path: string): string {
++  return load(path)
++}
++
++export function deep(rows: string[][]): number {
++  let n = 0
++  for (const row of rows) {
++    for (const cell of row) {
++      if (cell !== '') {
++        if (cell.length > 2) n += 1
++      }
++    }
++  }
++  return n
++}

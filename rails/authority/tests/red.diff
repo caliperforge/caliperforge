@@ -1,0 +1,18 @@
+diff --git a/src/hello.ts b/src/hello.ts
+--- a/src/hello.ts
++++ b/src/hello.ts
+@@ -1,1 +1,1 @@
+-export const hello = 'hi'
++export const hello = 'hello'
+diff --git a/schema/0001_init.sql b/schema/0001_init.sql
+--- a/schema/0001_init.sql
++++ b/schema/0001_init.sql
+@@ -1,1 +1,1 @@
+-PRAGMA foreign_keys = ON;
++PRAGMA foreign_keys = OFF;
+diff --git a/cli/cf.ts b/cli/cf.ts
+--- a/cli/cf.ts
++++ b/cli/cf.ts
+@@ -1,1 +1,1 @@
+-const name = 'cf'
++const name = 'cf2'

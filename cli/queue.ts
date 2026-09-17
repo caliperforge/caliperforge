@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { put } from '../sequencer/workspace.ts'
 import type { Db } from '../store/index.ts'
+import { templatePriority } from '../store/lanes.ts'
 import { claimed, implemented, issue as readIssue, lastMerger } from './gh.ts'
 
 const Account = z.object({ id: z.int(), measured_at: z.string(), pulse: z.enum(['warm', 'cold']) })
@@ -59,7 +60,8 @@ function planFor(db: Db, pipe: string, target: number): number {
   if (row === undefined) throw new Error(`no pipe "${pipe}"; cf pipe on ${pipe}`)
   const open = db.prepare("SELECT id FROM plans WHERE target_id = ? AND state IN ('queued', 'running')").get(target) as { id: number } | undefined
   if (open !== undefined) return open.id
-  const made = db.prepare("INSERT INTO plans (pipe_id, target_id, template, state, queued_at, step, retries) VALUES (?, ?, 'pr_path', 'queued', ?, 0, 0)")
-    .run(row.id, target, new Date().toISOString())
+  const made = db.prepare(`INSERT INTO plans (pipe_id, target_id, template, state, queued_at, step, retries, priority)
+    VALUES (?, ?, 'pr_path', 'queued', ?, 0, 0, ?)`)
+    .run(row.id, target, new Date().toISOString(), templatePriority(db, 'pr_path'))
   return Number(made.lastInsertRowid)
 }

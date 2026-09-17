@@ -1,6 +1,7 @@
 import { pr as readPr, type Pr } from '../cli/gh.ts'
 import type { Provider } from '../providers/kind.ts'
 import type { Db } from '../store/index.ts'
+import { cap } from '../store/lanes.ts'
 import { advance, back, clock, finish, live, needsCeo, openPipes, underCap, type PipeRow, type PlanRow } from '../store/plans.ts'
 import { at, last, type Step } from '../templates/pr-path.ts'
 import { capture } from './capture.ts'
@@ -16,15 +17,19 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
   const today = now.toISOString().slice(0, 10)
   for (const signal of capture(db, read)) started(db, signal)
   const out: Fired[] = []
-  for (const pipe of openPipes(db, clock(now))) {
-    const plan = pick(db, pipe, today)
-    if (plan !== null) out.push(await one(db, root, pipe, plan, provider))
+  for (const pipe of openPipes(db, clock(now)).slice(0, cap(db).cap)) {
+    for (const plan of picks(db, pipe, today)) out.push(await one(db, root, pipe, plan, provider))
   }
   return out
 }
 
-export function pick(db: Db, pipe: PipeRow, today: string): PlanRow | null {
-  return underCap(pipe, live(db, pipe)).find((p) => blocked(db, p, today) === null) ?? null
+/**
+ * The plans this pipe steps this tick, in priority order. A queued plan that is
+ * blocked holds no slot; a running one holds the slot it already took.
+ */
+export function picks(db: Db, pipe: PipeRow, today: string): PlanRow[] {
+  const free = live(db, pipe).filter((p) => p.state === 'running' || blocked(db, p, today) === null)
+  return underCap(pipe, free).filter((p) => blocked(db, p, today) === null)
 }
 
 async function one(db: Db, root: string, pipe: PipeRow, plan: PlanRow, provider: Provider): Promise<Fired> {

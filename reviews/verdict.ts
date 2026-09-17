@@ -17,12 +17,10 @@ export interface Verdict {
   origin_ref: string | null
 }
 
-export function read(reply: string, subject: string): Verdict {
-  const subject_digest = createHash('sha256').update(subject).digest('hex')
+export function read(reply: string, subject: string): Verdict | null {
   const fence = Fence.safeParse(yaml(reply))
-  if (!fence.success) {
-    return { outcome: 'refuse', defect_class: 'correctness', spans: ['review.verdict_fence'], subject_digest, origin_kind: 'ruling', origin_ref: 'reviewers.verdict_fence' }
-  }
+  if (!fence.success) return null
+  const subject_digest = createHash('sha256').update(subject).digest('hex')
   if (fence.data.outcome !== 'refuse') {
     return { outcome: fence.data.outcome, defect_class: null, spans: [], subject_digest, origin_kind: null, origin_ref: null }
   }

@@ -33,15 +33,26 @@ export async function judge(
     const outcome = barred(built.refusal.path, input)
     return { run: null, verdict: record(db, root, name, plan, outcome, 0, 0), outcome }
   }
+  if (builderRan(db, plan, name, manifest.step)) {
+    const outcome = barredAsBuilder(`${name}:${String(manifest.step)}`, input)
+    return { run: null, verdict: record(db, root, name, plan, outcome, 0, 0), outcome }
+  }
   const fired = await provider.fire(built.packet)
+  const outcome = read(fired.text, built.packet.prompt)
   const run = db.prepare(`INSERT INTO runs
     (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_tokens, output_tokens, seconds, exit)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(plan, manifest.step, name, specHash(root, name), provider.name, manifest.model, manifest.effort,
-      fired.usage.input, fired.usage.cache, fired.usage.output, fired.seconds, fired.exit)
-  const outcome = read(fired.text, built.packet.prompt)
+      fired.usage.input, fired.usage.cache, fired.usage.output, fired.seconds, outcome === null ? 1 : fired.exit)
+  if (outcome === null) throw new Error('reviewers.verdict_fence')
   const tokens = fired.usage.input + fired.usage.cache + fired.usage.output
   return { run: Number(run.lastInsertRowid), verdict: record(db, root, name, plan, outcome, tokens, fired.seconds), outcome }
+}
+
+function builderRan(db: Db, plan: number, seat: string, step: number): boolean {
+  if (step !== 4 && step !== 5) return false
+  return db.prepare('SELECT 1 FROM runs WHERE plan = ? AND seat = ? AND (step = 2 OR (? = 5 AND step = 4))')
+    .get(plan, seat, step) !== undefined
 }
 
 function barred(span: string, input: unknown): Verdict {
@@ -49,10 +60,25 @@ function barred(span: string, input: unknown): Verdict {
     outcome: 'refuse',
     defect_class: 'scope',
     spans: [span],
-    subject_digest: createHash('sha256').update(JSON.stringify(input)).digest('hex'),
+    subject_digest: digest(input),
     origin_kind: 'ruling',
     origin_ref: 'reviewers.maintainers_view',
   }
+}
+
+function barredAsBuilder(span: string, input: unknown): Verdict {
+  return {
+    outcome: 'refuse',
+    defect_class: 'scope',
+    spans: [span],
+    subject_digest: digest(input),
+    origin_kind: 'ruling',
+    origin_ref: 'runs.reviewer_not_builder',
+  }
+}
+
+function digest(input: unknown): string {
+  return createHash('sha256').update(JSON.stringify(input)).digest('hex')
 }
 
 function record(db: Db, root: string, name: string, plan: number, v: Verdict, tokens: number, seconds: number): number {

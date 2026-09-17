@@ -55,13 +55,17 @@ test('senior review reads the first verdict and names what the first verdict mis
   expect(db.prepare('SELECT gate, step FROM verdicts WHERE id = ?').get(second.verdict)).toEqual({ gate: 'senior_review', step: 5 })
 })
 
-test('reviewer != builder fires on the runs rows the bench writes', async () => {
+test('reviewer != builder is refused before the provider fires; the trigger still guards the rows', async () => {
   const { db, plan } = bench(root)
   const builder = `INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_tokens, output_tokens, seconds, exit)
     VALUES (${String(plan)}, 2, 'code_quality', '${specHash(root, 'code_quality')}', 'claude-agent-sdk', 'm', 'high', 0, 0, 0, 0, 0)`
   db.exec(builder)
-  await expect(judge(db, root, 'code_quality', plan, seeded(), replies(fixture('code_quality', 'seeded.reply.md'))))
-    .rejects.toThrow(/reviewer != builder/)
+  const never: Provider = { name: 'claude-agent-sdk', fire: () => { throw new Error('the provider was fired on a barred packet') } }
+  const barred = await judge(db, root, 'code_quality', plan, seeded(), never)
+  expect(barred.run).toBeNull()
+  expect(db.prepare('SELECT outcome, origin_kind, origin_ref, tokens FROM verdicts WHERE id = ?').get(barred.verdict))
+    .toEqual({ outcome: 'refuse', origin_kind: 'ruling', origin_ref: 'runs.reviewer_not_builder', tokens: 0 })
+  expect(db.prepare('SELECT count(*) AS n FROM runs WHERE plan = ?').get(plan)).toEqual({ n: 1 })
 
   const fresh_ = bench(root)
   const first = await judge(fresh_.db, root, 'code_quality', fresh_.plan, seeded(), replies(fixture('code_quality', 'seeded.reply.md')))
@@ -71,10 +75,15 @@ test('reviewer != builder fires on the runs rows the bench writes', async () => 
     VALUES (${String(fresh_.plan)}, 5, 'code_quality', '${specHash(root, 'code_quality')}', 'claude-agent-sdk', 'm', 'high', 0, 0, 0, 0, 0)`)).toBe(true)
 })
 
-test('a reviewer reply with no readable verdict fence refuses rather than passes', () => {
+test('a reviewer reply with no readable verdict fence is a failed run, not a verdict', async () => {
   for (const reply of ['looks fine to me', '---\noutcome: refuse\n---\n', '---\noutcome: refuse\nclass: correctness\nspans: []\n---\n', '---\n: : :\n---\n']) {
-    expect(read(reply, 'subject')).toMatchObject({ outcome: 'refuse', origin_kind: 'ruling', origin_ref: 'reviewers.verdict_fence' })
+    expect(read(reply, 'subject')).toBeNull()
   }
+  const { db, plan } = bench(root)
+  await expect(judge(db, root, 'code_quality', plan, seeded(), replies('looks fine to me')))
+    .rejects.toThrow('reviewers.verdict_fence')
+  expect(db.prepare('SELECT exit FROM runs WHERE plan = ?').all(plan)).toEqual([{ exit: 1 }])
+  expect(db.prepare('SELECT count(*) AS n FROM verdicts WHERE plan = ?').get(plan)).toEqual({ n: 0 })
 })
 
 test('a packet the bench refuses writes a refusal verdict and fires no provider', async () => {

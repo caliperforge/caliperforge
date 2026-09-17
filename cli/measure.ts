@@ -18,6 +18,9 @@ const COLD_DAYS = 21
 /** One page of merged pull requests is the window every count below is taken over. */
 const WINDOW = 100
 
+/** `gh search` is rate-limited at 30 a minute, so that is the window `elsewhere()` reads and the number of reads it makes. */
+const SEARCHES = 30
+
 export interface Pulse {
   repo: string
   measured_at: string
@@ -80,8 +83,8 @@ function logins(who: ({ login: string } | null)[]): string[] {
 
 /** What the people holding the merge button are doing elsewhere, which is where our pull request is waiting behind. */
 function elsewhere(repo: string, mergers: string[], read: Read): number {
-  const seen = mergers.flatMap((who) => Elsewhere
-    .parse(read(['search', 'prs', '--author', who, '--merged', '--limit', '30', '--json', 'repository']))
+  const seen = mergers.slice(0, SEARCHES).flatMap((who) => Elsewhere
+    .parse(read(['search', 'prs', '--author', who, '--merged', '--limit', String(SEARCHES), '--json', 'repository']))
     .map((r) => r.repository.nameWithOwner))
   return new Set(seen.filter((r) => r !== repo)).size
 }

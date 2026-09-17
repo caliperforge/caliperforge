@@ -204,16 +204,22 @@ test('a settled item already in rulings proposes nothing, and the pr body stays 
   expect(prBody(12, w.root, 1).split('\n').length).toBeLessThanOrEqual(20)
 })
 
+/**
+ * The lap-1 push left a `pushed` deliverable, so every tick from here polls it.
+ * The reader is injected: an open pr with nothing on it, read off no network.
+ */
+const lap = (w: World) => tick(w.db, w.root, stub(CARRIED), new Date(), () => pr())
+
 test('a second lap after a rewind puts a fresh card in the batch and cannot leave on the first lap approval', async () => {
   const w = await pushed()
   rewind(w.db, 1, 4)
   expect(plan(w.db, 1).head_digest).toBeNull()
-  for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  for (let at = 0; at < 3; at += 1) await lap(w)
   expect(plan(w.db, 1).step).toBe(7)
   expect(w.db.prepare('SELECT state FROM deliverables WHERE plan_id = 1 ORDER BY id').all())
     .toEqual([{ state: 'built' }, { state: 'gated' }, { state: 'pushed' }, { state: 'ready' }])
   expect(() => { advance(w.db, plan(w.db, 1), 8) }).toThrow(/no ceo approval row/)
-  expect(await tick(w.db, w.root, stub(CARRIED))).toEqual([])
+  expect(await lap(w)).toEqual([])
   expect(batch(w.db, w.root).map((c) => c.id)).toEqual([1])
 
   approveCard(w.db, w.root, 'plan', 1)

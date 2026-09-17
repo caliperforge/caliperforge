@@ -1,3 +1,4 @@
+import { pr as readPr, type Pr } from '../cli/gh.ts'
 import type { Provider } from '../providers/kind.ts'
 import type { Db } from '../store/index.ts'
 import { advance, back, clock, finish, live, needsCeo, openPipes, underCap, type PipeRow, type PlanRow } from '../store/plans.ts'
@@ -9,9 +10,11 @@ import { fireReview, fireSeat } from './seat.ts'
 import { blocked, kernel, proved, targetOf } from './steps.ts'
 import { checkout, languageOf, put, srcDir } from './workspace.ts'
 
-export async function tick(db: Db, root: string, provider: Provider, now: Date = new Date()): Promise<Fired[]> {
+/** `read` is the one network reader a tick does on its own account; it is injected so a test can drive a lap offline. */
+export async function tick(db: Db, root: string, provider: Provider, now: Date = new Date(),
+  read: (repo: string, no: number) => Pr = readPr): Promise<Fired[]> {
   const today = now.toISOString().slice(0, 10)
-  for (const signal of capture(db)) started(db, signal)
+  for (const signal of capture(db, read)) started(db, signal)
   const out: Fired[] = []
   for (const pipe of openPipes(db, clock(now))) {
     const plan = pick(db, pipe, today)

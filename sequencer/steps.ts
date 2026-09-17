@@ -92,9 +92,16 @@ export function targetOf(db: Db, plan: PlanRow): { repo: string; issue_no: numbe
   return (row ?? null) as { repo: string; issue_no: number } | null
 }
 
+/**
+ * The pulse is the repo's latest measurement — the row `rails/ready` already reads
+ * (`rails/ready/index.ts:44`), not the one `cf queue add` froze in `targets.account_id`,
+ * or a `cf measure` would refresh nothing the kernel reads. What the CEO approved is
+ * still pinned by `targets.evidence_measured_at` in `targetDigest()`.
+ */
 function target(db: Db, plan: PlanRow): Target | null {
   const row = db.prepare(`SELECT t.repo, t.issue_no, t.state, a.measured_at, a.pulse
-    FROM targets t JOIN accounts a ON a.id = t.account_id WHERE t.id = ?`).get(plan.target_id)
+    FROM targets t JOIN accounts a ON a.repo = t.repo
+    WHERE t.id = ? ORDER BY a.measured_at DESC LIMIT 1`).get(plan.target_id)
   return (row ?? null) as Target | null
 }
 

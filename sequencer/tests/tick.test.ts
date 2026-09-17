@@ -3,6 +3,7 @@ import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { day, halted, open as openPlans, runsOf, verdictsOf } from '../../cli/brief.ts'
+import { measure, type Read } from '../../cli/measure.ts'
 import { account, parse } from '../../cli/queue.ts'
 import { clock, inWindow, underCap, type PipeRow, type PlanRow } from '../../store/plans.ts'
 import { steps } from '../../templates/pr-path.ts'
@@ -107,6 +108,24 @@ test('an accounts row older than 30 days blocks the plan and refuses the queue',
   expect(await tick(w.db, w.root, stub(CARRIED), new Date('2026-09-17T09:00:00Z'))).toEqual([])
   expect(() => account(w.db, 'acme/widget', '2026-09-17')).toThrow(/re-measure before queueing/)
   expect(() => account(w.db, 'acme/other', '2026-09-17')).toThrow(/no accounts row/)
+})
+
+/** The three `gh` shapes `cf measure` parses, canned: one outsider merge that day, one open pr, one other repo. */
+const measured = (day: string): Read => (args) => {
+  if (args[0] === 'search') return [{ repository: { nameWithOwner: 'acme/other' } }]
+  if (args.includes('createdAt')) return [{ createdAt: `${day}T00:00:00Z` }]
+  return [{ author: { login: 'outsider' }, mergedBy: { login: 'maintainer' }, mergedAt: `${day}T00:00:00Z` }]
+}
+
+test('cf measure refreshes the pulse the tick reads, without a second cf queue add', async () => {
+  const w = world('warm', '2026-01-01')
+  approve(w.db, w.target)
+  expect(blocked(w.db, plan(w.db, 1), '2026-09-17')).toMatch(/days old, re-measure/)
+  expect(measure(w.db, 'acme/widget', '2026-09-17', measured('2026-09-17'))).toMatchObject({ pulse: 'warm', doors: 1 })
+  expect(w.db.prepare('SELECT account_id FROM targets WHERE id = 1').get()).toEqual({ account_id: 1 })
+  expect(blocked(w.db, plan(w.db, 1), '2026-09-17')).toBeNull()
+  expect((await tick(w.db, w.root, stub(CARRIED), new Date('2026-09-17T09:00:00Z')))[0]?.step).toBe(0)
+  expect(plan(w.db, 1).step).toBe(1)
 })
 
 test('a rail refusal names spans, sends the plan back one step, then to blocked_on_ceo', async () => {

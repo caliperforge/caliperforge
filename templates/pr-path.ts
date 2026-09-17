@@ -18,11 +18,7 @@ export const DEFAULT_BUILDER = 'typescript_specialist'
 
 const BUILDERS: Record<string, string> = { kotlin: 'kotlin_specialist', typescript: DEFAULT_BUILDER }
 
-/**
- * Which seat builds. The target's language picks it — a Kotlin tree needs a
- * seat that can run `gradle`, and no template may name one owner for every
- * repository we will ever walk.
- */
+/** Which seat builds: the target's language picks it. */
 export function builder(language: string | null): string {
   return (language === null ? undefined : BUILDERS[language]) ?? DEFAULT_BUILDER
 }

@@ -71,8 +71,6 @@ function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcom
     advance(db, plan, step.step + 1)
     return 'running'
   }
-  // The map's retry is "refusal names spans -> back to the builder". Spans that
-  // stop here make the rebuild blind, so they go to disk before the plan moves.
   put(root, plan.id, 'refusal.md', refusalText(step, outcome))
   return back(db, plan)
 }

@@ -1,14 +1,8 @@
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { mkdirSync, existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { join, relative } from 'node:path'
 
-/**
- * The plan's scratch checkout, at `.cf/work/<id>`.
- *
- * `runner/packet.ts:admits()` refuses any reviewer cwd carrying a `plans/`
- * path segment. That rule targets the org's own `plans/`; it cannot tell the
- * two apart. The earlier name `.cf/plans/<id>` tripped it on every review.
- */
+/** The plan's scratch checkout. No `plans/` segment: `runner/packet.ts:admits()` bars one from a reviewer cwd. */
 export function planDir(root: string, plan: number): string {
   return join(root, '.cf/work', String(plan))
 }
@@ -61,11 +55,6 @@ export function branchOf(repo: string, issue: number, attempt: number): string {
   return `${repoName(repo)}-${String(issue)}-a${String(attempt)}`
 }
 
-/**
- * Where clones come from. `<root>/.cf/git-base` is the only override, it is
- * gitignored, and absent it is github.com — so a real run always reaches the
- * real fork and a test can aim the same code at a local fixture.
- */
 export function gitBase(root: string): string {
   const path = join(root, '.cf/git-base')
   return existsSync(path) ? readFileSync(path, 'utf8').trim() : 'https://github.com'
@@ -75,16 +64,7 @@ function remote(base: string, slug: string): string {
   return base.includes('://') ? `${base}/${slug}.git` : join(base, slug)
 }
 
-/**
- * The plan's checkout of a real repository.
- *
- * `origin` is our fork, because that is the only place we may push. `upstream`
- * is the target's own repo and the branch is cut from *its* `main`, so the diff
- * a reviewer reads is against the maintainer's tree and not against whatever
- * the fork has drifted to. A target we own is its own upstream and walks the
- * identical path. `--no-local` because a hardlinked clone shares an object
- * store with its source: the builder must not be able to reach back through it.
- */
+/** `--no-local`: a hardlinked clone shares an object store with its source, and the builder must not reach back through it. */
 export function checkout(root: string, plan: number, repo: string, issue: number, attempt: number): Checkout {
   const dir = srcDir(root, plan)
   const branch = branchOf(repo, issue, attempt)
@@ -120,4 +100,26 @@ export function gitDiff(dir: string, base: string): string {
 
 function git(cwd: string, args: string[]): string {
   return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024 })
+}
+
+/** Without a real checkout the workspace starts empty, so every file in it is an addition. */
+export function diffOf(root: string, plan: number): string {
+  const src = srcDir(root, plan)
+  const base = maybe(root, plan, 'base.sha')
+  if (base !== null && cloned(src)) return gitDiff(src, base.trim())
+  return additions(src)
+}
+
+function additions(src: string): string {
+  return files(src).map((path) => {
+    const body = readFileSync(path, 'utf8')
+    const lines = body.split('\n')
+    const rel = relative(src, path)
+    return `--- /dev/null\n+++ b/${rel}\n@@ -0,0 +1,${String(lines.length)} @@\n${lines.map((l) => `+${l}`).join('\n')}`
+  }).join('\n')
+}
+
+function files(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+    e.isDirectory() ? files(join(dir, e.name)) : [join(dir, e.name)])
 }

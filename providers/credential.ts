@@ -20,15 +20,7 @@ export const ENV_FILE = join(homedir(), '.config/caliperforge/env')
 
 type Env = Record<string, string | undefined>
 
-/**
- * What the SDK subprocess should authenticate with.
- *
- * `query()` hands the subprocess whatever `options.env` names, so a credential
- * reaches the model without ever entering this process's environment, the
- * store or the tree. The file is read only where the environment has a hole,
- * only the two keys above are taken from it, and its value is returned — never
- * logged. Nothing here mutates its input.
- */
+/** `query()` hands the subprocess whatever `options.env` names; a credential reaches the model by no other route. */
 export function credential(env: Env = process.env, file: string = fileOf(env)): Credential {
   const supplied = read(file)
   const elsewhere = filled(env.ANTHROPIC_BASE_URL)

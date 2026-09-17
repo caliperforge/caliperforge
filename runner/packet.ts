@@ -10,13 +10,18 @@ const WRITERS = new Set(['Write', 'Edit', 'NotebookEdit', 'Bash', 'MultiEdit'])
 
 const OUTSIDE = /(^|\/)(crypto-contributor|agents|ops|knowledge|plans|escalations)(\/|$)|(^|\/)T-[A-Z][A-Z0-9-]*\.md$/
 
+/** `Bash(gradle:*)` is still Bash: a tool's permission pattern does not change which tool it is. */
+function bare(tool: string): string {
+  return tool.split('(')[0] ?? tool
+}
+
 export const Review = z.object({
   review: z.string(),
   gate: z.enum(['review', 'senior_review']),
   step: z.int().min(4).max(5),
   model: z.string(),
   effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']),
-  tools: z.array(z.string()).min(1).refine((t) => !t.some((name) => WRITERS.has(name)), {
+  tools: z.array(z.string()).min(1).refine((t) => !t.some((name) => WRITERS.has(bare(name))), {
     message: `a reviewer may not hold ${[...WRITERS].join(', ')}`,
   }),
   write_paths: z.tuple([]),

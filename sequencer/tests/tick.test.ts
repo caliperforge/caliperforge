@@ -162,7 +162,7 @@ test('six ticks walk a plan from measure to Ready on one seat run and no tokens 
   expect(w.db.prepare("SELECT count(*) AS n FROM runs WHERE seat = 'typescript_specialist'").get()).toEqual({ n: 1 })
 })
 
-test('step 6 fires the ready rail and records its verdict rather than passing by construction', async () => {
+test('step 6 refuses until ci-green has left a verdict, then fires the ready rail and records it', async () => {
   const w = world()
   approve(w.db, w.target)
   for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED))
@@ -172,10 +172,16 @@ test('step 6 fires the ready rail and records its verdict rather than passing by
     byte_identical_elsewhere, fork_ci_green, bot_clean, target_warm, evidence)
     VALUES (1, 2, 'typescript_specialist', ?, 'gated', 1, 1, 1, 1, 1, 'https://github.com/acme/widget/pull/1')`)
     .run('b'.repeat(64))
+  const blind = (await tick(w.db, w.root, stub(CARRIED)))[0]
+  expect(blind).toMatchObject({ step: 6, name: 'ready', outcome: 'refuse' })
+  expect(blind?.spans).toEqual(['ci-green'])
+  w.db.prepare(`INSERT INTO verdicts (gate, kind, subject_digest, plan, step, outcome, rail_id, tokens, seconds)
+    VALUES ('ready', 'rail', ?, 1, 6, 'pass', 'ci-green', 0, 0)`).run('c'.repeat(64))
+  w.db.prepare("UPDATE plans SET step = 6, state = 'running' WHERE id = 1").run()
   const fired = (await tick(w.db, w.root, stub(CARRIED)))[0]
   expect(fired).toMatchObject({ step: 6, name: 'ready', outcome: 'pass', state: 'running' })
-  expect(w.db.prepare("SELECT gate, kind, outcome FROM verdicts WHERE rail_id = 'ready'").get())
-    .toEqual({ gate: 'ready', kind: 'rail', outcome: 'pass' })
+  expect(w.db.prepare("SELECT gate, kind, outcome FROM verdicts WHERE rail_id = 'ready' ORDER BY id").all())
+    .toEqual([{ gate: 'ready', kind: 'rail', outcome: 'refuse' }, { gate: 'ready', kind: 'rail', outcome: 'pass' }])
 })
 
 test('every run row points at a transcript the provider wrote', async () => {
@@ -213,7 +219,9 @@ test('cf brief and cf plan bind the plan they are asked for', async () => {
   for (const step of [0, 1, 2, 3]) expect((await tick(w.db, w.root, stub(CARRIED)))[0]?.step).toBe(step)
   expect(runsOf(w.db, 1).map((r) => r.step)).toEqual([2])
   expect(runsOf(w.db, 99)).toEqual([])
-  expect(verdictsOf(w.db, 1).map((v) => v.gate)).toEqual(['pre_review'])
+  expect(verdictsOf(w.db, 1).map((v) => v.gate)).toEqual(Array<string>(6).fill('pre_review'))
+  expect(w.db.prepare('SELECT rail_id FROM verdicts WHERE plan = 1 ORDER BY id').all().map((r) => (r as { rail_id: string }).rail_id))
+    .toEqual(['completion-audit', 'secret-scan', 'authority', 'tight', 'test-weakened', 'identifiers'])
   expect(verdictsOf(w.db, 99)).toEqual([])
   expect(openPlans(w.db).map((p) => p.id)).toEqual([1])
   expect(halted(w.db)).toEqual([])

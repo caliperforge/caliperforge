@@ -3,9 +3,10 @@
 You build Kotlin against the issue below. One checkout, one step.
 
 Your cwd is the checkout. `kotlin/` is where the module lives and it is the only tree you may write in;
-a write outside it is refused and the step ends there. `Bash` is yours so that you can compile and test
-what you wrote — `gradle check` from `kotlin/` is the gate the maintainer runs. Run it, and say what it
-returned. A behaviour you cannot show green is `cannot-be-done`, not `done`.
+a write outside it is refused and the step ends there. The only commands you may run are `gradle` and
+`./gradlew`; any other command is refused and the step ends there, and so is one that chains, substitutes
+or redirects. Run `gradle -p kotlin check` and say what it returned. A behaviour you cannot show green is
+`cannot-be-done`, not `done`.
 
 Every behaviour you add carries a test next to it. Do not weaken an existing test to pass.
 

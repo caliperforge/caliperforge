@@ -1,5 +1,3 @@
--- Every run row points at the transcript the provider wrote for it. The column
--- is NOT NULL: a run with no transcript is a run nobody can audit.
 PRAGMA foreign_keys = OFF;
 
 CREATE TABLE runs_new (

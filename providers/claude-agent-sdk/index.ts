@@ -7,6 +7,7 @@ export const claudeAgentSdk: Provider = { name: 'claude-agent-sdk', fire }
 
 async function fire(packet: Packet): Promise<Fired> {
   const started = Date.now()
+  const refused: string[] = []
   const run = query({
     prompt: packet.prompt,
     options: {
@@ -16,11 +17,15 @@ async function fire(packet: Packet): Promise<Fired> {
       allowedTools: packet.tools,
       settingSources: [],
       permissionMode: 'default',
-      hooks: { PreToolUse: [{ hooks: [(input) => Promise.resolve(gate(packet, input))] }] },
+      hooks: { PreToolUse: [{ hooks: [(input) => {
+        const decision = gate(packet, input)
+        if (decision.stopReason !== undefined) refused.push(decision.stopReason)
+        return Promise.resolve(decision)
+      }] }] },
     },
   })
   for await (const message of run) {
-    if (message.type === 'result') return fired(message, started)
+    if (message.type === 'result') return fired(message, started, refused)
   }
   throw new Error('claude-agent-sdk closed without a result message')
 }
@@ -40,7 +45,7 @@ export function gate(packet: Packet, input: HookInput): SyncHookJSONOutput {
   }
 }
 
-function fired(message: SDKResultMessage, started: number): Fired {
+export function fired(message: SDKResultMessage, started: number, refused: string[]): Fired {
   const usage = Object.values(message.modelUsage).reduce(
     (n, u) => ({
       input: n.input + u.inputTokens,
@@ -49,10 +54,15 @@ function fired(message: SDKResultMessage, started: number): Fired {
     }),
     { input: 0, cache: 0, output: 0 },
   )
+  const denials = refused.length + message.permission_denials.length
+  const ended = message.terminal_reason ?? (denials > 0 ? 'hook_stopped' : 'completed')
+  const text = message.subtype === 'success' ? message.result : message.errors.join('\n')
   return {
-    text: message.subtype === 'success' ? message.result : message.errors.join('\n'),
+    text: text === '' ? refused.join('\n') : text,
     usage,
     seconds: (Date.now() - started) / 1000,
-    exit: message.is_error ? 1 : 0,
+    exit: message.is_error || ended !== 'completed' ? 1 : 0,
+    stop_reason: refused[0] ?? (ended === 'completed' ? message.stop_reason : ended),
+    denials,
   }
 }

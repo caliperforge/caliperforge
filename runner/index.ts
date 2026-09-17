@@ -1,12 +1,22 @@
+import { realpathSync } from 'node:fs'
 import { relative, resolve } from 'node:path'
 import type { Packet, Provider, Refusal } from '../providers/kind.ts'
 import type { Db } from '../store/index.ts'
 import { load, seat, tight, type Seat } from './rules.ts'
 
 export function refuse(cwd: string, writePaths: string[], path: string): Refusal | null {
-  const rel = relative(cwd, resolve(cwd, path))
+  const root = real(cwd)
+  const rel = relative(root, real(resolve(root, path)))
   const inside = !rel.startsWith('..') && writePaths.some((p) => rel === p || rel.startsWith(`${p}/`))
-  return inside ? null : { outcome: 'refuse', origin_kind: 'ruling', origin_ref: 'seat.write_paths', path: rel }
+  return inside ? null : { origin_kind: 'ruling', origin_ref: 'seat.write_paths', path: rel }
+}
+
+function real(path: string): string {
+  try {
+    return realpathSync(path)
+  } catch {
+    return path
+  }
 }
 
 export function packet(manifest: Seat, prompt: string, spec: string, issue: string, cwd: string): Packet {

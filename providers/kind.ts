@@ -1,5 +1,4 @@
 export interface Refusal {
-  outcome: 'refuse'
   origin_kind: 'rail' | 'ruling' | 'incident'
   origin_ref: string
   path: string
@@ -19,6 +18,8 @@ export interface Fired {
   usage: { input: number; cache: number; output: number }
   seconds: number
   exit: number
+  stop_reason: string | null
+  denials: number
 }
 
 export interface Provider {

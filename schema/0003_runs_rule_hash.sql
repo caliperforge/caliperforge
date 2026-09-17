@@ -5,7 +5,7 @@ CREATE TABLE runs_new (
   plan          INTEGER NOT NULL REFERENCES plans(id),
   step          INTEGER NOT NULL CHECK (step BETWEEN 0 AND 9),
   seat          TEXT NOT NULL REFERENCES rules(id),
-  rule_hash     TEXT NOT NULL CHECK (length(rule_hash) = 64 AND rule_hash GLOB '[0-9a-f]*'),
+  rule_hash     TEXT NOT NULL CHECK (length(rule_hash) = 64 AND rule_hash NOT GLOB '*[^0-9a-f]*'),
   provider      TEXT NOT NULL CHECK (provider IN ('claude-agent-sdk', 'anthropic-api', 'deepseek')),
   model         TEXT NOT NULL,
   effort        TEXT NOT NULL CHECK (effort IN ('low', 'medium', 'high', 'xhigh', 'max')),

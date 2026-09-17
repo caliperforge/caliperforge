@@ -40,3 +40,12 @@ test('writes a verdicts row the store accepts', () => {
   const row = db.prepare('SELECT gate, kind, outcome, rail_id, origin_kind, origin_ref, tokens FROM verdicts WHERE id = ?').get(id)
   expect(row).toEqual({ gate: 'pre_review', kind: 'rail', outcome: 'refuse', rail_id: 'completion-audit', origin_kind: 'rail', origin_ref: 'completion-audit', tokens: 0 })
 })
+
+test('refuses rather than throws on a fence that is not a done envelope', () => {
+  const fences = ['---\nstatus: partial\ndone: []\n---\n', '---\ndone:\n  - status: done\n---\n', '---\n: : :\n---\n']
+  for (const fence of fences) {
+    const verdict = audit(fence, ['D1'])
+    expect(verdict.outcome).toBe('refuse')
+    expect(verdict.spans).toEqual(['D1'])
+  }
+})

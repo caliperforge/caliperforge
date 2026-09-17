@@ -57,5 +57,15 @@ export function record(db: Db, plan: number, verdict: Verdict, seconds: number):
 function carried(handback: string): Map<string, string> {
   const fence = /^---\r?\n([\s\S]*?)\r?\n---\s*$/m.exec(handback)
   if (fence === null) return new Map()
-  return new Map(Envelope.parse(parse(fence[1] ?? '')).done.map((row) => [row.id, row.pointer ?? '']))
+  const envelope = Envelope.safeParse(yaml(fence[1] ?? ''))
+  if (!envelope.success) return new Map()
+  return new Map(envelope.data.done.map((row) => [row.id, row.pointer ?? '']))
+}
+
+function yaml(text: string): unknown {
+  try {
+    return parse(text)
+  } catch {
+    return null
+  }
 }

@@ -6,7 +6,7 @@ import { capture } from './capture.ts'
 import type { Fired, Outcome } from './kind.ts'
 import { started } from './signals.ts'
 import { fireReview, fireSeat } from './seat.ts'
-import { blocked, kernel, targetOf } from './steps.ts'
+import { blocked, kernel, proved, targetOf } from './steps.ts'
 import { checkout, languageOf, put, srcDir } from './workspace.ts'
 
 export async function tick(db: Db, root: string, provider: Provider, now: Date = new Date()): Promise<Fired[]> {
@@ -71,6 +71,7 @@ function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcom
     return 'blocked_on_ceo'
   }
   if (outcome.outcome !== 'refuse') {
+    proved(db, root, plan, step)
     if (last(step.step)) { finish(db, plan); return 'done' }
     advance(db, plan, step.step + 1)
     return 'running'

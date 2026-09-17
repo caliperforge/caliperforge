@@ -28,7 +28,7 @@ function reachable(db: Db, row: Pushed, read: (repo: string, no: number) => Pr):
 function one(db: Db, row: Pushed, read: (repo: string, no: number) => Pr): SignalRow[] {
   const view = read(row.repo, prNumber(row.evidence))
   const fresh = signals(view, row).map((s) => record(db, s)).filter((s) => s !== null)
-  attribute(db, row.plan, view, fresh)
+  attribute(db, row.plan, view)
   return fresh
 }
 
@@ -51,8 +51,14 @@ function review(base: Base, r: Pr['reviews'][number]): Signal {
     author: r.author.login,
     at: r.submittedAt,
     external_id: r.id,
-    score: bot ? Number(SCORE.exec(r.body)?.[1] ?? 0) : null,
+    score: bot ? scored(r.body) : null,
   }
+}
+
+/** A bot review with no `n/5` states no verdict; the CHECK on `signals` drops the row rather than let it rewind the plan. */
+function scored(body: string): number | null {
+  const hit = SCORE.exec(body)?.[1]
+  return hit === undefined ? null : Number(hit)
 }
 
 function merged(base: Base, view: Pr): Signal[] {

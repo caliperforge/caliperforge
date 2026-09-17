@@ -25,18 +25,21 @@ export interface Item {
   evidence: string
 }
 
-/** The bytes the CEO signs off on a proposal card. */
 export function bytes(p: Pick<ProposalRow, 'class' | 'subject' | 'value'>): string {
   return `${p.class} ${p.subject} = ${p.value}`
 }
 
-export function propose(db: Db, item: Item): number {
+/** The evidence on a signed row is what the CEO signed against, so the upsert stops at the card he has already settled. */
+export function propose(db: Db, item: Item): number | null {
   const row = db.prepare(`INSERT INTO proposals
     (class, subject, value, state, match_ruling_id, match_issue_no, evidence)
     VALUES (?, ?, ?, 'open', ?, ?, ?)
-    ON CONFLICT (class, subject, value) DO UPDATE SET evidence = excluded.evidence`)
-    .run(item.class, item.subject, item.value, item.match_ruling_id, item.match_issue_no, item.evidence)
-  return row.changes === 0 ? id(db, item) : Number(row.lastInsertRowid)
+    ON CONFLICT (class, subject, value) DO UPDATE SET evidence = excluded.evidence
+      WHERE proposals.state = 'open'
+    RETURNING id`)
+    .get(item.class, item.subject, item.value, item.match_ruling_id, item.match_issue_no, item.evidence) as
+    { id: number } | undefined
+  return row?.id ?? null
 }
 
 export function open(db: Db): ProposalRow[] {
@@ -55,10 +58,4 @@ export function stamp(db: Db, proposal: number): void {
 /** A struck proposal leaves no row; the `approvals` refusal is the whole record of it. */
 export function strike(db: Db, proposal: number): void {
   db.prepare('DELETE FROM proposals WHERE id = ?').run(proposal)
-}
-
-function id(db: Db, item: Item): number {
-  const row = db.prepare('SELECT id FROM proposals WHERE class = ? AND subject = ? AND value = ?')
-    .get(item.class, item.subject, item.value) as { id: number }
-  return row.id
 }

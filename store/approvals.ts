@@ -12,12 +12,16 @@ export function headDigest(sha: string): string {
   return digestOf(sha.trim())
 }
 
+/** A second lap can land on the same bytes; signing them again re-dates the one row rather than colliding with it. */
 export function decide(db: Db, kind: SubjectKind, id: number, digest: string, reason: string | null): number {
   const row = db.prepare(`INSERT INTO approvals
     (subject_kind, subject_id, subject_digest, who, decision, reason, approved_at)
-    VALUES (?, ?, ?, 'ceo', ?, ?, ?)`)
-    .run(kind, id, digest, reason === null ? 'approved' : 'refused', reason, new Date().toISOString())
-  return Number(row.lastInsertRowid)
+    VALUES (?, ?, ?, 'ceo', ?, ?, ?)
+    ON CONFLICT (subject_kind, subject_id, subject_digest, decision)
+      DO UPDATE SET approved_at = excluded.approved_at
+    RETURNING id`)
+    .get(kind, id, digest, reason === null ? 'approved' : 'refused', reason, new Date().toISOString()) as { id: number }
+  return row.id
 }
 
 export function approvalOf(db: Db, kind: SubjectKind, id: number, digest: string): number | null {

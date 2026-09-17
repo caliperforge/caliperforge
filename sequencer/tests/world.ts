@@ -107,6 +107,11 @@ export function ready(db: Db, id: number): void {
     byte_identical_elsewhere, fork_ci_green, bot_clean, target_warm, evidence)
     VALUES (?, 2, 'typescript_specialist', ?, 'gated', 1, 1, 1, 1, 1, 'https://github.com/acme/widget/issues/12')`)
     .run(id, 'b'.repeat(64))
+  forkCi(db, id)
+}
+
+/** The one ready proof no step in the tree writes: the verdict `rails/ci-green` would have left on the fork. */
+export function forkCi(db: Db, id: number): void {
   db.prepare(`INSERT INTO verdicts (gate, kind, subject_digest, plan, step, outcome, rail_id, tokens, seconds)
     VALUES ('ready', 'rail', ?, ?, 6, 'pass', 'ci-green', 0, 0)`).run('c'.repeat(64), id)
 }

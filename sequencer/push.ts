@@ -1,5 +1,4 @@
 import { execFileSync } from 'node:child_process'
-import { join } from 'node:path'
 import { openPr } from '../cli/gh.ts'
 import { approvalOf, headDigest } from '../store/approvals.ts'
 import type { Db } from '../store/index.ts'
@@ -26,11 +25,10 @@ export function push(db: Db, root: string, plan: PlanRow, wire: Wire = WIRE): Ou
   if (!cloned(srcDir(root, plan.id))) return refuse('checkout', `plan ${String(plan.id)} has no checkout to send`)
   const head = headOf(root, plan.id)
   const approval = approvalOf(db, 'plan', plan.id, headDigest(head.sha))
-  if (approval === null) return refuse(head.sha.slice(0, 12), `no ceo approval row for ${head.branch} at ${head.sha.slice(0, 12)}`)
+  if (approval === null) return refuse('approvals', `no ceo approval row for ${head.branch} at ${head.sha.slice(0, 12)}`)
   const cold = unproven(db, plan.id)
   if (cold !== null) return refuse(cold, `${cold} left no passing verdict on plan ${String(plan.id)}`)
   const body = put(root, plan.id, 'pr.md', prBody(target.issue_no, root, plan.id))
-  git(head.dir, ['config', 'core.hooksPath', join(root, 'hooks')])
   wire.send(head.dir, head.branch)
   const url = wire.open(target.repo, `caliperforge:${head.branch}`, title(root, plan.id), body)
   pushed(db, plan.id, approval, url)

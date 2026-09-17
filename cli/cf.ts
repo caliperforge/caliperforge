@@ -13,6 +13,7 @@ import { PlanRow } from '../store/plans.ts'
 import { headApproved } from '../store/approvals.ts'
 import { approve as approveCard, batch, refuse as refuseCard, render } from './batch.ts'
 import { awaiting, day, halted, open as openPlans, runsOf, section, verdictsOf } from './brief.ts'
+import { measure, render as renderPulse } from './measure.ts'
 import { add } from './queue.ts'
 import { close } from './session.ts'
 
@@ -58,6 +59,10 @@ cf.command('pipe').argument('<state>', 'on or off').argument('<name>').action((s
   handle.prepare("INSERT OR IGNORE INTO pipes (name, enabled, window_start, window_end, max_concurrent) VALUES (?, 0, '00:00', '23:59', 1)").run(name)
   handle.prepare('UPDATE pipes SET enabled = ? WHERE name = ?').run(state === 'on' ? 1 : 0, name)
   out(`pipe ${name} ${state}\n`)
+})
+
+cf.command('measure').argument('<repo>', 'owner/repo to take the step 0 pulse of').action((repo: string) => {
+  out(renderPulse(measure(db(), repo, new Date().toISOString().slice(0, 10))))
 })
 
 const queue = cf.command('queue')

@@ -1,6 +1,7 @@
 import { headOf, prBody } from '../sequencer/push.ts'
 import { cloned, diffOf, srcDir } from '../sequencer/workspace.ts'
 import { decide, digestOf, headDigest } from '../store/approvals.ts'
+import { approved } from '../store/deliverables.ts'
 import type { Db } from '../store/index.ts'
 import { bytes, byId, open as openProposals, stamp, strike, type ProposalRow } from '../store/proposals.ts'
 
@@ -26,13 +27,13 @@ export function batch(db: Db, root: string): Card[] {
 export function approve(db: Db, root: string, kind: 'plan' | 'proposal', id: number): string {
   const card = cardOf(db, root, kind, id)
   db.transaction(() => {
-    decide(db, kind, id, card.digest, null)
+    const approval = decide(db, kind, id, card.digest, null)
     if (kind === 'proposal') settle(db, id)
+    else approved(db, id, approval)
   })()
   return card.digest
 }
 
-/** Approved becomes a row. For a ruling that row is `rulings`; the issue is the step, the row is the record. */
 function settle(db: Db, id: number): void {
   const p = byId(db, id)
   if (p === null) throw new Error(`no proposal ${String(id)}`)

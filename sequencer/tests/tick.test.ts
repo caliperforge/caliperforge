@@ -19,7 +19,8 @@ const UNPOINTED = 'built\n\n---\ndone:\n  - id: D1\n    status: done\n    pointe
 const pipe = (over: Partial<PipeRow>): PipeRow =>
   ({ id: 1, name: 'pr-path', enabled: 1, window_start: '09:00', window_end: '17:00', max_concurrent: 1, ...over })
 const row = (over: Partial<PlanRow>): PlanRow =>
-  ({ id: 1, pipe_id: 1, target_id: 1, template: 'pr_path', state: 'queued', queued_at: '', step: 0, retries: 0, ...over })
+  ({ id: 1, pipe_id: 1, target_id: 1, template: 'pr_path', state: 'queued', queued_at: '', step: 0, retries: 0,
+    head_digest: null, ...over })
 
 test('the builder works in the checkout and may write only inside its write_paths', async () => {
   const w = world()

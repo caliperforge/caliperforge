@@ -64,7 +64,10 @@ function remote(base: string, slug: string): string {
   return base.includes('://') ? `${base}/${slug}.git` : join(base, slug)
 }
 
-/** `--no-local`: a hardlinked clone shares an object store with its source, and the builder must not reach back through it. */
+/**
+ * `--no-local`: a hardlinked clone shares an object store with its source, and the builder must not reach back through it.
+ * `core.hooksPath` is set here and not at step 8, so every push out of a plan checkout meets the pre-push hook, not just the kernel's.
+ */
 export function checkout(root: string, plan: number, repo: string, issue: number, attempt: number): Checkout {
   const dir = srcDir(root, plan)
   const branch = branchOf(repo, issue, attempt)
@@ -75,6 +78,7 @@ export function checkout(root: string, plan: number, repo: string, issue: number
     '-c', `remote.upstream.url=${remote(base, repo)}`,
     '-c', 'remote.upstream.fetch=+refs/heads/*:refs/remotes/upstream/*',
     remote(base, `${FORK}/${repoName(repo)}`), dir])
+  git(dir, ['config', 'core.hooksPath', join(root, 'hooks')])
   git(dir, ['fetch', '--no-tags', 'upstream', '+main:refs/remotes/upstream/main'])
   const head = git(dir, ['rev-parse', 'refs/remotes/upstream/main']).trim()
   git(dir, ['checkout', '-B', branch, head])

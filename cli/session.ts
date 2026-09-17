@@ -34,14 +34,14 @@ export function settled(transcript: string): Settled[] {
 export function close(db: Db, path: string, find: FindIssue = search): number[] {
   return settled(readFileSync(path, 'utf8'))
     .filter((s) => ruled(db, s) === 'new')
-    .map((s) => propose(db, {
+    .flatMap((s) => propose(db, {
       class: s.class,
       subject: s.subject,
       value: s.value,
       match_ruling_id: priorRuling(db, s),
       match_issue_no: find(s.subject),
       evidence: `${path}:${String(s.line)}`,
-    }))
+    }) ?? [])
 }
 
 function ruled(db: Db, s: Settled): 'new' | 'settled' {

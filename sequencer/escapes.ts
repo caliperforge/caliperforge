@@ -1,7 +1,7 @@
 import type { Pr } from '../cli/gh.ts'
 import { escaped, owner, type Owner } from '../store/dispositions.ts'
 import type { Db } from '../store/index.ts'
-import type { SignalRow } from '../store/signals.ts'
+import { since, type SignalRow } from '../store/signals.ts'
 
 const GATE: Record<Owner, string> = {
   step0: 'target',
@@ -27,21 +27,22 @@ export function classOf(body: string): string {
   return tight ?? KNOWN.find((c) => body.includes(c)) ?? FALLBACK
 }
 
-export function attribute(db: Db, plan: number, view: Pr, fresh: SignalRow[]): number[] {
+/** Review and merge rarely land on one tick, so the escape is read against every signal the plan ever carried. */
+export function attribute(db: Db, plan: number, view: Pr): number[] {
   if (view.mergedAt === null) return []
-  return findings(view, fresh).flatMap((f) => {
+  return findings(view, since(db, plan)).flatMap((f) => {
     const verdict = verdictAt(db, plan, GATE[owner(f)])
     return verdict === null ? [] : [escaped(db, { verdict_id: verdict, defect_class: f, evidence: view.url })]
   })
 }
 
 /** One disposition per verdict is a unique index, so a finding that named its class outranks the fallback. */
-function findings(view: Pr, fresh: SignalRow[]): string[] {
+function findings(view: Pr, seen: SignalRow[]): string[] {
   const bodies = new Map(view.reviews.map((r) => [r.id, r.body]))
-  const seen = fresh
+  const found = seen
     .filter((s) => s.kind === 'review' || (s.kind === 'bot_review' && (s.score ?? 5) < 5))
     .map((s) => classOf(bodies.get(s.external_id) ?? ''))
-  return [...seen.filter((c) => c !== FALLBACK), ...seen.filter((c) => c === FALLBACK)]
+  return [...found.filter((c) => c !== FALLBACK), ...found.filter((c) => c === FALLBACK)]
 }
 
 function verdictAt(db: Db, plan: number, gate: string): number | null {

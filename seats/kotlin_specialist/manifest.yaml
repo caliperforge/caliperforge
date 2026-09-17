@@ -1,0 +1,12 @@
+seat: kotlin_specialist
+model: claude-opus-5
+effort: high
+tools:
+  - Read
+  - Write
+  - Edit
+  - Glob
+  - Grep
+  - Bash
+write_paths:
+  - kotlin

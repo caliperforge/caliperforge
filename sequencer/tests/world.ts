@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import { cpSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -43,9 +44,39 @@ export function stub(text: string, exit = 0, review = PASS, seen?: (packet: Pack
   }
 }
 
-export function world(pulse: 'warm' | 'cold' = 'warm', day = new Date().toISOString().slice(0, 10)): World {
+export const TYPESCRIPT = { 'src/hello.ts': 'export const hello = (): string => "hi"\n' }
+export const KOTLIN = { 'kotlin/build.gradle.kts': 'plugins { kotlin("jvm") }\n' }
+
+/**
+ * The two repositories `checkout()` needs, standing in for github: the target's
+ * own repo and our fork of it. `.cf/git-base` aims the sequencer at them, so it
+ * clones, fetches upstream and branches for real, off the network.
+ */
+function remotes(root: string, files: Record<string, string>): void {
+  const base = join(root, 'remotes')
+  const upstream = join(base, 'acme/widget')
+  mkdirSync(upstream, { recursive: true })
+  git(upstream, ['init', '-q', '-b', 'main'])
+  for (const [path, body] of Object.entries(files)) {
+    mkdirSync(dirname(join(upstream, path)), { recursive: true })
+    writeFileSync(join(upstream, path), body)
+  }
+  git(upstream, ['add', '-A'])
+  git(upstream, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'base'])
+  git(base, ['clone', '-q', '--no-local', upstream, join(base, 'caliperforge/widget')])
+  mkdirSync(join(root, '.cf'), { recursive: true })
+  writeFileSync(join(root, '.cf/git-base'), base)
+}
+
+function git(cwd: string, args: string[]): void {
+  execFileSync('git', args, { cwd, stdio: 'ignore' })
+}
+
+export function world(pulse: 'warm' | 'cold' = 'warm', day = new Date().toISOString().slice(0, 10),
+  files: Record<string, string> = TYPESCRIPT): World {
   const root = mkdtempSync(join(tmpdir(), 'cf-seq-'))
   for (const dir of ['rules', 'seats', 'reviews', 'rails']) cpSync(join(repo, dir), join(root, dir), { recursive: true })
+  remotes(root, files)
   const db = fresh(join(repo, 'schema'))
   const merge = pulse === 'warm' ? day : '2000-01-01'
   db.prepare(`INSERT INTO accounts (id, repo, measured_at, maintainers, doors, last_outsider_merge,

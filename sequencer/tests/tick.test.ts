@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
@@ -10,7 +11,9 @@ import { blocked } from '../steps.ts'
 import { doneIds, srcDir } from '../workspace.ts'
 import { benchPacket } from '../../runner/packet.ts'
 import type { Packet } from '../../providers/kind.ts'
-import { approve, PASS, plan, REFUSE, stub, world } from './world.ts'
+import { approve, KOTLIN, PASS, plan, REFUSE, stub, world } from './world.ts'
+
+const head = (cwd: string, args: string[]): string => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim()
 
 const CARRIED = 'built\n\n---\ndone:\n  - id: D1\n    status: done\n    pointer: src/hello.ts:1\n---\n'
 const UNPOINTED = 'built\n\n---\ndone:\n  - id: D1\n    status: done\n    pointer:\n---\n'
@@ -19,21 +22,47 @@ const pipe = (over: Partial<PipeRow>): PipeRow =>
 const row = (over: Partial<PlanRow>): PlanRow =>
   ({ id: 1, pipe_id: 1, target_id: 1, template: 'pr_path', state: 'queued', queued_at: '', step: 0, retries: 0, ...over })
 
-test('the builder may write the files it is asked for, and nothing beside them', async () => {
+test('the builder works in the checkout and may write only inside its write_paths', async () => {
   const w = world()
   approve(w.db, w.target)
   const packets: Packet[] = []
-  await tick(w.db, w.root, stub(CARRIED, 0, PASS, (p) => packets.push(p)))
-  await tick(w.db, w.root, stub(CARRIED, 0, PASS, (p) => packets.push(p)))
-  await tick(w.db, w.root, stub(CARRIED, 0, PASS, (p) => packets.push(p)))
+  for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED, 0, PASS, (p) => packets.push(p)))
   const builder = packets[0]
   expect(builder).toBeDefined()
   const src = realpathSync(srcDir(w.root, 1))
-  expect(builder?.refuse(join(src, 'hello.ts'))).toBeNull()
-  expect(builder?.refuse(join(src, 'nested/hello.ts'))).toBeNull()
-  expect(builder?.refuse('src/hello.ts')).toBeNull()
+  expect(builder?.cwd).toBe(srcDir(w.root, 1))
+  expect(builder?.refuse(join(src, 'src/hello.ts'))).toBeNull()
+  expect(builder?.refuse('src/nested/hello.ts')).toBeNull()
+  expect(builder?.refuse(join(src, 'README.md'))).toMatchObject({ origin_ref: 'seat.write_paths' })
   expect(builder?.refuse(join(src, '../issue.md'))).toMatchObject({ origin_ref: 'seat.write_paths' })
   expect(builder?.refuse('../hello.ts')).toMatchObject({ origin_ref: 'seat.write_paths' })
+})
+
+test('a plan on a real target is cloned from our fork and branched off upstream main', async () => {
+  const w = world()
+  approve(w.db, w.target)
+  for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  const src = srcDir(w.root, 1)
+  expect(existsSync(join(src, 'src/hello.ts'))).toBe(true)
+  expect(head(src, ['rev-parse', '--abbrev-ref', 'HEAD'])).toBe('widget-12-a1')
+  expect(head(src, ['remote', 'get-url', 'origin'])).toMatch(/remotes\/caliperforge\/widget$/)
+  expect(head(src, ['remote', 'get-url', 'upstream'])).toMatch(/remotes\/acme\/widget$/)
+  expect(head(src, ['rev-parse', 'HEAD'])).toBe(readFileSync(join(w.root, '.cf/work/1/base.sha'), 'utf8').trim())
+  expect(head(src, ['status', '--porcelain'])).toBe('')
+})
+
+test('a kotlin checkout routes the build to the kotlin seat, and the diff is against the branch base', async () => {
+  const w = world('warm', undefined, KOTLIN)
+  approve(w.db, w.target)
+  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  const fired = (await tick(w.db, w.root, stub(CARRIED)))[0]
+  expect(fired).toMatchObject({ step: 2, name: 'build', outcome: 'pass' })
+  expect(fired?.note).toMatch(/^kotlin_specialist /)
+  expect(existsSync(join(srcDir(w.root, 1), 'kotlin/build.gradle.kts'))).toBe(true)
+  const seen: Packet[] = []
+  await tick(w.db, w.root, stub(CARRIED))
+  await tick(w.db, w.root, stub(CARRIED, 0, PASS, (p) => seen.push(p)))
+  expect(seen[0]?.prompt.split('# Diff')[1]?.trim()).toBe('')
 })
 
 test('a pipe fires only inside its window, wrapping across midnight', () => {

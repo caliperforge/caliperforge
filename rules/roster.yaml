@@ -1,6 +1,10 @@
 seats:
   - typescript_specialist
+  - kotlin_specialist
 digests:
   typescript_specialist:
     manifest: 9f1068a0fda7ce6b93e64a895d89a4f6239d8bb6aff1a5f523040565ca6e7069
     prompt: 30590f3bfb9cbe494f000da60f1a8a6fe01eba1af3ef626bec0bec50c8d80967
+  kotlin_specialist:
+    manifest: 88eb98b2a35a888abb29aa7ba9ba95530e7a02b8e7d7ae2efb83421a5c9e2ee9
+    prompt: b165ac35a85f5ed50a8aa121559030511692fd7138fd2f30daef7cd3cafe2b37

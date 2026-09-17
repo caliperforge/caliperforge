@@ -87,6 +87,12 @@ function preReview(db: Db, root: string, plan: PlanRow): Outcome {
   return { outcome: verdict.outcome, spans: verdict.spans, note: `completion-audit: ${verdict.message}` }
 }
 
+/** The repository and issue a plan's checkout is made from, if it has one. */
+export function targetOf(db: Db, plan: PlanRow): { repo: string; issue_no: number } | null {
+  const row = db.prepare('SELECT repo, issue_no FROM targets WHERE id = ?').get(plan.target_id)
+  return (row ?? null) as { repo: string; issue_no: number } | null
+}
+
 function target(db: Db, plan: PlanRow): Target | null {
   const row = db.prepare(`SELECT t.repo, t.issue_no, t.state, a.measured_at, a.pulse
     FROM targets t JOIN accounts a ON a.id = t.account_id WHERE t.id = ?`).get(plan.target_id)

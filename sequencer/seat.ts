@@ -9,7 +9,7 @@ import type { Db } from '../store/index.ts'
 import type { PlanRow } from '../store/plans.ts'
 import type { Step } from '../templates/pr-path.ts'
 import type { Outcome } from './kind.ts'
-import { get, maybe, planDir, put, srcDir } from './workspace.ts'
+import { cloned, get, gitDiff, maybe, planDir, put, srcDir } from './workspace.ts'
 
 const INSERT = `INSERT INTO runs
   (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_tokens, output_tokens, seconds, exit, transcript_path)
@@ -19,24 +19,13 @@ export async function fireSeat(db: Db, root: string, plan: PlanRow, step: Step, 
   load(db, root)
   const { manifest, prompt, hash } = seat(root, step.runs)
   const fired = await provider.fire(
-    packet(manifest, prompt, tight(root), brief(root, plan), checkout(root, plan.id), transcriptOf(root, plan.id, step.step)))
+    packet(manifest, prompt, tight(root), brief(root, plan), srcDir(root, plan.id), transcriptOf(root, plan.id, step.step)))
   db.prepare(INSERT).run(plan.id, step.step, step.runs, hash, provider.name, manifest.model, manifest.effort,
     fired.usage.input, fired.usage.cache, fired.usage.output, fired.seconds, fired.exit, fired.transcript_path)
   put(root, plan.id, `step-${String(step.step)}.handback.md`, fired.text)
   const tokens = fired.usage.input + fired.usage.cache + fired.usage.output
   if (fired.exit === 0) return { outcome: 'pass', spans: [], note: `${step.runs} exit 0, ${String(tokens)} tokens` }
   return { outcome: 'refuse', spans: [fired.stop_reason ?? 'seat.exit'], note: `${step.runs} exit ${String(fired.exit)}` }
-}
-
-/**
- * The builder works in the plan's checkout, not in `src/` inside it. A seat's
- * `write_paths` are relative to its cwd, which is what `cf fire --cwd` hands
- * it: with `src/` as the cwd, `write_paths: [src]` admits only `src/src/**`
- * and the write gate refuses every file a builder actually writes.
- */
-function checkout(root: string, plan: number): string {
-  srcDir(root, plan)
-  return planDir(root, plan)
 }
 
 /**
@@ -79,10 +68,18 @@ function verdictText(v: { outcome: string; spans: string[]; message: string }): 
 
 /**
  * What step 2 changed, as a unified diff the reviewer and `rails/diff.ts` can
- * both read. The workspace starts empty, so every file in it is an addition.
+ * both read. In a real checkout that is `git diff` against the sha the branch
+ * was cut from, so an untouched workspace diffs to nothing; without one the
+ * workspace starts empty and every file in it is an addition.
  */
 function diffOf(root: string, plan: number): string {
   const src = srcDir(root, plan)
+  const base = maybe(root, plan, 'base.sha')
+  if (base !== null && cloned(src)) return gitDiff(src, base.trim())
+  return additions(src)
+}
+
+function additions(src: string): string {
   return files(src).map((path) => {
     const body = readFileSync(path, 'utf8')
     const lines = body.split('\n')

@@ -1,6 +1,7 @@
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { query, type HookInput, type SDKResultMessage, type SyncHookJSONOutput } from '@anthropic-ai/claude-agent-sdk'
+import { credential } from '../credential.ts'
 import type { Fired, Packet, Provider } from '../kind.ts'
 
 const WRITES = new Set(['Write', 'Edit', 'NotebookEdit'])
@@ -15,6 +16,7 @@ async function fire(packet: Packet): Promise<Fired> {
     prompt: packet.prompt,
     options: {
       cwd: packet.cwd,
+      env: credential().env,
       model: packet.model,
       effort: packet.effort,
       allowedTools: packet.tools,

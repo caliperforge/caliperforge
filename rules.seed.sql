@@ -10,4 +10,5 @@ VALUES
   ('identifiers', 'rail', 'rules/rails.yaml', '328ab926a4e5aef852e9cad7e64bbbbe0707afa6ca001226ee7f52182deb8ede', '2026-09-17'),
   ('ci-green', 'rail', 'rules/rails.yaml', '328ab926a4e5aef852e9cad7e64bbbbe0707afa6ca001226ee7f52182deb8ede', '2026-09-17'),
   ('ready', 'rail', 'rules/rails.yaml', '328ab926a4e5aef852e9cad7e64bbbbe0707afa6ca001226ee7f52182deb8ede', '2026-09-17'),
-  ('typescript_specialist', 'card', 'rules/roster.yaml', 'c5df6d79cb1c363d36de04cac8b6bd200259e2ad0c2cffe44b3b357df1950da2', '2026-09-17');
+  ('typescript_specialist', 'card', 'rules/roster.yaml', '28f5eb058af8a768b44d0f802b03a226ae59dcf2006a87d6a4a9606a228df9ca', '2026-09-17'),
+  ('kotlin_specialist', 'card', 'rules/roster.yaml', '28f5eb058af8a768b44d0f802b03a226ae59dcf2006a87d6a4a9606a228df9ca', '2026-09-17');

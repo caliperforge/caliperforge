@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import type { Db } from '../store/index.ts'
-import { gh } from './gh.ts'
+import { gh, ours, type Read } from './gh.ts'
 
 const Merged = z.array(z.object({
   author: z.object({ login: z.string() }).nullable(),
@@ -8,12 +8,18 @@ const Merged = z.array(z.object({
   mergedAt: z.string().nullable(),
 }))
 
-const Opened = z.array(z.object({ createdAt: z.string() }))
+const Opened = z.array(z.object({
+  createdAt: z.string(),
+  headRepositoryOwner: z.object({ login: z.string() }).nullable(),
+}))
 
 const Elsewhere = z.array(z.object({ repository: z.object({ nameWithOwner: z.string() }) }))
 
 /** Ruled at rev 4: no outsider merge in 21 days, or an open-PR median over 21 days, is a cold account. */
 const COLD_DAYS = 21
+
+/** Plan states a plan can still leave; a target under one of them is a loop of ours that is still open. */
+const LIVE = "('queued', 'running', 'blocked_on_ceo')"
 
 /** One page of merged pull requests is the window every count below is taken over. */
 const WINDOW = 100
@@ -29,40 +35,51 @@ export interface Pulse {
   last_outsider_merge: string | null
   open_pr_age_p50_days: number
   cross_repo_activity: number
+  open_loop: boolean
   pulse: 'warm' | 'cold'
   evidence: string
 }
 
-export type Read = (args: string[]) => unknown
+export type { Read }
 
 const UPSERT = `INSERT INTO accounts (repo, measured_at, maintainers, doors, last_outsider_merge,
-  open_pr_age_p50_days, cross_repo_activity, pulse, evidence) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  open_pr_age_p50_days, cross_repo_activity, open_loop, pulse, evidence) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   ON CONFLICT (repo, measured_at) DO UPDATE SET maintainers = excluded.maintainers, doors = excluded.doors,
     last_outsider_merge = excluded.last_outsider_merge, open_pr_age_p50_days = excluded.open_pr_age_p50_days,
-    cross_repo_activity = excluded.cross_repo_activity, pulse = excluded.pulse, evidence = excluded.evidence`
+    cross_repo_activity = excluded.cross_repo_activity, open_loop = excluded.open_loop,
+    pulse = excluded.pulse, evidence = excluded.evidence`
 
 export function measure(db: Db, repo: string, today: string, read: Read = gh): Pulse {
-  const row = pulseOf(repo, today, read)
+  const row = pulseOf(repo, today, read, planOpen(db, repo))
   db.prepare(UPSERT).run(row.repo, row.measured_at, row.maintainers, row.doors, row.last_outsider_merge,
-    row.open_pr_age_p50_days, row.cross_repo_activity, row.pulse, row.evidence)
+    row.open_pr_age_p50_days, row.cross_repo_activity, row.open_loop ? 1 : 0, row.pulse, row.evidence)
   return row
+}
+
+/** The second half of "open loop": a plan of ours on this repo that has not reached a terminal state. */
+export function planOpen(db: Db, repo: string): boolean {
+  return db.prepare(`SELECT 1 FROM plans JOIN targets ON targets.id = plans.target_id
+    WHERE targets.repo = ? AND plans.state IN ${LIVE} LIMIT 1`).get(repo) !== undefined
 }
 
 export function render(row: Pulse): string {
   return [row.repo, row.measured_at, row.pulse, `maintainers ${String(row.maintainers)}`,
     `doors ${String(row.doors)}`, `last outsider merge ${row.last_outsider_merge ?? '-'}`,
     `open pr age p50 ${String(row.open_pr_age_p50_days)}d`,
-    `cross repo ${String(row.cross_repo_activity)}`, row.evidence].join('\t').concat('\n')
+    `cross repo ${String(row.cross_repo_activity)}`,
+    `open loop ${row.open_loop ? 'yes' : 'no'}`, row.evidence].join('\t').concat('\n')
 }
 
-function pulseOf(repo: string, today: string, read: Read): Pulse {
+function pulseOf(repo: string, today: string, read: Read, planned: boolean): Pulse {
   const merged = Merged.parse(read(['pr', 'list', '--repo', repo, '--state', 'merged',
     '--limit', String(WINDOW), '--json', 'author,mergedBy,mergedAt']))
   const mergers = logins(merged.map((p) => p.mergedBy))
   const outsiders = merged.filter((p) => p.author !== null && !mergers.includes(p.author.login))
   const last = outsiders.flatMap((p) => (p.mergedAt === null ? [] : [p.mergedAt])).sort().at(-1)?.slice(0, 10) ?? null
-  const age = p50(Opened.parse(read(['pr', 'list', '--repo', repo, '--state', 'open',
-    '--limit', String(WINDOW), '--json', 'createdAt'])).map((p) => days(today, p.createdAt)))
+  const opened = Opened.parse(read(['pr', 'list', '--repo', repo, '--state', 'open',
+    '--limit', String(WINDOW), '--json', 'createdAt,headRepositoryOwner']))
+  const age = p50(opened.map((p) => days(today, p.createdAt)))
+  const loop = planned || opened.some((p) => ours(p.headRepositoryOwner?.login))
   return {
     repo,
     measured_at: today,
@@ -71,9 +88,20 @@ function pulseOf(repo: string, today: string, read: Read): Pulse {
     last_outsider_merge: last,
     open_pr_age_p50_days: age,
     cross_repo_activity: elsewhere(repo, mergers, read),
-    pulse: last === null || days(today, last) > COLD_DAYS || age > COLD_DAYS ? 'cold' : 'warm',
+    open_loop: loop,
+    pulse: cold(today, last, age, loop) ? 'cold' : 'warm',
     evidence: `https://github.com/${repo}/pulse`,
   }
+}
+
+/**
+ * The no-outsider-merge axis is unconditional. The p50 axis is not: a median dragged up by a tail of
+ * third-party pull requests says nothing about a repo where a loop of ours is already open — BUILD_MAP
+ * rev 6.1 step 0 "must not trip on a target inside an open loop", kernel issue 23.
+ */
+function cold(today: string, last: string | null, age: number, loop: boolean): boolean {
+  if (last === null || days(today, last) > COLD_DAYS) return true
+  return age > COLD_DAYS && !loop
 }
 
 /** A maintainer is someone the repo let press merge; a door is one who has pressed it for an outsider. */

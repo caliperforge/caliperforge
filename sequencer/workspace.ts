@@ -36,7 +36,7 @@ export function doneIds(issue: string): string[] {
 }
 
 /** The org account every target is forked into. A branch is pushed here; it is never cut from here. */
-const FORK = 'caliperforge'
+export const FORK = 'caliperforge'
 
 /** A target directory that names the language its builder must be able to compile. */
 const LANGUAGES: [string, string][] = [['kotlin', 'kotlin']]

@@ -8,11 +8,22 @@ const Account = z.object({ id: z.int(), measured_at: z.string(), pulse: z.enum([
 
 const URL = /^https:\/\/github\.com\/([^/]+\/[^/]+)\/issues\/(\d+)$/
 
+/** Law 4: a trip names a typed origin, and a ruling-origin resolves to a `rulings` row, not a sentence. */
+export interface Origin {
+  origin_kind: 'ruling'
+  origin_ref: string
+}
+
+/** The two step-0 trips kernel issue 23 rebuilt; both resolve to a ruling carrying the issue and the map line. */
+const IMPLEMENTED: Origin = { origin_kind: 'ruling', origin_ref: 'queue.implemented' }
+const COLD: Origin = { origin_kind: 'ruling', origin_ref: 'queue.cold_pulse' }
+
 export interface Added {
   target: number
   plan: number | null
   state: 'ready' | 'parked' | 'refused'
   why: string
+  origin: Origin | null
 }
 
 export function parse(repo: string, url: string): number {
@@ -36,21 +47,34 @@ export function add(db: Db, root: string, repo: string, url: string, pipe: strin
   const pulse = account(db, repo, today)
   const row = readIssue(repo, no)
   const merger = lastMerger(repo)
-  const why = claimed(row) ?? implemented(repo, row) ?? (merger === null ? `${repo} has no named merger` : null)
+  const claim = claimed(row)
+  const shipped = claim === null ? implemented(repo, row) : null
+  const why = claim ?? shipped ?? (merger === null ? `${repo} has no named merger` : null)
   const state = why !== null ? 'refused' : pulse.pulse === 'cold' ? 'parked' : 'ready'
-  const target = upsert(db, pulse, repo, no, merger ?? '', state, url)
-  if (why !== null) return { target, plan: null, state, why }
+  const origin = shipped !== null ? IMPLEMENTED : state === 'parked' ? COLD : null
+  const target = upsert(db, pulse, repo, no, merger ?? '', state, url, ruling(db, origin, state))
+  if (why !== null) return { target, plan: null, state, why, origin }
   const plan = planFor(db, pipe, target)
   put(root, plan, 'issue.md', `# ${row.title}\n\n${row.body}\n`)
-  return { target, plan, state, why: state === 'parked' ? `${repo} pulse is cold; parked` : `${repo}#${String(no)} queued` }
+  const note = state === 'parked' ? `${repo} pulse is cold; parked` : `${repo}#${String(no)} queued`
+  return { target, plan, state, why: note, origin }
 }
 
-function upsert(db: Db, pulse: z.infer<typeof Account>, repo: string, no: number, merger: string, state: string, url: string): number {
-  db.prepare(`INSERT INTO targets (account_id, repo, issue_no, named_merger, state, evidence_measured_at, evidence)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+/** `targets.ineligible_ruling_id` is the refused trip's law-4 home; the parked trip has no column, only the row. */
+function ruling(db: Db, origin: Origin | null, state: string): number | null {
+  if (origin === null || state !== 'refused') return null
+  const row = db.prepare('SELECT id FROM rulings WHERE subject = ? ORDER BY id DESC LIMIT 1')
+    .get(origin.origin_ref) as { id: number } | undefined
+  return row?.id ?? null
+}
+
+function upsert(db: Db, pulse: z.infer<typeof Account>, repo: string, no: number, merger: string, state: string, url: string, ruled: number | null): number {
+  db.prepare(`INSERT INTO targets (account_id, repo, issue_no, named_merger, state, evidence_measured_at, evidence, ineligible_ruling_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT (repo, issue_no) DO UPDATE SET account_id = excluded.account_id, named_merger = excluded.named_merger,
-      state = excluded.state, evidence_measured_at = excluded.evidence_measured_at, evidence = excluded.evidence`)
-    .run(pulse.id, repo, no, merger, state, pulse.measured_at.slice(0, 10), url)
+      state = excluded.state, evidence_measured_at = excluded.evidence_measured_at, evidence = excluded.evidence,
+      ineligible_ruling_id = excluded.ineligible_ruling_id`)
+    .run(pulse.id, repo, no, merger, state, pulse.measured_at.slice(0, 10), url, ruled)
   const row = db.prepare('SELECT id FROM targets WHERE repo = ? AND issue_no = ?').get(repo, no) as { id: number }
   return row.id
 }

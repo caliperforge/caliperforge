@@ -1,0 +1,71 @@
+import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { parse } from 'yaml'
+import { z } from 'zod'
+import type { Db } from '../../store/index.ts'
+
+const Manifest = z.object({
+  rail: z.literal('completion-audit'),
+  gate: z.literal('pre_review'),
+  step: z.int().min(0).max(9),
+  defect_class: z.string(),
+})
+
+const Envelope = z.object({
+  done: z.array(z.object({
+    id: z.string(),
+    status: z.enum(['done', 'cannot-be-done', 'they-said-dont']),
+    pointer: z.string().nullish(),
+  })).min(1),
+})
+
+export interface Verdict {
+  outcome: 'pass' | 'refuse'
+  origin_kind: 'rail' | null
+  origin_ref: string | null
+  subject_digest: string
+  spans: string[]
+  message: string
+}
+
+export function audit(handback: string, expected: string[]): Verdict {
+  const rows = carried(handback)
+  const subject = createHash('sha256').update(handback).digest('hex')
+  const spans = expected.filter((id) => (rows.get(id) ?? '').trim() === '')
+  if (spans.length === 0) return { outcome: 'pass', origin_kind: null, origin_ref: null, subject_digest: subject, spans, message: `${String(expected.length)} done-condition(s) carried with a pointer` }
+  return {
+    outcome: 'refuse',
+    origin_kind: 'rail',
+    origin_ref: 'completion-audit',
+    subject_digest: subject,
+    spans,
+    message: `${spans.join(', ')} expected by the ticket, absent from the handback or carried with no pointer`,
+  }
+}
+
+export function record(db: Db, plan: number, verdict: Verdict, seconds: number): number {
+  const manifest = Manifest.parse(parse(readFileSync(join(import.meta.dirname, 'manifest.yaml'), 'utf8')))
+  const row = db.prepare(`INSERT INTO verdicts
+    (gate, kind, subject_digest, plan, step, outcome, rail_id, origin_kind, origin_ref, tokens, seconds)
+    VALUES (?, 'rail', ?, ?, ?, ?, ?, ?, ?, 0, ?)`)
+    .run(manifest.gate, verdict.subject_digest, plan, manifest.step, verdict.outcome,
+      manifest.rail, verdict.origin_kind, verdict.origin_ref, seconds)
+  return Number(row.lastInsertRowid)
+}
+
+function carried(handback: string): Map<string, string> {
+  const fence = /^---\r?\n([\s\S]*?)\r?\n---\s*$/m.exec(handback)
+  if (fence === null) return new Map()
+  const envelope = Envelope.safeParse(yaml(fence[1] ?? ''))
+  if (!envelope.success) return new Map()
+  return new Map(envelope.data.done.map((row) => [row.id, row.pointer ?? '']))
+}
+
+function yaml(text: string): unknown {
+  try {
+    return parse(text)
+  } catch {
+    return null
+  }
+}

@@ -1,0 +1,11 @@
+seat: typescript_specialist
+model: claude-opus-5
+effort: high
+tools:
+  - Read
+  - Write
+  - Edit
+  - Glob
+  - Grep
+write_paths:
+  - src

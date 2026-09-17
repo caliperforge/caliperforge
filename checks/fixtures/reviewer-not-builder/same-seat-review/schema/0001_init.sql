@@ -3,6 +3,7 @@ CREATE TABLE runs (
   plan          INTEGER NOT NULL,
   step          INTEGER NOT NULL,
   seat          TEXT NOT NULL,
+  rule_hash     TEXT NOT NULL,
   provider      TEXT NOT NULL,
   model         TEXT NOT NULL,
   effort        TEXT NOT NULL,

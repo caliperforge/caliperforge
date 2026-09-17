@@ -17,3 +17,4 @@ the lockfile is the record. No line below is a version claim.
 - `typescript-eslint` — type-aware rules; `eslint` alone cannot read the types.
 - `@eslint/js` — `eslint`'s own rule presets, the base layer of the config.
 - `commander` — the `cf` command surface. The one CLI lib; zero runtime dependencies of its own.
+- `@anthropic-ai/claude-agent-sdk` — the one provider implementation; it fires a seat in its own checkout and reports per-model token usage. Auth is whatever the local `claude` CLI holds; no key enters the tree.

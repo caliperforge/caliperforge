@@ -68,3 +68,12 @@ export function back(db: Db, plan: PlanRow): 'retried' | 'blocked_on_ceo' {
 export function needsCeo(db: Db, plan: PlanRow): void {
   db.prepare("UPDATE plans SET state = 'blocked_on_ceo' WHERE id = ?").run(plan.id)
 }
+
+export function finish(db: Db, plan: PlanRow): void {
+  db.prepare("UPDATE plans SET step = ?, state = 'done' WHERE id = ?").run(plan.step + 1, plan.id)
+}
+
+/** A signal on a pushed PR puts the plan back on the review step it escaped. */
+export function rewind(db: Db, plan: number, step: number): void {
+  db.prepare("UPDATE plans SET step = ?, state = 'running', retries = 0 WHERE id = ?").run(step, plan)
+}

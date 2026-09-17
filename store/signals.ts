@@ -1,0 +1,31 @@
+import { z } from 'zod'
+import type { Db } from './index.ts'
+
+export const SignalRow = z.object({
+  id: z.int(),
+  repo: z.string(),
+  pr: z.int(),
+  kind: z.enum(['comment', 'review', 'bot_review', 'merge', 'ci_red']),
+  author: z.string(),
+  at: z.string(),
+  external_id: z.string(),
+  score: z.int().nullable(),
+  plan: z.int().nullable(),
+})
+
+export type SignalRow = z.infer<typeof SignalRow>
+
+export type Signal = Omit<SignalRow, 'id'>
+
+/** The tick re-reads the same PR every run; the row is keyed so a replay writes nothing. */
+export function record(db: Db, signal: Signal): SignalRow | null {
+  const written = db.prepare(`INSERT OR IGNORE INTO signals
+    (repo, pr, kind, author, at, external_id, score, plan) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(signal.repo, signal.pr, signal.kind, signal.author, signal.at, signal.external_id, signal.score, signal.plan)
+  if (written.changes === 0) return null
+  return SignalRow.parse(db.prepare('SELECT * FROM signals WHERE id = ?').get(Number(written.lastInsertRowid)))
+}
+
+export function since(db: Db, plan: number): SignalRow[] {
+  return db.prepare('SELECT * FROM signals WHERE plan = ? ORDER BY id').all(plan).map((r) => SignalRow.parse(r))
+}

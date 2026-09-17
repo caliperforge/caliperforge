@@ -49,8 +49,8 @@ test('escaped is attributed to the owning step and overridden carries the approv
   const miss = escaped(db, { verdict_id: verdict(db, plan, 'pass'), defect_class: 'tight.comment', evidence })
   expect(kindOf(db, miss)).toEqual({ kind: 'escaped', owner: 'step3', defect_class: 'tight.comment' })
 
-  const approval = Number(db.prepare(`INSERT INTO approvals (subject_kind, subject_id, subject_digest, who, approved_at)
-    VALUES ('override', 1, ?, 'ceo', '2026-09-17')`).run('b'.repeat(64)).lastInsertRowid)
+  const approval = Number(db.prepare(`INSERT INTO approvals (subject_kind, subject_id, subject_digest, who, decision, approved_at)
+    VALUES ('override', 1, ?, 'ceo', 'approved', '2026-09-17')`).run('b'.repeat(64)).lastInsertRowid)
   const over = overridden(db, { verdict_id: verdict(db, plan, 'refuse'), defect_class: 'scope', evidence }, approval, 'false_positive')
   expect(kindOf(db, over)).toEqual({ kind: 'overridden', owner: 'review', defect_class: 'scope' })
 })

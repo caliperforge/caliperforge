@@ -10,8 +10,11 @@ import { tick } from '../sequencer/index.ts'
 import { blocked, targetDigest } from '../sequencer/steps.ts'
 import { dump, migrate, open as openDb, type Db } from '../store/index.ts'
 import { PlanRow } from '../store/plans.ts'
+import { headApproved } from '../store/approvals.ts'
+import { approve as approveCard, batch, refuse as refuseCard, render } from './batch.ts'
 import { awaiting, day, halted, open as openPlans, runsOf, section, verdictsOf } from './brief.ts'
 import { add } from './queue.ts'
+import { close } from './session.ts'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { version: string }
@@ -89,6 +92,8 @@ cf.command('plan').argument('<id>').action((id: string) => {
 
 const approve = cf.command('approve')
 
+const refuse = cf.command('refuse')
+
 approve.command('target').argument('<id>').action((id: string) => {
   const handle = db()
   const t = handle.prepare('SELECT repo, issue_no, evidence_measured_at FROM targets WHERE id = ?').get(Number(id)) as
@@ -96,9 +101,41 @@ approve.command('target').argument('<id>').action((id: string) => {
   if (t === undefined) throw new Error(`no target ${id}`)
   const at = new Date().toISOString()
   const digest = targetDigest(t)
-  handle.prepare(`INSERT OR IGNORE INTO approvals (subject_kind, subject_id, subject_digest, who, approved_at)
-    VALUES ('target', ?, ?, 'ceo', ?)`).run(Number(id), digest, at)
+  handle.prepare(`INSERT OR IGNORE INTO approvals (subject_kind, subject_id, subject_digest, who, decision, approved_at)
+    VALUES ('target', ?, ?, 'ceo', 'approved', ?)`).run(Number(id), digest, at)
   out(`target ${id} approved\t${digest.slice(0, 12)}\n`)
+})
+
+cf.command('batch').action(() => {
+  const cards = batch(db(), root)
+  if (cards.length === 0) out('nothing awaiting sign-off\n')
+  for (const card of cards) out(render(card))
+})
+
+for (const kind of ['plan', 'proposal'] as const) {
+  approve.command(kind).argument('<id>').action((id: string) => {
+    out(`${kind} ${id} approved\t${approveCard(db(), root, kind, Number(id)).slice(0, 12)}\n`)
+  })
+  refuse.command(kind).argument('<id>').argument('<reason>').action((id: string, reason: string) => {
+    out(`${kind} ${id} refused\t${refuseCard(db(), root, kind, Number(id), reason).slice(0, 12)}\n`)
+  })
+}
+
+const session = cf.command('session')
+
+session.command('close').argument('<transcript>').action((path: string) => {
+  const made = close(db(), resolve(path))
+  out(`${String(made.length)} proposal(s) in the batch\n`)
+})
+
+/** `hooks/pre-push` runs this; git hands it `<local ref> <local sha> <remote ref> <remote sha>` on stdin. */
+cf.command('push-check').action(() => {
+  const handle = db()
+  const refused = readFileSync(0, 'utf8').split('\n').filter((l) => l.trim() !== '')
+    .map((line) => line.split(' ')[1] ?? '')
+    .filter((sha) => !/^0{40,}$/.test(sha) && !headApproved(handle, sha))
+  for (const sha of refused) process.stderr.write(`cf: no ceo approval row for ${sha.slice(0, 12)}\n`)
+  process.exitCode = refused.length === 0 ? 0 : 1
 })
 
 cf.command('halted').action(() => {

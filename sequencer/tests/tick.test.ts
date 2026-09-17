@@ -11,11 +11,10 @@ import { blocked } from '../steps.ts'
 import { doneIds, srcDir } from '../workspace.ts'
 import { benchPacket } from '../../runner/packet.ts'
 import type { Packet } from '../../providers/kind.ts'
-import { approve, KOTLIN, PASS, plan, REFUSE, stub, world } from './world.ts'
+import { approve, CARRIED, KOTLIN, PASS, plan, REFUSE, stub, world } from './world.ts'
 
 const head = (cwd: string, args: string[]): string => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim()
 
-const CARRIED = 'built\n\n---\ndone:\n  - id: D1\n    status: done\n    pointer: src/hello.ts:1\n---\n'
 const UNPOINTED = 'built\n\n---\ndone:\n  - id: D1\n    status: done\n    pointer:\n---\n'
 const pipe = (over: Partial<PipeRow>): PipeRow =>
   ({ id: 1, name: 'pr-path', enabled: 1, window_start: '09:00', window_end: '17:00', max_concurrent: 1, ...over })
@@ -197,9 +196,9 @@ test('every run row points at a transcript the provider wrote', async () => {
   }
 })
 
-test('pr-path is measure to batch, 0 to 7, and every gate step writes a verdict', () => {
-  expect(steps.map((s) => s.name)).toEqual(['measure', 'ruling', 'build', 'rails', 'review', 'senior', 'ready', 'batch'])
-  expect(steps.map((s) => s.step)).toEqual([0, 1, 2, 3, 4, 5, 6, 7])
+test('pr-path is measure to push, 0 to 8, and every gate step writes a verdict', () => {
+  expect(steps.map((s) => s.name)).toEqual(['measure', 'ruling', 'build', 'rails', 'review', 'senior', 'ready', 'batch', 'push'])
+  expect(steps.map((s) => s.step)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8])
   expect(steps.filter((s) => s.gate && !s.writes_verdict)).toEqual([])
   expect(steps.filter((s) => s.writes_verdict).map((s) => s.verdict_gate))
     .toEqual(['pre_review', 'review', 'senior_review', 'ready'])

@@ -7,12 +7,13 @@ import type { PlanRow } from '../store/plans.ts'
 import { at } from '../templates/pr-path.ts'
 import type { Outcome } from './kind.ts'
 import { preReview } from './rails.ts'
+import { push } from './push.ts'
 
 interface Target { repo: string; issue_no: number; state: string; measured_at: string; pulse: string }
 
 export function blocked(db: Db, plan: PlanRow, today: string): string | null {
   const step = at(plan.step)
-  if (step.fires === 'ceo') return 'awaiting the sign-off batch'
+  if (step.fires === 'ceo') return approvedPlan(db, plan) ? null : 'awaiting the sign-off batch'
   if (step.name === 'ruling') return approved(db, plan) ? null : 'awaiting cf approve target'
   if (step.name === 'ready') return proven(db, plan) ? null : 'awaiting the ready proof'
   const row = target(db, plan)
@@ -25,6 +26,7 @@ export function kernel(db: Db, root: string, plan: PlanRow): Outcome {
   if (step.name === 'rails') return preReview(db, root, plan)
   if (step.name === 'measure') return measure(db, plan)
   if (step.name === 'ready') return readyGate(db, root, plan)
+  if (step.name === 'push') return push(db, root, plan)
   return { outcome: 'pass', spans: [], note: step.name }
 }
 
@@ -115,6 +117,12 @@ function approved(db: Db, plan: PlanRow): boolean {
   if (t === undefined) return false
   return db.prepare("SELECT 1 FROM approvals WHERE subject_kind = 'target' AND subject_id = ? AND subject_digest = ?")
     .get(plan.target_id, targetDigest(t)) !== undefined
+}
+
+/** R30 as code's other half: the store refuses the step, this refuses the tick that would have asked for it. */
+function approvedPlan(db: Db, plan: PlanRow): boolean {
+  return db.prepare("SELECT 1 FROM approvals WHERE subject_kind = 'plan' AND subject_id = ? AND decision = 'approved'")
+    .get(plan.id) !== undefined
 }
 
 function proven(db: Db, plan: PlanRow): boolean {

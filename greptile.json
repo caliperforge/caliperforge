@@ -1,0 +1,34 @@
+{
+  "comment": "CaliperForge kernel review. Rules live in this file; the dashboard is a blind spot.",
+  "strictness": 3,
+  "commentTypes": ["logic", "syntax", "style"],
+  "triggerOnUpdates": true,
+  "statusCheck": true,
+  "shouldUpdateDescription": false,
+  "ignorePatterns": [
+    "package-lock.json",
+    "**/fixtures/**",
+    "checks/fixtures/**"
+  ],
+  "customContext": {
+    "rules": [
+      { "rule": "A comment that restates its line, or matches because / in order to / note that / this is needed / to ensure, is a defect. A comment exists only where the code cannot say it: an invariant, or an upstream constraint with a link.", "scope": ["**/*.ts"] },
+      { "rule": "A function over 40 lines or nested deeper than 3 is a defect.", "scope": ["**/*.ts"] },
+      { "rule": "Unused imports, unreachable branches, dead helpers, and defensive checks on states the types exclude are defects.", "scope": ["**/*.ts"] },
+      { "rule": "A test weakened in this diff that then went green is a defect. Name the assertion that was removed or loosened.", "scope": ["**/*.test.ts"] },
+      { "rule": "Every refusal path must carry a typed origin — origin_kind in rail, ruling, incident, plus origin_ref. A refusal with no origin is a defect.", "scope": ["rails/**", "reviews/**", "runner/**"] },
+      { "rule": "A rule belongs in exactly one form: a schema constraint, a rail with a fixture that fails, or a CI check. Prose asserting a rule anywhere else is a defect.", "scope": ["**"] },
+      { "rule": "Every hunk maps to the issue this PR references, and nothing the issue asked for is left out. A hunk that answers no part of the issue is a defect.", "scope": ["**"] },
+      { "rule": "A PR description that summarises the diff, or opens with preamble, filler or hedges, is a defect.", "scope": ["**"] }
+    ],
+    "files": [
+      { "path": "rules/tight.md", "scope": ["**"] },
+      { "path": "docs/adr/0003-one-rule-one-form.md", "scope": ["**"] },
+      { "path": "docs/adr/0004-origin-on-refuse.md", "scope": ["**"] }
+    ],
+    "other": [
+      { "context": "TypeScript strict, Node LTS, one package. SQLite via better-sqlite3 with plain .sql migrations and no ORM; constraints live in schema/. zod at every boundary. Records are rows, reports are queries, and no free-text column exists except an evidence link.", "scope": ["**"] },
+      { "context": "A review is clean only at 5/5 with no logic findings. Anything less routes the diff back to the builder.", "scope": ["**"] }
+    ]
+  }
+}

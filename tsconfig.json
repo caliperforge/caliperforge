@@ -20,6 +20,6 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["store", "cli", "checks", "providers", "runner", "rails", "seats", "vitest.config.ts"],
+  "include": ["store", "cli", "checks", "providers", "runner", "rails", "reviews", "seats", "vitest.config.ts"],
   "exclude": ["checks/fixtures"]
 }

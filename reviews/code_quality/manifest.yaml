@@ -1,0 +1,11 @@
+review: code_quality
+gate: review
+step: 4
+model: claude-opus-5
+effort: high
+tools:
+  - Read
+  - Glob
+  - Grep
+write_paths: []
+reads_verdict: false

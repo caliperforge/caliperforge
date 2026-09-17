@@ -9,8 +9,8 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
 it('applies every migration once and records the version', () => {
   const db = open(':memory:')
-  expect(migrate(db, join(root, 'schema'))).toEqual(['0001_init.sql', '0002_rulings.sql'])
-  expect(db.pragma('user_version', { simple: true })).toBe(2)
+  expect(migrate(db, join(root, 'schema'))).toEqual(['0001_init.sql', '0002_rulings.sql', '0003_runs_rule_hash.sql'])
+  expect(db.pragma('user_version', { simple: true })).toBe(3)
   expect(migrate(db, join(root, 'schema'))).toEqual([])
 })
 

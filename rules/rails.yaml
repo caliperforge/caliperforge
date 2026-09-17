@@ -7,5 +7,6 @@ rails:
   - authority
   - tight
   - test-weakened
+  - identifiers
   - ci-green
   - ready

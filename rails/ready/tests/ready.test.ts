@@ -46,6 +46,8 @@ test('refuses every unmet ready condition by name', () => {
     'tests:1 ready.tests',
     'tree:1 ready.byte_identical',
     'https://github.com/o/r/actions/runs/1 ci.red',
+    'fork:1 not.public',
+    'bot:1 ready.bot_clean',
     'parked-org/project:1 stale.verdict',
     'spans:1 no.anchor',
   ])
@@ -55,6 +57,13 @@ test('passes a green deliverable against a warm target measured inside 30 days',
   const verdict = ready(seeded(), proof('green.proof.json', 'pass'))
   expect(verdict.outcome).toBe('pass')
   expect(verdict.spans).toEqual([])
+})
+
+test('refuses a green tree the counterparty bot flagged, and a fork nobody can read', () => {
+  const db = seeded()
+  const clean = proof('green.proof.json', 'pass')
+  expect(ready(db, { ...clean, bot_clean: false }).spans).toEqual(['bot:1 ready.bot_clean'])
+  expect(ready(db, { ...clean, fork_public: false }).spans).toEqual(['fork:1 not.public'])
 })
 
 test('refuses a warm row measured more than 30 days ago, and an unmeasured repo', () => {

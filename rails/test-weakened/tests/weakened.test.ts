@@ -37,6 +37,13 @@ test('does not fire while the suite is red', () => {
   expect(verdict.spans).toHaveLength(3)
 })
 
+test('refuses the deletion of a whole test file while the suite is green', () => {
+  const diff = 'diff --git a/t/a.test.ts b/t/a.test.ts\ndeleted file mode 100644\n--- a/t/a.test.ts\n+++ /dev/null\n@@ -1,3 +0,0 @@\n-test(\'parses\', () => {\n-  expect(parse(F)).toBe(1)\n-})\n'
+  const verdict = weakened(diff, 'green')
+  expect(verdict.outcome).toBe('refuse')
+  expect(verdict.spans).toEqual(['t/a.test.ts:1 test.weakened.removed'])
+})
+
 test('ignores a weakened line outside a test file', () => {
   const diff = '--- a/src/x.ts\n+++ b/src/x.ts\n@@ -1,1 +1,1 @@\n-expect(x).toBe(1)\n+expect(x).toBeDefined()\n'
   expect(weakened(diff, 'green').spans).toEqual([])

@@ -12,12 +12,13 @@ const PATTERNS: [string, RegExp][] = [
   ['secret.assignment', /(?:api[_-]?key|secret|token|password|passwd)["'\s]*[:=]\s*["'][A-Za-z0-9/+_-]{16,}["']/i],
 ]
 
-const ENV_FILE = /^\.env(\..+)?$/
+const ENV_FILE = /^\.env(?:\.(?!example$|sample$|template$).+)?$/
+const EXEMPT = /(?:^|\/)fixtures\/|^rails\/[^/]+\/tests\//
 
 export function scan(diff: string): Verdict {
-  const files = parse(diff)
+  const files = parse(diff).filter((f) => !EXEMPT.test(f.path))
   const spans = [
-    ...files.filter((f) => ENV_FILE.test(basename(f.path))).map((f) => `${f.path}:1 secret.env_file`),
+    ...files.filter((f) => !f.deleted && ENV_FILE.test(basename(f.path))).map((f) => `${f.path}:1 secret.env_file`),
     ...files.flatMap((f) => f.added).flatMap(matched),
   ]
   const subject_digest = createHash('sha256').update(diff).digest('hex')

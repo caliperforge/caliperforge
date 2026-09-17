@@ -25,6 +25,7 @@ export function weakened(diff: string, suite: 'green' | 'red'): Verdict {
 }
 
 function judge(file: FileDiff): string[] {
+  if (file.deleted) return [gone(file)]
   const removed = file.removed.filter((l) => ASSERT.test(l.text))
   const added = file.added.filter((l) => ASSERT.test(l.text))
   const loose = file.added.filter((l) => LOOSE.test(l.text))
@@ -34,6 +35,11 @@ function judge(file: FileDiff): string[] {
     ...(downgraded ? [span(loose[0], 'test.weakened.loosened')] : []),
     ...file.added.filter((l) => SKIPPED.test(l.text)).map((l) => span(l, 'test.weakened.skipped')),
   ]
+}
+
+function gone(file: FileDiff): string {
+  const first = file.removed.find((l) => ASSERT.test(l.text))
+  return `${file.path}:${String(first?.line ?? 1)} test.weakened.removed`
 }
 
 function count(lines: Line[], pattern: RegExp): number {

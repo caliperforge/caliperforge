@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { claudeAgentSdk } from '../providers/claude-agent-sdk/index.ts'
+import { credential } from '../providers/credential.ts'
 import { fire } from '../runner/index.ts'
 import { tick } from '../sequencer/index.ts'
 import { blocked, targetDigest } from '../sequencer/steps.ts'
@@ -43,6 +44,7 @@ cf.command('runs').action(() => {
 cf.command('fire').argument('<seat>').argument('<issue-file>')
   .option('--cwd <dir>', 'checkout the seat writes in', process.cwd())
   .action(async (name: string, issue: string, options: { cwd: string }) => {
+    credential()
     const run = await fire(db(), root, name, resolve(options.cwd), readFileSync(issue, 'utf8'), claudeAgentSdk)
     process.stderr.write(`run ${String(run.id)}\n`)
     out(run.text)
@@ -114,6 +116,8 @@ cf.command('brief').action(() => {
 })
 
 cf.command('tick').action(async () => {
+  const auth = credential()
+  process.stderr.write(`auth ${auth.kind} from ${auth.from}\n`)
   const fired = await tick(db(), root, claudeAgentSdk)
   if (fired.length === 0) out('nothing to fire\n')
   for (const f of fired) {

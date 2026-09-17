@@ -19,13 +19,24 @@ export async function fireSeat(db: Db, root: string, plan: PlanRow, step: Step, 
   load(db, root)
   const { manifest, prompt, hash } = seat(root, step.runs)
   const fired = await provider.fire(
-    packet(manifest, prompt, tight(root), brief(root, plan), srcDir(root, plan.id), transcriptOf(root, plan.id, step.step)))
+    packet(manifest, prompt, tight(root), brief(root, plan), checkout(root, plan.id), transcriptOf(root, plan.id, step.step)))
   db.prepare(INSERT).run(plan.id, step.step, step.runs, hash, provider.name, manifest.model, manifest.effort,
     fired.usage.input, fired.usage.cache, fired.usage.output, fired.seconds, fired.exit, fired.transcript_path)
   put(root, plan.id, `step-${String(step.step)}.handback.md`, fired.text)
   const tokens = fired.usage.input + fired.usage.cache + fired.usage.output
   if (fired.exit === 0) return { outcome: 'pass', spans: [], note: `${step.runs} exit 0, ${String(tokens)} tokens` }
   return { outcome: 'refuse', spans: [fired.stop_reason ?? 'seat.exit'], note: `${step.runs} exit ${String(fired.exit)}` }
+}
+
+/**
+ * The builder works in the plan's checkout, not in `src/` inside it. A seat's
+ * `write_paths` are relative to its cwd, which is what `cf fire --cwd` hands
+ * it: with `src/` as the cwd, `write_paths: [src]` admits only `src/src/**`
+ * and the write gate refuses every file a builder actually writes.
+ */
+function checkout(root: string, plan: number): string {
+  srcDir(root, plan)
+  return planDir(root, plan)
 }
 
 /**

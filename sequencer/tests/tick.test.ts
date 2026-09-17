@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { day, halted, open as openPlans, runsOf, verdictsOf } from '../../cli/brief.ts'
@@ -7,9 +7,10 @@ import { clock, inWindow, underCap, type PipeRow, type PlanRow } from '../../sto
 import { steps } from '../../templates/pr-path.ts'
 import { tick } from '../index.ts'
 import { blocked } from '../steps.ts'
-import { doneIds } from '../workspace.ts'
+import { doneIds, srcDir } from '../workspace.ts'
 import { benchPacket } from '../../runner/packet.ts'
-import { approve, plan, REFUSE, stub, world } from './world.ts'
+import type { Packet } from '../../providers/kind.ts'
+import { approve, PASS, plan, REFUSE, stub, world } from './world.ts'
 
 const CARRIED = 'built\n\n---\ndone:\n  - id: D1\n    status: done\n    pointer: src/hello.ts:1\n---\n'
 const UNPOINTED = 'built\n\n---\ndone:\n  - id: D1\n    status: done\n    pointer:\n---\n'
@@ -17,6 +18,23 @@ const pipe = (over: Partial<PipeRow>): PipeRow =>
   ({ id: 1, name: 'pr-path', enabled: 1, window_start: '09:00', window_end: '17:00', max_concurrent: 1, ...over })
 const row = (over: Partial<PlanRow>): PlanRow =>
   ({ id: 1, pipe_id: 1, target_id: 1, template: 'pr_path', state: 'queued', queued_at: '', step: 0, retries: 0, ...over })
+
+test('the builder may write the files it is asked for, and nothing beside them', async () => {
+  const w = world()
+  approve(w.db, w.target)
+  const packets: Packet[] = []
+  await tick(w.db, w.root, stub(CARRIED, 0, PASS, (p) => packets.push(p)))
+  await tick(w.db, w.root, stub(CARRIED, 0, PASS, (p) => packets.push(p)))
+  await tick(w.db, w.root, stub(CARRIED, 0, PASS, (p) => packets.push(p)))
+  const builder = packets[0]
+  expect(builder).toBeDefined()
+  const src = realpathSync(srcDir(w.root, 1))
+  expect(builder?.refuse(join(src, 'hello.ts'))).toBeNull()
+  expect(builder?.refuse(join(src, 'nested/hello.ts'))).toBeNull()
+  expect(builder?.refuse('src/hello.ts')).toBeNull()
+  expect(builder?.refuse(join(src, '../issue.md'))).toMatchObject({ origin_ref: 'seat.write_paths' })
+  expect(builder?.refuse('../hello.ts')).toMatchObject({ origin_ref: 'seat.write_paths' })
+})
 
 test('a pipe fires only inside its window, wrapping across midnight', () => {
   expect(clock(new Date(2026, 8, 17, 9, 5))).toBe('09:05')

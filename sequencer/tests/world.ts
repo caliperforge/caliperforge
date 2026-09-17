@@ -2,7 +2,7 @@ import { cpSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fresh } from '../../checks/sqlite.ts'
-import type { Provider } from '../../providers/kind.ts'
+import type { Packet, Provider } from '../../providers/kind.ts'
 import type { Db } from '../../store/index.ts'
 import { PlanRow, type PipeRow } from '../../store/plans.ts'
 import { targetDigest } from '../steps.ts'
@@ -26,10 +26,11 @@ export const REFUSE = '---\noutcome: refuse\nclass: correctness\nspans:\n  - src
  * no write tool — `runner/packet.ts:Review` refuses a reviewer that holds one —
  * so the stub answers those with a verdict fence and the builder with `text`.
  */
-export function stub(text: string, exit = 0, review = PASS): Provider {
+export function stub(text: string, exit = 0, review = PASS, seen?: (packet: Packet) => void): Provider {
   return {
     name: 'claude-agent-sdk',
     fire: (packet) => {
+      seen?.(packet)
       mkdirSync(dirname(packet.transcript), { recursive: true })
       writeFileSync(packet.transcript, '{"type":"result"}\n')
       return Promise.resolve({

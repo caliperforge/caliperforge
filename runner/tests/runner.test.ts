@@ -33,6 +33,18 @@ test('a write inside write_paths is allowed and one outside is refused with an o
   expect(refuse(cwd, ['src'], 'srcery/hello.ts')).not.toBeNull()
 })
 
+test('a seat building our own kernel writes anywhere but .cf/, and a stranger\'s repo keeps write_paths', () => {
+  expect(refuse(cwd, ['src'], 'cli/gh.ts')).toMatchObject({ origin_ref: 'seat.write_paths', path: 'cli/gh.ts' })
+  expect(refuse(cwd, ['src'], 'cli/gh.ts', true)).toBeNull()
+  expect(refuse(cwd, ['src'], 'src/hello.ts', true)).toBeNull()
+  expect(refuse(cwd, ['src'], '.cf/work/2/plan.json', true)).toMatchObject({ origin_ref: 'seat.write_paths', path: '.cf/work/2/plan.json' })
+  expect(refuse(cwd, ['src'], '../escape.ts', true)).toMatchObject({ path: '../escape.ts' })
+
+  const manifest = seat(root, 'typescript_specialist').manifest
+  expect(packet(manifest, 'p', 't', 'i', cwd, TRANSCRIPT, true).refuse('cli/x.ts')).toBeNull()
+  expect(packet(manifest, 'p', 't', 'i', cwd, TRANSCRIPT).refuse('cli/x.ts')).not.toBeNull()
+})
+
 test('the provider gate denies a refused write and lets everything else through', () => {
   const p = packet(seat(root, 'typescript_specialist').manifest, 'prompt', 'tight', 'issue', cwd, TRANSCRIPT)
   const pre = (tool: string, file: string): HookInput =>

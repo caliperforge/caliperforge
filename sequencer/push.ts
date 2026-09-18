@@ -1,10 +1,10 @@
 import { execFileSync } from 'node:child_process'
 import { closeIssue, openPr } from '../cli/gh.ts'
-import { gates, headDigest, signedHead } from '../store/approvals.ts'
+import { headDigest, signedHead } from '../store/approvals.ts'
 import type { Db } from '../store/index.ts'
 import { internal, originIssue, type PlanRow } from '../store/plans.ts'
 import type { Outcome } from './kind.ts'
-import { cloned, fetchMain, get, MAIN, put, SELF, srcDir, titleOf } from './workspace.ts'
+import { cloned, conflicted, fetchMain, get, MAIN, put, SELF, srcDir, titleOf } from './workspace.ts'
 
 interface Head { dir: string; branch: string; sha: string }
 
@@ -22,30 +22,39 @@ const WIRE: Wire = {
 }
 
 /**
- * #35 rule 1: the plan that passed the gates goes onto `main` in the tick that signs it -- a
- * fast-forward while the branch still sits on main's head, a merge commit once it does not -- and
- * its issue is closed with that sha. A merge commit is a second name for bytes the gates already
- * proved, so the gates sign it too and `hooks/pre-push` lets `main` out on the same clause.
+ * #35 rule 1: the plan that passed the gates goes onto `main` in the tick that signs it, as a
+ * fast-forward of the head the gates signed, and its issue is closed with that sha. A `main` that
+ * moved since ready is #35 rule 3's case and never lands here: step 7 sends it back through
+ * `baseMoved` first, so the sha `hooks/pre-push` lets out is the one the rails judged.
  */
 export function land(db: Db, root: string, plan: PlanRow, approval: number, wire: Wire = WIRE): Outcome {
   const issue = originIssue(plan)
   if (issue === null) return refuse('plans', `plan ${String(plan.id)} names no issue of ours to land`)
-  if (!cloned(srcDir(root, plan.id))) return refuse('checkout', `plan ${String(plan.id)} has no checkout to land`)
+  const src = srcDir(root, plan.id)
+  if (!cloned(src)) return refuse('checkout', `plan ${String(plan.id)} has no checkout to land`)
+  if (conflicted(src)) return refuse('base:conflict', `plan ${String(plan.id)} has unmerged paths; a conflicted tree is neither committed nor landed`)
   const head = headOf(root, plan.id)
   const sha = merged(head.dir, head.branch)
-  if (sha !== head.sha) gates(db, plan.id, headDigest(sha))
+  if (sha === null) return refuse('base:stale', `main moved under plan ${String(plan.id)} between ready and land; cut it again from main`)
   wire.send(head.dir, 'main')
   wire.close(SELF, issue, sha)
   pushed(db, plan.id, approval, `https://github.com/${SELF}/commit/${sha}`)
   return { outcome: 'pass', spans: [], note: `landed ${head.branch} on main as ${sha.slice(0, 12)}` }
 }
 
-/** The tree is left on the branch it came in on: every other step reads the checkout as the plan's, not main's. */
-function merged(dir: string, branch: string): string {
+/**
+ * The tree is left on the branch it came in on: every other step reads the checkout as the plan's, not main's.
+ * `--ff-only` refuses before it touches a file, so a `main` that moved inside the tick leaves no merge to abort.
+ */
+function merged(dir: string, branch: string): string | null {
   fetchMain(dir)
   git(dir, ['checkout', '-B', 'main', MAIN])
-  git(dir, ['-c', 'user.email=cf@caliperforge.dev', '-c', 'user.name=caliperforge',
-    'merge', '--ff', '--no-edit', '-m', `land ${branch}`, branch])
+  try {
+    git(dir, ['merge', '--ff-only', branch])
+  } catch {
+    git(dir, ['checkout', branch])
+    return null
+  }
   const sha = git(dir, ['rev-parse', 'main']).trim()
   git(dir, ['checkout', branch])
   return sha

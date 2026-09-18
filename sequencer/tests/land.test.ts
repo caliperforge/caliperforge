@@ -5,7 +5,7 @@ import { basename, join } from 'node:path'
 import { expect, test } from 'vitest'
 import { headApproved } from '../../store/approvals.ts'
 import { tick } from '../index.ts'
-import { headOf, type Wire } from '../push.ts'
+import { headOf, land, type Wire } from '../push.ts'
 import { liveTree, srcDir } from '../workspace.ts'
 import { approve, built, CARRIED, forkCi, internalPlan, moveMain, ours, plan, ready, stub, world, type World } from './world.ts'
 
@@ -62,20 +62,67 @@ test('an internal plan that passed ready is on main, pushed and its issue closed
   expect(sent).toHaveLength(2)
 })
 
-test('main moving between ready and batch lands a merge commit the gates sign too', async () => {
+test('main moving between ready and batch rewinds to the rails and lands as a fast-forward on the second pass', async () => {
   const w = mine()
   const sent: string[] = []
   const wire = watched(sent)
   await atBatch(w, wire)
   moveMain(w.root, 'after.ts')
 
-  await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  const held = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
   const src = srcDir(w.root, ID)
+  expect(held).toMatchObject({ step: 7, outcome: 'pass', state: 'running', spans: ['base:stale'] })
+  expect(plan(w.db, ID).step).toBe(3)
+  expect(sent).toEqual([])
+  expect(w.db.prepare("SELECT count(*) AS n FROM approvals WHERE who = 'gates'").get()).toEqual({ n: 0 })
+  expect(git(src, ['rev-list', '--count', `main..${BRANCH}`])).not.toBe('0')
+
+  for (let at = 0; at < 5; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
   const sha = git(src, ['rev-parse', 'main'])
+  expect(plan(w.db, ID).step).toBe(8)
+  expect(sha).toBe(git(src, ['rev-parse', BRANCH]))
   expect(git(src, ['rev-list', '--parents', '-n', '1', 'main']).split(' ')).toHaveLength(3)
-  expect(sha).not.toBe(git(src, ['rev-parse', BRANCH]))
+  expect(git(src, ['rev-list', '--first-parent', 'main'])).toContain(sha)
+  expect(sent).toEqual(['send src main', `close caliperforge/caliperforge#34 ${sha.slice(0, 7)}`])
   expect(headApproved(w.db, sha)).toBe(true)
-  expect(headApproved(w.db, git(src, ['rev-parse', BRANCH]))).toBe(true)
+})
+
+test('a branch that conflicts with a moved main refuses at batch, aborts the merge and closes nothing', async () => {
+  const w = mine()
+  const sent: string[] = []
+  const wire = watched(sent)
+  await atBatch(w, wire)
+  moveMain(w.root, 'src/hello.ts', 'export const hello = (): string => "main took this line"\n')
+
+  const refused = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
+  const src = srcDir(w.root, ID)
+  expect(refused).toMatchObject({ step: 7, outcome: 'refuse', spans: ['base:conflict'] })
+  expect(git(src, ['status', '--porcelain'])).toBe('')
+  expect(git(src, ['rev-parse', '--abbrev-ref', 'HEAD'])).toBe(BRANCH)
+  expect(git(src, ['diff', '--name-only', '--diff-filter=U'])).toBe('')
+  expect(sent).toEqual([])
+  expect(w.db.prepare("SELECT count(*) AS n FROM approvals WHERE who = 'gates'").get()).toEqual({ n: 0 })
+  expect(w.db.prepare('SELECT state FROM deliverables WHERE plan_id = ? ORDER BY id DESC LIMIT 1').get(ID))
+    .not.toEqual({ state: 'pushed' })
+})
+
+test('a main that moves inside the tick makes the land a refusal, not a merge commit', async () => {
+  const w = mine()
+  const sent: string[] = []
+  const wire = watched(sent)
+  await atBatch(w, wire)
+  const src = srcDir(w.root, ID)
+  const head = git(src, ['rev-parse', BRANCH])
+  moveMain(w.root, 'racing.ts')
+
+  const refused = land(w.db, w.root, plan(w.db, ID), 1, wire)
+  expect(refused).toMatchObject({ outcome: 'refuse', spans: ['base:stale'] })
+  expect(git(src, ['rev-parse', '--abbrev-ref', 'HEAD'])).toBe(BRANCH)
+  expect(git(src, ['rev-parse', BRANCH])).toBe(head)
+  expect(git(src, ['status', '--porcelain'])).toBe('')
+  expect(sent).toEqual([])
+  expect(w.db.prepare("SELECT count(*) AS n FROM deliverables WHERE plan_id = ? AND state = 'pushed'").get(ID))
+    .toEqual({ n: 0 })
 })
 
 test('an external plan does not land: step 7 still waits for the ceo and step 8 opens a pull request', async () => {

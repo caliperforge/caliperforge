@@ -10,7 +10,7 @@ import { at, type Step } from '../templates/pr-path.ts'
 import type { Outcome } from './kind.ts'
 import { preReview } from './rails.ts'
 import { headOf, land, push, type Wire } from './push.ts'
-import { abortMerge, behindMain, cloned, diffOf, fetchMain, maybe, mergeMain, put, SELF, srcDir } from './workspace.ts'
+import { abortMerge, behindMain, cloned, conflicted, diffOf, fetchMain, maybe, mergeMain, put, SELF, srcDir } from './workspace.ts'
 
 interface Target { repo: string; issue_no: number; state: string; measured_at: string; pulse: string }
 
@@ -40,10 +40,14 @@ export function kernel(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcom
  * four gate verdicts and the ready rail are the whole sign-off, the row that settles its
  * deliverable is signed `gates`, and the same step puts the branch on `main` (#35 rule 1). The
  * store's step-7 trigger reads that signature only on a plan that names an origin, so an external
- * plan still cannot leave ready on anything but the CEO's.
+ * plan still cannot leave ready on anything but the CEO's. The base is judged again before any of
+ * that: a `main` that moved since ready is #35 rule 3's case, and nothing is signed for a head the
+ * rails have not seen.
  */
 function batch(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
   if (!internal(plan)) return { outcome: 'pass', spans: [], note: 'batch' }
+  const moved = baseMoved(root, plan)
+  if (moved !== null) return moved
   const head = plan.head_digest
   if (head === null) return { outcome: 'refuse', spans: ['plans'], note: `plan ${String(plan.id)} reached batch with no proved head` }
   const approval = db.transaction(() => {
@@ -68,28 +72,31 @@ function readyGate(db: Db, root: string, plan: PlanRow): Outcome {
  * #35 rule 3: nothing lands over a moved main. The first miss merges main into the branch and sends
  * the plan back to the rails, which judge the merged bytes; a second miss is a branch that cannot
  * keep up with main and refuses so it is cut again. The builder's work is committed first: a merge
- * into a dirty tree is the one way main's bytes and the seat's could be lost against each other.
+ * into a dirty tree is the one way main's bytes and the seat's could be lost against each other --
+ * and a tree that already carries unmerged paths is refused before that commit, `base:conflict`, so
+ * conflict markers are never what the plan's bytes turn out to be.
  */
 function baseMoved(root: string, plan: PlanRow): Outcome | null {
   const src = srcDir(root, plan.id)
   if (!cloned(src)) return null
+  if (conflicted(src)) return cutAgain('base:conflict', 'the checkout has unmerged paths from a tick that stopped mid-merge')
   const main = fetchMain(src)
   if (!behindMain(src)) return null
-  if (maybe(root, plan.id, 'base.merged') !== null) return cutAgain('the branch is behind main a second time')
+  if (maybe(root, plan.id, 'base.merged') !== null) return cutAgain('base:stale', 'the branch is behind main a second time')
   headOf(root, plan.id)
   try {
     mergeMain(src)
   } catch {
     abortMerge(src)
-    return cutAgain('the branch conflicts with main')
+    return cutAgain('base:conflict', 'the branch conflicts with main')
   }
   put(root, plan.id, 'base.merged', `${main}\n`)
   put(root, plan.id, 'base.sha', `${main}\n`)
   return { outcome: 'pass', spans: ['base:stale'], note: 'main moved; merged it and re-ran the rails', rewind: 3 }
 }
 
-function cutAgain(note: string): Outcome {
-  return { outcome: 'refuse', spans: ['base:stale'], note: `${note}; cut it again from main` }
+function cutAgain(span: 'base:stale' | 'base:conflict', note: string): Outcome {
+  return { outcome: 'refuse', spans: [span], note: `${note}; cut it again from main` }
 }
 
 function proofOf(db: Db, plan: PlanRow): Proof | null {

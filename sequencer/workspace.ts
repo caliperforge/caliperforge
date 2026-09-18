@@ -108,8 +108,21 @@ export function mergeMain(dir: string): void {
     'merge', '--no-edit', MAIN])
 }
 
+/**
+ * A merge that could not be made leaves no trace. `merge --abort` restores the tree; when git refused
+ * before it touched a file there is no merge to abort and the throw is the proof the tree is already clean.
+ */
 export function abortMerge(dir: string): void {
-  git(dir, ['merge', '--abort'])
+  try {
+    git(dir, ['merge', '--abort'])
+  } catch {
+    return
+  }
+}
+
+/** Unmerged paths: a tree a tick stopped mid-merge in. Nothing is committed, signed or landed from one. */
+export function conflicted(dir: string): boolean {
+  return git(dir, ['diff', '--name-only', '--diff-filter=U']).trim() !== ''
 }
 
 /**

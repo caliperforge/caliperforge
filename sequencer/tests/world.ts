@@ -92,10 +92,11 @@ export function built(root: string, id: number, line: string): void {
   writeFileSync(path, `${readFileSync(path, 'utf8')}${line}\n`)
 }
 
-/** A commit landing on our own `main` while a plan is out on its branch. */
-export function moveMain(root: string, name: string): void {
+/** A commit landing on our own `main` while a plan is out on its branch. A `body` overwrites a file the branch also touched, which is the conflicting case. */
+export function moveMain(root: string, name: string, body?: string): void {
   const dir = join(root, 'remotes', SELF)
-  writeFileSync(join(dir, name), `export const ${name.replace('.ts', '')} = 1\n`)
+  mkdirSync(dirname(join(dir, name)), { recursive: true })
+  writeFileSync(join(dir, name), body ?? `export const ${name.replace('.ts', '')} = 1\n`)
   git(dir, ['add', '-A'])
   git(dir, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', `main moves on ${name}`])
 }

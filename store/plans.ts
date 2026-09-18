@@ -22,6 +22,7 @@ export const PlanRow = z.object({
   step: z.int(),
   retries: z.int(),
   head_digest: z.string().nullable(),
+  priority: z.int(),
 })
 
 export type PlanRow = z.infer<typeof PlanRow>
@@ -43,13 +44,17 @@ export function openPipes(db: Db, hhmm: string): PipeRow[] {
 }
 
 export function live(db: Db, pipe: PipeRow): PlanRow[] {
-  return db.prepare("SELECT * FROM plans WHERE pipe_id = ? AND state IN ('queued', 'running') ORDER BY queued_at, id")
+  return db.prepare("SELECT * FROM plans WHERE pipe_id = ? AND state IN ('queued', 'running') ORDER BY priority, queued_at, id")
     .all(pipe.id).map((r) => PlanRow.parse(r))
 }
 
 export function underCap(pipe: PipeRow, plans: PlanRow[]): PlanRow[] {
-  const running = plans.filter((p) => p.state === 'running')
-  return running.length >= pipe.max_concurrent ? running : plans
+  const out = plans.filter((p) => p.state === 'running')
+  for (const plan of plans.filter((p) => p.state !== 'running')) {
+    if (out.length >= pipe.max_concurrent) break
+    out.push(plan)
+  }
+  return out
 }
 
 export function advance(db: Db, plan: PlanRow, step: number): void {

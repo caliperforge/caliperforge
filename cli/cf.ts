@@ -9,10 +9,11 @@ import { fire } from '../runner/index.ts'
 import { tick } from '../sequencer/index.ts'
 import { blocked, targetDigest } from '../sequencer/steps.ts'
 import { dump, migrate, open as openDb, type Db } from '../store/index.ts'
-import { PlanRow } from '../store/plans.ts'
+import { dial, lanes, priority as setPriority, record, Reading, windows } from '../store/lanes.ts'
+import { clock, PlanRow } from '../store/plans.ts'
 import { headApproved } from '../store/approvals.ts'
 import { approve as approveCard, batch, refuse as refuseCard, render } from './batch.ts'
-import { awaiting, day, halted, open as openPlans, runsOf, section, verdictsOf } from './brief.ts'
+import { awaiting, day, halted, laneLine, open as openPlans, runsOf, section, verdictsOf, windowLine } from './brief.ts'
 import { measure, render as renderPulse } from './measure.ts'
 import { add } from './queue.ts'
 import { close } from './session.ts'
@@ -61,6 +62,26 @@ cf.command('pipe').argument('<state>', 'on or off').argument('<name>').action((s
   out(`pipe ${name} ${state}\n`)
 })
 
+cf.command('priority').argument('<plan>').argument('<n>', 'P0 first, up to P9')
+  .action((id: string, n: string) => {
+    const handle = db()
+    setPriority(handle, Number(id), Number(n))
+    out(`plan ${id} priority P${n}\n`)
+  })
+
+cf.command('lanes').argument('[n]', 'lanes the ceo opens, 0 to the ceiling').action((n: string | undefined) => {
+  const handle = db()
+  if (n !== undefined) dial(handle, Number(n), new Date().toISOString())
+  out(laneLine(lanes(handle, clock(new Date()))))
+})
+
+cf.command('usage').argument('[file]', 'a provider rate-limit reading, json').action((file: string | undefined) => {
+  const handle = db()
+  if (file !== undefined) record(handle, Reading.parse(JSON.parse(readFileSync(resolve(file), 'utf8'))))
+  out(laneLine(lanes(handle, clock(new Date()))))
+  for (const w of windows(handle)) out(windowLine(w))
+})
+
 cf.command('measure').argument('<repo>', 'owner/repo to take the step 0 pulse of').action((repo: string) => {
   out(renderPulse(measure(db(), repo, new Date().toISOString().slice(0, 10))))
 })
@@ -75,7 +96,9 @@ queue.command('add').argument('<repo>').argument('<issue-url>').option('--pipe <
   })
 
 queue.command('list').action(() => {
-  const rows = db().prepare(`SELECT t.id, t.repo, t.issue_no, t.state, t.named_merger, t.evidence_measured_at
+  const handle = db()
+  out(laneLine(lanes(handle, clock(new Date()))))
+  const rows = handle.prepare(`SELECT t.id, t.repo, t.issue_no, t.state, t.named_merger, t.evidence_measured_at
     FROM targets t ORDER BY t.id`).all() as Record<string, string | number>[]
   for (const r of rows) out(`${String(r.id)}\t${String(r.repo)}#${String(r.issue_no)}\t${String(r.state)}\t${String(r.named_merger)}\t${String(r.evidence_measured_at)}\n`)
 })
@@ -149,6 +172,7 @@ cf.command('halted').action(() => {
 
 cf.command('brief').action(() => {
   const handle = db()
+  out(laneLine(lanes(handle, clock(new Date()))))
   out(section('open plans', openPlans(handle)))
   out(section('halted', halted(handle)))
   out(section('awaiting approval', awaiting(handle)))

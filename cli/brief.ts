@@ -1,4 +1,5 @@
 import type { Db } from '../store/index.ts'
+import { name, type LaneState, type WindowRow } from '../store/lanes.ts'
 
 export interface PlanLine {
   id: number
@@ -53,4 +54,16 @@ export function runsOf(db: Db, plan: number): Record<string, string | number>[] 
 export function verdictsOf(db: Db, plan: number): Record<string, string | number | null>[] {
   return db.prepare('SELECT id, gate, step, outcome, origin_ref FROM verdicts WHERE plan = ? ORDER BY id')
     .all(plan) as Record<string, string | number | null>[]
+}
+
+export function laneLine(l: LaneState): string {
+  return `lanes ${String(l.live)}/${String(l.open)} live/open\tcap ${name(l.cap)}\tdial ${String(l.dial)}` +
+    `\tband ${name(l.band)}\tceiling ${String(l.ceiling)}\n`
+}
+
+/** One row per rate-limit window: our tokens inside it, the provider's utilisation of it, the cap. */
+export function windowLine(w: WindowRow): string {
+  const used = w.utilisation === null ? 'no fresh reading' : `${(w.utilisation * 100).toFixed(1)}% ${w.status ?? ''}`.trim()
+  return `  ${w.kind}\t${String(w.runs)} run(s)\t${String(w.tokens)} tokens\t${used}` +
+    `\tobserved ${w.observed_at ?? '-'}\tresets ${w.resets_at ?? '-'}\n`
 }

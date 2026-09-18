@@ -6,14 +6,16 @@ import { fileURLToPath } from 'node:url'
 import { claudeAgentSdk } from '../providers/claude-agent-sdk/index.ts'
 import { credential } from '../providers/credential.ts'
 import { fire } from '../runner/index.ts'
-import { tick } from '../sequencer/index.ts'
+import { dry, tick } from '../sequencer/index.ts'
 import { blocked, targetDigest } from '../sequencer/steps.ts'
 import { dump, migrate, open as openDb, type Db } from '../store/index.ts'
-import { dial, lanes, priority as setPriority, record, Reading, windows } from '../store/lanes.ts'
-import { clock, PlanRow } from '../store/plans.ts'
+import { dial, hhmm, lanes, priority as setPriority, record, Reading, windows } from '../store/lanes.ts'
+import { openPipes, PlanRow } from '../store/plans.ts'
 import { headApproved } from '../store/approvals.ts'
+import { receipt } from '../store/ticks.ts'
+import { adopt, render as renderAdopt } from './adopt.ts'
 import { approve as approveCard, batch, refuse as refuseCard, render } from './batch.ts'
-import { awaiting, day, halted, laneLine, open as openPlans, runsOf, section, verdictsOf, windowLine } from './brief.ts'
+import { awaiting, day, dryLines, halted, laneLine, open as openPlans, runsOf, section, tickNote, verdictsOf, windowLine } from './brief.ts'
 import { measure, render as renderPulse } from './measure.ts'
 import { add as fileIssue, render as renderUnfiled, unfiled } from './plan.ts'
 import { add } from './queue.ts'
@@ -73,13 +75,13 @@ cf.command('priority').argument('<plan>').argument('<n>', 'P0 first, up to P9')
 cf.command('lanes').argument('[n]', 'lanes the ceo opens, 0 to the ceiling').action((n: string | undefined) => {
   const handle = db()
   if (n !== undefined) dial(handle, Number(n), new Date().toISOString())
-  out(laneLine(lanes(handle, clock(new Date()))))
+  out(laneLine(lanes(handle, hhmm(handle))))
 })
 
 cf.command('usage').argument('[file]', 'a provider rate-limit reading, json').action((file: string | undefined) => {
   const handle = db()
   if (file !== undefined) record(handle, Reading.parse(JSON.parse(readFileSync(resolve(file), 'utf8'))))
-  out(laneLine(lanes(handle, clock(new Date()))))
+  out(laneLine(lanes(handle, hhmm(handle))))
   for (const w of windows(handle)) out(windowLine(w))
 })
 
@@ -99,7 +101,7 @@ queue.command('add').argument('<repo>').argument('<issue-url>').option('--pipe <
 
 queue.command('list').action(() => {
   const handle = db()
-  out(laneLine(lanes(handle, clock(new Date()))))
+  out(laneLine(lanes(handle, hhmm(handle))))
   const rows = handle.prepare(`SELECT t.id, t.repo, t.issue_no, t.state, t.named_merger, t.evidence_measured_at
     FROM targets t ORDER BY t.id`).all() as Record<string, string | number>[]
   for (const r of rows) out(`${String(r.id)}\t${String(r.repo)}#${String(r.issue_no)}\t${String(r.state)}\t${String(r.named_merger)}\t${String(r.evidence_measured_at)}\n`)
@@ -197,7 +199,7 @@ cf.command('halted').action(() => {
 
 cf.command('brief').action(() => {
   const handle = db()
-  out(laneLine(lanes(handle, clock(new Date()))))
+  out(laneLine(lanes(handle, hhmm(handle))))
   out(section('open plans', openPlans(handle)))
   out(section('halted', halted(handle)))
   out(section('awaiting approval', awaiting(handle)))
@@ -205,16 +207,38 @@ cf.command('brief').action(() => {
   out(`last 24 h\n  ${String(d.runs)} run(s)\t${String(d.tokens)} tokens\t${d.seconds.toFixed(1)}s\n`)
 })
 
-cf.command('tick').action(async () => {
-  const { auth } = credential()
-  process.stderr.write(`auth ${auth.kind} from ${auth.from}\n`)
-  const fired = await tick(db(), root, claudeAgentSdk)
-  if (fired.length === 0) out('nothing to fire\n')
-  for (const f of fired) {
-    out(`${f.pipe}\tplan ${String(f.plan)}\tstep ${String(f.step)} ${f.name}\t${f.outcome}\t${f.state}\t${f.note}\n`)
-    for (const span of f.spans) out(`  span\t${span}\n`)
-  }
-})
+cf.command('adopt').argument('<ref>', 'an <owner/repo>#<n> pull request of ours that is already open')
+  .action((ref: string) => {
+    out(renderAdopt(adopt(db(), ref, new Date().toISOString().slice(0, 10))))
+  })
+
+cf.command('tick').option('--dry', 'read what a tick would do, fire nothing, call no network')
+  .action(async (options: { dry?: boolean }) => {
+    const handle = db()
+    const now = new Date()
+    if (options.dry === true) {
+      dryTick(handle, now)
+      return
+    }
+    const { auth } = credential()
+    process.stderr.write(`auth ${auth.kind} from ${auth.from}\n`)
+    const fired = await tick(handle, root, claudeAgentSdk, now)
+    receipt(handle, { at: now.toISOString(), hhmm: hhmm(handle, now), dry: false,
+      pipes: openPipes(handle, hhmm(handle, now)).length, fired: fired.length,
+      exit: fired.some((f) => f.outcome === 'refuse') ? 1 : 0, note: tickNote(fired) })
+    if (fired.length === 0) out('nothing to fire\n')
+    for (const f of fired) {
+      out(`${f.pipe}\tplan ${String(f.plan)}\tstep ${String(f.step)} ${f.name}\t${f.outcome}\t${f.state}\t${f.note}\n`)
+      for (const span of f.spans) out(`  span\t${span}\n`)
+    }
+  })
+
+function dryTick(handle: Db, now: Date): void {
+  const would = dry(handle, now)
+  out(dryLines(would))
+  receipt(handle, { at: now.toISOString(), hhmm: would.hhmm, dry: true, pipes: would.pipes,
+    fired: 0, exit: 0, note: tickNote([]) })
+}
 
 try {
   await cf.parseAsync()

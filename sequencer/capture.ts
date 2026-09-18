@@ -74,8 +74,18 @@ function red(base: Base, view: Pr): Signal[] {
       external_id: `${String(view.number)}-${c.name ?? 'check'}`, score: null }))
 }
 
+/**
+ * The two ways a pull request of ours becomes one the tick watches: v2 pushed it and stamped the
+ * deliverable, or `cf adopt` named a v1 one and its `targets` row carries the pull url. Either
+ * marker outlives a rewind, so a plan back on the review step is still read every tick.
+ */
 function pushed(db: Db): Pushed[] {
   return db.prepare(`SELECT d.plan_id AS plan, t.repo, d.evidence
     FROM deliverables d JOIN plans p ON p.id = d.plan_id JOIN targets t ON t.id = p.target_id
-    WHERE d.state = 'pushed' AND d.evidence GLOB 'https://*/pull/*' ORDER BY d.id`).all() as Pushed[]
+    WHERE d.state = 'pushed' AND d.evidence GLOB 'https://*/pull/*'
+    UNION
+    SELECT p.id AS plan, t.repo, t.evidence
+    FROM plans p JOIN targets t ON t.id = p.target_id
+    WHERE t.evidence GLOB 'https://*/pull/*'
+    ORDER BY plan`).all() as Pushed[]
 }

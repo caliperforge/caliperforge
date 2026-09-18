@@ -1,8 +1,8 @@
 import { pr as readPr, type Pr } from '../cli/gh.ts'
 import type { Provider } from '../providers/kind.ts'
 import type { Db } from '../store/index.ts'
-import { cap } from '../store/lanes.ts'
-import { advance, back, clock, finish, live, needsCeo, openPipes, underCap, type PipeRow, type PlanRow } from '../store/plans.ts'
+import { cap, hhmm, zone } from '../store/lanes.ts'
+import { advance, back, finish, live, needsCeo, openPipes, underCap, type PipeRow, type PlanRow } from '../store/plans.ts'
 import { at, last, type Step } from '../templates/pr-path.ts'
 import { capture } from './capture.ts'
 import type { Fired, Outcome } from './kind.ts'
@@ -17,10 +17,34 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
   const today = now.toISOString().slice(0, 10)
   for (const signal of capture(db, read)) started(db, signal)
   const out: Fired[] = []
-  for (const pipe of openPipes(db, clock(now)).slice(0, cap(db).cap)) {
+  for (const pipe of openPipes(db, hhmm(db, now)).slice(0, cap(db).cap)) {
     for (const plan of picks(db, pipe, today)) out.push(await one(db, root, pipe, plan, provider))
   }
   return out
+}
+
+/** The templates a step map exists for. A lane whose map is unwritten is on with nothing to step. */
+const MAPPED = new Set(['pr_path'])
+
+export interface Would {
+  pipe: string
+  plan: number
+  step: number
+  template: string
+}
+
+export interface Quiet {
+  pipe: string
+  live: number
+}
+
+export interface Dry {
+  hhmm: string
+  zone: number
+  cap: number
+  pipes: number
+  would: Would[]
+  quiet: Quiet[]
 }
 
 /**
@@ -28,8 +52,26 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
  * blocked holds no slot; a running one holds the slot it already took.
  */
 export function picks(db: Db, pipe: PipeRow, today: string): PlanRow[] {
-  const free = live(db, pipe).filter((p) => p.state === 'running' || blocked(db, p, today) === null)
+  const mapped = live(db, pipe).filter((p) => MAPPED.has(p.template))
+  const free = mapped.filter((p) => p.state === 'running' || blocked(db, p, today) === null)
   return underCap(pipe, free).filter((p) => p.state !== 'running' || blocked(db, p, today) === null)
+}
+
+/** What a tick would do, off the store alone: no `gh` call, no model, no row moved. */
+export function dry(db: Db, now: Date = new Date()): Dry {
+  const when = hhmm(db, now)
+  const today = now.toISOString().slice(0, 10)
+  const held = cap(db).cap
+  const open = openPipes(db, when).slice(0, held).map((p) => ({ pipe: p, plans: picks(db, p, today) }))
+  return {
+    hhmm: when,
+    zone: zone(db),
+    cap: held,
+    pipes: open.length,
+    would: open.flatMap((o) => o.plans.map((p) => ({ pipe: o.pipe.name, plan: p.id, step: p.step, template: p.template }))),
+    quiet: open.filter((o) => o.plans.length === 0)
+      .map((o) => ({ pipe: o.pipe.name, live: live(db, o.pipe).length })),
+  }
 }
 
 async function one(db: Db, root: string, pipe: PipeRow, plan: PlanRow, provider: Provider): Promise<Fired> {

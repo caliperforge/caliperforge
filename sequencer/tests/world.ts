@@ -87,11 +87,21 @@ export function world(pulse: 'warm' | 'cold' = 'warm', day = new Date().toISOStr
   db.prepare(`INSERT INTO targets (id, account_id, repo, issue_no, named_merger, state, evidence_measured_at, evidence)
     VALUES (1, 1, 'acme/widget', 12, 'maintainer', ?, ?, 'https://github.com/acme/widget/issues/12')`)
     .run(pulse === 'warm' ? 'ready' : 'parked', day)
-  db.prepare("INSERT INTO pipes (id, name, enabled, window_start, window_end, max_concurrent) VALUES (1, 'pr-path', 1, '00:00', '23:59', 1)").run()
+  onePipe(db)
   db.prepare("INSERT INTO plans (id, pipe_id, target_id, template, state, queued_at, step, retries) VALUES (1, 1, 1, 'pr_path', 'queued', ?, 0, 0)")
     .run(`${day}T00:00:00.000Z`)
   put(root, 1, 'issue.md', '# hello\n\n- **D1** add `hello()` in `src/hello.ts`\n')
   return { db, root, pipe: pipeRow(db), plan: 1, target: 1 }
+}
+
+/**
+ * The store ships three lanes on, over a window with a wall clock in it. A sequencer test is one
+ * lane wide and runs at whatever hour the suite runs at, so the world opens the pr-path pipe all
+ * day and drops the two lanes it does not drive; a test that wants a second names it itself.
+ */
+function onePipe(db: Db): void {
+  db.prepare("UPDATE pipes SET window_start = '00:00', window_end = '23:59' WHERE name = 'pr-path'").run()
+  db.prepare("DELETE FROM pipes WHERE name IN ('comms', 'research')").run()
 }
 
 export function approve(db: Db, target: number): void {

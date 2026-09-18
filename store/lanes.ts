@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import type { Db } from './index.ts'
-import { openPipes } from './plans.ts'
+import { clock, openPipes } from './plans.ts'
 
 export const LaneCap = z.object({
   dial: z.int(),
@@ -68,6 +68,15 @@ export function priority(db: Db, plan: number, n: number): void {
 
 export function templatePriority(db: Db, template: string): number {
   return count(db, `priority.default.${template}`)
+}
+
+/** The zone rule, read once: `tick.zone_offset_minutes` is the only place a window's timezone is written. */
+export function zone(db: Db): number {
+  return count(db, 'tick.zone_offset_minutes')
+}
+
+export function hhmm(db: Db, now: Date = new Date()): string {
+  return clock(now, zone(db))
 }
 
 export function cap(db: Db): LaneCap {

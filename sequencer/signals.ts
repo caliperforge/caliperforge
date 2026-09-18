@@ -21,10 +21,10 @@ export function started(db: Db, signal: SignalRow): Started | null {
   return { signal: signal.id, template: 'pr_path', plan: signal.plan, step: REVIEW_STEP }
 }
 
-/** The comms pipe is created off: P7 fills `templates/comms.ts` and turns it on. */
+/** The comms lane is on and holds no step map; the plan queued here waits there until P7 writes one. */
 function comms(db: Db, signal: SignalRow, from: number): Started {
   db.prepare(`INSERT OR IGNORE INTO pipes (name, enabled, window_start, window_end, max_concurrent)
-    VALUES ('comms', 0, '00:00', '23:59', 1)`).run()
+    VALUES ('comms', 1, '07:00', '22:00', 1)`).run()
   const pipe = db.prepare("SELECT id FROM pipes WHERE name = 'comms'").get() as { id: number }
   const target = db.prepare('SELECT target_id FROM plans WHERE id = ?').get(from) as { target_id: number | null }
   const made = db.prepare(`INSERT INTO plans (pipe_id, target_id, template, state, queued_at, step, retries)

@@ -30,8 +30,14 @@ export const PlanRow = z.object({
 
 export type PlanRow = z.infer<typeof PlanRow>
 
-export function clock(now: Date): string {
-  return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+/** Wall-clock HH:MM in the zone the pipe windows are written in; the offset comes from the store. */
+export function clock(now: Date, offsetMinutes = 0): string {
+  const shifted = new Date(now.getTime() + offsetMinutes * 60000)
+  return `${pad(shifted.getUTCHours())}:${pad(shifted.getUTCMinutes())}`
+}
+
+function pad(n: number): string {
+  return String(n).padStart(2, '0')
 }
 
 export function inWindow(pipe: PipeRow, hhmm: string): boolean {

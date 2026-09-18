@@ -67,7 +67,8 @@ test('a kotlin checkout routes the build to the kotlin seat, and the diff is aga
 })
 
 test('a pipe fires only inside its window, wrapping across midnight', () => {
-  expect(clock(new Date(2026, 8, 17, 9, 5))).toBe('09:05')
+  expect(clock(new Date('2026-09-17T15:05:00Z'), -360)).toBe('09:05')
+  expect(clock(new Date('2026-09-17T15:05:00Z'))).toBe('15:05')
   expect(inWindow(pipe({}), '09:00')).toBe(true)
   expect(inWindow(pipe({}), '08:59')).toBe(false)
   expect(inWindow(pipe({ window_start: '22:00', window_end: '02:00' }), '23:30')).toBe(true)

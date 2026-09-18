@@ -7,7 +7,6 @@ import { approve, CARRIED, stub, world, type World } from './world.ts'
 const TODAY = new Date().toISOString().slice(0, 10)
 const AT = `${TODAY}T09:00:00.000Z`
 
-/** `usage` is unique on (kind, observed_at), so every reading a test takes needs its own stamp. */
 const BASE = Date.now()
 let seq = 0
 
@@ -30,14 +29,18 @@ function second(w: World): void {
     VALUES (2, 'research', 1, '00:00', '23:59', 1)`).run()
 }
 
-test('a plan is queued at its template default priority, and cf priority moves it', () => {
+test('a plan is queued at its template default priority, and cf priority moves it', async () => {
   const w = world()
   expect([templatePriority(w.db, 'pr_path'), templatePriority(w.db, 'research'), templatePriority(w.db, 'comms')])
     .toEqual([1, 2, 3])
   priority(w.db, 1, 0)
   expect(w.db.prepare('SELECT priority FROM plans WHERE id = 1').get()).toEqual({ priority: 0 })
   expect(() => { priority(w.db, 99, 0) }).toThrow(/no plan 99/)
+  expect(() => { priority(w.db, 1, 2.5) }).toThrow(/cf priority takes P0 to P9/)
+  expect(() => { priority(w.db, 1, 10) }).toThrow(/cf priority takes P0 to P9/)
   expect(() => w.db.prepare('UPDATE plans SET priority = 10 WHERE id = 1').run()).toThrow(/CHECK/)
+  expect(() => w.db.prepare('UPDATE plans SET priority = 2.5 WHERE id = 1').run()).toThrow(/CHECK/)
+  expect((await tick(w.db, w.root, stub(CARRIED))).map((f) => f.plan)).toEqual([1])
 })
 
 test('within a lane the tick starts plans in priority order, in parallel up to max_concurrent', () => {
@@ -100,6 +103,15 @@ test('the fuller of the two windows rules, and a stale reading is no reading', (
   w.db.prepare('DELETE FROM usage').run()
   record(w.db, reading(0.95, 'seven_day', 7 * 3600))
   expect(cap(w.db)).toMatchObject({ dial: 4, band: null, cap: 4 })
+})
+
+test('the latest reading is the one observed last, not the one recorded last', () => {
+  const w = world()
+  dial(w.db, 4, AT)
+  record(w.db, reading(0.95, 'seven_day', 60))
+  expect(cap(w.db)).toMatchObject({ band: 0, cap: 0 })
+  record(w.db, reading(0.1, 'seven_day', 3600))
+  expect(cap(w.db)).toMatchObject({ band: 0, cap: 0 })
 })
 
 test('the dial never exceeds the band and the machine never exceeds the dial', () => {

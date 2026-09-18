@@ -56,7 +56,6 @@ export function verdictsOf(db: Db, plan: number): Record<string, string | number
     .all(plan) as Record<string, string | number | null>[]
 }
 
-/** The queue header kernel issue 21 asks for: how many plans are running against how many the cap opened. */
 export function laneLine(l: LaneState): string {
   return `lanes ${String(l.live)}/${String(l.open)} live/open\tcap ${name(l.cap)}\tdial ${String(l.dial)}` +
     `\tband ${name(l.band)}\tceiling ${String(l.ceiling)}\n`

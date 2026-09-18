@@ -1,11 +1,6 @@
 PRAGMA foreign_keys = OFF;
 
--- Kernel issue 21: priority inside a lane, a global lane cap the CEO dials by hand, and a band
--- the provider's usage window steps that cap down through.
-
--- P0 is first. The column default only backfills the rows 0009 left; a plan queued from now on
--- takes `priority.default.<template>` below.
-ALTER TABLE plans ADD COLUMN priority INTEGER NOT NULL DEFAULT 1 CHECK (priority BETWEEN 0 AND 9);
+ALTER TABLE plans ADD COLUMN priority INTEGER NOT NULL DEFAULT 1 CHECK (typeof(priority) = 'integer' AND priority BETWEEN 0 AND 9);
 
 -- `who` records whose hand a value came from: the dial is the CEO's, every other row is a PR's.
 -- A `lanes.band.*` row has no runtime writer — `store/lanes.ts:set` refuses the key, and a new
@@ -43,24 +38,20 @@ INSERT INTO settings (key, value, who, origin_kind, origin_ref, set_at) VALUES
   ('priority.default.research', '2',    'pr',  'ruling', 'kernel-issue-21', '2026-09-17'),
   ('priority.default.comms',    '3',    'pr',  'ruling', 'kernel-issue-21', '2026-09-17');
 
--- The key's suffix is the utilisation ceiling in percent; `spot` is a cap of nothing running.
 CREATE VIEW lane_bands AS
   SELECT CAST(substr(key, 13) AS INTEGER) AS pct,
          CASE value WHEN 'spot' THEN 0 ELSE CAST(value AS INTEGER) END AS cap
   FROM settings
   WHERE key GLOB 'lanes.band.p[0-9]*';
 
--- The latest row per window, dropped once it is older than `lanes.stale_seconds`: a six-hour-old
--- 0.10 is not a reading of now and would otherwise pin three lanes open.
+-- The latest row per window, dropped once it is older than `lanes.stale_seconds`.
 CREATE VIEW usage_fresh AS
   SELECT u.kind, u.utilisation, u.status, u.resets_at, u.observed_at
   FROM usage u
-  WHERE u.id = (SELECT max(w.id) FROM usage w WHERE w.kind = u.kind)
+  WHERE u.observed_at = (SELECT max(w.observed_at) FROM usage w WHERE w.kind = u.kind)
     AND (julianday('now') - julianday(u.observed_at)) * 86400.0
         <= (SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'lanes.stale_seconds');
 
--- `band` is NULL with no fresh reading, and the dial then stands alone. Where both windows read,
--- the fuller one rules. The dial never exceeds the band and neither exceeds the ceiling.
 CREATE VIEW lane_cap AS
   WITH dial(n)    AS (SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'lanes.dial'),
        ceiling(n) AS (SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'lanes.ceiling'),
@@ -72,8 +63,6 @@ CREATE VIEW lane_cap AS
          min(d.n, coalesce(b.n, d.n), c.n) AS cap
   FROM dial d, ceiling c, band b;
 
--- D4: what the Machine page reads. Two rows, always, one per window: the tokens our runs spent
--- inside it, the provider's own utilisation of it, and the cap that came out of both.
 CREATE VIEW machine_window AS
   SELECT k.kind,
     (SELECT count(*) FROM runs r WHERE julianday(r.at) >= julianday('now', k.since)) AS runs,

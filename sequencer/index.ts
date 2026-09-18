@@ -29,7 +29,7 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
  */
 export function picks(db: Db, pipe: PipeRow, today: string): PlanRow[] {
   const free = live(db, pipe).filter((p) => p.state === 'running' || blocked(db, p, today) === null)
-  return underCap(pipe, free).filter((p) => blocked(db, p, today) === null)
+  return underCap(pipe, free).filter((p) => p.state !== 'running' || blocked(db, p, today) === null)
 }
 
 async function one(db: Db, root: string, pipe: PipeRow, plan: PlanRow, provider: Provider): Promise<Fired> {

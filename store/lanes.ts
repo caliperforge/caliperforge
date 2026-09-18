@@ -42,7 +42,6 @@ export const Reading = z.object({
 
 export type Reading = z.infer<typeof Reading>
 
-/** A band row moves through a migration; `cf` has no route to one. */
 const BY_PR = 'lanes.band.'
 
 export function get(db: Db, key: string): string {
@@ -61,13 +60,12 @@ export function set(db: Db, key: string, value: string, who: 'ceo' | 'pr', at: s
   if (done.changes === 0) throw new Error(`no settings row "${key}"; a new key is born in a migration`)
 }
 
-/** `cf priority <plan> <n>`, and the queue page behind it. */
 export function priority(db: Db, plan: number, n: number): void {
+  if (!Number.isInteger(n) || n < 0 || n > 9) throw new Error('cf priority takes P0 to P9')
   const done = db.prepare('UPDATE plans SET priority = ? WHERE id = ?').run(n, plan)
   if (done.changes === 0) throw new Error(`no plan ${String(plan)}`)
 }
 
-/** What a plan of this template is queued at when nobody says otherwise. */
 export function templatePriority(db: Db, template: string): number {
   return count(db, `priority.default.${template}`)
 }
@@ -76,14 +74,12 @@ export function cap(db: Db): LaneCap {
   return LaneCap.parse(db.prepare('SELECT dial, band, ceiling, cap FROM lane_cap').get())
 }
 
-/** `cf lanes <n>`. Over the ceiling is refused, not clamped: a dial that lies is worse than a stop. */
 export function dial(db: Db, n: number, at: string): void {
   const ceiling = count(db, 'lanes.ceiling')
   if (!Number.isInteger(n) || n < 0 || n > ceiling) throw new Error(`cf lanes takes 0 to ${String(ceiling)}`)
   set(db, 'lanes.dial', String(n), 'ceo', at)
 }
 
-/** `open` is how many running plans the capped pipes hold between them; `live` is how many there are. */
 export function lanes(db: Db, hhmm: string): LaneState {
   const held = cap(db)
   const row = db.prepare("SELECT count(*) AS live FROM plans WHERE state = 'running'").get() as { live: number }

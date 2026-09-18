@@ -69,14 +69,12 @@ cf.command('priority').argument('<plan>').argument('<n>', 'P0 first, up to P9')
     out(`plan ${id} priority P${n}\n`)
   })
 
-/** The CEO's dial. Read with no argument. The machine takes the lower of this and the usage band. */
 cf.command('lanes').argument('[n]', 'lanes the ceo opens, 0 to the ceiling').action((n: string | undefined) => {
   const handle = db()
   if (n !== undefined) dial(handle, Number(n), new Date().toISOString())
   out(laneLine(lanes(handle, clock(new Date()))))
 })
 
-/** `machine_window` is the view the Machine page reads; with a file this first records a reading into it. */
 cf.command('usage').argument('[file]', 'a provider rate-limit reading, json').action((file: string | undefined) => {
   const handle = db()
   if (file !== undefined) record(handle, Reading.parse(JSON.parse(readFileSync(resolve(file), 'utf8'))))

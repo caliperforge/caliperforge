@@ -29,6 +29,7 @@ function watched(log: string[]): Wire {
   return {
     send: (dir, branch) => void log.push(`send ${basename(dir)} ${branch}`),
     open: (repo, head) => { log.push(`open ${repo} ${head}`); return URL },
+    close: (repo, no, sha) => void log.push(`close ${repo}#${String(no)} ${sha.slice(0, 7)}`),
   }
 }
 
@@ -60,30 +61,22 @@ test('the internal checkout is our own repo on p<plan>-<slug>, built by the type
   expect(internalBranch(7, '!!!')).toBe('p7-issue')
 })
 
-test('step 7 lands an internal plan on the gates, and step 8 opens the pr on our own repo', async () => {
+test('step 7 signs an internal plan on the gates and shows it in the batch as a read-out', async () => {
   const w = mine()
-  for (let at = 0; at < 5; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  const wire = watched([])
+  for (let at = 0; at < 5; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
   forkCi(w.db, ID)
-  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
   expect(plan(w.db, ID).step).toBe(7)
   expect(blocked(w.db, plan(w.db, ID), '2026-09-18')).toBeNull()
 
-  const signed = (await tick(w.db, w.root, stub(CARRIED)))[0]
+  const signed = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
   expect(signed).toMatchObject({ step: 7, name: 'batch', outcome: 'pass', state: 'running' })
   expect(w.db.prepare("SELECT who, decision, subject_digest FROM approvals WHERE subject_kind = 'plan'").get())
     .toEqual({ who: 'gates', decision: 'approved', subject_digest: plan(w.db, ID).head_digest })
   expect(plan(w.db, ID).step).toBe(8)
   expect(landed(w.db)).toEqual([{ plan: ID, origin: ISSUE, digest: plan(w.db, ID).head_digest }])
   expect(headApproved(w.db, headOf(w.root, ID).sha)).toBe(true)
-
-  const sent: string[] = []
-  expect(push(w.db, w.root, plan(w.db, ID), watched(sent))).toMatchObject({ outcome: 'pass' })
-  expect(sent).toEqual([
-    'send src p2-let-an-internal-plan-run',
-    'open caliperforge/caliperforge caliperforge:p2-let-an-internal-plan-run',
-  ])
-  expect(w.db.prepare('SELECT state, evidence FROM deliverables WHERE plan_id = ? ORDER BY id DESC LIMIT 1').get(ID))
-    .toEqual({ state: 'pushed', evidence: URL })
 })
 
 test('a gates signature does not let an external plan leave ready, and the hook will not take one', async () => {

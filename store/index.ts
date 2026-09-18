@@ -17,12 +17,26 @@ export function open(path: string): Db {
   return db
 }
 
+/**
+ * One file, one transaction: a schema file that throws half way leaves `user_version` and every
+ * table as they were. The foreign-key switch is thrown outside it -- sqlite makes `PRAGMA
+ * foreign_keys` a no-op inside a transaction, and a file that rebuilds a table needs it off.
+ */
 export function migrate(db: Db, dir: string): string[] {
   const at = Number(db.pragma('user_version', { simple: true }))
   const pending = readdirSync(dir).filter((f) => f.endsWith('.sql') && version(f) > at).sort()
+  const keys = Number(db.pragma('foreign_keys', { simple: true })) === 1
   for (const file of pending) {
-    db.exec(readFileSync(join(dir, file), 'utf8'))
-    db.pragma(`user_version = ${String(version(file))}`)
+    const sql = readFileSync(join(dir, file), 'utf8')
+    db.pragma('foreign_keys = OFF')
+    try {
+      db.transaction(() => {
+        db.exec(sql)
+        db.pragma(`user_version = ${String(version(file))}`)
+      })()
+    } finally {
+      if (keys) db.pragma('foreign_keys = ON')
+    }
   }
   return pending
 }

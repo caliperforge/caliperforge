@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { cpSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fresh } from '../../checks/sqlite.ts'
@@ -7,7 +7,7 @@ import type { Packet, Provider } from '../../providers/kind.ts'
 import type { Db } from '../../store/index.ts'
 import { PlanRow, type PipeRow } from '../../store/plans.ts'
 import { targetDigest } from '../steps.ts'
-import { put, SELF } from '../workspace.ts'
+import { put, SELF, srcDir } from '../workspace.ts'
 
 const repo = join(import.meta.dirname, '../..')
 
@@ -84,6 +84,20 @@ export function ours(root: string, files: Record<string, string> = TYPESCRIPT): 
   }
   git(dir, ['add', '-A'])
   git(dir, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'base'])
+}
+
+/** Bytes in the plan's checkout: the stub provider answers with text alone and writes no file. */
+export function built(root: string, id: number, line: string): void {
+  const path = join(srcDir(root, id), 'src/hello.ts')
+  writeFileSync(path, `${readFileSync(path, 'utf8')}${line}\n`)
+}
+
+/** A commit landing on our own `main` while a plan is out on its branch. */
+export function moveMain(root: string, name: string): void {
+  const dir = join(root, 'remotes', SELF)
+  writeFileSync(join(dir, name), `export const ${name.replace('.ts', '')} = 1\n`)
+  git(dir, ['add', '-A'])
+  git(dir, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', `main moves on ${name}`])
 }
 
 /** A plan filed from one of our own issues: an origin, a lane, a seat, and no target row. */

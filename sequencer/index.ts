@@ -2,23 +2,24 @@ import { pr as readPr, type Pr } from '../cli/gh.ts'
 import type { Provider } from '../providers/kind.ts'
 import type { Db } from '../store/index.ts'
 import { cap, hhmm, zone } from '../store/lanes.ts'
-import { advance, back, finish, internal, live, needsCeo, openPipes, underCap, type PipeRow, type PlanRow } from '../store/plans.ts'
+import { advance, back, finish, internal, live, needsCeo, openPipes, rewind, underCap, type PipeRow, type PlanRow } from '../store/plans.ts'
 import { at, last, type Step } from '../templates/pr-path.ts'
 import { capture } from './capture.ts'
 import type { Fired, Outcome } from './kind.ts'
 import { started } from './signals.ts'
+import type { Wire } from './push.ts'
 import { fireReview, fireSeat } from './seat.ts'
 import { blocked, kernel, proved, targetOf } from './steps.ts'
 import { branchOf, checkout, internalBranch, languageOf, put, SELF, srcDir, titleOf } from './workspace.ts'
 
-/** `read` is the one network reader a tick does on its own account; it is injected so a test can drive a lap offline. */
+/** `read` and `wire` are the network a tick touches on its own account; both are injected so a test can drive a lap offline. */
 export async function tick(db: Db, root: string, provider: Provider, now: Date = new Date(),
-  read: (repo: string, no: number) => Pr = readPr): Promise<Fired[]> {
+  read: (repo: string, no: number) => Pr = readPr, wire?: Wire): Promise<Fired[]> {
   const today = now.toISOString().slice(0, 10)
   for (const signal of capture(db, read)) started(db, signal)
   const out: Fired[] = []
   for (const pipe of openPipes(db, hhmm(db, now)).slice(0, cap(db).cap)) {
-    for (const plan of picks(db, pipe, today)) out.push(await one(db, root, pipe, plan, provider))
+    for (const plan of picks(db, pipe, today)) out.push(await one(db, root, pipe, plan, provider, wire))
   }
   return out
 }
@@ -74,10 +75,10 @@ export function dry(db: Db, now: Date = new Date()): Dry {
   }
 }
 
-async function one(db: Db, root: string, pipe: PipeRow, plan: PlanRow, provider: Provider): Promise<Fired> {
+async function one(db: Db, root: string, pipe: PipeRow, plan: PlanRow, provider: Provider, wire?: Wire): Promise<Fired> {
   const tree = workspace(db, root, plan)
   const step = at(plan.step, tree.language)
-  const outcome = tree.failed ?? await fire(db, root, plan, step, provider)
+  const outcome = tree.failed ?? await fire(db, root, plan, step, provider, wire)
   return {
     pipe: pipe.name,
     plan: plan.id,
@@ -122,13 +123,17 @@ function treeOf(db: Db, root: string, plan: PlanRow): { repo: string; branch: st
   return row === null ? null : { repo: row.repo, branch: branchOf(row.repo, row.issue_no, plan.retries + 1) }
 }
 
-function fire(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
+function fire(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider, wire?: Wire): Promise<Outcome> {
   if (step.fires === 'seat') return fireSeat(db, root, plan, step, provider)
   if (step.fires === 'review') return fireReview(db, root, plan, step, provider)
-  return Promise.resolve(kernel(db, root, plan))
+  return Promise.resolve(kernel(db, root, plan, wire))
 }
 
 function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcome): string {
+  if (outcome.rewind !== undefined) {
+    rewind(db, plan.id, outcome.rewind)
+    return 'running'
+  }
   if (outcome.outcome === 'needs_ceo') {
     needsCeo(db, plan)
     return 'blocked_on_ceo'

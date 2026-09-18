@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { join, relative } from 'node:path'
+import { join, relative, resolve } from 'node:path'
 
 /** The plan's scratch checkout. No `plans/` segment: `runner/packet.ts:admits()` bars one from a reviewer cwd. */
 export function planDir(root: string, plan: number): string {
@@ -84,21 +84,59 @@ function remote(base: string, slug: string): string {
 }
 
 /**
+ * The ref a tree is cut from and landed on. An internal plan's `origin` and `upstream` are the same
+ * repository -- ours -- so for one of our own plans this ref is `origin/main` exactly; for a target
+ * it is the stranger's `main`, which our fork may sit behind.
+ */
+export const MAIN = 'refs/remotes/upstream/main'
+
+/** #35 rule 2: main is re-read before a tree is cut and before a base is judged, so nothing starts from a stale ref. */
+export function fetchMain(dir: string): string {
+  git(dir, ['fetch', '--no-tags', 'origin', '+main:refs/remotes/origin/main'])
+  git(dir, ['fetch', '--no-tags', 'upstream', `+main:${MAIN}`])
+  return git(dir, ['rev-parse', MAIN]).trim()
+}
+
+/** Whether the branch was cut from a `main` that has since moved on without it. */
+export function behindMain(dir: string): boolean {
+  const main = git(dir, ['rev-parse', MAIN]).trim()
+  return git(dir, ['merge-base', 'HEAD', MAIN]).trim() !== main
+}
+
+export function mergeMain(dir: string): void {
+  git(dir, ['-c', 'user.email=cf@caliperforge.dev', '-c', 'user.name=caliperforge',
+    'merge', '--no-edit', MAIN])
+}
+
+export function abortMerge(dir: string): void {
+  git(dir, ['merge', '--abort'])
+}
+
+/**
+ * #35 rule 2: the live kernel tree is the machine's, not a seat's. Every seat and reviewer works in
+ * `.cf/work/<plan>/src`, so a cwd under the root that is not one is the tree the tick itself runs from.
+ */
+export function liveTree(root: string, cwd: string): boolean {
+  const rel = relative(resolve(root), resolve(cwd))
+  if (rel.startsWith('..')) return false
+  return !/^\.cf[/\\]work[/\\]\d+[/\\]src([/\\]|$)/.test(rel)
+}
+
+/**
  * `--no-local`: a hardlinked clone shares an object store with its source, and the builder must not reach back through it.
  * `core.hooksPath` is set here and not at step 8, so every push out of a plan checkout meets the pre-push hook, not just the kernel's.
  */
 export function checkout(root: string, plan: number, repo: string, branch: string): Checkout {
   const dir = srcDir(root, plan)
   const done = maybe(root, plan, 'base.sha')
-  if (done !== null && cloned(dir)) return { dir, branch, base: done.trim() }
+  if (done !== null && cloned(dir)) { fetchMain(dir); return { dir, branch, base: done.trim() } }
   const base = gitBase(root)
   git(planDir(root, plan), ['clone', '--no-local', '--origin', 'origin',
     '-c', `remote.upstream.url=${remote(base, repo)}`,
     '-c', 'remote.upstream.fetch=+refs/heads/*:refs/remotes/upstream/*',
     remote(base, `${FORK}/${repoName(repo)}`), dir])
   git(dir, ['config', 'core.hooksPath', join(root, 'hooks')])
-  git(dir, ['fetch', '--no-tags', 'upstream', '+main:refs/remotes/upstream/main'])
-  const head = git(dir, ['rev-parse', 'refs/remotes/upstream/main']).trim()
+  const head = fetchMain(dir)
   git(dir, ['checkout', '-B', branch, head])
   put(root, plan, 'base.sha', `${head}\n`)
   return { dir, branch, base: head }

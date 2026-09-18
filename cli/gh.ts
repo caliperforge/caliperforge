@@ -118,6 +118,12 @@ export function openPr(repo: string, head: string, title: string, bodyFile: stri
     '--title', title, '--body-file', bodyFile], { encoding: 'utf8' }).trim()
 }
 
+/** #35 rule 1: an internal plan is closed by the commit that landed it on `main`, not by a pull request. */
+export function closeIssue(repo: string, no: number, sha: string): void {
+  execFileSync('gh', ['issue', 'close', String(no), '--repo', repo, '--comment', `landed on main as ${sha}`],
+    { encoding: 'utf8' })
+}
+
 export function searchIssue(repo: string, subject: string): number | null {
   const found = Prs.parse(gh(['issue', 'list', '--repo', repo, '--search', subject, '--state', 'all', '--json', 'number']))
   return found[0]?.number ?? null

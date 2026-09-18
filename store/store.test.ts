@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -23,4 +23,17 @@ it('dumps a database that replays into an identical one', () => {
   const replay = open(':memory:')
   replay.exec(readFileSync(out, 'utf8'))
   expect(replay.prepare('SELECT id FROM rules').all()).toEqual([{ id: 'r' }])
+})
+
+it('a schema file that fails leaves the version and the half-written table behind', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cf-schema-'))
+  writeFileSync(join(dir, '0001_kept.sql'), 'CREATE TABLE kept (id INTEGER PRIMARY KEY);\n')
+  writeFileSync(join(dir, '0002_half.sql'),
+    'CREATE TABLE half (id INTEGER PRIMARY KEY);\nINSERT INTO half (id) VALUES (1), (1);\n')
+  const db = open(':memory:')
+
+  expect(() => migrate(db, dir)).toThrow(/UNIQUE|PRIMARY KEY/)
+  expect(db.pragma('user_version', { simple: true })).toBe(1)
+  expect(db.prepare("SELECT name FROM sqlite_master WHERE name IN ('kept', 'half')").all()).toEqual([{ name: 'kept' }])
+  expect(db.pragma('foreign_keys', { simple: true })).toBe(1)
 })

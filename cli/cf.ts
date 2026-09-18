@@ -7,6 +7,7 @@ import { claudeAgentSdk } from '../providers/claude-agent-sdk/index.ts'
 import { credential } from '../providers/credential.ts'
 import { fire } from '../runner/index.ts'
 import { dry, tick } from '../sequencer/index.ts'
+import { liveTree } from '../sequencer/workspace.ts'
 import { blocked, targetDigest } from '../sequencer/steps.ts'
 import { dump, migrate, open as openDb, type Db } from '../store/index.ts'
 import { dial, hhmm, lanes, priority as setPriority, record, Reading, windows } from '../store/lanes.ts'
@@ -52,7 +53,9 @@ cf.command('runs').action(() => {
 cf.command('fire').argument('<seat>').argument('<issue-file>')
   .option('--cwd <dir>', 'checkout the seat writes in', process.cwd())
   .action(async (name: string, issue: string, options: { cwd: string }) => {
-    const run = await fire(db(), root, name, resolve(options.cwd), readFileSync(issue, 'utf8'), claudeAgentSdk)
+    const cwd = resolve(options.cwd)
+    if (liveTree(root, cwd)) throw new Error(`${cwd} is the machine's own tree; a seat works in .cf/work/<plan>/src`)
+    const run = await fire(db(), root, name, cwd, readFileSync(issue, 'utf8'), claudeAgentSdk)
     process.stderr.write(`run ${String(run.id)}\n`)
     out(run.text)
   })

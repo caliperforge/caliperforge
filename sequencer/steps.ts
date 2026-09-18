@@ -9,8 +9,8 @@ import { internal, originIssue, stampHead, type PlanRow } from '../store/plans.t
 import { at, type Step } from '../templates/pr-path.ts'
 import type { Outcome } from './kind.ts'
 import { preReview } from './rails.ts'
-import { headOf, push } from './push.ts'
-import { diffOf, SELF } from './workspace.ts'
+import { headOf, land, push, type Wire } from './push.ts'
+import { abortMerge, behindMain, cloned, diffOf, fetchMain, maybe, mergeMain, put, SELF, srcDir } from './workspace.ts'
 
 interface Target { repo: string; issue_no: number; state: string; measured_at: string; pulse: string }
 
@@ -24,37 +24,72 @@ export function blocked(db: Db, plan: PlanRow, today: string): string | null {
   return stale(db, plan, today)
 }
 
-export function kernel(db: Db, root: string, plan: PlanRow): Outcome {
+export function kernel(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
   const step = at(plan.step)
   if (step.name === 'rails') return preReview(db, root, plan)
   if (step.name === 'measure') return measure(db, plan)
   if (step.name === 'ready') return readyGate(db, root, plan)
-  if (step.name === 'batch') return batch(db, plan)
-  if (step.name === 'push') return push(db, root, plan)
+  if (step.name === 'batch') return batch(db, root, plan, wire)
+  if (step.name === 'push') return push(db, root, plan, wire)
   return { outcome: 'pass', spans: [], note: step.name }
 }
 
 /**
  * Step 7. An external plan only reaches here once `cf approve plan` wrote the CEO's row, so the
  * step has nothing left to do and says so. An internal plan lands on the gates alone (#20): the
- * four gate verdicts and the ready rail are the whole sign-off, and the row that settles its
- * deliverable is signed `gates`. The store's step-7 trigger reads that signature only on a plan
- * that names an origin, so an external plan still cannot leave ready on anything but the CEO's.
+ * four gate verdicts and the ready rail are the whole sign-off, the row that settles its
+ * deliverable is signed `gates`, and the same step puts the branch on `main` (#35 rule 1). The
+ * store's step-7 trigger reads that signature only on a plan that names an origin, so an external
+ * plan still cannot leave ready on anything but the CEO's.
  */
-function batch(db: Db, plan: PlanRow): Outcome {
+function batch(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
   if (!internal(plan)) return { outcome: 'pass', spans: [], note: 'batch' }
   const head = plan.head_digest
   if (head === null) return { outcome: 'refuse', spans: ['plans'], note: `plan ${String(plan.id)} reached batch with no proved head` }
-  db.transaction(() => { settle(db, plan.id, gates(db, plan.id, head)) })()
-  return { outcome: 'pass', spans: [], note: `landed on the gates at ${head.slice(0, 12)}` }
+  const approval = db.transaction(() => {
+    const id = gates(db, plan.id, head)
+    settle(db, plan.id, id)
+    return id
+  })()
+  return land(db, root, plan, approval, wire)
 }
 
 function readyGate(db: Db, root: string, plan: PlanRow): Outcome {
+  const moved = baseMoved(root, plan)
+  if (moved !== null) return moved
   const proof = proofOf(db, plan)
   if (proof === null) return { outcome: 'refuse', spans: ['deliverables'], note: `plan ${String(plan.id)} has no deliverable row` }
   const verdict = readyRail(db, proof)
   recordRail(db, join(root, 'rails/ready'), plan.id, verdict, 0)
   return { outcome: verdict.outcome, spans: verdict.spans, note: `ready: ${verdict.message}` }
+}
+
+/**
+ * #35 rule 3: nothing lands over a moved main. The first miss merges main into the branch and sends
+ * the plan back to the rails, which judge the merged bytes; a second miss is a branch that cannot
+ * keep up with main and refuses so it is cut again. The builder's work is committed first: a merge
+ * into a dirty tree is the one way main's bytes and the seat's could be lost against each other.
+ */
+function baseMoved(root: string, plan: PlanRow): Outcome | null {
+  const src = srcDir(root, plan.id)
+  if (!cloned(src)) return null
+  const main = fetchMain(src)
+  if (!behindMain(src)) return null
+  if (maybe(root, plan.id, 'base.merged') !== null) return cutAgain('the branch is behind main a second time')
+  headOf(root, plan.id)
+  try {
+    mergeMain(src)
+  } catch {
+    abortMerge(src)
+    return cutAgain('the branch conflicts with main')
+  }
+  put(root, plan.id, 'base.merged', `${main}\n`)
+  put(root, plan.id, 'base.sha', `${main}\n`)
+  return { outcome: 'pass', spans: ['base:stale'], note: 'main moved; merged it and re-ran the rails', rewind: 3 }
+}
+
+function cutAgain(note: string): Outcome {
+  return { outcome: 'refuse', spans: ['base:stale'], note: `${note}; cut it again from main` }
 }
 
 function proofOf(db: Db, plan: PlanRow): Proof | null {

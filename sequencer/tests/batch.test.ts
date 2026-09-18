@@ -279,6 +279,7 @@ function watched(log: string[]): Wire {
   return {
     send: (dir, branch) => void log.push(`send ${basename(dir)} ${branch}`),
     open: (repo, head) => { log.push(`open ${repo} ${head}`); return URL },
+    close: (repo, no, sha) => void log.push(`close ${repo}#${String(no)} ${sha.slice(0, 7)}`),
   }
 }
 

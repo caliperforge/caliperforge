@@ -8,13 +8,11 @@ const Account = z.object({ id: z.int(), measured_at: z.string(), pulse: z.enum([
 
 const URL = /^https:\/\/github\.com\/([^/]+\/[^/]+)\/issues\/(\d+)$/
 
-/** Law 4: a trip names a typed origin, and a ruling-origin resolves to a `rulings` row, not a sentence. */
 export interface Origin {
   origin_kind: 'ruling'
   origin_ref: string
 }
 
-/** The two step-0 trips kernel issue 23 rebuilt; both resolve to a ruling carrying the issue and the map line. */
 const IMPLEMENTED: Origin = { origin_kind: 'ruling', origin_ref: 'queue.implemented' }
 const COLD: Origin = { origin_kind: 'ruling', origin_ref: 'queue.cold_pulse' }
 

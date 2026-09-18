@@ -27,6 +27,9 @@ const Merged = z.array(z.object({ mergedBy: z.object({ login: z.string() }).null
 
 export const CLAIM = /i'?ll take (this|it)|i'?m working on|working on (this|it)|taking this|assign (this )?to me|\/claim|dibs/i
 
+/** One page. Left off, `gh pr list` stops at 30 rows and anything past the cap is never read. */
+export const WINDOW = 100
+
 export type Issue = z.infer<typeof Issue>
 
 export type Read = (args: string[]) => unknown
@@ -46,10 +49,6 @@ export function claimed(row: Issue): string | null {
   return row.comments.some((c) => CLAIM.test(c.body)) ? 'a comment claims the issue' : null
 }
 
-/**
- * A pull request pushed from our fork is our own open loop, never someone else's implementation:
- * BUILD_MAP rev 6.1 step 0 "must not trip on a target inside an open loop", kernel issue 23.
- */
 export function ours(login: string | null | undefined): boolean {
   return login === FORK
 }
@@ -57,7 +56,8 @@ export function ours(login: string | null | undefined): boolean {
 /** Every open pull request the issue's number turns up in, minus the ones pushed from our own fork. */
 export function foreign(repo: string, no: number, read: Read = gh): z.infer<typeof Refs> {
   return Refs.parse(read(['pr', 'list', '--repo', repo, '--state', 'open', '--search', `#${String(no)}`,
-    '--json', 'number,title,body,headRepositoryOwner'])).filter((p) => !ours(p.headRepositoryOwner?.login))
+    '--limit', String(WINDOW), '--json', 'number,title,body,headRepositoryOwner']))
+    .filter((p) => !ours(p.headRepositoryOwner?.login))
 }
 
 export function implemented(repo: string, row: Issue, read: Read = gh): string | null {

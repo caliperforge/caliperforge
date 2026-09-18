@@ -2,7 +2,7 @@ import { join } from 'node:path'
 import { expect, it } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import type { Issue, Read } from '../gh.ts'
-import { foreign, implemented } from '../gh.ts'
+import { foreign, implemented, WINDOW } from '../gh.ts'
 import { measure } from '../measure.ts'
 
 const root = join(import.meta.dirname, '../..')
@@ -56,6 +56,12 @@ function reader(map: Record<string, unknown>): Read {
 it('counts one foreign pull request among the nine referencing pay-kit#284', () => {
   expect(REFERENCES).toHaveLength(9)
   expect(foreign('solana-foundation/pay-kit', 284, reader({ list: REFERENCES })).map((p) => p.number)).toEqual([228])
+})
+
+it('asks for a page of referencing pull requests rather than the 30 rows an uncapped list returns', () => {
+  let sent: string[] = []
+  foreign('solana-foundation/pay-kit', 284, (args) => { sent = args; return [] })
+  expect(sent.slice(sent.indexOf('--limit'), sent.indexOf('--limit') + 2)).toEqual(['--limit', String(WINDOW)])
 })
 
 it('does not read the one foreign pull request as an implementation: it never names #284 itself', () => {

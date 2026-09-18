@@ -1,8 +1,5 @@
 PRAGMA foreign_keys = OFF;
 
--- Step 0 must not trip on a target inside an open loop (BUILD_MAP rev 6.1 line 82, step 0; kernel issue 23).
--- The no-outsider-merge axis is unchanged. The p50 axis no longer cools an account we already have
--- an open loop on: an open pull request from our fork, or a plan of ours that is not terminal there.
 CREATE TABLE accounts_new (
   id                   INTEGER PRIMARY KEY,
   repo                 TEXT NOT NULL CHECK (repo GLOB '*/*'),

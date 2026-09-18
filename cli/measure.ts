@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import type { Db } from '../store/index.ts'
-import { gh, ours, type Read } from './gh.ts'
+import { gh, ours, WINDOW, type Read } from './gh.ts'
 
 const Merged = z.array(z.object({
   author: z.object({ login: z.string() }).nullable(),
@@ -20,9 +20,6 @@ const COLD_DAYS = 21
 
 /** Plan states a plan can still leave; a target under one of them is a loop of ours that is still open. */
 const LIVE = "('queued', 'running', 'blocked_on_ceo')"
-
-/** One page of merged pull requests is the window every count below is taken over. */
-const WINDOW = 100
 
 /** `gh search` is rate-limited at 30 a minute, so that is the window `elsewhere()` reads and the number of reads it makes. */
 const SEARCHES = 30
@@ -56,7 +53,6 @@ export function measure(db: Db, repo: string, today: string, read: Read = gh): P
   return row
 }
 
-/** The second half of "open loop": a plan of ours on this repo that has not reached a terminal state. */
 export function planOpen(db: Db, repo: string): boolean {
   return db.prepare(`SELECT 1 FROM plans JOIN targets ON targets.id = plans.target_id
     WHERE targets.repo = ? AND plans.state IN ${LIVE} LIMIT 1`).get(repo) !== undefined
@@ -94,11 +90,6 @@ function pulseOf(repo: string, today: string, read: Read, planned: boolean): Pul
   }
 }
 
-/**
- * The no-outsider-merge axis is unconditional. The p50 axis is not: a median dragged up by a tail of
- * third-party pull requests says nothing about a repo where a loop of ours is already open — BUILD_MAP
- * rev 6.1 step 0 "must not trip on a target inside an open loop", kernel issue 23.
- */
 function cold(today: string, last: string | null, age: number, loop: boolean): boolean {
   if (last === null || days(today, last) > COLD_DAYS) return true
   return age > COLD_DAYS && !loop

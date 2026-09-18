@@ -3,6 +3,7 @@ import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { day, halted, open as openPlans, runsOf, verdictsOf } from '../../cli/brief.ts'
+import { measure, type Read } from '../../cli/measure.ts'
 import { account, parse } from '../../cli/queue.ts'
 import { clock, inWindow, underCap, type PipeRow, type PlanRow } from '../../store/plans.ts'
 import { steps } from '../../templates/pr-path.ts'
@@ -11,16 +12,16 @@ import { blocked } from '../steps.ts'
 import { doneIds, srcDir } from '../workspace.ts'
 import { benchPacket } from '../../runner/packet.ts'
 import type { Packet } from '../../providers/kind.ts'
-import { approve, KOTLIN, PASS, plan, REFUSE, stub, world } from './world.ts'
+import { approve, CARRIED, KOTLIN, PASS, plan, REFUSE, stub, world } from './world.ts'
 
 const head = (cwd: string, args: string[]): string => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim()
 
-const CARRIED = 'built\n\n---\ndone:\n  - id: D1\n    status: done\n    pointer: src/hello.ts:1\n---\n'
 const UNPOINTED = 'built\n\n---\ndone:\n  - id: D1\n    status: done\n    pointer:\n---\n'
 const pipe = (over: Partial<PipeRow>): PipeRow =>
   ({ id: 1, name: 'pr-path', enabled: 1, window_start: '09:00', window_end: '17:00', max_concurrent: 1, ...over })
 const row = (over: Partial<PlanRow>): PlanRow =>
-  ({ id: 1, pipe_id: 1, target_id: 1, template: 'pr_path', state: 'queued', queued_at: '', step: 0, retries: 0, ...over })
+  ({ id: 1, pipe_id: 1, target_id: 1, template: 'pr_path', state: 'queued', queued_at: '', step: 0, retries: 0,
+    head_digest: null, ...over })
 
 test('the builder works in the checkout and may write only inside its write_paths', async () => {
   const w = world()
@@ -107,6 +108,24 @@ test('an accounts row older than 30 days blocks the plan and refuses the queue',
   expect(await tick(w.db, w.root, stub(CARRIED), new Date('2026-09-17T09:00:00Z'))).toEqual([])
   expect(() => account(w.db, 'acme/widget', '2026-09-17')).toThrow(/re-measure before queueing/)
   expect(() => account(w.db, 'acme/other', '2026-09-17')).toThrow(/no accounts row/)
+})
+
+/** The three `gh` shapes `cf measure` parses, canned: one outsider merge that day, one open pr, one other repo. */
+const measured = (day: string): Read => (args) => {
+  if (args[0] === 'search') return [{ repository: { nameWithOwner: 'acme/other' } }]
+  if (args.includes('createdAt')) return [{ createdAt: `${day}T00:00:00Z` }]
+  return [{ author: { login: 'outsider' }, mergedBy: { login: 'maintainer' }, mergedAt: `${day}T00:00:00Z` }]
+}
+
+test('cf measure refreshes the pulse the tick reads, without a second cf queue add', async () => {
+  const w = world('warm', '2026-01-01')
+  approve(w.db, w.target)
+  expect(blocked(w.db, plan(w.db, 1), '2026-09-17')).toMatch(/days old, re-measure/)
+  expect(measure(w.db, 'acme/widget', '2026-09-17', measured('2026-09-17'))).toMatchObject({ pulse: 'warm', doors: 1 })
+  expect(w.db.prepare('SELECT account_id FROM targets WHERE id = 1').get()).toEqual({ account_id: 1 })
+  expect(blocked(w.db, plan(w.db, 1), '2026-09-17')).toBeNull()
+  expect((await tick(w.db, w.root, stub(CARRIED), new Date('2026-09-17T09:00:00Z')))[0]?.step).toBe(0)
+  expect(plan(w.db, 1).step).toBe(1)
 })
 
 test('a rail refusal names spans, sends the plan back one step, then to blocked_on_ceo', async () => {
@@ -197,9 +216,9 @@ test('every run row points at a transcript the provider wrote', async () => {
   }
 })
 
-test('pr-path is measure to batch, 0 to 7, and every gate step writes a verdict', () => {
-  expect(steps.map((s) => s.name)).toEqual(['measure', 'ruling', 'build', 'rails', 'review', 'senior', 'ready', 'batch'])
-  expect(steps.map((s) => s.step)).toEqual([0, 1, 2, 3, 4, 5, 6, 7])
+test('pr-path is measure to push, 0 to 8, and every gate step writes a verdict', () => {
+  expect(steps.map((s) => s.name)).toEqual(['measure', 'ruling', 'build', 'rails', 'review', 'senior', 'ready', 'batch', 'push'])
+  expect(steps.map((s) => s.step)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8])
   expect(steps.filter((s) => s.gate && !s.writes_verdict)).toEqual([])
   expect(steps.filter((s) => s.writes_verdict).map((s) => s.verdict_gate))
     .toEqual(['pre_review', 'review', 'senior_review', 'ready'])

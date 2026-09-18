@@ -1,0 +1,3 @@
+#!/bin/sh
+# R30: the CEO sends. A push with no matching approvals row is refused here, not reviewed.
+exec node "$(cd "$(dirname "$0")/.." && pwd)/cli/cf.ts" push-check

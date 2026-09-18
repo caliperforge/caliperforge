@@ -21,6 +21,7 @@ export const PlanRow = z.object({
   queued_at: z.string(),
   step: z.int(),
   retries: z.int(),
+  head_digest: z.string().nullable(),
 })
 
 export type PlanRow = z.infer<typeof PlanRow>
@@ -67,4 +68,19 @@ export function back(db: Db, plan: PlanRow): 'retried' | 'blocked_on_ceo' {
 
 export function needsCeo(db: Db, plan: PlanRow): void {
   db.prepare("UPDATE plans SET state = 'blocked_on_ceo' WHERE id = ?").run(plan.id)
+}
+
+export function finish(db: Db, plan: PlanRow): void {
+  db.prepare("UPDATE plans SET step = ?, state = 'done' WHERE id = ?").run(plan.step + 1, plan.id)
+}
+
+/** A signal on a pushed PR puts the plan back on the review step it escaped; the head it was signed at is no longer the head. */
+export function rewind(db: Db, plan: number, step: number): void {
+  db.prepare("UPDATE plans SET step = ?, state = 'running', retries = 0, head_digest = NULL WHERE id = ?")
+    .run(step, plan)
+}
+
+/** The head the ready gate proved, which is the only head an approval row can be read against. */
+export function stampHead(db: Db, plan: number, digest: string): void {
+  db.prepare('UPDATE plans SET head_digest = ? WHERE id = ?').run(digest, plan)
 }

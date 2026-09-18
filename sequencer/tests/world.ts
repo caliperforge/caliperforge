@@ -19,6 +19,8 @@ export interface World {
   target: number
 }
 
+export const CARRIED = 'built\n\n---\ndone:\n  - id: D1\n    status: done\n    pointer: src/hello.ts:1\n---\n'
+
 export const PASS = '---\noutcome: pass\n---\n'
 export const REFUSE = '---\noutcome: refuse\nclass: correctness\nspans:\n  - src/hello.ts:1\n---\n'
 
@@ -95,8 +97,23 @@ export function world(pulse: 'warm' | 'cold' = 'warm', day = new Date().toISOStr
 export function approve(db: Db, target: number): void {
   const t = db.prepare('SELECT repo, issue_no, evidence_measured_at FROM targets WHERE id = ?').get(target) as
     { repo: string; issue_no: number; evidence_measured_at: string }
-  db.prepare(`INSERT INTO approvals (subject_kind, subject_id, subject_digest, who, approved_at)
-    VALUES ('target', ?, ?, 'ceo', '2026-09-17T00:00:00.000Z')`).run(target, targetDigest(t))
+  db.prepare(`INSERT INTO approvals (subject_kind, subject_id, subject_digest, who, decision, approved_at)
+    VALUES ('target', ?, ?, 'ceo', 'approved', '2026-09-17T00:00:00.000Z')`).run(target, targetDigest(t))
+}
+
+/** The proof step 6 reads: a deliverable row and the ci-green verdict the rail would have left. */
+export function ready(db: Db, id: number): void {
+  db.prepare(`INSERT INTO deliverables (plan_id, step, seat, diff_digest, state, tests_pass,
+    byte_identical_elsewhere, fork_ci_green, bot_clean, target_warm, evidence)
+    VALUES (?, 2, 'typescript_specialist', ?, 'gated', 1, 1, 1, 1, 1, 'https://github.com/acme/widget/issues/12')`)
+    .run(id, 'b'.repeat(64))
+  forkCi(db, id)
+}
+
+/** The one ready proof no step in the tree writes: the verdict `rails/ci-green` would have left on the fork. */
+export function forkCi(db: Db, id: number): void {
+  db.prepare(`INSERT INTO verdicts (gate, kind, subject_digest, plan, step, outcome, rail_id, tokens, seconds)
+    VALUES ('ready', 'rail', ?, ?, 6, 'pass', 'ci-green', 0, 0)`).run('c'.repeat(64), id)
 }
 
 export function plan(db: Db, id: number): PlanRow {

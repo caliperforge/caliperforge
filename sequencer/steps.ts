@@ -2,17 +2,21 @@ import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 import { ready as readyRail, type Proof } from '../rails/ready/index.ts'
 import { record as recordRail } from '../rails/record.ts'
+import { digestOf, headDigest } from '../store/approvals.ts'
+import { built, gated, ready as readyRow, type Made, type Proven } from '../store/deliverables.ts'
 import type { Db } from '../store/index.ts'
-import type { PlanRow } from '../store/plans.ts'
-import { at } from '../templates/pr-path.ts'
+import { stampHead, type PlanRow } from '../store/plans.ts'
+import { at, type Step } from '../templates/pr-path.ts'
 import type { Outcome } from './kind.ts'
 import { preReview } from './rails.ts'
+import { headOf, push } from './push.ts'
+import { diffOf } from './workspace.ts'
 
 interface Target { repo: string; issue_no: number; state: string; measured_at: string; pulse: string }
 
 export function blocked(db: Db, plan: PlanRow, today: string): string | null {
   const step = at(plan.step)
-  if (step.fires === 'ceo') return 'awaiting the sign-off batch'
+  if (step.fires === 'ceo') return approvedPlan(db, plan) ? null : 'awaiting the sign-off batch'
   if (step.name === 'ruling') return approved(db, plan) ? null : 'awaiting cf approve target'
   if (step.name === 'ready') return proven(db, plan) ? null : 'awaiting the ready proof'
   const row = target(db, plan)
@@ -25,6 +29,7 @@ export function kernel(db: Db, root: string, plan: PlanRow): Outcome {
   if (step.name === 'rails') return preReview(db, root, plan)
   if (step.name === 'measure') return measure(db, plan)
   if (step.name === 'ready') return readyGate(db, root, plan)
+  if (step.name === 'push') return push(db, root, plan)
   return { outcome: 'pass', spans: [], note: step.name }
 }
 
@@ -87,9 +92,16 @@ export function targetOf(db: Db, plan: PlanRow): { repo: string; issue_no: numbe
   return (row ?? null) as { repo: string; issue_no: number } | null
 }
 
+/**
+ * The pulse is the repo's latest measurement — the row `rails/ready` already reads
+ * (`rails/ready/index.ts:44`), not the one `cf queue add` froze in `targets.account_id`,
+ * or a `cf measure` would refresh nothing the kernel reads. What the CEO approved is
+ * still pinned by `targets.evidence_measured_at` in `targetDigest()`.
+ */
 function target(db: Db, plan: PlanRow): Target | null {
   const row = db.prepare(`SELECT t.repo, t.issue_no, t.state, a.measured_at, a.pulse
-    FROM targets t JOIN accounts a ON a.id = t.account_id WHERE t.id = ?`).get(plan.target_id)
+    FROM targets t JOIN accounts a ON a.repo = t.repo
+    WHERE t.id = ? ORDER BY a.measured_at DESC LIMIT 1`).get(plan.target_id)
   return (row ?? null) as Target | null
 }
 
@@ -115,6 +127,55 @@ function approved(db: Db, plan: PlanRow): boolean {
   if (t === undefined) return false
   return db.prepare("SELECT 1 FROM approvals WHERE subject_kind = 'target' AND subject_id = ? AND subject_digest = ?")
     .get(plan.target_id, targetDigest(t)) !== undefined
+}
+
+/**
+ * R30 as code's other half: the store refuses the step, this refuses the tick that would have asked for it.
+ * The sign-off is for one head on one lap, so it is read off the deliverable row the ready gate wrote and
+ * against the head it proved — a rewind opens a new row and clears the head, and the old approval is dead.
+ */
+function approvedPlan(db: Db, plan: PlanRow): boolean {
+  return db.prepare(`SELECT 1 FROM deliverables d JOIN approvals a ON a.id = d.approval_id
+    WHERE d.plan_id = ? AND d.state = 'approved'
+      AND d.id = (SELECT max(id) FROM deliverables WHERE plan_id = d.plan_id)
+      AND a.subject_kind = 'plan' AND a.subject_id = d.plan_id
+      AND a.decision = 'approved' AND a.subject_digest = ?`).get(plan.id, plan.head_digest) !== undefined
+}
+
+/** The deliverable row is written where the step proved it: the handback at build, the gates at senior, the rail at ready. */
+export function proved(db: Db, root: string, plan: PlanRow, step: Step): void {
+  if (step.name === 'build') built(db, made(db, root, plan, step))
+  if (step.name === 'senior') gated(db, made(db, root, plan, step), proof(db, plan))
+  if (step.name === 'ready') {
+    readyRow(db, plan.id)
+    stampHead(db, plan.id, headDigest(headOf(root, plan.id).sha))
+  }
+}
+
+function made(db: Db, root: string, plan: PlanRow, step: Step): Made {
+  const row = db.prepare('SELECT evidence FROM targets WHERE id = ?').get(plan.target_id) as
+    { evidence: string } | undefined
+  if (row === undefined) throw new Error(`plan ${String(plan.id)} has no target row`)
+  return { plan: plan.id, step: step.step, seat: step.seat, diff_digest: digestOf(diffOf(root, plan.id)), evidence: row.evidence }
+}
+
+/** Each of the five is a row somebody else wrote: a gate verdict, the ci-green rail, a bot signal, the account pulse. */
+function proof(db: Db, plan: PlanRow): Proven {
+  const today = new Date().toISOString().slice(0, 10)
+  return {
+    tests_pass: passed(db, plan.id, 'gate', 'pre_review'),
+    byte_identical_elsewhere: passed(db, plan.id, 'gate', 'review') && passed(db, plan.id, 'gate', 'senior_review'),
+    fork_ci_green: passed(db, plan.id, 'rail_id', 'ci-green'),
+    bot_clean: db.prepare("SELECT 1 FROM signals WHERE plan = ? AND kind = 'bot_review' AND score < 5")
+      .get(plan.id) === undefined,
+    target_warm: target(db, plan)?.pulse === 'warm' && stale(db, plan, today) === null,
+  }
+}
+
+function passed(db: Db, plan: number, column: 'gate' | 'rail_id', value: string): boolean {
+  const row = db.prepare(`SELECT outcome FROM verdicts WHERE plan = ? AND ${column} = ? ORDER BY id DESC LIMIT 1`)
+    .get(plan, value) as { outcome: string } | undefined
+  return row?.outcome === 'pass'
 }
 
 function proven(db: Db, plan: PlanRow): boolean {

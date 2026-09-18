@@ -1,0 +1,294 @@
+import { readFileSync, writeFileSync } from 'node:fs'
+import { basename, join } from 'node:path'
+import { expect, test } from 'vitest'
+import { approve as approveCard, batch, refuse as refuseCard } from '../../cli/batch.ts'
+import type { Pr } from '../../cli/gh.ts'
+import { close, settled } from '../../cli/session.ts'
+import { headApproved, headDigest } from '../../store/approvals.ts'
+import type { Db } from '../../store/index.ts'
+import { advance, rewind } from '../../store/plans.ts'
+import { open as openProposals } from '../../store/proposals.ts'
+import { SignalRow } from '../../store/signals.ts'
+import { capture } from '../capture.ts'
+import { classOf } from '../escapes.ts'
+import { headOf, prBody, push, type Wire } from '../push.ts'
+import { started } from '../signals.ts'
+import { srcDir } from '../workspace.ts'
+import { tick } from '../index.ts'
+import { approve, CARRIED, forkCi, plan, ready, stub, world, type World } from './world.ts'
+
+const URL = 'https://github.com/acme/widget/pull/7'
+
+const TRANSCRIPT = [
+  'RULING push.digest = approval_matches_head_and_the_hook',
+  'the ceo said a lot of other things here and none of them are written anywhere',
+  'WORK batch.card = show_the_change_and_the_marks',
+  'ORDERING p7.comms = after_p6',
+  'WORLD fork.ci = green',
+  'MEASUREMENT tick.interval = 300s',
+].join('\n')
+
+const pr = (over: Partial<Pr> = {}): Pr => ({
+  number: 7, url: URL, state: 'OPEN', mergedAt: null, mergedBy: null,
+  comments: [], reviews: [], statusCheckRollup: [], ...over,
+})
+
+async function atBatch(): Promise<World> {
+  const w = world()
+  approve(w.db, w.target)
+  for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  writeFileSync(join(srcDir(w.root, 1), 'src/hello.ts'), 'export const hello = (): string => "hey"\n')
+  ready(w.db, 1)
+  await tick(w.db, w.root, stub(CARRIED))
+  expect(plan(w.db, 1).step).toBe(7)
+  return w
+}
+
+test('the batch is a card per plan at ready and per open proposal, with a green/red check list', async () => {
+  const w = await atBatch()
+  const card = batch(w.db, w.root)[0]
+  expect(card).toMatchObject({ kind: 'plan', id: 1, title: 'acme/widget#12 widget-12-a1' })
+  expect(card?.digest).toBe(headDigest(headOf(w.root, 1).sha))
+  expect(card?.change).toBe('  1 file(s)\t+1\t-1')
+  expect(card?.text).toBe('Closes #12\n\n- D1 add `hello()` in `src/hello.ts`')
+  expect(card?.marks).toEqual([
+    { name: 'pre_review', ok: true }, { name: 'review', ok: true },
+    { name: 'senior_review', ok: true }, { name: 'ready', ok: true },
+  ])
+})
+
+test('a plan cannot leave ready without an approval row, and the store is what refuses', async () => {
+  const w = await atBatch()
+  expect(() => { advance(w.db, plan(w.db, 1), 8) }).toThrow(/no ceo approval row/)
+  expect(await tick(w.db, w.root, stub(CARRIED))).toEqual([])
+  const digest = approveCard(w.db, w.root, 'plan', 1)
+  expect(w.db.prepare("SELECT who, decision, subject_digest FROM approvals WHERE subject_kind = 'plan'").get())
+    .toEqual({ who: 'ceo', decision: 'approved', subject_digest: digest })
+  advance(w.db, plan(w.db, 1), 8)
+  expect(plan(w.db, 1).step).toBe(8)
+})
+
+test('push refuses without a matching row, then pushes the approved head and opens the pr', async () => {
+  const w = await atBatch()
+  const sent: string[] = []
+  const wire = watched(sent)
+  expect(push(w.db, w.root, plan(w.db, 1), wire)).toMatchObject({ outcome: 'refuse' })
+  expect(sent).toEqual([])
+  approveCard(w.db, w.root, 'plan', 1)
+  expect(push(w.db, w.root, plan(w.db, 1), wire)).toMatchObject({ outcome: 'pass' })
+  expect(sent).toEqual(['send src widget-12-a1', 'open acme/widget caliperforge:widget-12-a1'])
+  expect(w.db.prepare('SELECT state, evidence FROM deliverables WHERE plan_id = 1 ORDER BY id DESC LIMIT 1').get())
+    .toEqual({ state: 'pushed', evidence: URL })
+})
+
+test('the pre-push hook asks one question: is this sha the one the ceo signed', async () => {
+  const w = await atBatch()
+  const sha = headOf(w.root, 1).sha
+  expect(headApproved(w.db, sha)).toBe(false)
+  approveCard(w.db, w.root, 'plan', 1)
+  expect(headApproved(w.db, sha)).toBe(true)
+  expect(headApproved(w.db, 'f'.repeat(40))).toBe(false)
+})
+
+test('the tick records every comment, review, bot review and merge on our open pr, once', async () => {
+  const w = await pushed()
+  const view = pr({
+    comments: [{ id: 'c1', author: { login: 'maintainer' }, body: 'please split this', createdAt: '2026-09-17T10:00:00Z' }],
+    reviews: [{ id: 'r1', author: { login: 'greptile-apps[bot]' }, body: 'score 4/5', submittedAt: '2026-09-17T11:00:00Z' }],
+    statusCheckRollup: [{ name: 'build', conclusion: 'FAILURE' }],
+  })
+  expect(capture(w.db, () => view).map((s) => s.kind)).toEqual(['comment', 'bot_review', 'ci_red'])
+  expect(capture(w.db, () => view)).toEqual([])
+  expect(w.db.prepare('SELECT kind, author, score, pr, plan FROM signals ORDER BY id').all()).toEqual([
+    { kind: 'comment', author: 'maintainer', score: null, pr: 7, plan: 1 },
+    { kind: 'bot_review', author: 'greptile-apps[bot]', score: 4, pr: 7, plan: 1 },
+    { kind: 'ci_red', author: 'ci', score: null, pr: 7, plan: 1 },
+  ])
+})
+
+test('a counterparty finding on merged code is an escape against the step the map says owns it', async () => {
+  const w = await pushed()
+  const merged = pr({
+    mergedAt: '2026-09-18T09:00:00Z', mergedBy: { login: 'maintainer' },
+    reviews: [{ id: 'r9', author: { login: 'maintainer' }, body: 'this is a scope problem', submittedAt: '2026-09-18T08:00:00Z' }],
+  })
+  capture(w.db, () => merged)
+  expect(w.db.prepare('SELECT kind, defect_class, owner, evidence FROM dispositions').get())
+    .toEqual({ kind: 'escaped', defect_class: 'scope', owner: 'review', evidence: URL })
+  expect(classOf('tight.comment on line 3')).toBe('tight.comment')
+  expect(classOf('no class named here')).toBe('correctness')
+})
+
+test('a pr the tick cannot read this time does not stop the pipes behind it', async () => {
+  const w = await pushed()
+  expect(capture(w.db, () => { throw new Error('gh: could not resolve host') })).toEqual([])
+  expect(capture(w.db, () => pr({ comments: [{ id: 'c1', author: { login: 'maintainer' }, body: 'hi', createdAt: '2026-09-17T10:00:00Z' }] })))
+    .toHaveLength(1)
+})
+
+test('a vague bot finding does not take the disposition slot a named one earned', async () => {
+  const w = await pushed()
+  const merged = pr({
+    mergedAt: '2026-09-18T09:00:00Z', mergedBy: { login: 'maintainer' },
+    reviews: [
+      { id: 'r1', author: { login: 'greptile[bot]' }, body: 'looks fine 4/5', submittedAt: '2026-09-18T07:00:00Z' },
+      { id: 'r2', author: { login: 'maintainer' }, body: 'this is a scope problem', submittedAt: '2026-09-18T08:00:00Z' },
+    ],
+  })
+  capture(w.db, () => merged)
+  expect(w.db.prepare('SELECT defect_class FROM dispositions').all()).toEqual([{ defect_class: 'scope' }])
+})
+
+test('an approval that cannot settle its row writes no approval row either', async () => {
+  const w = await atBatch()
+  const path = `${w.root}/one.md`
+  writeFileSync(path, 'RULING batch.card = change_text_and_marks\n')
+  close(w.db, path, () => null)
+  const id = Number(openProposals(w.db)[0]?.id)
+  expect(() => approveCard(w.db, w.root, 'proposal', id)).toThrow(/names no issue/)
+  expect(w.db.prepare("SELECT count(*) AS n FROM approvals WHERE subject_kind = 'proposal'").get()).toEqual({ n: 0 })
+  expect(openProposals(w.db)).toHaveLength(1)
+})
+
+test('a plan at ready with no checkout stays on the card list and cannot be signed', async () => {
+  const w = await atBatch()
+  w.db.prepare(`INSERT INTO plans (id, pipe_id, target_id, template, state, queued_at, step, retries)
+    VALUES (2, 1, 1, 'pr_path', 'running', ?, 7, 0)`).run('2026-09-17T00:00:00.000Z')
+  const blind = batch(w.db, w.root).find((c) => c.id === 2)
+  expect(blind).toMatchObject({ kind: 'plan', digest: '', marks: [{ name: 'bytes on the branch', ok: false }] })
+  expect(() => approveCard(w.db, w.root, 'plan', 2)).toThrow(/no bytes on its branch/)
+  expect(() => headOf(w.root, 2)).toThrow(/has no checkout/)
+  expect(push(w.db, w.root, plan(w.db, 2), watched([]))).toMatchObject({ outcome: 'refuse' })
+})
+
+test('a signal starts the plan the map says it starts', async () => {
+  const w = await pushed()
+  const bot = (score: number): number => signal(w.db, 'bot_review', 'greptile[bot]', score)
+  expect(started(w.db, row(w.db, bot(5)))).toBeNull()
+  expect(started(w.db, row(w.db, bot(4)))).toMatchObject({ template: 'pr_path', plan: 1, step: 4 })
+  expect(plan(w.db, 1)).toMatchObject({ step: 4, state: 'running' })
+  expect(started(w.db, row(w.db, signal(w.db, 'ci_red', 'ci', null)))).toMatchObject({ template: 'pr_path', step: 4 })
+  const comms = started(w.db, row(w.db, signal(w.db, 'merge', 'maintainer', null)))
+  expect(comms).toMatchObject({ template: 'comms', step: 0 })
+  expect(w.db.prepare('SELECT template, state FROM plans WHERE id = ?').get(comms?.plan))
+    .toEqual({ template: 'comms', state: 'queued' })
+  expect(w.db.prepare("SELECT enabled FROM pipes WHERE name = 'comms'").get()).toEqual({ enabled: 0 })
+})
+
+test('session close writes typed proposals and nothing else, and approval turns a ruling into a row', async () => {
+  const w = await atBatch()
+  const path = `${w.root}/session.md`
+  writeFileSync(path, TRANSCRIPT)
+  expect(settled(readFileSync(path, 'utf8')).map((s) => s.class)).toEqual(['ruling', 'work', 'ordering', 'world_fact', 'measurement'])
+  expect(close(w.db, path, () => 42)).toHaveLength(5)
+  const rows = openProposals(w.db)
+  expect(rows.map((r) => r.class)).toEqual(['ruling', 'work', 'ordering', 'world_fact', 'measurement'])
+  expect(rows[0]).toMatchObject({ subject: 'push.digest', match_issue_no: 42 })
+  expect(rows[0]?.evidence).toBe(`${path}:1`)
+  expect(rows[0]?.match_ruling_id).not.toBeNull()
+
+  approveCard(w.db, w.root, 'proposal', Number(rows[0]?.id))
+  expect(w.db.prepare("SELECT value, issue_no FROM rulings WHERE subject = 'push.digest' ORDER BY id DESC LIMIT 1").get())
+    .toEqual({ value: 'approval_matches_head_and_the_hook', issue_no: 42 })
+  refuseCard(w.db, w.root, 'proposal', Number(rows[1]?.id), 'not_now')
+  expect(openProposals(w.db).map((r) => r.class)).toEqual(['ordering', 'world_fact', 'measurement'])
+  expect(w.db.prepare("SELECT decision, reason FROM approvals WHERE subject_kind = 'proposal' ORDER BY id").all())
+    .toEqual([{ decision: 'approved', reason: null }, { decision: 'refused', reason: 'not_now' }])
+})
+
+test('a settled item already in rulings proposes nothing, and the pr body stays under twenty lines', async () => {
+  const w = await atBatch()
+  const path = `${w.root}/again.md`
+  writeFileSync(path, 'RULING push.digest = approval_matches_branch_head_digest\n')
+  expect(close(w.db, path, () => 42)).toEqual([])
+  expect(prBody(12, w.root, 1).split('\n').length).toBeLessThanOrEqual(20)
+})
+
+/**
+ * The lap-1 push left a `pushed` deliverable, so every tick from here polls it.
+ * The reader is injected: an open pr with nothing on it, read off no network.
+ */
+const lap = (w: World) => tick(w.db, w.root, stub(CARRIED), new Date(), () => pr())
+
+test('a second lap after a rewind puts a fresh card in the batch and cannot leave on the first lap approval', async () => {
+  const w = await pushed()
+  rewind(w.db, 1, 4)
+  expect(plan(w.db, 1).head_digest).toBeNull()
+  for (let at = 0; at < 3; at += 1) await lap(w)
+  expect(plan(w.db, 1).step).toBe(7)
+  expect(w.db.prepare('SELECT state FROM deliverables WHERE plan_id = 1 ORDER BY id').all())
+    .toEqual([{ state: 'built' }, { state: 'gated' }, { state: 'pushed' }, { state: 'ready' }])
+  expect(() => { advance(w.db, plan(w.db, 1), 8) }).toThrow(/no ceo approval row/)
+  expect(await lap(w)).toEqual([])
+  expect(batch(w.db, w.root).map((c) => c.id)).toEqual([1])
+
+  approveCard(w.db, w.root, 'plan', 1)
+  expect(w.db.prepare("SELECT count(*) AS n FROM approvals WHERE subject_kind = 'plan'").get()).toEqual({ n: 1 })
+  expect(w.db.prepare('SELECT state FROM deliverables WHERE plan_id = 1 ORDER BY id DESC LIMIT 1').get())
+    .toEqual({ state: 'approved' })
+  advance(w.db, plan(w.db, 1), 8)
+  expect(plan(w.db, 1).step).toBe(8)
+})
+
+test('an approved non-ruling item said again in a later session leaves its evidence and the batch alone', async () => {
+  const w = await atBatch()
+  const first = `${w.root}/first.md`
+  writeFileSync(first, 'WORK batch.card = show_the_change_and_the_marks\n')
+  const made = close(w.db, first, () => 42)
+  approveCard(w.db, w.root, 'proposal', Number(made[0]))
+  const again = `${w.root}/again-later.md`
+  writeFileSync(again, '\n\nWORK batch.card = show_the_change_and_the_marks\n')
+  expect(close(w.db, again, () => 42)).toEqual([])
+  expect(w.db.prepare("SELECT state, evidence FROM proposals WHERE subject = 'batch.card'").get())
+    .toEqual({ state: 'approved', evidence: `${first}:1` })
+  expect(openProposals(w.db)).toHaveLength(0)
+})
+
+test('a review read on one tick and the merge on a later one is still one escape', async () => {
+  const w = await pushed()
+  const review = { id: 'r9', author: { login: 'maintainer' }, body: 'this is a scope problem', submittedAt: '2026-09-18T08:00:00Z' }
+  capture(w.db, () => pr({ reviews: [review] }))
+  expect(w.db.prepare('SELECT count(*) AS n FROM dispositions').get()).toEqual({ n: 0 })
+  capture(w.db, () => pr({ reviews: [review], mergedAt: '2026-09-19T09:00:00Z', mergedBy: { login: 'maintainer' } }))
+  expect(w.db.prepare('SELECT kind, defect_class, owner FROM dispositions').all())
+    .toEqual([{ kind: 'escaped', defect_class: 'scope', owner: 'review' }])
+})
+
+test('the steps write the deliverable themselves, and a plan reaches the batch with no fixture row', async () => {
+  const w = world()
+  approve(w.db, w.target)
+  for (let at = 0; at < 5; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  forkCi(w.db, 1)
+  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  expect(plan(w.db, 1).step).toBe(7)
+  expect(w.db.prepare('SELECT step, seat, state FROM deliverables WHERE plan_id = 1 ORDER BY id').all()).toEqual([
+    { step: 2, seat: 'typescript_specialist', state: 'built' },
+    { step: 5, seat: 'typescript_specialist', state: 'ready' },
+  ])
+  expect(plan(w.db, 1).head_digest).toBe(headDigest(headOf(w.root, 1).sha))
+})
+
+async function pushed(): Promise<World> {
+  const w = await atBatch()
+  approveCard(w.db, w.root, 'plan', 1)
+  push(w.db, w.root, plan(w.db, 1), watched([]))
+  return w
+}
+
+function watched(log: string[]): Wire {
+  return {
+    send: (dir, branch) => void log.push(`send ${basename(dir)} ${branch}`),
+    open: (repo, head) => { log.push(`open ${repo} ${head}`); return URL },
+  }
+}
+
+function row(db: Db, id: number): SignalRow {
+  return SignalRow.parse(db.prepare('SELECT * FROM signals WHERE id = ?').get(id))
+}
+
+function signal(db: Db, kind: string, author: string, score: number | null): number {
+  const written = db.prepare(`INSERT INTO signals (repo, pr, kind, author, at, external_id, score, plan)
+    VALUES ('acme/widget', 7, ?, ?, '2026-09-18T09:00:00Z', ?, ?, 1)`)
+    .run(kind, author, `${kind}-${String(score)}-${author}`, score)
+  return Number(written.lastInsertRowid)
+}

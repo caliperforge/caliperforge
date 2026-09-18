@@ -18,7 +18,7 @@ const LINES = `SELECT p.id, p.step, p.state, t.repo, t.issue_no
   FROM plans p LEFT JOIN targets t ON t.id = p.target_id`
 
 export function open(db: Db): PlanLine[] {
-  return db.prepare(`${LINES} WHERE p.state IN ('queued', 'running') AND p.step < 7 ORDER BY p.queued_at, p.id`).all() as PlanLine[]
+  return db.prepare(`${LINES} WHERE p.state IN ('queued', 'running') AND p.step <> 7 ORDER BY p.queued_at, p.id`).all() as PlanLine[]
 }
 
 export function halted(db: Db): PlanLine[] {

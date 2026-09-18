@@ -32,7 +32,12 @@ export const steps: Step[] = [
   { step: 5, name: 'senior', seat: DEFAULT_BUILDER, fires: 'review', runs: 'senior_review', gate: true, writes_verdict: true, verdict_gate: 'senior_review' },
   { step: 6, name: 'ready', seat: DEFAULT_BUILDER, fires: 'kernel', runs: 'ready', gate: true, writes_verdict: true, verdict_gate: 'ready' },
   { step: 7, name: 'batch', seat: DEFAULT_BUILDER, fires: 'ceo', runs: 'approval', gate: false, writes_verdict: false, verdict_gate: null },
+  { step: 8, name: 'push', seat: DEFAULT_BUILDER, fires: 'kernel', runs: 'push', gate: false, writes_verdict: false, verdict_gate: null },
 ]
+
+export function last(step: number): boolean {
+  return step === (steps.at(-1)?.step ?? 0)
+}
 
 export function at(step: number, language: string | null = null): Step {
   const found = steps.find((s) => s.step === step)

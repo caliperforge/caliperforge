@@ -1,10 +1,10 @@
 import { execFileSync } from 'node:child_process'
 import { openPr } from '../cli/gh.ts'
-import { approvalOf, headDigest } from '../store/approvals.ts'
+import { headDigest, signedHead } from '../store/approvals.ts'
 import type { Db } from '../store/index.ts'
-import type { PlanRow } from '../store/plans.ts'
+import { originIssue, type PlanRow } from '../store/plans.ts'
 import type { Outcome } from './kind.ts'
-import { cloned, get, put, srcDir } from './workspace.ts'
+import { cloned, get, put, SELF, srcDir, titleOf } from './workspace.ts'
 
 interface Head { dir: string; branch: string; sha: string }
 
@@ -20,11 +20,11 @@ const WIRE: Wire = {
 }
 
 export function push(db: Db, root: string, plan: PlanRow, wire: Wire = WIRE): Outcome {
-  const target = targetOf(db, plan)
+  const target = subject(db, plan)
   if (target === null) return refuse('targets', `plan ${String(plan.id)} has no target row`)
   if (!cloned(srcDir(root, plan.id))) return refuse('checkout', `plan ${String(plan.id)} has no checkout to send`)
   const head = headOf(root, plan.id)
-  const approval = approvalOf(db, 'plan', plan.id, headDigest(head.sha))
+  const approval = signedHead(db, plan.id, headDigest(head.sha))
   if (approval === null) return refuse('approvals', `no ceo approval row for ${head.branch} at ${head.sha.slice(0, 12)}`)
   const cold = unproven(db, plan.id)
   if (cold !== null) return refuse(cold, `${cold} left no passing verdict on plan ${String(plan.id)}`)
@@ -74,7 +74,7 @@ function land(dir: string): void {
 }
 
 function title(root: string, plan: number): string {
-  return /^#\s+(.*)$/m.exec(get(root, plan, 'issue.md'))?.[1]?.trim() ?? `plan ${String(plan)}`
+  return titleOf(root, plan) ?? `plan ${String(plan)}`
 }
 
 /** Tight: a description that summarises the diff is a refusal, so the body names the issue and its ids. */
@@ -88,7 +88,10 @@ function refuse(span: string, note: string): Outcome {
   return { outcome: 'refuse', spans: [span], note }
 }
 
-function targetOf(db: Db, plan: PlanRow): { repo: string; issue_no: number } | null {
+/** The repository the pull request is opened on and the issue it closes: a target's, or one of ours. */
+function subject(db: Db, plan: PlanRow): { repo: string; issue_no: number } | null {
+  const own = originIssue(plan)
+  if (own !== null) return { repo: SELF, issue_no: own }
   return (db.prepare('SELECT repo, issue_no FROM targets WHERE id = ?').get(plan.target_id) ?? null) as
     { repo: string; issue_no: number } | null
 }

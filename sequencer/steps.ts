@@ -2,22 +2,22 @@ import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 import { ready as readyRail, type Proof } from '../rails/ready/index.ts'
 import { record as recordRail } from '../rails/record.ts'
-import { digestOf, headDigest } from '../store/approvals.ts'
-import { built, gated, ready as readyRow, type Made, type Proven } from '../store/deliverables.ts'
+import { digestOf, gates, headDigest } from '../store/approvals.ts'
+import { approved as settle, built, gated, ready as readyRow, type Made, type Proven } from '../store/deliverables.ts'
 import type { Db } from '../store/index.ts'
-import { stampHead, type PlanRow } from '../store/plans.ts'
+import { internal, originIssue, stampHead, type PlanRow } from '../store/plans.ts'
 import { at, type Step } from '../templates/pr-path.ts'
 import type { Outcome } from './kind.ts'
 import { preReview } from './rails.ts'
 import { headOf, push } from './push.ts'
-import { diffOf } from './workspace.ts'
+import { diffOf, SELF } from './workspace.ts'
 
 interface Target { repo: string; issue_no: number; state: string; measured_at: string; pulse: string }
 
 export function blocked(db: Db, plan: PlanRow, today: string): string | null {
   const step = at(plan.step)
-  if (step.fires === 'ceo') return approvedPlan(db, plan) ? null : 'awaiting the sign-off batch'
-  if (step.name === 'ruling') return approved(db, plan) ? null : 'awaiting cf approve target'
+  if (step.fires === 'ceo') return internal(plan) || approvedPlan(db, plan) ? null : 'awaiting the sign-off batch'
+  if (step.name === 'ruling') return internal(plan) || approved(db, plan) ? null : 'awaiting cf approve target'
   if (step.name === 'ready') return proven(db, plan) ? null : 'awaiting the ready proof'
   const row = target(db, plan)
   if (row?.state === 'parked') return `${row.repo}#${String(row.issue_no)} parked on a cold pulse`
@@ -29,8 +29,24 @@ export function kernel(db: Db, root: string, plan: PlanRow): Outcome {
   if (step.name === 'rails') return preReview(db, root, plan)
   if (step.name === 'measure') return measure(db, plan)
   if (step.name === 'ready') return readyGate(db, root, plan)
+  if (step.name === 'batch') return batch(db, plan)
   if (step.name === 'push') return push(db, root, plan)
   return { outcome: 'pass', spans: [], note: step.name }
+}
+
+/**
+ * Step 7. An external plan only reaches here once `cf approve plan` wrote the CEO's row, so the
+ * step has nothing left to do and says so. An internal plan lands on the gates alone (#20): the
+ * four gate verdicts and the ready rail are the whole sign-off, and the row that settles its
+ * deliverable is signed `gates`. The store's step-7 trigger reads that signature only on a plan
+ * that names an origin, so an external plan still cannot leave ready on anything but the CEO's.
+ */
+function batch(db: Db, plan: PlanRow): Outcome {
+  if (!internal(plan)) return { outcome: 'pass', spans: [], note: 'batch' }
+  const head = plan.head_digest
+  if (head === null) return { outcome: 'refuse', spans: ['plans'], note: `plan ${String(plan.id)} reached batch with no proved head` }
+  db.transaction(() => { settle(db, plan.id, gates(db, plan.id, head)) })()
+  return { outcome: 'pass', spans: [], note: `landed on the gates at ${head.slice(0, 12)}` }
 }
 
 function readyGate(db: Db, root: string, plan: PlanRow): Outcome {
@@ -42,17 +58,17 @@ function readyGate(db: Db, root: string, plan: PlanRow): Outcome {
 }
 
 function proofOf(db: Db, plan: PlanRow): Proof | null {
-  const row = db.prepare(`SELECT d.tests_pass, d.byte_identical_elsewhere, d.fork_ci_green, d.bot_clean,
-      d.diff_digest, t.repo
-    FROM deliverables d JOIN plans p ON p.id = d.plan_id JOIN targets t ON t.id = p.target_id
-    WHERE d.plan_id = ? ORDER BY d.id DESC LIMIT 1`).get(plan.id) as
+  const row = db.prepare(`SELECT tests_pass, byte_identical_elsewhere, fork_ci_green, bot_clean, diff_digest
+    FROM deliverables WHERE plan_id = ? ORDER BY id DESC LIMIT 1`).get(plan.id) as
     { tests_pass: number; byte_identical_elsewhere: number; fork_ci_green: number; bot_clean: number
-      diff_digest: string; repo: string } | undefined
-  if (row === undefined) return null
+      diff_digest: string } | undefined
+  const repo = repoOf(db, plan)
+  if (row === undefined || repo === null) return null
   const ci = db.prepare("SELECT outcome, subject_digest FROM verdicts WHERE plan = ? AND rail_id = 'ci-green' ORDER BY id DESC LIMIT 1")
     .get(plan.id) as { outcome: string; subject_digest: string } | undefined
   return {
-    repo: row.repo,
+    repo,
+    ours: internal(plan),
     at: new Date().toISOString().slice(0, 10),
     tests_pass: row.tests_pass === 1,
     byte_identical_elsewhere: row.byte_identical_elsewhere === 1,
@@ -63,7 +79,15 @@ function proofOf(db: Db, plan: PlanRow): Proof | null {
   }
 }
 
+/** The repository the ready rail reads a pulse for. Ours has none to read, and needs none (#20). */
+function repoOf(db: Db, plan: PlanRow): string | null {
+  if (internal(plan)) return SELF
+  const row = db.prepare('SELECT repo FROM targets WHERE id = ?').get(plan.target_id) as { repo: string } | undefined
+  return row?.repo ?? null
+}
+
 export function measure(db: Db, plan: PlanRow): Outcome {
+  if (internal(plan)) return { outcome: 'pass', spans: [], note: `${SELF}#${String(originIssue(plan))} is ours; no account to measure` }
   const row = target(db, plan)
   if (row === null) return { outcome: 'refuse', spans: ['targets'], note: `plan ${String(plan.id)} has no target row` }
   if (row.state === 'ready' || row.state === 'queued') {
@@ -153,10 +177,16 @@ export function proved(db: Db, root: string, plan: PlanRow, step: Step): void {
 }
 
 function made(db: Db, root: string, plan: PlanRow, step: Step): Made {
+  return { plan: plan.id, step: step.step, seat: step.seat, diff_digest: digestOf(diffOf(root, plan.id)), evidence: evidenceOf(db, plan) }
+}
+
+/** What the deliverable row points at: the target's issue url, or the issue of ours the plan was filed from. */
+function evidenceOf(db: Db, plan: PlanRow): string {
+  if (plan.origin !== null) return plan.origin
   const row = db.prepare('SELECT evidence FROM targets WHERE id = ?').get(plan.target_id) as
     { evidence: string } | undefined
   if (row === undefined) throw new Error(`plan ${String(plan.id)} has no target row`)
-  return { plan: plan.id, step: step.step, seat: step.seat, diff_digest: digestOf(diffOf(root, plan.id)), evidence: row.evidence }
+  return row.evidence
 }
 
 /** Each of the five is a row somebody else wrote: a gate verdict, the ci-green rail, a bot signal, the account pulse. */
@@ -168,7 +198,7 @@ function proof(db: Db, plan: PlanRow): Proven {
     fork_ci_green: passed(db, plan.id, 'rail_id', 'ci-green'),
     bot_clean: db.prepare("SELECT 1 FROM signals WHERE plan = ? AND kind = 'bot_review' AND score < 5")
       .get(plan.id) === undefined,
-    target_warm: target(db, plan)?.pulse === 'warm' && stale(db, plan, today) === null,
+    target_warm: internal(plan) || (target(db, plan)?.pulse === 'warm' && stale(db, plan, today) === null),
   }
 }
 

@@ -14,7 +14,7 @@ import { openPipes, PlanRow } from '../store/plans.ts'
 import { headApproved } from '../store/approvals.ts'
 import { receipt } from '../store/ticks.ts'
 import { adopt, render as renderAdopt } from './adopt.ts'
-import { approve as approveCard, batch, refuse as refuseCard, render } from './batch.ts'
+import { approve as approveCard, batch, landed, refuse as refuseCard, render, renderLanded } from './batch.ts'
 import { awaiting, day, dryLines, halted, laneLine, open as openPlans, runsOf, section, tickNote, verdictsOf, windowLine } from './brief.ts'
 import { measure, render as renderPulse } from './measure.ts'
 import { add as fileIssue, render as renderUnfiled, unfiled } from './plan.ts'
@@ -112,7 +112,7 @@ const plan = cf.command('plan')
 plan.command('add').requiredOption('--issue <ref>', 'an <owner/repo>#<n> github issue')
   .option('--pipe <name>', 'pipe to file the plan on', 'internal')
   .action((options: { issue: string; pipe: string }) => {
-    const filed = fileIssue(db(), options.issue, options.pipe)
+    const filed = fileIssue(db(), root, options.issue, options.pipe)
     const origin = filed.origin === null ? '-' : `${filed.origin.origin_kind}:${filed.origin.origin_ref}`
     const ruled = filed.ruling === null ? '-' : `ruling ${String(filed.ruling)}`
     out(`plan ${filed.plan === null ? '-' : String(filed.plan)} ${filed.state}\t${filed.lane ?? '-'}\t${filed.seat ?? '-'}\t${filed.why}\t${origin}\t${ruled}\n`)
@@ -162,9 +162,11 @@ approve.command('target').argument('<id>').action((id: string) => {
 })
 
 cf.command('batch').action(() => {
-  const cards = batch(db(), root)
+  const handle = db()
+  const cards = batch(handle, root)
   if (cards.length === 0) out('nothing awaiting sign-off\n')
   for (const card of cards) out(render(card))
+  for (const row of landed(handle)) out(renderLanded(row))
 })
 
 for (const kind of ['plan', 'proposal'] as const) {

@@ -2,14 +2,14 @@ import { pr as readPr, type Pr } from '../cli/gh.ts'
 import type { Provider } from '../providers/kind.ts'
 import type { Db } from '../store/index.ts'
 import { cap, hhmm, zone } from '../store/lanes.ts'
-import { advance, back, finish, live, needsCeo, openPipes, underCap, type PipeRow, type PlanRow } from '../store/plans.ts'
+import { advance, back, finish, internal, live, needsCeo, openPipes, underCap, type PipeRow, type PlanRow } from '../store/plans.ts'
 import { at, last, type Step } from '../templates/pr-path.ts'
 import { capture } from './capture.ts'
 import type { Fired, Outcome } from './kind.ts'
 import { started } from './signals.ts'
 import { fireReview, fireSeat } from './seat.ts'
 import { blocked, kernel, proved, targetOf } from './steps.ts'
-import { checkout, languageOf, put, srcDir } from './workspace.ts'
+import { branchOf, checkout, internalBranch, languageOf, put, SELF, srcDir, titleOf } from './workspace.ts'
 
 /** `read` is the one network reader a tick does on its own account; it is injected so a test can drive a lap offline. */
 export async function tick(db: Db, root: string, provider: Provider, now: Date = new Date(),
@@ -97,16 +97,29 @@ async function one(db: Db, root: string, pipe: PipeRow, plan: PlanRow, provider:
  * be written in is what picks the builder.
  */
 function workspace(db: Db, root: string, plan: PlanRow): { language: string | null; failed: Outcome | null } {
-  const row = targetOf(db, plan)
   const fires = at(plan.step).fires
-  if (row === null || (fires !== 'seat' && fires !== 'review')) return { language: null, failed: null }
+  const tree = fires === 'seat' || fires === 'review' ? treeOf(db, root, plan) : null
+  if (tree === null) return { language: null, failed: null }
   try {
-    checkout(root, plan.id, row.repo, row.issue_no, plan.retries + 1)
+    checkout(root, plan.id, tree.repo, tree.branch)
   } catch (error) {
     const note = error instanceof Error ? error.message : String(error)
-    return { language: null, failed: { outcome: 'refuse', spans: [`${row.repo}#${String(row.issue_no)}`], note: `checkout: ${note}` } }
+    return { language: null, failed: { outcome: 'refuse', spans: [tree.repo], note: `checkout: ${note}` } }
   }
   return { language: languageOf(srcDir(root, plan.id)), failed: null }
+}
+
+/**
+ * Which repository the branch is cut in and what it is called: a stranger's repo and
+ * `<repo>-<issue>-a<attempt>` for a target, our own repo and `p<plan>-<slug>` for an issue
+ * of ours. Either way the clone is our fork and the base is that repo's `main`.
+ */
+function treeOf(db: Db, root: string, plan: PlanRow): { repo: string; branch: string } | null {
+  if (internal(plan)) {
+    return { repo: SELF, branch: internalBranch(plan.id, titleOf(root, plan.id) ?? `plan ${String(plan.id)}`) }
+  }
+  const row = targetOf(db, plan)
+  return row === null ? null : { repo: row.repo, branch: branchOf(row.repo, row.issue_no, plan.retries + 1) }
 }
 
 function fire(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {

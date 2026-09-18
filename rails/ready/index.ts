@@ -6,6 +6,8 @@ const WARM_DAYS = 30
 
 export interface Proof {
   repo: string
+  /** Our own repository: nobody measures us, so there is no account pulse to read (#20). */
+  ours: boolean
   at: string
   tests_pass: boolean
   byte_identical_elsewhere: boolean
@@ -40,6 +42,7 @@ export function ready(db: Db, proof: Proof): Verdict {
 }
 
 function warm(db: Db, proof: Proof): boolean {
+  if (proof.ours) return true
   const row = db
     .prepare('SELECT pulse, julianday(?) - julianday(measured_at) AS age FROM accounts WHERE repo = ? ORDER BY measured_at DESC LIMIT 1')
     .get(proof.at, proof.repo) as { pulse: string; age: number } | undefined

@@ -7,7 +7,7 @@ import type { Packet, Provider } from '../../providers/kind.ts'
 import type { Db } from '../../store/index.ts'
 import { PlanRow, type PipeRow } from '../../store/plans.ts'
 import { targetDigest } from '../steps.ts'
-import { put } from '../workspace.ts'
+import { put, SELF } from '../workspace.ts'
 
 const repo = join(import.meta.dirname, '../..')
 
@@ -68,6 +68,31 @@ function remotes(root: string, files: Record<string, string>): void {
   git(base, ['clone', '-q', '--no-local', upstream, join(base, 'caliperforge/widget')])
   mkdirSync(join(root, '.cf'), { recursive: true })
   writeFileSync(join(root, '.cf/git-base'), base)
+}
+
+/**
+ * Our own repository, standing in for github the same way `remotes()` stands in for a
+ * stranger's: an internal plan clones it, fetches its `main` and branches off that.
+ */
+export function ours(root: string, files: Record<string, string> = TYPESCRIPT): void {
+  const dir = join(root, 'remotes', SELF)
+  mkdirSync(dir, { recursive: true })
+  git(dir, ['init', '-q', '-b', 'main'])
+  for (const [path, body] of Object.entries(files)) {
+    mkdirSync(dirname(join(dir, path)), { recursive: true })
+    writeFileSync(join(dir, path), body)
+  }
+  git(dir, ['add', '-A'])
+  git(dir, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'base'])
+}
+
+/** A plan filed from one of our own issues: an origin, a lane, a seat, and no target row. */
+export function internalPlan(db: Db, root: string, id: number, title = 'let an internal plan run'): number {
+  db.prepare(`INSERT INTO plans (id, pipe_id, target_id, template, state, queued_at, step, retries, priority, lane, seat, origin)
+    VALUES (?, 1, NULL, 'pr_path', 'queued', '2026-09-18T00:00:00.000Z', 0, 0, 1, 'machine', 'typescript_specialist', ?)`)
+    .run(id, `https://github.com/${SELF}/issues/34`)
+  put(root, id, 'issue.md', `# ${title}\n\n- **D1** add \`hello()\` in \`src/hello.ts\`\n`)
+  return id
 }
 
 function git(cwd: string, args: string[]): void {

@@ -1,5 +1,6 @@
 {
   "repo": "parked-org/project",
+  "ours": false,
   "at": "2026-09-17",
   "tests_pass": false,
   "byte_identical_elsewhere": false,

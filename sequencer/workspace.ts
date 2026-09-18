@@ -38,6 +38,9 @@ export function doneIds(issue: string): string[] {
 /** The org account every target is forked into. A branch is pushed here; it is never cut from here. */
 export const FORK = 'caliperforge'
 
+/** Our own repository: the tree an internal plan is branched in, and the one its PR is opened on. */
+export const SELF = `${FORK}/caliperforge`
+
 /** A target directory that names the language its builder must be able to compile. */
 const LANGUAGES: [string, string][] = [['kotlin', 'kotlin']]
 
@@ -55,6 +58,22 @@ export function branchOf(repo: string, issue: number, attempt: number): string {
   return `${repoName(repo)}-${String(issue)}-a${String(attempt)}`
 }
 
+/** The branch an internal plan works on: the plan number, then the issue title as a slug. */
+export function internalBranch(plan: number, title: string): string {
+  return `p${String(plan)}-${slugged(title)}`
+}
+
+function slugged(title: string): string {
+  const cut = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 48).replace(/^-+|-+$/g, '')
+  return cut === '' ? 'issue' : cut
+}
+
+/** The ticket's title: the first heading of the `issue.md` the plan was filed with. */
+export function titleOf(root: string, plan: number): string | null {
+  const body = maybe(root, plan, 'issue.md')
+  return body === null ? null : (/^#\s+(.*)$/m.exec(body)?.[1]?.trim() ?? null)
+}
+
 export function gitBase(root: string): string {
   const path = join(root, '.cf/git-base')
   return existsSync(path) ? readFileSync(path, 'utf8').trim() : 'https://github.com'
@@ -68,9 +87,8 @@ function remote(base: string, slug: string): string {
  * `--no-local`: a hardlinked clone shares an object store with its source, and the builder must not reach back through it.
  * `core.hooksPath` is set here and not at step 8, so every push out of a plan checkout meets the pre-push hook, not just the kernel's.
  */
-export function checkout(root: string, plan: number, repo: string, issue: number, attempt: number): Checkout {
+export function checkout(root: string, plan: number, repo: string, branch: string): Checkout {
   const dir = srcDir(root, plan)
-  const branch = branchOf(repo, issue, attempt)
   const done = maybe(root, plan, 'base.sha')
   if (done !== null && cloned(dir)) return { dir, branch, base: done.trim() }
   const base = gitBase(root)

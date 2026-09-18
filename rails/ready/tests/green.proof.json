@@ -1,5 +1,6 @@
 {
   "repo": "upstream-org/project",
+  "ours": false,
   "at": "2026-09-17",
   "tests_pass": true,
   "byte_identical_elsewhere": true,

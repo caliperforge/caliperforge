@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { put } from '../sequencer/workspace.ts'
 import type { Db } from '../store/index.ts'
 import { templatePriority } from '../store/lanes.ts'
 import { DEFAULT_BUILDER } from '../templates/pr-path.ts'
@@ -80,13 +81,14 @@ export function seatOf(labels: { name: string }[]): string | null {
   return labels.map((l) => SEAT_LABEL.exec(l.name)?.[1]).find((n) => n !== undefined) ?? null
 }
 
-export function add(db: Db, ref: string, pipe: string, read: Read = gh): Filed {
+export function add(db: Db, root: string, ref: string, pipe: string, read: Read = gh): Filed {
   const { repo, no } = parse(ref)
   const row = issue(repo, no, read)
   const lane = laneOf(row.labels)
   if (lane === null) return refusal(db, ref)
   const seat = seatOf(row.labels) ?? LANE[lane].seat
   const plan = file(db, pipe, lane, seat, row.url)
+  put(root, plan, 'issue.md', `# ${row.title}\n\n${row.body}\n`)
   return { plan, lane, seat, state: 'queued', why: `${ref} queued on ${lane} for ${seat}`, origin: null, ruling: null }
 }
 

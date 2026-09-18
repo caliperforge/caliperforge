@@ -23,6 +23,24 @@ export function batch(db: Db, root: string): Card[] {
   return [...planCards(db, root), ...proposalCards(db)]
 }
 
+export interface Landed { plan: number; origin: string; digest: string }
+
+/**
+ * #20: an internal plan lands on the gates alone, so it never becomes a card to sign.
+ * It shows in the batch as the list of what landed — the issue it came from and the head
+ * the gates signed — which is a read-out and asks the CEO for nothing.
+ */
+export function landed(db: Db): Landed[] {
+  return db.prepare(`SELECT p.id AS plan, p.origin, a.subject_digest AS digest FROM plans p
+    JOIN approvals a ON a.subject_kind = 'plan' AND a.subject_id = p.id AND a.who = 'gates'
+    WHERE p.origin IS NOT NULL AND a.subject_digest = p.head_digest ORDER BY p.id`).all() as Landed[]
+}
+
+export function renderLanded(row: Landed): string {
+  return `landed ${String(row.plan)}	${row.origin}	${row.digest.slice(0, 12)}
+`
+}
+
 /** The approval row and the row it settles land together or not at all; a half-signed card cannot be re-signed. */
 export function approve(db: Db, root: string, kind: 'plan' | 'proposal', id: number): string {
   const card = cardOf(db, root, kind, id)

@@ -91,7 +91,8 @@ const queue = cf.command('queue')
 queue.command('add').argument('<repo>').argument('<issue-url>').option('--pipe <name>', 'pipe to queue on', 'pr-path')
   .action((repo: string, url: string, options: { pipe: string }) => {
     const added = add(db(), root, repo, url, options.pipe, new Date().toISOString().slice(0, 10))
-    out(`target ${String(added.target)} ${added.state}\tplan ${added.plan === null ? '-' : String(added.plan)}\t${added.why}\n`)
+    const origin = added.origin === null ? '-' : `${added.origin.origin_kind}:${added.origin.origin_ref}`
+    out(`target ${String(added.target)} ${added.state}\tplan ${added.plan === null ? '-' : String(added.plan)}\t${added.why}\t${origin}\n`)
     process.exitCode = added.state === 'refused' ? 1 : 0
   })
 

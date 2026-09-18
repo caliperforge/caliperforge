@@ -16,7 +16,7 @@ interface Canned { merged?: unknown[]; open?: unknown[]; searches?: string[] }
 function canned(rows: Canned, log: string[] = []): Read {
   return (args) => {
     if (args[0] === 'search') { log.push(String(args[3])); return [{ repository: { nameWithOwner: 'acme/other' } }] }
-    if (args.includes('createdAt')) return rows.open ?? []
+    if (args.includes('createdAt,headRepositoryOwner')) return rows.open ?? []
     return rows.merged ?? []
   }
 }
@@ -28,7 +28,8 @@ test('an outsider merged inside the window by a door is a warm account, and the 
   const db = fresh(schema)
   const row = measure(db, 'acme/widget', TODAY, canned({
     merged: [merge('outsider', 'maintainer', '2026-09-10T00:00:00Z'), merge('maintainer', 'maintainer', '2026-09-01T00:00:00Z')],
-    open: [{ createdAt: '2026-09-16T00:00:00Z' }, { createdAt: '2026-09-15T00:00:00Z' }],
+    open: [{ createdAt: '2026-09-16T00:00:00Z', headRepositoryOwner: null },
+      { createdAt: '2026-09-15T00:00:00Z', headRepositoryOwner: null }],
   }))
   expect(row).toMatchObject({ pulse: 'warm', maintainers: 1, doors: 1, last_outsider_merge: '2026-09-10',
     open_pr_age_p50_days: 1, cross_repo_activity: 1 })
@@ -49,7 +50,7 @@ test('an outsider merge older than twenty-one days is cold, and so is a p50 open
     .toMatchObject({ pulse: 'cold', last_outsider_merge: '2026-08-01' })
   expect(measure(db, 'acme/other', TODAY, canned({
     merged: [merge('outsider', 'maintainer', '2026-09-16T00:00:00Z')],
-    open: [{ createdAt: '2026-01-01T00:00:00Z' }],
+    open: [{ createdAt: '2026-01-01T00:00:00Z', headRepositoryOwner: null }],
   }))).toMatchObject({ pulse: 'cold', open_pr_age_p50_days: 259 })
 })
 

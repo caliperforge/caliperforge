@@ -113,7 +113,7 @@ test('an accounts row older than 30 days blocks the plan and refuses the queue',
 /** The three `gh` shapes `cf measure` parses, canned: one outsider merge that day, one open pr, one other repo. */
 const measured = (day: string): Read => (args) => {
   if (args[0] === 'search') return [{ repository: { nameWithOwner: 'acme/other' } }]
-  if (args.includes('createdAt')) return [{ createdAt: `${day}T00:00:00Z` }]
+  if (args.includes('createdAt,headRepositoryOwner')) return [{ createdAt: `${day}T00:00:00Z`, headRepositoryOwner: null }]
   return [{ author: { login: 'outsider' }, mergedBy: { login: 'maintainer' }, mergedAt: `${day}T00:00:00Z` }]
 }
 

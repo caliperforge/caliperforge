@@ -14,6 +14,11 @@ export interface Packet {
   refuse: (path: string) => Refusal | null
 }
 
+/** `Bash(gradle:*)` is still Bash: a tool's permission pattern does not change which tool it is. */
+export function bare(tool: string): string {
+  return tool.split('(')[0] ?? tool
+}
+
 export interface Fired {
   text: string
   transcript_path: string

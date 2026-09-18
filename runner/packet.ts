@@ -2,18 +2,13 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { parse } from 'yaml'
 import { z } from 'zod'
-import type { Packet, Refusal } from '../providers/kind.ts'
+import { bare, type Packet, type Refusal } from '../providers/kind.ts'
 import { refuse } from './index.ts'
 import { tight } from './rules.ts'
 
 const WRITERS = new Set(['Write', 'Edit', 'NotebookEdit', 'Bash', 'MultiEdit'])
 
 const OUTSIDE = /(^|\/)(crypto-contributor|agents|ops|knowledge|plans|escalations)(\/|$)|(^|\/)T-[A-Z][A-Z0-9-]*\.md$/
-
-/** `Bash(gradle:*)` is still Bash: a tool's permission pattern does not change which tool it is. */
-function bare(tool: string): string {
-  return tool.split('(')[0] ?? tool
-}
 
 export const Review = z.object({
   review: z.string(),

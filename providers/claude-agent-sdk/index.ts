@@ -2,7 +2,7 @@ import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { query, type HookInput, type SDKResultMessage, type SyncHookJSONOutput } from '@anthropic-ai/claude-agent-sdk'
 import { credential } from '../credential.ts'
-import type { Fired, Packet, Provider } from '../kind.ts'
+import { bare, type Fired, type Packet, type Provider } from '../kind.ts'
 
 const WRITES = new Set(['Write', 'Edit', 'NotebookEdit'])
 
@@ -25,6 +25,7 @@ async function fire(packet: Packet): Promise<Fired> {
       env: credential().env,
       model: packet.model,
       effort: packet.effort,
+      tools: offered(packet.tools),
       allowedTools: packet.tools,
       settingSources: [],
       permissionMode: 'default',
@@ -40,6 +41,14 @@ async function fire(packet: Packet): Promise<Fired> {
     if (message.type === 'result') return { ...fired(message, started, refused), transcript_path: packet.transcript }
   }
   throw new Error('claude-agent-sdk closed without a result message')
+}
+
+/**
+ * What the session is offered, as against `allowedTools`, which only auto-approves.
+ * A seat that never names `Bash(…)` never sees Bash, so it cannot open on a command the gate must refuse.
+ */
+export function offered(tools: string[]): string[] {
+  return [...new Set(tools.map(bare))]
 }
 
 /** The stream as it arrived, one JSON message per line, before any reading of it. */

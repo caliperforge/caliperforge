@@ -23,6 +23,9 @@ export const PlanRow = z.object({
   retries: z.int(),
   head_digest: z.string().nullable(),
   priority: z.int(),
+  lane: z.enum(['machine', 'atelier', 'comms', 'research']).nullable(),
+  seat: z.string().nullable(),
+  origin: z.string().nullable(),
 })
 
 export type PlanRow = z.infer<typeof PlanRow>

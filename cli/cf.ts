@@ -15,6 +15,7 @@ import { headApproved } from '../store/approvals.ts'
 import { approve as approveCard, batch, refuse as refuseCard, render } from './batch.ts'
 import { awaiting, day, halted, laneLine, open as openPlans, runsOf, section, verdictsOf, windowLine } from './brief.ts'
 import { measure, render as renderPulse } from './measure.ts'
+import { add as fileIssue, render as renderUnfiled, unfiled } from './plan.ts'
 import { add } from './queue.ts'
 import { close } from './session.ts'
 
@@ -104,7 +105,30 @@ queue.command('list').action(() => {
   for (const r of rows) out(`${String(r.id)}\t${String(r.repo)}#${String(r.issue_no)}\t${String(r.state)}\t${String(r.named_merger)}\t${String(r.evidence_measured_at)}\n`)
 })
 
-cf.command('plan').argument('<id>').action((id: string) => {
+const plan = cf.command('plan')
+
+plan.command('add').requiredOption('--issue <ref>', 'an <owner/repo>#<n> github issue')
+  .option('--pipe <name>', 'pipe to file the plan on', 'internal')
+  .action((options: { issue: string; pipe: string }) => {
+    const filed = fileIssue(db(), options.issue, options.pipe)
+    const origin = filed.origin === null ? '-' : `${filed.origin.origin_kind}:${filed.origin.origin_ref}`
+    const ruled = filed.ruling === null ? '-' : `ruling ${String(filed.ruling)}`
+    out(`plan ${filed.plan === null ? '-' : String(filed.plan)} ${filed.state}\t${filed.lane ?? '-'}\t${filed.seat ?? '-'}\t${filed.why}\t${origin}\t${ruled}\n`)
+    process.exitCode = filed.state === 'refused' ? 1 : 0
+  })
+
+cf.command('plans').option('--unfiled', 'open caliperforge issues no plan row names').action((options: { unfiled?: boolean }) => {
+  const handle = db()
+  if (options.unfiled !== true) {
+    out(section('open plans', openPlans(handle)))
+    return
+  }
+  const rows = unfiled(handle)
+  out(`unfiled (${String(rows.length)})\n`)
+  for (const row of rows) out(`  ${renderUnfiled(row)}`)
+})
+
+plan.argument('<id>').action((id: string) => {
   const handle = db()
   const row = handle.prepare('SELECT * FROM plans WHERE id = ?').get(Number(id))
   if (row === undefined) throw new Error(`no plan ${id}`)

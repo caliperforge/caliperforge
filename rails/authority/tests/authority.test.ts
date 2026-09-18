@@ -32,6 +32,42 @@ test('refuses an escape above the root', () => {
   expect(authority(root, 'typescript_specialist', diff).spans).toEqual(['../outside.ts:1 authority.write_paths'])
 })
 
+/**
+ * #41: the rail applies the runner's own-kernel rule. Measured 2026-09-18 16:04-16:19: the rail
+ * kept the narrow fence, so plans 11 (#30) and 13 (#32) built and were then refused here for
+ * `cli/adopt.ts` and `rails/tight/index.ts` -- the very files their issues named.
+ */
+const KERNEL = ['diff --git a/cli/x.ts b/cli/x.ts', '--- a/cli/x.ts', '+++ b/cli/x.ts',
+  '@@ -1,0 +1,1 @@', '+export const x = 1',
+  'diff --git a/sequencer/y.ts b/sequencer/y.ts', '--- a/sequencer/y.ts', '+++ b/sequencer/y.ts',
+  '@@ -1,0 +1,1 @@', '+export const y = 2', ''].join('\n')
+
+const FROZEN = ['diff --git a/schema/0001_init.sql b/schema/0001_init.sql', '--- a/schema/0001_init.sql',
+  '+++ b/schema/0001_init.sql', '@@ -1,0 +1,1 @@', '+-- touched', ''].join('\n')
+
+const NOTES = ['diff --git a/.cf/anything b/.cf/anything', '--- a/.cf/anything', '+++ b/.cf/anything',
+  '@@ -1,0 +1,1 @@', '+{}', ''].join('\n')
+
+test('an internal plan may write the kernel the issue named; an external plan may not', () => {
+  expect(authority(root, 'typescript_specialist', KERNEL, true)).toMatchObject({ outcome: 'pass', spans: [] })
+  expect(authority(root, 'typescript_specialist', KERNEL, false).spans)
+    .toEqual(['cli/x.ts:1 authority.write_paths', 'sequencer/y.ts:1 authority.write_paths'])
+})
+
+test('a frozen migration and the tick\'s own notes are refused on an internal plan too', () => {
+  for (const ours of [true, false]) {
+    expect(authority(root, 'typescript_specialist', FROZEN, ours).spans)
+      .toEqual(['schema/0001_init.sql:1 authority.frozen_schema'])
+    expect(authority(root, 'typescript_specialist', NOTES, ours).spans)
+      .toEqual(['.cf/anything:1 authority.write_paths'])
+  }
+})
+
+test('an escape above the root is refused on an internal plan too', () => {
+  const diff = '--- a/x\n+++ b/../outside.ts\n@@ -1,0 +1,1 @@\n+export const x = 1\n'
+  expect(authority(root, 'typescript_specialist', diff, true).spans).toEqual(['../outside.ts:1 authority.write_paths'])
+})
+
 test('writes a verdicts row the store accepts', () => {
   const db = fresh(join(root, 'schema'))
   load(db, root)

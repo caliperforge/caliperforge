@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process'
-import { basename } from 'node:path'
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { basename, join } from 'node:path'
 import { expect, test } from 'vitest'
 import { landed } from '../../cli/batch.ts'
 import { headApproved, headDigest } from '../../store/approvals.ts'
@@ -59,6 +60,23 @@ test('the internal checkout is our own repo on p<plan>-<slug>, built by the type
   expect(w.db.prepare('SELECT seat FROM runs WHERE step = 2').get()).toEqual({ seat: 'typescript_specialist' })
   expect(internalBranch(7, 'A/B: an issue — with punctuation!')).toBe('p7-a-b-an-issue-with-punctuation')
   expect(internalBranch(7, '!!!')).toBe('p7-issue')
+})
+
+/**
+ * #41: the authority rail reads the same write rule the runner did. Measured 2026-09-18 16:04-16:19,
+ * plans 11 (#30) and 13 (#32) built and were then refused here for `cli/adopt.ts` and
+ * `rails/tight/index.ts` -- the files their own issues named.
+ */
+test('the rails let an internal build keep the kernel files outside `src/` that it changed', async () => {
+  const w = mine()
+  for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  mkdirSync(join(srcDir(w.root, ID), 'cli'), { recursive: true })
+  writeFileSync(join(srcDir(w.root, ID), 'cli/x.ts'), 'export const x = 1\n')
+
+  const rails = (await tick(w.db, w.root, stub(CARRIED)))[0]
+  expect(rails).toMatchObject({ plan: ID, step: 3, name: 'rails', outcome: 'pass' })
+  expect(w.db.prepare("SELECT outcome FROM verdicts WHERE plan = ? AND rail_id = 'authority'").get(ID))
+    .toEqual({ outcome: 'pass' })
 })
 
 test('step 7 signs an internal plan on the gates and shows it in the batch as a read-out', async () => {

@@ -91,13 +91,13 @@ export function advance(db: Db, plan: PlanRow, step: number): void {
   db.prepare("UPDATE plans SET step = ?, state = 'running' WHERE id = ?").run(step, plan.id)
 }
 
-export function back(db: Db, plan: PlanRow): 'retried' | 'blocked_on_ceo' {
+export function back(db: Db, plan: PlanRow, step: number): 'retried' | 'blocked_on_ceo' {
   if (plan.retries >= 1) {
     db.prepare("UPDATE plans SET state = 'blocked_on_ceo' WHERE id = ?").run(plan.id)
     return 'blocked_on_ceo'
   }
   db.prepare("UPDATE plans SET step = ?, retries = retries + 1, state = 'running' WHERE id = ?")
-    .run(Math.max(plan.step - 1, 0), plan.id)
+    .run(Math.max(step, 0), plan.id)
   return 'retried'
 }
 

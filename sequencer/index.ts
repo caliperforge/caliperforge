@@ -147,10 +147,12 @@ function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcom
     return 'running'
   }
   put(root, plan.id, 'refusal.md', refusalText(step, outcome))
-  return back(db, plan)
+  // step 2 is the build in templates/pr-path.ts
+  return back(db, plan, step.fires === 'review' ? 2 : step.step - 1)
 }
 
 function refusalText(step: Step, outcome: Outcome): string {
   const spans = outcome.spans.length === 0 ? '  (none named)' : outcome.spans.map((s) => `  - ${s}`).join('\n')
-  return `step ${String(step.step)} ${step.name} refused by ${step.runs}\n\n${outcome.note}\n\nspans:\n${spans}\n`
+  const words = outcome.message === undefined ? '' : `\n${outcome.message}\n`
+  return `step ${String(step.step)} ${step.name} refused by ${step.runs}\n\n${outcome.note}\n\nspans:\n${spans}\n${words}`
 }

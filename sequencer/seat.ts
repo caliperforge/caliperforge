@@ -3,6 +3,7 @@ import { packet } from '../runner/index.ts'
 import { reviewManifest, type Bench } from '../runner/packet.ts'
 import { load, seat, tight } from '../runner/rules.ts'
 import { judge, loadReviews } from '../reviews/bench.ts'
+import type { Verdict } from '../reviews/verdict.ts'
 import type { Db } from '../store/index.ts'
 import { builderRan, internal, type PlanRow } from '../store/plans.ts'
 import { byRun, pending } from '../store/transcript.ts'
@@ -99,7 +100,7 @@ export async function fireReview(db: Db, root: string, plan: PlanRow, step: Step
   try {
     const { outcome } = await judge(db, root, step.runs, plan.id, input, provider, transcriptOf(root, plan.id, step.step))
     put(root, plan.id, `step-${String(step.step)}.verdict.md`, verdictText(outcome))
-    return { outcome: outcome.outcome, spans: outcome.spans, note: `${step.runs} ${outcome.outcome}` }
+    return { outcome: outcome.outcome, spans: outcome.spans, note: `${step.runs} ${outcome.outcome}`, message: outcome.message }
   } catch (error) {
     const note = error instanceof Error ? error.message : String(error)
     return { outcome: 'refuse', spans: ['reviewers.verdict_fence'], note: `${step.runs} ${note}` }
@@ -115,6 +116,7 @@ function priorVerdict(root: string, plan: number): string {
   return maybe(root, plan, 'step-4.verdict.md') ?? 'the first reviewer left no verdict'
 }
 
-function verdictText(v: { outcome: string; spans: string[]; message: string }): string {
-  return `---\noutcome: ${v.outcome}\nspans:\n${v.spans.map((s) => `  - ${s}`).join('\n')}\n---\n\n${v.message}\n`
+function verdictText(v: Verdict): string {
+  const defect = v.defect_class === null ? '' : `class: ${v.defect_class}\n`
+  return `---\noutcome: ${v.outcome}\n${defect}spans:\n${v.spans.map((s) => `  - ${s}`).join('\n')}\n---\n\n${v.message}\n`
 }

@@ -210,7 +210,7 @@ test('release refuses a plan parked on the coo at step 1 and moves no row', asyn
   await tick(w.db, w.root, stub(CARRIED, 0, undefined, undefined, asks('is the comment part of this change?')))
   expect(plan(w.db, ID)).toMatchObject({ step: 1, state: 'blocked_on_ceo' })
 
-  expect(() => release(w.db, ID)).toThrow(/plan 2 is not a brief/)
+  expect(() => { release(w.db, ID) }).toThrow(/plan 2 is not a brief/)
   expect(plan(w.db, ID)).toMatchObject({ step: 1, state: 'blocked_on_ceo' })
   expect(left(w)).toBe('10')
 })

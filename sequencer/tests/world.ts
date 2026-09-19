@@ -26,7 +26,8 @@ export const CARRIED = 'built\n\n---\ndone:\n  - id: D1\n    status: done\n    p
   + '  - id: D2\n    status: done\n    pointer: src/hello.ts:1\n---\n'
 
 export const PASS = '---\noutcome: pass\n---\n'
-export const REFUSE = '---\noutcome: refuse\nclass: correctness\nspans:\n  - src/hello.ts:1\n---\n'
+export const WORDS = '`hello()` takes no name, so the call the issue names as D2 cannot be refused at all.'
+export const REFUSE = `${WORDS}\n\n---\noutcome: refuse\nclass: correctness\nspans:\n  - src/hello.ts:1\n---\n`
 
 const BRIEF = ['', '**What:** add `hello()`.', '**Why:** the ask asks for it.', '**When it ends:** it is exported.', '',
   '## Approach', '', 'Write it in `src/hello.ts`.', '',

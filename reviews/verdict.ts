@@ -11,8 +11,12 @@ const Fence = z.object({
   spans: z.array(z.string()).nullish(),
 }).refine((f) => f.outcome !== 'refuse' || ((f.spans ?? []).length > 0 && f.class != null))
 
+const FENCE = /^---\r?\n([\s\S]*?)\r?\n---\s*$/m
+
 export function read(reply: string, subject: string): Verdict | null {
-  const fence = Fence.safeParse(yaml(reply))
+  const found = FENCE.exec(reply)
+  if (found === null) return null
+  const fence = Fence.safeParse(yaml(found[1] ?? ''))
   if (!fence.success) return null
   const subject_digest = createHash('sha256').update(subject).digest('hex')
   if (fence.data.outcome !== 'refuse') {
@@ -25,15 +29,13 @@ export function read(reply: string, subject: string): Verdict | null {
     subject_digest,
     origin_kind: 'ruling',
     origin_ref: 'reviewers.verdict',
-    message: `${String(fence.data.class)}: ${(fence.data.spans ?? []).join(', ')}`,
+    message: reply.slice(0, found.index).trim(),
   }
 }
 
-function yaml(reply: string): unknown {
-  const fence = /^---\r?\n([\s\S]*?)\r?\n---\s*$/m.exec(reply)
-  if (fence === null) return null
+function yaml(body: string): unknown {
   try {
-    return parse(fence[1] ?? '')
+    return parse(body)
   } catch {
     return null
   }

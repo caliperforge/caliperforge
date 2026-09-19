@@ -3,12 +3,14 @@ import type { Verdict } from '../store/verdict.ts'
 /**
  * What a step produced. `outcome` is the routing decision; `spans` is what a refusal names.
  * `rewind` is the step a pass goes back to -- the moved base of #35 rule 3 -- and clears the plan's
- * retries; `held` leaves the plan on its step with its retries intact.
+ * retries; `held` leaves the plan on its step with its retries intact. `message` is the reviewer's
+ * own prose, which the builder rebuilds against.
  */
 export interface Outcome {
   outcome: Verdict['outcome']
   spans: string[]
   note: string
+  message?: string
   rewind?: number
   held?: true
 }

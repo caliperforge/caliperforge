@@ -12,7 +12,7 @@ import { blocked, kernel } from '../steps.ts'
 import { doneIds, srcDir } from '../workspace.ts'
 import { benchPacket } from '../../runner/packet.ts'
 import type { Packet } from '../../providers/kind.ts'
-import { approve, CARRIED, KOTLIN, PASS, plan, redLaps, REFUSE, RUN, runsAfter, runsOn, stub, watched, world } from './world.ts'
+import { approve, CARRIED, KOTLIN, PASS, plan, redLaps, REFUSE, RUN, runsAfter, runsOn, stub, watched, WORDS, world } from './world.ts'
 
 const head = (cwd: string, args: string[]): string => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim()
 
@@ -156,14 +156,38 @@ test('the sequencer hands the bench a maintainer view, and a wrong shape refuses
   expect(bare).toHaveProperty('refusal')
 })
 
-test('a reviewer refusal carries its spans to the builder instead of dropping them', async () => {
+const planFile = (root: string, name: string): string => readFileSync(join(root, '.cf/work/1', name), 'utf8')
+
+test('a review refusal returns the plan to build with the reviewer words, then escalates', async () => {
   const w = world()
   approve(w.db, w.target)
   for (let at = 0; at < 4; at += 1) await tick(w.db, w.root, stub(CARRIED))
   const fired = (await tick(w.db, w.root, stub(CARRIED, 0, REFUSE)))[0]
   expect(fired).toMatchObject({ step: 4, outcome: 'refuse', state: 'retried' })
   expect(fired?.spans).toEqual(['src/hello.ts:1'])
-  expect(readFileSync(join(w.root, '.cf/work/1/refusal.md'), 'utf8')).toMatch(/src\/hello\.ts:1/)
+  expect(plan(w.db, 1)).toMatchObject({ step: 2, retries: 1 })
+  expect(planFile(w.root, 'refusal.md')).toBe(`step 4 review refused by code_quality\n\ncode_quality refuse\n\nspans:\n  - src/hello.ts:1\n\n${WORDS}\n`)
+  expect(planFile(w.root, 'step-4.verdict.md'))
+    .toBe(`---\noutcome: refuse\nclass: correctness\nspans:\n  - src/hello.ts:1\n---\n\n${WORDS}\n`)
+
+  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  const second = (await tick(w.db, w.root, stub(CARRIED, 0, REFUSE)))[0]
+  expect(second).toMatchObject({ step: 4, outcome: 'refuse', state: 'blocked_on_ceo' })
+  expect(plan(w.db, 1)).toMatchObject({ step: 4, retries: 1, state: 'blocked_on_ceo' })
+})
+
+test('a senior refusal lands on build too, and the ticks after it walk rails, review, senior', async () => {
+  const w = world()
+  approve(w.db, w.target)
+  for (let at = 0; at < 5; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  const fired = (await tick(w.db, w.root, stub(CARRIED, 0, REFUSE)))[0]
+  expect(fired).toMatchObject({ step: 5, outcome: 'refuse', state: 'retried' })
+  expect(plan(w.db, 1)).toMatchObject({ step: 2, retries: 1 })
+  expect(planFile(w.root, 'refusal.md')).toContain(WORDS)
+
+  const walked: string[] = []
+  for (let at = 0; at < 4; at += 1) walked.push((await tick(w.db, w.root, stub(CARRIED)))[0]?.name ?? '')
+  expect(walked).toEqual(['build', 'rails', 'review', 'senior'])
 })
 
 test('six ticks walk a plan from measure to Ready on one seat run and no tokens spent deciding', async () => {
@@ -210,6 +234,7 @@ test('a red run on the fork refuses the ready gate on the rail and sends the pla
   const red = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined,
     watched([], w.root, 1, runsOn(w.root, 1, 'completed', 'failure'))))[0]
   expect(red).toMatchObject({ step: 6, name: 'ready', outcome: 'refuse', state: 'retried' })
+  expect(plan(w.db, 1)).toMatchObject({ step: 5, retries: 1 })
   expect(red?.spans).toEqual(['ci-green', 'fork:1 not.public'])
   expect(w.db.prepare("SELECT outcome FROM verdicts WHERE plan = 1 AND rail_id = 'ci-green'").get())
     .toEqual({ outcome: 'refuse' })

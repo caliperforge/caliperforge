@@ -12,12 +12,12 @@ const BOT = /\[bot\]$|greptile/i
 const SCORE = /(\d)\s*\/\s*5/
 
 /** Every open PR of ours, every tick. `gh` polling is the only reader; there is no webhook and no server. */
-export function capture(db: Db, read: typeof readPr = readPr): SignalRow[] {
+export function capture(db: Db, read: (repo: string, no: number) => Pr = readPr): SignalRow[] {
   return pushed(db).flatMap((row) => reachable(db, row, read))
 }
 
 /** A pr `gh` cannot reach this tick is read again next tick; it does not stop the pipes behind it. */
-function reachable(db: Db, row: Pushed, read: typeof readPr): SignalRow[] {
+function reachable(db: Db, row: Pushed, read: (repo: string, no: number) => Pr): SignalRow[] {
   try {
     return one(db, row, read)
   } catch {
@@ -25,7 +25,7 @@ function reachable(db: Db, row: Pushed, read: typeof readPr): SignalRow[] {
   }
 }
 
-function one(db: Db, row: Pushed, read: typeof readPr): SignalRow[] {
+function one(db: Db, row: Pushed, read: (repo: string, no: number) => Pr): SignalRow[] {
   const view = read(row.repo, prNumber(row.evidence))
   const fresh = signals(view, row).map((s) => record(db, s)).filter((s) => s !== null)
   attribute(db, row.plan, view)

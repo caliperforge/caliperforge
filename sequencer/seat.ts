@@ -53,11 +53,6 @@ function stands(): Outcome {
   return { outcome: 'pass', spans: [], note: 'the brief stands' }
 }
 
-/**
- * A refusal read here is the shape check's own — a builder's rewinds onto a plan `builderRan()` returns above,
- * so its spans are still under the brief when step 2 fires again. Saving a brief drops the shape refusal,
- * which a builder would otherwise open on having built nothing.
- */
 function again(root: string, plan: number, ask: string): string {
   const refusal = maybe(root, plan, 'refusal.md')
   return refusal === null ? ask : `${ask}\n\n# Refused — write the whole brief again, fixing this\n\n${refusal}`

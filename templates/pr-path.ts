@@ -16,8 +16,7 @@ export interface Step {
 /** The builder a target whose language names no seat of its own falls to. */
 export const DEFAULT_BUILDER = 'typescript_specialist'
 
-/** The seat that turns the ask into the brief, in any language: it reads the code and writes nothing. */
-export const BRIEF_WRITER = 'brief_writer'
+const BRIEF_WRITER = 'brief_writer'
 
 const BUILDERS: Record<string, string> = { kotlin: 'kotlin_specialist', typescript: DEFAULT_BUILDER }
 

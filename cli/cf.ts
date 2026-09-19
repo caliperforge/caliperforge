@@ -211,7 +211,7 @@ cf.command('brief').action(() => {
 
 cf.command('adopt').argument('<ref>', 'an <owner/repo>#<n> pull request of ours that is already open')
   .action((ref: string) => {
-    out(renderAdopt(adopt(db(), ref, new Date().toISOString().slice(0, 10))))
+    out(renderAdopt(adopt(db(), root, ref, new Date().toISOString().slice(0, 10))))
   })
 
 cf.command('tick').option('--dry', 'read what a tick would do, fire nothing, call no network')

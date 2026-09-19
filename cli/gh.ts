@@ -93,6 +93,7 @@ const Pr = z.object({
   state: z.string(),
   mergedAt: z.string().nullable(),
   mergedBy: z.object({ login: z.string() }).nullable(),
+  reviewDecision: z.string().nullable(),
   comments: z.array(z.object({ id: z.string(), author: z.object({ login: z.string() }), body: z.string(), createdAt: z.string() })),
   reviews: z.array(z.object({ id: z.string(), author: z.object({ login: z.string() }), body: z.string(), submittedAt: z.string() })),
   statusCheckRollup: z.array(z.looseObject({ name: z.string().optional(), conclusion: z.string().nullish() })).nullable(),
@@ -100,7 +101,7 @@ const Pr = z.object({
 
 export type Pr = z.infer<typeof Pr>
 
-const PR_FIELDS = 'number,url,state,mergedAt,mergedBy,comments,reviews,statusCheckRollup'
+const PR_FIELDS = 'number,url,state,mergedAt,mergedBy,reviewDecision,comments,reviews,statusCheckRollup'
 
 export function pr(repo: string, no: number): Pr {
   return Pr.parse(gh(['pr', 'view', String(no), '--repo', repo, '--json', PR_FIELDS]))

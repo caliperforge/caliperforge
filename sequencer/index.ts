@@ -1,4 +1,4 @@
-import { pr as readPr, type Pr } from '../cli/gh.ts'
+import { pr } from '../cli/gh.ts'
 import type { Provider } from '../providers/kind.ts'
 import type { Db } from '../store/index.ts'
 import { cap, hhmm, zone } from '../store/lanes.ts'
@@ -13,7 +13,7 @@ import { branchOf, checkout, internalBranch, languageOf, put, SELF, srcDir, titl
 
 /** `read` is the one network reader a tick does on its own account; it is injected so a test can drive a lap offline. */
 export async function tick(db: Db, root: string, provider: Provider, now: Date = new Date(),
-  read: (repo: string, no: number) => Pr = readPr): Promise<Fired[]> {
+  read: typeof pr = pr): Promise<Fired[]> {
   const today = now.toISOString().slice(0, 10)
   for (const signal of capture(db, read)) started(db, signal)
   const out: Fired[] = []

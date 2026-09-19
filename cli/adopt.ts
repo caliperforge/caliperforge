@@ -1,11 +1,23 @@
 import { z } from 'zod'
+import { put } from '../sequencer/workspace.ts'
 import type { Db } from '../store/index.ts'
 import { templatePriority } from '../store/lanes.ts'
 import { gh, type Read } from './gh.ts'
 import { measure } from './measure.ts'
 import { parse } from './plan.ts'
 
-const View = z.object({ number: z.int(), url: z.string(), state: z.string() })
+const View = z.object({
+  number: z.int(),
+  url: z.string(),
+  state: z.string(),
+  title: z.string(),
+  body: z.string(),
+  closingIssuesReferences: z.array(z.object({ number: z.int() })),
+})
+
+const Linked = z.object({ title: z.string(), body: z.string() })
+
+const PR_FIELDS = 'number,url,state,title,body,closingIssuesReferences'
 
 const Account = z.object({ id: z.int(), measured_at: z.string() })
 
@@ -22,7 +34,7 @@ export interface Adopted {
 }
 
 export function view(repo: string, no: number, read: Read = gh): z.infer<typeof View> {
-  return View.parse(read(['pr', 'view', String(no), '--repo', repo, '--json', 'number,url,state']))
+  return View.parse(read(['pr', 'view', String(no), '--repo', repo, '--json', PR_FIELDS]))
 }
 
 /**
@@ -30,7 +42,7 @@ export function view(repo: string, no: number, read: Read = gh): z.infer<typeof 
  * is the watch and nothing more: no deliverable, no proof and no approval, so the batch card still
  * gates anything v2 would push onto the branch afterwards.
  */
-export function adopt(db: Db, ref: string, today: string, read: Read = gh): Adopted {
+export function adopt(db: Db, root: string, ref: string, today: string, read: Read = gh): Adopted {
   const { repo, no } = parse(ref)
   const row = view(repo, no, read)
   const account = accountOf(db, repo, today, read)
@@ -38,7 +50,17 @@ export function adopt(db: Db, ref: string, today: string, read: Read = gh): Adop
   const held = db.prepare('SELECT id FROM plans WHERE target_id = ? ORDER BY id LIMIT 1').get(target) as
     { id: number } | undefined
   const plan = held?.id ?? file(db, target)
+  put(root, plan, 'issue.md', packet(repo, row, read))
   return { target, plan, repo, pr: row.number, url: row.url, fresh: held === undefined }
+}
+
+/** Ruling `adopt.issue_packet`: the ask a review rewound onto this plan reads it against. */
+function packet(repo: string, row: z.infer<typeof View>, read: Read): string {
+  const head = `# ${row.title}\n\n${row.body}\n`
+  const no = row.closingIssuesReferences[0]?.number
+  if (no === undefined) return head
+  const linked = Linked.parse(read(['issue', 'view', String(no), '--repo', repo, '--json', 'title,body']))
+  return `${head}\n# ${repo}#${String(no)} ${linked.title}\n\n${linked.body}\n`
 }
 
 /** An account nobody has measured is measured now; an old reading is left alone, since the pull request is already open. */

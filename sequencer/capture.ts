@@ -12,12 +12,12 @@ const BOT = /\[bot\]$|greptile/i
 const SCORE = /(\d)\s*\/\s*5/
 
 /** Every open PR of ours, every tick. `gh` polling is the only reader; there is no webhook and no server. */
-export function capture(db: Db, read: (repo: string, no: number) => Pr = readPr): SignalRow[] {
+export function capture(db: Db, read: typeof readPr = readPr): SignalRow[] {
   return pushed(db).flatMap((row) => reachable(db, row, read))
 }
 
 /** A pr `gh` cannot reach this tick is read again next tick; it does not stop the pipes behind it. */
-function reachable(db: Db, row: Pushed, read: (repo: string, no: number) => Pr): SignalRow[] {
+function reachable(db: Db, row: Pushed, read: typeof readPr): SignalRow[] {
   try {
     return one(db, row, read)
   } catch {
@@ -25,11 +25,21 @@ function reachable(db: Db, row: Pushed, read: (repo: string, no: number) => Pr):
   }
 }
 
-function one(db: Db, row: Pushed, read: (repo: string, no: number) => Pr): SignalRow[] {
+function one(db: Db, row: Pushed, read: typeof readPr): SignalRow[] {
   const view = read(row.repo, prNumber(row.evidence))
   const fresh = signals(view, row).map((s) => record(db, s)).filter((s) => s !== null)
   attribute(db, row.plan, view)
-  return fresh
+  return acted(db, view, fresh)
+}
+
+/**
+ * The ruling `signals.left_alone` names the review decision that is as good as merged: what lands
+ * on such a pull request is recorded and starts nothing, and the merge is the one signal left.
+ */
+function acted(db: Db, view: Pr, fresh: SignalRow[]): SignalRow[] {
+  const ruled = db.prepare("SELECT value FROM rulings WHERE subject = 'signals.left_alone' ORDER BY id DESC LIMIT 1")
+    .get() as { value: string }
+  return view.reviewDecision?.toLowerCase() === ruled.value ? fresh.filter((s) => s.kind === 'merge') : fresh
 }
 
 export function signals(view: Pr, row: Pushed): Signal[] {

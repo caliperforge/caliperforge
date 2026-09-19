@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
+import { setTimeout as sleep } from 'node:timers/promises'
 import { fresh } from '../../checks/sqlite.ts'
 import type { Packet, Provider } from '../../providers/kind.ts'
 import type { Gh } from '../../rails/ci-green/index.ts'
@@ -64,6 +65,15 @@ export function stub(text: string, exit = 0, review = PASS, seen?: (packet: Pack
   }
 }
 
+/** The stub with a sleeping `fire`, so a lap's wall time is the fires it waits on and not the rows it writes. */
+export function slow(ms: number, text: string): Provider {
+  const inner = stub(text)
+  return {
+    ...inner,
+    fire: async (packet) => { await sleep(ms); return inner.fire(packet) },
+  }
+}
+
 function answer(packet: Packet, text: string, review: string, brief?: string): string {
   if (packet.tools.includes('Write')) return text
   if (!packet.prompt.includes('# brief_writer')) return review
@@ -96,12 +106,14 @@ function remotes(root: string, files: Record<string, string>): void {
 
 /**
  * Our own repository, standing in for github the same way `remotes()` stands in for a
- * stranger's: an internal plan clones it, fetches its `main` and branches off that.
+ * stranger's: an internal plan clones it, fetches its `main` and branches off that. It is
+ * not bare, so it takes a landing push onto its checked-out `main` only under `denyCurrentBranch`.
  */
 export function ours(root: string, files: Record<string, string> = TYPESCRIPT): void {
   const dir = join(root, 'remotes', SELF)
   mkdirSync(dir, { recursive: true })
   git(dir, ['init', '-q', '-b', 'main'])
+  git(dir, ['config', 'receive.denyCurrentBranch', 'updateInstead'])
   for (const [path, body] of Object.entries(files)) {
     mkdirSync(dirname(join(dir, path)), { recursive: true })
     writeFileSync(join(dir, path), body)
@@ -125,11 +137,11 @@ export function moveMain(root: string, name: string, body?: string): void {
   git(dir, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', `main moves on ${name}`])
 }
 
-/** A plan filed from one of our own issues: an origin, a lane, a seat, and no target row. */
-export function internalPlan(db: Db, root: string, id: number, title = 'let an internal plan run'): number {
+/** A plan filed from one of our own issues: an origin, a lane, a seat, and no target row. `plans_one_per_issue` holds one plan per url, so a second plan names a second issue. */
+export function internalPlan(db: Db, root: string, id: number, title = 'let an internal plan run', issue = 34): number {
   db.prepare(`INSERT INTO plans (id, pipe_id, target_id, template, state, queued_at, step, retries, priority, lane, seat, origin)
     VALUES (?, 1, NULL, 'pr_path', 'queued', '2026-09-18T00:00:00.000Z', 0, 0, 1, 'machine', 'typescript_specialist', ?)`)
-    .run(id, `https://github.com/${SELF}/issues/34`)
+    .run(id, `https://github.com/${SELF}/issues/${String(issue)}`)
   put(root, id, 'ask.md', `# ${title}\n\n- **D1** add \`hello()\` in \`src/hello.ts\`\n`)
   return id
 }
@@ -180,10 +192,19 @@ export const PR = 'https://github.com/acme/widget/pull/7'
 
 /** The fork's CI as step 6 reads it: one run, read against whatever head the branch is on by then. */
 export function runsOn(root: string, id: number, status = 'completed', conclusion = 'success'): Gh {
-  return () => JSON.stringify([{
+  return () => JSON.stringify([runAt(root, id, status, conclusion)])
+}
+
+/** A lap carrying more than one plan: a run at each plan's head, and `ci-green` keeps the one at its own. */
+export function runsAll(root: string, ids: number[]): Gh {
+  return () => JSON.stringify(ids.map((id) => runAt(root, id)))
+}
+
+function runAt(root: string, id: number, status = 'completed', conclusion = 'success'): object {
+  return {
     headSha: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: srcDir(root, id), encoding: 'utf8' }).trim(),
     status, conclusion, url: RUN, workflowName: 'CI',
-  }])
+  }
 }
 
 /** The window a live push lands in: github lists no run at the new head until `misses` reads later. */
@@ -213,6 +234,14 @@ export function watched(log: string[], root: string, id: number, runs = runsOn(r
     open: (repo, head) => { log.push(`open ${repo} ${head}`); return PR },
     close: (repo, no, sha) => void log.push(`close ${repo}#${String(no)} ${sha.slice(0, 7)}`),
     runs,
+  }
+}
+
+/** The same transport with a real landing: a `main` send moves our remote, so a second lander in the lap meets it. */
+export function landing(wire: Wire): Wire {
+  return {
+    ...wire,
+    send: (dir, branch) => { wire.send(dir, branch); if (branch === 'main') git(dir, ['push', 'origin', 'main']) },
   }
 }
 

@@ -8,10 +8,12 @@ import { advance } from '../../store/plans.ts'
 import { tick } from '../index.ts'
 import { headOf, push } from '../push.ts'
 import { blocked } from '../steps.ts'
-import { internalBranch, srcDir } from '../workspace.ts'
-import { approve, CARRIED, internalPlan, ours, plan, runsOn, stub, watched, world, type World } from './world.ts'
+import { internalBranch, SELF, srcDir } from '../workspace.ts'
+import { approve, CARRIED, internalPlan, landing, ours, plan, runsAll, runsOn, slow, stub, watched, world, type World } from './world.ts'
 
 const ID = 2
+const SECOND = 3
+const NAP = 500
 const ISSUE = 'https://github.com/caliperforge/caliperforge/issues/34'
 
 const git = (cwd: string, args: string[]): string => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim()
@@ -24,6 +26,48 @@ function mine(): World {
   internalPlan(w.db, w.root, ID)
   return w
 }
+
+/** Two of our own issues in the one lane, with the cap open for both. */
+function pair(): World {
+  const w = mine()
+  internalPlan(w.db, w.root, SECOND, 'let a second internal plan run', 35)
+  w.db.prepare('UPDATE pipes SET max_concurrent = 2 WHERE id = 1').run()
+  return w
+}
+
+test('a lap fires the picks of a pipe at once: two plans cost one sleep and each leaves its own run row', async () => {
+  const w = pair()
+  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
+
+  const began = Date.now()
+  const fired = await tick(w.db, w.root, slow(NAP, CARRIED))
+  expect(Date.now() - began).toBeLessThan(2 * NAP)
+  expect(fired.map((f) => f.plan)).toEqual([ID, SECOND])
+  expect([plan(w.db, ID).state, plan(w.db, SECOND).state]).toEqual(['running', 'running'])
+  expect(w.db.prepare('SELECT plan, seat FROM runs WHERE step = 2 ORDER BY plan').all())
+    .toEqual([{ plan: ID, seat: 'typescript_specialist' }, { plan: SECOND, seat: 'typescript_specialist' }])
+})
+
+test('two plans at batch in one lap: the first lands on main and the second is sent round again', async () => {
+  const w = pair()
+  const sent: string[] = []
+  const wire = landing(watched(sent, w.root, ID, runsAll(w.root, [ID, SECOND])))
+  for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  for (const id of [ID, SECOND]) {
+    writeFileSync(join(srcDir(w.root, id), `src/p${String(id)}.ts`), `export const p${String(id)} = true\n`)
+  }
+  for (let at = 0; at < 4; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  expect([plan(w.db, ID).step, plan(w.db, SECOND).step]).toEqual([7, 7])
+
+  const fired = await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  const remote = join(w.root, 'remotes', SELF)
+  expect(fired[1]).toMatchObject({ plan: SECOND, step: 7, spans: ['base:stale'], state: 'running' })
+  expect(sent.filter((s) => s === 'send src main')).toEqual(['send src main'])
+  expect(git(remote, ['rev-list', '--count', 'main'])).toBe('2')
+  expect(git(remote, ['rev-parse', 'main'])).toBe(git(srcDir(w.root, ID), ['rev-parse', 'HEAD']))
+  expect(w.db.prepare("SELECT plan_id FROM deliverables WHERE state = 'pushed'").all()).toEqual([{ plan_id: ID }])
+  expect(plan(w.db, SECOND).step).toBe(3)
+})
 
 test('a plan with an origin and no target passes measure and ruling, and waits on no approval', async () => {
   const w = mine()

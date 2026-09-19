@@ -19,7 +19,7 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
   for (const signal of capture(db, read)) started(db, signal)
   const out: Fired[] = []
   for (const pipe of openPipes(db, hhmm(db, now)).slice(0, cap(db).cap)) {
-    for (const plan of picks(db, pipe, today)) out.push(await one(db, root, pipe, plan, provider, wire))
+    out.push(...await Promise.all(picks(db, pipe, today).map((plan) => one(db, root, pipe, plan, provider, wire))))
   }
   return out
 }

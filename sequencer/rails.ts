@@ -11,10 +11,14 @@ import { tight } from '../rails/tight/index.ts'
 import type { Db } from '../store/index.ts'
 import { internal, type PlanRow } from '../store/plans.ts'
 import { builder } from '../templates/pr-path.ts'
+import { checks, type Failure } from './checks.ts'
 import type { Outcome } from './kind.ts'
 import { diffOf, doneIds, get, languageOf, srcDir } from './workspace.ts'
 
-/** Step 3: the six rails the map's step list names, in its order, ending at the first refusal. No reviewer tokens. */
+/**
+ * Step 3: the six rails the map's step list names, in its order, ending at the first refusal, and
+ * then the checkout's own type check, style check and tests. No reviewer tokens.
+ */
 export function preReview(db: Db, root: string, plan: PlanRow): Outcome {
   const handback = get(root, plan.id, 'step-2.handback.md')
   const first = audit(handback, doneIds(get(root, plan.id, 'issue.md')))
@@ -25,7 +29,19 @@ export function preReview(db: Db, root: string, plan: PlanRow): Outcome {
     recordRail(db, join(root, 'rails', rail), plan.id, verdict, 0)
     if (verdict.outcome !== 'pass') return named(rail, verdict)
   }
+  // a stranger's scripts and install hooks never run on this host; their fork CI at step 6 is their check
+  const failed = internal(plan) ? checks(srcDir(root, plan.id)) : null
+  if (failed !== null) return broke(failed)
   return { outcome: 'pass', spans: [], note: 'pre-review: six rails pass' }
+}
+
+function broke(failed: Failure): Outcome {
+  return {
+    outcome: 'refuse',
+    spans: [`checks:${failed.command.split(' ').at(-1) ?? ''}`],
+    note: `${failed.command} exit ${String(failed.code)}`,
+    message: failed.output,
+  }
 }
 
 function rest(root: string, plan: PlanRow, handback: string): [string, () => Verdict][] {

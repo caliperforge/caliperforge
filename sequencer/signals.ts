@@ -13,8 +13,9 @@ export interface Started {
 const REVIEW_STEP = 4
 
 export function started(db: Db, signal: SignalRow): Started | null {
-  if (signal.plan === null || older(db, signal, signal.plan)) return null
+  if (signal.plan === null) return null
   if (signal.kind === 'merge') return comms(db, signal, signal.plan)
+  if (older(db, signal, signal.plan)) return null
   if (signal.kind === 'bot_review' && (signal.score ?? 5) >= 5) return null
   if (signal.kind === 'comment' && signal.author === 'ci') return null
   rewind(db, signal.plan, REVIEW_STEP)

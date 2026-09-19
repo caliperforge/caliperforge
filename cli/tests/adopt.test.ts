@@ -163,3 +163,11 @@ test('an approved pull request is left alone: what lands on it is recorded, and 
   expect(merged.map((s) => s.kind)).toEqual(['merge'])
   expect(started(db, SignalRow.parse(merged[0]))).toMatchObject({ template: 'comms', step: 0 })
 })
+
+test('a merge that predates the adoption is still acted on: history is never replayed, a merge is never dropped', () => {
+  const db = fresh(schema)
+  adopted(db, root())
+  const merged = capture(db, () => view({ mergedAt: '2026-09-17T23:00:00Z', mergedBy: { login: 'ludo' } }))
+  const merge = merged.find((s) => s.kind === 'merge')
+  expect(started(db, SignalRow.parse(merge))).toMatchObject({ template: 'comms', step: 0 })
+})

@@ -53,7 +53,7 @@ export function add(db: Db, root: string, repo: string, url: string, pipe: strin
   const target = upsert(db, pulse, repo, no, merger ?? '', state, url, ruling(db, origin, state))
   if (why !== null) return { target, plan: null, state, why, origin }
   const plan = planFor(db, pipe, target)
-  put(root, plan, 'issue.md', `# ${row.title}\n\n${row.body}\n`)
+  put(root, plan, 'ask.md', `# ${row.title}\n\n${row.body}\n`)
   const note = state === 'parked' ? `${repo} pulse is cold; parked` : `${repo}#${String(no)} queued`
   return { target, plan, state, why: note, origin }
 }

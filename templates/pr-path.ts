@@ -1,4 +1,4 @@
-export type Fires = 'kernel' | 'seat' | 'review' | 'ceo'
+export type Fires = 'kernel' | 'brief' | 'seat' | 'review' | 'ceo'
 
 export type Gate = 'premise' | 'target' | 'pre_review' | 'review' | 'senior_review' | 'ready'
 
@@ -16,6 +16,9 @@ export interface Step {
 /** The builder a target whose language names no seat of its own falls to. */
 export const DEFAULT_BUILDER = 'typescript_specialist'
 
+/** The seat that turns the ask into the brief, in any language: it reads the code and writes nothing. */
+export const BRIEF_WRITER = 'brief_writer'
+
 const BUILDERS: Record<string, string> = { kotlin: 'kotlin_specialist', typescript: DEFAULT_BUILDER }
 
 /** Which seat builds: the target's language picks it. */
@@ -25,7 +28,7 @@ export function builder(language: string | null): string {
 
 export const steps: Step[] = [
   { step: 0, name: 'measure', seat: DEFAULT_BUILDER, fires: 'kernel', runs: 'target', gate: false, writes_verdict: false, verdict_gate: null },
-  { step: 1, name: 'ruling', seat: DEFAULT_BUILDER, fires: 'kernel', runs: 'approval', gate: false, writes_verdict: false, verdict_gate: null },
+  { step: 1, name: 'ruling', seat: BRIEF_WRITER, fires: 'brief', runs: BRIEF_WRITER, gate: false, writes_verdict: false, verdict_gate: null },
   { step: 2, name: 'build', seat: DEFAULT_BUILDER, fires: 'seat', runs: DEFAULT_BUILDER, gate: false, writes_verdict: false, verdict_gate: null },
   { step: 3, name: 'rails', seat: DEFAULT_BUILDER, fires: 'kernel', runs: 'pre_review', gate: true, writes_verdict: true, verdict_gate: 'pre_review' },
   { step: 4, name: 'review', seat: DEFAULT_BUILDER, fires: 'review', runs: 'code_quality', gate: true, writes_verdict: true, verdict_gate: 'review' },
@@ -42,6 +45,7 @@ export function last(step: number): boolean {
 export function at(step: number, language: string | null = null): Step {
   const found = steps.find((s) => s.step === step)
   if (found === undefined) throw new Error(`pr-path has no step ${String(step)}`)
+  if (found.fires === 'brief') return found
   const seat = builder(language)
   return found.fires === 'seat' ? { ...found, seat, runs: seat } : { ...found, seat }
 }

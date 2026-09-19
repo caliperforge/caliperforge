@@ -4,9 +4,7 @@ import { parse } from 'yaml'
 import { z } from 'zod'
 import { bare, type Packet, type Refusal } from '../providers/kind.ts'
 import { refuse } from './index.ts'
-import { tight } from './rules.ts'
-
-const WRITERS = new Set(['Write', 'Edit', 'NotebookEdit', 'Bash', 'MultiEdit'])
+import { tight, WRITERS } from './rules.ts'
 
 const OUTSIDE = /(^|\/)(crypto-contributor|agents|ops|knowledge|plans|escalations)(\/|$)|(^|\/)T-[A-Z][A-Z0-9-]*\.md$/
 

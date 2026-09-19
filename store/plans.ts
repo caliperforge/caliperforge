@@ -82,6 +82,11 @@ export function underCap(pipe: PipeRow, plans: PlanRow[]): PlanRow[] {
   return out
 }
 
+/** Whether a builder has ever run on this plan: a rewind onto step 1 finds the ticket it was built against, not a fresh one. */
+export function builderRan(db: Db, plan: number): boolean {
+  return db.prepare('SELECT 1 FROM runs WHERE plan = ? AND step >= 2').get(plan) !== undefined
+}
+
 export function advance(db: Db, plan: PlanRow, step: number): void {
   db.prepare("UPDATE plans SET step = ?, state = 'running' WHERE id = ?").run(step, plan.id)
 }

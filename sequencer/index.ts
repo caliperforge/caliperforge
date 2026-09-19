@@ -8,7 +8,7 @@ import { capture } from './capture.ts'
 import type { Fired, Outcome } from './kind.ts'
 import { started } from './signals.ts'
 import type { Wire } from './push.ts'
-import { fireReview, fireSeat } from './seat.ts'
+import { fireBrief, fireReview, fireSeat } from './seat.ts'
 import { blocked, kernel, proved, targetOf } from './steps.ts'
 import { branchOf, checkout, internalBranch, languageOf, put, SELF, srcDir, titleOf } from './workspace.ts'
 
@@ -92,14 +92,14 @@ async function one(db: Db, root: string, pipe: PipeRow, plan: PlanRow, provider:
 }
 
 /**
- * The checkout the plan's seats read and write. A plan parked on a cold pulse
- * or refused at the ruling never earns one, so it is made on the first step
- * that needs a tree and not at queue time — and the language it turns out to
- * be written in is what picks the builder.
+ * The checkout the plan's seats read and write. A plan parked on a cold pulse or still
+ * waiting on `cf approve target` never earns one, so it is made on the first step that
+ * needs a tree — step 1, where the brief is written against the code — and not at queue
+ * time; the language it turns out to be written in is what picks the builder.
  */
 function workspace(db: Db, root: string, plan: PlanRow): { language: string | null; failed: Outcome | null } {
   const fires = at(plan.step).fires
-  const tree = fires === 'seat' || fires === 'review' ? treeOf(db, root, plan) : null
+  const tree = fires === 'brief' || fires === 'seat' || fires === 'review' ? treeOf(db, root, plan) : null
   if (tree === null) return { language: null, failed: null }
   try {
     checkout(root, plan.id, tree.repo, tree.branch)
@@ -124,6 +124,7 @@ function treeOf(db: Db, root: string, plan: PlanRow): { repo: string; branch: st
 }
 
 function fire(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider, wire?: Wire): Promise<Outcome> {
+  if (step.fires === 'brief') return fireBrief(db, root, plan, step, provider)
   if (step.fires === 'seat') return fireSeat(db, root, plan, step, provider)
   if (step.fires === 'review') return fireReview(db, root, plan, step, provider)
   return Promise.resolve(kernel(db, root, plan, wire))

@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
 
 /** The plan's scratch checkout. No `plans/` segment: `runner/packet.ts:admits()` bars one from a reviewer cwd. */
@@ -28,6 +28,17 @@ export function get(root: string, plan: number, name: string): string {
 export function maybe(root: string, plan: number, name: string): string | null {
   const path = join(planDir(root, plan), name)
   return existsSync(path) ? readFileSync(path, 'utf8') : null
+}
+
+export function drop(root: string, plan: number, name: string): void {
+  rmSync(join(planDir(root, plan), name), { force: true })
+}
+
+export function move(root: string, plan: number, from: string, to: string): string {
+  const body = get(root, plan, from)
+  put(root, plan, to, body)
+  rmSync(join(planDir(root, plan), from))
+  return body
 }
 
 export function doneIds(issue: string): string[] {
@@ -68,9 +79,9 @@ function slugged(title: string): string {
   return cut === '' ? 'issue' : cut
 }
 
-/** The ticket's title: the first heading of the `issue.md` the plan was filed with. */
+/** The ticket's title: the first heading of the brief, or of the ask the plan was filed with before there is one. */
 export function titleOf(root: string, plan: number): string | null {
-  const body = maybe(root, plan, 'issue.md')
+  const body = maybe(root, plan, 'issue.md') ?? maybe(root, plan, 'ask.md')
   return body === null ? null : (/^#\s+(.*)$/m.exec(body)?.[1]?.trim() ?? null)
 }
 

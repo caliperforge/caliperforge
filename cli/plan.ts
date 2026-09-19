@@ -88,7 +88,7 @@ export function add(db: Db, root: string, ref: string, pipe: string, read: Read 
   if (lane === null) return refusal(db, ref)
   const seat = seatOf(row.labels) ?? LANE[lane].seat
   const plan = file(db, pipe, lane, seat, row.url)
-  put(root, plan, 'issue.md', `# ${row.title}\n\n${row.body}\n`)
+  put(root, plan, 'ask.md', `# ${row.title}\n\n${row.body}\n`)
   return { plan, lane, seat, state: 'queued', why: `${ref} queued on ${lane} for ${seat}`, origin: null, ruling: null }
 }
 

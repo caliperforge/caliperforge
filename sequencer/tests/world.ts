@@ -21,17 +21,32 @@ export interface World {
   target: number
 }
 
-export const CARRIED = 'built\n\n---\ndone:\n  - id: D1\n    status: done\n    pointer: src/hello.ts:1\n---\n'
+export const CARRIED = 'built\n\n---\ndone:\n  - id: D1\n    status: done\n    pointer: src/hello.ts:1\n'
+  + '  - id: D2\n    status: done\n    pointer: src/hello.ts:1\n---\n'
 
 export const PASS = '---\noutcome: pass\n---\n'
 export const REFUSE = '---\noutcome: refuse\nclass: correctness\nspans:\n  - src/hello.ts:1\n---\n'
 
+const BRIEF = ['', '**What:** add `hello()`.', '**Why:** the ask asks for it.', '**When it ends:** it is exported.', '',
+  '## Approach', '', 'Write it in `src/hello.ts`.', '',
+  '## Cases', '', '- D1 add `hello()` in `src/hello.ts`', '- D2 a call with no name is refused', '',
+  '## Must not break', '', '- the exports already in the file', '',
+  '## Files', '', '- src/hello.ts (new)', '',
+  '## Out of scope', '', '- everything the ask does not name', ''].join('\n')
+
+/** A brief the shape check passes, titled off the ask the packet carries under `# Issue`. */
+export function briefFor(prompt: string): string {
+  const issue = prompt.split('\n# Issue\n').at(-1) ?? ''
+  return `# ${/^#\s+(.*)$/m.exec(issue)?.[1] ?? 'no title'}\n${BRIEF}`
+}
+
 /**
- * One provider standing in for both roles. A reviewer packet is the one with
+ * One provider standing in for three roles. A reviewer packet is the one with
  * no write tool — `runner/packet.ts:Review` refuses a reviewer that holds one —
- * so the stub answers those with a verdict fence and the builder with `text`.
+ * so the stub answers those with a verdict fence, the brief writer with a brief
+ * and the builder with `text`.
  */
-export function stub(text: string, exit = 0, review = PASS, seen?: (packet: Packet) => void): Provider {
+export function stub(text: string, exit = 0, review = PASS, seen?: (packet: Packet) => void, brief?: string): Provider {
   return {
     name: 'claude-agent-sdk',
     fire: (packet) => {
@@ -39,13 +54,19 @@ export function stub(text: string, exit = 0, review = PASS, seen?: (packet: Pack
       mkdirSync(dirname(packet.transcript), { recursive: true })
       writeFileSync(packet.transcript, '{"type":"result"}\n')
       return Promise.resolve({
-      text: packet.tools.includes('Write') ? text : review,
+      text: answer(packet, text, review, brief),
       transcript_path: packet.transcript,
       usage: { input: 10, cache: 20, output: 30 }, seconds: 0.5, exit,
       stop_reason: exit === 0 ? 'end_turn' : 'hook_stopped', denials: exit,
       })
     },
   }
+}
+
+function answer(packet: Packet, text: string, review: string, brief?: string): string {
+  if (packet.tools.includes('Write')) return text
+  if (!packet.prompt.includes('# brief_writer')) return review
+  return brief ?? briefFor(packet.prompt)
 }
 
 export const TYPESCRIPT = { 'src/hello.ts': 'export const hello = (): string => "hi"\n' }
@@ -108,7 +129,7 @@ export function internalPlan(db: Db, root: string, id: number, title = 'let an i
   db.prepare(`INSERT INTO plans (id, pipe_id, target_id, template, state, queued_at, step, retries, priority, lane, seat, origin)
     VALUES (?, 1, NULL, 'pr_path', 'queued', '2026-09-18T00:00:00.000Z', 0, 0, 1, 'machine', 'typescript_specialist', ?)`)
     .run(id, `https://github.com/${SELF}/issues/34`)
-  put(root, id, 'issue.md', `# ${title}\n\n- **D1** add \`hello()\` in \`src/hello.ts\`\n`)
+  put(root, id, 'ask.md', `# ${title}\n\n- **D1** add \`hello()\` in \`src/hello.ts\`\n`)
   return id
 }
 
@@ -132,7 +153,7 @@ export function world(pulse: 'warm' | 'cold' = 'warm', day = new Date().toISOStr
   onePipe(db)
   db.prepare("INSERT INTO plans (id, pipe_id, target_id, template, state, queued_at, step, retries) VALUES (1, 1, 1, 'pr_path', 'queued', ?, 0, 0)")
     .run(`${day}T00:00:00.000Z`)
-  put(root, 1, 'issue.md', '# hello\n\n- **D1** add `hello()` in `src/hello.ts`\n')
+  put(root, 1, 'ask.md', '# hello\n\n- **D1** add `hello()` in `src/hello.ts`\n')
   return { db, root, pipe: pipeRow(db), plan: 1, target: 1 }
 }
 

@@ -105,11 +105,11 @@ test('cf plans --unfiled lists the open issues no plan row names, and drops the 
   expect(log[0]).toContain('search issues --owner caliperforge --state open')
 })
 
-test('the filed plan carries the issue on disk, so step 2 has its ask and the rails their D rows', () => {
+test('the filed plan carries the raw issue on disk as the ask step 1 briefs from', () => {
   const db = piped()
-  const carried = { ...ISSUE, body: 'What: run our own plan.\n\n- **D1** steps 0 and 1 pass\n- **D2** issue.md is written\n' }
+  const carried = { ...ISSUE, body: 'What: run our own plan.\n\n- **D1** steps 0 and 1 pass\n- **D2** ask.md is written\n' }
   const filed = add(db, root, 'caliperforge/caliperforge#25', 'internal', canned([carried]))
-  const body = readFileSync(join(root, '.cf/work', String(filed.plan), 'issue.md'), 'utf8')
+  const body = readFileSync(join(root, '.cf/work', String(filed.plan), 'ask.md'), 'utf8')
   expect(body).toBe(`# ${carried.title}\n\n${carried.body}\n`)
   expect(doneIds(body)).toEqual(['D1', 'D2'])
 })

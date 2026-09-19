@@ -6,7 +6,7 @@ import { day, halted, open as openPlans, runsOf, verdictsOf } from '../../cli/br
 import { measure, type Read } from '../../cli/measure.ts'
 import { account, parse } from '../../cli/queue.ts'
 import { clock, inWindow, underCap, type PipeRow, type PlanRow } from '../../store/plans.ts'
-import { steps } from '../../templates/pr-path.ts'
+import { at, steps } from '../../templates/pr-path.ts'
 import { tick } from '../index.ts'
 import { blocked, kernel } from '../steps.ts'
 import { doneIds, srcDir } from '../workspace.ts'
@@ -28,7 +28,7 @@ test('the builder works in the checkout and may write only inside its write_path
   approve(w.db, w.target)
   const packets: Packet[] = []
   for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED, 0, PASS, (p) => packets.push(p)))
-  const builder = packets[0]
+  const builder = packets.find((p) => p.tools.includes('Write'))
   expect(builder).toBeDefined()
   const src = realpathSync(srcDir(w.root, 1))
   expect(builder?.cwd).toBe(srcDir(w.root, 1))
@@ -292,7 +292,7 @@ test('every run row points at a transcript the provider wrote', async () => {
   for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED))
   const rows = w.db.prepare('SELECT seat, step, transcript_path FROM runs ORDER BY id').all() as
     { seat: string; step: number; transcript_path: string }[]
-  expect(rows.map((r) => r.step)).toEqual([2, 4, 5])
+  expect(rows.map((r) => r.step)).toEqual([1, 2, 4, 5])
   for (const r of rows) {
     expect(r.transcript_path).toMatch(/\.transcript\.jsonl$/)
     expect(existsSync(r.transcript_path)).toBe(true)
@@ -305,6 +305,8 @@ test('pr-path is measure to push, 0 to 8, and every gate step writes a verdict',
   expect(steps.filter((s) => s.gate && !s.writes_verdict)).toEqual([])
   expect(steps.filter((s) => s.writes_verdict).map((s) => s.verdict_gate))
     .toEqual(['pre_review', 'review', 'senior_review', 'ready'])
+  expect(at(1, 'kotlin')).toMatchObject({ seat: 'brief_writer', runs: 'brief_writer' })
+  expect(at(2, 'kotlin')).toMatchObject({ seat: 'kotlin_specialist', runs: 'kotlin_specialist' })
 })
 
 test('the ticket ids a rail expects come off the issue, falling back to D1', () => {
@@ -319,7 +321,7 @@ test('cf brief and cf plan bind the plan they are asked for', async () => {
   const w = world()
   approve(w.db, w.target)
   for (const step of [0, 1, 2, 3]) expect((await tick(w.db, w.root, stub(CARRIED)))[0]?.step).toBe(step)
-  expect(runsOf(w.db, 1).map((r) => r.step)).toEqual([2])
+  expect(runsOf(w.db, 1).map((r) => r.step)).toEqual([1, 2])
   expect(runsOf(w.db, 99)).toEqual([])
   expect(verdictsOf(w.db, 1).map((v) => v.gate)).toEqual(Array<string>(6).fill('pre_review'))
   expect(w.db.prepare('SELECT rail_id FROM verdicts WHERE plan = 1 ORDER BY id').all().map((r) => (r as { rail_id: string }).rail_id))
@@ -327,5 +329,5 @@ test('cf brief and cf plan bind the plan they are asked for', async () => {
   expect(verdictsOf(w.db, 99)).toEqual([])
   expect(openPlans(w.db).map((p) => p.id)).toEqual([1])
   expect(halted(w.db)).toEqual([])
-  expect(day(w.db)).toMatchObject({ runs: 1, tokens: 60 })
+  expect(day(w.db)).toMatchObject({ runs: 2, tokens: 120 })
 })

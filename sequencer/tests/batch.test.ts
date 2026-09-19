@@ -47,7 +47,7 @@ test('the batch is a card per plan at ready and per open proposal, with a green/
   expect(card).toMatchObject({ kind: 'plan', id: 1, title: 'acme/widget#12 widget-12-a1' })
   expect(card?.digest).toBe(headDigest(headOf(w.root, 1).sha))
   expect(card?.change).toBe('  1 file(s)\t+1\t-1')
-  expect(card?.text).toBe('Closes #12\n\n- D1 add `hello()` in `src/hello.ts`')
+  expect(card?.text).toBe('Closes #12\n\n- D1 add `hello()` in `src/hello.ts`\n- D2 a call with no name is refused')
   expect(card?.marks).toEqual([
     { name: 'pre_review', ok: true }, { name: 'review', ok: true },
     { name: 'senior_review', ok: true }, { name: 'ready', ok: true },

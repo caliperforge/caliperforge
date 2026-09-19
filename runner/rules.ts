@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { parse } from 'yaml'
 import { z } from 'zod'
 import { manifest } from '../checks/manifest.ts'
+import { bare } from '../providers/kind.ts'
 import type { Db } from '../store/index.ts'
 
 const Roster = z.object({
@@ -14,12 +15,17 @@ const Roster = z.object({
   ),
 })
 
+export const WRITERS = new Set(['Write', 'Edit', 'NotebookEdit', 'Bash', 'MultiEdit'])
+
 export const Seat = z.object({
   seat: z.string(),
   model: z.string(),
   effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']),
   tools: z.array(z.string()).min(1),
-  write_paths: z.array(z.string()).min(1),
+  write_paths: z.array(z.string()),
+}).refine((s) => s.write_paths.length > 0 || !s.tools.some((t) => WRITERS.has(bare(t))), {
+  message: `a seat with no write_paths may hold none of ${[...WRITERS].join(', ')}`,
+  path: ['tools'],
 })
 
 export type Seat = z.infer<typeof Seat>

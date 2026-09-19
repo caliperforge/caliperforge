@@ -28,7 +28,9 @@ export const Bench = z.object({
   issue: z.string(),
   diff: z.string(),
   verdict: z.string().optional(),
-}).strict()
+  prior: z.string().optional(),
+  since: z.string().optional(),
+}).strict().refine((b) => b.since === undefined || b.prior !== undefined, { path: ['since'] })
 
 export type Bench = z.infer<typeof Bench>
 
@@ -61,9 +63,14 @@ export function benchPacket(
 }
 
 function assembled(root: string, name: string, manifest: Review, bench: Bench, transcript: string): Packet {
-  const prior = bench.verdict === undefined ? '' : `\n\n# First verdict\n\n${bench.verdict}`
+  const sections: [string, string | undefined][] = [
+    ['First verdict', bench.verdict],
+    ['Your last verdict', bench.prior],
+    ['Changed since your last verdict', bench.since],
+  ]
+  const tail = sections.map(([head, body]) => (body === undefined ? '' : `\n\n# ${head}\n\n${body}`)).join('')
   return {
-    prompt: `${tight(root)}\n\n${spec(root, name)}\n\n# Issue\n\n${bench.issue}\n\n# Diff\n\n${bench.diff}${prior}`,
+    prompt: `${tight(root)}\n\n${spec(root, name)}\n\n# Issue\n\n${bench.issue}\n\n# Diff\n\n${bench.diff}${tail}`,
     cwd: bench.repo,
     transcript,
     model: manifest.model,

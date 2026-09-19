@@ -182,6 +182,17 @@ export function gitDiff(dir: string, base: string): string {
   return git(dir, ['diff', base])
 }
 
+/** The tree as a reviewer saw it, named by a sha nothing commits: what a later round diffs against. */
+export function snapshot(dir: string): string {
+  git(dir, ['add', '-A'])
+  return git(dir, ['write-tree']).trim()
+}
+
+export function diffSince(dir: string, tree: string): string {
+  git(dir, ['add', '-A', '--intent-to-add'])
+  return git(dir, ['diff', tree])
+}
+
 function git(cwd: string, args: string[]): string {
   return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024 })
 }

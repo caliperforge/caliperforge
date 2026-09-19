@@ -57,6 +57,15 @@ test('senior review reads the first verdict and names what the first verdict mis
   expect(db.prepare('SELECT gate, step FROM verdicts WHERE id = ?').get(second.verdict)).toEqual({ gate: 'senior_review', step: 5 })
 })
 
+test('two defects in two files come back as one refusal naming both spans', async () => {
+  const { db, plan } = bench(root)
+  const out = await judge(db, root, 'code_quality', plan, seeded({ diff: fixture('code_quality', 'pair.diff') }),
+    replies(fixture('code_quality', 'pair.reply.md')), TRANSCRIPT)
+  expect(out.outcome).toMatchObject({ outcome: 'refuse', defect_class: 'correctness', spans: ['src/stats.ts:2', 'src/parse.ts:1'] })
+  expect(out.outcome.message).toContain('scope')
+  expect(db.prepare('SELECT count(*) AS n FROM verdicts WHERE plan = ?').get(plan)).toEqual({ n: 1 })
+})
+
 test('reviewer != builder is refused before the provider fires; the trigger still guards the rows', async () => {
   const { db, plan } = bench(root)
   const builder = `INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_tokens, output_tokens, seconds, exit, transcript_path)

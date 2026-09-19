@@ -10,7 +10,7 @@ import { byRun, pending } from '../store/transcript.ts'
 import type { Step } from '../templates/pr-path.ts'
 import { shape, unclear } from './brief.ts'
 import type { Outcome } from './kind.ts'
-import { diffOf, drop, get, maybe, move, planDir, put, srcDir } from './workspace.ts'
+import { cloned, diffOf, diffSince, drop, get, maybe, move, planDir, put, snapshot, srcDir } from './workspace.ts'
 
 const INSERT = `INSERT INTO runs
   (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_tokens, output_tokens, seconds, exit, transcript_path)
@@ -91,20 +91,37 @@ function rebuild(root: string, plan: PlanRow): string {
 export async function fireReview(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
   loadReviews(db, root)
   const manifest = reviewManifest(root, step.runs)
+  const mine = `step-${String(step.step)}`
   const input: Bench = {
     repo: srcDir(root, plan.id),
     issue: get(root, plan.id, 'issue.md'),
     diff: diffOf(root, plan.id),
     ...(manifest.reads_verdict ? { verdict: priorVerdict(root, plan.id) } : {}),
+    ...rounds(root, plan.id, mine),
   }
   try {
     const { outcome } = await judge(db, root, step.runs, plan.id, input, provider, transcriptOf(root, plan.id, step.step))
-    put(root, plan.id, `step-${String(step.step)}.verdict.md`, verdictText(outcome))
+    put(root, plan.id, `${mine}.verdict.md`, verdictText(outcome))
+    keepTree(root, plan.id, mine)
     return { outcome: outcome.outcome, spans: outcome.spans, note: `${step.runs} ${outcome.outcome}`, message: outcome.message }
   } catch (error) {
     const note = error instanceof Error ? error.message : String(error)
     return { outcome: 'refuse', spans: ['reviewers.verdict_fence'], note: `${step.runs} ${note}` }
   }
+}
+
+/** From a reviewer's second round on: the verdict it wrote last round and what the tree did since. */
+function rounds(root: string, plan: number, mine: string): { prior?: string; since?: string } {
+  const last = maybe(root, plan, `${mine}.verdict.md`)
+  if (last === null) return {}
+  const tree = maybe(root, plan, `${mine}.tree`)
+  if (tree === null) return { prior: last }
+  return { prior: last, since: diffSince(srcDir(root, plan), tree.trim()) }
+}
+
+function keepTree(root: string, plan: number, mine: string): void {
+  const src = srcDir(root, plan)
+  if (cloned(src)) put(root, plan, `${mine}.tree`, `${snapshot(src)}\n`)
 }
 
 function transcriptOf(root: string, plan: number, step: number): string {

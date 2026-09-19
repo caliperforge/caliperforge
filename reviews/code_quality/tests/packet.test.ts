@@ -51,6 +51,16 @@ test('a fifth source is refused, and the first verdict only where the manifest r
   expect(benchPacket(root, 'code_quality', bench({ card: 'agents/coo/CARD.md' }), TRANSCRIPT)).toMatchObject({ refusal: { path: 'card' } })
   expect(benchPacket(root, 'code_quality', bench({ verdict: 'refuse' }), TRANSCRIPT)).toMatchObject({ refusal: { path: 'verdict' } })
   expect(benchPacket(root, 'senior_review', bench(), TRANSCRIPT)).toMatchObject({ refusal: { path: 'verdict' } })
+  expect(benchPacket(root, 'code_quality', bench({ since: '+ a line since' }), TRANSCRIPT)).toMatchObject({ refusal: { path: 'since' } })
+})
+
+test('a re-review packet carries the reviewer its own last verdict and the diff since it, after the first one', () => {
+  const out = benchPacket(root, 'senior_review',
+    bench({ verdict: 'the first verdict', prior: 'my last verdict', since: '+ a line since' }), TRANSCRIPT)
+  if ('refusal' in out) throw new Error(`refused: ${out.refusal.path}`)
+  const prompt = out.packet.prompt
+  expect(prompt.indexOf('# First verdict')).toBeLessThan(prompt.indexOf('# Your last verdict'))
+  expect(prompt.endsWith('\n\n# Your last verdict\n\nmy last verdict\n\n# Changed since your last verdict\n\n+ a line since')).toBe(true)
 })
 
 test('the reviewer manifest declares no write path and holds no write tool', () => {

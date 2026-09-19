@@ -12,7 +12,7 @@ import { blocked, kernel } from '../steps.ts'
 import { doneIds, srcDir } from '../workspace.ts'
 import { benchPacket } from '../../runner/packet.ts'
 import type { Packet } from '../../providers/kind.ts'
-import { approve, CARRIED, KOTLIN, PASS, plan, redLaps, REFUSE, RUN, runsAfter, runsOn, stub, watched, WORDS, world } from './world.ts'
+import { approve, built, CARRIED, KOTLIN, PASS, plan, redLaps, REFUSE, RUN, runsAfter, runsOn, stub, watched, WORDS, world } from './world.ts'
 
 const head = (cwd: string, args: string[]): string => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim()
 
@@ -158,22 +158,42 @@ test('the sequencer hands the bench a maintainer view, and a wrong shape refuses
 
 const planFile = (root: string, name: string): string => readFileSync(join(root, '.cf/work/1', name), 'utf8')
 
-test('a review refusal returns the plan to build with the reviewer words, then escalates', async () => {
+const PAIR = `${WORDS}\n\n---\noutcome: refuse\nclass: correctness\nspans:\n  - src/hello.ts:1\n  - src/parse.ts:3\n---\n`
+
+test('a review refusal returns the plan to build with every span the reviewer named, then escalates', async () => {
   const w = world()
   approve(w.db, w.target)
   for (let at = 0; at < 4; at += 1) await tick(w.db, w.root, stub(CARRIED))
-  const fired = (await tick(w.db, w.root, stub(CARRIED, 0, REFUSE)))[0]
+  const fired = (await tick(w.db, w.root, stub(CARRIED, 0, PAIR)))[0]
   expect(fired).toMatchObject({ step: 4, outcome: 'refuse', state: 'retried' })
-  expect(fired?.spans).toEqual(['src/hello.ts:1'])
+  expect(fired?.spans).toEqual(['src/hello.ts:1', 'src/parse.ts:3'])
   expect(plan(w.db, 1)).toMatchObject({ step: 2, retries: 1 })
-  expect(planFile(w.root, 'refusal.md')).toBe(`step 4 review refused by code_quality\n\ncode_quality refuse\n\nspans:\n  - src/hello.ts:1\n\n${WORDS}\n`)
+  expect(planFile(w.root, 'refusal.md'))
+    .toBe(`step 4 review refused by code_quality\n\ncode_quality refuse\n\nspans:\n  - src/hello.ts:1\n  - src/parse.ts:3\n\n${WORDS}\n`)
   expect(planFile(w.root, 'step-4.verdict.md'))
-    .toBe(`---\noutcome: refuse\nclass: correctness\nspans:\n  - src/hello.ts:1\n---\n\n${WORDS}\n`)
+    .toBe(`---\noutcome: refuse\nclass: correctness\nspans:\n  - src/hello.ts:1\n  - src/parse.ts:3\n---\n\n${WORDS}\n`)
 
   for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
   const second = (await tick(w.db, w.root, stub(CARRIED, 0, REFUSE)))[0]
   expect(second).toMatchObject({ step: 4, outcome: 'refuse', state: 'blocked_on_ceo' })
   expect(plan(w.db, 1)).toMatchObject({ step: 4, retries: 1, state: 'blocked_on_ceo' })
+})
+
+test('a reviewer gets its own last verdict and the diff since it from its second round on, neither on its first', async () => {
+  const w = world()
+  approve(w.db, w.target)
+  for (let step = 0; step < 4; step += 1) await tick(w.db, w.root, stub(CARRIED))
+  const round1: Packet[] = []
+  await tick(w.db, w.root, stub(CARRIED, 0, REFUSE, (p) => round1.push(p)))
+  expect(round1[0]?.prompt).not.toContain('# Your last verdict')
+
+  built(w.root, 1, 'export const two = (): number => 2')
+  for (let step = 0; step < 2; step += 1) await tick(w.db, w.root, stub(CARRIED))
+  const round2: Packet[] = []
+  await tick(w.db, w.root, stub(CARRIED, 0, PASS, (p) => round2.push(p)))
+  const prompt = round2[0]?.prompt ?? ''
+  expect(prompt).toContain(`# Your last verdict\n\n---\noutcome: refuse\nclass: correctness\nspans:\n  - src/hello.ts:1\n---\n\n${WORDS}`)
+  expect(prompt.split('# Changed since your last verdict')[1]).toContain('+export const two = (): number => 2')
 })
 
 test('a senior refusal lands on build too, and the ticks after it walk rails, review, senior', async () => {

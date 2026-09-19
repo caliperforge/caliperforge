@@ -53,13 +53,29 @@ export function signedHead(db: Db, plan: number, digest: string): number | null 
 }
 
 /**
- * What `hooks/pre-push` asks: is this branch head one that was signed off? The clause is the
+ * What `hooks/pre-push` asks of a sha landing on `main`: was this head signed off? The clause is the
  * step-7 trigger's, word for word — the CEO's row, or the gates' row on a plan that names an
- * origin — so no external branch can leave on a signature the CEO did not write.
+ * origin. An external branch is held to the CEO's row where it becomes a pull request, in
+ * `sequencer/push.ts`, not here: `refusedPush` lets an unsigned branch reach our fork.
  */
 export function headApproved(db: Db, sha: string): boolean {
   return db.prepare(`SELECT 1 FROM approvals a JOIN plans p ON p.id = a.subject_id
     WHERE a.subject_kind = 'plan' AND a.subject_digest = ? AND a.decision = 'approved'
       AND (a.who = 'ceo' OR (a.who = 'gates' AND p.origin IS NOT NULL))`)
     .get(headDigest(sha)) !== undefined
+}
+
+const LANDS = 'refs/heads/main'
+
+/**
+ * The shas `hooks/pre-push` refuses, off git's `<local ref> <local sha> <remote ref> <remote sha>`
+ * lines: an unsigned one landing on `main`. A branch on our own fork is the machine's workspace --
+ * step 6 puts one there for the fork's CI to judge, while nothing is signed yet -- and the pull
+ * request opened off that branch is held to the signed row by `sequencer/push.ts`.
+ */
+export function refusedPush(db: Db, stdin: string): string[] {
+  return stdin.split('\n').map((line) => line.split(' '))
+    .filter((fields) => fields[2] === LANDS)
+    .map((fields) => fields[1] ?? '')
+    .filter((sha) => !/^0{40,}$/.test(sha) && !headApproved(db, sha))
 }

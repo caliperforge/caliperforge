@@ -1,1 +1,6 @@
-[{"headSha":"9f2c1ab","status":"completed","conclusion":"success","url":"https://github.com/caliperforge/caliperforge/actions/runs/2"}]
+[{"headSha":"9f2c1ab","status":"completed","conclusion":"success","url":"https://github.com/caliperforge/caliperforge/actions/runs/2","workflowName":"Kotlin"},
+ {"headSha":"9f2c1ab","status":"completed","conclusion":"failure","url":"https://github.com/caliperforge/caliperforge/actions/runs/3","workflowName":"Go"},
+ {"headSha":"9f2c1ab","status":"completed","conclusion":"failure","url":"https://github.com/caliperforge/caliperforge/actions/runs/4","workflowName":"Ruby"},
+ {"headSha":"9f2c1ab","status":"completed","conclusion":"failure","url":"https://github.com/caliperforge/caliperforge/actions/runs/5","workflowName":"PHP"},
+ {"headSha":"9f2c1ab","status":"completed","conclusion":"success","url":"https://github.com/caliperforge/caliperforge/actions/runs/6","workflowName":"Report"},
+ {"headSha":"0000000","status":"completed","conclusion":"failure","url":"https://github.com/caliperforge/caliperforge/actions/runs/7","workflowName":"Kotlin"}]

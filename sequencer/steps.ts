@@ -9,8 +9,8 @@ import { internal, originIssue, stampHead, type PlanRow } from '../store/plans.t
 import { at, type Step } from '../templates/pr-path.ts'
 import type { Outcome } from './kind.ts'
 import { preReview } from './rails.ts'
-import { headOf, push } from './push.ts'
-import { diffOf, SELF } from './workspace.ts'
+import { forkCi, headOf, land, push, type Wire } from './push.ts'
+import { abortMerge, behindMain, cloned, conflicted, diffOf, fetchMain, maybe, mergeMain, put, SELF, srcDir } from './workspace.ts'
 
 interface Target { repo: string; issue_no: number; state: string; measured_at: string; pulse: string }
 
@@ -24,46 +24,94 @@ export function blocked(db: Db, plan: PlanRow, today: string): string | null {
   return stale(db, plan, today)
 }
 
-export function kernel(db: Db, root: string, plan: PlanRow): Outcome {
+export function kernel(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
   const step = at(plan.step)
   if (step.name === 'rails') return preReview(db, root, plan)
   if (step.name === 'measure') return measure(db, plan)
-  if (step.name === 'ready') return readyGate(db, root, plan)
-  if (step.name === 'batch') return batch(db, plan)
-  if (step.name === 'push') return push(db, root, plan)
+  if (step.name === 'ready') return readyGate(db, root, plan, wire)
+  if (step.name === 'batch') return batch(db, root, plan, wire)
+  if (step.name === 'push') return push(db, root, plan, wire)
   return { outcome: 'pass', spans: [], note: step.name }
 }
 
 /**
  * Step 7. An external plan only reaches here once `cf approve plan` wrote the CEO's row, so the
  * step has nothing left to do and says so. An internal plan lands on the gates alone (#20): the
- * four gate verdicts and the ready rail are the whole sign-off, and the row that settles its
- * deliverable is signed `gates`. The store's step-7 trigger reads that signature only on a plan
- * that names an origin, so an external plan still cannot leave ready on anything but the CEO's.
+ * four gate verdicts and the ready rail are the whole sign-off, the row that settles its
+ * deliverable is signed `gates`, and the same step puts the branch on `main` (#35 rule 1). The
+ * store's step-7 trigger reads that signature only on a plan that names an origin, so an external
+ * plan still cannot leave ready on anything but the CEO's. The base is judged again before any of
+ * that: a `main` that moved since ready is #35 rule 3's case, and nothing is signed for a head the
+ * rails have not seen.
  */
-function batch(db: Db, plan: PlanRow): Outcome {
+function batch(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
   if (!internal(plan)) return { outcome: 'pass', spans: [], note: 'batch' }
+  const moved = baseMoved(root, plan)
+  if (moved !== null) return moved
   const head = plan.head_digest
   if (head === null) return { outcome: 'refuse', spans: ['plans'], note: `plan ${String(plan.id)} reached batch with no proved head` }
-  db.transaction(() => { settle(db, plan.id, gates(db, plan.id, head)) })()
-  return { outcome: 'pass', spans: [], note: `landed on the gates at ${head.slice(0, 12)}` }
+  const approval = db.transaction(() => {
+    const id = gates(db, plan.id, head)
+    settle(db, plan.id, id)
+    return id
+  })()
+  return land(db, root, plan, approval, wire)
 }
 
-function readyGate(db: Db, root: string, plan: PlanRow): Outcome {
-  const proof = proofOf(db, plan)
-  if (proof === null) return { outcome: 'refuse', spans: ['deliverables'], note: `plan ${String(plan.id)} has no deliverable row` }
-  const verdict = readyRail(db, proof)
+function readyGate(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
+  const moved = baseMoved(root, plan)
+  if (moved !== null) return moved
+  const repo = repoOf(db, plan)
+  if (repo === null) return { outcome: 'refuse', spans: ['targets'], note: `plan ${String(plan.id)} has no target row` }
+  const row = gatedRow(db, plan.id)
+  if (row === null) return { outcome: 'refuse', spans: ['deliverables'], note: `plan ${String(plan.id)} has no deliverable row` }
+  const waiting = forkCi(db, root, plan, repo, wire)
+  if (waiting !== null) return waiting
+  const verdict = readyRail(db, proofOf(db, plan, repo, row))
   recordRail(db, join(root, 'rails/ready'), plan.id, verdict, 0)
   return { outcome: verdict.outcome, spans: verdict.spans, note: `ready: ${verdict.message}` }
 }
 
-function proofOf(db: Db, plan: PlanRow): Proof | null {
-  const row = db.prepare(`SELECT tests_pass, byte_identical_elsewhere, fork_ci_green, bot_clean, diff_digest
-    FROM deliverables WHERE plan_id = ? ORDER BY id DESC LIMIT 1`).get(plan.id) as
-    { tests_pass: number; byte_identical_elsewhere: number; fork_ci_green: number; bot_clean: number
-      diff_digest: string } | undefined
-  const repo = repoOf(db, plan)
-  if (row === undefined || repo === null) return null
+/**
+ * #35 rule 3: nothing lands over a moved main. The first miss merges main into the branch and sends
+ * the plan back to the rails, which judge the merged bytes; a second miss is a branch that cannot
+ * keep up with main and refuses so it is cut again. The builder's work is committed first: a merge
+ * into a dirty tree is the one way main's bytes and the seat's could be lost against each other --
+ * and a tree that already carries unmerged paths is refused before that commit, `base:conflict`, so
+ * conflict markers are never what the plan's bytes turn out to be.
+ */
+function baseMoved(root: string, plan: PlanRow): Outcome | null {
+  const src = srcDir(root, plan.id)
+  if (!cloned(src)) return null
+  if (conflicted(src)) return cutAgain('base:conflict', 'the checkout has unmerged paths from a tick that stopped mid-merge')
+  const main = fetchMain(src)
+  if (!behindMain(src)) return null
+  if (maybe(root, plan.id, 'base.merged') !== null) return cutAgain('base:stale', 'the branch is behind main a second time')
+  headOf(root, plan.id)
+  try {
+    mergeMain(src)
+  } catch {
+    abortMerge(src)
+    return cutAgain('base:conflict', 'the branch conflicts with main')
+  }
+  put(root, plan.id, 'base.merged', `${main}\n`)
+  put(root, plan.id, 'base.sha', `${main}\n`)
+  return { outcome: 'pass', spans: ['base:stale'], note: 'main moved; merged it and re-ran the rails', rewind: 3 }
+}
+
+function cutAgain(span: 'base:stale' | 'base:conflict', note: string): Outcome {
+  return { outcome: 'refuse', spans: [span], note: `${note}; cut it again from main` }
+}
+
+interface Gated { tests_pass: number; byte_identical_elsewhere: number; bot_clean: number; diff_digest: string }
+
+/** The row senior left, read before the branch is sent: `forkCi` has no row to stamp without one. */
+function gatedRow(db: Db, plan: number): Gated | null {
+  return (db.prepare(`SELECT tests_pass, byte_identical_elsewhere, bot_clean, diff_digest
+    FROM deliverables WHERE plan_id = ? ORDER BY id DESC LIMIT 1`).get(plan) ?? null) as Gated | null
+}
+
+function proofOf(db: Db, plan: PlanRow, repo: string, row: Gated): Proof {
   const ci = db.prepare("SELECT outcome, subject_digest FROM verdicts WHERE plan = ? AND rail_id = 'ci-green' ORDER BY id DESC LIMIT 1")
     .get(plan.id) as { outcome: string; subject_digest: string } | undefined
   return {
@@ -72,11 +120,18 @@ function proofOf(db: Db, plan: PlanRow): Proof | null {
     at: new Date().toISOString().slice(0, 10),
     tests_pass: row.tests_pass === 1,
     byte_identical_elsewhere: row.byte_identical_elsewhere === 1,
-    fork_public: row.fork_ci_green === 1,
+    fork_public: forkGreened(db, plan.id),
     bot_clean: row.bot_clean === 1,
     ci: green(ci),
     spans: [row.diff_digest.slice(0, 12)],
   }
+}
+
+/** Read again after `forkCi`: the column it stamps is the fork-CI proof, and the row was found before it ran. */
+function forkGreened(db: Db, plan: number): boolean {
+  const row = db.prepare('SELECT fork_ci_green FROM deliverables WHERE plan_id = ? ORDER BY id DESC LIMIT 1')
+    .get(plan) as { fork_ci_green: number } | undefined
+  return row?.fork_ci_green === 1
 }
 
 /** The repository the ready rail reads a pulse for. Ours has none to read, and needs none (#20). */
@@ -208,8 +263,9 @@ function passed(db: Db, plan: number, column: 'gate' | 'rail_id', value: string)
   return row?.outcome === 'pass'
 }
 
+/** The four the gates left at senior. The fifth, fork CI, is the ready step's own first act. */
 function proven(db: Db, plan: PlanRow): boolean {
   return db.prepare(`SELECT 1 FROM deliverables WHERE plan_id = ? AND tests_pass = 1
-    AND byte_identical_elsewhere = 1 AND fork_ci_green = 1 AND bot_clean = 1 AND target_warm = 1`)
+    AND byte_identical_elsewhere = 1 AND bot_clean = 1 AND target_warm = 1`)
     .get(plan.id) !== undefined
 }

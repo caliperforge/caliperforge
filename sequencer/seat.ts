@@ -4,7 +4,7 @@ import { reviewManifest, type Bench } from '../runner/packet.ts'
 import { load, seat, tight } from '../runner/rules.ts'
 import { judge, loadReviews } from '../reviews/bench.ts'
 import type { Db } from '../store/index.ts'
-import type { PlanRow } from '../store/plans.ts'
+import { internal, type PlanRow } from '../store/plans.ts'
 import { byRun, pending } from '../store/transcript.ts'
 import type { Step } from '../templates/pr-path.ts'
 import type { Outcome } from './kind.ts'
@@ -18,7 +18,8 @@ export async function fireSeat(db: Db, root: string, plan: PlanRow, step: Step, 
   load(db, root)
   const { manifest, prompt, hash } = seat(root, step.runs)
   const fired = await provider.fire(
-    packet(manifest, prompt, tight(root), brief(root, plan), srcDir(root, plan.id), transcriptOf(root, plan.id, step.step)))
+    packet(manifest, prompt, tight(root), brief(root, plan), srcDir(root, plan.id),
+      transcriptOf(root, plan.id, step.step), internal(plan)))
   const row = db.prepare(INSERT).run(plan.id, step.step, step.runs, hash, provider.name, manifest.model, manifest.effort,
     fired.usage.input, fired.usage.cache, fired.usage.output, fired.seconds, fired.exit, fired.transcript_path)
   byRun(db, Number(row.lastInsertRowid), fired.transcript_path)

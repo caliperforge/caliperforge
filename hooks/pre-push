@@ -1,3 +1,4 @@
 #!/bin/sh
-# R30: the CEO sends. A push with no matching approvals row is refused here, not reviewed.
+# R30: the CEO sends. A push landing on main with no matching approvals row is refused here, not reviewed;
+# a branch bound for our own fork passes -- step 6 puts it there for CI before anything is signed.
 exec node "$(cd "$(dirname "$0")/.." && pwd)/cli/cf.ts" push-check

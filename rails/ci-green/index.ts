@@ -3,16 +3,30 @@ import { createHash } from 'node:crypto'
 import { z } from 'zod'
 import type { Verdict } from '../record.ts'
 
-const Runs = z.array(z.object({
+const Run = z.object({
   headSha: z.string(),
   status: z.string(),
   conclusion: z.string(),
   url: z.string(),
-}))
+  workflowName: z.string(),
+})
+
+const Runs = z.array(Run)
+
+type Run = z.infer<typeof Run>
 
 const QUALIFIED = /\b([A-Za-z0-9._-]+)\/([A-Za-z0-9._-]+)#\d+\b/g
 const URL = /https:\/\/github\.com\/([A-Za-z0-9._-]+)\/([A-Za-z0-9._-]+)\/(?:issues|pull)\/\d+/g
 const BARE = /(?:^|[^A-Za-z0-9._/-])#\d+\b/
+
+/** A push starts every workflow at once, so one page holds every run the head has. */
+const WINDOW = 100
+
+/** The span a run that has not finished carries; its caller waits on that rather than refusing. */
+export const PENDING = 'ci.pending'
+
+/** The span a head with no run at all carries. A push's runs appear after it returns, so a caller waits on this too. */
+export const MISSING = 'ci.missing'
 
 export interface Head {
   fork: string
@@ -27,9 +41,9 @@ export interface Text {
 
 export type Gh = (args: string[]) => string
 
-export function ciGreen(head: Head, text: Text, gh: Gh = shell): Verdict {
+export function ciGreen(head: Head, text: Text, touched: string[], gh: Gh = shell): Verdict {
   const ours = head.fork.split('/')[0] ?? head.fork
-  const spans = [...run(head, gh), ...upstream(text, ours)]
+  const spans = [...runs(head, touched, gh), ...upstream(text, ours)]
   const subject_digest = createHash('sha256').update(`${head.fork}\n${head.branch}\n${head.sha}`).digest('hex')
   if (spans.length === 0) return { outcome: 'pass', defect_class: null, origin_kind: null, origin_ref: null, subject_digest, spans, message: `${head.fork}@${head.sha} is green and names no upstream number` }
   return {
@@ -42,16 +56,31 @@ export function ciGreen(head: Head, text: Text, gh: Gh = shell): Verdict {
   }
 }
 
-function run(head: Head, gh: Gh): string[] {
+function runs(head: Head, touched: string[], gh: Gh): string[] {
   const listed = Runs.safeParse(JSON.parse(gh([
     'run', 'list', '--repo', head.fork, '--branch', head.branch,
-    '--limit', '1', '--json', 'headSha,status,conclusion,url',
+    '--limit', String(WINDOW), '--json', 'headSha,status,conclusion,url,workflowName',
   ])))
   if (!listed.success) return [`${head.fork}:${head.branch} ci.unreadable`]
-  const last = listed.data[0]
-  if (last?.headSha !== head.sha) return [`${head.fork}:${head.sha} ci.missing`]
-  if (last.status !== 'completed') return [`${last.url} ci.pending`]
-  return last.conclusion === 'success' ? [] : [`${last.url} ci.red`]
+  const judged = mine(listed.data.filter((r) => r.headSha === head.sha), touched)
+  if (judged.length === 0) return [`${head.fork}:${head.sha} ${MISSING}`]
+  return judged.flatMap(read)
+}
+
+/**
+ * A repository with a workflow per language starts them all on every push, and one the diff never
+ * touched going red judges no branch of ours. The diff's top path segments are the languages it
+ * names; where none of them names a workflow, every run at the head is the branch's own.
+ */
+function mine(at: Run[], touched: string[]): Run[] {
+  const languages = new Set(touched.map((path) => path.split('/')[0]?.toLowerCase()))
+  const named = at.filter((r) => languages.has(r.workflowName.toLowerCase()))
+  return named.length === 0 ? at : named
+}
+
+function read(run: Run): string[] {
+  if (run.status !== 'completed') return [`${run.url} ${PENDING}`]
+  return run.conclusion === 'success' ? [] : [`${run.url} ci.red`]
 }
 
 function upstream(text: Text, ours: string): string[] {
@@ -70,6 +99,6 @@ function foreign(text: string, ours: string): boolean {
   return qualified.some((m) => m[1] !== ours) || BARE.test(text)
 }
 
-function shell(args: string[]): string {
+export function shell(args: string[]): string {
   return execFileSync('gh', args, { encoding: 'utf8' })
 }

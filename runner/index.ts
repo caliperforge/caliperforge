@@ -4,10 +4,21 @@ import type { Packet, Provider, Refusal } from '../providers/kind.ts'
 import type { Db } from '../store/index.ts'
 import { load, seat, tight, type Seat } from './rules.ts'
 
-export function refuse(cwd: string, writePaths: string[], path: string): Refusal | null {
+/** The tick's own state inside a plan checkout. A seat writes the repository, never the machine's notes about it. */
+const CF = '.cf'
+
+/**
+ * #38: a seat building our own kernel writes anywhere in its checkout except `.cf/` -- the tree is
+ * ours, and a fence that lets `src/` through but not `cli/` refuses the work the issue asked for.
+ * A seat working a stranger's repository keeps the manifest's `write_paths`, which is the narrow
+ * fence a counterparty never agreed to widen.
+ */
+export function refuse(cwd: string, writePaths: string[], path: string, ours = false): Refusal | null {
   const root = real(cwd)
   const rel = relative(root, real(resolve(root, path)))
-  const inside = !rel.startsWith('..') && writePaths.some((p) => rel === p || rel.startsWith(`${p}/`))
+  const fenced = ours ? [CF] : writePaths
+  const under = fenced.some((p) => rel === p || rel.startsWith(`${p}/`))
+  const inside = !rel.startsWith('..') && (ours ? !under : under)
   return inside ? null : { origin_kind: 'ruling', origin_ref: 'seat.write_paths', path: rel }
 }
 
@@ -19,7 +30,8 @@ function real(path: string): string {
   }
 }
 
-export function packet(manifest: Seat, prompt: string, spec: string, issue: string, cwd: string, transcript: string): Packet {
+export function packet(manifest: Seat, prompt: string, spec: string, issue: string, cwd: string,
+  transcript: string, ours = false): Packet {
   return {
     prompt: `${spec}\n\n${prompt}\n\n# Issue\n\n${issue}`,
     cwd,
@@ -27,7 +39,7 @@ export function packet(manifest: Seat, prompt: string, spec: string, issue: stri
     model: manifest.model,
     effort: manifest.effort,
     tools: manifest.tools,
-    refuse: (path) => refuse(cwd, manifest.write_paths, path),
+    refuse: (path) => refuse(cwd, manifest.write_paths, path, ours),
   }
 }
 

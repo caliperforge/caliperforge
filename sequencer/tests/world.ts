@@ -1,13 +1,15 @@
 import { execFileSync } from 'node:child_process'
-import { cpSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { fresh } from '../../checks/sqlite.ts'
 import type { Packet, Provider } from '../../providers/kind.ts'
+import type { Gh } from '../../rails/ci-green/index.ts'
 import type { Db } from '../../store/index.ts'
 import { PlanRow, type PipeRow } from '../../store/plans.ts'
+import type { Wire } from '../push.ts'
 import { targetDigest } from '../steps.ts'
-import { put, SELF } from '../workspace.ts'
+import { put, SELF, srcDir } from '../workspace.ts'
 
 const repo = join(import.meta.dirname, '../..')
 
@@ -86,6 +88,21 @@ export function ours(root: string, files: Record<string, string> = TYPESCRIPT): 
   git(dir, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'base'])
 }
 
+/** Bytes in the plan's checkout: the stub provider answers with text alone and writes no file. */
+export function built(root: string, id: number, line: string): void {
+  const path = join(srcDir(root, id), 'src/hello.ts')
+  writeFileSync(path, `${readFileSync(path, 'utf8')}${line}\n`)
+}
+
+/** A commit landing on our own `main` while a plan is out on its branch. A `body` overwrites a file the branch also touched, which is the conflicting case. */
+export function moveMain(root: string, name: string, body?: string): void {
+  const dir = join(root, 'remotes', SELF)
+  mkdirSync(dirname(join(dir, name)), { recursive: true })
+  writeFileSync(join(dir, name), body ?? `export const ${name.replace('.ts', '')} = 1\n`)
+  git(dir, ['add', '-A'])
+  git(dir, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', `main moves on ${name}`])
+}
+
 /** A plan filed from one of our own issues: an origin, a lane, a seat, and no target row. */
 export function internalPlan(db: Db, root: string, id: number, title = 'let an internal plan run'): number {
   db.prepare(`INSERT INTO plans (id, pipe_id, target_id, template, state, queued_at, step, retries, priority, lane, seat, origin)
@@ -136,19 +153,45 @@ export function approve(db: Db, target: number): void {
     VALUES ('target', ?, ?, 'ceo', 'approved', '2026-09-17T00:00:00.000Z')`).run(target, targetDigest(t))
 }
 
-/** The proof step 6 reads: a deliverable row and the ci-green verdict the rail would have left. */
-export function ready(db: Db, id: number): void {
-  db.prepare(`INSERT INTO deliverables (plan_id, step, seat, diff_digest, state, tests_pass,
-    byte_identical_elsewhere, fork_ci_green, bot_clean, target_warm, evidence)
-    VALUES (?, 2, 'typescript_specialist', ?, 'gated', 1, 1, 1, 1, 1, 'https://github.com/acme/widget/issues/12')`)
-    .run(id, 'b'.repeat(64))
-  forkCi(db, id)
+export const RUN = 'https://github.com/caliperforge/widget/actions/runs/1'
+export const PR = 'https://github.com/acme/widget/pull/7'
+
+/** The fork's CI as step 6 reads it: one run, read against whatever head the branch is on by then. */
+export function runsOn(root: string, id: number, status = 'completed', conclusion = 'success'): Gh {
+  return () => JSON.stringify([{
+    headSha: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: srcDir(root, id), encoding: 'utf8' }).trim(),
+    status, conclusion, url: RUN, workflowName: 'CI',
+  }])
 }
 
-/** The one ready proof no step in the tree writes: the verdict `rails/ci-green` would have left on the fork. */
-export function forkCi(db: Db, id: number): void {
-  db.prepare(`INSERT INTO verdicts (gate, kind, subject_digest, plan, step, outcome, rail_id, tokens, seconds)
-    VALUES ('ready', 'rail', ?, ?, 6, 'pass', 'ci-green', 0, 0)`).run('c'.repeat(64), id)
+/** The window a live push lands in: github lists no run at the new head until `misses` reads later. */
+export function runsAfter(root: string, id: number, misses: number): Gh {
+  const listed = runsOn(root, id)
+  let read = 0
+  return (args) => {
+    read += 1
+    return read <= misses ? '[]' : listed(args)
+  }
+}
+
+/** A fork that stays red, read as a live lap reads it: the push's runs miss the API once, then fail. */
+export function redLaps(root: string, id: number): Gh {
+  const red = runsOn(root, id, 'completed', 'failure')
+  let read = 0
+  return (args) => {
+    read += 1
+    return read % 2 === 1 ? '[]' : red(args)
+  }
+}
+
+/** The transport a test drives a lap through: every send, pull request and close is a line in `log`. */
+export function watched(log: string[], root: string, id: number, runs = runsOn(root, id)): Wire {
+  return {
+    send: (dir, branch) => void log.push(`send ${basename(dir)} ${branch}`),
+    open: (repo, head) => { log.push(`open ${repo} ${head}`); return PR },
+    close: (repo, no, sha) => void log.push(`close ${repo}#${String(no)} ${sha.slice(0, 7)}`),
+    runs,
+  }
 }
 
 export function plan(db: Db, id: number): PlanRow {

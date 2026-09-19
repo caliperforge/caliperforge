@@ -35,6 +35,11 @@ export function gated(db: Db, made: Made, proof: Proven): void {
   write(db, made, 'gated', proof)
 }
 
+/** The one proof the gates cannot leave: fork CI is judged at step 6, on the row senior wrote. */
+export function forkGreen(db: Db, plan: number, green: boolean): void {
+  db.prepare('UPDATE deliverables SET fork_ci_green = ? WHERE id = ?').run(Number(green), latest(db, plan))
+}
+
 /** A `CHECK` on the table refuses a ready row missing any of the five, so the store is what says no. */
 export function ready(db: Db, plan: number): void {
   db.prepare("UPDATE deliverables SET state = 'ready' WHERE id = ?").run(latest(db, plan))

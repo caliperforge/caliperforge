@@ -9,7 +9,7 @@ import { scan } from '../rails/secret-scan/index.ts'
 import { weakened } from '../rails/test-weakened/index.ts'
 import { tight } from '../rails/tight/index.ts'
 import type { Db } from '../store/index.ts'
-import type { PlanRow } from '../store/plans.ts'
+import { internal, type PlanRow } from '../store/plans.ts'
 import { builder } from '../templates/pr-path.ts'
 import type { Outcome } from './kind.ts'
 import { diffOf, doneIds, get, languageOf, srcDir } from './workspace.ts'
@@ -33,7 +33,7 @@ function rest(root: string, plan: PlanRow, handback: string): [string, () => Ver
   const diff = diffOf(root, plan.id)
   return [
     ['secret-scan', () => scan(diff)],
-    ['authority', () => authority(root, builder(languageOf(src)), diff)],
+    ['authority', () => authority(root, builder(languageOf(src)), diff, internal(plan))],
     ['tight', () => tight(root, { diff, sources: sources(src, diff), description: handback })],
     ['test-weakened', () => weakened(diff, 'green')],
     ['identifiers', () => identifiers(src, handback)],

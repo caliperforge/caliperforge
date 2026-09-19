@@ -8,11 +8,11 @@ import { account, parse } from '../../cli/queue.ts'
 import { clock, inWindow, underCap, type PipeRow, type PlanRow } from '../../store/plans.ts'
 import { steps } from '../../templates/pr-path.ts'
 import { tick } from '../index.ts'
-import { blocked } from '../steps.ts'
+import { blocked, kernel } from '../steps.ts'
 import { doneIds, srcDir } from '../workspace.ts'
 import { benchPacket } from '../../runner/packet.ts'
 import type { Packet } from '../../providers/kind.ts'
-import { approve, CARRIED, KOTLIN, PASS, plan, REFUSE, stub, world } from './world.ts'
+import { approve, CARRIED, KOTLIN, PASS, plan, redLaps, REFUSE, RUN, runsAfter, runsOn, stub, watched, world } from './world.ts'
 
 const head = (cwd: string, args: string[]): string => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim()
 
@@ -177,31 +177,113 @@ test('six ticks walk a plan from measure to Ready on one seat run and no tokens 
   }
   expect(walked).toEqual(['measure', 'ruling', 'build', 'rails', 'review', 'senior'])
   expect(plan(w.db, 1).step).toBe(6)
-  expect(blocked(w.db, plan(w.db, 1), '2026-09-17')).toBe('awaiting the ready proof')
-  expect(await tick(w.db, w.root, stub(CARRIED))).toEqual([])
+  expect(blocked(w.db, plan(w.db, 1), '2026-09-17')).toBeNull()
   expect(w.db.prepare("SELECT count(*) AS n FROM runs WHERE seat = 'typescript_specialist'").get()).toEqual({ n: 1 })
 })
 
-test('step 6 refuses until ci-green has left a verdict, then fires the ready rail and records it', async () => {
+test('step 6 sends the branch to our fork, waits out a run still going, then records ci-green and ready', async () => {
   const w = world()
   approve(w.db, w.target)
   for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  const sent: string[] = []
+
+  const held = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined,
+    watched(sent, w.root, 1, runsOn(w.root, 1, 'in_progress'))))[0]
+  expect(held).toMatchObject({ step: 6, name: 'ready', outcome: 'pass', state: 'running' })
+  expect(held?.spans).toEqual([`${RUN} ci.pending`])
+  expect(sent).toEqual(['send src widget-12-a1'])
   expect(plan(w.db, 1).step).toBe(6)
-  expect(blocked(w.db, plan(w.db, 1), '2026-09-17')).toBe('awaiting the ready proof')
-  w.db.prepare(`INSERT INTO deliverables (plan_id, step, seat, diff_digest, state, tests_pass,
-    byte_identical_elsewhere, fork_ci_green, bot_clean, target_warm, evidence)
-    VALUES (1, 2, 'typescript_specialist', ?, 'gated', 1, 1, 1, 1, 1, 'https://github.com/acme/widget/pull/1')`)
-    .run('b'.repeat(64))
-  const blind = (await tick(w.db, w.root, stub(CARRIED)))[0]
-  expect(blind).toMatchObject({ step: 6, name: 'ready', outcome: 'refuse' })
-  expect(blind?.spans).toEqual(['ci-green'])
-  w.db.prepare(`INSERT INTO verdicts (gate, kind, subject_digest, plan, step, outcome, rail_id, tokens, seconds)
-    VALUES ('ready', 'rail', ?, 1, 6, 'pass', 'ci-green', 0, 0)`).run('c'.repeat(64))
-  w.db.prepare("UPDATE plans SET step = 6, state = 'running' WHERE id = 1").run()
-  const fired = (await tick(w.db, w.root, stub(CARRIED)))[0]
+  expect(w.db.prepare("SELECT count(*) AS n FROM verdicts WHERE plan = 1 AND rail_id = 'ci-green'").get())
+    .toEqual({ n: 0 })
+
+  const fired = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched(sent, w.root, 1)))[0]
   expect(fired).toMatchObject({ step: 6, name: 'ready', outcome: 'pass', state: 'running' })
-  expect(w.db.prepare("SELECT gate, kind, outcome FROM verdicts WHERE rail_id = 'ready' ORDER BY id").all())
-    .toEqual([{ gate: 'ready', kind: 'rail', outcome: 'refuse' }, { gate: 'ready', kind: 'rail', outcome: 'pass' }])
+  expect(sent).toHaveLength(2)
+  expect(w.db.prepare('SELECT rail_id, gate, outcome FROM verdicts WHERE plan = 1 AND step = 6 ORDER BY id').all())
+    .toEqual([{ rail_id: 'ci-green', gate: 'ready', outcome: 'pass' }, { rail_id: 'ready', gate: 'ready', outcome: 'pass' }])
+})
+
+test('a red run on the fork refuses the ready gate on the rail and sends the plan back', async () => {
+  const w = world()
+  approve(w.db, w.target)
+  for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  const red = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined,
+    watched([], w.root, 1, runsOn(w.root, 1, 'completed', 'failure'))))[0]
+  expect(red).toMatchObject({ step: 6, name: 'ready', outcome: 'refuse', state: 'retried' })
+  expect(red?.spans).toEqual(['ci-green', 'fork:1 not.public'])
+  expect(w.db.prepare("SELECT outcome FROM verdicts WHERE plan = 1 AND rail_id = 'ci-green'").get())
+    .toEqual({ outcome: 'refuse' })
+})
+
+test('a fork that stays red escalates on the second strike instead of cycling 6 -> 5 -> 6', async () => {
+  const w = world()
+  approve(w.db, w.target)
+  for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  const wire = watched([], w.root, 1, redLaps(w.root, 1))
+  const lap = async (): Promise<string | undefined> => (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]?.state
+
+  expect(await lap()).toBe('running')
+  expect(plan(w.db, 1)).toMatchObject({ step: 6, retries: 0 })
+  expect(await lap()).toBe('retried')
+  expect(plan(w.db, 1)).toMatchObject({ step: 5, retries: 1 })
+  expect(await lap()).toBe('running')
+
+  expect(await lap()).toBe('running')
+  expect(plan(w.db, 1)).toMatchObject({ step: 6, retries: 1 })
+  expect(await lap()).toBe('blocked_on_ceo')
+})
+
+test('the push window is waited out: no run at the new head holds step 6, the run that appears is judged', async () => {
+  const w = world()
+  approve(w.db, w.target)
+  for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  const sent: string[] = []
+  const wire = watched(sent, w.root, 1, runsAfter(w.root, 1, 2))
+
+  const first = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
+  expect(first).toMatchObject({ step: 6, name: 'ready', outcome: 'pass', state: 'running' })
+  expect(first?.spans[0]).toMatch(/ ci\.missing$/)
+  expect(first?.note).toMatch(/no run yet, tick 1 of 10/)
+  expect((await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]?.note).toMatch(/tick 2 of 10/)
+  expect(w.db.prepare("SELECT count(*) AS n FROM verdicts WHERE plan = 1 AND rail_id = 'ci-green'").get())
+    .toEqual({ n: 0 })
+  expect(plan(w.db, 1).step).toBe(6)
+
+  const judged = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
+  expect(judged).toMatchObject({ step: 6, name: 'ready', outcome: 'pass' })
+  expect(w.db.prepare("SELECT outcome FROM verdicts WHERE plan = 1 AND rail_id = 'ci-green'").get())
+    .toEqual({ outcome: 'pass' })
+  expect(plan(w.db, 1).step).toBe(7)
+  expect(sent).toHaveLength(3)
+})
+
+test('a head still runless after the window is refused on ci-green, not waited on forever', async () => {
+  const w = world()
+  approve(w.db, w.target)
+  for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  const wire = watched([], w.root, 1, () => '[]')
+  for (let at = 0; at < 10; at += 1) {
+    expect((await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0])
+      .toMatchObject({ step: 6, outcome: 'pass', state: 'running' })
+  }
+
+  const out = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
+  expect(out).toMatchObject({ step: 6, name: 'ready', outcome: 'refuse', state: 'retried' })
+  expect(w.db.prepare("SELECT outcome FROM verdicts WHERE plan = 1 AND rail_id = 'ci-green'").get())
+    .toEqual({ outcome: 'refuse' })
+  expect(plan(w.db, 1).step).toBe(5)
+})
+
+test('step 6 refuses a plan with no deliverable row instead of sending the branch and raising', async () => {
+  const w = world()
+  approve(w.db, w.target)
+  for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  w.db.prepare('DELETE FROM deliverables WHERE plan_id = 1').run()
+  const sent: string[] = []
+
+  expect(kernel(w.db, w.root, plan(w.db, 1), watched(sent, w.root, 1)))
+    .toMatchObject({ outcome: 'refuse', spans: ['deliverables'] })
+  expect(sent).toEqual([])
 })
 
 test('every run row points at a transcript the provider wrote', async () => {

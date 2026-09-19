@@ -29,7 +29,17 @@ function one(db: Db, row: Pushed, read: (repo: string, no: number) => Pr): Signa
   const view = read(row.repo, prNumber(row.evidence))
   const fresh = signals(view, row).map((s) => record(db, s)).filter((s) => s !== null)
   attribute(db, row.plan, view)
-  return fresh
+  return acted(db, view, fresh)
+}
+
+/**
+ * The ruling `signals.left_alone` names the review decision that is as good as merged: what lands
+ * on such a pull request is recorded and starts nothing, and the merge is the one signal left.
+ */
+function acted(db: Db, view: Pr, fresh: SignalRow[]): SignalRow[] {
+  const ruled = db.prepare("SELECT value FROM rulings WHERE subject = 'signals.left_alone' ORDER BY id DESC LIMIT 1")
+    .get() as { value: string }
+  return view.reviewDecision?.toLowerCase() === ruled.value ? fresh.filter((s) => s.kind === 'merge') : fresh
 }
 
 export function signals(view: Pr, row: Pushed): Signal[] {

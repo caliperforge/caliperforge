@@ -27,7 +27,7 @@ const TRANSCRIPT = [
 ].join('\n')
 
 const pr = (over: Partial<Pr> = {}): Pr => ({
-  number: 7, url: URL, state: 'OPEN', mergedAt: null, mergedBy: null,
+  number: 7, url: URL, state: 'OPEN', mergedAt: null, mergedBy: null, reviewDecision: null,
   comments: [], reviews: [], statusCheckRollup: [], ...over,
 })
 
@@ -282,7 +282,7 @@ function row(db: Db, id: number): SignalRow {
 
 function signal(db: Db, kind: string, author: string, score: number | null): number {
   const written = db.prepare(`INSERT INTO signals (repo, pr, kind, author, at, external_id, score, plan)
-    VALUES ('acme/widget', 7, ?, ?, '2026-09-18T09:00:00Z', ?, ?, 1)`)
-    .run(kind, author, `${kind}-${String(score)}-${author}`, score)
+    VALUES ('acme/widget', 7, ?, ?, ?, ?, ?, 1)`)
+    .run(kind, author, new Date().toISOString(), `${kind}-${String(score)}-${author}`, score)
   return Number(written.lastInsertRowid)
 }

@@ -15,10 +15,20 @@ const REVIEW_STEP = 4
 export function started(db: Db, signal: SignalRow): Started | null {
   if (signal.plan === null) return null
   if (signal.kind === 'merge') return comms(db, signal, signal.plan)
+  if (older(db, signal, signal.plan)) return null
   if (signal.kind === 'bot_review' && (signal.score ?? 5) >= 5) return null
   if (signal.kind === 'comment' && signal.author === 'ci') return null
   rewind(db, signal.plan, REVIEW_STEP)
   return { signal: signal.id, template: 'pr_path', plan: signal.plan, step: REVIEW_STEP }
+}
+
+/**
+ * Ruling `signals.pre_adoption`: an adopted plan inherits the whole thread of a pull request v1
+ * opened. What predates the row is history the plan already stands on — recorded, never replayed.
+ */
+function older(db: Db, signal: SignalRow, plan: number): boolean {
+  const row = db.prepare('SELECT queued_at FROM plans WHERE id = ?').get(plan) as { queued_at: string }
+  return Date.parse(signal.at) < Date.parse(row.queued_at)
 }
 
 /** The comms lane is on and holds no step map; the plan queued here waits there until P7 writes one. */

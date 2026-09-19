@@ -1,5 +1,6 @@
 import { pr as readPr, type Pr } from '../cli/gh.ts'
 import type { Provider } from '../providers/kind.ts'
+import { hold } from '../store/holds.ts'
 import type { Db } from '../store/index.ts'
 import { cap, hhmm, zone } from '../store/lanes.ts'
 import { advance, back, finish, internal, live, needsCeo, openPipes, rewind, underCap, type PipeRow, type PlanRow } from '../store/plans.ts'
@@ -144,7 +145,7 @@ function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcom
     proved(db, root, plan, step)
     if (last(step.step)) { finish(db, plan); return 'done' }
     advance(db, plan, step.step + 1)
-    return 'running'
+    return hold(db, plan.id, step.step)
   }
   put(root, plan.id, 'refusal.md', refusalText(step, outcome))
   return back(db, plan)

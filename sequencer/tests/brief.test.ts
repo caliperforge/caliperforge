@@ -2,11 +2,13 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import type { Packet } from '../../providers/kind.ts'
+import { release } from '../../store/holds.ts'
+import { get } from '../../store/lanes.ts'
 import { shape, unclear } from '../brief.ts'
 import { tick } from '../index.ts'
 import { blocked } from '../steps.ts'
 import { drop, maybe, move, put, titleOf } from '../workspace.ts'
-import { approve, CARRIED, internalPlan, ours, plan, stub, world, type World } from './world.ts'
+import { approve, CARRIED, internalPlan, ours, plan, reads, stub, world, type World } from './world.ts'
 
 const repo = join(import.meta.dirname, '../..')
 
@@ -19,6 +21,8 @@ const ID = 2
 const briefOf = (w: World): string => maybe(w.root, ID, 'issue.md') ?? ''
 
 const askOf = (w: World): string => maybe(w.root, ID, 'ask.md') ?? ''
+
+const left = (w: World): string => get(w.db, 'brief.reads_left')
 
 /** A fixture reply retitled onto the ask the internal plan is filed with, which every brief's title must equal. */
 const titled = (name: string): string => fixture(name).replace('# A seat that briefs before any build', '# let an internal plan run')
@@ -172,6 +176,64 @@ test('a plan queued before the brief seat has its raw issue moved to the ask and
   expect((await tick(w.db, w.root, stub(CARRIED)))[0]).toMatchObject({ step: 1, outcome: 'pass' })
   expect(maybe(w.root, ID, 'ask.md')).toBe(raw)
   expect(shape(briefOf(w), raw, repo)).toBeNull()
+})
+
+/** A world whose ten reads are unspent, ticked through step 0 to the tick that passes step 1. */
+async function unread(): Promise<World> {
+  const w = mine()
+  reads(w.db, 10)
+  await tick(w.db, w.root, stub(CARRIED))
+  return w
+}
+
+test('the first briefed plan waits on the coo at step 2, spends one read, and the next tick fires nothing', async () => {
+  const w = await unread()
+
+  expect((await tick(w.db, w.root, stub(CARRIED)))[0])
+    .toMatchObject({ step: 1, outcome: 'pass', state: 'blocked_on_ceo' })
+  expect(plan(w.db, ID)).toMatchObject({ step: 2, state: 'blocked_on_ceo' })
+  expect(left(w)).toBe('9')
+  expect(await tick(w.db, w.root, stub(CARRIED))).toEqual([])
+})
+
+test('released, the plan runs again and the next tick fires the builder', async () => {
+  const w = await unread()
+  await tick(w.db, w.root, stub(CARRIED))
+
+  release(w.db, ID)
+  expect(plan(w.db, ID)).toMatchObject({ step: 2, state: 'running' })
+  expect((await tick(w.db, w.root, stub(CARRIED)))[0]).toMatchObject({ step: 2, name: 'build', outcome: 'pass' })
+})
+
+test('release refuses a plan parked on the coo at step 1 and moves no row', async () => {
+  const w = await unread()
+  await tick(w.db, w.root, stub(CARRIED, 0, undefined, undefined, asks('is the comment part of this change?')))
+  expect(plan(w.db, ID)).toMatchObject({ step: 1, state: 'blocked_on_ceo' })
+
+  expect(() => release(w.db, ID)).toThrow(/plan 2 is not a brief/)
+  expect(plan(w.db, ID)).toMatchObject({ step: 1, state: 'blocked_on_ceo' })
+  expect(left(w)).toBe('10')
+})
+
+test('with the reads spent, step 1 passes to running and the builder fires in the next tick', async () => {
+  const w = mine()
+  await tick(w.db, w.root, stub(CARRIED))
+
+  expect((await tick(w.db, w.root, stub(CARRIED)))[0]).toMatchObject({ step: 1, outcome: 'pass', state: 'running' })
+  expect((await tick(w.db, w.root, stub(CARRIED)))[0]).toMatchObject({ step: 2, outcome: 'pass' })
+  expect(left(w)).toBe('0')
+})
+
+test('a rewind onto a brief that stands holds nothing and spends no read', async () => {
+  const w = mine()
+  for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  reads(w.db, 10)
+  w.db.prepare("UPDATE plans SET step = 1, state = 'running' WHERE id = ?").run(ID)
+
+  expect((await tick(w.db, w.root, stub(CARRIED)))[0])
+    .toMatchObject({ step: 1, note: 'the brief stands', state: 'running' })
+  expect(plan(w.db, ID)).toMatchObject({ step: 2, state: 'running' })
+  expect(left(w)).toBe('10')
 })
 
 test('an external plan walks the same step 1 on the same seat, and never before cf approve target', async () => {

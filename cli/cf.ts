@@ -9,6 +9,7 @@ import { fire } from '../runner/index.ts'
 import { dry, tick } from '../sequencer/index.ts'
 import { liveTree } from '../sequencer/workspace.ts'
 import { blocked, targetDigest } from '../sequencer/steps.ts'
+import { release } from '../store/holds.ts'
 import { dump, migrate, open as openDb, type Db } from '../store/index.ts'
 import { dial, hhmm, lanes, priority as setPriority, record, Reading, windows } from '../store/lanes.ts'
 import { openPipes, PlanRow } from '../store/plans.ts'
@@ -146,6 +147,11 @@ plan.argument('<id>').action((id: string) => {
   for (const v of verdictsOf(handle, plan.id)) {
     out(`  verdict ${String(v.id)}\tstep ${String(v.step)}\t${String(v.gate)}\t${String(v.outcome)}\t${String(v.origin_ref ?? '-')}\n`)
   }
+})
+
+cf.command('release').argument('<plan>', 'a briefed plan waiting on the coo to read it').action((id: string) => {
+  release(db(), Number(id))
+  out(`plan ${id} released\n`)
 })
 
 const approve = cf.command('approve')

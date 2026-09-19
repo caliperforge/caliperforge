@@ -163,6 +163,7 @@ export function world(pulse: 'warm' | 'cold' = 'warm', day = new Date().toISOStr
     VALUES (1, 1, 'acme/widget', 12, 'maintainer', ?, ?, 'https://github.com/acme/widget/issues/12')`)
     .run(pulse === 'warm' ? 'ready' : 'parked', day)
   onePipe(db)
+  reads(db, 0)
   db.prepare("INSERT INTO plans (id, pipe_id, target_id, template, state, queued_at, step, retries) VALUES (1, 1, 1, 'pr_path', 'queued', ?, 0, 0)")
     .run(`${day}T00:00:00.000Z`)
   put(root, 1, 'ask.md', '# hello\n\n- **D1** add `hello()` in `src/hello.ts`\n')
@@ -177,6 +178,11 @@ export function world(pulse: 'warm' | 'cold' = 'warm', day = new Date().toISOStr
 function onePipe(db: Db): void {
   db.prepare("UPDATE pipes SET window_start = '00:00', window_end = '23:59' WHERE name = 'pr-path'").run()
   db.prepare("DELETE FROM pipes WHERE name IN ('comms', 'research')").run()
+}
+
+/** The COO's reads of the first ten briefs (`store/holds.ts`): spent in a world that is not driving them. */
+export function reads(db: Db, n: number): void {
+  db.prepare("UPDATE settings SET value = ? WHERE key = 'brief.reads_left'").run(String(n))
 }
 
 export function approve(db: Db, target: number): void {

@@ -1,23 +1,21 @@
 import { readFileSync, writeFileSync } from 'node:fs'
-import { basename, join } from 'node:path'
+import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { approve as approveCard, batch, refuse as refuseCard } from '../../cli/batch.ts'
 import type { Pr } from '../../cli/gh.ts'
 import { close, settled } from '../../cli/session.ts'
-import { headApproved, headDigest } from '../../store/approvals.ts'
+import { headApproved, headDigest, refusedPush } from '../../store/approvals.ts'
 import type { Db } from '../../store/index.ts'
 import { advance, rewind } from '../../store/plans.ts'
 import { open as openProposals } from '../../store/proposals.ts'
 import { SignalRow } from '../../store/signals.ts'
 import { capture } from '../capture.ts'
 import { classOf } from '../escapes.ts'
-import { headOf, prBody, push, type Wire } from '../push.ts'
+import { headOf, prBody, push } from '../push.ts'
 import { started } from '../signals.ts'
 import { srcDir } from '../workspace.ts'
 import { tick } from '../index.ts'
-import { approve, CARRIED, forkCi, plan, ready, stub, world, type World } from './world.ts'
-
-const URL = 'https://github.com/acme/widget/pull/7'
+import { approve, CARRIED, plan, PR as URL, stub, watched, world, type World } from './world.ts'
 
 const TRANSCRIPT = [
   'RULING push.digest = approval_matches_head_and_the_hook',
@@ -38,8 +36,7 @@ async function atBatch(): Promise<World> {
   approve(w.db, w.target)
   for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED))
   writeFileSync(join(srcDir(w.root, 1), 'src/hello.ts'), 'export const hello = (): string => "hey"\n')
-  ready(w.db, 1)
-  await tick(w.db, w.root, stub(CARRIED))
+  await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
   expect(plan(w.db, 1).step).toBe(7)
   return w
 }
@@ -71,7 +68,7 @@ test('a plan cannot leave ready without an approval row, and the store is what r
 test('push refuses without a matching row, then pushes the approved head and opens the pr', async () => {
   const w = await atBatch()
   const sent: string[] = []
-  const wire = watched(sent)
+  const wire = watched(sent, w.root, 1)
   expect(push(w.db, w.root, plan(w.db, 1), wire)).toMatchObject({ outcome: 'refuse' })
   expect(sent).toEqual([])
   approveCard(w.db, w.root, 'plan', 1)
@@ -81,12 +78,16 @@ test('push refuses without a matching row, then pushes the approved head and ope
     .toEqual({ state: 'pushed', evidence: URL })
 })
 
-test('the pre-push hook asks one question: is this sha the one the ceo signed', async () => {
+test('the pre-push hook asks of what lands on main whether the ceo signed it, and lets the fork branch by', async () => {
   const w = await atBatch()
   const sha = headOf(w.root, 1).sha
+  const onto = (ref: string): string[] => refusedPush(w.db, `refs/heads/x ${sha} ${ref} ${'0'.repeat(40)}\n`)
   expect(headApproved(w.db, sha)).toBe(false)
+  expect(onto('refs/heads/main')).toEqual([sha])
+  expect(onto('refs/heads/widget-12-a1')).toEqual([])
   approveCard(w.db, w.root, 'plan', 1)
   expect(headApproved(w.db, sha)).toBe(true)
+  expect(onto('refs/heads/main')).toEqual([])
   expect(headApproved(w.db, 'f'.repeat(40))).toBe(false)
 })
 
@@ -158,7 +159,7 @@ test('a plan at ready with no checkout stays on the card list and cannot be sign
   expect(blind).toMatchObject({ kind: 'plan', digest: '', marks: [{ name: 'bytes on the branch', ok: false }] })
   expect(() => approveCard(w.db, w.root, 'plan', 2)).toThrow(/no bytes on its branch/)
   expect(() => headOf(w.root, 2)).toThrow(/has no checkout/)
-  expect(push(w.db, w.root, plan(w.db, 2), watched([]))).toMatchObject({ outcome: 'refuse' })
+  expect(push(w.db, w.root, plan(w.db, 2), watched([], w.root, 2))).toMatchObject({ outcome: 'refuse' })
 })
 
 test('a signal starts the plan the map says it starts', async () => {
@@ -208,7 +209,7 @@ test('a settled item already in rulings proposes nothing, and the pr body stays 
  * The lap-1 push left a `pushed` deliverable, so every tick from here polls it.
  * The reader is injected: an open pr with nothing on it, read off no network.
  */
-const lap = (w: World) => tick(w.db, w.root, stub(CARRIED), new Date(), () => pr())
+const lap = (w: World) => tick(w.db, w.root, stub(CARRIED), new Date(), () => pr(), watched([], w.root, 1))
 
 test('a second lap after a rewind puts a fresh card in the batch and cannot leave on the first lap approval', async () => {
   const w = await pushed()
@@ -217,7 +218,7 @@ test('a second lap after a rewind puts a fresh card in the batch and cannot leav
   for (let at = 0; at < 3; at += 1) await lap(w)
   expect(plan(w.db, 1).step).toBe(7)
   expect(w.db.prepare('SELECT state FROM deliverables WHERE plan_id = 1 ORDER BY id').all())
-    .toEqual([{ state: 'built' }, { state: 'gated' }, { state: 'pushed' }, { state: 'ready' }])
+    .toEqual([{ state: 'built' }, { state: 'pushed' }, { state: 'ready' }])
   expect(() => { advance(w.db, plan(w.db, 1), 8) }).toThrow(/no ceo approval row/)
   expect(await lap(w)).toEqual([])
   expect(batch(w.db, w.root).map((c) => c.id)).toEqual([1])
@@ -257,9 +258,9 @@ test('a review read on one tick and the merge on a later one is still one escape
 test('the steps write the deliverable themselves, and a plan reaches the batch with no fixture row', async () => {
   const w = world()
   approve(w.db, w.target)
-  for (let at = 0; at < 5; at += 1) await tick(w.db, w.root, stub(CARRIED))
-  forkCi(w.db, 1)
-  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  for (let at = 0; at < 7; at += 1) {
+    await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
+  }
   expect(plan(w.db, 1).step).toBe(7)
   expect(w.db.prepare('SELECT step, seat, state FROM deliverables WHERE plan_id = 1 ORDER BY id').all()).toEqual([
     { step: 2, seat: 'typescript_specialist', state: 'built' },
@@ -271,16 +272,8 @@ test('the steps write the deliverable themselves, and a plan reaches the batch w
 async function pushed(): Promise<World> {
   const w = await atBatch()
   approveCard(w.db, w.root, 'plan', 1)
-  push(w.db, w.root, plan(w.db, 1), watched([]))
+  push(w.db, w.root, plan(w.db, 1), watched([], w.root, 1))
   return w
-}
-
-function watched(log: string[]): Wire {
-  return {
-    send: (dir, branch) => void log.push(`send ${basename(dir)} ${branch}`),
-    open: (repo, head) => { log.push(`open ${repo} ${head}`); return URL },
-    close: (repo, no, sha) => void log.push(`close ${repo}#${String(no)} ${sha.slice(0, 7)}`),
-  }
 }
 
 function row(db: Db, id: number): SignalRow {

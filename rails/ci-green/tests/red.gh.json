@@ -1,1 +1,2 @@
-[{"headSha":"9f2c1ab","status":"completed","conclusion":"failure","url":"https://github.com/caliperforge/caliperforge/actions/runs/1"}]
+[{"headSha":"9f2c1ab","status":"completed","conclusion":"failure","url":"https://github.com/caliperforge/caliperforge/actions/runs/1","workflowName":"Kotlin"},
+ {"headSha":"9f2c1ab","status":"completed","conclusion":"success","url":"https://github.com/caliperforge/caliperforge/actions/runs/2","workflowName":"Go"}]

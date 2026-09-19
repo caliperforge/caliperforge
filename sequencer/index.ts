@@ -130,6 +130,7 @@ function fire(db: Db, root: string, plan: PlanRow, step: Step, provider: Provide
 }
 
 function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcome): string {
+  if (outcome.held === true) return 'running'
   if (outcome.rewind !== undefined) {
     rewind(db, plan.id, outcome.rewind)
     return 'running'

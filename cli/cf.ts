@@ -12,7 +12,7 @@ import { blocked, targetDigest } from '../sequencer/steps.ts'
 import { dump, migrate, open as openDb, type Db } from '../store/index.ts'
 import { dial, hhmm, lanes, priority as setPriority, record, Reading, windows } from '../store/lanes.ts'
 import { openPipes, PlanRow } from '../store/plans.ts'
-import { headApproved } from '../store/approvals.ts'
+import { refusedPush } from '../store/approvals.ts'
 import { receipt } from '../store/ticks.ts'
 import { adopt, render as renderAdopt } from './adopt.ts'
 import { approve as approveCard, batch, landed, refuse as refuseCard, render, renderLanded } from './batch.ts'
@@ -188,12 +188,8 @@ session.command('close').argument('<transcript>').action((path: string) => {
   out(`${String(made.length)} proposal(s) in the batch\n`)
 })
 
-/** `hooks/pre-push` runs this; git hands it `<local ref> <local sha> <remote ref> <remote sha>` on stdin. */
 cf.command('push-check').action(() => {
-  const handle = db()
-  const refused = readFileSync(0, 'utf8').split('\n').filter((l) => l.trim() !== '')
-    .map((line) => line.split(' ')[1] ?? '')
-    .filter((sha) => !/^0{40,}$/.test(sha) && !headApproved(handle, sha))
+  const refused = refusedPush(db(), readFileSync(0, 'utf8'))
   for (const sha of refused) process.stderr.write(`cf: no ceo approval row for ${sha.slice(0, 12)}\n`)
   process.exitCode = refused.length === 0 ? 0 : 1
 })

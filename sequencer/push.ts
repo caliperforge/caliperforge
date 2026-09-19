@@ -1,10 +1,15 @@
 import { execFileSync } from 'node:child_process'
+import { join } from 'node:path'
 import { closeIssue, openPr } from '../cli/gh.ts'
+import { ciGreen, MISSING, PENDING, shell, type Gh } from '../rails/ci-green/index.ts'
+import { parse } from '../rails/diff.ts'
+import { record } from '../rails/record.ts'
 import { headDigest, signedHead } from '../store/approvals.ts'
+import { forkGreen } from '../store/deliverables.ts'
 import type { Db } from '../store/index.ts'
 import { internal, originIssue, type PlanRow } from '../store/plans.ts'
 import type { Outcome } from './kind.ts'
-import { cloned, conflicted, fetchMain, get, MAIN, put, SELF, srcDir, titleOf } from './workspace.ts'
+import { cloned, conflicted, diffOf, fetchMain, FORK, get, MAIN, maybe, put, repoName, SELF, srcDir, titleOf } from './workspace.ts'
 
 interface Head { dir: string; branch: string; sha: string }
 
@@ -13,12 +18,77 @@ export interface Wire {
   send: (dir: string, branch: string) => void
   open: (repo: string, head: string, title: string, bodyFile: string) => string
   close: (repo: string, no: number, sha: string) => void
+  runs: Gh
 }
 
 const WIRE: Wire = {
   send: (dir, branch) => void git(dir, ['push', '--set-upstream', 'origin', branch]),
   open: openPr,
   close: closeIssue,
+  runs: shell,
+}
+
+/** Ticks a head is given to reach a finished run; past them an unfinished CI is judged as it stands. */
+const APPEARS = 10
+
+const WAITS = 'ci.waits'
+
+/**
+ * Step 6 before the gate: the branch goes to our fork -- no pull request, and the rail reads the
+ * branch's own commit messages for an upstream number -- and `rails/ci-green` judges the runs at
+ * that head. GitHub has no run at a head the moment the push returns, so a head with no run yet
+ * waits exactly as a run still going does, and both waits share one window: past `APPEARS` ticks
+ * the spans are recorded as the refusal they are, so a CI that never greens still reaches `back()`.
+ */
+export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire = WIRE): Outcome | null {
+  const head = headOf(root, plan.id)
+  const fork = `${FORK}/${repoName(repo)}`
+  wire.send(head.dir, head.branch)
+  const verdict = ciGreen({ fork, branch: head.branch, sha: head.sha },
+    { body: '', commits: commits(head.dir) }, touched(root, plan.id), wire.runs)
+  const waiting = unfinished(verdict.spans)
+  if (waiting !== null) {
+    const ticks = waited(root, plan.id, head.sha)
+    const at = `${fork}@${head.sha.slice(0, 12)}`
+    if (ticks <= APPEARS) return held(verdict.spans, `${at} ${waiting}, tick ${String(ticks)} of ${String(APPEARS)}`)
+  }
+  record(db, join(root, 'rails/ci-green'), plan.id, verdict, 0)
+  forkGreen(db, plan.id, verdict.outcome === 'pass')
+  return null
+}
+
+function unfinished(spans: string[]): string | null {
+  if (carries(spans, PENDING)) return 'is still running CI'
+  return carries(spans, MISSING) ? 'has no run yet' : null
+}
+
+function carries(spans: string[], span: string): boolean {
+  return spans.some((one) => one.endsWith(span))
+}
+
+/**
+ * A wait records nothing -- the gate reads a ci-green verdict only for a head CI has actually judged --
+ * and moves nothing: a `rewind` would zero `plans.retries`, and the two-strike escalation `back()`
+ * counts is the only way a fork that stays red leaves step 6.
+ */
+function held(spans: string[], note: string): Outcome {
+  return { outcome: 'pass', spans, held: true, note }
+}
+
+/** The count is kept against the head it counts for, so a rebuilt branch starts its window over. */
+function waited(root: string, plan: number, sha: string): number {
+  const seen = (maybe(root, plan, WAITS) ?? '').split(' ')
+  const ticks = seen[0] === sha ? Number(seen[1]) + 1 : 1
+  put(root, plan, WAITS, `${sha} ${String(ticks)}`)
+  return ticks
+}
+
+function commits(dir: string): string[] {
+  return git(dir, ['log', '-z', '--format=%B', `${MAIN}..HEAD`]).split('\0').filter((m) => m.trim() !== '')
+}
+
+function touched(root: string, plan: number): string[] {
+  return parse(diffOf(root, plan)).map((f) => f.path)
 }
 
 /**

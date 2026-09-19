@@ -9,7 +9,7 @@ import { internal, originIssue, stampHead, type PlanRow } from '../store/plans.t
 import { at, type Step } from '../templates/pr-path.ts'
 import type { Outcome } from './kind.ts'
 import { preReview } from './rails.ts'
-import { headOf, land, push, type Wire } from './push.ts'
+import { forkCi, headOf, land, push, type Wire } from './push.ts'
 import { abortMerge, behindMain, cloned, conflicted, diffOf, fetchMain, maybe, mergeMain, put, SELF, srcDir } from './workspace.ts'
 
 interface Target { repo: string; issue_no: number; state: string; measured_at: string; pulse: string }
@@ -28,7 +28,7 @@ export function kernel(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcom
   const step = at(plan.step)
   if (step.name === 'rails') return preReview(db, root, plan)
   if (step.name === 'measure') return measure(db, plan)
-  if (step.name === 'ready') return readyGate(db, root, plan)
+  if (step.name === 'ready') return readyGate(db, root, plan, wire)
   if (step.name === 'batch') return batch(db, root, plan, wire)
   if (step.name === 'push') return push(db, root, plan, wire)
   return { outcome: 'pass', spans: [], note: step.name }
@@ -58,12 +58,16 @@ function batch(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
   return land(db, root, plan, approval, wire)
 }
 
-function readyGate(db: Db, root: string, plan: PlanRow): Outcome {
+function readyGate(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
   const moved = baseMoved(root, plan)
   if (moved !== null) return moved
-  const proof = proofOf(db, plan)
-  if (proof === null) return { outcome: 'refuse', spans: ['deliverables'], note: `plan ${String(plan.id)} has no deliverable row` }
-  const verdict = readyRail(db, proof)
+  const repo = repoOf(db, plan)
+  if (repo === null) return { outcome: 'refuse', spans: ['targets'], note: `plan ${String(plan.id)} has no target row` }
+  const row = gatedRow(db, plan.id)
+  if (row === null) return { outcome: 'refuse', spans: ['deliverables'], note: `plan ${String(plan.id)} has no deliverable row` }
+  const waiting = forkCi(db, root, plan, repo, wire)
+  if (waiting !== null) return waiting
+  const verdict = readyRail(db, proofOf(db, plan, repo, row))
   recordRail(db, join(root, 'rails/ready'), plan.id, verdict, 0)
   return { outcome: verdict.outcome, spans: verdict.spans, note: `ready: ${verdict.message}` }
 }
@@ -99,13 +103,15 @@ function cutAgain(span: 'base:stale' | 'base:conflict', note: string): Outcome {
   return { outcome: 'refuse', spans: [span], note: `${note}; cut it again from main` }
 }
 
-function proofOf(db: Db, plan: PlanRow): Proof | null {
-  const row = db.prepare(`SELECT tests_pass, byte_identical_elsewhere, fork_ci_green, bot_clean, diff_digest
-    FROM deliverables WHERE plan_id = ? ORDER BY id DESC LIMIT 1`).get(plan.id) as
-    { tests_pass: number; byte_identical_elsewhere: number; fork_ci_green: number; bot_clean: number
-      diff_digest: string } | undefined
-  const repo = repoOf(db, plan)
-  if (row === undefined || repo === null) return null
+interface Gated { tests_pass: number; byte_identical_elsewhere: number; bot_clean: number; diff_digest: string }
+
+/** The row senior left, read before the branch is sent: `forkCi` has no row to stamp without one. */
+function gatedRow(db: Db, plan: number): Gated | null {
+  return (db.prepare(`SELECT tests_pass, byte_identical_elsewhere, bot_clean, diff_digest
+    FROM deliverables WHERE plan_id = ? ORDER BY id DESC LIMIT 1`).get(plan) ?? null) as Gated | null
+}
+
+function proofOf(db: Db, plan: PlanRow, repo: string, row: Gated): Proof {
   const ci = db.prepare("SELECT outcome, subject_digest FROM verdicts WHERE plan = ? AND rail_id = 'ci-green' ORDER BY id DESC LIMIT 1")
     .get(plan.id) as { outcome: string; subject_digest: string } | undefined
   return {
@@ -114,11 +120,18 @@ function proofOf(db: Db, plan: PlanRow): Proof | null {
     at: new Date().toISOString().slice(0, 10),
     tests_pass: row.tests_pass === 1,
     byte_identical_elsewhere: row.byte_identical_elsewhere === 1,
-    fork_public: row.fork_ci_green === 1,
+    fork_public: forkGreened(db, plan.id),
     bot_clean: row.bot_clean === 1,
     ci: green(ci),
     spans: [row.diff_digest.slice(0, 12)],
   }
+}
+
+/** Read again after `forkCi`: the column it stamps is the fork-CI proof, and the row was found before it ran. */
+function forkGreened(db: Db, plan: number): boolean {
+  const row = db.prepare('SELECT fork_ci_green FROM deliverables WHERE plan_id = ? ORDER BY id DESC LIMIT 1')
+    .get(plan) as { fork_ci_green: number } | undefined
+  return row?.fork_ci_green === 1
 }
 
 /** The repository the ready rail reads a pulse for. Ours has none to read, and needs none (#20). */
@@ -250,8 +263,9 @@ function passed(db: Db, plan: number, column: 'gate' | 'rail_id', value: string)
   return row?.outcome === 'pass'
 }
 
+/** The four the gates left at senior. The fifth, fork CI, is the ready step's own first act. */
 function proven(db: Db, plan: PlanRow): boolean {
   return db.prepare(`SELECT 1 FROM deliverables WHERE plan_id = ? AND tests_pass = 1
-    AND byte_identical_elsewhere = 1 AND fork_ci_green = 1 AND bot_clean = 1 AND target_warm = 1`)
+    AND byte_identical_elsewhere = 1 AND bot_clean = 1 AND target_warm = 1`)
     .get(plan.id) !== undefined
 }

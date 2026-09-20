@@ -61,7 +61,7 @@ test('two defects in two files come back as one refusal naming both spans', asyn
   const { db, plan } = bench(root)
   const out = await judge(db, root, 'code_quality', plan, seeded({ diff: fixture('code_quality', 'pair.diff') }),
     replies(fixture('code_quality', 'pair.reply.md')), TRANSCRIPT)
-  expect(out.outcome).toMatchObject({ outcome: 'refuse', defect_class: 'correctness', spans: ['src/stats.ts:2', 'src/parse.ts:1'] })
+  expect(out.outcome).toMatchObject({ outcome: 'refuse', defect_class: 'correctness', spans: ['src/stats.ts:2', 'src/parse.ts:1'], origin_kind: 'ruling', origin_ref: 'reviewers.verdict' })
   expect(out.outcome.message).toContain('scope')
   expect(db.prepare('SELECT count(*) AS n FROM verdicts WHERE plan = ?').get(plan)).toEqual({ n: 1 })
 })

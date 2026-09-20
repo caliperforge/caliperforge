@@ -18,16 +18,39 @@ export interface Failure {
   command: string
   code: number
   output: string
+  retried: boolean
 }
 
 export type Run = (args: string[], cwd: string) => { code: number; output: string }
 
 export function checks(src: string, run: Run = npm): Failure | null {
   for (const args of commands(src)) {
-    const { code, output } = run(args, src)
-    if (code !== 0) return { command: `npm ${args.join(' ')}`, code, output: tail(output) }
+    const first = run(args, src)
+    if (first.code === 0) continue
+    const retried = loadOnly(first.output)
+    const { code, output } = retried ? run(args, src) : first
+    if (code !== 0) return { command: `npm ${args.join(' ')}`, code, output: tail(output), retried }
   }
   return null
+}
+
+/** vitest names a failed test where it ran it and again under Failed Tests; each naming opens a block. */
+const OPENS = /^[ \t]*(?:FAIL\b|×[ \t])/
+
+const LOAD = /Test timed out in \d+ *ms|Hook timed out|expected [\d.]+ to be less than [\d.]+/
+
+function loadOnly(output: string): boolean {
+  const named = failures(output)
+  return named.length > 0 && named.every((block) => LOAD.test(block))
+}
+
+function failures(output: string): string[] {
+  const blocks: string[][] = []
+  for (const line of output.split('\n')) {
+    if (OPENS.test(line)) blocks.push([line])
+    else blocks.at(-1)?.push(line)
+  }
+  return blocks.map((block) => block.join('\n'))
 }
 
 function commands(src: string): string[][] {

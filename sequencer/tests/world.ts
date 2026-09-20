@@ -65,12 +65,21 @@ export function stub(text: string, exit = 0, review = PASS, seen?: (packet: Pack
   }
 }
 
-/** The stub with a sleeping `fire`, so a lap's wall time is the fires it waits on and not the rows it writes. */
-export function slow(ms: number, text: string): Provider {
+/** The stub with a sleeping `fire`, and `peak()`: the most fires a lap ever held in flight at once. */
+export function slow(ms: number, text: string): Provider & { peak: () => number } {
   const inner = stub(text)
+  let live = 0
+  let peak = 0
   return {
     ...inner,
-    fire: async (packet) => { await sleep(ms); return inner.fire(packet) },
+    peak: () => peak,
+    fire: async (packet) => {
+      live += 1
+      peak = Math.max(peak, live)
+      await sleep(ms)
+      live -= 1
+      return inner.fire(packet)
+    },
   }
 }
 

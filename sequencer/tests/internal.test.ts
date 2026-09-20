@@ -35,13 +35,13 @@ function pair(): World {
   return w
 }
 
-test('a lap fires the picks of a pipe at once: two plans cost one sleep and each leaves its own run row', async () => {
+test('a lap fires the picks of a pipe at once: two fires are in flight together and each leaves its own run row', async () => {
   const w = pair()
   for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
 
-  const began = Date.now()
-  const fired = await tick(w.db, w.root, slow(NAP, CARRIED))
-  expect(Date.now() - began).toBeLessThan(2 * NAP)
+  const provider = slow(NAP, CARRIED)
+  const fired = await tick(w.db, w.root, provider)
+  expect(provider.peak()).toBe(2)
   expect(fired.map((f) => f.plan)).toEqual([ID, SECOND])
   expect([plan(w.db, ID).state, plan(w.db, SECOND).state]).toEqual(['running', 'running'])
   expect(w.db.prepare('SELECT plan, seat FROM runs WHERE step = 2 ORDER BY plan').all())

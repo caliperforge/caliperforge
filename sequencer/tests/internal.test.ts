@@ -1,8 +1,10 @@
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { landed } from '../../cli/batch.ts'
+import { check } from '../../cli/digests.ts'
+import { digest, listed } from '../../runner/rules.ts'
 import { headApproved, headDigest } from '../../store/approvals.ts'
 import { advance } from '../../store/plans.ts'
 import { tick } from '../index.ts'
@@ -95,6 +97,35 @@ test('the internal checkout is our own repo on p<plan>-<slug>, built by the type
   expect(w.db.prepare('SELECT seat FROM runs WHERE step = 2').get()).toEqual({ seat: 'typescript_specialist' })
   expect(internalBranch(7, 'A/B: an issue — with punctuation!')).toBe('p7-a-b-an-issue-with-punctuation')
   expect(internalBranch(7, '!!!')).toBe('p7-issue')
+})
+
+test('step 3 fills the digests an internal checkout holds, and a target checkout has none to fill', async () => {
+  const w = mine()
+  for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  const src = srcDir(w.root, ID)
+  appendFileSync(join(src, 'seats/brief_writer/prompt.md'), '\n')
+
+  const rails = (await tick(w.db, w.root, stub(CARRIED)))[0]
+  expect(rails).toMatchObject({ plan: ID, step: 3, name: 'rails', outcome: 'pass' })
+  expect(listed(src).digests.brief_writer?.prompt).toBe(digest(join(src, 'seats/brief_writer/prompt.md')))
+  expect(check(src, new Date().toISOString().slice(0, 10))).toEqual([])
+
+  const t = world()
+  approve(t.db, t.target)
+  for (let at = 0; at < 3; at += 1) await tick(t.db, t.root, stub(CARRIED))
+  expect((await tick(t.db, t.root, stub(CARRIED)))[0]).toMatchObject({ step: 3, name: 'rails', outcome: 'pass' })
+  expect(existsSync(join(srcDir(t.root, t.plan), 'rules'))).toBe(false)
+})
+
+test('a roster the build left unfillable refuses that plan back to step 2 and the lap still steps the other', async () => {
+  const w = pair()
+  for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  writeFileSync(join(srcDir(w.root, ID), 'rules/roster.yaml'), 'seats: []\n')
+
+  const fired = await tick(w.db, w.root, stub(CARRIED))
+  expect(fired[0]).toMatchObject({ plan: ID, step: 3, outcome: 'refuse', spans: ['rules/roster.yaml'] })
+  expect(fired[1]).toMatchObject({ plan: SECOND, step: 3, outcome: 'pass' })
+  expect(plan(w.db, ID).step).toBe(2)
 })
 
 /**

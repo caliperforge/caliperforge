@@ -117,12 +117,15 @@ function remotes(root: string, files: Record<string, string>): void {
  * Our own repository, standing in for github the same way `remotes()` stands in for a
  * stranger's: an internal plan clones it, fetches its `main` and branches off that. It is
  * not bare, so it takes a landing push onto its checked-out `main` only under `denyCurrentBranch`.
+ * It carries the rules an internal checkout holds, because step 3 fills their digests in one.
  */
 export function ours(root: string, files: Record<string, string> = TYPESCRIPT): void {
   const dir = join(root, 'remotes', SELF)
   mkdirSync(dir, { recursive: true })
   git(dir, ['init', '-q', '-b', 'main'])
   git(dir, ['config', 'receive.denyCurrentBranch', 'updateInstead'])
+  for (const kernel of ['rules', 'seats']) cpSync(join(repo, kernel), join(dir, kernel), { recursive: true })
+  cpSync(join(repo, 'rules.seed.sql'), join(dir, 'rules.seed.sql'))
   for (const [path, body] of Object.entries(files)) {
     mkdirSync(dirname(join(dir, path)), { recursive: true })
     writeFileSync(join(dir, path), body)

@@ -18,6 +18,7 @@ import { receipt } from '../store/ticks.ts'
 import { adopt, render as renderAdopt } from './adopt.ts'
 import { approve as approveCard, batch, landed, refuse as refuseCard, render, renderLanded } from './batch.ts'
 import { awaiting, day, dryLines, halted, laneLine, open as openPlans, runsOf, section, tickNote, verdictsOf, windowLine } from './brief.ts'
+import { check, fill } from './digests.ts'
 import { measure, render as renderPulse } from './measure.ts'
 import { add as fileIssue, render as renderUnfiled, unfiled } from './plan.ts'
 import { add } from './queue.ts'
@@ -38,6 +39,22 @@ const cf = new Command('cf').version(pkg.version)
 cf.command('migrate').action(() => {
   for (const file of migrate(openDb(join(root, 'cf.db')), join(root, 'schema'))) out(`applied ${file}\n`)
 })
+
+cf.command('digests').option('--check', 'write nothing; name each digest the tree contradicts')
+  .action((options: { check?: boolean }) => {
+    const today = new Date().toISOString().slice(0, 10)
+    if (options.check === true) {
+      const stale = check(root, today)
+      for (const s of stale) {
+        process.stderr.write(`cf: ${s.path} is not what cf digests writes\n`)
+        for (const [id, hash] of Object.entries(s.digests)) process.stderr.write(`cf:   ${id} should be ${hash}\n`)
+      }
+      process.exitCode = stale.length === 0 ? 0 : 1
+      return
+    }
+    const written = fill(root, today)
+    out(written.length === 0 ? 'digests already right\n' : written.map((p) => `wrote ${p}\n`).join(''))
+  })
 
 cf.command('dump').argument('[out]', 'file to write the dump to', 'cf.dump.sql').action((file: string) => {
   const path = resolve(root, file)

@@ -15,6 +15,8 @@ const Roster = z.object({
   ),
 })
 
+const Written = Roster.extend({ digests: z.record(z.string(), z.record(z.string(), z.string())).catch({}) })
+
 export const WRITERS = new Set(['Write', 'Edit', 'NotebookEdit', 'Bash', 'MultiEdit'])
 
 export const Seat = z.object({
@@ -45,7 +47,7 @@ export function rules(root: string): Rule[] {
     { id: 'rules/rails.yaml', kind: 'rail', path: 'rules/rails.yaml', content_hash: rails },
     { id: 'rules/tight.md', kind: 'card', path: 'rules/tight.md', content_hash: tight },
     ...manifest(root).rails.map((id) => ({ id, kind: 'rail' as const, path: 'rules/rails.yaml', content_hash: rails })),
-    ...listed(root).seats.map((id) => ({ id, kind: 'card' as const, path: 'rules/roster.yaml', content_hash: roster })),
+    ...written(root).seats.map((id) => ({ id, kind: 'card' as const, path: 'rules/roster.yaml', content_hash: roster })),
   ]
 }
 
@@ -75,10 +77,26 @@ export function tight(root: string): string {
   return readFileSync(join(root, 'rules/tight.md'), 'utf8')
 }
 
-function listed(root: string): z.infer<typeof Roster> {
-  return Roster.parse(parse(readFileSync(join(root, 'rules/roster.yaml'), 'utf8')))
+export function listed(root: string): z.infer<typeof Roster> {
+  return Roster.parse(read(root))
 }
 
-function digest(path: string): string {
+/** The roster as it stands, digests and mispastes alike: what `listed()` refuses is what `cf digests` repairs. */
+export function written(root: string): z.infer<typeof Written> {
+  return Written.parse(read(root))
+}
+
+function read(root: string): unknown {
+  return parse(readFileSync(join(root, 'rules/roster.yaml'), 'utf8'))
+}
+
+export function expected(root: string): Record<string, { manifest: string; prompt: string }> {
+  return Object.fromEntries(written(root).seats.map((name) => [name, {
+    manifest: digest(join(root, 'seats', name, 'manifest.yaml')),
+    prompt: digest(join(root, 'seats', name, 'prompt.md')),
+  }]))
+}
+
+export function digest(path: string): string {
   return createHash('sha256').update(readFileSync(path)).digest('hex')
 }

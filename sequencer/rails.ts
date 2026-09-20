@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { fill } from '../cli/digests.ts'
 import { authority } from '../rails/authority/index.ts'
 import { audit, record } from '../rails/completion-audit/index.ts'
 import { parse } from '../rails/diff.ts'
@@ -17,9 +18,12 @@ import { diffOf, doneIds, get, languageOf, srcDir } from './workspace.ts'
 
 /**
  * Step 3: the six rails the map's step list names, in its order, ending at the first refusal, and
- * then the checkout's own type check, style check and tests. No reviewer tokens.
+ * then the checkout's own type check, style check and tests. No reviewer tokens. The fill comes
+ * first so that `rest()` reads a diff carrying the digests, not the ones the builder left behind.
  */
 export function preReview(db: Db, root: string, plan: PlanRow): Outcome {
+  const refusal = internal(plan) ? unfilled(srcDir(root, plan.id)) : null
+  if (refusal !== null) return refusal
   const handback = get(root, plan.id, 'step-2.handback.md')
   const first = audit(handback, doneIds(get(root, plan.id, 'issue.md')))
   record(db, plan.id, first, 0)
@@ -33,6 +37,21 @@ export function preReview(db: Db, root: string, plan: PlanRow): Outcome {
   const failed = internal(plan) ? checks(srcDir(root, plan.id)) : null
   if (failed !== null) return broke(failed)
   return { outcome: 'pass', spans: [], note: 'pre-review: six rails pass' }
+}
+
+/** The roster and seat files a fill reads are the builder's, so their typo refuses this plan where a throw takes the lap. */
+function unfilled(src: string): Outcome | null {
+  try {
+    fill(src, new Date().toISOString().slice(0, 10))
+    return null
+  } catch (error) {
+    return {
+      outcome: 'refuse',
+      spans: ['rules/roster.yaml'],
+      note: 'digests: the checkout could not be filled',
+      message: error instanceof Error ? error.message : String(error),
+    }
+  }
 }
 
 function broke(failed: Failure): Outcome {

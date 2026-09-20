@@ -6,7 +6,7 @@ import { expect, test } from 'vitest'
 import { headApproved } from '../../store/approvals.ts'
 import { tick } from '../index.ts'
 import { headOf, land, type Wire } from '../push.ts'
-import { liveTree, srcDir } from '../workspace.ts'
+import { conflicted, diffOf, fetchMain, get, liveTree, MAIN, srcDir } from '../workspace.ts'
 import { approve, built, CARRIED, internalPlan, moveMain, ours, plan, stub, watched, world, type World } from './world.ts'
 
 const ID = 2
@@ -23,10 +23,15 @@ function mine(): World {
   return w
 }
 
+/** Steps 0 to 2: the plan is on the rails step with the builder's bytes in the tree, uncommitted. */
+async function atRails(w: World, wire: Wire, id = ID): Promise<void> {
+  for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  built(w.root, id, 'export const landed = true')
+}
+
 /** Steps 0 to 6: the builder's bytes land at step 2, and step 6 sends the branch to the fork. */
 async function atBatch(w: World, wire: Wire): Promise<void> {
-  for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
-  built(w.root, ID, 'export const landed = true')
+  await atRails(w, wire)
   for (let at = 0; at < 4; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
 }
 
@@ -152,6 +157,101 @@ test('a base behind main merges main and re-runs the rails once, then refuses on
   expect(refused).toMatchObject({ step: 6, outcome: 'refuse', spans: ['base:stale'] })
   expect(refused?.note).toContain('behind main a second time')
   expect(headOf(w.root, ID).branch).toBe(BRANCH)
+})
+
+test('a stale tree merges main before the rails read it and records the new base, in one tick', async () => {
+  const w = mine()
+  const wire = watched([], w.root, ID)
+  await atRails(w, wire)
+  expect(plan(w.db, ID).step).toBe(3)
+  moveMain(w.root, 'ahead.ts')
+
+  const fired = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
+  const src = srcDir(w.root, ID)
+  expect(fired).toMatchObject({ step: 3, name: 'rails', outcome: 'pass' })
+  expect(plan(w.db, ID).step).toBe(4)
+  expect(git(src, ['log', '--oneline', 'HEAD'])).toContain('main moves on ahead.ts')
+  expect(get(w.root, ID, 'base.sha').trim()).toBe(git(src, ['rev-parse', MAIN]))
+  expect(diffOf(w.root, ID)).toContain('export const landed = true')
+})
+
+test('a tree already at main\'s head gains no commit at the rails and its base.sha is byte-identical', async () => {
+  const w = mine()
+  const wire = watched([], w.root, ID)
+  await atRails(w, wire)
+  const src = srcDir(w.root, ID)
+  const head = git(src, ['rev-parse', 'HEAD'])
+  const base = get(w.root, ID, 'base.sha')
+
+  expect((await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0])
+    .toMatchObject({ step: 3, outcome: 'pass' })
+  expect(git(src, ['rev-parse', 'HEAD'])).toBe(head)
+  expect(get(w.root, ID, 'base.sha')).toBe(base)
+})
+
+test('a merge that conflicts at the rails aborts, hands the builder the paths and spends no retry', async () => {
+  const w = mine()
+  const wire = watched([], w.root, ID)
+  await atRails(w, wire)
+  const src = srcDir(w.root, ID)
+  const base = get(w.root, ID, 'base.sha')
+  moveMain(w.root, 'src/hello.ts', 'export const hello = (): string => "main took this line"\n')
+
+  const refused = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
+  expect(refused).toMatchObject({ step: 3, outcome: 'refuse', spans: ['src/hello.ts'] })
+  expect(plan(w.db, ID)).toMatchObject({ step: 2, retries: 0 })
+  expect(conflicted(src)).toBe(false)
+  expect(git(src, ['status', '--porcelain'])).toBe('')
+  expect(get(w.root, ID, 'base.sha')).toBe(base)
+  expect(get(w.root, ID, 'refusal.md')).toContain('src/hello.ts')
+})
+
+test('a tree a tick stopped mid-merge in commits no conflict marker at the rails', async () => {
+  const w = mine()
+  const wire = watched([], w.root, ID)
+  await atRails(w, wire)
+  const src = srcDir(w.root, ID)
+  moveMain(w.root, 'src/hello.ts', 'export const hello = (): string => "main took this line"\n')
+  headOf(w.root, ID)
+  fetchMain(src)
+  expect(() => git(src, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'merge', '--no-edit', MAIN])).toThrow()
+  expect(conflicted(src)).toBe(true)
+
+  const refused = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
+  expect(refused).toMatchObject({ step: 3, outcome: 'refuse', spans: ['src/hello.ts'] })
+  expect(plan(w.db, ID)).toMatchObject({ step: 2, retries: 0 })
+  expect(conflicted(src)).toBe(false)
+  expect(git(src, ['status', '--porcelain'])).toBe('')
+  expect(diffOf(w.root, ID)).not.toContain('<<<<<<<')
+  expect(git(src, ['log', '-p', BRANCH])).not.toContain('<<<<<<<')
+})
+
+test('the merge the rails step makes is the machine\'s commit, not the host user\'s', async () => {
+  const w = mine()
+  const wire = watched([], w.root, ID)
+  await atRails(w, wire)
+  moveMain(w.root, 'ahead.ts')
+
+  await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  expect(git(srcDir(w.root, ID), ['log', '-1', '--format=%ae %ce', 'HEAD']))
+    .toBe('cf@caliperforge.dev cf@caliperforge.dev')
+})
+
+test('a target\'s tree at the rails is untouched when our own main moves', async () => {
+  const w = world()
+  approve(w.db, w.target)
+  const wire = watched([], w.root, 1)
+  await atRails(w, wire, 1)
+  ours(w.root)
+  moveMain(w.root, 'ahead.ts')
+  const src = srcDir(w.root, 1)
+  const head = git(src, ['rev-parse', 'HEAD'])
+  const base = get(w.root, 1, 'base.sha')
+
+  expect((await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0])
+    .toMatchObject({ step: 3, outcome: 'pass' })
+  expect(git(src, ['rev-parse', 'HEAD'])).toBe(head)
+  expect(get(w.root, 1, 'base.sha')).toBe(base)
 })
 
 test('a seat works in the plan checkout and nowhere else under the machine\'s own tree', () => {

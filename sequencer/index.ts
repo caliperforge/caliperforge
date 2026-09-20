@@ -133,6 +133,7 @@ function fire(db: Db, root: string, plan: PlanRow, step: Step, provider: Provide
 
 function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcome): string {
   if (outcome.held === true) return 'running'
+  if (outcome.outcome === 'refuse') put(root, plan.id, 'refusal.md', refusalText(step, outcome))
   if (outcome.rewind !== undefined) {
     rewind(db, plan.id, outcome.rewind)
     return 'running'
@@ -147,7 +148,6 @@ function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcom
     advance(db, plan, step.step + 1)
     return hold(db, plan.id, step.step)
   }
-  put(root, plan.id, 'refusal.md', refusalText(step, outcome))
   // step 2 is the build in templates/pr-path.ts
   return back(db, plan, step.fires === 'review' ? 2 : step.step - 1)
 }

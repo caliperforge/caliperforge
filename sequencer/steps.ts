@@ -10,7 +10,7 @@ import { at, type Step } from '../templates/pr-path.ts'
 import type { Outcome } from './kind.ts'
 import { preReview } from './rails.ts'
 import { forkCi, headOf, land, push, type Wire } from './push.ts'
-import { abortMerge, behindMain, cloned, conflicted, diffOf, fetchMain, maybe, mergeMain, put, SELF, srcDir } from './workspace.ts'
+import { abortMerge, behindMain, cloned, conflicted, diffOf, fetchMain, maybe, mergeMain, put, SELF, srcDir, unmerged } from './workspace.ts'
 
 interface Target { repo: string; issue_no: number; state: string; measured_at: string; pulse: string }
 
@@ -26,7 +26,7 @@ export function blocked(db: Db, plan: PlanRow, today: string): string | null {
 
 export function kernel(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
   const step = at(plan.step)
-  if (step.name === 'rails') return preReview(db, root, plan)
+  if (step.name === 'rails') return freshBase(root, plan) ?? preReview(db, root, plan)
   if (step.name === 'measure') return measure(db, plan)
   if (step.name === 'ready') return readyGate(db, root, plan, wire)
   if (step.name === 'batch') return batch(db, root, plan, wire)
@@ -73,12 +73,50 @@ function readyGate(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
 }
 
 /**
+ * Step 3's base, #35 rule 3 one tick before the ready and batch gates: a merge returns no outcome,
+ * so the rails judge the merged tree in this same tick, and it spends none of the `base.merged`
+ * budget those two count their one miss against. A conflict is the builder's to settle, so the
+ * refusal names the unmerged paths and rewinds onto the build. A tick that stopped inside a merge
+ * left that merge open, and its bytes were committed before it, so the abort loses nothing and this
+ * tick merges again from the old base.
+ */
+function freshBase(root: string, plan: PlanRow): Outcome | null {
+  const src = srcDir(root, plan.id)
+  if (!cloned(src)) return null
+  if (conflicted(src)) abortMerge(src)
+  const main = fetchMain(src)
+  if (!behindMain(src)) return null
+  const paths = takeMain(root, plan.id, src, main)
+  if (paths === null) return null
+  return { outcome: 'refuse', spans: paths, note: 'main moved and the branch conflicts with it', rewind: 2 }
+}
+
+/**
+ * The one merge, for step 3 and for the ready and batch gates. The builder's work is committed
+ * first: a merge into a dirty tree is the one way main's bytes and the seat's could be lost against
+ * each other -- and never over unmerged paths, or conflict markers are what the plan's bytes turn
+ * out to be. A merge that cannot be made leaves the branch on its old base and answers with the
+ * paths it stopped on.
+ */
+function takeMain(root: string, plan: number, src: string, main: string): string[] | null {
+  if (conflicted(src)) return unmerged(src)
+  headOf(root, plan)
+  try {
+    mergeMain(src)
+  } catch {
+    const paths = unmerged(src)
+    abortMerge(src)
+    return paths
+  }
+  put(root, plan, 'base.sha', `${main}\n`)
+  return null
+}
+
+/**
  * #35 rule 3: nothing lands over a moved main. The first miss merges main into the branch and sends
  * the plan back to the rails, which judge the merged bytes; a second miss is a branch that cannot
- * keep up with main and refuses so it is cut again. The builder's work is committed first: a merge
- * into a dirty tree is the one way main's bytes and the seat's could be lost against each other --
- * and a tree that already carries unmerged paths is refused before that commit, `base:conflict`, so
- * conflict markers are never what the plan's bytes turn out to be.
+ * keep up with main and refuses so it is cut again. A tree still carrying unmerged paths this late
+ * is cut again too, `base:conflict`: past step 3 no builder is coming back to settle them.
  */
 function baseMoved(root: string, plan: PlanRow): Outcome | null {
   const src = srcDir(root, plan.id)
@@ -87,15 +125,8 @@ function baseMoved(root: string, plan: PlanRow): Outcome | null {
   const main = fetchMain(src)
   if (!behindMain(src)) return null
   if (maybe(root, plan.id, 'base.merged') !== null) return cutAgain('base:stale', 'the branch is behind main a second time')
-  headOf(root, plan.id)
-  try {
-    mergeMain(src)
-  } catch {
-    abortMerge(src)
-    return cutAgain('base:conflict', 'the branch conflicts with main')
-  }
+  if (takeMain(root, plan.id, src, main) !== null) return cutAgain('base:conflict', 'the branch conflicts with main')
   put(root, plan.id, 'base.merged', `${main}\n`)
-  put(root, plan.id, 'base.sha', `${main}\n`)
   return { outcome: 'pass', spans: ['base:stale'], note: 'main moved; merged it and re-ran the rails', rewind: 3 }
 }
 

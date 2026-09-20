@@ -131,9 +131,13 @@ export function abortMerge(dir: string): void {
   }
 }
 
+export function unmerged(dir: string): string[] {
+  return git(dir, ['diff', '--name-only', '--diff-filter=U']).split('\n').filter((path) => path !== '')
+}
+
 /** Unmerged paths: a tree a tick stopped mid-merge in. Nothing is committed, signed or landed from one. */
 export function conflicted(dir: string): boolean {
-  return git(dir, ['diff', '--name-only', '--diff-filter=U']).trim() !== ''
+  return unmerged(dir).length > 0
 }
 
 /**

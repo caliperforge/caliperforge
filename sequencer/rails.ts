@@ -39,7 +39,7 @@ function broke(failed: Failure): Outcome {
   return {
     outcome: 'refuse',
     spans: [`checks:${failed.command.split(' ').at(-1) ?? ''}`],
-    note: `${failed.command} exit ${String(failed.code)}`,
+    note: `${failed.command} exit ${String(failed.code)}${failed.retried ? ' after one retry' : ''}`,
     message: failed.output,
   }
 }

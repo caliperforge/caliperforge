@@ -4,7 +4,7 @@ import type { Verdict } from '../store/verdict.ts'
  * What a step produced. `outcome` is the routing decision; `spans` is what a refusal names.
  * `rewind` is the step an outcome goes back to -- the moved base of #35 rule 3 -- and clears the plan's
  * retries; `held` leaves the plan on its step with its retries intact. `message` is the reviewer's
- * own prose, which the builder rebuilds against.
+ * own prose, which the builder rebuilds against. `blip` is a checkout the network failed.
  */
 export interface Outcome {
   outcome: Verdict['outcome']
@@ -13,6 +13,7 @@ export interface Outcome {
   message?: string
   rewind?: number
   held?: true
+  blip?: true
 }
 
 export interface Fired {

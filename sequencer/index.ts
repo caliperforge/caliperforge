@@ -1,9 +1,11 @@
 import { pr as readPr, type Pr } from '../cli/gh.ts'
 import type { Provider } from '../providers/kind.ts'
+import { digestOf } from '../store/approvals.ts'
 import { hold } from '../store/holds.ts'
 import type { Db } from '../store/index.ts'
 import { cap, hhmm, zone } from '../store/lanes.ts'
 import { advance, back, finish, internal, live, needsCeo, openPipes, rewind, underCap, type PipeRow, type PlanRow } from '../store/plans.ts'
+import { blipped, fingerprint, refused, WHY, type Why } from '../store/refusals.ts'
 import { at, last, type Step } from '../templates/pr-path.ts'
 import { capture } from './capture.ts'
 import type { Fired, Outcome } from './kind.ts'
@@ -11,7 +13,7 @@ import { started } from './signals.ts'
 import type { Wire } from './push.ts'
 import { fireBrief, fireReview, fireSeat } from './seat.ts'
 import { blocked, kernel, proved, targetOf } from './steps.ts'
-import { branchOf, checkout, internalBranch, languageOf, put, SELF, srcDir, titleOf } from './workspace.ts'
+import { branchOf, checkout, diffOf, internalBranch, languageOf, maybe, put, SELF, srcDir, titleOf } from './workspace.ts'
 
 /** `read` and `wire` are the network a tick touches on its own account; both are injected so a test can drive a lap offline. */
 export async function tick(db: Db, root: string, provider: Provider, now: Date = new Date(),
@@ -106,7 +108,7 @@ function workspace(db: Db, root: string, plan: PlanRow): { language: string | nu
     checkout(root, plan.id, tree.repo, tree.branch)
   } catch (error) {
     const note = error instanceof Error ? error.message : String(error)
-    return { language: null, failed: { outcome: 'refuse', spans: [tree.repo], note: `checkout: ${note}` } }
+    return { language: null, failed: { outcome: 'refuse', spans: [tree.repo], note: `checkout: ${note}`, blip: true } }
   }
   return { language: languageOf(srcDir(root, plan.id)), failed: null }
 }
@@ -133,6 +135,7 @@ function fire(db: Db, root: string, plan: PlanRow, step: Step, provider: Provide
 
 function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcome): string {
   if (outcome.held === true) return 'running'
+  if (outcome.blip === true) return blip(db, root, plan, step, outcome)
   if (outcome.outcome === 'refuse') put(root, plan.id, 'refusal.md', refusalText(step, outcome))
   if (outcome.rewind !== undefined) {
     rewind(db, plan.id, outcome.rewind)
@@ -150,8 +153,35 @@ function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcom
       return hold(db, plan.id, step.step)
     })()
   }
+  const why = refused(db, { plan: plan.id, step: step.step, fingerprint: fingerprintOf(step, outcome),
+    diff: step.step >= 3 ? digestOf(diffOf(root, plan.id)) : null })
+  if (why !== 'again') stopped(root, plan.id, why)
   // step 2 is the build in templates/pr-path.ts
-  return back(db, plan, step.fires === 'review' ? 2 : step.step - 1)
+  return back(db, plan, step.fires === 'review' ? 2 : step.step - 1, why !== 'again')
+}
+
+/** A failed checkout leaves the plan on its step for the next tick, until it has failed `BLIPS` times in a row. */
+function blip(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcome): string {
+  const why = blipped(db, plan.id, step.step)
+  if (why === 'again') return 'running'
+  put(root, plan.id, 'refusal.md', refusalText(step, outcome))
+  stopped(root, plan.id, why)
+  needsCeo(db, plan)
+  return 'blocked_on_ceo'
+}
+
+/** A failed check is known by what failed, not by the one span every failure of that check shares. */
+function fingerprintOf(step: Step, outcome: Outcome): string {
+  const checked = outcome.spans.some((s) => s.startsWith('checks:'))
+  return fingerprint(step.step, outcome.spans, checked ? (outcome.message ?? '') : '')
+}
+
+function stopped(root: string, plan: number, why: Exclude<Why, 'again'>): void {
+  put(root, plan, 'refusal.md', `${maybe(root, plan, 'refusal.md') ?? ''}
+# Stopped
+
+${WHY[why]}.
+`)
 }
 
 function refusalText(step: Step, outcome: Outcome): string {

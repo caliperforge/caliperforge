@@ -91,14 +91,22 @@ export function advance(db: Db, plan: PlanRow, step: number): void {
   db.prepare("UPDATE plans SET step = ?, state = 'running' WHERE id = ?").run(step, plan.id)
 }
 
-export function back(db: Db, plan: PlanRow, step: number): 'retried' | 'blocked_on_ceo' {
-  if (plan.retries >= 1) {
+/** `stop` is `store/refusals.ts`'s call; `retries` only marks that the plan has been round once, which names a target's branch. */
+export function back(db: Db, plan: PlanRow, step: number, stop: boolean): 'retried' | 'blocked_on_ceo' {
+  if (stop) {
     db.prepare("UPDATE plans SET state = 'blocked_on_ceo' WHERE id = ?").run(plan.id)
     return 'blocked_on_ceo'
   }
-  db.prepare("UPDATE plans SET step = ?, retries = retries + 1, state = 'running' WHERE id = ?")
+  db.prepare("UPDATE plans SET step = ?, retries = 1, state = 'running' WHERE id = ?")
     .run(Math.max(step, 0), plan.id)
   return 'retried'
+}
+
+/** A person sends a blocked plan round again: a refused build goes back to the builder, anything earlier re-runs its step. */
+export function retry(db: Db, plan: PlanRow): number {
+  const step = plan.step >= 3 ? 2 : plan.step
+  db.prepare("UPDATE plans SET step = ?, state = 'running' WHERE id = ?").run(step, plan.id)
+  return step
 }
 
 export function needsCeo(db: Db, plan: PlanRow): void {

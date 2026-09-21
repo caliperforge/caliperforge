@@ -81,11 +81,17 @@ function openTranscript(packet: Packet): (message: unknown) => void {
   return (message) => { appendFileSync(packet.transcript, `${JSON.stringify(message)}\n`) }
 }
 
+/**
+ * A write outside the fence ends the step. A command outside the seat's list is refused and the seat goes on
+ * with its other tools: once a builder held `npm`, a `grep` it reached for ended the whole build (plan 62, 09-21).
+ */
 export function gate(packet: Packet, input: HookInput): SyncHookJSONOutput {
   if (input.hook_event_name !== 'PreToolUse') return { continue: true }
-  const denied = input.tool_name === 'Bash'
-    ? ranOutside(packet.tools, input.tool_input)
-    : wroteOutside(packet, input.tool_name, input.tool_input)
+  if (input.tool_name === 'Bash') {
+    const refused = ranOutside(packet.tools, input.tool_input)
+    return refused === null ? { continue: true } : deny(refused)
+  }
+  const denied = wroteOutside(packet, input.tool_name, input.tool_input)
   return denied === null ? { continue: true } : stop(denied)
 }
 
@@ -111,6 +117,10 @@ function admits(pattern: string, command: string): boolean {
   return command === prefix || command.startsWith(`${prefix} `)
 }
 
+function deny(reason: string): SyncHookJSONOutput {
+  return { continue: true, hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } }
+}
+
 function stop(reason: string): SyncHookJSONOutput {
   return {
     continue: false,
@@ -129,7 +139,7 @@ export function fired(message: SDKResultMessage, started: number, refused: strin
     { input: 0, cache: 0, output: 0 },
   )
   const denials = refused.length + message.permission_denials.length
-  const ended = message.terminal_reason ?? (denials > 0 ? 'hook_stopped' : 'completed')
+  const ended = message.terminal_reason ?? (refused.length > 0 ? 'hook_stopped' : 'completed')
   const text = message.subtype === 'success' ? message.result : message.errors.join('\n')
   return {
     text: text === '' ? refused.join('\n') : text,

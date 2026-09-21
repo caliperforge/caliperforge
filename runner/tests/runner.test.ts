@@ -68,8 +68,9 @@ test('the builder runs its checks on our tree and holds no shell on a stranger\'
   expect(theirs.tools.some((t) => t.startsWith('Bash('))).toBe(false)
   expect(gate(ours, bash('npm run test -- store/refusals.test.ts'))).toEqual({ continue: true })
   expect(gate(ours, bash('npm run lint -- --fix'))).toEqual({ continue: true })
-  expect(gate(ours, bash('npm install left-pad'))).toMatchObject({ continue: false })
-  expect(gate(ours, bash('npm run tight && rm -rf .'))).toMatchObject({ continue: false })
+  for (const command of ['npm install left-pad', 'npm run tight && rm -rf .', 'grep -rn x src']) {
+    expect(gate(ours, bash(command))).toMatchObject({ continue: true, hookSpecificOutput: { permissionDecision: 'deny' } })
+  }
 })
 
 test('the kotlin seat keeps gradle on a stranger\'s tree', () => {
@@ -121,6 +122,11 @@ test('a hook-stopped session lands non-zero carrying the refusal origin, a compl
   expect(stopped).toMatchObject({ exit: 1, denials: 1, stop_reason: reason, text: reason })
   const clean = fired(result({ result: 'done', terminal_reason: 'completed' }), Date.now(), [])
   expect(clean).toMatchObject({ exit: 0, denials: 0, stop_reason: 'end_turn', text: 'done' })
+})
+
+test('a refused command is counted and the session still lands zero', () => {
+  const denied = { tool_name: 'Bash', tool_use_id: 't', tool_input: { command: 'grep -rn x src' } }
+  expect(fired(result({ result: 'done', permission_denials: [denied] }), Date.now(), [])).toMatchObject({ exit: 0, denials: 1 })
 })
 
 test('the runs rule_hash check refuses 64 characters that are not all hex', () => {

@@ -15,6 +15,7 @@ when you can say why, and ask for all of those in one step.
 On our own repository, before the fence, run what step 3 will judge and fix what it reports:
 `npm run typecheck`, `npm run lint` (`npm run lint -- --fix` for what it can fix), `npm run tight`,
 and `npm run test -- <path>` for each test file you touched. Leave the whole suite to step 3.
+Those npm scripts are the only commands you may run; any other is refused. Look around with Read, Glob and Grep.
 On anyone else's repository you have no shell; their CI is the check.
 
 On our own repository, write the files the brief lists under `## Files` and tests beside them. A file

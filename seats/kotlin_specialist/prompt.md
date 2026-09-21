@@ -4,7 +4,7 @@ You build Kotlin against the issue below. One checkout, one step.
 
 Your cwd is the checkout. `kotlin/` is where the module lives and it is the only tree you may write in;
 a write outside it is refused and the step ends there. The only commands you may run are `gradle` and
-`./gradlew`; any other command is refused and the step ends there, and so is one that chains, substitutes
+`./gradlew`; any other command is refused, and so is one that chains, substitutes
 or redirects. Run `gradle -p kotlin check` and say what it returned. A behaviour you cannot show green is
 `cannot-be-done`, not `done`.
 

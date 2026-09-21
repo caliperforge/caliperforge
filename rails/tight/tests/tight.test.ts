@@ -91,3 +91,8 @@ test('a restating comment after a template still refuses', () => {
   const verdict = tight(root, { diff: added('src/fixture.ts', source), sources: { 'src/fixture.ts': source }, description: 'x.' })
   expect(verdict.spans).toEqual(['src/fixture.ts:2 tight.restating'])
 })
+
+test('a prose span is named for the text it read', () => {
+  const verdict = tight(root, { ...subject('red'), prose: 'handback' })
+  expect(verdict.spans.filter((s) => !s.startsWith('src/'))).toEqual(['handback:1 tight.preamble', 'handback:3 tight.hedge', 'handback:3 tight.summary'])
+})

@@ -82,14 +82,16 @@ function rest(db: Db, root: string, plan: PlanRow, handback: string): [string, (
   return [
     ['secret-scan', () => scan(diff)],
     ['authority', () => authority(root, name, diff, internal(plan), fence, outside)],
-    ['tight', () => tight(root, { diff, sources: sources(src, diff), description: prose(root, plan, handback) })],
+    ['tight', () => tight(root, { diff, sources: sources(src, diff), ...prose(root, plan, handback) })],
     ['test-weakened', () => weakened(diff, 'green')],
     ['identifiers', () => identifiers(src, handback)],
   ]
 }
 
-function prose(root: string, plan: PlanRow, handback: string): string {
-  return maybe(root, plan.id, 'pr.md') ?? (internal(plan) ? '' : handback)
+function prose(root: string, plan: PlanRow, handback: string): { description: string; prose: 'description' | 'handback' } {
+  const text = maybe(root, plan.id, 'pr.md')
+  if (text !== null) return { description: text, prose: 'description' }
+  return { description: internal(plan) ? '' : handback, prose: 'handback' }
 }
 
 function named(rail: string, verdict: Verdict): Outcome {

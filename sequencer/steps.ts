@@ -4,13 +4,15 @@ import { ready as readyRail, type Proof } from '../rails/ready/index.ts'
 import { record as recordRail } from '../rails/record.ts'
 import { digestOf, gates, headDigest } from '../store/approvals.ts'
 import { approved as settle, built, gated, ready as readyRow, type Made, type Proven } from '../store/deliverables.ts'
+import { record as recordFiles } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
 import { internal, originIssue, stampHead, type PlanRow } from '../store/plans.ts'
 import { at, type Step } from '../templates/pr-path.ts'
+import { files } from './brief.ts'
 import type { Outcome } from './kind.ts'
 import { preReview } from './rails.ts'
 import { forkCi, headOf, land, push, type Wire } from './push.ts'
-import { abortMerge, behindMain, cloned, conflicted, diffOf, fetchMain, maybe, mergeMain, put, SELF, srcDir, unmerged } from './workspace.ts'
+import { abortMerge, behindMain, cloned, conflicted, diffOf, fetchMain, get, maybe, mergeMain, put, SELF, srcDir, unmerged } from './workspace.ts'
 
 interface Target { repo: string; issue_no: number; state: string; measured_at: string; pulse: string }
 
@@ -252,8 +254,9 @@ function approvedPlan(db: Db, plan: PlanRow): boolean {
       AND a.decision = 'approved' AND a.subject_digest = ?`).get(plan.id, plan.head_digest) !== undefined
 }
 
-/** The deliverable row is written where the step proved it: the handback at build, the gates at senior, the rail at ready. */
+/** What the step leaves in the store where it proved it: the file list at the brief, the handback at build, the gates at senior, the rail at ready. */
 export function proved(db: Db, root: string, plan: PlanRow, step: Step): void {
+  if (step.fires === 'brief') recordFiles(db, plan.id, files(get(root, plan.id, 'issue.md')))
   if (step.name === 'build') built(db, made(db, root, plan, step))
   if (step.name === 'senior') gated(db, made(db, root, plan, step), proof(db, plan))
   if (step.name === 'ready') {

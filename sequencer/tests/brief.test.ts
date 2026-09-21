@@ -1,10 +1,11 @@
 import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, relative } from 'node:path'
 import { expect, test } from 'vitest'
+import { walk } from '../../checks/tree.ts'
 import type { Packet } from '../../providers/kind.ts'
 import { release } from '../../store/holds.ts'
 import { get } from '../../store/lanes.ts'
-import { shape, unclear } from '../brief.ts'
+import { files, shape, unclear } from '../brief.ts'
 import { tick } from '../index.ts'
 import { blocked } from '../steps.ts'
 import { drop, maybe, move, put, titleOf } from '../workspace.ts'
@@ -23,6 +24,12 @@ const briefOf = (w: World): string => maybe(w.root, ID, 'issue.md') ?? ''
 const askOf = (w: World): string => maybe(w.root, ID, 'ask.md') ?? ''
 
 const left = (w: World): string => get(w.db, 'brief.reads_left')
+
+const listed = (w: World): unknown[] =>
+  w.db.prepare('SELECT path FROM plan_files WHERE plan = ? ORDER BY position').all(ID)
+
+const STOP = `CREATE TRIGGER stop BEFORE UPDATE OF step ON plans WHEN NEW.step = 2
+  BEGIN SELECT RAISE(ABORT, 'advance refused'); END`
 
 /** A fixture reply retitled onto the ask the internal plan is filed with, which every brief's title must equal. */
 const titled = (name: string): string => fixture(name).replace('# A seat that briefs before any build', '# let an internal plan run')
@@ -78,6 +85,21 @@ test('step 1 fires the read-only seat once, saves its reply as the brief, and ad
   expect(titleOf(w.root, ID)).toBe('let an internal plan run')
   expect(w.db.prepare('SELECT seat, exit FROM runs WHERE step = 1').get()).toEqual({ seat: 'brief_writer', exit: 0 })
   expect(plan(w.db, ID).step).toBe(2)
+})
+
+test('a throw at the advance takes the file list back with it', async () => {
+  const w = mine()
+  await tick(w.db, w.root, stub(CARRIED))
+  w.db.exec(STOP)
+
+  await expect(tick(w.db, w.root, stub(CARRIED))).rejects.toThrow(/advance refused/)
+  expect(plan(w.db, ID).step).toBe(1)
+  expect(listed(w)).toEqual([])
+
+  w.db.exec('DROP TRIGGER stop')
+  await tick(w.db, w.root, stub(CARRIED))
+  expect(plan(w.db, ID).step).toBe(2)
+  expect(listed(w)).toEqual([{ path: 'src/hello.ts' }])
 })
 
 const FAILS = [
@@ -246,4 +268,15 @@ test('an external plan walks the same step 1 on the same seat, and never before 
   approve(w.db, w.target)
   expect((await tick(w.db, w.root, stub(CARRIED)))[0]).toMatchObject({ step: 1, outcome: 'pass' })
   expect(w.db.prepare('SELECT seat FROM runs WHERE step = 1').get()).toEqual({ seat: 'brief_writer' })
+})
+
+test('brief.ts is the only source that reads ## Files, and the shape check refuses through it', () => {
+  const readers = walk(repo, (name) => name.endsWith('.ts') && !name.endsWith('.test.ts'))
+    .map((f) => relative(repo, f))
+    // A live checkout carries `.cf/work/*/src`, each a copy of this tree rather than a second reader in it.
+    .filter((f) => !f.startsWith('.cf/') && !f.includes('/tests/') && readFileSync(join(repo, f), 'utf8').includes('## Files'))
+  expect(readers).toEqual(['sequencer/brief.ts'])
+
+  const brief = fixture('absent-file.md')
+  expect(files(brief).map((f) => f.path)).toEqual([shape(brief, ask, repo)])
 })

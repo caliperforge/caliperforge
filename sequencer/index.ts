@@ -143,10 +143,12 @@ function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcom
     return 'blocked_on_ceo'
   }
   if (outcome.outcome !== 'refuse') {
-    proved(db, root, plan, step)
-    if (last(step.step)) { finish(db, plan); return 'done' }
-    advance(db, plan, step.step + 1)
-    return hold(db, plan.id, step.step)
+    return db.transaction((): string => {
+      proved(db, root, plan, step)
+      if (last(step.step)) { finish(db, plan); return 'done' }
+      advance(db, plan, step.step + 1)
+      return hold(db, plan.id, step.step)
+    })()
   }
   // step 2 is the build in templates/pr-path.ts
   return back(db, plan, step.fires === 'review' ? 2 : step.step - 1)

@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { parse } from 'yaml'
 import { z } from 'zod'
+import type { PlanFile } from '../store/files.ts'
 
 const PARTS = ['**What:**', '**Why:**', '**When it ends:**',
   '## Approach', '## Cases', '## Must not break', '## Files', '## Out of scope']
@@ -44,11 +45,17 @@ function order(brief: string): string | null {
   return null
 }
 
+/** The one reader of `## Files`: every path the brief says the job touches, in the order it listed them. */
+export function files(brief: string): PlanFile[] {
+  return section(brief, '## Files').split('\n').flatMap((line): PlanFile[] => {
+    const path = PATH.exec(line)?.[1]
+    return path === undefined ? [] : [{ path, is_new: line.includes('(new)') }]
+  })
+}
+
 function absent(brief: string, src: string): string | null {
-  for (const line of section(brief, '## Files').split('\n')) {
-    const path = line.includes('(new)') ? undefined : PATH.exec(line)?.[1]
-    if (path === undefined || existsSync(join(src, path))) continue
-    return path
+  for (const file of files(brief)) {
+    if (!file.is_new && !existsSync(join(src, file.path))) return file.path
   }
   return null
 }

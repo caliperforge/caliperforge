@@ -179,6 +179,20 @@ test('a review refusal returns the plan to build with every span the reviewer na
   expect(plan(w.db, 1)).toMatchObject({ step: 4, retries: 1, state: 'blocked_on_ceo' })
 })
 
+test('a new refusal after a real rebuild goes round again; the same one again stops', async () => {
+  const w = world()
+  approve(w.db, w.target)
+  for (let at = 0; at < 4; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  expect((await tick(w.db, w.root, stub(CARRIED, 0, PAIR)))[0]).toMatchObject({ step: 4, state: 'retried' })
+  built(w.root, 1, 'export const two = (): number => 2')
+  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  expect((await tick(w.db, w.root, stub(CARRIED, 0, REFUSE)))[0]).toMatchObject({ step: 4, state: 'retried' })
+  built(w.root, 1, 'export const three = (): number => 3')
+  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  expect((await tick(w.db, w.root, stub(CARRIED, 0, REFUSE)))[0]).toMatchObject({ step: 4, state: 'blocked_on_ceo' })
+  expect(planFile(w.root, 'refusal.md')).toContain('# Stopped\n\nthe same refusal came back')
+})
+
 test('a reviewer gets its own last verdict and the diff since it from its second round on, neither on its first', async () => {
   const w = world()
   approve(w.db, w.target)

@@ -13,7 +13,8 @@ import { blocked, targetDigest } from '../sequencer/steps.ts'
 import { release } from '../store/holds.ts'
 import { dump, migrate, open as openDb, type Db } from '../store/index.ts'
 import { dial, hhmm, lanes, priority as setPriority, record, Reading, windows } from '../store/lanes.ts'
-import { openPipes, PlanRow } from '../store/plans.ts'
+import { openPipes, PlanRow, retry } from '../store/plans.ts'
+import { clear } from '../store/refusals.ts'
 import { refusedPush } from '../store/approvals.ts'
 import { receipt } from '../store/ticks.ts'
 import { adopt, render as renderAdopt } from './adopt.ts'
@@ -172,6 +173,17 @@ cf.command('release').argument('<plan>', 'a briefed plan waiting on the coo to r
   release(db(), Number(id))
   out(`plan ${id} released\n`)
 })
+
+cf.command('retry').argument('<plan>', 'a plan blocked on a refusal, sent round again with its count cleared')
+  .action((id: string) => {
+    const handle = db()
+    const row = handle.prepare('SELECT * FROM plans WHERE id = ?').get(Number(id))
+    if (row === undefined) throw new Error(`no plan ${id}`)
+    const plan = PlanRow.parse(row)
+    if (plan.state !== 'blocked_on_ceo') throw new Error(`plan ${id} is ${plan.state}, not blocked`)
+    const step = handle.transaction(() => { clear(handle, plan.id); return retry(handle, plan) })()
+    out(`plan ${id} running again at step ${String(step)}\n`)
+  })
 
 const approve = cf.command('approve')
 

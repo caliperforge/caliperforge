@@ -52,7 +52,7 @@ test('a build that changed nothing stops', () => {
 
 test('the last round stops however new it is', () => {
   const db = bench()
-  const whys = Array.from({ length: ROUNDS }, (_, n) =>
+  const whys = [...Array(ROUNDS).keys()].map((n) =>
     refused(db, { plan: PLAN, step: 3, fingerprint: fingerprint(3, [`src/a.ts:${String(n)}`]), diff: String(n).padStart(64, '0') }))
   expect(whys.slice(0, -1).every((w) => w === 'again')).toBe(true)
   expect(whys.at(-1)).toBe('spent')

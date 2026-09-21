@@ -57,6 +57,26 @@ test('the provider gate denies a refused write and lets everything else through'
   })
 })
 
+const bash = (command: string): HookInput =>
+  ({ hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command }, tool_use_id: 't', session_id: 's', transcript_path: '', cwd })
+
+test('the builder runs its checks on our tree and holds no shell on a stranger\'s', () => {
+  const manifest = seat(root, 'typescript_specialist').manifest
+  const ours = packet(manifest, 'p', 't', 'i', cwd, TRANSCRIPT, true)
+  const theirs = packet(manifest, 'p', 't', 'i', cwd, TRANSCRIPT)
+  expect(ours.tools).toContain('Bash(npm run tight)')
+  expect(theirs.tools.some((t) => t.startsWith('Bash('))).toBe(false)
+  expect(gate(ours, bash('npm run test -- store/refusals.test.ts'))).toEqual({ continue: true })
+  expect(gate(ours, bash('npm run lint -- --fix'))).toEqual({ continue: true })
+  expect(gate(ours, bash('npm install left-pad'))).toMatchObject({ continue: false })
+  expect(gate(ours, bash('npm run tight && rm -rf .'))).toMatchObject({ continue: false })
+})
+
+test('the kotlin seat keeps gradle on a stranger\'s tree', () => {
+  const p = packet(seat(root, 'kotlin_specialist').manifest, 'p', 't', 'i', cwd, TRANSCRIPT)
+  expect(p.tools).toContain('Bash(gradle:*)')
+})
+
 test('the packet carries the Tight spec, the seat prompt and the issue', () => {
   const p = packet(seat(root, 'typescript_specialist').manifest, 'SEAT', 'TIGHT', 'ISSUE', cwd, TRANSCRIPT)
   expect(p.prompt.indexOf('TIGHT')).toBeLessThan(p.prompt.indexOf('SEAT'))

@@ -14,7 +14,7 @@ import { checks, type Failure } from './checks.ts'
 import type { Outcome } from './kind.ts'
 import { seat } from '../runner/rules.ts'
 import { fenceFor, languageFor } from './route.ts'
-import { diffOf, doneIds, get, srcDir } from './workspace.ts'
+import { diffOf, doneIds, get, maybe, srcDir } from './workspace.ts'
 
 /**
  * Step 3: the six rails the map's step list names, in its order, ending at the first refusal, and
@@ -63,6 +63,10 @@ function broke(failed: Failure): Outcome {
   }
 }
 
+/**
+ * Tight's prose rule reads what the maintainer will read: the pull request text the card set, where it set one.
+ * The handback is the machine's; judging its prose sent a builder after a PR body it may not write.
+ */
 function rest(db: Db, root: string, plan: PlanRow, handback: string): [string, () => Verdict][] {
   const src = srcDir(root, plan.id)
   const diff = diffOf(root, plan.id)
@@ -71,7 +75,7 @@ function rest(db: Db, root: string, plan: PlanRow, handback: string): [string, (
   return [
     ['secret-scan', () => scan(diff)],
     ['authority', () => authority(root, name, diff, internal(plan), fence)],
-    ['tight', () => tight(root, { diff, sources: sources(src, diff), description: handback })],
+    ['tight', () => tight(root, { diff, sources: sources(src, diff), description: maybe(root, plan.id, 'pr.md') ?? handback })],
     ['test-weakened', () => weakened(diff, 'green')],
     ['identifiers', () => identifiers(src, handback)],
   ]

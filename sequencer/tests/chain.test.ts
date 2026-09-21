@@ -6,7 +6,7 @@ import type { Packet } from '../../providers/kind.ts'
 import type { Gh } from '../../rails/ci-green/index.ts'
 import { rewind } from '../../store/plans.ts'
 import { tick } from '../index.ts'
-import { srcDir } from '../workspace.ts'
+import { put, srcDir } from '../workspace.ts'
 import { approve, CARRIED, plan, runsAfter, stub, watched, world, type World } from './world.ts'
 
 /** The builder's bytes, written the way a real builder writes them: into the checkout it was handed, mid-fire. */
@@ -110,4 +110,16 @@ test('a second round before any PR goes out on the next branch', async () => {
   expect(sent).toEqual(['unrehearse caliperforge/widget widget-12-a1', 'send src widget-12-a2', 'rehearse caliperforge/widget widget-12-a2'])
   const count = execFileSync('git', ['rev-list', '--count', 'refs/remotes/upstream/main..HEAD'], { cwd: src, encoding: 'utf8' })
   expect(count.trim()).toBe('1')
+})
+
+test('Tight reads the PR text the card set, not the handback', async () => {
+  const told = 'Updated `src/hello.ts` so hello() says hey.\n\n' + CARRIED
+  const w = ready()
+  put(w.root, 1, 'pr.md', 'Addresses #12.\n\n## Summary\n\n- `hello()` says hey.\n')
+  const fired = await tick(w.db, w.root, stub(told, 0, undefined, writes), undefined, undefined, watched([], w.root, 1), 5)
+  expect(fired.find((f) => f.step === 3)).toMatchObject({ outcome: 'pass' })
+
+  const bare = ready()
+  const refused = await tick(bare.db, bare.root, stub(told, 0, undefined, writes), undefined, undefined, watched([], bare.root, 1), 5)
+  expect(refused.find((f) => f.step === 3)).toMatchObject({ outcome: 'refuse' })
 })

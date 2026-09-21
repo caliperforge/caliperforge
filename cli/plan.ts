@@ -92,12 +92,12 @@ export function add(db: Db, root: string, ref: string, pipe: string, read: Read 
   return { plan, lane, seat, state: 'queued', why: `${ref} queued on ${lane} for ${seat}`, origin: null, ruling: null }
 }
 
-/** Open caliperforge issues no plan row names: filed, not queued. */
+/** Open caliperforge issues no plan row and no part of a split names: filed, not queued. */
 export function unfiled(db: Db, read: Read = gh): Unfiled[] {
   const found = Found.parse(read(['search', 'issues', '--owner', 'caliperforge', '--state', 'open',
     '--limit', '100', '--json', 'number,title,url,repository,labels']))
-  const seen = new Set((db.prepare('SELECT origin FROM plans WHERE origin IS NOT NULL').all() as { origin: string }[])
-    .map((r) => r.origin))
+  const seen = new Set((db.prepare('SELECT origin AS url FROM plans WHERE origin IS NOT NULL UNION SELECT url FROM parts').all() as
+    { url: string }[]).map((r) => r.url))
   return found.filter((f) => !seen.has(f.url))
     .map((f) => ({ repo: f.repository.nameWithOwner, no: f.number, title: f.title, url: f.url, lane: laneOf(f.labels) }))
 }

@@ -155,7 +155,94 @@ export function closeIssue(repo: string, no: number, sha: string): void {
     { encoding: 'utf8' })
 }
 
+/** #72: a part of a split ticket, filed on our repo under the CEO's credential; the url is the part's name from here on. */
+export function fileIssue(repo: string, title: string, body: string, labels: string[]): string {
+  return execFileSync('gh', ['issue', 'create', '--repo', repo, '--title', title, '--body-file', '-',
+    ...labels.flatMap((l) => ['--label', l])], { encoding: 'utf8', input: body }).trim()
+}
+
+export function commentIssue(repo: string, no: number, body: string): void {
+  execFileSync('gh', ['issue', 'comment', String(no), '--repo', repo, '--body-file', '-'], { encoding: 'utf8', input: body })
+}
+
 export function searchIssue(repo: string, subject: string): number | null {
   const found = Prs.parse(gh(['issue', 'list', '--repo', repo, '--search', subject, '--state', 'all', '--json', 'number']))
   return found[0]?.number ?? null
+}
+
+/** The CEO's three answers to a sign-off card, as labels on our own repo. */
+export type Answer = 'go' | 'no' | 'talk'
+
+export const ANSWERS: readonly Answer[] = ['go', 'no', 'talk']
+
+const LOOKS: Record<Answer, { color: string; says: string }> = {
+  go: { color: '2da44e', says: 'Sign-off: send it' },
+  no: { color: 'cf222e', says: 'Sign-off: refuse it; a comment goes to the builder' },
+  talk: { color: 'bf8700', says: 'Sign-off: hand it to the COO' },
+}
+
+/** What a card says back: the answer the owner's label gives, the owner's comments, and whether it is still open. */
+export interface Seen { answer: Answer | null; words: string | null; open: boolean }
+
+/** The tracker the sign-off cards live on, a seam so a test answers a card without the network. */
+export interface Desk {
+  open: (title: string, body: string) => { no: number; url: string }
+  seen: (no: number) => Seen
+  unlabel: (no: number, label: Answer) => void
+  close: (no: number, comment: string) => void
+}
+
+export type Run = (args: string[], input?: string) => string
+
+const Card = z.object({
+  state: z.string(),
+  labels: z.array(z.object({ name: z.string() })),
+  comments: z.array(z.object({ author: z.object({ login: z.string() }), body: z.string() })),
+})
+
+const Events = z.array(z.looseObject({
+  event: z.string(),
+  actor: z.object({ login: z.string() }).nullable(),
+  label: z.object({ name: z.string() }).optional(),
+}))
+
+function run(args: string[], input?: string): string {
+  return execFileSync('gh', args, { encoding: 'utf8', ...(input === undefined ? {} : { input }) })
+}
+
+/**
+ * The repo is public, so a label only its collaborators can set is the answer, and only the one the
+ * owner of this host's `gh` credential set counts: the machine holds no account of its own, and a
+ * collaborator's label is not the CEO's word.
+ */
+export function desk(repo: string, read: Read = gh, exec: Run = run): Desk {
+  let owner: string | null = null
+  const me = (): string => (owner ??= exec(['api', 'user', '--jq', '.login']).trim())
+  return {
+    open: (title, body) => {
+      for (const name of ANSWERS) {
+        exec(['label', 'create', name, '--repo', repo, '--color', LOOKS[name].color, '--description', LOOKS[name].says, '--force'])
+      }
+      const url = exec(['issue', 'create', '--repo', repo, '--title', title, '--body-file', '-'], body).trim()
+      return { no: issueNo(url), url }
+    },
+    seen: (no) => {
+      const card = Card.parse(read(['issue', 'view', String(no), '--repo', repo, '--json', 'state,labels,comments']))
+      const on = new Set(card.labels.map((l) => l.name))
+      const ours = Events.parse(read(['api', `repos/${repo}/issues/${String(no)}/events?per_page=100`]))
+        .filter((e) => e.event === 'labeled' && e.actor?.login === me())
+        .map((e) => e.label?.name)
+        .filter((n): n is Answer => n !== undefined && on.has(n) && (ANSWERS as readonly string[]).includes(n))
+      const said = card.comments.filter((c) => c.author.login === me()).map((c) => c.body.trim()).filter((b) => b !== '')
+      return { answer: ours.at(-1) ?? null, words: said.length === 0 ? null : said.join('\n\n'), open: card.state === 'OPEN' }
+    },
+    unlabel: (no, label) => void exec(['issue', 'edit', String(no), '--repo', repo, '--remove-label', label]),
+    close: (no, comment) => void exec(['issue', 'close', String(no), '--repo', repo, '--comment', comment]),
+  }
+}
+
+function issueNo(url: string): number {
+  const hit = /\/issues\/(\d+)$/.exec(url)
+  if (hit === null) throw new Error(`"${url}" is not a github issue url`)
+  return Number(hit[1])
 }

@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import { join } from 'node:path'
-import { closeIssue, openPr, rehearse, unrehearse } from '../cli/gh.ts'
+import { closeIssue, commentIssue, fileIssue, openPr, rehearse, unrehearse } from '../cli/gh.ts'
 import { ciGreen, MISSING, PENDING, shell, type Gh } from '../rails/ci-green/index.ts'
 import { parse } from '../rails/diff.ts'
 import { record } from '../rails/record.ts'
@@ -22,12 +22,16 @@ export interface Wire {
   runs: Gh
   rehearse?: (fork: string, branch: string) => void
   unrehearse?: (fork: string, branch: string) => void
+  file: (repo: string, title: string, body: string, labels: string[]) => string
+  comment: (repo: string, no: number, body: string) => void
 }
 
-const WIRE: Wire = {
+export const WIRE: Wire = {
   send: (dir, branch) => void git(dir, ['push', '--set-upstream', 'origin', branch]),
   open: openPr,
   close: closeIssue,
+  file: fileIssue,
+  comment: commentIssue,
   runs: shell,
   rehearse,
   unrehearse,

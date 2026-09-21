@@ -15,12 +15,37 @@ const ROW = /^\s*[-*]\s*\**D\d+\**/gm
 
 const Unclear = z.object({ outcome: z.literal('unclear'), question: z.string().min(1) })
 
+const Part = z.object({ title: z.string().min(1), what: z.string().min(1), why: z.string().min(1), ends: z.string().min(1) })
+
+const Split = z.object({ outcome: z.literal('split'), parts: z.array(Part).min(2) })
+
+export type Part = z.infer<typeof Part>
+
+/** #72: past this many files other than tests a brief is two jobs, and the brief writer is sent back to split it. */
+export const WIDE = 5
+
+const TEST = /(^|\/)(tests?|spec|__tests__|fixtures)\/|[._](test|spec)\.|Tests?\./
+
 /** The fence a seat ends with when the ask cannot be briefed against the code: the question goes back to the COO. */
 export function unclear(reply: string): string | null {
   const fence = /---\r?\n([\s\S]*?)\r?\n---$/.exec(reply.trimEnd())
   if (fence === null) return null
   const parsed = Unclear.safeParse(yamlOf(fence[1] ?? ''))
   return parsed.success ? parsed.data.question : null
+}
+
+/** #72: the fence a seat ends with when the ask is more than one job: the parts, in the order they must land. */
+export function split(reply: string): Part[] | null {
+  const fence = /---\r?\n([\s\S]*?)\r?\n---$/.exec(reply.trimEnd())
+  if (fence === null) return null
+  const parsed = Split.safeParse(yamlOf(fence[1] ?? ''))
+  return parsed.success ? parsed.data.parts : null
+}
+
+/** How many files other than tests the brief touches, when that is more than one job holds. */
+export function wide(brief: string): number | null {
+  const count = files(brief).filter((f) => !TEST.test(f.path)).length
+  return count > WIDE ? count : null
 }
 
 /** The part of the brief that is missing, out of order or untrue of the checkout; null is a brief a builder can work from. */

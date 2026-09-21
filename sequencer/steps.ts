@@ -12,6 +12,7 @@ import { files } from './brief.ts'
 import type { Outcome } from './kind.ts'
 import { preReview } from './rails.ts'
 import { forkCi, headOf, land, opened, push, type Wire } from './push.ts'
+import { following } from './split.ts'
 import { abortMerge, behindMain, cloned, conflicted, diffOf, fetchMain, get, maybe, mergeMain, put, SELF, srcDir, unmerged } from './workspace.ts'
 
 interface Target { repo: string; issue_no: number; state: string; measured_at: string; pulse: string }
@@ -56,7 +57,17 @@ function batch(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
     settle(db, plan.id, id)
     return id
   })()
-  return land(db, root, plan, approval, wire)
+  const landed = land(db, root, plan, approval, wire)
+  if (landed.outcome !== 'pass') return landed
+  const next = following(db, root, plan, landedSha(db, plan.id), wire)
+  return next === null ? landed : { ...landed, note: `${landed.note}; ${next}` }
+}
+
+/** The commit `land` stamped on the deliverable row, which is what closes a split ticket's parent. */
+function landedSha(db: Db, plan: number): string {
+  const row = db.prepare('SELECT evidence FROM deliverables WHERE plan_id = ? ORDER BY id DESC LIMIT 1').get(plan) as
+    { evidence: string } | undefined
+  return row?.evidence.split('/').at(-1) ?? ''
 }
 
 function readyGate(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {

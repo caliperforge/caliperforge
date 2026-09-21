@@ -46,3 +46,26 @@ outcome: unclear
 question: <the one question whose answer unblocks the brief>
 ---
 ```
+
+An ask that is more than one job — you would name more than five files besides tests, or two changes
+that could each land and be reviewed alone — is not briefed at all. Split it: close with this fence and
+nothing after it, the parts in the order they must land, each one a job a builder finishes in one sitting.
+
+```
+---
+outcome: split
+parts:
+  - title: <what the first part does, as an issue title>
+    what: <one line>
+    why: <one line>
+    ends: <one line: how anyone can tell it is done>
+  - title: <the second part>
+    what: <one line>
+    why: <one line>
+    ends: <one line>
+---
+```
+
+The machine files each part as its own issue and queues them one at a time. On someone else's repository,
+or on a ticket that is already a part, the split goes to the COO instead, so answer it only when the ask
+really is more than one job.

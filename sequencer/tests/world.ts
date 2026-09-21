@@ -261,6 +261,11 @@ export function watched(log: string[], root: string, id: number, runs = runsOn(r
     runs,
     rehearse: (fork, branch) => void log.push(`rehearse ${fork} ${branch}`),
     unrehearse: (fork, branch) => void log.push(`unrehearse ${fork} ${branch}`),
+    file: (repo, title) => {
+      log.push(`file ${repo} ${title}`)
+      return `https://github.com/${repo}/issues/${String(900 + log.filter((l) => l.startsWith('file ')).length)}`
+    },
+    comment: (repo, no) => void log.push(`comment ${repo}#${String(no)}`),
   }
 }
 

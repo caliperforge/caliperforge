@@ -9,7 +9,8 @@ import { self } from '../rails/tight/index.ts'
 import { fire } from '../runner/index.ts'
 import { dry, tick } from '../sequencer/index.ts'
 import { behind, upgraded } from '../sequencer/upgrade.ts'
-import { liveTree } from '../sequencer/workspace.ts'
+import { signoffs } from '../sequencer/signoff.ts'
+import { liveTree, SELF } from '../sequencer/workspace.ts'
 import { blocked, targetDigest } from '../sequencer/steps.ts'
 import { release } from '../store/holds.ts'
 import { dump, migrate, open as openDb, type Db } from '../store/index.ts'
@@ -24,6 +25,7 @@ import { approve as approveCard, batch, landed, refuse as refuseCard, render, re
 import { awaiting, day, dryLines, halted, laneLine, open as openPlans, runsOf, section, tickets, ticketSection,
   tickNote, verdictsOf, windowLine } from './brief.ts'
 import { check, fill } from './digests.ts'
+import { desk } from './gh.ts'
 import { ack, events, line, notify, record as keep, unread } from './inbox.ts'
 import { measure, render as renderPulse } from './measure.ts'
 import { add as fileIssue, render as renderUnfiled, unfiled } from './plan.ts'
@@ -306,7 +308,20 @@ cf.command('tick').option('--dry', 'read what a tick would do, fire nothing, cal
       out(`${f.pipe}\tplan ${String(f.plan)}\tstep ${String(f.step)} ${f.name}\t${f.outcome}\t${f.state}\t${f.note}\n`)
       for (const span of f.spans) out(`  span\t${span}\n`)
     }
+    cards(handle, now)
   })
+
+cf.command('signoff').description('open, read and close the sign-off cards on our repo, as every tick does')
+  .action(() => { cards(db(), new Date()) })
+
+/** A tracker that cannot be read this time leaves every card where it stands; the next tick reads it again. */
+function cards(handle: Db, now: Date): void {
+  try {
+    for (const s of signoffs(handle, root, desk(SELF), now)) out(`signoff\tplan ${String(s.plan)}\tcard ${String(s.card)}\t${s.did}\n`)
+  } catch (error) {
+    process.stderr.write(`cf: sign-off cards: ${error instanceof Error ? error.message : String(error)}\n`)
+  }
+}
 
 /** Until the tree holds what it merged it would fire a lap of a version it has already replaced. */
 function halt(handle: Db, now: Date, sha: string): void {

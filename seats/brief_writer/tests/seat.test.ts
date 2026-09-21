@@ -20,9 +20,9 @@ test('the roster carries the seat and the loader gives it a rules row', () => {
   expect(rules(root).find((r) => r.id === 'brief_writer')).toMatchObject({ kind: 'card', path: 'rules/roster.yaml' })
 })
 
-test('the prompt names every part the shape check reads, and the unclear fence', () => {
+test('the prompt names every part the shape check reads, and the unclear and split fences', () => {
   const prompt = seat(root, 'brief_writer').prompt
-  for (const part of ['## Approach', '## Cases', '## Must not break', '## Files', '## Out of scope', 'outcome: unclear']) {
+  for (const part of ['## Approach', '## Cases', '## Must not break', '## Files', '## Out of scope', 'outcome: unclear', 'outcome: split']) {
     expect(prompt).toContain(part)
   }
 })

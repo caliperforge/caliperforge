@@ -8,7 +8,7 @@ import type { Db } from '../store/index.ts'
 import { builderRan, internal, type PlanRow } from '../store/plans.ts'
 import { byRun, pending } from '../store/transcript.ts'
 import type { Step } from '../templates/pr-path.ts'
-import { shape, unclear } from './brief.ts'
+import { shape, split, unclear, wide, WIDE, type Part } from './brief.ts'
 import { install } from './checks.ts'
 import { fenceFor } from './route.ts'
 import type { Outcome } from './kind.ts'
@@ -35,6 +35,8 @@ export async function fireSeat(db: Db, root: string, plan: PlanRow, step: Step, 
  */
 export async function fireBrief(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
   if (builderRan(db, plan.id)) return stands()
+  const saved = split(maybe(root, plan.id, 'split.md') ?? '')
+  if (saved !== null) return splitting(step, saved)
   const ask = askOf(root, plan.id)
   const src = srcDir(root, plan.id)
   const standing = maybe(root, plan.id, 'issue.md')
@@ -46,11 +48,26 @@ export async function fireBrief(db: Db, root: string, plan: PlanRow, step: Step,
     put(root, plan.id, 'question.md', `${question}\n`)
     return { outcome: 'needs_ceo', spans: [], note: `${step.runs}: ${question}` }
   }
+  const parts = split(fired.text)
+  if (parts !== null) {
+    put(root, plan.id, 'split.md', fired.text)
+    return splitting(step, parts)
+  }
   const missing = shape(fired.text, ask, src)
   if (missing !== null) return { outcome: 'refuse', spans: [missing], note: `${step.runs}: the brief is missing ${missing}` }
+  const width = internal(plan) ? wide(fired.text) : null
+  if (width !== null) {
+    return { outcome: 'refuse', spans: ['brief.wide'],
+      note: `${step.runs}: the brief touches ${String(width)} files besides tests; past ${String(WIDE)} it is more than one job, so answer with the split fence` }
+  }
   put(root, plan.id, 'issue.md', fired.text)
   drop(root, plan.id, 'refusal.md')
   return { outcome: 'pass', spans: [], note: `${step.runs}: brief written` }
+}
+
+/** The answer is kept until it is filed, so a `gh` that fails half way does not buy a second brief. */
+function splitting(step: Step, parts: Part[]): Outcome {
+  return { outcome: 'pass', spans: [], note: `${step.runs}: ${String(parts.length)} jobs, not one`, parts }
 }
 
 function stands(): Outcome {

@@ -11,6 +11,7 @@ import { at, last, type Step } from '../templates/pr-path.ts'
 import { capture } from './capture.ts'
 import type { Fired, Outcome } from './kind.ts'
 import { started } from './signals.ts'
+import { parted } from './split.ts'
 import type { Wire } from './push.ts'
 import { fireBrief, fireReview, fireSeat } from './seat.ts'
 import { blocked, kernel, proved, targetOf } from './steps.ts'
@@ -106,7 +107,8 @@ async function stepped(db: Db, root: string, pipe: PipeRow, plan: PlanRow, lease
   provider: Provider, wire?: Wire): Promise<Fired> {
   const tree = workspace(db, root, plan)
   const step = at(plan.step, tree.language)
-  const outcome = tree.failed ?? await fire(db, root, plan, step, provider, wire)
+  const fired = tree.failed ?? await fire(db, root, plan, step, provider, wire)
+  const outcome = fired.parts === undefined ? fired : parted(db, root, plan, fired.parts, wire)
   const state = settle(db, root, plan, step, outcome)
   return {
     pipe: pipe.name,
@@ -163,6 +165,10 @@ function fire(db: Db, root: string, plan: PlanRow, step: Step, provider: Provide
 function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcome): string {
   if (outcome.held === true) return 'running'
   if (outcome.blip === true) return blip(db, root, plan, step, outcome)
+  if (outcome.split === true) {
+    db.prepare("UPDATE plans SET state = 'done' WHERE id = ?").run(plan.id)
+    return 'done'
+  }
   if (outcome.outcome === 'refuse') put(root, plan.id, 'refusal.md', refusalText(step, outcome))
   if (outcome.rewind !== undefined) {
     rewind(db, plan.id, outcome.rewind)

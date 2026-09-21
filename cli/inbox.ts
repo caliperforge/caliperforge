@@ -8,10 +8,10 @@ import { clock } from '../store/plans.ts'
 
 /**
  * #49: what a tick did that a person may have to act on, as one line per event in a file the COO
- * reads at every check-in (`cf inbox`), and a desktop notification for the three that need one.
+ * reads at every check-in (`cf inbox`), and a desktop notification for the ones that need one.
  * Read is what `cf inbox --ack` has marked; nothing else counts as delivered.
  */
-export type Kind = 'blocked' | 'landed' | 'done' | 'refused' | 'asked'
+export type Kind = 'blocked' | 'landed' | 'done' | 'refused' | 'asked' | 'signoff'
 
 export interface Event {
   at: string
@@ -27,7 +27,7 @@ const INBOX = '.cf/inbox.jsonl'
 
 const READ = '.cf/inbox.read'
 
-const LOUD = new Set<Kind>(['blocked', 'landed', 'done', 'asked'])
+const LOUD = new Set<Kind>(['blocked', 'landed', 'done', 'asked', 'signoff'])
 
 export type Post = (title: string, body: string) => void
 
@@ -85,7 +85,7 @@ export function line(db: Db, e: Event): string {
   return `${clock(new Date(e.at), zone(db))}  ${e.kind.padEnd(7)}  ${e.ticket} (plan ${String(e.plan)}) at step ${String(e.step)} ${e.name}: ${e.note}`
 }
 
-/** Blocked, landed, done and a maintainer's ask reach the desktop; a refusal going round again only reaches the file. */
+/** Blocked, landed, done, an ask and a card to sign reach the desktop; a refusal going round again only reaches the file. */
 export function notify(news: Event[], post: Post = desktop): void {
   for (const e of news.filter((n) => LOUD.has(n.kind))) post(`cf: ${e.ticket} ${e.kind}`, e.note)
 }

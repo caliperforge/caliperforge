@@ -5,7 +5,7 @@ import { desk as ghDesk, type Answer, type Desk, type Seen } from '../../cli/gh.
 import { unread } from '../../cli/inbox.ts'
 import { rewind } from '../../store/plans.ts'
 import { tick } from '../index.ts'
-import { signoffs } from '../signoff.ts'
+import { ruled, signoffs } from '../signoff.ts'
 import { put, srcDir } from '../workspace.ts'
 import { approve, CARRIED, plan, stub, watched, world, type World } from './world.ts'
 
@@ -86,6 +86,9 @@ test('no with words sends it back to the builder with them; no alone waits for t
   expect(signoffs(w.db, w.root, desk)).toEqual([{ plan: 1, card: 100, did: 'no' }])
   expect(plan(w.db, 1)).toMatchObject({ step: 2, state: 'running', head_digest: null })
   expect(readFileSync(join(w.root, '.cf/work/1/refusal.md'), 'utf8')).toContain('Call it expiry, not expires.')
+  const brief = readFileSync(join(w.root, '.cf/work/1/issue.md'), 'utf8')
+  expect(brief).toContain(`- D3 The CEO's ruling at sign-off (${new Date().toISOString().slice(0, 10)}): Call it expiry, not expires.`)
+  expect(brief.split('## Must not break')[1]?.split('## ')[0]).toContain("The CEO's ruling at sign-off")
   expect(w.db.prepare("SELECT decision, reason FROM approvals WHERE subject_kind = 'plan'").get())
     .toEqual({ decision: 'refused', reason: 'signoff.no' })
 
@@ -148,4 +151,12 @@ test('the card names every workflow and says green only of what is', async () =>
   const body = desk.cards.get(100)?.body ?? ''
   expect(body).toContain('but 1 of their workflows is not green')
   expect(body).toContain('- Their CI on our fork: Ruby green; also ran, not judged on: Python red')
+})
+
+test('a ruling lands as the next D row and a Must not break line, or in its own section', () => {
+  const brief = '# t\n\n## Cases\n\n- D1 a\n- D2 b\n\n## Must not break\n\n- c\n\n## Files\n\n- `a/b.ts`\n'
+  expect(ruled(brief, 'Only\nthe number.', '2026-09-21')).toBe('# t\n\n## Cases\n\n- D1 a\n- D2 b\n'
+    + "- D3 The CEO's ruling at sign-off (2026-09-21): Only the number.\n\n## Must not break\n\n- c\n"
+    + "- The CEO's ruling at sign-off (2026-09-21): Only the number.\n\n## Files\n\n- `a/b.ts`\n")
+  expect(ruled('# t\n\nfree text\n', 'x', '2026-09-21')).toBe("# t\n\nfree text\n\n## The CEO's rulings\n\n- D1 The CEO's ruling at sign-off (2026-09-21): x\n")
 })

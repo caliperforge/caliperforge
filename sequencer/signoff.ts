@@ -7,7 +7,7 @@ import { needsCeo, PlanRow, rewind } from '../store/plans.ts'
 import { clear } from '../store/refusals.ts'
 import type { Board } from '../rails/ci-green/index.ts'
 import { BOARD, headOf, opened } from './push.ts'
-import { drop, FORK, maybe, put, repoName, titleOf } from './workspace.ts'
+import { drop, FORK, get, maybe, put, repoName, titleOf } from './workspace.ts'
 
 /**
  * 09-21 item 4: an outside job is signed off without a terminal. A plan waiting at step 7 gets one
@@ -77,7 +77,8 @@ function answered(db: Db, root: string, card: Card, kept: Kept, seen: Seen & { a
     } else {
       db.transaction(() => { clear(db, card.id); rewind(db, card.id, BUILD) })()
       put(root, card.id, 'refusal.md', said(kept.url, seen.words))
-      close('Refused. It goes back to the builder with your words; a new card comes with the next round.')
+      put(root, card.id, 'issue.md', ruled(get(root, card.id, 'issue.md'), seen.words, now.toISOString().slice(0, 10)))
+      close('Refused. It goes back to the builder with your words, and they are now part of its brief; a new card comes with the next round.')
       drop(root, card.id, FILE)
       tell(root, card, 'refused', `back to the builder: ${flat(seen.words)}`, now)
     }
@@ -201,6 +202,31 @@ function code(text: string): string {
   const tick = '`'.repeat(longest(text) + 1)
   const pad = text.startsWith('`') || text.endsWith('`') ? ' ' : ''
   return `${tick}${pad}${text}${pad}${tick}`
+}
+
+/**
+ * The CEO's `no` with words joins the brief: a D row the builder must answer and a Must not break line the
+ * reviewers hold. `refusal.md` carries them for one round; the brief carries them for every round after it.
+ */
+export function ruled(brief: string, words: string, day: string): string {
+  const said = `The CEO's ruling at sign-off (${day}): ${words.replace(/\s+/g, ' ').trim()}`
+  const next = Math.max(0, ...[...brief.matchAll(/^\s*[-*]\s*\**D(\d+)/gm)].map((m) => Number(m[1]))) + 1
+  const lines = brief.trimEnd().split('\n')
+  const cased = under(lines, '## Cases', `- D${String(next)} ${said}`)
+  const held = under(lines, '## Must not break', `- ${said}`)
+  if (!cased && !held) lines.push('', "## The CEO's rulings", '', `- D${String(next)} ${said}`)
+  return `${lines.join('\n')}\n`
+}
+
+/** Adds `line` as the last bullet of the section under `heading`; false where the brief has no such section. */
+function under(lines: string[], heading: string, line: string): boolean {
+  const from = lines.findIndex((l) => l.trimEnd() === heading)
+  if (from === -1) return false
+  const next = lines.findIndex((l, i) => i > from && l.startsWith('## '))
+  let at = next === -1 ? lines.length : next
+  while (at > from + 1 && (lines[at - 1] ?? '').trim() === '') at -= 1
+  lines.splice(at, 0, line)
+  return true
 }
 
 function said(url: string, words: string): string {

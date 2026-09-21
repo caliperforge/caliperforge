@@ -10,6 +10,7 @@ VALUES
   ('identifiers', 'rail', 'rules/rails.yaml', '328ab926a4e5aef852e9cad7e64bbbbe0707afa6ca001226ee7f52182deb8ede', '2026-09-17'),
   ('ci-green', 'rail', 'rules/rails.yaml', '328ab926a4e5aef852e9cad7e64bbbbe0707afa6ca001226ee7f52182deb8ede', '2026-09-17'),
   ('ready', 'rail', 'rules/rails.yaml', '328ab926a4e5aef852e9cad7e64bbbbe0707afa6ca001226ee7f52182deb8ede', '2026-09-17'),
-  ('typescript_specialist', 'card', 'rules/roster.yaml', '20a4294ca45f0ed51623f0165e6b23190b075ae9e8fde2abcc7ee4b4e00b8249', '2026-09-17'),
-  ('kotlin_specialist', 'card', 'rules/roster.yaml', '20a4294ca45f0ed51623f0165e6b23190b075ae9e8fde2abcc7ee4b4e00b8249', '2026-09-17'),
-  ('brief_writer', 'card', 'rules/roster.yaml', '20a4294ca45f0ed51623f0165e6b23190b075ae9e8fde2abcc7ee4b4e00b8249', '2026-09-17');
+  ('typescript_specialist', 'card', 'rules/roster.yaml', '6fa21df2eee194870182b51fcdc5440ffa820280b835f8e5c5c3fab9c1505199', '2026-09-17'),
+  ('kotlin_specialist', 'card', 'rules/roster.yaml', '6fa21df2eee194870182b51fcdc5440ffa820280b835f8e5c5c3fab9c1505199', '2026-09-17'),
+  ('brief_writer', 'card', 'rules/roster.yaml', '6fa21df2eee194870182b51fcdc5440ffa820280b835f8e5c5c3fab9c1505199', '2026-09-17'),
+  ('outside_specialist', 'card', 'rules/roster.yaml', '6fa21df2eee194870182b51fcdc5440ffa820280b835f8e5c5c3fab9c1505199', '2026-09-21');

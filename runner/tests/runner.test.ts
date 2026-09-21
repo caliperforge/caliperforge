@@ -77,6 +77,13 @@ test('the kotlin seat keeps gradle on a stranger\'s tree', () => {
   expect(p.tools).toContain('Bash(gradle:*)')
 })
 
+test('a fence handed in replaces the manifest\'s on a stranger\'s tree', () => {
+  const manifest = seat(root, 'outside_specialist').manifest
+  const p = packet(manifest, 'p', 't', 'i', cwd, TRANSCRIPT, false, ['ruby/lib/config.rb'])
+  expect(p.refuse('ruby/lib/config.rb')).toBeNull()
+  expect(p.refuse('lua/config.lua')).toMatchObject({ origin_ref: 'seat.write_paths' })
+})
+
 test('the packet carries the Tight spec, the seat prompt and the issue', () => {
   const p = packet(seat(root, 'typescript_specialist').manifest, 'SEAT', 'TIGHT', 'ISSUE', cwd, TRANSCRIPT)
   expect(p.prompt.indexOf('TIGHT')).toBeLessThan(p.prompt.indexOf('SEAT'))

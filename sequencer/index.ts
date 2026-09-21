@@ -13,7 +13,8 @@ import { started } from './signals.ts'
 import type { Wire } from './push.ts'
 import { fireBrief, fireReview, fireSeat } from './seat.ts'
 import { blocked, kernel, proved, targetOf } from './steps.ts'
-import { branchOf, checkout, diffOf, internalBranch, languageOf, maybe, put, SELF, srcDir, titleOf } from './workspace.ts'
+import { languageFor } from './route.ts'
+import { branchOf, checkout, diffOf, internalBranch, maybe, put, SELF, srcDir, titleOf } from './workspace.ts'
 
 /** `read` and `wire` are the network a tick touches on its own account; both are injected so a test can drive a lap offline. */
 export async function tick(db: Db, root: string, provider: Provider, now: Date = new Date(),
@@ -110,7 +111,7 @@ function workspace(db: Db, root: string, plan: PlanRow): { language: string | nu
     const note = error instanceof Error ? error.message : String(error)
     return { language: null, failed: { outcome: 'refuse', spans: [tree.repo], note: `checkout: ${note}`, blip: true } }
   }
-  return { language: languageOf(srcDir(root, plan.id)), failed: null }
+  return { language: languageFor(db, plan, srcDir(root, plan.id)), failed: null }
 }
 
 /**

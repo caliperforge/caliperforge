@@ -10,6 +10,7 @@ import { byRun, pending } from '../store/transcript.ts'
 import type { Step } from '../templates/pr-path.ts'
 import { shape, unclear } from './brief.ts'
 import { install } from './checks.ts'
+import { fenceFor } from './route.ts'
 import type { Outcome } from './kind.ts'
 import { cloned, diffOf, diffSince, drop, get, maybe, move, planDir, put, snapshot, srcDir } from './workspace.ts'
 
@@ -72,7 +73,7 @@ async function ran(db: Db, root: string, plan: PlanRow, step: Step, provider: Pr
   const { manifest, prompt, hash } = seat(root, step.runs)
   const fired = await provider.fire(
     packet(manifest, prompt, tight(root), issue, srcDir(root, plan.id),
-      transcriptOf(root, plan.id, step.step), ours))
+      transcriptOf(root, plan.id, step.step), ours, fenceFor(db, plan.id, manifest.write_paths)))
   const row = db.prepare(INSERT).run(plan.id, step.step, step.runs, hash, provider.name, manifest.model, manifest.effort,
     fired.usage.input, fired.usage.cache, fired.usage.output, fired.seconds, fired.exit, fired.transcript_path)
   byRun(db, Number(row.lastInsertRowid), fired.transcript_path)

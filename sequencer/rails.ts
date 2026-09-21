@@ -12,7 +12,9 @@ import { internal, type PlanRow } from '../store/plans.ts'
 import { builder } from '../templates/pr-path.ts'
 import { checks, type Failure } from './checks.ts'
 import type { Outcome } from './kind.ts'
-import { diffOf, doneIds, get, languageOf, srcDir } from './workspace.ts'
+import { seat } from '../runner/rules.ts'
+import { fenceFor, languageFor } from './route.ts'
+import { diffOf, doneIds, get, srcDir } from './workspace.ts'
 
 /**
  * Step 3: the six rails the map's step list names, in its order, ending at the first refusal, and
@@ -26,7 +28,7 @@ export function preReview(db: Db, root: string, plan: PlanRow): Outcome {
   const first = audit(handback, doneIds(get(root, plan.id, 'issue.md')))
   record(db, plan.id, first, 0)
   if (first.outcome !== 'pass') return named('completion-audit', first)
-  for (const [rail, run] of rest(root, plan, handback)) {
+  for (const [rail, run] of rest(db, root, plan, handback)) {
     const verdict = run()
     recordRail(db, join(root, 'rails', rail), plan.id, verdict, 0)
     if (verdict.outcome !== 'pass') return named(rail, verdict)
@@ -61,12 +63,14 @@ function broke(failed: Failure): Outcome {
   }
 }
 
-function rest(root: string, plan: PlanRow, handback: string): [string, () => Verdict][] {
+function rest(db: Db, root: string, plan: PlanRow, handback: string): [string, () => Verdict][] {
   const src = srcDir(root, plan.id)
   const diff = diffOf(root, plan.id)
+  const name = builder(languageFor(db, plan, src))
+  const fence = fenceFor(db, plan.id, seat(root, name).manifest.write_paths)
   return [
     ['secret-scan', () => scan(diff)],
-    ['authority', () => authority(root, builder(languageOf(src)), diff, internal(plan))],
+    ['authority', () => authority(root, name, diff, internal(plan), fence)],
     ['tight', () => tight(root, { diff, sources: sources(src, diff), description: handback })],
     ['test-weakened', () => weakened(diff, 'green')],
     ['identifiers', () => identifiers(src, handback)],

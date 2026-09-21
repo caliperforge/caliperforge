@@ -34,7 +34,7 @@ function real(path: string): string {
 const OURS_ONLY = 'Bash(npm '
 
 export function packet(manifest: Seat, prompt: string, spec: string, issue: string, cwd: string,
-  transcript: string, ours = false): Packet {
+  transcript: string, ours = false, fence: string[] = manifest.write_paths): Packet {
   return {
     prompt: `${spec}\n\n${prompt}\n\n# Issue\n\n${issue}`,
     cwd,
@@ -42,7 +42,7 @@ export function packet(manifest: Seat, prompt: string, spec: string, issue: stri
     model: manifest.model,
     effort: manifest.effort,
     tools: ours ? manifest.tools : manifest.tools.filter((t) => !t.startsWith(OURS_ONLY)),
-    refuse: (path) => refuse(cwd, manifest.write_paths, path, ours),
+    refuse: (path) => refuse(cwd, fence, path, ours),
   }
 }
 

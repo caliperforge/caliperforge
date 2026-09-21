@@ -13,8 +13,8 @@ const FROZEN = /^schema\/000[12]/
  * notes) and the frozen migrations. Without it the manifest's `write_paths` stand, unchanged: that
  * is the narrow fence a counterparty never agreed to widen.
  */
-export function authority(root: string, name: string, diff: string, ours = false): Verdict {
-  const writePaths = seat(root, name).manifest.write_paths
+export function authority(root: string, name: string, diff: string, ours = false,
+  writePaths: string[] = seat(root, name).manifest.write_paths): Verdict {
   const fence = ours ? 'our own tree (all but `.cf/`)' : `seat "${name}" write_paths (${writePaths.join(', ')})`
   const files = parse(diff)
   const spans = files.flatMap((f) => {

@@ -9,8 +9,10 @@ Change only the lines the job needs. Where a comment or doc line states a value 
 value and keep every other word: do not reword, reflow or trim text you were not asked to change.
 
 The files the brief lists follow it under `# The files`, as your checkout holds them: do not search for
-them again. Read the ones you will change in one step before you edit. Open a file you were not handed only
-when you can say why, and ask for all of those in one step.
+them again. The editor needs a Read before an Edit, so read every file you will change in ONE message,
+several Read calls at once, then edit; a handed file you will not change needs no Read. Open a file you were
+not handed only when you can say why, and ask for all of those in one message. Independent calls go out
+together in one message, never one per turn.
 
 On our own repository, before the fence, run what step 3 will judge and fix what it reports:
 `npm run typecheck`, `npm run lint` (`npm run lint -- --fix` for what it can fix), `npm run tight`,

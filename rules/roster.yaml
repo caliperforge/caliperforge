@@ -6,13 +6,13 @@ seats:
 digests:
   typescript_specialist:
     manifest: 6b842d68a8088bf2c60aec636c805dd63fd6f5f0df7fdb47a4d7ebbab745026d
-    prompt: c06075e0815a2c4e11230eac4af4112c7102f573b5b3dc288cb3c20feb4b8e11
+    prompt: e03351e399cff598ef233f4f4f52e84bdfc21951a890484325496d401f2a5f7e
   kotlin_specialist:
     manifest: 6fd226964586d4d9ec1d2f0007a7d708768aab9add669f5cace69990ffa87866
-    prompt: 729bc78cab47404fa8320ecc83fe1b39df06f6ecc9478bbfe4fd8d97abeaa068
+    prompt: 74ec0950b54fee4755a3c589eb1acc433cfd60ae3e14f4cc20df79f4bd07eefa
   brief_writer:
     manifest: e59d26eddc2a2193ab07f2260eba2e250fa2c42a6222863cfb45cb8889404a83
     prompt: 17d10f0ab97fa3ecd0fd1012bb0c4d1ec2fb9d59864c5a568628a873699b3bcb
   outside_specialist:
     manifest: 81e9f3a9f17ce8c22ca92795ddf982ae3b6af82a3fcd2d47324e01d7d7629888
-    prompt: 500a7a6e926ed015242adf50c53f08902fc4e31d98918653bb722030d1a3ad85
+    prompt: 95eabe31e9fb483547c400b50688d0c2067745cea2e5dbb0f9f9c08320e72385

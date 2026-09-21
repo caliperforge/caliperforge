@@ -11,6 +11,9 @@ const BOT = /\[bot\]$|greptile/i
 
 const SCORE = /(\d)\s*\/\s*5/
 
+/** Greptile's summary names its score; any other `n/5` in the body is taken only where this is absent. */
+const CONFIDENCE = /Confidence Score:\s*(\d)\s*\/\s*5/i
+
 /** Every open PR of ours, every tick. `gh` polling is the only reader; there is no webhook and no server. */
 export function capture(db: Db, read: (repo: string, no: number) => Pr = readPr): SignalRow[] {
   return pushed(db).flatMap((row) => reachable(db, row, read))
@@ -47,12 +50,18 @@ export function signals(view: Pr, row: Pushed): Signal[] {
   const base: Base = { repo: row.repo, pr: view.number, plan: row.plan }
   const theirs = (login: string): boolean => login !== view.author?.login
   return [
-    ...view.comments.filter((c) => theirs(c.author.login)).map((c) => ({ ...base, kind: 'comment' as const,
-      author: c.author.login, at: c.createdAt, external_id: c.id, score: null, body: c.body })),
+    ...view.comments.filter((c) => theirs(c.author.login)).map((c) => comment(base, c)),
     ...view.reviews.filter((r) => theirs(r.author.login)).map((r) => review(base, r)),
     ...merged(base, view),
     ...red(base, view),
   ]
+}
+
+/** #103: a review bot's summary comment carries its score as its review would; only a person's comment asks something of us. */
+function comment(base: Base, c: Pr['comments'][number]): Signal {
+  const bot = BOT.test(c.author.login)
+  return { ...base, kind: bot ? 'bot_review' : 'comment', author: c.author.login, at: c.createdAt, external_id: c.id,
+    score: bot ? scored(c.body) : null, body: c.body }
 }
 
 function review(base: Base, r: Pr['reviews'][number]): Signal {
@@ -71,7 +80,7 @@ function review(base: Base, r: Pr['reviews'][number]): Signal {
 
 /** A bot review with no `n/5` states no verdict; the CHECK on `signals` drops the row rather than let it rewind the plan. */
 function scored(body: string): number | null {
-  const hit = SCORE.exec(body)?.[1]
+  const hit = (CONFIDENCE.exec(body) ?? SCORE.exec(body))?.[1]
   return hit === undefined ? null : Number(hit)
 }
 

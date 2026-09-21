@@ -28,3 +28,7 @@ test('the prompt names the row a file outside the brief needs', () => {
 test('the prompt says the brief\'s files are handed', () => {
   expect(seat(root, 'typescript_specialist').prompt).toContain('follow it under `# The files`')
 })
+
+test('the prompt names the only commands the seat may run', () => {
+  expect(seat(root, 'typescript_specialist').prompt).toContain('Those npm scripts are the only commands you may run')
+})

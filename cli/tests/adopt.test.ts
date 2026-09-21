@@ -148,8 +148,8 @@ test('the thread the adoption inherited is recorded and starts nothing', () => {
     reviews: [{ id: 'r7', author: { login: 'EfeDurmaz16' }, body: 'please split this', submittedAt: '2026-09-17T18:00:00Z' }],
     statusCheckRollup: [],
   }))
-  expect(history.map((s) => s.kind)).toEqual(['comment', 'comment', 'review'])
-  expect(history.map((s) => started(db, s))).toEqual([null, null, null])
+  expect(history.map((s) => s.kind)).toEqual(['comment', 'review'])
+  expect(history.map((s) => started(db, s))).toEqual([null, null])
   expect(db.prepare('SELECT step, state FROM plans WHERE id = ?').get(plan)).toEqual({ step: 8, state: 'done' })
 })
 

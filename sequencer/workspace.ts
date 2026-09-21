@@ -52,6 +52,9 @@ export const FORK = 'caliperforge'
 /** Our own repository: the tree an internal plan is branched in, and the one its PR is opened on. */
 export const SELF = `${FORK}/caliperforge`
 
+/** #102: the private repo the sign-off cards live on, apart from our public tickets and pull requests. */
+export const SIGNOFF = `${FORK}/signoff`
+
 /** A target directory that names the language its builder must be able to compile. */
 const LANGUAGES: [string, string][] = [['kotlin', 'kotlin']]
 

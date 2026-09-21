@@ -129,6 +129,21 @@ test('the tick records every comment, review, bot review and merge on our open p
   ])
 })
 
+/** #103: on plan 65 Greptile's 5/5 summary comment rewound the finished job and told the CEO he was asked. */
+test('a review bot\'s summary comment is its score, not a person asking', async () => {
+  const w = await pushed()
+  const summary = (n: number): string => `<h2><a href="https://app.greptile.com"><picture></picture></a>Confidence Score: ${String(n)}/5</h2>\n\n1 of 2 files`
+  const view = pr({ comments: [
+    { id: 'g1', author: { login: 'greptile-apps' }, body: summary(5), createdAt: new Date(Date.now() + 1000).toISOString() },
+    { id: 'g2', author: { login: 'greptile-apps' }, body: summary(3), createdAt: new Date(Date.now() + 2000).toISOString() },
+  ] })
+  const [five, three] = capture(w.db, () => view)
+  if (five === undefined || three === undefined) throw new Error('two signals expected')
+  expect([five.kind, five.score, three.kind, three.score]).toEqual(['bot_review', 5, 'bot_review', 3])
+  expect(started(w.db, five)).toBeNull()
+  expect(started(w.db, three)).toMatchObject({ step: 4 })
+})
+
 test('what we said on our own pull request is not a signal; their words and the review state are kept', async () => {
   const w = await pushed()
   const view = pr({

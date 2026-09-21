@@ -15,7 +15,7 @@ import { builder } from '../templates/pr-path.ts'
 import { checks, type Failure } from './checks.ts'
 import type { Outcome } from './kind.ts'
 import { seat } from '../runner/rules.ts'
-import { strays } from './fence.ts'
+import { renumbered, strays } from './fence.ts'
 import { fenceFor, languageFor } from './route.ts'
 import { diffOf, doneIds, get, maybe, srcDir } from './workspace.ts'
 
@@ -81,15 +81,17 @@ function rest(db: Db, root: string, plan: PlanRow, handback: string): [string, (
     : []
   return [
     ['secret-scan', () => scan(diff)],
-    ['authority', () => authority(root, name, diff, internal(plan), fence, outside)],
-    ['tight', () => tight(root, { diff, sources: sources(src, diff), description: prose(root, plan, handback) })],
+    ['authority', () => authority(root, name, diff, internal(plan), fence, outside, internal(plan) ? renumbered(src, diff) : [])],
+    ['tight', () => tight(root, { diff, sources: sources(src, diff), ...prose(root, plan, handback) })],
     ['test-weakened', () => weakened(diff, 'green')],
     ['identifiers', () => identifiers(src, handback)],
   ]
 }
 
-function prose(root: string, plan: PlanRow, handback: string): string {
-  return maybe(root, plan.id, 'pr.md') ?? (internal(plan) ? '' : handback)
+function prose(root: string, plan: PlanRow, handback: string): { description: string; prose: 'description' | 'handback' } {
+  const text = maybe(root, plan.id, 'pr.md')
+  if (text !== null) return { description: text, prose: 'description' }
+  return { description: internal(plan) ? '' : handback, prose: 'handback' }
 }
 
 function named(rail: string, verdict: Verdict): Outcome {

@@ -58,7 +58,7 @@ test('the seat may run gradle and nothing else, and a chained command is not gra
   expect(ran(p, './gradlew -p kotlin check')).toEqual({ continue: true })
   for (const command of ['curl https://example.com', 'git push origin HEAD', 'gradle check && curl x', 'echo hi > ../../base.sha']) {
     expect(ran(p, command)).toMatchObject({
-      continue: false,
+      continue: true,
       hookSpecificOutput: { permissionDecision: 'deny', permissionDecisionReason: `ruling:seat.tools refuses the command ${JSON.stringify(command)}` },
     })
   }

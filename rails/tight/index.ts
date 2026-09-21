@@ -12,6 +12,8 @@ export interface Subject {
   diff: string
   sources: Record<string, string>
   description: string
+  /** What a prose span is named for: the PR text, or the builder's handback where there is none. */
+  prose?: 'description' | 'handback'
 }
 
 export function tight(root: string, subject: Subject): Verdict {
@@ -19,7 +21,7 @@ export function tight(root: string, subject: Subject): Verdict {
   const files = parse(subject.diff)
   const spans = [
     ...files.flatMap((f) => named(f.path, inFile(f, subject.sources, ceilings))),
-    ...named('description', inProse(subject.description, files.map((f) => f.path))),
+    ...named(subject.prose ?? 'description', inProse(subject.description, files.map((f) => f.path))),
   ]
   const subject_digest = createHash('sha256').update(`${subject.diff}\n${subject.description}`).digest('hex')
   if (spans.length === 0) return { outcome: 'pass', defect_class: null, origin_kind: null, origin_ref: null, subject_digest, spans, message: `${String(files.length)} file(s) and the description are Tight` }

@@ -1,3 +1,4 @@
+import { existsSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { ROSTER, SEED } from '../cli/digests.ts'
 import { section, TEST } from './brief.ts'
@@ -25,4 +26,22 @@ function admits(listed: string[], path: string): boolean {
     const tests = join(dirname(l), 'tests')
     return dir === dirname(l) || dir === tests || dir.startsWith(`${tests}/`)
   })
+}
+
+/** A migration a diff creates: `--- /dev/null` over `+++ b/schema/NNNN_*.sql`. */
+const MADE = /^--- \/dev\/null\n\+\+\+ b\/(schema\/(\d{4})_[^\n/]*\.sql)$/gm
+
+/**
+ * A migration the build created, numbered at or below one the checkout already holds. `migrate` applies only
+ * what is above the store's `user_version`, so the live store would never run it: plan 46 (#52) built a 0018
+ * on a base that already had 0021.
+ */
+export function renumbered(src: string, diff: string): string[] {
+  const made = [...diff.matchAll(MADE)].map((m) => ({ path: String(m[1]), n: Number(m[2]) }))
+  const dir = join(src, 'schema')
+  if (made.length === 0 || !existsSync(dir)) return []
+  const mine = new Set(made.map((m) => m.path))
+  const held = readdirSync(dir).filter((f) => /^\d{4}_.*\.sql$/.test(f) && !mine.has(`schema/${f}`)).map((f) => Number(f.slice(0, 4)))
+  const top = Math.max(0, ...held)
+  return made.filter((m) => m.n <= top).map((m) => m.path)
 }

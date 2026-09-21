@@ -1,4 +1,6 @@
 import { execFileSync } from 'node:child_process'
+import { basename } from 'node:path'
+import { parse } from '../rails/diff.ts'
 import { approve, batch, refuse, type Card } from '../cli/batch.ts'
 import type { Answer, Desk, Seen } from '../cli/gh.ts'
 import { notify, record, type Event, type Kind } from '../cli/inbox.ts'
@@ -7,7 +9,7 @@ import { needsCeo, PlanRow, rewind } from '../store/plans.ts'
 import { clear } from '../store/refusals.ts'
 import type { Board } from '../rails/ci-green/index.ts'
 import { BOARD, headOf, opened } from './push.ts'
-import { drop, FORK, maybe, put, repoName, titleOf } from './workspace.ts'
+import { diffOf, drop, FORK, get, maybe, put, repoName, titleOf } from './workspace.ts'
 
 /**
  * 09-21 item 4: an outside job is signed off without a terminal. A plan waiting at step 7 gets one
@@ -77,7 +79,8 @@ function answered(db: Db, root: string, card: Card, kept: Kept, seen: Seen & { a
     } else {
       db.transaction(() => { clear(db, card.id); rewind(db, card.id, BUILD) })()
       put(root, card.id, 'refusal.md', said(kept.url, seen.words))
-      close('Refused. It goes back to the builder with your words; a new card comes with the next round.')
+      put(root, card.id, 'issue.md', ruled(get(root, card.id, 'issue.md'), seen.words, now.toISOString().slice(0, 10)))
+      close('Refused. It goes back to the builder with your words, and they are now part of its brief; a new card comes with the next round.')
       drop(root, card.id, FILE)
       tell(root, card, 'refused', `back to the builder: ${flat(seen.words)}`, now)
     }
@@ -157,11 +160,22 @@ export function bodyFor(db: Db, root: string, card: Card): string {
     text,
     fence,
     '',
+    ...unsaid(root, card.id, open === null ? text : null),
     '**Answer with one label.** `go` sends it. `no` refuses it: comment first and the builder reworks against your words. `talk` hands it to the COO.',
     '',
     `<sub>plan ${String(card.id)}, head ${head.sha.slice(0, 12)}, digest ${card.digest.slice(0, 12)}</sub>`,
     '',
   ].join('\n')
+}
+
+/**
+ * #97: PR text written in advance (`cf queue add --pr`) can leave out a file the build changed. The card names
+ * each one the text never mentions, by path or by name, so the gap is seen before `go`.
+ */
+function unsaid(root: string, plan: number, text: string | null): string[] {
+  if (text === null || maybe(root, plan, 'pr.md') === null) return []
+  const left = parse(diffOf(root, plan)).map((f) => f.path).filter((p) => !text.includes(p) && !text.includes(basename(p)))
+  return left.length === 0 ? [] : [`**Not in the PR text:** ${left.map((p) => code(p)).join(', ')}`, '']
 }
 
 /** Green is said only of what finished green: a workflow the gate did not judge is still on the card, and still counts here. */
@@ -201,6 +215,31 @@ function code(text: string): string {
   const tick = '`'.repeat(longest(text) + 1)
   const pad = text.startsWith('`') || text.endsWith('`') ? ' ' : ''
   return `${tick}${pad}${text}${pad}${tick}`
+}
+
+/**
+ * The CEO's `no` with words joins the brief: a D row the builder must answer and a Must not break line the
+ * reviewers hold. `refusal.md` carries them for one round; the brief carries them for every round after it.
+ */
+export function ruled(brief: string, words: string, day: string): string {
+  const said = `The CEO's ruling at sign-off (${day}): ${words.replace(/\s+/g, ' ').trim()}`
+  const next = Math.max(0, ...[...brief.matchAll(/^\s*[-*]\s*\**D(\d+)/gm)].map((m) => Number(m[1]))) + 1
+  const lines = brief.trimEnd().split('\n')
+  const cased = under(lines, '## Cases', `- D${String(next)} ${said}`)
+  const held = under(lines, '## Must not break', `- ${said}`)
+  if (!cased && !held) lines.push('', "## The CEO's rulings", '', `- D${String(next)} ${said}`)
+  return `${lines.join('\n')}\n`
+}
+
+/** Adds `line` as the last bullet of the section under `heading`; false where the brief has no such section. */
+function under(lines: string[], heading: string, line: string): boolean {
+  const from = lines.findIndex((l) => l.trimEnd() === heading)
+  if (from === -1) return false
+  const next = lines.findIndex((l, i) => i > from && l.startsWith('## '))
+  let at = next === -1 ? lines.length : next
+  while (at > from + 1 && (lines[at - 1] ?? '').trim() === '') at -= 1
+  lines.splice(at, 0, line)
+  return true
 }
 
 function said(url: string, words: string): string {

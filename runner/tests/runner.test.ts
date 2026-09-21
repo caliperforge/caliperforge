@@ -5,7 +5,7 @@ import type { HookInput, SDKResultMessage } from '@anthropic-ai/claude-agent-sdk
 import { expect, test } from 'vitest'
 import { fresh, rejects } from '../../checks/sqlite.ts'
 import { fired, gate } from '../../providers/claude-agent-sdk/index.ts'
-import type { Provider } from '../../providers/kind.ts'
+import { CAPPED, type Provider } from '../../providers/kind.ts'
 import { fire, packet, planRow, refuse } from '../index.ts'
 import { load, rules, seat } from '../rules.ts'
 
@@ -122,6 +122,11 @@ test('a hook-stopped session lands non-zero carrying the refusal origin, a compl
   expect(stopped).toMatchObject({ exit: 1, denials: 1, stop_reason: reason, text: reason })
   const clean = fired(result({ result: 'done', terminal_reason: 'completed' }), Date.now(), [])
   expect(clean).toMatchObject({ exit: 0, denials: 0, stop_reason: 'end_turn', text: 'done' })
+})
+
+test('a session out of turns lands the cap in stop_reason, over the terminal reason it carries', () => {
+  const capped = fired(result({ subtype: 'error_max_turns', is_error: true, errors: [], terminal_reason: 'completed' }), Date.now(), [])
+  expect(capped).toMatchObject({ exit: 1, stop_reason: CAPPED })
 })
 
 test('a refused command is counted and the session still lands zero', () => {

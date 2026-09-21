@@ -113,11 +113,11 @@ test('a run that ends at the step cap is fired once more with no tools, and that
   const out = await judge(db, root, 'code_quality', plan, seeded(), provider, TRANSCRIPT)
   expect(sent[0]?.steps).toBe(STEP_CAP)
   expect(sent[1]?.tools).toEqual([])
-  expect(out.outcome).toMatchObject({ outcome: 'refuse', spans: ['src/stats.ts:2'] })
+  expect(out.outcome).toMatchObject({ outcome: 'refuse', spans: ['src/stats.ts:2'], origin_kind: 'ruling', origin_ref: 'reviewers.verdict' })
   expect(db.prepare('SELECT exit FROM runs WHERE plan = ? ORDER BY id').all(plan)).toEqual([{ exit: 1 }, { exit: 0 }])
   expect(db.prepare('SELECT max(id) AS id FROM runs WHERE plan = ?').get(plan)).toEqual({ id: out.run })
-  expect(db.prepare('SELECT id, outcome, tokens, seconds FROM verdicts WHERE plan = ?').all(plan))
-    .toEqual([{ id: out.verdict, outcome: 'refuse', tokens: 36, seconds: 1 }])
+  expect(db.prepare('SELECT id, outcome, origin_kind, origin_ref, tokens, seconds FROM verdicts WHERE plan = ?').all(plan))
+    .toEqual([{ id: out.verdict, outcome: 'refuse', origin_kind: 'ruling', origin_ref: 'reviewers.verdict', tokens: 36, seconds: 1 }])
 })
 
 test('a refusal whose class is not one of the four is still a refusal carrying its spans', async () => {

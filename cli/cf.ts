@@ -10,7 +10,7 @@ import { fire } from '../runner/index.ts'
 import { CHAIN_MINUTES, dry, tick } from '../sequencer/index.ts'
 import { behind, upgraded } from '../sequencer/upgrade.ts'
 import { signoffs } from '../sequencer/signoff.ts'
-import { liveTree, SELF } from '../sequencer/workspace.ts'
+import { liveTree, SIGNOFF } from '../sequencer/workspace.ts'
 import { blocked, targetDigest } from '../sequencer/steps.ts'
 import { release } from '../store/holds.ts'
 import { dump, migrate, open as openDb, type Db } from '../store/index.ts'
@@ -311,13 +311,13 @@ cf.command('tick').option('--dry', 'read what a tick would do, fire nothing, cal
     cards(handle, now)
   })
 
-cf.command('signoff').description('open, read and close the sign-off cards on our repo, as every tick does')
+cf.command('signoff').description('open, read and close the sign-off cards on the private sign-off repo, as every tick does')
   .action(() => { cards(db(), new Date()) })
 
 /** A tracker that cannot be read this time leaves every card where it stands; the next tick reads it again. */
 function cards(handle: Db, now: Date): void {
   try {
-    for (const s of signoffs(handle, root, desk(SELF), now)) out(`signoff\tplan ${String(s.plan)}\tcard ${String(s.card)}\t${s.did}\n`)
+    for (const s of signoffs(handle, root, desk(SIGNOFF), now)) out(`signoff\tplan ${String(s.plan)}\tcard ${String(s.card)}\t${s.did}\n`)
   } catch (error) {
     process.stderr.write(`cf: sign-off cards: ${error instanceof Error ? error.message : String(error)}\n`)
   }

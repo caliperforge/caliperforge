@@ -6,7 +6,7 @@ import { unread } from '../../cli/inbox.ts'
 import { rewind } from '../../store/plans.ts'
 import { tick } from '../index.ts'
 import { ruled, signoffs } from '../signoff.ts'
-import { put, srcDir } from '../workspace.ts'
+import { put, SELF, SIGNOFF, srcDir } from '../workspace.ts'
 import { approve, CARRIED, plan, stub, watched, world, type World } from './world.ts'
 
 async function atBatch(): Promise<World> {
@@ -37,7 +37,7 @@ function fake(): Desk & { cards: Map<number, Held>; log: string[] } {
       const no = cards.size + 100
       cards.set(no, { title, body, open: true, answer: null, words: null, closing: null })
       log.push(`open ${String(no)}`)
-      return { no, url: `https://github.com/caliperforge/caliperforge/issues/${String(no)}` }
+      return { no, url: `https://github.com/${SIGNOFF}/issues/${String(no)}` }
     },
     seen: (no): Seen => ({ answer: card(no).answer, words: card(no).words, open: card(no).open }),
     unlabel: (no, label) => { log.push(`unlabel ${String(no)} ${label}`); card(no).answer = null },
@@ -120,7 +120,7 @@ test('a new head closes the old card and opens the next; a job sent back closes 
   const w = await atBatch()
   const desk = fake()
   signoffs(w.db, w.root, desk)
-  put(w.root, 1, 'signoff', `100 ${'f'.repeat(64)} https://github.com/caliperforge/caliperforge/issues/100\n`)
+  put(w.root, 1, 'signoff', `100 ${'f'.repeat(64)} https://github.com/${SIGNOFF}/issues/100\n`)
   expect(signoffs(w.db, w.root, desk)).toEqual([{ plan: 1, card: 100, did: 'superseded' }, { plan: 1, card: 101, did: 'opened' }])
   expect(desk.cards.get(100)?.closing).toMatch(/^Superseded/)
   rewind(w.db, 1, 4)
@@ -172,4 +172,10 @@ test('the card names a changed file the PR text written in advance leaves out', 
   }
   expect(await bodyWith('Says hey.\n')).toContain('**Not in the PR text:** `src/hello.ts`')
   expect(await bodyWith('`hello.ts` says hey.\n')).not.toContain('Not in the PR text')
+})
+
+/** #102: the cards carry unposted PR text and the CEO's answers, so they live apart from our public repo. */
+test('the cards live on the private sign-off repo, not ours', () => {
+  expect(SIGNOFF).toBe('caliperforge/signoff')
+  expect(SIGNOFF).not.toBe(SELF)
 })

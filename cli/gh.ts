@@ -211,9 +211,8 @@ function run(args: string[], input?: string): string {
 }
 
 /**
- * The repo is public, so a label only its collaborators can set is the answer, and only the one the
- * owner of this host's `gh` credential set counts: the machine holds no account of its own, and a
- * collaborator's label is not the CEO's word.
+ * Only the label the owner of this host's `gh` credential set is an answer: the machine holds no account of
+ * its own, and a collaborator's label is not the CEO's word, on the private card repo (#102) as anywhere.
  */
 export function desk(repo: string, read: Read = gh, exec: Run = run): Desk {
   let owner: string | null = null

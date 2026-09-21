@@ -56,8 +56,16 @@ function failures(output: string): string[] {
 function commands(src: string): string[][] {
   const scripts = named(src)
   if (scripts === null) return []
-  const install = existsSync(join(src, 'package-lock.json')) && !existsSync(join(src, 'node_modules'))
-  return [...(install ? [['ci']] : []), ...scripts.map((s) => ['run', s])]
+  return [...(bare(src) ? [['ci']] : []), ...scripts.map((s) => ['run', s])]
+}
+
+function bare(src: string): boolean {
+  return existsSync(join(src, 'package-lock.json')) && !existsSync(join(src, 'node_modules'))
+}
+
+/** Our own checkout gets its dependencies before the builder fires, so the checks it may run have something to run. */
+export function install(src: string, run: Run = npm): void {
+  if (bare(src)) run(['ci', '--include=dev'], src)
 }
 
 function named(src: string): string[] | null {

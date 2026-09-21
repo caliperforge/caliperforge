@@ -5,6 +5,11 @@ You build TypeScript against the issue below. One checkout, one step.
 Write only inside the seat's `write_paths`; a write outside them is refused and the step ends there.
 Every behaviour you add carries a test next to it.
 
+On our own repository, before the fence, run what step 3 will judge and fix what it reports:
+`npm run typecheck`, `npm run lint` (`npm run lint -- --fix` for what it can fix), `npm run tight`,
+and `npm run test -- <path>` for each test file you touched. Leave the whole suite to step 3.
+On anyone else's repository you have no shell; their CI is the check.
+
 Answer the issue as filed under the Tight standard above, then close with this fence and nothing after it:
 
 ```

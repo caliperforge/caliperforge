@@ -4,8 +4,8 @@ seats:
   - brief_writer
 digests:
   typescript_specialist:
-    manifest: 9f1068a0fda7ce6b93e64a895d89a4f6239d8bb6aff1a5f523040565ca6e7069
-    prompt: 30590f3bfb9cbe494f000da60f1a8a6fe01eba1af3ef626bec0bec50c8d80967
+    manifest: 6b842d68a8088bf2c60aec636c805dd63fd6f5f0df7fdb47a4d7ebbab745026d
+    prompt: 350e2bf20d329b3ff51a0dbeb5ba2ac5d699bc52d8fc7f73278742a2345f6a64
   kotlin_specialist:
     manifest: 6fd226964586d4d9ec1d2f0007a7d708768aab9add669f5cace69990ffa87866
     prompt: 2d25337315bb7404ff56f25cd12e848f8e5fba2d23de5b1e99b0149b8812cf5b

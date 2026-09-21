@@ -9,6 +9,7 @@ import { builderRan, internal, type PlanRow } from '../store/plans.ts'
 import { byRun, pending } from '../store/transcript.ts'
 import type { Step } from '../templates/pr-path.ts'
 import { shape, unclear } from './brief.ts'
+import { install } from './checks.ts'
 import type { Outcome } from './kind.ts'
 import { cloned, diffOf, diffSince, drop, get, maybe, move, planDir, put, snapshot, srcDir } from './workspace.ts'
 
@@ -17,6 +18,7 @@ const INSERT = `INSERT INTO runs
   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 export async function fireSeat(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
+  if (internal(plan)) install(srcDir(root, plan.id))
   const fired = await ran(db, root, plan, step, provider, rebuild(root, plan), internal(plan))
   put(root, plan.id, `step-${String(step.step)}.handback.md`, fired.text)
   const tokens = fired.usage.input + fired.usage.cache + fired.usage.output

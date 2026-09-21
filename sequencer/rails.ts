@@ -1,14 +1,12 @@
-import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fill } from '../cli/digests.ts'
 import { authority } from '../rails/authority/index.ts'
 import { audit, record } from '../rails/completion-audit/index.ts'
-import { parse } from '../rails/diff.ts'
 import { identifiers } from '../rails/identifiers/index.ts'
 import { record as recordRail, type Verdict } from '../rails/record.ts'
 import { scan } from '../rails/secret-scan/index.ts'
 import { weakened } from '../rails/test-weakened/index.ts'
-import { tight } from '../rails/tight/index.ts'
+import { sources, tight } from '../rails/tight/index.ts'
 import type { Db } from '../store/index.ts'
 import { internal, type PlanRow } from '../store/plans.ts'
 import { builder } from '../templates/pr-path.ts'
@@ -73,17 +71,6 @@ function rest(root: string, plan: PlanRow, handback: string): [string, () => Ver
     ['test-weakened', () => weakened(diff, 'green')],
     ['identifiers', () => identifiers(src, handback)],
   ]
-}
-
-/** Tight reads the whole function a hunk lands in, so it needs the file as the checkout now holds it. */
-function sources(src: string, diff: string): Record<string, string> {
-  const out: Record<string, string> = {}
-  for (const file of parse(diff)) {
-    const path = join(src, file.path)
-    if (file.deleted || !file.path.endsWith('.ts') || !existsSync(path)) continue
-    out[file.path] = readFileSync(path, 'utf8')
-  }
-  return out
 }
 
 function named(rail: string, verdict: Verdict): Outcome {

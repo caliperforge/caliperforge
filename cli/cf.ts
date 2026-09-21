@@ -5,6 +5,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { claudeAgentSdk } from '../providers/claude-agent-sdk/index.ts'
 import { credential } from '../providers/credential.ts'
+import { self } from '../rails/tight/index.ts'
 import { fire } from '../runner/index.ts'
 import { dry, tick } from '../sequencer/index.ts'
 import { behind, upgraded } from '../sequencer/upgrade.ts'
@@ -172,6 +173,13 @@ plan.argument('<id>').action((id: string) => {
 cf.command('release').argument('<plan>', 'a briefed plan waiting on the coo to read it').action((id: string) => {
   release(db(), Number(id))
   out(`plan ${id} released\n`)
+})
+
+cf.command('tight').description('the Tight rail on this checkout against main, as step 3 will run it').action(() => {
+  const verdict = self(process.cwd())
+  out(`${verdict.message}\n`)
+  for (const span of verdict.spans) out(`  ${span}\n`)
+  process.exitCode = verdict.outcome === 'pass' ? 0 : 1
 })
 
 cf.command('retry').argument('<plan>', 'a plan blocked on a refusal, sent round again with its count cleared')

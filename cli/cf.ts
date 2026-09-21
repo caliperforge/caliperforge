@@ -7,6 +7,7 @@ import { claudeAgentSdk } from '../providers/claude-agent-sdk/index.ts'
 import { credential } from '../providers/credential.ts'
 import { fire } from '../runner/index.ts'
 import { dry, tick } from '../sequencer/index.ts'
+import { behind, upgraded } from '../sequencer/upgrade.ts'
 import { liveTree } from '../sequencer/workspace.ts'
 import { blocked, targetDigest } from '../sequencer/steps.ts'
 import { release } from '../store/holds.ts'
@@ -246,18 +247,32 @@ cf.command('tick').option('--dry', 'read what a tick would do, fire nothing, cal
       dryTick(handle, now)
       return
     }
+    const sha = behind(handle, root)
+    if (sha !== null) {
+      halt(handle, now, sha)
+      return
+    }
     const { auth } = credential()
     process.stderr.write(`auth ${auth.kind} from ${auth.from}\n`)
     const fired = await tick(handle, root, claudeAgentSdk, now)
-    receipt(handle, { at: now.toISOString(), hhmm: hhmm(handle, now), dry: false,
+    receipt(handle, upgraded(handle, root, { at: now.toISOString(), hhmm: hhmm(handle, now), dry: false,
       pipes: openPipes(handle, hhmm(handle, now)).length, fired: fired.length,
-      exit: fired.some((f) => f.outcome === 'refuse') ? 1 : 0, note: tickNote(fired) })
+      exit: fired.some((f) => f.outcome === 'refuse') ? 1 : 0, note: tickNote(fired) }))
     if (fired.length === 0) out('nothing to fire\n')
     for (const f of fired) {
       out(`${f.pipe}\tplan ${String(f.plan)}\tstep ${String(f.step)} ${f.name}\t${f.outcome}\t${f.state}\t${f.note}\n`)
       for (const span of f.spans) out(`  span\t${span}\n`)
     }
   })
+
+/** Until the tree holds what it merged it would fire a lap of a version it has already replaced. */
+function halt(handle: Db, now: Date, sha: string): void {
+  const note = `live tree is behind ${sha.slice(0, 12)}; it fires nothing until it holds that commit`
+  process.stderr.write(`cf: ${note}\n`)
+  receipt(handle, { at: now.toISOString(), hhmm: hhmm(handle, now), dry: false,
+    pipes: openPipes(handle, hhmm(handle, now)).length, fired: 0, exit: 1, note })
+  process.exitCode = 1
+}
 
 function dryTick(handle: Db, now: Date): void {
   const would = dry(handle, now)

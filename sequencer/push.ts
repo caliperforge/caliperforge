@@ -8,6 +8,7 @@ import { headDigest, signedHead } from '../store/approvals.ts'
 import { forkGreen } from '../store/deliverables.ts'
 import type { Db } from '../store/index.ts'
 import { internal, originIssue, type PlanRow } from '../store/plans.ts'
+import { red } from './failures.ts'
 import type { Outcome } from './kind.ts'
 import { cloned, conflicted, diffOf, fetchMain, FORK, get, MAIN, maybe, planDir, put, repoName, SELF, srcDir, titleOf } from './workspace.ts'
 
@@ -43,6 +44,7 @@ const WAITS = 'ci.waits'
  * that head. GitHub has no run at a head the moment the push returns, so a head with no run yet
  * waits exactly as a run still going does, and both waits share one window: past `APPEARS` ticks
  * the spans are recorded as the refusal they are, so a CI that never greens still reaches `back()`.
+ * A red run goes to the builder, not a reviewer: their CI is the only test an outside build gets.
  */
 export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire = WIRE): Outcome | null {
   if (!internal(plan)) squash(root, plan.id)
@@ -60,7 +62,10 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
   }
   record(db, join(root, 'rails/ci-green'), plan.id, verdict, 0)
   forkGreen(db, plan.id, verdict.outcome === 'pass')
-  return null
+  const failed = verdict.outcome === 'refuse' ? red(fork, verdict.spans, wire.runs) : null
+  if (failed === null) return null
+  return { outcome: 'refuse', spans: failed.spans, message: failed.log, to: 2,
+    note: `their CI is red on ${fork}@${head.sha.slice(0, 12)}; back to the builder with the failed log` }
 }
 
 function unfinished(spans: string[]): string | null {

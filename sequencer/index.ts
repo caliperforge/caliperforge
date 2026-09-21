@@ -19,7 +19,7 @@ import { branchOf, checkout, diffOf, internalBranch, maybe, put, SELF, srcDir, t
 /** `read` and `wire` are the network a tick touches on its own account; both are injected so a test can drive a lap offline. */
 export async function tick(db: Db, root: string, provider: Provider, now: Date = new Date(),
   read: (repo: string, no: number) => Pr = readPr, wire?: Wire): Promise<Fired[]> {
-  for (const signal of capture(db, read)) started(db, signal)
+  for (const signal of capture(db, read)) started(db, signal, root)
   const out: Fired[] = []
   for (const pipe of openPipes(db, hhmm(db, now)).slice(0, cap(db).cap)) {
     out.push(...await Promise.all(picks(db, pipe).map((plan) => one(db, root, pipe, plan, provider, wire))))

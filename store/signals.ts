@@ -11,17 +11,20 @@ export const SignalRow = z.object({
   external_id: z.string(),
   score: z.int().nullable(),
   plan: z.int().nullable(),
+  body: z.string().nullable(),
+  state: z.string().nullable(),
 })
 
 export type SignalRow = z.infer<typeof SignalRow>
 
-export type Signal = Omit<SignalRow, 'id'>
+export type Signal = Omit<SignalRow, 'id' | 'body' | 'state'> & { body?: string | null; state?: string | null }
 
 /** The tick re-reads the same PR every run; the row is keyed so a replay writes nothing. */
 export function record(db: Db, signal: Signal): SignalRow | null {
   const written = db.prepare(`INSERT OR IGNORE INTO signals
-    (repo, pr, kind, author, at, external_id, score, plan) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-    .run(signal.repo, signal.pr, signal.kind, signal.author, signal.at, signal.external_id, signal.score, signal.plan)
+    (repo, pr, kind, author, at, external_id, score, plan, body, state) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(signal.repo, signal.pr, signal.kind, signal.author, signal.at, signal.external_id, signal.score, signal.plan,
+      signal.body ?? null, signal.state ?? null)
   if (written.changes === 0) return null
   return SignalRow.parse(db.prepare('SELECT * FROM signals WHERE id = ?').get(Number(written.lastInsertRowid)))
 }

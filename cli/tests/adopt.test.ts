@@ -132,12 +132,12 @@ test('capture reads an adopted pull request like any v2 pushed one, and replays 
   expect(capture(db, () => view()).filter((s) => s.kind === 'comment')).toEqual([])
 })
 
-test("a maintainer's comment on an adopted pull request puts its plan back on the review step", () => {
+test("a maintainer's comment on an adopted pull request goes to the build and waits there for a person", () => {
   const db = fresh(schema)
   const plan = adopted(db, root())
   const note = capture(db, () => view())[0]
-  expect(started(db, SignalRow.parse(note))).toMatchObject({ template: 'pr_path', plan, step: 4 })
-  expect(db.prepare('SELECT step, state FROM plans WHERE id = ?').get(plan)).toEqual({ step: 4, state: 'running' })
+  expect(started(db, SignalRow.parse(note))).toMatchObject({ template: 'pr_path', plan, step: 2 })
+  expect(db.prepare('SELECT step, state FROM plans WHERE id = ?').get(plan)).toEqual({ step: 2, state: 'blocked_on_ceo' })
 })
 
 test('the thread the adoption inherited is recorded and starts nothing', () => {

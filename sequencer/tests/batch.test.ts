@@ -14,6 +14,7 @@ import { capture } from '../capture.ts'
 import { classOf } from '../escapes.ts'
 import { headOf, prBody, push } from '../push.ts'
 import { started } from '../signals.ts'
+import { unread } from '../../cli/inbox.ts'
 import { put, srcDir } from '../workspace.ts'
 import { tick } from '../index.ts'
 import { approve, CARRIED, plan, PR as URL, stub, watched, world, type World } from './world.ts'
@@ -128,6 +129,52 @@ test('the tick records every comment, review, bot review and merge on our open p
   ])
 })
 
+test('what we said on our own pull request is not a signal; their words and the review state are kept', async () => {
+  const w = await pushed()
+  const view = pr({
+    author: { login: 'michael-moffett' },
+    comments: [
+      { id: 'c1', author: { login: 'michael-moffett' }, body: '@efe this rounds out the languages', createdAt: '2026-09-17T09:00:00Z' },
+      { id: 'c2', author: { login: 'maintainer' }, body: 'can you add PHP too?', createdAt: '2026-09-17T10:00:00Z' },
+    ],
+    reviews: [{ id: 'r1', author: { login: 'maintainer' }, body: 'rename this', submittedAt: '2026-09-17T11:00:00Z', state: 'CHANGES_REQUESTED' }],
+  })
+  expect(capture(w.db, () => view).map((s) => [s.kind, s.author, s.body, s.state])).toEqual([
+    ['comment', 'maintainer', 'can you add PHP too?', null],
+    ['review', 'maintainer', 'rename this', 'CHANGES_REQUESTED'],
+  ])
+})
+
+test('a changes-requested review goes to the builder with the words; a plain comment waits there for a person', async () => {
+  const w = await pushed()
+  const said = (id: string, state: string | undefined, body: string): SignalRow[] => capture(w.db, () => pr({
+    reviews: [{ id, author: { login: 'maintainer' }, body, submittedAt: new Date(Date.now() + 60_000).toISOString(),
+      ...(state === undefined ? {} : { state }) }],
+  }))
+  const [asked] = said('r1', 'CHANGES_REQUESTED', 'rename expires to expiry')
+  expect(asked === undefined ? null : started(w.db, asked, w.root)).toMatchObject({ plan: 1, step: 2 })
+  expect(plan(w.db, 1)).toMatchObject({ step: 2, state: 'running' })
+  expect(readFileSync(join(w.root, '.cf/work/1/refusal.md'), 'utf8')).toContain('rename expires to expiry')
+  expect(unread(w.root).map((e) => e.kind)).toEqual(['asked'])
+
+  const [plain] = said('r2', 'COMMENTED', 'why 120 and not 60?')
+  if (plain !== undefined) started(w.db, plain, w.root)
+  expect(plan(w.db, 1)).toMatchObject({ step: 2, state: 'blocked_on_ceo' })
+})
+
+test('a round on an open pull request pushes its branch without opening another', async () => {
+  const w = await pushed()
+  const sent: string[] = []
+  const wire = watched(sent, w.root, 1)
+  rewind(w.db, 1, 4)
+  for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  expect(sent).toEqual(['send src HEAD:refs/heads/widget-12-a1-next', 'rehearse caliperforge/widget widget-12-a1-next'])
+  approveCard(w.db, w.root, 'plan', 1)
+  advance(w.db, plan(w.db, 1), 8)
+  expect(push(w.db, w.root, plan(w.db, 1), wire)).toMatchObject({ outcome: 'pass', note: `pushed widget-12-a1 onto ${URL}` })
+  expect(sent.slice(2)).toEqual(['send src widget-12-a1', 'unrehearse caliperforge/widget widget-12-a1-next'])
+})
+
 test('a counterparty finding on merged code is an escape against the step the map says owns it', async () => {
   const w = await pushed()
   const merged = pr({
@@ -189,7 +236,8 @@ test('a signal starts the plan the map says it starts', async () => {
   expect(started(w.db, row(w.db, bot(5)))).toBeNull()
   expect(started(w.db, row(w.db, bot(4)))).toMatchObject({ template: 'pr_path', plan: 1, step: 4 })
   expect(plan(w.db, 1)).toMatchObject({ step: 4, state: 'running' })
-  expect(started(w.db, row(w.db, signal(w.db, 'ci_red', 'ci', null)))).toMatchObject({ template: 'pr_path', step: 4 })
+  expect(started(w.db, row(w.db, signal(w.db, 'ci_red', 'ci', null)))).toMatchObject({ template: 'pr_path', step: 2 })
+  expect(plan(w.db, 1)).toMatchObject({ step: 2, state: 'running' })
   const comms = started(w.db, row(w.db, signal(w.db, 'merge', 'maintainer', null)))
   expect(comms).toMatchObject({ template: 'comms', step: 0 })
   expect(w.db.prepare('SELECT template, state FROM plans WHERE id = ?').get(comms?.plan))

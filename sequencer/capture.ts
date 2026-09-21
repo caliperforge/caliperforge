@@ -42,12 +42,14 @@ function acted(db: Db, view: Pr, fresh: SignalRow[]): SignalRow[] {
   return view.reviewDecision?.toLowerCase() === ruled.value ? fresh.filter((s) => s.kind === 'merge') : fresh
 }
 
+/** Everything on our open pull request but what we said ourselves: our own comment asks nothing of us. */
 export function signals(view: Pr, row: Pushed): Signal[] {
   const base: Base = { repo: row.repo, pr: view.number, plan: row.plan }
+  const theirs = (login: string): boolean => login !== view.author?.login
   return [
-    ...view.comments.map((c) => ({ ...base, kind: 'comment' as const, author: c.author.login,
-      at: c.createdAt, external_id: c.id, score: null })),
-    ...view.reviews.map((r) => review(base, r)),
+    ...view.comments.filter((c) => theirs(c.author.login)).map((c) => ({ ...base, kind: 'comment' as const,
+      author: c.author.login, at: c.createdAt, external_id: c.id, score: null, body: c.body })),
+    ...view.reviews.filter((r) => theirs(r.author.login)).map((r) => review(base, r)),
     ...merged(base, view),
     ...red(base, view),
   ]
@@ -62,6 +64,8 @@ function review(base: Base, r: Pr['reviews'][number]): Signal {
     at: r.submittedAt,
     external_id: r.id,
     score: bot ? scored(r.body) : null,
+    body: r.body,
+    state: r.state ?? null,
   }
 }
 
@@ -81,7 +85,8 @@ function red(base: Base, view: Pr): Signal[] {
   return (view.statusCheckRollup ?? [])
     .filter((c) => c.conclusion === 'FAILURE')
     .map((c) => ({ ...base, kind: 'ci_red' as const, author: 'ci', at: new Date().toISOString(),
-      external_id: `${String(view.number)}-${c.name ?? 'check'}`, score: null }))
+      external_id: `${String(view.number)}-${c.name ?? 'check'}`, score: null,
+      body: `their CI check ${c.name ?? 'check'} is red on the pull request` }))
 }
 
 /**

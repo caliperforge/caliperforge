@@ -95,13 +95,15 @@ const Pr = z.object({
   mergedBy: z.object({ login: z.string() }).nullable(),
   reviewDecision: z.string().nullable(),
   comments: z.array(z.object({ id: z.string(), author: z.object({ login: z.string() }), body: z.string(), createdAt: z.string() })),
-  reviews: z.array(z.object({ id: z.string(), author: z.object({ login: z.string() }), body: z.string(), submittedAt: z.string() })),
+  reviews: z.array(z.object({ id: z.string(), author: z.object({ login: z.string() }), body: z.string(), submittedAt: z.string(),
+    state: z.string().optional() })),
+  author: z.object({ login: z.string() }).optional(),
   statusCheckRollup: z.array(z.looseObject({ name: z.string().optional(), conclusion: z.string().nullish() })).nullable(),
 })
 
 export type Pr = z.infer<typeof Pr>
 
-const PR_FIELDS = 'number,url,state,mergedAt,mergedBy,reviewDecision,comments,reviews,statusCheckRollup'
+const PR_FIELDS = 'number,url,state,mergedAt,mergedBy,reviewDecision,comments,reviews,statusCheckRollup,author'
 
 export function pr(repo: string, no: number): Pr {
   return Pr.parse(gh(['pr', 'view', String(no), '--repo', repo, '--json', PR_FIELDS]))
@@ -113,7 +115,6 @@ export function prNumber(url: string): number {
   return Number(hit[1])
 }
 
-/** Opened under the CEO's `gh` credential; the machine holds no account of its own. */
 /**
  * Their CI runs on pull requests, not on a pushed branch, so a pull request on our own fork is what
  * starts it. Its title and body name nothing upstream: a number there would put a permanent
@@ -142,6 +143,7 @@ function rehearsal(fork: string, branch: string): number | null {
   return open[0]?.number ?? null
 }
 
+/** Opened under the CEO's `gh` credential; the machine holds no account of its own. */
 export function openPr(repo: string, head: string, title: string, bodyFile: string): string {
   return execFileSync('gh', ['pr', 'create', '--repo', repo, '--base', 'main', '--head', head,
     '--title', title, '--body-file', bodyFile], { encoding: 'utf8' }).trim()

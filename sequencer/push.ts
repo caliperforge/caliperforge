@@ -33,6 +33,12 @@ const WIRE: Wire = {
   unrehearse,
 }
 
+/**
+ * Once the pull request is open, CI runs on this branch beside it: pushing the real branch would put
+ * an unsigned-off round on the maintainer's screen before the CEO has seen it.
+ */
+const NEXT = '-next'
+
 /** Ticks a head is given to reach a finished run; past them an unfinished CI is judged as it stands. */
 const APPEARS = 10
 
@@ -47,12 +53,14 @@ const WAITS = 'ci.waits'
  * A red run goes to the builder, not a reviewer: their CI is the only test an outside build gets.
  */
 export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire = WIRE): Outcome | null {
-  if (!internal(plan)) squash(root, plan.id)
+  const open = !internal(plan) && opened(db, plan.id) !== null
+  if (!internal(plan)) (open ? follow : squash)(root, plan.id)
   const head = headOf(root, plan.id)
   const fork = `${FORK}/${repoName(repo)}`
-  wire.send(head.dir, head.branch)
-  if (!internal(plan)) wire.rehearse?.(fork, head.branch)
-  const verdict = ciGreen({ fork, branch: head.branch, sha: head.sha },
+  const ci = open ? `${head.branch}${NEXT}` : head.branch
+  wire.send(head.dir, open ? `HEAD:refs/heads/${ci}` : head.branch)
+  if (!internal(plan)) wire.rehearse?.(fork, ci)
+  const verdict = ciGreen({ fork, branch: ci, sha: head.sha },
     { body: '', commits: commits(head.dir) }, touched(root, plan.id), wire.runs)
   const waiting = unfinished(verdict.spans)
   if (waiting !== null) {
@@ -159,14 +167,26 @@ export function push(db: Db, root: string, plan: PlanRow, wire: Wire = WIRE): Ou
   if (approval === null) return refuse('approvals', `no ceo approval row for ${head.branch} at ${head.sha.slice(0, 12)}`)
   const cold = unproven(db, plan.id)
   if (cold !== null) return refuse(cold, `${cold} left no passing verdict on plan ${String(plan.id)}`)
+  const open = opened(db, plan.id)
+  wire.send(head.dir, head.branch)
+  wire.unrehearse?.(`${FORK}/${repoName(target.repo)}`, open === null ? head.branch : `${head.branch}${NEXT}`)
+  if (open !== null) {
+    pushed(db, plan.id, approval, open)
+    return { outcome: 'pass', spans: [], note: `pushed ${head.branch} onto ${open}` }
+  }
   const body = maybe(root, plan.id, 'pr.md') === null
     ? put(root, plan.id, 'pr.md', prBody(target.issue_no, root, plan.id))
     : join(planDir(root, plan.id), 'pr.md')
-  wire.send(head.dir, head.branch)
-  wire.unrehearse?.(`${FORK}/${repoName(target.repo)}`, head.branch)
   const url = wire.open(target.repo, `caliperforge:${head.branch}`, title(root, plan.id), body)
   pushed(db, plan.id, approval, url)
   return { outcome: 'pass', spans: [], note: `pushed ${head.branch} as ${url}` }
+}
+
+/** The pull request this plan already opened, if it did: the row step 8 stamped carries its url. */
+export function opened(db: Db, plan: number): string | null {
+  const row = db.prepare(`SELECT evidence FROM deliverables WHERE plan_id = ? AND state = 'pushed'
+    AND evidence GLOB 'https://*/pull/*' ORDER BY id DESC LIMIT 1`).get(plan) as { evidence: string } | undefined
+  return row?.evidence ?? null
 }
 
 /** The ready gate already consumed fork CI and the counterparty bot; push reads its rows, never reruns them. */
@@ -246,9 +266,50 @@ export function squash(root: string, plan: number): void {
   const staged = git(dir, ['diff', '--cached', '--name-only']).trim() !== ''
   if (!staged && count === 1 && git(dir, ['log', '-1', '--format=%B']).trim() === message) return
   git(dir, ['reset', '--soft', base])
+  sign(dir, message)
+}
+
+/**
+ * Once the pull request is open its branch only moves forward -- no force-push, ever. The rounds'
+ * commits since the head the pull request shows fold into one signed follow-up commit on top of it.
+ */
+export function follow(root: string, plan: number): void {
+  const dir = srcDir(root, plan)
+  const branch = git(dir, ['rev-parse', '--abbrev-ref', 'HEAD']).trim()
+  const shown = `refs/remotes/origin/${branch}`
+  const message = `${kindOf(title(root, plan))}: address review`
+  git(dir, ['add', '-A', '--', '.'])
+  if (!published(dir, branch, shown)) {
+    sign(dir, message)
+    return
+  }
+  const count = Number(git(dir, ['rev-list', '--count', `${shown}..HEAD`]).trim())
+  const staged = git(dir, ['diff', '--cached', '--name-only']).trim() !== ''
+  if (!staged && (count === 0 || (count === 1 && git(dir, ['log', '-1', '--format=%B']).trim() === message))) return
+  git(dir, ['reset', '--soft', shown])
+  sign(dir, message)
+}
+
+/** Whether we know the head the pull request shows; not knowing it, nothing already committed is folded. */
+function published(dir: string, branch: string, shown: string): boolean {
+  try {
+    git(dir, ['fetch', '--no-tags', 'origin', `+refs/heads/${branch}:${shown}`])
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** A commit as the host's git identity, signed where the host signs; nothing staged is no commit. */
+function sign(dir: string, message: string): void {
   if (git(dir, ['diff', '--cached', '--name-only']).trim() === '') return
   execFileSync('git', [...identity(dir), 'commit', '-q', '-m', message],
     { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 60_000 })
+}
+
+/** The conventional-commit type and scope of the pull request's title, for its follow-up commits. */
+function kindOf(title: string): string {
+  return /^([a-z]+(?:\([^)]*\))?)!?:/.exec(title)?.[1] ?? 'fix'
 }
 
 /** Subject and body with no upstream number: the ci-green rail refuses a branch whose commits name one. */

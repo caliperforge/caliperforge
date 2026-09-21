@@ -70,11 +70,22 @@ function order(brief: string): string | null {
   return null
 }
 
-/** The one reader of `## Files`: every path the brief says the job touches, in the order it listed them. */
+/** A path in backticks anywhere on a `## Files` row; the directory in it is what tells it from a symbol. */
+const TICKED = /`([A-Za-z0-9_.-]*\/[A-Za-z0-9_./-]*\.[A-Za-z0-9]+)(?::[\d,-]+)?`/g
+
+/**
+ * The one reader of `## Files`: every path the brief says the job touches, in the order it listed them,
+ * once each. A row may name several (`- Tests: \`a\`, \`b\``): an outside builder's fence is this list,
+ * so a path the reader drops is a file the builder cannot write.
+ */
 export function files(brief: string): PlanFile[] {
+  const seen = new Set<string>()
+  const first = (path: string): boolean => !seen.has(path) && Boolean(seen.add(path))
   return section(brief, '## Files').split('\n').flatMap((line): PlanFile[] => {
-    const path = PATH.exec(line)?.[1]
-    return path === undefined ? [] : [{ path, is_new: line.includes('(new)') }]
+    const lead = PATH.exec(line)?.[1]
+    const ticked = /^\s*[-*]/.test(line) ? [...line.matchAll(TICKED)].map((m) => String(m[1])) : []
+    return [...(lead === undefined ? [] : [lead]), ...ticked].filter(first)
+      .map((path) => ({ path, is_new: line.includes('(new)') }))
   })
 }
 

@@ -280,3 +280,12 @@ test('brief.ts is the only source that reads ## Files, and the shape check refus
   const brief = fixture('absent-file.md')
   expect(files(brief).map((f) => f.path)).toEqual([shape(brief, ask, repo)])
 })
+
+test('a Files row naming several paths lists each once', () => {
+  const brief = ['# t', '', '## Files', '', '- `a/b.rb:197`', '- Tests: `x/y_test.rb:187`, `x/z_spec.lua:149` and `a/b.rb`',
+    '- `Store::TTL` moves to `c/d.rb` (new)', '', '## Out of scope', ''].join('\n')
+  expect(files(brief)).toEqual([
+    { path: 'a/b.rb', is_new: false }, { path: 'x/y_test.rb', is_new: false },
+    { path: 'x/z_spec.lua', is_new: false }, { path: 'c/d.rb', is_new: true },
+  ])
+})

@@ -1,5 +1,5 @@
 import { headOf, prBody } from '../sequencer/push.ts'
-import { cloned, diffOf, srcDir } from '../sequencer/workspace.ts'
+import { cloned, diffOf, maybe, srcDir } from '../sequencer/workspace.ts'
 import { decide, digestOf, headDigest } from '../store/approvals.ts'
 import { approved } from '../store/deliverables.ts'
 import type { Db } from '../store/index.ts'
@@ -107,7 +107,7 @@ function card(db: Db, root: string, p: Ready): Card {
     title: `${p.repo}#${String(p.issue_no)} ${head.branch}`,
     digest: headDigest(head.sha),
     change: stat(diffOf(root, p.id)),
-    text: prBody(p.issue_no, root, p.id).trimEnd(),
+    text: (maybe(root, p.id, 'pr.md') ?? prBody(p.issue_no, root, p.id)).trimEnd(),
     marks: marks(db, p.id),
   }
 }

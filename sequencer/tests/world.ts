@@ -252,6 +252,8 @@ export function watched(log: string[], root: string, id: number, runs = runsOn(r
     open: (repo, head) => { log.push(`open ${repo} ${head}`); return PR },
     close: (repo, no, sha) => void log.push(`close ${repo}#${String(no)} ${sha.slice(0, 7)}`),
     runs,
+    rehearse: (fork, branch) => void log.push(`rehearse ${fork} ${branch}`),
+    unrehearse: (fork, branch) => void log.push(`unrehearse ${fork} ${branch}`),
   }
 }
 

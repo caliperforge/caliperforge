@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import { join } from 'node:path'
-import { closeIssue, openPr } from '../cli/gh.ts'
+import { closeIssue, openPr, rehearse, unrehearse } from '../cli/gh.ts'
 import { ciGreen, MISSING, PENDING, shell, type Gh } from '../rails/ci-green/index.ts'
 import { parse } from '../rails/diff.ts'
 import { record } from '../rails/record.ts'
@@ -9,7 +9,7 @@ import { forkGreen } from '../store/deliverables.ts'
 import type { Db } from '../store/index.ts'
 import { internal, originIssue, type PlanRow } from '../store/plans.ts'
 import type { Outcome } from './kind.ts'
-import { cloned, conflicted, diffOf, fetchMain, FORK, get, MAIN, maybe, put, repoName, SELF, srcDir, titleOf } from './workspace.ts'
+import { cloned, conflicted, diffOf, fetchMain, FORK, get, MAIN, maybe, planDir, put, repoName, SELF, srcDir, titleOf } from './workspace.ts'
 
 interface Head { dir: string; branch: string; sha: string }
 
@@ -19,6 +19,8 @@ export interface Wire {
   open: (repo: string, head: string, title: string, bodyFile: string) => string
   close: (repo: string, no: number, sha: string) => void
   runs: Gh
+  rehearse?: (fork: string, branch: string) => void
+  unrehearse?: (fork: string, branch: string) => void
 }
 
 const WIRE: Wire = {
@@ -26,6 +28,8 @@ const WIRE: Wire = {
   open: openPr,
   close: closeIssue,
   runs: shell,
+  rehearse,
+  unrehearse,
 }
 
 /** Ticks a head is given to reach a finished run; past them an unfinished CI is judged as it stands. */
@@ -41,9 +45,11 @@ const WAITS = 'ci.waits'
  * the spans are recorded as the refusal they are, so a CI that never greens still reaches `back()`.
  */
 export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire = WIRE): Outcome | null {
+  if (!internal(plan)) squash(root, plan.id)
   const head = headOf(root, plan.id)
   const fork = `${FORK}/${repoName(repo)}`
   wire.send(head.dir, head.branch)
+  if (!internal(plan)) wire.rehearse?.(fork, head.branch)
   const verdict = ciGreen({ fork, branch: head.branch, sha: head.sha },
     { body: '', commits: commits(head.dir) }, touched(root, plan.id), wire.runs)
   const waiting = unfinished(verdict.spans)
@@ -148,8 +154,11 @@ export function push(db: Db, root: string, plan: PlanRow, wire: Wire = WIRE): Ou
   if (approval === null) return refuse('approvals', `no ceo approval row for ${head.branch} at ${head.sha.slice(0, 12)}`)
   const cold = unproven(db, plan.id)
   if (cold !== null) return refuse(cold, `${cold} left no passing verdict on plan ${String(plan.id)}`)
-  const body = put(root, plan.id, 'pr.md', prBody(target.issue_no, root, plan.id))
+  const body = maybe(root, plan.id, 'pr.md') === null
+    ? put(root, plan.id, 'pr.md', prBody(target.issue_no, root, plan.id))
+    : join(planDir(root, plan.id), 'pr.md')
   wire.send(head.dir, head.branch)
+  wire.unrehearse?.(`${FORK}/${repoName(target.repo)}`, head.branch)
   const url = wire.open(target.repo, `caliperforge:${head.branch}`, title(root, plan.id), body)
   pushed(db, plan.id, approval, url)
   return { outcome: 'pass', spans: [], note: `pushed ${head.branch} as ${url}` }
@@ -197,11 +206,62 @@ function title(root: string, plan: number): string {
   return titleOf(root, plan) ?? `plan ${String(plan)}`
 }
 
-/** Tight: a description that summarises the diff is a refusal, so the body names the issue and its ids. */
+const TEST = /(^|\/)(tests?|spec|__tests__)\/|[._](test|spec)\.|Tests?\./
+
+/**
+ * Used when the card set no body. Their shape, not ours: it addresses the issue rather than closing
+ * it, since one item of a maintainer's list is not the list.
+ */
 export function prBody(no: number, root: string, plan: number): string {
-  const ids = [...get(root, plan, 'issue.md').matchAll(/^\s*[-*]\s*\**(D\d+)\**\s*(.*)$/gm)]
-    .map((m) => `- ${String(m[1])} ${(m[2] ?? '').trim()}`)
-  return [`Closes #${String(no)}`, '', ...ids].slice(0, 20).join('\n').concat('\n')
+  const brief = get(root, plan, 'issue.md')
+  const tests = parse(diffOf(root, plan)).map((f) => f.path).filter((p) => TEST.test(p))
+  return [`Addresses #${String(no)}.`, '', '## Summary', '', ...said(brief).map((l) => `- ${l}`), '',
+    '## Test Plan', '', ...tests.map((t) => `- \`${t}\``), '- CI green on our fork at this head.', ''].join('\n')
+}
+
+/** The brief's What and Why lines, the two things a maintainer reads first. */
+function said(brief: string): string[] {
+  return ['**What:**', '**Why:**'].flatMap((key) => {
+    const line = brief.split('\n').find((l) => l.startsWith(key))?.slice(key.length).trim()
+    return line === undefined || line === '' ? [] : [line]
+  })
+}
+
+/**
+ * A stranger's branch goes out as one commit, signed as whoever this host's git says it is -- the
+ * CEO, on his Mac -- with the brief's title as its subject. The rounds' commits and any merge of
+ * their main fold into it; a branch already in that shape is left alone, so a held CI keeps its head.
+ */
+export function squash(root: string, plan: number): void {
+  const dir = srcDir(root, plan)
+  const message = messageOf(root, plan)
+  git(dir, ['add', '-A', '--', '.'])
+  const base = git(dir, ['merge-base', 'HEAD', MAIN]).trim()
+  const count = Number(git(dir, ['rev-list', '--count', `${base}..HEAD`]).trim())
+  const staged = git(dir, ['diff', '--cached', '--name-only']).trim() !== ''
+  if (!staged && count === 1 && git(dir, ['log', '-1', '--format=%B']).trim() === message) return
+  git(dir, ['reset', '--soft', base])
+  if (git(dir, ['diff', '--cached', '--name-only']).trim() === '') return
+  execFileSync('git', [...identity(dir), 'commit', '-q', '-m', message],
+    { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 60_000 })
+}
+
+/** Subject and body with no upstream number: the ci-green rail refuses a branch whose commits name one. */
+function messageOf(root: string, plan: number): string {
+  const clean = (s: string): string => s.replace(/#\d+/g, '').replace(/\s+/g, ' ').trim()
+  const subject = clean(title(root, plan))
+  const body = said(maybe(root, plan, 'issue.md') ?? '').map(clean).join('\n\n')
+  return body === '' ? subject : `${subject}\n\n${body}`
+}
+
+/** The host's own identity where it has one; a bare runner (CI, a test) commits as the machine. */
+function identity(dir: string): string[] {
+  try {
+    git(dir, ['config', 'user.email'])
+    return []
+  } catch {
+    return ['-c', 'user.email=cf@caliperforge.dev', '-c', 'user.name=caliperforge']
+  }
 }
 
 function refuse(span: string, note: string): Outcome {

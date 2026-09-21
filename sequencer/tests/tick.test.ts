@@ -250,14 +250,14 @@ test('step 6 sends the branch to our fork, waits out a run still going, then rec
     watched(sent, w.root, 1, runsOn(w.root, 1, 'in_progress'))))[0]
   expect(held).toMatchObject({ step: 6, name: 'ready', outcome: 'pass', state: 'running' })
   expect(held?.spans).toEqual([`${RUN} ci.pending`])
-  expect(sent).toEqual(['send src widget-12-a1'])
+  expect(sent).toEqual(['send src widget-12-a1', 'rehearse caliperforge/widget widget-12-a1'])
   expect(plan(w.db, 1).step).toBe(6)
   expect(w.db.prepare("SELECT count(*) AS n FROM verdicts WHERE plan = 1 AND rail_id = 'ci-green'").get())
     .toEqual({ n: 0 })
 
   const fired = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched(sent, w.root, 1)))[0]
   expect(fired).toMatchObject({ step: 6, name: 'ready', outcome: 'pass', state: 'running' })
-  expect(sent).toHaveLength(2)
+  expect(sent).toHaveLength(4)
   expect(w.db.prepare('SELECT rail_id, gate, outcome FROM verdicts WHERE plan = 1 AND step = 6 ORDER BY id').all())
     .toEqual([{ rail_id: 'ci-green', gate: 'ready', outcome: 'pass' }, { rail_id: 'ready', gate: 'ready', outcome: 'pass' }])
 })
@@ -314,7 +314,7 @@ test('the push window is waited out: no run at the new head holds step 6, the ru
   expect(w.db.prepare("SELECT outcome FROM verdicts WHERE plan = 1 AND rail_id = 'ci-green'").get())
     .toEqual({ outcome: 'pass' })
   expect(plan(w.db, 1).step).toBe(7)
-  expect(sent).toHaveLength(3)
+  expect(sent).toHaveLength(6)
 })
 
 test('a head still runless after the window is refused on ci-green, not waited on forever', async () => {

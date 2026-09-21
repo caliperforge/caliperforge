@@ -114,6 +114,34 @@ export function prNumber(url: string): number {
 }
 
 /** Opened under the CEO's `gh` credential; the machine holds no account of its own. */
+/**
+ * Their CI runs on pull requests, not on a pushed branch, so a pull request on our own fork is what
+ * starts it. Its title and body name nothing upstream: a number there would put a permanent
+ * "mentioned" line on the maintainer's thread.
+ */
+export function rehearse(fork: string, branch: string): void {
+  if (rehearsal(fork, branch) !== null) return
+  try {
+    execFileSync('gh', ['repo', 'sync', fork, '--branch', 'main'], { encoding: 'utf8', stdio: 'pipe' })
+  } catch {
+    // a fork main that cannot fast-forward still carries the branch's own CI
+  }
+  execFileSync('gh', ['pr', 'create', '--repo', fork, '--base', 'main', '--head', branch,
+    '--title', 'CI rehearsal only (do not merge)', '--body', 'Fork CI only. Do not merge.'], { encoding: 'utf8' })
+}
+
+/** Closed with no comment and the branch kept: the branch is the head the real pull request opens from. */
+export function unrehearse(fork: string, branch: string): void {
+  const no = rehearsal(fork, branch)
+  if (no !== null) execFileSync('gh', ['pr', 'close', String(no), '--repo', fork], { encoding: 'utf8' })
+}
+
+function rehearsal(fork: string, branch: string): number | null {
+  const open = z.array(z.object({ number: z.int() })).parse(gh(['pr', 'list', '--repo', fork, '--head', branch,
+    '--state', 'open', '--json', 'number']))
+  return open[0]?.number ?? null
+}
+
 export function openPr(repo: string, head: string, title: string, bodyFile: string): string {
   return execFileSync('gh', ['pr', 'create', '--repo', repo, '--base', 'main', '--head', head,
     '--title', title, '--body-file', bodyFile], { encoding: 'utf8' }).trim()

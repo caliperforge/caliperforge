@@ -11,7 +11,7 @@ import { at, type Step } from '../templates/pr-path.ts'
 import { files } from './brief.ts'
 import type { Outcome } from './kind.ts'
 import { preReview } from './rails.ts'
-import { forkCi, headOf, land, push, type Wire } from './push.ts'
+import { forkCi, headOf, land, opened, push, type Wire } from './push.ts'
 import { abortMerge, behindMain, cloned, conflicted, diffOf, fetchMain, get, maybe, mergeMain, put, SELF, srcDir, unmerged } from './workspace.ts'
 
 interface Target { repo: string; issue_no: number; state: string; measured_at: string; pulse: string }
@@ -27,7 +27,7 @@ export function blocked(db: Db, plan: PlanRow): string | null {
 
 export function kernel(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
   const step = at(plan.step)
-  if (step.name === 'rails') return freshBase(root, plan) ?? preReview(db, root, plan)
+  if (step.name === 'rails') return freshBase(db, root, plan) ?? preReview(db, root, plan)
   if (step.name === 'measure') return measure(db, plan)
   if (step.name === 'ready') return readyGate(db, root, plan, wire)
   if (step.name === 'batch') return batch(db, root, plan, wire)
@@ -47,7 +47,7 @@ export function kernel(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcom
  */
 function batch(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
   if (!internal(plan)) return { outcome: 'pass', spans: [], note: 'batch' }
-  const moved = baseMoved(root, plan)
+  const moved = baseMoved(db, root, plan)
   if (moved !== null) return moved
   const head = plan.head_digest
   if (head === null) return { outcome: 'refuse', spans: ['plans'], note: `plan ${String(plan.id)} reached batch with no proved head` }
@@ -60,7 +60,7 @@ function batch(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
 }
 
 function readyGate(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
-  const moved = baseMoved(root, plan)
+  const moved = baseMoved(db, root, plan)
   if (moved !== null) return moved
   const repo = repoOf(db, plan)
   if (repo === null) return { outcome: 'refuse', spans: ['targets'], note: `plan ${String(plan.id)} has no target row` }
@@ -81,9 +81,9 @@ function readyGate(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
  * left that merge open, and its bytes were committed before it, so the abort loses nothing and this
  * tick merges again from the old base.
  */
-function freshBase(root: string, plan: PlanRow): Outcome | null {
+function freshBase(db: Db, root: string, plan: PlanRow): Outcome | null {
   const src = srcDir(root, plan.id)
-  if (!cloned(src)) return null
+  if (!cloned(src) || shown(db, plan)) return null
   if (conflicted(src)) abortMerge(src)
   const main = fetchMain(src)
   if (!behindMain(src)) return null
@@ -119,9 +119,9 @@ function takeMain(root: string, plan: number, src: string, main: string): string
  * keep up with main and refuses so it is cut again. A tree still carrying unmerged paths this late
  * is cut again too, `base:conflict`: past step 3 no builder is coming back to settle them.
  */
-function baseMoved(root: string, plan: PlanRow): Outcome | null {
+function baseMoved(db: Db, root: string, plan: PlanRow): Outcome | null {
   const src = srcDir(root, plan.id)
-  if (!cloned(src)) return null
+  if (!cloned(src) || shown(db, plan)) return null
   if (conflicted(src)) return cutAgain('base:conflict', 'the checkout has unmerged paths from a tick that stopped mid-merge')
   const main = fetchMain(src)
   if (!behindMain(src)) return null
@@ -129,6 +129,11 @@ function baseMoved(root: string, plan: PlanRow): Outcome | null {
   if (takeMain(root, plan.id, src, main) !== null) return cutAgain('base:conflict', 'the branch conflicts with main')
   put(root, plan.id, 'base.merged', `${main}\n`)
   return { outcome: 'pass', spans: ['base:stale'], note: 'main moved; merged it and re-ran the rails', rewind: 3 }
+}
+
+/** A stranger's pull request that is already open is not merged into: their main moving is theirs to settle. */
+function shown(db: Db, plan: PlanRow): boolean {
+  return !internal(plan) && opened(db, plan.id) !== null
 }
 
 function cutAgain(span: 'base:stale' | 'base:conflict', note: string): Outcome {

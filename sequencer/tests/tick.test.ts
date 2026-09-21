@@ -13,7 +13,7 @@ import { doneIds, srcDir } from '../workspace.ts'
 import { record } from '../../store/files.ts'
 import { benchPacket } from '../../runner/packet.ts'
 import type { Packet } from '../../providers/kind.ts'
-import { approve, built, CARRIED, KOTLIN, PASS, plan, redLaps, REFUSE, RUN, runsAfter, runsOn, stub, watched, WORDS, world } from './world.ts'
+import { approve, built, CARRIED, KOTLIN, PASS, plan, REFUSE, RUN, runsAfter, runsOn, stub, watched, WORDS, world } from './world.ts'
 
 const head = (cwd: string, args: string[]): string => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim()
 
@@ -262,34 +262,31 @@ test('step 6 sends the branch to our fork, waits out a run still going, then rec
     .toEqual([{ rail_id: 'ci-green', gate: 'ready', outcome: 'pass' }, { rail_id: 'ready', gate: 'ready', outcome: 'pass' }])
 })
 
-test('a red run on the fork refuses the ready gate on the rail and sends the plan back', async () => {
+test('a red run on the fork sends the plan to the builder with the failed log', async () => {
   const w = world()
   approve(w.db, w.target)
   for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED))
   const red = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined,
     watched([], w.root, 1, runsOn(w.root, 1, 'completed', 'failure'))))[0]
   expect(red).toMatchObject({ step: 6, name: 'ready', outcome: 'refuse', state: 'retried' })
-  expect(plan(w.db, 1)).toMatchObject({ step: 5, retries: 1 })
-  expect(red?.spans).toEqual(['ci-green', 'fork:1 not.public'])
+  expect(plan(w.db, 1)).toMatchObject({ step: 2, retries: 1 })
+  expect(red?.spans[0]).toMatch(/^ci\.red /)
+  expect(planFile(w.root, 'refusal.md')).toContain('their CI is red')
   expect(w.db.prepare("SELECT outcome FROM verdicts WHERE plan = 1 AND rail_id = 'ci-green'").get())
     .toEqual({ outcome: 'refuse' })
 })
 
-test('a fork that stays red escalates on the second strike instead of cycling 6 -> 5 -> 6', async () => {
+test('a fork still red after a rebuild that changed nothing stops instead of cycling', async () => {
   const w = world()
   approve(w.db, w.target)
   for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED))
-  const wire = watched([], w.root, 1, redLaps(w.root, 1))
+  const wire = watched([], w.root, 1, runsOn(w.root, 1, 'completed', 'failure'))
   const lap = async (): Promise<string | undefined> => (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]?.state
 
-  expect(await lap()).toBe('running')
-  expect(plan(w.db, 1)).toMatchObject({ step: 6, retries: 0 })
   expect(await lap()).toBe('retried')
-  expect(plan(w.db, 1)).toMatchObject({ step: 5, retries: 1 })
-  expect(await lap()).toBe('running')
-
-  expect(await lap()).toBe('running')
-  expect(plan(w.db, 1)).toMatchObject({ step: 6, retries: 1 })
+  expect(plan(w.db, 1).step).toBe(2)
+  for (let at = 0; at < 4; at += 1) await lap()
+  expect(plan(w.db, 1).step).toBe(6)
   expect(await lap()).toBe('blocked_on_ceo')
 })
 

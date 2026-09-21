@@ -156,7 +156,7 @@ function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcom
     diff: step.step >= 3 ? digestOf(diffOf(root, plan.id)) : null })
   if (why !== 'again') stopped(root, plan.id, why)
   // step 2 is the build in templates/pr-path.ts
-  return back(db, plan, step.fires === 'review' ? 2 : step.step - 1, why !== 'again')
+  return back(db, plan, outcome.to ?? (step.fires === 'review' ? 2 : step.step - 1), why !== 'again')
 }
 
 /** A failed checkout leaves the plan on its step for the next tick, until it has failed `BLIPS` times in a row. */
@@ -169,9 +169,9 @@ function blip(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcome)
   return 'blocked_on_ceo'
 }
 
-/** A failed check is known by what failed, not by the one span every failure of that check shares. */
+/** A failed check or CI run is known by what failed, not by the one span every such failure shares. */
 function fingerprintOf(step: Step, outcome: Outcome): string {
-  const checked = outcome.spans.some((s) => s.startsWith('checks:'))
+  const checked = outcome.spans.some((s) => s.startsWith('checks:') || s.startsWith('ci.red'))
   return fingerprint(step.step, outcome.spans, checked ? (outcome.message ?? '') : '')
 }
 

@@ -20,7 +20,10 @@ export interface Signed { plan: number; card: number; did: 'opened' | Answer | '
 
 const FILE = 'signoff'
 
-/** Step 2 is the build in templates/pr-path.ts: the CEO's words go to whoever can change the code. */
+/**
+ * Step 2 is the build in templates/pr-path.ts: the CEO's words go to whoever can change the code. The
+ * approval row's reason is a slug (`approvals.reason` is checked); the words themselves go in `refusal.md`.
+ */
 const BUILD = 2
 
 interface Kept { no: number; digest: string; url: string; shut: boolean }
@@ -65,7 +68,7 @@ function answered(db: Db, root: string, card: Card, kept: Kept, seen: Seen & { a
     desk.unlabel(kept.no, 'talk')
     tell(root, card, 'asked', `wants to talk about it: ${kept.url}${seen.words === null ? '' : ` (${flat(seen.words)})`}`, now)
   } else {
-    refuse(db, root, 'plan', card.id, seen.words ?? 'refused at sign-off with no words')
+    refuse(db, root, 'plan', card.id, seen.words === null ? 'signoff.no_words' : 'signoff.no')
     if (seen.words === null) {
       needsCeo(db, planOf(db, card.id))
       save(root, card.id, { ...kept, shut: true })

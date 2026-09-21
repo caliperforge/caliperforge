@@ -82,12 +82,12 @@ test('no with words sends it back to the builder with them; no alone waits for t
   const desk = fake()
   signoffs(w.db, w.root, desk)
   const card = desk.cards.get(100)
-  if (card !== undefined) { card.answer = 'no'; card.words = 'call it expiry, not expires' }
+  if (card !== undefined) { card.answer = 'no'; card.words = 'Call it expiry, not expires.' }
   expect(signoffs(w.db, w.root, desk)).toEqual([{ plan: 1, card: 100, did: 'no' }])
   expect(plan(w.db, 1)).toMatchObject({ step: 2, state: 'running', head_digest: null })
-  expect(readFileSync(join(w.root, '.cf/work/1/refusal.md'), 'utf8')).toContain('call it expiry, not expires')
+  expect(readFileSync(join(w.root, '.cf/work/1/refusal.md'), 'utf8')).toContain('Call it expiry, not expires.')
   expect(w.db.prepare("SELECT decision, reason FROM approvals WHERE subject_kind = 'plan'").get())
-    .toEqual({ decision: 'refused', reason: 'call it expiry, not expires' })
+    .toEqual({ decision: 'refused', reason: 'signoff.no' })
 
   const bare = await atBatch()
   const quiet = fake()

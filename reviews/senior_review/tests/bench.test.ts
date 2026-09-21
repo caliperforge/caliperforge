@@ -87,7 +87,8 @@ test('reviewer != builder is refused before the provider fires; the trigger stil
 })
 
 test('a reviewer reply with no readable verdict fence is a failed run, not a verdict', async () => {
-  for (const reply of ['looks fine to me', '---\noutcome: refuse\n---\n', '---\noutcome: refuse\nclass: correctness\nspans: []\n---\n', '---\n: : :\n---\n']) {
+  for (const reply of ['looks fine to me', '---\noutcome: refuse\n---\n', '---\noutcome: refuse\nclass: correctness\nspans: []\n---\n', '---\n: : :\n---\n',
+    '---\noutcome: refuse\nclass: Tests!\nspans:\n  - src/stats.ts:4\n---\n', '---\noutcome: refuse\nclass: test.weakened\nspans:\n  - src/stats.ts:4\n---\n']) {
     expect(read(reply, 'subject')).toBeNull()
   }
   const { db, plan } = bench(root)
@@ -95,6 +96,17 @@ test('a reviewer reply with no readable verdict fence is a failed run, not a ver
     .rejects.toThrow('reviewers.verdict_fence')
   expect(db.prepare('SELECT exit FROM runs WHERE plan = ?').all(plan)).toEqual([{ exit: 1 }])
   expect(db.prepare('SELECT count(*) AS n FROM verdicts WHERE plan = ?').get(plan)).toEqual({ n: 0 })
+})
+
+test('a refusal whose class is not one of the four is still a refusal carrying its spans', async () => {
+  const reply = fixture('senior_review', 'unlisted.reply.md')
+  expect(read(reply, 'subject')).toMatchObject({ outcome: 'refuse', defect_class: 'tests', spans: ['src/stats.ts:4'], origin_kind: 'ruling', origin_ref: 'reviewers.verdict' })
+
+  const { db, plan } = bench(root)
+  const out = await judge(db, root, 'senior_review', plan, seeded({ verdict: fixture('senior_review', 'first.verdict.md') }), replies(reply), TRANSCRIPT)
+  expect(db.prepare('SELECT exit FROM runs WHERE id = ?').get(out.run ?? 0)).toEqual({ exit: 0 })
+  expect(db.prepare('SELECT gate, outcome, origin_kind, origin_ref FROM verdicts WHERE id = ?').get(out.verdict))
+    .toEqual({ gate: 'senior_review', outcome: 'refuse', origin_kind: 'ruling', origin_ref: 'reviewers.verdict' })
 })
 
 test('a packet the bench refuses writes a refusal verdict and fires no provider', async () => {

@@ -7,7 +7,7 @@ export type { Verdict }
 
 const Fence = z.object({
   outcome: z.enum(['pass', 'refuse', 'needs_ceo']),
-  class: z.enum(['correctness', 'scope', 'approach', 'minimal']).nullish(),
+  class: z.string().regex(/^[a-z_]+$/).nullish(),
   spans: z.array(z.string()).nullish(),
 }).refine((f) => f.outcome !== 'refuse' || ((f.spans ?? []).length > 0 && f.class != null))
 

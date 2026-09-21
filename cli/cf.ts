@@ -23,6 +23,7 @@ import { approve as approveCard, batch, landed, refuse as refuseCard, render, re
 import { awaiting, day, dryLines, halted, laneLine, open as openPlans, runsOf, section, tickets, ticketSection,
   tickNote, verdictsOf, windowLine } from './brief.ts'
 import { check, fill } from './digests.ts'
+import { ack, events, line, notify, record as keep, unread } from './inbox.ts'
 import { measure, render as renderPulse } from './measure.ts'
 import { add as fileIssue, render as renderUnfiled, unfiled } from './plan.ts'
 import { add } from './queue.ts'
@@ -175,6 +176,16 @@ cf.command('release').argument('<plan>', 'a briefed plan waiting on the coo to r
   out(`plan ${id} released\n`)
 })
 
+cf.command('inbox').option('--ack', 'mark everything shown so far as read')
+  .description('what ticks did that a person may need to act on, unread first')
+  .action((options: { ack?: boolean }) => {
+    const handle = db()
+    const news = unread(root)
+    if (news.length === 0) out('inbox empty\n')
+    for (const e of news) out(`${line(handle, e)}\n`)
+    if (options.ack === true) out(`${String(ack(root))} marked read\n`)
+  })
+
 cf.command('tight').description('the Tight rail on this checkout against main, as step 3 will run it').action(() => {
   const verdict = self(process.cwd())
   out(`${verdict.message}\n`)
@@ -278,6 +289,9 @@ cf.command('tick').option('--dry', 'read what a tick would do, fire nothing, cal
     receipt(handle, upgraded(handle, root, { at: now.toISOString(), hhmm: hhmm(handle, now), dry: false,
       pipes: openPipes(handle, hhmm(handle, now)).length, fired: fired.length,
       exit: fired.some((f) => f.outcome === 'refuse') ? 1 : 0, note: tickNote(fired) }))
+    const news = events(handle, fired, now.toISOString())
+    keep(root, news)
+    notify(news)
     if (fired.length === 0) out('nothing to fire\n')
     for (const f of fired) {
       out(`${f.pipe}\tplan ${String(f.plan)}\tstep ${String(f.step)} ${f.name}\t${f.outcome}\t${f.state}\t${f.note}\n`)

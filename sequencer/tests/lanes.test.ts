@@ -1,4 +1,5 @@
 import { expect, test } from 'vitest'
+import type { Packet } from '../../providers/kind.ts'
 import { laneLine } from '../../cli/brief.ts'
 import { cap, dial, lanes, name, priority, record, set, templatePriority, windows, type Reading } from '../../store/lanes.ts'
 import { picks, tick } from '../index.ts'
@@ -156,4 +157,18 @@ test('the machine window view puts our tokens beside the cap, one row per window
   expect(rows.map((r) => r.runs)).toEqual([2, 2])
   expect(rows.map((r) => r.cap)).toEqual([2, 2])
   expect(rows.map((r) => r.utilisation)).toEqual([null, 0.45])
+})
+
+/** #104: nothing wrote `usage` before; a run's own reading now steps the band. */
+test('a run past 80% of the week puts the machine on spot', async () => {
+  const w = world()
+  approve(w.db, w.target)
+  dial(w.db, 4, AT)
+  const inner = stub(CARRIED)
+  const full = { ...inner, fire: async (p: Packet) => ({ ...(await inner.fire(p)), limits: [reading(0.83)] }) }
+  const ran = (): unknown => w.db.prepare('SELECT 1 FROM runs').get()
+  for (let at = 0; at < 4 && ran() === undefined; at += 1) await tick(w.db, w.root, full)
+  expect(w.db.prepare('SELECT kind, utilisation FROM usage').all()).toEqual([{ kind: 'seven_day', utilisation: 0.83 }])
+  expect(cap(w.db)).toMatchObject({ dial: 4, band: 0, cap: 0 })
+  expect(await tick(w.db, w.root, full)).toEqual([])
 })

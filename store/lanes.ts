@@ -109,6 +109,11 @@ export function record(db: Db, reading: Reading): void {
       new Date(reading.resets_at * 1000).toISOString(), reading.observed_at)
 }
 
+/** Every reading a run brought back; a provider that reports none leaves the band where it was. */
+export function observed(db: Db, readings: Reading[] = []): void {
+  for (const reading of readings) record(db, reading)
+}
+
 /** `spot` is the fourth step of the band: the machine opens nothing and a run is fired by hand. */
 export function name(n: number | null): string {
   if (n === null) return 'none'

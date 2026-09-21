@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import type { Provider } from '../providers/kind.ts'
 import { benchPacket, reviewManifest } from '../runner/packet.ts'
 import type { Db } from '../store/index.ts'
+import { observed } from '../store/lanes.ts'
 import { byRun } from '../store/transcript.ts'
 import { subdirs } from '../checks/tree.ts'
 import { read, type Verdict } from './verdict.ts'
@@ -48,6 +49,7 @@ export async function judge(
       fired.usage.input, fired.usage.cache, fired.usage.output, fired.seconds,
       outcome === null ? 1 : fired.exit, fired.transcript_path)
   byRun(db, Number(run.lastInsertRowid), fired.transcript_path)
+  observed(db, fired.limits)
   if (outcome === null) throw new Error('reviewers.verdict_fence')
   const tokens = fired.usage.input + fired.usage.cache + fired.usage.output
   return { run: Number(run.lastInsertRowid), verdict: record(db, root, name, plan, outcome, tokens, fired.seconds), outcome }

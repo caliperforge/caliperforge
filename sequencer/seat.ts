@@ -5,6 +5,7 @@ import { load, seat, tight } from '../runner/rules.ts'
 import { judge, loadReviews } from '../reviews/bench.ts'
 import type { Verdict } from '../reviews/verdict.ts'
 import type { Db } from '../store/index.ts'
+import { observed } from '../store/lanes.ts'
 import { builderRan, internal, type PlanRow } from '../store/plans.ts'
 import { byRun, pending } from '../store/transcript.ts'
 import type { Step } from '../templates/pr-path.ts'
@@ -94,6 +95,7 @@ async function ran(db: Db, root: string, plan: PlanRow, step: Step, provider: Pr
   const row = db.prepare(INSERT).run(plan.id, step.step, step.runs, hash, provider.name, manifest.model, manifest.effort,
     fired.usage.input, fired.usage.cache, fired.usage.output, fired.seconds, fired.exit, fired.transcript_path)
   byRun(db, Number(row.lastInsertRowid), fired.transcript_path)
+  observed(db, fired.limits)
   return fired
 }
 

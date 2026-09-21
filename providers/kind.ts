@@ -1,3 +1,5 @@
+import type { Reading } from '../store/lanes.ts'
+
 export interface Refusal {
   origin_kind: 'rail' | 'ruling' | 'incident'
   origin_ref: string
@@ -27,6 +29,8 @@ export interface Fired {
   exit: number
   stop_reason: string | null
   denials: number
+  /** The subscription windows the provider reported during the run (#104): what the usage band steps the lanes by. */
+  limits?: Reading[]
 }
 
 export interface Provider {

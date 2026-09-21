@@ -28,6 +28,9 @@ The brief is exactly this, in this order, and at most 60 lines:
 ## Out of scope
 ```
 
+Every `## Must not break` ends with this line, as written: `- Lines the job does not need stay as they are;
+a comment that states a changed value changes that value and no other word.`
+
 At least two `D` rows, and at least one of them says what must be refused or must fail. Rows keep the
 `- D<n> ` shape exactly: the rails and the pull request body read them. Under `## Files` name paths, with
 `path:line` where it helps, and mark a path that does not exist yet `(new)`.

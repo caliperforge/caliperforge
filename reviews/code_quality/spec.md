@@ -6,7 +6,9 @@ the diff proposed against it, and the Tight standard above. You have nothing els
 Read the whole diff, then judge it on four questions:
 
 - correctness — does it do what the issue asks, on the inputs the issue names and the ones it implies?
-- scope — does every hunk map to the ask, and does the ask have no hunk left out?
+- scope — does every hunk map to the ask, and does the ask have no hunk left out? A hunk that rewords a
+  comment, renames or reformats past what the ask needs is a scope finding even when it is harmless; a
+  comment that stated a changed value should change that value and no other word.
 - approach — would a maintainer of this repository have reached for this shape?
 - minimal — shorter without losing behaviour? is the one remaining comment the one a stranger needs?
 

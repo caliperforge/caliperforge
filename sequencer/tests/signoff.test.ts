@@ -136,3 +136,16 @@ test('only the label the owner of the gh credential set is an answer', () => {
   const seen = ghDesk('caliperforge/caliperforge', read, () => 'michael-moffett\n').seen(5)
   expect(seen).toEqual({ answer: 'talk', words: 'one question', open: true })
 })
+
+test('the card names every workflow and says green only of what is', async () => {
+  const w = await atBatch()
+  put(w.root, 1, 'ci.json', JSON.stringify([
+    { workflow: 'Ruby', status: 'completed', conclusion: 'success', gates: true },
+    { workflow: 'Python', status: 'completed', conclusion: 'failure', gates: false },
+  ]))
+  const desk = fake()
+  signoffs(w.db, w.root, desk)
+  const body = desk.cards.get(100)?.body ?? ''
+  expect(body).toContain('but 1 of their workflows is not green')
+  expect(body).toContain('- Their CI on our fork: Ruby green; also ran, not judged on: Python red')
+})

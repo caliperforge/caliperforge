@@ -7,7 +7,7 @@ import { claudeAgentSdk } from '../providers/claude-agent-sdk/index.ts'
 import { credential } from '../providers/credential.ts'
 import { self } from '../rails/tight/index.ts'
 import { fire } from '../runner/index.ts'
-import { dry, tick } from '../sequencer/index.ts'
+import { CHAIN_MINUTES, dry, tick } from '../sequencer/index.ts'
 import { behind, upgraded } from '../sequencer/upgrade.ts'
 import { signoffs } from '../sequencer/signoff.ts'
 import { liveTree, SELF } from '../sequencer/workspace.ts'
@@ -296,7 +296,7 @@ cf.command('tick').option('--dry', 'read what a tick would do, fire nothing, cal
     }
     const { auth } = credential()
     process.stderr.write(`auth ${auth.kind} from ${auth.from}\n`)
-    const fired = await tick(handle, root, claudeAgentSdk, now)
+    const fired = await tick(handle, root, claudeAgentSdk, now, undefined, undefined, CHAIN_MINUTES)
     receipt(handle, upgraded(handle, root, { at: now.toISOString(), hhmm: hhmm(handle, now), dry: false,
       pipes: openPipes(handle, hhmm(handle, now)).length, fired: fired.length,
       exit: fired.some((f) => f.outcome === 'refuse') ? 1 : 0, note: tickNote(fired) }))

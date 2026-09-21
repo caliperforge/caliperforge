@@ -5,7 +5,8 @@ import { notify, record, type Event, type Kind } from '../cli/inbox.ts'
 import type { Db } from '../store/index.ts'
 import { needsCeo, PlanRow, rewind } from '../store/plans.ts'
 import { clear } from '../store/refusals.ts'
-import { headOf, opened } from './push.ts'
+import type { Board } from '../rails/ci-green/index.ts'
+import { BOARD, headOf, opened } from './push.ts'
 import { drop, FORK, maybe, put, repoName, titleOf } from './workspace.ts'
 
 /**
@@ -131,17 +132,18 @@ export function bodyFor(db: Db, root: string, card: Card): string {
   const head = headOf(root, card.id)
   const open = opened(db, card.id)
   const fork = `${FORK}/${repoName(s.repo)}`
-  const passed = card.marks.every((m) => m.ok)
+  const ci = boardOf(root, card.id)
   const text = open === null ? card.text : lastMessage(head.dir)
   const fence = '`'.repeat(Math.max(3, longest(text) + 1))
   return [
     `**${repoName(s.repo)} ${String(s.issue_no)}**: ${prTitle(root, card.id)}`,
     '',
-    passed ? 'Waiting on you. The four gates passed and their CI is green on our fork.' : 'Waiting on you, but not every gate passed: read the marks first.',
+    headline(card.marks.every((m) => m.ok), ci),
     '',
     `- Upstream: ${code(s.repo)} issue ${code(String(s.issue_no))}, written as code so this card leaves no mark on their thread`,
     `- Change: ${card.change.trim().split('\t').join(', ')}; [the commit on our fork](https://github.com/${fork}/commit/${head.sha})`,
     `- Gates: ${card.marks.map((m) => `${m.name} ${m.ok ? 'pass' : 'NOT PASSED'}`).join(', ')}`,
+    ...(ci === null ? [] : [`- Their CI on our fork: ${ciLine(ci)}`]),
     open === null
       ? `- Goes out as: a new pull request titled ${code(prTitle(root, card.id))}`
       : `- Goes out as: a follow-up commit on our open pull request ${code(open)}`,
@@ -157,6 +159,31 @@ export function bodyFor(db: Db, root: string, card: Card): string {
     `<sub>plan ${String(card.id)}, head ${head.sha.slice(0, 12)}, digest ${card.digest.slice(0, 12)}</sub>`,
     '',
   ].join('\n')
+}
+
+/** Green is said only of what finished green: a workflow the gate did not judge is still on the card, and still counts here. */
+function headline(passed: boolean, ci: Board[] | null): string {
+  if (!passed) return 'Waiting on you, but not every gate passed: read the marks first.'
+  if (ci === null) return 'Waiting on you. The four gates passed.'
+  const off = ci.filter((r) => state(r) !== 'green').length
+  if (off === 0) return 'Waiting on you. The four gates passed and every one of their workflows is green on our fork.'
+  return `Waiting on you. The four gates passed, but ${String(off)} of their workflows ${off === 1 ? 'is' : 'are'} not green: read the CI line first.`
+}
+
+function ciLine(ci: Board[]): string {
+  const judged = ci.filter((r) => r.gates).map((r) => `${r.workflow} ${state(r)}`)
+  const rest = ci.filter((r) => !r.gates).map((r) => `${r.workflow} ${state(r)}`)
+  return rest.length === 0 ? judged.join(', ') : `${judged.join(', ')}; also ran, not judged on: ${rest.join(', ')}`
+}
+
+function state(r: Board): string {
+  if (r.status !== 'completed') return 'still running'
+  return r.conclusion === 'success' ? 'green' : r.conclusion === 'failure' ? 'red' : r.conclusion
+}
+
+function boardOf(root: string, plan: number): Board[] | null {
+  const saved = maybe(root, plan, BOARD)
+  return saved === null ? null : JSON.parse(saved) as Board[]
 }
 
 function lastMessage(dir: string): string {

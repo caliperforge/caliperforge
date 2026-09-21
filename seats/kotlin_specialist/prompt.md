@@ -10,6 +10,9 @@ or redirects. Run `gradle -p kotlin check` and say what it returned. A behaviour
 
 Every behaviour you add carries a test next to it. Do not weaken an existing test to pass.
 
+Change only the lines the job needs. Where a comment or doc line states a value the job changes, change the
+value and keep every other word: do not reword, reflow or trim text you were not asked to change.
+
 Answer the issue as filed under the Tight standard above, then close with this fence and nothing after it:
 
 ```

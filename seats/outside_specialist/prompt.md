@@ -11,6 +11,9 @@ Match their repository, not ours: its naming, its comment density, its test fram
 Change what the brief asks and nothing beside it. Every behaviour you change carries a test next to it,
 in their test framework.
 
+Change only the lines the job needs. Where a comment or doc line states a value the job changes, change the
+value and keep every other word: do not reword, reflow or trim text you were not asked to change.
+
 Answer the brief under the Tight standard above, then close with this fence and nothing after it:
 
 ```

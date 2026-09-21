@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { join } from 'node:path'
 import { closeIssue, commentIssue, fileIssue, openPr, rehearse, unrehearse } from '../cli/gh.ts'
-import { ciGreen, MISSING, PENDING, shell, type Gh } from '../rails/ci-green/index.ts'
+import { judge, MISSING, PENDING, shell, type Board, type Gh } from '../rails/ci-green/index.ts'
 import { parse } from '../rails/diff.ts'
 import { record } from '../rails/record.ts'
 import { headDigest, signedHead } from '../store/approvals.ts'
@@ -64,9 +64,10 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
   const ci = open ? `${head.branch}${NEXT}` : head.branch
   wire.send(head.dir, open ? `HEAD:refs/heads/${ci}` : head.branch)
   if (!internal(plan)) wire.rehearse?.(fork, ci)
-  const verdict = ciGreen({ fork, branch: ci, sha: head.sha },
+  const { verdict, board } = judge({ fork, branch: ci, sha: head.sha },
     { body: '', commits: commits(head.dir) }, touched(root, plan.id), wire.runs)
-  const waiting = unfinished(verdict.spans)
+  put(root, plan.id, BOARD, `${JSON.stringify(board)}\n`)
+  const waiting = unfinished(verdict.spans) ?? others(board)
   if (waiting !== null) {
     const ticks = waited(root, plan.id, head.sha)
     const at = `${fork}@${head.sha.slice(0, 12)}`
@@ -78,6 +79,18 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
   if (failed === null) return null
   return { outcome: 'refuse', spans: failed.spans, message: failed.log, to: 2,
     note: `their CI is red on ${fork}@${head.sha.slice(0, 12)}; back to the builder with the failed log` }
+}
+
+/**
+ * Every run at the head as the ready gate last read it: the sign-off card lists it, so the card never says
+ * green over a workflow still running. Only the runs `mine()` keeps can refuse; the rest are shown, not judged.
+ */
+export const BOARD = 'ci.json'
+
+/** A workflow the diff does not name is still waited on: the card that follows says what it finished as. */
+function others(board: Board[]): string | null {
+  const running = board.filter((r) => r.status !== 'completed').map((r) => r.workflow)
+  return running.length === 0 ? null : `still running ${running.join(', ')}`
 }
 
 function unfinished(spans: string[]): string | null {

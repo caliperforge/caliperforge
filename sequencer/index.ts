@@ -5,7 +5,7 @@ import { hold } from '../store/holds.ts'
 import type { Db } from '../store/index.ts'
 import { clear as unlease, held, take, type Lease, type Taken } from '../store/leases.ts'
 import { cap, hhmm, zone } from '../store/lanes.ts'
-import { advance, back, finish, internal, live, needsCeo, openPipes, rewind, underCap, type PipeRow, type PlanRow } from '../store/plans.ts'
+import { advance, back, finish, internal, live, needsCeo, openPipes, PlanRow, rewind, underCap, type PipeRow } from '../store/plans.ts'
 import { blipped, fingerprint, refused, WHY, type Why } from '../store/refusals.ts'
 import { at, last, type Step } from '../templates/pr-path.ts'
 import { capture } from './capture.ts'
@@ -18,17 +18,28 @@ import { blocked, kernel, proved, targetOf } from './steps.ts'
 import { languageFor } from './route.ts'
 import { branchOf, checkout, diffOf, internalBranch, maybe, put, SELF, srcDir, titleOf } from './workspace.ts'
 
-/** `read` and `wire` are the network a tick touches on its own account; both are injected so a test can drive a lap offline. */
+/**
+ * `read` and `wire` are the network a tick touches on its own account; both are injected so a test can drive a lap offline.
+ * `chain` is how many minutes a job may keep stepping inside this tick (#78, widened): the live tick passes `CHAIN_MINUTES`,
+ * and a test that leaves it at 0 still sees one step per tick.
+ */
 export async function tick(db: Db, root: string, provider: Provider, now: Date = new Date(),
-  read: (repo: string, no: number) => Pr = readPr, wire?: Wire): Promise<Fired[]> {
+  read: (repo: string, no: number) => Pr = readPr, wire?: Wire, chain = 0): Promise<Fired[]> {
   for (const signal of capture(db, read)) started(db, signal, root)
   const out: Fired[] = []
   for (const pipe of openPipes(db, hhmm(db, now)).slice(0, cap(db).cap)) {
     const mine = leased(db, pipe, now)
-    out.push(...await Promise.all(mine.map((m) => one(db, root, pipe, m.plan, m.lease, provider, wire))))
+    const laps = await Promise.all(mine.map((m) => one(db, root, pipe, m.plan, m.lease, provider, wire, chain)))
+    out.push(...laps.flat())
   }
   return out
 }
+
+/** The live tick's budget for one job: well inside the lease ceiling, and long enough for a whole lap short of CI. */
+export const CHAIN_MINUTES = 45
+
+/** Steps one job may take in one tick: a full lap and two rebuilds, and a ceiling on a loop that spends no model. */
+const STEPS = 20
 
 /** #65: the picks this tick won the lease on; one another live tick holds is left where it stands. */
 function leased(db: Db, pipe: PipeRow, now: Date): { plan: PlanRow; lease: Taken }[] {
@@ -93,24 +104,45 @@ export function dry(db: Db, now: Date = new Date()): Dry {
   }
 }
 
-/** The lease goes on every way out, a throw included: the plan is free for the next tick either way. */
+/**
+ * The lease goes on every way out, a throw included: the plan is free for the next tick either way. With a
+ * `chain` budget the job keeps its lease and takes its next step at once, until it has to wait on something
+ * outside the machine -- their CI, a person, a lane the CEO turned off -- or the budget runs out.
+ */
 async function one(db: Db, root: string, pipe: PipeRow, plan: PlanRow, lease: Taken,
-  provider: Provider, wire?: Wire): Promise<Fired> {
+  provider: Provider, wire?: Wire, chain = 0): Promise<Fired[]> {
+  const until = Date.now() + chain * 60_000
+  const out: Fired[] = []
   try {
-    return await stepped(db, root, pipe, plan, lease, provider, wire)
+    let row: PlanRow | null = plan
+    while (row !== null) {
+      const lap = await stepped(db, root, pipe, row, lease, provider, wire)
+      out.push(lap.fired)
+      const more = chain > 0 && Date.now() < until && out.length < STEPS && !lap.wait
+      row = more ? onward(db, pipe, row.id) : null
+    }
+    return out
   } finally {
     unlease(db, plan.id)
   }
 }
 
+/** The job as the store now has it, if it can take another step in this tick: still running, not blocked, its lane still open. */
+function onward(db: Db, pipe: PipeRow, id: number): PlanRow | null {
+  if (!openPipes(db, hhmm(db, new Date())).some((p) => p.id === pipe.id)) return null
+  const row = PlanRow.parse(db.prepare('SELECT * FROM plans WHERE id = ?').get(id))
+  return row.state === 'running' && blocked(db, row) === null ? row : null
+}
+
+/** `wait` is a step that settled by waiting: a CI still running, or a checkout the network failed. Neither is worth asking again in the same tick. */
 async function stepped(db: Db, root: string, pipe: PipeRow, plan: PlanRow, lease: Taken,
-  provider: Provider, wire?: Wire): Promise<Fired> {
+  provider: Provider, wire?: Wire): Promise<{ fired: Fired; wait: boolean }> {
   const tree = workspace(db, root, plan)
   const step = at(plan.step, tree.language)
-  const fired = tree.failed ?? await fire(db, root, plan, step, provider, wire)
-  const outcome = fired.parts === undefined ? fired : parted(db, root, plan, fired.parts, wire)
+  const made = tree.failed ?? await fire(db, root, plan, step, provider, wire)
+  const outcome = made.parts === undefined ? made : parted(db, root, plan, made.parts, wire)
   const state = settle(db, root, plan, step, outcome)
-  return {
+  const fired: Fired = {
     pipe: pipe.name,
     plan: plan.id,
     step: step.step,
@@ -121,6 +153,7 @@ async function stepped(db: Db, root: string, pipe: PipeRow, plan: PlanRow, lease
     note: outcome.note,
     stole: lease.stole,
   }
+  return { fired, wait: outcome.held === true || outcome.blip === true }
 }
 
 /**
@@ -189,8 +222,20 @@ function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcom
   const why = refused(db, { plan: plan.id, step: step.step, fingerprint: fingerprintOf(step, outcome),
     diff: step.step >= 3 ? digestOf(diffOf(root, plan.id)) : null })
   if (why !== 'again') stopped(root, plan.id, why)
-  // step 2 is the build in templates/pr-path.ts
-  return back(db, plan, outcome.to ?? (step.fires === 'review' ? 2 : step.step - 1), why !== 'again')
+  return back(db, plan, outcome.to ?? backTo(step), why !== 'again')
+}
+
+/** Step 2 is the build in templates/pr-path.ts. */
+const BUILD = 2
+
+/**
+ * Where a refusal sends the job: a review's to the build, a build's back to the build -- the brief it used to
+ * fall back to never changes once a builder has run, so that detour cost a tick and bought nothing -- and a
+ * kernel step's to the step before it.
+ */
+function backTo(step: Step): number {
+  if (step.fires === 'review') return BUILD
+  return step.fires === 'seat' ? step.step : step.step - 1
 }
 
 /** A failed checkout leaves the plan on its step for the next tick, until it has failed `BLIPS` times in a row. */

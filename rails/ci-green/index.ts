@@ -41,9 +41,28 @@ export interface Text {
 
 export type Gh = (args: string[]) => string
 
+/** One run at the head as the sign-off card shows it; `gates` is whether the verdict counts it. */
+export interface Board { workflow: string; status: string; conclusion: string; gates: boolean }
+
 export function ciGreen(head: Head, text: Text, touched: string[], gh: Gh = shell): Verdict {
+  return judge(head, text, touched, gh).verdict
+}
+
+/**
+ * The verdict and every run at the head, off one listing: the ready gate waits on the whole board, and
+ * the card shows it, while only the runs `mine()` keeps can refuse the branch.
+ */
+export function judge(head: Head, text: Text, touched: string[], gh: Gh = shell): { verdict: Verdict; board: Board[] } {
+  const listed = list(head, gh)
+  const at = listed?.filter((r) => r.headSha === head.sha) ?? []
+  const judged = new Set(mine(at, touched))
+  const board = at.map((r) => ({ workflow: r.workflowName, status: r.status, conclusion: r.conclusion, gates: judged.has(r) }))
+  return { verdict: verdictOf(head, text, listed === null ? null : [...judged]), board }
+}
+
+function verdictOf(head: Head, text: Text, judged: Run[] | null): Verdict {
   const ours = head.fork.split('/')[0] ?? head.fork
-  const spans = [...runs(head, touched, gh), ...upstream(text, ours)]
+  const spans = [...runs(head, judged), ...upstream(text, ours)]
   const subject_digest = createHash('sha256').update(`${head.fork}\n${head.branch}\n${head.sha}`).digest('hex')
   if (spans.length === 0) return { outcome: 'pass', defect_class: null, origin_kind: null, origin_ref: null, subject_digest, spans, message: `${head.fork}@${head.sha} is green and names no upstream number` }
   return {
@@ -56,13 +75,16 @@ export function ciGreen(head: Head, text: Text, touched: string[], gh: Gh = shel
   }
 }
 
-function runs(head: Head, touched: string[], gh: Gh): string[] {
+function list(head: Head, gh: Gh): Run[] | null {
   const listed = Runs.safeParse(JSON.parse(gh([
     'run', 'list', '--repo', head.fork, '--branch', head.branch,
     '--limit', String(WINDOW), '--json', 'headSha,status,conclusion,url,workflowName',
   ])))
-  if (!listed.success) return [`${head.fork}:${head.branch} ci.unreadable`]
-  const judged = mine(listed.data.filter((r) => r.headSha === head.sha), touched)
+  return listed.success ? listed.data : null
+}
+
+function runs(head: Head, judged: Run[] | null): string[] {
+  if (judged === null) return [`${head.fork}:${head.branch} ci.unreadable`]
   if (judged.length === 0) return [`${head.fork}:${head.sha} ${MISSING}`]
   return judged.flatMap(read)
 }

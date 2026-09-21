@@ -177,6 +177,8 @@ test('a plan a builder has run on keeps its hand-written ticket, its ask and its
   const w = mine()
   for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
   await tick(w.db, w.root, stub(CARRIED, 1))
+  expect(plan(w.db, ID)).toMatchObject({ step: 2, state: 'running' })
+  w.db.prepare("UPDATE plans SET step = 1 WHERE id = ?").run(ID)
   const hand = '# a ticket the COO wrote\n\n- D1 do the thing\n'
   put(w.root, ID, 'issue.md', hand)
   drop(w.root, ID, 'ask.md')

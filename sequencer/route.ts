@@ -3,7 +3,7 @@ import type { Db } from '../store/index.ts'
 import { internal, type PlanRow } from '../store/plans.ts'
 import { languageOf } from './workspace.ts'
 
-/** The manifest entry that says a seat's fence is the brief's `## Files`, not a directory. */
+/** The manifest entry that says a seat's fence is the file list the brief settled, not a directory. */
 export const BRIEF_FILES = 'brief:files'
 
 /**

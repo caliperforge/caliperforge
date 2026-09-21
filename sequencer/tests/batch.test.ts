@@ -263,8 +263,8 @@ test('the steps write the deliverable themselves, and a plan reaches the batch w
   }
   expect(plan(w.db, 1).step).toBe(7)
   expect(w.db.prepare('SELECT step, seat, state FROM deliverables WHERE plan_id = 1 ORDER BY id').all()).toEqual([
-    { step: 2, seat: 'typescript_specialist', state: 'built' },
-    { step: 5, seat: 'typescript_specialist', state: 'ready' },
+    { step: 2, seat: 'outside_specialist', state: 'built' },
+    { step: 5, seat: 'outside_specialist', state: 'ready' },
   ])
   expect(plan(w.db, 1).head_digest).toBe(headDigest(headOf(w.root, 1).sha))
 })

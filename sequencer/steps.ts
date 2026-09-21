@@ -16,14 +16,13 @@ import { abortMerge, behindMain, cloned, conflicted, diffOf, fetchMain, get, may
 
 interface Target { repo: string; issue_no: number; state: string; measured_at: string; pulse: string }
 
-export function blocked(db: Db, plan: PlanRow, today: string): string | null {
+export function blocked(db: Db, plan: PlanRow): string | null {
   const step = at(plan.step)
   if (step.fires === 'ceo') return internal(plan) || approvedPlan(db, plan) ? null : 'awaiting the sign-off batch'
   if (step.name === 'ruling') return internal(plan) || approved(db, plan) ? null : 'awaiting cf approve target'
   if (step.name === 'ready') return proven(db, plan) ? null : 'awaiting the ready proof'
   const row = target(db, plan)
-  if (row?.state === 'parked') return `${row.repo}#${String(row.issue_no)} parked on a cold pulse`
-  return stale(db, plan, today)
+  return row?.state === 'parked' ? `${row.repo}#${String(row.issue_no)} is parked` : null
 }
 
 export function kernel(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
@@ -69,7 +68,7 @@ function readyGate(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
   if (row === null) return { outcome: 'refuse', spans: ['deliverables'], note: `plan ${String(plan.id)} has no deliverable row` }
   const waiting = forkCi(db, root, plan, repo, wire)
   if (waiting !== null) return waiting
-  const verdict = readyRail(db, proofOf(db, plan, repo, row))
+  const verdict = readyRail(proofOf(db, plan, repo, row))
   recordRail(db, join(root, 'rails/ready'), plan.id, verdict, 0)
   return { outcome: verdict.outcome, spans: verdict.spans, note: `ready: ${verdict.message}` }
 }
@@ -217,13 +216,6 @@ function target(db: Db, plan: PlanRow): Target | null {
   return (row ?? null) as Target | null
 }
 
-function stale(db: Db, plan: PlanRow, today: string): string | null {
-  const row = target(db, plan)
-  if (row === null) return null
-  const days = Math.floor((Date.parse(today) - Date.parse(row.measured_at.slice(0, 10))) / 86400000)
-  return days > 30 ? `account evidence is ${String(days)} days old, re-measure` : null
-}
-
 /** The digest `cf approve target` binds an approval to. */
 export function targetDigest(t: { repo: string; issue_no: number; evidence_measured_at: string }): string {
   return createHash('sha256').update(`${t.repo}#${String(t.issue_no)}@${t.evidence_measured_at}`).digest('hex')
@@ -280,14 +272,13 @@ function evidenceOf(db: Db, plan: PlanRow): string {
 
 /** Each of the five is a row somebody else wrote: a gate verdict, the ci-green rail, a bot signal, the account pulse. */
 function proof(db: Db, plan: PlanRow): Proven {
-  const today = new Date().toISOString().slice(0, 10)
   return {
     tests_pass: passed(db, plan.id, 'gate', 'pre_review'),
     byte_identical_elsewhere: passed(db, plan.id, 'gate', 'review') && passed(db, plan.id, 'gate', 'senior_review'),
     fork_ci_green: passed(db, plan.id, 'rail_id', 'ci-green'),
     bot_clean: db.prepare("SELECT 1 FROM signals WHERE plan = ? AND kind = 'bot_review' AND score < 5")
       .get(plan.id) === undefined,
-    target_warm: internal(plan) || (target(db, plan)?.pulse === 'warm' && stale(db, plan, today) === null),
+    target_warm: internal(plan) || target(db, plan)?.state !== 'parked',
   }
 }
 

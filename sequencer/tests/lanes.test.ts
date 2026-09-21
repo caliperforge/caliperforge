@@ -48,11 +48,11 @@ test('within a lane the tick starts plans in priority order, in parallel up to m
   queued(w, 2, 1, 0)
   queued(w, 3, 1, 2)
   w.db.prepare('UPDATE pipes SET max_concurrent = 3 WHERE id = 1').run()
-  expect(picks(w.db, { ...w.pipe, max_concurrent: 3 }, TODAY).map((p) => p.id)).toEqual([2, 1, 3])
-  expect(picks(w.db, { ...w.pipe, max_concurrent: 2 }, TODAY).map((p) => p.id)).toEqual([2, 1])
-  expect(picks(w.db, { ...w.pipe, max_concurrent: 1 }, TODAY).map((p) => p.id)).toEqual([2])
+  expect(picks(w.db, { ...w.pipe, max_concurrent: 3 }).map((p) => p.id)).toEqual([2, 1, 3])
+  expect(picks(w.db, { ...w.pipe, max_concurrent: 2 }).map((p) => p.id)).toEqual([2, 1])
+  expect(picks(w.db, { ...w.pipe, max_concurrent: 1 }).map((p) => p.id)).toEqual([2])
   priority(w.db, 3, 0)
-  expect(picks(w.db, { ...w.pipe, max_concurrent: 3 }, TODAY).map((p) => p.id)).toEqual([2, 3, 1])
+  expect(picks(w.db, { ...w.pipe, max_concurrent: 3 }).map((p) => p.id)).toEqual([2, 3, 1])
 })
 
 test('a plan already running keeps its slot and a blocked queued plan takes none', async () => {
@@ -61,10 +61,10 @@ test('a plan already running keeps its slot and a blocked queued plan takes none
   w.db.prepare('UPDATE pipes SET max_concurrent = 2 WHERE id = 1').run()
   expect((await tick(w.db, w.root, stub(CARRIED))).map((f) => f.plan)).toEqual([1, 2])
   expect(w.db.prepare("SELECT count(*) AS n FROM plans WHERE state = 'running'").get()).toEqual({ n: 2 })
-  expect(picks(w.db, { ...w.pipe, max_concurrent: 2 }, TODAY)).toEqual([])
+  expect(picks(w.db, { ...w.pipe, max_concurrent: 2 })).toEqual([])
   approve(w.db, w.target)
-  expect(picks(w.db, { ...w.pipe, max_concurrent: 2 }, TODAY).map((p) => p.id)).toEqual([1, 2])
-  expect(picks(w.db, { ...w.pipe, max_concurrent: 1 }, TODAY).map((p) => p.id)).toEqual([1, 2])
+  expect(picks(w.db, { ...w.pipe, max_concurrent: 2 }).map((p) => p.id)).toEqual([1, 2])
+  expect(picks(w.db, { ...w.pipe, max_concurrent: 1 }).map((p) => p.id)).toEqual([1, 2])
 })
 
 test('the cap decides how many pipes worth of plans the tick opens', async () => {

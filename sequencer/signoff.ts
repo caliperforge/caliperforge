@@ -1,4 +1,6 @@
 import { execFileSync } from 'node:child_process'
+import { basename } from 'node:path'
+import { parse } from '../rails/diff.ts'
 import { approve, batch, refuse, type Card } from '../cli/batch.ts'
 import type { Answer, Desk, Seen } from '../cli/gh.ts'
 import { notify, record, type Event, type Kind } from '../cli/inbox.ts'
@@ -7,7 +9,7 @@ import { needsCeo, PlanRow, rewind } from '../store/plans.ts'
 import { clear } from '../store/refusals.ts'
 import type { Board } from '../rails/ci-green/index.ts'
 import { BOARD, headOf, opened } from './push.ts'
-import { drop, FORK, get, maybe, put, repoName, titleOf } from './workspace.ts'
+import { diffOf, drop, FORK, get, maybe, put, repoName, titleOf } from './workspace.ts'
 
 /**
  * 09-21 item 4: an outside job is signed off without a terminal. A plan waiting at step 7 gets one
@@ -158,11 +160,22 @@ export function bodyFor(db: Db, root: string, card: Card): string {
     text,
     fence,
     '',
+    ...unsaid(root, card.id, open === null ? text : null),
     '**Answer with one label.** `go` sends it. `no` refuses it: comment first and the builder reworks against your words. `talk` hands it to the COO.',
     '',
     `<sub>plan ${String(card.id)}, head ${head.sha.slice(0, 12)}, digest ${card.digest.slice(0, 12)}</sub>`,
     '',
   ].join('\n')
+}
+
+/**
+ * #97: PR text written in advance (`cf queue add --pr`) can leave out a file the build changed. The card names
+ * each one the text never mentions, by path or by name, so the gap is seen before `go`.
+ */
+function unsaid(root: string, plan: number, text: string | null): string[] {
+  if (text === null || maybe(root, plan, 'pr.md') === null) return []
+  const left = parse(diffOf(root, plan)).map((f) => f.path).filter((p) => !text.includes(p) && !text.includes(basename(p)))
+  return left.length === 0 ? [] : [`**Not in the PR text:** ${left.map((p) => code(p)).join(', ')}`, '']
 }
 
 /** Green is said only of what finished green: a workflow the gate did not judge is still on the card, and still counts here. */

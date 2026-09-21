@@ -160,3 +160,16 @@ test('a ruling lands as the next D row and a Must not break line, or in its own 
     + "- The CEO's ruling at sign-off (2026-09-21): Only the number.\n\n## Files\n\n- `a/b.ts`\n")
   expect(ruled('# t\n\nfree text\n', 'x', '2026-09-21')).toBe("# t\n\nfree text\n\n## The CEO's rulings\n\n- D1 The CEO's ruling at sign-off (2026-09-21): x\n")
 })
+
+/** #97: on plan 65 the PR text came from the hand build and never mentioned two Lua files the machine changed. */
+test('the card names a changed file the PR text written in advance leaves out', async () => {
+  const bodyWith = async (pr: string): Promise<string> => {
+    const w = await atBatch()
+    put(w.root, 1, 'pr.md', pr)
+    const desk = fake()
+    signoffs(w.db, w.root, desk)
+    return desk.cards.get(100)?.body ?? ''
+  }
+  expect(await bodyWith('Says hey.\n')).toContain('**Not in the PR text:** `src/hello.ts`')
+  expect(await bodyWith('`hello.ts` says hey.\n')).not.toContain('Not in the PR text')
+})

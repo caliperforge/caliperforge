@@ -63,3 +63,7 @@ test('the seat may run gradle and nothing else, and a chained command is not gra
     })
   }
 })
+
+test('the prompt says the brief\'s files are handed', () => {
+  expect(seat(root, 'kotlin_specialist').prompt).toContain('follow it under `# The files`')
+})

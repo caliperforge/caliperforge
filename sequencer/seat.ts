@@ -5,10 +5,12 @@ import { load, seat, tight } from '../runner/rules.ts'
 import { judge, loadReviews } from '../reviews/bench.ts'
 import type { Verdict } from '../reviews/verdict.ts'
 import type { Db } from '../store/index.ts'
+import { filesOf } from '../store/files.ts'
 import { builderRan, internal, type PlanRow } from '../store/plans.ts'
 import { byRun, pending } from '../store/transcript.ts'
 import type { Step } from '../templates/pr-path.ts'
-import { shape, split, unclear, wide, WIDE, type Part } from './brief.ts'
+import { pointed, shape, split, unclear, wide, WIDE, type Part } from './brief.ts'
+import { handout, touched, type Handed } from './handout.ts'
 import { install } from './checks.ts'
 import { fenceFor } from './route.ts'
 import type { Outcome } from './kind.ts'
@@ -20,7 +22,7 @@ const INSERT = `INSERT INTO runs
 
 export async function fireSeat(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
   if (internal(plan)) install(srcDir(root, plan.id))
-  const fired = await ran(db, root, plan, step, provider, rebuild(root, plan), internal(plan))
+  const fired = await ran(db, root, plan, step, provider, rebuild(db, root, plan), internal(plan))
   put(root, plan.id, `step-${String(step.step)}.handback.md`, fired.text)
   const tokens = fired.usage.input + fired.usage.cache + fired.usage.output
   if (fired.exit === 0) return { outcome: 'pass', spans: [], note: `${step.runs} exit 0, ${String(tokens)} tokens` }
@@ -101,11 +103,32 @@ function exited(step: Step, fired: Fired): Outcome {
   return { outcome: 'refuse', spans: [fired.stop_reason ?? 'seat.exit'], note: `${step.runs} exit ${String(fired.exit)}` }
 }
 
-/** The builder's packet, carrying the spans a refusal named so a rebuild is not a repeat. */
-function rebuild(root: string, plan: PlanRow): string {
+/**
+ * The builder's packet (#67): the brief and the text of the files it lists; on a rebuild, the spans the
+ * refusal named, the builder's own diff so far, and the text of only the files those two touch.
+ */
+function rebuild(db: Db, root: string, plan: PlanRow): string {
+  const src = srcDir(root, plan.id)
   const issue = get(root, plan.id, 'issue.md')
   const refusal = maybe(root, plan.id, 'refusal.md')
-  return refusal === null ? issue : `${issue}\n\n# Refused — rebuild only these spans\n\n${refusal}`
+  if (refusal === null) return handed(issue, handout(src, listed(db, plan.id, issue)))
+  const diff = diffOf(root, plan.id)
+  const again = `${issue}\n\n# Refused — rebuild only these spans\n\n${refusal}`
+  const since = diff.trim() === '' ? again : `${again}\n\n# Your diff so far\n\n\`\`\`\`diff\n${diff}\n\`\`\`\``
+  return handed(since, handout(src, touched(diff, refusal)))
+}
+
+/** The brief's files from the store, a new one left out, each with the lines the brief points it at. */
+function listed(db: Db, plan: number, issue: string): Handed[] {
+  const lines = pointed(issue)
+  return filesOf(db, plan).filter((f) => !f.is_new).flatMap((f): Handed[] => {
+    const at = lines.filter((l) => l.path === f.path)
+    return at.length === 0 ? [{ path: f.path, line: null }] : at
+  })
+}
+
+function handed(issue: string, files: string): string {
+  return files === '' ? issue : `${issue}\n\n${files}`
 }
 
 export async function fireReview(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {

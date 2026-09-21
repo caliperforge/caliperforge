@@ -14,6 +14,10 @@ in their test framework.
 Change only the lines the job needs. Where a comment or doc line states a value the job changes, change the
 value and keep every other word: do not reword, reflow or trim text you were not asked to change.
 
+The files the brief lists follow it under `# The files`, as your checkout holds them: do not search for
+them again. Read the ones you will change in one step before you edit. Open a file you were not handed only
+when you can say why, and ask for all of those in one step.
+
 Answer the brief under the Tight standard above, then close with this fence and nothing after it:
 
 ```

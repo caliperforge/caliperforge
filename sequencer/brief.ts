@@ -70,6 +70,15 @@ function order(brief: string): string | null {
   return null
 }
 
+/** A path with the line it points at, anywhere on a `## Files` row: `` `a/b.rb:197` ``. */
+const POINTED = /([A-Za-z0-9_.-]*\/[A-Za-z0-9_./-]*\.[A-Za-z0-9]+):(\d+)/g
+
+/** Each line a `## Files` row points at, so a long file is handed by its block (#67). */
+export function pointed(brief: string): { path: string; line: number }[] {
+  return section(brief, '## Files').split('\n').filter((l) => /^\s*[-*]/.test(l))
+    .flatMap((l) => [...l.matchAll(POINTED)].map((m) => ({ path: String(m[1]), line: Number(m[2]) })))
+}
+
 /** A path in backticks anywhere on a `## Files` row; the directory in it is what tells it from a symbol. */
 const TICKED = /`([A-Za-z0-9_.-]*\/[A-Za-z0-9_./-]*\.[A-Za-z0-9]+)(?::[\d,-]+)?`/g
 

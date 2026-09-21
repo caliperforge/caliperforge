@@ -28,3 +28,7 @@ test('minimal-edit rule in every builder, the brief and the first review', () =>
   expect(readFileSync(join(root, 'reviews/code_quality/spec.md'), 'utf8').replace(/\s+/g, ' '))
     .toContain('rewords a comment, renames or reformats past what the ask needs is a scope finding')
 })
+
+test('the prompt says the brief\'s files are handed', () => {
+  expect(seat(root, 'outside_specialist').prompt).toContain('follow it under `# The files`')
+})

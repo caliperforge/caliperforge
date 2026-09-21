@@ -24,3 +24,7 @@ test('the prompt tells the seat to close with the handback fence', () => {
 test('the prompt names the row a file outside the brief needs', () => {
   expect(seat(root, 'typescript_specialist').prompt).toContain('under `## Outside the files`')
 })
+
+test('the prompt says the brief\'s files are handed', () => {
+  expect(seat(root, 'typescript_specialist').prompt).toContain('follow it under `# The files`')
+})

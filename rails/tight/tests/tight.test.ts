@@ -66,3 +66,28 @@ test('writes a verdicts row the store accepts', () => {
   const row = db.prepare('SELECT gate, kind, outcome, rail_id, origin_kind, origin_ref FROM verdicts WHERE id = ?').get(id)
   expect(row).toEqual({ gate: 'pre_review', kind: 'rail', outcome: 'refuse', rail_id: 'tight', origin_kind: 'rail', origin_ref: 'tight' })
 })
+
+const added = (path: string, source: string): string => {
+  const lines = source.trimEnd().split('\n')
+  return `--- /dev/null\n+++ b/${path}\n@@ -0,0 +1,${String(lines.length)} @@\n${lines.map((l) => `+${l}`).join('\n')}\n`
+}
+
+/** #105: plan 47 was refused on a template line that writes `// step ${i}`, read as a comment once an earlier `${…}` threw the scan off. */
+test('text in a template or a regex is not a comment', () => {
+  const template = [
+    'export const body = (i: number): string => `    val step${String(i)} = ${String(i)}`',
+    'export const doc = (i: number): string => `    // step ${String(i)}`',
+    'export const stepString = 1',
+  ].join('\n')
+  const regex = 'export const slashes = (s: string): boolean => /\\/\\/ step string/.test(s)\nexport const stepString = 1'
+  for (const source of [template, regex]) {
+    const verdict = tight(root, { diff: added('src/fixture.ts', source), sources: { 'src/fixture.ts': source }, description: 'x.' })
+    expect(verdict.spans).toEqual([])
+  }
+})
+
+test('a restating comment after a template still refuses', () => {
+  const source = 'export const doc = (i: number): string => `// step ${String(i)} done`\n// step count\nexport const stepCount = 1\n'
+  const verdict = tight(root, { diff: added('src/fixture.ts', source), sources: { 'src/fixture.ts': source }, description: 'x.' })
+  expect(verdict.spans).toEqual(['src/fixture.ts:2 tight.restating'])
+})

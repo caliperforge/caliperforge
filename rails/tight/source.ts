@@ -3,11 +3,6 @@ import { lineOf } from '../../checks/tree.ts'
 
 const JUSTIFYING = /because|in order to|note that|this is needed|to ensure/i
 
-const COMMENT = new Set<ts.SyntaxKind>([
-  ts.SyntaxKind.SingleLineCommentTrivia,
-  ts.SyntaxKind.MultiLineCommentTrivia,
-])
-
 const NESTS = new Set<ts.SyntaxKind>([
   ts.SyntaxKind.IfStatement,
   ts.SyntaxKind.ForStatement,
@@ -33,7 +28,7 @@ export function inSource(text: string, added: Set<number>, ceilings: Ceilings): 
   const src = ts.createSourceFile('subject.ts', text, ts.ScriptTarget.ESNext, true)
   const uses = counts(src)
   return [
-    ...comments(text).filter((c) => added.has(c.line)).flatMap((c) => judgeComment(text, c)),
+    ...comments(src).filter((c) => added.has(c.line)).flatMap((c) => judgeComment(text, c)),
     ...declared(src).filter((d) => added.has(d.line)).flatMap((d) => judgeDeclaration(d, uses)),
     ...functions(src).filter((f) => touched(src, f, added)).flatMap((f) => judgeSize(src, f, ceilings)),
   ].sort((a, b) => a.line - b.line)
@@ -136,14 +131,24 @@ function depth(node: ts.Node, at: number): number {
   return deepest
 }
 
-function comments(text: string): { line: number; text: string; end: number }[] {
-  const scanner = ts.createScanner(ts.ScriptTarget.ESNext, false, ts.LanguageVariant.Standard, text)
-  const out: { line: number; text: string; end: number }[] = []
-  for (let token = scanner.scan(); token !== ts.SyntaxKind.EndOfFileToken; token = scanner.scan()) {
-    if (!COMMENT.has(token)) continue
-    out.push({ line: lineOf(text, scanner.getTokenStart()), text: scanner.getTokenText(), end: scanner.getTokenEnd() })
+/**
+ * Every comment, found from the parsed tree: the parser knows a template's tail and a regex from a comment,
+ * where a bare scanner loses its place after the first `${…}` and reads the strings after it as code (#105).
+ */
+function comments(src: ts.SourceFile): { line: number; text: string; end: number }[] {
+  const text = src.text
+  const found = new Map<number, { line: number; text: string; end: number }>()
+  const take = (ranges: ts.CommentRange[] | undefined): void => {
+    for (const r of ranges ?? []) found.set(r.pos, { line: lineOf(text, r.pos), text: text.slice(r.pos, r.end), end: r.end })
   }
-  return out
+  const visit = (node: ts.Node): void => {
+    if (node.kind >= ts.SyntaxKind.FirstJSDocNode && node.kind <= ts.SyntaxKind.LastJSDocNode) return
+    take(ts.getLeadingCommentRanges(text, node.getFullStart()))
+    take(ts.getTrailingCommentRanges(text, node.getEnd()))
+    node.getChildren(src).forEach(visit)
+  }
+  visit(src)
+  return [...found.entries()].sort(([a], [b]) => a - b).map(([, c]) => c)
 }
 
 function subject(text: string, comment: { end: number }): string {

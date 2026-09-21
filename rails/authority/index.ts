@@ -11,16 +11,18 @@ const FROZEN = /^schema\/000[12]/
  * being written (`runner/index.ts:refuse`). With `ours` -- a plan filed from one of our own issues
  * -- a kernel build may touch the whole kernel, so the only refusals left are `.cf/` (the tick's own
  * notes) and the frozen migrations. Without it the manifest's `write_paths` stand, unchanged: that
- * is the narrow fence a counterparty never agreed to widen.
+ * is the narrow fence a counterparty never agreed to widen. `outside` is what a kernel build touched
+ * beyond its brief's file list (#87, `sequencer/fence.ts`).
  */
 export function authority(root: string, name: string, diff: string, ours = false,
-  writePaths: string[] = seat(root, name).manifest.write_paths): Verdict {
+  writePaths: string[] = seat(root, name).manifest.write_paths, outside: string[] = []): Verdict {
   const fence = ours ? 'our own tree (all but `.cf/`)' : `seat "${name}" write_paths (${writePaths.join(', ')})`
   const files = parse(diff)
   const spans = files.flatMap((f) => {
     if (FROZEN.test(f.path)) return [`${f.path}:1 authority.frozen_schema`]
     return refuse(root, writePaths, f.path, ours) === null ? [] : [`${f.path}:1 authority.write_paths`]
   })
+  spans.push(...outside.filter((p) => !spans.some((s) => s.startsWith(`${p}:`))).map((p) => `${p}:1 authority.outside_files`))
   const subject_digest = createHash('sha256').update(diff).digest('hex')
   if (spans.length === 0) return { outcome: 'pass', defect_class: null, origin_kind: null, origin_ref: null, subject_digest, spans, message: `${String(files.length)} file(s) inside ${fence}` }
   return {
@@ -29,6 +31,6 @@ export function authority(root: string, name: string, diff: string, ours = false
     origin_ref: 'authority',
     subject_digest,
     spans,
-    message: `${String(spans.length)} span(s) outside ${fence} or under a frozen migration`,
+    message: `${String(spans.length)} span(s) outside ${fence}, under a frozen migration, or outside the brief's file list with no row under ## Outside the files`,
   }
 }

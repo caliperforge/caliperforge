@@ -1,18 +1,21 @@
 import { join } from 'node:path'
 import { fill } from '../cli/digests.ts'
 import { authority } from '../rails/authority/index.ts'
+import { parse } from '../rails/diff.ts'
 import { audit, record } from '../rails/completion-audit/index.ts'
 import { identifiers } from '../rails/identifiers/index.ts'
 import { record as recordRail, type Verdict } from '../rails/record.ts'
 import { scan } from '../rails/secret-scan/index.ts'
 import { weakened } from '../rails/test-weakened/index.ts'
 import { sources, tight } from '../rails/tight/index.ts'
+import { filesOf } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
 import { internal, type PlanRow } from '../store/plans.ts'
 import { builder } from '../templates/pr-path.ts'
 import { checks, type Failure } from './checks.ts'
 import type { Outcome } from './kind.ts'
 import { seat } from '../runner/rules.ts'
+import { strays } from './fence.ts'
 import { fenceFor, languageFor } from './route.ts'
 import { diffOf, doneIds, get, maybe, srcDir } from './workspace.ts'
 
@@ -72,9 +75,12 @@ function rest(db: Db, root: string, plan: PlanRow, handback: string): [string, (
   const diff = diffOf(root, plan.id)
   const name = builder(languageFor(db, plan, src))
   const fence = fenceFor(db, plan.id, seat(root, name).manifest.write_paths)
+  const outside = internal(plan)
+    ? strays(parse(diff).map((f) => f.path), filesOf(db, plan.id).map((f) => f.path), handback)
+    : []
   return [
     ['secret-scan', () => scan(diff)],
-    ['authority', () => authority(root, name, diff, internal(plan), fence)],
+    ['authority', () => authority(root, name, diff, internal(plan), fence, outside)],
     ['tight', () => tight(root, { diff, sources: sources(src, diff), description: maybe(root, plan.id, 'pr.md') ?? handback })],
     ['test-weakened', () => weakened(diff, 'green')],
     ['identifiers', () => identifiers(src, handback)],

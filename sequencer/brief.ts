@@ -24,7 +24,7 @@ export type Part = z.infer<typeof Part>
 /** #72: past this many files other than tests a brief is two jobs, and the brief writer is sent back to split it. */
 export const WIDE = 5
 
-const TEST = /(^|\/)(tests?|spec|__tests__|fixtures)\/|[._](test|spec)\.|Tests?\./
+export const TEST = /(^|\/)(tests?|spec|__tests__|fixtures)\/|[._](test|spec)\.|Tests?\./
 
 /** The fence a seat ends with when the ask cannot be briefed against the code: the question goes back to the COO. */
 export function unclear(reply: string): string | null {
@@ -96,7 +96,7 @@ function absent(brief: string, src: string): string | null {
   return null
 }
 
-function section(brief: string, heading: string): string {
+export function section(brief: string, heading: string): string {
   const lines = brief.split('\n')
   const from = lines.findIndex((l) => l.trimEnd() === heading)
   if (from === -1) return ''

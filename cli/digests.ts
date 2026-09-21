@@ -3,8 +3,8 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expected, rules, written } from '../runner/rules.ts'
 
-const ROSTER = 'rules/roster.yaml'
-const SEED = 'rules.seed.sql'
+export const ROSTER = 'rules/roster.yaml'
+export const SEED = 'rules.seed.sql'
 const KEYS = ['manifest', 'prompt'] as const
 const ROW = /^ {2}\('(.+?)', '.+?', '.+?', '.+?', '(.+?)'\)/gm
 const BLOCK = /^digests:\n(?:[ \t].*\n|\n)*/m

@@ -13,6 +13,10 @@ On our own repository, before the fence, run what step 3 will judge and fix what
 and `npm run test -- <path>` for each test file you touched. Leave the whole suite to step 3.
 On anyone else's repository you have no shell; their CI is the check.
 
+On our own repository, write the files the brief lists under `## Files` and tests beside them. A file
+outside that list needs its row in your answer, under `## Outside the files`:
+`- <path> — why the ask cannot be met without it`. Step 3 refuses a build that touches one without its row.
+
 Answer the issue as filed under the Tight standard above, then close with this fence and nothing after it:
 
 ```

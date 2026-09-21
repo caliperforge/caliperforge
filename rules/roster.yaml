@@ -6,7 +6,7 @@ seats:
 digests:
   typescript_specialist:
     manifest: 6b842d68a8088bf2c60aec636c805dd63fd6f5f0df7fdb47a4d7ebbab745026d
-    prompt: 109e0f2989544e7a5dd880cc4641bfd38522dc153862dedc64dd374264c861bb
+    prompt: 2ed9ea3e0c8089dca551ce5ac4540a8f259a2d7d4209b5029f11b5a9390fb862
   kotlin_specialist:
     manifest: 6fd226964586d4d9ec1d2f0007a7d708768aab9add669f5cace69990ffa87866
     prompt: 50b8c936c3294271be7a486737f155bc17ce9c2404bda7d2da93126970811bc2

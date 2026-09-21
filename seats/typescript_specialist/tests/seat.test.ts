@@ -20,3 +20,7 @@ test('the roster carries the seat and the loader gives it a rules row', () => {
 test('the prompt tells the seat to close with the handback fence', () => {
   expect(seat(root, 'typescript_specialist').prompt).toContain('- id: D1')
 })
+
+test('the prompt names the row a file outside the brief needs', () => {
+  expect(seat(root, 'typescript_specialist').prompt).toContain('under `## Outside the files`')
+})

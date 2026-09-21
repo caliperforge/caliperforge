@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { appendFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
+import type { Packet, Provider } from '../../providers/kind.ts'
 import { landed } from '../../cli/batch.ts'
 import { check } from '../../cli/digests.ts'
 import { digest, listed } from '../../runner/rules.ts'
@@ -11,7 +12,7 @@ import { tick } from '../index.ts'
 import { headOf, push } from '../push.ts'
 import { blocked } from '../steps.ts'
 import { internalBranch, SELF, srcDir } from '../workspace.ts'
-import { approve, CARRIED, internalPlan, landing, ours, plan, runsAll, runsOn, slow, stub, watched, world, type World } from './world.ts'
+import { approve, CARRIED, internalPlan, landing, ours, owning, plan, runsAll, runsOn, slow, stub, watched, world, type World } from './world.ts'
 
 const ID = 2
 const SECOND = 3
@@ -54,14 +55,16 @@ test('two plans at batch in one lap: the first lands on main and the second is s
   const w = pair()
   const sent: string[] = []
   const wire = landing(watched(sent, w.root, ID, runsAll(w.root, [ID, SECOND])))
-  for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  const ownFile = (p: Packet): string => `src/p${/work\/(\d+)\/src/.exec(p.cwd)?.[1] ?? ''}.ts`
+  const built: Provider = { name: 'claude-agent-sdk', fire: (p) => stub(owning([ownFile(p)])).fire(p) }
+  for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, built, undefined, undefined, wire)
   for (const id of [ID, SECOND]) {
     writeFileSync(join(srcDir(w.root, id), `src/p${String(id)}.ts`), `export const p${String(id)} = true\n`)
   }
-  for (let at = 0; at < 4; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  for (let at = 0; at < 4; at += 1) await tick(w.db, w.root, built, undefined, undefined, wire)
   expect([plan(w.db, ID).step, plan(w.db, SECOND).step]).toEqual([7, 7])
 
-  const fired = await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  const fired = await tick(w.db, w.root, built, undefined, undefined, wire)
   const remote = join(w.root, 'remotes', SELF)
   expect(fired[1]).toMatchObject({ plan: SECOND, step: 7, spans: ['base:stale'], state: 'running' })
   expect(sent.filter((s) => s === 'send src main')).toEqual(['send src main'])
@@ -101,11 +104,12 @@ test('the internal checkout is our own repo on p<plan>-<slug>, built by the type
 
 test('step 3 fills the digests an internal checkout holds, and a target checkout has none to fill', async () => {
   const w = mine()
-  for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  const built = stub(owning(['seats/brief_writer/prompt.md']))
+  for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, built)
   const src = srcDir(w.root, ID)
   appendFileSync(join(src, 'seats/brief_writer/prompt.md'), '\n')
 
-  const rails = (await tick(w.db, w.root, stub(CARRIED)))[0]
+  const rails = (await tick(w.db, w.root, built))[0]
   expect(rails).toMatchObject({ plan: ID, step: 3, name: 'rails', outcome: 'pass' })
   expect(listed(src).digests.brief_writer?.prompt).toBe(digest(join(src, 'seats/brief_writer/prompt.md')))
   expect(check(src, new Date().toISOString().slice(0, 10))).toEqual([])
@@ -135,11 +139,12 @@ test('a roster the build left unfillable refuses that plan back to step 2 and th
  */
 test('the rails let an internal build keep the kernel files outside `src/` that it changed', async () => {
   const w = mine()
-  for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  const built = stub(owning(['cli/x.ts']))
+  for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, built)
   mkdirSync(join(srcDir(w.root, ID), 'cli'), { recursive: true })
   writeFileSync(join(srcDir(w.root, ID), 'cli/x.ts'), 'export const x = 1\n')
 
-  const rails = (await tick(w.db, w.root, stub(CARRIED)))[0]
+  const rails = (await tick(w.db, w.root, built))[0]
   expect(rails).toMatchObject({ plan: ID, step: 3, name: 'rails', outcome: 'pass' })
   expect(w.db.prepare("SELECT outcome FROM verdicts WHERE plan = ? AND rail_id = 'authority'").get(ID))
     .toEqual({ outcome: 'pass' })

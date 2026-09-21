@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import type { Db } from './index.ts'
+import { held } from './leases.ts'
 import { clock, openPipes } from './plans.ts'
 
 export const LaneCap = z.object({
@@ -89,11 +90,12 @@ export function dial(db: Db, n: number, at: string): void {
   set(db, 'lanes.dial', String(n), 'ceo', at)
 }
 
-export function lanes(db: Db, hhmm: string): LaneState {
-  const held = cap(db)
-  const row = db.prepare("SELECT count(*) AS live FROM plans WHERE state = 'running'").get() as { live: number }
-  const open = openPipes(db, hhmm).slice(0, held.cap).reduce((sum, p) => sum + p.max_concurrent, 0)
-  return { ...held, live: row.live, open }
+export function lanes(db: Db, hhmm: string, now: Date = new Date()): LaneState {
+  const wide = cap(db)
+  const running = db.prepare("SELECT id FROM plans WHERE state = 'running'").all() as { id: number }[]
+  const live = new Set([...running.map((p) => p.id), ...held(db, now).map((l) => l.plan)])
+  const open = openPipes(db, hhmm).slice(0, wide.cap).reduce((sum, p) => sum + p.max_concurrent, 0)
+  return { ...wide, live: live.size, open }
 }
 
 export function windows(db: Db): WindowRow[] {

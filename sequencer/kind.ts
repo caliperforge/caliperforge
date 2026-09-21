@@ -27,4 +27,5 @@ export interface Fired {
   state: string
   spans: string[]
   note: string
+  stole: number | null
 }

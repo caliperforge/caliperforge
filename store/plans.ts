@@ -73,9 +73,11 @@ export function live(db: Db, pipe: PipeRow): PlanRow[] {
     .all(pipe.id).map((r) => PlanRow.parse(r))
 }
 
-export function underCap(pipe: PipeRow, plans: PlanRow[]): PlanRow[] {
-  const out = plans.filter((p) => p.state === 'running')
-  for (const plan of plans.filter((p) => p.state !== 'running')) {
+/** A leased plan is mid-fire: it holds the slot it took whatever state the row is caught at. */
+export function underCap(pipe: PipeRow, plans: PlanRow[], leased = new Set<number>()): PlanRow[] {
+  const holds = (p: PlanRow): boolean => p.state === 'running' || leased.has(p.id)
+  const out = plans.filter(holds)
+  for (const plan of plans.filter((p) => !holds(p))) {
     if (out.length >= pipe.max_concurrent) break
     out.push(plan)
   }

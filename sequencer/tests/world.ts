@@ -8,6 +8,8 @@ import type { Packet, Provider } from '../../providers/kind.ts'
 import type { Gh } from '../../rails/ci-green/index.ts'
 import type { Db } from '../../store/index.ts'
 import { PlanRow, type PipeRow } from '../../store/plans.ts'
+import { tick } from '../index.ts'
+import type { Fired } from '../kind.ts'
 import type { Wire } from '../push.ts'
 import { targetDigest } from '../steps.ts'
 import { put, SELF, srcDir } from '../workspace.ts'
@@ -81,6 +83,11 @@ export function slow(ms: number, text: string): Provider & { peak: () => number 
       return inner.fire(packet)
     },
   }
+}
+
+/** A tick left mid-flight: its leases are taken and its seat is still running when this returns. */
+export function inFlight(w: World, ms = 500): Promise<Fired[]> {
+  return tick(w.db, w.root, slow(ms, CARRIED))
 }
 
 function answer(packet: Packet, text: string, review: string, brief?: string): string {

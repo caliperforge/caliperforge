@@ -5,13 +5,16 @@
   <key>Label</key>
   <string>com.caliperforge.tick</string>
 
+  <!-- launchd will not overlap its own job, so the job is the launcher and not the tick it starts. -->
   <key>ProgramArguments</key>
   <array>
-    <string>/usr/bin/env</string>
-    <string>node</string>
-    <string>/Users/michael/cf_v2/cli/cf.ts</string>
-    <string>tick</string>
+    <string>/bin/sh</string>
+    <string>/Users/michael/cf_v2/launchd/tick.sh</string>
   </array>
+
+  <!-- Without this launchd kills the tick the launcher left running behind it. -->
+  <key>AbandonProcessGroup</key>
+  <true/>
 
   <key>WorkingDirectory</key>
   <string>/Users/michael/cf_v2</string>

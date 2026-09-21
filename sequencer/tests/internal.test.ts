@@ -73,12 +73,12 @@ test('two plans at batch in one lap: the first lands on main and the second is s
 
 test('a plan with an origin and no target passes measure and ruling, and waits on no approval', async () => {
   const w = mine()
-  expect(blocked(w.db, plan(w.db, ID), '2026-09-18')).toBeNull()
+  expect(blocked(w.db, plan(w.db, ID))).toBeNull()
   const first = (await tick(w.db, w.root, stub(CARRIED)))[0]
   expect(first).toMatchObject({ plan: ID, step: 0, name: 'measure', outcome: 'pass' })
   expect(first?.note).toContain('caliperforge/caliperforge#34')
   expect(plan(w.db, ID).step).toBe(1)
-  expect(blocked(w.db, plan(w.db, ID), '2026-09-18')).toBeNull()
+  expect(blocked(w.db, plan(w.db, ID))).toBeNull()
 
   const second = (await tick(w.db, w.root, stub(CARRIED)))[0]
   expect(second).toMatchObject({ step: 1, name: 'ruling', outcome: 'pass' })
@@ -167,7 +167,7 @@ test('step 7 signs an internal plan on the gates and shows it in the batch as a 
   const wire = watched([], w.root, ID)
   for (let at = 0; at < 7; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
   expect(plan(w.db, ID).step).toBe(7)
-  expect(blocked(w.db, plan(w.db, ID), '2026-09-18')).toBeNull()
+  expect(blocked(w.db, plan(w.db, ID))).toBeNull()
 
   const signed = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
   expect(signed).toMatchObject({ step: 7, name: 'batch', outcome: 'pass', state: 'running' })

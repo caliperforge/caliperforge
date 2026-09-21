@@ -19,11 +19,10 @@ import { branchOf, checkout, diffOf, internalBranch, maybe, put, SELF, srcDir, t
 /** `read` and `wire` are the network a tick touches on its own account; both are injected so a test can drive a lap offline. */
 export async function tick(db: Db, root: string, provider: Provider, now: Date = new Date(),
   read: (repo: string, no: number) => Pr = readPr, wire?: Wire): Promise<Fired[]> {
-  const today = now.toISOString().slice(0, 10)
   for (const signal of capture(db, read)) started(db, signal)
   const out: Fired[] = []
   for (const pipe of openPipes(db, hhmm(db, now)).slice(0, cap(db).cap)) {
-    out.push(...await Promise.all(picks(db, pipe, today).map((plan) => one(db, root, pipe, plan, provider, wire))))
+    out.push(...await Promise.all(picks(db, pipe).map((plan) => one(db, root, pipe, plan, provider, wire))))
   }
   return out
 }
@@ -56,18 +55,17 @@ export interface Dry {
  * The plans this pipe steps this tick, in priority order. A queued plan that is
  * blocked holds no slot; a running one holds the slot it already took.
  */
-export function picks(db: Db, pipe: PipeRow, today: string): PlanRow[] {
+export function picks(db: Db, pipe: PipeRow): PlanRow[] {
   const mapped = live(db, pipe).filter((p) => MAPPED.has(p.template))
-  const free = mapped.filter((p) => p.state === 'running' || blocked(db, p, today) === null)
-  return underCap(pipe, free).filter((p) => p.state !== 'running' || blocked(db, p, today) === null)
+  const free = mapped.filter((p) => p.state === 'running' || blocked(db, p) === null)
+  return underCap(pipe, free).filter((p) => p.state !== 'running' || blocked(db, p) === null)
 }
 
 /** What a tick would do, off the store alone: no `gh` call, no model, no row moved. */
 export function dry(db: Db, now: Date = new Date()): Dry {
   const when = hhmm(db, now)
-  const today = now.toISOString().slice(0, 10)
   const held = cap(db).cap
-  const open = openPipes(db, when).slice(0, held).map((p) => ({ pipe: p, plans: picks(db, p, today) }))
+  const open = openPipes(db, when).slice(0, held).map((p) => ({ pipe: p, plans: picks(db, p) }))
   return {
     hhmm: when,
     zone: zone(db),

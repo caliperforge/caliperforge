@@ -118,8 +118,14 @@ cf.command('measure').argument('<repo>', 'owner/repo to take the step 0 pulse of
 const queue = cf.command('queue')
 
 queue.command('add').argument('<repo>').argument('<issue-url>').option('--pipe <name>', 'pipe to queue on', 'pr-path')
-  .action((repo: string, url: string, options: { pipe: string }) => {
-    const added = add(db(), root, repo, url, options.pipe, new Date().toISOString().slice(0, 10))
+  .option('--ask <file>', 'our target card: the job is this, their issue only its context')
+  .option('--pr <file>', 'the body the pull request opens with')
+  .action((repo: string, url: string, options: { pipe: string; ask?: string; pr?: string }) => {
+    const scope = {
+      ...(options.ask === undefined ? {} : { card: readFileSync(options.ask, 'utf8') }),
+      ...(options.pr === undefined ? {} : { pr: readFileSync(options.pr, 'utf8') }),
+    }
+    const added = add(db(), root, repo, url, options.pipe, new Date().toISOString().slice(0, 10), scope)
     const origin = added.origin === null ? '-' : `${added.origin.origin_kind}:${added.origin.origin_ref}`
     out(`target ${String(added.target)} ${added.state}\tplan ${added.plan === null ? '-' : String(added.plan)}\t${added.why}\t${origin}\n`)
     process.exitCode = added.state === 'refused' ? 1 : 0
@@ -161,7 +167,7 @@ plan.argument('<id>').action((id: string) => {
   const row = handle.prepare('SELECT * FROM plans WHERE id = ?').get(Number(id))
   if (row === undefined) throw new Error(`no plan ${id}`)
   const plan = PlanRow.parse(row)
-  const why = blocked(handle, plan, new Date().toISOString().slice(0, 10))
+  const why = blocked(handle, plan)
   out(`plan ${String(plan.id)}\t${plan.template}\tstep ${String(plan.step)}\t${plan.state}\tretries ${String(plan.retries)}\t${why ?? 'unblocked'}\n`)
   for (const r of runsOf(handle, plan.id)) {
     out(`  run ${String(r.id)}\tstep ${String(r.step)}\t${String(r.seat)}\texit ${String(r.exit)}\n`)

@@ -10,6 +10,7 @@ import { at, steps } from '../../templates/pr-path.ts'
 import { tick } from '../index.ts'
 import { blocked, kernel } from '../steps.ts'
 import { doneIds, srcDir } from '../workspace.ts'
+import { record } from '../../store/files.ts'
 import { benchPacket } from '../../runner/packet.ts'
 import type { Packet } from '../../providers/kind.ts'
 import { approve, built, CARRIED, KOTLIN, PASS, plan, redLaps, REFUSE, RUN, runsAfter, runsOn, stub, watched, WORDS, world } from './world.ts'
@@ -23,17 +24,17 @@ const row = (over: Partial<PlanRow>): PlanRow =>
   ({ id: 1, pipe_id: 1, target_id: 1, template: 'pr_path', state: 'queued', queued_at: '', step: 0, retries: 0,
     head_digest: null, priority: 1, lane: null, seat: null, origin: null, ...over })
 
-test('the builder works in the checkout and may write only inside its write_paths', async () => {
+test('on a stranger\'s repo the builder is the outside seat and may write only the brief\'s files', async () => {
   const w = world()
   approve(w.db, w.target)
   const packets: Packet[] = []
   for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED, 0, PASS, (p) => packets.push(p)))
   const builder = packets.find((p) => p.tools.includes('Write'))
-  expect(builder).toBeDefined()
+  expect(builder?.prompt).toContain('# outside_specialist')
   const src = realpathSync(srcDir(w.root, 1))
   expect(builder?.cwd).toBe(srcDir(w.root, 1))
   expect(builder?.refuse(join(src, 'src/hello.ts'))).toBeNull()
-  expect(builder?.refuse('src/nested/hello.ts')).toBeNull()
+  expect(builder?.refuse('src/nested/hello.ts')).toMatchObject({ origin_ref: 'seat.write_paths' })
   expect(builder?.refuse(join(src, 'README.md'))).toMatchObject({ origin_ref: 'seat.write_paths' })
   expect(builder?.refuse(join(src, '../issue.md'))).toMatchObject({ origin_ref: 'seat.write_paths' })
   expect(builder?.refuse('../hello.ts')).toMatchObject({ origin_ref: 'seat.write_paths' })
@@ -52,10 +53,11 @@ test('a plan on a real target is cloned from our fork and branched off upstream 
   expect(head(src, ['status', '--porcelain'])).toBe('')
 })
 
-test('a kotlin checkout routes the build to the kotlin seat, and the diff is against the branch base', async () => {
+test('a brief wholly under kotlin/ routes the build to the kotlin seat, and the diff is against the branch base', async () => {
   const w = world('warm', undefined, KOTLIN)
   approve(w.db, w.target)
   for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  record(w.db, 1, [{ path: 'kotlin/build.gradle.kts', is_new: false }])
   const fired = (await tick(w.db, w.root, stub(CARRIED)))[0]
   expect(fired).toMatchObject({ step: 2, name: 'build', outcome: 'pass' })
   expect(fired?.note).toMatch(/^kotlin_specialist /)
@@ -93,20 +95,20 @@ test('step 1 is blocked until cf approve target writes the row', async () => {
   expect(plan(w.db, 1).step).toBe(1)
   expect(await tick(w.db, w.root, stub(CARRIED))).toEqual([])
   approve(w.db, w.target)
-  expect(blocked(w.db, plan(w.db, 1), '2026-09-17')).toBeNull()
+  expect(blocked(w.db, plan(w.db, 1))).toBeNull()
 })
 
-test('a cold pulse parks the plan at measure and never refuses it', async () => {
+test('a parked target holds its plan; a cold pulse alone holds nothing', async () => {
   const w = world('cold')
-  expect(blocked(w.db, plan(w.db, 1), '2026-09-17')).toMatch(/parked on a cold pulse/)
+  expect(blocked(w.db, plan(w.db, 1))).toMatch(/is parked/)
   expect(await tick(w.db, w.root, stub(CARRIED))).toEqual([])
-  expect(plan(w.db, 1).state).toBe('queued')
+  w.db.prepare("UPDATE targets SET state = 'ready' WHERE id = 1").run()
+  expect(blocked(w.db, plan(w.db, 1))).toBeNull()
 })
 
-test('an accounts row older than 30 days blocks the plan and refuses the queue', async () => {
+test('old account evidence holds no plan; queueing still wants a fresh row, which cf queue add measures', () => {
   const w = world('warm', '2026-01-01')
-  expect(blocked(w.db, plan(w.db, 1), '2026-09-17')).toMatch(/days old, re-measure/)
-  expect(await tick(w.db, w.root, stub(CARRIED), new Date('2026-09-17T09:00:00Z'))).toEqual([])
+  expect(blocked(w.db, plan(w.db, 1))).toBeNull()
   expect(() => account(w.db, 'acme/widget', '2026-09-17')).toThrow(/re-measure before queueing/)
   expect(() => account(w.db, 'acme/other', '2026-09-17')).toThrow(/no accounts row/)
 })
@@ -121,10 +123,9 @@ const measured = (day: string): Read => (args) => {
 test('cf measure refreshes the pulse the tick reads, without a second cf queue add', async () => {
   const w = world('warm', '2026-01-01')
   approve(w.db, w.target)
-  expect(blocked(w.db, plan(w.db, 1), '2026-09-17')).toMatch(/days old, re-measure/)
   expect(measure(w.db, 'acme/widget', '2026-09-17', measured('2026-09-17'))).toMatchObject({ pulse: 'warm', doors: 1 })
   expect(w.db.prepare('SELECT account_id FROM targets WHERE id = 1').get()).toEqual({ account_id: 1 })
-  expect(blocked(w.db, plan(w.db, 1), '2026-09-17')).toBeNull()
+  expect(blocked(w.db, plan(w.db, 1))).toBeNull()
   expect((await tick(w.db, w.root, stub(CARRIED), new Date('2026-09-17T09:00:00Z')))[0]?.step).toBe(0)
   expect(plan(w.db, 1).step).toBe(1)
 })
@@ -235,8 +236,8 @@ test('six ticks walk a plan from measure to Ready on one seat run and no tokens 
   }
   expect(walked).toEqual(['measure', 'ruling', 'build', 'rails', 'review', 'senior'])
   expect(plan(w.db, 1).step).toBe(6)
-  expect(blocked(w.db, plan(w.db, 1), '2026-09-17')).toBeNull()
-  expect(w.db.prepare("SELECT count(*) AS n FROM runs WHERE seat = 'typescript_specialist'").get()).toEqual({ n: 1 })
+  expect(blocked(w.db, plan(w.db, 1))).toBeNull()
+  expect(w.db.prepare("SELECT count(*) AS n FROM runs WHERE seat = 'outside_specialist'").get()).toEqual({ n: 1 })
 })
 
 test('step 6 sends the branch to our fork, waits out a run still going, then records ci-green and ready', async () => {

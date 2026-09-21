@@ -261,7 +261,7 @@ test('a rewind onto a brief that stands holds nothing and spends no read', async
 test('an external plan walks the same step 1 on the same seat, and never before cf approve target', async () => {
   const w = world()
   await tick(w.db, w.root, stub(CARRIED))
-  expect(blocked(w.db, plan(w.db, 1), '2026-09-18')).toMatch(/awaiting cf approve target/)
+  expect(blocked(w.db, plan(w.db, 1))).toMatch(/awaiting cf approve target/)
   expect(await tick(w.db, w.root, stub(CARRIED))).toEqual([])
   expect(w.db.prepare('SELECT count(*) AS n FROM runs').get()).toEqual({ n: 0 })
 

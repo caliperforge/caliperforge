@@ -2,7 +2,8 @@ import { z } from 'zod'
 import { put } from '../sequencer/workspace.ts'
 import type { Db } from '../store/index.ts'
 import { templatePriority } from '../store/lanes.ts'
-import { claimed, implemented, issue as readIssue, lastMerger } from './gh.ts'
+import { claimed, implemented, issue as readIssue, lastMerger, type Issue } from './gh.ts'
+import { measure } from './measure.ts'
 
 const Account = z.object({ id: z.int(), measured_at: z.string(), pulse: z.enum(['warm', 'cold']) })
 
@@ -14,12 +15,11 @@ export interface Origin {
 }
 
 const IMPLEMENTED: Origin = { origin_kind: 'ruling', origin_ref: 'queue.implemented' }
-const COLD: Origin = { origin_kind: 'ruling', origin_ref: 'queue.cold_pulse' }
 
 export interface Added {
   target: number
   plan: number | null
-  state: 'ready' | 'parked' | 'refused'
+  state: 'ready' | 'refused'
   why: string
   origin: Origin | null
 }
@@ -40,22 +40,48 @@ export function account(db: Db, repo: string, today: string): z.infer<typeof Acc
   return parsed
 }
 
-export function add(db: Db, root: string, repo: string, url: string, pipe: string, today: string): Added {
+/** Ours to say what the job is: `card` is the ask, their issue only its context; `pr` is the body the PR opens with. */
+export interface Scope {
+  card?: string
+  pr?: string
+}
+
+/**
+ * A target is queued however slowly the repo merges: the CEO picks targets, not the pulse, which is
+ * measured here when missing or old and kept as data. A card of ours scopes one item of their
+ * issue, so an issue other pull requests already touch is still open to it.
+ */
+export function add(db: Db, root: string, repo: string, url: string, pipe: string, today: string, scope: Scope = {}): Added {
   const no = parse(repo, url)
-  const pulse = account(db, repo, today)
+  const pulse = measured(db, repo, today)
   const row = readIssue(repo, no)
   const merger = lastMerger(repo)
   const claim = claimed(row)
-  const shipped = claim === null ? implemented(repo, row) : null
+  const shipped = claim === null && scope.card === undefined ? implemented(repo, row) : null
   const why = claim ?? shipped ?? (merger === null ? `${repo} has no named merger` : null)
-  const state = why !== null ? 'refused' : pulse.pulse === 'cold' ? 'parked' : 'ready'
-  const origin = shipped !== null ? IMPLEMENTED : state === 'parked' ? COLD : null
+  const state = why !== null ? 'refused' : 'ready'
+  const origin = shipped !== null ? IMPLEMENTED : null
   const target = upsert(db, pulse, repo, no, merger ?? '', state, url, ruling(db, origin, state))
   if (why !== null) return { target, plan: null, state, why, origin }
   const plan = planFor(db, pipe, target)
-  put(root, plan, 'ask.md', `# ${row.title}\n\n${row.body}\n`)
-  const note = state === 'parked' ? `${repo} pulse is cold; parked` : `${repo}#${String(no)} queued`
-  return { target, plan, state, why: note, origin }
+  put(root, plan, 'ask.md', askOf(row, scope.card))
+  if (scope.pr !== undefined) put(root, plan, 'pr.md', scope.pr)
+  return { target, plan, state, why: `${repo}#${String(no)} queued`, origin }
+}
+
+export function askOf(row: Pick<Issue, 'title' | 'body'>, card: string | undefined): string {
+  const theirs = `# ${row.title}\n\n${row.body}\n`
+  if (card === undefined) return theirs
+  return `${card.trimEnd()}\n\n## Their issue, for context only; the scope is the card above\n\n${theirs.replace(/^#/gm, '###')}`
+}
+
+function measured(db: Db, repo: string, today: string): z.infer<typeof Account> {
+  try {
+    return account(db, repo, today)
+  } catch {
+    measure(db, repo, today)
+    return account(db, repo, today)
+  }
 }
 
 /** `targets.ineligible_ruling_id` is the refused trip's law-4 home; the parked trip has no column, only the row. */

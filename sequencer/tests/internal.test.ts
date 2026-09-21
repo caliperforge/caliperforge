@@ -150,6 +150,15 @@ test('the rails let an internal build keep the kernel files outside `src/` that 
     .toEqual({ outcome: 'pass' })
 })
 
+/** Plan 46 (#52) was refused twice on its handback's prose, which no one outside the machine reads. */
+test('Tight judges no prose on a kernel plan', async () => {
+  const w = mine()
+  const told = stub(`Updated \`src/hello.ts\` so hello() says hey.\n\n${CARRIED}`)
+  for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, told)
+  appendFileSync(join(srcDir(w.root, ID), 'src/hello.ts'), 'export const hey = (): string => "hey"\n')
+  expect((await tick(w.db, w.root, told))[0]).toMatchObject({ plan: ID, step: 3, name: 'rails', outcome: 'pass' })
+})
+
 test('step 6 sends an internal branch to origin and judges the runs at its head on caliperforge/caliperforge', async () => {
   const w = mine()
   const listed = runsOn(w.root, ID)

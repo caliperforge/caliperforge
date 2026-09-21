@@ -68,7 +68,8 @@ function broke(failed: Failure): Outcome {
 
 /**
  * Tight's prose rule reads what the maintainer will read: the pull request text the card set, where it set one.
- * The handback is the machine's; judging its prose sent a builder after a PR body it may not write.
+ * The handback is the machine's; judging its prose sent a builder after a PR body it may not write. A kernel
+ * plan lands as a commit named for its branch and opens no pull request, so it has no prose to judge.
  */
 function rest(db: Db, root: string, plan: PlanRow, handback: string): [string, () => Verdict][] {
   const src = srcDir(root, plan.id)
@@ -81,10 +82,14 @@ function rest(db: Db, root: string, plan: PlanRow, handback: string): [string, (
   return [
     ['secret-scan', () => scan(diff)],
     ['authority', () => authority(root, name, diff, internal(plan), fence, outside)],
-    ['tight', () => tight(root, { diff, sources: sources(src, diff), description: maybe(root, plan.id, 'pr.md') ?? handback })],
+    ['tight', () => tight(root, { diff, sources: sources(src, diff), description: prose(root, plan, handback) })],
     ['test-weakened', () => weakened(diff, 'green')],
     ['identifiers', () => identifiers(src, handback)],
   ]
+}
+
+function prose(root: string, plan: PlanRow, handback: string): string {
+  return maybe(root, plan.id, 'pr.md') ?? (internal(plan) ? '' : handback)
 }
 
 function named(rail: string, verdict: Verdict): Outcome {

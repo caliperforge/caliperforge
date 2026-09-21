@@ -1,6 +1,7 @@
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
-import { query, type HookInput, type SDKResultMessage, type SyncHookJSONOutput } from '@anthropic-ai/claude-agent-sdk'
+import { query, type HookInput, type SDKRateLimitInfo, type SDKResultMessage, type SyncHookJSONOutput } from '@anthropic-ai/claude-agent-sdk'
+import type { Reading } from '../../store/lanes.ts'
 import { credential } from '../credential.ts'
 import { bare, type Fired, type Packet, type Provider } from '../kind.ts'
 
@@ -17,6 +18,7 @@ export const claudeAgentSdk: Provider = { name: 'claude-agent-sdk', fire }
 async function fire(packet: Packet): Promise<Fired> {
   const started = Date.now()
   const refused: string[] = []
+  const limits: Reading[] = []
   const transcript = openTranscript(packet)
   const run = query({
     prompt: packet.prompt,
@@ -38,9 +40,30 @@ async function fire(packet: Packet): Promise<Fired> {
   })
   for await (const message of run) {
     transcript(message)
-    if (message.type === 'result') return { ...fired(message, started, refused), transcript_path: packet.transcript }
+    if (message.type === 'rate_limit_event') limits.push(...readings(message.rate_limit_info, new Date().toISOString()))
+    if (message.type === 'result') return { ...fired(message, started, refused), limits, transcript_path: packet.transcript }
   }
   throw new Error('claude-agent-sdk closed without a result message')
+}
+
+const WINDOWS = ['five_hour', 'seven_day'] as const
+
+type Unified = Partial<Record<string, { utilization?: number; resetsAt?: number }>>
+
+/**
+ * The windows one rate-limit event reports (#104). The event names one window and its status; the CLI also
+ * sends `unifiedWindows` with both, and a window other than the named one is `allowed` until it is full.
+ */
+export function readings(info: SDKRateLimitInfo, at: string): Reading[] {
+  const unified = (info as { unifiedWindows?: Unified }).unifiedWindows ?? {}
+  return WINDOWS.flatMap((kind): Reading[] => {
+    const own = info.rateLimitType === kind
+    const utilization = (own ? info.utilization : undefined) ?? unified[kind]?.utilization
+    const resets = (own ? info.resetsAt : undefined) ?? unified[kind]?.resetsAt
+    if (utilization === undefined || resets === undefined) return []
+    const status = own ? info.status : utilization >= 1 ? 'rejected' : 'allowed'
+    return [{ observed_at: at, rate_limit_type: kind, resets_at: resets, status, utilization }]
+  })
 }
 
 /**

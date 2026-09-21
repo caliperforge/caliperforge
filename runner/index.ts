@@ -2,6 +2,7 @@ import { realpathSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
 import type { Packet, Provider, Refusal } from '../providers/kind.ts'
 import type { Db } from '../store/index.ts'
+import { observed } from '../store/lanes.ts'
 import { load, seat, tight, type Seat } from './rules.ts'
 
 /** The tick's own state inside a plan checkout. A seat writes the repository, never the machine's notes about it. */
@@ -64,6 +65,7 @@ export async function fire(
     VALUES (?, 2, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(plan, name, hash, provider.name, manifest.model, manifest.effort,
       fired.usage.input, fired.usage.cache, fired.usage.output, fired.seconds, fired.exit, fired.transcript_path)
+  observed(db, fired.limits)
   return { id: Number(row.lastInsertRowid), text: fired.text }
 }
 

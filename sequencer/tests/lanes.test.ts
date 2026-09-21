@@ -1,4 +1,5 @@
 import { expect, test } from 'vitest'
+import type { Packet } from '../../providers/kind.ts'
 import { laneLine } from '../../cli/brief.ts'
 import { cap, dial, lanes, name, priority, record, set, templatePriority, windows, type Reading } from '../../store/lanes.ts'
 import { picks, tick } from '../index.ts'
@@ -85,11 +86,11 @@ test('the usage band steps the cap down as the window fills, and back up when it
   const w = world()
   dial(w.db, 4, AT)
   const stepped: (number | null)[] = []
-  for (const u of [0.1, 0.45, 0.7, 0.95, 0.1]) {
+  for (const u of [0.1, 0.45, 0.7, 0.9, 0.97, 0.1]) {
     record(w.db, reading(u))
     stepped.push(cap(w.db).cap)
   }
-  expect(stepped).toEqual([3, 2, 1, 0, 3])
+  expect(stepped).toEqual([3, 2, 1, 1, 0, 3])
   expect(name(0)).toBe('spot')
   expect(name(null)).toBe('none')
 })
@@ -98,7 +99,7 @@ test('the fuller of the two windows rules, and a stale reading is no reading', (
   const w = world()
   dial(w.db, 4, AT)
   record(w.db, reading(0.1, 'seven_day'))
-  record(w.db, reading(0.95, 'five_hour'))
+  record(w.db, reading(0.97, 'five_hour'))
   expect(cap(w.db)).toMatchObject({ dial: 4, band: 0, cap: 0 })
   w.db.prepare('DELETE FROM usage').run()
   record(w.db, reading(0.95, 'seven_day', 7 * 3600))
@@ -108,7 +109,7 @@ test('the fuller of the two windows rules, and a stale reading is no reading', (
 test('the latest reading is the one observed last, not the one recorded last', () => {
   const w = world()
   dial(w.db, 4, AT)
-  record(w.db, reading(0.95, 'seven_day', 60))
+  record(w.db, reading(0.97, 'seven_day', 60))
   expect(cap(w.db)).toMatchObject({ band: 0, cap: 0 })
   record(w.db, reading(0.1, 'seven_day', 3600))
   expect(cap(w.db)).toMatchObject({ band: 0, cap: 0 })
@@ -156,4 +157,19 @@ test('the machine window view puts our tokens beside the cap, one row per window
   expect(rows.map((r) => r.runs)).toEqual([2, 2])
   expect(rows.map((r) => r.cap)).toEqual([2, 2])
   expect(rows.map((r) => r.utilisation)).toEqual([null, 0.45])
+})
+
+/** #104: nothing wrote `usage` before; a run's own reading now steps the band. */
+test('past 80% of the week one lane, past 95% none', async () => {
+  const w = world()
+  approve(w.db, w.target)
+  dial(w.db, 4, AT)
+  const inner = stub(CARRIED)
+  const full = { ...inner, fire: async (p: Packet) => ({ ...(await inner.fire(p)), limits: [reading(0.83)] }) }
+  const ran = (): unknown => w.db.prepare('SELECT 1 FROM runs').get()
+  for (let at = 0; at < 4 && ran() === undefined; at += 1) await tick(w.db, w.root, full)
+  expect(w.db.prepare('SELECT kind, utilisation FROM usage').all()).toEqual([{ kind: 'seven_day', utilisation: 0.83 }])
+  expect(cap(w.db)).toMatchObject({ dial: 4, band: 1, cap: 1 })
+  record(w.db, reading(0.97))
+  expect(await tick(w.db, w.root, full)).toEqual([])
 })

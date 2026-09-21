@@ -47,6 +47,8 @@ export function admits(path: string): Refusal | null {
   return { origin_kind: 'ruling', origin_ref: 'reviewers.maintainers_view', path }
 }
 
+export const STEP_CAP = 8
+
 export function benchPacket(
   root: string,
   name: string,
@@ -76,6 +78,7 @@ function assembled(root: string, name: string, manifest: Review, bench: Bench, t
     model: manifest.model,
     effort: manifest.effort,
     tools: manifest.tools,
+    steps: STEP_CAP,
     refuse: (path) => refuse(bench.repo, manifest.write_paths, path),
   }
 }

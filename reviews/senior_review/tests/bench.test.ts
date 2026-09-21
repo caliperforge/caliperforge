@@ -3,8 +3,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { fresh, rejects } from '../../../checks/sqlite.ts'
-import type { Provider } from '../../../providers/kind.ts'
+import { CAPPED, type Packet, type Provider } from '../../../providers/kind.ts'
 import { planRow } from '../../../runner/index.ts'
+import { STEP_CAP } from '../../../runner/packet.ts'
 import { load } from '../../../runner/rules.ts'
 import { judge, loadReviews, specHash } from '../../bench.ts'
 import { read } from '../../verdict.ts'
@@ -96,6 +97,27 @@ test('a reviewer reply with no readable verdict fence is a failed run, not a ver
     .rejects.toThrow('reviewers.verdict_fence')
   expect(db.prepare('SELECT exit FROM runs WHERE plan = ?').all(plan)).toEqual([{ exit: 1 }])
   expect(db.prepare('SELECT count(*) AS n FROM verdicts WHERE plan = ?').get(plan)).toEqual({ n: 0 })
+})
+
+test('a run that ends at the step cap is fired once more with no tools, and that reply is the verdict', async () => {
+  const { db, plan } = bench(root)
+  const sent: Packet[] = []
+  const provider: Provider = {
+    name: 'claude-agent-sdk',
+    fire: async (p) => {
+      sent.push(p)
+      const fired = await replies(sent.length === 1 ? 'still reading' : fixture('code_quality', 'seeded.reply.md')).fire(p)
+      return sent.length === 1 ? { ...fired, stop_reason: CAPPED, exit: 1 } : fired
+    },
+  }
+  const out = await judge(db, root, 'code_quality', plan, seeded(), provider, TRANSCRIPT)
+  expect(sent[0]?.steps).toBe(STEP_CAP)
+  expect(sent[1]?.tools).toEqual([])
+  expect(out.outcome).toMatchObject({ outcome: 'refuse', spans: ['src/stats.ts:2'] })
+  expect(db.prepare('SELECT exit FROM runs WHERE plan = ? ORDER BY id').all(plan)).toEqual([{ exit: 1 }, { exit: 0 }])
+  expect(db.prepare('SELECT max(id) AS id FROM runs WHERE plan = ?').get(plan)).toEqual({ id: out.run })
+  expect(db.prepare('SELECT id, outcome, tokens, seconds FROM verdicts WHERE plan = ?').all(plan))
+    .toEqual([{ id: out.verdict, outcome: 'refuse', tokens: 36, seconds: 1 }])
 })
 
 test('a refusal whose class is not one of the four is still a refusal carrying its spans', async () => {

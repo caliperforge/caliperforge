@@ -13,8 +13,13 @@ export interface Packet {
   model: string
   effort: 'low' | 'medium' | 'high' | 'xhigh' | 'max'
   tools: string[]
+  /** The run's turn ceiling; a packet without one runs unbounded. */
+  steps?: number
   refuse: (path: string) => Refusal | null
 }
+
+/** What `Fired.stop_reason` carries when the run ended on the packet's `steps`. */
+export const CAPPED = 'max_turns'
 
 /** `Bash(gradle:*)` is still Bash: a tool's permission pattern does not change which tool it is. */
 export function bare(tool: string): string {

@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { Provider } from '../providers/kind.ts'
-import { benchPacket, reviewManifest } from '../runner/packet.ts'
+import { CAPPED, type Packet, type Provider } from '../providers/kind.ts'
+import { benchPacket, reviewManifest, type Review } from '../runner/packet.ts'
 import type { Db } from '../store/index.ts'
 import { observed } from '../store/lanes.ts'
 import { byRun } from '../store/transcript.ts'
@@ -40,19 +40,45 @@ export async function judge(
     const outcome = barredAsBuilder(`${name}:${String(manifest.step)}`, input)
     return { run: null, verdict: record(db, root, name, plan, outcome, 0, 0), outcome }
   }
-  const fired = await provider.fire(built.packet)
-  const outcome = read(fired.text, built.packet.prompt)
-  const run = db.prepare(`INSERT INTO runs
+  const first = await ran(db, root, name, plan, manifest, provider, built.packet)
+  const refired = first.capped && first.outcome === null
+    ? await ran(db, root, name, plan, manifest, provider, { ...built.packet, tools: [] })
+    : null
+  const last = refired ?? first
+  if (last.outcome === null) throw new Error('reviewers.verdict_fence')
+  const tokens = first.tokens + (refired?.tokens ?? 0)
+  const seconds = first.seconds + (refired?.seconds ?? 0)
+  return { run: last.run, verdict: record(db, root, name, plan, last.outcome, tokens, seconds), outcome: last.outcome }
+}
+
+interface Ran {
+  run: number
+  outcome: Verdict | null
+  capped: boolean
+  tokens: number
+  seconds: number
+}
+
+async function ran(db: Db, root: string, name: string, plan: number, manifest: Review, provider: Provider,
+  packet: Packet): Promise<Ran> {
+  const fired = await provider.fire(packet)
+  const outcome = read(fired.text, packet.prompt)
+  const row = db.prepare(`INSERT INTO runs
     (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_tokens, output_tokens, seconds, exit, transcript_path)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(plan, manifest.step, name, specHash(root, name), provider.name, manifest.model, manifest.effort,
       fired.usage.input, fired.usage.cache, fired.usage.output, fired.seconds,
       outcome === null ? 1 : fired.exit, fired.transcript_path)
-  byRun(db, Number(run.lastInsertRowid), fired.transcript_path)
+  const run = Number(row.lastInsertRowid)
+  byRun(db, run, fired.transcript_path)
   observed(db, fired.limits)
-  if (outcome === null) throw new Error('reviewers.verdict_fence')
-  const tokens = fired.usage.input + fired.usage.cache + fired.usage.output
-  return { run: Number(run.lastInsertRowid), verdict: record(db, root, name, plan, outcome, tokens, fired.seconds), outcome }
+  return {
+    run,
+    outcome,
+    capped: fired.stop_reason === CAPPED,
+    tokens: fired.usage.input + fired.usage.cache + fired.usage.output,
+    seconds: fired.seconds,
+  }
 }
 
 function builderRan(db: Db, plan: number, seat: string, step: number): boolean {

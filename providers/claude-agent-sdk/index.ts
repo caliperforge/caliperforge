@@ -3,7 +3,7 @@ import { dirname } from 'node:path'
 import { query, type HookInput, type SDKRateLimitInfo, type SDKResultMessage, type SyncHookJSONOutput } from '@anthropic-ai/claude-agent-sdk'
 import type { Reading } from '../../store/lanes.ts'
 import { credential } from '../credential.ts'
-import { bare, type Fired, type Packet, type Provider } from '../kind.ts'
+import { bare, CAPPED, type Fired, type Packet, type Provider } from '../kind.ts'
 
 const WRITES = new Set(['Write', 'Edit', 'NotebookEdit'])
 
@@ -29,6 +29,7 @@ async function fire(packet: Packet): Promise<Fired> {
       effort: packet.effort,
       tools: offered(packet.tools),
       allowedTools: packet.tools,
+      ...(packet.steps === undefined ? {} : { maxTurns: packet.steps }),
       settingSources: [],
       permissionMode: 'default',
       hooks: { PreToolUse: [{ hooks: [(input) => {
@@ -129,7 +130,7 @@ export function fired(message: SDKResultMessage, started: number, refused: strin
     { input: 0, cache: 0, output: 0 },
   )
   const denials = refused.length + message.permission_denials.length
-  const ended = message.terminal_reason ?? (denials > 0 ? 'hook_stopped' : 'completed')
+  const ended = (message.subtype === 'error_max_turns' ? CAPPED : message.terminal_reason) ?? (denials > 0 ? 'hook_stopped' : 'completed')
   const text = message.subtype === 'success' ? message.result : message.errors.join('\n')
   return {
     text: text === '' ? refused.join('\n') : text,

@@ -20,7 +20,7 @@ function world(): Db {
 }
 
 const fired = (over: Partial<Fired>): Fired =>
-  ({ pipe: 'internal', plan: 7, step: 3, name: 'rails', outcome: 'pass', state: 'running', spans: [], note: 'ok', ...over })
+  ({ pipe: 'internal', plan: 7, step: 3, name: 'rails', outcome: 'pass', state: 'running', spans: [], note: 'ok', stole: null, ...over })
 
 const LAP = [
   fired({ outcome: 'refuse', state: 'blocked_on_ceo', note: 'tight: 1 span(s) breach Tight' }),

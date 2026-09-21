@@ -3,6 +3,7 @@ import type { Provider } from '../providers/kind.ts'
 import { digestOf } from '../store/approvals.ts'
 import { hold } from '../store/holds.ts'
 import type { Db } from '../store/index.ts'
+import { clear as unlease, held, take, type Lease, type Taken } from '../store/leases.ts'
 import { cap, hhmm, zone } from '../store/lanes.ts'
 import { advance, back, finish, internal, live, needsCeo, openPipes, rewind, underCap, type PipeRow, type PlanRow } from '../store/plans.ts'
 import { blipped, fingerprint, refused, WHY, type Why } from '../store/refusals.ts'
@@ -22,9 +23,18 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
   for (const signal of capture(db, read)) started(db, signal, root)
   const out: Fired[] = []
   for (const pipe of openPipes(db, hhmm(db, now)).slice(0, cap(db).cap)) {
-    out.push(...await Promise.all(picks(db, pipe).map((plan) => one(db, root, pipe, plan, provider, wire))))
+    const mine = leased(db, pipe, now)
+    out.push(...await Promise.all(mine.map((m) => one(db, root, pipe, m.plan, m.lease, provider, wire))))
   }
   return out
+}
+
+/** #65: the picks this tick won the lease on; one another live tick holds is left where it stands. */
+function leased(db: Db, pipe: PipeRow, now: Date): { plan: PlanRow; lease: Taken }[] {
+  return picks(db, pipe, now).flatMap((plan) => {
+    const lease = take(db, plan.id, now)
+    return lease === null ? [] : [{ plan, lease }]
+  })
 }
 
 /** The templates a step map exists for. A lane whose map is unwritten is on with nothing to step. */
@@ -49,47 +59,65 @@ export interface Dry {
   pipes: number
   would: Would[]
   quiet: Quiet[]
+  held: Lease[]
 }
 
 /**
  * The plans this pipe steps this tick, in priority order. A queued plan that is
- * blocked holds no slot; a running one holds the slot it already took.
+ * blocked holds no slot; a running one holds the slot it already took, and so does
+ * one another tick has leased, which this tick offers to nobody.
  */
-export function picks(db: Db, pipe: PipeRow): PlanRow[] {
+export function picks(db: Db, pipe: PipeRow, now: Date = new Date()): PlanRow[] {
+  const leases = new Set(held(db, now).map((l) => l.plan))
   const mapped = live(db, pipe).filter((p) => MAPPED.has(p.template))
-  const free = mapped.filter((p) => p.state === 'running' || blocked(db, p) === null)
-  return underCap(pipe, free).filter((p) => p.state !== 'running' || blocked(db, p) === null)
+  const free = mapped.filter((p) => p.state === 'running' || leases.has(p.id) || blocked(db, p) === null)
+  return underCap(pipe, free, leases)
+    .filter((p) => !leases.has(p.id) && (p.state !== 'running' || blocked(db, p) === null))
 }
 
 /** What a tick would do, off the store alone: no `gh` call, no model, no row moved. */
 export function dry(db: Db, now: Date = new Date()): Dry {
   const when = hhmm(db, now)
-  const held = cap(db).cap
-  const open = openPipes(db, when).slice(0, held).map((p) => ({ pipe: p, plans: picks(db, p) }))
+  const wide = cap(db).cap
+  const open = openPipes(db, when).slice(0, wide).map((p) => ({ pipe: p, plans: picks(db, p, now) }))
   return {
     hhmm: when,
     zone: zone(db),
-    cap: held,
+    cap: wide,
     pipes: open.length,
+    held: held(db, now),
     would: open.flatMap((o) => o.plans.map((p) => ({ pipe: o.pipe.name, plan: p.id, step: p.step, template: p.template }))),
     quiet: open.filter((o) => o.plans.length === 0)
       .map((o) => ({ pipe: o.pipe.name, live: live(db, o.pipe).length })),
   }
 }
 
-async function one(db: Db, root: string, pipe: PipeRow, plan: PlanRow, provider: Provider, wire?: Wire): Promise<Fired> {
+/** The lease goes on every way out, a throw included: the plan is free for the next tick either way. */
+async function one(db: Db, root: string, pipe: PipeRow, plan: PlanRow, lease: Taken,
+  provider: Provider, wire?: Wire): Promise<Fired> {
+  try {
+    return await stepped(db, root, pipe, plan, lease, provider, wire)
+  } finally {
+    unlease(db, plan.id)
+  }
+}
+
+async function stepped(db: Db, root: string, pipe: PipeRow, plan: PlanRow, lease: Taken,
+  provider: Provider, wire?: Wire): Promise<Fired> {
   const tree = workspace(db, root, plan)
   const step = at(plan.step, tree.language)
   const outcome = tree.failed ?? await fire(db, root, plan, step, provider, wire)
+  const state = settle(db, root, plan, step, outcome)
   return {
     pipe: pipe.name,
     plan: plan.id,
     step: step.step,
     name: step.name,
     outcome: outcome.outcome,
-    state: settle(db, root, plan, step, outcome),
+    state,
     spans: outcome.spans,
     note: outcome.note,
+    stole: lease.stole,
   }
 }
 

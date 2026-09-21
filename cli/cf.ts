@@ -14,6 +14,7 @@ import { blocked, targetDigest } from '../sequencer/steps.ts'
 import { release } from '../store/holds.ts'
 import { dump, migrate, open as openDb, type Db } from '../store/index.ts'
 import { dial, hhmm, lanes, priority as setPriority, record, Reading, windows } from '../store/lanes.ts'
+import { holder } from '../store/leases.ts'
 import { openPipes, PlanRow, retry } from '../store/plans.ts'
 import { clear } from '../store/refusals.ts'
 import { refusedPush } from '../store/approvals.ts'
@@ -168,7 +169,9 @@ plan.argument('<id>').action((id: string) => {
   if (row === undefined) throw new Error(`no plan ${id}`)
   const plan = PlanRow.parse(row)
   const why = blocked(handle, plan)
+  const lease = holder(handle, plan.id)
   out(`plan ${String(plan.id)}\t${plan.template}\tstep ${String(plan.step)}\t${plan.state}\tretries ${String(plan.retries)}\t${why ?? 'unblocked'}\n`)
+  out(`  lease ${lease === null ? 'none' : `pid ${String(lease.pid)}\ttaken ${lease.taken_at}`}\n`)
   for (const r of runsOf(handle, plan.id)) {
     out(`  run ${String(r.id)}\tstep ${String(r.step)}\t${String(r.seat)}\texit ${String(r.exit)}\n`)
   }

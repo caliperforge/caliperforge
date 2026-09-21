@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import type { Packet } from '../../providers/kind.ts'
 import type { Gh } from '../../rails/ci-green/index.ts'
+import { rewind } from '../../store/plans.ts'
 import { tick } from '../index.ts'
 import { srcDir } from '../workspace.ts'
 import { approve, CARRIED, plan, runsAfter, stub, watched, world, type World } from './world.ts'
@@ -92,4 +93,21 @@ test('waits on every workflow, judges only its own', async () => {
     { workflow: 'Src', status: 'completed', conclusion: 'success', gates: true },
     { workflow: 'Python', status: 'completed', conclusion: 'failure', gates: false },
   ])
+})
+
+test('a second round before any PR goes out on the next branch', async () => {
+  const w = ready()
+  await tick(w.db, w.root, stub(CARRIED, 0, undefined, writes), undefined, undefined, watched([], w.root, 1), 5)
+  const src = srcDir(w.root, 1)
+  execFileSync('git', ['push', '-q', 'origin', 'widget-12-a1'], { cwd: src })
+  rewind(w.db, 1, 2)
+  const again = (packet: Packet): void => {
+    if (packet.tools.includes('Write')) writeFileSync(join(packet.cwd, 'src/hello.ts'), 'export const hello = (): string => "hello"\n')
+  }
+  const sent: string[] = []
+  await tick(w.db, w.root, stub(CARRIED, 0, undefined, again), undefined, undefined, watched(sent, w.root, 1), 5)
+  expect(plan(w.db, 1).step).toBe(7)
+  expect(sent).toEqual(['unrehearse caliperforge/widget widget-12-a1', 'send src widget-12-a2', 'rehearse caliperforge/widget widget-12-a2'])
+  const count = execFileSync('git', ['rev-list', '--count', 'refs/remotes/upstream/main..HEAD'], { cwd: src, encoding: 'utf8' })
+  expect(count.trim()).toBe('1')
 })

@@ -58,9 +58,10 @@ const WAITS = 'ci.waits'
  */
 export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire = WIRE): Outcome | null {
   const open = !internal(plan) && opened(db, plan.id) !== null
-  if (!internal(plan)) (open ? follow : squash)(root, plan.id)
-  const head = headOf(root, plan.id)
   const fork = `${FORK}/${repoName(repo)}`
+  if (!internal(plan)) (open ? follow : squash)(root, plan.id)
+  if (!internal(plan) && !open) renamed(srcDir(root, plan.id), fork, wire)
+  const head = headOf(root, plan.id)
   const ci = open ? `${head.branch}${NEXT}` : head.branch
   wire.send(head.dir, open ? `HEAD:refs/heads/${ci}` : head.branch)
   if (!internal(plan)) wire.rehearse?.(fork, ci)
@@ -284,6 +285,42 @@ export function squash(root: string, plan: number): void {
   if (!staged && count === 1 && git(dir, ['log', '-1', '--format=%B']).trim() === message) return
   git(dir, ['reset', '--soft', base])
   sign(dir, message)
+}
+
+/**
+ * A round after the first on a branch no pull request shows yet. Its squash cannot fast-forward the commit
+ * our fork already holds, and nothing is force-pushed, ever: the round goes out under the next attempt's
+ * name and the old rehearsal closes without a word. The pull request opens from whichever branch the last
+ * round used.
+ */
+function renamed(dir: string, fork: string, wire: Wire): void {
+  const branch = git(dir, ['rev-parse', '--abbrev-ref', 'HEAD']).trim()
+  if (!onFork(dir, branch) || carried(dir, branch)) return
+  git(dir, ['branch', '-m', nextFree(dir, branch)])
+  wire.unrehearse?.(fork, branch)
+}
+
+function onFork(dir: string, branch: string): boolean {
+  return git(dir, ['ls-remote', '--heads', 'origin', `refs/heads/${branch}`]).trim() !== ''
+}
+
+/** Whether HEAD carries the commit our fork holds for the branch, so a plain push only moves it forward. */
+function carried(dir: string, branch: string): boolean {
+  try {
+    git(dir, ['fetch', '--no-tags', 'origin', `+refs/heads/${branch}:refs/remotes/origin/${branch}`])
+    git(dir, ['merge-base', '--is-ancestor', `refs/remotes/origin/${branch}`, 'HEAD'])
+    return true
+  } catch {
+    return false
+  }
+}
+
+function nextFree(dir: string, branch: string): string {
+  const hit = /^(.*)-a(\d+)$/.exec(branch)
+  const stem = hit?.[1] ?? branch
+  let n = hit === null ? 2 : Number(hit[2]) + 1
+  while (onFork(dir, `${stem}-a${String(n)}`)) n += 1
+  return `${stem}-a${String(n)}`
 }
 
 /**

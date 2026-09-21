@@ -17,7 +17,8 @@ import { refusedPush } from '../store/approvals.ts'
 import { receipt } from '../store/ticks.ts'
 import { adopt, render as renderAdopt } from './adopt.ts'
 import { approve as approveCard, batch, landed, refuse as refuseCard, render, renderLanded } from './batch.ts'
-import { awaiting, day, dryLines, halted, laneLine, open as openPlans, runsOf, section, tickNote, verdictsOf, windowLine } from './brief.ts'
+import { awaiting, day, dryLines, halted, laneLine, open as openPlans, runsOf, section, tickets, ticketSection,
+  tickNote, verdictsOf, windowLine } from './brief.ts'
 import { check, fill } from './digests.ts'
 import { measure, render as renderPulse } from './measure.ts'
 import { add as fileIssue, render as renderUnfiled, unfiled } from './plan.ts'
@@ -229,6 +230,7 @@ cf.command('brief').action(() => {
   out(section('awaiting approval', awaiting(handle)))
   const d = day(handle)
   out(`last 24 h\n  ${String(d.runs)} run(s)\t${String(d.tokens)} tokens\t${d.seconds.toFixed(1)}s\n`)
+  out(ticketSection(tickets(handle)))
 })
 
 cf.command('adopt').argument('<ref>', 'an <owner/repo>#<n> pull request of ours that is already open')

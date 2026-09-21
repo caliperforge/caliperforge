@@ -17,6 +17,19 @@ export interface Day {
   seconds: number
 }
 
+export interface Ticket {
+  plan: number
+  origin: string | null
+  target: string | null
+  runs: number
+  build: number
+  review: number
+  minutes: number
+  tokens: number
+  outcome: string
+  early: number
+}
+
 const LINES = `SELECT p.id, p.step, p.state, t.repo, t.issue_no
   FROM plans p LEFT JOIN targets t ON t.id = p.target_id`
 
@@ -37,6 +50,47 @@ export function day(db: Db): Day {
     coalesce(sum(input_tokens + cache_tokens + output_tokens), 0) AS tokens,
     coalesce(sum(seconds), 0) AS seconds
     FROM runs WHERE julianday(at) >= julianday('now', '-1 day')`).get() as Day
+}
+
+/** CEO 2026-09-19 12:15: per-ticket usage is read as two eras, split at this instant. */
+const ERA = '2026-09-19 11:21'
+
+const TICKETS = `SELECT p.id AS plan, p.origin, t.repo || '#' || t.issue_no AS target,
+  count(*) AS runs,
+  sum(r.step = 2) AS build,
+  sum(r.step IN (4, 5)) AS review,
+  sum(r.seconds) / 60.0 AS minutes,
+  sum(r.input_tokens + r.cache_tokens + r.output_tokens) AS tokens,
+  CASE p.state WHEN 'done' THEN 'landed' WHEN 'refused' THEN 'wasted' WHEN 'halted' THEN 'wasted'
+    ELSE 'open' END AS outcome,
+  julianday(min(r.at)) < julianday(?) AS early
+  FROM runs r JOIN plans p ON p.id = r.plan LEFT JOIN targets t ON t.id = p.target_id
+  GROUP BY p.id ORDER BY max(r.at) DESC, p.id DESC`
+
+export function tickets(db: Db): Ticket[] {
+  return db.prepare(TICKETS).all(ERA) as Ticket[]
+}
+
+function ticketLine(t: Ticket): string {
+  return `  ${ref(t)}\t${String(t.runs)} run(s)\t${String(t.build)} build\t${String(t.review)} review` +
+    `\t${t.minutes.toFixed(1)} min\t${String(t.tokens)} tokens\t${t.outcome}`
+}
+
+export function ticketSection(rows: Ticket[]): string {
+  const body = rows.length === 0 ? '  none\n' : `${rows.map(ticketLine).join('\n')}\n`
+  return `cost per ticket (${String(rows.length)})\n${body}` +
+    average('before', rows.filter((t) => t.early === 1)) + average('since', rows.filter((t) => t.early === 0))
+}
+
+function average(era: string, rows: Ticket[]): string {
+  const minutes = rows.reduce((sum, t) => sum + t.minutes, 0)
+  const mean = rows.length === 0 ? '-' : `${(minutes / rows.length).toFixed(1)} min`
+  return `  ${era} ${ERA}\t${String(rows.length)} ticket(s)\t${mean} avg\n`
+}
+
+function ref(t: Ticket): string {
+  if (t.origin !== null) return `#${t.origin.slice(t.origin.lastIndexOf('/') + 1)}`
+  return t.target ?? `plan ${String(t.plan)}`
 }
 
 export function line(p: PlanLine): string {

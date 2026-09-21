@@ -15,7 +15,7 @@ import { builder } from '../templates/pr-path.ts'
 import { checks, type Failure } from './checks.ts'
 import type { Outcome } from './kind.ts'
 import { seat } from '../runner/rules.ts'
-import { strays } from './fence.ts'
+import { renumbered, strays } from './fence.ts'
 import { fenceFor, languageFor } from './route.ts'
 import { diffOf, doneIds, get, maybe, srcDir } from './workspace.ts'
 
@@ -81,7 +81,7 @@ function rest(db: Db, root: string, plan: PlanRow, handback: string): [string, (
     : []
   return [
     ['secret-scan', () => scan(diff)],
-    ['authority', () => authority(root, name, diff, internal(plan), fence, outside)],
+    ['authority', () => authority(root, name, diff, internal(plan), fence, outside, internal(plan) ? renumbered(src, diff) : [])],
     ['tight', () => tight(root, { diff, sources: sources(src, diff), ...prose(root, plan, handback) })],
     ['test-weakened', () => weakened(diff, 'green')],
     ['identifiers', () => identifiers(src, handback)],

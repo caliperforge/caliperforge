@@ -1,7 +1,8 @@
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
-import { strays } from '../fence.ts'
+import { renumbered, strays } from '../fence.ts'
 import { tick } from '../index.ts'
 import { srcDir } from '../workspace.ts'
 import { CARRIED, internalPlan, ours, plan, stub, world, type World } from './world.ts'
@@ -52,4 +53,14 @@ test('an unowned stray refuses at the rails, before any review', async () => {
   expect(rails).toMatchObject({ plan: ID, step: 3, name: 'rails', outcome: 'refuse', spans: ['cli/extra.ts:1 authority.outside_files'] })
   expect(w.db.prepare('SELECT 1 FROM runs WHERE plan = ? AND step > 3').all(ID)).toEqual([])
   expect(plan(w.db, ID).step).toBe(2)
+})
+
+test('a new migration numbered at or below one the checkout holds', () => {
+  const src = mkdtempSync(join(tmpdir(), 'cf-schema-'))
+  mkdirSync(join(src, 'schema'))
+  for (const f of ['0020_leases.sql', '0021_parts.sql', '0018_label.sql']) writeFileSync(join(src, 'schema', f), '')
+  const made = (path: string): string => `diff --git a/${path} b/${path}\nnew file mode 100644\n--- /dev/null\n+++ b/${path}\n@@ -0,0 +1 @@\n+SELECT 1;\n`
+  expect(renumbered(src, made('schema/0018_label.sql'))).toEqual(['schema/0018_label.sql'])
+  expect(renumbered(src, made('schema/0022_next.sql'))).toEqual([])
+  expect(renumbered(src, '--- a/schema/0021_parts.sql\n+++ b/schema/0021_parts.sql\n@@ -1 +1 @@\n+x\n')).toEqual([])
 })

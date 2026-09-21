@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
@@ -13,7 +14,7 @@ import { capture } from '../capture.ts'
 import { classOf } from '../escapes.ts'
 import { headOf, prBody, push } from '../push.ts'
 import { started } from '../signals.ts'
-import { srcDir } from '../workspace.ts'
+import { put, srcDir } from '../workspace.ts'
 import { tick } from '../index.ts'
 import { approve, CARRIED, plan, PR as URL, stub, watched, world, type World } from './world.ts'
 
@@ -47,7 +48,7 @@ test('the batch is a card per plan at ready and per open proposal, with a green/
   expect(card).toMatchObject({ kind: 'plan', id: 1, title: 'acme/widget#12 widget-12-a1' })
   expect(card?.digest).toBe(headDigest(headOf(w.root, 1).sha))
   expect(card?.change).toBe('  1 file(s)\t+1\t-1')
-  expect(card?.text).toBe('Closes #12\n\n- D1 add `hello()` in `src/hello.ts`\n- D2 a call with no name is refused')
+  expect(card?.text).toBe('Addresses #12.\n\n## Summary\n\n- add `hello()`.\n- the ask asks for it.\n\n## Test Plan\n\n- CI green on our fork at this head.')
   expect(card?.marks).toEqual([
     { name: 'pre_review', ok: true }, { name: 'review', ok: true },
     { name: 'senior_review', ok: true }, { name: 'ready', ok: true },
@@ -73,9 +74,29 @@ test('push refuses without a matching row, then pushes the approved head and ope
   expect(sent).toEqual([])
   approveCard(w.db, w.root, 'plan', 1)
   expect(push(w.db, w.root, plan(w.db, 1), wire)).toMatchObject({ outcome: 'pass' })
-  expect(sent).toEqual(['send src widget-12-a1', 'open acme/widget caliperforge:widget-12-a1'])
+  expect(sent).toEqual(['send src widget-12-a1', 'unrehearse caliperforge/widget widget-12-a1', 'open acme/widget caliperforge:widget-12-a1'])
   expect(w.db.prepare('SELECT state, evidence FROM deliverables WHERE plan_id = 1 ORDER BY id DESC LIMIT 1').get())
     .toEqual({ state: 'pushed', evidence: URL })
+})
+
+test('an outside branch reaches the batch as one commit, titled off the brief, naming no upstream number', async () => {
+  const w = await atBatch()
+  const log = execFileSync('git', ['log', '--format=%B%x00', 'refs/remotes/upstream/main..HEAD'],
+    { cwd: srcDir(w.root, 1), encoding: 'utf8' }).split('\0').map((m) => m.trim()).filter((m) => m !== '')
+  expect(log).toEqual(['hello\n\nadd `hello()`.\n\nthe ask asks for it.'])
+})
+
+test('a body the card set is the one the pull request opens with', async () => {
+  const w = await atBatch()
+  put(w.root, 1, 'pr.md', 'Addresses the defaults-table item in #12.\n')
+  const bodies: string[] = []
+  const wire = { ...watched([], w.root, 1), open: (...args: [string, string, string, string]) => {
+    bodies.push(readFileSync(args[3], 'utf8'))
+    return URL
+  } }
+  approveCard(w.db, w.root, 'plan', 1)
+  expect(push(w.db, w.root, plan(w.db, 1), wire)).toMatchObject({ outcome: 'pass' })
+  expect(bodies).toEqual(['Addresses the defaults-table item in #12.\n'])
 })
 
 test('the pre-push hook asks of what lands on main whether the ceo signed it, and lets the fork branch by', async () => {

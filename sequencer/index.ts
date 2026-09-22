@@ -27,8 +27,8 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
   read: (repo: string, no: number) => Pr = readPr, wire?: Wire, chain = 0): Promise<Fired[]> {
   for (const signal of capture(db, read)) started(db, signal, root)
   const out: Fired[] = []
-  for (const pipe of openPipes(db, hhmm(db, now)).slice(0, cap(db).cap)) {
-    const mine = leased(db, pipe, now)
+  for (const { pipe, plans } of working(offered(db, now), cap(db).cap)) {
+    const mine = leased(db, plans, now)
     const laps = await Promise.all(mine.map((m) => one(db, root, pipe, m.plan, m.lease, provider, wire, chain)))
     out.push(...laps.flat())
   }
@@ -42,11 +42,30 @@ export const CHAIN_MINUTES = 45
 const STEPS = 20
 
 /** #65: the picks this tick won the lease on; one another live tick holds is left where it stands. */
-function leased(db: Db, pipe: PipeRow, now: Date): { plan: PlanRow; lease: Taken }[] {
-  return picks(db, pipe, now).flatMap((plan) => {
+function leased(db: Db, plans: PlanRow[], now: Date): { plan: PlanRow; lease: Taken }[] {
+  return plans.flatMap((plan) => {
     const lease = take(db, plan.id, now)
     return lease === null ? [] : [{ plan, lease }]
   })
+}
+
+export interface Offer {
+  pipe: PipeRow
+  plans: PlanRow[]
+}
+
+/** Every open lane and what it would step, asked once: one reading of the queues serves the whole tick. */
+function offered(db: Db, now: Date): Offer[] {
+  return openPipes(db, hhmm(db, now)).map((pipe) => ({ pipe, plans: picks(db, pipe, now) }))
+}
+
+/**
+ * #125: the cap is spent on lanes that can use it. A lane with nothing to step takes no slot, so at
+ * cap 1 an idle lane no longer holds the only slot against a lane with a plan it could step; among
+ * lanes that can step, the lower id still wins, which is the order `openPipes` returns.
+ */
+function working(offers: Offer[], wide: number): Offer[] {
+  return offers.filter((o) => o.plans.length > 0).slice(0, wide)
 }
 
 /** The templates a step map exists for. A lane whose map is unwritten is on with nothing to step. */
@@ -59,9 +78,11 @@ export interface Would {
   template: string
 }
 
+/** A lane the tick passed over. `ready` is what it would have stepped had the cap reached it. */
 export interface Quiet {
   pipe: string
   live: number
+  ready: number
 }
 
 export interface Dry {
@@ -91,16 +112,18 @@ export function picks(db: Db, pipe: PipeRow, now: Date = new Date()): PlanRow[] 
 export function dry(db: Db, now: Date = new Date()): Dry {
   const when = hhmm(db, now)
   const wide = cap(db).cap
-  const open = openPipes(db, when).slice(0, wide).map((p) => ({ pipe: p, plans: picks(db, p, now) }))
+  const offers = offered(db, now)
+  const open = working(offers, wide)
+  const taken = new Set(open.map((o) => o.pipe.id))
   return {
     hhmm: when,
     zone: zone(db),
     cap: wide,
-    pipes: open.length,
+    pipes: offers.length,
     held: held(db, now),
     would: open.flatMap((o) => o.plans.map((p) => ({ pipe: o.pipe.name, plan: p.id, step: p.step, template: p.template }))),
-    quiet: open.filter((o) => o.plans.length === 0)
-      .map((o) => ({ pipe: o.pipe.name, live: live(db, o.pipe).length })),
+    quiet: offers.filter((o) => !taken.has(o.pipe.id))
+      .map((o) => ({ pipe: o.pipe.name, live: live(db, o.pipe).length, ready: o.plans.length })),
   }
 }
 

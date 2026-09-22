@@ -267,7 +267,7 @@ function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcom
     return 'done'
   }
   if (outcome.outcome === 'refuse') put(root, plan.id, 'refusal.md', refusalText(step, outcome))
-  if (outcome.rewind !== undefined) {
+  if (outcome.rewind !== undefined && outcome.outcome !== 'refuse') {
     rewind(db, plan.id, outcome.rewind)
     return 'running'
   }
@@ -287,11 +287,23 @@ function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcom
     diff: step.step >= 3 ? digestOf(diffOf(root, plan.id)) : null })
   if (why !== 'again') stopped(root, plan.id, why)
   if (why === 'shared') db.prepare('UPDATE pipes SET enabled = 0 WHERE id = ?').run(plan.pipe_id)
+  if (outcome.rewind !== undefined && why === 'again') {
+    rewind(db, plan.id, outcome.rewind)
+    return 'running'
+  }
   return back(db, plan, outcome.to ?? backTo(step), why !== 'again')
 }
 
 /** Step 2 is the build in templates/pr-path.ts. */
 const BUILD = 2
+
+/**
+ * #119. A conflicting merge at step 3 rewinds onto a build that cannot see main's side, so the
+ * rebuild lands on the old base and the next merge conflicts the same way: plan 62 went round five
+ * times on 09-21 at 300-470k a lap. The rewind stands -- a moved main is not the builder's fault and
+ * costs it no retry -- but the refusal is now recorded like any other, so the second identical
+ * conflict is a repeat and the plan waits for a person.
+ */
 
 /**
  * Where a refusal sends the job: a review's to the build, a build's back to the build -- the brief it used to

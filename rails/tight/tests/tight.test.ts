@@ -58,6 +58,68 @@ test('ignores a breach on a line the diff did not add', () => {
   expect(tight(root, { diff, sources: { 'src/old.ts': source }, description: 'x.' }).outcome).toBe('pass')
 })
 
+function braced(path: string, source: string): Subject {
+  const lines = source.split('\n')
+  return {
+    diff: `--- /dev/null\n+++ b/${path}\n@@ -0,0 +1,${String(lines.length)} @@\n${lines.map((l) => `+${l}`).join('\n')}`,
+    sources: { [path]: source },
+    description: 'Ledger settlement.',
+  }
+}
+
+test('refuses a Kotlin function past the ceiling at its fun line', () => {
+  const verdict = tight(root, braced('src/Ledger.kt', fixture('kotlin.long.kt.txt')))
+  expect(verdict.outcome).toBe('refuse')
+  expect(verdict.spans).toEqual(['src/Ledger.kt:3 tight.length'])
+})
+
+test('passes the same Kotlin work split under the ceiling', () => {
+  const verdict = tight(root, braced('src/Ledger.kts', fixture('kotlin.split.kt.txt')))
+  expect(verdict.outcome).toBe('pass')
+  expect(verdict.spans).toEqual([])
+})
+
+test('judges Swift func the same as Kotlin fun', () => {
+  expect(tight(root, braced('src/Ledger.swift', fixture('swift.long.swift.txt'))).spans)
+    .toEqual(['src/Ledger.swift:3 tight.length'])
+  expect(tight(root, braced('src/Ledger.swift', fixture('swift.split.swift.txt'))).spans).toEqual([])
+})
+
+test('ends a Kotlin function at its brace, not at one inside a multi-line string', () => {
+  const verdict = tight(root, braced('src/Receipt.kt', fixture('kotlin.strings.kt.txt')))
+  expect(verdict.spans).toEqual([])
+  expect(verdict.message).not.toContain('src/Receipt.kt')
+})
+
+test('reads no span from an unbalanced Kotlin file and names it', () => {
+  const source = 'fun open(rows: List<Row>): Int {\n    if (rows.isEmpty()) {\n        return 0\n    return rows.size\n}\n'
+  const verdict = tight(root, braced('src/Open.kt', source))
+  expect(verdict.spans).toEqual([])
+  expect(verdict.message).toContain('src/Open.kt')
+})
+
+test('never judges an expression-bodied fun', () => {
+  const filler = [...Array(45).keys()].map((i) => `    val step${String(i)} = ${String(i)}`).join('\n')
+  const source = `fun total(rows: List<Row>) = rows.size\n\nfun tally(rows: List<Row>): Int {\n${filler}\n    return rows.size\n}\n`
+  expect(tight(root, braced('src/Total.kt', source)).spans).toEqual(['src/Total.kt:3 tight.length'])
+})
+
+test('leaves the next function its brace when a declaration has no body', () => {
+  const doc = [...Array(45).keys()].map((i) => `    val step${String(i)}: Int`).join('\n')
+  const body = [...Array(45).keys()].map((i) => `    val step${String(i)} = ${String(i)}`).join('\n')
+  const kotlin = `fun interface Handler {\n${doc}\n    fun handle(row: Row): Int\n}\n\nfun settle(rows: List<Row>): Long {\n${body}\n    return 0L\n}\n`
+  expect(tight(root, braced('src/Handler.kt', kotlin)).spans).toEqual(['src/Handler.kt:50 tight.length'])
+  const counts = [...Array(45).keys()].map((i) => `        let step${String(i)} = ${String(i)}`).join('\n')
+  const swift = `protocol Ledger {\n    func settle(rows: [Row]) -> Int\n}\n\nstruct Cash: Ledger {\n    func settle(rows: [Row]) -> Int {\n${counts}\n        return rows.count\n    }\n}\n`
+  expect(tight(root, braced('src/Cash.swift', swift)).spans).toEqual(['src/Cash.swift:6 tight.length'])
+})
+
+test('reads nothing from a .py path whose source is present', () => {
+  const verdict = tight(root, braced('src/ledger.py', fixture('kotlin.long.kt.txt')))
+  expect(verdict.outcome).toBe('pass')
+  expect(verdict.spans).toEqual([])
+})
+
 test('writes a verdicts row the store accepts', () => {
   const db = fresh(join(root, 'schema'))
   load(db, root)

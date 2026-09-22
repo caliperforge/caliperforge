@@ -1,0 +1,27 @@
+import Foundation
+
+func settle(rows: [Row]) -> Int {
+    var cents = 0
+    for row in rows {
+        if row.kind == "charge" {
+            cents += row.amount
+        }
+    }
+    return drift(cents: cents)
+}
+
+func drift(cents: Int) -> Int {
+    var total = cents
+    let step0 = total + 0
+    let step1 = total + 1
+    let step2 = total + 2
+    let step3 = total + 3
+    let step4 = total + 4
+    let step5 = total + 5
+    let step6 = total + 6
+    let step7 = total + 7
+    let step8 = total + 8
+    let step9 = total + 9
+    total += step9
+    return total
+}

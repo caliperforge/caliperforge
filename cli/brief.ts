@@ -1,4 +1,4 @@
-import type { Dry } from '../sequencer/index.ts'
+import type { Dry, Quiet } from '../sequencer/index.ts'
 import type { Fired } from '../sequencer/kind.ts'
 import type { Db } from '../store/index.ts'
 import { name, type LaneState, type WindowRow } from '../store/lanes.ts'
@@ -129,7 +129,7 @@ export function dryLines(d: Dry): string {
   const head = `tick --dry\t${d.hhmm} ${offset(d.zone)}\tcap ${name(d.cap)}\t${String(d.pipes)} pipe(s) open\n`
   const would = d.would.map((w) =>
     `  ${w.pipe}\tplan ${String(w.plan)}\tstep ${String(w.step)}\t${w.template}\twould fire\n`)
-  const quiet = d.quiet.map((q) => `  ${q.pipe}\t${q.live === 0 ? 'on, nothing queued' : held(q.live)}\n`)
+  const quiet = d.quiet.map((q) => `  ${q.pipe}\t${skipped(q)}\n`)
   const leases = d.held.map((l) => `  plan ${String(l.plan)}\tleased by pid ${String(l.pid)}\tsince ${l.taken_at}\n`)
   return [head, ...would, ...leases, ...quiet].join('')
 }
@@ -139,6 +139,12 @@ export function tickNote(fired: Fired[]): string {
   if (fired.length === 0) return 'nothing to fire'
   return fired.map((f) => `${f.pipe} plan ${String(f.plan)} step ${String(f.step)} ${f.name} ${f.outcome}`
     + (f.stole === null ? '' : ` took over pid ${String(f.stole)}`)).join('; ')
+}
+
+/** Why the tick passed this lane over: it had nothing to step, or the cap ran out before it (#125). */
+function skipped(q: Quiet): string {
+  if (q.ready > 0) return `on, ${String(q.ready)} ready, cap spent on a lower lane`
+  return q.live === 0 ? 'on, nothing queued' : held(q.live)
 }
 
 /** A lane with live plans and none it may step is not an empty lane; the count says which it is. */

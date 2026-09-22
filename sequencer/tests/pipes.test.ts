@@ -18,10 +18,14 @@ const OPENS = new Date('2026-09-18T13:00:00.000Z')
 
 const AT = '2026-09-18T13:00:00.000Z'
 
-function queued(db: Db, id: number, pipe: string, template: 'comms' | 'research'): void {
+/** A `pr_path` plan the store will take needs a target or an origin; ours is filed from one of our own issues. */
+function queued(db: Db, id: number, pipe: string, template: 'comms' | 'research' | 'pr_path'): void {
   const row = db.prepare('SELECT id FROM pipes WHERE name = ?').get(pipe) as { id: number }
-  db.prepare(`INSERT INTO plans (id, pipe_id, template, state, queued_at, step, retries)
-    VALUES (?, ?, ?, 'queued', ?, 0, 0)`).run(id, row.id, template, AT)
+  const origin = template === 'pr_path' ? `https://github.com/caliperforge/caliperforge/issues/${String(id)}` : null
+  const ours = origin === null ? null : 'machine'
+  db.prepare(`INSERT INTO plans (id, pipe_id, template, state, queued_at, step, retries, origin, lane, seat)
+    VALUES (?, ?, ?, 'queued', ?, 0, 0, ?, ?, ?)`)
+    .run(id, row.id, template, AT, origin, ours, ours === null ? null : 'typescript_specialist')
 }
 
 test('the store ships the three lanes the ceo opened, on, one at a time, 07:00 to 22:00', () => {
@@ -53,7 +57,8 @@ test('a lane with no template reads as on with nothing queued, not as an error',
   const would = dry(db, OPENS)
   expect(would).toMatchObject({ hhmm: '07:00', zone: -360, cap: 3, pipes: 3, would: [] })
   expect(would.quiet).toEqual([
-    { pipe: 'pr-path', live: 0 }, { pipe: 'comms', live: 0 }, { pipe: 'research', live: 0 },
+    { pipe: 'pr-path', live: 0, ready: 0 }, { pipe: 'comms', live: 0, ready: 0 },
+    { pipe: 'research', live: 0, ready: 0 },
   ])
   expect(dryLines(would)).toBe('tick --dry\t07:00 utc-06:00\tcap 3\t3 pipe(s) open\n'
     + '  pr-path\ton, nothing queued\n  comms\ton, nothing queued\n  research\ton, nothing queued\n')
@@ -71,9 +76,25 @@ test('a plan queued on a lane with no step map is left where it stands, and stop
   const would = dry(db, OPENS)
   expect(would.would).toEqual([])
   expect(would.quiet).toEqual([
-    { pipe: 'pr-path', live: 0 }, { pipe: 'comms', live: 1 }, { pipe: 'research', live: 1 },
+    { pipe: 'pr-path', live: 0, ready: 0 }, { pipe: 'comms', live: 1, ready: 0 },
+    { pipe: 'research', live: 1, ready: 0 },
   ])
   expect(dryLines(would)).toContain('  comms\ton, 1 queued and blocked\n')
+})
+
+test('#125: the cap goes to the lanes that can step, and a lane it did not reach says so', () => {
+  const db = fresh(schema)
+  dial(db, 1, AT)
+  queued(db, 1, 'comms', 'pr_path')
+  queued(db, 2, 'research', 'pr_path')
+  const would = dry(db, OPENS)
+  expect(would.cap).toBe(1)
+  expect(would.pipes).toBe(3)
+  expect(would.would).toEqual([{ pipe: 'comms', plan: 1, step: 0, template: 'pr_path' }])
+  expect(would.quiet).toEqual([
+    { pipe: 'pr-path', live: 0, ready: 0 }, { pipe: 'research', live: 1, ready: 1 },
+  ])
+  expect(dryLines(would)).toContain('  research\ton, 1 ready, cap spent on a lower lane\n')
 })
 
 test('the tick leaves its receipt in the store, dry runs included', () => {

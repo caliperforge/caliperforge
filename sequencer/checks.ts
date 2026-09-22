@@ -51,7 +51,7 @@ function loadOnly(output: string): boolean {
   return named.length > 0 && named.every((block) => LOAD.test(block))
 }
 
-function failures(output: string): string[] {
+export function failures(output: string): string[] {
   const blocks: string[][] = []
   for (const line of output.split('\n')) {
     if (OPENS.test(line)) blocks.push([line])

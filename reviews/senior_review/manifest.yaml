@@ -5,7 +5,5 @@ model: claude-opus-5
 effort: high
 tools:
   - Read
-  - Glob
-  - Grep
 write_paths: []
 reads_verdict: true

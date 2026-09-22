@@ -1,0 +1,4 @@
+rail: checks
+gate: pre_review
+step: 3
+defect_class: ci.red

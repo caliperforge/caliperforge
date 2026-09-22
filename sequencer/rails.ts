@@ -1,6 +1,7 @@
 import { join } from 'node:path'
 import { fill } from '../cli/digests.ts'
 import { authority } from '../rails/authority/index.ts'
+import { checked } from '../rails/checks/index.ts'
 import { parse } from '../rails/diff.ts'
 import { audit, record } from '../rails/completion-audit/index.ts'
 import { identifiers } from '../rails/identifiers/index.ts'
@@ -37,8 +38,11 @@ export function preReview(db: Db, root: string, plan: PlanRow): Outcome {
     if (verdict.outcome !== 'pass') return named(rail, verdict)
   }
   // a stranger's scripts and install hooks never run on this host; their fork CI at step 6 is their check
-  const failed = internal(plan) ? checks(srcDir(root, plan.id), undefined, narrow(db, plan)) : null
-  if (failed !== null) return broke(failed)
+  if (internal(plan)) {
+    const failed = checks(srcDir(root, plan.id), undefined, narrow(db, plan))
+    recordRail(db, join(root, 'rails', 'checks'), plan.id, checked(failed, diffOf(root, plan.id)), 0)
+    if (failed !== null) return broke(failed)
+  }
   return { outcome: 'pass', spans: [], note: 'pre-review: six rails pass' }
 }
 

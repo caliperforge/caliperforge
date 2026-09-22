@@ -8,5 +8,6 @@ rails:
   - tight
   - test-weakened
   - identifiers
+  - checks
   - ci-green
   - ready

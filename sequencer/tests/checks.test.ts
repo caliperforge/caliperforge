@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { record } from '../../store/files.ts'
+import type { Db } from '../../store/index.ts'
 import { checks, type Run } from '../checks.ts'
 import { tick } from '../index.ts'
 import { narrow } from '../rails.ts'
@@ -12,6 +13,7 @@ import { approve, CARRIED, internalPlan, ours, plan, stub, TYPESCRIPT, world, ty
 const ID = 2
 
 const RED = { lint: 'node -e "process.stderr.write(\'lint is red\'); process.exit(3)"' }
+const GREEN = { lint: 'node -e ""', test: 'node -e ""' }
 
 const TIMEOUT = ' FAIL x.test.ts > a lap\nError: Test timed out in 5000ms.\n'
 const BOUND = '   × a lap 1066ms\n     → expected 1066 to be less than 1000\n'
@@ -68,6 +70,12 @@ function mine(scripts: Record<string, string>): World {
   return w
 }
 
+/** The row `proof()` reads for `tests_pass`: the last `pre_review` verdict the lap wrote. */
+function last(db: Db, plan: number): unknown {
+  return db.prepare(`SELECT gate, kind, step, outcome, rail_id, origin_kind, origin_ref, tokens, seconds
+    FROM verdicts WHERE plan = ? ORDER BY id DESC LIMIT 1`).get(plan)
+}
+
 test('the three scripts run in order and stop at the first non-zero exit, which the failure names', () => {
   const all = recorder('run lint')
   const src = tree({ 'package.json': pkg({ typecheck: 'tsc --noEmit', lint: 'eslint .', test: 'vitest run' }) })
@@ -90,6 +98,23 @@ test('a checkout whose lint exits non-zero is back on step 2 with the command an
   expect(w.db.prepare('SELECT 1 FROM runs WHERE plan = ? AND step > 3').all(ID)).toEqual([])
   expect(get(w.root, ID, 'refusal.md')).toContain('npm run lint')
   expect(get(w.root, ID, 'refusal.md')).toContain('lint is red')
+  expect(last(w.db, ID)).toEqual({
+    gate: 'pre_review', kind: 'rail', step: 3, outcome: 'refuse', rail_id: 'checks',
+    origin_kind: 'rail', origin_ref: 'checks', tokens: 0, seconds: 0,
+  })
+}, SLOW)
+
+test('a checkout whose scripts all exit zero is on step 4 with a pass row for `proof()` to read', async () => {
+  const w = mine(GREEN)
+  for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED))
+
+  const fired = (await tick(w.db, w.root, stub(CARRIED)))[0]
+  expect(fired).toMatchObject({ plan: ID, step: 3, name: 'rails', outcome: 'pass' })
+  expect(plan(w.db, ID).step).toBe(4)
+  expect(last(w.db, ID)).toEqual({
+    gate: 'pre_review', kind: 'rail', step: 3, outcome: 'pass', rail_id: 'checks',
+    origin_kind: null, origin_ref: null, tokens: 0, seconds: 0,
+  })
 }, SLOW)
 
 test('a timeout-only failure runs the command once more, and the second run is the one that settles it', () => {
@@ -125,6 +150,7 @@ test('load-only on both runs is refused with the second run, and the note names 
   expect(fired).toMatchObject({ plan: ID, step: 3, outcome: 'refuse', spans: ['checks:test'] })
   expect(fired?.note).toBe('npm run test exit 1 after one retry')
   expect(get(w.root, ID, 'refusal.md')).toContain('after one retry')
+  expect(last(w.db, ID)).toMatchObject({ outcome: 'refuse', rail_id: 'checks', origin_ref: 'x.test.ts > a lap' })
 }, SLOW)
 
 test('#77: a narrow list runs the tests it can reach, and only in place of a vitest suite', () => {
@@ -202,4 +228,5 @@ test('a plan on a target runs none of the stranger\'s scripts and passes step 3 
   const fired = (await tick(w.db, w.root, stub(CARRIED)))[0]
   expect(fired).toMatchObject({ plan: w.plan, step: 3, name: 'rails', outcome: 'pass' })
   expect(plan(w.db, w.plan).step).toBe(4)
+  expect(w.db.prepare("SELECT 1 FROM verdicts WHERE plan = ? AND rail_id = 'checks'").all(w.plan)).toEqual([])
 }, SLOW)

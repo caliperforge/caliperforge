@@ -34,6 +34,20 @@ export function drop(root: string, plan: number, name: string): void {
   rmSync(join(planDir(root, plan), name), { force: true })
 }
 
+/**
+ * #154. A finished plan's checkout is 99% of what `.cf/work` holds -- 7.0G of the 7.1G the 39 terminal
+ * plans carried on 2026-09-22. Its paper is the other 1% and stays: the ask, the refusals, the
+ * handbacks, the transcripts and the verdict trees are the only record of what the seats said.
+ */
+export function reap(root: string, plans: number[]): number[] {
+  return plans.filter((plan) => {
+    const dir = join(planDir(root, plan), 'src')
+    if (!existsSync(dir)) return false
+    rmSync(dir, { recursive: true, force: true })
+    return true
+  })
+}
+
 export function move(root: string, plan: number, from: string, to: string): string {
   const body = get(root, plan, from)
   put(root, plan, to, body)

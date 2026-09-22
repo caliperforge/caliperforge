@@ -1,7 +1,8 @@
 import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 
-const SKIP = new Set(['node_modules', '.git', 'fixtures'])
+/** `.cf` is the machine's own notes on a job — job checkouts included. A stranger's repo parked there is never ours to judge. */
+const SKIP = new Set(['node_modules', '.git', 'fixtures', '.cf'])
 
 export function walk(dir: string, match: (name: string) => boolean): string[] {
   if (!existsSync(dir)) return []

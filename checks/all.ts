@@ -2,6 +2,7 @@ import { fixturePerRail } from './fixture-per-rail.ts'
 import type { Check, Finding } from './kind.ts'
 import { originOnRefuse } from './origin-on-refuse.ts'
 import { reachability } from './reachability.ts'
+import { reviewerManifests } from './reviewer-manifests.ts'
 import { reviewerNotBuilder } from './reviewer-not-builder.ts'
 import { ruleHashes } from './rule-hashes.ts'
 import { templateValidity } from './template-validity.ts'
@@ -14,6 +15,7 @@ export const CHECKS: Check[] = [
   tight,
   templateValidity,
   reviewerNotBuilder,
+  reviewerManifests,
   fixturePerRail,
 ]
 

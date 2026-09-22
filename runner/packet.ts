@@ -8,15 +8,22 @@ import { tight, WRITERS } from './rules.ts'
 
 const OUTSIDE = /(^|\/)(crypto-contributor|agents|ops|knowledge|plans|escalations)(\/|$)|(^|\/)T-[A-Z][A-Z0-9-]*\.md$/
 
+/** #84: a reviewer judges the packet it was handed. Browsing the checkout is what re-reads the repository it already has. */
+export const BROWSE = new Set(['Glob', 'Grep'])
+
 export const Review = z.object({
   review: z.string(),
   gate: z.enum(['review', 'senior_review']),
   step: z.int().min(4).max(5),
   model: z.string(),
   effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']),
-  tools: z.array(z.string()).min(1).refine((t) => !t.some((name) => WRITERS.has(bare(name))), {
-    message: `a reviewer may not hold ${[...WRITERS].join(', ')}`,
-  }),
+  tools: z.array(z.string()).min(1)
+    .refine((t) => !t.some((name) => WRITERS.has(bare(name))), {
+      message: `a reviewer may not hold ${[...WRITERS].join(', ')}`,
+    })
+    .refine((t) => !t.some((name) => BROWSE.has(bare(name))), {
+      message: `a reviewer judges what it was handed and may not hold ${[...BROWSE].join(', ')}`,
+    }),
   write_paths: z.tuple([]),
   reads_verdict: z.boolean(),
 }).strict()

@@ -63,12 +63,13 @@ test('a re-review packet carries the reviewer its own last verdict and the diff 
   expect(prompt.endsWith('\n\n# Your last verdict\n\nmy last verdict\n\n# Changed since your last verdict\n\n+ a line since')).toBe(true)
 })
 
-test('the reviewer manifest declares no write path and holds no write tool', () => {
+test('the reviewer manifest declares no write path, and holds no write or browse tool', () => {
   const manifest = reviewManifest(root, 'code_quality')
   expect(manifest.write_paths).toEqual([])
-  expect(manifest.tools).toEqual(['Read', 'Glob', 'Grep'])
-  for (const tool of ['Write', 'Edit', 'NotebookEdit', 'Bash', 'MultiEdit']) {
+  expect(manifest.tools).toEqual(['Read'])
+  for (const tool of ['Write', 'Edit', 'NotebookEdit', 'Bash', 'MultiEdit', 'Glob', 'Grep']) {
     expect(Review.safeParse({ ...manifest, tools: [tool] }).success).toBe(false)
+    expect(Review.safeParse({ ...manifest, tools: ['Read', tool] }).success).toBe(false)
   }
   expect(Review.safeParse({ ...manifest, write_paths: ['src'] }).success).toBe(false)
 })

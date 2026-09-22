@@ -5,7 +5,7 @@ import { hold } from '../store/holds.ts'
 import type { Db } from '../store/index.ts'
 import { clear as unlease, held, take, type Lease, type Taken } from '../store/leases.ts'
 import { cap, hhmm, zone } from '../store/lanes.ts'
-import { advance, back, finish, internal, live, needsCeo, openPipes, PlanRow, rewind, underCap, waiting, type PipeRow, type Wait } from '../store/plans.ts'
+import { PlanRow, advance, back, finish, internal, live, needsCeo, openPipes, rewind, terminal, type PipeRow, type Wait, underCap, waiting } from '../store/plans.ts'
 import { blipped, fingerprint, overBudget, refused, WHY, type Why } from '../store/refusals.ts'
 import { at, last, type Step } from '../templates/pr-path.ts'
 import { capture } from './capture.ts'
@@ -16,7 +16,7 @@ import type { Wire } from './push.ts'
 import { fireBrief, fireReview, fireSeat } from './seat.ts'
 import { blocked, kernel, proved, targetOf } from './steps.ts'
 import { languageFor } from './route.ts'
-import { branchOf, checkout, diffOf, internalBranch, maybe, put, SELF, srcDir, titleOf } from './workspace.ts'
+import { SELF, branchOf, checkout, diffOf, internalBranch, maybe, put, reap, srcDir, titleOf } from './workspace.ts'
 
 /**
  * `read` and `wire` are the network a tick touches on its own account; both are injected so a test can drive a lap offline.
@@ -26,6 +26,7 @@ import { branchOf, checkout, diffOf, internalBranch, maybe, put, SELF, srcDir, t
 export async function tick(db: Db, root: string, provider: Provider, now: Date = new Date(),
   read: (repo: string, no: number) => Pr = readPr, wire?: Wire, chain = 0): Promise<Fired[]> {
   for (const signal of capture(db, read)) started(db, signal, root)
+  reap(root, terminal(db))
   const out: Fired[] = []
   const offers = offered(db, now)
   const open = working(offers, cap(db).cap)

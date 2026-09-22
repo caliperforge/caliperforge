@@ -133,6 +133,12 @@ export function needsCeo(db: Db, plan: PlanRow): void {
   db.prepare("UPDATE plans SET state = 'blocked_on_ceo' WHERE id = ?").run(plan.id)
 }
 
+/** The plans whose checkout no step is coming back for. */
+export function terminal(db: Db): number[] {
+  return (db.prepare("SELECT id FROM plans WHERE state IN ('done', 'refused', 'halted')").all() as { id: number }[])
+    .map((row) => row.id)
+}
+
 export function finish(db: Db, plan: PlanRow): void {
   db.prepare("UPDATE plans SET step = ?, state = 'done' WHERE id = ?").run(plan.step + 1, plan.id)
 }

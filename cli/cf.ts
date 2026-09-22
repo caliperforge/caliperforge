@@ -10,13 +10,13 @@ import { fire } from '../runner/index.ts'
 import { CHAIN_MINUTES, dry, tick } from '../sequencer/index.ts'
 import { behind, upgraded } from '../sequencer/upgrade.ts'
 import { signoffs } from '../sequencer/signoff.ts'
-import { liveTree, SIGNOFF } from '../sequencer/workspace.ts'
+import { SIGNOFF, liveTree, reap } from '../sequencer/workspace.ts'
 import { blocked, parked, targetDigest, WAITING } from '../sequencer/steps.ts'
 import { release } from '../store/holds.ts'
 import { dump, migrate, open as openDb, type Db } from '../store/index.ts'
 import { dial, hhmm, lanes, priority as setPriority, record, Reading, windows } from '../store/lanes.ts'
 import { holder } from '../store/leases.ts'
-import { openPipes, PlanRow, retry } from '../store/plans.ts'
+import { PlanRow, openPipes, retry, terminal } from '../store/plans.ts'
 import { clear } from '../store/refusals.ts'
 import { refusedPush } from '../store/approvals.ts'
 import { receipt } from '../store/ticks.ts'
@@ -182,6 +182,11 @@ plan.argument('<id>').action((id: string) => {
   for (const v of verdictsOf(handle, plan.id)) {
     out(`  verdict ${String(v.id)}\tstep ${String(v.step)}\t${String(v.gate)}\t${String(v.outcome)}\t${String(v.origin_ref ?? '-')}\n`)
   }
+})
+
+cf.command('reap').description("remove the checkout of every plan no step is coming back for").action(() => {
+  const gone = reap(root, terminal(db()))
+  out(`reaped ${String(gone.length)} checkout(s)${gone.length === 0 ? '' : `: ${gone.join(', ')}`}\n`)
 })
 
 cf.command('release').argument('<plan>', 'a briefed plan waiting on the coo to read it').action((id: string) => {

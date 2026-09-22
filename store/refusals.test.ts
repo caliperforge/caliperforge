@@ -37,6 +37,18 @@ test('a new refusal goes round again', () => {
   expect(refused(db, { plan: PLAN, step: 4, fingerprint: B, diff: D2 })).toBe('again')
 })
 
+test('the same failure on another job stops as shared, until a person clears it', () => {
+  const db = bench()
+  db.prepare(`INSERT INTO plans (id, pipe_id, template, state, queued_at, lane, seat, origin)
+    VALUES (2, 1, 'pr_path', 'running', '2026-09-21T00:00:00.000Z', 'machine', 'typescript_specialist',
+      'https://github.com/caliperforge/caliperforge/issues/77')`).run()
+  refused(db, { plan: 2, step: 3, fingerprint: A, diff: D1 })
+  expect(refused(db, { plan: PLAN, step: 3, fingerprint: A, diff: D2 })).toBe('shared')
+  clear(db, 2)
+  clear(db, PLAN)
+  expect(refused(db, { plan: PLAN, step: 3, fingerprint: A, diff: D2 })).toBe('again')
+})
+
 test('the same refusal twice stops', () => {
   const db = bench()
   refused(db, { plan: PLAN, step: 3, fingerprint: A, diff: D1 })

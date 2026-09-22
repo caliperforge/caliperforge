@@ -11,10 +11,11 @@ const AT = `${TODAY}T09:00:00.000Z`
 const BASE = Date.now()
 let seq = 0
 
-const reading = (utilization: number, kind: Reading['rate_limit_type'] = 'seven_day', ago = 0): Reading => ({
+const reading = (utilization: number, kind: Reading['rate_limit_type'] = 'seven_day', ago = 0,
+  resets = 3 * 86400): Reading => ({
   observed_at: new Date(BASE + (seq += 1) - ago * 1000).toISOString(),
   rate_limit_type: kind,
-  resets_at: 1790222400,
+  resets_at: Math.floor(BASE / 1000) + resets,
   status: 'allowed_warning',
   utilization,
 })
@@ -95,14 +96,17 @@ test('the usage band steps the cap down as the window fills, and back up when it
   expect(name(null)).toBe('none')
 })
 
-test('the fuller of the two windows rules, and a stale reading is no reading', () => {
+test('the fuller of the two windows rules, and an old reading holds until its window resets', () => {
   const w = world()
   dial(w.db, 4, AT)
   record(w.db, reading(0.1, 'seven_day'))
   record(w.db, reading(0.97, 'five_hour'))
   expect(cap(w.db)).toMatchObject({ dial: 4, band: 0, cap: 0 })
   w.db.prepare('DELETE FROM usage').run()
-  record(w.db, reading(0.95, 'seven_day', 7 * 3600))
+  record(w.db, reading(0.95, 'seven_day', 13 * 3600))
+  expect(cap(w.db)).toMatchObject({ dial: 4, band: 1, cap: 1 })
+  w.db.prepare('DELETE FROM usage').run()
+  record(w.db, reading(0.95, 'seven_day', 13 * 3600, -60))
   expect(cap(w.db)).toMatchObject({ dial: 4, band: null, cap: 4 })
 })
 

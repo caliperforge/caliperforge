@@ -1,13 +1,19 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
-import { desk as ghDesk, type Answer, type Desk, type Seen } from '../../cli/gh.ts'
+import { desk as ghDesk, type Answer, type Desk, type Pr, type Seen } from '../../cli/gh.ts'
 import { unread } from '../../cli/inbox.ts'
 import { rewind } from '../../store/plans.ts'
 import { tick } from '../index.ts'
 import { ruled, signoffs } from '../signoff.ts'
 import { put, SELF, SIGNOFF, srcDir } from '../workspace.ts'
 import { approve, CARRIED, plan, stub, watched, world, type World } from './world.ts'
+
+/** Their pull request as the tick reads it, offline: open and quiet. */
+const quiet = (): Pr => ({
+  number: 7, url: 'https://github.com/acme/widget/pull/7', state: 'OPEN', mergedAt: null, mergedBy: null,
+  reviewDecision: null, comments: [], reviews: [], statusCheckRollup: [],
+})
 
 async function atBatch(): Promise<World> {
   const w = world()
@@ -71,13 +77,13 @@ test('go signs the head the card showed, closes the card, and the next tick send
     .toEqual({ who: 'ceo', decision: 'approved', subject_digest: plan(w.db, 1).head_digest })
   expect(card).toMatchObject({ open: false })
   const sent: string[] = []
-  await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched(sent, w.root, 1))
-  await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched(sent, w.root, 1))
+  await tick(w.db, w.root, stub(CARRIED), undefined, quiet, watched(sent, w.root, 1))
+  await tick(w.db, w.root, stub(CARRIED), undefined, quiet, watched(sent, w.root, 1))
   expect(sent).toContain('open acme/widget caliperforge:widget-12-a1')
   expect(signoffs(w.db, w.root, desk)).toEqual([])
 })
 
-test('no with words sends it back to the builder with them; no alone waits for the coo', async () => {
+test('no with words sends it back to the builder with them', async () => {
   const w = await atBatch()
   const desk = fake()
   signoffs(w.db, w.root, desk)
@@ -91,7 +97,9 @@ test('no with words sends it back to the builder with them; no alone waits for t
   expect(brief.split('## Must not break')[1]?.split('## ')[0]).toContain("The CEO's ruling at sign-off")
   expect(w.db.prepare("SELECT decision, reason FROM approvals WHERE subject_kind = 'plan'").get())
     .toEqual({ decision: 'refused', reason: 'signoff.no' })
+})
 
+test('no alone waits for the coo', async () => {
   const bare = await atBatch()
   const quiet = fake()
   signoffs(bare.db, bare.root, quiet)

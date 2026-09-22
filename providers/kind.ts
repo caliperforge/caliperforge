@@ -1,3 +1,4 @@
+import type { TerminalReason } from '@anthropic-ai/claude-agent-sdk'
 import type { Reading } from '../store/lanes.ts'
 
 export interface Refusal {
@@ -18,8 +19,8 @@ export interface Packet {
   refuse: (path: string) => Refusal | null
 }
 
-/** What `Fired.stop_reason` carries when the run ended on the packet's `steps`. */
-export const CAPPED = 'max_turns'
+/** `stop_reason` is the SDK's `terminal_reason` verbatim, so the refire keys on the SDK's own spelling. */
+export const CAPPED: Extract<TerminalReason, 'max_turns'> = 'max_turns'
 
 /** `Bash(gradle:*)` is still Bash: a tool's permission pattern does not change which tool it is. */
 export function bare(tool: string): string {

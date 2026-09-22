@@ -124,8 +124,8 @@ test('a hook-stopped session lands non-zero carrying the refusal origin, a compl
   expect(clean).toMatchObject({ exit: 0, denials: 0, stop_reason: 'end_turn', text: 'done' })
 })
 
-test('a session out of turns lands the cap in stop_reason, over the terminal reason it carries', () => {
-  const capped = fired(result({ subtype: 'error_max_turns', is_error: true, errors: [], terminal_reason: 'completed' }), Date.now(), [])
+test('a session that spent its turns lands the cap in stop_reason', () => {
+  const capped = fired(result({ subtype: 'error_max_turns', is_error: true, errors: [], terminal_reason: 'max_turns' }), Date.now(), [])
   expect(capped).toMatchObject({ exit: 1, stop_reason: CAPPED })
 })
 

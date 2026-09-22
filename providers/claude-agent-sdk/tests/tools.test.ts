@@ -36,6 +36,13 @@ test('a reviewer packet offers only the three tools its manifest names', async (
   expect(sent.at(-1)?.allowedTools).toEqual(['Read', 'Glob', 'Grep'])
 })
 
+test('a packet carrying steps sends them as the query turn limit, and one without sends none', async () => {
+  await claudeAgentSdk.fire({ ...packet(['Read']), steps: 3 })
+  expect(sent.at(-1)?.maxTurns).toBe(3)
+  await claudeAgentSdk.fire(packet(['Read']))
+  expect(sent.at(-1)).not.toHaveProperty('maxTurns')
+})
+
 test('a builder packet offers Bash once, under its bare name, and the patterns stay on allowedTools', async () => {
   const tools = ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash(gradle:*)', 'Bash(./gradlew:*)']
   await claudeAgentSdk.fire(packet(tools))

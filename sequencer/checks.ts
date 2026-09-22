@@ -15,6 +15,8 @@ const CAP = 10 * 60 * 1000
 const MAX = 64 * 1024 * 1024
 
 export interface Failure {
+  /** The script the failure is named by, whatever command stood in for it. */
+  script: string
   command: string
   code: number
   output: string
@@ -23,13 +25,18 @@ export interface Failure {
 
 export type Run = (args: string[], cwd: string) => { code: number; output: string }
 
-export function checks(src: string, run: Run = npm): Failure | null {
-  for (const args of commands(src)) {
+/**
+ * `narrow` is the plan's own file list (#77). Given one, the tests run is `vitest related` over those
+ * paths -- every test the import graph says they can reach -- instead of the whole suite. The first pass
+ * through step 3 passes none, so every job still runs the suite whole once, against the tree it built on.
+ */
+export function checks(src: string, run: Run = npm, narrow: string[] = []): Failure | null {
+  for (const [script, args] of commands(src, narrow)) {
     const first = run(args, src)
     if (first.code === 0) continue
     const retried = loadOnly(first.output)
     const { code, output } = retried ? run(args, src) : first
-    if (code !== 0) return { command: `npm ${args.join(' ')}`, code, output: tail(output), retried }
+    if (code !== 0) return { script, command: `npm ${args.join(' ')}`, code, output: tail(output), retried }
   }
   return null
 }
@@ -53,10 +60,22 @@ function failures(output: string): string[] {
   return blocks.map((block) => block.join('\n'))
 }
 
-function commands(src: string): string[][] {
-  const scripts = named(src)
+/** A test script that is vitest takes `related`; anything else is run whole, narrow list or not. */
+const VITEST = /(^|\s)vitest(\s|$)/
+
+function commands(src: string, narrow: string[]): [string, string[]][] {
+  const scripts = read(src)
   if (scripts === null) return []
-  return [...(bare(src) ? [['ci']] : []), ...scripts.map((s) => ['run', s])]
+  const named = SCRIPTS.filter((s) => scripts[s] !== undefined)
+  return [
+    ...(bare(src) ? [['ci', ['ci']] as [string, string[]]] : []),
+    ...named.map((s): [string, string[]] => [s, related(scripts[s] ?? '', s, narrow) ?? ['run', s]]),
+  ]
+}
+
+function related(script: string, name: string, narrow: string[]): string[] | null {
+  if (name !== 'test' || narrow.length === 0 || !VITEST.test(script)) return null
+  return ['exec', '--', 'vitest', 'related', '--run', ...narrow]
 }
 
 function bare(src: string): boolean {
@@ -68,12 +87,11 @@ export function install(src: string, run: Run = npm): void {
   if (bare(src)) run(['ci', '--include=dev'], src)
 }
 
-function named(src: string): string[] | null {
+function read(src: string): Record<string, string> | null {
   const path = join(src, 'package.json')
   if (!existsSync(path)) return null
-  const read = Package.safeParse(JSON.parse(readFileSync(path, 'utf8')))
-  if (!read.success) return null
-  return SCRIPTS.filter((s) => read.data.scripts[s] !== undefined)
+  const got = Package.safeParse(JSON.parse(readFileSync(path, 'utf8')))
+  return got.success ? got.data.scripts : null
 }
 
 function tail(output: string): string {

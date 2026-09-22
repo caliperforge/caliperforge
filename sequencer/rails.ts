@@ -37,9 +37,20 @@ export function preReview(db: Db, root: string, plan: PlanRow): Outcome {
     if (verdict.outcome !== 'pass') return named(rail, verdict)
   }
   // a stranger's scripts and install hooks never run on this host; their fork CI at step 6 is their check
-  const failed = internal(plan) ? checks(srcDir(root, plan.id)) : null
+  const failed = internal(plan) ? checks(srcDir(root, plan.id), undefined, narrow(db, plan)) : null
   if (failed !== null) return broke(failed)
   return { outcome: 'pass', spans: [], note: 'pre-review: six rails pass' }
+}
+
+/**
+ * #77. The first build's lap runs the whole suite, so every job is judged against it once, on the tree it
+ * built on. A rebuild only touched the plan's own files, so its lap runs the tests those files reach and
+ * the suite is not paid for again -- the cost is in the laps after the first: plan 62 went round 25 times.
+ * A rebuild with no recorded file list gets the whole suite, which is the safe way to know nothing.
+ */
+export function narrow(db: Db, plan: PlanRow): string[] {
+  const built = db.prepare('SELECT count(*) AS n FROM runs WHERE plan = ? AND step = 2').get(plan.id) as { n: number }
+  return built.n > 1 ? filesOf(db, plan.id).map((f) => f.path) : []
 }
 
 /** The roster and seat files a fill reads are the builder's, so their typo refuses this plan where a throw takes the lap. */
@@ -60,7 +71,7 @@ function unfilled(src: string): Outcome | null {
 function broke(failed: Failure): Outcome {
   return {
     outcome: 'refuse',
-    spans: [`checks:${failed.command.split(' ').at(-1) ?? ''}`],
+    spans: [`checks:${failed.script}`],
     note: `${failed.command} exit ${String(failed.code)}${failed.retried ? ' after one retry' : ''}`,
     message: failed.output,
   }

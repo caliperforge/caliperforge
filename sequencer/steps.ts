@@ -6,7 +6,7 @@ import { digestOf, gates, headDigest } from '../store/approvals.ts'
 import { approved as settle, built, gated, ready as readyRow, type Made, type Proven } from '../store/deliverables.ts'
 import { record as recordFiles } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
-import { internal, originIssue, stampHead, type PlanRow } from '../store/plans.ts'
+import { internal, originIssue, stampHead, type PlanRow, type Wait } from '../store/plans.ts'
 import { at, type Step } from '../templates/pr-path.ts'
 import { files } from './brief.ts'
 import type { Outcome } from './kind.ts'
@@ -17,11 +17,32 @@ import { abortMerge, behindMain, cloned, conflicted, diffOf, fetchMain, get, may
 
 interface Target { repo: string; issue_no: number; state: string; measured_at: string; pulse: string }
 
-export function blocked(db: Db, plan: PlanRow): string | null {
+/**
+ * #140: what the tick says when it passes a plan over, as a reason the store checks rather than a
+ * string a caller formats. `WAITING` carries the words; a target that names itself gets them from `parked`.
+ */
+export function blocked(db: Db, plan: PlanRow): Wait | null {
   const step = at(plan.step)
-  if (step.fires === 'ceo') return internal(plan) || approvedPlan(db, plan) ? null : 'awaiting the sign-off batch'
-  if (step.name === 'ruling') return internal(plan) || approved(db, plan) ? null : 'awaiting cf approve target'
-  if (step.name === 'ready') return proven(db, plan) ? null : 'awaiting the ready proof'
+  if (step.fires === 'ceo') return internal(plan) || approvedPlan(db, plan) ? null : 'ceo_batch'
+  if (step.name === 'ruling') return internal(plan) || approved(db, plan) ? null : 'target_approval'
+  if (step.name === 'ready') return proven(db, plan) ? null : 'ready_proof'
+  return target(db, plan)?.state === 'parked' ? 'target_parked' : null
+}
+
+export const WAITING: Record<Wait, string> = {
+  ceo_batch: 'awaiting the sign-off batch',
+  target_approval: 'awaiting cf approve target',
+  ready_proof: 'awaiting the ready proof',
+  target_parked: 'its target is parked',
+  token_ceiling: 'it spent the token ceiling since a person last sent it round',
+  leased: 'another live tick holds it',
+  over_cap: 'its lane is open and full',
+  lane_over_cap: 'the lane cap was spent on a lower lane',
+  no_step_map: 'its template has no step map',
+}
+
+/** The parked target by name, which the bare reason cannot carry. */
+export function parked(db: Db, plan: PlanRow): string | null {
   const row = target(db, plan)
   return row?.state === 'parked' ? `${row.repo}#${String(row.issue_no)} is parked` : null
 }

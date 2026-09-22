@@ -5,8 +5,11 @@ import { join } from 'node:path'
 import { manifest } from '../../checks/manifest.ts'
 import { parse, type FileDiff } from '../diff.ts'
 import type { Verdict } from '../record.ts'
+import { scan, type Declaration } from './braces.ts'
 import { inProse } from './prose.ts'
 import { inSource, type Ceilings, type Span } from './source.ts'
+
+const BRACED = ['.kt', '.kts', '.swift']
 
 export interface Subject {
   diff: string
@@ -23,22 +26,53 @@ export function tight(root: string, subject: Subject): Verdict {
     ...files.flatMap((f) => named(f.path, inFile(f, subject.sources, ceilings))),
     ...named(subject.prose ?? 'description', inProse(subject.description, files.map((f) => f.path))),
   ]
+  const unread = noted(files.filter((f) => unbalanced(f, subject.sources)).map((f) => f.path))
   const subject_digest = createHash('sha256').update(`${subject.diff}\n${subject.description}`).digest('hex')
-  if (spans.length === 0) return { outcome: 'pass', defect_class: null, origin_kind: null, origin_ref: null, subject_digest, spans, message: `${String(files.length)} file(s) and the description are Tight` }
+  if (spans.length === 0) return { outcome: 'pass', defect_class: null, origin_kind: null, origin_ref: null, subject_digest, spans, message: `${String(files.length)} file(s) and the description are Tight${unread}` }
   return {
     outcome: 'refuse', defect_class: null,
     origin_kind: 'rail',
     origin_ref: 'tight',
     subject_digest,
     spans,
-    message: `${String(spans.length)} span(s) breach Tight at function_lines ${String(ceilings.function_lines)}, nesting ${String(ceilings.nesting)}`,
+    message: `${String(spans.length)} span(s) breach Tight at function_lines ${String(ceilings.function_lines)}, nesting ${String(ceilings.nesting)}${unread}`,
   }
 }
 
+/** The brace scanner judges length and nesting only; unused declarations and comments stay TypeScript-only. */
 function inFile(file: FileDiff, sources: Record<string, string>, ceilings: Ceilings): Span[] {
   const text = sources[file.path]
-  if (text === undefined || !file.path.endsWith('.ts')) return []
-  return inSource(text, new Set(file.added.map((l) => l.line)), ceilings)
+  if (text === undefined) return []
+  const added = new Set(file.added.map((l) => l.line))
+  if (file.path.endsWith('.ts')) return inSource(text, added, ceilings)
+  if (!braced(file.path)) return []
+  const { declarations, balanced } = scan(text)
+  if (!balanced) return []
+  return declarations.filter((d) => !d.expression && touched(d, added)).flatMap((d) => judge(d, ceilings))
+}
+
+function braced(path: string): boolean {
+  return BRACED.some((extension) => path.endsWith(extension))
+}
+
+function unbalanced(file: FileDiff, sources: Record<string, string>): boolean {
+  const text = sources[file.path]
+  return text !== undefined && braced(file.path) && !scan(text).balanced
+}
+
+function touched(d: Declaration, added: Set<number>): boolean {
+  return [...added].some((l) => l >= d.line && l <= d.end)
+}
+
+function judge(d: Declaration, ceilings: Ceilings): Span[] {
+  return [
+    ...(d.end - d.line + 1 > ceilings.function_lines ? [{ line: d.line, kind: 'tight.length' }] : []),
+    ...(d.nesting > ceilings.nesting ? [{ line: d.line, kind: 'tight.nesting' }] : []),
+  ]
+}
+
+function noted(paths: string[]): string {
+  return paths.length === 0 ? '' : `; unbalanced braces left ${paths.join(', ')} unread`
 }
 
 function named(path: string, spans: Span[]): string[] {

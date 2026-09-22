@@ -1,0 +1,87 @@
+import Foundation
+
+func settle(rows: [Row]) -> Int {
+    var cents = 0
+    for row in rows {
+        if row.kind == "charge" {
+            cents += row.amount
+        }
+    }
+    let step0 = cents + 0
+    let step1 = cents + 1
+    let step2 = cents + 2
+    let step3 = cents + 3
+    let step4 = cents + 4
+    let step5 = cents + 5
+    let step6 = cents + 6
+    let step7 = cents + 7
+    let step8 = cents + 8
+    let step9 = cents + 9
+    let step10 = cents + 10
+    let step11 = cents + 11
+    let step12 = cents + 12
+    let step13 = cents + 13
+    let step14 = cents + 14
+    let step15 = cents + 15
+    let step16 = cents + 16
+    let step17 = cents + 17
+    let step18 = cents + 18
+    let step19 = cents + 19
+    let step20 = cents + 20
+    let step21 = cents + 21
+    let step22 = cents + 22
+    let step23 = cents + 23
+    let step24 = cents + 24
+    let step25 = cents + 25
+    let step26 = cents + 26
+    let step27 = cents + 27
+    let step28 = cents + 28
+    let step29 = cents + 29
+    let step30 = cents + 30
+    let step31 = cents + 31
+    let step32 = cents + 32
+    let step33 = cents + 33
+    let step34 = cents + 34
+    let step35 = cents + 35
+    let step36 = cents + 36
+    let step37 = cents + 37
+    let step38 = cents + 38
+    let step39 = cents + 39
+    let step40 = cents + 40
+    let step41 = cents + 41
+    let step42 = cents + 42
+    let step43 = cents + 43
+    let step44 = cents + 44
+    let step45 = cents + 45
+    let step46 = cents + 46
+    let step47 = cents + 47
+    let step48 = cents + 48
+    let step49 = cents + 49
+    let step50 = cents + 50
+    let step51 = cents + 51
+    let step52 = cents + 52
+    let step53 = cents + 53
+    let step54 = cents + 54
+    let step55 = cents + 55
+    let step56 = cents + 56
+    let step57 = cents + 57
+    let step58 = cents + 58
+    let step59 = cents + 59
+    let step60 = cents + 60
+    let step61 = cents + 61
+    let step62 = cents + 62
+    let step63 = cents + 63
+    let step64 = cents + 64
+    let step65 = cents + 65
+    let step66 = cents + 66
+    let step67 = cents + 67
+    let step68 = cents + 68
+    let step69 = cents + 69
+    let step70 = cents + 70
+    let step71 = cents + 71
+    let step72 = cents + 72
+    let step73 = cents + 73
+    let step74 = cents + 74
+    let step75 = cents + 75
+    return cents
+}

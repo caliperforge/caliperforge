@@ -1,0 +1,87 @@
+package pay.ledger
+
+fun settle(rows: List<Row>): Long {
+    var cents = 0L
+    for (row in rows) {
+        if (row.kind == "charge") {
+            cents += row.amount
+        }
+    }
+    val step0 = cents + 0
+    val step1 = cents + 1
+    val step2 = cents + 2
+    val step3 = cents + 3
+    val step4 = cents + 4
+    val step5 = cents + 5
+    val step6 = cents + 6
+    val step7 = cents + 7
+    val step8 = cents + 8
+    val step9 = cents + 9
+    val step10 = cents + 10
+    val step11 = cents + 11
+    val step12 = cents + 12
+    val step13 = cents + 13
+    val step14 = cents + 14
+    val step15 = cents + 15
+    val step16 = cents + 16
+    val step17 = cents + 17
+    val step18 = cents + 18
+    val step19 = cents + 19
+    val step20 = cents + 20
+    val step21 = cents + 21
+    val step22 = cents + 22
+    val step23 = cents + 23
+    val step24 = cents + 24
+    val step25 = cents + 25
+    val step26 = cents + 26
+    val step27 = cents + 27
+    val step28 = cents + 28
+    val step29 = cents + 29
+    val step30 = cents + 30
+    val step31 = cents + 31
+    val step32 = cents + 32
+    val step33 = cents + 33
+    val step34 = cents + 34
+    val step35 = cents + 35
+    val step36 = cents + 36
+    val step37 = cents + 37
+    val step38 = cents + 38
+    val step39 = cents + 39
+    val step40 = cents + 40
+    val step41 = cents + 41
+    val step42 = cents + 42
+    val step43 = cents + 43
+    val step44 = cents + 44
+    val step45 = cents + 45
+    val step46 = cents + 46
+    val step47 = cents + 47
+    val step48 = cents + 48
+    val step49 = cents + 49
+    val step50 = cents + 50
+    val step51 = cents + 51
+    val step52 = cents + 52
+    val step53 = cents + 53
+    val step54 = cents + 54
+    val step55 = cents + 55
+    val step56 = cents + 56
+    val step57 = cents + 57
+    val step58 = cents + 58
+    val step59 = cents + 59
+    val step60 = cents + 60
+    val step61 = cents + 61
+    val step62 = cents + 62
+    val step63 = cents + 63
+    val step64 = cents + 64
+    val step65 = cents + 65
+    val step66 = cents + 66
+    val step67 = cents + 67
+    val step68 = cents + 68
+    val step69 = cents + 69
+    val step70 = cents + 70
+    val step71 = cents + 71
+    val step72 = cents + 72
+    val step73 = cents + 73
+    val step74 = cents + 74
+    val step75 = cents + 75
+    return cents
+}

@@ -1,0 +1,27 @@
+package pay.ledger
+
+fun settle(rows: List<Row>): Long {
+    var cents = 0L
+    for (row in rows) {
+        if (row.kind == "charge") {
+            cents += row.amount
+        }
+    }
+    return drift(cents)
+}
+
+fun drift(cents: Long): Long {
+    var total = cents
+    val step0 = total + 0
+    val step1 = total + 1
+    val step2 = total + 2
+    val step3 = total + 3
+    val step4 = total + 4
+    val step5 = total + 5
+    val step6 = total + 6
+    val step7 = total + 7
+    val step8 = total + 8
+    val step9 = total + 9
+    total += step9
+    return total
+}

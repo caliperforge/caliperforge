@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { headApproved } from '../../store/approvals.ts'
+import { WHY } from '../../store/refusals.ts'
 import { tick } from '../index.ts'
 import { headOf, land, type Wire } from '../push.ts'
 import { conflicted, diffOf, fetchMain, get, liveTree, MAIN, srcDir } from '../workspace.ts'
@@ -204,6 +205,24 @@ test('a merge that conflicts at the rails aborts, hands the builder the paths an
   expect(git(src, ['status', '--porcelain'])).toBe('')
   expect(get(w.root, ID, 'base.sha')).toBe(base)
   expect(get(w.root, ID, 'refusal.md')).toContain('src/hello.ts')
+})
+
+test('the same conflict twice stops the plan instead of going round again', async () => {
+  const w = mine()
+  const wire = watched([], w.root, ID)
+  await atRails(w, wire)
+  moveMain(w.root, 'src/hello.ts', 'export const hello = (): string => "main took this line"\n')
+
+  expect((await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0])
+    .toMatchObject({ step: 3, outcome: 'refuse', spans: ['src/hello.ts'] })
+  expect(plan(w.db, ID)).toMatchObject({ step: 2, state: 'running', retries: 0 })
+
+  await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  expect((await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0])
+    .toMatchObject({ step: 3, outcome: 'refuse', state: 'blocked_on_ceo' })
+  expect(plan(w.db, ID).state).toBe('blocked_on_ceo')
+  expect(get(w.root, ID, 'refusal.md')).toContain(WHY.repeat)
+  expect(w.db.prepare('SELECT count(*) AS n FROM refusals WHERE plan = ? AND blip = 0').get(ID)).toEqual({ n: 2 })
 })
 
 test('a tree a tick stopped mid-merge in commits no conflict marker at the rails', async () => {

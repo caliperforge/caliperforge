@@ -2,7 +2,7 @@ import { realpathSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
 import type { Packet, Provider, Refusal } from '../providers/kind.ts'
 import type { Db } from '../store/index.ts'
-import { observed } from '../store/lanes.ts'
+import { observed, wall } from '../store/lanes.ts'
 import { load, seat, tight, type Seat } from './rules.ts'
 
 /** The tick's own state inside a plan checkout. A seat writes the repository, never the machine's notes about it. */
@@ -59,7 +59,7 @@ export async function fire(
   const { manifest, prompt, hash } = seat(root, name)
   const plan = planRow(db)
   const transcript = join(root, '.cf/work', String(plan), 'step-2.transcript.jsonl')
-  const fired = await provider.fire(packet(manifest, prompt, tight(root), issue, cwd, transcript))
+  const fired = await provider.fire({ ...packet(manifest, prompt, tight(root), issue, cwd, transcript), wall: wall(db) })
   const row = db.prepare(`INSERT INTO runs
     (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_tokens, output_tokens, seconds, exit, transcript_path)
     VALUES (?, 2, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)

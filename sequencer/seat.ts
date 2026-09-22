@@ -6,7 +6,7 @@ import { judge, loadReviews } from '../reviews/bench.ts'
 import type { Verdict } from '../reviews/verdict.ts'
 import type { Db } from '../store/index.ts'
 import { filesOf } from '../store/files.ts'
-import { observed } from '../store/lanes.ts'
+import { observed, wall } from '../store/lanes.ts'
 import { builderRan, internal, type PlanRow } from '../store/plans.ts'
 import { byRun, pending } from '../store/transcript.ts'
 import type { Step } from '../templates/pr-path.ts'
@@ -91,9 +91,11 @@ async function ran(db: Db, root: string, plan: PlanRow, step: Step, provider: Pr
   issue: string, ours: boolean): Promise<Fired> {
   load(db, root)
   const { manifest, prompt, hash } = seat(root, step.runs)
-  const fired = await provider.fire(
-    packet(manifest, prompt, tight(root), issue, srcDir(root, plan.id),
-      transcriptOf(root, plan.id, step.step), ours, fenceFor(db, plan.id, manifest.write_paths)))
+  const fired = await provider.fire({
+    ...packet(manifest, prompt, tight(root), issue, srcDir(root, plan.id),
+      transcriptOf(root, plan.id, step.step), ours, fenceFor(db, plan.id, manifest.write_paths)),
+    wall: wall(db),
+  })
   const row = db.prepare(INSERT).run(plan.id, step.step, step.runs, hash, provider.name, manifest.model, manifest.effort,
     fired.usage.input, fired.usage.cache, fired.usage.output, fired.seconds, fired.exit, fired.transcript_path)
   byRun(db, Number(row.lastInsertRowid), fired.transcript_path)

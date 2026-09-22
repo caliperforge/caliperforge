@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { CAPPED, type Packet, type Provider } from '../providers/kind.ts'
 import { benchPacket, reviewManifest, type Review } from '../runner/packet.ts'
 import type { Db } from '../store/index.ts'
-import { observed } from '../store/lanes.ts'
+import { observed, wall } from '../store/lanes.ts'
 import { byRun } from '../store/transcript.ts'
 import { subdirs } from '../checks/tree.ts'
 import { read, type Verdict } from './verdict.ts'
@@ -61,7 +61,7 @@ interface Ran {
 
 async function ran(db: Db, root: string, name: string, plan: number, manifest: Review, provider: Provider,
   packet: Packet): Promise<Ran> {
-  const fired = await provider.fire(packet)
+  const fired = await provider.fire({ ...packet, wall: wall(db) })
   const outcome = read(fired.text, packet.prompt)
   const row = db.prepare(`INSERT INTO runs
     (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_tokens, output_tokens, seconds, exit, transcript_path)

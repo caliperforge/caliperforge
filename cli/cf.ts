@@ -11,7 +11,7 @@ import { CHAIN_MINUTES, dry, tick } from '../sequencer/index.ts'
 import { behind, upgraded } from '../sequencer/upgrade.ts'
 import { signoffs } from '../sequencer/signoff.ts'
 import { liveTree, SIGNOFF } from '../sequencer/workspace.ts'
-import { blocked, targetDigest } from '../sequencer/steps.ts'
+import { blocked, parked, targetDigest, WAITING } from '../sequencer/steps.ts'
 import { release } from '../store/holds.ts'
 import { dump, migrate, open as openDb, type Db } from '../store/index.ts'
 import { dial, hhmm, lanes, priority as setPriority, record, Reading, windows } from '../store/lanes.ts'
@@ -170,9 +170,11 @@ plan.argument('<id>').action((id: string) => {
   const row = handle.prepare('SELECT * FROM plans WHERE id = ?').get(Number(id))
   if (row === undefined) throw new Error(`no plan ${id}`)
   const plan = PlanRow.parse(row)
-  const why = blocked(handle, plan)
+  const code = blocked(handle, plan)
+  const why = code === null ? 'unblocked' : parked(handle, plan) ?? WAITING[code]
   const lease = holder(handle, plan.id)
-  out(`plan ${String(plan.id)}\t${plan.template}\tstep ${String(plan.step)}\t${plan.state}\tretries ${String(plan.retries)}\t${why ?? 'unblocked'}\n`)
+  out(`plan ${String(plan.id)}\t${plan.template}\tstep ${String(plan.step)}\t${plan.state}\tretries ${String(plan.retries)}\t${why}\n`)
+  out(`  waiting on ${plan.wait_reason === null ? '-' : `${plan.wait_reason}\t${WAITING[plan.wait_reason]}`}\n`)
   out(`  lease ${lease === null ? 'none' : `pid ${String(lease.pid)}\ttaken ${lease.taken_at}`}\n`)
   for (const r of runsOf(handle, plan.id)) {
     out(`  run ${String(r.id)}\tstep ${String(r.step)}\t${String(r.seat)}\texit ${String(r.exit)}\n`)

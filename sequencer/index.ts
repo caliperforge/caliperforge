@@ -5,7 +5,7 @@ import { hold } from '../store/holds.ts'
 import type { Db } from '../store/index.ts'
 import { clear as unlease, held, take, type Lease, type Taken } from '../store/leases.ts'
 import { cap, hhmm, zone } from '../store/lanes.ts'
-import { advance, back, finish, internal, live, needsCeo, openPipes, PlanRow, rewind, underCap, type PipeRow } from '../store/plans.ts'
+import { advance, back, finish, internal, live, needsCeo, openPipes, PlanRow, rewind, underCap, waiting, type PipeRow, type Wait } from '../store/plans.ts'
 import { blipped, fingerprint, overBudget, refused, WHY, type Why } from '../store/refusals.ts'
 import { at, last, type Step } from '../templates/pr-path.ts'
 import { capture } from './capture.ts'
@@ -27,12 +27,36 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
   read: (repo: string, no: number) => Pr = readPr, wire?: Wire, chain = 0): Promise<Fired[]> {
   for (const signal of capture(db, read)) started(db, signal, root)
   const out: Fired[] = []
-  for (const { pipe, plans } of working(offered(db, now), cap(db).cap)) {
+  const offers = offered(db, now)
+  const open = working(offers, cap(db).cap)
+  waited(db, offers, open, now)
+  for (const { pipe, plans } of open) {
     const mine = leased(db, plans, now)
     const laps = await Promise.all(mine.map((m) => one(db, root, pipe, m.plan, m.lease, provider, wire, chain)))
     out.push(...laps.flat())
   }
   return out
+}
+
+/**
+ * #140: every live plan on an open lane either takes a step this tick or records why it did not, so the
+ * reason is a stored fact and not a `blocked()` return the tick threw away. A plan it steps carries none.
+ */
+function waited(db: Db, offers: Offer[], open: Offer[], now: Date): void {
+  const leases = new Set(held(db, now).map((l) => l.plan))
+  const reached = new Set(open.map((o) => o.pipe.id))
+  const taken = new Set(open.flatMap((o) => o.plans.map((p) => p.id)))
+  waiting(db, offers.flatMap((o) => live(db, o.pipe).map((plan) => ({
+    plan: plan.id,
+    why: taken.has(plan.id) ? null : why(db, plan, leases, reached.has(o.pipe.id)),
+  }))))
+}
+
+/** Why this live plan is not being stepped, in the order the tick decides it. */
+function why(db: Db, plan: PlanRow, leases: Set<number>, reached: boolean): Wait {
+  if (leases.has(plan.id)) return 'leased'
+  if (!MAPPED.has(plan.template)) return 'no_step_map'
+  return blocked(db, plan) ?? (reached ? 'over_cap' : 'lane_over_cap')
 }
 
 /** The live tick's budget for one job: well inside the lease ceiling, and long enough for a whole lap short of CI. */
@@ -189,6 +213,7 @@ function ceilinged(db: Db, root: string, pipe: PipeRow, plan: PlanRow, over: { s
   const note = `spent ${million(over.spent)} tokens since a person last sent it round, past the ${million(over.ceiling)} ceiling`
   put(root, plan.id, 'refusal.md', `${maybe(root, plan.id, 'refusal.md') ?? ''}\n# Stopped\n\n${note}.\n`)
   needsCeo(db, plan)
+  waiting(db, [{ plan: plan.id, why: 'token_ceiling' }])
   const step = at(plan.step)
   return { pipe: pipe.name, plan: plan.id, step: step.step, name: step.name, outcome: 'refuse',
     state: 'blocked_on_ceo', spans: ['ceiling'], note, stole: lease.stole }

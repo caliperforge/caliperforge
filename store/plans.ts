@@ -12,6 +12,15 @@ export const PipeRow = z.object({
 
 export type PipeRow = z.infer<typeof PipeRow>
 
+/**
+ * #140: why the tick is not stepping this plan. The store checks the list, so a reason outside it is
+ * refused on the way in rather than read back by #141's router or the #139 orchestrator as a surprise.
+ */
+export const WAIT = ['ceo_batch', 'target_approval', 'ready_proof', 'target_parked', 'token_ceiling',
+  'leased', 'over_cap', 'lane_over_cap', 'no_step_map'] as const
+
+export type Wait = typeof WAIT[number]
+
 export const PlanRow = z.object({
   id: z.int(),
   pipe_id: z.int(),
@@ -26,6 +35,7 @@ export const PlanRow = z.object({
   lane: z.enum(['machine', 'atelier', 'comms', 'research']).nullable(),
   seat: z.string().nullable(),
   origin: z.string().nullable(),
+  wait_reason: z.enum(WAIT).nullable(),
 })
 
 export type PlanRow = z.infer<typeof PlanRow>
@@ -87,6 +97,14 @@ export function underCap(pipe: PipeRow, plans: PlanRow[], leased = new Set<numbe
 /** Whether a builder has ever run on this plan: a rewind onto step 1 finds the ticket it was built against, not a fresh one. */
 export function builderRan(db: Db, plan: number): boolean {
   return db.prepare('SELECT 1 FROM runs WHERE plan = ? AND step >= 2').get(plan) !== undefined
+}
+
+/** #140: a plan the tick stepped carries no reason; one it passed over carries why, from the list the store checks. */
+export function waiting(db: Db, rows: { plan: number; why: Wait | null }[]): void {
+  const set = db.prepare('UPDATE plans SET wait_reason = ? WHERE id = ?')
+  db.transaction(() => {
+    for (const row of rows) set.run(row.why, row.plan)
+  })()
 }
 
 export function advance(db: Db, plan: PlanRow, step: number): void {

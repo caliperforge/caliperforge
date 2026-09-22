@@ -5,7 +5,7 @@ import { expect, test } from 'vitest'
 import { day, halted, open as openPlans, runsOf, verdictsOf } from '../../cli/brief.ts'
 import { measure, type Read } from '../../cli/measure.ts'
 import { account, parse } from '../../cli/queue.ts'
-import { clock, inWindow, underCap, type PipeRow, type PlanRow } from '../../store/plans.ts'
+import { clock, inWindow, underCap, waiting, type PipeRow, type PlanRow, type Wait } from '../../store/plans.ts'
 import { at, steps } from '../../templates/pr-path.ts'
 import { tick } from '../index.ts'
 import { blocked, kernel } from '../steps.ts'
@@ -22,7 +22,7 @@ const pipe = (over: Partial<PipeRow>): PipeRow =>
   ({ id: 1, name: 'pr-path', enabled: 1, window_start: '09:00', window_end: '17:00', max_concurrent: 1, ...over })
 const row = (over: Partial<PlanRow>): PlanRow =>
   ({ id: 1, pipe_id: 1, target_id: 1, template: 'pr_path', state: 'queued', queued_at: '', step: 0, retries: 0,
-    head_digest: null, priority: 1, lane: null, seat: null, origin: null, ...over })
+    head_digest: null, priority: 1, lane: null, seat: null, origin: null, wait_reason: null, ...over })
 
 test('on a stranger\'s repo the builder is the outside seat and may write only the brief\'s files', async () => {
   const w = world()
@@ -89,21 +89,32 @@ test('an off pipe fires nothing', async () => {
   expect(await tick(w.db, w.root, stub(CARRIED))).toEqual([])
 })
 
-test('step 1 is blocked until cf approve target writes the row', async () => {
+test('step 1 is blocked until cf approve target writes the row, and the plan records what it waits on', async () => {
   const w = world()
   expect(await tick(w.db, w.root, stub(CARRIED))).toHaveLength(1)
   expect(plan(w.db, 1).step).toBe(1)
+  expect(plan(w.db, 1).wait_reason).toBeNull()
   expect(await tick(w.db, w.root, stub(CARRIED))).toEqual([])
+  expect(plan(w.db, 1).wait_reason).toBe('target_approval')
   approve(w.db, w.target)
   expect(blocked(w.db, plan(w.db, 1))).toBeNull()
 })
 
-test('a parked target holds its plan; a cold pulse alone holds nothing', async () => {
+test('a parked target holds its plan and says so in the row; a cold pulse alone holds nothing', async () => {
   const w = world('cold')
-  expect(blocked(w.db, plan(w.db, 1))).toMatch(/is parked/)
+  expect(blocked(w.db, plan(w.db, 1))).toBe('target_parked')
   expect(await tick(w.db, w.root, stub(CARRIED))).toEqual([])
+  expect(plan(w.db, 1).wait_reason).toBe('target_parked')
   w.db.prepare("UPDATE targets SET state = 'ready' WHERE id = 1").run()
   expect(blocked(w.db, plan(w.db, 1))).toBeNull()
+  expect(await tick(w.db, w.root, stub(CARRIED))).toHaveLength(1)
+  expect(plan(w.db, 1).wait_reason).toBeNull()
+})
+
+test('#140: the store takes only the reasons it lists', () => {
+  const w = world('cold')
+  expect(() => { waiting(w.db, [{ plan: 1, why: 'because i said so' as Wait }]) }).toThrow(/CHECK constraint/)
+  expect(plan(w.db, 1).wait_reason).toBeNull()
 })
 
 test('old account evidence holds no plan; queueing still wants a fresh row, which cf queue add measures', () => {

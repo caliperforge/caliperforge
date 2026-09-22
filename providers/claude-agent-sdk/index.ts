@@ -1,6 +1,6 @@
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
-import { query, type HookInput, type SDKRateLimitInfo, type SDKResultMessage, type SyncHookJSONOutput } from '@anthropic-ai/claude-agent-sdk'
+import { query, type HookInput, type SDKMessage, type SDKRateLimitInfo, type SDKResultMessage, type SyncHookJSONOutput } from '@anthropic-ai/claude-agent-sdk'
 import type { Reading } from '../../store/lanes.ts'
 import { credential } from '../credential.ts'
 import { bare, type Fired, type Packet, type Provider } from '../kind.ts'
@@ -19,6 +19,7 @@ async function fire(packet: Packet): Promise<Fired> {
   const started = Date.now()
   const refused: string[] = []
   const limits: Reading[] = []
+  const spent = { tokens: 0 }
   const transcript = openTranscript(packet)
   const run = query({
     prompt: packet.prompt,
@@ -33,7 +34,8 @@ async function fire(packet: Packet): Promise<Fired> {
       settingSources: [],
       permissionMode: 'default',
       hooks: { PreToolUse: [{ hooks: [(input) => {
-        const decision = gate(packet, input)
+        const over = walled(packet.wall, spent.tokens)
+        const decision = over === null ? gate(packet, input) : stop(over)
         if (decision.stopReason !== undefined) refused.push(decision.stopReason)
         return Promise.resolve(decision)
       }] }] },
@@ -41,10 +43,33 @@ async function fire(packet: Packet): Promise<Fired> {
   })
   for await (const message of run) {
     transcript(message)
+    spent.tokens += turn(message)
     if (message.type === 'rate_limit_event') limits.push(...readings(message.rate_limit_info, new Date().toISOString()))
     if (message.type === 'result') return { ...fired(message, started, refused), limits, transcript_path: packet.transcript }
   }
   throw new Error('claude-agent-sdk closed without a result message')
+}
+
+/**
+ * #148: the wall is read before the tool call that would feed another turn to the model, never after the
+ * bill. A runaway run is tool-driven, so this is the seam every extra turn passes through; a run that spends
+ * its wall inside one turn still stops at the next one, which is the earliest any brake can act.
+ */
+export function walled(wall: number | undefined, spent: number): string | null {
+  if (wall === undefined || spent < wall) return null
+  return `ruling:run.token_wall stopped the run at ${million(spent)} tokens, past the ${million(wall)} wall`
+}
+
+/** What a turn added to the bill, counted the way `runs` counts it: a cache read is spend. */
+function turn(message: SDKMessage): number {
+  if (message.type !== 'assistant') return 0
+  const used = message.message.usage
+  return used.input_tokens + (used.cache_read_input_tokens ?? 0)
+    + (used.cache_creation_input_tokens ?? 0) + used.output_tokens
+}
+
+function million(n: number): string {
+  return `${(n / 1e6).toFixed(1)}M`
 }
 
 const WINDOWS = ['five_hour', 'seven_day'] as const

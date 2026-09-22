@@ -80,6 +80,11 @@ export function hhmm(db: Db, now: Date = new Date()): string {
   return clock(now, zone(db))
 }
 
+/** #148: what one run may spend before it stops. Under `plan.token_ceiling`, so it is the brake that acts first. */
+export function wall(db: Db): number {
+  return count(db, 'run.token_wall')
+}
+
 export function cap(db: Db): LaneCap {
   return LaneCap.parse(db.prepare('SELECT dial, band, ceiling, cap FROM lane_cap').get())
 }

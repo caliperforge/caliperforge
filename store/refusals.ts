@@ -7,7 +7,7 @@ export const ROUNDS = 6
 /** Failed checkouts in a row before a blip is treated as a fault. */
 export const BLIPS = 3
 
-export type Why = 'again' | 'repeat' | 'unchanged' | 'spent' | 'blips'
+export type Why = 'again' | 'shared' | 'repeat' | 'unchanged' | 'spent' | 'blips'
 
 export interface Refused {
   plan: number
@@ -30,14 +30,18 @@ export function fingerprint(step: number, spans: string[], output = ''): string 
 }
 
 /**
- * Records the refusal and says whether the plan goes round again. It stops on a refusal it has
- * already had, on a build that changed nothing since the last refusal, and past `ROUNDS`.
+ * Records the refusal and says whether the plan goes round again. It stops on a refusal another job
+ * took within a day (the fault is on main, and no build here can fix it), on one it has already had,
+ * on a build that changed nothing since the last refusal, and past `ROUNDS`.
  */
 export function refused(db: Db, r: Refused): Why {
   const prior = db.prepare('SELECT fingerprint, diff FROM refusals WHERE plan = ? AND cleared = 0 AND blip = 0 ORDER BY id')
     .all(r.plan) as { fingerprint: string; diff: string | null }[]
   db.prepare('INSERT INTO refusals (plan, step, fingerprint, diff, blip) VALUES (?, ?, ?, ?, 0)')
     .run(r.plan, r.step, r.fingerprint, r.diff)
+  const elsewhere = db.prepare(`SELECT 1 FROM refusals WHERE fingerprint = ? AND plan <> ? AND cleared = 0 AND blip = 0
+    AND julianday(at) > julianday('now', '-1 day')`).get(r.fingerprint, r.plan)
+  if (elsewhere !== undefined) return 'shared'
   if (prior.some((p) => p.fingerprint === r.fingerprint)) return 'repeat'
   if (r.diff !== null && prior.at(-1)?.diff === r.diff) return 'unchanged'
   return prior.length + 1 >= ROUNDS ? 'spent' : 'again'
@@ -52,12 +56,27 @@ export function blipped(db: Db, plan: number, step: number): Why {
   return (run === -1 ? rows.length : run) + 1 >= BLIPS ? 'blips' : 'again'
 }
 
+/**
+ * CEO 09-21: a job halts past the token ceiling. The count starts again when a person sends it round,
+ * so it is every run since the latest refusal a person cleared.
+ */
+export function overBudget(db: Db, plan: number): { spent: number; ceiling: number } | null {
+  const row = db.prepare(`SELECT
+      (SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'plan.token_ceiling') AS ceiling,
+      (SELECT coalesce(sum(r.input_tokens + r.cache_tokens + r.output_tokens), 0) FROM runs r
+        WHERE r.plan = ? AND julianday(r.at) > coalesce(
+          (SELECT max(julianday(f.at)) FROM refusals f WHERE f.plan = ? AND f.cleared = 1), 0)) AS spent`)
+    .get(plan, plan) as { ceiling: number | null; spent: number }
+  return row.ceiling !== null && row.spent >= row.ceiling ? { spent: row.spent, ceiling: row.ceiling } : null
+}
+
 /** A person sent the plan round again: what it was refused for before no longer counts against it. */
 export function clear(db: Db, plan: number): void {
   db.prepare('UPDATE refusals SET cleared = 1 WHERE plan = ?').run(plan)
 }
 
 export const WHY: Record<Exclude<Why, 'again'>, string> = {
+  shared: 'another job was refused for the same failure within a day, so the fault is on main and this lane is off until a person looks',
   repeat: 'the same refusal came back, so another round would repeat it',
   unchanged: 'the build changed nothing since the last refusal',
   spent: `the plan has had ${String(ROUNDS)} refusals`,

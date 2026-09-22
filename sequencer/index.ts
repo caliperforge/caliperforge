@@ -6,7 +6,7 @@ import type { Db } from '../store/index.ts'
 import { clear as unlease, held, take, type Lease, type Taken } from '../store/leases.ts'
 import { cap, hhmm, zone } from '../store/lanes.ts'
 import { advance, back, finish, internal, live, needsCeo, openPipes, PlanRow, rewind, underCap, type PipeRow } from '../store/plans.ts'
-import { blipped, fingerprint, refused, WHY, type Why } from '../store/refusals.ts'
+import { blipped, fingerprint, overBudget, refused, WHY, type Why } from '../store/refusals.ts'
 import { at, last, type Step } from '../templates/pr-path.ts'
 import { capture } from './capture.ts'
 import type { Fired, Outcome } from './kind.ts'
@@ -137,6 +137,9 @@ function onward(db: Db, pipe: PipeRow, id: number): PlanRow | null {
 /** `wait` is a step that settled by waiting: a CI still running, or a checkout the network failed. Neither is worth asking again in the same tick. */
 async function stepped(db: Db, root: string, pipe: PipeRow, plan: PlanRow, lease: Taken,
   provider: Provider, wire?: Wire): Promise<{ fired: Fired; wait: boolean }> {
+  const fires = at(plan.step).fires
+  const over = fires === 'brief' || fires === 'seat' || fires === 'review' ? overBudget(db, plan.id) : null
+  if (over !== null) return { fired: ceilinged(db, root, pipe, plan, over, lease), wait: true }
   const tree = workspace(db, root, plan)
   const step = at(plan.step, tree.language)
   const made = tree.failed ?? await fire(db, root, plan, step, provider, wire)
@@ -154,6 +157,18 @@ async function stepped(db: Db, root: string, pipe: PipeRow, plan: PlanRow, lease
     stole: lease.stole,
   }
   return { fired, wait: outcome.held === true || outcome.blip === true }
+}
+
+/** The job stops before its next model run, with what it spent written where a person will read it. */
+function ceilinged(db: Db, root: string, pipe: PipeRow, plan: PlanRow, over: { spent: number; ceiling: number },
+  lease: Taken): Fired {
+  const million = (n: number): string => `${(n / 1e6).toFixed(1)}M`
+  const note = `spent ${million(over.spent)} tokens since a person last sent it round, past the ${million(over.ceiling)} ceiling`
+  put(root, plan.id, 'refusal.md', `${maybe(root, plan.id, 'refusal.md') ?? ''}\n# Stopped\n\n${note}.\n`)
+  needsCeo(db, plan)
+  const step = at(plan.step)
+  return { pipe: pipe.name, plan: plan.id, step: step.step, name: step.name, outcome: 'refuse',
+    state: 'blocked_on_ceo', spans: ['ceiling'], note, stole: lease.stole }
 }
 
 /**
@@ -222,6 +237,7 @@ function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcom
   const why = refused(db, { plan: plan.id, step: step.step, fingerprint: fingerprintOf(step, outcome),
     diff: step.step >= 3 ? digestOf(diffOf(root, plan.id)) : null })
   if (why !== 'again') stopped(root, plan.id, why)
+  if (why === 'shared') db.prepare('UPDATE pipes SET enabled = 0 WHERE id = ?').run(plan.pipe_id)
   return back(db, plan, outcome.to ?? backTo(step), why !== 'again')
 }
 

@@ -2,8 +2,10 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
+import { record } from '../../store/files.ts'
 import { checks, type Run } from '../checks.ts'
 import { tick } from '../index.ts'
+import { narrow } from '../rails.ts'
 import { get } from '../workspace.ts'
 import { approve, CARRIED, internalPlan, ours, plan, stub, TYPESCRIPT, world, type World } from './world.ts'
 
@@ -69,7 +71,7 @@ function mine(scripts: Record<string, string>): World {
 test('the three scripts run in order and stop at the first non-zero exit, which the failure names', () => {
   const all = recorder('run lint')
   const src = tree({ 'package.json': pkg({ typecheck: 'tsc --noEmit', lint: 'eslint .', test: 'vitest run' }) })
-  expect(checks(src, all.run)).toEqual({ command: 'npm run lint', code: 2, output: 'boom', retried: false })
+  expect(checks(src, all.run)).toEqual({ script: 'lint', command: 'npm run lint', code: 2, output: 'boom', retried: false })
   expect(all.seen).toEqual(['run typecheck', 'run lint'])
 
   const some = recorder()
@@ -99,7 +101,7 @@ test('a timeout-only failure runs the command once more, and the second run is t
 test('an assertion failure is refused on the first run and never retried', () => {
   const once = replies({ code: 1, output: ASSERTED }, { code: 0, output: '' })
   expect(checks(tree(ONE), once.run))
-    .toEqual({ command: 'npm run test', code: 1, output: ASSERTED, retried: false })
+    .toEqual({ script: 'test', command: 'npm run test', code: 1, output: ASSERTED, retried: false })
   expect(once.seen).toEqual(['run test'])
 })
 
@@ -114,7 +116,7 @@ test('a failure the output does not account for as load is refused on the first 
 test('load-only on both runs is refused with the second run, and the note names the retry', async () => {
   const both = replies({ code: 1, output: TIMEOUT }, { code: 7, output: BOUND })
   expect(checks(tree(ONE), both.run))
-    .toEqual({ command: 'npm run test', code: 7, output: BOUND, retried: true })
+    .toEqual({ script: 'test', command: 'npm run test', code: 7, output: BOUND, retried: true })
 
   const w = mine(NAPPING)
   for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED))
@@ -125,6 +127,54 @@ test('load-only on both runs is refused with the second run, and the note names 
   expect(get(w.root, ID, 'refusal.md')).toContain('after one retry')
 }, SLOW)
 
+test('#77: a narrow list runs the tests it can reach, and only in place of a vitest suite', () => {
+  const some = recorder()
+  const src = tree({ 'package.json': pkg({ typecheck: 'tsc --noEmit', lint: 'eslint .', test: 'vitest run' }) })
+  expect(checks(src, some.run, ['store/plans.ts', 'store/lanes.ts'])).toBeNull()
+  expect(some.seen).toEqual(['run typecheck', 'run lint', 'exec -- vitest related --run store/plans.ts store/lanes.ts'])
+
+  const whole = recorder()
+  expect(checks(src, whole.run, [])).toBeNull()
+  expect(whole.seen).toEqual(['run typecheck', 'run lint', 'run test'])
+
+  const jest = recorder()
+  expect(checks(tree({ 'package.json': pkg({ test: 'jest' }) }), jest.run, ['a.ts'])).toBeNull()
+  expect(jest.seen).toEqual(['run test'])
+})
+
+test('#77: a narrow run that fails is still named by the script, not by the last path it was given', () => {
+  const red = recorder('exec -- vitest related --run store/plans.ts')
+  const src = tree({ 'package.json': pkg({ test: 'vitest run' }) })
+  expect(checks(src, red.run, ['store/plans.ts'])).toMatchObject({ script: 'test', code: 2 })
+})
+
+const HASH = '0'.repeat(64)
+
+/** A step-2 run row, which is all `narrow` reads to tell a first build from a rebuild. */
+function built(w: World, at: number): void {
+  w.db.prepare(`INSERT OR IGNORE INTO rules (id, kind, path, content_hash, loaded_at)
+    VALUES ('typescript_specialist', 'card', 'rules/roster.yaml', ?, '2026-09-22T00:00:00.000Z')`).run(HASH)
+  w.db.prepare(`INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort,
+    input_tokens, cache_tokens, output_tokens, seconds, exit, transcript_path)
+    VALUES (1, 2, 'typescript_specialist', ?, 'anthropic-api', 'm', 'low', 0, 0, 0, 0, 0, ?)`)
+    .run(HASH, `step-2.${String(at)}.transcript.jsonl`)
+}
+
+test('#77: the first build is judged by the whole suite; a rebuild by what its own files reach', () => {
+  const w = world()
+  const row = plan(w.db, 1)
+  record(w.db, 1, [{ path: 'store/plans.ts', is_new: false }, { path: 'store/lanes.ts', is_new: false }])
+
+  expect(narrow(w.db, row)).toEqual([])
+  built(w, 1)
+  expect(narrow(w.db, row)).toEqual([])
+  built(w, 2)
+  expect(narrow(w.db, row)).toEqual(['store/plans.ts', 'store/lanes.ts'])
+
+  record(w.db, 1, [])
+  expect(narrow(w.db, row)).toEqual([])
+})
+
 test('a checkout with no package.json runs no command', () => {
   const none = recorder()
   expect(checks(tree({ 'readme.md': '# no scripts here\n' }), none.run)).toBeNull()
@@ -134,7 +184,7 @@ test('a checkout with no package.json runs no command', () => {
 test('npm ci runs for a lock file with no node_modules, and its own failure refuses the same way', () => {
   const files = { 'package.json': pkg({ test: 'vitest run' }), 'package-lock.json': '{}' }
   const fresh = recorder('ci')
-  expect(checks(tree(files), fresh.run)).toEqual({ command: 'npm ci', code: 2, output: 'boom', retried: false })
+  expect(checks(tree(files), fresh.run)).toEqual({ script: 'ci', command: 'npm ci', code: 2, output: 'boom', retried: false })
   expect(fresh.seen).toEqual(['ci'])
 
   const installed = recorder()

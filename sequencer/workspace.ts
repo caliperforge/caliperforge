@@ -218,8 +218,40 @@ function git(cwd: string, args: string[]): string {
   return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024 })
 }
 
+/** The builder's work, saved across a re-cut. Between the two checkouts it is the only copy of it. */
+export const CARRY = 'step-2.diff.prev'
+
+/**
+ * #162. A conflicting merge used to abort back onto the old base and hand the builder that same stale
+ * tree, so the rebuild edited its own old file and the next merge met the same conflict: plan 62 went
+ * round five times on 09-21 at 300-470k a lap. Handing main's version alongside is not enough -- git
+ * still has two changes to the same lines. The base has to move. So the builder's diff is saved, the
+ * checkout is dropped, and the next tick cuts a new one from main for that diff to be re-applied onto.
+ */
+export function recut(root: string, plan: number): string {
+  const diff = diffOf(root, plan)
+  put(root, plan, CARRY, diff)
+  drop(root, plan, 'base.sha')
+  drop(root, plan, 'base.merged')
+  rmSync(srcDir(root, plan), { recursive: true, force: true })
+  return diff
+}
+
+/**
+ * The saved diff, while the new checkout holds nothing of its own: the work still to be re-applied.
+ * The file is not deleted once it has been -- a checkout that holds the work answers for itself here,
+ * and the carried copy stays as the record of what crossed the re-cut, like the rest of a plan's paper.
+ */
+export function carried(root: string, plan: number): string | null {
+  return live(root, plan).trim() === '' ? maybe(root, plan, CARRY) : null
+}
+
 /** Without a real checkout the workspace starts empty, so every file in it is an addition. */
 export function diffOf(root: string, plan: number): string {
+  return carried(root, plan) ?? live(root, plan)
+}
+
+function live(root: string, plan: number): string {
   const src = srcDir(root, plan)
   const base = maybe(root, plan, 'base.sha')
   if (base !== null && cloned(src)) return gitDiff(src, base.trim())

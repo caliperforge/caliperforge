@@ -15,7 +15,7 @@ import { handout, touched, type Handed } from './handout.ts'
 import { install } from './checks.ts'
 import { fenceFor } from './route.ts'
 import type { Outcome } from './kind.ts'
-import { cloned, diffOf, diffSince, drop, get, maybe, move, planDir, put, snapshot, srcDir } from './workspace.ts'
+import { carried, cloned, diffOf, diffSince, drop, get, maybe, move, planDir, put, snapshot, srcDir } from './workspace.ts'
 
 const INSERT = `INSERT INTO runs
   (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_tokens, output_tokens, seconds, exit, transcript_path)
@@ -109,7 +109,9 @@ function exited(step: Step, fired: Fired): Outcome {
 
 /**
  * The builder's packet (#67): the brief and the text of the files it lists; on a rebuild, the spans the
- * refusal named, the builder's own diff so far, and the text of only the files those two touch.
+ * refusal named, the builder's own diff so far, and the text of only the files those two touch. After a
+ * #162 re-cut the diff is the one carried across and the files are main's, so the packet says to
+ * re-apply rather than to carry on: the builder is looking at a tree that has none of its work in it.
  */
 function rebuild(db: Db, root: string, plan: PlanRow): string {
   const src = srcDir(root, plan.id)
@@ -118,8 +120,15 @@ function rebuild(db: Db, root: string, plan: PlanRow): string {
   if (refusal === null) return handed(issue, handout(src, listed(db, plan.id, issue)))
   const diff = diffOf(root, plan.id)
   const again = `${issue}\n\n# Refused — rebuild only these spans\n\n${refusal}`
-  const since = diff.trim() === '' ? again : `${again}\n\n# Your diff so far\n\n\`\`\`\`diff\n${diff}\n\`\`\`\``
+  const since = diff.trim() === '' ? again : `${again}\n\n# ${headed(root, plan.id)}\n\n\`\`\`\`diff\n${diff}\n\`\`\`\``
   return handed(since, handout(src, touched(diff, refusal)))
+}
+
+function headed(root: string, plan: number): string {
+  return carried(root, plan) === null
+    ? 'Your diff so far'
+    : 'Main moved and your work conflicted with it, so the checkout was cut again from main — '
+      + 'the files below are main\'s and hold none of your work. Re-apply this diff onto them'
 }
 
 /** The brief's files from the store, a new one left out, each with the lines the brief points it at. */

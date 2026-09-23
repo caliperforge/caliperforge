@@ -13,7 +13,7 @@ import type { Outcome } from './kind.ts'
 import { preReview } from './rails.ts'
 import { forkCi, headOf, land, opened, push, type Wire } from './push.ts'
 import { following } from './split.ts'
-import { abortMerge, behindMain, cloned, conflicted, diffOf, fetchMain, get, maybe, mergeMain, put, SELF, srcDir, unmerged } from './workspace.ts'
+import { abortMerge, behindMain, cloned, conflicted, diffOf, fetchMain, get, maybe, mergeMain, put, recut, SELF, srcDir, unmerged } from './workspace.ts'
 
 interface Target { repo: string; issue_no: number; state: string; measured_at: string; pulse: string }
 
@@ -111,7 +111,8 @@ function readyGate(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
  * budget those two count their one miss against. A conflict is the builder's to settle, so the
  * refusal names the unmerged paths and rewinds onto the build. A tick that stopped inside a merge
  * left that merge open, and its bytes were committed before it, so the abort loses nothing and this
- * tick merges again from the old base.
+ * tick merges again from the old base. #162: the rewind alone would hand the builder that same old
+ * base, so the checkout is cut again from main and the builder's diff carried across to be re-applied.
  */
 function freshBase(db: Db, root: string, plan: PlanRow): Outcome | null {
   const src = srcDir(root, plan.id)
@@ -121,7 +122,8 @@ function freshBase(db: Db, root: string, plan: PlanRow): Outcome | null {
   if (!behindMain(src)) return null
   const paths = takeMain(root, plan.id, src, main)
   if (paths === null) return null
-  return { outcome: 'refuse', spans: paths, note: 'main moved and the branch conflicts with it', rewind: 2 }
+  recut(root, plan.id)
+  return { outcome: 'refuse', spans: paths, note: 'main moved and the branch conflicts with it; cut again from main', rewind: 2 }
 }
 
 /**

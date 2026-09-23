@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
+import type { Narrowing } from '../runner/packet.ts'
 
 /** The plan's scratch checkout. No `plans/` segment: `runner/packet.ts:admits()` bars one from a reviewer cwd. */
 export function planDir(root: string, plan: number): string {
@@ -212,6 +213,30 @@ export function snapshot(dir: string): string {
 export function diffSince(dir: string, tree: string): string {
   git(dir, ['add', '-A', '--intent-to-add'])
   return git(dir, ['diff', tree])
+}
+
+/**
+ * The plan's diff read against the tree a reviewer judged. A path that moved but the plan's diff
+ * does not touch came in with main, not from the builder; a path the plan's diff names that did not
+ * move stands at the blob it had at that verdict.
+ */
+export function narrowing(dir: string, tree: string, base: string): Narrowing {
+  git(dir, ['add', '-A', '--intent-to-add'])
+  const moved = new Set(names(dir, tree))
+  const plan = names(dir, base)
+  return {
+    changed: plan.filter((path) => moved.has(path)),
+    merged: [...moved].filter((path) => !plan.includes(path)),
+    unchanged: plan.filter((path) => !moved.has(path)).map((path): [string, string] => [path, blob(dir, tree, path)]),
+  }
+}
+
+function names(dir: string, since: string): string[] {
+  return git(dir, ['diff', '--name-only', since]).split('\n').filter((path) => path !== '')
+}
+
+function blob(dir: string, tree: string, path: string): string {
+  return git(dir, ['ls-tree', tree, '--', path]).split(/\s+/)[2] ?? 'absent'
 }
 
 function git(cwd: string, args: string[]): string {

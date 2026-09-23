@@ -19,9 +19,11 @@ One verdict carries every finding you have. Each names the span a reader opens â
 every span goes in the fence; `class:` takes the most severe of them, and the prose names the other
 classes. Say what is wrong at each span and stop; you do not write the fix.
 
-On a re-read the packet carries `Your last verdict` and `Changed since your last verdict`. Answer
-that verdict finding by finding: fixed, or still standing, and did the fix break what it touched?
-A finding you raise on lines unchanged since that read says why you missed it then.
+On a re-read the packet carries `Your last verdict`, `Changed since your last verdict` and
+`Paths since your last verdict`, which is git's, not a claim. Judge the changed paths, and answer
+your last verdict finding by finding: fixed, or still standing, and did the fix break what it
+touched? You do not re-open a path git names unchanged; a span on one holds only under `reopen:`,
+naming the fact that changed your mind.
 
 Close with this fence and nothing after it:
 
@@ -31,7 +33,10 @@ outcome: refuse
 class: correctness
 spans:
   - path/to/file.ts:12
+reopen:
+  path/to/file.ts:12: the merge from main added a second caller
 ---
 ```
 
-`outcome` is `pass`, `refuse` or `needs_ceo`. A `pass` carries no class and no spans.
+`outcome` is `pass`, `refuse` or `needs_ceo`. A `pass` carries no class and no spans. `reopen:` is
+for spans on unchanged paths and nothing else; leave it out where you have none.

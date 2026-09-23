@@ -47,6 +47,41 @@ test('the review refuses the seeded defect naming the span, and passes the clean
   expect(clean.outcome).toMatchObject({ outcome: 'pass', spans: [], defect_class: null })
 })
 
+const TREE = 'c'.repeat(40)
+
+/** git's word on a second round: the builder moved `src/parse.ts` and left `src/stats.ts` where the reviewer judged it. */
+const FROZEN = { changed: ['src/parse.ts'], merged: [], unchanged: [['src/stats.ts', 'b'.repeat(40)]] }
+
+const PRIOR = (span: string): string => `---\noutcome: refuse\nclass: correctness\nspans:\n  - ${span}\n---\n\nthe median is wrong\n`
+const AGAIN = (reopen: string): string =>
+  `src/stats.ts:2 is still wrong\n\n---\noutcome: refuse\nclass: correctness\nspans:\n  - src/stats.ts:2\n${reopen}---\n`
+
+test('the verdict row carries the tree it judged, and takes nothing else for one', async () => {
+  const { db, plan } = bench(root)
+  const out = await judge(db, root, 'code_quality', plan, seeded({ tree: TREE }), replies(fixture('code_quality', 'clean.reply.md')), TRANSCRIPT)
+  expect(db.prepare('SELECT tree FROM verdicts WHERE id = ?').get(out.verdict)).toEqual({ tree: TREE })
+  expect(rejects(db, `UPDATE verdicts SET tree = 'not a tree' WHERE id = ${String(out.verdict)}`)).toBe(true)
+})
+
+test('a refusal on a path unchanged since this reviewer\'s last verdict leaves the fence for the prose', async () => {
+  const { db, plan } = bench(root)
+  const noted = await judge(db, root, 'code_quality', plan,
+    seeded({ prior: PRIOR('src/stats.ts:9'), narrowing: FROZEN }), replies(AGAIN('')), TRANSCRIPT)
+  expect(noted.outcome).toMatchObject({ outcome: 'pass', spans: [], defect_class: null, origin_kind: null, origin_ref: null })
+  expect(noted.outcome.message).toContain('Noted, not refused, unchanged since my last verdict:\n  - src/stats.ts:2')
+  expect(db.prepare('SELECT outcome FROM verdicts WHERE id = ?').get(noted.verdict)).toEqual({ outcome: 'pass' })
+})
+
+test('that same span still refuses under reopen, named by the last verdict, or off the unchanged set', async () => {
+  const { db, plan } = bench(root)
+  const outcome = async (input: Record<string, unknown>, reply: string): Promise<string> =>
+    (await judge(db, root, 'code_quality', plan, input, replies(reply), TRANSCRIPT)).outcome.outcome
+  expect(await outcome(seeded({ prior: PRIOR('src/stats.ts:9'), narrowing: FROZEN }),
+    AGAIN('reopen:\n  src/stats.ts:2: main merged a second caller that passes no name\n'))).toBe('refuse')
+  expect(await outcome(seeded({ prior: PRIOR('src/stats.ts:2'), narrowing: FROZEN }), AGAIN(''))).toBe('refuse')
+  expect(await outcome(seeded({ prior: PRIOR('src/stats.ts:9'), narrowing: { ...FROZEN, unchanged: [] } }), AGAIN(''))).toBe('refuse')
+})
+
 test('senior review reads the first verdict and names what the first verdict missed', async () => {
   const { db, plan } = bench(root)
   const sent: string[] = []

@@ -1,6 +1,6 @@
 import type { Fired, Provider } from '../providers/kind.ts'
 import { packet } from '../runner/index.ts'
-import { reviewManifest, type Bench } from '../runner/packet.ts'
+import { reviewManifest, type Bench, type Narrowing } from '../runner/packet.ts'
 import { load, seat, tight } from '../runner/rules.ts'
 import { judge, loadReviews } from '../reviews/bench.ts'
 import type { Verdict } from '../reviews/verdict.ts'
@@ -15,7 +15,7 @@ import { handout, touched, type Handed } from './handout.ts'
 import { install } from './checks.ts'
 import { fenceFor } from './route.ts'
 import type { Outcome } from './kind.ts'
-import { carried, cloned, diffOf, diffSince, drop, get, maybe, move, planDir, put, snapshot, srcDir } from './workspace.ts'
+import { carried, cloned, diffOf, diffSince, drop, get, maybe, move, narrowing, planDir, put, snapshot, srcDir } from './workspace.ts'
 
 const INSERT = `INSERT INTO runs
   (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_tokens, output_tokens, seconds, exit, transcript_path)
@@ -147,18 +147,18 @@ function handed(issue: string, files: string): string {
 export async function fireReview(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
   loadReviews(db, root)
   const manifest = reviewManifest(root, step.runs)
-  const mine = `step-${String(step.step)}`
+  const src = srcDir(root, plan.id)
   const input: Bench = {
-    repo: srcDir(root, plan.id),
+    repo: src,
     issue: get(root, plan.id, 'issue.md'),
     diff: diffOf(root, plan.id),
+    ...(cloned(src) ? { tree: snapshot(src) } : {}),
     ...(manifest.reads_verdict ? { verdict: priorVerdict(root, plan.id) } : {}),
-    ...rounds(root, plan.id, mine),
+    ...rounds(db, root, plan.id, step.step),
   }
   try {
     const { outcome } = await judge(db, root, step.runs, plan.id, input, provider, transcriptOf(root, plan.id, step.step))
-    put(root, plan.id, `${mine}.verdict.md`, verdictText(outcome))
-    keepTree(root, plan.id, mine)
+    put(root, plan.id, `step-${String(step.step)}.verdict.md`, verdictText(outcome))
     return { outcome: outcome.outcome, spans: outcome.spans, note: `${step.runs} ${outcome.outcome}`, message: outcome.message }
   } catch (error) {
     const note = error instanceof Error ? error.message : String(error)
@@ -166,18 +166,21 @@ export async function fireReview(db: Db, root: string, plan: PlanRow, step: Step
   }
 }
 
-/** From a reviewer's second round on: the verdict it wrote last round and what the tree did since. */
-function rounds(root: string, plan: number, mine: string): { prior?: string; since?: string } {
-  const last = maybe(root, plan, `${mine}.verdict.md`)
+/** From a reviewer's second round on: the verdict it wrote last round, and what the tree did since the one it judged. */
+function rounds(db: Db, root: string, plan: number, step: number): { prior?: string; since?: string; narrowing?: Narrowing } {
+  const last = maybe(root, plan, `step-${String(step)}.verdict.md`)
   if (last === null) return {}
-  const tree = maybe(root, plan, `${mine}.tree`)
+  const tree = judged(db, plan, step)
   if (tree === null) return { prior: last }
-  return { prior: last, since: diffSince(srcDir(root, plan), tree.trim()) }
+  const src = srcDir(root, plan)
+  return { prior: last, since: diffSince(src, tree), narrowing: narrowing(src, tree, get(root, plan, 'base.sha').trim()) }
 }
 
-function keepTree(root: string, plan: number, mine: string): void {
-  const src = srcDir(root, plan)
-  if (cloned(src)) put(root, plan, `${mine}.tree`, `${snapshot(src)}\n`)
+/** The tree the reviewer's own last verdict judged, off the row `judge()` wrote it on. */
+function judged(db: Db, plan: number, step: number): string | null {
+  const row = db.prepare("SELECT tree FROM verdicts WHERE plan = ? AND step = ? AND kind = 'review' ORDER BY id DESC LIMIT 1")
+    .get(plan, step) as { tree: string | null } | undefined
+  return row?.tree ?? null
 }
 
 function transcriptOf(root: string, plan: number, step: number): string {

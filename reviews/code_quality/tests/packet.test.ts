@@ -54,13 +54,20 @@ test('a fifth source is refused, and the first verdict only where the manifest r
   expect(benchPacket(root, 'code_quality', bench({ since: '+ a line since' }), TRANSCRIPT)).toMatchObject({ refusal: { path: 'since' } })
 })
 
-test('a re-review packet carries the reviewer its own last verdict and the diff since it, after the first one', () => {
-  const out = benchPacket(root, 'senior_review',
-    bench({ verdict: 'the first verdict', prior: 'my last verdict', since: '+ a line since' }), TRANSCRIPT)
+const BLOB = 'a'.repeat(40)
+
+test('a re-review packet carries the last verdict, the diff since it, then git on what did not move', () => {
+  const out = benchPacket(root, 'senior_review', bench({
+    verdict: 'the first verdict', prior: 'my last verdict', since: '+ a line since',
+    narrowing: { changed: ['src/stats.ts'], merged: ['src/main.ts'], unchanged: [['src/parse.ts', BLOB]] },
+  }), TRANSCRIPT)
   if ('refusal' in out) throw new Error(`refused: ${out.refusal.path}`)
   const prompt = out.packet.prompt
   expect(prompt.indexOf('# First verdict')).toBeLessThan(prompt.indexOf('# Your last verdict'))
-  expect(prompt.endsWith('\n\n# Your last verdict\n\nmy last verdict\n\n# Changed since your last verdict\n\n+ a line since')).toBe(true)
+  expect(prompt).toContain('\n\n# Your last verdict\n\nmy last verdict\n\n# Changed since your last verdict\n\n+ a line since')
+  expect(prompt.endsWith('\n\n# Paths since your last verdict\n\nchanged since the tree you judged:\n  - src/stats.ts\n\n'
+    + "merged from main, not the builder's:\n  - src/main.ts\n\n"
+    + `unchanged since you judged it, at the blob it had then:\n  - src/parse.ts ${BLOB}`)).toBe(true)
 })
 
 test('the reviewer manifest declares no write path, and holds no write or browse tool', () => {

@@ -194,8 +194,15 @@ export function cloned(dir: string): boolean {
 
 /** What the checkout is written in, by the directory a builder would have to work in. */
 export function languageOf(dir: string): string | null {
+  if (swift(dir)) return 'swift'
   for (const [sub, language] of LANGUAGES) if (existsSync(join(dir, sub))) return language
   return null
+}
+
+/** #43: an Xcode project or a Swift package at the checkout's root is a Swift tree. */
+function swift(dir: string): boolean {
+  if (existsSync(join(dir, 'Package.swift'))) return true
+  return existsSync(dir) && readdirSync(dir).some((name) => name.endsWith('.xcodeproj'))
 }
 
 /** Everything the builder changed, against the sha the branch was cut from. */

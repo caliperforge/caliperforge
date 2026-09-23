@@ -18,7 +18,9 @@ export const DEFAULT_BUILDER = 'typescript_specialist'
 
 const BRIEF_WRITER = 'brief_writer'
 
-const BUILDERS: Record<string, string> = { kotlin: 'kotlin_specialist', typescript: DEFAULT_BUILDER, outside: 'outside_specialist' }
+const BUILDERS: Record<string, string> = {
+  kotlin: 'kotlin_specialist', swift: 'swift_specialist', typescript: DEFAULT_BUILDER, outside: 'outside_specialist',
+}
 
 /** Which seat builds: the target's language picks it. */
 export function builder(language: string | null): string {

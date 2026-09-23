@@ -78,9 +78,10 @@ export function openPipes(db: Db, hhmm: string): PipeRow[] {
     .filter((p) => inWindow(p, hhmm))
 }
 
+/** Work already under way sorts first — `step = 0` is 1 for a plan not yet started — so a released plan waits behind no later P0. */
 export function live(db: Db, pipe: PipeRow): PlanRow[] {
-  return db.prepare("SELECT * FROM plans WHERE pipe_id = ? AND state IN ('queued', 'running') ORDER BY priority, queued_at, id")
-    .all(pipe.id).map((r) => PlanRow.parse(r))
+  return db.prepare(`SELECT * FROM plans WHERE pipe_id = ? AND state IN ('queued', 'running')
+    ORDER BY step = 0, priority, queued_at, id`).all(pipe.id).map((r) => PlanRow.parse(r))
 }
 
 /** A leased plan is mid-fire: it holds the slot it took whatever state the row is caught at. */

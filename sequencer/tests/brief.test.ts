@@ -3,7 +3,7 @@ import { join, relative } from 'node:path'
 import { expect, test } from 'vitest'
 import { walk } from '../../checks/tree.ts'
 import type { Packet } from '../../providers/kind.ts'
-import { release } from '../../store/holds.ts'
+import { release, returnToLane } from '../../store/holds.ts'
 import { get } from '../../store/lanes.ts'
 import { files, shape, unclear } from '../brief.ts'
 import { tick } from '../index.ts'
@@ -220,13 +220,29 @@ test('the first briefed plan waits on the coo at step 2, spends one read, and th
   expect(await tick(w.db, w.root, stub(CARRIED))).toEqual([])
 })
 
-test('released, the plan runs again and the next tick fires the builder', async () => {
+test('released, the plan is queued at step 2 and the next tick fires the builder', async () => {
   const w = await unread()
   await tick(w.db, w.root, stub(CARRIED))
 
   release(w.db, ID)
-  expect(plan(w.db, ID)).toMatchObject({ step: 2, state: 'running' })
+  expect(plan(w.db, ID)).toMatchObject({ step: 2, state: 'queued' })
   expect((await tick(w.db, w.root, stub(CARRIED)))[0]).toMatchObject({ step: 2, name: 'build', outcome: 'pass' })
+})
+
+test('cf return queues a blocked or halted plan at the step it holds, and refuses any other state', async () => {
+  const w = await unread()
+  await tick(w.db, w.root, stub(CARRIED))
+
+  returnToLane(w.db, ID)
+  expect(plan(w.db, ID)).toMatchObject({ step: 2, state: 'queued' })
+  for (const state of ['queued', 'running', 'done', 'refused'] as const) {
+    w.db.prepare('UPDATE plans SET state = ? WHERE id = ?').run(state, ID)
+    expect(() => { returnToLane(w.db, ID) }).toThrow(/plan 2 is neither blocked on the ceo nor halted/)
+    expect(plan(w.db, ID)).toMatchObject({ step: 2, state })
+  }
+  w.db.prepare("UPDATE plans SET state = 'halted' WHERE id = ?").run(ID)
+  returnToLane(w.db, ID)
+  expect(plan(w.db, ID)).toMatchObject({ step: 2, state: 'queued' })
 })
 
 test('release refuses a plan parked on the coo at step 1 and moves no row', async () => {

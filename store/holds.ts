@@ -17,8 +17,15 @@ export function hold(db: Db, plan: number, step: number): 'running' | 'blocked_o
   })()
 }
 
+/** Lifting a hold queues the plan and never runs it: the lane's width is what admits, in `picks` (`sequencer/index.ts:56`). */
 export function release(db: Db, plan: number): void {
-  const done = db.prepare("UPDATE plans SET state = 'running' WHERE id = ? AND step = 2 AND state = 'blocked_on_ceo'")
+  const done = db.prepare("UPDATE plans SET state = 'queued' WHERE id = ? AND step = 2 AND state = 'blocked_on_ceo'")
     .run(plan)
   if (done.changes === 0) throw new Error(`plan ${String(plan)} is not a brief waiting on the coo's read`)
+}
+
+export function returnToLane(db: Db, plan: number): void {
+  const done = db.prepare("UPDATE plans SET state = 'queued' WHERE id = ? AND state IN ('blocked_on_ceo', 'halted')")
+    .run(plan)
+  if (done.changes === 0) throw new Error(`plan ${String(plan)} is neither blocked on the ceo nor halted`)
 }

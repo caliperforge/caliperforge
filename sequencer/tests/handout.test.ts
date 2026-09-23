@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import type { Packet, Provider } from '../../providers/kind.ts'
-import { pointed } from '../brief.ts'
+import { pointed, STANDING } from '../brief.ts'
 import { handout, WHOLE } from '../handout.ts'
 import { tick } from '../index.ts'
 import { approve, CARRIED, PASS, stub, world, type World } from './world.ts'
@@ -19,7 +19,11 @@ const BRIEF = ['# hello', '',
   '## Cases', '', '- D1 add `hello()` in `src/hello.ts`', '- D2 a call with no name is refused', '',
   '## Must not break', '', '- the exports already in the file', '',
   '## Files', '', '- `src/hello.ts`, `src/bye.ts:1`', '',
-  '## Out of scope', '', '- everything the ask does not name', ''].join('\n')
+  '## Files to read', '', '- src/hello.ts — what it exports today', '',
+  '## Who else reads what this changes', '', '- nobody else: the ask names these files', '',
+  '## Tests', '', '- src/hello.ts — a call with no name is refused', '',
+  '## Out of scope', '', '- everything the ask does not name', '',
+  '## Standing', '', ...STANDING, ''].join('\n')
 
 const LONG = ['function a(): number {', '  return 1', '}', '',
   ...[...Array(WHOLE).keys()].map((i) => `const filler${String(i)} = ${String(i)}`), '',

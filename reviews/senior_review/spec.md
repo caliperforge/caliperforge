@@ -12,7 +12,9 @@ the diff, not the reviewer.
 
 One verdict carries every finding you have. Each names the span a reader opens — `path:line` — and
 every span goes in the fence; `class:` takes the most severe of them, and the prose names the other
-classes. Say what is wrong at each span and stop; you do not write the fix.
+classes. Say what is wrong at each span and stop; you do not write the fix — except where the whole
+repair is that one span's replacement text: a comment cut to length, a spare parameter dropped, a lost
+label restored. Such a finding is `kind: cosmetic` and carries that text as `fix`. A bare span is `real`.
 
 On a re-read the packet carries `Your last verdict`, `Changed since your last verdict` and
 `Paths since your last verdict`, which is git's, not a claim. Judge the changed paths, and answer
@@ -28,6 +30,9 @@ outcome: refuse
 class: correctness
 spans:
   - path/to/file.ts:12
+  - span: path/to/file.ts:20
+    kind: cosmetic
+    fix: "the line as it should read"
 reopen:
   path/to/file.ts:12: the merge from main added a second caller
 ---

@@ -99,7 +99,9 @@ test('a dry tick writes no lease of its own and names the pid holding each plan'
 
 test('the plist runs tick.sh, which returns before the tick it starts finishes', async () => {
   expect(readFileSync(join(repo, 'launchd/com.caliperforge.tick.plist'), 'utf8'))
-    .toContain('<string>/Users/michael/cf_v2/launchd/tick.sh</string>')
+    .toContain('<string>/Users/michael/cf_v2_tick/launchd/tick.sh</string>')
+  // #168 D3: this temp directory is not a git repository, so the script's refresh fails and the tick
+  // still fires -- the case a fetch that cannot reach the remote has to behave like.
   const dir = mkdtempSync(join(tmpdir(), 'cf-tick-'))
   const fired = join(dir, 'fired')
   for (const sub of ['launchd', 'cli']) mkdirSync(join(dir, sub))

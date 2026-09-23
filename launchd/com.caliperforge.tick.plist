@@ -6,10 +6,11 @@
   <string>com.caliperforge.tick</string>
 
   <!-- launchd will not overlap its own job, so the job is the launcher and not the tick it starts. -->
+  <!-- #168: the pinned worktree, never /Users/michael/cf_v2, which is the tree people work in. -->
   <key>ProgramArguments</key>
   <array>
     <string>/bin/sh</string>
-    <string>/Users/michael/cf_v2/launchd/tick.sh</string>
+    <string>/Users/michael/cf_v2_tick/launchd/tick.sh</string>
   </array>
 
   <!-- Without this launchd kills the tick the launcher left running behind it. -->
@@ -17,7 +18,7 @@
   <true/>
 
   <key>WorkingDirectory</key>
-  <string>/Users/michael/cf_v2</string>
+  <string>/Users/michael/cf_v2_tick</string>
 
   <key>StartInterval</key>
   <integer>60</integer>

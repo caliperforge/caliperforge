@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 import { ready as readyRail, type Proof } from '../rails/ready/index.ts'
 import { record as recordRail } from '../rails/record.ts'
+import { record as recordMerge } from '../store/merges.ts'
 import { digestOf, gates, headDigest } from '../store/approvals.ts'
 import { approved as settle, built, gated, ready as readyRow, type Made, type Proven } from '../store/deliverables.ts'
 import { record as recordFiles } from '../store/files.ts'
@@ -13,7 +14,7 @@ import type { Outcome } from './kind.ts'
 import { preReview } from './rails.ts'
 import { forkCi, headOf, land, opened, push, type Wire } from './push.ts'
 import { following } from './split.ts'
-import { abortMerge, behindMain, cloned, conflicted, diffOf, fetchMain, get, maybe, mergeMain, put, recut, SELF, srcDir, unmerged } from './workspace.ts'
+import { abortMerge, behindMain, cloned, conflicted, diffOf, fetchMain, get, maybe, merging, mergeMain, put, recut, SELF, srcDir, unmerged } from './workspace.ts'
 
 interface Target { repo: string; issue_no: number; state: string; measured_at: string; pulse: string }
 
@@ -120,30 +121,36 @@ function freshBase(db: Db, root: string, plan: PlanRow): Outcome | null {
   if (conflicted(src)) abortMerge(src)
   const main = fetchMain(src)
   if (!behindMain(src)) return null
-  const paths = takeMain(root, plan.id, src, main)
+  const paths = takeMain(db, root, plan, src, main, at(plan.step).step)
   if (paths === null) return null
   recut(root, plan.id)
   return { outcome: 'refuse', spans: paths, note: 'main moved and the branch conflicts with it; cut again from main', rewind: 2 }
 }
 
 /**
- * The one merge, for step 3 and for the ready and batch gates. The builder's work is committed
+ * The one merge, for step 3 and for the ready and batch gates. #130: every merge leaves its two file
+ * sets and their overlap on the plan, whether it went through or conflicted -- data first, and #60
+ * part b is the decision that reads them. The builder's work is committed
  * first: a merge into a dirty tree is the one way main's bytes and the seat's could be lost against
  * each other -- and never over unmerged paths, or conflict markers are what the plan's bytes turn
  * out to be. A merge that cannot be made leaves the branch on its old base and answers with the
  * paths it stopped on.
  */
-function takeMain(root: string, plan: number, src: string, main: string): string[] | null {
+function takeMain(db: Db, root: string, plan: PlanRow, src: string, main: string, step: number): string[] | null {
   if (conflicted(src)) return unmerged(src)
-  headOf(root, plan)
+  headOf(root, plan.id)
+  const { incoming, mine } = merging(src, get(root, plan.id, 'base.sha').trim(), main)
+  const overlap = incoming.some((path) => mine.includes(path))
   try {
     mergeMain(src)
   } catch {
     const paths = unmerged(src)
     abortMerge(src)
+    recordMerge(db, plan.id, step, { main, incoming, mine, overlap })
     return paths
   }
-  put(root, plan, 'base.sha', `${main}\n`)
+  recordMerge(db, plan.id, step, { main, incoming, mine, overlap })
+  put(root, plan.id, 'base.sha', `${main}\n`)
   return null
 }
 
@@ -160,7 +167,7 @@ function baseMoved(db: Db, root: string, plan: PlanRow): Outcome | null {
   const main = fetchMain(src)
   if (!behindMain(src)) return null
   if (maybe(root, plan.id, 'base.merged') !== null) return cutAgain('base:stale', 'the branch is behind main a second time')
-  if (takeMain(root, plan.id, src, main) !== null) return cutAgain('base:conflict', 'the branch conflicts with main')
+  if (takeMain(db, root, plan, src, main, at(plan.step).step) !== null) return cutAgain('base:conflict', 'the branch conflicts with main')
   put(root, plan.id, 'base.merged', `${main}\n`)
   return { outcome: 'pass', spans: ['base:stale'], note: 'main moved; merged it and re-ran the rails', rewind: 3 }
 }

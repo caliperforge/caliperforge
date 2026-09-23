@@ -13,8 +13,8 @@ import { blocked, kernel } from '../steps.ts'
 import { diffOf, doneIds, narrowing, snapshot, srcDir } from '../workspace.ts'
 import { record } from '../../store/files.ts'
 import { benchPacket } from '../../runner/packet.ts'
-import type { Packet } from '../../providers/kind.ts'
-import { approve, built, CARRIED, dropping, internalPlan, KOTLIN, ours, owning, PASS, plan, REFUSE, RUN, runsAfter, runsOn, stub, watched, WORDS, world } from './world.ts'
+import type { Packet, Provider } from '../../providers/kind.ts'
+import { approve, builds, built, CARRIED, dropping, internalPlan, KOTLIN, ours, owning, PASS, plan, REFUSE, RUN, runsAfter, runsOn, stub, watched, WORDS, world } from './world.ts'
 
 const head = (cwd: string, args: string[]): string => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim()
 
@@ -228,6 +228,19 @@ const OWNS = owning(['src/parse.ts'])
 /** The first reviewer packet of a round: a builder's carries Write, a reviewer's is Read only. */
 const reviewer = (packets: Packet[]): string => packets.find((p) => !p.tools.includes('Write'))?.prompt ?? ''
 
+test('outside reviewer gets context and map; ours does not', async () => {
+  const w = world()
+  approve(w.db, w.target)
+  const packets: Packet[] = []
+  const inner = builds(() => { writeFileSync(join(srcDir(w.root, 1), 'src/hello.ts'), 'export const hello = (): string => "hello"\n') })
+  const seen: Provider = { ...inner, fire: (p) => { packets.push(p); return inner.fire(p) } }
+  for (let at = 0; at < 5; at += 1) await tick(w.db, w.root, seen)
+  const prompt = packets.find((p) => p.prompt.includes('\n# Diff\n'))?.prompt ?? ''
+  expect(prompt).toContain('# Changed code in context')
+  expect(prompt).toContain('# Files around the change')
+  expect(prompt.indexOf('# Changed code in context')).toBeGreaterThan(prompt.indexOf('# Diff'))
+})
+
 test('a reviewer gets its own last verdict, the diff since the tree it judged and what did not move, neither on its first', async () => {
   const w = world()
   w.db.prepare('DELETE FROM plans WHERE id = 1').run()
@@ -238,6 +251,7 @@ test('a reviewer gets its own last verdict, the diff since the tree it judged an
   const round1: Packet[] = []
   await tick(w.db, w.root, stub(OWNS, 0, REFUSE, (p) => round1.push(p)))
   expect(reviewer(round1)).not.toContain('# Your last verdict')
+  expect(reviewer(round1)).not.toContain('# Changed code in context')
 
   built(w.root, MINE, 'export const two = (): number => 2')
   const round2: Packet[] = []

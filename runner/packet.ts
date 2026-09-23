@@ -44,6 +44,8 @@ export const Bench = z.object({
   issue: z.string(),
   diff: z.string(),
   tree: z.string().optional(),
+  context: z.string().optional(),
+  map: z.string().optional(),
   verdict: z.string().optional(),
   prior: z.string().optional(),
   since: z.string().optional(),
@@ -84,6 +86,8 @@ export function benchPacket(
 
 function assembled(root: string, name: string, manifest: Review, bench: Bench, transcript: string): Packet {
   const sections: [string, string | undefined][] = [
+    ['Changed code in context', framed(bench.context, 'Each hunk inside the function that encloses it. Judge from this and the diff; open a file only for what neither holds.')],
+    ['Files around the change', framed(bench.map, 'Every file in each touched directory, its length and its head comment; * marks a changed file.')],
     ['First verdict', bench.verdict],
     ['Your last verdict', bench.prior],
     ['Changed since your last verdict', bench.since],
@@ -100,6 +104,10 @@ function assembled(root: string, name: string, manifest: Review, bench: Bench, t
     steps: STEP_CAP,
     refuse: (path) => refuse(bench.repo, manifest.write_paths, path),
   }
+}
+
+function framed(body: string | undefined, lead: string): string | undefined {
+  return body === undefined ? undefined : `${lead}\n\n${body}`
 }
 
 function statement(n: Narrowing | undefined): string | undefined {

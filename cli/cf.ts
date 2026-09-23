@@ -121,10 +121,12 @@ cf.command('measure').argument('<repo>', 'owner/repo to take the step 0 pulse of
 const queue = cf.command('queue')
 
 queue.command('add').argument('<repo>').argument('<issue-url>').option('--pipe <name>', 'pipe to queue on', 'pr-path')
+  .option('--part <slug>', 'one item of the issue: its own target, plan and branch; needs --ask')
   .option('--ask <file>', 'our target card: the job is this, their issue only its context')
   .option('--pr <file>', 'the body the pull request opens with')
-  .action((repo: string, url: string, options: { pipe: string; ask?: string; pr?: string }) => {
+  .action((repo: string, url: string, options: { pipe: string; ask?: string; pr?: string; part?: string }) => {
     const scope = {
+      ...(options.part === undefined ? {} : { part: options.part }),
       ...(options.ask === undefined ? {} : { card: readFileSync(options.ask, 'utf8') }),
       ...(options.pr === undefined ? {} : { pr: readFileSync(options.pr, 'utf8') }),
     }
@@ -137,9 +139,9 @@ queue.command('add').argument('<repo>').argument('<issue-url>').option('--pipe <
 queue.command('list').action(() => {
   const handle = db()
   out(laneLine(lanes(handle, hhmm(handle))))
-  const rows = handle.prepare(`SELECT t.id, t.repo, t.issue_no, t.state, t.named_merger, t.evidence_measured_at
+  const rows = handle.prepare(`SELECT t.id, t.repo, t.issue_no, t.part, t.state, t.named_merger, t.evidence_measured_at
     FROM targets t ORDER BY t.id`).all() as Record<string, string | number>[]
-  for (const r of rows) out(`${String(r.id)}\t${String(r.repo)}#${String(r.issue_no)}\t${String(r.state)}\t${String(r.named_merger)}\t${String(r.evidence_measured_at)}\n`)
+  for (const r of rows) out(`${String(r.id)}\t${String(r.repo)}#${String(r.issue_no)}${r.part === '' ? '' : ` ${String(r.part)}`}\t${String(r.state)}\t${String(r.named_merger)}\t${String(r.evidence_measured_at)}\n`)
 })
 
 const plan = cf.command('plan')

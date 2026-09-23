@@ -44,7 +44,11 @@ export function account(db: Db, repo: string, today: string): z.infer<typeof Acc
 export interface Scope {
   card?: string
   pr?: string
+  /** #181: one item of the issue, which the card scopes; its own target, plan and branch. */
+  part?: string
 }
+
+const PART = /^[a-z0-9][a-z0-9-]{0,31}$/
 
 /**
  * A target is queued however slowly the repo merges: the CEO picks targets, not the pulse, which is
@@ -53,6 +57,9 @@ export interface Scope {
  */
 export function add(db: Db, root: string, repo: string, url: string, pipe: string, today: string, scope: Scope = {}): Added {
   const no = parse(repo, url)
+  const part = scope.part ?? ''
+  if (part !== '' && !PART.test(part)) throw new Error(`part "${part}" is not a lowercase slug of at most 32 characters`)
+  if (part !== '' && scope.card === undefined) throw new Error('a part is one item of the issue; name it with --ask')
   const pulse = measured(db, repo, today)
   const row = readIssue(repo, no)
   const merger = lastMerger(repo)
@@ -61,12 +68,12 @@ export function add(db: Db, root: string, repo: string, url: string, pipe: strin
   const why = claim ?? shipped ?? (merger === null ? `${repo} has no named merger` : null)
   const state = why !== null ? 'refused' : 'ready'
   const origin = shipped !== null ? IMPLEMENTED : null
-  const target = upsert(db, pulse, repo, no, merger ?? '', state, url, ruling(db, origin, state))
+  const target = upsert(db, pulse, repo, no, part, merger ?? '', state, url, ruling(db, origin, state))
   if (why !== null) return { target, plan: null, state, why, origin }
   const plan = planFor(db, pipe, target)
   put(root, plan, 'ask.md', askOf(row, scope.card))
   if (scope.pr !== undefined) put(root, plan, 'pr.md', scope.pr)
-  return { target, plan, state, why: `${repo}#${String(no)} queued`, origin }
+  return { target, plan, state, why: `${repo}#${String(no)}${part === '' ? '' : ` ${part}`} queued`, origin }
 }
 
 export function askOf(row: Pick<Issue, 'title' | 'body'>, card: string | undefined): string {
@@ -92,14 +99,14 @@ function ruling(db: Db, origin: Origin | null, state: string): number | null {
   return row?.id ?? null
 }
 
-function upsert(db: Db, pulse: z.infer<typeof Account>, repo: string, no: number, merger: string, state: string, url: string, ruled: number | null): number {
-  db.prepare(`INSERT INTO targets (account_id, repo, issue_no, named_merger, state, evidence_measured_at, evidence, ineligible_ruling_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT (repo, issue_no) DO UPDATE SET account_id = excluded.account_id, named_merger = excluded.named_merger,
+function upsert(db: Db, pulse: z.infer<typeof Account>, repo: string, no: number, part: string, merger: string, state: string, url: string, ruled: number | null): number {
+  db.prepare(`INSERT INTO targets (account_id, repo, issue_no, part, named_merger, state, evidence_measured_at, evidence, ineligible_ruling_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT (repo, issue_no, part) DO UPDATE SET account_id = excluded.account_id, named_merger = excluded.named_merger,
       state = excluded.state, evidence_measured_at = excluded.evidence_measured_at, evidence = excluded.evidence,
       ineligible_ruling_id = excluded.ineligible_ruling_id`)
-    .run(pulse.id, repo, no, merger, state, pulse.measured_at.slice(0, 10), url, ruled)
-  const row = db.prepare('SELECT id FROM targets WHERE repo = ? AND issue_no = ?').get(repo, no) as { id: number }
+    .run(pulse.id, repo, no, part, merger, state, pulse.measured_at.slice(0, 10), url, ruled)
+  const row = db.prepare('SELECT id FROM targets WHERE repo = ? AND issue_no = ? AND part = ?').get(repo, no, part) as { id: number }
   return row.id
 }
 

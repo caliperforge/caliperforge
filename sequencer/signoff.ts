@@ -109,10 +109,10 @@ function withdraw(db: Db, root: string, id: number, desk: Desk): Signed | null {
   return { plan: id, card: kept.no, did: 'withdrawn' }
 }
 
-interface Subject { repo: string; issue_no: number }
+interface Subject { repo: string; issue_no: number; part: string }
 
 function subjectOf(db: Db, plan: number): Subject {
-  const row = db.prepare('SELECT t.repo, t.issue_no FROM plans p JOIN targets t ON t.id = p.target_id WHERE p.id = ?')
+  const row = db.prepare('SELECT t.repo, t.issue_no, t.part FROM plans p JOIN targets t ON t.id = p.target_id WHERE p.id = ?')
     .get(plan) as Subject | undefined
   if (row === undefined) throw new Error(`plan ${String(plan)} has no target row`)
   return row
@@ -121,7 +121,7 @@ function subjectOf(db: Db, plan: number): Subject {
 /** No `owner/repo#n` and no upstream url anywhere a reference is read: our repo is public, and either would put a line on their thread. */
 function titleFor(db: Db, root: string, plan: number): string {
   const s = subjectOf(db, plan)
-  return `Sign-off: ${repoName(s.repo)} ${String(s.issue_no)}, ${prTitle(root, plan)}`
+  return `Sign-off: ${repoName(s.repo)} ${String(s.issue_no)}${s.part === '' ? '' : ` ${s.part}`}, ${prTitle(root, plan)}`
 }
 
 function prTitle(root: string, plan: number): string {

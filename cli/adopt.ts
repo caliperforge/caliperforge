@@ -82,11 +82,11 @@ function latest(db: Db, repo: string): z.infer<typeof Account> | null {
 function upsert(db: Db, account: z.infer<typeof Account>, repo: string, no: number, url: string): number {
   db.prepare(`INSERT INTO targets (account_id, repo, issue_no, named_merger, state, evidence_measured_at, evidence, ineligible_ruling_id)
     VALUES (?, ?, ?, '', 'queued', ?, ?, NULL)
-    ON CONFLICT (repo, issue_no) DO UPDATE SET account_id = excluded.account_id, state = 'queued',
+    ON CONFLICT (repo, issue_no, part) DO UPDATE SET account_id = excluded.account_id, state = 'queued',
       evidence_measured_at = excluded.evidence_measured_at, evidence = excluded.evidence,
       ineligible_ruling_id = NULL`)
     .run(account.id, repo, no, account.measured_at.slice(0, 10), url)
-  const row = db.prepare('SELECT id FROM targets WHERE repo = ? AND issue_no = ?').get(repo, no) as { id: number }
+  const row = db.prepare("SELECT id FROM targets WHERE repo = ? AND issue_no = ? AND part = ''").get(repo, no) as { id: number }
   return row.id
 }
 

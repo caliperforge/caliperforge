@@ -246,7 +246,7 @@ function workspace(db: Db, root: string, plan: PlanRow): { language: string | nu
 
 /**
  * Which repository the branch is cut in and what it is called: a stranger's repo and
- * `<repo>-<issue>-a<attempt>` for a target, our own repo and `p<plan>-<slug>` for an issue
+ * `<repo>-<issue>[-<part>]-a<attempt>` for a target, our own repo and `p<plan>-<slug>` for an issue
  * of ours. Either way the clone is our fork and the base is that repo's `main`.
  */
 function treeOf(db: Db, root: string, plan: PlanRow): { repo: string; branch: string } | null {
@@ -254,7 +254,7 @@ function treeOf(db: Db, root: string, plan: PlanRow): { repo: string; branch: st
     return { repo: homeOf(plan), branch: internalBranch(plan.id, titleOf(root, plan.id) ?? `plan ${String(plan.id)}`) }
   }
   const row = targetOf(db, plan)
-  return row === null ? null : { repo: row.repo, branch: branchOf(row.repo, row.issue_no, plan.retries + 1) }
+  return row === null ? null : { repo: row.repo, branch: branchOf(row.repo, row.issue_no, plan.retries + 1, row.part) }
 }
 
 function fire(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider, wire?: Wire): Promise<Outcome> {

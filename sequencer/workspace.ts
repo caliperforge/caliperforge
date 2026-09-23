@@ -83,8 +83,8 @@ export function repoName(repo: string): string {
   return repo.split('/')[1] ?? repo
 }
 
-export function branchOf(repo: string, issue: number, attempt: number): string {
-  return `${repoName(repo)}-${String(issue)}-a${String(attempt)}`
+export function branchOf(repo: string, issue: number, attempt: number, part = ''): string {
+  return `${repoName(repo)}-${String(issue)}${part === '' ? '' : `-${part}`}-a${String(attempt)}`
 }
 
 /** The branch an internal plan works on: the plan number, then the issue title as a slug. */

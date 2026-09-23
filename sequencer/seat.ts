@@ -1,5 +1,7 @@
+import { existsSync, rmSync } from 'node:fs'
+import { join } from 'node:path'
 import type { Fired, Provider } from '../providers/kind.ts'
-import { packet } from '../runner/index.ts'
+import { packet, refuse } from '../runner/index.ts'
 import { reviewManifest, type Bench, type Narrowing } from '../runner/packet.ts'
 import { load, seat, tight } from '../runner/rules.ts'
 import { judge, loadReviews } from '../reviews/bench.ts'
@@ -13,6 +15,7 @@ import type { Step } from '../templates/pr-path.ts'
 import { pointed, shape, split, unclear, wide, WIDE, type Part } from './brief.ts'
 import { handout, touched, type Handed } from './handout.ts'
 import { install } from './checks.ts'
+import { deletions } from './fence.ts'
 import { fenceFor } from './route.ts'
 import type { Outcome } from './kind.ts'
 import { carried, cloned, diffOf, diffSince, drop, get, maybe, move, narrowing, planDir, put, snapshot, srcDir } from './workspace.ts'
@@ -29,8 +32,30 @@ export async function fireSeat(db: Db, root: string, plan: PlanRow, step: Step, 
   const fired = await ran(db, root, plan, step, provider, rebuild(db, root, plan, prev), internal(plan))
   put(root, plan.id, name, fired.text)
   const tokens = fired.usage.input + fired.usage.cache + fired.usage.output
-  if (fired.exit === 0) return { outcome: 'pass', spans: [], note: `${step.runs} exit 0, ${String(tokens)} tokens` }
-  return exited(step, fired)
+  if (fired.exit !== 0) return exited(step, fired)
+  return dropped(db, root, plan, step, fired.text)
+    ?? { outcome: 'pass', spans: [], note: `${step.runs} exit 0, ${String(tokens)} tokens` }
+}
+
+/**
+ * #64. The build names paths under `## Deleted` and the kernel removes them, before the rails read the
+ * tree; `git add -A` at the commit stages the removal, so the deletion is in the diff the reviewers
+ * judge. The fence that bars a write bars a delete -- the same `refuse()` the seat's own tools run
+ * through -- and a path that is not there refuses rather than passing as a silent no-op.
+ */
+function dropped(db: Db, root: string, plan: PlanRow, step: Step, handback: string): Outcome | null {
+  const paths = deletions(handback)
+  if (paths.length === 0) return null
+  const src = srcDir(root, plan.id)
+  const fence = fenceFor(db, plan.id, seat(root, step.runs).manifest.write_paths)
+  const barred = paths.filter((path) => refuse(src, fence, path, internal(plan)) !== null)
+  const absent = paths.filter((path) => !barred.includes(path) && !existsSync(join(src, path)))
+  if (barred.length > 0 || absent.length > 0) {
+    const why = [...barred.map((p) => `${p} is outside the fence`), ...absent.map((p) => `${p} is not in the tree`)]
+    return { outcome: 'refuse', spans: [...barred, ...absent], note: `${step.runs}: ${why.join('; ')}` }
+  }
+  for (const path of paths) rmSync(join(src, path))
+  return null
 }
 
 /**

@@ -24,6 +24,10 @@ On our own repository, write the files the brief lists under `## Files` and test
 outside that list needs its row in your answer, under `## Outside the files`:
 `- <path> — why the ask cannot be met without it`. Step 3 refuses a build that touches one without its row.
 
+A file the ask needs removed goes under `## Deleted` in your answer, one `- <path>` per line, repo-relative:
+you have no shell, so the kernel deletes them for you before step 3 reads the tree. A path outside what you may
+write, or one that is not there, refuses the build.
+
 Answer the issue as filed under the Tight standard above, then close with this fence and nothing after it:
 
 ```

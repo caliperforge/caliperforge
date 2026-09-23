@@ -22,6 +22,10 @@ together in one message, never one per turn.
 
 Answer the brief under the Tight standard above, then close with this fence and nothing after it:
 
+A file the ask needs removed goes under `## Deleted` in your answer, one `- <path>` per line, repo-relative:
+you have no shell, so the kernel deletes them for you before step 3 reads the tree. A path outside what you may
+write, or one that is not there, refuses the build.
+
 ```
 ---
 done:

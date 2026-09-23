@@ -19,6 +19,10 @@ several Read calls at once, then edit; a handed file you will not change needs n
 not handed only when you can say why, and ask for all of those in one message. Independent calls go out
 together in one message, never one per turn.
 
+A file the ask needs removed goes under `## Deleted` in your answer, one `- <path>` per line, repo-relative:
+you have no shell, so the kernel deletes them for you before step 3 reads the tree. A path outside what you may
+write, or one that is not there, refuses the build.
+
 Answer the issue as filed under the Tight standard above, then close with this fence and nothing after it:
 
 ```

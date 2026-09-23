@@ -10,11 +10,11 @@ import { clock, inWindow, underCap, waiting, type PipeRow, type PlanRow, type Wa
 import { at, steps } from '../../templates/pr-path.ts'
 import { tick } from '../index.ts'
 import { blocked, kernel } from '../steps.ts'
-import { doneIds, narrowing, snapshot, srcDir } from '../workspace.ts'
+import { diffOf, doneIds, narrowing, snapshot, srcDir } from '../workspace.ts'
 import { record } from '../../store/files.ts'
 import { benchPacket } from '../../runner/packet.ts'
 import type { Packet } from '../../providers/kind.ts'
-import { approve, built, CARRIED, internalPlan, KOTLIN, ours, owning, PASS, plan, REFUSE, RUN, runsAfter, runsOn, stub, watched, WORDS, world } from './world.ts'
+import { approve, built, CARRIED, dropping, internalPlan, KOTLIN, ours, owning, PASS, plan, REFUSE, RUN, runsAfter, runsOn, stub, watched, WORDS, world } from './world.ts'
 
 const head = (cwd: string, args: string[]): string => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim()
 
@@ -456,4 +456,60 @@ test('cf brief and cf plan bind the plan they are asked for', async () => {
   expect(openPlans(w.db).map((p) => p.id)).toEqual([1])
   expect(halted(w.db)).toEqual([])
   expect(day(w.db)).toMatchObject({ runs: 2, tokens: 120 })
+})
+
+test('a builder names a file for deletion and the kernel removes it before the rails read the tree', async () => {
+  const w = world()
+  w.db.prepare('DELETE FROM plans WHERE id = 1').run()
+  ours(w.root)
+  internalPlan(w.db, w.root, MINE)
+  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  const src = srcDir(w.root, MINE)
+  writeFileSync(join(src, 'src/gone.ts'), 'export const gone = 1\n')
+
+  const fired = (await tick(w.db, w.root, stub(dropping(['src/gone.ts']))))[0]
+
+  expect(fired).toMatchObject({ step: 2, name: 'build', outcome: 'pass' })
+  expect(existsSync(join(src, 'src/gone.ts'))).toBe(false)
+  expect(diffOf(w.root, MINE)).not.toContain('export const gone = 1')
+})
+
+test('a deletion outside the fence refuses the build and names the path', async () => {
+  const w = world()
+  approve(w.db, w.target)
+  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
+
+  const fired = (await tick(w.db, w.root, stub(dropping(['src/elsewhere.ts']))))[0]
+
+  expect(fired).toMatchObject({ step: 2, outcome: 'refuse', spans: ['src/elsewhere.ts'] })
+  expect(fired?.note).toContain('outside the fence')
+  expect(existsSync(join(srcDir(w.root, 1), 'src/hello.ts'))).toBe(true)
+})
+
+test('a deletion of a path that is not in the tree refuses rather than passing as a no-op', async () => {
+  const w = world()
+  w.db.prepare('DELETE FROM plans WHERE id = 1').run()
+  ours(w.root)
+  internalPlan(w.db, w.root, MINE)
+  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
+
+  const fired = (await tick(w.db, w.root, stub(dropping(['src/never-was.ts']))))[0]
+
+  expect(fired).toMatchObject({ step: 2, outcome: 'refuse', spans: ['src/never-was.ts'] })
+  expect(fired?.note).toContain('is not in the tree')
+})
+
+test('the same path named twice is deleted once, not refused the second time as absent', async () => {
+  const w = world()
+  w.db.prepare('DELETE FROM plans WHERE id = 1').run()
+  ours(w.root)
+  internalPlan(w.db, w.root, MINE)
+  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  const src = srcDir(w.root, MINE)
+  writeFileSync(join(src, 'src/twice.ts'), 'export const twice = 1\n')
+
+  const fired = (await tick(w.db, w.root, stub(dropping(['src/twice.ts', 'src/twice.ts']))))[0]
+
+  expect(fired).toMatchObject({ step: 2, outcome: 'pass' })
+  expect(existsSync(join(src, 'src/twice.ts'))).toBe(false)
 })

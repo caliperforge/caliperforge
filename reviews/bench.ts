@@ -29,7 +29,7 @@ export async function judge(
   input: unknown,
   provider: Provider,
   transcript: string,
-): Promise<{ run: number | null; verdict: number; outcome: Verdict }> {
+): Promise<{ run: number | null; verdict: number; outcome: Judged }> {
   const manifest = reviewManifest(root, name)
   const built = benchPacket(root, name, input, transcript)
   if ('refusal' in built) {
@@ -88,7 +88,7 @@ async function ran(db: Db, root: string, name: string, plan: number, manifest: R
  * named no finding on, is a span it already passed: it leaves the fence for the prose unless
  * `reopen:` names what changed the reviewer's mind. A verdict with nothing left in the fence passes.
  */
-function narrowed(v: Judged, bench: Bench): Verdict {
+function narrowed(v: Judged, bench: Bench): Judged {
   if (v.outcome !== 'refuse') return v
   const frozen = new Set((bench.narrowing?.unchanged ?? []).map(([path]) => path))
   const named = new Set(read(bench.prior ?? '', '')?.spans ?? [])
@@ -96,8 +96,8 @@ function narrowed(v: Judged, bench: Bench): Verdict {
   if (noted.length === 0) return v
   const spans = v.spans.filter((s) => !noted.includes(s))
   const message = `${v.message}\n\nNoted, not refused, unchanged since my last verdict:\n${noted.map((s) => `  - ${s}`).join('\n')}`
-  if (spans.length > 0) return { ...v, spans, message }
-  return { ...v, outcome: 'pass', spans: [], defect_class: null, origin_kind: null, origin_ref: null, message }
+  if (spans.length > 0) return { ...v, spans, findings: v.findings.filter((f) => spans.includes(f.span)), message }
+  return { ...v, outcome: 'pass', spans: [], findings: [], defect_class: null, origin_kind: null, origin_ref: null, message }
 }
 
 function builderRan(db: Db, plan: number, seat: string, step: number): boolean {
@@ -106,11 +106,13 @@ function builderRan(db: Db, plan: number, seat: string, step: number): boolean {
     .get(plan, seat, step) !== undefined
 }
 
-function barred(span: string, input: unknown): Verdict {
+function barred(span: string, input: unknown): Judged {
   return {
     outcome: 'refuse',
     defect_class: 'scope',
     spans: [span],
+    findings: [{ span, kind: 'real', fix: null }],
+    reopen: {},
     subject_digest: digest(input),
     origin_kind: 'ruling',
     origin_ref: 'reviewers.maintainers_view',
@@ -118,11 +120,13 @@ function barred(span: string, input: unknown): Verdict {
   }
 }
 
-function barredAsBuilder(span: string, input: unknown): Verdict {
+function barredAsBuilder(span: string, input: unknown): Judged {
   return {
     outcome: 'refuse',
     defect_class: 'scope',
     spans: [span],
+    findings: [{ span, kind: 'real', fix: null }],
+    reopen: {},
     subject_digest: digest(input),
     origin_kind: 'ruling',
     origin_ref: 'runs.reviewer_not_builder',
@@ -134,12 +138,12 @@ function digest(input: unknown): string {
   return createHash('sha256').update(JSON.stringify(input)).digest('hex')
 }
 
-function record(db: Db, root: string, name: string, plan: number, v: Verdict,
-  tokens: number, seconds: number, tree: string | null): number {
+export function record(db: Db, root: string, name: string, plan: number, v: Verdict,
+  tokens: number, seconds: number, tree: string | null, quick = 0): number {
   const manifest = reviewManifest(root, name)
   const row = db.prepare(`INSERT INTO verdicts
-    (gate, kind, subject_digest, plan, step, outcome, rail_id, origin_kind, origin_ref, tokens, seconds, tree)
-    VALUES (?, 'review', ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)`)
-    .run(manifest.gate, v.subject_digest, plan, manifest.step, v.outcome, v.origin_kind, v.origin_ref, tokens, seconds, tree)
+    (gate, kind, subject_digest, plan, step, outcome, rail_id, origin_kind, origin_ref, tokens, seconds, tree, quick_lane)
+    VALUES (?, 'review', ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)`)
+    .run(manifest.gate, v.subject_digest, plan, manifest.step, v.outcome, v.origin_kind, v.origin_ref, tokens, seconds, tree, quick)
   return Number(row.lastInsertRowid)
 }

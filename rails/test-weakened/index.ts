@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { parse, type FileDiff, type Line } from '../diff.ts'
 import type { Verdict } from '../record.ts'
 
-const TEST_FILE = /(?:^|\/)tests?\/|\.(?:test|spec)\.[jt]sx?$/
+export const TEST_FILE = /(?:^|\/)tests?\/|\.(?:test|spec)\.[jt]sx?$/
 const ASSERT = /\b(?:expect|assert)\s*\(/
 const STRICT = /\.(?:toBe|toEqual|toStrictEqual|toMatchObject|toMatchInlineSnapshot|toHaveBeenCalledWith|toThrowError|toContain)\s*\(/
 const LOOSE = /\.(?:toBeDefined|toBeTruthy|toBeFalsy|toBeUndefined|toBeNull)\s*\(\s*\)|\bexpect\.(?:anything|any)\s*\(/

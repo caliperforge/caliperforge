@@ -97,6 +97,19 @@ export function inFlight(w: World, ms = 500): Promise<Fired[]> {
   return tick(w.db, w.root, slow(ms, CARRIED))
 }
 
+/** The stub with a builder that works: `edit` runs on every fire holding `Write`, and `exit` is that fire's alone. */
+export function builds(edit: () => void, review = PASS, exit = 0): Provider {
+  const inner = stub(CARRIED, 0, review)
+  return {
+    ...inner,
+    fire: async (packet) => {
+      if (!packet.tools.includes('Write')) return inner.fire(packet)
+      edit()
+      return { ...await inner.fire(packet), exit }
+    },
+  }
+}
+
 function answer(packet: Packet, text: string, review: string, brief?: string): string {
   if (packet.tools.includes('Write')) return text
   if (!packet.prompt.includes('# brief_writer')) return review

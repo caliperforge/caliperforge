@@ -14,7 +14,8 @@ import { reprice } from './priority.ts'
 import { started } from './signals.ts'
 import { parted } from './split.ts'
 import type { Wire } from './push.ts'
-import { fireBrief, fireReview, fireSeat } from './seat.ts'
+import { fireRound } from './quick.ts'
+import { fireBrief, fireSeat } from './seat.ts'
 import { blocked, kept, kernel, overlapping, proved, targetOf } from './steps.ts'
 import { languageFor } from './route.ts'
 import { branchOf, checkout, diffOf, internalBranch, maybe, put, reap, srcDir, titleOf } from './workspace.ts'
@@ -261,7 +262,7 @@ function fire(db: Db, root: string, plan: PlanRow, step: Step, provider: Provide
   if (step.fires === 'seat') return fireSeat(db, root, plan, step, provider)
   if (step.fires === 'review') {
     const standing = kept(db, root, plan, step)
-    return standing === null ? fireReview(db, root, plan, step, provider) : Promise.resolve(standing)
+    return standing === null ? fireRound(db, root, plan, step, provider) : Promise.resolve(standing)
   }
   return Promise.resolve(kernel(db, root, plan, wire))
 }

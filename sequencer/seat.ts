@@ -5,7 +5,7 @@ import { packet, refuse } from '../runner/index.ts'
 import { reviewManifest, type Bench, type Narrowing } from '../runner/packet.ts'
 import { load, seat, tight } from '../runner/rules.ts'
 import { judge, loadReviews } from '../reviews/bench.ts'
-import type { Verdict } from '../reviews/verdict.ts'
+import type { Finding, Judged } from '../reviews/verdict.ts'
 import type { Db } from '../store/index.ts'
 import { filesOf } from '../store/files.ts'
 import { observed, wall } from '../store/lanes.ts'
@@ -116,7 +116,7 @@ function askOf(root: string, plan: number): string {
   return maybe(root, plan, 'ask.md') ?? move(root, plan, 'issue.md', 'ask.md')
 }
 
-async function ran(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider,
+export async function ran(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider,
   issue: string, ours: boolean): Promise<Fired> {
   load(db, root)
   const { manifest, prompt, hash } = seat(root, step.runs)
@@ -181,7 +181,14 @@ function handed(issue: string, files: string): string {
   return files === '' ? issue : `${issue}\n\n${files}`
 }
 
-export async function fireReview(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
+/** The verdict, the findings behind its spans, and the tree it was written against. */
+export interface Round {
+  outcome: Outcome
+  findings: Finding[]
+  tree: string | null
+}
+
+export async function fireReview(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Round> {
   loadReviews(db, root)
   const manifest = reviewManifest(root, step.runs)
   const src = srcDir(root, plan.id)
@@ -196,10 +203,14 @@ export async function fireReview(db: Db, root: string, plan: PlanRow, step: Step
   try {
     const { outcome } = await judge(db, root, step.runs, plan.id, input, provider, transcriptOf(root, plan.id, step.step))
     put(root, plan.id, `step-${String(step.step)}.verdict.md`, verdictText(outcome))
-    return { outcome: outcome.outcome, spans: outcome.spans, note: `${step.runs} ${outcome.outcome}`, message: outcome.message }
+    return {
+      outcome: { outcome: outcome.outcome, spans: outcome.spans, note: `${step.runs} ${outcome.outcome}`, message: outcome.message },
+      findings: outcome.findings,
+      tree: input.tree ?? null,
+    }
   } catch (error) {
     const note = error instanceof Error ? error.message : String(error)
-    return { outcome: 'refuse', spans: ['reviewers.verdict_fence'], note: `${step.runs} ${note}` }
+    return { outcome: { outcome: 'refuse', spans: ['reviewers.verdict_fence'], note: `${step.runs} ${note}` }, findings: [], tree: null }
   }
 }
 
@@ -229,7 +240,13 @@ function priorVerdict(root: string, plan: number): string {
   return maybe(root, plan, 'step-4.verdict.md') ?? 'the first reviewer left no verdict'
 }
 
-function verdictText(v: Verdict): string {
+function verdictText(v: Judged): string {
   const defect = v.defect_class === null ? '' : `class: ${v.defect_class}\n`
-  return `---\noutcome: ${v.outcome}\n${defect}spans:\n${v.spans.map((s) => `  - ${s}`).join('\n')}\n---\n\n${v.message}\n`
+  return `---\noutcome: ${v.outcome}\n${defect}spans:\n${v.findings.map(entry).join('\n')}\n---\n\n${v.message}\n`
+}
+
+/** A plain finding is the bare span the reviewers have always written; a cosmetic one carries its fix on. */
+function entry(f: Finding): string {
+  if (f.kind === 'real' && f.fix === null) return `  - ${f.span}`
+  return `  - span: ${f.span}\n    kind: ${f.kind}\n    fix: ${JSON.stringify(f.fix)}`
 }

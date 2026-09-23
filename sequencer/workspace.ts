@@ -239,6 +239,19 @@ function blob(dir: string, tree: string, path: string): string {
   return git(dir, ['ls-tree', tree, '--', path]).split(/\s+/)[2] ?? 'absent'
 }
 
+/**
+ * #130. The two file sets a merge is judged by, read before it is made: what main has changed since
+ * this branch was cut, and what the branch has changed over the same span. The builder's work is
+ * committed by `headOf` before this is called, so `mine` is the whole of it.
+ */
+export function merging(dir: string, base: string, main: string): { incoming: string[]; mine: string[] } {
+  return { incoming: changedNames(dir, base, main), mine: changedNames(dir, base, 'HEAD') }
+}
+
+function changedNames(dir: string, from: string, to: string): string[] {
+  return git(dir, ['diff', '--name-only', from, to]).split('\n').filter((path) => path !== '')
+}
+
 function git(cwd: string, args: string[]): string {
   return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024 })
 }

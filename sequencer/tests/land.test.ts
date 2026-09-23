@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import type { Packet } from '../../providers/kind.ts'
 import { headApproved } from '../../store/approvals.ts'
+import { last as lastMerge } from '../../store/merges.ts'
 import { tick } from '../index.ts'
 import { headOf, land, type Wire } from '../push.ts'
 import { CARRY, carried, cloned, conflicted, diffOf, fetchMain, get, liveTree, maybe, MAIN, srcDir } from '../workspace.ts'
@@ -325,4 +326,34 @@ test('a seat works in the plan checkout and nowhere else under the machine\'s ow
   expect(liveTree(root, srcDir(root, 2))).toBe(false)
   expect(liveTree(root, join(srcDir(root, 2), 'store'))).toBe(false)
   expect(liveTree(root, tmpdir())).toBe(false)
+})
+
+test('a merge from main records what it brought in against what the job changed, and their overlap', async () => {
+  const w = mine()
+  const wire = watched([], w.root, ID)
+  await atRails(w, wire)
+  moveMain(w.root, 'after.ts')
+
+  expect((await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0])
+    .toMatchObject({ step: 3, outcome: 'pass' })
+
+  const row = lastMerge(w.db, ID)
+  expect(row?.incoming).toEqual(['after.ts'])
+  expect(row?.mine).toEqual(['src/hello.ts'])
+  expect(row?.overlap).toBe(false)
+  expect(row?.main).toBe(git(srcDir(w.root, ID), ['rev-parse', MAIN]))
+})
+
+test('a merge that conflicts records the overlap it conflicted on', async () => {
+  const w = mine()
+  const wire = watched([], w.root, ID)
+  await atRails(w, wire)
+  moveMain(w.root, 'src/hello.ts', 'export const hello = (): string => "main took this line"\n')
+
+  await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+
+  const row = lastMerge(w.db, ID)
+  expect(row?.incoming).toEqual(['src/hello.ts'])
+  expect(row?.mine).toEqual(['src/hello.ts'])
+  expect(row?.overlap).toBe(true)
 })

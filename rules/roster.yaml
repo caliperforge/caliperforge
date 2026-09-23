@@ -1,6 +1,7 @@
 seats:
   - typescript_specialist
   - kotlin_specialist
+  - swift_specialist
   - brief_writer
   - outside_specialist
 digests:
@@ -10,6 +11,9 @@ digests:
   kotlin_specialist:
     manifest: 6fd226964586d4d9ec1d2f0007a7d708768aab9add669f5cace69990ffa87866
     prompt: 47322255d725d18938df6821c60f82402d3dc1f1a98309803348800482508a98
+  swift_specialist:
+    manifest: bbb73a03347da9385a159193fa96ddbad3be41d4219875c46bd1cfc76f8024e4
+    prompt: 92d4e2aea5c739e09fa17651aeefef59c82c9c4ee5ce2ad6134338099d65f44b
   brief_writer:
     manifest: e59d26eddc2a2193ab07f2260eba2e250fa2c42a6222863cfb45cb8889404a83
     prompt: 17d10f0ab97fa3ecd0fd1012bb0c4d1ec2fb9d59864c5a568628a873699b3bcb

@@ -1,0 +1,15 @@
+seat: swift_specialist
+model: claude-opus-5
+effort: high
+tools:
+  - Read
+  - Write
+  - Edit
+  - Glob
+  - Grep
+  - Bash(xcodebuild:*)
+  - Bash(swift:*)
+write_paths:
+  - Atelier
+  - AtelierTests
+  - Atelier.xcodeproj

@@ -239,6 +239,7 @@ test('outside reviewer gets context and map; ours does not', async () => {
   expect(prompt).toContain('# Changed code in context')
   expect(prompt).toContain('# Files around the change')
   expect(prompt.indexOf('# Changed code in context')).toBeGreaterThan(prompt.indexOf('# Diff'))
+  expect(prompt).not.toContain('# Checks')
 })
 
 test('a reviewer gets its own last verdict, the diff since the tree it judged and what did not move, neither on its first', async () => {
@@ -252,11 +253,13 @@ test('a reviewer gets its own last verdict, the diff since the tree it judged an
   await tick(w.db, w.root, stub(OWNS, 0, REFUSE, (p) => round1.push(p)))
   expect(reviewer(round1)).not.toContain('# Your last verdict')
   expect(reviewer(round1)).not.toContain('# Changed code in context')
+  expect(reviewer(round1)).not.toContain('# Checks')
 
   built(w.root, MINE, 'export const two = (): number => 2')
   const round2: Packet[] = []
   for (let step = 0; step < 4; step += 1) await tick(w.db, w.root, stub(OWNS, 0, PASS, (p) => round2.push(p)))
   const prompt = reviewer(round2)
+  expect(prompt).toContain('# Checks\n\nPassed on this diff')
   expect(prompt).toContain(`# Your last verdict\n\n---\noutcome: refuse\nclass: correctness\nspans:\n  - src/hello.ts:1\n---\n\n${WORDS}`)
   expect(prompt.split('# Changed since your last verdict')[1]).toContain('+export const two = (): number => 2')
   expect(prompt.split('# Paths since your last verdict')[1]).toMatch(

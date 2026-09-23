@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { existsSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Fired, Provider } from '../providers/kind.ts'
@@ -15,7 +16,8 @@ import type { Step } from '../templates/pr-path.ts'
 import { pointed, shape, split, TEMPLATE, unclear, wide, WIDE, type Part } from './brief.ts'
 import { handout, touched, type Handed } from './handout.ts'
 import { handover, type Handover } from './handover.ts'
-import { install } from './checks.ts'
+import { install, mode } from './checks.ts'
+import { narrow } from './rails.ts'
 import { deletions } from './fence.ts'
 import { fenceFor } from './route.ts'
 import type { Outcome } from './kind.ts'
@@ -200,6 +202,7 @@ export async function fireReview(db: Db, root: string, plan: PlanRow, step: Step
     diff: diffOf(root, plan.id),
     ...(cloned(src) ? { tree: snapshot(src) } : {}),
     ...outside(root, plan, src),
+    ...checked(db, plan, src, diffOf(root, plan.id)),
     ...(manifest.reads_verdict ? { verdict: priorVerdict(root, plan.id) } : {}),
     ...rounds(db, root, plan.id, step.step),
   }
@@ -221,6 +224,19 @@ export async function fireReview(db: Db, root: string, plan: PlanRow, step: Step
 function outside(root: string, plan: PlanRow, src: string): Handover {
   const base = maybe(root, plan.id, 'base.sha')
   return internal(plan) || base === null || !cloned(src) ? {} : handover(src, base.trim())
+}
+
+/**
+ * #86. Step 3 already ran the checkout's own checks on this diff; the reviewer is told so rather than
+ * reasoning its way to it. Read off the rail's row, never re-run, and only while the diff is the one it judged.
+ */
+function checked(db: Db, plan: PlanRow, src: string, diff: string): { checks?: string } {
+  if (!internal(plan)) return {}
+  const row = db.prepare(`SELECT outcome, subject_digest FROM verdicts WHERE plan = ? AND kind = 'rail' AND rail_id = 'checks'
+    ORDER BY id DESC LIMIT 1`).get(plan.id) as { outcome: string; subject_digest: string } | undefined
+  if (row?.outcome !== 'pass' || row.subject_digest !== createHash('sha256').update(diff).digest('hex')) return {}
+  const scope = narrow(db, plan).length > 0 ? 'the tests this plan\'s files reach' : 'the whole suite'
+  return { checks: `Passed on this diff: every script the checkout names exits zero (${mode(src)}, ${scope}). Do not re-derive what they settle.` }
 }
 
 /** From a reviewer's second round on: the verdict it wrote last round, and what the tree did since the one it judged. */

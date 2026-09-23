@@ -5,7 +5,7 @@ import { beforeEach, expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import type { Read } from '../gh.ts'
 import { doneIds } from '../../sequencer/workspace.ts'
-import { add, laneOf, parse, seatOf, unfiled } from '../plan.ts'
+import { add, laneOf, parse, priorityOf, seatOf, unfiled } from '../plan.ts'
 import type { Db } from '../../store/index.ts'
 
 const schema = join(import.meta.dirname, '../../schema')
@@ -78,6 +78,22 @@ test('an issue with no lane label is refused, naming every label that would sett
   expect(db.prepare('SELECT count(*) AS n FROM plans').get()).toEqual({ n: 0 })
 })
 
+test('the P label on the issue is the priority it files at, and two of them file nothing', () => {
+  const db = piped()
+  const rows = [{ ...ISSUE, labels: ['lane:machine', 'P2'] },
+    { ...ISSUE, number: 26, url: `${URL.slice(0, -2)}26`, labels: ['lane:machine', 'P0', 'P2'] }]
+  const filed = add(db, root, 'caliperforge/caliperforge#25', 'internal', canned(rows))
+  expect(db.prepare('SELECT priority FROM plans WHERE id = ?').get(filed.plan)).toEqual({ priority: 2 })
+
+  const refused = add(db, root, 'caliperforge/caliperforge#26', 'internal', canned(rows))
+  expect(refused).toMatchObject({ plan: null, state: 'refused',
+    origin: { origin_kind: 'ruling', origin_ref: 'plan.priority_label' } })
+  expect(refused.why).toContain('P0 and P2')
+  expect(db.prepare('SELECT subject FROM rulings WHERE id = ?').get(refused.ruling))
+    .toEqual({ subject: 'plan.priority_label' })
+  expect(db.prepare('SELECT count(*) AS n FROM plans').get()).toEqual({ n: 1 })
+})
+
 test('the same issue twice is one row, and the second call returns the first plan', () => {
   const db = piped()
   const first = add(db, root, 'caliperforge/caliperforge#25', 'internal', canned([ISSUE]))
@@ -114,11 +130,14 @@ test('the filed plan carries the raw issue on disk as the ask step 1 briefs from
   expect(doneIds(body)).toEqual(['D1', 'D2'])
 })
 
-test('the reference, the lane label and the seat label are read off exactly', () => {
+test('the reference, the lane label, the seat label and the priority label are read off exactly', () => {
   expect(parse('caliperforge/caliperforge#25')).toEqual({ repo: 'caliperforge/caliperforge', no: 25 })
   expect(() => parse('caliperforge#25')).toThrow('is not an <owner/repo>#<n> issue reference')
   expect(laneOf([{ name: 'lane:atelier' }])).toBe('atelier')
   expect(laneOf([{ name: 'lane:kitchen' }, { name: 'lanes' }])).toBeNull()
   expect(seatOf([{ name: 'seat:kotlin_specialist' }])).toBe('kotlin_specialist')
   expect(seatOf([{ name: 'bug' }])).toBeNull()
+  expect(priorityOf([{ name: 'P2' }])).toBe(2)
+  expect(priorityOf([{ name: 'bug' }, { name: 'P10' }, { name: 'p2' }])).toBeNull()
+  expect(() => priorityOf([{ name: 'P0' }, { name: 'P2' }])).toThrow('P0 and P2')
 })

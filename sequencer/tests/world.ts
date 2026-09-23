@@ -161,10 +161,11 @@ export function moveMain(root: string, name: string, body?: string): void {
 }
 
 /** A plan filed from one of our own issues: an origin, a lane, a seat, and no target row. `plans_one_per_issue` holds one plan per url, so a second plan names a second issue. */
-export function internalPlan(db: Db, root: string, id: number, title = 'let an internal plan run', issue = 34): number {
+export function internalPlan(db: Db, root: string, id: number, title = 'let an internal plan run', issue = 34,
+  priority = 1): number {
   db.prepare(`INSERT INTO plans (id, pipe_id, target_id, template, state, queued_at, step, retries, priority, lane, seat, origin)
-    VALUES (?, 1, NULL, 'pr_path', 'queued', '2026-09-18T00:00:00.000Z', 0, 0, 1, 'machine', 'typescript_specialist', ?)`)
-    .run(id, `https://github.com/${SELF}/issues/${String(issue)}`)
+    VALUES (?, 1, NULL, 'pr_path', 'queued', '2026-09-18T00:00:00.000Z', 0, 0, ?, 'machine', 'typescript_specialist', ?)`)
+    .run(id, priority, `https://github.com/${SELF}/issues/${String(issue)}`)
   put(root, id, 'ask.md', `# ${title}\n\n- **D1** add \`hello()\` in \`src/hello.ts\`\n`)
   return id
 }

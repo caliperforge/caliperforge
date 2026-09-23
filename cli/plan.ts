@@ -12,6 +12,8 @@ const SEAT_LABEL = /^seat:([a-z][a-z0-9_]*)$/
 
 const LANE_LABEL = /^lane:([a-z]+)$/
 
+const PRIORITY_LABEL = /^P([0-9])$/
+
 const Issue = z.object({
   number: z.int(),
   title: z.string(),
@@ -41,8 +43,6 @@ const LANE: Record<Lane, { template: Template; seat: string }> = {
   comms: { template: 'comms', seat: DEFAULT_BUILDER },
   research: { template: 'research', seat: DEFAULT_BUILDER },
 }
-
-const NO_LANE: Origin = { origin_kind: 'ruling', origin_ref: 'plan.lane_label' }
 
 export interface Filed {
   plan: number | null
@@ -81,13 +81,29 @@ export function seatOf(labels: { name: string }[]): string | null {
   return labels.map((l) => SEAT_LABEL.exec(l.name)?.[1]).find((n) => n !== undefined) ?? null
 }
 
+/** The priority the issue's one `P0`-`P9` label names: `null` for none, and refused for more than one. */
+export function priorityOf(labels: { name: string }[]): number | null {
+  const held = labels.map((l) => PRIORITY_LABEL.exec(l.name)).filter((hit) => hit !== null)
+  if (held.length > 1) throw new Error(`carries ${held.map((hit) => hit[0]).join(' and ')}; one priority label at most`)
+  const one = held[0]
+  return one === undefined ? null : Number(one[1])
+}
+
 export function add(db: Db, root: string, ref: string, pipe: string, read: Read = gh): Filed {
   const { repo, no } = parse(ref)
   const row = issue(repo, no, read)
   const lane = laneOf(row.labels)
-  if (lane === null) return refusal(db, ref)
+  if (lane === null) {
+    return refusal(db, ref, 'plan.lane_label', `carries no lane label; add one of ${LANES.map((l) => `lane:${l}`).join(', ')}`)
+  }
+  let priority: number | null
+  try {
+    priority = priorityOf(row.labels)
+  } catch (error) {
+    return refusal(db, ref, 'plan.priority_label', error instanceof Error ? error.message : String(error))
+  }
   const seat = seatOf(row.labels) ?? LANE[lane].seat
-  const plan = file(db, pipe, lane, seat, row.url)
+  const plan = file(db, pipe, lane, seat, row.url, priority)
   put(root, plan, 'ask.md', `# ${row.title}\n\n${row.body}\n`)
   return { plan, lane, seat, state: 'queued', why: `${ref} queued on ${lane} for ${seat}`, origin: null, ruling: null }
 }
@@ -106,17 +122,9 @@ export function render(row: Unfiled): string {
   return `${row.repo}#${String(row.no)}\t${row.lane ?? 'no lane'}\tfiled, not queued\t${row.title}\n`
 }
 
-function refusal(db: Db, ref: string): Filed {
-  const names = LANES.map((l) => `lane:${l}`).join(', ')
-  return {
-    plan: null,
-    lane: null,
-    seat: null,
-    state: 'refused',
-    why: `${ref} carries no lane label; add one of ${names}`,
-    origin: NO_LANE,
-    ruling: ruling(db, NO_LANE.origin_ref),
-  }
+function refusal(db: Db, ref: string, subject: string, why: string): Filed {
+  const origin: Origin = { origin_kind: 'ruling', origin_ref: subject }
+  return { plan: null, lane: null, seat: null, state: 'refused', why: `${ref} ${why}`, origin, ruling: ruling(db, subject) }
 }
 
 function ruling(db: Db, subject: string): number | null {
@@ -125,7 +133,7 @@ function ruling(db: Db, subject: string): number | null {
   return row?.id ?? null
 }
 
-function file(db: Db, pipe: string, lane: Lane, seat: string, url: string): number {
+function file(db: Db, pipe: string, lane: Lane, seat: string, url: string, priority: number | null): number {
   const held = db.prepare('SELECT id FROM plans WHERE origin = ?').get(url) as { id: number } | undefined
   if (held !== undefined) return held.id
   const row = db.prepare('SELECT id FROM pipes WHERE name = ?').get(pipe) as { id: number } | undefined
@@ -133,6 +141,6 @@ function file(db: Db, pipe: string, lane: Lane, seat: string, url: string): numb
   const template = LANE[lane].template
   const made = db.prepare(`INSERT INTO plans (pipe_id, template, state, queued_at, step, retries, priority, lane, seat, origin)
     VALUES (?, ?, 'queued', ?, 0, 0, ?, ?, ?, ?)`)
-    .run(row.id, template, new Date().toISOString(), templatePriority(db, template), lane, seat, url)
+    .run(row.id, template, new Date().toISOString(), priority ?? templatePriority(db, template), lane, seat, url)
   return Number(made.lastInsertRowid)
 }

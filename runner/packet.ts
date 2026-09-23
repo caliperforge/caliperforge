@@ -30,13 +30,24 @@ export const Review = z.object({
 
 export type Review = z.infer<typeof Review>
 
+/** git's account of the plan's diff against the tree a reviewer judged: what it must re-read, and what it may not re-open. */
+export const Narrowing = z.object({
+  changed: z.array(z.string()),
+  merged: z.array(z.string()),
+  unchanged: z.array(z.tuple([z.string(), z.string()])),
+}).strict()
+
+export type Narrowing = z.infer<typeof Narrowing>
+
 export const Bench = z.object({
   repo: z.string(),
   issue: z.string(),
   diff: z.string(),
+  tree: z.string().optional(),
   verdict: z.string().optional(),
   prior: z.string().optional(),
   since: z.string().optional(),
+  narrowing: Narrowing.optional(),
 }).strict().refine((b) => b.since === undefined || b.prior !== undefined, { path: ['since'] })
 
 export type Bench = z.infer<typeof Bench>
@@ -61,14 +72,14 @@ export function benchPacket(
   name: string,
   input: unknown,
   transcript: string,
-): { packet: Packet } | { refusal: Refusal } {
+): { packet: Packet; bench: Bench } | { refusal: Refusal } {
   const manifest = reviewManifest(root, name)
   const bench = Bench.safeParse(input)
   if (!bench.success) return { refusal: shape(named(bench.error)) }
   if ((bench.data.verdict !== undefined) !== manifest.reads_verdict) return { refusal: shape('verdict') }
   const outside = admits(bench.data.repo)
   if (outside !== null) return { refusal: outside }
-  return { packet: assembled(root, name, manifest, bench.data, transcript) }
+  return { packet: assembled(root, name, manifest, bench.data, transcript), bench: bench.data }
 }
 
 function assembled(root: string, name: string, manifest: Review, bench: Bench, transcript: string): Packet {
@@ -76,6 +87,7 @@ function assembled(root: string, name: string, manifest: Review, bench: Bench, t
     ['First verdict', bench.verdict],
     ['Your last verdict', bench.prior],
     ['Changed since your last verdict', bench.since],
+    ['Paths since your last verdict', statement(bench.narrowing)],
   ]
   const tail = sections.map(([head, body]) => (body === undefined ? '' : `\n\n# ${head}\n\n${body}`)).join('')
   return {
@@ -88,6 +100,20 @@ function assembled(root: string, name: string, manifest: Review, bench: Bench, t
     steps: STEP_CAP,
     refuse: (path) => refuse(bench.repo, manifest.write_paths, path),
   }
+}
+
+function statement(n: Narrowing | undefined): string | undefined {
+  if (n === undefined) return undefined
+  const lists: [string, string[]][] = [
+    ['changed since the tree you judged', n.changed],
+    ["merged from main, not the builder's", n.merged],
+    ['unchanged since you judged it, at the blob it had then', n.unchanged.map(([path, blob]) => `${path} ${blob}`)],
+  ]
+  return lists.map(([head, paths]) => `${head}:\n${listed(paths)}`).join('\n\n')
+}
+
+function listed(paths: string[]): string {
+  return paths.length === 0 ? '  - none' : paths.map((path) => `  - ${path}`).join('\n')
 }
 
 function named(error: z.ZodError): string {

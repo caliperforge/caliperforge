@@ -2,12 +2,12 @@ import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { CAPPED, type Packet, type Provider } from '../providers/kind.ts'
-import { benchPacket, reviewManifest, type Review } from '../runner/packet.ts'
+import { benchPacket, reviewManifest, type Bench, type Review } from '../runner/packet.ts'
 import type { Db } from '../store/index.ts'
 import { observed, wall } from '../store/lanes.ts'
 import { byRun } from '../store/transcript.ts'
 import { subdirs } from '../checks/tree.ts'
-import { read, type Verdict } from './verdict.ts'
+import { read, type Judged, type Verdict } from './verdict.ts'
 
 export function loadReviews(db: Db, root: string): string[] {
   const names = subdirs(join(root, 'reviews'))
@@ -34,11 +34,12 @@ export async function judge(
   const built = benchPacket(root, name, input, transcript)
   if ('refusal' in built) {
     const outcome = barred(built.refusal.path, input)
-    return { run: null, verdict: record(db, root, name, plan, outcome, 0, 0), outcome }
+    return { run: null, verdict: record(db, root, name, plan, outcome, 0, 0, null), outcome }
   }
+  const tree = built.bench.tree ?? null
   if (builderRan(db, plan, name, manifest.step)) {
     const outcome = barredAsBuilder(`${name}:${String(manifest.step)}`, input)
-    return { run: null, verdict: record(db, root, name, plan, outcome, 0, 0), outcome }
+    return { run: null, verdict: record(db, root, name, plan, outcome, 0, 0, tree), outcome }
   }
   const first = await ran(db, root, name, plan, manifest, provider, built.packet)
   const refired = first.capped && first.outcome === null
@@ -48,12 +49,13 @@ export async function judge(
   if (last.outcome === null) throw new Error('reviewers.verdict_fence')
   const tokens = first.tokens + (refired?.tokens ?? 0)
   const seconds = first.seconds + (refired?.seconds ?? 0)
-  return { run: last.run, verdict: record(db, root, name, plan, last.outcome, tokens, seconds), outcome: last.outcome }
+  const stands = narrowed(last.outcome, built.bench)
+  return { run: last.run, verdict: record(db, root, name, plan, stands, tokens, seconds, tree), outcome: stands }
 }
 
 interface Ran {
   run: number
-  outcome: Verdict | null
+  outcome: Judged | null
   capped: boolean
   tokens: number
   seconds: number
@@ -79,6 +81,23 @@ async function ran(db: Db, root: string, name: string, plan: number, manifest: R
     tokens: fired.usage.input + fired.usage.cache + fired.usage.output,
     seconds: fired.seconds,
   }
+}
+
+/**
+ * A span on a path git says has not moved since this reviewer's own last verdict, that the verdict
+ * named no finding on, is a span it already passed: it leaves the fence for the prose unless
+ * `reopen:` names what changed the reviewer's mind. A verdict with nothing left in the fence passes.
+ */
+function narrowed(v: Judged, bench: Bench): Verdict {
+  if (v.outcome !== 'refuse') return v
+  const frozen = new Set((bench.narrowing?.unchanged ?? []).map(([path]) => path))
+  const named = new Set(read(bench.prior ?? '', '')?.spans ?? [])
+  const noted = v.spans.filter((s) => frozen.has(s.split(':')[0] ?? s) && !named.has(s) && v.reopen[s] === undefined)
+  if (noted.length === 0) return v
+  const spans = v.spans.filter((s) => !noted.includes(s))
+  const message = `${v.message}\n\nNoted, not refused, unchanged since my last verdict:\n${noted.map((s) => `  - ${s}`).join('\n')}`
+  if (spans.length > 0) return { ...v, spans, message }
+  return { ...v, outcome: 'pass', spans: [], defect_class: null, origin_kind: null, origin_ref: null, message }
 }
 
 function builderRan(db: Db, plan: number, seat: string, step: number): boolean {
@@ -115,11 +134,12 @@ function digest(input: unknown): string {
   return createHash('sha256').update(JSON.stringify(input)).digest('hex')
 }
 
-function record(db: Db, root: string, name: string, plan: number, v: Verdict, tokens: number, seconds: number): number {
+function record(db: Db, root: string, name: string, plan: number, v: Verdict,
+  tokens: number, seconds: number, tree: string | null): number {
   const manifest = reviewManifest(root, name)
   const row = db.prepare(`INSERT INTO verdicts
-    (gate, kind, subject_digest, plan, step, outcome, rail_id, origin_kind, origin_ref, tokens, seconds)
-    VALUES (?, 'review', ?, ?, ?, ?, NULL, ?, ?, ?, ?)`)
-    .run(manifest.gate, v.subject_digest, plan, manifest.step, v.outcome, v.origin_kind, v.origin_ref, tokens, seconds)
+    (gate, kind, subject_digest, plan, step, outcome, rail_id, origin_kind, origin_ref, tokens, seconds, tree)
+    VALUES (?, 'review', ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)`)
+    .run(manifest.gate, v.subject_digest, plan, manifest.step, v.outcome, v.origin_kind, v.origin_ref, tokens, seconds, tree)
   return Number(row.lastInsertRowid)
 }

@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process'
-import { existsSync, readFileSync, realpathSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { day, halted, open as openPlans, runsOf, verdictsOf } from '../../cli/brief.ts'
@@ -9,11 +10,11 @@ import { clock, inWindow, underCap, waiting, type PipeRow, type PlanRow, type Wa
 import { at, steps } from '../../templates/pr-path.ts'
 import { tick } from '../index.ts'
 import { blocked, kernel } from '../steps.ts'
-import { doneIds, srcDir } from '../workspace.ts'
+import { doneIds, narrowing, snapshot, srcDir } from '../workspace.ts'
 import { record } from '../../store/files.ts'
 import { benchPacket } from '../../runner/packet.ts'
 import type { Packet } from '../../providers/kind.ts'
-import { approve, built, CARRIED, KOTLIN, PASS, plan, REFUSE, RUN, runsAfter, runsOn, stub, watched, WORDS, world } from './world.ts'
+import { approve, built, CARRIED, internalPlan, KOTLIN, ours, owning, PASS, plan, REFUSE, RUN, runsAfter, runsOn, stub, watched, WORDS, world } from './world.ts'
 
 const head = (cwd: string, args: string[]): string => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim()
 
@@ -205,21 +206,67 @@ test('a new refusal after a real rebuild goes round again; the same one again st
   expect(planFile(w.root, 'refusal.md')).toContain('# Stopped\n\nthe same refusal came back')
 })
 
-test('a reviewer gets its own last verdict and the diff since it from its second round on, neither on its first', async () => {
-  const w = world()
-  approve(w.db, w.target)
-  for (let step = 0; step < 4; step += 1) await tick(w.db, w.root, stub(CARRIED))
-  const round1: Packet[] = []
-  await tick(w.db, w.root, stub(CARRIED, 0, REFUSE, (p) => round1.push(p)))
-  expect(round1[0]?.prompt).not.toContain('# Your last verdict')
+/**
+ * This round is on one of our own plans, not a stranger's. #87 landed after this test was written:
+ * an outside seat may write only the files the brief lists, full stop, so a second file it needs in
+ * the diff cannot be owned there at all. On our own repository it can, under `## Outside the files`.
+ */
+const MINE = 2
+const OWNS = owning(['src/parse.ts'])
 
-  built(w.root, 1, 'export const two = (): number => 2')
-  for (let step = 0; step < 2; step += 1) await tick(w.db, w.root, stub(CARRIED))
+/** The first reviewer packet of a round: a builder's carries Write, a reviewer's is Read only. */
+const reviewer = (packets: Packet[]): string => packets.find((p) => !p.tools.includes('Write'))?.prompt ?? ''
+
+test('a reviewer gets its own last verdict, the diff since the tree it judged and what did not move, neither on its first', async () => {
+  const w = world()
+  w.db.prepare('DELETE FROM plans WHERE id = 1').run()
+  ours(w.root)
+  internalPlan(w.db, w.root, MINE)
+  for (let step = 0; step < 4; step += 1) await tick(w.db, w.root, stub(CARRIED))
+  writeFileSync(join(srcDir(w.root, MINE), 'src/parse.ts'), 'export const parse = (): number => 1\n')
+  const round1: Packet[] = []
+  await tick(w.db, w.root, stub(OWNS, 0, REFUSE, (p) => round1.push(p)))
+  expect(reviewer(round1)).not.toContain('# Your last verdict')
+
+  built(w.root, MINE, 'export const two = (): number => 2')
   const round2: Packet[] = []
-  await tick(w.db, w.root, stub(CARRIED, 0, PASS, (p) => round2.push(p)))
-  const prompt = round2[0]?.prompt ?? ''
+  for (let step = 0; step < 4; step += 1) await tick(w.db, w.root, stub(OWNS, 0, PASS, (p) => round2.push(p)))
+  const prompt = reviewer(round2)
   expect(prompt).toContain(`# Your last verdict\n\n---\noutcome: refuse\nclass: correctness\nspans:\n  - src/hello.ts:1\n---\n\n${WORDS}`)
   expect(prompt.split('# Changed since your last verdict')[1]).toContain('+export const two = (): number => 2')
+  expect(prompt.split('# Paths since your last verdict')[1]).toMatch(
+    new RegExp(`changed since the tree you judged:\n {2}- src/hello\\.ts\n\n`
+      + `merged from main, not the builder's:\n {2}- none\n\n`
+      + `unchanged since you judged it, at the blob it had then:\n {2}- src/parse\\.ts [0-9a-f]{40}`))
+  const trees = w.db.prepare('SELECT tree FROM verdicts WHERE plan = ? AND step = 4 ORDER BY id').all(MINE) as { tree: string }[]
+  expect(trees).toHaveLength(2)
+  expect(trees.every((r) => /^[0-9a-f]{40}$/.test(r.tree))).toBe(true)
+})
+
+test('narrowing calls a moved path the plan does not touch main\'s, and proves the rest with its blob', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cf-narrow-'))
+  const run = (...args: string[]): string => execFileSync('git', args, { cwd: dir, encoding: 'utf8' })
+  const commit = (message: string, ...paths: string[]): string =>
+    run('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', message, ...paths)
+  const write = (name: string, body: string): void => { writeFileSync(join(dir, name), body) }
+  run('init', '-q', '-b', 'main')
+  write('kept.ts', 'export const kept = 1\n')
+  run('add', '-A')
+  commit('base')
+  write('kept.ts', 'export const kept = 2\n')
+  write('built.ts', 'export const built = 1\n')
+  const tree = snapshot(dir)
+
+  write('main.ts', 'export const main = 1\n')
+  run('add', 'main.ts')
+  commit('main moves on main.ts', '--', 'main.ts')
+  write('built.ts', 'export const built = 2\n')
+
+  expect(narrowing(dir, tree, run('rev-parse', 'HEAD').trim())).toEqual({
+    changed: ['built.ts'],
+    merged: ['main.ts'],
+    unchanged: [['kept.ts', run('rev-parse', `${tree}:kept.ts`).trim()]],
+  })
 })
 
 test('a senior refusal lands on build too, and the ticks after it walk rails, review, senior', async () => {

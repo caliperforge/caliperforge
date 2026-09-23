@@ -13,7 +13,7 @@ import { filesOf } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
 import { internal, type PlanRow } from '../store/plans.ts'
 import { builder } from '../templates/pr-path.ts'
-import { checks, type Failure } from './checks.ts'
+import { checks, mode, type Failure } from './checks.ts'
 import type { Outcome } from './kind.ts'
 import { seat } from '../runner/rules.ts'
 import { renumbered, strays } from './fence.ts'
@@ -46,7 +46,7 @@ export function preReview(db: Db, root: string, plan: PlanRow): Outcome {
     recordRail(db, join(root, 'rails', 'checks'), plan.id, checked(failed, diffOf(root, plan.id)), 0)
     if (failed !== null) return broke(failed)
   }
-  return { outcome: 'pass', spans: [], note: 'pre-review: six rails pass' }
+  return { outcome: 'pass', spans: [], note: `pre-review: six rails pass; checks ran ${internal(plan) ? mode(srcDir(root, plan.id)) : 'none'}` }
 }
 
 /**

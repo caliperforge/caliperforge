@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 import { ready as readyRail, type Proof } from '../rails/ready/index.ts'
 import { record as recordRail } from '../rails/record.ts'
-import { record as recordMerge } from '../store/merges.ts'
+import { keep, last as lastMerge, lastReview, record as recordMerge } from '../store/merges.ts'
 import { digestOf, gates, headDigest } from '../store/approvals.ts'
 import { approved as settle, built, gated, ready as readyRow, type Made, type Proven } from '../store/deliverables.ts'
 import { record as recordFiles } from '../store/files.ts'
@@ -129,8 +129,8 @@ function freshBase(db: Db, root: string, plan: PlanRow): Outcome | null {
 
 /**
  * The one merge, for step 3 and for the ready and batch gates. #130: every merge leaves its two file
- * sets and their overlap on the plan, whether it went through or conflicted -- data first, and #60
- * part b is the decision that reads them. The builder's work is committed
+ * sets and their overlap on the plan, whether it went through or conflicted; `kept()` is the decision
+ * that reads them. The builder's work is committed
  * first: a merge into a dirty tree is the one way main's bytes and the seat's could be lost against
  * each other -- and never over unmerged paths, or conflict markers are what the plan's bytes turn
  * out to be. A merge that cannot be made leaves the branch on its old base and answers with the
@@ -146,12 +146,36 @@ function takeMain(db: Db, root: string, plan: PlanRow, src: string, main: string
   } catch {
     const paths = unmerged(src)
     abortMerge(src)
-    recordMerge(db, plan.id, step, { main, incoming, mine, overlap })
+    recordMerge(db, plan.id, step, { main, incoming, mine, overlap, clean: false })
     return paths
   }
-  recordMerge(db, plan.id, step, { main, incoming, mine, overlap })
+  recordMerge(db, plan.id, step, { main, incoming, mine, overlap, clean: true })
   put(root, plan.id, 'base.sha', `${main}\n`)
   return null
+}
+
+/**
+ * #131. A merge git took without help, that brought in no file the job changed, leaves the job's own diff
+ * byte-identical: the reviewers already passed exactly these bytes, so their verdict stands and no seat is
+ * fired. The rails and checks still run on the merged tree at step 3. Kept only for a verdict given before
+ * that merge, and only while the diff is the one senior passed; anything else is a full review as before.
+ */
+export function kept(db: Db, root: string, plan: PlanRow, step: Step): Outcome | null {
+  const gate = step.verdict_gate
+  const merge = lastMerge(db, plan.id)
+  if (gate === null || merge === null || !merge.clean || merge.overlap || merge.verdict === null) return null
+  const given = lastReview(db, plan.id, gate)
+  if (given?.outcome !== 'pass' || given.id > merge.verdict) return null
+  if (passedDiff(db, plan.id) !== digestOf(diffOf(root, plan.id))) return null
+  keep(db, plan.id, step.step, gate, given, merge.id)
+  return { outcome: 'pass', spans: [], note: `${step.runs} kept: main brought in ${String(merge.incoming.length)} file(s), none of the job's` }
+}
+
+/** The diff senior last passed, off the row its pass wrote. */
+function passedDiff(db: Db, plan: number): string | null {
+  const row = db.prepare("SELECT diff_digest FROM deliverables WHERE plan_id = ? AND step = 5 ORDER BY id DESC LIMIT 1")
+    .get(plan) as { diff_digest: string } | undefined
+  return row?.diff_digest ?? null
 }
 
 /**

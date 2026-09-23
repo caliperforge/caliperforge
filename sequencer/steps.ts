@@ -297,9 +297,9 @@ function green(ci: { outcome: string; subject_digest: string } | undefined): Pro
 }
 
 /** The repository and issue a plan's checkout is made from, if it has one. */
-export function targetOf(db: Db, plan: PlanRow): { repo: string; issue_no: number } | null {
-  const row = db.prepare('SELECT repo, issue_no FROM targets WHERE id = ?').get(plan.target_id)
-  return (row ?? null) as { repo: string; issue_no: number } | null
+export function targetOf(db: Db, plan: PlanRow): { repo: string; issue_no: number; part: string } | null {
+  const row = db.prepare('SELECT repo, issue_no, part FROM targets WHERE id = ?').get(plan.target_id)
+  return (row ?? null) as { repo: string; issue_no: number; part: string } | null
 }
 
 /**

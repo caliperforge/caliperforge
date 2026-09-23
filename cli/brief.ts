@@ -135,10 +135,13 @@ export function dryLines(d: Dry): string {
 }
 
 /** The receipt line a tick leaves in `ticks.note`, which is the only log launchd keeps. */
-export function tickNote(fired: Fired[]): string {
-  if (fired.length === 0) return 'nothing to fire'
-  return fired.map((f) => `${f.pipe} plan ${String(f.plan)} step ${String(f.step)} ${f.name} ${f.outcome}`
-    + (f.stole === null ? '' : ` took over pid ${String(f.stole)}`)).join('; ')
+/** `waits` are the plans held on another job's files (#88), so a wait reads as a wait and not an idle lane. */
+export function tickNote(fired: Fired[], waits: { plan: number; on: number }[] = []): string {
+  const held = waits.map((w) => `plan ${String(w.plan)} waits on plan ${String(w.on)}`)
+  const steps = fired.map((f) => `${f.pipe} plan ${String(f.plan)} step ${String(f.step)} ${f.name} ${f.outcome}`
+    + (f.stole === null ? '' : ` took over pid ${String(f.stole)}`))
+  const all = [...steps, ...held]
+  return all.length === 0 ? 'nothing to fire' : all.join('; ')
 }
 
 /** Why the tick passed this lane over: it had nothing to step, or the cap ran out before it (#125). */

@@ -15,7 +15,7 @@ import { started } from './signals.ts'
 import { parted } from './split.ts'
 import type { Wire } from './push.ts'
 import { fireBrief, fireReview, fireSeat } from './seat.ts'
-import { blocked, kept, kernel, proved, targetOf } from './steps.ts'
+import { blocked, kept, kernel, overlapping, proved, targetOf } from './steps.ts'
 import { languageFor } from './route.ts'
 import { SELF, branchOf, checkout, diffOf, internalBranch, maybe, put, reap, srcDir, titleOf } from './workspace.ts'
 
@@ -49,10 +49,10 @@ function waited(db: Db, offers: Offer[], open: Offer[], now: Date): void {
   const leases = new Set(held(db, now).map((l) => l.plan))
   const reached = new Set(open.map((o) => o.pipe.id))
   const taken = new Set(open.flatMap((o) => o.plans.map((p) => p.id)))
-  waiting(db, offers.flatMap((o) => live(db, o.pipe).map((plan) => ({
-    plan: plan.id,
-    why: taken.has(plan.id) ? null : why(db, plan, leases, reached.has(o.pipe.id)),
-  }))))
+  waiting(db, offers.flatMap((o) => live(db, o.pipe).map((plan) => {
+    const reason = taken.has(plan.id) ? null : why(db, plan, leases, reached.has(o.pipe.id))
+    return { plan: plan.id, why: reason, on: reason === 'file_overlap' ? (overlapping(db, plan)?.plan ?? null) : null }
+  })))
 }
 
 /** Why this live plan is not being stepped, in the order the tick decides it. */
@@ -130,7 +130,8 @@ export interface Dry {
 export function picks(db: Db, pipe: PipeRow, now: Date = new Date()): PlanRow[] {
   const leases = new Set(held(db, now).map((l) => l.plan))
   const mapped = live(db, pipe).filter((p) => MAPPED.has(p.template))
-  const free = mapped.filter((p) => p.state === 'running' || leases.has(p.id) || blocked(db, p) === null)
+  const free = mapped.filter((p) => leases.has(p.id) || blocked(db, p) === null
+    || (p.state === 'running' && overlapping(db, p) === null))
   return underCap(pipe, free, leases)
     .filter((p) => !leases.has(p.id) && (p.state !== 'running' || blocked(db, p) === null))
 }

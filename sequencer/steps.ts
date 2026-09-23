@@ -5,9 +5,9 @@ import { record as recordRail } from '../rails/record.ts'
 import { keep, last as lastMerge, lastReview, record as recordMerge } from '../store/merges.ts'
 import { digestOf, gates, headDigest } from '../store/approvals.ts'
 import { approved as settle, built, gated, ready as readyRow, type Made, type Proven } from '../store/deliverables.ts'
-import { record as recordFiles } from '../store/files.ts'
+import { record as recordFiles, sharing } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
-import { internal, originIssue, stampHead, type PlanRow, type Wait } from '../store/plans.ts'
+import { builderRan, internal, originIssue, stampHead, type PlanRow, type Wait } from '../store/plans.ts'
 import { at, type Step } from '../templates/pr-path.ts'
 import { files } from './brief.ts'
 import type { Outcome } from './kind.ts'
@@ -27,7 +27,17 @@ export function blocked(db: Db, plan: PlanRow): Wait | null {
   if (step.fires === 'ceo') return internal(plan) || approvedPlan(db, plan) ? null : 'ceo_batch'
   if (step.name === 'ruling') return internal(plan) || approved(db, plan) ? null : 'target_approval'
   if (step.name === 'ready') return proven(db, plan) ? null : 'ready_proof'
-  return target(db, plan)?.state === 'parked' ? 'target_parked' : null
+  if (target(db, plan)?.state === 'parked') return 'target_parked'
+  return overlapping(db, plan) === null ? null : 'file_overlap'
+}
+
+/**
+ * #88. A job about to build waits while another job in the same repo has one of its files in flight.
+ * Only a build that has not started waits: a job already building is never stopped by this.
+ */
+export function overlapping(db: Db, plan: PlanRow): { plan: number; path: string } | null {
+  if (at(plan.step).name !== 'build' || builderRan(db, plan.id)) return null
+  return sharing(db, plan.id)
 }
 
 export const WAITING: Record<Wait, string> = {
@@ -40,6 +50,7 @@ export const WAITING: Record<Wait, string> = {
   over_cap: 'its lane is open and full',
   lane_over_cap: 'the lane cap was spent on a lower lane',
   no_step_map: 'its template has no step map',
+  file_overlap: 'another job is building one of its files',
 }
 
 /** The parked target by name, which the bare reason cannot carry. */

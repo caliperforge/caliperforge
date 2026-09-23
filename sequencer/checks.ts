@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { appendFileSync, existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { z } from 'zod'
 
@@ -12,6 +12,9 @@ const TAIL = 80
 
 const CAP = 10 * 60 * 1000
 
+/** A cold Xcode build of the whole app and its tests runs well past the npm cap. */
+const XCODE_CAP = 25 * 60 * 1000
+
 const MAX = 64 * 1024 * 1024
 
 export interface Failure {
@@ -23,7 +26,30 @@ export interface Failure {
   retried: boolean
 }
 
-export type Run = (args: string[], cwd: string) => { code: number; output: string }
+/** `bin` is the program; left out it is `npm`, which is every checkout but an Xcode or a Kotlin one. */
+export type Run = (args: string[], cwd: string, bin?: string) => { code: number; output: string }
+
+/** #126: what a checkout is judged with, by what sits at its root. */
+export type Mode = 'xcodebuild' | 'npm' | 'gradle' | 'none'
+
+/** Derived data stays inside the checkout, under `.cf/work`, and never under a folder macOS guards. */
+export const DERIVED = '.cf-derived'
+
+const XCODE = (project: string): string[] => ['-project', project, '-scheme', project.replace(/\.xcodeproj$/, ''),
+  '-destination', 'platform=macOS', '-derivedDataPath', DERIVED, 'test']
+
+const GRADLE = ['-p', 'kotlin', 'check']
+
+export function mode(src: string): Mode {
+  if (project(src) !== null) return 'xcodebuild'
+  if (existsSync(join(src, 'package.json'))) return 'npm'
+  return existsSync(join(src, 'kotlin')) ? 'gradle' : 'none'
+}
+
+function project(src: string): string | null {
+  if (!existsSync(src)) return null
+  return readdirSync(src).find((name) => name.endsWith('.xcodeproj')) ?? null
+}
 
 /**
  * `narrow` is the plan's own file list (#77). Given one, the tests run is `vitest related` over those
@@ -31,14 +57,24 @@ export type Run = (args: string[], cwd: string) => { code: number; output: strin
  * through step 3 passes none, so every job still runs the suite whole once, against the tree it built on.
  */
 export function checks(src: string, run: Run = npm, narrow: string[] = []): Failure | null {
+  const bin = mode(src)
+  if (bin === 'xcodebuild') excluded(src)
   for (const [script, args] of commands(src, narrow)) {
-    const first = run(args, src)
+    const first = run(args, src, bin)
     if (first.code === 0) continue
     const retried = loadOnly(first.output)
-    const { code, output } = retried ? run(args, src) : first
-    if (code !== 0) return { script, command: `npm ${args.join(' ')}`, code, output: tail(output), retried }
+    const { code, output } = retried ? run(args, src, bin) : first
+    if (code !== 0) return { script, command: `${bin} ${args.join(' ')}`, code, output: tail(output), retried }
   }
   return null
+}
+
+/** The derived data is build output: never staged, never in the diff the reviewers read. */
+function excluded(src: string): void {
+  const path = join(src, '.git', 'info', 'exclude')
+  if (!existsSync(join(src, '.git'))) return
+  const held = existsSync(path) ? readFileSync(path, 'utf8') : ''
+  if (!held.split('\n').includes(`${DERIVED}/`)) appendFileSync(path, `${held.endsWith('\n') || held === '' ? '' : '\n'}${DERIVED}/\n`)
 }
 
 /** vitest names a failed test where it ran it and again under Failed Tests; each naming opens a block. */
@@ -64,6 +100,9 @@ export function failures(output: string): string[] {
 const VITEST = /(^|\s)vitest(\s|$)/
 
 function commands(src: string, narrow: string[]): [string, string[]][] {
+  const xcode = project(src)
+  if (xcode !== null) return [['test', XCODE(xcode)]]
+  if (mode(src) === 'gradle') return [['check', GRADLE]]
   const scripts = read(src)
   if (scripts === null) return []
   const named = SCRIPTS.filter((s) => scripts[s] !== undefined)
@@ -99,7 +138,7 @@ function tail(output: string): string {
 }
 
 /** A command the cap killed leaves no status, and that is the failure it is recorded as. */
-function npm(args: string[], cwd: string): { code: number; output: string } {
-  const done = spawnSync('npm', args, { cwd, encoding: 'utf8', timeout: CAP, maxBuffer: MAX })
+function npm(args: string[], cwd: string, bin = 'npm'): { code: number; output: string } {
+  const done = spawnSync(bin, args, { cwd, encoding: 'utf8', timeout: bin === 'xcodebuild' ? XCODE_CAP : CAP, maxBuffer: MAX })
   return { code: done.status ?? 1, output: `${done.stdout}${done.stderr}` }
 }

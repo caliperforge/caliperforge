@@ -1,10 +1,10 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { record } from '../../store/files.ts'
 import type { Db } from '../../store/index.ts'
-import { checks, type Run } from '../checks.ts'
+import { checks, mode, type Run } from '../checks.ts'
 import { tick } from '../index.ts'
 import { narrow } from '../rails.ts'
 import { get } from '../workspace.ts'
@@ -230,3 +230,46 @@ test('a plan on a target runs none of the stranger\'s scripts and passes step 3 
   expect(plan(w.db, w.plan).step).toBe(4)
   expect(w.db.prepare("SELECT 1 FROM verdicts WHERE plan = ? AND rail_id = 'checks'").all(w.plan)).toEqual([])
 }, SLOW)
+
+test('D1 an xcode checkout runs xcodebuild test with its derived data inside', () => {
+  const src = tree({})
+  mkdirSync(join(src, 'Atelier.xcodeproj'))
+  mkdirSync(join(src, '.git', 'info'), { recursive: true })
+  const bins: string[] = []
+  const seen: string[] = []
+  const run: Run = (...[args, , bin]) => { bins.push(bin ?? 'npm'); seen.push(args.join(' ')); return { code: 0, output: '' } }
+  expect(mode(src)).toBe('xcodebuild')
+  expect(checks(src, run)).toBeNull()
+  expect(bins).toEqual(['xcodebuild'])
+  expect(seen).toEqual(["-project Atelier.xcodeproj -scheme Atelier -destination platform=macOS -derivedDataPath .cf-derived test"])
+  expect(readFileSync(join(src, '.git', 'info', 'exclude'), 'utf8')).toContain('.cf-derived/')
+})
+
+test('D1 a red xcodebuild names its command', () => {
+  const src = tree({})
+  mkdirSync(join(src, 'Atelier.xcodeproj'))
+  const run: Run = () => ({ code: 65, output: '** TEST FAILED **' })
+  expect(checks(src, run)).toMatchObject({ script: 'test', code: 65, command: expect.stringMatching(/^xcodebuild -project Atelier\.xcodeproj/) as string })
+})
+
+test('D2 a package.json checkout runs npm as before', () => {
+  expect(mode(tree(ONE))).toBe('npm')
+})
+
+test('D3 a kotlin checkout runs gradle check', () => {
+  const src = tree({})
+  mkdirSync(join(src, 'kotlin'))
+  const bins: string[] = []
+  const seen: string[] = []
+  const run: Run = (...[args, , bin]) => { bins.push(bin ?? 'npm'); seen.push(args.join(' ')); return { code: 0, output: '' } }
+  expect(mode(src)).toBe('gradle')
+  expect(checks(src, run)).toBeNull()
+  expect([bins, seen]).toEqual([['gradle'], ['-p kotlin check']])
+})
+
+test('D4 the rails note names the mode', async () => {
+  const w = mine(GREEN)
+  const notes: string[] = []
+  for (let at = 0; at < 4; at += 1) notes.push(...(await tick(w.db, w.root, stub(CARRIED))).filter((f) => f.name === 'rails').map((f) => f.note))
+  expect(notes).toContain('pre-review: six rails pass; checks ran npm')
+})

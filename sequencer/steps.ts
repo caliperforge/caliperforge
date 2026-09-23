@@ -4,8 +4,9 @@ import { ready as readyRail, type Proof } from '../rails/ready/index.ts'
 import { record as recordRail } from '../rails/record.ts'
 import { keep, last as lastMerge, lastReview, record as recordMerge } from '../store/merges.ts'
 import { digestOf, gates, headDigest } from '../store/approvals.ts'
+import { parse } from '../rails/diff.ts'
 import { approved as settle, built, gated, ready as readyRow, type Made, type Proven } from '../store/deliverables.ts'
-import { record as recordFiles, sharing } from '../store/files.ts'
+import { building, filesOf, record as recordFiles, sharing, strays as recordStrays } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
 import { builderRan, internal, originIssue, stampHead, type PlanRow, type Wait } from '../store/plans.ts'
 import { at, type Step } from '../templates/pr-path.ts'
@@ -61,7 +62,7 @@ export function parked(db: Db, plan: PlanRow): string | null {
 
 export function kernel(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
   const step = at(plan.step)
-  if (step.name === 'rails') return freshBase(db, root, plan) ?? preReview(db, root, plan)
+  if (step.name === 'rails') return freshBase(db, root, plan) ?? strayed(db, root, plan) ?? preReview(db, root, plan)
   if (step.name === 'measure') return measure(db, plan)
   if (step.name === 'ready') return readyGate(db, root, plan, wire)
   if (step.name === 'batch') return batch(db, root, plan, wire)
@@ -115,6 +116,22 @@ function readyGate(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
   const verdict = readyRail(proofOf(db, plan, repo, row))
   recordRail(db, join(root, 'rails/ready'), plan.id, verdict, 0)
   return { outcome: verdict.outcome, spans: verdict.spans, note: `ready: ${verdict.message}` }
+}
+
+/**
+ * #89. #88 holds jobs apart on the paths their briefs named, and a build that wrote outside that list
+ * breaks the promise silently. So every path the build wrote outside it is recorded as a stray -- which #88
+ * reads on the next pick, and the rails do not -- and one an older job is building holds
+ * this job here, that job named, until it settles. A path nobody else holds goes on to the rails as before.
+ */
+function strayed(db: Db, root: string, plan: PlanRow): Outcome | null {
+  const listed = filesOf(db, plan.id).map((f) => f.path)
+  if (listed.length === 0) return null
+  const wrote = parse(diffOf(root, plan.id)).map((f) => f.path)
+  recordStrays(db, plan.id, wrote.filter((path) => !listed.includes(path)))
+  const other = building(db, plan.id, wrote)
+  if (other === null) return null
+  return { outcome: 'pass', held: true, spans: [other.path], note: `wrote ${other.path}, which plan ${String(other.plan)} is building; waits for it` }
 }
 
 /**

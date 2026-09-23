@@ -20,9 +20,27 @@ Step 1 fires the seat in the plan's checkout; the machine saves its reply as `is
 ## Files
 
 - sequencer/brief.ts
-- seats/brief_writer/manifest.yaml
+- sequencer/seat.ts:39
 - sequencer/ask.ts (new)
+
+## Files to read
+
+- seats/brief_writer/prompt.md — the template the seat carries today
+
+## Who else reads what this changes
+
+- sequencer/workspace.ts:44 — reads the D rows, unaffected: no row shape moves
+
+## Tests
+
+- sequencer/tests/brief.test.ts — one case per ground the check turns a brief back on
 
 ## Out of scope
 
 - posting the brief back to the issue as a comment
+
+## Standing
+
+- no shell, and no report of what it did not see
+- no forced push
+- no person's name or address in code

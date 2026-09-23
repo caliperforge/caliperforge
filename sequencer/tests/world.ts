@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
@@ -8,6 +8,7 @@ import type { Packet, Provider } from '../../providers/kind.ts'
 import type { Gh } from '../../rails/ci-green/index.ts'
 import type { Db } from '../../store/index.ts'
 import { PlanRow, type PipeRow } from '../../store/plans.ts'
+import { STANDING } from '../brief.ts'
 import { tick } from '../index.ts'
 import type { Fired } from '../kind.ts'
 import type { Wire } from '../push.ts'
@@ -38,17 +39,23 @@ export const dropping = (paths: string[]): string =>
 export const WORDS = '`hello()` takes no name, so the call the issue names as D2 cannot be refused at all.'
 export const REFUSE = `${WORDS}\n\n---\noutcome: refuse\nclass: correctness\nspans:\n  - src/hello.ts:1\n---\n`
 
-const BRIEF = ['', '**What:** add `hello()`.', '**Why:** the ask asks for it.', '**When it ends:** it is exported.', '',
-  '## Approach', '', 'Write it in `src/hello.ts`.', '',
-  '## Cases', '', '- D1 add `hello()` in `src/hello.ts`', '- D2 a call with no name is refused', '',
+const BRIEF = (file: string): string => ['',
+  '**What:** add `hello()`.', '**Why:** the ask asks for it.', '**When it ends:** it is exported.', '',
+  '## Approach', '', `Write it in \`${file}\`.`, '',
+  '## Cases', '', `- D1 add \`hello()\` in \`${file}\``, '- D2 a call with no name is refused', '',
   '## Must not break', '', '- the exports already in the file', '',
-  '## Files', '', '- src/hello.ts (new)', '',
-  '## Out of scope', '', '- everything the ask does not name', ''].join('\n')
+  '## Files', '', `- ${file}`, '',
+  '## Files to read', '', `- ${file} — what it exports today`, '',
+  '## Who else reads what this changes', '', '- nobody else: the ask names one file', '',
+  '## Tests', '', `- ${file} — a call with no name is refused`, '',
+  '## Out of scope', '', '- everything the ask does not name', '',
+  '## Standing', '', ...STANDING, ''].join('\n')
 
-/** A brief the shape check passes, titled off the ask the packet carries under `# Issue`. */
-export function briefFor(prompt: string): string {
+/** A brief the shape check passes, titled off the ask the packet carries under `# Issue` and named on a file the checkout holds. */
+export function briefFor(prompt: string, cwd: string): string {
   const issue = prompt.split('\n# Issue\n').at(-1) ?? ''
-  return `# ${/^#\s+(.*)$/m.exec(issue)?.[1] ?? 'no title'}\n${BRIEF}`
+  const file = existsSync(join(cwd, 'src/hello.ts')) ? 'src/hello.ts' : 'kotlin/build.gradle.kts'
+  return `# ${/^#\s+(.*)$/m.exec(issue)?.[1] ?? 'no title'}\n${BRIEF(file)}`
 }
 
 /**
@@ -113,7 +120,7 @@ export function builds(edit: () => void, review = PASS, exit = 0): Provider {
 function answer(packet: Packet, text: string, review: string, brief?: string): string {
   if (packet.tools.includes('Write')) return text
   if (!packet.prompt.includes('# brief_writer')) return review
-  return brief ?? briefFor(packet.prompt)
+  return brief ?? briefFor(packet.prompt, packet.cwd)
 }
 
 export const TYPESCRIPT = { 'src/hello.ts': 'export const hello = (): string => "hi"\n' }

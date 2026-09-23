@@ -5,10 +5,10 @@ import { walk } from '../../checks/tree.ts'
 import type { Packet } from '../../providers/kind.ts'
 import { release, returnToLane } from '../../store/holds.ts'
 import { get } from '../../store/lanes.ts'
-import { files, shape, unclear } from '../brief.ts'
+import { files, shape, TEMPLATE, unclear, type Refused } from '../brief.ts'
 import { tick } from '../index.ts'
 import { blocked } from '../steps.ts'
-import { drop, maybe, move, put, titleOf } from '../workspace.ts'
+import { drop, maybe, move, put, srcDir, titleOf } from '../workspace.ts'
 import { approve, CARRIED, internalPlan, ours, plan, reads, stub, world, type World } from './world.ts'
 
 const repo = join(import.meta.dirname, '../..')
@@ -16,6 +16,8 @@ const repo = join(import.meta.dirname, '../..')
 const fixture = (name: string): string => readFileSync(join(repo, 'seats/brief_writer/tests', name), 'utf8')
 
 const ask = fixture('ask.md')
+
+const brief = fixture('brief.md')
 
 const ID = 2
 
@@ -31,6 +33,21 @@ const listed = (w: World): unknown[] =>
 const STOP = `CREATE TRIGGER stop BEFORE UPDATE OF step ON plans WHEN NEW.step = 2
   BEGIN SELECT RAISE(ABORT, 'advance refused'); END`
 
+const on = (text: string): Refused | null => shape(text, ask, repo)
+
+const holding = (text: string): string => expect.stringContaining(text) as string
+
+/** The fixture with one section's bullets swapped for the lines given. */
+const swap = (text: string, heading: string, lines: string[]): string =>
+  text.replace(new RegExp(`(${heading}\n\n)[^#]*`), `$1${lines.join('\n')}\n\n`)
+
+/** The fixture carrying one more line under `## Out of scope`, which the grounds read like any other. */
+const saying = (line: string): string => brief.replace('- posting', `${line}\n- posting`)
+
+const handback = (changing: string[], others: string[]): string =>
+  swap(swap(brief, '## Files', ['- rails/completion-audit/index.ts', ...changing]),
+    '## Who else reads what this changes', others)
+
 /** A fixture reply retitled onto the ask the internal plan is filed with, which every brief's title must equal. */
 const titled = (name: string): string => fixture(name).replace('# A seat that briefs before any build', '# let an internal plan run')
 
@@ -45,29 +62,68 @@ function mine(): World {
   return w
 }
 
-test('a brief with every part, two D rows and files in the checkout passes', () => {
-  expect(shape(fixture('brief.md'), ask, repo)).toBeNull()
+test('a brief on the template with every section filled passes', () => {
+  expect(on(brief)).toBeNull()
 })
 
-test('the part that is missing is the span, and a path off the checkout is its own', () => {
-  expect(shape(fixture('no-must-not-break.md'), ask, repo)).toBe('## Must not break')
-  expect(shape(fixture('one-case.md'), ask, repo)).toBe('## Cases')
-  expect(shape(fixture('absent-file.md'), ask, repo)).toBe('sequencer/nowhere.ts')
+test('an empty section, a path off the tree and a `(new)` path already in it are each refused', () => {
+  expect(on(swap(brief, '## Out of scope', []))).toMatchObject({ span: '## Out of scope' })
+  expect(on(fixture('absent-file.md'))).toMatchObject({ span: 'sequencer/nowhere.ts' })
+  expect(on(swap(brief, '## Files', ['- sequencer/brief.ts (new)'])))
+    .toMatchObject({ span: 'sequencer/brief.ts', reason: holding('already in the tree') })
 })
 
-test('a title the ask does not carry, a dropped line, a part out of order and 60 lines passed are refused', () => {
-  const brief = fixture('brief.md')
-  expect(shape(brief.replace('# A seat', '# Some seat'), ask, repo)).toBe('# <title>')
-  expect(shape(brief.replace('# A seat that briefs before any build\n', ''), ask, repo)).toBe('# <title>')
-  expect(shape(brief.replace(/^\*\*Why:.*$/m, ''), ask, repo)).toBe('**Why:**')
-  expect(shape('# A seat that briefs before any build\n\n**What:** one\n**Why:** two\n**When it ends:** three\n'
-    + '\n## Cases\n\n- D1 one\n- D2 two\n\n## Approach\n', ask, repo)).toBe('## Cases')
-  expect(shape(`${brief}${'\n- a line'.repeat(40)}`, ask, repo)).toBe('60 lines')
+test('a forced push, a squash, a person and an address are refused; CaliperForge and a repo are not', () => {
+  expect(on(saying('- force push the branch once the base moves'))).toMatchObject({ span: 'force push' })
+  expect(on(saying('- squash the two commits into one'))).toMatchObject({ span: 'squash' })
+  expect(on(saying('- keep the row Sam Hartley signed off'))).toMatchObject({ span: 'Sam Hartley' })
+  expect(on(saying('- mail coo@example.com when it lands'))).toMatchObject({ span: 'coo@example.com' })
+  expect(on(saying('- CaliperForge keeps the caliperforge/widget fork'))).toBeNull()
+})
+
+test('a brief asking the builder to run, count or report anything needing a shell is refused', () => {
+  const shell = 'the builder holds no shell'
+  expect(on(saying('- run the tests in the checkout'))).toMatchObject({ span: 'run the tests' })
+  expect(on(saying('- run the tests in the checkout'))?.reason).toContain(shell)
+  expect(on(saying('- count what npm test writes'))?.reason).toContain(shell)
+  expect(on(saying('- report the git log for the branch'))?.reason).toContain(shell)
+})
+
+test('a brief over the line ceiling is refused on the cap', () => {
+  expect(on(saying(Array.from({ length: 40 }, () => '- a line').join('\n')))).toMatchObject({ span: '80 lines' })
+})
+
+test('a change to the handback format names both its readers or is refused on the one left out', () => {
+  const unaffected = ['- sequencer/workspace.ts:44 — reads the D rows, unaffected']
+  expect(on(handback([], unaffected))).toMatchObject({ span: 'sequencer/rails.ts' })
+  expect(on(handback(['- sequencer/rails.ts'], unaffected)))
+    .toMatchObject({ span: 'rails/tight/prose.ts', reason: holding('the handback format') })
+  expect(on(handback([], ['- sequencer/rails.ts — reads it', '- rails/tight/prose.ts — reads it']))).toBeNull()
+})
+
+test('the handback format beside a path that is neither its reader nor a test is two jobs in one', () => {
+  const readers = ['- sequencer/rails.ts', '- rails/tight/prose.ts']
+  expect(on(handback([...readers, '- store/plans.ts'], ['- nothing else'])))
+    .toMatchObject({ span: 'store/plans.ts', reason: holding('two jobs in one brief') })
+  expect(on(handback([...readers, '- sequencer/tests/brief.test.ts'], ['- nothing else']))).toBeNull()
+})
+
+test('the part that is missing is the span, and a section with one D row is its own', () => {
+  expect(on(fixture('no-must-not-break.md'))).toMatchObject({ span: '## Must not break' })
+  expect(on(fixture('one-case.md'))).toMatchObject({ span: '## Cases' })
+})
+
+test('a title the ask does not carry, a dropped line and a part out of order are refused', () => {
+  expect(on(brief.replace('# A seat', '# Some seat'))).toMatchObject({ span: '# <title>' })
+  expect(on(brief.replace('# A seat that briefs before any build\n', ''))).toMatchObject({ span: '# <title>' })
+  expect(on(brief.replace(/^\*\*Why:.*$/m, ''))).toMatchObject({ span: '**Why:**' })
+  const flipped = brief.replace('## Tests', '## X').replace('## Out of scope', '## Tests').replace('## X', '## Out of scope')
+  expect(on(flipped)).toMatchObject({ span: '## Out of scope' })
 })
 
 test('only a fence that says unclear carries a question back to the COO', () => {
   expect(unclear(fixture('unclear.md'))).toBe('is the GitHub comment part of this change or its own issue?')
-  expect(unclear(fixture('brief.md'))).toBeNull()
+  expect(unclear(brief)).toBeNull()
   expect(unclear('---\noutcome: unclear\n---\n')).toBeNull()
 })
 
@@ -81,7 +137,7 @@ test('step 1 fires the read-only seat once, saves its reply as the brief, and ad
   expect(fired).toMatchObject({ step: 1, name: 'ruling', outcome: 'pass' })
   expect(packets.map((p) => p.tools)).toEqual([['Read', 'Glob', 'Grep']])
   expect(packets[0]?.refuse('src/hello.ts')).toMatchObject({ origin_ref: 'seat.write_paths' })
-  expect(shape(briefOf(w), askOf(w), repo)).toBeNull()
+  expect(shape(briefOf(w), askOf(w), srcDir(w.root, ID))).toBeNull()
   expect(titleOf(w.root, ID)).toBe('let an internal plan run')
   expect(w.db.prepare('SELECT seat, exit FROM runs WHERE step = 1').get()).toEqual({ seat: 'brief_writer', exit: 0 })
   expect(plan(w.db, ID).step).toBe(2)
@@ -100,6 +156,17 @@ test('a throw at the advance takes the file list back with it', async () => {
   await tick(w.db, w.root, stub(CARRIED))
   expect(plan(w.db, ID).step).toBe(2)
   expect(listed(w)).toEqual([{ path: 'src/hello.ts' }])
+})
+
+test('the seat packet carries the template under the ask', async () => {
+  const w = mine()
+  const packets: Packet[] = []
+  await tick(w.db, w.root, stub(CARRIED))
+  await tick(w.db, w.root, stub(CARRIED, 0, undefined, (p) => packets.push(p)))
+
+  const prompt = packets[0]?.prompt ?? ''
+  expect(prompt).toContain(TEMPLATE)
+  expect(prompt.indexOf(TEMPLATE)).toBeGreaterThan(prompt.indexOf('# let an internal plan run'))
 })
 
 const FAILS = [
@@ -133,8 +200,8 @@ test('the seat is fired again with the shape refusal under the ask', async () =>
 
   await tick(w.db, w.root, stub(CARRIED, 0, undefined, (p) => packets.push(p)))
   expect(packets[0]?.prompt).toContain('# Refused — write the whole brief again, fixing this')
-  expect(packets[0]?.prompt).toContain('the brief is missing ## Must not break')
-  expect(shape(briefOf(w), askOf(w), repo)).toBeNull()
+  expect(packets[0]?.prompt).toContain('## Must not break is missing or out of order')
+  expect(shape(briefOf(w), askOf(w), srcDir(w.root, ID))).toBeNull()
 })
 
 test('a brief saved after a shape refusal leaves the builder no refusal to read', async () => {
@@ -164,12 +231,12 @@ test('an unclear reply stops the plan on the COO, saves the question, and spends
 test('a round that comes back to step 1 keeps the brief the reviewers read', async () => {
   const w = mine()
   for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
-  const brief = briefOf(w)
+  const saved = briefOf(w)
   w.db.prepare("UPDATE plans SET step = 1, state = 'running' WHERE id = ?").run(ID)
 
   const again = (await tick(w.db, w.root, stub(CARRIED)))[0]
   expect(again).toMatchObject({ step: 1, outcome: 'pass', note: 'the brief stands' })
-  expect(briefOf(w)).toBe(brief)
+  expect(briefOf(w)).toBe(saved)
   expect(w.db.prepare('SELECT count(*) AS n FROM runs WHERE step = 1').get()).toEqual({ n: 1 })
 })
 
@@ -199,7 +266,7 @@ test('a plan queued before the brief seat has its raw issue moved to the ask and
 
   expect((await tick(w.db, w.root, stub(CARRIED)))[0]).toMatchObject({ step: 1, outcome: 'pass' })
   expect(maybe(w.root, ID, 'ask.md')).toBe(raw)
-  expect(shape(briefOf(w), raw, repo)).toBeNull()
+  expect(shape(briefOf(w), raw, srcDir(w.root, ID))).toBeNull()
 })
 
 /** A world whose ten reads are unspent, ticked through step 0 to the tick that passes step 1. */
@@ -296,7 +363,7 @@ test('brief.ts is the only source that reads ## Files, and the shape check refus
   expect(readers).toEqual(['sequencer/brief.ts'])
 
   const brief = fixture('absent-file.md')
-  expect(files(brief).map((f) => f.path)).toEqual([shape(brief, ask, repo)])
+  expect(files(brief).map((f) => f.path)).toEqual([shape(brief, ask, repo)?.span])
 })
 
 test('a Files row naming several paths lists each once', () => {

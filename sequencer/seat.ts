@@ -12,7 +12,7 @@ import { observed, wall } from '../store/lanes.ts'
 import { builderRan, internal, type PlanRow } from '../store/plans.ts'
 import { byRun, pending } from '../store/transcript.ts'
 import type { Step } from '../templates/pr-path.ts'
-import { pointed, shape, split, unclear, wide, WIDE, type Part } from './brief.ts'
+import { pointed, shape, split, TEMPLATE, unclear, wide, WIDE, type Part } from './brief.ts'
 import { handout, touched, type Handed } from './handout.ts'
 import { install } from './checks.ts'
 import { deletions } from './fence.ts'
@@ -85,8 +85,8 @@ export async function fireBrief(db: Db, root: string, plan: PlanRow, step: Step,
     put(root, plan.id, 'split.md', fired.text)
     return splitting(step, parts)
   }
-  const missing = shape(fired.text, ask, src)
-  if (missing !== null) return { outcome: 'refuse', spans: [missing], note: `${step.runs}: the brief is missing ${missing}` }
+  const refused = shape(fired.text, ask, src)
+  if (refused !== null) return { outcome: 'refuse', spans: [refused.span], note: `${step.runs}: ${refused.reason}` }
   const width = internal(plan) ? wide(fired.text) : null
   if (width !== null) {
     return { outcome: 'refuse', spans: ['brief.wide'],
@@ -108,7 +108,8 @@ function stands(): Outcome {
 
 function again(root: string, plan: number, ask: string): string {
   const refusal = maybe(root, plan, 'refusal.md')
-  return refusal === null ? ask : `${ask}\n\n# Refused — write the whole brief again, fixing this\n\n${refusal}`
+  const asked = `${ask}\n\n${TEMPLATE}`
+  return refusal === null ? asked : `${asked}\n# Refused — write the whole brief again, fixing this\n\n${refusal}`
 }
 
 /** A plan queued before the brief seat carries its ask as `issue.md`, the name the brief now takes. */

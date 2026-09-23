@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { split, wide } from '../brief.ts'
+import { split, STANDING, wide } from '../brief.ts'
 import { tick } from '../index.ts'
 import { following } from '../split.ts'
 import { maybe } from '../workspace.ts'
@@ -108,5 +108,7 @@ function wideBrief(paths: string[]): string {
   return ['# let an internal plan run', '', '**What:** a.', '**Why:** b.', '**When it ends:** c.', '',
     '## Approach', '', 'x', '', '## Cases', '', '- D1 one', '- D2 a call with no name is refused', '',
     '## Must not break', '', '- y', '', '## Files', '', ...paths.map((p) => `- ${p}`), '',
-    '## Out of scope', '', '- z', ''].join('\n')
+    '## Files to read', '', '- src/hello.ts — what it exports today', '',
+    '## Who else reads what this changes', '', '- nobody else', '', '## Tests', '', '- src/a.ts — the case', '',
+    '## Out of scope', '', '- z', '', '## Standing', '', ...STANDING, ''].join('\n')
 }

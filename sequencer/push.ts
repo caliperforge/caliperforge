@@ -10,7 +10,8 @@ import type { Db } from '../store/index.ts'
 import { internal, originIssue, type PlanRow } from '../store/plans.ts'
 import { red } from './failures.ts'
 import type { Outcome } from './kind.ts'
-import { cloned, conflicted, diffOf, fetchMain, FORK, get, MAIN, maybe, planDir, put, repoName, SELF, srcDir, titleOf } from './workspace.ts'
+import { cloned, conflicted, diffOf, fetchMain, FORK, get, MAIN, maybe, planDir, put, repoName, srcDir, titleOf } from './workspace.ts'
+import { homeOf } from './home.ts'
 
 interface Head { dir: string; branch: string; sha: string }
 
@@ -144,8 +145,8 @@ export function land(db: Db, root: string, plan: PlanRow, approval: number, wire
   const sha = merged(head.dir, head.branch)
   if (sha === null) return refuse('base:stale', `main moved under plan ${String(plan.id)} between ready and land; cut it again from main`)
   wire.send(head.dir, 'main')
-  wire.close(SELF, issue, sha)
-  pushed(db, plan.id, approval, `https://github.com/${SELF}/commit/${sha}`)
+  wire.close(homeOf(plan), issue, sha)
+  pushed(db, plan.id, approval, `https://github.com/${homeOf(plan)}/commit/${sha}`)
   return { outcome: 'pass', spans: [], note: `landed ${head.branch} on main as ${sha.slice(0, 12)}` }
 }
 

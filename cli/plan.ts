@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { put } from '../sequencer/workspace.ts'
+import { FORK, put, SELF } from '../sequencer/workspace.ts'
 import type { Db } from '../store/index.ts'
 import { templatePriority } from '../store/lanes.ts'
 import { DEFAULT_BUILDER } from '../templates/pr-path.ts'
@@ -36,12 +36,15 @@ export type Lane = typeof LANES[number]
 
 export type Template = 'pr_path' | 'research' | 'comms'
 
-/** The template each lane files on, and the seat that template falls to when no `seat:` label names one. */
-const LANE: Record<Lane, { template: Template; seat: string }> = {
-  machine: { template: 'pr_path', seat: DEFAULT_BUILDER },
-  atelier: { template: 'pr_path', seat: DEFAULT_BUILDER },
-  comms: { template: 'comms', seat: DEFAULT_BUILDER },
-  research: { template: 'research', seat: DEFAULT_BUILDER },
+/**
+ * Each lane in one place (#69): the template it files on, the seat that template falls to when no `seat:`
+ * label names one, the repo its jobs build and land in, and the pipe they queue on. A lane's pipe starts off.
+ */
+export const LANE: Record<Lane, { template: Template; seat: string; home: string; pipe: string }> = {
+  machine: { template: 'pr_path', seat: DEFAULT_BUILDER, home: SELF, pipe: 'internal' },
+  atelier: { template: 'pr_path', seat: 'swift_specialist', home: `${FORK}/atelier`, pipe: 'atelier' },
+  comms: { template: 'comms', seat: DEFAULT_BUILDER, home: SELF, pipe: 'internal' },
+  research: { template: 'research', seat: DEFAULT_BUILDER, home: SELF, pipe: 'internal' },
 }
 
 export interface Filed {
@@ -89,7 +92,7 @@ export function priorityOf(labels: { name: string }[]): number | null {
   return one === undefined ? null : Number(one[1])
 }
 
-export function add(db: Db, root: string, ref: string, pipe: string, read: Read = gh): Filed {
+export function add(db: Db, root: string, ref: string, pipe?: string, read: Read = gh): Filed {
   const { repo, no } = parse(ref)
   const row = issue(repo, no, read)
   const lane = laneOf(row.labels)
@@ -102,8 +105,11 @@ export function add(db: Db, root: string, ref: string, pipe: string, read: Read 
   } catch (error) {
     return refusal(db, ref, 'plan.priority_label', error instanceof Error ? error.message : String(error))
   }
+  if (repo !== LANE[lane].home) {
+    return refusal(db, ref, 'plan.lane_home', `is on ${repo}; the ${lane} lane builds in ${LANE[lane].home}`)
+  }
   const seat = seatOf(row.labels) ?? LANE[lane].seat
-  const plan = file(db, pipe, lane, seat, row.url, priority)
+  const plan = file(db, pipe ?? LANE[lane].pipe, lane, seat, row.url, priority)
   put(root, plan, 'ask.md', `# ${row.title}\n\n${row.body}\n`)
   return { plan, lane, seat, state: 'queued', why: `${ref} queued on ${lane} for ${seat}`, origin: null, ruling: null }
 }
@@ -136,6 +142,9 @@ function ruling(db: Db, subject: string): number | null {
 function file(db: Db, pipe: string, lane: Lane, seat: string, url: string, priority: number | null): number {
   const held = db.prepare('SELECT id FROM plans WHERE origin = ?').get(url) as { id: number } | undefined
   if (held !== undefined) return held.id
+  if (pipe === LANE[lane].pipe) {
+    db.prepare("INSERT OR IGNORE INTO pipes (name, enabled, window_start, window_end, max_concurrent) VALUES (?, 0, '07:00', '22:00', 1)").run(pipe)
+  }
   const row = db.prepare('SELECT id FROM pipes WHERE name = ?').get(pipe) as { id: number } | undefined
   if (row === undefined) throw new Error(`no pipe "${pipe}"; cf pipe on ${pipe}`)
   const template = LANE[lane].template

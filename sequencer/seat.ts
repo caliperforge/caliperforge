@@ -19,17 +19,18 @@ import { deletions } from './fence.ts'
 import { fenceFor } from './route.ts'
 import type { Outcome } from './kind.ts'
 import { carried, cloned, diffOf, diffSince, drop, get, maybe, move, narrowing, planDir, put, snapshot, srcDir } from './workspace.ts'
+import { kernelPlan } from './home.ts'
 
 const INSERT = `INSERT INTO runs
   (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_tokens, output_tokens, seconds, exit, transcript_path)
   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 export async function fireSeat(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
-  if (internal(plan)) install(srcDir(root, plan.id))
+  if (kernelPlan(plan)) install(srcDir(root, plan.id))
   const name = `step-${String(step.step)}.handback.md`
   const prev = maybe(root, plan.id, name)
   if (prev !== null) put(root, plan.id, `step-${String(step.step)}.handback.prev.md`, prev)
-  const fired = await ran(db, root, plan, step, provider, rebuild(db, root, plan, prev), internal(plan))
+  const fired = await ran(db, root, plan, step, provider, rebuild(db, root, plan, prev), kernelPlan(plan))
   put(root, plan.id, name, fired.text)
   const tokens = fired.usage.input + fired.usage.cache + fired.usage.output
   if (fired.exit !== 0) return exited(step, fired)
@@ -48,7 +49,7 @@ function dropped(db: Db, root: string, plan: PlanRow, step: Step, handback: stri
   if (paths.length === 0) return null
   const src = srcDir(root, plan.id)
   const fence = fenceFor(db, plan.id, seat(root, step.runs).manifest.write_paths)
-  const barred = paths.filter((path) => refuse(src, fence, path, internal(plan)) !== null)
+  const barred = paths.filter((path) => refuse(src, fence, path, kernelPlan(plan)) !== null)
   const absent = paths.filter((path) => !barred.includes(path) && !existsSync(join(src, path)))
   if (barred.length > 0 || absent.length > 0) {
     const why = [...barred.map((p) => `${p} is outside the fence`), ...absent.map((p) => `${p} is not in the tree`)]

@@ -3,7 +3,8 @@ import { internal, originIssue, PlanRow } from '../store/plans.ts'
 import type { Part } from './brief.ts'
 import type { Outcome } from './kind.ts'
 import { WIRE, type Wire } from './push.ts'
-import { drop, put, SELF } from './workspace.ts'
+import { drop, put } from './workspace.ts'
+import { homeOf } from './home.ts'
 
 const LETTERS = 'abcdefghijklmnopqrstuvwxyz'
 
@@ -27,7 +28,7 @@ export function parted(db: Db, root: string, plan: PlanRow, parts: Part[], wire:
   try {
     const urls = [...parts.keys()].map((n) => filed(db, plan, parent, parts, n, wire))
     queue(db, root, plan, 0)
-    wire.comment(SELF, parent, `The brief writer found this is ${String(parts.length)} jobs, not one. They land in this order: ${urls.map(ref).join(', ')}. The first is queued; each one that lands queues the next, and this issue closes when the last one lands.`)
+    wire.comment(homeOf(plan), parent, `The brief writer found this is ${String(parts.length)} jobs, not one. They land in this order: ${urls.map(ref).join(', ')}. The first is queued; each one that lands queues the next, and this issue closes when the last one lands.`)
     return { outcome: 'pass', spans: [], split: true, note: `split into ${urls.map(ref).join(', ')}; ${ref(urls[0] ?? '')} queued` }
   } catch (error) {
     const note = error instanceof Error ? error.message : String(error)
@@ -49,7 +50,7 @@ export function following(db: Db, root: string, plan: PlanRow, sha: string, wire
   const issue = originIssue(parent)
   if (issue === null) return 'the last part landed'
   try {
-    wire.close(SELF, issue, sha)
+    wire.close(homeOf(parent), issue, sha)
     return `the last part landed; #${String(issue)} closed`
   } catch (error) {
     return `the last part landed; closing #${String(issue)} failed: ${error instanceof Error ? error.message : String(error)}`
@@ -75,7 +76,7 @@ function filed(db: Db, plan: PlanRow, parent: number, parts: Part[], n: number, 
   const body = [`**What:** ${part.what}`, `**Why:** ${part.why}`, `**When it ends:** ${part.ends}`, '',
     `Part ${letter(n)} of ${String(parts.length)} of #${String(parent)}, split by the brief writer.`,
     ...(prior === undefined ? [] : [`After: ${ref(prior)}`]), ''].join('\n')
-  const url = wire.file(SELF, title, body, plan.lane === null ? [] : [`lane:${plan.lane}`])
+  const url = wire.file(homeOf(plan), title, body, plan.lane === null ? [] : [`lane:${plan.lane}`])
   db.prepare('INSERT INTO parts (parent, n, url, title, body) VALUES (?, ?, ?, ?, ?)').run(plan.id, n, url, title, body)
   return url
 }

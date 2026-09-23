@@ -19,6 +19,7 @@ import { seat } from '../runner/rules.ts'
 import { renumbered, strays } from './fence.ts'
 import { fenceFor, languageFor } from './route.ts'
 import { diffOf, doneIds, get, maybe, srcDir } from './workspace.ts'
+import { kernelPlan } from './home.ts'
 
 /**
  * Step 3: the six rails the map's step list names, in its order, ending at the first refusal, and
@@ -26,7 +27,7 @@ import { diffOf, doneIds, get, maybe, srcDir } from './workspace.ts'
  * first so that `rest()` reads a diff carrying the digests, not the ones the builder left behind.
  */
 export function preReview(db: Db, root: string, plan: PlanRow): Outcome {
-  const refusal = internal(plan) ? unfilled(srcDir(root, plan.id)) : null
+  const refusal = kernelPlan(plan) ? unfilled(srcDir(root, plan.id)) : null
   if (refusal !== null) return refusal
   const handback = get(root, plan.id, 'step-2.handback.md')
   const diff = diffOf(root, plan.id)
@@ -93,12 +94,12 @@ function rest(db: Db, root: string, plan: PlanRow, handback: string): [string, (
   const diff = diffOf(root, plan.id)
   const name = builder(languageFor(db, plan, src))
   const fence = fenceFor(db, plan.id, seat(root, name).manifest.write_paths)
-  const outside = internal(plan)
+  const outside = kernelPlan(plan)
     ? strays(parse(diff).map((f) => f.path), filesOf(db, plan.id).map((f) => f.path), handback)
     : []
   return [
     ['secret-scan', () => scan(diff)],
-    ['authority', () => authority(root, name, diff, internal(plan), fence, outside, internal(plan) ? renumbered(src, diff) : [])],
+    ['authority', () => authority(root, name, diff, kernelPlan(plan), fence, outside, kernelPlan(plan) ? renumbered(src, diff) : [])],
     ['tight', () => tight(root, { diff, sources: sources(src, diff), ...prose(root, plan, handback) })],
     ['test-weakened', () => weakened(diff, 'green')],
     ['identifiers', () => identifiers(src, handback)],

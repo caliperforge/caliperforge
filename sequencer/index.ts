@@ -17,7 +17,8 @@ import type { Wire } from './push.ts'
 import { fireBrief, fireReview, fireSeat } from './seat.ts'
 import { blocked, kept, kernel, overlapping, proved, targetOf } from './steps.ts'
 import { languageFor } from './route.ts'
-import { SELF, branchOf, checkout, diffOf, internalBranch, maybe, put, reap, srcDir, titleOf } from './workspace.ts'
+import { branchOf, checkout, diffOf, internalBranch, maybe, put, reap, srcDir, titleOf } from './workspace.ts'
+import { homeOf } from './home.ts'
 
 /**
  * `read`, `wire` and `labels` are the network a tick touches on its own account; each is injected so a test can drive a lap
@@ -249,7 +250,7 @@ function workspace(db: Db, root: string, plan: PlanRow): { language: string | nu
  */
 function treeOf(db: Db, root: string, plan: PlanRow): { repo: string; branch: string } | null {
   if (internal(plan)) {
-    return { repo: SELF, branch: internalBranch(plan.id, titleOf(root, plan.id) ?? `plan ${String(plan.id)}`) }
+    return { repo: homeOf(plan), branch: internalBranch(plan.id, titleOf(root, plan.id) ?? `plan ${String(plan.id)}`) }
   }
   const row = targetOf(db, plan)
   return row === null ? null : { repo: row.repo, branch: branchOf(row.repo, row.issue_no, plan.retries + 1) }

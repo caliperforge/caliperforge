@@ -23,8 +23,11 @@ const INSERT = `INSERT INTO runs
 
 export async function fireSeat(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
   if (internal(plan)) install(srcDir(root, plan.id))
-  const fired = await ran(db, root, plan, step, provider, rebuild(db, root, plan), internal(plan))
-  put(root, plan.id, `step-${String(step.step)}.handback.md`, fired.text)
+  const name = `step-${String(step.step)}.handback.md`
+  const prev = maybe(root, plan.id, name)
+  if (prev !== null) put(root, plan.id, `step-${String(step.step)}.handback.prev.md`, prev)
+  const fired = await ran(db, root, plan, step, provider, rebuild(db, root, plan, prev), internal(plan))
+  put(root, plan.id, name, fired.text)
   const tokens = fired.usage.input + fired.usage.cache + fired.usage.output
   if (fired.exit === 0) return { outcome: 'pass', spans: [], note: `${step.runs} exit 0, ${String(tokens)} tokens` }
   return exited(step, fired)
@@ -109,19 +112,27 @@ function exited(step: Step, fired: Fired): Outcome {
 
 /**
  * The builder's packet (#67): the brief and the text of the files it lists; on a rebuild, the spans the
- * refusal named, the builder's own diff so far, and the text of only the files those two touch. After a
- * #162 re-cut the diff is the one carried across and the files are main's, so the packet says to
- * re-apply rather than to carry on: the builder is looking at a tree that has none of its work in it.
+ * refusal named, the rows its last hand-back claimed, the builder's own diff so far, and the text of only
+ * the files those touch. After a #162 re-cut the diff is the one carried across and the files are main's,
+ * so the packet says to re-apply rather than to carry on: the builder is looking at a tree that has none
+ * of its work in it.
  */
-function rebuild(db: Db, root: string, plan: PlanRow): string {
+function rebuild(db: Db, root: string, plan: PlanRow, prev: string | null): string {
   const src = srcDir(root, plan.id)
   const issue = get(root, plan.id, 'issue.md')
   const refusal = maybe(root, plan.id, 'refusal.md')
-  if (refusal === null) return handed(issue, handout(src, listed(db, plan.id, issue)))
+  const rows = lastRows(prev)
+  if (refusal === null) return handed(`${issue}${rows}`, handout(src, listed(db, plan.id, issue)))
   const diff = diffOf(root, plan.id)
-  const again = `${issue}\n\n# Refused — rebuild only these spans\n\n${refusal}`
+  const again = `${issue}\n\n# Refused — rebuild only these spans\n\n${refusal}${rows}`
   const since = diff.trim() === '' ? again : `${again}\n\n# ${headed(root, plan.id)}\n\n\`\`\`\`diff\n${diff}\n\`\`\`\``
   return handed(since, handout(src, touched(diff, refusal)))
+}
+
+/** The rows the last fence claimed: a rebuild's own fence answers every case, not only the ones it touched. */
+function lastRows(prev: string | null): string {
+  const done = /^---\r?\n[\s\S]*?^(done:[\s\S]*?)\r?\n---\s*$/m.exec(prev ?? '')?.[1]
+  return done === undefined ? '' : `\n\n# Your last hand-back — carry these rows forward, updating the ones you rebuild\n\n${done}\n`
 }
 
 function headed(root: string, plan: number): string {

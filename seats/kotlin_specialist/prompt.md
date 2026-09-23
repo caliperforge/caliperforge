@@ -32,3 +32,4 @@ done:
 
 One `- id:` row per `- D<n>` the issue lists, same ids, same order. An issue that lists none has one, `D1`.
 `status` is `done`, `cannot-be-done` or `they-said-dont`.
+A rebuild's fence lists every case again: carry forward the rows the refusal did not touch, update the ones it did.

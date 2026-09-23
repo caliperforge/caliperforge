@@ -173,6 +173,17 @@ const planFile = (root: string, name: string): string => readFileSync(join(root,
 
 const PAIR = `${WORDS}\n\n---\noutcome: refuse\nclass: correctness\nspans:\n  - src/hello.ts:1\n  - src/parse.ts:3\n---\n`
 
+test('a rebuild keeps the hand-back it was refused on and hands its rows to the builder', async () => {
+  const w = world()
+  approve(w.db, w.target)
+  for (let at = 0; at < 4; at += 1) await tick(w.db, w.root, stub(UNPOINTED))
+  const packets: Packet[] = []
+  await tick(w.db, w.root, stub(CARRIED, 0, PASS, (p) => packets.push(p)))
+  expect(planFile(w.root, 'step-2.handback.prev.md')).toBe(UNPOINTED)
+  expect(packets.find((p) => p.tools.includes('Write'))?.prompt)
+    .toContain('done:\n  - id: D1\n    status: done\n    pointer:')
+})
+
 test('a review refusal returns the plan to build with every span the reviewer named, then escalates', async () => {
   const w = world()
   approve(w.db, w.target)

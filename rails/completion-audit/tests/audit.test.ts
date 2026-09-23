@@ -26,6 +26,30 @@ test('refuses an expected done-condition the handback does not carry', () => {
   expect(verdict.origin_ref).toBe('completion-audit')
 })
 
+const touching = (path: string): string => `--- a/${path}\n+++ b/${path}\n@@ -1,1 +1,2 @@\n x\n+y\n`
+
+test('a one-line rebuild carries forward the rows its diff never touched', () => {
+  const verdict = audit(fixture('handback-rebuilt.md'), ['D1', 'D2', 'D3', 'D4', 'D5'],
+    fixture('handback-five.md'), touching('src/hello.ts'))
+  expect(verdict.outcome).toBe('pass')
+  expect(verdict.spans).toEqual([])
+  expect(verdict.message).toContain('D2, D3, D4, D5')
+})
+
+test('refuses an id neither the rebuild nor the previous handback carries', () => {
+  const verdict = audit(fixture('handback-rebuilt.md'), ['D1', 'D2', 'D6'],
+    fixture('handback-five.md'), touching('src/hello.ts'))
+  expect(verdict.outcome).toBe('refuse')
+  expect(verdict.spans).toEqual(['D6'])
+})
+
+test('refuses an absent id whose previous pointer names a file the rebuild touched', () => {
+  const verdict = audit(fixture('handback-rebuilt.md'), ['D1', 'D2'],
+    fixture('handback-five.md'), touching('src/greet.ts'))
+  expect(verdict.outcome).toBe('refuse')
+  expect(verdict.spans).toEqual(['D2'])
+})
+
 test('refuses every expected done-condition when the handback carries no fence', () => {
   const verdict = audit('Not logged in \u00b7 Please run /login', ['D1'])
   expect(verdict.outcome).toBe('refuse')

@@ -29,7 +29,9 @@ export function preReview(db: Db, root: string, plan: PlanRow): Outcome {
   const refusal = internal(plan) ? unfilled(srcDir(root, plan.id)) : null
   if (refusal !== null) return refusal
   const handback = get(root, plan.id, 'step-2.handback.md')
-  const first = audit(handback, doneIds(get(root, plan.id, 'issue.md')))
+  const diff = diffOf(root, plan.id)
+  const prev = maybe(root, plan.id, 'step-2.handback.prev.md') ?? ''
+  const first = audit(handback, doneIds(get(root, plan.id, 'issue.md')), prev, diff)
   record(db, plan.id, first, 0)
   if (first.outcome !== 'pass') return named('completion-audit', first)
   for (const [rail, run] of rest(db, root, plan, handback)) {

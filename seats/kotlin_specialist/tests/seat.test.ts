@@ -27,6 +27,12 @@ test('the prompt tells the seat to close with the handback fence', () => {
   expect(seat(root, 'kotlin_specialist').prompt).toContain('- id: D1')
 })
 
+test('the prompt tells a rebuild to list every case, carrying the untouched rows forward', () => {
+  expect(seat(root, 'kotlin_specialist').prompt).toContain(
+    "A rebuild's fence lists every case again: carry forward the rows the refusal did not touch, update the ones it did.",
+  )
+})
+
 test('a kotlin tree picks this seat and anything else falls to the default', () => {
   expect(builder('kotlin')).toBe('kotlin_specialist')
   expect(builder(null)).toBe('typescript_specialist')

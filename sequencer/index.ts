@@ -1,4 +1,4 @@
-import { pr as readPr, type Pr } from '../cli/gh.ts'
+import { pr as readPr, type Pr, type Read } from '../cli/gh.ts'
 import type { Provider } from '../providers/kind.ts'
 import { digestOf } from '../store/approvals.ts'
 import { hold } from '../store/holds.ts'
@@ -10,6 +10,7 @@ import { blipped, fingerprint, overBudget, refused, WHY, type Why } from '../sto
 import { at, last, type Step } from '../templates/pr-path.ts'
 import { capture } from './capture.ts'
 import type { Fired, Outcome } from './kind.ts'
+import { reprice } from './priority.ts'
 import { started } from './signals.ts'
 import { parted } from './split.ts'
 import type { Wire } from './push.ts'
@@ -19,14 +20,15 @@ import { languageFor } from './route.ts'
 import { SELF, branchOf, checkout, diffOf, internalBranch, maybe, put, reap, srcDir, titleOf } from './workspace.ts'
 
 /**
- * `read` and `wire` are the network a tick touches on its own account; both are injected so a test can drive a lap offline.
- * `chain` is how many minutes a job may keep stepping inside this tick (#78, widened): the live tick passes `CHAIN_MINUTES`,
- * and a test that leaves it at 0 still sees one step per tick.
+ * `read`, `wire` and `labels` are the network a tick touches on its own account; each is injected so a test can drive a lap
+ * offline. `chain` is how many minutes a job may keep stepping inside this tick (#78, widened): the live tick passes
+ * `CHAIN_MINUTES`, and a test that leaves it at 0 still sees one step per tick.
  */
 export async function tick(db: Db, root: string, provider: Provider, now: Date = new Date(),
-  read: (repo: string, no: number) => Pr = readPr, wire?: Wire, chain = 0): Promise<Fired[]> {
+  read: (repo: string, no: number) => Pr = readPr, wire?: Wire, chain = 0, labels?: Read): Promise<Fired[]> {
   for (const signal of capture(db, read)) started(db, signal, root)
   reap(root, terminal(db))
+  reprice(db, labels)
   const out: Fired[] = []
   const offers = offered(db, now)
   const open = working(offers, cap(db).cap)

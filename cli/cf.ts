@@ -25,7 +25,7 @@ import { approve as approveCard, batch, landed, refuse as refuseCard, render, re
 import { awaiting, day, dryLines, halted, laneLine, open as openPlans, runsOf, section, tickets, ticketSection,
   tickNote, verdictsOf, windowLine } from './brief.ts'
 import { check, fill } from './digests.ts'
-import { desk } from './gh.ts'
+import { desk, gh } from './gh.ts'
 import { ack, events, line, notify, record as keep, unread } from './inbox.ts'
 import { measure, render as renderPulse } from './measure.ts'
 import { add as fileIssue, render as renderUnfiled, unfiled } from './plan.ts'
@@ -308,7 +308,7 @@ cf.command('tick').option('--dry', 'read what a tick would do, fire nothing, cal
     }
     const { auth } = credential()
     process.stderr.write(`auth ${auth.kind} from ${auth.from}\n`)
-    const fired = await tick(handle, root, claudeAgentSdk, now, undefined, undefined, CHAIN_MINUTES)
+    const fired = await tick(handle, root, claudeAgentSdk, now, undefined, undefined, CHAIN_MINUTES, gh)
     receipt(handle, upgraded(handle, root, { at: now.toISOString(), hhmm: hhmm(handle, now), dry: false,
       pipes: openPipes(handle, hhmm(handle, now)).length, fired: fired.length,
       exit: fired.some((f) => f.outcome === 'refuse') ? 1 : 0, note: tickNote(fired) }))

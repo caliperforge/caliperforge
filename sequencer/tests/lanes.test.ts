@@ -2,11 +2,12 @@ import { expect, test } from 'vitest'
 import type { Packet } from '../../providers/kind.ts'
 import { laneLine } from '../../cli/brief.ts'
 import { release } from '../../store/holds.ts'
+import type { Read } from '../../cli/gh.ts'
 import { cap, dial, lanes, name, priority, record, set, templatePriority, windows, type Reading } from '../../store/lanes.ts'
 import { live } from '../../store/plans.ts'
 import { picks, tick } from '../index.ts'
-import { put } from '../workspace.ts'
-import { approve, CARRIED, plan, stub, world, type World } from './world.ts'
+import { put, SELF } from '../workspace.ts'
+import { approve, CARRIED, internalPlan, plan, stub, world, type World } from './world.ts'
 
 const ASK = '# hello\n\n- **D1** add `hello()` in `src/hello.ts`\n'
 
@@ -30,6 +31,10 @@ function queued(w: World, id: number, pipe: number, at: number): void {
     VALUES (?, ?, 1, 'pr_path', 'queued', ?, 0, 0, ?)`)
     .run(id, pipe, `${TODAY}T00:00:0${String(id)}.000Z`, at)
 }
+
+/** Issue 34, as `gh issue view` answers it, under whatever labels the test hangs on it. */
+const labelled = (...names: string[]): Read => () => ({ number: 34, title: 'a plan of our own', body: 'ask',
+  url: `https://github.com/${SELF}/issues/34`, labels: names.map((label) => ({ name: label })) })
 
 function second(w: World): void {
   w.db.prepare(`INSERT INTO pipes (id, name, enabled, window_start, window_end, max_concurrent)
@@ -185,6 +190,27 @@ test('cf brief and the queue query show live against open', async () => {
   expect(lanes(w.db, '09:00')).toMatchObject({ live: 2, open: 2 })
   dial(w.db, 0, AT)
   expect(laneLine(lanes(w.db, '09:00'))).toBe('lanes 2/0 live/open\tcap spot\tdial 0\tband none\tceiling 4\n')
+})
+
+test('a relabelled issue re-prices its plan within one tick, and steps it ahead of its lane-mates', async () => {
+  const w = world()
+  internalPlan(w.db, w.root, 2, 'a plan the ticket re-prices', 34, 2)
+  expect(picks(w.db, w.pipe).map((p) => p.id)).toEqual([1])
+  const fired = await tick(w.db, w.root, stub(CARRIED), undefined, undefined, undefined, 0, labelled('lane:machine', 'P0'))
+  expect(plan(w.db, 2).priority).toBe(0)
+  expect(fired.map((f) => f.plan)).toEqual([2])
+})
+
+test('an issue the tick cannot read, or one carrying two P labels, leaves the priority it has', async () => {
+  const w = world()
+  internalPlan(w.db, w.root, 2, 'a plan the ticket cannot re-price', 34, 2)
+  const unread: Read = () => { throw new Error('gh: could not resolve to an issue') }
+  for (const read of [unread, labelled('P0', 'P2')]) {
+    const fired = await tick(w.db, w.root, stub(CARRIED), undefined, undefined, undefined, 0, read)
+    expect(plan(w.db, 2).priority).toBe(2)
+    expect(fired.map((f) => f.plan)).toEqual([1])
+    w.db.prepare("UPDATE plans SET step = 0, state = 'queued'").run()
+  }
 })
 
 test('the machine window view puts our tokens beside the cap, one row per window', async () => {

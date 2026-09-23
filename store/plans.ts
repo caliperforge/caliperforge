@@ -40,7 +40,7 @@ export const PlanRow = z.object({
 
 export type PlanRow = z.infer<typeof PlanRow>
 
-const ISSUE = /\/issues\/(\d+)$/
+const ISSUE = /github\.com\/([^/]+\/[^/]+)\/issues\/(\d+)$/
 
 /**
  * A plan filed from one of our own issues: it names an `origin` and no target row.
@@ -50,10 +50,15 @@ export function internal(plan: PlanRow): boolean {
   return plan.origin !== null
 }
 
+/** The repo and issue number an internal plan's origin url names. */
+export function originRef(plan: PlanRow): { repo: string; no: number } | null {
+  const hit = plan.origin === null ? null : ISSUE.exec(plan.origin)
+  return hit === null ? null : { repo: String(hit[1]), no: Number(hit[2]) }
+}
+
 /** The issue number an internal plan's origin url names. */
 export function originIssue(plan: PlanRow): number | null {
-  const hit = plan.origin === null ? null : ISSUE.exec(plan.origin)
-  return hit === null ? null : Number(hit[1])
+  return originRef(plan)?.no ?? null
 }
 
 /** Wall-clock HH:MM in the zone the pipe windows are written in; the offset comes from the store. */

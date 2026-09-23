@@ -14,6 +14,7 @@ import { byRun, pending } from '../store/transcript.ts'
 import type { Step } from '../templates/pr-path.ts'
 import { pointed, shape, split, TEMPLATE, unclear, wide, WIDE, type Part } from './brief.ts'
 import { handout, touched, type Handed } from './handout.ts'
+import { handover, type Handover } from './handover.ts'
 import { install } from './checks.ts'
 import { deletions } from './fence.ts'
 import { fenceFor } from './route.ts'
@@ -198,6 +199,7 @@ export async function fireReview(db: Db, root: string, plan: PlanRow, step: Step
     issue: get(root, plan.id, 'issue.md'),
     diff: diffOf(root, plan.id),
     ...(cloned(src) ? { tree: snapshot(src) } : {}),
+    ...outside(root, plan, src),
     ...(manifest.reads_verdict ? { verdict: priorVerdict(root, plan.id) } : {}),
     ...rounds(db, root, plan.id, step.step),
   }
@@ -213,6 +215,12 @@ export async function fireReview(db: Db, root: string, plan: PlanRow, step: Step
     const note = error instanceof Error ? error.message : String(error)
     return { outcome: { outcome: 'refuse', spans: ['reviewers.verdict_fence'], note: `${step.runs} ${note}` }, findings: [], tree: null }
   }
+}
+
+/** #132: on someone else's repository the reviewer is handed its footing instead of reading for it. */
+function outside(root: string, plan: PlanRow, src: string): Handover {
+  const base = maybe(root, plan.id, 'base.sha')
+  return internal(plan) || base === null || !cloned(src) ? {} : handover(src, base.trim())
 }
 
 /** From a reviewer's second round on: the verdict it wrote last round, and what the tree did since the one it judged. */

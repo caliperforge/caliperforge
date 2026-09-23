@@ -3,12 +3,12 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
+import type { Packet } from '../../providers/kind.ts'
 import { headApproved } from '../../store/approvals.ts'
-import { WHY } from '../../store/refusals.ts'
 import { tick } from '../index.ts'
 import { headOf, land, type Wire } from '../push.ts'
-import { conflicted, diffOf, fetchMain, get, liveTree, MAIN, srcDir } from '../workspace.ts'
-import { approve, built, CARRIED, internalPlan, moveMain, ours, plan, stub, watched, world, type World } from './world.ts'
+import { CARRY, carried, cloned, conflicted, diffOf, fetchMain, get, liveTree, maybe, MAIN, srcDir } from '../workspace.ts'
+import { approve, built, CARRIED, internalPlan, moveMain, ours, PASS, plan, stub, watched, world, type World } from './world.ts'
 
 const ID = 2
 const BRANCH = 'p2-let-an-internal-plan-run'
@@ -201,13 +201,54 @@ test('a merge that conflicts at the rails aborts, hands the builder the paths an
   const refused = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
   expect(refused).toMatchObject({ step: 3, outcome: 'refuse', spans: ['src/hello.ts'] })
   expect(plan(w.db, ID)).toMatchObject({ step: 2, retries: 0 })
-  expect(conflicted(src)).toBe(false)
-  expect(git(src, ['status', '--porcelain'])).toBe('')
-  expect(get(w.root, ID, 'base.sha')).toBe(base)
+  expect(cloned(src)).toBe(false)
+  expect(maybe(w.root, ID, 'base.sha')).toBeNull()
+  expect(base).not.toBe('')
+  expect(get(w.root, ID, CARRY)).toContain('export const landed = true')
   expect(get(w.root, ID, 'refusal.md')).toContain('src/hello.ts')
 })
 
-test('the same conflict twice stops the plan instead of going round again', async () => {
+test('the re-cut checkout is main\'s, and the builder is handed its own diff to re-apply onto it', async () => {
+  const w = mine()
+  const wire = watched([], w.root, ID)
+  await atRails(w, wire)
+  const src = srcDir(w.root, ID)
+  moveMain(w.root, 'src/hello.ts', 'export const hello = (): string => "main took this line"\n')
+  await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+
+  const seen: Packet[] = []
+  await tick(w.db, w.root, stub(CARRIED, 0, PASS, (packet) => seen.push(packet)), undefined, undefined, wire)
+
+  expect(git(src, ['rev-parse', 'HEAD'])).toBe(git(src, ['rev-parse', MAIN]))
+  expect(get(w.root, ID, 'base.sha').trim()).toBe(git(src, ['rev-parse', MAIN]))
+  expect(seen[0]?.prompt).toContain('Re-apply this diff onto them')
+  expect(seen[0]?.prompt).toContain('export const landed = true')
+  expect(seen[0]?.prompt).toContain('main took this line')
+  expect(carried(w.root, ID)).toContain('export const landed = true')
+})
+
+test('the carried diff goes inert once the builder has re-applied it onto the new base', async () => {
+  const w = mine()
+  const wire = watched([], w.root, ID)
+  await atRails(w, wire)
+  moveMain(w.root, 'src/hello.ts', 'export const hello = (): string => "main took this line"\n')
+  await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  built(w.root, ID, 'export const landed = true')
+
+  expect(carried(w.root, ID)).toBeNull()
+  expect(maybe(w.root, ID, CARRY)).not.toBeNull()
+  expect(diffOf(w.root, ID)).toContain('export const landed = true')
+  expect(diffOf(w.root, ID)).toContain('main took this line')
+})
+
+/**
+ * #160 gave the conflict loop a counter; #162 removed what it was counting. The same conflict cannot
+ * come round a second time now, because the second lap is not on the old base -- it is on main. The
+ * repeat rule itself is the refusals ledger's, and is proved there (`store/refusals.test.ts`); what is
+ * proved here is that the lap the counter existed for no longer happens.
+ */
+test('the conflict does not come round a second time: the next lap is on main, and the rails pass', async () => {
   const w = mine()
   const wire = watched([], w.root, ID)
   await atRails(w, wire)
@@ -216,13 +257,13 @@ test('the same conflict twice stops the plan instead of going round again', asyn
   expect((await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0])
     .toMatchObject({ step: 3, outcome: 'refuse', spans: ['src/hello.ts'] })
   expect(plan(w.db, ID)).toMatchObject({ step: 2, state: 'running', retries: 0 })
+  expect(w.db.prepare('SELECT count(*) AS n FROM refusals WHERE plan = ? AND blip = 0').get(ID)).toEqual({ n: 1 })
 
   await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
   expect((await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0])
-    .toMatchObject({ step: 3, outcome: 'refuse', state: 'blocked_on_ceo' })
-  expect(plan(w.db, ID).state).toBe('blocked_on_ceo')
-  expect(get(w.root, ID, 'refusal.md')).toContain(WHY.repeat)
-  expect(w.db.prepare('SELECT count(*) AS n FROM refusals WHERE plan = ? AND blip = 0').get(ID)).toEqual({ n: 2 })
+    .toMatchObject({ step: 3, outcome: 'pass', state: 'running' })
+  expect(plan(w.db, ID).state).toBe('running')
+  expect(w.db.prepare('SELECT count(*) AS n FROM refusals WHERE plan = ? AND blip = 0').get(ID)).toEqual({ n: 1 })
 })
 
 test('a tree a tick stopped mid-merge in commits no conflict marker at the rails', async () => {
@@ -239,9 +280,12 @@ test('a tree a tick stopped mid-merge in commits no conflict marker at the rails
   const refused = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
   expect(refused).toMatchObject({ step: 3, outcome: 'refuse', spans: ['src/hello.ts'] })
   expect(plan(w.db, ID)).toMatchObject({ step: 2, retries: 0 })
-  expect(conflicted(src)).toBe(false)
-  expect(git(src, ['status', '--porcelain'])).toBe('')
+  expect(cloned(src)).toBe(false)
+  expect(get(w.root, ID, CARRY)).not.toContain('<<<<<<<')
   expect(diffOf(w.root, ID)).not.toContain('<<<<<<<')
+
+  await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  expect(conflicted(src)).toBe(false)
   expect(git(src, ['log', '-p', BRANCH])).not.toContain('<<<<<<<')
 })
 

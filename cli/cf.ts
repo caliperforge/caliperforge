@@ -12,7 +12,7 @@ import { behind, upgraded } from '../sequencer/upgrade.ts'
 import { signoffs } from '../sequencer/signoff.ts'
 import { SIGNOFF, liveTree, reap } from '../sequencer/workspace.ts'
 import { blocked, parked, targetDigest, WAITING } from '../sequencer/steps.ts'
-import { release } from '../store/holds.ts'
+import { release, returnToLane } from '../store/holds.ts'
 import { dump, migrate, open as openDb, type Db } from '../store/index.ts'
 import { dial, hhmm, lanes, priority as setPriority, record, Reading, windows } from '../store/lanes.ts'
 import { holder } from '../store/leases.ts'
@@ -191,7 +191,12 @@ cf.command('reap').description("remove the checkout of every plan no step is com
 
 cf.command('release').argument('<plan>', 'a briefed plan waiting on the coo to read it').action((id: string) => {
   release(db(), Number(id))
-  out(`plan ${id} released\n`)
+  out(`plan ${id} queued\n`)
+})
+
+cf.command('return').argument('<plan>', 'a plan blocked on the ceo or halted').action((id: string) => {
+  returnToLane(db(), Number(id))
+  out(`plan ${id} queued\n`)
 })
 
 cf.command('inbox').option('--ack', 'mark everything shown so far as read')

@@ -1,9 +1,14 @@
 import { expect, test } from 'vitest'
 import type { Packet } from '../../providers/kind.ts'
 import { laneLine } from '../../cli/brief.ts'
+import { release } from '../../store/holds.ts'
 import { cap, dial, lanes, name, priority, record, set, templatePriority, windows, type Reading } from '../../store/lanes.ts'
+import { live } from '../../store/plans.ts'
 import { picks, tick } from '../index.ts'
-import { approve, CARRIED, stub, world, type World } from './world.ts'
+import { put } from '../workspace.ts'
+import { approve, CARRIED, plan, stub, world, type World } from './world.ts'
+
+const ASK = '# hello\n\n- **D1** add `hello()` in `src/hello.ts`\n'
 
 const TODAY = new Date().toISOString().slice(0, 10)
 const AT = `${TODAY}T09:00:00.000Z`
@@ -67,6 +72,38 @@ test('a plan already running keeps its slot and a blocked queued plan takes none
   approve(w.db, w.target)
   expect(picks(w.db, { ...w.pipe, max_concurrent: 2 }).map((p) => p.id)).toEqual([1, 2])
   expect(picks(w.db, { ...w.pipe, max_concurrent: 1 }).map((p) => p.id)).toEqual([1, 2])
+})
+
+test('a plan already under way queues ahead of one not yet started', () => {
+  const w = world()
+  queued(w, 2, 1, 1)
+  queued(w, 3, 1, 0)
+  w.db.prepare("UPDATE plans SET step = 2, state = 'queued' WHERE id = 1").run()
+  expect(live(w.db, w.pipe).map((p) => p.id)).toEqual([1, 3, 2])
+})
+
+test('a released plan waits for a free slot and the lane never runs past its width', async () => {
+  const w = world()
+  approve(w.db, w.target)
+  w.db.prepare('UPDATE pipes SET max_concurrent = 2 WHERE id = 1').run()
+  queued(w, 2, 1, 1)
+  put(w.root, 2, 'ask.md', ASK)
+  for (const id of [3, 4]) {
+    queued(w, id, 1, 1)
+    w.db.prepare("UPDATE plans SET step = 2, state = 'blocked_on_ceo' WHERE id = ?").run(id)
+    put(w.root, id, 'issue.md', ASK)
+  }
+  expect((await tick(w.db, w.root, stub(CARRIED))).map((f) => f.plan)).toEqual([1, 2])
+
+  release(w.db, 3)
+  release(w.db, 4)
+  expect((await tick(w.db, w.root, stub(CARRIED))).map((f) => f.plan)).toEqual([1, 2])
+  expect(lanes(w.db, '09:00').live).toBe(2)
+
+  w.db.prepare("UPDATE plans SET state = 'done' WHERE id = 1").run()
+  expect((await tick(w.db, w.root, stub(CARRIED))).map((f) => f.plan)).toEqual([2, 3])
+  expect(lanes(w.db, '09:00').live).toBe(2)
+  expect(plan(w.db, 4)).toMatchObject({ step: 2, state: 'queued' })
 })
 
 test('the cap decides how many pipes worth of plans the tick opens', async () => {

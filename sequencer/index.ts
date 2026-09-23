@@ -15,7 +15,7 @@ import { started } from './signals.ts'
 import { parted } from './split.ts'
 import type { Wire } from './push.ts'
 import { fireBrief, fireReview, fireSeat } from './seat.ts'
-import { blocked, kernel, proved, targetOf } from './steps.ts'
+import { blocked, kept, kernel, proved, targetOf } from './steps.ts'
 import { languageFor } from './route.ts'
 import { SELF, branchOf, checkout, diffOf, internalBranch, maybe, put, reap, srcDir, titleOf } from './workspace.ts'
 
@@ -257,7 +257,10 @@ function treeOf(db: Db, root: string, plan: PlanRow): { repo: string; branch: st
 function fire(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider, wire?: Wire): Promise<Outcome> {
   if (step.fires === 'brief') return fireBrief(db, root, plan, step, provider)
   if (step.fires === 'seat') return fireSeat(db, root, plan, step, provider)
-  if (step.fires === 'review') return fireReview(db, root, plan, step, provider)
+  if (step.fires === 'review') {
+    const standing = kept(db, root, plan, step)
+    return standing === null ? fireReview(db, root, plan, step, provider) : Promise.resolve(standing)
+  }
   return Promise.resolve(kernel(db, root, plan, wire))
 }
 

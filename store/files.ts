@@ -17,3 +17,22 @@ export function record(db: Db, plan: number, list: PlanFile[]): void {
     list.forEach((file, at) => void insert.run(plan, file.path, file.is_new ? 1 : 0, at))
   })()
 }
+
+/** The repo a plan's paths are relative to: its target's, or ours. */
+const REPO = "COALESCE((SELECT t.repo FROM targets t WHERE t.id = %s.target_id), '')"
+
+/**
+ * #88. The job this plan must wait for: one in the same repo, not settled, past its brief, whose file
+ * list shares a path with this one's -- and either building already or queued ahead of it, so two
+ * unbuilt plans never wait on each other. A plan parked on the CEO or stopped holds nothing up.
+ */
+export function sharing(db: Db, plan: number): { plan: number; path: string } | null {
+  return (db.prepare(`SELECT o.id AS plan, f.path FROM plans me
+    JOIN plan_files mine ON mine.plan = me.id
+    JOIN plan_files f ON f.path = mine.path AND f.plan <> me.id
+    JOIN plans o ON o.id = f.plan
+    WHERE me.id = ? AND o.state IN ('queued', 'running') AND o.step >= 2
+      AND ${REPO.replace('%s', 'o')} = ${REPO.replace('%s', 'me')}
+      AND (o.id < me.id OR EXISTS (SELECT 1 FROM runs r WHERE r.plan = o.id AND r.step >= 2))
+    ORDER BY o.id LIMIT 1`).get(plan) ?? null) as { plan: number; path: string } | null
+}

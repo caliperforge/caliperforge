@@ -16,7 +16,7 @@ import { release, returnToLane } from '../store/holds.ts'
 import { dump, migrate, open as openDb, type Db } from '../store/index.ts'
 import { dial, hhmm, lanes, priority as setPriority, record, Reading, windows } from '../store/lanes.ts'
 import { holder } from '../store/leases.ts'
-import { PlanRow, openPipes, retry, terminal } from '../store/plans.ts'
+import { PlanRow, openPipes, overlapWaits, retry, terminal } from '../store/plans.ts'
 import { clear } from '../store/refusals.ts'
 import { refusedPush } from '../store/approvals.ts'
 import { receipt } from '../store/ticks.ts'
@@ -174,7 +174,9 @@ plan.argument('<id>').action((id: string) => {
   const why = code === null ? 'unblocked' : parked(handle, plan) ?? WAITING[code]
   const lease = holder(handle, plan.id)
   out(`plan ${String(plan.id)}\t${plan.template}\tstep ${String(plan.step)}\t${plan.state}\tretries ${String(plan.retries)}\t${why}\n`)
-  out(`  waiting on ${plan.wait_reason === null ? '-' : `${plan.wait_reason}\t${WAITING[plan.wait_reason]}`}\n`)
+  const on = (handle.prepare('SELECT waits_on FROM plans WHERE id = ?').get(plan.id) as { waits_on: number | null }).waits_on
+  const after = on === null ? '' : `\tplan ${String(on)}`
+  out(`  waiting on ${plan.wait_reason === null ? '-' : `${plan.wait_reason}\t${WAITING[plan.wait_reason]}${after}`}\n`)
   out(`  lease ${lease === null ? 'none' : `pid ${String(lease.pid)}\ttaken ${lease.taken_at}`}\n`)
   for (const r of runsOf(handle, plan.id)) {
     out(`  run ${String(r.id)}\tstep ${String(r.step)}\t${String(r.seat)}\texit ${String(r.exit)}\n`)
@@ -311,7 +313,7 @@ cf.command('tick').option('--dry', 'read what a tick would do, fire nothing, cal
     const fired = await tick(handle, root, claudeAgentSdk, now, undefined, undefined, CHAIN_MINUTES, gh)
     receipt(handle, upgraded(handle, root, { at: now.toISOString(), hhmm: hhmm(handle, now), dry: false,
       pipes: openPipes(handle, hhmm(handle, now)).length, fired: fired.length,
-      exit: fired.some((f) => f.outcome === 'refuse') ? 1 : 0, note: tickNote(fired) }))
+      exit: fired.some((f) => f.outcome === 'refuse') ? 1 : 0, note: tickNote(fired, overlapWaits(handle)) }))
     const news = events(handle, fired, now.toISOString())
     keep(root, news)
     notify(news)
@@ -348,7 +350,7 @@ function dryTick(handle: Db, now: Date): void {
   const would = dry(handle, now)
   out(dryLines(would))
   receipt(handle, { at: now.toISOString(), hhmm: would.hhmm, dry: true, pipes: would.pipes,
-    fired: 0, exit: 0, note: tickNote([]) })
+    fired: 0, exit: 0, note: tickNote([], overlapWaits(handle)) })
 }
 
 try {

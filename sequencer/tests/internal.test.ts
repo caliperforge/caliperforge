@@ -7,6 +7,7 @@ import { landed } from '../../cli/batch.ts'
 import { check } from '../../cli/digests.ts'
 import { digest, listed } from '../../runner/rules.ts'
 import { headApproved, headDigest } from '../../store/approvals.ts'
+import { record as recordFiles } from '../../store/files.ts'
 import { advance } from '../../store/plans.ts'
 import { tick } from '../index.ts'
 import { headOf, push } from '../push.ts'
@@ -38,9 +39,15 @@ function pair(): World {
   return w
 }
 
+/** Every stub brief names `src/hello.ts`; the second plan is given its own file so #88 lets both build at once. */
+function apart(w: World): void {
+  recordFiles(w.db, SECOND, [{ path: `src/p${String(SECOND)}.ts`, is_new: true }])
+}
+
 test('a lap fires the picks of a pipe at once: two fires are in flight together and each leaves its own run row', async () => {
   const w = pair()
   for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  apart(w)
 
   const provider = slow(NAP, CARRIED)
   const fired = await tick(w.db, w.root, provider)
@@ -57,7 +64,9 @@ test('two plans at batch in one lap: the first lands on main and the second is s
   const wire = landing(watched(sent, w.root, ID, runsAll(w.root, [ID, SECOND])))
   const ownFile = (p: Packet): string => `src/p${/work\/(\d+)\/src/.exec(p.cwd)?.[1] ?? ''}.ts`
   const built: Provider = { name: 'claude-agent-sdk', fire: (p) => stub(owning([ownFile(p)])).fire(p) }
-  for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, built, undefined, undefined, wire)
+  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, built, undefined, undefined, wire)
+  apart(w)
+  await tick(w.db, w.root, built, undefined, undefined, wire)
   for (const id of [ID, SECOND]) {
     writeFileSync(join(srcDir(w.root, id), `src/p${String(id)}.ts`), `export const p${String(id)} = true\n`)
   }
@@ -123,7 +132,9 @@ test('step 3 fills the digests an internal checkout holds, and a target checkout
 
 test('a roster the build left unfillable refuses that plan back to step 2 and the lap still steps the other', async () => {
   const w = pair()
-  for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  apart(w)
+  await tick(w.db, w.root, stub(CARRIED))
   writeFileSync(join(srcDir(w.root, ID), 'rules/roster.yaml'), 'seats: []\n')
 
   const fired = await tick(w.db, w.root, stub(CARRIED))

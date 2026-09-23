@@ -17,7 +17,7 @@ export type PipeRow = z.infer<typeof PipeRow>
  * refused on the way in rather than read back by #141's router or the #139 orchestrator as a surprise.
  */
 export const WAIT = ['ceo_batch', 'target_approval', 'ready_proof', 'target_parked', 'token_ceiling',
-  'leased', 'over_cap', 'lane_over_cap', 'no_step_map'] as const
+  'leased', 'over_cap', 'lane_over_cap', 'no_step_map', 'file_overlap'] as const
 
 export type Wait = typeof WAIT[number]
 
@@ -106,10 +106,11 @@ export function builderRan(db: Db, plan: number): boolean {
 }
 
 /** #140: a plan the tick stepped carries no reason; one it passed over carries why, from the list the store checks. */
-export function waiting(db: Db, rows: { plan: number; why: Wait | null }[]): void {
-  const set = db.prepare('UPDATE plans SET wait_reason = ? WHERE id = ?')
+/** `on` is the plan a `file_overlap` waits for (#88); every other reason names none. */
+export function waiting(db: Db, rows: { plan: number; why: Wait | null; on?: number | null }[]): void {
+  const set = db.prepare('UPDATE plans SET wait_reason = ?, waits_on = ? WHERE id = ?')
   db.transaction(() => {
-    for (const row of rows) set.run(row.why, row.plan)
+    for (const row of rows) set.run(row.why, row.on ?? null, row.plan)
   })()
 }
 
@@ -158,4 +159,10 @@ export function rewind(db: Db, plan: number, step: number): void {
 /** The head the ready gate proved, which is the only head an approval row can be read against. */
 export function stampHead(db: Db, plan: number, digest: string): void {
   db.prepare('UPDATE plans SET head_digest = ? WHERE id = ?').run(digest, plan)
+}
+
+/** The plans the last tick held on another job's files, and the job each waits for (#88). */
+export function overlapWaits(db: Db): { plan: number; on: number }[] {
+  return db.prepare("SELECT id AS plan, waits_on AS on_ FROM plans WHERE wait_reason = 'file_overlap' AND waits_on IS NOT NULL ORDER BY id")
+    .all().map((r) => ({ plan: (r as { plan: number }).plan, on: (r as { on_: number }).on_ }))
 }

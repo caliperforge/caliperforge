@@ -15,7 +15,8 @@ import type { Outcome } from './kind.ts'
 import { preReview } from './rails.ts'
 import { forkCi, headOf, land, opened, push, type Wire } from './push.ts'
 import { following } from './split.ts'
-import { abortMerge, behindMain, cloned, conflicted, diffOf, fetchMain, get, maybe, merging, mergeMain, put, recut, SELF, srcDir, unmerged } from './workspace.ts'
+import { abortMerge, behindMain, cloned, conflicted, diffOf, fetchMain, get, maybe, merging, mergeMain, put, recut, srcDir, unmerged } from './workspace.ts'
+import { homeOf } from './home.ts'
 
 interface Target { repo: string; issue_no: number; state: string; measured_at: string; pulse: string }
 
@@ -266,13 +267,13 @@ function forkGreened(db: Db, plan: number): boolean {
 
 /** The repository the ready rail reads a pulse for. Ours has none to read, and needs none (#20). */
 function repoOf(db: Db, plan: PlanRow): string | null {
-  if (internal(plan)) return SELF
+  if (internal(plan)) return homeOf(plan)
   const row = db.prepare('SELECT repo FROM targets WHERE id = ?').get(plan.target_id) as { repo: string } | undefined
   return row?.repo ?? null
 }
 
 export function measure(db: Db, plan: PlanRow): Outcome {
-  if (internal(plan)) return { outcome: 'pass', spans: [], note: `${SELF}#${String(originIssue(plan))} is ours; no account to measure` }
+  if (internal(plan)) return { outcome: 'pass', spans: [], note: `${homeOf(plan)}#${String(originIssue(plan))} is ours; no account to measure` }
   const row = target(db, plan)
   if (row === null) return { outcome: 'refuse', spans: ['targets'], note: `plan ${String(plan.id)} has no target row` }
   if (row.state === 'ready' || row.state === 'queued') {

@@ -1,0 +1,14 @@
+seat: php_specialist
+model: claude-opus-5-5
+effort: high
+tools:
+  - Read
+  - Write
+  - Edit
+  - Glob
+  - Grep
+  - Bash(composer:*)
+  - Bash(php -l:*)
+  - Bash(just:*)
+write_paths:
+  - brief:files

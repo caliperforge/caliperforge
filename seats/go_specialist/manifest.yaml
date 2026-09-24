@@ -1,0 +1,17 @@
+seat: go_specialist
+model: claude-opus-5-5
+effort: high
+tools:
+  - Read
+  - Write
+  - Edit
+  - Glob
+  - Grep
+  - Bash(go test:*)
+  - Bash(go vet:*)
+  - Bash(go build:*)
+  - Bash(go -C:*)
+  - Bash(gofmt:*)
+  - Bash(just:*)
+write_paths:
+  - brief:files

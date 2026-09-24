@@ -82,6 +82,14 @@ test('the kotlin seat keeps gradle on a stranger\'s tree', () => {
   expect(p.tools).toContain('Bash(gradle:*)')
 })
 
+test('the six language seats keep their commands on a stranger\'s tree', () => {
+  const held = { rust_specialist: 'Bash(cargo test:*)', python_specialist: 'Bash(uv run:*)', ruby_specialist: 'Bash(bundle exec:*)',
+    go_specialist: 'Bash(go test:*)', php_specialist: 'Bash(composer:*)', lua_specialist: 'Bash(just:*)' }
+  for (const [name, tool] of Object.entries(held)) {
+    expect(packet(seat(root, name).manifest, 'p', 't', 'i', cwd, TRANSCRIPT).tools).toContain(tool)
+  }
+})
+
 test('a fence handed in replaces the manifest\'s on a stranger\'s tree', () => {
   const manifest = seat(root, 'outside_specialist').manifest
   const p = packet(manifest, 'p', 't', 'i', cwd, TRANSCRIPT, false, ['ruby/lib/config.rb'])

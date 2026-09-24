@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { split, STANDING, wide } from '../brief.ts'
+import { split, STANDING, unclear, wide } from '../brief.ts'
 import { tick } from '../index.ts'
 import { following } from '../split.ts'
 import { maybe } from '../workspace.ts'
@@ -31,6 +31,12 @@ test('a split fence is two or more parts in landing order; one part or a questio
   expect(split(PARTS)?.map((p) => p.title)).toEqual(['file the parts', 'queue them in order'])
   expect(split(PARTS.replace(/ {2}- title: queue[\s\S]*?parent\n/, ''))).toBeNull()
   expect(split('---\noutcome: unclear\nquestion: which one?\n---\n')).toBeNull()
+})
+
+test('a part whose prose holds a colon still reads as a split, and a question with one still reads', () => {
+  const colon = PARTS.replace('ends: two issues exist', 'ends: tests show all four cases: a 3/5 is refused')
+  expect(split(colon)?.[0]?.ends).toBe('tests show all four cases: a 3/5 is refused')
+  expect(unclear('---\noutcome: unclear\nquestion: which of these: a or b?\n---\n')).toBe('which of these: a or b?')
 })
 
 test('past five files besides tests a brief is wide; tests do not count', () => {

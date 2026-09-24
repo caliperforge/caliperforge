@@ -5,7 +5,7 @@ import { walk } from '../../checks/tree.ts'
 import type { Packet } from '../../providers/kind.ts'
 import { release, returnToLane } from '../../store/holds.ts'
 import { get } from '../../store/lanes.ts'
-import { files, shape, TEMPLATE, unclear, type Refused } from '../brief.ts'
+import { files, shape, TEMPLATE, unclear, writable, type Refused } from '../brief.ts'
 import { tick } from '../index.ts'
 import { blocked } from '../steps.ts'
 import { drop, maybe, move, put, srcDir, titleOf } from '../workspace.ts'
@@ -372,6 +372,14 @@ test('a Files row naming several paths lists each once', () => {
   expect(files(brief)).toEqual([
     { path: 'a/b.rb', is_new: false }, { path: 'x/y_test.rb', is_new: false },
     { path: 'x/z_spec.lua', is_new: false }, { path: 'c/d.rb', is_new: true },
+  ])
+})
+
+test('a test named only under ## Tests is writable', () => {
+  const brief = ['# t', '', '## Files', '', '- `ruby/lib/pay_kit/config.rb:259`', '', '## Tests', '',
+    '- `ruby/test/pay_kit/config_test.rb` — D1', '- `ruby/test/pay_kit/config_test.rb` — D2', '', '## Out of scope', ''].join('\n')
+  expect(writable(brief)).toEqual([
+    { path: 'ruby/lib/pay_kit/config.rb', is_new: false }, { path: 'ruby/test/pay_kit/config_test.rb', is_new: true },
   ])
 })
 

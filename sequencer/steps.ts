@@ -10,7 +10,7 @@ import { building, filesOf, record as recordFiles, sharing, strays as recordStra
 import type { Db } from '../store/index.ts'
 import { builderRan, internal, originIssue, stampHead, type PlanRow, type Wait } from '../store/plans.ts'
 import { at, type Step } from '../templates/pr-path.ts'
-import { files } from './brief.ts'
+import { writable } from './brief.ts'
 import type { Outcome } from './kind.ts'
 import { preReview } from './rails.ts'
 import { forkCi, headOf, land, opened, push, type Wire } from './push.ts'
@@ -347,7 +347,7 @@ function approvedPlan(db: Db, plan: PlanRow): boolean {
 
 /** What the step leaves in the store where it proved it: the file list at the brief, the handback at build, the gates at senior, the rail at ready. */
 export function proved(db: Db, root: string, plan: PlanRow, step: Step): void {
-  if (step.fires === 'brief') recordFiles(db, plan.id, files(get(root, plan.id, 'issue.md')))
+  if (step.fires === 'brief') recordFiles(db, plan.id, writable(get(root, plan.id, 'issue.md')))
   if (step.name === 'build') built(db, made(db, root, plan, step))
   if (step.name === 'senior') gated(db, made(db, root, plan, step), proof(db, plan))
   if (step.name === 'ready') {

@@ -256,6 +256,16 @@ export function files(brief: string): PlanFile[] {
   })
 }
 
+/**
+ * What the builder may write: `## Files`, then each `## Tests` path it does not already list. A test named
+ * only under `## Tests` is recorded as new, so it widens the fence without being handed as a file to read.
+ */
+export function writable(brief: string): PlanFile[] {
+  const listed = files(brief)
+  const extra = [...new Set(leads(brief, '## Tests'))].filter((path) => !listed.some((f) => f.path === path))
+  return [...listed, ...extra.map((path) => ({ path, is_new: true }))]
+}
+
 function leads(brief: string, heading: string): string[] {
   return section(brief, heading).split('\n').flatMap((line) => {
     const path = PATH.exec(line)?.[1]

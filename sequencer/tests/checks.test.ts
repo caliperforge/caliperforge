@@ -5,7 +5,7 @@ import { expect, test } from 'vitest'
 import { record } from '../../store/files.ts'
 import type { Db } from '../../store/index.ts'
 import { checks, mode, type Run } from '../checks.ts'
-import { formatLine, recipes } from '../gates.ts'
+import { ciFeatures, formatLine, recipes } from '../gates.ts'
 import { tick } from '../index.ts'
 import { narrow } from '../rails.ts'
 import { get } from '../workspace.ts'
@@ -347,4 +347,18 @@ test('#204 the recipe reader skips assignments and settings, and takes recipes w
   const src = nested({ 'Justfile': 'set shell := ["bash", "-uc"]\nuv_run := "uv run"\n\ndefault:\n    @just --list\n\ntest-cover gate="90":\n    x\n\n@lint:\n    y\n' })
   expect([...(recipes(join(src, 'Justfile')) ?? [])]).toEqual(['default', 'test-cover', 'lint'])
   expect(formatLine(src)).toEqual(['fmt', '--all', '--', '--check'])
+})
+
+test('#204 rust tests take the features their CI test line names, less a service it starts, on the crates that declare them', () => {
+  const src = nested({
+    'Cargo.toml': '[workspace]\n',
+    'crates/core/Cargo.toml': '[package]\nname = "surfpool-core"\n\n[features]\ndefault = ["sqlite"]\npostgres = []\nignore_tests_ci = []\n\n[dependencies]\n',
+    'crates/types/Cargo.toml': '[package]\nname = "surfpool-types"\n\n[features]\ndefault = []\n',
+    '.github/workflows/rust.yml': 'jobs:\n  build:\n    services:\n      postgres:\n        image: postgres:15\n    steps:\n'
+      + '      - run: cargo test --all --verbose --features "postgres,ignore_tests_ci"\n',
+  })
+  expect(ciFeatures(src)).toEqual(['ignore_tests_ci'])
+  const { run, calls } = heard()
+  expect(checks(src, run, [], { language: 'rust', files: ['crates/types/src/types.rs', 'crates/core/src/types.rs'] })).toBeNull()
+  expect(calls[1]).toBe(`cargo test -p surfpool-types -p surfpool-core --features surfpool-core/ignore_tests_ci @${src}`)
 })

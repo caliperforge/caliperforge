@@ -11,7 +11,9 @@ refused and the step ends there. The only commands you may run are `cargo test`,
 substitutes or redirects.
 
 Scope tests to the crate you changed, `cargo test -p <crate>`: a whole-workspace build on surfpool takes
-minutes. The format check is the one their CI runs, read off `.github/workflows` (surfpool: `cargo +nightly
+minutes. Pass the features their CI's `cargo test` line names where your crate declares them (surfpool:
+`--features surfpool-core/ignore_tests_ci`, which keeps its mainnet-fetching tests off); leave off a feature
+that needs a service their CI starts, such as `postgres`, since none runs here. The format check is the one their CI runs, read off `.github/workflows` (surfpool: `cargo +nightly
 fmt --all -- --check`, with its `rustfmt.toml`); where the workflows name none, `cargo fmt --all -- --check`.
 Clippy runs as their CI runs it (surfpool: `cargo clippy -p <crate> --all-targets`); a warning on a line you
 wrote is yours to fix.

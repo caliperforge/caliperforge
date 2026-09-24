@@ -45,12 +45,16 @@ test('a seat building our own kernel writes anywhere but .cf/, and a stranger\'s
   expect(packet(manifest, 'p', 't', 'i', cwd, TRANSCRIPT).refuse('cli/x.ts')).not.toBeNull()
 })
 
-test('the provider gate denies a refused write and lets everything else through', () => {
+test('the gate stops a refused write and denies an outside read', () => {
   const p = packet(seat(root, 'typescript_specialist').manifest, 'prompt', 'tight', 'issue', cwd, TRANSCRIPT)
   const pre = (tool: string, file: string): HookInput =>
     ({ hook_event_name: 'PreToolUse', tool_name: tool, tool_input: { file_path: file }, tool_use_id: 't', session_id: 's', transcript_path: '', cwd })
   expect(gate(p, pre('Write', 'src/hello.ts'))).toEqual({ continue: true })
-  expect(gate(p, pre('Read', '/etc/passwd'))).toEqual({ continue: true })
+  expect(gate(p, pre('Read', 'src/hello.ts'))).toEqual({ continue: true })
+  expect(gate(p, pre('Read', '/etc/passwd'))).toMatchObject({
+    continue: true,
+    hookSpecificOutput: { permissionDecision: 'deny', permissionDecisionReason: expect.stringContaining('run.outside_checkout') as string },
+  })
   expect(gate(p, pre('Write', 'package.json'))).toMatchObject({
     continue: false,
     hookSpecificOutput: { permissionDecision: 'deny', permissionDecisionReason: 'ruling:seat.write_paths refuses a write to package.json' },

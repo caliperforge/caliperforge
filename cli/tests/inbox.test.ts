@@ -5,7 +5,7 @@ import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import type { Fired } from '../../sequencer/kind.ts'
 import type { Db } from '../../store/index.ts'
-import { ack, events, line, notify, record, unread } from '../inbox.ts'
+import { ack, events, line, notify, plain, record, unread, type Event } from '../inbox.ts'
 
 const schema = join(import.meta.dirname, '../../schema')
 
@@ -36,7 +36,7 @@ test('a lap is blocked, landed and refused events; a passing step is none', () =
 test('only blocked, landed and done reach the desktop', () => {
   const posted: string[] = []
   notify(events(world(), LAP, AT), (title) => posted.push(title))
-  expect(posted).toEqual(['cf: #49 blocked', 'cf: #49 landed'])
+  expect(posted).toEqual(['CaliperForge · #49', 'CaliperForge · #49'])
 })
 
 test('unread is everything after the last ack', () => {
@@ -54,4 +54,25 @@ test('a line reads in the store\'s local time', () => {
   const db = world()
   db.prepare("UPDATE settings SET value = '-360' WHERE key = 'tick.zone_offset_minutes'").run()
   expect(events(db, LAP.slice(1, 2), AT).map((e) => line(db, e))[0]).toMatch(/^08:05 {2}landed {3}#49 \(plan 7\) at step 7 batch: landed/)
+})
+
+const ev = (over: Partial<Event>): Event =>
+  ({ at: AT, plan: 70, ticket: 'solana-foundation/surfpool#706', kind: 'blocked', step: 5, name: 'senior', note: '', ...over })
+
+test('a blocked alert says why in words', () => {
+  expect(plain(ev({ note: 'senior_review reviewers.verdict_fence' }))).toBe('Stopped, needs you: the reviewer gave no verdict (at senior).')
+  expect(plain(ev({ note: 'spent 6.1M tokens since a person last sent it round, past the 6.0M ceiling' })))
+    .toContain('spent past the job ceiling')
+  expect(plain(ev({ note: 'something new' }))).toBe('Stopped, needs you: something new (at senior).')
+})
+
+test('a bot comment reaches the alert without its HTML', () => {
+  expect(plain(ev({ kind: 'asked', note: 'greptile-apps: <h2><a href="x">Summary</a></h2>' })))
+    .toBe('Someone commented on the PR. greptile-apps: Summary')
+})
+
+test('the title names the repo and issue, not the org', () => {
+  const posted: string[] = []
+  notify([ev({ note: 'x' })], (title) => posted.push(title))
+  expect(posted).toEqual(['CaliperForge · surfpool #706'])
 })

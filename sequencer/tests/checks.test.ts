@@ -10,25 +10,16 @@ import { ciFeatures, formatLine, recipes } from '../gates.ts'
 import { tick } from '../index.ts'
 import { narrow } from '../rails.ts'
 import { get } from '../workspace.ts'
-import { approve, CARRIED, internalPlan, ours, plan, stub, TYPESCRIPT, world, type World } from './world.ts'
+import { GREEN, NAPPING, pkg, RED, TIMEOUT } from './bases.ts'
+import { approve, CARRIED, internalPlan, ours, plan, stub, world, type World } from './world.ts'
 
 const ID = 2
 
-const RED = { lint: 'node -e "process.stderr.write(\'lint is red\'); process.exit(3)"' }
-const GREEN = { lint: 'node -e ""', test: 'node -e ""' }
-
-const TIMEOUT = ' FAIL x.test.ts > a lap\nError: Test timed out in 5000ms.\n'
 const BOUND = '   × a lap 1066ms\n     → expected 1066 to be less than 1000\n'
 const ASSERTED = ' FAIL x.test.ts > a call\nAssertionError: expected "hi" to be "ho"\n'
 const SILENT = ' FAIL x.test.ts > a call\n'
 
-const NAPPING = { test: `node -e "process.stderr.write('${TIMEOUT.replaceAll('\n', '\\n')}'); process.exit(1)"` }
-
 const SLOW = 30000
-
-function pkg(scripts: Record<string, string>): string {
-  return JSON.stringify({ name: 'x', private: true, scripts })
-}
 
 const ONE = { 'package.json': pkg({ test: 'vitest run' }) }
 
@@ -64,10 +55,10 @@ function recorder(red?: string): { run: Run; seen: string[] } {
 }
 
 /** Our own repo carrying the scripts, so the plan's checkout is the one the checks run in. */
-function mine(scripts: Record<string, string>): World {
+function mine(files: Record<string, string>): World {
   const w = world()
   w.db.prepare('DELETE FROM plans WHERE id = 1').run()
-  ours(w.root, { ...TYPESCRIPT, 'package.json': pkg(scripts) })
+  ours(w.root, files)
   internalPlan(w.db, w.root, ID)
   return w
 }
@@ -223,7 +214,7 @@ test('npm ci runs for a lock file with no node_modules, and its own failure refu
 })
 
 test('a plan on a target runs none of the stranger\'s scripts and passes step 3 as before', async () => {
-  const w = world('warm', undefined, { ...TYPESCRIPT, 'package.json': pkg(RED) })
+  const w = world('warm', undefined, RED)
   approve(w.db, w.target)
   for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED))
 

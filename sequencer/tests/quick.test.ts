@@ -4,14 +4,14 @@ import { expect, test } from 'vitest'
 import type { Provider } from '../../providers/kind.ts'
 import { tick } from '../index.ts'
 import { get, srcDir } from '../workspace.ts'
-import { approve, builds, CARRIED, internalPlan, ours, plan, stub, TYPESCRIPT, WORDS, world, type World } from './world.ts'
+import { OOPS } from './bases.ts'
+import { approve, builds, CARRIED, internalPlan, ours, plan, stub, WORDS, world, type World } from './world.ts'
 
 const SLOW = 30000
 const ID = 2
 const HELLO = 'src/hello.ts'
 const SPAN = `${HELLO}:1`
 const FIX = 'export const hello = (): string => "hey"'
-const RED = { lint: `node -e "process.exit(require('node:fs').readFileSync('src/hello.ts', 'utf8').includes('oops') ? 3 : 0)"` }
 
 function fence(...spans: string[]): string {
   return `${WORDS}\n\n---\noutcome: refuse\nclass: minimal\nspans:\n${spans.join('\n')}\n---\n`
@@ -95,7 +95,7 @@ test('a builder that exits non-zero keeps the lap', async () => {
 test('a fix the checkout\'s own checks refuse keeps the lap', async () => {
   const w = world()
   w.db.prepare('DELETE FROM plans WHERE id = 1').run()
-  ours(w.root, { ...TYPESCRIPT, 'package.json': JSON.stringify({ name: 'x', private: true, scripts: RED }) })
+  ours(w.root, OOPS)
   internalPlan(w.db, w.root, ID)
   for (let at = 0; at < 4; at += 1) await tick(w.db, w.root, stub(CARRIED))
 

@@ -16,7 +16,7 @@ export interface Packet {
   tools: string[]
   /** The run's turn ceiling; a packet without one runs unbounded. */
   steps?: number
-  /** #148: what this one run may spend before it stops, cache reads included. A packet without one is unwalled. */
+  /** #148: what this one run may spend before it stops, cache reads left out. A packet without one is unwalled. */
   wall?: number
   refuse: (path: string) => Refusal | null
 }

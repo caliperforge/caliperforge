@@ -17,9 +17,13 @@ const TURNS = 4
 
 const PER_TURN = 2_000_000
 
+const spend = { read: false }
+
 const turn = (n: number): unknown => ({
   type: 'assistant',
-  message: { usage: { input_tokens: 0, cache_read_input_tokens: n, cache_creation_input_tokens: 0, output_tokens: 0 } },
+  message: { usage: spend.read
+    ? { input_tokens: 0, cache_read_input_tokens: n, cache_creation_input_tokens: 0, output_tokens: 0 }
+    : { input_tokens: n, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, output_tokens: 0 } },
 })
 
 const CALL = { hook_event_name: 'PreToolUse', tool_name: 'Read', tool_input: { file_path: '/tmp/x.ts' } }
@@ -69,6 +73,16 @@ test('a run past its wall stops before the next model call, and the row says whi
   expect(fired.stop_reason).toContain('run.token_wall')
   expect(fired.exit).toBe(1)
   expect(fired.denials).toBe(1)
+})
+
+test('cache reads never reach the wall', async () => {
+  decisions.length = 0
+  spend.read = true
+  const fired = await claudeAgentSdk.fire({ ...packet(), wall: 5_000_000 })
+  spend.read = false
+
+  expect(decisions.map((d) => d.continue)).toEqual([true, true, true, true])
+  expect(fired.exit).toBe(0)
 })
 
 test('a packet with no wall runs every turn it was going to run', async () => {

@@ -1,9 +1,11 @@
 import { execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
+import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { closeIssue, commentIssue, fileIssue, openPr, rehearse, unrehearse } from '../cli/gh.ts'
 import { judge, MISSING, PENDING, shell, type Board, type Gh } from '../rails/ci-green/index.ts'
 import { parse } from '../rails/diff.ts'
-import { record } from '../rails/record.ts'
+import { record, type Verdict } from '../rails/record.ts'
 import { headDigest, signedHead } from '../store/approvals.ts'
 import { forkGreen } from '../store/deliverables.ts'
 import type { Db } from '../store/index.ts'
@@ -62,6 +64,7 @@ const WAITS = 'ci.waits'
  * A red run goes to the builder, not a reviewer: their CI is the only test an outside build gets.
  */
 export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire = WIRE): Outcome | null {
+  if (internal(plan) && !workflows(srcDir(root, plan.id))) return checked(db, root, plan, repo)
   const open = !internal(plan) && opened(db, plan.id) !== null
   const fork = `${FORK}/${repoName(repo)}`
   if (!internal(plan)) (open ? follow : squash)(root, plan.id)
@@ -86,6 +89,37 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
   if (failed === null) return null
   return { outcome: 'refuse', spans: failed.spans, message: failed.log, to: 2,
     note: `their CI is red on ${fork}@${head.sha.slice(0, 12)}; back to the builder with the failed log` }
+}
+
+/** A repo GitHub runs no workflow for: nothing on the fork will ever show a run at the head. */
+function workflows(dir: string): boolean {
+  const at = join(dir, '.github/workflows')
+  return existsSync(at) && readdirSync(at).some((f) => /\.ya?ml$/.test(f))
+}
+
+/**
+ * #206: our own repo with no workflows (Atelier) has no CI to wait on, so step 3's checks, run on this
+ * Mac at this head, stand as it. Nothing is pushed: the branch lands on `main` from the checkout. An
+ * outside plan never comes here; its fork CI is the only test their code gets.
+ */
+function checked(db: Db, root: string, plan: PlanRow, repo: string): null {
+  const step3 = db.prepare("SELECT outcome FROM verdicts WHERE plan = ? AND gate = 'pre_review' ORDER BY id DESC LIMIT 1")
+    .get(plan.id) as { outcome: string } | undefined
+  const passed = step3?.outcome === 'pass'
+  const sha = headOf(root, plan.id).sha
+  const verdict: Verdict = {
+    outcome: passed ? 'pass' : 'refuse',
+    defect_class: null,
+    origin_kind: passed ? null : 'rail',
+    origin_ref: passed ? null : 'ci-green',
+    subject_digest: createHash('sha256').update(`${repo}\nlocal\n${sha}`).digest('hex'),
+    spans: passed ? [] : ['ci.local'],
+    message: `${repo} runs no workflows; step 3's checks at ${sha.slice(0, 12)} stand as its CI`,
+  }
+  put(root, plan.id, BOARD, '[]\n')
+  record(db, join(root, 'rails/ci-green'), plan.id, verdict, 0)
+  forkGreen(db, plan.id, passed)
+  return null
 }
 
 /**

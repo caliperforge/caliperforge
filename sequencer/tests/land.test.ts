@@ -63,6 +63,26 @@ test('an internal plan that passed ready is on main, pushed and its issue closed
   expect(sent).toHaveLength(3)
 })
 
+test('an internal plan on a repo with no workflows lands on step 3\'s checks, never waiting on a fork run', async () => {
+  const w = world()
+  w.db.prepare('DELETE FROM plans WHERE id = 1').run()
+  ours(w.root, undefined, false)
+  internalPlan(w.db, w.root, ID)
+  const sent: string[] = []
+  const wire = watched(sent, w.root, ID, () => { throw new Error('no workflows: github is never asked for runs') })
+  await atBatch(w, wire)
+  expect(plan(w.db, ID).step).toBe(7)
+  expect(sent).toEqual([])
+  expect(w.db.prepare("SELECT outcome, step FROM verdicts WHERE plan = ? AND rail_id = 'ci-green'").get(ID))
+    .toEqual({ outcome: 'pass', step: 6 })
+  expect(w.db.prepare("SELECT outcome FROM verdicts WHERE plan = ? AND rail_id = 'ready'").get(ID))
+    .toEqual({ outcome: 'pass' })
+
+  await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  const sha = git(srcDir(w.root, ID), ['rev-parse', 'main'])
+  expect(sent).toEqual(['send src main', `close caliperforge/caliperforge#34 ${sha.slice(0, 7)}`])
+})
+
 test('main moving between ready and batch rewinds to the rails and lands as a fast-forward on the second pass', async () => {
   const w = mine()
   const sent: string[] = []

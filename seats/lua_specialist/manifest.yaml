@@ -1,0 +1,15 @@
+seat: lua_specialist
+model: claude-opus-5-5
+effort: high
+tools:
+  - Read
+  - Write
+  - Edit
+  - Glob
+  - Grep
+  - Bash(just:*)
+  - Bash(luajit:*)
+  - Bash(luacheck:*)
+  - Bash(busted:*)
+write_paths:
+  - brief:files

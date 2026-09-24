@@ -7,7 +7,7 @@ import { record } from '../../store/files.ts'
 import type { Db } from '../../store/index.ts'
 import { PlanRow } from '../../store/plans.ts'
 import { builder } from '../../templates/pr-path.ts'
-import { BRIEF_FILES, fenceFor, languageFor } from '../route.ts'
+import { BRIEF_FILES, fenceFor, languageFor, languageOfPath, majority } from '../route.ts'
 
 const schema = join(import.meta.dirname, '../../schema')
 
@@ -32,10 +32,49 @@ function world(): { db: Db; target: PlanRow; ours: PlanRow } {
   return { db, target: row(1), ours: row(2) }
 }
 
-test('a ruby and lua change in a repo with a kotlin folder goes to the outside seat', () => {
+const listed = (paths: string[]) => paths.map((path) => ({ path, is_new: false }))
+
+test('a ruby and lua change in a repo with a kotlin folder ties, and the first file listed picks ruby', () => {
   const w = world()
-  record(w.db, 1, [{ path: 'ruby/lib/pay_kit/config.rb', is_new: false }, { path: 'lua/pay_kit/internal/config.lua', is_new: false }])
+  record(w.db, 1, listed(['ruby/lib/pay_kit/config.rb', 'lua/pay_kit/internal/config.lua']))
+  expect(builder(languageFor(w.db, w.target, monorepo()))).toBe('ruby_specialist')
+})
+
+test('pay-kit #166: ruby source, its test and a doc go to the ruby seat', () => {
+  const w = world()
+  record(w.db, 1, listed(['ruby/lib/pay_kit/config.rb', 'docs/paykit-interface.md', 'ruby/test/pay_kit/config_test.rb']))
+  expect(builder(languageFor(w.db, w.target, monorepo()))).toBe('ruby_specialist')
+})
+
+test('surfpool #706: rust with ts-rs output beside it goes to the rust seat', () => {
+  const w = world()
+  record(w.db, 1, listed(['crates/types/src/types.rs', 'crates/core/src/types.rs', 'crates/core/src/rpc/surfnet_cheatcodes.rs',
+    'crates/sdk-node/surfpool-sdk/kit/types/api.ts', 'crates/sdk-node/surfpool-sdk/kit/generated/methods.ts',
+    'crates/sdk-node/surfpool-sdk/kit/generated/index.ts', 'crates/sdk-node/surfpool-sdk/kit/generated/MintUpdate.ts']))
+  expect(builder(languageFor(w.db, w.target, monorepo()))).toBe('rust_specialist')
+})
+
+test('a docs-only list, or one in a language with no seat, falls to the outside seat', () => {
+  const w = world()
+  record(w.db, 1, listed(['docs/paykit-interface.md', 'README.md']))
   expect(builder(languageFor(w.db, w.target, monorepo()))).toBe('outside_specialist')
+  record(w.db, 1, listed(['typescript/packages/mpp/src/config.ts']))
+  expect(builder(languageFor(w.db, w.target, monorepo()))).toBe('outside_specialist')
+})
+
+test('the most non-test files win; tests count only when there is nothing else', () => {
+  expect(majority(['python/tests/test_config.py', 'python/tests/test_env.py', 'go/config.go'])).toBe('go')
+  expect(majority(['ruby/test/pay_kit/config_test.rb'])).toBe('ruby')
+  expect(majority(['go/a.go', 'php/src/A.php', 'php/src/B.php'])).toBe('php')
+  expect(majority(['lua/pay_kit/a.lua', 'go/a.go'])).toBe('lua')
+})
+
+test('each path is read by its name first, then its folder; docs and fixtures by nothing', () => {
+  expect(['crates/x/Cargo.toml', 'python/pyproject.toml', 'ruby/Gemfile', 'go/go.mod', 'php/composer.json', 'lua/pay-kit-dev-1.rockspec']
+    .map(languageOfPath)).toEqual(['rust', 'python', 'ruby', 'go', 'php', 'lua'])
+  expect(languageOfPath('programs/escrow/Xargo.toml')).toBe('rust')
+  expect(languageOfPath('go/testdata/vector.json')).toBeNull()
+  expect(languageOfPath('ruby/README.md')).toBeNull()
 })
 
 test('a change wholly under kotlin/ still goes to the kotlin seat', () => {

@@ -18,8 +18,11 @@ export const DEFAULT_BUILDER = 'typescript_specialist'
 
 const BRIEF_WRITER = 'brief_writer'
 
+/** #204: a stranger's repo in one of these languages gets its builder; `outside` is the last resort, never the default. */
 const BUILDERS: Record<string, string> = {
   kotlin: 'kotlin_specialist', swift: 'swift_specialist', typescript: DEFAULT_BUILDER, outside: 'outside_specialist',
+  rust: 'rust_specialist', python: 'python_specialist', ruby: 'ruby_specialist', go: 'go_specialist',
+  php: 'php_specialist', lua: 'lua_specialist',
 }
 
 /** Which seat builds: the target's language picks it. */

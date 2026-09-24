@@ -375,10 +375,16 @@ function proof(db: Db, plan: PlanRow): Proven {
     tests_pass: passed(db, plan.id, 'gate', 'pre_review'),
     byte_identical_elsewhere: passed(db, plan.id, 'gate', 'review') && passed(db, plan.id, 'gate', 'senior_review'),
     fork_ci_green: passed(db, plan.id, 'rail_id', 'ci-green'),
-    bot_clean: db.prepare("SELECT 1 FROM signals WHERE plan = ? AND kind = 'bot_review' AND score < 5")
-      .get(plan.id) === undefined,
+    bot_clean: unanswered(db, plan.id) === undefined,
     target_warm: internal(plan) || target(db, plan)?.state !== 'parked',
   }
+}
+
+/** A low bot score a later build has answered no longer holds the plan; the bot scores the new head once it is pushed. */
+export function unanswered(db: Db, plan: number): unknown {
+  return db.prepare(`SELECT 1 FROM signals s WHERE s.plan = ? AND s.kind = 'bot_review' AND s.score < 5
+    AND julianday(s.at) > coalesce((SELECT max(julianday(r.at)) FROM runs r WHERE r.plan = ? AND r.step = 2), 0)`)
+    .get(plan, plan)
 }
 
 function passed(db: Db, plan: number, column: 'gate' | 'rail_id', value: string): boolean {

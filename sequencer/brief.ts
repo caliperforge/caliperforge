@@ -84,7 +84,9 @@ interface Format {
 const SHARED: Format[] = [{
   what: 'the handback format',
   files: ['rails/completion-audit/index.ts', 'seats/typescript_specialist/prompt.md', 'seats/kotlin_specialist/prompt.md',
-    'seats/swift_specialist/prompt.md', 'seats/outside_specialist/prompt.md'],
+    'seats/swift_specialist/prompt.md', 'seats/outside_specialist/prompt.md', 'seats/rust_specialist/prompt.md',
+    'seats/python_specialist/prompt.md', 'seats/ruby_specialist/prompt.md', 'seats/go_specialist/prompt.md',
+    'seats/php_specialist/prompt.md', 'seats/lua_specialist/prompt.md'],
   readers: ['sequencer/rails.ts', 'rails/tight/prose.ts'],
 }]
 

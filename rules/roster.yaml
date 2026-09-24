@@ -4,6 +4,12 @@ seats:
   - swift_specialist
   - brief_writer
   - outside_specialist
+  - rust_specialist
+  - python_specialist
+  - ruby_specialist
+  - go_specialist
+  - php_specialist
+  - lua_specialist
 digests:
   typescript_specialist:
     manifest: a8dd50ad9bc5d01f576bd87d7fc88bd0b518adb47d37468f28b24b02d4d730a1
@@ -20,3 +26,21 @@ digests:
   outside_specialist:
     manifest: 3897d50daa0caf59420769d972b0ed0dc67876076ba4373beeef28ba81dd33f4
     prompt: 175a79d2e7d099f34e188cd7b2a8bda31845bc0fe6012dbd4f6c33d9baaba56f
+  rust_specialist:
+    manifest: 5090575dcb48be94bc22f4c8f4c7bcbca1fe02389697b1e6dd455d49e292235c
+    prompt: 68d957839fe1bb44275dcf48306f61f4761d218214c2a970edd8d8d4d3fcee93
+  python_specialist:
+    manifest: cd93446f89a0345e256335bf8665c166ceafabec78c1341f44f576bd0cd541fb
+    prompt: 28abad4746370c5945c004c3ff4dcaf3f009ee5c2623daba8d1ec39a443b4f9c
+  ruby_specialist:
+    manifest: ac857c4d8fc3b53d7d87afca059941513dd0af0370e58d6c35a663ea61738a84
+    prompt: b5abc2228e6bf3fcc7246d5d2ce8623f06a2c628ae56ab41d64efcb72f5c936c
+  go_specialist:
+    manifest: d51808df190a60b43c37daaa5236c3312318fd37563ce341e754789b03c505d8
+    prompt: d89241aea6b730711cd061f25bcbcef964be3454d8ff0ddfc15bb2ee0fb10c16
+  php_specialist:
+    manifest: 3e32ca7de0c3fd5d60d8e542e8bcece124d8b89c5c6b753435a5f3892b72de1b
+    prompt: 421d2fe62b2d316d06b32a4cd3b1622fb58cc9ccfb0c1dfa759e0a70bfdd6a6e
+  lua_specialist:
+    manifest: a1622ce0fe5d4526ee1a9a6efc84cbf1736c092e9af1ba4ed42c53ff5e3a6aa8
+    prompt: e374efe62e2048bf0c7d7ab187c86428af53f472a68c971c76409e0087203eb0

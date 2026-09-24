@@ -105,7 +105,7 @@ function rest(db: Db, root: string, plan: PlanRow, handback: string): [string, (
   return [
     ['secret-scan', () => scan(diff)],
     ['authority', () => authority(root, name, diff, kernelPlan(plan), fence, outside, kernelPlan(plan) ? renumbered(src, diff) : [])],
-    ['tight', () => tight(root, { diff, sources: sources(src, diff), ...prose(root, plan, handback) })],
+    ['tight', () => tight(root, { diff, sources: sources(src, diff), ...prose(root, plan, handback), code: internal(plan) })],
     ['test-weakened', () => weakened(diff, 'green')],
     ['identifiers', () => identifiers(src, handback)],
   ]

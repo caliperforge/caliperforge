@@ -8,7 +8,7 @@ to PR descriptions, comments, posts and seat prompts.
 
 Rails refuse: a comment that restates its line; unused imports, unreachable branches, dead helpers,
 defensive checks on states the types exclude; function length or nesting above the ceiling in the
-rail manifest; a test weakened in the diff that went green; prose filler and hedges; a description
+rail manifest (our own repos only: on someone else's repo their format and lint checks set the code's limits); a test weakened in the diff that went green; prose filler and hedges; a description
 that summarises the diff; any preamble.
 
 Review judges: shorter without losing behaviour? every hunk maps to the ask? the one remaining

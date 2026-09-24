@@ -106,7 +106,7 @@ test('a wide internal brief goes back to the brief writer to be split', async ()
 
 function wideBrief(paths: string[]): string {
   return ['# let an internal plan run', '', '**What:** a.', '**Why:** b.', '**When it ends:** c.', '',
-    '## Approach', '', 'x', '', '## Cases', '', '- D1 one', '- D2 a call with no name is refused', '',
+    '## Approach', '', 'x', '', '## Settled facts', '', '- none: every name the change uses is in this checkout', '', '## Cases', '', '- D1 one', '- D2 a call with no name is refused', '',
     '## Must not break', '', '- y', '', '## Files', '', ...paths.map((p) => `- ${p}`), '',
     '## Files to read', '', '- src/hello.ts — what it exports today', '',
     '## Who else reads what this changes', '', '- nobody else', '', '## Tests', '', '- src/a.ts — the case', '',

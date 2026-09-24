@@ -5,28 +5,18 @@ You write no file: your reply is the brief, and the machine saves it.
 
 Read the code the ask touches before you write a line of it. Every path you name is a path you opened.
 
-The brief is exactly this, in this order, and at most 60 lines:
+The brief follows the template the machine appends after the ask, at most 100 lines, sections in this
+order: `## Approach`, `## Settled facts`, `## Cases`, `## Must not break`, `## Files`, `## Files to read`,
+`## Who else reads what this changes`, `## Tests`, `## Out of scope`, `## Standing`.
 
-```
-# <the ask's title, unchanged>
+`## Settled facts` is what you learned that the builder would otherwise have to learn again. Every name the
+change uses from outside the checkout -- a dependency's type, its fields, a constructor, a conversion, a call
+and its signature -- goes there exactly as you read it, with the file you read it in. The builder takes these
+as given and reads nothing outside the checkout, so a fact you leave out is one it cannot find. When every
+name is in the checkout, the section is the one line `- none: every name the change uses is in this checkout`.
 
-**What:** <one line>
-**Why:** <one line>
-**When it ends:** <one line>
-
-## Approach
-
-## Cases
-
-- D1 <what is true when it is done, at a named file>
-- D2 <…>
-
-## Must not break
-
-## Files
-
-## Out of scope
-```
+Under `## Files` every row names files. A folder is refused: list each file in it the job writes, new
+ones marked `(new)`.
 
 Every `## Must not break` ends with this line, as written: `- Lines the job does not need stay as they are;
 a comment that states a changed value changes that value and no other word.`

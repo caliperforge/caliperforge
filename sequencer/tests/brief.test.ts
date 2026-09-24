@@ -90,7 +90,7 @@ test('a brief asking the builder to run, count or report anything needing a shel
 })
 
 test('a brief over the line ceiling is refused on the cap', () => {
-  expect(on(saying(Array.from({ length: 40 }, () => '- a line').join('\n')))).toMatchObject({ span: '80 lines' })
+  expect(on(saying(Array.from({ length: 60 }, () => '- a line').join('\n')))).toMatchObject({ span: '100 lines' })
 })
 
 test('a change to the handback format names both its readers or is refused on the one left out', () => {
@@ -373,4 +373,13 @@ test('a Files row naming several paths lists each once', () => {
     { path: 'a/b.rb', is_new: false }, { path: 'x/y_test.rb', is_new: false },
     { path: 'x/z_spec.lua', is_new: false }, { path: 'c/d.rb', is_new: true },
   ])
+})
+
+test('a folder row under ## Files is refused', () => {
+  expect(on(swap(brief, '## Files', ['- sequencer/brief.ts', '- sequencer/tests/ — the tests'])))
+    .toMatchObject({ span: '- sequencer/tests/ — the tests', reason: holding('names no file') })
+})
+
+test('a brief without ## Settled facts is refused', () => {
+  expect(on(brief.replace(/## Settled facts\n\n[^#]*/, ''))).toMatchObject({ span: '## Settled facts' })
 })

@@ -6,6 +6,7 @@ import type { Packet, Provider } from '../../providers/kind.ts'
 import { pointed, STANDING } from '../brief.ts'
 import { handout, WHOLE } from '../handout.ts'
 import { tick } from '../index.ts'
+import { stopped } from '../seat.ts'
 import { approve, CARRIED, PASS, stub, world, type World } from './world.ts'
 
 const FILES = {
@@ -16,6 +17,7 @@ const FILES = {
 const BRIEF = ['# hello', '',
   '**What:** add `hello()`.', '**Why:** the ask asks for it.', '**When it ends:** it is exported.', '',
   '## Approach', '', 'Write it in `src/hello.ts`.', '',
+  '## Settled facts', '', '- none: every name the change uses is in this checkout', '',
   '## Cases', '', '- D1 add `hello()` in `src/hello.ts`', '- D2 a call with no name is refused', '',
   '## Must not break', '', '- the exports already in the file', '',
   '## Files', '', '- `src/hello.ts`, `src/bye.ts:1`', '',
@@ -93,4 +95,34 @@ test('a rebuild is handed its refusal, its diff and only the files those touch',
   expect(again).toContain('+++ b/src/extra.ts')
   expect(again).toContain('## src/extra.ts\n')
   expect(again).not.toContain('export const bye')
+})
+
+test('a stopped build resumes: kept diff, written files not re-handed', async () => {
+  const w = briefed()
+  const packets: Packet[] = []
+  let fired = 0
+  const inner = builds(packets, (cwd) => { writeFileSync(join(cwd, 'src/hello.ts'), 'export const hello = (): string => "hey"\n') })
+  const provider: Provider = {
+    ...inner,
+    fire: async (packet) => {
+      const out = await inner.fire(packet)
+      if (!packet.tools.includes('Write')) return out
+      fired += 1
+      return fired === 1 ? { ...out, exit: 1, stop_reason: 'ruling:run.token_wall stopped the run' } : out
+    },
+  }
+  for (let at = 0; at < 5 && packets.length < 2; at += 1) await tick(w.db, w.root, provider)
+  const again = packets[1]?.prompt ?? ''
+  expect(again).toContain('# Your last fire stopped before it finished')
+  expect(again).toContain('Not written yet: `src/bye.ts`')
+  expect(again).toContain('+++ b/src/hello.ts')
+  expect(again).not.toContain('# Refused — rebuild only these spans')
+  expect(again).not.toContain('## src/hello.ts\n')
+  expect(again).toContain('export const bye')
+})
+
+test('only a builder exit reads as stopped', () => {
+  expect(stopped('step 2 build refused by outside_specialist\n\noutside_specialist exit 1\n\nspans:\n  - ruling:run.token_wall\n')).toBe(true)
+  expect(stopped('step 2 build refused by outside_specialist\n\nrails: src/a.ts outside the fence\n\nspans:\n  - src/a.ts\n')).toBe(false)
+  expect(stopped('step 4 review refused by code_quality\n\ncode_quality refuse\n\nspans:\n  - src/a.ts:6\n')).toBe(false)
 })

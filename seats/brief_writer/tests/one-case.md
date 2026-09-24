@@ -8,6 +8,10 @@
 
 Step 1 fires the seat in the plan's checkout; the machine saves its reply as `issue.md`.
 
+## Settled facts
+
+- none: every name the change uses is in this checkout
+
 ## Cases
 
 - D1 the seat fires once at step 1 and its reply is saved as the brief

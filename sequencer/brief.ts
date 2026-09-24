@@ -4,7 +4,7 @@ import { parse } from 'yaml'
 import { z } from 'zod'
 import type { PlanFile } from '../store/files.ts'
 
-const CEILING = 80
+const CEILING = 100
 
 const HUMANS = ['Michael Moffett', 'Moffett', 'Sam Hartley']
 
@@ -15,7 +15,7 @@ export const STANDING = [
   "- no person's name or address in code",
 ]
 
-const PARTS = ['**What:**', '**Why:**', '**When it ends:**', '## Approach', '## Cases', '## Must not break',
+const PARTS = ['**What:**', '**Why:**', '**When it ends:**', '## Approach', '## Settled facts', '## Cases', '## Must not break',
   '## Files', '## Files to read', '## Who else reads what this changes', '## Tests', '## Out of scope', '## Standing']
 
 /** #72: past this many files other than tests a brief is two jobs, and the brief writer is sent back to split it. */
@@ -34,6 +34,11 @@ export const TEMPLATE = `The brief is exactly this, in this order, and at most $
 
 <the shape of the change, in the code that is there>
 
+## Settled facts
+
+- <each name the change uses from outside this checkout — a dependency's type, field, call or signature — exactly as you read it, with the file you read it in; the builder takes these as given and reads nothing outside the checkout>
+- none: every name the change uses is in this checkout
+
 ## Cases
 
 - D1 <what is true when it is done, at a named file>
@@ -45,7 +50,7 @@ export const TEMPLATE = `The brief is exactly this, in this order, and at most $
 
 ## Files
 
-- <path:line> — the files this job changes, at most ${String(WIDE)} besides tests, \`(new)\` only for a path the tree does not hold yet
+- <path:line> — the files this job changes, at most ${String(WIDE)} besides tests, \`(new)\` only for a path the tree does not hold yet; each row names files, never a folder
 
 ## Files to read
 
@@ -141,7 +146,7 @@ export function shape(brief: string, ask: string, src: string): Refused | null {
   const title = titleOf(brief)
   if (title === null || title !== titleOf(ask)) return { span: '# <title>', reason: "the title is not the ask's" }
   const checks: ((b: string) => Refused | null)[] =
-    [order, empty, carried, cases, caps, forbidden, shared, (b) => paths(b, src)]
+    [order, empty, carried, cases, caps, folders, forbidden, shared, (b) => paths(b, src)]
   for (const check of checks) {
     const refused = check(brief)
     if (refused !== null) return refused
@@ -182,6 +187,12 @@ function cases(brief: string): Refused | null {
 function caps(brief: string): Refused | null {
   const lines = brief.trimEnd().split('\n').length
   return lines > CEILING ? { span: `${String(CEILING)} lines`, reason: `the brief is ${String(lines)} lines` } : null
+}
+
+/** A row that names no file is a folder or a sentence; dropped silently, it leaves the builder fenced out of what it must write. */
+function folders(brief: string): Refused | null {
+  const bare = section(brief, '## Files').split('\n').find((l) => /^\s*[-*]/.test(l) && files(`## Files\n${l}`).length === 0)
+  return bare === undefined ? null : { span: bare.trim(), reason: 'this ## Files row names no file; list each file, not the folder' }
 }
 
 function forbidden(brief: string): Refused | null {

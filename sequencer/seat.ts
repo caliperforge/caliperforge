@@ -20,7 +20,8 @@ import { handover, type Handover } from './handover.ts'
 import { install, mode } from './checks.ts'
 import { narrow } from './rails.ts'
 import { deletions } from './fence.ts'
-import { fenceFor } from './route.ts'
+import { fenceFor, languageFor } from './route.ts'
+import { gates, outsideLanguage } from './gates.ts'
 import type { Outcome } from './kind.ts'
 import { carried, cloned, diffOf, diffSince, drop, get, maybe, move, narrowing, planDir, put, snapshot, srcDir } from './workspace.ts'
 import { kernelPlan } from './home.ts'
@@ -250,13 +251,18 @@ function outside(root: string, plan: PlanRow, src: string): Handover {
 
 /**
  * #86. Step 3 already ran the checkout's own checks on this diff; the reviewer is told so rather than
- * reasoning its way to it. Read off the rail's row, never re-run, and only while the diff is the one it judged.
+ * reasoning its way to it. #204: on a stranger's repo, once step 3 ran its language's gates. Read off the rail's row, never re-run, and only while the diff is the one it judged.
  */
-function checked(db: Db, plan: PlanRow, src: string, diff: string): { checks?: string } {
-  if (!internal(plan)) return {}
+export function checked(db: Db, plan: PlanRow, src: string, diff: string): { checks?: string } {
+  const outside = internal(plan) ? null : outsideLanguage(languageFor(db, plan, src))
+  if (!internal(plan) && outside === null) return {}
   const row = db.prepare(`SELECT outcome, subject_digest FROM verdicts WHERE plan = ? AND kind = 'rail' AND rail_id = 'checks'
     ORDER BY id DESC LIMIT 1`).get(plan.id) as { outcome: string; subject_digest: string } | undefined
   if (row?.outcome !== 'pass' || row.subject_digest !== createHash('sha256').update(diff).digest('hex')) return {}
+  if (outside !== null) {
+    const ran = gates(src, { language: outside, files: filesOf(db, plan.id).map((f) => f.path) }).map((g) => g.script).join(', ')
+    return { checks: `Passed on this diff: their ${outside} gates exit zero (${ran}). Do not re-derive what they settle.` }
+  }
   const scope = narrow(db, plan).length > 0 ? 'the tests this plan\'s files reach' : 'the whole suite'
   return { checks: `Passed on this diff: every script the checkout names exits zero (${mode(src)}, ${scope}). Do not re-derive what they settle.` }
 }

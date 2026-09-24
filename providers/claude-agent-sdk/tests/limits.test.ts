@@ -37,7 +37,7 @@ test('the named window alone, and none from an overage event', () => {
 test('a run brings its readings back', async () => {
   const fired = await claudeAgentSdk.fire({
     prompt: 'p', cwd: '/tmp', transcript: join(mkdtempSync(join(tmpdir(), 'cf-limits-')), 'run.transcript.jsonl'),
-    model: 'claude-opus-5', effort: 'high', tools: ['Read'], refuse: () => null,
+    model: 'claude-opus-5-5', effort: 'high', tools: ['Read'], refuse: () => null,
   })
   expect(fired.limits?.map((r) => [r.rate_limit_type, r.utilization])).toEqual([['five_hour', 0.06], ['seven_day', 0.83]])
 })

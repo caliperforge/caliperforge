@@ -1,7 +1,7 @@
 review: senior_review
 gate: senior_review
 step: 5
-model: claude-opus-5
+model: claude-opus-5-5
 effort: high
 tools:
   - Read

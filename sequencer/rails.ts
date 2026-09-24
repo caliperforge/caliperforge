@@ -16,6 +16,7 @@ import { builder } from '../templates/pr-path.ts'
 import { checks, mode, type Failure } from './checks.ts'
 import { outsideLanguage } from './gates.ts'
 import type { Outcome } from './kind.ts'
+import { lock, unlock } from './lock.ts'
 import { seat } from '../runner/rules.ts'
 import { renumbered, strays } from './fence.ts'
 import { fenceFor, languageFor } from './route.ts'
@@ -45,10 +46,16 @@ export function preReview(db: Db, root: string, plan: PlanRow): Outcome {
   // language's gates (#204): its builder already ran them at step 2, and a red fork CI after the reviews costs more.
   const outside = internal(plan) ? null : outsideLanguage(languageFor(db, plan, srcDir(root, plan.id)))
   if (internal(plan) || outside !== null) {
-    const failed = checks(srcDir(root, plan.id), undefined, outside === null ? narrow(db, plan) : [],
-      outside === null ? null : { language: outside, files: filesOf(db, plan.id).map((f) => f.path) })
-    recordRail(db, join(root, 'rails', 'checks'), plan.id, checked(failed, diffOf(root, plan.id)), 0)
-    if (failed !== null) return broke(failed)
+    const holder = lock(root, plan.id)
+    if (holder !== null) return { outcome: 'pass', held: true, spans: ['checks'], note: `checks wait: plan ${String(holder.plan)} is running its tests` }
+    try {
+      const failed = checks(srcDir(root, plan.id), undefined, outside === null ? narrow(db, plan) : [],
+        outside === null ? null : { language: outside, files: filesOf(db, plan.id).map((f) => f.path) })
+      recordRail(db, join(root, 'rails', 'checks'), plan.id, checked(failed, diffOf(root, plan.id)), 0)
+      if (failed !== null) return broke(failed)
+    } finally {
+      unlock(root)
+    }
   }
   const ran = internal(plan) ? mode(srcDir(root, plan.id)) : outside ?? 'none'
   return { outcome: 'pass', spans: [], note: `pre-review: six rails pass; checks ran ${ran}` }

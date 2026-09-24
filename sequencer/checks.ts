@@ -105,7 +105,11 @@ const OPENS = /^[ \t]*(?:FAIL\b|×[ \t])/
 
 const LOAD = /Test timed out in \d+ *ms|Hook timed out|expected [\d.]+ to be less than [\d.]+/
 
+/** xcodebuild's runner never connected, so no test ran and nothing else can have failed. */
+const HUNG = 'The test runner hung before establishing connection'
+
 function loadOnly(output: string): boolean {
+  if (output.includes(HUNG)) return true
   const named = failures(output)
   return named.length > 0 && named.every((block) => LOAD.test(block))
 }

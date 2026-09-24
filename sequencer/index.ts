@@ -9,6 +9,7 @@ import { PlanRow, advance, back, finish, internal, live, needsCeo, openPipes, re
 import { blipped, fingerprint, refused, WHY, type Why } from '../store/refusals.ts'
 import { at, last, type Step } from '../templates/pr-path.ts'
 import { capture } from './capture.ts'
+import { woke } from './orchestrator.ts'
 import type { Fired, Outcome } from './kind.ts'
 import { reprice } from './priority.ts'
 import { started } from './signals.ts'
@@ -42,6 +43,7 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
     const laps = await Promise.all(mine.map((m) => one(db, root, pipe, m, m.lease, provider, wire, chain)))
     out.push(...laps.flat())
   }
+  await woke(db, root, provider, now)
   return out
 }
 

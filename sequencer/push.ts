@@ -54,6 +54,8 @@ const FINISHES = 45
 
 const WAITS = 'ci.waits'
 
+const REHEARSED = 'ci.next'
+
 /**
  * Step 6 before the gate: the branch goes to our fork -- no pull request, and the rail reads the
  * branch's own commit messages for an upstream number -- and `rails/ci-green` judges the runs at
@@ -70,7 +72,7 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
   if (!internal(plan)) (open ? follow : squash)(root, plan.id)
   if (!internal(plan) && !open) renamed(srcDir(root, plan.id), fork, wire)
   const head = headOf(root, plan.id)
-  const ci = open ? `${head.branch}${NEXT}` : head.branch
+  const ci = open ? rehearsal(root, plan.id, fork, head, wire) : head.branch
   wire.send(head.dir, open ? `HEAD:refs/heads/${ci}` : head.branch)
   if (!internal(plan)) wire.rehearse?.(fork, ci)
   const { verdict, board } = judge({ fork, branch: ci, sha: head.sha },
@@ -227,7 +229,7 @@ export function push(db: Db, root: string, plan: PlanRow, wire: Wire = WIRE): Ou
   if (cold !== null) return refuse(cold, `${cold} left no passing verdict on plan ${String(plan.id)}`)
   const open = opened(db, plan.id)
   wire.send(head.dir, head.branch)
-  wire.unrehearse?.(`${FORK}/${repoName(target.repo)}`, open === null ? head.branch : `${head.branch}${NEXT}`)
+  wire.unrehearse?.(`${FORK}/${repoName(target.repo)}`, open === null ? head.branch : rehearsed(root, plan.id, head.branch))
   if (open !== null) {
     pushed(db, plan.id, approval, open)
     return { outcome: 'pass', spans: [], note: `pushed ${head.branch} onto ${open}` }
@@ -361,6 +363,23 @@ function nextFree(dir: string, branch: string): string {
   let n = hit === null ? 2 : Number(hit[2]) + 1
   while (onFork(dir, `${stem}-a${String(n)}`)) n += 1
   return `${stem}-a${String(n)}`
+}
+
+/** The first `-next` name a plain push only moves forward; a held tick at the same head keeps its name. */
+function rehearsal(root: string, plan: number, fork: string, head: Head, wire: Wire): string {
+  const named = (n: number): string => `${head.branch}${NEXT}${n === 1 ? '' : String(n)}`
+  let n = 1
+  while (onFork(head.dir, named(n)) && !carried(head.dir, named(n))) n += 1
+  const name = named(n)
+  const previous = rehearsed(root, plan, head.branch)
+  if (previous !== name) wire.unrehearse?.(fork, previous)
+  put(root, plan, REHEARSED, name)
+  return name
+}
+
+/** A round sent before the name was saved went to plain `-next`. */
+function rehearsed(root: string, plan: number, branch: string): string {
+  return maybe(root, plan, REHEARSED) ?? `${branch}${NEXT}`
 }
 
 /**

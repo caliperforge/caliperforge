@@ -121,20 +121,29 @@ export interface Refused {
   reason: string
 }
 
-/** The fence a seat ends with when the ask cannot be briefed against the code: the question goes back to the COO. */
+/**
+ * The fence a seat ends with when the ask cannot be briefed against the code: the question goes back to the COO.
+ * A reply with neither a fence nor a title is the same question in prose (#212), never a failed title check.
+ */
 export function unclear(reply: string): string | null {
-  const fence = /---\r?\n([\s\S]*?)\r?\n---$/.exec(reply.trimEnd())
-  if (fence === null) return null
-  const parsed = Unclear.safeParse(yamlOf(fence[1] ?? ''))
+  const fence = fenceOf(reply)
+  if (fence === null) return titleOf(reply) === null && reply.trim() !== '' ? reply.trim() : null
+  const parsed = Unclear.safeParse(yamlOf(fence))
   return parsed.success ? parsed.data.question : null
 }
 
 /** #72: the fence a seat ends with when the ask is more than one job: the parts, in the order they must land. */
 export function split(reply: string): Part[] | null {
-  const fence = /---\r?\n([\s\S]*?)\r?\n---$/.exec(reply.trimEnd())
+  const fence = fenceOf(reply)
   if (fence === null) return null
-  const parsed = Split.safeParse(yamlOf(fence[1] ?? ''))
+  const parsed = Split.safeParse(yamlOf(fence))
   return parsed.success ? parsed.data.parts : null
+}
+
+/** The fence a reply ends with, whether or not the seat wrapped it in a code block (#212: plans 71 and 78). */
+function fenceOf(reply: string): string | null {
+  const bare = reply.trimEnd().replace(/\n```\s*$/, '').replace(/```[a-z]*\r?\n(?=---\r?\n(?:(?!```)[\s\S])*$)/, '')
+  return /---\r?\n([\s\S]*?)\r?\n---$/.exec(bare.trimEnd())?.[1] ?? null
 }
 
 /** How many files other than tests the brief touches, when that is more than one job holds. */

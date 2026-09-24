@@ -5,7 +5,7 @@ import { walk } from '../../checks/tree.ts'
 import type { Packet } from '../../providers/kind.ts'
 import { release, returnToLane } from '../../store/holds.ts'
 import { get } from '../../store/lanes.ts'
-import { files, shape, TEMPLATE, unclear, writable, type Refused } from '../brief.ts'
+import { files, shape, split, TEMPLATE, unclear, writable, type Refused } from '../brief.ts'
 import { tick } from '../index.ts'
 import { blocked } from '../steps.ts'
 import { drop, maybe, move, put, srcDir, titleOf } from '../workspace.ts'
@@ -125,6 +125,19 @@ test('only a fence that says unclear carries a question back to the COO', () => 
   expect(unclear(fixture('unclear.md'))).toBe('is the GitHub comment part of this change or its own issue?')
   expect(unclear(brief)).toBeNull()
   expect(unclear('---\noutcome: unclear\n---\n')).toBeNull()
+})
+
+test('prose with no title or fence is the question itself; a titled brief is not', () => {
+  expect(unclear('I could not brief this: the router it needs is not on main.\n')).toBe('I could not brief this: the router it needs is not on main.')
+  expect(unclear(brief)).toBeNull()
+  expect(unclear('')).toBeNull()
+})
+
+test('a fence wrapped in a code block still splits', () => {
+  const parts = '---\noutcome: split\nparts:\n  - title: a\n    what: w\n    why: y\n    ends: e\n  - title: b\n    what: w\n    why: y\n    ends: e\n---'
+  expect(split(`Two jobs.\n\n\`\`\`yaml\n${parts}\n\`\`\`\n`)?.map((p) => p.title)).toEqual(['a', 'b'])
+  expect(split(`Two jobs.\n\n${parts}\n`)?.map((p) => p.title)).toEqual(['a', 'b'])
+  expect(unclear(`Two jobs.\n\n\`\`\`\n${parts}\n\`\`\``)).toBeNull()
 })
 
 test('step 1 fires the read-only seat once, saves its reply as the brief, and advances to the build', async () => {

@@ -39,7 +39,7 @@ export function holder(db: Db, plan: number, now: Date = new Date()): Lease | nu
   return held(db, now).find((l) => l.plan === plan) ?? null
 }
 
-function gone(lease: Lease, now: Date): boolean {
+export function gone(lease: Lease, now: Date): boolean {
   return !alive(lease.pid) || Date.parse(lease.taken_at) <= now.getTime() - CEILING_MS
 }
 

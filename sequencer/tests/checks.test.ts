@@ -1,4 +1,5 @@
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { expect, test } from 'vitest'
@@ -252,6 +253,51 @@ test('D1 a red xcodebuild names its command', () => {
   const run: Run = () => ({ code: 65, output: '** TEST FAILED **' })
   expect(checks(src, run)).toMatchObject({ script: 'test', code: 65, command: expect.stringMatching(/^xcodebuild -project Atelier\.xcodeproj/) as string })
 })
+
+test('an xcodebuild run whose test runner hung runs once more, and the second run settles it', () => {
+  const src = tree({})
+  mkdirSync(join(src, 'Atelier.xcodeproj'))
+  const twice = replies({ code: 65, output: 'The test runner hung before establishing connection.\n** TEST FAILED **' }, { code: 0, output: '' })
+  expect(checks(src, twice.run)).toBeNull()
+  expect(twice.seen).toHaveLength(2)
+})
+
+test('an xcodebuild failure without the hung line is refused on the first run', () => {
+  const src = tree({})
+  mkdirSync(join(src, 'Atelier.xcodeproj'))
+  const once = replies({ code: 65, output: '** TEST FAILED **' }, { code: 0, output: '' })
+  expect(checks(src, once.run)).toMatchObject({ code: 65, retried: false })
+  expect(once.seen).toHaveLength(1)
+})
+
+/** A step 3 checks lock another plan's tick left, naming `pid`. */
+function locked(w: World, pid: number): string {
+  const path = join(w.root, '.cf', 'checks.lock')
+  mkdirSync(dirname(path), { recursive: true })
+  writeFileSync(path, JSON.stringify({ plan: 9, pid, taken_at: new Date().toISOString() }))
+  return path
+}
+
+test('a checks lock a live tick holds leaves step 3 held on it, with no checks run or recorded', async () => {
+  const w = mine(GREEN)
+  locked(w, process.ppid)
+  for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED))
+
+  const fired = (await tick(w.db, w.root, stub(CARRIED)))[0]
+  expect(fired).toMatchObject({ plan: ID, step: 3, name: 'rails', note: 'checks wait: plan 9 is running its tests' })
+  expect(plan(w.db, ID).step).toBe(3)
+  expect(w.db.prepare("SELECT 1 FROM verdicts WHERE plan = ? AND rail_id = 'checks'").all(ID)).toEqual([])
+}, SLOW)
+
+test('a checks lock whose holder is gone is taken over, and no lock is left after a pass or a refusal', async () => {
+  for (const [scripts, step] of [[GREEN, 4], [RED, 2]] as const) {
+    const w = mine(scripts)
+    const path = locked(w, spawnSync('/usr/bin/true').pid)
+    for (let at = 0; at < 4; at += 1) await tick(w.db, w.root, stub(CARRIED))
+    expect(plan(w.db, ID).step).toBe(step)
+    expect(existsSync(path)).toBe(false)
+  }
+}, SLOW)
 
 test('D2 a package.json checkout runs npm as before', () => {
   expect(mode(tree(ONE))).toBe('npm')

@@ -22,7 +22,7 @@ function packet(tools: string[]): Packet {
     prompt: 'p',
     cwd: '/tmp',
     transcript: join(mkdtempSync(join(tmpdir(), 'cf-tools-')), 'run.transcript.jsonl'),
-    model: 'claude-opus-5',
+    model: 'claude-opus-5-5',
     effort: 'high',
     tools,
     refuse: () => null,

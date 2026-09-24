@@ -4,7 +4,7 @@ import { Seat, rules, seat } from '../../../runner/rules.ts'
 
 const root = join(import.meta.dirname, '../../..')
 
-const card = { seat: 'brief_writer', model: 'claude-opus-5', effort: 'high', tools: ['Read', 'Glob', 'Grep'], write_paths: [] }
+const card = { seat: 'brief_writer', model: 'claude-opus-5-5', effort: 'high', tools: ['Read', 'Glob', 'Grep'], write_paths: [] }
 
 test('the manifest holds Read, Glob and Grep, and no write path', () => {
   expect(Seat.parse(seat(root, 'brief_writer').manifest)).toEqual(card)

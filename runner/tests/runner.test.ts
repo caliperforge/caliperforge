@@ -93,7 +93,7 @@ test('the packet carries the Tight spec, the seat prompt and the issue', () => {
   const p = packet(seat(root, 'typescript_specialist').manifest, 'SEAT', 'TIGHT', 'ISSUE', cwd, TRANSCRIPT)
   expect(p.prompt.indexOf('TIGHT')).toBeLessThan(p.prompt.indexOf('SEAT'))
   expect(p.prompt.indexOf('SEAT')).toBeLessThan(p.prompt.indexOf('ISSUE'))
-  expect(p.model).toBe('claude-opus-5')
+  expect(p.model).toBe('claude-opus-5-5')
 })
 
 test('the rules loader hashes roster, rails and Tight into rules', () => {
@@ -155,7 +155,7 @@ test('firing one step writes one runs row carrying the rule hash as sent', async
   const row = db.prepare('SELECT step, seat, rule_hash, provider, model, effort, input_tokens, cache_tokens, output_tokens, seconds, exit FROM runs WHERE id = ?').get(id)
   expect(row).toEqual({
     step: 2, seat: 'typescript_specialist', rule_hash: seat(root, 'typescript_specialist').hash,
-    provider: 'claude-agent-sdk', model: 'claude-opus-5', effort: 'high',
+    provider: 'claude-agent-sdk', model: 'claude-opus-5-5', effort: 'high',
     input_tokens: 11, cache_tokens: 22, output_tokens: 33, seconds: 1.5, exit: 0,
   })
 })

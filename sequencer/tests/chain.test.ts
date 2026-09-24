@@ -112,7 +112,7 @@ test('a second round before any PR goes out on the next branch', async () => {
   expect(count.trim()).toBe('1')
 })
 
-test('Tight reads the PR text the card set, not the handback', async () => {
+test('Tight reads the PR text the card set, and never the handback', async () => {
   const told = 'Updated `src/hello.ts` so hello() says hey.\n\n' + CARRIED
   const w = ready()
   put(w.root, 1, 'pr.md', 'Addresses #12.\n\n## Summary\n\n- `hello()` says hey.\n')
@@ -120,6 +120,6 @@ test('Tight reads the PR text the card set, not the handback', async () => {
   expect(fired.find((f) => f.step === 3)).toMatchObject({ outcome: 'pass' })
 
   const bare = ready()
-  const refused = await tick(bare.db, bare.root, stub(told, 0, undefined, writes), undefined, undefined, watched([], bare.root, 1), 5)
-  expect(refused.find((f) => f.step === 3)).toMatchObject({ outcome: 'refuse' })
+  const unset = await tick(bare.db, bare.root, stub(told, 0, undefined, writes), undefined, undefined, watched([], bare.root, 1), 5)
+  expect(unset.find((f) => f.step === 3)).toMatchObject({ outcome: 'pass' })
 })

@@ -2,7 +2,8 @@ import { expect, test } from 'vitest'
 import { tickNote } from '../../cli/brief.ts'
 import { record as recordFiles } from '../../store/files.ts'
 import { overlapWaits } from '../../store/plans.ts'
-import { picks, tick } from '../index.ts'
+import { tick } from '../index.ts'
+import { picks } from '../next.ts'
 import { CARRIED, internalPlan, ours, plan, stub, world, type World } from './world.ts'
 
 const ID = 2

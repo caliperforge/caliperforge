@@ -365,7 +365,7 @@ function nextFree(dir: string, branch: string): string {
   return `${stem}-a${String(n)}`
 }
 
-/** The first `-next` name a plain push only moves forward; a held tick at the same head keeps its name. */
+/** A held tick at the same head keeps its name: the fork already holds that head. */
 function rehearsal(root: string, plan: number, fork: string, head: Head, wire: Wire): string {
   const named = (n: number): string => `${head.branch}${NEXT}${n === 1 ? '' : String(n)}`
   let n = 1

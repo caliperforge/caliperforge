@@ -14,6 +14,7 @@ import type { Db } from '../store/index.ts'
 import { internal, type PlanRow } from '../store/plans.ts'
 import { builder } from '../templates/pr-path.ts'
 import { checks, mode, type Failure } from './checks.ts'
+import { outsideLanguage } from './gates.ts'
 import type { Outcome } from './kind.ts'
 import { seat } from '../runner/rules.ts'
 import { renumbered, strays } from './fence.ts'
@@ -40,13 +41,17 @@ export function preReview(db: Db, root: string, plan: PlanRow): Outcome {
     recordRail(db, join(root, 'rails', rail), plan.id, verdict, 0)
     if (verdict.outcome !== 'pass') return named(rail, verdict)
   }
-  // a stranger's scripts and install hooks never run on this host; their fork CI at step 6 is their check
-  if (internal(plan)) {
-    const failed = checks(srcDir(root, plan.id), undefined, narrow(db, plan))
+  // a stranger's npm scripts never run on this host. A stranger's repo in a language with its own seat runs that
+  // language's gates (#204): its builder already ran them at step 2, and a red fork CI after the reviews costs more.
+  const outside = internal(plan) ? null : outsideLanguage(languageFor(db, plan, srcDir(root, plan.id)))
+  if (internal(plan) || outside !== null) {
+    const failed = checks(srcDir(root, plan.id), undefined, outside === null ? narrow(db, plan) : [],
+      outside === null ? null : { language: outside, files: filesOf(db, plan.id).map((f) => f.path) })
     recordRail(db, join(root, 'rails', 'checks'), plan.id, checked(failed, diffOf(root, plan.id)), 0)
     if (failed !== null) return broke(failed)
   }
-  return { outcome: 'pass', spans: [], note: `pre-review: six rails pass; checks ran ${internal(plan) ? mode(srcDir(root, plan.id)) : 'none'}` }
+  const ran = internal(plan) ? mode(srcDir(root, plan.id)) : outside ?? 'none'
+  return { outcome: 'pass', spans: [], note: `pre-review: six rails pass; checks ran ${ran}` }
 }
 
 /**

@@ -42,6 +42,7 @@ export const REFUSE = `${WORDS}\n\n---\noutcome: refuse\nclass: correctness\nspa
 const BRIEF = (file: string): string => ['',
   '**What:** add `hello()`.', '**Why:** the ask asks for it.', '**When it ends:** it is exported.', '',
   '## Approach', '', `Write it in \`${file}\`.`, '',
+  '## Settled facts', '', '- none: every name the change uses is in this checkout', '',
   '## Cases', '', `- D1 add \`hello()\` in \`${file}\``, '- D2 a call with no name is refused', '',
   '## Must not break', '', '- the exports already in the file', '',
   '## Files', '', `- ${file}`, '',

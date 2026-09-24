@@ -20,6 +20,9 @@ several Read calls at once, then edit; a handed file you will not change needs n
 not handed only when you can say why, and ask for all of those in one message. Independent calls go out
 together in one message, never one per turn.
 
+The brief's `## Settled facts` were checked when it was written: take them as given and do not look them up
+again. Read nothing outside the checkout.
+
 Answer the brief under the Tight standard above, then close with this fence and nothing after it:
 
 A file the ask needs removed goes under `## Deleted` in your answer, one `- <path>` per line, repo-relative:

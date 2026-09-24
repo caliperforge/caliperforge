@@ -13,6 +13,7 @@ import { observed, wall } from '../store/lanes.ts'
 import { builderRan, internal, type PlanRow } from '../store/plans.ts'
 import { byRun, pending } from '../store/transcript.ts'
 import type { Step } from '../templates/pr-path.ts'
+import { parse } from '../rails/diff.ts'
 import { pointed, shape, split, TEMPLATE, unclear, wide, WIDE, type Part } from './brief.ts'
 import { handout, touched, type Handed } from './handout.ts'
 import { handover, type Handover } from './handover.ts'
@@ -154,9 +155,30 @@ function rebuild(db: Db, root: string, plan: PlanRow, prev: string | null): stri
   const rows = lastRows(prev)
   if (refusal === null) return handed(`${issue}${rows}`, handout(src, listed(db, plan.id, issue)))
   const diff = diffOf(root, plan.id)
+  if (stopped(refusal) && carried(root, plan.id) === null) return resumed(db, src, plan.id, `${issue}${rows}`, diff)
   const again = `${issue}\n\n# Refused — rebuild only these spans\n\n${refusal}${rows}`
   const since = diff.trim() === '' ? again : `${again}\n\n# ${headed(root, plan.id)}\n\n\`\`\`\`diff\n${diff}\n\`\`\`\``
   return handed(since, handout(src, touched(diff, refusal)))
+}
+
+/** A build the wall or an exit cut short was never judged: the refusal names the stop, not a fault in the work. */
+export function stopped(refusal: string): boolean {
+  return /^step \d+ build refused by \S+\n\n\S+ exit [1-9]\d*\n/.test(refusal)
+}
+
+/**
+ * The work a stopped fire left in the tree is kept, and the next fire is told so: it is handed what it
+ * has not written yet, not the files it already changed, so it finishes instead of starting over.
+ */
+function resumed(db: Db, src: string, plan: number, issue: string, diff: string): string {
+  const listing = listed(db, plan, issue)
+  if (diff.trim() === '') return handed(issue, handout(src, listing))
+  const done = new Set(parse(diff).map((f) => f.path))
+  const left = filesOf(db, plan).map((f) => f.path).filter((p) => !done.has(p))
+  const rest = left.length === 0 ? '' : ` Not written yet: ${left.map((p) => `\`${p}\``).join(', ')}.`
+  const head = '# Your last fire stopped before it finished\n\nThe diff below is your work so far and the checkout holds it. '
+    + `Keep it: do not re-read or rewrite what it holds. Finish what is left.${rest} Answer every D row the diff does not answer yet.`
+  return handed(`${issue}\n\n${head}\n\n\`\`\`\`diff\n${diff}\n\`\`\`\``, handout(src, listing.filter((f) => !done.has(f.path))))
 }
 
 /** The rows the last fence claimed: a rebuild's own fence answers every case, not only the ones it touched. */

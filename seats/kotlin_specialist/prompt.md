@@ -23,6 +23,9 @@ A file the ask needs removed goes under `## Deleted` in your answer, one `- <pat
 you have no shell, so the kernel deletes them for you before step 3 reads the tree. A path outside what you may
 write, or one that is not there, refuses the build.
 
+The brief's `## Settled facts` were checked when it was written: take them as given and do not look them up
+again. Read nothing outside the checkout.
+
 Answer the issue as filed under the Tight standard above, then close with this fence and nothing after it:
 
 ```

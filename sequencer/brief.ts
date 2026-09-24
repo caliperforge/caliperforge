@@ -62,7 +62,7 @@ export const TEMPLATE = `The brief is exactly this, in this order, and at most $
 
 ## Tests
 
-- <path> — <the case it carries>
+- <path> — <the one behaviour it pins: a D row or a named edge; no test that pins nothing the change does>
 
 ## Out of scope
 

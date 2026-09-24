@@ -10,7 +10,7 @@ import { fire } from '../runner/index.ts'
 import { CHAIN_MINUTES, dry, tick } from '../sequencer/index.ts'
 import { behind, upgraded } from '../sequencer/upgrade.ts'
 import { signoffs } from '../sequencer/signoff.ts'
-import { SIGNOFF, liveTree, reap } from '../sequencer/workspace.ts'
+import { SIGNOFF, afresh, liveTree, reap } from '../sequencer/workspace.ts'
 import { blocked, parked, targetDigest, WAITING } from '../sequencer/steps.ts'
 import { release, returnToLane } from '../store/holds.ts'
 import { dump, migrate, open as openDb, type Db } from '../store/index.ts'
@@ -199,7 +199,8 @@ cf.command('release').argument('<plan>', 'a briefed plan waiting on the coo to r
 })
 
 cf.command('return').argument('<plan>', 'a plan blocked on the ceo or halted').action((id: string) => {
-  returnToLane(db(), Number(id))
+  const n = Number(id)
+  afresh(root, n, returnToLane(db(), n))
   out(`plan ${id} queued\n`)
 })
 
@@ -228,6 +229,7 @@ cf.command('retry').argument('<plan>', 'a plan blocked on a refusal, sent round 
     const plan = PlanRow.parse(row)
     if (plan.state !== 'blocked_on_ceo') throw new Error(`plan ${id} is ${plan.state}, not blocked`)
     const step = handle.transaction(() => { clear(handle, plan.id); return retry(handle, plan) })()
+    afresh(root, plan.id, step)
     out(`plan ${id} running again at step ${String(step)}\n`)
   })
 

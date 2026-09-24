@@ -5,8 +5,8 @@ import { hold } from '../store/holds.ts'
 import type { Db } from '../store/index.ts'
 import { clear as unlease, held, take, type Lease, type Taken } from '../store/leases.ts'
 import { cap, hhmm, zone } from '../store/lanes.ts'
-import { PlanRow, advance, back, finish, internal, live, needsCeo, openPipes, rewind, terminal, type PipeRow, type Wait, underCap, waiting } from '../store/plans.ts'
-import { blipped, fingerprint, overBudget, refused, WHY, type Why } from '../store/refusals.ts'
+import { PlanRow, advance, back, finish, internal, live, needsCeo, openPipes, rewind, terminal, type PipeRow, waiting } from '../store/plans.ts'
+import { blipped, fingerprint, refused, WHY, type Why } from '../store/refusals.ts'
 import { at, last, type Step } from '../templates/pr-path.ts'
 import { capture } from './capture.ts'
 import type { Fired, Outcome } from './kind.ts'
@@ -16,7 +16,8 @@ import { parted } from './split.ts'
 import type { Wire } from './push.ts'
 import { fireRound } from './quick.ts'
 import { fireBrief, fireSeat } from './seat.ts'
-import { blocked, kept, kernel, overlapping, proved, targetOf } from './steps.ts'
+import { offered, route, working, type Route } from './next.ts'
+import { kept, kernel, proved, targetOf } from './steps.ts'
 import { languageFor } from './route.ts'
 import { branchOf, checkout, diffOf, internalBranch, maybe, put, reap, srcDir, titleOf } from './workspace.ts'
 import { homeOf } from './home.ts'
@@ -32,36 +33,21 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
   reap(root, terminal(db))
   reprice(db, labels)
   const out: Fired[] = []
-  const offers = offered(db, now)
-  const open = working(offers, cap(db).cap)
-  waited(db, offers, open, now)
-  for (const { pipe, plans } of open) {
-    const mine = leased(db, plans, now)
-    const laps = await Promise.all(mine.map((m) => one(db, root, pipe, m.plan, m.lease, provider, wire, chain)))
+  const lanes = openPipes(db, hhmm(db, now))
+    .map((pipe) => ({ pipe, routed: live(db, pipe).map((plan) => ({ plan, route: route(db, plan, now) })) }))
+  waiting(db, lanes.flatMap((l) => l.routed.map(({ plan, route: r }) =>
+    'fire' in r ? { plan: plan.id, why: null } : { plan: plan.id, why: r.wait, on: r.on })))
+  for (const { pipe, routed } of lanes) {
+    const mine = leased(db, routed.filter((r) => stepping(r.route)), now)
+    const laps = await Promise.all(mine.map((m) => one(db, root, pipe, m, m.lease, provider, wire, chain)))
     out.push(...laps.flat())
   }
   return out
 }
 
-/**
- * #140: every live plan on an open lane either takes a step this tick or records why it did not, so the
- * reason is a stored fact and not a `blocked()` return the tick threw away. A plan it steps carries none.
- */
-function waited(db: Db, offers: Offer[], open: Offer[], now: Date): void {
-  const leases = new Set(held(db, now).map((l) => l.plan))
-  const reached = new Set(open.map((o) => o.pipe.id))
-  const taken = new Set(open.flatMap((o) => o.plans.map((p) => p.id)))
-  waiting(db, offers.flatMap((o) => live(db, o.pipe).map((plan) => {
-    const reason = taken.has(plan.id) ? null : why(db, plan, leases, reached.has(o.pipe.id))
-    return { plan: plan.id, why: reason, on: reason === 'file_overlap' ? (overlapping(db, plan)?.plan ?? null) : null }
-  })))
-}
-
-/** Why this live plan is not being stepped, in the order the tick decides it. */
-function why(db: Db, plan: PlanRow, leases: Set<number>, reached: boolean): Wait {
-  if (leases.has(plan.id)) return 'leased'
-  if (!MAPPED.has(plan.template)) return 'no_step_map'
-  return blocked(db, plan) ?? (reached ? 'over_cap' : 'lane_over_cap')
+/** A `token_ceiling` plan is leased too: `ceilinged` is its step. */
+function stepping(r: Route): boolean {
+  return 'fire' in r || 'over' in r
 }
 
 /** The live tick's budget for one job: well inside the lease ceiling, and long enough for a whole lap short of CI. */
@@ -71,34 +57,17 @@ export const CHAIN_MINUTES = 45
 const STEPS = 20
 
 /** #65: the picks this tick won the lease on; one another live tick holds is left where it stands. */
-function leased(db: Db, plans: PlanRow[], now: Date): { plan: PlanRow; lease: Taken }[] {
-  return plans.flatMap((plan) => {
-    const lease = take(db, plan.id, now)
-    return lease === null ? [] : [{ plan, lease }]
+function leased(db: Db, picks: Leg[], now: Date): (Leg & { lease: Taken })[] {
+  return picks.flatMap((pick) => {
+    const lease = take(db, pick.plan.id, now)
+    return lease === null ? [] : [{ ...pick, lease }]
   })
 }
 
-export interface Offer {
-  pipe: PipeRow
-  plans: PlanRow[]
+interface Leg {
+  plan: PlanRow
+  route: Route
 }
-
-/** Every open lane and what it would step, asked once: one reading of the queues serves the whole tick. */
-function offered(db: Db, now: Date): Offer[] {
-  return openPipes(db, hhmm(db, now)).map((pipe) => ({ pipe, plans: picks(db, pipe, now) }))
-}
-
-/**
- * #125: the cap is spent on lanes that can use it. A lane with nothing to step takes no slot, so at
- * cap 1 an idle lane no longer holds the only slot against a lane with a plan it could step; among
- * lanes that can step, the lower id still wins, which is the order `openPipes` returns.
- */
-function working(offers: Offer[], wide: number): Offer[] {
-  return offers.filter((o) => o.plans.length > 0).slice(0, wide)
-}
-
-/** The templates a step map exists for. A lane whose map is unwritten is on with nothing to step. */
-const MAPPED = new Set(['pr_path'])
 
 export interface Would {
   pipe: string
@@ -124,20 +93,6 @@ export interface Dry {
   held: Lease[]
 }
 
-/**
- * The plans this pipe steps this tick, in priority order. A queued plan that is
- * blocked holds no slot; a running one holds the slot it already took, and so does
- * one another tick has leased, which this tick offers to nobody.
- */
-export function picks(db: Db, pipe: PipeRow, now: Date = new Date()): PlanRow[] {
-  const leases = new Set(held(db, now).map((l) => l.plan))
-  const mapped = live(db, pipe).filter((p) => MAPPED.has(p.template))
-  const free = mapped.filter((p) => leases.has(p.id) || blocked(db, p) === null
-    || (p.state === 'running' && overlapping(db, p) === null))
-  return underCap(pipe, free, leases)
-    .filter((p) => !leases.has(p.id) && (p.state !== 'running' || blocked(db, p) === null))
-}
-
 /** What a tick would do, off the store alone: no `gh` call, no model, no row moved. */
 export function dry(db: Db, now: Date = new Date()): Dry {
   const when = hhmm(db, now)
@@ -151,7 +106,8 @@ export function dry(db: Db, now: Date = new Date()): Dry {
     cap: wide,
     pipes: offers.length,
     held: held(db, now),
-    would: open.flatMap((o) => o.plans.map((p) => ({ pipe: o.pipe.name, plan: p.id, step: p.step, template: p.template }))),
+    would: offers.flatMap((o) => live(db, o.pipe).filter((p) => 'fire' in route(db, p, now))
+      .map((p) => ({ pipe: o.pipe.name, plan: p.id, step: p.step, template: p.template }))),
     quiet: offers.filter((o) => !taken.has(o.pipe.id))
       .map((o) => ({ pipe: o.pipe.name, live: live(db, o.pipe).length, ready: o.plans.length })),
   }
@@ -162,37 +118,40 @@ export function dry(db: Db, now: Date = new Date()): Dry {
  * `chain` budget the job keeps its lease and takes its next step at once, until it has to wait on something
  * outside the machine -- their CI, a person, a lane the CEO turned off -- or the budget runs out.
  */
-async function one(db: Db, root: string, pipe: PipeRow, plan: PlanRow, lease: Taken,
+async function one(db: Db, root: string, pipe: PipeRow, first: Leg, lease: Taken,
   provider: Provider, wire?: Wire, chain = 0): Promise<Fired[]> {
   const until = Date.now() + chain * 60_000
   const out: Fired[] = []
   try {
-    let row: PlanRow | null = plan
-    while (row !== null) {
-      const lap = await stepped(db, root, pipe, row, lease, provider, wire)
+    let leg: Leg | null = first
+    while (leg !== null) {
+      const { plan, route: r } = leg
+      if ('over' in r) {
+        out.push(ceilinged(db, root, pipe, plan, r.over, lease))
+        break
+      }
+      const lap = await stepped(db, root, pipe, plan, lease, provider, wire)
       out.push(lap.fired)
       const more = chain > 0 && Date.now() < until && out.length < STEPS && !lap.wait
-      row = more ? onward(db, pipe, row.id) : null
+      leg = more ? onward(db, first.plan.id, lease) : null
     }
     return out
   } finally {
-    unlease(db, plan.id)
+    unlease(db, first.plan.id)
   }
 }
 
-/** The job as the store now has it, if it can take another step in this tick: still running, not blocked, its lane still open. */
-function onward(db: Db, pipe: PipeRow, id: number): PlanRow | null {
-  if (!openPipes(db, hhmm(db, new Date())).some((p) => p.id === pipe.id)) return null
-  const row = PlanRow.parse(db.prepare('SELECT * FROM plans WHERE id = ?').get(id))
-  return row.state === 'running' && blocked(db, row) === null ? row : null
+/** The job as the store now has it, if it can take another step in this tick: still running, and routed to step. */
+function onward(db: Db, id: number, lease: Taken): Leg | null {
+  const plan = PlanRow.parse(db.prepare('SELECT * FROM plans WHERE id = ?').get(id))
+  if (plan.state !== 'running') return null
+  const r = route(db, plan, new Date(), lease)
+  return stepping(r) ? { plan, route: r } : null
 }
 
 /** `wait` is a step that settled by waiting: a CI still running, or a checkout the network failed. Neither is worth asking again in the same tick. */
 async function stepped(db: Db, root: string, pipe: PipeRow, plan: PlanRow, lease: Taken,
   provider: Provider, wire?: Wire): Promise<{ fired: Fired; wait: boolean }> {
-  const fires = at(plan.step).fires
-  const over = fires === 'brief' || fires === 'seat' || fires === 'review' ? overBudget(db, plan.id) : null
-  if (over !== null) return { fired: ceilinged(db, root, pipe, plan, over, lease), wait: true }
   const tree = workspace(db, root, plan)
   const step = at(plan.step, tree.language)
   const made = tree.failed ?? await fire(db, root, plan, step, provider, wire)

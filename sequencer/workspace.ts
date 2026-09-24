@@ -57,6 +57,14 @@ export function move(root: string, plan: number, from: string, to: string): stri
   return body
 }
 
+/** Only step 1 starts from the ask: the builder at step 2 still reads `refusal.md` for a signal's words. */
+export function afresh(root: string, plan: number, step: number): void {
+  if (step !== 1) return
+  for (const name of ['refusal.md', 'question.md']) {
+    if (maybe(root, plan, name) !== null) move(root, plan, name, name.replace('.md', '.prev.md'))
+  }
+}
+
 export function doneIds(issue: string): string[] {
   const ids = [...issue.matchAll(/^\s*[-*]\s*\**(D\d+)\**/gm)].map((m) => m[1] ?? '')
   return ids.length === 0 ? ['D1'] : [...new Set(ids)]
@@ -187,9 +195,23 @@ export function checkout(root: string, plan: number, repo: string, branch: strin
   git(dir, ['config', 'core.hooksPath', join(root, 'hooks')])
   excluded(dir)
   const head = fetchMain(dir)
+  if (done !== null && pushed(dir, branch)) {
+    git(dir, ['checkout', '-B', branch, `origin/${branch}`])
+    return { dir, branch, base: done.trim() }
+  }
   git(dir, ['checkout', '-B', branch, head])
   put(root, plan, 'base.sha', `${head}\n`)
   return { dir, branch, base: head }
+}
+
+/** #202: a plan reopened after its checkout was reaped starts from the branch it already pushed, never a fresh cut of main. */
+function pushed(dir: string, branch: string): boolean {
+  try {
+    git(dir, ['rev-parse', '--verify', '--quiet', `refs/remotes/origin/${branch}`])
+    return true
+  } catch {
+    return false
+  }
 }
 
 export function cloned(dir: string): boolean {

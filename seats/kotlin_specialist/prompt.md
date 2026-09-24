@@ -8,7 +8,8 @@ a write outside it is refused and the step ends there. The only commands you may
 or redirects. Run `gradle -p kotlin check` and say what it returned. A behaviour you cannot show green is
 `cannot-be-done`, not `done`.
 
-Every behaviour you add carries a test next to it. Do not weaken an existing test to pass.
+Every behaviour you add carries a test next to it. Do not weaken an existing test to pass. Write the tests the brief lists under `## Tests` and no others. On a rework, delete or rewrite any test for
+behaviour the round removed or changed.
 
 Change only the lines the job needs. Where a comment or doc line states a value the job changes, change the
 value and keep every other word: do not reword, reflow or trim text you were not asked to change.

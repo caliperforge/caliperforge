@@ -16,6 +16,7 @@ import { builder } from '../templates/pr-path.ts'
 import { checks, mode, type Failure } from './checks.ts'
 import { outsideLanguage } from './gates.ts'
 import type { Outcome } from './kind.ts'
+import { lock, unlock } from './lock.ts'
 import { seat } from '../runner/rules.ts'
 import { renumbered, strays } from './fence.ts'
 import { fenceFor, languageFor } from './route.ts'
@@ -45,10 +46,16 @@ export function preReview(db: Db, root: string, plan: PlanRow): Outcome {
   // language's gates (#204): its builder already ran them at step 2, and a red fork CI after the reviews costs more.
   const outside = internal(plan) ? null : outsideLanguage(languageFor(db, plan, srcDir(root, plan.id)))
   if (internal(plan) || outside !== null) {
-    const failed = checks(srcDir(root, plan.id), undefined, outside === null ? narrow(db, plan) : [],
-      outside === null ? null : { language: outside, files: filesOf(db, plan.id).map((f) => f.path) })
-    recordRail(db, join(root, 'rails', 'checks'), plan.id, checked(failed, diffOf(root, plan.id)), 0)
-    if (failed !== null) return broke(failed)
+    const holder = lock(root, plan.id)
+    if (holder !== null) return { outcome: 'pass', held: true, spans: ['checks'], note: `checks wait: plan ${String(holder.plan)} is running its tests` }
+    try {
+      const failed = checks(srcDir(root, plan.id), undefined, outside === null ? narrow(db, plan) : [],
+        outside === null ? null : { language: outside, files: filesOf(db, plan.id).map((f) => f.path) })
+      recordRail(db, join(root, 'rails', 'checks'), plan.id, checked(failed, diffOf(root, plan.id)), 0)
+      if (failed !== null) return broke(failed)
+    } finally {
+      unlock(root)
+    }
   }
   const ran = internal(plan) ? mode(srcDir(root, plan.id)) : outside ?? 'none'
   return { outcome: 'pass', spans: [], note: `pre-review: six rails pass; checks ran ${ran}` }
@@ -92,7 +99,8 @@ function broke(failed: Failure): Outcome {
 /**
  * Tight's prose rule reads what the maintainer will read: the pull request text the card set, where it set one.
  * The handback is the machine's; judging its prose sent a builder after a PR body it may not write. A kernel
- * plan lands as a commit named for its branch and opens no pull request, so it has no prose to judge.
+ * plan lands as a commit named for its branch and opens no pull request, so it has no prose to judge; an outside
+ * plan's body is built from the brief, never the handback (plan 70).
  */
 function rest(db: Db, root: string, plan: PlanRow, handback: string): [string, () => Verdict][] {
   const src = srcDir(root, plan.id)
@@ -105,16 +113,14 @@ function rest(db: Db, root: string, plan: PlanRow, handback: string): [string, (
   return [
     ['secret-scan', () => scan(diff)],
     ['authority', () => authority(root, name, diff, kernelPlan(plan), fence, outside, kernelPlan(plan) ? renumbered(src, diff) : [])],
-    ['tight', () => tight(root, { diff, sources: sources(src, diff), ...prose(root, plan, handback) })],
+    ['tight', () => tight(root, { diff, sources: sources(src, diff), ...prose(root, plan), code: internal(plan) })],
     ['test-weakened', () => weakened(diff, 'green')],
     ['identifiers', () => identifiers(src, handback)],
   ]
 }
 
-function prose(root: string, plan: PlanRow, handback: string): { description: string; prose: 'description' | 'handback' } {
-  const text = maybe(root, plan.id, 'pr.md')
-  if (text !== null) return { description: text, prose: 'description' }
-  return { description: internal(plan) ? '' : handback, prose: 'handback' }
+function prose(root: string, plan: PlanRow): { description: string } {
+  return { description: maybe(root, plan.id, 'pr.md') ?? '' }
 }
 
 function named(rail: string, verdict: Verdict): Outcome {

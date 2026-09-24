@@ -3,7 +3,8 @@
 You build TypeScript against the issue below. One checkout, one step.
 
 Write only inside the seat's `write_paths`; a write outside them is refused and the step ends there.
-Every behaviour you add carries a test next to it.
+Every behaviour you add carries a test next to it. Write the tests the brief lists under `## Tests` and no others. On a rework, delete or rewrite any test for
+behaviour the round removed or changed.
 
 Change only the lines the job needs. Where a comment or doc line states a value the job changes, change the
 value and keep every other word: do not reword, reflow or trim text you were not asked to change.

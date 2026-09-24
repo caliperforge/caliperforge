@@ -17,16 +17,19 @@ export interface Subject {
   description: string
   /** What a prose span is named for: the PR text, or the builder's handback where there is none. */
   prose?: 'description' | 'handback'
+  /** False on someone else's repo: their format and lint checks set the code's limits, and only the prose is ours. */
+  code?: boolean
 }
 
 export function tight(root: string, subject: Subject): Verdict {
   const { ceilings } = manifest(root)
   const files = parse(subject.diff)
+  const judged = subject.code === false ? [] : files
   const spans = [
-    ...files.flatMap((f) => named(f.path, inFile(f, subject.sources, ceilings))),
+    ...judged.flatMap((f) => named(f.path, inFile(f, subject.sources, ceilings))),
     ...named(subject.prose ?? 'description', inProse(subject.description, files.map((f) => f.path))),
   ]
-  const unread = noted(files.filter((f) => unbalanced(f, subject.sources)).map((f) => f.path))
+  const unread = noted(judged.filter((f) => unbalanced(f, subject.sources)).map((f) => f.path))
   const subject_digest = createHash('sha256').update(`${subject.diff}\n${subject.description}`).digest('hex')
   if (spans.length === 0) return { outcome: 'pass', defect_class: null, origin_kind: null, origin_ref: null, subject_digest, spans, message: `${String(files.length)} file(s) and the description are Tight${unread}` }
   return {

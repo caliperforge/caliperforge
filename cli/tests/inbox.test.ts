@@ -5,7 +5,7 @@ import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import type { Fired } from '../../sequencer/kind.ts'
 import type { Db } from '../../store/index.ts'
-import { ack, events, line, notify, plain, record, unread, type Event } from '../inbox.ts'
+import { ack, crashed, events, line, notify, plain, record, unread, type Event } from '../inbox.ts'
 
 const schema = join(import.meta.dirname, '../../schema')
 
@@ -54,6 +54,15 @@ test('a line reads in the store\'s local time', () => {
   const db = world()
   db.prepare("UPDATE settings SET value = '-360' WHERE key = 'tick.zone_offset_minutes'").run()
   expect(events(db, LAP.slice(1, 2), AT).map((e) => line(db, e))[0]).toMatch(/^08:05 {2}landed {3}#49 \(plan 7\) at step 7 batch: landed/)
+})
+
+test('a crashed tick is one unread line with no plan and no step', () => {
+  const db = world()
+  const root = mkdtempSync(join(tmpdir(), 'cf-inbox-'))
+  crashed(root, AT, new Error('push rejected'))
+  const [e] = unread(root)
+  expect(e).toMatchObject({ kind: 'crashed', ticket: 'cf tick' })
+  expect(e === undefined ? '' : line(db, e)).toMatch(/^\d\d:\d\d {2}crashed {2}cf tick: push rejected$/)
 })
 
 const ev = (over: Partial<Event>): Event =>

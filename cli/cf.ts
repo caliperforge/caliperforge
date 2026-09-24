@@ -26,7 +26,7 @@ import { awaiting, day, dryLines, halted, laneLine, open as openPlans, runsOf, s
   tickNote, verdictsOf, windowLine } from './brief.ts'
 import { check, fill } from './digests.ts'
 import { desk, gh } from './gh.ts'
-import { ack, events, line, notify, record as keep, unread } from './inbox.ts'
+import { ack, crashed, events, line, notify, record as keep, unread } from './inbox.ts'
 import { measure, render as renderPulse } from './measure.ts'
 import { add as fileIssue, render as renderUnfiled, unfiled } from './plan.ts'
 import { add } from './queue.ts'
@@ -301,8 +301,15 @@ cf.command('adopt').argument('<ref>', 'an <owner/repo>#<n> pull request of ours 
 
 cf.command('tick').option('--dry', 'read what a tick would do, fire nothing, call no network')
   .action(async (options: { dry?: boolean }) => {
-    const handle = db()
     const now = new Date()
+    await ticked(options, now).catch((error: unknown) => {
+      crashed(root, now.toISOString(), error)
+      throw error
+    })
+  })
+
+async function ticked(options: { dry?: boolean }, now: Date): Promise<void> {
+    const handle = db()
     if (options.dry === true) {
       dryTick(handle, now)
       return
@@ -327,7 +334,7 @@ cf.command('tick').option('--dry', 'read what a tick would do, fire nothing, cal
       for (const span of f.spans) out(`  span\t${span}\n`)
     }
     cards(handle, now)
-  })
+}
 
 cf.command('signoff').description('open, read and close the sign-off cards on the private sign-off repo, as every tick does')
   .action(() => { cards(db(), new Date()) })

@@ -58,12 +58,12 @@ export function blipped(db: Db, plan: number, step: number): Why {
 
 /**
  * CEO 09-21: a job halts past the token ceiling. The count starts again when a person sends it round,
- * so it is every run since the latest refusal a person cleared.
+ * so it is every run since the latest refusal a person cleared. Cache reads are not counted (CEO 09-24).
  */
 export function overBudget(db: Db, plan: number): { spent: number; ceiling: number } | null {
   const row = db.prepare(`SELECT
       (SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'plan.token_ceiling') AS ceiling,
-      (SELECT coalesce(sum(r.input_tokens + r.cache_tokens + r.output_tokens), 0) FROM runs r
+      (SELECT coalesce(sum(r.input_tokens + r.output_tokens), 0) FROM runs r
         WHERE r.plan = ? AND julianday(r.at) > coalesce(
           (SELECT max(julianday(f.at)) FROM refusals f WHERE f.plan = ? AND f.cleared = 1), 0)) AS spent`)
     .get(plan, plan) as { ceiling: number | null; spent: number }

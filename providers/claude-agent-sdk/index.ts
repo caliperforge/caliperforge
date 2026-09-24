@@ -81,12 +81,11 @@ function writing(input: HookInput): boolean {
   return input.hook_event_name === 'PreToolUse' && WRITES.has(input.tool_name)
 }
 
-/** What a turn added to the bill, counted the way `runs` counts it: a cache read is spend. */
+/** What a turn adds against the wall. CEO 09-24: cache reads are recorded, never capped. */
 function turn(message: SDKMessage): number {
   if (message.type !== 'assistant') return 0
   const used = message.message.usage
-  return used.input_tokens + (used.cache_read_input_tokens ?? 0)
-    + (used.cache_creation_input_tokens ?? 0) + used.output_tokens
+  return used.input_tokens + (used.cache_creation_input_tokens ?? 0) + used.output_tokens
 }
 
 function million(n: number): string {
@@ -211,8 +210,8 @@ function stop(reason: string): SyncHookJSONOutput {
 export function fired(message: SDKResultMessage, started: number, refused: string[]): Omit<Fired, 'transcript_path'> {
   const usage = Object.values(message.modelUsage).reduce(
     (n, u) => ({
-      input: n.input + u.inputTokens,
-      cache: n.cache + u.cacheReadInputTokens + u.cacheCreationInputTokens,
+      input: n.input + u.inputTokens + u.cacheCreationInputTokens,
+      cache: n.cache + u.cacheReadInputTokens,
       output: n.output + u.outputTokens,
     }),
     { input: 0, cache: 0, output: 0 },

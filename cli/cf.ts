@@ -309,31 +309,31 @@ cf.command('tick').option('--dry', 'read what a tick would do, fire nothing, cal
   })
 
 async function ticked(options: { dry?: boolean }, now: Date): Promise<void> {
-    const handle = db()
-    if (options.dry === true) {
-      dryTick(handle, now)
-      return
-    }
-    const sha = behind(handle, root)
-    if (sha !== null) {
-      halt(handle, now, sha)
-      return
-    }
-    const { auth } = credential()
-    process.stderr.write(`auth ${auth.kind} from ${auth.from}\n`)
-    const fired = await tick(handle, root, claudeAgentSdk, now, undefined, undefined, CHAIN_MINUTES, gh)
-    receipt(handle, upgraded(handle, root, { at: now.toISOString(), hhmm: hhmm(handle, now), dry: false,
-      pipes: openPipes(handle, hhmm(handle, now)).length, fired: fired.length,
-      exit: fired.some((f) => f.outcome === 'refuse') ? 1 : 0, note: tickNote(fired, overlapWaits(handle)) }))
-    const news = events(handle, fired, now.toISOString())
-    keep(root, news)
-    notify(news)
-    if (fired.length === 0) out('nothing to fire\n')
-    for (const f of fired) {
-      out(`${f.pipe}\tplan ${String(f.plan)}\tstep ${String(f.step)} ${f.name}\t${f.outcome}\t${f.state}\t${f.note}\n`)
-      for (const span of f.spans) out(`  span\t${span}\n`)
-    }
-    cards(handle, now)
+  const handle = db()
+  if (options.dry === true) {
+    dryTick(handle, now)
+    return
+  }
+  const sha = behind(handle, root)
+  if (sha !== null) {
+    halt(handle, now, sha)
+    return
+  }
+  const { auth } = credential()
+  process.stderr.write(`auth ${auth.kind} from ${auth.from}\n`)
+  const fired = await tick(handle, root, claudeAgentSdk, now, undefined, undefined, CHAIN_MINUTES, gh)
+  receipt(handle, upgraded(handle, root, { at: now.toISOString(), hhmm: hhmm(handle, now), dry: false,
+    pipes: openPipes(handle, hhmm(handle, now)).length, fired: fired.length,
+    exit: fired.some((f) => f.outcome === 'refuse') ? 1 : 0, note: tickNote(fired, overlapWaits(handle)) }))
+  const news = events(handle, fired, now.toISOString())
+  keep(root, news)
+  notify(news)
+  if (fired.length === 0) out('nothing to fire\n')
+  for (const f of fired) {
+    out(`${f.pipe}\tplan ${String(f.plan)}\tstep ${String(f.step)} ${f.name}\t${f.outcome}\t${f.state}\t${f.note}\n`)
+    for (const span of f.spans) out(`  span\t${span}\n`)
+  }
+  cards(handle, now)
 }
 
 cf.command('signoff').description('open, read and close the sign-off cards on the private sign-off repo, as every tick does')

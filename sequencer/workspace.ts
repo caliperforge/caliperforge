@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { mkdirSync, existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
 import type { Narrowing } from '../runner/packet.ts'
+import { excluded } from './checks.ts'
 
 /** The plan's scratch checkout. No `plans/` segment: `runner/packet.ts:admits()` bars one from a reviewer cwd. */
 export function planDir(root: string, plan: number): string {
@@ -171,17 +172,19 @@ export function liveTree(root: string, cwd: string): boolean {
 /**
  * `--no-local`: a hardlinked clone shares an object store with its source, and the builder must not reach back through it.
  * `core.hooksPath` is set here and not at step 8, so every push out of a plan checkout meets the pre-push hook, not just the kernel's.
+ * The build-output exclude is written here too: a builder runs xcodebuild at step 2, before the rails do.
  */
 export function checkout(root: string, plan: number, repo: string, branch: string): Checkout {
   const dir = srcDir(root, plan)
   const done = maybe(root, plan, 'base.sha')
-  if (done !== null && cloned(dir)) { fetchMain(dir); return { dir, branch, base: done.trim() } }
+  if (done !== null && cloned(dir)) { fetchMain(dir); excluded(dir); return { dir, branch, base: done.trim() } }
   const base = gitBase(root)
   git(planDir(root, plan), ['clone', '--no-local', '--origin', 'origin',
     '-c', `remote.upstream.url=${remote(base, repo)}`,
     '-c', 'remote.upstream.fetch=+refs/heads/*:refs/remotes/upstream/*',
     remote(base, `${FORK}/${repoName(repo)}`), dir])
   git(dir, ['config', 'core.hooksPath', join(root, 'hooks')])
+  excluded(dir)
   const head = fetchMain(dir)
   git(dir, ['checkout', '-B', branch, head])
   put(root, plan, 'base.sha', `${head}\n`)

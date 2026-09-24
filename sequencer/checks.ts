@@ -70,7 +70,7 @@ export function checks(src: string, run: Run = npm, narrow: string[] = []): Fail
 }
 
 /** The derived data is build output: never staged, never in the diff the reviewers read. */
-function excluded(src: string): void {
+export function excluded(src: string): void {
   const path = join(src, '.git', 'info', 'exclude')
   if (!existsSync(join(src, '.git'))) return
   const held = existsSync(path) ? readFileSync(path, 'utf8') : ''

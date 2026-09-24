@@ -52,6 +52,7 @@ test('a plan on a real target is cloned from our fork and branched off upstream 
   expect(head(src, ['remote', 'get-url', 'upstream'])).toMatch(/remotes\/acme\/widget$/)
   expect(head(src, ['rev-parse', 'HEAD'])).toBe(readFileSync(join(w.root, '.cf/work/1/base.sha'), 'utf8').trim())
   expect(head(src, ['status', '--porcelain'])).toBe('')
+  expect(readFileSync(join(src, '.git/info/exclude'), 'utf8')).toContain('.cf-derived/')
 })
 
 test('a brief wholly under kotlin/ routes the build to the kotlin seat, and the diff is against the branch base', async () => {

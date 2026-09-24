@@ -5,7 +5,7 @@ import { expect, test } from 'vitest'
 import { fresh, rejects } from '../../../checks/sqlite.ts'
 import { CAPPED, type Packet, type Provider } from '../../../providers/kind.ts'
 import { planRow } from '../../../runner/index.ts'
-import { STEP_CAP } from '../../../runner/packet.ts'
+import { CAP_MAX, STEP_CAP, stepsFor } from '../../../runner/packet.ts'
 import { load } from '../../../runner/rules.ts'
 import { judge, loadReviews, specHash } from '../../bench.ts'
 import { read } from '../../verdict.ts'
@@ -173,4 +173,11 @@ test('a packet the bench refuses writes a refusal verdict and fires no provider'
   expect(out.run).toBeNull()
   expect(db.prepare('SELECT outcome, origin_kind, origin_ref FROM verdicts WHERE id = ?').get(out.verdict))
     .toEqual({ outcome: 'refuse', origin_kind: 'ruling', origin_ref: 'reviewers.maintainers_view' })
+})
+
+test('review turns grow with the diff', () => {
+  const diff = (n: number): string => ['--- a/x.rs', '+++ b/x.rs', ...Array.from({ length: n }, () => '+line')].join('\n')
+  expect(stepsFor(diff(300))).toBe(STEP_CAP)
+  expect(stepsFor(diff(777))).toBe(STEP_CAP + 4)
+  expect(stepsFor(diff(5000))).toBe(CAP_MAX)
 })

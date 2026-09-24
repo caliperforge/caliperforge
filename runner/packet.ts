@@ -70,6 +70,17 @@ export function admits(path: string): Refusal | null {
 
 export const STEP_CAP = 8
 
+/** Past this many changed lines a reviewer gets one more turn per `PER` lines, up to `CAP_MAX`. */
+const SMALL = 300
+const PER = 100
+export const CAP_MAX = 16
+
+/** A reviewer's turns grow with the diff it judges: 8 read a small diff, a 777-line one ran out before its verdict. */
+export function stepsFor(diff: string): number {
+  const changed = diff.split('\n').filter((l) => /^[+-]/.test(l) && !/^(\+\+\+|---) /.test(l)).length
+  return Math.min(CAP_MAX, STEP_CAP + Math.floor(Math.max(0, changed - SMALL) / PER))
+}
+
 export function benchPacket(
   root: string,
   name: string,
@@ -103,7 +114,7 @@ function assembled(root: string, name: string, manifest: Review, bench: Bench, t
     model: manifest.model,
     effort: manifest.effort,
     tools: manifest.tools,
-    steps: STEP_CAP,
+    steps: stepsFor(bench.diff),
     refuse: (path) => refuse(bench.repo, manifest.write_paths, path),
   }
 }

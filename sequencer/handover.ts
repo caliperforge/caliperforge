@@ -38,13 +38,20 @@ export function enclosed(src: string, base: string): string | null {
   const parts: string[] = []
   let used = 0
   for (const path of changedPaths(src, base)) {
-    const part = WIDTHS.map((w) => git(src, ['diff', w, base, '--', path]))
-      .find((out) => out.split('\n').length <= PER_FILE)
+    const part = fitted(src, base, path)
     if (part === undefined || used + part.split('\n').length > CAP) continue
     parts.push(part)
     used += part.split('\n').length
   }
   return parts.length === 0 ? null : parts.join('')
+}
+
+function fitted(src: string, base: string, path: string): string | undefined {
+  for (const w of WIDTHS) {
+    const out = git(src, ['diff', w, base, '--', path])
+    if (out.split('\n').length <= PER_FILE) return out
+  }
+  return undefined
 }
 
 function changedPaths(src: string, base: string): string[] {

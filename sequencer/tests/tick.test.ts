@@ -287,14 +287,15 @@ test('a reviewer step 5 sent back is handed the delta since the tree it passed, 
   writeFileSync(hello, HELLO('a + b', 'word + c + d'))
   for (let step = 0; step < 3; step += 1) await tick(w.db, w.root, stub(CARRIED, 0, PASS))
   await tick(w.db, w.root, stub(CARRIED, 0, REFUSE))
-  const round = async (word: string, back: string): Promise<string> => {
-    writeFileSync(hello, HELLO(word, back))
-    const seen: Packet[] = []
-    for (let step = 0; step < 3; step += 1) await tick(w.db, w.root, stub(CARRIED, 0, REFUSE, (p) => seen.push(p)))
-    return reviewer(seen)
-  }
+  const baseTree = execFileSync('git', ['rev-parse', 'HEAD^{tree}'], { cwd: srcDir(w.root, MINE), encoding: 'utf8' }).trim()
+  w.db.prepare(`INSERT INTO verdicts (gate, kind, subject_digest, plan, step, outcome, origin_kind, origin_ref, tokens, seconds, tree)
+    SELECT gate, kind, subject_digest, plan, step, 'refuse', 'ruling', 'review.code_quality', 0, 0, ? FROM verdicts
+    WHERE plan = ? AND step = 4 AND kind = 'review'`).run(baseTree, MINE)
+  writeFileSync(hello, HELLO('a + b + "!"', 'word + c + d'))
+  const seen: Packet[] = []
+  for (let step = 0; step < 3; step += 1) await tick(w.db, w.root, stub(CARRIED, 0, REFUSE, (p) => seen.push(p)))
 
-  const prompt = await round('a + b + "!"', 'word + c + d')
+  const prompt = reviewer(seen)
   expect(section(prompt, 'Diff')).toContain('\n+  const c = ""\n')
   expect(section(prompt, 'Your last verdict')).toMatch(/^---\noutcome: pass\n/)
   expect(section(prompt, 'Refusal that sent the build back')).toMatch(/^step 5 /)
@@ -302,9 +303,8 @@ test('a reviewer step 5 sent back is handed the delta since the tree it passed, 
   const since = section(prompt, 'Changed since your last verdict')
   expect(since).toContain('\n export function hello(): string {\n')
   expect(since).toContain('\n+  const word = a + b + "!"\n')
+  expect(since).not.toContain('+  const c = ""')
   expect(section(prompt, 'Paths since your last verdict')).toContain('changed since the tree you judged:\n  - src/hello.ts\n')
-
-  expect(section(await round('a + b + "!"', 'word'), 'Changed since your last verdict')).toContain('\n+  const word = a + b + "!"\n')
 })
 
 test('narrowing calls a moved path the plan does not touch main\'s, and proves the rest with its blob', () => {

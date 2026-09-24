@@ -160,8 +160,12 @@ function tail(output: string): string {
   return output.split('\n').slice(-TAIL).join('\n')
 }
 
-/** A command the cap killed leaves no status, and that is the failure it is recorded as. */
-function npm(args: string[], cwd: string, bin = 'npm'): { code: number; output: string } {
+/**
+ * A command the cap killed leaves no status, and that is the failure it is recorded as. A program that never
+ * started has no output at all, so the spawn error is what the builder reads (09-24: cargo off launchd's PATH).
+ */
+export function npm(args: string[], cwd: string, bin = 'npm'): { code: number; output: string } {
   const done = spawnSync(bin, args, { cwd, encoding: 'utf8', timeout: LONG.includes(bin) ? XCODE_CAP : CAP, maxBuffer: MAX })
+  if (done.error !== undefined && typeof done.stdout !== 'string') return { code: 127, output: `${bin}: ${done.error.message}` }
   return { code: done.status ?? 1, output: `${done.stdout}${done.stderr}` }
 }

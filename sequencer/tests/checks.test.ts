@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path'
 import { expect, test } from 'vitest'
 import { record } from '../../store/files.ts'
 import type { Db } from '../../store/index.ts'
-import { checks, mode, type Run } from '../checks.ts'
+import { checks, mode, npm, type Run } from '../checks.ts'
 import { ciFeatures, formatLine, recipes } from '../gates.ts'
 import { tick } from '../index.ts'
 import { narrow } from '../rails.ts'
@@ -361,4 +361,8 @@ test('#204 rust tests take the features their CI test line names, less a service
   const { run, calls } = heard()
   expect(checks(src, run, [], { language: 'rust', files: ['crates/types/src/types.rs', 'crates/core/src/types.rs'] })).toBeNull()
   expect(calls[1]).toBe(`cargo test -p surfpool-types -p surfpool-core --features surfpool-core/ignore_tests_ci @${src}`)
+})
+
+test('a program that never starts is named', () => {
+  expect(npm(['--version'], tmpdir(), 'cf-no-such-bin')).toEqual({ code: 127, output: expect.stringMatching(/^cf-no-such-bin: spawnSync cf-no-such-bin ENOENT/) as string })
 })

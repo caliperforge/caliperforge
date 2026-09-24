@@ -92,6 +92,8 @@ const SHARED: Format[] = [{
 
 const FORCED = /forced?[- ]push|--force\b|force-with-lease|\bsquash|rewrit\w+ (?:the )?history|history rewrit\w+/i
 
+const NEGATED = /\b(?:no|not|never|without|nor|nothing|none|isn't|doesn't|don't|won't|cannot)\b/i
+
 const EMAIL = /[\w.%+-]+@[\w-]+\.[A-Za-z]{2,}/
 
 const SHELL = /\b(?:run|runs|running|rerun|execute|count|counts|report|reports)\b[^.\n]*\b(?:shell|terminal|command|bash|npm|pnpm|npx|node|git|vitest|tsc|the tests|test suite)\b/i
@@ -211,10 +213,20 @@ function forbidden(brief: string): Refused | null {
   const human = HUMANS.find((name) => body.includes(name))
   if (human !== undefined) return { span: human, reason: `${human} — no person's name goes in the code` }
   for (const [pattern, ground] of GROUNDS) {
-    const hit = pattern.exec(body)?.[0]
+    const hit = pattern === EMAIL ? pattern.exec(body)?.[0] : asked(body, pattern)
     if (hit !== undefined) return { span: hit, reason: `${hit} — ${ground}` }
   }
   return null
+}
+
+/** A ground a line asks for: a `code` name is not an ask, and neither is a line saying the thing must not happen (plan 82). */
+function asked(body: string, pattern: RegExp): string | undefined {
+  for (const line of body.split('\n')) {
+    const prose = line.replace(/`[^`\n]*`/g, '``')
+    const hit = pattern.exec(prose)
+    if (hit !== null && !NEGATED.test(prose.slice(0, hit.index + hit[0].length))) return hit[0]
+  }
+  return undefined
 }
 
 function shared(brief: string): Refused | null {
@@ -308,6 +320,17 @@ function titleOf(text: string): string | null {
 function yamlOf(text: string): unknown {
   try {
     return parse(text)
+  } catch {
+    return loose(text)
+  }
+}
+
+/** Plan 77: a seat's prose value holding `: ` is not YAML; each known key's value is read as one quoted string instead. */
+function loose(text: string): unknown {
+  const quoted = text.replace(/^(\s*(?:- )?(?:title|what|why|ends|question|outcome):[ \t]+)(?!["'|>])(.+)$/gm,
+    (...m: string[]) => `${m[1] ?? ''}${JSON.stringify((m[2] ?? '').trim())}`)
+  try {
+    return parse(quoted)
   } catch {
     return null
   }

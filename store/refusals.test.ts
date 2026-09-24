@@ -49,6 +49,16 @@ test('the same failure on another job stops as shared, until a person clears it'
   expect(refused(db, { plan: PLAN, step: 3, fingerprint: A, diff: D2 })).toBe('again')
 })
 
+test('the same brief refusal on two jobs is not shared', () => {
+  const db = bench()
+  db.prepare(`INSERT INTO plans (id, pipe_id, template, state, queued_at, lane, seat, origin)
+    VALUES (2, 1, 'pr_path', 'running', '2026-09-21T00:00:00.000Z', 'machine', 'typescript_specialist',
+      'https://github.com/caliperforge/caliperforge/issues/77')`).run()
+  const title = fingerprint(1, ['# <title>'])
+  refused(db, { plan: 2, step: 1, fingerprint: title, diff: null })
+  expect(refused(db, { plan: PLAN, step: 1, fingerprint: title, diff: null })).toBe('again')
+})
+
 test('the same refusal twice stops', () => {
   const db = bench()
   refused(db, { plan: PLAN, step: 3, fingerprint: A, diff: D1 })

@@ -3,6 +3,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync
 import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
+import { inject } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import type { Packet, Provider } from '../../providers/kind.ts'
 import type { Gh } from '../../rails/ci-green/index.ts'
@@ -14,6 +15,7 @@ import type { Fired } from '../kind.ts'
 import type { Wire } from '../push.ts'
 import { targetDigest } from '../steps.ts'
 import { put, SELF, srcDir } from '../workspace.ts'
+import { git, key, TYPESCRIPT } from './bases.ts'
 
 const repo = join(import.meta.dirname, '../..')
 
@@ -124,9 +126,7 @@ function answer(packet: Packet, text: string, review: string, brief?: string): s
   return brief ?? briefFor(packet.prompt, packet.cwd)
 }
 
-export const TYPESCRIPT = { 'src/hello.ts': 'export const hello = (): string => "hi"\n' }
-const WORKFLOW = '.github/workflows/ci.yml'
-export const KOTLIN = { 'kotlin/build.gradle.kts': 'plugins { kotlin("jvm") }\n' }
+export { KOTLIN, TYPESCRIPT } from './bases.ts'
 
 /**
  * The two repositories `checkout()` needs, standing in for github: the target's
@@ -135,16 +135,7 @@ export const KOTLIN = { 'kotlin/build.gradle.kts': 'plugins { kotlin("jvm") }\n'
  */
 function remotes(root: string, files: Record<string, string>): void {
   const base = join(root, 'remotes')
-  const upstream = join(base, 'acme/widget')
-  mkdirSync(upstream, { recursive: true })
-  git(upstream, ['init', '-q', '-b', 'main'])
-  for (const [path, body] of Object.entries(files)) {
-    mkdirSync(dirname(join(upstream, path)), { recursive: true })
-    writeFileSync(join(upstream, path), body)
-  }
-  git(upstream, ['add', '-A'])
-  git(upstream, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'base'])
-  git(base, ['clone', '-q', '--no-local', upstream, join(base, 'caliperforge/widget')])
+  copy('world', files, false, base)
   mkdirSync(join(root, '.cf'), { recursive: true })
   writeFileSync(join(root, '.cf/git-base'), base)
 }
@@ -157,19 +148,13 @@ function remotes(root: string, files: Record<string, string>): void {
  * workflow as the kernel's own repo does; `ci = false` is Atelier's, which runs none (#206).
  */
 export function ours(root: string, files: Record<string, string> = TYPESCRIPT, ci = true): void {
-  const dir = join(root, 'remotes', SELF)
-  if (ci) files = { ...files, [WORKFLOW]: 'on: push\n' }
-  mkdirSync(dir, { recursive: true })
-  git(dir, ['init', '-q', '-b', 'main'])
-  git(dir, ['config', 'receive.denyCurrentBranch', 'updateInstead'])
-  for (const kernel of ['rules', 'seats']) cpSync(join(repo, kernel), join(dir, kernel), { recursive: true })
-  cpSync(join(repo, 'rules.seed.sql'), join(dir, 'rules.seed.sql'))
-  for (const [path, body] of Object.entries(files)) {
-    mkdirSync(dirname(join(dir, path)), { recursive: true })
-    writeFileSync(join(dir, path), body)
-  }
-  git(dir, ['add', '-A'])
-  git(dir, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'base'])
+  copy('ours', files, ci, join(root, 'remotes', SELF))
+}
+
+function copy(kind: 'world' | 'ours', files: Record<string, string>, ci: boolean, to: string): void {
+  const from = join(inject('bases'), key(kind, files, ci))
+  if (!existsSync(from)) throw new Error(`no ${kind} base was built for ${Object.keys(files).join(', ')}`)
+  cpSync(from, to, { recursive: true })
 }
 
 /** Bytes in the plan's checkout: the stub provider answers with text alone and writes no file. */
@@ -195,10 +180,6 @@ export function internalPlan(db: Db, root: string, id: number, title = 'let an i
     .run(id, priority, `https://github.com/${SELF}/issues/${String(issue)}`)
   put(root, id, 'ask.md', `# ${title}\n\n- **D1** add \`hello()\` in \`src/hello.ts\`\n`)
   return id
-}
-
-function git(cwd: string, args: string[]): void {
-  execFileSync('git', args, { cwd, stdio: 'ignore' })
 }
 
 export function world(pulse: 'warm' | 'cold' = 'warm', day = new Date().toISOString().slice(0, 10),

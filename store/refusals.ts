@@ -7,6 +7,9 @@ export const ROUNDS = 6
 /** Failed checkouts in a row before a blip is treated as a fault. */
 export const BLIPS = 3
 
+/** The first step that runs anything of main's. */
+const BUILD = 2
+
 export type Why = 'again' | 'shared' | 'repeat' | 'unchanged' | 'spent' | 'blips'
 
 export interface Refused {
@@ -32,7 +35,9 @@ export function fingerprint(step: number, spans: string[], output = ''): string 
 /**
  * Records the refusal and says whether the plan goes round again. It stops on a refusal another job
  * took within a day (the fault is on main, and no build here can fix it), on one it has already had,
- * on a build that changed nothing since the last refusal, and past `ROUNDS`.
+ * on a build that changed nothing since the last refusal, and past `ROUNDS`. Before the build nothing
+ * of main has run, so a refusal there is never read as shared: two briefs refused alike are two
+ * replies to two asks, and turned the internal lane off twice on 09-24.
  */
 export function refused(db: Db, r: Refused): Why {
   const prior = db.prepare('SELECT fingerprint, diff FROM refusals WHERE plan = ? AND cleared = 0 AND blip = 0 ORDER BY id')
@@ -41,7 +46,7 @@ export function refused(db: Db, r: Refused): Why {
     .run(r.plan, r.step, r.fingerprint, r.diff)
   const elsewhere = db.prepare(`SELECT 1 FROM refusals WHERE fingerprint = ? AND plan <> ? AND cleared = 0 AND blip = 0
     AND julianday(at) > julianday('now', '-1 day')`).get(r.fingerprint, r.plan)
-  if (elsewhere !== undefined) return 'shared'
+  if (elsewhere !== undefined && r.step >= BUILD) return 'shared'
   if (prior.some((p) => p.fingerprint === r.fingerprint)) return 'repeat'
   if (r.diff !== null && prior.at(-1)?.diff === r.diff) return 'unchanged'
   return prior.length + 1 >= ROUNDS ? 'spent' : 'again'

@@ -1,5 +1,5 @@
-import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs'
-import { dirname, isAbsolute, relative, resolve } from 'node:path'
+import { appendFileSync, existsSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs'
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { query, type HookInput, type SDKMessage, type SDKRateLimitInfo, type SDKResultMessage, type SyncHookJSONOutput } from '@anthropic-ai/claude-agent-sdk'
 import type { Reading } from '../../store/lanes.ts'
 import { credential } from '../credential.ts'
@@ -153,9 +153,25 @@ export function readOutside(cwd: string, tool: string, args: unknown): string | 
   const given = args as { file_path?: unknown; path?: unknown }
   const path = typeof given.file_path === 'string' ? given.file_path : typeof given.path === 'string' ? given.path : null
   if (path === null) return null
-  const rel = relative(resolve(cwd), resolve(cwd, path))
+  const target = real(resolve(cwd, path))
+  if (SPILLED.test(target)) return null
+  const rel = relative(real(resolve(cwd)), target)
   if (rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))) return null
   return `ruling:run.outside_checkout refuses a read of ${path}: read nothing outside the checkout; the brief's Settled facts hold what the change needs from outside it`
+}
+
+/** Where the harness spills a tool result too long to hand back inline; the seat reads its own output there. */
+const SPILLED = /\/\.claude\/projects\/[^/]+\/[^/]+\/tool-results\//
+
+/**
+ * The tick runs from a worktree whose `.cf` is a symlink, so a seat's cwd and the paths it reads can name
+ * one checkout two ways. Both sides are compared as the disk resolves them; a path not yet on disk
+ * resolves through its nearest existing parent.
+ */
+function real(path: string): string {
+  if (existsSync(path)) return realpathSync(path)
+  const parent = dirname(path)
+  return parent === path ? path : join(real(parent), basename(path))
 }
 
 function wroteOutside(packet: Packet, tool: string, args: unknown): string | null {

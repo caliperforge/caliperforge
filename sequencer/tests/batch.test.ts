@@ -184,7 +184,7 @@ test('a round on an open pull request pushes its branch without opening another'
   const wire = watched(sent, w.root, 1)
   rewind(w.db, 1, 4)
   for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, () => pr(), wire)
-  expect(sent).toEqual(['send src HEAD:refs/heads/widget-12-a1-next', 'rehearse caliperforge/widget widget-12-a1-next'])
+  expect(sent).toEqual(['send src +HEAD:refs/heads/widget-12-a1-next', 'rehearse caliperforge/widget widget-12-a1-next'])
   approveCard(w.db, w.root, 'plan', 1)
   advance(w.db, plan(w.db, 1), 8)
   expect(push(w.db, w.root, plan(w.db, 1), wire)).toMatchObject({ outcome: 'pass', note: `pushed widget-12-a1 onto ${URL}` })

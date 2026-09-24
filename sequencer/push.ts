@@ -71,7 +71,8 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
   if (!internal(plan) && !open) renamed(srcDir(root, plan.id), fork, wire)
   const head = headOf(root, plan.id)
   const ci = open ? `${head.branch}${NEXT}` : head.branch
-  wire.send(head.dir, open ? `HEAD:refs/heads/${ci}` : head.branch)
+  // The -next branch is ours alone and holds the last round's head; a reworked round is a sibling of it, not a child.
+  wire.send(head.dir, open ? `+HEAD:refs/heads/${ci}` : head.branch)
   if (!internal(plan)) wire.rehearse?.(fork, ci)
   const { verdict, board } = judge({ fork, branch: ci, sha: head.sha },
     { body: '', commits: commits(head.dir) }, touched(root, plan.id), wire.runs)

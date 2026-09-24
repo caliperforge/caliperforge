@@ -6,17 +6,17 @@ seats:
   - outside_specialist
 digests:
   typescript_specialist:
-    manifest: 6b842d68a8088bf2c60aec636c805dd63fd6f5f0df7fdb47a4d7ebbab745026d
+    manifest: a8dd50ad9bc5d01f576bd87d7fc88bd0b518adb47d37468f28b24b02d4d730a1
     prompt: bad6a6910cd1983e97430a562ea5f1d3d0a0791a54cac1b7d84ee94903ec001c
   kotlin_specialist:
-    manifest: 6fd226964586d4d9ec1d2f0007a7d708768aab9add669f5cace69990ffa87866
+    manifest: 0ac9229de8943374e26c0c570689ffcdad364ef90d0c03f6486bdc443419fd6b
     prompt: f49277187130506aa0d6c9331478b23ac56249986c7b1d524dc7b7f673c792a8
   swift_specialist:
-    manifest: bbb73a03347da9385a159193fa96ddbad3be41d4219875c46bd1cfc76f8024e4
+    manifest: 01be33cd84ee1654a52d5f832b9db30acd1c6060f5e901c653a7661c27f1711e
     prompt: 1341b68c403210628d63cafbd19a4a624243e484399b7cd454ab502e31a3e023
   brief_writer:
-    manifest: e59d26eddc2a2193ab07f2260eba2e250fa2c42a6222863cfb45cb8889404a83
+    manifest: 9f242cf80f39b12b889aa092dca097abe8d1260a8014e05f0af3bd5b8ccc86a5
     prompt: f0f8a8cb479c2bf7fd6b8674b35cc83b5600fb1867b3bc29f67bdfe428918260
   outside_specialist:
-    manifest: 81e9f3a9f17ce8c22ca92795ddf982ae3b6af82a3fcd2d47324e01d7d7629888
+    manifest: 3897d50daa0caf59420769d972b0ed0dc67876076ba4373beeef28ba81dd33f4
     prompt: 175a79d2e7d099f34e188cd7b2a8bda31845bc0fe6012dbd4f6c33d9baaba56f

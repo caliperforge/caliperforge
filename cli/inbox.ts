@@ -87,7 +87,38 @@ export function line(db: Db, e: Event): string {
 
 /** Blocked, landed, done, an ask and a card to sign reach the desktop; a refusal going round again only reaches the file. */
 export function notify(news: Event[], post: Post = desktop): void {
-  for (const e of news.filter((n) => LOUD.has(n.kind))) post(`cf: ${e.ticket} ${e.kind}`, e.note)
+  for (const e of news.filter((n) => LOUD.has(n.kind))) post(`CaliperForge · ${short(e.ticket)}`, plain(e))
+}
+
+const HEAD: Record<Kind, string> = {
+  blocked: 'Stopped, needs you',
+  landed: 'Landed on main',
+  done: 'Done',
+  refused: 'Sent back',
+  asked: 'Someone commented on the PR',
+  signoff: 'Ready for your review before it posts',
+}
+
+/** Why a job stopped, in the words a person reads on a phone; an unknown reason falls back to the machine's note. */
+const WHY: [RegExp, string][] = [
+  [/token ceiling|past the [\d.]+M ceiling/, 'it spent past the job ceiling; send it round again or drop it'],
+  [/run\.token_wall/, 'one run hit the spend wall'],
+  [/run\.idle/, 'the builder read for a long time and wrote nothing'],
+  [/verdict_fence|reviewers\.verdict/, 'the reviewer gave no verdict'],
+  [/same refusal came back/, 'the same problem came back twice, so it stopped rather than loop'],
+  [/exit \d+$/, 'a step failed'],
+]
+
+/** The note a person gets: the stop reason in words and the step it stopped at; HTML a bot posted is stripped. */
+export function plain(e: Event): string {
+  const note = e.note.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+  if (e.kind !== 'blocked') return `${HEAD[e.kind]}. ${note}`.trim()
+  const why = WHY.find(([pattern]) => pattern.test(e.note))?.[1] ?? note
+  return `${HEAD.blocked}: ${why} (at ${e.name}).`
+}
+
+function short(ticket: string): string {
+  return ticket.replace(/^[\w.-]+\/([\w.-]+)#/, '$1 #')
 }
 
 function desktop(title: string, body: string): void {

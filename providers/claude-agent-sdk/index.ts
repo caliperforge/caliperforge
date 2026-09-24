@@ -1,11 +1,16 @@
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs'
-import { dirname } from 'node:path'
+import { dirname, isAbsolute, relative, resolve } from 'node:path'
 import { query, type HookInput, type SDKMessage, type SDKRateLimitInfo, type SDKResultMessage, type SyncHookJSONOutput } from '@anthropic-ai/claude-agent-sdk'
 import type { Reading } from '../../store/lanes.ts'
 import { credential } from '../credential.ts'
 import { bare, type Fired, type Packet, type Provider } from '../kind.ts'
 
 const WRITES = new Set(['Write', 'Edit', 'NotebookEdit'])
+
+const READS = new Set(['Read', 'Glob', 'Grep'])
+
+/** A builder that has taken this many model turns and written nothing is reading, not building. */
+export const IDLE_TURNS = 20
 
 /** The `Bash(<pattern>)` entries of a tool list. A seat that names none may run no command. */
 const RULE = /^Bash\((.+)\)$/
@@ -20,6 +25,7 @@ async function fire(packet: Packet): Promise<Fired> {
   const refused: string[] = []
   const limits: Reading[] = []
   const spent = { tokens: 0 }
+  const pace = { turns: new Set<string>(), wrote: false }
   const transcript = openTranscript(packet)
   const run = query({
     prompt: packet.prompt,
@@ -34,8 +40,9 @@ async function fire(packet: Packet): Promise<Fired> {
       settingSources: [],
       permissionMode: 'default',
       hooks: { PreToolUse: [{ hooks: [(input) => {
-        const over = walled(packet.wall, spent.tokens)
+        const over = walled(packet.wall, spent.tokens) ?? idle(packet.tools, pace.wrote, pace.turns.size)
         const decision = over === null ? gate(packet, input) : stop(over)
+        if (decision.continue && writing(input)) pace.wrote = true
         if (decision.stopReason !== undefined) refused.push(decision.stopReason)
         return Promise.resolve(decision)
       }] }] },
@@ -44,6 +51,7 @@ async function fire(packet: Packet): Promise<Fired> {
   for await (const message of run) {
     transcript(message)
     spent.tokens += turn(message)
+    if (message.type === 'assistant') pace.turns.add((message.message as { id?: string }).id ?? String(pace.turns.size))
     if (message.type === 'rate_limit_event') limits.push(...readings(message.rate_limit_info, new Date().toISOString()))
     if (message.type === 'result') return { ...fired(message, started, refused), limits, transcript_path: packet.transcript }
   }
@@ -58,6 +66,19 @@ async function fire(packet: Packet): Promise<Fired> {
 export function walled(wall: number | undefined, spent: number): string | null {
   if (wall === undefined || spent < wall) return null
   return `ruling:run.token_wall stopped the run at ${million(spent)} tokens, past the ${million(wall)} wall`
+}
+
+/**
+ * A builder that has spent `IDLE_TURNS` turns without one write stops, before the wall would catch it: on
+ * 09-24 two surfpool fires read a dependency for 23 turns each and wrote nothing. Seats without Write never trip.
+ */
+export function idle(tools: string[], wrote: boolean, turns: number): string | null {
+  if (wrote || turns < IDLE_TURNS || !tools.some((t) => WRITES.has(bare(t)))) return null
+  return `ruling:run.idle stopped the run after ${String(turns)} turns with nothing written`
+}
+
+function writing(input: HookInput): boolean {
+  return input.hook_event_name === 'PreToolUse' && WRITES.has(input.tool_name)
 }
 
 /** What a turn added to the bill, counted the way `runs` counts it: a cache read is spend. */
@@ -117,8 +138,24 @@ export function gate(packet: Packet, input: HookInput): SyncHookJSONOutput {
     const refused = ranOutside(packet.tools, input.tool_input)
     return refused === null ? { continue: true } : deny(refused)
   }
+  const away = readOutside(packet.cwd, input.tool_name, input.tool_input)
+  if (away !== null) return deny(away)
   const denied = wroteOutside(packet, input.tool_name, input.tool_input)
   return denied === null ? { continue: true } : stop(denied)
+}
+
+/**
+ * A read outside the checkout is refused and the seat goes on: what it needs from a dependency is in the
+ * brief's Settled facts. The registry dig this stops cost two surfpool fires their whole wall on 09-24.
+ */
+export function readOutside(cwd: string, tool: string, args: unknown): string | null {
+  if (!READS.has(tool)) return null
+  const given = args as { file_path?: unknown; path?: unknown }
+  const path = typeof given.file_path === 'string' ? given.file_path : typeof given.path === 'string' ? given.path : null
+  if (path === null) return null
+  const rel = relative(resolve(cwd), resolve(cwd, path))
+  if (rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))) return null
+  return `ruling:run.outside_checkout refuses a read of ${path}: read nothing outside the checkout; the brief's Settled facts hold what the change needs from outside it`
 }
 
 function wroteOutside(packet: Packet, tool: string, args: unknown): string | null {

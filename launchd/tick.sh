@@ -10,6 +10,9 @@
 # fires. Installing this script anywhere but the pinned worktree points the checkout at a tree people
 # work in, which is the failure it exists to remove.
 {
+  # launchd's PATH (the plist) has no ~/.cargo/bin; without it every cargo call from a seat or step 3 is ENOENT (#204)
+  PATH="$HOME/.cargo/bin:$PATH"
+  export PATH
   cd "$(dirname "$0")/.." || exit 1
   git fetch -q --no-tags origin main 2>/dev/null && git checkout -q --detach FETCH_HEAD 2>/dev/null
   node cli/cf.ts tick >/dev/null 2>&1 &

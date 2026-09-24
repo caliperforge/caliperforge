@@ -191,6 +191,25 @@ test('a round on an open pull request pushes its branch without opening another'
   expect(sent.slice(2)).toEqual(['send src widget-12-a1', 'unrehearse caliperforge/widget widget-12-a1-next'])
 })
 
+test('a round whose -next the fork holds at a commit HEAD lacks goes out under the next free name, forcing nothing', async () => {
+  const w = await pushed()
+  const src = srcDir(w.root, 1)
+  const git = (args: string[]): string => execFileSync('git', args, { cwd: src, encoding: 'utf8' }).trim()
+  const stale = git(['-c', 'user.email=cf@caliperforge.dev', '-c', 'user.name=caliperforge', 'commit-tree', 'HEAD^{tree}', '-p', 'HEAD', '-m', 'stale'])
+  git(['push', '-q', 'origin', `${stale}:refs/heads/widget-12-a1-next`])
+  const sent: string[] = []
+  const wire = watched(sent, w.root, 1)
+  rewind(w.db, 1, 4)
+  for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, () => pr(), wire)
+  expect(sent).toEqual(['unrehearse caliperforge/widget widget-12-a1-next', 'send src HEAD:refs/heads/widget-12-a1-next2',
+    'rehearse caliperforge/widget widget-12-a1-next2'])
+  approveCard(w.db, w.root, 'plan', 1)
+  advance(w.db, plan(w.db, 1), 8)
+  push(w.db, w.root, plan(w.db, 1), wire)
+  expect(sent.slice(3)).toEqual(['send src widget-12-a1', 'unrehearse caliperforge/widget widget-12-a1-next2'])
+  expect(sent.filter((l) => l.includes('--force') || l.includes('+refs'))).toEqual([])
+})
+
 test('a counterparty finding on merged code is an escape against the step the map says owns it', async () => {
   const w = await pushed()
   const merged = pr({

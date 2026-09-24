@@ -1,3 +1,6 @@
+import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { expect, test } from 'vitest'
 
 const { IDLE_TURNS, idle, readOutside } = await import('../index.ts')
@@ -16,6 +19,24 @@ test('reads inside the checkout pass', () => {
   expect(readOutside(cwd, 'Grep', { pattern: 'x' })).toBeNull()
   expect(readOutside(cwd, 'Glob', { pattern: '*', path: cwd })).toBeNull()
   expect(readOutside(cwd, 'Write', { file_path: '/etc/x' })).toBeNull()
+})
+
+test('symlinked checkout reads inside', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cf-trips-'))
+  const src = join(root, 'real', 'work', '68', 'src')
+  mkdirSync(join(src, 'Atelier'), { recursive: true })
+  writeFileSync(join(src, 'Atelier', 'ContentView.swift'), '')
+  mkdirSync(join(root, 'tick'))
+  symlinkSync(join(root, 'real'), join(root, 'tick', '.cf'))
+  const cwd = join(root, 'tick', '.cf', 'work', '68', 'src')
+  expect(readOutside(cwd, 'Read', { file_path: join(src, 'Atelier', 'ContentView.swift') })).toBeNull()
+  expect(readOutside(cwd, 'Read', { file_path: join(src, 'Atelier', 'New.swift') })).toBeNull()
+  expect(readOutside(cwd, 'Read', { file_path: join(root, 'real', 'work', '69', 'src', 'x.rb') })).toContain('run.outside_checkout')
+})
+
+test('spilled tool result reads', () => {
+  const spill = '/Users/m/.claude/projects/-Users-m-cf-v2--cf-work-68-src/44737eb4/tool-results/bvvskcyql.txt'
+  expect(readOutside('/Users/m/cf_v2/.cf/work/68/src', 'Read', { file_path: spill })).toBeNull()
 })
 
 test('an idle builder trips, a writer or a reviewer does not', () => {

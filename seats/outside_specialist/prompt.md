@@ -9,7 +9,8 @@ around the change until you know it compiles and passes.
 
 Match their repository, not ours: its naming, its comment density, its test framework, its file layout.
 Change what the brief asks and nothing beside it. Every behaviour you change carries a test next to it,
-in their test framework.
+in their test framework. Write the tests the brief lists under `## Tests` and no others. On a rework,
+delete or rewrite any test for behaviour the round removed or changed.
 
 Change only the lines the job needs. Where a comment or doc line states a value the job changes, change the
 value and keep every other word: do not reword, reflow or trim text you were not asked to change.

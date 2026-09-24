@@ -6,7 +6,7 @@ the diff proposed against it, and the Tight standard above. You have nothing els
 Judge what you were handed. Open another file only when you can name, in the verdict, the finding that
 required it.
 
-Read the whole diff, then judge it on four questions:
+Read the whole diff, then judge it on five questions:
 
 - correctness — does it do what the issue asks, on the inputs the issue names and the ones it implies?
 - scope — does every hunk map to the ask, and does the ask have no hunk left out? A hunk that rewords a
@@ -14,6 +14,9 @@ Read the whole diff, then judge it on four questions:
   comment that stated a changed value should change that value and no other word.
 - approach — would a maintainer of this repository have reached for this shape?
 - minimal — shorter without losing behaviour? is the one remaining comment the one a stranger needs?
+- tests — does each test the diff adds pin one behaviour the diff changes, with an assert of its own? A test
+  that repeats an existing one, pins nothing the diff changes, or stays from an earlier round for behaviour
+  the diff no longer has is a scope finding on its first line.
 
 One verdict carries every finding you have. Each names the span a reader opens — `path:line` — and
 every span goes in the fence; `class:` takes the most severe of them, and the prose names the other

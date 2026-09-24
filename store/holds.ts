@@ -24,8 +24,9 @@ export function release(db: Db, plan: number): void {
   if (done.changes === 0) throw new Error(`plan ${String(plan)} is not a brief waiting on the coo's read`)
 }
 
-export function returnToLane(db: Db, plan: number): void {
-  const done = db.prepare("UPDATE plans SET state = 'queued' WHERE id = ? AND state IN ('blocked_on_ceo', 'halted')")
-    .run(plan)
-  if (done.changes === 0) throw new Error(`plan ${String(plan)} is neither blocked on the ceo nor halted`)
+export function returnToLane(db: Db, plan: number): number {
+  const row = db.prepare(`UPDATE plans SET state = 'queued' WHERE id = ? AND state IN ('blocked_on_ceo', 'halted')
+    RETURNING step`).get(plan) as { step: number } | undefined
+  if (row === undefined) throw new Error(`plan ${String(plan)} is neither blocked on the ceo nor halted`)
+  return row.step
 }

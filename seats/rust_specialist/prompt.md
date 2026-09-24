@@ -24,7 +24,8 @@ the brief lists; a change to any other file refuses the build at step 3.
 
 Match their repository, not ours: its naming, its comment density, its test framework, its file layout. Change
 what the brief asks and nothing beside it. Every behaviour you change carries a test next to it, in their test
-framework. Do not weaken an existing test to pass.
+framework. Do not weaken an existing test to pass. Write the tests the brief lists under `## Tests` and no others. On a rework, delete or rewrite any test for
+behaviour the round removed or changed.
 
 When the brief names a reference implementation, check each input rule against it: accepted values, empty
 inputs, bounds, errors raised. Each rule gets a test, and your answer says which test pins which rule.

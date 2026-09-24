@@ -52,6 +52,16 @@ test('refuses a function longer than the manifest ceiling', () => {
   expect(verdict.spans).toEqual(['src/long.ts:1 tight.length'])
 })
 
+test('on an outside repo the code limits are theirs; the prose is still judged', () => {
+  const body = [...Array(45).keys()].map((i) => `  const v${String(i)} = ${String(i)}`).join('\n')
+  const source = `export function long(): number {\n${body}\n  return v0\n}\n`
+  const diff = `--- /dev/null\n+++ b/src/long.ts\n@@ -0,0 +1,48 @@\n${source.split('\n').map((l) => `+${l}`).join('\n')}`
+  expect(tight(root, { diff, sources: { 'src/long.ts': source }, description: 'Long.', code: false }).outcome).toBe('pass')
+  expect(tight(root, { ...subject('red'), code: false }).spans).toEqual([
+    'description:1 tight.preamble', 'description:3 tight.hedge', 'description:3 tight.summary',
+  ])
+})
+
 test('ignores a breach on a line the diff did not add', () => {
   const source = '// because it is old\nexport const x = 1\n'
   const diff = '--- a/src/old.ts\n+++ b/src/old.ts\n@@ -1,2 +1,2 @@\n // because it is old\n-export const x = 0\n+export const x = 1\n'

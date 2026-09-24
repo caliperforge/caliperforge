@@ -81,6 +81,12 @@ test('a forced push, a squash, a person and an address are refused; CaliperForge
   expect(on(saying('- CaliperForge keeps the caliperforge/widget fork'))).toBeNull()
 })
 
+test('a line forbidding a forced push, or naming `squash` as code, is not an ask to force push', () => {
+  expect(on(saying('- no send carries a `+` refspec or `--force`, and it never force pushes'))).toBeNull()
+  expect(on(saying('- a plan with no open PR still goes through `squash` and `renamed`'))).toBeNull()
+  expect(on(saying('- force push the branch, not a merge'))).toMatchObject({ span: 'force push' })
+})
+
 test('a brief asking the builder to run, count or report anything needing a shell is refused', () => {
   const shell = 'the builder holds no shell'
   expect(on(saying('- run the tests in the checkout'))).toMatchObject({ span: 'run the tests' })

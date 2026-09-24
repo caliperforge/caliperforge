@@ -272,6 +272,41 @@ test('a reviewer gets its own last verdict, the diff since the tree it judged an
   expect(trees.every((r) => /^[0-9a-f]{40}$/.test(r.tree))).toBe(true)
 })
 
+const HELLO = (word: string, back: string): string =>
+  `export function hello(): string {\n  const a = "h"\n  const b = "i"\n  const c = ""\n  const d = ""\n  const word = ${word}\n  return ${back}\n}\n`
+
+const section = (prompt: string, head: string): string => prompt.split(`\n# ${head}\n\n`)[1]?.split('\n\n# ')[0] ?? ''
+
+test('a reviewer step 5 sent back is handed the delta since the tree it passed, in its function, with the refusal', async () => {
+  const w = world()
+  w.db.prepare('DELETE FROM plans WHERE id = 1').run()
+  ours(w.root)
+  internalPlan(w.db, w.root, MINE)
+  const hello = join(srcDir(w.root, MINE), 'src/hello.ts')
+  for (let step = 0; step < 2; step += 1) await tick(w.db, w.root, stub(CARRIED))
+  writeFileSync(hello, HELLO('a + b', 'word + c + d'))
+  for (let step = 0; step < 3; step += 1) await tick(w.db, w.root, stub(CARRIED, 0, PASS))
+  await tick(w.db, w.root, stub(CARRIED, 0, REFUSE))
+  const round = async (word: string, back: string): Promise<string> => {
+    writeFileSync(hello, HELLO(word, back))
+    const seen: Packet[] = []
+    for (let step = 0; step < 3; step += 1) await tick(w.db, w.root, stub(CARRIED, 0, REFUSE, (p) => seen.push(p)))
+    return reviewer(seen)
+  }
+
+  const prompt = await round('a + b + "!"', 'word + c + d')
+  expect(section(prompt, 'Diff')).toContain('\n+  const c = ""\n')
+  expect(section(prompt, 'Your last verdict')).toMatch(/^---\noutcome: pass\n/)
+  expect(section(prompt, 'Refusal that sent the build back')).toMatch(/^step 5 /)
+  expect(section(prompt, 'Refusal that sent the build back')).toContain(WORDS)
+  const since = section(prompt, 'Changed since your last verdict')
+  expect(since).toContain('\n export function hello(): string {\n')
+  expect(since).toContain('\n+  const word = a + b + "!"\n')
+  expect(section(prompt, 'Paths since your last verdict')).toContain('changed since the tree you judged:\n  - src/hello.ts\n')
+
+  expect(section(await round('a + b + "!"', 'word'), 'Changed since your last verdict')).toContain('\n+  const word = a + b + "!"\n')
+})
+
 test('narrowing calls a moved path the plan does not touch main\'s, and proves the rest with its blob', () => {
   const dir = mkdtempSync(join(tmpdir(), 'cf-narrow-'))
   const run = (...args: string[]): string => execFileSync('git', args, { cwd: dir, encoding: 'utf8' })

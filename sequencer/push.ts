@@ -44,8 +44,11 @@ export const WIRE: Wire = {
  */
 const NEXT = '-next'
 
-/** Ticks a head is given to reach a finished run; past them an unfinished CI is judged as it stands. */
+/** Ticks a head is given for its first run to show; past them a head with no run is judged as it stands. */
 const APPEARS = 10
+
+/** Ticks a head whose runs are going is given to finish. Surfpool's Rust workflow takes 10 to 33 minutes. */
+const FINISHES = 45
 
 const WAITS = 'ci.waits'
 
@@ -53,8 +56,9 @@ const WAITS = 'ci.waits'
  * Step 6 before the gate: the branch goes to our fork -- no pull request, and the rail reads the
  * branch's own commit messages for an upstream number -- and `rails/ci-green` judges the runs at
  * that head. GitHub has no run at a head the moment the push returns, so a head with no run yet
- * waits exactly as a run still going does, and both waits share one window: past `APPEARS` ticks
- * the spans are recorded as the refusal they are, so a CI that never greens still reaches `back()`.
+ * waits as a run still going does. Both count on one tally: a head with no run is judged past `APPEARS`
+ * ticks, one whose runs are going past `FINISHES`; then the spans are recorded as the refusal they
+ * are, so a CI that never greens still reaches `back()`.
  * A red run goes to the builder, not a reviewer: their CI is the only test an outside build gets.
  */
 export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire = WIRE): Outcome | null {
@@ -73,7 +77,8 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
   if (waiting !== null) {
     const ticks = waited(root, plan.id, head.sha)
     const at = `${fork}@${head.sha.slice(0, 12)}`
-    if (ticks <= APPEARS) return held(verdict.spans, `${at} ${waiting}, tick ${String(ticks)} of ${String(APPEARS)}`)
+    const window = carries(verdict.spans, MISSING) ? APPEARS : FINISHES
+    if (ticks <= window) return held(verdict.spans, `${at} ${waiting}, tick ${String(ticks)} of ${String(window)}`)
   }
   record(db, join(root, 'rails/ci-green'), plan.id, verdict, 0)
   forkGreen(db, plan.id, verdict.outcome === 'pass')

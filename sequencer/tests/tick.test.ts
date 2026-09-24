@@ -376,6 +376,19 @@ test('a fork still red after a rebuild that changed nothing stops instead of cyc
   expect(await lap()).toBe('blocked_on_ceo')
 })
 
+test('a run still going is waited on past the first-run window', async () => {
+  const w = world()
+  approve(w.db, w.target)
+  for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  const wire = watched([], w.root, 1, runsOn(w.root, 1, 'in_progress', ''))
+  let last
+  for (let at = 0; at < 11; at += 1) last = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
+  expect(last).toMatchObject({ step: 6, name: 'ready', outcome: 'pass', state: 'running' })
+  expect(last?.note).toMatch(/is still running CI, tick 11 of 45/)
+  expect(w.db.prepare("SELECT count(*) AS n FROM verdicts WHERE plan = 1 AND rail_id = 'ci-green'").get())
+    .toEqual({ n: 0 })
+})
+
 test('the push window is waited out: no run at the new head holds step 6, the run that appears is judged', async () => {
   const w = world()
   approve(w.db, w.target)

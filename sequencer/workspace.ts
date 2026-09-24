@@ -57,6 +57,14 @@ export function move(root: string, plan: number, from: string, to: string): stri
   return body
 }
 
+/** Only step 1 starts from the ask: the builder at step 2 still reads `refusal.md` for a signal's words. */
+export function afresh(root: string, plan: number, step: number): void {
+  if (step !== 1) return
+  for (const name of ['refusal.md', 'question.md']) {
+    if (maybe(root, plan, name) !== null) move(root, plan, name, name.replace('.md', '.prev.md'))
+  }
+}
+
 export function doneIds(issue: string): string[] {
   const ids = [...issue.matchAll(/^\s*[-*]\s*\**(D\d+)\**/gm)].map((m) => m[1] ?? '')
   return ids.length === 0 ? ['D1'] : [...new Set(ids)]

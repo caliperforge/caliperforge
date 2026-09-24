@@ -5,10 +5,12 @@ import { walk } from '../../checks/tree.ts'
 import type { Packet } from '../../providers/kind.ts'
 import { release, returnToLane } from '../../store/holds.ts'
 import { get } from '../../store/lanes.ts'
+import { retry } from '../../store/plans.ts'
+import { WHY } from '../../store/refusals.ts'
 import { files, shape, split, TEMPLATE, unclear, writable, type Refused } from '../brief.ts'
 import { tick } from '../index.ts'
 import { blocked } from '../steps.ts'
-import { drop, maybe, move, put, srcDir, titleOf } from '../workspace.ts'
+import { afresh, drop, maybe, move, put, srcDir, titleOf } from '../workspace.ts'
 import { approve, CARRIED, internalPlan, ours, plan, reads, stub, world, type World } from './world.ts'
 
 const repo = join(import.meta.dirname, '../..')
@@ -277,6 +279,49 @@ test('a plan a builder has run on keeps its hand-written ticket, its ask and its
   expect(w.db.prepare('SELECT count(*) AS n FROM runs WHERE step = 1').get()).toEqual({ n: 1 })
 })
 
+const STOPPED = `step 1 brief refused\n\n# Stopped\n\n${WHY.shared}.\n`
+
+test('afresh at step 1 moves the refusal and the question aside, byte for byte', () => {
+  const w = mine()
+  put(w.root, ID, 'refusal.md', STOPPED)
+  put(w.root, ID, 'question.md', 'which file?\n')
+
+  afresh(w.root, ID, 1)
+  expect([maybe(w.root, ID, 'refusal.md'), maybe(w.root, ID, 'question.md')]).toEqual([null, null])
+  expect(maybe(w.root, ID, 'refusal.prev.md')).toBe(STOPPED)
+  expect(maybe(w.root, ID, 'question.prev.md')).toBe('which file?\n')
+})
+
+test('afresh at step 2 leaves the refusal the builder reads', () => {
+  const w = mine()
+  put(w.root, ID, 'refusal.md', STOPPED)
+
+  afresh(w.root, ID, 2)
+  expect(maybe(w.root, ID, 'refusal.md')).toBe(STOPPED)
+  expect(maybe(w.root, ID, 'refusal.prev.md')).toBeNull()
+})
+
+test('afresh on a plan with neither file writes nothing', () => {
+  const w = mine()
+
+  expect(() => { afresh(w.root, ID, 1) }).not.toThrow()
+  expect([maybe(w.root, ID, 'refusal.prev.md'), maybe(w.root, ID, 'question.prev.md')]).toEqual([null, null])
+})
+
+test('a plan blocked at step 1 and retried is briefed from the ask alone', async () => {
+  const w = mine()
+  const packets: Packet[] = []
+  await tick(w.db, w.root, stub(CARRIED))
+  await tick(w.db, w.root, stub(CARRIED, 0, undefined, undefined, asks('is the comment part of this change?')))
+  put(w.root, ID, 'refusal.md', STOPPED)
+
+  afresh(w.root, ID, retry(w.db, plan(w.db, ID)))
+  await tick(w.db, w.root, stub(CARRIED, 0, undefined, (p) => packets.push(p)))
+  expect(packets[0]?.prompt).not.toContain('# Refused')
+  expect(packets[0]?.prompt).not.toContain('lane is off')
+  expect(shape(briefOf(w), askOf(w), srcDir(w.root, ID))).toBeNull()
+})
+
 test('a plan queued before the brief seat has its raw issue moved to the ask and is briefed like any other', async () => {
   const w = mine()
   const raw = move(w.root, ID, 'ask.md', 'issue.md')
@@ -319,7 +364,7 @@ test('cf return queues a blocked or halted plan at the step it holds, and refuse
   const w = await unread()
   await tick(w.db, w.root, stub(CARRIED))
 
-  returnToLane(w.db, ID)
+  expect(returnToLane(w.db, ID)).toBe(2)
   expect(plan(w.db, ID)).toMatchObject({ step: 2, state: 'queued' })
   for (const state of ['queued', 'running', 'done', 'refused'] as const) {
     w.db.prepare('UPDATE plans SET state = ? WHERE id = ?').run(state, ID)

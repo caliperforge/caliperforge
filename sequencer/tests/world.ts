@@ -125,6 +125,7 @@ function answer(packet: Packet, text: string, review: string, brief?: string): s
 }
 
 export const TYPESCRIPT = { 'src/hello.ts': 'export const hello = (): string => "hi"\n' }
+const WORKFLOW = '.github/workflows/ci.yml'
 export const KOTLIN = { 'kotlin/build.gradle.kts': 'plugins { kotlin("jvm") }\n' }
 
 /**
@@ -152,10 +153,12 @@ function remotes(root: string, files: Record<string, string>): void {
  * Our own repository, standing in for github the same way `remotes()` stands in for a
  * stranger's: an internal plan clones it, fetches its `main` and branches off that. It is
  * not bare, so it takes a landing push onto its checked-out `main` only under `denyCurrentBranch`.
- * It carries the rules an internal checkout holds, because step 3 fills their digests in one.
+ * It carries the rules an internal checkout holds, because step 3 fills their digests in one, and a
+ * workflow as the kernel's own repo does; `ci = false` is Atelier's, which runs none (#206).
  */
-export function ours(root: string, files: Record<string, string> = TYPESCRIPT): void {
+export function ours(root: string, files: Record<string, string> = TYPESCRIPT, ci = true): void {
   const dir = join(root, 'remotes', SELF)
+  if (ci) files = { ...files, [WORKFLOW]: 'on: push\n' }
   mkdirSync(dir, { recursive: true })
   git(dir, ['init', '-q', '-b', 'main'])
   git(dir, ['config', 'receive.denyCurrentBranch', 'updateInstead'])

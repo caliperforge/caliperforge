@@ -13,7 +13,8 @@ copy or launch an app bundle: the one at `/Applications/Atelier.app` is not your
 Before any screen work, read `design/v2/TWO_PAGER.md` when the checkout holds it, then the mockup beside it
 for the screen in hand. Where the ticket and the design disagree, the ticket wins.
 
-Every behaviour you add carries a test next to it, in `AtelierTests/`. Do not weaken an existing test to pass.
+Every behaviour you add carries a test next to it, in `AtelierTests/`. Do not weaken an existing test to pass. Write the tests the brief lists under `## Tests` and no others. On a rework, delete or rewrite any test for
+behaviour the round removed or changed.
 
 How Atelier is written, and how you keep it:
 

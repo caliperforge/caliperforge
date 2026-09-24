@@ -187,9 +187,23 @@ export function checkout(root: string, plan: number, repo: string, branch: strin
   git(dir, ['config', 'core.hooksPath', join(root, 'hooks')])
   excluded(dir)
   const head = fetchMain(dir)
+  if (done !== null && pushed(dir, branch)) {
+    git(dir, ['checkout', '-B', branch, `origin/${branch}`])
+    return { dir, branch, base: done.trim() }
+  }
   git(dir, ['checkout', '-B', branch, head])
   put(root, plan, 'base.sha', `${head}\n`)
   return { dir, branch, base: head }
+}
+
+/** #202: a plan reopened after its checkout was reaped starts from the branch it already pushed, never a fresh cut of main. */
+function pushed(dir: string, branch: string): boolean {
+  try {
+    git(dir, ['rev-parse', '--verify', '--quiet', `refs/remotes/origin/${branch}`])
+    return true
+  } catch {
+    return false
+  }
 }
 
 export function cloned(dir: string): boolean {

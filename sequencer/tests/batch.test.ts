@@ -14,6 +14,7 @@ import { capture } from '../capture.ts'
 import { classOf } from '../escapes.ts'
 import { headOf, prBody, push } from '../push.ts'
 import { started } from '../signals.ts'
+import { unanswered } from '../steps.ts'
 import { unread } from '../../cli/inbox.ts'
 import { put, srcDir } from '../workspace.ts'
 import { tick } from '../index.ts'
@@ -258,6 +259,19 @@ test('a signal starts the plan the map says it starts', async () => {
   expect(w.db.prepare('SELECT template, state FROM plans WHERE id = ?').get(comms?.plan))
     .toEqual({ template: 'comms', state: 'queued' })
   expect(w.db.prepare("SELECT enabled FROM pipes WHERE name = 'comms'").get()).toEqual({ enabled: 1 })
+})
+
+test('answered bot score stops holding', async () => {
+  const w = await pushed()
+  const build = (at: string): void => void w.db.prepare(`INSERT INTO runs (plan, step, seat, rule_hash, provider, model,
+    effort, input_tokens, cache_tokens, output_tokens, seconds, exit, at, transcript_path)
+    VALUES (1, 2, 'typescript_specialist', ?, 'claude-agent-sdk', 'm', 'high', 0, 0, 0, 0, 0, ?, 'x.transcript.jsonl')`)
+    .run('0'.repeat(64), at)
+  build('2000-01-01 00:00:00')
+  signal(w.db, 'bot_review', 'greptile[bot]', 1)
+  expect(unanswered(w.db, 1)).toBeDefined()
+  build('2999-01-01 00:00:00')
+  expect(unanswered(w.db, 1)).toBeUndefined()
 })
 
 test('session close writes typed proposals and nothing else, and approval turns a ruling into a row', async () => {

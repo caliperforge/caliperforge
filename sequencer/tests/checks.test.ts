@@ -1,10 +1,11 @@
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { expect, test } from 'vitest'
 import { record } from '../../store/files.ts'
 import type { Db } from '../../store/index.ts'
 import { checks, mode, type Run } from '../checks.ts'
+import { formatLine, recipes } from '../gates.ts'
 import { tick } from '../index.ts'
 import { narrow } from '../rails.ts'
 import { get } from '../workspace.ts'
@@ -272,4 +273,78 @@ test('D4 the rails note names the mode', async () => {
   const notes: string[] = []
   for (let at = 0; at < 4; at += 1) notes.push(...(await tick(w.db, w.root, stub(CARRIED))).filter((f) => f.name === 'rails').map((f) => f.note))
   expect(notes).toContain('pre-review: six rails pass; checks ran npm')
+})
+
+function nested(files: Record<string, string>): string {
+  const dir = mkdtempSync(join(tmpdir(), 'cf-gates-'))
+  for (const [path, body] of Object.entries(files)) {
+    mkdirSync(dirname(join(dir, path)), { recursive: true })
+    writeFileSync(join(dir, path), body)
+  }
+  return dir
+}
+
+function heard(code = 0, output = ''): { run: Run; calls: string[] } {
+  const calls: string[] = []
+  const run: Run = (args, cwd, bin) => { calls.push(`${bin ?? 'npm'} ${args.join(' ')} @${cwd}`); return { code, output } }
+  return { run, calls }
+}
+
+const JUST = 'install:\n    bundle install\n\ntest:\n    bundle exec ruby -Itest test/run.rb\n\nfmt:\n    bundle exec standardrb --fix\n\nlint:\n    bundle exec standardrb\n'
+
+test('#204 an outside ruby plan runs its Justfile gates in ruby/, never npm at the root', () => {
+  const src = nested({ 'package.json': pkg({ test: 'vitest run' }), 'ruby/Justfile': JUST, 'ruby/Gemfile': '', 'ruby/lib/pay_kit/config.rb': '' })
+  const { run, calls } = heard()
+  expect(checks(src, run, [], { language: 'ruby', files: ['docs/x.md', 'ruby/lib/pay_kit/config.rb'] })).toBeNull()
+  const at = join(src, 'ruby')
+  expect(calls).toEqual([`just --justfile Justfile install @${at}`, `just --justfile Justfile lint @${at}`, `just --justfile Justfile test @${at}`])
+})
+
+test('#192 an outside rust plan runs the fmt check its CI runs, then only the crates it touched', () => {
+  const src = nested({
+    'Cargo.toml': '[workspace]\nmembers = ["crates/*"]\n',
+    'crates/core/Cargo.toml': '[package]\nname = "surfpool-core"\nversion = "0.1.0"\n',
+    'crates/types/Cargo.toml': '[package]\nname = "surfpool-types"\n',
+    '.github/workflows/rust.yml': 'jobs:\n  fmt:\n    steps:\n      - name: Run Cargo fmt\n        run: cargo +nightly fmt --all -- --check\n',
+  })
+  const { run, calls } = heard()
+  const files = ['crates/types/src/types.rs', 'crates/core/src/rpc/a.rs', 'crates/core/src/b.rs', 'crates/sdk-node/kit/generated/index.ts']
+  expect(checks(src, run, [], { language: 'rust', files })).toBeNull()
+  expect(calls).toEqual([`cargo +nightly fmt --all -- --check @${src}`, `cargo test -p surfpool-types -p surfpool-core @${src}`])
+})
+
+test('#192 with no fmt line in the workflows, rust falls back to cargo fmt --all -- --check at the workspace', () => {
+  const src = nested({ 'rust/Cargo.toml': '[workspace]\n', 'rust/crates/kit/Cargo.toml': '[package]\nname = "pay-kit"\n' })
+  const { run, calls } = heard()
+  expect(checks(src, run, [], { language: 'rust', files: ['rust/crates/kit/src/lib.rs'] })).toBeNull()
+  const at = join(src, 'rust')
+  expect(calls).toEqual([`cargo fmt --all -- --check @${at}`, `cargo test -p pay-kit @${at}`])
+})
+
+test('#192 a red format check refuses with the diff, named by folder', () => {
+  const src = nested({ 'Cargo.toml': '[package]\nname = "x"\n' })
+  const { run } = heard(1, 'Diff in src/lib.rs at line 3')
+  expect(checks(src, run, [], { language: 'rust', files: ['src/lib.rs'] }))
+    .toEqual({ script: 'format', command: 'cargo fmt --all -- --check', code: 1, output: 'Diff in src/lib.rs at line 3', retried: false })
+})
+
+test('#204 a go folder with no Justfile runs gofmt, vet and test raw; gofmt printing a file is a failure', () => {
+  const src = nested({ 'go/go.mod': 'module x\n', 'go/config.go': '' })
+  const { run, calls } = heard(0, 'config.go\n')
+  expect(checks(src, run, [], { language: 'go', files: ['go/config.go'] }))
+    .toMatchObject({ script: 'format', command: 'gofmt -s -l . (in go/)', code: 1, output: 'config.go\n' })
+  expect(calls).toEqual([`gofmt -s -l . @${join(src, 'go')}`])
+})
+
+test('#204 a recipe the Justfile does not define is not run', () => {
+  const src = nested({ 'lua/Justfile': 'test:\n    luajit tests/run.lua\n', 'lua/pay-kit-dev-1.rockspec': '', 'lua/pay_kit/a.lua': '' })
+  const { run, calls } = heard()
+  expect(checks(src, run, [], { language: 'lua', files: ['lua/pay_kit/a.lua'] })).toBeNull()
+  expect(calls).toEqual([`just --justfile Justfile test @${join(src, 'lua')}`])
+})
+
+test('#204 the recipe reader skips assignments and settings, and takes recipes with parameters', () => {
+  const src = nested({ 'Justfile': 'set shell := ["bash", "-uc"]\nuv_run := "uv run"\n\ndefault:\n    @just --list\n\ntest-cover gate="90":\n    x\n\n@lint:\n    y\n' })
+  expect([...(recipes(join(src, 'Justfile')) ?? [])]).toEqual(['default', 'test-cover', 'lint'])
+  expect(formatLine(src)).toEqual(['fmt', '--all', '--', '--check'])
 })

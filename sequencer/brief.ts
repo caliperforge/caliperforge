@@ -96,7 +96,12 @@ const NEGATED = /\b(?:no|not|never|without|nor|nothing|none|isn't|doesn't|don't|
 
 const EMAIL = /[\w.%+-]+@[\w-]+\.[A-Za-z]{2,}/
 
-const SHELL = /\b(?:run|runs|running|rerun|execute|count|counts|report|reports)\b[^.\n]*\b(?:shell|terminal|command|bash|npm|pnpm|npx|node|git|vitest|tsc|the tests|test suite)\b/i
+/**
+ * An ask of the builder: a line that opens on the verb, or names the builder as the one who runs. A brief on our
+ * own kernel describes code that runs git and npm ("the ready gate runs git add"), and read as an ask that sent
+ * plans 127, 129 and 151 back three times each on 09-25.
+ */
+const SHELL = /(?:(?<=^\s*(?:[-*]|\d+\.)?\s*(?:then\s+|and\s+)?)|\b(?:you|the builder|builder)\s+(?:(?:should|must|will|can|needs? to)\s+)?)(?:run|re-?run|execute|count|report)s?\b[^.\n]*\b(?:shell|terminal|command|bash|npm|pnpm|npx|node|git|vitest|tsc|the tests|test suite)\b/i
 
 const GROUNDS: [RegExp, string][] = [
   [FORCED, 'the builder does not force push, squash or rewrite history'],

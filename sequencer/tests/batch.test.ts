@@ -237,6 +237,39 @@ test('a counterparty finding on merged code is an escape against the step the ma
   expect(classOf('no class named here')).toBe('correctness')
 })
 
+const FORKED = pr({
+  number: 3, url: 'https://github.com/caliperforge/widget/pull/3',
+  comments: [{ id: 'c3', author: { login: 'maintainer' }, body: 'why this?', createdAt: '2026-09-17T10:00:00Z' }],
+  reviews: [{ id: 'g3', author: { login: 'greptile-apps[bot]' }, body: `Confidence Score: 4/5\n\n${REVIEWED}`, submittedAt: '2026-09-17T11:00:00Z' }],
+  statusCheckRollup: [{ name: 'build', conclusion: 'FAILURE' }],
+})
+
+const forked = (repo: string): Pr => (repo === 'caliperforge/widget' ? FORKED : pr())
+
+const listing = (heads: string[]) => (args: string[]): unknown => {
+  const head = args[args.indexOf('--head') + 1] ?? ''
+  heads.push(head)
+  return head === 'widget-12-a1-next' ? [{ number: 3 }] : []
+}
+
+test('only the bot review on the rehearsal is kept, on the plan, and a merge upstream takes no escape from it', async () => {
+  const w = await pushed()
+  expect(capture(w.db, forked, w.root, listing([]))).toEqual([])
+  expect(w.db.prepare('SELECT repo, pr, kind, score, head, plan FROM signals').all())
+    .toEqual([{ repo: 'caliperforge/widget', pr: 3, kind: 'bot_review', score: 4, head: SHA, plan: 1 }])
+  capture(w.db, () => pr({ mergedAt: '2026-09-18T09:00:00Z', mergedBy: { login: 'maintainer' } }))
+  expect(w.db.prepare('SELECT count(*) AS n FROM dispositions').get()).toEqual({ n: 0 })
+})
+
+test('a plan with no checkout is asked about no rehearsal', async () => {
+  const w = await pushed()
+  w.db.prepare(`INSERT INTO plans (id, pipe_id, target_id, template, state, queued_at, step, retries)
+    VALUES (2, 1, 1, 'pr_path', 'running', ?, 7, 0)`).run('2026-09-17T00:00:00.000Z')
+  const heads: string[] = []
+  capture(w.db, forked, w.root, listing(heads))
+  expect(heads).toEqual(['widget-12-a1-next'])
+})
+
 test('a pr the tick cannot read this time does not stop the pipes behind it', async () => {
   const w = await pushed()
   expect(capture(w.db, () => { throw new Error('gh: could not resolve host') })).toEqual([])

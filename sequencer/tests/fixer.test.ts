@@ -107,3 +107,21 @@ test('after two live fixes in a day the fixer is not called and the stop escalat
   expect(packets.some((p) => basename(p.transcript).startsWith('fixer'))).toBe(false)
   expect(posted).toHaveLength(1)
 })
+
+test('a file the build already wrote as a stray is listed by clearing the flag, not by a second row', async () => {
+  const { db, home } = seeded('live')
+  db.prepare("INSERT INTO plan_files (plan, path, is_new, position, stray) VALUES (7, 'a.ts', 0, 0, 0), (7, 'schema/0040_x.sql', 1, 1, 1)").run()
+  await woke(db, home, stub(RETURN, []), now, () => undefined, wire([]))
+  expect(db.prepare('SELECT path, position, stray FROM plan_files WHERE plan = 7 ORDER BY position').all()).toEqual([
+    { path: 'a.ts', position: 0, stray: 0 }, { path: 'schema/0040_x.sql', position: 1, stray: 0 }])
+  expect(state(db)).toEqual({ state: 'queued', step: 4 })
+})
+
+test('a fixer that throws leaves the tick running and the stop with a person', async () => {
+  const { db, home } = seeded('live')
+  const posted: string[] = []
+  const broken: Wire = { ...wire([]), file: () => { throw new Error('gh is down') } }
+  await woke(db, home, stub('---\ndid: nothing\nthen: ticket\nwhy: a bug\nticket: a bug\n---\n', []), now, (t) => void posted.push(t), broken)
+  expect(maybe(home, 7, 'fixer.error')).toBe('gh is down')
+  expect(posted).toHaveLength(1)
+})

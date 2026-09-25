@@ -98,12 +98,7 @@ export async function fixer(db: Db, root: string, plan: PlanRow, decision: { id:
 }
 
 function apply(db: Db, root: string, plan: PlanRow, f: Fix, wire: Wire): string {
-  for (const path of f.add_files ?? []) {
-    db.prepare(`INSERT INTO plan_files (plan, path, is_new, position, stray)
-      SELECT ?, ?, 1, coalesce(max(position), -1) + 1, 0 FROM plan_files WHERE plan = ?
-      AND NOT EXISTS (SELECT 1 FROM plan_files WHERE plan = ? AND path = ?)`).run(plan.id, path, plan.id, plan.id, path)
-    db.prepare("UPDATE plan_files SET stray = 0 WHERE plan = ? AND path = ?").run(plan.id, path)
-  }
+  for (const path of f.add_files ?? []) listed(db, plan.id, path)
   if (plan.state !== 'blocked_on_ceo' && plan.state !== 'halted') return 'escalated'
   switch (f.then) {
     case 'return': afresh(root, plan.id, returnToLane(db, plan.id)); return 'return'
@@ -127,6 +122,17 @@ function apply(db: Db, root: string, plan: PlanRow, f: Fix, wire: Wire): string 
     }
     case 'ask_ceo': return 'escalated'
   }
+}
+
+/** A path the build already wrote is a stray row: it is listed by clearing the flag, never by a second row. */
+function listed(db: Db, plan: number, path: string): void {
+  const held = db.prepare('SELECT 1 FROM plan_files WHERE plan = ? AND path = ?').get(plan, path)
+  if (held !== undefined) {
+    db.prepare('UPDATE plan_files SET stray = 0 WHERE plan = ? AND path = ?').run(plan, path)
+    return
+  }
+  const next = db.prepare('SELECT coalesce(max(position), -1) + 1 AS n FROM plan_files WHERE plan = ?').get(plan) as { n: number }
+  db.prepare('INSERT INTO plan_files (plan, path, is_new, position, stray) VALUES (?, ?, 1, ?, 0)').run(plan, path, next.n)
 }
 
 function issue(db: Db, root: string, plan: PlanRow, decision: { why: string }, m: Mode): string {

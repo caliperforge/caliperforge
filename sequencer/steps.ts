@@ -13,7 +13,7 @@ import { at, type Step } from '../templates/pr-path.ts'
 import { writable } from './brief.ts'
 import type { Outcome } from './kind.ts'
 import { preReview } from './rails.ts'
-import { forkCi, headOf, land, opened, push, type Wire } from './push.ts'
+import { forkCi, headOf, land, opened, push, reviewable, type Wire } from './push.ts'
 import { following } from './split.ts'
 import { abortMerge, behindMain, cloned, conflicted, diffOf, fetchMain, get, maybe, merging, mergeMain, put, recut, srcDir, unmerged } from './workspace.ts'
 import { homeOf } from './home.ts'
@@ -63,12 +63,19 @@ export function parked(db: Db, plan: PlanRow): string | null {
 
 export function kernel(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
   const step = at(plan.step)
-  if (step.name === 'rails') return freshBase(db, root, plan) ?? strayed(db, root, plan) ?? preReview(db, root, plan)
+  if (step.name === 'rails') return freshBase(db, root, plan) ?? strayed(db, root, plan) ?? railed(db, root, plan, wire)
   if (step.name === 'measure') return measure(db, plan)
   if (step.name === 'ready') return readyGate(db, root, plan, wire)
   if (step.name === 'batch') return batch(db, root, plan, wire)
   if (step.name === 'push') return push(db, root, plan, wire)
   return { outcome: 'pass', spans: [], note: step.name }
+}
+
+function railed(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
+  const judged = preReview(db, root, plan)
+  const repo = repoOf(db, plan)
+  if (judged.outcome === 'pass' && judged.held !== true && repo !== null) reviewable(db, root, plan, repo, wire)
+  return judged
 }
 
 /**

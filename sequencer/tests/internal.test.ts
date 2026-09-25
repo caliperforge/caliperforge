@@ -126,7 +126,8 @@ test('step 3 fills the digests an internal checkout holds, and a target checkout
   const t = world()
   approve(t.db, t.target)
   for (let at = 0; at < 3; at += 1) await tick(t.db, t.root, stub(CARRIED))
-  expect((await tick(t.db, t.root, stub(CARRIED)))[0]).toMatchObject({ step: 3, name: 'rails', outcome: 'pass' })
+  expect((await tick(t.db, t.root, stub(CARRIED), undefined, undefined, watched([], t.root, t.plan)))[0])
+    .toMatchObject({ step: 3, name: 'rails', outcome: 'pass' })
   expect(existsSync(join(srcDir(t.root, t.plan), 'rules'))).toBe(false)
 })
 

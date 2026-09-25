@@ -29,11 +29,14 @@ export function bare(tool: string): string {
   return tool.split('(')[0] ?? tool
 }
 
+export type Ended = 'completed' | 'stopped'
+
 export interface Fired {
   text: string
   transcript_path: string
   usage: { input: number; cache: number; output: number }
   seconds: number
+  ended: Ended
   exit: number
   stop_reason: string | null
   denials: number

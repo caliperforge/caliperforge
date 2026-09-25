@@ -83,7 +83,7 @@ async function decide(db: Db, root: string, plan: PlanRow, reason: Woken, provid
     ...packet(manifest, prompt, tight(root), woken.text, dir, pending(dir, 'orchestrator')),
     wall: wall(db),
   })
-  const answer = fired.exit === 0 ? read(fired.text) : refused('exit')
+  const answer = fired.ended === 'completed' ? read(fired.text) : refused('exit')
   if ('origin_kind' in answer) return answer
   const id = decided(db, { plan: plan.id, step: plan.step, wait_reason: reason, verb: answer.verb, why: answer.why,
     evidence: answer.evidence ?? null, tokens: fired.usage.input + fired.usage.output })

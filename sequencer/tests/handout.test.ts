@@ -104,7 +104,7 @@ test('a stopped build resumes: kept diff, written files not re-handed', async ()
       const out = await inner.fire(packet)
       if (!packet.tools.includes('Write')) return out
       fired += 1
-      return fired === 1 ? { ...out, exit: 1, stop_reason: 'ruling:run.token_wall stopped the run' } : out
+      return fired === 1 ? { ...out, ended: 'stopped', exit: 1, stop_reason: 'ruling:run.token_wall stopped the run' } : out
     },
   }
   for (let at = 0; at < 5 && packets.length < 2; at += 1) await tick(w.db, w.root, provider)
@@ -118,7 +118,8 @@ test('a stopped build resumes: kept diff, written files not re-handed', async ()
 })
 
 test('only a builder exit reads as stopped', () => {
-  expect(stopped('step 2 build refused by outside_specialist\n\noutside_specialist exit 1\n\nspans:\n  - ruling:run.token_wall\n')).toBe(true)
+  expect(stopped('step 2 build refused by outside_specialist\n\noutside_specialist stopped\n\nspans:\n  - ruling:run.token_wall\n')).toBe(true)
   expect(stopped('step 2 build refused by outside_specialist\n\nrails: src/a.ts outside the fence\n\nspans:\n  - src/a.ts\n')).toBe(false)
+  expect(stopped('step 3 build refused by checks\n\nnpm run lint exit 3\n\nspans:\n  - npm run lint\n')).toBe(false)
   expect(stopped('step 4 review refused by code_quality\n\ncode_quality refuse\n\nspans:\n  - src/a.ts:6\n')).toBe(false)
 })

@@ -77,7 +77,7 @@ export function stub(text: string, exit = 0, review = PASS, seen?: (packet: Pack
       return Promise.resolve({
       text: answer(packet, text, review, brief),
       transcript_path: packet.transcript,
-      usage: { input: 10, cache: 20, output: 30 }, seconds: 0.5, exit,
+      usage: { input: 10, cache: 20, output: 30 }, seconds: 0.5, ended: exit === 0 ? 'completed' : 'stopped', exit,
       stop_reason: exit === 0 ? 'end_turn' : 'hook_stopped', denials: exit,
       })
     },
@@ -115,7 +115,7 @@ export function builds(edit: () => void, review = PASS, exit = 0): Provider {
     fire: async (packet) => {
       if (!packet.tools.includes('Write')) return inner.fire(packet)
       edit()
-      return { ...await inner.fire(packet), exit }
+      return { ...await inner.fire(packet), ended: exit === 0 ? 'completed' : 'stopped', exit }
     },
   }
 }

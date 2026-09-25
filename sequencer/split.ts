@@ -76,7 +76,8 @@ function filed(db: Db, plan: PlanRow, parent: number, parts: Part[], n: number, 
   const body = [`**What:** ${part.what}`, `**Why:** ${part.why}`, `**When it ends:** ${part.ends}`, '',
     `Part ${letter(n)} of ${String(parts.length)} of #${String(parent)}, split by the brief writer.`,
     ...(prior === undefined ? [] : [`After: ${ref(prior)}`]), ''].join('\n')
-  const url = wire.file(homeOf(plan), title, body, plan.lane === null ? [] : [`lane:${plan.lane}`])
+  // Intake re-prices a plan from its issue's P label, so a part filed without one fell to the default (9b ran P3 under a P0).
+  const url = wire.file(homeOf(plan), title, body, [...(plan.lane === null ? [] : [`lane:${plan.lane}`]), `P${String(plan.priority)}`])
   db.prepare('INSERT INTO parts (parent, n, url, title, body) VALUES (?, ?, ?, ?, ?)').run(plan.id, n, url, title, body)
   return url
 }

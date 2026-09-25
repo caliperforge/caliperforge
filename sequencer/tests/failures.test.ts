@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest'
 import type { Gh } from '../../rails/ci-green/index.ts'
-import { red } from '../failures.ts'
+import { failing, red } from '../failures.ts'
 
 const FORK = 'caliperforge/pay-kit'
 
@@ -15,6 +15,10 @@ test('a red run names its workflow and carries its failed log without timestamps
   expect(found?.spans).toEqual(['ci.red Ruby'])
   expect(found?.log).toContain('Failure: test_default [config_test.rb:187]')
   expect(found?.log).not.toMatch(/2026-09-21T/)
+})
+
+test('a failed log names each failing job and step once', () => {
+  expect(failing(FORK, '77', gh)).toEqual([{ job: 'Ruby tests', step: 'run' }])
 })
 
 test('no red run is no failure to hand back', () => {

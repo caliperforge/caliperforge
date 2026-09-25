@@ -1,7 +1,16 @@
-import { pr as readPr, prNumber, type Pr } from '../cli/gh.ts'
+import { z } from 'zod'
+import { pr as readPr, prNumber, WINDOW, type Pr, type Read } from '../cli/gh.ts'
+import { add, LANE, LANES, laneOf, seen } from '../cli/plan.ts'
 import type { Db } from '../store/index.ts'
+import { originRef, PlanRow } from '../store/plans.ts'
 import { record, type Signal, type SignalRow } from '../store/signals.ts'
 import { attribute } from './escapes.ts'
+
+const Listed = z.array(z.object({
+  number: z.int(),
+  url: z.string(),
+  labels: z.array(z.object({ name: z.string() })),
+}))
 
 interface Pushed { plan: number; repo: string; evidence: string }
 
@@ -25,6 +34,34 @@ function reachable(db: Db, row: Pushed, read: (repo: string, no: number) => Pr):
     return one(db, row, read)
   } catch {
     return []
+  }
+}
+
+export function intake(db: Db, root: string, read: Read): void {
+  const on = new Set((db.prepare('SELECT name FROM pipes WHERE enabled = 1').all() as { name: string }[]).map((p) => p.name))
+  for (const repo of new Set(LANES.filter((l) => on.has(LANE[l].pipe)).map((l) => LANE[l].home))) {
+    try {
+      listed(db, root, repo, read)
+    } catch {
+      continue
+    }
+  }
+}
+
+/** A list exactly `WINDOW` long may be cut short, so what is missing from it is not taken as gone. */
+function listed(db: Db, root: string, repo: string, read: Read): void {
+  const found = Listed.parse(read(['issue', 'list', '--repo', repo, '--state', 'open', '--limit', String(WINDOW),
+    '--json', 'number,title,url,labels']))
+  const kept = found.filter((i) => laneOf(i.labels) !== null)
+  if (found.length < WINDOW) halt(db, repo, new Set(kept.map((i) => i.url)))
+  const known = seen(db)
+  for (const i of kept.filter((k) => !known.has(k.url))) add(db, root, `${repo}#${String(i.number)}`, undefined, read)
+}
+
+function halt(db: Db, repo: string, open: Set<string>): void {
+  const queued = db.prepare("SELECT * FROM plans WHERE state = 'queued' AND origin IS NOT NULL").all().map((r) => PlanRow.parse(r))
+  for (const plan of queued.filter((p) => originRef(p)?.repo === repo && !open.has(p.origin ?? ''))) {
+    db.prepare("UPDATE plans SET state = 'halted' WHERE id = ?").run(plan.id)
   }
 }
 

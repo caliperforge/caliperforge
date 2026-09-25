@@ -49,9 +49,11 @@ export const Bench = z.object({
   checks: z.string().optional(),
   verdict: z.string().optional(),
   prior: z.string().optional(),
+  refusal: z.string().optional(),
   since: z.string().optional(),
   narrowing: Narrowing.optional(),
 }).strict().refine((b) => b.since === undefined || b.prior !== undefined, { path: ['since'] })
+  .refine((b) => b.refusal === undefined || b.prior !== undefined, { path: ['refusal'] })
 
 export type Bench = z.infer<typeof Bench>
 
@@ -96,6 +98,8 @@ export function benchPacket(
   return { packet: assembled(root, name, manifest, bench.data, transcript), bench: bench.data }
 }
 
+const MAP = 'The whole diff, for the map. Judge what changed since your last verdict, handed below.'
+
 function assembled(root: string, name: string, manifest: Review, bench: Bench, transcript: string): Packet {
   const sections: [string, string | undefined][] = [
     ['Changed code in context', framed(bench.context, 'Each hunk inside the function that encloses it. Judge from this and the diff; open a file only for what neither holds.')],
@@ -103,12 +107,14 @@ function assembled(root: string, name: string, manifest: Review, bench: Bench, t
     ['Files around the change', framed(bench.map, 'Every file in each touched directory, its length and its head comment; * marks a changed file.')],
     ['First verdict', bench.verdict],
     ['Your last verdict', bench.prior],
+    ['Refusal that sent the build back', bench.refusal],
     ['Changed since your last verdict', bench.since],
     ['Paths since your last verdict', statement(bench.narrowing)],
   ]
   const tail = sections.map(([head, body]) => (body === undefined ? '' : `\n\n# ${head}\n\n${body}`)).join('')
+  const diff = (bench.since === undefined ? undefined : framed(bench.diff, MAP)) ?? bench.diff
   return {
-    prompt: `${tight(root)}\n\n${spec(root, name)}\n\n# Issue\n\n${bench.issue}\n\n# Diff\n\n${bench.diff}${tail}`,
+    prompt: `${tight(root)}\n\n${spec(root, name)}\n\n# Issue\n\n${bench.issue}\n\n# Diff\n\n${diff}${tail}`,
     cwd: bench.repo,
     transcript,
     model: manifest.model,

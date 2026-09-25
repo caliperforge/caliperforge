@@ -26,11 +26,12 @@ import { awaiting, day, dryLines, halted, laneLine, open as openPlans, runsOf, s
   tickNote, verdictsOf, windowLine } from './brief.ts'
 import { check, fill } from './digests.ts'
 import { desk, gh } from './gh.ts'
-import { ack, events, line, notify, record as keep, unread } from './inbox.ts'
+import { ack, crashed, events, line, notify, record as keep, unread } from './inbox.ts'
 import { measure, render as renderPulse } from './measure.ts'
 import { add as fileIssue, render as renderUnfiled, unfiled } from './plan.ts'
 import { add } from './queue.ts'
 import { close } from './session.ts'
+import { alerter, CRASHED, liveness, livenessLine, stalledLanes, watch } from './watch.ts'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { version: string }
@@ -285,6 +286,8 @@ cf.command('halted').action(() => {
 
 cf.command('brief').action(() => {
   const handle = db()
+  out(livenessLine(handle, liveness(handle, new Date())))
+  for (const lane of stalledLanes(handle, new Date())) out(`lane\tOFF with work: ${lane}\n`)
   out(laneLine(lanes(handle, hhmm(handle))))
   out(section('open plans', openPlans(handle)))
   out(section('halted', halted(handle)))
@@ -301,33 +304,61 @@ cf.command('adopt').argument('<ref>', 'an <owner/repo>#<n> pull request of ours 
 
 cf.command('tick').option('--dry', 'read what a tick would do, fire nothing, call no network')
   .action(async (options: { dry?: boolean }) => {
-    const handle = db()
     const now = new Date()
-    if (options.dry === true) {
-      dryTick(handle, now)
-      return
-    }
-    const sha = behind(handle, root)
-    if (sha !== null) {
-      halt(handle, now, sha)
-      return
-    }
-    const { auth } = credential()
-    process.stderr.write(`auth ${auth.kind} from ${auth.from}\n`)
-    const fired = await tick(handle, root, claudeAgentSdk, now, undefined, undefined, CHAIN_MINUTES, gh)
-    receipt(handle, upgraded(handle, root, { at: now.toISOString(), hhmm: hhmm(handle, now), dry: false,
-      pipes: openPipes(handle, hhmm(handle, now)).length, fired: fired.length,
-      exit: fired.some((f) => f.outcome === 'refuse') ? 1 : 0, note: tickNote(fired, overlapWaits(handle)) }))
-    const news = events(handle, fired, now.toISOString())
-    keep(root, news)
-    notify(news)
-    if (fired.length === 0) out('nothing to fire\n')
-    for (const f of fired) {
-      out(`${f.pipe}\tplan ${String(f.plan)}\tstep ${String(f.step)} ${f.name}\t${f.outcome}\t${f.state}\t${f.note}\n`)
-      for (const span of f.spans) out(`  span\t${span}\n`)
-    }
-    cards(handle, now)
+    await ticked(options, now).catch((error: unknown) => {
+      crashed(root, now.toISOString(), error)
+      down(now, error)
+      throw error
+    })
   })
+
+/** #251: a tick that threw leaves a receipt saying so and raises the alert, or the table reads a dead machine as an idle one. */
+function down(now: Date, error: unknown): void {
+  try {
+    const handle = db()
+    const message = error instanceof Error ? error.message : String(error)
+    receipt(handle, { at: now.toISOString(), hhmm: hhmm(handle, now), dry: false,
+      pipes: openPipes(handle, hhmm(handle, now)).length, fired: 0, exit: 1, note: `${CRASHED}${message.slice(0, 500)}` })
+    watch(handle, root, now, alerter())
+  } catch {
+    return
+  }
+}
+
+cf.command('watch').description('alert once when no real tick has landed inside an open window, and once when one lands again')
+  .action(() => {
+    const handle = db()
+    out(livenessLine(handle, watch(handle, root, new Date(), alerter())))
+  })
+
+async function ticked(options: { dry?: boolean }, now: Date): Promise<void> {
+  const handle = db()
+  if (options.dry === true) {
+    dryTick(handle, now)
+    return
+  }
+  const sha = behind(handle, root)
+  if (sha !== null) {
+    halt(handle, now, sha)
+    return
+  }
+  const { auth } = credential()
+  process.stderr.write(`auth ${auth.kind} from ${auth.from}\n`)
+  const fired = await tick(handle, root, claudeAgentSdk, now, undefined, undefined, CHAIN_MINUTES, gh)
+  receipt(handle, upgraded(handle, root, { at: now.toISOString(), hhmm: hhmm(handle, now), dry: false,
+    pipes: openPipes(handle, hhmm(handle, now)).length, fired: fired.length,
+    exit: fired.some((f) => f.outcome === 'refuse') ? 1 : 0, note: tickNote(fired, overlapWaits(handle)) }))
+  watch(handle, root, now, alerter())
+  const news = events(handle, fired, now.toISOString())
+  keep(root, news)
+  notify(news)
+  if (fired.length === 0) out('nothing to fire\n')
+  for (const f of fired) {
+    out(`${f.pipe}\tplan ${String(f.plan)}\tstep ${String(f.step)} ${f.name}\t${f.outcome}\t${f.state}\t${f.note}\n`)
+    for (const span of f.spans) out(`  span\t${span}\n`)
+  }
+  cards(handle, now)
+}
 
 cf.command('signoff').description('open, read and close the sign-off cards on the private sign-off repo, as every tick does')
   .action(() => { cards(db(), new Date()) })

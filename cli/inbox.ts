@@ -11,7 +11,7 @@ import { clock } from '../store/plans.ts'
  * reads at every check-in (`cf inbox`), and a desktop notification for the ones that need one.
  * Read is what `cf inbox --ack` has marked; nothing else counts as delivered.
  */
-export type Kind = 'blocked' | 'landed' | 'done' | 'refused' | 'asked' | 'signoff'
+export type Kind = 'blocked' | 'landed' | 'done' | 'refused' | 'asked' | 'signoff' | 'crashed'
 
 export interface Event {
   at: string
@@ -45,7 +45,7 @@ function kindOf(f: Fired): Kind | null {
   return f.outcome === 'refuse' ? 'refused' : null
 }
 
-function ticketOf(db: Db, plan: number): string {
+export function ticketOf(db: Db, plan: number): string {
   const row = db.prepare(`SELECT p.origin, t.repo, t.issue_no FROM plans p LEFT JOIN targets t ON t.id = p.target_id
     WHERE p.id = ?`).get(plan) as { origin: string | null; repo: string | null; issue_no: number | null } | undefined
   if (row?.origin != null) return `#${row.origin.split('/').at(-1) ?? ''}`
@@ -57,6 +57,11 @@ export function record(root: string, news: Event[]): void {
   const path = join(root, INBOX)
   mkdirSync(dirname(path), { recursive: true })
   appendFileSync(path, news.map((e) => `${JSON.stringify(e)}\n`).join(''))
+}
+
+export function crashed(root: string, at: string, error: unknown): void {
+  const note = error instanceof Error ? error.message : String(error)
+  record(root, [{ at, plan: 0, ticket: 'cf tick', kind: 'crashed', step: 0, name: 'tick', note }])
 }
 
 export function unread(root: string): Event[] {
@@ -82,7 +87,8 @@ function seen(root: string): number {
 }
 
 export function line(db: Db, e: Event): string {
-  return `${clock(new Date(e.at), zone(db))}  ${e.kind.padEnd(7)}  ${e.ticket} (plan ${String(e.plan)}) at step ${String(e.step)} ${e.name}: ${e.note}`
+  const where = e.kind === 'crashed' ? e.ticket : `${e.ticket} (plan ${String(e.plan)}) at step ${String(e.step)} ${e.name}`
+  return `${clock(new Date(e.at), zone(db))}  ${e.kind.padEnd(7)}  ${where}: ${e.note}`
 }
 
 /** Blocked, landed, done, an ask and a card to sign reach the desktop; a refusal going round again only reaches the file. */
@@ -97,6 +103,7 @@ const HEAD: Record<Kind, string> = {
   refused: 'Sent back',
   asked: 'Someone commented on the PR',
   signoff: 'Ready for your review before it posts',
+  crashed: 'The tick crashed',
 }
 
 /** Why a job stopped, in the words a person reads on a phone; an unknown reason falls back to the machine's note. */

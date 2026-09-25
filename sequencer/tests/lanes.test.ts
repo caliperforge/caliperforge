@@ -5,10 +5,11 @@ import { release } from '../../store/holds.ts'
 import type { Read } from '../../cli/gh.ts'
 import { cap, dial, lanes, name, priority, record, set, templatePriority, windows, type Reading } from '../../store/lanes.ts'
 import { live } from '../../store/plans.ts'
+import { WHY } from '../../store/refusals.ts'
 import { tick } from '../index.ts'
 import { picks } from '../next.ts'
-import { put, SELF } from '../workspace.ts'
-import { approve, CARRIED, internalPlan, plan, stub, world, type World } from './world.ts'
+import { maybe, put, SELF } from '../workspace.ts'
+import { approve, CARRIED, internalPlan, plan, stub, watched, world, type World } from './world.ts'
 
 const ASK = '# hello\n\n- **D1** add `hello()` in `src/hello.ts`\n'
 
@@ -124,6 +125,27 @@ test('the cap decides how many pipes worth of plans the tick opens', async () =>
   w.db.prepare("UPDATE plans SET step = 0, state = 'queued'").run()
   dial(w.db, 0, AT)
   expect(await tick(w.db, w.root, stub(CARRIED))).toEqual([])
+})
+
+test('a throw inside one plan\'s step is that plan\'s refusal, a repeat stops it, and the other lane still steps', async () => {
+  const w = world()
+  approve(w.db, w.target)
+  for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  second(w)
+  queued(w, 2, 2, 1)
+  dial(w.db, 2, AT)
+  const stderr = 'Command failed: git push …\n! [rejected] … (fetch first)'
+  const wire = { ...watched([], w.root, 1), send: () => { throw new Error(stderr) } }
+
+  const first = await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  expect(first.find((f) => f.plan === 1)).toMatchObject({ step: 6, outcome: 'refuse', state: 'retried' })
+  expect(first.find((f) => f.plan === 2)).toMatchObject({ pipe: 'research' })
+  expect(plan(w.db, 1).step).toBe(6)
+  expect(maybe(w.root, 1, 'refusal.md')).toContain(stderr)
+
+  await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  expect(plan(w.db, 1).state).toBe('blocked_on_ceo')
+  expect(maybe(w.root, 1, 'refusal.md')).toMatch(new RegExp(`# Stopped\\n\\n${WHY.repeat}\\.\\n$`))
 })
 
 test('the usage band steps the cap down as the window fills, and back up when it drains', () => {

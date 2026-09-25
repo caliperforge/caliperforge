@@ -272,6 +272,41 @@ test('a reviewer gets its own last verdict, the diff since the tree it judged an
   expect(trees.every((r) => /^[0-9a-f]{40}$/.test(r.tree))).toBe(true)
 })
 
+const HELLO = (word: string): string =>
+  `export function hello(): string {\n  const a = "h"\n  const b = "i"\n  const c = ""\n  const d = ""\n  const word = ${word}\n  return word + c + d\n}\n`
+
+const section = (prompt: string, head: string): string => prompt.split(`\n# ${head}\n\n`)[1]?.split('\n\n# ')[0] ?? ''
+
+test('a reviewer step 5 sent back is handed the delta since the tree it passed, in its function, with the refusal', async () => {
+  const w = world()
+  w.db.prepare('DELETE FROM plans WHERE id = 1').run()
+  ours(w.root)
+  internalPlan(w.db, w.root, MINE)
+  const hello = join(srcDir(w.root, MINE), 'src/hello.ts')
+  for (let step = 0; step < 2; step += 1) await tick(w.db, w.root, stub(CARRIED))
+  writeFileSync(hello, HELLO('a + b'))
+  for (let step = 0; step < 3; step += 1) await tick(w.db, w.root, stub(CARRIED, 0, PASS))
+  await tick(w.db, w.root, stub(CARRIED, 0, REFUSE))
+  const baseTree = execFileSync('git', ['rev-parse', 'HEAD^{tree}'], { cwd: srcDir(w.root, MINE), encoding: 'utf8' }).trim()
+  w.db.prepare(`INSERT INTO verdicts (gate, kind, subject_digest, plan, step, outcome, origin_kind, origin_ref, tokens, seconds, tree)
+    SELECT gate, kind, subject_digest, plan, step, 'refuse', 'ruling', 'review.code_quality', 0, 0, ? FROM verdicts
+    WHERE plan = ? AND step = 4 AND kind = 'review'`).run(baseTree, MINE)
+  writeFileSync(hello, HELLO('a + b + "!"'))
+  const seen: Packet[] = []
+  for (let step = 0; step < 3; step += 1) await tick(w.db, w.root, stub(CARRIED, 0, REFUSE, (p) => seen.push(p)))
+
+  const prompt = reviewer(seen)
+  expect(section(prompt, 'Diff')).toContain('\n+  const c = ""\n')
+  expect(section(prompt, 'Your last verdict')).toMatch(/^---\noutcome: pass\n/)
+  expect(section(prompt, 'Refusal that sent the build back')).toMatch(/^step 5 /)
+  expect(section(prompt, 'Refusal that sent the build back')).toContain(WORDS)
+  const since = section(prompt, 'Changed since your last verdict')
+  expect(since).toContain('\n export function hello(): string {\n')
+  expect(since).toContain('\n+  const word = a + b + "!"\n')
+  expect(since).not.toContain('+  const c = ""')
+  expect(section(prompt, 'Paths since your last verdict')).toContain('changed since the tree you judged:\n  - src/hello.ts\n')
+})
+
 test('narrowing calls a moved path the plan does not touch main\'s, and proves the rest with its blob', () => {
   const dir = mkdtempSync(join(tmpdir(), 'cf-narrow-'))
   const run = (...args: string[]): string => execFileSync('git', args, { cwd: dir, encoding: 'utf8' })

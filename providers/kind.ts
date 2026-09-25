@@ -19,6 +19,8 @@ export interface Packet {
   /** #148: what this one run may spend before it stops, cache reads left out. A packet without one is unwalled. */
   wall?: number
   refuse: (path: string) => Refusal | null
+  /** #274: folders outside the checkout this run may read, never write. */
+  reads?: string[]
 }
 
 /** `stop_reason` is the SDK's `terminal_reason` verbatim, so the refire keys on the SDK's own spelling. */

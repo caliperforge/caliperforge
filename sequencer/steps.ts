@@ -216,29 +216,40 @@ function passedDiff(db: Db, plan: number): string | null {
 
 /**
  * #35 rule 3: nothing lands over a moved main. The first miss merges main into the branch and sends
- * the plan back to the rails, which judge the merged bytes; a second miss is a branch that cannot
- * keep up with main and refuses so it is cut again. A tree still carrying unmerged paths this late
- * is cut again too, `base:conflict`: past step 3 no builder is coming back to settle them.
+ * the plan back to the rails, which judge the merged bytes. #295: a later miss, a conflict, or a tree
+ * left mid-merge used to refuse with "cut it again", which nothing did: the builder had nothing to
+ * change and every later move of main refused the job again. They go back to the rails instead, where
+ * `freshBase` merges main or, on a conflict, cuts the checkout again and carries the build across.
  */
 function baseMoved(db: Db, root: string, plan: PlanRow): Outcome | null {
   const src = srcDir(root, plan.id)
   if (!cloned(src) || shown(db, plan)) return null
-  if (conflicted(src)) return cutAgain('base:conflict', 'the checkout has unmerged paths from a tick that stopped mid-merge')
+  if (conflicted(src)) return toRails(root, plan, 'base:conflict', 'the checkout has unmerged paths from a tick that stopped mid-merge')
   const main = fetchMain(src)
   if (!behindMain(src, main)) return null
-  if (maybe(root, plan.id, 'base.merged') !== null) return cutAgain('base:stale', 'the branch is behind main a second time')
-  if (takeMain(db, root, plan, src, main, at(plan.step).step) !== null) return cutAgain('base:conflict', 'the branch conflicts with main')
+  if (maybe(root, plan.id, 'base.merged') !== null) return toRails(root, plan, 'base:stale', 'main moved again')
+  if (takeMain(db, root, plan, src, main, at(plan.step).step) !== null) return toRails(root, plan, 'base:conflict', 'the branch conflicts with main')
   put(root, plan.id, 'base.merged', `${main}\n`)
   return { outcome: 'pass', spans: ['base:stale'], note: 'main moved; merged it and re-ran the rails', rewind: 3 }
+}
+
+/** Past this many trips back to the rails, a job that never catches main goes to a person. */
+export const LAPS = 4
+
+const LAPPED = 'base.laps'
+
+function toRails(root: string, plan: PlanRow, span: 'base:stale' | 'base:conflict', note: string): Outcome {
+  const laps = maybe(root, plan.id, LAPPED) ?? ''
+  if (laps.split('\n').filter((l) => l !== '').length >= LAPS) {
+    return { outcome: 'refuse', spans: [span], note: `${note}, and ${String(LAPS)} trips back to the rails have not caught main up` }
+  }
+  put(root, plan.id, LAPPED, `${laps}${span}\n`)
+  return { outcome: 'pass', spans: [span], note: `${note}; back to the rails to take main`, rewind: 3 }
 }
 
 /** A stranger's pull request that is already open is not merged into: their main moving is theirs to settle. */
 function shown(db: Db, plan: PlanRow): boolean {
   return !internal(plan) && opened(db, plan.id) !== null
-}
-
-function cutAgain(span: 'base:stale' | 'base:conflict', note: string): Outcome {
-  return { outcome: 'refuse', spans: [span], note: `${note}; cut it again from main` }
 }
 
 interface Gated { tests_pass: number; byte_identical_elsewhere: number; bot_clean: number; diff_digest: string }

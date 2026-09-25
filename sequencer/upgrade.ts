@@ -49,7 +49,7 @@ export function upgraded(db: Db, root: string, lap: Receipt): Receipt {
   return reason === null ? lap : { ...lap, exit: 1, note: `${lap.note}; ${reason}` }
 }
 
-function said(error: unknown): string {
+export function said(error: unknown): string {
   const text = error instanceof Error ? error.message : String(error)
   return text.trim().split('\n').at(-1)?.trim() ?? ''
 }

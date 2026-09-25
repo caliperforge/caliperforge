@@ -9,12 +9,13 @@ import { self } from '../rails/tight/index.ts'
 import { fire } from '../runner/index.ts'
 import { CHAIN_MINUTES, dry, tick } from '../sequencer/index.ts'
 import { behind, upgraded } from '../sequencer/upgrade.ts'
+import { saved } from '../sequencer/hq.ts'
 import { signoffs } from '../sequencer/signoff.ts'
 import { SIGNOFF, afresh, liveTree, reap } from '../sequencer/workspace.ts'
 import { blocked, parked, targetDigest, WAITING } from '../sequencer/steps.ts'
 import { release, returnToLane } from '../store/holds.ts'
 import { dump, migrate, open as openDb, type Db } from '../store/index.ts'
-import { dial, hhmm, lanes, priority as setPriority, record, Reading, windows } from '../store/lanes.ts'
+import { dial, hhmm, lanes, priority as setPriority, record, Reading, set, windows } from '../store/lanes.ts'
 import { holder } from '../store/leases.ts'
 import { PlanRow, openPipes, overlapWaits, retry, terminal } from '../store/plans.ts'
 import { clear } from '../store/refusals.ts'
@@ -106,6 +107,11 @@ cf.command('lanes').argument('[n]', 'lanes the ceo opens, 0 to the ceiling').act
   const handle = db()
   if (n !== undefined) dial(handle, Number(n), new Date().toISOString())
   out(laneLine(lanes(handle, hhmm(handle))))
+})
+
+cf.command('hq').argument('<dir>', 'the HQ checkout every job end commits and pushes').action((dir: string) => {
+  set(db(), 'hq.path', resolve(dir), 'ceo', new Date().toISOString().slice(0, 10))
+  out(`hq ${resolve(dir)}\n`)
 })
 
 cf.command('usage').argument('[file]', 'a provider rate-limit reading, json').action((file: string | undefined) => {
@@ -345,9 +351,10 @@ async function ticked(options: { dry?: boolean }, now: Date): Promise<void> {
   const { auth } = credential()
   process.stderr.write(`auth ${auth.kind} from ${auth.from}\n`)
   const fired = await tick(handle, root, claudeAgentSdk, now, undefined, undefined, CHAIN_MINUTES, gh)
-  receipt(handle, upgraded(handle, root, { at: now.toISOString(), hhmm: hhmm(handle, now), dry: false,
+  receipt(handle, saved(handle, upgraded(handle, root, { at: now.toISOString(), hhmm: hhmm(handle, now), dry: false,
     pipes: openPipes(handle, hhmm(handle, now)).length, fired: fired.length,
-    exit: fired.some((f) => f.outcome === 'refuse') ? 1 : 0, note: tickNote(fired, overlapWaits(handle)) }))
+    exit: fired.some((f) => f.outcome === 'refuse') ? 1 : 0, note: tickNote(fired, overlapWaits(handle)) }),
+  fired.filter((f) => f.state === 'done').map((f) => f.plan)))
   watch(handle, root, now, alerter())
   const news = events(handle, fired, now.toISOString())
   keep(root, news)

@@ -61,8 +61,8 @@ test('the gate stops a refused write and denies an outside read', () => {
   })
 })
 
-const bash = (command: string): HookInput =>
-  ({ hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command }, tool_use_id: 't', session_id: 's', transcript_path: '', cwd })
+const bash = (command: string, background?: boolean): HookInput =>
+  ({ hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: background === undefined ? { command } : { command, run_in_background: background }, tool_use_id: 't', session_id: 's', transcript_path: '', cwd })
 
 test('the builder runs its checks on our tree and holds no shell on a stranger\'s', () => {
   const manifest = seat(root, 'typescript_specialist').manifest
@@ -75,6 +75,15 @@ test('the builder runs its checks on our tree and holds no shell on a stranger\'
   for (const command of ['npm install left-pad', 'npm run tight && rm -rf .', 'grep -rn x src']) {
     expect(gate(ours, bash(command))).toMatchObject({ continue: true, hookSpecificOutput: { permissionDecision: 'deny' } })
   }
+})
+
+test('a background run is denied and the seat stays in the session', () => {
+  const ours = packet(seat(root, 'typescript_specialist').manifest, 'p', 't', 'i', cwd, TRANSCRIPT, true)
+  const denied = gate(ours, bash('npm run tight', true))
+  expect(denied).toMatchObject({ continue: true, hookSpecificOutput: { permissionDecision: 'deny', permissionDecisionReason: expect.stringMatching(/^ruling:seat\.tools/) as string } })
+  expect(denied.stopReason).toBeUndefined()
+  expect(gate(ours, bash('npm run tight', false))).toEqual({ continue: true })
+  expect(gate(ours, bash('npm run tight'))).toEqual({ continue: true })
 })
 
 test('the kotlin seat keeps gradle on a stranger\'s tree', () => {

@@ -11,7 +11,7 @@ import { tick } from '../index.ts'
 import { narrow } from '../rails.ts'
 import { get } from '../workspace.ts'
 import { GREEN, NAPPING, pkg, RED, TIMEOUT } from './bases.ts'
-import { approve, CARRIED, internalPlan, ours, plan, stub, world, type World } from './world.ts'
+import { approve, CARRIED, internalPlan, ours, plan, stub, watched, world, type World } from './world.ts'
 
 const ID = 2
 
@@ -218,7 +218,7 @@ test('a plan on a target runs none of the stranger\'s scripts and passes step 3 
   approve(w.db, w.target)
   for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED))
 
-  const fired = (await tick(w.db, w.root, stub(CARRIED)))[0]
+  const fired = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, w.plan)))[0]
   expect(fired).toMatchObject({ plan: w.plan, step: 3, name: 'rails', outcome: 'pass' })
   expect(plan(w.db, w.plan).step).toBe(4)
   expect(w.db.prepare("SELECT 1 FROM verdicts WHERE plan = ? AND rail_id = 'checks'").all(w.plan)).toEqual([])

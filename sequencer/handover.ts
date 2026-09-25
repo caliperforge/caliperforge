@@ -34,7 +34,7 @@ export function handover(src: string, base: string): Handover {
   return { ...(context === null ? {} : { context }), ...(map === '' ? {} : { map }) }
 }
 
-function enclosed(src: string, base: string): string | null {
+export function enclosed(src: string, base: string): string | null {
   const parts: string[] = []
   let used = 0
   for (const path of changedPaths(src, base)) {

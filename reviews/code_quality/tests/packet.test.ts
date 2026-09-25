@@ -52,6 +52,15 @@ test('a fifth source is refused, and the first verdict only where the manifest r
   expect(benchPacket(root, 'code_quality', bench({ verdict: 'refuse' }), TRANSCRIPT)).toMatchObject({ refusal: { path: 'verdict' } })
   expect(benchPacket(root, 'senior_review', bench(), TRANSCRIPT)).toMatchObject({ refusal: { path: 'verdict' } })
   expect(benchPacket(root, 'code_quality', bench({ since: '+ a line since' }), TRANSCRIPT)).toMatchObject({ refusal: { path: 'since' } })
+  expect(benchPacket(root, 'code_quality', bench({ refusal: 'step 5 refused' }), TRANSCRIPT)).toMatchObject({ refusal: { path: 'refusal' } })
+})
+
+test('a reworked round hands the last verdict, the refusal, then the delta, and leads the whole diff as the map', () => {
+  const { packet } = built(bench({ prior: 'my last verdict', refusal: 'step 5 refused', since: '+ a line since' }))
+  expect(packet.prompt).toContain('\n\n# Diff\n\nThe whole diff, for the map. Judge what changed since your last verdict, handed below.\n\n'
+    + fixture('seeded.diff'))
+  expect(packet.prompt).toContain('\n\n# Your last verdict\n\nmy last verdict\n\n# Refusal that sent the build back\n\nstep 5 refused'
+    + '\n\n# Changed since your last verdict\n\n+ a line since')
 })
 
 const BLOB = 'a'.repeat(40)

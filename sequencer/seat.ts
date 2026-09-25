@@ -3,7 +3,7 @@ import { existsSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Fired, Provider } from '../providers/kind.ts'
 import { packet, refuse } from '../runner/index.ts'
-import { reviewManifest, type Bench, type Narrowing } from '../runner/packet.ts'
+import { reviewManifest, type Bench } from '../runner/packet.ts'
 import { load, seat, tight } from '../runner/rules.ts'
 import { judge, loadReviews } from '../reviews/bench.ts'
 import type { Finding, Judged } from '../reviews/verdict.ts'
@@ -16,7 +16,7 @@ import type { Step } from '../templates/pr-path.ts'
 import { parse } from '../rails/diff.ts'
 import { pointed, shape, split, TEMPLATE, unclear, wide, WIDE, type Part } from './brief.ts'
 import { handout, touched, type Handed } from './handout.ts'
-import { handover, type Handover } from './handover.ts'
+import { enclosed, handover, type Handover } from './handover.ts'
 import { install, mode } from './checks.ts'
 import { narrow } from './rails.ts'
 import { deletions } from './fence.ts'
@@ -267,19 +267,24 @@ export function checked(db: Db, plan: PlanRow, src: string, diff: string): { che
   return { checks: `Passed on this diff: every script the checkout names exits zero (${mode(src)}, ${scope}). Do not re-derive what they settle.` }
 }
 
-/** From a reviewer's second round on: the verdict it wrote last round, and what the tree did since the one it judged. */
-function rounds(db: Db, root: string, plan: number, step: number): { prior?: string; since?: string; narrowing?: Narrowing } {
+/** From a reviewer's second round on: the verdict it wrote last round, the refusal that sent the build back, and what the tree did since the one it judged. */
+function rounds(db: Db, root: string, plan: number, step: number): Pick<Bench, 'prior' | 'refusal' | 'since' | 'narrowing'> {
   const last = maybe(root, plan, `step-${String(step)}.verdict.md`)
   if (last === null) return {}
+  const refusal = maybe(root, plan, 'refusal.md')
+  const prior = { prior: last, ...(refusal === null ? {} : { refusal }) }
   const tree = judged(db, plan, step)
-  if (tree === null) return { prior: last }
+  if (tree === null) return prior
   const src = srcDir(root, plan)
-  return { prior: last, since: diffSince(src, tree), narrowing: narrowing(src, tree, get(root, plan, 'base.sha').trim()) }
+  // Before enclosed(): diffSince's `add -A --intent-to-add` is what puts new files in enclosed()'s diff.
+  const plain = diffSince(src, tree)
+  return { ...prior, since: enclosed(src, tree) ?? plain, narrowing: narrowing(src, tree, get(root, plan, 'base.sha').trim()) }
 }
 
-/** The tree the reviewer's own last verdict judged, off the row `judge()` wrote it on. */
+/** The tree the reviewer last passed, else the one its last verdict judged, off the row `judge()` wrote it on. */
 function judged(db: Db, plan: number, step: number): string | null {
-  const row = db.prepare("SELECT tree FROM verdicts WHERE plan = ? AND step = ? AND kind = 'review' ORDER BY id DESC LIMIT 1")
+  const row = db.prepare(`SELECT tree FROM verdicts WHERE plan = ? AND step = ? AND kind = 'review'
+    ORDER BY outcome = 'pass' AND tree IS NOT NULL DESC, id DESC LIMIT 1`)
     .get(plan, step) as { tree: string | null } | undefined
   return row?.tree ?? null
 }

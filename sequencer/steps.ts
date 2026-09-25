@@ -121,6 +121,7 @@ function readyGate(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
   if (repo === null) return { outcome: 'refuse', spans: ['targets'], note: `plan ${String(plan.id)} has no target row` }
   const row = gatedRow(db, plan.id)
   if (row === null) return { outcome: 'refuse', spans: ['deliverables'], note: `plan ${String(plan.id)} has no deliverable row` }
+  if (!cloned(srcDir(root, plan.id))) return { outcome: 'refuse', spans: ['checkout'], note: `plan ${String(plan.id)} has no checkout to send` }
   const waiting = forkCi(db, root, plan, repo, wire)
   if (waiting !== null) return waiting
   const verdict = readyRail(proofOf(db, root, plan, repo, row))

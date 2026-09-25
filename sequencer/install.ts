@@ -28,9 +28,9 @@ function steps(at: Places): Step[] {
 
 export function reinstall(run: Run, post: Post, at: Places = PLACES): void {
   for (const [bin, args, cwd] of steps(at)) {
-    const { code, output } = run(args, cwd, bin)
-    if (code !== 0) {
-      post('CaliperForge · Atelier did not build', `${bin} ${args.join(' ')}\n${output.split('\n').slice(-TAIL).join('\n')}`)
+    const ran = run(args, cwd, bin)
+    if (!ran.ok) {
+      post('CaliperForge · Atelier did not build', `${bin} ${args.join(' ')}\n${ran.output.split('\n').slice(-TAIL).join('\n')}`)
       return
     }
   }

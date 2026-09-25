@@ -29,6 +29,9 @@ const TRANSCRIPT = [
   'MEASUREMENT tick.interval = 300s',
 ].join('\n')
 
+const SHA = 'a'.repeat(40)
+const REVIEWED = `Last reviewed commit: [fix](https://github.com/acme/widget/commit/${SHA})`
+
 const pr = (over: Partial<Pr> = {}): Pr => ({
   number: 7, url: URL, state: 'OPEN', mergedAt: null, mergedBy: null, reviewDecision: null,
   comments: [], reviews: [], statusCheckRollup: [], ...over,
@@ -118,7 +121,7 @@ test('the tick records every comment, review, bot review and merge on our open p
   const w = await pushed()
   const view = pr({
     comments: [{ id: 'c1', author: { login: 'maintainer' }, body: 'please split this', createdAt: '2026-09-17T10:00:00Z' }],
-    reviews: [{ id: 'r1', author: { login: 'greptile-apps[bot]' }, body: 'score 4/5', submittedAt: '2026-09-17T11:00:00Z' }],
+    reviews: [{ id: 'r1', author: { login: 'greptile-apps[bot]' }, body: `score 4/5\n\n${REVIEWED}`, submittedAt: '2026-09-17T11:00:00Z' }],
     statusCheckRollup: [{ name: 'build', conclusion: 'FAILURE' }],
   })
   expect(capture(w.db, () => view).map((s) => s.kind)).toEqual(['comment', 'bot_review', 'ci_red'])
@@ -133,7 +136,7 @@ test('the tick records every comment, review, bot review and merge on our open p
 /** #103: on plan 65 Greptile's 5/5 summary comment rewound the finished job and told the CEO he was asked. */
 test('a review bot\'s summary comment is its score, not a person asking', async () => {
   const w = await pushed()
-  const summary = (n: number): string => `<h2><a href="https://app.greptile.com"><picture></picture></a>Confidence Score: ${String(n)}/5</h2>\n\n1 of 2 files`
+  const summary = (n: number): string => `<h2><a href="https://app.greptile.com"><picture></picture></a>Confidence Score: ${String(n)}/5</h2>\n\n1 of 2 files\n\n${REVIEWED}`
   const view = pr({ comments: [
     { id: 'g1', author: { login: 'greptile-apps' }, body: summary(5), createdAt: new Date(Date.now() + 1000).toISOString() },
     { id: 'g2', author: { login: 'greptile-apps' }, body: summary(3), createdAt: new Date(Date.now() + 2000).toISOString() },
@@ -143,6 +146,17 @@ test('a review bot\'s summary comment is its score, not a person asking', async 
   expect([five.kind, five.score, three.kind, three.score]).toEqual(['bot_review', 5, 'bot_review', 3])
   expect(started(w.db, five)).toBeNull()
   expect(started(w.db, three)).toMatchObject({ step: 4 })
+})
+
+test('a Greptile summary is stored with the head it reviewed; one in the older format stores nothing', async () => {
+  const w = await pushed()
+  const at = new Date(Date.now() + 1000).toISOString()
+  const view = pr({ comments: [
+    { id: 'g1', author: { login: 'greptile-apps' }, body: `Confidence Score: 4/5\n\n${REVIEWED}`, createdAt: at },
+    { id: 'g2', author: { login: 'greptile-apps' }, body: 'Confidence Score: 4/5', createdAt: at },
+  ] })
+  expect(capture(w.db, () => view).map((s) => s.external_id)).toEqual(['g1'])
+  expect(w.db.prepare('SELECT external_id, score, head FROM signals').all()).toEqual([{ external_id: 'g1', score: 4, head: SHA }])
 })
 
 test('what we said on our own pull request is not a signal; their words and the review state are kept', async () => {
@@ -235,7 +249,7 @@ test('a vague bot finding does not take the disposition slot a named one earned'
   const merged = pr({
     mergedAt: '2026-09-18T09:00:00Z', mergedBy: { login: 'maintainer' },
     reviews: [
-      { id: 'r1', author: { login: 'greptile[bot]' }, body: 'looks fine 4/5', submittedAt: '2026-09-18T07:00:00Z' },
+      { id: 'r1', author: { login: 'greptile[bot]' }, body: `looks fine 4/5\n\n${REVIEWED}`, submittedAt: '2026-09-18T07:00:00Z' },
       { id: 'r2', author: { login: 'maintainer' }, body: 'this is a scope problem', submittedAt: '2026-09-18T08:00:00Z' },
     ],
   })

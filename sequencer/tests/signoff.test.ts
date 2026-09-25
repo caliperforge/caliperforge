@@ -18,7 +18,7 @@ const quiet = (): Pr => ({
 async function atBatch(): Promise<World> {
   const w = world()
   approve(w.db, w.target)
-  for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
   writeFileSync(join(srcDir(w.root, 1), 'src/hello.ts'), 'export const hello = (): string => "hey"\n')
   await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
   expect(plan(w.db, 1).step).toBe(7)

@@ -65,7 +65,7 @@ test('a brief wholly under kotlin/ routes the build to the kotlin seat, and the 
   expect(fired?.note).toMatch(/^kotlin_specialist /)
   expect(existsSync(join(srcDir(w.root, 1), 'kotlin/build.gradle.kts'))).toBe(true)
   const seen: Packet[] = []
-  await tick(w.db, w.root, stub(CARRIED))
+  await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
   await tick(w.db, w.root, stub(CARRIED, 0, PASS, (p) => seen.push(p)))
   expect(seen[0]?.prompt.split('# Diff')[1]?.trim()).toBe('')
 })
@@ -162,7 +162,9 @@ test('a rail refusal names spans, sends the plan back one step, then to blocked_
 test('the sequencer hands the bench a maintainer view, and a wrong shape refuses before any model', async () => {
   const w = world()
   approve(w.db, w.target)
-  for (const step of [0, 1, 2, 3]) expect((await tick(w.db, w.root, stub(CARRIED)))[0]?.step).toBe(step)
+  for (const step of [0, 1, 2, 3]) {
+    expect((await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1)))[0]?.step).toBe(step)
+  }
   expect((await tick(w.db, w.root, stub(CARRIED)))[0]).toMatchObject({ step: 4, outcome: 'pass', state: 'running' })
   const row = w.db.prepare("SELECT gate, kind, outcome FROM verdicts WHERE step = 4").get()
   expect(row).toEqual({ gate: 'review', kind: 'review', outcome: 'pass' })
@@ -177,7 +179,9 @@ const PAIR = `${WORDS}\n\n---\noutcome: refuse\nclass: correctness\nspans:\n  - 
 test('a rebuild keeps the hand-back it was refused on and hands its rows to the builder', async () => {
   const w = world()
   approve(w.db, w.target)
-  for (let at = 0; at < 4; at += 1) await tick(w.db, w.root, stub(UNPOINTED))
+  const sent: string[] = []
+  for (let at = 0; at < 4; at += 1) await tick(w.db, w.root, stub(UNPOINTED), undefined, undefined, watched(sent, w.root, 1))
+  expect(sent).toEqual([])
   const packets: Packet[] = []
   await tick(w.db, w.root, stub(CARRIED, 0, PASS, (p) => packets.push(p)))
   expect(planFile(w.root, 'step-2.handback.prev.md')).toBe(UNPOINTED)
@@ -188,7 +192,8 @@ test('a rebuild keeps the hand-back it was refused on and hands its rows to the 
 test('a review refusal returns the plan to build with every span the reviewer named, then escalates', async () => {
   const w = world()
   approve(w.db, w.target)
-  for (let at = 0; at < 4; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  const wire = watched([], w.root, 1)
+  for (let at = 0; at < 4; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
   const fired = (await tick(w.db, w.root, stub(CARRIED, 0, PAIR)))[0]
   expect(fired).toMatchObject({ step: 4, outcome: 'refuse', state: 'retried' })
   expect(fired?.spans).toEqual(['src/hello.ts:1', 'src/parse.ts:3'])
@@ -198,8 +203,8 @@ test('a review refusal returns the plan to build with every span the reviewer na
   expect(planFile(w.root, 'step-4.verdict.md'))
     .toBe(`---\noutcome: refuse\nclass: correctness\nspans:\n  - src/hello.ts:1\n  - src/parse.ts:3\n---\n\n${WORDS}\n`)
 
-  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
-  const second = (await tick(w.db, w.root, stub(CARRIED, 0, REFUSE)))[0]
+  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  const second =(await tick(w.db, w.root, stub(CARRIED, 0, REFUSE)))[0]
   expect(second).toMatchObject({ step: 4, outcome: 'refuse', state: 'blocked_on_ceo' })
   expect(plan(w.db, 1)).toMatchObject({ step: 4, retries: 1, state: 'blocked_on_ceo' })
 })
@@ -207,13 +212,14 @@ test('a review refusal returns the plan to build with every span the reviewer na
 test('a new refusal after a real rebuild goes round again; the same one again stops', async () => {
   const w = world()
   approve(w.db, w.target)
-  for (let at = 0; at < 4; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  const wire = watched([], w.root, 1)
+  for (let at = 0; at < 4; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
   expect((await tick(w.db, w.root, stub(CARRIED, 0, PAIR)))[0]).toMatchObject({ step: 4, state: 'retried' })
   built(w.root, 1, 'export const two = (): number => 2')
-  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
   expect((await tick(w.db, w.root, stub(CARRIED, 0, REFUSE)))[0]).toMatchObject({ step: 4, state: 'retried' })
   built(w.root, 1, 'export const three = (): number => 3')
-  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
   expect((await tick(w.db, w.root, stub(CARRIED, 0, REFUSE)))[0]).toMatchObject({ step: 4, state: 'blocked_on_ceo' })
   expect(planFile(w.root, 'refusal.md')).toContain('# Stopped\n\nthe same refusal came back')
 })
@@ -235,7 +241,7 @@ test('outside reviewer gets context and map; ours does not', async () => {
   const packets: Packet[] = []
   const inner = builds(() => { writeFileSync(join(srcDir(w.root, 1), 'src/hello.ts'), 'export const hello = (): string => "hello"\n') })
   const seen: Provider = { ...inner, fire: (p) => { packets.push(p); return inner.fire(p) } }
-  for (let at = 0; at < 5; at += 1) await tick(w.db, w.root, seen)
+  for (let at = 0; at < 5; at += 1) await tick(w.db, w.root, seen, undefined, undefined, watched([], w.root, 1))
   const prompt = packets.find((p) => p.prompt.includes('\n# Diff\n'))?.prompt ?? ''
   expect(prompt).toContain('# Changed code in context')
   expect(prompt).toContain('# Files around the change')
@@ -336,14 +342,15 @@ test('narrowing calls a moved path the plan does not touch main\'s, and proves t
 test('a senior refusal lands on build too, and the ticks after it walk rails, review, senior', async () => {
   const w = world()
   approve(w.db, w.target)
-  for (let at = 0; at < 5; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  const wire = watched([], w.root, 1)
+  for (let at = 0; at < 5; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
   const fired = (await tick(w.db, w.root, stub(CARRIED, 0, REFUSE)))[0]
   expect(fired).toMatchObject({ step: 5, outcome: 'refuse', state: 'retried' })
   expect(plan(w.db, 1)).toMatchObject({ step: 2, retries: 1 })
   expect(planFile(w.root, 'refusal.md')).toContain(WORDS)
 
   const walked: string[] = []
-  for (let at = 0; at < 4; at += 1) walked.push((await tick(w.db, w.root, stub(CARRIED)))[0]?.name ?? '')
+  for (let at = 0; at < 4; at += 1) walked.push((await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]?.name ?? '')
   expect(walked).toEqual(['build', 'rails', 'review', 'senior'])
 })
 
@@ -352,7 +359,7 @@ test('six ticks walk a plan from measure to Ready on one seat run and no tokens 
   approve(w.db, w.target)
   const walked: string[] = []
   for (const at of [0, 1, 2, 3, 4, 5]) {
-    const fired = (await tick(w.db, w.root, stub(CARRIED)))[0]
+    const fired = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1)))[0]
     expect(fired).toMatchObject({ step: at, outcome: 'pass' })
     walked.push(fired?.name ?? '')
   }
@@ -365,14 +372,14 @@ test('six ticks walk a plan from measure to Ready on one seat run and no tokens 
 test('step 6 sends the branch to our fork, waits out a run still going, then records ci-green and ready', async () => {
   const w = world()
   approve(w.db, w.target)
-  for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED))
   const sent: string[] = []
+  for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched(sent, w.root, 1))
 
   const held = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined,
     watched(sent, w.root, 1, runsOn(w.root, 1, 'in_progress'))))[0]
   expect(held).toMatchObject({ step: 6, name: 'ready', outcome: 'pass', state: 'running' })
   expect(held?.spans).toEqual([`${RUN} ci.pending`])
-  expect(sent).toEqual(['send src widget-12-a1', 'rehearse caliperforge/widget widget-12-a1'])
+  expect(sent.slice(2)).toEqual(['send src widget-12-a1'])
   expect(plan(w.db, 1).step).toBe(6)
   expect(w.db.prepare("SELECT count(*) AS n FROM verdicts WHERE plan = 1 AND rail_id = 'ci-green'").get())
     .toEqual({ n: 0 })
@@ -384,10 +391,27 @@ test('step 6 sends the branch to our fork, waits out a run still going, then rec
     .toEqual([{ rail_id: 'ci-green', gate: 'ready', outcome: 'pass' }, { rail_id: 'ready', gate: 'ready', outcome: 'pass' }])
 })
 
+test('step 3\'s pass sends and rehearses the branch before review fires, and step 6 opens no second rehearsal', async () => {
+  const w = world()
+  approve(w.db, w.target)
+  const sent: string[] = []
+  const branches: string[] = []
+  const runs = runsOn(w.root, 1)
+  const wire = watched(sent, w.root, 1, (args) => { branches.push(String(args[args.indexOf('--branch') + 1])); return runs(args) })
+  for (let at = 0; at < 4; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  expect(plan(w.db, 1).step).toBe(4)
+  expect(sent).toEqual(['send src widget-12-a1', 'rehearse caliperforge/widget widget-12-a1'])
+
+  for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  expect(plan(w.db, 1).step).toBe(7)
+  expect(sent.slice(2)).toEqual(['send src widget-12-a1'])
+  expect(branches).toEqual(['widget-12-a1'])
+})
+
 test('a red run on the fork sends the plan to the builder with the failed log', async () => {
   const w = world()
   approve(w.db, w.target)
-  for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
   const red = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined,
     watched([], w.root, 1, runsOn(w.root, 1, 'completed', 'failure'))))[0]
   expect(red).toMatchObject({ step: 6, name: 'ready', outcome: 'refuse', state: 'retried' })
@@ -401,7 +425,7 @@ test('a red run on the fork sends the plan to the builder with the failed log', 
 test('a fork still red after a rebuild that changed nothing stops instead of cycling', async () => {
   const w = world()
   approve(w.db, w.target)
-  for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
   const wire = watched([], w.root, 1, runsOn(w.root, 1, 'completed', 'failure'))
   const lap = async (): Promise<string | undefined> => (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]?.state
 
@@ -415,7 +439,7 @@ test('a fork still red after a rebuild that changed nothing stops instead of cyc
 test('a run still going is waited on past the first-run window', async () => {
   const w = world()
   approve(w.db, w.target)
-  for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
   const wire = watched([], w.root, 1, runsOn(w.root, 1, 'in_progress', ''))
   let last
   for (let at = 0; at < 11; at += 1) last = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
@@ -428,7 +452,7 @@ test('a run still going is waited on past the first-run window', async () => {
 test('the push window is waited out: no run at the new head holds step 6, the run that appears is judged', async () => {
   const w = world()
   approve(w.db, w.target)
-  for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
   const sent: string[] = []
   const wire = watched(sent, w.root, 1, runsAfter(w.root, 1, 2))
 
@@ -446,13 +470,13 @@ test('the push window is waited out: no run at the new head holds step 6, the ru
   expect(w.db.prepare("SELECT outcome FROM verdicts WHERE plan = 1 AND rail_id = 'ci-green'").get())
     .toEqual({ outcome: 'pass' })
   expect(plan(w.db, 1).step).toBe(7)
-  expect(sent).toHaveLength(6)
+  expect(sent).toHaveLength(4)
 })
 
 test('a head still runless after the window is refused on ci-green, not waited on forever', async () => {
   const w = world()
   approve(w.db, w.target)
-  for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
   const wire = watched([], w.root, 1, () => '[]')
   for (let at = 0; at < 10; at += 1) {
     expect((await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0])
@@ -469,7 +493,7 @@ test('a head still runless after the window is refused on ci-green, not waited o
 test('step 6 refuses a plan with no deliverable row instead of sending the branch and raising', async () => {
   const w = world()
   approve(w.db, w.target)
-  for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
   w.db.prepare('DELETE FROM deliverables WHERE plan_id = 1').run()
   const sent: string[] = []
 
@@ -481,8 +505,8 @@ test('step 6 refuses a plan with no deliverable row instead of sending the branc
 test('every run row points at a transcript the provider wrote', async () => {
   const w = world()
   approve(w.db, w.target)
-  for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED))
-  const rows = w.db.prepare('SELECT seat, step, transcript_path FROM runs ORDER BY id').all() as
+  for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
+  const rows =w.db.prepare('SELECT seat, step, transcript_path FROM runs ORDER BY id').all() as
     { seat: string; step: number; transcript_path: string }[]
   expect(rows.map((r) => r.step)).toEqual([1, 2, 4, 5])
   for (const r of rows) {
@@ -512,7 +536,9 @@ test('the ticket ids a rail expects come off the issue, falling back to D1', () 
 test('cf brief and cf plan bind the plan they are asked for', async () => {
   const w = world()
   approve(w.db, w.target)
-  for (const step of [0, 1, 2, 3]) expect((await tick(w.db, w.root, stub(CARRIED)))[0]?.step).toBe(step)
+  for (const step of [0, 1, 2, 3]) {
+    expect((await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1)))[0]?.step).toBe(step)
+  }
   expect(runsOf(w.db, 1).map((r) => r.step)).toEqual([1, 2])
   expect(runsOf(w.db, 99)).toEqual([])
   expect(verdictsOf(w.db, 1).map((v) => v.gate)).toEqual(Array<string>(6).fill('pre_review'))

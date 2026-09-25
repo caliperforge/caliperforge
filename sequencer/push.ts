@@ -67,13 +67,7 @@ const REHEARSED = 'ci.next'
  */
 export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire = WIRE): Outcome | null {
   if (internal(plan) && !workflows(srcDir(root, plan.id))) return checked(db, root, plan, repo)
-  const open = !internal(plan) && opened(db, plan.id) !== null
-  const fork = `${FORK}/${repoName(repo)}`
-  if (!internal(plan)) (open ? follow : squash)(root, plan.id)
-  if (!internal(plan) && !open) renamed(srcDir(root, plan.id), fork, wire)
-  const head = headOf(root, plan.id)
-  const ci = open ? rehearsal(root, plan.id, fork, head, wire) : head.branch
-  wire.send(head.dir, open ? `HEAD:refs/heads/${ci}` : head.branch)
+  const { fork, head, ci } = sent(db, root, plan, repo, wire)
   if (!internal(plan)) wire.rehearse?.(fork, ci)
   const { verdict, board } = judge({ fork, branch: ci, sha: head.sha },
     { body: '', commits: commits(head.dir) }, touched(root, plan.id), wire.runs)
@@ -91,6 +85,24 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
   if (failed === null) return null
   return { outcome: 'refuse', spans: failed.spans, message: failed.log, to: 2,
     note: `their CI is red on ${fork}@${head.sha.slice(0, 12)}; back to the builder with the failed log` }
+}
+
+/** Step 3's pass opens the rehearsal: a review bot reads only an open pull request. */
+export function reviewable(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire = WIRE): void {
+  if (internal(plan)) return
+  const { fork, ci } = sent(db, root, plan, repo, wire)
+  wire.rehearse?.(fork, ci)
+}
+
+function sent(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire): { fork: string; head: Head; ci: string } {
+  const open = !internal(plan) && opened(db, plan.id) !== null
+  const fork = `${FORK}/${repoName(repo)}`
+  if (!internal(plan)) (open ? follow : squash)(root, plan.id)
+  if (!internal(plan) && !open) renamed(srcDir(root, plan.id), fork, wire)
+  const head = headOf(root, plan.id)
+  const ci = open ? rehearsal(root, plan.id, fork, head, wire) : head.branch
+  wire.send(head.dir, open ? `HEAD:refs/heads/${ci}` : head.branch)
+  return { fork, head, ci }
 }
 
 /** A repo GitHub runs no workflow for: nothing on the fork will ever show a run at the head. */

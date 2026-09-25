@@ -30,7 +30,7 @@ import { homeOf } from './home.ts'
  * `CHAIN_MINUTES`, and a test that leaves it at 0 still sees one step per tick.
  */
 export async function tick(db: Db, root: string, provider: Provider, now: Date = new Date(),
-  read: (repo: string, no: number) => Pr = readPr, wire?: Wire, chain = 0, labels?: Read): Promise<Fired[]> {
+  read: (repo: string, no: number) => Pr = readPr, wire?: Wire, chain = 0, labels?: Read, each = Infinity): Promise<Fired[]> {
   for (const signal of capture(db, read)) started(db, signal, root)
   if (labels !== undefined) intake(db, root, labels)
   reap(root, terminal(db))
@@ -40,10 +40,16 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
     .map((pipe) => ({ pipe, routed: live(db, pipe).map((plan) => ({ plan, route: route(db, plan, now) })) }))
   waiting(db, lanes.flatMap((l) => l.routed.map(({ plan, route: r }) =>
     'fire' in r ? { plan: plan.id, why: null } : { plan: plan.id, why: r.wait, on: r.on })))
-  for (const { pipe, routed } of lanes) {
-    const mine = leased(db, routed.filter((r) => stepping(r.route)), now)
-    const laps = await Promise.all(mine.map((m) => one(db, root, pipe, m, m.lease, provider, wire, chain)))
-    out.push(...laps.flat())
+  if (Number.isFinite(each)) {
+    const laps = lanes.flatMap(({ pipe, routed }) => leased(db, routed.filter((r) => stepping(r.route)), now, each)
+      .map((m) => one(db, root, pipe, m, m.lease, provider, wire, chain)))
+    out.push(...(await Promise.all(laps)).flat())
+  } else {
+    for (const { pipe, routed } of lanes) {
+      const mine = leased(db, routed.filter((r) => stepping(r.route)), now)
+      const laps = await Promise.all(mine.map((m) => one(db, root, pipe, m, m.lease, provider, wire, chain)))
+      out.push(...laps.flat())
+    }
   }
   await woke(db, root, provider, now)
   return out
@@ -54,6 +60,13 @@ function stepping(r: Route): boolean {
   return 'fire' in r || 'over' in r
 }
 
+/**
+ * Jobs the live tick leases per lane. Step 3's checks run synchronously, so every job in one tick waited on the slowest
+ * test run: on 09-25 one job's suite froze five others for 20+ minutes, and the Atelier lane waited behind the machine
+ * lane. One job per lane per tick puts each job in its own process; the tick fires every minute, so the lanes fill in minutes.
+ */
+export const EACH = 1
+
 /** The live tick's budget for one job: well inside the lease ceiling, and long enough for a whole lap short of CI. */
 export const CHAIN_MINUTES = 45
 
@@ -61,11 +74,14 @@ export const CHAIN_MINUTES = 45
 const STEPS = 20
 
 /** #65: the picks this tick won the lease on; one another live tick holds is left where it stands. */
-function leased(db: Db, picks: Leg[], now: Date): (Leg & { lease: Taken })[] {
-  return picks.flatMap((pick) => {
+function leased(db: Db, picks: Leg[], now: Date, each = Infinity): (Leg & { lease: Taken })[] {
+  const out: (Leg & { lease: Taken })[] = []
+  for (const pick of picks) {
+    if (out.length >= each) break
     const lease = take(db, pick.plan.id, now)
-    return lease === null ? [] : [{ ...pick, lease }]
-  })
+    if (lease !== null) out.push({ ...pick, lease })
+  }
+  return out
 }
 
 interface Leg {

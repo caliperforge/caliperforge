@@ -118,3 +118,16 @@ function wideBrief(paths: string[]): string {
     '## Who else reads what this changes', '', '- nobody else', '', '## Tests', '', '- src/a.ts — the case', '',
     '## Out of scope', '', '- z', '', '## Standing', '', ...STANDING, ''].join('\n')
 }
+
+test('parts carry the parent priority label', async () => {
+  const w = mine()
+  w.db.prepare('UPDATE plans SET priority = 0 WHERE id = ?').run(ID)
+  const labels: string[][] = []
+  const wire = (id: number) => {
+    const inner = watched([], w.root, id)
+    return { ...inner, file: (...a: Parameters<typeof inner.file>) => { labels.push(a[3]); return inner.file(...a) } }
+  }
+  await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire(ID))
+  await tick(w.db, w.root, stub(CARRIED, 0, undefined, undefined, PARTS), undefined, undefined, wire(ID))
+  expect(labels).toEqual([['lane:machine', 'P0'], ['lane:machine', 'P0']])
+})

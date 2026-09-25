@@ -20,6 +20,8 @@ export interface Outcome {
   to?: number
   parts?: Part[]
   split?: true
+  /** Main moved under the branch: nobody's fault, so never `shared` or `repeat` (plans 143 and 155 turned atelier off, 09-25). */
+  moved?: true
 }
 
 export interface Fired {

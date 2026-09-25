@@ -65,3 +65,21 @@ test('a stall alerts once, and its end alerts once', () => {
   expect(posted.at(-1)).toBe('CaliperForge · the machine is running again')
   expect(existsSync(join(root, '.cf/watch.alerted'))).toBe(false)
 })
+
+test('a lane switched off with jobs in it alerts once, and not again until it is back on', () => {
+  const db = world()
+  const root = mkdtempSync(join(tmpdir(), 'cf-lanes-'))
+  tickAt(db, 0)
+  db.prepare(`INSERT INTO plans (id, pipe_id, template, state, queued_at, step, lane, seat, origin)
+    SELECT 1, id, 'pr_path', 'running', '2026-09-25', 2, 'machine', 'typescript_specialist', 'https://github.com/caliperforge/caliperforge/issues/1' FROM pipes WHERE name = 'pr-path'`).run()
+  db.prepare("UPDATE pipes SET enabled = 0 WHERE name = 'pr-path'").run()
+  const posted: string[] = []
+  const post = (title: string, body: string): void => void posted.push(`${title}: ${body}`)
+  watch(db, root, NOW, post)
+  watch(db, root, NOW, post)
+  expect(posted).toHaveLength(1)
+  expect(posted[0]).toContain('pr-path (1 job waiting)')
+  db.prepare("UPDATE pipes SET enabled = 1 WHERE name = 'pr-path'").run()
+  watch(db, root, NOW, post)
+  expect(existsSync(join(root, '.cf/watch.lanes'))).toBe(false)
+})

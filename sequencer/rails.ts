@@ -91,7 +91,7 @@ function broke(failed: Failure): Outcome {
   return {
     outcome: 'refuse',
     spans: [`checks:${failed.script}`],
-    note: `${failed.command} exit ${String(failed.code)}${failed.retried ? ' after one retry' : ''}`,
+    note: `${failed.command} exit ${failed.code}${failed.retried ? ' after one retry' : ''}`,
     message: failed.output,
   }
 }

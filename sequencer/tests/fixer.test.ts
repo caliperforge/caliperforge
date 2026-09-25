@@ -212,3 +212,17 @@ test('wait on a closed job escalates', async () => {
   expect(waitsOn(db)).toEqual({ waits_on: null })
   expect(posted).toHaveLength(1)
 })
+
+test('gone checkout, outside plan: to a person', async () => {
+  const { db, home } = seeded('live')
+  db.exec(`INSERT INTO accounts (id, repo, measured_at, maintainers, doors, last_outsider_merge, open_pr_age_p50_days,
+    cross_repo_activity, pulse, evidence) VALUES (1, 'acme/kit', '2026-09-24', 2, 1, '2026-09-24', 3, 4, 'warm', 'https://github.com/acme/kit');
+    INSERT INTO targets (id, account_id, repo, issue_no, named_merger, state, evidence_measured_at, evidence)
+    VALUES (1, 1, 'acme/kit', 706, 'ludo', 'ready', '2026-09-24', 'https://github.com/acme/kit/issues/706')`)
+  db.exec("UPDATE plans SET target_id = 1, lane = NULL, seat = NULL, origin = NULL WHERE id = 7")
+  rmSync(join(home, '.cf/work/7/src'), { recursive: true })
+  const packets: Packet[] = []
+  await woke(db, home, stub('---\ndid: nothing\nthen: rebuild\nwhy: x\n---\n', packets), now, () => undefined, wire([]))
+  expect(packets.some((p) => basename(p.transcript).startsWith('fixer'))).toBe(true)
+  expect(state(db)).toEqual({ state: 'blocked_on_ceo', step: 4 })
+})

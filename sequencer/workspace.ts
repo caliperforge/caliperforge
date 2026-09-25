@@ -137,8 +137,7 @@ export function fetchMain(dir: string): string {
 }
 
 /** Whether the branch was cut from a `main` that has since moved on without it. */
-export function behindMain(dir: string): boolean {
-  const main = git(dir, ['rev-parse', MAIN]).trim()
+export function behindMain(dir: string, main: string): boolean {
   return git(dir, ['merge-base', 'HEAD', MAIN]).trim() !== main
 }
 
@@ -329,7 +328,8 @@ export function carried(root: string, plan: number): string | null {
 
 /** Without a real checkout the workspace starts empty, so every file in it is an addition. */
 export function diffOf(root: string, plan: number): string {
-  return carried(root, plan) ?? live(root, plan)
+  const diff = live(root, plan)
+  return diff.trim() === '' ? maybe(root, plan, CARRY) ?? diff : diff
 }
 
 function live(root: string, plan: number): string {

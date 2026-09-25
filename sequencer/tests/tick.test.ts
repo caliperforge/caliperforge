@@ -10,7 +10,8 @@ import { clock, inWindow, rewind, underCap, waiting, type PipeRow, type PlanRow,
 import { at, steps } from '../../templates/pr-path.ts'
 import { tick } from '../index.ts'
 import { blocked, kernel } from '../steps.ts'
-import { diffOf, doneIds, narrowing, snapshot, srcDir } from '../workspace.ts'
+import { diffOf, doneIds, get, narrowing, put, snapshot, srcDir } from '../workspace.ts'
+import { GREEN } from '../base.ts'
 import { record } from '../../store/files.ts'
 import { benchPacket } from '../../runner/packet.ts'
 import type { Packet, Provider } from '../../providers/kind.ts'
@@ -498,12 +499,14 @@ test('a fork still red after a rebuild that changed nothing stops instead of cyc
   expect(await lap()).toBe('blocked_on_ceo')
 })
 
-/** Green at a head G, then rebuilt to a head H at step 6 that the fork lists red on Validate, with G's run as `g` says. */
+/** Green at a head G on its own branch, then rebuilt to a head H at step 6 that the fork lists red on Validate, with G's run as `g` says. */
 const redOnBase = async (g: { status: string; conclusion: string }, log: string[]): Promise<[World, Wire]> => {
   const w = world()
   approve(w.db, w.target)
   for (let at = 0; at < 7; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
-  const wire = watched([], w.root, 1, rerunning(log, w.root, 1, head(srcDir(w.root, 1), ['rev-parse', 'HEAD']), g))
+  put(w.root, 1, GREEN, get(w.root, 1, GREEN).replace(/^\S+/, 'rehearsal'))
+  const base = { branch: 'rehearsal', sha: head(srcDir(w.root, 1), ['rev-parse', 'HEAD']) }
+  const wire = watched([], w.root, 1, rerunning(log, w.root, 1, base, g))
   rewind(w.db, 1, 2)
   await tick(w.db, w.root, builds(() => { built(w.root, 1, 'export const again = 1') }), undefined, undefined, wire)
   for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)

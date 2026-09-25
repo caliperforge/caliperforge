@@ -149,7 +149,7 @@ function freshBase(db: Db, root: string, plan: PlanRow): Outcome | null {
   if (!cloned(src) || shown(db, plan)) return null
   if (conflicted(src)) abortMerge(src)
   const main = fetchMain(src)
-  if (!behindMain(src)) return null
+  if (!behindMain(src, main)) return null
   const paths = takeMain(db, root, plan, src, main, at(plan.step).step)
   if (paths === null) return null
   recut(root, plan.id)
@@ -218,7 +218,7 @@ function baseMoved(db: Db, root: string, plan: PlanRow): Outcome | null {
   if (!cloned(src) || shown(db, plan)) return null
   if (conflicted(src)) return cutAgain('base:conflict', 'the checkout has unmerged paths from a tick that stopped mid-merge')
   const main = fetchMain(src)
-  if (!behindMain(src)) return null
+  if (!behindMain(src, main)) return null
   if (maybe(root, plan.id, 'base.merged') !== null) return cutAgain('base:stale', 'the branch is behind main a second time')
   if (takeMain(db, root, plan, src, main, at(plan.step).step) !== null) return cutAgain('base:conflict', 'the branch conflicts with main')
   put(root, plan.id, 'base.merged', `${main}\n`)

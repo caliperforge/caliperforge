@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
@@ -499,6 +499,18 @@ test('step 6 refuses a plan with no deliverable row instead of sending the branc
 
   expect(kernel(w.db, w.root, plan(w.db, 1), watched(sent, w.root, 1)))
     .toMatchObject({ outcome: 'refuse', spans: ['deliverables'] })
+  expect(sent).toEqual([])
+})
+
+test('step 6 refuses a plan whose checkout is missing instead of staging in the parent repo', async () => {
+  const w = world()
+  approve(w.db, w.target)
+  for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
+  rmSync(join(srcDir(w.root, 1), '.git'), { recursive: true, force: true })
+  const sent: string[] = []
+
+  expect(kernel(w.db, w.root, plan(w.db, 1), watched(sent, w.root, 1)))
+    .toMatchObject({ outcome: 'refuse', spans: ['checkout'] })
   expect(sent).toEqual([])
 })
 

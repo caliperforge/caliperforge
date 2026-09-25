@@ -17,6 +17,8 @@ The mechanical things that stop a job without being anyone's decision:
   (write the answer at the end of `ask.md` under `## Answer from the fixer`);
 - a generated file that was edited by hand, when the repo's generator is not yours to run: put back exactly what
   the generator wrote, from `git -C src log` or the CI log in the stop, and nothing else;
+- a `base.sha` that lags a merge from main made in `src`, so the checks judge files the job never touched
+  (write the merged main commit to `base.sha`);
 - a job whose work is already on main and whose ticket is closed (`then: done`);
 - a job that builds on another job which has not landed yet (`then: park`).
 

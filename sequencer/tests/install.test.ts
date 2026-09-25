@@ -20,14 +20,14 @@ function recording(at: Places, log: string[], fails?: string): Run {
   return (...[args, , bin = 'npm']) => {
     const name = bin === 'git' ? `git ${args[0] ?? ''}` : bin
     log.push(`${name} ${held(at)}`)
-    if (name === fails) return { code: 1, output: 'error: it broke' }
+    if (name === fails) return { ok: false, code: '1', output: 'error: it broke' }
     if (name === 'git clone') mkdirSync(join(at.clone, '.git'), { recursive: true })
     if (bin === 'xcodebuild') {
       const built = join(at.derived, 'Build/Products/Release/Atelier.app')
       mkdirSync(built, { recursive: true })
       writeFileSync(join(built, 'build'), 'new')
     }
-    return { code: 0, output: '' }
+    return { ok: true, output: '' }
   }
 }
 

@@ -14,6 +14,8 @@ import { wall } from '../store/lanes.ts'
 import { PlanRow } from '../store/plans.ts'
 import { pending } from '../store/transcript.ts'
 import { act, applying } from './act.ts'
+import { fixer } from './fixer.ts'
+import { WIRE, type Wire } from './push.ts'
 import { maybe, planDir, put } from './workspace.ts'
 
 export const WAKE = ['token_ceiling', 'ready_proof', 'target_parked', 'no_step_map'] as const
@@ -29,7 +31,7 @@ const Answer = z.object({
 type Answer = z.infer<typeof Answer>
 
 /** #238: once `orchestrator.apply` is on, a decision is acted on as soon as it is made. The lease keeps two overlapping ticks off one stop. */
-export async function woke(db: Db, root: string, provider: Provider, now: Date, post: Post = alerter()): Promise<void> {
+export async function woke(db: Db, root: string, provider: Provider, now: Date, post: Post = alerter(), wire: Wire = WIRE): Promise<void> {
   const rows = db.prepare(`SELECT * FROM plans WHERE (wait_reason IN (${WAKE.map(() => '?').join(', ')})
     AND state IN ('queued', 'running', 'blocked_on_ceo')) OR state = 'blocked_on_ceo' ORDER BY id`).all(...WAKE)
   for (const plan of rows.map((r) => PlanRow.parse(r))) {
@@ -40,11 +42,19 @@ export async function woke(db: Db, root: string, provider: Provider, now: Date, 
     try {
       const got = await decide(db, root, plan, reason, provider, now)
       put(root, plan.id, 'orchestrator.md', `${head}\n\n${stringify('id' in got ? got.answer : got)}`)
-      if ('id' in got && applying(db)) act(db, root, plan, { id: got.id, ...got.answer }, ticketOf(db, plan.id), now, post)
+      if ('id' in got && applying(db)) await handle(db, root, plan, { id: got.id, ...got.answer }, provider, now, post, wire)
     } finally {
       unlease(db, plan.id)
     }
   }
+}
+
+/** An `ask_coo` goes to the fixer first; what it does not take is acted on or escalated as before. */
+async function handle(db: Db, root: string, plan: PlanRow, d: { id: number; verb: Verb; why: string }, provider: Provider,
+  now: Date, post: Post, wire: Wire): Promise<void> {
+  const ticket = ticketOf(db, plan.id)
+  const fixed = d.verb === 'ask_coo' && await fixer(db, root, plan, d, ticket, provider, now, post, wire)
+  if (!fixed) act(db, root, plan, d, ticket, now, post)
 }
 
 function woken(plan: PlanRow): Woken {

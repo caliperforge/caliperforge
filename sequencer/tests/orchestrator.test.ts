@@ -122,7 +122,7 @@ test('#246 the packet carries the words the plan stopped with', async () => {
     fire: (packet) => {
       packets.push(JSON.stringify(packet))
       return Promise.resolve({ text: VALID, transcript_path: packet.transcript, usage: { input: 1, cache: 0, output: 1 },
-        seconds: 0, exit: 0, stop_reason: 'end_turn', denials: 0 })
+        seconds: 0, ended: 'completed', exit: 0, stop_reason: 'end_turn', denials: 0 })
     },
   }
   await woke(db, home, provider, now)

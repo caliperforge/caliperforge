@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path'
 import { hostValue } from '../providers/credential.ts'
 import type { Db } from '../store/index.ts'
 import { hhmm, zone } from '../store/lanes.ts'
-import { clock, openPipes } from '../store/plans.ts'
+import { clock, inWindow, openPipes, PipeRow } from '../store/plans.ts'
 
 /** #251. Inside an open window a real tick lands every minute; ten without one means the machine is down, not idle. */
 export const STALE_MINUTES = 10
@@ -14,6 +14,8 @@ export const CRASHED = 'crashed: '
 
 /** Set while an alert is out, so a stall alerts once and its end alerts once. */
 const MARK = '.cf/watch.alerted'
+
+const LANES = '.cf/watch.lanes'
 
 export interface Liveness {
   at: string | null
@@ -41,6 +43,18 @@ export function livenessLine(db: Db, l: Liveness): string {
 
 export type Post = (title: string, body: string) => void
 
+/**
+ * A lane the shared-failure rule switched off keeps ticking with nothing to fire: alive, and stalled. On 09-25
+ * two false run-wall stops turned `internal` off at 08:21 and five jobs sat until 08:55 with every tick green.
+ */
+export function stalledLanes(db: Db, now: Date): string[] {
+  const at = hhmm(db, now)
+  const rows = db.prepare(`SELECT p.*, count(pl.id) AS jobs FROM pipes p JOIN plans pl ON pl.pipe_id = p.id
+    WHERE p.enabled = 0 AND pl.state IN ('queued', 'running') GROUP BY p.id ORDER BY p.id`).all() as (Record<string, unknown> & { jobs: number })[]
+  return rows.filter((r) => inWindow(PipeRow.parse({ ...r, jobs: undefined }), at))
+    .map((r) => `${String(r.name)} (${String(r.jobs)} job${r.jobs === 1 ? '' : 's'} waiting)`)
+}
+
 /** One alert when the machine goes down and one when it comes back; every run in between is silent. */
 export function watch(db: Db, root: string, now: Date, post: Post): Liveness {
   const l = liveness(db, now)
@@ -53,7 +67,21 @@ export function watch(db: Db, root: string, now: Date, post: Post): Liveness {
     post('CaliperForge · the machine is running again', livenessLine(db, l).replace(/^tick\t/, '').trim())
     rmSync(mark)
   }
+  lanes(db, root, now, post)
   return l
+}
+
+function lanes(db: Db, root: string, now: Date, post: Post): void {
+  const off = stalledLanes(db, now)
+  const mark = join(root, LANES)
+  const was = existsSync(mark)
+  if (off.length > 0 && !was) {
+    post('CaliperForge · a lane is off with work in it', `${off.join(', ')}. A shared failure switched it off; cf pipe on <lane> once it is looked at.`)
+    mkdirSync(dirname(mark), { recursive: true })
+    writeFileSync(mark, off.join('\n'))
+  } else if (off.length === 0 && was) {
+    rmSync(mark)
+  }
 }
 
 /** The desktop banner, and an iMessage when the host's env file names `IMESSAGE_NOTIFY_TO`: the channel that reaches a phone. */

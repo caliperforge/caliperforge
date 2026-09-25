@@ -31,7 +31,7 @@ import { measure, render as renderPulse } from './measure.ts'
 import { add as fileIssue, render as renderUnfiled, unfiled } from './plan.ts'
 import { add } from './queue.ts'
 import { close } from './session.ts'
-import { alerter, CRASHED, liveness, livenessLine, watch } from './watch.ts'
+import { alerter, CRASHED, liveness, livenessLine, stalledLanes, watch } from './watch.ts'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { version: string }
@@ -287,6 +287,7 @@ cf.command('halted').action(() => {
 cf.command('brief').action(() => {
   const handle = db()
   out(livenessLine(handle, liveness(handle, new Date())))
+  for (const lane of stalledLanes(handle, new Date())) out(`lane\tOFF with work: ${lane}\n`)
   out(laneLine(lanes(handle, hhmm(handle))))
   out(section('open plans', openPlans(handle)))
   out(section('halted', halted(handle)))

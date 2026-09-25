@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { parse, stringify } from 'yaml'
 import { z } from 'zod'
 import type { Provider, Refusal } from '../providers/kind.ts'
@@ -13,9 +14,7 @@ import { maybe, planDir, put } from './workspace.ts'
 
 export const WAKE = ['token_ceiling', 'ready_proof', 'target_parked', 'no_step_map'] as const
 
-const Waiting = PlanRow.extend({ wait_reason: z.enum(WAKE) })
-
-type Waiting = z.infer<typeof Waiting>
+type Woken = (typeof WAKE)[number] | 'blocked_on_ceo'
 
 const Answer = z.object({
   verb: z.enum(VERBS),
@@ -26,16 +25,27 @@ const Answer = z.object({
 type Answer = z.infer<typeof Answer>
 
 export async function woke(db: Db, root: string, provider: Provider, now: Date): Promise<void> {
-  const rows = db.prepare(`SELECT * FROM plans WHERE wait_reason IN (${WAKE.map(() => '?').join(', ')})
-    AND state IN ('queued', 'running', 'blocked_on_ceo') ORDER BY id`).all(...WAKE)
-  for (const plan of rows.map((r) => Waiting.parse(r))) {
-    const head = `step ${String(plan.step)} ${plan.wait_reason}`
+  const rows = db.prepare(`SELECT * FROM plans WHERE (wait_reason IN (${WAKE.map(() => '?').join(', ')})
+    AND state IN ('queued', 'running', 'blocked_on_ceo')) OR state = 'blocked_on_ceo' ORDER BY id`).all(...WAKE)
+  for (const plan of rows.map((r) => PlanRow.parse(r))) {
+    const reason = woken(plan)
+    const head = `step ${String(plan.step)} ${reason === 'blocked_on_ceo' ? `blocked ${stop(root, plan.id)}` : reason}`
     if (maybe(root, plan.id, 'orchestrator.md')?.split('\n')[0] === head) continue
-    put(root, plan.id, 'orchestrator.md', `${head}\n\n${stringify(await decide(db, root, plan, provider, now))}`)
+    put(root, plan.id, 'orchestrator.md', `${head}\n\n${stringify(await decide(db, root, plan, reason, provider, now))}`)
   }
 }
 
-async function decide(db: Db, root: string, plan: Waiting, provider: Provider, now: Date): Promise<Answer | Refusal> {
+function woken(plan: PlanRow): Woken {
+  return (WAKE as readonly string[]).includes(plan.wait_reason ?? '') ? plan.wait_reason as Woken : 'blocked_on_ceo'
+}
+
+/** #246: one stop is one refusal (or question) as written; the same words at the same step are the same stop. */
+function stop(root: string, plan: number): string {
+  const said = maybe(root, plan, 'refusal.md') ?? maybe(root, plan, 'question.md')
+  return said === null ? 'none' : createHash('sha256').update(said).digest('hex').slice(0, 12)
+}
+
+async function decide(db: Db, root: string, plan: PlanRow, reason: Woken, provider: Provider, now: Date): Promise<Answer | Refusal> {
   const woken = wake(db, root, plan.id, now)
   if ('refusal' in woken) return woken.refusal
   const { manifest, prompt } = seat(root, 'orchestrator')
@@ -46,7 +56,7 @@ async function decide(db: Db, root: string, plan: Waiting, provider: Provider, n
   })
   const answer = fired.exit === 0 ? read(fired.text) : refused('exit')
   if ('origin_kind' in answer) return answer
-  decided(db, { plan: plan.id, step: plan.step, wait_reason: plan.wait_reason, verb: answer.verb, why: answer.why,
+  decided(db, { plan: plan.id, step: plan.step, wait_reason: reason, verb: answer.verb, why: answer.why,
     evidence: answer.evidence ?? null, tokens: fired.usage.input + fired.usage.output })
   return answer
 }

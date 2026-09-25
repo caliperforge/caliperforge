@@ -31,7 +31,8 @@ function sections(db: Db, root: string, row: Row, now: Date): Section[] {
   return [
     ['card', card(root, row)],
     ['step', fields(row, ['step', 'retries'])],
-    ['verdict', verdict(db, root, row.id)],
+    ['verdict', verdict(db, root, row.id, row.state === 'blocked_on_ceo')],
+    ['stop', stopped(root, row)],
     ['refusals', rows(db, 'SELECT step, fingerprint, at FROM refusals WHERE plan = ? AND cleared = 0 AND blip = 0 ORDER BY id', row.id).join('\n') || 'none'],
     ['runs', runs(db, row.id)],
     ['queue', queue(db, row)],
@@ -43,13 +44,24 @@ function sections(db: Db, root: string, row: Row, now: Date): Section[] {
 
 function card(root: string, row: Row): string | null {
   const ask = maybe(root, row.id, 'ask.md')
-  return row.wait_reason === null || ask === null ? null : `${fields(row, CARD)}\n\n${ask}`
+  const waiting = row.wait_reason !== null || row.state === 'blocked_on_ceo'
+  return !waiting || ask === null ? null : `${fields(row, CARD)}\n\n${ask}`
 }
 
-function verdict(db: Db, root: string, plan: number): string | null {
+/** #246: what stopped a plan for a person, in the words it was stopped with. The orchestrator cannot judge a stop it cannot read. */
+export const STOP_CHARS = 6000
+
+function stopped(root: string, row: Row): string {
+  if (row.state !== 'blocked_on_ceo') return 'none'
+  const said = maybe(root, row.id, 'refusal.md') ?? maybe(root, row.id, 'question.md')
+  if (said === null) return 'none'
+  return said.length <= STOP_CHARS ? said : `${said.slice(0, STOP_CHARS)}\n\n[cut at ${String(STOP_CHARS)} characters]`
+}
+
+function verdict(db: Db, root: string, plan: number, blocked: boolean): string | null {
   const v = db.prepare(`SELECT gate, step, kind, outcome, origin_kind, origin_ref FROM verdicts
     WHERE plan = ? ORDER BY id DESC LIMIT 1`).get(plan) as { step: number; kind: string } & Record<string, Cell> | undefined
-  if (v === undefined) return null
+  if (v === undefined) return blocked ? 'none' : null
   const head = line(...Object.values(v))
   if (v.kind !== 'review') return head
   const fence = /^---\n[\s\S]*?\n---/.exec(maybe(root, plan, `step-${String(v.step)}.verdict.md`) ?? '')?.[0]
@@ -64,7 +76,7 @@ function runs(db: Db, plan: number): string | null {
 
 function queue(db: Db, row: Row): string | null {
   const first = live(db, PipeRow.parse(db.prepare('SELECT * FROM pipes WHERE id = ?').get(row.pipe_id))).at(0)
-  return first === undefined ? null : line(first.id, first.step, first.priority, first.wait_reason)
+  return first === undefined ? 'none' : line(first.id, first.step, first.priority, first.wait_reason)
 }
 
 function base(db: Db, root: string, plan: number): string | null {

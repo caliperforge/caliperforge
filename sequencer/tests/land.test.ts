@@ -7,8 +7,9 @@ import type { Packet } from '../../providers/kind.ts'
 import { headApproved } from '../../store/approvals.ts'
 import { last as lastMerge } from '../../store/merges.ts'
 import { tick } from '../index.ts'
+import { LAPS } from '../steps.ts'
 import { headOf, land, type Wire } from '../push.ts'
-import { CARRY, carried, cloned, conflicted, diffOf, fetchMain, get, liveTree, maybe, MAIN, srcDir } from '../workspace.ts'
+import { CARRY, carried, cloned, conflicted, diffOf, fetchMain, get, liveTree, maybe, MAIN, put, srcDir } from '../workspace.ts'
 import { approve, built, CARRIED, internalPlan, moveMain, ours, PASS, plan, stub, watched, world, type World } from './world.ts'
 
 const ID = 2
@@ -120,7 +121,7 @@ test('main moving between ready and batch rewinds to the rails and lands as a fa
   expect(headApproved(w.db, sha)).toBe(true)
 })
 
-test('a branch that conflicts with a moved main refuses at batch, aborts the merge and closes nothing', async () => {
+test('conflict at batch: back to rails, merge aborted, nothing closed', async () => {
   const w = mine()
   const sent: string[] = []
   const wire = watched(sent, w.root, ID)
@@ -129,7 +130,8 @@ test('a branch that conflicts with a moved main refuses at batch, aborts the mer
 
   const refused = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
   const src = srcDir(w.root, ID)
-  expect(refused).toMatchObject({ step: 7, outcome: 'refuse', spans: ['base:conflict'] })
+  expect(refused).toMatchObject({ step: 7, outcome: 'pass', spans: ['base:conflict'] })
+  expect(plan(w.db, ID).step).toBe(3)
   expect(git(src, ['status', '--porcelain'])).toBe('')
   expect(git(src, ['rev-parse', '--abbrev-ref', 'HEAD'])).toBe(BRANCH)
   expect(git(src, ['diff', '--name-only', '--diff-filter=U'])).toBe('')
@@ -173,7 +175,7 @@ test('an external plan does not land: step 7 still waits for the ceo and step 8 
   expect(git(srcDir(w.root, 1), ['rev-parse', '--abbrev-ref', 'HEAD'])).toBe('widget-12-a1')
 })
 
-test('a base behind main merges main and re-runs the rails once, then refuses on the second miss', async () => {
+test('behind main twice: rails merge it again', async () => {
   const w = mine()
   const wire = watched([], w.root, ID)
   for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
@@ -188,10 +190,25 @@ test('a base behind main merges main and re-runs the rails once, then refuses on
   for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
   expect(plan(w.db, ID).step).toBe(6)
   moveMain(w.root, 'second.ts')
+  const again = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
+  expect(again).toMatchObject({ step: 6, outcome: 'pass', spans: ['base:stale'] })
+  expect(plan(w.db, ID).step).toBe(3)
+  for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  expect(plan(w.db, ID).step).toBe(6)
+  expect(git(srcDir(w.root, ID), ['log', '--oneline', BRANCH])).toContain('main moves on second.ts')
+  expect(headOf(w.root, ID).branch).toBe(BRANCH)
+})
+
+test('behind main past the lap cap: refused', async () => {
+  const w = mine()
+  const wire = watched([], w.root, ID)
+  for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  put(w.root, ID, 'base.merged', 'x\n')
+  put(w.root, ID, 'base.laps', 'base:stale\n'.repeat(LAPS))
+  moveMain(w.root, 'late.ts')
   const refused = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
   expect(refused).toMatchObject({ step: 6, outcome: 'refuse', spans: ['base:stale'] })
-  expect(refused?.note).toContain('behind main a second time')
-  expect(headOf(w.root, ID).branch).toBe(BRANCH)
+  expect(refused?.note).toContain('have not caught main up')
 })
 
 test('a stale tree merges main before the rails read it and records the new base, in one tick', async () => {

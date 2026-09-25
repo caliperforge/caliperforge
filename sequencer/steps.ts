@@ -15,7 +15,9 @@ import type { Outcome } from './kind.ts'
 import { preReview } from './rails.ts'
 import { forkCi, headOf, land, opened, push, reviewable, title, type Wire } from './push.ts'
 import { following } from './split.ts'
-import { abortMerge, behindMain, cloned, conflicted, diffOf, fetchMain, get, maybe, merging, mergeMain, put, recut, srcDir, unmerged } from './workspace.ts'
+import { abortMerge, behindMain, cloned, conflicted, diffOf, diffSince, fetchMain, get, holds, maybe, merging, mergeMain, narrowing, put, recut, srcDir,
+  unmerged } from './workspace.ts'
+import { classify } from './delta.ts'
 import { homeOf } from './home.ts'
 
 interface Target { repo: string; issue_no: number; state: string; measured_at: string; pulse: string }
@@ -190,13 +192,31 @@ function takeMain(db: Db, root: string, plan: PlanRow, src: string, main: string
   return null
 }
 
+export function kept(db: Db, root: string, plan: PlanRow, step: Step): Outcome | null {
+  return merged(db, root, plan, step) ?? (step.step === 5 ? skipped(db, root, plan.id) : null)
+}
+
+/** #199: a rework whose delta since senior's pass is comments or docs alone keeps that pass. */
+function skipped(db: Db, root: string, plan: number): Outcome | null {
+  const given = lastReview(db, plan, 'senior_review')
+  const passed = maybe(root, plan, 'step-5.passed.diff')
+  const src = srcDir(root, plan)
+  if (given?.outcome !== 'pass' || given.tree === null || passed === null || !holds(src, given.tree)) return null
+  const changed = narrowing(src, given.tree, get(root, plan, 'base.sha').trim()).changed
+  const { mode, why } = classify(passed, diffSince(src, given.tree), changed)
+  if (mode !== 'comment') return null
+  keep(db, plan, 5, 'senior_review', given, null)
+  put(root, plan, 'step-5.mode', `skipped: ${why}\n`)
+  return { outcome: 'pass', spans: [], note: `senior_review skipped: ${why}` }
+}
+
 /**
  * #131. A merge git took without help, that brought in no file the job changed, leaves the job's own diff
  * byte-identical: the reviewers already passed exactly these bytes, so their verdict stands and no seat is
  * fired. The rails and checks still run on the merged tree at step 3. Kept only for a verdict given before
  * that merge, and only while the diff is the one senior passed; anything else is a full review as before.
  */
-export function kept(db: Db, root: string, plan: PlanRow, step: Step): Outcome | null {
+function merged(db: Db, root: string, plan: PlanRow, step: Step): Outcome | null {
   const gate = step.verdict_gate
   const merge = lastMerge(db, plan.id)
   if (gate === null || merge === null || !merge.clean || merge.overlap || merge.verdict === null) return null

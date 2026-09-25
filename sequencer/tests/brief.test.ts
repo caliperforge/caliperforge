@@ -97,6 +97,13 @@ test('a brief asking the builder to run, count or report anything needing a shel
   expect(on(saying('- report the git log for the branch'))?.reason).toContain(shell)
 })
 
+test('shell: code that runs a command is not an ask', () => {
+  expect(on(saying('- the ready gate runs git add in the parent repo when src is missing'))).toBeNull()
+  expect(on(saying('- step 3 re-runs the whole command once on a timeout'))).toBeNull()
+  expect(on(saying('- the builder runs the tests before it hands back'))?.reason).toContain('the builder holds no shell')
+  expect(on(saying('1. Then run npm test'))?.reason).toContain('the builder holds no shell')
+})
+
 test('a brief over the line ceiling is refused on the cap', () => {
   expect(on(saying(Array.from({ length: 60 }, () => '- a line').join('\n')))).toMatchObject({ span: '100 lines' })
 })

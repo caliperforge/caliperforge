@@ -318,7 +318,7 @@ function down(now: Date, error: unknown): void {
     const message = error instanceof Error ? error.message : String(error)
     receipt(handle, { at: now.toISOString(), hhmm: hhmm(handle, now), dry: false,
       pipes: openPipes(handle, hhmm(handle, now)).length, fired: 0, exit: 1, note: `${CRASHED}${message.slice(0, 500)}` })
-    watch(handle, root, now, alerter(handle))
+    watch(handle, root, now, alerter())
   } catch {
     return
   }
@@ -327,7 +327,7 @@ function down(now: Date, error: unknown): void {
 cf.command('watch').description('alert once when no real tick has landed inside an open window, and once when one lands again')
   .action(() => {
     const handle = db()
-    out(livenessLine(handle, watch(handle, root, new Date(), alerter(handle))))
+    out(livenessLine(handle, watch(handle, root, new Date(), alerter())))
   })
 
 async function ticked(options: { dry?: boolean }, now: Date): Promise<void> {
@@ -347,7 +347,7 @@ async function ticked(options: { dry?: boolean }, now: Date): Promise<void> {
   receipt(handle, upgraded(handle, root, { at: now.toISOString(), hhmm: hhmm(handle, now), dry: false,
     pipes: openPipes(handle, hhmm(handle, now)).length, fired: fired.length,
     exit: fired.some((f) => f.outcome === 'refuse') ? 1 : 0, note: tickNote(fired, overlapWaits(handle)) }))
-  watch(handle, root, now, alerter(handle))
+  watch(handle, root, now, alerter())
   const news = events(handle, fired, now.toISOString())
   keep(root, news)
   notify(news)

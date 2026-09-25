@@ -11,6 +11,7 @@ import { headDigest, signedHead } from '../store/approvals.ts'
 import { forkGreen } from '../store/deliverables.ts'
 import type { Db } from '../store/index.ts'
 import { internal, originIssue, type PlanRow } from '../store/plans.ts'
+import { GREEN, onBase } from './base.ts'
 import { npm } from './checks.ts'
 import { red } from './failures.ts'
 import { reinstall } from './install.ts'
@@ -74,19 +75,23 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
   if (internal(plan) && !workflows(srcDir(root, plan.id))) return checked(db, root, plan, repo)
   const { fork, head, ci } = sent(db, root, plan, repo, wire)
   if (!internal(plan)) wire.rehearse?.(fork, ci)
-  const { verdict, board } = judge({ fork, branch: ci, sha: head.sha },
-    { body: '', commits: commits(head.dir) }, touched(root, plan.id), wire.runs)
+  const on = { fork, branch: ci, sha: head.sha }
+  const { verdict, board } = judge(on, { body: '', commits: commits(head.dir) }, touched(root, plan.id), wire.runs)
   put(root, plan.id, BOARD, `${JSON.stringify(board)}\n`)
+  const at = `${fork}@${head.sha.slice(0, 12)}`
   const waiting = unfinished(verdict.spans) ?? others(board)
-  if (waiting !== null) {
-    const ticks = waited(root, plan.id, head.sha)
-    const at = `${fork}@${head.sha.slice(0, 12)}`
-    const window = carries(verdict.spans, MISSING) ? APPEARS : FINISHES
-    if (ticks <= window) return held(verdict.spans, `${at} ${waiting}, tick ${String(ticks)} of ${String(window)}`)
-  }
-  record(db, join(root, 'rails/ci-green'), plan.id, verdict, 0)
-  forkGreen(db, plan.id, verdict.outcome === 'pass')
-  const failed = verdict.outcome === 'refuse' ? red(fork, verdict.spans, wire.runs) : null
+  const window = carries(verdict.spans, MISSING) ? APPEARS : FINISHES
+  const hold = waiting === null ? null : holding(root, plan.id, head.sha, verdict.spans, `${at} ${waiting}`, window)
+  if (hold !== null) return hold
+  const base = waiting === null && verdict.outcome === 'refuse' ? onBase(root, plan.id, on, verdict.spans, board, wire.runs) : null
+  const rerun = typeof base === 'string' ? holding(root, plan.id, head.sha, verdict.spans, `${at} ${base}`, FINISHES) : null
+  if (rerun !== null) return rerun
+  if (Array.isArray(base)) put(root, plan.id, BOARD, `${JSON.stringify(base)}\n`)
+  const passed = verdict.outcome === 'pass' || Array.isArray(base)
+  record(db, join(root, 'rails/ci-green'), plan.id, passed ? { ...verdict, outcome: 'pass', origin_kind: null, origin_ref: null } : verdict, 0)
+  forkGreen(db, plan.id, passed)
+  if (verdict.outcome === 'pass') put(root, plan.id, GREEN, `${ci} ${head.sha}\n`)
+  const failed = passed ? null : red(fork, verdict.spans, wire.runs)
   if (failed === null) return null
   return { outcome: 'refuse', spans: failed.spans, message: failed.log, to: 2,
     note: `their CI is red on ${fork}@${head.sha.slice(0, 12)}; back to the builder with the failed log` }
@@ -169,6 +174,11 @@ function carries(spans: string[], span: string): boolean {
  */
 function held(spans: string[], note: string): Outcome {
   return { outcome: 'pass', spans, held: true, note }
+}
+
+function holding(root: string, plan: number, sha: string, spans: string[], waiting: string, window: number): Outcome | null {
+  const ticks = waited(root, plan, sha)
+  return ticks <= window ? held(spans, `${waiting}, tick ${String(ticks)} of ${String(window)}`) : null
 }
 
 /** The count is kept against the head it counts for, so a rebuilt branch starts its window over. */
@@ -398,6 +408,12 @@ function rehearsal(root: string, plan: number, fork: string, head: Head, wire: W
 /** A round sent before the name was saved went to plain `-next`. */
 function rehearsed(root: string, plan: number, branch: string): string {
   return maybe(root, plan, REHEARSED) ?? `${branch}${NEXT}`
+}
+
+/** Read without `headOf`, which commits the plan's work. */
+export function rehearsalBranch(db: Db, root: string, plan: number): string {
+  const branch = git(srcDir(root, plan), ['rev-parse', '--abbrev-ref', 'HEAD']).trim()
+  return opened(db, plan) === null ? branch : rehearsed(root, plan, branch)
 }
 
 /**

@@ -137,8 +137,8 @@ export function unrehearse(fork: string, branch: string): void {
   if (no !== null) execFileSync('gh', ['pr', 'close', String(no), '--repo', fork], { encoding: 'utf8' })
 }
 
-function rehearsal(fork: string, branch: string): number | null {
-  const open = z.array(z.object({ number: z.int() })).parse(gh(['pr', 'list', '--repo', fork, '--head', branch,
+export function rehearsal(fork: string, branch: string, read: Read = gh): number | null {
+  const open = z.array(z.object({ number: z.int() })).parse(read(['pr', 'list', '--repo', fork, '--head', branch,
     '--state', 'open', '--json', 'number']))
   return open[0]?.number ?? null
 }

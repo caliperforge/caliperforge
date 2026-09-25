@@ -25,13 +25,15 @@ export interface Failure {
   /** The script the failure is named by, whatever command stood in for it. */
   script: string
   command: string
-  code: number
+  code: string
   output: string
   retried: boolean
 }
 
+export type Ran = { ok: true; output: string } | { ok: false; code: string; output: string }
+
 /** `bin` is the program; left out it is `npm`, which is every checkout but an Xcode or a Kotlin one. */
-export type Run = (args: string[], cwd: string, bin?: string) => { code: number; output: string }
+export type Run = (args: string[], cwd: string, bin?: string) => Ran
 
 /** #126: what a checkout is judged with, by what sits at its root; #204: an outside plan, by its language. */
 export type Mode = 'xcodebuild' | 'npm' | 'gradle' | 'none' | OutsideLanguage
@@ -66,10 +68,10 @@ export function checks(src: string, run: Run = npm, narrow: string[] = [], outsi
   if (bin === 'xcodebuild') excluded(src)
   for (const [script, args] of commands(src, narrow)) {
     const first = run(args, src, bin)
-    if (first.code === 0) continue
+    if (first.ok) continue
     const retried = loadOnly(first.output)
-    const { code, output } = retried ? run(args, src, bin) : first
-    if (code !== 0) return { script, command: `${bin} ${args.join(' ')}`, code, output: tail(output), retried }
+    const last = retried ? run(args, src, bin) : first
+    if (!last.ok) return { script, command: `${bin} ${args.join(' ')}`, code: last.code, output: tail(last.output), retried }
   }
   return null
 }
@@ -83,14 +85,14 @@ function gated(src: string, list: Gate[], run: Run): Failure | null {
     const cwd = join(src, gate.dir)
     const where = gate.dir === '' ? '' : ` (in ${gate.dir}/)`
     const first = settled(gate, run(gate.args, cwd, gate.bin))
-    if (first.code === 0) continue
+    if (first.ok) continue
     return { script: gate.script, command: `${gate.bin} ${gate.args.join(' ')}${where}`, code: first.code, output: tail(first.output), retried: false }
   }
   return null
 }
 
-function settled(gate: Gate, ran: { code: number; output: string }): { code: number; output: string } {
-  return gate.quiet === true && ran.code === 0 && ran.output.trim() !== '' ? { code: 1, output: ran.output } : ran
+function settled(gate: Gate, ran: Ran): Ran {
+  return gate.quiet === true && ran.ok && ran.output.trim() !== '' ? { ok: false, code: '1', output: ran.output } : ran
 }
 
 /** The derived data is build output: never staged, never in the diff the reviewers read. */
@@ -169,12 +171,13 @@ function tail(output: string): string {
  * A command the cap killed leaves no status, and that is the failure it is recorded as. A program that never
  * started has no output at all, so the spawn error is what the builder reads (09-24: cargo off launchd's PATH).
  */
-export function npm(args: string[], cwd: string, bin = 'npm'): { code: number; output: string } {
+export function npm(args: string[], cwd: string, bin = 'npm'): Ran {
   const held = slot()
   try {
     const done = spawnSync(bin, args, { cwd, encoding: 'utf8', timeout: LONG.includes(bin) ? XCODE_CAP : CAP, maxBuffer: MAX })
-    if (done.error !== undefined && typeof done.stdout !== 'string') return { code: 127, output: `${bin}: ${done.error.message}` }
-    return { code: done.status ?? 1, output: `${done.stdout}${done.stderr}` }
+    if (done.error !== undefined && typeof done.stdout !== 'string') return { ok: false, code: '127', output: `${bin}: ${done.error.message}` }
+    const output = `${done.stdout}${done.stderr}`
+    return done.status === 0 ? { ok: true, output } : { ok: false, code: String(done.status ?? 1), output }
   } finally {
     if (held !== null) free(held)
   }

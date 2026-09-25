@@ -25,6 +25,18 @@ export function red(fork: string, spans: string[], gh: Gh): Red | null {
   }
 }
 
+export interface Failed { job: string; step: string }
+
+/** Each job and step `--log-failed` names, once. */
+export function failing(fork: string, id: string, gh: Gh): Failed[] {
+  const seen = new Map<string, Failed>()
+  for (const line of gh(['run', 'view', id, '--repo', fork, '--log-failed']).split('\n')) {
+    const [job, step] = line.split('\t')
+    if (job !== undefined && step !== undefined) seen.set(`${job}\t${step}`, { job, step })
+  }
+  return [...seen.values()]
+}
+
 function nameOf(fork: string, id: string, gh: Gh): string {
   try {
     const run = JSON.parse(gh(['run', 'view', id, '--repo', fork, '--json', 'workflowName'])) as { workflowName?: unknown }

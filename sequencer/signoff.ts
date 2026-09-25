@@ -193,7 +193,8 @@ function headline(passed: boolean, ci: Board[] | null): string {
 }
 
 function ciLine(ci: Board[]): string {
-  const judged = ci.filter((r) => r.gates).map((r) => `${r.workflow} ${state(r)}`)
+  const judged = ci.filter((r) => r.gates)
+    .map((r) => r.base === undefined ? `${r.workflow} ${state(r)}` : `${r.workflow} red on the base too (${r.base.join(', ')})`)
   const rest = ci.filter((r) => !r.gates).map((r) => `${r.workflow} ${state(r)}`)
   return rest.length === 0 ? judged.join(', ') : `${judged.join(', ')}; also ran, not judged on: ${rest.join(', ')}`
 }

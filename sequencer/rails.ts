@@ -54,7 +54,7 @@ export function preReview(db: Db, root: string, plan: PlanRow): Outcome {
       recordRail(db, join(root, 'rails', 'checks'), plan.id, checked(failed, diffOf(root, plan.id)), 0)
       if (failed !== null) return broke(failed)
     } finally {
-      unlock(root)
+      unlock(root, plan.id)
     }
   }
   const ran = internal(plan) ? mode(srcDir(root, plan.id)) : outside ?? 'none'
@@ -91,7 +91,7 @@ function broke(failed: Failure): Outcome {
   return {
     outcome: 'refuse',
     spans: [`checks:${failed.script}`],
-    note: `${failed.command} exit ${String(failed.code)}${failed.retried ? ' after one retry' : ''}`,
+    note: `${failed.command} exit ${failed.code}${failed.retried ? ' after one retry' : ''}`,
     message: failed.output,
   }
 }

@@ -29,6 +29,9 @@ const TRANSCRIPT = [
   'MEASUREMENT tick.interval = 300s',
 ].join('\n')
 
+const SHA = 'a'.repeat(40)
+const REVIEWED = `Last reviewed commit: [fix](https://github.com/acme/widget/commit/${SHA})`
+
 const pr = (over: Partial<Pr> = {}): Pr => ({
   number: 7, url: URL, state: 'OPEN', mergedAt: null, mergedBy: null, reviewDecision: null,
   comments: [], reviews: [], statusCheckRollup: [], ...over,
@@ -118,7 +121,7 @@ test('the tick records every comment, review, bot review and merge on our open p
   const w = await pushed()
   const view = pr({
     comments: [{ id: 'c1', author: { login: 'maintainer' }, body: 'please split this', createdAt: '2026-09-17T10:00:00Z' }],
-    reviews: [{ id: 'r1', author: { login: 'greptile-apps[bot]' }, body: 'score 4/5', submittedAt: '2026-09-17T11:00:00Z' }],
+    reviews: [{ id: 'r1', author: { login: 'greptile-apps[bot]' }, body: `score 4/5\n\n${REVIEWED}`, submittedAt: '2026-09-17T11:00:00Z' }],
     statusCheckRollup: [{ name: 'build', conclusion: 'FAILURE' }],
   })
   expect(capture(w.db, () => view).map((s) => s.kind)).toEqual(['comment', 'bot_review', 'ci_red'])
@@ -133,7 +136,7 @@ test('the tick records every comment, review, bot review and merge on our open p
 /** #103: on plan 65 Greptile's 5/5 summary comment rewound the finished job and told the CEO he was asked. */
 test('a review bot\'s summary comment is its score, not a person asking', async () => {
   const w = await pushed()
-  const summary = (n: number): string => `<h2><a href="https://app.greptile.com"><picture></picture></a>Confidence Score: ${String(n)}/5</h2>\n\n1 of 2 files`
+  const summary = (n: number): string => `<h2><a href="https://app.greptile.com"><picture></picture></a>Confidence Score: ${String(n)}/5</h2>\n\n1 of 2 files\n\n${REVIEWED}`
   const view = pr({ comments: [
     { id: 'g1', author: { login: 'greptile-apps' }, body: summary(5), createdAt: new Date(Date.now() + 1000).toISOString() },
     { id: 'g2', author: { login: 'greptile-apps' }, body: summary(3), createdAt: new Date(Date.now() + 2000).toISOString() },
@@ -143,6 +146,17 @@ test('a review bot\'s summary comment is its score, not a person asking', async 
   expect([five.kind, five.score, three.kind, three.score]).toEqual(['bot_review', 5, 'bot_review', 3])
   expect(started(w.db, five)).toBeNull()
   expect(started(w.db, three)).toMatchObject({ step: 4 })
+})
+
+test('a Greptile summary is stored with the head it reviewed; one in the older format stores nothing', async () => {
+  const w = await pushed()
+  const at = new Date(Date.now() + 1000).toISOString()
+  const view = pr({ comments: [
+    { id: 'g1', author: { login: 'greptile-apps' }, body: `Confidence Score: 4/5\n\n${REVIEWED}`, createdAt: at },
+    { id: 'g2', author: { login: 'greptile-apps' }, body: 'Confidence Score: 4/5', createdAt: at },
+  ] })
+  expect(capture(w.db, () => view).map((s) => s.external_id)).toEqual(['g1'])
+  expect(w.db.prepare('SELECT external_id, score, head FROM signals').all()).toEqual([{ external_id: 'g1', score: 4, head: SHA }])
 })
 
 test('what we said on our own pull request is not a signal; their words and the review state are kept', async () => {
@@ -223,6 +237,39 @@ test('a counterparty finding on merged code is an escape against the step the ma
   expect(classOf('no class named here')).toBe('correctness')
 })
 
+const FORKED = pr({
+  number: 3, url: 'https://github.com/caliperforge/widget/pull/3',
+  comments: [{ id: 'c3', author: { login: 'maintainer' }, body: 'why this?', createdAt: '2026-09-17T10:00:00Z' }],
+  reviews: [{ id: 'g3', author: { login: 'greptile-apps[bot]' }, body: `Confidence Score: 4/5\n\n${REVIEWED}`, submittedAt: '2026-09-17T11:00:00Z' }],
+  statusCheckRollup: [{ name: 'build', conclusion: 'FAILURE' }],
+})
+
+const forked = (repo: string): Pr => (repo === 'caliperforge/widget' ? FORKED : pr())
+
+const listing = (heads: string[]) => (args: string[]): unknown => {
+  const head = args[args.indexOf('--head') + 1] ?? ''
+  heads.push(head)
+  return head === 'widget-12-a1-next' ? [{ number: 3 }] : []
+}
+
+test('only the bot review on the rehearsal is kept, on the plan, and a merge upstream takes no escape from it', async () => {
+  const w = await pushed()
+  expect(capture(w.db, forked, w.root, listing([]))).toEqual([])
+  expect(w.db.prepare('SELECT repo, pr, kind, score, head, plan FROM signals').all())
+    .toEqual([{ repo: 'caliperforge/widget', pr: 3, kind: 'bot_review', score: 4, head: SHA, plan: 1 }])
+  capture(w.db, () => pr({ mergedAt: '2026-09-18T09:00:00Z', mergedBy: { login: 'maintainer' } }))
+  expect(w.db.prepare('SELECT count(*) AS n FROM dispositions').get()).toEqual({ n: 0 })
+})
+
+test('a plan with no checkout is asked about no rehearsal', async () => {
+  const w = await pushed()
+  w.db.prepare(`INSERT INTO plans (id, pipe_id, target_id, template, state, queued_at, step, retries)
+    VALUES (2, 1, 1, 'pr_path', 'running', ?, 7, 0)`).run('2026-09-17T00:00:00.000Z')
+  const heads: string[] = []
+  capture(w.db, forked, w.root, listing(heads))
+  expect(heads).toEqual(['widget-12-a1-next'])
+})
+
 test('a pr the tick cannot read this time does not stop the pipes behind it', async () => {
   const w = await pushed()
   expect(capture(w.db, () => { throw new Error('gh: could not resolve host') })).toEqual([])
@@ -235,7 +282,7 @@ test('a vague bot finding does not take the disposition slot a named one earned'
   const merged = pr({
     mergedAt: '2026-09-18T09:00:00Z', mergedBy: { login: 'maintainer' },
     reviews: [
-      { id: 'r1', author: { login: 'greptile[bot]' }, body: 'looks fine 4/5', submittedAt: '2026-09-18T07:00:00Z' },
+      { id: 'r1', author: { login: 'greptile[bot]' }, body: `looks fine 4/5\n\n${REVIEWED}`, submittedAt: '2026-09-18T07:00:00Z' },
       { id: 'r2', author: { login: 'maintainer' }, body: 'this is a scope problem', submittedAt: '2026-09-18T08:00:00Z' },
     ],
   })

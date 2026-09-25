@@ -400,6 +400,40 @@ test('#204 rust tests take the features their CI test line names, less a service
   expect(calls[1]).toBe(`cargo test -p surfpool-types -p surfpool-core --features surfpool-core/ignore_tests_ci @${src}`)
 })
 
+const BINDINGS = 'jobs:\n  bindings:\n    steps:\n      - name: Verify committed bindings are up to date\n        run: |\n'
+  + '          node crates/sdk-node/scripts/generate-kit-types.js\n          git diff --exit-code\n'
+
+function surfpool(sdk: string): string {
+  return nested({
+    'Cargo.toml': '[workspace]\nmembers = ["crates/*"]\n',
+    'crates/core/Cargo.toml': '[package]\nname = "surfpool-core"\nversion = "0.1.0"\n',
+    '.github/workflows/rust.yml': 'jobs:\n  fmt:\n    steps:\n      - name: Run Cargo fmt\n        run: cargo +nightly fmt --all -- --check\n',
+    '.github/workflows/sdk.yml': sdk,
+  })
+}
+
+test('#221 an outside rust plan stages, runs the bindings generator its CI runs, then diffs, at the root', () => {
+  const src = surfpool(BINDINGS)
+  const { run, calls } = heard()
+  expect(checks(src, run, [], { language: 'rust', files: ['crates/core/src/a.rs'] })).toBeNull()
+  expect(calls).toEqual([`cargo +nightly fmt --all -- --check @${src}`, `cargo test -p surfpool-core @${src}`, `git add -A @${src}`,
+    `node crates/sdk-node/scripts/generate-kit-types.js @${src}`, `git diff --exit-code @${src}`])
+})
+
+test('#221 a red diff after regenerating refuses with the diff', () => {
+  const src = surfpool(BINDINGS)
+  const run: Run = (...[args, , bin]) => `${bin ?? 'npm'} ${args.join(' ')}` === 'git diff --exit-code' ? { code: 1, output: '-a\n+b' } : { code: 0, output: '' }
+  expect(checks(src, run, [], { language: 'rust', files: ['crates/core/src/a.rs'] }))
+    .toEqual({ script: 'diff', command: 'git diff --exit-code', code: 1, output: '-a\n+b', retried: false })
+})
+
+test('#221 a diff step with no generator, or one needing a shell, adds no gate', () => {
+  const src = surfpool('jobs:\n  a:\n    steps:\n      - run: |\n          cd x && node gen.js\n          git diff --exit-code\n      - run: git diff --exit-code\n')
+  const { run, calls } = heard()
+  expect(checks(src, run, [], { language: 'rust', files: ['crates/core/src/a.rs'] })).toBeNull()
+  expect(calls).toEqual([`cargo +nightly fmt --all -- --check @${src}`, `cargo test -p surfpool-core @${src}`])
+})
+
 test('a program that never starts is named', () => {
   expect(npm(['--version'], tmpdir(), 'cf-no-such-bin')).toEqual({ code: 127, output: expect.stringMatching(/^cf-no-such-bin: spawnSync cf-no-such-bin ENOENT/) as string })
 })

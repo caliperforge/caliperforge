@@ -1,5 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { parse } from 'yaml'
+import { z } from 'zod'
 
 /** A language whose builder holds its own shell and brief-files fence on a stranger's repo (#204). */
 export const OUTSIDE_LANGUAGES = ['rust', 'python', 'ruby', 'go', 'php', 'lua'] as const
@@ -81,8 +83,12 @@ const RECIPES: Record<Exclude<OutsideLanguage, 'rust'>, Recipe> = {
 
 const JUSTFILE = 'Justfile'
 
-/** What step 3 runs on an outside plan: install, then the gates upstream runs, in the language's own folder. */
+/** What step 3 runs on an outside plan: install, then the gates upstream runs, in the language's own folder, then its workflows' regenerate-and-diff steps at the root. */
 export function gates(src: string, outside: Outside): Gate[] {
+  return [...own(src, outside), ...regenerated(src)]
+}
+
+function own(src: string, outside: Outside): Gate[] {
   if (outside.language === 'rust') return rust(src, outside.files)
   const recipe = RECIPES[outside.language]
   const dir = home(src, first(outside), (name) => name === JUSTFILE || recipe.markers.test(name))
@@ -155,6 +161,38 @@ function unique(crates: Crate[]): Crate[] {
 function workflows(src: string): string[] {
   const dir = join(src, '.github', 'workflows')
   return existsSync(dir) ? readdirSync(dir).filter((f) => /\.ya?ml$/.test(f)).sort().map((f) => readFileSync(join(dir, f), 'utf8')) : []
+}
+
+const Workflow = z.object({ jobs: z.record(z.string(), z.object({ steps: z.array(z.object({ run: z.string().optional() })).default([]) })) })
+
+/** `npm()` spawns without a shell, so a line needing one cannot become a gate. */
+const SHELL = /&&|[|;$`<>]/
+
+/** #221: each workflow step that runs a generator then `git diff --exit-code`, at the root. */
+function regenerated(src: string): Gate[] {
+  return workflows(src).flatMap((text) => {
+    let doc: unknown
+    try {
+      doc = parse(text)
+    } catch {
+      return []
+    }
+    const found = Workflow.safeParse(doc)
+    return found.success ? Object.values(found.data.jobs).flatMap((job) => job.steps.flatMap((step) => regenerate(step.run ?? ''))) : []
+  })
+}
+
+/** Staged first: the builder's change is uncommitted, and the diff must show only what the generator rewrote. */
+function regenerate(run: string): Gate[] {
+  const lines = run.split('\n').map((l) => l.trim()).filter((l) => l !== '' && !l.startsWith('#'))
+  const used = lines.slice(0, lines.findIndex((l) => l.startsWith('git diff --exit-code')) + 1)
+  if (used.length < 2 || used.some((l) => SHELL.test(l))) return []
+  const generate = used.slice(0, -1).map((line): Gate => {
+    const [bin = '', ...args] = line.split(/\s+/)
+    return { script: 'generate', bin, args, dir: '' }
+  })
+  const [, ...diff] = (used.at(-1) ?? '').split(/\s+/)
+  return [{ script: 'stage', bin: 'git', args: ['add', '-A'], dir: '' }, ...generate, { script: 'diff', bin: 'git', args: diff, dir: '' }]
 }
 
 const FMT = /\bcargo((?:[ \t]+\+[\w.-]+)?[ \t]+fmt\b[^\n'"#]*)/

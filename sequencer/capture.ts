@@ -8,6 +8,7 @@ import { attribute } from './escapes.ts'
 
 const Listed = z.array(z.object({
   number: z.int(),
+  title: z.string(),
   url: z.string(),
   labels: z.array(z.object({ name: z.string() })),
 }))
@@ -55,13 +56,48 @@ function listed(db: Db, root: string, repo: string, read: Read): void {
   const kept = found.filter((i) => laneOf(i.labels) !== null)
   if (found.length < WINDOW) halt(db, repo, new Set(kept.map((i) => i.url)))
   const known = seen(db)
-  for (const i of kept.filter((k) => !known.has(k.url))) add(db, root, `${repo}#${String(i.number)}`, undefined, read)
+  const split = named(found.map((i) => i.title))
+  for (const i of kept.filter((k) => !known.has(k.url) && !split.has(k.number) && !parent(repo, k.number, read))) {
+    add(db, root, `${repo}#${String(i.number)}`, undefined, read)
+  }
+}
+
+/** A part is titled `<parent><letter>: …` (\`85a: …\`); the numbers so named are parents, whoever split them. */
+function named(titles: string[]): Set<number> {
+  return new Set(titles.flatMap((t) => /^(\d+)[a-z]\b/.exec(t)?.[1] ?? []).map(Number))
+}
+
+const Summary = z.object({ sub_issues_summary: z.object({ total: z.int() }).optional() })
+
+/**
+ * #260: an issue with sub-issues is a parent; its parts are the jobs, and building it repeats them (#139, #138
+ * and #85 on 09-25). An answer that cannot be read counts as a parent this tick, and the next tick asks again.
+ */
+function parent(repo: string, no: number, read: Read): boolean {
+  try {
+    return (Summary.parse(read(['api', `repos/${repo}/issues/${String(no)}`])).sub_issues_summary?.total ?? 0) > 0
+  } catch {
+    return true
+  }
 }
 
 function halt(db: Db, repo: string, open: Set<string>): void {
   const queued = db.prepare("SELECT * FROM plans WHERE state = 'queued' AND origin IS NOT NULL").all().map((r) => PlanRow.parse(r))
   for (const plan of queued.filter((p) => originRef(p)?.repo === repo && !open.has(p.origin ?? ''))) {
     db.prepare("UPDATE plans SET state = 'halted' WHERE id = ?").run(plan.id)
+  }
+  landed(db, repo, open)
+}
+
+/**
+ * #257: a plan whose work is on main and whose issue is closed is finished, whatever step it thinks it is on.
+ * Plans 88 and 89 were landed by hand and kept going; each lap after that reviewed an empty diff.
+ */
+function landed(db: Db, repo: string, open: Set<string>): void {
+  const live = db.prepare(`SELECT p.* FROM plans p WHERE p.state IN ('running', 'blocked_on_ceo') AND p.origin IS NOT NULL
+    AND EXISTS (SELECT 1 FROM deliverables d WHERE d.plan_id = p.id AND d.state = 'pushed')`).all().map((r) => PlanRow.parse(r))
+  for (const plan of live.filter((p) => originRef(p)?.repo === repo && !open.has(p.origin ?? ''))) {
+    db.prepare("UPDATE plans SET state = 'done', wait_reason = NULL WHERE id = ?").run(plan.id)
   }
 }
 

@@ -14,7 +14,8 @@ import { diffOf, doneIds, narrowing, snapshot, srcDir } from '../workspace.ts'
 import { record } from '../../store/files.ts'
 import { benchPacket } from '../../runner/packet.ts'
 import type { Packet, Provider } from '../../providers/kind.ts'
-import { approve, builds, built, CARRIED, dropping, internalPlan, KOTLIN, ours, owning, PASS, plan, REFUSE, RUN, runsAfter, runsOn, stub, watched, WORDS, world, type World } from './world.ts'
+import type { Wire } from '../push.ts'
+import { approve, builds, built, CARRIED, dropping, internalPlan, KOTLIN, ours, owning, PASS, plan, REFUSE, rerunning, RUN, runsAfter, runsOn, stub, watched, WORDS, world, type World } from './world.ts'
 
 const head = (cwd: string, args: string[]): string => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim()
 
@@ -495,6 +496,60 @@ test('a fork still red after a rebuild that changed nothing stops instead of cyc
   for (let at = 0; at < 4; at += 1) await lap()
   expect(plan(w.db, 1).step).toBe(6)
   expect(await lap()).toBe('blocked_on_ceo')
+})
+
+/** Green at a head G, then rebuilt to a head H at step 6 that the fork lists red on Validate, with G's run as `g` says. */
+const redOnBase = async (g: { status: string; conclusion: string }, log: string[]): Promise<[World, Wire]> => {
+  const w = world()
+  approve(w.db, w.target)
+  for (let at = 0; at < 7; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
+  const wire = watched([], w.root, 1, rerunning(log, w.root, 1, head(srcDir(w.root, 1), ['rev-parse', 'HEAD']), g))
+  rewind(w.db, 1, 2)
+  await tick(w.db, w.root, builds(() => { built(w.root, 1, 'export const again = 1') }), undefined, undefined, wire)
+  for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  expect(plan(w.db, 1).step).toBe(6)
+  return [w, wire]
+}
+
+const ciGreen = (w: World): unknown => w.db.prepare("SELECT outcome FROM verdicts WHERE plan = 1 AND rail_id = 'ci-green' ORDER BY id DESC").all()
+
+test('a job red at the head and red again at the re-run last green head is the base\'s: the plan goes on to sign-off', async () => {
+  const g = { status: 'completed', conclusion: 'success' }
+  const log: string[] = []
+  const [w, wire] = await redOnBase(g, log)
+  const lap = async (): Promise<unknown> => (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
+
+  expect(await lap()).toMatchObject({ step: 6, outcome: 'pass', state: 'running' })
+  expect(log).toEqual(['run rerun 1 --repo caliperforge/widget'])
+  expect(await lap()).toMatchObject({ step: 6, outcome: 'pass', state: 'running' })
+  expect(ciGreen(w)).toEqual([{ outcome: 'pass' }])
+
+  Object.assign(g, { status: 'completed', conclusion: 'failure' })
+  expect(await lap()).toMatchObject({ step: 6, name: 'ready', outcome: 'pass' })
+  expect(plan(w.db, 1)).toMatchObject({ step: 7, retries: 0 })
+  expect(ciGreen(w)).toEqual([{ outcome: 'pass' }, { outcome: 'pass' }])
+  expect(log).toHaveLength(1)
+})
+
+test('a job red at the head whose last green head re-runs green goes back to the builder', async () => {
+  const g = { status: 'completed', conclusion: 'success' }
+  const [w, wire] = await redOnBase(g, [])
+  const lap = async (): Promise<unknown> => (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
+
+  await lap()
+  await lap()
+  g.status = 'completed'
+  expect(await lap()).toMatchObject({ step: 6, name: 'ready', outcome: 'refuse', state: 'retried' })
+  expect(plan(w.db, 1)).toMatchObject({ step: 2, retries: 1 })
+  expect(ciGreen(w)).toEqual([{ outcome: 'refuse' }, { outcome: 'pass' }])
+})
+
+test('a last green head already red is read as it is, with no re-run asked', async () => {
+  const log: string[] = []
+  const [w, wire] = await redOnBase({ status: 'completed', conclusion: 'failure' }, log)
+  expect((await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]).toMatchObject({ step: 6, outcome: 'pass' })
+  expect(plan(w.db, 1).step).toBe(7)
+  expect(log).toEqual([])
 })
 
 test('a run still going is waited on past the first-run window', async () => {

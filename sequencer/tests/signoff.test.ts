@@ -162,6 +162,16 @@ test('the card names every workflow and says green only of what is', async () =>
   expect(body).toContain('- Their CI on our fork: Ruby green; also ran, not judged on: Python red')
 })
 
+test('a workflow red on the base too is named so on the card, with its job and step', async () => {
+  const w = await atBatch()
+  put(w.root, 1, 'ci.json', JSON.stringify([
+    { workflow: 'Validate', status: 'completed', conclusion: 'failure', gates: true, base: ['validate: Install'] },
+  ]))
+  const desk = fake()
+  signoffs(w.db, w.root, desk)
+  expect(desk.cards.get(100)?.body).toContain('- Their CI on our fork: Validate red on the base too (validate: Install)')
+})
+
 test('a ruling lands as the next D row and a Must not break line, or in its own section', () => {
   const brief = '# t\n\n## Cases\n\n- D1 a\n- D2 b\n\n## Must not break\n\n- c\n\n## Files\n\n- `a/b.ts`\n'
   expect(ruled(brief, 'Only\nthe number.', '2026-09-21')).toBe('# t\n\n## Cases\n\n- D1 a\n- D2 b\n'

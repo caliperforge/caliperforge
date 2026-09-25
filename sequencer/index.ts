@@ -206,6 +206,7 @@ function workspace(db: Db, root: string, plan: PlanRow): { language: string | nu
     checkout(root, plan.id, tree.repo, tree.branch)
   } catch (error) {
     const note = error instanceof Error ? error.message : String(error)
+    if (OFFLINE.test(note)) return { language: null, failed: thrown(at(plan.step), note) }
     return { language: null, failed: { outcome: 'refuse', spans: [tree.repo], note: `checkout: ${note}`, blip: true } }
   }
   return { language: languageFor(db, plan, srcDir(root, plan.id)), failed: null }
@@ -230,10 +231,23 @@ async function made(db: Db, root: string, plan: PlanRow, step: Step, provider: P
     const out = await fire(db, root, plan, step, provider, wire)
     return out.parts === undefined ? out : parted(db, root, plan, out.parts, wire)
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    return { outcome: 'refuse', spans: [`threw: ${message.split('\n')[0] ?? ''}`],
-      note: `step ${String(step.step)} ${step.name} threw`, message, to: step.step }
+    return thrown(step, error instanceof Error ? error.message : String(error))
   }
+}
+
+/**
+ * The host losing its network is not the job's fault. On 09-25 a Wi-Fi drop made four jobs' `git fetch` throw at
+ * step 3; each became a refusal, a person was asked, and two alike turned the Atelier lane off as a fault on main.
+ * Such a throw holds the job on its step, uncounted, and the next tick tries again.
+ */
+const OFFLINE = /Could not resolve host|getaddrinfo|ENOTFOUND|EAI_AGAIN|ENETUNREACH|ETIMEDOUT|Network is unreachable|Failed to connect to|Connection timed out/
+
+export function thrown(step: Step, message: string): Outcome {
+  if (OFFLINE.test(message)) {
+    return { outcome: 'pass', held: true, spans: ['offline'], note: `step ${String(step.step)} ${step.name}: the network is down; the next tick tries again` }
+  }
+  return { outcome: 'refuse', spans: [`threw: ${message.split('\n')[0] ?? ''}`],
+    note: `step ${String(step.step)} ${step.name} threw`, message, to: step.step }
 }
 
 function fire(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider, wire?: Wire): Promise<Outcome> {

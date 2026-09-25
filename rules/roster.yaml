@@ -10,6 +10,7 @@ seats:
   - go_specialist
   - php_specialist
   - lua_specialist
+  - orchestrator
 digests:
   typescript_specialist:
     manifest: a8dd50ad9bc5d01f576bd87d7fc88bd0b518adb47d37468f28b24b02d4d730a1
@@ -44,3 +45,6 @@ digests:
   lua_specialist:
     manifest: a1622ce0fe5d4526ee1a9a6efc84cbf1736c092e9af1ba4ed42c53ff5e3a6aa8
     prompt: 335c56345a79d5ec80a60e0fbf2682964edd9c2dedd9f7900391390385a1fa63
+  orchestrator:
+    manifest: 5c83eed74d97d77b459e19b21bc244a9a600e3423969eff7d497de7d8debce8f
+    prompt: a8361fda64a21af52b76fecbb4ae18b49f494c035f643b36f97a9f18eba8d917

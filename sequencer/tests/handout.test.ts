@@ -7,12 +7,8 @@ import { pointed, STANDING } from '../brief.ts'
 import { handout, WHOLE } from '../handout.ts'
 import { tick } from '../index.ts'
 import { stopped } from '../seat.ts'
+import { HANDOUT } from './bases.ts'
 import { approve, CARRIED, PASS, stub, world, type World } from './world.ts'
-
-const FILES = {
-  'src/hello.ts': 'export const hello = (): string => "hi"\n',
-  'src/bye.ts': 'export const bye = (): string => "bye"\n',
-}
 
 const BRIEF = ['# hello', '',
   '**What:** add `hello()`.', '**Why:** the ask asks for it.', '**When it ends:** it is exported.', '',
@@ -40,7 +36,7 @@ function tree(files: Record<string, string>): string {
 }
 
 function briefed(): World {
-  const w = world('warm', undefined, FILES)
+  const w = world('warm', undefined, HANDOUT)
   approve(w.db, w.target)
   return w
 }

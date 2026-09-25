@@ -272,8 +272,8 @@ test('a reviewer gets its own last verdict, the diff since the tree it judged an
   expect(trees.every((r) => /^[0-9a-f]{40}$/.test(r.tree))).toBe(true)
 })
 
-const HELLO = (word: string, back: string): string =>
-  `export function hello(): string {\n  const a = "h"\n  const b = "i"\n  const c = ""\n  const d = ""\n  const word = ${word}\n  return ${back}\n}\n`
+const HELLO = (word: string): string =>
+  `export function hello(): string {\n  const a = "h"\n  const b = "i"\n  const c = ""\n  const d = ""\n  const word = ${word}\n  return word + c + d\n}\n`
 
 const section = (prompt: string, head: string): string => prompt.split(`\n# ${head}\n\n`)[1]?.split('\n\n# ')[0] ?? ''
 
@@ -284,14 +284,14 @@ test('a reviewer step 5 sent back is handed the delta since the tree it passed, 
   internalPlan(w.db, w.root, MINE)
   const hello = join(srcDir(w.root, MINE), 'src/hello.ts')
   for (let step = 0; step < 2; step += 1) await tick(w.db, w.root, stub(CARRIED))
-  writeFileSync(hello, HELLO('a + b', 'word + c + d'))
+  writeFileSync(hello, HELLO('a + b'))
   for (let step = 0; step < 3; step += 1) await tick(w.db, w.root, stub(CARRIED, 0, PASS))
   await tick(w.db, w.root, stub(CARRIED, 0, REFUSE))
   const baseTree = execFileSync('git', ['rev-parse', 'HEAD^{tree}'], { cwd: srcDir(w.root, MINE), encoding: 'utf8' }).trim()
   w.db.prepare(`INSERT INTO verdicts (gate, kind, subject_digest, plan, step, outcome, origin_kind, origin_ref, tokens, seconds, tree)
     SELECT gate, kind, subject_digest, plan, step, 'refuse', 'ruling', 'review.code_quality', 0, 0, ? FROM verdicts
     WHERE plan = ? AND step = 4 AND kind = 'review'`).run(baseTree, MINE)
-  writeFileSync(hello, HELLO('a + b + "!"', 'word + c + d'))
+  writeFileSync(hello, HELLO('a + b + "!"'))
   const seen: Packet[] = []
   for (let step = 0; step < 3; step += 1) await tick(w.db, w.root, stub(CARRIED, 0, REFUSE, (p) => seen.push(p)))
 

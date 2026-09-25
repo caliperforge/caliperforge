@@ -276,6 +276,7 @@ function rounds(db: Db, root: string, plan: number, step: number): Pick<Bench, '
   const tree = judged(db, plan, step)
   if (tree === null) return prior
   const src = srcDir(root, plan)
+  // Before enclosed(): diffSince's `add -A --intent-to-add` is what puts new files in enclosed()'s diff.
   const plain = diffSince(src, tree)
   return { ...prior, since: enclosed(src, tree) ?? plain, narrowing: narrowing(src, tree, get(root, plan, 'base.sha').trim()) }
 }

@@ -4,7 +4,8 @@ import { join } from 'node:path'
 import { subdirs, walk } from '../../checks/tree.ts'
 import type { Verdict } from '../record.ts'
 
-const NAMED = /(?:^|[\s([<'"`])((?:[A-Za-z0-9_.-]+\/)+[A-Za-z0-9_.-]+)(?::(\d+))?/g
+/** `+` belongs to a name: Swift's `Type+Extension.swift` read as `Type` and refused plan 155 (09-25). */
+const NAMED = /(?:^|[\s([<'"`])((?:[A-Za-z0-9_.+-]+\/)+[A-Za-z0-9_.+-]+)(?::(\d+))?/g
 const ADR = /\bADR[ -](\d{4})\b/g
 
 interface Said {

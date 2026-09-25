@@ -54,7 +54,7 @@ export function preReview(db: Db, root: string, plan: PlanRow): Outcome {
       recordRail(db, join(root, 'rails', 'checks'), plan.id, checked(failed, diffOf(root, plan.id)), 0)
       if (failed !== null) return broke(failed)
     } finally {
-      unlock(root)
+      unlock(root, plan.id)
     }
   }
   const ran = internal(plan) ? mode(srcDir(root, plan.id)) : outside ?? 'none'

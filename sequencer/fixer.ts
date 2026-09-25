@@ -1,6 +1,5 @@
 import { existsSync, readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
-import { parse } from 'yaml'
 import { z } from 'zod'
 import { record, ticketOf } from '../cli/inbox.ts'
 import type { Post } from '../cli/watch.ts'
@@ -15,6 +14,7 @@ import { retry, type PlanRow } from '../store/plans.ts'
 import { clear } from '../store/refusals.ts'
 import { pending } from '../store/transcript.ts'
 import { hold, unhold } from './hold.ts'
+import { prose } from './prose.ts'
 import { WIRE, type Wire } from './push.ts'
 import { afresh, cloned, drop, maybe, move, planDir, put, SELF, titleOf } from './workspace.ts'
 
@@ -227,17 +227,10 @@ function issue(db: Db, root: string, plan: PlanRow, decision: { why: string }, m
 function read(text: string): Fix | null {
   const fence = /^---\n([\s\S]*?)\n---$/m.exec(text)?.[1]
   if (fence === undefined) return null
-  const got = Fix.safeParse(yaml(fence) ?? lines(fence))
+  const got = Fix.safeParse(prose(fence, ['did', 'then', 'why', 'ticket']) ?? lines(fence))
   return got.success ? got.data : null
 }
 
-function yaml(fence: string): unknown {
-  try {
-    return parse(fence) as unknown
-  } catch {
-    return null
-  }
-}
 
 /** A colon inside \`did\` or \`why\` is prose: each line is its key up to the first colon, and a \`[a, b]\` value a list. */
 function lines(fence: string): Record<string, unknown> {

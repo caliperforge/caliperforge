@@ -1,6 +1,8 @@
+import { rmSync } from 'node:fs'
+import { join } from 'node:path'
 import type { Db } from '../store/index.ts'
 import { returnToLane } from '../store/holds.ts'
-import { afresh, drop, maybe, put } from './workspace.ts'
+import { afresh, drop, maybe, planDir, put } from './workspace.ts'
 
 /**
  * #291: a held job stays `blocked_on_ceo` with a note beside it, never `halted`. Halted is terminal, so the next
@@ -22,6 +24,14 @@ export function unhold(db: Db, root: string, plan: number): number {
   const step = returnToLane(db, plan)
   db.prepare('UPDATE plans SET waits_on = NULL WHERE id = ?').run(plan)
   drop(root, plan, NOTE)
+  if (step <= 1) fresh(root, plan)
   afresh(root, plan, step)
   return step
+}
+
+/** Plan 146 went back at step 1 on a checkout cut before the job it waited on landed. Nothing is built yet, so the brief gets today's main. */
+function fresh(root: string, plan: number): void {
+  rmSync(join(planDir(root, plan), 'src'), { recursive: true, force: true })
+  drop(root, plan, 'base.sha')
+  drop(root, plan, 'base.merged')
 }

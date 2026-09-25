@@ -1,5 +1,6 @@
 import { fixturePerRail } from './fixture-per-rail.ts'
 import type { Check, Finding } from './kind.ts'
+import { migrationOrder } from './migration-order.ts'
 import { originOnRefuse } from './origin-on-refuse.ts'
 import { reachability } from './reachability.ts'
 import { reviewerManifests } from './reviewer-manifests.ts'
@@ -17,6 +18,7 @@ export const CHECKS: Check[] = [
   reviewerNotBuilder,
   reviewerManifests,
   fixturePerRail,
+  migrationOrder,
 ]
 
 export async function runAll(root: string, only?: string): Promise<Finding[]> {

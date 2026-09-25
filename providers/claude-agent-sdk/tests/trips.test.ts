@@ -34,6 +34,15 @@ test('symlinked checkout reads inside', () => {
   expect(readOutside(cwd, 'Read', { file_path: join(root, 'real', 'work', '69', 'src', 'x.rb') })).toContain('run.outside_checkout')
 })
 
+test('#274 a granted folder reads, nothing beside it does', () => {
+  const cwd = '/Users/m/cf_v2/.cf/work/143/src'
+  const reads = ['/Users/m/cf_v2/schema', '/Users/m/cf_v2/cli']
+  expect(readOutside(cwd, 'Read', { file_path: '/Users/m/cf_v2/schema/0036_decisions.sql' }, reads)).toBeNull()
+  expect(readOutside(cwd, 'Grep', { pattern: 'events', path: '/Users/m/cf_v2/schema' }, reads)).toBeNull()
+  expect(readOutside(cwd, 'Read', { file_path: '/Users/m/cf_v2/sequencer/steps.ts' }, reads)).toContain('run.outside_checkout')
+  expect(readOutside(cwd, 'Read', { file_path: '/Users/m/cf_v2/schema-old/x.sql' }, reads)).toContain('run.outside_checkout')
+})
+
 test('spilled tool result reads', () => {
   const spill = '/Users/m/.claude/projects/-Users-m-cf-v2--cf-work-68-src/44737eb4/tool-results/bvvskcyql.txt'
   expect(readOutside('/Users/m/cf_v2/.cf/work/68/src', 'Read', { file_path: spill })).toBeNull()

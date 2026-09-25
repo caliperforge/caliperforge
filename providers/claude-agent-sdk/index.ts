@@ -150,7 +150,7 @@ export function gate(packet: Packet, input: HookInput): SyncHookJSONOutput {
     const refused = ranOutside(packet.tools, input.tool_input)
     return refused === null ? { continue: true } : deny(refused)
   }
-  const away = readOutside(packet.cwd, input.tool_name, input.tool_input)
+  const away = readOutside(packet.cwd, input.tool_name, input.tool_input, packet.reads)
   if (away !== null) return deny(away)
   const denied = wroteOutside(packet, input.tool_name, input.tool_input)
   return denied === null ? { continue: true } : stop(denied)
@@ -160,7 +160,7 @@ export function gate(packet: Packet, input: HookInput): SyncHookJSONOutput {
  * A read outside the checkout is refused and the seat goes on: what it needs from a dependency is in the
  * brief's Settled facts. The registry dig this stops cost two surfpool fires their whole wall on 09-24.
  */
-export function readOutside(cwd: string, tool: string, args: unknown): string | null {
+export function readOutside(cwd: string, tool: string, args: unknown, reads: string[] = []): string | null {
   if (!READS.has(tool)) return null
   const given = args as { file_path?: unknown; path?: unknown }
   const path = typeof given.file_path === 'string' ? given.file_path : typeof given.path === 'string' ? given.path : null
@@ -169,7 +169,13 @@ export function readOutside(cwd: string, tool: string, args: unknown): string | 
   if (SPILLED.test(target)) return null
   const rel = relative(real(resolve(cwd)), target)
   if (rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))) return null
+  if (reads.some((dir) => within(real(resolve(dir)), target))) return null
   return `ruling:run.outside_checkout refuses a read of ${path}: read nothing outside the checkout; the brief's Settled facts hold what the change needs from outside it`
+}
+
+function within(dir: string, target: string): boolean {
+  const rel = relative(dir, target)
+  return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))
 }
 
 /** Where the harness spills a tool result too long to hand back inline; the seat reads its own output there. */

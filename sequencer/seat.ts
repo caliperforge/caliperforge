@@ -79,7 +79,7 @@ export async function fireBrief(db: Db, root: string, plan: PlanRow, step: Step,
   const src = srcDir(root, plan.id)
   const standing = maybe(root, plan.id, 'issue.md')
   if (standing !== null && shape(standing, ask, src) === null) return stands()
-  const fired = await ran(db, root, plan, step, provider, again(root, plan.id, ask), false)
+  const fired = await ran(db, root, plan, step, provider, again(root, plan.id, ask) + store(root, plan), false)
   if (fired.ended !== 'completed') return exited(step, fired)
   const question = unclear(fired.text)
   if (question !== null) {
@@ -118,6 +118,20 @@ function again(root: string, plan: number, ask: string): string {
   return refusal === null ? asked : `${asked}\n# Refused — write the whole brief again, fixing this\n\n${refusal}`
 }
 
+/**
+ * #274: Atelier reads cf.db, so its brief writer may read the machine's schema and CLI, read-only. Before this,
+ * plans 114, 116, 143, 146 and 155 each stopped at step 1 to ask for a column name a person had to copy in.
+ */
+export function machineReads(root: string, plan: PlanRow, seat: string): string[] {
+  return plan.lane === 'atelier' && seat === 'brief_writer' ? [join(root, 'schema'), join(root, 'cli')] : []
+}
+
+function store(root: string, plan: PlanRow): string {
+  const [schema, cli] = machineReads(root, plan, 'brief_writer')
+  if (schema === undefined || cli === undefined) return ''
+  return `\n\n# The machine's store\n\nAtelier reads the machine's cf.db. Its tables are defined in \`${schema}/*.sql\` (later files alter earlier ones) and the \`cf\` commands in \`${cli}/\`. Read them for column names and values; you may not write there.\n`
+}
+
 /** A plan queued before the brief seat carries its ask as `issue.md`, the name the brief now takes. */
 function askOf(root: string, plan: number): string {
   return maybe(root, plan, 'ask.md') ?? move(root, plan, 'issue.md', 'ask.md')
@@ -131,6 +145,7 @@ export async function ran(db: Db, root: string, plan: PlanRow, step: Step, provi
     ...packet(manifest, prompt, tight(root), issue, srcDir(root, plan.id),
       transcriptOf(root, plan.id, step.step), ours, fenceFor(db, plan.id, manifest.write_paths)),
     wall: wall(db),
+    reads: machineReads(root, plan, step.runs),
   })
   const row = db.prepare(INSERT).run(plan.id, step.step, step.runs, hash, provider.name, manifest.model, manifest.effort,
     fired.usage.input, fired.usage.cache, fired.usage.output, fired.seconds, fired.exit, fired.transcript_path)

@@ -4,7 +4,7 @@ import { digestOf } from '../store/approvals.ts'
 import { hold } from '../store/holds.ts'
 import { logged, newestRun, runSince } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
-import { clear as unlease, held, take, type Lease, type Taken } from '../store/leases.ts'
+import { clear as unlease, drop, handOver, held, take, type Lease, type Taken } from '../store/leases.ts'
 import { cap, hhmm, zone } from '../store/lanes.ts'
 import { PlanRow, advance, back, finish, internal, live, needsCeo, openPipes, rewind, terminal, type PipeRow, waiting } from '../store/plans.ts'
 import { blipped, fingerprint, refused, WHY, type Why } from '../store/refusals.ts'
@@ -30,7 +30,8 @@ import { homeOf } from './home.ts'
  * `CHAIN_MINUTES`, and a test that leaves it at 0 still sees one step per tick.
  */
 export async function tick(db: Db, root: string, provider: Provider, now: Date = new Date(),
-  read: (repo: string, no: number) => Pr = readPr, wire?: Wire, chain = 0, labels?: Read, each = Infinity): Promise<Fired[]> {
+  read: (repo: string, no: number) => Pr = readPr, wire?: Wire, chain = 0, labels?: Read, each = Infinity,
+  apart?: Apart): Promise<Fired[]> {
   for (const signal of capture(db, read)) started(db, signal, root)
   if (labels !== undefined) intake(db, root, labels)
   reap(root, terminal(db))
@@ -42,7 +43,7 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
     'fire' in r ? { plan: plan.id, why: null } : { plan: plan.id, why: r.wait, on: r.on })))
   if (Number.isFinite(each)) {
     const laps = lanes.flatMap(({ pipe, routed }) => leased(db, routed.filter((r) => stepping(r.route)), now, each)
-      .map((m) => one(db, root, pipe, m, m.lease, provider, wire, chain)))
+      .map((m) => apart === undefined ? one(db, root, pipe, m, m.lease, provider, wire, chain) : away(db, m, apart)))
     out.push(...(await Promise.all(laps)).flat())
   } else {
     for (const { pipe, routed } of lanes) {
@@ -55,6 +56,37 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
   return out
 }
 
+/** Runs one leased job in a process of its own and hands back what it fired. */
+export type Apart = (plan: number, stole: number | null) => Promise<Fired[]>
+
+/** A job whose process died before it took the lease frees its plan; one that died after leaves a dead pid, which the next tick takes over. */
+async function away(db: Db, leg: Leg & { lease: Taken }, apart: Apart): Promise<Fired[]> {
+  try {
+    return await apart(leg.plan.id, leg.lease.stole)
+  } finally {
+    drop(db, leg.plan.id)
+  }
+}
+
+/**
+ * #311: one leased job's laps, in the process `cf lap` forked for it. Step 3's checks and the slot wait block
+ * the event loop, and an agent whose tool hook cannot answer stops with it: on 09-25 two reviews logged 23
+ * minutes for 12 seconds of model. One process per job keeps a check from freezing another lane's agent.
+ */
+export async function lap(db: Db, root: string, provider: Provider, plan: number, from: number, stole: number | null,
+  chain = 0): Promise<Fired[]> {
+  const lease = handOver(db, plan, from)
+  if (lease === null) return []
+  const taken = { ...lease, stole }
+  const row = PlanRow.parse(db.prepare('SELECT * FROM plans WHERE id = ?').get(plan))
+  const pipe = openPipes(db, hhmm(db, new Date())).find((p) => p.id === row.pipe_id)
+  if (pipe === undefined) {
+    unlease(db, plan)
+    return []
+  }
+  return one(db, root, pipe, { plan: row, route: route(db, row, new Date(), taken) }, taken, provider, undefined, chain)
+}
+
 /** A `token_ceiling` plan is leased too: `ceilinged` is its step. */
 function stepping(r: Route): boolean {
   return 'fire' in r || 'over' in r
@@ -63,7 +95,7 @@ function stepping(r: Route): boolean {
 /**
  * Jobs the live tick leases per lane. Step 3's checks run synchronously, so every job in one tick waited on the slowest
  * test run: on 09-25 one job's suite froze five others for 20+ minutes, and the Atelier lane waited behind the machine
- * lane. One job per lane per tick puts each job in its own process; the tick fires every minute, so the lanes fill in minutes.
+ * lane. One job per lane per tick, each in a process of its own (#311); the tick fires every minute, so the lanes fill in minutes.
  */
 export const EACH = 1
 

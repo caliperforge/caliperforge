@@ -13,7 +13,7 @@ import { at, type Step } from '../templates/pr-path.ts'
 import { writable } from './brief.ts'
 import type { Outcome } from './kind.ts'
 import { preReview } from './rails.ts'
-import { forkCi, headOf, land, opened, push, type Wire } from './push.ts'
+import { forkCi, headOf, land, opened, push, reviewable, title, type Wire } from './push.ts'
 import { following } from './split.ts'
 import { abortMerge, behindMain, cloned, conflicted, diffOf, fetchMain, get, maybe, merging, mergeMain, put, recut, srcDir, unmerged } from './workspace.ts'
 import { homeOf } from './home.ts'
@@ -63,12 +63,19 @@ export function parked(db: Db, plan: PlanRow): string | null {
 
 export function kernel(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
   const step = at(plan.step)
-  if (step.name === 'rails') return freshBase(db, root, plan) ?? strayed(db, root, plan) ?? preReview(db, root, plan)
+  if (step.name === 'rails') return freshBase(db, root, plan) ?? strayed(db, root, plan) ?? railed(db, root, plan, wire)
   if (step.name === 'measure') return measure(db, plan)
   if (step.name === 'ready') return readyGate(db, root, plan, wire)
   if (step.name === 'batch') return batch(db, root, plan, wire)
   if (step.name === 'push') return push(db, root, plan, wire)
   return { outcome: 'pass', spans: [], note: step.name }
+}
+
+function railed(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
+  const judged = preReview(db, root, plan)
+  const repo = repoOf(db, plan)
+  if (judged.outcome === 'pass' && judged.held !== true && repo !== null) reviewable(db, root, plan, repo, wire)
+  return judged
 }
 
 /**
@@ -114,7 +121,7 @@ function readyGate(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
   if (row === null) return { outcome: 'refuse', spans: ['deliverables'], note: `plan ${String(plan.id)} has no deliverable row` }
   const waiting = forkCi(db, root, plan, repo, wire)
   if (waiting !== null) return waiting
-  const verdict = readyRail(proofOf(db, plan, repo, row))
+  const verdict = readyRail(proofOf(db, root, plan, repo, row))
   recordRail(db, join(root, 'rails/ready'), plan.id, verdict, 0)
   return { outcome: verdict.outcome, spans: verdict.spans, note: `ready: ${verdict.message}` }
 }
@@ -149,7 +156,7 @@ function freshBase(db: Db, root: string, plan: PlanRow): Outcome | null {
   if (!cloned(src) || shown(db, plan)) return null
   if (conflicted(src)) abortMerge(src)
   const main = fetchMain(src)
-  if (!behindMain(src)) return null
+  if (!behindMain(src, main)) return null
   const paths = takeMain(db, root, plan, src, main, at(plan.step).step)
   if (paths === null) return null
   recut(root, plan.id)
@@ -218,7 +225,7 @@ function baseMoved(db: Db, root: string, plan: PlanRow): Outcome | null {
   if (!cloned(src) || shown(db, plan)) return null
   if (conflicted(src)) return cutAgain('base:conflict', 'the checkout has unmerged paths from a tick that stopped mid-merge')
   const main = fetchMain(src)
-  if (!behindMain(src)) return null
+  if (!behindMain(src, main)) return null
   if (maybe(root, plan.id, 'base.merged') !== null) return cutAgain('base:stale', 'the branch is behind main a second time')
   if (takeMain(db, root, plan, src, main, at(plan.step).step) !== null) return cutAgain('base:conflict', 'the branch conflicts with main')
   put(root, plan.id, 'base.merged', `${main}\n`)
@@ -242,7 +249,7 @@ function gatedRow(db: Db, plan: number): Gated | null {
     FROM deliverables WHERE plan_id = ? ORDER BY id DESC LIMIT 1`).get(plan) ?? null) as Gated | null
 }
 
-function proofOf(db: Db, plan: PlanRow, repo: string, row: Gated): Proof {
+function proofOf(db: Db, root: string, plan: PlanRow, repo: string, row: Gated): Proof {
   const ci = db.prepare("SELECT outcome, subject_digest FROM verdicts WHERE plan = ? AND rail_id = 'ci-green' ORDER BY id DESC LIMIT 1")
     .get(plan.id) as { outcome: string; subject_digest: string } | undefined
   return {
@@ -255,6 +262,8 @@ function proofOf(db: Db, plan: PlanRow, repo: string, row: Gated): Proof {
     bot_clean: row.bot_clean === 1,
     ci: green(ci),
     spans: [row.diff_digest.slice(0, 12)],
+    title: title(root, plan.id),
+    named: [maybe(root, plan.id, 'ask.md') ?? '', ...parse(diffOf(root, plan.id)).flatMap((f) => f.added.map((l) => l.text))].join('\n'),
   }
 }
 

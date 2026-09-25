@@ -28,7 +28,7 @@ export async function fireRound(db: Db, root: string, plan: PlanRow, step: Step,
   if (findings.length === 0 || !findings.every((f) => f.kind === 'cosmetic')) return verdict
   const src = srcDir(root, plan.id)
   const fired = await ran(db, root, plan, at(2, languageFor(db, plan, src)), provider, asked(root, plan.id, findings), internal(plan))
-  if (fired.exit !== 0) return verdict
+  if (fired.ended !== 'completed') return verdict
   if (strayed(diffSince(src, tree), findings)) return verdict
   if (internal(plan) && checks(src) !== null) return verdict
   record(db, root, step.runs, plan.id, settled(diffOf(root, plan.id)), 0, fired.seconds, null, 1)

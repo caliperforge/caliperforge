@@ -232,11 +232,13 @@ export function fired(message: SDKResultMessage, started: number, refused: strin
   const denials = refused.length + message.permission_denials.length
   const ended = message.terminal_reason ?? (refused.length > 0 ? 'hook_stopped' : 'completed')
   const text = message.subtype === 'success' ? message.result : message.errors.join('\n')
+  const stopped = message.is_error || ended !== 'completed'
   return {
     text: text === '' ? refused.join('\n') : text,
     usage,
     seconds: (Date.now() - started) / 1000,
-    exit: message.is_error || ended !== 'completed' ? 1 : 0,
+    ended: stopped ? 'stopped' : 'completed',
+    exit: stopped ? 1 : 0,
     stop_reason: refused[0] ?? (ended === 'completed' ? message.stop_reason : ended),
     denials,
   }

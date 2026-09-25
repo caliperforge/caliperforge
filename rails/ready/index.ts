@@ -12,6 +12,9 @@ export interface Proof {
   bot_clean: boolean
   ci: Verdict
   spans: string[]
+  title: string
+  /** The ask's text and the diff's added lines. */
+  named: string
 }
 
 export function ready(proof: Proof): Verdict {
@@ -21,6 +24,7 @@ export function ready(proof: Proof): Verdict {
     ...(proof.ci.outcome === 'pass' ? [] : proof.ci.spans),
     ...(proof.fork_public ? [] : ['fork:1 not.public']),
     ...(proof.bot_clean ? [] : ['bot:1 ready.bot_clean']),
+    ...(proof.ours || !clipped(proof.title, proof.named) ? [] : ['title:1 ready.title_clipped']),
     ...(proof.spans.length === 0 ? ['spans:1 no.anchor'] : []),
   ]
   const subject_digest = digest(proof)
@@ -35,6 +39,13 @@ export function ready(proof: Proof): Verdict {
     spans,
     message: `${String(spans.length)} span(s) keep the deliverable out of the batch`,
   }
+}
+
+/** pay-kit#340: a title ending on a code-shaped word that some longer name in the ask or diff starts with. */
+function clipped(title: string, named: string): boolean {
+  const last = /([A-Za-z_][A-Za-z0-9_]*)\W*$/.exec(title)?.[1]
+  if (last === undefined || !/_|[a-z][A-Z]/.test(last)) return false
+  return (named.match(/[A-Za-z_][A-Za-z0-9_]*/g) ?? []).some((t) => t.length > last.length && t.startsWith(last))
 }
 
 function digest(proof: Proof): string {

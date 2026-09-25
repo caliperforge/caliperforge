@@ -135,6 +135,10 @@ test('only a fence that says unclear carries a question back to the COO', () => 
   expect(unclear('---\noutcome: unclear\n---\n')).toBeNull()
 })
 
+test('a question naming an issue keeps everything after the #', () => {
+  expect(unclear(asks('Has #3a landed, and on which commit?'))).toBe('Has #3a landed, and on which commit?')
+})
+
 test('prose with no title or fence is the question itself; a titled brief is not', () => {
   expect(unclear('I could not brief this: the router it needs is not on main.\n')).toBe('I could not brief this: the router it needs is not on main.')
   expect(unclear(brief)).toBeNull()

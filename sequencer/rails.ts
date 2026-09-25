@@ -37,7 +37,7 @@ export function preReview(db: Db, root: string, plan: PlanRow): Outcome {
   const first = audit(handback, doneIds(get(root, plan.id, 'issue.md')), prev, diff)
   record(db, plan.id, first, 0)
   if (first.outcome !== 'pass') return named('completion-audit', first)
-  for (const [rail, run] of rest(db, root, plan, handback)) {
+  for (const [rail, run] of rest(db, root, plan, handback, diff)) {
     const verdict = run()
     recordRail(db, join(root, 'rails', rail), plan.id, verdict, 0)
     if (verdict.outcome !== 'pass') return named(rail, verdict)
@@ -102,9 +102,8 @@ function broke(failed: Failure): Outcome {
  * plan lands as a commit named for its branch and opens no pull request, so it has no prose to judge; an outside
  * plan's body is built from the brief, never the handback (plan 70).
  */
-function rest(db: Db, root: string, plan: PlanRow, handback: string): [string, () => Verdict][] {
+function rest(db: Db, root: string, plan: PlanRow, handback: string, diff: string): [string, () => Verdict][] {
   const src = srcDir(root, plan.id)
-  const diff = diffOf(root, plan.id)
   const name = builder(languageFor(db, plan, src))
   const fence = fenceFor(db, plan.id, seat(root, name).manifest.write_paths)
   const outside = kernelPlan(plan)

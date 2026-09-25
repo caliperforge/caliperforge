@@ -77,7 +77,7 @@ export function stub(text: string, exit = 0, review = PASS, seen?: (packet: Pack
       return Promise.resolve({
       text: answer(packet, text, review, brief),
       transcript_path: packet.transcript,
-      usage: { input: 10, cache: 20, output: 30 }, seconds: 0.5, exit,
+      usage: { input: 10, cache: 20, output: 30 }, seconds: 0.5, ended: exit === 0 ? 'completed' : 'stopped', exit,
       stop_reason: exit === 0 ? 'end_turn' : 'hook_stopped', denials: exit,
       })
     },
@@ -115,7 +115,7 @@ export function builds(edit: () => void, review = PASS, exit = 0): Provider {
     fire: async (packet) => {
       if (!packet.tools.includes('Write')) return inner.fire(packet)
       edit()
-      return { ...await inner.fire(packet), exit }
+      return { ...await inner.fire(packet), ended: exit === 0 ? 'completed' : 'stopped', exit }
     },
   }
 }
@@ -272,7 +272,10 @@ export function watched(log: string[], root: string, id: number, runs = runsOn(r
     open: (repo, head) => { log.push(`open ${repo} ${head}`); return PR },
     close: (repo, no, sha) => void log.push(`close ${repo}#${String(no)} ${sha.slice(0, 7)}`),
     runs,
-    rehearse: (fork, branch) => void log.push(`rehearse ${fork} ${branch}`),
+    rehearse: (fork, branch) => {
+      const line = `rehearse ${fork} ${branch}`
+      if (log.findLast((l) => l === line || l === `un${line}`) !== line) log.push(line)
+    },
     unrehearse: (fork, branch) => void log.push(`unrehearse ${fork} ${branch}`),
     file: (repo, title) => {
       log.push(`file ${repo} ${title}`)

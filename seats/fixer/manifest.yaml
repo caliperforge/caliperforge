@@ -1,0 +1,20 @@
+seat: fixer
+model: claude-opus-5-5
+effort: high
+tools:
+  - Read
+  - Glob
+  - Grep
+  - Edit
+  - Write
+  - Bash(git -C src status:*)
+  - Bash(git -C src diff:*)
+  - Bash(git -C src add:*)
+  - Bash(git -C src mv:*)
+  - Bash(git -C src log:*)
+write_paths:
+  - src
+  - issue.md
+  - ask.md
+  - step-2.handback.md
+  - base.sha

@@ -8,8 +8,8 @@ import type { Db } from '../store/index.ts'
 import { needsCeo, PlanRow, rewind } from '../store/plans.ts'
 import { clear } from '../store/refusals.ts'
 import type { Board } from '../rails/ci-green/index.ts'
-import { BOARD, headOf, opened } from './push.ts'
-import { diffOf, drop, FORK, get, maybe, put, repoName, titleOf } from './workspace.ts'
+import { BOARD, headOf, opened, title } from './push.ts'
+import { diffOf, drop, FORK, get, maybe, put, repoName } from './workspace.ts'
 
 /**
  * 09-21 item 4: an outside job is signed off without a terminal. A plan waiting at step 7 gets one
@@ -121,11 +121,7 @@ function subjectOf(db: Db, plan: number): Subject {
 /** No `owner/repo#n` and no upstream url anywhere a reference is read: our repo is public, and either would put a line on their thread. */
 function titleFor(db: Db, root: string, plan: number): string {
   const s = subjectOf(db, plan)
-  return `Sign-off: ${repoName(s.repo)} ${String(s.issue_no)}${s.part === '' ? '' : ` ${s.part}`}, ${prTitle(root, plan)}`
-}
-
-function prTitle(root: string, plan: number): string {
-  return titleOf(root, plan) ?? `plan ${String(plan)}`
+  return `Sign-off: ${repoName(s.repo)} ${String(s.issue_no)}${s.part === '' ? '' : ` ${s.part}`}, ${title(root, plan)}`
 }
 
 /**
@@ -142,7 +138,7 @@ export function bodyFor(db: Db, root: string, card: Card): string {
   const text = open === null ? card.text : lastMessage(head.dir)
   const fence = '`'.repeat(Math.max(3, longest(text) + 1))
   return [
-    `**${repoName(s.repo)} ${String(s.issue_no)}**: ${prTitle(root, card.id)}`,
+    `**${repoName(s.repo)} ${String(s.issue_no)}**: ${title(root, card.id)}`,
     '',
     headline(card.marks.every((m) => m.ok), ci),
     '',
@@ -151,7 +147,7 @@ export function bodyFor(db: Db, root: string, card: Card): string {
     `- Gates: ${card.marks.map((m) => `${m.name} ${m.ok ? 'pass' : 'NOT PASSED'}`).join(', ')}`,
     ...(ci === null ? [] : [`- Their CI on our fork: ${ciLine(ci)}`]),
     open === null
-      ? `- Goes out as: a new pull request titled ${code(prTitle(root, card.id))}`
+      ? `- Goes out as: a new pull request titled ${code(title(root, card.id))}`
       : `- Goes out as: a follow-up commit on our open pull request ${code(open)}`,
     '',
     open === null ? '**What the maintainer reads**' : '**The commit message the maintainer reads**',

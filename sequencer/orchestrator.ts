@@ -53,7 +53,13 @@ export async function woke(db: Db, root: string, provider: Provider, now: Date, 
 async function handle(db: Db, root: string, plan: PlanRow, d: { id: number; verb: Verb; why: string }, provider: Provider,
   now: Date, post: Post, wire: Wire): Promise<void> {
   const ticket = ticketOf(db, plan.id)
-  const fixed = d.verb === 'ask_coo' && await fixer(db, root, plan, d, ticket, provider, now, post, wire)
+  let fixed = false
+  try {
+    fixed = d.verb === 'ask_coo' && await fixer(db, root, plan, d, ticket, provider, now, post, wire)
+  } catch (error) {
+    // A fixer that throws must not take the tick down with it (09-25 11:15); the stop goes to a person as before.
+    put(root, plan.id, 'fixer.error', error instanceof Error ? error.message : String(error))
+  }
   if (!fixed) act(db, root, plan, d, ticket, now, post)
 }
 

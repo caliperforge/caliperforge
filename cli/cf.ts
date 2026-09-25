@@ -31,6 +31,7 @@ import { measure, render as renderPulse } from './measure.ts'
 import { add as fileIssue, render as renderUnfiled, unfiled } from './plan.ts'
 import { add } from './queue.ts'
 import { close } from './session.ts'
+import { alerter, CRASHED, liveness, livenessLine, watch } from './watch.ts'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { version: string }
@@ -285,6 +286,7 @@ cf.command('halted').action(() => {
 
 cf.command('brief').action(() => {
   const handle = db()
+  out(livenessLine(handle, liveness(handle, new Date())))
   out(laneLine(lanes(handle, hhmm(handle))))
   out(section('open plans', openPlans(handle)))
   out(section('halted', halted(handle)))
@@ -304,8 +306,28 @@ cf.command('tick').option('--dry', 'read what a tick would do, fire nothing, cal
     const now = new Date()
     await ticked(options, now).catch((error: unknown) => {
       crashed(root, now.toISOString(), error)
+      down(now, error)
       throw error
     })
+  })
+
+/** #251: a tick that threw leaves a receipt saying so and raises the alert, or the table reads a dead machine as an idle one. */
+function down(now: Date, error: unknown): void {
+  try {
+    const handle = db()
+    const message = error instanceof Error ? error.message : String(error)
+    receipt(handle, { at: now.toISOString(), hhmm: hhmm(handle, now), dry: false,
+      pipes: openPipes(handle, hhmm(handle, now)).length, fired: 0, exit: 1, note: `${CRASHED}${message.slice(0, 500)}` })
+    watch(handle, root, now, alerter(handle))
+  } catch {
+    return
+  }
+}
+
+cf.command('watch').description('alert once when no real tick has landed inside an open window, and once when one lands again')
+  .action(() => {
+    const handle = db()
+    out(livenessLine(handle, watch(handle, root, new Date(), alerter(handle))))
   })
 
 async function ticked(options: { dry?: boolean }, now: Date): Promise<void> {
@@ -325,6 +347,7 @@ async function ticked(options: { dry?: boolean }, now: Date): Promise<void> {
   receipt(handle, upgraded(handle, root, { at: now.toISOString(), hhmm: hhmm(handle, now), dry: false,
     pipes: openPipes(handle, hhmm(handle, now)).length, fired: fired.length,
     exit: fired.some((f) => f.outcome === 'refuse') ? 1 : 0, note: tickNote(fired, overlapWaits(handle)) }))
+  watch(handle, root, now, alerter(handle))
   const news = events(handle, fired, now.toISOString())
   keep(root, news)
   notify(news)

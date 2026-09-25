@@ -162,7 +162,7 @@ function freshBase(db: Db, root: string, plan: PlanRow): Outcome | null {
   const paths = takeMain(db, root, plan, src, main, at(plan.step).step)
   if (paths === null) return null
   recut(root, plan.id)
-  return { outcome: 'refuse', spans: paths, note: 'main moved and the branch conflicts with it; cut again from main', rewind: 2 }
+  return { outcome: 'refuse', spans: paths, note: 'main moved and the branch conflicts with it; cut again from main', rewind: 2, moved: true }
 }
 
 /**

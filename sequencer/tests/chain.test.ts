@@ -65,7 +65,7 @@ test('a refused build rebuilds in the same tick', async () => {
     const out = await inner.fire(packet)
     if (!packet.tools.includes('Write')) return out
     builds += 1
-    return builds === 1 ? { ...out, exit: 1, stop_reason: 'hook_stopped' } : out
+    return builds === 1 ? { ...out, ended: 'stopped' as const, exit: 1, stop_reason: 'hook_stopped' } : out
   } }
   const fired = await tick(w.db, w.root, flaky, undefined, undefined, watched([], w.root, 1), 5)
   expect(fired.slice(0, 4).map((f) => [f.step, f.outcome])).toEqual([[0, 'pass'], [1, 'pass'], [2, 'refuse'], [2, 'pass']])

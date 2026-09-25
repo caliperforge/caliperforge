@@ -39,7 +39,7 @@ function body(diff: string): string {
 function replies(text: string): Provider {
   return {
     name: 'claude-agent-sdk',
-    fire: (p) => Promise.resolve({ text, transcript_path: p.transcript, usage: { input: 9, cache: 0, output: 4 }, seconds: 0.2, exit: 0, stop_reason: 'end_turn', denials: 0 }),
+    fire: (p) => Promise.resolve({ text, transcript_path: p.transcript, usage: { input: 9, cache: 0, output: 4 }, seconds: 0.2, ended: 'completed', exit: 0, stop_reason: 'end_turn', denials: 0 }),
   }
 }
 

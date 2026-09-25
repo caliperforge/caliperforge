@@ -16,7 +16,7 @@ const TRANSCRIPT = '/tmp/cf-seat/run.transcript.jsonl'
 const stub: Provider = {
   name: 'claude-agent-sdk',
   fire: (p) => Promise.resolve({
-    text: p.prompt, transcript_path: p.transcript, usage: { input: 11, cache: 22, output: 33 }, seconds: 1.5, exit: 0, stop_reason: 'end_turn', denials: 0,
+    text: p.prompt, transcript_path: p.transcript, usage: { input: 11, cache: 22, output: 33 }, seconds: 1.5, ended: 'completed', exit: 0, stop_reason: 'end_turn', denials: 0,
   }),
 }
 
@@ -131,14 +131,14 @@ test('a write under a symlinked cwd resolves to the same root and is allowed', (
 test('a hook-stopped session lands non-zero carrying the refusal origin, a completed one lands zero', () => {
   const reason = 'ruling:seat.write_paths refuses a write to package.json'
   const stopped = fired(result({ result: '', terminal_reason: 'hook_stopped' }), Date.now(), [reason])
-  expect(stopped).toMatchObject({ exit: 1, denials: 1, stop_reason: reason, text: reason })
+  expect(stopped).toMatchObject({ ended: 'stopped', exit: 1, denials: 1, stop_reason: reason, text: reason })
   const clean = fired(result({ result: 'done', terminal_reason: 'completed' }), Date.now(), [])
-  expect(clean).toMatchObject({ exit: 0, denials: 0, stop_reason: 'end_turn', text: 'done' })
+  expect(clean).toMatchObject({ ended: 'completed', exit: 0, denials: 0, stop_reason: 'end_turn', text: 'done' })
 })
 
 test('a session that spent its turns lands the cap in stop_reason', () => {
   const capped = fired(result({ subtype: 'error_max_turns', is_error: true, errors: [], terminal_reason: 'max_turns' }), Date.now(), [])
-  expect(capped).toMatchObject({ exit: 1, stop_reason: CAPPED })
+  expect(capped).toMatchObject({ ended: 'stopped', exit: 1, stop_reason: CAPPED })
 })
 
 test('a refused command is counted and the session still lands zero', () => {

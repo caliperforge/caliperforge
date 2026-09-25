@@ -38,7 +38,7 @@ export async function fireSeat(db: Db, root: string, plan: PlanRow, step: Step, 
   const fired = await ran(db, root, plan, step, provider, rebuild(db, root, plan, prev), kernelPlan(plan))
   put(root, plan.id, name, fired.text)
   const tokens = fired.usage.input + fired.usage.cache + fired.usage.output
-  if (fired.exit !== 0) return exited(step, fired)
+  if (fired.ended !== 'completed') return exited(step, fired)
   return dropped(db, root, plan, step, fired.text)
     ?? { outcome: 'pass', spans: [], note: `${step.runs} exit 0, ${String(tokens)} tokens` }
 }
@@ -79,7 +79,7 @@ export async function fireBrief(db: Db, root: string, plan: PlanRow, step: Step,
   const standing = maybe(root, plan.id, 'issue.md')
   if (standing !== null && shape(standing, ask, src) === null) return stands()
   const fired = await ran(db, root, plan, step, provider, again(root, plan.id, ask), false)
-  if (fired.exit !== 0) return exited(step, fired)
+  if (fired.ended !== 'completed') return exited(step, fired)
   const question = unclear(fired.text)
   if (question !== null) {
     put(root, plan.id, 'question.md', `${question}\n`)
@@ -139,7 +139,7 @@ export async function ran(db: Db, root: string, plan: PlanRow, step: Step, provi
 }
 
 function exited(step: Step, fired: Fired): Outcome {
-  return { outcome: 'refuse', spans: [fired.stop_reason ?? 'seat.exit'], note: `${step.runs} exit ${String(fired.exit)}` }
+  return { outcome: 'refuse', spans: [fired.stop_reason ?? 'seat.exit'], note: `${step.runs} ${fired.ended}` }
 }
 
 /**
@@ -164,7 +164,7 @@ function rebuild(db: Db, root: string, plan: PlanRow, prev: string | null): stri
 
 /** A build the wall or an exit cut short was never judged: the refusal names the stop, not a fault in the work. */
 export function stopped(refusal: string): boolean {
-  return /^step \d+ build refused by \S+\n\n\S+ exit [1-9]\d*\n/.test(refusal)
+  return /^step \d+ build refused by \S+\n\n\S+ stopped\n/.test(refusal)
 }
 
 /**

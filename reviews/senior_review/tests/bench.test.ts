@@ -21,7 +21,7 @@ function fixture(review: string, name: string): string {
 function replies(text: string): Provider {
   return {
     name: 'claude-agent-sdk',
-    fire: (p) => Promise.resolve({ text, transcript_path: p.transcript, usage: { input: 5, cache: 6, output: 7 }, seconds: 0.5, exit: 0, stop_reason: 'end_turn', denials: 0 }),
+    fire: (p) => Promise.resolve({ text, transcript_path: p.transcript, usage: { input: 5, cache: 6, output: 7 }, seconds: 0.5, ended: 'completed', exit: 0, stop_reason: 'end_turn', denials: 0 }),
   }
 }
 
@@ -142,7 +142,7 @@ test('a run that ends at the step cap is fired once more with no tools, and that
     fire: async (p) => {
       sent.push(p)
       const fired = await replies(sent.length === 1 ? 'still reading' : fixture('code_quality', 'seeded.reply.md')).fire(p)
-      return sent.length === 1 ? { ...fired, stop_reason: CAPPED, exit: 1 } : fired
+      return sent.length === 1 ? { ...fired, stop_reason: CAPPED, ended: 'stopped', exit: 1 } : fired
     },
   }
   const out = await judge(db, root, 'code_quality', plan, seeded(), provider, TRANSCRIPT)

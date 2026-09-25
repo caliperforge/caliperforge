@@ -30,7 +30,7 @@ function stub(text: string, fires: string[]): Provider {
     fire: (packet) => {
       fires.push(packet.prompt)
       return Promise.resolve({ text, transcript_path: packet.transcript, usage: { input: 10, cache: 20, output: 30 },
-        seconds: 0, exit: 0, stop_reason: 'end_turn', denials: 0 })
+        seconds: 0, ended: 'completed', exit: 0, stop_reason: 'end_turn', denials: 0 })
     },
   }
 }

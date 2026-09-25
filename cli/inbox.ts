@@ -45,7 +45,7 @@ function kindOf(f: Fired): Kind | null {
   return f.outcome === 'refuse' ? 'refused' : null
 }
 
-function ticketOf(db: Db, plan: number): string {
+export function ticketOf(db: Db, plan: number): string {
   const row = db.prepare(`SELECT p.origin, t.repo, t.issue_no FROM plans p LEFT JOIN targets t ON t.id = p.target_id
     WHERE p.id = ?`).get(plan) as { origin: string | null; repo: string | null; issue_no: number | null } | undefined
   if (row?.origin != null) return `#${row.origin.split('/').at(-1) ?? ''}`

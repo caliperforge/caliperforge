@@ -147,3 +147,84 @@ test('#246 the store takes blocked_on_ceo as a decision reason and still refuses
   expect(() => insert('blocked_on_ceo')).not.toThrow()
   expect(() => insert('made_up')).toThrow(/CHECK/)
 })
+
+const RETRY = '---\nverb: retry\nwhy: the reviewer found a defect the builder can fix\n---\n'
+
+function wheel(db: ReturnType<typeof open>) {
+  db.prepare(`INSERT INTO settings (key, value, who, origin_kind, origin_ref, set_at)
+    VALUES ('orchestrator.apply', '1', 'ceo', 'ruling', 'ceo-2026-09-25', '2026-09-25')`).run()
+}
+
+const applied = (db: ReturnType<typeof open>) =>
+  (db.prepare('SELECT verb, applied FROM decisions ORDER BY id').all() as { verb: string; applied: string | null }[])
+
+test('#238 in shadow a decision changes nothing', async () => {
+  const { db, home } = seeded()
+  blocked(db)
+  put(home, 7, 'refusal.md', 'step 4 review refused\n')
+  await woke(db, home, stub(RETRY, []), now, () => undefined)
+  expect(db.prepare('SELECT state, step FROM plans WHERE id = 7').get()).toEqual({ state: 'blocked_on_ceo', step: 4 })
+  expect(applied(db)).toEqual([{ verb: 'retry', applied: null }])
+})
+
+test('#238 with the wheel, retry sends the plan back to the builder with its refusals cleared', async () => {
+  const { db, home } = seeded()
+  blocked(db)
+  wheel(db)
+  put(home, 7, 'refusal.md', 'step 4 review refused\n')
+  await woke(db, home, stub(RETRY, []), now, () => undefined)
+  expect(db.prepare('SELECT state, step FROM plans WHERE id = 7').get()).toEqual({ state: 'running', step: 2 })
+  expect(db.prepare('SELECT count(*) AS n FROM refusals WHERE plan = 7 AND cleared = 0').get()).toEqual({ n: 0 })
+  expect(applied(db)).toEqual([{ verb: 'retry', applied: 'applied' }])
+  expect(db.prepare('SELECT count(*) AS n FROM leases').get()).toEqual({ n: 0 })
+})
+
+test('#238 a verb off the mechanical list goes to a person and moves nothing', async () => {
+  const { db, home } = seeded()
+  blocked(db)
+  wheel(db)
+  put(home, 7, 'refusal.md', 'step 4 review refused\n')
+  const posted: string[] = []
+  await woke(db, home, stub(VALID, []), now, (title) => void posted.push(title))
+  expect(db.prepare('SELECT state, step FROM plans WHERE id = 7').get()).toEqual({ state: 'blocked_on_ceo', step: 4 })
+  expect(applied(db)).toEqual([{ verb: 'ask_ceo', applied: 'escalated' }])
+  expect(posted).toEqual(['CaliperForge · #139 needs a person'])
+})
+
+test('#238 a plan moved twice in a day is capped and handed to a person', async () => {
+  const { db, home } = seeded()
+  blocked(db)
+  wheel(db)
+  for (let i = 0; i < 2; i += 1) {
+    db.prepare(`INSERT INTO decisions (plan, step, wait_reason, verb, why, applied, at)
+      VALUES (7, 4, 'blocked_on_ceo', 'retry', 'x', 'applied', '2026-09-24 20:00:00')`).run()
+  }
+  put(home, 7, 'refusal.md', 'step 4 review refused again\n')
+  const posted: string[] = []
+  await woke(db, home, stub(RETRY, []), now, (title) => void posted.push(title))
+  expect(db.prepare('SELECT state FROM plans WHERE id = 7').get()).toEqual({ state: 'blocked_on_ceo' })
+  expect(applied(db).at(-1)).toEqual({ verb: 'retry', applied: 'capped' })
+  expect(posted).toHaveLength(1)
+})
+
+test('#238 a stop another live tick holds is left for the next wake', async () => {
+  const { db, home } = seeded()
+  blocked(db)
+  put(home, 7, 'refusal.md', 'step 4 review refused\n')
+  db.prepare('INSERT INTO leases (plan, pid, taken_at) VALUES (7, ?, ?)').run(process.ppid, now.toISOString())
+  const fires: string[] = []
+  await woke(db, home, stub(RETRY, fires), now, () => undefined)
+  expect(fires).toEqual([])
+  expect(maybe(home, 7, 'orchestrator.md')).toBeNull()
+})
+
+test('#238 a colon inside why or evidence is prose, not a broken fence', async () => {
+  const { db, home } = seeded()
+  blocked(db)
+  put(home, 7, 'refusal.md', 'step 3 rails refused\n')
+  const text = '```\n---\nverb: ask_coo\nwhy: Same refusal twice: the brief names a test that does not exist.\n' +
+    'evidence: identifiers: 1 identifier(s) name no source in the tree\n---\n```'
+  await woke(db, home, stub(text, []), now, () => undefined)
+  expect(decisions(db)).toMatchObject([{ verb: 'ask_coo', why: 'Same refusal twice: the brief names a test that does not exist.',
+    evidence: 'identifiers: 1 identifier(s) name no source in the tree' }])
+})

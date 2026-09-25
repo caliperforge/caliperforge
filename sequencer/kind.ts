@@ -34,4 +34,6 @@ export interface Fired {
   spans: string[]
   note: string
   stole: number | null
+  /** The step only waited (the checks lock, another job's files, the network) and spent no model. */
+  held?: true
 }

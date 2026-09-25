@@ -180,7 +180,7 @@ test('the card names a changed file the PR text written in advance leaves out', 
   }
   expect(await bodyWith('Says hey.\n')).toContain('**Not in the PR text:** `src/hello.ts`')
   expect(await bodyWith('`hello.ts` says hey.\n')).not.toContain('Not in the PR text')
-}, 60_000)
+})
 
 /** #102: the cards carry unposted PR text and the CEO's answers, so they live apart from our public repo. */
 test('the cards live on the private sign-off repo, not ours', () => {

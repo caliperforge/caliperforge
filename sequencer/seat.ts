@@ -276,8 +276,8 @@ function rounds(db: Db, root: string, plan: number, step: number): Pick<Bench, '
   const tree = judged(db, plan, step)
   if (tree === null) return prior
   const src = srcDir(root, plan)
-  const moved = narrowing(src, tree, get(root, plan, 'base.sha').trim())
-  return { ...prior, since: enclosed(src, tree) ?? diffSince(src, tree), narrowing: moved }
+  const plain = diffSince(src, tree)
+  return { ...prior, since: enclosed(src, tree) ?? plain, narrowing: narrowing(src, tree, get(root, plan, 'base.sha').trim()) }
 }
 
 /** The tree the reviewer last passed, else the one its last verdict judged, off the row `judge()` wrote it on. */

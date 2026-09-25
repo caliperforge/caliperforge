@@ -8,7 +8,7 @@ import { cap, hhmm, zone } from '../store/lanes.ts'
 import { PlanRow, advance, back, finish, internal, live, needsCeo, openPipes, rewind, terminal, type PipeRow, waiting } from '../store/plans.ts'
 import { blipped, fingerprint, refused, WHY, type Why } from '../store/refusals.ts'
 import { at, last, type Step } from '../templates/pr-path.ts'
-import { capture } from './capture.ts'
+import { capture, intake } from './capture.ts'
 import { woke } from './orchestrator.ts'
 import type { Fired, Outcome } from './kind.ts'
 import { reprice } from './priority.ts'
@@ -31,6 +31,7 @@ import { homeOf } from './home.ts'
 export async function tick(db: Db, root: string, provider: Provider, now: Date = new Date(),
   read: (repo: string, no: number) => Pr = readPr, wire?: Wire, chain = 0, labels?: Read): Promise<Fired[]> {
   for (const signal of capture(db, read)) started(db, signal, root)
+  if (labels !== undefined) intake(db, root, labels)
   reap(root, terminal(db))
   reprice(db, labels)
   const out: Fired[] = []

@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto'
 import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { closeIssue, commentIssue, fileIssue, openPr, rehearse, unrehearse } from '../cli/gh.ts'
+import { alerter } from '../cli/watch.ts'
 import { judge, MISSING, PENDING, shell, type Board, type Gh } from '../rails/ci-green/index.ts'
 import { parse } from '../rails/diff.ts'
 import { record, type Verdict } from '../rails/record.ts'
@@ -10,7 +11,9 @@ import { headDigest, signedHead } from '../store/approvals.ts'
 import { forkGreen } from '../store/deliverables.ts'
 import type { Db } from '../store/index.ts'
 import { internal, originIssue, type PlanRow } from '../store/plans.ts'
+import { npm } from './checks.ts'
 import { red } from './failures.ts'
+import { reinstall } from './install.ts'
 import type { Outcome } from './kind.ts'
 import { cloned, conflicted, diffOf, fetchMain, FORK, get, MAIN, maybe, planDir, put, repoName, srcDir, titleOf } from './workspace.ts'
 import { homeOf } from './home.ts'
@@ -27,6 +30,7 @@ export interface Wire {
   unrehearse?: (fork: string, branch: string) => void
   file: (repo: string, title: string, body: string, labels: string[]) => string
   comment: (repo: string, no: number, body: string) => void
+  install?: () => void
 }
 
 export const WIRE: Wire = {
@@ -38,6 +42,7 @@ export const WIRE: Wire = {
   runs: shell,
   rehearse,
   unrehearse,
+  install: () => { reinstall(npm, alerter()) },
 }
 
 /**
@@ -200,6 +205,7 @@ export function land(db: Db, root: string, plan: PlanRow, approval: number, wire
   wire.send(head.dir, 'main')
   wire.close(homeOf(plan), issue, sha)
   pushed(db, plan.id, approval, `https://github.com/${homeOf(plan)}/commit/${sha}`)
+  if (plan.lane === 'atelier') wire.install?.()
   return { outcome: 'pass', spans: [], note: `landed ${head.branch} on main as ${sha.slice(0, 12)}` }
 }
 

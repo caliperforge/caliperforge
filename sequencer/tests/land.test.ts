@@ -63,6 +63,18 @@ test('an internal plan that passed ready is on main, pushed and its issue closed
   expect(sent).toHaveLength(3)
 })
 
+test('an atelier-lane plan that lands installs the app once, after the main send and the close', async () => {
+  const w = mine()
+  const sent: string[] = []
+  const wire = watched(sent, w.root, ID)
+  await atBatch(w, wire)
+  w.db.prepare("UPDATE plans SET lane = 'atelier' WHERE id = ?").run(ID)
+
+  await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  const sha = git(srcDir(w.root, ID), ['rev-parse', 'main'])
+  expect(sent).toEqual([FORKED, 'send src main', `close caliperforge/caliperforge#34 ${sha.slice(0, 7)}`, 'install'])
+})
+
 test('an internal plan on a repo with no workflows lands on step 3\'s checks, never waiting on a fork run', async () => {
   const w = world()
   w.db.prepare('DELETE FROM plans WHERE id = 1').run()
@@ -135,6 +147,7 @@ test('a main that moves inside the tick makes the land a refusal, not a merge co
   const src = srcDir(w.root, ID)
   const head = git(src, ['rev-parse', BRANCH])
   moveMain(w.root, 'racing.ts')
+  w.db.prepare("UPDATE plans SET lane = 'atelier' WHERE id = ?").run(ID)
 
   const refused = land(w.db, w.root, plan(w.db, ID), 1, wire)
   expect(refused).toMatchObject({ outcome: 'refuse', spans: ['base:stale'] })

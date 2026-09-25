@@ -282,6 +282,7 @@ export function watched(log: string[], root: string, id: number, runs = runsOn(r
       return `https://github.com/${repo}/issues/${String(900 + log.filter((l) => l.startsWith('file ')).length)}`
     },
     comment: (repo, no) => void log.push(`comment ${repo}#${String(no)}`),
+    install: () => void log.push('install'),
   }
 }
 

@@ -410,6 +410,12 @@ function rehearsed(root: string, plan: number, branch: string): string {
   return maybe(root, plan, REHEARSED) ?? `${branch}${NEXT}`
 }
 
+/** Read without `headOf`, which commits the plan's work. */
+export function rehearsalBranch(db: Db, root: string, plan: number): string {
+  const branch = git(srcDir(root, plan), ['rev-parse', '--abbrev-ref', 'HEAD']).trim()
+  return opened(db, plan) === null ? branch : rehearsed(root, plan, branch)
+}
+
 /**
  * Once the pull request is open its branch only moves forward -- no force-push, ever. The rounds'
  * commits since the head the pull request shows fold into one signed follow-up commit on top of it.

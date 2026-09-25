@@ -27,10 +27,10 @@ export function classOf(body: string): string {
   return tight ?? KNOWN.find((c) => body.includes(c)) ?? FALLBACK
 }
 
-/** Review and merge rarely land on one tick, so the escape is read against every signal the plan ever carried. */
-export function attribute(db: Db, plan: number, view: Pr): number[] {
+/** Review and merge rarely land on one tick, so the escape is read against every signal the pull request ever carried. */
+export function attribute(db: Db, plan: number, repo: string, view: Pr): number[] {
   if (view.mergedAt === null) return []
-  return findings(view, since(db, plan)).flatMap((f) => {
+  return findings(view, since(db, plan).filter((s) => s.repo === repo && s.pr === view.number)).flatMap((f) => {
     const verdict = verdictAt(db, plan, GATE[owner(f)])
     return verdict === null ? [] : [escaped(db, { verdict_id: verdict, defect_class: f, evidence: view.url })]
   })

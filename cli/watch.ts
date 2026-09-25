@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { hostValue } from '../providers/credential.ts'
 import type { Db } from '../store/index.ts'
 import { hhmm, zone } from '../store/lanes.ts'
 import { clock, openPipes } from '../store/plans.ts'
@@ -55,12 +56,11 @@ export function watch(db: Db, root: string, now: Date, post: Post): Liveness {
   return l
 }
 
-/** The desktop banner, and an iMessage when `alert.imessage_to` names a handle: the channel that reaches a phone. */
-export function alerter(db: Db): Post {
-  const row = db.prepare("SELECT value FROM settings WHERE key = 'alert.imessage_to'").get() as { value: string } | undefined
+/** The desktop banner, and an iMessage when the host's env file names `IMESSAGE_NOTIFY_TO`: the channel that reaches a phone. */
+export function alerter(to: string | null = hostValue('IMESSAGE_NOTIFY_TO')): Post {
   return (title, body) => {
     banner(title, body)
-    if (row !== undefined) imessage(row.value, `${title}\n${body}`)
+    if (to !== null) imessage(to, `${title}\n${body}`)
   }
 }
 

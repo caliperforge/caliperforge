@@ -29,6 +29,10 @@ On someone else's repository the ask opens with our target card and their issue 
 The card is the scope. Carry what it says the other implementations do, and what we have said on
 their threads, into `## Must not break`: the reviewers see the brief, not the card.
 
+When the ask mirrors, ports or matches another implementation, list that implementation's input rules
+under `## Must not break`: the values it accepts, what it does with an empty input, its bounds and the
+errors it raises, each with its file:line.
+
 An ask you cannot brief against this code — two changes in one, a sentence that reads two ways, a finish
 line nobody could tell you had crossed — stops here instead of spending a build. Close with this fence
 and nothing after it:

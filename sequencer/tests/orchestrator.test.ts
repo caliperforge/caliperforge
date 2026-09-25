@@ -228,3 +228,9 @@ test('#238 a colon inside why or evidence is prose, not a broken fence', async (
   expect(decisions(db)).toMatchObject([{ verb: 'ask_coo', why: 'Same refusal twice: the brief names a test that does not exist.',
     evidence: 'identifiers: 1 identifier(s) name no source in the tree' }])
 })
+
+test('#275 a # in why is kept whole', async () => {
+  const { db, home } = seeded()
+  await woke(db, home, stub('---\nverb: ask_ceo\nwhy: #261: split of a split\nevidence: waits on #37\n---\n', []), now)
+  expect(decisions(db)).toMatchObject([{ why: '#261: split of a split', evidence: 'waits on #37' }])
+})

@@ -103,7 +103,10 @@ async function ask(db: Db, root: string, plan: PlanRow, decision: { why: string 
   return { got: fired.exit === 0 ? read(fired.text) : null, tokens: fired.usage.input + fired.usage.output }
 }
 
-/** #286: plan 123 sat an hour on 09-25 with its checkout reaped. That needs no model: the builder takes it on a fresh one. */
+/**
+ * #286: plan 123 sat an hour on 09-25 with its checkout reaped. That needs no model: the builder takes it on a fresh one.
+ * Our own tickets only: a reaped outside plan's re-cut restored an old rehearsal branch on 09-25, so those go to a person.
+ */
 const GONE: Fix = {
   did: 'nothing; the checkout is gone, so no step can run against it',
   then: 'rebuild',
@@ -111,7 +114,7 @@ const GONE: Fix = {
 }
 
 function gone(root: string, plan: PlanRow): boolean {
-  return plan.template === 'pr_path' && plan.step >= 2 && !cloned(join(planDir(root, plan.id), 'src'))
+  return plan.template === 'pr_path' && plan.origin !== null && plan.step >= 2 && !cloned(join(planDir(root, plan.id), 'src'))
 }
 
 /** `base.sha` stays so `checkout()` restores a pushed branch (#202); `retries` stays because it names an outside plan's branch. */

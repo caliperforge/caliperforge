@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { parse, stringify } from 'yaml'
+import { stringify } from 'yaml'
 import { z } from 'zod'
 import type { Provider, Refusal } from '../providers/kind.ts'
 import { packet } from '../runner/index.ts'
@@ -15,6 +15,8 @@ import { PlanRow } from '../store/plans.ts'
 import { pending } from '../store/transcript.ts'
 import { act, applying } from './act.ts'
 import { fixer, released } from './fixer.ts'
+import { isHeld } from './hold.ts'
+import { prose } from './prose.ts'
 import { WIRE, type Wire } from './push.ts'
 import { maybe, planDir, put } from './workspace.ts'
 
@@ -38,6 +40,7 @@ export async function woke(db: Db, root: string, provider: Provider, now: Date, 
   for (const plan of rows.map((r) => PlanRow.parse(r))) {
     const reason = woken(plan)
     const head = `step ${String(plan.step)} ${reason === 'blocked_on_ceo' ? `blocked ${stop(root, plan.id)}` : reason}`
+    if (isHeld(root, plan.id)) continue
     if (maybe(root, plan.id, 'orchestrator.md')?.split('\n')[0] === head) continue
     if (take(db, plan.id, now) === null) continue
     try {
@@ -94,7 +97,7 @@ async function decide(db: Db, root: string, plan: PlanRow, reason: Woken, provid
 function read(text: string): Answer | Refusal {
   const fence = /^---\n([\s\S]*?)\n---$/m.exec(text)?.[1]
   if (fence === undefined) return refused('fence')
-  const body = yaml(fence) ?? lines(fence)
+  const body = prose(fence, ['verb', 'why', 'evidence']) ?? lines(fence)
   if (body === null) return refused('fence')
   const got = Answer.safeParse(body)
   if (got.success) return got.data
@@ -102,13 +105,6 @@ function read(text: string): Answer | Refusal {
   return refused(String((issue?.code === 'unrecognized_keys' ? issue.keys[0] : issue?.path[0]) ?? 'fence'))
 }
 
-function yaml(fence: string): unknown {
-  try {
-    return parse(fence) as unknown
-  } catch {
-    return null
-  }
-}
 
 /** A `why` with a colon in it is prose, not YAML: each line is its key up to the first colon and the rest as written. */
 function lines(fence: string): Record<string, string> | null {

@@ -19,6 +19,7 @@ import { handout, touched, type Handed } from './handout.ts'
 import { enclosed, handover, type Handover } from './handover.ts'
 import { install, mode } from './checks.ts'
 import { narrow } from './rails.ts'
+import { classify } from './delta.ts'
 import { deletions } from './fence.ts'
 import { fenceFor, languageFor } from './route.ts'
 import { gates, outsideLanguage } from './gates.ts'
@@ -78,7 +79,7 @@ export async function fireBrief(db: Db, root: string, plan: PlanRow, step: Step,
   const src = srcDir(root, plan.id)
   const standing = maybe(root, plan.id, 'issue.md')
   if (standing !== null && shape(standing, ask, src) === null) return stands()
-  const fired = await ran(db, root, plan, step, provider, again(root, plan.id, ask), false)
+  const fired = await ran(db, root, plan, step, provider, again(root, plan.id, ask) + store(root, plan), false)
   if (fired.ended !== 'completed') return exited(step, fired)
   const question = unclear(fired.text)
   if (question !== null) {
@@ -117,6 +118,23 @@ function again(root: string, plan: number, ask: string): string {
   return refusal === null ? asked : `${asked}\n# Refused — write the whole brief again, fixing this\n\n${refusal}`
 }
 
+/**
+ * #274: Atelier reads cf.db, so its brief writer may read the machine's schema and CLI, read-only. Before this,
+ * plans 114, 116, 143, 146 and 155 each stopped at step 1 to ask for a column name a person had to copy in.
+ */
+export function machineReads(root: string, plan: PlanRow, seat: string): string[] {
+  return plan.lane === 'atelier' && seat === 'brief_writer' ? [join(root, 'schema'), join(root, 'cli')] : []
+}
+
+/** Parallel dashboard jobs kept colliding on the same four files (atelier #45 split them). */
+const DASHBOARD = '\n# Dashboard layout\n\nEach dashboard section owns its files: a view in `Atelier/Views/Dashboard/`, its query as an extension on `DashboardSource` in `Atelier/Services/Dashboard/`, its models in `Atelier/Models/Dashboard/`, and its tests in `AtelierTests/Dashboard/`. A new table, chart or row gets new files there; only `Atelier/Views/DashboardView.swift` composes the sections, with one line per section. Do not add dashboard state or queries to `CFQueueStore`, and do not put a new section in another section\'s files.\n'
+
+function store(root: string, plan: PlanRow): string {
+  const [schema, cli] = machineReads(root, plan, 'brief_writer')
+  if (schema === undefined || cli === undefined) return ''
+  return `\n\n# The machine's store\n\nAtelier reads the machine's cf.db. Its tables are defined in \`${schema}/*.sql\` (later files alter earlier ones) and the \`cf\` commands in \`${cli}/\`. Read them for column names and values; you may not write there.\n${DASHBOARD}`
+}
+
 /** A plan queued before the brief seat carries its ask as `issue.md`, the name the brief now takes. */
 function askOf(root: string, plan: number): string {
   return maybe(root, plan, 'ask.md') ?? move(root, plan, 'issue.md', 'ask.md')
@@ -130,6 +148,7 @@ export async function ran(db: Db, root: string, plan: PlanRow, step: Step, provi
     ...packet(manifest, prompt, tight(root), issue, srcDir(root, plan.id),
       transcriptOf(root, plan.id, step.step), ours, fenceFor(db, plan.id, manifest.write_paths)),
     wall: wall(db),
+    reads: machineReads(root, plan, step.runs),
   })
   const row = db.prepare(INSERT).run(plan.id, step.step, step.runs, hash, provider.name, manifest.model, manifest.effort,
     fired.usage.input, fired.usage.cache, fired.usage.output, fired.seconds, fired.exit, fired.transcript_path)
@@ -232,6 +251,7 @@ export async function fireReview(db: Db, root: string, plan: PlanRow, step: Step
   try {
     const { outcome } = await judge(db, root, step.runs, plan.id, input, provider, transcriptOf(root, plan.id, step.step))
     put(root, plan.id, `step-${String(step.step)}.verdict.md`, verdictText(outcome))
+    if (outcome.outcome === 'pass' && input.tree !== undefined) put(root, plan.id, `step-${String(step.step)}.passed.diff`, input.diff)
     return {
       outcome: { outcome: outcome.outcome, spans: outcome.spans, note: `${step.runs} ${outcome.outcome}`, message: outcome.message },
       findings: outcome.findings,
@@ -278,7 +298,10 @@ function rounds(db: Db, root: string, plan: number, step: number): Pick<Bench, '
   if (tree === null || !holds(src, tree)) return prior
   // Before enclosed(): diffSince's `add -A --intent-to-add` is what puts new files in enclosed()'s diff.
   const plain = diffSince(src, tree)
-  return { ...prior, since: enclosed(src, tree) ?? plain, narrowing: narrowing(src, tree, get(root, plan, 'base.sha').trim()) }
+  const paths = narrowing(src, tree, get(root, plan, 'base.sha').trim())
+  const { mode, why } = classify(maybe(root, plan, `step-${String(step)}.passed.diff`), plain, paths.changed)
+  put(root, plan, `step-${String(step)}.mode`, `${mode}: ${why}\n`)
+  return mode === 'full' ? prior : { ...prior, since: enclosed(src, tree) ?? plain, narrowing: paths }
 }
 
 /** The tree the reviewer last passed, else the one its last verdict judged, off the row `judge()` wrote it on. */

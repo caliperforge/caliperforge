@@ -7,13 +7,17 @@ import { claudeAgentSdk } from '../providers/claude-agent-sdk/index.ts'
 import { credential } from '../providers/credential.ts'
 import { self } from '../rails/tight/index.ts'
 import { fire } from '../runner/index.ts'
-import { CHAIN_MINUTES, dry, tick } from '../sequencer/index.ts'
+import { spawn } from 'node:child_process'
+import { CHAIN_MINUTES, dry, EACH, lap, tick, type Apart } from '../sequencer/index.ts'
+import type { Fired } from '../sequencer/kind.ts'
+import { CHECK_SLOTS } from '../sequencer/checks.ts'
 import { behind, upgraded } from '../sequencer/upgrade.ts'
 import { saved } from '../sequencer/hq.ts'
 import { signoffs } from '../sequencer/signoff.ts'
+import { hold, isHeld, unhold } from '../sequencer/hold.ts'
 import { SIGNOFF, afresh, liveTree, reap } from '../sequencer/workspace.ts'
 import { blocked, parked, targetDigest, WAITING } from '../sequencer/steps.ts'
-import { release, returnToLane } from '../store/holds.ts'
+import { release } from '../store/holds.ts'
 import { dump, migrate, open as openDb, type Db } from '../store/index.ts'
 import { dial, hhmm, lanes, priority as setPriority, record, Reading, set, windows } from '../store/lanes.ts'
 import { holder } from '../store/leases.ts'
@@ -205,10 +209,29 @@ cf.command('release').argument('<plan>', 'a briefed plan waiting on the coo to r
   out(`plan ${id} queued\n`)
 })
 
-cf.command('return').argument('<plan>', 'a plan blocked on the ceo or halted').action((id: string) => {
-  const n = Number(id)
-  afresh(root, n, returnToLane(db(), n))
+cf.command('return').argument('<plan>', 'a plan blocked on the ceo, held or halted').action((id: string) => {
+  unhold(db(), root, Number(id))
   out(`plan ${id} queued\n`)
+})
+
+cf.command('park').argument('<plan>', 'a plan to hold where it stands, checkout kept')
+  .option('--on <plan>', 'the plan it waits on; it goes back in its lane when that one lands')
+  .option('--why <text>', 'why it is held', 'held by a person')
+  .action((id: string, options: { on?: string; why: string }) => {
+    const handle = db()
+    const n = Number(id)
+    if (holder(handle, n) !== null) throw new Error(`plan ${id} is mid-step in a live tick; park it once the tick lets go`)
+    const on = options.on === undefined ? null : Number(options.on)
+    if (on !== null && handle.prepare("SELECT 1 FROM plans WHERE id = ? AND state IN ('queued', 'running', 'blocked_on_ceo')").get(on) === undefined) {
+      throw new Error(`plan ${String(on)} is not open, so nothing would release plan ${id}`)
+    }
+    hold(handle, root, n, options.why, new Date(), on)
+    out(`plan ${id} held${on === null ? '' : ` on plan ${String(on)}`}\n`)
+  })
+
+cf.command('unpark').argument('<plan>', 'a held plan, put back at the step it stopped on').action((id: string) => {
+  const step = unhold(db(), root, Number(id))
+  out(`plan ${id} queued at step ${String(step)}\n`)
 })
 
 cf.command('inbox').option('--ack', 'mark everything shown so far as read')
@@ -297,7 +320,9 @@ cf.command('brief').action(() => {
   out(laneLine(lanes(handle, hhmm(handle))))
   out(section('open plans', openPlans(handle)))
   out(section('halted', halted(handle)))
-  out(section('awaiting approval', awaiting(handle)))
+  const waiting = awaiting(handle)
+  out(section('held', waiting.filter((l) => isHeld(root, l.id))))
+  out(section('awaiting approval', waiting.filter((l) => !isHeld(root, l.id))))
   const d = day(handle)
   out(`last 24 h\n  ${String(d.runs)} run(s)\t${String(d.tokens)} tokens\t${d.seconds.toFixed(1)}s\n`)
   out(ticketSection(tickets(handle)))
@@ -317,6 +342,34 @@ cf.command('tick').option('--dry', 'read what a tick would do, fire nothing, cal
       throw error
     })
   })
+
+/** The last line `cf lap` writes: what the job fired, for the tick that forked it. */
+const FIRED = 'cf-lap-fired\t'
+
+cf.command('lap').argument('<plan>', 'a plan the tick leased').requiredOption('--from <pid>', 'the tick holding the lease')
+  .option('--stole <pid>', 'the dead tick the lease was taken over from')
+  .description('run one leased job in this process, for the tick that forked it (#311)')
+  .action(async (id: string, options: { from: string; stole?: string }) => {
+    process.env.CF_CHECK_SLOTS ??= String(CHECK_SLOTS)
+    const fired = await lap(db(), root, claudeAgentSdk, Number(id), Number(options.from),
+      options.stole === undefined ? null : Number(options.stole), CHAIN_MINUTES)
+    out(`\n${FIRED}${JSON.stringify(fired)}\n`)
+  })
+
+/** #311: each leased job runs in a child process, so one job's synchronous checks never freeze another's agent. */
+const apart: Apart = (plan, stole) => new Promise((done, failed) => {
+  const args = [...process.execArgv, fileURLToPath(import.meta.url), 'lap', String(plan), '--from', String(process.pid),
+    ...(stole === null ? [] : ['--stole', String(stole)])]
+  const child = spawn(process.execPath, args, { cwd: process.cwd(), env: process.env, stdio: ['ignore', 'pipe', 'inherit'] })
+  let said = ''
+  child.stdout.setEncoding('utf8').on('data', (chunk: string) => { said += chunk })
+  child.on('error', failed)
+  child.on('close', (code) => {
+    const last = said.split('\n').findLast((l) => l.startsWith(FIRED))
+    if (code === 0 && last !== undefined) done(JSON.parse(last.slice(FIRED.length)) as Fired[])
+    else failed(new Error(`cf lap ${String(plan)} exited ${String(code)}`))
+  })
+})
 
 /** #251: a tick that threw leaves a receipt saying so and raises the alert, or the table reads a dead machine as an idle one. */
 function down(now: Date, error: unknown): void {
@@ -350,7 +403,8 @@ async function ticked(options: { dry?: boolean }, now: Date): Promise<void> {
   }
   const { auth } = credential()
   process.stderr.write(`auth ${auth.kind} from ${auth.from}\n`)
-  const fired = await tick(handle, root, claudeAgentSdk, now, undefined, undefined, CHAIN_MINUTES, gh)
+  process.env.CF_CHECK_SLOTS ??= String(CHECK_SLOTS)
+  const fired = await tick(handle, root, claudeAgentSdk, now, undefined, undefined, CHAIN_MINUTES, gh, EACH, apart)
   receipt(handle, saved(handle, upgraded(handle, root, { at: now.toISOString(), hhmm: hhmm(handle, now), dry: false,
     pipes: openPipes(handle, hhmm(handle, now)).length, fired: fired.length,
     exit: fired.some((f) => f.outcome === 'refuse') ? 1 : 0, note: tickNote(fired, overlapWaits(handle)) }),

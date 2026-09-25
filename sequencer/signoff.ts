@@ -145,6 +145,7 @@ export function bodyFor(db: Db, root: string, card: Card): string {
     `- Upstream: ${code(s.repo)} issue ${code(String(s.issue_no))}, written as code so this card leaves no mark on their thread`,
     `- Change: ${card.change.trim().split('\t').join(', ')}; [the commit on our fork](https://github.com/${fork}/commit/${head.sha})`,
     `- Gates: ${card.marks.map((m) => `${m.name} ${m.ok ? 'pass' : 'NOT PASSED'}`).join(', ')}`,
+    ...modes(root, card.id),
     ...(ci === null ? [] : [`- Their CI on our fork: ${ciLine(ci)}`]),
     open === null
       ? `- Goes out as: a new pull request titled ${code(title(root, card.id))}`
@@ -174,6 +175,14 @@ function unsaid(root: string, plan: number, text: string | null): string[] {
   return left.length === 0 ? [] : [`**Not in the PR text:** ${left.map((p) => code(p)).join(', ')}`, '']
 }
 
+function modes(root: string, plan: number): string[] {
+  const named = ([[4, 'review'], [5, 'senior_review']] as const).flatMap(([step, gate]) => {
+    const mode = maybe(root, plan, `step-${String(step)}.mode`)
+    return mode === null ? [] : [`${gate} ${mode.trim()}`]
+  })
+  return named.length === 0 ? [] : [`- Review mode: ${named.join('; ')}`]
+}
+
 /** Green is said only of what finished green: a workflow the gate did not judge is still on the card, and still counts here. */
 function headline(passed: boolean, ci: Board[] | null): string {
   if (!passed) return 'Waiting on you, but not every gate passed: read the marks first.'
@@ -184,7 +193,8 @@ function headline(passed: boolean, ci: Board[] | null): string {
 }
 
 function ciLine(ci: Board[]): string {
-  const judged = ci.filter((r) => r.gates).map((r) => `${r.workflow} ${state(r)}`)
+  const judged = ci.filter((r) => r.gates)
+    .map((r) => r.base === undefined ? `${r.workflow} ${state(r)}` : `${r.workflow} red on the base too (${r.base.join(', ')})`)
   const rest = ci.filter((r) => !r.gates).map((r) => `${r.workflow} ${state(r)}`)
   return rest.length === 0 ? judged.join(', ') : `${judged.join(', ')}; also ran, not judged on: ${rest.join(', ')}`
 }

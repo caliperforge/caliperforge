@@ -26,6 +26,17 @@ export function take(db: Db, plan: number, now: Date = new Date(), pid: number =
   return won === undefined ? null : { ...won, stole }
 }
 
+/** #311: the tick that leased a job hands it to the process it forked to run it, so the lease lives and dies with that process. */
+export function handOver(db: Db, plan: number, from: number, to: number = process.pid): Lease | null {
+  return (db.prepare('UPDATE leases SET pid = ? WHERE plan = ? AND pid = ? RETURNING plan, pid, taken_at')
+    .get(to, plan, from) as Lease | undefined) ?? null
+}
+
+/** Frees a plan only while this process still holds it: a lease handed on is the other process's to free. */
+export function drop(db: Db, plan: number, pid: number = process.pid): void {
+  db.prepare('DELETE FROM leases WHERE plan = ? AND pid = ?').run(plan, pid)
+}
+
 export function clear(db: Db, plan: number): void {
   db.prepare('DELETE FROM leases WHERE plan = ?').run(plan)
 }

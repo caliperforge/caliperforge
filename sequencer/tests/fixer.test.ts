@@ -5,6 +5,7 @@ import { expect, test } from 'vitest'
 import type { Packet, Provider } from '../../providers/kind.ts'
 import { migrate, open } from '../../store/index.ts'
 import type { Wire } from '../push.ts'
+import { terminal } from '../../store/plans.ts'
 import { woke } from '../orchestrator.ts'
 import { maybe, put, srcDir } from '../workspace.ts'
 
@@ -78,13 +79,15 @@ test('shadow: the fixer reads only, changes nothing, and the stop still reaches 
   expect(maybe(home, 7, 'fixes.jsonl')).toContain('"mode":"shadow"')
 })
 
-test('a machine bug becomes a top ticket and the job is parked', async () => {
+test('ticket: filed, job held, checkout kept', async () => {
   const { db, home } = seeded('live')
   const filed: string[] = []
   await woke(db, home, stub('---\ndid: nothing\nthen: ticket\nwhy: the spend wall counts a turn four times\nticket: the run wall counts each streamed block\n---\n', []),
     now, () => undefined, wire(filed))
   expect(filed).toEqual(['the run wall counts each streamed block'])
-  expect(state(db)).toEqual({ state: 'halted', step: 4 })
+  expect(state(db)).toEqual({ state: 'blocked_on_ceo', step: 4 })
+  expect(maybe(home, 7, 'parked.md')).toContain('issues/999')
+  expect(terminal(db)).not.toContain(7)
 })
 
 test('ask_ceo from the fixer reaches the phone with its reason', async () => {
@@ -189,6 +192,7 @@ test('wait: held quietly, released on land', async () => {
   await woke(db, home, stub(WAIT, []), now, (t) => void posted.push(t), wire([]))
   expect(state(db)).toEqual({ state: 'queued', step: 4 })
   expect(waitsOn(db)).toEqual({ waits_on: null })
+  expect(maybe(home, 7, 'parked.md')).toBeNull()
   expect(posted).toEqual([])
 })
 
@@ -225,4 +229,25 @@ test('gone checkout, outside plan: to a person', async () => {
   await woke(db, home, stub('---\ndid: nothing\nthen: rebuild\nwhy: x\n---\n', packets), now, () => undefined, wire([]))
   expect(packets.some((p) => basename(p.transcript).startsWith('fixer'))).toBe(true)
   expect(state(db)).toEqual({ state: 'blocked_on_ceo', step: 4 })
+})
+
+test('park: held, not reaped, not re-woken', async () => {
+  const { db, home } = seeded('live')
+  const packets: Packet[] = []
+  const PARK = '---\ndid: nothing\nthen: park\nwhy: builds on a job not yet filed\n---\n'
+  await woke(db, home, stub(PARK, packets), now, () => undefined, wire([]))
+  expect(state(db)).toEqual({ state: 'blocked_on_ceo', step: 4 })
+  expect(terminal(db)).not.toContain(7)
+  rmSync(join(home, '.cf/work/7/orchestrator.md'))
+  await woke(db, home, stub(PARK, packets), now, () => undefined, wire([]))
+  expect(packets.filter((p) => basename(p.transcript).startsWith('orchestrator'))).toHaveLength(1)
+})
+
+test('a # in did or why is kept whole', async () => {
+  const { db, home } = seeded('live')
+  const fix = '---\ndid: nothing; #37 landed at 22775be\nthen: ask_ceo\nwhy: #261: split of a split\n---\n'
+  await woke(db, home, stub(fix, []), now, () => undefined, wire([]))
+  const line = JSON.parse((maybe(home, 7, 'fixes.jsonl') ?? '').trim()) as { did: string; why: string }
+  expect(line.did).toBe('nothing; #37 landed at 22775be')
+  expect(line.why).toBe('#261: split of a split')
 })

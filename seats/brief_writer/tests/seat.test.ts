@@ -26,3 +26,9 @@ test('the prompt names every part the shape check reads, and the unclear and spl
     expect(prompt).toContain(part)
   }
 })
+
+test('the prompt sends a reference implementation\'s input rules to Must not break', () => {
+  expect(seat(root, 'brief_writer').prompt.replace(/\s+/g, ' ')).toContain(
+    'When the ask mirrors, ports or matches another implementation, list that implementation\'s input rules under `## Must not break`: the values it accepts, what it does with an empty input, its bounds and the errors it raises, each with its file:line.',
+  )
+})

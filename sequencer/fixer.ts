@@ -1,6 +1,5 @@
 import { existsSync, readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
-import { parse } from 'yaml'
 import { z } from 'zod'
 import { record, ticketOf } from '../cli/inbox.ts'
 import type { Post } from '../cli/watch.ts'
@@ -14,6 +13,8 @@ import { wall } from '../store/lanes.ts'
 import { retry, type PlanRow } from '../store/plans.ts'
 import { clear } from '../store/refusals.ts'
 import { pending } from '../store/transcript.ts'
+import { hold, unhold } from './hold.ts'
+import { prose } from './prose.ts'
 import { WIRE, type Wire } from './push.ts'
 import { afresh, cloned, drop, maybe, move, planDir, put, SELF, titleOf } from './workspace.ts'
 
@@ -77,7 +78,7 @@ export async function fixer(db: Db, root: string, plan: PlanRow, decision: { id:
     log(root, plan.id, { at: now.toISOString(), mode: m, ...got, tokens, applied: 'shadow' })
     return false
   }
-  const applied = apply(db, root, plan, got, wire)
+  const applied = apply(db, root, plan, got, wire, now)
   log(root, plan.id, { at: now.toISOString(), mode: m, ...got, tokens, applied })
   const note = `fixer: ${got.did} → ${got.then}. ${got.why}`
   if (applied === 'escalated') {
@@ -130,11 +131,12 @@ function rebuild(db: Db, root: string, plan: PlanRow): string {
 }
 
 /** #287: the job it waits on must still be open, or nothing would ever release it. */
-function awaits(db: Db, plan: PlanRow, on: number): string {
+function awaits(db: Db, root: string, plan: PlanRow, f: Fix, now: Date): string {
+  const on = f.waits_on ?? 0
   const them = db.prepare("SELECT 1 FROM plans WHERE id = ? AND id <> ? AND state IN ('queued', 'running', 'blocked_on_ceo')")
     .get(on, plan.id)
   if (them === undefined) return 'escalated'
-  db.prepare('UPDATE plans SET waits_on = ? WHERE id = ?').run(on, plan.id)
+  hold(db, root, plan.id, f.why, now, on)
   return `wait ${String(on)}`
 }
 
@@ -144,21 +146,21 @@ export function released(db: Db, root: string, now: Date, post: Post): void {
     WHERE p.state = 'blocked_on_ceo' AND w.state IN ('done', 'refused', 'halted') ORDER BY p.id`).all() as
     { id: number; step: number; on_: number; theirs: string }[]
   for (const r of rows) {
-    db.prepare('UPDATE plans SET waits_on = NULL WHERE id = ?').run(r.id)
     const ticket = ticketOf(db, r.id)
     const at = now.toISOString()
     if (r.theirs === 'done') {
-      afresh(root, r.id, returnToLane(db, r.id))
+      unhold(db, root, r.id)
       record(root, [{ at, plan: r.id, ticket, kind: 'refused', step: r.step, name: 'fixer', note: `plan ${String(r.on_)} landed, so this job is back in its lane` }])
       continue
     }
+    db.prepare('UPDATE plans SET waits_on = NULL WHERE id = ?').run(r.id)
     const note = `plan ${String(r.on_)}, which this job waits on, ended ${r.theirs}`
     record(root, [{ at, plan: r.id, ticket, kind: 'blocked', step: r.step, name: 'fixer', note }])
     post(`CaliperForge · ${ticket} needs you`, `plan ${String(r.id)}, step ${String(r.step)}. ${note}`)
   }
 }
 
-function apply(db: Db, root: string, plan: PlanRow, f: Fix, wire: Wire): string {
+function apply(db: Db, root: string, plan: PlanRow, f: Fix, wire: Wire, now: Date): string {
   for (const path of f.add_files ?? []) listed(db, plan.id, path)
   if (plan.state !== 'blocked_on_ceo' && plan.state !== 'halted') return 'escalated'
   switch (f.then) {
@@ -174,13 +176,13 @@ function apply(db: Db, root: string, plan: PlanRow, f: Fix, wire: Wire): string 
       db.prepare("UPDATE plans SET state = 'done', wait_reason = NULL WHERE id = ?").run(plan.id)
       return 'done'
     }
-    case 'park': db.prepare("UPDATE plans SET state = 'halted' WHERE id = ?").run(plan.id); return 'park'
-    case 'wait': return awaits(db, plan, f.waits_on ?? 0)
+    case 'park': hold(db, root, plan.id, f.why, now); return 'park'
+    case 'wait': return awaits(db, root, plan, f, now)
     case 'rebuild': return gone(root, plan) ? rebuild(db, root, plan) : 'escalated'
     case 'ticket': {
       const url = wire.file(SELF, f.ticket ?? f.why, `Filed by the fixer on plan ${String(plan.id)}.\n\n${f.why}\n\n${f.did}`,
         ['lane:machine', 'P0'])
-      db.prepare("UPDATE plans SET state = 'halted' WHERE id = ?").run(plan.id)
+      hold(db, root, plan.id, `${url}\n\n${f.why}`, now)
       return `ticket ${url}`
     }
     case 'ask_ceo': return 'escalated'
@@ -225,17 +227,10 @@ function issue(db: Db, root: string, plan: PlanRow, decision: { why: string }, m
 function read(text: string): Fix | null {
   const fence = /^---\n([\s\S]*?)\n---$/m.exec(text)?.[1]
   if (fence === undefined) return null
-  const got = Fix.safeParse(yaml(fence) ?? lines(fence))
+  const got = Fix.safeParse(prose(fence, ['did', 'then', 'why', 'ticket']) ?? lines(fence))
   return got.success ? got.data : null
 }
 
-function yaml(fence: string): unknown {
-  try {
-    return parse(fence) as unknown
-  } catch {
-    return null
-  }
-}
 
 /** A colon inside \`did\` or \`why\` is prose: each line is its key up to the first colon, and a \`[a, b]\` value a list. */
 function lines(fence: string): Record<string, unknown> {

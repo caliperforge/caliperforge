@@ -6,15 +6,17 @@ import { expect, test } from 'vitest'
 import { day, halted, open as openPlans, runsOf, verdictsOf } from '../../cli/brief.ts'
 import { measure, type Read } from '../../cli/measure.ts'
 import { account, parse } from '../../cli/queue.ts'
-import { clock, inWindow, underCap, waiting, type PipeRow, type PlanRow, type Wait } from '../../store/plans.ts'
+import { clock, inWindow, rewind, underCap, waiting, type PipeRow, type PlanRow, type Wait } from '../../store/plans.ts'
 import { at, steps } from '../../templates/pr-path.ts'
 import { tick } from '../index.ts'
 import { blocked, kernel } from '../steps.ts'
-import { diffOf, doneIds, narrowing, snapshot, srcDir } from '../workspace.ts'
+import { diffOf, doneIds, get, narrowing, put, snapshot, srcDir } from '../workspace.ts'
+import { GREEN } from '../base.ts'
 import { record } from '../../store/files.ts'
 import { benchPacket } from '../../runner/packet.ts'
 import type { Packet, Provider } from '../../providers/kind.ts'
-import { approve, builds, built, CARRIED, dropping, internalPlan, KOTLIN, ours, owning, PASS, plan, REFUSE, RUN, runsAfter, runsOn, stub, watched, WORDS, world } from './world.ts'
+import type { Wire } from '../push.ts'
+import { approve, builds, built, CARRIED, dropping, internalPlan, KOTLIN, ours, owning, PASS, plan, REFUSE, rerunning, RUN, runsAfter, runsOn, stub, watched, WORDS, world, type World } from './world.ts'
 
 const head = (cwd: string, args: string[]): string => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim()
 
@@ -313,6 +315,67 @@ test('a reviewer step 5 sent back is handed the delta since the tree it passed, 
   expect(section(prompt, 'Paths since your last verdict')).toContain('changed since the tree you judged:\n  - src/hello.ts\n')
 })
 
+const FOUR = 'export const one = 1\nexport const two = 2\nexport const three = 3\nexport const four = 4'
+
+const modeOf = (root: string, step: number): string => readFileSync(join(root, `.cf/work/${String(MINE)}/step-${String(step)}.mode`), 'utf8')
+
+/** An internal plan whose review passed on FOUR in src/hello.ts and whose senior gave `senior`, sent back to build. */
+async function passedOn(senior: string): Promise<World> {
+  const w = world()
+  w.db.prepare('DELETE FROM plans WHERE id = 1').run()
+  ours(w.root)
+  internalPlan(w.db, w.root, MINE)
+  for (let step = 0; step < 2; step += 1) await tick(w.db, w.root, stub(CARRIED))
+  built(w.root, MINE, FOUR)
+  for (let step = 0; step < 3; step += 1) await tick(w.db, w.root, stub(CARRIED, 0, PASS))
+  await tick(w.db, w.root, stub(CARRIED, 0, senior))
+  rewind(w.db, MINE, 2)
+  return w
+}
+
+async function reworked(w: World, handback: string, ticks: number): Promise<string> {
+  const seen: Packet[] = []
+  for (let step = 0; step < ticks; step += 1) await tick(w.db, w.root, stub(handback, 0, PASS, (p) => seen.push(p)))
+  return reviewer(seen)
+}
+
+const seniorRuns = (w: World): unknown => w.db.prepare('SELECT count(*) AS n FROM runs WHERE plan = ? AND step = 5').get(MINE)
+
+test('D1 D2 a rework delta outside the passed diff, or over half of it, is reviewed in full', async () => {
+  const unseen = await passedOn(REFUSE)
+  writeFileSync(join(srcDir(unseen.root, MINE), 'src/parse.ts'), 'export const parse = (): number => 1\n')
+  const full = await reworked(unseen, OWNS, 3)
+  expect(full).toContain('# Your last verdict')
+  expect(full).not.toContain('# Changed since your last verdict')
+  expect(full).not.toContain('# Paths since your last verdict')
+  expect(modeOf(unseen.root, 4)).toBe('full: src/parse.ts is not in the passed diff\n')
+
+  const big = await passedOn(REFUSE)
+  built(big.root, MINE, 'export const five = 5\nexport const six = 6\nexport const seven = 7')
+  expect(await reworked(big, CARRIED, 3)).not.toContain('# Changed since your last verdict')
+  expect(modeOf(big.root, 4)).toBe('full: 3 delta lines is over half of 4 passed\n')
+})
+
+test('D3 a comment-only rework delta is reviewed as a delta and senior keeps its pass without a run', async () => {
+  const w = await passedOn(PASS)
+  built(w.root, MINE, '// one to four')
+  expect(await reworked(w, CARRIED, 4)).toContain('# Changed since your last verdict')
+  expect(modeOf(w.root, 4)).toMatch(/^comment: /)
+  expect(seniorRuns(w)).toEqual({ n: 1 })
+  expect(w.db.prepare("SELECT outcome, tokens, kept_by FROM verdicts WHERE plan = ? AND gate = 'senior_review' ORDER BY id DESC LIMIT 1").get(MINE))
+    .toEqual({ outcome: 'pass', tokens: 0, kept_by: null })
+  expect(modeOf(w.root, 5)).toBe('skipped: 1 delta lines, comments and docs only\n')
+  expect(plan(w.db, MINE).step).toBe(6)
+})
+
+test('D4 a code line in the delta still fires senior review', async () => {
+  const w = await passedOn(PASS)
+  built(w.root, MINE, '// one to four\nexport const five = 5')
+  await reworked(w, CARRIED, 4)
+  expect(seniorRuns(w)).toEqual({ n: 2 })
+  expect(modeOf(w.root, 5)).toMatch(/^delta: /)
+})
+
 test('narrowing calls a moved path the plan does not touch main\'s, and proves the rest with its blob', () => {
   const dir = mkdtempSync(join(tmpdir(), 'cf-narrow-'))
   const run = (...args: string[]): string => execFileSync('git', args, { cwd: dir, encoding: 'utf8' })
@@ -434,6 +497,62 @@ test('a fork still red after a rebuild that changed nothing stops instead of cyc
   for (let at = 0; at < 4; at += 1) await lap()
   expect(plan(w.db, 1).step).toBe(6)
   expect(await lap()).toBe('blocked_on_ceo')
+})
+
+/** Green at a head G on its own branch, then rebuilt to a head H at step 6 that the fork lists red on Validate, with G's run as `g` says. */
+const redOnBase = async (g: { status: string; conclusion: string }, log: string[]): Promise<[World, Wire]> => {
+  const w = world()
+  approve(w.db, w.target)
+  for (let at = 0; at < 7; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
+  put(w.root, 1, GREEN, get(w.root, 1, GREEN).replace(/^\S+/, 'rehearsal'))
+  const base = { branch: 'rehearsal', sha: head(srcDir(w.root, 1), ['rev-parse', 'HEAD']) }
+  const wire = watched([], w.root, 1, rerunning(log, w.root, 1, base, g))
+  rewind(w.db, 1, 2)
+  await tick(w.db, w.root, builds(() => { built(w.root, 1, 'export const again = 1') }), undefined, undefined, wire)
+  for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  expect(plan(w.db, 1).step).toBe(6)
+  return [w, wire]
+}
+
+const ciGreen = (w: World): unknown => w.db.prepare("SELECT outcome FROM verdicts WHERE plan = 1 AND rail_id = 'ci-green' ORDER BY id DESC").all()
+
+test('a job red at the head and red again at the re-run last green head is the base\'s: the plan goes on to sign-off', async () => {
+  const g = { status: 'completed', conclusion: 'success' }
+  const log: string[] = []
+  const [w, wire] = await redOnBase(g, log)
+  const lap = async (): Promise<unknown> => (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
+
+  expect(await lap()).toMatchObject({ step: 6, outcome: 'pass', state: 'running' })
+  expect(log).toEqual(['run rerun 1 --repo caliperforge/widget'])
+  expect(await lap()).toMatchObject({ step: 6, outcome: 'pass', state: 'running' })
+  expect(ciGreen(w)).toEqual([{ outcome: 'pass' }])
+
+  Object.assign(g, { status: 'completed', conclusion: 'failure' })
+  expect(await lap()).toMatchObject({ step: 6, name: 'ready', outcome: 'pass' })
+  expect(plan(w.db, 1)).toMatchObject({ step: 7, retries: 0 })
+  expect(ciGreen(w)).toEqual([{ outcome: 'pass' }, { outcome: 'pass' }])
+  expect(log).toHaveLength(1)
+})
+
+test('a job red at the head whose last green head re-runs green goes back to the builder', async () => {
+  const g = { status: 'completed', conclusion: 'success' }
+  const [w, wire] = await redOnBase(g, [])
+  const lap = async (): Promise<unknown> => (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
+
+  await lap()
+  await lap()
+  g.status = 'completed'
+  expect(await lap()).toMatchObject({ step: 6, name: 'ready', outcome: 'refuse', state: 'retried' })
+  expect(plan(w.db, 1)).toMatchObject({ step: 2, retries: 1 })
+  expect(ciGreen(w)).toEqual([{ outcome: 'refuse' }, { outcome: 'pass' }])
+})
+
+test('a last green head already red is read as it is, with no re-run asked', async () => {
+  const log: string[] = []
+  const [w, wire] = await redOnBase({ status: 'completed', conclusion: 'failure' }, log)
+  expect((await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]).toMatchObject({ step: 6, outcome: 'pass' })
+  expect(plan(w.db, 1).step).toBe(7)
+  expect(log).toEqual([])
 })
 
 test('a run still going is waited on past the first-run window', async () => {

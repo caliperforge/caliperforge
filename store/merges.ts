@@ -54,7 +54,7 @@ export function lastReview(db: Db, plan: number, gate: string): Given | null {
 }
 
 /** A review verdict carried across a merge: the same outcome and tree, no tokens, and the merge that let it stand. */
-export function keep(db: Db, plan: number, step: number, gate: string, from: Given, merge: number): number {
+export function keep(db: Db, plan: number, step: number, gate: string, from: Given, merge: number | null): number {
   const row = db.prepare(`INSERT INTO verdicts
     (gate, kind, subject_digest, plan, step, outcome, rail_id, origin_kind, origin_ref, tokens, seconds, tree, kept_by)
     VALUES (?, 'review', ?, ?, ?, 'pass', NULL, NULL, NULL, 0, 0, ?, ?)`)

@@ -24,6 +24,8 @@ const SCORE = /(\d)\s*\/\s*5/
 /** Greptile's summary names its score; any other `n/5` in the body is taken only where this is absent. */
 const CONFIDENCE = /Confidence Score:\s*(\d)\s*\/\s*5/i
 
+const REVIEWED = /Last reviewed commit: \[[^\]]*\]\(https:\/\/github\.com\/[^/)]+\/[^/)]+\/commit\/([0-9a-f]{40})\)/
+
 /** Every open PR of ours, every tick. `gh` polling is the only reader; there is no webhook and no server. */
 export function capture(db: Db, read: (repo: string, no: number) => Pr = readPr): SignalRow[] {
   return pushed(db).flatMap((row) => reachable(db, row, read))
@@ -127,14 +129,14 @@ export function signals(view: Pr, row: Pushed): Signal[] {
     ...view.reviews.filter((r) => theirs(r.author.login)).map((r) => review(base, r)),
     ...merged(base, view),
     ...red(base, view),
-  ]
+  ].filter((s) => s.kind !== 'bot_review' || typeof s.head === 'string')
 }
 
 /** #103: a review bot's summary comment carries its score as its review would; only a person's comment asks something of us. */
 function comment(base: Base, c: Pr['comments'][number]): Signal {
   const bot = BOT.test(c.author.login)
   return { ...base, kind: bot ? 'bot_review' : 'comment', author: c.author.login, at: c.createdAt, external_id: c.id,
-    score: bot ? scored(c.body) : null, body: c.body }
+    score: bot ? scored(c.body) : null, body: c.body, head: bot ? REVIEWED.exec(c.body)?.[1] ?? null : null }
 }
 
 function review(base: Base, r: Pr['reviews'][number]): Signal {
@@ -148,6 +150,7 @@ function review(base: Base, r: Pr['reviews'][number]): Signal {
     score: bot ? scored(r.body) : null,
     body: r.body,
     state: r.state ?? null,
+    head: bot ? REVIEWED.exec(r.body)?.[1] ?? null : null,
   }
 }
 

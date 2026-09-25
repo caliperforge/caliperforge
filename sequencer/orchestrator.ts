@@ -15,6 +15,7 @@ import { PlanRow } from '../store/plans.ts'
 import { pending } from '../store/transcript.ts'
 import { act, applying } from './act.ts'
 import { fixer, released } from './fixer.ts'
+import { isHeld } from './hold.ts'
 import { WIRE, type Wire } from './push.ts'
 import { maybe, planDir, put } from './workspace.ts'
 
@@ -38,6 +39,7 @@ export async function woke(db: Db, root: string, provider: Provider, now: Date, 
   for (const plan of rows.map((r) => PlanRow.parse(r))) {
     const reason = woken(plan)
     const head = `step ${String(plan.step)} ${reason === 'blocked_on_ceo' ? `blocked ${stop(root, plan.id)}` : reason}`
+    if (isHeld(root, plan.id)) continue
     if (maybe(root, plan.id, 'orchestrator.md')?.split('\n')[0] === head) continue
     if (take(db, plan.id, now) === null) continue
     try {

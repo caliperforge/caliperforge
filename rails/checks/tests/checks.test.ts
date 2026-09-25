@@ -6,8 +6,8 @@ import { checked } from '../index.ts'
 
 const DIFF = '--- a/src/x.ts\n+++ b/src/x.ts\n@@ -1 +1 @@\n-a\n+b\n'
 
-const LINT: Failure = { script: 'lint', command: 'npm run lint', code: 3, output: 'lint is red', retried: false }
-const TEST: Failure = { script: 'test', command: 'npm run test', code: 1, output: ' FAIL x.test.ts > a call\nAssertionError: expected "hi" to be "ho"\n', retried: false }
+const LINT: Failure = { script: 'lint', command: 'npm run lint', code: '3', output: 'lint is red', retried: false }
+const TEST: Failure = { script: 'test', command: 'npm run test', code: '1', output: ' FAIL x.test.ts > a call\nAssertionError: expected "hi" to be "ho"\n', retried: false }
 
 const verdict = (failed: Failure): Verdict => checked(failed, DIFF)
 

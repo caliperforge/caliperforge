@@ -15,7 +15,7 @@ export function checked(failed: Failure | null, diff: string): Verdict {
     origin_ref: 'checks',
     subject_digest,
     spans: [`checks:${failed.script}`],
-    message: `${failed.command} exit ${String(failed.code)}`,
+    message: `${failed.command} exit ${failed.code}`,
   }
   const test = failed.script === 'test' ? named(failed.output) : null
   // `origin-on-refuse` reads origin_ref off the literal, so a test name can only land over it (checks/origin-on-refuse.ts:56)

@@ -15,16 +15,20 @@ const REPO = 'caliperforge/caliperforge'
 
 const url = (n: number): string => `https://github.com/${REPO}/issues/${String(n)}`
 
-interface Fixture { number: number; labels: string[] }
+interface Fixture { number: number; labels: string[]; parts?: number; title?: string }
 
 const TWO: Fixture[] = [{ number: 40, labels: ['lane:machine'] }, { number: 41, labels: ['lane:machine', 'P2'] }]
 
 function canned(rows: Fixture[], log: string[] = []): Read {
   return (args) => {
     log.push(args.join(' '))
-    const shaped = rows.map((r) => ({ number: r.number, title: `issue ${String(r.number)}`, body: 'the ask',
+    const shaped = rows.map((r) => ({ number: r.number, title: r.title ?? `issue ${String(r.number)}`, body: 'the ask',
       url: url(r.number), labels: r.labels.map((name) => ({ name })) }))
     if (args[1] === 'list') return shaped
+    if (args[0] === 'api') {
+      const no = Number(args[1]?.split('/').at(-1))
+      return { sub_issues_summary: { total: rows.find((r) => r.number === no)?.parts ?? 0 } }
+    }
     const hit = shaped.find((r) => String(r.number) === args[2])
     if (hit === undefined) throw new Error(`no fixture for ${args.join(' ')}`)
     return hit
@@ -125,4 +129,40 @@ test('D5: the tick lists issues only when handed a reader', async () => {
     throw new Error('gh is down')
   })
   expect(log).toEqual([`issue list --repo ${REPO} --state open --limit ${String(WINDOW)} --json number,title,url,labels`])
+})
+
+test('#260: an issue with sub-issues is a parent and is not adopted; its parts are', () => {
+  const db = piped()
+  intake(db, root, canned([{ number: 85, labels: ['lane:machine'], parts: 3 }, { number: 121, labels: ['lane:machine'] }]))
+  expect(states(db)).toEqual([{ origin: url(121), state: 'queued' }])
+})
+
+test('#260: a parent split by hand, named only by its parts\' titles, is not adopted', () => {
+  const db = piped()
+  intake(db, root, canned([{ number: 85, labels: ['lane:machine'] },
+    { number: 121, labels: ['lane:machine'], title: '85a: each changed declaration whole' }]))
+  expect(states(db)).toEqual([{ origin: url(121), state: 'queued' }])
+})
+
+test('#257: a running or blocked plan whose work was pushed and whose issue closed is done', () => {
+  const db = piped()
+  queue(db, 60, 'blocked_on_ceo')
+  queue(db, 61, 'running')
+  queue(db, 62, 'blocked_on_ceo')
+  db.prepare(`INSERT INTO rules (id, kind, path, content_hash, loaded_at)
+    VALUES ('typescript_specialist', 'roster', 'seats/typescript_specialist', ?, '2026-09-25')`).run('0'.repeat(64))
+  for (const plan of [1, 2]) {
+    const approval = db.prepare(`INSERT INTO approvals (subject_kind, subject_id, subject_digest, who, decision, approved_at)
+      VALUES ('plan', ?, ?, 'gates', 'approved', '2026-09-25T00:00:00.000Z') RETURNING id`).get(plan, 'd'.repeat(64)) as { id: number }
+    db.prepare(`INSERT INTO deliverables (plan_id, step, seat, diff_digest, state, tests_pass, byte_identical_elsewhere,
+      fork_ci_green, bot_clean, target_warm, approval_id, evidence)
+      VALUES (?, 7, 'typescript_specialist', ?, 'pushed', 1, 1, 1, 1, 1, ?, 'https://github.com/caliperforge/caliperforge/commit/abc')`)
+      .run(plan, 'd'.repeat(64), approval.id)
+  }
+  intake(db, root, canned([]))
+  expect(states(db)).toEqual([
+    { origin: url(60), state: 'done' },
+    { origin: url(61), state: 'done' },
+    { origin: url(62), state: 'blocked_on_ceo' },
+  ])
 })

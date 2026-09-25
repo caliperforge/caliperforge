@@ -43,6 +43,12 @@ export function credential(env: Env = process.env, file: string = fileOf(env)): 
   return { auth: { kind: filled(out.ANTHROPIC_API_KEY) ? 'api-key' : 'none', from }, env: out }
 }
 
+/** #251: a host value that is not a credential but must not live in the tree, such as the alert handle. */
+export function hostValue(key: string, env: Env = process.env, file: string = fileOf(env)): string | null {
+  const value = filled(env[key]) ? env[key] : read(file).get(key)
+  return value === undefined || value === '' ? null : value
+}
+
 function fileOf(env: Env): string {
   return filled(env.CF_ENV_FILE) ? (env.CF_ENV_FILE ?? ENV_FILE) : ENV_FILE
 }

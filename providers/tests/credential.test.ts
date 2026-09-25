@@ -2,7 +2,7 @@ import { chmodSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { credential, ENV_FILE } from '../credential.ts'
+import { credential, ENV_FILE, hostValue } from '../credential.ts'
 
 const OAUTH = 'CLAUDE_CODE_OAUTH_TOKEN'
 const API = 'ANTHROPIC_API_KEY'
@@ -74,5 +74,14 @@ describe('credential, choosing between two', () => {
   it('is none when the named file holds nothing and the environment is empty', () => {
     expect(credential({ CF_ENV_FILE: envFile('# nothing\n') }).auth)
       .toEqual({ kind: 'none', from: 'the environment' })
+  })
+})
+
+describe('hostValue', () => {
+  it('reads a key from the environment first, then the file, and is null when neither has it', () => {
+    const file = envFile('IMESSAGE_NOTIFY_TO="me@example.com"\n')
+    expect(hostValue('IMESSAGE_NOTIFY_TO', {}, file)).toBe('me@example.com')
+    expect(hostValue('IMESSAGE_NOTIFY_TO', { IMESSAGE_NOTIFY_TO: 'env@example.com' }, file)).toBe('env@example.com')
+    expect(hostValue('IMESSAGE_NOTIFY_TO', {}, NOWHERE)).toBeNull()
   })
 })

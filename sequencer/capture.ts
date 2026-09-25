@@ -1,7 +1,17 @@
-import { pr as readPr, prNumber, type Pr } from '../cli/gh.ts'
+import { z } from 'zod'
+import { pr as readPr, prNumber, WINDOW, type Pr, type Read } from '../cli/gh.ts'
+import { add, LANE, LANES, laneOf, seen } from '../cli/plan.ts'
 import type { Db } from '../store/index.ts'
+import { originRef, PlanRow } from '../store/plans.ts'
 import { record, type Signal, type SignalRow } from '../store/signals.ts'
 import { attribute } from './escapes.ts'
+
+const Listed = z.array(z.object({
+  number: z.int(),
+  title: z.string(),
+  url: z.string(),
+  labels: z.array(z.object({ name: z.string() })),
+}))
 
 interface Pushed { plan: number; repo: string; evidence: string }
 
@@ -25,6 +35,69 @@ function reachable(db: Db, row: Pushed, read: (repo: string, no: number) => Pr):
     return one(db, row, read)
   } catch {
     return []
+  }
+}
+
+export function intake(db: Db, root: string, read: Read): void {
+  const on = new Set((db.prepare('SELECT name FROM pipes WHERE enabled = 1').all() as { name: string }[]).map((p) => p.name))
+  for (const repo of new Set(LANES.filter((l) => on.has(LANE[l].pipe)).map((l) => LANE[l].home))) {
+    try {
+      listed(db, root, repo, read)
+    } catch {
+      continue
+    }
+  }
+}
+
+/** A list exactly `WINDOW` long may be cut short, so what is missing from it is not taken as gone. */
+function listed(db: Db, root: string, repo: string, read: Read): void {
+  const found = Listed.parse(read(['issue', 'list', '--repo', repo, '--state', 'open', '--limit', String(WINDOW),
+    '--json', 'number,title,url,labels']))
+  const kept = found.filter((i) => laneOf(i.labels) !== null)
+  if (found.length < WINDOW) halt(db, repo, new Set(kept.map((i) => i.url)))
+  const known = seen(db)
+  const split = named(found.map((i) => i.title))
+  for (const i of kept.filter((k) => !known.has(k.url) && !split.has(k.number) && !parent(repo, k.number, read))) {
+    add(db, root, `${repo}#${String(i.number)}`, undefined, read)
+  }
+}
+
+/** A part is titled `<parent><letter>: …` (\`85a: …\`); the numbers so named are parents, whoever split them. */
+function named(titles: string[]): Set<number> {
+  return new Set(titles.flatMap((t) => /^(\d+)[a-z]\b/.exec(t)?.[1] ?? []).map(Number))
+}
+
+const Summary = z.object({ sub_issues_summary: z.object({ total: z.int() }).optional() })
+
+/**
+ * #260: an issue with sub-issues is a parent; its parts are the jobs, and building it repeats them (#139, #138
+ * and #85 on 09-25). An answer that cannot be read counts as a parent this tick, and the next tick asks again.
+ */
+function parent(repo: string, no: number, read: Read): boolean {
+  try {
+    return (Summary.parse(read(['api', `repos/${repo}/issues/${String(no)}`])).sub_issues_summary?.total ?? 0) > 0
+  } catch {
+    return true
+  }
+}
+
+function halt(db: Db, repo: string, open: Set<string>): void {
+  const queued = db.prepare("SELECT * FROM plans WHERE state = 'queued' AND origin IS NOT NULL").all().map((r) => PlanRow.parse(r))
+  for (const plan of queued.filter((p) => originRef(p)?.repo === repo && !open.has(p.origin ?? ''))) {
+    db.prepare("UPDATE plans SET state = 'halted' WHERE id = ?").run(plan.id)
+  }
+  landed(db, repo, open)
+}
+
+/**
+ * #257: a plan whose work is on main and whose issue is closed is finished, whatever step it thinks it is on.
+ * Plans 88 and 89 were landed by hand and kept going; each lap after that reviewed an empty diff.
+ */
+function landed(db: Db, repo: string, open: Set<string>): void {
+  const live = db.prepare(`SELECT p.* FROM plans p WHERE p.state IN ('running', 'blocked_on_ceo') AND p.origin IS NOT NULL
+    AND EXISTS (SELECT 1 FROM deliverables d WHERE d.plan_id = p.id AND d.state = 'pushed')`).all().map((r) => PlanRow.parse(r))
+  for (const plan of live.filter((p) => originRef(p)?.repo === repo && !open.has(p.origin ?? ''))) {
+    db.prepare("UPDATE plans SET state = 'done', wait_reason = NULL WHERE id = ?").run(plan.id)
   }
 }
 

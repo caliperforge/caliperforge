@@ -2,13 +2,14 @@ import { pr as readPr, type Pr, type Read } from '../cli/gh.ts'
 import type { Provider } from '../providers/kind.ts'
 import { digestOf } from '../store/approvals.ts'
 import { hold } from '../store/holds.ts'
+import { logged, newestRun, runSince } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { clear as unlease, held, take, type Lease, type Taken } from '../store/leases.ts'
 import { cap, hhmm, zone } from '../store/lanes.ts'
 import { PlanRow, advance, back, finish, internal, live, needsCeo, openPipes, rewind, terminal, type PipeRow, waiting } from '../store/plans.ts'
 import { blipped, fingerprint, refused, WHY, type Why } from '../store/refusals.ts'
 import { at, last, type Step } from '../templates/pr-path.ts'
-import { capture } from './capture.ts'
+import { capture, intake } from './capture.ts'
 import { woke } from './orchestrator.ts'
 import type { Fired, Outcome } from './kind.ts'
 import { reprice } from './priority.ts'
@@ -31,6 +32,7 @@ import { homeOf } from './home.ts'
 export async function tick(db: Db, root: string, provider: Provider, now: Date = new Date(),
   read: (repo: string, no: number) => Pr = readPr, wire?: Wire, chain = 0, labels?: Read): Promise<Fired[]> {
   for (const signal of capture(db, read)) started(db, signal, root)
+  if (labels !== undefined) intake(db, root, labels)
   reap(root, terminal(db))
   reprice(db, labels)
   const out: Fired[] = []
@@ -156,9 +158,11 @@ async function stepped(db: Db, root: string, pipe: PipeRow, plan: PlanRow, lease
   provider: Provider, wire?: Wire): Promise<{ fired: Fired; wait: boolean }> {
   const tree = workspace(db, root, plan)
   const step = at(plan.step, tree.language)
-  const made = tree.failed ?? await fire(db, root, plan, step, provider, wire)
-  const outcome = made.parts === undefined ? made : parted(db, root, plan, made.parts, wire)
+  const mark = newestRun(db)
+  const outcome = tree.failed ?? await made(db, root, plan, step, provider, wire)
   const state = settle(db, root, plan, step, outcome)
+  logged(db, { plan: plan.id, kind: step.name, actor: step.runs, outcome: outcome.outcome, message: outcome.note,
+    pointer: `step-${String(step.step)}`, run: runSince(db, plan.id, step.step, mark) })
   const fired: Fired = {
     pipe: pipe.name,
     plan: plan.id,
@@ -182,6 +186,8 @@ function ceilinged(db: Db, root: string, pipe: PipeRow, plan: PlanRow, over: { s
   needsCeo(db, plan)
   waiting(db, [{ plan: plan.id, why: 'token_ceiling' }])
   const step = at(plan.step)
+  logged(db, { plan: plan.id, kind: step.name, actor: 'token_ceiling', outcome: 'refuse', message: note,
+    pointer: `step-${String(step.step)}`, run: null })
   return { pipe: pipe.name, plan: plan.id, step: step.step, name: step.name, outcome: 'refuse',
     state: 'blocked_on_ceo', spans: ['ceiling'], note, stole: lease.stole }
 }
@@ -216,6 +222,18 @@ function treeOf(db: Db, root: string, plan: PlanRow): { repo: string; branch: st
   }
   const row = targetOf(db, plan)
   return row === null ? null : { repo: row.repo, branch: branchOf(row.repo, row.issue_no, plan.retries + 1, row.part) }
+}
+
+/** The first line goes in the span: two plans that threw differently must not match as `shared` and turn the lane off. */
+async function made(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider, wire?: Wire): Promise<Outcome> {
+  try {
+    const out = await fire(db, root, plan, step, provider, wire)
+    return out.parts === undefined ? out : parted(db, root, plan, out.parts, wire)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    return { outcome: 'refuse', spans: [`threw: ${message.split('\n')[0] ?? ''}`],
+      note: `step ${String(step.step)} ${step.name} threw`, message, to: step.step }
+  }
 }
 
 function fire(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider, wire?: Wire): Promise<Outcome> {

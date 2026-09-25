@@ -243,6 +243,16 @@ export function snapshot(dir: string): string {
   return git(dir, ['write-tree']).trim()
 }
 
+/** #251: a re-cut checkout no longer holds the tree a reviewer judged before it; asking git for it throws. */
+export function holds(dir: string, sha: string): boolean {
+  try {
+    git(dir, ['cat-file', '-e', sha])
+    return true
+  } catch {
+    return false
+  }
+}
+
 export function diffSince(dir: string, tree: string): string {
   git(dir, ['add', '-A', '--intent-to-add'])
   return git(dir, ['diff', tree])

@@ -24,7 +24,7 @@ async function fire(packet: Packet): Promise<Fired> {
   const started = Date.now()
   const refused: string[] = []
   const limits: Reading[] = []
-  const spent = { tokens: 0 }
+  const spent = new Map<string, number>()
   const pace = { turns: new Set<string>(), wrote: false }
   const transcript = openTranscript(packet)
   const run = query({
@@ -40,7 +40,7 @@ async function fire(packet: Packet): Promise<Fired> {
       settingSources: [],
       permissionMode: 'default',
       hooks: { PreToolUse: [{ hooks: [(input) => {
-        const over = walled(packet.wall, spent.tokens) ?? idle(packet.tools, pace.wrote, pace.turns.size)
+        const over = walled(packet.wall, total(spent)) ?? idle(packet.tools, pace.wrote, pace.turns.size)
         const decision = over === null ? gate(packet, input) : stop(over)
         if (decision.continue && writing(input)) pace.wrote = true
         if (decision.stopReason !== undefined) refused.push(decision.stopReason)
@@ -50,8 +50,11 @@ async function fire(packet: Packet): Promise<Fired> {
   })
   for await (const message of run) {
     transcript(message)
-    spent.tokens += turn(message)
-    if (message.type === 'assistant') pace.turns.add((message.message as { id?: string }).id ?? String(pace.turns.size))
+    if (message.type === 'assistant') {
+      const id = (message.message as { id?: string }).id ?? `turn-${String(pace.turns.size)}`
+      pace.turns.add(id)
+      spent.set(id, Math.max(spent.get(id) ?? 0, turn(message)))
+    }
     if (message.type === 'rate_limit_event') limits.push(...readings(message.rate_limit_info, new Date().toISOString()))
     if (message.type === 'result') return { ...fired(message, started, refused), limits, transcript_path: packet.transcript }
   }
@@ -82,8 +85,18 @@ function writing(input: HookInput): boolean {
 }
 
 /** What a turn adds against the wall. CEO 09-24: cache reads are recorded, never capped. */
-function turn(message: SDKMessage): number {
-  if (message.type !== 'assistant') return 0
+/**
+ * The SDK sends one assistant message per content block, each carrying the whole turn's usage under the same
+ * message id. Summed per message, a turn counted three or four times over, and the 0.4M wall stopped runs
+ * that had spent about 0.1M (plans 85 and 94, 09-24). One turn is one id, counted once, at its largest.
+ */
+function total(spent: Map<string, number>): number {
+  let sum = 0
+  for (const tokens of spent.values()) sum += tokens
+  return sum
+}
+
+function turn(message: SDKMessage & { type: 'assistant' }): number {
   const used = message.message.usage
   return used.input_tokens + (used.cache_creation_input_tokens ?? 0) + used.output_tokens
 }

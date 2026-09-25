@@ -118,10 +118,14 @@ export function add(db: Db, root: string, ref: string, pipe?: string, read: Read
 export function unfiled(db: Db, read: Read = gh): Unfiled[] {
   const found = Found.parse(read(['search', 'issues', '--owner', 'caliperforge', '--state', 'open',
     '--limit', '100', '--json', 'number,title,url,repository,labels']))
-  const seen = new Set((db.prepare('SELECT origin AS url FROM plans WHERE origin IS NOT NULL UNION SELECT url FROM parts').all() as
-    { url: string }[]).map((r) => r.url))
-  return found.filter((f) => !seen.has(f.url))
+  const known = seen(db)
+  return found.filter((f) => !known.has(f.url))
     .map((f) => ({ repo: f.repository.nameWithOwner, no: f.number, title: f.title, url: f.url, lane: laneOf(f.labels) }))
+}
+
+export function seen(db: Db): Set<string> {
+  return new Set((db.prepare('SELECT origin AS url FROM plans WHERE origin IS NOT NULL UNION SELECT url FROM parts').all() as
+    { url: string }[]).map((r) => r.url))
 }
 
 export function render(row: Unfiled): string {

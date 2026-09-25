@@ -107,7 +107,8 @@ test('a second round before any PR goes out on the next branch', async () => {
   const sent: string[] = []
   await tick(w.db, w.root, stub(CARRIED, 0, undefined, again), undefined, undefined, watched(sent, w.root, 1), 5)
   expect(plan(w.db, 1).step).toBe(7)
-  expect(sent).toEqual(['unrehearse caliperforge/widget widget-12-a1', 'send src widget-12-a2', 'rehearse caliperforge/widget widget-12-a2'])
+  expect(sent).toEqual(['unrehearse caliperforge/widget widget-12-a1', 'send src widget-12-a2', 'rehearse caliperforge/widget widget-12-a2',
+    'send src widget-12-a2'])
   const count = execFileSync('git', ['rev-list', '--count', 'refs/remotes/upstream/main..HEAD'], { cwd: src, encoding: 'utf8' })
   expect(count.trim()).toBe('1')
 })

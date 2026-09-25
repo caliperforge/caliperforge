@@ -5,7 +5,7 @@ import type { Provider } from '../../providers/kind.ts'
 import { tick } from '../index.ts'
 import { get, srcDir } from '../workspace.ts'
 import { OOPS } from './bases.ts'
-import { approve, builds, CARRIED, internalPlan, ours, plan, stub, WORDS, world, type World } from './world.ts'
+import { approve, builds, CARRIED, internalPlan, ours, plan, stub, watched, WORDS, world, type World } from './world.ts'
 
 const SLOW = 30000
 const ID = 2
@@ -38,7 +38,7 @@ async function toReview(body?: string): Promise<World> {
   const w = world()
   approve(w.db, w.target)
   const provider = body === undefined ? stub(CARRIED) : builds(writes(w.root, 1, body))
-  for (let at = 0; at < 4; at += 1) await tick(w.db, w.root, provider)
+  for (let at = 0; at < 4; at += 1) await tick(w.db, w.root, provider, undefined, undefined, watched([], w.root, 1))
   return w
 }
 

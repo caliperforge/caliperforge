@@ -23,7 +23,7 @@ import { deletions } from './fence.ts'
 import { fenceFor, languageFor } from './route.ts'
 import { gates, outsideLanguage } from './gates.ts'
 import type { Outcome } from './kind.ts'
-import { carried, cloned, diffOf, diffSince, drop, get, maybe, move, narrowing, planDir, put, snapshot, srcDir } from './workspace.ts'
+import { carried, cloned, diffOf, diffSince, drop, get, holds, maybe, move, narrowing, planDir, put, snapshot, srcDir } from './workspace.ts'
 import { kernelPlan } from './home.ts'
 
 const INSERT = `INSERT INTO runs
@@ -274,8 +274,8 @@ function rounds(db: Db, root: string, plan: number, step: number): Pick<Bench, '
   const refusal = maybe(root, plan, 'refusal.md')
   const prior = { prior: last, ...(refusal === null ? {} : { refusal }) }
   const tree = judged(db, plan, step)
-  if (tree === null) return prior
   const src = srcDir(root, plan)
+  if (tree === null || !holds(src, tree)) return prior
   // Before enclosed(): diffSince's `add -A --intent-to-add` is what puts new files in enclosed()'s diff.
   const plain = diffSince(src, tree)
   return { ...prior, since: enclosed(src, tree) ?? plain, narrowing: narrowing(src, tree, get(root, plan, 'base.sha').trim()) }

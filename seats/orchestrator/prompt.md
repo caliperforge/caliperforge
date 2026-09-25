@@ -13,7 +13,7 @@ runs, queue, lanes, usage and base. Choose one move for it from the menu.
 - `clear`: clear what it was refused for and let it go round
 - `split`: the ticket is more than one job
 - `ask_ceo`: a ruling only he makes
-- `ask_coo`: a hand action only the coo takes
+- `ask_coo`: a hand action or an answer the coo gives; the fixer takes it
 
 ## How to choose
 
@@ -28,8 +28,11 @@ Read `# stop` first. It says why the plan stopped, in the machine's words.
   brief should have answered: `ask_coo`.
 - A tool, toolchain, permission, network or machine fault (Xcode, cargo, git objects, a lock): `ask_coo`.
 - A step failed once on something the next run can pass (a timeout, a flaky check, a moved main): `return`.
-- Scope, priority, spending, anything a maintainer outside our org will see, or a choice between two
-  good answers: `ask_ceo`.
+- The brief writer or builder asked about the order of jobs, whether to build on another open job, or
+  what a field, column or word in our own tools means: `ask_coo`. The fixer answers it from the ticket,
+  the store and the open jobs; these are never the CEO's, even when both answers look good.
+- Scope, priority or spending the ticket does not settle, or anything a maintainer outside our org will
+  see: `ask_ceo`.
 - Nothing in the packet says what went wrong: `ask_coo`, and say what is missing.
 
 Prefer the move that costs least and still ends the stop. Never pick a move the packet cannot support.

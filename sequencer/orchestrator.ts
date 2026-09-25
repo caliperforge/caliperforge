@@ -14,7 +14,7 @@ import { wall } from '../store/lanes.ts'
 import { PlanRow } from '../store/plans.ts'
 import { pending } from '../store/transcript.ts'
 import { act, applying } from './act.ts'
-import { fixer } from './fixer.ts'
+import { fixer, released } from './fixer.ts'
 import { WIRE, type Wire } from './push.ts'
 import { maybe, planDir, put } from './workspace.ts'
 
@@ -32,6 +32,7 @@ type Answer = z.infer<typeof Answer>
 
 /** #238: once `orchestrator.apply` is on, a decision is acted on as soon as it is made. The lease keeps two overlapping ticks off one stop. */
 export async function woke(db: Db, root: string, provider: Provider, now: Date, post: Post = alerter(), wire: Wire = WIRE): Promise<void> {
+  released(db, root, now, post)
   const rows = db.prepare(`SELECT * FROM plans WHERE (wait_reason IN (${WAKE.map(() => '?').join(', ')})
     AND state IN ('queued', 'running', 'blocked_on_ceo')) OR state = 'blocked_on_ceo' ORDER BY id`).all(...WAKE)
   for (const plan of rows.map((r) => PlanRow.parse(r))) {

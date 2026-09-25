@@ -1,4 +1,4 @@
-import { cpSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { expect, test } from 'vitest'
@@ -26,6 +26,7 @@ function seeded(mode: string) {
   put(home, 7, 'step-4.verdict.md', '---\noutcome: refuse\nspans:\n  - x\n---\n')
   put(home, 7, 'base.sha', `${'a'.repeat(40)}\n`)
   writeFileSync(join(srcDir(home, 7), 'index.ts'), 'export {}\n')
+  mkdirSync(join(srcDir(home, 7), '.git'))
   return { db, home }
 }
 
@@ -123,5 +124,91 @@ test('a fixer that throws leaves the tick running and the stop with a person', a
   const broken: Wire = { ...wire([]), file: () => { throw new Error('gh is down') } }
   await woke(db, home, stub('---\ndid: nothing\nthen: ticket\nwhy: a bug\nticket: a bug\n---\n', []), now, (t) => void posted.push(t), broken)
   expect(maybe(home, 7, 'fixer.error')).toBe('gh is down')
+  expect(posted).toHaveLength(1)
+})
+
+const WAIT = '---\ndid: answered in ask.md that it builds on plan 8\nthen: wait\nwhy: plan 8 has not landed\nwaits_on: 8\n---\n'
+
+function second(db: ReturnType<typeof open>, state = 'running') {
+  db.prepare(`INSERT INTO plans (id, pipe_id, template, state, queued_at, step, retries, priority, lane, seat, origin)
+    VALUES (8, 9, 'pr_path', ?, '2026-09-24', 2, 0, 1, 'machine', 'typescript_specialist',
+    'https://github.com/caliperforge/caliperforge/issues/140')`).run(state)
+}
+
+const waitsOn = (db: ReturnType<typeof open>) => db.prepare('SELECT waits_on FROM plans WHERE id = 7').get()
+
+test('gone checkout: rebuilt, no model', async () => {
+  const { db, home } = seeded('live')
+  rmSync(join(home, '.cf/work/7/src'), { recursive: true })
+  put(home, 7, 'base.merged', `${'b'.repeat(40)}\n`)
+  const packets: Packet[] = []
+  const posted: string[] = []
+  await woke(db, home, stub(RETURN, packets), now, (t) => void posted.push(t), wire([]))
+  expect(state(db)).toEqual({ state: 'queued', step: 2 })
+  expect(packets.some((p) => basename(p.transcript).startsWith('fixer'))).toBe(false)
+  expect(posted).toEqual([])
+  expect(maybe(home, 7, 'refusal.prev.md')).toContain('rails refused')
+  expect(maybe(home, 7, 'refusal.md')).toBeNull()
+  expect(maybe(home, 7, 'base.merged')).toBeNull()
+  expect(maybe(home, 7, 'base.sha')).not.toBeNull()
+  expect(db.prepare('SELECT cleared FROM refusals WHERE plan = 7').all()).toEqual([{ cleared: 1 }])
+  expect(maybe(home, 7, 'fixes.jsonl')).toContain('"applied":"rebuild"')
+})
+
+test('gone checkout, shadow: untouched', async () => {
+  const { db, home } = seeded('shadow')
+  rmSync(join(home, '.cf/work/7/src'), { recursive: true })
+  const posted: string[] = []
+  await woke(db, home, stub(RETURN, []), now, (t) => void posted.push(t), wire([]))
+  expect(state(db)).toEqual({ state: 'blocked_on_ceo', step: 4 })
+  expect(posted).toHaveLength(1)
+})
+
+test('rebuild with a live checkout escalates', async () => {
+  const { db, home } = seeded('live')
+  const posted: string[] = []
+  await woke(db, home, stub('---\ndid: nothing\nthen: rebuild\nwhy: x\n---\n', []), now, (t) => void posted.push(t), wire([]))
+  expect(state(db)).toEqual({ state: 'blocked_on_ceo', step: 4 })
+  expect(existsSync(join(home, '.cf/work/7/src/index.ts'))).toBe(true)
+  expect(posted).toHaveLength(1)
+})
+
+test('wait: held quietly, released on land', async () => {
+  const { db, home } = seeded('live')
+  second(db)
+  const packets: Packet[] = []
+  const posted: string[] = []
+  await woke(db, home, stub(WAIT, packets), now, (t) => void posted.push(t), wire([]))
+  expect(state(db)).toEqual({ state: 'blocked_on_ceo', step: 4 })
+  expect(waitsOn(db)).toEqual({ waits_on: 8 })
+  expect(posted).toEqual([])
+  expect(packets.find((p) => basename(p.transcript).startsWith('fixer'))?.prompt).toContain('- plan 8, running, step 2')
+  await woke(db, home, stub(WAIT, []), now, (t) => void posted.push(t), wire([]))
+  expect(state(db)).toEqual({ state: 'blocked_on_ceo', step: 4 })
+  db.exec("UPDATE plans SET state = 'done' WHERE id = 8")
+  await woke(db, home, stub(WAIT, []), now, (t) => void posted.push(t), wire([]))
+  expect(state(db)).toEqual({ state: 'queued', step: 4 })
+  expect(waitsOn(db)).toEqual({ waits_on: null })
+  expect(posted).toEqual([])
+})
+
+test('wait on a refused job pings', async () => {
+  const { db, home } = seeded('live')
+  second(db)
+  const posted: string[] = []
+  await woke(db, home, stub(WAIT, []), now, (t) => void posted.push(t), wire([]))
+  db.exec("UPDATE plans SET state = 'refused' WHERE id = 8")
+  await woke(db, home, stub(WAIT, []), now, (t) => void posted.push(t), wire([]))
+  expect(state(db)).toEqual({ state: 'blocked_on_ceo', step: 4 })
+  expect(waitsOn(db)).toEqual({ waits_on: null })
+  expect(posted).toEqual(['CaliperForge · #139 needs you'])
+})
+
+test('wait on a closed job escalates', async () => {
+  const { db, home } = seeded('live')
+  second(db, 'done')
+  const posted: string[] = []
+  await woke(db, home, stub(WAIT, []), now, (t) => void posted.push(t), wire([]))
+  expect(waitsOn(db)).toEqual({ waits_on: null })
   expect(posted).toHaveLength(1)
 })

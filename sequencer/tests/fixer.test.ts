@@ -242,3 +242,12 @@ test('park: held, not reaped, not re-woken', async () => {
   await woke(db, home, stub(PARK, packets), now, () => undefined, wire([]))
   expect(packets.filter((p) => basename(p.transcript).startsWith('orchestrator'))).toHaveLength(1)
 })
+
+test('a # in did or why is kept whole', async () => {
+  const { db, home } = seeded('live')
+  const fix = '---\ndid: nothing; #37 landed at 22775be\nthen: ask_ceo\nwhy: #261: split of a split\n---\n'
+  await woke(db, home, stub(fix, []), now, () => undefined, wire([]))
+  const line = JSON.parse((maybe(home, 7, 'fixes.jsonl') ?? '').trim()) as { did: string; why: string }
+  expect(line.did).toBe('nothing; #37 landed at 22775be')
+  expect(line.why).toBe('#261: split of a split')
+})

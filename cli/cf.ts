@@ -8,6 +8,7 @@ import { credential } from '../providers/credential.ts'
 import { self } from '../rails/tight/index.ts'
 import { fire } from '../runner/index.ts'
 import { CHAIN_MINUTES, dry, EACH, tick } from '../sequencer/index.ts'
+import { CHECK_SLOTS } from '../sequencer/checks.ts'
 import { behind, upgraded } from '../sequencer/upgrade.ts'
 import { saved } from '../sequencer/hq.ts'
 import { signoffs } from '../sequencer/signoff.ts'
@@ -372,6 +373,7 @@ async function ticked(options: { dry?: boolean }, now: Date): Promise<void> {
   }
   const { auth } = credential()
   process.stderr.write(`auth ${auth.kind} from ${auth.from}\n`)
+  process.env.CF_CHECK_SLOTS ??= String(CHECK_SLOTS)
   const fired = await tick(handle, root, claudeAgentSdk, now, undefined, undefined, CHAIN_MINUTES, gh, EACH)
   receipt(handle, saved(handle, upgraded(handle, root, { at: now.toISOString(), hhmm: hhmm(handle, now), dry: false,
     pipes: openPipes(handle, hhmm(handle, now)).length, fired: fired.length,

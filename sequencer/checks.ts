@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process'
-import { appendFileSync, existsSync, readdirSync, readFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { z } from 'zod'
 import { gates, type Gate, type Outside, type OutsideLanguage } from './gates.ts'
@@ -169,7 +170,60 @@ function tail(output: string): string {
  * started has no output at all, so the spawn error is what the builder reads (09-24: cargo off launchd's PATH).
  */
 export function npm(args: string[], cwd: string, bin = 'npm'): { code: number; output: string } {
-  const done = spawnSync(bin, args, { cwd, encoding: 'utf8', timeout: LONG.includes(bin) ? XCODE_CAP : CAP, maxBuffer: MAX })
-  if (done.error !== undefined && typeof done.stdout !== 'string') return { code: 127, output: `${bin}: ${done.error.message}` }
-  return { code: done.status ?? 1, output: `${done.stdout}${done.stderr}` }
+  const held = slot()
+  try {
+    const done = spawnSync(bin, args, { cwd, encoding: 'utf8', timeout: LONG.includes(bin) ? XCODE_CAP : CAP, maxBuffer: MAX })
+    if (done.error !== undefined && typeof done.stdout !== 'string') return { code: 127, output: `${bin}: ${done.error.message}` }
+    return { code: done.status ?? 1, output: `${done.stdout}${done.stderr}` }
+  } finally {
+    if (held !== null) free(held)
+  }
+}
+
+/**
+ * #220's second half. Once each job ran in its own tick (#307), every lane's test suite, Swift build and cargo build
+ * could run at once, which is the load that turned slow tests into fake failures on 09-24. The live tick sets
+ * `CF_CHECK_SLOTS`; a check waits for one of that many slot files. Unset (tests, a person's shell) means no limit.
+ */
+export const CHECK_SLOTS = 2
+
+export const SLOT_DIR = join(homedir(), '.cf-cache', 'check-slots')
+
+export function slot(dir = process.env.CF_CHECK_SLOTS_DIR ?? SLOT_DIR, n = Number(process.env.CF_CHECK_SLOTS ?? 0),
+  wait = 2000): string | null {
+  if (!(n > 0)) return null
+  mkdirSync(dir, { recursive: true })
+  for (;;) {
+    for (let i = 0; i < n; i += 1) {
+      const path = join(dir, `slot-${String(i)}`)
+      if (claim(path)) return path
+    }
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, wait)
+  }
+}
+
+/** A slot whose holder died is cleared for the next claim. */
+function claim(path: string): boolean {
+  try {
+    writeFileSync(path, String(process.pid), { flag: 'wx' })
+    return true
+  } catch {
+    const holder = existsSync(path) ? Number(readFileSync(path, 'utf8')) : 0
+    if (holder > 0 && !alive(holder)) rmSync(path, { force: true })
+    return false
+  }
+}
+
+export function free(path: string): void {
+  if (existsSync(path) && readFileSync(path, 'utf8') === String(process.pid)) rmSync(path, { force: true })
+}
+
+function alive(pid: number): boolean {
+  if (!Number.isInteger(pid) || pid <= 0) return false
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    return (error as { code?: string }).code === 'EPERM'
+  }
 }

@@ -19,6 +19,7 @@ import { handout, touched, type Handed } from './handout.ts'
 import { enclosed, handover, type Handover } from './handover.ts'
 import { install, mode } from './checks.ts'
 import { narrow } from './rails.ts'
+import { classify } from './delta.ts'
 import { deletions } from './fence.ts'
 import { fenceFor, languageFor } from './route.ts'
 import { gates, outsideLanguage } from './gates.ts'
@@ -232,6 +233,7 @@ export async function fireReview(db: Db, root: string, plan: PlanRow, step: Step
   try {
     const { outcome } = await judge(db, root, step.runs, plan.id, input, provider, transcriptOf(root, plan.id, step.step))
     put(root, plan.id, `step-${String(step.step)}.verdict.md`, verdictText(outcome))
+    if (outcome.outcome === 'pass' && input.tree !== undefined) put(root, plan.id, `step-${String(step.step)}.passed.diff`, input.diff)
     return {
       outcome: { outcome: outcome.outcome, spans: outcome.spans, note: `${step.runs} ${outcome.outcome}`, message: outcome.message },
       findings: outcome.findings,
@@ -278,7 +280,10 @@ function rounds(db: Db, root: string, plan: number, step: number): Pick<Bench, '
   if (tree === null || !holds(src, tree)) return prior
   // Before enclosed(): diffSince's `add -A --intent-to-add` is what puts new files in enclosed()'s diff.
   const plain = diffSince(src, tree)
-  return { ...prior, since: enclosed(src, tree) ?? plain, narrowing: narrowing(src, tree, get(root, plan, 'base.sha').trim()) }
+  const paths = narrowing(src, tree, get(root, plan, 'base.sha').trim())
+  const { mode, why } = classify(maybe(root, plan, `step-${String(step)}.passed.diff`), plain, paths.changed)
+  put(root, plan, `step-${String(step)}.mode`, `${mode}: ${why}\n`)
+  return mode === 'full' ? prior : { ...prior, since: enclosed(src, tree) ?? plain, narrowing: paths }
 }
 
 /** The tree the reviewer last passed, else the one its last verdict judged, off the row `judge()` wrote it on. */

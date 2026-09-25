@@ -6,7 +6,7 @@ import { unread } from '../../cli/inbox.ts'
 import { rewind } from '../../store/plans.ts'
 import { tick } from '../index.ts'
 import { ruled, signoffs } from '../signoff.ts'
-import { put, SELF, SIGNOFF, srcDir } from '../workspace.ts'
+import { drop, put, SELF, SIGNOFF, srcDir } from '../workspace.ts'
 import { approve, CARRIED, plan, stub, watched, world, type World } from './world.ts'
 
 /** Their pull request as the tick reads it, offline: open and quiet. */
@@ -181,6 +181,21 @@ test('the card names a changed file the PR text written in advance leaves out', 
   }
   expect(await bodyWith('Says hey.\n')).toContain('**Not in the PR text:** `src/hello.ts`')
   expect(await bodyWith('`hello.ts` says hey.\n')).not.toContain('Not in the PR text')
+})
+
+test('D6 the card names each rework round\'s review mode, and a plan with none has no such line', async () => {
+  const w = await atBatch()
+  const plain = fake()
+  signoffs(w.db, w.root, plain)
+  expect(plain.cards.get(100)?.body).not.toContain('Review mode:')
+
+  put(w.root, 1, 'step-4.mode', 'full: src/parse.ts is not in the passed diff\n')
+  put(w.root, 1, 'step-5.mode', 'skipped: 1 delta lines, comments and docs only\n')
+  drop(w.root, 1, 'signoff')
+  const desk = fake()
+  signoffs(w.db, w.root, desk)
+  expect(desk.cards.get(100)?.body).toContain('- Gates: pre_review pass, review pass, senior_review pass, ready pass\n'
+    + '- Review mode: review full: src/parse.ts is not in the passed diff; senior_review skipped: 1 delta lines, comments and docs only\n')
 })
 
 /** #102: the cards carry unposted PR text and the CEO's answers, so they live apart from our public repo. */

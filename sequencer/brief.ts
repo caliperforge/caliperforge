@@ -317,21 +317,20 @@ function titleOf(text: string): string | null {
   return /^#\s+(.*)$/m.exec(text)?.[1]?.trim() ?? null
 }
 
+/**
+ * Each known key's value is read as one quoted string first. As plain YAML, `: ` breaks the parse (plan 77) and
+ * ` #` silently ends the value: plan 114's question "Has #3a landed" reached the COO as "Has". A value that runs
+ * onto a second line does not survive the quoting, and is read as plain YAML instead.
+ */
 function yamlOf(text: string): unknown {
-  try {
-    return parse(text)
-  } catch {
-    return loose(text)
-  }
-}
-
-/** Plan 77: a seat's prose value holding `: ` is not YAML; each known key's value is read as one quoted string instead. */
-function loose(text: string): unknown {
   const quoted = text.replace(/^(\s*(?:- )?(?:title|what|why|ends|question|outcome):[ \t]+)(?!["'|>])(.+)$/gm,
     (...m: string[]) => `${m[1] ?? ''}${JSON.stringify((m[2] ?? '').trim())}`)
-  try {
-    return parse(quoted)
-  } catch {
-    return null
+  for (const each of [quoted, text]) {
+    try {
+      return parse(each)
+    } catch {
+      continue
+    }
   }
+  return null
 }

@@ -13,7 +13,7 @@ import { at, type Step } from '../templates/pr-path.ts'
 import { writable } from './brief.ts'
 import type { Outcome } from './kind.ts'
 import { preReview } from './rails.ts'
-import { forkCi, headOf, land, opened, push, reviewable, type Wire } from './push.ts'
+import { forkCi, headOf, land, opened, push, reviewable, title, type Wire } from './push.ts'
 import { following } from './split.ts'
 import { abortMerge, behindMain, cloned, conflicted, diffOf, fetchMain, get, maybe, merging, mergeMain, put, recut, srcDir, unmerged } from './workspace.ts'
 import { homeOf } from './home.ts'
@@ -121,7 +121,7 @@ function readyGate(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
   if (row === null) return { outcome: 'refuse', spans: ['deliverables'], note: `plan ${String(plan.id)} has no deliverable row` }
   const waiting = forkCi(db, root, plan, repo, wire)
   if (waiting !== null) return waiting
-  const verdict = readyRail(proofOf(db, plan, repo, row))
+  const verdict = readyRail(proofOf(db, root, plan, repo, row))
   recordRail(db, join(root, 'rails/ready'), plan.id, verdict, 0)
   return { outcome: verdict.outcome, spans: verdict.spans, note: `ready: ${verdict.message}` }
 }
@@ -249,7 +249,7 @@ function gatedRow(db: Db, plan: number): Gated | null {
     FROM deliverables WHERE plan_id = ? ORDER BY id DESC LIMIT 1`).get(plan) ?? null) as Gated | null
 }
 
-function proofOf(db: Db, plan: PlanRow, repo: string, row: Gated): Proof {
+function proofOf(db: Db, root: string, plan: PlanRow, repo: string, row: Gated): Proof {
   const ci = db.prepare("SELECT outcome, subject_digest FROM verdicts WHERE plan = ? AND rail_id = 'ci-green' ORDER BY id DESC LIMIT 1")
     .get(plan.id) as { outcome: string; subject_digest: string } | undefined
   return {
@@ -262,6 +262,8 @@ function proofOf(db: Db, plan: PlanRow, repo: string, row: Gated): Proof {
     bot_clean: row.bot_clean === 1,
     ci: green(ci),
     spans: [row.diff_digest.slice(0, 12)],
+    title: title(root, plan.id),
+    named: [maybe(root, plan.id, 'ask.md') ?? '', ...parse(diffOf(root, plan.id)).flatMap((f) => f.added.map((l) => l.text))].join('\n'),
   }
 }
 

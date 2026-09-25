@@ -6,5 +6,7 @@
   "byte_identical_elsewhere": false,
   "fork_public": false,
   "bot_clean": false,
-  "spans": []
+  "spans": [],
+  "title": "feat(ruby): PayKit.configure_from_env mirrors Python's configure_from",
+  "named": "def self.configure_from_env(env = ENV)"
 }

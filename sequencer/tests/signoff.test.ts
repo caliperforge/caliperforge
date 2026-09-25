@@ -58,6 +58,7 @@ test('an outside plan at sign-off gets one card, and the card links nothing on t
   expect(signoffs(w.db, w.root, desk)).toEqual([])
   const card = desk.cards.get(100)
   expect(card?.title).toBe('Sign-off: widget 12, hello')
+  expect(card?.body).toContain('titled `hello`')
   expect(card?.body).toContain('```markdown\nAddresses #12.')
   expect(card?.body).toContain('https://github.com/caliperforge/widget/commit/')
   expect(card?.body).toContain('pre_review pass, review pass, senior_review pass, ready pass')

@@ -49,8 +49,18 @@ test('refuses every unmet ready condition by name', () => {
     'https://github.com/o/r/actions/runs/1 ci.red',
     'fork:1 not.public',
     'bot:1 ready.bot_clean',
+    'title:1 ready.title_clipped',
     'spans:1 no.anchor',
   ])
+})
+
+test('passes a title ending on a whole name, on a plain word, or on our own plan', () => {
+  const green = proof('green.proof.json', 'pass')
+  const red = proof('red.proof.json', 'refuse')
+  const whole = { ...green, title: 'feat(ruby): PayKit.configure_from_env', named: red.named }
+  expect(ready(whole).spans).toEqual([])
+  expect(ready({ ...green, title: 'fix: add retry', named: 'retry_count' }).spans).toEqual([])
+  expect(ready({ ...green, ours: true, title: red.title, named: red.named }).spans).toEqual([])
 })
 
 test('passes a green deliverable', () => {

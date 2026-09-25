@@ -42,8 +42,8 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
   waiting(db, lanes.flatMap((l) => l.routed.map(({ plan, route: r }) =>
     'fire' in r ? { plan: plan.id, why: null } : { plan: plan.id, why: r.wait, on: r.on })))
   if (Number.isFinite(each)) {
-    const laps = lanes.flatMap(({ pipe, routed }) => leased(db, routed.filter((r) => stepping(r.route)), now, each)
-      .map((m) => apart === undefined ? one(db, root, pipe, m, m.lease, provider, wire, chain) : away(db, m, apart)))
+    const laps = lanes.map(({ pipe, routed }) => lane(routed.filter((r) => stepping(r.route)), now, each,
+      (m) => apart === undefined ? one(db, root, pipe, m, m.lease, provider, wire, chain) : away(db, m, apart), db))
     out.push(...(await Promise.all(laps)).flat())
   } else {
     for (const { pipe, routed } of lanes) {
@@ -53,6 +53,25 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
     }
   }
   await woke(db, root, provider, now)
+  return out
+}
+
+/**
+ * A lane's `each` jobs this tick. A job that only waited spent no model and does not count: on 09-25 plan 159
+ * sat on the checks lock and took the Atelier lane's one lease every minute, so plans 164 and 166 never started.
+ */
+async function lane(picks: Leg[], now: Date, each: number, run: (m: Leg & { lease: Taken }) => Promise<Fired[]>,
+  db: Db): Promise<Fired[]> {
+  const out: Fired[] = []
+  let ran = 0
+  for (const pick of picks) {
+    if (ran >= each) break
+    const lease = take(db, pick.plan.id, now)
+    if (lease === null) continue
+    const fired = await run({ ...pick, lease })
+    out.push(...fired)
+    if (fired.length === 0 || !fired.every((f) => f.held === true)) ran += 1
+  }
   return out
 }
 
@@ -221,6 +240,7 @@ async function stepped(db: Db, root: string, pipe: PipeRow, plan: PlanRow, lease
     spans: outcome.spans,
     note: outcome.note,
     stole: lease.stole,
+    ...(outcome.held === true ? { held: true as const } : {}),
   }
   return { fired, wait: outcome.held === true || outcome.blip === true }
 }

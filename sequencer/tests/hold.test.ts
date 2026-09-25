@@ -1,11 +1,11 @@
-import { mkdtempSync, readFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { migrate, open } from '../../store/index.ts'
 import { terminal } from '../../store/plans.ts'
 import { hold, isHeld, unhold } from '../hold.ts'
-import { put } from '../workspace.ts'
+import { maybe, put, srcDir } from '../workspace.ts'
 
 const repo = join(import.meta.dirname, '../..')
 
@@ -38,4 +38,23 @@ test('unhold at step 1 sets the question aside', () => {
   unhold(db, home, 7)
   expect(isHeld(home, 7)).toBe(false)
   expect(readFileSync(join(home, '.cf/work/7/question.prev.md'), 'utf8')).toBe('which one?\n')
+})
+
+test('unhold at step 1 drops a stale checkout', () => {
+  const { db, home } = seeded()
+  db.exec('UPDATE plans SET step = 1 WHERE id = 7')
+  writeFileSync(join(srcDir(home, 7), 'old.ts'), 'x\n')
+  put(home, 7, 'base.sha', `${'c'.repeat(40)}\n`)
+  hold(db, home, 7, 'x', new Date(), null)
+  unhold(db, home, 7)
+  expect(existsSync(join(home, '.cf/work/7/src'))).toBe(false)
+  expect(maybe(home, 7, 'base.sha')).toBeNull()
+})
+
+test('unhold past step 1 keeps the checkout', () => {
+  const { db, home } = seeded()
+  writeFileSync(join(srcDir(home, 7), 'built.ts'), 'x\n')
+  hold(db, home, 7, 'x', new Date(), null)
+  unhold(db, home, 7)
+  expect(existsSync(join(home, '.cf/work/7/src/built.ts'))).toBe(true)
 })

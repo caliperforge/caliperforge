@@ -91,3 +91,59 @@ test('D4 a reason outside WAKE is not woken', async () => {
   expect(fires).toEqual([])
   expect(maybe(home, 7, 'orchestrator.md')).toBeNull()
 })
+
+const blocked = (db: ReturnType<typeof open>) =>
+  db.exec("UPDATE plans SET state = 'blocked_on_ceo', wait_reason = NULL WHERE id = 7")
+
+test('#246 a plan stopped for a person gets one decision per distinct stop, and is left byte-identical', async () => {
+  const { db, home } = seeded()
+  blocked(db)
+  put(home, 7, 'refusal.md', 'step 4 review refused by code_quality\n\nthe binding is stale\n')
+  const fires: string[] = []
+  const before = state(db, home)
+  await woke(db, home, stub(VALID, fires), now)
+  expect(decisions(db)).toMatchObject([{ plan: 7, step: 4, wait_reason: 'blocked_on_ceo', verb: 'ask_ceo' }])
+  expect(state(db, home)).toEqual(before)
+  expect(maybe(home, 7, 'orchestrator.md')?.split('\n')[0]).toMatch(/^step 4 blocked [0-9a-f]{12}$/)
+  await woke(db, home, stub(VALID, fires), now)
+  expect(fires).toHaveLength(1)
+  put(home, 7, 'refusal.md', 'step 4 review refused by code_quality\n\na different finding\n')
+  await woke(db, home, stub(VALID, fires), now)
+  expect(decisions(db)).toHaveLength(2)
+})
+
+test('#246 the packet carries the words the plan stopped with', async () => {
+  const { db, home } = seeded()
+  blocked(db)
+  put(home, 7, 'refusal.md', 'the build changed nothing since the last refusal\n')
+  const packets: string[] = []
+  const provider: Provider = {
+    name: 'claude-agent-sdk',
+    fire: (packet) => {
+      packets.push(JSON.stringify(packet))
+      return Promise.resolve({ text: VALID, transcript_path: packet.transcript, usage: { input: 1, cache: 0, output: 1 },
+        seconds: 0, exit: 0, stop_reason: 'end_turn', denials: 0 })
+    },
+  }
+  await woke(db, home, provider, now)
+  expect(packets[0]).toContain('# stop')
+  expect(packets[0]).toContain('the build changed nothing since the last refusal')
+})
+
+test('#246 a blocked plan with a reason on the wake list keeps that reason and is woken once', async () => {
+  const { db, home } = seeded()
+  db.exec("UPDATE plans SET state = 'blocked_on_ceo' WHERE id = 7")
+  const fires: string[] = []
+  await woke(db, home, stub(VALID, fires), now)
+  await woke(db, home, stub(VALID, fires), now)
+  expect(decisions(db)).toMatchObject([{ wait_reason: 'token_ceiling' }])
+  expect(fires).toHaveLength(1)
+})
+
+test('#246 the store takes blocked_on_ceo as a decision reason and still refuses an unknown one', () => {
+  const { db } = seeded()
+  const insert = (reason: string) => db.prepare(`INSERT INTO decisions (plan, step, wait_reason, verb, why)
+    VALUES (7, 4, ?, 'ask_coo', 'x')`).run(reason)
+  expect(() => insert('blocked_on_ceo')).not.toThrow()
+  expect(() => insert('made_up')).toThrow(/CHECK/)
+})

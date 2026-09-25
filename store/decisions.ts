@@ -9,7 +9,7 @@ export type Verb = typeof VERBS[number]
 export interface Decision {
   plan: number
   step: number
-  wait_reason: Wait
+  wait_reason: Wait | 'blocked_on_ceo'
   verb: Verb
   why: string
   evidence: string | null

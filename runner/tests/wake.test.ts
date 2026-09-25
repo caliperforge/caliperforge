@@ -28,7 +28,7 @@ test('D1 a waiting plan wakes with every section in order and no file content', 
   const { db, home } = seeded()
   const { text } = wake(db, home, 7) as { text: string }
   expect([...text.matchAll(/^# (\w+)$/gm)].map((m) => m[1]))
-    .toEqual(['card', 'step', 'verdict', 'refusals', 'runs', 'queue', 'lanes', 'usage', 'base'])
+    .toEqual(['card', 'step', 'verdict', 'stop', 'refusals', 'runs', 'queue', 'lanes', 'usage', 'base'])
   expect(text).toContain('spans:\n  - runner/wake.ts\n---')
   expect(text).not.toContain(SENTINEL)
   expect(text).not.toContain(MESSAGE)

@@ -11,9 +11,10 @@ import { CHAIN_MINUTES, dry, tick } from '../sequencer/index.ts'
 import { behind, upgraded } from '../sequencer/upgrade.ts'
 import { saved } from '../sequencer/hq.ts'
 import { signoffs } from '../sequencer/signoff.ts'
+import { hold, isHeld, unhold } from '../sequencer/hold.ts'
 import { SIGNOFF, afresh, liveTree, reap } from '../sequencer/workspace.ts'
 import { blocked, parked, targetDigest, WAITING } from '../sequencer/steps.ts'
-import { release, returnToLane } from '../store/holds.ts'
+import { release } from '../store/holds.ts'
 import { dump, migrate, open as openDb, type Db } from '../store/index.ts'
 import { dial, hhmm, lanes, priority as setPriority, record, Reading, set, windows } from '../store/lanes.ts'
 import { holder } from '../store/leases.ts'
@@ -205,10 +206,29 @@ cf.command('release').argument('<plan>', 'a briefed plan waiting on the coo to r
   out(`plan ${id} queued\n`)
 })
 
-cf.command('return').argument('<plan>', 'a plan blocked on the ceo or halted').action((id: string) => {
-  const n = Number(id)
-  afresh(root, n, returnToLane(db(), n))
+cf.command('return').argument('<plan>', 'a plan blocked on the ceo, held or halted').action((id: string) => {
+  unhold(db(), root, Number(id))
   out(`plan ${id} queued\n`)
+})
+
+cf.command('park').argument('<plan>', 'a plan to hold where it stands, checkout kept')
+  .option('--on <plan>', 'the plan it waits on; it goes back in its lane when that one lands')
+  .option('--why <text>', 'why it is held', 'held by a person')
+  .action((id: string, options: { on?: string; why: string }) => {
+    const handle = db()
+    const n = Number(id)
+    if (holder(handle, n) !== null) throw new Error(`plan ${id} is mid-step in a live tick; park it once the tick lets go`)
+    const on = options.on === undefined ? null : Number(options.on)
+    if (on !== null && handle.prepare("SELECT 1 FROM plans WHERE id = ? AND state IN ('queued', 'running', 'blocked_on_ceo')").get(on) === undefined) {
+      throw new Error(`plan ${String(on)} is not open, so nothing would release plan ${id}`)
+    }
+    hold(handle, root, n, options.why, new Date(), on)
+    out(`plan ${id} held${on === null ? '' : ` on plan ${String(on)}`}\n`)
+  })
+
+cf.command('unpark').argument('<plan>', 'a held plan, put back at the step it stopped on').action((id: string) => {
+  const step = unhold(db(), root, Number(id))
+  out(`plan ${id} queued at step ${String(step)}\n`)
 })
 
 cf.command('inbox').option('--ack', 'mark everything shown so far as read')
@@ -297,7 +317,9 @@ cf.command('brief').action(() => {
   out(laneLine(lanes(handle, hhmm(handle))))
   out(section('open plans', openPlans(handle)))
   out(section('halted', halted(handle)))
-  out(section('awaiting approval', awaiting(handle)))
+  const waiting = awaiting(handle)
+  out(section('held', waiting.filter((l) => isHeld(root, l.id))))
+  out(section('awaiting approval', waiting.filter((l) => !isHeld(root, l.id))))
   const d = day(handle)
   out(`last 24 h\n  ${String(d.runs)} run(s)\t${String(d.tokens)} tokens\t${d.seconds.toFixed(1)}s\n`)
   out(ticketSection(tickets(handle)))

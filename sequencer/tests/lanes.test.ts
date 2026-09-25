@@ -130,7 +130,7 @@ test('the cap decides how many pipes worth of plans the tick opens', async () =>
 test('a throw inside one plan\'s step is that plan\'s refusal, a repeat stops it, and the other lane still steps', async () => {
   const w = world()
   approve(w.db, w.target)
-  for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
   second(w)
   queued(w, 2, 2, 1)
   dial(w.db, 2, AT)

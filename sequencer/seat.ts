@@ -126,10 +126,13 @@ export function machineReads(root: string, plan: PlanRow, seat: string): string[
   return plan.lane === 'atelier' && seat === 'brief_writer' ? [join(root, 'schema'), join(root, 'cli')] : []
 }
 
+/** Parallel dashboard jobs kept colliding on the same four files (atelier #45 split them). */
+const DASHBOARD = '\n# Dashboard layout\n\nEach dashboard section owns its files: a view in `Atelier/Views/Dashboard/`, its query as an extension on `DashboardSource` in `Atelier/Services/Dashboard/`, its models in `Atelier/Models/Dashboard/`, and its tests in `AtelierTests/Dashboard/`. A new table, chart or row gets new files there; only `Atelier/Views/DashboardView.swift` composes the sections, with one line per section. Do not add dashboard state or queries to `CFQueueStore`, and do not put a new section in another section\'s files.\n'
+
 function store(root: string, plan: PlanRow): string {
   const [schema, cli] = machineReads(root, plan, 'brief_writer')
   if (schema === undefined || cli === undefined) return ''
-  return `\n\n# The machine's store\n\nAtelier reads the machine's cf.db. Its tables are defined in \`${schema}/*.sql\` (later files alter earlier ones) and the \`cf\` commands in \`${cli}/\`. Read them for column names and values; you may not write there.\n`
+  return `\n\n# The machine's store\n\nAtelier reads the machine's cf.db. Its tables are defined in \`${schema}/*.sql\` (later files alter earlier ones) and the \`cf\` commands in \`${cli}/\`. Read them for column names and values; you may not write there.\n${DASHBOARD}`
 }
 
 /** A plan queued before the brief seat carries its ask as `issue.md`, the name the brief now takes. */

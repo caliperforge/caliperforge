@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { existsSync, readdirSync } from 'node:fs'
+import { readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Check, Finding } from './kind.ts'
 
@@ -14,11 +14,10 @@ export const migrationOrder: Check = {
 
 function findings(root: string): Finding[] {
   const ref = REFS.find((r) => resolves(root, r))
-  const dir = join(root, 'schema')
-  if (ref === undefined || !existsSync(dir)) return []
+  if (ref === undefined) return []
   const held = new Set(git(root, ['ls-tree', '--full-tree', '--name-only', ref, '--', 'schema/']).split('\n'))
   const top = Math.max(0, ...[...held].map((p) => p.slice('schema/'.length)).filter((f) => MIGRATION.test(f)).map(number))
-  return readdirSync(dir)
+  return readdirSync(join(root, 'schema'))
     .filter((f) => MIGRATION.test(f) && !held.has(`schema/${f}`) && number(f) <= top)
     .map((f) => ({
       check: 'migration-order',

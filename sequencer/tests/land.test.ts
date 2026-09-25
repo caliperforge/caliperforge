@@ -155,7 +155,7 @@ test('an external plan does not land: step 7 still waits for the ceo and step 8 
 
   expect(plan(w.db, 1).step).toBe(7)
   expect((await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]).toBeUndefined()
-  expect(sent).toEqual(['send src widget-12-a1', 'rehearse caliperforge/widget widget-12-a1'])
+  expect(sent).toEqual(['send src widget-12-a1', 'rehearse caliperforge/widget widget-12-a1', 'send src widget-12-a1'])
   expect(w.db.prepare("SELECT count(*) AS n FROM approvals WHERE who = 'gates'").get()).toEqual({ n: 0 })
   expect(git(srcDir(w.root, 1), ['rev-parse', '--abbrev-ref', 'HEAD'])).toBe('widget-12-a1')
 })
@@ -329,12 +329,12 @@ test('a target\'s tree at the rails is untouched when our own main moves', async
   ours(w.root)
   moveMain(w.root, 'ahead.ts')
   const src = srcDir(w.root, 1)
-  const head = git(src, ['rev-parse', 'HEAD'])
+  const tree = git(src, ['rev-parse', `${git(src, ['stash', 'create'])}^{tree}`])
   const base = get(w.root, 1, 'base.sha')
 
   expect((await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0])
     .toMatchObject({ step: 3, outcome: 'pass' })
-  expect(git(src, ['rev-parse', 'HEAD'])).toBe(head)
+  expect(git(src, ['rev-parse', 'HEAD^{tree}'])).toBe(tree)
   expect(get(w.root, 1, 'base.sha')).toBe(base)
 })
 

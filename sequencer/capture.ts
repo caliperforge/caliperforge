@@ -1,10 +1,12 @@
 import { z } from 'zod'
-import { pr as readPr, prNumber, WINDOW, type Pr, type Read } from '../cli/gh.ts'
+import { pr as readPr, prNumber, rehearsal, WINDOW, type Pr, type Read } from '../cli/gh.ts'
 import { add, LANE, LANES, laneOf, seen } from '../cli/plan.ts'
 import type { Db } from '../store/index.ts'
 import { originRef, PlanRow } from '../store/plans.ts'
 import { record, type Signal, type SignalRow } from '../store/signals.ts'
 import { attribute } from './escapes.ts'
+import { rehearsalBranch } from './push.ts'
+import { cloned, FORK, repoName, srcDir } from './workspace.ts'
 
 const Listed = z.array(z.object({
   number: z.int(),
@@ -13,7 +15,7 @@ const Listed = z.array(z.object({
   labels: z.array(z.object({ name: z.string() })),
 }))
 
-interface Pushed { plan: number; repo: string; evidence: string }
+interface Pushed { plan: number; repo: string; evidence: string; rehearsal: boolean }
 
 type Base = Pick<Signal, 'repo' | 'pr' | 'plan'>
 
@@ -27,8 +29,8 @@ const CONFIDENCE = /Confidence Score:\s*(\d)\s*\/\s*5/i
 const REVIEWED = /Last reviewed commit: \[[^\]]*\]\(https:\/\/github\.com\/[^/)]+\/[^/)]+\/commit\/([0-9a-f]{40})\)/
 
 /** Every open PR of ours, every tick. `gh` polling is the only reader; there is no webhook and no server. */
-export function capture(db: Db, read: (repo: string, no: number) => Pr = readPr): SignalRow[] {
-  return pushed(db).flatMap((row) => reachable(db, row, read))
+export function capture(db: Db, read: (repo: string, no: number) => Pr = readPr, root?: string, list?: Read): SignalRow[] {
+  return pushed(db, root, list).flatMap((row) => reachable(db, row, read))
 }
 
 /** A pr `gh` cannot reach this tick is read again next tick; it does not stop the pipes behind it. */
@@ -105,8 +107,12 @@ function landed(db: Db, repo: string, open: Set<string>): void {
 
 function one(db: Db, row: Pushed, read: (repo: string, no: number) => Pr): SignalRow[] {
   const view = read(row.repo, prNumber(row.evidence))
+  if (row.rehearsal) {
+    for (const s of signals(view, row).filter((s) => s.kind === 'bot_review')) record(db, s)
+    return []
+  }
   const fresh = signals(view, row).map((s) => record(db, s)).filter((s) => s !== null)
-  attribute(db, row.plan, view)
+  attribute(db, row.plan, row.repo, view)
   return acted(db, view, fresh)
 }
 
@@ -179,13 +185,30 @@ function red(base: Base, view: Pr): Signal[] {
  * deliverable, or `cf adopt` named a v1 one and its `targets` row carries the pull url. Either
  * marker outlives a rewind, so a plan back on the review step is still read every tick.
  */
-function pushed(db: Db): Pushed[] {
-  return db.prepare(`SELECT d.plan_id AS plan, t.repo, d.evidence
+function pushed(db: Db, root?: string, list?: Read): Pushed[] {
+  const rows = (db.prepare(`SELECT d.plan_id AS plan, t.repo, d.evidence
     FROM deliverables d JOIN plans p ON p.id = d.plan_id JOIN targets t ON t.id = p.target_id
     WHERE d.state = 'pushed' AND d.evidence GLOB 'https://*/pull/*'
     UNION
     SELECT p.id AS plan, t.repo, t.evidence
     FROM plans p JOIN targets t ON t.id = p.target_id
     WHERE t.evidence GLOB 'https://*/pull/*'
-    ORDER BY plan`).all() as Pushed[]
+    ORDER BY plan`).all() as Omit<Pushed, 'rehearsal'>[]).map((r) => ({ ...r, rehearsal: false }))
+  return root === undefined || list === undefined ? rows : [...rows, ...rehearsals(db, root, list)]
+}
+
+/** `git rev-parse` in a `srcDir` with no `.git` climbs to the repository around `root` and reads its branch. */
+function rehearsals(db: Db, root: string, list: Read): Pushed[] {
+  const live = db.prepare(`SELECT p.id AS plan, t.repo FROM plans p JOIN targets t ON t.id = p.target_id
+    WHERE p.origin IS NULL AND p.state IN ('running', 'blocked_on_ceo') ORDER BY p.id`).all() as { plan: number; repo: string }[]
+  return live.filter((p) => cloned(srcDir(root, p.plan))).flatMap((p) => opened(db, root, p.plan, `${FORK}/${repoName(p.repo)}`, list))
+}
+
+function opened(db: Db, root: string, plan: number, fork: string, list: Read): Pushed[] {
+  try {
+    const no = rehearsal(fork, rehearsalBranch(db, root, plan), list)
+    return no === null ? [] : [{ plan, repo: fork, evidence: `https://github.com/${fork}/pull/${String(no)}`, rehearsal: true }]
+  } catch {
+    return []
+  }
 }

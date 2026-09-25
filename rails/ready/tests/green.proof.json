@@ -6,5 +6,7 @@
   "byte_identical_elsewhere": true,
   "fork_public": true,
   "bot_clean": true,
-  "spans": ["src/loader.ts:12-31"]
+  "spans": ["src/loader.ts:12-31"],
+  "title": "fix(loader): read loadConfig once",
+  "named": "export function loadConfig(path: string): Config"
 }

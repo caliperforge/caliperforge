@@ -299,7 +299,7 @@ function commitWork(dir: string): void {
     'commit', '-qm', git(dir, ['rev-parse', '--abbrev-ref', 'HEAD']).trim()])
 }
 
-function title(root: string, plan: number): string {
+export function title(root: string, plan: number): string {
   return titleOf(root, plan) ?? `plan ${String(plan)}`
 }
 

@@ -59,3 +59,16 @@ test('lap steps nothing its tick no longer holds', async () => {
   expect(await lap(w.db, w.root, stub(CARRIED), 2, 7, null)).toEqual([])
   expect(plan(w.db, 2).step).toBe(0)
 })
+
+test('a job that only waited leaves the lane its job for this tick', async () => {
+  const w = two()
+  const sent: number[] = []
+  const fired = await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 2), 0, undefined, 1,
+    (id) => {
+      sent.push(id)
+      const f = { pipe: 'internal', plan: id, step: 3, name: 'rails', outcome: 'pass' as const, state: 'running', spans: [], note: '', stole: null }
+      return Promise.resolve(sent.length === 1 ? [{ ...f, held: true as const }] : [f])
+    })
+  expect(sent).toHaveLength(2)
+  expect(fired.map((f) => f.held === true)).toEqual([true, false])
+})

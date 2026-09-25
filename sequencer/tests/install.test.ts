@@ -16,12 +16,11 @@ function places(cloned: boolean): Places {
 
 const held = (at: Places): string => existsSync(join(at.app, 'build')) ? readFileSync(join(at.app, 'build'), 'utf8') : 'none'
 
-/** Logs each command with the installed build it saw; `fails` exits non-zero, and xcodebuild leaves a `new` bundle. */
 function recording(at: Places, log: string[], fails?: string): Run {
-  return (args, cwd, bin = 'npm') => {
+  return (...[args, , bin = 'npm']) => {
     const name = bin === 'git' ? `git ${args[0] ?? ''}` : bin
     log.push(`${name} ${held(at)}`)
-    if (name === fails || !existsSync(cwd)) return { code: 1, output: 'error: it broke' }
+    if (name === fails) return { code: 1, output: 'error: it broke' }
     if (name === 'git clone') mkdirSync(join(at.clone, '.git'), { recursive: true })
     if (bin === 'xcodebuild') {
       const built = join(at.derived, 'Build/Products/Release/Atelier.app')

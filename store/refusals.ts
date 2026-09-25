@@ -17,6 +17,9 @@ export interface Refused {
   step: number
   fingerprint: string
   diff: string | null
+  /** A conflict with a moved main. Two jobs on the same files conflict alike, and one job can conflict
+   * on the same paths twice as main keeps moving; `base.laps` caps the loop, so neither is a fault here. */
+  moved?: true | undefined
 }
 
 const ANSI = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'g')
@@ -38,7 +41,8 @@ export function fingerprint(step: number, spans: string[], output = ''): string 
  * on a build that changed nothing since the last refusal, and past `ROUNDS`. Before the build nothing
  * of main has run, so a refusal there is never read as shared: two briefs refused alike are two
  * replies to two asks, and turned the internal lane off twice on 09-24. A branch behind main is never
- * read as shared either, because main moving is not a fault on main.
+ * read as shared either, because main moving is not a fault on main, and nor is a branch cut
+ * again because main moved under it: that one goes round until `ROUNDS`, and `base.laps` caps it sooner.
  */
 export function refused(db: Db, r: Refused): Why {
   const prior = db.prepare('SELECT fingerprint, diff FROM refusals WHERE plan = ? AND cleared = 0 AND blip = 0 ORDER BY id')
@@ -47,6 +51,7 @@ export function refused(db: Db, r: Refused): Why {
     .run(r.plan, r.step, r.fingerprint, r.diff)
   const elsewhere = db.prepare(`SELECT 1 FROM refusals WHERE fingerprint = ? AND plan <> ? AND cleared = 0 AND blip = 0
     AND julianday(at) > julianday('now', '-1 day')`).get(r.fingerprint, r.plan)
+  if (r.moved === true) return prior.length + 1 >= ROUNDS ? 'spent' : 'again'
   if (elsewhere !== undefined && r.step >= BUILD && r.fingerprint !== fingerprint(r.step, ['base:stale'])) return 'shared'
   if (prior.some((p) => p.fingerprint === r.fingerprint)) return 'repeat'
   if (r.diff !== null && prior.at(-1)?.diff === r.diff) return 'unchanged'

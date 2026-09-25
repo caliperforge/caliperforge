@@ -329,11 +329,12 @@ test('a target\'s tree at the rails is untouched when our own main moves', async
   ours(w.root)
   moveMain(w.root, 'ahead.ts')
   const src = srcDir(w.root, 1)
+  const tree = git(src, ['rev-parse', `${git(src, ['stash', 'create'])}^{tree}`])
   const base = get(w.root, 1, 'base.sha')
 
   expect((await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0])
     .toMatchObject({ step: 3, outcome: 'pass' })
-  expect(git(src, ['log', '--oneline', 'HEAD'])).not.toContain('main moves on ahead.ts')
+  expect(git(src, ['rev-parse', 'HEAD^{tree}'])).toBe(tree)
   expect(get(w.root, 1, 'base.sha')).toBe(base)
 })
 

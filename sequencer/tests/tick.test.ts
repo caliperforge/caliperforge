@@ -204,7 +204,7 @@ test('a review refusal returns the plan to build with every span the reviewer na
     .toBe(`---\noutcome: refuse\nclass: correctness\nspans:\n  - src/hello.ts:1\n  - src/parse.ts:3\n---\n\n${WORDS}\n`)
 
   for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
-  const second =(await tick(w.db, w.root, stub(CARRIED, 0, REFUSE)))[0]
+  const second = (await tick(w.db, w.root, stub(CARRIED, 0, REFUSE)))[0]
   expect(second).toMatchObject({ step: 4, outcome: 'refuse', state: 'blocked_on_ceo' })
   expect(plan(w.db, 1)).toMatchObject({ step: 4, retries: 1, state: 'blocked_on_ceo' })
 })
@@ -506,7 +506,7 @@ test('every run row points at a transcript the provider wrote', async () => {
   const w = world()
   approve(w.db, w.target)
   for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
-  const rows =w.db.prepare('SELECT seat, step, transcript_path FROM runs ORDER BY id').all() as
+  const rows = w.db.prepare('SELECT seat, step, transcript_path FROM runs ORDER BY id').all() as
     { seat: string; step: number; transcript_path: string }[]
   expect(rows.map((r) => r.step)).toEqual([1, 2, 4, 5])
   for (const r of rows) {

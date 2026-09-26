@@ -84,7 +84,7 @@ function holders(node: ts.VariableStatement): ts.Identifier[] {
     .map((d) => d.name as ts.Identifier)
 }
 
-function exported(node: ts.Statement): boolean {
+export function exported(node: ts.Statement): boolean {
   return ts.canHaveModifiers(node) && (ts.getModifiers(node) ?? []).some((m) => m.kind === ts.SyntaxKind.ExportKeyword)
 }
 

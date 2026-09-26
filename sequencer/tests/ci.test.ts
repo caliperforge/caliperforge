@@ -47,7 +47,7 @@ test('green at the head passes step 3 without the laptop suite', async () => {
   const fired = await rails(w, wire)
   expect(fired).toMatchObject({ step: 3, outcome: 'pass' })
   expect(fired?.note).toContain('checks ran on GitHub CI at caliperforge/caliperforge@')
-  expect(sent).toEqual(['send src p2-let-an-internal-plan-run'])
+  expect(sent).toEqual(['send src +p2-let-an-internal-plan-run'])
   expect(w.db.prepare("SELECT outcome FROM verdicts WHERE plan = ? AND rail_id = 'checks'").get(ID)).toEqual({ outcome: 'pass' })
   expect(plan(w.db, ID).step).toBe(4)
 })

@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
-import { free, slot } from '../checks.ts'
+import { free, npm, slot } from '../checks.ts'
 
 test('no limit when unset', () => {
   expect(slot(mkdtempSync(join(tmpdir(), 'cf-slot-')), 0)).toBeNull()
@@ -35,4 +35,19 @@ test('a live holder is waited on', async () => {
   expect(slot(dir, 1, 20)).toBe(path)
   expect(Date.now() - began).toBeGreaterThanOrEqual(250)
   holder.kill()
+})
+
+test('a check never hands its slots to the tests it runs', () => {
+  const was = { n: process.env.CF_CHECK_SLOTS, dir: process.env.CF_CHECK_SLOTS_DIR }
+  process.env.CF_CHECK_SLOTS = '2'
+  process.env.CF_CHECK_SLOTS_DIR = mkdtempSync(join(tmpdir(), 'cf-slots-'))
+  try {
+    const ran = npm(['-e', 'process.stdout.write(process.env.CF_CHECK_SLOTS ?? "unset")'], tmpdir(), 'node')
+    expect(ran.output).toBe('unset')
+  } finally {
+    if (was.n === undefined) delete process.env.CF_CHECK_SLOTS
+    else process.env.CF_CHECK_SLOTS = was.n
+    if (was.dir === undefined) delete process.env.CF_CHECK_SLOTS_DIR
+    else process.env.CF_CHECK_SLOTS_DIR = was.dir
+  }
 })

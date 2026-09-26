@@ -19,6 +19,14 @@
   CARGO_TARGET_DIR="$HOME/.cf-cache/cargo-target"
   export CARGO_TARGET_DIR
   cd "$(dirname "$0")/.." || exit 1
-  git fetch -q --no-tags origin main 2>/dev/null && git checkout -q --detach FETCH_HEAD 2>/dev/null
+  # Never FETCH_HEAD: this worktree shares its repo with every job's git, and on 09-25 a whole-remote fetch
+  # landed between these two lines, so FETCH_HEAD's first line was a 09-22 branch. The tick checked it out,
+  # and that commit's tick.sh had no fetch, so the tree stayed there all night. The tree only moves
+  # forward: a commit that is not ahead of the one it holds is left alone.
+  git fetch -q --no-tags origin +refs/heads/main:refs/remotes/origin/main 2>/dev/null
+  main=$(git rev-parse -q --verify refs/remotes/origin/main 2>/dev/null)
+  if [ -n "$main" ] && git merge-base --is-ancestor HEAD "$main" 2>/dev/null; then
+    git checkout -q --detach "$main" 2>/dev/null
+  fi
   node cli/cf.ts tick >/dev/null 2>&1 &
 }

@@ -7,7 +7,7 @@ import { release, returnToLane } from '../../store/holds.ts'
 import { get } from '../../store/lanes.ts'
 import { retry } from '../../store/plans.ts'
 import { WHY } from '../../store/refusals.ts'
-import { files, shape, split, TEMPLATE, unclear, writable, type Refused } from '../brief.ts'
+import { files, references, shape, split, TEMPLATE, unclear, writable, type Refused } from '../brief.ts'
 import { tick } from '../index.ts'
 import { blocked } from '../steps.ts'
 import { afresh, drop, maybe, move, put, srcDir, titleOf } from '../workspace.ts'
@@ -448,6 +448,12 @@ test('a Files row naming several paths lists each once', () => {
     { path: 'a/b.rb', is_new: false }, { path: 'x/y_test.rb', is_new: false },
     { path: 'x/z_spec.lua', is_new: false }, { path: 'c/d.rb', is_new: true },
   ])
+})
+
+test('references are the Must not break lines outside the files the job changes', () => {
+  const brief = ['# t', '', '## Must not break', '', '- empty RPC URL is unset (`python/src/solana_pay_kit/config.py:12`)',
+    '- booleans stay `true`/`false` (`ruby/lib/pay_kit/config.rb:40`)', '', '## Files', '', '- `ruby/lib/pay_kit/config.rb:259`', ''].join('\n')
+  expect(references(brief)).toEqual([{ path: 'python/src/solana_pay_kit/config.py', line: 12 }])
 })
 
 test('a test named only under ## Tests is writable', () => {

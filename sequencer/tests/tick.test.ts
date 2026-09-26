@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { day, halted, open as openPlans, runsOf, verdictsOf } from '../../cli/brief.ts'
 import { measure, type Read } from '../../cli/measure.ts'
-import { account, parse } from '../../cli/queue.ts'
+import { account, parse, refuseTarget } from '../../cli/queue.ts'
 import { clock, inWindow, rewind, underCap, waiting, type PipeRow, type PlanRow, type Wait } from '../../store/plans.ts'
 import { at, steps } from '../../templates/pr-path.ts'
 import { tick } from '../index.ts'
@@ -115,6 +115,22 @@ test('step 1 is blocked until cf approve target writes the row, and the plan rec
   expect(plan(w.db, 1).wait_reason).toBe('target_approval')
   approve(w.db, w.target)
   expect(blocked(w.db, plan(w.db, 1))).toBeNull()
+})
+
+test('D6: a refusal row for the target\'s digest still blocks step 1 on target_approval', async () => {
+  const w = world()
+  await tick(w.db, w.root, stub(CARRIED))
+  refuseTarget(w.db, w.target, 'not.ours')
+  expect(blocked(w.db, plan(w.db, 1))).toBe('target_approval')
+})
+
+test('D8: a tick files no plan for a scanned ready target with no approval row', async () => {
+  const w = world()
+  const id = Number(w.db.prepare(`INSERT INTO targets (account_id, repo, issue_no, named_merger, state, evidence_measured_at, evidence)
+    SELECT 1, repo, 13, named_merger, 'ready', evidence_measured_at, 'https://github.com/acme/widget/issues/13' FROM targets WHERE id = 1`)
+    .run().lastInsertRowid)
+  await tick(w.db, w.root, stub(CARRIED))
+  expect(w.db.prepare('SELECT count(*) AS n FROM plans WHERE target_id = ?').get(id)).toEqual({ n: 0 })
 })
 
 test('a parked target holds its plan and says so in the row; a cold pulse alone holds nothing', async () => {

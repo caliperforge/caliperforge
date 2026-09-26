@@ -403,7 +403,7 @@ function approved(db: Db, plan: PlanRow): boolean {
   const t = db.prepare('SELECT repo, issue_no, evidence_measured_at FROM targets WHERE id = ?').get(plan.target_id) as
     { repo: string; issue_no: number; evidence_measured_at: string } | undefined
   if (t === undefined) return false
-  return db.prepare("SELECT 1 FROM approvals WHERE subject_kind = 'target' AND subject_id = ? AND subject_digest = ?")
+  return db.prepare("SELECT 1 FROM approvals WHERE subject_kind = 'target' AND subject_id = ? AND subject_digest = ? AND decision = 'approved'")
     .get(plan.target_id, targetDigest(t)) !== undefined
 }
 

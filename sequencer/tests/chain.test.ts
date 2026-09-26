@@ -107,10 +107,10 @@ test('three rounds before any PR go out on one branch, each a plain push', async
     await tick(w.db, w.root, stub(CARRIED, 0, undefined, round), undefined, undefined, wire, 5)
     expect(plan(w.db, 1).step).toBe(7)
   }
-  expect(sent.filter((l) => !l.startsWith('send '))).toEqual(['rehearse caliperforge/widget widget-12-a1'])
-  expect(new Set(sent.filter((l) => l.startsWith('send ')))).toEqual(new Set(['send src widget-12-a1']))
+  expect(sent.filter((l) => !l.startsWith('send '))).toEqual(['rehearse caliperforge/widget widget-12-a1-next'])
+  expect(new Set(sent.filter((l) => l.startsWith('send ')))).toEqual(new Set(['send src HEAD:refs/heads/widget-12-a1-next']))
   const git = (args: string[]): string => execFileSync('git', args, { cwd: src, encoding: 'utf8' }).trim()
-  expect(git(['ls-remote', 'origin', 'refs/heads/widget-12-a1']).split('\t')[0]).toBe(git(['rev-parse', 'HEAD']))
+  expect(git(['ls-remote', 'origin', 'refs/heads/widget-12-a1-next']).split('\t')[0]).toBe(git(['rev-parse', 'HEAD']))
 })
 
 test('Tight reads the PR text the card set, and never the handback', async () => {

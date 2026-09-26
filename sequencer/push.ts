@@ -48,7 +48,7 @@ export const WIRE: Wire = {
 }
 
 /**
- * Once the pull request is open, CI runs on this branch beside it: pushing the real branch would put
+ * From the first round, CI runs on this branch beside the real one: pushing the real branch would put
  * an unsigned-off round on the maintainer's screen before the CEO has seen it.
  */
 const NEXT = '-next'
@@ -74,7 +74,7 @@ const REHEARSED = 'ci.next'
  */
 export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire = WIRE): Outcome | null {
   if (internal(plan) && !workflows(srcDir(root, plan.id))) return checked(db, root, plan, repo)
-  const { fork, head, ci } = sent(db, root, plan, repo, wire)
+  const { fork, head, ci } = sent(root, plan, repo, wire)
   if (!internal(plan)) wire.rehearse?.(fork, ci)
   const on = { fork, branch: ci, sha: head.sha }
   const { verdict, board } = judge(on, { body: '', commits: commits(head.dir) }, touched(root, plan.id), wire.runs)
@@ -99,24 +99,24 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
 }
 
 /** Step 3's pass opens the rehearsal: a review bot reads only an open pull request. */
-export function reviewable(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire = WIRE): void {
+export function reviewable(root: string, plan: PlanRow, repo: string, wire: Wire = WIRE): void {
   if (internal(plan)) return
-  const { fork, ci } = sent(db, root, plan, repo, wire)
+  const { fork, ci } = sent(root, plan, repo, wire)
   wire.rehearse?.(fork, ci)
 }
 
-export function sent(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire): { fork: string; head: Head; ci: string } {
-  const open = !internal(plan) && opened(db, plan.id) !== null
+export function sent(root: string, plan: PlanRow, repo: string, wire: Wire): { fork: string; head: Head; ci: string } {
+  const outside = !internal(plan)
   const fork = `${FORK}/${repoName(repo)}`
   const dir = srcDir(root, plan.id)
   const branch = git(dir, ['rev-parse', '--abbrev-ref', 'HEAD']).trim()
-  const ci = open ? rehearsed(root, plan.id, branch) : branch
-  if (!internal(plan)) {
-    if (open || onFork(dir, branch)) follow(root, plan.id, ci)
+  const ci = outside ? rehearsed(root, plan.id, branch) : branch
+  if (outside) {
+    if (onFork(dir, branch) || onFork(dir, ci)) follow(root, plan.id, ci)
     else squash(root, plan.id)
   }
   const head = headOf(root, plan.id)
-  wire.send(head.dir, open ? `HEAD:refs/heads/${ci}` : head.branch)
+  wire.send(head.dir, outside ? `HEAD:refs/heads/${ci}` : head.branch)
   return { fork, head, ci }
 }
 
@@ -268,7 +268,7 @@ export function push(db: Db, root: string, plan: PlanRow, wire: Wire = WIRE): Ou
   if (cold !== null) return refuse(cold, `${cold} left no passing verdict on plan ${String(plan.id)}`)
   const open = opened(db, plan.id)
   wire.send(head.dir, head.branch)
-  wire.unrehearse?.(`${FORK}/${repoName(target.repo)}`, open === null ? head.branch : rehearsed(root, plan.id, head.branch))
+  wire.unrehearse?.(`${FORK}/${repoName(target.repo)}`, rehearsed(root, plan.id, head.branch))
   if (open !== null) {
     pushed(db, plan.id, approval, open)
     return { outcome: 'pass', spans: [], note: `pushed ${head.branch} onto ${open}` }
@@ -387,9 +387,8 @@ function rehearsed(root: string, plan: number, branch: string): string {
 }
 
 /** Read without `headOf`, which commits the plan's work. */
-export function rehearsalBranch(db: Db, root: string, plan: number): string {
-  const branch = git(srcDir(root, plan), ['rev-parse', '--abbrev-ref', 'HEAD']).trim()
-  return opened(db, plan) === null ? branch : rehearsed(root, plan, branch)
+export function rehearsalBranch(root: string, plan: number): string {
+  return rehearsed(root, plan, git(srcDir(root, plan), ['rev-parse', '--abbrev-ref', 'HEAD']).trim())
 }
 
 /**
@@ -402,12 +401,14 @@ export function follow(root: string, plan: number, name: string): void {
   const shown = `refs/remotes/origin/${branch}`
   const message = `${kindOf(title(root, plan))}: address review`
   git(dir, ['add', '-A', '--', '.'])
-  if (!published(dir, branch, shown)) {
+  const own = published(dir, branch, shown)
+  const next = `refs/remotes/origin/${name}`
+  const ahead = name !== branch && published(dir, name, next)
+  if (!own && !ahead) {
     sign(dir, message)
     return
   }
-  const next = `refs/remotes/origin/${name}`
-  const tip = name !== branch && published(dir, name, next) && ancestor(dir, shown, next) ? next : shown
+  const tip = ahead && (!own || ancestor(dir, shown, next)) ? next : shown
   const count = Number(git(dir, ['rev-list', '--count', `${tip}..HEAD`]).trim())
   const staged = git(dir, ['diff', '--cached', '--name-only']).trim() !== ''
   const same = count === 0 || (count === 1 && git(dir, ['log', '-1', '--format=%B']).trim() === message)

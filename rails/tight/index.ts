@@ -26,8 +26,9 @@ export function tight(root: string, subject: Subject): Verdict {
   const { ceilings } = manifest(root)
   const files = parse(subject.diff)
   const judged = subject.code === false ? [] : files
+  const removed = new Set(files.flatMap((f) => f.removed.map((l) => l.text.trim())))
   const spans = [
-    ...judged.flatMap((f) => named(f.path, inFile(f, subject.sources, ceilings))),
+    ...judged.flatMap((f) => named(f.path, inFile(f, subject.sources, ceilings, removed))),
     ...named(subject.prose ?? 'description', inProse(subject.description, files.map((f) => f.path))),
   ]
   const unread = noted(judged.filter((f) => unbalanced(f, subject.sources)).map((f) => f.path))
@@ -44,11 +45,11 @@ export function tight(root: string, subject: Subject): Verdict {
 }
 
 /** The brace scanner judges length and nesting only; unused declarations and comments stay TypeScript-only. */
-function inFile(file: FileDiff, sources: Record<string, string>, ceilings: Ceilings): Span[] {
+function inFile(file: FileDiff, sources: Record<string, string>, ceilings: Ceilings, removed: Set<string>): Span[] {
   const text = sources[file.path]
   if (text === undefined) return []
   const added = new Set(file.added.map((l) => l.line))
-  if (file.path.endsWith('.ts')) return inSource(text, added, ceilings)
+  if (file.path.endsWith('.ts')) return inSource(text, added, ceilings, removed)
   if (!braced(file.path)) return []
   const { declarations, balanced } = scan(text)
   if (!balanced) return []

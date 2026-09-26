@@ -2,7 +2,7 @@ import type { Dry, Quiet } from '../sequencer/index.ts'
 import type { Fired } from '../sequencer/kind.ts'
 import type { Db } from '../store/index.ts'
 import { name, type LaneState, type WindowRow } from '../store/lanes.ts'
-import type { Wait } from '../store/plans.ts'
+import { BUILT, type Wait } from '../store/plans.ts'
 
 export interface PlanLine {
   id: number
@@ -58,8 +58,8 @@ const ERA = '2026-09-19 11:21'
 
 const TICKETS = `SELECT p.id AS plan, p.origin, t.repo || '#' || t.issue_no AS target,
   count(*) AS runs,
-  sum(r.step = 2) AS build,
-  sum(r.step IN (4, 5)) AS review,
+  sum(r.step = 2 AND r.${BUILT}) AS build,
+  sum(r.step IN (4, 5) AND r.${BUILT}) AS review,
   sum(r.seconds) / 60.0 AS minutes,
   sum(r.input_tokens + r.cache_tokens + r.output_tokens) AS tokens,
   CASE p.state WHEN 'done' THEN 'landed' WHEN 'refused' THEN 'wasted' WHEN 'halted' THEN 'wasted'

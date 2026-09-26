@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import type { Fired, Provider } from '../providers/kind.ts'
 import { packet, refuse } from '../runner/index.ts'
 import { reviewManifest, type Bench } from '../runner/packet.ts'
-import { load, seat, tight } from '../runner/rules.ts'
+import { load, seat, tight, type Seat } from '../runner/rules.ts'
 import { judge, loadReviews } from '../reviews/bench.ts'
 import type { Finding, Judged } from '../reviews/verdict.ts'
 import type { Db } from '../store/index.ts'
@@ -150,11 +150,16 @@ export async function ran(db: Db, root: string, plan: PlanRow, step: Step, provi
     wall: wall(db),
     reads: machineReads(root, plan, step.runs),
   })
-  const row = db.prepare(INSERT).run(plan.id, step.step, step.runs, hash, provider.name, manifest.model, manifest.effort,
-    fired.usage.input, fired.usage.cache, fired.usage.output, fired.seconds, fired.exit, fired.transcript_path)
-  byRun(db, Number(row.lastInsertRowid), fired.transcript_path)
+  recorded(db, plan.id, step.step, step.runs, hash, provider.name, manifest, fired)
   observed(db, fired.limits)
   return fired
+}
+
+export function recorded(db: Db, plan: number, step: number, name: string, hash: string, provider: Provider['name'],
+  manifest: Seat, fired: Fired): void {
+  const row = db.prepare(INSERT).run(plan, step, name, hash, provider, manifest.model, manifest.effort,
+    fired.usage.input, fired.usage.cache, fired.usage.output, fired.seconds, fired.exit, fired.transcript_path)
+  byRun(db, Number(row.lastInsertRowid), fired.transcript_path)
 }
 
 function exited(step: Step, fired: Fired): Outcome {

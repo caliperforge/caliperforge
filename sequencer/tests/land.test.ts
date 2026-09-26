@@ -8,8 +8,8 @@ import { headApproved } from '../../store/approvals.ts'
 import { last as lastMerge } from '../../store/merges.ts'
 import { tick } from '../index.ts'
 import { LAPS } from '../steps.ts'
-import { COMMIT, commitMessage, headOf, land, type Wire } from '../push.ts'
-import { CARRY, carried, cloned, conflicted, diffOf, drop, fetchMain, get, liveTree, maybe, MAIN, put, srcDir } from '../workspace.ts'
+import { COMMIT, commitMessage, headOf, land, sent, WIRE, type Wire } from '../push.ts'
+import { CARRY, carried, cloned, conflicted, diffOf, drop, fetchMain, get, liveTree, maybe, MAIN, put, SELF, srcDir } from '../workspace.ts'
 import { approve, built, CARRIED, internalPlan, moveMain, ours, PASS, plan, stub, watched, world, type World } from './world.ts'
 
 const ID = 2
@@ -320,6 +320,27 @@ test('the re-cut checkout is main\'s, and the builder is handed its own diff to 
   expect(maybe(w.root, ID, CARRY)).not.toBeNull()
   expect(diffOf(w.root, ID)).toContain('export const landed = true')
   expect(diffOf(w.root, ID)).toContain('main took this line')
+})
+
+test('a branch re-cut after its push folds the pushed head in, so the ready push fast-forwards', async () => {
+  const w = mine()
+  const wire = { ...watched([], w.root, ID), send: WIRE.send }
+  await atBatch(w, wire)
+  const remote = join(w.root, 'remotes', SELF)
+  const old = git(remote, ['rev-parse', BRANCH])
+  moveMain(w.root, 'src/hello.ts', 'export const hello = (): string => "main took this line"\n')
+  for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  built(w.root, ID, 'export const landed = true')
+  const src = srcDir(w.root, ID)
+  const tree = git(src, ['rev-parse', `${headOf(w.root, ID).sha}^{tree}`])
+  expect(() => git(src, ['push', 'origin', BRANCH])).toThrow()
+
+  const { head } = sent(w.root, plan(w.db, ID), SELF, WIRE)
+  expect(git(remote, ['rev-parse', BRANCH])).toBe(git(src, ['rev-parse', 'HEAD']))
+  expect(head.sha).toBe(git(src, ['rev-parse', 'HEAD']))
+  expect(() => git(src, ['merge-base', '--is-ancestor', old, 'HEAD'])).not.toThrow()
+  expect(git(src, ['rev-parse', 'HEAD^{tree}'])).toBe(tree)
+  expect(sent(w.root, plan(w.db, ID), SELF, WIRE).head.sha).toBe(head.sha)
 })
 
 /**

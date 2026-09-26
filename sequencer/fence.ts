@@ -1,6 +1,6 @@
 import { existsSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { ROSTER, SEED } from '../cli/digests.ts'
+import { MAP, ROSTER, SEED } from '../cli/digests.ts'
 import { section, TEST } from './brief.ts'
 
 /** A row a builder owns a path outside the list with: `- <path> — <why>`. */
@@ -19,7 +19,7 @@ export function strays(touched: string[], listed: string[], handback: string): s
 
 /** A listed path, a test beside one, or a digest file step 3 fills itself. */
 function admits(listed: string[], path: string): boolean {
-  if (listed.includes(path) || path === ROSTER || path === SEED) return true
+  if (listed.includes(path) || path === ROSTER || path === SEED || path === MAP) return true
   if (!TEST.test(path)) return false
   const dir = dirname(path)
   return listed.some((l) => {

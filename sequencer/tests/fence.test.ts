@@ -30,7 +30,7 @@ async function stray(handback: string): Promise<{ w: World; rails: unknown }> {
 
 test('listed, beside a listed file, or filled by step 3', () => {
   const touched = ['sequencer/rails.ts', 'sequencer/tests/fence.test.ts', 'sequencer/fence.test.ts',
-    'sequencer/tests/fixtures/a.diff', 'rules/roster.yaml', 'rules.seed.sql']
+    'sequencer/tests/fixtures/a.diff', 'rules/roster.yaml', 'rules.seed.sql', 'MAP.md']
   expect(strays(touched, LISTED, '')).toEqual([])
   expect(strays(['sequencer/seat.ts', 'cli/tests/x.test.ts'], LISTED, '')).toEqual(['sequencer/seat.ts', 'cli/tests/x.test.ts'])
   expect(strays(['sequencer/seat.ts'], [], '')).toEqual([])

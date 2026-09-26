@@ -1,9 +1,10 @@
-import { appendFileSync, cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { appendFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { digest, listed } from '../../runner/rules.ts'
 import { check, fill } from '../digests.ts'
+import { map } from '../map.ts'
 
 const repo = join(import.meta.dirname, '../..')
 const TODAY = '2026-09-20'
@@ -15,6 +16,8 @@ function tree(): string {
   const root = mkdtempSync(join(tmpdir(), 'cf-digests-'))
   for (const dir of ['rules', 'seats']) cpSync(join(repo, dir), join(root, dir), { recursive: true })
   cpSync(join(repo, 'rules.seed.sql'), join(root, 'rules.seed.sql'))
+  writeFileSync(join(root, 'a.ts'), 'export const a = 1\n')
+  writeFileSync(join(root, 'MAP.md'), map(root))
   return root
 }
 
@@ -115,4 +118,25 @@ test('check names a seed a fill would rewrite, whatever the edited row holds, an
   expect(check(root, TODAY)).toEqual([{ path: 'rules.seed.sql', digests: {} }])
   expect(fill(root, TODAY)).toEqual(['rules.seed.sql'])
   expect(readFileSync(seed, 'utf8')).toBe(was)
+})
+
+test('check names a map an added export makes stale and writes nothing, then fill makes it clean', () => {
+  const root = tree()
+  const was = readFileSync(join(root, 'MAP.md'), 'utf8')
+  appendFileSync(join(root, 'a.ts'), 'export const b = 2\n')
+
+  expect(check(root, TODAY)).toEqual([{ path: 'MAP.md', digests: {} }])
+  expect(readFileSync(join(root, 'MAP.md'), 'utf8')).toBe(was)
+  expect(fill(root, TODAY)).toEqual(['MAP.md'])
+  expect(check(root, TODAY)).toEqual([])
+})
+
+test('check names a missing map and writes nothing, then fill creates it', () => {
+  const root = tree()
+  rmSync(join(root, 'MAP.md'))
+
+  expect(check(root, TODAY)).toEqual([{ path: 'MAP.md', digests: {} }])
+  expect(existsSync(join(root, 'MAP.md'))).toBe(false)
+  expect(fill(root, TODAY)).toEqual(['MAP.md'])
+  expect(check(root, TODAY)).toEqual([])
 })

@@ -1,10 +1,12 @@
 import { createHash } from 'node:crypto'
-import { readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expected, rules, written } from '../runner/rules.ts'
+import { map } from './map.ts'
 
 export const ROSTER = 'rules/roster.yaml'
 export const SEED = 'rules.seed.sql'
+export const MAP = 'MAP.md'
 const KEYS = ['manifest', 'prompt'] as const
 const ROW = /^ {2}\('(.+?)', '.+?', '.+?', '.+?', '(.+?)'\)/gm
 const BLOCK = /^digests:\n(?:[ \t].*\n|\n)*/m
@@ -26,8 +28,8 @@ export function check(root: string, today: string): Stale[] {
 
 function stale(root: string, today: string): { path: string; body: string }[] {
   const roster = filled(root)
-  return [{ path: ROSTER, body: roster }, { path: SEED, body: seeded(root, roster, today) }]
-    .filter(({ path, body }) => readFileSync(join(root, path), 'utf8') !== body)
+  return [{ path: ROSTER, body: roster }, { path: SEED, body: seeded(root, roster, today) }, { path: MAP, body: map(root) }]
+    .filter(({ path, body }) => (existsSync(join(root, path)) ? readFileSync(join(root, path), 'utf8') : '') !== body)
 }
 
 function wrong(root: string): Record<string, string> {

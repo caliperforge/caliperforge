@@ -77,6 +77,20 @@ const TABLE: Record<string, Row> = {
     id: 2,
     want: { wait: 'lane_over_cap', on: null },
   },
+  'a plan on a second lane at cap 1 while another pid runs the first lane': {
+    state: () => {
+      const w = world()
+      w.db.prepare(`INSERT INTO pipes (id, name, enabled, window_start, window_end, max_concurrent)
+        VALUES (2, 'research', 1, '00:00', '23:59', 1)`).run()
+      dial(w.db, 1, NOW.toISOString())
+      take(w.db, 1, NOW)
+      w.db.prepare(`INSERT INTO plans (id, pipe_id, target_id, template, state, queued_at, step, retries)
+        VALUES (2, 2, 1, 'pr_path', 'queued', '2026-09-18T00:00:00.000Z', 0, 0)`).run()
+      return w
+    },
+    id: 2,
+    want: { wait: 'lane_over_cap', on: null },
+  },
   'a brief past the token ceiling': {
     state: () => {
       const w = stepTo(world(), 1, 1)

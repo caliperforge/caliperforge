@@ -333,6 +333,22 @@ test('a plan blocked at step 1 and retried is briefed from the ask alone', async
   expect(shape(briefOf(w), askOf(w), srcDir(w.root, ID))).toBeNull()
 })
 
+test('a plan re-briefed after a retry at step 1 replaces its file list', async () => {
+  const w = mine()
+  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  expect(listed(w)).toEqual([{ path: 'src/hello.ts' }])
+  const first = briefOf(w)
+  w.db.prepare("UPDATE plans SET step = 1, state = 'blocked_on_ceo' WHERE id = ?").run(ID)
+  drop(w.root, ID, 'issue.md')
+  afresh(w.root, ID, retry(w.db, plan(w.db, ID)))
+
+  const second = swap(swap(first, '## Files', ['- src/bye.ts (new)']), '## Tests', ['- src/bye.ts — a call with no name is refused'])
+  const fired = (await tick(w.db, w.root, stub(CARRIED, 0, undefined, undefined, second)))[0]
+  expect(fired).toMatchObject({ step: 1, outcome: 'pass' })
+  expect(fired).not.toMatchObject({ note: 'the brief stands' })
+  expect(listed(w)).toEqual([{ path: 'src/bye.ts' }])
+})
+
 test('a plan queued before the brief seat has its raw issue moved to the ask and is briefed like any other', async () => {
   const w = mine()
   const raw = move(w.root, ID, 'ask.md', 'issue.md')

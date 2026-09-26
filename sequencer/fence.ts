@@ -32,8 +32,7 @@ function admits(listed: string[], path: string): boolean {
 const IMPORT = /\b(?:from|import)\s*\(?\s*['"](\.[^'"]+)['"]/g
 
 /**
- * #191: the failing test files, when none is listed and each directly imports a path the diff changed;
- * `null` otherwise, and for a plan with no list, which is not fenced.
+ * #191: the failing test files, when none is listed and each directly imports a path the diff changed; `null` otherwise.
  */
 export function broken(src: string, tests: string[], listed: string[], changed: string[]): string[] | null {
   const files = [...new Set(tests.map((t) => (t.split(' ')[0] ?? '').replace(/:\d+$/, '')))]

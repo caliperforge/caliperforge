@@ -1,5 +1,8 @@
 import { createHash } from 'node:crypto'
 import { join } from 'node:path'
+import { CHECK, find } from '../cli/find.ts'
+import type { Read } from '../cli/gh.ts'
+import { CARD } from '../cli/queue.ts'
 import { ready as readyRail, type Proof } from '../rails/ready/index.ts'
 import { record as recordRail } from '../rails/record.ts'
 import { keep, last as lastMerge, lastReview, record as recordMerge } from '../store/merges.ts'
@@ -63,10 +66,10 @@ export function parked(db: Db, plan: PlanRow): string | null {
   return row?.state === 'parked' ? `${row.repo}#${String(row.issue_no)} is parked` : null
 }
 
-export function kernel(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
+export function kernel(db: Db, root: string, plan: PlanRow, wire?: Wire, read?: Read): Outcome {
   const step = at(plan.step)
   if (step.name === 'rails') return freshBase(db, root, plan) ?? strayed(db, root, plan) ?? railed(db, root, plan, wire)
-  if (step.name === 'measure') return measure(db, plan)
+  if (step.name === 'measure') return measure(db, root, plan, read)
   if (step.name === 'ready') return readyGate(db, root, plan, wire)
   if (step.name === 'batch') return batch(db, root, plan, wire)
   if (step.name === 'push') return push(db, root, plan, wire)
@@ -121,6 +124,7 @@ function readyGate(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
   if (repo === null) return { outcome: 'refuse', spans: ['targets'], note: `plan ${String(plan.id)} has no target row` }
   const row = gatedRow(db, plan.id)
   if (row === null) return { outcome: 'refuse', spans: ['deliverables'], note: `plan ${String(plan.id)} has no deliverable row` }
+  if (!cloned(srcDir(root, plan.id))) return { outcome: 'refuse', spans: ['checkout'], note: `plan ${String(plan.id)} has no checkout to send` }
   const waiting = forkCi(db, root, plan, repo, wire)
   if (waiting !== null) return waiting
   const verdict = readyRail(proofOf(db, root, plan, repo, row))
@@ -162,7 +166,7 @@ function freshBase(db: Db, root: string, plan: PlanRow): Outcome | null {
   const paths = takeMain(db, root, plan, src, main, at(plan.step).step)
   if (paths === null) return null
   recut(root, plan.id)
-  return { outcome: 'refuse', spans: paths, note: 'main moved and the branch conflicts with it; cut again from main', rewind: 2 }
+  return { outcome: 'refuse', spans: paths, note: 'main moved and the branch conflicts with it; cut again from main', rewind: 2, moved: true }
 }
 
 /**
@@ -312,14 +316,24 @@ function repoOf(db: Db, plan: PlanRow): string | null {
   return row?.repo ?? null
 }
 
-export function measure(db: Db, plan: PlanRow): Outcome {
+export function measure(db: Db, root: string, plan: PlanRow, read?: Read): Outcome {
   if (internal(plan)) return { outcome: 'pass', spans: [], note: `${homeOf(plan)}#${String(originIssue(plan))} is ours; no account to measure` }
   const row = target(db, plan)
   if (row === null) return { outcome: 'refuse', spans: ['targets'], note: `plan ${String(plan.id)} has no target row` }
-  if (row.state === 'ready' || row.state === 'queued') {
-    return { outcome: 'pass', spans: [], note: `${row.repo}#${String(row.issue_no)} ${row.pulse}` }
-  }
-  return { outcome: 'refuse', spans: [`targets/${row.repo}#${String(row.issue_no)}`], note: `target state ${row.state}` }
+  const span = `targets/${row.repo}#${String(row.issue_no)}`
+  if (row.state !== 'ready' && row.state !== 'queued') return { outcome: 'refuse', spans: [span], note: `target state ${row.state}` }
+  const park = read === undefined ? null : checked(root, plan, row, read)
+  if (park === null) return { outcome: 'pass', spans: [], note: `${row.repo}#${String(row.issue_no)} ${row.pulse}` }
+  db.prepare("UPDATE targets SET state = 'parked' WHERE id = ?").run(plan.target_id)
+  return { outcome: 'refuse', held: true, spans: [span], note: park }
+}
+
+function checked(root: string, plan: PlanRow, row: Target, read: Read): string | null {
+  const ask = maybe(root, plan.id, 'ask.md') ?? ''
+  const found = find(row.repo, row.issue_no, ask.includes(CARD), read)
+  const at = ask.lastIndexOf(`\n${CHECK}\n`)
+  put(root, plan.id, 'ask.md', `${at === -1 ? ask : ask.slice(0, at)}\n${found.section}`)
+  return found.park
 }
 
 /** No `ci-green` verdict is not a green CI. The ready gate's CI input is a row the rail wrote or a refusal. */

@@ -7,7 +7,10 @@ import { claudeAgentSdk } from '../providers/claude-agent-sdk/index.ts'
 import { credential } from '../providers/credential.ts'
 import { self } from '../rails/tight/index.ts'
 import { fire } from '../runner/index.ts'
-import { CHAIN_MINUTES, dry, tick } from '../sequencer/index.ts'
+import { spawn } from 'node:child_process'
+import { CHAIN_MINUTES, dry, EACH, lap, tick, type Apart } from '../sequencer/index.ts'
+import type { Fired } from '../sequencer/kind.ts'
+import { CHECK_SLOTS } from '../sequencer/checks.ts'
 import { behind, upgraded } from '../sequencer/upgrade.ts'
 import { saved } from '../sequencer/hq.ts'
 import { signoffs } from '../sequencer/signoff.ts'
@@ -340,6 +343,34 @@ cf.command('tick').option('--dry', 'read what a tick would do, fire nothing, cal
     })
   })
 
+/** The last line `cf lap` writes: what the job fired, for the tick that forked it. */
+const FIRED = 'cf-lap-fired\t'
+
+cf.command('lap').argument('<plan>', 'a plan the tick leased').requiredOption('--from <pid>', 'the tick holding the lease')
+  .option('--stole <pid>', 'the dead tick the lease was taken over from')
+  .description('run one leased job in this process, for the tick that forked it (#311)')
+  .action(async (id: string, options: { from: string; stole?: string }) => {
+    process.env.CF_CHECK_SLOTS ??= String(CHECK_SLOTS)
+    const fired = await lap(db(), root, claudeAgentSdk, Number(id), Number(options.from),
+      options.stole === undefined ? null : Number(options.stole), CHAIN_MINUTES, gh)
+    out(`\n${FIRED}${JSON.stringify(fired)}\n`)
+  })
+
+/** #311: each leased job runs in a child process, so one job's synchronous checks never freeze another's agent. */
+const apart: Apart = (plan, stole) => new Promise((done, failed) => {
+  const args = [...process.execArgv, fileURLToPath(import.meta.url), 'lap', String(plan), '--from', String(process.pid),
+    ...(stole === null ? [] : ['--stole', String(stole)])]
+  const child = spawn(process.execPath, args, { cwd: process.cwd(), env: process.env, stdio: ['ignore', 'pipe', 'inherit'] })
+  let said = ''
+  child.stdout.setEncoding('utf8').on('data', (chunk: string) => { said += chunk })
+  child.on('error', failed)
+  child.on('close', (code) => {
+    const last = said.split('\n').findLast((l) => l.startsWith(FIRED))
+    if (code === 0 && last !== undefined) done(JSON.parse(last.slice(FIRED.length)) as Fired[])
+    else failed(new Error(`cf lap ${String(plan)} exited ${String(code)}`))
+  })
+})
+
 /** #251: a tick that threw leaves a receipt saying so and raises the alert, or the table reads a dead machine as an idle one. */
 function down(now: Date, error: unknown): void {
   try {
@@ -372,7 +403,8 @@ async function ticked(options: { dry?: boolean }, now: Date): Promise<void> {
   }
   const { auth } = credential()
   process.stderr.write(`auth ${auth.kind} from ${auth.from}\n`)
-  const fired = await tick(handle, root, claudeAgentSdk, now, undefined, undefined, CHAIN_MINUTES, gh)
+  process.env.CF_CHECK_SLOTS ??= String(CHECK_SLOTS)
+  const fired = await tick(handle, root, claudeAgentSdk, now, undefined, undefined, CHAIN_MINUTES, gh, EACH, apart)
   receipt(handle, saved(handle, upgraded(handle, root, { at: now.toISOString(), hhmm: hhmm(handle, now), dry: false,
     pipes: openPipes(handle, hhmm(handle, now)).length, fired: fired.length,
     exit: fired.some((f) => f.outcome === 'refuse') ? 1 : 0, note: tickNote(fired, overlapWaits(handle)) }),

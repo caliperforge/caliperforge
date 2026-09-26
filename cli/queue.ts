@@ -79,8 +79,10 @@ export function add(db: Db, root: string, repo: string, url: string, pipe: strin
 export function askOf(row: Pick<Issue, 'title' | 'body'>, card: string | undefined): string {
   const theirs = `# ${row.title}\n\n${row.body}\n`
   if (card === undefined) return theirs
-  return `${card.trimEnd()}\n\n## Their issue, for context only; the scope is the card above\n\n${theirs.replace(/^#/gm, '###')}`
+  return `${card.trimEnd()}\n\n${CARD}\n\n${theirs.replace(/^#/gm, '###')}`
 }
+
+export const CARD = '## Their issue, for context only; the scope is the card above'
 
 function measured(db: Db, repo: string, today: string): z.infer<typeof Account> {
   try {

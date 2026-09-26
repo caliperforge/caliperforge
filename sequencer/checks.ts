@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process'
-import { appendFileSync, existsSync, readdirSync, readFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { z } from 'zod'
 import { gates, type Gate, type Outside, type OutsideLanguage } from './gates.ts'
@@ -24,13 +25,17 @@ export interface Failure {
   /** The script the failure is named by, whatever command stood in for it. */
   script: string
   command: string
-  code: number
+  code: string
   output: string
+  /** `file:line name`, or `file name` where no line of the file holds the title; ` (timeout)` on a load block. */
+  tests: string[]
   retried: boolean
 }
 
+export type Ran = { ok: true; output: string } | { ok: false; code: string; output: string }
+
 /** `bin` is the program; left out it is `npm`, which is every checkout but an Xcode or a Kotlin one. */
-export type Run = (args: string[], cwd: string, bin?: string) => { code: number; output: string }
+export type Run = (args: string[], cwd: string, bin?: string) => Ran
 
 /** #126: what a checkout is judged with, by what sits at its root; #204: an outside plan, by its language. */
 export type Mode = 'xcodebuild' | 'npm' | 'gradle' | 'none' | OutsideLanguage
@@ -65,10 +70,10 @@ export function checks(src: string, run: Run = npm, narrow: string[] = [], outsi
   if (bin === 'xcodebuild') excluded(src)
   for (const [script, args] of commands(src, narrow)) {
     const first = run(args, src, bin)
-    if (first.code === 0) continue
+    if (first.ok) continue
     const retried = loadOnly(first.output)
-    const { code, output } = retried ? run(args, src, bin) : first
-    if (code !== 0) return { script, command: `${bin} ${args.join(' ')}`, code, output: tail(output), retried }
+    const last = retried ? run(alone(first.output, read(src)?.[script] ?? '', args), src, bin) : first
+    if (!last.ok) return { script, command: `${bin} ${args.join(' ')}`, code: last.code, output: tail(last.output), tests: entries(src, last.output), retried }
   }
   return null
 }
@@ -82,14 +87,14 @@ function gated(src: string, list: Gate[], run: Run): Failure | null {
     const cwd = join(src, gate.dir)
     const where = gate.dir === '' ? '' : ` (in ${gate.dir}/)`
     const first = settled(gate, run(gate.args, cwd, gate.bin))
-    if (first.code === 0) continue
-    return { script: gate.script, command: `${gate.bin} ${gate.args.join(' ')}${where}`, code: first.code, output: tail(first.output), retried: false }
+    if (first.ok) continue
+    return { script: gate.script, command: `${gate.bin} ${gate.args.join(' ')}${where}`, code: first.code, output: tail(first.output), tests: [], retried: false }
   }
   return null
 }
 
-function settled(gate: Gate, ran: { code: number; output: string }): { code: number; output: string } {
-  return gate.quiet === true && ran.code === 0 && ran.output.trim() !== '' ? { code: 1, output: ran.output } : ran
+function settled(gate: Gate, ran: Ran): Ran {
+  return gate.quiet === true && ran.ok && ran.output.trim() !== '' ? { ok: false, code: '1', output: ran.output } : ran
 }
 
 /** The derived data is build output: never staged, never in the diff the reviewers read. */
@@ -121,6 +126,36 @@ export function failures(output: string): string[] {
     else blocks.at(-1)?.push(line)
   }
   return blocks.map((block) => block.join('\n'))
+}
+
+const FAILED = /^[ \t]*FAIL\b/
+
+/** Only a `FAIL` opener carries `file > … > title`; a `×` line names the title alone. */
+const TEST = /^[ \t]*FAIL[ \t]+(.+?) > (.+?)[ \t]*$/m
+
+function entries(src: string, output: string): string[] {
+  const seen = new Map<string, string>()
+  for (const block of failures(output)) {
+    const hit = TEST.exec(block)
+    if (hit === null) continue
+    const [, file = '', name = ''] = hit
+    const key = `${file} > ${name}`
+    if (!seen.has(key)) seen.set(key, `${at(src, file, name.split(' > ').at(-1) ?? name)} ${name}${LOAD.test(block) ? ' (timeout)' : ''}`)
+  }
+  return [...seen.values()]
+}
+
+function at(src: string, file: string, title: string): string {
+  const path = join(src, file)
+  const line = existsSync(path) ? readFileSync(path, 'utf8').split('\n').findIndex((text) => text.includes(title)) : -1
+  return line < 0 ? file : `${file}:${String(line + 1)}`
+}
+
+function alone(output: string, script: string, args: string[]): string[] {
+  const opened = failures(output).filter((block) => FAILED.test(block))
+  const files = opened.map((block) => TEST.exec(block)?.[1]).filter((file) => file !== undefined)
+  if (!VITEST.test(script) || files.length === 0 || files.length < opened.length) return args
+  return ['exec', '--', 'vitest', 'run', ...new Set(files)]
 }
 
 /** A test script that is vitest takes `related`; anything else is run whole, narrow list or not. */
@@ -168,8 +203,74 @@ function tail(output: string): string {
  * A command the cap killed leaves no status, and that is the failure it is recorded as. A program that never
  * started has no output at all, so the spawn error is what the builder reads (09-24: cargo off launchd's PATH).
  */
-export function npm(args: string[], cwd: string, bin = 'npm'): { code: number; output: string } {
-  const done = spawnSync(bin, args, { cwd, encoding: 'utf8', timeout: LONG.includes(bin) ? XCODE_CAP : CAP, maxBuffer: MAX })
-  if (done.error !== undefined && typeof done.stdout !== 'string') return { code: 127, output: `${bin}: ${done.error.message}` }
-  return { code: done.status ?? 1, output: `${done.stdout}${done.stderr}` }
+export function npm(args: string[], cwd: string, bin = 'npm'): Ran {
+  const held = slot()
+  try {
+    const done = spawnSync(bin, args, { cwd, encoding: 'utf8', timeout: LONG.includes(bin) ? XCODE_CAP : CAP, maxBuffer: MAX,
+      env: unslotted() })
+    if (done.error !== undefined && typeof done.stdout !== 'string') return { ok: false, code: '127', output: `${bin}: ${done.error.message}` }
+    const output = `${done.stdout}${done.stderr}`
+    return done.status === 0 ? { ok: true, output } : { ok: false, code: String(done.status ?? 1), output }
+  } finally {
+    if (held !== null) free(held)
+  }
+}
+
+/**
+ * The run's own tests must not queue for the slots the run holds: with both taken by the two step-3 runs #313 let
+ * through, every test that reached `npm()` waited for ever and the cap killed the suite (exit 143, five jobs, 09-25).
+ */
+function unslotted(): NodeJS.ProcessEnv {
+  const env = { ...process.env }
+  delete env.CF_CHECK_SLOTS
+  delete env.CF_CHECK_SLOTS_DIR
+  return env
+}
+
+/**
+ * #220's second half. Once each job ran in its own tick (#307), every lane's test suite, Swift build and cargo build
+ * could run at once, which is the load that turned slow tests into fake failures on 09-24. The live tick sets
+ * `CF_CHECK_SLOTS`; a check waits for one of that many slot files. Unset (tests, a person's shell) means no limit.
+ */
+export const CHECK_SLOTS = 2
+
+export const SLOT_DIR = join(homedir(), '.cf-cache', 'check-slots')
+
+export function slot(dir = process.env.CF_CHECK_SLOTS_DIR ?? SLOT_DIR, n = Number(process.env.CF_CHECK_SLOTS ?? 0),
+  wait = 2000): string | null {
+  if (!(n > 0)) return null
+  mkdirSync(dir, { recursive: true })
+  for (;;) {
+    for (let i = 0; i < n; i += 1) {
+      const path = join(dir, `slot-${String(i)}`)
+      if (claim(path)) return path
+    }
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, wait)
+  }
+}
+
+/** A slot whose holder died is cleared for the next claim. */
+function claim(path: string): boolean {
+  try {
+    writeFileSync(path, String(process.pid), { flag: 'wx' })
+    return true
+  } catch {
+    const holder = existsSync(path) ? Number(readFileSync(path, 'utf8')) : 0
+    if (holder > 0 && !alive(holder)) rmSync(path, { force: true })
+    return false
+  }
+}
+
+export function free(path: string): void {
+  if (existsSync(path) && readFileSync(path, 'utf8') === String(process.pid)) rmSync(path, { force: true })
+}
+
+function alive(pid: number): boolean {
+  if (!Number.isInteger(pid) || pid <= 0) return false
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    return (error as { code?: string }).code === 'EPERM'
+  }
 }

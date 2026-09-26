@@ -265,6 +265,25 @@ export function redLaps(root: string, id: number): Gh {
   }
 }
 
+/**
+ * A head red on Validate, listed on every branch but `base.branch`, where only its last green head's run lists, as `g`
+ * says; a `run rerun` goes in `log` and sets it going. Both runs' failed logs name the same job.
+ */
+export function rerunning(log: string[], root: string, id: number, base: { branch: string; sha: string }, g: { status: string; conclusion: string }): Gh {
+  return (args) => {
+    if (args[1] === 'rerun') {
+      log.push(args.join(' '))
+      g.status = 'in_progress'
+      return ''
+    }
+    if (args.includes('--log-failed')) return 'validate\tInstall\t2026-09-24T18:47:03Z lockfile needs updating\n'
+    if (args[1] === 'view') return JSON.stringify({ workflowName: 'Validate' })
+    return JSON.stringify(args[args.indexOf('--branch') + 1] === base.branch
+      ? [{ headSha: base.sha, ...g, url: RUN, workflowName: 'Validate' }]
+      : [{ ...runAt(root, id, 'completed', 'failure'), url: RUN.replace(/1$/, '2'), workflowName: 'Validate' }])
+  }
+}
+
 /** The transport a test drives a lap through: every send, pull request and close is a line in `log`. */
 export function watched(log: string[], root: string, id: number, runs = runsOn(root, id)): Wire {
   return {

@@ -4,7 +4,8 @@ import { join } from 'node:path'
 import { subdirs, walk } from '../../checks/tree.ts'
 import type { Verdict } from '../record.ts'
 
-const NAMED = /(?:^|[\s([<'"`])((?:[A-Za-z0-9_.-]+\/)+[A-Za-z0-9_.-]+)(?::(\d+))?/g
+/** `+` belongs to a name: Swift's `Type+Extension.swift` read as `Type` and refused plan 155 (09-25). */
+const NAMED = /(?:^|[\s([<'"`])((?:[A-Za-z0-9_.+-]+\/)+[A-Za-z0-9_.+-]+)(?::(\d+))?/g
 const ADR = /\bADR[ -](\d{4})\b/g
 
 interface Said {
@@ -36,7 +37,7 @@ export function identifiers(root: string, text: string): Verdict {
 
 function paths(root: string, ours: Set<string>, l: Said): Named[] {
   return [...l.text.matchAll(NAMED)]
-    .map((m) => ({ id: m[1] ?? '', at: m[2] }))
+    .map((m) => ({ id: (m[1] ?? '').replace(/\.+$/, ''), at: m[2] }))
     .filter((n) => ours.has(n.id.split('/')[0] ?? ''))
     .filter((n) => !resolves(join(root, n.id), n.at))
     .map((n) => ({ id: n.at === undefined ? n.id : `${n.id}:${n.at}`, line: l.line }))

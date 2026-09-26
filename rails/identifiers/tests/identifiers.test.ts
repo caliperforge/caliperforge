@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { fresh } from '../../../checks/sqlite.ts'
@@ -34,6 +35,18 @@ test('passes a text whose every identifier resolves against the tree', () => {
 
 test('leaves alone a name whose first segment is no directory of this tree', () => {
   expect(identifiers(root, 'merged upstream-org/project and https://github.com/o/r/pull/3').spans).toEqual([])
+})
+
+test('reads a plus as part of a file name', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cf-ids-'))
+  mkdirSync(join(dir, 'Atelier'))
+  writeFileSync(join(dir, 'Atelier', 'Source+Runs.swift'), '')
+  expect(identifiers(dir, 'the query lives in Atelier/Source+Runs.swift').outcome).toBe('pass')
+  expect(identifiers(dir, 'see Atelier/Source+Seats.swift').message).toContain('Atelier/Source+Seats.swift')
+})
+
+test('a sentence ending on a path keeps its full stop out of the name', () => {
+  expect(identifiers(root, 'the gate lives in rails/diff.ts.').outcome).toBe('pass')
 })
 
 test('writes a verdicts row the store accepts', () => {

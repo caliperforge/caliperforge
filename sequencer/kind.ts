@@ -20,6 +20,8 @@ export interface Outcome {
   to?: number
   parts?: Part[]
   split?: true
+  /** Main moved under the branch: nobody's fault, so never `shared` or `repeat` (plans 143 and 155 turned atelier off, 09-25). */
+  moved?: true
 }
 
 export interface Fired {
@@ -32,4 +34,6 @@ export interface Fired {
   spans: string[]
   note: string
   stole: number | null
+  /** The step only waited (the checks lock, another job's files, the network) and spent no model. */
+  held?: true
 }

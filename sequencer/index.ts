@@ -4,8 +4,9 @@ import { digestOf } from '../store/approvals.ts'
 import { hold } from '../store/holds.ts'
 import { logged, newestRun, runSince } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
-import { clear as unlease, held, take, type Lease, type Taken } from '../store/leases.ts'
+import { clear as unlease, drop, handOver, held, take, type Lease, type Taken } from '../store/leases.ts'
 import { cap, hhmm, zone } from '../store/lanes.ts'
+import { busy, idle } from '../store/now.ts'
 import { PlanRow, advance, back, finish, internal, live, needsCeo, openPipes, rewind, terminal, type PipeRow, waiting } from '../store/plans.ts'
 import { blipped, fingerprint, refused, WHY, type Why } from '../store/refusals.ts'
 import { at, last, type Step } from '../templates/pr-path.ts'
@@ -30,8 +31,9 @@ import { homeOf } from './home.ts'
  * `CHAIN_MINUTES`, and a test that leaves it at 0 still sees one step per tick.
  */
 export async function tick(db: Db, root: string, provider: Provider, now: Date = new Date(),
-  read: (repo: string, no: number) => Pr = readPr, wire?: Wire, chain = 0, labels?: Read): Promise<Fired[]> {
-  for (const signal of capture(db, read)) started(db, signal, root)
+  read: (repo: string, no: number) => Pr = readPr, wire?: Wire, chain = 0, labels?: Read, each = Infinity,
+  apart?: Apart): Promise<Fired[]> {
+  for (const signal of capture(db, read, root, labels)) started(db, signal, root)
   if (labels !== undefined) intake(db, root, labels)
   reap(root, terminal(db))
   reprice(db, labels)
@@ -40,19 +42,82 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
     .map((pipe) => ({ pipe, routed: live(db, pipe).map((plan) => ({ plan, route: route(db, plan, now) })) }))
   waiting(db, lanes.flatMap((l) => l.routed.map(({ plan, route: r }) =>
     'fire' in r ? { plan: plan.id, why: null } : { plan: plan.id, why: r.wait, on: r.on })))
-  for (const { pipe, routed } of lanes) {
-    const mine = leased(db, routed.filter((r) => stepping(r.route)), now)
-    const laps = await Promise.all(mine.map((m) => one(db, root, pipe, m, m.lease, provider, wire, chain)))
-    out.push(...laps.flat())
+  if (Number.isFinite(each)) {
+    const laps = lanes.map(({ pipe, routed }) => lane(routed.filter((r) => stepping(r.route)), now, each,
+      (m) => apart === undefined ? one(db, root, pipe, m, m.lease, provider, wire, chain, labels) : away(db, m, apart), db))
+    out.push(...(await Promise.all(laps)).flat())
+  } else {
+    for (const { pipe, routed } of lanes) {
+      const mine = leased(db, routed.filter((r) => stepping(r.route)), now)
+      const laps = await Promise.all(mine.map((m) => one(db, root, pipe, m, m.lease, provider, wire, chain, labels)))
+      out.push(...laps.flat())
+    }
   }
   await woke(db, root, provider, now)
   return out
+}
+
+/**
+ * A lane's `each` jobs this tick. A job that only waited spent no model and does not count: on 09-25 plan 159
+ * sat on the checks lock and took the Atelier lane's one lease every minute, so plans 164 and 166 never started.
+ */
+async function lane(picks: Leg[], now: Date, each: number, run: (m: Leg & { lease: Taken }) => Promise<Fired[]>,
+  db: Db): Promise<Fired[]> {
+  const out: Fired[] = []
+  let ran = 0
+  for (const pick of picks) {
+    if (ran >= each) break
+    const lease = take(db, pick.plan.id, now)
+    if (lease === null) continue
+    const fired = await run({ ...pick, lease })
+    out.push(...fired)
+    if (fired.length === 0 || !fired.every((f) => f.held === true)) ran += 1
+  }
+  return out
+}
+
+/** Runs one leased job in a process of its own and hands back what it fired. */
+export type Apart = (plan: number, stole: number | null) => Promise<Fired[]>
+
+/** A job whose process died before it took the lease frees its plan; one that died after leaves a dead pid, which the next tick takes over. */
+async function away(db: Db, leg: Leg & { lease: Taken }, apart: Apart): Promise<Fired[]> {
+  try {
+    return await apart(leg.plan.id, leg.lease.stole)
+  } finally {
+    drop(db, leg.plan.id)
+  }
+}
+
+/**
+ * #311: one leased job's laps, in the process `cf lap` forked for it. Step 3's checks and the slot wait block
+ * the event loop, and an agent whose tool hook cannot answer stops with it: on 09-25 two reviews logged 23
+ * minutes for 12 seconds of model. One process per job keeps a check from freezing another lane's agent.
+ */
+export async function lap(db: Db, root: string, provider: Provider, plan: number, from: number, stole: number | null,
+  chain = 0, read?: Read): Promise<Fired[]> {
+  const lease = handOver(db, plan, from)
+  if (lease === null) return []
+  const taken = { ...lease, stole }
+  const row = PlanRow.parse(db.prepare('SELECT * FROM plans WHERE id = ?').get(plan))
+  const pipe = openPipes(db, hhmm(db, new Date())).find((p) => p.id === row.pipe_id)
+  if (pipe === undefined) {
+    unlease(db, plan)
+    return []
+  }
+  return one(db, root, pipe, { plan: row, route: route(db, row, new Date(), taken) }, taken, provider, undefined, chain, read)
 }
 
 /** A `token_ceiling` plan is leased too: `ceilinged` is its step. */
 function stepping(r: Route): boolean {
   return 'fire' in r || 'over' in r
 }
+
+/**
+ * Jobs the live tick leases per lane. Step 3's checks run synchronously, so every job in one tick waited on the slowest
+ * test run: on 09-25 one job's suite froze five others for 20+ minutes, and the Atelier lane waited behind the machine
+ * lane. One job per lane per tick, each in a process of its own (#311); the tick fires every minute, so the lanes fill in minutes.
+ */
+export const EACH = 1
 
 /** The live tick's budget for one job: well inside the lease ceiling, and long enough for a whole lap short of CI. */
 export const CHAIN_MINUTES = 45
@@ -61,11 +126,14 @@ export const CHAIN_MINUTES = 45
 const STEPS = 20
 
 /** #65: the picks this tick won the lease on; one another live tick holds is left where it stands. */
-function leased(db: Db, picks: Leg[], now: Date): (Leg & { lease: Taken })[] {
-  return picks.flatMap((pick) => {
+function leased(db: Db, picks: Leg[], now: Date, each = Infinity): (Leg & { lease: Taken })[] {
+  const out: (Leg & { lease: Taken })[] = []
+  for (const pick of picks) {
+    if (out.length >= each) break
     const lease = take(db, pick.plan.id, now)
-    return lease === null ? [] : [{ ...pick, lease }]
-  })
+    if (lease !== null) out.push({ ...pick, lease })
+  }
+  return out
 }
 
 interface Leg {
@@ -123,7 +191,7 @@ export function dry(db: Db, now: Date = new Date()): Dry {
  * outside the machine -- their CI, a person, a lane the CEO turned off -- or the budget runs out.
  */
 async function one(db: Db, root: string, pipe: PipeRow, first: Leg, lease: Taken,
-  provider: Provider, wire?: Wire, chain = 0): Promise<Fired[]> {
+  provider: Provider, wire?: Wire, chain = 0, read?: Read): Promise<Fired[]> {
   const until = Date.now() + chain * 60_000
   const out: Fired[] = []
   try {
@@ -134,7 +202,7 @@ async function one(db: Db, root: string, pipe: PipeRow, first: Leg, lease: Taken
         out.push(ceilinged(db, root, pipe, plan, r.over, lease))
         break
       }
-      const lap = await stepped(db, root, pipe, plan, lease, provider, wire)
+      const lap = await stepped(db, root, pipe, plan, lease, provider, wire, read)
       out.push(lap.fired)
       const more = chain > 0 && Date.now() < until && out.length < STEPS && !lap.wait
       leg = more ? onward(db, first.plan.id, lease) : null
@@ -142,6 +210,7 @@ async function one(db: Db, root: string, pipe: PipeRow, first: Leg, lease: Taken
     return out
   } finally {
     unlease(db, first.plan.id)
+    idle(db, first.plan.id)
   }
 }
 
@@ -155,11 +224,11 @@ function onward(db: Db, id: number, lease: Taken): Leg | null {
 
 /** `wait` is a step that settled by waiting: a CI still running, or a checkout the network failed. Neither is worth asking again in the same tick. */
 async function stepped(db: Db, root: string, pipe: PipeRow, plan: PlanRow, lease: Taken,
-  provider: Provider, wire?: Wire): Promise<{ fired: Fired; wait: boolean }> {
+  provider: Provider, wire?: Wire, read?: Read): Promise<{ fired: Fired; wait: boolean }> {
   const tree = workspace(db, root, plan)
   const step = at(plan.step, tree.language)
   const mark = newestRun(db)
-  const outcome = tree.failed ?? await made(db, root, plan, step, provider, wire)
+  const outcome = tree.failed ?? await made(db, root, plan, step, provider, wire, read)
   const state = settle(db, root, plan, step, outcome)
   logged(db, { plan: plan.id, kind: step.name, actor: step.runs, outcome: outcome.outcome, message: outcome.note,
     pointer: `step-${String(step.step)}`, run: runSince(db, plan.id, step.step, mark) })
@@ -173,6 +242,7 @@ async function stepped(db: Db, root: string, pipe: PipeRow, plan: PlanRow, lease
     spans: outcome.spans,
     note: outcome.note,
     stole: lease.stole,
+    ...(outcome.held === true ? { held: true as const } : {}),
   }
   return { fired, wait: outcome.held === true || outcome.blip === true }
 }
@@ -206,6 +276,7 @@ function workspace(db: Db, root: string, plan: PlanRow): { language: string | nu
     checkout(root, plan.id, tree.repo, tree.branch)
   } catch (error) {
     const note = error instanceof Error ? error.message : String(error)
+    if (OFFLINE.test(note)) return { language: null, failed: thrown(at(plan.step), note) }
     return { language: null, failed: { outcome: 'refuse', spans: [tree.repo], note: `checkout: ${note}`, blip: true } }
   }
   return { language: languageFor(db, plan, srcDir(root, plan.id)), failed: null }
@@ -225,25 +296,43 @@ function treeOf(db: Db, root: string, plan: PlanRow): { repo: string; branch: st
 }
 
 /** The first line goes in the span: two plans that threw differently must not match as `shared` and turn the lane off. */
-async function made(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider, wire?: Wire): Promise<Outcome> {
+async function made(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider, wire?: Wire, read?: Read): Promise<Outcome> {
   try {
-    const out = await fire(db, root, plan, step, provider, wire)
+    const out = await fire(db, root, plan, step, provider, wire, read)
     return out.parts === undefined ? out : parted(db, root, plan, out.parts, wire)
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    return { outcome: 'refuse', spans: [`threw: ${message.split('\n')[0] ?? ''}`],
-      note: `step ${String(step.step)} ${step.name} threw`, message, to: step.step }
+    return thrown(step, error instanceof Error ? error.message : String(error))
   }
 }
 
-function fire(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider, wire?: Wire): Promise<Outcome> {
-  if (step.fires === 'brief') return fireBrief(db, root, plan, step, provider)
-  if (step.fires === 'seat') return fireSeat(db, root, plan, step, provider)
+/**
+ * The host losing its network is not the job's fault. On 09-25 a Wi-Fi drop made four jobs' `git fetch` throw at
+ * step 3; each became a refusal, a person was asked, and two alike turned the Atelier lane off as a fault on main.
+ * Such a throw holds the job on its step, uncounted, and the next tick tries again.
+ */
+const OFFLINE = /Could not resolve host|getaddrinfo|ENOTFOUND|EAI_AGAIN|ENETUNREACH|ETIMEDOUT|Network is unreachable|Failed to connect to|Connection timed out/
+
+export function thrown(step: Step, message: string): Outcome {
+  if (OFFLINE.test(message)) {
+    return { outcome: 'pass', held: true, spans: ['offline'], note: `step ${String(step.step)} ${step.name}: the network is down; the next tick tries again` }
+  }
+  return { outcome: 'refuse', spans: [`threw: ${message.split('\n')[0] ?? ''}`],
+    note: `step ${String(step.step)} ${step.name} threw`, message, to: step.step }
+}
+
+function fire(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider, wire?: Wire, read?: Read): Promise<Outcome> {
+  if (step.fires === 'brief') return model(db, plan, step, () => fireBrief(db, root, plan, step, provider))
+  if (step.fires === 'seat') return model(db, plan, step, () => fireSeat(db, root, plan, step, provider))
   if (step.fires === 'review') {
     const standing = kept(db, root, plan, step)
-    return standing === null ? fireRound(db, root, plan, step, provider) : Promise.resolve(standing)
+    return standing === null ? model(db, plan, step, () => fireRound(db, root, plan, step, provider)) : Promise.resolve(standing)
   }
-  return Promise.resolve(kernel(db, root, plan, wire))
+  return Promise.resolve(kernel(db, root, plan, wire, read))
+}
+
+function model(db: Db, plan: PlanRow, step: Step, run: () => Promise<Outcome>): Promise<Outcome> {
+  busy(db, plan.id, 'model', `${step.runs} step ${String(step.step)}`)
+  return run()
 }
 
 function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcome): string {
@@ -271,7 +360,7 @@ function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcom
     })()
   }
   const why = refused(db, { plan: plan.id, step: step.step, fingerprint: fingerprintOf(step, outcome),
-    diff: step.step >= 3 ? digestOf(diffOf(root, plan.id)) : null })
+    diff: step.step >= 3 ? digestOf(diffOf(root, plan.id)) : null, moved: outcome.moved })
   if (why !== 'again') stopped(root, plan.id, why)
   if (why === 'shared') db.prepare('UPDATE pipes SET enabled = 0 WHERE id = ?').run(plan.pipe_id)
   if (outcome.rewind !== undefined && why === 'again') {
@@ -312,10 +401,15 @@ function blip(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcome)
   return 'blocked_on_ceo'
 }
 
-/** A failed check or CI run is known by what failed, not by the one span every such failure shares. */
-function fingerprintOf(step: Step, outcome: Outcome): string {
+/**
+ * A failed check or CI run is known by what failed, not by the one span every such failure shares. So is a
+ * `text:N` span, a line of this job's own brief or handback: plans 24 and 130 both drew "text:5
+ * identifier.unresolved" for different names, read as one fault on main, and the internal lane went off on 09-25.
+ */
+export function fingerprintOf(step: Step, outcome: Outcome): string {
   const checked = outcome.spans.some((s) => s.startsWith('checks:') || s.startsWith('ci.red'))
-  return fingerprint(step.step, outcome.spans, checked ? (outcome.message ?? '') : '')
+  const own = outcome.spans.some((s) => s.startsWith('text:'))
+  return fingerprint(step.step, outcome.spans, checked ? (outcome.message ?? '') : own ? outcome.note : '')
 }
 
 function stopped(root: string, plan: number, why: Exclude<Why, 'again'>): void {

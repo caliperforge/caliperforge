@@ -2,11 +2,12 @@ import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { CAPPED, type Packet, type Provider } from '../providers/kind.ts'
-import { benchPacket, reviewManifest, type Bench, type Review } from '../runner/packet.ts'
+import { assembled, benchPacket, reviewManifest, type Bench, type Review } from '../runner/packet.ts'
 import type { Db } from '../store/index.ts'
 import { observed, wall } from '../store/lanes.ts'
 import { byRun } from '../store/transcript.ts'
 import { subdirs } from '../checks/tree.ts'
+import { inContext } from './package.ts'
 import { read, type Judged, type Verdict } from './verdict.ts'
 
 export function loadReviews(db: Db, root: string): string[] {
@@ -41,9 +42,11 @@ export async function judge(
     const outcome = barredAsBuilder(`${name}:${String(manifest.step)}`, input)
     return { run: null, verdict: record(db, root, name, plan, outcome, 0, 0, tree), outcome }
   }
-  const first = await ran(db, root, name, plan, manifest, provider, built.packet)
+  const context = built.bench.context ?? inContext(db, plan, built.bench.repo, built.bench.diff)
+  const packet = context === undefined ? built.packet : assembled(root, name, manifest, { ...built.bench, context }, transcript)
+  const first = await ran(db, root, name, plan, manifest, provider, packet)
   const refired = first.capped && first.outcome === null
-    ? await ran(db, root, name, plan, manifest, provider, { ...built.packet, tools: [] })
+    ? await ran(db, root, name, plan, manifest, provider, { ...packet, tools: [] })
     : null
   const last = refired ?? first
   if (last.outcome === null) throw new Error('reviewers.verdict_fence')

@@ -41,8 +41,8 @@ export interface Text {
 
 export type Gh = (args: string[]) => string
 
-/** One run at the head as the sign-off card shows it; `gates` is whether the verdict counts it. */
-export interface Board { workflow: string; status: string; conclusion: string; gates: boolean }
+/** One run at the head as the sign-off card shows it; `gates` is whether the verdict counts it; `base`, the `<job>: <step>` red at the last green head too. */
+export interface Board { workflow: string; status: string; conclusion: string; gates: boolean; base?: string[] }
 
 export function ciGreen(head: Head, text: Text, touched: string[], gh: Gh = shell): Verdict {
   return judge(head, text, touched, gh).verdict
@@ -75,7 +75,7 @@ function verdictOf(head: Head, text: Text, judged: Run[] | null): Verdict {
   }
 }
 
-function list(head: Head, gh: Gh): Run[] | null {
+export function list(head: Head, gh: Gh): Run[] | null {
   const listed = Runs.safeParse(JSON.parse(gh([
     'run', 'list', '--repo', head.fork, '--branch', head.branch,
     '--limit', String(WINDOW), '--json', 'headSha,status,conclusion,url,workflowName',

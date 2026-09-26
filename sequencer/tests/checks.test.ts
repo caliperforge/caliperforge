@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path'
 import { expect, test } from 'vitest'
 import { record } from '../../store/files.ts'
 import type { Db } from '../../store/index.ts'
-import { checks, mode, npm, type Run } from '../checks.ts'
+import { checks, mode, npm, type Ran, type Run } from '../checks.ts'
 import { ciFeatures, formatLine, recipes } from '../gates.ts'
 import { tick } from '../index.ts'
 import { narrow } from '../rails.ts'
@@ -30,13 +30,13 @@ function tree(files: Record<string, string>): string {
 }
 
 /** A shell answering each call in turn, so a retry of the same command meets the next answer. */
-function replies(...answers: { code: number; output: string }[]): { run: Run; seen: string[] } {
+function replies(...answers: Ran[]): { run: Run; seen: string[] } {
   const seen: string[] = []
   return {
     seen,
     run: (args) => {
       seen.push(args.join(' '))
-      return answers[seen.length - 1] ?? { code: 0, output: '' }
+      return answers[seen.length - 1] ?? { ok: true, output: '' }
     },
   }
 }
@@ -49,7 +49,7 @@ function recorder(red?: string): { run: Run; seen: string[] } {
     run: (args) => {
       const command = args.join(' ')
       seen.push(command)
-      return command === red ? { code: 2, output: 'boom' } : { code: 0, output: '' }
+      return command === red ? { ok: false, code: '2', output: 'boom' } : { ok: true, output: '' }
     },
   }
 }
@@ -72,7 +72,7 @@ function last(db: Db, plan: number): unknown {
 test('the three scripts run in order and stop at the first non-zero exit, which the failure names', () => {
   const all = recorder('run lint')
   const src = tree({ 'package.json': pkg({ typecheck: 'tsc --noEmit', lint: 'eslint .', test: 'vitest run' }) })
-  expect(checks(src, all.run)).toEqual({ script: 'lint', command: 'npm run lint', code: 2, output: 'boom', retried: false })
+  expect(checks(src, all.run)).toEqual({ script: 'lint', command: 'npm run lint', code: '2', output: 'boom', tests: [], retried: false })
   expect(all.seen).toEqual(['run typecheck', 'run lint'])
 
   const some = recorder()
@@ -110,39 +110,68 @@ test('a checkout whose scripts all exit zero is on step 4 with a pass row for `p
   })
 }, SLOW)
 
-test('a timeout-only failure runs the command once more, and the second run is the one that settles it', () => {
-  const twice = replies({ code: 1, output: TIMEOUT }, { code: 0, output: '' })
-  expect(checks(tree(ONE), twice.run)).toBeNull()
-  expect(twice.seen).toEqual(['run test', 'run test'])
+const CALLS = { ...ONE, 'a.test.ts': "import { test } from 'vitest'\n\ntest('a call', () => {})\n", 'b.test.ts': "\ntest('a lap', () => {})\n" }
+const CALL = ' FAIL a.test.ts > a call\nAssertionError: expected "hi" to be "ho"\n'
+const LAP = ' FAIL b.test.ts > a lap\nError: Test timed out in 5000ms.\n'
+
+test('D1 a failure names each failing test by file and line, marks the timeouts, and is refused after one run', () => {
+  const once = replies({ ok: false, code: '1', output: `${CALL}${LAP}${CALL}` }, { ok: true, output: '' })
+  expect(checks(tree(CALLS), once.run)).toMatchObject({ tests: ['a.test.ts:3 a call', 'b.test.ts:2 a lap (timeout)'], retried: false })
+  expect(once.seen).toEqual(['run test'])
+})
+
+test('D2 a timeout-only vitest failure re-runs only the files it names, and that run settles it', () => {
+  const twice = replies({ ok: false, code: '1', output: LAP }, { ok: true, output: '' })
+  expect(checks(tree(CALLS), twice.run)).toBeNull()
+  expect(twice.seen).toEqual(['run test', 'exec -- vitest run b.test.ts'])
+})
+
+test('D3 a re-run of the files alone that fails is refused under the first command, with its own tests', () => {
+  const output = ' FAIL b.test.ts > a lap\nAssertionError: expected 1 to be 2\n'
+  const twice = replies({ ok: false, code: '1', output: LAP }, { ok: false, code: '1', output })
+  expect(checks(tree(CALLS), twice.run))
+    .toEqual({ script: 'test', command: 'npm run test', code: '1', output, tests: ['b.test.ts:2 a lap'], retried: true })
+})
+
+test('D4 load with no FAIL line, a hung xcodebuild runner, or a test script that is not vitest re-runs the same command', () => {
+  const xcode = tree({})
+  mkdirSync(join(xcode, 'Atelier.xcodeproj'))
+  const hung = 'The test runner hung before establishing connection.\n'
+  for (const [src, output] of [[tree(ONE), BOUND], [xcode, hung], [tree({ 'package.json': pkg({ test: 'jest' }) }), LAP]] as const) {
+    const twice = replies({ ok: false, code: '1', output }, { ok: true, output: '' })
+    expect(checks(src, twice.run)).toBeNull()
+    expect(twice.seen[1]).toBe(twice.seen[0])
+  }
 })
 
 test('an assertion failure is refused on the first run and never retried', () => {
-  const once = replies({ code: 1, output: ASSERTED }, { code: 0, output: '' })
+  const once = replies({ ok: false, code: '1', output: ASSERTED }, { ok: true, output: '' })
   expect(checks(tree(ONE), once.run))
-    .toEqual({ script: 'test', command: 'npm run test', code: 1, output: ASSERTED, retried: false })
+    .toEqual({ script: 'test', command: 'npm run test', code: '1', output: ASSERTED, tests: ['x.test.ts a call'], retried: false })
   expect(once.seen).toEqual(['run test'])
 })
 
 test('a failure the output does not account for as load is refused on the first run', () => {
   for (const output of [`${TIMEOUT}${ASSERTED}`, SILENT]) {
-    const shell = replies({ code: 1, output }, { code: 0, output: '' })
-    expect(checks(tree(ONE), shell.run)).toMatchObject({ command: 'npm run test', code: 1, retried: false })
+    const shell = replies({ ok: false, code: '1', output }, { ok: true, output: '' })
+    expect(checks(tree(ONE), shell.run)).toMatchObject({ command: 'npm run test', code: '1', retried: false })
     expect(shell.seen).toEqual(['run test'])
   }
 })
 
 test('load-only on both runs is refused with the second run, and the note names the retry', async () => {
-  const both = replies({ code: 1, output: TIMEOUT }, { code: 7, output: BOUND })
+  const both = replies({ ok: false, code: '1', output: TIMEOUT }, { ok: false, code: '7', output: BOUND })
   expect(checks(tree(ONE), both.run))
-    .toEqual({ script: 'test', command: 'npm run test', code: 7, output: BOUND, retried: true })
+    .toEqual({ script: 'test', command: 'npm run test', code: '7', output: BOUND, tests: [], retried: true })
 
   const w = mine(NAPPING)
   for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED))
 
   const fired = (await tick(w.db, w.root, stub(CARRIED)))[0]
-  expect(fired).toMatchObject({ plan: ID, step: 3, outcome: 'refuse', spans: ['checks:test'] })
+  expect(fired).toMatchObject({ plan: ID, step: 3, outcome: 'refuse', spans: ['checks:test', 'x.test.ts a lap (timeout)'] })
   expect(fired?.note).toBe('npm run test exit 1 after one retry')
   expect(get(w.root, ID, 'refusal.md')).toContain('after one retry')
+  expect(get(w.root, ID, 'refusal.md')).toContain('  - checks:test\n  - x.test.ts a lap (timeout)\n')
   expect(last(w.db, ID)).toMatchObject({ outcome: 'refuse', rail_id: 'checks', origin_ref: 'x.test.ts > a lap' })
 }, SLOW)
 
@@ -164,7 +193,7 @@ test('#77: a narrow list runs the tests it can reach, and only in place of a vit
 test('#77: a narrow run that fails is still named by the script, not by the last path it was given', () => {
   const red = recorder('exec -- vitest related --run store/plans.ts')
   const src = tree({ 'package.json': pkg({ test: 'vitest run' }) })
-  expect(checks(src, red.run, ['store/plans.ts'])).toMatchObject({ script: 'test', code: 2 })
+  expect(checks(src, red.run, ['store/plans.ts'])).toMatchObject({ script: 'test', code: '2' })
 })
 
 const HASH = '0'.repeat(64)
@@ -203,7 +232,7 @@ test('a checkout with no package.json runs no command', () => {
 test('npm ci runs for a lock file with no node_modules, and its own failure refuses the same way', () => {
   const files = { 'package.json': pkg({ test: 'vitest run' }), 'package-lock.json': '{}' }
   const fresh = recorder('ci')
-  expect(checks(tree(files), fresh.run)).toEqual({ script: 'ci', command: 'npm ci', code: 2, output: 'boom', retried: false })
+  expect(checks(tree(files), fresh.run)).toEqual({ script: 'ci', command: 'npm ci', code: '2', output: 'boom', tests: [], retried: false })
   expect(fresh.seen).toEqual(['ci'])
 
   const installed = recorder()
@@ -230,7 +259,7 @@ test('D1 an xcode checkout runs xcodebuild test with its derived data inside', (
   mkdirSync(join(src, '.git', 'info'), { recursive: true })
   const bins: string[] = []
   const seen: string[] = []
-  const run: Run = (...[args, , bin]) => { bins.push(bin ?? 'npm'); seen.push(args.join(' ')); return { code: 0, output: '' } }
+  const run: Run = (...[args, , bin]) => { bins.push(bin ?? 'npm'); seen.push(args.join(' ')); return { ok: true, output: '' } }
   expect(mode(src)).toBe('xcodebuild')
   expect(checks(src, run)).toBeNull()
   expect(bins).toEqual(['xcodebuild'])
@@ -241,14 +270,14 @@ test('D1 an xcode checkout runs xcodebuild test with its derived data inside', (
 test('D1 a red xcodebuild names its command', () => {
   const src = tree({})
   mkdirSync(join(src, 'Atelier.xcodeproj'))
-  const run: Run = () => ({ code: 65, output: '** TEST FAILED **' })
-  expect(checks(src, run)).toMatchObject({ script: 'test', code: 65, command: expect.stringMatching(/^xcodebuild -project Atelier\.xcodeproj/) as string })
+  const run: Run = () => ({ ok: false, code: '65', output: '** TEST FAILED **' })
+  expect(checks(src, run)).toMatchObject({ script: 'test', code: '65', command: expect.stringMatching(/^xcodebuild -project Atelier\.xcodeproj/) as string })
 })
 
 test('an xcodebuild run whose test runner hung runs once more, and the second run settles it', () => {
   const src = tree({})
   mkdirSync(join(src, 'Atelier.xcodeproj'))
-  const twice = replies({ code: 65, output: 'The test runner hung before establishing connection.\n** TEST FAILED **' }, { code: 0, output: '' })
+  const twice = replies({ ok: false, code: '65', output: 'The test runner hung before establishing connection.\n** TEST FAILED **' }, { ok: true, output: '' })
   expect(checks(src, twice.run)).toBeNull()
   expect(twice.seen).toHaveLength(2)
 })
@@ -256,8 +285,8 @@ test('an xcodebuild run whose test runner hung runs once more, and the second ru
 test('an xcodebuild failure without the hung line is refused on the first run', () => {
   const src = tree({})
   mkdirSync(join(src, 'Atelier.xcodeproj'))
-  const once = replies({ code: 65, output: '** TEST FAILED **' }, { code: 0, output: '' })
-  expect(checks(src, once.run)).toMatchObject({ code: 65, retried: false })
+  const once = replies({ ok: false, code: '65', output: '** TEST FAILED **' }, { ok: true, output: '' })
+  expect(checks(src, once.run)).toMatchObject({ code: '65', retried: false })
   expect(once.seen).toHaveLength(1)
 })
 
@@ -299,7 +328,7 @@ test('D3 a kotlin checkout runs gradle check', () => {
   mkdirSync(join(src, 'kotlin'))
   const bins: string[] = []
   const seen: string[] = []
-  const run: Run = (...[args, , bin]) => { bins.push(bin ?? 'npm'); seen.push(args.join(' ')); return { code: 0, output: '' } }
+  const run: Run = (...[args, , bin]) => { bins.push(bin ?? 'npm'); seen.push(args.join(' ')); return { ok: true, output: '' } }
   expect(mode(src)).toBe('gradle')
   expect(checks(src, run)).toBeNull()
   expect([bins, seen]).toEqual([['gradle'], ['-p kotlin check']])
@@ -321,9 +350,9 @@ function nested(files: Record<string, string>): string {
   return dir
 }
 
-function heard(code = 0, output = ''): { run: Run; calls: string[] } {
+function heard(ran: Ran = { ok: true, output: '' }): { run: Run; calls: string[] } {
   const calls: string[] = []
-  const run: Run = (args, cwd, bin) => { calls.push(`${bin ?? 'npm'} ${args.join(' ')} @${cwd}`); return { code, output } }
+  const run: Run = (args, cwd, bin) => { calls.push(`${bin ?? 'npm'} ${args.join(' ')} @${cwd}`); return ran }
   return { run, calls }
 }
 
@@ -360,16 +389,16 @@ test('#192 with no fmt line in the workflows, rust falls back to cargo fmt --all
 
 test('#192 a red format check refuses with the diff, named by folder', () => {
   const src = nested({ 'Cargo.toml': '[package]\nname = "x"\n' })
-  const { run } = heard(1, 'Diff in src/lib.rs at line 3')
+  const { run } = heard({ ok: false, code: '1', output: 'Diff in src/lib.rs at line 3' })
   expect(checks(src, run, [], { language: 'rust', files: ['src/lib.rs'] }))
-    .toEqual({ script: 'format', command: 'cargo fmt --all -- --check', code: 1, output: 'Diff in src/lib.rs at line 3', retried: false })
+    .toEqual({ script: 'format', command: 'cargo fmt --all -- --check', code: '1', output: 'Diff in src/lib.rs at line 3', tests: [], retried: false })
 })
 
 test('#204 a go folder with no Justfile runs gofmt, vet and test raw; gofmt printing a file is a failure', () => {
   const src = nested({ 'go/go.mod': 'module x\n', 'go/config.go': '' })
-  const { run, calls } = heard(0, 'config.go\n')
+  const { run, calls } = heard({ ok: true, output: 'config.go\n' })
   expect(checks(src, run, [], { language: 'go', files: ['go/config.go'] }))
-    .toMatchObject({ script: 'format', command: 'gofmt -s -l . (in go/)', code: 1, output: 'config.go\n' })
+    .toMatchObject({ script: 'format', command: 'gofmt -s -l . (in go/)', code: '1', output: 'config.go\n' })
   expect(calls).toEqual([`gofmt -s -l . @${join(src, 'go')}`])
 })
 
@@ -422,9 +451,9 @@ test('#221 an outside rust plan stages, runs the bindings generator its CI runs,
 
 test('#221 a red diff after regenerating refuses with the diff', () => {
   const src = surfpool(BINDINGS)
-  const run: Run = (...[args, , bin]) => `${bin ?? 'npm'} ${args.join(' ')}` === 'git diff --exit-code' ? { code: 1, output: '-a\n+b' } : { code: 0, output: '' }
+  const run: Run = (...[args, , bin]) => `${bin ?? 'npm'} ${args.join(' ')}` === 'git diff --exit-code' ? { ok: false, code: '1', output: '-a\n+b' } : { ok: true, output: '' }
   expect(checks(src, run, [], { language: 'rust', files: ['crates/core/src/a.rs'] }))
-    .toEqual({ script: 'diff', command: 'git diff --exit-code', code: 1, output: '-a\n+b', retried: false })
+    .toEqual({ script: 'diff', command: 'git diff --exit-code', code: '1', output: '-a\n+b', tests: [], retried: false })
 })
 
 test('#221 a diff step with no generator, or one needing a shell, adds no gate', () => {
@@ -435,5 +464,5 @@ test('#221 a diff step with no generator, or one needing a shell, adds no gate',
 })
 
 test('a program that never starts is named', () => {
-  expect(npm(['--version'], tmpdir(), 'cf-no-such-bin')).toEqual({ code: 127, output: expect.stringMatching(/^cf-no-such-bin: spawnSync cf-no-such-bin ENOENT/) as string })
+  expect(npm(['--version'], tmpdir(), 'cf-no-such-bin')).toEqual({ ok: false, code: '127', output: expect.stringMatching(/^cf-no-such-bin: spawnSync cf-no-such-bin ENOENT/) as string })
 })

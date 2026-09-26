@@ -73,6 +73,17 @@ test('a branch behind main on two jobs is not shared, a conflict with main still
   expect(refused(db, { plan: PLAN, step: 6, fingerprint: conflict, diff: null })).toBe('shared')
 })
 
+test('two jobs cut again from a moved main on the same files go round, however often', () => {
+  const db = bench()
+  db.prepare(`INSERT INTO plans (id, pipe_id, template, state, queued_at, lane, seat, origin)
+    VALUES (2, 1, 'pr_path', 'running', '2026-09-21T00:00:00.000Z', 'machine', 'typescript_specialist',
+      'https://github.com/caliperforge/caliperforge/issues/77')`).run()
+  const recut = fingerprint(3, ['Atelier/Views/DashboardView.swift'])
+  refused(db, { plan: 2, step: 3, fingerprint: recut, diff: D1, moved: true })
+  expect(refused(db, { plan: PLAN, step: 3, fingerprint: recut, diff: D1, moved: true })).toBe('again')
+  expect(refused(db, { plan: PLAN, step: 3, fingerprint: recut, diff: D1, moved: true })).toBe('again')
+})
+
 test('the same refusal twice stops', () => {
   const db = bench()
   refused(db, { plan: PLAN, step: 3, fingerprint: A, diff: D1 })

@@ -12,6 +12,7 @@ export type Route = { fire: Step } | { wait: Wait; on: number | null }
 export interface Offer {
   pipe: PipeRow
   plans: PlanRow[]
+  busy: boolean
 }
 
 /** The templates a step map exists for. A lane whose map is unwritten is on with nothing to step. */
@@ -37,16 +38,20 @@ function others(db: Db, now: Date, mine: Lease | null): Lease[] {
 
 /** Every open lane and what it would step, asked once: one reading of the queues serves the whole tick. */
 export function offered(db: Db, now: Date, mine: Lease | null = null): Offer[] {
-  return openPipes(db, hhmm(db, now)).map((pipe) => ({ pipe, plans: picks(db, pipe, now, mine) }))
+  const leased = new Set(others(db, now, mine).map((l) => l.plan))
+  return openPipes(db, hhmm(db, now)).map((pipe) => ({
+    pipe, plans: picks(db, pipe, now, mine), busy: live(db, pipe).some((p) => leased.has(p.id)),
+  }))
 }
 
 /**
  * #125: the cap is spent on lanes that can use it. A lane with nothing to step takes no slot, so at
  * cap 1 an idle lane no longer holds the only slot against a lane with a plan it could step; among
- * lanes that can step, the lower id still wins, which is the order `openPipes` returns.
+ * lanes that can step, the lower id still wins, which is the order `openPipes` returns. A lane with a
+ * job in flight in another process holds its slot.
  */
 export function working(offers: Offer[], wide: number): Offer[] {
-  return offers.filter((o) => o.plans.length > 0).slice(0, wide)
+  return offers.filter((o) => o.plans.length > 0 || o.busy).slice(0, wide)
 }
 
 /**

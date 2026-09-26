@@ -68,6 +68,21 @@ test('an escape above the root is refused on an internal plan too', () => {
   expect(authority(root, 'typescript_specialist', diff, true).spans).toEqual(['../outside.ts:1 authority.write_paths'])
 })
 
+test('an unlisted path is refused with the row that owns it or a revert', () => {
+  const { outcome, message } = authority(root, 'typescript_specialist', KERNEL, true, [], ['cli/extra.ts'])
+  expect(outcome).toBe('refuse')
+  for (const part of ['cli/extra.ts', '## Outside the files', '- `cli/extra.ts` — ', 'revert']) expect(message).toContain(part)
+})
+
+test('a refusal with no unlisted path carries no row line', () => {
+  const made = 'diff --git a/schema/0018_x.sql b/schema/0018_x.sql\nnew file mode 100644\n--- /dev/null\n+++ b/schema/0018_x.sql\n@@ -0,0 +1 @@\n+SELECT 1;\n'
+  for (const verdict of [authority(root, 'typescript_specialist', KERNEL, false), authority(root, 'typescript_specialist', FROZEN, true),
+    authority(root, 'typescript_specialist', made, true, [], [], ['schema/0018_x.sql'])]) {
+    expect(verdict.outcome).toBe('refuse')
+    expect(verdict.message).not.toContain('— <why>')
+  }
+})
+
 test('writes a verdicts row the store accepts', () => {
   const db = fresh(join(root, 'schema'))
   load(db, root)

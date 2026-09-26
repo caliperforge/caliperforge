@@ -1,4 +1,4 @@
-import { existsSync, renameSync } from 'node:fs'
+import { existsSync, readFileSync, renameSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import type { Db } from './index.ts'
 
@@ -17,4 +17,28 @@ export function byRun(db: Db, run: number, written: string): string {
   if (existsSync(written)) renameSync(written, named)
   db.prepare('UPDATE runs SET transcript_path = ? WHERE id = ?').run(named, run)
   return named
+}
+
+const FIGURE = /"total_cost_usd":(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/
+
+/** Matched rather than parsed, so a line that is not JSON is passed over without a catch. */
+export function cost(path: string): number | null {
+  if (!existsSync(path)) return null
+  const lines = readFileSync(path, 'utf8').split('\n')
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const figure = FIGURE.exec(lines[i] ?? '')?.[1]
+    if (figure !== undefined) return Number(figure)
+  }
+  return null
+}
+
+export function backfill(db: Db): number {
+  const rows = db.prepare('SELECT id, transcript_path FROM runs WHERE cost_usd IS NULL').all() as { id: number; transcript_path: string }[]
+  const write = db.prepare('UPDATE runs SET cost_usd = ? WHERE id = ? AND cost_usd IS NULL')
+  let written = 0
+  for (const row of rows) {
+    const figure = cost(row.transcript_path)
+    if (figure !== null) written += write.run(figure, row.id).changes
+  }
+  return written
 }

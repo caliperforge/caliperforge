@@ -1,0 +1,2 @@
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"done"}]}}
+{"type":"result","subtype":"success","is_error":false,"result":"done","total_cost_usd":0.43}

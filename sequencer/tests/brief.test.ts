@@ -7,7 +7,7 @@ import { release, returnToLane } from '../../store/holds.ts'
 import { get } from '../../store/lanes.ts'
 import { retry } from '../../store/plans.ts'
 import { WHY } from '../../store/refusals.ts'
-import { files, references, shape, split, TEMPLATE, unclear, writable, type Refused } from '../brief.ts'
+import { files, pointed, references, shape, split, TEMPLATE, unclear, writable, type Refused } from '../brief.ts'
 import { tick } from '../index.ts'
 import { blocked } from '../steps.ts'
 import { afresh, drop, maybe, move, put, srcDir, titleOf } from '../workspace.ts'
@@ -483,6 +483,25 @@ test('a test named only under ## Tests is writable', () => {
 test('a folder row under ## Files is refused', () => {
   expect(on(swap(brief, '## Files', ['- sequencer/brief.ts', '- sequencer/tests/ — the tests'])))
     .toMatchObject({ span: '- sequencer/tests/ — the tests', reason: holding('names no file') })
+})
+
+const PLUS = 'Sources/App/DashboardSource+Runs.swift'
+
+const plus = (row: string): string => ['# t', '', '## Files', '', row, '', '## Out of scope', ''].join('\n')
+
+test('a Files row naming a + path yields that path, backticked or bare', () => {
+  for (const row of [`- \`${PLUS}:27\``, `- ${PLUS}:27 — the WHERE`]) {
+    expect(files(plus(row))).toEqual([{ path: PLUS, is_new: false }])
+  }
+})
+
+test('a backticked + path keeps the line it points at', () => {
+  expect(pointed(plus(`- \`${PLUS}:27\``))).toEqual([{ path: PLUS, line: 27 }])
+})
+
+test('a + path off the tree is refused on the whole path', () => {
+  expect(on(swap(brief, '## Files', [`- \`${PLUS}:27\``])))
+    .toMatchObject({ span: PLUS, reason: holding('not in the checkout') })
 })
 
 test('a brief without ## Settled facts is refused', () => {

@@ -11,7 +11,7 @@ const LETTERS = 'abcdefghijklmnopqrstuvwxyz'
 
 /**
  * #72, filed. Every part becomes an issue of ours, titled `<parent><letter>: …` in the order the parts
- * land, carrying the parent's lane; the first is queued at the parent's priority and the parent's
+ * land, carrying the parent's lane; every part with no `after` is queued at the parent's priority and the parent's
  * issue says where its work went. The parent plan ends here with no build. A split of somebody else's
  * ticket is not the machine's to file: the parts wait for the COO instead.
  * Filing is resumable -- a part already on file is not filed twice -- so a `gh` that fails half way is
@@ -28,9 +28,12 @@ export function parted(db: Db, root: string, plan: PlanRow, parts: Part[], wire:
   }
   try {
     const urls = [...parts.keys()].map((n) => filed(db, plan, parent, parts, n, wire))
-    queue(db, root, plan, 0)
-    wire.comment(homeOf(plan), parent, `The brief writer found this is ${String(parts.length)} jobs, not one. They land in this order: ${urls.map(ref).join(', ')}. The first is queued; each one that lands queues the next, and this issue closes when the last one lands.`)
-    return { outcome: 'pass', spans: [], split: true, note: `split into ${urls.map(ref).join(', ')}; ${ref(urls[0] ?? '')} queued` }
+    const on = (n: number): string => ref(urls[n] ?? '')
+    const started = [...parts.keys()].filter((n) => parts[n]?.after === 'none')
+    for (const n of started) queue(db, root, plan, n)
+    const waits = parts.flatMap((p, n) => p.after === 'none' ? [] : [`${on(n)} waits on ${on(LETTERS.indexOf(p.after))}`])
+    wire.comment(homeOf(plan), parent, `The brief writer found this is ${String(parts.length)} jobs, not one: ${urls.map(ref).join(', ')}. ${[`${started.map(on).join(', ')} started`, ...waits].join('; ')}. This issue closes when every one lands.`)
+    return { outcome: 'pass', spans: [], split: true, note: `split into ${urls.map(ref).join(', ')}; ${started.map(on).join(', ')} queued` }
   } catch (error) {
     const note = error instanceof Error ? error.message : String(error)
     return { outcome: 'refuse', spans: ['gh'], blip: true, note: `split: ${note}` }
@@ -38,7 +41,7 @@ export function parted(db: Db, root: string, plan: PlanRow, parts: Part[], wire:
 }
 
 /**
- * After a part lands on main: the next part is queued, or, the last one landed, the parent's issue is
+ * After a part lands on main: the parts that wait on it are queued, or, every other part landed, the parent's issue is
  * closed with the sha that finished it. Only the close touches the network, and a close that fails is
  * said in the note rather than undoing a landing.
  */
@@ -46,13 +49,23 @@ export function following(db: Db, root: string, plan: PlanRow, sha: string, wire
   const row = db.prepare('SELECT parent, n FROM parts WHERE plan = ?').get(plan.id) as { parent: number; n: number } | undefined
   if (row === undefined) return null
   const parent = PlanRow.parse(db.prepare('SELECT * FROM plans WHERE id = ?').get(row.parent))
-  const next = queue(db, root, parent, row.n + 1)
-  if (next !== null) return `part ${letter(row.n + 1)} queued as plan ${String(next)}`
+  const waiting = db.prepare('SELECT n FROM parts WHERE parent = ? AND after = ? AND plan IS NULL').all(parent.id, row.n) as { n: number }[]
+  if (waiting.length > 0) return waiting.map(({ n }) => `part ${letter(n)} queued as plan ${String(queue(db, root, parent, n))}`).join('; ')
+  const rest = db.prepare('SELECT plan FROM parts WHERE parent = ? AND n != ?').all(parent.id, row.n) as { plan: number | null }[]
+  if (!rest.every((p) => landed(db, p.plan))) return null
   const issue = originIssue(parent)
   if (issue === null) return 'the last part landed'
   const closed = close(parent, issue, sha, wire)
   const up = following(db, root, parent, sha, wire)
   return up === null ? closed : `${closed}; ${up}`
+}
+
+/** A split part is `done` from the moment it splits, so it lands only when its own parts have. */
+function landed(db: Db, plan: number | null): boolean {
+  if (plan === null) return false
+  const row = db.prepare('SELECT state FROM plans WHERE id = ?').get(plan) as { state: string }
+  const parts = db.prepare('SELECT plan FROM parts WHERE parent = ?').all(plan) as { plan: number | null }[]
+  return row.state === 'done' && parts.every((p) => landed(db, p.plan))
 }
 
 function close(plan: PlanRow, issue: number, sha: string, wire: Wire): string {
@@ -71,8 +84,9 @@ export function claimed(db: Db, root: string, issue: { url: string; title: strin
   const row = db.prepare('SELECT plan FROM parts WHERE url = ? AND plan IS NOT NULL').get(issue.url.replace(/\d+$/, no)) as
     { plan: number } | undefined
   if (row === undefined) return false
-  db.prepare('INSERT INTO parts (parent, n, url, title, body) VALUES (?, ?, ?, ?, ?)')
-    .run(row.plan, LETTERS.indexOf(at), issue.url, issue.title, issue.body)
+  const n = LETTERS.indexOf(at)
+  db.prepare('INSERT INTO parts (parent, n, url, title, body, after) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(row.plan, n, issue.url, issue.title, issue.body, n === 0 ? null : n - 1)
   queue(db, root, PlanRow.parse(db.prepare('SELECT * FROM plans WHERE id = ?').get(row.plan)), 0)
   return true
 }
@@ -88,15 +102,16 @@ function filed(db: Db, plan: PlanRow, parent: number, parts: Part[], n: number, 
   if (held !== undefined) return held.url
   const part = parts[n]
   if (part === undefined) throw new Error(`no part ${String(n)}`)
-  const prior = n === 0 ? undefined
-    : (db.prepare('SELECT url FROM parts WHERE parent = ? AND n = ?').get(plan.id, n - 1) as { url: string } | undefined)?.url
+  const after = part.after === 'none' ? null : LETTERS.indexOf(part.after)
+  const prior = after === null ? undefined
+    : (db.prepare('SELECT url FROM parts WHERE parent = ? AND n = ?').get(plan.id, after) as { url: string } | undefined)?.url
   const title = `${String(parent)}${letter(n)}: ${part.title}`
   const body = [`**What:** ${part.what}`, `**Why:** ${part.why}`, `**When it ends:** ${part.ends}`, '',
     `Part ${letter(n)} of ${String(parts.length)} of #${String(parent)}, split by the brief writer.`,
     ...(prior === undefined ? [] : [`After: ${ref(prior)}`]), ''].join('\n')
   // Intake re-prices a plan from its issue's P label, so a part filed without one fell to the default (9b ran P3 under a P0).
   const url = wire.file(homeOf(plan), title, body, [...(plan.lane === null ? [] : [`lane:${plan.lane}`]), `P${String(plan.priority)}`])
-  db.prepare('INSERT INTO parts (parent, n, url, title, body) VALUES (?, ?, ?, ?, ?)').run(plan.id, n, url, title, body)
+  db.prepare('INSERT INTO parts (parent, n, url, title, body, after) VALUES (?, ?, ?, ?, ?, ?)').run(plan.id, n, url, title, body, after)
   return url
 }
 

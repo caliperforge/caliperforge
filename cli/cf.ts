@@ -16,7 +16,7 @@ import { saved } from '../sequencer/hq.ts'
 import { signoffs } from '../sequencer/signoff.ts'
 import { hold, isHeld, unhold } from '../sequencer/hold.ts'
 import { SIGNOFF, afresh, liveTree, reap } from '../sequencer/workspace.ts'
-import { blocked, parked, targetDigest, WAITING } from '../sequencer/steps.ts'
+import { blocked, parked, WAITING } from '../sequencer/steps.ts'
 import { release, retried } from '../store/holds.ts'
 import { dump, migrate, open as openDb, type Db } from '../store/index.ts'
 import { dial, hhmm, lanes, priority as setPriority, record, Reading, set, windows } from '../store/lanes.ts'
@@ -35,7 +35,7 @@ import { desk, gh } from './gh.ts'
 import { ack, crashed, events, line, notify, record as keep, unread } from './inbox.ts'
 import { measure, render as renderPulse } from './measure.ts'
 import { add as fileIssue, render as renderUnfiled, unfiled } from './plan.ts'
-import { add } from './queue.ts'
+import { add, approve as approveTarget, note, refuseTarget } from './queue.ts'
 import { fill as fillRecord, render as renderRecord, still } from './record.ts'
 import { render as renderScan, scan } from './scan.ts'
 import { close } from './session.ts'
@@ -178,9 +178,14 @@ queue.command('add').argument('<repo>').argument('<issue-url>').option('--pipe <
 queue.command('list').action(() => {
   const handle = db()
   out(laneLine(lanes(handle, hhmm(handle))))
-  const rows = handle.prepare(`SELECT t.id, t.repo, t.issue_no, t.part, t.state, t.named_merger, t.evidence_measured_at
-    FROM targets t ORDER BY t.id`).all() as Record<string, string | number>[]
-  for (const r of rows) out(`${String(r.id)}\t${String(r.repo)}#${String(r.issue_no)}${r.part === '' ? '' : ` ${String(r.part)}`}\t${String(r.state)}\t${String(r.named_merger)}\t${String(r.evidence_measured_at)}\n`)
+  const rows = handle.prepare(`SELECT t.id, t.repo, t.issue_no, t.part, t.state, t.named_merger, t.evidence_measured_at, t.coo_take
+    FROM targets t ORDER BY t.id`).all() as Record<string, string | number | null>[]
+  for (const r of rows) out(`${String(r.id)}\t${String(r.repo)}#${String(r.issue_no)}${r.part === '' ? '' : ` ${String(r.part)}`}\t${String(r.state)}\t${String(r.named_merger)}\t${String(r.evidence_measured_at)}\t${String(r.coo_take ?? '-')}\n`)
+})
+
+queue.command('note').argument('<id>').argument('<take>', 'the coo\'s line: take ... or skip ...').action((id: string, take: string) => {
+  note(db(), Number(id), take)
+  out(`target ${id} noted\n`)
 })
 
 const plan = cf.command('plan')
@@ -291,16 +296,14 @@ const approve = cf.command('approve')
 
 const refuse = cf.command('refuse')
 
-approve.command('target').argument('<id>').action((id: string) => {
-  const handle = db()
-  const t = handle.prepare('SELECT repo, issue_no, evidence_measured_at FROM targets WHERE id = ?').get(Number(id)) as
-    { repo: string; issue_no: number; evidence_measured_at: string } | undefined
-  if (t === undefined) throw new Error(`no target ${id}`)
-  const at = new Date().toISOString()
-  const digest = targetDigest(t)
-  handle.prepare(`INSERT OR IGNORE INTO approvals (subject_kind, subject_id, subject_digest, who, decision, approved_at)
-    VALUES ('target', ?, ?, 'ceo', 'approved', ?)`).run(Number(id), digest, at)
-  out(`target ${id} approved\t${digest.slice(0, 12)}\n`)
+approve.command('target').argument('<id>').option('--pipe <name>', 'pipe to file its plan on', 'pr-path')
+  .action((id: string, options: { pipe: string }) => {
+    const done = approveTarget(db(), root, Number(id), options.pipe)
+    out(`target ${id} approved\t${done.digest.slice(0, 12)}\tplan ${done.plan === null ? '-' : String(done.plan)}\n`)
+  })
+
+refuse.command('target').argument('<id>').argument('<reason>').action((id: string, reason: string) => {
+  out(`target ${id} refused\t${refuseTarget(db(), Number(id), reason).slice(0, 12)}\n`)
 })
 
 cf.command('batch').action(() => {
@@ -429,10 +432,11 @@ async function ticked(options: { dry?: boolean }, now: Date): Promise<void> {
   const { auth } = credential()
   process.stderr.write(`auth ${auth.kind} from ${auth.from}\n`)
   process.env.CF_CHECK_SLOTS ??= String(CHECK_SLOTS)
-  const fired = await tick(handle, root, claudeAgentSdk, now, undefined, undefined, CHAIN_MINUTES, gh, EACH, apart)
+  const lines: string[] = []
+  const fired = await tick(handle, root, claudeAgentSdk, now, undefined, undefined, CHAIN_MINUTES, gh, EACH, apart, lines)
   receipt(handle, saved(handle, upgraded(handle, root, { at: now.toISOString(), hhmm: hhmm(handle, now), dry: false,
     pipes: openPipes(handle, hhmm(handle, now)).length, fired: fired.length,
-    exit: fired.some((f) => f.outcome === 'refuse') ? 1 : 0, note: tickNote(fired, overlapWaits(handle)) }),
+    exit: fired.some((f) => f.outcome === 'refuse') ? 1 : 0, note: tickNote(fired, overlapWaits(handle), lines) }),
   fired.filter((f) => f.state === 'done').map((f) => f.plan)))
   watch(handle, root, now, alerter())
   const news = events(handle, fired, now.toISOString())

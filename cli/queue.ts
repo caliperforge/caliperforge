@@ -1,5 +1,7 @@
 import { z } from 'zod'
+import { targetDigest } from '../sequencer/steps.ts'
 import { put } from '../sequencer/workspace.ts'
+import { decide } from '../store/approvals.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { templatePriority } from '../store/lanes.ts'
@@ -71,7 +73,7 @@ export function add(db: Db, root: string, repo: string, url: string, pipe: strin
   const origin = shipped !== null ? IMPLEMENTED : null
   const target = upsert(db, pulse, repo, no, part, merger ?? '', state, url, ruling(db, origin, state))
   if (why !== null) return { target, plan: null, state, why, origin }
-  const plan = planFor(db, pipe, target, url)
+  const plan = planFor(db, pipe, target, url, 'cf queue add')
   put(root, plan, 'ask.md', askOf(row, scope.card))
   if (scope.pr !== undefined) put(root, plan, 'pr.md', scope.pr)
   return { target, plan, state, why: `${repo}#${String(no)}${part === '' ? '' : ` ${part}`} queued`, origin }
@@ -113,7 +115,42 @@ function upsert(db: Db, pulse: z.infer<typeof Account>, repo: string, no: number
   return row.id
 }
 
-function planFor(db: Db, pipe: string, target: number, url: string): number {
+interface Scanned { repo: string; issue_no: number; evidence_measured_at: string; state: string; evidence: string }
+
+function targetOf(db: Db, id: number): Scanned {
+  const t = db.prepare('SELECT repo, issue_no, evidence_measured_at, state, evidence FROM targets WHERE id = ?').get(id) as Scanned | undefined
+  if (t === undefined) throw new Error(`no target ${String(id)}`)
+  return t
+}
+
+export function approve(db: Db, root: string, id: number, pipe: string): { digest: string; plan: number | null } {
+  const t = targetOf(db, id)
+  if (t.state === 'refused') throw new Error(`target ${String(id)} is refused`)
+  const unplanned = t.state === 'ready' && db.prepare('SELECT 1 FROM plans WHERE target_id = ?').get(id) === undefined
+  const row = unplanned ? readIssue(t.repo, t.issue_no) : null
+  const digest = targetDigest(t)
+  const filed = db.transaction(() => {
+    decide(db, 'target', id, digest, null)
+    return row === null ? null : { plan: planFor(db, pipe, id, t.evidence, 'cf approve target'), ask: askOf(row, undefined) }
+  })()
+  if (filed !== null) put(root, filed.plan, 'ask.md', filed.ask)
+  return { digest, plan: filed?.plan ?? null }
+}
+
+export function refuseTarget(db: Db, id: number, reason: string): string {
+  const digest = targetDigest(targetOf(db, id))
+  db.transaction(() => {
+    decide(db, 'target', id, digest, reason)
+    db.prepare("UPDATE targets SET state = 'refused' WHERE id = ?").run(id)
+  })()
+  return digest
+}
+
+export function note(db: Db, id: number, take: string): void {
+  if (db.prepare('UPDATE targets SET coo_take = ? WHERE id = ?').run(take, id).changes === 0) throw new Error(`no target ${String(id)}`)
+}
+
+function planFor(db: Db, pipe: string, target: number, url: string, actor: string): number {
   const row = db.prepare('SELECT id FROM pipes WHERE name = ?').get(pipe) as { id: number } | undefined
   if (row === undefined) throw new Error(`no pipe "${pipe}"; cf pipe on ${pipe}`)
   const open = db.prepare("SELECT id FROM plans WHERE target_id = ? AND state IN ('queued', 'running')").get(target) as { id: number } | undefined
@@ -122,6 +159,6 @@ function planFor(db: Db, pipe: string, target: number, url: string): number {
     VALUES (?, ?, 'pr_path', 'queued', ?, 0, 0, ?)`)
     .run(row.id, target, new Date().toISOString(), templatePriority(db, 'pr_path'))
   const id = Number(made.lastInsertRowid)
-  logged(db, { plan: id, kind: 'filed', actor: 'cf queue add', outcome: 'pass', message: url, pointer: null, run: null })
+  logged(db, { plan: id, kind: 'filed', actor, outcome: 'pass', message: url, pointer: null, run: null })
   return id
 }

@@ -9,16 +9,16 @@ import { headApproved, headDigest, refusedPush } from '../../store/approvals.ts'
 import type { Db } from '../../store/index.ts'
 import { advance, rewind } from '../../store/plans.ts'
 import { open as openProposals } from '../../store/proposals.ts'
-import { SignalRow } from '../../store/signals.ts'
+import { graded, SignalRow } from '../../store/signals.ts'
 import { capture } from '../capture.ts'
 import { classOf } from '../escapes.ts'
-import { headOf, prBody, push } from '../push.ts'
+import { COMMIT, headOf, prBody, push, sent as next } from '../push.ts'
 import { started } from '../signals.ts'
 import { unanswered } from '../steps.ts'
 import { unread } from '../../cli/inbox.ts'
-import { put, srcDir } from '../workspace.ts'
+import { get, maybe, put, srcDir } from '../workspace.ts'
 import { tick } from '../index.ts'
-import { approve, CARRIED, plan, PR as URL, SEEDED, stub, watched, world, type World } from './world.ts'
+import { approve, CARRIED, plan, PR as URL, SEEDED, stub, tip, watched, world, type World } from './world.ts'
 
 const TRANSCRIPT = [
   'RULING push.digest = approval_matches_head_and_the_hook',
@@ -78,6 +78,7 @@ test('an outside branch reaches the batch as one commit, titled off the brief, n
   const log = execFileSync('git', ['log', '--format=%B%x00', 'refs/remotes/upstream/main..HEAD'],
     { cwd: srcDir(w.root, 1), encoding: 'utf8' }).split('\0').map((m) => m.trim()).filter((m) => m !== '')
   expect(log).toEqual(['hello\n\nadd `hello()`.\n\nthe ask asks for it.'])
+  expect(maybe(w.root, 1, COMMIT)).toBeNull()
 })
 
 test('a body the card set is the one the pull request opens with', async () => {
@@ -187,7 +188,7 @@ test('a round on an open pull request pushes its branch without opening another'
   const wire = watched(sent, w.root, 1)
   rewind(w.db, 1, 4)
   for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, () => pr(), wire)
-  expect(sent).toEqual(['send src HEAD:refs/heads/widget-12-a1-next', 'rehearse caliperforge/widget widget-12-a1-next'])
+  expect(sent).toEqual([`send src ${tip(w.root, 1)}:refs/heads/widget-12-a1-next`, 'rehearse caliperforge/widget widget-12-a1-next'])
   approveCard(w.db, w.root, 'plan', 1)
   advance(w.db, plan(w.db, 1), 8)
   expect(push(w.db, w.root, plan(w.db, 1), wire)).toMatchObject({ outcome: 'pass', note: `pushed widget-12-a1 onto ${URL}` })
@@ -210,7 +211,7 @@ test('a round whose -next the fork holds at a commit HEAD lacks folds onto it, f
   rewind(w.db, 1, 4)
   writeFileSync(join(src, 'src/hello.ts'), 'export const hello = (): string => "hi"\n')
   for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, () => pr(), wire)
-  expect(sent).toEqual(['send src HEAD:refs/heads/widget-12-a1-next', 'rehearse caliperforge/widget widget-12-a1-next'])
+  expect(sent).toEqual([`send src ${tip(w.root, 1)}:refs/heads/widget-12-a1-next`, 'rehearse caliperforge/widget widget-12-a1-next'])
   git(['merge-base', '--is-ancestor', stale, 'HEAD'])
   approveCard(w.db, w.root, 'plan', 1)
   advance(w.db, plan(w.db, 1), 8)
@@ -219,7 +220,7 @@ test('a round whose -next the fork holds at a commit HEAD lacks folds onto it, f
   expect(sent.filter((l) => l.includes('--force') || l.includes('+refs'))).toEqual([])
 })
 
-test('rounds before the pull request fast-forward -next, and push sends the branch itself and opens it', async () => {
+test('D1 D2 D3 rounds before the pull request fast-forward -next on tips the branch never holds, and push sends the branch itself and opens it', async () => {
   const w = world()
   approve(w.db, w.target)
   const src = srcDir(w.root, 1)
@@ -242,9 +243,16 @@ test('rounds before the pull request fast-forward -next, and push sends the bran
   await round('hi', 3)
   git(['merge-base', '--is-ancestor', first, 'HEAD'])
   expect(git(['rev-parse', 'HEAD'])).not.toBe(first)
-  expect(git(['ls-remote', 'origin', 'refs/heads/widget-12-a1-next']).split('\t')[0]).toBe(git(['rev-parse', 'HEAD']))
+  expect(git(['ls-remote', 'origin', 'refs/heads/widget-12-a1-next']).split('\t')[0]).toBe(tip(w.root, 1))
   expect(git(['ls-remote', 'origin', 'refs/heads/widget-12-a1'])).toBe('')
-  expect(new Set(sent.filter((l) => l.startsWith('send ')))).toEqual(new Set(['send src HEAD:refs/heads/widget-12-a1-next']))
+  const tips = get(w.root, 1, 'next.tips').trim().split('\n').map((l) => l.slice(0, 40))
+  expect(new Set(sent.filter((l) => l.startsWith('send ')))).toEqual(new Set(tips.map((t) => `send src ${t}:refs/heads/widget-12-a1-next`)))
+  expect(tips.map((t) => git(['show', `${t}:greptile.json`]))).toEqual(tips.map(() => '{"autoReview": []}'))
+  tips.reduce((older, newer) => { git(['merge-base', '--is-ancestor', older, newer]); return newer })
+  expect(git(['ls-tree', '-r', 'widget-12-a1', 'greptile.json'])).toBe('')
+  expect(git(['log', '--format=%H', 'widget-12-a1']).split('\n').filter((h) => tips.includes(h))).toEqual([])
+  const held = (): string => next(w.root, plan(w.db, 1), 'acme/widget', wire).tip
+  expect([held(), held()]).toEqual([tip(w.root, 1), tip(w.root, 1)])
   approveCard(w.db, w.root, 'plan', 1)
   advance(w.db, plan(w.db, 1), 8)
   const before = sent.length
@@ -264,6 +272,13 @@ test('a counterparty finding on merged code is an escape against the step the ma
     .toEqual({ kind: 'escaped', defect_class: 'scope', owner: 'review', evidence: URL })
   expect(classOf('tight.comment on line 3')).toBe('tight.comment')
   expect(classOf('no class named here')).toBe('correctness')
+})
+
+test('a pull request read that throws leaves a swallowed event and no signal', async () => {
+  const w = await pushed()
+  expect(capture(w.db, () => { throw new Error('HTTP 502\nbody') })).toEqual([])
+  expect(w.db.prepare("SELECT plan, kind, actor, outcome, message FROM events WHERE kind = 'swallowed'").all())
+    .toEqual([{ plan: 1, kind: 'swallowed', actor: 'reachable', outcome: 'pass', message: 'HTTP 502' }])
 })
 
 const FORKED = pr({
@@ -288,6 +303,15 @@ test('only the bot review on the rehearsal is kept, on the plan, and a merge ups
     .toEqual([{ repo: 'caliperforge/widget', pr: 3, kind: 'bot_review', score: 4, head: SHA, plan: 1 }])
   capture(w.db, () => pr({ mergedAt: '2026-09-18T09:00:00Z', mergedBy: { login: 'maintainer' } }))
   expect(w.db.prepare('SELECT count(*) AS n FROM dispositions').get()).toEqual({ n: 0 })
+})
+
+test('D5 a rehearsal review at a -next tip is stored at the plan HEAD the tip carries', async () => {
+  const w = await pushed()
+  const head = headOf(w.root, 1).sha
+  put(w.root, 1, 'next.tips', `${SHA} ${head}\n`)
+  capture(w.db, forked, w.root, listing([]))
+  expect(w.db.prepare('SELECT head FROM signals WHERE author != ?').all(SEEDED)).toEqual([{ head }])
+  expect(graded(w.db, 1, head)).toMatchObject({ external_id: 'g3', score: 4 })
 })
 
 test('a plan with no checkout is asked about no rehearsal', async () => {

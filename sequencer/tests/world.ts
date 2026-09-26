@@ -15,7 +15,7 @@ import { tick } from '../index.ts'
 import type { Fired } from '../kind.ts'
 import type { Wire } from '../push.ts'
 import { targetDigest } from '../steps.ts'
-import { put, SELF, srcDir } from '../workspace.ts'
+import { maybe, put, SELF, srcDir } from '../workspace.ts'
 import { git, key, TYPESCRIPT } from './bases.ts'
 
 const repo = join(import.meta.dirname, '../..')
@@ -243,10 +243,13 @@ export function runsAll(root: string, ids: number[]): Gh {
 }
 
 function runAt(root: string, id: number, status = 'completed', conclusion = 'success'): object {
-  return {
-    headSha: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: srcDir(root, id), encoding: 'utf8' }).trim(),
-    status, conclusion, url: RUN, workflowName: 'CI',
-  }
+  return { headSha: tip(root, id), status, conclusion, url: RUN, workflowName: 'CI' }
+}
+
+/** The -next tip `sent` made for the checkout's HEAD, or HEAD where it made none. */
+export function tip(root: string, id: number): string {
+  const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: srcDir(root, id), encoding: 'utf8' }).trim()
+  return (maybe(root, id, 'next.tips') ?? '').split('\n').find((l) => l.endsWith(` ${head}`))?.split(' ')[0] ?? head
 }
 
 /** The window a live push lands in: github lists no run at the new head until `misses` reads later. */
@@ -314,6 +317,7 @@ export function watched(log: string[], root: string, id: number, runs = runsOn(r
       if (log.findLast((l) => l === line || l === `un${line}`) !== line) log.push(line)
     },
     unrehearse: (fork, branch) => void log.push(`unrehearse ${fork} ${branch}`),
+    review: (fork, branch) => void log.push(`review ${fork} ${branch}`),
     file: (repo, title) => {
       log.push(`file ${repo} ${title}`)
       return `https://github.com/${repo}/issues/${String(900 + log.filter((l) => l.startsWith('file ')).length)}`

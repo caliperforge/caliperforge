@@ -266,6 +266,13 @@ test('a counterparty finding on merged code is an escape against the step the ma
   expect(classOf('no class named here')).toBe('correctness')
 })
 
+test('a pull request read that throws leaves a swallowed event and no signal', async () => {
+  const w = await pushed()
+  expect(capture(w.db, () => { throw new Error('HTTP 502\nbody') })).toEqual([])
+  expect(w.db.prepare("SELECT plan, kind, actor, outcome, message FROM events WHERE kind = 'swallowed'").all())
+    .toEqual([{ plan: 1, kind: 'swallowed', actor: 'reachable', outcome: 'pass', message: 'HTTP 502' }])
+})
+
 const FORKED = pr({
   number: 3, url: 'https://github.com/caliperforge/widget/pull/3',
   comments: [{ id: 'c3', author: { login: 'maintainer' }, body: 'why this?', createdAt: '2026-09-17T10:00:00Z' }],

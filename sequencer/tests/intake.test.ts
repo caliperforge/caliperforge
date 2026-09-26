@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { beforeEach, expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
+import { tickNote } from '../../cli/brief.ts'
 import { WINDOW, type Read } from '../../cli/gh.ts'
 import type { Db } from '../../store/index.ts'
 import { intake } from '../capture.ts'
@@ -104,11 +105,23 @@ test('D4: a lane whose pipe is off or missing has its home left unlisted', () =>
   }
 })
 
-test('D4: a read that throws halts no plan', () => {
+test('D4: a read that throws halts no plan and names the repo', () => {
   const db = piped()
   queue(db, 50)
-  intake(db, root, () => { throw new Error('gh is down') })
+  expect(intake(db, root, () => { throw new Error('gh is down') })).toEqual([`${REPO}: gh is down`])
   expect(states(db)).toEqual([{ origin: url(50), state: 'queued' }])
+})
+
+test('a parent read that throws skips that issue alone, names it, and makes no ticket its part', () => {
+  const db = piped()
+  const read = canned(TWO)
+  const lines = intake(db, root, (args) => {
+    if (args[1] === `repos/${REPO}/issues/40`) throw new Error('HTTP 502\nbody')
+    return read(args)
+  })
+  expect(lines).toEqual([`${REPO}#40: HTTP 502`])
+  expect(states(db)).toEqual([{ origin: url(41), state: 'queued' }])
+  expect(db.prepare('SELECT count(*) AS n FROM tickets WHERE parent = 40').get()).toEqual({ n: 0 })
 })
 
 test('D4: a list exactly WINDOW long halts no plan', () => {
@@ -124,11 +137,13 @@ test('D5: the tick lists issues only when handed a reader', async () => {
   await tick(db, root, stub(CARRIED))
   expect(db.prepare('SELECT count(*) AS n FROM plans').get()).toEqual({ n: 0 })
   const log: string[] = []
+  const sink: string[] = []
   await tick(db, root, stub(CARRIED), undefined, undefined, undefined, 0, (args) => {
     log.push(args.join(' '))
     throw new Error('gh is down')
-  })
+  }, undefined, undefined, sink)
   expect(log).toEqual([`issue list --repo ${REPO} --state open --limit ${String(WINDOW)} --json number,title,body,url,labels`])
+  expect(tickNote([], [], sink)).toContain(`${REPO}: gh is down`)
 })
 
 test('#260: an issue with sub-issues is a parent and is not adopted; its parts are', () => {

@@ -1,7 +1,9 @@
 import { judge, MISSING, type Gh } from '../rails/ci-green/index.ts'
+import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { busy } from '../store/now.ts'
 import type { PlanRow } from '../store/plans.ts'
+import { firstLine } from './capture.ts'
 import { entries, type Failure } from './checks.ts'
 import { homeOf, kernelPlan } from './home.ts'
 import type { Outcome } from './kind.ts'
@@ -58,7 +60,8 @@ export function ciChecks(db: Db, root: string, plan: PlanRow, wire: Wire = WIRE)
     }
     if (carries(verdict.spans, 'ci.unreadable')) return null
     return { failed: verdict.outcome === 'pass' ? null : failure(srcDir(root, plan.id), fork, verdict.spans, wire.runs), at }
-  } catch {
+  } catch (error) {
+    logged(db, { plan: plan.id, kind: 'swallowed', actor: 'ciChecks', outcome: 'pass', message: firstLine(error), pointer: null, run: null })
     return null
   }
 }

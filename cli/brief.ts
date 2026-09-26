@@ -148,11 +148,11 @@ export function dryLines(d: Dry): string {
 
 /** The receipt line a tick leaves in `ticks.note`, which is the only log launchd keeps. */
 /** `waits` are the plans held on another job's files (#88), so a wait reads as a wait and not an idle lane. */
-export function tickNote(fired: Fired[], waits: { plan: number; on: number }[] = []): string {
+export function tickNote(fired: Fired[], waits: { plan: number; on: number }[] = [], lines: string[] = []): string {
   const held = waits.map((w) => `plan ${String(w.plan)} waits on plan ${String(w.on)}`)
   const steps = fired.map((f) => `${f.pipe} plan ${String(f.plan)} step ${String(f.step)} ${f.name} ${f.outcome}`
     + (f.stole === null ? '' : ` took over pid ${String(f.stole)}`))
-  const all = [...steps, ...held]
+  const all = [...steps, ...held, ...lines]
   return all.length === 0 ? 'nothing to fire' : all.join('; ')
 }
 

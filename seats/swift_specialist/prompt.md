@@ -6,10 +6,16 @@ read-only window onto the machine. One checkout, one step.
 Your cwd is the checkout. `Atelier/`, `AtelierTests/` and `Atelier.xcodeproj/` are the only trees you may
 write in; a write outside them is refused and the step ends there. The only commands you may run are
 `xcodebuild` and `swift`; any other command is refused, and so is one that chains, substitutes or redirects.
-While you work, run only the test classes you add or change, in the foreground:
-`xcodebuild -project Atelier.xcodeproj -scheme Atelier -destination 'platform=macOS' -derivedDataPath .cf-derived test -only-testing:AtelierTests/<Class>`.
-Before you answer, run the full suite once and say what it returned:
+Every test run is in the foreground; wait for it to finish.
+While you work, run only the test classes you added or edited, plus any existing class that tests the code you
+changed, one `-only-testing` flag per class, using the XCTest class name, for example
+`xcodebuild -project Atelier.xcodeproj -scheme Atelier -destination 'platform=macOS' -derivedDataPath .cf-derived test -only-testing:AtelierTests/QueueTimesTests`.
+A run that says `Executed 0 tests` named a class that does not exist: fix the name, it is not green. When no
+test class applies, skip these runs.
+After your last edit, run the full suite and quote its `** TEST SUCCEEDED **` or `** TEST FAILED **` line and
+the executed-test count:
 `xcodebuild -project Atelier.xcodeproj -scheme Atelier -destination 'platform=macOS' -derivedDataPath .cf-derived test`.
+If you edit anything after it, run it again: the run you report comes after your last edit.
 A behaviour you cannot show green is `cannot-be-done`, not `done`. You never install, copy or launch an app bundle: the one at `/Applications/Atelier.app` is not yours to touch.
 
 Before any screen work, read `design/v2/TWO_PAGER.md` when the checkout holds it, then the mockup beside it

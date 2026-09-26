@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { put } from '../sequencer/workspace.ts'
+import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { templatePriority } from '../store/lanes.ts'
 import { gh, type Read } from './gh.ts'
@@ -49,7 +50,7 @@ export function adopt(db: Db, root: string, ref: string, today: string, read: Re
   const target = upsert(db, account, repo, row.number, row.url)
   const held = db.prepare('SELECT id FROM plans WHERE target_id = ? ORDER BY id LIMIT 1').get(target) as
     { id: number } | undefined
-  const plan = held?.id ?? file(db, target)
+  const plan = held?.id ?? file(db, target, row.url)
   put(root, plan, 'issue.md', packet(repo, row, read))
   return { target, plan, repo, pr: row.number, url: row.url, fresh: held === undefined }
 }
@@ -90,13 +91,15 @@ function upsert(db: Db, account: z.infer<typeof Account>, repo: string, no: numb
   return row.id
 }
 
-function file(db: Db, target: number): number {
+function file(db: Db, target: number, url: string): number {
   const pipe = db.prepare("SELECT id FROM pipes WHERE name = 'pr-path'").get() as { id: number } | undefined
   if (pipe === undefined) throw new Error('no pipe "pr-path"; cf pipe on pr-path')
   const made = db.prepare(`INSERT INTO plans (pipe_id, target_id, template, state, queued_at, step, retries, priority)
     VALUES (?, ?, 'pr_path', 'done', ?, ?, 0, ?)`)
     .run(pipe.id, target, new Date().toISOString(), PUSHED_STEP, templatePriority(db, 'pr_path'))
-  return Number(made.lastInsertRowid)
+  const id = Number(made.lastInsertRowid)
+  logged(db, { plan: id, kind: 'filed', actor: 'cf adopt', outcome: 'pass', message: url, pointer: null, run: null })
+  return id
 }
 
 export function render(row: Adopted): string {

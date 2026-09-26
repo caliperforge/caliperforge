@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { put } from '../sequencer/workspace.ts'
+import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { templatePriority } from '../store/lanes.ts'
 import { claimed, implemented, issue as readIssue, lastMerger, type Issue } from './gh.ts'
@@ -70,7 +71,7 @@ export function add(db: Db, root: string, repo: string, url: string, pipe: strin
   const origin = shipped !== null ? IMPLEMENTED : null
   const target = upsert(db, pulse, repo, no, part, merger ?? '', state, url, ruling(db, origin, state))
   if (why !== null) return { target, plan: null, state, why, origin }
-  const plan = planFor(db, pipe, target)
+  const plan = planFor(db, pipe, target, url)
   put(root, plan, 'ask.md', askOf(row, scope.card))
   if (scope.pr !== undefined) put(root, plan, 'pr.md', scope.pr)
   return { target, plan, state, why: `${repo}#${String(no)}${part === '' ? '' : ` ${part}`} queued`, origin }
@@ -112,7 +113,7 @@ function upsert(db: Db, pulse: z.infer<typeof Account>, repo: string, no: number
   return row.id
 }
 
-function planFor(db: Db, pipe: string, target: number): number {
+function planFor(db: Db, pipe: string, target: number, url: string): number {
   const row = db.prepare('SELECT id FROM pipes WHERE name = ?').get(pipe) as { id: number } | undefined
   if (row === undefined) throw new Error(`no pipe "${pipe}"; cf pipe on ${pipe}`)
   const open = db.prepare("SELECT id FROM plans WHERE target_id = ? AND state IN ('queued', 'running')").get(target) as { id: number } | undefined
@@ -120,5 +121,7 @@ function planFor(db: Db, pipe: string, target: number): number {
   const made = db.prepare(`INSERT INTO plans (pipe_id, target_id, template, state, queued_at, step, retries, priority)
     VALUES (?, ?, 'pr_path', 'queued', ?, 0, 0, ?)`)
     .run(row.id, target, new Date().toISOString(), templatePriority(db, 'pr_path'))
-  return Number(made.lastInsertRowid)
+  const id = Number(made.lastInsertRowid)
+  logged(db, { plan: id, kind: 'filed', actor: 'cf queue add', outcome: 'pass', message: url, pointer: null, run: null })
+  return id
 }

@@ -1,3 +1,4 @@
+import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { internal, originIssue, PlanRow } from '../store/plans.ts'
 import type { Part } from './brief.ts'
@@ -92,6 +93,7 @@ function queue(db: Db, root: string, parent: PlanRow, n: number): number | null 
     VALUES (?, ?, 'queued', ?, 0, 0, ?, ?, ?, ?)`)
     .run(parent.pipe_id, parent.template, new Date().toISOString(), parent.priority, parent.lane, parent.seat, row.url)
   const id = Number(made.lastInsertRowid)
+  logged(db, { plan: id, kind: 'filed', actor: 'split', outcome: 'pass', message: row.url, pointer: null, run: null })
   db.prepare('UPDATE parts SET plan = ? WHERE parent = ? AND n = ?').run(id, parent.id, n)
   put(root, id, 'ask.md', `# ${row.title}\n\n${row.body}`)
   return id

@@ -353,7 +353,7 @@ cf.command('lap').argument('<plan>', 'a plan the tick leased').requiredOption('-
   .action(async (id: string, options: { from: string; stole?: string }) => {
     process.env.CF_CHECK_SLOTS ??= String(CHECK_SLOTS)
     const fired = await lap(db(), root, claudeAgentSdk, Number(id), Number(options.from),
-      options.stole === undefined ? null : Number(options.stole), CHAIN_MINUTES)
+      options.stole === undefined ? null : Number(options.stole), CHAIN_MINUTES, gh)
     out(`\n${FIRED}${JSON.stringify(fired)}\n`)
   })
 

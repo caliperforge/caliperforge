@@ -96,7 +96,7 @@ function cold(today: string, last: string | null, age: number, loop: boolean): b
 }
 
 /** A maintainer is someone the repo let press merge; a door is one who has pressed it for an outsider. */
-function logins(who: ({ login: string } | null)[]): string[] {
+export function logins(who: ({ login: string } | null)[]): string[] {
   return [...new Set(who.flatMap((w) => (w === null ? [] : [w.login])))]
 }
 
@@ -112,7 +112,7 @@ function days(today: string, at: string): number {
   return Math.max(0, Math.floor((Date.parse(today) - Date.parse(at)) / 86400000))
 }
 
-function p50(ages: number[]): number {
+export function p50(ages: number[]): number {
   const sorted = [...ages].sort((a, b) => a - b)
   return sorted[Math.floor((sorted.length - 1) / 2)] ?? 0
 }

@@ -1,4 +1,5 @@
 import { notify, record as keep, type Event } from '../cli/inbox.ts'
+import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { needsCeo, PlanRow, rewind } from '../store/plans.ts'
 import { clear } from '../store/refusals.ts'
@@ -70,5 +71,8 @@ function comms(db: Db, signal: SignalRow, from: number): Started {
   const target = db.prepare('SELECT target_id FROM plans WHERE id = ?').get(from) as { target_id: number | null }
   const made = db.prepare(`INSERT INTO plans (pipe_id, target_id, template, state, queued_at, step, retries)
     VALUES (?, ?, 'comms', 'queued', ?, 0, 0)`).run(pipe.id, target.target_id, new Date().toISOString())
-  return { signal: signal.id, template: 'comms', plan: Number(made.lastInsertRowid), step: 0 }
+  const plan = Number(made.lastInsertRowid)
+  logged(db, { plan, kind: 'filed', actor: 'merge signal', outcome: 'pass', message: `${signal.repo}#${String(signal.pr)}`,
+    pointer: null, run: null })
+  return { signal: signal.id, template: 'comms', plan, step: 0 }
 }

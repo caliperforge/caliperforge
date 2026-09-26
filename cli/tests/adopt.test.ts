@@ -117,6 +117,8 @@ test('adopting the same pull request twice is one plan row, and the second call 
   expect(again.fresh).toBe(false)
   expect(rows(db, 'SELECT count(*) AS n FROM plans')).toEqual([{ n: 1 }])
   expect(rows(db, 'SELECT count(*) AS n FROM targets')).toEqual([{ n: 1 }])
+  expect(rows(db, "SELECT plan, actor, message FROM events WHERE kind = 'filed'"))
+    .toEqual([{ plan: first.plan, actor: 'cf adopt', message: URL }])
   expect(render(again)).toContain('already watched')
 })
 

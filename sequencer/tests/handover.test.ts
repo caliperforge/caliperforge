@@ -5,7 +5,12 @@ import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { handover } from '../handover.ts'
 
-function repo(files: Record<string, string>): { dir: string; base: string; write: (p: string, b: string) => void } {
+function repo(files: Record<string, string>): {
+  dir: string
+  base: string
+  write: (p: string, b: string) => void
+  run: (...args: string[]) => string
+} {
   const dir = mkdtempSync(join(tmpdir(), 'cf-handover-'))
   const run = (...args: string[]): string => execFileSync('git', args, { cwd: dir, encoding: 'utf8' })
   const write = (path: string, body: string): void => {
@@ -16,20 +21,45 @@ function repo(files: Record<string, string>): { dir: string; base: string; write
   for (const [path, body] of Object.entries(files)) write(path, body)
   run('add', '-A')
   run('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'base')
-  return { dir, base: run('rev-parse', 'HEAD').trim(), write }
+  return { dir, base: run('rev-parse', 'HEAD').trim(), write, run }
 }
 
 const pad = (n: number): string => [...Array(n).keys()].map((i) => `    let x${String(i)} = ${String(i)};`).join('\n')
 
 const RUST = `// Verifies a payment challenge.\npub fn verify(c: &Challenge) -> bool {\n${pad(40)}\n    c.amount > 0\n}\n`
 
+const TS = `// Verifies a payment challenge.\nexport function verify(c: Challenge): boolean {\n${pad(40)}\n  return c.amount > 0\n}\n`
+
+const KT = `fun verify(c: Challenge): Boolean {\n${pad(40)}\n    return c.amount > 0\n}\n`
+
 test('context', () => {
-  const r = repo({ 'rust/src/verify.rs': RUST, 'rust/src/lib.rs': '//! pay-kit core\npub mod verify;\n' })
-  r.write('rust/src/verify.rs', RUST.replace('c.amount > 0', 'c.amount > 0 && !c.expired()'))
+  const r = repo({ 'src/verify.ts': TS, 'src/index.ts': 'export * from \'./verify.ts\'\n' })
+  r.write('src/verify.ts', TS.replace('c.amount > 0', 'c.amount > 0 && !c.expired()'))
   const { context } = handover(r.dir, r.base)
-  expect(context).toContain('pub fn verify(c: &Challenge) -> bool {')
+  expect(context).toContain('export function verify(c: Challenge): boolean {')
   expect(context).toContain('let x0 = 0;')
-  expect(context).toContain('+    c.amount > 0 && !c.expired()')
+  expect(context).toContain('+  return c.amount > 0 && !c.expired()')
+})
+
+test('kotlin', () => {
+  const r = repo({ 'src/Verify.kt': KT })
+  r.write('src/Verify.kt', KT.replace('c.amount > 0', 'c.amount > 0 && !c.expired()'))
+  const { context } = handover(r.dir, r.base)
+  expect(context).toContain('+    return c.amount > 0 && !c.expired()')
+  expect(context).not.toContain('let x0 = 0;')
+})
+
+test('new and renamed', () => {
+  const r = repo({ 'ios/Pay.swift': 'func pay() -> Bool {\n    return true\n}\n' })
+  r.run('mv', 'ios/Pay.swift', 'ios/Checkout.swift')
+  r.write('ios/Checkout.swift', 'func pay() -> Bool {\n    return false\n}\n')
+  r.write('android/Verify.kt', KT)
+  r.run('add', '-N', 'android/Verify.kt')
+  const { context } = handover(r.dir, r.base)
+  expect(context).toContain('ios/Checkout.swift')
+  expect(context).toContain('+    return false')
+  expect(context).toContain('android/Verify.kt')
+  expect(context).toContain('+fun verify(c: Challenge): Boolean {')
 })
 
 test('map', () => {

@@ -12,14 +12,15 @@ import { approved as settle, built, gated, ready as readyRow, type Made, type Pr
 import { building, filesOf, record as recordFiles, sharing, strays as recordStrays } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
 import { BUILT, builderRan, internal, originIssue, stampHead, type PlanRow, type Wait } from '../store/plans.ts'
+import { graded } from '../store/signals.ts'
 import { at, type Step } from '../templates/pr-path.ts'
 import { writable } from './brief.ts'
 import type { Outcome } from './kind.ts'
 import { preReview } from './rails.ts'
-import { forkCi, headOf, land, opened, push, reviewable, title, type Wire } from './push.ts'
+import { forkCi, headOf, holding, land, opened, push, reviewable, title, type Wire } from './push.ts'
 import { following } from './split.ts'
-import { abortMerge, behindMain, cloned, conflicted, diffOf, diffSince, fetchMain, get, holds, maybe, merging, mergeMain, narrowing, put, recut, srcDir,
-  unmerged } from './workspace.ts'
+import { abortMerge, behindMain, cloned, conflicted, diffOf, diffSince, fetchMain, FORK, get, holds, maybe, merging, mergeMain, narrowing, put, recut,
+  repoName, srcDir, unmerged } from './workspace.ts'
 import { classify } from './delta.ts'
 import { homeOf } from './home.ts'
 
@@ -127,9 +128,29 @@ function readyGate(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
   if (!cloned(srcDir(root, plan.id))) return { outcome: 'refuse', spans: ['checkout'], note: `plan ${String(plan.id)} has no checkout to send` }
   const waiting = forkCi(db, root, plan, repo, wire)
   if (waiting !== null) return waiting
+  const bot = internal(plan) ? '' : greptile(db, root, plan, repo)
+  if (typeof bot !== 'string') return bot
   const verdict = readyRail(proofOf(db, root, plan, repo, row))
   recordRail(db, join(root, 'rails/ready'), plan.id, verdict, 0)
-  return { outcome: verdict.outcome, spans: verdict.spans, note: `ready: ${verdict.message}` }
+  return { outcome: verdict.outcome, spans: verdict.spans, note: `ready: ${verdict.message}${bot}` }
+}
+
+/** Ticks an outside head waits for Greptile's score before ready goes on without one. */
+export const GRADING = 45
+
+/** Nothing leaves our fork below 4/5 from Greptile at this head. */
+function greptile(db: Db, root: string, plan: PlanRow, repo: string): Outcome | string {
+  const sha = headOf(root, plan.id).sha
+  const at = `${FORK}/${repoName(repo)}@${sha.slice(0, 12)}`
+  const row = graded(db, plan.id, sha)
+  if (row === null) {
+    return holding(root, plan.id, sha, ['greptile.missing'], `${at} has no Greptile score yet`, GRADING, 'greptile.waits')
+      ?? `; Greptile gave no score in ${String(GRADING)} ticks`
+  }
+  const score = row.score ?? 0
+  if (score >= 4) return ''
+  return { outcome: 'refuse', spans: [`greptile:${String(score)}/5`], message: row.body ?? '', to: 2,
+    note: `Greptile scored ${at} ${String(score)}/5; back to the builder with its findings` }
 }
 
 /**
@@ -436,9 +457,9 @@ function proof(db: Db, plan: PlanRow): Proven {
 
 /** A low bot score a later build has answered no longer holds the plan; the bot scores the new head once it is pushed. */
 export function unanswered(db: Db, plan: number): unknown {
-  return db.prepare(`SELECT 1 FROM signals s WHERE s.plan = ? AND s.kind = 'bot_review' AND s.score < 5
+  return db.prepare(`SELECT 1 FROM signals s WHERE s.plan = ? AND s.kind = 'bot_review' AND s.score < 5 AND s.repo NOT GLOB ?
     AND julianday(s.at) > coalesce((SELECT max(julianday(r.at)) FROM runs r WHERE r.plan = ? AND r.step = 2 AND r.${BUILT}), 0)`)
-    .get(plan, plan)
+    .get(plan, `${FORK}/*`, plan)
 }
 
 function passed(db: Db, plan: number, column: 'gate' | 'rail_id', value: string): boolean {

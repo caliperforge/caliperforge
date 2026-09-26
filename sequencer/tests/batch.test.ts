@@ -18,7 +18,7 @@ import { unanswered } from '../steps.ts'
 import { unread } from '../../cli/inbox.ts'
 import { put, srcDir } from '../workspace.ts'
 import { tick } from '../index.ts'
-import { approve, CARRIED, plan, PR as URL, stub, watched, world, type World } from './world.ts'
+import { approve, CARRIED, plan, PR as URL, SEEDED, stub, watched, world, type World } from './world.ts'
 
 const TRANSCRIPT = [
   'RULING push.digest = approval_matches_head_and_the_hook',
@@ -126,7 +126,7 @@ test('the tick records every comment, review, bot review and merge on our open p
   })
   expect(capture(w.db, () => view).map((s) => s.kind)).toEqual(['comment', 'bot_review', 'ci_red'])
   expect(capture(w.db, () => view)).toEqual([])
-  expect(w.db.prepare('SELECT kind, author, score, pr, plan FROM signals ORDER BY id').all()).toEqual([
+  expect(w.db.prepare('SELECT kind, author, score, pr, plan FROM signals WHERE author != ? ORDER BY id').all(SEEDED)).toEqual([
     { kind: 'comment', author: 'maintainer', score: null, pr: 7, plan: 1 },
     { kind: 'bot_review', author: 'greptile-apps[bot]', score: 4, pr: 7, plan: 1 },
     { kind: 'ci_red', author: 'ci', score: null, pr: 7, plan: 1 },
@@ -156,7 +156,7 @@ test('a Greptile summary is stored with the head it reviewed; one in the older f
     { id: 'g2', author: { login: 'greptile-apps' }, body: 'Confidence Score: 4/5', createdAt: at },
   ] })
   expect(capture(w.db, () => view).map((s) => s.external_id)).toEqual(['g1'])
-  expect(w.db.prepare('SELECT external_id, score, head FROM signals').all()).toEqual([{ external_id: 'g1', score: 4, head: SHA }])
+  expect(w.db.prepare('SELECT external_id, score, head FROM signals WHERE author != ?').all(SEEDED)).toEqual([{ external_id: 'g1', score: 4, head: SHA }])
 })
 
 test('what we said on our own pull request is not a signal; their words and the review state are kept', async () => {
@@ -255,7 +255,7 @@ const listing = (heads: string[]) => (args: string[]): unknown => {
 test('only the bot review on the rehearsal is kept, on the plan, and a merge upstream takes no escape from it', async () => {
   const w = await pushed()
   expect(capture(w.db, forked, w.root, listing([]))).toEqual([])
-  expect(w.db.prepare('SELECT repo, pr, kind, score, head, plan FROM signals').all())
+  expect(w.db.prepare('SELECT repo, pr, kind, score, head, plan FROM signals WHERE author != ?').all(SEEDED))
     .toEqual([{ repo: 'caliperforge/widget', pr: 3, kind: 'bot_review', score: 4, head: SHA, plan: 1 }])
   capture(w.db, () => pr({ mergedAt: '2026-09-18T09:00:00Z', mergedBy: { login: 'maintainer' } }))
   expect(w.db.prepare('SELECT count(*) AS n FROM dispositions').get()).toEqual({ n: 0 })
@@ -340,6 +340,16 @@ test('answered bot score stops holding', async () => {
   expect(unanswered(w.db, 1)).toBeDefined()
   build('2999-01-01 00:00:00')
   expect(unanswered(w.db, 1)).toBeUndefined()
+})
+
+test('D5 a rehearsal score on our fork leaves unanswered alone; one below 5 upstream still holds', async () => {
+  const w = await pushed()
+  const bot = (repo: string, score: number): void => void w.db.prepare(`INSERT INTO signals (repo, pr, kind, author, at, external_id, score, plan)
+    VALUES (?, 7, 'bot_review', 'greptile', ?, ?, ?, 1)`).run(repo, new Date(Date.now() + 1000).toISOString(), repo, score)
+  bot('caliperforge/widget', 4)
+  expect(unanswered(w.db, 1)).toBeUndefined()
+  bot('acme/widget', 4)
+  expect(unanswered(w.db, 1)).toBeDefined()
 })
 
 test('session close writes typed proposals and nothing else, and approval turns a ruling into a row', async () => {

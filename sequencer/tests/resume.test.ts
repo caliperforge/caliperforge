@@ -28,7 +28,7 @@ test('held mid-lap: tree kept, lands after unhold', async () => {
   await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
   expect(cloned(src(w))).toBe(true)
   expect(plan(w.db, ID).state).toBe('blocked_on_ceo')
-  unhold(w.db, w.root, ID)
+  unhold(w.db, w.root, ID, 'ceo')
   for (let at = 0; at < 8 && plan(w.db, ID).state !== 'done'; at += 1) {
     await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
   }
@@ -42,7 +42,7 @@ test('held at the brief: back on the main that moved', async () => {
   await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
   hold(w.db, w.root, ID, 'waits on another job', new Date())
   moveMain(w.root, 'landed-meanwhile.ts')
-  unhold(w.db, w.root, ID)
+  unhold(w.db, w.root, ID, 'ceo')
   expect(existsSync(src(w))).toBe(false)
   await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
   expect(existsSync(join(src(w), 'landed-meanwhile.ts'))).toBe(true)

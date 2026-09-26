@@ -437,7 +437,8 @@ export function follow(root: string, plan: number, name: string): void {
   const dir = srcDir(root, plan)
   const branch = git(dir, ['rev-parse', '--abbrev-ref', 'HEAD']).trim()
   const shown = `refs/remotes/origin/${branch}`
-  const message = `${kindOf(title(root, plan))}: address review`
+  const summary = clean(/^summary:[ \t]*(.*)$/m.exec(maybe(root, plan, 'step-2.handback.md') ?? '')?.[1] ?? '')
+  const message = `${kindOf(title(root, plan))}: ${summary === '' ? 'address review' : summary}`
   git(dir, ['add', '-A', '--', '.'])
   const own = published(dir, branch, shown)
   const next = `refs/remotes/origin/${name}`
@@ -477,9 +478,10 @@ function kindOf(title: string): string {
   return /^([a-z]+(?:\([^)]*\))?)!?:/.exec(title)?.[1] ?? 'fix'
 }
 
+const clean = (s: string): string => s.replace(/#\d+/g, '').replace(/\s+/g, ' ').trim()
+
 /** Subject and body with no upstream number: the ci-green rail refuses a branch whose commits name one. */
 function messageOf(root: string, plan: number): string {
-  const clean = (s: string): string => s.replace(/#\d+/g, '').replace(/\s+/g, ' ').trim()
   const subject = clean(title(root, plan))
   const body = said(maybe(root, plan, 'issue.md') ?? '').map(clean).join('\n\n')
   return body === '' ? subject : `${subject}\n\n${body}`

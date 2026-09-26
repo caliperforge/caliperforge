@@ -76,6 +76,7 @@ test('an issue with no lane label is refused, naming every label that would sett
   expect(filed.origin).toEqual({ origin_kind: 'ruling', origin_ref: 'plan.lane_label' })
   expect(db.prepare('SELECT subject FROM rulings WHERE id = ?').get(filed.ruling)).toEqual({ subject: 'plan.lane_label' })
   expect(db.prepare('SELECT count(*) AS n FROM plans').get()).toEqual({ n: 0 })
+  expect(db.prepare('SELECT count(*) AS n FROM events').get()).toEqual({ n: 0 })
 })
 
 test('the P label on the issue is the priority it files at, and two of them file nothing', () => {
@@ -100,6 +101,8 @@ test('the same issue twice is one row, and the second call returns the first pla
   const again = add(db, root, 'caliperforge/caliperforge#25', 'internal', canned([ISSUE]))
   expect(again.plan).toBe(first.plan)
   expect(db.prepare('SELECT count(*) AS n FROM plans WHERE origin = ?').get(URL)).toEqual({ n: 1 })
+  expect(db.prepare('SELECT plan, kind, actor, outcome, message FROM events').all())
+    .toEqual([{ plan: first.plan, kind: 'filed', actor: 'cf plan add', outcome: 'pass', message: URL }])
 })
 
 test('the schema, not the code, is what holds one plan per issue', () => {

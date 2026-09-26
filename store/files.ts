@@ -1,4 +1,5 @@
 import type { Db } from './index.ts'
+import { BUILT } from './plans.ts'
 
 export interface PlanFile {
   path: string
@@ -43,7 +44,7 @@ export function sharing(db: Db, plan: number): { plan: number; path: string } | 
     JOIN plans o ON o.id = f.plan
     WHERE me.id = ? AND o.state IN ('queued', 'running') AND o.step >= 2
       AND ${REPO.replace('%s', 'o')} = ${REPO.replace('%s', 'me')}
-      AND (o.id < me.id OR EXISTS (SELECT 1 FROM runs r WHERE r.plan = o.id AND r.step >= 2))
+      AND (o.id < me.id OR EXISTS (SELECT 1 FROM runs r WHERE r.plan = o.id AND r.step >= 2 AND r.${BUILT}))
     ORDER BY o.id LIMIT 1`).get(plan) ?? null) as { plan: number; path: string } | null
 }
 
@@ -59,6 +60,6 @@ export function building(db: Db, plan: number, paths: string[]): { plan: number;
     WHERE me.id = ? AND f.path IN (SELECT value FROM json_each(?))
       AND o.state IN ('queued', 'running') AND o.step >= 2
       AND ${REPO.replace('%s', 'o')} = ${REPO.replace('%s', 'me')}
-      AND EXISTS (SELECT 1 FROM runs r WHERE r.plan = o.id AND r.step >= 2)
+      AND EXISTS (SELECT 1 FROM runs r WHERE r.plan = o.id AND r.step >= 2 AND r.${BUILT})
     ORDER BY o.id LIMIT 1`).get(plan, JSON.stringify(paths)) ?? null) as { plan: number; path: string } | null
 }

@@ -15,7 +15,7 @@ import { GREEN } from '../base.ts'
 import { record } from '../../store/files.ts'
 import { benchPacket } from '../../runner/packet.ts'
 import type { Packet, Provider } from '../../providers/kind.ts'
-import type { Wire } from '../push.ts'
+import { forkCi, type Wire } from '../push.ts'
 import { approve, builds, built, CARRIED, dropping, internalPlan, KOTLIN, ours, owning, PASS, plan, REFUSE, rerunning, RUN, runsAfter, runsOn, stub, watched, WORDS, world, type World } from './world.ts'
 
 const head = (cwd: string, args: string[]): string => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim()
@@ -576,6 +576,11 @@ test('a run still going is waited on past the first-run window', async () => {
   expect(last?.note).toMatch(/is still running CI, tick 11 of 45/)
   expect(w.db.prepare("SELECT count(*) AS n FROM verdicts WHERE plan = 1 AND rail_id = 'ci-green'").get())
     .toEqual({ n: 0 })
+  const now = (): unknown[] => w.db.prepare('SELECT doing, detail FROM now WHERE plan = 1').all()
+  expect(forkCi(w.db, w.root, plan(w.db, 1), 'acme/widget', watched([], w.root, 1))).toBeNull()
+  expect(now()).toEqual([])
+  forkCi(w.db, w.root, plan(w.db, 1), 'acme/widget', wire)
+  expect(now()).toEqual([{ doing: 'waiting on CI', detail: expect.stringMatching(/is still running CI, tick \d+ of 45$/) as unknown }])
 })
 
 test('the push window is waited out: no run at the new head holds step 6, the run that appears is judged', async () => {

@@ -46,6 +46,7 @@ export const Bench = z.object({
   tree: z.string().optional(),
   context: z.string().optional(),
   map: z.string().optional(),
+  symbols: z.string().optional(),
   checks: z.string().optional(),
   verdict: z.string().optional(),
   bot: z.string().optional(),
@@ -102,11 +103,14 @@ export function benchPacket(
 
 const MAP = 'The whole diff, for the map. Judge what changed since your last verdict, handed below.'
 
+export const SYMBOLS_LEAD = 'Each top-level export at the branch base, as path:line name.'
+
 export function assembled(root: string, name: string, manifest: Review, bench: Bench, transcript: string): Packet {
   const sections: [string, string | undefined][] = [
     ['Changed code in context', framed(bench.context, 'Each hunk inside the function that encloses it. Judge from this and the diff; open a file only for what neither holds.')],
     ['Checks', bench.checks],
     ['Files around the change', framed(bench.map, 'Every file in each touched directory, its length and its head comment; * marks a changed file.')],
+    ['Symbols at the branch base', framed(bench.symbols, SYMBOLS_LEAD)],
     ['Reference the brief names', bench.reference],
     ['First verdict', bench.verdict],
     ['Greptile on this head', bench.bot],

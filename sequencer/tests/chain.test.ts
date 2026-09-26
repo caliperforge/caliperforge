@@ -90,22 +90,27 @@ test('waits on every workflow, judges only its own', async () => {
   ])
 })
 
-test('a second round before any PR goes out on the next branch', async () => {
+test('three rounds before any PR go out on one branch, each a plain push', async () => {
   const w = ready()
-  await tick(w.db, w.root, stub(CARRIED, 0, undefined, writes), undefined, undefined, watched([], w.root, 1), 5)
   const src = srcDir(w.root, 1)
-  execFileSync('git', ['push', '-q', 'origin', 'widget-12-a1'], { cwd: src })
-  rewind(w.db, 1, 2)
-  const again = (packet: Packet): void => {
-    if (packet.tools.includes('Write')) writeFileSync(join(packet.cwd, 'src/hello.ts'), 'export const hello = (): string => "hello"\n')
-  }
   const sent: string[] = []
-  await tick(w.db, w.root, stub(CARRIED, 0, undefined, again), undefined, undefined, watched(sent, w.root, 1), 5)
-  expect(plan(w.db, 1).step).toBe(7)
-  expect(sent).toEqual(['unrehearse caliperforge/widget widget-12-a1', 'send src widget-12-a2', 'rehearse caliperforge/widget widget-12-a2',
-    'send src widget-12-a2'])
-  const count = execFileSync('git', ['rev-list', '--count', 'refs/remotes/upstream/main..HEAD'], { cwd: src, encoding: 'utf8' })
-  expect(count.trim()).toBe('1')
+  const log = watched(sent, w.root, 1)
+  const wire = { ...log, send: (dir: string, ref: string) => {
+    log.send(dir, ref)
+    execFileSync('git', ['push', '-q', 'origin', ref], { cwd: dir })
+  } }
+  for (const [at, said] of ['hey', 'hello', 'hi'].entries()) {
+    if (at > 0) rewind(w.db, 1, 2)
+    const round = (packet: Packet): void => {
+      if (packet.tools.includes('Write')) writeFileSync(join(packet.cwd, 'src/hello.ts'), `export const hello = (): string => "${said}"\n`)
+    }
+    await tick(w.db, w.root, stub(CARRIED, 0, undefined, round), undefined, undefined, wire, 5)
+    expect(plan(w.db, 1).step).toBe(7)
+  }
+  expect(sent.filter((l) => !l.startsWith('send '))).toEqual(['rehearse caliperforge/widget widget-12-a1'])
+  expect(new Set(sent.filter((l) => l.startsWith('send ')))).toEqual(new Set(['send src widget-12-a1']))
+  const git = (args: string[]): string => execFileSync('git', args, { cwd: src, encoding: 'utf8' }).trim()
+  expect(git(['ls-remote', 'origin', 'refs/heads/widget-12-a1']).split('\t')[0]).toBe(git(['rev-parse', 'HEAD']))
 })
 
 test('Tight reads the PR text the card set, and never the handback', async () => {

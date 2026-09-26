@@ -36,6 +36,7 @@ test('on a stranger\'s repo the builder is the outside seat and may write only t
   for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED, 0, PASS, (p) => packets.push(p)))
   const builder = packets.find((p) => p.tools.includes('Write'))
   expect(builder?.prompt).toContain('# outside_specialist')
+  expect(builder?.prompt).toContain('# Symbols at the branch base\n\nEach top-level export at the branch base, as path:line name.\n\nsrc/hello.ts:1 hello\n')
   const src = realpathSync(srcDir(w.root, 1))
   expect(builder?.cwd).toBe(srcDir(w.root, 1))
   expect(builder?.refuse(join(src, 'src/hello.ts'))).toBeNull()
@@ -261,6 +262,22 @@ test('outside reviewer gets context and map; ours does not', async () => {
   expect(prompt).toContain('# Files around the change')
   expect(prompt.indexOf('# Changed code in context')).toBeGreaterThan(prompt.indexOf('# Diff'))
   expect(prompt).not.toContain('# Checks')
+  expect(prompt).toContain('# Symbols at the branch base\n\nEach top-level export at the branch base, as path:line name.\n\nsrc/hello.ts:1 hello\n')
+  expect(prompt.indexOf('# Symbols at the branch base')).toBeGreaterThan(prompt.indexOf('# Files around the change'))
+})
+
+test('D3 our own plan hands no symbol map to the builder or the reviewer, and builds none', async () => {
+  const w = world()
+  w.db.prepare('DELETE FROM plans WHERE id = 1').run()
+  ours(w.root)
+  internalPlan(w.db, w.root, MINE)
+  const seen: Packet[] = []
+  for (let step = 0; step < 2; step += 1) await tick(w.db, w.root, stub(CARRIED))
+  built(w.root, MINE, FOUR)
+  for (let step = 0; step < 3; step += 1) await tick(w.db, w.root, stub(CARRIED, 0, PASS, (p) => seen.push(p)))
+  expect(plan(w.db, MINE).step).toBe(5)
+  expect(seen.map((p) => p.prompt.includes('# Symbols at the branch base'))).toEqual([false, false])
+  expect(existsSync(join(w.root, '.cf/maps'))).toBe(false)
 })
 
 test('a reviewer gets its own last verdict, the diff since the tree it judged and what did not move, neither on its first', async () => {

@@ -14,7 +14,7 @@ import { builderRan, internal, type PlanRow } from '../store/plans.ts'
 import { byRun, pending } from '../store/transcript.ts'
 import type { Step } from '../templates/pr-path.ts'
 import { parse } from '../rails/diff.ts'
-import { pointed, shape, split, TEMPLATE, unclear, wide, WIDE, type Part } from './brief.ts'
+import { pointed, references, shape, split, TEMPLATE, unclear, wide, WIDE, type Part } from './brief.ts'
 import { handout, touched, type Handed } from './handout.ts'
 import { enclosed, handover, type Handover } from './handover.ts'
 import { install, mode } from './checks.ts'
@@ -24,7 +24,7 @@ import { deletions } from './fence.ts'
 import { fenceFor, languageFor } from './route.ts'
 import { gates, outsideLanguage } from './gates.ts'
 import type { Outcome } from './kind.ts'
-import { carried, cloned, diffOf, diffSince, drop, get, holds, maybe, move, narrowing, planDir, put, snapshot, srcDir } from './workspace.ts'
+import { carried, cloned, diffOf, diffSince, drop, get, headSha, holds, maybe, move, narrowing, planDir, put, snapshot, srcDir } from './workspace.ts'
 import { kernelPlan } from './home.ts'
 
 const INSERT = `INSERT INTO runs
@@ -238,14 +238,17 @@ export async function fireReview(db: Db, root: string, plan: PlanRow, step: Step
   loadReviews(db, root)
   const manifest = reviewManifest(root, step.runs)
   const src = srcDir(root, plan.id)
+  const issue = get(root, plan.id, 'issue.md')
   const input: Bench = {
     repo: src,
-    issue: get(root, plan.id, 'issue.md'),
+    issue,
     diff: diffOf(root, plan.id),
     ...(cloned(src) ? { tree: snapshot(src) } : {}),
     ...outside(root, plan, src),
+    ...(manifest.gate === 'senior_review' ? referenced(src, issue) : {}),
     ...checked(db, plan, src, diffOf(root, plan.id)),
     ...(manifest.reads_verdict ? { verdict: priorVerdict(root, plan.id) } : {}),
+    ...(manifest.gate === 'senior_review' && cloned(src) ? greptile(db, plan.id, headSha(src)) : {}),
     ...rounds(db, root, plan.id, step.step),
   }
   try {
@@ -269,6 +272,11 @@ function outside(root: string, plan: PlanRow, src: string): Handover {
   return internal(plan) || base === null || !cloned(src) ? {} : handover(src, base.trim())
 }
 
+function referenced(src: string, issue: string): Pick<Bench, 'reference'> {
+  const text = handout(src, references(issue))
+  return text === '' ? {} : { reference: text }
+}
+
 /**
  * #86. Step 3 already ran the checkout's own checks on this diff; the reviewer is told so rather than
  * reasoning its way to it. #204: on a stranger's repo, once step 3 ran its language's gates. Read off the rail's row, never re-run, and only while the diff is the one it judged.
@@ -285,6 +293,12 @@ export function checked(db: Db, plan: PlanRow, src: string, diff: string): { che
   }
   const scope = narrow(db, plan).length > 0 ? 'the tests this plan\'s files reach' : 'the whole suite'
   return { checks: `Passed on this diff: every script the checkout names exits zero (${mode(src)}, ${scope}). Do not re-derive what they settle.` }
+}
+
+function greptile(db: Db, plan: number, head: string): Pick<Bench, 'bot'> {
+  const row = db.prepare(`SELECT body FROM signals WHERE plan = ? AND kind = 'bot_review' AND head = ? AND body IS NOT NULL
+    ORDER BY id DESC LIMIT 1`).get(plan, head) as { body: string } | undefined
+  return row === undefined ? {} : { bot: row.body }
 }
 
 /** From a reviewer's second round on: the verdict it wrote last round, the refusal that sent the build back, and what the tree did since the one it judged. */

@@ -27,6 +27,14 @@ const another = (w: World, id: number, pipe: number, step: number): World => {
   return w
 }
 
+const behind = (step: number) => (): World => {
+  const w = stepTo(world(), 1, step)
+  w.db.prepare('UPDATE pipes SET max_concurrent = 1 WHERE id = 1').run()
+  w.db.prepare(`INSERT INTO plans (id, pipe_id, target_id, template, state, queued_at, step, retries)
+    VALUES (2, 1, 1, 'pr_path', 'queued', '2026-09-18T00:00:00.000Z', 0, 0)`).run()
+  return w
+}
+
 const leased = (): World => {
   const w = world()
   take(w.db, 1, NOW)
@@ -65,6 +73,15 @@ const TABLE: Record<string, Row> = {
       return w
     },
     want: { wait: 'over_cap', on: null },
+  },
+  'a queued plan behind a running one awaiting target approval in a one-wide lane': {
+    state: behind(1), id: 2, want: { fire: at(0) },
+  },
+  'a queued plan behind a running one awaiting sign-off in a one-wide lane': {
+    state: behind(7), id: 2, want: { fire: at(0) },
+  },
+  'a queued plan behind a running one awaiting its ready proof in a one-wide lane': {
+    state: behind(6), id: 2, want: { wait: 'lane_over_cap', on: null },
   },
   'a plan on a second lane at cap 1': {
     state: () => {

@@ -100,9 +100,11 @@ export function underCap(pipe: PipeRow, plans: PlanRow[], leased = new Set<numbe
   return out
 }
 
+export const BUILT = "seat NOT IN ('fixer', 'orchestrator')"
+
 /** Whether a builder has ever run on this plan: a rewind onto step 1 finds the ticket it was built against, not a fresh one. */
 export function builderRan(db: Db, plan: number): boolean {
-  return db.prepare('SELECT 1 FROM runs WHERE plan = ? AND step >= 2').get(plan) !== undefined
+  return db.prepare(`SELECT 1 FROM runs WHERE plan = ? AND step >= 2 AND ${BUILT}`).get(plan) !== undefined
 }
 
 /** #140: a plan the tick stepped carries no reason; one it passed over carries why, from the list the store checks. */

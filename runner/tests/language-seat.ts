@@ -52,6 +52,7 @@ function declared(s: LanguageSeat): void {
 
   test('the prompt closes with the handback fence and the rebuild line', () => {
     const prompt = seat(root, s.seat).prompt
+    expect(prompt).toMatch(/^---\nsummary: <the change in one line>\ndone:$/m)
     expect(prompt).toContain('- id: D1')
     expect(prompt).toContain(
       "A rebuild's fence lists every case again: carry forward the rows the refusal did not touch, update the ones it did.",

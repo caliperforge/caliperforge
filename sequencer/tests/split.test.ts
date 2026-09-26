@@ -60,6 +60,7 @@ test('an internal ticket split is filed as parts, the first queued, and the pare
     { n: number; url: string; plan: number | null }[]
   expect(parts.map((p) => [p.n, p.url.split('/').at(-1), p.plan === null])).toEqual([[0, '901', false], [1, '902', true]])
   const first = parts[0]?.plan ?? 0
+  expect(w.db.prepare("SELECT plan, actor FROM events WHERE kind = 'filed'").all()).toEqual([{ plan: first, actor: 'split' }])
   expect(plan(w.db, first)).toMatchObject({ state: 'queued', step: 0, priority: plan(w.db, ID).priority, lane: 'machine',
     origin: 'https://github.com/caliperforge/caliperforge/issues/901' })
   expect(maybe(w.root, first, 'ask.md')).toMatch(/^# 34a: file the parts\n\n\*\*What:\*\* the machine files each part/)
@@ -74,6 +75,7 @@ test('a part landing queues the next; the last one landing closes the parent', a
   expect(following(w.db, w.root, plan(w.db, a), 'a'.repeat(40), watched(log, w.root, a))).toMatch(/^part b queued as plan \d+$/)
   const b = (w.db.prepare('SELECT plan FROM parts WHERE n = 1').get() as { plan: number }).plan
   expect(maybe(w.root, b, 'ask.md')).toContain('After: #901')
+  expect(w.db.prepare("SELECT plan FROM events WHERE kind = 'filed' ORDER BY id").all()).toEqual([{ plan: a }, { plan: b }])
   expect(following(w.db, w.root, plan(w.db, b), 'b'.repeat(40), watched(log, w.root, b))).toBe('the last part landed; #34 closed')
   expect(log.at(-1)).toBe('close caliperforge/caliperforge#34 bbbbbbb')
   expect(following(w.db, w.root, plan(w.db, ID), 'c'.repeat(40), watched(log, w.root, ID))).toBeNull()

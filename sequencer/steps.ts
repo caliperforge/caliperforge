@@ -11,7 +11,7 @@ import { parse } from '../rails/diff.ts'
 import { approved as settle, built, gated, ready as readyRow, type Made, type Proven } from '../store/deliverables.ts'
 import { building, filesOf, record as recordFiles, sharing, strays as recordStrays } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
-import { builderRan, internal, originIssue, stampHead, type PlanRow, type Wait } from '../store/plans.ts'
+import { BUILT, builderRan, internal, originIssue, stampHead, type PlanRow, type Wait } from '../store/plans.ts'
 import { at, type Step } from '../templates/pr-path.ts'
 import { writable } from './brief.ts'
 import type { Outcome } from './kind.ts'
@@ -77,7 +77,7 @@ export function kernel(db: Db, root: string, plan: PlanRow, wire?: Wire, read?: 
 }
 
 function railed(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
-  const judged = preReview(db, root, plan)
+  const judged = preReview(db, root, plan, wire)
   const repo = repoOf(db, plan)
   if (judged.outcome === 'pass' && judged.held !== true && repo !== null) reviewable(db, root, plan, repo, wire)
   return judged
@@ -437,7 +437,7 @@ function proof(db: Db, plan: PlanRow): Proven {
 /** A low bot score a later build has answered no longer holds the plan; the bot scores the new head once it is pushed. */
 export function unanswered(db: Db, plan: number): unknown {
   return db.prepare(`SELECT 1 FROM signals s WHERE s.plan = ? AND s.kind = 'bot_review' AND s.score < 5
-    AND julianday(s.at) > coalesce((SELECT max(julianday(r.at)) FROM runs r WHERE r.plan = ? AND r.step = 2), 0)`)
+    AND julianday(s.at) > coalesce((SELECT max(julianday(r.at)) FROM runs r WHERE r.plan = ? AND r.step = 2 AND r.${BUILT}), 0)`)
     .get(plan, plan)
 }
 

@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { renumbered, strays } from '../fence.ts'
 import { tick } from '../index.ts'
-import { srcDir } from '../workspace.ts'
+import { get, srcDir } from '../workspace.ts'
 import { CARRIED, internalPlan, ours, plan, stub, world, type World } from './world.ts'
 
 const ID = 2
@@ -48,11 +48,16 @@ test('an owned stray passes the rails and goes to review', async () => {
   expect(plan(w.db, ID).step).toBe(4)
 })
 
-test('an unowned stray refuses at the rails, before any review', async () => {
+test('an unowned stray refuses at the rails, before any review, naming its row; the round that writes it passes', async () => {
   const { w, rails } = await stray(CARRIED)
   expect(rails).toMatchObject({ plan: ID, step: 3, name: 'rails', outcome: 'refuse', spans: ['cli/extra.ts:1 authority.outside_files'] })
   expect(w.db.prepare('SELECT 1 FROM runs WHERE plan = ? AND step > 3').all(ID)).toEqual([])
   expect(plan(w.db, ID).step).toBe(2)
+  for (const part of ['cli/extra.ts', '- `cli/extra.ts` — ']) expect(get(w.root, ID, 'refusal.md')).toContain(part)
+  await tick(w.db, w.root, stub(OWNS))
+  writeFileSync(join(srcDir(w.root, ID), 'cli/extra.ts'), 'export const extra = 1\n')
+  expect((await tick(w.db, w.root, stub(OWNS)))[0]).toMatchObject({ plan: ID, step: 3, name: 'rails', outcome: 'pass' })
+  expect(plan(w.db, ID).step).toBe(4)
 })
 
 test('a new migration numbered at or below one the checkout holds', () => {

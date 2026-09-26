@@ -1,0 +1,32 @@
+diff --git a/ruby/lib/pay_kit/config.rb b/ruby/lib/pay_kit/config.rb
+--- a/ruby/lib/pay_kit/config.rb
++++ b/ruby/lib/pay_kit/config.rb
+@@ -10,7 +10,9 @@ module PayKit
+     end
+
+     def debug?
+-      @env.fetch("PAY_KIT_DEBUG", "false") == "true"
++      value = @env.fetch("PAY_KIT_DEBUG", "false").strip.downcase
++      raise ArgumentError, "PAY_KIT_DEBUG must be true or false" unless %w[true false].include?(value)
++      value == "true"
+     end
+
+     def cluster
+@@ -22,7 +24,7 @@ module PayKit
+     end
+
+     def rpc_url
+-      @env["PAY_KIT_RPC_URL"]
++      @env.fetch("PAY_KIT_RPC_URL", nil)&.strip
+     end
+
+     def memo
+@@ -34,7 +36,7 @@ module PayKit
+     end
+
+     def expiry
+-      @env.fetch("PAY_KIT_EXPIRY", DEFAULT_EXPIRY).to_i
++      Integer(@env.fetch("PAY_KIT_EXPIRY", DEFAULT_EXPIRY))
+     end
+   end
+ end

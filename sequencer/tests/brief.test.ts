@@ -7,7 +7,7 @@ import { release, returnToLane } from '../../store/holds.ts'
 import { get } from '../../store/lanes.ts'
 import { retry } from '../../store/plans.ts'
 import { WHY } from '../../store/refusals.ts'
-import { files, shape, split, TEMPLATE, unclear, writable, type Refused } from '../brief.ts'
+import { files, pointed, references, shape, split, TEMPLATE, unclear, writable, type Refused } from '../brief.ts'
 import { tick } from '../index.ts'
 import { blocked } from '../steps.ts'
 import { afresh, drop, maybe, move, put, srcDir, titleOf } from '../workspace.ts'
@@ -333,6 +333,22 @@ test('a plan blocked at step 1 and retried is briefed from the ask alone', async
   expect(shape(briefOf(w), askOf(w), srcDir(w.root, ID))).toBeNull()
 })
 
+test('a plan re-briefed after a retry at step 1 replaces its file list', async () => {
+  const w = mine()
+  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  expect(listed(w)).toEqual([{ path: 'src/hello.ts' }])
+  const first = briefOf(w)
+  w.db.prepare("UPDATE plans SET step = 1, state = 'blocked_on_ceo' WHERE id = ?").run(ID)
+  drop(w.root, ID, 'issue.md')
+  afresh(w.root, ID, retry(w.db, plan(w.db, ID)))
+
+  const second = swap(swap(first, '## Files', ['- src/bye.ts (new)']), '## Tests', ['- src/bye.ts — a call with no name is refused'])
+  const fired = (await tick(w.db, w.root, stub(CARRIED, 0, undefined, undefined, second)))[0]
+  expect(fired).toMatchObject({ step: 1, outcome: 'pass' })
+  expect(fired).not.toMatchObject({ note: 'the brief stands' })
+  expect(listed(w)).toEqual([{ path: 'src/bye.ts' }])
+})
+
 test('a plan queued before the brief seat has its raw issue moved to the ask and is briefed like any other', async () => {
   const w = mine()
   const raw = move(w.root, ID, 'ask.md', 'issue.md')
@@ -450,6 +466,12 @@ test('a Files row naming several paths lists each once', () => {
   ])
 })
 
+test('references are the Must not break lines outside the files the job changes', () => {
+  const brief = ['# t', '', '## Must not break', '', '- empty RPC URL is unset (`python/src/solana_pay_kit/config.py:12`)',
+    '- booleans stay `true`/`false` (`ruby/lib/pay_kit/config.rb:40`)', '', '## Files', '', '- `ruby/lib/pay_kit/config.rb:259`', ''].join('\n')
+  expect(references(brief)).toEqual([{ path: 'python/src/solana_pay_kit/config.py', line: 12 }])
+})
+
 test('a test named only under ## Tests is writable', () => {
   const brief = ['# t', '', '## Files', '', '- `ruby/lib/pay_kit/config.rb:259`', '', '## Tests', '',
     '- `ruby/test/pay_kit/config_test.rb` — D1', '- `ruby/test/pay_kit/config_test.rb` — D2', '', '## Out of scope', ''].join('\n')
@@ -461,6 +483,25 @@ test('a test named only under ## Tests is writable', () => {
 test('a folder row under ## Files is refused', () => {
   expect(on(swap(brief, '## Files', ['- sequencer/brief.ts', '- sequencer/tests/ — the tests'])))
     .toMatchObject({ span: '- sequencer/tests/ — the tests', reason: holding('names no file') })
+})
+
+const PLUS = 'Sources/App/DashboardSource+Runs.swift'
+
+const plus = (row: string): string => ['# t', '', '## Files', '', row, '', '## Out of scope', ''].join('\n')
+
+test('a Files row naming a + path yields that path, backticked or bare', () => {
+  for (const row of [`- \`${PLUS}:27\``, `- ${PLUS}:27 — the WHERE`]) {
+    expect(files(plus(row))).toEqual([{ path: PLUS, is_new: false }])
+  }
+})
+
+test('a backticked + path keeps the line it points at', () => {
+  expect(pointed(plus(`- \`${PLUS}:27\``))).toEqual([{ path: PLUS, line: 27 }])
+})
+
+test('a + path off the tree is refused on the whole path', () => {
+  expect(on(swap(brief, '## Files', [`- \`${PLUS}:27\``])))
+    .toMatchObject({ span: PLUS, reason: holding('not in the checkout') })
 })
 
 test('a brief without ## Settled facts is refused', () => {

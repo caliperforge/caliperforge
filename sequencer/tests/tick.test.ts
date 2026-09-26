@@ -282,7 +282,7 @@ test('a reviewer gets its own last verdict, the diff since the tree it judged an
   expect(prompt).toContain(`# Your last verdict\n\n---\noutcome: refuse\nclass: correctness\nspans:\n  - src/hello.ts:1\n---\n\n${WORDS}`)
   expect(prompt.split('# Changed since your last verdict')[1]).toContain('+export const two = (): number => 2')
   expect(prompt.split('# Paths since your last verdict')[1]).toMatch(
-    new RegExp(`changed since the tree you judged:\n {2}- src/hello\\.ts\n\n`
+    new RegExp(`changed since the tree you judged:\n {2}- MAP\\.md\n {2}- src/hello\\.ts\n\n`
       + `merged from main, not the builder's:\n {2}- none\n\n`
       + `unchanged since you judged it, at the blob it had then:\n {2}- src/parse\\.ts [0-9a-f]{40}`))
   const trees = w.db.prepare('SELECT tree FROM verdicts WHERE plan = ? AND step = 4 ORDER BY id').all(MINE) as { tree: string }[]

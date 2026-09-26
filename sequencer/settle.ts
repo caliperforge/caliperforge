@@ -7,7 +7,7 @@ import type { Db } from '../store/index.ts'
 import type { Taken } from '../store/leases.ts'
 import { busy } from '../store/now.ts'
 import { advance, back, finish, internal, needsCeo, rewind, type PipeRow, type PlanRow, waiting } from '../store/plans.ts'
-import { blipped, refused } from '../store/refusals.ts'
+import { blipped, peer, refused } from '../store/refusals.ts'
 import { at, last, type Step } from '../templates/pr-path.ts'
 import type { Fired, Outcome } from './kind.ts'
 import { parted } from './split.ts'
@@ -172,11 +172,15 @@ function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcom
       return hold(db, plan.id, step.step)
     })()
   }
-  const why = refused(db, { plan: plan.id, step: step.step, fingerprint: fingerprintOf(step, outcome),
+  const r = { plan: plan.id, step: step.step, fingerprint: fingerprintOf(step, outcome),
     diff: step.step >= 3 ? digestOf(diffOf(root, plan.id)) : null, moved: outcome.moved,
-    own: outcome.spans.some((s) => s.startsWith('ratchet:')) || undefined })
+    own: outcome.spans.some((s) => s.startsWith('ratchet:')) || undefined }
+  const why = refused(db, r)
   if (why !== 'again') stopped(root, plan.id, why)
-  if (why === 'shared') db.prepare('UPDATE pipes SET enabled = 0 WHERE id = ?').run(plan.pipe_id)
+  if (why === 'shared') {
+    db.prepare('UPDATE pipes SET enabled = 0 WHERE id = ?').run(plan.pipe_id)
+    outcome.note += `; lane off: plans ${String(plan.id)} and ${String(peer(db, r))} refused on ${outcome.spans.join(', ')}`
+  }
   if (outcome.rewind !== undefined && why === 'again') {
     rewind(db, plan.id, outcome.rewind)
     return 'running'

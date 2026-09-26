@@ -121,8 +121,8 @@ const Part = z.object({ title: z.string().min(1), what: z.string().min(1), why: 
 const LETTERS = 'abcdefghijklmnopqrstuvwxyz'
 
 const Split = z.object({ outcome: z.literal('split'), parts: z.array(Part).min(2) })
-  .refine((v) => v.parts.every((p, i) => p.after === undefined || p.after === 'none' ||
-    (p.after.length === 1 && LETTERS.slice(0, i).includes(p.after))))
+  .refine((v) => v.parts.every((p, i) => p.after === undefined || p.after.toLowerCase() === 'none' ||
+    (p.after.length === 1 && LETTERS.slice(0, i).includes(p.after.toLowerCase()))))
 
 export type Part = z.infer<typeof Part> & { after: string }
 
@@ -150,7 +150,7 @@ export function split(reply: string): Part[] | null {
   if (fence === null) return null
   const parsed = Split.safeParse(yamlOf(fence))
   if (!parsed.success) return null
-  return parsed.data.parts.map((p, i) => ({ ...p, after: p.after ?? (i === 0 ? 'none' : LETTERS.charAt(i - 1)) }))
+  return parsed.data.parts.map((p, i) => ({ ...p, after: p.after?.toLowerCase() ?? (i === 0 ? 'none' : LETTERS.charAt(i - 1)) }))
 }
 
 /** The fence a reply ends with, whether or not the seat wrapped it in a code block (#212: plans 71 and 78). */

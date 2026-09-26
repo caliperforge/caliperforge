@@ -4,6 +4,7 @@ import { add, LANE, LANES, laneOf, seen } from '../cli/plan.ts'
 import type { Db } from '../store/index.ts'
 import { originRef, PlanRow } from '../store/plans.ts'
 import { record, type Signal, type SignalRow } from '../store/signals.ts'
+import { partOf, recordListing } from '../store/tickets.ts'
 import { attribute } from './escapes.ts'
 import { rehearsalBranch } from './push.ts'
 import { claimed } from './split.ts'
@@ -21,7 +22,7 @@ interface Pushed { plan: number; repo: string; evidence: string; rehearsal: bool
 
 type Base = Pick<Signal, 'repo' | 'pr' | 'plan'>
 
-const BOT = /\[bot\]$|greptile/i
+export const BOT = /\[bot\]$|greptile/i
 
 const SCORE = /(\d)\s*\/\s*5/
 
@@ -60,6 +61,7 @@ function listed(db: Db, root: string, repo: string, read: Read): void {
   const found = Listed.parse(read(['issue', 'list', '--repo', repo, '--state', 'open', '--limit', String(WINDOW),
     '--json', 'number,title,body,url,labels']))
   const kept = found.filter((i) => laneOf(i.labels) !== null)
+  recordListing(db, repo, found, found.length < WINDOW)
   if (found.length < WINDOW) halt(db, repo, new Set(kept.map((i) => i.url)))
   const known = seen(db)
   const split = named(found.map((i) => i.title))
@@ -70,7 +72,7 @@ function listed(db: Db, root: string, repo: string, read: Read): void {
 
 /** A part is titled `<parent><letter>: …` (\`85a: …\`); the numbers so named are parents, whoever split them. */
 function named(titles: string[]): Set<number> {
-  return new Set(titles.flatMap((t) => /^(\d+)[a-z]\b/.exec(t)?.[1] ?? []).map(Number))
+  return new Set(titles.flatMap((t) => partOf(t) ?? []))
 }
 
 const Summary = z.object({ sub_issues_summary: z.object({ total: z.int() }).optional() })

@@ -30,6 +30,12 @@ export function record(db: Db, signal: Signal): SignalRow | null {
   return SignalRow.parse(db.prepare('SELECT * FROM signals WHERE id = ?').get(Number(written.lastInsertRowid)))
 }
 
+export function graded(db: Db, plan: number, head: string): SignalRow | null {
+  const row: unknown = db.prepare("SELECT * FROM signals WHERE plan = ? AND kind = 'bot_review' AND head = ? ORDER BY id DESC LIMIT 1")
+    .get(plan, head)
+  return row === undefined ? null : SignalRow.parse(row)
+}
+
 export function since(db: Db, plan: number): SignalRow[] {
   return db.prepare('SELECT * FROM signals WHERE plan = ? ORDER BY id').all(plan).map((r) => SignalRow.parse(r))
 }

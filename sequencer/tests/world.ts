@@ -5,6 +5,8 @@ import { basename, dirname, join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { inject } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
+import { MAP } from '../../cli/digests.ts'
+import { map } from '../../cli/map.ts'
 import type { Packet, Provider } from '../../providers/kind.ts'
 import type { Gh } from '../../rails/ci-green/index.ts'
 import type { Db } from '../../store/index.ts'
@@ -168,6 +170,7 @@ export function moveMain(root: string, name: string, body?: string): void {
   const dir = join(root, 'remotes', SELF)
   mkdirSync(dirname(join(dir, name)), { recursive: true })
   writeFileSync(join(dir, name), body ?? `export const ${name.replace('.ts', '')} = 1\n`)
+  writeFileSync(join(dir, MAP), map(dir))
   git(dir, ['add', '-A'])
   git(dir, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', `main moves on ${name}`])
 }

@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
+import { MAP } from '../cli/digests.ts'
 import type { Narrowing } from '../runner/packet.ts'
 import { excluded } from './checks.ts'
 
@@ -230,10 +231,13 @@ function swift(dir: string): boolean {
   return existsSync(dir) && readdirSync(dir).some((name) => name.endsWith('.xcodeproj'))
 }
 
+/** Step 3 writes the map from the whole tree, so no diff a plan is judged or merged by carries it. */
+const UNMAPPED = ['--', '.', `:(exclude)${MAP}`]
+
 /** Everything the builder changed, against the sha the branch was cut from. */
 export function gitDiff(dir: string, base: string): string {
   git(dir, ['add', '-A', '--intent-to-add'])
-  return git(dir, ['diff', base])
+  return git(dir, ['diff', base, ...UNMAPPED])
 }
 
 /** The tree as a reviewer saw it, named by a sha nothing commits: what a later round diffs against. */
@@ -254,7 +258,7 @@ export function holds(dir: string, sha: string): boolean {
 
 export function diffSince(dir: string, tree: string): string {
   git(dir, ['add', '-A', '--intent-to-add'])
-  return git(dir, ['diff', tree])
+  return git(dir, ['diff', tree, ...UNMAPPED])
 }
 
 /**
@@ -274,7 +278,7 @@ export function narrowing(dir: string, tree: string, base: string): Narrowing {
 }
 
 function names(dir: string, since: string): string[] {
-  return git(dir, ['diff', '--name-only', since]).split('\n').filter((path) => path !== '')
+  return git(dir, ['diff', '--name-only', since, ...UNMAPPED]).split('\n').filter((path) => path !== '')
 }
 
 function blob(dir: string, tree: string, path: string): string {
@@ -291,7 +295,7 @@ export function merging(dir: string, base: string, main: string): { incoming: st
 }
 
 function changedNames(dir: string, from: string, to: string): string[] {
-  return git(dir, ['diff', '--name-only', from, to]).split('\n').filter((path) => path !== '')
+  return git(dir, ['diff', '--name-only', from, to, ...UNMAPPED]).split('\n').filter((path) => path !== '')
 }
 
 function git(cwd: string, args: string[]): string {

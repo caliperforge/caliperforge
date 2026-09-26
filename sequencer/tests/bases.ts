@@ -4,6 +4,8 @@ import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import type { TestProject } from 'vitest/node'
+import { MAP } from '../../cli/digests.ts'
+import { map } from '../../cli/map.ts'
 
 declare module 'vitest' {
   export interface ProvidedContext { bases: string }
@@ -66,11 +68,12 @@ function ours(dir: string, files: Tree, ci: boolean): void {
   git(dir, ['init', '-q', '-b', 'main'])
   git(dir, ['config', 'receive.denyCurrentBranch', 'updateInstead'])
   for (const kernel of ['rules', 'seats']) cpSync(join(repo, kernel), join(dir, kernel), { recursive: true })
-  cpSync(join(repo, 'rules.seed.sql'), join(dir, 'rules.seed.sql'))
+  for (const file of ['rules.seed.sql', '.gitattributes']) cpSync(join(repo, file), join(dir, file))
   for (const [path, body] of Object.entries(files)) {
     mkdirSync(dirname(join(dir, path)), { recursive: true })
     writeFileSync(join(dir, path), body)
   }
+  writeFileSync(join(dir, MAP), map(dir))
   git(dir, ['add', '-A'])
   git(dir, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'base'])
 }

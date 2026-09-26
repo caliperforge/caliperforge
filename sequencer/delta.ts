@@ -1,15 +1,14 @@
-import { MAP } from '../cli/digests.ts'
 import { parse, type FileDiff } from '../rails/diff.ts'
 
 export interface Picked { mode: 'full' | 'delta' | 'comment'; why: string }
 
 const COMMENT = /^(\/\/|\/\*|\*|$)/
 
-/** How a rework round is reviewed: `since` counts only on the builder's `changed` paths, never step 3's `MAP.md`, measured against the diff last passed. */
+/** How a rework round is reviewed: `since` counts only on the builder's `changed` paths, measured against the diff last passed. */
 export function classify(passed: string | null, since: string, changed: string[]): Picked {
   if (passed === null) return { mode: 'delta', why: 'no passed diff on file, so against the tree last judged' }
-  const seen = parse(passed).filter((f) => f.path !== MAP)
-  const counted = parse(since).filter((f) => f.path !== MAP && changed.includes(f.path))
+  const seen = parse(passed)
+  const counted = parse(since).filter((f) => changed.includes(f.path))
   const unseen = counted.find((f) => !seen.some((s) => s.path === f.path))
   if (unseen !== undefined) return { mode: 'full', why: `${unseen.path} is not in the passed diff` }
   const moved = size(counted)

@@ -58,6 +58,7 @@ Answer the issue as filed under the Tight standard above, then close with this f
 
 ```
 ---
+summary: <the change in one line>
 done:
   - id: D1
     status: done

@@ -157,7 +157,7 @@ function quiet(dir: string, ci: string): string {
   index(['update-index', '--add', '--cacheinfo', `100644,${blob},greptile.json`])
   const next = `refs/remotes/origin/${ci}`
   const parents = published(dir, ci, next) && !ancestor(dir, next, 'HEAD') ? ['HEAD', next] : ['HEAD']
-  return index([...MACHINE, 'commit-tree', index(['write-tree']), ...parents.flatMap((p) => ['-p', p]),
+  return index(['-c', 'user.email=cf@caliperforge.dev', '-c', 'user.name=caliperforge', 'commit-tree', index(['write-tree']), ...parents.flatMap((p) => ['-p', p]),
     '-m', 'greptile.json: review on request only'])
 }
 
@@ -363,10 +363,9 @@ export function headOf(root: string, plan: number): Head {
 function commitWork(dir: string): void {
   git(dir, ['add', '-A', '--', '.'])
   if (git(dir, ['diff', '--cached', '--name-only']).trim() === '') return
-  git(dir, [...MACHINE, 'commit', '-qm', git(dir, ['rev-parse', '--abbrev-ref', 'HEAD']).trim()])
+  git(dir, ['-c', 'user.email=cf@caliperforge.dev', '-c', 'user.name=caliperforge',
+    'commit', '-qm', git(dir, ['rev-parse', '--abbrev-ref', 'HEAD']).trim()])
 }
-
-const MACHINE = ['-c', 'user.email=cf@caliperforge.dev', '-c', 'user.name=caliperforge']
 
 export function title(root: string, plan: number): string {
   return titleOf(root, plan) ?? `plan ${String(plan)}`
@@ -495,7 +494,7 @@ function identity(dir: string): string[] {
     git(dir, ['config', 'user.email'])
     return []
   } catch {
-    return MACHINE
+    return ['-c', 'user.email=cf@caliperforge.dev', '-c', 'user.name=caliperforge']
   }
 }
 

@@ -724,10 +724,8 @@ test('D6 D7 each new passing head asks Greptile once; a fourth goes to the COO u
   const log: string[] = []
   const [w, lap] = await atReady(() => undefined, log)
   const asked = (): string[] => log.filter((l) => l.startsWith('review '))
-  const round = async (line: string): Promise<Fired | undefined> => {
-    rewind(w.db, 1, 2)
-    await tick(w.db, w.root, builds(() => { built(w.root, 1, line) }))
-    for (let at = 0; at < 3; at += 1) await lap()
+  const round = (line: string): Promise<Fired | undefined> => {
+    built(w.root, 1, line)
     return lap()
   }
   expect(await lap()).toMatchObject({ step: 6, outcome: 'pass', spans: ['greptile.missing'] })

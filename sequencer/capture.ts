@@ -18,7 +18,8 @@ const Listed = z.array(z.object({
   labels: z.array(z.object({ name: z.string() })),
 }))
 
-interface Pushed { plan: number; repo: string; evidence: string; rehearsal: boolean }
+/** `rehearsal` is the root whose `next.tips` traces a rehearsal's heads, null on a real pull request. */
+interface Pushed { plan: number; repo: string; evidence: string; rehearsal: string | null }
 
 type Base = Pick<Signal, 'repo' | 'pr' | 'plan'>
 
@@ -33,13 +34,13 @@ const REVIEWED = /Last reviewed commit: \[[^\]]*\]\(https:\/\/github\.com\/[^/)]
 
 /** Every open PR of ours, every tick. `gh` polling is the only reader; there is no webhook and no server. */
 export function capture(db: Db, read: (repo: string, no: number) => Pr = readPr, root?: string, list?: Read): SignalRow[] {
-  return pushed(db, root, list).flatMap((row) => reachable(db, row, read, root))
+  return pushed(db, root, list).flatMap((row) => reachable(db, row, read))
 }
 
 /** A pr `gh` cannot reach this tick is read again next tick; it does not stop the pipes behind it. */
-function reachable(db: Db, row: Pushed, read: (repo: string, no: number) => Pr, root?: string): SignalRow[] {
+function reachable(db: Db, row: Pushed, read: (repo: string, no: number) => Pr): SignalRow[] {
   try {
-    return one(db, row, read, root)
+    return one(db, row, read)
   } catch {
     return []
   }
@@ -112,12 +113,11 @@ function landed(db: Db, repo: string, open: Set<string>): void {
   }
 }
 
-/** Only `rehearsals()`, which has `root`, makes a rehearsal row. */
-function one(db: Db, row: Pushed, read: (repo: string, no: number) => Pr, root?: string): SignalRow[] {
+function one(db: Db, row: Pushed, read: (repo: string, no: number) => Pr): SignalRow[] {
   const view = read(row.repo, prNumber(row.evidence))
-  if (row.rehearsal && root !== undefined) {
+  if (row.rehearsal !== null) {
     for (const s of signals(view, row).filter((s) => s.kind === 'bot_review')) {
-      record(db, { ...s, head: carried(root, row.plan, s.head ?? '') })
+      record(db, { ...s, head: typeof s.head === 'string' ? carried(row.rehearsal, row.plan, s.head) : null })
     }
     return []
   }
@@ -203,7 +203,7 @@ function pushed(db: Db, root?: string, list?: Read): Pushed[] {
     SELECT p.id AS plan, t.repo, t.evidence
     FROM plans p JOIN targets t ON t.id = p.target_id
     WHERE t.evidence GLOB 'https://*/pull/*'
-    ORDER BY plan`).all() as Omit<Pushed, 'rehearsal'>[]).map((r) => ({ ...r, rehearsal: false }))
+    ORDER BY plan`).all() as Omit<Pushed, 'rehearsal'>[]).map((r) => ({ ...r, rehearsal: null }))
   return root === undefined || list === undefined ? rows : [...rows, ...rehearsals(db, root, list)]
 }
 
@@ -217,7 +217,7 @@ function rehearsals(db: Db, root: string, list: Read): Pushed[] {
 function opened(root: string, plan: number, fork: string, list: Read): Pushed[] {
   try {
     const no = rehearsal(fork, rehearsalBranch(root, plan), list)
-    return no === null ? [] : [{ plan, repo: fork, evidence: `https://github.com/${fork}/pull/${String(no)}`, rehearsal: true }]
+    return no === null ? [] : [{ plan, repo: fork, evidence: `https://github.com/${fork}/pull/${String(no)}`, rehearsal: root }]
   } catch {
     return []
   }

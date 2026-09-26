@@ -18,6 +18,10 @@ name is in the checkout, the section is the one line `- none: every name the cha
 Under `## Files` every row names files. A folder is refused: list each file in it the job writes, new
 ones marked `(new)`.
 
+When `## Files` lists a file a workflow generates, that row names the workflow step that writes it, meaning
+its `.github/workflows` file and the generator line before `git diff --exit-code`, and says step 3 runs that
+generator and diffs the file against its output.
+
 Every `## Must not break` ends with this line, as written: `- Lines the job does not need stay as they are;
 a comment that states a changed value changes that value and no other word.`
 

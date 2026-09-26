@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
-import { handover } from '../handover.ts'
+import { capped, handover, SYMBOLS } from '../handover.ts'
 
 function repo(files: Record<string, string>): {
   dir: string
@@ -79,6 +79,13 @@ test('cap', () => {
 test('clean', () => {
   const r = repo({ 'a.ts': 'export const a = 1\n' })
   expect(handover(r.dir, r.base)).toEqual({})
+})
+
+test('D4 capped', () => {
+  const rows = (n: number): string => [...Array(n).keys()].map((i) => `a.ts:${String(i + 1)} a${String(i)}\n`).join('')
+  expect(capped(rows(SYMBOLS))).toBe(rows(SYMBOLS))
+  expect(capped(rows(SYMBOLS + 1))).toBe(`${rows(SYMBOLS)}… 1 more`)
+  expect(capped('')).toBeUndefined()
 })
 
 test('pragma', () => {

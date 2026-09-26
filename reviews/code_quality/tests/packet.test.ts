@@ -63,6 +63,11 @@ test('a reworked round hands the last verdict, the refusal, then the delta, and 
     + '\n\n# Changed since your last verdict\n\n+ a line since')
 })
 
+test('D5 a bench admits the symbol map and hands it under its own heading', () => {
+  expect(built(bench({ symbols: 'a.ts:1 a\n' })).packet.prompt).toContain(
+    '\n\n# Symbols at the branch base\n\nEach top-level export at the branch base, as path:line name.\n\na.ts:1 a\n')
+})
+
 const BLOB = 'a'.repeat(40)
 
 test('a re-review packet carries the last verdict, the diff since it, then git on what did not move', () => {

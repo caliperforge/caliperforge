@@ -487,7 +487,7 @@ function messageOf(root: string, plan: number): string {
 
 export const COMMIT = 'commit.msg'
 
-/** An internal plan's commit message; the qualified `Closes` number is one ci-green counts as ours. */
+/** `Closes` stays owner-qualified: ci-green refuses a bare number (`rails/ci-green/index.ts:121`). */
 export function commitMessage(root: string, plan: PlanRow): string | null {
   const ref = originRef(plan)
   return ref === null ? null : `${messageOf(root, plan.id)}\n\nCloses ${ref.repo}#${String(ref.no)}\nPlan ${String(plan.id)}`

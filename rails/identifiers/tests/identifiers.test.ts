@@ -45,6 +45,10 @@ test('reads a plus as part of a file name', () => {
   expect(identifiers(dir, 'see Atelier/Source+Seats.swift').message).toContain('Atelier/Source+Seats.swift')
 })
 
+test('a sentence ending on a path keeps its full stop out of the name', () => {
+  expect(identifiers(root, 'the gate lives in rails/diff.ts.').outcome).toBe('pass')
+})
+
 test('writes a verdicts row the store accepts', () => {
   const db = fresh(join(root, 'schema'))
   load(db, root)

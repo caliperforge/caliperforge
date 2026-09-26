@@ -35,8 +35,16 @@ export const OOPS = {
   'package.json': pkg({ lint: `node -e "process.exit(require('node:fs').readFileSync('src/hello.ts', 'utf8').includes('oops') ? 3 : 0)"` }),
 }
 
+const failing = (from: string): Tree => ({
+  'src/tests/hello.test.ts': `import { hello } from '${from}'\n\ntest('says hi', () => hello())\n`,
+  'package.json': pkg({ test: `node -e "process.stderr.write(' FAIL src/tests/hello.test.ts > says hi\\n'); process.exit(1)"` }),
+})
+export const BROKEN = { ...TYPESCRIPT, ...failing('../hello.ts') }
+export const ORPHANED = { ...HANDOUT, ...failing('../bye.ts') }
+
 export const WORLDS: Tree[] = [TYPESCRIPT, KOTLIN, HANDOUT, RED]
-export const OURS: [Tree, boolean][] = [[TYPESCRIPT, true], [TYPESCRIPT, false], [RED, true], [GREEN, true], [NAPPING, true], [OOPS, true]]
+export const OURS: [Tree, boolean][] = [[TYPESCRIPT, true], [TYPESCRIPT, false], [RED, true], [GREEN, true], [NAPPING, true], [OOPS, true],
+  [BROKEN, true], [ORPHANED, true]]
 
 export function key(kind: 'world' | 'ours', files: Tree, ci: boolean): string {
   const sorted = Object.entries(files).sort(([a], [b]) => a.localeCompare(b))

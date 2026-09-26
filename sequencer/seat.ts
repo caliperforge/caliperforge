@@ -3,7 +3,7 @@ import { existsSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Fired, Provider } from '../providers/kind.ts'
 import { packet, refuse } from '../runner/index.ts'
-import { reviewManifest, type Bench } from '../runner/packet.ts'
+import { reviewManifest, SYMBOLS_LEAD, type Bench } from '../runner/packet.ts'
 import { load, seat, tight, type Seat } from '../runner/rules.ts'
 import { judge, loadReviews } from '../reviews/bench.ts'
 import type { Finding, Judged } from '../reviews/verdict.ts'
@@ -16,7 +16,9 @@ import type { Step } from '../templates/pr-path.ts'
 import { parse } from '../rails/diff.ts'
 import { human, pointed, references, shape, split, TEMPLATE, unclear, wide, WIDE, type Part } from './brief.ts'
 import { handout, touched, type Handed } from './handout.ts'
-import { enclosed, handover, type Handover } from './handover.ts'
+import { capped, enclosed, handover, type Handover } from './handover.ts'
+import { symbolMap } from './symbols.ts'
+import { targetOf } from './steps.ts'
 import { install, mode } from './checks.ts'
 import { narrow } from './rails.ts'
 import { classify } from './delta.ts'
@@ -36,7 +38,8 @@ export async function fireSeat(db: Db, root: string, plan: PlanRow, step: Step, 
   const name = `step-${String(step.step)}.handback.md`
   const prev = maybe(root, plan.id, name)
   if (prev !== null) put(root, plan.id, `step-${String(step.step)}.handback.prev.md`, prev)
-  const fired = await ran(db, root, plan, step, provider, rebuild(db, root, plan, prev), kernelPlan(plan))
+  const issue = handed(rebuild(db, root, plan, prev), symbolSection(db, root, plan))
+  const fired = await ran(db, root, plan, step, provider, issue, kernelPlan(plan))
   put(root, plan.id, name, fired.text)
   const tokens = fired.usage.input + fired.usage.cache + fired.usage.output
   if (fired.ended !== 'completed') return exited(step, fired)
@@ -252,7 +255,7 @@ export async function fireReview(db: Db, root: string, plan: PlanRow, step: Step
     issue,
     diff: diffOf(root, plan.id),
     ...(cloned(src) ? { tree: snapshot(src) } : {}),
-    ...outside(root, plan, src),
+    ...outside(db, root, plan, src),
     ...(manifest.gate === 'senior_review' ? referenced(src, issue) : {}),
     ...checked(db, plan, src, diffOf(root, plan.id)),
     ...(manifest.reads_verdict ? { verdict: priorVerdict(root, plan.id) } : {}),
@@ -275,9 +278,23 @@ export async function fireReview(db: Db, root: string, plan: PlanRow, step: Step
 }
 
 /** #132: on someone else's repository the reviewer is handed its footing instead of reading for it. */
-function outside(root: string, plan: PlanRow, src: string): Handover {
+function outside(db: Db, root: string, plan: PlanRow, src: string): Handover {
   const base = maybe(root, plan.id, 'base.sha')
-  return internal(plan) || base === null || !cloned(src) ? {} : handover(src, base.trim())
+  if (internal(plan) || base === null || !cloned(src)) return {}
+  return { ...handover(src, base.trim()), ...symbolsOf(db, root, plan, src) }
+}
+
+function symbolsOf(db: Db, root: string, plan: PlanRow, src: string): Pick<Handover, 'symbols'> {
+  const base = maybe(root, plan.id, 'base.sha')
+  const target = targetOf(db, plan)
+  if (internal(plan) || base === null || target === null || !cloned(src)) return {}
+  const symbols = capped(symbolMap(root, target.repo, src, base.trim()))
+  return symbols === undefined ? {} : { symbols }
+}
+
+function symbolSection(db: Db, root: string, plan: PlanRow): string {
+  const { symbols } = symbolsOf(db, root, plan, srcDir(root, plan.id))
+  return symbols === undefined ? '' : `# Symbols at the branch base\n\n${SYMBOLS_LEAD}\n\n${symbols}`
 }
 
 function referenced(src: string, issue: string): Pick<Bench, 'reference'> {

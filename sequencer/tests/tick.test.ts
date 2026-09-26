@@ -16,8 +16,9 @@ import { record } from '../../store/files.ts'
 import { record as signal } from '../../store/signals.ts'
 import { benchPacket } from '../../runner/packet.ts'
 import type { Packet, Provider } from '../../providers/kind.ts'
+import type { Fired } from '../kind.ts'
 import { forkCi, type Wire } from '../push.ts'
-import { approve, builds, built, CARRIED, dropping, internalPlan, KOTLIN, ours, owning, PASS, plan, REFUSE, rerunning, RUN, runsAfter, runsOn, stub, watched, WORDS, world, type World } from './world.ts'
+import { approve, builds, built, CARRIED, dropping, internalPlan, KOTLIN, ours, owning, PASS, plan, REFUSE, rerunning, RUN, runsAfter, runsOn, scored, stub, watched, WORDS, world, type World } from './world.ts'
 
 const head = (cwd: string, args: string[]): string => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim()
 
@@ -35,6 +36,7 @@ test('on a stranger\'s repo the builder is the outside seat and may write only t
   for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED, 0, PASS, (p) => packets.push(p)))
   const builder = packets.find((p) => p.tools.includes('Write'))
   expect(builder?.prompt).toContain('# outside_specialist')
+  expect(builder?.prompt).toContain('# Symbols at the branch base\n\nEach top-level export at the branch base, as path:line name.\n\nsrc/hello.ts:1 hello\n')
   const src = realpathSync(srcDir(w.root, 1))
   expect(builder?.cwd).toBe(srcDir(w.root, 1))
   expect(builder?.refuse(join(src, 'src/hello.ts'))).toBeNull()
@@ -260,6 +262,22 @@ test('outside reviewer gets context and map; ours does not', async () => {
   expect(prompt).toContain('# Files around the change')
   expect(prompt.indexOf('# Changed code in context')).toBeGreaterThan(prompt.indexOf('# Diff'))
   expect(prompt).not.toContain('# Checks')
+  expect(prompt).toContain('# Symbols at the branch base\n\nEach top-level export at the branch base, as path:line name.\n\nsrc/hello.ts:1 hello\n')
+  expect(prompt.indexOf('# Symbols at the branch base')).toBeGreaterThan(prompt.indexOf('# Files around the change'))
+})
+
+test('D3 our own plan hands no symbol map to the builder or the reviewer, and builds none', async () => {
+  const w = world()
+  w.db.prepare('DELETE FROM plans WHERE id = 1').run()
+  ours(w.root)
+  internalPlan(w.db, w.root, MINE)
+  const seen: Packet[] = []
+  for (let step = 0; step < 2; step += 1) await tick(w.db, w.root, stub(CARRIED))
+  built(w.root, MINE, FOUR)
+  for (let step = 0; step < 3; step += 1) await tick(w.db, w.root, stub(CARRIED, 0, PASS, (p) => seen.push(p)))
+  expect(plan(w.db, MINE).step).toBe(5)
+  expect(seen.map((p) => p.prompt.includes('# Symbols at the branch base'))).toEqual([false, false])
+  expect(existsSync(join(w.root, '.cf/maps'))).toBe(false)
 })
 
 test('a reviewer gets its own last verdict, the diff since the tree it judged and what did not move, neither on its first', async () => {
@@ -673,6 +691,66 @@ test('a head still runless after the window is refused on ci-green, not waited o
   expect(w.db.prepare("SELECT outcome FROM verdicts WHERE plan = 1 AND rail_id = 'ci-green'").get())
     .toEqual({ outcome: 'refuse' })
   expect(plan(w.db, 1).step).toBe(5)
+})
+
+/** An outside plan at ready, green on the fork, whose every rehearsal `grade` scores for Greptile or leaves unscored. */
+const atReady = async (grade: (w: World) => void): Promise<[World, () => Promise<Fired | undefined>]> => {
+  const w = world()
+  approve(w.db, w.target)
+  const wire = { ...watched([], w.root, 1), rehearse: () => { grade(w) } }
+  const lap = async (): Promise<Fired | undefined> => (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
+  for (let at = 0; at < 6; at += 1) await lap()
+  expect(plan(w.db, 1).step).toBe(6)
+  return [w, lap]
+}
+
+const FINDINGS = 'Confidence Score: 3/5\n\nThe empty name is never refused.'
+
+const readyVerdicts = (w: World): unknown => w.db.prepare("SELECT count(*) AS n FROM verdicts WHERE plan = 1 AND rail_id = 'ready'").get()
+
+test('D1 no Greptile score at the head holds ready through tick 45; tick 46 goes on and says so', async () => {
+  const [w, lap] = await atReady(() => undefined)
+  expect(await lap()).toMatchObject({ step: 6, name: 'ready', outcome: 'pass', state: 'running', spans: ['greptile.missing'],
+    note: expect.stringMatching(/has no Greptile score yet, tick 1 of 45$/) as unknown })
+  put(w.root, 1, 'greptile.waits', `${head(srcDir(w.root, 1), ['rev-parse', 'HEAD'])} 44`)
+  expect((await lap())?.note).toMatch(/tick 45 of 45$/)
+  expect(readyVerdicts(w)).toEqual({ n: 0 })
+  expect(plan(w.db, 1).step).toBe(6)
+  expect((await lap())?.note).toMatch(/Greptile gave no score in 45 ticks$/)
+  expect(plan(w.db, 1).step).toBe(7)
+})
+
+test('D2 a 3/5 at the current head goes back to the builder with the findings; on another head it is no score', async () => {
+  const [w, lap] = await atReady((at) => { scored(at.root, 1, 3, FINDINGS) })
+  expect(await lap()).toMatchObject({ step: 6, name: 'ready', outcome: 'refuse', spans: ['greptile:3/5'] })
+  expect(plan(w.db, 1).step).toBe(2)
+  expect(get(w.root, 1, 'refusal.md')).toContain(FINDINGS)
+
+  const [old, again] = await atReady((at) => {
+    signal(at.db, { repo: 'caliperforge/widget', pr: 1, kind: 'bot_review', author: 'greptile', at: new Date().toISOString(),
+      external_id: 'old', score: 3, plan: 1, body: FINDINGS, head: 'f'.repeat(40) })
+  })
+  expect(await again()).toMatchObject({ step: 6, outcome: 'pass', state: 'running', spans: ['greptile.missing'] })
+  expect(plan(old.db, 1).step).toBe(6)
+})
+
+test('D3 a 4/5 at the current head passes ready to sign-off', async () => {
+  const [w, lap] = await atReady((at) => { scored(at.root, 1, 4, 'Confidence Score: 4/5') })
+  expect(await lap()).toMatchObject({ step: 6, name: 'ready', outcome: 'pass' })
+  expect(plan(w.db, 1).step).toBe(7)
+})
+
+test('D6 an internal plan passes ready with no Greptile score and no hold', async () => {
+  const w = world()
+  w.db.prepare('DELETE FROM plans WHERE id = 1').run()
+  ours(w.root)
+  internalPlan(w.db, w.root, MINE)
+  const wire = { ...watched([], w.root, MINE), rehearse: () => undefined }
+  for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  const out = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
+  expect(out).toMatchObject({ step: 6, name: 'ready', outcome: 'pass' })
+  expect(out?.note).not.toMatch(/Greptile/)
+  expect(plan(w.db, MINE).step).toBe(7)
 })
 
 test('step 6 refuses a plan with no deliverable row instead of sending the branch and raising', async () => {

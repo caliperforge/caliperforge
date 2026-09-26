@@ -128,7 +128,7 @@ test('D5: the tick lists issues only when handed a reader', async () => {
     log.push(args.join(' '))
     throw new Error('gh is down')
   })
-  expect(log).toEqual([`issue list --repo ${REPO} --state open --limit ${String(WINDOW)} --json number,title,url,labels`])
+  expect(log).toEqual([`issue list --repo ${REPO} --state open --limit ${String(WINDOW)} --json number,title,body,url,labels`])
 })
 
 test('#260: an issue with sub-issues is a parent and is not adopted; its parts are', () => {
@@ -142,6 +142,25 @@ test('#260: a parent split by hand, named only by its parts\' titles, is not ado
   intake(db, root, canned([{ number: 85, labels: ['lane:machine'] },
     { number: 121, labels: ['lane:machine'], title: '85a: each changed declaration whole' }]))
   expect(states(db)).toEqual([{ origin: url(121), state: 'queued' }])
+})
+
+test('D3: a part\'s own parts filed by the COO join that part\'s plan, part a queued, and neither is its own plan', () => {
+  const db = piped()
+  queue(db, 200, 'done')
+  queue(db, 223, 'blocked_on_ceo')
+  db.prepare("INSERT INTO parts (parent, n, url, title, body, plan) VALUES (1, 0, ?, 'part', 'the part', 2)").run(url(223))
+  intake(db, root, canned([{ number: 280, labels: ['lane:machine'], title: '223a: first' },
+    { number: 281, labels: ['lane:machine'], title: '223b: second' }]))
+  expect(db.prepare('SELECT n, url, plan FROM parts WHERE parent = 2 ORDER BY n').all()).toEqual([
+    { n: 0, url: url(280), plan: 3 },
+    { n: 1, url: url(281), plan: null },
+  ])
+  expect(states(db)).toEqual([
+    { origin: url(200), state: 'done' },
+    { origin: url(223), state: 'blocked_on_ceo' },
+    { origin: url(280), state: 'queued' },
+  ])
+  expect(readFileSync(join(root, '.cf/work/3/ask.md'), 'utf8')).toBe('# 223a: first\n\nthe ask')
 })
 
 test('#257: a running or blocked plan whose work was pushed and whose issue closed is done', () => {

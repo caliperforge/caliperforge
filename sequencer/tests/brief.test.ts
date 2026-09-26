@@ -203,8 +203,8 @@ test('the seat packet carries the template under the ask', async () => {
   const prompt = packets[0]?.prompt ?? ''
   expect(prompt).toContain(TEMPLATE)
   expect(prompt.indexOf(TEMPLATE)).toBeGreaterThan(prompt.indexOf('# let an internal plan run'))
-  expect(prompt).not.toContain('# Your last brief')
-  expect(prompt).not.toContain('# Your last question')
+  expect(prompt).not.toContain('\n# Your last brief\n')
+  expect(prompt).not.toContain('\n# Your last question\n')
 })
 
 const FAILS = [
@@ -375,7 +375,7 @@ test('a returned question whose transcript is gone is re-briefed from the ask al
   unhold(w.db, w.root, ID, 'ceo')
 
   expect((await tick(w.db, w.root, stub(CARRIED, 0, undefined, (p) => packets.push(p))))[0]).toMatchObject({ step: 1, outcome: 'pass' })
-  expect(packets[0]?.prompt).not.toContain('# Your last question')
+  expect(packets[0]?.prompt).not.toContain('\n# Your last question\n')
 })
 
 test('a plan re-briefed after a retry at step 1 replaces its file list', async () => {

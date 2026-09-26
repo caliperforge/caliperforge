@@ -38,7 +38,8 @@ export function enclosed(src: string, base: string): string | null {
   const parts: string[] = []
   let used = 0
   for (const path of changedPaths(src, base)) {
-    const part = WIDTHS.map((w) => git(src, ['diff', w, base, '--', path]))
+    const widths = /\.[cm]?tsx?$/.test(path) ? WIDTHS : WIDTHS.slice(1)
+    const part = widths.map((w) => git(src, ['diff', w, base, '--', path]))
       .find((out) => out.split('\n').length <= PER_FILE)
     if (part === undefined || used + part.split('\n').length > CAP) continue
     parts.push(part)

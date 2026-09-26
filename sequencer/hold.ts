@@ -20,8 +20,8 @@ export function isHeld(root: string, plan: number): boolean {
   return maybe(root, plan, NOTE) !== null
 }
 
-export function unhold(db: Db, root: string, plan: number): number {
-  const step = returnToLane(db, plan)
+export function unhold(db: Db, root: string, plan: number, actor: string): number {
+  const step = returnToLane(db, plan, actor)
   db.prepare('UPDATE plans SET waits_on = NULL WHERE id = ?').run(plan)
   drop(root, plan, NOTE)
   if (step <= 1) fresh(root, plan)

@@ -17,12 +17,11 @@ import { signoffs } from '../sequencer/signoff.ts'
 import { hold, isHeld, unhold } from '../sequencer/hold.ts'
 import { SIGNOFF, afresh, liveTree, reap } from '../sequencer/workspace.ts'
 import { blocked, parked, targetDigest, WAITING } from '../sequencer/steps.ts'
-import { release } from '../store/holds.ts'
+import { release, retried } from '../store/holds.ts'
 import { dump, migrate, open as openDb, type Db } from '../store/index.ts'
 import { dial, hhmm, lanes, priority as setPriority, record, Reading, set, windows } from '../store/lanes.ts'
 import { holder } from '../store/leases.ts'
-import { PlanRow, openPipes, overlapWaits, retry, terminal } from '../store/plans.ts'
-import { clear } from '../store/refusals.ts'
+import { PlanRow, openPipes, overlapWaits, terminal } from '../store/plans.ts'
 import { refusedPush } from '../store/approvals.ts'
 import { receipt } from '../store/ticks.ts'
 import { adopt, render as renderAdopt } from './adopt.ts'
@@ -36,6 +35,7 @@ import { ack, crashed, events, line, notify, record as keep, unread } from './in
 import { measure, render as renderPulse } from './measure.ts'
 import { add as fileIssue, render as renderUnfiled, unfiled } from './plan.ts'
 import { add } from './queue.ts'
+import { fill as fillRecord, render as renderRecord, still } from './record.ts'
 import { close } from './session.ts'
 import { alerter, CRASHED, liveness, livenessLine, stalledLanes, watch } from './watch.ts'
 
@@ -108,7 +108,7 @@ cf.command('pipe').argument('<state>', 'on or off').argument('<name>').action((s
 cf.command('priority').argument('<plan>').argument('<n>', 'P0 first, up to P9')
   .action((id: string, n: string) => {
     const handle = db()
-    setPriority(handle, Number(id), Number(n))
+    setPriority(handle, Number(id), Number(n), 'ceo')
     out(`plan ${id} priority P${n}\n`)
   })
 
@@ -132,6 +132,11 @@ cf.command('usage').argument('[file]', 'a provider rate-limit reading, json').ac
 
 cf.command('measure').argument('<repo>', 'owner/repo to take the step 0 pulse of').action((repo: string) => {
   out(renderPulse(measure(db(), repo, new Date().toISOString().slice(0, 10))))
+})
+
+cf.command('record').argument('<repo>', 'owner/repo whose pull requests of ours to record').action((repo: string) => {
+  const handle = db()
+  out(renderRecord(repo, fillRecord(handle, repo), still(handle, repo)))
 })
 
 const queue = cf.command('queue')
@@ -215,7 +220,7 @@ cf.command('release').argument('<plan>', 'a briefed plan waiting on the coo to r
 })
 
 cf.command('return').argument('<plan>', 'a plan blocked on the ceo, held or halted').action((id: string) => {
-  unhold(db(), root, Number(id))
+  unhold(db(), root, Number(id), 'ceo')
   out(`plan ${id} queued\n`)
 })
 
@@ -235,7 +240,7 @@ cf.command('park').argument('<plan>', 'a plan to hold where it stands, checkout 
   })
 
 cf.command('unpark').argument('<plan>', 'a held plan, put back at the step it stopped on').action((id: string) => {
-  const step = unhold(db(), root, Number(id))
+  const step = unhold(db(), root, Number(id), 'ceo')
   out(`plan ${id} queued at step ${String(step)}\n`)
 })
 
@@ -258,13 +263,9 @@ cf.command('tight').description('the Tight rail on this checkout against main, a
 
 cf.command('retry').argument('<plan>', 'a plan blocked on a refusal, sent round again with its count cleared')
   .action((id: string) => {
-    const handle = db()
-    const row = handle.prepare('SELECT * FROM plans WHERE id = ?').get(Number(id))
-    if (row === undefined) throw new Error(`no plan ${id}`)
-    const plan = PlanRow.parse(row)
-    if (plan.state !== 'blocked_on_ceo') throw new Error(`plan ${id} is ${plan.state}, not blocked`)
-    const step = handle.transaction(() => { clear(handle, plan.id); return retry(handle, plan) })()
-    afresh(root, plan.id, step)
+    const n = Number(id)
+    const step = retried(db(), n, 'ceo')
+    afresh(root, n, step)
     out(`plan ${id} running again at step ${String(step)}\n`)
   })
 

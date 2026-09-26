@@ -7,6 +7,7 @@ import type { Provider } from '../providers/kind.ts'
 import { packet } from '../runner/index.ts'
 import { load, seat, tight } from '../runner/rules.ts'
 import { mark } from '../store/decisions.ts'
+import { listed } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
 import { returnToLane } from '../store/holds.ts'
 import { wall } from '../store/lanes.ts'
@@ -152,7 +153,7 @@ export function released(db: Db, root: string, now: Date, post: Post): void {
     const ticket = ticketOf(db, r.id)
     const at = now.toISOString()
     if (r.theirs === 'done') {
-      unhold(db, root, r.id)
+      unhold(db, root, r.id, 'fixer')
       record(root, [{ at, plan: r.id, ticket, kind: 'refused', step: r.step, name: 'fixer', note: `plan ${String(r.on_)} landed, so this job is back in its lane` }])
       continue
     }
@@ -167,7 +168,7 @@ function apply(db: Db, root: string, plan: PlanRow, f: Fix, wire: Wire, now: Dat
   for (const path of f.add_files ?? []) listed(db, plan.id, path)
   if (plan.state !== 'blocked_on_ceo' && plan.state !== 'halted') return 'escalated'
   switch (f.then) {
-    case 'return': afresh(root, plan.id, returnToLane(db, plan.id)); return 'return'
+    case 'return': afresh(root, plan.id, returnToLane(db, plan.id, 'fixer')); return 'return'
     case 'retry': {
       const step = db.transaction(() => { clear(db, plan.id); return retry(db, plan) })()
       afresh(root, plan.id, step)
@@ -190,17 +191,6 @@ function apply(db: Db, root: string, plan: PlanRow, f: Fix, wire: Wire, now: Dat
     }
     case 'ask_ceo': return 'escalated'
   }
-}
-
-/** A path the build already wrote is a stray row: it is listed by clearing the flag, never by a second row. */
-function listed(db: Db, plan: number, path: string): void {
-  const held = db.prepare('SELECT 1 FROM plan_files WHERE plan = ? AND path = ?').get(plan, path)
-  if (held !== undefined) {
-    db.prepare('UPDATE plan_files SET stray = 0 WHERE plan = ? AND path = ?').run(plan, path)
-    return
-  }
-  const next = db.prepare('SELECT coalesce(max(position), -1) + 1 AS n FROM plan_files WHERE plan = ?').get(plan) as { n: number }
-  db.prepare('INSERT INTO plan_files (plan, path, is_new, position, stray) VALUES (?, ?, 1, ?, 0)').run(plan, path, next.n)
 }
 
 function issue(db: Db, root: string, plan: PlanRow, decision: { why: string }, m: Mode): string {

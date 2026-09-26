@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { logged } from './events.ts'
 import type { Db } from './index.ts'
 import { held } from './leases.ts'
 import { clock, openPipes } from './plans.ts'
@@ -61,10 +62,11 @@ export function set(db: Db, key: string, value: string, who: 'ceo' | 'pr', at: s
   if (done.changes === 0) throw new Error(`no settings row "${key}"; a new key is born in a migration`)
 }
 
-export function priority(db: Db, plan: number, n: number): void {
+export function priority(db: Db, plan: number, n: number, actor?: string): void {
   if (!Number.isInteger(n) || n < 0 || n > 9) throw new Error('cf priority takes P0 to P9')
   const done = db.prepare('UPDATE plans SET priority = ? WHERE id = ?').run(n, plan)
   if (done.changes === 0) throw new Error(`no plan ${String(plan)}`)
+  if (actor !== undefined) logged(db, { plan, kind: 'priority', actor, outcome: 'pass', message: `P${String(n)}`, pointer: null, run: null })
 }
 
 export function templatePriority(db: Db, template: string): number {

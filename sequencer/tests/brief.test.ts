@@ -3,8 +3,8 @@ import { join, relative } from 'node:path'
 import { expect, test } from 'vitest'
 import { walk } from '../../checks/tree.ts'
 import type { Packet } from '../../providers/kind.ts'
-import { release, returnToLane } from '../../store/holds.ts'
-import { get } from '../../store/lanes.ts'
+import { release, retried, returnToLane } from '../../store/holds.ts'
+import { get, priority } from '../../store/lanes.ts'
 import { retry } from '../../store/plans.ts'
 import { WHY } from '../../store/refusals.ts'
 import { files, pointed, references, shape, split, TEMPLATE, unclear, writable, type Refused } from '../brief.ts'
@@ -28,6 +28,9 @@ const briefOf = (w: World): string => maybe(w.root, ID, 'issue.md') ?? ''
 const askOf = (w: World): string => maybe(w.root, ID, 'ask.md') ?? ''
 
 const left = (w: World): string => get(w.db, 'brief.reads_left')
+
+const hands = (w: World): unknown[] => w.db.prepare(`SELECT kind, actor, outcome FROM events
+  WHERE kind IN ('release', 'return', 'retry', 'priority') ORDER BY id`).all()
 
 const listed = (w: World): unknown[] =>
   w.db.prepare('SELECT path FROM plan_files WHERE plan = ? ORDER BY position').all(ID)
@@ -393,11 +396,13 @@ test('cf return queues a blocked or halted plan at the step it holds, and refuse
 
   expect(returnToLane(w.db, ID)).toBe(2)
   expect(plan(w.db, ID)).toMatchObject({ step: 2, state: 'queued' })
+  const before = hands(w)
   for (const state of ['queued', 'running', 'done', 'refused'] as const) {
     w.db.prepare('UPDATE plans SET state = ? WHERE id = ?').run(state, ID)
     expect(() => { returnToLane(w.db, ID) }).toThrow(/plan 2 is neither blocked on the ceo nor halted/)
     expect(plan(w.db, ID)).toMatchObject({ step: 2, state })
   }
+  expect(hands(w)).toEqual(before)
   w.db.prepare("UPDATE plans SET state = 'halted' WHERE id = ?").run(ID)
   returnToLane(w.db, ID)
   expect(plan(w.db, ID)).toMatchObject({ step: 2, state: 'queued' })
@@ -411,6 +416,36 @@ test('release refuses a plan parked on the coo at step 1 and moves no row', asyn
   expect(() => { release(w.db, ID) }).toThrow(/plan 2 is not a brief/)
   expect(plan(w.db, ID)).toMatchObject({ step: 1, state: 'blocked_on_ceo' })
   expect(left(w)).toBe('10')
+  expect(hands(w)).toEqual([])
+})
+
+test('release, return, retry and priority by hand each write one event naming who did it', async () => {
+  const w = await unread()
+  await tick(w.db, w.root, stub(CARRIED))
+  const park = (): void => { w.db.prepare("UPDATE plans SET state = 'blocked_on_ceo' WHERE id = ?").run(ID) }
+
+  release(w.db, ID)
+  park()
+  returnToLane(w.db, ID, 'ceo')
+  park()
+  retried(w.db, ID, 'ceo')
+  priority(w.db, ID, 3, 'ceo')
+  expect(hands(w)).toEqual([
+    { kind: 'release', actor: 'coo', outcome: 'pass' },
+    { kind: 'return', actor: 'ceo', outcome: 'pass' },
+    { kind: 'retry', actor: 'ceo', outcome: 'pass' },
+    { kind: 'priority', actor: 'ceo', outcome: 'pass' },
+  ])
+})
+
+test('a refused retry or priority, and a priority with no actor, write no event', () => {
+  const w = mine()
+  w.db.prepare("UPDATE plans SET state = 'queued' WHERE id = ?").run(ID)
+
+  expect(() => retried(w.db, ID, 'ceo')).toThrow(/plan 2 is queued, not blocked/)
+  expect(() => { priority(w.db, ID, 10, 'ceo') }).toThrow(/cf priority takes P0 to P9/)
+  priority(w.db, ID, 3)
+  expect(hands(w)).toEqual([])
 })
 
 test('with the reads spent, step 1 passes to running and the builder fires in the next tick', async () => {

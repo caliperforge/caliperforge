@@ -12,14 +12,14 @@ const LETTERS = 'abcdefghijklmnopqrstuvwxyz'
 /**
  * #72, filed. Every part becomes an issue of ours, titled `<parent><letter>: …` in the order the parts
  * land, carrying the parent's lane; the first is queued at the parent's priority and the parent's
- * issue says where its work went. The parent plan ends here with no build. A part of a part, or a
- * split of somebody else's ticket, is not the machine's to file: the parts wait for the COO instead.
+ * issue says where its work went. The parent plan ends here with no build. A split of somebody else's
+ * ticket is not the machine's to file: the parts wait for the COO instead.
  * Filing is resumable -- a part already on file is not filed twice -- so a `gh` that fails half way is
  * a blip the next tick finishes.
  */
 export function parted(db: Db, root: string, plan: PlanRow, parts: Part[], wire: Wire = WIRE): Outcome {
   const parent = originIssue(plan)
-  const why = unfileable(db, plan, parent)
+  const why = unfileable(plan, parent)
   if (why !== null || parent === null) {
     const said = why ?? 'the plan names no issue of ours'
     put(root, plan.id, 'question.md', `${said}. The brief writer's parts, in landing order, for the COO to file or refuse:\n\n${parts.map(render).join('\n\n')}\n`)
@@ -50,20 +50,37 @@ export function following(db: Db, root: string, plan: PlanRow, sha: string, wire
   if (next !== null) return `part ${letter(row.n + 1)} queued as plan ${String(next)}`
   const issue = originIssue(parent)
   if (issue === null) return 'the last part landed'
+  const closed = close(parent, issue, sha, wire)
+  const up = following(db, root, parent, sha, wire)
+  return up === null ? closed : `${closed}; ${up}`
+}
+
+function close(plan: PlanRow, issue: number, sha: string, wire: Wire): string {
   try {
-    wire.close(homeOf(parent), issue, sha)
+    wire.close(homeOf(plan), issue, sha)
     return `the last part landed; #${String(issue)} closed`
   } catch (error) {
     return `the last part landed; closing #${String(issue)} failed: ${error instanceof Error ? error.message : String(error)}`
   }
 }
 
+/** A part's own split filed by the COO as `<part issue><letter>: …` joins the part's plan as the machine's would. */
+export function claimed(db: Db, root: string, issue: { url: string; title: string; body: string }): boolean {
+  const [, no, at] = /^(\d+)([a-z])\b/.exec(issue.title) ?? []
+  if (no === undefined || at === undefined) return false
+  const row = db.prepare('SELECT plan FROM parts WHERE url = ? AND plan IS NOT NULL').get(issue.url.replace(/\d+$/, no)) as
+    { plan: number } | undefined
+  if (row === undefined) return false
+  db.prepare('INSERT INTO parts (parent, n, url, title, body) VALUES (?, ?, ?, ?, ?)')
+    .run(row.plan, LETTERS.indexOf(at), issue.url, issue.title, issue.body)
+  queue(db, root, PlanRow.parse(db.prepare('SELECT * FROM plans WHERE id = ?').get(row.plan)), 0)
+  return true
+}
+
 /** Why a split cannot be filed by the machine, or null when it can. */
-function unfileable(db: Db, plan: PlanRow, parent: number | null): string | null {
+function unfileable(plan: PlanRow, parent: number | null): string | null {
   if (!internal(plan)) return 'a ticket on somebody else\'s repository is split by the COO, not the machine'
-  if (parent === null) return 'the plan names no issue of ours to split'
-  const part = db.prepare('SELECT 1 FROM parts WHERE plan = ?').get(plan.id)
-  return part === undefined ? null : 'this ticket is already a part of a split, and a split of a split is the COO\'s'
+  return parent === null ? 'the plan names no issue of ours to split' : null
 }
 
 function filed(db: Db, plan: PlanRow, parent: number, parts: Part[], n: number, wire: Wire): string {

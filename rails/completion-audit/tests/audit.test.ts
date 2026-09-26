@@ -56,6 +56,10 @@ test('refuses every expected done-condition when the handback carries no fence',
   expect(verdict.spans).toEqual(['D1'])
 })
 
+test('reads the rows past a summary YAML cannot parse', () => {
+  expect(audit(fixture('handback-colon.md'), ['D1', 'D2']).outcome).toBe('pass')
+})
+
 test('writes a verdicts row the store accepts', () => {
   const db = fresh(join(root, 'schema'))
   load(db, root)

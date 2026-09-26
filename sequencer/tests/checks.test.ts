@@ -3,15 +3,15 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { expect, test } from 'vitest'
-import { record } from '../../store/files.ts'
+import { filesOf, record } from '../../store/files.ts'
 import type { Db } from '../../store/index.ts'
 import { checks, mode, npm, type Ran, type Run } from '../checks.ts'
 import { ciFeatures, formatLine, recipes } from '../gates.ts'
 import { tick } from '../index.ts'
 import { narrow } from '../rails.ts'
 import { get } from '../workspace.ts'
-import { GREEN, NAPPING, pkg, RED, TIMEOUT } from './bases.ts'
-import { approve, CARRIED, internalPlan, ours, plan, stub, watched, world, type World } from './world.ts'
+import { BROKEN, GREEN, NAPPING, ORPHANED, pkg, RED, TIMEOUT } from './bases.ts'
+import { approve, built as edited, CARRIED, internalPlan, ours, plan, stub, watched, world, type World } from './world.ts'
 
 const ID = 2
 
@@ -173,6 +173,32 @@ test('load-only on both runs is refused with the second run, and the note names 
   expect(get(w.root, ID, 'refusal.md')).toContain('after one retry')
   expect(get(w.root, ID, 'refusal.md')).toContain('  - checks:test\n  - x.test.ts a lap (timeout)\n')
   expect(last(w.db, ID)).toMatchObject({ outcome: 'refuse', rail_id: 'checks', origin_ref: 'x.test.ts > a lap' })
+}, SLOW)
+
+/** A plan of `files` refused once at step 3, after its build changed `src/hello.ts`; its file list before that lap, and the lap. */
+async function reddened(files: Record<string, string>): Promise<{ w: World; before: string[]; fired: Awaited<ReturnType<typeof tick>>[number] | undefined }> {
+  const w = mine(files)
+  for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  edited(w.root, ID, 'export const two = (): number => 2')
+  const before = filesOf(w.db, ID).map((f) => f.path)
+  return { w, before, fired: (await tick(w.db, w.root, stub(CARRIED)))[0] }
+}
+
+test('#191 D1 a failing unlisted test that imports a changed file joins the job\'s files, with no stop', async () => {
+  const { w, before, fired } = await reddened(BROKEN)
+  expect(fired?.note).toBe("npm run test exit 1; added to this job's files: src/tests/hello.test.ts")
+  expect(plan(w.db, ID)).toMatchObject({ step: 2 })
+  expect(plan(w.db, ID).state).not.toBe('blocked_on_ceo')
+  expect(filesOf(w.db, ID).map((f) => f.path)).toEqual([...before, 'src/tests/hello.test.ts'])
+  expect(get(w.root, ID, 'refusal.md')).toContain('src/tests/hello.test.ts')
+  expect(w.db.prepare('SELECT 1 FROM decisions WHERE plan = ?').all(ID)).toEqual([])
+}, SLOW)
+
+test('#191 D2 a failing unlisted test that imports nothing changed is refused as before', async () => {
+  const { w, before, fired } = await reddened(ORPHANED)
+  expect(fired).toMatchObject({ outcome: 'refuse', spans: ['checks:test', 'src/tests/hello.test.ts:3 says hi'] })
+  expect(fired?.note).toBe('npm run test exit 1')
+  expect(filesOf(w.db, ID).map((f) => f.path)).toEqual(before)
 }, SLOW)
 
 test('#77: a narrow list runs the tests it can reach, and only in place of a vitest suite', () => {

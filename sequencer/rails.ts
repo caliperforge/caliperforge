@@ -11,7 +11,7 @@ import { weakened } from '../rails/test-weakened/index.ts'
 import { sources, tight } from '../rails/tight/index.ts'
 import { filesOf } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
-import { internal, type PlanRow } from '../store/plans.ts'
+import { BUILT, internal, type PlanRow } from '../store/plans.ts'
 import { builder } from '../templates/pr-path.ts'
 import { checks, mode, type Failure } from './checks.ts'
 import { outsideLanguage } from './gates.ts'
@@ -68,7 +68,7 @@ export function preReview(db: Db, root: string, plan: PlanRow): Outcome {
  * A rebuild with no recorded file list gets the whole suite, which is the safe way to know nothing.
  */
 export function narrow(db: Db, plan: PlanRow): string[] {
-  const built = db.prepare('SELECT count(*) AS n FROM runs WHERE plan = ? AND step = 2').get(plan.id) as { n: number }
+  const built = db.prepare(`SELECT count(*) AS n FROM runs WHERE plan = ? AND step = 2 AND ${BUILT}`).get(plan.id) as { n: number }
   return built.n > 1 ? filesOf(db, plan.id).map((f) => f.path) : []
 }
 

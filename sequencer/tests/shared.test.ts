@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest'
 import { at } from '../../templates/pr-path.ts'
-import { fingerprintOf } from '../index.ts'
+import { fingerprintOf } from '../refusal.ts'
 
 const text = (note: string) => ({ outcome: 'refuse' as const, spans: ['text:5 identifier.unresolved'], note })
 const base = (note: string) => ({ outcome: 'refuse' as const, spans: ['base:stale'], note })

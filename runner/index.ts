@@ -61,10 +61,10 @@ export async function fire(
   const transcript = join(root, '.cf/work', String(plan), 'step-2.transcript.jsonl')
   const fired = await provider.fire({ ...packet(manifest, prompt, tight(root), issue, cwd, transcript), wall: wall(db) })
   const row = db.prepare(`INSERT INTO runs
-    (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_tokens, output_tokens, seconds, exit, transcript_path)
-    VALUES (?, 2, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_tokens, output_tokens, seconds, exit, transcript_path, cost_usd)
+    VALUES (?, 2, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(plan, name, hash, provider.name, manifest.model, manifest.effort,
-      fired.usage.input, fired.usage.cache, fired.usage.output, fired.seconds, fired.exit, fired.transcript_path)
+      fired.usage.input, fired.usage.cache, fired.usage.output, fired.seconds, fired.exit, fired.transcript_path, fired.usage.cost ?? null)
   observed(db, fired.limits)
   return { id: Number(row.lastInsertRowid), text: fired.text }
 }

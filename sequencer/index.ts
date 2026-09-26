@@ -231,10 +231,11 @@ async function stepped(db: Db, root: string, pipe: PipeRow, plan: PlanRow, lease
   const tree = workspace(db, root, plan)
   const step = at(plan.step, tree.language)
   const mark = newestRun(db)
+  const verdicts = newestVerdict(db)
   const outcome = tree.failed ?? await made(db, root, plan, step, provider, wire, read)
   const state = settle(db, root, plan, step, outcome)
   logged(db, { plan: plan.id, kind: step.name, actor: step.runs, outcome: outcome.outcome, message: outcome.note,
-    pointer: `step-${String(step.step)}`, run: runSince(db, plan.id, step.step, mark) })
+    pointer: pointer(db, plan.id, step, verdicts), run: runSince(db, plan.id, step.step, mark) })
   const fired: Fired = {
     pipe: pipe.name,
     plan: plan.id,
@@ -248,6 +249,20 @@ async function stepped(db: Db, root: string, pipe: PipeRow, plan: PlanRow, lease
     ...(outcome.held === true ? { held: true as const } : {}),
   }
   return { fired, wait: outcome.held === true || outcome.blip === true }
+}
+
+function newestVerdict(db: Db): number {
+  return (db.prepare('SELECT coalesce(max(id), 0) AS id FROM verdicts').get() as { id: number }).id
+}
+
+function pointer(db: Db, plan: number, step: Step, after: number): string {
+  if (step.fires === 'brief') return `plans:${String(plan)}`
+  const own = step.fires === 'review'
+    ? (db.prepare(`SELECT max(id) AS id FROM verdicts
+        WHERE plan = ? AND step = ? AND kind = 'review' AND quick_lane = 0 AND id > ?`)
+      .get(plan, step.step, after) as { id: number | null }).id
+    : null
+  return own === null ? `step-${String(step.step)}` : `verdicts:${String(own)}`
 }
 
 /** The job stops before its next model run, with what it spent written where a person will read it. */

@@ -19,9 +19,19 @@ const COMMENT = /^\s*(\/\/+!?|\/\*+|\*|#+|--(\[\[)?|;+|"""|'''|<!--)\s*/
 /** Comment lines that are pragmas, not descriptions. */
 const PRAGMA = /^(frozen_string_literal|luacheck|eslint|@ts-|SPDX|-\*-|coding[:=]|!)/
 
+export const SYMBOLS = 400
+
 export interface Handover {
   context?: string
   map?: string
+  symbols?: string
+}
+
+export function capped(map: string): string | undefined {
+  if (map === '') return undefined
+  const rows = map.trimEnd().split('\n')
+  if (rows.length <= SYMBOLS) return map
+  return [...rows.slice(0, SYMBOLS), `… ${String(rows.length - SYMBOLS)} more`].join('\n')
 }
 
 /**

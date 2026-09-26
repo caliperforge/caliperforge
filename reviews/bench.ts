@@ -69,11 +69,11 @@ async function ran(db: Db, root: string, name: string, plan: number, manifest: R
   const fired = await provider.fire({ ...packet, wall: wall(db) })
   const outcome = read(fired.text, packet.prompt)
   const row = db.prepare(`INSERT INTO runs
-    (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_tokens, output_tokens, seconds, exit, transcript_path)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_tokens, output_tokens, seconds, exit, transcript_path, cost_usd)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(plan, manifest.step, name, specHash(root, name), provider.name, manifest.model, manifest.effort,
       fired.usage.input, fired.usage.cache, fired.usage.output, fired.seconds,
-      outcome === null ? 1 : fired.exit, fired.transcript_path)
+      outcome === null ? 1 : fired.exit, fired.transcript_path, fired.usage.cost ?? null)
   const run = Number(row.lastInsertRowid)
   byRun(db, run, fired.transcript_path)
   observed(db, fired.limits)
@@ -145,8 +145,9 @@ export function record(db: Db, root: string, name: string, plan: number, v: Verd
   tokens: number, seconds: number, tree: string | null, quick = 0): number {
   const manifest = reviewManifest(root, name)
   const row = db.prepare(`INSERT INTO verdicts
-    (gate, kind, subject_digest, plan, step, outcome, rail_id, origin_kind, origin_ref, tokens, seconds, tree, quick_lane)
-    VALUES (?, 'review', ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)`)
-    .run(manifest.gate, v.subject_digest, plan, manifest.step, v.outcome, v.origin_kind, v.origin_ref, tokens, seconds, tree, quick)
+    (gate, kind, subject_digest, plan, step, outcome, rail_id, origin_kind, origin_ref, tokens, seconds, tree, quick_lane, message)
+    VALUES (?, 'review', ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(manifest.gate, v.subject_digest, plan, manifest.step, v.outcome, v.origin_kind, v.origin_ref, tokens, seconds, tree, quick,
+      v.message)
   return Number(row.lastInsertRowid)
 }

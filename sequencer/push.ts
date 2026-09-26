@@ -48,7 +48,7 @@ export const WIRE: Wire = {
 }
 
 /**
- * Once the pull request is open, CI runs on this branch beside it: pushing the real branch would put
+ * From the first round, CI runs on this branch beside the real one: pushing the real branch would put
  * an unsigned-off round on the maintainer's screen before the CEO has seen it.
  */
 const NEXT = '-next'
@@ -74,7 +74,7 @@ const REHEARSED = 'ci.next'
  */
 export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire = WIRE): Outcome | null {
   if (internal(plan) && !workflows(srcDir(root, plan.id))) return checked(db, root, plan, repo)
-  const { fork, head, ci } = sent(db, root, plan, repo, wire)
+  const { fork, head, ci } = sent(root, plan, repo, wire)
   if (!internal(plan)) wire.rehearse?.(fork, ci)
   const on = { fork, branch: ci, sha: head.sha }
   const { verdict, board } = judge(on, { body: '', commits: commits(head.dir) }, touched(root, plan.id), wire.runs)
@@ -99,20 +99,24 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
 }
 
 /** Step 3's pass opens the rehearsal: a review bot reads only an open pull request. */
-export function reviewable(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire = WIRE): void {
+export function reviewable(root: string, plan: PlanRow, repo: string, wire: Wire = WIRE): void {
   if (internal(plan)) return
-  const { fork, ci } = sent(db, root, plan, repo, wire)
+  const { fork, ci } = sent(root, plan, repo, wire)
   wire.rehearse?.(fork, ci)
 }
 
-export function sent(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire): { fork: string; head: Head; ci: string } {
-  const open = !internal(plan) && opened(db, plan.id) !== null
+export function sent(root: string, plan: PlanRow, repo: string, wire: Wire): { fork: string; head: Head; ci: string } {
+  const outside = !internal(plan)
   const fork = `${FORK}/${repoName(repo)}`
-  if (!internal(plan)) (open ? follow : squash)(root, plan.id)
-  if (!internal(plan) && !open) renamed(srcDir(root, plan.id), fork, wire)
+  const dir = srcDir(root, plan.id)
+  const branch = git(dir, ['rev-parse', '--abbrev-ref', 'HEAD']).trim()
+  const ci = outside ? rehearsed(root, plan.id, branch) : branch
+  if (outside) {
+    if (onFork(dir, branch) || onFork(dir, ci)) follow(root, plan.id, ci)
+    else squash(root, plan.id)
+  }
   const head = headOf(root, plan.id)
-  const ci = open ? rehearsal(root, plan.id, fork, head, wire) : head.branch
-  wire.send(head.dir, open ? `HEAD:refs/heads/${ci}` : head.branch)
+  wire.send(head.dir, outside ? `HEAD:refs/heads/${ci}` : head.branch)
   return { fork, head, ci }
 }
 
@@ -264,7 +268,7 @@ export function push(db: Db, root: string, plan: PlanRow, wire: Wire = WIRE): Ou
   if (cold !== null) return refuse(cold, `${cold} left no passing verdict on plan ${String(plan.id)}`)
   const open = opened(db, plan.id)
   wire.send(head.dir, head.branch)
-  wire.unrehearse?.(`${FORK}/${repoName(target.repo)}`, open === null ? head.branch : rehearsed(root, plan.id, head.branch))
+  wire.unrehearse?.(`${FORK}/${repoName(target.repo)}`, rehearsed(root, plan.id, head.branch))
   if (open !== null) {
     pushed(db, plan.id, approval, open)
     return { outcome: 'pass', spans: [], note: `pushed ${head.branch} onto ${open}` }
@@ -348,7 +352,7 @@ function said(brief: string): string[] {
 }
 
 /**
- * A stranger's branch goes out as one commit, signed as whoever this host's git says it is -- the
+ * A stranger's branch first goes out as one commit, signed as whoever this host's git says it is -- the
  * CEO, on his Mac -- with the brief's title as its subject. The rounds' commits and any merge of
  * their main fold into it; a branch already in that shape is left alone, so a held CI keeps its head.
  */
@@ -364,52 +368,17 @@ export function squash(root: string, plan: number): void {
   sign(dir, message)
 }
 
-/**
- * A round after the first on a branch no pull request shows yet. Its squash cannot fast-forward the commit
- * our fork already holds, and nothing is force-pushed, ever: the round goes out under the next attempt's
- * name and the old rehearsal closes without a word. The pull request opens from whichever branch the last
- * round used.
- */
-function renamed(dir: string, fork: string, wire: Wire): void {
-  const branch = git(dir, ['rev-parse', '--abbrev-ref', 'HEAD']).trim()
-  if (!onFork(dir, branch) || carried(dir, branch)) return
-  git(dir, ['branch', '-m', nextFree(dir, branch)])
-  wire.unrehearse?.(fork, branch)
-}
-
 function onFork(dir: string, branch: string): boolean {
   return git(dir, ['ls-remote', '--heads', 'origin', `refs/heads/${branch}`]).trim() !== ''
 }
 
-/** Whether HEAD carries the commit our fork holds for the branch, so a plain push only moves it forward. */
-function carried(dir: string, branch: string): boolean {
+function ancestor(dir: string, older: string, newer: string): boolean {
   try {
-    git(dir, ['fetch', '--no-tags', 'origin', `+refs/heads/${branch}:refs/remotes/origin/${branch}`])
-    git(dir, ['merge-base', '--is-ancestor', `refs/remotes/origin/${branch}`, 'HEAD'])
+    git(dir, ['merge-base', '--is-ancestor', older, newer])
     return true
   } catch {
     return false
   }
-}
-
-function nextFree(dir: string, branch: string): string {
-  const hit = /^(.*)-a(\d+)$/.exec(branch)
-  const stem = hit?.[1] ?? branch
-  let n = hit === null ? 2 : Number(hit[2]) + 1
-  while (onFork(dir, `${stem}-a${String(n)}`)) n += 1
-  return `${stem}-a${String(n)}`
-}
-
-/** A held tick at the same head keeps its name: the fork already holds that head. */
-function rehearsal(root: string, plan: number, fork: string, head: Head, wire: Wire): string {
-  const named = (n: number): string => `${head.branch}${NEXT}${n === 1 ? '' : String(n)}`
-  let n = 1
-  while (onFork(head.dir, named(n)) && !carried(head.dir, named(n))) n += 1
-  const name = named(n)
-  const previous = rehearsed(root, plan, head.branch)
-  if (previous !== name) wire.unrehearse?.(fork, previous)
-  put(root, plan, REHEARSED, name)
-  return name
 }
 
 /** A round sent before the name was saved went to plain `-next`. */
@@ -418,29 +387,33 @@ function rehearsed(root: string, plan: number, branch: string): string {
 }
 
 /** Read without `headOf`, which commits the plan's work. */
-export function rehearsalBranch(db: Db, root: string, plan: number): string {
-  const branch = git(srcDir(root, plan), ['rev-parse', '--abbrev-ref', 'HEAD']).trim()
-  return opened(db, plan) === null ? branch : rehearsed(root, plan, branch)
+export function rehearsalBranch(root: string, plan: number): string {
+  return rehearsed(root, plan, git(srcDir(root, plan), ['rev-parse', '--abbrev-ref', 'HEAD']).trim())
 }
 
 /**
- * Once the pull request is open its branch only moves forward -- no force-push, ever. The rounds'
- * commits since the head the pull request shows fold into one signed follow-up commit on top of it.
+ * Once our fork holds the branch it only moves forward -- no force-push, ever. The rounds'
+ * commits since the head its rehearsal shows fold into one signed follow-up commit on top of it.
  */
-export function follow(root: string, plan: number): void {
+export function follow(root: string, plan: number, name: string): void {
   const dir = srcDir(root, plan)
   const branch = git(dir, ['rev-parse', '--abbrev-ref', 'HEAD']).trim()
   const shown = `refs/remotes/origin/${branch}`
   const message = `${kindOf(title(root, plan))}: address review`
   git(dir, ['add', '-A', '--', '.'])
-  if (!published(dir, branch, shown)) {
+  const own = published(dir, branch, shown)
+  const next = `refs/remotes/origin/${name}`
+  const ahead = name !== branch && published(dir, name, next)
+  if (!own && !ahead) {
     sign(dir, message)
     return
   }
-  const count = Number(git(dir, ['rev-list', '--count', `${shown}..HEAD`]).trim())
+  const tip = ahead && (!own || ancestor(dir, shown, next)) ? next : shown
+  const count = Number(git(dir, ['rev-list', '--count', `${tip}..HEAD`]).trim())
   const staged = git(dir, ['diff', '--cached', '--name-only']).trim() !== ''
-  if (!staged && (count === 0 || (count === 1 && git(dir, ['log', '-1', '--format=%B']).trim() === message))) return
-  git(dir, ['reset', '--soft', shown])
+  const same = count === 0 || (count === 1 && git(dir, ['log', '-1', '--format=%B']).trim() === message)
+  if (!staged && same && ancestor(dir, tip, 'HEAD')) return
+  git(dir, ['reset', '--soft', tip])
   sign(dir, message)
 }
 

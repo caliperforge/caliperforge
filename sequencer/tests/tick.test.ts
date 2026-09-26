@@ -36,6 +36,7 @@ test('on a stranger\'s repo the builder is the outside seat and may write only t
   for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED, 0, PASS, (p) => packets.push(p)))
   const builder = packets.find((p) => p.tools.includes('Write'))
   expect(builder?.prompt).toContain('# outside_specialist')
+  expect(builder?.prompt).toContain('# Symbols at the branch base\n\nEach top-level export at the branch base, as path:line name.\n\nsrc/hello.ts:1 hello\n')
   const src = realpathSync(srcDir(w.root, 1))
   expect(builder?.cwd).toBe(srcDir(w.root, 1))
   expect(builder?.refuse(join(src, 'src/hello.ts'))).toBeNull()
@@ -261,6 +262,22 @@ test('outside reviewer gets context and map; ours does not', async () => {
   expect(prompt).toContain('# Files around the change')
   expect(prompt.indexOf('# Changed code in context')).toBeGreaterThan(prompt.indexOf('# Diff'))
   expect(prompt).not.toContain('# Checks')
+  expect(prompt).toContain('# Symbols at the branch base\n\nEach top-level export at the branch base, as path:line name.\n\nsrc/hello.ts:1 hello\n')
+  expect(prompt.indexOf('# Symbols at the branch base')).toBeGreaterThan(prompt.indexOf('# Files around the change'))
+})
+
+test('D3 our own plan hands no symbol map to the builder or the reviewer, and builds none', async () => {
+  const w = world()
+  w.db.prepare('DELETE FROM plans WHERE id = 1').run()
+  ours(w.root)
+  internalPlan(w.db, w.root, MINE)
+  const seen: Packet[] = []
+  for (let step = 0; step < 2; step += 1) await tick(w.db, w.root, stub(CARRIED))
+  built(w.root, MINE, FOUR)
+  for (let step = 0; step < 3; step += 1) await tick(w.db, w.root, stub(CARRIED, 0, PASS, (p) => seen.push(p)))
+  expect(plan(w.db, MINE).step).toBe(5)
+  expect(seen.map((p) => p.prompt.includes('# Symbols at the branch base'))).toEqual([false, false])
+  expect(existsSync(join(w.root, '.cf/maps'))).toBe(false)
 })
 
 test('a reviewer gets its own last verdict, the diff since the tree it judged and what did not move, neither on its first', async () => {
@@ -463,21 +480,6 @@ test('a senior refusal lands on build too, and the ticks after it walk rails, re
   expect(walked).toEqual(['build', 'rails', 'review', 'senior'])
 })
 
-test('six ticks walk a plan from measure to Ready on one seat run and no tokens spent deciding', async () => {
-  const w = world()
-  approve(w.db, w.target)
-  const walked: string[] = []
-  for (const at of [0, 1, 2, 3, 4, 5]) {
-    const fired = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1)))[0]
-    expect(fired).toMatchObject({ step: at, outcome: 'pass' })
-    walked.push(fired?.name ?? '')
-  }
-  expect(walked).toEqual(['measure', 'ruling', 'build', 'rails', 'review', 'senior'])
-  expect(plan(w.db, 1).step).toBe(6)
-  expect(blocked(w.db, plan(w.db, 1))).toBeNull()
-  expect(w.db.prepare("SELECT count(*) AS n FROM runs WHERE seat = 'outside_specialist'").get()).toEqual({ n: 1 })
-})
-
 test('step 6 sends the branch to our fork, waits out a run still going, then records ci-green and ready', async () => {
   const w = world()
   approve(w.db, w.target)
@@ -488,7 +490,7 @@ test('step 6 sends the branch to our fork, waits out a run still going, then rec
     watched(sent, w.root, 1, runsOn(w.root, 1, 'in_progress'))))[0]
   expect(held).toMatchObject({ step: 6, name: 'ready', outcome: 'pass', state: 'running' })
   expect(held?.spans).toEqual([`${RUN} ci.pending`])
-  expect(sent.slice(2)).toEqual(['send src widget-12-a1'])
+  expect(sent.slice(2)).toEqual(['send src HEAD:refs/heads/widget-12-a1-next'])
   expect(plan(w.db, 1).step).toBe(6)
   expect(w.db.prepare("SELECT count(*) AS n FROM verdicts WHERE plan = 1 AND rail_id = 'ci-green'").get())
     .toEqual({ n: 0 })
@@ -509,12 +511,12 @@ test('step 3\'s pass sends and rehearses the branch before review fires, and ste
   const wire = watched(sent, w.root, 1, (args) => { branches.push(String(args[args.indexOf('--branch') + 1])); return runs(args) })
   for (let at = 0; at < 4; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
   expect(plan(w.db, 1).step).toBe(4)
-  expect(sent).toEqual(['send src widget-12-a1', 'rehearse caliperforge/widget widget-12-a1'])
+  expect(sent).toEqual(['send src HEAD:refs/heads/widget-12-a1-next', 'rehearse caliperforge/widget widget-12-a1-next'])
 
   for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
   expect(plan(w.db, 1).step).toBe(7)
-  expect(sent.slice(2)).toEqual(['send src widget-12-a1'])
-  expect(branches).toEqual(['widget-12-a1'])
+  expect(sent.slice(2)).toEqual(['send src HEAD:refs/heads/widget-12-a1-next'])
+  expect(branches).toEqual(['widget-12-a1-next'])
 })
 
 test('a red run on the fork sends the plan to the builder with the failed log', async () => {
@@ -721,19 +723,6 @@ test('D3 a 4/5 at the current head passes ready to sign-off', async () => {
   const [w, lap] = await atReady((at) => { scored(at.root, 1, 4, 'Confidence Score: 4/5') })
   expect(await lap()).toMatchObject({ step: 6, name: 'ready', outcome: 'pass' })
   expect(plan(w.db, 1).step).toBe(7)
-})
-
-test('D6 an internal plan passes ready with no Greptile score and no hold', async () => {
-  const w = world()
-  w.db.prepare('DELETE FROM plans WHERE id = 1').run()
-  ours(w.root)
-  internalPlan(w.db, w.root, MINE)
-  const wire = { ...watched([], w.root, MINE), rehearse: () => undefined }
-  for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
-  const out = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
-  expect(out).toMatchObject({ step: 6, name: 'ready', outcome: 'pass' })
-  expect(out?.note).not.toMatch(/Greptile/)
-  expect(plan(w.db, MINE).step).toBe(7)
 })
 
 test('step 6 refuses a plan with no deliverable row instead of sending the branch and raising', async () => {

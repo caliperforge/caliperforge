@@ -328,6 +328,12 @@ function titleOf(text: string): string | null {
   return /^#\s+(.*)$/m.exec(text)?.[1]?.trim() ?? null
 }
 
+export function human(brief: string): Record<'title' | 'what' | 'why' | 'ends', string | null> {
+  const line = (label: string): string | null =>
+    brief.split('\n').find((l) => l.startsWith(label))?.slice(label.length).trim() ?? null
+  return { title: titleOf(brief), what: line('**What:**'), why: line('**Why:**'), ends: line('**When it ends:**') }
+}
+
 /**
  * Each known key's value is read as one quoted string first. As plain YAML, `: ` breaks the parse (plan 77) and
  * ` #` silently ends the value: plan 114's question "Has #3a landed" reached the COO as "Has". A value that runs

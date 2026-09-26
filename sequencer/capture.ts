@@ -22,7 +22,7 @@ interface Pushed { plan: number; repo: string; evidence: string; rehearsal: bool
 
 type Base = Pick<Signal, 'repo' | 'pr' | 'plan'>
 
-const BOT = /\[bot\]$|greptile/i
+export const BOT = /\[bot\]$|greptile/i
 
 const SCORE = /(\d)\s*\/\s*5/
 
@@ -208,12 +208,12 @@ function pushed(db: Db, root?: string, list?: Read): Pushed[] {
 function rehearsals(db: Db, root: string, list: Read): Pushed[] {
   const live = db.prepare(`SELECT p.id AS plan, t.repo FROM plans p JOIN targets t ON t.id = p.target_id
     WHERE p.origin IS NULL AND p.state IN ('running', 'blocked_on_ceo') ORDER BY p.id`).all() as { plan: number; repo: string }[]
-  return live.filter((p) => cloned(srcDir(root, p.plan))).flatMap((p) => opened(db, root, p.plan, `${FORK}/${repoName(p.repo)}`, list))
+  return live.filter((p) => cloned(srcDir(root, p.plan))).flatMap((p) => opened(root, p.plan, `${FORK}/${repoName(p.repo)}`, list))
 }
 
-function opened(db: Db, root: string, plan: number, fork: string, list: Read): Pushed[] {
+function opened(root: string, plan: number, fork: string, list: Read): Pushed[] {
   try {
-    const no = rehearsal(fork, rehearsalBranch(db, root, plan), list)
+    const no = rehearsal(fork, rehearsalBranch(root, plan), list)
     return no === null ? [] : [{ plan, repo: fork, evidence: `https://github.com/${fork}/pull/${String(no)}`, rehearsal: true }]
   } catch {
     return []

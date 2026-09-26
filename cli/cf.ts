@@ -35,6 +35,8 @@ import { ack, crashed, events, line, notify, record as keep, unread } from './in
 import { measure, render as renderPulse } from './measure.ts'
 import { add as fileIssue, render as renderUnfiled, unfiled } from './plan.ts'
 import { add } from './queue.ts'
+import { fill as fillRecord, render as renderRecord, still } from './record.ts'
+import { render as renderScan, scan } from './scan.ts'
 import { close } from './session.ts'
 import { alerter, CRASHED, liveness, livenessLine, stalledLanes, watch } from './watch.ts'
 
@@ -131,6 +133,23 @@ cf.command('usage').argument('[file]', 'a provider rate-limit reading, json').ac
 
 cf.command('measure').argument('<repo>', 'owner/repo to take the step 0 pulse of').action((repo: string) => {
   out(renderPulse(measure(db(), repo, new Date().toISOString().slice(0, 10))))
+})
+
+cf.command('record').argument('<repo>', 'owner/repo whose pull requests of ours to record').action((repo: string) => {
+  const handle = db()
+  out(renderRecord(repo, fillRecord(handle, repo), still(handle, repo)))
+})
+
+cf.command('scan').argument('<repo>', 'owner/repo whose open issues to write as ready targets').action((repo: string) => {
+  const handle = db()
+  fillRecord(handle, repo)
+  const { targets, why } = scan(handle, repo, new Date().toISOString().slice(0, 10))
+  if (why !== null) {
+    process.stderr.write(`cf: ${why}\n`)
+    process.exitCode = 1
+    return
+  }
+  for (const id of targets) out(renderScan(handle, id))
 })
 
 const queue = cf.command('queue')

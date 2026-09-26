@@ -27,18 +27,23 @@ const Envelope = z.object({
 export function audit(handback: string, expected: string[], prev = '', diff = ''): Verdict {
   const rows = carried(handback)
   const subject = createHash('sha256').update(handback).digest('hex')
+  if (typeof rows === 'string') return refuse(subject, ['step-2.handback.md'], `the handback fence is not YAML: ${rows}`)
   const absent = expected.filter((id) => (rows.get(id)?.pointer ?? '').trim() === '')
   const stands = untouched(prev, diff)
   const forward = absent.filter(stands)
   const spans = absent.filter((id) => !stands(id))
   if (spans.length === 0) return { outcome: 'pass', defect_class: null, origin_kind: null, origin_ref: null, subject_digest: subject, spans, message: `${String(expected.length)} done-condition(s) carried with a pointer${also(forward)}` }
+  return refuse(subject, spans, `${spans.join(', ')} expected by the ticket, absent from the handback or carried with no pointer`)
+}
+
+function refuse(subject: string, spans: string[], message: string): Verdict {
   return {
     outcome: 'refuse', defect_class: null,
     origin_kind: 'rail',
     origin_ref: 'completion-audit',
     subject_digest: subject,
     spans,
-    message: `${spans.join(', ')} expected by the ticket, absent from the handback or carried with no pointer`,
+    message,
   }
 }
 
@@ -60,7 +65,7 @@ function untouched(prev: string, diff: string): (id: string) => boolean {
   const touched = new Set(hunks(diff).map((file) => file.path))
   const rows = carried(prev)
   return (id) => {
-    const row = rows.get(id)
+    const row = typeof rows === 'string' ? undefined : rows.get(id)
     const path = (row?.pointer ?? '').split(':')[0] ?? ''
     return row?.status === 'done' && path !== '' && !touched.has(path)
   }
@@ -70,18 +75,30 @@ function also(forward: string[]): string {
   return forward.length === 0 ? '' : `, ${forward.join(', ')} carried forward from the previous handback`
 }
 
-function carried(handback: string): Map<string, z.infer<typeof Envelope>['done'][number]> {
+function carried(handback: string): Map<string, z.infer<typeof Envelope>['done'][number]> | string {
   const fence = /^---\r?\n([\s\S]*?)\r?\n---\s*$/m.exec(handback)
   if (fence === null) return new Map()
-  const envelope = Envelope.safeParse(yaml(fence[1] ?? ''))
-  if (!envelope.success) return new Map()
-  return new Map(envelope.data.done.map((row) => [row.id, row]))
+  const body = fence[1] ?? ''
+  const whole = yaml(body)
+  const envelope = Envelope.safeParse(whole)
+  const rows = envelope.success ? envelope : Envelope.safeParse(yaml(doneOnly(body)))
+  if (!rows.success) return whole instanceof Error ? whole.message : new Map()
+  return new Map(rows.data.done.map((row) => [row.id, row]))
+}
+
+/** 09-26: a `summary:` line holding an unquoted `: ` broke the whole fence, so the rows the audit needs are read on their own. */
+function doneOnly(body: string): string {
+  const at = /^done:/m.exec(body)
+  if (at === null) return ''
+  const rest = body.slice(at.index).split('\n')
+  const end = rest.findIndex((line, i) => i > 0 && /^\S/.test(line))
+  return (end === -1 ? rest : rest.slice(0, end)).join('\n')
 }
 
 function yaml(text: string): unknown {
   try {
     return parse(text)
-  } catch {
-    return null
+  } catch (error) {
+    return error instanceof Error ? error : new Error(String(error))
   }
 }

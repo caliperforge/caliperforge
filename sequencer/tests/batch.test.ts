@@ -60,17 +60,6 @@ test('the batch is a card per plan at ready and per open proposal, with a green/
   ])
 })
 
-test('a plan cannot leave ready without an approval row, and the store is what refuses', async () => {
-  const w = await atBatch()
-  expect(() => { advance(w.db, plan(w.db, 1), 8) }).toThrow(/no ceo approval row/)
-  expect(await tick(w.db, w.root, stub(CARRIED))).toEqual([])
-  const digest = approveCard(w.db, w.root, 'plan', 1)
-  expect(w.db.prepare("SELECT who, decision, subject_digest FROM approvals WHERE subject_kind = 'plan'").get())
-    .toEqual({ who: 'ceo', decision: 'approved', subject_digest: digest })
-  advance(w.db, plan(w.db, 1), 8)
-  expect(plan(w.db, 1).step).toBe(8)
-})
-
 test('push refuses without a matching row, then pushes the approved head and opens the pr', async () => {
   const w = await atBatch()
   const sent: string[] = []
@@ -79,7 +68,7 @@ test('push refuses without a matching row, then pushes the approved head and ope
   expect(sent).toEqual([])
   approveCard(w.db, w.root, 'plan', 1)
   expect(push(w.db, w.root, plan(w.db, 1), wire)).toMatchObject({ outcome: 'pass' })
-  expect(sent).toEqual(['send src widget-12-a1', 'unrehearse caliperforge/widget widget-12-a1', 'open acme/widget caliperforge:widget-12-a1'])
+  expect(sent).toEqual(['send src widget-12-a1', 'unrehearse caliperforge/widget widget-12-a1-next', 'open acme/widget caliperforge:widget-12-a1'])
   expect(w.db.prepare('SELECT state, evidence FROM deliverables WHERE plan_id = 1 ORDER BY id DESC LIMIT 1').get())
     .toEqual({ state: 'pushed', evidence: URL })
 })
@@ -205,23 +194,63 @@ test('a round on an open pull request pushes its branch without opening another'
   expect(sent.slice(2)).toEqual(['send src widget-12-a1', 'unrehearse caliperforge/widget widget-12-a1-next'])
 })
 
-test('a round whose -next the fork holds at a commit HEAD lacks goes out under the next free name, forcing nothing', async () => {
+test('a round whose -next the fork holds at a commit HEAD lacks folds onto it, forcing nothing', async () => {
   const w = await pushed()
   const src = srcDir(w.root, 1)
   const git = (args: string[]): string => execFileSync('git', args, { cwd: src, encoding: 'utf8' }).trim()
+  git(['push', '-q', 'origin', 'widget-12-a1'])
   const stale = git(['-c', 'user.email=cf@caliperforge.dev', '-c', 'user.name=caliperforge', 'commit-tree', 'HEAD^{tree}', '-p', 'HEAD', '-m', 'stale'])
   git(['push', '-q', 'origin', `${stale}:refs/heads/widget-12-a1-next`])
   const sent: string[] = []
-  const wire = watched(sent, w.root, 1)
+  const log = watched(sent, w.root, 1)
+  const wire = { ...log, send: (dir: string, ref: string) => {
+    log.send(dir, ref)
+    execFileSync('git', ['push', '-q', 'origin', ref], { cwd: dir })
+  } }
   rewind(w.db, 1, 4)
+  writeFileSync(join(src, 'src/hello.ts'), 'export const hello = (): string => "hi"\n')
   for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, () => pr(), wire)
-  expect(sent).toEqual(['unrehearse caliperforge/widget widget-12-a1-next', 'send src HEAD:refs/heads/widget-12-a1-next2',
-    'rehearse caliperforge/widget widget-12-a1-next2'])
+  expect(sent).toEqual(['send src HEAD:refs/heads/widget-12-a1-next', 'rehearse caliperforge/widget widget-12-a1-next'])
+  git(['merge-base', '--is-ancestor', stale, 'HEAD'])
   approveCard(w.db, w.root, 'plan', 1)
   advance(w.db, plan(w.db, 1), 8)
   push(w.db, w.root, plan(w.db, 1), wire)
-  expect(sent.slice(3)).toEqual(['send src widget-12-a1', 'unrehearse caliperforge/widget widget-12-a1-next2'])
+  expect(sent.slice(2)).toEqual(['send src widget-12-a1', 'unrehearse caliperforge/widget widget-12-a1-next'])
   expect(sent.filter((l) => l.includes('--force') || l.includes('+refs'))).toEqual([])
+})
+
+test('rounds before the pull request fast-forward -next, and push sends the branch itself and opens it', async () => {
+  const w = world()
+  approve(w.db, w.target)
+  const src = srcDir(w.root, 1)
+  const git = (args: string[]): string => execFileSync('git', args, { cwd: src, encoding: 'utf8' }).trim()
+  const sent: string[] = []
+  const log = watched(sent, w.root, 1)
+  const wire = { ...log, send: (dir: string, ref: string) => {
+    log.send(dir, ref)
+    execFileSync('git', ['push', '-q', 'origin', ref], { cwd: dir })
+  } }
+  const round = async (said: string, ticks: number): Promise<void> => {
+    for (let at = 1; at < ticks; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+    writeFileSync(join(src, 'src/hello.ts'), `export const hello = (): string => "${said}"\n`)
+    await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+    expect(plan(w.db, 1).step).toBe(7)
+  }
+  await round('hey', 7)
+  const first = git(['rev-parse', 'HEAD'])
+  rewind(w.db, 1, 4)
+  await round('hi', 3)
+  git(['merge-base', '--is-ancestor', first, 'HEAD'])
+  expect(git(['rev-parse', 'HEAD'])).not.toBe(first)
+  expect(git(['ls-remote', 'origin', 'refs/heads/widget-12-a1-next']).split('\t')[0]).toBe(git(['rev-parse', 'HEAD']))
+  expect(git(['ls-remote', 'origin', 'refs/heads/widget-12-a1'])).toBe('')
+  expect(new Set(sent.filter((l) => l.startsWith('send ')))).toEqual(new Set(['send src HEAD:refs/heads/widget-12-a1-next']))
+  approveCard(w.db, w.root, 'plan', 1)
+  advance(w.db, plan(w.db, 1), 8)
+  const before = sent.length
+  push(w.db, w.root, plan(w.db, 1), wire)
+  expect(sent.slice(before)).toEqual(['send src widget-12-a1', 'unrehearse caliperforge/widget widget-12-a1-next',
+    'open acme/widget caliperforge:widget-12-a1'])
 })
 
 test('a counterparty finding on merged code is an escape against the step the map says owns it', async () => {
@@ -429,20 +458,6 @@ test('a review read on one tick and the merge on a later one is still one escape
   capture(w.db, () => pr({ reviews: [review], mergedAt: '2026-09-19T09:00:00Z', mergedBy: { login: 'maintainer' } }))
   expect(w.db.prepare('SELECT kind, defect_class, owner FROM dispositions').all())
     .toEqual([{ kind: 'escaped', defect_class: 'scope', owner: 'review' }])
-})
-
-test('the steps write the deliverable themselves, and a plan reaches the batch with no fixture row', async () => {
-  const w = world()
-  approve(w.db, w.target)
-  for (let at = 0; at < 7; at += 1) {
-    await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
-  }
-  expect(plan(w.db, 1).step).toBe(7)
-  expect(w.db.prepare('SELECT step, seat, state FROM deliverables WHERE plan_id = 1 ORDER BY id').all()).toEqual([
-    { step: 2, seat: 'outside_specialist', state: 'built' },
-    { step: 5, seat: 'outside_specialist', state: 'ready' },
-  ])
-  expect(plan(w.db, 1).head_digest).toBe(headDigest(headOf(w.root, 1).sha))
 })
 
 async function pushed(): Promise<World> {

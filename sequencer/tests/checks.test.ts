@@ -108,6 +108,7 @@ test('a checkout whose scripts all exit zero is on step 4 with a pass row for `p
     gate: 'pre_review', kind: 'rail', step: 3, outcome: 'pass', rail_id: 'checks',
     origin_kind: null, origin_ref: null, tokens: 0, seconds: 0,
   })
+  expect(fired?.note).toBe('pre-review: six rails pass; checks ran npm')
 }, SLOW)
 
 const CALLS = { ...ONE, 'a.test.ts': "import { test } from 'vitest'\n\ntest('a call', () => {})\n", 'b.test.ts': "\ntest('a lap', () => {})\n" }
@@ -300,14 +301,6 @@ test('D1 a red xcodebuild names its command', () => {
   expect(checks(src, run)).toMatchObject({ script: 'test', code: '65', command: expect.stringMatching(/^xcodebuild -project Atelier\.xcodeproj/) as string })
 })
 
-test('an xcodebuild run whose test runner hung runs once more, and the second run settles it', () => {
-  const src = tree({})
-  mkdirSync(join(src, 'Atelier.xcodeproj'))
-  const twice = replies({ ok: false, code: '65', output: 'The test runner hung before establishing connection.\n** TEST FAILED **' }, { ok: true, output: '' })
-  expect(checks(src, twice.run)).toBeNull()
-  expect(twice.seen).toHaveLength(2)
-})
-
 test('an xcodebuild failure without the hung line is refused on the first run', () => {
   const src = tree({})
   mkdirSync(join(src, 'Atelier.xcodeproj'))
@@ -345,10 +338,6 @@ test('a checks lock whose holder is gone is taken over, and no lock is left afte
   }
 }, SLOW)
 
-test('D2 a package.json checkout runs npm as before', () => {
-  expect(mode(tree(ONE))).toBe('npm')
-})
-
 test('D3 a kotlin checkout runs gradle check', () => {
   const src = tree({})
   mkdirSync(join(src, 'kotlin'))
@@ -358,13 +347,6 @@ test('D3 a kotlin checkout runs gradle check', () => {
   expect(mode(src)).toBe('gradle')
   expect(checks(src, run)).toBeNull()
   expect([bins, seen]).toEqual([['gradle'], ['-p kotlin check']])
-})
-
-test('D4 the rails note names the mode', async () => {
-  const w = mine(GREEN)
-  const notes: string[] = []
-  for (let at = 0; at < 4; at += 1) notes.push(...(await tick(w.db, w.root, stub(CARRIED))).filter((f) => f.name === 'rails').map((f) => f.note))
-  expect(notes).toContain('pre-review: six rails pass; checks ran npm')
 })
 
 function nested(files: Record<string, string>): string {

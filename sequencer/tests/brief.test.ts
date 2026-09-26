@@ -217,6 +217,7 @@ test('a reply that fails the shape check refuses step 1 on the missing part and 
     const fired = (await tick(w.db, w.root, stub(CARRIED, 0, undefined, undefined, titled(name))))[0]
     expect(fired).toMatchObject({ step: 1, outcome: 'refuse', state: 'retried', spans: [span] })
     expect(maybe(w.root, ID, 'issue.md')).toBeNull()
+    expect(w.db.prepare('SELECT title FROM plans WHERE id = ?').get(ID)).toEqual({ title: null })
   }
 })
 

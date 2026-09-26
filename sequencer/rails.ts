@@ -90,7 +90,7 @@ function unfilled(src: string): Outcome | null {
 function broke(failed: Failure): Outcome {
   return {
     outcome: 'refuse',
-    spans: [`checks:${failed.script}`],
+    spans: [`checks:${failed.script}`, ...failed.tests],
     note: `${failed.command} exit ${failed.code}${failed.retried ? ' after one retry' : ''}`,
     message: failed.output,
   }

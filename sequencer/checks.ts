@@ -27,6 +27,8 @@ export interface Failure {
   command: string
   code: string
   output: string
+  /** `file:line name`, or `file name` where no line of the file holds the title; ` (timeout)` on a load block. */
+  tests: string[]
   retried: boolean
 }
 
@@ -70,8 +72,8 @@ export function checks(src: string, run: Run = npm, narrow: string[] = [], outsi
     const first = run(args, src, bin)
     if (first.ok) continue
     const retried = loadOnly(first.output)
-    const last = retried ? run(args, src, bin) : first
-    if (!last.ok) return { script, command: `${bin} ${args.join(' ')}`, code: last.code, output: tail(last.output), retried }
+    const last = retried ? run(alone(first.output, read(src)?.[script] ?? '', args), src, bin) : first
+    if (!last.ok) return { script, command: `${bin} ${args.join(' ')}`, code: last.code, output: tail(last.output), tests: entries(src, last.output), retried }
   }
   return null
 }
@@ -86,7 +88,7 @@ function gated(src: string, list: Gate[], run: Run): Failure | null {
     const where = gate.dir === '' ? '' : ` (in ${gate.dir}/)`
     const first = settled(gate, run(gate.args, cwd, gate.bin))
     if (first.ok) continue
-    return { script: gate.script, command: `${gate.bin} ${gate.args.join(' ')}${where}`, code: first.code, output: tail(first.output), retried: false }
+    return { script: gate.script, command: `${gate.bin} ${gate.args.join(' ')}${where}`, code: first.code, output: tail(first.output), tests: [], retried: false }
   }
   return null
 }
@@ -124,6 +126,36 @@ export function failures(output: string): string[] {
     else blocks.at(-1)?.push(line)
   }
   return blocks.map((block) => block.join('\n'))
+}
+
+const FAILED = /^[ \t]*FAIL\b/
+
+/** Only a `FAIL` opener carries `file > … > title`; a `×` line names the title alone. */
+const TEST = /^[ \t]*FAIL[ \t]+(.+?) > (.+?)[ \t]*$/m
+
+function entries(src: string, output: string): string[] {
+  const seen = new Map<string, string>()
+  for (const block of failures(output)) {
+    const hit = TEST.exec(block)
+    if (hit === null) continue
+    const [, file = '', name = ''] = hit
+    const key = `${file} > ${name}`
+    if (!seen.has(key)) seen.set(key, `${at(src, file, name.split(' > ').at(-1) ?? name)} ${name}${LOAD.test(block) ? ' (timeout)' : ''}`)
+  }
+  return [...seen.values()]
+}
+
+function at(src: string, file: string, title: string): string {
+  const path = join(src, file)
+  const line = existsSync(path) ? readFileSync(path, 'utf8').split('\n').findIndex((text) => text.includes(title)) : -1
+  return line < 0 ? file : `${file}:${String(line + 1)}`
+}
+
+function alone(output: string, script: string, args: string[]): string[] {
+  const opened = failures(output).filter((block) => FAILED.test(block))
+  const files = opened.map((block) => TEST.exec(block)?.[1]).filter((file) => file !== undefined)
+  if (!VITEST.test(script) || files.length === 0 || files.length < opened.length) return args
+  return ['exec', '--', 'vitest', 'run', ...new Set(files)]
 }
 
 /** A test script that is vitest takes `related`; anything else is run whole, narrow list or not. */

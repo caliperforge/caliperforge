@@ -28,7 +28,7 @@ import { receipt } from '../store/ticks.ts'
 import { adopt, render as renderAdopt } from './adopt.ts'
 import { approve as approveCard, batch, landed, refuse as refuseCard, render, renderLanded } from './batch.ts'
 import { awaiting, day, dryLines, halted, laneLine, open as openPlans, runsOf, section, tickets, ticketSection,
-  tickNote, verdictsOf, windowLine } from './brief.ts'
+  tickNote, verdictsOf, waitLine, waits, windowLine } from './brief.ts'
 import { check, fill } from './digests.ts'
 import { desk, gh } from './gh.ts'
 import { ack, crashed, events, line, notify, record as keep, unread } from './inbox.ts'
@@ -318,6 +318,7 @@ cf.command('brief').action(() => {
   out(livenessLine(handle, liveness(handle, new Date())))
   for (const lane of stalledLanes(handle, new Date())) out(`lane\tOFF with work: ${lane}\n`)
   out(laneLine(lanes(handle, hhmm(handle))))
+  out(waitLine(waits(handle)))
   out(section('open plans', openPlans(handle)))
   out(section('halted', halted(handle)))
   const waiting = awaiting(handle)

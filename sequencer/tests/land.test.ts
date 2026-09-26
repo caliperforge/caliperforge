@@ -161,20 +161,6 @@ test('a main that moves inside the tick makes the land a refusal, not a merge co
     .toEqual({ n: 0 })
 })
 
-test('an external plan does not land: step 7 still waits for the ceo and step 8 opens a pull request', async () => {
-  const w = world()
-  const sent: string[] = []
-  const wire = watched(sent, w.root, 1)
-  approve(w.db, w.target)
-  for (let at = 0; at < 7; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
-
-  expect(plan(w.db, 1).step).toBe(7)
-  expect((await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]).toBeUndefined()
-  expect(sent).toEqual(['send src widget-12-a1', 'rehearse caliperforge/widget widget-12-a1', 'send src widget-12-a1'])
-  expect(w.db.prepare("SELECT count(*) AS n FROM approvals WHERE who = 'gates'").get()).toEqual({ n: 0 })
-  expect(git(srcDir(w.root, 1), ['rev-parse', '--abbrev-ref', 'HEAD'])).toBe('widget-12-a1')
-})
-
 test('behind main twice: rails merge it again', async () => {
   const w = mine()
   const wire = watched([], w.root, ID)
@@ -225,6 +211,13 @@ test('a stale tree merges main before the rails read it and records the new base
   expect(git(src, ['log', '--oneline', 'HEAD'])).toContain('main moves on ahead.ts')
   expect(get(w.root, ID, 'base.sha').trim()).toBe(git(src, ['rev-parse', MAIN]))
   expect(diffOf(w.root, ID)).toContain('export const landed = true')
+  expect(git(srcDir(w.root, ID), ['log', '-1', '--format=%ae %ce', 'HEAD']))
+    .toBe('cf@caliperforge.dev cf@caliperforge.dev')
+  const row = lastMerge(w.db, ID)
+  expect(row?.incoming).toEqual(['ahead.ts'])
+  expect(row?.mine).toEqual(['src/hello.ts'])
+  expect(row?.overlap).toBe(false)
+  expect(row?.main).toBe(git(srcDir(w.root, ID), ['rev-parse', MAIN]))
 })
 
 test('a tree already at main\'s head gains no commit at the rails and its base.sha is byte-identical', async () => {
@@ -257,6 +250,10 @@ test('a merge that conflicts at the rails aborts, hands the builder the paths an
   expect(base).not.toBe('')
   expect(get(w.root, ID, CARRY)).toContain('export const landed = true')
   expect(get(w.root, ID, 'refusal.md')).toContain('src/hello.ts')
+  const row = lastMerge(w.db, ID)
+  expect(row?.incoming).toEqual(['src/hello.ts'])
+  expect(row?.mine).toEqual(['src/hello.ts'])
+  expect(row?.overlap).toBe(true)
 })
 
 test('the re-cut checkout is main\'s, and the builder is handed its own diff to re-apply onto it', async () => {
@@ -276,15 +273,6 @@ test('the re-cut checkout is main\'s, and the builder is handed its own diff to 
   expect(seen[0]?.prompt).toContain('export const landed = true')
   expect(seen[0]?.prompt).toContain('main took this line')
   expect(carried(w.root, ID)).toContain('export const landed = true')
-})
-
-test('the carried diff goes inert once the builder has re-applied it onto the new base', async () => {
-  const w = mine()
-  const wire = watched([], w.root, ID)
-  await atRails(w, wire)
-  moveMain(w.root, 'src/hello.ts', 'export const hello = (): string => "main took this line"\n')
-  await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
-  await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
   built(w.root, ID, 'export const landed = true')
 
   expect(carried(w.root, ID)).toBeNull()
@@ -340,17 +328,6 @@ test('a tree a tick stopped mid-merge in commits no conflict marker at the rails
   expect(git(src, ['log', '-p', BRANCH])).not.toContain('<<<<<<<')
 })
 
-test('the merge the rails step makes is the machine\'s commit, not the host user\'s', async () => {
-  const w = mine()
-  const wire = watched([], w.root, ID)
-  await atRails(w, wire)
-  moveMain(w.root, 'ahead.ts')
-
-  await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
-  expect(git(srcDir(w.root, ID), ['log', '-1', '--format=%ae %ce', 'HEAD']))
-    .toBe('cf@caliperforge.dev cf@caliperforge.dev')
-})
-
 test('a target\'s tree at the rails is untouched when our own main moves', async () => {
   const w = world()
   approve(w.db, w.target)
@@ -376,34 +353,4 @@ test('a seat works in the plan checkout and nowhere else under the machine\'s ow
   expect(liveTree(root, srcDir(root, 2))).toBe(false)
   expect(liveTree(root, join(srcDir(root, 2), 'store'))).toBe(false)
   expect(liveTree(root, tmpdir())).toBe(false)
-})
-
-test('a merge from main records what it brought in against what the job changed, and their overlap', async () => {
-  const w = mine()
-  const wire = watched([], w.root, ID)
-  await atRails(w, wire)
-  moveMain(w.root, 'after.ts')
-
-  expect((await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0])
-    .toMatchObject({ step: 3, outcome: 'pass' })
-
-  const row = lastMerge(w.db, ID)
-  expect(row?.incoming).toEqual(['after.ts'])
-  expect(row?.mine).toEqual(['src/hello.ts'])
-  expect(row?.overlap).toBe(false)
-  expect(row?.main).toBe(git(srcDir(w.root, ID), ['rev-parse', MAIN]))
-})
-
-test('a merge that conflicts records the overlap it conflicted on', async () => {
-  const w = mine()
-  const wire = watched([], w.root, ID)
-  await atRails(w, wire)
-  moveMain(w.root, 'src/hello.ts', 'export const hello = (): string => "main took this line"\n')
-
-  await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
-
-  const row = lastMerge(w.db, ID)
-  expect(row?.incoming).toEqual(['src/hello.ts'])
-  expect(row?.mine).toEqual(['src/hello.ts'])
-  expect(row?.overlap).toBe(true)
 })

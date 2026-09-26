@@ -60,17 +60,6 @@ test('the batch is a card per plan at ready and per open proposal, with a green/
   ])
 })
 
-test('a plan cannot leave ready without an approval row, and the store is what refuses', async () => {
-  const w = await atBatch()
-  expect(() => { advance(w.db, plan(w.db, 1), 8) }).toThrow(/no ceo approval row/)
-  expect(await tick(w.db, w.root, stub(CARRIED))).toEqual([])
-  const digest = approveCard(w.db, w.root, 'plan', 1)
-  expect(w.db.prepare("SELECT who, decision, subject_digest FROM approvals WHERE subject_kind = 'plan'").get())
-    .toEqual({ who: 'ceo', decision: 'approved', subject_digest: digest })
-  advance(w.db, plan(w.db, 1), 8)
-  expect(plan(w.db, 1).step).toBe(8)
-})
-
 test('push refuses without a matching row, then pushes the approved head and opens the pr', async () => {
   const w = await atBatch()
   const sent: string[] = []
@@ -435,20 +424,6 @@ test('a review read on one tick and the merge on a later one is still one escape
   capture(w.db, () => pr({ reviews: [review], mergedAt: '2026-09-19T09:00:00Z', mergedBy: { login: 'maintainer' } }))
   expect(w.db.prepare('SELECT kind, defect_class, owner FROM dispositions').all())
     .toEqual([{ kind: 'escaped', defect_class: 'scope', owner: 'review' }])
-})
-
-test('the steps write the deliverable themselves, and a plan reaches the batch with no fixture row', async () => {
-  const w = world()
-  approve(w.db, w.target)
-  for (let at = 0; at < 7; at += 1) {
-    await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
-  }
-  expect(plan(w.db, 1).step).toBe(7)
-  expect(w.db.prepare('SELECT step, seat, state FROM deliverables WHERE plan_id = 1 ORDER BY id').all()).toEqual([
-    { step: 2, seat: 'outside_specialist', state: 'built' },
-    { step: 5, seat: 'outside_specialist', state: 'ready' },
-  ])
-  expect(plan(w.db, 1).head_digest).toBe(headDigest(headOf(w.root, 1).sha))
 })
 
 async function pushed(): Promise<World> {

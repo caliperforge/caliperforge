@@ -219,7 +219,7 @@ test('a round whose -next the fork holds at a commit HEAD lacks folds onto it, f
   expect(sent.filter((l) => l.includes('--force') || l.includes('+refs'))).toEqual([])
 })
 
-test('D1 D2 D3 rounds before the pull request fast-forward -next on tips the branch never holds, and push sends the branch itself', async () => {
+test('D1 D2 D3 rounds before the pull request fast-forward -next on tips the branch never holds, and push sends the branch itself and opens it', async () => {
   const w = world()
   approve(w.db, w.target)
   const src = srcDir(w.root, 1)

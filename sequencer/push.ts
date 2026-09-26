@@ -144,10 +144,7 @@ function tipOf(root: string, plan: number, head: Head, ci: string): string {
   return tip
 }
 
-/**
- * HEAD plus `greptile.json` turning Greptile's own reviews off (#345b), built in a spare index so the checkout
- * is untouched. The fork's -next tip is a second parent where HEAD lacks it, so -next only fast-forwards.
- */
+/** HEAD plus `greptile.json` turning Greptile's own reviews off (#345b). */
 function quiet(dir: string, ci: string): string {
   const env = { ...process.env, GIT_INDEX_FILE: join(git(dir, ['rev-parse', '--absolute-git-dir']).trim(), 'next.index') }
   const index = (args: string[]): string =>

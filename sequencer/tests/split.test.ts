@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest'
 import { split, STANDING, unclear, wide } from '../brief.ts'
 import { tick } from '../index.ts'
-import { following } from '../split.ts'
+import { following, released } from '../split.ts'
 import { maybe } from '../workspace.ts'
 import { approve, CARRIED, internalPlan, ours, plan, stub, watched, world, type World } from './world.ts'
 
@@ -155,6 +155,17 @@ test('D3, D4: a landing queues the parts that wait on it, and the parent closes 
   expect(log.filter((l) => l.startsWith('close '))).toEqual([])
   expect(landing(w, 1, log)).toBe('the last part landed; #34 closed')
   expect(log.filter((l) => l.startsWith('close '))).toEqual(['close caliperforge/caliperforge#34 1111111'])
+})
+
+test('D4: a part released early is not queued again when the part it waits on lands last, and the parent closes', async () => {
+  const w = mine()
+  const log: string[] = []
+  await briefed(w, ID, AFTER(['none', 'a', 'none']), log)
+  w.db.prepare("INSERT INTO tickets (repo, number, title, lane, after) VALUES ('caliperforge/caliperforge', 902, 't', 'machine', 901)").run()
+  released(w.db, w.root, 'caliperforge/caliperforge', new Set())
+  expect(landing(w, 1, log)).toBeNull()
+  expect(landing(w, 2, log)).toBeNull()
+  expect(landing(w, 0, log)).toBe('the last part landed; #34 closed')
 })
 
 test('D5: a split whose parts all say none queues every part at once', async () => {

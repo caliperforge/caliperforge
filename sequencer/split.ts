@@ -49,7 +49,7 @@ export function following(db: Db, root: string, plan: PlanRow, sha: string, wire
   const row = db.prepare('SELECT parent, n FROM parts WHERE plan = ?').get(plan.id) as { parent: number; n: number } | undefined
   if (row === undefined) return null
   const parent = PlanRow.parse(db.prepare('SELECT * FROM plans WHERE id = ?').get(row.parent))
-  const waiting = db.prepare('SELECT n FROM parts WHERE parent = ? AND after = ?').all(parent.id, row.n) as { n: number }[]
+  const waiting = db.prepare('SELECT n FROM parts WHERE parent = ? AND after = ? AND plan IS NULL').all(parent.id, row.n) as { n: number }[]
   if (waiting.length > 0) return waiting.map(({ n }) => `part ${letter(n)} queued as plan ${String(queue(db, root, parent, n))}`).join('; ')
   const rest = db.prepare('SELECT plan FROM parts WHERE parent = ? AND n != ?').all(parent.id, row.n) as { plan: number | null }[]
   if (!rest.every((p) => landed(db, p.plan))) return null

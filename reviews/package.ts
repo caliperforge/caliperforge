@@ -37,7 +37,7 @@ function declarations(repo: string, path: string, hunks: Set<number>): Changed {
   }
 }
 
-function declaredNames(s: ts.Statement): string[] {
+export function declaredNames(s: ts.Statement): string[] {
   if (ts.isVariableStatement(s)) return s.declarationList.declarations.flatMap((d) => (ts.isIdentifier(d.name) ? [d.name.text] : []))
   if (ts.isFunctionDeclaration(s) || ts.isClassDeclaration(s)) return s.name === undefined ? [] : [s.name.text]
   if (ts.isInterfaceDeclaration(s) || ts.isTypeAliasDeclaration(s) || ts.isEnumDeclaration(s)) return [s.name.text]

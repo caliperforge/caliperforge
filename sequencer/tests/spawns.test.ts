@@ -28,7 +28,7 @@ test('D4 a step-3 tick spawns 11 git processes, 3 of them the live diff', async 
   const lines = readFileSync(log, 'utf8').trimEnd().split('\n')
   const base = get(w.root, ID, 'base.sha').trim()
   expect(lines).toHaveLength(11)
-  expect(lines.filter((line) => line === `diff ${base}`)).toHaveLength(3)
+  expect(lines.filter((line) => line === `diff ${base} -- . :(exclude)MAP.md`)).toHaveLength(3)
   expect(lines.filter((line) => line === `rev-parse ${MAIN}`)).toHaveLength(1)
   expect(fired).toMatchObject({ step: 3, outcome: 'pass' })
 })

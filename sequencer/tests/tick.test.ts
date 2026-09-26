@@ -72,6 +72,16 @@ test('a brief wholly under kotlin/ routes the build to the kotlin seat, and the 
   expect(seen[0]?.prompt.split('# Diff')[1]?.trim()).toBe('')
 })
 
+test('D1 D2 a firing seat holds a model row in now for its plan, and the lap clears it', async () => {
+  const w = world()
+  approve(w.db, w.target)
+  await tick(w.db, w.root, stub(CARRIED))
+  const during: unknown[] = []
+  await tick(w.db, w.root, stub(CARRIED, 0, PASS, () => during.push(...w.db.prepare('SELECT doing, detail, pid FROM now').all())))
+  expect(during).toEqual([{ doing: 'model', detail: 'brief_writer step 1', pid: process.pid }])
+  expect(w.db.prepare('SELECT count(*) AS n FROM now').get()).toEqual({ n: 0 })
+})
+
 test('a pipe fires only inside its window, wrapping across midnight', () => {
   expect(clock(new Date('2026-09-17T15:05:00Z'), -360)).toBe('09:05')
   expect(clock(new Date('2026-09-17T15:05:00Z'))).toBe('15:05')

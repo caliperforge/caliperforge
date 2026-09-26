@@ -6,6 +6,7 @@ import { logged, newestRun, runSince } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { clear as unlease, drop, handOver, held, take, type Lease, type Taken } from '../store/leases.ts'
 import { cap, hhmm, zone } from '../store/lanes.ts'
+import { busy, idle } from '../store/now.ts'
 import { PlanRow, advance, back, finish, internal, live, needsCeo, openPipes, rewind, terminal, type PipeRow, waiting } from '../store/plans.ts'
 import { blipped, fingerprint, refused, WHY, type Why } from '../store/refusals.ts'
 import { at, last, type Step } from '../templates/pr-path.ts'
@@ -209,6 +210,7 @@ async function one(db: Db, root: string, pipe: PipeRow, first: Leg, lease: Taken
     return out
   } finally {
     unlease(db, first.plan.id)
+    idle(db, first.plan.id)
   }
 }
 
@@ -319,13 +321,18 @@ export function thrown(step: Step, message: string): Outcome {
 }
 
 function fire(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider, wire?: Wire): Promise<Outcome> {
-  if (step.fires === 'brief') return fireBrief(db, root, plan, step, provider)
-  if (step.fires === 'seat') return fireSeat(db, root, plan, step, provider)
+  if (step.fires === 'brief') return model(db, plan, step, () => fireBrief(db, root, plan, step, provider))
+  if (step.fires === 'seat') return model(db, plan, step, () => fireSeat(db, root, plan, step, provider))
   if (step.fires === 'review') {
     const standing = kept(db, root, plan, step)
-    return standing === null ? fireRound(db, root, plan, step, provider) : Promise.resolve(standing)
+    return standing === null ? model(db, plan, step, () => fireRound(db, root, plan, step, provider)) : Promise.resolve(standing)
   }
   return Promise.resolve(kernel(db, root, plan, wire))
+}
+
+function model(db: Db, plan: PlanRow, step: Step, run: () => Promise<Outcome>): Promise<Outcome> {
+  busy(db, plan.id, 'model', `${step.runs} step ${String(step.step)}`)
+  return run()
 }
 
 function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcome): string {

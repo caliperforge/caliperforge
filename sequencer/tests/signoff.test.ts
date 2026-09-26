@@ -7,7 +7,7 @@ import { rewind } from '../../store/plans.ts'
 import { tick } from '../index.ts'
 import { ruled, signoffs } from '../signoff.ts'
 import { drop, put, SELF, SIGNOFF, srcDir } from '../workspace.ts'
-import { approve, CARRIED, plan, stub, watched, world, type World } from './world.ts'
+import { approve, CARRIED, plan, scored, stub, watched, world, type World } from './world.ts'
 
 /** Their pull request as the tick reads it, offline: open and quiet. */
 const quiet = (): Pr => ({
@@ -218,6 +218,20 @@ test('D6 the card names each rework round\'s review mode, and a plan with none h
   signoffs(w.db, w.root, desk)
   expect(desk.cards.get(100)?.body).toContain('- Gates: pre_review pass, review pass, senior_review pass, ready pass\n'
     + '- Review mode: review full: src/parse.ts is not in the passed diff; senior_review skipped: 1 delta lines, comments and docs only\n')
+})
+
+test('D4 the card prints Greptile\'s score at this head, or that ready went on without one', async () => {
+  const w = await atBatch()
+  w.db.prepare('DELETE FROM signals').run()
+  const unscored = fake()
+  signoffs(w.db, w.root, unscored)
+  expect(unscored.cards.get(100)?.body).toContain('- Greptile on our fork: no score at this head; ready went on after 45 ticks without one\n')
+
+  scored(w.root, 1, 4, 'Confidence Score: 4/5', 'greptile')
+  drop(w.root, 1, 'signoff')
+  const desk = fake()
+  signoffs(w.db, w.root, desk)
+  expect(desk.cards.get(100)?.body).toContain('- Greptile on our fork: 4/5 at this head\n')
 })
 
 /** #102: the cards carry unposted PR text and the CEO's answers, so they live apart from our public repo. */

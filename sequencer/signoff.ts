@@ -7,8 +7,10 @@ import { notify, record, type Event, type Kind } from '../cli/inbox.ts'
 import type { Db } from '../store/index.ts'
 import { needsCeo, PlanRow, rewind } from '../store/plans.ts'
 import { clear } from '../store/refusals.ts'
+import { graded } from '../store/signals.ts'
 import type { Board } from '../rails/ci-green/index.ts'
 import { BOARD, headOf, opened, rehearsalBranch, title } from './push.ts'
+import { GRADING } from './steps.ts'
 import { diffOf, drop, FORK, get, maybe, put, repoName } from './workspace.ts'
 
 /**
@@ -149,6 +151,7 @@ export function bodyFor(db: Db, root: string, card: Card, desk: Desk): string {
     `- Gates: ${card.marks.map((m) => `${m.name} ${m.ok ? 'pass' : 'NOT PASSED'}`).join(', ')}`,
     ...modes(root, card.id),
     ...(ci === null ? [] : [`- Their CI on our fork: ${ciLine(ci)}`]),
+    `- Greptile on our fork: ${greptileLine(db, card.id, head.sha)}`,
     open === null
       ? `- Goes out as: a new pull request titled ${code(title(root, card.id))}`
       : `- Goes out as: a follow-up commit on our open pull request ${code(open)}`,
@@ -192,6 +195,11 @@ function headline(passed: boolean, ci: Board[] | null): string {
   const off = ci.filter((r) => state(r) !== 'green').length
   if (off === 0) return 'Waiting on you. The four gates passed and every one of their workflows is green on our fork.'
   return `Waiting on you. The four gates passed, but ${String(off)} of their workflows ${off === 1 ? 'is' : 'are'} not green: read the CI line first.`
+}
+
+function greptileLine(db: Db, plan: number, sha: string): string {
+  const score = graded(db, plan, sha)?.score ?? null
+  return score === null ? `no score at this head; ready went on after ${String(GRADING)} ticks without one` : `${String(score)}/5 at this head`
 }
 
 function ciLine(ci: Board[]): string {

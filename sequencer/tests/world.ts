@@ -9,6 +9,7 @@ import type { Packet, Provider } from '../../providers/kind.ts'
 import type { Gh } from '../../rails/ci-green/index.ts'
 import type { Db } from '../../store/index.ts'
 import { PlanRow, type PipeRow } from '../../store/plans.ts'
+import { record } from '../../store/signals.ts'
 import { STANDING } from '../brief.ts'
 import { tick } from '../index.ts'
 import type { Fired } from '../kind.ts'
@@ -182,12 +183,15 @@ export function internalPlan(db: Db, root: string, id: number, title = 'let an i
   return id
 }
 
+const opened = new Map<string, Db>()
+
 export function world(pulse: 'warm' | 'cold' = 'warm', day = new Date().toISOString().slice(0, 10),
   files: Record<string, string> = TYPESCRIPT): World {
   const root = mkdtempSync(join(tmpdir(), 'cf-seq-'))
   for (const dir of ['rules', 'seats', 'reviews', 'rails']) cpSync(join(repo, dir), join(root, dir), { recursive: true })
   remotes(root, files)
   const db = fresh(join(repo, 'schema'))
+  opened.set(root, db)
   const merge = pulse === 'warm' ? day : '2000-01-01'
   db.prepare(`INSERT INTO accounts (id, repo, measured_at, maintainers, doors, last_outsider_merge,
     open_pr_age_p50_days, cross_repo_activity, pulse, evidence)
@@ -284,6 +288,19 @@ export function rerunning(log: string[], root: string, id: number, base: { branc
   }
 }
 
+/** The author of the score every `watched` rehearsal records: a test that counts signals leaves it out. */
+export const SEEDED = 'seeded'
+
+/** Greptile's score on the rehearsal at the checkout's HEAD, in the db `world()` opened for `root`. */
+export function scored(root: string, id: number, score: number, body: string | null = null, author = SEEDED): void {
+  const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: srcDir(root, id), encoding: 'utf8' }).trim()
+  const db = opened.get(root)
+  if (db !== undefined) {
+    record(db, { repo: 'caliperforge/widget', pr: 1, kind: 'bot_review', author, at: new Date().toISOString(),
+      external_id: `${author}-${head}`, score, plan: id, body, head })
+  }
+}
+
 /** The transport a test drives a lap through: every send, pull request and close is a line in `log`. */
 export function watched(log: string[], root: string, id: number, runs = runsOn(root, id)): Wire {
   return {
@@ -292,6 +309,7 @@ export function watched(log: string[], root: string, id: number, runs = runsOn(r
     close: (repo, no, sha) => void log.push(`close ${repo}#${String(no)} ${sha.slice(0, 7)}`),
     runs,
     rehearse: (fork, branch) => {
+      scored(root, id, 5)
       const line = `rehearse ${fork} ${branch}`
       if (log.findLast((l) => l === line || l === `un${line}`) !== line) log.push(line)
     },

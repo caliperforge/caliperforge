@@ -12,11 +12,11 @@ import { open as openProposals } from '../../store/proposals.ts'
 import { graded, SignalRow } from '../../store/signals.ts'
 import { capture } from '../capture.ts'
 import { classOf } from '../escapes.ts'
-import { headOf, prBody, push, sent as next } from '../push.ts'
+import { COMMIT, headOf, prBody, push, sent as next } from '../push.ts'
 import { started } from '../signals.ts'
 import { unanswered } from '../steps.ts'
 import { unread } from '../../cli/inbox.ts'
-import { get, put, srcDir } from '../workspace.ts'
+import { get, maybe, put, srcDir } from '../workspace.ts'
 import { tick } from '../index.ts'
 import { approve, CARRIED, plan, PR as URL, SEEDED, stub, tip, watched, world, type World } from './world.ts'
 
@@ -78,6 +78,7 @@ test('an outside branch reaches the batch as one commit, titled off the brief, n
   const log = execFileSync('git', ['log', '--format=%B%x00', 'refs/remotes/upstream/main..HEAD'],
     { cwd: srcDir(w.root, 1), encoding: 'utf8' }).split('\0').map((m) => m.trim()).filter((m) => m !== '')
   expect(log).toEqual(['hello\n\nadd `hello()`.\n\nthe ask asks for it.'])
+  expect(maybe(w.root, 1, COMMIT)).toBeNull()
 })
 
 test('a body the card set is the one the pull request opens with', async () => {

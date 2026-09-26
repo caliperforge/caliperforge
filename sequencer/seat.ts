@@ -26,6 +26,7 @@ import { deletions } from './fence.ts'
 import { fenceFor, languageFor } from './route.ts'
 import { gates, outsideLanguage } from './gates.ts'
 import type { Outcome } from './kind.ts'
+import { COMMIT, commitMessage } from './push.ts'
 import { carried, cloned, diffOf, diffSince, drop, get, headSha, holds, maybe, move, narrowing, planDir, put, snapshot, srcDir } from './workspace.ts'
 import { kernelPlan } from './home.ts'
 
@@ -105,6 +106,8 @@ export async function fireBrief(db: Db, root: string, plan: PlanRow, step: Step,
   db.prepare('UPDATE plans SET title = ?, what = ?, why = ?, ends = ? WHERE id = ?')
     .run(lines.title, lines.what, lines.why, lines.ends, plan.id)
   put(root, plan.id, 'issue.md', fired.text)
+  const message = commitMessage(root, plan)
+  if (message !== null) put(root, plan.id, COMMIT, message)
   drop(root, plan.id, 'refusal.md')
   return { outcome: 'pass', spans: [], note: `${step.runs}: brief written` }
 }

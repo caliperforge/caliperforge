@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { existsSync, rmSync } from 'node:fs'
-import { isAbsolute, join, relative } from 'node:path'
+import { join, relative } from 'node:path'
 import type { Fired, Provider } from '../providers/kind.ts'
 import { packet, refuse } from '../runner/index.ts'
 import { reviewManifest, SYMBOLS_LEAD, type Bench } from '../runner/packet.ts'
@@ -143,7 +143,7 @@ function lastQuestion(db: Db, root: string, plan: number): string {
   const run = db.prepare('SELECT transcript_path FROM runs WHERE plan = ? AND step = 1 ORDER BY id DESC LIMIT 1')
     .get(plan) as { transcript_path: string | null } | undefined
   const paths = [...new Set(opened(run?.transcript_path ?? '').map((path) => relative(src, path)))]
-    .filter((path) => path !== '' && !path.startsWith('..') && !isAbsolute(path))
+    .filter((path) => path !== '' && !path.startsWith('..'))
   if (paths.length === 0) return ''
   const incoming = new Set(merging(src, sha, MAIN).incoming)
   const rows = paths.map((path) => `- ${path} — ${incoming.has(path) ? 'changed on main since' : 'unchanged'}`)

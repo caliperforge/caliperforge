@@ -241,7 +241,7 @@ test('the seat is fired again with its last brief and the shape refusal under th
 
   await tick(w.db, w.root, stub(CARRIED, 0, undefined, (p) => packets.push(p)))
   expect(packets[0]?.prompt).toContain(`# Your last brief\n\n${reply}`)
-  expect(packets[0]?.prompt).toContain('## Must not break is missing')
+  expect(packets[0]?.prompt).toContain('## Must not break is missing or out of order')
   expect(packets[0]?.prompt).not.toContain('write the whole brief again')
   expect(shape(briefOf(w), askOf(w), srcDir(w.root, ID))).toBeNull()
 })
@@ -346,7 +346,6 @@ test('a plan blocked at step 1 and retried is briefed from the ask alone', async
 const lastTranscript = (w: World): string => (w.db.prepare(
   'SELECT transcript_path FROM runs WHERE plan = ? AND step = 1 ORDER BY id DESC LIMIT 1').get(ID) as { transcript_path: string }).transcript_path
 
-/** A world whose brief writer asked a question, ticked to the fire that asks it. */
 async function questioned(): Promise<World> {
   const w = mine()
   await tick(w.db, w.root, stub(CARRIED))

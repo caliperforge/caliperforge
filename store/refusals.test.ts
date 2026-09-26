@@ -49,6 +49,25 @@ test('the same failure on another job stops as shared, until a person clears it'
   expect(refused(db, { plan: PLAN, step: 3, fingerprint: A, diff: D2 })).toBe('again')
 })
 
+function another(db: Db, pipe: number, origin: string): void {
+  db.prepare(`INSERT INTO plans (id, pipe_id, template, state, queued_at, lane, seat, origin)
+    VALUES (2, ?, 'pr_path', 'running', '2026-09-21T00:00:00.000Z', 'machine', 'typescript_specialist', ?)`).run(pipe, origin)
+}
+
+test('D1 the same failure in another repo is not shared', () => {
+  const db = bench()
+  another(db, 1, 'https://github.com/caliperforge/atelier/issues/77')
+  refused(db, { plan: 2, step: 3, fingerprint: A, diff: D1 })
+  expect(refused(db, { plan: PLAN, step: 3, fingerprint: A, diff: D2 })).toBe('again')
+})
+
+test('D3 the same failure in another pipe is not shared', () => {
+  const db = bench()
+  another(db, 2, 'https://github.com/caliperforge/caliperforge/issues/77')
+  refused(db, { plan: 2, step: 3, fingerprint: A, diff: D1 })
+  expect(refused(db, { plan: PLAN, step: 3, fingerprint: A, diff: D2 })).toBe('again')
+})
+
 test('D6 a job\'s own refusal is never shared, and still stops', () => {
   const db = bench()
   db.prepare(`INSERT INTO plans (id, pipe_id, template, state, queued_at, lane, seat, origin)

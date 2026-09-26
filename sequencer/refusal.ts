@@ -11,7 +11,7 @@ import { maybe, put } from './workspace.ts'
 export function fingerprintOf(step: Step, outcome: Outcome): string {
   const checked = outcome.spans.some((s) => s.startsWith('checks:') || s.startsWith('ci.red'))
   const own = outcome.spans.some((s) => s.startsWith('text:'))
-  return fingerprint(step.step, outcome.spans, checked ? (outcome.message ?? '') : own ? outcome.note : '')
+  return fingerprint(step.step, own ? [...outcome.spans, outcome.note] : outcome.spans, checked ? (outcome.message ?? '') : '')
 }
 
 export function stopped(root: string, plan: number, why: Exclude<Why, 'again'>): void {

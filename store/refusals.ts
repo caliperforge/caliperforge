@@ -52,13 +52,24 @@ export function refused(db: Db, r: Refused): Why {
     .all(r.plan) as { fingerprint: string; diff: string | null }[]
   db.prepare('INSERT INTO refusals (plan, step, fingerprint, diff, blip) VALUES (?, ?, ?, ?, 0)')
     .run(r.plan, r.step, r.fingerprint, r.diff)
-  const elsewhere = db.prepare(`SELECT 1 FROM refusals WHERE fingerprint = ? AND plan <> ? AND cleared = 0 AND blip = 0
-    AND julianday(at) > julianday('now', '-1 day')`).get(r.fingerprint, r.plan)
+  const elsewhere = peer(db, r)
   if (r.moved === true) return prior.length + 1 >= ROUNDS ? 'spent' : 'again'
   if (r.own !== true && elsewhere !== undefined && r.step >= BUILD && r.fingerprint !== fingerprint(r.step, ['base:stale'])) return 'shared'
   if (prior.some((p) => p.fingerprint === r.fingerprint)) return 'repeat'
   if (r.diff !== null && prior.at(-1)?.diff === r.diff) return 'unchanged'
   return prior.length + 1 >= ROUNDS ? 'spent' : 'again'
+}
+
+const repo = (p: string, t: string): string =>
+  `coalesce(${t}.repo, replace(substr(${p}.origin, 1, instr(${p}.origin, '/issues/') - 1), 'https://github.com/', ''))`
+
+/** Another plan in `r.plan`'s pipe and repo refused with the same fingerprint within a day, if one was. */
+export function peer(db: Db, r: Refused): number | undefined {
+  const row = db.prepare(`SELECT f.plan FROM refusals f JOIN plans p ON p.id = f.plan LEFT JOIN targets t ON t.id = p.target_id
+      JOIN plans me ON me.id = ? LEFT JOIN targets mt ON mt.id = me.target_id
+    WHERE f.fingerprint = ? AND f.plan <> me.id AND f.cleared = 0 AND f.blip = 0 AND julianday(f.at) > julianday('now', '-1 day')
+      AND p.pipe_id = me.pipe_id AND ${repo('p', 't')} = ${repo('me', 'mt')}`).get(r.plan, r.fingerprint) as { plan: number } | undefined
+  return row?.plan
 }
 
 /** A failed checkout: the plan stays on its step until `BLIPS` of them come in a row. */

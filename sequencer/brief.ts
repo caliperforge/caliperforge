@@ -109,7 +109,7 @@ const GROUNDS: [RegExp, string][] = [
   [SHELL, 'the builder holds no shell'],
 ]
 
-const PATH = /^\s*[-*]\s*`?([A-Za-z0-9_./-]+\.[A-Za-z0-9]+)(?::\d+)?`?/
+const PATH = /^\s*[-*]\s*`?([A-Za-z0-9_./+-]+\.[A-Za-z0-9]+)(?::\d+)?`?/
 
 const ROW = /^\s*[-*]\s*\**D\d+\**/gm
 
@@ -257,7 +257,7 @@ function paths(brief: string, src: string): Refused | null {
 }
 
 /** A path with the line it points at, anywhere on a `## Files` row: `` `a/b.rb:197` ``. */
-const POINTED = /([A-Za-z0-9_.-]*\/[A-Za-z0-9_./-]*\.[A-Za-z0-9]+):(\d+)/g
+const POINTED = /([A-Za-z0-9_.+-]*\/[A-Za-z0-9_./+-]*\.[A-Za-z0-9]+):(\d+)/g
 
 /** Each line a `## Files` row points at, so a long file is handed by its block (#67). */
 export function pointed(brief: string, heading = '## Files'): { path: string; line: number }[] {
@@ -272,7 +272,7 @@ export function references(brief: string): { path: string; line: number }[] {
 }
 
 /** A path in backticks anywhere on a `## Files` row; the directory in it is what tells it from a symbol. */
-const TICKED = /`([A-Za-z0-9_.-]*\/[A-Za-z0-9_./-]*\.[A-Za-z0-9]+)(?::[\d,-]+)?`/g
+const TICKED = /`([A-Za-z0-9_.+-]*\/[A-Za-z0-9_./+-]*\.[A-Za-z0-9]+)(?::[\d,-]+)?`/g
 
 /**
  * The one reader of `## Files`: every path the brief says the job touches, in the order it listed them,

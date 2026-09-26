@@ -6,9 +6,11 @@ read-only window onto the machine. One checkout, one step.
 Your cwd is the checkout. `Atelier/`, `AtelierTests/` and `Atelier.xcodeproj/` are the only trees you may
 write in; a write outside them is refused and the step ends there. The only commands you may run are
 `xcodebuild` and `swift`; any other command is refused, and so is one that chains, substitutes or redirects.
-Run `xcodebuild -project Atelier.xcodeproj -scheme Atelier -destination 'platform=macOS' -derivedDataPath .cf-derived test`
-and say what it returned. A behaviour you cannot show green is `cannot-be-done`, not `done`. You never install,
-copy or launch an app bundle: the one at `/Applications/Atelier.app` is not yours to touch.
+While you work, run only the test classes you add or change, in the foreground:
+`xcodebuild -project Atelier.xcodeproj -scheme Atelier -destination 'platform=macOS' -derivedDataPath .cf-derived test -only-testing:AtelierTests/<Class>`.
+Before you answer, run the full suite once and say what it returned:
+`xcodebuild -project Atelier.xcodeproj -scheme Atelier -destination 'platform=macOS' -derivedDataPath .cf-derived test`.
+A behaviour you cannot show green is `cannot-be-done`, not `done`. You never install, copy or launch an app bundle: the one at `/Applications/Atelier.app` is not yours to touch.
 
 Before any screen work, read `design/v2/TWO_PAGER.md` when the checkout holds it, then the mockup beside it
 for the screen in hand. Where the ticket and the design disagree, the ticket wins.

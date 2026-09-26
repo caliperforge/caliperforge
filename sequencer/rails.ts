@@ -9,7 +9,7 @@ import { record as recordRail, type Verdict } from '../rails/record.ts'
 import { scan } from '../rails/secret-scan/index.ts'
 import { weakened } from '../rails/test-weakened/index.ts'
 import { sources, tight } from '../rails/tight/index.ts'
-import { filesOf } from '../store/files.ts'
+import { filesOf, listed } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
 import { busy } from '../store/now.ts'
 import { BUILT, internal, type PlanRow } from '../store/plans.ts'
@@ -20,7 +20,7 @@ import { outsideLanguage } from './gates.ts'
 import type { Outcome } from './kind.ts'
 import { lock, unlock } from './lock.ts'
 import { seat } from '../runner/rules.ts'
-import { renumbered, strays } from './fence.ts'
+import { broken, renumbered, strays } from './fence.ts'
 import { fenceFor, languageFor } from './route.ts'
 import { diffOf, doneIds, get, maybe, srcDir } from './workspace.ts'
 import { kernelPlan } from './home.ts'
@@ -53,7 +53,7 @@ export function preReview(db: Db, root: string, plan: PlanRow, wire?: Wire): Out
   if (ci !== null && 'wait' in ci) return ci.wait
   if (ci !== null) {
     recordRail(db, join(root, 'rails', 'checks'), plan.id, checked(ci.failed, diffOf(root, plan.id)), 0)
-    if (ci.failed !== null) return broke(ci.failed)
+    if (ci.failed !== null) return broke(db, root, plan, ci.failed)
     return { outcome: 'pass', spans: [], note: `pre-review: six rails pass; checks ran on GitHub CI at ${ci.at}` }
   }
   if (internal(plan) || outside !== null) {
@@ -63,7 +63,7 @@ export function preReview(db: Db, root: string, plan: PlanRow, wire?: Wire): Out
       const failed = checks(srcDir(root, plan.id), noted(db, plan.id), outside === null ? narrow(db, plan) : [],
         outside === null ? null : { language: outside, files: filesOf(db, plan.id).map((f) => f.path) })
       recordRail(db, join(root, 'rails', 'checks'), plan.id, checked(failed, diffOf(root, plan.id)), 0)
-      if (failed !== null) return broke(failed)
+      if (failed !== null) return broke(db, root, plan, failed)
     } finally {
       unlock(root, plan.id)
     }
@@ -102,11 +102,14 @@ function unfilled(src: string): Outcome | null {
   }
 }
 
-function broke(failed: Failure): Outcome {
+function broke(db: Db, root: string, plan: PlanRow, failed: Failure): Outcome {
+  const added = broken(srcDir(root, plan.id), failed.tests, filesOf(db, plan.id).map((f) => f.path),
+    parse(diffOf(root, plan.id)).map((f) => f.path))
+  for (const path of added ?? []) listed(db, plan.id, path)
   return {
     outcome: 'refuse',
     spans: [`checks:${failed.script}`, ...failed.tests],
-    note: `${failed.command} exit ${failed.code}${failed.retried ? ' after one retry' : ''}`,
+    note: `${failed.command} exit ${failed.code}${failed.retried ? ' after one retry' : ''}${added === null ? '' : `; added to this job's files: ${added.join(', ')}`}`,
     message: failed.output,
   }
 }

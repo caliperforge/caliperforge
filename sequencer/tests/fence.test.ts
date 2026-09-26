@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
-import { renumbered, strays } from '../fence.ts'
+import { broken, renumbered, strays } from '../fence.ts'
 import { tick } from '../index.ts'
 import { get, srcDir } from '../workspace.ts'
 import { CARRIED, internalPlan, ours, plan, stub, world, type World } from './world.ts'
@@ -58,6 +58,15 @@ test('an unowned stray refuses at the rails, before any review, naming its row; 
   writeFileSync(join(srcDir(w.root, ID), 'cli/extra.ts'), 'export const extra = 1\n')
   expect((await tick(w.db, w.root, stub(OWNS)))[0]).toMatchObject({ plan: ID, step: 3, name: 'rails', outcome: 'pass' })
   expect(plan(w.db, ID).step).toBe(4)
+})
+
+test('#191 D3 a failing test is returned only when unlisted and importing a changed path', () => {
+  const src = mkdtempSync(join(tmpdir(), 'cf-broken-'))
+  mkdirSync(join(src, 'store/tests'), { recursive: true })
+  writeFileSync(join(src, 'store/tests/x.test.ts'), "import { x } from '../x.ts'\n")
+  expect(broken(src, ['store/tests/x.test.ts:1 x'], ['store/y.ts'], ['store/x.ts'])).toEqual(['store/tests/x.test.ts'])
+  expect(broken(src, ['store/tests/x.test.ts:1 x'], ['store/tests/x.test.ts'], ['store/x.ts'])).toBeNull()
+  expect(broken(src, [], ['store/y.ts'], ['store/x.ts'])).toBeNull()
 })
 
 test('a new migration numbered at or below one the checkout holds', () => {

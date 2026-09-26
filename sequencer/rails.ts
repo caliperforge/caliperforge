@@ -49,19 +49,19 @@ export function preReview(db: Db, root: string, plan: PlanRow, wire?: Wire): Out
     recordRail(db, join(root, 'rails', rail), plan.id, verdict, 0)
     if (verdict.outcome !== 'pass') return named(rail, verdict)
   }
-  return (kernelPlan(plan) ? ratchetStop(db, root, plan.id, diff) : null) ?? suite(db, root, plan, wire)
+  return kernelPlan(plan) ? ratchetFirst(db, root, plan, diff, wire) : suite(db, root, plan, wire)
 }
 
-/** Only findings on paths the diff touches are the job's: the rest is main's debt. */
-function ratchetStop(db: Db, root: string, plan: number, diff: string): Outcome | null {
+/** Only findings on paths the diff touches are the job's: the rest is main's debt. A held step comes round again, so it warns once not held. */
+function ratchetFirst(db: Db, root: string, plan: PlanRow, diff: string, wire?: Wire): Outcome {
   const { mode: set, raises } = ratchetRules(db)
   const touched = new Set(parse(diff).map((f) => f.path))
-  const found = ratcheted(srcDir(root, plan), raises).filter((f) => touched.has(f.path))
-  if (found.length === 0) return null
+  const found = ratcheted(srcDir(root, plan.id), raises).filter((f) => touched.has(f.path))
   const message = found.map((f) => f.message).join('; ')
-  if (set === 'refuse') return { outcome: 'refuse', spans: found.map((f) => `ratchet:${f.path}`), note: 'ratchet: the job grew a file past its budget', message }
-  logged(db, { plan, kind: 'ratchet', actor: 'ratchet', outcome: 'pass', message: `would refuse: ${message}`, pointer: null, run: null })
-  return null
+  if (found.length > 0 && set === 'refuse') return { outcome: 'refuse', spans: found.map((f) => `ratchet:${f.path}`), note: 'ratchet: the job grew a file past its budget', message }
+  const outcome = suite(db, root, plan, wire)
+  if (found.length > 0 && outcome.held !== true) logged(db, { plan: plan.id, kind: 'ratchet', actor: 'ratchet', outcome: 'pass', message: `would refuse: ${message}`, pointer: null, run: null })
+  return outcome
 }
 
 function suite(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {

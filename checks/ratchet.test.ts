@@ -59,7 +59,7 @@ it('D1 a raise lifts only the file it names', () => {
     .toEqual([GROWN.replace('a.ts', 'b.ts')])
 })
 
-it('D2 a raise that is not a whole number or is under budget lifts nothing', () => {
+it('D2 a raise not whole or under budget lifts nothing', () => {
   const dir = tree({ 'a.ts': 'x\n'.repeat(41) }, { 'a.ts': { lines: 10 } })
   for (const raise of [Number('abc'), 20]) {
     expect(ratcheted(dir, { 'ratchet.raise.lines.a.ts': raise }).map((f) => f.message)).toEqual([GROWN])

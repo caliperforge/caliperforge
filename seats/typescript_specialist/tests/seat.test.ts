@@ -38,3 +38,16 @@ test('the prompt tells a rebuild to list every case, carrying the untouched rows
     "A rebuild's fence lists every case again: carry forward the rows the refusal did not touch, update the ones it did.",
   )
 })
+
+test('the prompt carries the own-repo rules and the outside comment-density line', () => {
+  const { prompt } = seat(root, 'typescript_specialist')
+  for (const line of [
+    'On our own repository:',
+    '- A comment states, in one sentence, a fact the code cannot say.',
+    '- Why a change was made goes in the commit message, never in a comment.',
+    '- Code the change replaces is deleted in the same job.',
+    '- A fallback records that it fell back.',
+    '- New logic goes in a new file rather than growing a file past its budget.',
+    "On anyone else's repository, match its comment density instead.",
+  ]) expect(prompt).toContain(line)
+})

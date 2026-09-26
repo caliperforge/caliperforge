@@ -199,6 +199,38 @@ test('passes ranges, bare hashes, the word plan and history in a string', () => 
   expect(commented('', "export const s = '#154 09-24'").spans).toEqual([])
 })
 
+const moved = (removed: string, source: string): string[] => {
+  const gone = removed.split('\n')
+  const diff = `--- a/src/a.ts\n+++ /dev/null\n@@ -1,${String(gone.length)} +0,0 @@\n${gone.map((l) => `-${l}`).join('\n')}\n${added('src/b.ts', source)}`
+  return tight(root, { diff, sources: { 'src/b.ts': source }, description: 'x.' }).spans
+}
+
+const within = (comment: string): string[] => {
+  const source = `export const reap = 1\n${comment}\nexport const sow = 2\n`
+  const diff = `--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1,4 +1,4 @@\n-/** #154: reap\n- * on land */\n export const reap = 1\n+${comment.replace('\n', '\n+')}\n export const sow = 2\n`
+  return tight(root, { diff, sources: { 'src/a.ts': source }, description: 'x.' }).spans
+}
+
+test('passes a comment moved unchanged to another file', () => {
+  for (const source of ['/** #154: reap on land */\nexport const reap = 1', '// step count\nexport const stepCount = 1']) {
+    expect(moved(source, source)).toEqual([])
+  }
+})
+
+test('passes a block comment moved unchanged within its file', () => {
+  expect(within('/** #154: reap\n * on land */')).toEqual([])
+})
+
+test('refuses a moved comment with one word changed', () => {
+  expect(within('/** #154: reap\n * at land */')).toEqual(['src/a.ts:2 tight.history'])
+  expect(moved('// step count\nexport const stepCount = 1', '// step total\nexport const stepTotal = 1')).toEqual(['src/b.ts:1 tight.restating'])
+})
+
+test('judges an unused import moved verbatim', () => {
+  const line = "import { join } from 'node:path'"
+  expect(moved(line, `${line}\nexport const x = 1`)).toEqual(['src/b.ts:1 tight.unused_import'])
+})
+
 test('a prose span is named for the text it read', () => {
   const verdict = tight(root, { ...subject('red'), prose: 'handback' })
   expect(verdict.spans.filter((s) => !s.startsWith('src/'))).toEqual(['handback:1 tight.preamble', 'handback:3 tight.hedge', 'handback:3 tight.summary'])

@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { expect, it } from 'vitest'
-import { ratchet, type Counts } from './ratchet.ts'
+import { ratchet, ratcheted, type Counts } from './ratchet.ts'
 
 function tree(files: Record<string, string>, seed: Counts): string {
   const dir = mkdtempSync(join(tmpdir(), 'cf-ratchet-'))
@@ -49,6 +49,21 @@ it('refuses a removal until ratchet.json is lowered', async () => {
   expect(await messages(dir)).toEqual(['lower ratchet.json sequencer/x.ts prepare to 0'])
   record(dir, { 'sequencer/x.ts': { lines: 1 } })
   expect(await messages(dir)).toEqual([])
+})
+
+const GROWN = 'a.ts lines 41 over budget 40: move the new function to a new file'
+
+it('D1 a raise lifts only the file it names', () => {
+  const dir = tree({ 'a.ts': 'x\n'.repeat(60), 'b.ts': 'x\n'.repeat(41) }, { 'a.ts': { lines: 10 }, 'b.ts': { lines: 10 } })
+  expect(ratcheted(dir, { 'ratchet.raise.lines.a.ts': 60 }).map((f) => f.message))
+    .toEqual([GROWN.replace('a.ts', 'b.ts')])
+})
+
+it('D2 a raise not whole or under budget lifts nothing', () => {
+  const dir = tree({ 'a.ts': 'x\n'.repeat(41) }, { 'a.ts': { lines: 10 } })
+  for (const raise of [Number('abc'), 20]) {
+    expect(ratcheted(dir, { 'ratchet.raise.lines.a.ts': raise }).map((f) => f.message)).toEqual([GROWN])
+  }
 })
 
 it('refuses a long test name and citing comments', async () => {

@@ -26,7 +26,12 @@ const COMMENT = new Set<ts.SyntaxKind>([
 
 export const ratchet: Check = {
   name: 'ratchet',
-  run: (root: string) => Promise.resolve(judged(counts(root), recorded(root))),
+  run: (root: string) => Promise.resolve(ratcheted(root, {})),
+}
+
+/** `raises` is keyed by the settings row `ratchet.raise.<metric>.<path>`, `/` read as `.` and `-` as `_`. */
+export function ratcheted(root: string, raises: Record<string, number>): Finding[] {
+  return judged(counts(root), recorded(root), raises)
 }
 
 export function counts(root: string): Counts {
@@ -90,14 +95,20 @@ function comments(text: string): string[] {
   return out
 }
 
-function judged(now: Counts, then: Counts): Finding[] {
+function judged(now: Counts, then: Counts, raises: Record<string, number>): Finding[] {
   const paths = [...new Set([...Object.keys(then), ...Object.keys(now)])]
-  return paths.flatMap((path) => METRICS.flatMap((metric) => verdict(path, metric, now[path]?.[metric] ?? 0, then[path])))
+  return paths.flatMap((path) => METRICS.flatMap((metric) =>
+    verdict(path, metric, now[path]?.[metric] ?? 0, then[path], raises[raiseKey(metric, path)])))
 }
 
-function verdict(path: string, metric: Metric, count: number, was: Tally | undefined): Finding[] {
+function raiseKey(metric: Metric, path: string): string {
+  return `ratchet.raise.${metric}.${path}`.replaceAll('/', '.').replaceAll('-', '_')
+}
+
+function verdict(path: string, metric: Metric, count: number, was: Tally | undefined, raise = 0): Finding[] {
   const seen = was?.[metric] ?? 0
-  const budget = metric === 'lines' && was === undefined ? 300 : seen + (metric === 'lines' ? 30 : 0)
+  const floor = metric === 'lines' && was === undefined ? 300 : seen + (metric === 'lines' ? 30 : 0)
+  const budget = Number.isInteger(raise) ? Math.max(floor, raise) : floor
   if (count > budget) return [refusal(path, `${path} ${metric} ${String(count)} over budget ${String(budget)}: ${FIX[metric]}`)]
   if (count < seen) return [refusal(path, `lower ratchet.json ${path} ${metric} to ${String(count)}`)]
   return []

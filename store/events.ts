@@ -18,6 +18,11 @@ export function logged(db: Db, e: Event): number {
   return Number(row.lastInsertRowid)
 }
 
+export function eventsOf(db: Db, plan: number, kind: string): Pick<Event, 'actor' | 'outcome' | 'message'>[] {
+  return db.prepare('SELECT actor, outcome, message FROM events WHERE plan = ? AND kind = ? ORDER BY id')
+    .all(plan, kind) as Pick<Event, 'actor' | 'outcome' | 'message'>[]
+}
+
 export function newestRun(db: Db): number {
   return (db.prepare('SELECT coalesce(max(id), 0) AS id FROM runs').get() as { id: number }).id
 }

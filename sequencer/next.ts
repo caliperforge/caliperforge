@@ -58,8 +58,9 @@ export function working(offers: Offer[], wide: number): Offer[] {
 
 /**
  * The plans this pipe steps this tick, in priority order. A queued plan that is
- * blocked holds no slot; a running one holds the slot it already took unless it waits on the CEO, and so does
- * one another tick has leased, which this tick offers to nobody.
+ * blocked holds no slot; a running one holds the slot it already took, and so does
+ * one another tick has leased, which this tick offers to nobody; a running one that
+ * waits on the CEO and is not leased gives its slot up.
  */
 export function picks(db: Db, pipe: PipeRow, now: Date = new Date(), mine: Lease | null = null): PlanRow[] {
   const leases = new Set(others(db, now, mine).map((l) => l.plan))

@@ -38,3 +38,9 @@ test('the prompt makes a generated file\'s row name the workflow step that write
     'When `## Files` lists a file a workflow generates, that row names the workflow step that writes it, meaning its `.github/workflows` file and the generator line before `git diff --exit-code`, and says step 3 runs that generator and diffs the file against its output.',
   )
 })
+
+test('the prompt sends every builder and implementer of a changed shared type or signature to the file list', () => {
+  expect(seat(root, 'brief_writer').prompt.replace(/\s+/g, ' ')).toContain(
+    'When the ask changes a shared type or a function\'s signature, search the checkout for its name and list every file that builds or implements it: under `## Files`, or under `## Tests` when it is a test or fixture.',
+  )
+})

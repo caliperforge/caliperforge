@@ -6,7 +6,7 @@ import { originRef, PlanRow } from '../store/plans.ts'
 import { record, type Signal, type SignalRow } from '../store/signals.ts'
 import { partOf, recordListing } from '../store/tickets.ts'
 import { attribute } from './escapes.ts'
-import { rehearsalBranch } from './push.ts'
+import { carried, rehearsalBranch } from './push.ts'
 import { claimed, released } from './split.ts'
 import { cloned, FORK, repoName, srcDir } from './workspace.ts'
 
@@ -33,13 +33,13 @@ const REVIEWED = /Last reviewed commit: \[[^\]]*\]\(https:\/\/github\.com\/[^/)]
 
 /** Every open PR of ours, every tick. `gh` polling is the only reader; there is no webhook and no server. */
 export function capture(db: Db, read: (repo: string, no: number) => Pr = readPr, root?: string, list?: Read): SignalRow[] {
-  return pushed(db, root, list).flatMap((row) => reachable(db, row, read))
+  return pushed(db, root, list).flatMap((row) => reachable(db, row, read, root))
 }
 
 /** A pr `gh` cannot reach this tick is read again next tick; it does not stop the pipes behind it. */
-function reachable(db: Db, row: Pushed, read: (repo: string, no: number) => Pr): SignalRow[] {
+function reachable(db: Db, row: Pushed, read: (repo: string, no: number) => Pr, root?: string): SignalRow[] {
   try {
-    return one(db, row, read)
+    return one(db, row, read, root)
   } catch {
     return []
   }
@@ -112,10 +112,13 @@ function landed(db: Db, repo: string, open: Set<string>): void {
   }
 }
 
-function one(db: Db, row: Pushed, read: (repo: string, no: number) => Pr): SignalRow[] {
+/** Only `rehearsals()`, which has `root`, makes a rehearsal row. */
+function one(db: Db, row: Pushed, read: (repo: string, no: number) => Pr, root?: string): SignalRow[] {
   const view = read(row.repo, prNumber(row.evidence))
-  if (row.rehearsal) {
-    for (const s of signals(view, row).filter((s) => s.kind === 'bot_review')) record(db, s)
+  if (row.rehearsal && root !== undefined) {
+    for (const s of signals(view, row).filter((s) => s.kind === 'bot_review')) {
+      record(db, { ...s, head: carried(root, row.plan, s.head ?? '') })
+    }
     return []
   }
   const fresh = signals(view, row).map((s) => record(db, s)).filter((s) => s !== null)

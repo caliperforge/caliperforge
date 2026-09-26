@@ -17,7 +17,7 @@ import { at, type Step } from '../templates/pr-path.ts'
 import { writable } from './brief.ts'
 import type { Outcome } from './kind.ts'
 import { preReview } from './rails.ts'
-import { forkCi, headOf, holding, land, opened, push, reviewable, title, type Wire } from './push.ts'
+import { forkCi, headOf, holding, land, opened, push, rehearsalBranch, reviewable, title, WIRE, type Wire } from './push.ts'
 import { following } from './split.ts'
 import { abortMerge, behindMain, cloned, conflicted, diffOf, diffSince, fetchMain, FORK, get, holds, maybe, merging, mergeMain, narrowing, put, recut,
   repoName, srcDir, unmerged } from './workspace.ts'
@@ -128,7 +128,7 @@ function readyGate(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
   if (!cloned(srcDir(root, plan.id))) return { outcome: 'refuse', spans: ['checkout'], note: `plan ${String(plan.id)} has no checkout to send` }
   const waiting = forkCi(db, root, plan, repo, wire)
   if (waiting !== null) return waiting
-  const bot = internal(plan) ? '' : greptile(db, root, plan, repo)
+  const bot = internal(plan) ? '' : greptile(db, root, plan, repo, wire ?? WIRE)
   if (typeof bot !== 'string') return bot
   const verdict = readyRail(proofOf(db, root, plan, repo, row))
   recordRail(db, join(root, 'rails/ready'), plan.id, verdict, 0)
@@ -139,18 +139,37 @@ function readyGate(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
 export const GRADING = 45
 
 /** Nothing leaves our fork below 4/5 from Greptile at this head. */
-function greptile(db: Db, root: string, plan: PlanRow, repo: string): Outcome | string {
+function greptile(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire): Outcome | string {
   const sha = headOf(root, plan.id).sha
   const at = `${FORK}/${repoName(repo)}@${sha.slice(0, 12)}`
   const row = graded(db, plan.id, sha)
   if (row === null) {
-    return holding(root, plan.id, sha, ['greptile.missing'], `${at} has no Greptile score yet`, GRADING, 'greptile.waits')
+    return asked(root, plan.id, sha, repo, wire)
+      ?? holding(root, plan.id, sha, ['greptile.missing'], `${at} has no Greptile score yet`, GRADING, 'greptile.waits')
       ?? `; Greptile gave no score in ${String(GRADING)} ticks`
   }
   const score = row.score ?? 0
   if (score >= 4) return ''
   return { outcome: 'refuse', spans: [`greptile:${String(score)}/5`], message: row.body ?? '', to: 2,
     note: `Greptile scored ${at} ${String(score)}/5; back to the builder with its findings` }
+}
+
+/** Greptile's plan gives 50 credits a month, so a job asks for at most this many reviews. */
+const ASKS = 3
+
+const ASKED = 'greptile.asked'
+
+function asked(root: string, plan: number, sha: string, repo: string, wire: Wire): Outcome | null {
+  const text = maybe(root, plan, ASKED) ?? ''
+  const heads = text.split('\n').filter((l) => l !== '')
+  if (heads.includes(sha)) return null
+  if (heads.length >= ASKS) {
+    return { outcome: 'needs_ceo', spans: ['greptile.requests'],
+      note: `Greptile was asked ${String(ASKS)} times on this job; asking again at ${sha.slice(0, 12)} is the COO's call` }
+  }
+  wire.review(`${FORK}/${repoName(repo)}`, rehearsalBranch(root, plan))
+  put(root, plan, ASKED, `${text}${sha}\n`)
+  return null
 }
 
 /**

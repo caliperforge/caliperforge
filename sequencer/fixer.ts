@@ -101,7 +101,7 @@ async function ask(db: Db, root: string, plan: PlanRow, decision: { why: string 
     ...packet({ ...manifest, tools }, prompt, tight(root), issue(db, root, plan, decision, m), dir, pending(dir, 'fixer')),
     wall: Math.min(wall(db), FIX_WALL),
   })
-  return { got: fired.exit === 0 ? read(fired.text) : null, tokens: fired.usage.input + fired.usage.output }
+  return { got: fired.ended === 'completed' ? read(fired.text) : null, tokens: fired.usage.input + fired.usage.output }
 }
 
 /**

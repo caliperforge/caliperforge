@@ -28,7 +28,7 @@ async function atBatch(): Promise<World> {
 interface Held { title: string; body: string; open: boolean; answer: Answer | null; words: string | null; closing: string | null }
 
 /** The tracker as a map: a test answers a card by setting its label and words. */
-function fake(): Desk & { cards: Map<number, Held>; log: string[] } {
+function fake(pr: number | null = null): Desk & { cards: Map<number, Held>; log: string[] } {
   const cards = new Map<number, Held>()
   const log: string[] = []
   const card = (no: number): Held => {
@@ -48,6 +48,7 @@ function fake(): Desk & { cards: Map<number, Held>; log: string[] } {
     seen: (no): Seen => ({ answer: card(no).answer, words: card(no).words, open: card(no).open }),
     unlabel: (no, label) => { log.push(`unlabel ${String(no)} ${label}`); card(no).answer = null },
     close: (no, comment) => { log.push(`close ${String(no)}`); card(no).open = false; card(no).closing = comment },
+    rehearsal: () => pr,
   }
 }
 
@@ -65,6 +66,18 @@ test('an outside plan at sign-off gets one card, and the card links nothing on t
   const outside = (card?.body ?? '').replace(/```markdown[\s\S]*?\n```\n/, '').replace(/`[^`]*`/g, '')
   expect(outside).not.toMatch(/#\d|acme\/widget|github\.com\/acme/)
   expect(unread(w.root).map((e) => [e.kind, e.ticket])).toEqual([['signoff', 'acme/widget#12']])
+})
+
+test('a card with a rehearsal pull request links its files view before the commit', async () => {
+  const w = await atBatch()
+  const desk = fake(5)
+  signoffs(w.db, w.root, desk)
+  const body = desk.cards.get(100)?.body ?? ''
+  const files = body.indexOf('https://github.com/caliperforge/widget/pull/5/files')
+  expect(files).toBeGreaterThan(-1)
+  expect(files).toBeLessThan(body.indexOf('https://github.com/caliperforge/widget/commit/'))
+  const outside = body.replace(/```markdown[\s\S]*?\n```\n/, '').replace(/`[^`]*`/g, '')
+  expect(outside).not.toMatch(/#\d|acme\/widget|github\.com\/acme/)
 })
 
 test('go signs the head the card showed, closes the card, and the next tick sends it', async () => {

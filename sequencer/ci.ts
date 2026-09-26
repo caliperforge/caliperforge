@@ -1,5 +1,6 @@
 import { judge, MISSING, type Gh } from '../rails/ci-green/index.ts'
 import type { Db } from '../store/index.ts'
+import { busy } from '../store/now.ts'
 import type { PlanRow } from '../store/plans.ts'
 import { entries, type Failure } from './checks.ts'
 import { homeOf, kernelPlan } from './home.ts'
@@ -51,7 +52,9 @@ export function ciChecks(db: Db, root: string, plan: PlanRow, wire: Wire = WIRE)
     if (waiting !== null) {
       const window = carries(verdict.spans, MISSING) ? SHOWS : RUNS
       const hold = holding(root, plan.id, head.sha, verdict.spans, `${at} ${waiting}`, window, WAITS)
-      return hold === null ? null : { wait: hold }
+      if (hold === null) return null
+      busy(db, plan.id, 'waiting on CI', hold.note)
+      return { wait: hold }
     }
     if (carries(verdict.spans, 'ci.unreadable')) return null
     return { failed: verdict.outcome === 'pass' ? null : failure(srcDir(root, plan.id), fork, verdict.spans, wire.runs), at }

@@ -22,7 +22,7 @@ interface Pushed { plan: number; repo: string; evidence: string; rehearsal: bool
 
 type Base = Pick<Signal, 'repo' | 'pr' | 'plan'>
 
-const BOT = /\[bot\]$|greptile/i
+export const BOT = /\[bot\]$|greptile/i
 
 const SCORE = /(\d)\s*\/\s*5/
 

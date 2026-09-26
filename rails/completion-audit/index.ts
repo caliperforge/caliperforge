@@ -73,9 +73,20 @@ function also(forward: string[]): string {
 function carried(handback: string): Map<string, z.infer<typeof Envelope>['done'][number]> {
   const fence = /^---\r?\n([\s\S]*?)\r?\n---\s*$/m.exec(handback)
   if (fence === null) return new Map()
-  const envelope = Envelope.safeParse(yaml(fence[1] ?? ''))
-  if (!envelope.success) return new Map()
-  return new Map(envelope.data.done.map((row) => [row.id, row]))
+  const body = fence[1] ?? ''
+  const envelope = Envelope.safeParse(yaml(body))
+  const rows = envelope.success ? envelope : Envelope.safeParse(yaml(doneOnly(body)))
+  if (!rows.success) return new Map()
+  return new Map(rows.data.done.map((row) => [row.id, row]))
+}
+
+/** 09-26: a `summary:` line holding an unquoted `: ` broke the whole fence, so the rows the audit needs are read on their own. */
+function doneOnly(body: string): string {
+  const at = /^done:/m.exec(body)
+  if (at === null) return ''
+  const rest = body.slice(at.index).split('\n')
+  const end = rest.findIndex((line, i) => i > 0 && /^\S/.test(line))
+  return (end === -1 ? rest : rest.slice(0, end)).join('\n')
 }
 
 function yaml(text: string): unknown {

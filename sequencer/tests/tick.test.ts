@@ -576,11 +576,27 @@ test('a run still going is waited on past the first-run window', async () => {
   expect(last?.note).toMatch(/is still running CI, tick 11 of 45/)
   expect(w.db.prepare("SELECT count(*) AS n FROM verdicts WHERE plan = 1 AND rail_id = 'ci-green'").get())
     .toEqual({ n: 0 })
-  const now = (): unknown[] => w.db.prepare('SELECT doing, detail FROM now WHERE plan = 1').all()
+})
+
+const atCi = async (): Promise<World> => {
+  const w = world()
+  approve(w.db, w.target)
+  for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
+  return w
+}
+
+const now = (w: World): unknown[] => w.db.prepare('SELECT doing, detail FROM now WHERE plan = 1').all()
+
+test('a CI hold leaves a waiting on CI row in now', async () => {
+  const w = await atCi()
+  forkCi(w.db, w.root, plan(w.db, 1), 'acme/widget', watched([], w.root, 1, runsOn(w.root, 1, 'in_progress', '')))
+  expect(now(w)).toEqual([{ doing: 'waiting on CI', detail: expect.stringMatching(/is still running CI, tick 1 of 45$/) as unknown }])
+})
+
+test('a CI run judged without a hold leaves no now row', async () => {
+  const w = await atCi()
   expect(forkCi(w.db, w.root, plan(w.db, 1), 'acme/widget', watched([], w.root, 1))).toBeNull()
-  expect(now()).toEqual([])
-  forkCi(w.db, w.root, plan(w.db, 1), 'acme/widget', wire)
-  expect(now()).toEqual([{ doing: 'waiting on CI', detail: expect.stringMatching(/is still running CI, tick \d+ of 45$/) as unknown }])
+  expect(now(w)).toEqual([])
 })
 
 test('the push window is waited out: no run at the new head holds step 6, the run that appears is judged', async () => {

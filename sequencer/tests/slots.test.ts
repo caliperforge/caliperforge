@@ -37,7 +37,7 @@ test('a live holder is waited on', async () => {
   holder.kill()
 })
 
-test('D1 a check that waits for a slot records the wait once, then the command', async () => {
+test('a check that waits for a slot records the wait once, then the command', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'cf-slot-'))
   const path = join(dir, 'slot-0')
   const holder = spawn(process.execPath, ['-e',
@@ -55,7 +55,7 @@ test('D1 a check that waits for a slot records the wait once, then the command',
   expect(seen).toEqual([['waiting for a check slot', 'node -e '], ['checks', 'node -e ']])
 })
 
-test('D2 a check that never waited records only the command', () => {
+test('a check that never waited records only the command', () => {
   const seen: string[][] = []
   vi.stubEnv('CF_CHECK_SLOTS', undefined)
   try {

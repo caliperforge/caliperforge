@@ -21,10 +21,10 @@ export function byRun(db: Db, run: number, written: string): string {
 
 const FIGURE = /"total_cost_usd":(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/
 
-/** Matched rather than parsed, so a line that is not JSON is passed over without a catch. */
+/** A message and its newline are appended in one write, so only the text after the last newline can be cut short. */
 export function cost(path: string): number | null {
   if (!existsSync(path)) return null
-  for (const line of readFileSync(path, 'utf8').split('\n').reverse()) {
+  for (const line of readFileSync(path, 'utf8').split('\n').slice(0, -1).reverse()) {
     const figure = FIGURE.exec(line)?.[1]
     if (figure !== undefined) return Number(figure)
   }

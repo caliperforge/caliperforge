@@ -23,7 +23,7 @@ function run(db: Db, transcript: string, spent: number | null): number {
 
 const spent = (db: Db, id: number): unknown => (db.prepare('SELECT cost_usd FROM runs WHERE id = ?').get(id) as { cost_usd: unknown }).cost_usd
 
-test('backfill fills a NULL cost from its transcript, once, and never overwrites', () => {
+test('backfill fills NULL costs once and never overwrites', () => {
   const db = loaded()
   const empty = run(db, fixture('costed'), null)
   const set = run(db, fixture('costed'), 2.96)
@@ -34,7 +34,7 @@ test('backfill fills a NULL cost from its transcript, once, and never overwrites
   expect([spent(db, empty), spent(db, set)]).toEqual([0.43, 2.96])
 })
 
-test('a missing transcript or one with no figure leaves the row NULL', () => {
+test('a missing, uncosted or cut transcript stays NULL', () => {
   const db = loaded()
   const missing = run(db, fixture('absent'), null)
   const uncosted = run(db, fixture('uncosted'), null)

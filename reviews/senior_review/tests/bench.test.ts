@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
@@ -7,6 +7,7 @@ import { CAPPED, type Packet, type Provider } from '../../../providers/kind.ts'
 import { planRow } from '../../../runner/index.ts'
 import { CAP_MAX, STEP_CAP, stepsFor } from '../../../runner/packet.ts'
 import { load } from '../../../runner/rules.ts'
+import { record } from '../../../store/files.ts'
 import { judge, loadReviews, specHash } from '../../bench.ts'
 import { read } from '../../verdict.ts'
 
@@ -91,6 +92,19 @@ test('senior review reads the first verdict and names what the first verdict mis
   expect(sent[0]).toContain('src/stats.ts:2')
   expect(second.outcome.spans).toEqual(['src/stats.ts:4'])
   expect(db.prepare('SELECT gate, step FROM verdicts WHERE id = ?').get(second.verdict)).toEqual({ gate: 'senior_review', step: 5 })
+})
+
+test('the prompt carries each changed declaration whole under Changed code in context', async () => {
+  const { db, plan } = bench(root)
+  const src = mkdtempSync(join(tmpdir(), 'cf-context-'))
+  writeFileSync(join(src, 'a.ts'), 'const a = 1\n\nexport function one(): number {\n  return a\n}\n')
+  record(db, plan, [{ path: 'a.ts', is_new: false }])
+  const sent: string[] = []
+  const capture: Provider = { name: 'claude-agent-sdk', fire: (p) => { sent.push(p.prompt); return replies(fixture('code_quality', 'clean.reply.md')).fire(p) } }
+  const diff = '--- a/a.ts\n+++ b/a.ts\n@@ -4 +4 @@\n-  return 0\n+  return a\n'
+  await judge(db, root, 'code_quality', plan, seeded({ repo: src, diff }), capture, TRANSCRIPT)
+  expect(sent[0]).toContain('# Changed code in context')
+  expect(sent[0]).toContain('## a.ts:3-5\n\n````\nexport function one(): number {\n  return a\n}\n````')
 })
 
 test('two defects in two files come back as one refusal naming both spans', async () => {

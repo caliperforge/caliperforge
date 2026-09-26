@@ -1,4 +1,4 @@
-import { existsSync, readdirSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { ROSTER, SEED } from '../cli/digests.ts'
 import { section, TEST } from './brief.ts'
@@ -26,6 +26,21 @@ function admits(listed: string[], path: string): boolean {
     const tests = join(dirname(l), 'tests')
     return dir === dirname(l) || dir === tests || dir.startsWith(`${tests}/`)
   })
+}
+
+/** A relative specifier after `from`, `import` or `import(`. */
+const IMPORT = /\b(?:from|import)\s*\(?\s*['"](\.[^'"]+)['"]/g
+
+/**
+ * #191: the failing test files, when none is listed and each directly imports a path the diff changed;
+ * `null` otherwise, and for a plan with no list, which is not fenced.
+ */
+export function broken(src: string, tests: string[], listed: string[], changed: string[]): string[] | null {
+  const files = [...new Set(tests.map((t) => (t.split(' ')[0] ?? '').replace(/:\d+$/, '')))]
+  if (listed.length === 0 || files.length === 0 || files.some((f) => listed.includes(f))) return null
+  const reaches = (file: string): boolean => existsSync(join(src, file))
+    && [...readFileSync(join(src, file), 'utf8').matchAll(IMPORT)].some((m) => changed.includes(join(dirname(file), m[1] ?? '')))
+  return files.every(reaches) ? files : null
 }
 
 /** A row a builder names a file for deletion with: `- <path>`, with or without a reason after it. */

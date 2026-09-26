@@ -4,7 +4,7 @@ import { fresh } from '../checks/sqlite.ts'
 import { planRow } from '../runner/index.ts'
 import { load } from '../runner/rules.ts'
 import type { Db } from './index.ts'
-import { backfill, cost } from './transcript.ts'
+import { backfill } from './transcript.ts'
 
 const root = join(import.meta.dirname, '..')
 const loaded = (): Db => {
@@ -40,8 +40,4 @@ test('a missing transcript or one with no figure leaves the row NULL', () => {
   const uncosted = run(db, fixture('uncosted'), null)
   expect(backfill(db)).toBe(0)
   expect([spent(db, missing), spent(db, uncosted)]).toEqual([null, null])
-})
-
-test('a line that is not JSON does not throw', () => {
-  expect(cost(fixture('uncosted'))).toBeNull()
 })

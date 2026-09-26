@@ -24,9 +24,8 @@ const FIGURE = /"total_cost_usd":(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/
 /** Matched rather than parsed, so a line that is not JSON is passed over without a catch. */
 export function cost(path: string): number | null {
   if (!existsSync(path)) return null
-  const lines = readFileSync(path, 'utf8').split('\n')
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const figure = FIGURE.exec(lines[i] ?? '')?.[1]
+  for (const line of readFileSync(path, 'utf8').split('\n').reverse()) {
+    const figure = FIGURE.exec(line)?.[1]
     if (figure !== undefined) return Number(figure)
   }
   return null

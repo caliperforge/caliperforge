@@ -1,12 +1,10 @@
 #!/usr/bin/env node
 import { Command } from 'commander'
 import { readFileSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { claudeAgentSdk } from '../providers/claude-agent-sdk/index.ts'
 import { credential } from '../providers/credential.ts'
-import { self } from '../rails/tight/index.ts'
-import { fire } from '../runner/index.ts'
 import { spawn } from 'node:child_process'
 import { CHAIN_MINUTES, dry, EACH, lap, tick, type Apart } from '../sequencer/index.ts'
 import type { Fired } from '../sequencer/kind.ts'
@@ -14,32 +12,18 @@ import { CHECK_SLOTS } from '../sequencer/checks.ts'
 import { behind, upgraded } from '../sequencer/upgrade.ts'
 import { saved } from '../sequencer/hq.ts'
 import { signoffs } from '../sequencer/signoff.ts'
-import { hold, isHeld, unhold } from '../sequencer/hold.ts'
-import { SIGNOFF, afresh, liveTree, reap } from '../sequencer/workspace.ts'
-import { blocked, parked, WAITING } from '../sequencer/steps.ts'
-import { release, retried } from '../store/holds.ts'
-import { dump, migrate, open as openDb, type Db } from '../store/index.ts'
-import { dial, hhmm, lanes, priority as setPriority, record, Reading, set, windows } from '../store/lanes.ts'
-import { holder } from '../store/leases.ts'
-import { PlanRow, openPipes, overlapWaits, terminal } from '../store/plans.ts'
-import { refusedPush } from '../store/approvals.ts'
+import { SIGNOFF } from '../sequencer/workspace.ts'
+import { migrate, open as openDb, type Db } from '../store/index.ts'
+import { hhmm } from '../store/lanes.ts'
+import { openPipes, overlapWaits } from '../store/plans.ts'
 import { receipt } from '../store/ticks.ts'
-import { backfill } from '../store/transcript.ts'
-import { adopt, render as renderAdopt } from './adopt.ts'
-import { approve as approveCard, batch, landed, refuse as refuseCard, render, renderLanded } from './batch.ts'
-import { awaiting, day, dryLines, halted, laneLine, open as openPlans, runsOf, section, tickets, ticketSection,
-  tickNote, verdictsOf, waitLine, waits, windowLine } from './brief.ts'
-import { check, fill } from './digests.ts'
-import { write as writeMap } from './map.ts'
+import { dryLines, tickNote } from './brief.ts'
+import { registerInbox, registerLanes, registerSession, type Cli } from './cf-lanes.ts'
+import { registerPlans, registerRetry } from './cf-plans.ts'
+import { registerAdopt, registerApprovals, registerTargets } from './cf-targets.ts'
 import { desk, gh } from './gh.ts'
-import { ack, crashed, events, line, notify, record as keep, unread } from './inbox.ts'
-import { measure, render as renderPulse } from './measure.ts'
-import { add as fileIssue, render as renderUnfiled, unfiled } from './plan.ts'
-import { add, approve as approveTarget, note, refuseTarget } from './queue.ts'
-import { fill as fillRecord, render as renderRecord, still } from './record.ts'
-import { render as renderScan, scan } from './scan.ts'
-import { close } from './session.ts'
-import { alerter, CRASHED, liveness, livenessLine, stalledLanes, watch } from './watch.ts'
+import { crashed, events, notify, record as keep } from './inbox.ts'
+import { alerter, CRASHED, livenessLine, watch } from './watch.ts'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { version: string }
@@ -52,314 +36,16 @@ function db(): Db {
 }
 
 const cf = new Command('cf').version(pkg.version)
+const cli: Cli = { root, db, out }
 
-cf.command('migrate').action(() => {
-  for (const file of migrate(openDb(join(root, 'cf.db')), join(root, 'schema'))) out(`applied ${file}\n`)
-})
-
-cf.command('digests').option('--check', 'write nothing; name each digest the tree contradicts')
-  .action((options: { check?: boolean }) => {
-    const today = new Date().toISOString().slice(0, 10)
-    if (options.check === true) {
-      const stale = check(root, today)
-      for (const s of stale) {
-        process.stderr.write(`cf: ${s.path} is not what cf digests writes\n`)
-        for (const [id, hash] of Object.entries(s.digests)) process.stderr.write(`cf:   ${id} should be ${hash}\n`)
-      }
-      process.exitCode = stale.length === 0 ? 0 : 1
-      return
-    }
-    const written = fill(root, today)
-    out(written.length === 0 ? 'digests already right\n' : written.map((p) => `wrote ${p}\n`).join(''))
-  })
-
-cf.command('map').argument('[dir]', 'the tree to map', '.').action((dir: string) => {
-  out(`wrote ${writeMap(resolve(dir))}\n`)
-})
-
-cf.command('dump').argument('[out]', 'file to write the dump to', 'cf.dump.sql').action((file: string) => {
-  const path = resolve(root, file)
-  dump(openDb(join(root, 'cf.db')), path)
-  out(`dumped to ${path}\n`)
-})
-
-cf.command('runs').action(() => {
-  const rows = db().prepare('SELECT id, seat, step, exit, input_tokens + cache_tokens + output_tokens AS tokens, seconds FROM runs ORDER BY id')
-    .all() as { id: number; seat: string; step: number; exit: number; tokens: number; seconds: number }[]
-  for (const r of rows) out(`${String(r.id)}\t${r.seat}\t${String(r.step)}\t${String(r.exit)}\t${String(r.tokens)}\t${r.seconds.toFixed(1)}\n`)
-})
-
-cf.command('backfill-cost').action(() => {
-  out(`backfilled ${String(backfill(db()))} run(s)\n`)
-})
-
-cf.command('fire').argument('<seat>').argument('<issue-file>')
-  .option('--cwd <dir>', 'checkout the seat writes in', process.cwd())
-  .action(async (name: string, issue: string, options: { cwd: string }) => {
-    const cwd = resolve(options.cwd)
-    if (liveTree(root, cwd)) throw new Error(`${cwd} is the machine's own tree; a seat works in .cf/work/<plan>/src`)
-    const run = await fire(db(), root, name, cwd, readFileSync(issue, 'utf8'), claudeAgentSdk)
-    process.stderr.write(`run ${String(run.id)}\n`)
-    out(run.text)
-  })
-
-cf.command('pipe').argument('<state>', 'on or off').argument('<name>').action((state: string, name: string) => {
-  if (state !== 'on' && state !== 'off') throw new Error('cf pipe takes on or off')
-  const handle = db()
-  handle.prepare("INSERT OR IGNORE INTO pipes (name, enabled, window_start, window_end, max_concurrent) VALUES (?, 0, '00:00', '23:59', 1)").run(name)
-  handle.prepare('UPDATE pipes SET enabled = ? WHERE name = ?').run(state === 'on' ? 1 : 0, name)
-  out(`pipe ${name} ${state}\n`)
-})
-
-cf.command('priority').argument('<plan>').argument('<n>', 'P0 first, up to P9')
-  .action((id: string, n: string) => {
-    const handle = db()
-    setPriority(handle, Number(id), Number(n), 'ceo')
-    out(`plan ${id} priority P${n}\n`)
-  })
-
-cf.command('lanes').argument('[n]', 'lanes the ceo opens, 0 to the ceiling').action((n: string | undefined) => {
-  const handle = db()
-  if (n !== undefined) dial(handle, Number(n), new Date().toISOString())
-  out(laneLine(lanes(handle, hhmm(handle))))
-})
-
-cf.command('hq').argument('<dir>', 'the HQ checkout every job end commits and pushes').action((dir: string) => {
-  set(db(), 'hq.path', resolve(dir), 'ceo', new Date().toISOString().slice(0, 10))
-  out(`hq ${resolve(dir)}\n`)
-})
-
-cf.command('usage').argument('[file]', 'a provider rate-limit reading, json').action((file: string | undefined) => {
-  const handle = db()
-  if (file !== undefined) record(handle, Reading.parse(JSON.parse(readFileSync(resolve(file), 'utf8'))))
-  out(laneLine(lanes(handle, hhmm(handle))))
-  for (const w of windows(handle)) out(windowLine(w))
-})
-
-cf.command('measure').argument('<repo>', 'owner/repo to take the step 0 pulse of').action((repo: string) => {
-  out(renderPulse(measure(db(), repo, new Date().toISOString().slice(0, 10))))
-})
-
-cf.command('record').argument('<repo>', 'owner/repo whose pull requests of ours to record').action((repo: string) => {
-  const handle = db()
-  out(renderRecord(repo, fillRecord(handle, repo), still(handle, repo)))
-})
-
-cf.command('scan').argument('<repo>', 'owner/repo whose open issues to write as ready targets').action((repo: string) => {
-  const handle = db()
-  fillRecord(handle, repo)
-  const { targets, why } = scan(handle, repo, new Date().toISOString().slice(0, 10))
-  if (why !== null) {
-    process.stderr.write(`cf: ${why}\n`)
-    process.exitCode = 1
-    return
-  }
-  for (const id of targets) out(renderScan(handle, id))
-})
-
-const queue = cf.command('queue')
-
-queue.command('add').argument('<repo>').argument('<issue-url>').option('--pipe <name>', 'pipe to queue on', 'pr-path')
-  .option('--part <slug>', 'one item of the issue: its own target, plan and branch; needs --ask')
-  .option('--ask <file>', 'our target card: the job is this, their issue only its context')
-  .option('--pr <file>', 'the body the pull request opens with')
-  .action((repo: string, url: string, options: { pipe: string; ask?: string; pr?: string; part?: string }) => {
-    const scope = {
-      ...(options.part === undefined ? {} : { part: options.part }),
-      ...(options.ask === undefined ? {} : { card: readFileSync(options.ask, 'utf8') }),
-      ...(options.pr === undefined ? {} : { pr: readFileSync(options.pr, 'utf8') }),
-    }
-    const added = add(db(), root, repo, url, options.pipe, new Date().toISOString().slice(0, 10), scope)
-    const origin = added.origin === null ? '-' : `${added.origin.origin_kind}:${added.origin.origin_ref}`
-    out(`target ${String(added.target)} ${added.state}\tplan ${added.plan === null ? '-' : String(added.plan)}\t${added.why}\t${origin}\n`)
-    process.exitCode = added.state === 'refused' ? 1 : 0
-  })
-
-queue.command('list').action(() => {
-  const handle = db()
-  out(laneLine(lanes(handle, hhmm(handle))))
-  const rows = handle.prepare(`SELECT t.id, t.repo, t.issue_no, t.part, t.state, t.named_merger, t.evidence_measured_at, t.coo_take
-    FROM targets t ORDER BY t.id`).all() as Record<string, string | number | null>[]
-  for (const r of rows) out(`${String(r.id)}\t${String(r.repo)}#${String(r.issue_no)}${r.part === '' ? '' : ` ${String(r.part)}`}\t${String(r.state)}\t${String(r.named_merger)}\t${String(r.evidence_measured_at)}\t${String(r.coo_take ?? '-')}\n`)
-})
-
-queue.command('note').argument('<id>').argument('<take>', 'the coo\'s line: take ... or skip ...').action((id: string, take: string) => {
-  note(db(), Number(id), take)
-  out(`target ${id} noted\n`)
-})
-
-const plan = cf.command('plan')
-
-plan.command('add').requiredOption('--issue <ref>', 'an <owner/repo>#<n> github issue')
-  .option('--pipe <name>', 'pipe to file the plan on; the lane\'s own by default')
-  .action((options: { issue: string; pipe?: string }) => {
-    const filed = fileIssue(db(), root, options.issue, options.pipe)
-    const origin = filed.origin === null ? '-' : `${filed.origin.origin_kind}:${filed.origin.origin_ref}`
-    const ruled = filed.ruling === null ? '-' : `ruling ${String(filed.ruling)}`
-    out(`plan ${filed.plan === null ? '-' : String(filed.plan)} ${filed.state}\t${filed.lane ?? '-'}\t${filed.seat ?? '-'}\t${filed.why}\t${origin}\t${ruled}\n`)
-    process.exitCode = filed.state === 'refused' ? 1 : 0
-  })
-
-cf.command('plans').option('--unfiled', 'open caliperforge issues no plan row names').action((options: { unfiled?: boolean }) => {
-  const handle = db()
-  if (options.unfiled !== true) {
-    out(section('open plans', openPlans(handle)))
-    return
-  }
-  const rows = unfiled(handle)
-  out(`unfiled (${String(rows.length)})\n`)
-  for (const row of rows) out(`  ${renderUnfiled(row)}`)
-})
-
-plan.argument('<id>').action((id: string) => {
-  const handle = db()
-  const row = handle.prepare('SELECT * FROM plans WHERE id = ?').get(Number(id))
-  if (row === undefined) throw new Error(`no plan ${id}`)
-  const plan = PlanRow.parse(row)
-  const code = blocked(handle, plan)
-  const why = code === null ? 'unblocked' : parked(handle, plan) ?? WAITING[code]
-  const lease = holder(handle, plan.id)
-  out(`plan ${String(plan.id)}\t${plan.template}\tstep ${String(plan.step)}\t${plan.state}\tretries ${String(plan.retries)}\t${why}\n`)
-  const on = (handle.prepare('SELECT waits_on FROM plans WHERE id = ?').get(plan.id) as { waits_on: number | null }).waits_on
-  const after = on === null ? '' : `\tplan ${String(on)}`
-  out(`  waiting on ${plan.wait_reason === null ? '-' : `${plan.wait_reason}\t${WAITING[plan.wait_reason]}${after}`}\n`)
-  out(`  lease ${lease === null ? 'none' : `pid ${String(lease.pid)}\ttaken ${lease.taken_at}`}\n`)
-  for (const r of runsOf(handle, plan.id)) {
-    out(`  run ${String(r.id)}\tstep ${String(r.step)}\t${String(r.seat)}\texit ${String(r.exit)}\n`)
-  }
-  for (const v of verdictsOf(handle, plan.id)) {
-    out(`  verdict ${String(v.id)}\tstep ${String(v.step)}\t${String(v.gate)}\t${String(v.outcome)}\t${String(v.origin_ref ?? '-')}\n`)
-  }
-})
-
-cf.command('reap').description("remove the checkout of every plan no step is coming back for").action(() => {
-  const gone = reap(root, terminal(db()))
-  out(`reaped ${String(gone.length)} checkout(s)${gone.length === 0 ? '' : `: ${gone.join(', ')}`}\n`)
-})
-
-cf.command('release').argument('<plan>', 'a briefed plan waiting on the coo to read it').action((id: string) => {
-  release(db(), Number(id))
-  out(`plan ${id} queued\n`)
-})
-
-cf.command('return').argument('<plan>', 'a plan blocked on the ceo, held or halted').action((id: string) => {
-  unhold(db(), root, Number(id), 'ceo')
-  out(`plan ${id} queued\n`)
-})
-
-cf.command('park').argument('<plan>', 'a plan to hold where it stands, checkout kept')
-  .option('--on <plan>', 'the plan it waits on; it goes back in its lane when that one lands')
-  .option('--why <text>', 'why it is held', 'held by a person')
-  .action((id: string, options: { on?: string; why: string }) => {
-    const handle = db()
-    const n = Number(id)
-    if (holder(handle, n) !== null) throw new Error(`plan ${id} is mid-step in a live tick; park it once the tick lets go`)
-    const on = options.on === undefined ? null : Number(options.on)
-    if (on !== null && handle.prepare("SELECT 1 FROM plans WHERE id = ? AND state IN ('queued', 'running', 'blocked_on_ceo')").get(on) === undefined) {
-      throw new Error(`plan ${String(on)} is not open, so nothing would release plan ${id}`)
-    }
-    hold(handle, root, n, options.why, new Date(), on)
-    out(`plan ${id} held${on === null ? '' : ` on plan ${String(on)}`}\n`)
-  })
-
-cf.command('unpark').argument('<plan>', 'a held plan, put back at the step it stopped on').action((id: string) => {
-  const step = unhold(db(), root, Number(id), 'ceo')
-  out(`plan ${id} queued at step ${String(step)}\n`)
-})
-
-cf.command('inbox').option('--ack', 'mark everything shown so far as read')
-  .description('what ticks did that a person may need to act on, unread first')
-  .action((options: { ack?: boolean }) => {
-    const handle = db()
-    const news = unread(root)
-    if (news.length === 0) out('inbox empty\n')
-    for (const e of news) out(`${line(handle, e)}\n`)
-    if (options.ack === true) out(`${String(ack(root))} marked read\n`)
-  })
-
-cf.command('tight').description('the Tight rail on this checkout against main, as step 3 will run it').action(() => {
-  const verdict = self(process.cwd())
-  out(`${verdict.message}\n`)
-  for (const span of verdict.spans) out(`  ${span}\n`)
-  process.exitCode = verdict.outcome === 'pass' ? 0 : 1
-})
-
-cf.command('retry').argument('<plan>', 'a plan blocked on a refusal, sent round again with its count cleared')
-  .action((id: string) => {
-    const n = Number(id)
-    const step = retried(db(), n, 'ceo')
-    afresh(root, n, step)
-    out(`plan ${id} running again at step ${String(step)}\n`)
-  })
-
-const approve = cf.command('approve')
-
-const refuse = cf.command('refuse')
-
-approve.command('target').argument('<id>').option('--pipe <name>', 'pipe to file its plan on', 'pr-path')
-  .action((id: string, options: { pipe: string }) => {
-    const done = approveTarget(db(), root, Number(id), options.pipe)
-    out(`target ${id} approved\t${done.digest.slice(0, 12)}\tplan ${done.plan === null ? '-' : String(done.plan)}\n`)
-  })
-
-refuse.command('target').argument('<id>').argument('<reason>').action((id: string, reason: string) => {
-  out(`target ${id} refused\t${refuseTarget(db(), Number(id), reason).slice(0, 12)}\n`)
-})
-
-cf.command('batch').action(() => {
-  const handle = db()
-  const cards = batch(handle, root)
-  if (cards.length === 0) out('nothing awaiting sign-off\n')
-  for (const card of cards) out(render(card))
-  for (const row of landed(handle)) out(renderLanded(row))
-})
-
-for (const kind of ['plan', 'proposal'] as const) {
-  approve.command(kind).argument('<id>').action((id: string) => {
-    out(`${kind} ${id} approved\t${approveCard(db(), root, kind, Number(id)).slice(0, 12)}\n`)
-  })
-  refuse.command(kind).argument('<id>').argument('<reason>').action((id: string, reason: string) => {
-    out(`${kind} ${id} refused\t${refuseCard(db(), root, kind, Number(id), reason).slice(0, 12)}\n`)
-  })
-}
-
-const session = cf.command('session')
-
-session.command('close').argument('<transcript>').action((path: string) => {
-  const made = close(db(), resolve(path))
-  out(`${String(made.length)} proposal(s) in the batch\n`)
-})
-
-cf.command('push-check').action(() => {
-  const refused = refusedPush(db(), readFileSync(0, 'utf8'))
-  for (const sha of refused) process.stderr.write(`cf: no ceo approval row for ${sha.slice(0, 12)}\n`)
-  process.exitCode = refused.length === 0 ? 0 : 1
-})
-
-cf.command('halted').action(() => {
-  out(section('halted', halted(db())))
-})
-
-cf.command('brief').action(() => {
-  const handle = db()
-  out(livenessLine(handle, liveness(handle, new Date())))
-  for (const lane of stalledLanes(handle, new Date())) out(`lane\tOFF with work: ${lane}\n`)
-  out(laneLine(lanes(handle, hhmm(handle))))
-  out(waitLine(waits(handle)))
-  out(section('open plans', openPlans(handle)))
-  out(section('halted', halted(handle)))
-  const waiting = awaiting(handle)
-  out(section('held', waiting.filter((l) => isHeld(root, l.id))))
-  out(section('awaiting approval', waiting.filter((l) => !isHeld(root, l.id))))
-  const d = day(handle)
-  out(`last 24 h\n  ${String(d.runs)} run(s)\t${String(d.tokens)} tokens\t${d.seconds.toFixed(1)}s\n`)
-  out(ticketSection(tickets(handle)))
-})
-
-cf.command('adopt').argument('<ref>', 'an <owner/repo>#<n> pull request of ours that is already open')
-  .action((ref: string) => {
-    out(renderAdopt(adopt(db(), root, ref, new Date().toISOString().slice(0, 10))))
-  })
+registerLanes(cf, cli)
+registerTargets(cf, cli)
+registerPlans(cf, cli)
+registerInbox(cf, cli)
+registerRetry(cf, cli)
+registerApprovals(cf, cli)
+registerSession(cf, cli)
+registerAdopt(cf, cli)
 
 cf.command('tick').option('--dry', 'read what a tick would do, fire nothing, call no network')
   .action(async (options: { dry?: boolean }) => {

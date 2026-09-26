@@ -74,7 +74,7 @@
     "prepare": 8
   },
   "cli/cf.ts": {
-    "lines": 477,
+    "lines": 172,
     "silent-catch": 3
   },
   "cli/digests.ts": {

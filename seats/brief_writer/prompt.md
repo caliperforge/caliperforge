@@ -63,12 +63,17 @@ parts:
     what: <one line>
     why: <one line>
     ends: <one line: how anyone can tell it is done>
+    after: none
   - title: <the second part>
     what: <one line>
     why: <one line>
     ends: <one line>
+    after: <none, or the letter of the earlier part it builds on>
 ---
 ```
+
+Name an earlier part in `after:` only when this part reads or changes code that part adds; parts that touch
+different files are `after: none`.
 
 The machine files each part as its own issue and queues them one at a time. On someone else's repository,
 the split goes to the COO instead, so answer it only when the ask

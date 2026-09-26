@@ -49,6 +49,20 @@ test('the same failure on another job stops as shared, until a person clears it'
   expect(refused(db, { plan: PLAN, step: 3, fingerprint: A, diff: D2 })).toBe('again')
 })
 
+test('D6 a job\'s own refusal is never shared, and still stops', () => {
+  const db = bench()
+  db.prepare(`INSERT INTO plans (id, pipe_id, template, state, queued_at, lane, seat, origin)
+    VALUES (2, 1, 'pr_path', 'running', '2026-09-21T00:00:00.000Z', 'machine', 'typescript_specialist',
+      'https://github.com/caliperforge/caliperforge/issues/77')`).run()
+  refused(db, { plan: 2, step: 3, fingerprint: A, diff: D1, own: true })
+  expect(refused(db, { plan: PLAN, step: 3, fingerprint: A, diff: D1, own: true })).toBe('again')
+  expect(refused(db, { plan: PLAN, step: 3, fingerprint: A, diff: D2, own: true })).toBe('repeat')
+  expect(refused(db, { plan: PLAN, step: 3, fingerprint: B, diff: D2, own: true })).toBe('unchanged')
+  const whys = [...Array(ROUNDS).keys()].map((n) =>
+    refused(db, { plan: 2, step: 3, fingerprint: fingerprint(3, [String(n)]), diff: String(n).padStart(64, '0'), own: true }))
+  expect(whys.at(-1)).toBe('spent')
+})
+
 test('the same brief refusal on two jobs is not shared', () => {
   const db = bench()
   db.prepare(`INSERT INTO plans (id, pipe_id, template, state, queued_at, lane, seat, origin)

@@ -2,6 +2,7 @@ import type { Dry, Quiet } from '../sequencer/index.ts'
 import type { Fired } from '../sequencer/kind.ts'
 import type { Db } from '../store/index.ts'
 import { name, type LaneState, type WindowRow } from '../store/lanes.ts'
+import type { Wait } from '../store/plans.ts'
 
 export interface PlanLine {
   id: number
@@ -115,6 +116,17 @@ export function verdictsOf(db: Db, plan: number): Record<string, string | number
 export function laneLine(l: LaneState): string {
   return `lanes ${String(l.live)}/${String(l.open)} live/open\tcap ${name(l.cap)}\tdial ${String(l.dial)}` +
     `\tband ${name(l.band)}\tceiling ${String(l.ceiling)}\n`
+}
+
+export function waits(db: Db): { reason: Wait; plans: number }[] {
+  return db.prepare(`SELECT wait_reason AS reason, count(*) AS plans FROM plans
+    WHERE state IN ('queued', 'running') AND wait_reason IS NOT NULL
+    GROUP BY wait_reason ORDER BY wait_reason`).all() as { reason: Wait; plans: number }[]
+}
+
+export function waitLine(rows: { reason: Wait; plans: number }[]): string {
+  const pairs = rows.length === 0 ? ['none'] : rows.map((w) => `${w.reason} ${String(w.plans)}`)
+  return `waits\t${pairs.join('\t')}\n`
 }
 
 /** One row per rate-limit window: our tokens inside it, the provider's utilisation of it, the cap. */

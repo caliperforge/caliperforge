@@ -14,7 +14,7 @@ const SEATS: Record<number, string> = { 2: 'typescript_specialist', 4: 'code_qua
 
 function world(): Db {
   const db = fresh(schema)
-  for (const seat of Object.values(SEATS)) {
+  for (const seat of [...Object.values(SEATS), 'orchestrator']) {
     db.prepare("INSERT INTO rules VALUES (?, 'card', 'seats/seat.md', ?, '2026-09-19')").run(seat, HASH)
   }
   db.prepare(`INSERT INTO accounts (id, repo, measured_at, maintainers, doors, last_outsider_merge,
@@ -33,12 +33,20 @@ function plan(db: Db, id: number, state: string, issue: number | null, target: n
       issue === null ? null : 'machine', origin)
 }
 
-function run(db: Db, plan: number, step: number, at: string, seconds = 60, tokens = 100): void {
+function run(db: Db, plan: number, step: number, at: string, seconds = 60, tokens = 100, seat = SEATS[step]): void {
   db.prepare(`INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort,
     input_tokens, cache_tokens, output_tokens, seconds, exit, at, transcript_path)
     VALUES (?, ?, ?, ?, 'claude-agent-sdk', 'opus', 'high', ?, 0, 0, ?, 0, ?, 'x.transcript.jsonl')`)
-    .run(plan, step, SEATS[step], HASH, tokens, seconds, at)
+    .run(plan, step, seat, HASH, tokens, seconds, at)
 }
+
+test('D4 an orchestrator run at step 4 adds to runs and tokens, not to review', () => {
+  const db = world()
+  plan(db, 1, 'blocked_on_ceo', 25)
+  run(db, 1, 2, '2026-09-20 09:00:00')
+  run(db, 1, 4, '2026-09-20 10:00:00', 60, 100, 'orchestrator')
+  expect(tickets(db)).toMatchObject([{ runs: 2, build: 1, review: 0, tokens: 200 }])
+})
 
 test('every plan with a run gets a row, newest run first, with its rounds, minutes, tokens and outcome', () => {
   const db = world()

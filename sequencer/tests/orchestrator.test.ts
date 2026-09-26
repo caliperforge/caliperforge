@@ -44,6 +44,8 @@ function state(db: ReturnType<typeof open>, home: string) {
 }
 
 const decisions = (db: ReturnType<typeof open>) => db.prepare('SELECT plan, step, wait_reason, verb, why, evidence, tokens FROM decisions').all()
+const runs = (db: ReturnType<typeof open>) => db.prepare(`SELECT step, input_tokens, cache_tokens, output_tokens FROM runs
+  WHERE plan = 7 AND seat = 'orchestrator'`).all()
 
 test('D1 a waiting plan gets one decision and is left byte-identical', async () => {
   const { db, home } = seeded()
@@ -57,6 +59,7 @@ test('D1 a waiting plan gets one decision and is left byte-identical', async () 
   await woke(db, home, stub(VALID, fires), now)
   expect(decisions(db)).toHaveLength(1)
   expect(fires).toHaveLength(1)
+  expect(runs(db)).toEqual([{ step: 4, input_tokens: 10, cache_tokens: 20, output_tokens: 30 }])
 })
 
 test.each([
@@ -68,6 +71,7 @@ test.each([
   const before = state(db, home)
   await woke(db, home, stub(text, []), now)
   expect(decisions(db)).toEqual([])
+  expect(runs(db)).toHaveLength(1)
   expect(state(db, home)).toEqual(before)
   expect(maybe(home, 7, 'orchestrator.md'))
     .toBe(`step 4 token_ceiling\n\norigin_kind: ruling\norigin_ref: orchestrator.decision\npath: ${path}\n`)
@@ -79,6 +83,7 @@ test('D3 a packet wake() refuses fires no model and records the refusal', async 
   const fires: string[] = []
   await woke(db, home, stub(VALID, fires), now)
   expect(fires).toEqual([])
+  expect(runs(db)).toEqual([])
   expect(maybe(home, 7, 'orchestrator.md'))
     .toBe('step 4 token_ceiling\n\norigin_kind: ruling\norigin_ref: orchestrator.packet\npath: base\n')
 })

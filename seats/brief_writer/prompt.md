@@ -71,5 +71,5 @@ parts:
 ```
 
 The machine files each part as its own issue and queues them one at a time. On someone else's repository,
-or on a ticket that is already a part, the split goes to the COO instead, so answer it only when the ask
+the split goes to the COO instead, so answer it only when the ask
 really is more than one job.

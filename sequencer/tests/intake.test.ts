@@ -299,6 +299,44 @@ test('D4: a list exactly WINDOW long queues no part', () => {
   expect(waits(db)).toEqual({ plan: null })
 })
 
+const A: Fixture = { number: 300, labels: ['lane:machine'] }
+
+const HAND: Fixture = { number: 301, labels: ['lane:machine'], body: 'After: #300' }
+
+test('D1: a hand-filed ticket whose After: issue is open gets no plan and its ticket records the wait', () => {
+  const db = piped()
+  intake(db, root, canned([A, HAND]))
+  expect(states(db)).toEqual([{ origin: url(300), state: 'queued' }])
+  expect(db.prepare('SELECT after FROM tickets WHERE number = 301').get()).toEqual({ after: 300 })
+})
+
+test('D2: once its After: issue leaves the list, the held ticket is queued with its ask', () => {
+  const db = piped()
+  intake(db, root, canned([A, HAND]))
+  intake(db, root, canned([HAND]))
+  expect(states(db)).toEqual([{ origin: url(300), state: 'halted' }, { origin: url(301), state: 'queued' }])
+  expect(existsSync(join(root, '.cf/work/2/ask.md'))).toBe(true)
+})
+
+test('D3: an After: issue missing from a whole list holds nothing', () => {
+  const db = piped()
+  intake(db, root, canned([HAND]))
+  expect(states(db)).toEqual([{ origin: url(301), state: 'queued' }])
+})
+
+test('D4: a list exactly WINDOW long holds a ticket whose After: issue is missing from it', () => {
+  const db = piped()
+  intake(db, root, canned([HAND, ...[...Array(WINDOW - 1).keys()].map((i) => ({ number: 1000 + i, labels: ['bug'] }))]))
+  expect(states(db)).toEqual([])
+})
+
+test('D5: a held ticket listed again still gets no plan', () => {
+  const db = piped()
+  intake(db, root, canned([A, HAND]))
+  intake(db, root, canned([A, HAND]))
+  expect(states(db)).toEqual([{ origin: url(300), state: 'queued' }])
+})
+
 function pushed(db: Db, plans: number[]): void {
   db.prepare(`INSERT INTO rules (id, kind, path, content_hash, loaded_at)
     VALUES ('typescript_specialist', 'roster', 'seats/typescript_specialist', ?, '2026-09-25')`).run('0'.repeat(64))

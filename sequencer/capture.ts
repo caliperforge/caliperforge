@@ -5,7 +5,7 @@ import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { originRef, PlanRow } from '../store/plans.ts'
 import { record, type Signal, type SignalRow } from '../store/signals.ts'
-import { partOf, recordListing } from '../store/tickets.ts'
+import { afterOf, partOf, recordListing } from '../store/tickets.ts'
 import { attribute } from './escapes.ts'
 import { carried, rehearsalBranch } from './push.ts'
 import { claimed, released } from './split.ts'
@@ -71,16 +71,23 @@ function listed(db: Db, root: string, repo: string, read: Read, lines: string[])
   const found = Listed.parse(read(['issue', 'list', '--repo', repo, '--state', 'open', '--limit', String(WINDOW),
     '--json', 'number,title,body,url,labels']))
   const kept = found.filter((i) => laneOf(i.labels) !== null)
-  recordListing(db, repo, found, found.length < WINDOW)
-  if (found.length < WINDOW) {
+  const open = new Set(found.map((i) => i.number))
+  const whole = found.length < WINDOW
+  recordListing(db, repo, found, whole)
+  if (whole) {
     halt(db, repo, new Set(kept.map((i) => i.url)))
-    released(db, root, repo, new Set(found.map((i) => i.number)))
+    released(db, root, repo, open)
   }
   const known = seen(db)
   const split = named(found.map((i) => i.title))
   for (const i of kept.filter((k) => !known.has(k.url) && !split.has(k.number) && !parent(repo, k.number, read, lines))) {
-    if (!claimed(db, root, i)) add(db, root, `${repo}#${String(i.number)}`, undefined, read)
+    if (!claimed(db, root, i) && !held(i.body, open, whole)) add(db, root, `${repo}#${String(i.number)}`, undefined, read)
   }
+}
+
+function held(body: string, open: Set<number>, whole: boolean): boolean {
+  const after = afterOf(body)
+  return after !== null && (!whole || open.has(after))
 }
 
 /** A part is titled `<parent><letter>: …` (\`85a: …\`); the numbers so named are parents, whoever split them. */

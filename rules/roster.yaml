@@ -24,7 +24,7 @@ digests:
     prompt: c2f6183a6be5cdd214c7c9e4f8ad3e121e51ed5578401cb5fc92393b519bd9bb
   brief_writer:
     manifest: 9f242cf80f39b12b889aa092dca097abe8d1260a8014e05f0af3bd5b8ccc86a5
-    prompt: 6b5ab1b7c6baffeef919dbcd44cd96b6788dc9feeefdb31f326fb4a95a96644f
+    prompt: 5f1d7e61d4d5513d1c9bcfd7f3580e0df3ce10997e538ee2b0dabcfa9090cfd6
   outside_specialist:
     manifest: 3897d50daa0caf59420769d972b0ed0dc67876076ba4373beeef28ba81dd33f4
     prompt: efa16cf31366d279cb47f8353aa78fcad684e1c585ca01e6cba413843e882bff

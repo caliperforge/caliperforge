@@ -18,7 +18,7 @@ import { benchPacket } from '../../runner/packet.ts'
 import type { Packet, Provider } from '../../providers/kind.ts'
 import type { Fired } from '../kind.ts'
 import { forkCi, type Wire } from '../push.ts'
-import { approve, builds, built, CARRIED, dropping, internalPlan, KOTLIN, ours, owning, PASS, plan, REFUSE, rerunning, RUN, runsAfter, runsOn, scored, stub, watched, WORDS, world, type World } from './world.ts'
+import { approve, builds, built, CARRIED, dropping, internalPlan, KOTLIN, ours, owning, PASS, plan, REFUSE, rerunning, RUN, runsAfter, runsOn, scored, stub, tip, watched, WORDS, world, type World } from './world.ts'
 
 const head = (cwd: string, args: string[]): string => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim()
 
@@ -506,7 +506,7 @@ test('step 6 sends the branch to our fork, waits out a run still going, then rec
     watched(sent, w.root, 1, runsOn(w.root, 1, 'in_progress'))))[0]
   expect(held).toMatchObject({ step: 6, name: 'ready', outcome: 'pass', state: 'running' })
   expect(held?.spans).toEqual([`${RUN} ci.pending`])
-  expect(sent.slice(2)).toEqual(['send src HEAD:refs/heads/widget-12-a1-next'])
+  expect(sent.slice(2)).toEqual([`send src ${tip(w.root, 1)}:refs/heads/widget-12-a1-next`])
   expect(plan(w.db, 1).step).toBe(6)
   expect(w.db.prepare("SELECT count(*) AS n FROM verdicts WHERE plan = 1 AND rail_id = 'ci-green'").get())
     .toEqual({ n: 0 })
@@ -527,11 +527,12 @@ test('step 3\'s pass sends and rehearses the branch before review fires, and ste
   const wire = watched(sent, w.root, 1, (args) => { branches.push(String(args[args.indexOf('--branch') + 1])); return runs(args) })
   for (let at = 0; at < 4; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
   expect(plan(w.db, 1).step).toBe(4)
-  expect(sent).toEqual(['send src HEAD:refs/heads/widget-12-a1-next', 'rehearse caliperforge/widget widget-12-a1-next'])
+  const next = `send src ${tip(w.root, 1)}:refs/heads/widget-12-a1-next`
+  expect(sent).toEqual([next, 'rehearse caliperforge/widget widget-12-a1-next'])
 
   for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
   expect(plan(w.db, 1).step).toBe(7)
-  expect(sent.slice(2)).toEqual(['send src HEAD:refs/heads/widget-12-a1-next'])
+  expect(sent.slice(2)).toEqual([next])
   expect(branches).toEqual(['widget-12-a1-next'])
 })
 
@@ -569,7 +570,7 @@ const redOnBase = async (g: { status: string; conclusion: string }, log: string[
   approve(w.db, w.target)
   for (let at = 0; at < 7; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
   put(w.root, 1, GREEN, get(w.root, 1, GREEN).replace(/^\S+/, 'rehearsal'))
-  const base = { branch: 'rehearsal', sha: head(srcDir(w.root, 1), ['rev-parse', 'HEAD']) }
+  const base = { branch: 'rehearsal', sha: tip(w.root, 1) }
   const wire = watched([], w.root, 1, rerunning(log, w.root, 1, base, g))
   rewind(w.db, 1, 2)
   await tick(w.db, w.root, builds(() => { built(w.root, 1, 'export const again = 1') }), undefined, undefined, wire)
@@ -695,10 +696,10 @@ test('a head still runless after the window is refused on ci-green, not waited o
 })
 
 /** An outside plan at ready, green on the fork, whose every rehearsal `grade` scores for Greptile or leaves unscored. */
-const atReady = async (grade: (w: World) => void): Promise<[World, () => Promise<Fired | undefined>]> => {
+const atReady = async (grade: (w: World) => void, log: string[] = []): Promise<[World, () => Promise<Fired | undefined>]> => {
   const w = world()
   approve(w.db, w.target)
-  const wire = { ...watched([], w.root, 1), rehearse: () => { grade(w) } }
+  const wire = { ...watched(log, w.root, 1), rehearse: () => { grade(w) } }
   const lap = async (): Promise<Fired | undefined> => (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
   for (let at = 0; at < 6; at += 1) await lap()
   expect(plan(w.db, 1).step).toBe(6)
@@ -733,6 +734,26 @@ test('D2 a 3/5 at the current head goes back to the builder with the findings; o
   })
   expect(await again()).toMatchObject({ step: 6, outcome: 'pass', state: 'running', spans: ['greptile.missing'] })
   expect(plan(old.db, 1).step).toBe(6)
+})
+
+test('D6 D7 each new passing head asks Greptile once; a fourth goes to the COO unasked', async () => {
+  const log: string[] = []
+  const [w, lap] = await atReady(() => undefined, log)
+  const asked = (): string[] => log.filter((l) => l.startsWith('review '))
+  const round = (line: string): Promise<Fired | undefined> => {
+    built(w.root, 1, line)
+    return lap()
+  }
+  expect(await lap()).toMatchObject({ step: 6, outcome: 'pass', spans: ['greptile.missing'] })
+  await lap()
+  expect(asked()).toEqual(['review caliperforge/widget widget-12-a1-next'])
+  await round('export const two = 2')
+  await round('export const three = 3')
+  expect(asked()).toHaveLength(3)
+  expect(get(w.root, 1, 'greptile.asked').trim().split('\n')).toHaveLength(3)
+  expect(await round('export const four = 4')).toMatchObject({ step: 6, outcome: 'needs_ceo', state: 'blocked_on_ceo', spans: ['greptile.requests'] })
+  expect(asked()).toHaveLength(3)
+  expect(plan(w.db, 1).state).toBe('blocked_on_ceo')
 })
 
 test('D3 a 4/5 at the current head passes ready to sign-off', async () => {

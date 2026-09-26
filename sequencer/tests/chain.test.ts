@@ -6,8 +6,8 @@ import type { Packet } from '../../providers/kind.ts'
 import type { Gh } from '../../rails/ci-green/index.ts'
 import { rewind } from '../../store/plans.ts'
 import { tick } from '../index.ts'
-import { put, srcDir } from '../workspace.ts'
-import { approve, CARRIED, plan, runsAfter, stub, watched, world, type World } from './world.ts'
+import { get, put, srcDir } from '../workspace.ts'
+import { approve, CARRIED, plan, runsAfter, stub, tip, watched, world, type World } from './world.ts'
 
 /** The builder's bytes, written the way a real builder writes them: into the checkout it was handed, mid-fire. */
 const writes = (packet: Packet): void => {
@@ -72,7 +72,7 @@ test('waits on every workflow, judges only its own', async () => {
   let reads = 0
   const runs: Gh = () => {
     reads += 1
-    const headSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: srcDir(w.root, 1), encoding: 'utf8' }).trim()
+    const headSha = tip(w.root, 1)
     const url = 'https://github.com/caliperforge/widget/actions/runs/2'
     return JSON.stringify([
       { headSha, status: 'completed', conclusion: 'success', url, workflowName: 'Src' },
@@ -108,9 +108,10 @@ test('three rounds before any PR go out on one branch, each a plain push', async
     expect(plan(w.db, 1).step).toBe(7)
   }
   expect(sent.filter((l) => !l.startsWith('send '))).toEqual(['rehearse caliperforge/widget widget-12-a1-next'])
-  expect(new Set(sent.filter((l) => l.startsWith('send ')))).toEqual(new Set(['send src HEAD:refs/heads/widget-12-a1-next']))
+  const tips = get(w.root, 1, 'next.tips').trim().split('\n').map((l) => `send src ${l.slice(0, 40)}:refs/heads/widget-12-a1-next`)
+  expect(new Set(sent.filter((l) => l.startsWith('send ')))).toEqual(new Set(tips))
   const git = (args: string[]): string => execFileSync('git', args, { cwd: src, encoding: 'utf8' }).trim()
-  expect(git(['ls-remote', 'origin', 'refs/heads/widget-12-a1-next']).split('\t')[0]).toBe(git(['rev-parse', 'HEAD']))
+  expect(git(['ls-remote', 'origin', 'refs/heads/widget-12-a1-next']).split('\t')[0]).toBe(tip(w.root, 1))
 })
 
 test('Tight reads the PR text the card set, and never the handback', async () => {

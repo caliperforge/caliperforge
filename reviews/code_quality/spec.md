@@ -14,6 +14,9 @@ Read the whole diff, then judge it on five questions:
   comment that stated a changed value should change that value and no other word.
 - approach — would a maintainer of this repository have reached for this shape?
 - minimal — shorter without losing behaviour? is the one remaining comment the one a stranger needs?
+  Refuse code the diff replaces and leaves in place, a fallback that does not record that it fell back,
+  and a comment that tells what the code used to do or why it changed. A diff that grows an already-large
+  file gets a note in the prose and no span in the fence: the ratchet owns the line budget.
 - tests — does each test the diff adds pin one behaviour the diff changes, with an assert of its own? A test
   that repeats an existing one, pins nothing the diff changes, or stays from an earlier round for behaviour
   the diff no longer has is a scope finding on its first line. Every test the diff deletes must be named in

@@ -44,12 +44,12 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
     'fire' in r ? { plan: plan.id, why: null } : { plan: plan.id, why: r.wait, on: r.on })))
   if (Number.isFinite(each)) {
     const laps = lanes.map(({ pipe, routed }) => lane(routed.filter((r) => stepping(r.route)), now, each,
-      (m) => apart === undefined ? one(db, root, pipe, m, m.lease, provider, wire, chain) : away(db, m, apart), db))
+      (m) => apart === undefined ? one(db, root, pipe, m, m.lease, provider, wire, chain, labels) : away(db, m, apart), db))
     out.push(...(await Promise.all(laps)).flat())
   } else {
     for (const { pipe, routed } of lanes) {
       const mine = leased(db, routed.filter((r) => stepping(r.route)), now)
-      const laps = await Promise.all(mine.map((m) => one(db, root, pipe, m, m.lease, provider, wire, chain)))
+      const laps = await Promise.all(mine.map((m) => one(db, root, pipe, m, m.lease, provider, wire, chain, labels)))
       out.push(...laps.flat())
     }
   }
@@ -94,7 +94,7 @@ async function away(db: Db, leg: Leg & { lease: Taken }, apart: Apart): Promise<
  * minutes for 12 seconds of model. One process per job keeps a check from freezing another lane's agent.
  */
 export async function lap(db: Db, root: string, provider: Provider, plan: number, from: number, stole: number | null,
-  chain = 0): Promise<Fired[]> {
+  chain = 0, read?: Read): Promise<Fired[]> {
   const lease = handOver(db, plan, from)
   if (lease === null) return []
   const taken = { ...lease, stole }
@@ -104,7 +104,7 @@ export async function lap(db: Db, root: string, provider: Provider, plan: number
     unlease(db, plan)
     return []
   }
-  return one(db, root, pipe, { plan: row, route: route(db, row, new Date(), taken) }, taken, provider, undefined, chain)
+  return one(db, root, pipe, { plan: row, route: route(db, row, new Date(), taken) }, taken, provider, undefined, chain, read)
 }
 
 /** A `token_ceiling` plan is leased too: `ceilinged` is its step. */
@@ -191,7 +191,7 @@ export function dry(db: Db, now: Date = new Date()): Dry {
  * outside the machine -- their CI, a person, a lane the CEO turned off -- or the budget runs out.
  */
 async function one(db: Db, root: string, pipe: PipeRow, first: Leg, lease: Taken,
-  provider: Provider, wire?: Wire, chain = 0): Promise<Fired[]> {
+  provider: Provider, wire?: Wire, chain = 0, read?: Read): Promise<Fired[]> {
   const until = Date.now() + chain * 60_000
   const out: Fired[] = []
   try {
@@ -202,7 +202,7 @@ async function one(db: Db, root: string, pipe: PipeRow, first: Leg, lease: Taken
         out.push(ceilinged(db, root, pipe, plan, r.over, lease))
         break
       }
-      const lap = await stepped(db, root, pipe, plan, lease, provider, wire)
+      const lap = await stepped(db, root, pipe, plan, lease, provider, wire, read)
       out.push(lap.fired)
       const more = chain > 0 && Date.now() < until && out.length < STEPS && !lap.wait
       leg = more ? onward(db, first.plan.id, lease) : null
@@ -224,11 +224,11 @@ function onward(db: Db, id: number, lease: Taken): Leg | null {
 
 /** `wait` is a step that settled by waiting: a CI still running, or a checkout the network failed. Neither is worth asking again in the same tick. */
 async function stepped(db: Db, root: string, pipe: PipeRow, plan: PlanRow, lease: Taken,
-  provider: Provider, wire?: Wire): Promise<{ fired: Fired; wait: boolean }> {
+  provider: Provider, wire?: Wire, read?: Read): Promise<{ fired: Fired; wait: boolean }> {
   const tree = workspace(db, root, plan)
   const step = at(plan.step, tree.language)
   const mark = newestRun(db)
-  const outcome = tree.failed ?? await made(db, root, plan, step, provider, wire)
+  const outcome = tree.failed ?? await made(db, root, plan, step, provider, wire, read)
   const state = settle(db, root, plan, step, outcome)
   logged(db, { plan: plan.id, kind: step.name, actor: step.runs, outcome: outcome.outcome, message: outcome.note,
     pointer: `step-${String(step.step)}`, run: runSince(db, plan.id, step.step, mark) })
@@ -296,9 +296,9 @@ function treeOf(db: Db, root: string, plan: PlanRow): { repo: string; branch: st
 }
 
 /** The first line goes in the span: two plans that threw differently must not match as `shared` and turn the lane off. */
-async function made(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider, wire?: Wire): Promise<Outcome> {
+async function made(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider, wire?: Wire, read?: Read): Promise<Outcome> {
   try {
-    const out = await fire(db, root, plan, step, provider, wire)
+    const out = await fire(db, root, plan, step, provider, wire, read)
     return out.parts === undefined ? out : parted(db, root, plan, out.parts, wire)
   } catch (error) {
     return thrown(step, error instanceof Error ? error.message : String(error))
@@ -320,14 +320,14 @@ export function thrown(step: Step, message: string): Outcome {
     note: `step ${String(step.step)} ${step.name} threw`, message, to: step.step }
 }
 
-function fire(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider, wire?: Wire): Promise<Outcome> {
+function fire(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider, wire?: Wire, read?: Read): Promise<Outcome> {
   if (step.fires === 'brief') return model(db, plan, step, () => fireBrief(db, root, plan, step, provider))
   if (step.fires === 'seat') return model(db, plan, step, () => fireSeat(db, root, plan, step, provider))
   if (step.fires === 'review') {
     const standing = kept(db, root, plan, step)
     return standing === null ? model(db, plan, step, () => fireRound(db, root, plan, step, provider)) : Promise.resolve(standing)
   }
-  return Promise.resolve(kernel(db, root, plan, wire))
+  return Promise.resolve(kernel(db, root, plan, wire, read))
 }
 
 function model(db: Db, plan: PlanRow, step: Step, run: () => Promise<Outcome>): Promise<Outcome> {

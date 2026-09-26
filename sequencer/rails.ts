@@ -1,6 +1,7 @@
 import { join } from 'node:path'
 import { ratcheted } from '../checks/ratchet.ts'
 import { fill } from '../cli/digests.ts'
+import { record as inbox, ticketOf } from '../cli/inbox.ts'
 import { authority } from '../rails/authority/index.ts'
 import { checked } from '../rails/checks/index.ts'
 import { parse } from '../rails/diff.ts'
@@ -15,7 +16,7 @@ import { filesOf, listed } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
 import { ratchetRules } from '../store/lanes.ts'
 import { busy } from '../store/now.ts'
-import { BUILT, internal, type PlanRow } from '../store/plans.ts'
+import { BUILT, internal, laneOff, type PlanRow } from '../store/plans.ts'
 import { builder } from '../templates/pr-path.ts'
 import { checks, mode, npm, type Failure, type Run } from './checks.ts'
 import { ciChecks } from './ci.ts'
@@ -81,6 +82,7 @@ function suite(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
     try {
       const failed = checks(srcDir(root, plan.id), noted(db, plan.id), outside === null ? narrow(db, plan) : [],
         outside === null ? null : { language: outside, files: filesOf(db, plan.id).map((f) => f.path) })
+      if (failed?.fault !== undefined) return faulted(db, root, plan, failed.fault)
       recordRail(db, join(root, 'rails', 'checks'), plan.id, checked(failed, diffOf(root, plan.id)), 0)
       if (failed !== null) return broke(db, root, plan, failed)
     } finally {
@@ -89,6 +91,14 @@ function suite(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
   }
   const ran = internal(plan) ? mode(srcDir(root, plan.id)) : outside ?? 'none'
   return { outcome: 'pass', spans: [], note: `pre-review: six rails pass; checks ran ${ran}` }
+}
+
+/** A Mac that cannot run tests holds the job with its retries and switches its lane off, with one inbox line. */
+export function faulted(db: Db, root: string, plan: PlanRow, fault: string): Outcome {
+  const name = laneOff(db, plan.pipe_id)
+  const note = `Xcode on this Mac cannot run tests (${fault}): restart the Mac, or run xcodebuild -runFirstLaunch after an Xcode update, then cf pipe on ${name ?? 'its lane, already off'}`
+  if (name !== null) inbox(root, [{ at: new Date().toISOString(), plan: plan.id, ticket: ticketOf(db, plan.id), kind: 'blocked', step: 3, name: 'rails', note }])
+  return { outcome: 'pass', held: true, spans: ['xcode'], note }
 }
 
 /**

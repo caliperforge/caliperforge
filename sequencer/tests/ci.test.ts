@@ -58,6 +58,7 @@ test('no run yet holds step 3, then the run passes it', async () => {
   await toRails(w, wire)
   expect(await rails(w, wire)).toMatchObject({ step: 3, outcome: 'pass' })
   expect(plan(w.db, ID).step).toBe(3)
+  expect(w.db.prepare('SELECT doing FROM now WHERE plan = ?').get(ID)).toEqual({ doing: 'waiting on CI' })
   expect((await rails(w, wire))?.note).toContain('GitHub CI')
   expect(plan(w.db, ID).step).toBe(4)
 })

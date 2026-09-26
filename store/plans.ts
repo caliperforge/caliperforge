@@ -116,8 +116,12 @@ export function waiting(db: Db, rows: { plan: number; why: Wait | null; on?: num
   })()
 }
 
+export const ENTER = `CASE WHEN state = 'running' OR (SELECT count(*) FROM plans o WHERE o.pipe_id = plans.pipe_id
+  AND o.id <> plans.id AND o.state = 'running') < (SELECT max_concurrent FROM pipes WHERE pipes.id = plans.pipe_id)
+  THEN 'running' ELSE 'queued' END`
+
 export function advance(db: Db, plan: PlanRow, step: number): void {
-  db.prepare("UPDATE plans SET step = ?, state = 'running' WHERE id = ?").run(step, plan.id)
+  db.prepare(`UPDATE plans SET step = ?, state = ${ENTER} WHERE id = ?`).run(step, plan.id)
 }
 
 /** `stop` is `store/refusals.ts`'s call; `retries` only marks that the plan has been round once, which names a target's branch. */
@@ -126,7 +130,7 @@ export function back(db: Db, plan: PlanRow, step: number, stop: boolean): 'retri
     db.prepare("UPDATE plans SET state = 'blocked_on_ceo' WHERE id = ?").run(plan.id)
     return 'blocked_on_ceo'
   }
-  db.prepare("UPDATE plans SET step = ?, retries = 1, state = 'running' WHERE id = ?")
+  db.prepare(`UPDATE plans SET step = ?, retries = 1, state = ${ENTER} WHERE id = ?`)
     .run(Math.max(step, 0), plan.id)
   return 'retried'
 }
@@ -134,7 +138,7 @@ export function back(db: Db, plan: PlanRow, step: number, stop: boolean): 'retri
 /** A person sends a blocked plan round again: a refused build goes back to the builder, anything earlier re-runs its step. */
 export function retry(db: Db, plan: PlanRow): number {
   const step = plan.step >= 3 ? 2 : plan.step
-  db.prepare("UPDATE plans SET step = ?, state = 'running' WHERE id = ?").run(step, plan.id)
+  db.prepare(`UPDATE plans SET step = ?, state = ${ENTER} WHERE id = ?`).run(step, plan.id)
   return step
 }
 
@@ -154,7 +158,7 @@ export function finish(db: Db, plan: PlanRow): void {
 
 /** A signal on a pushed PR puts the plan back on the review step it escaped; the head it was signed at is no longer the head. */
 export function rewind(db: Db, plan: number, step: number): void {
-  db.prepare("UPDATE plans SET step = ?, state = 'running', retries = 0, head_digest = NULL WHERE id = ?")
+  db.prepare(`UPDATE plans SET step = ?, state = ${ENTER}, retries = 0, head_digest = NULL WHERE id = ?`)
     .run(step, plan)
 }
 

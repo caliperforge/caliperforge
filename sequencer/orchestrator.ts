@@ -3,7 +3,7 @@ import { stringify } from 'yaml'
 import { z } from 'zod'
 import type { Provider, Refusal } from '../providers/kind.ts'
 import { packet } from '../runner/index.ts'
-import { seat, tight } from '../runner/rules.ts'
+import { load, seat, tight } from '../runner/rules.ts'
 import { wake } from '../runner/wake.ts'
 import { ticketOf } from '../cli/inbox.ts'
 import { alerter, type Post } from '../cli/watch.ts'
@@ -18,6 +18,7 @@ import { fixer, released } from './fixer.ts'
 import { isHeld } from './hold.ts'
 import { prose } from './prose.ts'
 import { WIRE, type Wire } from './push.ts'
+import { recorded } from './seat.ts'
 import { maybe, planDir, put } from './workspace.ts'
 
 export const WAKE = ['token_ceiling', 'ready_proof', 'target_parked', 'no_step_map'] as const
@@ -81,12 +82,14 @@ async function decide(db: Db, root: string, plan: PlanRow, reason: Woken, provid
   Promise<{ id: number; answer: Answer & { verb: Verb } } | Refusal> {
   const woken = wake(db, root, plan.id, now)
   if ('refusal' in woken) return woken.refusal
-  const { manifest, prompt } = seat(root, 'orchestrator')
+  load(db, root)
+  const { manifest, prompt, hash } = seat(root, 'orchestrator')
   const dir = planDir(root, plan.id)
   const fired = await provider.fire({
     ...packet(manifest, prompt, tight(root), woken.text, dir, pending(dir, 'orchestrator')),
     wall: wall(db),
   })
+  recorded(db, plan.id, plan.step, 'orchestrator', hash, provider.name, manifest, fired)
   const answer = fired.ended === 'completed' ? read(fired.text) : refused('exit')
   if ('origin_kind' in answer) return answer
   const id = decided(db, { plan: plan.id, step: plan.step, wait_reason: reason, verb: answer.verb, why: answer.why,

@@ -18,6 +18,9 @@ name is in the checkout, the section is the one line `- none: every name the cha
 Under `## Files` every row names files. A folder is refused: list each file in it the job writes, new
 ones marked `(new)`.
 
+When the ask changes a shared type or a function's signature, search the checkout for its name and list
+every file that builds or implements it: under `## Files`, or under `## Tests` when it is a test or fixture.
+
 When `## Files` lists a file a workflow generates, that row names the workflow step that writes it, meaning
 its `.github/workflows` file and the generator line before `git diff --exit-code`, and says step 3 runs that
 generator and diffs the file against its output.

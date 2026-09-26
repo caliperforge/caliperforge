@@ -14,7 +14,7 @@ import { builderRan, internal, type PlanRow } from '../store/plans.ts'
 import { byRun, pending } from '../store/transcript.ts'
 import type { Step } from '../templates/pr-path.ts'
 import { parse } from '../rails/diff.ts'
-import { pointed, references, shape, split, TEMPLATE, unclear, wide, WIDE, type Part } from './brief.ts'
+import { human, pointed, references, shape, split, TEMPLATE, unclear, wide, WIDE, type Part } from './brief.ts'
 import { handout, touched, type Handed } from './handout.ts'
 import { enclosed, handover, type Handover } from './handover.ts'
 import { install, mode } from './checks.ts'
@@ -98,6 +98,9 @@ export async function fireBrief(db: Db, root: string, plan: PlanRow, step: Step,
     return { outcome: 'refuse', spans: ['brief.wide'],
       note: `${step.runs}: the brief touches ${String(width)} files besides tests; past ${String(WIDE)} it is more than one job, so answer with the split fence` }
   }
+  const lines = human(fired.text)
+  db.prepare('UPDATE plans SET title = ?, what = ?, why = ?, ends = ? WHERE id = ?')
+    .run(lines.title, lines.what, lines.why, lines.ends, plan.id)
   put(root, plan.id, 'issue.md', fired.text)
   drop(root, plan.id, 'refusal.md')
   return { outcome: 'pass', spans: [], note: `${step.runs}: brief written` }

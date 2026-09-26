@@ -2,3 +2,4 @@ node_modules/
 cf.db
 cf.dump.sql
 .cf/
+MAP.md

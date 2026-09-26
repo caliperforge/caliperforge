@@ -30,8 +30,8 @@ import { carried, cloned, diffOf, diffSince, drop, get, headSha, holds, maybe, m
 import { kernelPlan } from './home.ts'
 
 const INSERT = `INSERT INTO runs
-  (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_tokens, output_tokens, seconds, exit, transcript_path)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_tokens, output_tokens, seconds, exit, transcript_path, cost_usd)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 export async function fireSeat(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
   if (kernelPlan(plan)) install(srcDir(root, plan.id))
@@ -164,7 +164,7 @@ export async function ran(db: Db, root: string, plan: PlanRow, step: Step, provi
 export function recorded(db: Db, plan: number, step: number, name: string, hash: string, provider: Provider['name'],
   manifest: Seat, fired: Fired): void {
   const row = db.prepare(INSERT).run(plan, step, name, hash, provider, manifest.model, manifest.effort,
-    fired.usage.input, fired.usage.cache, fired.usage.output, fired.seconds, fired.exit, fired.transcript_path)
+    fired.usage.input, fired.usage.cache, fired.usage.output, fired.seconds, fired.exit, fired.transcript_path, fired.usage.cost ?? null)
   byRun(db, Number(row.lastInsertRowid), fired.transcript_path)
 }
 

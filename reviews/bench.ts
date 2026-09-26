@@ -69,11 +69,11 @@ async function ran(db: Db, root: string, name: string, plan: number, manifest: R
   const fired = await provider.fire({ ...packet, wall: wall(db) })
   const outcome = read(fired.text, packet.prompt)
   const row = db.prepare(`INSERT INTO runs
-    (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_tokens, output_tokens, seconds, exit, transcript_path)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_tokens, output_tokens, seconds, exit, transcript_path, cost_usd)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(plan, manifest.step, name, specHash(root, name), provider.name, manifest.model, manifest.effort,
       fired.usage.input, fired.usage.cache, fired.usage.output, fired.seconds,
-      outcome === null ? 1 : fired.exit, fired.transcript_path)
+      outcome === null ? 1 : fired.exit, fired.transcript_path, fired.usage.cost ?? null)
   const run = Number(row.lastInsertRowid)
   byRun(db, run, fired.transcript_path)
   observed(db, fired.limits)

@@ -13,6 +13,7 @@ import { blocked, kernel } from '../steps.ts'
 import { diffOf, doneIds, get, narrowing, put, snapshot, srcDir } from '../workspace.ts'
 import { GREEN } from '../base.ts'
 import { record } from '../../store/files.ts'
+import { record as signal } from '../../store/signals.ts'
 import { benchPacket } from '../../runner/packet.ts'
 import type { Packet, Provider } from '../../providers/kind.ts'
 import type { Wire } from '../push.ts'
@@ -384,6 +385,39 @@ test('D4 a code line in the delta still fires senior review', async () => {
   await reworked(w, CARRIED, 4)
   expect(seniorRuns(w)).toEqual({ n: 2 })
   expect(modeOf(w.root, 5)).toMatch(/^delta: /)
+})
+
+/** Review's and senior's packets on an internal plan built on FOUR, with Greptile's `OLD` on another head and, if `current`, `NEW` on this one. */
+async function greptiled(current: boolean): Promise<Packet[]> {
+  const w = world()
+  w.db.prepare('DELETE FROM plans WHERE id = 1').run()
+  ours(w.root)
+  internalPlan(w.db, w.root, MINE)
+  for (let step = 0; step < 2; step += 1) await tick(w.db, w.root, stub(CARRIED))
+  built(w.root, MINE, FOUR)
+  for (let step = 0; step < 2; step += 1) await tick(w.db, w.root, stub(CARRIED, 0, PASS))
+  const rows: [string, string][] = [['OLD', 'f'.repeat(40)], ...(current ? [['NEW', head(srcDir(w.root, MINE), ['rev-parse', 'HEAD'])] as [string, string]] : [])]
+  for (const [body, sha] of rows) {
+    signal(w.db, { repo: 'caliperforge/cf', pr: 1, kind: 'bot_review', author: 'greptile', at: '2026-09-26T00:00:00Z',
+      external_id: body, score: 5, plan: MINE, body, head: sha })
+  }
+  const seen: Packet[] = []
+  for (let step = 0; step < 2; step += 1) await tick(w.db, w.root, stub(CARRIED, 0, PASS, (p) => seen.push(p)))
+  return seen
+}
+
+const senior = (packets: Packet[]): string => packets.find((p) => p.prompt.includes('# First verdict'))?.prompt ?? ''
+
+test('D1 D2 D3 senior is handed Greptile on the current head only, and review never is', async () => {
+  const both = await greptiled(true)
+  expect(section(senior(both), 'Greptile on this head')).toBe('NEW')
+  expect(senior(both)).not.toContain('OLD')
+  expect(reviewer(both)).not.toContain('# Greptile on this head')
+
+  const stale = await greptiled(false)
+  expect(senior(stale)).toContain('# First verdict')
+  expect(senior(stale)).not.toContain('# Greptile on this head')
+  expect(senior(stale)).not.toContain('OLD')
 })
 
 test('narrowing calls a moved path the plan does not touch main\'s, and proves the rest with its blob', () => {

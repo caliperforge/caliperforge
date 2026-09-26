@@ -84,14 +84,10 @@ export async function fireBrief(db: Db, root: string, plan: PlanRow, step: Step,
   const standing = maybe(root, plan.id, 'issue.md')
   if (standing !== null && shape(standing, ask, src) === null) return stands()
   const fired = await ran(db, root, plan, step, provider, again(db, root, plan.id, ask) + store(root, plan), false)
+  drop(root, plan.id, 'brief.refused.md')
   if (fired.ended !== 'completed') return exited(step, fired)
   const question = unclear(fired.text)
-  if (question !== null) {
-    put(root, plan.id, 'question.md', `${question}\n`)
-    const base = maybe(root, plan.id, 'base.sha')
-    if (base !== null) put(root, plan.id, 'question.sha', base)
-    return { outcome: 'needs_ceo', spans: [], note: `${step.runs}: ${question}` }
-  }
+  if (question !== null) return asking(root, plan.id, step, question)
   const parts = split(fired.text)
   if (parts !== null) {
     put(root, plan.id, 'split.md', fired.text)
@@ -123,6 +119,13 @@ function splitting(step: Step, parts: Part[]): Outcome {
 
 function stands(): Outcome {
   return { outcome: 'pass', spans: [], note: 'the brief stands' }
+}
+
+function asking(root: string, plan: number, step: Step, question: string): Outcome {
+  put(root, plan, 'question.md', `${question}\n`)
+  const base = maybe(root, plan, 'base.sha')
+  if (base !== null) put(root, plan, 'question.sha', base)
+  return { outcome: 'needs_ceo', spans: [], note: `${step.runs}: ${question}` }
 }
 
 function again(db: Db, root: string, plan: number, ask: string): string {

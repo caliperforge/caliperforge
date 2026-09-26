@@ -244,6 +244,7 @@ test('the seat is fired again with its last brief and the shape refusal under th
   expect(packets[0]?.prompt).toContain('## Must not break is missing or out of order')
   expect(packets[0]?.prompt).not.toContain('write the whole brief again')
   expect(shape(briefOf(w), askOf(w), srcDir(w.root, ID))).toBeNull()
+  expect(maybe(w.root, ID, 'brief.refused.md')).toBeNull()
 })
 
 test('a brief saved after a shape refusal leaves the builder no refusal to read', async () => {

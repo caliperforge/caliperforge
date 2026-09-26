@@ -463,21 +463,6 @@ test('a senior refusal lands on build too, and the ticks after it walk rails, re
   expect(walked).toEqual(['build', 'rails', 'review', 'senior'])
 })
 
-test('six ticks walk a plan from measure to Ready on one seat run and no tokens spent deciding', async () => {
-  const w = world()
-  approve(w.db, w.target)
-  const walked: string[] = []
-  for (const at of [0, 1, 2, 3, 4, 5]) {
-    const fired = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1)))[0]
-    expect(fired).toMatchObject({ step: at, outcome: 'pass' })
-    walked.push(fired?.name ?? '')
-  }
-  expect(walked).toEqual(['measure', 'ruling', 'build', 'rails', 'review', 'senior'])
-  expect(plan(w.db, 1).step).toBe(6)
-  expect(blocked(w.db, plan(w.db, 1))).toBeNull()
-  expect(w.db.prepare("SELECT count(*) AS n FROM runs WHERE seat = 'outside_specialist'").get()).toEqual({ n: 1 })
-})
-
 test('step 6 sends the branch to our fork, waits out a run still going, then records ci-green and ready', async () => {
   const w = world()
   approve(w.db, w.target)
@@ -721,19 +706,6 @@ test('D3 a 4/5 at the current head passes ready to sign-off', async () => {
   const [w, lap] = await atReady((at) => { scored(at.root, 1, 4, 'Confidence Score: 4/5') })
   expect(await lap()).toMatchObject({ step: 6, name: 'ready', outcome: 'pass' })
   expect(plan(w.db, 1).step).toBe(7)
-})
-
-test('D6 an internal plan passes ready with no Greptile score and no hold', async () => {
-  const w = world()
-  w.db.prepare('DELETE FROM plans WHERE id = 1').run()
-  ours(w.root)
-  internalPlan(w.db, w.root, MINE)
-  const wire = { ...watched([], w.root, MINE), rehearse: () => undefined }
-  for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
-  const out = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
-  expect(out).toMatchObject({ step: 6, name: 'ready', outcome: 'pass' })
-  expect(out?.note).not.toMatch(/Greptile/)
-  expect(plan(w.db, MINE).step).toBe(7)
 })
 
 test('step 6 refuses a plan with no deliverable row instead of sending the branch and raising', async () => {

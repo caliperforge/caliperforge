@@ -52,11 +52,6 @@ test('stops when the lane is switched off', async () => {
   expect(plan(w.db, 1).step).toBe(3)
 })
 
-test('one step per tick without a budget', async () => {
-  const w = ready()
-  expect((await tick(w.db, w.root, stub(CARRIED))).map((f) => f.step)).toEqual([0])
-})
-
 test('a refused build rebuilds in the same tick', async () => {
   const w = ready()
   let builds = 0

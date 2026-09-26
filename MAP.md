@@ -1,0 +1,739 @@
+# MAP.md — written by `cf digests`
+
+- `checks/all.ts`
+  - CHECKS
+  - runAll
+- `checks/exit-code-routing.ts`
+  - exitCodeRouting
+- `checks/fixture-per-rail.ts`
+  - fixturePerRail
+- `checks/kind.ts`
+  - Finding
+  - Check
+- `checks/manifest.ts`
+  - Manifest
+  - manifest
+- `checks/migration-order.ts`
+  - migrationOrder
+- `checks/origin-on-refuse.ts`
+  - originOnRefuse
+- `checks/reachability.ts`
+  - reachability
+- `checks/reviewer-manifests.ts`
+  - reviewerManifests
+- `checks/reviewer-not-builder.ts`
+  - reviewerNotBuilder
+- `checks/rule-hashes.ts`
+  - ruleHashes
+- `checks/run.ts`
+- `checks/sqlite.ts`
+  - fresh
+  - rejects
+- `checks/template-validity.ts`
+  - templateValidity
+- `checks/tight.ts`
+  - tight
+- `checks/tree.ts`
+  - walk
+  - subdirs
+  - lineOf
+- `cli/adopt.ts`
+  - Adopted
+  - view
+  - adopt
+  - render
+- `cli/batch.ts`
+  - Mark
+  - Card
+  - batch
+  - Landed
+  - landed
+  - renderLanded
+  - approve
+  - refuse
+  - render
+- `cli/brief.ts`
+  - PlanLine
+  - Day
+  - Ticket
+  - open
+  - halted
+  - awaiting
+  - day
+  - tickets
+  - ticketSection
+  - line
+  - section
+  - runsOf
+  - verdictsOf
+  - laneLine
+  - waits
+  - waitLine
+  - windowLine
+  - dryLines
+  - tickNote
+- `cli/cf.ts`
+- `cli/digests.ts`
+  - ROSTER
+  - SEED
+  - MAP
+  - Stale
+  - fill
+  - check
+- `cli/find.ts`
+  - CHECK
+  - Checked
+  - find
+- `cli/gh.ts`
+  - CLAIM
+  - WINDOW
+  - Issue
+  - Read
+  - gh
+  - issue
+  - claimed
+  - ours
+  - foreign
+  - implemented
+  - lastMerger
+  - Pr
+  - pr
+  - prNumber
+  - rehearse
+  - unrehearse
+  - rehearsal
+  - openPr
+  - closeIssue
+  - fileIssue
+  - commentIssue
+  - searchIssue
+  - Answer
+  - ANSWERS
+  - Seen
+  - Desk
+  - Run
+  - desk
+- `cli/inbox.ts`
+  - Kind
+  - Event
+  - Post
+  - events
+  - ticketOf
+  - record
+  - crashed
+  - unread
+  - ack
+  - line
+  - notify
+  - plain
+- `cli/map.ts`
+  - map
+- `cli/measure.ts`
+  - Pulse
+  - measure
+  - planOpen
+  - render
+  - logins
+  - p50
+- `cli/plan.ts`
+  - LANES
+  - Lane
+  - Template
+  - LANE
+  - Filed
+  - Unfiled
+  - parse
+  - issue
+  - laneOf
+  - seatOf
+  - priorityOf
+  - add
+  - unfiled
+  - seen
+  - render
+- `cli/queue.ts`
+  - Origin
+  - Added
+  - parse
+  - account
+  - Scope
+  - add
+  - askOf
+  - CARD
+- `cli/session.ts`
+  - Settled
+  - FindIssue
+  - settled
+  - close
+- `cli/watch.ts`
+  - STALE_MINUTES
+  - CRASHED
+  - Liveness
+  - liveness
+  - livenessLine
+  - Post
+  - stalledLanes
+  - watch
+  - alerter
+- `providers/claude-agent-sdk/index.ts`
+  - IDLE_TURNS
+  - claudeAgentSdk
+  - walled
+  - idle
+  - readings
+  - offered
+  - gate
+  - readOutside
+  - fired
+- `providers/credential.ts`
+  - Auth
+  - Credential
+  - ENV_FILE
+  - credential
+  - hostValue
+- `providers/kind.ts`
+  - Refusal
+  - Packet
+  - CAPPED
+  - bare
+  - Ended
+  - Fired
+  - Provider
+- `rails/authority/index.ts`
+  - authority
+- `rails/checks/index.ts`
+  - checked
+- `rails/ci-green/index.ts`
+  - PENDING
+  - MISSING
+  - Head
+  - Text
+  - Gh
+  - Board
+  - ciGreen
+  - judge
+  - list
+  - shell
+- `rails/completion-audit/index.ts`
+  - audit
+  - record
+- `rails/diff.ts`
+  - Line
+  - FileDiff
+  - parse
+- `rails/identifiers/index.ts`
+  - identifiers
+- `rails/ready/index.ts`
+  - Proof
+  - ready
+- `rails/record.ts`
+  - record
+- `rails/secret-scan/index.ts`
+  - scan
+- `rails/test-weakened/index.ts`
+  - TEST_FILE
+  - weakened
+- `rails/tight/braces.ts`
+  - Declaration
+  - Scan
+  - scan
+- `rails/tight/index.ts`
+  - Subject
+  - tight
+  - sources
+  - self
+- `rails/tight/prose.ts`
+  - inProse
+- `rails/tight/source.ts`
+  - Ceilings
+  - Span
+  - inSource
+  - exported
+  - touched
+  - lineAt
+- `reviews/bench.ts`
+  - loadReviews
+  - specHash
+  - judge
+  - record
+- `reviews/package.ts`
+  - inContext
+  - declaredNames
+- `reviews/verdict.ts`
+  - Finding
+  - Judged
+  - read
+- `runner/index.ts`
+  - refuse
+  - packet
+  - fire
+  - planRow
+- `runner/packet.ts`
+  - BROWSE
+  - Review
+  - Review
+  - Narrowing
+  - Narrowing
+  - Bench
+  - Bench
+  - reviewManifest
+  - spec
+  - admits
+  - STEP_CAP
+  - CAP_MAX
+  - stepsFor
+  - benchPacket
+  - assembled
+- `runner/rules.ts`
+  - WRITERS
+  - Seat
+  - Seat
+  - Rule
+  - rules
+  - load
+  - seat
+  - tight
+  - listed
+  - written
+  - expected
+  - digest
+- `runner/wake.ts`
+  - CAP
+  - wake
+  - STOP_CHARS
+- `sequencer/act.ts`
+  - MECHANICAL
+  - TOUCHES
+  - applying
+  - act
+- `sequencer/base.ts`
+  - GREEN
+  - onBase
+- `sequencer/brief.ts`
+  - STANDING
+  - WIDE
+  - TEMPLATE
+  - Part
+  - TEST
+  - Refused
+  - unclear
+  - split
+  - wide
+  - shape
+  - pointed
+  - references
+  - files
+  - writable
+  - section
+- `sequencer/capture.ts`
+  - capture
+  - intake
+  - signals
+- `sequencer/checks.ts`
+  - Failure
+  - Ran
+  - Run
+  - Mode
+  - DERIVED
+  - mode
+  - checks
+  - excluded
+  - failures
+  - entries
+  - install
+  - npm
+  - CHECK_SLOTS
+  - SLOT_DIR
+  - slot
+  - free
+- `sequencer/ci.ts`
+  - WHERE
+  - SHOWS
+  - RUNS
+  - Ci
+  - ciChecks
+- `sequencer/delta.ts`
+  - Picked
+  - classify
+- `sequencer/escapes.ts`
+  - classOf
+  - attribute
+- `sequencer/failures.ts`
+  - Red
+  - red
+  - Failed
+  - failing
+- `sequencer/fence.ts`
+  - strays
+  - deletions
+  - renumbered
+- `sequencer/fixer.ts`
+  - Mode
+  - THEN
+  - FIXES
+  - FIX_WALL
+  - Fix
+  - mode
+  - fixesToday
+  - fixer
+  - released
+- `sequencer/gates.ts`
+  - OUTSIDE_LANGUAGES
+  - OutsideLanguage
+  - outsideLanguage
+  - Outside
+  - Gate
+  - gates
+  - recipes
+  - formatLine
+  - ciFeatures
+- `sequencer/handout.ts`
+  - WHOLE
+  - Handed
+  - handout
+  - touched
+  - block
+- `sequencer/handover.ts`
+  - Handover
+  - handover
+  - enclosed
+- `sequencer/hold.ts`
+  - hold
+  - isHeld
+  - unhold
+- `sequencer/home.ts`
+  - homeOf
+  - kernelPlan
+- `sequencer/hq.ts`
+  - save
+  - saved
+- `sequencer/index.ts`
+  - tick
+  - Apart
+  - lap
+  - EACH
+  - CHAIN_MINUTES
+  - Would
+  - Quiet
+  - Dry
+  - dry
+  - thrown
+  - fingerprintOf
+- `sequencer/install.ts`
+  - PLACES
+  - Places
+  - reinstall
+- `sequencer/kind.ts`
+  - Outcome
+  - Fired
+- `sequencer/lock.ts`
+  - lock
+  - unlock
+- `sequencer/next.ts`
+  - Route
+  - Offer
+  - route
+  - offered
+  - working
+  - picks
+- `sequencer/orchestrator.ts`
+  - WAKE
+  - woke
+- `sequencer/priority.ts`
+  - reprice
+- `sequencer/prose.ts`
+  - prose
+- `sequencer/push.ts`
+  - Wire
+  - WIRE
+  - forkCi
+  - reviewable
+  - sent
+  - workflows
+  - BOARD
+  - unfinished
+  - carries
+  - holding
+  - land
+  - push
+  - opened
+  - headOf
+  - title
+  - prBody
+  - squash
+  - rehearsalBranch
+  - follow
+- `sequencer/quick.ts`
+  - fireRound
+- `sequencer/rails.ts`
+  - preReview
+  - narrow
+- `sequencer/route.ts`
+  - BRIEF_FILES
+  - languageFor
+  - OUTSIDE
+  - languageOfPath
+  - majority
+  - fenceFor
+- `sequencer/seat.ts`
+  - fireSeat
+  - fireBrief
+  - machineReads
+  - ran
+  - stopped
+  - Round
+  - fireReview
+  - checked
+- `sequencer/signals.ts`
+  - Started
+  - started
+- `sequencer/signoff.ts`
+  - Signed
+  - signoffs
+  - bodyFor
+  - ruled
+- `sequencer/split.ts`
+  - parted
+  - following
+- `sequencer/steps.ts`
+  - blocked
+  - overlapping
+  - WAITING
+  - parked
+  - kernel
+  - kept
+  - LAPS
+  - measure
+  - targetOf
+  - targetDigest
+  - proved
+  - unanswered
+- `sequencer/upgrade.ts`
+  - behind
+  - upgrade
+  - upgraded
+  - said
+- `sequencer/workspace.ts`
+  - planDir
+  - srcDir
+  - put
+  - get
+  - maybe
+  - drop
+  - reap
+  - move
+  - afresh
+  - doneIds
+  - FORK
+  - SELF
+  - SIGNOFF
+  - Checkout
+  - repoName
+  - branchOf
+  - internalBranch
+  - titleOf
+  - gitBase
+  - MAIN
+  - fetchMain
+  - behindMain
+  - mergeMain
+  - abortMerge
+  - unmerged
+  - conflicted
+  - liveTree
+  - checkout
+  - cloned
+  - languageOf
+  - gitDiff
+  - snapshot
+  - holds
+  - diffSince
+  - narrowing
+  - merging
+  - CARRY
+  - recut
+  - carried
+  - diffOf
+- `store/approvals.ts`
+  - SubjectKind
+  - digestOf
+  - headDigest
+  - decide
+  - gates
+  - signedHead
+  - headApproved
+  - refusedPush
+- `store/decisions.ts`
+  - VERBS
+  - Verb
+  - Applied
+  - Decision
+  - decided
+  - decisions
+  - mark
+  - touches
+- `store/deliverables.ts`
+  - Proven
+  - Made
+  - built
+  - gated
+  - forkGreen
+  - ready
+  - approved
+- `store/dispositions.ts`
+  - Owner
+  - Span
+  - Span
+  - owner
+  - settle
+  - escaped
+  - overridden
+- `store/events.ts`
+  - Event
+  - logged
+  - newestRun
+  - runSince
+- `store/files.ts`
+  - PlanFile
+  - filesOf
+  - strays
+  - record
+  - sharing
+  - building
+- `store/holds.ts`
+  - hold
+  - release
+  - returnToLane
+- `store/index.ts`
+  - Db
+  - open
+  - migrate
+  - dump
+  - rules
+- `store/lanes.ts`
+  - LaneCap
+  - LaneCap
+  - LaneState
+  - LaneState
+  - WindowRow
+  - WindowRow
+  - Reading
+  - Reading
+  - get
+  - count
+  - set
+  - priority
+  - templatePriority
+  - zone
+  - hhmm
+  - wall
+  - cap
+  - dial
+  - lanes
+  - windows
+  - record
+  - observed
+  - name
+- `store/leases.ts`
+  - Lease
+  - Taken
+  - take
+  - handOver
+  - drop
+  - clear
+  - held
+  - holder
+  - gone
+  - alive
+- `store/merges.ts`
+  - Merge
+  - Recorded
+  - record
+  - last
+  - Given
+  - lastReview
+  - keep
+- `store/now.ts`
+  - Now
+  - busy
+  - idle
+  - current
+- `store/plans.ts`
+  - PipeRow
+  - PipeRow
+  - WAIT
+  - Wait
+  - PlanRow
+  - PlanRow
+  - internal
+  - originRef
+  - originIssue
+  - clock
+  - inWindow
+  - openPipes
+  - live
+  - underCap
+  - BUILT
+  - builderRan
+  - waiting
+  - advance
+  - back
+  - retry
+  - needsCeo
+  - terminal
+  - finish
+  - rewind
+  - stampHead
+  - overlapWaits
+- `store/proposals.ts`
+  - CLASSES
+  - ProposalRow
+  - ProposalRow
+  - Item
+  - bytes
+  - propose
+  - open
+  - byId
+  - stamp
+  - strike
+- `store/refusals.ts`
+  - ROUNDS
+  - BLIPS
+  - Why
+  - Refused
+  - fingerprint
+  - refused
+  - blipped
+  - overBudget
+  - clear
+  - WHY
+- `store/rows.ts`
+  - RuleRow
+  - RuleRow
+- `store/signals.ts`
+  - SignalRow
+  - SignalRow
+  - Signal
+  - record
+  - since
+- `store/ticks.ts`
+  - Receipt
+  - receipt
+  - last
+- `store/transcript.ts`
+  - pending
+  - byRun
+- `store/verdict.ts` — The one verdict shape: a rail and a review both end in a `verdicts` row.
+  - Verdict
+- `templates/comms.ts`
+  - steps
+- `templates/pr-path.ts`
+  - Fires
+  - Gate
+  - Step
+  - DEFAULT_BUILDER
+  - builder
+  - steps
+  - last
+  - at
+- `vitest.config.ts`

@@ -260,9 +260,15 @@ function paths(brief: string, src: string): Refused | null {
 const POINTED = /([A-Za-z0-9_.-]*\/[A-Za-z0-9_./-]*\.[A-Za-z0-9]+):(\d+)/g
 
 /** Each line a `## Files` row points at, so a long file is handed by its block (#67). */
-export function pointed(brief: string): { path: string; line: number }[] {
-  return section(brief, '## Files').split('\n').filter((l) => /^\s*[-*]/.test(l))
+export function pointed(brief: string, heading = '## Files'): { path: string; line: number }[] {
+  return section(brief, heading).split('\n').filter((l) => /^\s*[-*]/.test(l))
     .flatMap((l) => [...l.matchAll(POINTED)].map((m) => ({ path: String(m[1]), line: Number(m[2]) })))
+}
+
+/** #203b: the reference a port must match, each line a `## Must not break` row points at outside the files the job changes. */
+export function references(brief: string): { path: string; line: number }[] {
+  const changing = new Set(files(brief).map((f) => f.path))
+  return pointed(brief, '## Must not break').filter((p) => !changing.has(p.path))
 }
 
 /** A path in backticks anywhere on a `## Files` row; the directory in it is what tells it from a symbol. */

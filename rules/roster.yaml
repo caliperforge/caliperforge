@@ -21,7 +21,7 @@ digests:
     prompt: 8b7449d691e7287aaca5beb77a0497a9cde2ee8ab523e57c8aac6eef169e1cb8
   swift_specialist:
     manifest: 01be33cd84ee1654a52d5f832b9db30acd1c6060f5e901c653a7661c27f1711e
-    prompt: c2f6183a6be5cdd214c7c9e4f8ad3e121e51ed5578401cb5fc92393b519bd9bb
+    prompt: f38eb1e2b392ba57ef83adf682ae013d644fe6f9f193bcc172d5747ee1459f54
   brief_writer:
     manifest: 9f242cf80f39b12b889aa092dca097abe8d1260a8014e05f0af3bd5b8ccc86a5
     prompt: 5f1d7e61d4d5513d1c9bcfd7f3580e0df3ce10997e538ee2b0dabcfa9090cfd6

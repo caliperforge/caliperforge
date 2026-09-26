@@ -4,6 +4,7 @@ import { fresh } from '../../checks/sqlite.ts'
 import { FORK } from '../../sequencer/workspace.ts'
 import type { Db } from '../../store/index.ts'
 import type { Read } from '../gh.ts'
+import { refuseTarget } from '../queue.ts'
 import { render, scan } from '../scan.ts'
 
 const schema = join(import.meta.dirname, '../../schema')
@@ -99,6 +100,15 @@ test('D3: a refused or queued target keeps every column', () => {
   expect(row(db, 1)).toEqual(refused)
   expect(row(db, 2)).toMatchObject({ state: 'queued', named_merger: 'old' })
   expect(db.prepare('SELECT count(*) AS n FROM targets GROUP BY repo, issue_no, part HAVING n > 1').all()).toEqual([])
+})
+
+test('D5: a target the CEO refused is left as it was by a rescan and not returned', () => {
+  const db = world()
+  const [id] = scan(db, REPO, TODAY, canned({ issues: [issue(1)] })).targets
+  refuseTarget(db, Number(id), 'not.ours')
+  const refused = row(db, 1)
+  expect(scan(db, REPO, TODAY, canned({ issues: [issue(1, 'grown\nlonger')] })).targets).toEqual([])
+  expect(row(db, 1)).toEqual(refused)
 })
 
 test('D4: a repo with no named merger gets no targets', () => {

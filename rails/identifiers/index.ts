@@ -37,7 +37,7 @@ export function identifiers(root: string, text: string): Verdict {
 
 function paths(root: string, ours: Set<string>, l: Said): Named[] {
   return [...l.text.matchAll(NAMED)]
-    .map((m) => ({ id: m[1] ?? '', at: m[2] }))
+    .map((m) => ({ id: (m[1] ?? '').replace(/\.+$/, ''), at: m[2] }))
     .filter((n) => ours.has(n.id.split('/')[0] ?? ''))
     .filter((n) => !resolves(join(root, n.id), n.at))
     .map((n) => ({ id: n.at === undefined ? n.id : `${n.id}:${n.at}`, line: l.line }))

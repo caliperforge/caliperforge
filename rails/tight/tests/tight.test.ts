@@ -4,7 +4,7 @@ import { expect, test } from 'vitest'
 import { fresh } from '../../../checks/sqlite.ts'
 import { planRow } from '../../../runner/index.ts'
 import { load } from '../../../runner/rules.ts'
-import { record } from '../../record.ts'
+import { record, type Verdict } from '../../record.ts'
 import { tight, type Subject } from '../index.ts'
 
 const root = join(import.meta.dirname, '../../..')
@@ -164,21 +164,20 @@ test('a restating comment after a template still refuses', () => {
   expect(verdict.spans).toEqual(['src/fixture.ts:2 tight.restating'])
 })
 
-const commented = (comment: string, code = 'export const reap = 1'): string[] => {
+const commented = (comment: string, code = 'export const reap = 1'): Verdict => {
   const source = `${comment}\n${code}\n`
-  return tight(root, { diff: added('src/x.ts', source), sources: { 'src/x.ts': source }, description: 'x.' }).spans
+  return tight(root, { diff: added('src/x.ts', source), sources: { 'src/x.ts': source }, description: 'x.' })
 }
 
 test('refuses history in an added comment and says where it belongs', () => {
-  const source = '/** #154: reap on land */\nexport const reap = 1\n'
-  const verdict = tight(root, { diff: added('src/x.ts', source), sources: { 'src/x.ts': source }, description: 'x.' })
+  const verdict = commented('/** #154: reap on land */')
   expect(verdict.outcome).toBe('refuse')
   expect(verdict.spans).toEqual(['src/x.ts:1 tight.history'])
   expect(verdict.message).toContain('commit message')
 })
 
 test('passes the same comment without its history', () => {
-  expect(commented('/** Reap on land. */')).toEqual([])
+  expect(commented('/** Reap on land. */').spans).toEqual([])
 })
 
 test('passes a history comment on a line the diff did not add', () => {
@@ -189,15 +188,15 @@ test('passes a history comment on a line the diff did not add', () => {
 
 test('refuses each form of history', () => {
   for (const comment of ['// 2026-09-24', '// 09-24', '// asked by the CEO', '// COO call', '// plan 47']) {
-    expect(commented(comment)).toEqual(['src/x.ts:1 tight.history'])
+    expect(commented(comment).spans).toEqual(['src/x.ts:1 tight.history'])
   }
 })
 
 test('passes ranges, bare hashes, the word plan and history in a string', () => {
   for (const comment of ['// ports 80-99', '// the #private field', '// the plan holds']) {
-    expect(commented(comment)).toEqual([])
+    expect(commented(comment).spans).toEqual([])
   }
-  expect(commented('', "export const s = '#154 09-24'")).toEqual([])
+  expect(commented('', "export const s = '#154 09-24'").spans).toEqual([])
 })
 
 test('a prose span is named for the text it read', () => {

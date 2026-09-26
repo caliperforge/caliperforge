@@ -6,7 +6,7 @@ import { logged, newestRun, runSince } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { clear as unlease, drop, handOver, held, take, type Lease, type Taken } from '../store/leases.ts'
 import { cap, hhmm, zone } from '../store/lanes.ts'
-import { busy, idle } from '../store/now.ts'
+import { busy, idle, keepWait } from '../store/now.ts'
 import { PlanRow, advance, back, finish, internal, live, needsCeo, openPipes, rewind, terminal, type PipeRow, waiting } from '../store/plans.ts'
 import { blipped, fingerprint, refused, WHY, type Why } from '../store/refusals.ts'
 import { at, last, type Step } from '../templates/pr-path.ts'
@@ -194,6 +194,7 @@ async function one(db: Db, root: string, pipe: PipeRow, first: Leg, lease: Taken
   provider: Provider, wire?: Wire, chain = 0, read?: Read): Promise<Fired[]> {
   const until = Date.now() + chain * 60_000
   const out: Fired[] = []
+  let waited = false
   try {
     let leg: Leg | null = first
     while (leg !== null) {
@@ -204,13 +205,15 @@ async function one(db: Db, root: string, pipe: PipeRow, first: Leg, lease: Taken
       }
       const lap = await stepped(db, root, pipe, plan, lease, provider, wire, read)
       out.push(lap.fired)
+      waited = lap.wait
       const more = chain > 0 && Date.now() < until && out.length < STEPS && !lap.wait
       leg = more ? onward(db, first.plan.id, lease) : null
     }
     return out
   } finally {
     unlease(db, first.plan.id)
-    idle(db, first.plan.id)
+    if (waited) keepWait(db, first.plan.id)
+    else idle(db, first.plan.id)
   }
 }
 

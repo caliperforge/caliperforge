@@ -3,13 +3,14 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { expect, test } from 'vitest'
+import { unread } from '../../cli/inbox.ts'
 import { filesOf, record } from '../../store/files.ts'
 import type { Db } from '../../store/index.ts'
 import { checks, mode, npm, type Ran, type Run } from '../checks.ts'
 import { ciFeatures, formatLine, recipes } from '../gates.ts'
 import { tick } from '../index.ts'
-import { narrow } from '../rails.ts'
-import { get } from '../workspace.ts'
+import { faulted, narrow } from '../rails.ts'
+import { get, srcDir } from '../workspace.ts'
 import { BROKEN, GREEN, NAPPING, ORPHANED, pkg, RED, TIMEOUT } from './bases.ts'
 import { approve, built as edited, CARRIED, internalPlan, ours, plan, stub, watched, world, type World } from './world.ts'
 
@@ -308,6 +309,74 @@ test('an xcodebuild failure without the hung line is refused on the first run', 
   expect(checks(src, once.run)).toMatchObject({ code: '65', retried: false })
   expect(once.seen).toHaveLength(1)
 })
+
+const STALE = 'CoreSimulator is out of date: 1051.55 is running, 1171.7 is required'
+
+const HANG = 'The test runner hung before establishing connection.\n'
+
+function xcode(): string {
+  const src = tree({})
+  mkdirSync(join(src, 'Atelier.xcodeproj'))
+  return src
+}
+
+test('#257 D1 an xcodebuild log saying CoreSimulator is out of date is a fault after one run', () => {
+  const once = replies({ ok: false, code: '70', output: `building\n${STALE}\n` })
+  expect(checks(xcode(), once.run)).toMatchObject({ fault: STALE, retried: false })
+  expect(once.seen).toHaveLength(1)
+})
+
+test('#257 D1 a fault keeps the retries, switches the lane off and writes one inbox line, once', () => {
+  const w = world()
+  internalPlan(w.db, w.root, ID)
+  expect(faulted(w.db, w.root, plan(w.db, ID), STALE)).toMatchObject({ outcome: 'pass', held: true })
+  expect(plan(w.db, ID).retries).toBe(0)
+  expect(w.db.prepare('SELECT enabled FROM pipes WHERE id = 1').get()).toEqual({ enabled: 0 })
+  expect(unread(w.root).map((e) => e.note)).toEqual([expect.stringMatching(/restart the Mac.*xcodebuild -runFirstLaunch/) as string])
+  faulted(w.db, w.root, plan(w.db, ID), STALE)
+  expect(unread(w.root)).toHaveLength(1)
+})
+
+test('#257 D2 a red xcodebuild test run carries no fault', () => {
+  expect(checks(xcode(), () => ({ ok: false, code: '65', output: '** TEST FAILED **' }))).not.toHaveProperty('fault')
+})
+
+test('#257 D3 the linkd.autoShortcut lines are dropped from the output and every other line kept in order', () => {
+  const noise = 'Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={}'
+  const run: Run = () => ({ ok: false, code: '65', output: ['a', noise, 'b', noise, '** TEST FAILED **'].join('\n') })
+  expect(checks(xcode(), run)?.output).toBe('a\nb\n** TEST FAILED **')
+})
+
+test('#257 D4 a runner that hangs on its retry too is a fault; a hang then a green run is not', () => {
+  const both = replies({ ok: false, code: '1', output: HANG }, { ok: false, code: '1', output: HANG })
+  expect(checks(xcode(), both.run)).toMatchObject({ fault: HANG.trim(), retried: true })
+  expect(checks(xcode(), replies({ ok: false, code: '1', output: HANG }).run)).toBeNull()
+})
+
+test('#257 D5 an npm failure naming CoreSimulator or the hung runner is an ordinary refusal', () => {
+  const output = `${STALE}\n${HANG}`
+  const failed = checks(tree(ONE), replies({ ok: false, code: '1', output }, { ok: false, code: '1', output }).run)
+  expect(failed).toMatchObject({ script: 'test', code: '1' })
+  expect(failed).not.toHaveProperty('fault')
+})
+
+test('#257 D6 a faulted step 3 stays on its step and records no checks verdict', async () => {
+  const bin = mkdtempSync(join(tmpdir(), 'cf-bin-'))
+  writeFileSync(join(bin, 'xcodebuild'), `#!/bin/sh\necho '${STALE}'\nexit 70\n`, { mode: 0o755 })
+  const path = process.env.PATH
+  process.env.PATH = `${bin}:${path ?? ''}`
+  try {
+    const w = mine(GREEN)
+    for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED))
+    mkdirSync(join(srcDir(w.root, ID), 'Atelier.xcodeproj'))
+    const fired = (await tick(w.db, w.root, stub(CARRIED)))[0]
+    expect(fired).toMatchObject({ plan: ID, step: 3, name: 'rails', spans: ['xcode'] })
+    expect(plan(w.db, ID)).toMatchObject({ step: 3, retries: 0 })
+    expect(w.db.prepare("SELECT 1 FROM verdicts WHERE plan = ? AND rail_id = 'checks'").all(ID)).toEqual([])
+  } finally {
+    process.env.PATH = path
+  }
+}, SLOW)
 
 /** A step 3 checks lock another plan's tick left, naming `pid`. */
 function locked(w: World, pid: number): string {

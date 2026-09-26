@@ -83,6 +83,12 @@ export function openPipes(db: Db, hhmm: string): PipeRow[] {
     .filter((p) => inWindow(p, hhmm))
 }
 
+/** The pipe's name when this call switched it off; null when it was already off. */
+export function laneOff(db: Db, pipe: number): string | null {
+  const row = db.prepare('UPDATE pipes SET enabled = 0 WHERE id = ? AND enabled = 1 RETURNING name').get(pipe) as { name: string } | undefined
+  return row?.name ?? null
+}
+
 /** Work already under way sorts first — `step = 0` is 1 for a plan not yet started — so a released plan waits behind no later P0. */
 export function live(db: Db, pipe: PipeRow): PlanRow[] {
   return db.prepare(`SELECT * FROM plans WHERE pipe_id = ? AND state IN ('queued', 'running')

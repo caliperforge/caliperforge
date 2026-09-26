@@ -324,6 +324,8 @@ test('a signal starts the plan the map says it starts', async () => {
   expect(comms).toMatchObject({ template: 'comms', step: 0 })
   expect(w.db.prepare('SELECT template, state FROM plans WHERE id = ?').get(comms?.plan))
     .toEqual({ template: 'comms', state: 'queued' })
+  expect(w.db.prepare("SELECT plan, actor FROM events WHERE kind = 'filed'").all())
+    .toEqual([{ plan: comms?.plan, actor: 'merge signal' }])
   expect(w.db.prepare("SELECT enabled FROM pipes WHERE name = 'comms'").get()).toEqual({ enabled: 1 })
 })
 

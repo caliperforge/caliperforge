@@ -14,6 +14,7 @@ const ESC = String.fromCharCode(27)
 
 const LOG = [
   `check\tRun npm run test\t2026-09-26T13:10:02.1234567Z ${ESC}[31m FAIL ${ESC}[39m src/hello.test.ts > hello > says hey`,
+  'check\tRun npm run test\t2026-09-26T13:10:02.1534567Z ^[[41m^[[1m FAIL ^[[22m^[[49m src/bye.test.ts^[[2m > ^[[22mbye > says bye',
   'check\tRun npm run test\t2026-09-26T13:10:02.2234567Z AssertionError: expected "hi" to be "hey"',
   'check\tRun npm run test\t2026-09-26T13:10:03.0000000Z ##[error]Process completed with exit code 1.',
 ].join('\n')
@@ -69,7 +70,7 @@ test('red sends the build back naming the failing test', async () => {
   await toRails(w, wire)
   const fired = await rails(w, wire)
   expect(fired).toMatchObject({ step: 3, outcome: 'refuse' })
-  expect(fired?.spans).toEqual(['checks:test', 'src/hello.test.ts hello > says hey'])
+  expect(fired?.spans).toEqual(['checks:test', 'src/hello.test.ts hello > says hey', 'src/bye.test.ts bye > says bye'])
   expect(fired?.note).toBe('npm run test on GitHub CI exit 1')
   expect(plan(w.db, ID).step).toBe(2)
 })

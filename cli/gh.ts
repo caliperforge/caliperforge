@@ -72,7 +72,7 @@ export function implemented(repo: string, row: Issue, read: Read = gh): string |
  * The search is full text over the whole thread, so a bystander's pull request surfaces on a comment
  * of ours that cites the issue. Only the pull request's own text is somebody else's claim on it.
  */
-function mentions(text: string, no: number): boolean {
+export function mentions(text: string, no: number): boolean {
   return new RegExp(`#${String(no)}(?!\\d)`).test(text)
 }
 
@@ -82,8 +82,8 @@ function headOwner(repo: string, no: number, read: Read): string | null {
     .headRepositoryOwner?.login ?? null
 }
 
-export function lastMerger(repo: string): string | null {
-  const merged = Merged.parse(gh(['pr', 'list', '--repo', repo, '--state', 'merged', '--limit', '1', '--json', 'mergedBy']))
+export function lastMerger(repo: string, read: Read = gh): string | null {
+  const merged = Merged.parse(read(['pr', 'list', '--repo', repo, '--state', 'merged', '--limit', '1', '--json', 'mergedBy']))
   return merged[0]?.mergedBy?.login ?? null
 }
 

@@ -138,7 +138,7 @@ function readyGate(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
 /** Ticks an outside head waits for Greptile's score before ready goes on without one. */
 export const GRADING = 45
 
-/** Nothing leaves our fork below 4/5 from Greptile at this head; the string is what the ready note adds. */
+/** Nothing leaves our fork below 4/5 from Greptile at this head. */
 function greptile(db: Db, root: string, plan: PlanRow, repo: string): Outcome | string {
   const sha = headOf(root, plan.id).sha
   const at = `${FORK}/${repoName(repo)}@${sha.slice(0, 12)}`

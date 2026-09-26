@@ -43,9 +43,9 @@ function piped(enabled = 1): Db {
   return db
 }
 
-function queue(db: Db, n: number, state = 'queued'): void {
-  db.prepare(`INSERT INTO plans (pipe_id, template, state, queued_at, lane, seat, origin)
-    VALUES (1, 'pr_path', ?, '2026-09-18', 'machine', 'typescript_specialist', ?)`).run(state, url(n))
+function queue(db: Db, n: number, state = 'queued', step = 0): void {
+  db.prepare(`INSERT INTO plans (pipe_id, template, state, queued_at, lane, seat, origin, step)
+    VALUES (1, 'pr_path', ?, '2026-09-18', 'machine', 'typescript_specialist', ?, ?)`).run(state, url(n), step)
 }
 
 const states = (db: Db): unknown[] => db.prepare('SELECT origin, state FROM plans ORDER BY id').all()
@@ -299,14 +299,10 @@ test('D4: a list exactly WINDOW long queues no part', () => {
   expect(waits(db)).toEqual({ plan: null })
 })
 
-test('#257: a running or blocked plan whose work was pushed and whose issue closed is done', () => {
-  const db = piped()
-  queue(db, 60, 'blocked_on_ceo')
-  queue(db, 61, 'running')
-  queue(db, 62, 'blocked_on_ceo')
+function pushed(db: Db, plans: number[]): void {
   db.prepare(`INSERT INTO rules (id, kind, path, content_hash, loaded_at)
     VALUES ('typescript_specialist', 'roster', 'seats/typescript_specialist', ?, '2026-09-25')`).run('0'.repeat(64))
-  for (const plan of [1, 2]) {
+  for (const plan of plans) {
     const approval = db.prepare(`INSERT INTO approvals (subject_kind, subject_id, subject_digest, who, decision, approved_at)
       VALUES ('plan', ?, ?, 'gates', 'approved', '2026-09-25T00:00:00.000Z') RETURNING id`).get(plan, 'd'.repeat(64)) as { id: number }
     db.prepare(`INSERT INTO deliverables (plan_id, step, seat, diff_digest, state, tests_pass, byte_identical_elsewhere,
@@ -314,10 +310,32 @@ test('#257: a running or blocked plan whose work was pushed and whose issue clos
       VALUES (?, 7, 'typescript_specialist', ?, 'pushed', 1, 1, 1, 1, 1, ?, 'https://github.com/caliperforge/caliperforge/commit/abc')`)
       .run(plan, 'd'.repeat(64), approval.id)
   }
+}
+
+test('#257: a running or blocked plan whose work was pushed and whose issue closed is done', () => {
+  const db = piped()
+  queue(db, 60, 'blocked_on_ceo')
+  queue(db, 61, 'running')
+  queue(db, 62, 'blocked_on_ceo')
+  pushed(db, [1, 2])
   intake(db, root, canned([]))
   expect(states(db)).toEqual([
     { origin: url(60), state: 'done' },
     { origin: url(61), state: 'done' },
     { origin: url(62), state: 'blocked_on_ceo' },
+  ])
+})
+
+test('D1-D3: a queued plan at step 8 whose issue closed is done if pushed, halted if not, and queued while its issue is open', () => {
+  const db = piped()
+  queue(db, 70, 'queued', 8)
+  queue(db, 71, 'queued', 8)
+  queue(db, 72, 'queued', 8)
+  pushed(db, [1, 3])
+  intake(db, root, canned([{ number: 72, labels: ['lane:machine'] }]))
+  expect(states(db)).toEqual([
+    { origin: url(70), state: 'done' },
+    { origin: url(71), state: 'halted' },
+    { origin: url(72), state: 'queued' },
   ])
 })

@@ -104,7 +104,8 @@ function parent(repo: string, no: number, read: Read, lines: string[]): boolean 
 }
 
 function halt(db: Db, repo: string, open: Set<string>): void {
-  const queued = db.prepare("SELECT * FROM plans WHERE state = 'queued' AND origin IS NOT NULL").all().map((r) => PlanRow.parse(r))
+  const queued = db.prepare(`SELECT * FROM plans WHERE state = 'queued' AND origin IS NOT NULL
+    AND NOT EXISTS (SELECT 1 FROM deliverables d WHERE d.plan_id = plans.id AND d.state = 'pushed')`).all().map((r) => PlanRow.parse(r))
   for (const plan of queued.filter((p) => originRef(p)?.repo === repo && !open.has(p.origin ?? ''))) {
     db.prepare("UPDATE plans SET state = 'halted' WHERE id = ?").run(plan.id)
   }
@@ -116,7 +117,7 @@ function halt(db: Db, repo: string, open: Set<string>): void {
  * Plans 88 and 89 were landed by hand and kept going; each lap after that reviewed an empty diff.
  */
 function landed(db: Db, repo: string, open: Set<string>): void {
-  const live = db.prepare(`SELECT p.* FROM plans p WHERE p.state IN ('running', 'blocked_on_ceo') AND p.origin IS NOT NULL
+  const live = db.prepare(`SELECT p.* FROM plans p WHERE p.state IN ('queued', 'running', 'blocked_on_ceo') AND p.origin IS NOT NULL
     AND EXISTS (SELECT 1 FROM deliverables d WHERE d.plan_id = p.id AND d.state = 'pushed')`).all().map((r) => PlanRow.parse(r))
   for (const plan of live.filter((p) => originRef(p)?.repo === repo && !open.has(p.origin ?? ''))) {
     db.prepare("UPDATE plans SET state = 'done', wait_reason = NULL WHERE id = ?").run(plan.id)

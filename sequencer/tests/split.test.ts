@@ -12,11 +12,11 @@ const PARTS = ['---', 'outcome: split', 'parts:',
   '  - title: queue them in order', '    what: a landing queues the next', '    why: order without a gate', '    ends: the last closes the parent',
   '---', ''].join('\n')
 
-const AFTER =(after: (string | null)[]): string => ['---', 'outcome: split', 'parts:',
+const AFTER = (after: (string | null)[]): string => ['---', 'outcome: split', 'parts:',
   ...after.flatMap((a, i) => [`  - title: part ${String(i)}`, '    what: w', '    why: y', '    ends: e', ...a === null ? [] : [`    after: ${a}`]]),
   '---', ''].join('\n')
 
-const BRIEF_OF =(paths: string[]): string => `# t\n\n## Files\n\n${paths.map((p) => `- ${p}`).join('\n')}\n`
+const BRIEF_OF = (paths: string[]): string => `# t\n\n## Files\n\n${paths.map((p) => `- ${p}`).join('\n')}\n`
 
 function mine(): World {
   const w = world()

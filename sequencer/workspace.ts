@@ -298,7 +298,7 @@ export function headSha(dir: string): string {
   return git(dir, ['rev-parse', 'HEAD']).trim()
 }
 
-function git(cwd: string, args: string[]): string {
+export function git(cwd: string, args: string[]): string {
   return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024 })
 }
 

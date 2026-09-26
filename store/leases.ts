@@ -54,7 +54,7 @@ export function gone(lease: Lease, now: Date): boolean {
   return !alive(lease.pid) || Date.parse(lease.taken_at) <= now.getTime() - CEILING_MS
 }
 
-function alive(pid: number): boolean {
+export function alive(pid: number): boolean {
   try {
     process.kill(pid, 0)
     return true

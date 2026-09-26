@@ -137,6 +137,12 @@ export function unrehearse(fork: string, branch: string): void {
   if (no !== null) execFileSync('gh', ['pr', 'close', String(no), '--repo', fork], { encoding: 'utf8' })
 }
 
+export function review(fork: string, branch: string): void {
+  const no = rehearsal(fork, branch)
+  if (no === null) throw new Error(`${fork} has no open rehearsal of ${branch} to ask Greptile on`)
+  execFileSync('gh', ['pr', 'comment', String(no), '--repo', fork, '--body', '@greptileai'], { encoding: 'utf8' })
+}
+
 export function rehearsal(fork: string, branch: string, read: Read = gh): number | null {
   const open = z.array(z.object({ number: z.int() })).parse(read(['pr', 'list', '--repo', fork, '--head', branch,
     '--state', 'open', '--json', 'number']))

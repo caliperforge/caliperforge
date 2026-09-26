@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { closeIssue, commentIssue, fileIssue, openPr, rehearse, unrehearse } from '../cli/gh.ts'
+import { closeIssue, commentIssue, fileIssue, openPr, rehearse, review, unrehearse } from '../cli/gh.ts'
 import { alerter } from '../cli/watch.ts'
 import { judge, MISSING, PENDING, shell, type Board, type Gh } from '../rails/ci-green/index.ts'
 import { parse } from '../rails/diff.ts'
@@ -30,6 +30,7 @@ export interface Wire {
   runs: Gh
   rehearse?: (fork: string, branch: string) => void
   unrehearse?: (fork: string, branch: string) => void
+  review: (fork: string, branch: string) => void
   file: (repo: string, title: string, body: string, labels: string[]) => string
   comment: (repo: string, no: number, body: string) => void
   install?: () => void
@@ -44,6 +45,7 @@ export const WIRE: Wire = {
   runs: shell,
   rehearse,
   unrehearse,
+  review,
   install: () => { reinstall(npm, alerter()) },
 }
 
@@ -74,9 +76,9 @@ const REHEARSED = 'ci.next'
  */
 export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire = WIRE): Outcome | null {
   if (internal(plan) && !workflows(srcDir(root, plan.id))) return checked(db, root, plan, repo)
-  const { fork, head, ci } = sent(root, plan, repo, wire)
+  const { fork, head, ci, tip } = sent(root, plan, repo, wire)
   if (!internal(plan)) wire.rehearse?.(fork, ci)
-  const on = { fork, branch: ci, sha: head.sha }
+  const on = { fork, branch: ci, sha: tip }
   const { verdict, board } = judge(on, { body: '', commits: commits(head.dir) }, touched(root, plan.id), wire.runs)
   put(root, plan.id, BOARD, `${JSON.stringify(board)}\n`)
   const at = `${fork}@${head.sha.slice(0, 12)}`
@@ -91,7 +93,7 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
   const passed = verdict.outcome === 'pass' || Array.isArray(base)
   record(db, join(root, 'rails/ci-green'), plan.id, passed ? { ...verdict, outcome: 'pass', origin_kind: null, origin_ref: null } : verdict, 0)
   forkGreen(db, plan.id, passed)
-  if (verdict.outcome === 'pass') put(root, plan.id, GREEN, `${ci} ${head.sha}\n`)
+  if (verdict.outcome === 'pass') put(root, plan.id, GREEN, `${ci} ${tip}\n`)
   const failed = passed ? null : red(fork, verdict.spans, wire.runs)
   if (failed === null) return null
   return { outcome: 'refuse', spans: failed.spans, message: failed.log, to: 2,
@@ -105,7 +107,7 @@ export function reviewable(root: string, plan: PlanRow, repo: string, wire: Wire
   wire.rehearse?.(fork, ci)
 }
 
-export function sent(root: string, plan: PlanRow, repo: string, wire: Wire): { fork: string; head: Head; ci: string } {
+export function sent(root: string, plan: PlanRow, repo: string, wire: Wire): { fork: string; head: Head; ci: string; tip: string } {
   const outside = !internal(plan)
   const fork = `${FORK}/${repoName(repo)}`
   const dir = srcDir(root, plan.id)
@@ -116,8 +118,44 @@ export function sent(root: string, plan: PlanRow, repo: string, wire: Wire): { f
     else squash(root, plan.id)
   }
   const head = headOf(root, plan.id)
-  wire.send(head.dir, outside ? `HEAD:refs/heads/${ci}` : head.branch)
-  return { fork, head, ci }
+  const tip = outside ? tipOf(root, plan.id, head, ci) : head.sha
+  wire.send(head.dir, outside ? `${tip}:refs/heads/${ci}` : head.branch)
+  return { fork, head, ci, tip }
+}
+
+/** `<tip> <head>`: each -next tip made, and the plan HEAD it carries. */
+const TIPS = 'next.tips'
+
+function tips(root: string, plan: number): string[][] {
+  return (maybe(root, plan, TIPS) ?? '').split('\n').filter((l) => l !== '').map((l) => l.split(' '))
+}
+
+/** The plan HEAD a -next tip carries; a -next pushed before tips were made is the plan HEAD itself. */
+export function carried(root: string, plan: number, sha: string): string {
+  return tips(root, plan).find(([tip]) => tip === sha)?.[1] ?? sha
+}
+
+/** A head sent again keeps its tip, so its CI is not restarted. */
+function tipOf(root: string, plan: number, head: Head, ci: string): string {
+  const known = tips(root, plan).find(([, of]) => of === head.sha)?.[0]
+  if (known !== undefined) return known
+  const tip = quiet(head.dir, ci)
+  put(root, plan, TIPS, `${maybe(root, plan, TIPS) ?? ''}${tip} ${head.sha}\n`)
+  return tip
+}
+
+/** HEAD plus `greptile.json` turning Greptile's own reviews off (#345b). */
+function quiet(dir: string, ci: string): string {
+  const env = { ...process.env, GIT_INDEX_FILE: join(git(dir, ['rev-parse', '--absolute-git-dir']).trim(), 'next.index') }
+  const index = (args: string[]): string =>
+    execFileSync('git', args, { cwd: dir, encoding: 'utf8', env, stdio: ['ignore', 'pipe', 'pipe'] }).trim()
+  const blob = execFileSync('git', ['hash-object', '-w', '--stdin'], { cwd: dir, encoding: 'utf8', input: '{"autoReview": []}\n' }).trim()
+  index(['read-tree', 'HEAD'])
+  index(['update-index', '--add', '--cacheinfo', `100644,${blob},greptile.json`])
+  const next = `refs/remotes/origin/${ci}`
+  const parents = published(dir, ci, next) && !ancestor(dir, next, 'HEAD') ? ['HEAD', next] : ['HEAD']
+  return index(['-c', 'user.email=cf@caliperforge.dev', '-c', 'user.name=caliperforge', 'commit-tree', index(['write-tree']), ...parents.flatMap((p) => ['-p', p]),
+    '-m', 'greptile.json: review on request only'])
 }
 
 /** A repo GitHub runs no workflow for: nothing on the fork will ever show a run at the head. */
@@ -408,7 +446,7 @@ export function follow(root: string, plan: number, name: string): void {
     sign(dir, message)
     return
   }
-  const tip = ahead && (!own || ancestor(dir, shown, next)) ? next : shown
+  const tip = ahead && (!own || ancestor(dir, shown, next)) ? carried(root, plan, git(dir, ['rev-parse', next]).trim()) : shown
   const count = Number(git(dir, ['rev-list', '--count', `${tip}..HEAD`]).trim())
   const staged = git(dir, ['diff', '--cached', '--name-only']).trim() !== ''
   const same = count === 0 || (count === 1 && git(dir, ['log', '-1', '--format=%B']).trim() === message)

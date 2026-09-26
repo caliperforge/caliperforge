@@ -140,6 +140,13 @@ test('two defects in two files come back as one refusal naming both spans', asyn
   expect(db.prepare('SELECT count(*) AS n FROM verdicts WHERE plan = ?').get(plan)).toEqual({ n: 1 })
 })
 
+test('a replaced function left in place is a minimal refusal', async () => {
+  const { db, plan } = bench(root)
+  const out = await judge(db, root, 'code_quality', plan, seeded({ diff: fixture('code_quality', 'kept.diff') }),
+    replies(fixture('code_quality', 'kept.reply.md')), TRANSCRIPT)
+  expect(out.outcome).toMatchObject({ outcome: 'refuse', defect_class: 'minimal', spans: ['src/stats.ts:1'], origin_kind: 'ruling', origin_ref: 'reviewers.verdict' })
+})
+
 test('reviewer != builder is refused before the provider fires; the trigger still guards the rows', async () => {
   const { db, plan } = bench(root)
   const builder = `INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_tokens, output_tokens, seconds, exit, transcript_path)

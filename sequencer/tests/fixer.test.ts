@@ -45,7 +45,7 @@ function stub(fix: string, packets: Packet[]): Provider {
 
 function wire(filed: string[]): Wire {
   const no = (): never => { throw new Error('not in this test') }
-  return { send: no, open: no, close: no, runs: no, comment: no,
+  return { send: no, open: no, close: no, runs: no, comment: no, review: no,
     file: (...args) => { const title = args[1]; filed.push(title); return 'https://github.com/caliperforge/caliperforge/issues/999' } }
 }
 

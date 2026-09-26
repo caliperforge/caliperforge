@@ -115,11 +115,16 @@ const ROW = /^\s*[-*]\s*\**D\d+\**/gm
 
 const Unclear = z.object({ outcome: z.literal('unclear'), question: z.string().min(1) })
 
-const Part = z.object({ title: z.string().min(1), what: z.string().min(1), why: z.string().min(1), ends: z.string().min(1) })
+const Part = z.object({ title: z.string().min(1), what: z.string().min(1), why: z.string().min(1), ends: z.string().min(1),
+  after: z.string().optional() })
+
+const LETTERS = 'abcdefghijklmnopqrstuvwxyz'
 
 const Split = z.object({ outcome: z.literal('split'), parts: z.array(Part).min(2) })
+  .refine((v) => v.parts.every((p, i) => p.after === undefined || p.after === 'none' ||
+    (p.after.length === 1 && LETTERS.slice(0, i).includes(p.after))))
 
-export type Part = z.infer<typeof Part>
+export type Part = z.infer<typeof Part> & { after: string }
 
 export const TEST = /(^|\/)(tests?|spec|__tests__|fixtures)\/|[._](test|spec)\.|Tests?\./
 
@@ -144,7 +149,8 @@ export function split(reply: string): Part[] | null {
   const fence = fenceOf(reply)
   if (fence === null) return null
   const parsed = Split.safeParse(yamlOf(fence))
-  return parsed.success ? parsed.data.parts : null
+  if (!parsed.success) return null
+  return parsed.data.parts.map((p, i) => ({ ...p, after: p.after ?? (i === 0 ? 'none' : LETTERS.charAt(i - 1)) }))
 }
 
 /** The fence a reply ends with, whether or not the seat wrapped it in a code block (#212: plans 71 and 78). */

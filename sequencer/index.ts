@@ -378,7 +378,8 @@ function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcom
     })()
   }
   const why = refused(db, { plan: plan.id, step: step.step, fingerprint: fingerprintOf(step, outcome),
-    diff: step.step >= 3 ? digestOf(diffOf(root, plan.id)) : null, moved: outcome.moved })
+    diff: step.step >= 3 ? digestOf(diffOf(root, plan.id)) : null, moved: outcome.moved,
+    own: outcome.spans.some((s) => s.startsWith('ratchet:')) || undefined })
   if (why !== 'again') stopped(root, plan.id, why)
   if (why === 'shared') db.prepare('UPDATE pipes SET enabled = 0 WHERE id = ?').run(plan.pipe_id)
   if (outcome.rewind !== undefined && why === 'again') {

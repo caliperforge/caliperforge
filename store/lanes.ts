@@ -52,6 +52,14 @@ export function get(db: Db, key: string): string {
   return row.value
 }
 
+export function ratchetRules(db: Db): { mode: 'warn' | 'refuse'; raises: Record<string, number> } {
+  const rows = db.prepare("SELECT key, value FROM settings WHERE key = 'ratchet.mode' OR key GLOB 'ratchet.raise.*'")
+    .all() as { key: string; value: string }[]
+  const refuse = rows.some((r) => r.key === 'ratchet.mode' && r.value === 'refuse')
+  const raises = Object.fromEntries(rows.filter((r) => r.key !== 'ratchet.mode').map((r) => [r.key, Number(r.value)]))
+  return { mode: refuse ? 'refuse' : 'warn', raises }
+}
+
 export function count(db: Db, key: string): number {
   return Number(get(db, key))
 }

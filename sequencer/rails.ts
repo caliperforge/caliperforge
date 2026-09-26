@@ -1,4 +1,5 @@
 import { join } from 'node:path'
+import { ratcheted } from '../checks/ratchet.ts'
 import { fill } from '../cli/digests.ts'
 import { authority } from '../rails/authority/index.ts'
 import { checked } from '../rails/checks/index.ts'
@@ -9,8 +10,10 @@ import { record as recordRail, type Verdict } from '../rails/record.ts'
 import { scan } from '../rails/secret-scan/index.ts'
 import { weakened } from '../rails/test-weakened/index.ts'
 import { sources, tight } from '../rails/tight/index.ts'
+import { logged } from '../store/events.ts'
 import { filesOf, listed } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
+import { ratchetRules } from '../store/lanes.ts'
 import { busy } from '../store/now.ts'
 import { BUILT, internal, type PlanRow } from '../store/plans.ts'
 import { builder } from '../templates/pr-path.ts'
@@ -46,6 +49,22 @@ export function preReview(db: Db, root: string, plan: PlanRow, wire?: Wire): Out
     recordRail(db, join(root, 'rails', rail), plan.id, verdict, 0)
     if (verdict.outcome !== 'pass') return named(rail, verdict)
   }
+  return (kernelPlan(plan) ? ratchetStop(db, root, plan.id, diff) : null) ?? suite(db, root, plan, wire)
+}
+
+/** Only findings on paths the diff touches are the job's: the rest is main's debt. */
+function ratchetStop(db: Db, root: string, plan: number, diff: string): Outcome | null {
+  const { mode: set, raises } = ratchetRules(db)
+  const touched = new Set(parse(diff).map((f) => f.path))
+  const found = ratcheted(srcDir(root, plan), raises).filter((f) => touched.has(f.path))
+  if (found.length === 0) return null
+  const message = found.map((f) => f.message).join('; ')
+  if (set === 'refuse') return { outcome: 'refuse', spans: found.map((f) => `ratchet:${f.path}`), note: 'ratchet: the job grew a file past its budget', message }
+  logged(db, { plan, kind: 'ratchet', actor: 'ratchet', outcome: 'pass', message: `would refuse: ${message}`, pointer: null, run: null })
+  return null
+}
+
+function suite(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
   // a stranger's npm scripts never run on this host. A stranger's repo in a language with its own seat runs that
   // language's gates (#204): its builder already ran them at step 2, and a red fork CI after the reviews costs more.
   const outside = internal(plan) ? null : outsideLanguage(languageFor(db, plan, srcDir(root, plan.id)))

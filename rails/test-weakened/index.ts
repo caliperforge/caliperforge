@@ -7,9 +7,10 @@ const ASSERT = /\b(?:expect|assert)\s*\(/
 const STRICT = /\.(?:toBe|toEqual|toStrictEqual|toMatchObject|toMatchInlineSnapshot|toHaveBeenCalledWith|toThrowError|toContain)\s*\(/
 const LOOSE = /\.(?:toBeDefined|toBeTruthy|toBeFalsy|toBeUndefined|toBeNull)\s*\(\s*\)|\bexpect\.(?:anything|any)\s*\(/
 const SKIPPED = /\b(?:test|it|describe)\.(?:skip|todo|failing)\b|\bx(?:it|describe)\s*\(/
+const TITLE = /\b(?:test|it|describe)\s*\(\s*(['"`])(.+?)\1/
 
-export function weakened(diff: string, suite: 'green' | 'red'): Verdict {
-  const spans = parse(diff).filter((f) => TEST_FILE.test(f.path)).flatMap(judge)
+export function weakened(diff: string, suite: 'green' | 'red', named = ''): Verdict {
+  const spans = parse(diff).filter((f) => TEST_FILE.test(f.path)).flatMap((f) => judge(f, named))
   const subject_digest = createHash('sha256').update(`${diff}\n${suite}`).digest('hex')
   if (spans.length === 0 || suite === 'red') {
     return { outcome: 'pass', defect_class: null, origin_kind: null, origin_ref: null, subject_digest, spans, message: message(spans.length, suite) }
@@ -24,9 +25,10 @@ export function weakened(diff: string, suite: 'green' | 'red'): Verdict {
   }
 }
 
-function judge(file: FileDiff): string[] {
-  if (file.deleted) return [gone(file)]
-  const removed = file.removed.filter((l) => ASSERT.test(l.text))
+function judge(file: FileDiff, named: string): string[] {
+  if (file.deleted) return named.includes(file.path) ? [] : [gone(file)]
+  const spared = exempt(file.removed, named)
+  const removed = file.removed.filter((l) => ASSERT.test(l.text) && !spared.has(l))
   const added = file.added.filter((l) => ASSERT.test(l.text))
   const loose = file.added.filter((l) => LOOSE.test(l.text))
   const downgraded = count(file.removed, STRICT) > count(file.added, STRICT) && loose.length > 0
@@ -35,6 +37,18 @@ function judge(file: FileDiff): string[] {
     ...(downgraded ? [span(loose[0], 'test.weakened.loosened')] : []),
     ...file.added.filter((l) => SKIPPED.test(l.text)).map((l) => span(l, 'test.weakened.skipped')),
   ]
+}
+
+/** `parse` does not advance the cursor on `-` lines, so one run of removed lines shares one `line`. */
+function exempt(removed: Line[], named: string): Set<Line> {
+  const spared = new Set<Line>()
+  let title: string | undefined
+  removed.forEach((l, i) => {
+    if (removed[i - 1]?.line !== l.line) title = undefined
+    title = TITLE.exec(l.text)?.[2] ?? title
+    if (title !== undefined && named.includes(title)) spared.add(l)
+  })
+  return spared
 }
 
 function gone(file: FileDiff): string {

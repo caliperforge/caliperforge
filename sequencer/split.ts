@@ -102,7 +102,7 @@ function filed(db: Db, plan: PlanRow, parent: number, parts: Part[], n: number, 
   if (held !== undefined) return held.url
   const part = parts[n]
   if (part === undefined) throw new Error(`no part ${String(n)}`)
-  const after = before(part)
+  const after = part.after === 'none' ? null : LETTERS.indexOf(part.after)
   const prior = after === null ? undefined
     : (db.prepare('SELECT url FROM parts WHERE parent = ? AND n = ?').get(plan.id, after) as { url: string } | undefined)?.url
   const title = `${String(parent)}${letter(n)}: ${part.title}`
@@ -113,10 +113,6 @@ function filed(db: Db, plan: PlanRow, parent: number, parts: Part[], n: number, 
   const url = wire.file(homeOf(plan), title, body, [...(plan.lane === null ? [] : [`lane:${plan.lane}`]), `P${String(plan.priority)}`])
   db.prepare('INSERT INTO parts (parent, n, url, title, body, after) VALUES (?, ?, ?, ?, ?, ?)').run(plan.id, n, url, title, body, after)
   return url
-}
-
-function before(part: Part): number | null {
-  return part.after === 'none' ? null : LETTERS.indexOf(part.after)
 }
 
 /** A part whose `After:` issue is closed, however it closed, is queued; `open` is every open issue number of `repo`. */

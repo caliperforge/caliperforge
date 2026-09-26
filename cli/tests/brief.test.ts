@@ -1,8 +1,9 @@
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
-import { ticketSection, tickets } from '../brief.ts'
+import { ticketSection, tickets, waitLine, waits } from '../brief.ts'
 import type { Db } from '../../store/index.ts'
+import { waiting } from '../../store/plans.ts'
 
 const schema = join(import.meta.dirname, '../../schema')
 
@@ -97,4 +98,28 @@ test('tickets() reads the db alone: no provider, no gh, one statement', () => {
   expect(tickets).toHaveLength(1)
   expect(seen).toHaveLength(1)
   expect(seen[0]).toContain('FROM runs r JOIN plans p')
+})
+
+test('the waits line counts live plans per stored reason, ordered by reason', () => {
+  const db = world()
+  plan(db, 1, 'queued', 25)
+  plan(db, 2, 'running', 30)
+  plan(db, 3, 'queued', 31)
+  waiting(db, [{ plan: 1, why: 'over_cap' }, { plan: 2, why: 'file_overlap', on: 1 }, { plan: 3, why: 'file_overlap', on: 1 }])
+  expect(waitLine(waits(db))).toBe('waits\tfile_overlap 2\tover_cap 1\n')
+})
+
+test('a stale reason on a blocked plan and a live plan with no reason add nothing', () => {
+  const db = world()
+  plan(db, 1, 'blocked_on_ceo', 25)
+  plan(db, 2, 'queued', 30)
+  plan(db, 3, 'queued', 31)
+  waiting(db, [{ plan: 1, why: 'token_ceiling' }, { plan: 2, why: null }, { plan: 3, why: 'leased' }])
+  expect(waitLine(waits(db))).toBe('waits\tleased 1\n')
+})
+
+test('with no waiting live plan the waits line reads none', () => {
+  const db = world()
+  plan(db, 1, 'queued', 25)
+  expect(waitLine(waits(db))).toBe('waits\tnone\n')
 })

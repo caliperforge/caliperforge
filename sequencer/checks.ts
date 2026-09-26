@@ -30,6 +30,8 @@ export interface Failure {
   /** `file:line name`, or `file name` where no line of the file holds the title; ` (timeout)` on a load block. */
   tests: string[]
   retried: boolean
+  /** The xcodebuild log line saying this Mac, not the job, cannot run tests. */
+  fault?: string
 }
 
 export type Ran = { ok: true; output: string } | { ok: false; code: string; output: string }
@@ -75,9 +77,15 @@ export function checks(src: string, run: Run = npm, narrow: string[] = [], outsi
     if (first.ok) continue
     const retried = loadOnly(first.output)
     const last = retried ? run(alone(first.output, read(src)?.[script] ?? '', args), src, bin) : first
-    if (!last.ok) return { script, command: `${bin} ${args.join(' ')}`, code: last.code, output: tail(last.output), tests: entries(src, last.output), retried }
+    if (!last.ok) return { script, command: `${bin} ${args.join(' ')}`, code: last.code, output: tail(last.output), tests: entries(src, last.output), retried,
+      ...faultOf(bin, last.output) }
   }
   return null
+}
+
+function faultOf(bin: Mode, output: string): { fault?: string } {
+  const line = bin === 'xcodebuild' ? output.split('\n').find((text) => FAULTS.some((f) => text.includes(f))) : undefined
+  return line === undefined ? {} : { fault: line.trim() }
 }
 
 /**
@@ -114,6 +122,8 @@ const LOAD = /Test timed out in \d+ *ms|Hook timed out|expected [\d.]+ to be les
 
 /** xcodebuild's runner never connected, so no test ran and nothing else can have failed. */
 const HUNG = 'The test runner hung before establishing connection'
+
+const FAULTS = ['CoreSimulator is out of date', HUNG]
 
 function loadOnly(output: string): boolean {
   if (output.includes(HUNG)) return true
@@ -197,8 +207,10 @@ function read(src: string): Record<string, string> | null {
   return got.success ? got.data.scripts : null
 }
 
+const NOISE = 'Code=4097 "connection to service named com.apple.linkd.autoShortcut"'
+
 function tail(output: string): string {
-  return output.split('\n').slice(-TAIL).join('\n')
+  return output.split('\n').filter((line) => !line.includes(NOISE)).slice(-TAIL).join('\n')
 }
 
 /**

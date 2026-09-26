@@ -21,6 +21,8 @@ export interface Refused {
   /** A conflict with a moved main. Two jobs on the same files conflict alike, and one job can conflict
    * on the same paths twice as main keeps moving; `base.laps` caps the loop, so neither is a fault here. */
   moved?: true | undefined
+  /** A refusal only this job's own diff can cause, so another job taking it is no fault on main. */
+  own?: true | undefined
 }
 
 const ANSI = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'g')
@@ -53,7 +55,7 @@ export function refused(db: Db, r: Refused): Why {
   const elsewhere = db.prepare(`SELECT 1 FROM refusals WHERE fingerprint = ? AND plan <> ? AND cleared = 0 AND blip = 0
     AND julianday(at) > julianday('now', '-1 day')`).get(r.fingerprint, r.plan)
   if (r.moved === true) return prior.length + 1 >= ROUNDS ? 'spent' : 'again'
-  if (elsewhere !== undefined && r.step >= BUILD && r.fingerprint !== fingerprint(r.step, ['base:stale'])) return 'shared'
+  if (r.own !== true && elsewhere !== undefined && r.step >= BUILD && r.fingerprint !== fingerprint(r.step, ['base:stale'])) return 'shared'
   if (prior.some((p) => p.fingerprint === r.fingerprint)) return 'repeat'
   if (r.diff !== null && prior.at(-1)?.diff === r.diff) return 'unchanged'
   return prior.length + 1 >= ROUNDS ? 'spent' : 'again'

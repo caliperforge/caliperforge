@@ -14,7 +14,7 @@ import { builderRan, internal, type PlanRow } from '../store/plans.ts'
 import { byRun, pending } from '../store/transcript.ts'
 import type { Step } from '../templates/pr-path.ts'
 import { parse } from '../rails/diff.ts'
-import { pointed, shape, split, TEMPLATE, unclear, wide, WIDE, type Part } from './brief.ts'
+import { pointed, references, shape, split, TEMPLATE, unclear, wide, WIDE, type Part } from './brief.ts'
 import { handout, touched, type Handed } from './handout.ts'
 import { enclosed, handover, type Handover } from './handover.ts'
 import { install, mode } from './checks.ts'
@@ -238,12 +238,14 @@ export async function fireReview(db: Db, root: string, plan: PlanRow, step: Step
   loadReviews(db, root)
   const manifest = reviewManifest(root, step.runs)
   const src = srcDir(root, plan.id)
+  const issue = get(root, plan.id, 'issue.md')
   const input: Bench = {
     repo: src,
-    issue: get(root, plan.id, 'issue.md'),
+    issue,
     diff: diffOf(root, plan.id),
     ...(cloned(src) ? { tree: snapshot(src) } : {}),
     ...outside(root, plan, src),
+    ...(manifest.gate === 'senior_review' ? referenced(src, issue) : {}),
     ...checked(db, plan, src, diffOf(root, plan.id)),
     ...(manifest.reads_verdict ? { verdict: priorVerdict(root, plan.id) } : {}),
     ...(manifest.gate === 'senior_review' && cloned(src) ? greptile(db, plan.id, headSha(src)) : {}),
@@ -268,6 +270,11 @@ export async function fireReview(db: Db, root: string, plan: PlanRow, step: Step
 function outside(root: string, plan: PlanRow, src: string): Handover {
   const base = maybe(root, plan.id, 'base.sha')
   return internal(plan) || base === null || !cloned(src) ? {} : handover(src, base.trim())
+}
+
+function referenced(src: string, issue: string): Pick<Bench, 'reference'> {
+  const text = handout(src, references(issue))
+  return text === '' ? {} : { reference: text }
 }
 
 /**

@@ -53,6 +53,7 @@ export const Bench = z.object({
   refusal: z.string().optional(),
   since: z.string().optional(),
   narrowing: Narrowing.optional(),
+  reference: z.string().optional(),
 }).strict().refine((b) => b.since === undefined || b.prior !== undefined, { path: ['since'] })
   .refine((b) => b.refusal === undefined || b.prior !== undefined, { path: ['refusal'] })
 
@@ -106,6 +107,7 @@ export function assembled(root: string, name: string, manifest: Review, bench: B
     ['Changed code in context', framed(bench.context, 'Each hunk inside the function that encloses it. Judge from this and the diff; open a file only for what neither holds.')],
     ['Checks', bench.checks],
     ['Files around the change', framed(bench.map, 'Every file in each touched directory, its length and its head comment; * marks a changed file.')],
+    ['Reference the brief names', bench.reference],
     ['First verdict', bench.verdict],
     ['Greptile on this head', bench.bot],
     ['Your last verdict', bench.prior],

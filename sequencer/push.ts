@@ -10,6 +10,7 @@ import { record, type Verdict } from '../rails/record.ts'
 import { headDigest, signedHead } from '../store/approvals.ts'
 import { forkGreen } from '../store/deliverables.ts'
 import type { Db } from '../store/index.ts'
+import { busy } from '../store/now.ts'
 import { internal, originIssue, type PlanRow } from '../store/plans.ts'
 import { GREEN, onBase } from './base.ts'
 import { npm } from './checks.ts'
@@ -82,10 +83,10 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
   const waiting = unfinished(verdict.spans) ?? others(board)
   const window = carries(verdict.spans, MISSING) ? APPEARS : FINISHES
   const hold = waiting === null ? null : holding(root, plan.id, head.sha, verdict.spans, `${at} ${waiting}`, window)
-  if (hold !== null) return hold
+  if (hold !== null) return onCi(db, plan.id, hold)
   const base = waiting === null && verdict.outcome === 'refuse' ? onBase(root, plan.id, on, verdict.spans, board, wire.runs) : null
   const rerun = typeof base === 'string' ? holding(root, plan.id, head.sha, verdict.spans, `${at} ${base}`, FINISHES) : null
-  if (rerun !== null) return rerun
+  if (rerun !== null) return onCi(db, plan.id, rerun)
   if (Array.isArray(base)) put(root, plan.id, BOARD, `${JSON.stringify(base)}\n`)
   const passed = verdict.outcome === 'pass' || Array.isArray(base)
   record(db, join(root, 'rails/ci-green'), plan.id, passed ? { ...verdict, outcome: 'pass', origin_kind: null, origin_ref: null } : verdict, 0)
@@ -104,7 +105,7 @@ export function reviewable(db: Db, root: string, plan: PlanRow, repo: string, wi
   wire.rehearse?.(fork, ci)
 }
 
-function sent(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire): { fork: string; head: Head; ci: string } {
+export function sent(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire): { fork: string; head: Head; ci: string } {
   const open = !internal(plan) && opened(db, plan.id) !== null
   const fork = `${FORK}/${repoName(repo)}`
   if (!internal(plan)) (open ? follow : squash)(root, plan.id)
@@ -116,7 +117,7 @@ function sent(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire): { 
 }
 
 /** A repo GitHub runs no workflow for: nothing on the fork will ever show a run at the head. */
-function workflows(dir: string): boolean {
+export function workflows(dir: string): boolean {
   const at = join(dir, '.github/workflows')
   return existsSync(at) && readdirSync(at).some((f) => /\.ya?ml$/.test(f))
 }
@@ -158,12 +159,12 @@ function others(board: Board[]): string | null {
   return running.length === 0 ? null : `still running ${running.join(', ')}`
 }
 
-function unfinished(spans: string[]): string | null {
+export function unfinished(spans: string[]): string | null {
   if (carries(spans, PENDING)) return 'is still running CI'
   return carries(spans, MISSING) ? 'has no run yet' : null
 }
 
-function carries(spans: string[], span: string): boolean {
+export function carries(spans: string[], span: string): boolean {
   return spans.some((one) => one.endsWith(span))
 }
 
@@ -176,16 +177,22 @@ function held(spans: string[], note: string): Outcome {
   return { outcome: 'pass', spans, held: true, note }
 }
 
-function holding(root: string, plan: number, sha: string, spans: string[], waiting: string, window: number): Outcome | null {
-  const ticks = waited(root, plan, sha)
+function onCi(db: Db, plan: number, hold: Outcome): Outcome {
+  busy(db, plan, 'waiting on CI', hold.note)
+  return hold
+}
+
+export function holding(root: string, plan: number, sha: string, spans: string[], waiting: string, window: number,
+  key = WAITS): Outcome | null {
+  const ticks = waited(root, plan, sha, key)
   return ticks <= window ? held(spans, `${waiting}, tick ${String(ticks)} of ${String(window)}`) : null
 }
 
 /** The count is kept against the head it counts for, so a rebuilt branch starts its window over. */
-function waited(root: string, plan: number, sha: string): number {
-  const seen = (maybe(root, plan, WAITS) ?? '').split(' ')
+function waited(root: string, plan: number, sha: string, key: string): number {
+  const seen = (maybe(root, plan, key) ?? '').split(' ')
   const ticks = seen[0] === sha ? Number(seen[1]) + 1 : 1
-  put(root, plan, WAITS, `${sha} ${String(ticks)}`)
+  put(root, plan, key, `${sha} ${String(ticks)}`)
   return ticks
 }
 

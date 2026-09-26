@@ -190,6 +190,7 @@ export interface Desk {
   seen: (no: number) => Seen
   unlabel: (no: number, label: Answer) => void
   close: (no: number, comment: string) => void
+  rehearsal: (fork: string, branch: string) => number | null
 }
 
 export type Run = (args: string[], input?: string) => string
@@ -237,6 +238,7 @@ export function desk(repo: string, read: Read = gh, exec: Run = run): Desk {
     },
     unlabel: (no, label) => void exec(['issue', 'edit', String(no), '--repo', repo, '--remove-label', label]),
     close: (no, comment) => void exec(['issue', 'close', String(no), '--repo', repo, '--comment', comment]),
+    rehearsal: (fork, branch) => rehearsal(fork, branch, read),
   }
 }
 

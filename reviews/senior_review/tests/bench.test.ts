@@ -94,6 +94,20 @@ test('senior review reads the first verdict and names what the first verdict mis
   expect(db.prepare('SELECT gate, step FROM verdicts WHERE id = ?').get(second.verdict)).toEqual({ gate: 'senior_review', step: 5 })
 })
 
+test('senior review handed the reference refuses the pay-kit#340 port on each rule it breaks', async () => {
+  const { db, plan } = bench(root)
+  const sent: string[] = []
+  const reference = fixture('senior_review', 'paykit340.reference.md')
+  const capture: Provider = { name: 'claude-agent-sdk', fire: (p) => { sent.push(p.prompt); return replies(fixture('senior_review', 'paykit340.reply.md')).fire(p) } }
+  const out = await judge(db, root, 'senior_review', plan,
+    seeded({ diff: fixture('senior_review', 'paykit340.diff'), verdict: '---\noutcome: pass\n---\n', reference }), capture, TRANSCRIPT)
+  expect(sent[0]).toContain(`\n\n# Reference the brief names\n\n${reference}\n\n# First verdict`)
+  expect(out.outcome).toMatchObject({ outcome: 'refuse', defect_class: 'correctness',
+    spans: ['ruby/lib/pay_kit/config.rb:14', 'ruby/lib/pay_kit/config.rb:27', 'ruby/lib/pay_kit/config.rb:39'],
+    origin_kind: 'ruling', origin_ref: 'reviewers.verdict' })
+  for (const rule of ['yes/no/on/off booleans', 'empty RPC URL as unset', 'non-positive expiry rejected']) expect(out.outcome.message).toContain(rule)
+})
+
 test('the prompt carries each changed declaration whole under Changed code in context', async () => {
   const { db, plan } = bench(root)
   const src = mkdtempSync(join(tmpdir(), 'cf-context-'))

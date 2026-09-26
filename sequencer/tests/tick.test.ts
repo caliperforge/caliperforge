@@ -396,11 +396,12 @@ async function greptiled(current: boolean): Promise<Packet[]> {
   for (let step = 0; step < 2; step += 1) await tick(w.db, w.root, stub(CARRIED))
   built(w.root, MINE, FOUR)
   for (let step = 0; step < 2; step += 1) await tick(w.db, w.root, stub(CARRIED, 0, PASS))
-  const rows: [string, string][] = [['OLD', 'f'.repeat(40)], ...(current ? [['NEW', head(srcDir(w.root, MINE), ['rev-parse', 'HEAD'])] as [string, string]] : [])]
-  for (const [body, sha] of rows) {
+  const bot = (body: string, sha: string): void => {
     signal(w.db, { repo: 'caliperforge/cf', pr: 1, kind: 'bot_review', author: 'greptile', at: '2026-09-26T00:00:00Z',
       external_id: body, score: 5, plan: MINE, body, head: sha })
   }
+  bot('OLD', 'f'.repeat(40))
+  if (current) bot('NEW', head(srcDir(w.root, MINE), ['rev-parse', 'HEAD']))
   const seen: Packet[] = []
   for (let step = 0; step < 2; step += 1) await tick(w.db, w.root, stub(CARRIED, 0, PASS, (p) => seen.push(p)))
   return seen

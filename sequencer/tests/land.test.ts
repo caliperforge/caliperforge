@@ -8,15 +8,20 @@ import { headApproved } from '../../store/approvals.ts'
 import { last as lastMerge } from '../../store/merges.ts'
 import { tick } from '../index.ts'
 import { LAPS } from '../steps.ts'
-import { headOf, land, type Wire } from '../push.ts'
-import { CARRY, carried, cloned, conflicted, diffOf, fetchMain, get, liveTree, maybe, MAIN, put, srcDir } from '../workspace.ts'
+import { COMMIT, commitMessage, headOf, land, type Wire } from '../push.ts'
+import { CARRY, carried, cloned, conflicted, diffOf, drop, fetchMain, get, liveTree, maybe, MAIN, put, srcDir } from '../workspace.ts'
 import { approve, built, CARRIED, internalPlan, moveMain, ours, PASS, plan, stub, watched, world, type World } from './world.ts'
 
 const ID = 2
 const BRANCH = 'p2-let-an-internal-plan-run'
 const FORKED = `send src ${BRANCH}`
 
+const MESSAGE = 'let an internal plan run\n\nadd `hello()`.\n\nthe ask asks for it.\n\nCloses caliperforge/caliperforge#34\nPlan 2'
+
 const git = (cwd: string, args: string[]): string => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim()
+
+const bodies = (cwd: string, range: string): string[] =>
+  git(cwd, ['log', '--no-merges', '--format=%B%x00', range]).split('\0').map((m) => m.trim()).filter((m) => m !== '')
 
 function mine(): World {
   const w = world()
@@ -62,6 +67,42 @@ test('an internal plan that passed ready is on main, pushed and its issue closed
   const last = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
   expect(last).toMatchObject({ step: 8, name: 'push', outcome: 'pass', state: 'done' })
   expect(sent).toHaveLength(3)
+})
+
+test('D1 each commit a landed internal plan put on main carries its title, what, why, closing line and plan', async () => {
+  const w = mine()
+  const wire = watched([], w.root, ID)
+  await atBatch(w, wire)
+  expect(w.db.prepare("SELECT outcome, step FROM verdicts WHERE plan = ? AND rail_id = 'ci-green'").get(ID))
+    .toEqual({ outcome: 'pass', step: 6 })
+  await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  expect(new Set(bodies(srcDir(w.root, ID), `${MAIN}..main`))).toEqual(new Set([MESSAGE]))
+})
+
+test('D2 a second round adds a commit with the same message and leaves the first in place', async () => {
+  const w = mine()
+  await atRails(w, watched([], w.root, ID))
+  const first = headOf(w.root, ID).sha
+  built(w.root, ID, 'export const again = true')
+  headOf(w.root, ID)
+  const src = srcDir(w.root, ID)
+  expect(bodies(src, `${MAIN}..HEAD`)).toEqual([MESSAGE, MESSAGE])
+  expect(git(src, ['rev-parse', 'HEAD~1'])).toBe(first)
+})
+
+test('D3 a bare upstream number in the brief does not reach the commit message', () => {
+  const w = mine()
+  put(w.root, ID, 'issue.md', '# let #35 run\n\n**What:** add it.\n**Why:** #35 asks for it.\n')
+  const message = commitMessage(w.root, plan(w.db, ID))
+  expect(message).toBe('let run\n\nadd it.\n\nasks for it.\n\nCloses caliperforge/caliperforge#34\nPlan 2')
+})
+
+test('D5 an internal plan with no saved message commits under its branch name', async () => {
+  const w = mine()
+  await atRails(w, watched([], w.root, ID))
+  drop(w.root, ID, COMMIT)
+  headOf(w.root, ID)
+  expect(bodies(srcDir(w.root, ID), `${MAIN}..HEAD`)).toEqual([BRANCH])
 })
 
 test('an atelier-lane plan that lands installs the app once, after the main send and the close', async () => {

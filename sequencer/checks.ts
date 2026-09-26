@@ -37,6 +37,8 @@ export type Ran = { ok: true; output: string } | { ok: false; code: string; outp
 /** `bin` is the program; left out it is `npm`, which is every checkout but an Xcode or a Kotlin one. */
 export type Run = (args: string[], cwd: string, bin?: string) => Ran
 
+export type Note = (doing: string, detail: string) => void
+
 /** #126: what a checkout is judged with, by what sits at its root; #204: an outside plan, by its language. */
 export type Mode = 'xcodebuild' | 'npm' | 'gradle' | 'none' | OutsideLanguage
 
@@ -203,8 +205,10 @@ function tail(output: string): string {
  * A command the cap killed leaves no status, and that is the failure it is recorded as. A program that never
  * started has no output at all, so the spawn error is what the builder reads (09-24: cargo off launchd's PATH).
  */
-export function npm(args: string[], cwd: string, bin = 'npm'): Ran {
-  const held = slot()
+export function npm(args: string[], cwd: string, bin = 'npm', note?: Note): Ran {
+  const command = `${bin} ${args.join(' ')}`
+  const held = slot(undefined, undefined, undefined, () => note?.('waiting for a check slot', command))
+  note?.('checks', command)
   try {
     const done = spawnSync(bin, args, { cwd, encoding: 'utf8', timeout: LONG.includes(bin) ? XCODE_CAP : CAP, maxBuffer: MAX,
       env: unslotted() })
@@ -237,14 +241,15 @@ export const CHECK_SLOTS = 2
 export const SLOT_DIR = join(homedir(), '.cf-cache', 'check-slots')
 
 export function slot(dir = process.env.CF_CHECK_SLOTS_DIR ?? SLOT_DIR, n = Number(process.env.CF_CHECK_SLOTS ?? 0),
-  wait = 2000): string | null {
+  wait = 2000, waiting?: () => void): string | null {
   if (!(n > 0)) return null
   mkdirSync(dir, { recursive: true })
-  for (;;) {
+  for (let first = true; ; first = false) {
     for (let i = 0; i < n; i += 1) {
       const path = join(dir, `slot-${String(i)}`)
       if (claim(path)) return path
     }
+    if (first) waiting?.()
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, wait)
   }
 }

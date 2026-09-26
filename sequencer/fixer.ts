@@ -5,7 +5,7 @@ import { record, ticketOf } from '../cli/inbox.ts'
 import type { Post } from '../cli/watch.ts'
 import type { Provider } from '../providers/kind.ts'
 import { packet } from '../runner/index.ts'
-import { seat, tight } from '../runner/rules.ts'
+import { load, seat, tight } from '../runner/rules.ts'
 import { mark } from '../store/decisions.ts'
 import { listed } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
@@ -17,6 +17,7 @@ import { pending } from '../store/transcript.ts'
 import { hold, unhold } from './hold.ts'
 import { prose } from './prose.ts'
 import { WIRE, type Wire } from './push.ts'
+import { recorded } from './seat.ts'
 import { afresh, cloned, drop, maybe, move, planDir, put, SELF, titleOf } from './workspace.ts'
 
 /**
@@ -95,13 +96,15 @@ export async function fixer(db: Db, root: string, plan: PlanRow, decision: { id:
 
 async function ask(db: Db, root: string, plan: PlanRow, decision: { why: string }, m: Mode, provider: Provider):
   Promise<{ got: Fix | null; tokens: number }> {
-  const { manifest, prompt } = seat(root, 'fixer')
+  load(db, root)
+  const { manifest, prompt, hash } = seat(root, 'fixer')
   const dir = planDir(root, plan.id)
   const tools = m === 'live' ? manifest.tools : manifest.tools.filter((t) => ['Read', 'Glob', 'Grep'].includes(t))
   const fired = await provider.fire({
     ...packet({ ...manifest, tools }, prompt, tight(root), issue(db, root, plan, decision, m), dir, pending(dir, 'fixer')),
     wall: Math.min(wall(db), FIX_WALL),
   })
+  recorded(db, plan.id, plan.step, 'fixer', hash, provider.name, manifest, fired)
   return { got: fired.ended === 'completed' ? read(fired.text) : null, tokens: fired.usage.input + fired.usage.output }
 }
 
@@ -150,7 +153,7 @@ export function released(db: Db, root: string, now: Date, post: Post): void {
     const ticket = ticketOf(db, r.id)
     const at = now.toISOString()
     if (r.theirs === 'done') {
-      unhold(db, root, r.id)
+      unhold(db, root, r.id, 'fixer')
       record(root, [{ at, plan: r.id, ticket, kind: 'refused', step: r.step, name: 'fixer', note: `plan ${String(r.on_)} landed, so this job is back in its lane` }])
       continue
     }
@@ -165,7 +168,7 @@ function apply(db: Db, root: string, plan: PlanRow, f: Fix, wire: Wire, now: Dat
   for (const path of f.add_files ?? []) listed(db, plan.id, path)
   if (plan.state !== 'blocked_on_ceo' && plan.state !== 'halted') return 'escalated'
   switch (f.then) {
-    case 'return': afresh(root, plan.id, returnToLane(db, plan.id)); return 'return'
+    case 'return': afresh(root, plan.id, returnToLane(db, plan.id, 'fixer')); return 'return'
     case 'retry': {
       const step = db.transaction(() => { clear(db, plan.id); return retry(db, plan) })()
       afresh(root, plan.id, step)

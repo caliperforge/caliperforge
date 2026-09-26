@@ -28,7 +28,7 @@ async function atBatch(): Promise<World> {
 interface Held { title: string; body: string; open: boolean; answer: Answer | null; words: string | null; closing: string | null }
 
 /** The tracker as a map: a test answers a card by setting its label and words. */
-function fake(): Desk & { cards: Map<number, Held>; log: string[] } {
+function fake(pr: number | null = null, lines: string[] = []): Desk & { cards: Map<number, Held>; log: string[] } {
   const cards = new Map<number, Held>()
   const log: string[] = []
   const card = (no: number): Held => {
@@ -48,6 +48,8 @@ function fake(): Desk & { cards: Map<number, Held>; log: string[] } {
     seen: (no): Seen => ({ answer: card(no).answer, words: card(no).words, open: card(no).open }),
     unlabel: (no, label) => { log.push(`unlabel ${String(no)} ${label}`); card(no).answer = null },
     close: (no, comment) => { log.push(`close ${String(no)}`); card(no).open = false; card(no).closing = comment },
+    rehearsal: () => pr,
+    lines: () => lines,
   }
 }
 
@@ -67,6 +69,17 @@ test('an outside plan at sign-off gets one card, and the card links nothing on t
   expect(unread(w.root).map((e) => [e.kind, e.ticket])).toEqual([['signoff', 'acme/widget#12']])
 })
 
+test('a card with a rehearsal PR links its files view before the commit, and still nothing on their thread', async () => {
+  const w = await atBatch()
+  const desk = fake(5)
+  signoffs(w.db, w.root, desk)
+  const body = desk.cards.get(100)?.body ?? ''
+  const files = body.indexOf('https://github.com/caliperforge/widget/pull/5/files')
+  expect(files).toBeGreaterThan(-1)
+  expect(files).toBeLessThan(body.indexOf('https://github.com/caliperforge/widget/commit/'))
+  expect(body.replace(/```markdown[\s\S]*?\n```\n/, '').replace(/`[^`]*`/g, '')).not.toMatch(/#\d|acme\/widget|github\.com\/acme/)
+})
+
 test('go signs the head the card showed, closes the card, and the next tick sends it', async () => {
   const w = await atBatch()
   const desk = fake()
@@ -84,6 +97,20 @@ test('go signs the head the card showed, closes the card, and the next tick send
   expect(signoffs(w.db, w.root, desk)).toEqual([])
 })
 
+test('go on a card whose lane is full leaves the plan queued', async () => {
+  const w = await atBatch()
+  w.db.prepare('UPDATE pipes SET max_concurrent = 1 WHERE id = 1').run()
+  w.db.prepare("UPDATE plans SET state = 'blocked_on_ceo' WHERE id = 1").run()
+  w.db.prepare(`INSERT INTO plans (id, pipe_id, target_id, template, state, queued_at, step, retries)
+    VALUES (2, 1, 1, 'pr_path', 'running', '2000-01-01T00:00:00.000Z', 2, 0)`).run()
+  const desk = fake()
+  signoffs(w.db, w.root, desk)
+  const card = desk.cards.get(100)
+  if (card !== undefined) card.answer = 'go'
+  expect(signoffs(w.db, w.root, desk)).toEqual([{ plan: 1, card: 100, did: 'go' }])
+  expect(plan(w.db, 1)).toMatchObject({ step: 7, state: 'queued' })
+})
+
 test('no with words sends it back to the builder with them', async () => {
   const w = await atBatch()
   const desk = fake()
@@ -98,6 +125,47 @@ test('no with words sends it back to the builder with them', async () => {
   expect(brief.split('## Must not break')[1]?.split('## ')[0]).toContain("The CEO's ruling at sign-off")
   expect(w.db.prepare("SELECT decision, reason FROM approvals WHERE subject_kind = 'plan'").get())
     .toEqual({ decision: 'refused', reason: 'signoff.no' })
+})
+
+test('D1 no with only a line comment on the rehearsal PR sends it back to the builder with it', async () => {
+  const w = await atBatch()
+  const desk = fake(5, ['src/hello.ts:1 Name it greet.'])
+  signoffs(w.db, w.root, desk)
+  const card = desk.cards.get(100)
+  if (card !== undefined) card.answer = 'no'
+  expect(signoffs(w.db, w.root, desk)).toEqual([{ plan: 1, card: 100, did: 'no' }])
+  expect(plan(w.db, 1)).toMatchObject({ step: 2, state: 'running' })
+  expect(readFileSync(join(w.root, '.cf/work/1/refusal.md'), 'utf8')).toContain('src/hello.ts:1 Name it greet.')
+  expect(w.db.prepare("SELECT reason FROM approvals WHERE subject_kind = 'plan'").get()).toEqual({ reason: 'signoff.no' })
+})
+
+test('D2 only the credential owner\'s line comments come back, at the original line when outdated', () => {
+  const read = (args: string[]): unknown => args[1]?.startsWith('repos/') === true && args[1].includes('/pulls/')
+    ? [
+      { path: 'src/hello.ts', line: 3, original_line: 3, body: 'ship it', user: { login: 'stranger' } },
+      { path: 'src/hello.ts', line: null, original_line: 1, body: ' Name it greet. ', user: { login: 'michael-moffett' } },
+    ]
+    : []
+  expect(ghDesk(SIGNOFF, read, () => 'michael-moffett\n').lines('caliperforge/widget', 5)).toEqual(['src/hello.ts:1 Name it greet.'])
+})
+
+test('D3 no with card words and a line comment carries both, card words first', async () => {
+  const w = await atBatch()
+  const desk = fake(5, ['src/hello.ts:1 Name it greet.'])
+  signoffs(w.db, w.root, desk)
+  const card = desk.cards.get(100)
+  if (card !== undefined) { card.answer = 'no'; card.words = 'Call it expiry.' }
+  signoffs(w.db, w.root, desk)
+  expect(readFileSync(join(w.root, '.cf/work/1/refusal.md'), 'utf8')).toContain('Call it expiry.\n\nsrc/hello.ts:1 Name it greet.')
+  expect(readFileSync(join(w.root, '.cf/work/1/issue.md'), 'utf8')).toContain('Call it expiry. src/hello.ts:1 Name it greet.')
+})
+
+test('D4 the card says a comment on a line of the diff plus no reaches the builder', async () => {
+  const w = await atBatch()
+  const desk = fake()
+  signoffs(w.db, w.root, desk)
+  expect(desk.cards.get(100)?.body)
+    .toContain('`no` refuses it: comment on the card or on a line of the diff first and the builder reworks against your words.')
 })
 
 test('no alone waits for the coo', async () => {

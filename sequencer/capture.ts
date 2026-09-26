@@ -4,13 +4,16 @@ import { add, LANE, LANES, laneOf, seen } from '../cli/plan.ts'
 import type { Db } from '../store/index.ts'
 import { originRef, PlanRow } from '../store/plans.ts'
 import { record, type Signal, type SignalRow } from '../store/signals.ts'
+import { partOf, recordListing } from '../store/tickets.ts'
 import { attribute } from './escapes.ts'
 import { rehearsalBranch } from './push.ts'
+import { claimed } from './split.ts'
 import { cloned, FORK, repoName, srcDir } from './workspace.ts'
 
 const Listed = z.array(z.object({
   number: z.int(),
   title: z.string(),
+  body: z.string(),
   url: z.string(),
   labels: z.array(z.object({ name: z.string() })),
 }))
@@ -56,19 +59,20 @@ export function intake(db: Db, root: string, read: Read): void {
 /** A list exactly `WINDOW` long may be cut short, so what is missing from it is not taken as gone. */
 function listed(db: Db, root: string, repo: string, read: Read): void {
   const found = Listed.parse(read(['issue', 'list', '--repo', repo, '--state', 'open', '--limit', String(WINDOW),
-    '--json', 'number,title,url,labels']))
+    '--json', 'number,title,body,url,labels']))
   const kept = found.filter((i) => laneOf(i.labels) !== null)
+  recordListing(db, repo, found, found.length < WINDOW)
   if (found.length < WINDOW) halt(db, repo, new Set(kept.map((i) => i.url)))
   const known = seen(db)
   const split = named(found.map((i) => i.title))
   for (const i of kept.filter((k) => !known.has(k.url) && !split.has(k.number) && !parent(repo, k.number, read))) {
-    add(db, root, `${repo}#${String(i.number)}`, undefined, read)
+    if (!claimed(db, root, i)) add(db, root, `${repo}#${String(i.number)}`, undefined, read)
   }
 }
 
 /** A part is titled `<parent><letter>: …` (\`85a: …\`); the numbers so named are parents, whoever split them. */
 function named(titles: string[]): Set<number> {
-  return new Set(titles.flatMap((t) => /^(\d+)[a-z]\b/.exec(t)?.[1] ?? []).map(Number))
+  return new Set(titles.flatMap((t) => partOf(t) ?? []))
 }
 
 const Summary = z.object({ sub_issues_summary: z.object({ total: z.int() }).optional() })

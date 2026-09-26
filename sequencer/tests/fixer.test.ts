@@ -51,6 +51,11 @@ function wire(filed: string[]): Wire {
 
 const state = (db: ReturnType<typeof open>) => db.prepare('SELECT state, step FROM plans WHERE id = 7').get()
 const applied = (db: ReturnType<typeof open>) => db.prepare('SELECT applied FROM decisions').all()
+const runs = (db: ReturnType<typeof open>) => db.prepare(`SELECT seat, input_tokens, cache_tokens, output_tokens,
+  transcript_path LIKE '%/run-' || id || '.transcript.jsonl' AS named FROM runs
+  WHERE plan = 7 AND seat IN ('fixer', 'orchestrator') ORDER BY id`).all()
+const RAN = [{ seat: 'orchestrator', input_tokens: 10, cache_tokens: 0, output_tokens: 5, named: 1 },
+  { seat: 'fixer', input_tokens: 10, cache_tokens: 0, output_tokens: 5, named: 1 }]
 
 const RETURN = '---\ndid: renamed schema/0036_x.sql to 0040_x.sql in src and issue.md\nthen: return\nwhy: the rails will find the file now\nadd_files: [schema/0040_x.sql]\n---\n'
 
@@ -66,6 +71,7 @@ test('live: an ask_coo stop goes to the fixer, which fixes it and returns the jo
   const fixerPacket = packets.find((p) => basename(p.transcript).startsWith('fixer'))
   expect(fixerPacket?.tools).toContain('Edit')
   expect(fixerPacket?.prompt).toContain('# The machine\'s store')
+  expect(runs(db)).toEqual(RAN)
 })
 
 test('shadow: the fixer reads only, changes nothing, and the stop still reaches a person', async () => {
@@ -77,6 +83,7 @@ test('shadow: the fixer reads only, changes nothing, and the stop still reaches 
   expect(packets.find((p) => basename(p.transcript).startsWith('fixer'))?.tools).toEqual(['Read', 'Glob', 'Grep'])
   expect(posted).toHaveLength(1)
   expect(maybe(home, 7, 'fixes.jsonl')).toContain('"mode":"shadow"')
+  expect(runs(db)).toEqual(RAN)
 })
 
 test('ticket: filed, job held, checkout kept', async () => {

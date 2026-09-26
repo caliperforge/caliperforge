@@ -15,14 +15,14 @@ const REPO = 'caliperforge/caliperforge'
 
 const url = (n: number): string => `https://github.com/${REPO}/issues/${String(n)}`
 
-interface Fixture { number: number; labels: string[]; parts?: number; title?: string }
+interface Fixture { number: number; labels: string[]; parts?: number; title?: string; body?: string }
 
 const TWO: Fixture[] = [{ number: 40, labels: ['lane:machine'] }, { number: 41, labels: ['lane:machine', 'P2'] }]
 
 function canned(rows: Fixture[], log: string[] = []): Read {
   return (args) => {
     log.push(args.join(' '))
-    const shaped = rows.map((r) => ({ number: r.number, title: r.title ?? `issue ${String(r.number)}`, body: 'the ask',
+    const shaped = rows.map((r) => ({ number: r.number, title: r.title ?? `issue ${String(r.number)}`, body: r.body ?? 'the ask',
       url: url(r.number), labels: r.labels.map((name) => ({ name })) }))
     if (args[1] === 'list') return shaped
     if (args[0] === 'api') {
@@ -128,7 +128,7 @@ test('D5: the tick lists issues only when handed a reader', async () => {
     log.push(args.join(' '))
     throw new Error('gh is down')
   })
-  expect(log).toEqual([`issue list --repo ${REPO} --state open --limit ${String(WINDOW)} --json number,title,url,labels`])
+  expect(log).toEqual([`issue list --repo ${REPO} --state open --limit ${String(WINDOW)} --json number,title,body,url,labels`])
 })
 
 test('#260: an issue with sub-issues is a parent and is not adopted; its parts are', () => {
@@ -142,6 +142,97 @@ test('#260: a parent split by hand, named only by its parts\' titles, is not ado
   intake(db, root, canned([{ number: 85, labels: ['lane:machine'] },
     { number: 121, labels: ['lane:machine'], title: '85a: each changed declaration whole' }]))
   expect(states(db)).toEqual([{ origin: url(121), state: 'queued' }])
+})
+
+test('D3: a part\'s own parts filed by the COO join that part\'s plan, part a queued, and neither is its own plan', () => {
+  const db = piped()
+  queue(db, 200, 'done')
+  queue(db, 223, 'blocked_on_ceo')
+  db.prepare("INSERT INTO parts (parent, n, url, title, body, plan) VALUES (1, 0, ?, 'part', 'the part', 2)").run(url(223))
+  intake(db, root, canned([{ number: 280, labels: ['lane:machine'], title: '223a: first' },
+    { number: 281, labels: ['lane:machine'], title: '223b: second' }]))
+  expect(db.prepare('SELECT n, url, plan FROM parts WHERE parent = 2 ORDER BY n').all()).toEqual([
+    { n: 0, url: url(280), plan: 3 },
+    { n: 1, url: url(281), plan: null },
+  ])
+  expect(states(db)).toEqual([
+    { origin: url(200), state: 'done' },
+    { origin: url(223), state: 'blocked_on_ceo' },
+    { origin: url(280), state: 'queued' },
+  ])
+  expect(readFileSync(join(root, '.cf/work/3/ask.md'), 'utf8')).toBe('# 223a: first\n\nthe ask')
+})
+
+const FIVE: Fixture[] = [
+  { number: 40, labels: ['lane:machine', 'P2'] },
+  { number: 121, labels: ['lane:machine', 'P1'], title: '85a: each changed declaration whole', body: 'After: #120' },
+  { number: 85, labels: ['lane:machine', 'P1'], parts: 3 },
+  { number: 70, labels: ['lane:machine'] },
+]
+
+function ticket(db: Db, n: number): void {
+  db.prepare("INSERT INTO tickets (repo, number, title, lane) VALUES (?, ?, 'earlier', 'machine')").run(REPO, n)
+}
+
+const tickets = (db: Db): unknown[] => db.prepare('SELECT number, title, lane, priority, after, parent FROM tickets ORDER BY number').all()
+
+const RECORDED = [
+  { number: 40, title: 'issue 40', lane: 'machine', priority: 2, after: null, parent: null },
+  { number: 70, title: 'issue 70', lane: 'machine', priority: null, after: null, parent: null },
+  { number: 85, title: 'issue 85', lane: 'machine', priority: 1, after: null, parent: null },
+  { number: 121, title: '85a: each changed declaration whole', lane: 'machine', priority: 1, after: 120, parent: 85 },
+]
+
+function five(): Db {
+  const db = piped()
+  queue(db, 40)
+  ticket(db, 60)
+  intake(db, root, canned(FIVE))
+  return db
+}
+
+test('D1: every open lane issue listed is a ticket, and one closed since the last listing is gone', () => {
+  expect(tickets(five())).toEqual(RECORDED)
+})
+
+test('D2: a listed issue that lost its lane label loses its ticket, even from a list WINDOW long', () => {
+  const db = piped()
+  ticket(db, 50)
+  intake(db, root, canned([...Array(WINDOW).keys()].map((i) => ({ number: 50 + i, labels: ['bug'] }))))
+  expect(tickets(db)).toEqual([])
+})
+
+test('D3: a list exactly WINDOW long drops no ticket for an issue missing from it', () => {
+  const db = piped()
+  ticket(db, 50)
+  intake(db, root, canned([...Array(WINDOW).keys()].map((i) => ({ number: 1000 + i, labels: i === 0 ? ['lane:machine'] : ['bug'] }))))
+  expect(db.prepare('SELECT number FROM tickets ORDER BY number').all()).toEqual([{ number: 50 }, { number: 1000 }])
+})
+
+test('D4: an issue with two P labels is recorded unpriced and the rest of its repo is still queued', () => {
+  const db = piped()
+  intake(db, root, canned([{ number: 40, labels: ['lane:machine', 'P1', 'P2'] }, { number: 41, labels: ['lane:machine'] }]))
+  expect(db.prepare('SELECT number, priority FROM tickets ORDER BY number').all()).toEqual([
+    { number: 40, priority: null },
+    { number: 41, priority: null },
+  ])
+  expect(states(db)).toEqual([{ origin: url(41), state: 'queued' }])
+})
+
+test('D5: recording the tickets queues only what add made', () => {
+  const db = five()
+  expect(states(db)).toEqual([
+    { origin: url(40), state: 'queued' },
+    { origin: url(121), state: 'queued' },
+    { origin: url(70), state: 'queued' },
+  ])
+  expect(db.prepare('SELECT count(*) AS n FROM parts').get()).toEqual({ n: 0 })
+})
+
+test('D6: the same listing again leaves the same tickets', () => {
+  const db = five()
+  intake(db, root, canned(FIVE))
+  expect(tickets(db)).toEqual(RECORDED)
 })
 
 test('#257: a running or blocked plan whose work was pushed and whose issue closed is done', () => {

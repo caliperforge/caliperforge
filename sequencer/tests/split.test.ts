@@ -81,24 +81,37 @@ test('a part landing queues the next; the last one landing closes the parent', a
   expect(following(w.db, w.root, plan(w.db, ID), 'c'.repeat(40), watched(log, w.root, ID))).toBeNull()
 })
 
-test('a split of a split, and a split of somebody else\'s ticket, wait for the COO with the parts', async () => {
+test('D1, D2: a part split again files its parts, and its last one landing closes the part and queues the grandparent\'s next', async () => {
   const w = mine()
   internalPlan(w.db, w.root, 3, 'the parent', 33)
-  w.db.prepare("INSERT INTO parts (parent, n, url, title, body, plan) VALUES (3, 0, 'https://github.com/caliperforge/caliperforge/issues/34', 't', 'b', ?)").run(ID)
+  const part = w.db.prepare('INSERT INTO parts (parent, n, url, title, body, plan) VALUES (3, ?, ?, \'t\', \'b\', ?)')
+  part.run(0, 'https://github.com/caliperforge/caliperforge/issues/34', ID)
+  part.run(1, 'https://github.com/caliperforge/caliperforge/issues/35', null)
   w.db.prepare("UPDATE plans SET state = 'done' WHERE id = 3").run()
   const log: string[] = []
   await briefed(w, ID, PARTS, log)
-  expect(plan(w.db, ID)).toMatchObject({ state: 'blocked_on_ceo', step: 1 })
-  expect(log).toEqual([])
-  expect(maybe(w.root, ID, 'question.md')).toMatch(/a split of a split is the COO's[\s\S]*a\. file the parts[\s\S]*b\. queue them in order/)
-  expect(maybe(w.root, ID, 'split.md')).toBeNull()
+  expect(log).toEqual([
+    'file caliperforge/caliperforge 34a: file the parts',
+    'file caliperforge/caliperforge 34b: queue them in order',
+    'comment caliperforge/caliperforge#34',
+  ])
+  expect(plan(w.db, ID)).toMatchObject({ state: 'done', step: 1 })
+  const a = (w.db.prepare('SELECT plan FROM parts WHERE parent = ? AND n = 0').get(ID) as { plan: number }).plan
+  following(w.db, w.root, plan(w.db, a), 'a'.repeat(40), watched(log, w.root, a))
+  const b = (w.db.prepare('SELECT plan FROM parts WHERE parent = ? AND n = 1').get(ID) as { plan: number }).plan
+  expect(following(w.db, w.root, plan(w.db, b), 'b'.repeat(40), watched(log, w.root, b)))
+    .toMatch(/^the last part landed; #34 closed; part b queued as plan \d+$/)
+  expect(log.at(-1)).toBe('close caliperforge/caliperforge#34 bbbbbbb')
+})
 
+test('D4: a split of somebody else\'s ticket waits for the COO with the parts', async () => {
   const out = world()
   approve(out.db, out.target)
   const theirs: string[] = []
   await briefed(out, 1, PARTS, theirs)
   expect(plan(out.db, 1)).toMatchObject({ state: 'blocked_on_ceo', step: 1 })
   expect(theirs).toEqual([])
+  expect(maybe(out.root, 1, 'question.md')).toMatch(/split by the COO[\s\S]*a\. file the parts[\s\S]*b\. queue them in order/)
 })
 
 test('a wide internal brief goes back to the brief writer to be split', async () => {

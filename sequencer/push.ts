@@ -10,6 +10,7 @@ import { record, type Verdict } from '../rails/record.ts'
 import { headDigest, signedHead } from '../store/approvals.ts'
 import { forkGreen } from '../store/deliverables.ts'
 import type { Db } from '../store/index.ts'
+import { busy } from '../store/now.ts'
 import { internal, originIssue, type PlanRow } from '../store/plans.ts'
 import { GREEN, onBase } from './base.ts'
 import { npm } from './checks.ts'
@@ -82,10 +83,10 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
   const waiting = unfinished(verdict.spans) ?? others(board)
   const window = carries(verdict.spans, MISSING) ? APPEARS : FINISHES
   const hold = waiting === null ? null : holding(root, plan.id, head.sha, verdict.spans, `${at} ${waiting}`, window)
-  if (hold !== null) return hold
+  if (hold !== null) return onCi(db, plan.id, hold)
   const base = waiting === null && verdict.outcome === 'refuse' ? onBase(root, plan.id, on, verdict.spans, board, wire.runs) : null
   const rerun = typeof base === 'string' ? holding(root, plan.id, head.sha, verdict.spans, `${at} ${base}`, FINISHES) : null
-  if (rerun !== null) return rerun
+  if (rerun !== null) return onCi(db, plan.id, rerun)
   if (Array.isArray(base)) put(root, plan.id, BOARD, `${JSON.stringify(base)}\n`)
   const passed = verdict.outcome === 'pass' || Array.isArray(base)
   record(db, join(root, 'rails/ci-green'), plan.id, passed ? { ...verdict, outcome: 'pass', origin_kind: null, origin_ref: null } : verdict, 0)
@@ -174,6 +175,11 @@ export function carries(spans: string[], span: string): boolean {
  */
 function held(spans: string[], note: string): Outcome {
   return { outcome: 'pass', spans, held: true, note }
+}
+
+function onCi(db: Db, plan: number, hold: Outcome): Outcome {
+  busy(db, plan, 'waiting on CI', hold.note)
+  return hold
 }
 
 export function holding(root: string, plan: number, sha: string, spans: string[], waiting: string, window: number,

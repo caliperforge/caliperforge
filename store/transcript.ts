@@ -1,6 +1,24 @@
 import { existsSync, readFileSync, renameSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { z } from 'zod'
 import type { Db } from './index.ts'
+
+const Turn = z.object({ type: z.literal('assistant'), message: z.object({ content: z.array(z.unknown()) }) })
+
+const Read = z.object({ type: z.literal('tool_use'), name: z.literal('Read'), input: z.object({ file_path: z.string() }) })
+
+/** The `file_path` of each Read call in a transcript, in order; none when it is missing or a line is not JSON. */
+export function opened(path: string): string[] {
+  if (!existsSync(path)) return []
+  try {
+    return readFileSync(path, 'utf8').split('\n').filter((line) => line !== '').flatMap((line) => {
+      const turn = Turn.safeParse(JSON.parse(line))
+      return turn.success ? turn.data.message.content.flatMap((block) => Read.safeParse(block).data?.input.file_path ?? []) : []
+    })
+  } catch {
+    return []
+  }
+}
 
 /** The name a provider writes under before the run it belongs to has an id. */
 export function pending(dir: string, tag: string): string {

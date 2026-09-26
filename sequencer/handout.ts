@@ -63,7 +63,7 @@ function opens(line: string | undefined): boolean {
   return line !== undefined && line !== '' && !/^\s/.test(line)
 }
 
-function block(path: string, lines: string[], from: number, to: number): string {
+export function block(path: string, lines: string[], from: number, to: number): string {
   const name = from === 1 && to === lines.length ? path : `${path}:${String(from)}-${String(to)}`
   return `## ${name}\n\n${FENCE}\n${lines.slice(from - 1, to).join('\n')}\n${FENCE}`
 }

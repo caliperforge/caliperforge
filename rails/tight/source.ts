@@ -116,7 +116,7 @@ function bodied(node: ts.SignatureDeclaration): boolean {
   return 'body' in node && node.body !== undefined
 }
 
-function touched(src: ts.SourceFile, fn: ts.Node, added: Set<number>): boolean {
+export function touched(src: ts.SourceFile, fn: ts.Node, added: Set<number>): boolean {
   const from = lineAt(src, fn.getStart(src))
   const to = lineAt(src, fn.getEnd())
   return [...added].some((l) => l >= from && l <= to)
@@ -167,6 +167,6 @@ function words(source: string): Set<string> {
   return new Set((source.toLowerCase().match(/[a-z][a-z0-9]*/g) ?? []).filter((w) => w.length > 1))
 }
 
-function lineAt(src: ts.SourceFile, pos: number): number {
+export function lineAt(src: ts.SourceFile, pos: number): number {
   return src.getLineAndCharacterOfPosition(pos).line + 1
 }

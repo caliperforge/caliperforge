@@ -12,6 +12,10 @@ const PARTS = ['---', 'outcome: split', 'parts:',
   '  - title: queue them in order', '    what: a landing queues the next', '    why: order without a gate', '    ends: the last closes the parent',
   '---', ''].join('\n')
 
+const AFTER = (after: (string | null)[]): string => ['---', 'outcome: split', 'parts:',
+  ...after.flatMap((a, i) => [`  - title: part ${String(i)}`, '    what: w', '    why: y', '    ends: e', ...a === null ? [] : [`    after: ${a}`]]),
+  '---', ''].join('\n')
+
 const BRIEF_OF = (paths: string[]): string => `# t\n\n## Files\n\n${paths.map((p) => `- ${p}`).join('\n')}\n`
 
 function mine(): World {
@@ -37,6 +41,20 @@ test('a part whose prose holds a colon still reads as a split, and a question wi
   const colon = PARTS.replace('ends: two issues exist', 'ends: tests show all four cases: a 3/5 is refused')
   expect(split(colon)?.[0]?.ends).toBe('tests show all four cases: a 3/5 is refused')
   expect(unclear('---\noutcome: unclear\nquestion: which of these: a or b?\n---\n')).toBe('which of these: a or b?')
+})
+
+test('D1, D2: each part says which earlier part it builds on; a missing after is the part before', () => {
+  expect(split(AFTER(['none', 'a', 'none']))?.map((p) => p.after)).toEqual(['none', 'a', 'none'])
+  expect(split(PARTS)?.map((p) => p.after)).toEqual(['none', 'a'])
+  expect(split(AFTER([null, null, null, null]))?.map((p) => p.after)).toEqual(['none', 'a', 'b', 'c'])
+  expect(split(AFTER([null, 'none', null]))?.map((p) => p.after)).toEqual(['none', 'none', 'b'])
+})
+
+test('D3: an after naming the part itself, a later part or no part is not a split', () => {
+  for (const after of [['none', 'c', 'none'], ['a', 'none', 'none'], ['none', 'none', 'c'], ['none', 'z', 'none'], ['none', 'none', 'ab'],
+    ['none', 'none', 'A'], ['none', "''", 'none']]) {
+    expect(split(AFTER(after))).toBeNull()
+  }
 })
 
 test('past five files besides tests a brief is wide; tests do not count', () => {

@@ -54,6 +54,15 @@ write, or one that is not there, refuses the build.
 The brief's `## Settled facts` were checked when it was written: take them as given and do not look them up
 again. Read nothing outside the checkout.
 
+On our own repository:
+- A comment states, in one sentence, a fact the code cannot say.
+- Why a change was made goes in the commit message, never in a comment.
+- Code the change replaces is deleted in the same job.
+- A fallback records that it fell back.
+- New logic goes in a new file rather than growing a file past its budget.
+
+On anyone else's repository, match its comment density instead.
+
 Answer the issue as filed under the Tight standard above, then close with this fence and nothing after it:
 
 ```

@@ -19,10 +19,10 @@ function fixture(review: string, name: string): string {
   return readFileSync(join(root, 'reviews', review, 'fixtures', name), 'utf8')
 }
 
-function replies(text: string): Provider {
+function replies(text: string, cost?: number): Provider {
   return {
     name: 'claude-agent-sdk',
-    fire: (p) => Promise.resolve({ text, transcript_path: p.transcript, usage: { input: 5, cache: 6, output: 7 }, seconds: 0.5, ended: 'completed', exit: 0, stop_reason: 'end_turn', denials: 0 }),
+    fire: (p) => Promise.resolve({ text, transcript_path: p.transcript, usage: { input: 5, cache: 6, output: 7, ...(cost === undefined ? {} : { cost }) }, seconds: 0.5, ended: 'completed', exit: 0, stop_reason: 'end_turn', denials: 0 }),
   }
 }
 
@@ -46,6 +46,16 @@ test('the review refuses the seeded defect naming the span, and passes the clean
 
   const clean = await judge(db, root, 'code_quality', plan, seeded({ diff: fixture('code_quality', 'clean.diff') }), replies(fixture('code_quality', 'clean.reply.md')), TRANSCRIPT)
   expect(clean.outcome).toMatchObject({ outcome: 'pass', spans: [], defect_class: null })
+})
+
+test('a reviewer run writes its cost to its runs row, and NULL when the provider reports none', async () => {
+  const { db, plan } = bench(root)
+  const cost = async (provider: Provider): Promise<unknown> => {
+    const out = await judge(db, root, 'code_quality', plan, seeded(), provider, TRANSCRIPT)
+    return db.prepare('SELECT cost_usd FROM runs WHERE id = ?').get(out.run ?? 0)
+  }
+  expect(await cost(replies(fixture('code_quality', 'clean.reply.md'), 0.42))).toEqual({ cost_usd: 0.42 })
+  expect(await cost(replies(fixture('code_quality', 'clean.reply.md')))).toEqual({ cost_usd: null })
 })
 
 const TREE = 'c'.repeat(40)
@@ -128,6 +138,13 @@ test('two defects in two files come back as one refusal naming both spans', asyn
   expect(out.outcome).toMatchObject({ outcome: 'refuse', defect_class: 'correctness', spans: ['src/stats.ts:2', 'src/parse.ts:1'], origin_kind: 'ruling', origin_ref: 'reviewers.verdict' })
   expect(out.outcome.message).toContain('scope')
   expect(db.prepare('SELECT count(*) AS n FROM verdicts WHERE plan = ?').get(plan)).toEqual({ n: 1 })
+})
+
+test('a replaced function left in place is a minimal refusal', async () => {
+  const { db, plan } = bench(root)
+  const out = await judge(db, root, 'code_quality', plan, seeded({ diff: fixture('code_quality', 'kept.diff') }),
+    replies(fixture('code_quality', 'kept.reply.md')), TRANSCRIPT)
+  expect(out.outcome).toMatchObject({ outcome: 'refuse', defect_class: 'minimal', spans: ['src/stats.ts:1'], origin_kind: 'ruling', origin_ref: 'reviewers.verdict' })
 })
 
 test('reviewer != builder is refused before the provider fires; the trigger still guards the rows', async () => {

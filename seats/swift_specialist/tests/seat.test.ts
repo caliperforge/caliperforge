@@ -53,6 +53,19 @@ test('the prompt carries the test command, the design line and the fence', () =>
   expect(prompt).toContain('follow it under `# The files`')
 })
 
+test('the prompt carries the own-repo rules and the outside comment-density line', () => {
+  const { prompt } = seat(root, SEAT)
+  for (const line of [
+    'On our own repository:',
+    '- A comment states, in one sentence, a fact the code cannot say.',
+    '- Why a change was made goes in the commit message, never in a comment.',
+    '- Code the change replaces is deleted in the same job.',
+    '- A fallback records that it fell back.',
+    '- New logic goes in a new file rather than growing a file past its budget.',
+    "On anyone else's repository, match its comment density instead.",
+  ]) expect(prompt).toContain(line)
+})
+
 test('write_paths admit the app and its tests and refuse everything beside them', () => {
   const paths = seat(root, SEAT).manifest.write_paths
   expect(refuse(root, paths, 'Atelier/Views/NowView.swift')).toBeNull()

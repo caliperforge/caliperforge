@@ -144,7 +144,7 @@ test('a replaced function left in place is a minimal refusal', async () => {
   const { db, plan } = bench(root)
   const out = await judge(db, root, 'code_quality', plan, seeded({ diff: fixture('code_quality', 'kept.diff') }),
     replies(fixture('code_quality', 'kept.reply.md')), TRANSCRIPT)
-  expect(out.outcome).toMatchObject({ outcome: 'refuse', defect_class: 'minimal', spans: ['src/stats.ts:1'], origin_ref: 'reviewers.verdict' })
+  expect(out.outcome).toMatchObject({ outcome: 'refuse', defect_class: 'minimal', spans: ['src/stats.ts:1'], origin_kind: 'ruling', origin_ref: 'reviewers.verdict' })
 })
 
 test('reviewer != builder is refused before the provider fires; the trigger still guards the rows', async () => {

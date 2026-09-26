@@ -22,6 +22,10 @@ your last verdict finding by finding: fixed, or still standing, and did the fix 
 touched? You do not re-open a path git names unchanged; a span on one holds only under `reopen:`,
 naming the fact that changed your mind.
 
+When the packet carries `# Reference the brief names`, check the diff against each rule the brief
+lists under `## Must not break`: accepted values, empty input, bounds, errors raised. Any rule the
+port breaks is a `correctness` span on the diff's line, unless a brief line says why the port differs.
+
 Close with this fence and nothing after it:
 
 ```

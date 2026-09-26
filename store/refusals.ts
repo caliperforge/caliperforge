@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import type { Db } from './index.ts'
+import { BUILT } from './plans.ts'
 
 /** Refusals a plan takes before it waits for a person, however different each one is. */
 export const ROUNDS = 6
@@ -75,7 +76,7 @@ export function overBudget(db: Db, plan: number): { spent: number; ceiling: numb
   const row = db.prepare(`SELECT
       (SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'plan.token_ceiling') AS ceiling,
       (SELECT coalesce(sum(r.input_tokens + r.output_tokens), 0) FROM runs r
-        WHERE r.plan = ? AND julianday(r.at) > coalesce(
+        WHERE r.plan = ? AND r.${BUILT} AND julianday(r.at) > coalesce(
           (SELECT max(julianday(f.at)) FROM refusals f WHERE f.plan = ? AND f.cleared = 1), 0)) AS spent`)
     .get(plan, plan) as { ceiling: number | null; spent: number }
   return row.ceiling !== null && row.spent >= row.ceiling ? { spent: row.spent, ceiling: row.ceiling } : null

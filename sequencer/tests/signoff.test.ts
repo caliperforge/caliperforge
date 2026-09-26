@@ -52,7 +52,7 @@ function fake(pr: number | null = null): Desk & { cards: Map<number, Held>; log:
   }
 }
 
-test('an outside plan at sign-off gets one card, and the card links nothing on their thread', async () => {
+test('an outside plan at sign-off gets one card, links its rehearsal files view before the commit, and nothing on their thread', async () => {
   const w = await atBatch()
   const desk = fake()
   expect(signoffs(w.db, w.root, desk)).toEqual([{ plan: 1, card: 100, did: 'opened' }])
@@ -66,18 +66,15 @@ test('an outside plan at sign-off gets one card, and the card links nothing on t
   const outside = (card?.body ?? '').replace(/```markdown[\s\S]*?\n```\n/, '').replace(/`[^`]*`/g, '')
   expect(outside).not.toMatch(/#\d|acme\/widget|github\.com\/acme/)
   expect(unread(w.root).map((e) => [e.kind, e.ticket])).toEqual([['signoff', 'acme/widget#12']])
-})
 
-test('a card with a rehearsal pull request links its files view before the commit', async () => {
-  const w = await atBatch()
-  const desk = fake(5)
-  signoffs(w.db, w.root, desk)
-  const body = desk.cards.get(100)?.body ?? ''
+  drop(w.root, 1, 'signoff')
+  const rehearsed = fake(5)
+  signoffs(w.db, w.root, rehearsed)
+  const body = rehearsed.cards.get(100)?.body ?? ''
   const files = body.indexOf('https://github.com/caliperforge/widget/pull/5/files')
   expect(files).toBeGreaterThan(-1)
   expect(files).toBeLessThan(body.indexOf('https://github.com/caliperforge/widget/commit/'))
-  const outside = body.replace(/```markdown[\s\S]*?\n```\n/, '').replace(/`[^`]*`/g, '')
-  expect(outside).not.toMatch(/#\d|acme\/widget|github\.com\/acme/)
+  expect(body.replace(/```markdown[\s\S]*?\n```\n/, '').replace(/`[^`]*`/g, '')).not.toMatch(/#\d|acme\/widget|github\.com\/acme/)
 })
 
 test('go signs the head the card showed, closes the card, and the next tick sends it', async () => {

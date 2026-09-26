@@ -25,14 +25,18 @@ export interface Span {
   kind: string
 }
 
-export function inSource(text: string, added: Set<number>, ceilings: Ceilings): Span[] {
+export function inSource(text: string, added: Set<number>, ceilings: Ceilings, removed: Set<string>): Span[] {
   const src = ts.createSourceFile('subject.ts', text, ts.ScriptTarget.ESNext, true)
   const uses = counts(src)
   return [
-    ...comments(src).filter((c) => added.has(c.line)).flatMap((c) => judgeComment(text, c)),
+    ...comments(src).filter((c) => added.has(c.line) && !moved(c.text, removed)).flatMap((c) => judgeComment(text, c)),
     ...declared(src).filter((d) => added.has(d.line)).flatMap((d) => judgeDeclaration(d, uses)),
     ...functions(src).filter((f) => touched(src, f, added)).flatMap((f) => judgeSize(src, f, ceilings)),
   ].sort((a, b) => a.line - b.line)
+}
+
+function moved(comment: string, removed: Set<string>): boolean {
+  return comment.split('\n').every((l) => [...removed].some((r) => r.endsWith(l.trim())))
 }
 
 function judgeComment(text: string, c: { line: number; text: string; end: number }): Span[] {

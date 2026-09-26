@@ -206,13 +206,25 @@ function tail(output: string): string {
 export function npm(args: string[], cwd: string, bin = 'npm'): Ran {
   const held = slot()
   try {
-    const done = spawnSync(bin, args, { cwd, encoding: 'utf8', timeout: LONG.includes(bin) ? XCODE_CAP : CAP, maxBuffer: MAX })
+    const done = spawnSync(bin, args, { cwd, encoding: 'utf8', timeout: LONG.includes(bin) ? XCODE_CAP : CAP, maxBuffer: MAX,
+      env: unslotted() })
     if (done.error !== undefined && typeof done.stdout !== 'string') return { ok: false, code: '127', output: `${bin}: ${done.error.message}` }
     const output = `${done.stdout}${done.stderr}`
     return done.status === 0 ? { ok: true, output } : { ok: false, code: String(done.status ?? 1), output }
   } finally {
     if (held !== null) free(held)
   }
+}
+
+/**
+ * The run's own tests must not queue for the slots the run holds: with both taken by the two step-3 runs #313 let
+ * through, every test that reached `npm()` waited for ever and the cap killed the suite (exit 143, five jobs, 09-25).
+ */
+function unslotted(): NodeJS.ProcessEnv {
+  const env = { ...process.env }
+  delete env.CF_CHECK_SLOTS
+  delete env.CF_CHECK_SLOTS_DIR
+  return env
 }
 
 /**

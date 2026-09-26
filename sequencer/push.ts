@@ -11,7 +11,7 @@ import { headDigest, signedHead } from '../store/approvals.ts'
 import { forkGreen } from '../store/deliverables.ts'
 import type { Db } from '../store/index.ts'
 import { busy } from '../store/now.ts'
-import { internal, originIssue, type PlanRow } from '../store/plans.ts'
+import { internal, originIssue, originRef, type PlanRow } from '../store/plans.ts'
 import { GREEN, onBase } from './base.ts'
 import { npm } from './checks.ts'
 import { red } from './failures.ts'
@@ -349,7 +349,7 @@ function pushed(db: Db, plan: number, approval: number, url: string): void {
 export function headOf(root: string, plan: number): Head {
   const dir = srcDir(root, plan)
   if (!cloned(dir)) throw new Error(`plan ${String(plan)} has no checkout at ${dir}`)
-  commitWork(dir)
+  commitWork(dir, maybe(root, plan, COMMIT))
   return {
     dir,
     branch: git(dir, ['rev-parse', '--abbrev-ref', 'HEAD']).trim(),
@@ -357,11 +357,11 @@ export function headOf(root: string, plan: number): Head {
   }
 }
 
-function commitWork(dir: string): void {
+function commitWork(dir: string, message: string | null): void {
   git(dir, ['add', '-A', '--', '.'])
   if (git(dir, ['diff', '--cached', '--name-only']).trim() === '') return
   git(dir, ['-c', 'user.email=cf@caliperforge.dev', '-c', 'user.name=caliperforge',
-    'commit', '-qm', git(dir, ['rev-parse', '--abbrev-ref', 'HEAD']).trim()])
+    'commit', '-qm', message ?? git(dir, ['rev-parse', '--abbrev-ref', 'HEAD']).trim()])
 }
 
 export function title(root: string, plan: number): string {
@@ -483,6 +483,14 @@ function messageOf(root: string, plan: number): string {
   const subject = clean(title(root, plan))
   const body = said(maybe(root, plan, 'issue.md') ?? '').map(clean).join('\n\n')
   return body === '' ? subject : `${subject}\n\n${body}`
+}
+
+export const COMMIT = 'commit.msg'
+
+/** `Closes` stays owner-qualified: ci-green refuses a bare number (`rails/ci-green/index.ts:121`). */
+export function commitMessage(root: string, plan: PlanRow): string | null {
+  const ref = originRef(plan)
+  return ref === null ? null : `${messageOf(root, plan.id)}\n\nCloses ${ref.repo}#${String(ref.no)}\nPlan ${String(plan.id)}`
 }
 
 /** The host's own identity where it has one; a bare runner (CI, a test) commits as the machine. */

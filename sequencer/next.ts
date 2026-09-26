@@ -18,6 +18,8 @@ export interface Offer {
 /** The templates a step map exists for. A lane whose map is unwritten is on with nothing to step. */
 const MAPPED = new Set(['pr_path'])
 
+const ON_CEO = new Set<Wait>(['target_approval', 'ceo_batch'])
+
 export function route(db: Db, plan: PlanRow, now: Date, mine: Lease | null = null): Route {
   if (others(db, now, mine).some((l) => l.plan === plan.id)) return { wait: 'leased', on: null }
   if (!MAPPED.has(plan.template)) return { wait: 'no_step_map', on: null }
@@ -56,14 +58,16 @@ export function working(offers: Offer[], wide: number): Offer[] {
 
 /**
  * The plans this pipe steps this tick, in priority order. A queued plan that is
- * blocked holds no slot; a running one holds the slot it already took, and so does
+ * blocked holds no slot; a running one holds the slot it already took unless it waits on the CEO, and so does
  * one another tick has leased, which this tick offers to nobody.
  */
 export function picks(db: Db, pipe: PipeRow, now: Date = new Date(), mine: Lease | null = null): PlanRow[] {
   const leases = new Set(others(db, now, mine).map((l) => l.plan))
   const mapped = live(db, pipe).filter((p) => MAPPED.has(p.template))
-  const free = mapped.filter((p) => leases.has(p.id) || blocked(db, p) === null
-    || (p.state === 'running' && overlapping(db, p) === null))
+  const free = mapped.filter((p) => {
+    const stop = blocked(db, p)
+    return leases.has(p.id) || stop === null || (p.state === 'running' && overlapping(db, p) === null && !ON_CEO.has(stop))
+  })
   return underCap(pipe, free, leases)
     .filter((p) => !leases.has(p.id) && (p.state !== 'running' || blocked(db, p) === null))
 }

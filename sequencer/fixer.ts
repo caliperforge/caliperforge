@@ -5,7 +5,7 @@ import { record, ticketOf } from '../cli/inbox.ts'
 import type { Post } from '../cli/watch.ts'
 import type { Provider } from '../providers/kind.ts'
 import { packet } from '../runner/index.ts'
-import { seat, tight } from '../runner/rules.ts'
+import { load, seat, tight } from '../runner/rules.ts'
 import { mark } from '../store/decisions.ts'
 import type { Db } from '../store/index.ts'
 import { returnToLane } from '../store/holds.ts'
@@ -16,6 +16,7 @@ import { pending } from '../store/transcript.ts'
 import { hold, unhold } from './hold.ts'
 import { prose } from './prose.ts'
 import { WIRE, type Wire } from './push.ts'
+import { recorded } from './seat.ts'
 import { afresh, cloned, drop, maybe, move, planDir, put, SELF, titleOf } from './workspace.ts'
 
 /**
@@ -94,13 +95,15 @@ export async function fixer(db: Db, root: string, plan: PlanRow, decision: { id:
 
 async function ask(db: Db, root: string, plan: PlanRow, decision: { why: string }, m: Mode, provider: Provider):
   Promise<{ got: Fix | null; tokens: number }> {
-  const { manifest, prompt } = seat(root, 'fixer')
+  load(db, root)
+  const { manifest, prompt, hash } = seat(root, 'fixer')
   const dir = planDir(root, plan.id)
   const tools = m === 'live' ? manifest.tools : manifest.tools.filter((t) => ['Read', 'Glob', 'Grep'].includes(t))
   const fired = await provider.fire({
     ...packet({ ...manifest, tools }, prompt, tight(root), issue(db, root, plan, decision, m), dir, pending(dir, 'fixer')),
     wall: Math.min(wall(db), FIX_WALL),
   })
+  recorded(db, plan.id, plan.step, 'fixer', hash, provider.name, manifest, fired)
   return { got: fired.ended === 'completed' ? read(fired.text) : null, tokens: fired.usage.input + fired.usage.output }
 }
 

@@ -190,6 +190,8 @@ export interface Desk {
   seen: (no: number) => Seen
   unlabel: (no: number, label: Answer) => void
   close: (no: number, comment: string) => void
+  rehearsal: (fork: string, branch: string) => number | null
+  lines: (fork: string, pr: number) => string[]
 }
 
 export type Run = (args: string[], input?: string) => string
@@ -204,6 +206,14 @@ const Events = z.array(z.looseObject({
   event: z.string(),
   actor: z.object({ login: z.string() }).nullable(),
   label: z.object({ name: z.string() }).optional(),
+}))
+
+const Lines = z.array(z.object({
+  path: z.string(),
+  line: z.int().nullable(),
+  original_line: z.int().nullable(),
+  body: z.string(),
+  user: z.object({ login: z.string() }),
 }))
 
 function run(args: string[], input?: string): string {
@@ -237,6 +247,13 @@ export function desk(repo: string, read: Read = gh, exec: Run = run): Desk {
     },
     unlabel: (no, label) => void exec(['issue', 'edit', String(no), '--repo', repo, '--remove-label', label]),
     close: (no, comment) => void exec(['issue', 'close', String(no), '--repo', repo, '--comment', comment]),
+    rehearsal: (fork, branch) => rehearsal(fork, branch, read),
+    lines: (fork, pr) => Lines.parse(read(['api', `repos/${fork}/pulls/${String(pr)}/comments?per_page=100`]))
+      .filter((c) => c.user.login === me() && c.body.trim() !== '')
+      .map((c) => {
+        const at = c.line ?? c.original_line
+        return `${c.path}${at === null ? '' : `:${String(at)}`} ${c.body.trim()}`
+      }),
   }
 }
 

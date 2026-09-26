@@ -14,6 +14,7 @@ const ESC = String.fromCharCode(27)
 
 const LOG = [
   `check\tRun npm run test\t2026-09-26T13:10:02.1234567Z ${ESC}[31m FAIL ${ESC}[39m src/hello.test.ts > hello > says hey`,
+  'check\tRun npm run test\t2026-09-26T13:10:02.1534567Z ^[[41m^[[1m FAIL ^[[22m^[[49m src/bye.test.ts^[[2m > ^[[22mbye > says bye',
   'check\tRun npm run test\t2026-09-26T13:10:02.2234567Z AssertionError: expected "hi" to be "hey"',
   'check\tRun npm run test\t2026-09-26T13:10:03.0000000Z ##[error]Process completed with exit code 1.',
 ].join('\n')
@@ -46,7 +47,7 @@ test('green at the head passes step 3 without the laptop suite', async () => {
   const fired = await rails(w, wire)
   expect(fired).toMatchObject({ step: 3, outcome: 'pass' })
   expect(fired?.note).toContain('checks ran on GitHub CI at caliperforge/caliperforge@')
-  expect(sent).toEqual(['send src p2-let-an-internal-plan-run'])
+  expect(sent).toEqual(['send src +p2-let-an-internal-plan-run'])
   expect(w.db.prepare("SELECT outcome FROM verdicts WHERE plan = ? AND rail_id = 'checks'").get(ID)).toEqual({ outcome: 'pass' })
   expect(plan(w.db, ID).step).toBe(4)
 })
@@ -57,6 +58,7 @@ test('no run yet holds step 3, then the run passes it', async () => {
   await toRails(w, wire)
   expect(await rails(w, wire)).toMatchObject({ step: 3, outcome: 'pass' })
   expect(plan(w.db, ID).step).toBe(3)
+  expect(w.db.prepare('SELECT doing FROM now WHERE plan = ?').get(ID)).toEqual({ doing: 'waiting on CI' })
   expect((await rails(w, wire))?.note).toContain('GitHub CI')
   expect(plan(w.db, ID).step).toBe(4)
 })
@@ -69,7 +71,7 @@ test('red sends the build back naming the failing test', async () => {
   await toRails(w, wire)
   const fired = await rails(w, wire)
   expect(fired).toMatchObject({ step: 3, outcome: 'refuse' })
-  expect(fired?.spans).toEqual(['checks:test', 'src/hello.test.ts hello > says hey'])
+  expect(fired?.spans).toEqual(['checks:test', 'src/hello.test.ts hello > says hey', 'src/bye.test.ts bye > says bye'])
   expect(fired?.note).toBe('npm run test on GitHub CI exit 1')
   expect(plan(w.db, ID).step).toBe(2)
 })

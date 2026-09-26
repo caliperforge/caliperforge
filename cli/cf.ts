@@ -29,6 +29,7 @@ import { approve as approveCard, batch, landed, refuse as refuseCard, render, re
 import { awaiting, day, dryLines, halted, laneLine, open as openPlans, runsOf, section, tickets, ticketSection,
   tickNote, verdictsOf, waitLine, waits, windowLine } from './brief.ts'
 import { check, fill } from './digests.ts'
+import { write as writeMap } from './map.ts'
 import { desk, gh } from './gh.ts'
 import { ack, crashed, events, line, notify, record as keep, unread } from './inbox.ts'
 import { measure, render as renderPulse } from './measure.ts'
@@ -68,6 +69,10 @@ cf.command('digests').option('--check', 'write nothing; name each digest the tre
     const written = fill(root, today)
     out(written.length === 0 ? 'digests already right\n' : written.map((p) => `wrote ${p}\n`).join(''))
   })
+
+cf.command('map').argument('[dir]', 'the tree to map', '.').action((dir: string) => {
+  out(`wrote ${writeMap(resolve(dir))}\n`)
+})
 
 cf.command('dump').argument('[out]', 'file to write the dump to', 'cf.dump.sql').action((file: string) => {
   const path = resolve(root, file)

@@ -5,10 +5,10 @@ import { approve, batch, refuse, type Card } from '../cli/batch.ts'
 import type { Answer, Desk, Seen } from '../cli/gh.ts'
 import { notify, record, type Event, type Kind } from '../cli/inbox.ts'
 import type { Db } from '../store/index.ts'
-import { needsCeo, PlanRow, rewind } from '../store/plans.ts'
+import { ENTER, needsCeo, PlanRow, rewind } from '../store/plans.ts'
 import { clear } from '../store/refusals.ts'
 import type { Board } from '../rails/ci-green/index.ts'
-import { BOARD, headOf, opened, title } from './push.ts'
+import { BOARD, headOf, opened, rehearsalBranch, title } from './push.ts'
 import { diffOf, drop, FORK, get, maybe, put, repoName } from './workspace.ts'
 
 /**
@@ -63,33 +63,45 @@ function answered(db: Db, root: string, card: Card, kept: Kept, seen: Seen & { a
   const close = (comment: string): void => { if (seen.open) desk.close(kept.no, comment) }
   if (seen.answer === 'go') {
     approve(db, root, 'plan', card.id)
-    db.prepare("UPDATE plans SET state = 'running' WHERE id = ? AND state = 'blocked_on_ceo'").run(card.id)
+    db.prepare(`UPDATE plans SET state = ${ENTER} WHERE id = ? AND state = 'blocked_on_ceo'`).run(card.id)
     close(`Signed at ${card.digest.slice(0, 12)}. It goes out on the next tick.`)
     drop(root, card.id, FILE)
   } else if (seen.answer === 'talk') {
     desk.unlabel(kept.no, 'talk')
     tell(root, card, 'asked', `wants to talk about it: ${kept.url}${seen.words === null ? '' : ` (${flat(seen.words)})`}`, now)
   } else {
-    refuse(db, root, 'plan', card.id, seen.words === null ? 'signoff.no_words' : 'signoff.no')
-    if (seen.words === null) {
+    const words = wordsOf(db, root, card.id, seen.words, desk)
+    refuse(db, root, 'plan', card.id, words === null ? 'signoff.no_words' : 'signoff.no')
+    if (words === null) {
       needsCeo(db, planOf(db, card.id))
       save(root, card.id, { ...kept, shut: true })
       close('Refused with no words, so it waits for the COO.')
       tell(root, card, 'asked', `refused at sign-off with no words: ${kept.url}`, now)
     } else {
       db.transaction(() => { clear(db, card.id); rewind(db, card.id, BUILD) })()
-      put(root, card.id, 'refusal.md', said(kept.url, seen.words))
-      put(root, card.id, 'issue.md', ruled(get(root, card.id, 'issue.md'), seen.words, now.toISOString().slice(0, 10)))
+      put(root, card.id, 'refusal.md', said(kept.url, words))
+      put(root, card.id, 'issue.md', ruled(get(root, card.id, 'issue.md'), words, now.toISOString().slice(0, 10)))
       close('Refused. It goes back to the builder with your words, and they are now part of its brief; a new card comes with the next round.')
       drop(root, card.id, FILE)
-      tell(root, card, 'refused', `back to the builder: ${flat(seen.words)}`, now)
+      tell(root, card, 'refused', `back to the builder: ${flat(words)}`, now)
     }
   }
   return { plan: card.id, card: kept.no, did: seen.answer }
 }
 
+function wordsOf(db: Db, root: string, plan: number, card: string | null, desk: Desk): string | null {
+  const { fork, no } = rehearsalOf(db, root, plan, desk)
+  const all = [...(card === null ? [] : [card]), ...(no === null ? [] : desk.lines(fork, no))]
+  return all.length === 0 ? null : all.join('\n\n')
+}
+
+function rehearsalOf(db: Db, root: string, plan: number, desk: Desk): { fork: string; no: number | null } {
+  const fork = `${FORK}/${repoName(subjectOf(db, plan).repo)}`
+  return { fork, no: desk.rehearsal(fork, rehearsalBranch(db, root, plan)) }
+}
+
 function opening(db: Db, root: string, card: Card, desk: Desk, now: Date): Signed {
-  const made = desk.open(titleFor(db, root, card.id), bodyFor(db, root, card))
+  const made = desk.open(titleFor(db, root, card.id), bodyFor(db, root, card, desk))
   save(root, card.id, { no: made.no, digest: card.digest, url: made.url, shut: false })
   tell(root, card, 'signoff', `sign it off: ${made.url}`, now)
   return { plan: card.id, card: made.no, did: 'opened' }
@@ -129,11 +141,12 @@ function titleFor(db: Db, root: string, plan: number): string {
  * commit on our fork, and the words the maintainer will read, fenced so no mention or reference in
  * them pings anyone or links anything before he says go.
  */
-export function bodyFor(db: Db, root: string, card: Card): string {
+export function bodyFor(db: Db, root: string, card: Card, desk: Desk): string {
   const s = subjectOf(db, card.id)
   const head = headOf(root, card.id)
   const open = opened(db, card.id)
-  const fork = `${FORK}/${repoName(s.repo)}`
+  const { fork, no } = rehearsalOf(db, root, card.id, desk)
+  const files = no === null ? '' : `[the diff on our fork](https://github.com/${fork}/pull/${String(no)}/files); `
   const ci = boardOf(root, card.id)
   const text = open === null ? card.text : lastMessage(head.dir)
   const fence = '`'.repeat(Math.max(3, longest(text) + 1))
@@ -143,7 +156,7 @@ export function bodyFor(db: Db, root: string, card: Card): string {
     headline(card.marks.every((m) => m.ok), ci),
     '',
     `- Upstream: ${code(s.repo)} issue ${code(String(s.issue_no))}, written as code so this card leaves no mark on their thread`,
-    `- Change: ${card.change.trim().split('\t').join(', ')}; [the commit on our fork](https://github.com/${fork}/commit/${head.sha})`,
+    `- Change: ${card.change.trim().split('\t').join(', ')}; ${files}[the commit on our fork](https://github.com/${fork}/commit/${head.sha})`,
     `- Gates: ${card.marks.map((m) => `${m.name} ${m.ok ? 'pass' : 'NOT PASSED'}`).join(', ')}`,
     ...modes(root, card.id),
     ...(ci === null ? [] : [`- Their CI on our fork: ${ciLine(ci)}`]),
@@ -158,7 +171,7 @@ export function bodyFor(db: Db, root: string, card: Card): string {
     fence,
     '',
     ...unsaid(root, card.id, open === null ? text : null),
-    '**Answer with one label.** `go` sends it. `no` refuses it: comment first and the builder reworks against your words. `talk` hands it to the COO.',
+    '**Answer with one label.** `go` sends it. `no` refuses it: comment on the card or on a line of the diff first and the builder reworks against your words. `talk` hands it to the COO.',
     '',
     `<sub>plan ${String(card.id)}, head ${head.sha.slice(0, 12)}, digest ${card.digest.slice(0, 12)}</sub>`,
     '',

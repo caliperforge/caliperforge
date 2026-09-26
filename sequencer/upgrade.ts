@@ -29,7 +29,8 @@ export function behind(db: Db, root: string): string | null {
 export function upgrade(db: Db, root: string, sha: string): string | null {
   const branch = git(root, ['rev-parse', '--abbrev-ref', 'HEAD']).trim()
   try {
-    git(root, ['pull', '--ff-only'])
+    if (branch === 'HEAD') forward(root)
+    else git(root, ['pull', '--ff-only'])
   } catch (error) {
     return `${branch} cannot fast-forward to ${sha.slice(0, 12)}: ${said(error)}`
   }
@@ -47,6 +48,16 @@ export function upgraded(db: Db, root: string, lap: Receipt): Receipt {
   if (sha === null) return lap
   const reason = upgrade(db, root, sha)
   return reason === null ? lap : { ...lap, exit: 1, note: `${lap.note}; ${reason}` }
+}
+
+/**
+ * #337. The pinned tick tree (#168) sits on a detached HEAD, where `git pull` has no branch to pull. It moves the
+ * way tick.sh moves it: to origin/main, and only forward.
+ */
+function forward(root: string): void {
+  git(root, ['fetch', '-q', '--no-tags', 'origin', '+refs/heads/main:refs/remotes/origin/main'])
+  git(root, ['merge-base', '--is-ancestor', 'HEAD', 'refs/remotes/origin/main'])
+  git(root, ['checkout', '-q', '--detach', 'refs/remotes/origin/main'])
 }
 
 export function said(error: unknown): string {

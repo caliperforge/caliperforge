@@ -13,9 +13,10 @@ import { blocked, kernel } from '../steps.ts'
 import { diffOf, doneIds, get, narrowing, put, snapshot, srcDir } from '../workspace.ts'
 import { GREEN } from '../base.ts'
 import { record } from '../../store/files.ts'
+import { record as signal } from '../../store/signals.ts'
 import { benchPacket } from '../../runner/packet.ts'
 import type { Packet, Provider } from '../../providers/kind.ts'
-import type { Wire } from '../push.ts'
+import { forkCi, type Wire } from '../push.ts'
 import { approve, builds, built, CARRIED, dropping, internalPlan, KOTLIN, ours, owning, PASS, plan, REFUSE, rerunning, RUN, runsAfter, runsOn, stub, watched, WORDS, world, type World } from './world.ts'
 
 const head = (cwd: string, args: string[]): string => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim()
@@ -386,6 +387,40 @@ test('D4 a code line in the delta still fires senior review', async () => {
   expect(modeOf(w.root, 5)).toMatch(/^delta: /)
 })
 
+/** Review's and senior's packets on an internal plan built on FOUR, with Greptile's `OLD` on another head and, if `current`, `NEW` on this one. */
+async function greptiled(current: boolean): Promise<Packet[]> {
+  const w = world()
+  w.db.prepare('DELETE FROM plans WHERE id = 1').run()
+  ours(w.root)
+  internalPlan(w.db, w.root, MINE)
+  for (let step = 0; step < 2; step += 1) await tick(w.db, w.root, stub(CARRIED))
+  built(w.root, MINE, FOUR)
+  for (let step = 0; step < 2; step += 1) await tick(w.db, w.root, stub(CARRIED, 0, PASS))
+  const bot = (body: string, sha: string): void => {
+    signal(w.db, { repo: 'caliperforge/cf', pr: 1, kind: 'bot_review', author: 'greptile', at: '2026-09-26T00:00:00Z',
+      external_id: body, score: 5, plan: MINE, body, head: sha })
+  }
+  bot('OLD', 'f'.repeat(40))
+  if (current) bot('NEW', head(srcDir(w.root, MINE), ['rev-parse', 'HEAD']))
+  const seen: Packet[] = []
+  for (let step = 0; step < 2; step += 1) await tick(w.db, w.root, stub(CARRIED, 0, PASS, (p) => seen.push(p)))
+  return seen
+}
+
+const senior = (packets: Packet[]): string => packets.find((p) => p.prompt.includes('# First verdict'))?.prompt ?? ''
+
+test('D1 D2 D3 senior is handed Greptile on the current head only, and review never is', async () => {
+  const both = await greptiled(true)
+  expect(section(senior(both), 'Greptile on this head')).toBe('NEW')
+  expect(senior(both)).not.toContain('OLD')
+  expect(reviewer(both)).not.toContain('# Greptile on this head')
+
+  const stale = await greptiled(false)
+  expect(senior(stale)).toContain('# First verdict')
+  expect(senior(stale)).not.toContain('# Greptile on this head')
+  expect(senior(stale)).not.toContain('OLD')
+})
+
 test('narrowing calls a moved path the plan does not touch main\'s, and proves the rest with its blob', () => {
   const dir = mkdtempSync(join(tmpdir(), 'cf-narrow-'))
   const run = (...args: string[]): string => execFileSync('git', args, { cwd: dir, encoding: 'utf8' })
@@ -576,6 +611,27 @@ test('a run still going is waited on past the first-run window', async () => {
   expect(last?.note).toMatch(/is still running CI, tick 11 of 45/)
   expect(w.db.prepare("SELECT count(*) AS n FROM verdicts WHERE plan = 1 AND rail_id = 'ci-green'").get())
     .toEqual({ n: 0 })
+})
+
+const atCi = async (): Promise<World> => {
+  const w = world()
+  approve(w.db, w.target)
+  for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
+  return w
+}
+
+const now = (w: World): unknown[] => w.db.prepare('SELECT doing, detail FROM now WHERE plan = 1').all()
+
+test('a CI hold leaves a waiting on CI row in now', async () => {
+  const w = await atCi()
+  forkCi(w.db, w.root, plan(w.db, 1), 'acme/widget', watched([], w.root, 1, runsOn(w.root, 1, 'in_progress', '')))
+  expect(now(w)).toEqual([{ doing: 'waiting on CI', detail: expect.stringMatching(/is still running CI, tick 1 of 45$/) as unknown }])
+})
+
+test('a CI run judged without a hold leaves no now row', async () => {
+  const w = await atCi()
+  expect(forkCi(w.db, w.root, plan(w.db, 1), 'acme/widget', watched([], w.root, 1))).toBeNull()
+  expect(now(w)).toEqual([])
 })
 
 test('the push window is waited out: no run at the new head holds step 6, the run that appears is judged', async () => {

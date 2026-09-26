@@ -11,9 +11,10 @@ import { weakened } from '../rails/test-weakened/index.ts'
 import { sources, tight } from '../rails/tight/index.ts'
 import { filesOf } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
+import { busy } from '../store/now.ts'
 import { BUILT, internal, type PlanRow } from '../store/plans.ts'
 import { builder } from '../templates/pr-path.ts'
-import { checks, mode, type Failure } from './checks.ts'
+import { checks, mode, npm, type Failure, type Run } from './checks.ts'
 import { ciChecks } from './ci.ts'
 import { outsideLanguage } from './gates.ts'
 import type { Outcome } from './kind.ts'
@@ -59,7 +60,7 @@ export function preReview(db: Db, root: string, plan: PlanRow, wire?: Wire): Out
     const holder = lock(root, plan.id)
     if (holder !== null) return { outcome: 'pass', held: true, spans: ['checks'], note: `checks wait: plan ${String(holder.plan)} is running its tests` }
     try {
-      const failed = checks(srcDir(root, plan.id), undefined, outside === null ? narrow(db, plan) : [],
+      const failed = checks(srcDir(root, plan.id), noted(db, plan.id), outside === null ? narrow(db, plan) : [],
         outside === null ? null : { language: outside, files: filesOf(db, plan.id).map((f) => f.path) })
       recordRail(db, join(root, 'rails', 'checks'), plan.id, checked(failed, diffOf(root, plan.id)), 0)
       if (failed !== null) return broke(failed)
@@ -80,6 +81,10 @@ export function preReview(db: Db, root: string, plan: PlanRow, wire?: Wire): Out
 export function narrow(db: Db, plan: PlanRow): string[] {
   const built = db.prepare(`SELECT count(*) AS n FROM runs WHERE plan = ? AND step = 2 AND ${BUILT}`).get(plan.id) as { n: number }
   return built.n > 1 ? filesOf(db, plan.id).map((f) => f.path) : []
+}
+
+function noted(db: Db, plan: number): Run {
+  return (args, cwd, bin) => npm(args, cwd, bin, (doing, detail) => { busy(db, plan, doing, detail) })
 }
 
 /** The roster and seat files a fill reads are the builder's, so their typo refuses this plan where a throw takes the lap. */
@@ -123,7 +128,7 @@ function rest(db: Db, root: string, plan: PlanRow, handback: string, diff: strin
     ['secret-scan', () => scan(diff)],
     ['authority', () => authority(root, name, diff, kernelPlan(plan), fence, outside, kernelPlan(plan) ? renumbered(src, diff) : [])],
     ['tight', () => tight(root, { diff, sources: sources(src, diff), ...prose(root, plan), code: internal(plan) })],
-    ['test-weakened', () => weakened(diff, 'green')],
+    ['test-weakened', () => weakened(diff, 'green', [maybe(root, plan.id, 'ask.md') ?? '', get(root, plan.id, 'issue.md'), prose(root, plan).description].join('\n'))],
     ['identifiers', () => identifiers(src, handback)],
   ]
 }

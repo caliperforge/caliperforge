@@ -32,6 +32,7 @@ write, or one that is not there, refuses the build.
 
 ```
 ---
+summary: <the change in one line>
 done:
   - id: D1
     status: done

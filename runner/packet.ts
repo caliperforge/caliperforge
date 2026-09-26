@@ -100,7 +100,7 @@ export function benchPacket(
 
 const MAP = 'The whole diff, for the map. Judge what changed since your last verdict, handed below.'
 
-function assembled(root: string, name: string, manifest: Review, bench: Bench, transcript: string): Packet {
+export function assembled(root: string, name: string, manifest: Review, bench: Bench, transcript: string): Packet {
   const sections: [string, string | undefined][] = [
     ['Changed code in context', framed(bench.context, 'Each hunk inside the function that encloses it. Judge from this and the diff; open a file only for what neither holds.')],
     ['Checks', bench.checks],

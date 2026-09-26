@@ -90,6 +90,8 @@ test('a push that fails runs the suite on the laptop', async () => {
   const wire: Wire = { ...watched([], w.root, ID), send: () => { throw new Error('offline') } }
   await toRails(w, wire)
   expect((await rails(w, wire))?.note).toBe(LOCAL)
+  expect(w.db.prepare("SELECT plan, actor, message FROM events WHERE kind = 'swallowed'").all())
+    .toEqual([{ plan: ID, actor: 'ciChecks', message: 'offline' }])
 })
 
 test('without the switch the laptop runs the suite and nothing is sent', async () => {

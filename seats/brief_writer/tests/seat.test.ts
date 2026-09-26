@@ -27,6 +27,15 @@ test('the prompt names every part the shape check reads, and the unclear and spl
   }
 })
 
+test('D4: the split fence shows after on each part, and the prompt says when to name an earlier part', () => {
+  const prompt = seat(root, 'brief_writer').prompt
+  const fence = /outcome: split[\s\S]*?\n---/.exec(prompt)?.[0] ?? ''
+  expect(fence.match(/^ {4}after: /gm)).toHaveLength(fence.match(/^ {2}- title: /gm)?.length ?? -1)
+  expect(prompt.replace(/\s+/g, ' ')).toContain(
+    'Name an earlier part in `after:` only when this part reads or changes code that part adds; parts that touch different files are `after: none`.',
+  )
+})
+
 test('the prompt sends a reference implementation\'s input rules to Must not break', () => {
   expect(seat(root, 'brief_writer').prompt.replace(/\s+/g, ' ')).toContain(
     'When the ask mirrors, ports or matches another implementation, list that implementation\'s input rules under `## Must not break`: the values it accepts, what it does with an empty input, its bounds and the errors it raises, each with its file:line.',

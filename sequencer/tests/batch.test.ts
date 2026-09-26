@@ -261,6 +261,43 @@ test('D1 D2 D3 rounds before the pull request fast-forward -next on tips the bra
     'open acme/widget caliperforge:widget-12-a1'])
 })
 
+async function refollowed(handback: string): Promise<{ git: (args: string[]) => string; again: () => void }> {
+  const w = world()
+  approve(w.db, w.target)
+  const src = srcDir(w.root, 1)
+  const git = (args: string[]): string => execFileSync('git', args, { cwd: src, encoding: 'utf8' }).trim()
+  const log = watched([], w.root, 1)
+  const wire = { ...log, send: (dir: string, ref: string) => {
+    log.send(dir, ref)
+    execFileSync('git', ['push', '-q', 'origin', ref], { cwd: dir })
+  } }
+  const round = async (said: string, ticks: number): Promise<void> => {
+    for (let at = 1; at < ticks; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+    writeFileSync(join(src, 'src/hello.ts'), `export const hello = (): string => "${said}"\n`)
+    await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  }
+  await round('hey', 7)
+  put(w.root, 1, 'step-2.handback.md', handback)
+  rewind(w.db, 1, 4)
+  await round('hi', 3)
+  return { git, again: () => { next(w.root, plan(w.db, 1), 'acme/widget', wire) } }
+}
+
+test('D1 D3 D4 a follow-up commit is the handback summary with no upstream number, and the next tick keeps it', async () => {
+  const { git, again } = await refollowed('Renamed.\n\n---\nsummary: rename hello for #12\ndone:\n  - id: D1\n---\n')
+  const message = git(['log', '-1', '--format=%B'])
+  expect(message).toBe('fix: rename hello for')
+  expect(message).not.toMatch(/#\d/)
+  const head = git(['rev-parse', 'HEAD'])
+  again()
+  expect(git(['rev-parse', 'HEAD'])).toBe(head)
+})
+
+test('D2 a follow-up commit whose handback has no summary says it addresses review', async () => {
+  const { git } = await refollowed('Renamed.\n\n---\ndone:\n  - id: D1\n---\n')
+  expect(git(['log', '-1', '--format=%B'])).toBe('fix: address review')
+})
+
 test('a counterparty finding on merged code is an escape against the step the map says owns it', async () => {
   const w = await pushed()
   const merged = pr({

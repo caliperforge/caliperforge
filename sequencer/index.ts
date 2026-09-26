@@ -34,7 +34,7 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
   read: (repo: string, no: number) => Pr = readPr, wire?: Wire, chain = 0, labels?: Read, each = Infinity,
   apart?: Apart, lines?: string[]): Promise<Fired[]> {
   for (const signal of capture(db, read, root, labels)) started(db, signal, root)
-  if (labels !== undefined) lines?.push(...intake(db, root, labels))
+  if (labels !== undefined) (lines ?? []).push(...intake(db, root, labels))
   reap(root, terminal(db))
   reprice(db, labels)
   const out: Fired[] = []

@@ -137,12 +137,13 @@ test('D5: the tick lists issues only when handed a reader', async () => {
   await tick(db, root, stub(CARRIED))
   expect(db.prepare('SELECT count(*) AS n FROM plans').get()).toEqual({ n: 0 })
   const log: string[] = []
-  const sink: string[] = []
   await tick(db, root, stub(CARRIED), undefined, undefined, undefined, 0, (args) => {
     log.push(args.join(' '))
     throw new Error('gh is down')
-  }, undefined, undefined, sink)
+  })
   expect(log).toEqual([`issue list --repo ${REPO} --state open --limit ${String(WINDOW)} --json number,title,body,url,labels`])
+  const sink: string[] = []
+  await tick(db, root, stub(CARRIED), undefined, undefined, undefined, 0, () => { throw new Error('gh is down') }, undefined, undefined, sink)
   expect(tickNote([], [], sink)).toContain(`${REPO}: gh is down`)
 })
 

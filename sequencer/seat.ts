@@ -24,7 +24,7 @@ import { deletions } from './fence.ts'
 import { fenceFor, languageFor } from './route.ts'
 import { gates, outsideLanguage } from './gates.ts'
 import type { Outcome } from './kind.ts'
-import { carried, cloned, diffOf, diffSince, drop, get, holds, maybe, move, narrowing, planDir, put, snapshot, srcDir } from './workspace.ts'
+import { carried, cloned, diffOf, diffSince, drop, get, headSha, holds, maybe, move, narrowing, planDir, put, snapshot, srcDir } from './workspace.ts'
 import { kernelPlan } from './home.ts'
 
 const INSERT = `INSERT INTO runs
@@ -253,6 +253,7 @@ export async function fireReview(db: Db, root: string, plan: PlanRow, step: Step
     ...(manifest.gate === 'senior_review' ? referenced(src, issue) : {}),
     ...checked(db, plan, src, diffOf(root, plan.id)),
     ...(manifest.reads_verdict ? { verdict: priorVerdict(root, plan.id) } : {}),
+    ...(manifest.gate === 'senior_review' && cloned(src) ? greptile(db, plan.id, headSha(src)) : {}),
     ...rounds(db, root, plan.id, step.step),
   }
   try {
@@ -297,6 +298,12 @@ export function checked(db: Db, plan: PlanRow, src: string, diff: string): { che
   }
   const scope = narrow(db, plan).length > 0 ? 'the tests this plan\'s files reach' : 'the whole suite'
   return { checks: `Passed on this diff: every script the checkout names exits zero (${mode(src)}, ${scope}). Do not re-derive what they settle.` }
+}
+
+function greptile(db: Db, plan: number, head: string): Pick<Bench, 'bot'> {
+  const row = db.prepare(`SELECT body FROM signals WHERE plan = ? AND kind = 'bot_review' AND head = ? AND body IS NOT NULL
+    ORDER BY id DESC LIMIT 1`).get(plan, head) as { body: string } | undefined
+  return row === undefined ? {} : { bot: row.body }
 }
 
 /** From a reviewer's second round on: the verdict it wrote last round, the refusal that sent the build back, and what the tree did since the one it judged. */

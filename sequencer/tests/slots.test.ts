@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process'
 import { existsSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { expect, test } from 'vitest'
+import { expect, test, vi } from 'vitest'
 import { free, npm, slot } from '../checks.ts'
 
 test('no limit when unset', () => {
@@ -35,6 +35,35 @@ test('a live holder is waited on', async () => {
   expect(slot(dir, 1, 20)).toBe(path)
   expect(Date.now() - began).toBeGreaterThanOrEqual(250)
   holder.kill()
+})
+
+test('a check that waits for a slot records the wait once, then the command', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cf-slot-'))
+  const path = join(dir, 'slot-0')
+  const holder = spawn(process.execPath, ['-e',
+    `require('fs').writeFileSync(${JSON.stringify(path)}, String(process.pid)); setTimeout(() => require('fs').rmSync(${JSON.stringify(path)}), 400)`])
+  while (!existsSync(path)) await new Promise((r) => setTimeout(r, 10))
+  const seen: string[][] = []
+  vi.stubEnv('CF_CHECK_SLOTS', '1')
+  vi.stubEnv('CF_CHECK_SLOTS_DIR', dir)
+  try {
+    npm(['-e', ''], tmpdir(), 'node', (doing, detail) => void seen.push([doing, detail]))
+  } finally {
+    vi.unstubAllEnvs()
+    holder.kill()
+  }
+  expect(seen).toEqual([['waiting for a check slot', 'node -e '], ['checks', 'node -e ']])
+})
+
+test('a check that never waited records only the command', () => {
+  const seen: string[][] = []
+  vi.stubEnv('CF_CHECK_SLOTS', undefined)
+  try {
+    npm(['-e', ''], tmpdir(), 'node', (doing, detail) => void seen.push([doing, detail]))
+  } finally {
+    vi.unstubAllEnvs()
+  }
+  expect(seen).toEqual([['checks', 'node -e ']])
 })
 
 test('a check never hands its slots to the tests it runs', () => {

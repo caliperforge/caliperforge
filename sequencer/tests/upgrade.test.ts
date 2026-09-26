@@ -22,13 +22,14 @@ const store = (): Db => fresh(join(import.meta.dirname, '../../schema'))
 const version = (db: Db): number => Number(db.pragma('user_version', { simple: true }))
 
 /** The lap of `sequencer/tests/land.test.ts`, with `sql` on the main it lands over and the COO's tree cloned before it. */
-async function lands(sql: string): Promise<{ w: World; live: string; sha: string }> {
+async function lands(sql: string, detached = false): Promise<{ w: World; live: string; sha: string }> {
   const w = world()
   w.db.prepare('DELETE FROM plans WHERE id = 1').run()
   ours(w.root)
   internalPlan(w.db, w.root, ID)
   const live = mkdtempSync(join(tmpdir(), 'cf-live-'))
   git(live, ['clone', '-q', '--no-local', join(w.root, 'remotes', SELF), live])
+  if (detached) git(live, ['checkout', '-q', '--detach'])
   const wire = landing(watched([], w.root, ID))
   for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
   built(w.root, ID, 'export const landed = true')
@@ -80,6 +81,24 @@ test('a live tree with a commit of its own is refused: no ref moves and no schem
   expect(git(live, ['rev-parse', 'HEAD'])).toBe(head)
   expect(git(live, ['rev-parse', 'main'])).toBe(head)
   expect(version(db)).toBe(0)
+})
+
+test('a detached tick tree moves forward to the landing, migrated, and its receipt stays clean', async () => {
+  const { w, live, sha } = await lands('CREATE TABLE live (id INTEGER PRIMARY KEY);\n', true)
+
+  expect(upgraded(w.db, live, LAP)).toEqual(LAP)
+  expect(git(live, ['rev-parse', 'HEAD'])).toBe(sha)
+  expect(git(live, ['rev-parse', '--abbrev-ref', 'HEAD'])).toBe('HEAD')
+  expect(version(w.db)).toBe(18)
+})
+
+test('a detached tick tree carrying a commit of its own is refused and does not move', () => {
+  const { live, sha } = diverged()
+  git(live, ['checkout', '-q', '--detach'])
+  const head = git(live, ['rev-parse', 'HEAD'])
+
+  expect(upgrade(store(), live, sha)).toContain(`HEAD cannot fast-forward to ${sha.slice(0, 12)}`)
+  expect(git(live, ['rev-parse', 'HEAD'])).toBe(head)
 })
 
 test('a schema file that throws puts the sqlite message in that tick\'s receipt at exit 1', async () => {

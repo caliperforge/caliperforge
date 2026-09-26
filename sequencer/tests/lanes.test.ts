@@ -4,7 +4,7 @@ import { laneLine } from '../../cli/brief.ts'
 import { release } from '../../store/holds.ts'
 import type { Read } from '../../cli/gh.ts'
 import { cap, dial, lanes, name, priority, record, set, templatePriority, windows, type Reading } from '../../store/lanes.ts'
-import { live } from '../../store/plans.ts'
+import { live, retry, rewind } from '../../store/plans.ts'
 import { WHY } from '../../store/refusals.ts'
 import { tick } from '../index.ts'
 import { picks } from '../next.ts'
@@ -111,6 +111,45 @@ test('a released plan waits for a free slot and the lane never runs past its wid
   expect((await tick(w.db, w.root, stub(CARRIED))).map((f) => f.plan)).toEqual([2, 3])
   expect(lanes(w.db, '09:00').live).toBe(2)
   expect(plan(w.db, 4)).toMatchObject({ step: 2, state: 'queued' })
+})
+
+function full(w: World = world()): World {
+  w.db.prepare('UPDATE pipes SET max_concurrent = 1 WHERE id = 1').run()
+  w.db.prepare("UPDATE plans SET state = 'running' WHERE id = 1").run()
+  queued(w, 2, 1, 1)
+  w.db.prepare("UPDATE plans SET step = 4, retries = 1, head_digest = ?, state = 'blocked_on_ceo' WHERE id = 2").run('a'.repeat(64))
+  put(w.root, 2, 'issue.md', ASK)
+  return w
+}
+
+test('a plan retried onto a full lane waits queued at its kept step and fires once a slot frees', async () => {
+  const w = world()
+  approve(w.db, w.target)
+  await tick(w.db, w.root, stub(CARRIED))
+  full(w)
+  const running = (): unknown => w.db.prepare("SELECT count(*) AS n FROM plans WHERE pipe_id = 1 AND state = 'running'").get()
+  expect(retry(w.db, plan(w.db, 2))).toBe(2)
+  expect(plan(w.db, 2)).toMatchObject({ step: 2, state: 'queued' })
+  expect(running()).toEqual({ n: 1 })
+  expect((await tick(w.db, w.root, stub(CARRIED))).map((f) => f.plan)).toEqual([1])
+  expect(plan(w.db, 2)).toMatchObject({ step: 2, state: 'queued', wait_reason: 'over_cap' })
+  expect(running()).toEqual({ n: 1 })
+
+  w.db.prepare("UPDATE plans SET state = 'done' WHERE id = 1").run()
+  expect((await tick(w.db, w.root, stub(CARRIED))).map((f) => [f.plan, f.step])).toEqual([[2, 2]])
+})
+
+test('a rewind onto a full lane queues the plan with the step, retries and head it writes', () => {
+  const w = full()
+  rewind(w.db, 2, 4)
+  expect(plan(w.db, 2)).toMatchObject({ step: 4, state: 'queued', retries: 0, head_digest: null })
+})
+
+test('a retry onto a lane with a free slot runs at once', () => {
+  const w = full()
+  w.db.prepare('UPDATE pipes SET max_concurrent = 2 WHERE id = 1').run()
+  retry(w.db, plan(w.db, 2))
+  expect(plan(w.db, 2)).toMatchObject({ step: 2, state: 'running' })
 })
 
 test('the cap decides how many pipes worth of plans the tick opens', async () => {

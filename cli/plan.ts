@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { FORK, put, SELF } from '../sequencer/workspace.ts'
+import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { templatePriority } from '../store/lanes.ts'
 import { DEFAULT_BUILDER } from '../templates/pr-path.ts'
@@ -155,5 +156,7 @@ function file(db: Db, pipe: string, lane: Lane, seat: string, url: string, prior
   const made = db.prepare(`INSERT INTO plans (pipe_id, template, state, queued_at, step, retries, priority, lane, seat, origin)
     VALUES (?, ?, 'queued', ?, 0, 0, ?, ?, ?, ?)`)
     .run(row.id, template, new Date().toISOString(), priority ?? templatePriority(db, template), lane, seat, url)
-  return Number(made.lastInsertRowid)
+  const id = Number(made.lastInsertRowid)
+  logged(db, { plan: id, kind: 'filed', actor: 'cf plan add', outcome: 'pass', message: url, pointer: null, run: null })
+  return id
 }

@@ -28,7 +28,7 @@ async function atBatch(): Promise<World> {
 interface Held { title: string; body: string; open: boolean; answer: Answer | null; words: string | null; closing: string | null }
 
 /** The tracker as a map: a test answers a card by setting its label and words. */
-function fake(): Desk & { cards: Map<number, Held>; log: string[] } {
+function fake(pr: number | null = null): Desk & { cards: Map<number, Held>; log: string[] } {
   const cards = new Map<number, Held>()
   const log: string[] = []
   const card = (no: number): Held => {
@@ -48,6 +48,7 @@ function fake(): Desk & { cards: Map<number, Held>; log: string[] } {
     seen: (no): Seen => ({ answer: card(no).answer, words: card(no).words, open: card(no).open }),
     unlabel: (no, label) => { log.push(`unlabel ${String(no)} ${label}`); card(no).answer = null },
     close: (no, comment) => { log.push(`close ${String(no)}`); card(no).open = false; card(no).closing = comment },
+    rehearsal: () => pr,
   }
 }
 
@@ -67,6 +68,17 @@ test('an outside plan at sign-off gets one card, and the card links nothing on t
   expect(unread(w.root).map((e) => [e.kind, e.ticket])).toEqual([['signoff', 'acme/widget#12']])
 })
 
+test('a card with a rehearsal PR links its files view before the commit, and still nothing on their thread', async () => {
+  const w = await atBatch()
+  const desk = fake(5)
+  signoffs(w.db, w.root, desk)
+  const body = desk.cards.get(100)?.body ?? ''
+  const files = body.indexOf('https://github.com/caliperforge/widget/pull/5/files')
+  expect(files).toBeGreaterThan(-1)
+  expect(files).toBeLessThan(body.indexOf('https://github.com/caliperforge/widget/commit/'))
+  expect(body.replace(/```markdown[\s\S]*?\n```\n/, '').replace(/`[^`]*`/g, '')).not.toMatch(/#\d|acme\/widget|github\.com\/acme/)
+})
+
 test('go signs the head the card showed, closes the card, and the next tick sends it', async () => {
   const w = await atBatch()
   const desk = fake()
@@ -82,6 +94,20 @@ test('go signs the head the card showed, closes the card, and the next tick send
   await tick(w.db, w.root, stub(CARRIED), undefined, quiet, watched(sent, w.root, 1))
   expect(sent).toContain('open acme/widget caliperforge:widget-12-a1')
   expect(signoffs(w.db, w.root, desk)).toEqual([])
+})
+
+test('go on a card whose lane is full leaves the plan queued', async () => {
+  const w = await atBatch()
+  w.db.prepare('UPDATE pipes SET max_concurrent = 1 WHERE id = 1').run()
+  w.db.prepare("UPDATE plans SET state = 'blocked_on_ceo' WHERE id = 1").run()
+  w.db.prepare(`INSERT INTO plans (id, pipe_id, target_id, template, state, queued_at, step, retries)
+    VALUES (2, 1, 1, 'pr_path', 'running', '2000-01-01T00:00:00.000Z', 2, 0)`).run()
+  const desk = fake()
+  signoffs(w.db, w.root, desk)
+  const card = desk.cards.get(100)
+  if (card !== undefined) card.answer = 'go'
+  expect(signoffs(w.db, w.root, desk)).toEqual([{ plan: 1, card: 100, did: 'go' }])
+  expect(plan(w.db, 1)).toMatchObject({ step: 7, state: 'queued' })
 })
 
 test('no with words sends it back to the builder with them', async () => {

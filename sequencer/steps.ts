@@ -77,7 +77,7 @@ export function kernel(db: Db, root: string, plan: PlanRow, wire?: Wire, read?: 
 }
 
 function railed(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
-  const judged = preReview(db, root, plan)
+  const judged = preReview(db, root, plan, wire)
   const repo = repoOf(db, plan)
   if (judged.outcome === 'pass' && judged.held !== true && repo !== null) reviewable(db, root, plan, repo, wire)
   return judged

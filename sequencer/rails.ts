@@ -11,9 +11,11 @@ import { weakened } from '../rails/test-weakened/index.ts'
 import { sources, tight } from '../rails/tight/index.ts'
 import { filesOf } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
+import { busy } from '../store/now.ts'
 import { BUILT, internal, type PlanRow } from '../store/plans.ts'
 import { builder } from '../templates/pr-path.ts'
-import { checks, mode, type Failure } from './checks.ts'
+import { checks, mode, npm, type Failure, type Run } from './checks.ts'
+import { ciChecks } from './ci.ts'
 import { outsideLanguage } from './gates.ts'
 import type { Outcome } from './kind.ts'
 import { lock, unlock } from './lock.ts'
@@ -22,13 +24,15 @@ import { renumbered, strays } from './fence.ts'
 import { fenceFor, languageFor } from './route.ts'
 import { diffOf, doneIds, get, maybe, srcDir } from './workspace.ts'
 import { kernelPlan } from './home.ts'
+import type { Wire } from './push.ts'
 
 /**
  * Step 3: the six rails the map's step list names, in its order, ending at the first refusal, and
  * then the checkout's own type check, style check and tests. No reviewer tokens. The fill comes
  * first so that `rest()` reads a diff carrying the digests, not the ones the builder left behind.
+ * Our own repo's suite runs on GitHub CI when `checks.where` says so (#332), and on this laptop otherwise.
  */
-export function preReview(db: Db, root: string, plan: PlanRow): Outcome {
+export function preReview(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
   const refusal = kernelPlan(plan) ? unfilled(srcDir(root, plan.id)) : null
   if (refusal !== null) return refusal
   const handback = get(root, plan.id, 'step-2.handback.md')
@@ -45,11 +49,18 @@ export function preReview(db: Db, root: string, plan: PlanRow): Outcome {
   // a stranger's npm scripts never run on this host. A stranger's repo in a language with its own seat runs that
   // language's gates (#204): its builder already ran them at step 2, and a red fork CI after the reviews costs more.
   const outside = internal(plan) ? null : outsideLanguage(languageFor(db, plan, srcDir(root, plan.id)))
+  const ci = internal(plan) ? ciChecks(db, root, plan, wire) : null
+  if (ci !== null && 'wait' in ci) return ci.wait
+  if (ci !== null) {
+    recordRail(db, join(root, 'rails', 'checks'), plan.id, checked(ci.failed, diffOf(root, plan.id)), 0)
+    if (ci.failed !== null) return broke(ci.failed)
+    return { outcome: 'pass', spans: [], note: `pre-review: six rails pass; checks ran on GitHub CI at ${ci.at}` }
+  }
   if (internal(plan) || outside !== null) {
     const holder = lock(root, plan.id)
     if (holder !== null) return { outcome: 'pass', held: true, spans: ['checks'], note: `checks wait: plan ${String(holder.plan)} is running its tests` }
     try {
-      const failed = checks(srcDir(root, plan.id), undefined, outside === null ? narrow(db, plan) : [],
+      const failed = checks(srcDir(root, plan.id), noted(db, plan.id), outside === null ? narrow(db, plan) : [],
         outside === null ? null : { language: outside, files: filesOf(db, plan.id).map((f) => f.path) })
       recordRail(db, join(root, 'rails', 'checks'), plan.id, checked(failed, diffOf(root, plan.id)), 0)
       if (failed !== null) return broke(failed)
@@ -70,6 +81,10 @@ export function preReview(db: Db, root: string, plan: PlanRow): Outcome {
 export function narrow(db: Db, plan: PlanRow): string[] {
   const built = db.prepare(`SELECT count(*) AS n FROM runs WHERE plan = ? AND step = 2 AND ${BUILT}`).get(plan.id) as { n: number }
   return built.n > 1 ? filesOf(db, plan.id).map((f) => f.path) : []
+}
+
+function noted(db: Db, plan: number): Run {
+  return (args, cwd, bin) => npm(args, cwd, bin, (doing, detail) => { busy(db, plan, doing, detail) })
 }
 
 /** The roster and seat files a fill reads are the builder's, so their typo refuses this plan where a throw takes the lap. */
@@ -113,7 +128,7 @@ function rest(db: Db, root: string, plan: PlanRow, handback: string, diff: strin
     ['secret-scan', () => scan(diff)],
     ['authority', () => authority(root, name, diff, kernelPlan(plan), fence, outside, kernelPlan(plan) ? renumbered(src, diff) : [])],
     ['tight', () => tight(root, { diff, sources: sources(src, diff), ...prose(root, plan), code: internal(plan) })],
-    ['test-weakened', () => weakened(diff, 'green')],
+    ['test-weakened', () => weakened(diff, 'green', [maybe(root, plan.id, 'ask.md') ?? '', get(root, plan.id, 'issue.md'), prose(root, plan).description].join('\n'))],
     ['identifiers', () => identifiers(src, handback)],
   ]
 }

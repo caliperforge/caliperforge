@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest'
 import { at } from '../../templates/pr-path.ts'
-import { thrown } from '../index.ts'
+import { thrown } from '../settle.ts'
 
 const FETCH = "Command failed: git fetch --no-tags origin +main:refs/remotes/origin/main\nfatal: unable to access 'https://github.com/caliperforge/caliperforge.git/': Could not resolve host: github.com"
 

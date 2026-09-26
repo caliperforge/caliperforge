@@ -1,3 +1,4 @@
+import { exitCodeRouting } from './exit-code-routing.ts'
 import { fixturePerRail } from './fixture-per-rail.ts'
 import type { Check, Finding } from './kind.ts'
 import { migrationOrder } from './migration-order.ts'
@@ -19,6 +20,7 @@ export const CHECKS: Check[] = [
   reviewerManifests,
   fixturePerRail,
   migrationOrder,
+  exitCodeRouting,
 ]
 
 export async function runAll(root: string, only?: string): Promise<Finding[]> {

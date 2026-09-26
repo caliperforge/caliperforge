@@ -52,6 +52,7 @@ Answer the brief under the Tight standard above, then close with this fence and 
 
 ```
 ---
+summary: <the change in one line>
 done:
   - id: D1
     status: done

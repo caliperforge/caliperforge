@@ -133,7 +133,7 @@ const FAILED = /^[ \t]*FAIL\b/
 /** Only a `FAIL` opener carries `file > … > title`; a `×` line names the title alone. */
 const TEST = /^[ \t]*FAIL[ \t]+(.+?) > (.+?)[ \t]*$/m
 
-function entries(src: string, output: string): string[] {
+export function entries(src: string, output: string): string[] {
   const seen = new Map<string, string>()
   for (const block of failures(output)) {
     const hit = TEST.exec(block)

@@ -104,7 +104,7 @@ export function reviewable(db: Db, root: string, plan: PlanRow, repo: string, wi
   wire.rehearse?.(fork, ci)
 }
 
-function sent(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire): { fork: string; head: Head; ci: string } {
+export function sent(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire): { fork: string; head: Head; ci: string } {
   const open = !internal(plan) && opened(db, plan.id) !== null
   const fork = `${FORK}/${repoName(repo)}`
   if (!internal(plan)) (open ? follow : squash)(root, plan.id)
@@ -116,7 +116,7 @@ function sent(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire): { 
 }
 
 /** A repo GitHub runs no workflow for: nothing on the fork will ever show a run at the head. */
-function workflows(dir: string): boolean {
+export function workflows(dir: string): boolean {
   const at = join(dir, '.github/workflows')
   return existsSync(at) && readdirSync(at).some((f) => /\.ya?ml$/.test(f))
 }
@@ -158,12 +158,12 @@ function others(board: Board[]): string | null {
   return running.length === 0 ? null : `still running ${running.join(', ')}`
 }
 
-function unfinished(spans: string[]): string | null {
+export function unfinished(spans: string[]): string | null {
   if (carries(spans, PENDING)) return 'is still running CI'
   return carries(spans, MISSING) ? 'has no run yet' : null
 }
 
-function carries(spans: string[], span: string): boolean {
+export function carries(spans: string[], span: string): boolean {
   return spans.some((one) => one.endsWith(span))
 }
 
@@ -176,16 +176,17 @@ function held(spans: string[], note: string): Outcome {
   return { outcome: 'pass', spans, held: true, note }
 }
 
-function holding(root: string, plan: number, sha: string, spans: string[], waiting: string, window: number): Outcome | null {
-  const ticks = waited(root, plan, sha)
+export function holding(root: string, plan: number, sha: string, spans: string[], waiting: string, window: number,
+  key = WAITS): Outcome | null {
+  const ticks = waited(root, plan, sha, key)
   return ticks <= window ? held(spans, `${waiting}, tick ${String(ticks)} of ${String(window)}`) : null
 }
 
 /** The count is kept against the head it counts for, so a rebuilt branch starts its window over. */
-function waited(root: string, plan: number, sha: string): number {
-  const seen = (maybe(root, plan, WAITS) ?? '').split(' ')
+function waited(root: string, plan: number, sha: string, key: string): number {
+  const seen = (maybe(root, plan, key) ?? '').split(' ')
   const ticks = seen[0] === sha ? Number(seen[1]) + 1 : 1
-  put(root, plan, WAITS, `${sha} ${String(ticks)}`)
+  put(root, plan, key, `${sha} ${String(ticks)}`)
   return ticks
 }
 

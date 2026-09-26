@@ -70,10 +70,23 @@ test('writes a verdicts row the store accepts', () => {
 })
 
 test('refuses rather than throws on a fence that is not a done envelope', () => {
-  const fences = ['---\nstatus: partial\ndone: []\n---\n', '---\ndone:\n  - status: done\n---\n', '---\n: : :\n---\n']
+  const fences = ['---\nstatus: partial\ndone: []\n---\n', '---\ndone:\n  - status: done\n---\n']
   for (const fence of fences) {
     const verdict = audit(fence, ['D1'])
     expect(verdict.outcome).toBe('refuse')
     expect(verdict.spans).toEqual(['D1'])
   }
+})
+
+test('refuses on the parse error when no rows can be read from the fence', () => {
+  for (const fence of [fixture('handback-unparsed.md'), '---\n: : :\n---\n']) {
+    const verdict = audit(fence, ['D1', 'D2'])
+    expect(verdict.outcome).toBe('refuse')
+    expect(verdict.spans).toEqual(['step-2.handback.md'])
+    expect(verdict.message).toContain('not YAML')
+  }
+})
+
+test('a previous handback YAML cannot parse carries nothing and refuses nothing', () => {
+  expect(audit(fixture('handback-carried.md'), ['D1', 'D2'], fixture('handback-unparsed.md'), '').outcome).toBe('pass')
 })

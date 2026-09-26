@@ -36,7 +36,7 @@ On Solana code:
 - Every account you read is owner-checked before its data is trusted: compare `owner` with the program you expect.
 - Amounts, lamports and indexes use checked arithmetic (`checked_add`, `checked_sub`, `checked_mul`, `try_from` for casts); no bare `as` that can truncate.
 - A mint or token account may belong to Token or Token-2022: match on its owner and handle both; never assume classic SPL Token.
-- Files ts-rs generates (surfpool's `crates/sdk-node/**/generated/*.ts`) keep the generator's byte format: header, field order, quoting and trailing newline exactly as it writes them. They are yours to write when the brief lists them.
+- Files a generator writes (surfpool's `crates/sdk-node/**/generated/*.ts`) match what the generator the brief names writes: step 3 runs that generator and fails on any diff. They are yours to write when the brief lists them.
 
 Change only the lines the job needs. Where a comment or doc line states a value the job changes, change the
 value and keep every other word: do not reword, reflow or trim text you were not asked to change.

@@ -30,7 +30,7 @@ digests:
     prompt: efa16cf31366d279cb47f8353aa78fcad684e1c585ca01e6cba413843e882bff
   rust_specialist:
     manifest: 5090575dcb48be94bc22f4c8f4c7bcbca1fe02389697b1e6dd455d49e292235c
-    prompt: 2bdb963aee098381d9fcbb54756dead20e83d2b2f5295f0948baa1ec5955aa89
+    prompt: 445a89ee967108eec8cf354c78d8cd591d49299e81d78675be6d4a856bac1f6d
   python_specialist:
     manifest: cd93446f89a0345e256335bf8665c166ceafabec78c1341f44f576bd0cd541fb
     prompt: 5a5183a83871536eaf37d886c82141c20f95d5fdd1247e7df851f69a685a30b7

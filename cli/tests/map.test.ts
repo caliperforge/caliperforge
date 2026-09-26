@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
@@ -27,6 +27,49 @@ test('write puts the map of a tree at its root', () => {
   const root = mkdtempSync(join(tmpdir(), 'cf-map-'))
   writeFileSync(join(root, 'a.ts'), '/** One constant. */\nexport const a = 1\n')
   expect(readFileSync(write(root), 'utf8')).toBe('# MAP.md — written by `cf map`\n\n- `a.ts` — One constant.\n  - a\n')
+})
+
+const canvas = `//
+//  Canvas.swift
+//  Atelier
+//
+import SwiftUI
+
+let scale = 2
+
+@MainActor final class Store {
+    func draw() {}
+    static func make() -> Store { Store() }
+}
+
+public struct Box<T>: Sendable {
+    enum Kind {}
+}
+
+@available(iOS 17, *)
+extension Array where Element == Int {
+    func total() -> Int { reduce(0, +) }
+}
+
+func render(_ store: Store) {}
+`
+
+test('a Swift file lists its top-level declarations beside the .ts entries', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cf-map-'))
+  mkdirSync(join(root, 'Sources'))
+  mkdirSync(join(root, 'Tests'))
+  writeFileSync(join(root, 'a.ts'), '/** One constant. */\nexport const a = 1\n')
+  writeFileSync(join(root, 'Sources/Canvas.swift'), canvas)
+  writeFileSync(join(root, 'Tests/CanvasTests.swift'), 'final class CanvasTests {}\n')
+  expect(readFileSync(write(root), 'utf8')).toBe('# MAP.md — written by `cf map`\n\n'
+    + '- `Sources/Canvas.swift`\n  - class Store\n  - struct Box\n  - extension Array\n  - func render\n'
+    + '- `a.ts` — One constant.\n  - a\n')
+})
+
+test('a Swift doc comment is a purpose', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cf-map-'))
+  writeFileSync(join(root, 'Doc.swift'), '/// Draws the canvas.\n')
+  expect(map(root)).toBe('# MAP.md — written by `cf map`\n\n- `Doc.swift` — Draws the canvas.\n')
 })
 
 test('the map is never committed', () => {

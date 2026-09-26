@@ -10,6 +10,7 @@ import { inProse } from './prose.ts'
 import { inSource, type Ceilings, type Span } from './source.ts'
 
 const BRACED = ['.kt', '.kts', '.swift']
+const HISTORY = '; history belongs in the commit message, the comment keeps the one sentence that states the rule'
 
 export interface Subject {
   diff: string
@@ -38,7 +39,7 @@ export function tight(root: string, subject: Subject): Verdict {
     origin_ref: 'tight',
     subject_digest,
     spans,
-    message: `${String(spans.length)} span(s) breach Tight at function_lines ${String(ceilings.function_lines)}, nesting ${String(ceilings.nesting)}${unread}`,
+    message: `${String(spans.length)} span(s) breach Tight at function_lines ${String(ceilings.function_lines)}, nesting ${String(ceilings.nesting)}${unread}${spans.some((s) => s.endsWith(' tight.history')) ? HISTORY : ''}`,
   }
 }
 

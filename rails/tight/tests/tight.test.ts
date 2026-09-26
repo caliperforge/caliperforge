@@ -164,6 +164,42 @@ test('a restating comment after a template still refuses', () => {
   expect(verdict.spans).toEqual(['src/fixture.ts:2 tight.restating'])
 })
 
+const commented = (comment: string, code = 'export const reap = 1'): string[] => {
+  const source = `${comment}\n${code}\n`
+  return tight(root, { diff: added('src/x.ts', source), sources: { 'src/x.ts': source }, description: 'x.' }).spans
+}
+
+test('refuses history in an added comment and says where it belongs', () => {
+  const source = '/** #154: reap on land */\nexport const reap = 1\n'
+  const verdict = tight(root, { diff: added('src/x.ts', source), sources: { 'src/x.ts': source }, description: 'x.' })
+  expect(verdict.outcome).toBe('refuse')
+  expect(verdict.spans).toEqual(['src/x.ts:1 tight.history'])
+  expect(verdict.message).toContain('commit message')
+})
+
+test('passes the same comment without its history', () => {
+  expect(commented('/** Reap on land. */')).toEqual([])
+})
+
+test('passes a history comment on a line the diff did not add', () => {
+  const source = '// #154: reap on land\nexport const x = 1\n'
+  const diff = '--- a/src/old.ts\n+++ b/src/old.ts\n@@ -1,2 +1,2 @@\n // #154: reap on land\n-export const x = 0\n+export const x = 1\n'
+  expect(tight(root, { diff, sources: { 'src/old.ts': source }, description: 'x.' }).outcome).toBe('pass')
+})
+
+test('refuses each form of history', () => {
+  for (const comment of ['// 2026-09-24', '// 09-24', '// asked by the CEO', '// COO call', '// plan 47']) {
+    expect(commented(comment)).toEqual(['src/x.ts:1 tight.history'])
+  }
+})
+
+test('passes ranges, bare hashes, the word plan and history in a string', () => {
+  for (const comment of ['// ports 80-99', '// the #private field', '// the plan holds']) {
+    expect(commented(comment)).toEqual([])
+  }
+  expect(commented('', "export const s = '#154 09-24'")).toEqual([])
+})
+
 test('a prose span is named for the text it read', () => {
   const verdict = tight(root, { ...subject('red'), prose: 'handback' })
   expect(verdict.spans.filter((s) => !s.startsWith('src/'))).toEqual(['handback:1 tight.preamble', 'handback:3 tight.hedge', 'handback:3 tight.summary'])

@@ -2,6 +2,7 @@ import ts from 'typescript'
 import { lineOf } from '../../checks/tree.ts'
 
 const JUSTIFYING = /because|in order to|note that|this is needed|to ensure/i
+const HISTORY = [/#\d+\b|\b(?:\d{4}-)?(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])\b|\b(?:CEO|COO)\b/, /\bplan \d+\b/i]
 
 const NESTS = new Set<ts.SyntaxKind>([
   ts.SyntaxKind.IfStatement,
@@ -35,8 +36,9 @@ export function inSource(text: string, added: Set<number>, ceilings: Ceilings): 
 }
 
 function judgeComment(text: string, c: { line: number; text: string; end: number }): Span[] {
-  if (JUSTIFYING.test(c.text)) return [{ line: c.line, kind: 'tight.justifying' }]
-  return restates(c.text, subject(text, c)) ? [{ line: c.line, kind: 'tight.restating' }] : []
+  const history = HISTORY.some((r) => r.test(c.text)) ? [{ line: c.line, kind: 'tight.history' }] : []
+  if (JUSTIFYING.test(c.text)) return [...history, { line: c.line, kind: 'tight.justifying' }]
+  return restates(c.text, subject(text, c)) ? [...history, { line: c.line, kind: 'tight.restating' }] : history
 }
 
 function judgeDeclaration(d: Declaration, uses: Map<string, number>): Span[] {

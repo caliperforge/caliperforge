@@ -4,7 +4,7 @@ import { maybe } from '../sequencer/workspace.ts'
 import type { Db } from '../store/index.ts'
 import { count, hhmm, lanes, wall, windows } from '../store/lanes.ts'
 import { last } from '../store/merges.ts'
-import { live, PipeRow, PlanRow } from '../store/plans.ts'
+import { BUILT, live, PipeRow, PlanRow } from '../store/plans.ts'
 
 export const CAP = 15_000
 
@@ -69,7 +69,7 @@ function verdict(db: Db, root: string, plan: number, blocked: boolean): string |
 }
 
 function runs(db: Db, plan: number): string | null {
-  const recent = rows(db, 'SELECT step, seat, input_tokens + output_tokens FROM runs WHERE plan = ? ORDER BY id DESC LIMIT 2', plan)
+  const recent = rows(db, `SELECT step, seat, input_tokens + output_tokens FROM runs WHERE plan = ? AND ${BUILT} ORDER BY id DESC LIMIT 2`, plan)
   if (recent.length === 0) return null
   return [...recent, line('run.token_wall', wall(db)), line('plan.token_ceiling', count(db, 'plan.token_ceiling'))].join('\n')
 }

@@ -26,9 +26,16 @@ function mine(): World {
   return w
 }
 
-async function briefed(w: World, id: number, brief: string, log: string[]): Promise<void> {
-  await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched(log, w.root, id))
-  await tick(w.db, w.root, stub(CARRIED, 0, undefined, undefined, brief), undefined, undefined, watched(log, w.root, id))
+async function briefed(w: World, id: number, brief: string, log: string[], wire = watched(log, w.root, id)): Promise<void> {
+  await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  await tick(w.db, w.root, stub(CARRIED, 0, undefined, undefined, brief), undefined, undefined, wire)
+}
+
+function landing(w: World, n: number, log: string[]): string | null {
+  const id = (w.db.prepare('SELECT plan FROM parts WHERE parent = ? AND n = ?').get(ID, n) as { plan: number }).plan
+  const note = following(w.db, w.root, plan(w.db, id), String(n).repeat(40), watched(log, w.root, id))
+  w.db.prepare("UPDATE plans SET state = 'done' WHERE id = ?").run(id)
+  return note
 }
 
 test('a split fence is two or more parts in landing order; one part or a question is not a split', () => {
@@ -91,6 +98,7 @@ test('a part landing queues the next; the last one landing closes the parent', a
   await briefed(w, ID, PARTS, log)
   const a = (w.db.prepare('SELECT plan FROM parts WHERE n = 0').get() as { plan: number }).plan
   expect(following(w.db, w.root, plan(w.db, a), 'a'.repeat(40), watched(log, w.root, a))).toMatch(/^part b queued as plan \d+$/)
+  w.db.prepare("UPDATE plans SET state = 'done' WHERE id = ?").run(a)
   const b = (w.db.prepare('SELECT plan FROM parts WHERE n = 1').get() as { plan: number }).plan
   expect(maybe(w.root, b, 'ask.md')).toContain('After: #901')
   expect(w.db.prepare("SELECT plan FROM events WHERE kind = 'filed' ORDER BY id").all()).toEqual([{ plan: a }, { plan: b }])
@@ -102,9 +110,9 @@ test('a part landing queues the next; the last one landing closes the parent', a
 test('D1, D2: a part split again files its parts, and its last one landing closes the part and queues the grandparent\'s next', async () => {
   const w = mine()
   internalPlan(w.db, w.root, 3, 'the parent', 33)
-  const part = w.db.prepare('INSERT INTO parts (parent, n, url, title, body, plan) VALUES (3, ?, ?, \'t\', \'b\', ?)')
-  part.run(0, 'https://github.com/caliperforge/caliperforge/issues/34', ID)
-  part.run(1, 'https://github.com/caliperforge/caliperforge/issues/35', null)
+  const part = w.db.prepare('INSERT INTO parts (parent, n, url, title, body, plan, after) VALUES (3, ?, ?, \'t\', \'b\', ?, ?)')
+  part.run(0, 'https://github.com/caliperforge/caliperforge/issues/34', ID, null)
+  part.run(1, 'https://github.com/caliperforge/caliperforge/issues/35', null, 0)
   w.db.prepare("UPDATE plans SET state = 'done' WHERE id = 3").run()
   const log: string[] = []
   await briefed(w, ID, PARTS, log)
@@ -116,10 +124,43 @@ test('D1, D2: a part split again files its parts, and its last one landing close
   expect(plan(w.db, ID)).toMatchObject({ state: 'done', step: 1 })
   const a = (w.db.prepare('SELECT plan FROM parts WHERE parent = ? AND n = 0').get(ID) as { plan: number }).plan
   following(w.db, w.root, plan(w.db, a), 'a'.repeat(40), watched(log, w.root, a))
+  w.db.prepare("UPDATE plans SET state = 'done' WHERE id = ?").run(a)
   const b = (w.db.prepare('SELECT plan FROM parts WHERE parent = ? AND n = 1').get(ID) as { plan: number }).plan
   expect(following(w.db, w.root, plan(w.db, b), 'b'.repeat(40), watched(log, w.root, b)))
     .toMatch(/^the last part landed; #34 closed; part b queued as plan \d+$/)
   expect(log.at(-1)).toBe('close caliperforge/caliperforge#34 bbbbbbb')
+})
+
+test('D1, D2, D6: parts with no after start at once, and only a waiting part names the issue it waits on', async () => {
+  const w = mine()
+  const log: string[] = []
+  const said: string[] = []
+  await briefed(w, ID, AFTER(['none', 'a', 'none']), log, { ...watched(log, w.root, ID), comment: (...a) => void said.push(a[2]) })
+  expect(log.filter((l) => l.startsWith('file '))).toHaveLength(3)
+  const parts = w.db.prepare('SELECT p.after, p.body, s.state FROM parts p LEFT JOIN plans s ON s.id = p.plan WHERE p.parent = ? ORDER BY p.n').all(ID) as
+    { after: number | null; body: string; state: string | null }[]
+  expect(parts.map((p) => [p.after, p.state, p.body.includes('After:')])).toEqual([[null, 'queued', false], [0, null, true], [null, 'queued', false]])
+  expect(parts[1]?.body).toContain('After: #901')
+  expect(said).toEqual([expect.stringContaining('#901, #903 started; #902 waits on #901.') as unknown])
+})
+
+test('D3, D4: a landing queues the parts that wait on it, and the parent closes once, when the last part lands', async () => {
+  const w = mine()
+  const log: string[] = []
+  await briefed(w, ID, AFTER(['none', 'a', 'none']), log)
+  expect(landing(w, 2, log)).toBeNull()
+  expect(w.db.prepare('SELECT plan FROM parts WHERE n = 1').get()).toEqual({ plan: null })
+  expect(landing(w, 0, log)).toMatch(/^part b queued as plan \d+$/)
+  expect(landing(w, 2, log)).toBeNull()
+  expect(log.filter((l) => l.startsWith('close '))).toEqual([])
+  expect(landing(w, 1, log)).toBe('the last part landed; #34 closed')
+  expect(log.filter((l) => l.startsWith('close '))).toEqual(['close caliperforge/caliperforge#34 1111111'])
+})
+
+test('D5: a split whose parts all say none queues every part at once', async () => {
+  const w = mine()
+  await briefed(w, ID, AFTER(['none', 'none']), [])
+  expect(w.db.prepare("SELECT count(*) AS n FROM parts p JOIN plans s ON s.id = p.plan WHERE p.parent = ? AND s.state = 'queued'").get(ID)).toEqual({ n: 2 })
 })
 
 test('D4: a split of somebody else\'s ticket waits for the COO with the parts', async () => {

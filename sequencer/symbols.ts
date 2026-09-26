@@ -5,12 +5,12 @@ import { git, repoName } from './workspace.ts'
 const patterns: [string[], RegExp][] = [
   [
     ['ts', 'tsx', 'mts', 'cts', 'js', 'jsx', 'mjs', 'cjs'],
-    /^export\s+(?:(?:default|declare|abstract|async)\s+)*(?:function\*?|class|const|let|var|interface|type|enum|namespace)\s+([A-Za-z_$][\w$]*)/,
+    /^export\s+(?:(?:default|declare|abstract|async)\s+)*(?:function\*?|class|(?:const\s+)?enum|const|let|var|interface|type|namespace)\s+([A-Za-z_$][\w$]*)/,
   ],
   [['rs'], /^pub(?:\([^)]*\))?\s+(?:(?:async|unsafe|const)\s+)*(?:fn|struct|enum|trait|type|const|static|mod|union)\s+([A-Za-z_]\w*)/],
   [['go'], /^(?:func(?:\s*\([^)]*\))?|type|var|const)\s+([A-Z]\w*)/],
   [['py'], /^(?:async\s+)?(?:def|class)\s+([A-Za-z]\w*)/],
-  [['kt', 'kts'], /^(?:(?!private\b)[a-z]+\s+)*(?:fun|class|interface|object|val|var|typealias)\s+([A-Za-z_]\w*)/],
+  [['kt', 'kts'], /^(?:(?!private\b)[a-z]+\s+)*(?:fun|class|interface|object|val|var|typealias)\s+(?:<.*?>\s+)?(?:[\w<>?,.*\s]+\.)?([A-Za-z_]\w*)/],
   [['swift'], /^(?:public|open)\s+(?:func|class|struct|enum|protocol|let|var|typealias)\s+([A-Za-z_]\w*)/],
   [['java'], /^public\s+(?:(?:final|abstract|sealed)\s+)*(?:class|interface|enum|record)\s+([A-Za-z_$][\w$]*)/],
   [['rb'], /^(?:class|module|def)\s+([\w.:]+[?!]?)/],

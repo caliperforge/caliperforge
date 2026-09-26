@@ -10,8 +10,9 @@ function repo(): { root: string; dir: string; sha: string } {
   const git = (...args: string[]): string =>
     execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', ...args], { cwd: dir, encoding: 'utf8' }).trim()
   git('init', '-q')
-  writeFileSync(join(dir, 'a.ts'), 'export function alpha() {}\n  export const indented = 1\nconst hidden = 2\nexport default class Beta {}\n')
+  writeFileSync(join(dir, 'a.ts'), 'export function alpha() {}\n  export const indented = 1\nconst hidden = 2\nexport default class Beta {}\nexport declare const enum Color {}\n')
   writeFileSync(join(dir, 'b.rs'), 'pub fn gamma() {}\nfn hidden() {}\npub(crate) struct Delta;\n    pub fn nested() {}\n')
+  writeFileSync(join(dir, 'c.kt'), 'fun String.toSlug() = this\nfun <T> first(x: T) = x\nval String.size get() = length\nprivate fun hidden() {}\n')
   writeFileSync(join(dir, 'notes.xyz'), 'export const x = 1\n')
   git('add', '.')
   git('commit', '-q', '-m', 'first')
@@ -22,7 +23,7 @@ function repo(): { root: string; dir: string; sha: string } {
   return { root: mkdtempSync(join(tmpdir(), 'cf-root-')), dir, sha }
 }
 
-const expected = 'a.ts:1 alpha\na.ts:4 Beta\nb.rs:1 gamma\nb.rs:3 Delta\n'
+const expected = 'a.ts:1 alpha\na.ts:4 Beta\na.ts:5 Color\nb.rs:1 gamma\nb.rs:3 Delta\nc.kt:1 toSlug\nc.kt:2 first\nc.kt:3 size\n'
 
 test('a map lists the top-level exports at sha and a second call reads the cache', () => {
   const { root, dir, sha } = repo()

@@ -361,7 +361,7 @@ function commitWork(dir: string, message: string | null): void {
   git(dir, ['add', '-A', '--', '.'])
   if (git(dir, ['diff', '--cached', '--name-only']).trim() === '') return
   git(dir, ['-c', 'user.email=cf@caliperforge.dev', '-c', 'user.name=caliperforge',
-    'commit', '-qm', message ?? git(dir,['rev-parse', '--abbrev-ref', 'HEAD']).trim()])
+    'commit', '-qm', message ?? git(dir, ['rev-parse', '--abbrev-ref', 'HEAD']).trim()])
 }
 
 export function title(root: string, plan: number): string {

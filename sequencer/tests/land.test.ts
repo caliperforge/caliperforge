@@ -76,9 +76,7 @@ test('D1 each commit a landed internal plan put on main carries its title, what,
   expect(w.db.prepare("SELECT outcome, step FROM verdicts WHERE plan = ? AND rail_id = 'ci-green'").get(ID))
     .toEqual({ outcome: 'pass', step: 6 })
   await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
-  const log = bodies(srcDir(w.root, ID), `${MAIN}..main`)
-  expect(log.length).toBeGreaterThan(0)
-  expect(new Set(log)).toEqual(new Set([MESSAGE]))
+  expect(new Set(bodies(srcDir(w.root, ID), `${MAIN}..main`))).toEqual(new Set([MESSAGE]))
 })
 
 test('D2 a second round adds a commit with the same message and leaves the first in place', async () => {

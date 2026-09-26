@@ -32,3 +32,9 @@ test('the prompt sends a reference implementation\'s input rules to Must not bre
     'When the ask mirrors, ports or matches another implementation, list that implementation\'s input rules under `## Must not break`: the values it accepts, what it does with an empty input, its bounds and the errors it raises, each with its file:line.',
   )
 })
+
+test('the prompt makes a generated file\'s row name the workflow step that writes it', () => {
+  expect(seat(root, 'brief_writer').prompt.replace(/\s+/g, ' ')).toContain(
+    'When `## Files` lists a file a workflow generates, that row names the workflow step that writes it, meaning its `.github/workflows` file and the generator line before `git diff --exit-code`, and says step 3 runs that generator and diffs the file against its output.',
+  )
+})

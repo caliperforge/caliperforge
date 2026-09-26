@@ -116,7 +116,6 @@ export function waiting(db: Db, rows: { plan: number; why: Wait | null; on?: num
   })()
 }
 
-/** The state an `UPDATE plans` puts a plan back in: a full lane queues it, a running plan keeps its slot. */
 export const ENTER = `CASE WHEN state = 'running' OR (SELECT count(*) FROM plans o WHERE o.pipe_id = plans.pipe_id
   AND o.id <> plans.id AND o.state = 'running') < (SELECT max_concurrent FROM pipes WHERE pipes.id = plans.pipe_id)
   THEN 'running' ELSE 'queued' END`

@@ -292,12 +292,12 @@ export function rerunning(log: string[], root: string, id: number, base: { branc
 export const SEEDED = 'seeded'
 
 /** Greptile's score on the rehearsal at the checkout's HEAD, in the db `world()` opened for `root`. */
-export function scored(root: string, id: number, score: number, body: string | null = null, author = SEEDED): void {
+export function scored(root: string, id: number, score: number, body: string | null = null): void {
   const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: srcDir(root, id), encoding: 'utf8' }).trim()
   const db = opened.get(root)
   if (db !== undefined) {
-    record(db, { repo: 'caliperforge/widget', pr: 1, kind: 'bot_review', author, at: new Date().toISOString(),
-      external_id: `${author}-${head}`, score, plan: id, body, head })
+    record(db, { repo: 'caliperforge/widget', pr: 1, kind: 'bot_review', author: SEEDED, at: new Date().toISOString(),
+      external_id: head, score, plan: id, body, head })
   }
 }
 

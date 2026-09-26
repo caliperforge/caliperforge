@@ -704,7 +704,7 @@ test('D1 no Greptile score at the head holds ready through tick 45; tick 46 goes
 })
 
 test('D2 a 3/5 at the current head goes back to the builder with the findings; on another head it is no score', async () => {
-  const [w, lap] = await atReady((at) => { scored(at.root, 1, 3, FINDINGS, 'greptile') })
+  const [w, lap] = await atReady((at) => { scored(at.root, 1, 3, FINDINGS) })
   expect(await lap()).toMatchObject({ step: 6, name: 'ready', outcome: 'refuse', spans: ['greptile:3/5'] })
   expect(plan(w.db, 1).step).toBe(2)
   expect(get(w.root, 1, 'refusal.md')).toContain(FINDINGS)
@@ -718,7 +718,7 @@ test('D2 a 3/5 at the current head goes back to the builder with the findings; o
 })
 
 test('D3 a 4/5 at the current head passes ready to sign-off', async () => {
-  const [w, lap] = await atReady((at) => { scored(at.root, 1, 4, 'Confidence Score: 4/5', 'greptile') })
+  const [w, lap] = await atReady((at) => { scored(at.root, 1, 4, 'Confidence Score: 4/5') })
   expect(await lap()).toMatchObject({ step: 6, name: 'ready', outcome: 'pass' })
   expect(plan(w.db, 1).step).toBe(7)
 })

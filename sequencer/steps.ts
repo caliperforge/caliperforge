@@ -455,10 +455,7 @@ function proof(db: Db, plan: PlanRow): Proven {
   }
 }
 
-/**
- * A low bot score a later build has answered no longer holds the plan; the bot scores the new head once it is pushed.
- * A score on our fork's rehearsal is the ready gate's to judge, not this one's.
- */
+/** A low bot score a later build has answered no longer holds the plan; the bot scores the new head once it is pushed. */
 export function unanswered(db: Db, plan: number): unknown {
   return db.prepare(`SELECT 1 FROM signals s WHERE s.plan = ? AND s.kind = 'bot_review' AND s.score < 5 AND s.repo NOT GLOB ?
     AND julianday(s.at) > coalesce((SELECT max(julianday(r.at)) FROM runs r WHERE r.plan = ? AND r.step = 2 AND r.${BUILT}), 0)`)

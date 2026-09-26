@@ -283,7 +283,7 @@ test('D4 the card prints Greptile\'s score at this head, or that ready went on w
   signoffs(w.db, w.root, unscored)
   expect(unscored.cards.get(100)?.body).toContain('- Greptile on our fork: no score at this head; ready went on after 45 ticks without one\n')
 
-  scored(w.root, 1, 4, 'Confidence Score: 4/5', 'greptile')
+  scored(w.root, 1, 4, 'Confidence Score: 4/5')
   drop(w.root, 1, 'signoff')
   const desk = fake()
   signoffs(w.db, w.root, desk)

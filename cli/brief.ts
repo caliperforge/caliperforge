@@ -2,7 +2,7 @@ import type { Dry, Quiet } from '../sequencer/index.ts'
 import type { Fired } from '../sequencer/kind.ts'
 import type { Db } from '../store/index.ts'
 import { name, type LaneState, type WindowRow } from '../store/lanes.ts'
-import { BUILT, type Wait } from '../store/plans.ts'
+import { BUILT, type Holder, type Wait } from '../store/plans.ts'
 
 export interface PlanLine {
   id: number
@@ -10,6 +10,7 @@ export interface PlanLine {
   state: string
   repo: string | null
   issue_no: number | null
+  held_why: string | null
 }
 
 export interface Day {
@@ -31,7 +32,7 @@ export interface Ticket {
   early: number
 }
 
-const LINES = `SELECT p.id, p.step, p.state, t.repo, t.issue_no
+const LINES = `SELECT p.id, p.step, p.state, t.repo, t.issue_no, p.held_why
   FROM plans p LEFT JOIN targets t ON t.id = p.target_id`
 
 export function open(db: Db): PlanLine[] {
@@ -42,8 +43,8 @@ export function halted(db: Db): PlanLine[] {
   return db.prepare(`${LINES} WHERE p.state = 'halted' ORDER BY p.queued_at, p.id`).all() as PlanLine[]
 }
 
-export function awaiting(db: Db): PlanLine[] {
-  return db.prepare(`${LINES} WHERE p.state = 'blocked_on_ceo' OR p.step = 7 ORDER BY p.queued_at, p.id`).all() as PlanLine[]
+export function heldBy(db: Db, by: Holder): PlanLine[] {
+  return db.prepare(`${LINES} WHERE p.held_by = ? ORDER BY p.queued_at, p.id`).all(by) as PlanLine[]
 }
 
 export function day(db: Db): Day {
@@ -96,7 +97,7 @@ function ref(t: Ticket): string {
 
 export function line(p: PlanLine): string {
   const target = p.repo === null ? '-' : `${p.repo}#${String(p.issue_no ?? 0)}`
-  return `  plan ${String(p.id)}\tstep ${String(p.step)}\t${p.state}\t${target}`
+  return `  plan ${String(p.id)}\tstep ${String(p.step)}\t${p.state}\t${target}${p.held_why === null ? '' : `\t${p.held_why}`}`
 }
 
 export function section(title: string, rows: PlanLine[]): string {

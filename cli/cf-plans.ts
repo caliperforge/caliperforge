@@ -6,7 +6,7 @@ import { blocked, parked, WAITING } from '../sequencer/steps.ts'
 import { release, retried } from '../store/holds.ts'
 import { hhmm, lanes } from '../store/lanes.ts'
 import { holder } from '../store/leases.ts'
-import { PlanRow, terminal } from '../store/plans.ts'
+import { held, holderOf, HOLDERS, PlanRow, terminal } from '../store/plans.ts'
 import { laneLine, open as openPlans, runsOf, section, verdictsOf } from './brief.ts'
 import type { Cli } from './cf-lanes.ts'
 import { add as fileIssue, render as renderUnfiled, unfiled } from './plan.ts'
@@ -16,6 +16,7 @@ export function registerPlans(cf: Command, cli: Cli): void {
   queues(cf, cli)
   shown(planned(cf, cli), cli)
   holds(cf, cli)
+  parks(cf, cli)
 }
 
 function queues(cf: Command, { root, db, out }: Cli): void {
@@ -115,7 +116,9 @@ function holds(cf: Command, { root, db, out }: Cli): void {
     unhold(db(), root, Number(id), 'ceo')
     out(`plan ${id} queued\n`)
   })
+}
 
+function parks(cf: Command, { root, db, out }: Cli): void {
   cf.command('park').argument('<plan>', 'a plan to hold where it stands, checkout kept')
     .option('--on <plan>', 'the plan it waits on; it goes back in its lane when that one lands')
     .option('--why <text>', 'why it is held', 'held by a person')
@@ -129,6 +132,19 @@ function holds(cf: Command, { root, db, out }: Cli): void {
       }
       hold(handle, root, n, options.why, new Date(), on)
       out(`plan ${id} held${on === null ? '' : ` on plan ${String(on)}`}\n`)
+    })
+
+  cf.command('hold').argument('<plan>', 'a plan to hold where it stands, checkout kept')
+    .requiredOption('--by <holder>', `who it waits on: ${HOLDERS.join(' or ')}`)
+    .requiredOption('--why <text>', 'why it is held')
+    .action((id: string, options: { by: string; why: string }) => {
+      const by = holderOf(options.by)
+      const handle = db()
+      const n = Number(id)
+      if (holder(handle, n) !== null) throw new Error(`plan ${id} is mid-step in a live tick; hold it once the tick lets go`)
+      hold(handle, root, n, options.why, new Date())
+      held(handle, n, by, options.why)
+      out(`plan ${id} held on the ${by}\n`)
     })
 
   cf.command('unpark').argument('<plan>', 'a held plan, put back at the step it stopped on').action((id: string) => {

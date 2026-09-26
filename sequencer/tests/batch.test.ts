@@ -68,7 +68,7 @@ test('push refuses without a matching row, then pushes the approved head and ope
   expect(sent).toEqual([])
   approveCard(w.db, w.root, 'plan', 1)
   expect(push(w.db, w.root, plan(w.db, 1), wire)).toMatchObject({ outcome: 'pass' })
-  expect(sent).toEqual(['send src widget-12-a1', 'unrehearse caliperforge/widget widget-12-a1', 'open acme/widget caliperforge:widget-12-a1'])
+  expect(sent).toEqual(['send src widget-12-a1', 'unrehearse caliperforge/widget widget-12-a1-next', 'open acme/widget caliperforge:widget-12-a1'])
   expect(w.db.prepare('SELECT state, evidence FROM deliverables WHERE plan_id = 1 ORDER BY id DESC LIMIT 1').get())
     .toEqual({ state: 'pushed', evidence: URL })
 })
@@ -217,6 +217,40 @@ test('a round whose -next the fork holds at a commit HEAD lacks folds onto it, f
   push(w.db, w.root, plan(w.db, 1), wire)
   expect(sent.slice(2)).toEqual(['send src widget-12-a1', 'unrehearse caliperforge/widget widget-12-a1-next'])
   expect(sent.filter((l) => l.includes('--force') || l.includes('+refs'))).toEqual([])
+})
+
+test('rounds before the pull request fast-forward -next, and push sends the branch itself and opens it', async () => {
+  const w = world()
+  approve(w.db, w.target)
+  const src = srcDir(w.root, 1)
+  const git = (args: string[]): string => execFileSync('git', args, { cwd: src, encoding: 'utf8' }).trim()
+  const sent: string[] = []
+  const log = watched(sent, w.root, 1)
+  const wire = { ...log, send: (dir: string, ref: string) => {
+    log.send(dir, ref)
+    execFileSync('git', ['push', '-q', 'origin', ref], { cwd: dir })
+  } }
+  const round = async (said: string, ticks: number): Promise<void> => {
+    for (let at = 1; at < ticks; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+    writeFileSync(join(src, 'src/hello.ts'), `export const hello = (): string => "${said}"\n`)
+    await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+    expect(plan(w.db, 1).step).toBe(7)
+  }
+  await round('hey', 7)
+  const first = git(['rev-parse', 'HEAD'])
+  rewind(w.db, 1, 4)
+  await round('hi', 3)
+  git(['merge-base', '--is-ancestor', first, 'HEAD'])
+  expect(git(['rev-parse', 'HEAD'])).not.toBe(first)
+  expect(git(['ls-remote', 'origin', 'refs/heads/widget-12-a1-next']).split('\t')[0]).toBe(git(['rev-parse', 'HEAD']))
+  expect(git(['ls-remote', 'origin', 'refs/heads/widget-12-a1'])).toBe('')
+  expect(new Set(sent.filter((l) => l.startsWith('send ')))).toEqual(new Set(['send src HEAD:refs/heads/widget-12-a1-next']))
+  approveCard(w.db, w.root, 'plan', 1)
+  advance(w.db, plan(w.db, 1), 8)
+  const before = sent.length
+  push(w.db, w.root, plan(w.db, 1), wire)
+  expect(sent.slice(before)).toEqual(['send src widget-12-a1', 'unrehearse caliperforge/widget widget-12-a1-next',
+    'open acme/widget caliperforge:widget-12-a1'])
 })
 
 test('a counterparty finding on merged code is an escape against the step the map says owns it', async () => {

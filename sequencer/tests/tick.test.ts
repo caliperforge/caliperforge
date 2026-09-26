@@ -490,7 +490,7 @@ test('step 6 sends the branch to our fork, waits out a run still going, then rec
     watched(sent, w.root, 1, runsOn(w.root, 1, 'in_progress'))))[0]
   expect(held).toMatchObject({ step: 6, name: 'ready', outcome: 'pass', state: 'running' })
   expect(held?.spans).toEqual([`${RUN} ci.pending`])
-  expect(sent.slice(2)).toEqual(['send src widget-12-a1'])
+  expect(sent.slice(2)).toEqual(['send src HEAD:refs/heads/widget-12-a1-next'])
   expect(plan(w.db, 1).step).toBe(6)
   expect(w.db.prepare("SELECT count(*) AS n FROM verdicts WHERE plan = 1 AND rail_id = 'ci-green'").get())
     .toEqual({ n: 0 })
@@ -511,12 +511,12 @@ test('step 3\'s pass sends and rehearses the branch before review fires, and ste
   const wire = watched(sent, w.root, 1, (args) => { branches.push(String(args[args.indexOf('--branch') + 1])); return runs(args) })
   for (let at = 0; at < 4; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
   expect(plan(w.db, 1).step).toBe(4)
-  expect(sent).toEqual(['send src widget-12-a1', 'rehearse caliperforge/widget widget-12-a1'])
+  expect(sent).toEqual(['send src HEAD:refs/heads/widget-12-a1-next', 'rehearse caliperforge/widget widget-12-a1-next'])
 
   for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
   expect(plan(w.db, 1).step).toBe(7)
-  expect(sent.slice(2)).toEqual(['send src widget-12-a1'])
-  expect(branches).toEqual(['widget-12-a1'])
+  expect(sent.slice(2)).toEqual(['send src HEAD:refs/heads/widget-12-a1-next'])
+  expect(branches).toEqual(['widget-12-a1-next'])
 })
 
 test('a red run on the fork sends the plan to the builder with the failed log', async () => {

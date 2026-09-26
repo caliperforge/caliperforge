@@ -99,7 +99,7 @@ function wordsOf(db: Db, root: string, plan: number, card: string | null, desk: 
 
 function rehearsalOf(db: Db, root: string, plan: number, desk: Desk): { fork: string; no: number | null } {
   const fork = `${FORK}/${repoName(subjectOf(db, plan).repo)}`
-  return { fork, no: desk.rehearsal(fork, rehearsalBranch(db, root, plan)) }
+  return { fork, no: desk.rehearsal(fork, rehearsalBranch(root, plan)) }
 }
 
 function opening(db: Db, root: string, card: Card, desk: Desk, now: Date): Signed {

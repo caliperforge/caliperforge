@@ -7,7 +7,7 @@ import { record, type Signal, type SignalRow } from '../store/signals.ts'
 import { partOf, recordListing } from '../store/tickets.ts'
 import { attribute } from './escapes.ts'
 import { rehearsalBranch } from './push.ts'
-import { claimed } from './split.ts'
+import { claimed, released } from './split.ts'
 import { cloned, FORK, repoName, srcDir } from './workspace.ts'
 
 const Listed = z.array(z.object({
@@ -62,7 +62,10 @@ function listed(db: Db, root: string, repo: string, read: Read): void {
     '--json', 'number,title,body,url,labels']))
   const kept = found.filter((i) => laneOf(i.labels) !== null)
   recordListing(db, repo, found, found.length < WINDOW)
-  if (found.length < WINDOW) halt(db, repo, new Set(kept.map((i) => i.url)))
+  if (found.length < WINDOW) {
+    halt(db, repo, new Set(kept.map((i) => i.url)))
+    released(db, root, repo, new Set(found.map((i) => i.number)))
+  }
   const known = seen(db)
   const split = named(found.map((i) => i.title))
   for (const i of kept.filter((k) => !known.has(k.url) && !split.has(k.number) && !parent(repo, k.number, read))) {

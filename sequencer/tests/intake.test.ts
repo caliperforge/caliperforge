@@ -235,6 +235,54 @@ test('D6: the same listing again leaves the same tickets', () => {
   expect(tickets(db)).toEqual(RECORDED)
 })
 
+function waiting(): Db {
+  const db = piped()
+  queue(db, 30, 'done')
+  db.prepare("INSERT INTO parts (parent, n, url, title, body) VALUES (1, 0, ?, '30a: first', 'the part')").run(url(53))
+  db.prepare("INSERT INTO parts (parent, n, url, title, body) VALUES (1, 1, ?, '30b: second', 'After: #53')").run(url(54))
+  return db
+}
+
+const B: Fixture = { number: 54, labels: ['lane:machine'], title: '30b: second', body: 'After: #53' }
+
+const unblocked = (db: Db): unknown[] => db.prepare("SELECT plan, message FROM events WHERE kind = 'unblocked'").all()
+
+const waits = (db: Db): unknown => db.prepare('SELECT plan FROM parts WHERE n = 1').get()
+
+test('D1: a part whose After: issue closed off the machine is queued as its parent\'s, with its ask, and says so', () => {
+  const db = waiting()
+  intake(db, root, canned([B]))
+  const kin = 'SELECT pipe_id, lane, seat, priority FROM plans WHERE id = ?'
+  expect(db.prepare(kin).get(2)).toEqual(db.prepare(kin).get(1))
+  expect(states(db)).toEqual([{ origin: url(30), state: 'done' }, { origin: url(54), state: 'queued' }])
+  expect(waits(db)).toEqual({ plan: 2 })
+  expect(readFileSync(join(root, '.cf/work/2/ask.md'), 'utf8')).toBe('# 30b: second\n\nAfter: #53')
+  expect(unblocked(db)).toEqual([{ plan: 2, message: '#53 closed' }])
+})
+
+test('D2: a part whose After: issue is still open, lane-labelled or not, is not queued', () => {
+  for (const labels of [['lane:machine'], ['bug']]) {
+    const db = waiting()
+    intake(db, root, canned([{ number: 53, labels, title: '30a: first' }, B]))
+    expect(waits(db)).toEqual({ plan: null })
+    expect(states(db)).toEqual([{ origin: url(30), state: 'done' }])
+  }
+})
+
+test('D3: the same listing again makes no second plan and no second unblocked event', () => {
+  const db = waiting()
+  intake(db, root, canned([B]))
+  intake(db, root, canned([B]))
+  expect(db.prepare('SELECT count(*) AS n FROM plans WHERE origin = ?').get(url(54))).toEqual({ n: 1 })
+  expect(unblocked(db)).toHaveLength(1)
+})
+
+test('D4: a list exactly WINDOW long queues no part', () => {
+  const db = waiting()
+  intake(db, root, canned([B, ...[...Array(WINDOW - 1).keys()].map((i) => ({ number: 1000 + i, labels: ['bug'] }))]))
+  expect(waits(db)).toEqual({ plan: null })
+})
+
 test('#257: a running or blocked plan whose work was pushed and whose issue closed is done', () => {
   const db = piped()
   queue(db, 60, 'blocked_on_ceo')

@@ -84,6 +84,20 @@ test('go signs the head the card showed, closes the card, and the next tick send
   expect(signoffs(w.db, w.root, desk)).toEqual([])
 })
 
+test('go on a card whose lane is full leaves the plan queued', async () => {
+  const w = await atBatch()
+  w.db.prepare('UPDATE pipes SET max_concurrent = 1 WHERE id = 1').run()
+  w.db.prepare("UPDATE plans SET state = 'blocked_on_ceo' WHERE id = 1").run()
+  w.db.prepare(`INSERT INTO plans (id, pipe_id, target_id, template, state, queued_at, step, retries)
+    VALUES (2, 1, 1, 'pr_path', 'running', '2000-01-01T00:00:00.000Z', 2, 0)`).run()
+  const desk = fake()
+  signoffs(w.db, w.root, desk)
+  const card = desk.cards.get(100)
+  if (card !== undefined) card.answer = 'go'
+  expect(signoffs(w.db, w.root, desk)).toEqual([{ plan: 1, card: 100, did: 'go' }])
+  expect(plan(w.db, 1)).toMatchObject({ step: 7, state: 'queued' })
+})
+
 test('no with words sends it back to the builder with them', async () => {
   const w = await atBatch()
   const desk = fake()

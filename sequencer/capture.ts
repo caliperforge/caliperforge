@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { pr as readPr, prNumber, rehearsal, WINDOW, type Pr, type Read } from '../cli/gh.ts'
 import { add, LANE, LANES, laneOf, seen } from '../cli/plan.ts'
+import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { originRef, PlanRow } from '../store/plans.ts'
 import { record, type Signal, type SignalRow } from '../store/signals.ts'
@@ -41,24 +42,32 @@ export function capture(db: Db, read: (repo: string, no: number) => Pr = readPr,
 function reachable(db: Db, row: Pushed, read: (repo: string, no: number) => Pr): SignalRow[] {
   try {
     return one(db, row, read)
-  } catch {
+  } catch (error) {
+    logged(db, { plan: row.plan, kind: 'swallowed', actor: 'reachable', outcome: 'pass', message: firstLine(error), pointer: null, run: null })
     return []
   }
 }
 
-export function intake(db: Db, root: string, read: Read): void {
+export function firstLine(error: unknown): string {
+  return (error instanceof Error ? error.message : String(error)).split('\n')[0] ?? ''
+}
+
+export function intake(db: Db, root: string, read: Read): string[] {
+  const lines: string[] = []
   const on = new Set((db.prepare('SELECT name FROM pipes WHERE enabled = 1').all() as { name: string }[]).map((p) => p.name))
   for (const repo of new Set(LANES.filter((l) => on.has(LANE[l].pipe)).map((l) => LANE[l].home))) {
     try {
-      listed(db, root, repo, read)
-    } catch {
+      listed(db, root, repo, read, lines)
+    } catch (error) {
+      lines.push(`${repo}: ${firstLine(error)}`)
       continue
     }
   }
+  return lines
 }
 
 /** A list exactly `WINDOW` long may be cut short, so what is missing from it is not taken as gone. */
-function listed(db: Db, root: string, repo: string, read: Read): void {
+function listed(db: Db, root: string, repo: string, read: Read, lines: string[]): void {
   const found = Listed.parse(read(['issue', 'list', '--repo', repo, '--state', 'open', '--limit', String(WINDOW),
     '--json', 'number,title,body,url,labels']))
   const kept = found.filter((i) => laneOf(i.labels) !== null)
@@ -69,7 +78,7 @@ function listed(db: Db, root: string, repo: string, read: Read): void {
   }
   const known = seen(db)
   const split = named(found.map((i) => i.title))
-  for (const i of kept.filter((k) => !known.has(k.url) && !split.has(k.number) && !parent(repo, k.number, read))) {
+  for (const i of kept.filter((k) => !known.has(k.url) && !split.has(k.number) && !parent(repo, k.number, read, lines))) {
     if (!claimed(db, root, i)) add(db, root, `${repo}#${String(i.number)}`, undefined, read)
   }
 }
@@ -85,10 +94,11 @@ const Summary = z.object({ sub_issues_summary: z.object({ total: z.int() }).opti
  * #260: an issue with sub-issues is a parent; its parts are the jobs, and building it repeats them (#139, #138
  * and #85 on 09-25). An answer that cannot be read counts as a parent this tick, and the next tick asks again.
  */
-function parent(repo: string, no: number, read: Read): boolean {
+function parent(repo: string, no: number, read: Read, lines: string[]): boolean {
   try {
     return (Summary.parse(read(['api', `repos/${repo}/issues/${String(no)}`])).sub_issues_summary?.total ?? 0) > 0
-  } catch {
+  } catch (error) {
+    lines.push(`${repo}#${String(no)}: ${firstLine(error)}`)
     return true
   }
 }

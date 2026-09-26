@@ -169,10 +169,19 @@ test('the runs rule_hash check refuses 64 characters that are not all hex', () =
 test('firing one step writes one runs row carrying the rule hash as sent', async () => {
   const db = fresh(join(root, 'schema'))
   const { id } = await fire(db, root, 'typescript_specialist', cwd, 'ISSUE', stub)
-  const row = db.prepare('SELECT step, seat, rule_hash, provider, model, effort, input_tokens, cache_tokens, output_tokens, seconds, exit FROM runs WHERE id = ?').get(id)
+  const row = db.prepare('SELECT step, seat, rule_hash, provider, model, effort, input_tokens, cache_tokens, output_tokens, seconds, exit, cost_usd FROM runs WHERE id = ?').get(id)
   expect(row).toEqual({
     step: 2, seat: 'typescript_specialist', rule_hash: seat(root, 'typescript_specialist').hash,
     provider: 'claude-agent-sdk', model: 'claude-opus-5-5', effort: 'high',
-    input_tokens: 11, cache_tokens: 22, output_tokens: 33, seconds: 1.5, exit: 0,
+    input_tokens: 11, cache_tokens: 22, output_tokens: 33, seconds: 1.5, exit: 0, cost_usd: null,
   })
+})
+
+test('the SDK\'s total_cost_usd lands in the runs row', async () => {
+  const db = fresh(join(root, 'schema'))
+  const costed = fired(result({ result: 'done', total_cost_usd: 0.42 }), Date.now(), [])
+  expect(costed.usage.cost).toBe(0.42)
+  const provider: Provider = { name: 'claude-agent-sdk', fire: (p) => Promise.resolve({ ...costed, transcript_path: p.transcript }) }
+  const { id } = await fire(db, root, 'typescript_specialist', cwd, 'ISSUE', provider)
+  expect(db.prepare('SELECT cost_usd FROM runs WHERE id = ?').get(id)).toEqual({ cost_usd: 0.42 })
 })

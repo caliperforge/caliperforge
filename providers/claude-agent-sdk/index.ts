@@ -243,7 +243,7 @@ export function fired(message: SDKResultMessage, started: number, refused: strin
   const stopped = message.is_error || ended !== 'completed'
   return {
     text: text === '' ? refused.join('\n') : text,
-    usage,
+    usage: { ...usage, cost: message.total_cost_usd },
     seconds: (Date.now() - started) / 1000,
     ended: stopped ? 'stopped' : 'completed',
     exit: stopped ? 1 : 0,

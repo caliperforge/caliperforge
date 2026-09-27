@@ -172,7 +172,7 @@ function prose(root: string, plan: PlanRow): { description: string } {
 
 function unfinishedFirst(root: string, plan: number, outcome: Outcome): Outcome {
   const command = maybe(root, plan, 'step-2.unfinished.md')
-  return command === null ? outcome : { ...outcome, note: `the builder's test run did not finish: ${command}; ${outcome.note}` }
+  return command === null ? outcome : { ...outcome, note: `the builder's test run did not finish: ${command.replace(/\s+/g, ' ').trim()}; ${outcome.note}` }
 }
 
 function named(rail: string, verdict: Verdict): Outcome {

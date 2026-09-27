@@ -152,7 +152,7 @@ test('a replaced function left in place is a minimal refusal', async () => {
 
 test('reviewer != builder is refused before the provider fires; the trigger still guards the rows', async () => {
   const { db, plan } = bench(root)
-  const builder = `INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_tokens, output_tokens, seconds, exit, transcript_path)
+  const builder = `INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_read_tokens, output_tokens, seconds, exit, transcript_path)
     VALUES (${String(plan)}, 2, 'code_quality', '${specHash(root, 'code_quality')}', 'claude-agent-sdk', 'm', 'high', 0, 0, 0, 0, 0, 'x.transcript.jsonl')`
   db.exec(builder)
   const never: Provider = { name: 'claude-agent-sdk', fire: () => { throw new Error('the provider was fired on a barred packet') } }
@@ -166,7 +166,7 @@ test('reviewer != builder is refused before the provider fires; the trigger stil
   const first = await judge(fresh_.db, root, 'code_quality', fresh_.plan, seeded(), replies(fixture('code_quality', 'seeded.reply.md')), TRANSCRIPT)
   expect(first.run).not.toBeNull()
   expect(rejects(fresh_.db, `UPDATE runs SET seat = 'code_quality' WHERE id = ${String(first.run ?? 0)} AND step = 4`)).toBe(false)
-  expect(rejects(fresh_.db, `INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_tokens, output_tokens, seconds, exit, transcript_path)
+  expect(rejects(fresh_.db, `INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_read_tokens, output_tokens, seconds, exit, transcript_path)
     VALUES (${String(fresh_.plan)}, 5, 'code_quality', '${specHash(root, 'code_quality')}', 'claude-agent-sdk', 'm', 'high', 0, 0, 0, 0, 0, 'x.transcript.jsonl')`)).toBe(true)
 })
 

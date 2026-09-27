@@ -26,7 +26,7 @@ test('#284: a fixer or orchestrator run is never read as a build', () => {
   for (const id of [1, 2]) {
     for (const seat of ['fixer', 'orchestrator']) {
       db.prepare(`INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort,
-        input_tokens, cache_tokens, output_tokens, seconds, exit, at, transcript_path)
+        input_tokens, cache_read_tokens, output_tokens, seconds, exit, at, transcript_path)
         VALUES (?, 2, ?, ?, 'claude-agent-sdk', 'm', 'high', 0, 0, 0, 0, 0, '2999-01-01 00:00:00', 'x.transcript.jsonl')`)
         .run(id, seat, HASH)
     }

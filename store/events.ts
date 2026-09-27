@@ -52,7 +52,7 @@ export interface Run {
 
 export function runLogged(db: Db, r: Run): number {
   const row = db.prepare(`INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort,
-    input_tokens, cache_tokens, output_tokens, seconds, exit, transcript_path, cost_usd)
+    input_tokens, cache_read_tokens, output_tokens, seconds, exit, transcript_path, cost_usd)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(r.plan, r.step, r.seat, r.rule_hash, r.provider, r.model, r.effort, r.fired.usage.input, r.fired.usage.cache,
       r.fired.usage.output, r.fired.seconds, r.exit, r.fired.transcript_path, r.fired.usage.cost ?? null)
@@ -61,7 +61,7 @@ export function runLogged(db: Db, r: Run): number {
 
 export function runAt(db: Db, plan: number, step: number, seat: string, at: string): number {
   const row = db.prepare(`INSERT INTO runs (plan, step, seat, rule_hash, provider, model,
-    effort, input_tokens, cache_tokens, output_tokens, seconds, exit, at, transcript_path)
+    effort, input_tokens, cache_read_tokens, output_tokens, seconds, exit, at, transcript_path)
     VALUES (?, ?, ?, ?, 'claude-agent-sdk', 'm', 'high', 0, 0, 0, 0, 0, ?, 'x.transcript.jsonl')`)
     .run(plan, step, seat, '0'.repeat(64), at)
   return Number(row.lastInsertRowid)

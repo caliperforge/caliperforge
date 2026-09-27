@@ -39,7 +39,7 @@ function plan(db: Db, id: number, state: string, issue: number | null, target: n
 
 function run(db: Db, plan: number, step: number, at: string, seconds = 60, tokens = 100, seat = SEATS[step]): void {
   db.prepare(`INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort,
-    input_tokens, cache_tokens, output_tokens, seconds, exit, at, transcript_path)
+    input_tokens, cache_read_tokens, output_tokens, seconds, exit, at, transcript_path)
     VALUES (?, ?, ?, ?, 'claude-agent-sdk', 'opus', 'high', ?, 0, 0, ?, 0, ?, 'x.transcript.jsonl')`)
     .run(plan, step, seat, HASH, tokens, seconds, at)
 }

@@ -62,7 +62,7 @@ function stores(cf: Command, { root, db, out }: Cli): void {
   })
 
   cf.command('runs').action(() => {
-    const rows = db().prepare('SELECT id, seat, step, exit, input_tokens + cache_tokens + output_tokens AS tokens, seconds FROM runs ORDER BY id')
+    const rows = db().prepare('SELECT id, seat, step, exit, input_tokens + cache_read_tokens + output_tokens AS tokens, seconds FROM runs ORDER BY id')
       .all() as { id: number; seat: string; step: number; exit: number; tokens: number; seconds: number }[]
     for (const r of rows) out(`${String(r.id)}\t${r.seat}\t${String(r.step)}\t${String(r.exit)}\t${String(r.tokens)}\t${r.seconds.toFixed(1)}\n`)
   })

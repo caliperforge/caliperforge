@@ -160,7 +160,7 @@ test('the runs rule_hash check refuses 64 characters that are not all hex', () =
   load(db, root)
   const plan = String(planRow(db))
   const insert = (hash: string): string =>
-    `INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_tokens, output_tokens, seconds, exit, transcript_path)
+    `INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_read_tokens, output_tokens, seconds, exit, transcript_path)
      VALUES (${plan}, 2, 'typescript_specialist', '${hash}', 'claude-agent-sdk', 'm', 'high', 0, 0, 0, 0, 0, 'x.transcript.jsonl')`
   expect(rejects(db, insert(`0${'z'.repeat(63)}`))).toBe(true)
   expect(rejects(db, insert('a'.repeat(64)))).toBe(false)
@@ -169,11 +169,11 @@ test('the runs rule_hash check refuses 64 characters that are not all hex', () =
 test('firing one step writes one runs row carrying the rule hash as sent', async () => {
   const db = fresh(join(root, 'schema'))
   const { id } = await fire(db, root, 'typescript_specialist', cwd, 'ISSUE', stub)
-  const row = db.prepare('SELECT step, seat, rule_hash, provider, model, effort, input_tokens, cache_tokens, output_tokens, seconds, exit, cost_usd FROM runs WHERE id = ?').get(id)
+  const row = db.prepare('SELECT step, seat, rule_hash, provider, model, effort, input_tokens, cache_read_tokens, output_tokens, seconds, exit, cost_usd FROM runs WHERE id = ?').get(id)
   expect(row).toEqual({
     step: 2, seat: 'typescript_specialist', rule_hash: seat(root, 'typescript_specialist').hash,
     provider: 'claude-agent-sdk', model: 'claude-opus-5-5', effort: 'high',
-    input_tokens: 11, cache_tokens: 22, output_tokens: 33, seconds: 1.5, exit: 0, cost_usd: null,
+    input_tokens: 11, cache_read_tokens: 22, output_tokens: 33, seconds: 1.5, exit: 0, cost_usd: null,
   })
 })
 

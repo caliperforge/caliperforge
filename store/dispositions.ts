@@ -41,6 +41,11 @@ export function overridden(db: Db, span: Span, approval: number, tag: 'false_pos
   return put(db, span, 'overridden', approval, tag)
 }
 
+export function dispositionsOf(db: Db): { kind: string; defect_class: string; owner: Owner; evidence: string }[] {
+  return db.prepare('SELECT kind, defect_class, owner, evidence FROM dispositions ORDER BY id')
+    .all() as { kind: string; defect_class: string; owner: Owner; evidence: string }[]
+}
+
 function put(db: Db, span: Span, kind: string, approval: number | null, tag: string | null): number {
   const row = Span.parse(span)
   const written = db.prepare(`INSERT INTO dispositions

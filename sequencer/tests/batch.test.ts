@@ -9,8 +9,9 @@ import { approvalsOf, headApproved, headDigest, refusedPush } from '../../store/
 import { deliverablesOf } from '../../store/deliverables.ts'
 import { dispositionsOf } from '../../store/dispositions.ts'
 import type { Db } from '../../store/index.ts'
-import { advance, rewind } from '../../store/plans.ts'
-import { open as openProposals } from '../../store/proposals.ts'
+import { advance, pipeNamed, putPlan, rewind, titles } from '../../store/plans.ts'
+import { bySubject, open as openProposals } from '../../store/proposals.ts'
+import { latest } from '../../store/rulings.ts'
 import { ofKind, runAt } from '../../store/events.ts'
 import { graded, others, record, type SignalRow } from '../../store/signals.ts'
 import { capture } from '../capture.ts'
@@ -328,6 +329,8 @@ const FORKED = pr({
   statusCheckRollup: [{ name: 'build', conclusion: 'FAILURE' }],
 })
 
+const SECOND = { id: 2, pipe_id: 1, target_id: 1, template: 'pr_path', state: 'running', queued_at: '2026-09-17T00:00:00.000Z', step: 7, retries: 0 } as const
+
 const forked = (repo: string): Pr => (repo === 'caliperforge/widget' ? FORKED : pr())
 
 const INLINE = [
@@ -371,8 +374,7 @@ test('D1 a rehearsal review writes the bot\'s inline findings at its commit unde
 
 test('a plan with no checkout is asked about no rehearsal', async () => {
   const w = await pushed()
-  w.db.prepare(`INSERT INTO plans (id, pipe_id, target_id, template, state, queued_at, step, retries)
-    VALUES (2, 1, 1, 'pr_path', 'running', ?, 7, 0)`).run('2026-09-17T00:00:00.000Z')
+  putPlan(w.db, SECOND)
   const heads: string[] = []
   capture(w.db, forked, w.root, listing(heads))
   expect(heads).toEqual(['widget-12-a1-next'])
@@ -411,8 +413,7 @@ test('an approval that cannot settle its row writes no approval row either', asy
 
 test('a plan at ready with no checkout stays on the card list and cannot be signed', async () => {
   const w = await atBatch()
-  w.db.prepare(`INSERT INTO plans (id, pipe_id, target_id, template, state, queued_at, step, retries)
-    VALUES (2, 1, 1, 'pr_path', 'running', ?, 7, 0)`).run('2026-09-17T00:00:00.000Z')
+  putPlan(w.db, SECOND)
   const blind = batch(w.db, w.root).find((c) => c.id === 2)
   expect(blind).toMatchObject({ kind: 'plan', digest: '', marks: [{ name: 'bytes on the branch', ok: false }] })
   expect(() => approveCard(w.db, w.root, 'plan', 2)).toThrow(/no bytes on its branch/)
@@ -430,11 +431,10 @@ test('a signal starts the plan the map says it starts', async () => {
   expect(plan(w.db, 1)).toMatchObject({ step: 2, state: 'running' })
   const comms = started(w.db, signal(w.db, 'merge', 'maintainer', null))
   expect(comms).toMatchObject({ template: 'comms', step: 0 })
-  expect(w.db.prepare('SELECT template, state FROM plans WHERE id = ?').get(comms?.plan))
-    .toEqual({ template: 'comms', state: 'queued' })
+  expect(plan(w.db, Number(comms?.plan))).toMatchObject({ template: 'comms', state: 'queued' })
   expect(ofKind(w.db, 'filed').map((e) => ({ plan: e.plan, actor: e.actor })))
     .toEqual([{ plan: comms?.plan, actor: 'merge signal' }])
-  expect(w.db.prepare("SELECT enabled FROM pipes WHERE name = 'comms'").get()).toEqual({ enabled: 1 })
+  expect(pipeNamed(w.db, 'comms')?.enabled).toBe(1)
 })
 
 test('an outside merge signal replayed files one ship-post plan', async () => {
@@ -442,7 +442,7 @@ test('an outside merge signal replayed files one ship-post plan', async () => {
   const merge = signal(w.db, 'merge', 'maintainer', null)
   expect(started(w.db, merge)).toMatchObject({ template: 'comms' })
   expect(started(w.db, merge)).toBeNull()
-  expect(w.db.prepare("SELECT title FROM plans WHERE template = 'comms'").all()).toEqual([{ title: 'ship post acme/widget#7' }])
+  expect(titles(w.db, 'comms')).toEqual(['ship post acme/widget#7'])
   expect(ofKind(w.db, 'filed').map((e) => e.message)).toEqual(['acme/widget#7'])
 })
 
@@ -452,7 +452,7 @@ test('a merge signal on an internal plan files nothing', () => {
   const merge = record(w.db, { repo: 'acme/widget', pr: 7, kind: 'merge', author: 'maintainer', at: new Date().toISOString(),
     external_id: 'merge-7', score: null, plan: 2 })
   expect(merge === null ? 'unrecorded' : started(w.db, merge)).toBeNull()
-  expect(w.db.prepare("SELECT count(*) AS n FROM plans WHERE template = 'comms'").get()).toEqual({ n: 0 })
+  expect(titles(w.db, 'comms')).toEqual([])
 })
 
 test('answered bot score stops holding', async () => {
@@ -489,8 +489,7 @@ test('session close writes typed proposals and nothing else, and approval turns 
   expect(rows[0]?.match_ruling_id).not.toBeNull()
 
   approveCard(w.db, w.root, 'proposal', Number(rows[0]?.id))
-  expect(w.db.prepare("SELECT value, issue_no FROM rulings WHERE subject = 'push.digest' ORDER BY id DESC LIMIT 1").get())
-    .toEqual({ value: 'approval_matches_head_and_the_hook', issue_no: 42 })
+  expect(latest(w.db, 'push.digest')).toEqual({ value: 'approval_matches_head_and_the_hook', issue_no: 42 })
   refuseCard(w.db, w.root, 'proposal', Number(rows[1]?.id), 'not_now')
   expect(openProposals(w.db).map((r) => r.class)).toEqual(['ordering', 'world_fact', 'measurement'])
   expect(approvalsOf(w.db, 'proposal')).toEqual([{ decision: 'approved', reason: null }, { decision: 'refused', reason: 'not_now' }])
@@ -537,8 +536,7 @@ test('an approved non-ruling item said again in a later session leaves its evide
   const again = `${w.root}/again-later.md`
   writeFileSync(again, '\n\nWORK batch.card = show_the_change_and_the_marks\n')
   expect(close(w.db, again, () => 42)).toEqual([])
-  expect(w.db.prepare("SELECT state, evidence FROM proposals WHERE subject = 'batch.card'").get())
-    .toEqual({ state: 'approved', evidence: `${first}:1` })
+  expect(bySubject(w.db, 'batch.card')).toMatchObject({ state: 'approved', evidence: `${first}:1` })
   expect(openProposals(w.db)).toHaveLength(0)
 })
 

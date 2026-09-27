@@ -38,13 +38,13 @@ type Written = z.infer<typeof Noted>
 
 const Fence = z.object({
   outcome: z.enum(['pass', 'refuse', 'needs_ceo']),
-  class: z.string().regex(/^[a-z_]+$/).nullish(),
+  class: z.union([z.literal('claim.unverified'), z.string().regex(/^[a-z_]+$/)]).nullish(),
   spans: z.array(Span).nullish(),
   reopen: z.record(z.string(), z.string()).nullish(),
   notes: z.array(Noted).nullish(),
 }).refine((f) => f.outcome !== 'refuse' || ((f.spans ?? []).length > 0 && f.class != null))
 
-const FENCE = /^---\r?\n([\s\S]*?)\r?\n---\s*$/m
+const FENCE = /^(?:```\w*\r?\n)?---\r?\n([\s\S]*?)\r?\n---(?:\r?\n```)?\s*$/m
 
 /** A verdict as the reviewer wrote it: the row, its findings, and the new fact it names for each span it re-opens. */
 export interface Judged extends Verdict {
@@ -59,9 +59,10 @@ export function read(reply: string, subject: string): Judged | null {
   const fence = Fence.safeParse(yaml(found[1] ?? ''))
   if (!fence.success) return null
   const subject_digest = createHash('sha256').update(subject).digest('hex')
-  if (fence.data.outcome === 'pass') return passed(fence.data.notes ?? [], reply.slice(0, found.index).trim(), subject_digest)
+  const prose = reply.slice(0, found.index).trim()
+  if (fence.data.outcome === 'pass') return passed(fence.data.notes ?? [], prose, subject_digest)
   if (fence.data.outcome !== 'refuse') {
-    return { outcome: fence.data.outcome, defect_class: null, spans: [], findings: [], subject_digest, origin_kind: null, origin_ref: null, message: fence.data.outcome, reopen: {}, notes: [] }
+    return { outcome: fence.data.outcome, defect_class: null, spans: [], findings: [], subject_digest, origin_kind: null, origin_ref: null, message: prose, reopen: {}, notes: [] }
   }
   const findings = fence.data.spans ?? []
   return {
@@ -72,7 +73,7 @@ export function read(reply: string, subject: string): Judged | null {
     subject_digest,
     origin_kind: 'ruling',
     origin_ref: 'reviewers.verdict',
-    message: reply.slice(0, found.index).trim(),
+    message: prose,
     reopen: fence.data.reopen ?? {},
     notes: [],
   }
@@ -85,7 +86,7 @@ function known(n: Written): n is Note {
 function passed(notes: Written[], prose: string, subject_digest: string): Judged {
   const stray = notes.filter((n) => !known(n))
   if (stray.length === 0) {
-    return { outcome: 'pass', defect_class: null, spans: [], findings: [], subject_digest, origin_kind: null, origin_ref: null, message: 'pass', reopen: {}, notes: notes.filter(known) }
+    return { outcome: 'pass', defect_class: null, spans: [], findings: [], subject_digest, origin_kind: null, origin_ref: null, message: prose === '' ? 'pass' : prose, reopen: {}, notes: notes.filter(known) }
   }
   const spans = stray.map((n) => `${n.file}:${String(n.line)}`)
   return {

@@ -1,0 +1,6 @@
+seat: text_review
+model: claude-opus-5-5
+effort: high
+tools:
+  - Read
+write_paths: []

@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { logged } from './events.ts'
 import type { Db } from './index.ts'
 import { held } from './leases.ts'
-import { clock, openPipes } from './plans.ts'
+import { clock, openPipes, type PlanRow } from './plans.ts'
 
 export const LaneCap = z.object({
   dial: z.int(),
@@ -133,4 +133,21 @@ export function observed(db: Db, readings: Reading[] = []): void {
 export function name(n: number | null): string {
   if (n === null) return 'none'
   return n === 0 ? 'spot' : String(n)
+}
+
+export function width(db: Db, pipe: number, n: number): void {
+  db.prepare('UPDATE pipes SET max_concurrent = ? WHERE id = ?').run(n, pipe)
+}
+
+export function amend(db: Db, plan: number, fields: Partial<Pick<PlanRow, 'step' | 'state' | 'retries' | 'head_digest' | 'priority'>>): void {
+  const cols = Object.keys(fields).map((k) => `${k} = @${k}`).join(', ')
+  db.prepare(`UPDATE plans SET ${cols} WHERE id = @id`).run({ ...fields, id: plan })
+}
+
+export function forget(db: Db): void {
+  db.prepare('DELETE FROM usage').run()
+}
+
+export function usage(db: Db): { kind: string; utilisation: number }[] {
+  return db.prepare('SELECT kind, utilisation FROM usage ORDER BY id').all() as { kind: string; utilisation: number }[]
 }

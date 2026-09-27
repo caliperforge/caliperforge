@@ -18,6 +18,13 @@ export function receipt(db: Db, row: Receipt): number {
   return Number(made.lastInsertRowid)
 }
 
+export function slots(db: Db, tick: number, rows: { pipe: { id: number }; free: number; startable: number }[]): void {
+  const put = db.prepare('INSERT INTO tick_lanes (tick, pipe, free, startable) VALUES (?, ?, ?, ?)')
+  db.transaction(() => {
+    for (const row of rows) put.run(tick, row.pipe.id, row.free, row.startable)
+  })()
+}
+
 export function last(db: Db, limit = 10): Receipt[] {
   return db.prepare('SELECT at, hhmm, dry, pipes, fired, exit, note FROM ticks ORDER BY id DESC LIMIT ?')
     .all(limit).map((r) => ({ ...(r as Receipt), dry: (r as { dry: number }).dry === 1 }))

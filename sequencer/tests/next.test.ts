@@ -5,6 +5,7 @@ import { holder, take } from '../../store/leases.ts'
 import { WAIT } from '../../store/plans.ts'
 import { at } from '../../templates/pr-path.ts'
 import { route, type Route } from '../next.ts'
+import { mapOf } from '../steps.ts'
 import { approve, plan, world, type World } from './world.ts'
 
 const NOW = new Date()
@@ -53,13 +54,13 @@ const TABLE: Record<string, Row> = {
     },
     want: { wait: 'no_step_map', on: null },
   },
-  'a comms plan, whose steps the sequencer does not run yet': {
+  'a comms plan at its first step': {
     state: () => {
       const w = world()
       w.db.prepare("UPDATE plans SET template = 'comms' WHERE id = 1").run()
       return w
     },
-    want: { wait: 'no_step_map', on: null },
+    want: { fire: mapOf('comms').at(0) },
   },
   'a target not yet approved': { state: () => stepTo(world(), 1, 1), want: { wait: 'target_approval', on: null } },
   'a ready step with no proof': { state: () => stepTo(world(), 1, 6), want: { wait: 'ready_proof', on: null } },

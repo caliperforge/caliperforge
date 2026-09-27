@@ -1,4 +1,4 @@
-import { mkdtempSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { beforeEach, expect, test } from 'vitest'
@@ -7,7 +7,8 @@ import { hold } from '../../sequencer/hold.ts'
 import { put } from '../../sequencer/workspace.ts'
 import { migrate, open, type Db } from '../../store/index.ts'
 import { receipt, slots } from '../../store/ticks.ts'
-import { flow } from '../flow.ts'
+import { flow, reported } from '../flow.ts'
+import { all } from '../inbox.ts'
 
 const schema = join(import.meta.dirname, '../../schema')
 
@@ -147,4 +148,34 @@ test('D7: flow leaves cf.db and .cf/ byte for byte as they were', () => {
   const before = bytes()
   expect(flow(db, root, now)).toHaveLength(2)
   expect(bytes()).toEqual(before)
+})
+
+const later = (minutes: number): Date => new Date(now.getTime() + minutes * 60_000)
+
+test('reported D1: two hourly runs over the same stuck plan leave one flow line', () => {
+  const db = piped()
+  refusals(db, plan(db, 4, 'blocked_on_ceo'), '2026-09-26 11:00:00', 'a', 'a')
+  reported(db, root, now)
+  reported(db, root, later(60))
+  expect(all(root).map((e) => [e.kind, e.plan, e.ticket])).toEqual([['flow', 4, '#4']])
+})
+
+test('reported D2: a run inside the hour writes nothing; the next writes only the new finding', () => {
+  const db = piped()
+  refusals(db, plan(db, 4, 'blocked_on_ceo'), '2026-09-26 11:00:00', 'a', 'a')
+  reported(db, root, now)
+  refusals(db, plan(db, 6, 'blocked_on_ceo'), '2026-09-26 11:00:00', 'a', 'a')
+  reported(db, root, later(30))
+  expect(all(root)).toHaveLength(1)
+  reported(db, root, later(60))
+  expect(all(root).map((e) => e.plan)).toEqual([4, 6])
+})
+
+test('reported D3: with no open pipe it writes no inbox line and no stamp', () => {
+  const db = fresh(schema)
+  db.prepare("UPDATE settings SET value = '0' WHERE key = 'tick.zone_offset_minutes'").run()
+  db.prepare("UPDATE pipes SET window_start = '03:00', window_end = '03:01'").run()
+  refusals(db, plan(db, 4, 'blocked_on_ceo'), '2026-09-26 11:00:00', 'a', 'a')
+  reported(db, root, now)
+  expect([existsSync(join(root, '.cf/inbox.jsonl')), existsSync(join(root, '.cf/flow.at'))]).toEqual([false, false])
 })

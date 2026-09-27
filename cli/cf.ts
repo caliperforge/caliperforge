@@ -18,7 +18,7 @@ import { hhmm } from '../store/lanes.ts'
 import { openPipes, overlapWaits } from '../store/plans.ts'
 import { receipt, slots } from '../store/ticks.ts'
 import { dryLines, tickNote } from './brief.ts'
-import { slack } from './flow.ts'
+import { reported, slack } from './flow.ts'
 import { registerInbox, registerLanes, registerSession, type Cli } from './cf-lanes.ts'
 import { registerPlans, registerRetry } from './cf-plans.ts'
 import { registerAdopt, registerApprovals, registerTargets } from './cf-targets.ts'
@@ -122,6 +122,7 @@ async function ticked(options: { dry?: boolean }, now: Date): Promise<void> {
   const news = events(handle, fired, now.toISOString())
   keep(root, news)
   notify(news)
+  reported(handle, root, now)
   if (fired.length === 0) out('nothing to fire\n')
   for (const f of fired) {
     out(`${f.pipe}\tplan ${String(f.plan)}\tstep ${String(f.step)} ${f.name}\t${f.outcome}\t${f.state}\t${f.note}\n`)

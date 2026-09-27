@@ -78,6 +78,12 @@ test('#374 a `+` path reads, a row naming no path is unread, a blank line is not
     .toEqual({ paths: ['src/a.ts'], unread: [] })
 })
 
+test('#397 a code-fence line is not a row; a prose row is still unread', () => {
+  expect(deletions('## Deleted\n\n```\n- src/a.ts\n- src/b.ts\n```\n')).toEqual({ paths: ['src/a.ts', 'src/b.ts'], unread: [] })
+  expect(deletions('## Deleted\n\n- src/a.ts\n```\n\n```yaml\n---\ndone:\n---\n```\n')).toEqual({ paths: ['src/a.ts'], unread: [] })
+  expect(deletions('## Deleted\n\n```\n- the old spend file\n```\n')).toEqual({ paths: [], unread: ['- the old spend file'] })
+})
+
 test('a new migration numbered at or below one the checkout holds', () => {
   const src = mkdtempSync(join(tmpdir(), 'cf-schema-'))
   mkdirSync(join(src, 'schema'))

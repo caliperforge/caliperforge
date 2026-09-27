@@ -5,6 +5,7 @@ import { audit } from '../../../rails/completion-audit/index.ts'
 import { Seat, rules, seat } from '../../../runner/rules.ts'
 
 const root = join(import.meta.dirname, '../../..')
+const REASK = 'A hand-back with no fence, or one whose YAML does not parse, is asked once for the fence alone: answer with only the closing `---` fence and a `done:` row per case, and edit no file, since an edit there refuses the build.'
 
 test('the manifest fences writes to the files the brief names', () => {
   expect(Seat.parse(seat(root, 'outside_specialist').manifest)).toMatchObject({
@@ -37,6 +38,7 @@ test('the prompt says the brief\'s files are handed', () => {
 test('the fence asks for a summary above done, and the audit still reads it', () => {
   for (const name of ['go_specialist', 'kotlin_specialist', 'outside_specialist', 'swift_specialist', 'typescript_specialist']) {
     expect(seat(root, name).prompt).toMatch(/^---\nsummary: <the change in one line>\ndone:$/m)
+    expect(seat(root, name).prompt).toContain(REASK)
   }
   const fence = (pointer: string) => `---\nsummary: x\ndone:\n  - id: D1\n    status: done\n${pointer}---\n`
   expect(audit(fence('    pointer: a.ts\n'), ['D1']).outcome).toBe('pass')

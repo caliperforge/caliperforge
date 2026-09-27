@@ -9,7 +9,7 @@ import { tick } from '../index.ts'
 import { stopped } from '../seat.ts'
 import { put, ruled } from '../workspace.ts'
 import { HANDOUT } from './bases.ts'
-import { approve, CARRIED, PASS, stub, world, type World } from './world.ts'
+import { approve, CARRIED, PASS, stub, watched, world, type World } from './world.ts'
 
 const BRIEF = ['# hello', '',
   '**What:** add `hello()`.', '**Why:** the ask asks for it.', '**When it ends:** it is exported.', '',
@@ -111,6 +111,41 @@ test('D1 a ruling appended to ask.md after the build reaches the next builder pa
   for (let at = 0; at < 5 && packets.length < 2; at += 1) await tick(w.db, w.root, provider)
   expect(packets[1]?.prompt).toContain('# What the ask holds beyond this brief\n\n## Ruling\n\nuse bye()')
   expect(packets[0]?.prompt).not.toContain('use bye()')
+})
+
+test('D1 rulings.md reaches the builder right after the brief', async () => {
+  const w = briefed()
+  put(w.root, 1, 'rulings.md', 'use bye()\n')
+  const packets: Packet[] = []
+  for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, builds(packets))
+  expect(packets[0]?.prompt).toContain(`${BRIEF}\n\n# Rulings\n\nuse bye()`)
+})
+
+/** Every packet of a plan walked through senior review, with `rulings` as its `rulings.md` when given. */
+async function walked(rulings?: string): Promise<Packet[]> {
+  const w = world()
+  approve(w.db, w.target)
+  if (rulings !== undefined) put(w.root, 1, 'rulings.md', rulings)
+  const packets: Packet[] = []
+  const wire = watched([], w.root, 1)
+  for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED, 0, PASS, (p) => packets.push(p)), undefined, undefined, wire)
+  return packets
+}
+
+test('D1 rulings.md reaches both reviewers between # Issue and # Diff', async () => {
+  const packets = await walked('use bye()\n')
+  for (const seat of ['# code_quality', '# senior_review']) {
+    const prompt = packets.find((p) => !p.tools.includes('Write') && p.prompt.includes(seat))?.prompt ?? ''
+    expect(prompt.split('\n# Issue\n')[1]?.split('\n# Diff\n')[0]).toContain('\n\n# Rulings\n\nuse bye()')
+  }
+})
+
+test('D5 a missing or blank rulings.md puts no # Rulings in any packet', async () => {
+  for (const rulings of [undefined, ' \n']) {
+    const packets = await walked(rulings)
+    expect(packets.filter((p) => p.prompt.includes('# senior_review'))).toHaveLength(1)
+    expect(packets.filter((p) => p.prompt.includes('\n# Rulings\n'))).toEqual([])
+  }
 })
 
 test('D2 D3 ruled: the tail past the copy, the whole ask once its start moved, else nothing', () => {

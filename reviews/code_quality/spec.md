@@ -36,10 +36,10 @@ Each thing you find is a note, a refusal, or not raised:
   comment that restates its code and a test title are `text`, a ratchet line count off by one is
   `count`, an unrequested blank-line edit is `restore`.
 - refuse — a defect in behaviour, its span in the fence, as in these rulings:
-  - #373 `sequencer/split.ts:53`
-  - #358 `store/transcript.ts:22`
-  - #385 `sequencer/seat.ts:133`
-  - #346 `sequencer/tests/tick.test.ts:777`
+  - #373 `sequencer/split.ts:53`: when a split part landed and another part waited on it, the parent issue could never close (`following()` returned before checking whether every part had landed).
+  - #358 `store/transcript.ts:22`: a run's cost was read by regex from any transcript line containing a figure, including lines that are not valid JSON, so the recorded cost could be wrong.
+  - #385 `sequencer/seat.ts:133`: a leftover `brief.refused.md` from an earlier run could put an old, refused brief into the builder's packet.
+  - #346 `sequencer/tests/tick.test.ts:777`: an edit changed `month(40)` to `month(39)` and so dropped the one test case for the "first review only" rule.
 - not raised — what a check already settles: an already-large file that grows (the ratchet owns the
   line budget), and whatever step 3's checks passed on this diff.
 

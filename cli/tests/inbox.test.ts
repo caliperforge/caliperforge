@@ -85,3 +85,9 @@ test('the title names the repo and issue, not the org', () => {
   notify([ev({ note: 'x' })], (title) => posted.push(title))
   expect(posted).toEqual(['CaliperForge · surfpool #706'])
 })
+
+test('D4: a flow event reaches the file only, never the desktop', () => {
+  const posted: string[] = []
+  notify([ev({ kind: 'flow', note: 'stopped on a repeated refusal: cf retry 70' })], (title) => posted.push(title))
+  expect(posted).toEqual([])
+})

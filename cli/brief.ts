@@ -1,5 +1,7 @@
 import type { Dry, Quiet } from '../sequencer/index.ts'
 import type { Fired } from '../sequencer/kind.ts'
+import { CREDITS } from '../sequencer/ready.ts'
+import { ruled } from '../sequencer/workspace.ts'
 import type { Db } from '../store/index.ts'
 import { name, type LaneState, type WindowRow } from '../store/lanes.ts'
 import { BUILT, type Holder, type Wait } from '../store/plans.ts'
@@ -105,6 +107,12 @@ export function section(title: string, rows: PlanLine[]): string {
   return `${title} (${String(rows.length)})\n${body}`
 }
 
+export function rulings(db: Db, root: string): string {
+  const plans = db.prepare('SELECT id FROM plans ORDER BY id').all() as { id: number }[]
+  return plans.filter((p) => ruled(root, p.id) !== null)
+    .map((p) => `ask\tplan ${String(p.id)}: ask.md differs from the ask its issue.md was briefed from\n`).join('')
+}
+
 export function runsOf(db: Db, plan: number): Record<string, string | number>[] {
   return db.prepare('SELECT id, step, seat, exit FROM runs WHERE plan = ? ORDER BY id').all(plan) as Record<string, string | number>[]
 }
@@ -128,6 +136,10 @@ export function waits(db: Db): { reason: Wait; plans: number }[] {
 export function waitLine(rows: { reason: Wait; plans: number }[]): string {
   const pairs = rows.length === 0 ? ['none'] : rows.map((w) => `${w.reason} ${String(w.plans)}`)
   return `waits\t${pairs.join('\t')}\n`
+}
+
+export function greptileLine(n: number): string {
+  return `greptile ${String(n)}/${String(CREDITS)} this month\n`
 }
 
 /** One row per rate-limit window: our tokens inside it, the provider's utilisation of it, the cap. */

@@ -135,13 +135,22 @@ function one(db: Db, row: Pushed, read: (repo: string, no: number) => Pr): Signa
   const view = read(row.repo, prNumber(row.evidence))
   if (row.rehearsal !== null) {
     for (const s of signals(view, row).filter((s) => s.kind === 'bot_review')) {
-      record(db, { ...s, head: typeof s.head === 'string' ? carried(row.rehearsal, row.plan, s.head) : null })
+      stored(db, row, { ...s, head: typeof s.head === 'string' ? carried(row.rehearsal, row.plan, s.head) : null })
     }
     return []
   }
-  const fresh = signals(view, row).map((s) => record(db, s)).filter((s) => s !== null)
+  const fresh = signals(view, row).map((s) => stored(db, row, s)).filter((s) => s !== null)
   attribute(db, row.plan, row.repo, view)
   return acted(db, view, fresh)
+}
+
+function stored(db: Db, row: Pushed, s: Signal): SignalRow | null {
+  const written = record(db, s)
+  if (written !== null) {
+    logged(db, { plan: row.plan, kind: written.kind, actor: written.author, outcome: 'pass',
+      message: `${written.repo}#${String(written.pr)}`, pointer: `signals:${String(written.id)}`, run: null })
+  }
+  return written
 }
 
 /**

@@ -28,7 +28,7 @@ import { fenceFor, languageFor } from './route.ts'
 import { gates, outsideLanguage } from './gates.ts'
 import type { Outcome } from './kind.ts'
 import { COMMIT, commitMessage } from './push.ts'
-import { carried, cloned, diffOf, diffSince, drop, get, headSha, holds, MAIN, maybe, merging, move, narrowing, planDir, put, snapshot, srcDir } from './workspace.ts'
+import { carried, cloned, diffOf, diffSince, drop, get, headSha, holds, MAIN, maybe, merging, move, narrowing, planDir, put, ruled, snapshot, srcDir } from './workspace.ts'
 import { kernelPlan } from './home.ts'
 
 const INSERT = `INSERT INTO runs
@@ -72,7 +72,7 @@ function dropped(db: Db, root: string, plan: PlanRow, step: Step, handback: stri
 
 /**
  * Step 1. The seat's reply is the brief, and the machine is what saves it: everything downstream reads
- * `issue.md` and so works from the brief, never from the ask. A plan a builder has already run on keeps
+ * `issue.md` and so works from the brief; only the builder also gets what ask.md gained since (`ruled`). A plan a builder has already run on keeps
  * the ticket it was built against, whatever its shape, and a brief that still passes stands, so the
  * contract the reviewers read does not move under them between rebuild rounds.
  */
@@ -106,6 +106,7 @@ export async function fireBrief(db: Db, root: string, plan: PlanRow, step: Step,
   db.prepare('UPDATE plans SET title = ?, what = ?, why = ?, ends = ? WHERE id = ?')
     .run(lines.title, lines.what, lines.why, lines.ends, plan.id)
   put(root, plan.id, 'issue.md', fired.text)
+  put(root, plan.id, 'ask.briefed.md', ask)
   const message = commitMessage(root, plan)
   if (message !== null) put(root, plan.id, COMMIT, message)
   drop(root, plan.id, 'refusal.md')
@@ -214,7 +215,8 @@ function exited(step: Step, fired: Fired): Outcome {
  */
 function rebuild(db: Db, root: string, plan: PlanRow, prev: string | null): string {
   const src = srcDir(root, plan.id)
-  const issue = get(root, plan.id, 'issue.md')
+  const ruling = ruled(root, plan.id)
+  const issue = get(root, plan.id, 'issue.md') + (ruling === null ? '' : `\n\n# What the ask holds beyond this brief\n\n${ruling.trim()}`)
   const refusal = maybe(root, plan.id, 'refusal.md')
   const rows = lastRows(prev)
   if (refusal === null) return handed(`${issue}${rows}`, handout(src, listed(db, plan.id, issue)))

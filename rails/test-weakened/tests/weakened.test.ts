@@ -68,6 +68,18 @@ test('refuses an assertion removed from a test that stays beside a named removal
   expect(verdict.spans).toEqual(['t/b.test.ts:2 test.weakened.removed'])
 })
 
+const loosened = `${header}+  expect(keep()).toBeNull()\n   expect(keep()).toBe(1)\n })\n${block}`
+
+test('passes a loose assertion added beside a named removal', () => {
+  const verdict = weakened(loosened, 'green', 'remove parses')
+  expect(verdict.outcome).toBe('pass')
+  expect(verdict.spans).toEqual([])
+})
+
+test('refuses a loose assertion added beside a removal named for another test', () => {
+  expect(weakened(loosened, 'green', 'remove other').spans).toEqual(['t/b.test.ts:2 test.weakened.loosened'])
+})
+
 test('ignores a weakened line outside a test file', () => {
   const diff = '--- a/src/x.ts\n+++ b/src/x.ts\n@@ -1,1 +1,1 @@\n-expect(x).toBe(1)\n+expect(x).toBeDefined()\n'
   expect(weakened(diff, 'green').spans).toEqual([])

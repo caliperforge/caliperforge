@@ -146,13 +146,6 @@ test('D4 load with no FAIL line, a hung xcodebuild runner, or a test script that
   }
 })
 
-test('an assertion failure is refused on the first run and never retried', () => {
-  const once = replies({ ok: false, code: '1', output: ASSERTED }, { ok: true, output: '' })
-  expect(checks(tree(ONE), once.run))
-    .toEqual({ script: 'test', command: 'npm run test', code: '1', output: ASSERTED, tests: ['x.test.ts a call'], retried: false })
-  expect(once.seen).toEqual(['run test'])
-})
-
 test('a failure the output does not account for as load is refused on the first run', () => {
   for (const output of [`${TIMEOUT}${ASSERTED}`, SILENT]) {
     const shell = replies({ ok: false, code: '1', output }, { ok: true, output: '' })

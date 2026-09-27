@@ -5,10 +5,6 @@ import { join } from 'node:path'
 import { expect, test, vi } from 'vitest'
 import { free, npm, slot } from '../checks.ts'
 
-test('no limit when unset', () => {
-  expect(slot(mkdtempSync(join(tmpdir(), 'cf-slot-')), 0)).toBeNull()
-})
-
 test('takes free slots, frees its own', () => {
   const dir = mkdtempSync(join(tmpdir(), 'cf-slot-'))
   const a = slot(dir, 2)

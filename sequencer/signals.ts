@@ -1,7 +1,8 @@
 import { notify, record as keep, type Event } from '../cli/inbox.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
-import { needsCeo, PlanRow, rewind } from '../store/plans.ts'
+import { hhmm, zone } from '../store/lanes.ts'
+import { internal, needsCeo, PlanRow, rewind } from '../store/plans.ts'
 import { clear } from '../store/refusals.ts'
 import type { SignalRow } from '../store/signals.ts'
 import { assembling } from './home.ts'
@@ -85,15 +86,31 @@ function older(db: Db, signal: SignalRow, plan: number): boolean {
 }
 
 /** The comms lane is on and holds no step map; the plan queued here waits there until P7 writes one. */
-function comms(db: Db, signal: SignalRow, from: number): Started {
+function comms(db: Db, signal: SignalRow, from: number): Started | null {
+  const merged = PlanRow.parse(db.prepare('SELECT * FROM plans WHERE id = ?').get(from))
+  if (internal(merged)) return null
   db.prepare(`INSERT OR IGNORE INTO pipes (name, enabled, window_start, window_end, max_concurrent)
     VALUES ('comms', 1, '07:00', '22:00', 1)`).run()
+  const ticket = `${signal.repo}#${String(signal.pr)}`
+  const plan = file(db, `ship post ${ticket}`, merged.target_id, new Date(), 'merge signal', ticket)
+  return plan === null ? null : { signal: signal.id, template: 'comms', plan, step: 0 }
+}
+
+/** The day's comms plan, filed once from 20:30 local on a comms lane someone left on. */
+export function daily(db: Db, now: Date): void {
+  if (hhmm(db, now) < '20:30') return
+  if (db.prepare("SELECT 1 FROM pipes WHERE name = 'comms' AND enabled = 1").get() === undefined) return
+  const day = new Date(now.getTime() + zone(db) * 60000).toISOString().slice(0, 10)
+  file(db, `daily ${day}`, null, now, 'daily clock', day)
+}
+
+/** `plans_one_comms` holds a comms title to one plan, so a title already filed files nothing. */
+function file(db: Db, title: string, target: number | null, at: Date, actor: string, message: string): number | null {
   const pipe = db.prepare("SELECT id FROM pipes WHERE name = 'comms'").get() as { id: number }
-  const target = db.prepare('SELECT target_id FROM plans WHERE id = ?').get(from) as { target_id: number | null }
-  const made = db.prepare(`INSERT INTO plans (pipe_id, target_id, template, state, queued_at, step, retries)
-    VALUES (?, ?, 'comms', 'queued', ?, 0, 0)`).run(pipe.id, target.target_id, new Date().toISOString())
+  const made = db.prepare(`INSERT OR IGNORE INTO plans (pipe_id, target_id, template, state, queued_at, step, retries, title)
+    VALUES (?, ?, 'comms', 'queued', ?, 0, 0, ?)`).run(pipe.id, target, at.toISOString(), title)
+  if (made.changes !== 1) return null
   const plan = Number(made.lastInsertRowid)
-  logged(db, { plan, kind: 'filed', actor: 'merge signal', outcome: 'pass', message: `${signal.repo}#${String(signal.pr)}`,
-    pointer: null, run: null })
-  return { signal: signal.id, template: 'comms', plan, step: 0 }
+  logged(db, { plan, kind: 'filed', actor, outcome: 'pass', message, pointer: null, run: null })
+  return plan
 }

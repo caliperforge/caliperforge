@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { subdirs, walk } from '../../checks/tree.ts'
+import { parse } from '../diff.ts'
 import type { Verdict } from '../record.ts'
 
 /** `+` belongs to a name: Swift's `Type+Extension.swift` read as `Type` and refused plan 155 (09-25). */
@@ -18,10 +19,11 @@ interface Named {
   line: number
 }
 
-export function identifiers(root: string, text: string): Verdict {
+export function identifiers(root: string, text: string, diff = ''): Verdict {
   const ours = new Set(subdirs(root))
+  const gone = new Set(parse(diff).filter((f) => f.deleted).map((f) => f.path))
   const said = lines(text)
-  const missing = said.flatMap((l) => [...paths(root, ours, l), ...adrs(root, l)])
+  const missing = said.flatMap((l) => [...paths(root, ours, gone, l), ...adrs(root, l)])
   const spans = missing.map((m) => `text:${String(m.line)} identifier.unresolved`)
   const subject_digest = createHash('sha256').update(text).digest('hex')
   if (spans.length === 0) return { outcome: 'pass', defect_class: null, origin_kind: null, origin_ref: null, subject_digest, spans, message: `every identifier named across ${String(said.length)} line(s) resolves against its source` }
@@ -35,11 +37,11 @@ export function identifiers(root: string, text: string): Verdict {
   }
 }
 
-function paths(root: string, ours: Set<string>, l: Said): Named[] {
+function paths(root: string, ours: Set<string>, gone: Set<string>, l: Said): Named[] {
   return [...l.text.matchAll(NAMED)]
     .map((m) => ({ id: (m[1] ?? '').replace(/\.+$/, ''), at: m[2] }))
     .filter((n) => ours.has(n.id.split('/')[0] ?? ''))
-    .filter((n) => !resolves(join(root, n.id), n.at))
+    .filter((n) => !gone.has(n.id) && !resolves(join(root, n.id), n.at))
     .map((n) => ({ id: n.at === undefined ? n.id : `${n.id}:${n.at}`, line: l.line }))
 }
 

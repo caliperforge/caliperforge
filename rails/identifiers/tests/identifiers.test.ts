@@ -45,6 +45,26 @@ test('reads a plus as part of a file name', () => {
   expect(identifiers(dir, 'see Atelier/Source+Seats.swift').message).toContain('Atelier/Source+Seats.swift')
 })
 
+const deletion = '--- a/Atelier/X.swift\n+++ /dev/null\n@@ -1 +0,0 @@\n-struct X {}\n'
+
+function atelier(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'cf-ids-'))
+  mkdirSync(join(dir, 'Atelier'))
+  return dir
+}
+
+test('passes a path the diff deletes', () => {
+  const verdict = identifiers(atelier(), 'removed Atelier/X.swift', deletion)
+  expect(verdict.outcome).toBe('pass')
+  expect(verdict.spans).toEqual([])
+})
+
+test('refuses a path neither on disk nor deleted', () => {
+  const verdict = identifiers(atelier(), 'see Atelier/Y.swift', deletion)
+  expect(verdict.outcome).toBe('refuse')
+  expect(verdict.message).toContain('Atelier/Y.swift')
+})
+
 test('a sentence ending on a path keeps its full stop out of the name', () => {
   expect(identifiers(root, 'the gate lives in rails/diff.ts.').outcome).toBe('pass')
 })

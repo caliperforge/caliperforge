@@ -556,7 +556,6 @@
     "test-name": 1
   },
   "sequencer/tests/batch.test.ts": {
-    "prepare": 6,
     "test-name": 24
   },
   "sequencer/tests/brief.test.ts": {
@@ -789,7 +788,7 @@
   },
   "store/plans.ts": {
     "citing-comment": 2,
-    "lines": 174
+    "lines": 232
   },
   "store/proposals.ts": {
     "lines": 61

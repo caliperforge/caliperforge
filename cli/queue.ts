@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { targetDigest } from '../sequencer/steps.ts'
+import { targetDigest } from '../sequencer/approve.ts'
 import { put } from '../sequencer/workspace.ts'
 import { decide } from '../store/approvals.ts'
 import { logged } from '../store/events.ts'

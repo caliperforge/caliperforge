@@ -380,6 +380,11 @@
     "lines": 56,
     "prepare": 1
   },
+  "sequencer/approve.ts": {
+    "citing-comment": 1,
+    "lines": 73,
+    "prepare": 4
+  },
   "sequencer/base.ts": {
     "citing-comment": 1,
     "lines": 64,
@@ -541,8 +546,8 @@
   },
   "sequencer/steps.ts": {
     "citing-comment": 2,
-    "lines": 183,
-    "prepare": 6
+    "lines": 116,
+    "prepare": 2
   },
   "sequencer/symbols.ts": {
     "lines": 43

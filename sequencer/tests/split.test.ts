@@ -94,21 +94,6 @@ test('an internal ticket split is filed as parts, the first queued, and the pare
   expect(w.db.prepare('SELECT body FROM parts WHERE n = 1').get()).toMatchObject({ body: expect.stringContaining('After: #901') as unknown })
 })
 
-test('a part landing queues the next; the last one landing closes the parent', async () => {
-  const w = mine()
-  const log: string[] = []
-  await briefed(w, ID, PARTS, log)
-  const a = (w.db.prepare('SELECT plan FROM parts WHERE n = 0').get() as { plan: number }).plan
-  expect(following(w.db, w.root, plan(w.db, a), 'a'.repeat(40), watched(log, w.root, a))).toMatch(/^part b queued as plan \d+$/)
-  w.db.prepare("UPDATE plans SET state = 'done' WHERE id = ?").run(a)
-  const b = (w.db.prepare('SELECT plan FROM parts WHERE n = 1').get() as { plan: number }).plan
-  expect(maybe(w.root, b, 'ask.md')).toContain('After: #901')
-  expect(w.db.prepare("SELECT plan FROM events WHERE kind = 'filed' ORDER BY id").all()).toEqual([{ plan: a }, { plan: b }])
-  expect(following(w.db, w.root, plan(w.db, b), 'b'.repeat(40), watched(log, w.root, b))).toBe('the last part landed; #34 closed')
-  expect(log.at(-1)).toBe('close caliperforge/caliperforge#34 bbbbbbb')
-  expect(following(w.db, w.root, plan(w.db, ID), 'c'.repeat(40), watched(log, w.root, ID))).toBeNull()
-})
-
 test('D1, D2: a part split again files its parts, and its last one landing closes the part and queues the grandparent\'s next', async () => {
   const w = mine()
   internalPlan(w.db, w.root, 3, 'the parent', 33)
@@ -157,6 +142,7 @@ test('D3, D4: a landing queues the parts that wait on it, and the parent closes 
   expect(log.filter((l) => l.startsWith('close '))).toEqual([])
   expect(landing(w, 1, log)).toBe('the last part landed; #34 closed')
   expect(log.filter((l) => l.startsWith('close '))).toEqual(['close caliperforge/caliperforge#34 1111111'])
+  expect(following(w.db, w.root, plan(w.db, ID), 'c'.repeat(40), watched(log, w.root, ID))).toBeNull()
 })
 
 test('D4: a part released early is not queued again when the part it waits on lands last, and the parent closes', async () => {

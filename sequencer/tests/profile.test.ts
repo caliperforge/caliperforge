@@ -1,12 +1,16 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { cpSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { expect, test } from 'vitest'
+import type { Packet } from '../../providers/kind.ts'
+import { seat } from '../../runner/rules.ts'
 import { profile } from '../../store/profile.ts'
+import { at } from '../../templates/pr-path.ts'
 import { gates, type OutsideLanguage } from '../gates.ts'
 import { messageOf, prBody } from '../push.ts'
+import { ran } from '../seat.ts'
 import { checkout, put, srcDir } from '../workspace.ts'
-import { world } from './world.ts'
+import { CARRIED, internalPlan, PASS, plan, stub, world } from './world.ts'
 
 const REPO = join(import.meta.dirname, '../..')
 
@@ -115,3 +119,37 @@ test.each([{ ai_trailer: false, trailer: 'Co-Authored-By: Claude' }, { ai_traile
   'D5 no Co-Authored-By line under %o', (rules) => {
     expect(messageOf(memo(), 1, rules)).not.toContain('Co-Authored-By')
   })
+
+async function prompted(repo: string, step = 2, id = 1): Promise<string> {
+  const w = world()
+  cpSync(join(REPO, 'profiles'), join(w.root, 'profiles'), { recursive: true })
+  w.db.prepare('UPDATE targets SET repo = ? WHERE id = 1').run(repo)
+  if (id !== 1) internalPlan(w.db, w.root, id)
+  const seen: Packet[] = []
+  await ran(w.db, w.root, plan(w.db, id), at(step), stub(CARRIED, 0, PASS, (p) => seen.push(p)), 'the ask', false)
+  return seen[0]?.prompt ?? ''
+}
+
+test.each(['pay-kit', 'surfpool'])('D1 D2 a step-2 build on solana-foundation/%s carries its notes between the seat prompt and # Issue', async (name) => {
+  const repo = `solana-foundation/${name}`
+  const prompt = await prompted(repo)
+  const notes = profile(REPO, repo)?.notes ?? []
+  expect(notes.length).toBe(name === 'pay-kit' ? 7 : 4)
+  const own = seat(REPO, 'typescript_specialist').prompt
+  expect(prompt).toContain(own)
+  expect(prompt).toContain(`# Notes on ${repo}`)
+  for (const note of notes) {
+    const i = prompt.indexOf(`- ${note}`)
+    expect(i).toBeGreaterThanOrEqual(prompt.indexOf(own) + own.length)
+    expect(i).toBeLessThan(prompt.indexOf('\n# Issue\n'))
+  }
+})
+
+test.each([
+  { name: 'an internal plan', repo: 'solana-foundation/pay-kit', step: 2, id: 2 },
+  { name: 'the brief writer', repo: 'solana-foundation/pay-kit', step: 1, id: 1 },
+  { name: 'a repo with no profile', repo: 'acme/widget', step: 2, id: 1 },
+  { name: 'a profile with no notes', repo: 'solana-foundation/other', step: 2, id: 1 },
+])('D3 D4 $name gets no notes section', async (c) => {
+  expect(await prompted(c.repo, c.step, c.id)).not.toContain('# Notes on')
+})

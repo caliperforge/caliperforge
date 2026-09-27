@@ -91,3 +91,27 @@ test.each(BRIEFS)('D5 the outside commit message and PR body are pinned: $messag
   expect(messageOf(w.root, 1)).toBe(b.message)
   expect(prBody(12, w.root, 1)).toBe(b.body)
 })
+
+const MCP = nested({
+  'profiles/modelcontextprotocol/_org.yml': 'disclosure: This change was written with AI assistance.\ntrailer: "Co-Authored-By: Claude"\n',
+  'profiles/modelcontextprotocol/go-sdk.yml': 'subject: package\nissue_ref: Fixes\nai_trailer: true\n',
+})
+
+function memo(): string {
+  const w = world()
+  checkout(w.root, 1, 'acme/widget', 'widget-35-a1')
+  put(w.root, 1, 'issue.md', '# feat(mcp): Add a memo\n\n**What:** Carry a memo.\n**Why:** Fixes #35.\n')
+  return w.root
+}
+
+test('D4 a go-sdk profile shapes the subject, keeps Fixes #N and adds the trailer and disclosure', () => {
+  const root = memo()
+  const rules = profile(MCP, 'modelcontextprotocol/go-sdk')
+  expect(messageOf(root, 1, rules)).toBe('mcp: add a memo\n\nCarry a memo.\n\nFixes #35.\n\nCo-Authored-By: Claude')
+  expect(prBody(35, root, 1, rules)).toMatch(/- CI green on our fork at this head\.\n\nThis change was written with AI assistance\.\n$/)
+})
+
+test.each([{ ai_trailer: false, trailer: 'Co-Authored-By: Claude' }, { ai_trailer: true }, null])(
+  'D5 no Co-Authored-By line under %o', (rules) => {
+    expect(messageOf(memo(), 1, rules)).not.toContain('Co-Authored-By')
+  })

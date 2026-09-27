@@ -18,6 +18,7 @@ type Run = z.infer<typeof Run>
 const QUALIFIED = /\b([A-Za-z0-9._-]+)\/([A-Za-z0-9._-]+)#\d+\b/g
 const URL = /https:\/\/github\.com\/([A-Za-z0-9._-]+)\/([A-Za-z0-9._-]+)\/(?:issues|pull)\/\d+/g
 const BARE = /(?:^|[^A-Za-z0-9._/-])#\d+\b/
+const FIXES = /\bFixes #\d+\b/g
 
 /** A push starts every workflow at once, so one page holds every run the head has. */
 const WINDOW = 100
@@ -37,6 +38,7 @@ export interface Head {
 export interface Text {
   body: string
   commits: string[]
+  issue_ref?: 'Fixes' | undefined
 }
 
 export type Gh = (args: string[]) => string
@@ -107,8 +109,8 @@ function read(run: Run): string[] {
 
 function upstream(text: Text, ours: string): string[] {
   return [
-    ...lines(text.body).filter((l) => foreign(l.text, ours)).map((l) => `body:${String(l.at)} upstream.number`),
-    ...text.commits.map((text, index) => ({ text, at: index + 1 })).filter((c) => foreign(c.text, ours)).map((c) => `commit:${String(c.at)} upstream.number`),
+    ...lines(text.body).filter((l) => foreign(l.text, ours, text.issue_ref)).map((l) => `body:${String(l.at)} upstream.number`),
+    ...text.commits.map((text, index) => ({ text, at: index + 1 })).filter((c) => foreign(c.text, ours, text.issue_ref)).map((c) => `commit:${String(c.at)} upstream.number`),
   ]
 }
 
@@ -116,9 +118,9 @@ function lines(text: string): { text: string; at: number }[] {
   return text.split('\n').map((line, index) => ({ text: line, at: index + 1 }))
 }
 
-function foreign(text: string, ours: string): boolean {
+function foreign(text: string, ours: string, ref: Text['issue_ref']): boolean {
   const qualified = [...text.matchAll(QUALIFIED), ...text.matchAll(URL)]
-  return qualified.some((m) => m[1] !== ours) || BARE.test(text)
+  return qualified.some((m) => m[1] !== ours) || BARE.test(ref === 'Fixes' ? text.replace(FIXES, '') : text)
 }
 
 export function shell(args: string[]): string {

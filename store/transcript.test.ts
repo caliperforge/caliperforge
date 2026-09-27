@@ -17,7 +17,7 @@ const loaded = (): Db => {
 const fixture = (name: string): string => join(import.meta.dirname, 'fixtures', `${name}.transcript.jsonl`)
 
 function run(db: Db, transcript: string, spent: number | null): number {
-  const row = db.prepare(`INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_tokens, output_tokens, seconds, exit, transcript_path, cost_usd)
+  const row = db.prepare(`INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_read_tokens, output_tokens, seconds, exit, transcript_path, cost_usd)
     VALUES (?, 2, 'typescript_specialist', ?, 'claude-agent-sdk', 'm', 'high', 0, 0, 0, 0, 0, ?, ?)`)
     .run(planRow(db), 'a'.repeat(64), transcript, spent)
   return Number(row.lastInsertRowid)

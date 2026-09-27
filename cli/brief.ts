@@ -51,7 +51,7 @@ export function heldBy(db: Db, by: Holder): PlanLine[] {
 
 export function day(db: Db): Day {
   return db.prepare(`SELECT count(*) AS runs,
-    coalesce(sum(input_tokens + cache_tokens + output_tokens), 0) AS tokens,
+    coalesce(sum(input_tokens + cache_read_tokens + output_tokens), 0) AS tokens,
     coalesce(sum(seconds), 0) AS seconds
     FROM runs WHERE julianday(at) >= julianday('now', '-1 day')`).get() as Day
 }
@@ -64,7 +64,7 @@ const TICKETS = `SELECT p.id AS plan, p.origin, t.repo || '#' || t.issue_no AS t
   sum(r.step = 2 AND r.${BUILT}) AS build,
   sum(r.step IN (4, 5) AND r.${BUILT}) AS review,
   sum(r.seconds) / 60.0 AS minutes,
-  sum(r.input_tokens + r.cache_tokens + r.output_tokens) AS tokens,
+  sum(r.input_tokens + r.cache_read_tokens + r.output_tokens) AS tokens,
   CASE p.state WHEN 'done' THEN 'landed' WHEN 'refused' THEN 'wasted' WHEN 'halted' THEN 'wasted'
     ELSE 'open' END AS outcome,
   julianday(min(r.at)) < julianday(?) AS early

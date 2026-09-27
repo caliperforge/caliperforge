@@ -8,7 +8,7 @@ CREATE TABLE runs (
   model         TEXT NOT NULL,
   effort        TEXT NOT NULL,
   input_tokens  INTEGER NOT NULL,
-  cache_tokens  INTEGER NOT NULL,
+  cache_read_tokens INTEGER NOT NULL,
   output_tokens INTEGER NOT NULL,
   seconds       REAL NOT NULL,
   exit          INTEGER NOT NULL,

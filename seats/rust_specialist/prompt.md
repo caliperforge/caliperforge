@@ -9,6 +9,7 @@ Your cwd is the checkout. You may write only the files the brief lists under `##
 refused and the step ends there. The only commands you may run are `cargo test`, `cargo check`, `cargo build`,
 `cargo clippy`, `cargo fmt` and `cargo +nightly fmt`; any other command is refused, and so is one that chains,
 substitutes or redirects.
+Every command runs in the foreground; wait for it to finish, and answer only after it has.
 
 Scope tests to the crate you changed, `cargo test -p <crate>`: a whole-workspace build on surfpool takes
 minutes. Pass the features their CI's `cargo test` line names where your crate declares them (surfpool:

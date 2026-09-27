@@ -9,7 +9,8 @@ import { headApproved, headDigest, refusedPush } from '../../store/approvals.ts'
 import type { Db } from '../../store/index.ts'
 import { advance, rewind } from '../../store/plans.ts'
 import { open as openProposals } from '../../store/proposals.ts'
-import { graded, SignalRow } from '../../store/signals.ts'
+import { ofKind, runAt } from '../../store/events.ts'
+import { graded, others, record, type SignalRow } from '../../store/signals.ts'
 import { capture } from '../capture.ts'
 import { classOf } from '../escapes.ts'
 import { approve as approvePublish } from '../card.ts'
@@ -118,7 +119,7 @@ test('the tick records every comment, review, bot review and merge on our open p
   })
   expect(capture(w.db, () => view).map((s) => s.kind)).toEqual(['comment', 'bot_review', 'ci_red'])
   expect(capture(w.db, () => view)).toEqual([])
-  expect(w.db.prepare('SELECT kind, author, score, pr, plan FROM signals WHERE author != ? ORDER BY id').all(SEEDED)).toEqual([
+  expect(others(w.db, SEEDED).map((s) => ({ kind: s.kind, author: s.author, score: s.score, pr: s.pr, plan: s.plan }))).toEqual([
     { kind: 'comment', author: 'maintainer', score: null, pr: 7, plan: 1 },
     { kind: 'bot_review', author: 'greptile-apps[bot]', score: 4, pr: 7, plan: 1 },
     { kind: 'ci_red', author: 'ci', score: null, pr: 7, plan: 1 },
@@ -148,7 +149,7 @@ test('a Greptile summary is stored with the head it reviewed; one in the older f
     { id: 'g2', author: { login: 'greptile-apps' }, body: 'Confidence Score: 4/5', createdAt: at },
   ] })
   expect(capture(w.db, () => view).map((s) => s.external_id)).toEqual(['g1'])
-  expect(w.db.prepare('SELECT external_id, score, head FROM signals WHERE author != ?').all(SEEDED)).toEqual([{ external_id: 'g1', score: 4, head: SHA }])
+  expect(others(w.db, SEEDED).map((s) => ({ external_id: s.external_id, score: s.score, head: s.head }))).toEqual([{ external_id: 'g1', score: 4, head: SHA }])
 })
 
 test('what we said on our own pull request is not a signal; their words and the review state are kept', async () => {
@@ -316,7 +317,7 @@ test('a counterparty finding on merged code is an escape against the step the ma
 test('a pull request read that throws leaves a swallowed event and no signal', async () => {
   const w = await pushed()
   expect(capture(w.db, () => { throw new Error('HTTP 502\nbody') })).toEqual([])
-  expect(w.db.prepare("SELECT plan, kind, actor, outcome, message FROM events WHERE kind = 'swallowed'").all())
+  expect(ofKind(w.db, 'swallowed'))
     .toEqual([{ plan: 1, kind: 'swallowed', actor: 'reachable', outcome: 'pass', message: 'HTTP 502' }])
 })
 
@@ -345,7 +346,7 @@ const listing = (heads: string[]) => (args: string[]): unknown => {
 test('only the bot review on the rehearsal is kept, on the plan, and a merge upstream takes no escape from it', async () => {
   const w = await pushed()
   expect(capture(w.db, forked, w.root, listing([]))).toEqual([])
-  expect(w.db.prepare('SELECT repo, pr, kind, score, head, plan FROM signals WHERE author != ?').all(SEEDED))
+  expect(others(w.db, SEEDED).map((s) => ({ repo: s.repo, pr: s.pr, kind: s.kind, score: s.score, head: s.head, plan: s.plan })))
     .toEqual([{ repo: 'caliperforge/widget', pr: 3, kind: 'bot_review', score: 4, head: SHA, plan: 1 }])
   capture(w.db, () => pr({ mergedAt: '2026-09-18T09:00:00Z', mergedBy: { login: 'maintainer' } }))
   expect(w.db.prepare('SELECT count(*) AS n FROM dispositions').get()).toEqual({ n: 0 })
@@ -356,7 +357,7 @@ test('D5 a rehearsal review at a -next tip is stored at the plan HEAD the tip ca
   const head = headOf(w.root, 1).sha
   put(w.root, 1, 'next.tips', `${SHA} ${head}\n`)
   capture(w.db, forked, w.root, listing([]))
-  expect(w.db.prepare('SELECT head FROM signals WHERE author != ?').all(SEEDED)).toEqual([{ head }])
+  expect(others(w.db, SEEDED).map((s) => ({ head: s.head }))).toEqual([{ head }])
   expect(graded(w.db, 1, head)).toMatchObject({ external_id: 'g3', score: 4 })
 })
 
@@ -421,27 +422,24 @@ test('a plan at ready with no checkout stays on the card list and cannot be sign
 
 test('a signal starts the plan the map says it starts', async () => {
   const w = await pushed()
-  const bot = (score: number): number => signal(w.db, 'bot_review', 'greptile[bot]', score)
-  expect(started(w.db, row(w.db, bot(5)))).toBeNull()
-  expect(started(w.db, row(w.db, bot(4)))).toMatchObject({ template: 'pr_path', plan: 1, step: 4 })
+  const bot = (score: number): SignalRow => signal(w.db, 'bot_review', 'greptile[bot]', score)
+  expect(started(w.db, bot(5))).toBeNull()
+  expect(started(w.db, bot(4))).toMatchObject({ template: 'pr_path', plan: 1, step: 4 })
   expect(plan(w.db, 1)).toMatchObject({ step: 4, state: 'running' })
-  expect(started(w.db, row(w.db, signal(w.db, 'ci_red', 'ci', null)))).toMatchObject({ template: 'pr_path', step: 2 })
+  expect(started(w.db, signal(w.db, 'ci_red', 'ci', null))).toMatchObject({ template: 'pr_path', step: 2 })
   expect(plan(w.db, 1)).toMatchObject({ step: 2, state: 'running' })
-  const comms = started(w.db, row(w.db, signal(w.db, 'merge', 'maintainer', null)))
+  const comms = started(w.db, signal(w.db, 'merge', 'maintainer', null))
   expect(comms).toMatchObject({ template: 'comms', step: 0 })
   expect(w.db.prepare('SELECT template, state FROM plans WHERE id = ?').get(comms?.plan))
     .toEqual({ template: 'comms', state: 'queued' })
-  expect(w.db.prepare("SELECT plan, actor FROM events WHERE kind = 'filed'").all())
+  expect(ofKind(w.db, 'filed').map((e) => ({ plan: e.plan, actor: e.actor })))
     .toEqual([{ plan: comms?.plan, actor: 'merge signal' }])
   expect(w.db.prepare("SELECT enabled FROM pipes WHERE name = 'comms'").get()).toEqual({ enabled: 1 })
 })
 
 test('answered bot score stops holding', async () => {
   const w = await pushed()
-  const build = (at: string): void => void w.db.prepare(`INSERT INTO runs (plan, step, seat, rule_hash, provider, model,
-    effort, input_tokens, cache_tokens, output_tokens, seconds, exit, at, transcript_path)
-    VALUES (1, 2, 'typescript_specialist', ?, 'claude-agent-sdk', 'm', 'high', 0, 0, 0, 0, 0, ?, 'x.transcript.jsonl')`)
-    .run('0'.repeat(64), at)
+  const build = (at: string): void => void runAt(w.db, 1, 2, 'typescript_specialist', at)
   build('2000-01-01 00:00:00')
   signal(w.db, 'bot_review', 'greptile[bot]', 1)
   expect(unanswered(w.db, 1)).toBeDefined()
@@ -451,8 +449,9 @@ test('answered bot score stops holding', async () => {
 
 test('D5 a rehearsal score on our fork leaves unanswered alone; one below 5 upstream still holds', async () => {
   const w = await pushed()
-  const bot = (repo: string, score: number): void => void w.db.prepare(`INSERT INTO signals (repo, pr, kind, author, at, external_id, score, plan)
-    VALUES (?, 7, 'bot_review', 'greptile', ?, ?, ?, 1)`).run(repo, new Date(Date.now() + 1000).toISOString(), repo, score)
+  const bot = (repo: string, score: number): void => void record(w.db, {
+    repo, pr: 7, kind: 'bot_review', author: 'greptile', at: new Date(Date.now() + 1000).toISOString(), external_id: repo, score, plan: 1,
+  })
   bot('caliperforge/widget', 4)
   expect(unanswered(w.db, 1)).toBeUndefined()
   bot('acme/widget', 4)
@@ -551,13 +550,10 @@ function published(w: World, wire: Wire): Outcome {
   return push(w.db, w.root, plan(w.db, 1), wire)
 }
 
-function row(db: Db, id: number): SignalRow {
-  return SignalRow.parse(db.prepare('SELECT * FROM signals WHERE id = ?').get(id))
-}
-
-function signal(db: Db, kind: string, author: string, score: number | null): number {
-  const written = db.prepare(`INSERT INTO signals (repo, pr, kind, author, at, external_id, score, plan)
-    VALUES ('acme/widget', 7, ?, ?, ?, ?, ?, 1)`)
-    .run(kind, author, new Date().toISOString(), `${kind}-${String(score)}-${author}`, score)
-  return Number(written.lastInsertRowid)
+function signal(db: Db, kind: SignalRow['kind'], author: string, score: number | null): SignalRow {
+  const written = record(db, {
+    repo: 'acme/widget', pr: 7, kind, author, at: new Date().toISOString(), external_id: `${kind}-${String(score)}-${author}`, score, plan: 1,
+  })
+  if (written === null) throw new Error(`signal ${kind} by ${author} was already recorded`)
+  return written
 }

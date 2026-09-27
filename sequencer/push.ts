@@ -13,13 +13,14 @@ import type { Db } from '../store/index.ts'
 import { busy } from '../store/now.ts'
 import { internal, originIssue, originRef, type PlanRow } from '../store/plans.ts'
 import { GREEN, onBase } from './base.ts'
-import { waiting } from './card.ts'
+import { CHECKS, waiting } from './card.ts'
 import { npm } from './checks.ts'
 import { red } from './failures.ts'
 import { reinstall } from './install.ts'
 import type { Outcome } from './kind.ts'
 import { cloned, conflicted, diffOf, fetchMain, FORK, get, MAIN, maybe, planDir, put, repoName, srcDir, titleOf } from './workspace.ts'
 import { homeOf } from './home.ts'
+import { size } from './size.ts'
 
 interface Head { dir: string; branch: string; sha: string }
 
@@ -315,7 +316,7 @@ export function push(db: Db, root: string, plan: PlanRow, wire: Wire = WIRE): Ou
   if (approval === null) return refuse('approvals', `no ceo approval row for ${head.branch} at ${head.sha.slice(0, 12)}`)
   const cold = unproven(db, plan.id)
   if (cold !== null) return refuse(cold, `${cold} left no passing verdict on plan ${String(plan.id)}`)
-  const card = waiting(db, root, plan.id, head.sha)
+  const card = waiting(db, root, plan.id, head.sha, [...CHECKS, size(db, target.repo)])
   if (card !== null) return card
   const open = opened(db, plan.id)
   wire.send(head.dir, head.branch)

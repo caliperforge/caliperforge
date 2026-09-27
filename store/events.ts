@@ -31,3 +31,8 @@ export function runSince(db: Db, plan: number, step: number, after: number): num
   return (db.prepare('SELECT max(id) AS id FROM runs WHERE plan = ? AND step = ? AND id > ?')
     .get(plan, step, after) as { id: number | null }).id
 }
+
+export function runRows(db: Db): { plan: number; seat: string; step: number; transcript_path: string }[] {
+  return db.prepare('SELECT plan, seat, step, transcript_path FROM runs ORDER BY id')
+    .all() as { plan: number; seat: string; step: number; transcript_path: string }[]
+}

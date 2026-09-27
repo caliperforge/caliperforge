@@ -7,14 +7,15 @@ import { weight } from './weight.ts'
 import { maybe, put } from './workspace.ts'
 
 export interface Row { check: string; ok: boolean; says: string }
-export type Check = (db: Db, root: string, plan: number) => Row
+export interface Target { repo: string; issue_no: number; named_merger: string }
+export type Check = (db: Db, root: string, plan: number, target: Target) => Row
 
 export const CHECKS: Check[] = [lead, weight]
 
 const CARD = 'maintainer.md'
 
-export function waiting(db: Db, root: string, plan: number, sha: string, checks: Check[] = CHECKS): Outcome | null {
-  const rows = checks.map((check) => check(db, root, plan))
+export function waiting(db: Db, root: string, plan: number, sha: string, target: Target, checks: Check[] = CHECKS): Outcome | null {
+  const rows = checks.map((check) => check(db, root, plan, target))
   const text = [`plan ${String(plan)} at ${sha}`, ...rows.map((r) => `${r.ok ? 'pass' : 'flag'}\t${r.check}\t${r.says}`)]
     .map((line) => `${line}\n`).join('')
   put(root, plan, CARD, text)

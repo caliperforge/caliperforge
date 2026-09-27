@@ -1,0 +1,76 @@
+import { z } from 'zod'
+import { gh, mentions, ours, WINDOW, type Read } from '../cli/gh.ts'
+import { parse } from '../rails/diff.ts'
+import type { Check, Target } from './card.ts'
+import { diffOf, git, MAIN, srcDir } from './workspace.ts'
+
+const Login = z.object({ login: z.string() })
+
+const Prs = z.array(z.object({
+  url: z.string(),
+  title: z.string(),
+  body: z.string(),
+  isDraft: z.boolean(),
+  author: Login.nullable(),
+  headRepositoryOwner: Login.nullable(),
+  files: z.array(z.object({ path: z.string() })),
+}))
+
+const Siblings = z.array(z.object({ url: z.string(), repository: z.object({ nameWithOwner: z.string() }) }))
+
+const RECENT = 30
+
+export function theirs(read: Read = gh): Check {
+  return (...[, root, plan, target]) => {
+    const paths = parse(diffOf(root, plan)).map((f) => f.path)
+    const hits = [...prs(read, target, paths), ...siblings(read, target), ...branches(srcDir(root, plan), target, paths)].sort()
+    return { check: 'their work', ok: hits.length === 0,
+      says: hits.length === 0 ? `nothing of theirs touches our files or names #${String(target.issue_no)}` : hits.join('; ') }
+  }
+}
+
+function prs(read: Read, target: Target, paths: string[]): string[] {
+  const owner = ownerOf(target.repo)
+  return Prs.parse(read(['pr', 'list', '--repo', target.repo, '--state', 'open', '--limit', String(WINDOW),
+    '--json', 'number,url,title,body,isDraft,author,headRepositoryOwner,files']))
+    .filter((p) => !ours(p.headRepositoryOwner?.login))
+    .filter((p) => p.headRepositoryOwner?.login === owner || p.author?.login === target.named_merger)
+    .flatMap((p) => {
+      const found = hit(paths, p.files.map((f) => f.path), mentions(`${p.title}\n${p.body}`, target.issue_no), target.issue_no)
+      return found === null ? [] : [`${p.isDraft ? 'draft' : 'pr'} ${p.url} ${found}`]
+    })
+}
+
+function siblings(read: Read, target: Target): string[] {
+  const no = String(target.issue_no)
+  return Siblings.parse(read(['search', 'prs', `${target.repo}#${no}`, '--owner', ownerOf(target.repo),
+    '--state', 'open', '--json', 'url,repository']))
+    .filter((p) => p.repository.nameWithOwner !== target.repo)
+    .map((p) => `pr ${p.url} names #${no}`)
+}
+
+function branches(dir: string, target: Target, paths: string[]): string[] {
+  git(dir, ['fetch', '--no-tags', 'upstream'])
+  const since = Date.now() - RECENT * 86_400_000
+  return git(dir, ['ls-remote', '--heads', 'upstream']).split('\n').flatMap((line) => {
+    const name = line.split('\t')[1]?.replace(/^refs\/heads\//, '')
+    if (name === undefined || name === 'main') return []
+    const ref = `refs/remotes/upstream/${name}`
+    if (Date.parse(git(dir, ['log', '-1', '--format=%cI', ref]).trim()) < since) return []
+    const base = git(dir, ['merge-base', MAIN, ref]).trim()
+    const changed = git(dir, ['diff', '--name-only', base, ref]).split('\n')
+    const said = git(dir, ['log', '-z', '--format=%B', `${base}..${ref}`])
+    const found = hit(paths, changed, mentions(said, target.issue_no), target.issue_no)
+    return found === null ? [] : [`branch https://github.com/${target.repo}/tree/${name} ${found}`]
+  })
+}
+
+function hit(paths: string[], touched: string[], named: boolean, no: number): string | null {
+  const shared = paths.filter((p) => touched.includes(p))
+  if (shared.length > 0) return `touches ${shared.join(', ')}`
+  return named ? `names #${String(no)}` : null
+}
+
+function ownerOf(repo: string): string {
+  return repo.slice(0, repo.indexOf('/'))
+}

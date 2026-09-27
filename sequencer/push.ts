@@ -13,7 +13,7 @@ import type { Db } from '../store/index.ts'
 import { busy } from '../store/now.ts'
 import { internal, originIssue, originRef, type PlanRow } from '../store/plans.ts'
 import { GREEN, onBase } from './base.ts'
-import { CHECKS, waiting } from './card.ts'
+import { CHECKS, waiting, type Check, type Target } from './card.ts'
 import { npm } from './checks.ts'
 import { red } from './failures.ts'
 import { reinstall } from './install.ts'
@@ -21,6 +21,7 @@ import type { Outcome } from './kind.ts'
 import { cloned, conflicted, diffOf, fetchMain, FORK, get, MAIN, maybe, planDir, put, repoName, srcDir, titleOf } from './workspace.ts'
 import { homeOf } from './home.ts'
 import { size } from './size.ts'
+import { theirs } from './theirs.ts'
 
 interface Head { dir: string; branch: string; sha: string }
 
@@ -36,6 +37,7 @@ export interface Wire {
   file: (repo: string, title: string, body: string, labels: string[]) => string
   comment: (repo: string, no: number, body: string) => void
   install?: () => void
+  card?: Check[]
 }
 
 export const WIRE: Wire = {
@@ -49,6 +51,7 @@ export const WIRE: Wire = {
   unrehearse,
   review,
   install: () => { reinstall(npm, alerter()) },
+  card: [theirs()],
 }
 
 /**
@@ -316,7 +319,7 @@ export function push(db: Db, root: string, plan: PlanRow, wire: Wire = WIRE): Ou
   if (approval === null) return refuse('approvals', `no ceo approval row for ${head.branch} at ${head.sha.slice(0, 12)}`)
   const cold = unproven(db, plan.id)
   if (cold !== null) return refuse(cold, `${cold} left no passing verdict on plan ${String(plan.id)}`)
-  const card = waiting(db, root, plan.id, head.sha, [...CHECKS, size(target.repo)])
+  const card = waiting(db, root, plan.id, head.sha, target, [...CHECKS, size(target.repo), ...(wire.card ?? [])])
   if (card !== null) return card
   const open = opened(db, plan.id)
   wire.send(head.dir, head.branch)
@@ -524,9 +527,9 @@ function refuse(span: string, note: string): Outcome {
 }
 
 /** The stranger's repository the pull request is opened on and the issue it closes. */
-function subject(db: Db, plan: PlanRow): { repo: string; issue_no: number } | null {
-  return (db.prepare('SELECT repo, issue_no FROM targets WHERE id = ?').get(plan.target_id) ?? null) as
-    { repo: string; issue_no: number } | null
+function subject(db: Db, plan: PlanRow): Target | null {
+  return (db.prepare('SELECT repo, issue_no, named_merger FROM targets WHERE id = ?').get(plan.target_id) ?? null) as
+    Target | null
 }
 
 function git(cwd: string, args: string[]): string {

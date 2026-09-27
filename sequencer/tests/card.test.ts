@@ -12,6 +12,7 @@ import { get, maybe, srcDir } from '../workspace.ts'
 import { approve as approveTarget, CARRIED, internalPlan, plan, PR, stub, watched, world, type World } from './world.ts'
 
 const SHA = 'a'.repeat(40)
+const TARGET = { repo: 'acme/widget', issue_no: 12, named_merger: 'maintainer' }
 
 async function atBatch(): Promise<World> {
   const w = world()
@@ -60,12 +61,12 @@ test('D2 an approved card sends and opens as today, beside the one unchanged ste
 test('D3 a failing check is a flag row and holds like a clean card until the card is approved', () => {
   const w = world()
   const lint = (): { check: string; ok: boolean; says: string } => ({ check: 'lint', ok: false, says: 'two errors' })
-  const held = waiting(w.db, w.root, 1, SHA, [lint])
+  const held = waiting(w.db, w.root, 1, SHA, TARGET, [lint])
   expect(held).toMatchObject({ outcome: 'pass', held: true, spans: ['card'] })
   expect(held?.note).toContain('1 flag(s)')
   expect(get(w.root, 1, 'maintainer.md')).toBe(`plan 1 at ${SHA}\nflag\tlint\ttwo errors\n`)
   approve(w.db, w.root, 1)
-  expect(waiting(w.db, w.root, 1, SHA, [lint])).toBeNull()
+  expect(waiting(w.db, w.root, 1, SHA, TARGET, [lint])).toBeNull()
 })
 
 test('D4 an approval at an earlier card sends nothing: other rows or another head rewrite the card and hold', async () => {
@@ -76,7 +77,7 @@ test('D4 an approval at an earlier card sends nothing: other rows or another hea
   approve(w.db, w.root, 1)
   const pass = (): { check: string; ok: boolean; says: string } => ({ check: 'lint', ok: true, says: 'clean' })
   const sha = headOf(w.root, 1).sha
-  expect(waiting(w.db, w.root, 1, sha, [pass])).toMatchObject({ held: true })
+  expect(waiting(w.db, w.root, 1, sha, TARGET, [pass])).toMatchObject({ held: true })
   expect(get(w.root, 1, 'maintainer.md')).toBe(`plan 1 at ${sha}\npass\tlint\tclean\n`)
   push(w.db, w.root, plan(w.db, 1), wire)
   const src = srcDir(w.root, 1)

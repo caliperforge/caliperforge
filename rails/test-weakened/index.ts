@@ -31,7 +31,7 @@ function judge(file: FileDiff, named: string): string[] {
   const removed = file.removed.filter((l) => ASSERT.test(l.text) && !spared.has(l))
   const added = file.added.filter((l) => ASSERT.test(l.text))
   const loose = file.added.filter((l) => LOOSE.test(l.text))
-  const downgraded = count(file.removed, STRICT) > count(file.added, STRICT) && loose.length > 0
+  const downgraded = count(file.removed.filter((l) => !spared.has(l)), STRICT) > count(file.added, STRICT) && loose.length > 0
   return [
     ...(removed.length > added.length ? [span(removed[0], 'test.weakened.removed')] : []),
     ...(downgraded ? [span(loose[0], 'test.weakened.loosened')] : []),

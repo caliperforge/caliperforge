@@ -10,15 +10,15 @@ const FOUND = '- G11 src/hello.ts:1 a mint change is lost\n- G12 src/hello.ts:2 
 const answering = (ids: string[]): string =>
   CARRIED.replace(/---\n$/, `${ids.map((id) => `  - id: ${id}\n    status: done\n    pointer: src/hello.ts:1\n`).join('')}---\n`)
 
-/** Ticks until step 3 has judged the build, with `score` recorded and FOUND stored at the checkout HEAD once the brief is asked for. */
+/** Ticks until step 3 has judged the build, with FOUND stored at the checkout HEAD once the brief is asked for, and `score` recorded there unless null. */
 async function built(score: number | null, handback = CARRIED): Promise<{ w: World; packets: Packet[] }> {
   const w = world()
   approve(w.db, w.target)
   const packets: Packet[] = []
   const provider = stub(handback, 0, PASS, (p) => {
     if (p.tools.includes('Write')) packets.push(p)
-    else if (p.prompt.includes('# brief_writer') && score !== null) {
-      scored(w.root, 1, score)
+    else if (p.prompt.includes('# brief_writer')) {
+      if (score !== null) scored(w.root, 1, score)
       put(w.root, 1, `findings-${execFileSync('git', ['rev-parse', 'HEAD'], { cwd: p.cwd, encoding: 'utf8' }).trim()}.md`, FOUND)
     }
   })

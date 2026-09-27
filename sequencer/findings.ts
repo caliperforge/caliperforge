@@ -1,18 +1,19 @@
 import { inline, said, type Read } from '../cli/gh.ts'
 import type { Db } from '../store/index.ts'
 import { graded, type Signal } from '../store/signals.ts'
+import { BOT } from './capture.ts'
 import { carried } from './push.ts'
 import { cloned, drop, headSha, maybe, put } from './workspace.ts'
 
 export interface Rehearsal { root: string; list: Read }
 
-/** Each bot review at the plan head its tip carries, with the reviewer's inline comments at its commit kept there under `G<comment id>`, an id that holds across rounds. */
+/** A finding is named by GitHub's comment id: a row the audit carries from an earlier hand-back then answers the same finding, never a renumbered one. */
 export function rehearsed({ root, list }: Rehearsal, plan: number, fork: string, pr: number, all: Signal[]): Signal[] {
   const bots = all.filter((s) => s.kind === 'bot_review')
   const comments = bots.length === 0 ? [] : inline(fork, pr, list)
   return bots.map((s) => {
     const head = typeof s.head === 'string' ? carried(root, plan, s.head) : null
-    const found = comments.filter((c) => c.user.login === s.author && c.commit_id === s.head)
+    const found = comments.filter((c) => BOT.test(c.user.login) && c.commit_id === s.head)
     if (head !== null && found.length > 0) put(root, plan, `findings-${head}.md`, found.map((c) => `- G${String(c.id)} ${said(c)}\n`).join(''))
     return { ...s, head }
   })

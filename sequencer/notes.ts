@@ -15,8 +15,23 @@ const COMMENT = new Set<ts.SyntaxKind>([
   ts.SyntaxKind.MultiLineCommentTrivia,
 ])
 const NAME = /^[A-Za-z_$][\w$]*$/
-const TEXT = /^['"`]/
+const TEXT = /^['"`}]/
 const PROSE = /\.(md|txt)$/
+const SCRIPT = /\.[cm]?[jt]s$/
+/** Tokens after which a `/` divides rather than opens a regular expression. */
+const OPERAND = new Set<ts.SyntaxKind>([
+  ts.SyntaxKind.Identifier,
+  ts.SyntaxKind.NumericLiteral,
+  ts.SyntaxKind.BigIntLiteral,
+  ts.SyntaxKind.StringLiteral,
+  ts.SyntaxKind.NoSubstitutionTemplateLiteral,
+  ts.SyntaxKind.TemplateTail,
+  ts.SyntaxKind.RegularExpressionLiteral,
+  ts.SyntaxKind.CloseParenToken,
+  ts.SyntaxKind.CloseBracketToken,
+  ts.SyntaxKind.CloseBraceToken,
+  ts.SyntaxKind.ThisKeyword,
+])
 
 interface Token {
   kind: ts.SyntaxKind
@@ -52,7 +67,7 @@ export function landed(db: Db, root: string, plan: PlanRow, step: Step, notes: N
 function refused(src: string, base: string | null, n: Note, text: string): string | null {
   const found = n.old === '' ? 0 : text.split(n.old).length - 1
   if (found !== 1) return `old text matches ${String(found)} times`
-  if (PROSE.test(n.file) || inert(text, swap(text, n))) return null
+  if (PROSE.test(n.file) || (SCRIPT.test(n.file) && inert(text, swap(text, n)))) return null
   return restores(src, base, n) ? null : 'changes running code'
 }
 
@@ -93,9 +108,24 @@ function alike(t: Token, u: Token | undefined): boolean {
 function tokens(text: string): Token[] {
   const scanner = ts.createScanner(ts.ScriptTarget.ESNext, false, ts.LanguageVariant.Standard, text)
   const out: Token[] = []
+  const braces: boolean[] = []
+  let last = ts.SyntaxKind.Unknown
   for (let kind = scanner.scan(); kind !== ts.SyntaxKind.EndOfFileToken; kind = scanner.scan()) {
+    const read = rescanned(scanner, kind, braces, last)
     const token = scanner.getTokenText()
-    if (!COMMENT.has(kind) && token.trim() !== '') out.push({ kind, text: token })
+    if (COMMENT.has(read) || token.trim() === '') continue
+    out.push({ kind: read, text: token })
+    last = read
   }
   return out
+}
+
+/** The scanner alone reads a template's closing `}` as a brace and a regular expression as a slash, so both are read again here. */
+function rescanned(scanner: ts.Scanner, kind: ts.SyntaxKind, braces: boolean[], last: ts.SyntaxKind): ts.SyntaxKind {
+  let read = kind
+  if (read === ts.SyntaxKind.CloseBraceToken && braces.pop() === true) read = scanner.reScanTemplateToken(false)
+  if ((read === ts.SyntaxKind.SlashToken || read === ts.SyntaxKind.SlashEqualsToken) && !OPERAND.has(last)) read = scanner.reScanSlashToken()
+  if (read === ts.SyntaxKind.OpenBraceToken) braces.push(false)
+  if (read === ts.SyntaxKind.TemplateHead || read === ts.SyntaxKind.TemplateMiddle) braces.push(true)
+  return read
 }

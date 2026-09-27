@@ -109,8 +109,8 @@ test('a fix the checkout\'s own checks refuse keeps the lap', async () => {
 
 const HI = 'export const hello = (): string => "hi"\n'
 
-function note(old: string, next: string, kind = 'text'): string {
-  return `  - file: ${HELLO}\n    line: 1\n    old: ${JSON.stringify(old)}\n    new: ${JSON.stringify(next)}\n    why: tidy\n    kind: ${kind}`
+function note(old: string, next: string, kind = 'text', file = HELLO): string {
+  return `  - file: ${file}\n    line: 1\n    old: ${JSON.stringify(old)}\n    new: ${JSON.stringify(next)}\n    why: tidy\n    kind: ${kind}`
 }
 
 function noted(...notes: string[]): string {
@@ -134,11 +134,17 @@ test('a pass whose note removes a comment lands it and moves to step 5 with no n
   expect(hello(w)).toBe(HI)
 })
 
-test('a note that changes a number in code refuses and leaves the file as reviewed', async () => {
-  const body = 'export const hello = (): number => 1\n'
+test('a note that changes code refuses and leaves the file as reviewed', async () => {
+  const body = 'export const hello = (a: string): string => `${a} x`\nexport const LIMIT = 30 / 2\nexport const t = `y`\n'
   const w = await toReview(body)
-  await refused(w, 1, stub(CARRIED, 0, noted(note('=> 1', '=> 2', 'count'))))
+  await refused(w, 1, stub(CARRIED, 0, noted(note('= 30', '= 31', 'count'))))
   expect(hello(w)).toBe(body)
+
+  const python = 'def ok():\n    return True\n'
+  const py = await toReview()
+  const path = join(srcDir(py.root, 1), 'src/hello.py')
+  await refused(py, 1, stub(CARRIED, 0, noted(note('True', 'False', 'text', 'src/hello.py')), () => { writeFileSync(path, python) }))
+  expect(readFileSync(path, 'utf8')).toBe(python)
 })
 
 test('a note whose old text is not in the file refuses', async () => {

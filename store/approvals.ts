@@ -65,6 +65,11 @@ export function headApproved(db: Db, sha: string): boolean {
     .get(headDigest(sha)) !== undefined
 }
 
+export function approvalsOf(db: Db, kind: SubjectKind): { decision: string; reason: string | null }[] {
+  return db.prepare('SELECT decision, reason FROM approvals WHERE subject_kind = ? ORDER BY id')
+    .all(kind) as { decision: string; reason: string | null }[]
+}
+
 const LANDS = 'refs/heads/main'
 
 /**

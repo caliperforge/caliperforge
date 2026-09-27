@@ -20,7 +20,21 @@ const comms = (): World => {
   return w
 }
 
-const judged = (w: World, line: string): ReturnType<typeof facts> => {
+/** A comms lane that is on but shut by 20:30, so the daily plan stays queued. */
+const clocked = (): World => {
+  const w = world()
+  w.db.prepare("UPDATE plans SET state = 'done' WHERE id = 1").run()
+  w.db.prepare(`INSERT INTO pipes (name, enabled, window_start, window_end, max_concurrent)
+    VALUES ('comms', 1, '07:00', '20:00', 1)`).run()
+  return w
+}
+
+const dailies = (w: World): unknown[] =>
+  w.db.prepare("SELECT title, state FROM plans WHERE template = 'comms' ORDER BY id").all()
+
+const never: Provider = { name: 'claude-agent-sdk', fire: () => { throw new Error('no seat fires on comms') } }
+
+const judged =(w: World, line: string): ReturnType<typeof facts> => {
   put(w.root, 1, 'draft.md', `# The day\n\n${line}\n`)
   return facts(w.root, plan(w.db, 1))
 }
@@ -29,12 +43,27 @@ test('D2: a comms plan ticks gather through capture to done, and no seat or rail
   const w = comms()
   reads(w.db, 1)
   put(w.root, 1, 'draft.md', `# The day\n\nOne job was refused. [refusal:${String(refusal(w, 0))}]\n`)
-  const never: Provider = { name: 'claude-agent-sdk', fire: () => { throw new Error('no seat fires on comms') } }
   for (let n = 0; n < 10 && plan(w.db, 1).state !== 'done'; n += 1) await tick(w.db, w.root, never)
   expect(plan(w.db, 1).state).toBe('done')
   expect(w.db.prepare('SELECT kind, outcome FROM events WHERE plan = 1 ORDER BY id').all())
     .toEqual(NAMES.map((kind) => ({ kind, outcome: 'pass' })))
   expect(w.db.prepare('SELECT (SELECT count(*) FROM runs) + (SELECT count(*) FROM verdicts) AS n').get()).toEqual({ n: 0 })
+})
+
+test('two ticks after 20:30 on one local day file one daily comms plan', async () => {
+  const w = clocked()
+  await tick(w.db, w.root, never, new Date('2026-09-28T02:31Z'))
+  await tick(w.db, w.root, never, new Date('2026-09-28T02:45Z'))
+  expect(dailies(w)).toEqual([{ title: 'daily 2026-09-27', state: 'queued' }])
+})
+
+test('a tick before 20:30 files no daily plan, and the next day after 20:30 files a second', async () => {
+  const w = clocked()
+  await tick(w.db, w.root, never, new Date('2026-09-28T02:29Z'))
+  expect(dailies(w)).toEqual([])
+  await tick(w.db, w.root, never, new Date('2026-09-28T02:31Z'))
+  await tick(w.db, w.root, never, new Date('2026-09-29T02:31Z'))
+  expect(dailies(w)).toEqual([{ title: 'daily 2026-09-27', state: 'queued' }, { title: 'daily 2026-09-28', state: 'queued' }])
 })
 
 test('D3: facts refuses each line that names an issue, an outside login, or no packet entry', () => {

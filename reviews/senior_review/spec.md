@@ -12,9 +12,22 @@ the diff, not the reviewer.
 
 One verdict carries every finding you have. Each names the span a reader opens — `path:line` — and
 every span goes in the fence; `class:` takes the most severe of them, and the prose names the other
-classes. Say what is wrong at each span and stop; you do not write the fix — except where the whole
-repair is that one span's replacement text: a comment cut to length, a spare parameter dropped, a lost
-label restored. Such a finding is `kind: cosmetic` and carries that text as `fix`. A bare span is `real`.
+classes. Say what is wrong at each span and stop; you do not write the fix.
+
+Each thing you find is a note, a refusal, or not raised:
+
+- note — on a `pass`, never a span: comment, name, doc or spacing text (`text`), a number the checks
+  compute (`count`), or a line put back to main's exact text (`restore`). A note names `file`, `line`,
+  the `old` text, the `new` text, `why` and its `kind`; a note of any other kind refuses the pass. A
+  comment that restates its code and a test title are `text`, a ratchet line count off by one is
+  `count`, an unrequested blank-line edit is `restore`.
+- refuse — a defect in behaviour, its span in the fence, as in these rulings:
+  - #373 `sequencer/split.ts:53`: when a split part landed and another part waited on it, the parent issue could never close (`following()` returned before checking whether every part had landed).
+  - #358 `store/transcript.ts:22`: a run's cost was read by regex from any transcript line containing a figure, including lines that are not valid JSON, so the recorded cost could be wrong.
+  - #385 `sequencer/seat.ts:133`: a leftover `brief.refused.md` from an earlier run could put an old, refused brief into the builder's packet.
+  - #346 `sequencer/tests/tick.test.ts:777`: an edit changed `month(40)` to `month(39)` and so dropped the one test case for the "first review only" rule.
+- not raised — what a check already settles: an already-large file that grows (the ratchet owns the
+  line budget), and whatever step 3's checks passed on this diff.
 
 On a re-read the packet carries `Your last verdict`, `Changed since your last verdict` and
 `Paths since your last verdict`, which is git's, not a claim. Judge the changed paths, and answer
@@ -34,11 +47,23 @@ outcome: refuse
 class: correctness
 spans:
   - path/to/file.ts:12
-  - span: path/to/file.ts:20
-    kind: cosmetic
-    fix: "the line as it should read"
 reopen:
   path/to/file.ts:12: the merge from main added a second caller
+---
+```
+
+A pass with a note:
+
+```
+---
+outcome: pass
+notes:
+  - file: path/to/file.ts
+    line: 7
+    old: "// adds one to the count"
+    new: ""
+    why: the comment restates its line
+    kind: text
 ---
 ```
 

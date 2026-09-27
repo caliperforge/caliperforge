@@ -81,10 +81,12 @@ function suite(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
     const holder = lock(root, plan.id)
     if (holder !== null) return { outcome: 'pass', held: true, spans: ['checks'], note: `checks wait: plan ${String(holder.plan)} is running its tests` }
     try {
+      const diff = diffOf(root, plan.id)
       const failed = checks(srcDir(root, plan.id), noted(db, plan.id), outside === null ? narrow(db, plan) : [],
-        outside === null ? null : { language: outside, files: filesOf(db, plan.id).map((f) => f.path) })
+        outside === null ? null : { language: outside, files: filesOf(db, plan.id).map((f) => f.path) },
+        parse(diff).map((f) => f.path))
       if (failed?.fault !== undefined) return faulted(db, root, plan, failed.fault)
-      recordRail(db, join(root, 'rails', 'checks'), plan.id, checked(failed, diffOf(root, plan.id)), 0)
+      recordRail(db, join(root, 'rails', 'checks'), plan.id, checked(failed, diff), 0)
       if (failed !== null) return broke(db, root, plan, failed)
     } finally {
       unlock(root, plan.id)
@@ -162,7 +164,7 @@ function rest(db: Db, root: string, plan: PlanRow, handback: string, diff: strin
     ['authority', () => authority(root, name, diff, kernelPlan(plan), fence, outside, kernelPlan(plan) ? renumbered(src, diff) : [])],
     ['tight', () => tight(root, { diff, sources: sources(src, diff), ...prose(root, plan), code: internal(plan) })],
     ['test-weakened', () => weakened(diff, 'green', [maybe(root, plan.id, 'ask.md') ?? '', get(root, plan.id, 'issue.md'), prose(root, plan).description].join('\n'))],
-    ['identifiers', () => identifiers(src, handback)],
+    ['identifiers', () => identifiers(src, handback, diff)],
   ]
 }
 

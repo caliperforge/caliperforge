@@ -19,7 +19,7 @@ import { kernel, targetOf } from './steps.ts'
 import { kept } from './merge.ts'
 import { languageFor } from './route.ts'
 import { branchOf, checkout, diffOf, internalBranch, maybe, put, srcDir, titleOf } from './workspace.ts'
-import { homeOf } from './home.ts'
+import { assembly, homeOf } from './home.ts'
 import { fingerprintOf, refusalText, stopped } from './refusal.ts'
 
 /** `wait` is a step that settled by waiting: a CI still running, or a checkout the network failed. Neither is worth asking again in the same tick. */
@@ -88,7 +88,7 @@ function workspace(db: Db, root: string, plan: PlanRow): { language: string | nu
   const tree = fires === 'brief' || fires === 'seat' || fires === 'review' ? treeOf(db, root, plan) : null
   if (tree === null) return { language: null, failed: null }
   try {
-    checkout(root, plan.id, tree.repo, tree.branch)
+    checkout(root, plan.id, tree.repo, tree.branch, tree.from)
   } catch (error) {
     const note = error instanceof Error ? error.message : String(error)
     if (OFFLINE.test(note)) return { language: null, failed: thrown(at(plan.step), note) }
@@ -100,11 +100,14 @@ function workspace(db: Db, root: string, plan: PlanRow): { language: string | nu
 /**
  * Which repository the branch is cut in and what it is called: a stranger's repo and
  * `<repo>-<issue>[-<part>]-a<attempt>` for a target, our own repo and `p<plan>-<slug>` for an issue
- * of ours. Either way the clone is our fork and the base is that repo's `main`.
+ * of ours, the target's repo and `p<plan>-<slug>` for a part of an outside plan. Every way the clone is
+ * our fork and the base is that repo's `main`, or our fork's `asm/<parent>` for a part.
  */
-function treeOf(db: Db, root: string, plan: PlanRow): { repo: string; branch: string } | null {
+function treeOf(db: Db, root: string, plan: PlanRow): { repo: string; branch: string; from?: string | undefined } | null {
   if (internal(plan)) {
-    return { repo: homeOf(plan), branch: internalBranch(plan.id, titleOf(root, plan.id) ?? `plan ${String(plan.id)}`) }
+    const branch = internalBranch(plan.id, titleOf(root, plan.id) ?? `plan ${String(plan.id)}`)
+    const outside = targetOf(db, plan)
+    return outside === null ? { repo: homeOf(plan), branch } : { repo: outside.repo, branch, from: assembly(db, plan)?.branch }
   }
   const row = targetOf(db, plan)
   return row === null ? null : { repo: row.repo, branch: branchOf(row.repo, row.issue_no, plan.retries + 1, row.part) }

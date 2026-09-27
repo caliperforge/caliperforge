@@ -131,17 +131,27 @@ function remote(base: string, slug: string): string {
 }
 
 /**
- * The ref a tree is cut from and landed on. An internal plan's `origin` and `upstream` are the same
- * repository -- ours -- so for one of our own plans this ref is `origin/main` exactly; for a target
- * it is the stranger's `main`, which our fork may sit behind.
+ * The ref a tree is cut from and landed on. A plan on our own repo has `origin` and `upstream` the same
+ * repository -- ours -- so for it this ref is `origin/main` exactly; for a target it is the stranger's
+ * `main`, which our fork may sit behind; for a part of an outside plan it is our fork's `asm/<parent>`.
  */
 export const MAIN = 'refs/remotes/upstream/main'
 
 /** #35 rule 2: main is re-read before a tree is cut and before a base is judged, so nothing starts from a stale ref. */
 export function fetchMain(dir: string): string {
   git(dir, ['fetch', '--no-tags', 'origin', '+main:refs/remotes/origin/main'])
-  git(dir, ['fetch', '--no-tags', 'upstream', `+main:${MAIN}`])
+  const from = assembled(dir)
+  git(dir, from === null ? ['fetch', '--no-tags', 'upstream', `+main:${MAIN}`] : ['fetch', '--no-tags', 'origin', `+${from}:${MAIN}`])
   return git(dir, ['rev-parse', MAIN]).trim()
+}
+
+/** The fork branch `checkout` wrote as the clone's `cf.base`; git throws on an unset key. */
+function assembled(dir: string): string | null {
+  try {
+    return git(dir, ['config', 'cf.base']).trim()
+  } catch {
+    return null
+  }
 }
 
 /** Whether the branch was cut from a `main` that has since moved on without it. */
@@ -190,7 +200,7 @@ export function liveTree(root: string, cwd: string): boolean {
  * `core.hooksPath` is set here and not at step 8, so every push out of a plan checkout meets the pre-push hook, not just the kernel's.
  * The build-output exclude is written here too: a builder runs xcodebuild at step 2, before the rails do.
  */
-export function checkout(root: string, plan: number, repo: string, branch: string): Checkout {
+export function checkout(root: string, plan: number, repo: string, branch: string, from = 'main'): Checkout {
   const dir = srcDir(root, plan)
   const done = maybe(root, plan, 'base.sha')
   if (done !== null && cloned(dir)) { fetchMain(dir); excluded(dir); return { dir, branch, base: done.trim() } }
@@ -200,6 +210,7 @@ export function checkout(root: string, plan: number, repo: string, branch: strin
     '-c', 'remote.upstream.fetch=+refs/heads/*:refs/remotes/upstream/*',
     remote(base, `${FORK}/${repoName(repo)}`), dir])
   git(dir, ['config', 'core.hooksPath', join(root, 'hooks')])
+  if (from !== 'main') git(dir, ['config', 'cf.base', from])
   excluded(dir)
   const head = fetchMain(dir)
   if (done !== null && pushed(dir, branch)) {

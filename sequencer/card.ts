@@ -1,6 +1,7 @@
 import { decide, digestOf } from '../store/approvals.ts'
 import type { Db } from '../store/index.ts'
 import { busy } from '../store/now.ts'
+import { conventions } from './conventions.ts'
 import type { Outcome } from './kind.ts'
 import { lead } from './lead.ts'
 import { weight } from './weight.ts'
@@ -10,7 +11,7 @@ export interface Row { check: string; ok: boolean; says: string }
 export interface Target { repo: string; issue_no: number; named_merger: string }
 export type Check = (db: Db, root: string, plan: number, target: Target) => Row
 
-export const CHECKS: Check[] = [lead, weight]
+export const CHECKS: Check[] = [lead, weight, conventions]
 
 const CARD = 'maintainer.md'
 

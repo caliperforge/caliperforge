@@ -184,7 +184,7 @@ function asked(root: string, plan: number, sha: string, repo: string, wire: Wire
   const month = heads.length === 0 ? 0 : monthly(root, new Date())
   if (month >= FIRST_ONLY) {
     return { outcome: 'needs_ceo', spans: ['greptile.month'],
-      note: `Greptile was asked ${String(month)}/${String(CREDITS)} times this month; a second review at ${sha.slice(0, 12)} is the COO's call` }
+      note: `Greptile was asked ${String(month)}/${String(CREDITS)} times this month; another review at ${sha.slice(0, 12)} is the COO's call` }
   }
   wire.review(`${FORK}/${repoName(repo)}`, rehearsalBranch(root, plan))
   put(root, plan, ASKED, `${text}${sha} ${new Date().toISOString()}\n`)

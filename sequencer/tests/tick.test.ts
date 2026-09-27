@@ -774,7 +774,7 @@ const month = async (others: number): Promise<[World, () => string[], (line: str
 }
 
 test('D2 at 40 this month the first head is asked and the second goes to the COO unasked', async () => {
-  const [w, asked, round] = await month(40)
+  const [w, asked, round] = await month(39)
   expect(await round('export const two = 2')).toMatchObject({ step: 6, outcome: 'needs_ceo', state: 'blocked_on_ceo', spans: ['greptile.month'] })
   expect(asked()).toHaveLength(1)
   expect(plan(w.db, 1).state).toBe('blocked_on_ceo')

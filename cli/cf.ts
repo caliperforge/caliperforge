@@ -22,6 +22,7 @@ import { registerInbox, registerLanes, registerSession, type Cli } from './cf-la
 import { registerPlans, registerRetry } from './cf-plans.ts'
 import { registerAdopt, registerApprovals, registerTargets } from './cf-targets.ts'
 import { desk, gh } from './gh.ts'
+import { health } from './health.ts'
 import { crashed, events, notify, record as keep } from './inbox.ts'
 import { alerter, down, livenessLine, watch } from './watch.ts'
 
@@ -46,6 +47,10 @@ registerRetry(cf, cli)
 registerApprovals(cf, cli)
 registerSession(cf, cli)
 registerAdopt(cf, cli)
+
+cf.command('health').action(() => {
+  out(health(db(), root, new Date().toISOString().slice(0, 10)))
+})
 
 cf.command('tick').option('--dry', 'read what a tick would do, fire nothing, call no network')
   .action(async (options: { dry?: boolean }) => {

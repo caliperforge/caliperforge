@@ -66,6 +66,12 @@ test('the prompt carries the own-repo rules and the outside comment-density line
   ]) expect(prompt).toContain(line)
 })
 
+test('the prompt keeps views on plain values and asks for no #Preview', () => {
+  const { prompt } = seat(root, SEAT)
+  expect(prompt).not.toContain('#Preview')
+  expect(prompt).toContain('a view takes plain values')
+})
+
 test('write_paths admit the app and its tests and refuse everything beside them', () => {
   const paths = seat(root, SEAT).manifest.write_paths
   expect(refuse(root, paths, 'Atelier/Views/NowView.swift')).toBeNull()

@@ -21,7 +21,8 @@ Read the whole diff, then judge it on five questions:
   that repeats an existing one, pins nothing the diff changes, or stays from an earlier round for behaviour
   the diff no longer has is a scope finding on its first line. Every test the diff deletes must be named in
   the issue or the PR text: check each is dead, or covered where the text says, and refuse a deletion that
-  is unnamed or whose cover does not hold.
+  is unnamed or whose cover does not hold. On our own repository, where no pull request is opened, the
+  builder's hand-back is the PR text.
 
 One verdict carries every finding you have. Each names the span a reader opens — `path:line` — and
 every span goes in the fence; `class:` takes the most severe of them, and the prose names the other

@@ -41,7 +41,7 @@ How Atelier is written, and how you keep it:
   never inline. State, step and hand colours are fixed. One clock, Guatemala time, never UTC. Plain words on
   screen: no slugs, digests or step numbers as titles.
 - Views stay small and previewable: a view takes plain values, the query and the mapping live in a service
-  with a test, and each new view ships a `#Preview` with sample data. Anything clickable is a real control
+  with a test. Anything clickable is a real control
   with an accessibility label.
 - The app shrinks: where the ticket retires a v1 folder reader, delete the reader in the same diff.
 - The project uses synchronized folders: a new file under `Atelier/` or `AtelierTests/` is in the target
@@ -87,3 +87,4 @@ done:
 One `- id:` row per `- D<n>` the issue lists, same ids, same order. An issue that lists none has one, `D1`.
 `status` is `done`, `cannot-be-done` or `they-said-dont`.
 A rebuild's fence lists every case again: carry forward the rows the refusal did not touch, update the ones it did.
+A hand-back with no fence, or one whose YAML does not parse, is asked once for the fence alone: answer with only the closing `---` fence and a `done:` row per case, and edit no file, since an edit there refuses the build.

@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { appendFileSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
@@ -7,6 +7,7 @@ import { pointed, STANDING } from '../brief.ts'
 import { handout, WHOLE } from '../handout.ts'
 import { tick } from '../index.ts'
 import { stopped } from '../seat.ts'
+import { put, ruled } from '../workspace.ts'
 import { HANDOUT } from './bases.ts'
 import { approve, CARRIED, PASS, stub, world, type World } from './world.ts'
 
@@ -98,6 +99,30 @@ test('a rebuild is handed its refusal, its diff and only the files those touch',
   expect(again).toContain('+++ b/src/extra.ts')
   expect(again).toContain('## src/extra.ts\n')
   expect(again).not.toContain('export const bye')
+})
+
+test('D1 a ruling appended to ask.md after the build reaches the next builder packet', async () => {
+  const w = briefed()
+  const packets: Packet[] = []
+  const provider = builds(packets, (cwd) => {
+    writeFileSync(join(cwd, 'src/extra.ts'), 'export const extra = 1\n')
+    appendFileSync(join(cwd, '..', 'ask.md'), '## Ruling\n\nuse bye()\n')
+  })
+  for (let at = 0; at < 5 && packets.length < 2; at += 1) await tick(w.db, w.root, provider)
+  expect(packets[1]?.prompt).toContain('# What the ask holds beyond this brief\n\n## Ruling\n\nuse bye()')
+  expect(packets[0]?.prompt).not.toContain('use bye()')
+})
+
+test('D2 D3 ruled: the tail past the copy, the whole ask once its start moved, else nothing', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cf-ruled-'))
+  put(root, 1, 'ask.md', '# ask\n')
+  expect(ruled(root, 1)).toBeNull()
+  put(root, 1, 'ask.briefed.md', '# ask\n')
+  expect(ruled(root, 1)).toBeNull()
+  put(root, 1, 'ask.md', '# ask\nruling\n')
+  expect(ruled(root, 1)).toBe('ruling\n')
+  put(root, 1, 'ask.md', '# moved\nruling\n')
+  expect(ruled(root, 1)).toBe('# moved\nruling\n')
 })
 
 test('a stopped build resumes: kept diff, written files not re-handed', async () => {

@@ -7,6 +7,7 @@ import { claudeAgentSdk } from '../providers/claude-agent-sdk/index.ts'
 import { credential } from '../providers/credential.ts'
 import { spawn } from 'node:child_process'
 import { CHAIN_MINUTES, dry, EACH, lap, tick, type Apart } from '../sequencer/index.ts'
+import { garden } from '../sequencer/garden.ts'
 import type { Fired } from '../sequencer/kind.ts'
 import { CHECK_SLOTS } from '../sequencer/checks.ts'
 import { behind, upgraded } from '../sequencer/upgrade.ts'
@@ -16,12 +17,13 @@ import { SIGNOFF } from '../sequencer/workspace.ts'
 import { migrate, open as openDb, type Db } from '../store/index.ts'
 import { hhmm } from '../store/lanes.ts'
 import { openPipes, overlapWaits } from '../store/plans.ts'
-import { receipt } from '../store/ticks.ts'
+import { receipt, slots } from '../store/ticks.ts'
 import { dryLines, tickNote } from './brief.ts'
+import { reported, slack } from './flow.ts'
 import { registerInbox, registerLanes, registerSession, type Cli } from './cf-lanes.ts'
 import { registerPlans, registerRetry } from './cf-plans.ts'
 import { registerAdopt, registerApprovals, registerTargets } from './cf-targets.ts'
-import { desk, gh } from './gh.ts'
+import { desk, fileIssue, gh } from './gh.ts'
 import { health } from './health.ts'
 import { crashed, events, notify, record as keep } from './inbox.ts'
 import { alerter, down, livenessLine, watch } from './watch.ts'
@@ -112,20 +114,24 @@ async function ticked(options: { dry?: boolean }, now: Date): Promise<void> {
   process.env.CF_CHECK_SLOTS ??= String(CHECK_SLOTS)
   const lines: string[] = []
   const fired = await tick(handle, root, claudeAgentSdk, now, undefined, undefined, CHAIN_MINUTES, gh, EACH, apart, lines)
-  receipt(handle, saved(handle, upgraded(handle, root, { at: now.toISOString(), hhmm: hhmm(handle, now), dry: false,
+  const id = receipt(handle, saved(handle, upgraded(handle, root, { at: now.toISOString(), hhmm: hhmm(handle, now), dry: false,
     pipes: openPipes(handle, hhmm(handle, now)).length, fired: fired.length,
     exit: fired.some((f) => f.outcome === 'refuse') ? 1 : 0, note: tickNote(fired, overlapWaits(handle), lines) }),
   fired.filter((f) => f.state === 'done').map((f) => f.plan)))
+  slots(handle, id, slack(handle, now))
   watch(handle, root, now, alerter())
   const news = events(handle, fired, now.toISOString())
   keep(root, news)
   notify(news)
+  reported(handle, root, now)
   if (fired.length === 0) out('nothing to fire\n')
   for (const f of fired) {
     out(`${f.pipe}\tplan ${String(f.plan)}\tstep ${String(f.step)} ${f.name}\t${f.outcome}\t${f.state}\t${f.note}\n`)
     for (const span of f.spans) out(`  span\t${span}\n`)
   }
   cards(handle, now)
+  const gardened = garden(handle, root, now, fileIssue)
+  if (gardened !== null) out(`garden\t${gardened}\n`)
 }
 
 cf.command('signoff').description('open, read and close the sign-off cards on the private sign-off repo, as every tick does')

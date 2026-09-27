@@ -469,6 +469,12 @@
     "lines": 58,
     "silent-catch": 1
   },
+  "sequencer/merge.ts": {
+    "citing-comment": 3,
+    "lines": 138,
+    "prepare": 1,
+    "silent-catch": 1
+  },
   "sequencer/next.ts": {
     "citing-comment": 2,
     "lines": 74
@@ -504,6 +510,9 @@
     "prepare": 1,
     "silent-catch": 1
   },
+  "sequencer/ready.ts": {
+    "lines": 18
+  },
   "sequencer/route.ts": {
     "citing-comment": 1,
     "lines": 65
@@ -530,10 +539,9 @@
     "silent-catch": 2
   },
   "sequencer/steps.ts": {
-    "citing-comment": 3,
-    "lines": 476,
-    "prepare": 16,
-    "silent-catch": 1
+    "citing-comment": 2,
+    "lines": 369,
+    "prepare": 15
   },
   "sequencer/symbols.ts": {
     "lines": 43

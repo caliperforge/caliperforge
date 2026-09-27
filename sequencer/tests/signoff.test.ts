@@ -142,8 +142,8 @@ test('D1 no with only a line comment on the rehearsal PR sends it back to the bu
 test('D2 only the credential owner\'s line comments come back, at the original line when outdated', () => {
   const read = (args: string[]): unknown => args[1]?.startsWith('repos/') === true && args[1].includes('/pulls/')
     ? [
-      { path: 'src/hello.ts', line: 3, original_line: 3, body: 'ship it', user: { login: 'stranger' } },
-      { path: 'src/hello.ts', line: null, original_line: 1, body: ' Name it greet. ', user: { login: 'michael-moffett' } },
+      { id: 1, commit_id: 'c1', path: 'src/hello.ts', line: 3, original_line: 3, body: 'ship it', user: { login: 'stranger' } },
+      { id: 2, commit_id: 'c1', path: 'src/hello.ts', line: null, original_line: 1, body: ' Name it greet. ', user: { login: 'michael-moffett' } },
     ]
     : []
   expect(ghDesk(SIGNOFF, read, () => 'michael-moffett\n').lines('caliperforge/widget', 5)).toEqual(['src/hello.ts:1 Name it greet.'])

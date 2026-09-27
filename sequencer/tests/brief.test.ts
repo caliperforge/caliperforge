@@ -343,6 +343,21 @@ test('afresh on a plan with neither file writes nothing', () => {
   expect([maybe(w.root, ID, 'refusal.prev.md'), maybe(w.root, ID, 'question.prev.md')]).toEqual([null, null])
 })
 
+test('D2 rulings.md stays byte for byte through cf return and cf retry at steps 1 and 2, and afresh', () => {
+  const w = mine()
+  const ruling = '# Ruling\n\nuse bye()\n'
+  put(w.root, ID, 'rulings.md', ruling)
+  const park = (step: number): void => { w.db.prepare("UPDATE plans SET step = ?, state = 'blocked_on_ceo' WHERE id = ?").run(step, ID) }
+  for (const step of [1, 2]) {
+    park(step)
+    expect(unhold(w.db, w.root, ID, 'ceo')).toBe(step)
+    park(step)
+    afresh(w.root, ID, retried(w.db, ID, 'ceo'))
+    afresh(w.root, ID, step)
+    expect(maybe(w.root, ID, 'rulings.md')).toBe(ruling)
+  }
+})
+
 test('a plan blocked at step 1 and retried is briefed from the ask alone', async () => {
   const w = mine()
   const packets: Packet[] = []

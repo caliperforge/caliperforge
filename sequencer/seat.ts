@@ -11,6 +11,7 @@ import type { Finding, Judged, Note } from '../reviews/verdict.ts'
 import { runLogged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { filesOf } from '../store/files.ts'
+import { profile } from '../store/profile.ts'
 import { observed, wall } from '../store/lanes.ts'
 import { builderRan, internal, type PlanRow } from '../store/plans.ts'
 import { byRun, opened, pending, unfinished } from '../store/transcript.ts'
@@ -223,7 +224,7 @@ export async function ran(db: Db, root: string, plan: PlanRow, step: Step, provi
   load(db, root)
   const { manifest, prompt, hash } = seat(root, step.runs)
   const src = srcDir(root, plan.id)
-  const built = packet(manifest, prompt, tight(root), issue, src,
+  const built = packet(manifest, prompt + noteSection(db, root, plan, step), tight(root), issue, src,
     transcriptOf(root, plan.id, step.step), ours, fenceFor(db, plan.id, manifest.write_paths))
   const fired = await provider.fire({
     ...built,
@@ -375,6 +376,12 @@ function symbolsOf(db: Db, root: string, plan: PlanRow, src: string): Pick<Hando
 function symbolSection(db: Db, root: string, plan: PlanRow): string {
   const { symbols } = symbolsOf(db, root, plan, srcDir(root, plan.id))
   return symbols === undefined ? '' : `# Symbols at the branch base\n\n${SYMBOLS_LEAD}\n\n${symbols}`
+}
+
+function noteSection(db: Db, root: string, plan: PlanRow, step: Step): string {
+  const repo = step.step === 2 && !internal(plan) ? repoOf(db, plan) : null
+  const notes = repo === null ? [] : profile(root, repo)?.notes ?? []
+  return repo === null || notes.length === 0 ? '' : `\n\n# Notes on ${repo}\n\n${notes.map((n) => `- ${n}`).join('\n')}`
 }
 
 function referenced(src: string, issue: string): Pick<Bench, 'reference'> {

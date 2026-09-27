@@ -82,7 +82,8 @@ function suite(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
     if (holder !== null) return { outcome: 'pass', held: true, spans: ['checks'], note: `checks wait: plan ${String(holder.plan)} is running its tests` }
     try {
       const failed = checks(srcDir(root, plan.id), noted(db, plan.id), outside === null ? narrow(db, plan) : [],
-        outside === null ? null : { language: outside, files: filesOf(db, plan.id).map((f) => f.path) })
+        outside === null ? null : { language: outside, files: filesOf(db, plan.id).map((f) => f.path) },
+        parse(diffOf(root, plan.id)).map((f) => f.path))
       if (failed?.fault !== undefined) return faulted(db, root, plan, failed.fault)
       recordRail(db, join(root, 'rails', 'checks'), plan.id, checked(failed, diffOf(root, plan.id)), 0)
       if (failed !== null) return broke(db, root, plan, failed)

@@ -3,13 +3,16 @@ import { writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { expect, test } from 'vitest'
 import { approve as approveCard } from '../../cli/batch.ts'
+import type { Pr } from '../../cli/gh.ts'
+import { record, type SignalRow } from '../../store/signals.ts'
 import { approve as approvePublish } from '../card.ts'
 import { tick } from '../index.ts'
 import { kernelPlan } from '../home.ts'
 import type { Wire } from '../push.ts'
 import { repoOf } from '../ready.ts'
-import { checkout, diffOf, fetchMain, FORK, get, put, SELF, srcDir } from '../workspace.ts'
-import { built, CARRIED, plan, REFUSE, stub, watched, world, type World } from './world.ts'
+import { started } from '../signals.ts'
+import { checkout, diffOf, fetchMain, FORK, get, maybe, put, SELF, srcDir } from '../workspace.ts'
+import { built, CARRIED, plan, PR, REFUSE, stub, watched, world, type World } from './world.ts'
 
 const ID = 2
 
@@ -39,8 +42,8 @@ function assembling(): Assembly {
 }
 
 /** The watched log with a real push, so a landing moves the fork's branch. */
-function pushing(log: string[], a: Assembly): Wire {
-  return { ...watched(log, a.w.root, ID), send: (dir, branch) => {
+function pushing(log: string[], a: Assembly, id = ID): Wire {
+  return { ...watched(log, a.w.root, id), send: (dir, branch) => {
     log.push(`send ${basename(dir)} ${branch}`)
     git(dir, ['push', '-q', 'origin', branch])
   } }
@@ -145,6 +148,89 @@ test('D4 a part whose last pre_review refused leaves the parent waiting on the r
   await laps(a, 3, watched([], a.w.root, 1))
   expect(plan(a.w.db, 1)).toMatchObject({ step: 6, wait_reason: 'ready_proof' })
   expect(a.w.db.prepare('SELECT tests_pass FROM deliverables WHERE plan_id = 1 ORDER BY id DESC LIMIT 1').get()).toEqual({ tests_pass: 0 })
+})
+
+/** The parent done, its pull request from asm/1 open. */
+function opened(a: Assembly): void {
+  const digest = '0'.repeat(64)
+  const approval = a.w.db.prepare(`INSERT INTO approvals (subject_kind, subject_id, subject_digest, who, decision, approved_at)
+    VALUES ('plan', 1, ?, 'ceo', 'approved', '2026-09-17T00:00:00.000Z')`).run(digest).lastInsertRowid
+  a.w.db.prepare(`INSERT INTO deliverables (plan_id, step, seat, diff_digest, state, tests_pass, byte_identical_elsewhere,
+    fork_ci_green, bot_clean, target_warm, approval_id, evidence)
+    VALUES (1, 8, 'typescript_specialist', ?, 'pushed', 1, 1, 1, 1, 1, ?, ?)`).run(digest, approval, PR)
+  a.w.db.prepare("UPDATE plans SET state = 'done', step = 9, head_digest = ? WHERE id = 1").run(digest)
+}
+
+function said(a: Assembly, kind: 'review' | 'comment', state: string | null): SignalRow {
+  const row = record(a.w.db, { repo: 'acme/widget', pr: 7, kind, author: 'maintainer', at: new Date().toISOString(),
+    external_id: `${kind}-${String(state)}`, score: null, plan: 1, body: 'rename expires to expiry', state })
+  if (row === null) throw new Error('recorded twice')
+  return row
+}
+
+/** The fix part's issue is its own number, apart from part 1's. */
+function filing(log: string[], a: Assembly, id = ID): Wire {
+  return { ...pushing(log, a, id), file: (repo, title) => {
+    log.push(`file ${repo} ${title}`)
+    return `https://github.com/${repo}/issues/950`
+  } }
+}
+
+const quiet = (): Pr => ({ number: 7, url: PR, state: 'OPEN', mergedAt: null, mergedBy: null, reviewDecision: null,
+  comments: [], reviews: [], statusCheckRollup: [] })
+
+test('D1 D2 a requested change on the assembled pull request files p1b and queues it, the parent untouched', async () => {
+  const a = await landed()
+  opened(a)
+  const parent = plan(a.w.db, 1)
+  const log: string[] = []
+  const fix = started(a.w.db, said(a, 'review', 'CHANGES_REQUESTED'), a.w.root, filing(log, a))
+  const id = Number(fix?.plan)
+  expect(fix).toMatchObject({ template: 'pr_path', step: 0 })
+  expect(log).toEqual([`file ${SELF} p1b: address maintainer's review on acme/widget#7`])
+  expect(a.w.db.prepare('SELECT n, after, plan FROM parts WHERE parent = 1 AND n = 1').get()).toEqual({ n: 1, after: null, plan: id })
+  expect(plan(a.w.db, id)).toMatchObject({ step: 0, state: 'queued' })
+  expect(get(a.w.root, id, 'ask.md')).toContain('rename expires to expiry')
+  expect(plan(a.w.db, 1)).toEqual(parent)
+  expect(maybe(a.w.root, 1, 'refusal.md')).toBeNull()
+})
+
+test('D3 the fix part lands on the fork\'s asm/1 alone, and the parent comes back to senior with its pull request kept', async () => {
+  const a = await landed()
+  opened(a)
+  const log: string[] = []
+  const id = Number(started(a.w.db, said(a, 'review', 'CHANGES_REQUESTED'), a.w.root, filing(log, a))?.plan)
+  const wire = filing(log, a, id)
+  const main = git(a.upstream, ['rev-parse', 'main'])
+  const branches = git(a.upstream, ['branch', '--list'])
+  const lap = (): Promise<unknown> => tick(a.w.db, a.w.root, stub(CARRIED), undefined, quiet, wire)
+
+  for (let at = 0; at < 3; at += 1) await lap()
+  built(a.w.root, id, 'export const fixed = true')
+  for (let at = 0; at < 8 && plan(a.w.db, 1).step !== 5; at += 1) await lap()
+  expect(plan(a.w.db, 1).step).toBe(5)
+  expect(git(a.fork, ['rev-parse', 'asm/1'])).toBe(git(srcDir(a.w.root, id), ['rev-parse', 'HEAD']))
+  expect(git(a.upstream, ['rev-parse', 'main'])).toBe(main)
+  expect(git(a.upstream, ['branch', '--list'])).toBe(branches)
+  expect(log.filter((l) => /^(send|open) /.test(l))).toEqual(['send src main:refs/heads/asm/1'])
+  expect(a.w.db.prepare("SELECT evidence FROM deliverables WHERE plan_id = 1 AND state = 'pushed' ORDER BY id DESC LIMIT 1").get())
+    .toEqual({ evidence: PR })
+})
+
+test('D4 D5 a plain comment still rewinds the parent to 2, and a filing that throws leaves no part and the parent with a person', async () => {
+  const a = await landed()
+  opened(a)
+  const wire = { ...watched([], a.w.root, 1), file: (): string => { throw new Error('gh is down') } }
+  const parts = (): unknown => a.w.db.prepare('SELECT count(*) AS n FROM parts WHERE parent = 1').get()
+
+  started(a.w.db, said(a, 'comment', null), a.w.root, wire)
+  expect(plan(a.w.db, 1)).toMatchObject({ step: 2, state: 'blocked_on_ceo' })
+
+  a.w.db.prepare("UPDATE plans SET state = 'done', step = 9, head_digest = ? WHERE id = 1").run('0'.repeat(64))
+  started(a.w.db, said(a, 'review', 'CHANGES_REQUESTED'), a.w.root, wire)
+  expect(plan(a.w.db, 1)).toMatchObject({ step: 2, state: 'blocked_on_ceo' })
+  expect(parts()).toEqual({ n: 1 })
+  expect(get(a.w.root, 1, 'refusal.md')).toContain('rename expires to expiry')
 })
 
 test('D5 a part plan is not the kernel\'s, and its repo is the target\'s', () => {

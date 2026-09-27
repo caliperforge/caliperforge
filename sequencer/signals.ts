@@ -4,6 +4,9 @@ import type { Db } from '../store/index.ts'
 import { needsCeo, PlanRow, rewind } from '../store/plans.ts'
 import { clear } from '../store/refusals.ts'
 import type { SignalRow } from '../store/signals.ts'
+import { assembling } from './home.ts'
+import { WIRE, type Wire } from './push.ts'
+import { fixed } from './split.ts'
 import { put } from './workspace.ts'
 
 export interface Started {
@@ -23,23 +26,41 @@ const BUILD_STEP = 2
  * A changes-requested review and a red check on the pull request go straight to the builder with the
  * words. A plain comment or review goes to the builder too, but waits there for a person: it may be a
  * question, and the CEO answers those himself (`cf retry` sends it on). Either way the words land in
- * the refusal the builder reads, the refusal count starts over, and the inbox says who asked.
+ * the refusal the builder reads, the refusal count starts over, and the inbox says who asked. A
+ * changes-requested review on an assembled pull request is the exception: it becomes one fix part.
  */
-export function started(db: Db, signal: SignalRow, root?: string): Started | null {
+export function started(db: Db, signal: SignalRow, root?: string, wire: Wire = WIRE): Started | null {
   if (signal.plan === null) return null
   if (signal.kind === 'merge') return comms(db, signal, signal.plan)
   if (older(db, signal, signal.plan)) return null
   if (signal.kind === 'bot_review' && (signal.score ?? 5) >= 5) return null
   if (signal.kind === 'comment' && signal.author === 'ci') return null
+  if (signal.kind === 'review' && signal.state === 'CHANGES_REQUESTED' && root !== undefined) {
+    const parent = PlanRow.parse(db.prepare('SELECT * FROM plans WHERE id = ?').get(signal.plan))
+    if (assembling(db, parent) !== null) return fix(db, signal, parent, root, wire)
+  }
   const step = signal.kind === 'bot_review' ? REVIEW_STEP : BUILD_STEP
   rewind(db, signal.plan, step)
   if (step === BUILD_STEP) asked(db, signal, signal.plan, root)
   return { signal: signal.id, template: 'pr_path', plan: signal.plan, step }
 }
 
-function asked(db: Db, signal: SignalRow, plan: number, root: string | undefined): void {
+/** The fix part lands on `asm/<parent>`, the pull request's head; a part that cannot be filed leaves the words waiting on the parent for a person. */
+function fix(db: Db, signal: SignalRow, parent: PlanRow, root: string, wire: Wire): Started {
+  try {
+    return { signal: signal.id, template: 'pr_path', plan: fixed(db, root, parent, signal, wire), step: 0 }
+  } catch (error) {
+    logged(db, { plan: parent.id, kind: 'unfiled', actor: 'review', outcome: 'refuse',
+      message: `fix part: ${error instanceof Error ? error.message : String(error)}`, pointer: null, run: null })
+    rewind(db, parent.id, BUILD_STEP)
+    asked(db, signal, parent.id, root, false)
+    return { signal: signal.id, template: 'pr_path', plan: parent.id, step: BUILD_STEP }
+  }
+}
+
+function asked(db: Db, signal: SignalRow, plan: number, root: string | undefined,
+  direct = signal.kind === 'ci_red' || signal.state === 'CHANGES_REQUESTED'): void {
   clear(db, plan)
-  const direct = signal.kind === 'ci_red' || signal.state === 'CHANGES_REQUESTED'
   if (!direct) needsCeo(db, PlanRow.parse(db.prepare('SELECT * FROM plans WHERE id = ?').get(plan)))
   if (root === undefined) return
   put(root, plan, 'refusal.md', words(signal))
@@ -49,7 +70,7 @@ function asked(db: Db, signal: SignalRow, plan: number, root: string | undefined
   notify([event])
 }
 
-function words(signal: SignalRow): string {
+export function words(signal: SignalRow): string {
   const said = signal.body ?? '(no words)'
   return `${signal.author} on ${signal.repo}#${String(signal.pr)} (${signal.kind}${signal.state === null ? '' : `, ${signal.state}`}, ${signal.at}):\n\n${said}\n\nspans:\n  - pr:${String(signal.pr)}\n`
 }

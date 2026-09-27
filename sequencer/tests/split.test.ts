@@ -1,7 +1,8 @@
 import { expect, test } from 'vitest'
 import { split, STANDING, unclear, wide } from '../brief.ts'
 import { tick } from '../index.ts'
-import { following, released } from '../split.ts'
+import { assembly } from '../home.ts'
+import { following, parted, released } from '../split.ts'
 import { maybe } from '../workspace.ts'
 import { approve, CARRIED, internalPlan, ours, plan, stub, watched, world, type World } from './world.ts'
 
@@ -176,14 +177,26 @@ test('D5: a split whose parts all say none queues every part at once', async () 
   expect(w.db.prepare("SELECT count(*) AS n FROM parts p JOIN plans s ON s.id = p.plan WHERE p.parent = ? AND s.state = 'queued'").get(ID)).toEqual({ n: 2 })
 })
 
-test('D4: a split of somebody else\'s ticket waits for the COO with the parts', async () => {
+test('D1: an approved split of somebody else\'s ticket is filed on our repo as internal-only parts building against asm/<plan>', async () => {
   const out = world()
   approve(out.db, out.target)
-  const theirs: string[] = []
-  await briefed(out, 1, PARTS, theirs)
-  expect(plan(out.db, 1)).toMatchObject({ state: 'blocked_on_ceo', step: 1 })
-  expect(theirs).toEqual([])
-  expect(maybe(out.root, 1, 'question.md')).toMatch(/split by the COO[\s\S]*a\. file the parts[\s\S]*b\. queue them in order/)
+  const log: string[] = []
+  await briefed(out, 1, PARTS, log)
+  expect(log).toEqual(['file caliperforge/caliperforge p1a: file the parts', 'file caliperforge/caliperforge p1b: queue them in order'])
+  expect(plan(out.db, 1)).toMatchObject({ state: 'done' })
+  const parts = out.db.prepare('SELECT body, plan FROM parts WHERE parent = 1 ORDER BY n').all() as { body: string; plan: number | null }[]
+  for (const { body } of parts) expect(body).toMatch(/Internal only[\s\S]*asm\/1/)
+  const a = parts[0]?.plan ?? 0
+  expect(plan(out.db, a)).toMatchObject({ target_id: 1 })
+  expect(assembly(out.db, plan(out.db, a))?.branch).toBe('asm/1')
+})
+
+test('D2: an unapproved split of somebody else\'s ticket files nothing and waits for the COO with the parts', () => {
+  const out = world()
+  const log: string[] = []
+  expect(parted(out.db, out.root, plan(out.db, 1), split(PARTS) ?? [], watched(log, out.root, 1))).toMatchObject({ outcome: 'needs_ceo' })
+  expect(log).toEqual([])
+  expect(maybe(out.root, 1, 'question.md')).toMatch(/split by the COO[\s\S]*a\. file the parts/)
 })
 
 test('a wide internal brief goes back to the brief writer to be split', async () => {

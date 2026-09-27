@@ -195,7 +195,7 @@ test('D1 a pass carries its notes of known kinds as written', () => {
 
 test('D2 a note of no known kind turns the pass into a scope refuse naming it', () => {
   const out = read(`the rest reads fine\n\n${PASS(NOTE('text') + NOTE('logic', '9'))}`, 'subject')
-  expect(out).toMatchObject({ outcome: 'refuse', defect_class: 'scope', spans: ['src/stats.ts:9'], notes: [], origin_ref: 'reviewers.verdict' })
+  expect(out).toMatchObject({ outcome: 'refuse', defect_class: 'scope', spans: ['src/stats.ts:9'], notes: [], origin_kind: 'ruling', origin_ref: 'reviewers.verdict' })
   expect(out?.message).toBe('the rest reads fine\nnote of no known kind logic at src/stats.ts:9')
 })
 

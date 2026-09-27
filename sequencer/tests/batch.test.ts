@@ -327,7 +327,14 @@ const FORKED = pr({
 
 const forked = (repo: string): Pr => (repo === 'caliperforge/widget' ? FORKED : pr())
 
+const INLINE = [
+  { id: 11, commit_id: SHA, path: 'src/hello.ts', line: 1, original_line: 1, body: 'a mint change is lost', user: { login: 'greptile-apps[bot]' } },
+  { id: 12, commit_id: SHA, path: 'src/hello.ts', line: 2, original_line: 2, body: 'rename it', user: { login: 'maintainer' } },
+  { id: 13, commit_id: 'b'.repeat(40), path: 'src/hello.ts', line: 3, original_line: 3, body: 'old', user: { login: 'greptile-apps[bot]' } },
+]
+
 const listing = (heads: string[]) => (args: string[]): unknown => {
+  if (args[0] === 'api') return INLINE
   const head = args[args.indexOf('--head') + 1] ?? ''
   heads.push(head)
   return head === 'widget-12-a1-next' ? [{ number: 3 }] : []
@@ -349,6 +356,14 @@ test('D5 a rehearsal review at a -next tip is stored at the plan HEAD the tip ca
   capture(w.db, forked, w.root, listing([]))
   expect(w.db.prepare('SELECT head FROM signals WHERE author != ?').all(SEEDED)).toEqual([{ head }])
   expect(graded(w.db, 1, head)).toMatchObject({ external_id: 'g3', score: 4 })
+})
+
+test('D1 a rehearsal review writes the bot\'s inline findings at its commit under the plan HEAD it carries', async () => {
+  const w = await pushed()
+  const head = headOf(w.root, 1).sha
+  put(w.root, 1, 'next.tips', `${SHA} ${head}\n`)
+  capture(w.db, forked, w.root, listing([]))
+  expect(maybe(w.root, 1, `findings-${head}.md`)).toBe('- G11 src/hello.ts:1 a mint change is lost\n')
 })
 
 test('a plan with no checkout is asked about no rehearsal', async () => {

@@ -215,12 +215,25 @@ const Events = z.array(z.looseObject({
 }))
 
 const Lines = z.array(z.object({
+  id: z.int(),
+  commit_id: z.string(),
   path: z.string(),
   line: z.int().nullable(),
   original_line: z.int().nullable(),
   body: z.string(),
   user: z.object({ login: z.string() }),
 }))
+
+type Line = z.infer<typeof Lines>[number]
+
+export function inline(fork: string, pr: number, read: Read): Line[] {
+  return Lines.parse(read(['api', `repos/${fork}/pulls/${String(pr)}/comments?per_page=100`]))
+}
+
+export function said(c: Line): string {
+  const at = c.line ?? c.original_line
+  return `${c.path}${at === null ? '' : `:${String(at)}`} ${c.body.trim()}`
+}
 
 function run(args: string[], input?: string): string {
   return execFileSync('gh', args, { encoding: 'utf8', ...(input === undefined ? {} : { input }) })
@@ -254,12 +267,7 @@ export function desk(repo: string, read: Read = gh, exec: Run = run): Desk {
     unlabel: (no, label) => void exec(['issue', 'edit', String(no), '--repo', repo, '--remove-label', label]),
     close: (no, comment) => void exec(['issue', 'close', String(no), '--repo', repo, '--comment', comment]),
     rehearsal: (fork, branch) => rehearsal(fork, branch, read),
-    lines: (fork, pr) => Lines.parse(read(['api', `repos/${fork}/pulls/${String(pr)}/comments?per_page=100`]))
-      .filter((c) => c.user.login === me() && c.body.trim() !== '')
-      .map((c) => {
-        const at = c.line ?? c.original_line
-        return `${c.path}${at === null ? '' : `:${String(at)}`} ${c.body.trim()}`
-      }),
+    lines: (fork, pr) => inline(fork, pr, read).filter((c) => c.user.login === me() && c.body.trim() !== '').map(said),
   }
 }
 

@@ -3,6 +3,7 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSyn
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { z } from 'zod'
+import { exitedOutside } from './exited.ts'
 import { gates, type Gate, type Outside, type OutsideLanguage } from './gates.ts'
 
 const Package = z.object({ scripts: z.record(z.string(), z.string()).default({}) })
@@ -69,14 +70,15 @@ function project(src: string): string | null {
  * paths -- every test the import graph says they can reach -- instead of the whole suite. The first pass
  * through step 3 passes none, so every job still runs the suite whole once, against the tree it built on.
  */
-export function checks(src: string, run: Run = npm, narrow: string[] = [], outside: Outside | null = null): Failure | null {
+export function checks(src: string, run: Run = npm, narrow: string[] = [], outside: Outside | null = null,
+  touched: string[] = []): Failure | null {
   if (outside !== null) return gated(src, gates(src, outside), run)
   const bin = mode(src)
   if (bin === 'xcodebuild') excluded(src)
   for (const [script, args] of commands(src, narrow)) {
     const first = run(args, src, bin)
     if (first.ok) continue
-    const retried = loadOnly(first.output)
+    const retried = loadOnly(first.output) || (bin === 'xcodebuild' && exitedOutside(src, first.output, touched))
     const last = retried ? run(alone(first.output, read(src)?.[script] ?? '', args), src, bin) : first
     if (!last.ok) return { script, command: `${bin} ${args.join(' ')}`, code: last.code, output: tail(last.output), tests: entries(src, last.output), retried,
       ...faultOf(bin, last.output) }

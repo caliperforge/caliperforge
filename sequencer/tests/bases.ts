@@ -41,10 +41,11 @@ const failing = (from: string): Tree => ({
 })
 export const BROKEN = { ...TYPESCRIPT, ...failing('../hello.ts') }
 export const ORPHANED = { ...HANDOUT, ...failing('../bye.ts') }
+export const ATELIER = { ...GREEN, 'AtelierTests/FloorDecisionCardsTests.swift': 'final class FloorDecisionCardsTests: XCTestCase {}\n' }
 
 export const WORLDS: Tree[] = [TYPESCRIPT, KOTLIN, HANDOUT, RED]
 export const OURS: [Tree, boolean][] = [[TYPESCRIPT, true], [TYPESCRIPT, false], [RED, true], [GREEN, true], [NAPPING, true], [OOPS, true],
-  [BROKEN, true], [ORPHANED, true]]
+  [BROKEN, true], [ORPHANED, true], [ATELIER, true]]
 
 export function key(kind: 'world' | 'ours', files: Tree, ci: boolean): string {
   const sorted = Object.entries(files).sort(([a], [b]) => a.localeCompare(b))

@@ -88,9 +88,9 @@ export function addPipe(db: Db, pipe: Omit<PipeRow, 'id'>): void {
     VALUES (@name, @enabled, @window_start, @window_end, @max_concurrent)`).run(pipe)
 }
 
-export function addPlan(db: Db, row: Pick<PlanRow, 'pipe_id' | 'template' | 'state' | 'queued_at' | 'lane' | 'seat' | 'origin' | 'step'>): number {
-  return Number(db.prepare(`INSERT INTO plans (pipe_id, template, state, queued_at, lane, seat, origin, step)
-    VALUES (@pipe_id, @template, @state, @queued_at, @lane, @seat, @origin, @step)`).run(row).lastInsertRowid)
+export function addPlan(db: Db, row: Pick<PlanRow, 'pipe_id' | 'target_id' | 'template' | 'state' | 'queued_at' | 'lane' | 'seat' | 'origin' | 'step'>): number {
+  return Number(db.prepare(`INSERT INTO plans (pipe_id, target_id, template, state, queued_at, lane, seat, origin, step)
+    VALUES (@pipe_id, @target_id, @template, @state, @queued_at, @lane, @seat, @origin, @step)`).run(row).lastInsertRowid)
 }
 
 export function allPlans(db: Db): PlanRow[] {

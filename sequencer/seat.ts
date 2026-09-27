@@ -346,8 +346,9 @@ export async function fireReview(db: Db, root: string, plan: PlanRow, step: Step
     const { outcome } = await judge(db, root, step.runs, plan.id, input, provider, transcriptOf(root, plan.id, step.step))
     put(root, plan.id, `step-${String(step.step)}.verdict.md`, verdictText(outcome))
     if (outcome.outcome === 'pass' && input.tree !== undefined) put(root, plan.id, `step-${String(step.step)}.passed.diff`, input.diff)
+    const asked = outcome.outcome === 'needs_ceo' && outcome.message !== '' ? `: ${outcome.message.replace(/\s+/g, ' ')}` : ''
     return {
-      outcome: { outcome: outcome.outcome, spans: outcome.spans, note: `${step.runs} ${outcome.outcome}`, message: outcome.message },
+      outcome: { outcome: outcome.outcome, spans: outcome.spans, note: `${step.runs} ${outcome.outcome}${asked}`, message: outcome.message },
       findings: outcome.findings,
       notes: outcome.notes,
       tree: input.tree ?? null,

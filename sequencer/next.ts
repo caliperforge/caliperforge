@@ -3,8 +3,8 @@ import { held, type Lease } from '../store/leases.ts'
 import { cap, hhmm } from '../store/lanes.ts'
 import { live, openPipes, underCap, type PipeRow, type PlanRow, type Wait } from '../store/plans.ts'
 import { overBudget } from '../store/refusals.ts'
-import { at, type Step } from '../templates/pr-path.ts'
-import { blocked, overlapping } from './steps.ts'
+import type { Step } from '../templates/pr-path.ts'
+import { blocked, mapOf, overlapping } from './steps.ts'
 
 export type Route = { fire: Step } | { wait: Wait; on: number | null }
   | { wait: 'token_ceiling'; on: null; over: { spent: number; ceiling: number } }
@@ -28,7 +28,7 @@ export function route(db: Db, plan: PlanRow, now: Date, mine: Lease | null = nul
   const lane = working(offered(db, now, mine), cap(db).cap).find((o) => o.pipe.id === plan.pipe_id)
   if (lane === undefined) return { wait: 'lane_over_cap', on: null }
   if (!lane.plans.some((p) => p.id === plan.id)) return { wait: 'over_cap', on: null }
-  const step = at(plan.step)
+  const step = mapOf(plan.template).at(plan.step)
   const spends = step.fires === 'brief' || step.fires === 'seat' || step.fires === 'review'
   const over = spends ? overBudget(db, plan.id) : null
   return over === null ? { fire: step } : { wait: 'token_ceiling', on: null, over }

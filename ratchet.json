@@ -697,7 +697,6 @@
     "test-name": 1
   },
   "sequencer/tests/split.test.ts": {
-    "prepare": 13,
     "test-name": 8
   },
   "sequencer/tests/strays.test.ts": {

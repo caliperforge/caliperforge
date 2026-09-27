@@ -3,12 +3,14 @@ import { LANE } from '../cli/plan.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { internal, originIssue, PlanRow, rewind } from '../store/plans.ts'
+import type { SignalRow } from '../store/signals.ts'
 import type { Part } from './brief.ts'
 import type { Outcome } from './kind.ts'
 import { WIRE, type Wire } from './push.ts'
 import { drop, get, put, srcDir } from './workspace.ts'
 import { homeOf } from './home.ts'
 import { approved } from './approve.ts'
+import { words } from './signals.ts'
 
 const LETTERS = 'abcdefghijklmnopqrstuvwxyz'
 
@@ -129,10 +131,27 @@ function filed(db: Db, plan: PlanRow, prefix: string, parts: Part[], n: number, 
     internal(plan) ? `Part ${of} of #${prefix}, split by the brief writer.`
       : `Internal only: part ${of} of plan ${id}, split by the brief writer; it builds against asm/${id} on our fork and opens no pull request upstream.`,
     ...(prior === undefined ? [] : [`After: ${ref(prior)}`]), ''].join('\n')
-  // Intake re-prices a plan from its issue's P label, so a part filed without one fell to the default (9b ran P3 under a P0).
-  const url = wire.file(homeOf(plan), title, body, [...(plan.lane === null ? [] : [`lane:${plan.lane}`]), `P${String(plan.priority)}`])
+  const url = wire.file(homeOf(plan), title, body, labels(plan))
   db.prepare('INSERT INTO parts (parent, n, url, title, body, after) VALUES (?, ?, ?, ?, ?, ?)').run(plan.id, n, url, title, body, after)
   return url
+}
+
+/** Intake re-prices a plan from its issue's P label, so a part filed without one fell to the default (9b ran P3 under a P0). */
+function labels(plan: PlanRow): string[] {
+  return [...(plan.lane === null ? [] : [`lane:${plan.lane}`]), `P${String(plan.priority)}`]
+}
+
+/** A requested change on an assembled pull request, filed and queued as one more internal part on `asm/<parent>`; returns its plan. */
+export function fixed(db: Db, root: string, parent: PlanRow, signal: SignalRow, wire: Wire = WIRE): number {
+  const { n } = db.prepare('SELECT count(*) AS n FROM parts WHERE parent = ?').get(parent.id) as { n: number }
+  const id = String(parent.id)
+  const title = `p${id}${letter(n)}: address ${signal.author}'s review on ${signal.repo}#${String(signal.pr)}`
+  const body = `${words(signal)}\nInternal only: a fix of plan ${id}; it builds against asm/${id} on our fork and opens no pull request upstream.\n`
+  const url = wire.file(homeOf(parent), title, body, labels(parent))
+  db.prepare('INSERT INTO parts (parent, n, url, title, body, after) VALUES (?, ?, ?, ?, ?, NULL)').run(parent.id, n, url, title, body)
+  const plan = queue(db, root, parent, n)
+  if (plan === null) throw new Error(`part ${letter(n)} of plan ${id} was filed but not queued`)
+  return plan
 }
 
 /** A part whose `After:` issue is closed, however it closed, is queued; `open` is every open issue number of `repo`. */

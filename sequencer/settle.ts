@@ -100,8 +100,8 @@ function workspace(db: Db, root: string, plan: PlanRow): { language: string | nu
 /**
  * Which repository the branch is cut in and what it is called: a stranger's repo and
  * `<repo>-<issue>[-<part>]-a<attempt>` for a target, our own repo and `p<plan>-<slug>` for an issue
- * of ours. Either way the clone is our fork and the base is that repo's `main`, or our fork's
- * `asm/<parent>` for a part of an outside plan.
+ * of ours, the target's repo and `p<plan>-<slug>` for a part of an outside plan. Every way the clone is
+ * our fork and the base is that repo's `main`, or our fork's `asm/<parent>` for a part.
  */
 function treeOf(db: Db, root: string, plan: PlanRow): { repo: string; branch: string; from?: string | undefined } | null {
   if (internal(plan)) {

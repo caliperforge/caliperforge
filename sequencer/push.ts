@@ -307,12 +307,16 @@ function merged(dir: string, branch: string): string | null {
   return sha
 }
 
-/** An internal plan is already on `main`; step 8 has no fork branch to send and no pull request to open. */
+/**
+ * An internal plan is already on `main`, or a part of an outside plan on its `asm/<parent>`; step 8 has
+ * no fork branch to send and no pull request to open.
+ */
 function onMain(db: Db, plan: PlanRow): Outcome {
+  const onto = assembly(db, plan)?.branch ?? 'main'
   const row = db.prepare("SELECT state, evidence FROM deliverables WHERE plan_id = ? ORDER BY id DESC LIMIT 1")
     .get(plan.id) as { state: string; evidence: string } | undefined
-  if (row?.state !== 'pushed') return refuse('deliverables', `plan ${String(plan.id)} reached push without landing on main`)
-  return { outcome: 'pass', spans: [], note: `on main at ${row.evidence}` }
+  if (row?.state !== 'pushed') return refuse('deliverables', `plan ${String(plan.id)} reached push without landing on ${onto}`)
+  return { outcome: 'pass', spans: [], note: `on ${onto} at ${row.evidence}` }
 }
 
 export function push(db: Db, root: string, plan: PlanRow, wire: Wire = WIRE): Outcome {

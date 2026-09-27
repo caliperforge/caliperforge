@@ -131,9 +131,9 @@ function remote(base: string, slug: string): string {
 }
 
 /**
- * The ref a tree is cut from and landed on. An internal plan's `origin` and `upstream` are the same
- * repository -- ours -- so for one of our own plans this ref is `origin/main` exactly; for a target
- * it is the stranger's `main`, which our fork may sit behind; for a part of an outside plan it is our fork's `asm/<parent>`.
+ * The ref a tree is cut from and landed on. A plan on our own repo has `origin` and `upstream` the same
+ * repository -- ours -- so for it this ref is `origin/main` exactly; for a target it is the stranger's
+ * `main`, which our fork may sit behind; for a part of an outside plan it is our fork's `asm/<parent>`.
  */
 export const MAIN = 'refs/remotes/upstream/main'
 

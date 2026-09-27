@@ -284,6 +284,16 @@ test('outside reviewer gets context and map; ours does not', async () => {
   expect(prompt.indexOf('# Symbols at the branch base')).toBeGreaterThan(prompt.indexOf('# Files around the change'))
 })
 
+test('D3 an outside review packet has no hand-back', async () => {
+  const w = world()
+  approve(w.db, w.target)
+  for (let at = 0; at < 4; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
+  const packets: Packet[] = []
+  expect((await tick(w.db, w.root, stub(CARRIED, 0, PASS, (p) => packets.push(p))))[0]).toMatchObject({ step: 4 })
+  expect(reviewer(packets)).toContain('\n# Diff\n')
+  expect(reviewer(packets)).not.toContain("# The builder's hand-back")
+})
+
 test('D3 our own plan hands no symbol map to the builder or the reviewer, and builds none', async () => {
   const w = world()
   w.db.prepare('DELETE FROM plans WHERE id = 1').run()

@@ -119,7 +119,7 @@ function filed(db: Db, plan: PlanRow, parent: number, parts: Part[], n: number, 
 export function released(db: Db, root: string, repo: string, open: Set<number>): void {
   const rows = db.prepare(`SELECT p.parent, p.n, t.after FROM parts p
     JOIN tickets t ON p.url = 'https://github.com/' || t.repo || '/issues/' || t.number
-    WHERE p.plan IS NULL AND t.repo = ? AND t.after IS NOT NULL`).all(repo) as { parent: number; n: number; after: number }[]
+    WHERE p.plan IS NULL AND t.repo = ? AND t.after IS NOT NULL AND t.closed_at IS NULL`).all(repo) as { parent: number; n: number; after: number }[]
   for (const row of rows.filter((r) => !open.has(r.after))) {
     const id = queue(db, root, PlanRow.parse(db.prepare('SELECT * FROM plans WHERE id = ?').get(row.parent)), row.n)
     if (id !== null) {

@@ -9,11 +9,13 @@ import { liveTree } from '../sequencer/workspace.ts'
 import { dump, migrate, open as openDb, type Db } from '../store/index.ts'
 import { dial, hhmm, lanes, priority as setPriority, record, Reading, set, windows } from '../store/lanes.ts'
 import { refusedPush } from '../store/approvals.ts'
+import { backfillTickets } from '../store/tickets.ts'
 import { backfill } from '../store/transcript.ts'
 import { day, greptileLine, halted, heldBy, laneLine, open as openPlans, rulings, section, tickets, ticketSection, waitLine, waits,
   windowLine } from './brief.ts'
 import { check, fill } from './digests.ts'
 import { flow } from './flow.ts'
+import { gh } from './gh.ts'
 import { write as writeMap } from './map.ts'
 import { ack, line, unread } from './inbox.ts'
 import { close } from './session.ts'
@@ -68,6 +70,10 @@ function stores(cf: Command, { root, db, out }: Cli): void {
 function fires(cf: Command, { root, db, out }: Cli): void {
   cf.command('backfill-cost').action(() => {
     out(`backfilled ${String(backfill(db()))} run(s)\n`)
+  })
+
+  cf.command('backfill-tickets').action(() => {
+    out(`backfilled ${String(backfillTickets(db(), gh))} ticket(s)\n`)
   })
 
   cf.command('fire').argument('<seat>').argument('<issue-file>')

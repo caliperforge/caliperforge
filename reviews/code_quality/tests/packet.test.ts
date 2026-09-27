@@ -68,6 +68,11 @@ test('D5 a bench admits the symbol map and hands it under its own heading', () =
     '\n\n# Symbols at the branch base\n\nEach top-level export at the branch base, as path:line name.\n\na.ts:1 a\n')
 })
 
+test('D1 the hand-back comes straight after the diff', () => {
+  expect(built(bench({ handback: 'removed: a.test.ts', checks: 'ok' })).packet.prompt).toContain(
+    `\n\n# Diff\n\n${fixture('seeded.diff')}\n\n# The builder's hand-back\n\nremoved: a.test.ts\n\n# Checks`)
+})
+
 const BLOB = 'a'.repeat(40)
 
 test('a re-review packet carries the last verdict, the diff since it, then git on what did not move', () => {

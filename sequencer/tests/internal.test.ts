@@ -111,6 +111,15 @@ test('the internal checkout is our own repo on p<plan>-<slug>, built by the type
   expect(internalBranch(7, '!!!')).toBe('p7-issue')
 })
 
+test('D2 our own review packet carries the hand-back', async () => {
+  const w = mine()
+  for (let at = 0; at < 4; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  const seen: Packet[] = []
+  await tick(w.db, w.root, stub(CARRIED, 0, undefined, (p) => seen.push(p)))
+  const review = seen.find((p) => p.tools.join() === 'Read')?.prompt ?? ''
+  expect(review).toContain(`# The builder's hand-back\n\n${CARRIED}`)
+})
+
 test('step 3 fills the digests an internal checkout holds, and a target checkout has none to fill', async () => {
   const w = mine()
   const built = stub(owning(['seats/brief_writer/prompt.md']))

@@ -184,8 +184,10 @@ test('a rail refusal names spans, sends the plan back one step, then to blocked_
   expect(first).toMatchObject({ step: 3, outcome: 'refuse', state: 'retried' })
   expect(plan(w.db, 1)).toMatchObject({ step: 2, retries: 1 })
   await tick(w.db, w.root, stub(UNPOINTED))
-  expect((await tick(w.db, w.root, stub(UNPOINTED)))[0]).toMatchObject({ step: 3, state: 'blocked_on_ceo' })
+  const stopped = (await tick(w.db, w.root, stub(UNPOINTED)))[0]
+  expect(stopped).toMatchObject({ step: 3, state: 'blocked_on_ceo' })
   expect(plan(w.db, 1).state).toBe('blocked_on_ceo')
+  expect(w.db.prepare('SELECT held_by, held_why FROM plans WHERE id = 1').get()).toEqual({ held_by: 'coo', held_why: stopped?.note })
   const verdict = w.db.prepare("SELECT outcome, origin_ref FROM verdicts WHERE rail_id = 'completion-audit' ORDER BY id").get()
   expect(verdict).toEqual({ outcome: 'refuse', origin_ref: 'completion-audit' })
 })

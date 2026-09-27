@@ -1,9 +1,11 @@
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { Command } from 'commander'
 import { expect, test } from 'vitest'
+import { registerPlans } from '../../cli/cf-plans.ts'
 import { migrate, open } from '../../store/index.ts'
-import { terminal } from '../../store/plans.ts'
+import { held, terminal, type Holder } from '../../store/plans.ts'
 import { hold, isHeld, unhold } from '../hold.ts'
 import { maybe, put, srcDir } from '../workspace.ts'
 
@@ -29,6 +31,28 @@ test('hold then unhold', () => {
   expect(unhold(db, home, 7, 'ceo')).toBe(4)
   expect(row(db)).toEqual({ state: 'queued', step: 4, waits_on: null })
   expect(db.prepare("SELECT actor FROM events WHERE plan = 7 AND kind = 'return'").all()).toEqual([{ actor: 'ceo' }])
+  expect(isHeld(home, 7)).toBe(false)
+})
+
+const holding = (db: ReturnType<typeof open>) => db.prepare('SELECT held_by, held_why FROM plans WHERE id = 7').get()
+
+test('D3 a held plan names who it waits on and why, and unhold clears both', () => {
+  const { db, home } = seeded()
+  hold(db, home, 7, 'after #372', new Date())
+  held(db, 7, 'coo', 'after #372')
+  expect(holding(db)).toEqual({ held_by: 'coo', held_why: 'after #372' })
+  unhold(db, home, 7, 'ceo')
+  expect(holding(db)).toEqual({ held_by: null, held_why: null })
+})
+
+test('D4 a holder outside ceo and coo is refused by the store and by cf hold before any write', () => {
+  const { db, home } = seeded()
+  expect(() => { held(db, 7, 'cto' as Holder, 'x') }).toThrow(/CHECK constraint/)
+  expect(holding(db)).toEqual({ held_by: null, held_why: null })
+  const cf = new Command()
+  registerPlans(cf, { root: home, db: () => db, out: () => undefined })
+  expect(() => cf.parse(['hold', '7', '--by', 'cto', '--why', 'x'], { from: 'user' })).toThrow(/--by takes ceo or coo, not cto/)
+  expect(row(db)).toEqual({ state: 'running', step: 4, waits_on: null })
   expect(isHeld(home, 7)).toBe(false)
 })
 

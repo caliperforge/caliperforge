@@ -116,10 +116,29 @@ export function builderRan(db: Db, plan: number): boolean {
 /** #140: a plan the tick stepped carries no reason; one it passed over carries why, from the list the store checks. */
 /** `on` is the plan a `file_overlap` waits for (#88); every other reason names none. */
 export function waiting(db: Db, rows: { plan: number; why: Wait | null; on?: number | null }[]): void {
-  const set = db.prepare('UPDATE plans SET wait_reason = ?, waits_on = ? WHERE id = ?')
+  const set = db.prepare(`UPDATE plans SET wait_reason = @why, waits_on = @on,
+    held_by = CASE WHEN state = 'blocked_on_ceo' THEN held_by WHEN ${ON_CEO} THEN 'ceo' WHEN held_by = 'ceo' THEN NULL ELSE held_by END,
+    held_why = CASE WHEN state = 'blocked_on_ceo' THEN held_why WHEN ${ON_CEO} THEN @why WHEN held_by = 'ceo' THEN NULL ELSE held_why END
+    WHERE id = @plan`)
   db.transaction(() => {
-    for (const row of rows) set.run(row.why, row.on ?? null, row.plan)
+    for (const row of rows) set.run({ why: row.why, on: row.on ?? null, plan: row.plan })
   })()
+}
+
+const ON_CEO = "@why IN ('target_approval', 'ceo_batch')"
+
+export const HOLDERS = ['ceo', 'coo'] as const
+
+export type Holder = typeof HOLDERS[number]
+
+export function holderOf(by: string): Holder {
+  const hit = HOLDERS.find((h) => h === by)
+  if (hit === undefined) throw new Error(`--by takes ${HOLDERS.join(' or ')}, not ${by}`)
+  return hit
+}
+
+export function held(db: Db, plan: number, by: Holder, why: string): void {
+  db.prepare('UPDATE plans SET held_by = ?, held_why = ? WHERE id = ?').run(by, why, plan)
 }
 
 export const ENTER = `CASE WHEN state = 'running' OR (SELECT count(*) FROM plans o WHERE o.pipe_id = plans.pipe_id
@@ -131,9 +150,9 @@ export function advance(db: Db, plan: PlanRow, step: number): void {
 }
 
 /** `stop` is `store/refusals.ts`'s call; `retries` only marks that the plan has been round once, which names a target's branch. */
-export function back(db: Db, plan: PlanRow, step: number, stop: boolean): 'retried' | 'blocked_on_ceo' {
+export function back(db: Db, plan: PlanRow, step: number, stop: boolean, why: string): 'retried' | 'blocked_on_ceo' {
   if (stop) {
-    db.prepare("UPDATE plans SET state = 'blocked_on_ceo' WHERE id = ?").run(plan.id)
+    needsCeo(db, plan, why)
     return 'blocked_on_ceo'
   }
   db.prepare(`UPDATE plans SET step = ?, retries = 1, state = ${ENTER} WHERE id = ?`)
@@ -148,8 +167,8 @@ export function retry(db: Db, plan: PlanRow): number {
   return step
 }
 
-export function needsCeo(db: Db, plan: PlanRow): void {
-  db.prepare("UPDATE plans SET state = 'blocked_on_ceo' WHERE id = ?").run(plan.id)
+export function needsCeo(db: Db, plan: PlanRow, why: string | null = null): void {
+  db.prepare("UPDATE plans SET state = 'blocked_on_ceo', held_why = ? WHERE id = ?").run(why?.split('\n')[0] ?? null, plan.id)
 }
 
 /** The plans whose checkout no step is coming back for. */

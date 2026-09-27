@@ -66,7 +66,7 @@ export function ceilinged(db: Db, root: string, pipe: PipeRow, plan: PlanRow, ov
   const million = (n: number): string => `${(n / 1e6).toFixed(1)}M`
   const note = `spent ${million(over.spent)} tokens since a person last sent it round, past the ${million(over.ceiling)} ceiling`
   put(root, plan.id, 'refusal.md', `${maybe(root, plan.id, 'refusal.md') ?? ''}\n# Stopped\n\n${note}.\n`)
-  needsCeo(db, plan)
+  needsCeo(db, plan, note)
   waiting(db, [{ plan: plan.id, why: 'token_ceiling' }])
   const step = at(plan.step)
   logged(db, { plan: plan.id, kind: step.name, actor: 'token_ceiling', outcome: 'refuse', message: note,
@@ -161,7 +161,7 @@ function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcom
     return 'running'
   }
   if (outcome.outcome === 'needs_ceo') {
-    needsCeo(db, plan)
+    needsCeo(db, plan, outcome.note)
     return 'blocked_on_ceo'
   }
   if (outcome.outcome !== 'refuse') {
@@ -185,7 +185,7 @@ function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcom
     rewind(db, plan.id, outcome.rewind)
     return 'running'
   }
-  return back(db, plan, outcome.to ?? backTo(step), why !== 'again')
+  return back(db, plan, outcome.to ?? backTo(step), why !== 'again', outcome.note)
 }
 
 /** Step 2 is the build in templates/pr-path.ts. */
@@ -215,6 +215,6 @@ function blip(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcome)
   if (why === 'again') return 'running'
   put(root, plan.id, 'refusal.md', refusalText(step, outcome))
   stopped(root, plan.id, why)
-  needsCeo(db, plan)
+  needsCeo(db, plan, outcome.note)
   return 'blocked_on_ceo'
 }

@@ -8,7 +8,11 @@ export const Profile = z.strictObject({
   checks: z.record(z.string(), z.array(z.string())).optional(),
   commit: z.string().optional(),
   pr: z.string().optional(),
-  intake: z.string().optional(),
+  intake: z.strictObject({
+    claim_first: z.boolean().default(false),
+    max_open_prs: z.int().optional(),
+    pace: z.strictObject({ prs: z.int(), days: z.int() }).optional(),
+  }).optional(),
   notes: z.array(z.string()).optional(),
   sources: z.array(z.string()).optional(),
 })

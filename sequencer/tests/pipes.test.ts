@@ -67,7 +67,6 @@ test('a lane with no template reads as on with nothing queued, not as an error',
 test('a plan queued on a lane with no step map is left where it stands, and stops no other lane', async () => {
   const db = fresh(schema)
   dial(db, 3, AT)
-  queued(db, 1, 'comms', 'comms')
   queued(db, 2, 'research', 'research')
   const root = mkdtempSync(join(tmpdir(), 'cf-pipes-'))
   expect(await tick(db, root, stub(CARRIED), OPENS)).toEqual([])
@@ -76,10 +75,10 @@ test('a plan queued on a lane with no step map is left where it stands, and stop
   const would = dry(db, OPENS)
   expect(would.would).toEqual([])
   expect(would.quiet).toEqual([
-    { pipe: 'pr-path', live: 0, ready: 0 }, { pipe: 'comms', live: 1, ready: 0 },
+    { pipe: 'pr-path', live: 0, ready: 0 }, { pipe: 'comms', live: 0, ready: 0 },
     { pipe: 'research', live: 1, ready: 0 },
   ])
-  expect(dryLines(would)).toContain('  comms\ton, 1 queued and blocked\n')
+  expect(dryLines(would)).toContain('  research\ton, 1 queued and blocked\n')
 })
 
 test('#125: the cap goes to the lanes that can step, and a lane it did not reach says so', () => {

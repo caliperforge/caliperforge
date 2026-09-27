@@ -15,10 +15,10 @@ seats:
 digests:
   typescript_specialist:
     manifest: a8dd50ad9bc5d01f576bd87d7fc88bd0b518adb47d37468f28b24b02d4d730a1
-    prompt: d7704d82245647fe30f5acbfff71a98268addb115c7d31bc68ad3409fe265408
+    prompt: 97fd45ff5f850155b876e6fce6afb3df0ff24eb3fff417a7a5a43106ec556718
   kotlin_specialist:
     manifest: 0ac9229de8943374e26c0c570689ffcdad364ef90d0c03f6486bdc443419fd6b
-    prompt: 8b7449d691e7287aaca5beb77a0497a9cde2ee8ab523e57c8aac6eef169e1cb8
+    prompt: b0735dff721724f3ad8b48bd319b60f348d9ee7a8d7756646d453eaf46f84fe4
   swift_specialist:
     manifest: 01be33cd84ee1654a52d5f832b9db30acd1c6060f5e901c653a7661c27f1711e
     prompt: f38eb1e2b392ba57ef83adf682ae013d644fe6f9f193bcc172d5747ee1459f54
@@ -30,10 +30,10 @@ digests:
     prompt: efa16cf31366d279cb47f8353aa78fcad684e1c585ca01e6cba413843e882bff
   rust_specialist:
     manifest: 5090575dcb48be94bc22f4c8f4c7bcbca1fe02389697b1e6dd455d49e292235c
-    prompt: 2b3c8bad4366ac24fcd84d83a50fb80ed39b3d18a8b8a23cf29c935d1e3a6be7
+    prompt: 6d0e97c8cb61f6feb8ebf383fa12c42c9282cc2b20a5de9eaa5bbd8368b2d407
   python_specialist:
     manifest: cd93446f89a0345e256335bf8665c166ceafabec78c1341f44f576bd0cd541fb
-    prompt: 6ecf6d52b39f24364ecb2fb6ce5b9d75adadb66307cc5ea3f0a30ff95150b7a7
+    prompt: fe8cb5e8576f304d95ea3d983134c2cc42ee9b0c6b79dc918779df3fcd09f04f
   ruby_specialist:
     manifest: ac857c4d8fc3b53d7d87afca059941513dd0af0370e58d6c35a663ea61738a84
     prompt: 8e0b2aaae87eb6b541ee0ba98e418b46476bb6fb907da143559cd6c71ff8aa08

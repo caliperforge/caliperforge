@@ -92,13 +92,80 @@ test('a builder that exits non-zero keeps the lap', async () => {
   await refused(w, 1, builds(writes(w.root, 1, `${FIX}\n`), fence(cosmetic(SPAN, FIX)), 1))
 })
 
-test('a fix the checkout\'s own checks refuse keeps the lap', async () => {
+async function internalReview(): Promise<World> {
   const w = world()
   w.db.prepare('DELETE FROM plans WHERE id = 1').run()
   ours(w.root, OOPS)
   internalPlan(w.db, w.root, ID)
   for (let at = 0; at < 4; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  return w
+}
 
+test('a fix the checkout\'s own checks refuse keeps the lap', async () => {
+  const w = await internalReview()
   const oops = 'export const oops = 1'
   await refused(w, ID, builds(writes(w.root, ID, `${oops}\n`), fence(cosmetic(SPAN, oops))))
+}, SLOW)
+
+const HI = 'export const hello = (): string => "hi"\n'
+
+function note(old: string, next: string, kind = 'text'): string {
+  return `  - file: ${HELLO}\n    line: 1\n    old: ${JSON.stringify(old)}\n    new: ${JSON.stringify(next)}\n    why: tidy\n    kind: ${kind}`
+}
+
+function noted(...notes: string[]): string {
+  return `---\noutcome: pass\nnotes:\n${notes.join('\n')}\n---\n`
+}
+
+function hello(w: World, id = 1): string {
+  return readFileSync(join(srcDir(w.root, id), HELLO), 'utf8')
+}
+
+function notes(w: World, id = 1): unknown {
+  return w.db.prepare("SELECT count(*) AS n FROM events WHERE plan = ? AND kind = 'note'").get(id)
+}
+
+test('a pass whose note removes a comment lands it and moves to step 5 with no new build', async () => {
+  const w = await toReview(`// the greeting\n${HI}`)
+  const fired = (await tick(w.db, w.root, stub(CARRIED, 0, noted(note('// the greeting\n', '')))))[0]
+  expect(fired).toMatchObject({ step: 4, outcome: 'pass', state: 'running' })
+  expect(plan(w.db, 1)).toMatchObject({ step: 5, retries: 0 })
+  expect(w.db.prepare('SELECT count(*) AS n FROM runs WHERE plan = 1 AND step = 2').get()).toEqual({ n: 1 })
+  expect(hello(w)).toBe(HI)
+})
+
+test('a note that changes a number in code refuses and leaves the file as reviewed', async () => {
+  const body = 'export const hello = (): number => 1\n'
+  const w = await toReview(body)
+  await refused(w, 1, stub(CARRIED, 0, noted(note('=> 1', '=> 2', 'count'))))
+  expect(hello(w)).toBe(body)
+})
+
+test('a note whose old text is not in the file refuses', async () => {
+  const w = await toReview()
+  await refused(w, 1, stub(CARRIED, 0, noted(note('nowhere', 'here'))))
+  expect(hello(w)).toBe(HI)
+})
+
+test('a restore note to the base\'s text lands though its tokens differ', async () => {
+  const w = await toReview('export const hello = (): number => 1\n')
+  await tick(w.db, w.root, stub(CARRIED, 0, noted(note('(): number => 1', '(): string => "hi"', 'restore'))))
+  expect(plan(w.db, 1)).toMatchObject({ step: 5, retries: 0 })
+  expect(hello(w)).toBe(HI)
+})
+
+test('each applied note leaves one note event, and a refused set leaves none', async () => {
+  const w = await toReview(`// one\n// two\n${HI}`)
+  await tick(w.db, w.root, stub(CARRIED, 0, noted(note('// one\n', ''), note('// two\n', ''))))
+  expect(notes(w)).toEqual({ n: 2 })
+
+  const refusing = await toReview('export const hello = (): number => 1\n')
+  await refused(refusing, 1, stub(CARRIED, 0, noted(note('=> 1', '=> 2', 'count'))))
+  expect(notes(refusing)).toEqual({ n: 0 })
+})
+
+test('an admitted note the checkout\'s checks refuse is put back', async () => {
+  const w = await internalReview()
+  await refused(w, ID, stub(CARRIED, 0, noted(note('hello', 'oops'))))
+  expect(hello(w, ID)).toBe(HI)
 }, SLOW)

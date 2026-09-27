@@ -7,7 +7,7 @@ import { packet, refuse } from '../runner/index.ts'
 import { reviewManifest, SYMBOLS_LEAD, type Bench } from '../runner/packet.ts'
 import { load, seat, tight, type Seat } from '../runner/rules.ts'
 import { judge, loadReviews } from '../reviews/bench.ts'
-import type { Finding, Judged } from '../reviews/verdict.ts'
+import type { Finding, Judged, Note } from '../reviews/verdict.ts'
 import type { Db } from '../store/index.ts'
 import { filesOf } from '../store/files.ts'
 import { observed, wall } from '../store/lanes.ts'
@@ -320,6 +320,7 @@ function handed(issue: string, files: string): string {
 export interface Round {
   outcome: Outcome
   findings: Finding[]
+  notes: Note[]
   tree: string | null
 }
 
@@ -348,11 +349,12 @@ export async function fireReview(db: Db, root: string, plan: PlanRow, step: Step
     return {
       outcome: { outcome: outcome.outcome, spans: outcome.spans, note: `${step.runs} ${outcome.outcome}`, message: outcome.message },
       findings: outcome.findings,
+      notes: outcome.notes,
       tree: input.tree ?? null,
     }
   } catch (error) {
     const note = error instanceof Error ? error.message : String(error)
-    return { outcome: { outcome: 'refuse', spans: ['reviewers.verdict_fence'], note: `${step.runs} ${note}` }, findings: [], tree: null }
+    return { outcome: { outcome: 'refuse', spans: ['reviewers.verdict_fence'], note: `${step.runs} ${note}` }, findings: [], notes: [], tree: null }
   }
 }
 

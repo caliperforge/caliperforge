@@ -2,7 +2,7 @@ import { expect, test } from 'vitest'
 import { building, record, sharing } from '../../store/files.ts'
 import { builderRan } from '../../store/plans.ts'
 import { narrow } from '../rails.ts'
-import { unanswered } from '../steps.ts'
+import { unanswered } from '../ready.ts'
 import { plan, world } from './world.ts'
 
 const HASH = '0'.repeat(64)

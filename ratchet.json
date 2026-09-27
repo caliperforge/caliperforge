@@ -511,7 +511,8 @@
     "silent-catch": 1
   },
   "sequencer/ready.ts": {
-    "lines": 18
+    "lines": 214,
+    "prepare": 9
   },
   "sequencer/route.ts": {
     "citing-comment": 1,
@@ -540,8 +541,8 @@
   },
   "sequencer/steps.ts": {
     "citing-comment": 2,
-    "lines": 369,
-    "prepare": 15
+    "lines": 183,
+    "prepare": 6
   },
   "sequencer/symbols.ts": {
     "lines": 43

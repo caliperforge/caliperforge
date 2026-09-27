@@ -1,5 +1,6 @@
 import type { Dry, Quiet } from '../sequencer/index.ts'
 import type { Fired } from '../sequencer/kind.ts'
+import { CREDITS } from '../sequencer/steps.ts'
 import type { Db } from '../store/index.ts'
 import { name, type LaneState, type WindowRow } from '../store/lanes.ts'
 import { BUILT, type Holder, type Wait } from '../store/plans.ts'
@@ -128,6 +129,10 @@ export function waits(db: Db): { reason: Wait; plans: number }[] {
 export function waitLine(rows: { reason: Wait; plans: number }[]): string {
   const pairs = rows.length === 0 ? ['none'] : rows.map((w) => `${w.reason} ${String(w.plans)}`)
   return `waits\t${pairs.join('\t')}\n`
+}
+
+export function greptileLine(n: number): string {
+  return `greptile ${String(n)}/${String(CREDITS)} this month\n`
 }
 
 /** One row per rate-limit window: our tokens inside it, the provider's utilisation of it, the cap. */

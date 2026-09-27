@@ -4,12 +4,13 @@ import { join, resolve } from 'node:path'
 import { claudeAgentSdk } from '../providers/claude-agent-sdk/index.ts'
 import { self } from '../rails/tight/index.ts'
 import { fire } from '../runner/index.ts'
+import { monthly } from '../sequencer/steps.ts'
 import { liveTree } from '../sequencer/workspace.ts'
 import { dump, migrate, open as openDb, type Db } from '../store/index.ts'
 import { dial, hhmm, lanes, priority as setPriority, record, Reading, set, windows } from '../store/lanes.ts'
 import { refusedPush } from '../store/approvals.ts'
 import { backfill } from '../store/transcript.ts'
-import { day, halted, heldBy, laneLine, open as openPlans, section, tickets, ticketSection, waitLine, waits,
+import { day, greptileLine, halted, heldBy, laneLine, open as openPlans, section, tickets, ticketSection, waitLine, waits,
   windowLine } from './brief.ts'
 import { check, fill } from './digests.ts'
 import { flow } from './flow.ts'
@@ -163,6 +164,7 @@ export function registerSession(cf: Command, { root, db, out }: Cli): void {
     for (const lane of stalledLanes(handle, new Date())) out(`lane\tOFF with work: ${lane}\n`)
     out(laneLine(lanes(handle, hhmm(handle))))
     out(waitLine(waits(handle)))
+    out(greptileLine(monthly(root, new Date())))
     out(section('open plans', openPlans(handle)))
     out(section('halted', halted(handle)))
     out(section('waiting on the CEO', heldBy(handle, 'ceo')))

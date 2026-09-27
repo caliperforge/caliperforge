@@ -177,7 +177,7 @@ const clock = new Date()
 const ago = (minutes: number) => new Date(clock.getTime() - minutes * 60_000).toISOString().replace('T', ' ').slice(0, 19)
 
 function stopped(db: Db, id: number, minutes: number, verb = 'ask_coo') {
-  if (id !== 7 && db.prepare('SELECT 1 FROM plans WHERE id = ?').get(id) === undefined) {
+  if (db.prepare('SELECT 1 FROM plans WHERE id = ?').get(id) === undefined) {
     db.prepare(`INSERT INTO plans (id, pipe_id, template, state, queued_at, step, retries, priority, lane, seat, origin)
       VALUES (?, 9, 'pr_path', 'running', '2026-09-24', 4, 0, 1, 'machine', 'typescript_specialist', ?)`)
       .run(id, `https://github.com/caliperforge/caliperforge/issues/${String(id + 900)}`)

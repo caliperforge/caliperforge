@@ -50,6 +50,10 @@ export function approved(db: Db, plan: number, approval: number): void {
   db.prepare("UPDATE deliverables SET state = 'approved', approval_id = ? WHERE id = ?").run(approval, latest(db, plan))
 }
 
+export function dropDeliverables(db: Db, plan: number): void {
+  db.prepare('DELETE FROM deliverables WHERE plan_id = ?').run(plan)
+}
+
 function latest(db: Db, plan: number): number {
   const row = db.prepare('SELECT id FROM deliverables WHERE plan_id = ? ORDER BY id DESC LIMIT 1').get(plan) as
     { id: number } | undefined

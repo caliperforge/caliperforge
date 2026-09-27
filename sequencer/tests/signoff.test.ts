@@ -4,6 +4,7 @@ import { expect, test } from 'vitest'
 import { desk as ghDesk, type Answer, type Desk, type Pr, type Seen } from '../../cli/gh.ts'
 import { unread } from '../../cli/inbox.ts'
 import { rewind } from '../../store/plans.ts'
+import { approve as approvePublish } from '../card.ts'
 import { tick } from '../index.ts'
 import { ruled, signoffs } from '../signoff.ts'
 import { drop, put, SELF, SIGNOFF, srcDir } from '../workspace.ts'
@@ -92,6 +93,8 @@ test('go signs the head the card showed, closes the card, and the next tick send
   expect(card).toMatchObject({ open: false })
   const sent: string[] = []
   await tick(w.db, w.root, stub(CARRIED), undefined, quiet, watched(sent, w.root, 1))
+  await tick(w.db, w.root, stub(CARRIED), undefined, quiet, watched(sent, w.root, 1))
+  approvePublish(w.db, w.root, 1)
   await tick(w.db, w.root, stub(CARRIED), undefined, quiet, watched(sent, w.root, 1))
   expect(sent).toContain('open acme/widget caliperforge:widget-12-a1')
   expect(signoffs(w.db, w.root, desk)).toEqual([])

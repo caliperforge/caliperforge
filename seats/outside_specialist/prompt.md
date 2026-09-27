@@ -42,3 +42,4 @@ done:
 
 One `- id:` row per `- D<n>` the brief lists, same ids, same order.
 `status` is `done`, `cannot-be-done` or `they-said-dont`.
+A hand-back with no fence, or one whose YAML does not parse, is asked once for the fence alone: answer with only the closing `---` fence and a `done:` row per case, and edit no file, since an edit there refuses the build.

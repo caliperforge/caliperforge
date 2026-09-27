@@ -20,8 +20,8 @@ test('cf --help lists every command in registration order', () => {
 
 test.each([
   ['queue', ['add', 'list', 'note']],
-  ['approve', ['target', 'plan', 'proposal']],
-  ['refuse', ['target', 'plan', 'proposal']],
+  ['approve', ['target', 'plan', 'proposal', 'card']],
+  ['refuse', ['target', 'plan', 'proposal', 'card']],
   ['plan', ['add']],
   ['session', ['close']],
 ])('cf %s --help keeps its subcommand order', (name, subcommands) => {

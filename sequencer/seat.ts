@@ -314,6 +314,7 @@ export async function fireReview(db: Db, root: string, plan: PlanRow, step: Step
     issue,
     diff: diffOf(root, plan.id),
     ...(cloned(src) ? { tree: snapshot(src) } : {}),
+    ...(internal(plan) && maybe(root, plan.id, 'step-2.handback.md') !== null ? { handback: get(root, plan.id, 'step-2.handback.md') } : {}),
     ...outside(db, root, plan, src),
     ...(manifest.gate === 'senior_review' ? referenced(src, issue) : {}),
     ...checked(db, plan, src, diffOf(root, plan.id)),

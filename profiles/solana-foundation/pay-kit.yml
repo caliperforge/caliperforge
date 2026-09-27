@@ -1,0 +1,23 @@
+checks:
+  python: [install, lint, typecheck, test]
+  ruby: [install, lint, test]
+  php: [install, lint, test]
+  lua: [install, lint, test]
+  go: [lint, test]
+  rust: [format, test]
+notes:
+  - Each language lives in its own folder, whose Justfile recipes are the checks, run as `just --justfile <folder>/Justfile <recipe>`.
+  - "rust/ ships no Justfile: `cargo fmt --all -- --check` at the rust/ workspace, then `cargo test -p <crate>` for the crates touched."
+  - Lua's tests need `luarocks path` evaluated first, which only its Justfile recipes do.
+  - Ruby lints with standardrb, not rubocop.
+  - PHP's lint is syntax, php-cs-fixer in check mode and PHPStan.
+  - Python's CI does not check `ruff format`, and its tree is not formatted by it.
+  - Go's Codama-generated clients under protocols/programs/ are regenerated from the IDL, never edited by hand.
+sources:
+  - sequencer/gates.ts
+  - seats/python_specialist/prompt.md
+  - seats/ruby_specialist/prompt.md
+  - seats/php_specialist/prompt.md
+  - seats/lua_specialist/prompt.md
+  - seats/go_specialist/prompt.md
+  - seats/rust_specialist/prompt.md

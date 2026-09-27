@@ -1,0 +1,11 @@
+checks:
+  rust: [format, test, stage, generate, diff]
+notes:
+  - "The format check is the fmt line its workflows run: `cargo +nightly fmt --all -- --check`, with its rustfmt.toml."
+  - Tests run only on the crates touched, with the features its CI's `cargo test` line names less `postgres`, a service this host does not run; surfpool-core takes `ignore_tests_ci`.
+  - "The bindings workflow regenerates with `node crates/sdk-node/scripts/generate-kit-types.js`, then `git diff --exit-code`: crates/sdk-node/**/generated/*.ts must match it."
+  - "Clippy runs as its CI runs it: `cargo clippy -p <crate> --all-targets`."
+sources:
+  - sequencer/gates.ts
+  - seats/rust_specialist/prompt.md
+  - .github/workflows of solana-foundation/surfpool

@@ -382,7 +382,7 @@
   },
   "sequencer/approve.ts": {
     "citing-comment": 1,
-    "lines": 72,
+    "lines": 73,
     "prepare": 4
   },
   "sequencer/base.ts": {

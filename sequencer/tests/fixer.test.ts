@@ -89,9 +89,13 @@ test('shadow: the fixer reads only, changes nothing, and the stop still reaches 
 test('ticket: filed, job held, checkout kept', async () => {
   const { db, home } = seeded('live')
   const filed: string[] = []
+  const labels: string[][] = []
+  const inner = wire(filed)
+  const labelled: Wire = { ...inner, file: (...a: Parameters<typeof inner.file>) => { labels.push(a[3]); return inner.file(...a) } }
   await woke(db, home, stub('---\ndid: nothing\nthen: ticket\nwhy: the spend wall counts a turn four times\nticket: the run wall counts each streamed block\n---\n', []),
-    now, () => undefined, wire(filed))
+    now, () => undefined, labelled)
   expect(filed).toEqual(['the run wall counts each streamed block'])
+  expect(labels).toEqual([['lane:machine', 'P0', 'fix']])
   expect(state(db)).toEqual({ state: 'blocked_on_ceo', step: 4 })
   expect(maybe(home, 7, 'parked.md')).toContain('issues/999')
   expect(terminal(db)).not.toContain(7)

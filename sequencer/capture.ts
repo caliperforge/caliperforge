@@ -5,22 +5,15 @@ import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { originRef, PlanRow } from '../store/plans.ts'
 import { record, type Signal, type SignalRow } from '../store/signals.ts'
-import { afterOf, partOf, recordListing } from '../store/tickets.ts'
+import { afterOf, FIELDS, Listed, type Listing, partOf, recordListing } from '../store/tickets.ts'
 import { attribute } from './escapes.ts'
-import { carried, rehearsalBranch } from './push.ts'
+import { rehearsed, type Rehearsal } from './findings.ts'
+import { rehearsalBranch } from './push.ts'
 import { claimed, released } from './split.ts'
 import { cloned, FORK, repoName, srcDir } from './workspace.ts'
 
-const Listed = z.array(z.object({
-  number: z.int(),
-  title: z.string(),
-  body: z.string(),
-  url: z.string(),
-  labels: z.array(z.object({ name: z.string() })),
-}))
-
-/** `rehearsal` is the root whose `next.tips` traces a rehearsal's heads, null on a real pull request. */
-interface Pushed { plan: number; repo: string; evidence: string; rehearsal: string | null }
+/** `rehearsal` holds the root whose `next.tips` traces a rehearsal's heads and the read its comments come by, null on a real pull request. */
+interface Pushed { plan: number; repo: string; evidence: string; rehearsal: Rehearsal | null }
 
 type Base = Pick<Signal, 'repo' | 'pr' | 'plan'>
 
@@ -68,12 +61,13 @@ export function intake(db: Db, root: string, read: Read): string[] {
 
 /** A list exactly `WINDOW` long may be cut short, so what is missing from it is not taken as gone. */
 function listed(db: Db, root: string, repo: string, read: Read, lines: string[]): void {
-  const found = Listed.parse(read(['issue', 'list', '--repo', repo, '--state', 'open', '--limit', String(WINDOW),
-    '--json', 'number,title,body,url,labels']))
+  const list = (state: string): Listing[] => Listed.parse(read(['issue', 'list', '--repo', repo, '--state', state,
+    '--limit', String(WINDOW), '--json', FIELDS]))
+  const found = list('open')
   const kept = found.filter((i) => laneOf(i.labels) !== null)
   const open = new Set(found.map((i) => i.number))
   const whole = found.length < WINDOW
-  recordListing(db, repo, found, whole)
+  recordListing(db, repo, [...found, ...list('closed')], whole)
   if (whole) {
     halt(db, repo, new Set(kept.map((i) => i.url)))
     released(db, root, repo, open)
@@ -134,9 +128,7 @@ function landed(db: Db, repo: string, open: Set<string>): void {
 function one(db: Db, row: Pushed, read: (repo: string, no: number) => Pr): SignalRow[] {
   const view = read(row.repo, prNumber(row.evidence))
   if (row.rehearsal !== null) {
-    for (const s of signals(view, row).filter((s) => s.kind === 'bot_review')) {
-      stored(db, row, { ...s, head: typeof s.head === 'string' ? carried(row.rehearsal, row.plan, s.head) : null })
-    }
+    for (const s of rehearsed(row.rehearsal, row.plan, row.repo, view.number, signals(view, row))) stored(db, row, s)
     return []
   }
   const fresh = signals(view, row).map((s) => stored(db, row, s)).filter((s) => s !== null)
@@ -244,7 +236,7 @@ function rehearsals(db: Db, root: string, list: Read): Pushed[] {
 function opened(root: string, plan: number, fork: string, list: Read): Pushed[] {
   try {
     const no = rehearsal(fork, rehearsalBranch(root, plan), list)
-    return no === null ? [] : [{ plan, repo: fork, evidence: `https://github.com/${fork}/pull/${String(no)}`, rehearsal: root }]
+    return no === null ? [] : [{ plan, repo: fork, evidence: `https://github.com/${fork}/pull/${String(no)}`, rehearsal: { root, list } }]
   } catch {
     return []
   }

@@ -24,12 +24,16 @@ import { install, mode } from './checks.ts'
 import { narrow } from './rails.ts'
 import { classify } from './delta.ts'
 import { deletions } from './fence.ts'
+import { findings } from './findings.ts'
 import { fenceFor, languageFor } from './route.ts'
 import { gates, outsideLanguage } from './gates.ts'
 import type { Outcome } from './kind.ts'
 import { COMMIT, commitMessage } from './push.ts'
-import { carried, cloned, diffOf, diffSince, drop, get, headSha, holds, MAIN, maybe, merging, move, narrowing, planDir, put, ruled, snapshot, srcDir } from './workspace.ts'
+import { carried, cloned, diffOf, diffSince, doneIds, drop, get, headSha, holds, MAIN, maybe, merging, move, narrowing, planDir, put, ruled, snapshot, srcDir } from './workspace.ts'
 import { kernelPlan } from './home.ts'
+import { audit } from '../rails/completion-audit/index.ts'
+
+const FENCE = /^---\r?\n[\s\S]*?\r?\n---\s*$/m
 
 const INSERT = `INSERT INTO runs
   (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_tokens, output_tokens, seconds, exit, transcript_path, cost_usd)
@@ -45,8 +49,28 @@ export async function fireSeat(db: Db, root: string, plan: PlanRow, step: Step, 
   put(root, plan.id, name, fired.text)
   const tokens = fired.usage.input + fired.usage.cache + fired.usage.output
   if (fired.ended !== 'completed') return exited(step, fired)
-  return dropped(db, root, plan, step, fired.text)
+  const kept = await fenced(db, root, plan, step, provider, fired.text)
+  if (typeof kept !== 'string') return kept
+  return dropped(db, root, plan, step, kept)
     ?? { outcome: 'pass', spans: [], note: `${step.runs} exit 0, ${String(tokens)} tokens` }
+}
+
+/** A step-2 hand-back with no fence, or one whose YAML does not parse, is asked once for the fence alone. */
+async function fenced(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider, text: string): Promise<string | Outcome> {
+  if (step.step !== 2 || (FENCE.test(text) && audit(text, []).outcome === 'pass')) return text
+  const before = diffOf(root, plan.id)
+  const ids = doneIds(get(root, plan.id, 'issue.md')).join(', ')
+  const ask = `# Your hand-back\n\n${text}\n\nWrite only the closing \`---\` fence, with a \`done:\` row for each of ${ids}. Edit no file.`
+  const again = await ran(db, root, plan, step, provider, ask, kernelPlan(plan))
+  if (again.ended !== 'completed') return exited(step, again)
+  if (diffOf(root, plan.id) !== before) {
+    return { outcome: 'refuse', spans: ['step-2.handback.md'], note: `${step.runs}: the fence re-ask edited the tree` }
+  }
+  const fence = FENCE.exec(again.text)?.[0]
+  if (fence === undefined) return text
+  const kept = `${text.replace(FENCE, '').trimEnd()}\n\n${fence}`
+  put(root, plan.id, 'step-2.handback.md', kept)
+  return kept
 }
 
 /**
@@ -216,7 +240,7 @@ function exited(step: Step, fired: Fired): Outcome {
 function rebuild(db: Db, root: string, plan: PlanRow, prev: string | null): string {
   const src = srcDir(root, plan.id)
   const ruling = ruled(root, plan.id)
-  const issue = get(root, plan.id, 'issue.md') + (ruling === null ? '' : `\n\n# What the ask holds beyond this brief\n\n${ruling.trim()}`)
+  const issue = get(root, plan.id, 'issue.md') + (ruling === null ? '' : `\n\n# What the ask holds beyond this brief\n\n${ruling.trim()}`) + findings(db, root, plan.id, src)
   const refusal = maybe(root, plan.id, 'refusal.md')
   const rows = lastRows(prev)
   if (refusal === null) return handed(`${issue}${rows}`, handout(src, listed(db, plan.id, issue)))

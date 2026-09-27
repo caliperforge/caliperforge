@@ -227,7 +227,7 @@ export function stampHead(db: Db, plan: number, digest: string): void {
 
 export interface Overlap { plan: number; on: number; path: string | null }
 
-/** The plans the last tick held on another job's files, the job each waits for, and the first file they share. */
+/** The plans the last tick held on another job's files, and the job each waits for (#88). */
 export function overlapWaits(db: Db): Overlap[] {
   return db.prepare(`SELECT p.id AS plan, p.waits_on AS "on", (SELECT f.path FROM plan_files f
     JOIN plan_files mine ON mine.plan = p.id AND mine.path = f.path

@@ -6,6 +6,7 @@ import { expect, test } from 'vitest'
 import { registerPlans } from '../../cli/cf-plans.ts'
 import { migrate, open } from '../../store/index.ts'
 import { held, terminal, type Holder } from '../../store/plans.ts'
+import { WHY } from '../../store/refusals.ts'
 import { hold, isHeld, unhold } from '../hold.ts'
 import { maybe, put, srcDir } from '../workspace.ts'
 
@@ -60,7 +61,7 @@ test('unhold at step 1 sets the question aside', () => {
   const { db, home } = seeded()
   db.exec('UPDATE plans SET step = 1 WHERE id = 7')
   hold(db, home, 7, 'x', new Date(), null)
-  unhold(db, home, 7, 'ceo')
+  expect(unhold(db, home, 7, 'ceo')).toBe(1)
   expect(isHeld(home, 7)).toBe(false)
   expect(readFileSync(join(home, '.cf/work/7/question.prev.md'), 'utf8')).toBe('which one?\n')
 })
@@ -74,6 +75,42 @@ test('unhold at step 1 drops a stale checkout', () => {
   unhold(db, home, 7, 'ceo')
   expect(existsSync(join(home, '.cf/work/7/src'))).toBe(false)
   expect(maybe(home, 7, 'base.sha')).toBeNull()
+})
+
+function stoppedAtCheck(why: keyof typeof WHY) {
+  const seed = seeded()
+  seed.db.exec("UPDATE plans SET step = 3, state = 'blocked_on_ceo' WHERE id = 7")
+  put(seed.home, 7, 'refusal.md', `step 3 rails refused by pre_review\n\n…\n\n# Stopped\n\n${WHY[why]}.\n`)
+  return seed
+}
+
+test('unhold on a repeat stop at step 3 sends the plan back to the build', () => {
+  const { db, home } = stoppedAtCheck('repeat')
+  expect(unhold(db, home, 7, 'ceo')).toBe(2)
+  expect(db.prepare('SELECT step FROM plans WHERE id = 7').get()).toEqual({ step: 2 })
+  expect(db.prepare('SELECT DISTINCT cleared FROM refusals WHERE plan = 7').all()).toEqual([{ cleared: 1 }])
+  expect(db.prepare("SELECT actor FROM events WHERE plan = 7 AND kind = 'retry'").all()).toEqual([{ actor: 'ceo' }])
+  expect(maybe(home, 7, 'refusal.md')).not.toBeNull()
+})
+
+test('unhold on an unchanged stop at step 3 returns at step 3', () => {
+  const { db, home } = stoppedAtCheck('unchanged')
+  expect(unhold(db, home, 7, 'ceo')).toBe(3)
+})
+
+test('unhold on a held repeat stop at step 3 returns at step 3', () => {
+  const { db, home } = stoppedAtCheck('repeat')
+  hold(db, home, 7, 'x', new Date(), null)
+  expect(unhold(db, home, 7, 'ceo')).toBe(3)
+})
+
+test('cf return prints the step the plan runs next', () => {
+  const { db, home } = stoppedAtCheck('repeat')
+  const printed: string[] = []
+  const cf = new Command()
+  registerPlans(cf, { root: home, db: () => db, out: (line: string) => { printed.push(line) } })
+  cf.parse(['return', '7'], { from: 'user' })
+  expect(printed).toEqual(['plan 7 queued at step 2\n'])
 })
 
 test('unhold past step 1 keeps the checkout', () => {

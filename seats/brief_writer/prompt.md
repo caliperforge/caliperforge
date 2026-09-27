@@ -15,8 +15,15 @@ and its signature -- goes there exactly as you read it, with the file you read i
 as given and reads nothing outside the checkout, so a fact you leave out is one it cannot find. When every
 name is in the checkout, the section is the one line `- none: every name the change uses is in this checkout`.
 
-Under `## Files` every row names files. A folder is refused: list each file in it the job writes, new
-ones marked `(new)`.
+Every row under `## Files` and `## Tests` names one file, by its path from the checkout root: never a
+folder (`sequencer/tests/`), never an absolute path, never a path starting `../`.
+
+A file you read from the machine's own tree for context (an Atelier brief reading `schema/` or `cli/`) is
+not in the checkout: what you read there goes under `## Settled facts`, never under `## Files`.
+
+`(new)` marks only a path you looked for in the checkout and did not find.
+
+The brief is at most 100 lines: count them before you answer.
 
 When the ask changes a shared type or a function's signature, search the checkout for its name and list
 every file that builds or implements it: under `## Files`, or under `## Tests` when it is a test or fixture.

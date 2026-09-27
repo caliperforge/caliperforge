@@ -1,0 +1,8 @@
+seat: solana_specialist
+model: claude-opus-5-5
+effort: high
+tools:
+  - Read
+  - Glob
+  - Grep
+write_paths: []

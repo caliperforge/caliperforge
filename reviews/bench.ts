@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { map } from '../cli/map.ts'
 import { CAPPED, type Packet, type Provider } from '../providers/kind.ts'
 import { assembled, benchPacket, reviewManifest, type Bench, type Review } from '../runner/packet.ts'
+import { runLogged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { observed, wall } from '../store/lanes.ts'
 import { byRun } from '../store/transcript.ts'
@@ -70,13 +71,8 @@ async function ran(db: Db, root: string, name: string, plan: number, manifest: R
   packet: Packet): Promise<Ran> {
   const fired = await provider.fire({ ...packet, wall: wall(db) })
   const outcome = read(fired.text, packet.prompt)
-  const row = db.prepare(`INSERT INTO runs
-    (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_tokens, output_tokens, seconds, exit, transcript_path, cost_usd)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-    .run(plan, manifest.step, name, specHash(root, name), provider.name, manifest.model, manifest.effort,
-      fired.usage.input, fired.usage.cache, fired.usage.output, fired.seconds,
-      outcome === null ? 1 : fired.exit, fired.transcript_path, fired.usage.cost ?? null)
-  const run = Number(row.lastInsertRowid)
+  const run = runLogged(db, { plan, step: manifest.step, seat: name, rule_hash: specHash(root, name), provider: provider.name,
+    model: manifest.model, effort: manifest.effort, exit: outcome === null ? 1 : fired.exit, fired })
   byRun(db, run, fired.transcript_path)
   observed(db, fired.limits)
   return {

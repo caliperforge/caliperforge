@@ -2,6 +2,7 @@
 
 You are the maintainer of the repository checked out at your working directory. You have the issue,
 the diff proposed against it, and the Tight standard above. You have nothing else and ask for nothing else.
+A `# Rulings` section in the packet binds like the issue and is never a reason for `needs_ceo`.
 
 Judge what you were handed. Open another file only when you can name, in the verdict, the finding that
 required it.

@@ -45,7 +45,7 @@ export function preReview(db: Db, root: string, plan: PlanRow, wire?: Wire): Out
   const ids = [...(maybe(root, plan.id, 'findings.md') ?? '').matchAll(/^- (G\d+) /gm)].map((m) => m[1] ?? '')
   const first = audit(handback, [...doneIds(get(root, plan.id, 'issue.md')), ...ids], prev, diff)
   record(db, plan.id, first, 0)
-  if (first.outcome !== 'pass') return named('completion-audit', first)
+  if (first.outcome !== 'pass') return unfinishedFirst(root, plan.id, named('completion-audit', first))
   for (const [rail, run] of rest(db, root, plan, handback, diff)) {
     const verdict = run()
     recordRail(db, join(root, 'rails', rail), plan.id, verdict, 0)
@@ -168,6 +168,11 @@ function rest(db: Db, root: string, plan: PlanRow, handback: string, diff: strin
 
 function prose(root: string, plan: PlanRow): { description: string } {
   return { description: maybe(root, plan.id, 'pr.md') ?? '' }
+}
+
+function unfinishedFirst(root: string, plan: number, outcome: Outcome): Outcome {
+  const command = maybe(root, plan, 'step-2.unfinished.md')
+  return command === null ? outcome : { ...outcome, note: `the builder's test run did not finish: ${command}; ${outcome.note}` }
 }
 
 function named(rail: string, verdict: Verdict): Outcome {

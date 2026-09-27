@@ -64,8 +64,7 @@ export interface Ticket {
 }
 
 export function allTickets(db: Db): Ticket[] {
-  return db.prepare(`SELECT repo, number, title, lane, priority, after, parent, opened_at, closed_at, kind
-    FROM tickets ORDER BY repo, number`).all() as Ticket[]
+  return db.prepare('SELECT * FROM tickets ORDER BY repo, number').all() as Ticket[]
 }
 
 export function backfillTickets(db: Db, read: Read): number {

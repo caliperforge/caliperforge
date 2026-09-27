@@ -11,7 +11,7 @@ import { ciFeatures, formatLine, recipes } from '../gates.ts'
 import { tick } from '../index.ts'
 import { faulted, narrow } from '../rails.ts'
 import { get, srcDir } from '../workspace.ts'
-import { BROKEN, GREEN, NAPPING, ORPHANED, pkg, RED, TIMEOUT } from './bases.ts'
+import { ATELIER, BROKEN, GREEN, NAPPING, ORPHANED, pkg, RED, TIMEOUT } from './bases.ts'
 import { approve, built as edited, CARRIED, internalPlan, ours, plan, stub, watched, world, type World } from './world.ts'
 
 const ID = 2
@@ -369,6 +369,73 @@ test('#257 D6 a faulted step 3 stays on its step and records no checks verdict',
   } finally {
     process.env.PATH = path
   }
+}, SLOW)
+
+const LOG = join(import.meta.dirname, 'fixtures', 'host-exit.log')
+const EXITED = readFileSync(LOG, 'utf8')
+const CARDS = 'AtelierTests/FloorDecisionCardsTests.swift'
+
+function atelier(): string {
+  const src = xcode()
+  mkdirSync(join(src, 'AtelierTests'))
+  writeFileSync(join(src, CARDS), ATELIER[CARDS])
+  return src
+}
+
+test('#352 D1 a host exit in a class outside the diff runs the same xcodebuild once more, and a green run settles it', () => {
+  const twice = replies({ ok: false, code: '65', output: EXITED }, { ok: true, output: '' })
+  expect(checks(atelier(), twice.run, [], null, ['src/hello.ts'])).toBeNull()
+  expect(twice.seen).toHaveLength(2)
+  expect(twice.seen[1]).toBe(twice.seen[0])
+})
+
+test('#352 D2 a host exit in a class the diff touches is refused after one run', () => {
+  const once = replies({ ok: false, code: '65', output: EXITED }, { ok: true, output: '' })
+  expect(checks(atelier(), once.run, [], null, [CARDS])).toMatchObject({ code: '65', retried: false })
+  expect(once.seen).toHaveLength(1)
+})
+
+test('#352 D3 a host exit on both runs is refused with the second run', () => {
+  const again = `${EXITED}again`
+  const both = replies({ ok: false, code: '65', output: EXITED }, { ok: false, code: '66', output: again })
+  expect(checks(atelier(), both.run)).toMatchObject({ code: '66', output: again, retried: true })
+})
+
+test('#352 D4 D5 no restart line, no class listed, or a class no swift file declares is refused after one run', () => {
+  const without = (text: string): string => EXITED.split('\n').filter((line) => !line.startsWith(text)).join('\n')
+  for (const [src, output] of [[atelier(), without('Restarting')], [atelier(), without('\tFloorDecisionCardsTests')], [xcode(), EXITED]] as const) {
+    const once = replies({ ok: false, code: '65', output }, { ok: true, output: '' })
+    expect(checks(src, once.run)).toMatchObject({ code: '65', retried: false })
+    expect(once.seen).toHaveLength(1)
+  }
+})
+
+/** Step 3 of an Atelier plan under a fake `xcodebuild` printing the fixture and exiting 65, or passing from its second run when `settles`. */
+async function exits(settles: boolean): Promise<{ w: World; fired: Awaited<ReturnType<typeof tick>>[number] | undefined }> {
+  const bin = mkdtempSync(join(tmpdir(), 'cf-bin-'))
+  const green = settles ? '[ -e "$0.ran" ] && exit 0\ntouch "$0.ran"\n' : ''
+  writeFileSync(join(bin, 'xcodebuild'), `#!/bin/sh\n${green}cat '${LOG}'\nexit 65\n`, { mode: 0o755 })
+  const path = process.env.PATH
+  process.env.PATH = `${bin}:${path ?? ''}`
+  try {
+    const w = mine(ATELIER)
+    for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED))
+    mkdirSync(join(srcDir(w.root, ID), 'Atelier.xcodeproj'))
+    return { w, fired: (await tick(w.db, w.root, stub(CARRIED)))[0] }
+  } finally {
+    process.env.PATH = path
+  }
+}
+
+test('#352 D6 a host exit outside the diff and then a green run moves the plan to step 4', async () => {
+  const { w } = await exits(true)
+  expect(plan(w.db, ID).step).toBe(4)
+}, SLOW)
+
+test('#352 D6 a host exit on both runs sends the plan back to step 2 with a checks:test refusal', async () => {
+  const { w, fired } = await exits(false)
+  expect(plan(w.db, ID).step).toBe(2)
+  expect(fired).toMatchObject({ outcome: 'refuse', spans: ['checks:test'], note: expect.stringMatching(/exit 65 after one retry$/) as string })
 }, SLOW)
 
 /** A step 3 checks lock another plan's tick left, naming `pid`. */

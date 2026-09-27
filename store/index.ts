@@ -55,6 +55,11 @@ export function rules(db: Db): RuleRow[] {
   return db.prepare('SELECT * FROM rules ORDER BY id').all().map((r) => RuleRow.parse(r))
 }
 
+export function addRule(db: Db, r: RuleRow): void {
+  db.prepare('INSERT INTO rules (id, kind, path, content_hash, loaded_at) VALUES (?, ?, ?, ?, ?)')
+    .run(r.id, r.kind, r.path, r.content_hash, r.loaded_at)
+}
+
 function version(file: string): number {
   return Number(file.slice(0, 4))
 }

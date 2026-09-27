@@ -58,6 +58,16 @@ export function recordListing(db: Db, repo: string, listed: Listing[], whole: bo
   }
 }
 
+export interface Ticket {
+  repo: string; number: number; title: string; lane: string; priority: number | null; after: number | null
+  parent: number | null; opened_at: string | null; closed_at: string | null; kind: 'fix' | 'build' | null
+}
+
+export function allTickets(db: Db): Ticket[] {
+  return db.prepare(`SELECT repo, number, title, lane, priority, after, parent, opened_at, closed_at, kind
+    FROM tickets ORDER BY repo, number`).all() as Ticket[]
+}
+
 export function backfillTickets(db: Db, read: Read): number {
   const repos = [...new Set(LANES.map((l) => LANE[l].home))].map((repo) => {
     const list = (state: string): Listing[] => {

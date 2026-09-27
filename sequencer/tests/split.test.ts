@@ -159,7 +159,7 @@ test('D3, D4: a landing queues the parts that wait on it, and the parent closes 
   const log: string[] = []
   await briefed(w, ID, AFTER(['none', 'a', 'none']), log)
   expect(landing(w, 2, log)).toBeNull()
-  expect(partPlan(w, 1)).toBeNull()
+  expect({ plan: partPlan(w, 1) }).toEqual({ plan: null })
   expect(landing(w, 0, log)).toMatch(/^part b queued as plan \d+$/)
   expect(landing(w, 2, log)).toBeNull()
   expect(log.filter((l) => l.startsWith('close '))).toEqual([])

@@ -823,7 +823,7 @@
     "lines": 10
   },
   "templates/comms.ts": {
-    "lines": 8
+    "lines": 43
   },
   "templates/pr-path.ts": {
     "citing-comment": 1,

@@ -1,7 +1,9 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { landed } from '../../cli/batch.ts'
 import type { Provider } from '../../providers/kind.ts'
-import { facts, gather } from '../../templates/comms.ts'
+import { drafted, facts, gather } from '../../templates/comms.ts'
 import { tick } from '../index.ts'
 import { FORK, get, put } from '../workspace.ts'
 import { plan, reads, world, type World } from './world.ts'
@@ -53,6 +55,23 @@ test('D4: facts passes a draft whose every line cites the packet and names no is
   gather(w.db, w.root, plan(w.db, 1))
   expect(judged(w, `One job was refused. [refusal:${String(id)}]\nThanks @${FORK} [refusal:${String(id)}]`))
     .toMatchObject({ outcome: 'pass', spans: [] })
+})
+
+const fixture = (name: string): string =>
+  readFileSync(join(import.meta.dirname, '../..', 'seats/writer/tests', name), 'utf8')
+
+test('writer D3: the reply reads as learnings and a post facts passes', () => {
+  const w = comms()
+  const reply = drafted(fixture('reply.md'))
+  expect(reply?.learnings).toMatch(/\S/)
+  expect(reply?.post).toMatch(/\S/)
+  put(w.root, 1, 'packet.json', JSON.stringify({ landed: [{ plan: 7, origin: '', digest: '' }], refusals: [{ id: 3 }] }))
+  put(w.root, 1, 'draft.md', reply?.post ?? '')
+  expect(facts(w.root, plan(w.db, 1))).toMatchObject({ outcome: 'pass', spans: [] })
+})
+
+test('writer D4: a reply with no learnings fence reads as null', () => {
+  expect(drafted(fixture('no-learnings.md'))).toBeNull()
 })
 
 test('D5: gather writes what landed and today\'s refusals, leaving blips and earlier days out', () => {

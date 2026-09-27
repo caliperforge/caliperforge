@@ -1,10 +1,12 @@
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { fresh } from '../checks/sqlite.ts'
 import { planRow } from '../runner/index.ts'
 import { load } from '../runner/rules.ts'
 import type { Db } from './index.ts'
-import { backfill } from './transcript.ts'
+import { backfill, unfinished } from './transcript.ts'
 
 const root = join(import.meta.dirname, '..')
 const loaded = (): Db => {
@@ -32,6 +34,16 @@ test('backfill fills NULL costs once and never overwrites', () => {
   expect(spent(db, set)).toBe(2.96)
   expect(backfill(db)).toBe(0)
   expect([spent(db, empty), spent(db, set)]).toEqual([0.43, 2.96])
+})
+
+test('D1 unfinished names the Bash command whose result was moved to the background', () => {
+  expect(unfinished(fixture('unfinished'))).toBe('npm test')
+})
+
+test('D3 unfinished is null for a missing file, no moved result, and a result matching no Bash call', () => {
+  const unmatched = join(mkdtempSync(join(tmpdir(), 'cf-transcript-')), 'unmatched.transcript.jsonl')
+  writeFileSync(unmatched, readFileSync(fixture('unfinished'), 'utf8').replace('"tool_use_id":"toolu_1"', '"tool_use_id":"toolu_2"'))
+  expect([unfinished(fixture('absent')), unfinished(fixture('costed')), unfinished(unmatched)]).toEqual([null, null, null])
 })
 
 test('a missing, uncosted or cut transcript stays NULL', () => {

@@ -20,6 +20,39 @@ export function opened(path: string): string[] {
   }
 }
 
+const Message = z.object({ type: z.enum(['assistant', 'user']), message: z.object({ content: z.array(z.unknown()) }) })
+
+const Bash = z.object({ type: z.literal('tool_use'), id: z.string(), name: z.literal('Bash'), input: z.object({ command: z.string() }) })
+
+const Result = z.object({
+  type: z.literal('tool_result'),
+  tool_use_id: z.string(),
+  content: z.union([z.string(), z.array(z.object({ text: z.string().optional() }))]),
+})
+
+const MOVED = /did not complete within its .* timeout and was moved to the background/
+
+/** The command of the last Bash call whose result says it was moved to the background; none when it is missing or a line is not JSON. */
+export function unfinished(path: string): string | null {
+  if (!existsSync(path)) return null
+  try {
+    const blocks = readFileSync(path, 'utf8').split('\n').filter((line) => line !== '')
+      .flatMap((line) => Message.safeParse(JSON.parse(line)).data?.message.content ?? [])
+    const commands = new Map(blocks.flatMap((block) => {
+      const call = Bash.safeParse(block).data
+      return call === undefined ? [] : [[call.id, call.input.command] as const]
+    }))
+    return blocks.flatMap((block) => {
+      const result = Result.safeParse(block).data
+      if (result === undefined) return []
+      const text = typeof result.content === 'string' ? result.content : result.content.map((part) => part.text ?? '').join('\n')
+      return MOVED.test(text) ? commands.get(result.tool_use_id) ?? [] : []
+    }).at(-1) ?? null
+  } catch {
+    return null
+  }
+}
+
 /** The name a provider writes under before the run it belongs to has an id. */
 export function pending(dir: string, tag: string): string {
   return join(dir, `${tag}.pending.transcript.jsonl`)

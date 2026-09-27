@@ -1,7 +1,9 @@
+import { copyFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import type { Provider } from '../../providers/kind.ts'
 import { tick } from '../index.ts'
-import { diffOf, get } from '../workspace.ts'
+import { diffOf, get, maybe } from '../workspace.ts'
 import { approve, built, CARRIED, stub, watched, world, type World } from './world.ts'
 
 const UNPOINTED = 'built\n\n---\ndone:\n  - id: D1\n    status: done\n    pointer:\n---\n'
@@ -56,6 +58,38 @@ test('D2 a re-ask answer that edits the tree is refused on the hand-back', async
   const w = await atBuild()
   const fired = (await tick(w.db, w.root, answers(['built', CARRIED], (n) => { if (n === 1) built(w.root, 1, 'export const more = 1') })))[0]
   expect(fired).toMatchObject({ step: 2, outcome: 'refuse', spans: ['step-2.handback.md'] })
+})
+
+const MOVED = join(import.meta.dirname, '../../store/fixtures/unfinished.transcript.jsonl')
+
+/** The builder hands back UNPOINTED from a transcript whose test run was moved to the background. */
+function unfinishedBuild(): Provider {
+  const inner = stub(UNPOINTED)
+  return {
+    ...inner,
+    fire: async (packet) => {
+      const fired = await inner.fire(packet)
+      if (packet.tools.includes('Write')) copyFileSync(MOVED, packet.transcript)
+      return fired
+    },
+  }
+}
+
+const refusalNote = (w: World): string => get(w.root, 1, 'refusal.md').split('\n')[2] ?? ''
+
+test('D1 a build whose test run never finished is refused at step 3 leading with the command', async () => {
+  const w = await atBuild()
+  await tick(w.db, w.root, unfinishedBuild())
+  expect((await tick(w.db, w.root, stub(UNPOINTED)))[0]).toMatchObject({ step: 3, outcome: 'refuse' })
+  expect(refusalNote(w)).toMatch(/^the builder's test run did not finish: npm test; completion-audit: /)
+})
+
+test('D2 a build with no moved-to-background result is refused as today', async () => {
+  const w = await atBuild()
+  await tick(w.db, w.root, stub(UNPOINTED))
+  expect((await tick(w.db, w.root, stub(UNPOINTED)))[0]).toMatchObject({ step: 3, outcome: 'refuse' })
+  expect(refusalNote(w)).toMatch(/^completion-audit: /)
+  expect(maybe(w.root, 1, 'step-2.unfinished.md')).toBeNull()
 })
 
 test('D3 a hand-back whose fence parses fires the builder once', async () => {

@@ -58,3 +58,4 @@ done:
 One `- id:` row per `- D<n>` the brief lists, same ids, same order. A brief that lists none has one, `D1`.
 `status` is `done`, `cannot-be-done` or `they-said-dont`.
 A rebuild's fence lists every case again: carry forward the rows the refusal did not touch, update the ones it did.
+A hand-back with no fence, or one whose YAML does not parse, is asked once for the fence alone: answer with only the closing `---` fence and a `done:` row per case, and edit no file, since an edit there refuses the build.

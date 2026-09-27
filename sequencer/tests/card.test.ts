@@ -8,7 +8,7 @@ import { advance } from '../../store/plans.ts'
 import { approve, refuse, waiting } from '../card.ts'
 import { tick } from '../index.ts'
 import { headOf, push } from '../push.ts'
-import { get, maybe, srcDir } from '../workspace.ts'
+import { get, maybe, put, srcDir } from '../workspace.ts'
 import { approve as approveTarget, CARRIED, internalPlan, plan, PR, stub, watched, world, type World } from './world.ts'
 
 const SHA = 'a'.repeat(40)
@@ -39,9 +39,21 @@ test('D1 an outside plan at push writes the card, calls no wire and holds on ste
   const held = push(w.db, w.root, plan(w.db, 1), watched(sent, w.root, 1))
   expect(held).toMatchObject({ outcome: 'pass', held: true, spans: ['card'] })
   expect(held.note).toContain('cf approve card 1')
-  expect(get(w.root, 1, 'maintainer.md')).toBe(`plan 1 at ${headOf(w.root, 1).sha}\npass\tlead\twhole issue, 1 lead(s)\npass\ttests\t+0 test / +1 code lines\npass\tconventions\tmatches the last 1 commits\npass\tsize\t2 code lines (2 in all), limit 400\n`)
+  expect(get(w.root, 1, 'maintainer.md')).toBe(`plan 1 at ${headOf(w.root, 1).sha}\npass\tlead\twhole issue, 1 lead(s)\npass\ttests\t+0 test / +1 code lines\npass\tconventions\tmatches the last 1 commits\npass\tsize\t2 code lines (2 in all), limit 400\npass\tprose\tclean\n`)
   expect(sent).toEqual([])
   expect(plan(w.db, 1).step).toBe(8)
+})
+
+test('D9 a pr.md holding a tell flags its line on the card and sends nothing until the card is approved', async () => {
+  const w = await atPush()
+  const sent: string[] = []
+  const wire = watched(sent, w.root, 1)
+  put(w.root, 1, 'pr.md', 'Addresses #12.\n\nThis is robust.\n')
+  expect(push(w.db, w.root, plan(w.db, 1), wire)).toMatchObject({ outcome: 'pass', held: true, spans: ['card'] })
+  expect(get(w.root, 1, 'maintainer.md')).toContain('\nflag\tprose\tbody:3 tell:robust\n')
+  expect(sent).toEqual([])
+  approve(w.db, w.root, 1)
+  expect(push(w.db, w.root, plan(w.db, 1), wire)).toMatchObject({ note: `pushed widget-12-a1 as ${PR}` })
 })
 
 test('D2 an approved card sends and opens as today, beside the one unchanged step-7 row', async () => {
@@ -87,7 +99,7 @@ test('D4 an approval at an earlier card sends nothing: other rows or another hea
   decide(w.db, 'plan', 1, headDigest(moved), null)
   const before = sent.length
   expect(push(w.db, w.root, plan(w.db, 1), wire)).toMatchObject({ outcome: 'pass', held: true, spans: ['card'] })
-  expect(get(w.root, 1, 'maintainer.md')).toBe(`plan 1 at ${moved}\npass\tlead\twhole issue, 1 lead(s)\npass\ttests\t+0 test / +0 code lines\npass\tconventions\tmatches the last 1 commits\npass\tsize\t0 code lines (0 in all), limit 400\n`)
+  expect(get(w.root, 1, 'maintainer.md')).toBe(`plan 1 at ${moved}\npass\tlead\twhole issue, 1 lead(s)\npass\ttests\t+0 test / +0 code lines\npass\tconventions\tmatches the last 1 commits\npass\tsize\t0 code lines (0 in all), limit 400\npass\tprose\tclean\n`)
   expect(sent.slice(before)).toEqual([])
   approve(w.db, w.root, 1)
   expect(push(w.db, w.root, plan(w.db, 1), wire)).toMatchObject({ note: `pushed widget-12-a1 onto ${PR}` })

@@ -21,6 +21,7 @@ import type { Outcome } from './kind.ts'
 import { cloned, conflicted, diffOf, fetchMain, FORK, get, MAIN, maybe, planDir, put, repoName, srcDir, titleOf } from './workspace.ts'
 import { homeOf } from './home.ts'
 import { size } from './size.ts'
+import { prosed } from './tells.ts'
 import { theirs } from './theirs.ts'
 
 interface Head { dir: string; branch: string; sha: string }
@@ -319,7 +320,9 @@ export function push(db: Db, root: string, plan: PlanRow, wire: Wire = WIRE): Ou
   if (approval === null) return refuse('approvals', `no ceo approval row for ${head.branch} at ${head.sha.slice(0, 12)}`)
   const cold = unproven(db, plan.id)
   if (cold !== null) return refuse(cold, `${cold} left no passing verdict on plan ${String(plan.id)}`)
-  const card = waiting(db, root, plan.id, head.sha, target, [...CHECKS, size(target.repo), ...(wire.card ?? [])])
+  const text = maybe(root, plan.id, 'pr.md') ?? prBody(target.issue_no, root, plan.id)
+  const checks = [...CHECKS, size(target.repo), prosed(title(root, plan.id), text), ...(wire.card ?? [])]
+  const card = waiting(db, root, plan.id, head.sha, target, checks)
   if (card !== null) return card
   const open = opened(db, plan.id)
   wire.send(head.dir, head.branch)
@@ -329,7 +332,7 @@ export function push(db: Db, root: string, plan: PlanRow, wire: Wire = WIRE): Ou
     return { outcome: 'pass', spans: [], note: `pushed ${head.branch} onto ${open}` }
   }
   const body = maybe(root, plan.id, 'pr.md') === null
-    ? put(root, plan.id, 'pr.md', prBody(target.issue_no, root, plan.id))
+    ? put(root, plan.id, 'pr.md', text)
     : join(planDir(root, plan.id), 'pr.md')
   const url = wire.open(target.repo, `caliperforge:${head.branch}`, title(root, plan.id), body)
   pushed(db, plan.id, approval, url)

@@ -1,9 +1,11 @@
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { Command } from 'commander'
 import { expect, test } from 'vitest'
+import { registerPlans } from '../../cli/cf-plans.ts'
 import { migrate, open } from '../../store/index.ts'
-import { held, holderOf, terminal, type Holder } from '../../store/plans.ts'
+import { held, terminal, type Holder } from '../../store/plans.ts'
 import { hold, isHeld, unhold } from '../hold.ts'
 import { maybe, put, srcDir } from '../workspace.ts'
 
@@ -47,7 +49,9 @@ test('D4 a holder outside ceo and coo is refused by the store and by cf hold bef
   const { db, home } = seeded()
   expect(() => { held(db, 7, 'cto' as Holder, 'x') }).toThrow(/CHECK constraint/)
   expect(holding(db)).toEqual({ held_by: null, held_why: null })
-  expect(() => holderOf('cto')).toThrow(/--by takes ceo or coo, not cto/)
+  const cf = new Command()
+  registerPlans(cf, { root: home, db: () => db, out: () => undefined })
+  expect(() => cf.parse(['hold', '7', '--by', 'cto', '--why', 'x'], { from: 'user' })).toThrow(/--by takes ceo or coo, not cto/)
   expect(row(db)).toEqual({ state: 'running', step: 4, waits_on: null })
   expect(isHeld(home, 7)).toBe(false)
 })

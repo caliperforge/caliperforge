@@ -12,6 +12,7 @@ import { backfill } from '../store/transcript.ts'
 import { day, halted, heldBy, laneLine, open as openPlans, section, tickets, ticketSection, waitLine, waits,
   windowLine } from './brief.ts'
 import { check, fill } from './digests.ts'
+import { flow } from './flow.ts'
 import { write as writeMap } from './map.ts'
 import { ack, line, unread } from './inbox.ts'
 import { close } from './session.ts'
@@ -133,7 +134,7 @@ export function registerInbox(cf: Command, { root, db, out }: Cli): void {
   })
 }
 
-export function registerSession(cf: Command, { db, out }: Cli): void {
+export function registerSession(cf: Command, { root, db, out }: Cli): void {
   const session = cf.command('session')
 
   session.command('close').argument('<transcript>').action((path: string) => {
@@ -149,6 +150,11 @@ export function registerSession(cf: Command, { db, out }: Cli): void {
 
   cf.command('halted').action(() => {
     out(section('halted', halted(db())))
+  })
+
+  cf.command('flow').action(() => {
+    const lines = flow(db(), root, new Date())
+    out(lines.length === 0 ? 'flow clear\n' : lines.join(''))
   })
 
   cf.command('brief').action(() => {

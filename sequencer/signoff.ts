@@ -10,7 +10,7 @@ import { clear } from '../store/refusals.ts'
 import { graded } from '../store/signals.ts'
 import type { Board } from '../rails/ci-green/index.ts'
 import { BOARD, headOf, opened, rehearsalBranch, title } from './push.ts'
-import { GRADING } from './steps.ts'
+import { GRADING } from './ready.ts'
 import { diffOf, drop, FORK, get, maybe, put, repoName } from './workspace.ts'
 
 /**

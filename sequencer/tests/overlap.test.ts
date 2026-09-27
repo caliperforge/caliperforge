@@ -4,6 +4,7 @@ import { record as recordFiles } from '../../store/files.ts'
 import { overlapWaits } from '../../store/plans.ts'
 import { tick } from '../index.ts'
 import { picks } from '../next.ts'
+import { blocked } from '../steps.ts'
 import { CARRIED, internalPlan, ours, plan, stub, world, type World } from './world.ts'
 
 const ID = 2
@@ -46,11 +47,31 @@ test('D2 a plan sharing no path builds beside it', async () => {
   expect(plan(w.db, SECOND).wait_reason).toBeNull()
 })
 
-test('D3 the receipt names the plan it waits on', async () => {
+test('D1 a shared path under .cf/ alone holds nothing up', async () => {
+  const w = pair()
+  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  recordFiles(w.db, ID, [{ path: '.cf/x', is_new: true }])
+  recordFiles(w.db, SECOND, [{ path: '.cf/x', is_new: true }])
+  await tick(w.db, w.root, stub(CARRIED))
+  expect(builds(w, SECOND)).toBeGreaterThan(0)
+  expect(plan(w.db, SECOND).wait_reason).toBeNull()
+})
+
+test('D3 the receipt names the plan it waits on and the file', async () => {
   const w = pair()
   await oneBuilding(w)
-  expect(overlapWaits(w.db)).toEqual([{ plan: SECOND, on: ID }])
-  expect(tickNote([], overlapWaits(w.db))).toBe(`plan ${String(SECOND)} waits on plan ${String(ID)}`)
+  expect(overlapWaits(w.db)).toEqual([{ plan: SECOND, on: ID, path: 'src/hello.ts' }])
+  expect(tickNote([], overlapWaits(w.db))).toBe(`plan ${String(SECOND)} waits on plan ${String(ID)} for src/hello.ts`)
+})
+
+test('D4 a plan at step 1 is never file_overlap and holds nobody', () => {
+  const w = pair()
+  recordFiles(w.db, ID, [{ path: 'src/hello.ts', is_new: false }])
+  recordFiles(w.db, SECOND, [{ path: 'src/hello.ts', is_new: false }])
+  w.db.prepare('UPDATE plans SET step = 1 WHERE id IN (?, ?)').run(ID, SECOND)
+  expect(blocked(w.db, plan(w.db, SECOND))).not.toBe('file_overlap')
+  w.db.prepare('UPDATE plans SET step = 2 WHERE id = ?').run(SECOND)
+  expect(blocked(w.db, plan(w.db, SECOND))).not.toBe('file_overlap')
 })
 
 test('D4 a plan with no file list blocks nothing and waits on nothing', async () => {
@@ -62,10 +83,10 @@ test('D4 a plan with no file list blocks nothing and waits on nothing', async ()
   expect([builds(w, ID) > 0, builds(w, SECOND) > 0]).toEqual([true, true])
 })
 
-test('D5 the wait clears when the building plan settles', async () => {
+test.each(['done', 'refused', 'halted'])('D5 D2 the wait clears on the first tick after the building plan is %s', async (state) => {
   const w = pair()
   await oneBuilding(w)
-  w.db.prepare("UPDATE plans SET state = 'done' WHERE id = ?").run(ID)
+  w.db.prepare('UPDATE plans SET state = ? WHERE id = ?').run(state, ID)
   await tick(w.db, w.root, stub(CARRIED))
   expect(builds(w, SECOND)).toBeGreaterThan(0)
   expect(plan(w.db, SECOND).wait_reason).toBeNull()

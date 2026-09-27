@@ -1,9 +1,12 @@
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import { z } from 'zod'
 import { picks } from '../sequencer/next.ts'
 import { maybe } from '../sequencer/workspace.ts'
 import type { Db } from '../store/index.ts'
 import { hhmm } from '../store/lanes.ts'
 import { internal, openPipes, originRef, type PipeRow, PlanRow } from '../store/plans.ts'
+import { all, record, ticketOf, type Event } from './inbox.ts'
 
 const Row = PlanRow.extend({ waits_on: z.int().nullable() })
 
@@ -24,14 +27,38 @@ export function slack(db: Db, now: Date): Slack[] {
   })
 }
 
-export function flow(db: Db, root: string, now: Date): string[] {
+interface Finding { plan: number; step: number; what: string; fix: string }
+
+const STAMP = '.cf/flow.at'
+
+const HOUR = 60 * 60 * 1000
+
+export function findings(db: Db, root: string, now: Date): Finding[] {
   const startable = new Set(slack(db, now).filter((s) => s.startable > 0).map((s) => s.pipe.id))
-  const plans = db.prepare('SELECT * FROM plans ORDER BY id').all().map((r) => Row.parse(r)).flatMap((p) => {
+  return db.prepare('SELECT * FROM plans ORDER BY id').all().map((r) => Row.parse(r)).flatMap((p) => {
     const note = maybe(root, p.id, 'parked.md')
     const hit = landed(db, p) ?? stale(db, p, note) ?? repeated(db, p, note, now) ?? ownerless(p, note) ?? overlapped(p, startable)
-    return hit === null ? [] : [`plan ${String(p.id)}\t${hit[0]}\t${hit[1]}\n`]
+    return hit === null ? [] : [{ plan: p.id, step: p.step, what: hit[0], fix: hit[1] }]
   })
+}
+
+export function flow(db: Db, root: string, now: Date): string[] {
+  const plans = findings(db, root, now).map((f) => `plan ${String(f.plan)}\t${f.what}\t${f.fix}\n`)
   return [...plans, ...parts(db), ...idle(db)]
+}
+
+export function reported(db: Db, root: string, now: Date): void {
+  if (openPipes(db, hhmm(db, now)).length === 0) return
+  const stamp = join(root, STAMP)
+  if (existsSync(stamp) && now.getTime() - Date.parse(readFileSync(stamp, 'utf8')) < HOUR) return
+  mkdirSync(dirname(stamp), { recursive: true })
+  writeFileSync(stamp, now.toISOString())
+  const key = (e: Pick<Event, 'plan' | 'note'>): string => `${String(e.plan)}\t${e.note}`
+  const known = new Set(all(root).filter((e) => e.kind === 'flow').map(key))
+  record(root, findings(db, root, now)
+    .map((f): Event => ({ at: now.toISOString(), plan: f.plan, ticket: ticketOf(db, f.plan), kind: 'flow', step: f.step, name: 'flow',
+      note: `${f.what}: ${f.fix}` }))
+    .filter((e) => !known.has(key(e))))
 }
 
 function landed(db: Db, p: Row): Hit {

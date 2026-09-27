@@ -1,6 +1,7 @@
 import { realpathSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
 import type { Packet, Provider, Refusal } from '../providers/kind.ts'
+import { runLogged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { observed, wall } from '../store/lanes.ts'
 import { load, seat, tight, type Seat } from './rules.ts'
@@ -60,13 +61,10 @@ export async function fire(
   const plan = planRow(db)
   const transcript = join(root, '.cf/work', String(plan), 'step-2.transcript.jsonl')
   const fired = await provider.fire({ ...packet(manifest, prompt, tight(root), issue, cwd, transcript), wall: wall(db) })
-  const row = db.prepare(`INSERT INTO runs
-    (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_tokens, output_tokens, seconds, exit, transcript_path, cost_usd)
-    VALUES (?, 2, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-    .run(plan, name, hash, provider.name, manifest.model, manifest.effort,
-      fired.usage.input, fired.usage.cache, fired.usage.output, fired.seconds, fired.exit, fired.transcript_path, fired.usage.cost ?? null)
+  const id = runLogged(db, { plan, step: 2, seat: name, rule_hash: hash, provider: provider.name, model: manifest.model,
+    effort: manifest.effort, exit: fired.exit, fired })
   observed(db, fired.limits)
-  return { id: Number(row.lastInsertRowid), text: fired.text }
+  return { id, text: fired.text }
 }
 
 export function planRow(db: Db): number {

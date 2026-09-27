@@ -1,3 +1,4 @@
+import type { Fired, Provider } from '../providers/kind.ts'
 import type { Db } from './index.ts'
 import type { Verdict } from './verdict.ts'
 
@@ -35,6 +36,27 @@ export function newestRun(db: Db): number {
 export function runSince(db: Db, plan: number, step: number, after: number): number | null {
   return (db.prepare('SELECT max(id) AS id FROM runs WHERE plan = ? AND step = ? AND id > ?')
     .get(plan, step, after) as { id: number | null }).id
+}
+
+export interface Run {
+  plan: number
+  step: number
+  seat: string
+  rule_hash: string
+  provider: Provider['name']
+  model: string
+  effort: string
+  exit: number
+  fired: Pick<Fired, 'usage' | 'seconds' | 'transcript_path'>
+}
+
+export function runLogged(db: Db, r: Run): number {
+  const row = db.prepare(`INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort,
+    input_tokens, cache_tokens, output_tokens, seconds, exit, transcript_path, cost_usd)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(r.plan, r.step, r.seat, r.rule_hash, r.provider, r.model, r.effort, r.fired.usage.input, r.fired.usage.cache,
+      r.fired.usage.output, r.fired.seconds, r.exit, r.fired.transcript_path, r.fired.usage.cost ?? null)
+  return Number(row.lastInsertRowid)
 }
 
 export function runAt(db: Db, plan: number, step: number, seat: string, at: string): number {

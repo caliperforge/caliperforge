@@ -8,6 +8,7 @@ import { reviewManifest, SYMBOLS_LEAD, type Bench } from '../runner/packet.ts'
 import { load, seat, tight, type Seat } from '../runner/rules.ts'
 import { judge, loadReviews } from '../reviews/bench.ts'
 import type { Finding, Judged, Note } from '../reviews/verdict.ts'
+import { runLogged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { filesOf } from '../store/files.ts'
 import { observed, wall } from '../store/lanes.ts'
@@ -36,10 +37,6 @@ import { kernelPlan } from './home.ts'
 import { audit } from '../rails/completion-audit/index.ts'
 
 const FENCE = /^---\r?\n[\s\S]*?\r?\n---\s*$/m
-
-const INSERT = `INSERT INTO runs
-  (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_tokens, output_tokens, seconds, exit, transcript_path, cost_usd)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 export async function fireSeat(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
   if (kernelPlan(plan)) install(srcDir(root, plan.id))
@@ -241,9 +238,9 @@ export async function ran(db: Db, root: string, plan: PlanRow, step: Step, provi
 
 export function recorded(db: Db, plan: number, step: number, name: string, hash: string, provider: Provider['name'],
   manifest: Seat, fired: Fired): void {
-  const row = db.prepare(INSERT).run(plan, step, name, hash, provider, manifest.model, manifest.effort,
-    fired.usage.input, fired.usage.cache, fired.usage.output, fired.seconds, fired.exit, fired.transcript_path, fired.usage.cost ?? null)
-  byRun(db, Number(row.lastInsertRowid), fired.transcript_path)
+  const id = runLogged(db, { plan, step, seat: name, rule_hash: hash, provider, model: manifest.model,
+    effort: manifest.effort, exit: fired.exit, fired })
+  byRun(db, id, fired.transcript_path)
 }
 
 function exited(step: Step, fired: Fired): Outcome {

@@ -9,7 +9,7 @@ type Metric = typeof METRICS[number]
 type Tally = Partial<Record<Metric, number>>
 export type Counts = Record<string, Tally>
 
-const FIX: Record<Metric, string> = {
+export const FIX: Record<Metric, string> = {
   'citing-comment': 'drop the ticket, date, name or plan number from the comment',
   lines: 'move the new function to a new file',
   prepare: 'move the query into store/',

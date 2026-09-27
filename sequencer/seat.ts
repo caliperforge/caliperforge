@@ -24,6 +24,7 @@ import { install, mode } from './checks.ts'
 import { narrow } from './rails.ts'
 import { classify } from './delta.ts'
 import { deletions } from './fence.ts'
+import { findings } from './findings.ts'
 import { fenceFor, languageFor } from './route.ts'
 import { gates, outsideLanguage } from './gates.ts'
 import type { Outcome } from './kind.ts'
@@ -216,7 +217,7 @@ function exited(step: Step, fired: Fired): Outcome {
 function rebuild(db: Db, root: string, plan: PlanRow, prev: string | null): string {
   const src = srcDir(root, plan.id)
   const ruling = ruled(root, plan.id)
-  const issue = get(root, plan.id, 'issue.md') + (ruling === null ? '' : `\n\n# What the ask holds beyond this brief\n\n${ruling.trim()}`)
+  const issue = get(root, plan.id, 'issue.md') + (ruling === null ? '' : `\n\n# What the ask holds beyond this brief\n\n${ruling.trim()}`) + findings(db, root, plan.id, src)
   const refusal = maybe(root, plan.id, 'refusal.md')
   const rows = lastRows(prev)
   if (refusal === null) return handed(`${issue}${rows}`, handout(src, listed(db, plan.id, issue)))

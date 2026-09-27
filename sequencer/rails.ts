@@ -42,7 +42,8 @@ export function preReview(db: Db, root: string, plan: PlanRow, wire?: Wire): Out
   const handback = get(root, plan.id, 'step-2.handback.md')
   const diff = diffOf(root, plan.id)
   const prev = maybe(root, plan.id, 'step-2.handback.prev.md') ?? ''
-  const first = audit(handback, doneIds(get(root, plan.id, 'issue.md')), prev, diff)
+  const ids = [...(maybe(root, plan.id, 'findings.md') ?? '').matchAll(/^- (G\d+) /gm)].map((m) => m[1] ?? '')
+  const first = audit(handback, [...doneIds(get(root, plan.id, 'issue.md')), ...ids], prev, diff)
   record(db, plan.id, first, 0)
   if (first.outcome !== 'pass') return named('completion-audit', first)
   for (const [rail, run] of rest(db, root, plan, handback, diff)) {

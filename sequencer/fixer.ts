@@ -185,7 +185,7 @@ function apply(db: Db, root: string, plan: PlanRow, f: Fix, wire: Wire, now: Dat
     case 'rebuild': return gone(root, plan) ? rebuild(db, root, plan) : 'escalated'
     case 'ticket': {
       const url = wire.file(SELF, f.ticket ?? f.why, `Filed by the fixer on plan ${String(plan.id)}.\n\n${f.why}\n\n${f.did}`,
-        ['lane:machine', 'P0'])
+        ['lane:machine', 'P0', 'fix'])
       hold(db, root, plan.id, `${url}\n\n${f.why}`, now)
       return `ticket ${url}`
     }

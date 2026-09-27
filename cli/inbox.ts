@@ -11,7 +11,7 @@ import { clock } from '../store/plans.ts'
  * reads at every check-in (`cf inbox`), and a desktop notification for the ones that need one.
  * Read is what `cf inbox --ack` has marked; nothing else counts as delivered.
  */
-export type Kind = 'blocked' | 'landed' | 'done' | 'refused' | 'asked' | 'signoff' | 'crashed'
+export type Kind = 'blocked' | 'landed' | 'done' | 'refused' | 'asked' | 'signoff' | 'crashed' | 'flow'
 
 export interface Event {
   at: string
@@ -75,7 +75,7 @@ export function ack(root: string): number {
   return marked
 }
 
-function all(root: string): Event[] {
+export function all(root: string): Event[] {
   const path = join(root, INBOX)
   if (!existsSync(path)) return []
   return readFileSync(path, 'utf8').split('\n').filter((l) => l !== '').map((l) => JSON.parse(l) as Event)
@@ -104,6 +104,7 @@ const HEAD: Record<Kind, string> = {
   asked: 'Someone commented on the PR',
   signoff: 'Ready for your review before it posts',
   crashed: 'The tick crashed',
+  flow: 'Stuck, cf flow names the fix',
 }
 
 /** Why a job stopped, in the words a person reads on a phone; an unknown reason falls back to the machine's note. */

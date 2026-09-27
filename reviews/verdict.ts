@@ -38,7 +38,7 @@ type Written = z.infer<typeof Noted>
 
 const Fence = z.object({
   outcome: z.enum(['pass', 'refuse', 'needs_ceo']),
-  class: z.string().regex(/^[a-z_]+$/).nullish(),
+  class: z.union([z.literal('claim.unverified'), z.string().regex(/^[a-z_]+$/)]).nullish(),
   spans: z.array(Span).nullish(),
   reopen: z.record(z.string(), z.string()).nullish(),
   notes: z.array(Noted).nullish(),
@@ -86,7 +86,7 @@ function known(n: Written): n is Note {
 function passed(notes: Written[], prose: string, subject_digest: string): Judged {
   const stray = notes.filter((n) => !known(n))
   if (stray.length === 0) {
-    return { outcome: 'pass', defect_class: null, spans: [], findings: [], subject_digest, origin_kind: null, origin_ref: null, message: 'pass', reopen: {}, notes: notes.filter(known) }
+    return { outcome: 'pass', defect_class: null, spans: [], findings: [], subject_digest, origin_kind: null, origin_ref: null, message: prose === '' ? 'pass' : prose, reopen: {}, notes: notes.filter(known) }
   }
   const spans = stray.map((n) => `${n.file}:${String(n.line)}`)
   return {

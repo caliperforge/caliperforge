@@ -214,6 +214,19 @@ test('D3 a note missing a field or with a non-integer line is a failed fence', (
   expect(read(PASS(NOTE('text', '3.5')), 'subject')).toBeNull()
 })
 
+test('a refuse of class claim.unverified reads, bare or wrapped', () => {
+  const bare = '---\noutcome: refuse\nclass: claim.unverified\nspans:\n  - src/stats.ts:4\n---\n'
+  for (const reply of [bare, `\`\`\`yaml\n${bare}\`\`\`\n`]) {
+    expect(read(reply, 'subject')).toMatchObject({ outcome: 'refuse', defect_class: 'claim.unverified', spans: ['src/stats.ts:4'], origin_kind: 'ruling', origin_ref: 'reviewers.verdict' })
+  }
+})
+
+test('a pass keeps its prose as message, else reads pass', () => {
+  const out = read(`wording only: "fixes" reads "adds"\n\n${PASS(NOTE('text'))}`, 'subject')
+  expect(out).toMatchObject({ outcome: 'pass', message: 'wording only: "fixes" reads "adds"', notes: [{ kind: 'text' }] })
+  expect(read(PASS(NOTE('text')), 'subject')?.message).toBe('pass')
+})
+
 test('a run that ends at the step cap is fired once more with no tools, and that reply is the verdict', async () => {
   const { db, plan } = bench(root)
   const sent: Packet[] = []

@@ -85,13 +85,19 @@ export function stub(text: string, exit = 0, review = PASS, seen?: (packet: Pack
   }
 }
 
-/** The stub with a sleeping `fire`. */
-export function slow(ms: number, text: string): Provider {
+/** The stub with a sleeping `fire`, and `peak()`: the most fires a lap ever held in flight at once. */
+export function slow(ms: number, text: string): Provider & { peak: () => number } {
   const inner = stub(text)
+  let live = 0
+  let peak = 0
   return {
     ...inner,
+    peak: () => peak,
     fire: async (packet) => {
+      live += 1
+      peak = Math.max(peak, live)
       await sleep(ms)
+      live -= 1
       return inner.fire(packet)
     },
   }

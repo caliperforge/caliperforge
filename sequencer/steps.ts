@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { CHECK, find } from '../cli/find.ts'
 import type { Read } from '../cli/gh.ts'
@@ -154,21 +155,37 @@ function greptile(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire)
     note: `Greptile scored ${at} ${String(score)}/5; back to the builder with its findings` }
 }
 
-/** Greptile's plan gives 50 credits a month, so a job asks for at most this many reviews. */
+export const CREDITS = 50
+
+export const FIRST_ONLY = 40
+
+/** Greptile's plan gives {@link CREDITS} credits a month, so a job asks for at most this many reviews. */
 const ASKS = 3
 
 const ASKED = 'greptile.asked'
 
+export function monthly(root: string, now: Date): number {
+  const month = now.toISOString().slice(0, 7)
+  return readdirSync(join(root, '.cf/work'))
+    .flatMap((plan) => (maybe(root, Number(plan), ASKED) ?? '').split('\n'))
+    .filter((l) => l.split(' ')[1]?.startsWith(month) === true).length
+}
+
 function asked(root: string, plan: number, sha: string, repo: string, wire: Wire): Outcome | null {
   const text = maybe(root, plan, ASKED) ?? ''
-  const heads = text.split('\n').filter((l) => l !== '')
+  const heads = text.split('\n').filter((l) => l !== '').map((l) => l.split(' ')[0])
   if (heads.includes(sha)) return null
   if (heads.length >= ASKS) {
     return { outcome: 'needs_ceo', spans: ['greptile.requests'],
       note: `Greptile was asked ${String(ASKS)} times on this job; asking again at ${sha.slice(0, 12)} is the COO's call` }
   }
+  const month = heads.length === 0 ? 0 : monthly(root, new Date())
+  if (month >= FIRST_ONLY) {
+    return { outcome: 'needs_ceo', spans: ['greptile.month'],
+      note: `Greptile was asked ${String(month)}/${String(CREDITS)} times this month; a second review at ${sha.slice(0, 12)} is the COO's call` }
+  }
   wire.review(`${FORK}/${repoName(repo)}`, rehearsalBranch(root, plan))
-  put(root, plan, ASKED, `${text}${sha}\n`)
+  put(root, plan, ASKED, `${text}${sha} ${new Date().toISOString()}\n`)
   return null
 }
 

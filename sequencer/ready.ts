@@ -126,7 +126,7 @@ function forkGreened(db: Db, plan: number): boolean {
 
 /** The repository the ready rail reads a pulse for. Ours has none to read, and needs none (#20). */
 export function repoOf(db: Db, plan: PlanRow): string | null {
-  if (internal(plan)) return homeOf(plan)
+  if (plan.target_id === null) return homeOf(plan)
   const row = db.prepare('SELECT repo FROM targets WHERE id = ?').get(plan.target_id) as { repo: string } | undefined
   return row?.repo ?? null
 }

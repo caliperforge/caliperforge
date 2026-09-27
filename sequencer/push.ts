@@ -20,7 +20,7 @@ import { reinstall } from './install.ts'
 import type { Outcome } from './kind.ts'
 import { merging } from './merging.ts'
 import { cloned, conflicted, diffOf, fetchMain, FORK, get, MAIN, maybe, planDir, put, repoName, srcDir, titleOf } from './workspace.ts'
-import { homeOf } from './home.ts'
+import { assembly, homeOf } from './home.ts'
 import { size } from './size.ts'
 import { prosed } from './tells.ts'
 import { theirs } from './theirs.ts'
@@ -277,14 +277,16 @@ export function land(db: Db, root: string, plan: PlanRow, approval: number, wire
   const src = srcDir(root, plan.id)
   if (!cloned(src)) return refuse('checkout', `plan ${String(plan.id)} has no checkout to land`)
   if (conflicted(src)) return refuse('base:conflict', `plan ${String(plan.id)} has unmerged paths; a conflicted tree is neither committed nor landed`)
+  const asm = assembly(db, plan)
+  const onto = asm?.branch ?? 'main'
   const head = headOf(root, plan.id)
   const sha = merged(head.dir, head.branch)
-  if (sha === null) return refuse('base:stale', `main moved under plan ${String(plan.id)} between ready and land; cut it again from main`)
-  wire.send(head.dir, 'main')
+  if (sha === null) return refuse('base:stale', `${onto} moved under plan ${String(plan.id)} between ready and land; cut it again from ${onto}`)
+  wire.send(head.dir, asm === null ? 'main' : `main:refs/heads/${asm.branch}`)
   wire.close(homeOf(plan), issue, sha)
-  pushed(db, plan.id, approval, `https://github.com/${homeOf(plan)}/commit/${sha}`)
+  pushed(db, plan.id, approval, `https://github.com/${asm?.fork ?? homeOf(plan)}/commit/${sha}`)
   if (plan.lane === 'atelier') wire.install?.()
-  return { outcome: 'pass', spans: [], note: `landed ${head.branch} on main as ${sha.slice(0, 12)}` }
+  return { outcome: 'pass', spans: [], note: `landed ${head.branch} on ${onto} as ${sha.slice(0, 12)}` }
 }
 
 /**

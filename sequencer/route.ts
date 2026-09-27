@@ -40,7 +40,7 @@ const BY_FOLDER: [RegExp, string][] = [
 /** Docs never pick a builder, nor do fixtures a test reads. */
 const IGNORED = /\.(md|mdx|txt|rst)$|(^|\/)(docs?|fixtures|testdata)\//
 
-const TEST = /(^|\/)(tests?|spec)\/|_test\.(go|rb)$|_spec\.rb$|(^|\/)test_[^/]*\.py$|_test\.py$|Test\.php$|_spec\.lua$/
+export const TEST = /(^|\/)(tests?|spec)\/|_test\.(go|rb)$|_spec\.rb$|(^|\/)test_[^/]*\.py$|_test\.py$|Test\.php$|_spec\.lua$/
 
 /** What one path is written in, or null: a TypeScript file generated beside Rust stays with the Rust. */
 export function languageOfPath(path: string): string | null {

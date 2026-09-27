@@ -29,7 +29,6 @@ export function verdictRows(db: Db, plan: number): VerdictRow[] {
     FROM verdicts WHERE plan = ? ORDER BY id`).all(plan) as VerdictRow[]
 }
 
-/** A ruling that refuses each review verdict at the plan's step, judged on `tree`. */
 export function overrule(db: Db, plan: number, step: number, ref: string, tree: string): void {
   db.prepare(`INSERT INTO verdicts (gate, kind, subject_digest, plan, step, outcome, origin_kind, origin_ref, tokens, seconds, tree)
     SELECT gate, kind, subject_digest, plan, step, 'refuse', 'ruling', ?, 0, 0, ? FROM verdicts

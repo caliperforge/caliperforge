@@ -3,7 +3,7 @@ import { parse, type FileDiff, type Line } from '../diff.ts'
 import type { Verdict } from '../record.ts'
 
 export const TEST_FILE = /(?:^|\/)tests?\/|\.(?:test|spec)\.[jt]sx?$/
-export const ASSERT =/\b(?:expect|assert)\s*\(/
+export const ASSERT = /\b(?:expect|assert)\s*\(/
 const STRICT = /\.(?:toBe|toEqual|toStrictEqual|toMatchObject|toMatchInlineSnapshot|toHaveBeenCalledWith|toThrowError|toContain)\s*\(/
 const LOOSE = /\.(?:toBeDefined|toBeTruthy|toBeFalsy|toBeUndefined|toBeNull)\s*\(\s*\)|\bexpect\.(?:anything|any)\s*\(/
 const SKIPPED = /\b(?:test|it|describe)\.(?:skip|todo|failing)\b|\bx(?:it|describe)\s*\(/

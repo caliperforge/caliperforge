@@ -2,10 +2,11 @@ import type { Db } from '../store/index.ts'
 import { digestOf } from '../store/approvals.ts'
 import { keep, last as lastMerge, lastReview, record as recordMerge } from '../store/merges.ts'
 import { internal, type PlanRow } from '../store/plans.ts'
-import { at, type Step } from '../templates/pr-path.ts'
+import type { Step } from '../templates/pr-path.ts'
 import { classify } from './delta.ts'
 import type { Outcome } from './kind.ts'
 import { headOf, opened } from './push.ts'
+import { mapOf } from './steps.ts'
 import { abortMerge, behindMain, cloned, conflicted, diffOf, diffSince, fetchMain, get, holds, maybe, merging, mergeMain, narrowing, put, recut,
   srcDir, unmerged } from './workspace.ts'
 
@@ -24,7 +25,7 @@ export function freshBase(db: Db, root: string, plan: PlanRow): Outcome | null {
   if (conflicted(src)) abortMerge(src)
   const main = fetchMain(src)
   if (!behindMain(src, main)) return null
-  const paths = takeMain(db, root, plan, src, main, at(plan.step).step)
+  const paths = takeMain(db, root, plan, src, main, mapOf(plan.template).at(plan.step).step)
   if (paths === null) return null
   recut(root, plan.id)
   return { outcome: 'refuse', spans: paths, note: 'main moved and the branch conflicts with it; cut again from main', rewind: 2, moved: true }
@@ -113,7 +114,7 @@ export function baseMoved(db: Db, root: string, plan: PlanRow): Outcome | null {
   const main = fetchMain(src)
   if (!behindMain(src, main)) return null
   if (maybe(root, plan.id, 'base.merged') !== null) return toRails(root, plan, 'base:stale', 'main moved again')
-  if (takeMain(db, root, plan, src, main, at(plan.step).step) !== null) return toRails(root, plan, 'base:conflict', 'the branch conflicts with main')
+  if (takeMain(db, root, plan, src, main, mapOf(plan.template).at(plan.step).step) !== null) return toRails(root, plan, 'base:conflict', 'the branch conflicts with main')
   put(root, plan.id, 'base.merged', `${main}\n`)
   return { outcome: 'pass', spans: ['base:stale'], note: 'main moved; merged it and re-ran the rails', rewind: 3 }
 }

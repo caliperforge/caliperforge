@@ -12,7 +12,7 @@ import type { Db } from '../store/index.ts'
 import { filesOf } from '../store/files.ts'
 import { observed, wall } from '../store/lanes.ts'
 import { builderRan, internal, type PlanRow } from '../store/plans.ts'
-import { byRun, opened, pending } from '../store/transcript.ts'
+import { byRun, opened, pending, unfinished } from '../store/transcript.ts'
 import type { Step } from '../templates/pr-path.ts'
 import { parse } from '../rails/diff.ts'
 import { estimate, human, pointed, references, shape, split, TEMPLATE, unclear, wide, WIDE, type Part } from './brief.ts'
@@ -48,6 +48,7 @@ export async function fireSeat(db: Db, root: string, plan: PlanRow, step: Step, 
   if (prev !== null) put(root, plan.id, `step-${String(step.step)}.handback.prev.md`, prev)
   const issue = handed(rebuild(db, root, plan, prev), symbolSection(db, root, plan))
   const fired = await ran(db, root, plan, step, provider, issue, kernelPlan(plan))
+  if (step.step === 2) marked(db, root, plan.id)
   put(root, plan.id, name, fired.text)
   const tokens = fired.usage.input + fired.usage.cache + fired.usage.output
   if (fired.ended !== 'completed') return exited(step, fired)
@@ -55,6 +56,14 @@ export async function fireSeat(db: Db, root: string, plan: PlanRow, step: Step, 
   if (typeof kept !== 'string') return kept
   return dropped(db, root, plan, step, kept)
     ?? { outcome: 'pass', spans: [], note: `${step.runs} exit 0, ${String(tokens)} tokens` }
+}
+
+function marked(db: Db, root: string, plan: number): void {
+  const run = db.prepare('SELECT transcript_path FROM runs WHERE plan = ? AND step = 2 ORDER BY id DESC LIMIT 1')
+    .get(plan) as { transcript_path: string | null } | undefined
+  const command = unfinished(run?.transcript_path ?? '')
+  if (command === null) drop(root, plan, 'step-2.unfinished.md')
+  else put(root, plan, 'step-2.unfinished.md', command)
 }
 
 /** A step-2 hand-back with no fence, or one whose YAML does not parse, is asked once for the fence alone. */

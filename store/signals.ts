@@ -39,3 +39,7 @@ export function graded(db: Db, plan: number, head: string): SignalRow | null {
 export function since(db: Db, plan: number): SignalRow[] {
   return db.prepare('SELECT * FROM signals WHERE plan = ? ORDER BY id').all(plan).map((r) => SignalRow.parse(r))
 }
+
+export function others(db: Db, author: string): SignalRow[] {
+  return db.prepare('SELECT * FROM signals WHERE author != ? ORDER BY id').all(author).map((r) => SignalRow.parse(r))
+}

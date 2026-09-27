@@ -2,11 +2,13 @@ import { execFileSync } from 'node:child_process'
 import { writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { expect, test } from 'vitest'
+import { approve as approveCard } from '../../cli/batch.ts'
+import { approve as approvePublish } from '../card.ts'
 import { tick } from '../index.ts'
 import { kernelPlan } from '../home.ts'
 import type { Wire } from '../push.ts'
 import { repoOf } from '../ready.ts'
-import { checkout, fetchMain, FORK, get, put, SELF, srcDir } from '../workspace.ts'
+import { checkout, diffOf, fetchMain, FORK, get, put, SELF, srcDir } from '../workspace.ts'
 import { built, CARRIED, plan, REFUSE, stub, watched, world, type World } from './world.ts'
 
 const ID = 2
@@ -98,6 +100,51 @@ test('D2 a part refused at review goes back to its own build, its sibling and as
   expect(plan(a.w.db, ID).step).toBe(2)
   expect(a.w.db.prepare('SELECT * FROM plans WHERE id = 3').get()).toEqual(sibling)
   expect(git(a.fork, ['rev-parse', 'asm/1'])).toBe(tip)
+})
+
+/** The part landed on asm/1, and the parent holding the `base.sha` its brief was written against. */
+async function landed(): Promise<Assembly> {
+  const a = assembling()
+  put(a.w.root, 1, 'base.sha', `${git(a.upstream, ['rev-parse', 'main'])}\n`)
+  const wire = pushing([], a)
+  await laps(a, 3, wire)
+  built(a.w.root, ID, 'export const landed = true')
+  await laps(a, 5, wire)
+  return a
+}
+
+test('D1 landing the only part leaves the parent at senior with the parts and both cases in its brief', async () => {
+  const a = await landed()
+  expect(plan(a.w.db, 1)).toMatchObject({ step: 5, state: expect.stringMatching(/^(queued|running)$/) as unknown, retries: 0 })
+  expect(get(a.w.root, 1, 'issue.md')).toBe(['# hello', '', '- **D1** add `hello()` in `src/hello.ts`', '', '## Parts, joined on asm/1', '',
+    '- part', '', '## Cases', '', '- D1 every part\'s cases hold together on asm/1',
+    '- D2 a gap between parts is refused: a case no part answers, a name one part adds and no part uses, a change two parts make twice', ''].join('\n'))
+})
+
+test('D2 D3 the parent reviews asm/1 against its base and opens one pull request from it, only after approval', async () => {
+  const a = await landed()
+  const log: string[] = []
+  const wire = watched(log, a.w.root, 1)
+  await laps(a, 4, wire)
+  expect(git(srcDir(a.w.root, 1), ['rev-parse', '--abbrev-ref', 'HEAD'])).toBe('asm/1')
+  expect(diffOf(a.w.root, 1)).toContain('src/asm.ts')
+  expect(plan(a.w.db, 1)).toMatchObject({ step: 7, wait_reason: 'ceo_batch' })
+  expect(log.filter((l) => l.startsWith('open '))).toEqual([])
+
+  approveCard(a.w.db, a.w.root, 'plan', 1)
+  await laps(a, 2, wire)
+  approvePublish(a.w.db, a.w.root, 1)
+  await laps(a, 1, wire)
+  expect(log.filter((l) => l.startsWith('open '))).toEqual(['open acme/widget caliperforge:asm/1'])
+})
+
+test('D4 a part whose last pre_review refused leaves the parent waiting on the ready proof', async () => {
+  const a = await landed()
+  a.w.db.prepare(`INSERT INTO verdicts (gate, kind, subject_digest, plan, step, outcome, rail_id, origin_kind, origin_ref, tokens, seconds)
+    VALUES ('pre_review', 'rail', ?, ?, 3, 'refuse', 'authority', 'rail', 'authority', 0, 0)`).run('0'.repeat(64), ID)
+  await laps(a, 3, watched([], a.w.root, 1))
+  expect(plan(a.w.db, 1)).toMatchObject({ step: 6, wait_reason: 'ready_proof' })
+  expect(a.w.db.prepare('SELECT tests_pass FROM deliverables WHERE plan_id = 1 ORDER BY id DESC LIMIT 1').get()).toEqual({ tests_pass: 0 })
 })
 
 test('D5 a part plan is not the kernel\'s, and its repo is the target\'s', () => {

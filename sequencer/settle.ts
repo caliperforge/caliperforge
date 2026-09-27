@@ -8,25 +8,25 @@ import type { Taken } from '../store/leases.ts'
 import { busy } from '../store/now.ts'
 import { advance, back, finish, internal, needsCeo, rewind, type PipeRow, type PlanRow, waiting } from '../store/plans.ts'
 import { blipped, peer, refused } from '../store/refusals.ts'
-import { at, last, type Step } from '../templates/pr-path.ts'
+import type { Step } from '../templates/pr-path.ts'
 import type { Fired, Outcome } from './kind.ts'
 import { parted } from './split.ts'
 import type { Wire } from './push.ts'
 import { fireRound } from './quick.ts'
 import { fireBrief, fireSeat } from './seat.ts'
 import { proved } from './ready.ts'
-import { kernel, targetOf } from './steps.ts'
+import { kernel, mapOf, targetOf } from './steps.ts'
 import { kept } from './merge.ts'
 import { languageFor } from './route.ts'
 import { branchOf, checkout, diffOf, internalBranch, maybe, put, ruled, srcDir, titleOf } from './workspace.ts'
-import { assembly, homeOf } from './home.ts'
+import { assembling, assembly, homeOf } from './home.ts'
 import { fingerprintOf, refusalText, stopped } from './refusal.ts'
 
 /** `wait` is a step that settled by waiting: a CI still running, or a checkout the network failed. Neither is worth asking again in the same tick. */
 export async function stepped(db: Db, root: string, pipe: PipeRow, plan: PlanRow, lease: Taken,
   provider: Provider, wire?: Wire, read?: Read): Promise<{ fired: Fired; wait: boolean }> {
   const tree = workspace(db, root, plan)
-  const step = at(plan.step, tree.language)
+  const step = mapOf(plan.template).at(plan.step, tree.language)
   const mark = newestRun(db)
   const verdicts = newestVerdict(db)
   const outcome = tree.failed ?? await made(db, root, plan, step, provider, wire, read)
@@ -70,7 +70,7 @@ export function ceilinged(db: Db, root: string, pipe: PipeRow, plan: PlanRow, ov
   put(root, plan.id, 'refusal.md', `${maybe(root, plan.id, 'refusal.md') ?? ''}\n# Stopped\n\n${note}.\n`)
   needsCeo(db, plan, note)
   waiting(db, [{ plan: plan.id, why: 'token_ceiling' }])
-  const step = at(plan.step)
+  const step = mapOf(plan.template).at(plan.step)
   logged(db, { plan: plan.id, kind: step.name, actor: 'token_ceiling', outcome: 'refuse', message: note,
     pointer: `step-${String(step.step)}`, run: null })
   return { pipe: pipe.name, plan: plan.id, step: step.step, name: step.name, outcome: 'refuse',
@@ -84,14 +84,14 @@ export function ceilinged(db: Db, root: string, pipe: PipeRow, plan: PlanRow, ov
  * time; the language it turns out to be written in is what picks the builder.
  */
 function workspace(db: Db, root: string, plan: PlanRow): { language: string | null; failed: Outcome | null } {
-  const fires = at(plan.step).fires
+  const fires = mapOf(plan.template).at(plan.step).fires
   const tree = fires === 'brief' || fires === 'seat' || fires === 'review' ? treeOf(db, root, plan) : null
   if (tree === null) return { language: null, failed: null }
   try {
     checkout(root, plan.id, tree.repo, tree.branch, tree.from)
   } catch (error) {
     const note = error instanceof Error ? error.message : String(error)
-    if (OFFLINE.test(note)) return { language: null, failed: thrown(at(plan.step), note) }
+    if (OFFLINE.test(note)) return { language: null, failed: thrown(mapOf(plan.template).at(plan.step), note) }
     return { language: null, failed: { outcome: 'refuse', spans: [tree.repo], note: `checkout: ${note}`, blip: true } }
   }
   return { language: languageFor(db, plan, srcDir(root, plan.id)), failed: null }
@@ -99,7 +99,7 @@ function workspace(db: Db, root: string, plan: PlanRow): { language: string | nu
 
 /**
  * Which repository the branch is cut in and what it is called: a stranger's repo and
- * `<repo>-<issue>[-<part>]-a<attempt>` for a target, our own repo and `p<plan>-<slug>` for an issue
+ * `<repo>-<issue>[-<part>]-a<attempt>` for a target, or `asm/<plan>` once its parts have landed, our own repo and `p<plan>-<slug>` for an issue
  * of ours, the target's repo and `p<plan>-<slug>` for a part of an outside plan. Every way the clone is
  * our fork and the base is that repo's `main`, or our fork's `asm/<parent>` for a part.
  */
@@ -110,7 +110,7 @@ function treeOf(db: Db, root: string, plan: PlanRow): { repo: string; branch: st
     return outside === null ? { repo: homeOf(plan), branch } : { repo: outside.repo, branch, from: assembly(db, plan)?.branch }
   }
   const row = targetOf(db, plan)
-  return row === null ? null : { repo: row.repo, branch: branchOf(row.repo, row.issue_no, plan.retries + 1, row.part) }
+  return row === null ? null : { repo: row.repo, branch: assembling(db, plan) ?? branchOf(row.repo, row.issue_no, plan.retries + 1, row.part) }
 }
 
 /** The first line goes in the span: two plans that threw differently must not match as `shared` and turn the lane off. */
@@ -172,7 +172,7 @@ function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcom
   if (outcome.outcome !== 'refuse') {
     return db.transaction((): string => {
       proved(db, root, plan, step)
-      if (last(step.step)) { finish(db, plan); return 'done' }
+      if (mapOf(plan.template).last(step.step)) { finish(db, plan); return 'done' }
       advance(db, plan, step.step + 1)
       return hold(db, plan.id, step.step)
     })()

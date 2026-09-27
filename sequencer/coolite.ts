@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { record, ticketOf } from '../cli/inbox.ts'
-import type { Post } from '../cli/watch.ts'
+import { alerter, type Post } from '../cli/watch.ts'
 import type { Provider } from '../providers/kind.ts'
 import { packet } from '../runner/index.ts'
 import { load, seat, tight } from '../runner/rules.ts'
@@ -8,10 +8,12 @@ import { logged } from '../store/events.ts'
 import { retried } from '../store/holds.ts'
 import type { Db } from '../store/index.ts'
 import { wall } from '../store/lanes.ts'
-import { held, type PlanRow } from '../store/plans.ts'
+import { clear as unlease, take } from '../store/leases.ts'
+import { busy, current, idle } from '../store/now.ts'
+import { held, PlanRow } from '../store/plans.ts'
 import { pending } from '../store/transcript.ts'
 import { split, type Part } from './brief.ts'
-import { hold, unhold } from './hold.ts'
+import { hold, isHeld, unhold } from './hold.ts'
 import { prose } from './prose.ts'
 import { WIRE, type Wire } from './push.ts'
 import { recorded } from './seat.ts'
@@ -48,6 +50,60 @@ export async function cooLite(db: Db, root: string, plan: PlanRow, provider: Pro
   hold(db, root, plan.id, m.why, now)
   held(db, plan.id, 'ceo', m.why)
   return told(db, root, plan, now, { outcome: 'needs_ceo', message }, post)
+}
+
+interface Stop { id: number; answered: number | null; today: number | null; old: number }
+
+/** #483b: one coo_lite run on the oldest stop once 3 pile up or one has waited 45 minutes. */
+export async function piled(db: Db, root: string, provider: Provider, now: Date, post: Post = alerter(),
+  wire: Wire = WIRE): Promise<void> {
+  const fresh = stops(db, root, now, post)
+  const [oldest] = fresh
+  if (oldest === undefined || (fresh.length < 3 && oldest.old !== 1)) return
+  await fire(db, root, provider, now, post, wire, fresh)
+}
+
+export async function byHand(db: Db, root: string, provider: Provider, now: Date, post: Post = alerter(),
+  wire: Wire = WIRE): Promise<string> {
+  return fire(db, root, provider, now, post, wire, stops(db, root, now, post))
+}
+
+function stops(db: Db, root: string, now: Date, post: Post): Stop[] {
+  const rows = db.prepare(`SELECT p.id, e.ruled >= d.at AS answered,
+      e.ruled >= datetime(@at, '-1 day') AS today, d.at <= datetime(@at, '-45 minutes') AS old
+    FROM plans p JOIN decisions d ON d.id = (SELECT max(id) FROM decisions WHERE plan = p.id)
+    LEFT JOIN (SELECT plan, max(at) AS ruled FROM events WHERE kind = 'coo_lite' GROUP BY plan) e ON e.plan = p.id
+    WHERE p.state = 'blocked_on_ceo' AND p.held_by = 'coo' AND d.verb IN ('ask_coo', 'ask_ceo')
+    ORDER BY d.at, p.id`).all({ at: now.toISOString() }) as Stop[]
+  const fresh: Stop[] = []
+  for (const s of rows.filter((s) => s.answered !== 1 && !isHeld(root, s.id))) {
+    if (s.today === 1) told(db, root, row(db, s.id), now, { outcome: 'needs_ceo', message: 'ask_coo: coo_lite ruled on this plan today' }, post)
+    else fresh.push(s)
+  }
+  return fresh
+}
+
+async function fire(db: Db, root: string, provider: Provider, now: Date, post: Post, wire: Wire,
+  fresh: Stop[]): Promise<string> {
+  const [oldest] = fresh
+  if (oldest === undefined) return 'no stopped plan'
+  if (current(db).some((n) => n.doing === 'coo_lite' && !n.stale)) return 'a coo_lite run is live'
+  const ran = db.prepare("SELECT count(*) AS n FROM runs WHERE seat = 'coo_lite' AND at >= datetime(?, '-1 day')")
+    .get(now.toISOString()) as { n: number }
+  const cap = db.prepare("SELECT value FROM settings WHERE key = 'coo_lite.max_daily'").get() as { value: string } | undefined
+  if (ran.n >= Number(cap?.value ?? 12)) return `cap reached: ${String(ran.n)} coo_lite runs today`
+  if (take(db, oldest.id, now) === null) return `plan ${String(oldest.id)} is leased`
+  try {
+    busy(db, oldest.id, 'coo_lite', `${String(fresh.length)} stops waiting`, now)
+    return await cooLite(db, root, row(db, oldest.id), provider, now, post, wire)
+  } finally {
+    idle(db, oldest.id)
+    unlease(db, oldest.id)
+  }
+}
+
+function row(db: Db, id: number): PlanRow {
+  return PlanRow.parse(db.prepare('SELECT * FROM plans WHERE id = ?').get(id))
 }
 
 async function ask(db: Db, root: string, plan: PlanRow, provider: Provider): Promise<Move | null> {

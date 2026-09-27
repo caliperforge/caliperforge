@@ -13,6 +13,7 @@ import { CHECK_SLOTS } from '../sequencer/checks.ts'
 import { behind, upgraded } from '../sequencer/upgrade.ts'
 import { saved } from '../sequencer/hq.ts'
 import { signoffs } from '../sequencer/signoff.ts'
+import { byHand } from '../sequencer/coolite.ts'
 import { SIGNOFF } from '../sequencer/workspace.ts'
 import { migrate, open as openDb, type Db } from '../store/index.ts'
 import { hhmm } from '../store/lanes.ts'
@@ -136,6 +137,12 @@ async function ticked(options: { dry?: boolean }, now: Date): Promise<void> {
 
 cf.command('signoff').description('open, read and close the sign-off cards on the private sign-off repo, as every tick does')
   .action(() => { cards(db(), new Date()) })
+
+cf.command('coo-lite').description('fire one coo_lite run on the oldest stopped plan now, below the pile thresholds')
+  .action(async () => {
+    const said = await byHand(db(), root, claudeAgentSdk, new Date())
+    out(`${said}\n`)
+  })
 
 /** A tracker that cannot be read this time leaves every card where it stands; the next tick reads it again. */
 function cards(handle: Db, now: Date): void {

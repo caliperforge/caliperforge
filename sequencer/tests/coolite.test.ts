@@ -5,11 +5,14 @@ import { expect, test } from 'vitest'
 import { all } from '../../cli/inbox.ts'
 import { fill } from '../../cli/digests.ts'
 import type { Provider } from '../../providers/kind.ts'
+import { load } from '../../runner/rules.ts'
+import { runAt } from '../../store/events.ts'
 import { retried } from '../../store/holds.ts'
 import { migrate, open, type Db } from '../../store/index.ts'
+import { busy } from '../../store/now.ts'
 import { held, PlanRow } from '../../store/plans.ts'
 import { split } from '../brief.ts'
-import { cooLite } from '../coolite.ts'
+import { byHand, cooLite, piled } from '../coolite.ts'
 import { hold, unhold } from '../hold.ts'
 import type { Wire } from '../push.ts'
 import { parted } from '../split.ts'
@@ -168,4 +171,116 @@ test('a split parted sends to the ceo is held by the ceo', async () => {
   await run(db, home, SPLIT)
   expect(db.prepare('SELECT state, held_by FROM plans WHERE id = 7').get()).toEqual({ state: 'blocked_on_ceo', held_by: 'ceo' })
   expect(db.prepare('SELECT count(*) AS n FROM plans').get()).toEqual({ n: 1 })
+})
+
+const clock = new Date()
+const ago = (minutes: number) => new Date(clock.getTime() - minutes * 60_000).toISOString().replace('T', ' ').slice(0, 19)
+
+function stopped(db: Db, id: number, minutes: number, verb = 'ask_coo') {
+  if (db.prepare('SELECT 1 FROM plans WHERE id = ?').get(id) === undefined) {
+    db.prepare(`INSERT INTO plans (id, pipe_id, template, state, queued_at, step, retries, priority, lane, seat, origin)
+      VALUES (?, 9, 'pr_path', 'running', '2026-09-24', 4, 0, 1, 'machine', 'typescript_specialist', ?)`)
+      .run(id, `https://github.com/caliperforge/caliperforge/issues/${String(id + 900)}`)
+    db.prepare("UPDATE plans SET state = 'blocked_on_ceo' WHERE id = ?").run(id)
+  }
+  db.prepare(`INSERT INTO decisions (plan, step, wait_reason, verb, why, at) VALUES (?, 4, 'blocked_on_ceo', ?, 'a stop', ?)`)
+    .run(id, verb, ago(minutes))
+}
+
+const fires = (db: Db) => db.prepare("SELECT plan FROM runs WHERE seat = 'coo_lite'").all()
+const pile = (db: Db, home: string, posted: string[] = []) =>
+  piled(db, home, stub(REPLY.ask_ceo ?? ''), clock, (t) => void posted.push(t), wire())
+
+test.each([
+  { name: '3 stops fire one run on the oldest', ages: [30, 20, 10], want: [{ plan: 7 }] },
+  { name: '2 young stops fire none', ages: [30, 20], want: [] },
+  { name: 'one 45-minute stop fires one', ages: [45], want: [{ plan: 7 }] },
+])('$name', async ({ ages, want }) => {
+  const { db, home } = seeded('1')
+  ages.forEach((m, i) => { stopped(db, 7 + i, m) })
+  await pile(db, home)
+  expect(fires(db)).toEqual(want)
+})
+
+test('a live coo_lite run holds the trigger', async () => {
+  const { db, home } = seeded('1')
+  for (const [i, m] of [30, 20, 10].entries()) stopped(db, 7 + i, m)
+  busy(db, 9, 'coo_lite', 'ruling', clock)
+  await pile(db, home)
+  expect(fires(db)).toEqual([])
+})
+
+test('a second stop on a plan ruled today goes to a person, once', async () => {
+  const { db, home } = seeded('1')
+  stopped(db, 7, 50)
+  db.prepare(`INSERT INTO events (plan, at, kind, actor, outcome, message) VALUES (7, ?, 'coo_lite', 'coo_lite', 'pass', 'rule: x')`).run(ago(60))
+  const posted: string[] = []
+  await pile(db, home, posted)
+  await pile(db, home, posted)
+  expect(fires(db)).toEqual([])
+  expect(told(db).filter((t) => t.outcome === 'needs_ceo')).toEqual([{ actor: 'coo_lite', outcome: 'needs_ceo', message: 'ask_coo: coo_lite ruled on this plan today' }])
+  expect(all(home).filter((e) => e.kind === 'blocked')).toHaveLength(1)
+  expect(posted).toHaveLength(1)
+})
+
+test('a stop already answered does not count and is not fired on', async () => {
+  const { db, home } = seeded('1')
+  for (const [i, m] of [30, 20, 10].entries()) stopped(db, 7 + i, m)
+  db.prepare(`INSERT INTO events (plan, at, kind, actor, outcome, message) VALUES (7, ?, 'coo_lite', 'coo_lite', 'needs_ceo', 'x')`).run(ago(5))
+  await pile(db, home)
+  expect(fires(db)).toEqual([])
+  expect(told(db)).toHaveLength(1)
+})
+
+test('coo_lite.max_daily caps the runs a day', async () => {
+  const { db, home } = seeded('1')
+  for (const [i, m] of [30, 20, 10].entries()) stopped(db, 7 + i, m)
+  load(db, home)
+  for (let i = 0; i < 12; i++) runAt(db, 7, 4, 'coo_lite', ago(60 + i))
+  await pile(db, home)
+  expect(fires(db)).toHaveLength(12)
+  db.prepare(`INSERT INTO settings (key, value, who, origin_kind, origin_ref, set_at)
+    VALUES ('coo_lite.max_daily', '13', 'ceo', 'ruling', 't', '2026-09-27')`).run()
+  await pile(db, home)
+  expect(fires(db)).toHaveLength(13)
+})
+
+const byHanded = (db: Db, home: string) => byHand(db, home, stub(REPLY.ask_ceo ?? ''), clock, () => undefined, wire())
+
+test('by hand, one young stop fires one run on it', async () => {
+  const { db, home } = seeded('1')
+  stopped(db, 7, 10)
+  await byHanded(db, home)
+  expect(fires(db)).toEqual([{ plan: 7 }])
+  expect(told(db)).toHaveLength(1)
+})
+
+test('by hand, the day cap fires nothing', async () => {
+  const { db, home } = seeded('1')
+  stopped(db, 7, 10)
+  load(db, home)
+  for (let i = 0; i < 12; i++) runAt(db, 7, 4, 'coo_lite', ago(60 + i))
+  expect(await byHanded(db, home)).toMatch(/^cap reached/)
+  expect(fires(db)).toHaveLength(12)
+  expect(told(db)).toEqual([])
+})
+
+test('by hand, a live coo_lite run fires nothing', async () => {
+  const { db, home } = seeded('1')
+  stopped(db, 7, 10)
+  stopped(db, 9, 5)
+  busy(db, 9, 'coo_lite', 'ruling', clock)
+  expect(await byHanded(db, home)).toBe('a coo_lite run is live')
+  expect(fires(db)).toEqual([])
+})
+
+test('a plan held by the ceo, a parked plan and a retried plan are not stops', async () => {
+  const { db, home } = seeded('1')
+  for (const [i, m] of [60, 60, 60].entries()) stopped(db, 7 + i, m)
+  held(db, 7, 'ceo', 'his call')
+  hold(db, home, 8, 'parked', clock)
+  stopped(db, 9, 55, 'retry')
+  await pile(db, home)
+  expect(fires(db)).toEqual([])
+  expect(told(db)).toEqual([])
 })

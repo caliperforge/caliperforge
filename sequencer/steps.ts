@@ -36,7 +36,7 @@ function listed(name: string, list: Step[]): StepMap {
 
 const MAPS: Record<PlanRow['template'], StepMap> = {
   pr_path: { steps, at, last },
-  /** A getter: templates/comms.ts imports back into this module, so its steps may not exist yet when this one loads. */
+  /** templates/comms.ts imports back into this module, so its steps may not exist yet when this one loads. */
   get comms() { return listed('comms', comms) },
   research: listed('research', []),
 }

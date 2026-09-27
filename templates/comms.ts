@@ -25,7 +25,7 @@ export function facts(root: string, plan: PlanRow): Outcome {
   const packet = JSON.parse(get(root, plan.id, 'packet.json')) as { landed: Landed[]; refusals: { id: number }[] }
   const known = new Set([...packet.landed.map((l) => `[landed:${String(l.plan)}]`), ...packet.refusals.map((r) => `[refusal:${String(r.id)}]`)])
   const spans = draft.split('\n').flatMap((line, i) =>
-    line.trim() === '' || line.startsWith('#') || sound(line, known) ? [] : [`draft.md:${String(i + 1)}`])
+    line.trim() === '' || sound(line, known) ? [] : [`draft.md:${String(i + 1)}`])
   if (spans.length === 0) return { outcome: 'pass', spans, note: 'every line cites the packet' }
   return { outcome: 'refuse', spans, note: `${String(spans.length)} draft line(s) cite no packet entry, or name an issue or an outside login` }
 }
@@ -33,5 +33,5 @@ export function facts(root: string, plan: PlanRow): Outcome {
 function sound(line: string, known: Set<string>): boolean {
   const tags = line.match(/\[(landed|refusal):\d+\]/g) ?? []
   return !/#\d|\/(issues|pull)\/\d/.test(line) && [...line.matchAll(/@([\w-]+)/g)].every((m) => ours(m[1]))
-    && tags.length > 0 && tags.every((t) => known.has(t))
+    && (tags.length > 0 || line.startsWith('#')) && tags.every((t) => known.has(t))
 }

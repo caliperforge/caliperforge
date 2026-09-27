@@ -41,7 +41,8 @@ test('D3: facts refuses each line that names an issue, an outside login, or no p
   gather(w.db, w.root, plan(w.db, 1))
   for (const line of [`Fixed #12 today. [refusal:${String(id)}]`, `See /issues/12 [refusal:${String(id)}]`,
     `See https://github.com/acme/widget/pull/7 [refusal:${String(id)}]`, `Thanks @someone [refusal:${String(id)}]`,
-    'One job was refused.', 'One job was refused. [refusal:999]', 'One job landed. [landed:999]']) {
+    'One job was refused.', 'One job was refused. [refusal:999]', 'One job landed. [landed:999]',
+    `#12 was refused. [refusal:${String(id)}]`, '## Fixed #12', '## Thanks @someone']) {
     expect(judged(w, line)).toMatchObject({ outcome: 'refuse', spans: ['draft.md:3'] })
   }
 })

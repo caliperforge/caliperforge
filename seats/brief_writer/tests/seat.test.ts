@@ -60,6 +60,12 @@ test('the prompt sends every builder and implementer of a changed shared type or
   )
 })
 
+test('D5: the prompt asks for the Estimate line and sends an outside brief past the size limit to the split fence', () => {
+  const prompt = seat(root, 'brief_writer').prompt.replace(/\s+/g, ' ')
+  expect(prompt).toContain('Under `## Approach`, write one line `Estimate: <n> lines`: the lines the change adds and removes, not counting tests or generated files.')
+  expect(prompt).toContain('On someone else\'s repository, a brief past five files besides tests or past that repository\'s size limit is refused as more than one job: answer it with the split fence.')
+})
+
 test('the prompt states the path and length rules the brief check refuses on', () => {
   const prompt = seat(root, 'brief_writer').prompt.replace(/\s+/g, ' ')
   for (const rule of [

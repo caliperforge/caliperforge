@@ -1,0 +1,16 @@
+seat: solidity_specialist
+model: claude-opus-5-5
+effort: high
+tools:
+  - Read
+  - Write
+  - Edit
+  - Glob
+  - Grep
+  - Bash(forge:*)
+  - Bash(cast:*)
+  - Bash(python3:*)
+write_paths:
+  - sample
+  - test
+  - index

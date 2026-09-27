@@ -758,6 +758,34 @@ test('D6 D7 each new passing head asks Greptile once; a fourth goes to the COO u
   expect(plan(w.db, 1).state).toBe('blocked_on_ceo')
 })
 
+/** An outside job at ready with its first head asked, while another job holds `others` of this month's requests. */
+const month = async (others: number): Promise<[World, () => string[], (line: string) => Promise<Fired | undefined>]> => {
+  const log: string[] = []
+  const [w, lap] = await atReady(() => undefined, log)
+  put(w.root, 2, 'greptile.asked', `${'f'.repeat(40)} ${new Date().toISOString()}\n`.repeat(others))
+  await lap()
+  await lap()
+  const asked = (): string[] => log.filter((l) => l.startsWith('review '))
+  expect(asked()).toHaveLength(1)
+  return [w, asked, (line) => {
+    built(w.root, 1, line)
+    return lap()
+  }]
+}
+
+test('D2 at 40 this month the first head is asked and the second goes to the COO unasked', async () => {
+  const [w, asked, round] = await month(40)
+  expect(await round('export const two = 2')).toMatchObject({ step: 6, outcome: 'needs_ceo', state: 'blocked_on_ceo', spans: ['greptile.month'] })
+  expect(asked()).toHaveLength(1)
+  expect(plan(w.db, 1).state).toBe('blocked_on_ceo')
+})
+
+test('D3 at 39 this month the second head is asked', async () => {
+  const [, asked, round] = await month(38)
+  await round('export const two = 2')
+  expect(asked()).toHaveLength(2)
+})
+
 test('D3 a 4/5 at the current head passes ready to sign-off', async () => {
   const [w, lap] = await atReady((at) => { scored(at.root, 1, 4, 'Confidence Score: 4/5') })
   expect(await lap()).toMatchObject({ step: 6, name: 'ready', outcome: 'pass' })

@@ -23,6 +23,11 @@ export function eventsOf(db: Db, plan: number, kind: string): Pick<Event, 'actor
     .all(plan, kind) as Pick<Event, 'actor' | 'outcome' | 'message'>[]
 }
 
+export function ofKind(db: Db, kind: string): Pick<Event, 'plan' | 'kind' | 'actor' | 'outcome' | 'message'>[] {
+  return db.prepare('SELECT plan, kind, actor, outcome, message FROM events WHERE kind = ? ORDER BY id')
+    .all(kind) as Pick<Event, 'plan' | 'kind' | 'actor' | 'outcome' | 'message'>[]
+}
+
 export function newestRun(db: Db): number {
   return (db.prepare('SELECT coalesce(max(id), 0) AS id FROM runs').get() as { id: number }).id
 }
@@ -30,6 +35,14 @@ export function newestRun(db: Db): number {
 export function runSince(db: Db, plan: number, step: number, after: number): number | null {
   return (db.prepare('SELECT max(id) AS id FROM runs WHERE plan = ? AND step = ? AND id > ?')
     .get(plan, step, after) as { id: number | null }).id
+}
+
+export function runAt(db: Db, plan: number, step: number, seat: string, at: string): number {
+  const row = db.prepare(`INSERT INTO runs (plan, step, seat, rule_hash, provider, model,
+    effort, input_tokens, cache_tokens, output_tokens, seconds, exit, at, transcript_path)
+    VALUES (?, ?, ?, ?, 'claude-agent-sdk', 'm', 'high', 0, 0, 0, 0, 0, ?, 'x.transcript.jsonl')`)
+    .run(plan, step, seat, '0'.repeat(64), at)
+  return Number(row.lastInsertRowid)
 }
 
 export function runRows(db: Db): { plan: number; seat: string; step: number; transcript_path: string }[] {

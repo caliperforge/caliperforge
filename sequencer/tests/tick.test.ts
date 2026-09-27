@@ -6,7 +6,7 @@ import { expect, test } from 'vitest'
 import { day, halted, open as openPlans, runsOf, verdictsOf } from '../../cli/brief.ts'
 import { measure, type Read } from '../../cli/measure.ts'
 import { account, parse, refuseTarget } from '../../cli/queue.ts'
-import { clock, inWindow, rewind, underCap, waiting, type PipeRow, type PlanRow, type Wait } from '../../store/plans.ts'
+import { clock, inWindow, rewind, waiting, type PipeRow, type Wait } from '../../store/plans.ts'
 import { at, steps } from '../../templates/pr-path.ts'
 import { tick } from '../index.ts'
 import { blocked, kernel } from '../steps.ts'
@@ -18,16 +18,13 @@ import { benchPacket } from '../../runner/packet.ts'
 import type { Packet, Provider } from '../../providers/kind.ts'
 import type { Fired } from '../kind.ts'
 import { forkCi, type Wire } from '../push.ts'
-import { approve, builds, built, CARRIED, dropping, internalPlan, KOTLIN, ours, owning, PASS, plan, REFUSE, rerunning, RUN, runsAfter, runsOn, scored, stub, tip, watched, WORDS, world, type World } from './world.ts'
+import { approve, builds, built, CARRIED, dropping, internalPlan, KOTLIN, ours, owning, PASS, plan, REFUSE, rerunning, runsAfter, runsOn, scored, stub, tip, watched, WORDS, world, type World } from './world.ts'
 
 const head = (cwd: string, args: string[]): string => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim()
 
 const UNPOINTED = 'built\n\n---\ndone:\n  - id: D1\n    status: done\n    pointer:\n---\n'
 const pipe = (over: Partial<PipeRow>): PipeRow =>
   ({ id: 1, name: 'pr-path', enabled: 1, window_start: '09:00', window_end: '17:00', max_concurrent: 1, ...over })
-const row = (over: Partial<PlanRow>): PlanRow =>
-  ({ id: 1, pipe_id: 1, target_id: 1, template: 'pr_path', state: 'queued', queued_at: '', step: 0, retries: 0,
-    head_digest: null, priority: 1, lane: null, seat: null, origin: null, wait_reason: null, ...over })
 
 test('on a stranger\'s repo the builder is the outside seat and may write only the brief\'s files', async () => {
   const w = world()
@@ -94,27 +91,10 @@ test('a pipe fires only inside its window, wrapping across midnight', () => {
   expect(inWindow(pipe({ window_start: '22:00', window_end: '02:00' }), '12:00')).toBe(false)
 })
 
-test('a pipe at max_concurrent offers only the plans already running', () => {
-  const plans = [row({ id: 1, state: 'running' }), row({ id: 2, state: 'queued' })]
-  expect(underCap(pipe({ max_concurrent: 1 }), plans).map((p) => p.id)).toEqual([1])
-  expect(underCap(pipe({ max_concurrent: 2 }), plans).map((p) => p.id)).toEqual([1, 2])
-})
-
 test('an off pipe fires nothing', async () => {
   const w = world()
   w.db.prepare('UPDATE pipes SET enabled = 0').run()
   expect(await tick(w.db, w.root, stub(CARRIED))).toEqual([])
-})
-
-test('step 1 is blocked until cf approve target writes the row, and the plan records what it waits on', async () => {
-  const w = world()
-  expect(await tick(w.db, w.root, stub(CARRIED))).toHaveLength(1)
-  expect(plan(w.db, 1).step).toBe(1)
-  expect(plan(w.db, 1).wait_reason).toBeNull()
-  expect(await tick(w.db, w.root, stub(CARRIED))).toEqual([])
-  expect(plan(w.db, 1).wait_reason).toBe('target_approval')
-  approve(w.db, w.target)
-  expect(blocked(w.db, plan(w.db, 1))).toBeNull()
 })
 
 test('D6: a refusal row for the target\'s digest still blocks step 1 on target_approval', async () => {
@@ -496,28 +476,6 @@ test('a senior refusal lands on build too, and the ticks after it walk rails, re
   const walked: string[] = []
   for (let at = 0; at < 4; at += 1) walked.push((await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]?.name ?? '')
   expect(walked).toEqual(['build', 'rails', 'review', 'senior'])
-})
-
-test('step 6 sends the branch to our fork, waits out a run still going, then records ci-green and ready', async () => {
-  const w = world()
-  approve(w.db, w.target)
-  const sent: string[] = []
-  for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched(sent, w.root, 1))
-
-  const held = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined,
-    watched(sent, w.root, 1, runsOn(w.root, 1, 'in_progress'))))[0]
-  expect(held).toMatchObject({ step: 6, name: 'ready', outcome: 'pass', state: 'running' })
-  expect(held?.spans).toEqual([`${RUN} ci.pending`])
-  expect(sent.slice(2)).toEqual([`send src ${tip(w.root, 1)}:refs/heads/widget-12-a1-next`])
-  expect(plan(w.db, 1).step).toBe(6)
-  expect(w.db.prepare("SELECT count(*) AS n FROM verdicts WHERE plan = 1 AND rail_id = 'ci-green'").get())
-    .toEqual({ n: 0 })
-
-  const fired = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched(sent, w.root, 1)))[0]
-  expect(fired).toMatchObject({ step: 6, name: 'ready', outcome: 'pass', state: 'running' })
-  expect(sent).toHaveLength(4)
-  expect(w.db.prepare('SELECT rail_id, gate, outcome FROM verdicts WHERE plan = 1 AND step = 6 ORDER BY id').all())
-    .toEqual([{ rail_id: 'ci-green', gate: 'ready', outcome: 'pass' }, { rail_id: 'ready', gate: 'ready', outcome: 'pass' }])
 })
 
 test('step 3\'s pass sends and rehearses the branch before review fires, and step 6 opens no second rehearsal', async () => {

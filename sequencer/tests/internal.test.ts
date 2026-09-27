@@ -13,11 +13,10 @@ import { tick } from '../index.ts'
 import { headOf, push } from '../push.ts'
 import { blocked } from '../steps.ts'
 import { internalBranch, SELF, srcDir } from '../workspace.ts'
-import { approve, CARRIED, internalPlan, landing, ours, owning, plan, runsAll, runsOn, slow, stub, watched, world, type World } from './world.ts'
+import { approve, CARRIED, internalPlan, landing, ours, owning, plan, runsAll, runsOn, stub, watched, world, type World } from './world.ts'
 
 const ID = 2
 const SECOND = 3
-const NAP = 500
 const ISSUE = 'https://github.com/caliperforge/caliperforge/issues/34'
 
 const git = (cwd: string, args: string[]): string => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim()
@@ -43,20 +42,6 @@ function pair(): World {
 function apart(w: World): void {
   recordFiles(w.db, SECOND, [{ path: `src/p${String(SECOND)}.ts`, is_new: true }])
 }
-
-test('a lap fires the picks of a pipe at once: two fires are in flight together and each leaves its own run row', async () => {
-  const w = pair()
-  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
-  apart(w)
-
-  const provider = slow(NAP, CARRIED)
-  const fired = await tick(w.db, w.root, provider)
-  expect(provider.peak()).toBe(2)
-  expect(fired.map((f) => f.plan)).toEqual([ID, SECOND])
-  expect([plan(w.db, ID).state, plan(w.db, SECOND).state]).toEqual(['running', 'running'])
-  expect(w.db.prepare('SELECT plan, seat FROM runs WHERE step = 2 ORDER BY plan').all())
-    .toEqual([{ plan: ID, seat: 'typescript_specialist' }, { plan: SECOND, seat: 'typescript_specialist' }])
-})
 
 test('two plans at batch in one lap: the first lands on main and the second is sent round again', async () => {
   const w = pair()

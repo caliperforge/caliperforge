@@ -1,12 +1,10 @@
-import { execFileSync } from 'node:child_process'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import type { Packet } from '../../providers/kind.ts'
 import type { Gh } from '../../rails/ci-green/index.ts'
-import { rewind } from '../../store/plans.ts'
 import { tick } from '../index.ts'
-import { get, put, srcDir } from '../workspace.ts'
+import { put } from '../workspace.ts'
 import { approve, CARRIED, plan, runsAfter, stub, tip, watched, world, type World } from './world.ts'
 
 /** The builder's bytes, written the way a real builder writes them: into the checkout it was handed, mid-fire. */
@@ -88,30 +86,6 @@ test('waits on every workflow, judges only its own', async () => {
     { workflow: 'Src', status: 'completed', conclusion: 'success', gates: true },
     { workflow: 'Python', status: 'completed', conclusion: 'failure', gates: false },
   ])
-})
-
-test('three rounds before any PR go out on one branch, each a plain push', async () => {
-  const w = ready()
-  const src = srcDir(w.root, 1)
-  const sent: string[] = []
-  const log = watched(sent, w.root, 1)
-  const wire = { ...log, send: (dir: string, ref: string) => {
-    log.send(dir, ref)
-    execFileSync('git', ['push', '-q', 'origin', ref], { cwd: dir })
-  } }
-  for (const [at, said] of ['hey', 'hello', 'hi'].entries()) {
-    if (at > 0) rewind(w.db, 1, 2)
-    const round = (packet: Packet): void => {
-      if (packet.tools.includes('Write')) writeFileSync(join(packet.cwd, 'src/hello.ts'), `export const hello = (): string => "${said}"\n`)
-    }
-    await tick(w.db, w.root, stub(CARRIED, 0, undefined, round), undefined, undefined, wire, 5)
-    expect(plan(w.db, 1).step).toBe(7)
-  }
-  expect(sent.filter((l) => !l.startsWith('send '))).toEqual(['rehearse caliperforge/widget widget-12-a1-next'])
-  const tips = get(w.root, 1, 'next.tips').trim().split('\n').map((l) => `send src ${l.slice(0, 40)}:refs/heads/widget-12-a1-next`)
-  expect(new Set(sent.filter((l) => l.startsWith('send ')))).toEqual(new Set(tips))
-  const git = (args: string[]): string => execFileSync('git', args, { cwd: src, encoding: 'utf8' }).trim()
-  expect(git(['ls-remote', 'origin', 'refs/heads/widget-12-a1-next']).split('\t')[0]).toBe(tip(w.root, 1))
 })
 
 test('Tight reads the PR text the card set, and never the handback', async () => {

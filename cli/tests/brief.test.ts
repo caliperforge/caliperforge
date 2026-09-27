@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
-import { greptileLine, heldBy, line, ticketSection, tickets, waitLine, waits } from '../brief.ts'
+import { greptileLine, heldBy, line, rulings, ticketSection, tickets, waitLine, waits } from '../brief.ts'
 import { monthly } from '../../sequencer/steps.ts'
 import { put } from '../../sequencer/workspace.ts'
 import type { Db } from '../../store/index.ts'
@@ -139,6 +139,20 @@ test('D1 the Greptile line counts this UTC month\'s dated requests across plans,
   put(root, 2, 'greptile.asked', `${'c'.repeat(40)}\n` + at('d', '2026-09-01T00:00:00.000Z').repeat(5))
   expect(monthly(root, now)).toBe(12)
   expect(greptileLine(12)).toBe('greptile 12/50 this month\n')
+})
+
+test('D4 D3 cf brief names each plan whose ask.md differs from its briefed copy, and no other', () => {
+  const db = world()
+  const root = mkdtempSync(join(tmpdir(), 'cf-rulings-'))
+  expect(rulings(db, root)).toBe('')
+  plan(db, 1, 'running', 25)
+  plan(db, 2, 'running', 30)
+  put(root, 1, 'ask.briefed.md', '# one\n')
+  put(root, 1, 'ask.md', '# one\n\n## Ruling\n')
+  put(root, 2, 'ask.briefed.md', '# two\n')
+  put(root, 2, 'ask.md', '# two\n')
+  expect(rulings(db, root)).toContain('plan 1')
+  expect(rulings(db, root)).not.toContain('plan 2')
 })
 
 const holding = (db: Db, id: number): unknown => db.prepare('SELECT held_by, held_why FROM plans WHERE id = ?').get(id)

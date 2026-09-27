@@ -32,6 +32,14 @@ export function maybe(root: string, plan: number, name: string): string | null {
   return existsSync(path) ? readFileSync(path, 'utf8') : null
 }
 
+/** `ask.briefed.md` is the ask the standing brief was written from. */
+export function ruled(root: string, plan: number): string | null {
+  const copy = maybe(root, plan, 'ask.briefed.md')
+  const ask = maybe(root, plan, 'ask.md')
+  if (copy === null || ask === null || ask === copy) return null
+  return ask.startsWith(copy) ? ask.slice(copy.length) : ask
+}
+
 export function drop(root: string, plan: number, name: string): void {
   rmSync(join(planDir(root, plan), name), { force: true })
 }

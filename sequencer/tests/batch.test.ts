@@ -5,7 +5,9 @@ import { expect, test } from 'vitest'
 import { approve as approveCard, batch, refuse as refuseCard } from '../../cli/batch.ts'
 import type { Pr } from '../../cli/gh.ts'
 import { close, settled } from '../../cli/session.ts'
-import { headApproved, headDigest, refusedPush } from '../../store/approvals.ts'
+import { approvalsOf, headApproved, headDigest, refusedPush } from '../../store/approvals.ts'
+import { deliverablesOf } from '../../store/deliverables.ts'
+import { dispositionsOf } from '../../store/dispositions.ts'
 import type { Db } from '../../store/index.ts'
 import { advance, rewind } from '../../store/plans.ts'
 import { open as openProposals } from '../../store/proposals.ts'
@@ -72,8 +74,7 @@ test('push refuses without a matching row, then pushes the approved head and ope
   approveCard(w.db, w.root, 'plan', 1)
   expect(published(w, wire)).toMatchObject({ outcome: 'pass' })
   expect(sent).toEqual(['send src widget-12-a1', 'unrehearse caliperforge/widget widget-12-a1-next', 'open acme/widget caliperforge:widget-12-a1'])
-  expect(w.db.prepare('SELECT state, evidence FROM deliverables WHERE plan_id = 1 ORDER BY id DESC LIMIT 1').get())
-    .toEqual({ state: 'pushed', evidence: URL })
+  expect(deliverablesOf(w.db, 1).at(-1)).toEqual({ state: 'pushed', evidence: URL })
 })
 
 test('an outside branch reaches the batch as one commit, titled off the brief, naming no upstream number', async () => {
@@ -308,8 +309,7 @@ test('a counterparty finding on merged code is an escape against the step the ma
     reviews: [{ id: 'r9', author: { login: 'maintainer' }, body: 'this is a scope problem', submittedAt: '2026-09-18T08:00:00Z' }],
   })
   capture(w.db, () => merged)
-  expect(w.db.prepare('SELECT kind, defect_class, owner, evidence FROM dispositions').get())
-    .toEqual({ kind: 'escaped', defect_class: 'scope', owner: 'review', evidence: URL })
+  expect(dispositionsOf(w.db)[0]).toEqual({ kind: 'escaped', defect_class: 'scope', owner: 'review', evidence: URL })
   expect(classOf('tight.comment on line 3')).toBe('tight.comment')
   expect(classOf('no class named here')).toBe('correctness')
 })
@@ -349,7 +349,7 @@ test('only the bot review on the rehearsal is kept, on the plan, and a merge ups
   expect(others(w.db, SEEDED).map((s) => ({ repo: s.repo, pr: s.pr, kind: s.kind, score: s.score, head: s.head, plan: s.plan })))
     .toEqual([{ repo: 'caliperforge/widget', pr: 3, kind: 'bot_review', score: 4, head: SHA, plan: 1 }])
   capture(w.db, () => pr({ mergedAt: '2026-09-18T09:00:00Z', mergedBy: { login: 'maintainer' } }))
-  expect(w.db.prepare('SELECT count(*) AS n FROM dispositions').get()).toEqual({ n: 0 })
+  expect(dispositionsOf(w.db)).toEqual([])
 })
 
 test('D5 a rehearsal review at a -next tip is stored at the plan HEAD the tip carries', async () => {
@@ -395,7 +395,7 @@ test('a vague bot finding does not take the disposition slot a named one earned'
     ],
   })
   capture(w.db, () => merged)
-  expect(w.db.prepare('SELECT defect_class FROM dispositions').all()).toEqual([{ defect_class: 'scope' }])
+  expect(dispositionsOf(w.db).map((d) => d.defect_class)).toEqual(['scope'])
 })
 
 test('an approval that cannot settle its row writes no approval row either', async () => {
@@ -405,7 +405,7 @@ test('an approval that cannot settle its row writes no approval row either', asy
   close(w.db, path, () => null)
   const id = Number(openProposals(w.db)[0]?.id)
   expect(() => approveCard(w.db, w.root, 'proposal', id)).toThrow(/names no issue/)
-  expect(w.db.prepare("SELECT count(*) AS n FROM approvals WHERE subject_kind = 'proposal'").get()).toEqual({ n: 0 })
+  expect(approvalsOf(w.db, 'proposal')).toEqual([])
   expect(openProposals(w.db)).toHaveLength(1)
 })
 
@@ -475,8 +475,7 @@ test('session close writes typed proposals and nothing else, and approval turns 
     .toEqual({ value: 'approval_matches_head_and_the_hook', issue_no: 42 })
   refuseCard(w.db, w.root, 'proposal', Number(rows[1]?.id), 'not_now')
   expect(openProposals(w.db).map((r) => r.class)).toEqual(['ordering', 'world_fact', 'measurement'])
-  expect(w.db.prepare("SELECT decision, reason FROM approvals WHERE subject_kind = 'proposal' ORDER BY id").all())
-    .toEqual([{ decision: 'approved', reason: null }, { decision: 'refused', reason: 'not_now' }])
+  expect(approvalsOf(w.db, 'proposal')).toEqual([{ decision: 'approved', reason: null }, { decision: 'refused', reason: 'not_now' }])
 })
 
 test('a settled item already in rulings proposes nothing, and the pr body stays under twenty lines', async () => {
@@ -499,16 +498,14 @@ test('a second lap after a rewind puts a fresh card in the batch and cannot leav
   expect(plan(w.db, 1).head_digest).toBeNull()
   for (let at = 0; at < 3; at += 1) await lap(w)
   expect(plan(w.db, 1).step).toBe(7)
-  expect(w.db.prepare('SELECT state FROM deliverables WHERE plan_id = 1 ORDER BY id').all())
-    .toEqual([{ state: 'built' }, { state: 'pushed' }, { state: 'ready' }])
+  expect(deliverablesOf(w.db, 1).map((d) => d.state)).toEqual(['built', 'pushed', 'ready'])
   expect(() => { advance(w.db, plan(w.db, 1), 8) }).toThrow(/no ceo approval row/)
   expect(await lap(w)).toEqual([])
   expect(batch(w.db, w.root).map((c) => c.id)).toEqual([1])
 
   approveCard(w.db, w.root, 'plan', 1)
-  expect(w.db.prepare("SELECT count(*) AS n FROM approvals WHERE subject_kind = 'plan'").get()).toEqual({ n: 1 })
-  expect(w.db.prepare('SELECT state FROM deliverables WHERE plan_id = 1 ORDER BY id DESC LIMIT 1').get())
-    .toEqual({ state: 'approved' })
+  expect(approvalsOf(w.db, 'plan')).toHaveLength(1)
+  expect(deliverablesOf(w.db, 1).at(-1)?.state).toBe('approved')
   advance(w.db, plan(w.db, 1), 8)
   expect(plan(w.db, 1).step).toBe(8)
 })
@@ -531,9 +528,9 @@ test('a review read on one tick and the merge on a later one is still one escape
   const w = await pushed()
   const review = { id: 'r9', author: { login: 'maintainer' }, body: 'this is a scope problem', submittedAt: '2026-09-18T08:00:00Z' }
   capture(w.db, () => pr({ reviews: [review] }))
-  expect(w.db.prepare('SELECT count(*) AS n FROM dispositions').get()).toEqual({ n: 0 })
+  expect(dispositionsOf(w.db)).toEqual([])
   capture(w.db, () => pr({ reviews: [review], mergedAt: '2026-09-19T09:00:00Z', mergedBy: { login: 'maintainer' } }))
-  expect(w.db.prepare('SELECT kind, defect_class, owner FROM dispositions').all())
+  expect(dispositionsOf(w.db).map(({ kind, defect_class, owner }) => ({ kind, defect_class, owner })))
     .toEqual([{ kind: 'escaped', defect_class: 'scope', owner: 'review' }])
 })
 

@@ -556,7 +556,7 @@
     "test-name": 1
   },
   "sequencer/tests/batch.test.ts": {
-    "prepare": 17,
+    "prepare": 6,
     "test-name": 24
   },
   "sequencer/tests/brief.test.ts": {

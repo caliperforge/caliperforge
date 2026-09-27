@@ -5,7 +5,8 @@ import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import type { Db } from '../../store/index.ts'
 import { receipt } from '../../store/ticks.ts'
-import { CRASHED, liveness, livenessLine, watch } from '../watch.ts'
+import { unread } from '../inbox.ts'
+import { CRASHED, down, liveness, livenessLine, watch } from '../watch.ts'
 
 const schema = join(import.meta.dirname, '../../schema')
 
@@ -64,6 +65,22 @@ test('a stall alerts once, and its end alerts once', () => {
   watch(db, root, NOW, post)
   expect(posted.at(-1)).toBe('CaliperForge · the machine is running again')
   expect(existsSync(join(root, '.cf/watch.alerted'))).toBe(false)
+})
+
+test('a reporter whose store fails records that in the inbox', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cf-down-'))
+  down(() => { throw new Error('store gone') }, root, NOW, new Error('tick failed'), () => undefined)
+  expect(unread(root)).toEqual([expect.objectContaining({ kind: 'crashed', note: 'store gone' })])
+})
+
+test('a reporter with a store leaves a crash receipt and alerts', () => {
+  const db = world()
+  const root = mkdtempSync(join(tmpdir(), 'cf-down-'))
+  const posted: string[] = []
+  down(() => db, root, NOW, new Error('tick failed'), (title) => void posted.push(title))
+  expect(liveness(db, NOW).crash).toBe('tick failed')
+  expect(posted).toEqual(['CaliperForge · the machine is down'])
+  expect(unread(root)).toEqual([])
 })
 
 test('a lane switched off with jobs in it alerts once, and not again until it is back on', () => {

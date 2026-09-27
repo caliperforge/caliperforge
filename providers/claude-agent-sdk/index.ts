@@ -202,7 +202,7 @@ function wroteOutside(packet: Packet, tool: string, args: unknown): string | nul
 
 function ranOutside(tools: string[], args: unknown): string | null {
   const given = args as { command?: unknown; run_in_background?: unknown }
-  if (given.run_in_background === true) return 'ruling:seat.tools refuses run_in_background: call Bash again without it and wait for the output'
+  if (given.run_in_background === true) return 'ruling:seat.tools refuses run_in_background: run it in the foreground and wait for it'
   const said = given.command
   const command = typeof said === 'string' ? said.trim() : ''
   const patterns = tools.flatMap((tool) => RULE.exec(tool)?.[1] ?? [])

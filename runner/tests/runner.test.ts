@@ -80,7 +80,7 @@ test('the builder runs its checks on our tree and holds no shell on a stranger\'
 test('a background run is denied and the seat stays in the session', () => {
   const ours = packet(seat(root, 'typescript_specialist').manifest, 'p', 't', 'i', cwd, TRANSCRIPT, true)
   const denied = gate(ours, bash('npm run tight', true))
-  expect(denied).toMatchObject({ continue: true, hookSpecificOutput: { permissionDecision: 'deny', permissionDecisionReason: expect.stringMatching(/^ruling:seat\.tools/) as string } })
+  expect(denied).toMatchObject({ continue: true, hookSpecificOutput: { permissionDecision: 'deny', permissionDecisionReason: 'ruling:seat.tools refuses run_in_background: run it in the foreground and wait for it' } })
   expect(denied.stopReason).toBeUndefined()
   expect(gate(ours, bash('npm run tight', false))).toEqual({ continue: true })
   expect(gate(ours, bash('npm run tight'))).toEqual({ continue: true })

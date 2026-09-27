@@ -284,7 +284,7 @@ test('D1 an xcode checkout runs xcodebuild test with its derived data inside', (
   expect(mode(src)).toBe('xcodebuild')
   expect(checks(src, run)).toBeNull()
   expect(bins).toEqual(['xcodebuild'])
-  expect(seen).toEqual(["-project Atelier.xcodeproj -scheme Atelier -destination platform=macOS -derivedDataPath .cf-derived test"])
+  expect(seen).toEqual(["-project Atelier.xcodeproj -scheme Atelier -destination platform=macOS -derivedDataPath .cf-derived -test-timeouts-enabled YES -default-test-execution-time-allowance 60 -maximum-test-execution-time-allowance 60 test"])
   expect(readFileSync(join(src, '.git', 'info', 'exclude'), 'utf8')).toContain('.cf-derived/')
 })
 

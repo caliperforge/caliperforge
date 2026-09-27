@@ -6,6 +6,9 @@ import { fresh } from '../../checks/sqlite.ts'
 import { tickNote } from '../../cli/brief.ts'
 import { WINDOW, type Read } from '../../cli/gh.ts'
 import type { Db } from '../../store/index.ts'
+import { addPart, allParts } from '../../store/parts.ts'
+import { addPipe, addPlan, allPlans, type PlanRow } from '../../store/plans.ts'
+import { allTickets, recordListing } from '../../store/tickets.ts'
 import { intake } from '../capture.ts'
 import { tick } from '../index.ts'
 import { CARRIED, stub } from './world.ts'
@@ -42,17 +45,15 @@ function canned(rows: Fixture[], log: string[] = [], closed: Fixture[] = []): Re
 
 function piped(enabled = 1): Db {
   const db = fresh(schema)
-  db.prepare("INSERT INTO pipes (name, enabled, window_start, window_end, max_concurrent) VALUES ('internal', ?, '00:00', '23:59', 1)")
-    .run(enabled)
+  addPipe(db, { name: 'internal', enabled, window_start: '00:00', window_end: '23:59', max_concurrent: 1 })
   return db
 }
 
-function queue(db: Db, n: number, state = 'queued', step = 0): void {
-  db.prepare(`INSERT INTO plans (pipe_id, template, state, queued_at, lane, seat, origin, step)
-    VALUES (1, 'pr_path', ?, '2026-09-18', 'machine', 'typescript_specialist', ?, ?)`).run(state, url(n), step)
+function queue(db: Db, n: number, state: PlanRow['state'] = 'queued', step = 0): void {
+  addPlan(db, { pipe_id: 1, template: 'pr_path', state, queued_at: '2026-09-18', lane: 'machine', seat: 'typescript_specialist', origin: url(n), step })
 }
 
-const states = (db: Db): unknown[] => db.prepare('SELECT origin, state FROM plans ORDER BY id').all()
+const states = (db: Db): unknown[] => allPlans(db).map((p) => ({ origin: p.origin, state: p.state }))
 
 let root = ''
 beforeEach(() => { root = mkdtempSync(join(tmpdir(), 'cf-intake-')) })
@@ -60,7 +61,7 @@ beforeEach(() => { root = mkdtempSync(join(tmpdir(), 'cf-intake-')) })
 test('D1: each open lane issue on a switched-on lane home becomes a queued plan with its ask written', () => {
   const db = piped()
   intake(db, root, canned(TWO))
-  expect(db.prepare('SELECT id, origin, state, priority FROM plans ORDER BY id').all()).toEqual([
+  expect(allPlans(db).map((p) => ({ id: p.id, origin: p.origin, state: p.state, priority: p.priority }))).toEqual([
     { id: 1, origin: url(40), state: 'queued', priority: 1 },
     { id: 2, origin: url(41), state: 'queued', priority: 2 },
   ])
@@ -74,7 +75,7 @@ test('D2: the same list again adds no row, views no issue and leaves each ask al
   writeFileSync(ask, 'edited')
   const log: string[] = []
   intake(db, root, canned(TWO, log))
-  expect(db.prepare('SELECT count(*) AS n FROM plans').get()).toEqual({ n: 2 })
+  expect(allPlans(db).length).toBe(2)
   expect(log.filter((l) => l.startsWith('issue view'))).toEqual([])
   expect(readFileSync(ask, 'utf8')).toBe('edited')
 })
@@ -95,7 +96,7 @@ test('D3: a queued plan whose issue left the list is halted, and a running or bl
 test('D4: an issue a part of a split names is not adopted', () => {
   const db = piped()
   queue(db, 30, 'done')
-  db.prepare("INSERT INTO parts (parent, n, url, title, body) VALUES (1, 0, ?, 'part', 'the part')").run(url(40))
+  addPart(db, { parent: 1, n: 0, url: url(40), title: 'part', body: 'the part' })
   intake(db, root, canned(TWO))
   expect(states(db)).toEqual([{ origin: url(30), state: 'done' }, { origin: url(41), state: 'queued' }])
 })
@@ -105,7 +106,7 @@ test('D4: a lane whose pipe is off or missing has its home left unlisted', () =>
     const log: string[] = []
     intake(db, root, canned(TWO, log))
     expect(log).toEqual([])
-    expect(db.prepare('SELECT count(*) AS n FROM plans').get()).toEqual({ n: 0 })
+    expect(allPlans(db).length).toBe(0)
   }
 })
 
@@ -125,7 +126,7 @@ test('a parent read that throws skips that issue alone, names it, and makes no t
   })
   expect(lines).toEqual([`${REPO}#40: HTTP 502`])
   expect(states(db)).toEqual([{ origin: url(41), state: 'queued' }])
-  expect(db.prepare('SELECT count(*) AS n FROM tickets WHERE parent = 40').get()).toEqual({ n: 0 })
+  expect(allTickets(db).filter((t) => t.parent === 40)).toEqual([])
 })
 
 test('D4: a list exactly WINDOW long halts no plan', () => {
@@ -139,7 +140,7 @@ test('D4: a list exactly WINDOW long halts no plan', () => {
 test('D5: the tick lists issues only when handed a reader', async () => {
   const db = piped()
   await tick(db, root, stub(CARRIED))
-  expect(db.prepare('SELECT count(*) AS n FROM plans').get()).toEqual({ n: 0 })
+  expect(allPlans(db).length).toBe(0)
   const log: string[] = []
   await tick(db, root, stub(CARRIED), undefined, undefined, undefined, 0, (args) => {
     log.push(args.join(' '))
@@ -168,10 +169,10 @@ test('D3: a part\'s own parts filed by the COO join that part\'s plan, part a qu
   const db = piped()
   queue(db, 200, 'done')
   queue(db, 223, 'blocked_on_ceo')
-  db.prepare("INSERT INTO parts (parent, n, url, title, body, plan) VALUES (1, 0, ?, 'part', 'the part', 2)").run(url(223))
+  addPart(db, { parent: 1, n: 0, url: url(223), title: 'part', body: 'the part', plan: 2 })
   intake(db, root, canned([{ number: 280, labels: ['lane:machine'], title: '223a: first' },
     { number: 281, labels: ['lane:machine'], title: '223b: second' }]))
-  expect(db.prepare('SELECT n, url, plan FROM parts WHERE parent = 2 ORDER BY n').all()).toEqual([
+  expect(allParts(db).filter((p) => p.parent === 2).map((p) => ({ n: p.n, url: p.url, plan: p.plan }))).toEqual([
     { n: 0, url: url(280), plan: 3 },
     { n: 1, url: url(281), plan: null },
   ])
@@ -191,10 +192,11 @@ const FIVE: Fixture[] = [
 ]
 
 function ticket(db: Db, n: number): void {
-  db.prepare("INSERT INTO tickets (repo, number, title, lane) VALUES (?, ?, 'earlier', 'machine')").run(REPO, n)
+  recordListing(db, REPO, [shape({ number: n, labels: ['lane:machine'], title: 'earlier' })], false)
 }
 
-const tickets = (db: Db): unknown[] => db.prepare('SELECT number, title, lane, priority, after, parent FROM tickets ORDER BY number').all()
+const tickets = (db: Db): unknown[] => allTickets(db).map((t) =>
+  ({ number: t.number, title: t.title, lane: t.lane, priority: t.priority, after: t.after, parent: t.parent }))
 
 const RECORDED = [
   { number: 40, title: 'issue 40', lane: 'machine', priority: 2, after: null, parent: null },
@@ -226,13 +228,13 @@ test('D3: a list exactly WINDOW long drops no ticket for an issue missing from i
   const db = piped()
   ticket(db, 50)
   intake(db, root, canned([...Array(WINDOW).keys()].map((i) => ({ number: 1000 + i, labels: i === 0 ? ['lane:machine'] : ['bug'] }))))
-  expect(db.prepare('SELECT number FROM tickets ORDER BY number').all()).toEqual([{ number: 50 }, { number: 1000 }])
+  expect(allTickets(db).map((t) => ({ number: t.number }))).toEqual([{ number: 50 }, { number: 1000 }])
 })
 
 test('D4: an issue with two P labels is recorded unpriced and the rest of its repo is still queued', () => {
   const db = piped()
   intake(db, root, canned([{ number: 40, labels: ['lane:machine', 'P1', 'P2'] }, { number: 41, labels: ['lane:machine'] }]))
-  expect(db.prepare('SELECT number, priority FROM tickets ORDER BY number').all()).toEqual([
+  expect(allTickets(db).map((t) => ({ number: t.number, priority: t.priority }))).toEqual([
     { number: 40, priority: null },
     { number: 41, priority: null },
   ])
@@ -246,7 +248,7 @@ test('D5: recording the tickets queues only what add made', () => {
     { origin: url(121), state: 'queued' },
     { origin: url(70), state: 'queued' },
   ])
-  expect(db.prepare('SELECT count(*) AS n FROM parts').get()).toEqual({ n: 0 })
+  expect(allParts(db).length).toBe(0)
 })
 
 test('D6: the same listing again leaves the same tickets', () => {
@@ -258,8 +260,8 @@ test('D6: the same listing again leaves the same tickets', () => {
 function waiting(): Db {
   const db = piped()
   queue(db, 30, 'done')
-  db.prepare("INSERT INTO parts (parent, n, url, title, body) VALUES (1, 0, ?, '30a: first', 'the part')").run(url(53))
-  db.prepare("INSERT INTO parts (parent, n, url, title, body) VALUES (1, 1, ?, '30b: second', 'After: #53')").run(url(54))
+  addPart(db, { parent: 1, n: 0, url: url(53), title: '30a: first', body: 'the part' })
+  addPart(db, { parent: 1, n: 1, url: url(54), title: '30b: second', body: 'After: #53' })
   return db
 }
 
@@ -267,13 +269,13 @@ const B: Fixture = { number: 54, labels: ['lane:machine'], title: '30b: second',
 
 const unblocked = (db: Db): unknown[] => db.prepare("SELECT plan, message FROM events WHERE kind = 'unblocked'").all()
 
-const waits = (db: Db): unknown => db.prepare('SELECT plan FROM parts WHERE n = 1').get()
+const waits = (db: Db): unknown => ({ plan: allParts(db).find((p) => p.n === 1)?.plan })
 
 test('D1: a part whose After: issue closed off the machine is queued as its parent\'s, with its ask, and says so', () => {
   const db = waiting()
   intake(db, root, canned([B]))
-  const kin = 'SELECT pipe_id, lane, seat, priority FROM plans WHERE id = ?'
-  expect(db.prepare(kin).get(2)).toEqual(db.prepare(kin).get(1))
+  const kin = allPlans(db).map((p) => ({ pipe_id: p.pipe_id, lane: p.lane, seat: p.seat, priority: p.priority }))
+  expect(kin[1]).toEqual(kin[0])
   expect(states(db)).toEqual([{ origin: url(30), state: 'done' }, { origin: url(54), state: 'queued' }])
   expect(waits(db)).toEqual({ plan: 2 })
   expect(readFileSync(join(root, '.cf/work/2/ask.md'), 'utf8')).toBe('# 30b: second\n\nAfter: #53')
@@ -293,7 +295,7 @@ test('D3: the same listing again makes no second plan and no second unblocked ev
   const db = waiting()
   intake(db, root, canned([B]))
   intake(db, root, canned([B]))
-  expect(db.prepare('SELECT count(*) AS n FROM plans WHERE origin = ?').get(url(54))).toEqual({ n: 1 })
+  expect(allPlans(db).filter((p) => p.origin === url(54)).length).toBe(1)
   expect(unblocked(db)).toHaveLength(1)
 })
 
@@ -311,7 +313,7 @@ test('D1: a hand-filed ticket whose After: issue is open gets no plan and its ti
   const db = piped()
   intake(db, root, canned([A, HAND]))
   expect(states(db)).toEqual([{ origin: url(300), state: 'queued' }])
-  expect(db.prepare('SELECT after FROM tickets WHERE number = 301').get()).toEqual({ after: 300 })
+  expect(allTickets(db).find((t) => t.number === 301)).toMatchObject({ after: 300 })
 })
 
 test('D2: once its After: issue leaves the list, the held ticket is queued with its ask', () => {
@@ -376,7 +378,7 @@ test('D1: an issue opened and closed between ticks has both times, and a ticket 
   const db = piped()
   intake(db, root, canned([{ number: 60, labels: ['lane:machine'] }]))
   intake(db, root, canned([], [], [CLOSED, { number: 60, labels: ['lane:machine'], closedAt: SHUT }]))
-  expect(db.prepare('SELECT number, opened_at, closed_at FROM tickets ORDER BY number').all()).toEqual([
+  expect(allTickets(db).map((t) => ({ number: t.number, opened_at: t.opened_at, closed_at: t.closed_at }))).toEqual([
     { number: 60, opened_at: OPENED, closed_at: SHUT },
     { number: 90, opened_at: '2026-09-25T09:00:00Z', closed_at: SHUT },
   ])
@@ -385,7 +387,7 @@ test('D1: an issue opened and closed between ticks has both times, and a ticket 
 test('D2: one tick records kind fix for a fix-labelled issue and build for one without', () => {
   const db = piped()
   intake(db, root, canned([{ number: 40, labels: ['lane:machine', 'fix'] }], [], [{ ...CLOSED, number: 41 }]))
-  expect(db.prepare('SELECT number, kind FROM tickets ORDER BY number').all()).toEqual([
+  expect(allTickets(db).map((t) => ({ number: t.number, kind: t.kind }))).toEqual([
     { number: 40, kind: 'fix' },
     { number: 41, kind: 'build' },
   ])

@@ -321,7 +321,7 @@ test('a pull request read that throws leaves a swallowed event and no signal', a
 const FORKED = pr({
   number: 3, url: 'https://github.com/caliperforge/widget/pull/3',
   comments: [{ id: 'c3', author: { login: 'maintainer' }, body: 'why this?', createdAt: '2026-09-17T10:00:00Z' }],
-  reviews: [{ id: 'g3', author: { login: 'greptile-apps' }, body: `Confidence Score: 4/5\n\n${REVIEWED}`, submittedAt: '2026-09-17T11:00:00Z' }],
+  reviews: [{ id: 'g3', author: { login: 'greptile-apps[bot]' }, body: `Confidence Score: 4/5\n\n${REVIEWED}`, submittedAt: '2026-09-17T11:00:00Z' }],
   statusCheckRollup: [{ name: 'build', conclusion: 'FAILURE' }],
 })
 

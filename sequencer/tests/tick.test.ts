@@ -268,6 +268,16 @@ test('a review refusal returns the plan to build with every span the reviewer na
   expect(plan(w.db, 1)).toMatchObject({ step: 4, retries: 1, state: 'blocked_on_ceo' })
 })
 
+test('a review needs_ceo holds the plan for the coo with the reviewer\'s question', async () => {
+  const w = world()
+  approve(w.db, w.target)
+  for (let at = 0; at < 4; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
+  const fired = (await tick(w.db, w.root, stub(CARRIED, 0, `${WORDS}\n\n---\noutcome: needs_ceo\n---\n`)))[0]
+  expect(fired).toMatchObject({ step: 4, outcome: 'needs_ceo', state: 'blocked_on_ceo' })
+  expect(holdOf(w.db, 1)).toEqual({ held_by: 'coo', held_why: `code_quality needs_ceo: ${WORDS}` })
+  expect(w.db.prepare('SELECT message FROM verdicts WHERE plan = 1 AND step = 4').get()).toEqual({ message: WORDS })
+})
+
 test('a new refusal after a real rebuild goes round again; the same one again stops', async () => {
   const w = world()
   approve(w.db, w.target)

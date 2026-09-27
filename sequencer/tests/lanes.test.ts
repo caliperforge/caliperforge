@@ -3,8 +3,9 @@ import type { Packet } from '../../providers/kind.ts'
 import { laneLine } from '../../cli/brief.ts'
 import { release } from '../../store/holds.ts'
 import type { Read } from '../../cli/gh.ts'
-import { cap, dial, lanes, name, priority, record, set, templatePriority, windows, type Reading } from '../../store/lanes.ts'
-import { live, retry, rewind } from '../../store/plans.ts'
+import { newestRun } from '../../store/events.ts'
+import { amend, cap, dial, forget, lanes, name, priority, record, set, templatePriority, usage, width, windows, type Reading } from '../../store/lanes.ts'
+import { addPipe, addPlan, allPlans, live, retry, rewind } from '../../store/plans.ts'
 import { WHY } from '../../store/refusals.ts'
 import { tick } from '../index.ts'
 import { picks } from '../next.ts'
@@ -29,9 +30,9 @@ const reading = (utilization: number, kind: Reading['rate_limit_type'] = 'seven_
 })
 
 function queued(w: World, id: number, pipe: number, at: number): void {
-  w.db.prepare(`INSERT INTO plans (id, pipe_id, target_id, template, state, queued_at, step, retries, priority)
-    VALUES (?, ?, 1, 'pr_path', 'queued', ?, 0, 0, ?)`)
-    .run(id, pipe, `${TODAY}T00:00:0${String(id)}.000Z`, at)
+  addPlan(w.db, { pipe_id: pipe, target_id: 1, template: 'pr_path', state: 'queued',
+    queued_at: `${TODAY}T00:00:0${String(id)}.000Z`, lane: null, seat: null, origin: null, step: 0 })
+  priority(w.db, id, at)
 }
 
 /** Issue 34, as `gh issue view` answers it, under whatever labels the test hangs on it. */
@@ -39,8 +40,7 @@ const labelled = (...names: string[]): Read => () => ({ number: 34, title: 'a pl
   url: `https://github.com/${SELF}/issues/34`, labels: names.map((label) => ({ name: label })) })
 
 function second(w: World): void {
-  w.db.prepare(`INSERT INTO pipes (id, name, enabled, window_start, window_end, max_concurrent)
-    VALUES (2, 'research', 1, '00:00', '23:59', 1)`).run()
+  addPipe(w.db, { name: 'research', enabled: 1, window_start: '00:00', window_end: '23:59', max_concurrent: 1 })
 }
 
 test('a plan is queued at its template default priority, and cf priority moves it', async () => {
@@ -48,12 +48,12 @@ test('a plan is queued at its template default priority, and cf priority moves i
   expect([templatePriority(w.db, 'pr_path'), templatePriority(w.db, 'research'), templatePriority(w.db, 'comms')])
     .toEqual([1, 2, 3])
   priority(w.db, 1, 0)
-  expect(w.db.prepare('SELECT priority FROM plans WHERE id = 1').get()).toEqual({ priority: 0 })
+  expect(plan(w.db, 1)).toMatchObject({ priority: 0 })
   expect(() => { priority(w.db, 99, 0) }).toThrow(/no plan 99/)
   expect(() => { priority(w.db, 1, 2.5) }).toThrow(/cf priority takes P0 to P9/)
   expect(() => { priority(w.db, 1, 10) }).toThrow(/cf priority takes P0 to P9/)
-  expect(() => w.db.prepare('UPDATE plans SET priority = 10 WHERE id = 1').run()).toThrow(/CHECK/)
-  expect(() => w.db.prepare('UPDATE plans SET priority = 2.5 WHERE id = 1').run()).toThrow(/CHECK/)
+  expect(() => { amend(w.db, 1, { priority: 10 }) }).toThrow(/CHECK/)
+  expect(() => { amend(w.db, 1, { priority: 2.5 }) }).toThrow(/CHECK/)
   expect((await tick(w.db, w.root, stub(CARRIED))).map((f) => f.plan)).toEqual([1])
 })
 
@@ -61,7 +61,7 @@ test('within a lane the tick starts plans in priority order, in parallel up to m
   const w = world()
   queued(w, 2, 1, 0)
   queued(w, 3, 1, 2)
-  w.db.prepare('UPDATE pipes SET max_concurrent = 3 WHERE id = 1').run()
+  width(w.db, 1, 3)
   expect(picks(w.db, { ...w.pipe, max_concurrent: 3 }).map((p) => p.id)).toEqual([2, 1, 3])
   expect(picks(w.db, { ...w.pipe, max_concurrent: 2 }).map((p) => p.id)).toEqual([2, 1])
   expect(picks(w.db, { ...w.pipe, max_concurrent: 1 }).map((p) => p.id)).toEqual([2])
@@ -72,9 +72,9 @@ test('within a lane the tick starts plans in priority order, in parallel up to m
 test('a plan already running keeps its slot and a blocked queued plan takes none', async () => {
   const w = world()
   queued(w, 2, 1, 2)
-  w.db.prepare('UPDATE pipes SET max_concurrent = 2 WHERE id = 1').run()
+  width(w.db, 1, 2)
   expect((await tick(w.db, w.root, stub(CARRIED))).map((f) => f.plan)).toEqual([1, 2])
-  expect(w.db.prepare("SELECT count(*) AS n FROM plans WHERE state = 'running'").get()).toEqual({ n: 2 })
+  expect(allPlans(w.db).filter((p) => p.state === 'running')).toHaveLength(2)
   expect(picks(w.db, { ...w.pipe, max_concurrent: 2 })).toEqual([])
   approve(w.db, w.target)
   expect(picks(w.db, { ...w.pipe, max_concurrent: 2 }).map((p) => p.id)).toEqual([1, 2])
@@ -85,19 +85,19 @@ test('a plan already under way queues ahead of one not yet started', () => {
   const w = world()
   queued(w, 2, 1, 1)
   queued(w, 3, 1, 0)
-  w.db.prepare("UPDATE plans SET step = 2, state = 'queued' WHERE id = 1").run()
+  amend(w.db, 1, { step: 2, state: 'queued' })
   expect(live(w.db, w.pipe).map((p) => p.id)).toEqual([1, 3, 2])
 })
 
 test('a released plan waits for a free slot and the lane never runs past its width', async () => {
   const w = world()
   approve(w.db, w.target)
-  w.db.prepare('UPDATE pipes SET max_concurrent = 2 WHERE id = 1').run()
+  width(w.db, 1, 2)
   queued(w, 2, 1, 1)
   put(w.root, 2, 'ask.md', ASK)
   for (const id of [3, 4]) {
     queued(w, id, 1, 1)
-    w.db.prepare("UPDATE plans SET step = 2, state = 'blocked_on_ceo' WHERE id = ?").run(id)
+    amend(w.db, id, { step: 2, state: 'blocked_on_ceo' })
     put(w.root, id, 'issue.md', ASK)
   }
   expect((await tick(w.db, w.root, stub(CARRIED))).map((f) => f.plan)).toEqual([1, 2])
@@ -107,17 +107,17 @@ test('a released plan waits for a free slot and the lane never runs past its wid
   expect((await tick(w.db, w.root, stub(CARRIED))).map((f) => f.plan)).toEqual([1, 2])
   expect(lanes(w.db, '09:00').live).toBe(2)
 
-  w.db.prepare("UPDATE plans SET state = 'done' WHERE id = 1").run()
+  amend(w.db, 1, { state: 'done' })
   expect((await tick(w.db, w.root, stub(CARRIED))).map((f) => f.plan)).toEqual([2, 3])
   expect(lanes(w.db, '09:00').live).toBe(2)
   expect(plan(w.db, 4)).toMatchObject({ step: 2, state: 'queued' })
 })
 
 function full(w: World = world()): World {
-  w.db.prepare('UPDATE pipes SET max_concurrent = 1 WHERE id = 1').run()
-  w.db.prepare("UPDATE plans SET state = 'running' WHERE id = 1").run()
+  width(w.db, 1, 1)
+  amend(w.db, 1, { state: 'running' })
   queued(w, 2, 1, 1)
-  w.db.prepare("UPDATE plans SET step = 4, retries = 1, head_digest = ?, state = 'blocked_on_ceo' WHERE id = 2").run('a'.repeat(64))
+  amend(w.db, 2, { step: 4, retries: 1, head_digest: 'a'.repeat(64), state: 'blocked_on_ceo' })
   put(w.root, 2, 'issue.md', ASK)
   return w
 }
@@ -127,15 +127,15 @@ test('a plan retried onto a full lane waits queued at its kept step and fires on
   approve(w.db, w.target)
   await tick(w.db, w.root, stub(CARRIED))
   full(w)
-  const running = (): unknown => w.db.prepare("SELECT count(*) AS n FROM plans WHERE pipe_id = 1 AND state = 'running'").get()
+  const running = (): number => allPlans(w.db).filter((p) => p.pipe_id === 1 && p.state === 'running').length
   expect(retry(w.db, plan(w.db, 2))).toBe(2)
   expect(plan(w.db, 2)).toMatchObject({ step: 2, state: 'queued' })
-  expect(running()).toEqual({ n: 1 })
+  expect(running()).toBe(1)
   expect((await tick(w.db, w.root, stub(CARRIED))).map((f) => f.plan)).toEqual([1])
   expect(plan(w.db, 2)).toMatchObject({ step: 2, state: 'queued', wait_reason: 'over_cap' })
-  expect(running()).toEqual({ n: 1 })
+  expect(running()).toBe(1)
 
-  w.db.prepare("UPDATE plans SET state = 'done' WHERE id = 1").run()
+  amend(w.db, 1, { state: 'done' })
   expect((await tick(w.db, w.root, stub(CARRIED))).map((f) => [f.plan, f.step])).toEqual([[2, 2]])
 })
 
@@ -147,7 +147,7 @@ test('a rewind onto a full lane queues the plan with the step, retries and head 
 
 test('a retry onto a lane with a free slot runs at once', () => {
   const w = full()
-  w.db.prepare('UPDATE pipes SET max_concurrent = 2 WHERE id = 1').run()
+  width(w.db, 1, 2)
   retry(w.db, plan(w.db, 2))
   expect(plan(w.db, 2)).toMatchObject({ step: 2, state: 'running' })
 })
@@ -158,10 +158,10 @@ test('the cap decides how many pipes worth of plans the tick opens', async () =>
   queued(w, 2, 2, 1)
   dial(w.db, 2, AT)
   expect((await tick(w.db, w.root, stub(CARRIED))).map((f) => f.pipe)).toEqual(['pr-path', 'research'])
-  w.db.prepare("UPDATE plans SET step = 0, state = 'queued'").run()
+  for (const p of allPlans(w.db)) amend(w.db, p.id, { step: 0, state: 'queued' })
   dial(w.db, 1, AT)
   expect((await tick(w.db, w.root, stub(CARRIED))).map((f) => f.pipe)).toEqual(['pr-path'])
-  w.db.prepare("UPDATE plans SET step = 0, state = 'queued'").run()
+  for (const p of allPlans(w.db)) amend(w.db, p.id, { step: 0, state: 'queued' })
   dial(w.db, 0, AT)
   expect(await tick(w.db, w.root, stub(CARRIED))).toEqual([])
 })
@@ -206,10 +206,10 @@ test('the fuller of the two windows rules, and an old reading holds until its wi
   record(w.db, reading(0.1, 'seven_day'))
   record(w.db, reading(0.97, 'five_hour'))
   expect(cap(w.db)).toMatchObject({ dial: 4, band: 0, cap: 0 })
-  w.db.prepare('DELETE FROM usage').run()
+  forget(w.db)
   record(w.db, reading(0.95, 'seven_day', 13 * 3600))
   expect(cap(w.db)).toMatchObject({ dial: 4, band: 1, cap: 1 })
-  w.db.prepare('DELETE FROM usage').run()
+  forget(w.db)
   record(w.db, reading(0.95, 'seven_day', 13 * 3600, -60))
   expect(cap(w.db)).toMatchObject({ dial: 4, band: null, cap: 4 })
 })
@@ -271,7 +271,7 @@ test('an issue the tick cannot read, or one carrying two P labels, leaves the pr
     const fired = await tick(w.db, w.root, stub(CARRIED), undefined, undefined, undefined, 0, read)
     expect(plan(w.db, 2).priority).toBe(2)
     expect(fired.map((f) => f.plan)).toEqual([1])
-    w.db.prepare("UPDATE plans SET step = 0, state = 'queued'").run()
+    for (const p of allPlans(w.db)) amend(w.db, p.id, { step: 0, state: 'queued' })
   }
 })
 
@@ -295,9 +295,9 @@ test('past 80% of the week one lane, past 95% none', async () => {
   dial(w.db, 4, AT)
   const inner = stub(CARRIED)
   const full = { ...inner, fire: async (p: Packet) => ({ ...(await inner.fire(p)), limits: [reading(0.83)] }) }
-  const ran = (): unknown => w.db.prepare('SELECT 1 FROM runs').get()
-  for (let at = 0; at < 4 && ran() === undefined; at += 1) await tick(w.db, w.root, full)
-  expect(w.db.prepare('SELECT kind, utilisation FROM usage').all()).toEqual([{ kind: 'seven_day', utilisation: 0.83 }])
+  const ran = (): boolean => newestRun(w.db) > 0
+  for (let at = 0; at < 4 && !ran(); at += 1) await tick(w.db, w.root, full)
+  expect(usage(w.db)).toEqual([{ kind: 'seven_day', utilisation: 0.83 }])
   expect(cap(w.db)).toMatchObject({ dial: 4, band: 1, cap: 1 })
   record(w.db, reading(0.97))
   expect(await tick(w.db, w.root, full)).toEqual([])

@@ -35,3 +35,9 @@ function sound(line: string, known: Set<string>): boolean {
   return !/#\d|\/(issues|pull)\/\d/.test(line) && [...line.matchAll(/@([\w-]+)/g)].every((m) => ours(m[1]))
     && (tags.length > 0 || line.startsWith('#')) && tags.every((t) => known.has(t))
 }
+
+export function drafted(reply: string): { learnings: string; post: string } | null {
+  const fence = /(?:^|\n)---\nlearnings:(.*)\n---\s*$/.exec(reply)
+  const learnings = (fence?.[1] ?? '').trim()
+  return fence === null || learnings === '' ? null : { learnings, post: reply.slice(0, fence.index).trim() }
+}

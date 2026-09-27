@@ -53,7 +53,7 @@ function piped(enabled = 1): Db {
 }
 
 function queue(db: Db, n: number, state: PlanRow['state'] = 'queued', step = 0): void {
-  addPlan(db, { pipe_id: 1, template: 'pr_path', state, queued_at: '2026-09-18', lane: 'machine', seat: 'typescript_specialist', origin: url(n), step })
+  addPlan(db, { pipe_id: 1, target_id: null, template: 'pr_path', state, queued_at: '2026-09-18', lane: 'machine', seat: 'typescript_specialist', origin: url(n), step })
 }
 
 const states = (db: Db): unknown[] => allPlans(db).map((p) => ({ origin: p.origin, state: p.state }))

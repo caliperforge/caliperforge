@@ -1,7 +1,8 @@
 import { rmSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Db } from '../store/index.ts'
-import { returnToLane } from '../store/holds.ts'
+import { returnToLane, retried } from '../store/holds.ts'
+import { WHY } from '../store/refusals.ts'
 import { afresh, drop, maybe, planDir, put } from './workspace.ts'
 
 /**
@@ -20,7 +21,15 @@ export function isHeld(root: string, plan: number): boolean {
   return maybe(root, plan, NOTE) !== null
 }
 
+const REPEAT = `# Stopped\n\n${WHY.repeat}.\n`
+
+function repeatAtCheck(db: Db, root: string, plan: number): boolean {
+  const row = db.prepare('SELECT step FROM plans WHERE id = ?').get(plan) as { step: number } | undefined
+  return !isHeld(root, plan) && row?.step === 3 && maybe(root, plan, 'refusal.md')?.endsWith(REPEAT) === true
+}
+
 export function unhold(db: Db, root: string, plan: number, actor: string): number {
+  if (repeatAtCheck(db, root, plan)) return retried(db, plan, actor)
   const step = returnToLane(db, plan, actor)
   db.prepare('UPDATE plans SET waits_on = NULL WHERE id = ?').run(plan)
   drop(root, plan, NOTE)

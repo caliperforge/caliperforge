@@ -4,7 +4,7 @@ import ts from 'typescript'
 import type { Check, Finding } from './kind.ts'
 import { walk } from './tree.ts'
 
-const METRICS = ['citing-comment', 'lines', 'prepare', 'silent-catch', 'test-name'] as const
+export const METRICS = ['citing-comment', 'lines', 'prepare', 'silent-catch', 'test-name'] as const
 type Metric = typeof METRICS[number]
 type Tally = Partial<Record<Metric, number>>
 export type Counts = Record<string, Tally>

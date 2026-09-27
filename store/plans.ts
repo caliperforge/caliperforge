@@ -83,6 +83,20 @@ export function openPipes(db: Db, hhmm: string): PipeRow[] {
     .filter((p) => inWindow(p, hhmm))
 }
 
+export function addPipe(db: Db, pipe: Omit<PipeRow, 'id'>): void {
+  db.prepare(`INSERT INTO pipes (name, enabled, window_start, window_end, max_concurrent)
+    VALUES (@name, @enabled, @window_start, @window_end, @max_concurrent)`).run(pipe)
+}
+
+export function addPlan(db: Db, row: Pick<PlanRow, 'pipe_id' | 'template' | 'state' | 'queued_at' | 'lane' | 'seat' | 'origin' | 'step'>): number {
+  return Number(db.prepare(`INSERT INTO plans (pipe_id, template, state, queued_at, lane, seat, origin, step)
+    VALUES (@pipe_id, @template, @state, @queued_at, @lane, @seat, @origin, @step)`).run(row).lastInsertRowid)
+}
+
+export function allPlans(db: Db): PlanRow[] {
+  return db.prepare('SELECT * FROM plans ORDER BY id').all().map((r) => PlanRow.parse(r))
+}
+
 /** The pipe's name when this call switched it off; null when it was already off. */
 export function laneOff(db: Db, pipe: number): string | null {
   const row = db.prepare('UPDATE pipes SET enabled = 0 WHERE id = ? AND enabled = 1 RETURNING name').get(pipe) as { name: string } | undefined

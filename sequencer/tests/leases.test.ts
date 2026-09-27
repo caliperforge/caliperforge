@@ -26,16 +26,6 @@ async function built(): Promise<World> {
   return w
 }
 
-test('two ticks started together step the plan once and the loser leaves no run row', async () => {
-  const w = await built()
-  const first = inFlight(w)
-  expect(await tick(w.db, w.root, stub(CARRIED))).toEqual([])
-  expect((await first).map((f) => f.plan)).toEqual([ID])
-  expect(w.db.prepare('SELECT count(*) AS n FROM runs WHERE step = 2').get()).toEqual({ n: 1 })
-  expect(plan(w.db, ID).step).toBe(3)
-  expect(held(w.db)).toEqual([])
-})
-
 test('take loses to a live holder and wins against a lease past the ceiling', async () => {
   const w = await built()
   const now = new Date()

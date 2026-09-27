@@ -127,7 +127,7 @@ function answer(packet: Packet, text: string, review: string, brief?: string): s
   return brief ?? briefFor(packet.prompt, packet.cwd)
 }
 
-export { KOTLIN, TYPESCRIPT } from './bases.ts'
+export { KOTLIN } from './bases.ts'
 
 /**
  * The two repositories `checkout()` needs, standing in for github: the target's
@@ -259,16 +259,6 @@ export function runsAfter(root: string, id: number, misses: number): Gh {
   return (args) => {
     read += 1
     return read <= misses ? '[]' : listed(args)
-  }
-}
-
-/** A fork that stays red, read as a live lap reads it: the push's runs miss the API once, then fail. */
-export function redLaps(root: string, id: number): Gh {
-  const red = runsOn(root, id, 'completed', 'failure')
-  let read = 0
-  return (args) => {
-    read += 1
-    return read % 2 === 1 ? '[]' : red(args)
   }
 }
 

@@ -12,7 +12,7 @@ import { refusedPush } from '../store/approvals.ts'
 import { overlapWaits } from '../store/plans.ts'
 import { backfillTickets } from '../store/tickets.ts'
 import { backfill } from '../store/transcript.ts'
-import { day, fileWaits, greptileLine, halted, heldBy, laneLine, open as openPlans, rulings, section, tickets, ticketSection, waitLine,
+import { byType, type ByType, day, fileWaits, greptileLine, halted, heldBy, laneLine, open as openPlans, rulings, section, tickets, ticketSection, waitLine,
   waits, windowLine } from './brief.ts'
 import { check, fill } from './digests.ts'
 import { flow } from './flow.ts'
@@ -62,9 +62,11 @@ function stores(cf: Command, { root, db, out }: Cli): void {
   })
 
   cf.command('runs').action(() => {
-    const rows = db().prepare('SELECT id, seat, step, exit, input_tokens + cache_tokens + output_tokens AS tokens, seconds FROM runs ORDER BY id')
-      .all() as { id: number; seat: string; step: number; exit: number; tokens: number; seconds: number }[]
-    for (const r of rows) out(`${String(r.id)}\t${r.seat}\t${String(r.step)}\t${String(r.exit)}\t${String(r.tokens)}\t${r.seconds.toFixed(1)}\n`)
+    const rows = db().prepare(`SELECT id, seat, step, exit, input_tokens + cache_read_tokens + output_tokens AS tokens, seconds,
+      input_tokens - coalesce(cache_write_tokens, 0) AS uncached_tokens, coalesce(cache_write_tokens, 0) AS cache_write_tokens,
+      cache_read_tokens, output_tokens FROM runs ORDER BY id`)
+      .all() as ({ id: number; seat: string; step: number; exit: number; tokens: number; seconds: number } & ByType)[]
+    for (const r of rows) out(`${String(r.id)}\t${r.seat}\t${String(r.step)}\t${String(r.exit)}\t${String(r.tokens)}\t${r.seconds.toFixed(1)}\t${byType(r)}\n`)
   })
 }
 

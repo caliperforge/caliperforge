@@ -43,7 +43,16 @@ test('D2 a field both files set comes out as the repo file has it, whole', () =>
   expect(profile(dir, 'acme/widget')).toEqual({ notes: ['own', 'more'], commit: 'org' })
 })
 
-test('D3 a field outside the six, or checks that are not string lists, is refused naming the file', () => {
+test('D1 the commit and PR rules parse, and a wrong issue_ref or ai_trailer is refused naming the file', () => {
+  const rules = { subject: 'package', issue_ref: 'Fixes', ai_trailer: true, trailer: 'Co-Authored-By: Claude', disclosure: 'Made with AI.' }
+  expect(profile(root({ '_org.yml': JSON.stringify(rules) }), 'acme/widget')).toEqual(rules)
+  const closes = root({ '_org.yml': 'issue_ref: Closes\n' })
+  expect(() => profile(closes, 'acme/widget')).toThrow(join(closes, 'profiles/acme/_org.yml'))
+  const yes = root({ '_org.yml': 'ai_trailer: "yes"\n' })
+  expect(() => profile(yes, 'acme/widget')).toThrow(join(yes, 'profiles/acme/_org.yml'))
+})
+
+test('D3 a field outside the eleven, or checks that are not string lists, is refused naming the file', () => {
   const extra = root({ '_org.yml': 'commit: x\nlabels: [bug]\n' })
   expect(() => profile(extra, 'acme/widget')).toThrow(join(extra, 'profiles/acme/_org.yml'))
   const checks = root({ '_org.yml': 'checks:\n  go: lint\n' })

@@ -38,7 +38,7 @@ function probe(db: Db, p: { name: string; sql: string[] }): Finding[] {
 }
 
 function run(plan: number, step: number, seat: string): string {
-  return `INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_tokens, output_tokens, seconds, exit, transcript_path)
+  return `INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_read_tokens, output_tokens, seconds, exit, transcript_path)
 VALUES (${String(plan)}, ${String(step)}, '${seat}', '${'0'.repeat(64)}', 'anthropic-api', 'm', 'low', 0, 0, 0, 0, 0, 'x.transcript.jsonl')`
 }
 

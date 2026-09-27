@@ -51,7 +51,7 @@ export function heldBy(db: Db, by: Holder): PlanLine[] {
 
 export function day(db: Db): Day {
   return db.prepare(`SELECT count(*) AS runs,
-    coalesce(sum(input_tokens + cache_tokens + output_tokens), 0) AS tokens,
+    coalesce(sum(input_tokens + cache_read_tokens + output_tokens), 0) AS tokens,
     coalesce(sum(seconds), 0) AS seconds
     FROM runs WHERE julianday(at) >= julianday('now', '-1 day')`).get() as Day
 }
@@ -64,7 +64,7 @@ const TICKETS = `SELECT p.id AS plan, p.origin, t.repo || '#' || t.issue_no AS t
   sum(r.step = 2 AND r.${BUILT}) AS build,
   sum(r.step IN (4, 5) AND r.${BUILT}) AS review,
   sum(r.seconds) / 60.0 AS minutes,
-  sum(r.input_tokens + r.cache_tokens + r.output_tokens) AS tokens,
+  sum(r.input_tokens + r.cache_read_tokens + r.output_tokens) AS tokens,
   CASE p.state WHEN 'done' THEN 'landed' WHEN 'refused' THEN 'wasted' WHEN 'halted' THEN 'wasted'
     ELSE 'open' END AS outcome,
   julianday(min(r.at)) < julianday(?) AS early
@@ -150,8 +150,15 @@ export function greptileLine(n: number): string {
 /** One row per rate-limit window: our tokens inside it, the provider's utilisation of it, the cap. */
 export function windowLine(w: WindowRow): string {
   const used = w.utilisation === null ? 'no fresh reading' : `${(w.utilisation * 100).toFixed(1)}% ${w.status ?? ''}`.trim()
-  return `  ${w.kind}\t${String(w.runs)} run(s)\t${String(w.tokens)} tokens\t${used}` +
+  return `  ${w.kind}\t${String(w.runs)} run(s)\t${String(w.tokens)} tokens\t${byType(w)}\t${used}` +
     `\tobserved ${w.observed_at ?? '-'}\tresets ${w.resets_at ?? '-'}\n`
+}
+
+export type ByType = Pick<WindowRow, 'uncached_tokens' | 'cache_write_tokens' | 'cache_read_tokens' | 'output_tokens'>
+
+export function byType(t: ByType): string {
+  return `${String(t.uncached_tokens)} uncached\t${String(t.cache_write_tokens)} cache write` +
+    `\t${String(t.cache_read_tokens)} cache read\t${String(t.output_tokens)} output`
 }
 
 /** `cf tick --dry`: the clock the windows are read against, the lanes open, and what each holds. */

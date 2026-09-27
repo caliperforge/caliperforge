@@ -8,8 +8,10 @@ import { reviewManifest, SYMBOLS_LEAD, type Bench } from '../runner/packet.ts'
 import { load, seat, tight, type Seat } from '../runner/rules.ts'
 import { judge, loadReviews } from '../reviews/bench.ts'
 import type { Finding, Judged, Note } from '../reviews/verdict.ts'
+import { runLogged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { filesOf } from '../store/files.ts'
+import { profile } from '../store/profile.ts'
 import { observed, wall } from '../store/lanes.ts'
 import { builderRan, internal, type PlanRow } from '../store/plans.ts'
 import { byRun, opened, pending, unfinished } from '../store/transcript.ts'
@@ -36,10 +38,6 @@ import { kernelPlan } from './home.ts'
 import { audit } from '../rails/completion-audit/index.ts'
 
 const FENCE = /^---\r?\n[\s\S]*?\r?\n---\s*$/m
-
-const INSERT = `INSERT INTO runs
-  (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_tokens, output_tokens, seconds, exit, transcript_path, cost_usd)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 export async function fireSeat(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
   if (kernelPlan(plan)) install(srcDir(root, plan.id))
@@ -226,7 +224,7 @@ export async function ran(db: Db, root: string, plan: PlanRow, step: Step, provi
   load(db, root)
   const { manifest, prompt, hash } = seat(root, step.runs)
   const src = srcDir(root, plan.id)
-  const built = packet(manifest, prompt, tight(root), issue, src,
+  const built = packet(manifest, prompt + noteSection(db, root, plan, step), tight(root), issue, src,
     transcriptOf(root, plan.id, step.step), ours, fenceFor(db, plan.id, manifest.write_paths))
   const fired = await provider.fire({
     ...built,
@@ -241,9 +239,9 @@ export async function ran(db: Db, root: string, plan: PlanRow, step: Step, provi
 
 export function recorded(db: Db, plan: number, step: number, name: string, hash: string, provider: Provider['name'],
   manifest: Seat, fired: Fired): void {
-  const row = db.prepare(INSERT).run(plan, step, name, hash, provider, manifest.model, manifest.effort,
-    fired.usage.input, fired.usage.cache, fired.usage.output, fired.seconds, fired.exit, fired.transcript_path, fired.usage.cost ?? null)
-  byRun(db, Number(row.lastInsertRowid), fired.transcript_path)
+  const id = runLogged(db, { plan, step, seat: name, rule_hash: hash, provider, model: manifest.model,
+    effort: manifest.effort, exit: fired.exit, fired })
+  byRun(db, id, fired.transcript_path)
 }
 
 function exited(step: Step, fired: Fired): Outcome {
@@ -378,6 +376,12 @@ function symbolsOf(db: Db, root: string, plan: PlanRow, src: string): Pick<Hando
 function symbolSection(db: Db, root: string, plan: PlanRow): string {
   const { symbols } = symbolsOf(db, root, plan, srcDir(root, plan.id))
   return symbols === undefined ? '' : `# Symbols at the branch base\n\n${SYMBOLS_LEAD}\n\n${symbols}`
+}
+
+function noteSection(db: Db, root: string, plan: PlanRow, step: Step): string {
+  const repo = step.step === 2 && !internal(plan) ? repoOf(db, plan) : null
+  const notes = repo === null ? [] : profile(root, repo)?.notes ?? []
+  return repo === null || notes.length === 0 ? '' : `\n\n# Notes on ${repo}\n\n${notes.map((n) => `- ${n}`).join('\n')}`
 }
 
 function referenced(src: string, issue: string): Pick<Bench, 'reference'> {

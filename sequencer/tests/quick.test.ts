@@ -62,7 +62,7 @@ test('the round leaves a passing gate row marked quick_lane and the builder toke
   await tick(w.db, w.root, builds(writes(w.root, 1, `${FIX}\n`), fence(cosmetic(SPAN, FIX))))
   expect(w.db.prepare("SELECT outcome, quick_lane, step FROM verdicts WHERE plan = 1 AND gate = 'review' ORDER BY id").all())
     .toEqual([{ outcome: 'refuse', quick_lane: 0, step: 4 }, { outcome: 'pass', quick_lane: 1, step: 4 }])
-  expect(w.db.prepare('SELECT seat, input_tokens + cache_tokens + output_tokens AS tokens FROM runs WHERE plan = 1 AND step = 2').all())
+  expect(w.db.prepare('SELECT seat, input_tokens + cache_read_tokens + output_tokens AS tokens FROM runs WHERE plan = 1 AND step = 2').all())
     .toEqual([{ seat: 'outside_specialist', tokens: 60 }, { seat: 'outside_specialist', tokens: 60 }])
   expect(w.db.prepare('SELECT count(*) AS n FROM runs WHERE plan = 1 AND step IN (4, 5)').get()).toEqual({ n: 1 })
 })

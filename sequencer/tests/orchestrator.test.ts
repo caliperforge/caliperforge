@@ -44,7 +44,7 @@ function state(db: ReturnType<typeof open>, home: string) {
 }
 
 const decisions = (db: ReturnType<typeof open>) => db.prepare('SELECT plan, step, wait_reason, verb, why, evidence, tokens FROM decisions').all()
-const runs = (db: ReturnType<typeof open>) => db.prepare(`SELECT step, input_tokens, cache_tokens, output_tokens FROM runs
+const runs = (db: ReturnType<typeof open>) => db.prepare(`SELECT step, input_tokens, cache_read_tokens, output_tokens FROM runs
   WHERE plan = 7 AND seat = 'orchestrator'`).all()
 
 test('D1 a waiting plan gets one decision and is left byte-identical', async () => {
@@ -59,7 +59,7 @@ test('D1 a waiting plan gets one decision and is left byte-identical', async () 
   await woke(db, home, stub(VALID, fires), now)
   expect(decisions(db)).toHaveLength(1)
   expect(fires).toHaveLength(1)
-  expect(runs(db)).toEqual([{ step: 4, input_tokens: 10, cache_tokens: 20, output_tokens: 30 }])
+  expect(runs(db)).toEqual([{ step: 4, input_tokens: 10, cache_read_tokens: 20, output_tokens: 30 }])
 })
 
 test.each([

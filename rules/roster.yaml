@@ -15,6 +15,8 @@ seats:
   - solana_specialist
   - writer
   - text_review
+  - coo_lite
+  - solidity_specialist
 digests:
   typescript_specialist:
     manifest: a8dd50ad9bc5d01f576bd87d7fc88bd0b518adb47d37468f28b24b02d4d730a1
@@ -64,3 +66,9 @@ digests:
   text_review:
     manifest: cc848017eac1f6d9e970b2862e82a00a753cbfca9c679faebad3597c4fae28ca
     prompt: bcefa5036394d40c3db579e8f3aa9c47f3bf6442145100828eb04192d53e92bf
+  coo_lite:
+    manifest: fbcf12aa267aa78a55f37db11224824b75e95044215a48565c95336399214051
+    prompt: 75cb6b90592c98c0509d880761e497c4228f4da12fb63ac467ee197ce4983e28
+  solidity_specialist:
+    manifest: cbd0015d48c5a86d0afb2ce4d80480746b33b7e3e51a96297cdab2deb1dcfea2
+    prompt: 4727a0da187517bc9910a0e6e42671e9b1cd1de53a0fed695386ce53519125cb

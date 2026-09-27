@@ -74,6 +74,17 @@ test('refuses a run that is missing, stale against the head, or still pending', 
   }
 })
 
+test('D2 Fixes #N passes only where issue_ref allows it', () => {
+  expect(ciGreen(head, { body: '', commits: ['Fixes #412'], issue_ref: 'Fixes' }, KOTLIN, gh('green.gh.json')).spans).toEqual([])
+  expect(ciGreen(head, { body: '', commits: ['Fixes #412'] }, KOTLIN, gh('green.gh.json')).spans).toEqual(['commit:1 upstream.number'])
+})
+
+test('D3 under issue_ref Fixes, closes, bare and other-repo numbers are still refused', () => {
+  const commits = ['closes #412', '#412', 'other/repo#1']
+  expect(ciGreen(head, { body: '', commits, issue_ref: 'Fixes' }, KOTLIN, gh('green.gh.json')).spans)
+    .toEqual(['commit:1 upstream.number', 'commit:2 upstream.number', 'commit:3 upstream.number'])
+})
+
 test('writes a verdicts row the store accepts', () => {
   const db = fresh(join(root, 'schema'))
   load(db, root)

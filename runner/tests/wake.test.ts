@@ -57,7 +57,7 @@ test('#284b: fixer and orchestrator runs land at steps 4 and 5 and leave the cei
       VALUES (?, 'card', 'rules/roster.yaml', ?, '2026-09-22T00:00:00.000Z')`).run(seat, '0'.repeat(64))
     for (const step of [4, 5]) {
       db.prepare(`INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort,
-        input_tokens, cache_tokens, output_tokens, seconds, exit, transcript_path)
+        input_tokens, cache_read_tokens, output_tokens, seconds, exit, transcript_path)
         VALUES (7, ?, ?, ?, 'claude-agent-sdk', 'm', 'high', 7000000, 0, 0, 0, 0, 'x.transcript.jsonl')`)
         .run(step, seat, '0'.repeat(64))
     }

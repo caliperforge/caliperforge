@@ -7,7 +7,7 @@ INSERT INTO plans (id, pipe_id, template, state, queued_at, step, retries, prior
   VALUES (7, 9, 'pr_path', 'running', '2026-09-24', 4, 0, 1, 'machine', 'typescript_specialist',
     'https://github.com/caliperforge/caliperforge/issues/139', 'token_ceiling');
 
-INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_tokens, output_tokens, seconds, exit, transcript_path) VALUES
+INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_read_tokens, output_tokens, seconds, exit, transcript_path) VALUES
   (7, 2, 'typescript_specialist', printf('%064d', 0), 'claude-agent-sdk', 'claude-opus-5-5', 'high', 1000, 900000, 200, 60, 0, '.cf/work/7/step-2.transcript.jsonl'),
   (7, 3, 'typescript_specialist', printf('%064d', 0), 'claude-agent-sdk', 'claude-opus-5-5', 'high', 3000, 900000, 400, 90, 0, '.cf/work/7/step-3.transcript.jsonl');
 

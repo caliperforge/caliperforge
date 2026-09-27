@@ -233,9 +233,10 @@ export function fired(message: SDKResultMessage, started: number, refused: strin
     (n, u) => ({
       input: n.input + u.inputTokens + u.cacheCreationInputTokens,
       cache: n.cache + u.cacheReadInputTokens,
+      write: n.write + u.cacheCreationInputTokens,
       output: n.output + u.outputTokens,
     }),
-    { input: 0, cache: 0, output: 0 },
+    { input: 0, cache: 0, write: 0, output: 0 },
   )
   const denials = refused.length + message.permission_denials.length
   const ended = message.terminal_reason ?? (refused.length > 0 ? 'hook_stopped' : 'completed')

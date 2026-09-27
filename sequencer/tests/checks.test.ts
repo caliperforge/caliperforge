@@ -224,7 +224,7 @@ function built(w: World, at: number): void {
   w.db.prepare(`INSERT OR IGNORE INTO rules (id, kind, path, content_hash, loaded_at)
     VALUES ('typescript_specialist', 'card', 'rules/roster.yaml', ?, '2026-09-22T00:00:00.000Z')`).run(HASH)
   w.db.prepare(`INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort,
-    input_tokens, cache_tokens, output_tokens, seconds, exit, transcript_path)
+    input_tokens, cache_read_tokens, output_tokens, seconds, exit, transcript_path)
     VALUES (1, 2, 'typescript_specialist', ?, 'anthropic-api', 'm', 'low', 0, 0, 0, 0, 0, ?)`)
     .run(HASH, `step-2.${String(at)}.transcript.jsonl`)
 }

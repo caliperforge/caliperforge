@@ -3,6 +3,7 @@ import { cloned, diffOf, maybe, srcDir } from '../sequencer/workspace.ts'
 import { decide, digestOf, headDigest } from '../store/approvals.ts'
 import { approved } from '../store/deliverables.ts'
 import type { Db } from '../store/index.ts'
+import { profile } from '../store/profile.ts'
 import { bytes, byId, open as openProposals, stamp, strike, type ProposalRow } from '../store/proposals.ts'
 
 export interface Mark { name: string; ok: boolean }
@@ -107,7 +108,7 @@ function card(db: Db, root: string, p: Ready): Card {
     title: `${p.repo}#${String(p.issue_no)} ${head.branch}`,
     digest: headDigest(head.sha),
     change: stat(diffOf(root, p.id)),
-    text: (maybe(root, p.id, 'pr.md') ?? prBody(p.issue_no, root, p.id)).trimEnd(),
+    text: (maybe(root, p.id, 'pr.md') ?? prBody(p.issue_no, root, p.id, profile(root, p.repo))).trimEnd(),
     marks: marks(db, p.id),
   }
 }

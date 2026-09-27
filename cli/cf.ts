@@ -7,6 +7,7 @@ import { claudeAgentSdk } from '../providers/claude-agent-sdk/index.ts'
 import { credential } from '../providers/credential.ts'
 import { spawn } from 'node:child_process'
 import { CHAIN_MINUTES, dry, EACH, lap, tick, type Apart } from '../sequencer/index.ts'
+import { garden } from '../sequencer/garden.ts'
 import type { Fired } from '../sequencer/kind.ts'
 import { CHECK_SLOTS } from '../sequencer/checks.ts'
 import { behind, upgraded } from '../sequencer/upgrade.ts'
@@ -22,7 +23,7 @@ import { reported, slack } from './flow.ts'
 import { registerInbox, registerLanes, registerSession, type Cli } from './cf-lanes.ts'
 import { registerPlans, registerRetry } from './cf-plans.ts'
 import { registerAdopt, registerApprovals, registerTargets } from './cf-targets.ts'
-import { desk, gh } from './gh.ts'
+import { desk, fileIssue, gh } from './gh.ts'
 import { health } from './health.ts'
 import { crashed, events, notify, record as keep } from './inbox.ts'
 import { alerter, down, livenessLine, watch } from './watch.ts'
@@ -129,6 +130,8 @@ async function ticked(options: { dry?: boolean }, now: Date): Promise<void> {
     for (const span of f.spans) out(`  span\t${span}\n`)
   }
   cards(handle, now)
+  const gardened = garden(handle, root, now, fileIssue)
+  if (gardened !== null) out(`garden\t${gardened}\n`)
 }
 
 cf.command('signoff').description('open, read and close the sign-off cards on the private sign-off repo, as every tick does')

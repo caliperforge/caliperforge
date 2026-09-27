@@ -94,9 +94,25 @@ test('writer D3: the reply reads as learnings and a post facts passes', () => {
   const reply = drafted(fixture('reply.md'))
   expect(reply?.learnings).toMatch(/\S/)
   expect(reply?.post).toMatch(/\S/)
+  expect(reply?.dest).toBe('site')
+  expect(reply?.dek).toMatch(/\S/)
+  expect(reply?.sources).toEqual([{ claim: 'the writer reads the packet', ref: 'templates/comms.ts:16' }])
+  expect(reply?.checks).toEqual([{ label: 'every line cites the packet', ok: true }])
   put(w.root, 1, 'packet.json', JSON.stringify({ landed: [{ plan: 7, origin: '', digest: '' }], refusals: [{ id: 3 }] }))
   put(w.root, 1, 'draft.md', reply?.post ?? '')
   expect(facts(w.root, plan(w.db, 1))).toMatchObject({ outcome: 'pass', spans: [] })
+})
+
+const varied = (key: string, value: string | null): string => fixture('reply.md').split('\n')
+  .flatMap((l) => (l.startsWith(`${key}:`) ? (value === null ? [] : [`${key}: ${value}`]) : [l])).join('\n')
+
+test.each([
+  ...['dest', 'dek', 'sources', 'checks', 'learnings'].map((key) => [key, null]),
+  ['dek', 'a'.repeat(161)], ['dek', 'a # b'], ['dek', 'a * b'], ['dek', 'a ` b'], ['dest', 'blog'],
+  ['checks', '[{"label": "x", "ok": "true"}]'], ['sources', '[{"claim": "x", "ref": "templates/comms.ts"}]'],
+  ['sources', '[{"claim": "x", "ref"'],
+] as [string, string | null][])('writer D2, D3: a fence with %s as %s reads as null', (key, value) => {
+  expect(drafted(varied(key, value))).toBeNull()
 })
 
 test('writer D4: a reply with no learnings fence reads as null', () => {

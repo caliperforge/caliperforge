@@ -13,6 +13,8 @@ import { blocked, kernel } from '../steps.ts'
 import { diffOf, doneIds, get, narrowing, put, snapshot, srcDir } from '../workspace.ts'
 import { GREEN } from '../base.ts'
 import { record } from '../../store/files.ts'
+import { runRows } from '../../store/events.ts'
+import { overrule, verdictRows } from '../../store/verdict.ts'
 import { record as signal } from '../../store/signals.ts'
 import { benchPacket } from '../../runner/packet.ts'
 import type { Packet, Provider } from '../../providers/kind.ts'
@@ -188,8 +190,8 @@ test('a rail refusal names spans, sends the plan back one step, then to blocked_
   expect(stopped).toMatchObject({ step: 3, state: 'blocked_on_ceo' })
   expect(plan(w.db, 1).state).toBe('blocked_on_ceo')
   expect(w.db.prepare('SELECT held_by, held_why FROM plans WHERE id = 1').get()).toEqual({ held_by: 'coo', held_why: stopped?.note })
-  const verdict = w.db.prepare("SELECT outcome, origin_ref FROM verdicts WHERE rail_id = 'completion-audit' ORDER BY id").get()
-  expect(verdict).toEqual({ outcome: 'refuse', origin_ref: 'completion-audit' })
+  const verdict = verdictRows(w.db, 1).find((v) => v.rail_id === 'completion-audit')
+  expect(verdict).toMatchObject({ outcome: 'refuse', origin_ref: 'completion-audit' })
 })
 
 test('the sequencer hands the bench a maintainer view, and a wrong shape refuses before any model', async () => {
@@ -199,8 +201,8 @@ test('the sequencer hands the bench a maintainer view, and a wrong shape refuses
     expect((await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1)))[0]?.step).toBe(step)
   }
   expect((await tick(w.db, w.root, stub(CARRIED)))[0]).toMatchObject({ step: 4, outcome: 'pass', state: 'running' })
-  const row = w.db.prepare("SELECT gate, kind, outcome FROM verdicts WHERE step = 4").get()
-  expect(row).toEqual({ gate: 'review', kind: 'review', outcome: 'pass' })
+  const row = verdictRows(w.db, 1).find((v) => v.step === 4)
+  expect(row).toMatchObject({ gate: 'review', kind: 'review', outcome: 'pass' })
   const bare = benchPacket(w.root, 'code_quality', 'a handback is not a maintainer view', '/tmp/x.transcript.jsonl')
   expect(bare).toHaveProperty('refusal')
 })
@@ -332,9 +334,9 @@ test('a reviewer gets its own last verdict, the diff since the tree it judged an
     new RegExp(`changed since the tree you judged:\n {2}- src/hello\\.ts\n\n`
       + `merged from main, not the builder's:\n {2}- none\n\n`
       + `unchanged since you judged it, at the blob it had then:\n {2}- src/parse\\.ts [0-9a-f]{40}`))
-  const trees = w.db.prepare('SELECT tree FROM verdicts WHERE plan = ? AND step = 4 ORDER BY id').all(MINE) as { tree: string }[]
+  const trees = verdictRows(w.db, MINE).filter((v) => v.step === 4)
   expect(trees).toHaveLength(2)
-  expect(trees.every((r) => /^[0-9a-f]{40}$/.test(r.tree))).toBe(true)
+  expect(trees.every((r) => /^[0-9a-f]{40}$/.test(r.tree ?? ''))).toBe(true)
 })
 
 const HELLO = (word: string): string =>
@@ -353,9 +355,7 @@ test('a reviewer step 5 sent back is handed the delta since the tree it passed, 
   for (let step = 0; step < 3; step += 1) await tick(w.db, w.root, stub(CARRIED, 0, PASS))
   await tick(w.db, w.root, stub(CARRIED, 0, REFUSE))
   const baseTree = execFileSync('git', ['rev-parse', 'HEAD^{tree}'], { cwd: srcDir(w.root, MINE), encoding: 'utf8' }).trim()
-  w.db.prepare(`INSERT INTO verdicts (gate, kind, subject_digest, plan, step, outcome, origin_kind, origin_ref, tokens, seconds, tree)
-    SELECT gate, kind, subject_digest, plan, step, 'refuse', 'ruling', 'review.code_quality', 0, 0, ? FROM verdicts
-    WHERE plan = ? AND step = 4 AND kind = 'review'`).run(baseTree, MINE)
+  overrule(w.db, MINE, 4, 'review.code_quality', baseTree)
   writeFileSync(hello, HELLO('a + b + "!"'))
   const seen: Packet[] = []
   for (let step = 0; step < 3; step += 1) await tick(w.db, w.root, stub(CARRIED, 0, REFUSE, (p) => seen.push(p)))
@@ -396,7 +396,7 @@ async function reworked(w: World, handback: string, ticks: number): Promise<stri
   return reviewer(seen)
 }
 
-const seniorRuns = (w: World): unknown => w.db.prepare('SELECT count(*) AS n FROM runs WHERE plan = ? AND step = 5').get(MINE)
+const seniorRuns = (w: World): unknown => ({ n: runRows(w.db).filter((r) => r.plan === MINE && r.step === 5).length })
 
 test('D1 D2 a rework delta outside the passed diff, or over half of it, is reviewed in full', async () => {
   const unseen = await passedOn(REFUSE)
@@ -419,8 +419,8 @@ test('D3 a comment-only rework delta is reviewed as a delta and senior keeps its
   expect(await reworked(w, CARRIED, 4)).toContain('# Changed since your last verdict')
   expect(modeOf(w.root, 4)).toMatch(/^comment: /)
   expect(seniorRuns(w)).toEqual({ n: 1 })
-  expect(w.db.prepare("SELECT outcome, tokens, kept_by FROM verdicts WHERE plan = ? AND gate = 'senior_review' ORDER BY id DESC LIMIT 1").get(MINE))
-    .toEqual({ outcome: 'pass', tokens: 0, kept_by: null })
+  expect(verdictRows(w.db, MINE).filter((v) => v.gate === 'senior_review').at(-1))
+    .toMatchObject({ outcome: 'pass', tokens: 0, kept_by: null })
   expect(modeOf(w.root, 5)).toBe('skipped: 1 delta lines, comments and docs only\n')
   expect(plan(w.db, MINE).step).toBe(6)
 })
@@ -520,14 +520,13 @@ test('step 6 sends the branch to our fork, waits out a run still going, then rec
   expect(held?.spans).toEqual([`${RUN} ci.pending`])
   expect(sent.slice(2)).toEqual([`send src ${tip(w.root, 1)}:refs/heads/widget-12-a1-next`])
   expect(plan(w.db, 1).step).toBe(6)
-  expect(w.db.prepare("SELECT count(*) AS n FROM verdicts WHERE plan = 1 AND rail_id = 'ci-green'").get())
-    .toEqual({ n: 0 })
+  expect(ciGreen(w)).toEqual([])
 
   const fired = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched(sent, w.root, 1)))[0]
   expect(fired).toMatchObject({ step: 6, name: 'ready', outcome: 'pass', state: 'running' })
   expect(sent).toHaveLength(4)
-  expect(w.db.prepare('SELECT rail_id, gate, outcome FROM verdicts WHERE plan = 1 AND step = 6 ORDER BY id').all())
-    .toEqual([{ rail_id: 'ci-green', gate: 'ready', outcome: 'pass' }, { rail_id: 'ready', gate: 'ready', outcome: 'pass' }])
+  expect(verdictRows(w.db, 1).filter((v) => v.step === 6))
+    .toMatchObject([{ rail_id: 'ci-green', gate: 'ready', outcome: 'pass' }, { rail_id: 'ready', gate: 'ready', outcome: 'pass' }])
 })
 
 test('step 3\'s pass sends and rehearses the branch before review fires, and step 6 opens no second rehearsal', async () => {
@@ -558,8 +557,7 @@ test('a red run on the fork sends the plan to the builder with the failed log', 
   expect(plan(w.db, 1)).toMatchObject({ step: 2, retries: 1 })
   expect(red?.spans[0]).toMatch(/^ci\.red /)
   expect(planFile(w.root, 'refusal.md')).toContain('their CI is red')
-  expect(w.db.prepare("SELECT outcome FROM verdicts WHERE plan = 1 AND rail_id = 'ci-green'").get())
-    .toEqual({ outcome: 'refuse' })
+  expect(ciGreen(w)).toEqual([{ outcome: 'refuse' }])
 })
 
 test('a fork still red after a rebuild that changed nothing stops instead of cycling', async () => {
@@ -591,7 +589,8 @@ const redOnBase = async (g: { status: string; conclusion: string }, log: string[
   return [w, wire]
 }
 
-const ciGreen = (w: World): unknown => w.db.prepare("SELECT outcome FROM verdicts WHERE plan = 1 AND rail_id = 'ci-green' ORDER BY id DESC").all()
+const ciGreen = (w: World): unknown =>
+  verdictRows(w.db, 1).filter((v) => v.rail_id === 'ci-green').map(({ outcome }) => ({ outcome })).reverse()
 
 test('a job red at the head and red again at the re-run last green head is the base\'s: the plan goes on to sign-off', async () => {
   const g = { status: 'completed', conclusion: 'success' }
@@ -641,8 +640,7 @@ test('a run still going is waited on past the first-run window', async () => {
   for (let at = 0; at < 11; at += 1) last = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
   expect(last).toMatchObject({ step: 6, name: 'ready', outcome: 'pass', state: 'running' })
   expect(last?.note).toMatch(/is still running CI, tick 11 of 45/)
-  expect(w.db.prepare("SELECT count(*) AS n FROM verdicts WHERE plan = 1 AND rail_id = 'ci-green'").get())
-    .toEqual({ n: 0 })
+  expect(ciGreen(w)).toEqual([])
 })
 
 const atCi = async (): Promise<World> => {
@@ -678,14 +676,12 @@ test('the push window is waited out: no run at the new head holds step 6, the ru
   expect(first?.spans[0]).toMatch(/ ci\.missing$/)
   expect(first?.note).toMatch(/no run yet, tick 1 of 10/)
   expect((await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]?.note).toMatch(/tick 2 of 10/)
-  expect(w.db.prepare("SELECT count(*) AS n FROM verdicts WHERE plan = 1 AND rail_id = 'ci-green'").get())
-    .toEqual({ n: 0 })
+  expect(ciGreen(w)).toEqual([])
   expect(plan(w.db, 1).step).toBe(6)
 
   const judged = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
   expect(judged).toMatchObject({ step: 6, name: 'ready', outcome: 'pass' })
-  expect(w.db.prepare("SELECT outcome FROM verdicts WHERE plan = 1 AND rail_id = 'ci-green'").get())
-    .toEqual({ outcome: 'pass' })
+  expect(ciGreen(w)).toEqual([{ outcome: 'pass' }])
   expect(plan(w.db, 1).step).toBe(7)
   expect(sent).toHaveLength(4)
 })
@@ -702,8 +698,7 @@ test('a head still runless after the window is refused on ci-green, not waited o
 
   const out = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
   expect(out).toMatchObject({ step: 6, name: 'ready', outcome: 'refuse', state: 'retried' })
-  expect(w.db.prepare("SELECT outcome FROM verdicts WHERE plan = 1 AND rail_id = 'ci-green'").get())
-    .toEqual({ outcome: 'refuse' })
+  expect(ciGreen(w)).toEqual([{ outcome: 'refuse' }])
   expect(plan(w.db, 1).step).toBe(5)
 })
 
@@ -720,7 +715,7 @@ const atReady = async (grade: (w: World) => void, log: string[] = []): Promise<[
 
 const FINDINGS = 'Confidence Score: 3/5\n\nThe empty name is never refused.'
 
-const readyVerdicts = (w: World): unknown => w.db.prepare("SELECT count(*) AS n FROM verdicts WHERE plan = 1 AND rail_id = 'ready'").get()
+const readyVerdicts = (w: World): unknown => ({ n: verdictRows(w.db, 1).filter((v) => v.rail_id === 'ready').length })
 
 test('D1 no Greptile score at the head holds ready through tick 45; tick 46 goes on and says so', async () => {
   const [w, lap] = await atReady(() => undefined)
@@ -830,8 +825,7 @@ test('every run row points at a transcript the provider wrote', async () => {
   const w = world()
   approve(w.db, w.target)
   for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
-  const rows = w.db.prepare('SELECT seat, step, transcript_path FROM runs ORDER BY id').all() as
-    { seat: string; step: number; transcript_path: string }[]
+  const rows = runRows(w.db)
   expect(rows.map((r) => r.step)).toEqual([1, 2, 4, 5])
   for (const r of rows) {
     expect(r.transcript_path).toMatch(/\.transcript\.jsonl$/)
@@ -866,7 +860,7 @@ test('cf brief and cf plan bind the plan they are asked for', async () => {
   expect(runsOf(w.db, 1).map((r) => r.step)).toEqual([1, 2])
   expect(runsOf(w.db, 99)).toEqual([])
   expect(verdictsOf(w.db, 1).map((v) => v.gate)).toEqual(Array<string>(6).fill('pre_review'))
-  expect(w.db.prepare('SELECT rail_id FROM verdicts WHERE plan = 1 ORDER BY id').all().map((r) => (r as { rail_id: string }).rail_id))
+  expect(verdictRows(w.db, 1).map((v) => v.rail_id))
     .toEqual(['completion-audit', 'secret-scan', 'authority', 'tight', 'test-weakened', 'identifiers'])
   expect(verdictsOf(w.db, 99)).toEqual([])
   expect(openPlans(w.db).map((p) => p.id)).toEqual([1])

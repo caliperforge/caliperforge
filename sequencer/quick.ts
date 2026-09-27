@@ -6,11 +6,12 @@ import type { Finding, Verdict } from '../reviews/verdict.ts'
 import { digestOf } from '../store/approvals.ts'
 import type { Db } from '../store/index.ts'
 import { internal, type PlanRow } from '../store/plans.ts'
-import { at, type Step } from '../templates/pr-path.ts'
+import type { Step } from '../templates/pr-path.ts'
 import { checks } from './checks.ts'
 import type { Outcome } from './kind.ts'
 import { fireReview, ran } from './seat.ts'
 import { languageFor } from './route.ts'
+import { mapOf } from './steps.ts'
 import { diffOf, diffSince, get, srcDir } from './workspace.ts'
 
 /** The fence a fix stays inside: every changed line within `NEAR` of one a finding named, `CAP` changed lines in all. */
@@ -27,7 +28,7 @@ export async function fireRound(db: Db, root: string, plan: PlanRow, step: Step,
   if (verdict.outcome !== 'refuse' || tree === null) return verdict
   if (findings.length === 0 || !findings.every((f) => f.kind === 'cosmetic')) return verdict
   const src = srcDir(root, plan.id)
-  const fired = await ran(db, root, plan, at(2, languageFor(db, plan, src)), provider, asked(root, plan.id, findings), internal(plan))
+  const fired = await ran(db, root, plan, mapOf(plan.template).at(2, languageFor(db, plan, src)), provider, asked(root, plan.id, findings), internal(plan))
   if (fired.ended !== 'completed') return verdict
   if (strayed(diffSince(src, tree), findings)) return verdict
   if (internal(plan) && checks(src) !== null) return verdict

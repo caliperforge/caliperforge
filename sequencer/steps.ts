@@ -5,7 +5,8 @@ import { parse } from '../rails/diff.ts'
 import { building, filesOf, sharing, strays as recordStrays } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
 import { builderRan, internal, originIssue, type PlanRow, type Wait } from '../store/plans.ts'
-import { at } from '../templates/pr-path.ts'
+import { steps as comms } from '../templates/comms.ts'
+import { at, last, steps, type Step } from '../templates/pr-path.ts'
 import { approved, approvedPlan, batch } from './approve.ts'
 import type { Outcome } from './kind.ts'
 import { preReview } from './rails.ts'
@@ -15,12 +16,40 @@ import { diffOf, maybe, put } from './workspace.ts'
 import { homeOf } from './home.ts'
 import { freshBase } from './merge.ts'
 
+export interface StepMap {
+  steps: Step[]
+  at(step: number, language?: string | null): Step
+  last(step: number): boolean
+}
+
+function listed(name: string, list: Step[]): StepMap {
+  return {
+    steps: list,
+    at: (step) => {
+      const found = list.find((s) => s.step === step)
+      if (found === undefined) throw new Error(`${name} has no step ${String(step)}`)
+      return found
+    },
+    last: (step) => step === list.at(-1)?.step,
+  }
+}
+
+const MAPS: Record<PlanRow['template'], StepMap> = {
+  pr_path: { steps, at, last },
+  comms: listed('comms', comms),
+  research: listed('research', []),
+}
+
+export function mapOf(template: PlanRow['template']): StepMap {
+  return MAPS[template]
+}
+
 /**
  * #140: what the tick says when it passes a plan over, as a reason the store checks rather than a
  * string a caller formats. `WAITING` carries the words; a target that names itself gets them from `parked`.
  */
 export function blocked(db: Db, plan: PlanRow): Wait | null {
-  const step = at(plan.step)
+  const step = mapOf(plan.template).at(plan.step)
   if (step.fires === 'ceo') return internal(plan) || approvedPlan(db, plan) ? null : 'ceo_batch'
   if (step.name === 'ruling') return internal(plan) || approved(db, plan) ? null : 'target_approval'
   if (step.name === 'ready') return proven(db, plan) ? null : 'ready_proof'
@@ -33,7 +62,7 @@ export function blocked(db: Db, plan: PlanRow): Wait | null {
  * Only a build that has not started waits: a job already building is never stopped by this.
  */
 export function overlapping(db: Db, plan: PlanRow): { plan: number; path: string } | null {
-  if (at(plan.step).name !== 'build' || builderRan(db, plan.id)) return null
+  if (mapOf(plan.template).at(plan.step).name !== 'build' || builderRan(db, plan.id)) return null
   return sharing(db, plan.id)
 }
 
@@ -57,7 +86,7 @@ export function parked(db: Db, plan: PlanRow): string | null {
 }
 
 export function kernel(db: Db, root: string, plan: PlanRow, wire?: Wire, read?: Read): Outcome {
-  const step = at(plan.step)
+  const step = mapOf(plan.template).at(plan.step)
   if (step.name === 'rails') return freshBase(db, root, plan) ?? strayed(db, root, plan) ?? railed(db, root, plan, wire)
   if (step.name === 'measure') return measure(db, root, plan, read)
   if (step.name === 'ready') return readyGate(db, root, plan, wire)

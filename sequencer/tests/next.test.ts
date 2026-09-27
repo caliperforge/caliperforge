@@ -53,6 +53,14 @@ const TABLE: Record<string, Row> = {
     },
     want: { wait: 'no_step_map', on: null },
   },
+  'a comms plan, whose steps the sequencer does not run yet': {
+    state: () => {
+      const w = world()
+      w.db.prepare("UPDATE plans SET template = 'comms' WHERE id = 1").run()
+      return w
+    },
+    want: { wait: 'no_step_map', on: null },
+  },
   'a target not yet approved': { state: () => stepTo(world(), 1, 1), want: { wait: 'target_approval', on: null } },
   'a ready step with no proof': { state: () => stepTo(world(), 1, 6), want: { wait: 'ready_proof', on: null } },
   'a batch with no sign-off': { state: () => stepTo(world(), 1, 7), want: { wait: 'ceo_batch', on: null } },

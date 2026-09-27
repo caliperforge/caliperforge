@@ -6,14 +6,14 @@ import { expect, it } from 'vitest'
 import { dump, migrate, open } from './index.ts'
 import { setLimit } from './limits.ts'
 import { addPart, allParts } from './parts.ts'
-import { addPlan } from './plans.ts'
+import { addPlan, builderRan } from './plans.ts'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
 it('applies every migration once and records the version', () => {
   const db = open(':memory:')
-  expect(migrate(db, join(root, 'schema'))).toEqual(['0001_init.sql', '0002_rulings.sql', '0003_runs_rule_hash.sql', '0004_one_disposition_per_verdict.sql', '0005_tick.sql', '0006_runs_transcript_path.sql', '0007_batch.sql', '0008_head_digest.sql', '0009_open_loop.sql', '0010_lanes.sql', '0011_issue_plans.sql', '0012_feeder.sql', '0013_internal_plans.sql', '0014_adopted_pr.sql', '0015_brief_read.sql', '0017_plan_files.sql', '0018_refusals.sql', '0019_signal_words.sql', '0020_leases.sql', '0021_parts.sql', '0022_band_p95.sql', '0023_reading_holds_ceiling.sql', '0024_run_token_wall.sql', '0025_wait_reason.sql', '0026_decisions.sql', '0027_verdict_tree.sql', '0028_priority_label.sql', '0029_merges.sql', '0030_kept_verdicts.sql', '0031_file_overlap.sql', '0032_stray_files.sql', '0033_quick_lane.sql', '0034_target_part.sql', '0035_caps_skip_cache_reads.sql', '0036_decisions_blocked_on_ceo.sql', '0037_decisions_applied.sql', '0039_events.sql', '0040_hq_path.sql', '0041_signal_head.sql', '0042_now.sql', '0043_reviewer_not_builder_skips_fixer.sql', '0044_tickets.sql', '0045_records.sql', '0046_brief_lines.sql', '0047_runs_cost.sql', '0048_scan_evidence.sql', '0049_part_after.sql', '0050_target_take.sql', '0051_held_by.sql', '0052_ratchet_counts.sql', '0053_tick_lanes.sql', '0054_gardens.sql', '0055_ticket_times.sql', '0056_size_limits.sql', '0057_refusal_ticket.sql', '0058_comms_once.sql'])
-  expect(db.pragma('user_version', { simple: true })).toBe(58)
+  expect(migrate(db, join(root, 'schema'))).toEqual(['0001_init.sql', '0002_rulings.sql', '0003_runs_rule_hash.sql', '0004_one_disposition_per_verdict.sql', '0005_tick.sql', '0006_runs_transcript_path.sql', '0007_batch.sql', '0008_head_digest.sql', '0009_open_loop.sql', '0010_lanes.sql', '0011_issue_plans.sql', '0012_feeder.sql', '0013_internal_plans.sql', '0014_adopted_pr.sql', '0015_brief_read.sql', '0017_plan_files.sql', '0018_refusals.sql', '0019_signal_words.sql', '0020_leases.sql', '0021_parts.sql', '0022_band_p95.sql', '0023_reading_holds_ceiling.sql', '0024_run_token_wall.sql', '0025_wait_reason.sql', '0026_decisions.sql', '0027_verdict_tree.sql', '0028_priority_label.sql', '0029_merges.sql', '0030_kept_verdicts.sql', '0031_file_overlap.sql', '0032_stray_files.sql', '0033_quick_lane.sql', '0034_target_part.sql', '0035_caps_skip_cache_reads.sql', '0036_decisions_blocked_on_ceo.sql', '0037_decisions_applied.sql', '0039_events.sql', '0040_hq_path.sql', '0041_signal_head.sql', '0042_now.sql', '0043_reviewer_not_builder_skips_fixer.sql', '0044_tickets.sql', '0045_records.sql', '0046_brief_lines.sql', '0047_runs_cost.sql', '0048_scan_evidence.sql', '0049_part_after.sql', '0050_target_take.sql', '0051_held_by.sql', '0052_ratchet_counts.sql', '0053_tick_lanes.sql', '0054_gardens.sql', '0055_ticket_times.sql', '0056_size_limits.sql', '0057_refusal_ticket.sql', '0058_comms_once.sql', '0059_reviewer_not_builder_skips_coo_lite.sql'])
+  expect(db.pragma('user_version', { simple: true })).toBe(59)
   expect(migrate(db, join(root, 'schema'))).toEqual([])
 })
 
@@ -36,6 +36,22 @@ it('D3: a part keeps the after it is given, and null when it is given none', () 
   addPart(db, { parent, n: 0, url: 'https://github.com/a/b/issues/2', title: 't', body: 'b' })
   addPart(db, { parent, n: 1, url: 'https://github.com/a/b/issues/3', title: 't', body: 'b', after: 0 })
   expect(allParts(db).map((p) => p.after)).toEqual([null, 0])
+})
+
+it('D1-D3: coo_lite runs at steps 2, 4 and 5 build nothing, and a builder still cannot review itself', () => {
+  const db = open(':memory:')
+  migrate(db, join(root, 'schema'))
+  for (const seat of ['coo_lite', 'typescript_specialist']) {
+    db.prepare("INSERT INTO rules VALUES (?, 'card', 'rules/seats.yaml', ?, '2026-09-27')").run(seat, 'a'.repeat(64))
+  }
+  const plan = addPlan(db, { pipe_id: 1, target_id: null, template: 'pr_path', state: 'queued', queued_at: '2026-09-27T00:00:00.000Z',
+    lane: 'machine', seat: 'typescript_specialist', origin: 'https://github.com/caliperforge/caliperforge/issues/1', step: 0 })
+  const run = (step: number, seat: string): unknown => db.prepare(`INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_tokens, output_tokens, seconds, exit, transcript_path)
+    VALUES (?, ?, ?, ?, 'anthropic-api', 'm', 'low', 0, 0, 0, 0, 0, 'x.transcript.jsonl')`).run(plan, step, seat, '0'.repeat(64))
+  for (const step of [2, 4, 5]) run(step, 'coo_lite')
+  expect(builderRan(db, plan)).toBe(false)
+  run(2, 'typescript_specialist')
+  expect(() => run(4, 'typescript_specialist')).toThrow(/reviewer != builder/)
 })
 
 it('D4: a size limit of 0 lines is refused', () => {

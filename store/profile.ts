@@ -11,6 +11,11 @@ export const Profile = z.strictObject({
   intake: z.string().optional(),
   notes: z.array(z.string()).optional(),
   sources: z.array(z.string()).optional(),
+  subject: z.enum(['conventional', 'package']).optional(),
+  issue_ref: z.literal('Fixes').optional(),
+  ai_trailer: z.boolean().optional(),
+  trailer: z.string().optional(),
+  disclosure: z.string().optional(),
 })
 
 export type Profile = z.infer<typeof Profile>

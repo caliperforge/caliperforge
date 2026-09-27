@@ -12,6 +12,7 @@ import { forkGreen } from '../store/deliverables.ts'
 import type { Db } from '../store/index.ts'
 import { busy } from '../store/now.ts'
 import { internal, originIssue, originRef, type PlanRow } from '../store/plans.ts'
+import { profile, type Profile } from '../store/profile.ts'
 import { GREEN, onBase } from './base.ts'
 import { CHECKS, waiting, type Check, type Target } from './card.ts'
 import { npm } from './checks.ts'
@@ -21,6 +22,7 @@ import type { Outcome } from './kind.ts'
 import { merging } from './merging.ts'
 import { cloned, conflicted, diffOf, fetchMain, FORK, get, MAIN, maybe, planDir, put, repoName, srcDir, titleOf } from './workspace.ts'
 import { assembly, homeOf } from './home.ts'
+import { clean, subjectOf } from './shape.ts'
 import { size } from './size.ts'
 import { prosed } from './tells.ts'
 import { theirs } from './theirs.ts'
@@ -88,7 +90,7 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
   const { fork, head, ci, tip } = sent(root, plan, repo, wire)
   if (!internal(plan)) wire.rehearse?.(fork, ci)
   const on = { fork, branch: ci, sha: tip }
-  const { verdict, board } = judge(on, { body: '', commits: commits(head.dir) }, touched(root, plan.id), wire.runs)
+  const { verdict, board } = judge(on, { body: '', commits: commits(head.dir), issue_ref: profile(root, repo)?.issue_ref }, touched(root, plan.id), wire.runs)
   put(root, plan.id, BOARD, `${JSON.stringify(board)}\n`)
   const at = `${fork}@${head.sha.slice(0, 12)}`
   const waiting = unfinished(verdict.spans) ?? others(board)
@@ -124,7 +126,7 @@ export function sent(root: string, plan: PlanRow, repo: string, wire: Wire): { f
   const ci = outside ? rehearsed(root, plan.id, branch) : branch
   if (outside) {
     if (onFork(dir, branch) || onFork(dir, ci)) follow(root, plan.id, ci)
-    else squash(root, plan.id)
+    else squash(root, plan.id, profile(root, repo))
   }
   const head = outside ? headOf(root, plan.id) : onward(headOf(root, plan.id))
   const tip = outside ? tipOf(root, plan.id, head, ci) : head.sha
@@ -329,7 +331,7 @@ export function push(db: Db, root: string, plan: PlanRow, wire: Wire = WIRE): Ou
   if (approval === null) return refuse('approvals', `no ceo approval row for ${head.branch} at ${head.sha.slice(0, 12)}`)
   const cold = unproven(db, plan.id)
   if (cold !== null) return refuse(cold, `${cold} left no passing verdict on plan ${String(plan.id)}`)
-  const text = maybe(root, plan.id, 'pr.md') ?? prBody(target.issue_no, root, plan.id)
+  const text = maybe(root, plan.id, 'pr.md') ?? prBody(target.issue_no, root, plan.id, profile(root, target.repo))
   const checks = [...CHECKS, size(target.repo), prosed(title(root, plan.id), text), merging(target.repo, wire.merged), ...(wire.card ?? [])]
   const card = waiting(db, root, plan.id, head.sha, target, checks)
   if (card !== null) return card
@@ -403,11 +405,11 @@ const TEST = /(^|\/)(tests?|spec|__tests__)\/|[._](test|spec)\.|Tests?\./
  * Used when the card set no body. Their shape, not ours: it addresses the issue rather than closing
  * it, since one item of a maintainer's list is not the list.
  */
-export function prBody(no: number, root: string, plan: number): string {
+export function prBody(no: number, root: string, plan: number, rules: Profile | null = null): string {
   const brief = get(root, plan, 'issue.md')
   const tests = parse(diffOf(root, plan)).map((f) => f.path).filter((p) => TEST.test(p))
-  return [`Addresses #${String(no)}.`, '', '## Summary', '', ...said(brief).map((l) => `- ${l}`), '',
-    '## Test Plan', '', ...tests.map((t) => `- \`${t}\``), '- CI green on our fork at this head.', ''].join('\n')
+  return [`Addresses #${String(no)}.`, '', '## Summary', '', ...said(brief).map((l) => `- ${l}`), '', '## Test Plan', '',
+    ...tests.map((t) => `- \`${t}\``), '- CI green on our fork at this head.', ...(rules?.disclosure === undefined ? [] : ['', rules.disclosure]), ''].join('\n')
 }
 
 /** The brief's What and Why lines, the two things a maintainer reads first. */
@@ -423,9 +425,9 @@ function said(brief: string): string[] {
  * CEO, on his Mac -- with the brief's title as its subject. The rounds' commits and any merge of
  * their main fold into it; a branch already in that shape is left alone, so a held CI keeps its head.
  */
-export function squash(root: string, plan: number): void {
+export function squash(root: string, plan: number, rules: Profile | null = null): void {
   const dir = srcDir(root, plan)
-  const message = messageOf(root, plan)
+  const message = messageOf(root, plan, rules)
   git(dir, ['add', '-A', '--', '.'])
   const base = git(dir, ['merge-base', 'HEAD', MAIN]).trim()
   const count = Number(git(dir, ['rev-list', '--count', `${base}..HEAD`]).trim())
@@ -507,18 +509,16 @@ function kindOf(title: string): string {
   return /^([a-z]+(?:\([^)]*\))?)!?:/.exec(title)?.[1] ?? 'fix'
 }
 
-const clean = (s: string): string => s.replace(/#\d+/g, '').replace(/\s+/g, ' ').trim()
-
 /** Subject and body with no upstream number: the ci-green rail refuses a branch whose commits name one. */
-export function messageOf(root: string, plan: number): string {
-  const subject = clean(title(root, plan))
-  const body = said(maybe(root, plan, 'issue.md') ?? '').map(clean).join('\n\n')
-  return body === '' ? subject : `${subject}\n\n${body}`
+export function messageOf(root: string, plan: number, rules: Profile | null = null): string {
+  const body = said(maybe(root, plan, 'issue.md') ?? '').map((l) => clean(l, rules)).join('\n\n')
+  const trailer = rules?.ai_trailer === true ? rules.trailer ?? '' : ''
+  return [subjectOf(title(root, plan), rules), body, trailer].filter((p) => p !== '').join('\n\n')
 }
 
 export const COMMIT = 'commit.msg'
 
-/** `Closes` stays owner-qualified: ci-green refuses a bare number (`rails/ci-green/index.ts:121`). */
+/** `Closes` stays owner-qualified: ci-green refuses a bare number (`rails/ci-green/index.ts:123`). */
 export function commitMessage(root: string, plan: PlanRow): string | null {
   const ref = originRef(plan)
   return ref === null ? null : `${messageOf(root, plan.id)}\n\nCloses ${ref.repo}#${String(ref.no)}\nPlan ${String(plan.id)}`

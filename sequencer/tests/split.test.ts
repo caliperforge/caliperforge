@@ -52,6 +52,8 @@ test('a part whose prose holds a colon still reads as a split, and a question wi
 
 test('D1, D2: each part says which earlier part it builds on; a missing after is the part before', () => {
   expect(split(AFTER(['none', 'a', 'none']))?.map((p) => p.after)).toEqual(['none', 'a', 'none'])
+  expect(split(AFTER(['none', 'A', 'none']))?.map((p) => p.after)).toEqual(['none', 'a', 'none'])
+  expect(split(AFTER(['none', 'A', 'none']))).toEqual(split(AFTER(['none', 'a', 'none'])))
   expect(split(PARTS)?.map((p) => p.after)).toEqual(['none', 'a'])
   expect(split(AFTER([null, null, null, null]))?.map((p) => p.after)).toEqual(['none', 'a', 'b', 'c'])
   expect(split(AFTER([null, 'none', null]))?.map((p) => p.after)).toEqual(['none', 'none', 'b'])
@@ -59,7 +61,7 @@ test('D1, D2: each part says which earlier part it builds on; a missing after is
 
 test('D3: an after naming the part itself, a later part or no part is not a split', () => {
   for (const after of [['none', 'c', 'none'], ['a', 'none', 'none'], ['none', 'none', 'c'], ['none', 'z', 'none'], ['none', 'none', 'ab'],
-    ['none', 'none', 'A'], ['none', "''", 'none']]) {
+    ['none', 'none', 'C'], ['B', 'none', 'none'], ['none', "''", 'none']]) {
     expect(split(AFTER(after))).toBeNull()
   }
 })

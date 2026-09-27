@@ -81,8 +81,10 @@ test('the authority rail reads the same write_paths off the diff', () => {
     .toMatchObject({ outcome: 'refuse', spans: ['Archive/Old.swift:1 authority.write_paths'] })
 })
 
-const ran = (p: Packet, command: string) =>
-  gate(p, { hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command } } as never)
+const ran = (p: Packet, command: string, background?: boolean) =>
+  gate(p, { hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: background === undefined ? { command } : { command, run_in_background: background } } as never)
+
+const XCODEBUILD = "xcodebuild -project Atelier.xcodeproj -scheme Atelier -destination 'platform=macOS' test"
 
 test('the seat may run xcodebuild and swift and nothing else', () => {
   const { manifest, prompt } = seat(root, SEAT)
@@ -92,4 +94,20 @@ test('the seat may run xcodebuild and swift and nothing else', () => {
   for (const command of ['open /Applications/Atelier.app', 'xcodebuild test && curl x', 'cp -R x /Applications']) {
     expect(ran(p, command)).toMatchObject({ hookSpecificOutput: { permissionDecision: 'deny' } })
   }
+})
+
+test('a background xcodebuild is denied and the seat stays in the session', () => {
+  const { manifest, prompt } = seat(root, SEAT)
+  const p = packet(manifest, prompt, '', '', root, join(root, 'x.transcript.jsonl'))
+  const denied = ran(p, XCODEBUILD, true)
+  expect(denied).toMatchObject({
+    continue: true,
+    hookSpecificOutput: {
+      permissionDecision: 'deny',
+      permissionDecisionReason: 'ruling:seat.tools refuses run_in_background: run it in the foreground and wait for it',
+    },
+  })
+  expect(denied.stopReason).toBeUndefined()
+  expect(ran(p, XCODEBUILD, false)).toEqual({ continue: true })
+  expect(ran(p, XCODEBUILD)).toEqual({ continue: true })
 })

@@ -48,6 +48,12 @@ test('the prompt makes a generated file\'s row name the workflow step that write
   )
 })
 
+test('the prompt says how to answer a last brief and a last question', () => {
+  const prompt = seat(root, 'brief_writer').prompt.replace(/\s+/g, ' ')
+  expect(prompt).toContain('When the ask carries `# Your last brief`, the refusal under it names what to fix: fix that, keep every other line, and open only the files the fix needs.')
+  expect(prompt).toContain('When the ask carries `# Your last question`, its answer is at the end of the ask: re-read only the files under `# Files you opened last time` marked changed, and what the answer adds.')
+})
+
 test('the prompt sends every builder and implementer of a changed shared type or signature to the file list', () => {
   expect(seat(root, 'brief_writer').prompt.replace(/\s+/g, ' ')).toContain(
     'When the ask changes a shared type or a function\'s signature, search the checkout for its name and list every file that builds or implements it: under `## Files`, or under `## Tests` when it is a test or fixture.',

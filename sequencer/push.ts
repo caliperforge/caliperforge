@@ -117,10 +117,20 @@ export function sent(root: string, plan: PlanRow, repo: string, wire: Wire): { f
     if (onFork(dir, branch) || onFork(dir, ci)) follow(root, plan.id, ci)
     else squash(root, plan.id)
   }
-  const head = headOf(root, plan.id)
+  const head = outside ? headOf(root, plan.id) : onward(headOf(root, plan.id))
   const tip = outside ? tipOf(root, plan.id, head, ci) : head.sha
   wire.send(head.dir, outside ? `${tip}:refs/heads/${ci}` : head.branch)
   return { fork, head, ci, tip }
+}
+
+/** A head re-cut from main after its branch was pushed takes the pushed head as a second parent and keeps its own tree. */
+function onward(head: Head): Head {
+  const shown = `refs/remotes/origin/${head.branch}`
+  if (!published(head.dir, head.branch, shown) || ancestor(head.dir, shown, 'HEAD')) return head
+  const sha = git(head.dir, [...identity(head.dir), 'commit-tree', 'HEAD^{tree}', '-p', 'HEAD', '-p', shown,
+    '-m', 'carry the earlier push of this branch']).trim()
+  git(head.dir, ['update-ref', `refs/heads/${head.branch}`, sha])
+  return { ...head, sha }
 }
 
 /** `<tip> <head>`: each -next tip made, and the plan HEAD it carries. */

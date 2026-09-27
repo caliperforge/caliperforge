@@ -17,3 +17,9 @@ test('a generated file matches the generator the brief names, not a described by
   expect(prompt).toContain('match what the generator the brief names writes: step 3 runs that generator and fails on any diff.')
   expect(prompt).not.toContain('header, field order, quoting and trailing newline')
 })
+
+test('the prompt says every command runs in the foreground', () => {
+  expect(seat(join(import.meta.dirname, '../../..'), 'rust_specialist').prompt).toContain(
+    'Every command runs in the foreground; wait for it to finish, and answer only after it has.',
+  )
+})

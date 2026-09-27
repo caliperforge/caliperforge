@@ -12,6 +12,11 @@ export function partOf(title: string): number | null {
   return hit === undefined ? null : Number(hit)
 }
 
+export function afterOf(body: string): number | null {
+  const hit = AFTER.exec(body)?.[1]
+  return hit === undefined ? null : Number(hit)
+}
+
 /** Only a `whole` listing, one shorter than the list limit, drops the rows of issues missing from it. */
 export function recordListing(db: Db, repo: string, listed: Listing[], whole: boolean): void {
   const put = db.prepare(`INSERT INTO tickets (repo, number, title, lane, priority, after, parent) VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -25,8 +30,7 @@ export function recordListing(db: Db, repo: string, listed: Listing[], whole: bo
       drop.run(repo, i.number)
       continue
     }
-    const after = AFTER.exec(i.body)?.[1]
-    put.run(repo, i.number, i.title, lane, priority(i.labels), after === undefined ? null : Number(after), partOf(i.title))
+    put.run(repo, i.number, i.title, lane, priority(i.labels), afterOf(i.body), partOf(i.title))
     kept.push(i.number)
   }
   if (whole) db.prepare('DELETE FROM tickets WHERE repo = ? AND number NOT IN (SELECT value FROM json_each(?))').run(repo, JSON.stringify(kept))

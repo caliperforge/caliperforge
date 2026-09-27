@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { existsSync, rmSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, relative } from 'node:path'
+import { map } from '../cli/map.ts'
 import type { Fired, Provider } from '../providers/kind.ts'
 import { packet, refuse } from '../runner/index.ts'
 import { reviewManifest, SYMBOLS_LEAD, type Bench } from '../runner/packet.ts'
@@ -11,7 +12,7 @@ import type { Db } from '../store/index.ts'
 import { filesOf } from '../store/files.ts'
 import { observed, wall } from '../store/lanes.ts'
 import { builderRan, internal, type PlanRow } from '../store/plans.ts'
-import { byRun, pending } from '../store/transcript.ts'
+import { byRun, opened, pending } from '../store/transcript.ts'
 import type { Step } from '../templates/pr-path.ts'
 import { parse } from '../rails/diff.ts'
 import { human, pointed, references, shape, split, TEMPLATE, unclear, wide, WIDE, type Part } from './brief.ts'
@@ -27,7 +28,7 @@ import { fenceFor, languageFor } from './route.ts'
 import { gates, outsideLanguage } from './gates.ts'
 import type { Outcome } from './kind.ts'
 import { COMMIT, commitMessage } from './push.ts'
-import { carried, cloned, diffOf, diffSince, drop, get, headSha, holds, maybe, move, narrowing, planDir, put, snapshot, srcDir } from './workspace.ts'
+import { carried, cloned, diffOf, diffSince, drop, get, headSha, holds, MAIN, maybe, merging, move, narrowing, planDir, put, snapshot, srcDir } from './workspace.ts'
 import { kernelPlan } from './home.ts'
 
 const INSERT = `INSERT INTO runs
@@ -83,21 +84,20 @@ export async function fireBrief(db: Db, root: string, plan: PlanRow, step: Step,
   const src = srcDir(root, plan.id)
   const standing = maybe(root, plan.id, 'issue.md')
   if (standing !== null && shape(standing, ask, src) === null) return stands()
-  const fired = await ran(db, root, plan, step, provider, again(root, plan.id, ask) + store(root, plan), false)
+  const fired = await ran(db, root, plan, step, provider, again(db, root, plan.id, ask) + store(root, plan), false)
+  drop(root, plan.id, 'brief.refused.md')
   if (fired.ended !== 'completed') return exited(step, fired)
   const question = unclear(fired.text)
-  if (question !== null) {
-    put(root, plan.id, 'question.md', `${question}\n`)
-    return { outcome: 'needs_ceo', spans: [], note: `${step.runs}: ${question}` }
-  }
+  if (question !== null) return asking(root, plan.id, step, question)
   const parts = split(fired.text)
   if (parts !== null) {
     put(root, plan.id, 'split.md', fired.text)
     return splitting(step, parts)
   }
   const refused = shape(fired.text, ask, src)
+  const width = refused === null && internal(plan) ? wide(fired.text) : null
+  if (refused !== null || width !== null) put(root, plan.id, 'brief.refused.md', fired.text)
   if (refused !== null) return { outcome: 'refuse', spans: [refused.span], note: `${step.runs}: ${refused.reason}` }
-  const width = internal(plan) ? wide(fired.text) : null
   if (width !== null) {
     return { outcome: 'refuse', spans: ['brief.wide'],
       note: `${step.runs}: the brief touches ${String(width)} files besides tests; past ${String(WIDE)} it is more than one job, so answer with the split fence` }
@@ -109,6 +109,7 @@ export async function fireBrief(db: Db, root: string, plan: PlanRow, step: Step,
   const message = commitMessage(root, plan)
   if (message !== null) put(root, plan.id, COMMIT, message)
   drop(root, plan.id, 'refusal.md')
+  drop(root, plan.id, 'question.sha')
   return { outcome: 'pass', spans: [], note: `${step.runs}: brief written` }
 }
 
@@ -121,10 +122,36 @@ function stands(): Outcome {
   return { outcome: 'pass', spans: [], note: 'the brief stands' }
 }
 
-function again(root: string, plan: number, ask: string): string {
+function asking(root: string, plan: number, step: Step, question: string): Outcome {
+  put(root, plan, 'question.md', `${question}\n`)
+  const base = maybe(root, plan, 'base.sha')
+  if (base !== null) put(root, plan, 'question.sha', base)
+  return { outcome: 'needs_ceo', spans: [], note: `${step.runs}: ${question}` }
+}
+
+function again(db: Db, root: string, plan: number, ask: string): string {
   const refusal = maybe(root, plan, 'refusal.md')
+  const last = maybe(root, plan, 'brief.refused.md')
   const asked = `${ask}\n\n${TEMPLATE}`
-  return refusal === null ? asked : `${asked}\n# Refused — write the whole brief again, fixing this\n\n${refusal}`
+  if (refusal === null) return `${asked}${lastQuestion(db, root, plan)}`
+  if (last === null) return `${asked}\n# Refused — write the whole brief again, fixing this\n\n${refusal}`
+  return `${asked}\n# Your last brief\n\n${last}\n# Refused — fix what this names, keep every other line\n\n${refusal}`
+}
+
+/** `cf return` recut the checkout from today's main, which holds `question.sha` as an ancestor. */
+function lastQuestion(db: Db, root: string, plan: number): string {
+  const question = maybe(root, plan, 'question.prev.md')
+  const sha = maybe(root, plan, 'question.sha')?.trim()
+  const src = srcDir(root, plan)
+  if (question === null || sha === undefined || !holds(src, sha)) return ''
+  const run = db.prepare('SELECT transcript_path FROM runs WHERE plan = ? AND step = 1 ORDER BY id DESC LIMIT 1')
+    .get(plan) as { transcript_path: string | null } | undefined
+  const paths = [...new Set(opened(run?.transcript_path ?? '').map((path) => relative(src, path)))]
+    .filter((path) => path !== '' && !path.startsWith('..'))
+  if (paths.length === 0) return ''
+  const incoming = new Set(merging(src, sha, MAIN).incoming)
+  const rows = paths.map((path) => `- ${path} — ${incoming.has(path) ? 'changed on main since' : 'unchanged'}`)
+  return `\n# Your last question\n\n${question}\n# Files you opened last time\n\n${rows.join('\n')}\n`
 }
 
 /**
@@ -153,9 +180,12 @@ export async function ran(db: Db, root: string, plan: PlanRow, step: Step, provi
   issue: string, ours: boolean): Promise<Fired> {
   load(db, root)
   const { manifest, prompt, hash } = seat(root, step.runs)
+  const src = srcDir(root, plan.id)
+  const built = packet(manifest, prompt, tight(root), issue, src,
+    transcriptOf(root, plan.id, step.step), ours, fenceFor(db, plan.id, manifest.write_paths))
   const fired = await provider.fire({
-    ...packet(manifest, prompt, tight(root), issue, srcDir(root, plan.id),
-      transcriptOf(root, plan.id, step.step), ours, fenceFor(db, plan.id, manifest.write_paths)),
+    ...built,
+    prompt: `${map(src)}\n\n${built.prompt}`,
     wall: wall(db),
     reads: machineReads(root, plan, step.runs),
   })

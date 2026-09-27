@@ -1,7 +1,8 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { expect, test } from 'vitest'
 import { walk } from '../../checks/tree.ts'
+import { MAP } from '../../cli/map.ts'
 import type { Packet } from '../../providers/kind.ts'
 import { release, retried, returnToLane } from '../../store/holds.ts'
 import { get, priority } from '../../store/lanes.ts'
@@ -9,9 +10,10 @@ import { retry } from '../../store/plans.ts'
 import { WHY } from '../../store/refusals.ts'
 import { files, pointed, references, shape, split, TEMPLATE, unclear, writable, type Refused } from '../brief.ts'
 import { tick } from '../index.ts'
+import { unhold } from '../hold.ts'
 import { blocked } from '../steps.ts'
 import { afresh, drop, maybe, move, put, srcDir, titleOf } from '../workspace.ts'
-import { approve, CARRIED, internalPlan, ours, plan, reads, stub, world, type World } from './world.ts'
+import { approve, CARRIED, internalPlan, moveMain, ours, plan, reads, stub, world, type World } from './world.ts'
 
 const repo = join(import.meta.dirname, '../..')
 
@@ -202,6 +204,18 @@ test('the seat packet carries the template under the ask', async () => {
   const prompt = packets[0]?.prompt ?? ''
   expect(prompt).toContain(TEMPLATE)
   expect(prompt.indexOf(TEMPLATE)).toBeGreaterThan(prompt.indexOf('# let an internal plan run'))
+  expect(prompt).not.toContain('\n# Your last brief\n')
+  expect(prompt).not.toContain('\n# Your last question\n')
+})
+
+test('the seat packet opens with the map of the plan\'s checkout, and no MAP.md is written', async () => {
+  const w = mine()
+  const packets: Packet[] = []
+  await tick(w.db, w.root, stub(CARRIED))
+  await tick(w.db, w.root, stub(CARRIED, 0, undefined, (p) => packets.push(p)))
+
+  expect(packets[0]?.prompt).toMatch(/^# MAP\.md — written by `cf map`\n/)
+  expect(existsSync(join(srcDir(w.root, ID), MAP))).toBe(false)
 })
 
 const FAILS = [
@@ -229,15 +243,19 @@ async function turnedBack(): Promise<World> {
   return w
 }
 
-test('the seat is fired again with the shape refusal under the ask', async () => {
+test('the seat is fired again with its last brief and the shape refusal under the ask', async () => {
   const w = await turnedBack()
   const packets: Packet[] = []
+  const reply = titled('no-must-not-break.md')
+  expect(maybe(w.root, ID, 'brief.refused.md')).toBe(reply)
   await tick(w.db, w.root, stub(CARRIED))
 
   await tick(w.db, w.root, stub(CARRIED, 0, undefined, (p) => packets.push(p)))
-  expect(packets[0]?.prompt).toContain('# Refused — write the whole brief again, fixing this')
+  expect(packets[0]?.prompt).toContain(`# Your last brief\n\n${reply}`)
   expect(packets[0]?.prompt).toContain('## Must not break is missing or out of order')
+  expect(packets[0]?.prompt).not.toContain('write the whole brief again')
   expect(shape(briefOf(w), askOf(w), srcDir(w.root, ID))).toBeNull()
+  expect(maybe(w.root, ID, 'brief.refused.md')).toBeNull()
 })
 
 test('a brief saved after a shape refusal leaves the builder no refusal to read', async () => {
@@ -262,6 +280,8 @@ test('an unclear reply stops the plan on the COO, saves the question, and spends
   expect(maybe(w.root, ID, 'question.md')).toBe(`${question}\n`)
   expect(maybe(w.root, ID, 'issue.md')).toBeNull()
   expect(plan(w.db, ID)).toMatchObject({ step: 1, retries: 0 })
+  expect(w.db.prepare('SELECT held_by, held_why FROM plans WHERE id = ?').get(ID))
+    .toEqual({ held_by: 'coo', held_why: `brief_writer: ${question}` })
 })
 
 test('a round that comes back to step 1 keeps the brief the reviewers read', async () => {
@@ -335,6 +355,40 @@ test('a plan blocked at step 1 and retried is briefed from the ask alone', async
   expect(packets[0]?.prompt).not.toContain('# Refused')
   expect(packets[0]?.prompt).not.toContain('lane is off')
   expect(shape(briefOf(w), askOf(w), srcDir(w.root, ID))).toBeNull()
+})
+
+const lastTranscript = (w: World): string => (w.db.prepare(
+  'SELECT transcript_path FROM runs WHERE plan = ? AND step = 1 ORDER BY id DESC LIMIT 1').get(ID) as { transcript_path: string }).transcript_path
+
+async function questioned(): Promise<World> {
+  const w = mine()
+  await tick(w.db, w.root, stub(CARRIED))
+  await tick(w.db, w.root, stub(CARRIED, 0, undefined, undefined, asks('which greeting?')))
+  return w
+}
+
+test('a question sent back by cf return is re-briefed with the files it opened, marked against main', async () => {
+  const w = await questioned()
+  const packets: Packet[] = []
+  const read = (path: string): string => JSON.stringify({ type: 'assistant',
+    message: { content: [{ type: 'tool_use', name: 'Read', input: { file_path: join(srcDir(w.root, ID), path) } }] } })
+  writeFileSync(lastTranscript(w), `${read('src/hello.ts')}\n${read('src/next.ts')}\n`)
+  moveMain(w.root, 'src/next.ts')
+  unhold(w.db, w.root, ID, 'ceo')
+
+  await tick(w.db, w.root, stub(CARRIED, 0, undefined, (p) => packets.push(p)))
+  expect(packets[0]?.prompt).toContain('# Your last question\n\nwhich greeting?\n')
+  expect(packets[0]?.prompt).toContain('# Files you opened last time\n\n- src/hello.ts — unchanged\n- src/next.ts — changed on main since\n')
+})
+
+test('a returned question whose transcript is gone is re-briefed from the ask alone and passes', async () => {
+  const w = await questioned()
+  const packets: Packet[] = []
+  rmSync(lastTranscript(w))
+  unhold(w.db, w.root, ID, 'ceo')
+
+  expect((await tick(w.db, w.root, stub(CARRIED, 0, undefined, (p) => packets.push(p))))[0]).toMatchObject({ step: 1, outcome: 'pass' })
+  expect(packets[0]?.prompt).not.toContain('\n# Your last question\n')
 })
 
 test('a plan re-briefed after a retry at step 1 replaces its file list', async () => {

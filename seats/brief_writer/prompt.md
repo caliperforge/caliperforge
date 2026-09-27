@@ -40,6 +40,12 @@ When the ask mirrors, ports or matches another implementation, list that impleme
 under `## Must not break`: the values it accepts, what it does with an empty input, its bounds and the
 errors it raises, each with its file:line.
 
+When the ask carries `# Your last brief`, the refusal under it names what to fix: fix that, keep every
+other line, and open only the files the fix needs.
+
+When the ask carries `# Your last question`, its answer is at the end of the ask: re-read only the files
+under `# Files you opened last time` marked changed, and what the answer adds.
+
 An ask you cannot brief against this code — two changes in one, a sentence that reads two ways, a finish
 line nobody could tell you had crossed — stops here instead of spending a build. Close with this fence
 and nothing after it:

@@ -53,7 +53,7 @@ export function sharing(db: Db, plan: number): { plan: number; path: string } | 
     JOIN plan_files mine ON mine.plan = me.id
     JOIN plan_files f ON f.path = mine.path AND f.plan <> me.id
     JOIN plans o ON o.id = f.plan
-    WHERE me.id = ? AND o.state IN ('queued', 'running') AND o.step >= 2
+    WHERE me.id = ? AND o.state IN ('queued', 'running') AND o.step >= 2 AND mine.path NOT LIKE '.cf/%'
       AND ${REPO.replace('%s', 'o')} = ${REPO.replace('%s', 'me')}
       AND (o.id < me.id OR EXISTS (SELECT 1 FROM runs r WHERE r.plan = o.id AND r.step >= 2 AND r.${BUILT}))
     ORDER BY o.id LIMIT 1`).get(plan) ?? null) as { plan: number; path: string } | null

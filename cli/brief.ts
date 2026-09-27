@@ -4,7 +4,7 @@ import { CREDITS } from '../sequencer/ready.ts'
 import { ruled } from '../sequencer/workspace.ts'
 import type { Db } from '../store/index.ts'
 import { name, type LaneState, type WindowRow } from '../store/lanes.ts'
-import { BUILT, type Holder, type Wait } from '../store/plans.ts'
+import { BUILT, type Holder, type Overlap, type Wait } from '../store/plans.ts'
 
 export interface PlanLine {
   id: number
@@ -138,6 +138,11 @@ export function waitLine(rows: { reason: Wait; plans: number }[]): string {
   return `waits\t${pairs.join('\t')}\n`
 }
 
+export function fileWaits(rows: Overlap[]): string {
+  const body = rows.length === 0 ? '  none\n' : rows.map((w) => `  plan ${String(w.plan)}\ton plan ${String(w.on)}\t${w.path ?? '-'}\n`).join('')
+  return `waiting on files (${String(rows.length)})\n${body}`
+}
+
 export function greptileLine(n: number): string {
   return `greptile ${String(n)}/${String(CREDITS)} this month\n`
 }
@@ -161,8 +166,8 @@ export function dryLines(d: Dry): string {
 
 /** The receipt line a tick leaves in `ticks.note`, which is the only log launchd keeps. */
 /** `waits` are the plans held on another job's files (#88), so a wait reads as a wait and not an idle lane. */
-export function tickNote(fired: Fired[], waits: { plan: number; on: number }[] = [], lines: string[] = []): string {
-  const held = waits.map((w) => `plan ${String(w.plan)} waits on plan ${String(w.on)}`)
+export function tickNote(fired: Fired[], waits: Overlap[] = [], lines: string[] = []): string {
+  const held = waits.map((w) => `plan ${String(w.plan)} waits on plan ${String(w.on)}${w.path === null ? '' : ` for ${w.path}`}`)
   const steps = fired.map((f) => `${f.pipe} plan ${String(f.plan)} step ${String(f.step)} ${f.name} ${f.outcome}`
     + (f.stole === null ? '' : ` took over pid ${String(f.stole)}`))
   const all = [...steps, ...held, ...lines]

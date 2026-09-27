@@ -48,7 +48,8 @@ export type Mode = 'xcodebuild' | 'npm' | 'gradle' | 'none' | OutsideLanguage
 export const DERIVED = '.cf-derived'
 
 const XCODE = (project: string): string[] => ['-project', project, '-scheme', project.replace(/\.xcodeproj$/, ''),
-  '-destination', 'platform=macOS', '-derivedDataPath', DERIVED, 'test']
+  '-destination', 'platform=macOS', '-derivedDataPath', DERIVED, '-test-timeouts-enabled', 'YES',
+  '-default-test-execution-time-allowance', '60', '-maximum-test-execution-time-allowance', '60', 'test']
 
 const GRADLE = ['-p', 'kotlin', 'check']
 

@@ -197,9 +197,43 @@ test('a wide internal brief goes back to the brief writer to be split', async ()
   expect(maybe(w.root, ID, 'issue.md')).toBeNull()
 })
 
-function wideBrief(paths: string[]): string {
-  return ['# let an internal plan run', '', '**What:** a.', '**Why:** b.', '**When it ends:** c.', '',
-    '## Approach', '', 'x', '', '## Settled facts', '', '- none: every name the change uses is in this checkout', '', '## Cases', '', '- D1 one', '- D2 a call with no name is refused', '',
+const SIX = ['a.ts', 'b.ts', 'c.ts', 'd.ts', 'e.ts', 'f.ts'].map((p) => `src/${p} (new)`)
+
+async function outside(brief: string, limit?: number): Promise<{ w: World; fired: unknown }> {
+  const w = world()
+  approve(w.db, w.target)
+  if (limit !== undefined) {
+    w.db.prepare("INSERT INTO size_limits (repo, lines, origin_kind, origin_ref, set_at) VALUES ('acme/widget', ?, 'ruling', 't', '2026-09-26')").run(limit)
+  }
+  await tick(w.db, w.root, stub(CARRIED))
+  const fired = (await tick(w.db, w.root, stub(CARRIED, 0, undefined, undefined, brief)))[0]
+  return { w, fired }
+}
+
+test('D1: an outside brief naming six files besides tests is refused as wide and saved aside', async () => {
+  const brief = wideBrief(SIX, 'hello')
+  const { w, fired } = await outside(brief)
+  expect(fired).toMatchObject({ step: 1, outcome: 'refuse', spans: ['brief.wide'] })
+  expect(maybe(w.root, 1, 'issue.md')).toBeNull()
+  expect(maybe(w.root, 1, 'brief.refused.md')).toBe(brief)
+})
+
+test('D2: an outside brief estimated past its repo\'s size limit is refused as wide, naming the limit', async () => {
+  const { w, fired } = await outside(wideBrief(SIX.slice(0, 5), 'hello', 'Estimate: ~1,300 lines'), 250)
+  expect(fired).toMatchObject({ step: 1, outcome: 'refuse', spans: ['brief.wide'] })
+  expect(maybe(w.root, 1, 'refusal.md')).toContain("the brief estimates 1300 lines besides tests and generated files; past acme/widget's 250 it is more than one job, so answer with the split fence")
+})
+
+test('D3: an outside brief of five files estimated at its repo\'s limit is saved as the issue', async () => {
+  const brief = wideBrief(SIX.slice(0, 5), 'hello', 'Estimate: 250 lines')
+  const { w, fired } = await outside(brief, 250)
+  expect(fired).toMatchObject({ step: 1, outcome: 'pass' })
+  expect(maybe(w.root, 1, 'issue.md')).toBe(brief)
+})
+
+function wideBrief(paths: string[], title = 'let an internal plan run', approach = 'x'): string {
+  return [`# ${title}`, '', '**What:** a.', '**Why:** b.', '**When it ends:** c.', '',
+    '## Approach', '', approach, '', '## Settled facts', '', '- none: every name the change uses is in this checkout', '', '## Cases', '', '- D1 one', '- D2 a call with no name is refused', '',
     '## Must not break', '', '- y', '', '## Files', '', ...paths.map((p) => `- ${p}`), '',
     '## Files to read', '', '- src/hello.ts — what it exports today', '',
     '## Who else reads what this changes', '', '- nobody else', '', '## Tests', '', '- src/a.ts — the case', '',

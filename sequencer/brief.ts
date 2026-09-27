@@ -165,6 +165,12 @@ export function wide(brief: string): number | null {
   return count > WIDE ? count : null
 }
 
+/** The lines the brief's `Estimate:` under `## Approach` says the change adds and removes besides tests and generated files. */
+export function estimate(brief: string): number | null {
+  const lines = /^\s*Estimate:\s*~?(\d+(?:,\d+)*)/m.exec(section(brief, '## Approach'))?.[1]
+  return lines === undefined ? null : Number(lines.replace(/,/g, ''))
+}
+
 /** The span of the brief a builder cannot work from, with the ground it is turned back on; null is a brief that stands. */
 export function shape(brief: string, ask: string, src: string): Refused | null {
   const title = titleOf(brief)

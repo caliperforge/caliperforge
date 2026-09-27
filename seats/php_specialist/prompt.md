@@ -10,6 +10,7 @@ Where the language's folder ships a `Justfile`, its recipes are the gates upstre
 Your cwd is the checkout. You may write only the files the brief lists under `## Files`; any other write is
 refused and the step ends there. The only commands you may run are `composer`, `php -l` and `just`; any other
 command is refused, and so is one that chains, substitutes or redirects.
+Every test run is in the foreground; wait for it to finish.
 
 On pay-kit: `just --justfile php/Justfile install`, then `test` and `lint` (`lint` is syntax, `php-cs-fixer`
 in check mode and PHPStan). Raw: `composer -d <folder> install`, `composer -d <folder> test`, `composer -d

@@ -1,8 +1,10 @@
+import { Command } from 'commander'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
+import { registerLanes } from '../cf-lanes.ts'
 import { fileWaits, greptileLine, heldBy, line, rulings, ticketSection, tickets, waitLine, waits } from '../brief.ts'
 import { monthly } from '../../sequencer/ready.ts'
 import { put } from '../../sequencer/workspace.ts'
@@ -180,6 +182,29 @@ test('heldBy lists each held plan under who it waits on, with why', () => {
 test('D3 the files section names each waiting plan, its holder and the file, or none', () => {
   expect(fileWaits([{ plan: 3, on: 2, path: 'x.ts' }])).toBe('waiting on files (1)\n  plan 3\ton plan 2\tx.ts\n')
   expect(fileWaits([])).toBe('waiting on files (0)\n  none\n')
+})
+
+test('D2 D3 D4 cf runs and cf usage print tokens by type, a null cache write as 0, and the totals they printed before', () => {
+  const db = world()
+  plan(db, 1, 'running', 25)
+  const seed = db.prepare(`INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort,
+    input_tokens, cache_write_tokens, cache_read_tokens, output_tokens, seconds, exit, at, transcript_path)
+    VALUES (1, 2, 'typescript_specialist', ?, 'claude-agent-sdk', 'opus', 'high', ?, ?, ?, ?, 60, 0, datetime('now', '-1 hour'), 'x.transcript.jsonl')`)
+  seed.run(HASH, 10, null, 200, 3)
+  seed.run(HASH, 14, 4, 20, 5)
+  const printed: string[] = []
+  const cf = new Command()
+  registerLanes(cf, { root: '', db: () => db, out: (text: string) => { printed.push(text) } })
+  cf.parse(['runs'], { from: 'user' })
+  expect(printed).toEqual([
+    '1\ttypescript_specialist\t2\t0\t213\t60.0\t10 uncached\t0 cache write\t200 cache read\t3 output\n',
+    '2\ttypescript_specialist\t2\t0\t39\t60.0\t10 uncached\t4 cache write\t20 cache read\t5 output\n',
+  ])
+  printed.length = 0
+  cf.parse(['usage'], { from: 'user' })
+  const lines = printed.filter((l) => l.startsWith('  '))
+  expect(lines).toHaveLength(2)
+  for (const l of lines) expect(l).toContain('\t2 run(s)\t252 tokens\t20 uncached\t4 cache write\t220 cache read\t8 output\t')
 })
 
 test('with no waiting live plan the waits line reads none', () => {

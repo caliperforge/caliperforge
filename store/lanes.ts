@@ -29,6 +29,10 @@ export const WindowRow = z.object({
   band: z.int().nullable(),
   ceiling: z.int(),
   cap: z.int(),
+  uncached_tokens: z.int(),
+  cache_write_tokens: z.int(),
+  cache_read_tokens: z.int(),
+  output_tokens: z.int(),
 })
 
 export type WindowRow = z.infer<typeof WindowRow>

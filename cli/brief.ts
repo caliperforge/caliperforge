@@ -150,8 +150,15 @@ export function greptileLine(n: number): string {
 /** One row per rate-limit window: our tokens inside it, the provider's utilisation of it, the cap. */
 export function windowLine(w: WindowRow): string {
   const used = w.utilisation === null ? 'no fresh reading' : `${(w.utilisation * 100).toFixed(1)}% ${w.status ?? ''}`.trim()
-  return `  ${w.kind}\t${String(w.runs)} run(s)\t${String(w.tokens)} tokens\t${used}` +
+  return `  ${w.kind}\t${String(w.runs)} run(s)\t${String(w.tokens)} tokens\t${byType(w)}\t${used}` +
     `\tobserved ${w.observed_at ?? '-'}\tresets ${w.resets_at ?? '-'}\n`
+}
+
+export type ByType = Pick<WindowRow, 'uncached_tokens' | 'cache_write_tokens' | 'cache_read_tokens' | 'output_tokens'>
+
+export function byType(t: ByType): string {
+  return `${String(t.uncached_tokens)} uncached\t${String(t.cache_write_tokens)} cache write` +
+    `\t${String(t.cache_read_tokens)} cache read\t${String(t.output_tokens)} output`
 }
 
 /** `cf tick --dry`: the clock the windows are read against, the lanes open, and what each holds. */

@@ -6,6 +6,7 @@ import { fresh } from '../../checks/sqlite.ts'
 import { hold } from '../../sequencer/hold.ts'
 import { put } from '../../sequencer/workspace.ts'
 import { migrate, open, type Db } from '../../store/index.ts'
+import { receipt, slots } from '../../store/ticks.ts'
 import { flow } from '../flow.ts'
 
 const schema = join(import.meta.dirname, '../../schema')
@@ -86,6 +87,53 @@ test('D6: a young repeat, a repeat with a later decision, a hold on a plan and a
   hold(db, root, plan(db, 3, 'running'), 'after plan 1', now, 1)
   refusals(db, plan(db, 4, 'blocked_on_ceo'), '2026-09-26 11:00:00', 'a', 'b')
   expect(flow(db, root, now)).toEqual([])
+})
+
+function tick(db: Db, dry: boolean, ...lanes: [number, number, number][]): void {
+  const id = receipt(db, { at: now.toISOString(), hhmm: '06:00', dry, pipes: 1, fired: 0, exit: 0, note: '' })
+  slots(db, id, lanes.map(([pipe, free, startable]) => ({ pipe: { id: pipe }, free, startable })))
+}
+
+function part(db: Db, parent: number, number: number, after: number): void {
+  db.prepare("INSERT INTO parts (parent, n, url, title, body) VALUES (?, ?, ?, 'part', 'body')")
+    .run(parent, number, `https://github.com/${REPO}/issues/${String(number)}`)
+  db.prepare("INSERT INTO tickets (repo, number, title, lane, after) VALUES (?, ?, 'part', 'machine', ?)").run(REPO, number, after)
+}
+
+test('393b D1-D3: an overlap holding a slot, a part after a closed issue and an idle lane are each listed once', () => {
+  const db = piped()
+  db.prepare("UPDATE pipes SET max_concurrent = 2, window_start = '00:00', window_end = '23:59' WHERE id = 1").run()
+  plan(db, 2, 'queued')
+  db.prepare("UPDATE plans SET wait_reason = 'file_overlap', waits_on = 2 WHERE id = ?").run(plan(db, 1, 'running'))
+  part(db, 2, 10, 9)
+  tick(db, false, [1, 1, 1])
+  tick(db, false, [1, 2, 3])
+  expect(flow(db, root, now)).toEqual([
+    "plan 1\tholds a slot waiting on plan 2's files\tcf park 1 --on 2\n",
+    'part #10\tafter #9, which is closed\tcf tick\n',
+    'lane pr-path\tidle two ticks: 2 free, 3 startable\tcf lanes\n',
+  ])
+})
+
+test('393b D4: a lane idle on only the latest real tick, or across a dry one, is not listed', () => {
+  const db = piped()
+  tick(db, false, [1, 0, 1])
+  tick(db, true, [1, 1, 1], [2, 1, 1])
+  tick(db, false, [1, 1, 1], [2, 1, 1])
+  expect(flow(db, root, now)).toEqual([])
+})
+
+test('393b D2: a part whose After: issue is still open is not listed', () => {
+  const db = piped()
+  plan(db, 2, 'queued')
+  part(db, 2, 10, 9)
+  db.prepare("INSERT INTO tickets (repo, number, title, lane) VALUES (?, 9, 'open', 'machine')").run(REPO)
+  expect(flow(db, root, now)).toEqual([])
+})
+
+test('393b D6: a negative free count fails its CHECK', () => {
+  const db = piped()
+  expect(() => { tick(db, false, [1, -1, 0]) }).toThrow(/CHECK/)
 })
 
 test('D7: flow leaves cf.db and .cf/ byte for byte as they were', () => {

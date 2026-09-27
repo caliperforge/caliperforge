@@ -16,8 +16,9 @@ import { SIGNOFF } from '../sequencer/workspace.ts'
 import { migrate, open as openDb, type Db } from '../store/index.ts'
 import { hhmm } from '../store/lanes.ts'
 import { openPipes, overlapWaits } from '../store/plans.ts'
-import { receipt } from '../store/ticks.ts'
+import { receipt, slots } from '../store/ticks.ts'
 import { dryLines, tickNote } from './brief.ts'
+import { slack } from './flow.ts'
 import { registerInbox, registerLanes, registerSession, type Cli } from './cf-lanes.ts'
 import { registerPlans, registerRetry } from './cf-plans.ts'
 import { registerAdopt, registerApprovals, registerTargets } from './cf-targets.ts'
@@ -112,10 +113,11 @@ async function ticked(options: { dry?: boolean }, now: Date): Promise<void> {
   process.env.CF_CHECK_SLOTS ??= String(CHECK_SLOTS)
   const lines: string[] = []
   const fired = await tick(handle, root, claudeAgentSdk, now, undefined, undefined, CHAIN_MINUTES, gh, EACH, apart, lines)
-  receipt(handle, saved(handle, upgraded(handle, root, { at: now.toISOString(), hhmm: hhmm(handle, now), dry: false,
+  const id = receipt(handle, saved(handle, upgraded(handle, root, { at: now.toISOString(), hhmm: hhmm(handle, now), dry: false,
     pipes: openPipes(handle, hhmm(handle, now)).length, fired: fired.length,
     exit: fired.some((f) => f.outcome === 'refuse') ? 1 : 0, note: tickNote(fired, overlapWaits(handle), lines) }),
   fired.filter((f) => f.state === 'done').map((f) => f.plan)))
+  slots(handle, id, slack(handle, now))
   watch(handle, root, now, alerter())
   const news = events(handle, fired, now.toISOString())
   keep(root, news)

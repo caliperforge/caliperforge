@@ -29,7 +29,7 @@ function plan(db: Db, n: number, state: string): number {
 }
 
 function pushed(db: Db, id: number): void {
-  db.prepare(`INSERT OR IGNORE INTO rules (id, kind, path, content_hash, loaded_at)
+  db.prepare(`INSERT INTO rules (id, kind, path, content_hash, loaded_at)
     VALUES ('typescript_specialist', 'roster', 'seats/typescript_specialist', ?, '2026-09-25')`).run('0'.repeat(64))
   const approval = db.prepare(`INSERT INTO approvals (subject_kind, subject_id, subject_digest, who, decision, approved_at)
     VALUES ('plan', ?, ?, 'gates', 'approved', '2026-09-25T00:00:00.000Z') RETURNING id`).get(id, 'd'.repeat(64)) as { id: number }
@@ -45,7 +45,7 @@ function refusals(db: Db, id: number, at: string, ...prints: string[]): void {
   }
 }
 
-const parked = (id: number, why = 'a person looks'): string => put(root, id, 'parked.md', `# Held\n\n${why}\n`)
+const parked = (id: number): string => put(root, id, 'parked.md', '# Held\n\na person looks\n')
 
 test('D1-D4: one plan per case is listed once with the command that fixes it', () => {
   const db = piped()

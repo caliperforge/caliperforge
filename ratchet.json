@@ -711,7 +711,6 @@
     "test-name": 1
   },
   "sequencer/tests/tick.test.ts": {
-    "prepare": 18,
     "test-name": 42
   },
   "sequencer/tests/upgrade.test.ts": {

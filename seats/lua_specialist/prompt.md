@@ -11,6 +11,7 @@ its recipes do that inside the recipe.
 Your cwd is the checkout. You may write only the files the brief lists under `## Files`; any other write is
 refused and the step ends there. The only commands you may run are `just`, `luajit`, `luacheck` and `busted`;
 any other command is refused, and so is one that chains, substitutes or redirects.
+Every test run is in the foreground; wait for it to finish.
 
 On pay-kit: `just --justfile lua/Justfile install` once (it fills `lua/lua_modules/`), then `test` and `lint`.
 Lua ships no canonical formatter; `luacheck` is the style gate.

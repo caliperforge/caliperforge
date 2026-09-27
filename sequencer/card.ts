@@ -2,17 +2,18 @@ import { decide, digestOf } from '../store/approvals.ts'
 import type { Db } from '../store/index.ts'
 import { busy } from '../store/now.ts'
 import type { Outcome } from './kind.ts'
+import { lead } from './lead.ts'
 import { maybe, put } from './workspace.ts'
 
 export interface Row { check: string; ok: boolean; says: string }
-export type Check = (root: string, plan: number) => Row
+export type Check = (db: Db, root: string, plan: number) => Row
 
-export const CHECKS: Check[] = []
+export const CHECKS: Check[] = [lead]
 
 const CARD = 'maintainer.md'
 
 export function waiting(db: Db, root: string, plan: number, sha: string, checks: Check[] = CHECKS): Outcome | null {
-  const rows = checks.map((check) => check(root, plan))
+  const rows = checks.map((check) => check(db, root, plan))
   const text = [`plan ${String(plan)} at ${sha}`, ...rows.map((r) => `${r.ok ? 'pass' : 'flag'}\t${r.check}\t${r.says}`)]
     .map((line) => `${line}\n`).join('')
   put(root, plan, CARD, text)

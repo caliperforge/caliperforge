@@ -316,7 +316,7 @@ export function push(db: Db, root: string, plan: PlanRow, wire: Wire = WIRE): Ou
   if (approval === null) return refuse('approvals', `no ceo approval row for ${head.branch} at ${head.sha.slice(0, 12)}`)
   const cold = unproven(db, plan.id)
   if (cold !== null) return refuse(cold, `${cold} left no passing verdict on plan ${String(plan.id)}`)
-  const card = waiting(db, root, plan.id, head.sha, [...CHECKS, size(db, target.repo)])
+  const card = waiting(db, root, plan.id, head.sha, [...CHECKS, size(target.repo)])
   if (card !== null) return card
   const open = opened(db, plan.id)
   wire.send(head.dir, head.branch)

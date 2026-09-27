@@ -38,7 +38,7 @@ test('D1 an outside plan at push writes the card, calls no wire and holds on ste
   const held = push(w.db, w.root, plan(w.db, 1), watched(sent, w.root, 1))
   expect(held).toMatchObject({ outcome: 'pass', held: true, spans: ['card'] })
   expect(held.note).toContain('cf approve card 1')
-  expect(get(w.root, 1, 'maintainer.md')).toBe(`plan 1 at ${headOf(w.root, 1).sha}\npass\tsize\t2 code lines (2 in all), limit 400\n`)
+  expect(get(w.root, 1, 'maintainer.md')).toBe(`plan 1 at ${headOf(w.root, 1).sha}\npass\tlead\twhole issue, 1 lead(s)\npass\tsize\t2 code lines (2 in all), limit 400\n`)
   expect(sent).toEqual([])
   expect(plan(w.db, 1).step).toBe(8)
 })
@@ -86,7 +86,7 @@ test('D4 an approval at an earlier card sends nothing: other rows or another hea
   decide(w.db, 'plan', 1, headDigest(moved), null)
   const before = sent.length
   expect(push(w.db, w.root, plan(w.db, 1), wire)).toMatchObject({ outcome: 'pass', held: true, spans: ['card'] })
-  expect(get(w.root, 1, 'maintainer.md')).toBe(`plan 1 at ${moved}\npass\tsize\t0 code lines (0 in all), limit 400\n`)
+  expect(get(w.root, 1, 'maintainer.md')).toBe(`plan 1 at ${moved}\npass\tlead\twhole issue, 1 lead(s)\npass\tsize\t0 code lines (0 in all), limit 400\n`)
   expect(sent.slice(before)).toEqual([])
   approve(w.db, w.root, 1)
   expect(push(w.db, w.root, plan(w.db, 1), wire)).toMatchObject({ note: `pushed widget-12-a1 onto ${PR}` })

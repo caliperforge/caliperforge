@@ -40,8 +40,8 @@ function within(file: FileDiff, limit: number): string {
     : `cut before ${file.path}:${String(opens.line)}`
 }
 
-export function size(db: Db, repo: string): Check {
-  return (root, plan) => sized(diffOf(root, plan), limitOf(db, repo))
+export function size(repo: string): Check {
+  return (db, root, plan) => sized(diffOf(root, plan), limitOf(db, repo))
 }
 
 export function limitOf(db: Db, repo: string): number {

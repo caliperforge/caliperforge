@@ -23,6 +23,8 @@ export interface Refused {
   moved?: true | undefined
   /** A refusal only this job's own diff can cause, so another job taking it is no fault on main. */
   own?: true | undefined
+  /** The sha256 of the ticket the builder works from: a ruling changes it, and the repeat check starts again. */
+  ticket?: string | undefined
 }
 
 const ANSI = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'g')
@@ -40,8 +42,8 @@ export function fingerprint(step: number, spans: string[], output = ''): string 
 
 /**
  * Records the refusal and says whether the plan goes round again. It stops on a refusal another job
- * took within a day (the fault is on main, and no build here can fix it), on one it has already had,
- * on a build that changed nothing since the last refusal, and past `ROUNDS`. Before the build nothing
+ * took within a day (the fault is on main, and no build here can fix it), on one it has already had
+ * against the same ticket, cleared or not, on a build that changed nothing since the last refusal, and past `ROUNDS`. Before the build nothing
  * of main has run, so a refusal there is never read as shared: two briefs refused alike are two
  * replies to two asks, and turned the internal lane off twice on 09-24. A branch behind main is never
  * read as shared either, because main moving is not a fault on main, and nor is a branch cut
@@ -50,12 +52,14 @@ export function fingerprint(step: number, spans: string[], output = ''): string 
 export function refused(db: Db, r: Refused): Why {
   const prior = db.prepare('SELECT fingerprint, diff FROM refusals WHERE plan = ? AND cleared = 0 AND blip = 0 ORDER BY id')
     .all(r.plan) as { fingerprint: string; diff: string | null }[]
-  db.prepare('INSERT INTO refusals (plan, step, fingerprint, diff, blip) VALUES (?, ?, ?, ?, 0)')
-    .run(r.plan, r.step, r.fingerprint, r.diff)
+  const had = db.prepare('SELECT 1 FROM refusals WHERE plan = ? AND blip = 0 AND fingerprint = ? AND ticket IS ?')
+    .get(r.plan, r.fingerprint, r.ticket ?? null) !== undefined
+  db.prepare('INSERT INTO refusals (plan, step, fingerprint, diff, blip, ticket) VALUES (?, ?, ?, ?, 0, ?)')
+    .run(r.plan, r.step, r.fingerprint, r.diff, r.ticket ?? null)
   const elsewhere = peer(db, r)
   if (r.moved === true) return prior.length + 1 >= ROUNDS ? 'spent' : 'again'
   if (r.own !== true && elsewhere !== undefined && r.step >= BUILD && r.fingerprint !== fingerprint(r.step, ['base:stale'])) return 'shared'
-  if (prior.some((p) => p.fingerprint === r.fingerprint)) return 'repeat'
+  if (had) return 'repeat'
   if (r.diff !== null && prior.at(-1)?.diff === r.diff) return 'unchanged'
   return prior.length + 1 >= ROUNDS ? 'spent' : 'again'
 }
@@ -95,7 +99,7 @@ export function overBudget(db: Db, plan: number): { spent: number; ceiling: numb
   return row.ceiling !== null && row.spent >= row.ceiling ? { spent: row.spent, ceiling: row.ceiling } : null
 }
 
-/** A person sent the plan round again: what it was refused for before no longer counts against it. */
+/** A person sent the plan round again: its round count starts over, but a refusal it already had still stops it. */
 export function clear(db: Db, plan: number): void {
   db.prepare('UPDATE refusals SET cleared = 1 WHERE plan = ?').run(plan)
 }

@@ -46,7 +46,7 @@ test('the same failure on another job stops as shared, until a person clears it'
   expect(refused(db, { plan: PLAN, step: 3, fingerprint: A, diff: D2 })).toBe('shared')
   clear(db, 2)
   clear(db, PLAN)
-  expect(refused(db, { plan: PLAN, step: 3, fingerprint: A, diff: D2 })).toBe('again')
+  expect(refused(db, { plan: PLAN, step: 3, fingerprint: A, diff: D2 })).toBe('repeat')
 })
 
 function another(db: Db, pipe: number, origin: string): void {
@@ -154,9 +154,38 @@ test('blips never count as rounds', () => {
   expect(refused(db, { plan: PLAN, step: 3, fingerprint: A, diff: D1 })).toBe('again')
 })
 
-test('a cleared plan starts its count over', () => {
+test('a cleared plan starts its round count over, and still stops on a refusal it had', () => {
   const db = bench()
-  refused(db, { plan: PLAN, step: 3, fingerprint: A, diff: D1 })
+  const whys = [...Array(ROUNDS - 1).keys()].map((n) =>
+    refused(db, { plan: PLAN, step: 3, fingerprint: fingerprint(3, [String(n)]), diff: String(n).padStart(64, '0') }))
+  expect(whys.every((w) => w === 'again')).toBe(true)
   clear(db, PLAN)
   expect(refused(db, { plan: PLAN, step: 3, fingerprint: A, diff: D1 })).toBe('again')
+  expect(refused(db, { plan: PLAN, step: 3, fingerprint: fingerprint(3, ['0']), diff: D2 })).toBe('repeat')
+})
+
+const T1 = 'd'.repeat(64)
+
+const T2 = 'e'.repeat(64)
+
+test('D1 the same fingerprint on the same ticket is a repeat', () => {
+  const db = bench()
+  expect(refused(db, { plan: PLAN, step: 3, fingerprint: A, diff: D1, ticket: T1 })).toBe('again')
+  expect(refused(db, { plan: PLAN, step: 3, fingerprint: A, diff: D2, ticket: T1 })).toBe('repeat')
+})
+
+test('D2 a clear between two refusals keeps the repeat; a new ticket goes round again', () => {
+  const db = bench()
+  refused(db, { plan: PLAN, step: 3, fingerprint: A, diff: D1, ticket: T1 })
+  clear(db, PLAN)
+  expect(refused(db, { plan: PLAN, step: 3, fingerprint: A, diff: D2, ticket: T1 })).toBe('repeat')
+  clear(db, PLAN)
+  expect(refused(db, { plan: PLAN, step: 3, fingerprint: A, diff: D1, ticket: T2 })).toBe('again')
+})
+
+test('D3 two fingerprints go round again, cleared or not', () => {
+  const db = bench()
+  expect(refused(db, { plan: PLAN, step: 3, fingerprint: A, diff: D1, ticket: T1 })).toBe('again')
+  clear(db, PLAN)
+  expect(refused(db, { plan: PLAN, step: 4, fingerprint: B, diff: D2, ticket: T1 })).toBe('again')
 })

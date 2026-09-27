@@ -7,6 +7,7 @@ import { day, halted, open as openPlans, runsOf, verdictsOf } from '../../cli/br
 import { measure, type Read } from '../../cli/measure.ts'
 import { account, parse, refuseTarget } from '../../cli/queue.ts'
 import { clock, inWindow, rewind, underCap, waiting, type PipeRow, type PlanRow, type Wait } from '../../store/plans.ts'
+import { retried } from '../../store/holds.ts'
 import { at, steps } from '../../templates/pr-path.ts'
 import { tick } from '../index.ts'
 import { blocked, kernel } from '../steps.ts'
@@ -192,6 +193,28 @@ test('a rail refusal names spans, sends the plan back one step, then to blocked_
   expect(w.db.prepare('SELECT held_by, held_why FROM plans WHERE id = 1').get()).toEqual({ held_by: 'coo', held_why: stopped?.note })
   const verdict = verdictRows(w.db, 1).find((v) => v.rail_id === 'completion-audit')
   expect(verdict).toMatchObject({ outcome: 'refuse', origin_ref: 'completion-audit' })
+})
+
+const retriedOnce = async (rule: (w: World) => void): Promise<[World, Fired | undefined]> => {
+  const w = world()
+  approve(w.db, w.target)
+  for (let at = 0; at < 5; at += 1) await tick(w.db, w.root, stub(UNPOINTED))
+  expect((await tick(w.db, w.root, stub(UNPOINTED)))[0]).toMatchObject({ step: 3, state: 'blocked_on_ceo' })
+  rule(w)
+  retried(w.db, 1, 'ceo')
+  await tick(w.db, w.root, stub(UNPOINTED))
+  return [w, (await tick(w.db, w.root, stub(UNPOINTED)))[0]]
+}
+
+test('D1 D2 the same refusal after a retry stops again', async () => {
+  const [w, fired] = await retriedOnce(() => undefined)
+  expect(fired).toMatchObject({ step: 3, outcome: 'refuse', state: 'blocked_on_ceo' })
+  expect(planFile(w.root, 'refusal.md')).toContain('# Stopped\n\nthe same refusal came back')
+})
+
+test('D2 the same refusal after a ruling added to the ask goes round again', async () => {
+  const [, fired] = await retriedOnce((w) => { put(w.root, 1, 'ask.md', `${get(w.root, 1, 'ask.md')}\n## Ruling\n\nuse bye()\n`) })
+  expect(fired).toMatchObject({ step: 3, outcome: 'refuse', state: 'retried' })
 })
 
 test('the sequencer hands the bench a maintainer view, and a wrong shape refuses before any model', async () => {

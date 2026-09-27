@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { map } from '../cli/map.ts'
 import { CAPPED, type Packet, type Provider } from '../providers/kind.ts'
 import { assembled, benchPacket, reviewManifest, type Bench, type Review } from '../runner/packet.ts'
 import type { Db } from '../store/index.ts'
@@ -43,7 +44,8 @@ export async function judge(
     return { run: null, verdict: record(db, root, name, plan, outcome, 0, 0, tree), outcome }
   }
   const context = built.bench.context ?? inContext(db, plan, built.bench.repo, built.bench.diff)
-  const packet = context === undefined ? built.packet : assembled(root, name, manifest, { ...built.bench, context }, transcript)
+  const chosen = context === undefined ? built.packet : assembled(root, name, manifest, { ...built.bench, context }, transcript)
+  const packet = { ...chosen, prompt: `${map(built.bench.repo)}\n\n${chosen.prompt}` }
   const first = await ran(db, root, name, plan, manifest, provider, packet)
   const refired = first.capped && first.outcome === null
     ? await ran(db, root, name, plan, manifest, provider, { ...packet, tools: [] })

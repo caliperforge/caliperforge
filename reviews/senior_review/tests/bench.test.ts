@@ -14,6 +14,7 @@ import { read } from '../../verdict.ts'
 const root = join(import.meta.dirname, '../../..')
 const TRANSCRIPT = join(tmpdir(), 'cf-review.transcript.jsonl')
 const repo = '/tmp/cf-review'
+const MAPPED = /^# MAP\.md — written by `cf map`\n/
 
 function fixture(review: string, name: string): string {
   return readFileSync(join(root, 'reviews', review, 'fixtures', name), 'utf8')
@@ -98,6 +99,7 @@ test('senior review reads the first verdict and names what the first verdict mis
   const sent: string[] = []
   const capture: Provider = { name: 'claude-agent-sdk', fire: (p) => { sent.push(p.prompt); return replies(fixture('senior_review', 'escape.reply.md')).fire(p) } }
   const second = await judge(db, root, 'senior_review', plan, seeded({ verdict: fixture('senior_review', 'first.verdict.md') }), capture, TRANSCRIPT)
+  expect(sent[0]).toMatch(MAPPED)
   expect(sent[0]).toContain('# First verdict')
   expect(sent[0]).toContain('src/stats.ts:2')
   expect(second.outcome.spans).toEqual(['src/stats.ts:4'])
@@ -127,6 +129,7 @@ test('the prompt carries each changed declaration whole under Changed code in co
   const capture: Provider = { name: 'claude-agent-sdk', fire: (p) => { sent.push(p.prompt); return replies(fixture('code_quality', 'clean.reply.md')).fire(p) } }
   const diff = '--- a/a.ts\n+++ b/a.ts\n@@ -4 +4 @@\n-  return 0\n+  return a\n'
   await judge(db, root, 'code_quality', plan, seeded({ repo: src, diff }), capture, TRANSCRIPT)
+  expect(sent[0]).toMatch(/^# MAP\.md — written by `cf map`\n\n- `a\.ts`/)
   expect(sent[0]).toContain('# Changed code in context')
   expect(sent[0]).toContain('## a.ts:3-5\n\n````\nexport function one(): number {\n  return a\n}\n````')
 })
@@ -193,6 +196,7 @@ test('a run that ends at the step cap is fired once more with no tools, and that
   const out = await judge(db, root, 'code_quality', plan, seeded(), provider, TRANSCRIPT)
   expect(sent[0]?.steps).toBe(STEP_CAP)
   expect(sent[1]?.tools).toEqual([])
+  expect(sent[1]?.prompt).toMatch(MAPPED)
   expect(out.outcome).toMatchObject({ outcome: 'refuse', spans: ['src/stats.ts:2'], origin_kind: 'ruling', origin_ref: 'reviewers.verdict' })
   expect(db.prepare('SELECT exit FROM runs WHERE plan = ? ORDER BY id').all(plan)).toEqual([{ exit: 1 }, { exit: 0 }])
   expect(db.prepare('SELECT max(id) AS id FROM runs WHERE plan = ?').get(plan)).toEqual({ id: out.run })

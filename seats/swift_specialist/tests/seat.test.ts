@@ -117,3 +117,12 @@ test('a background xcodebuild is denied and the seat stays in the session', () =
   expect(ran(p, XCODEBUILD, false)).toEqual({ continue: true })
   expect(ran(p, XCODEBUILD)).toEqual({ continue: true })
 })
+
+test('both prompt commands cap each test at 60 seconds and the gate admits them', () => {
+  const { manifest, prompt } = seat(root, SEAT)
+  const flagged = '-derivedDataPath .cf-derived -test-timeouts-enabled YES -default-test-execution-time-allowance 60 -maximum-test-execution-time-allowance 60 test'
+  expect(prompt.split(flagged)).toHaveLength(3)
+  expect(prompt).not.toContain('.cf-derived test')
+  const p = packet(manifest, prompt, '', '', root, join(root, 'x.transcript.jsonl'))
+  expect(ran(p, `xcodebuild -project Atelier.xcodeproj -scheme Atelier -destination 'platform=macOS' ${flagged}`)).toEqual({ continue: true })
+})

@@ -1,6 +1,6 @@
 import type { Dry, Quiet } from '../sequencer/index.ts'
 import type { Fired } from '../sequencer/kind.ts'
-import { CREDITS } from '../sequencer/steps.ts'
+import { CREDITS } from '../sequencer/ready.ts'
 import { ruled } from '../sequencer/workspace.ts'
 import type { Db } from '../store/index.ts'
 import { name, type LaneState, type WindowRow } from '../store/lanes.ts'

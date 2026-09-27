@@ -1,5 +1,4 @@
 import { createHash } from 'node:crypto'
-import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { CHECK, find } from '../cli/find.ts'
 import type { Read } from '../cli/gh.ts'
@@ -17,6 +16,7 @@ import { at, type Step } from '../templates/pr-path.ts'
 import { writable } from './brief.ts'
 import type { Outcome } from './kind.ts'
 import { preReview } from './rails.ts'
+import { ASKED, CREDITS, FIRST_ONLY, monthly } from './ready.ts'
 import { forkCi, headOf, holding, land, push, rehearsalBranch, reviewable, title, WIRE, type Wire } from './push.ts'
 import { following } from './split.ts'
 import { cloned, diffOf, FORK, get, maybe, put, repoName, srcDir } from './workspace.ts'
@@ -153,23 +153,8 @@ function greptile(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire)
     note: `Greptile scored ${at} ${String(score)}/5; back to the builder with its findings` }
 }
 
-export const CREDITS = 50
-
-export const FIRST_ONLY = 40
-
 /** Greptile's plan gives {@link CREDITS} credits a month, so a job asks for at most this many reviews. */
 const ASKS = 3
-
-const ASKED = 'greptile.asked'
-
-export function monthly(root: string, now: Date): number {
-  const month = now.toISOString().slice(0, 7)
-  const work = join(root, '.cf/work')
-  if (!existsSync(work)) return 0
-  return readdirSync(work)
-    .flatMap((plan) => (maybe(root, Number(plan), ASKED) ?? '').split('\n'))
-    .filter((l) => l.split(' ')[1]?.startsWith(month) === true).length
-}
 
 function asked(root: string, plan: number, sha: string, repo: string, wire: Wire): Outcome | null {
   const text = maybe(root, plan, ASKED) ?? ''

@@ -6,6 +6,7 @@ import { measure, render as renderPulse } from './measure.ts'
 import { approve as approveTarget, refuseTarget } from './queue.ts'
 import { fill as fillRecord, render as renderRecord, still } from './record.ts'
 import { render as renderScan, scan } from './scan.ts'
+import { approve as approvePublish, refuse as refusePublish } from '../sequencer/card.ts'
 
 export function registerTargets(cf: Command, { db, out }: Cli): void {
   cf.command('measure').argument('<repo>', 'owner/repo to take the step 0 pulse of').action((repo: string) => {
@@ -61,6 +62,13 @@ export function registerApprovals(cf: Command, { root, db, out }: Cli): void {
       out(`${kind} ${id} refused\t${refuseCard(db(), root, kind, Number(id), reason).slice(0, 12)}\n`)
     })
   }
+
+  approve.command('card').argument('<plan>').action((plan: string) => {
+    out(`card ${plan} approved\t${approvePublish(db(), root, Number(plan)).slice(0, 12)}\n`)
+  })
+  refuse.command('card').argument('<plan>').argument('<reason>').action((plan: string, reason: string) => {
+    out(`card ${plan} refused\t${refusePublish(db(), root, Number(plan), reason).slice(0, 12)}\n`)
+  })
 }
 
 export function registerAdopt(cf: Command, { root, db, out }: Cli): void {

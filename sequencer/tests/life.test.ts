@@ -6,7 +6,9 @@ import type { Pr } from '../../cli/gh.ts'
 import { approve } from '../../cli/queue.ts'
 import type { Packet } from '../../providers/kind.ts'
 import { capture } from '../capture.ts'
+import { approve as approvePublish } from '../card.ts'
 import { tick } from '../index.ts'
+import { maybe } from '../workspace.ts'
 import { git } from './bases.ts'
 import { CARRIED, plan, PR as URL, SEEDED, stub, watched, world, type World } from './world.ts'
 
@@ -45,6 +47,8 @@ async function pushed(): Promise<{ w: World; id: number }> {
   git(upstream, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'main moves on'])
   await ticks(w, id, () => plan(w.db, id).step === 7)
   approveCard(w.db, w.root, 'plan', id)
+  await ticks(w, id, () => maybe(w.root, id, 'maintainer.md') !== null)
+  approvePublish(w.db, w.root, id)
   await ticks(w, id, () => plan(w.db, id).state === 'done')
   return { w, id }
 }

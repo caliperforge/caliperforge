@@ -12,7 +12,9 @@ import { open as openProposals } from '../../store/proposals.ts'
 import { graded, SignalRow } from '../../store/signals.ts'
 import { capture } from '../capture.ts'
 import { classOf } from '../escapes.ts'
-import { COMMIT, headOf, prBody, push, sent as next } from '../push.ts'
+import { approve as approvePublish } from '../card.ts'
+import type { Outcome } from '../kind.ts'
+import { COMMIT, headOf, prBody, push, sent as next, type Wire } from '../push.ts'
 import { started } from '../signals.ts'
 import { unanswered } from '../steps.ts'
 import { unread } from '../../cli/inbox.ts'
@@ -67,7 +69,7 @@ test('push refuses without a matching row, then pushes the approved head and ope
   expect(push(w.db, w.root, plan(w.db, 1), wire)).toMatchObject({ outcome: 'refuse' })
   expect(sent).toEqual([])
   approveCard(w.db, w.root, 'plan', 1)
-  expect(push(w.db, w.root, plan(w.db, 1), wire)).toMatchObject({ outcome: 'pass' })
+  expect(published(w, wire)).toMatchObject({ outcome: 'pass' })
   expect(sent).toEqual(['send src widget-12-a1', 'unrehearse caliperforge/widget widget-12-a1-next', 'open acme/widget caliperforge:widget-12-a1'])
   expect(w.db.prepare('SELECT state, evidence FROM deliverables WHERE plan_id = 1 ORDER BY id DESC LIMIT 1').get())
     .toEqual({ state: 'pushed', evidence: URL })
@@ -90,7 +92,7 @@ test('a body the card set is the one the pull request opens with', async () => {
     return URL
   } }
   approveCard(w.db, w.root, 'plan', 1)
-  expect(push(w.db, w.root, plan(w.db, 1), wire)).toMatchObject({ outcome: 'pass' })
+  expect(published(w, wire)).toMatchObject({ outcome: 'pass' })
   expect(bodies).toEqual(['Addresses the defaults-table item in #12.\n'])
 })
 
@@ -215,7 +217,7 @@ test('a round whose -next the fork holds at a commit HEAD lacks folds onto it, f
   git(['merge-base', '--is-ancestor', stale, 'HEAD'])
   approveCard(w.db, w.root, 'plan', 1)
   advance(w.db, plan(w.db, 1), 8)
-  push(w.db, w.root, plan(w.db, 1), wire)
+  published(w, wire)
   expect(sent.slice(2)).toEqual(['send src widget-12-a1', 'unrehearse caliperforge/widget widget-12-a1-next'])
   expect(sent.filter((l) => l.includes('--force') || l.includes('+refs'))).toEqual([])
 })
@@ -256,7 +258,7 @@ test('D1 D2 D3 rounds before the pull request fast-forward -next on tips the bra
   approveCard(w.db, w.root, 'plan', 1)
   advance(w.db, plan(w.db, 1), 8)
   const before = sent.length
-  push(w.db, w.root, plan(w.db, 1), wire)
+  published(w, wire)
   expect(sent.slice(before)).toEqual(['send src widget-12-a1', 'unrehearse caliperforge/widget widget-12-a1-next',
     'open acme/widget caliperforge:widget-12-a1'])
 })
@@ -524,8 +526,14 @@ test('a review read on one tick and the merge on a later one is still one escape
 async function pushed(): Promise<World> {
   const w = await atBatch()
   approveCard(w.db, w.root, 'plan', 1)
-  push(w.db, w.root, plan(w.db, 1), watched([], w.root, 1))
+  published(w, watched([], w.root, 1))
   return w
+}
+
+function published(w: World, wire: Wire): Outcome {
+  push(w.db, w.root, plan(w.db, 1), wire)
+  approvePublish(w.db, w.root, 1)
+  return push(w.db, w.root, plan(w.db, 1), wire)
 }
 
 function row(db: Db, id: number): SignalRow {

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { readdirSync } from 'node:fs'
+import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { CHECK, find } from '../cli/find.ts'
 import type { Read } from '../cli/gh.ts'
@@ -166,7 +166,9 @@ const ASKED = 'greptile.asked'
 
 export function monthly(root: string, now: Date): number {
   const month = now.toISOString().slice(0, 7)
-  return readdirSync(join(root, '.cf/work'))
+  const work = join(root, '.cf/work')
+  if (!existsSync(work)) return 0
+  return readdirSync(work)
     .flatMap((plan) => (maybe(root, Number(plan), ASKED) ?? '').split('\n'))
     .filter((l) => l.split(' ')[1]?.startsWith(month) === true).length
 }

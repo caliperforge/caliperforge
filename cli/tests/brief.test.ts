@@ -133,7 +133,8 @@ test('a stale reason on a blocked plan and a live plan with no reason add nothin
 test('D1 the Greptile line counts this UTC month\'s dated requests across plans, not last month\'s or undated ones', () => {
   const root = mkdtempSync(join(tmpdir(), 'cf-month-'))
   const now = new Date('2026-09-26T12:00:00.000Z')
-  const at = (sha: string, when: string): string => `${sha.repeat(40)} ${when}\n`
+  expect(monthly(root, now)).toBe(0)
+  const at =(sha: string, when: string): string => `${sha.repeat(40)} ${when}\n`
   put(root, 1, 'greptile.asked', at('a', now.toISOString()).repeat(7) + at('b', '2026-08-31T23:59:59.000Z'))
   put(root, 2, 'greptile.asked', `${'c'.repeat(40)}\n` + at('d', '2026-09-01T00:00:00.000Z').repeat(5))
   expect(monthly(root, now)).toBe(12)

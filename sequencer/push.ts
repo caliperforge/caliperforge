@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { closeIssue, commentIssue, fileIssue, openPr, rehearse, review, unrehearse } from '../cli/gh.ts'
+import { closeIssue, commentIssue, fileIssue, gh, openPr, rehearse, review, unrehearse, type Read } from '../cli/gh.ts'
 import { alerter } from '../cli/watch.ts'
 import { judge, MISSING, PENDING, shell, type Board, type Gh } from '../rails/ci-green/index.ts'
 import { parse } from '../rails/diff.ts'
@@ -18,6 +18,7 @@ import { npm } from './checks.ts'
 import { red } from './failures.ts'
 import { reinstall } from './install.ts'
 import type { Outcome } from './kind.ts'
+import { merging } from './merging.ts'
 import { cloned, conflicted, diffOf, fetchMain, FORK, get, MAIN, maybe, planDir, put, repoName, srcDir, titleOf } from './workspace.ts'
 import { homeOf } from './home.ts'
 import { size } from './size.ts'
@@ -39,6 +40,7 @@ export interface Wire {
   comment: (repo: string, no: number, body: string) => void
   install?: () => void
   card?: Check[]
+  merged: Read
 }
 
 export const WIRE: Wire = {
@@ -53,6 +55,7 @@ export const WIRE: Wire = {
   review,
   install: () => { reinstall(npm, alerter()) },
   card: [theirs()],
+  merged: gh,
 }
 
 /**
@@ -321,7 +324,7 @@ export function push(db: Db, root: string, plan: PlanRow, wire: Wire = WIRE): Ou
   const cold = unproven(db, plan.id)
   if (cold !== null) return refuse(cold, `${cold} left no passing verdict on plan ${String(plan.id)}`)
   const text = maybe(root, plan.id, 'pr.md') ?? prBody(target.issue_no, root, plan.id)
-  const checks = [...CHECKS, size(target.repo), prosed(title(root, plan.id), text), ...(wire.card ?? [])]
+  const checks = [...CHECKS, size(target.repo), prosed(title(root, plan.id), text), merging(target.repo, wire.merged), ...(wire.card ?? [])]
   const card = waiting(db, root, plan.id, head.sha, target, checks)
   if (card !== null) return card
   const open = opened(db, plan.id)

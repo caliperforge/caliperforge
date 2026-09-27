@@ -324,6 +324,7 @@ export function watched(log: string[], root: string, id: number, runs = runsOn(r
     },
     comment: (repo, no) => void log.push(`comment ${repo}#${String(no)}`),
     install: () => void log.push('install'),
+    merged: () => [],
   }
 }
 

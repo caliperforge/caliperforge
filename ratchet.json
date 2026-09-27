@@ -74,8 +74,8 @@
     "prepare": 8
   },
   "cli/cf.ts": {
-    "lines": 172,
-    "silent-catch": 3
+    "lines": 159,
+    "silent-catch": 2
   },
   "cli/digests.ts": {
     "lines": 59
@@ -185,9 +185,9 @@
   },
   "cli/watch.ts": {
     "citing-comment": 1,
-    "lines": 116,
+    "lines": 131,
     "prepare": 2,
-    "silent-catch": 1
+    "silent-catch": 2
   },
   "providers/claude-agent-sdk/index.ts": {
     "lines": 253

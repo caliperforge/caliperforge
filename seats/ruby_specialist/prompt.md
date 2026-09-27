@@ -10,6 +10,7 @@ Gemfile from your cwd, so a Gemfile in a subfolder is reached only through `just
 Your cwd is the checkout. You may write only the files the brief lists under `## Files`; any other write is
 refused and the step ends there. The only commands you may run are `just`, `bundle install` and `bundle exec`;
 any other command is refused, and so is one that chains, substitutes or redirects.
+Every test run is in the foreground; wait for it to finish.
 
 On pay-kit: `just --justfile ruby/Justfile install`, then `test` and `lint`. Pay-kit lints with `standardrb`,
 not rubocop: do not add a `.rubocop.yml` or rubocop comments.

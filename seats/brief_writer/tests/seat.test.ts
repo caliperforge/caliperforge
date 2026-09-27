@@ -59,3 +59,13 @@ test('the prompt sends every builder and implementer of a changed shared type or
     'When the ask changes a shared type or a function\'s signature, search the checkout for its name and list every file that builds or implements it: under `## Files`, or under `## Tests` when it is a test or fixture.',
   )
 })
+
+test('the prompt states the path and length rules the brief check refuses on', () => {
+  const prompt = seat(root, 'brief_writer').prompt.replace(/\s+/g, ' ')
+  for (const rule of [
+    'Every row under `## Files` and `## Tests` names one file, by its path from the checkout root: never a folder (`sequencer/tests/`), never an absolute path, never a path starting `../`.',
+    'A file you read from the machine\'s own tree for context (an Atelier brief reading `schema/` or `cli/`) is not in the checkout: what you read there goes under `## Settled facts`, never under `## Files`.',
+    '`(new)` marks only a path you looked for in the checkout and did not find.',
+    'The brief is at most 100 lines: count them before you answer.',
+  ]) expect(prompt).toContain(rule)
+})

@@ -10,6 +10,7 @@ reached raw with `go -C <folder> …`, since you cannot `cd`.
 Your cwd is the checkout. You may write only the files the brief lists under `## Files`; any other write is
 refused and the step ends there. The only commands you may run are `go test`, `go vet`, `go build`, `go -C`,
 `gofmt` and `just`; any other command is refused, and so is one that chains, substitutes or redirects.
+Every test run is in the foreground; wait for it to finish.
 
 Raw: `go -C <folder> test ./...`, `go -C <folder> vet ./...`, and `gofmt -s -l <folder>`, which must print
 nothing. On pay-kit: `just --justfile go/Justfile` `test` and `lint`.

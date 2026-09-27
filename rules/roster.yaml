@@ -14,6 +14,7 @@ seats:
   - fixer
   - solana_specialist
   - writer
+  - text_review
 digests:
   typescript_specialist:
     manifest: a8dd50ad9bc5d01f576bd87d7fc88bd0b518adb47d37468f28b24b02d4d730a1
@@ -60,3 +61,6 @@ digests:
   writer:
     manifest: 00b4a67d448eee1288cde114b8ac5b95a25817a29f4ced4916e7c8fa78f04ee6
     prompt: 60747fcb34a24b6214bcf191381932d59ef6307a1906d59c590cbe2ec5dfe964
+  text_review:
+    manifest: cc848017eac1f6d9e970b2862e82a00a753cbfca9c679faebad3597c4fae28ca
+    prompt: bcefa5036394d40c3db579e8f3aa9c47f3bf6442145100828eb04192d53e92bf

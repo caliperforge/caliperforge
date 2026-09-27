@@ -142,16 +142,14 @@ function labels(plan: PlanRow): string[] {
 }
 
 /** A requested change on an assembled pull request, filed and queued as one more internal part on `asm/<parent>`; returns its plan. */
-export function fixed(db: Db, root: string, parent: PlanRow, signal: SignalRow, wire: Wire = WIRE): number {
+export function fixed(db: Db, root: string, parent: PlanRow, signal: SignalRow, wire: Wire): number {
   const { n } = db.prepare('SELECT count(*) AS n FROM parts WHERE parent = ?').get(parent.id) as { n: number }
   const id = String(parent.id)
   const title = `p${id}${letter(n)}: address ${signal.author}'s review on ${signal.repo}#${String(signal.pr)}`
   const body = `${words(signal)}\nInternal only: a fix of plan ${id}; it builds against asm/${id} on our fork and opens no pull request upstream.\n`
   const url = wire.file(homeOf(parent), title, body, labels(parent))
   db.prepare('INSERT INTO parts (parent, n, url, title, body, after) VALUES (?, ?, ?, ?, ?, NULL)').run(parent.id, n, url, title, body)
-  const plan = queue(db, root, parent, n)
-  if (plan === null) throw new Error(`part ${letter(n)} of plan ${id} was filed but not queued`)
-  return plan
+  return made(db, root, parent, n, { url, title, body })
 }
 
 /** A part whose `After:` issue is closed, however it closed, is queued; `open` is every open issue number of `repo`. */
@@ -173,11 +171,15 @@ function queue(db: Db, root: string, parent: PlanRow, n: number): number | null 
     { url: string; title: string; body: string; plan: number | null } | undefined
   if (row === undefined) return null
   if (row.plan !== null) return row.plan
-  const made = db.prepare(`INSERT INTO plans (pipe_id, target_id, template, state, queued_at, step, retries, priority, lane, seat, origin)
+  return made(db, root, parent, n, row)
+}
+
+function made(db: Db, root: string, parent: PlanRow, n: number, row: { url: string; title: string; body: string }): number {
+  const inserted = db.prepare(`INSERT INTO plans (pipe_id, target_id, template, state, queued_at, step, retries, priority, lane, seat, origin)
     VALUES (?, ?, ?, 'queued', ?, 0, 0, ?, ?, ?, ?)`)
     .run(parent.pipe_id, parent.target_id, parent.template, new Date().toISOString(), parent.priority,
       parent.lane ?? 'machine', parent.seat ?? LANE.machine.seat, row.url)
-  const id = Number(made.lastInsertRowid)
+  const id = Number(inserted.lastInsertRowid)
   logged(db, { plan: id, kind: 'filed', actor: 'split', outcome: 'pass', message: row.url, pointer: null, run: null })
   db.prepare('UPDATE parts SET plan = ? WHERE parent = ? AND n = ?').run(id, parent.id, n)
   put(root, id, 'ask.md', `# ${row.title}\n\n${row.body}`)

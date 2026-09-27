@@ -104,6 +104,15 @@ test('unhold on a held repeat stop at step 3 returns at step 3', () => {
   expect(unhold(db, home, 7, 'ceo')).toBe(3)
 })
 
+test('cf return prints the step the plan runs next', () => {
+  const { db, home } = stoppedAtCheck('repeat')
+  const printed: string[] = []
+  const cf = new Command()
+  registerPlans(cf, { root: home, db: () => db, out: (line: string) => { printed.push(line) } })
+  cf.parse(['return', '7'], { from: 'user' })
+  expect(printed).toEqual(['plan 7 queued at step 2\n'])
+})
+
 test('unhold past step 1 keeps the checkout', () => {
   const { db, home } = seeded()
   writeFileSync(join(srcDir(home, 7), 'built.ts'), 'x\n')

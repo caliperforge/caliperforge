@@ -1,3 +1,4 @@
+import { LANE } from '../cli/plan.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { internal, originIssue, PlanRow } from '../store/plans.ts'
@@ -6,6 +7,7 @@ import type { Outcome } from './kind.ts'
 import { WIRE, type Wire } from './push.ts'
 import { drop, put } from './workspace.ts'
 import { homeOf } from './home.ts'
+import { approved } from './approve.ts'
 
 const LETTERS = 'abcdefghijklmnopqrstuvwxyz'
 
@@ -13,26 +15,28 @@ const LETTERS = 'abcdefghijklmnopqrstuvwxyz'
  * #72, filed. Every part becomes an issue of ours, titled `<parent><letter>: …` in the order the parts
  * land, carrying the parent's lane; every part with no `after` is queued at the parent's priority and the parent's
  * issue says where its work went. The parent plan ends here with no build. A split of somebody else's
- * ticket is not the machine's to file: the parts wait for the COO instead.
+ * approved ticket is filed on our repo as internal-only parts titled `p<plan><letter>: …` that build against
+ * `asm/<plan>`; an unapproved one is not the machine's to file: the parts wait for the COO instead.
  * Filing is resumable -- a part already on file is not filed twice -- so a `gh` that fails half way is
  * a blip the next tick finishes.
  */
 export function parted(db: Db, root: string, plan: PlanRow, parts: Part[], wire: Wire = WIRE): Outcome {
-  const parent = originIssue(plan)
-  const why = unfileable(plan, parent)
-  if (why !== null || parent === null) {
-    const said = why ?? 'the plan names no issue of ours'
-    put(root, plan.id, 'question.md', `${said}. The brief writer's parts, in landing order, for the COO to file or refuse:\n\n${parts.map(render).join('\n\n')}\n`)
+  const why = unfileable(db, plan)
+  if (why !== null) {
+    put(root, plan.id, 'question.md', `${why}. The brief writer's parts, in landing order, for the COO to file or refuse:\n\n${parts.map(render).join('\n\n')}\n`)
     drop(root, plan.id, 'split.md')
-    return { outcome: 'needs_ceo', spans: ['split'], note: `${said}: ${String(parts.length)} parts wait for the COO` }
+    return { outcome: 'needs_ceo', spans: ['split'], note: `${why}: ${String(parts.length)} parts wait for the COO` }
   }
+  const parent = originIssue(plan)
   try {
-    const urls = [...parts.keys()].map((n) => filed(db, plan, parent, parts, n, wire))
+    const urls = [...parts.keys()].map((n) => filed(db, plan, parent === null ? `p${String(plan.id)}` : String(parent), parts, n, wire))
     const on = (n: number): string => ref(urls[n] ?? '')
     const started = [...parts.keys()].filter((n) => parts[n]?.after === 'none')
     for (const n of started) queue(db, root, plan, n)
     const waits = parts.flatMap((p, n) => p.after === 'none' ? [] : [`${on(n)} waits on ${on(LETTERS.indexOf(p.after))}`])
-    wire.comment(homeOf(plan), parent, `The brief writer found this is ${String(parts.length)} jobs, not one: ${urls.map(ref).join(', ')}. ${[`${started.map(on).join(', ')} started`, ...waits].join('; ')}. This issue closes when every one lands.`)
+    if (parent !== null) {
+      wire.comment(homeOf(plan), parent, `The brief writer found this is ${String(parts.length)} jobs, not one: ${urls.map(ref).join(', ')}. ${[`${started.map(on).join(', ')} started`, ...waits].join('; ')}. This issue closes when every one lands.`)
+    }
     return { outcome: 'pass', spans: [], split: true, note: `split into ${urls.map(ref).join(', ')}; ${started.map(on).join(', ')} queued` }
   } catch (error) {
     const note = error instanceof Error ? error.message : String(error)
@@ -92,12 +96,12 @@ export function claimed(db: Db, root: string, issue: { url: string; title: strin
 }
 
 /** Why a split cannot be filed by the machine, or null when it can. */
-function unfileable(plan: PlanRow, parent: number | null): string | null {
-  if (!internal(plan)) return 'a ticket on somebody else\'s repository is split by the COO, not the machine'
-  return parent === null ? 'the plan names no issue of ours to split' : null
+function unfileable(db: Db, plan: PlanRow): string | null {
+  if (internal(plan)) return originIssue(plan) === null ? 'the plan names no issue of ours to split' : null
+  return approved(db, plan) ? null : 'an unapproved ticket on somebody else\'s repository is split by the COO, not the machine'
 }
 
-function filed(db: Db, plan: PlanRow, parent: number, parts: Part[], n: number, wire: Wire): string {
+function filed(db: Db, plan: PlanRow, prefix: string, parts: Part[], n: number, wire: Wire): string {
   const held = db.prepare('SELECT url FROM parts WHERE parent = ? AND n = ?').get(plan.id, n) as { url: string } | undefined
   if (held !== undefined) return held.url
   const part = parts[n]
@@ -105,9 +109,12 @@ function filed(db: Db, plan: PlanRow, parent: number, parts: Part[], n: number, 
   const after = part.after === 'none' ? null : LETTERS.indexOf(part.after)
   const prior = after === null ? undefined
     : (db.prepare('SELECT url FROM parts WHERE parent = ? AND n = ?').get(plan.id, after) as { url: string } | undefined)?.url
-  const title = `${String(parent)}${letter(n)}: ${part.title}`
+  const title = `${prefix}${letter(n)}: ${part.title}`
+  const of = `${letter(n)} of ${String(parts.length)}`
+  const id = String(plan.id)
   const body = [`**What:** ${part.what}`, `**Why:** ${part.why}`, `**When it ends:** ${part.ends}`, '',
-    `Part ${letter(n)} of ${String(parts.length)} of #${String(parent)}, split by the brief writer.`,
+    internal(plan) ? `Part ${of} of #${prefix}, split by the brief writer.`
+      : `Internal only: part ${of} of plan ${id}, split by the brief writer; it builds against asm/${id} on our fork and opens no pull request upstream.`,
     ...(prior === undefined ? [] : [`After: ${ref(prior)}`]), ''].join('\n')
   // Intake re-prices a plan from its issue's P label, so a part filed without one fell to the default (9b ran P3 under a P0).
   const url = wire.file(homeOf(plan), title, body, [...(plan.lane === null ? [] : [`lane:${plan.lane}`]), `P${String(plan.priority)}`])
@@ -128,15 +135,16 @@ export function released(db: Db, root: string, repo: string, open: Set<number>):
   }
 }
 
-/** A part's plan is the parent's in every setting but its issue: same pipe, lane, seat and priority. */
+/** A part's plan is the parent's in every setting but its issue: same pipe, target, lane, seat and priority; an outside parent has no lane or seat, so its part takes the machine lane's. */
 function queue(db: Db, root: string, parent: PlanRow, n: number): number | null {
   const row = db.prepare('SELECT url, title, body, plan FROM parts WHERE parent = ? AND n = ?').get(parent.id, n) as
     { url: string; title: string; body: string; plan: number | null } | undefined
   if (row === undefined) return null
   if (row.plan !== null) return row.plan
-  const made = db.prepare(`INSERT INTO plans (pipe_id, template, state, queued_at, step, retries, priority, lane, seat, origin)
-    VALUES (?, ?, 'queued', ?, 0, 0, ?, ?, ?, ?)`)
-    .run(parent.pipe_id, parent.template, new Date().toISOString(), parent.priority, parent.lane, parent.seat, row.url)
+  const made = db.prepare(`INSERT INTO plans (pipe_id, target_id, template, state, queued_at, step, retries, priority, lane, seat, origin)
+    VALUES (?, ?, ?, 'queued', ?, 0, 0, ?, ?, ?, ?)`)
+    .run(parent.pipe_id, parent.target_id, parent.template, new Date().toISOString(), parent.priority,
+      parent.lane ?? 'machine', parent.seat ?? LANE.machine.seat, row.url)
   const id = Number(made.lastInsertRowid)
   logged(db, { plan: id, kind: 'filed', actor: 'split', outcome: 'pass', message: row.url, pointer: null, run: null })
   db.prepare('UPDATE parts SET plan = ? WHERE parent = ? AND n = ?').run(id, parent.id, n)

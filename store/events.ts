@@ -52,10 +52,10 @@ export interface Run {
 
 export function runLogged(db: Db, r: Run): number {
   const row = db.prepare(`INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort,
-    input_tokens, cache_read_tokens, output_tokens, seconds, exit, transcript_path, cost_usd)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    input_tokens, cache_read_tokens, output_tokens, seconds, exit, transcript_path, cost_usd, cache_write_tokens)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(r.plan, r.step, r.seat, r.rule_hash, r.provider, r.model, r.effort, r.fired.usage.input, r.fired.usage.cache,
-      r.fired.usage.output, r.fired.seconds, r.exit, r.fired.transcript_path, r.fired.usage.cost ?? null)
+      r.fired.usage.output, r.fired.seconds, r.exit, r.fired.transcript_path, r.fired.usage.cost ?? null, r.fired.usage.write ?? null)
   return Number(row.lastInsertRowid)
 }
 

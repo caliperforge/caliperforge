@@ -13,8 +13,8 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
 it('applies every migration once and records the version', () => {
   const db = open(':memory:')
-  expect(migrate(db, join(root, 'schema'))).toEqual(['0001_init.sql', '0002_rulings.sql', '0003_runs_rule_hash.sql', '0004_one_disposition_per_verdict.sql', '0005_tick.sql', '0006_runs_transcript_path.sql', '0007_batch.sql', '0008_head_digest.sql', '0009_open_loop.sql', '0010_lanes.sql', '0011_issue_plans.sql', '0012_feeder.sql', '0013_internal_plans.sql', '0014_adopted_pr.sql', '0015_brief_read.sql', '0017_plan_files.sql', '0018_refusals.sql', '0019_signal_words.sql', '0020_leases.sql', '0021_parts.sql', '0022_band_p95.sql', '0023_reading_holds_ceiling.sql', '0024_run_token_wall.sql', '0025_wait_reason.sql', '0026_decisions.sql', '0027_verdict_tree.sql', '0028_priority_label.sql', '0029_merges.sql', '0030_kept_verdicts.sql', '0031_file_overlap.sql', '0032_stray_files.sql', '0033_quick_lane.sql', '0034_target_part.sql', '0035_caps_skip_cache_reads.sql', '0036_decisions_blocked_on_ceo.sql', '0037_decisions_applied.sql', '0039_events.sql', '0040_hq_path.sql', '0041_signal_head.sql', '0042_now.sql', '0043_reviewer_not_builder_skips_fixer.sql', '0044_tickets.sql', '0045_records.sql', '0046_brief_lines.sql', '0047_runs_cost.sql', '0048_scan_evidence.sql', '0049_part_after.sql', '0050_target_take.sql', '0051_held_by.sql', '0052_ratchet_counts.sql', '0053_tick_lanes.sql', '0054_gardens.sql', '0055_ticket_times.sql', '0056_size_limits.sql', '0057_refusal_ticket.sql', '0058_comms_once.sql', '0059_reviewer_not_builder_skips_coo_lite.sql', '0060_cache_read_tokens.sql'])
-  expect(db.pragma('user_version', { simple: true })).toBe(60)
+  expect(migrate(db, join(root, 'schema'))).toEqual(['0001_init.sql', '0002_rulings.sql', '0003_runs_rule_hash.sql', '0004_one_disposition_per_verdict.sql', '0005_tick.sql', '0006_runs_transcript_path.sql', '0007_batch.sql', '0008_head_digest.sql', '0009_open_loop.sql', '0010_lanes.sql', '0011_issue_plans.sql', '0012_feeder.sql', '0013_internal_plans.sql', '0014_adopted_pr.sql', '0015_brief_read.sql', '0017_plan_files.sql', '0018_refusals.sql', '0019_signal_words.sql', '0020_leases.sql', '0021_parts.sql', '0022_band_p95.sql', '0023_reading_holds_ceiling.sql', '0024_run_token_wall.sql', '0025_wait_reason.sql', '0026_decisions.sql', '0027_verdict_tree.sql', '0028_priority_label.sql', '0029_merges.sql', '0030_kept_verdicts.sql', '0031_file_overlap.sql', '0032_stray_files.sql', '0033_quick_lane.sql', '0034_target_part.sql', '0035_caps_skip_cache_reads.sql', '0036_decisions_blocked_on_ceo.sql', '0037_decisions_applied.sql', '0039_events.sql', '0040_hq_path.sql', '0041_signal_head.sql', '0042_now.sql', '0043_reviewer_not_builder_skips_fixer.sql', '0044_tickets.sql', '0045_records.sql', '0046_brief_lines.sql', '0047_runs_cost.sql', '0048_scan_evidence.sql', '0049_part_after.sql', '0050_target_take.sql', '0051_held_by.sql', '0052_ratchet_counts.sql', '0053_tick_lanes.sql', '0054_gardens.sql', '0055_ticket_times.sql', '0056_size_limits.sql', '0057_refusal_ticket.sql', '0058_comms_once.sql', '0059_reviewer_not_builder_skips_coo_lite.sql', '0060_cache_read_tokens.sql', '0061_cache_write_tokens.sql'])
+  expect(db.pragma('user_version', { simple: true })).toBe(61)
   expect(migrate(db, join(root, 'schema'))).toEqual([])
 })
 
@@ -33,10 +33,12 @@ it('D2 D3: 0060 keeps every run total and the cache read CHECK', () => {
   const before = windows(db)
   expect(before.map((w) => [w.kind, w.runs, w.tokens])).toEqual([['five_hour', 1, 213], ['seven_day', 2, 638]])
 
-  expect(migrate(db, join(root, 'schema'))).toEqual(['0060_cache_read_tokens.sql'])
+  expect(migrate(db, join(root, 'schema'))).toEqual(['0060_cache_read_tokens.sql', '0061_cache_write_tokens.sql'])
   expect(windows(db)).toEqual(before)
   expect(db.prepare('SELECT sum(input_tokens + cache_read_tokens + output_tokens) AS n FROM runs').get()).toEqual({ n: 638 })
-  expect(() => seed.run(3, 0, -1, 0, '-1 hour')).toThrow(/CHECK constraint failed: cache_read_tokens/)
+  expect(() => db.prepare(`INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_read_tokens,
+    output_tokens, seconds, exit, transcript_path) VALUES (3, 2, 'typescript_specialist', printf('%064d', 0), 'claude-agent-sdk', 'm', 'high',
+    0, -1, 0, 1, 0, 'x.transcript.jsonl')`).run()).toThrow(/CHECK constraint failed: cache_read_tokens/)
 })
 
 it('holds a comms title to one plan, and leaves untitled comms plans alone', () => {

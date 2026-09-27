@@ -15,7 +15,9 @@ import { builderRan, internal, type PlanRow } from '../store/plans.ts'
 import { byRun, opened, pending } from '../store/transcript.ts'
 import type { Step } from '../templates/pr-path.ts'
 import { parse } from '../rails/diff.ts'
-import { human, pointed, references, shape, split, TEMPLATE, unclear, wide, WIDE, type Part } from './brief.ts'
+import { estimate, human, pointed, references, shape, split, TEMPLATE, unclear, wide, WIDE, type Part } from './brief.ts'
+import { repoOf } from './ready.ts'
+import { limitOf } from './size.ts'
 import { handout, touched, type Handed } from './handout.ts'
 import { capped, enclosed, handover, type Handover } from './handover.ts'
 import { symbolMap } from './symbols.ts'
@@ -119,13 +121,10 @@ export async function fireBrief(db: Db, root: string, plan: PlanRow, step: Step,
     return splitting(step, parts)
   }
   const refused = shape(fired.text, ask, src)
-  const width = refused === null && internal(plan) ? wide(fired.text) : null
-  if (refused !== null || width !== null) put(root, plan.id, 'brief.refused.md', fired.text)
+  const over = refused === null ? oversized(db, plan, fired.text) : null
+  if (refused !== null || over !== null) put(root, plan.id, 'brief.refused.md', fired.text)
   if (refused !== null) return { outcome: 'refuse', spans: [refused.span], note: `${step.runs}: ${refused.reason}` }
-  if (width !== null) {
-    return { outcome: 'refuse', spans: ['brief.wide'],
-      note: `${step.runs}: the brief touches ${String(width)} files besides tests; past ${String(WIDE)} it is more than one job, so answer with the split fence` }
-  }
+  if (over !== null) return { outcome: 'refuse', spans: ['brief.wide'], note: `${step.runs}: ${over}, so answer with the split fence` }
   const lines = human(fired.text)
   db.prepare('UPDATE plans SET title = ?, what = ?, why = ?, ends = ? WHERE id = ?')
     .run(lines.title, lines.what, lines.why, lines.ends, plan.id)
@@ -136,6 +135,17 @@ export async function fireBrief(db: Db, root: string, plan: PlanRow, step: Step,
   drop(root, plan.id, 'refusal.md')
   drop(root, plan.id, 'question.sha')
   return { outcome: 'pass', spans: [], note: `${step.runs}: brief written` }
+}
+
+function oversized(db: Db, plan: PlanRow, brief: string): string | null {
+  const width = wide(brief)
+  if (width !== null) return `the brief touches ${String(width)} files besides tests; past ${String(WIDE)} it is more than one job`
+  if (internal(plan)) return null
+  const repo = repoOf(db, plan)
+  const lines = estimate(brief)
+  if (repo === null || lines === null) return null
+  const limit = limitOf(db, repo)
+  return lines > limit ? `the brief estimates ${String(lines)} lines besides tests and generated files; past ${repo}'s ${String(limit)} it is more than one job` : null
 }
 
 /** The answer is kept until it is filed, so a `gh` that fails half way does not buy a second brief. */

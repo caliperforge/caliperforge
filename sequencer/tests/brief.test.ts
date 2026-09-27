@@ -8,7 +8,7 @@ import { release, retried, returnToLane } from '../../store/holds.ts'
 import { get, priority } from '../../store/lanes.ts'
 import { retry } from '../../store/plans.ts'
 import { WHY } from '../../store/refusals.ts'
-import { files, pointed, references, shape, split, TEMPLATE, unclear, writable, type Refused } from '../brief.ts'
+import { estimate, files, pointed, references, shape, split, TEMPLATE, unclear, writable, type Refused } from '../brief.ts'
 import { tick } from '../index.ts'
 import { unhold } from '../hold.ts'
 import { blocked } from '../steps.ts'
@@ -592,6 +592,14 @@ test('a backticked + path keeps the line it points at', () => {
 test('a + path off the tree is refused on the whole path', () => {
   expect(on(swap(brief, '## Files', [`- \`${PLUS}:27\``])))
     .toMatchObject({ span: PLUS, reason: holding('not in the checkout') })
+})
+
+test('D4: estimate reads the integer from `Estimate:` under ## Approach, and is null without one there', () => {
+  const at = (approach: string, after = ''): string => `# t\n\n## Approach\n\nx\n${approach}\n\n## Cases\n\n${after}\n`
+  expect(estimate(at('Estimate: 1,300 lines'))).toBe(1300)
+  expect(estimate(at('Estimate: ~420 lines'))).toBe(420)
+  expect(estimate(at('no line'))).toBeNull()
+  expect(estimate(at('no line', 'Estimate: 90 lines'))).toBeNull()
 })
 
 test('a brief without ## Settled facts is refused', () => {

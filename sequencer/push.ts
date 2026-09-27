@@ -510,7 +510,7 @@ function kindOf(title: string): string {
 const clean = (s: string): string => s.replace(/#\d+/g, '').replace(/\s+/g, ' ').trim()
 
 /** Subject and body with no upstream number: the ci-green rail refuses a branch whose commits name one. */
-function messageOf(root: string, plan: number): string {
+export function messageOf(root: string, plan: number): string {
   const subject = clean(title(root, plan))
   const body = said(maybe(root, plan, 'issue.md') ?? '').map(clean).join('\n\n')
   return body === '' ? subject : `${subject}\n\n${body}`

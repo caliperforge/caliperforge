@@ -1,0 +1,7 @@
+commit: >-
+  One commit signed as the host's git identity: the brief's title as its subject, its What and Why lines
+  as the body, and no upstream issue number anywhere, since the ci-green rail refuses a branch whose commits name one.
+pr: >-
+  Opens "Addresses #<n>.", since one item of a maintainer's list is not the list; then "## Summary" with the
+  brief's What and Why lines as bullets, then "## Test Plan" listing the test files the diff touches and
+  "CI green on our fork at this head."

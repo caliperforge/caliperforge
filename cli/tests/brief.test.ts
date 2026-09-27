@@ -1,7 +1,7 @@
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
-import { ticketSection, tickets, waitLine, waits } from '../brief.ts'
+import { heldBy, line, ticketSection, tickets, waitLine, waits } from '../brief.ts'
 import type { Db } from '../../store/index.ts'
 import { waiting } from '../../store/plans.ts'
 
@@ -124,6 +124,28 @@ test('a stale reason on a blocked plan and a live plan with no reason add nothin
   plan(db, 3, 'queued', 31)
   waiting(db, [{ plan: 1, why: 'token_ceiling' }, { plan: 2, why: null }, { plan: 3, why: 'leased' }])
   expect(waitLine(waits(db))).toBe('waits\tleased 1\n')
+})
+
+const holding = (db: Db, id: number): unknown => db.prepare('SELECT held_by, held_why FROM plans WHERE id = ?').get(id)
+
+test('D2 a target approval holds the plan on the CEO until the reason clears', () => {
+  const db = world()
+  plan(db, 1, 'queued', null, 1)
+  waiting(db, [{ plan: 1, why: 'target_approval' }])
+  expect(holding(db, 1)).toEqual({ held_by: 'ceo', held_why: 'target_approval' })
+  waiting(db, [{ plan: 1, why: null }])
+  expect(holding(db, 1)).toEqual({ held_by: null, held_why: null })
+})
+
+test('heldBy lists each held plan under who it waits on, with why', () => {
+  const db = world()
+  plan(db, 1, 'queued', null, 1)
+  plan(db, 2, 'queued', 30)
+  plan(db, 3, 'queued', 31)
+  waiting(db, [{ plan: 1, why: 'target_approval' }])
+  db.prepare("UPDATE plans SET state = 'blocked_on_ceo' WHERE id = 2").run()
+  expect(heldBy(db, 'ceo').map(line)).toEqual(['  plan 1\tstep 0\tqueued\tacme/widget#12\ttarget_approval'])
+  expect(heldBy(db, 'coo').map(line)).toEqual(['  plan 2\tstep 0\tblocked_on_ceo\t-'])
 })
 
 test('with no waiting live plan the waits line reads none', () => {

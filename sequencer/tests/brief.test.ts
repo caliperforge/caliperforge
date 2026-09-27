@@ -269,6 +269,8 @@ test('an unclear reply stops the plan on the COO, saves the question, and spends
   expect(maybe(w.root, ID, 'question.md')).toBe(`${question}\n`)
   expect(maybe(w.root, ID, 'issue.md')).toBeNull()
   expect(plan(w.db, ID)).toMatchObject({ step: 1, retries: 0 })
+  expect(w.db.prepare('SELECT held_by, held_why FROM plans WHERE id = ?').get(ID))
+    .toEqual({ held_by: 'coo', held_why: `brief_writer: ${question}` })
 })
 
 test('a round that comes back to step 1 keeps the brief the reviewers read', async () => {

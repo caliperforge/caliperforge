@@ -4,13 +4,12 @@ import { join, resolve } from 'node:path'
 import { claudeAgentSdk } from '../providers/claude-agent-sdk/index.ts'
 import { self } from '../rails/tight/index.ts'
 import { fire } from '../runner/index.ts'
-import { isHeld } from '../sequencer/hold.ts'
 import { liveTree } from '../sequencer/workspace.ts'
 import { dump, migrate, open as openDb, type Db } from '../store/index.ts'
 import { dial, hhmm, lanes, priority as setPriority, record, Reading, set, windows } from '../store/lanes.ts'
 import { refusedPush } from '../store/approvals.ts'
 import { backfill } from '../store/transcript.ts'
-import { awaiting, day, halted, laneLine, open as openPlans, section, tickets, ticketSection, waitLine, waits,
+import { day, halted, heldBy, laneLine, open as openPlans, section, tickets, ticketSection, waitLine, waits,
   windowLine } from './brief.ts'
 import { check, fill } from './digests.ts'
 import { write as writeMap } from './map.ts'
@@ -134,7 +133,7 @@ export function registerInbox(cf: Command, { root, db, out }: Cli): void {
   })
 }
 
-export function registerSession(cf: Command, { root, db, out }: Cli): void {
+export function registerSession(cf: Command, { db, out }: Cli): void {
   const session = cf.command('session')
 
   session.command('close').argument('<transcript>').action((path: string) => {
@@ -160,9 +159,8 @@ export function registerSession(cf: Command, { root, db, out }: Cli): void {
     out(waitLine(waits(handle)))
     out(section('open plans', openPlans(handle)))
     out(section('halted', halted(handle)))
-    const waiting = awaiting(handle)
-    out(section('held', waiting.filter((l) => isHeld(root, l.id))))
-    out(section('awaiting approval', waiting.filter((l) => !isHeld(root, l.id))))
+    out(section('waiting on the CEO', heldBy(handle, 'ceo')))
+    out(section('waiting on the COO', heldBy(handle, 'coo')))
     const d = day(handle)
     out(`last 24 h\n  ${String(d.runs)} run(s)\t${String(d.tokens)} tokens\t${d.seconds.toFixed(1)}s\n`)
     out(ticketSection(tickets(handle)))

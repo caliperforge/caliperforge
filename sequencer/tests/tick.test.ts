@@ -6,8 +6,11 @@ import { expect, test } from 'vitest'
 import { day, halted, open as openPlans, runsOf, verdictsOf } from '../../cli/brief.ts'
 import { measure, type Read } from '../../cli/measure.ts'
 import { account, parse, refuseTarget } from '../../cli/queue.ts'
-import { clock, inWindow, rewind, underCap, waiting, type PipeRow, type PlanRow, type Wait } from '../../store/plans.ts'
-import { retried } from '../../store/holds.ts'
+import { allPlans, clock, dropPlan, inWindow, laneOff, rewind, underCap, waiting, type PipeRow, type PlanRow, type Wait } from '../../store/plans.ts'
+import { holdOf, retried } from '../../store/holds.ts'
+import { current } from '../../store/now.ts'
+import { dropDeliverables } from '../../store/deliverables.ts'
+import { addTarget, setTargetState, targetRow } from '../../store/targets.ts'
 import { at, steps } from '../../templates/pr-path.ts'
 import { tick } from '../index.ts'
 import { blocked, kernel } from '../steps.ts'
@@ -83,9 +86,9 @@ test('D1 D2 a firing seat holds a model row in now for its plan, and the lap cle
   approve(w.db, w.target)
   await tick(w.db, w.root, stub(CARRIED))
   const during: unknown[] = []
-  await tick(w.db, w.root, stub(CARRIED, 0, PASS, () => during.push(...w.db.prepare('SELECT doing, detail, pid FROM now').all())))
+  await tick(w.db, w.root, stub(CARRIED, 0, PASS, () => during.push(...current(w.db).map(({ doing, detail, pid }) => ({ doing, detail, pid })))))
   expect(during).toEqual([{ doing: 'model', detail: 'brief_writer step 1', pid: process.pid }])
-  expect(w.db.prepare('SELECT count(*) AS n FROM now').get()).toEqual({ n: 0 })
+  expect(current(w.db)).toEqual([])
 })
 
 test('a pipe fires only inside its window, wrapping across midnight', () => {
@@ -105,7 +108,7 @@ test('a pipe at max_concurrent offers only the plans already running', () => {
 
 test('an off pipe fires nothing', async () => {
   const w = world()
-  w.db.prepare('UPDATE pipes SET enabled = 0').run()
+  laneOff(w.db, w.pipe.id)
   expect(await tick(w.db, w.root, stub(CARRIED))).toEqual([])
 })
 
@@ -129,11 +132,9 @@ test('D6: a refusal row for the target\'s digest still blocks step 1 on target_a
 
 test('D8: a tick files no plan for a scanned ready target with no approval row', async () => {
   const w = world()
-  const id = Number(w.db.prepare(`INSERT INTO targets (account_id, repo, issue_no, named_merger, state, evidence_measured_at, evidence)
-    SELECT 1, repo, 13, named_merger, 'ready', evidence_measured_at, 'https://github.com/acme/widget/issues/13' FROM targets WHERE id = 1`)
-    .run().lastInsertRowid)
+  const id = addTarget(w.db, { ...targetRow(w.db, 1), issue_no: 13, state: 'ready', evidence: 'https://github.com/acme/widget/issues/13' })
   await tick(w.db, w.root, stub(CARRIED))
-  expect(w.db.prepare('SELECT count(*) AS n FROM plans WHERE target_id = ?').get(id)).toEqual({ n: 0 })
+  expect(allPlans(w.db).filter((p) => p.target_id === id)).toEqual([])
 })
 
 test('a parked target holds its plan and says so in the row; a cold pulse alone holds nothing', async () => {
@@ -141,7 +142,7 @@ test('a parked target holds its plan and says so in the row; a cold pulse alone 
   expect(blocked(w.db, plan(w.db, 1))).toBe('target_parked')
   expect(await tick(w.db, w.root, stub(CARRIED))).toEqual([])
   expect(plan(w.db, 1).wait_reason).toBe('target_parked')
-  w.db.prepare("UPDATE targets SET state = 'ready' WHERE id = 1").run()
+  setTargetState(w.db, 1, 'ready')
   expect(blocked(w.db, plan(w.db, 1))).toBeNull()
   expect(await tick(w.db, w.root, stub(CARRIED))).toHaveLength(1)
   expect(plan(w.db, 1).wait_reason).toBeNull()
@@ -171,7 +172,7 @@ test('cf measure refreshes the pulse the tick reads, without a second cf queue a
   const w = world('warm', '2026-01-01')
   approve(w.db, w.target)
   expect(measure(w.db, 'acme/widget', '2026-09-17', measured('2026-09-17'))).toMatchObject({ pulse: 'warm', doors: 1 })
-  expect(w.db.prepare('SELECT account_id FROM targets WHERE id = 1').get()).toEqual({ account_id: 1 })
+  expect(targetRow(w.db, 1).account_id).toBe(1)
   expect(blocked(w.db, plan(w.db, 1))).toBeNull()
   expect((await tick(w.db, w.root, stub(CARRIED), new Date('2026-09-17T09:00:00Z')))[0]?.step).toBe(0)
   expect(plan(w.db, 1).step).toBe(1)
@@ -190,7 +191,7 @@ test('a rail refusal names spans, sends the plan back one step, then to blocked_
   const stopped = (await tick(w.db, w.root, stub(UNPOINTED)))[0]
   expect(stopped).toMatchObject({ step: 3, state: 'blocked_on_ceo' })
   expect(plan(w.db, 1).state).toBe('blocked_on_ceo')
-  expect(w.db.prepare('SELECT held_by, held_why FROM plans WHERE id = 1').get()).toEqual({ held_by: 'coo', held_why: stopped?.note })
+  expect(holdOf(w.db, 1)).toEqual({ held_by: 'coo', held_why: stopped?.note })
   const verdict = verdictRows(w.db, 1).find((v) => v.rail_id === 'completion-audit')
   expect(verdict).toMatchObject({ outcome: 'refuse', origin_ref: 'completion-audit' })
 })
@@ -321,7 +322,7 @@ test('D3 an outside review packet has no hand-back', async () => {
 
 test('D3 our own plan hands no symbol map to the builder or the reviewer, and builds none', async () => {
   const w = world()
-  w.db.prepare('DELETE FROM plans WHERE id = 1').run()
+  dropPlan(w.db, 1)
   ours(w.root)
   internalPlan(w.db, w.root, MINE)
   const seen: Packet[] = []
@@ -335,7 +336,7 @@ test('D3 our own plan hands no symbol map to the builder or the reviewer, and bu
 
 test('a reviewer gets its own last verdict, the diff since the tree it judged and what did not move, neither on its first', async () => {
   const w = world()
-  w.db.prepare('DELETE FROM plans WHERE id = 1').run()
+  dropPlan(w.db, 1)
   ours(w.root)
   internalPlan(w.db, w.root, MINE)
   for (let step = 0; step < 4; step += 1) await tick(w.db, w.root, stub(CARRIED))
@@ -369,7 +370,7 @@ const section = (prompt: string, head: string): string => prompt.split(`\n# ${he
 
 test('a reviewer step 5 sent back is handed the delta since the tree it passed, in its function, with the refusal', async () => {
   const w = world()
-  w.db.prepare('DELETE FROM plans WHERE id = 1').run()
+  dropPlan(w.db, 1)
   ours(w.root)
   internalPlan(w.db, w.root, MINE)
   const hello = join(srcDir(w.root, MINE), 'src/hello.ts')
@@ -402,7 +403,7 @@ const modeOf = (root: string, step: number): string => readFileSync(join(root, `
 /** An internal plan whose review passed on FOUR in src/hello.ts and whose senior gave `senior`, sent back to build. */
 async function passedOn(senior: string): Promise<World> {
   const w = world()
-  w.db.prepare('DELETE FROM plans WHERE id = 1').run()
+  dropPlan(w.db, 1)
   ours(w.root)
   internalPlan(w.db, w.root, MINE)
   for (let step = 0; step < 2; step += 1) await tick(w.db, w.root, stub(CARRIED))
@@ -459,7 +460,7 @@ test('D4 a code line in the delta still fires senior review', async () => {
 /** Review's and senior's packets on an internal plan built on FOUR, with Greptile's `OLD` on another head and, if `current`, `NEW` on this one. */
 async function greptiled(current: boolean): Promise<Packet[]> {
   const w = world()
-  w.db.prepare('DELETE FROM plans WHERE id = 1').run()
+  dropPlan(w.db, 1)
   ours(w.root)
   internalPlan(w.db, w.root, MINE)
   for (let step = 0; step < 2; step += 1) await tick(w.db, w.root, stub(CARRIED))
@@ -673,7 +674,7 @@ const atCi = async (): Promise<World> => {
   return w
 }
 
-const now = (w: World): unknown[] => w.db.prepare('SELECT doing, detail FROM now WHERE plan = 1').all()
+const now = (w: World): unknown[] => current(w.db).filter((r) => r.plan === 1).map(({ doing, detail }) => ({ doing, detail }))
 
 test('a CI hold leaves a waiting on CI row in now', async () => {
   const w = await atCi()
@@ -824,7 +825,7 @@ test('step 6 refuses a plan with no deliverable row instead of sending the branc
   const w = world()
   approve(w.db, w.target)
   for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
-  w.db.prepare('DELETE FROM deliverables WHERE plan_id = 1').run()
+  dropDeliverables(w.db, 1)
   const sent: string[] = []
 
   expect(kernel(w.db, w.root, plan(w.db, 1), watched(sent, w.root, 1)))
@@ -893,7 +894,7 @@ test('cf brief and cf plan bind the plan they are asked for', async () => {
 
 test('a builder names a file for deletion and the kernel removes it before the rails read the tree', async () => {
   const w = world()
-  w.db.prepare('DELETE FROM plans WHERE id = 1').run()
+  dropPlan(w.db, 1)
   ours(w.root)
   internalPlan(w.db, w.root, MINE)
   for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
@@ -921,7 +922,7 @@ test('a deletion outside the fence refuses the build and names the path', async 
 
 test('a deletion of a path that is not in the tree refuses rather than passing as a no-op', async () => {
   const w = world()
-  w.db.prepare('DELETE FROM plans WHERE id = 1').run()
+  dropPlan(w.db, 1)
   ours(w.root)
   internalPlan(w.db, w.root, MINE)
   for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
@@ -934,7 +935,7 @@ test('a deletion of a path that is not in the tree refuses rather than passing a
 
 test('the same path named twice is deleted once, not refused the second time as absent', async () => {
   const w = world()
-  w.db.prepare('DELETE FROM plans WHERE id = 1').run()
+  dropPlan(w.db, 1)
   ours(w.root)
   internalPlan(w.db, w.root, MINE)
   for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))

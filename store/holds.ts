@@ -35,6 +35,11 @@ export function returnToLane(db: Db, plan: number, actor = 'orchestrator'): numb
   return row.step
 }
 
+export function holdOf(db: Db, plan: number): { held_by: string | null; held_why: string | null } | undefined {
+  return db.prepare('SELECT held_by, held_why FROM plans WHERE id = ?').get(plan) as
+    { held_by: string | null; held_why: string | null } | undefined
+}
+
 export function retried(db: Db, id: number, actor: string): number {
   const row = db.prepare('SELECT * FROM plans WHERE id = ?').get(id)
   if (row === undefined) throw new Error(`no plan ${String(id)}`)

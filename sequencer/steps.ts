@@ -5,7 +5,7 @@ import { parse } from '../rails/diff.ts'
 import { building, filesOf, sharing, strays as recordStrays } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
 import { builderRan, internal, originIssue, type PlanRow, type Wait } from '../store/plans.ts'
-import { steps as comms } from '../templates/comms.ts'
+import { facts, gather, steps as comms } from '../templates/comms.ts'
 import { at, last, steps, type Step } from '../templates/pr-path.ts'
 import { approved, approvedPlan, batch } from './approve.ts'
 import type { Outcome } from './kind.ts'
@@ -36,7 +36,8 @@ function listed(name: string, list: Step[]): StepMap {
 
 const MAPS: Record<PlanRow['template'], StepMap> = {
   pr_path: { steps, at, last },
-  comms: listed('comms', comms),
+  /** A getter: templates/comms.ts imports back into this module, so its steps may not exist yet when this one loads. */
+  get comms() { return listed('comms', comms) },
   research: listed('research', []),
 }
 
@@ -92,6 +93,8 @@ export function kernel(db: Db, root: string, plan: PlanRow, wire?: Wire, read?: 
   if (step.name === 'ready') return readyGate(db, root, plan, wire)
   if (step.name === 'batch') return batch(db, root, plan, wire)
   if (step.name === 'push') return push(db, root, plan, wire)
+  if (step.name === 'gather') return gather(db, root, plan)
+  if (step.name === 'facts') return facts(root, plan)
   return { outcome: 'pass', spans: [], note: step.name }
 }
 

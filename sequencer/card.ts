@@ -3,12 +3,13 @@ import type { Db } from '../store/index.ts'
 import { busy } from '../store/now.ts'
 import type { Outcome } from './kind.ts'
 import { lead } from './lead.ts'
+import { weight } from './weight.ts'
 import { maybe, put } from './workspace.ts'
 
 export interface Row { check: string; ok: boolean; says: string }
 export type Check = (db: Db, root: string, plan: number) => Row
 
-export const CHECKS: Check[] = [lead]
+export const CHECKS: Check[] = [lead, weight]
 
 const CARD = 'maintainer.md'
 

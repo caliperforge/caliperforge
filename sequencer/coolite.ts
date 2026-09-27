@@ -18,7 +18,6 @@ import { recorded } from './seat.ts'
 import { parted } from './split.ts'
 import { afresh, maybe, planDir, put, SELF } from './workspace.ts'
 
-/** A read-only seat's move on a stopped job; it only proposes until `coo_lite.apply` = 1. */
 const Said = z.object({
   move: z.enum(['rule', 'waive', 'close', 'file', 'ask_ceo']),
   why: z.string().trim().min(1).max(400),
@@ -111,7 +110,6 @@ function apply(db: Db, root: string, plan: PlanRow, m: Move, wire: Wire, now: Da
   }
 }
 
-/** One events row and one inbox line per call; a stop left with a person also reaches the phone when `post` is given. */
 function told(db: Db, root: string, plan: PlanRow, now: Date, t: Told, post?: Post): string {
   logged(db, { plan: plan.id, kind: 'coo_lite', actor: 'coo_lite', outcome: t.outcome, message: t.message, pointer: null, run: null })
   const ticket = ticketOf(db, plan.id)

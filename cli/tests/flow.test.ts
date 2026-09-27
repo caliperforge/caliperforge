@@ -66,6 +66,13 @@ test('D1-D4: one plan per case is listed once with the command that fixes it', (
   ])
 })
 
+test('D4: a held plan whose ticket row is closed is held on a closed issue', () => {
+  const db = piped()
+  hold(db, root, plan(db, 3, 'running'), 'the ticket', now)
+  db.prepare("INSERT INTO tickets (repo, number, title, lane, closed_at) VALUES (?, 3, 'shut', 'machine', '2026-09-26T10:00:00Z')").run(REPO)
+  expect(flow(db, root, now)).toEqual(['plan 3\theld on closed issue #3\tcf unpark 3\n'])
+})
+
 test('D5: a plan both landed and held is listed once, as landed', () => {
   const db = piped()
   pushed(db, plan(db, 1, 'halted'))

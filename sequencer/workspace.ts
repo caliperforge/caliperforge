@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, existsSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
 import type { Narrowing } from '../runner/packet.ts'
 import { excluded } from './checks.ts'
@@ -203,6 +203,7 @@ export function liveTree(root: string, cwd: string): boolean {
 export function checkout(root: string, plan: number, repo: string, branch: string, from = 'main'): Checkout {
   const dir = srcDir(root, plan)
   const done = maybe(root, plan, 'base.sha')
+  if (done === null && readdirSync(dir).length > 0) renameSync(dir, `${dir}.stale-${String(Date.now())}`)
   if (done !== null && cloned(dir)) { fetchMain(dir); excluded(dir); return { dir, branch, base: done.trim() } }
   const base = gitBase(root)
   git(planDir(root, plan), ['clone', '--no-local', '--origin', 'origin',

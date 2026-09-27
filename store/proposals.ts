@@ -51,6 +51,11 @@ export function byId(db: Db, proposal: number): ProposalRow | null {
   return row === undefined ? null : ProposalRow.parse(row)
 }
 
+export function bySubject(db: Db, subject: string): ProposalRow | null {
+  const row = db.prepare('SELECT * FROM proposals WHERE subject = ? ORDER BY id LIMIT 1').get(subject)
+  return row === undefined ? null : ProposalRow.parse(row)
+}
+
 export function stamp(db: Db, proposal: number): void {
   db.prepare("UPDATE proposals SET state = 'approved' WHERE id = ?").run(proposal)
 }

@@ -218,6 +218,11 @@ test('D2 the same refusal after a ruling added to the ask goes round again', asy
   expect(fired).toMatchObject({ step: 3, outcome: 'refuse', state: 'retried' })
 })
 
+test('D4 the same refusal after a ruling written to rulings.md goes round again', async () => {
+  const [, fired] = await retriedOnce((w) => { put(w.root, 1, 'rulings.md', 'use bye()\n') })
+  expect(fired).toMatchObject({ step: 3, outcome: 'refuse', state: 'retried' })
+})
+
 test('the sequencer hands the bench a maintainer view, and a wrong shape refuses before any model', async () => {
   const w = world()
   approve(w.db, w.target)

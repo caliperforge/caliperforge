@@ -180,7 +180,7 @@ function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcom
   const r = { plan: plan.id, step: step.step, fingerprint: fingerprintOf(step, outcome),
     diff: step.step >= 3 ? digestOf(diffOf(root, plan.id)) : null, moved: outcome.moved,
     own: outcome.spans.some((s) => s.startsWith('ratchet:')) || undefined,
-    ticket: digestOf(`${maybe(root, plan.id, 'issue.md') ?? ''}${ruled(root, plan.id) ?? ''}`) }
+    ticket: digestOf(`${maybe(root, plan.id, 'issue.md') ?? ''}${ruled(root, plan.id) ?? ''}${maybe(root, plan.id, 'rulings.md') ?? ''}`) }
   const why = refused(db, r)
   if (why !== 'again') stopped(root, plan.id, why)
   if (why === 'shared') {

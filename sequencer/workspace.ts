@@ -40,6 +40,11 @@ export function ruled(root: string, plan: number): string | null {
   return ask.startsWith(copy) ? ask.slice(copy.length) : ask
 }
 
+export function rulings(root: string, plan: number): string {
+  const text = maybe(root, plan, 'rulings.md')?.trim() ?? ''
+  return text === '' ? '' : `\n\n# Rulings\n\n${text}`
+}
+
 export function drop(root: string, plan: number, name: string): void {
   rmSync(join(planDir(root, plan), name), { force: true })
 }

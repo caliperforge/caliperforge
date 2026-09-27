@@ -31,7 +31,7 @@ import { fenceFor, languageFor } from './route.ts'
 import { gates, outsideLanguage } from './gates.ts'
 import type { Outcome } from './kind.ts'
 import { COMMIT, commitMessage } from './push.ts'
-import { carried, cloned, diffOf, diffSince, doneIds, drop, get, headSha, holds, MAIN, maybe, merging, move, narrowing, planDir, put, ruled, snapshot, srcDir } from './workspace.ts'
+import { carried, cloned, diffOf, diffSince, doneIds, drop, get, headSha, holds, MAIN, maybe, merging, move, narrowing, planDir, put, ruled, rulings, snapshot, srcDir } from './workspace.ts'
 import { kernelPlan } from './home.ts'
 import { audit } from '../rails/completion-audit/index.ts'
 
@@ -259,7 +259,7 @@ function exited(step: Step, fired: Fired): Outcome {
 function rebuild(db: Db, root: string, plan: PlanRow, prev: string | null): string {
   const src = srcDir(root, plan.id)
   const ruling = ruled(root, plan.id)
-  const issue = get(root, plan.id, 'issue.md') + (ruling === null ? '' : `\n\n# What the ask holds beyond this brief\n\n${ruling.trim()}`) + findings(db, root, plan.id, src)
+  const issue = get(root, plan.id, 'issue.md') + rulings(root, plan.id) + (ruling === null ? '' : `\n\n# What the ask holds beyond this brief\n\n${ruling.trim()}`) + findings(db, root, plan.id, src)
   const refusal = maybe(root, plan.id, 'refusal.md')
   const rows = lastRows(prev)
   if (refusal === null) return handed(`${issue}${rows}`, handout(src, listed(db, plan.id, issue)))
@@ -331,7 +331,7 @@ export async function fireReview(db: Db, root: string, plan: PlanRow, step: Step
   const issue = get(root, plan.id, 'issue.md')
   const input: Bench = {
     repo: src,
-    issue,
+    issue: issue + rulings(root, plan.id),
     diff: diffOf(root, plan.id),
     ...(cloned(src) ? { tree: snapshot(src) } : {}),
     ...(internal(plan) && maybe(root, plan.id, 'step-2.handback.md') !== null ? { handback: get(root, plan.id, 'step-2.handback.md') } : {}),

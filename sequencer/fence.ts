@@ -49,10 +49,10 @@ const GONE = /^\s*[-*]\s*`?([A-Za-z0-9_+./-]+\.[A-Za-z0-9]+)`?\s*(?:(?:—|–|-
  * #64: the paths a build says to remove. A builder holds Read, Write, Edit, Glob and Grep and no
  * shell, so a build that should drop a file can only empty it; it names the paths here instead and
  * the kernel does the removing. Named twice is named once. A non-blank row before the closing fence
- * that names no path is unread.
+ * that names no path is unread; the ``` line that opens the fenced done block is not a row.
  */
 export function deletions(handback: string): { paths: string[]; unread: string[] } {
-  const rows = (section(handback, '## Deleted').split(/^---$/m)[0] ?? '').split('\n').map((l) => l.trim()).filter((l) => l !== '')
+  const rows = (section(handback, '## Deleted').split(/^---$/m)[0] ?? '').split('\n').map((l) => l.trim()).filter((l) => l !== '' && !l.startsWith('```'))
   return { paths: [...new Set(rows.flatMap((l) => GONE.exec(l)?.[1] ?? []))], unread: rows.filter((l) => !GONE.test(l)) }
 }
 

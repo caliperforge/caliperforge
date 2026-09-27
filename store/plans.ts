@@ -225,8 +225,12 @@ export function stampHead(db: Db, plan: number, digest: string): void {
   db.prepare('UPDATE plans SET head_digest = ? WHERE id = ?').run(digest, plan)
 }
 
+export interface Overlap { plan: number; on: number; path: string | null }
+
 /** The plans the last tick held on another job's files, and the job each waits for (#88). */
-export function overlapWaits(db: Db): { plan: number; on: number }[] {
-  return db.prepare("SELECT id AS plan, waits_on AS on_ FROM plans WHERE wait_reason = 'file_overlap' AND waits_on IS NOT NULL ORDER BY id")
-    .all().map((r) => ({ plan: (r as { plan: number }).plan, on: (r as { on_: number }).on_ }))
+export function overlapWaits(db: Db): Overlap[] {
+  return db.prepare(`SELECT p.id AS plan, p.waits_on AS "on", (SELECT f.path FROM plan_files f
+    JOIN plan_files mine ON mine.plan = p.id AND mine.path = f.path
+    WHERE f.plan = p.waits_on AND f.path NOT LIKE '.cf/%' ORDER BY f.position LIMIT 1) AS path
+    FROM plans p WHERE p.wait_reason = 'file_overlap' AND p.waits_on IS NOT NULL ORDER BY p.id`).all() as Overlap[]
 }

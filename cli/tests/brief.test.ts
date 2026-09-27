@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
-import { greptileLine, heldBy, line, rulings, ticketSection, tickets, waitLine, waits } from '../brief.ts'
+import { fileWaits, greptileLine, heldBy, line, rulings, ticketSection, tickets, waitLine, waits } from '../brief.ts'
 import { monthly } from '../../sequencer/ready.ts'
 import { put } from '../../sequencer/workspace.ts'
 import type { Db } from '../../store/index.ts'
@@ -175,6 +175,11 @@ test('heldBy lists each held plan under who it waits on, with why', () => {
   db.prepare("UPDATE plans SET state = 'blocked_on_ceo' WHERE id = 2").run()
   expect(heldBy(db, 'ceo').map(line)).toEqual(['  plan 1\tstep 0\tqueued\tacme/widget#12\ttarget_approval'])
   expect(heldBy(db, 'coo').map(line)).toEqual(['  plan 2\tstep 0\tblocked_on_ceo\t-'])
+})
+
+test('D3 the files section names each waiting plan, its holder and the file, or none', () => {
+  expect(fileWaits([{ plan: 3, on: 2, path: 'x.ts' }])).toBe('waiting on files (1)\n  plan 3\ton plan 2\tx.ts\n')
+  expect(fileWaits([])).toBe('waiting on files (0)\n  none\n')
 })
 
 test('with no waiting live plan the waits line reads none', () => {

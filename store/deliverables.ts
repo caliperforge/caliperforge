@@ -60,6 +60,11 @@ export function dropDeliverables(db: Db, plan: number): void {
   db.prepare('DELETE FROM deliverables WHERE plan_id = ?').run(plan)
 }
 
+export function deliverablesOf(db: Db, plan: number): { state: string; evidence: string }[] {
+  return db.prepare('SELECT state, evidence FROM deliverables WHERE plan_id = ? ORDER BY id')
+    .all(plan) as { state: string; evidence: string }[]
+}
+
 function latest(db: Db, plan: number): number {
   const row = db.prepare('SELECT id FROM deliverables WHERE plan_id = ? ORDER BY id DESC LIMIT 1').get(plan) as
     { id: number } | undefined

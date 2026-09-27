@@ -233,7 +233,7 @@ test('D3: an outside brief of five files estimated at its repo\'s limit is saved
 
 function wideBrief(paths: string[], title = 'let an internal plan run', approach = 'x'): string {
   return [`# ${title}`, '', '**What:** a.', '**Why:** b.', '**When it ends:** c.', '',
-    '## Approach', '', approach, '','## Settled facts', '', '- none: every name the change uses is in this checkout', '', '## Cases', '', '- D1 one', '- D2 a call with no name is refused', '',
+    '## Approach', '', approach, '', '## Settled facts', '', '- none: every name the change uses is in this checkout', '', '## Cases', '', '- D1 one', '- D2 a call with no name is refused', '',
     '## Must not break', '', '- y', '', '## Files', '', ...paths.map((p) => `- ${p}`), '',
     '## Files to read', '', '- src/hello.ts — what it exports today', '',
     '## Who else reads what this changes', '', '- nobody else', '', '## Tests', '', '- src/a.ts — the case', '',

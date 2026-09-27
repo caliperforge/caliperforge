@@ -23,7 +23,7 @@ import { registerPlans, registerRetry } from './cf-plans.ts'
 import { registerAdopt, registerApprovals, registerTargets } from './cf-targets.ts'
 import { desk, gh } from './gh.ts'
 import { crashed, events, notify, record as keep } from './inbox.ts'
-import { alerter, CRASHED, livenessLine, watch } from './watch.ts'
+import { alerter, down, livenessLine, watch } from './watch.ts'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { version: string }
@@ -52,7 +52,7 @@ cf.command('tick').option('--dry', 'read what a tick would do, fire nothing, cal
     const now = new Date()
     await ticked(options, now).catch((error: unknown) => {
       crashed(root, now.toISOString(), error)
-      down(now, error)
+      down(db, root, now, error, alerter())
       throw error
     })
   })
@@ -84,19 +84,6 @@ const apart: Apart = (plan, stole) => new Promise((done, failed) => {
     else failed(new Error(`cf lap ${String(plan)} exited ${String(code)}`))
   })
 })
-
-/** #251: a tick that threw leaves a receipt saying so and raises the alert, or the table reads a dead machine as an idle one. */
-function down(now: Date, error: unknown): void {
-  try {
-    const handle = db()
-    const message = error instanceof Error ? error.message : String(error)
-    receipt(handle, { at: now.toISOString(), hhmm: hhmm(handle, now), dry: false,
-      pipes: openPipes(handle, hhmm(handle, now)).length, fired: 0, exit: 1, note: `${CRASHED}${message.slice(0, 500)}` })
-    watch(handle, root, now, alerter())
-  } catch {
-    return
-  }
-}
 
 cf.command('watch').description('alert once when no real tick has landed inside an open window, and once when one lands again')
   .action(() => {

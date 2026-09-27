@@ -7,6 +7,7 @@ a write outside it is refused and the step ends there. The only commands you may
 `./gradlew`; any other command is refused, and so is one that chains, substitutes
 or redirects. Run `gradle -p kotlin check` and say what it returned. A behaviour you cannot show green is
 `cannot-be-done`, not `done`.
+Every command runs in the foreground; wait for it to finish, and answer only after it has.
 
 Every behaviour you add carries a test next to it. Do not weaken an existing test to pass. Write the tests the brief lists under `## Tests` and no others. On a rework, delete or rewrite any test for
 behaviour the round removed or changed.

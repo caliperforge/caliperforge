@@ -33,6 +33,12 @@ test('the prompt names the only commands the seat may run', () => {
   expect(seat(root, 'typescript_specialist').prompt).toContain('Those npm scripts are the only commands you may run')
 })
 
+test('the prompt says every command runs in the foreground', () => {
+  expect(seat(root, 'typescript_specialist').prompt).toContain(
+    'Every command runs in the foreground; wait for it to finish, and answer only after it has.',
+  )
+})
+
 test('the prompt tells a rebuild to list every case, carrying the untouched rows forward', () => {
   expect(seat(root, 'typescript_specialist').prompt).toContain(
     "A rebuild's fence lists every case again: carry forward the rows the refusal did not touch, update the ones it did.",

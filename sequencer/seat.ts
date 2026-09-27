@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { existsSync, rmSync } from 'node:fs'
 import { join, relative } from 'node:path'
+import { map } from '../cli/map.ts'
 import type { Fired, Provider } from '../providers/kind.ts'
 import { packet, refuse } from '../runner/index.ts'
 import { reviewManifest, SYMBOLS_LEAD, type Bench } from '../runner/packet.ts'
@@ -179,9 +180,12 @@ export async function ran(db: Db, root: string, plan: PlanRow, step: Step, provi
   issue: string, ours: boolean): Promise<Fired> {
   load(db, root)
   const { manifest, prompt, hash } = seat(root, step.runs)
+  const src = srcDir(root, plan.id)
+  const built = packet(manifest, prompt, tight(root), issue, src,
+    transcriptOf(root, plan.id, step.step), ours, fenceFor(db, plan.id, manifest.write_paths))
   const fired = await provider.fire({
-    ...packet(manifest, prompt, tight(root), issue, srcDir(root, plan.id),
-      transcriptOf(root, plan.id, step.step), ours, fenceFor(db, plan.id, manifest.write_paths)),
+    ...built,
+    prompt: `${map(src)}\n\n${built.prompt}`,
     wall: wall(db),
     reads: machineReads(root, plan, step.runs),
   })

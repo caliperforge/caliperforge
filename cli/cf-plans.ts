@@ -113,8 +113,8 @@ function holds(cf: Command, { root, db, out }: Cli): void {
   })
 
   cf.command('return').argument('<plan>', 'a plan blocked on the ceo, held or halted').action((id: string) => {
-    unhold(db(), root, Number(id), 'ceo')
-    out(`plan ${id} queued\n`)
+    const step = unhold(db(), root, Number(id), 'ceo')
+    out(`plan ${id} queued at step ${String(step)}\n`)
   })
 }
 

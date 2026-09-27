@@ -5,6 +5,8 @@ import { hostValue } from '../providers/credential.ts'
 import type { Db } from '../store/index.ts'
 import { hhmm, zone } from '../store/lanes.ts'
 import { clock, inWindow, openPipes, PipeRow } from '../store/plans.ts'
+import { receipt } from '../store/ticks.ts'
+import { crashed } from './inbox.ts'
 
 /** #251. Inside an open window a real tick lands every minute; ten without one means the machine is down, not idle. */
 export const STALE_MINUTES = 10
@@ -69,6 +71,19 @@ export function watch(db: Db, root: string, now: Date, post: Post): Liveness {
   }
   lanes(db, root, now, post)
   return l
+}
+
+/** A tick that threw leaves a receipt saying so and raises the alert, or the table reads a dead machine as an idle one. */
+export function down(open: () => Db, root: string, now: Date, error: unknown, post: Post): void {
+  try {
+    const handle = open()
+    const message = error instanceof Error ? error.message : String(error)
+    receipt(handle, { at: now.toISOString(), hhmm: hhmm(handle, now), dry: false,
+      pipes: openPipes(handle, hhmm(handle, now)).length, fired: 0, exit: 1, note: `${CRASHED}${message.slice(0, 500)}` })
+    watch(handle, root, now, post)
+  } catch (failure) {
+    crashed(root, now.toISOString(), failure)
+  }
 }
 
 function lanes(db: Db, root: string, now: Date, post: Post): void {

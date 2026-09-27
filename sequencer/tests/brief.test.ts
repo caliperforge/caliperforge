@@ -1,7 +1,8 @@
-import { readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { expect, test } from 'vitest'
 import { walk } from '../../checks/tree.ts'
+import { MAP } from '../../cli/map.ts'
 import type { Packet } from '../../providers/kind.ts'
 import { release, retried, returnToLane } from '../../store/holds.ts'
 import { get, priority } from '../../store/lanes.ts'
@@ -205,6 +206,16 @@ test('the seat packet carries the template under the ask', async () => {
   expect(prompt.indexOf(TEMPLATE)).toBeGreaterThan(prompt.indexOf('# let an internal plan run'))
   expect(prompt).not.toContain('\n# Your last brief\n')
   expect(prompt).not.toContain('\n# Your last question\n')
+})
+
+test('the seat packet opens with the map of the plan\'s checkout, and no MAP.md is written', async () => {
+  const w = mine()
+  const packets: Packet[] = []
+  await tick(w.db, w.root, stub(CARRIED))
+  await tick(w.db, w.root, stub(CARRIED, 0, undefined, (p) => packets.push(p)))
+
+  expect(packets[0]?.prompt).toMatch(/^# MAP\.md — written by `cf map`\n/)
+  expect(existsSync(join(srcDir(w.root, ID), MAP))).toBe(false)
 })
 
 const FAILS = [

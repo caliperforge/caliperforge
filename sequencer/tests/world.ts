@@ -14,7 +14,7 @@ import { STANDING } from '../brief.ts'
 import { tick } from '../index.ts'
 import type { Fired } from '../kind.ts'
 import type { Wire } from '../push.ts'
-import { targetDigest } from '../steps.ts'
+import { targetDigest } from '../approve.ts'
 import { maybe, put, SELF, srcDir } from '../workspace.ts'
 import { git, key, TYPESCRIPT } from './bases.ts'
 

@@ -11,6 +11,7 @@ import { checks } from './checks.ts'
 import type { Outcome } from './kind.ts'
 import { fireReview, ran } from './seat.ts'
 import { languageFor } from './route.ts'
+import { landed } from './notes.ts'
 import { mapOf } from './steps.ts'
 import { diffOf, diffSince, get, srcDir } from './workspace.ts'
 
@@ -24,7 +25,8 @@ const CAP = 20
  * lane cannot verify is the reviewer's own refusal, and the lap is the one the plan would have taken.
  */
 export async function fireRound(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
-  const { outcome: verdict, findings, tree } = await fireReview(db, root, plan, step, provider)
+  const { outcome: verdict, findings, notes, tree } = await fireReview(db, root, plan, step, provider)
+  if (verdict.outcome === 'pass' && notes.length > 0) return landed(db, root, plan, step, notes)
   if (verdict.outcome !== 'refuse' || tree === null) return verdict
   if (findings.length === 0 || !findings.every((f) => f.kind === 'cosmetic')) return verdict
   const src = srcDir(root, plan.id)

@@ -23,7 +23,7 @@ import { unanswered } from '../ready.ts'
 import { unread } from '../../cli/inbox.ts'
 import { get, maybe, put, srcDir } from '../workspace.ts'
 import { tick } from '../index.ts'
-import { approve, CARRIED, plan, PR as URL, SEEDED, stub, tip, watched, world, type World } from './world.ts'
+import { approve, CARRIED, internalPlan, plan, PR as URL, SEEDED, stub, tip, watched, world, type World } from './world.ts'
 
 const TRANSCRIPT = [
   'RULING push.digest = approval_matches_head_and_the_hook',
@@ -435,6 +435,24 @@ test('a signal starts the plan the map says it starts', async () => {
   expect(ofKind(w.db, 'filed').map((e) => ({ plan: e.plan, actor: e.actor })))
     .toEqual([{ plan: comms?.plan, actor: 'merge signal' }])
   expect(w.db.prepare("SELECT enabled FROM pipes WHERE name = 'comms'").get()).toEqual({ enabled: 1 })
+})
+
+test('an outside merge signal replayed files one ship-post plan', async () => {
+  const w = await pushed()
+  const merge = signal(w.db, 'merge', 'maintainer', null)
+  expect(started(w.db, merge)).toMatchObject({ template: 'comms' })
+  expect(started(w.db, merge)).toBeNull()
+  expect(w.db.prepare("SELECT title FROM plans WHERE template = 'comms'").all()).toEqual([{ title: 'ship post acme/widget#7' }])
+  expect(ofKind(w.db, 'filed').map((e) => e.message)).toEqual(['acme/widget#7'])
+})
+
+test('a merge signal on an internal plan files nothing', () => {
+  const w = world()
+  internalPlan(w.db, w.root, 2)
+  const merge = record(w.db, { repo: 'acme/widget', pr: 7, kind: 'merge', author: 'maintainer', at: new Date().toISOString(),
+    external_id: 'merge-7', score: null, plan: 2 })
+  expect(merge === null ? 'unrecorded' : started(w.db, merge)).toBeNull()
+  expect(w.db.prepare("SELECT count(*) AS n FROM plans WHERE template = 'comms'").get()).toEqual({ n: 0 })
 })
 
 test('answered bot score stops holding', async () => {

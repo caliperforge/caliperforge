@@ -9,7 +9,7 @@ import { capture, intake } from './capture.ts'
 import { woke } from './orchestrator.ts'
 import type { Fired } from './kind.ts'
 import { reprice } from './priority.ts'
-import { started } from './signals.ts'
+import { daily, started } from './signals.ts'
 import type { Wire } from './push.ts'
 import { offered, route, working, type Route } from './next.ts'
 import { reap } from './workspace.ts'
@@ -24,6 +24,7 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
   read: (repo: string, no: number) => Pr = readPr, wire?: Wire, chain = 0, labels?: Read, each = Infinity,
   apart?: Apart, lines?: string[]): Promise<Fired[]> {
   for (const signal of capture(db, read, root, labels)) started(db, signal, root, wire)
+  daily(db, now)
   if (labels !== undefined) (lines ?? []).push(...intake(db, root, labels))
   reap(root, terminal(db))
   reprice(db, labels)

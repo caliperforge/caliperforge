@@ -26,6 +26,16 @@ test('D1 no part over several leads is a flag, whatever the diff', () => {
   expect(lead(w.db, w.root, 1)).toEqual({ check: 'lead', ok: false, says: 'the target claims the whole issue of 3 leads' })
 })
 
+test('D1 each item of a numbered list is a lead', () => {
+  const w = at('', '# numbered\n\n1. fix `src/a.ts`\n2. fix `src/b.ts`\n3) fix `lib/c.ts`\n')
+  expect(lead(w.db, w.root, 1).says).toBe('the target claims the whole issue of 3 leads')
+})
+
+test('D3 a part touching the second and third numbered items is a flag', () => {
+  const w = at('fix-a', '# numbered\n\n1. fix `src/a.ts`\n2. fix `src/b.ts`\n3. fix `lib/c.ts`\n', ['src/b.ts', 'lib/c.ts'])
+  expect(lead(w.db, w.root, 1).says).toBe('covers fix-a but touches leads 2, 3')
+})
+
 test('D2 a part whose diff touches one lead passes, a name on a line under the lead counting for it', () => {
   const w = at('fix-b', '# two\n\n- fix a in `src/a.ts`\n- fix b\n  in `src/b.ts`\n', ['src/b.ts', 'README'])
   expect(lead(w.db, w.root, 1)).toEqual({ check: 'lead', ok: true, says: 'covers fix-b, one of 2 lead(s)' })

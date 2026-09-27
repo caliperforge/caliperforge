@@ -5,7 +5,7 @@ import type { Db } from '../store/index.ts'
 import type { Row } from './card.ts'
 import { diffOf, maybe } from './workspace.ts'
 
-const ITEM = /^(?:[-*+]|1[.)]) /
+const ITEM = /^(?:[-*+]|\d+[.)]) /
 const FIXER = '## Answer from the fixer'
 const NAME = /[\w./-]+/g
 

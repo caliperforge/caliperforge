@@ -74,6 +74,8 @@ test('#374 a `+` path reads, a row naming no path is unread, a blank line is not
   expect(deletions(`## Deleted\n\n- ${plus}\n`)).toEqual({ paths: [plus], unread: [] })
   expect(deletions('## Deleted\n\n- src/a.ts — why\n\n- the old spend file\n\n---\ndone:\n---\n'))
     .toEqual({ paths: ['src/a.ts'], unread: ['- the old spend file'] })
+  expect(deletions('## Deleted\n- src/a.ts\n\n```\n---\nsummary: x\n---\n```\n'))
+    .toEqual({ paths: ['src/a.ts'], unread: [] })
 })
 
 test('a new migration numbered at or below one the checkout holds', () => {

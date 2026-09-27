@@ -81,6 +81,13 @@ test('a build is handed the files its brief lists', async () => {
   expect(packets[0]?.prompt).toContain('export const bye')
 })
 
+test('a build packet opens with the map of the checkout', async () => {
+  const w = briefed()
+  const packets: Packet[] = []
+  for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, builds(packets))
+  expect(packets[0]?.prompt).toMatch(/^# MAP\.md — written by `cf map`\n/)
+})
+
 test('a rebuild is handed its refusal, its diff and only the files those touch', async () => {
   const w = briefed()
   const packets: Packet[] = []

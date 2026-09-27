@@ -43,15 +43,17 @@ export function broken(src: string, tests: string[], listed: string[], changed: 
 }
 
 /** A row a builder names a file for deletion with: `- <path>`, with or without a reason after it. */
-const GONE = /^\s*[-*]\s*`?([A-Za-z0-9_./-]+\.[A-Za-z0-9]+)`?\s*(?:(?:—|–|--?)\s+\S.*)?$/
+const GONE = /^\s*[-*]\s*`?([A-Za-z0-9_+./-]+\.[A-Za-z0-9]+)`?\s*(?:(?:—|–|--?)\s+\S.*)?$/
 
 /**
  * #64: the paths a build says to remove. A builder holds Read, Write, Edit, Glob and Grep and no
  * shell, so a build that should drop a file can only empty it; it names the paths here instead and
- * the kernel does the removing. Named twice is named once.
+ * the kernel does the removing. Named twice is named once. A non-blank row before the closing fence
+ * that names no path is unread.
  */
-export function deletions(handback: string): string[] {
-  return [...new Set(section(handback, '## Deleted').split('\n').flatMap((l) => GONE.exec(l)?.[1] ?? []))]
+export function deletions(handback: string): { paths: string[]; unread: string[] } {
+  const rows = (section(handback, '## Deleted').split(/^---$/m)[0] ?? '').split('\n').map((l) => l.trim()).filter((l) => l !== '')
+  return { paths: [...new Set(rows.flatMap((l) => GONE.exec(l)?.[1] ?? []))], unread: rows.filter((l) => !GONE.test(l)) }
 }
 
 /** A migration a diff creates: `--- /dev/null` over `+++ b/schema/NNNN_*.sql`. */

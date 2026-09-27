@@ -91,7 +91,8 @@ async function fenced(db: Db, root: string, plan: PlanRow, step: Step, provider:
  * through -- and a path that is not there refuses rather than passing as a silent no-op.
  */
 function dropped(db: Db, root: string, plan: PlanRow, step: Step, handback: string): Outcome | null {
-  const paths = deletions(handback)
+  const { paths, unread } = deletions(handback)
+  if (unread.length > 0) return { outcome: 'refuse', spans: unread, note: `${step.runs}: ${unread.map((r) => `${r} names no path`).join('; ')}` }
   if (paths.length === 0) return null
   const src = srcDir(root, plan.id)
   const fence = fenceFor(db, plan.id, seat(root, step.runs).manifest.write_paths)

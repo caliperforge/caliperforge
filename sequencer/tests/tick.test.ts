@@ -957,3 +957,31 @@ test('the same path named twice is deleted once, not refused the second time as 
   expect(fired).toMatchObject({ step: 2, outcome: 'pass' })
   expect(existsSync(join(src, 'src/twice.ts'))).toBe(false)
 })
+
+test('#374 a path with a `+` in it is deleted', async () => {
+  const w = world()
+  dropPlan(w.db, 1)
+  ours(w.root)
+  internalPlan(w.db, w.root, MINE)
+  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  const src = srcDir(w.root, MINE)
+  writeFileSync(join(src, 'src/a+b.ts'), 'export const ab = 1\n')
+
+  const fired = (await tick(w.db, w.root, stub(dropping(['src/a+b.ts']))))[0]
+
+  expect(fired).toMatchObject({ step: 2, name: 'build', outcome: 'pass' })
+  expect(existsSync(join(src, 'src/a+b.ts'))).toBe(false)
+  expect(diffOf(w.root, MINE)).not.toContain('export const ab = 1')
+})
+
+test('#374 a row naming no path refuses the build and removes nothing', async () => {
+  const w = world()
+  approve(w.db, w.target)
+  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
+
+  const fired = (await tick(w.db, w.root, stub(dropping(['src/hello.ts', 'the old spend file']))))[0]
+
+  expect(fired).toMatchObject({ step: 2, outcome: 'refuse', spans: ['- the old spend file'] })
+  expect(fired?.note).toContain('names no path')
+  expect(existsSync(join(srcDir(w.root, 1), 'src/hello.ts'))).toBe(true)
+})

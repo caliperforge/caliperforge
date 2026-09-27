@@ -5,7 +5,10 @@ import { beforeEach, expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import { tickNote } from '../../cli/brief.ts'
 import { WINDOW, type Read } from '../../cli/gh.ts'
-import type { Db } from '../../store/index.ts'
+import { gates } from '../../store/approvals.ts'
+import { pushedRow } from '../../store/deliverables.ts'
+import { ofKind } from '../../store/events.ts'
+import { addRule, type Db } from '../../store/index.ts'
 import { addPart, allParts } from '../../store/parts.ts'
 import { addPipe, addPlan, allPlans, type PlanRow } from '../../store/plans.ts'
 import { allTickets, recordListing } from '../../store/tickets.ts'
@@ -267,7 +270,7 @@ function waiting(): Db {
 
 const B: Fixture = { number: 54, labels: ['lane:machine'], title: '30b: second', body: 'After: #53' }
 
-const unblocked = (db: Db): unknown[] => db.prepare("SELECT plan, message FROM events WHERE kind = 'unblocked'").all()
+const unblocked = (db: Db): unknown[] => ofKind(db, 'unblocked').map(({ plan, message }) => ({ plan, message }))
 
 const waits = (db: Db): unknown => ({ plan: allParts(db).find((p) => p.n === 1)?.plan })
 
@@ -344,15 +347,10 @@ test('D5: a held ticket listed again still gets no plan', () => {
 })
 
 function pushed(db: Db, plans: number[]): void {
-  db.prepare(`INSERT INTO rules (id, kind, path, content_hash, loaded_at)
-    VALUES ('typescript_specialist', 'roster', 'seats/typescript_specialist', ?, '2026-09-25')`).run('0'.repeat(64))
+  addRule(db, { id: 'typescript_specialist', kind: 'roster', path: 'seats/typescript_specialist', content_hash: '0'.repeat(64), loaded_at: '2026-09-25' })
   for (const plan of plans) {
-    const approval = db.prepare(`INSERT INTO approvals (subject_kind, subject_id, subject_digest, who, decision, approved_at)
-      VALUES ('plan', ?, ?, 'gates', 'approved', '2026-09-25T00:00:00.000Z') RETURNING id`).get(plan, 'd'.repeat(64)) as { id: number }
-    db.prepare(`INSERT INTO deliverables (plan_id, step, seat, diff_digest, state, tests_pass, byte_identical_elsewhere,
-      fork_ci_green, bot_clean, target_warm, approval_id, evidence)
-      VALUES (?, 7, 'typescript_specialist', ?, 'pushed', 1, 1, 1, 1, 1, ?, 'https://github.com/caliperforge/caliperforge/commit/abc')`)
-      .run(plan, 'd'.repeat(64), approval.id)
+    pushedRow(db, { plan, step: 7, seat: 'typescript_specialist', diff_digest: 'd'.repeat(64),
+      evidence: 'https://github.com/caliperforge/caliperforge/commit/abc' }, gates(db, plan, 'd'.repeat(64)))
   }
 }
 

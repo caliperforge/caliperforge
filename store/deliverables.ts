@@ -50,8 +50,19 @@ export function approved(db: Db, plan: number, approval: number): void {
   db.prepare("UPDATE deliverables SET state = 'approved', approval_id = ? WHERE id = ?").run(approval, latest(db, plan))
 }
 
+export function pushedRow(db: Db, made: Made, approval: number): void {
+  db.prepare(`INSERT INTO deliverables (plan_id, step, seat, diff_digest, state, tests_pass, byte_identical_elsewhere,
+    fork_ci_green, bot_clean, target_warm, approval_id, evidence) VALUES (?, ?, ?, ?, 'pushed', 1, 1, 1, 1, 1, ?, ?)`)
+    .run(made.plan, made.step, made.seat, made.diff_digest, approval, made.evidence)
+}
+
 export function dropDeliverables(db: Db, plan: number): void {
   db.prepare('DELETE FROM deliverables WHERE plan_id = ?').run(plan)
+}
+
+export function deliverablesOf(db: Db, plan: number): { state: string; evidence: string }[] {
+  return db.prepare('SELECT state, evidence FROM deliverables WHERE plan_id = ? ORDER BY id')
+    .all(plan) as { state: string; evidence: string }[]
 }
 
 function latest(db: Db, plan: number): number {

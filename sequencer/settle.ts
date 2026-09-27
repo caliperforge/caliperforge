@@ -174,7 +174,7 @@ function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcom
       proved(db, root, plan, step)
       if (mapOf(plan.template).last(step.step)) { finish(db, plan); return 'done' }
       advance(db, plan, step.step + 1)
-      return hold(db, plan.id, step.step)
+      return plan.template === 'pr_path' ? hold(db, plan.id, step.step) : 'running'
     })()
   }
   const r = { plan: plan.id, step: step.step, fingerprint: fingerprintOf(step, outcome),

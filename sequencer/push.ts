@@ -509,7 +509,7 @@ function kindOf(title: string): string {
   return /^([a-z]+(?:\([^)]*\))?)!?:/.exec(title)?.[1] ?? 'fix'
 }
 
-/** Subject and body with no upstream number: the ci-green rail refuses a branch whose commits name one. */
+/** Subject and body with no upstream number the profile's `issue_ref` does not allow: the ci-green rail refuses a branch whose commits name one. */
 export function messageOf(root: string, plan: number, rules: Profile | null = null): string {
   const body = said(maybe(root, plan, 'issue.md') ?? '').map((l) => clean(l, rules)).join('\n\n')
   const trailer = rules?.ai_trailer === true ? rules.trailer ?? '' : ''

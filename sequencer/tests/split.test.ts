@@ -142,7 +142,7 @@ test('D3, D4: a landing queues the parts that wait on it, and the parent closes 
   expect(log.filter((l) => l.startsWith('close '))).toEqual([])
   expect(landing(w, 1, log)).toBe('the last part landed; #34 closed')
   expect(log.filter((l) => l.startsWith('close '))).toEqual(['close caliperforge/caliperforge#34 1111111'])
-  expect(following(w.db, w.root, plan(w.db, ID), 'c'.repeat(40), watched(log, w.root, ID))).toBeNull()
+  expect(following(w.db, w.root, plan(w.db, ID), 'c'.repeat(40), watched(log, w.root, ID))).toBe(null)
 })
 
 test('D4: a part released early is not queued again when the part it waits on lands last, and the parent closes', async () => {

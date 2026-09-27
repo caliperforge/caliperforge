@@ -91,3 +91,7 @@ different files are `after: none`.
 The machine files each part as its own issue and queues them one at a time. On someone else's repository,
 the split goes to the COO instead, so answer it only when the ask
 really is more than one job.
+
+Under `## Approach`, write one line `Estimate: <n> lines`: the lines the change adds and removes, not counting
+tests or generated files. On someone else's repository, a brief past five files besides tests or past that
+repository's size limit is refused as more than one job: answer it with the split fence.

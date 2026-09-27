@@ -1,0 +1,7 @@
+Test Suite 'FloorDecisionCardsTests' started at 2026-09-27 09:14:02.118.
+Restarting after unexpected exit, crash, or test timeout in FloorDecisionCardsTests.testDismissRecordsDecision(); summary will include totals from previous launches.
+Test session results, code coverage, and logs:
+	/Users/runner/Library/Developer/Xcode/DerivedData/Atelier/Logs/Test/Test-Atelier-2026.09.27_09-13-40-+0100.xcresult
+Failing tests:
+	FloorDecisionCardsTests.testDismissRecordsDecision()
+** TEST FAILED **

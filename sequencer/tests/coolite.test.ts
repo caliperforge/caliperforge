@@ -12,7 +12,7 @@ import { migrate, open, type Db } from '../../store/index.ts'
 import { busy } from '../../store/now.ts'
 import { held, PlanRow } from '../../store/plans.ts'
 import { split } from '../brief.ts'
-import { cooLite, piled } from '../coolite.ts'
+import { byHand, cooLite, piled } from '../coolite.ts'
 import { hold, unhold } from '../hold.ts'
 import type { Wire } from '../push.ts'
 import { parted } from '../split.ts'
@@ -243,6 +243,35 @@ test('coo_lite.max_daily caps the runs a day', async () => {
     VALUES ('coo_lite.max_daily', '13', 'ceo', 'ruling', 't', '2026-09-27')`).run()
   await pile(db, home)
   expect(fires(db)).toHaveLength(13)
+})
+
+const byHanded = (db: Db, home: string) => byHand(db, home, stub(REPLY.ask_ceo ?? ''), clock, () => undefined, wire())
+
+test('by hand, one young stop fires one run on it', async () => {
+  const { db, home } = seeded('1')
+  stopped(db, 7, 10)
+  await byHanded(db, home)
+  expect(fires(db)).toEqual([{ plan: 7 }])
+  expect(told(db)).toHaveLength(1)
+})
+
+test('by hand, the day cap fires nothing', async () => {
+  const { db, home } = seeded('1')
+  stopped(db, 7, 10)
+  load(db, home)
+  for (let i = 0; i < 12; i++) runAt(db, 7, 4, 'coo_lite', ago(60 + i))
+  expect(await byHanded(db, home)).toMatch(/^cap reached/)
+  expect(fires(db)).toHaveLength(12)
+  expect(told(db)).toEqual([])
+})
+
+test('by hand, a live coo_lite run fires nothing', async () => {
+  const { db, home } = seeded('1')
+  stopped(db, 7, 10)
+  stopped(db, 9, 5)
+  busy(db, 9, 'coo_lite', 'ruling', clock)
+  expect(await byHanded(db, home)).toBe('a coo_lite run is live')
+  expect(fires(db)).toEqual([])
 })
 
 test('a plan held by the ceo, a parked plan and a retried plan are not stops', async () => {

@@ -57,28 +57,45 @@ interface Stop { id: number; answered: number | null; today: number | null; old:
 /** #483b: one coo_lite run on the oldest stop once 3 pile up or one has waited 45 minutes. */
 export async function piled(db: Db, root: string, provider: Provider, now: Date, post: Post = alerter(),
   wire: Wire = WIRE): Promise<void> {
-  const at = now.toISOString()
-  const stops = db.prepare(`SELECT p.id, e.ruled >= d.at AS answered,
+  const fresh = stops(db, root, now, post)
+  const [oldest] = fresh
+  if (oldest === undefined || (fresh.length < 3 && oldest.old !== 1)) return
+  await fire(db, root, provider, now, post, wire, fresh)
+}
+
+export async function byHand(db: Db, root: string, provider: Provider, now: Date, post: Post = alerter(),
+  wire: Wire = WIRE): Promise<string> {
+  return fire(db, root, provider, now, post, wire, stops(db, root, now, post))
+}
+
+function stops(db: Db, root: string, now: Date, post: Post): Stop[] {
+  const rows = db.prepare(`SELECT p.id, e.ruled >= d.at AS answered,
       e.ruled >= datetime(@at, '-1 day') AS today, d.at <= datetime(@at, '-45 minutes') AS old
     FROM plans p JOIN decisions d ON d.id = (SELECT max(id) FROM decisions WHERE plan = p.id)
     LEFT JOIN (SELECT plan, max(at) AS ruled FROM events WHERE kind = 'coo_lite' GROUP BY plan) e ON e.plan = p.id
     WHERE p.state = 'blocked_on_ceo' AND p.held_by = 'coo' AND d.verb IN ('ask_coo', 'ask_ceo')
-    ORDER BY d.at, p.id`).all({ at }) as Stop[]
+    ORDER BY d.at, p.id`).all({ at: now.toISOString() }) as Stop[]
   const fresh: Stop[] = []
-  for (const s of stops.filter((s) => s.answered !== 1 && !isHeld(root, s.id))) {
+  for (const s of rows.filter((s) => s.answered !== 1 && !isHeld(root, s.id))) {
     if (s.today === 1) told(db, root, row(db, s.id), now, { outcome: 'needs_ceo', message: 'ask_coo: coo_lite ruled on this plan today' }, post)
     else fresh.push(s)
   }
+  return fresh
+}
+
+async function fire(db: Db, root: string, provider: Provider, now: Date, post: Post, wire: Wire,
+  fresh: Stop[]): Promise<string> {
   const [oldest] = fresh
-  if (oldest === undefined || (fresh.length < 3 && oldest.old !== 1)) return
-  if (current(db).some((n) => n.doing === 'coo_lite' && !n.stale)) return
-  const ran = db.prepare("SELECT count(*) AS n FROM runs WHERE seat = 'coo_lite' AND at >= datetime(?, '-1 day')").get(at) as { n: number }
+  if (oldest === undefined) return 'no stopped plan'
+  if (current(db).some((n) => n.doing === 'coo_lite' && !n.stale)) return 'a coo_lite run is live'
+  const ran = db.prepare("SELECT count(*) AS n FROM runs WHERE seat = 'coo_lite' AND at >= datetime(?, '-1 day')")
+    .get(now.toISOString()) as { n: number }
   const cap = db.prepare("SELECT value FROM settings WHERE key = 'coo_lite.max_daily'").get() as { value: string } | undefined
-  if (ran.n >= Number(cap?.value ?? 12)) return
-  if (take(db, oldest.id, now) === null) return
+  if (ran.n >= Number(cap?.value ?? 12)) return `cap reached: ${String(ran.n)} coo_lite runs today`
+  if (take(db, oldest.id, now) === null) return `plan ${String(oldest.id)} is leased`
   try {
     busy(db, oldest.id, 'coo_lite', `${String(fresh.length)} stops waiting`, now)
-    await cooLite(db, root, row(db, oldest.id), provider, now, post, wire)
+    return await cooLite(db, root, row(db, oldest.id), provider, now, post, wire)
   } finally {
     idle(db, oldest.id)
     unlease(db, oldest.id)

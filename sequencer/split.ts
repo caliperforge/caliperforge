@@ -1,11 +1,12 @@
+import { rmSync } from 'node:fs'
 import { LANE } from '../cli/plan.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
-import { internal, originIssue, PlanRow } from '../store/plans.ts'
+import { internal, originIssue, PlanRow, rewind } from '../store/plans.ts'
 import type { Part } from './brief.ts'
 import type { Outcome } from './kind.ts'
 import { WIRE, type Wire } from './push.ts'
-import { drop, put } from './workspace.ts'
+import { drop, get, put, srcDir } from './workspace.ts'
 import { homeOf } from './home.ts'
 import { approved } from './approve.ts'
 
@@ -58,7 +59,7 @@ export function following(db: Db, root: string, plan: PlanRow, sha: string, wire
   const rest = db.prepare('SELECT plan FROM parts WHERE parent = ? AND n != ?').all(parent.id, row.n) as { plan: number | null }[]
   if (!rest.every((p) => landed(db, p.plan))) return null
   const issue = originIssue(parent)
-  if (issue === null) return 'the last part landed'
+  if (issue === null) return assemble(db, root, parent)
   const closed = close(parent, issue, sha, wire)
   const up = following(db, root, parent, sha, wire)
   return up === null ? closed : `${closed}; ${up}`
@@ -70,6 +71,18 @@ function landed(db: Db, plan: number | null): boolean {
   const row = db.prepare('SELECT state FROM plans WHERE id = ?').get(plan) as { state: string }
   const parts = db.prepare('SELECT plan FROM parts WHERE parent = ?').all(plan) as { plan: number | null }[]
   return row.state === 'done' && parts.every((p) => landed(db, p.plan))
+}
+
+/** An outside parent goes back to senior on its checkout of `asm/<id>`, to be sent upstream as one change. */
+function assemble(db: Db, root: string, parent: PlanRow): string {
+  const branch = `asm/${String(parent.id)}`
+  const titles = db.prepare('SELECT title FROM parts WHERE parent = ? ORDER BY n').all(parent.id) as { title: string }[]
+  put(root, parent.id, 'issue.md', [get(root, parent.id, 'ask.md').trimEnd(), '', `## Parts, joined on ${branch}`, '',
+    ...titles.map((p) => `- ${p.title}`), '', '## Cases', '', `- D1 every part's cases hold together on ${branch}`,
+    '- D2 a gap between parts is refused: a case no part answers, a name one part adds and no part uses, a change two parts make twice', ''].join('\n'))
+  rmSync(srcDir(root, parent.id), { recursive: true, force: true })
+  rewind(db, parent.id, 5)
+  return `the last part landed; plan ${String(parent.id)} assembles ${branch} at senior`
 }
 
 function close(plan: PlanRow, issue: number, sha: string, wire: Wire): string {

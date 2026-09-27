@@ -21,3 +21,9 @@ export function assembly(db: Db, plan: PlanRow): { branch: string; fork: string 
     .get(plan.target_id, plan.id) as { parent: number; repo: string } | undefined
   return row === undefined ? null : { branch: `asm/${String(row.parent)}`, fork: `${FORK}/${repoName(row.repo)}` }
 }
+
+/** The branch an outside plan split into parts is checked, reviewed and sent upstream from, or null for any other plan. */
+export function assembling(db: Db, plan: PlanRow): string | null {
+  if (internal(plan)) return null
+  return db.prepare('SELECT 1 FROM parts WHERE parent = ?').get(plan.id) === undefined ? null : `asm/${String(plan.id)}`
+}

@@ -14,7 +14,7 @@ import { writable } from './brief.ts'
 import type { Outcome } from './kind.ts'
 import { forkCi, headOf, holding, rehearsalBranch, title, WIRE, type Wire } from './push.ts'
 import { cloned, diffOf, FORK, get, maybe, put, repoName, srcDir } from './workspace.ts'
-import { homeOf } from './home.ts'
+import { assembling, homeOf } from './home.ts'
 import { baseMoved } from './merge.ts'
 
 export const CREDITS = 50
@@ -184,9 +184,10 @@ function evidenceOf(db: Db, plan: PlanRow): string {
 
 /** Each of the five is a row somebody else wrote: a gate verdict, the ci-green rail, a bot signal, the account pulse. */
 function proof(db: Db, plan: PlanRow): Proven {
+  const railed = assembling(db, plan) === null ? [plan.id] : partsOf(db, plan.id)
   return {
-    tests_pass: passed(db, plan.id, 'gate', 'pre_review'),
-    byte_identical_elsewhere: passed(db, plan.id, 'gate', 'review') && passed(db, plan.id, 'gate', 'senior_review'),
+    tests_pass: railed.every((id) => passed(db, id, 'gate', 'pre_review')),
+    byte_identical_elsewhere: railed.every((id) => passed(db, id, 'gate', 'review')) && passed(db, plan.id, 'gate', 'senior_review'),
     fork_ci_green: passed(db, plan.id, 'rail_id', 'ci-green'),
     bot_clean: unanswered(db, plan.id) === undefined,
     target_warm: internal(plan) || target(db, plan)?.state !== 'parked',
@@ -198,6 +199,11 @@ export function unanswered(db: Db, plan: number): unknown {
   return db.prepare(`SELECT 1 FROM signals s WHERE s.plan = ? AND s.kind = 'bot_review' AND s.score < 5 AND s.repo NOT GLOB ?
     AND julianday(s.at) > coalesce((SELECT max(julianday(r.at)) FROM runs r WHERE r.plan = ? AND r.step = 2 AND r.${BUILT}), 0)`)
     .get(plan, `${FORK}/*`, plan)
+}
+
+/** An assembling parent runs no rails or review of its own: each part passed them on the bytes it put on the branch. */
+function partsOf(db: Db, plan: number): number[] {
+  return (db.prepare('SELECT plan FROM parts WHERE parent = ? AND plan IS NOT NULL').all(plan) as { plan: number }[]).map((p) => p.plan)
 }
 
 function passed(db: Db, plan: number, column: 'gate' | 'rail_id', value: string): boolean {

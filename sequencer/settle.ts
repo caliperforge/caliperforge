@@ -19,7 +19,7 @@ import { kernel, mapOf, targetOf } from './steps.ts'
 import { kept } from './merge.ts'
 import { languageFor } from './route.ts'
 import { branchOf, checkout, diffOf, internalBranch, maybe, put, ruled, srcDir, titleOf } from './workspace.ts'
-import { assembly, homeOf } from './home.ts'
+import { assembling, assembly, homeOf } from './home.ts'
 import { fingerprintOf, refusalText, stopped } from './refusal.ts'
 
 /** `wait` is a step that settled by waiting: a CI still running, or a checkout the network failed. Neither is worth asking again in the same tick. */
@@ -99,7 +99,7 @@ function workspace(db: Db, root: string, plan: PlanRow): { language: string | nu
 
 /**
  * Which repository the branch is cut in and what it is called: a stranger's repo and
- * `<repo>-<issue>[-<part>]-a<attempt>` for a target, our own repo and `p<plan>-<slug>` for an issue
+ * `<repo>-<issue>[-<part>]-a<attempt>` for a target, or `asm/<plan>` once its parts have landed, our own repo and `p<plan>-<slug>` for an issue
  * of ours, the target's repo and `p<plan>-<slug>` for a part of an outside plan. Every way the clone is
  * our fork and the base is that repo's `main`, or our fork's `asm/<parent>` for a part.
  */
@@ -110,7 +110,7 @@ function treeOf(db: Db, root: string, plan: PlanRow): { repo: string; branch: st
     return outside === null ? { repo: homeOf(plan), branch } : { repo: outside.repo, branch, from: assembly(db, plan)?.branch }
   }
   const row = targetOf(db, plan)
-  return row === null ? null : { repo: row.repo, branch: branchOf(row.repo, row.issue_no, plan.retries + 1, row.part) }
+  return row === null ? null : { repo: row.repo, branch: assembling(db, plan) ?? branchOf(row.repo, row.issue_no, plan.retries + 1, row.part) }
 }
 
 /** The first line goes in the span: two plans that threw differently must not match as `shared` and turn the lane off. */

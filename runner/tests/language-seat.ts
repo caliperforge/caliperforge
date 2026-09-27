@@ -57,9 +57,7 @@ function declared(s: LanguageSeat): void {
     expect(prompt).toContain(
       "A rebuild's fence lists every case again: carry forward the rows the refusal did not touch, update the ones it did.",
     )
-    expect(prompt).toContain(
-      "A hand-back with no fence, or one whose YAML does not parse, is asked once for the fence alone: answer with only the closing `---` fence and a `done:` row per case, and edit no file, since an edit there refuses the build.",
-    )
+    expect(prompt).toContain("A hand-back with no fence, or one whose YAML does not parse, is asked once for the fence alone: answer with only the closing `---` fence and a `done:` row per case, and edit no file, since an edit there refuses the build.")
     expect(prompt).toContain('follow it under `# The files`')
   })
 
@@ -74,6 +72,7 @@ function declared(s: LanguageSeat): void {
   test('the language picks this seat', () => {
     expect(builder(s.language)).toBe(s.seat)
   })
+
 }
 
 /** What the kernel holds the seat to: the command gate and the brief-files fence. */

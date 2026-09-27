@@ -75,7 +75,7 @@ function stale(db: Db, p: Row, note: string | null): Hit {
   const ref = originRef(p)
   if (p.state !== 'blocked_on_ceo' || ref === null) return null
   const { closed } = db.prepare(`SELECT EXISTS (SELECT 1 FROM tickets WHERE repo = ?)
-    AND NOT EXISTS (SELECT 1 FROM tickets WHERE repo = ? AND number = ?) AS closed`).get(ref.repo, ref.repo, ref.no) as { closed: number }
+    AND NOT EXISTS (SELECT 1 FROM tickets WHERE repo = ? AND number = ? AND closed_at IS NULL) AS closed`).get(ref.repo, ref.repo, ref.no) as { closed: number }
   return closed === 1 ? [`held on closed issue #${String(ref.no)}`, `cf unpark ${String(p.id)}`] : null
 }
 

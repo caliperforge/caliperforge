@@ -16,16 +16,20 @@ const REPO = 'caliperforge/caliperforge'
 
 const url = (n: number): string => `https://github.com/${REPO}/issues/${String(n)}`
 
-interface Fixture { number: number; labels: string[]; parts?: number; title?: string; body?: string }
+interface Fixture { number: number; labels: string[]; parts?: number; title?: string; body?: string; createdAt?: string; closedAt?: string }
 
 const TWO: Fixture[] = [{ number: 40, labels: ['lane:machine'] }, { number: 41, labels: ['lane:machine', 'P2'] }]
 
-function canned(rows: Fixture[], log: string[] = []): Read {
+const OPENED = '2026-09-20T09:00:00Z'
+
+const shape = (r: Fixture) => ({ number: r.number, title: r.title ?? `issue ${String(r.number)}`, body: r.body ?? 'the ask',
+  url: url(r.number), labels: r.labels.map((name) => ({ name })), createdAt: r.createdAt ?? OPENED, closedAt: r.closedAt ?? null })
+
+function canned(rows: Fixture[], log: string[] = [], closed: Fixture[] = []): Read {
   return (args) => {
     log.push(args.join(' '))
-    const shaped = rows.map((r) => ({ number: r.number, title: r.title ?? `issue ${String(r.number)}`, body: r.body ?? 'the ask',
-      url: url(r.number), labels: r.labels.map((name) => ({ name })) }))
-    if (args[1] === 'list') return shaped
+    const shaped = rows.map(shape)
+    if (args[1] === 'list') return args[5] === 'closed' ? closed.map(shape) : shaped
     if (args[0] === 'api') {
       const no = Number(args[1]?.split('/').at(-1))
       return { sub_issues_summary: { total: rows.find((r) => r.number === no)?.parts ?? 0 } }
@@ -141,7 +145,7 @@ test('D5: the tick lists issues only when handed a reader', async () => {
     log.push(args.join(' '))
     throw new Error('gh is down')
   })
-  expect(log).toEqual([`issue list --repo ${REPO} --state open --limit ${String(WINDOW)} --json number,title,body,url,labels`])
+  expect(log).toEqual([`issue list --repo ${REPO} --state open --limit ${String(WINDOW)} --json number,title,body,url,labels,createdAt,closedAt`])
   const sink: string[] = []
   await tick(db, root, stub(CARRIED), undefined, undefined, undefined, 0, () => { throw new Error('gh is down') }, undefined, undefined, sink)
   expect(tickNote([], [], sink)).toContain(`${REPO}: gh is down`)
@@ -361,6 +365,41 @@ test('#257: a running or blocked plan whose work was pushed and whose issue clos
     { origin: url(60), state: 'done' },
     { origin: url(61), state: 'done' },
     { origin: url(62), state: 'blocked_on_ceo' },
+  ])
+})
+
+const SHUT = '2026-09-25T10:00:00Z'
+
+const CLOSED: Fixture = { number: 90, labels: ['lane:machine'], createdAt: '2026-09-25T09:00:00Z', closedAt: SHUT }
+
+test('D1: an issue opened and closed between ticks has both times, and a ticket that closed keeps its row', () => {
+  const db = piped()
+  intake(db, root, canned([{ number: 60, labels: ['lane:machine'] }]))
+  intake(db, root, canned([], [], [CLOSED, { number: 60, labels: ['lane:machine'], closedAt: SHUT }]))
+  expect(db.prepare('SELECT number, opened_at, closed_at FROM tickets ORDER BY number').all()).toEqual([
+    { number: 60, opened_at: OPENED, closed_at: SHUT },
+    { number: 90, opened_at: '2026-09-25T09:00:00Z', closed_at: SHUT },
+  ])
+})
+
+test('D2: one tick records kind fix for a fix-labelled issue and build for one without', () => {
+  const db = piped()
+  intake(db, root, canned([{ number: 40, labels: ['lane:machine', 'fix'] }], [], [{ ...CLOSED, number: 41 }]))
+  expect(db.prepare('SELECT number, kind FROM tickets ORDER BY number').all()).toEqual([
+    { number: 40, kind: 'fix' },
+    { number: 41, kind: 'build' },
+  ])
+})
+
+test('D3: an issue only in the closed listing is not queued, holds and releases nothing, and is not open', () => {
+  const db = waiting()
+  queue(db, 300)
+  intake(db, root, canned([HAND], [], [{ ...A, closedAt: SHUT }, { ...B, closedAt: SHUT }, CLOSED]))
+  expect(waits(db)).toEqual({ plan: null })
+  expect(states(db)).toEqual([
+    { origin: url(30), state: 'done' },
+    { origin: url(300), state: 'halted' },
+    { origin: url(301), state: 'queued' },
   ])
 })
 

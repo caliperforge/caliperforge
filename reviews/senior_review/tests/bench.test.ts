@@ -170,10 +170,20 @@ test('reviewer != builder is refused before the provider fires; the trigger stil
     VALUES (${String(fresh_.plan)}, 5, 'code_quality', '${specHash(root, 'code_quality')}', 'claude-agent-sdk', 'm', 'high', 0, 0, 0, 0, 0, 'x.transcript.jsonl')`)).toBe(true)
 })
 
+test('a verdict fence wrapped in a ``` block reads the same as a bare one', () => {
+  const prose = 'Which of the two callers keeps the old name?\n\n'
+  for (const bare of ['---\noutcome: refuse\nclass: correctness\nspans:\n  - src/stats.ts:4\n---\n', '---\noutcome: needs_ceo\n---\n']) {
+    const wrapped = read(`${prose}\`\`\`yaml\n${bare}\`\`\`\n`, 's')
+    expect(wrapped).toEqual(read(prose + bare, 's'))
+    expect(wrapped?.message).not.toContain('```')
+  }
+})
+
 test('a reviewer reply with no readable verdict fence is a failed run, not a verdict', async () => {
   for (const reply of ['looks fine to me', '---\noutcome: refuse\n---\n', '---\noutcome: refuse\nclass: correctness\nspans: []\n---\n', '---\n: : :\n---\n',
     '---\noutcome: refuse\nclass: Tests!\nspans:\n  - src/stats.ts:4\n---\n', '---\noutcome: refuse\nclass: test.weakened\nspans:\n  - src/stats.ts:4\n---\n']) {
     expect(read(reply, 'subject')).toBeNull()
+    expect(read(`\`\`\`yaml\n${reply}\`\`\`\n`, 'subject')).toBeNull()
   }
   const { db, plan } = bench(root)
   await expect(judge(db, root, 'code_quality', plan, seeded(), replies('looks fine to me'), TRANSCRIPT))
@@ -202,6 +212,19 @@ test('D2 a note of no known kind turns the pass into a scope refuse naming it', 
 test('D3 a note missing a field or with a non-integer line is a failed fence', () => {
   expect(read(PASS(NOTE('text', '3', '')), 'subject')).toBeNull()
   expect(read(PASS(NOTE('text', '3.5')), 'subject')).toBeNull()
+})
+
+test('a refuse of class claim.unverified reads, bare or wrapped', () => {
+  const bare = '---\noutcome: refuse\nclass: claim.unverified\nspans:\n  - src/stats.ts:4\n---\n'
+  for (const reply of [bare, `\`\`\`yaml\n${bare}\`\`\`\n`]) {
+    expect(read(reply, 'subject')).toMatchObject({ outcome: 'refuse', defect_class: 'claim.unverified', spans: ['src/stats.ts:4'], origin_kind: 'ruling', origin_ref: 'reviewers.verdict' })
+  }
+})
+
+test('a pass keeps its prose as message, else reads pass', () => {
+  const out = read(`wording only: "fixes" reads "adds"\n\n${PASS(NOTE('text'))}`, 'subject')
+  expect(out).toMatchObject({ outcome: 'pass', message: 'wording only: "fixes" reads "adds"', notes: [{ kind: 'text' }] })
+  expect(read(PASS(NOTE('text')), 'subject')?.message).toBe('pass')
 })
 
 test('a run that ends at the step cap is fired once more with no tools, and that reply is the verdict', async () => {

@@ -10,7 +10,7 @@ import { dump, migrate, open as openDb, type Db } from '../store/index.ts'
 import { dial, hhmm, lanes, priority as setPriority, record, Reading, set, windows } from '../store/lanes.ts'
 import { refusedPush } from '../store/approvals.ts'
 import { backfill } from '../store/transcript.ts'
-import { day, greptileLine, halted, heldBy, laneLine, open as openPlans, section, tickets, ticketSection, waitLine, waits,
+import { day, greptileLine, halted, heldBy, laneLine, open as openPlans, rulings, section, tickets, ticketSection, waitLine, waits,
   windowLine } from './brief.ts'
 import { check, fill } from './digests.ts'
 import { flow } from './flow.ts'
@@ -162,6 +162,7 @@ export function registerSession(cf: Command, { root, db, out }: Cli): void {
     const handle = db()
     out(livenessLine(handle, liveness(handle, new Date())))
     for (const lane of stalledLanes(handle, new Date())) out(`lane\tOFF with work: ${lane}\n`)
+    out(rulings(handle, root))
     out(laneLine(lanes(handle, hhmm(handle))))
     out(waitLine(waits(handle)))
     out(greptileLine(monthly(root, new Date())))

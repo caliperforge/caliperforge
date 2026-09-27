@@ -11,7 +11,7 @@ function commands(...args: string[]): (string | undefined)[] {
 
 test('cf --help lists every command in registration order', () => {
   expect(commands()).toEqual([
-    'migrate', 'digests', 'map', 'dump', 'runs', 'backfill-cost', 'fire', 'pipe', 'priority', 'lanes', 'hq', 'usage',
+    'migrate', 'digests', 'map', 'dump', 'runs', 'backfill-cost', 'backfill-tickets', 'fire', 'pipe', 'priority', 'lanes', 'hq', 'usage',
     'measure', 'record', 'scan', 'queue', 'plan', 'plans', 'reap', 'release', 'return', 'park', 'hold', 'unpark', 'inbox', 'tight',
     'retry', 'approve', 'refuse', 'batch', 'session', 'push-check', 'halted', 'flow', 'brief', 'adopt', 'health', 'tick', 'lap', 'watch',
     'signoff',

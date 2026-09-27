@@ -1,6 +1,9 @@
 import { z } from 'zod'
-import { laneOf, priorityOf } from '../cli/plan.ts'
+import type { Read } from '../cli/gh.ts'
+import { LANE, LANES, laneOf, priorityOf } from '../cli/plan.ts'
 import type { Db } from './index.ts'
+
+export const HISTORY = 5000
 
 const PART = /^(\d+)[a-z]\b/
 
@@ -53,6 +56,19 @@ export function recordListing(db: Db, repo: string, listed: Listing[], whole: bo
     db.prepare('DELETE FROM tickets WHERE repo = ? AND closed_at IS NULL AND number NOT IN (SELECT value FROM json_each(?))')
       .run(repo, JSON.stringify(kept))
   }
+}
+
+export function backfillTickets(db: Db, read: Read): number {
+  const repos = [...new Set(LANES.map((l) => LANE[l].home))].map((repo) => {
+    const list = (state: string): Listing[] => {
+      const got = Listed.parse(read(['issue', 'list', '--repo', repo, '--state', state, '--limit', String(HISTORY), '--json', FIELDS]))
+      if (got.length === HISTORY) throw new Error(`${repo} lists ${String(HISTORY)} ${state} issues, the limit; the history may be cut short`)
+      return got
+    }
+    return { repo, listed: [...list('open'), ...list('closed')] }
+  })
+  for (const { repo, listed } of repos) recordListing(db, repo, listed, false)
+  return repos.reduce((n, r) => n + r.listed.length, 0)
 }
 
 /** Two P labels make `add` refuse the issue; the ticket is still recorded, unpriced. */

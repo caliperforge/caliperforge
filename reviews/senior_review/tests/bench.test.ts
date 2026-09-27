@@ -182,6 +182,28 @@ test('a reviewer reply with no readable verdict fence is a failed run, not a ver
   expect(db.prepare('SELECT count(*) AS n FROM verdicts WHERE plan = ?').get(plan)).toEqual({ n: 0 })
 })
 
+const NOTE = (kind: string, line = '3', why = '    why: w\n'): string =>
+  `  - file: src/stats.ts\n    line: ${line}\n    old: a\n    new: b\n${why}    kind: ${kind}\n`
+const PASS = (notes: string): string => `---\noutcome: pass\nnotes:\n${notes}---\n`
+
+test('D1 a pass carries its notes of known kinds as written', () => {
+  expect(read(PASS(NOTE('text') + NOTE('count') + NOTE('restore')), 'subject')).toMatchObject({
+    outcome: 'pass', spans: [], message: 'pass',
+    notes: ['text', 'count', 'restore'].map((kind) => ({ file: 'src/stats.ts', line: 3, old: 'a', new: 'b', why: 'w', kind })),
+  })
+})
+
+test('D2 a note of no known kind turns the pass into a scope refuse naming it', () => {
+  const out = read(`the rest reads fine\n\n${PASS(NOTE('text') + NOTE('logic', '9'))}`, 'subject')
+  expect(out).toMatchObject({ outcome: 'refuse', defect_class: 'scope', spans: ['src/stats.ts:9'], notes: [], origin_kind: 'ruling', origin_ref: 'reviewers.verdict' })
+  expect(out?.message).toBe('the rest reads fine\nnote of no known kind logic at src/stats.ts:9')
+})
+
+test('D3 a note missing a field or with a non-integer line is a failed fence', () => {
+  expect(read(PASS(NOTE('text', '3', '')), 'subject')).toBeNull()
+  expect(read(PASS(NOTE('text', '3.5')), 'subject')).toBeNull()
+})
+
 test('a run that ends at the step cap is fired once more with no tools, and that reply is the verdict', async () => {
   const { db, plan } = bench(root)
   const sent: Packet[] = []

@@ -61,7 +61,8 @@ const TWIN: Record<string, (db: Db, home: string) => void> = {
   },
   close: (db) => db.exec("UPDATE plans SET state = 'done', wait_reason = NULL WHERE id = 7"),
   file: (db, home) => {
-    hold(db, home, 7, 'filed', now, file(db, 'coo', 'internal', 'machine', LANE.machine.seat, 'https://github.com/caliperforge/caliperforge/issues/900', 0))
+    const url = 'https://github.com/caliperforge/caliperforge/issues/900'
+    hold(db, home, 7, `${url}\n\nfiled`, now, file(db, 'coo', 'internal', 'machine', LANE.machine.seat, url, 0))
   },
   ask_ceo: (db, home) => {
     hold(db, home, 7, 'a maintainer outside our org sees this', now)

@@ -1,11 +1,12 @@
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { expect, test } from 'vitest'
 import { unread } from '../../cli/inbox.ts'
 import { filesOf, record } from '../../store/files.ts'
 import type { Db } from '../../store/index.ts'
+import { profile } from '../../store/profile.ts'
 import { checks, mode, npm, type Ran, type Run } from '../checks.ts'
 import { ciFeatures, formatLine, recipes } from '../gates.ts'
 import { tick } from '../index.ts'
@@ -23,6 +24,14 @@ const SILENT = ' FAIL x.test.ts > a call\n'
 const SLOW = 30000
 
 const ONE = { 'package.json': pkg({ test: 'vitest run' }) }
+
+const THREE = { 'package.json': pkg({ typecheck: 'tsc --noEmit', lint: 'eslint .', test: 'vitest run' }) }
+
+const REPO = join(import.meta.dirname, '..', '..')
+
+const OWN = profile(REPO, 'caliperforge/caliperforge')?.commands ?? {}
+
+const APP = profile(REPO, 'caliperforge/atelier')?.commands ?? {}
 
 function tree(files: Record<string, string>): string {
   const dir = mkdtempSync(join(tmpdir(), 'cf-checks-'))
@@ -73,11 +82,11 @@ function last(db: Db, plan: number): unknown {
 test('three scripts run in order and stop at the first failure', () => {
   const all = recorder('run lint')
   const src = tree({ 'package.json': pkg({ typecheck: 'tsc --noEmit', lint: 'eslint .', test: 'vitest run' }) })
-  expect(checks(src, all.run)).toEqual({ script: 'lint', command: 'npm run lint', code: '2', output: 'boom', tests: [], retried: false })
+  expect(checks(src, OWN, all.run)).toEqual({ script: 'lint', command: 'npm run lint', code: '2', output: 'boom', tests: [], retried: false })
   expect(all.seen).toEqual(['run typecheck', 'run lint'])
 
   const some = recorder()
-  expect(checks(tree({ 'package.json': pkg({ test: 'vitest run', build: 'tsc' }) }), some.run)).toBeNull()
+  expect(checks(tree({ 'package.json': pkg({ test: 'vitest run', build: 'tsc' }) }), OWN, some.run)).toBeNull()
   expect(some.seen).toEqual(['run test'])
 })
 
@@ -118,20 +127,20 @@ const LAP = ' FAIL b.test.ts > a lap\nError: Test timed out in 5000ms.\n'
 
 test('D1 a failure names tests by file:line and marks timeouts', () => {
   const once = replies({ ok: false, code: '1', output: `${CALL}${LAP}${CALL}` }, { ok: true, output: '' })
-  expect(checks(tree(CALLS), once.run)).toMatchObject({ tests: ['a.test.ts:3 a call', 'b.test.ts:2 a lap (timeout)'], retried: false })
+  expect(checks(tree(CALLS), OWN, once.run)).toMatchObject({ tests: ['a.test.ts:3 a call', 'b.test.ts:2 a lap (timeout)'], retried: false })
   expect(once.seen).toEqual(['run test'])
 })
 
 test('D2 a timeout-only failure re-runs only the files it names', () => {
   const twice = replies({ ok: false, code: '1', output: LAP }, { ok: true, output: '' })
-  expect(checks(tree(CALLS), twice.run)).toBeNull()
+  expect(checks(tree(CALLS), OWN, twice.run)).toBeNull()
   expect(twice.seen).toEqual(['run test', 'exec -- vitest run b.test.ts'])
 })
 
 test('D3 a red files-only re-run refuses under the first command', () => {
   const output = ' FAIL b.test.ts > a lap\nAssertionError: expected 1 to be 2\n'
   const twice = replies({ ok: false, code: '1', output: LAP }, { ok: false, code: '1', output })
-  expect(checks(tree(CALLS), twice.run))
+  expect(checks(tree(CALLS), OWN, twice.run))
     .toEqual({ script: 'test', command: 'npm run test', code: '1', output, tests: ['b.test.ts:2 a lap'], retried: true })
 })
 
@@ -139,9 +148,9 @@ test('D4 load, a hung runner or non-vitest re-runs the command', () => {
   const xcode = tree({})
   mkdirSync(join(xcode, 'Atelier.xcodeproj'))
   const hung = 'The test runner hung before establishing connection.\n'
-  for (const [src, output] of [[tree(ONE), BOUND], [xcode, hung], [tree({ 'package.json': pkg({ test: 'jest' }) }), LAP]] as const) {
+  for (const [src, output, given] of [[tree(ONE), BOUND, OWN], [xcode, hung, APP], [tree({ 'package.json': pkg({ test: 'jest' }) }), LAP, OWN]] as const) {
     const twice = replies({ ok: false, code: '1', output }, { ok: true, output: '' })
-    expect(checks(src, twice.run)).toBeNull()
+    expect(checks(src, given, twice.run)).toBeNull()
     expect(twice.seen[1]).toBe(twice.seen[0])
   }
 })
@@ -149,14 +158,14 @@ test('D4 load, a hung runner or non-vitest re-runs the command', () => {
 test('a non-load failure is refused on the first run', () => {
   for (const output of [`${TIMEOUT}${ASSERTED}`, SILENT]) {
     const shell = replies({ ok: false, code: '1', output }, { ok: true, output: '' })
-    expect(checks(tree(ONE), shell.run)).toMatchObject({ command: 'npm run test', code: '1', retried: false })
+    expect(checks(tree(ONE), OWN, shell.run)).toMatchObject({ command: 'npm run test', code: '1', retried: false })
     expect(shell.seen).toEqual(['run test'])
   }
 })
 
 test('load-only twice refuses on the second run, noting the retry', async () => {
   const both = replies({ ok: false, code: '1', output: TIMEOUT }, { ok: false, code: '7', output: BOUND })
-  expect(checks(tree(ONE), both.run))
+  expect(checks(tree(ONE), OWN, both.run))
     .toEqual({ script: 'test', command: 'npm run test', code: '7', output: BOUND, tests: [], retried: true })
 
   const w = mine(NAPPING)
@@ -199,22 +208,22 @@ test('#191 D2 a red unlisted test on unchanged code is refused', async () => {
 test('#77: a narrow list runs reachable tests, only for vitest', () => {
   const some = recorder()
   const src = tree({ 'package.json': pkg({ typecheck: 'tsc --noEmit', lint: 'eslint .', test: 'vitest run' }) })
-  expect(checks(src, some.run, ['store/plans.ts', 'store/lanes.ts'])).toBeNull()
+  expect(checks(src, OWN, some.run, ['store/plans.ts', 'store/lanes.ts'])).toBeNull()
   expect(some.seen).toEqual(['run typecheck', 'run lint', 'exec -- vitest related --run store/plans.ts store/lanes.ts'])
 
   const whole = recorder()
-  expect(checks(src, whole.run, [])).toBeNull()
+  expect(checks(src, OWN, whole.run, [])).toBeNull()
   expect(whole.seen).toEqual(['run typecheck', 'run lint', 'run test'])
 
   const jest = recorder()
-  expect(checks(tree({ 'package.json': pkg({ test: 'jest' }) }), jest.run, ['a.ts'])).toBeNull()
+  expect(checks(tree({ 'package.json': pkg({ test: 'jest' }) }), OWN, jest.run, ['a.ts'])).toBeNull()
   expect(jest.seen).toEqual(['run test'])
 })
 
 test('#77: a failed narrow run is named by the script, not a path', () => {
   const red = recorder('exec -- vitest related --run store/plans.ts')
   const src = tree({ 'package.json': pkg({ test: 'vitest run' }) })
-  expect(checks(src, red.run, ['store/plans.ts'])).toMatchObject({ script: 'test', code: '2' })
+  expect(checks(src, OWN, red.run, ['store/plans.ts'])).toMatchObject({ script: 'test', code: '2' })
 })
 
 const HASH = '0'.repeat(64)
@@ -246,20 +255,20 @@ test('#77: first build runs the suite; a rebuild what it reaches', () => {
 
 test('a checkout with no package.json runs no command', () => {
   const none = recorder()
-  expect(checks(tree({ 'readme.md': '# no scripts here\n' }), none.run)).toBeNull()
+  expect(checks(tree({ 'readme.md': '# no scripts here\n' }), OWN, none.run)).toBeNull()
   expect(none.seen).toEqual([])
 })
 
 test('npm ci runs for a lock without node_modules, and can refuse', () => {
   const files = { 'package.json': pkg({ test: 'vitest run' }), 'package-lock.json': '{}' }
   const fresh = recorder('ci')
-  expect(checks(tree(files), fresh.run)).toEqual({ script: 'ci', command: 'npm ci', code: '2', output: 'boom', tests: [], retried: false })
+  expect(checks(tree(files), OWN, fresh.run)).toEqual({ script: 'ci', command: 'npm ci', code: '2', output: 'boom', tests: [], retried: false })
   expect(fresh.seen).toEqual(['ci'])
 
   const installed = recorder()
   const dir = tree(files)
   mkdirSync(join(dir, 'node_modules'))
-  expect(checks(dir, installed.run)).toBeNull()
+  expect(checks(dir, OWN, installed.run)).toBeNull()
   expect(installed.seen).toEqual(['run test'])
 })
 
@@ -274,6 +283,8 @@ test('a target plan runs no stranger scripts and passes step 3', async () => {
   expect(w.db.prepare("SELECT 1 FROM verdicts WHERE plan = ? AND rail_id = 'checks'").all(w.plan)).toEqual([])
 }, SLOW)
 
+const XCODEBUILD = '-project Atelier.xcodeproj -scheme Atelier -destination platform=macOS -derivedDataPath .cf-derived -test-timeouts-enabled YES -default-test-execution-time-allowance 60 -maximum-test-execution-time-allowance 60 test'
+
 test('D1 xcode runs xcodebuild test with its derived data inside', () => {
   const src = tree({})
   mkdirSync(join(src, 'Atelier.xcodeproj'))
@@ -282,24 +293,46 @@ test('D1 xcode runs xcodebuild test with its derived data inside', () => {
   const seen: string[] = []
   const run: Run = (...[args, , bin]) => { bins.push(bin ?? 'npm'); seen.push(args.join(' ')); return { ok: true, output: '' } }
   expect(mode(src)).toBe('xcodebuild')
-  expect(checks(src, run)).toBeNull()
+  expect(checks(src, APP, run)).toBeNull()
   expect(bins).toEqual(['xcodebuild'])
-  expect(seen).toEqual(["-project Atelier.xcodeproj -scheme Atelier -destination platform=macOS -derivedDataPath .cf-derived -test-timeouts-enabled YES -default-test-execution-time-allowance 60 -maximum-test-execution-time-allowance 60 test"])
+  expect(seen).toEqual([XCODEBUILD])
   expect(readFileSync(join(src, '.git', 'info', 'exclude'), 'utf8')).toContain('.cf-derived/')
+})
+
+test('the caliperforge and atelier profiles run the same commands', () => {
+  const some = recorder()
+  expect(checks(tree(THREE), OWN, some.run)).toBeNull()
+  expect(some.seen).toEqual(['run typecheck', 'run lint', 'run test'])
+
+  const bins: string[] = []
+  const seen: string[] = []
+  const run: Run = (...[args, , bin]) => { bins.push(bin ?? 'npm'); seen.push(args.join(' ')); return { ok: true, output: '' } }
+  expect(checks(xcode(), APP, run)).toBeNull()
+  expect([bins, seen]).toEqual([['xcodebuild'], [XCODEBUILD]])
+})
+
+test('commands left out of the profile are not run', () => {
+  const none = recorder()
+  expect(checks(xcode(), {}, none.run)).toBeNull()
+  expect(none.seen).toEqual([])
+
+  const lint = recorder()
+  expect(checks(tree(THREE), { npm: ['lint'] }, lint.run)).toBeNull()
+  expect(lint.seen).toEqual(['run lint'])
 })
 
 test('D1 a red xcodebuild names its command', () => {
   const src = tree({})
   mkdirSync(join(src, 'Atelier.xcodeproj'))
   const run: Run = () => ({ ok: false, code: '65', output: '** TEST FAILED **' })
-  expect(checks(src, run)).toMatchObject({ script: 'test', code: '65', command: expect.stringMatching(/^xcodebuild -project Atelier\.xcodeproj/) as string })
+  expect(checks(src, APP, run)).toMatchObject({ script: 'test', code: '65', command: expect.stringMatching(/^xcodebuild -project Atelier\.xcodeproj/) as string })
 })
 
 test('an xcodebuild failure not hung is refused on the first run', () => {
   const src = tree({})
   mkdirSync(join(src, 'Atelier.xcodeproj'))
   const once = replies({ ok: false, code: '65', output: '** TEST FAILED **' }, { ok: true, output: '' })
-  expect(checks(src, once.run)).toMatchObject({ code: '65', retried: false })
+  expect(checks(src, APP, once.run)).toMatchObject({ code: '65', retried: false })
   expect(once.seen).toHaveLength(1)
 })
 
@@ -315,7 +348,7 @@ function xcode(): string {
 
 test('#257 D1 an outdated CoreSimulator is a fault after one run', () => {
   const once = replies({ ok: false, code: '70', output: `building\n${STALE}\n` })
-  expect(checks(xcode(), once.run)).toMatchObject({ fault: STALE, retried: false })
+  expect(checks(xcode(), APP, once.run)).toMatchObject({ fault: STALE, retried: false })
   expect(once.seen).toHaveLength(1)
 })
 
@@ -331,27 +364,32 @@ test('#257 D1 a fault keeps retries, stops the lane, posts once', () => {
 })
 
 test('#257 D2 a red xcodebuild test run carries no fault', () => {
-  expect(checks(xcode(), () => ({ ok: false, code: '65', output: '** TEST FAILED **' }))).not.toHaveProperty('fault')
+  expect(checks(xcode(), APP, () => ({ ok: false, code: '65', output: '** TEST FAILED **' }))).not.toHaveProperty('fault')
 })
 
 test('#257 D3 linkd.autoShortcut lines drop; the rest keep order', () => {
   const noise = 'Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={}'
   const run: Run = () => ({ ok: false, code: '65', output: ['a', noise, 'b', noise, '** TEST FAILED **'].join('\n') })
-  expect(checks(xcode(), run)?.output).toBe('a\nb\n** TEST FAILED **')
+  expect(checks(xcode(), APP, run)?.output).toBe('a\nb\n** TEST FAILED **')
 })
 
 test('#257 D4 hung twice is a fault; hung then green is not', () => {
   const both = replies({ ok: false, code: '1', output: HANG }, { ok: false, code: '1', output: HANG })
-  expect(checks(xcode(), both.run)).toMatchObject({ fault: HANG.trim(), retried: true })
-  expect(checks(xcode(), replies({ ok: false, code: '1', output: HANG }).run)).toBeNull()
+  expect(checks(xcode(), APP, both.run)).toMatchObject({ fault: HANG.trim(), retried: true })
+  expect(checks(xcode(), APP, replies({ ok: false, code: '1', output: HANG }).run)).toBeNull()
 })
 
 test('#257 D5 npm naming CoreSimulator or a hang just refuses', () => {
   const output = `${STALE}\n${HANG}`
-  const failed = checks(tree(ONE), replies({ ok: false, code: '1', output }, { ok: false, code: '1', output }).run)
+  const failed = checks(tree(ONE), OWN, replies({ ok: false, code: '1', output }, { ok: false, code: '1', output }).run)
   expect(failed).toMatchObject({ script: 'test', code: '1' })
   expect(failed).not.toHaveProperty('fault')
 })
+
+/** Our own profile's yml ends in its `commands:` block, so atelier's xcodebuild line lands under it. */
+function xcoded(w: World): void {
+  appendFileSync(join(w.root, 'profiles', 'caliperforge', 'caliperforge.yml'), `  xcodebuild: ${JSON.stringify(APP.xcodebuild)}\n`)
+}
 
 test('#257 D6 a faulted step 3 stays put with no checks verdict', async () => {
   const bin = mkdtempSync(join(tmpdir(), 'cf-bin-'))
@@ -360,6 +398,7 @@ test('#257 D6 a faulted step 3 stays put with no checks verdict', async () => {
   process.env.PATH = `${bin}:${path ?? ''}`
   try {
     const w = mine(GREEN)
+    xcoded(w)
     for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED))
     mkdirSync(join(srcDir(w.root, ID), 'Atelier.xcodeproj'))
     const fired = (await tick(w.db, w.root, stub(CARRIED)))[0]
@@ -384,28 +423,28 @@ function atelier(): string {
 
 test('#352 D1 a host exit outside the diff earns one re-run', () => {
   const twice = replies({ ok: false, code: '65', output: EXITED }, { ok: true, output: '' })
-  expect(checks(atelier(), twice.run, [], null, ['src/hello.ts'])).toBeNull()
+  expect(checks(atelier(), APP, twice.run, [], null, ['src/hello.ts'])).toBeNull()
   expect(twice.seen).toHaveLength(2)
   expect(twice.seen[1]).toBe(twice.seen[0])
 })
 
 test('#352 D2 a host exit in the diff is refused after one run', () => {
   const once = replies({ ok: false, code: '65', output: EXITED }, { ok: true, output: '' })
-  expect(checks(atelier(), once.run, [], null, [CARDS])).toMatchObject({ code: '65', retried: false })
+  expect(checks(atelier(), APP, once.run, [], null, [CARDS])).toMatchObject({ code: '65', retried: false })
   expect(once.seen).toHaveLength(1)
 })
 
 test('#352 D3 a host exit on both runs refuses with the second', () => {
   const again = `${EXITED}again`
   const both = replies({ ok: false, code: '65', output: EXITED }, { ok: false, code: '66', output: again })
-  expect(checks(atelier(), both.run)).toMatchObject({ code: '66', output: again, retried: true })
+  expect(checks(atelier(), APP, both.run)).toMatchObject({ code: '66', output: again, retried: true })
 })
 
 test('#352 D4 D5 no restart line or known class refuses at once', () => {
   const without = (text: string): string => EXITED.split('\n').filter((line) => !line.startsWith(text)).join('\n')
   for (const [src, output] of [[atelier(), without('Restarting')], [atelier(), without('\tFloorDecisionCardsTests')], [xcode(), EXITED]] as const) {
     const once = replies({ ok: false, code: '65', output }, { ok: true, output: '' })
-    expect(checks(src, once.run)).toMatchObject({ code: '65', retried: false })
+    expect(checks(src, APP, once.run)).toMatchObject({ code: '65', retried: false })
     expect(once.seen).toHaveLength(1)
   }
 })
@@ -419,6 +458,7 @@ async function exits(settles: boolean): Promise<{ w: World; fired: Awaited<Retur
   process.env.PATH = `${bin}:${path ?? ''}`
   try {
     const w = mine(ATELIER)
+    xcoded(w)
     for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED))
     mkdirSync(join(srcDir(w.root, ID), 'Atelier.xcodeproj'))
     return { w, fired: (await tick(w.db, w.root, stub(CARRIED)))[0] }
@@ -474,7 +514,7 @@ test('D3 a kotlin checkout runs gradle check', () => {
   const seen: string[] = []
   const run: Run = (...[args, , bin]) => { bins.push(bin ?? 'npm'); seen.push(args.join(' ')); return { ok: true, output: '' } }
   expect(mode(src)).toBe('gradle')
-  expect(checks(src, run)).toBeNull()
+  expect(checks(src, {}, run)).toBeNull()
   expect([bins, seen]).toEqual([['gradle'], ['-p kotlin check']])
 })
 
@@ -498,7 +538,7 @@ const JUST = 'install:\n    bundle install\n\ntest:\n    bundle exec ruby -Itest
 test('#204 outside ruby runs Justfile gates in ruby/, never npm', () => {
   const src = nested({ 'package.json': pkg({ test: 'vitest run' }), 'ruby/Justfile': JUST, 'ruby/Gemfile': '', 'ruby/lib/pay_kit/config.rb': '' })
   const { run, calls } = heard()
-  expect(checks(src, run, [], { language: 'ruby', files: ['docs/x.md', 'ruby/lib/pay_kit/config.rb'] })).toBeNull()
+  expect(checks(src, {}, run, [], { language: 'ruby', files: ['docs/x.md', 'ruby/lib/pay_kit/config.rb'] })).toBeNull()
   const at = join(src, 'ruby')
   expect(calls).toEqual([`just --justfile Justfile install @${at}`, `just --justfile Justfile lint @${at}`, `just --justfile Justfile test @${at}`])
 })
@@ -512,14 +552,14 @@ test('#192 outside rust runs CI\'s fmt check, then touched crates', () => {
   })
   const { run, calls } = heard()
   const files = ['crates/types/src/types.rs', 'crates/core/src/rpc/a.rs', 'crates/core/src/b.rs', 'crates/sdk-node/kit/generated/index.ts']
-  expect(checks(src, run, [], { language: 'rust', files })).toBeNull()
+  expect(checks(src, {}, run, [], { language: 'rust', files })).toBeNull()
   expect(calls).toEqual([`cargo +nightly fmt --all -- --check @${src}`, `cargo test -p surfpool-types -p surfpool-core @${src}`])
 })
 
 test('#192 no CI fmt line falls back to cargo fmt --all --check', () => {
   const src = nested({ 'rust/Cargo.toml': '[workspace]\n', 'rust/crates/kit/Cargo.toml': '[package]\nname = "pay-kit"\n' })
   const { run, calls } = heard()
-  expect(checks(src, run, [], { language: 'rust', files: ['rust/crates/kit/src/lib.rs'] })).toBeNull()
+  expect(checks(src, {}, run, [], { language: 'rust', files: ['rust/crates/kit/src/lib.rs'] })).toBeNull()
   const at = join(src, 'rust')
   expect(calls).toEqual([`cargo fmt --all -- --check @${at}`, `cargo test -p pay-kit @${at}`])
 })
@@ -527,14 +567,14 @@ test('#192 no CI fmt line falls back to cargo fmt --all --check', () => {
 test('#192 a red fmt check refuses with the diff, named by folder', () => {
   const src = nested({ 'Cargo.toml': '[package]\nname = "x"\n' })
   const { run } = heard({ ok: false, code: '1', output: 'Diff in src/lib.rs at line 3' })
-  expect(checks(src, run, [], { language: 'rust', files: ['src/lib.rs'] }))
+  expect(checks(src, {}, run, [], { language: 'rust', files: ['src/lib.rs'] }))
     .toEqual({ script: 'format', command: 'cargo fmt --all -- --check', code: '1', output: 'Diff in src/lib.rs at line 3', tests: [], retried: false })
 })
 
 test('#204 bare go runs gofmt, vet and test; gofmt output fails', () => {
   const src = nested({ 'go/go.mod': 'module x\n', 'go/config.go': '' })
   const { run, calls } = heard({ ok: true, output: 'config.go\n' })
-  expect(checks(src, run, [], { language: 'go', files: ['go/config.go'] }))
+  expect(checks(src, {}, run, [], { language: 'go', files: ['go/config.go'] }))
     .toMatchObject({ script: 'format', command: 'gofmt -s -l . (in go/)', code: '1', output: 'config.go\n' })
   expect(calls).toEqual([`gofmt -s -l . @${join(src, 'go')}`])
 })
@@ -542,7 +582,7 @@ test('#204 bare go runs gofmt, vet and test; gofmt output fails', () => {
 test('#204 a recipe the Justfile does not define is not run', () => {
   const src = nested({ 'lua/Justfile': 'test:\n    luajit tests/run.lua\n', 'lua/pay-kit-dev-1.rockspec': '', 'lua/pay_kit/a.lua': '' })
   const { run, calls } = heard()
-  expect(checks(src, run, [], { language: 'lua', files: ['lua/pay_kit/a.lua'] })).toBeNull()
+  expect(checks(src, {}, run, [], { language: 'lua', files: ['lua/pay_kit/a.lua'] })).toBeNull()
   expect(calls).toEqual([`just --justfile Justfile test @${join(src, 'lua')}`])
 })
 
@@ -562,7 +602,7 @@ test('#204 rust tests take CI features, less services, per crate', () => {
   })
   expect(ciFeatures(src)).toEqual(['ignore_tests_ci'])
   const { run, calls } = heard()
-  expect(checks(src, run, [], { language: 'rust', files: ['crates/types/src/types.rs', 'crates/core/src/types.rs'] })).toBeNull()
+  expect(checks(src, {}, run, [], { language: 'rust', files: ['crates/types/src/types.rs', 'crates/core/src/types.rs'] })).toBeNull()
   expect(calls[1]).toBe(`cargo test -p surfpool-types -p surfpool-core --features surfpool-core/ignore_tests_ci @${src}`)
 })
 
@@ -581,7 +621,7 @@ function surfpool(sdk: string): string {
 test('#221 outside rust stages, runs CI\'s generator, then diffs', () => {
   const src = surfpool(BINDINGS)
   const { run, calls } = heard()
-  expect(checks(src, run, [], { language: 'rust', files: ['crates/core/src/a.rs'] })).toBeNull()
+  expect(checks(src, {}, run, [], { language: 'rust', files: ['crates/core/src/a.rs'] })).toBeNull()
   expect(calls).toEqual([`cargo +nightly fmt --all -- --check @${src}`, `cargo test -p surfpool-core @${src}`, `git add -A @${src}`,
     `node crates/sdk-node/scripts/generate-kit-types.js @${src}`, `git diff --exit-code @${src}`])
 })
@@ -589,14 +629,14 @@ test('#221 outside rust stages, runs CI\'s generator, then diffs', () => {
 test('#221 a red diff after regenerating refuses with the diff', () => {
   const src = surfpool(BINDINGS)
   const run: Run = (...[args, , bin]) => `${bin ?? 'npm'} ${args.join(' ')}` === 'git diff --exit-code' ? { ok: false, code: '1', output: '-a\n+b' } : { ok: true, output: '' }
-  expect(checks(src, run, [], { language: 'rust', files: ['crates/core/src/a.rs'] }))
+  expect(checks(src, {}, run, [], { language: 'rust', files: ['crates/core/src/a.rs'] }))
     .toEqual({ script: 'diff', command: 'git diff --exit-code', code: '1', output: '-a\n+b', tests: [], retried: false })
 })
 
 test('#221 a diff step with no generator or a shell adds no gate', () => {
   const src = surfpool('jobs:\n  a:\n    steps:\n      - run: |\n          cd x && node gen.js\n          git diff --exit-code\n      - run: git diff --exit-code\n')
   const { run, calls } = heard()
-  expect(checks(src, run, [], { language: 'rust', files: ['crates/core/src/a.rs'] })).toBeNull()
+  expect(checks(src, {}, run, [], { language: 'rust', files: ['crates/core/src/a.rs'] })).toBeNull()
   expect(calls).toEqual([`cargo +nightly fmt --all -- --check @${src}`, `cargo test -p surfpool-core @${src}`])
 })
 

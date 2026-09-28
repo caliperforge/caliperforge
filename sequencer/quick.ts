@@ -6,8 +6,10 @@ import type { Finding, Verdict } from '../reviews/verdict.ts'
 import { digestOf } from '../store/approvals.ts'
 import type { Db } from '../store/index.ts'
 import { internal, type PlanRow } from '../store/plans.ts'
+import { profile } from '../store/profile.ts'
 import type { Step } from '../templates/pr-path.ts'
 import { checks } from './checks.ts'
+import { homeOf } from './home.ts'
 import type { Outcome } from './kind.ts'
 import { fireReview, ran } from './seat.ts'
 import { languageFor } from './route.ts'
@@ -33,7 +35,7 @@ export async function fireRound(db: Db, root: string, plan: PlanRow, step: Step,
   const fired = await ran(db, root, plan, mapOf(plan.template).at(2, languageFor(db, plan, src)), provider, asked(root, plan.id, findings), internal(plan))
   if (fired.ended !== 'completed') return verdict
   if (strayed(diffSince(src, tree), findings)) return verdict
-  if (internal(plan) && checks(src) !== null) return verdict
+  if (internal(plan) && checks(src, profile(root, homeOf(plan))?.commands ?? {}) !== null) return verdict
   record(db, root, step.runs, plan.id, settled(diffOf(root, plan.id)), 0, fired.seconds, null, 1)
   return { outcome: 'pass', spans: [], note: `${step.runs} ${String(findings.length)} cosmetic finding(s) fixed in place` }
 }

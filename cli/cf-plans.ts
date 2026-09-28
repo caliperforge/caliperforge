@@ -121,19 +121,12 @@ function holds(cf: Command, { root, db, out }: Cli): void {
       const step = unhold(db(), root, Number(id), holderOf(options.by))
       out(`plan ${id} queued at step ${String(step)}\n`)
     })
-
-  cf.command('unpark').argument('<plan>', 'a held plan, put back at the step it stopped on').requiredOption(...BY)
-    .action((id: string, options: { by: string }) => {
-      const step = unhold(db(), root, Number(id), holderOf(options.by))
-      out(`plan ${id} queued at step ${String(step)}\n`)
-    })
 }
 
 function parks(cf: Command, { root, db, out }: Cli): void {
   cf.command('park').argument('<plan>', 'a plan to hold where it stands, checkout kept')
     .option('--on <plan>', 'the plan it waits on; it goes back in its lane when that one lands')
-    .option('--why <text>', 'why it is held', 'held by a person')
-    .requiredOption(...BY)
+    .option('--why <text>', 'why it is held', 'held by a person').requiredOption(...BY)
     .action((id: string, options: { on?: string; why: string; by: string }) => {
       const actor = holderOf(options.by)
       const handle = db()
@@ -162,6 +155,12 @@ function parks(cf: Command, { root, db, out }: Cli): void {
       held(handle, n, by, options.why)
       logged(handle, { plan: n, kind: 'hold', actor, outcome: 'pass', message: options.why, pointer: null, run: null })
       out(`plan ${id} held on the ${by}\n`)
+    })
+
+  cf.command('unpark').argument('<plan>', 'a held plan, put back at the step it stopped on').requiredOption(...BY)
+    .action((id: string, options: { by: string }) => {
+      const step = unhold(db(), root, Number(id), holderOf(options.by))
+      out(`plan ${id} queued at step ${String(step)}\n`)
     })
 }
 

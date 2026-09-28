@@ -92,7 +92,9 @@ test('our own plans stay with the typescript seat', () => {
 
 test('an empty repo of ours goes to the plan\'s seat', () => {
   const w = world()
-  expect(builder(languageFor(w.db, w.hooks, mkdtempSync(join(tmpdir(), 'cf-route-'))))).toBe('python_specialist')
+  const empty = mkdtempSync(join(tmpdir(), 'cf-route-'))
+  expect(builder(languageFor(w.db, w.hooks, empty))).toBe('python_specialist')
+  expect(languageFor(w.db, w.hooks, empty, false)).toBeNull()
 })
 
 test('a repo of ours with a language goes by its tree, not the plan\'s seat', () => {

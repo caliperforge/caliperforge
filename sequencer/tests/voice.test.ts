@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
-import { capture } from '../../templates/voice.ts'
+import { capture } from '../../templates/comms.ts'
 import { world, type World } from './world.ts'
 
 const today = new Date().toISOString().slice(0, 10)

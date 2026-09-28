@@ -5,7 +5,7 @@ import { parse } from '../rails/diff.ts'
 import { building, filesOf, sharing, strays as recordStrays } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
 import { builderRan, internal, originIssue, waiting, type PlanRow, type Wait } from '../store/plans.ts'
-import { desk, facts, gather, steps as comms } from '../templates/comms.ts'
+import { capture, desk, facts, gather, steps as comms } from '../templates/comms.ts'
 import { at, last, steps, type Step } from '../templates/pr-path.ts'
 import { approved, approvedPlan, batch } from './approve.ts'
 import type { Outcome } from './kind.ts'
@@ -15,7 +15,6 @@ import { push, reviewable, type Wire } from './push.ts'
 import { diffOf, maybe, put } from './workspace.ts'
 import { homeOf } from './home.ts'
 import { freshBase } from './merge.ts'
-import { capture } from '../templates/voice.ts'
 
 export interface StepMap {
   steps: Step[]

@@ -1,9 +1,12 @@
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import { z } from 'zod'
 import { landed, type Landed } from '../cli/batch.ts'
 import { ours } from '../cli/gh.ts'
 import type { Outcome } from '../sequencer/kind.ts'
 import { prose } from '../sequencer/prose.ts'
 import { get, maybe, put } from '../sequencer/workspace.ts'
+import { edited } from '../store/desk.ts'
 import type { Db } from '../store/index.ts'
 import type { PlanRow } from '../store/plans.ts'
 import { ofDay } from '../store/refusals.ts'
@@ -82,4 +85,30 @@ export function desk(db: Db, root: string, plan: PlanRow): Outcome {
       ON CONFLICT (date) DO UPDATE SET items = excluded.items, sources = excluded.sources`).run(work, JSON.stringify(items), JSON.stringify(refs))
   })()
   return { outcome: 'pass', spans: [], note: `desk_posts ${String(plan.id)} in proof for ${work}` }
+}
+
+const FIELDS = ['title', 'dek', 'body'] as const
+
+function pattern(draft: number, edit: number): string {
+  if (edit === 0) return 'cut'
+  if (edit * 10 < draft * 9) return 'shortened'
+  if (edit * 10 > draft * 11) return 'lengthened'
+  return 'reworded'
+}
+
+export function capture(db: Db, root: string): Outcome {
+  const today = new Date().toISOString().slice(0, 10)
+  const path = join(root, 'comms/voice-notes.md')
+  const had = existsSync(path) ? readFileSync(path, 'utf8').split('\n') : null
+  const lines = edited(db).flatMap((row) => FIELDS.flatMap((field) => {
+    const edit = row[`edited_${field}`]
+    if (edit === null) return []
+    const note = row.note === null ? '' : ` — note: ${row.note.trim().replace(/\s*[\r\n]\s*/g, ' ')}`
+    return [`- ${today} ${String(row.id)} ${field}: ${pattern(row[field].length, edit.length)} (${String(row[field].length)} → ${String(edit.length)} chars)${note}`]
+  })).filter((line) => had?.includes(line) !== true)
+  if (lines.length > 0) {
+    mkdirSync(dirname(path), { recursive: true })
+    appendFileSync(path, `${had === null ? '# Voice notes\n\n' : ''}${lines.join('\n')}\n`)
+  }
+  return { outcome: 'pass', spans: [], note: `${String(lines.length)} voice note(s) added` }
 }

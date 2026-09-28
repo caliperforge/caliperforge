@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { parse } from 'yaml'
 import { z } from 'zod'
@@ -176,7 +176,7 @@ export function shape(brief: string, ask: string, src: string): Refused | null {
   const title = titleOf(brief)
   if (title === null || title !== titleOf(ask)) return { span: '# <title>', reason: "the title is not the ask's" }
   const checks: ((b: string) => Refused | null)[] =
-    [order, empty, carried, cases, caps, folders, forbidden, shared, (b) => paths(b, src)]
+    [order, empty, carried, cases, caps, folders, forbidden, (b) => shared(b, src), (b) => paths(b, src)]
   for (const check of checks) {
     const refused = check(brief)
     if (refused !== null) return refused
@@ -246,16 +246,28 @@ function asked(body: string, pattern: RegExp): string | undefined {
   return undefined
 }
 
-function shared(brief: string): Refused | null {
+function shared(brief: string, src: string): Refused | null {
   const changing = files(brief).map((f) => f.path)
   const listed = [...changing, ...leads(brief, '## Who else reads what this changes')]
-  for (const format of SHARED.filter((f) => f.files.some((p) => changing.includes(p)))) {
+  const rows = pointed(brief)
+  const moving = changing.filter((p) => {
+    const lines = rows.filter((r) => r.path === p).map((r) => r.line)
+    return !p.endsWith('/prompt.md') || lines.length === 0 || lines.some((l) => l >= lastFence(join(src, p)))
+  })
+  for (const format of SHARED.filter((f) => f.files.some((p) => moving.includes(p)))) {
     const unlisted = format.readers.find((r) => !listed.includes(r))
     if (unlisted !== undefined) return { span: unlisted, reason: `${unlisted} reads ${format.what} and is named nowhere` }
     const other = changing.find((p) => !format.files.includes(p) && !format.readers.includes(p) && !TEST.test(p))
     if (other !== undefined) return { span: other, reason: `${format.what} and ${other} are two jobs in one brief` }
   }
   return null
+}
+
+/** The 1-based line a file's last fenced block opens on; 0 when it holds no such block. */
+function lastFence(path: string): number {
+  if (!existsSync(path)) return 0
+  const fences = readFileSync(path, 'utf8').split('\n').flatMap((l, i) => (l.startsWith('```') ? [i + 1] : []))
+  return fences.at(-2) ?? 0
 }
 
 function paths(brief: string, src: string): Refused | null {

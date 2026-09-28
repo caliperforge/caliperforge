@@ -13,6 +13,8 @@ interface Obj {
 
 export function open(path: string): Db {
   const db = new Database(path)
+  db.pragma('busy_timeout = 10000')
+  db.pragma('journal_mode = WAL')
   db.pragma('foreign_keys = ON')
   return db
 }

@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import ts from 'typescript'
+import { parse } from '../rails/diff.ts'
 import type { Note } from '../reviews/verdict.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
@@ -8,7 +9,7 @@ import { internal, type PlanRow } from '../store/plans.ts'
 import type { Step } from '../templates/pr-path.ts'
 import { checks } from './checks.ts'
 import type { Outcome } from './kind.ts'
-import { git, holds, maybe, srcDir } from './workspace.ts'
+import { diffOf, git, holds, maybe, srcDir } from './workspace.ts'
 
 const COMMENT = new Set<ts.SyntaxKind>([
   ts.SyntaxKind.SingleLineCommentTrivia,
@@ -42,29 +43,45 @@ interface Token {
 export function landed(db: Db, root: string, plan: PlanRow, step: Step, notes: Note[]): Outcome {
   const src = srcDir(root, plan.id)
   const base = maybe(root, plan.id, 'base.sha')?.trim() ?? null
+  const diffed = new Set(parse(diffOf(root, plan.id)).map((f) => f.path))
   const before = new Map<string, string>()
   const after = new Map<string, string>()
+  const kept: Note[] = []
+  const skipped: [Note, string][] = []
   for (const n of notes) {
     const path = join(src, n.file)
     const text = after.get(n.file) ?? (existsSync(path) ? readFileSync(path, 'utf8') : '')
+    const drop = unappliable(diffed, n, text)
+    if (drop !== null) {
+      skipped.push([n, drop])
+      continue
+    }
     const reason = refused(src, base, n, text)
     if (reason !== null) return refusal(step, [n], reason)
     if (!before.has(n.file)) before.set(n.file, text)
     after.set(n.file, swap(text, n))
+    kept.push(n)
   }
+  for (const [n, reason] of skipped) noted(db, plan, step, n, `dropped: ${reason}`)
   write(src, after)
-  const failed = internal(plan) ? checks(src) : null
+  const failed = internal(plan) && kept.length > 0 ? checks(src) : null
   if (failed !== null) write(src, before)
   const dropped = failed === null ? null : `dropped: ${failed.script} failed after the notes`
-  for (const n of notes) {
-    logged(db, { plan: plan.id, kind: 'note', actor: step.runs, outcome: 'pass', message: dropped ?? `${n.kind}: ${n.why}`, pointer: at(n), run: null })
-  }
-  return { outcome: 'pass', spans: [], note: `${step.runs} pass, ${String(notes.length)} note(s) ${dropped ?? 'applied'}` }
+  for (const n of kept) noted(db, plan, step, n, dropped ?? `${n.kind}: ${n.why}`)
+  return { outcome: 'pass', spans: [], note: `${step.runs} pass, ${String(kept.length)} note(s) ${dropped ?? 'applied'}` }
+}
+
+function unappliable(diffed: Set<string>, n: Note, text: string): string | null {
+  if (!diffed.has(n.file)) return 'not a file in the diff'
+  const found = n.old === '' ? 0 : text.split(n.old).length - 1
+  return found === 1 ? null : `old text matches ${String(found)} times`
+}
+
+function noted(db: Db, plan: PlanRow, step: Step, n: Note, message: string): void {
+  logged(db, { plan: plan.id, kind: 'note', actor: step.runs, outcome: 'pass', message, pointer: at(n), run: null })
 }
 
 function refused(src: string, base: string | null, n: Note, text: string): string | null {
-  const found = n.old === '' ? 0 : text.split(n.old).length - 1
-  if (found !== 1) return `old text matches ${String(found)} times`
   if (PROSE.test(n.file) || (SCRIPT.test(n.file) && inert(text, swap(text, n)))) return null
   return restores(src, base, n) ? null : 'changes running code'
 }

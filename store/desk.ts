@@ -25,10 +25,11 @@ export interface Approved {
   written_date: string
 }
 
-export function approvedSite(db: Db): Approved[] {
+export function dueSite(db: Db): Approved[] {
   return db.prepare(`SELECT id, COALESCE(edited_title, title) AS title, COALESCE(edited_dek, dek) AS dek,
     COALESCE(edited_body, body) AS body, work_date, written_date
-    FROM desk_posts WHERE dest = 'site' AND status = 'approved' ORDER BY id`).all() as Approved[]
+    FROM desk_posts WHERE dest = 'site' AND (status = 'approved'
+      OR (status = 'proof' AND kind = 'daily' AND julianday(proof_at) <= julianday('now') - 1)) ORDER BY id`).all() as Approved[]
 }
 
 export function published(db: Db, id: number): void {

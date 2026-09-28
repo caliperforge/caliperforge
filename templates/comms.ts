@@ -73,8 +73,8 @@ export function desk(db: Db, root: string, plan: PlanRow): Outcome {
   const { dest, dek, sources, checks, learnings = '' } = fence.data
   const work = /\d{4}-\d{2}-\d{2}$/.exec(title)?.[0] ?? plan.queued_at.slice(0, 10)
   db.transaction(() => {
-    const added = db.prepare(`INSERT OR IGNORE INTO desk_posts (id, kind, dest, status, title, dek, body, sources, checks, work_date, written_date)
-      VALUES (?, ?, ?, 'proof', ?, ?, ?, ?, ?, ?, ?)`).run(plan.id, title.split(' ')[0], dest, (post[1] ?? '').trim(), dek, body,
+    const added = db.prepare(`INSERT OR IGNORE INTO desk_posts (id, kind, dest, status, title, dek, body, sources, checks, work_date, written_date, proof_at)
+      VALUES (?, ?, ?, 'proof', ?, ?, ?, ?, ?, ?, ?, datetime('now'))`).run(plan.id, title.split(' ')[0], dest, (post[1] ?? '').trim(), dek, body,
       JSON.stringify(sources), JSON.stringify(checks), work, new Date().toISOString().slice(0, 10))
     if (added.changes === 0) return
     const old = db.prepare('SELECT items, sources FROM desk_learnings WHERE date = ?').get(work) as { items: string; sources: string } | undefined

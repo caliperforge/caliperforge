@@ -41,8 +41,13 @@ function paths(root: string, ours: Set<string>, gone: Set<string>, l: Said): Nam
   return [...l.text.matchAll(NAMED)]
     .map((m) => ({ id: (m[1] ?? '').replace(/\.+$/, ''), at: m[2] }))
     .filter((n) => ours.has(n.id.split('/')[0] ?? ''))
-    .filter((n) => !gone.has(n.id) && !resolves(join(root, n.id), n.at))
+    .filter((n) => !deleted(gone, n.id) && !resolves(join(root, n.id), n.at))
     .map((n) => ({ id: n.at === undefined ? n.id : `${n.id}:${n.at}`, line: l.line }))
+}
+
+/** A folder the diff empties counts as deleted too: plan 455 named `seats/light_coo/` and was refused (09-28). */
+function deleted(gone: Set<string>, id: string): boolean {
+  return gone.has(id) || [...gone].some((path) => path.startsWith(`${id}/`))
 }
 
 function resolves(path: string, at: string | undefined): boolean {

@@ -137,10 +137,10 @@ test('a seat prompt row above its handback fence is no format change', () => {
   expect(on(prompt([`- ${lua}:7`, '- profiles/solana-foundation/pay-kit.yml:8'], ['- nothing else']))).toBeNull()
 })
 
-test('a seat prompt row in its fence, or with no line, is a format change', () => {
-  const summary = readFileSync(join(repo, lua), 'utf8').split('\n').findIndex((l) => l.startsWith('summary:')) + 1
+test('a seat prompt row reaching into its fence, or with no line, is a format change', () => {
+  const summary = String(readFileSync(join(repo, lua), 'utf8').split('\n').findIndex((l) => l.startsWith('summary:')) + 1)
   const readers = ['- sequencer/rails.ts', '- rails/tight/prose.ts']
-  for (const row of [`- ${lua}:${String(summary)}`, `- ${lua}`]) {
+  for (const row of [`- ${lua}:${summary}`, `- ${lua}:7-${summary}`, `- ${lua}:7,${summary}`, `- ${lua}`]) {
     expect(on(prompt([row], ['- nothing else']))).toMatchObject({ span: 'sequencer/rails.ts' })
     expect(on(prompt([row, '- store/plans.ts'], readers)))
       .toMatchObject({ span: 'store/plans.ts', reason: holding('two jobs in one brief') })

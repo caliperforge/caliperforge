@@ -249,7 +249,7 @@ function asked(body: string, pattern: RegExp): string | undefined {
 function shared(brief: string, src: string): Refused | null {
   const changing = files(brief).map((f) => f.path)
   const listed = [...changing, ...leads(brief, '## Who else reads what this changes')]
-  const rows = pointed(brief)
+  const rows = reached(brief)
   const moving = changing.filter((p) => {
     const lines = rows.filter((r) => r.path === p).map((r) => r.line)
     return !p.endsWith('/prompt.md') || lines.length === 0 || lines.some((l) => l >= lastFence(join(src, p)))
@@ -268,6 +268,15 @@ function lastFence(path: string): number {
   if (!existsSync(path)) return 0
   const fences = readFileSync(path, 'utf8').split('\n').flatMap((l, i) => (l.startsWith('```') ? [i + 1] : []))
   return fences.at(-2) ?? 0
+}
+
+/** A path with the last line a `## Files` row reaches: `a/b.md:40-57` and `a/b.md:7,57` both reach 57. */
+const REACHED = /([A-Za-z0-9_.+-]*\/[A-Za-z0-9_./+-]*\.[A-Za-z0-9]+):([\d,-]+)/g
+
+function reached(brief: string): { path: string; line: number }[] {
+  return section(brief, '## Files').split('\n').filter((l) => /^\s*[-*]/.test(l))
+    .flatMap((l) => [...l.matchAll(REACHED)]
+      .map((m) => ({ path: String(m[1]), line: Math.max(...String(m[2]).split(/[,-]/).map(Number)) })))
 }
 
 function paths(brief: string, src: string): Refused | null {

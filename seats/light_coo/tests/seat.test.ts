@@ -30,7 +30,8 @@ test('D2: the roster carries light_coo, the loader gives it a rules row and the 
 test('D3: the prompt names the moves, the fence and every forced ask_ceo class', () => {
   const prompt = seat(root, 'light_coo').prompt
   for (const part of ['return', 'retry', 'ask_ceo', 'ticket', 'rulings:', 'plan:', 'ruling:', 'ceo_question:', '1,200']) expect(prompt).toContain(part)
-  for (const forced of ['spend', 'posted outside our org', 'pacing of a target', "CEO's name", 'reversing a CEO ruling']) expect(prompt).toContain(forced)
+  const prose = prompt.replace(/\s+/g, ' ')
+  for (const forced of ['spend', 'posted outside our org', 'pacing of a target', "CEO's name", 'reversing a CEO ruling']) expect(prose).toContain(forced)
 })
 
 test('D4: a roster without the light_coo digests fails the check, and an unfilled prompt edit fails the load', () => {

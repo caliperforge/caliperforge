@@ -7,7 +7,7 @@ import { unread } from '../../cli/inbox.ts'
 import { filesOf, record } from '../../store/files.ts'
 import type { Db } from '../../store/index.ts'
 import { profile } from '../../store/profile.ts'
-import { checks, mode, npm, type Ran, type Run } from '../checks.ts'
+import { checks, excluded, mode, npm, type Ran, type Run } from '../checks.ts'
 import { ciFeatures, formatLine, recipes } from '../gates.ts'
 import { tick } from '../index.ts'
 import { faulted, narrow } from '../rails.ts'
@@ -297,6 +297,15 @@ test('D1 xcode runs xcodebuild test with its derived data inside', () => {
   expect(bins).toEqual(['xcodebuild'])
   expect(seen).toEqual([XCODEBUILD])
   expect(readFileSync(join(src, '.git', 'info', 'exclude'), 'utf8')).toContain('.cf-derived/')
+})
+
+test('D1 excluded writes each build-output line once, after a missing newline', () => {
+  const src = tree({})
+  mkdirSync(join(src, '.git', 'info'), { recursive: true })
+  writeFileSync(join(src, '.git', 'info', 'exclude'), '# local')
+  excluded(src)
+  excluded(src)
+  expect(readFileSync(join(src, '.git', 'info', 'exclude'), 'utf8')).toBe('# local\n.cf-derived/\n__pycache__/\n')
 })
 
 test('the caliperforge and atelier profiles run the same commands', () => {

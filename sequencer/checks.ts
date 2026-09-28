@@ -3,13 +3,13 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSyn
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { z } from 'zod'
+import type { Profile } from '../store/profile.ts'
 import { exitedOutside } from './exited.ts'
 import { gates, type Gate, type Outside, type OutsideLanguage } from './gates.ts'
 
 const Package = z.object({ scripts: z.record(z.string(), z.string()).default({}) })
 
-/** The script names `package.json:13` reads, in the order a checkout is judged in. */
-const SCRIPTS = ['typecheck', 'lint', 'test']
+export type Commands = NonNullable<Profile['commands']>
 
 const TAIL = 80
 
@@ -48,10 +48,6 @@ export type Mode = 'xcodebuild' | 'npm' | 'gradle' | 'none' | OutsideLanguage
 /** Derived data stays inside the checkout, under `.cf/work`, and never under a folder macOS guards. */
 export const DERIVED = '.cf-derived'
 
-const XCODE = (project: string): string[] => ['-project', project, '-scheme', project.replace(/\.xcodeproj$/, ''),
-  '-destination', 'platform=macOS', '-derivedDataPath', DERIVED, '-test-timeouts-enabled', 'YES',
-  '-default-test-execution-time-allowance', '60', '-maximum-test-execution-time-allowance', '60', 'test']
-
 const GRADLE = ['-p', 'kotlin', 'check']
 
 export function mode(src: string): Mode {
@@ -70,12 +66,12 @@ function project(src: string): string | null {
  * paths -- every test the import graph says they can reach -- instead of the whole suite. The first pass
  * through step 3 passes none, so every job still runs the suite whole once, against the tree it built on.
  */
-export function checks(src: string, run: Run = npm, narrow: string[] = [], outside: Outside | null = null,
+export function checks(src: string, given: Commands, run: Run = npm, narrow: string[] = [], outside: Outside | null = null,
   touched: string[] = []): Failure | null {
   if (outside !== null) return gated(src, gates(src, outside), run)
   const bin = mode(src)
   if (bin === 'xcodebuild') excluded(src)
-  for (const [script, args] of commands(src, narrow)) {
+  for (const [script, args] of commands(src, given, narrow)) {
     const first = run(args, src, bin)
     if (first.ok) continue
     const retried = loadOnly(first.output) || (bin === 'xcodebuild' && exitedOutside(src, first.output, touched))
@@ -176,13 +172,12 @@ function alone(output: string, script: string, args: string[]): string[] {
 /** A test script that is vitest takes `related`; anything else is run whole, narrow list or not. */
 const VITEST = /(^|\s)vitest(\s|$)/
 
-function commands(src: string, narrow: string[]): [string, string[]][] {
-  const xcode = project(src)
-  if (xcode !== null) return [['test', XCODE(xcode)]]
+function commands(src: string, given: Commands, narrow: string[]): [string, string[]][] {
+  if (project(src) !== null) return given.xcodebuild === undefined ? [] : [['test', given.xcodebuild]]
   if (mode(src) === 'gradle') return [['check', GRADLE]]
   const scripts = read(src)
   if (scripts === null) return []
-  const named = SCRIPTS.filter((s) => scripts[s] !== undefined)
+  const named = (given.npm ?? []).filter((s) => scripts[s] !== undefined)
   return [
     ...(bare(src) ? [['ci', ['ci']] as [string, string[]]] : []),
     ...named.map((s): [string, string[]] => [s, related(scripts[s] ?? '', s, narrow) ?? ['run', s]]),

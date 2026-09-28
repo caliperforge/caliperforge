@@ -19,7 +19,7 @@ import { busy } from '../store/now.ts'
 import { BUILT, laneOff, type PlanRow } from '../store/plans.ts'
 import { profile, type Profile } from '../store/profile.ts'
 import { builder } from '../templates/pr-path.ts'
-import { checks, mode, npm, type Failure, type Run } from './checks.ts'
+import { checks, mode, npm, type Commands, type Failure, type Run } from './checks.ts'
 import { ciChecks } from './ci.ts'
 import { outsideLanguage } from './gates.ts'
 import type { Outcome } from './kind.ts'
@@ -41,7 +41,9 @@ type Rails = Profile['rails']
  */
 export function preReview(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
   const repo = repoOf(db, plan)
-  const on = (repo === null ? null : profile(root, repo))?.rails
+  const read = repo === null ? null : profile(root, repo)
+  const on = read?.rails
+  const commands = read?.commands ?? {}
   const refusal = on?.digests === true ? unfilled(srcDir(root, plan.id)) : null
   if (refusal !== null) return refusal
   const handback = get(root, plan.id, 'step-2.handback.md')
@@ -56,22 +58,22 @@ export function preReview(db: Db, root: string, plan: PlanRow, wire?: Wire): Out
     recordRail(db, join(root, 'rails', rail), plan.id, verdict, 0)
     if (verdict.outcome !== 'pass') return named(rail, verdict)
   }
-  return on?.ratchet === true ? ratchetFirst(db, root, plan, diff, on, wire) : suite(db, root, plan, on, wire)
+  return on?.ratchet === true ? ratchetFirst(db, root, plan, diff, on, commands, wire) : suite(db, root, plan, on, commands, wire)
 }
 
 /** Only findings on paths the diff touches are the job's: the rest is main's debt. A held step comes round again, so it warns once not held. */
-function ratchetFirst(db: Db, root: string, plan: PlanRow, diff: string, on: Rails, wire?: Wire): Outcome {
+function ratchetFirst(db: Db, root: string, plan: PlanRow, diff: string, on: Rails, commands: Commands, wire?: Wire): Outcome {
   const { mode: set, raises } = ratchetRules(db)
   const touched = new Set(parse(diff).map((f) => f.path))
   const found = ratcheted(srcDir(root, plan.id), raises).filter((f) => touched.has(f.path))
   const message = found.map((f) => f.message).join('; ')
   if (found.length > 0 && set === 'refuse') return { outcome: 'refuse', spans: found.map((f) => `ratchet:${f.path}`), note: 'ratchet: the job grew a file past its budget', message }
-  const outcome = suite(db, root, plan, on, wire)
+  const outcome = suite(db, root, plan, on, commands, wire)
   if (found.length > 0 && outcome.held !== true) logged(db, { plan: plan.id, kind: 'ratchet', actor: 'ratchet', outcome: 'pass', message: `would refuse: ${message}`, pointer: null, run: null })
   return outcome
 }
 
-function suite(db: Db, root: string, plan: PlanRow, on: Rails, wire?: Wire): Outcome {
+function suite(db: Db, root: string, plan: PlanRow, on: Rails, commands: Commands, wire?: Wire): Outcome {
   // a stranger's npm scripts never run on this host. A stranger's repo in a language with its own seat runs that
   // language's gates (#204): its builder already ran them at step 2, and a red fork CI after the reviews costs more.
   const local = on?.checks !== undefined
@@ -88,7 +90,7 @@ function suite(db: Db, root: string, plan: PlanRow, on: Rails, wire?: Wire): Out
     if (holder !== null) return { outcome: 'pass', held: true, spans: ['checks'], note: `checks wait: plan ${String(holder.plan)} is running its tests` }
     try {
       const diff = diffOf(root, plan.id)
-      const failed = checks(srcDir(root, plan.id), noted(db, plan.id), outside === null ? narrow(db, plan) : [],
+      const failed = checks(srcDir(root, plan.id), commands, noted(db, plan.id), outside === null ? narrow(db, plan) : [],
         outside === null ? null : { language: outside, files: filesOf(db, plan.id).map((f) => f.path) },
         parse(diff).map((f) => f.path))
       if (failed?.fault !== undefined) return faulted(db, root, plan, failed.fault)

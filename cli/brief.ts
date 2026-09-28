@@ -1,3 +1,4 @@
+import { z } from 'zod'
 import type { Dry, Quiet } from '../sequencer/index.ts'
 import type { Fired } from '../sequencer/kind.ts'
 import { CREDITS } from '../sequencer/ready.ts'
@@ -5,6 +6,8 @@ import { ruled } from '../sequencer/workspace.ts'
 import type { Db } from '../store/index.ts'
 import { name, type LaneState, type WindowRow } from '../store/lanes.ts'
 import { BUILT, type Holder, type Overlap, type Wait } from '../store/plans.ts'
+import { gh, type Read, WINDOW } from './gh.ts'
+import { LANE, LANES } from './plan.ts'
 
 export interface PlanLine {
   id: number
@@ -54,6 +57,58 @@ export function day(db: Db): Day {
     coalesce(sum(input_tokens + cache_read_tokens + output_tokens), 0) AS tokens,
     coalesce(sum(seconds), 0) AS seconds
     FROM runs WHERE julianday(at) >= julianday('now', '-1 day')`).get() as Day
+}
+
+export const ACTORS = ['ceo', 'coo', 'coo_lite', 'orchestrator', 'fixer'] as const
+
+export type Actor = typeof ACTORS[number]
+
+const SEATED: readonly Actor[] = ['coo_lite', 'orchestrator', 'fixer']
+
+export interface ActorRow {
+  actor: Actor
+  kinds: { kind: string; n: number }[]
+  runs: { runs: number; cost: number } | null
+}
+
+export function actors(db: Db, now: Date): ActorRow[] {
+  const at = now.toISOString()
+  const kinds = db.prepare(`SELECT actor, kind, count(*) AS n FROM events
+    WHERE julianday(at) >= julianday(?, '-1 day') GROUP BY actor, kind ORDER BY kind`)
+    .all(at) as { actor: string; kind: string; n: number }[]
+  const runs = db.prepare(`SELECT seat, count(*) AS runs, coalesce(sum(cost_usd), 0) AS cost FROM runs
+    WHERE NOT (${BUILT}) AND julianday(at) >= julianday(?, '-1 day') GROUP BY seat`)
+    .all(at) as { seat: string; runs: number; cost: number }[]
+  return ACTORS.map((actor) => ({
+    actor,
+    kinds: kinds.filter((k) => k.actor === actor).map(({ kind, n }) => ({ kind, n })),
+    runs: SEATED.includes(actor) ? runs.find((r) => r.seat === actor) ?? { runs: 0, cost: 0 } : null,
+  }))
+}
+
+const Merges = z.array(z.object({ headRefName: z.string(), mergedAt: z.string() }))
+
+export function hands(now: Date, read: Read = gh): number {
+  const from = now.getTime() - 86_400_000
+  const since = new Date(from).toISOString().slice(0, 10)
+  return [...new Set(LANES.map((l) => LANE[l].home))].reduce((n, repo) => {
+    const got = Merges.parse(read(['pr', 'list', '--repo', repo, '--state', 'merged', '--search', `merged:>=${since}`,
+      '--limit', String(WINDOW), '--json', 'headRefName,mergedAt']))
+    if (got.length === WINDOW) throw new Error(`${repo} lists ${String(WINDOW)} merged PRs, the limit; the count may be cut short`)
+    return n + got.filter((p) => p.headRefName.startsWith('hand-') &&
+      Date.parse(p.mergedAt) >= from && Date.parse(p.mergedAt) <= now.getTime()).length
+  }, 0)
+}
+
+function actorLine(r: ActorRow): string {
+  const n = r.kinds.reduce((sum, k) => sum + k.n, 0)
+  const kinds = r.kinds.length === 0 ? '-' : r.kinds.map((k) => `${k.kind} ${String(k.n)}`).join(', ')
+  const runs = r.runs === null ? '' : `\t${String(r.runs.runs)} run(s)\t$${r.runs.cost.toFixed(2)}`
+  return `  ${r.actor}\t${String(n)} intervention(s)\t${kinds}${runs}\n`
+}
+
+export function actorSection(rows: ActorRow[], hands: number): string {
+  return `last 24 h by actor\n${rows.map(actorLine).join('')}  hand PRs merged\t${String(hands)}\n`
 }
 
 /** CEO 2026-09-19 12:15: per-ticket usage is read as two eras, split at this instant. */

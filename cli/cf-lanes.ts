@@ -13,7 +13,7 @@ import { repriced } from '../store/events.ts'
 import { holderOf, HOLDERS, overlapWaits } from '../store/plans.ts'
 import { backfillTickets } from '../store/tickets.ts'
 import { backfill } from '../store/transcript.ts'
-import { byType, type ByType, day, fileWaits, greptileLine, halted, heldBy, laneLine, open as openPlans, rulings, section, tickets, ticketSection, waitLine,
+import { actors, actorSection, byType, type ByType, day, fileWaits, greptileLine, halted, hands, heldBy, laneLine, open as openPlans, rulings, section, tickets, ticketSection, waitLine,
   waits, windowLine } from './brief.ts'
 import { check, fill } from './digests.ts'
 import { flow } from './flow.ts'
@@ -173,6 +173,10 @@ export function registerSession(cf: Command, { root, db, out }: Cli): void {
     out(lines.length === 0 ? 'flow clear\n' : lines.join(''))
   })
 
+  briefs(cf, { root, db, out })
+}
+
+function briefs(cf: Command, { root, db, out }: Cli): void {
   cf.command('brief').action(() => {
     const handle = db()
     out(livenessLine(handle, liveness(handle, new Date())))
@@ -187,6 +191,8 @@ export function registerSession(cf: Command, { root, db, out }: Cli): void {
     out(section('waiting on the COO', heldBy(handle, 'coo')))
     const d = day(handle)
     out(`last 24 h\n  ${String(d.runs)} run(s)\t${String(d.tokens)} tokens\t${d.seconds.toFixed(1)}s\n`)
+    const now = new Date()
+    out(actorSection(actors(handle, now), hands(now, gh)))
     out(ticketSection(tickets(handle)))
   })
 }

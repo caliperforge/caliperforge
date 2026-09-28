@@ -53,10 +53,24 @@ test('D1 the commit and PR rules parse, and a wrong issue_ref or ai_trailer is r
 })
 
 test('#498a D1 our two repos name their builder and rails', () => {
+  const atelier = profile(REPO, 'caliperforge/atelier')
   expect(profile(REPO, 'caliperforge/caliperforge')).toEqual({ builder: 'typescript_specialist',
-    rails: { digests: true, ratchet: true, fence: true, tight_code: true, checks: 'ci' } })
-  expect(profile(REPO, 'caliperforge/atelier')).toEqual({ builder: 'swift_specialist',
-    rails: { digests: false, ratchet: false, fence: false, tight_code: true, checks: 'local' } })
+    rails: { digests: true, ratchet: true, fence: true, tight_code: true, checks: 'ci' },
+    commands: { npm: ['typecheck', 'lint', 'test'] } })
+  expect(atelier).toEqual({ builder: 'swift_specialist',
+    rails: { digests: false, ratchet: false, fence: false, tight_code: true, checks: 'local' },
+    commands: { xcodebuild: atelier?.commands?.xcodebuild } })
+})
+
+test('#539a D2 atelier holds the xcodebuild args checks.ts builds today', () => {
+  expect(profile(REPO, 'caliperforge/atelier')?.commands?.xcodebuild?.join(' ')).toBe('-project Atelier.xcodeproj -scheme Atelier -destination platform=macOS -derivedDataPath .cf-derived -test-timeouts-enabled YES -default-test-execution-time-allowance 60 -maximum-test-execution-time-allowance 60 test')
+})
+
+test('#539a D3 D4 a command outside npm and xcodebuild, or an unquoted 60, is refused naming the file', () => {
+  for (const commands of ['{ gradle: [check] }', '{ xcodebuild: [-default-test-execution-time-allowance, 60] }']) {
+    const dir = root({ 'widget.yml': `commands: ${commands}\n` })
+    expect(() => profile(dir, 'acme/widget')).toThrow(join(dir, 'profiles/acme/widget.yml'))
+  }
 })
 
 test('#498a D2 a rail outside the five, a rail that is not a boolean, or checks on github, is refused naming the file', () => {
@@ -66,7 +80,7 @@ test('#498a D2 a rail outside the five, a rail that is not a boolean, or checks 
   }
 })
 
-test('D3 a field outside the thirteen, or checks that are not string lists, is refused naming the file', () => {
+test('D3 a field outside the fourteen, or checks that are not string lists, is refused naming the file', () => {
   const extra = root({ '_org.yml': 'commit: x\nlabels: [bug]\n' })
   expect(() => profile(extra, 'acme/widget')).toThrow(join(extra, 'profiles/acme/_org.yml'))
   const checks = root({ '_org.yml': 'checks:\n  go: lint\n' })

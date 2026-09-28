@@ -6,6 +6,7 @@ import { expect, test } from 'vitest'
 import { registerLanes } from '../../cli/cf-lanes.ts'
 import { registerPlans, registerRetry } from '../../cli/cf-plans.ts'
 import { migrate, open } from '../../store/index.ts'
+import { drop, take } from '../../store/leases.ts'
 import { held, terminal, type Holder } from '../../store/plans.ts'
 import { WHY } from '../../store/refusals.ts'
 import { hold, isHeld, unhold } from '../hold.ts'
@@ -112,6 +113,61 @@ test('cf return prints the step the plan runs next', () => {
   registerPlans(cf, { root: home, db: () => db, out: (line: string) => { printed.push(line) } })
   cf.parse(['return', '7', '--by', 'ceo'], { from: 'user' })
   expect(printed).toEqual(['plan 7 queued at step 2\n'])
+})
+
+function driven() {
+  const { db, home } = seeded()
+  const printed: string[] = []
+  const cf = new Command()
+  registerPlans(cf, { root: home, db: () => db, out: (line: string) => { printed.push(line) } })
+  const run = (...args: string[]) => cf.parse(args, { from: 'user' })
+  const closes = () => db.prepare("SELECT actor, outcome, message FROM events WHERE kind = 'close'").all()
+  return { db, printed, run, closes }
+}
+
+test('D4 cf close refuses the plan by default, keeps its step and logs one close event', () => {
+  const { db, printed, run, closes } = driven()
+  run('close', '7', '--why', 'x', '--by', 'coo')
+  expect(row(db)).toEqual({ state: 'refused', step: 4, waits_on: null })
+  expect(closes()).toEqual([{ actor: 'coo', outcome: 'refuse', message: 'x' }])
+  expect(printed).toEqual(['plan 7 refused\n'])
+  expect(terminal(db)).toContain(7)
+})
+
+test('D4 cf close --as done finishes the plan with a pass event', () => {
+  const { db, run, closes } = driven()
+  run('close', '7', '--why', 'landed by hand', '--by', 'ceo', '--as', 'done')
+  expect(row(db)).toEqual({ state: 'done', step: 4, waits_on: null })
+  expect(closes()).toEqual([{ actor: 'ceo', outcome: 'pass', message: 'landed by hand' }])
+})
+
+test('D5 cf close and cf files on a missing plan write nothing', () => {
+  const { db, run } = driven()
+  expect(() => run('close', '99', '--why', 'x', '--by', 'coo')).toThrow('no plan 99')
+  expect(() => run('files', '99', 'add', 'a.ts', '--by', 'coo')).toThrow('no plan 99')
+  expect(db.prepare('SELECT count(*) AS n FROM plan_files WHERE plan = 99').get()).toEqual({ n: 0 })
+  expect(db.prepare('SELECT count(*) AS n FROM events WHERE plan = 99').get()).toEqual({ n: 0 })
+})
+
+test('D6 a bad holder, a bad --as, a closed plan and a leased plan are refused before any write', () => {
+  const { db, run, closes } = driven()
+  expect(() => run('close', '7', '--why', 'x', '--by', 'cto')).toThrow('--by takes ceo or coo, not cto')
+  expect(() => run('files', '7', 'add', 'a.ts', '--by', 'cto')).toThrow('--by takes ceo or coo, not cto')
+  expect(() => run('close', '7', '--why', 'x', '--by', 'coo', '--as', 'halted')).toThrow('--as takes refused or done, not halted')
+  take(db, 7)
+  expect(() => run('close', '7', '--why', 'x', '--by', 'coo')).toThrow(/mid-step in a live tick/)
+  expect(row(db)).toEqual({ state: 'running', step: 4, waits_on: null })
+  expect(closes()).toEqual([])
+  drop(db, 7)
+  db.exec("UPDATE plans SET state = 'done' WHERE id = 7")
+  expect(() => run('close', '7', '--why', 'x', '--by', 'coo')).toThrow('plan 7 is already done')
+  expect(closes()).toEqual([])
+})
+
+test('cf files prints the edit it made', () => {
+  const { printed, run } = driven()
+  run('files', '7', 'add', 'a.ts', '--by', 'coo')
+  expect(printed).toEqual(['plan 7 add a.ts\n'])
 })
 
 function ran(db: ReturnType<typeof open>, home: string, args: string[]): void {

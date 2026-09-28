@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { expect, it } from 'vitest'
-import { dump, migrate, open } from './index.ts'
+import { addRule, dump, migrate, open, rules } from './index.ts'
 import { get, set, windows } from './lanes.ts'
 import { setLimit } from './limits.ts'
 import { addPart, allParts } from './parts.ts'
@@ -105,6 +105,24 @@ it('dumps a database that replays into an identical one', () => {
   const replay = open(':memory:')
   replay.exec(readFileSync(out, 'utf8'))
   expect(replay.prepare('SELECT id FROM rules').all()).toEqual([{ id: 'r' }])
+})
+
+it('D1 D3: a new file opens in WAL mode with a 10 second busy timeout', () => {
+  const db = open(join(mkdtempSync(join(tmpdir(), 'cf-wal-')), 'cf.db'))
+  expect(db.pragma('journal_mode', { simple: true })).toBe('wal')
+  expect(db.pragma('busy_timeout', { simple: true })).toBe(10000)
+})
+
+it('D2 D4: a write commits while a second connection holds a read transaction', () => {
+  const path = join(mkdtempSync(join(tmpdir(), 'cf-wal-')), 'cf.db')
+  const writer = open(path)
+  migrate(writer, join(root, 'schema'))
+  const reader = open(path)
+  reader.exec('BEGIN')
+  expect(reader.prepare('SELECT count(*) AS n FROM rules').get()).toEqual({ n: 0 })
+  addRule(writer, { id: 'r', kind: 'rail', path: 'rules/rails.yaml', content_hash: 'a'.repeat(64), loaded_at: '2026-09-28' })
+  expect(rules(writer).map((r) => r.id)).toEqual(['r'])
+  reader.exec('COMMIT')
 })
 
 it('a schema file that fails leaves the version and the half-written table behind', () => {

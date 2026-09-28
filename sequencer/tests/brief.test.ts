@@ -217,7 +217,8 @@ test('step 1 fires the seat once, saves the brief, goes to build', async () => {
   const fired = (await tick(w.db, w.root, stub(CARRIED, 0, undefined, (p) => packets.push(p))))[0]
 
   expect(fired).toMatchObject({ step: 1, name: 'ruling', outcome: 'pass' })
-  expect(packets.map((p) => p.tools)).toEqual([['Read', 'Glob', 'Grep']])
+  expect(packets.map((p) => p.tools)).toEqual([['Read', 'Glob', 'Grep', 'mcp__github__read']])
+  expect(Object.keys(packets[0]?.servers ?? {})).toEqual(['github'])
   expect(packets[0]?.refuse('src/hello.ts')).toMatchObject({ origin_ref: 'seat.write_paths' })
   expect(shape(briefOf(w), askOf(w), srcDir(w.root, ID))).toBeNull()
   expect(titleOf(w.root, ID)).toBe('let an internal plan run')

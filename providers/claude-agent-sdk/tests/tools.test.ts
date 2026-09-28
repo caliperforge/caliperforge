@@ -1,6 +1,7 @@
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import type { McpSdkServerConfigWithInstance } from '@anthropic-ai/claude-agent-sdk'
 import { expect, test, vi } from 'vitest'
 import type { Packet } from '../../kind.ts'
 
@@ -41,6 +42,15 @@ test('a packet carrying steps sends them as the query turn limit, and one withou
   expect(sent.at(-1)?.maxTurns).toBe(3)
   await claudeAgentSdk.fire(packet(['Read']))
   expect(sent.at(-1)).not.toHaveProperty('maxTurns')
+})
+
+test('a packet carrying servers sends them as mcpServers, and one without sends none', async () => {
+  const servers = { github: {} as McpSdkServerConfigWithInstance }
+  await claudeAgentSdk.fire({ ...packet(['Read', 'mcp__github__read']), servers })
+  expect(sent.at(-1)?.mcpServers).toBe(servers)
+  expect(sent.at(-1)?.tools).toEqual(['Read', 'mcp__github__read'])
+  await claudeAgentSdk.fire(packet(['Read']))
+  expect(sent.at(-1)).not.toHaveProperty('mcpServers')
 })
 
 test('a builder packet offers Bash once, under its bare name, and the patterns stay on allowedTools', async () => {

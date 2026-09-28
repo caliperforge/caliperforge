@@ -6,8 +6,10 @@ import type { Note } from '../reviews/verdict.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { internal, type PlanRow } from '../store/plans.ts'
+import { profile } from '../store/profile.ts'
 import type { Step } from '../templates/pr-path.ts'
 import { checks } from './checks.ts'
+import { homeOf } from './home.ts'
 import type { Outcome } from './kind.ts'
 import { diffOf, git, holds, maybe, srcDir } from './workspace.ts'
 
@@ -64,7 +66,7 @@ export function landed(db: Db, root: string, plan: PlanRow, step: Step, notes: N
   }
   for (const [n, reason] of skipped) noted(db, plan, step, n, `dropped: ${reason}`)
   write(src, after)
-  const failed = internal(plan) && kept.length > 0 ? checks(src) : null
+  const failed = internal(plan) && kept.length > 0 ? checks(src, profile(root, homeOf(plan))?.commands ?? {}) : null
   if (failed !== null) write(src, before)
   const dropped = failed === null ? null : `dropped: ${failed.script} failed after the notes`
   for (const n of kept) noted(db, plan, step, n, dropped ?? `${n.kind}: ${n.why}`)

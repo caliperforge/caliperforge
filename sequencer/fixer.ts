@@ -17,6 +17,7 @@ import { pending } from '../store/transcript.ts'
 import { hold, unhold } from './hold.ts'
 import { prose } from './prose.ts'
 import { WIRE, type Wire } from './push.ts'
+import { rule } from './rule.ts'
 import { recorded } from './seat.ts'
 import { afresh, cloned, drop, maybe, move, planDir, put, SELF, titleOf } from './workspace.ts'
 
@@ -45,6 +46,7 @@ const Fix = z.object({
   ticket: z.string().trim().min(1).max(140).optional(),
   add_files: z.array(z.string().trim().min(1)).optional(),
   waits_on: z.coerce.number().int().positive().optional(),
+  answer: z.string().trim().min(1).max(1200).optional(),
 }).strict().refine((f) => f.then !== 'ticket' || f.ticket !== undefined, { path: ['ticket'] })
   .refine((f) => f.then !== 'wait' || f.waits_on !== undefined, { path: ['waits_on'] })
 
@@ -167,7 +169,9 @@ export function released(db: Db, root: string, now: Date, post: Post): void {
 function apply(db: Db, root: string, plan: PlanRow, f: Fix, wire: Wire, now: Date): string {
   for (const path of f.add_files ?? []) listed(db, plan.id, path)
   if (plan.state !== 'blocked_on_ceo' && plan.state !== 'halted') return 'escalated'
-  switch (f.then) {
+  const to = f.answer === undefined ? undefined : rule(db, root, plan, 'fixer', f.answer)
+  if (to === null) return 'escalated'
+  switch (to === 'issue.md' && f.then === 'return' ? 'retry' : f.then) {
     case 'return': afresh(root, plan.id, returnToLane(db, plan.id, 'fixer')); return 'return'
     case 'retry': {
       const step = db.transaction(() => { clear(db, plan.id); return retry(db, plan) })()
@@ -220,7 +224,7 @@ function issue(db: Db, root: string, plan: PlanRow, decision: { why: string }, m
 function read(text: string): Fix | null {
   const fence = /^---\n([\s\S]*?)\n---$/m.exec(text)?.[1]
   if (fence === undefined) return null
-  const got = Fix.safeParse(prose(fence, ['did', 'then', 'why', 'ticket']) ?? lines(fence))
+  const got = Fix.safeParse(prose(fence, ['did', 'then', 'why', 'ticket', 'answer']) ?? lines(fence))
   return got.success ? got.data : null
 }
 

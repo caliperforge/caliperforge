@@ -1,5 +1,5 @@
-import { realpathSync } from 'node:fs'
-import { join, relative, resolve } from 'node:path'
+import { existsSync, realpathSync } from 'node:fs'
+import { basename, dirname, join, relative, resolve } from 'node:path'
 import type { Packet, Provider, Refusal } from '../providers/kind.ts'
 import { runLogged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
@@ -24,12 +24,11 @@ export function refuse(cwd: string, writePaths: string[], path: string, ours = f
   return inside ? null : { origin_kind: 'ruling', origin_ref: 'seat.write_paths', path: rel }
 }
 
+/** A file not yet on disk resolves through its nearest existing parent: plan 438's new file, named through the tick's symlinked `.cf`, read as outside the checkout (09-28). */
 function real(path: string): string {
-  try {
-    return realpathSync(path)
-  } catch {
-    return path
-  }
+  if (existsSync(path)) return realpathSync(path)
+  const parent = dirname(path)
+  return parent === path ? path : join(real(parent), basename(path))
 }
 
 /** A stranger's npm scripts never run on this host (sequencer/rails.ts); their fork CI is their check. */

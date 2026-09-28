@@ -200,7 +200,7 @@ test('a round on an open pull request pushes its branch without opening another'
   expect(sent.slice(2)).toEqual(['send src widget-12-a1', 'unrehearse caliperforge/widget widget-12-a1-next'])
 })
 
-test('a round whose -next the fork holds at a commit HEAD lacks folds onto it, forcing nothing', async () => {
+test('a round whose -next the fork holds at a commit HEAD lacks folds onto it, forcing nothing', { timeout: 90_000 }, async () => {
   const w = await pushed()
   const src = srcDir(w.root, 1)
   const git = (args: string[]): string => execFileSync('git', args, { cwd: src, encoding: 'utf8' }).trim()

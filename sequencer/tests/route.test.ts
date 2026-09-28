@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
@@ -6,7 +6,7 @@ import { fresh } from '../../checks/sqlite.ts'
 import { record } from '../../store/files.ts'
 import type { Db } from '../../store/index.ts'
 import { PlanRow } from '../../store/plans.ts'
-import { builder } from '../../templates/pr-path.ts'
+import { builder, languageOfSeat } from '../../templates/pr-path.ts'
 import { BRIEF_FILES, fenceFor, languageFor, languageOfPath, majority } from '../route.ts'
 
 const schema = join(import.meta.dirname, '../../schema')
@@ -18,7 +18,7 @@ function monorepo(): string {
   return dir
 }
 
-function world(): { db: Db; target: PlanRow; ours: PlanRow } {
+function world(): { db: Db; target: PlanRow; ours: PlanRow; hooks: PlanRow } {
   const db = fresh(schema)
   db.prepare(`INSERT INTO accounts (id, repo, measured_at, maintainers, doors, last_outsider_merge,
     open_pr_age_p50_days, cross_repo_activity, pulse, evidence)
@@ -28,8 +28,10 @@ function world(): { db: Db; target: PlanRow; ours: PlanRow } {
   db.prepare(`INSERT INTO plans (id, pipe_id, target_id, template, state, queued_at) VALUES (1, 1, 1, 'pr_path', 'running', '2026-09-21')`).run()
   db.prepare(`INSERT INTO plans (id, pipe_id, template, state, queued_at, lane, seat, origin)
     VALUES (2, 1, 'pr_path', 'running', '2026-09-21', 'machine', 'typescript_specialist', 'https://github.com/caliperforge/caliperforge/issues/1')`).run()
+  db.prepare(`INSERT INTO plans (id, pipe_id, template, state, queued_at, lane, seat, origin)
+    VALUES (3, 1, 'pr_path', 'running', '2026-09-21', 'uniswap', 'python_specialist', 'https://github.com/caliperforge/v4-hook-index/issues/1')`).run()
   const row = (id: number): PlanRow => PlanRow.parse(db.prepare('SELECT * FROM plans WHERE id = ?').get(id))
-  return { db, target: row(1), ours: row(2) }
+  return { db, target: row(1), ours: row(2), hooks: row(3) }
 }
 
 const listed = (paths: string[]) => paths.map((path) => ({ path, is_new: false }))
@@ -86,6 +88,29 @@ test('a change wholly under kotlin/ still goes to the kotlin seat', () => {
 test('our own plans stay with the typescript seat', () => {
   const w = world()
   expect(builder(languageFor(w.db, w.ours, monorepo()))).toBe('typescript_specialist')
+})
+
+test('an empty repo of ours goes to the plan\'s seat', () => {
+  const w = world()
+  expect(builder(languageFor(w.db, w.hooks, mkdtempSync(join(tmpdir(), 'cf-route-'))))).toBe('python_specialist')
+})
+
+test('a repo of ours with a language goes by its tree, not the plan\'s seat', () => {
+  const w = world()
+  const dir = mkdtempSync(join(tmpdir(), 'cf-route-'))
+  writeFileSync(join(dir, 'Cargo.toml'), '')
+  expect(builder(languageFor(w.db, w.hooks, dir))).toBe('rust_specialist')
+})
+
+test('an empty repo of ours with no seat falls to the default builder', () => {
+  const w = world()
+  expect(builder(languageFor(w.db, { ...w.hooks, seat: null }, mkdtempSync(join(tmpdir(), 'cf-route-'))))).toBe('typescript_specialist')
+})
+
+test('a seat no language builds with has no language', () => {
+  expect(languageOfSeat('brief_writer')).toBeNull()
+  expect(languageOfSeat(null)).toBeNull()
+  expect(languageOfSeat('python_specialist')).toBe('python')
 })
 
 test('the brief-files fence is the brief\'s paths; any other fence is the manifest\'s', () => {

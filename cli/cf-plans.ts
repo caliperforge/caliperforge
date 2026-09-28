@@ -4,7 +4,8 @@ import { hold, unhold } from '../sequencer/hold.ts'
 import { afresh, reap } from '../sequencer/workspace.ts'
 import { blocked, parked, WAITING } from '../sequencer/steps.ts'
 import { logged } from '../store/events.ts'
-import { release, retried } from '../store/holds.ts'
+import { edit, VERBS } from '../store/files.ts'
+import { closed, release, retried } from '../store/holds.ts'
 import { hhmm, lanes } from '../store/lanes.ts'
 import { holder } from '../store/leases.ts'
 import { held, holderOf, HOLDERS, PlanRow, terminal } from '../store/plans.ts'
@@ -20,6 +21,7 @@ export function registerPlans(cf: Command, cli: Cli): void {
   shown(planned(cf, cli), cli)
   holds(cf, cli)
   parks(cf, cli)
+  closes(cf, cli)
 }
 
 function queues(cf: Command, { root, db, out }: Cli): void {
@@ -161,6 +163,32 @@ function parks(cf: Command, { root, db, out }: Cli): void {
     .action((id: string, options: { by: string }) => {
       const step = unhold(db(), root, Number(id), holderOf(options.by))
       out(`plan ${id} queued at step ${String(step)}\n`)
+    })
+}
+
+function closes(cf: Command, { db, out }: Cli): void {
+  cf.command('files').argument('<plan>').argument('<verb>', VERBS.join(', ')).argument('<path>')
+    .requiredOption(...BY)
+    .option('--why <text>', 'why the list changes')
+    .action((id: string, said: string, path: string, options: { by: string; why?: string }) => {
+      const by = holderOf(options.by)
+      const verb = VERBS.find((v) => v === said)
+      if (verb === undefined) throw new Error(`<verb> takes ${VERBS.join(', ')}, not ${said}`)
+      edit(db(), Number(id), verb, path, by, options.why ?? null)
+      out(`plan ${id} ${verb} ${path}\n`)
+    })
+
+  cf.command('close').argument('<plan>', 'a plan settled by hand, checkout kept for cf reap')
+    .requiredOption('--why <text>', 'why it is closed')
+    .requiredOption(...BY)
+    .option('--as <state>', 'refused or done', 'refused')
+    .action((id: string, options: { why: string; by: string; as: string }) => {
+      const by = holderOf(options.by)
+      if (options.as !== 'refused' && options.as !== 'done') throw new Error(`--as takes refused or done, not ${options.as}`)
+      const handle = db()
+      if (holder(handle, Number(id)) !== null) throw new Error(`plan ${id} is mid-step in a live tick; close it once the tick lets go`)
+      closed(handle, Number(id), options.as, by, options.why)
+      out(`plan ${id} ${options.as}\n`)
     })
 }
 

@@ -216,6 +216,45 @@ export function byType(t: ByType): string {
     `\t${String(t.cache_read_tokens)} cache read\t${String(t.output_tokens)} output`
 }
 
+export interface Cost extends ByType {
+  provider: string
+  model: string
+  runs: number
+  computed: number | null
+  reported: number | null
+}
+
+interface Model { provider: string; model: string }
+
+const LAST_DAY = "julianday(at) >= julianday('now', '-1 day')"
+
+export function costs(db: Db): Cost[] {
+  return db.prepare(`SELECT provider, model, count(*) AS runs,
+    sum(input_tokens - coalesce(cache_write_tokens, 0)) AS uncached_tokens, sum(coalesce(cache_write_tokens, 0)) AS cache_write_tokens,
+    sum(cache_read_tokens) AS cache_read_tokens, sum(output_tokens) AS output_tokens,
+    sum(cost_computed_usd) AS computed, sum(cost_usd) AS reported
+    FROM runs WHERE ${LAST_DAY} GROUP BY provider, model ORDER BY provider, model`).all() as Cost[]
+}
+
+export function unpriced(db: Db): Model[] {
+  return db.prepare(`SELECT DISTINCT provider, model FROM runs r WHERE ${LAST_DAY}
+    AND NOT EXISTS (SELECT 1 FROM prices p WHERE p.provider = r.provider AND p.model = r.model
+      AND julianday(p.effective_from) <= julianday(r.at))
+    ORDER BY provider, model`).all() as Model[]
+}
+
+function usd(n: number | null): string {
+  return n === null ? '-' : `$${n.toFixed(4)}`
+}
+
+export function costSection(rows: Cost[], missing: Model[]): string {
+  const lines = rows.map((c) => `  ${c.provider}/${c.model}\t${String(c.runs)} run(s)\t${byType(c)}` +
+    `\tcomputed ${usd(c.computed)}\treported ${usd(c.reported)}\n`)
+  const body = rows.length === 0 ? '  none\n' : lines.join('')
+  return `cost last 24 h by model (${String(rows.length)})\n${body}` +
+    missing.map((m) => `  no price row\t${m.provider}/${m.model}\n`).join('')
+}
+
 /** `cf tick --dry`: the clock the windows are read against, the lanes open, and what each holds. */
 export function dryLines(d: Dry): string {
   const head = `tick --dry\t${d.hhmm} ${offset(d.zone)}\tcap ${name(d.cap)}\t${String(d.pipes)} pipe(s) open\n`

@@ -1,6 +1,8 @@
+import { z } from 'zod'
 import { landed, type Landed } from '../cli/batch.ts'
 import { ours } from '../cli/gh.ts'
 import type { Outcome } from '../sequencer/kind.ts'
+import { prose } from '../sequencer/prose.ts'
 import { get, maybe, put } from '../sequencer/workspace.ts'
 import type { Db } from '../store/index.ts'
 import type { PlanRow } from '../store/plans.ts'
@@ -36,8 +38,19 @@ function sound(line: string, known: Set<string>): boolean {
     && (tags.length > 0 || line.startsWith('#')) && tags.every((t) => known.has(t))
 }
 
-export function drafted(reply: string): { learnings: string; post: string } | null {
-  const fence = /(?:^|\n)---\nlearnings:(.*)\n---\s*$/.exec(reply)
-  const learnings = (fence?.[1] ?? '').trim()
-  return fence === null || learnings === '' ? null : { learnings, post: reply.slice(0, fence.index).trim() }
+const REF = /^(https:\/\/\S+|[\w-][\w./-]*:[1-9]\d*)$/
+
+const Fence = z.object({
+  learnings: z.string().trim().min(1),
+  dest: z.enum(['site', 'substack', 'note']),
+  dek: z.string().trim().min(1).max(160).regex(/^[^`*_#[\]<>~]*$/),
+  sources: z.array(z.object({ claim: z.string().trim().min(1), ref: z.string().regex(REF) })),
+  checks: z.array(z.object({ label: z.string().trim().min(1), ok: z.boolean() })),
+})
+
+export function drafted(reply: string): (z.infer<typeof Fence> & { post: string }) | null {
+  const fence = /(?:^|\n)---\n((?:\w+:.*\n)+)---\s*$/.exec(reply)
+  if (fence === null) return null
+  const got = Fence.safeParse(prose(fence[1] ?? '', ['learnings', 'dek']))
+  return got.success ? { ...got.data, post: reply.slice(0, fence.index).trim() } : null
 }

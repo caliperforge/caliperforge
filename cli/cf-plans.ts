@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { hold, unhold } from '../sequencer/hold.ts'
 import { afresh, reap } from '../sequencer/workspace.ts'
 import { blocked, parked, WAITING } from '../sequencer/steps.ts'
+import { logged } from '../store/events.ts'
 import { release, retried } from '../store/holds.ts'
 import { hhmm, lanes } from '../store/lanes.ts'
 import { holder } from '../store/leases.ts'
@@ -11,6 +12,8 @@ import { laneLine, open as openPlans, runsOf, section, verdictsOf } from './brie
 import type { Cli } from './cf-lanes.ts'
 import { add as fileIssue, render as renderUnfiled, unfiled } from './plan.ts'
 import { add, note } from './queue.ts'
+
+const BY = ['--by <actor>', `who ran it: ${HOLDERS.join(' or ')}`] as const
 
 export function registerPlans(cf: Command, cli: Cli): void {
   queues(cf, cli)
@@ -107,22 +110,32 @@ function holds(cf: Command, { root, db, out }: Cli): void {
     out(`reaped ${String(gone.length)} checkout(s)${gone.length === 0 ? '' : `: ${gone.join(', ')}`}\n`)
   })
 
-  cf.command('release').argument('<plan>', 'a briefed plan waiting on the coo to read it').action((id: string) => {
-    release(db(), Number(id))
-    out(`plan ${id} queued\n`)
-  })
+  cf.command('release').argument('<plan>', 'a briefed plan waiting on the coo to read it').requiredOption(...BY)
+    .action((id: string, options: { by: string }) => {
+      release(db(), Number(id), holderOf(options.by))
+      out(`plan ${id} queued\n`)
+    })
 
-  cf.command('return').argument('<plan>', 'a plan blocked on the ceo, held or halted').action((id: string) => {
-    const step = unhold(db(), root, Number(id), 'ceo')
-    out(`plan ${id} queued at step ${String(step)}\n`)
-  })
+  cf.command('return').argument('<plan>', 'a plan blocked on the ceo, held or halted').requiredOption(...BY)
+    .action((id: string, options: { by: string }) => {
+      const step = unhold(db(), root, Number(id), holderOf(options.by))
+      out(`plan ${id} queued at step ${String(step)}\n`)
+    })
+
+  cf.command('unpark').argument('<plan>', 'a held plan, put back at the step it stopped on').requiredOption(...BY)
+    .action((id: string, options: { by: string }) => {
+      const step = unhold(db(), root, Number(id), holderOf(options.by))
+      out(`plan ${id} queued at step ${String(step)}\n`)
+    })
 }
 
 function parks(cf: Command, { root, db, out }: Cli): void {
   cf.command('park').argument('<plan>', 'a plan to hold where it stands, checkout kept')
     .option('--on <plan>', 'the plan it waits on; it goes back in its lane when that one lands')
     .option('--why <text>', 'why it is held', 'held by a person')
-    .action((id: string, options: { on?: string; why: string }) => {
+    .requiredOption(...BY)
+    .action((id: string, options: { on?: string; why: string; by: string }) => {
+      const actor = holderOf(options.by)
       const handle = db()
       const n = Number(id)
       if (holder(handle, n) !== null) throw new Error(`plan ${id} is mid-step in a live tick; park it once the tick lets go`)
@@ -131,33 +144,33 @@ function parks(cf: Command, { root, db, out }: Cli): void {
         throw new Error(`plan ${String(on)} is not open, so nothing would release plan ${id}`)
       }
       hold(handle, root, n, options.why, new Date(), on)
+      logged(handle, { plan: n, kind: 'park', actor, outcome: 'pass', message: options.why, pointer: null, run: null })
       out(`plan ${id} held${on === null ? '' : ` on plan ${String(on)}`}\n`)
     })
 
   cf.command('hold').argument('<plan>', 'a plan to hold where it stands, checkout kept')
     .requiredOption('--by <holder>', `who it waits on: ${HOLDERS.join(' or ')}`)
     .requiredOption('--why <text>', 'why it is held')
-    .action((id: string, options: { by: string; why: string }) => {
+    .requiredOption('--as <actor>', `who ran it: ${HOLDERS.join(' or ')}`)
+    .action((id: string, options: { by: string; why: string; as: string }) => {
       const by = holderOf(options.by)
+      const actor = holderOf(options.as)
       const handle = db()
       const n = Number(id)
       if (holder(handle, n) !== null) throw new Error(`plan ${id} is mid-step in a live tick; hold it once the tick lets go`)
       hold(handle, root, n, options.why, new Date())
       held(handle, n, by, options.why)
+      logged(handle, { plan: n, kind: 'hold', actor, outcome: 'pass', message: options.why, pointer: null, run: null })
       out(`plan ${id} held on the ${by}\n`)
     })
-
-  cf.command('unpark').argument('<plan>', 'a held plan, put back at the step it stopped on').action((id: string) => {
-    const step = unhold(db(), root, Number(id), 'ceo')
-    out(`plan ${id} queued at step ${String(step)}\n`)
-  })
 }
 
 export function registerRetry(cf: Command, { root, db, out }: Cli): void {
   cf.command('retry').argument('<plan>', 'a plan blocked on a refusal, sent round again with its count cleared')
-    .action((id: string) => {
+    .requiredOption(...BY)
+    .action((id: string, options: { by: string }) => {
       const n = Number(id)
-      const step = retried(db(), n, 'ceo')
+      const step = retried(db(), n, holderOf(options.by))
       afresh(root, n, step)
       out(`plan ${id} running again at step ${String(step)}\n`)
     })

@@ -500,7 +500,7 @@ test('released, the plan queues at step 2 and the builder fires', async () => {
   const w = await unread()
   await tick(w.db, w.root, stub(CARRIED))
 
-  release(w.db, ID)
+  release(w.db, ID, 'coo')
   expect(plan(w.db, ID)).toMatchObject({ step: 2, state: 'queued' })
   expect((await tick(w.db, w.root, stub(CARRIED)))[0]).toMatchObject({ step: 2, name: 'build', outcome: 'pass' })
 })
@@ -528,7 +528,7 @@ test('release refuses a plan parked at step 1 and moves no row', async () => {
   await tick(w.db, w.root, stub(CARRIED, 0, undefined, undefined, asks('is the comment part of this change?')))
   expect(plan(w.db, ID)).toMatchObject({ step: 1, state: 'blocked_on_ceo' })
 
-  expect(() => { release(w.db, ID) }).toThrow(/plan 2 is not a brief/)
+  expect(() => { release(w.db, ID, 'coo') }).toThrow(/plan 2 is not a brief/)
   expect(plan(w.db, ID)).toMatchObject({ step: 1, state: 'blocked_on_ceo' })
   expect(left(w)).toBe('10')
   expect(hands(w)).toEqual([])
@@ -539,7 +539,7 @@ test('release, return, retry and priority each log who did it', async () => {
   await tick(w.db, w.root, stub(CARRIED))
   const park = (): void => { w.db.prepare("UPDATE plans SET state = 'blocked_on_ceo' WHERE id = ?").run(ID) }
 
-  release(w.db, ID)
+  release(w.db, ID, 'coo')
   park()
   returnToLane(w.db, ID, 'ceo')
   park()

@@ -17,6 +17,7 @@ seats:
   - text_review
   - coo_lite
   - solidity_specialist
+  - light_coo
 digests:
   typescript_specialist:
     manifest: a8dd50ad9bc5d01f576bd87d7fc88bd0b518adb47d37468f28b24b02d4d730a1

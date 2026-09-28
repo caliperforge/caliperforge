@@ -48,6 +48,16 @@ test('D3 a held plan names who it waits on and why, and unhold clears both', () 
   expect(holding(db)).toEqual({ held_by: null, held_why: null })
 })
 
+test('D4 a hold on another plan keeps the first line of its why, and a hold on none leaves held_why as it was', () => {
+  const { db, home } = seeded()
+  db.exec("INSERT INTO plans (id, pipe_id, template, state, queued_at, lane, seat, origin) VALUES (8, 9, 'pr_path', 'queued', '2026-09-24', 'machine', 'typescript_specialist', 'https://github.com/caliperforge/caliperforge/issues/140')")
+  hold(db, home, 7, 'after #140\nit edits the same file', new Date(), 8)
+  expect(holding(db)).toEqual({ held_by: 'coo', held_why: 'after #140' })
+  held(db, 7, 'ceo', 'set before')
+  hold(db, home, 7, 'paused', new Date())
+  expect(holding(db)).toEqual({ held_by: 'ceo', held_why: 'set before' })
+})
+
 test('D4 a holder outside ceo and coo is refused by the store and by cf hold before any write', () => {
   const { db, home } = seeded()
   expect(() => { held(db, 7, 'cto' as Holder, 'x') }).toThrow(/CHECK constraint/)

@@ -52,8 +52,8 @@ function run(db: Db, plan: number, step: number, at: string, seconds = 60, token
 
 const NOW = new Date('2026-09-20T12:00:00.000Z')
 
-function event(db: Db, actor: string, kind: string, at = '2026-09-20 11:00:00'): void {
-  db.prepare("INSERT INTO events (plan, at, kind, actor, outcome, message) VALUES (1, ?, ?, ?, 'pass', '')").run(at, kind, actor)
+function event(db: Db, actor: string, kind: string, at = '2026-09-20 11:00:00', id = 1): void {
+  db.prepare("INSERT INTO events (plan, at, kind, actor, outcome, message) VALUES (?, ?, ?, ?, 'pass', '')").run(id, at, kind, actor)
 }
 
 function day24(): Db {
@@ -107,13 +107,25 @@ test('D5 a full page of merged PRs throws, naming the repo', () => {
 })
 
 test('D6 the fixture day renders the expected section exactly', () => {
-  expect(actorSection(actors(day24(), NOW), hands(NOW, () => merged))).toBe('last 24 h by actor\n' +
-    '  ceo\t2 intervention(s)\tretry 1, return 1\n' +
-    '  coo\t0 intervention(s)\t-\n' +
-    '  coo_lite\t1 intervention(s)\tcoo_lite 1\t2 run(s)\t$1.50\n' +
-    '  orchestrator\t1 intervention(s)\treturn 1\t0 run(s)\t$0.00\n' +
-    '  fixer\t0 intervention(s)\t-\t2 run(s)\t$0.25\n' +
+  expect(actorSection(actors(day24(), NOW), hands(NOW, () => merged))).toBe('last 24 h by actor, held/missed/open over 7 d\n' +
+    '  ceo\t2 intervention(s)\tretry 1, return 1\theld 0 missed 0 open 3\n' +
+    '  coo\t0 intervention(s)\t-\theld 0 missed 0 open 0\n' +
+    '  coo_lite\t1 intervention(s)\tcoo_lite 1\t2 run(s)\t$1.50\theld 0 missed 0 open 1\n' +
+    '  orchestrator\t1 intervention(s)\treturn 1\t0 run(s)\t$0.00\theld 0 missed 0 open 1\n' +
+    '  fixer\t0 intervention(s)\t-\t2 run(s)\t$0.25\theld 0 missed 0 open 0\n' +
     '  hand PRs merged\t6\n')
+})
+
+test('D6 each actor scores the week before now, and an event 8 days old counts nowhere', () => {
+  const db = world()
+  plan(db, 1, 'done', 25)
+  plan(db, 2, 'refused', 30)
+  plan(db, 3, 'running', 31)
+  for (const actor of ['ceo', 'coo', 'coo_lite', 'orchestrator', 'fixer']) {
+    for (const id of [1, 2, 3]) event(db, actor, 'retry', '2026-09-14 12:00:00', id)
+  }
+  event(db, 'ceo', 'retry', '2026-09-12 12:00:00', 3)
+  expect(actors(db, NOW).map((r) => r.scored)).toEqual(Array.from({ length: 5 }, () => ({ held: 1, missed: 1, open: 1 })))
 })
 
 test('D4 an orchestrator run at step 4 adds to runs and tokens, not to review', () => {

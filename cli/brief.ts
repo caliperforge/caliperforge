@@ -69,6 +69,7 @@ export interface ActorRow {
   actor: Actor
   kinds: { kind: string; n: number }[]
   runs: { runs: number; cost: number } | null
+  scored: { held: number; missed: number; open: number }
 }
 
 export function actors(db: Db, now: Date): ActorRow[] {
@@ -79,10 +80,14 @@ export function actors(db: Db, now: Date): ActorRow[] {
   const runs = db.prepare(`SELECT seat, count(*) AS runs, coalesce(sum(cost_usd), 0) AS cost FROM runs
     WHERE NOT (${BUILT}) AND julianday(at) >= julianday(?, '-1 day') GROUP BY seat`)
     .all(at) as { seat: string; runs: number; cost: number }[]
+  const scored = db.prepare(`SELECT actor, outcome, count(*) AS n FROM outcomes
+    WHERE julianday(at) >= julianday(?, '-7 day') GROUP BY actor, outcome`)
+    .all(at) as { actor: string; outcome: 'held' | 'missed' | 'open'; n: number }[]
   return ACTORS.map((actor) => ({
     actor,
     kinds: kinds.filter((k) => k.actor === actor).map(({ kind, n }) => ({ kind, n })),
     runs: SEATED.includes(actor) ? runs.find((r) => r.seat === actor) ?? { runs: 0, cost: 0 } : null,
+    scored: scored.filter((s) => s.actor === actor).reduce((sum, s) => ({ ...sum, [s.outcome]: s.n }), { held: 0, missed: 0, open: 0 }),
   }))
 }
 
@@ -104,11 +109,13 @@ function actorLine(r: ActorRow): string {
   const n = r.kinds.reduce((sum, k) => sum + k.n, 0)
   const kinds = r.kinds.length === 0 ? '-' : r.kinds.map((k) => `${k.kind} ${String(k.n)}`).join(', ')
   const runs = r.runs === null ? '' : `\t${String(r.runs.runs)} run(s)\t$${r.runs.cost.toFixed(2)}`
-  return `  ${r.actor}\t${String(n)} intervention(s)\t${kinds}${runs}\n`
+  const s = r.scored
+  return `  ${r.actor}\t${String(n)} intervention(s)\t${kinds}${runs}` +
+    `\theld ${String(s.held)} missed ${String(s.missed)} open ${String(s.open)}\n`
 }
 
 export function actorSection(rows: ActorRow[], hands: number): string {
-  return `last 24 h by actor\n${rows.map(actorLine).join('')}  hand PRs merged\t${String(hands)}\n`
+  return `last 24 h by actor, held/missed/open over 7 d\n${rows.map(actorLine).join('')}  hand PRs merged\t${String(hands)}\n`
 }
 
 /** CEO 2026-09-19 12:15: per-ticket usage is read as two eras, split at this instant. */

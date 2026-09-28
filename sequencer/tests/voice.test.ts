@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
-import { capture } from '../voice.ts'
+import { capture } from '../../templates/voice.ts'
 import { world, type World } from './world.ts'
 
 const today = new Date().toISOString().slice(0, 10)
@@ -55,4 +55,12 @@ test('D5: a note ends each of its row\'s lines, and a null note adds nothing', (
     `- ${today} 1 dek: reworded (10 → 11 chars) — note: less flat`,
     `- ${today} 2 title: shortened (7 → 5 chars)`,
   ])
+})
+
+test('D3 D5: a note with line breaks is one line, and a second capture adds nothing', () => {
+  const w = world()
+  posted(w, 1, { title: 'A day', note: ' less flat\n\n  more  plain\r\n' })
+  capture(w.db, w.root)
+  expect(capture(w.db, w.root)).toMatchObject({ note: '0 voice note(s) added' })
+  expect(notes(w)).toBe(`# Voice notes\n\n- ${today} 1 title: shortened (7 → 5 chars) — note: less flat more  plain\n`)
 })

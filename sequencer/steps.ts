@@ -15,7 +15,7 @@ import { push, reviewable, type Wire } from './push.ts'
 import { diffOf, maybe, put } from './workspace.ts'
 import { homeOf } from './home.ts'
 import { freshBase } from './merge.ts'
-import { capture } from './voice.ts'
+import { capture } from '../templates/voice.ts'
 
 export interface StepMap {
   steps: Step[]

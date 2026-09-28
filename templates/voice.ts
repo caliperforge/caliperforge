@@ -2,7 +2,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { edited } from '../store/desk.ts'
 import type { Db } from '../store/index.ts'
-import type { Outcome } from './kind.ts'
+import type { Outcome } from '../sequencer/kind.ts'
 
 const FIELDS = ['title', 'dek', 'body'] as const
 
@@ -20,7 +20,7 @@ export function capture(db: Db, root: string): Outcome {
   const lines = edited(db).flatMap((row) => FIELDS.flatMap((field) => {
     const edit = row[`edited_${field}`]
     if (edit === null) return []
-    const note = row.note === null ? '' : ` — note: ${row.note}`
+    const note = row.note === null ? '' : ` — note: ${row.note.trim().replace(/\s*[\r\n]\s*/g, ' ')}`
     return [`- ${today} ${String(row.id)} ${field}: ${pattern(row[field].length, edit.length)} (${String(row[field].length)} → ${String(edit.length)} chars)${note}`]
   })).filter((line) => had?.includes(line) !== true)
   if (lines.length > 0) {

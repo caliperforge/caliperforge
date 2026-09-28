@@ -126,7 +126,7 @@ test('step 1 waits on cf approve target, and the plan says so', async () => {
 test('D6: a refused target digest still blocks step 1', async () => {
   const w = world()
   await tick(w.db, w.root, stub(CARRIED))
-  refuseTarget(w.db, w.target, 'not.ours')
+  refuseTarget(w.db, w.target, 'not.ours', 'coo')
   expect(blocked(w.db, plan(w.db, 1))).toBe('target_approval')
 })
 

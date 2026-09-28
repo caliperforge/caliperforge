@@ -104,7 +104,7 @@ test('intake D2 approving a target an upstream branch works on refuses the targe
   git(dir, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qam', 'hello'])
   git(dir, ['push', '-q', 'upstream', 'HEAD:refs/heads/fix-hello'])
   const id = addTarget(w.db, { ...targetRow(w.db, 1), issue_no: 13, state: 'ready', evidence: 'https://github.com/acme/widget/issues/13' })
-  expect(() => approve(w.db, w.root, id, 'pr-path', picked(canned([]))))
+  expect(() => approve(w.db, w.root, id, 'pr-path', 'ceo', picked(canned([]))))
     .toThrow(`target ${String(id)} refused: branch ${TREE} touches src/hello.ts`)
   expect(w.db.prepare('SELECT state, evidence FROM targets WHERE id = ?').get(id)).toEqual({ state: 'refused', evidence: TREE })
   expect(w.db.prepare("SELECT decision, reason FROM approvals WHERE subject_kind = 'target' AND subject_id = ?").all(id))

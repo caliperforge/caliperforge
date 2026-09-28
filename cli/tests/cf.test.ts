@@ -41,6 +41,14 @@ test.each([
   [['approve', 'plan', '7']],
   [['refuse', 'card', '7', 'x']],
   [['approve', 'plan', '7', '--by', 'cto']],
+  [['approve', 'target', '3']],
+  [['refuse', 'target', '3', 'x']],
+  [['approve', 'proposal', '3']],
+  [['refuse', 'proposal', '3', 'x']],
+  [['approve', 'target', '3', '--by', 'cto']],
+  [['refuse', 'target', '3', 'x', '--by', 'cto']],
+  [['approve', 'proposal', '3', '--by', 'cto']],
+  [['refuse', 'proposal', '3', 'x', '--by', 'cto']],
 ])('D1 D2 cf %j is refused over --by before it acts', (args) => {
   expect(stderr(args)).toContain('--by')
 })

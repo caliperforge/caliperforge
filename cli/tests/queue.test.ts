@@ -58,40 +58,46 @@ test('D1: approving a scanned ready target files one plan with its ask, once', (
   const db = world()
   const root = mkdtempSync(join(tmpdir(), 'cf-queue-'))
   const id = scanned(db)
-  const { plan } = approve(db, root, id, 'pr-path', null)
+  const { plan } = approve(db, root, id, 'pr-path', 'ceo', null)
   expect(decisions(db)).toEqual([{ decision: 'approved', reason: null }])
   expect(db.prepare('SELECT id, template, state FROM plans WHERE target_id = ?').all(id))
     .toEqual([{ id: plan, template: 'pr_path', state: 'queued' }])
-  expect(db.prepare('SELECT kind, actor FROM events WHERE plan = ?').all(plan)).toEqual([{ kind: 'filed', actor: 'cf approve target' }])
+  expect(db.prepare('SELECT kind, actor, outcome, pointer FROM events WHERE plan = ?').all(plan)).toEqual([
+    { kind: 'filed', actor: 'ceo', outcome: 'pass', pointer: null },
+    { kind: 'signoff', actor: 'ceo', outcome: 'pass', pointer: `target:${String(id)}` },
+  ])
   expect(get(root, Number(plan), 'ask.md')).toBe('# t\n\nb\n')
-  expect(approve(db, root, id, 'pr-path').plan).toBeNull()
+  expect(approve(db, root, id, 'pr-path', 'ceo').plan).toBeNull()
   expect(count(db, 'plans')).toBe(1)
 })
 
 test('D2: approving a refused target throws and writes nothing', () => {
   const db = world()
   const id = scanned(db, 'refused')
-  expect(() => approve(db, mkdtempSync(join(tmpdir(), 'cf-queue-')), id, 'pr-path')).toThrow(`target ${String(id)} is refused`)
+  expect(() => approve(db, mkdtempSync(join(tmpdir(), 'cf-queue-')), id, 'pr-path', 'ceo')).toThrow(`target ${String(id)} is refused`)
   expect([decisions(db), count(db, 'plans'), count(db, 'events')]).toEqual([[], 0, 0])
 })
 
 test('D3: approving a target that already has a plan writes the row and files nothing', () => {
   const db = world()
   const added = queued(db)
-  expect(approve(db, mkdtempSync(join(tmpdir(), 'cf-queue-')), added.target, 'pr-path').plan).toBeNull()
+  expect(approve(db, mkdtempSync(join(tmpdir(), 'cf-queue-')), added.target, 'pr-path', 'ceo').plan).toBeNull()
   expect(decisions(db)).toEqual([{ decision: 'approved', reason: null }])
-  expect([count(db, 'plans'), count(db, 'events')]).toEqual([1, 1])
+  expect([count(db, 'plans'), count(db, 'events')]).toEqual([1, 2])
 })
 
 test('D4: refuseTarget writes the refusal and refuses the target; a bad reason leaves it as it was', () => {
   const db = world()
   const id = scanned(db)
   const state = (): unknown => db.prepare('SELECT state FROM targets WHERE id = ?').get(id)
-  expect(() => refuseTarget(db, id, 'Not ours')).toThrow(/CHECK/)
-  expect(state()).toEqual({ state: 'ready' })
-  refuseTarget(db, id, 'not.ours')
+  expect(() => refuseTarget(db, id, 'Not ours', 'coo')).toThrow(/CHECK/)
+  expect([state(), count(db, 'events')]).toEqual([{ state: 'ready' }, 0])
+  refuseTarget(db, id, 'not.ours', 'coo')
   expect(decisions(db)).toEqual([{ decision: 'refused', reason: 'not.ours' }])
   expect(state()).toEqual({ state: 'refused' })
+  expect(db.prepare('SELECT plan, kind, actor, outcome, message, pointer FROM events').all()).toEqual([
+    { plan: null, kind: 'signoff', actor: 'coo', outcome: 'refuse', message: 'not.ours', pointer: `target:${String(id)}` },
+  ])
 })
 
 test('D7: note stores a take or skip line and the store refuses any other', () => {

@@ -7,6 +7,7 @@ import { decide } from '../store/approvals.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { templatePriority } from '../store/lanes.ts'
+import type { Holder } from '../store/plans.ts'
 import { profile } from '../store/profile.ts'
 import { latest } from '../store/rulings.ts'
 import { claimed, gh, implemented, issue as readIssue, lastMerger, WINDOW, type Issue, type Read } from './gh.ts'
@@ -156,13 +157,13 @@ export function vetted(db: Db, root: string, plan: number, id: number, check: Ch
   return says
 }
 
-export function approve(db: Db, root: string, id: number, pipe: string, check: Check | null = picked()): { digest: string; plan: number | null } {
+export function approve(db: Db, root: string, id: number, pipe: string, by: Holder, check: Check | null = picked()): { digest: string; plan: number | null } {
   const t = targetOf(db, id)
   if (t.state === 'refused') throw new Error(`target ${String(id)} is refused`)
   const unplanned = t.state === 'ready' && db.prepare('SELECT 1 FROM plans WHERE target_id = ?').get(id) === undefined
   const row = unplanned ? readIssue(t.repo, t.issue_no) : null
   const digest = targetDigest(t)
-  const plan = row === null ? null : planFor(db, pipe, id, t.evidence, 'cf approve target')
+  const plan = row === null ? null : planFor(db, pipe, id, t.evidence, by)
   if (plan !== null && row !== null) put(root, plan, 'ask.md', askOf(row, undefined))
   if (plan !== null && check !== null) {
     checkout(root, plan, t.repo, branchOf(t.repo, t.issue_no, 1, t.part))
@@ -172,17 +173,26 @@ export function approve(db: Db, root: string, id: number, pipe: string, check: C
       throw new Error(`target ${String(id)} refused: ${says}`)
     }
   }
-  decide(db, 'target', id, digest, null)
+  db.transaction(() => {
+    decide(db, 'target', id, digest, null)
+    signed(db, id, by, 'pass', digest.slice(0, 12))
+  })()
   return { digest, plan }
 }
 
-export function refuseTarget(db: Db, id: number, reason: string): string {
+export function refuseTarget(db: Db, id: number, reason: string, by?: Holder): string {
   const digest = targetDigest(targetOf(db, id))
   db.transaction(() => {
     decide(db, 'target', id, digest, reason)
     db.prepare("UPDATE targets SET state = 'refused' WHERE id = ?").run(id)
+    if (by !== undefined) signed(db, id, by, 'refuse', reason)
   })()
   return digest
+}
+
+function signed(db: Db, target: number, by: Holder, outcome: 'pass' | 'refuse', message: string): void {
+  const plan = db.prepare('SELECT max(id) FROM plans WHERE target_id = ?').pluck().get(target) as number | null
+  logged(db, { plan, kind: 'signoff', actor: by, outcome, message, pointer: `target:${String(target)}`, run: null })
 }
 
 export function note(db: Db, id: number, take: string): void {

@@ -39,7 +39,7 @@ async function ticks(w: World, id: number, until: () => boolean): Promise<void> 
 async function pushed(): Promise<{ w: World; id: number }> {
   const w = world()
   w.db.prepare('DELETE FROM plans WHERE id = 1').run()
-  const id = Number(approve(w.db, w.root, w.target, 'pr-path', null).plan)
+  const id = Number(approve(w.db, w.root, w.target, 'pr-path', 'ceo', null).plan)
   await ticks(w, id, () => plan(w.db, id).step === 6)
   const upstream = join(w.root, 'remotes/acme/widget')
   writeFileSync(join(upstream, 'moved.ts'), 'export const moved = 1\n')

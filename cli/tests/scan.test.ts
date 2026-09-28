@@ -105,7 +105,7 @@ test('D3: a refused or queued target keeps every column', () => {
 test('D5: a target the CEO refused is left as it was by a rescan and not returned', () => {
   const db = world()
   const [id] = scan(db, REPO, TODAY, canned({ issues: [issue(1)] })).targets
-  refuseTarget(db, Number(id), 'not.ours')
+  refuseTarget(db, Number(id), 'not.ours', 'coo')
   const refused = row(db, 1)
   expect(scan(db, REPO, TODAY, canned({ issues: [issue(1, 'grown\nlonger')] })).targets).toEqual([])
   expect(row(db, 1)).toEqual(refused)

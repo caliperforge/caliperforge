@@ -9,6 +9,8 @@ import { render as renderScan, scan } from './scan.ts'
 import { approve as approvePublish, refuse as refusePublish } from '../sequencer/card.ts'
 import { HOLDERS, holderOf } from '../store/plans.ts'
 
+const BY = ['--by <holder>', `who signs it: ${HOLDERS.join(' or ')}`] as const
+
 export function registerTargets(cf: Command, { db, out }: Cli): void {
   cf.command('measure').argument('<repo>', 'owner/repo to take the step 0 pulse of').action((repo: string) => {
     out(renderPulse(measure(db(), repo, new Date().toISOString().slice(0, 10))))
@@ -37,15 +39,18 @@ export function registerApprovals(cf: Command, { root, db, out }: Cli): void {
 
   const refuse = cf.command('refuse')
 
-  approve.command('target').argument('<id>').option('--pipe <name>', 'pipe to file its plan on', 'pr-path')
-    .action((id: string, options: { pipe: string }) => {
-      const done = approveTarget(db(), root, Number(id), options.pipe)
+  approve.command('target').argument('<id>').option('--pipe <name>', 'pipe to file its plan on', 'pr-path').requiredOption(...BY)
+    .action((id: string, options: { pipe: string; by: string }) => {
+      const by = holderOf(options.by)
+      const done = approveTarget(db(), root, Number(id), options.pipe, by)
       out(`target ${id} approved\t${done.digest.slice(0, 12)}\tplan ${done.plan === null ? '-' : String(done.plan)}\n`)
     })
 
-  refuse.command('target').argument('<id>').argument('<reason>').action((id: string, reason: string) => {
-    out(`target ${id} refused\t${refuseTarget(db(), Number(id), reason).slice(0, 12)}\n`)
-  })
+  refuse.command('target').argument('<id>').argument('<reason>').requiredOption(...BY)
+    .action((id: string, reason: string, options: { by: string }) => {
+      const by = holderOf(options.by)
+      out(`target ${id} refused\t${refuseTarget(db(), Number(id), reason, by).slice(0, 12)}\n`)
+    })
 
   cf.command('batch').action(() => {
     const handle = db()
@@ -59,8 +64,6 @@ export function registerApprovals(cf: Command, { root, db, out }: Cli): void {
 }
 
 function signoffs(approve: Command, refuse: Command, { root, db, out }: Cli): void {
-  const BY = ['--by <holder>', `who signs it: ${HOLDERS.join(' or ')}`] as const
-
   approve.command('plan').argument('<id>').requiredOption(...BY).action((id: string, options: { by: string }) => {
     const by = holderOf(options.by)
     out(`plan ${id} approved\t${approveCard(db(), root, 'plan', Number(id), by).slice(0, 12)}\n`)
@@ -71,12 +74,15 @@ function signoffs(approve: Command, refuse: Command, { root, db, out }: Cli): vo
       out(`plan ${id} refused\t${refuseCard(db(), root, 'plan', Number(id), reason, by).slice(0, 12)}\n`)
     })
 
-  approve.command('proposal').argument('<id>').action((id: string) => {
-    out(`proposal ${id} approved\t${approveCard(db(), root, 'proposal', Number(id), 'ceo').slice(0, 12)}\n`)
+  approve.command('proposal').argument('<id>').requiredOption(...BY).action((id: string, options: { by: string }) => {
+    const by = holderOf(options.by)
+    out(`proposal ${id} approved\t${approveCard(db(), root, 'proposal', Number(id), by).slice(0, 12)}\n`)
   })
-  refuse.command('proposal').argument('<id>').argument('<reason>').action((id: string, reason: string) => {
-    out(`proposal ${id} refused\t${refuseCard(db(), root, 'proposal', Number(id), reason, 'ceo').slice(0, 12)}\n`)
-  })
+  refuse.command('proposal').argument('<id>').argument('<reason>').requiredOption(...BY)
+    .action((id: string, reason: string, options: { by: string }) => {
+      const by = holderOf(options.by)
+      out(`proposal ${id} refused\t${refuseCard(db(), root, 'proposal', Number(id), reason, by).slice(0, 12)}\n`)
+    })
 
   approve.command('card').argument('<plan>').requiredOption(...BY).action((plan: string, options: { by: string }) => {
     const by = holderOf(options.by)

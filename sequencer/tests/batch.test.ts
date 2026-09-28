@@ -505,6 +505,10 @@ test('session close writes only proposals; approval makes a row', async () => {
   refuseCard(w.db, w.root, 'proposal', Number(rows[1]?.id), 'not_now', 'ceo')
   expect(openProposals(w.db).map((r) => r.class)).toEqual(['ordering', 'world_fact', 'measurement'])
   expect(approvalsOf(w.db, 'proposal')).toEqual([{ decision: 'approved', reason: null }, { decision: 'refused', reason: 'not_now' }])
+  expect(w.db.prepare("SELECT plan, actor, outcome, pointer FROM events WHERE kind = 'signoff' ORDER BY id").all()).toEqual([
+    { plan: null, actor: 'ceo', outcome: 'pass', pointer: `proposal:${String(rows[0]?.id)}` },
+    { plan: null, actor: 'ceo', outcome: 'refuse', pointer: `proposal:${String(rows[1]?.id)}` },
+  ])
 })
 
 test('a ruled item proposes nothing; pr body under twenty lines', async () => {

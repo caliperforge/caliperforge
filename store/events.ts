@@ -3,7 +3,7 @@ import type { Db } from './index.ts'
 import type { Verdict } from './verdict.ts'
 
 export interface Event {
-  plan: number
+  plan: number | null
   kind: string
   actor: string
   outcome: Verdict['outcome']

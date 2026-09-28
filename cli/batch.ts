@@ -50,10 +50,8 @@ export function approve(db: Db, root: string, kind: 'plan' | 'proposal', id: num
   db.transaction(() => {
     const approval = decide(db, kind, id, card.digest, null)
     if (kind === 'proposal') settle(db, id)
-    else {
-      approved(db, id, approval)
-      signed(db, id, by, 'pass', card.digest.slice(0, 12))
-    }
+    else approved(db, id, approval)
+    signed(db, kind, id, by, 'pass', card.digest.slice(0, 12))
   })()
   return card.digest
 }
@@ -77,13 +75,14 @@ export function refuse(db: Db, root: string, kind: 'plan' | 'proposal', id: numb
   db.transaction(() => {
     decide(db, kind, id, card.digest, reason)
     if (kind === 'proposal') strike(db, id)
-    else signed(db, id, by, 'refuse', reason)
+    signed(db, kind, id, by, 'refuse', reason)
   })()
   return card.digest
 }
 
-function signed(db: Db, plan: number, by: Holder, outcome: 'pass' | 'refuse', message: string): void {
-  logged(db, { plan, kind: 'signoff', actor: by, outcome, message, pointer: null, run: null })
+function signed(db: Db, kind: 'plan' | 'proposal', id: number, by: Holder, outcome: 'pass' | 'refuse', message: string): void {
+  const plan = kind === 'plan' ? id : null
+  logged(db, { plan, kind: 'signoff', actor: by, outcome, message, pointer: plan === null ? `proposal:${String(id)}` : null, run: null })
 }
 
 export function render(card: Card): string {

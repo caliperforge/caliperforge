@@ -173,6 +173,23 @@ test('D3: the packet carries the rulings of plans with the same parent, not of o
   expect(prompts[0]).not.toContain('use plan 8')
 })
 
+test('an upstream-key stop gets the pinned read tool and is ruled with the keys', async () => {
+  const { db, home } = seeded('1')
+  put(home, 7, 'refusal.md', 'which keys does upstream config.toml take?\n')
+  const keys = `github.com/o/r@${'a'.repeat(40)} config.toml: name, port`
+  const reply = stub(`---\nmove: rule\nwhy: the pinned read settles it\nanswer: ${keys}\n---\n`)
+  const packets: Parameters<Provider['fire']>[0][] = []
+  const seen: Provider = { ...reply, fire: (p) => { packets.push(p); return reply.fire(p) } }
+  await cooLite(db, home, row(db), seen, now, () => undefined, wire())
+  expect(packets[0]?.tools).toEqual(['Read', 'Glob', 'Grep', 'mcp__github__read'])
+  expect(Object.keys(packets[0]?.servers ?? {})).toEqual(['github'])
+  expect(packets[0]?.prompt).toContain('mcp__github__read')
+  expect(told(db)).toEqual([{ actor: 'coo_lite', outcome: 'pass', message: 'rule: the pinned read settles it' }])
+  const day = new Date().toISOString().slice(0, 10)
+  expect(maybe(home, 7, 'issue.md')).toBe(`# Issue\n\nthe brief\n\n## Answer from the coo_lite (${day})\n\n${keys}\n\n## Standing\n\n- no forced push\n`)
+  expect(row(db).step).toBe(2)
+})
+
 test.each(['/etc/x', '../x'])('D5: a rule naming %s writes nothing and is held by the ceo', async (path) => {
   const { db, home } = seeded('1')
   await run(db, home, `---\nmove: rule\nwhy: the path settles it\nanswer: read ${path}\n---\n`)

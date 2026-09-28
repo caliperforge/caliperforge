@@ -128,6 +128,33 @@ test('the handback format beside an unrelated path is two jobs', () => {
   expect(on(handback([...readers, '- sequencer/tests/brief.test.ts'], ['- nothing else']))).toBeNull()
 })
 
+const lua = 'seats/lua_specialist/prompt.md'
+
+const prompt = (rows: string[], others: string[]): string =>
+  swap(swap(brief, '## Files', rows), '## Who else reads what this changes', others)
+
+test('a seat prompt row above its handback fence is no format change', () => {
+  expect(on(prompt([`- ${lua}:7`, '- profiles/solana-foundation/pay-kit.yml:8'], ['- nothing else']))).toBeNull()
+})
+
+test('a seat prompt row reaching into its fence, or with no line, is a format change', () => {
+  const summary = String(readFileSync(join(repo, lua), 'utf8').split('\n').findIndex((l) => l.startsWith('summary:')) + 1)
+  const readers = ['- sequencer/rails.ts', '- rails/tight/prose.ts']
+  const later = `- ${lua}:7 — the body; \`:${summary}\` the summary row`
+  for (const row of [`- ${lua}:${summary}`, `- ${lua}:7-${summary}`, `- ${lua}:7,${summary}`, later, `- ${lua}`]) {
+    expect(on(prompt([row], ['- nothing else']))).toMatchObject({ span: 'sequencer/rails.ts' })
+    expect(on(prompt([row, '- store/plans.ts'], readers)))
+      .toMatchObject({ span: 'store/plans.ts', reason: holding('two jobs in one brief') })
+  }
+})
+
+test('the completion audit is a format change with a line or without', () => {
+  const unaffected = ['- nothing else']
+  expect(on(handback([], unaffected))).toMatchObject({ span: 'sequencer/rails.ts' })
+  expect(on(handback([], unaffected).replace('- rails/completion-audit/index.ts', '- rails/completion-audit/index.ts:12')))
+    .toMatchObject({ span: 'sequencer/rails.ts' })
+})
+
 test('the missing part is the span; one D row is its own section', () => {
   expect(on(fixture('no-must-not-break.md'))).toMatchObject({ span: '## Must not break' })
   expect(on(fixture('one-case.md'))).toMatchObject({ span: '## Cases' })

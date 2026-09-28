@@ -20,7 +20,8 @@ import { WIRE, type Wire } from './push.ts'
 import { rule } from './rule.ts'
 import { recorded } from './seat.ts'
 import { parted } from './split.ts'
-import { afresh, maybe, planDir, SELF } from './workspace.ts'
+import { ticketed } from './ticket.ts'
+import { afresh, maybe, planDir } from './workspace.ts'
 
 const Said = z.object({
   move: z.enum(['rule', 'waive', 'close', 'file', 'ask_ceo']),
@@ -177,12 +178,9 @@ function apply(db: Db, root: string, plan: PlanRow, m: Move, wire: Wire, now: Da
       if (db.prepare("SELECT 1 FROM deliverables WHERE plan_id = ? AND state = 'pushed'").get(plan.id) === undefined) return false
       db.prepare("UPDATE plans SET state = 'done', wait_reason = NULL WHERE id = ?").run(plan.id)
       return true
-    case 'file': {
-      const url = wire.file(SELF, m.ticket ?? m.why, `Filed by coo_lite on plan ${String(plan.id)}.\n\n${m.why}`,
-        ['lane:machine', 'P0', 'fix'])
-      hold(db, root, plan.id, `${url}\n\n${m.why}`, now)
+    case 'file':
+      ticketed(db, root, plan, m.ticket ?? m.why, `Filed by coo_lite on plan ${String(plan.id)}.\n\n${m.why}`, m.why, wire, now)
       return true
-    }
     case 'ask_ceo': return false
   }
 }

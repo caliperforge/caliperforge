@@ -146,7 +146,7 @@ function ruling(db: Db, subject: string): number | null {
   return row?.id ?? null
 }
 
-function file(db: Db, by: Holder | 'intake', pipe: string, lane: Lane, seat: string, url: string, priority: number | null): number {
+export function file(db: Db, by: Holder | 'intake', pipe: string, lane: Lane, seat: string, url: string, priority: number | null): number {
   const held = db.prepare('SELECT id FROM plans WHERE origin = ?').get(url) as { id: number } | undefined
   if (held !== undefined) return held.id
   if (pipe === LANE[lane].pipe) {

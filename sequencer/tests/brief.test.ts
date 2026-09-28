@@ -500,7 +500,7 @@ test('released, the plan queues at step 2 and the builder fires', async () => {
   const w = await unread()
   await tick(w.db, w.root, stub(CARRIED))
 
-  release(w.db, ID)
+  release(w.db, ID, 'coo')
   expect(plan(w.db, ID)).toMatchObject({ step: 2, state: 'queued' })
   expect((await tick(w.db, w.root, stub(CARRIED)))[0]).toMatchObject({ step: 2, name: 'build', outcome: 'pass' })
 })
@@ -528,7 +528,7 @@ test('release refuses a plan parked at step 1 and moves no row', async () => {
   await tick(w.db, w.root, stub(CARRIED, 0, undefined, undefined, asks('is the comment part of this change?')))
   expect(plan(w.db, ID)).toMatchObject({ step: 1, state: 'blocked_on_ceo' })
 
-  expect(() => { release(w.db, ID) }).toThrow(/plan 2 is not a brief/)
+  expect(() => { release(w.db, ID, 'coo') }).toThrow(/plan 2 is not a brief/)
   expect(plan(w.db, ID)).toMatchObject({ step: 1, state: 'blocked_on_ceo' })
   expect(left(w)).toBe('10')
   expect(hands(w)).toEqual([])
@@ -539,7 +539,7 @@ test('release, return, retry and priority each log who did it', async () => {
   await tick(w.db, w.root, stub(CARRIED))
   const park = (): void => { w.db.prepare("UPDATE plans SET state = 'blocked_on_ceo' WHERE id = ?").run(ID) }
 
-  release(w.db, ID)
+  release(w.db, ID, 'coo')
   park()
   returnToLane(w.db, ID, 'ceo')
   park()
@@ -635,6 +635,11 @@ test('a folder row under ## Files is refused', () => {
     .toMatchObject({ span: '- sequencer/tests/ — the tests', reason: holding('names no file') })
 })
 
+test('D2: a Files row naming a root dotfile is not refused as a folder', () => {
+  expect(on(swap(brief, '## Files', ['- sequencer/brief.ts', '- `.gitignore`: `build/`.']))?.reason ?? '')
+    .not.toContain('names no file')
+})
+
 const PLUS = 'Sources/App/DashboardSource+Runs.swift'
 
 const plus = (row: string): string => ['# t', '', '## Files', '', row, '', '## Out of scope', ''].join('\n')
@@ -643,6 +648,10 @@ test('a Files row with a + path yields it, backticked or bare', () => {
   for (const row of [`- \`${PLUS}:27\``, `- ${PLUS}:27 — the WHERE`]) {
     expect(files(plus(row))).toEqual([{ path: PLUS, is_new: false }])
   }
+})
+
+test('D1: a Files row yields a root dotfile and not the folder after it', () => {
+  expect(files(plus('- `.gitignore` (new): `build/`.'))).toEqual([{ path: '.gitignore', is_new: true }])
 })
 
 test('a backticked + path keeps the line it points at', () => {

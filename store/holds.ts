@@ -1,6 +1,6 @@
 import { logged } from './events.ts'
 import type { Db } from './index.ts'
-import { builderRan, PlanRow, retry } from './plans.ts'
+import { builderRan, type Holder, PlanRow, retry } from './plans.ts'
 import { clear } from './refusals.ts'
 
 const SPEND = `UPDATE settings SET value = CAST(CAST(value AS INTEGER) - 1 AS TEXT)
@@ -20,11 +20,11 @@ export function hold(db: Db, plan: number, step: number): 'running' | 'blocked_o
 }
 
 /** Lifting a hold queues the plan and never runs it: the lane's width is what admits, in `picks` (`sequencer/index.ts:56`). */
-export function release(db: Db, plan: number): void {
+export function release(db: Db, plan: number, actor: Holder): void {
   const done = db.prepare("UPDATE plans SET state = 'queued' WHERE id = ? AND step = 2 AND state = 'blocked_on_ceo'")
     .run(plan)
   if (done.changes === 0) throw new Error(`plan ${String(plan)} is not a brief waiting on the coo's read`)
-  logged(db, { plan, kind: 'release', actor: 'coo', outcome: 'pass', message: 'step 2', pointer: null, run: null })
+  logged(db, { plan, kind: 'release', actor, outcome: 'pass', message: 'step 2', pointer: null, run: null })
 }
 
 export function returnToLane(db: Db, plan: number, actor = 'orchestrator'): number {
@@ -50,5 +50,15 @@ export function retried(db: Db, id: number, actor: string): number {
     const step = retry(db, plan)
     logged(db, { plan: id, kind: 'retry', actor, outcome: 'pass', message: `step ${String(step)}`, pointer: null, run: null })
     return step
+  })()
+}
+
+export function closed(db: Db, id: number, state: 'refused' | 'done', actor: Holder, why: string): void {
+  const row = db.prepare('SELECT state FROM plans WHERE id = ?').get(id) as { state: string } | undefined
+  if (row === undefined) throw new Error(`no plan ${String(id)}`)
+  if (row.state === 'done' || row.state === 'refused') throw new Error(`plan ${String(id)} is already ${row.state}`)
+  db.transaction(() => {
+    db.prepare('UPDATE plans SET state = ? WHERE id = ?').run(state, id)
+    logged(db, { plan: id, kind: 'close', actor, outcome: state === 'refused' ? 'refuse' : 'pass', message: why, pointer: null, run: null })
   })()
 }

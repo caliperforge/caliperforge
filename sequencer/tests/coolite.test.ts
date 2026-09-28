@@ -13,7 +13,7 @@ import { busy } from '../../store/now.ts'
 import { held, PlanRow, retry } from '../../store/plans.ts'
 import { clear } from '../../store/refusals.ts'
 import { split } from '../brief.ts'
-import { byHand, cooLite, piled } from '../coolite.ts'
+import { byHand, cooLite, piled, read } from '../coolite.ts'
 import { hold, unhold } from '../hold.ts'
 import type { Wire } from '../push.ts'
 import { rule } from '../rule.ts'
@@ -348,4 +348,11 @@ test('a plan held by the ceo, a parked plan and a retried plan are not stops', a
   await pile(db, home)
   expect(fires(db)).toEqual([])
   expect(told(db)).toEqual([])
+})
+
+test('a long why and a long ticket title still read', () => {
+  const why = 'the checkout holds only README.md and LICENSE, so the upstream layout cannot be settled here. '.repeat(8).trim()
+  const got = read(`reasoning\n\n\`\`\`\n---\nmove: file\nwhy: ${why}\nticket: ${'t'.repeat(200)}\n---\n\`\`\``)
+  expect(got).toMatchObject({ move: 'file', why })
+  expect(got !== null && 'ticket' in got ? got.ticket?.length : 0).toBe(140)
 })

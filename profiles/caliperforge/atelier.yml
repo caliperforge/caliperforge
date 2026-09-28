@@ -5,3 +5,20 @@ rails:
   fence: false
   tight_code: true
   checks: local
+commands:
+  xcodebuild:
+    - -project
+    - Atelier.xcodeproj
+    - -scheme
+    - Atelier
+    - -destination
+    - platform=macOS
+    - -derivedDataPath
+    - .cf-derived
+    - -test-timeouts-enabled
+    - 'YES'
+    - -default-test-execution-time-allowance
+    - '60'
+    - -maximum-test-execution-time-allowance
+    - '60'
+    - test

@@ -1,3 +1,4 @@
+import { z } from 'zod'
 import type { Dry, Quiet } from '../sequencer/index.ts'
 import type { Fired } from '../sequencer/kind.ts'
 import { CREDITS } from '../sequencer/ready.ts'
@@ -5,6 +6,8 @@ import { ruled } from '../sequencer/workspace.ts'
 import type { Db } from '../store/index.ts'
 import { name, type LaneState, type WindowRow } from '../store/lanes.ts'
 import { BUILT, type Holder, type Overlap, type Wait } from '../store/plans.ts'
+import { gh, type Read, WINDOW } from './gh.ts'
+import { LANE, LANES } from './plan.ts'
 
 export interface PlanLine {
   id: number
@@ -54,6 +57,58 @@ export function day(db: Db): Day {
     coalesce(sum(input_tokens + cache_read_tokens + output_tokens), 0) AS tokens,
     coalesce(sum(seconds), 0) AS seconds
     FROM runs WHERE julianday(at) >= julianday('now', '-1 day')`).get() as Day
+}
+
+export const ACTORS = ['ceo', 'coo', 'coo_lite', 'orchestrator', 'fixer'] as const
+
+export type Actor = typeof ACTORS[number]
+
+const SEATED: readonly Actor[] = ['coo_lite', 'orchestrator', 'fixer']
+
+export interface ActorRow {
+  actor: Actor
+  kinds: { kind: string; n: number }[]
+  runs: { runs: number; cost: number } | null
+}
+
+export function actors(db: Db, now: Date): ActorRow[] {
+  const at = now.toISOString()
+  const kinds = db.prepare(`SELECT actor, kind, count(*) AS n FROM events
+    WHERE julianday(at) >= julianday(?, '-1 day') GROUP BY actor, kind ORDER BY kind`)
+    .all(at) as { actor: string; kind: string; n: number }[]
+  const runs = db.prepare(`SELECT seat, count(*) AS runs, coalesce(sum(cost_usd), 0) AS cost FROM runs
+    WHERE NOT (${BUILT}) AND julianday(at) >= julianday(?, '-1 day') GROUP BY seat`)
+    .all(at) as { seat: string; runs: number; cost: number }[]
+  return ACTORS.map((actor) => ({
+    actor,
+    kinds: kinds.filter((k) => k.actor === actor).map(({ kind, n }) => ({ kind, n })),
+    runs: SEATED.includes(actor) ? runs.find((r) => r.seat === actor) ?? { runs: 0, cost: 0 } : null,
+  }))
+}
+
+const Merges = z.array(z.object({ headRefName: z.string(), mergedAt: z.string() }))
+
+export function hands(now: Date, read: Read = gh): number {
+  const from = now.getTime() - 86_400_000
+  const since = new Date(from).toISOString().slice(0, 10)
+  return [...new Set(LANES.map((l) => LANE[l].home))].reduce((n, repo) => {
+    const got = Merges.parse(read(['pr', 'list', '--repo', repo, '--state', 'merged', '--search', `merged:>=${since}`,
+      '--limit', String(WINDOW), '--json', 'headRefName,mergedAt']))
+    if (got.length === WINDOW) throw new Error(`${repo} lists ${String(WINDOW)} merged PRs, the limit; the count may be cut short`)
+    return n + got.filter((p) => p.headRefName.startsWith('hand-') &&
+      Date.parse(p.mergedAt) >= from && Date.parse(p.mergedAt) <= now.getTime()).length
+  }, 0)
+}
+
+function actorLine(r: ActorRow): string {
+  const n = r.kinds.reduce((sum, k) => sum + k.n, 0)
+  const kinds = r.kinds.length === 0 ? '-' : r.kinds.map((k) => `${k.kind} ${String(k.n)}`).join(', ')
+  const runs = r.runs === null ? '' : `\t${String(r.runs.runs)} run(s)\t$${r.runs.cost.toFixed(2)}`
+  return `  ${r.actor}\t${String(n)} intervention(s)\t${kinds}${runs}\n`
+}
+
+export function actorSection(rows: ActorRow[], hands: number): string {
+  return `last 24 h by actor\n${rows.map(actorLine).join('')}  hand PRs merged\t${String(hands)}\n`
 }
 
 /** CEO 2026-09-19 12:15: per-ticket usage is read as two eras, split at this instant. */
@@ -159,6 +214,45 @@ export type ByType = Pick<WindowRow, 'uncached_tokens' | 'cache_write_tokens' | 
 export function byType(t: ByType): string {
   return `${String(t.uncached_tokens)} uncached\t${String(t.cache_write_tokens)} cache write` +
     `\t${String(t.cache_read_tokens)} cache read\t${String(t.output_tokens)} output`
+}
+
+export interface Cost extends ByType {
+  provider: string
+  model: string
+  runs: number
+  computed: number | null
+  reported: number | null
+}
+
+interface Model { provider: string; model: string }
+
+const LAST_DAY = "julianday(at) >= julianday('now', '-1 day')"
+
+export function costs(db: Db): Cost[] {
+  return db.prepare(`SELECT provider, model, count(*) AS runs,
+    sum(input_tokens - coalesce(cache_write_tokens, 0)) AS uncached_tokens, sum(coalesce(cache_write_tokens, 0)) AS cache_write_tokens,
+    sum(cache_read_tokens) AS cache_read_tokens, sum(output_tokens) AS output_tokens,
+    sum(cost_computed_usd) AS computed, sum(cost_usd) AS reported
+    FROM runs WHERE ${LAST_DAY} GROUP BY provider, model ORDER BY provider, model`).all() as Cost[]
+}
+
+export function unpriced(db: Db): Model[] {
+  return db.prepare(`SELECT DISTINCT provider, model FROM runs r WHERE ${LAST_DAY}
+    AND NOT EXISTS (SELECT 1 FROM prices p WHERE p.provider = r.provider AND p.model = r.model
+      AND julianday(p.effective_from) <= julianday(r.at))
+    ORDER BY provider, model`).all() as Model[]
+}
+
+function usd(n: number | null): string {
+  return n === null ? '-' : `$${n.toFixed(4)}`
+}
+
+export function costSection(rows: Cost[], missing: Model[]): string {
+  const lines = rows.map((c) => `  ${c.provider}/${c.model}\t${String(c.runs)} run(s)\t${byType(c)}` +
+    `\tcomputed ${usd(c.computed)}\treported ${usd(c.reported)}\n`)
+  const body = rows.length === 0 ? '  none\n' : lines.join('')
+  return `cost last 24 h by model (${String(rows.length)})\n${body}` +
+    missing.map((m) => `  no price row\t${m.provider}/${m.model}\n`).join('')
 }
 
 /** `cf tick --dry`: the clock the windows are read against, the lanes open, and what each holds. */

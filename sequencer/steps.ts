@@ -4,7 +4,7 @@ import { CARD, waits } from '../cli/queue.ts'
 import { parse } from '../rails/diff.ts'
 import { building, filesOf, sharing, strays as recordStrays } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
-import { builderRan, internal, originIssue, waiting, type PlanRow, type Wait } from '../store/plans.ts'
+import { builderRan, held, internal, originIssue, originRef, waiting, type PlanRow, type Wait } from '../store/plans.ts'
 import { capture, desk, facts, gather, steps as comms } from '../templates/comms.ts'
 import { at, last, steps, type Step } from '../templates/pr-path.ts'
 import { approved, approvedPlan, batch } from './approve.ts'
@@ -16,6 +16,7 @@ import { push, reviewable, type Wire } from './push.ts'
 import { diffOf, maybe, put } from './workspace.ts'
 import { homeOf } from './home.ts'
 import { freshBase } from './merge.ts'
+import { hold } from './hold.ts'
 
 export interface StepMap {
   steps: Step[]
@@ -125,7 +126,30 @@ function strayed(db: Db, root: string, plan: PlanRow): Outcome | null {
   return { outcome: 'pass', held: true, spans: [other.path], note: `wrote ${other.path}, which plan ${String(other.plan)} is building; waits for it` }
 }
 
+/** A ticket with an `After:` line is not briefed until the plan of the issue it names lands; one that never will is held for a person. */
+function after(db: Db, root: string, plan: PlanRow): Outcome | null {
+  const ref = originRef(plan)
+  if (ref === null) return null
+  const ticket = db.prepare('SELECT after FROM tickets WHERE repo = ? AND number = ?').get(ref.repo, ref.no) as { after: number | null } | undefined
+  const n = ticket?.after ?? null
+  if (n === null) return null
+  const pred = db.prepare(`SELECT p.id, p.state, t.closed_at FROM plans p LEFT JOIN tickets t ON t.repo = ? AND t.number = ?
+    WHERE p.origin = ? ORDER BY p.id DESC LIMIT 1`).get(ref.repo, n, `https://github.com/${ref.repo}/issues/${String(n)}`) as
+    { id: number; state: PlanRow['state']; closed_at: string | null } | undefined
+  if (pred?.state === 'done') return null
+  const open = pred?.closed_at === null &&['queued', 'running', 'blocked_on_ceo'].includes(pred.state)
+  const why = pred === undefined ? `#${String(n)} has no plan`
+    : open ? `waits for #${String(n)}, plan ${String(pred.id)}, to land`
+    : pred.closed_at === null ? `#${String(n)}'s plan ${String(pred.id)} ended ${pred.state}`
+    : `#${String(n)} closed without plan ${String(pred.id)} landing`
+  hold(db, root, plan.id, why, new Date(), open ? pred.id : null)
+  if (!open) held(db, plan.id, 'coo', why)
+  return { outcome: 'pass', held: true, spans: [`#${String(n)}`], note: why }
+}
+
 export function measure(db: Db, root: string, plan: PlanRow, read?: Read): Outcome {
+  const gated = after(db, root, plan)
+  if (gated !== null) return gated
   if (internal(plan)) return { outcome: 'pass', spans: [], note: `${homeOf(plan)}#${String(originIssue(plan))} is ours; no account to measure` }
   const row = target(db, plan)
   if (row === null) return { outcome: 'refuse', spans: ['targets'], note: `plan ${String(plan.id)} has no target row` }

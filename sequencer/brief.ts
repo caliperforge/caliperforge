@@ -110,7 +110,7 @@ const GROUNDS: [RegExp, string][] = [
   [SHELL, 'the builder holds no shell'],
 ]
 
-const PATH = /^\s*[-*]\s*`?([A-Za-z0-9_./+-]+\.[A-Za-z0-9]+)(?::\d+)?`?/
+const PATH = /^\s*[-*]\s*`?([A-Za-z0-9_./+-]*\.[A-Za-z0-9]+)(?::\d+)?`?/
 
 const ROW = /^\s*[-*]\s*\**D\d+\**/gm
 

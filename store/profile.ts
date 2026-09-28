@@ -28,6 +28,10 @@ export const Profile = z.strictObject({
     tight_code: z.boolean().default(false),
     checks: z.enum(['ci', 'local']).optional(),
   }).optional(),
+  commands: z.strictObject({
+    npm: z.array(z.string()).optional(),
+    xcodebuild: z.array(z.string()).optional(),
+  }).optional(),
 })
 
 export type Profile = z.infer<typeof Profile>

@@ -5,9 +5,11 @@ import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import { registerLanes } from '../cf-lanes.ts'
-import { fileWaits, greptileLine, heldBy, line, rulings, ticketSection, tickets, waitLine, waits } from '../brief.ts'
+import { actors, actorSection, costs, costSection, fileWaits, greptileLine, hands, heldBy, line, rulings, ticketSection, tickets, unpriced, waitLine,
+  waits } from '../brief.ts'
 import { monthly } from '../../sequencer/ready.ts'
 import { put } from '../../sequencer/workspace.ts'
+import { repriced } from '../../store/events.ts'
 import type { Db } from '../../store/index.ts'
 import { waiting } from '../../store/plans.ts'
 
@@ -20,7 +22,7 @@ const SEATS: Record<number, string> = { 2: 'typescript_specialist', 4: 'code_qua
 
 function world(): Db {
   const db = fresh(schema)
-  for (const seat of [...Object.values(SEATS), 'orchestrator']) {
+  for (const seat of [...Object.values(SEATS), 'orchestrator', 'coo_lite', 'fixer']) {
     db.prepare("INSERT INTO rules VALUES (?, 'card', 'seats/seat.md', ?, '2026-09-19')").run(seat, HASH)
   }
   db.prepare(`INSERT INTO accounts (id, repo, measured_at, maintainers, doors, last_outsider_merge,
@@ -39,12 +41,79 @@ function plan(db: Db, id: number, state: string, issue: number | null, target: n
       issue === null ? null : 'machine', origin)
 }
 
-function run(db: Db, plan: number, step: number, at: string, seconds = 60, tokens = 100, seat = SEATS[step]): void {
+function run(db: Db, plan: number, step: number, at: string, seconds = 60, tokens = 100, seat = SEATS[step],
+  cost: number | null = null): void {
   db.prepare(`INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort,
-    input_tokens, cache_read_tokens, output_tokens, seconds, exit, at, transcript_path)
-    VALUES (?, ?, ?, ?, 'claude-agent-sdk', 'opus', 'high', ?, 0, 0, ?, 0, ?, 'x.transcript.jsonl')`)
-    .run(plan, step, seat, HASH, tokens, seconds, at)
+    input_tokens, cache_read_tokens, output_tokens, seconds, exit, at, transcript_path, cost_usd)
+    VALUES (?, ?, ?, ?, 'claude-agent-sdk', 'opus', 'high', ?, 0, 0, ?, 0, ?, 'x.transcript.jsonl', ?)`)
+    .run(plan, step, seat, HASH, tokens, seconds, at, cost)
 }
+
+const NOW = new Date('2026-09-20T12:00:00.000Z')
+
+function event(db: Db, actor: string, kind: string, at = '2026-09-20 11:00:00'): void {
+  db.prepare("INSERT INTO events (plan, at, kind, actor, outcome, message) VALUES (1, ?, ?, ?, 'pass', '')").run(at, kind, actor)
+}
+
+function day24(): Db {
+  const db = world()
+  plan(db, 1, 'running', 25)
+  event(db, 'ceo', 'retry')
+  event(db, 'ceo', 'return')
+  event(db, 'ceo', 'retry', '2026-09-19 11:00:00')
+  event(db, 'orchestrator', 'return')
+  event(db, 'coo_lite', 'coo_lite')
+  for (const actor of ['split', 'ciChecks', 'token_ceiling', 'cf plan add']) event(db, actor, 'filed')
+  run(db, 1, 3, '2026-09-20 09:00:00', 60, 100, 'coo_lite', 1)
+  run(db, 1, 3, '2026-09-20 10:00:00', 60, 100, 'coo_lite', 0.5)
+  run(db, 1, 3, '2026-09-19 11:00:00', 60, 100, 'coo_lite', 4)
+  run(db, 1, 3, '2026-09-20 10:00:00', 60, 100, 'fixer', 0.25)
+  run(db, 1, 3, '2026-09-20 11:00:00', 60, 100, 'fixer')
+  run(db, 1, 2, '2026-09-20 11:00:00', 60, 100, 'typescript_specialist', 9)
+  return db
+}
+
+const at = (hours: number): string => new Date(NOW.getTime() - hours * 3_600_000).toISOString()
+
+const merged = [
+  { headRefName: 'hand-a', mergedAt: at(1) },
+  { headRefName: 'hand-b', mergedAt: at(23) },
+  { headRefName: 'hand-c', mergedAt: at(25) },
+  { headRefName: 'p12-thing', mergedAt: at(1) },
+]
+
+test('D1 D2 D4 each actor counts its own events and seat runs in the 24 h before now, and no one else\'s', () => {
+  expect(actors(day24(), NOW)).toMatchObject([
+    { actor: 'ceo', kinds: [{ kind: 'retry', n: 1 }, { kind: 'return', n: 1 }], runs: null },
+    { actor: 'coo', kinds: [], runs: null },
+    { actor: 'coo_lite', kinds: [{ kind: 'coo_lite', n: 1 }], runs: { runs: 2, cost: 1.5 } },
+    { actor: 'orchestrator', kinds: [{ kind: 'return', n: 1 }], runs: { runs: 0, cost: 0 } },
+    { actor: 'fixer', kinds: [], runs: { runs: 2, cost: 0.25 } },
+  ])
+})
+
+test('D3 hand PRs merged in the window count across the three home repos, searched from the day before', () => {
+  const seen: string[][] = []
+  expect(hands(NOW, (args) => { seen.push(args); return merged })).toBe(6)
+  expect(seen.map((a) => a[a.indexOf('--repo') + 1]))
+    .toEqual(['caliperforge/caliperforge', 'caliperforge/atelier', 'caliperforge/v4-hook-index'])
+  for (const a of seen) expect(a).toContain('merged:>=2026-09-19')
+})
+
+test('D5 a full page of merged PRs throws, naming the repo', () => {
+  const full = Array.from({ length: 100 }, () => merged[0])
+  expect(() => hands(NOW, () => full)).toThrow(/caliperforge\/caliperforge lists 100 merged PRs/)
+})
+
+test('D6 the fixture day renders the expected section exactly', () => {
+  expect(actorSection(actors(day24(), NOW), hands(NOW, () => merged))).toBe('last 24 h by actor\n' +
+    '  ceo\t2 intervention(s)\tretry 1, return 1\n' +
+    '  coo\t0 intervention(s)\t-\n' +
+    '  coo_lite\t1 intervention(s)\tcoo_lite 1\t2 run(s)\t$1.50\n' +
+    '  orchestrator\t1 intervention(s)\treturn 1\t0 run(s)\t$0.00\n' +
+    '  fixer\t0 intervention(s)\t-\t2 run(s)\t$0.25\n' +
+    '  hand PRs merged\t6\n')
+})
 
 test('D4 an orchestrator run at step 4 adds to runs and tokens, not to review', () => {
   const db = world()
@@ -205,6 +274,51 @@ test('D2 D3 D4 cf runs and cf usage print tokens by type, a null cache write as 
   const lines = printed.filter((l) => l.startsWith('  '))
   expect(lines).toHaveLength(2)
   for (const l of lines) expect(l).toContain('\t2 run(s)\t252 tokens\t20 uncached\t4 cache write\t220 cache read\t8 output\t')
+})
+
+function priced(db: Db, model: string): void {
+  db.prepare(`INSERT INTO prices (provider, model, input, cache_read, cache_write, output, effective_from, source_url)
+    VALUES ('claude-agent-sdk', ?, 1, 0.1, 2, 10, '2026-01-01', 'https://example.com/prices')`).run(model)
+}
+
+function costed(db: Db, model: string, ago: string, input: number, write: number, read: number, output: number, usd: number): void {
+  db.prepare(`INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_write_tokens,
+    cache_read_tokens, output_tokens, cost_usd, seconds, exit, at, transcript_path)
+    VALUES (1, 2, 'typescript_specialist', ?, 'claude-agent-sdk', ?, 'high', ?, ?, ?, ?, ?, 60, 0, datetime('now', ?), 'x.transcript.jsonl')`)
+    .run(HASH, model, input, write, read, output, usd, ago)
+}
+
+function twoModels(): Db {
+  const db = world()
+  plan(db, 1, 'running', 25)
+  priced(db, 'opus')
+  costed(db, 'opus', '-1 hour', 1000, 200, 5000, 300, 0.01)
+  costed(db, 'haiku', '-1 hour', 500, 100, 1000, 50, 0.002)
+  return db
+}
+
+test('D1 D2 each model of the last day has a line with computed and reported cost, and the unpriced one is named', () => {
+  const db = twoModels()
+  repriced(db)
+  expect(costSection(costs(db), unpriced(db))).toBe('cost last 24 h by model (2)\n' +
+    '  claude-agent-sdk/haiku\t1 run(s)\t400 uncached\t100 cache write\t1000 cache read\t50 output\tcomputed -\treported $0.0020\n' +
+    '  claude-agent-sdk/opus\t1 run(s)\t800 uncached\t200 cache write\t5000 cache read\t300 output\tcomputed $0.0047\treported $0.0100\n' +
+    '  no price row\tclaude-agent-sdk/haiku\n')
+})
+
+test('D3 a priced model gets no price line, and a run older than a day counts on no line', () => {
+  const db = twoModels()
+  priced(db, 'haiku')
+  costed(db, 'opus', '-2 days', 9000, 900, 9000, 900, 9)
+  repriced(db)
+  expect(costSection(costs(db), unpriced(db))).toBe('cost last 24 h by model (2)\n' +
+    '  claude-agent-sdk/haiku\t1 run(s)\t400 uncached\t100 cache write\t1000 cache read\t50 output\tcomputed $0.0012\treported $0.0020\n' +
+    '  claude-agent-sdk/opus\t1 run(s)\t800 uncached\t200 cache write\t5000 cache read\t300 output\tcomputed $0.0047\treported $0.0100\n')
+})
+
+test('D4 an empty day prints none', () => {
+  const db = world()
+  expect(costSection(costs(db), unpriced(db))).toBe('cost last 24 h by model (0)\n  none\n')
 })
 
 test('with no waiting live plan the waits line reads none', () => {

@@ -104,7 +104,7 @@ test('ticket: filed, queued at P0, job held on it, checkout kept', async () => {
   expect(terminal(db)).not.toContain(7)
   const on = ticketed(db)
   expect(on).toMatchObject({ priority: 0, lane: 'machine', state: 'queued' })
-  expect(db.prepare('SELECT waits_on FROM plans WHERE id = 7').get()).toEqual({ waits_on: on?.id })
+  expect(waitsOn(db)).toEqual({ waits_on: on?.id })
   expect(maybe(home, on?.id ?? 0, 'ask.md')).toContain('plan 7')
   expect(maybe(home, on?.id ?? 0, 'ask.md')).toContain('identifiers: schema/0036_x.sql')
 })
@@ -116,7 +116,7 @@ test('ticket: the job is back at its step when the ticket lands', async () => {
   db.prepare("UPDATE plans SET state = 'done' WHERE id = ?").run(ticketed(db)?.id)
   await woke(db, home, stub(TICKET, []), now, (t) => void posted.push(t), wire([]))
   expect(state(db)).toEqual({ state: 'queued', step: 4 })
-  expect(db.prepare('SELECT waits_on FROM plans WHERE id = 7').get()).toEqual({ waits_on: null })
+  expect(waitsOn(db)).toEqual({ waits_on: null })
   expect(maybe(home, 7, 'parked.md')).toBeNull()
   expect(posted).toEqual([])
 })
@@ -131,7 +131,7 @@ test.each([
   const filed: string[] = []
   await woke(db, home, stub(TICKET, []), now, () => undefined, wire(filed))
   expect(filed).toEqual(want)
-  expect(db.prepare('SELECT waits_on FROM plans WHERE id = 7').get()).toEqual({ waits_on: on ?? ticketed(db)?.id })
+  expect(waitsOn(db)).toEqual({ waits_on: on ?? ticketed(db)?.id })
 })
 
 test('ask_ceo from the fixer reaches the phone with its reason', async () => {
@@ -175,7 +175,7 @@ test('a fixer that throws leaves the tick running and the stop with a person', a
   expect(maybe(home, 7, 'fixer.error')).toBe('gh is down')
   expect(posted).toHaveLength(1)
   expect(count()).toEqual(was)
-  expect(db.prepare('SELECT waits_on FROM plans WHERE id = 7').get()).toEqual({ waits_on: null })
+  expect(waitsOn(db)).toEqual({ waits_on: null })
 })
 
 const WAIT = '---\ndid: answered in ask.md that it builds on plan 8\nthen: wait\nwhy: plan 8 has not landed\nwaits_on: 8\n---\n'

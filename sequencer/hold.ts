@@ -13,7 +13,9 @@ import { afresh, drop, maybe, planDir, put } from './workspace.ts'
 const NOTE = 'parked.md'
 
 export function hold(db: Db, root: string, plan: number, why: string, now: Date, on: number | null = null): void {
-  db.prepare("UPDATE plans SET state = 'blocked_on_ceo', waits_on = ? WHERE id = ?").run(on, plan)
+  db.prepare(`UPDATE plans SET state = 'blocked_on_ceo', waits_on = @on,
+    held_why = CASE WHEN @on IS NULL THEN held_why ELSE @why END WHERE id = @plan`)
+    .run({ on, why: why.split('\n')[0] ?? null, plan })
   put(root, plan, NOTE, `# Held ${now.toISOString()}\n\n${why}\n${on === null ? '' : `\nwaits on plan ${String(on)}\n`}`)
 }
 

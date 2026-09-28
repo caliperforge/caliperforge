@@ -5,13 +5,14 @@ import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import { registerLanes } from '../cf-lanes.ts'
-import { actors, actorSection, costs, costSection, fileWaits, greptileLine, hands, heldBy, line, rulings, ticketSection, tickets, unpriced, waitLine,
-  waits } from '../brief.ts'
+import { actors, actorSection, costs, costSection, fileWaits, greptileLine, hands, heldBy, line, rulings, section, ticketSection, tickets, unpriced,
+  waitLine, waits } from '../brief.ts'
+import { hold } from '../../sequencer/hold.ts'
 import { monthly } from '../../sequencer/ready.ts'
 import { put } from '../../sequencer/workspace.ts'
 import { repriced } from '../../store/events.ts'
 import type { Db } from '../../store/index.ts'
-import { waiting } from '../../store/plans.ts'
+import { needsCeo, parked, PlanRow, waiting } from '../../store/plans.ts'
 
 const schema = join(import.meta.dirname, '../../schema')
 
@@ -246,6 +247,32 @@ test('heldBy lists each held plan under who it waits on, with why', () => {
   db.prepare("UPDATE plans SET state = 'blocked_on_ceo' WHERE id = 2").run()
   expect(heldBy(db, 'ceo').map(line)).toEqual(['  plan 1\tstep 0\tqueued\tacme/widget#12\ttarget_approval'])
   expect(heldBy(db, 'coo').map(line)).toEqual(['  plan 2\tstep 0\tblocked_on_ceo\t-'])
+})
+
+test('D1 a plan parked on another is listed under parked with the plan it waits for, and not as needing a decision', () => {
+  const db = world()
+  plan(db, 1, 'queued', 25)
+  plan(db, 2, 'queued', 30)
+  hold(db, mkdtempSync(join(tmpdir(), 'cf-parked-')), 2, 'after #30', new Date(), 1)
+  expect(section('parked on another job', parked(db)))
+    .toBe('parked on another job (1)\n  plan 2\tstep 0\tblocked_on_ceo\t-\twaits for plan 1 (queued, step 0)\tafter #30\n')
+  expect(heldBy(db, 'coo')).toEqual([])
+})
+
+test('D2 a blocked plan with no park needs a decision, with its stop, and is not parked', () => {
+  const db = world()
+  plan(db, 1, 'running', 25)
+  needsCeo(db, PlanRow.parse(db.prepare('SELECT * FROM plans WHERE id = 1').get()), 'code_quality refused: x')
+  expect(heldBy(db, 'coo').map(line)).toEqual(['  plan 1\tstep 0\tblocked_on_ceo\t-\tcode_quality refused: x'])
+  expect(parked(db)).toEqual([])
+})
+
+test('D3 a plan waiting on another job\'s files is not parked', () => {
+  const db = world()
+  plan(db, 1, 'queued', 25)
+  plan(db, 2, 'queued', 30)
+  waiting(db, [{ plan: 2, why: 'file_overlap', on: 1 }])
+  expect(parked(db)).toEqual([])
 })
 
 test('D3 the files section names each waiting plan, its holder and the file, or none', () => {

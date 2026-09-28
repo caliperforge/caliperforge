@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { all } from '../../cli/inbox.ts'
 import { fill } from '../../cli/digests.ts'
+import { file, LANE } from '../../cli/plan.ts'
 import type { Provider } from '../../providers/kind.ts'
 import { load } from '../../runner/rules.ts'
 import { runAt } from '../../store/events.ts'
@@ -59,7 +60,9 @@ const TWIN: Record<string, (db: Db, home: string) => void> = {
     db.exec("UPDATE plans SET state = 'done' WHERE id = 7")
   },
   close: (db) => db.exec("UPDATE plans SET state = 'done', wait_reason = NULL WHERE id = 7"),
-  file: (db, home) => { hold(db, home, 7, 'filed', now) },
+  file: (db, home) => {
+    hold(db, home, 7, 'filed', now, file(db, 'coo', 'internal', 'machine', LANE.machine.seat, 'https://github.com/caliperforge/caliperforge/issues/900', 0))
+  },
   ask_ceo: (db, home) => {
     hold(db, home, 7, 'a maintainer outside our org sees this', now)
     held(db, 7, 'ceo', 'a maintainer outside our org sees this')

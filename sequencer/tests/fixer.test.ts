@@ -86,19 +86,52 @@ test('shadow: the fixer reads only, changes nothing, and the stop still reaches 
   expect(runs(db)).toEqual(RAN)
 })
 
-test('ticket: filed, job held, checkout kept', async () => {
+const TICKET = '---\ndid: nothing\nthen: ticket\nwhy: the spend wall counts a turn four times\nticket: the run wall counts each streamed block\n---\n'
+const ticketed = (db: ReturnType<typeof open>) => db.prepare(`SELECT id, priority, lane, state FROM plans
+  WHERE origin = 'https://github.com/caliperforge/caliperforge/issues/999'`).get() as { id: number } | undefined
+
+test('ticket: filed, queued at P0, job held on it, checkout kept', async () => {
   const { db, home } = seeded('live')
   const filed: string[] = []
   const labels: string[][] = []
   const inner = wire(filed)
   const labelled: Wire = { ...inner, file: (...a: Parameters<typeof inner.file>) => { labels.push(a[3]); return inner.file(...a) } }
-  await woke(db, home, stub('---\ndid: nothing\nthen: ticket\nwhy: the spend wall counts a turn four times\nticket: the run wall counts each streamed block\n---\n', []),
-    now, () => undefined, labelled)
+  await woke(db, home, stub(TICKET, []), now, () => undefined, labelled)
   expect(filed).toEqual(['the run wall counts each streamed block'])
   expect(labels).toEqual([['lane:machine', 'P0', 'fix']])
   expect(state(db)).toEqual({ state: 'blocked_on_ceo', step: 4 })
-  expect(maybe(home, 7, 'parked.md')).toContain('issues/999')
+  expect(maybe(home, 7, 'parked.md')).toMatch(/^# Held .*\n\nhttps:\/\/github\.com\/caliperforge\/caliperforge\/issues\/999\n\nthe spend wall/)
   expect(terminal(db)).not.toContain(7)
+  const on = ticketed(db)
+  expect(on).toMatchObject({ priority: 0, lane: 'machine', state: 'queued' })
+  expect(db.prepare('SELECT waits_on FROM plans WHERE id = 7').get()).toEqual({ waits_on: on?.id })
+  expect(maybe(home, on?.id ?? 0, 'ask.md')).toContain('plan 7')
+  expect(maybe(home, on?.id ?? 0, 'ask.md')).toContain('identifiers: schema/0036_x.sql')
+})
+
+test('ticket: the job is back at its step when the ticket lands', async () => {
+  const { db, home } = seeded('live')
+  const posted: string[] = []
+  await woke(db, home, stub(TICKET, []), now, (t) => void posted.push(t), wire([]))
+  db.prepare("UPDATE plans SET state = 'done' WHERE id = ?").run(ticketed(db)?.id)
+  await woke(db, home, stub(TICKET, []), now, (t) => void posted.push(t), wire([]))
+  expect(state(db)).toEqual({ state: 'queued', step: 4 })
+  expect(db.prepare('SELECT waits_on FROM plans WHERE id = 7').get()).toEqual({ waits_on: null })
+  expect(maybe(home, 7, 'parked.md')).toBeNull()
+  expect(posted).toEqual([])
+})
+
+test.each([
+  { was: 'running', want: [], on: 8 },
+  { was: 'done', want: ['the run wall counts each streamed block'], on: null },
+])('ticket: plan 8 $was with the same title files $want', async ({ was, want, on }) => {
+  const { db, home } = seeded('live')
+  second(db, was)
+  put(home, 8, 'ask.md', '# the run wall counts each streamed block\n')
+  const filed: string[] = []
+  await woke(db, home, stub(TICKET, []), now, () => undefined, wire(filed))
+  expect(filed).toEqual(want)
+  expect(db.prepare('SELECT waits_on FROM plans WHERE id = 7').get()).toEqual({ waits_on: on ?? ticketed(db)?.id })
 })
 
 test('ask_ceo from the fixer reaches the phone with its reason', async () => {
@@ -136,9 +169,13 @@ test('a fixer that throws leaves the tick running and the stop with a person', a
   const { db, home } = seeded('live')
   const posted: string[] = []
   const broken: Wire = { ...wire([]), file: () => { throw new Error('gh is down') } }
+  const count = () => db.prepare('SELECT count(*) AS n FROM plans').get()
+  const was = count()
   await woke(db, home, stub('---\ndid: nothing\nthen: ticket\nwhy: a bug\nticket: a bug\n---\n', []), now, (t) => void posted.push(t), broken)
   expect(maybe(home, 7, 'fixer.error')).toBe('gh is down')
   expect(posted).toHaveLength(1)
+  expect(count()).toEqual(was)
+  expect(db.prepare('SELECT waits_on FROM plans WHERE id = 7').get()).toEqual({ waits_on: null })
 })
 
 const WAIT = '---\ndid: answered in ask.md that it builds on plan 8\nthen: wait\nwhy: plan 8 has not landed\nwaits_on: 8\n---\n'

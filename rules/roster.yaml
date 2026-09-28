@@ -35,7 +35,7 @@ digests:
     prompt: d6a3ec151e453f6f7f5f969fb63cd9e19a06e0d2041a965f1c5c008141b0a6a3
   rust_specialist:
     manifest: 5090575dcb48be94bc22f4c8f4c7bcbca1fe02389697b1e6dd455d49e292235c
-    prompt: e9260c3feba5562ade3a507a6fb1f77514db18e39e8af3d11da6abd299b30a0d
+    prompt: b9f3b66ed6bfe85f613287afcfc3b9801ba6a1c5c5f7dc1ea0d9669bcb17e532
   python_specialist:
     manifest: cd93446f89a0345e256335bf8665c166ceafabec78c1341f44f576bd0cd541fb
     prompt: ea5438e70210d5405f4d5f796e7171853705a3a93330024fd8f928c298d213fd
@@ -50,7 +50,7 @@ digests:
     prompt: 12c10089f798b995f2257dff3fa9a1bcc9f09ed87fa4d5d1b8cb41c916fa9dc0
   lua_specialist:
     manifest: a1622ce0fe5d4526ee1a9a6efc84cbf1736c092e9af1ba4ed42c53ff5e3a6aa8
-    prompt: 7bfb9e7d53749067daae2136e3c22f776266302a947f34fea1365de84dc1420e
+    prompt: 0ea9c68b70fafb71fd240dc6f3713d3a6fe2774ddf2c5ecdc163d993a5328649
   orchestrator:
     manifest: 5c83eed74d97d77b459e19b21bc244a9a600e3423969eff7d497de7d8debce8f
     prompt: dcbc3b6b2ec26f418c79da0248b318f8db1f3aef9b611da87fec37360063ed6a

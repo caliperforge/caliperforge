@@ -270,13 +270,18 @@ function lastFence(path: string): number {
   return fences.at(-2) ?? 0
 }
 
-/** A path with the last line a `## Files` row reaches: `a/b.md:40-57` and `a/b.md:7,57` both reach 57. */
-const REACHED = /([A-Za-z0-9_.+-]*\/[A-Za-z0-9_./+-]*\.[A-Za-z0-9]+):([\d,-]+)/g
+/** A path with the last line a `## Files` row reaches: `a/b.md:40-57`, `a/b.md:7,57` and `a/b.md:7` with a later bare `:57` all reach 57. */
+const REACHED = /([A-Za-z0-9_.+-]*\/[A-Za-z0-9_./+-]*\.[A-Za-z0-9]+)(?::([\d,-]+))?|:(\d[\d,-]*)/g
 
 function reached(brief: string): { path: string; line: number }[] {
-  return section(brief, '## Files').split('\n').filter((l) => /^\s*[-*]/.test(l))
-    .flatMap((l) => [...l.matchAll(REACHED)]
-      .map((m) => ({ path: String(m[1]), line: Math.max(...String(m[2]).split(/[,-]/).map(Number)) })))
+  return section(brief, '## Files').split('\n').filter((l) => /^\s*[-*]/.test(l)).flatMap((l) => {
+    let path = ''
+    return [...l.matchAll(REACHED)].flatMap((m) => {
+      path = m[1] ?? path
+      const lines = m[2] ?? m[3]
+      return lines === undefined || path === '' ? [] : [{ path, line: Math.max(...lines.split(/[,-]/).map(Number)) }]
+    })
+  })
 }
 
 function paths(brief: string, src: string): Refused | null {

@@ -95,6 +95,6 @@ export function article(body: string): string {
 }
 
 export function slug(title: string): string {
-  const s = title.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+  const s = title.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
   return /^.{1,60}(?=-|$)/.exec(s)?.[0] ?? s.slice(0, 60)
 }

@@ -7,6 +7,7 @@ import { approve as approveTarget, refuseTarget } from './queue.ts'
 import { fill as fillRecord, render as renderRecord, still } from './record.ts'
 import { render as renderScan, scan } from './scan.ts'
 import { approve as approvePublish, refuse as refusePublish } from '../sequencer/card.ts'
+import { HOLDERS, holderOf } from '../store/plans.ts'
 
 export function registerTargets(cf: Command, { db, out }: Cli): void {
   cf.command('measure').argument('<repo>', 'owner/repo to take the step 0 pulse of').action((repo: string) => {
@@ -54,21 +55,38 @@ export function registerApprovals(cf: Command, { root, db, out }: Cli): void {
     for (const row of landed(handle)) out(renderLanded(row))
   })
 
-  for (const kind of ['plan', 'proposal'] as const) {
-    approve.command(kind).argument('<id>').action((id: string) => {
-      out(`${kind} ${id} approved\t${approveCard(db(), root, kind, Number(id)).slice(0, 12)}\n`)
-    })
-    refuse.command(kind).argument('<id>').argument('<reason>').action((id: string, reason: string) => {
-      out(`${kind} ${id} refused\t${refuseCard(db(), root, kind, Number(id), reason).slice(0, 12)}\n`)
-    })
-  }
+  signoffs(approve, refuse, { root, db, out })
+}
 
-  approve.command('card').argument('<plan>').action((plan: string) => {
-    out(`card ${plan} approved\t${approvePublish(db(), root, Number(plan)).slice(0, 12)}\n`)
+function signoffs(approve: Command, refuse: Command, { root, db, out }: Cli): void {
+  const BY = ['--by <holder>', `who signs it: ${HOLDERS.join(' or ')}`] as const
+
+  approve.command('plan').argument('<id>').requiredOption(...BY).action((id: string, options: { by: string }) => {
+    const by = holderOf(options.by)
+    out(`plan ${id} approved\t${approveCard(db(), root, 'plan', Number(id), by).slice(0, 12)}\n`)
   })
-  refuse.command('card').argument('<plan>').argument('<reason>').action((plan: string, reason: string) => {
-    out(`card ${plan} refused\t${refusePublish(db(), root, Number(plan), reason).slice(0, 12)}\n`)
+  refuse.command('plan').argument('<id>').argument('<reason>').requiredOption(...BY)
+    .action((id: string, reason: string, options: { by: string }) => {
+      const by = holderOf(options.by)
+      out(`plan ${id} refused\t${refuseCard(db(), root, 'plan', Number(id), reason, by).slice(0, 12)}\n`)
+    })
+
+  approve.command('proposal').argument('<id>').action((id: string) => {
+    out(`proposal ${id} approved\t${approveCard(db(), root, 'proposal', Number(id), 'ceo').slice(0, 12)}\n`)
   })
+  refuse.command('proposal').argument('<id>').argument('<reason>').action((id: string, reason: string) => {
+    out(`proposal ${id} refused\t${refuseCard(db(), root, 'proposal', Number(id), reason, 'ceo').slice(0, 12)}\n`)
+  })
+
+  approve.command('card').argument('<plan>').requiredOption(...BY).action((plan: string, options: { by: string }) => {
+    const by = holderOf(options.by)
+    out(`card ${plan} approved\t${approvePublish(db(), root, Number(plan), by).slice(0, 12)}\n`)
+  })
+  refuse.command('card').argument('<plan>').argument('<reason>').requiredOption(...BY)
+    .action((plan: string, reason: string, options: { by: string }) => {
+      const by = holderOf(options.by)
+      out(`card ${plan} refused\t${refusePublish(db(), root, Number(plan), reason, by).slice(0, 12)}\n`)
+    })
 }
 
 export function registerAdopt(cf: Command, { root, db, out }: Cli): void {

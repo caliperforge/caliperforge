@@ -134,9 +134,9 @@ test('D2 D3 the parent reviews asm/1 against its base and opens one pull request
   expect(plan(a.w.db, 1)).toMatchObject({ step: 7, wait_reason: 'ceo_batch' })
   expect(log.filter((l) => l.startsWith('open '))).toEqual([])
 
-  approveCard(a.w.db, a.w.root, 'plan', 1)
+  approveCard(a.w.db, a.w.root, 'plan', 1, 'ceo')
   await laps(a, 2, wire)
-  approvePublish(a.w.db, a.w.root, 1)
+  approvePublish(a.w.db, a.w.root, 1, 'ceo')
   await laps(a, 1, wire)
   expect(log.filter((l) => l.startsWith('open '))).toEqual(['open acme/widget caliperforge:asm/1'])
 })

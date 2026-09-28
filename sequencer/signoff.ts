@@ -64,7 +64,7 @@ function one(db: Db, root: string, card: Card, desk: Desk, now: Date): Signed[] 
 function answered(db: Db, root: string, card: Card, kept: Kept, seen: Seen & { answer: Answer }, desk: Desk, now: Date): Signed {
   const close = (comment: string): void => { if (seen.open) desk.close(kept.no, comment) }
   if (seen.answer === 'go') {
-    approve(db, root, 'plan', card.id)
+    approve(db, root, 'plan', card.id, 'ceo')
     db.prepare(`UPDATE plans SET state = ${ENTER} WHERE id = ? AND state = 'blocked_on_ceo'`).run(card.id)
     close(`Signed at ${card.digest.slice(0, 12)}. It goes out on the next tick.`)
     drop(root, card.id, FILE)
@@ -73,7 +73,7 @@ function answered(db: Db, root: string, card: Card, kept: Kept, seen: Seen & { a
     tell(root, card, 'asked', `wants to talk about it: ${kept.url}${seen.words === null ? '' : ` (${flat(seen.words)})`}`, now)
   } else {
     const words = wordsOf(db, root, card.id, seen.words, desk)
-    refuse(db, root, 'plan', card.id, words === null ? 'signoff.no_words' : 'signoff.no')
+    refuse(db, root, 'plan', card.id, words === null ? 'signoff.no_words' : 'signoff.no', 'ceo')
     if (words === null) {
       needsCeo(db, planOf(db, card.id))
       save(root, card.id, { ...kept, shut: true })

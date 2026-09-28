@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { desk as ghDesk, type Answer, type Desk, type Pr, type Seen } from '../../cli/gh.ts'
 import { unread } from '../../cli/inbox.ts'
+import { eventsOf } from '../../store/events.ts'
 import { rewind } from '../../store/plans.ts'
 import { approve as approvePublish } from '../card.ts'
 import { tick } from '../index.ts'
@@ -90,11 +91,12 @@ test('go signs the head the card showed, closes the card, and the next tick send
   expect(signoffs(w.db, w.root, desk)).toEqual([{ plan: 1, card: 100, did: 'go' }])
   expect(w.db.prepare("SELECT who, decision, subject_digest FROM approvals WHERE subject_kind = 'plan'").get())
     .toEqual({ who: 'ceo', decision: 'approved', subject_digest: plan(w.db, 1).head_digest })
+  expect(eventsOf(w.db, 1, 'signoff')).toMatchObject([{ actor: 'ceo', outcome: 'pass' }])
   expect(card).toMatchObject({ open: false })
   const sent: string[] = []
   await tick(w.db, w.root, stub(CARRIED), undefined, quiet, watched(sent, w.root, 1))
   await tick(w.db, w.root, stub(CARRIED), undefined, quiet, watched(sent, w.root, 1))
-  approvePublish(w.db, w.root, 1)
+  approvePublish(w.db, w.root, 1, 'ceo')
   await tick(w.db, w.root, stub(CARRIED), undefined, quiet, watched(sent, w.root, 1))
   expect(sent).toContain('open acme/widget caliperforge:widget-12-a1')
   expect(signoffs(w.db, w.root, desk)).toEqual([])
@@ -128,6 +130,7 @@ test('no with words sends it back to the builder with them', async () => {
   expect(brief.split('## Must not break')[1]?.split('## ')[0]).toContain("The CEO's ruling at sign-off")
   expect(w.db.prepare("SELECT decision, reason FROM approvals WHERE subject_kind = 'plan'").get())
     .toEqual({ decision: 'refused', reason: 'signoff.no' })
+  expect(eventsOf(w.db, 1, 'signoff')).toEqual([{ actor: 'ceo', outcome: 'refuse', message: 'signoff.no' }])
 })
 
 test('D1 no with only a line comment on the rehearsal PR sends it back to the builder with it', async () => {

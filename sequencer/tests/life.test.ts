@@ -46,9 +46,9 @@ async function pushed(): Promise<{ w: World; id: number }> {
   git(upstream, ['add', '-A'])
   git(upstream, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'main moves on'])
   await ticks(w, id, () => plan(w.db, id).step === 7)
-  approveCard(w.db, w.root, 'plan', id)
+  approveCard(w.db, w.root, 'plan', id, 'ceo')
   await ticks(w, id, () => maybe(w.root, id, 'maintainer.md') !== null)
-  approvePublish(w.db, w.root, id)
+  approvePublish(w.db, w.root, id, 'ceo')
   await ticks(w, id, () => plan(w.db, id).state === 'done')
   return { w, id }
 }

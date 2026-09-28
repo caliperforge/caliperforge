@@ -2,7 +2,9 @@ import { headOf, prBody } from '../sequencer/push.ts'
 import { cloned, diffOf, maybe, srcDir } from '../sequencer/workspace.ts'
 import { decide, digestOf, headDigest } from '../store/approvals.ts'
 import { approved } from '../store/deliverables.ts'
+import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
+import type { Holder } from '../store/plans.ts'
 import { profile } from '../store/profile.ts'
 import { bytes, byId, open as openProposals, stamp, strike, type ProposalRow } from '../store/proposals.ts'
 
@@ -43,12 +45,15 @@ export function renderLanded(row: Landed): string {
 }
 
 /** The approval row and the row it settles land together or not at all; a half-signed card cannot be re-signed. */
-export function approve(db: Db, root: string, kind: 'plan' | 'proposal', id: number): string {
+export function approve(db: Db, root: string, kind: 'plan' | 'proposal', id: number, by: Holder): string {
   const card = cardOf(db, root, kind, id)
   db.transaction(() => {
     const approval = decide(db, kind, id, card.digest, null)
     if (kind === 'proposal') settle(db, id)
-    else approved(db, id, approval)
+    else {
+      approved(db, id, approval)
+      signed(db, id, by, 'pass', card.digest.slice(0, 12))
+    }
   })()
   return card.digest
 }
@@ -67,13 +72,18 @@ function ruling(db: Db, p: ProposalRow): void {
     .run(p.subject, p.value, p.evidence, new Date().toISOString().slice(0, 10), p.match_issue_no, p.match_ruling_id)
 }
 
-export function refuse(db: Db, root: string, kind: 'plan' | 'proposal', id: number, reason: string): string {
+export function refuse(db: Db, root: string, kind: 'plan' | 'proposal', id: number, reason: string, by: Holder): string {
   const card = cardOf(db, root, kind, id)
   db.transaction(() => {
     decide(db, kind, id, card.digest, reason)
     if (kind === 'proposal') strike(db, id)
+    else signed(db, id, by, 'refuse', reason)
   })()
   return card.digest
+}
+
+function signed(db: Db, plan: number, by: Holder, outcome: 'pass' | 'refuse', message: string): void {
+  logged(db, { plan, kind: 'signoff', actor: by, outcome, message, pointer: null, run: null })
 }
 
 export function render(card: Card): string {

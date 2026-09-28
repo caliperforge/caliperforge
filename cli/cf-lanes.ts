@@ -29,7 +29,6 @@ export function registerLanes(cf: Command, cli: Cli): void {
   stores(cf, cli)
   fires(cf, cli)
   dials(cf, cli)
-  briefs(cf, cli)
 }
 
 function stores(cf: Command, { root, db, out }: Cli): void {
@@ -173,6 +172,8 @@ export function registerSession(cf: Command, { root, db, out }: Cli): void {
     const lines = flow(db(), root, new Date())
     out(lines.length === 0 ? 'flow clear\n' : lines.join(''))
   })
+
+  briefs(cf, { root, db, out })
 }
 
 function briefs(cf: Command, { root, db, out }: Cli): void {

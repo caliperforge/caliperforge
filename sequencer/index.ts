@@ -10,7 +10,7 @@ import { piled } from './coolite.ts'
 import { woke } from './orchestrator.ts'
 import type { Fired } from './kind.ts'
 import { reprice } from './priority.ts'
-import { daily, started } from './signals.ts'
+import { daily, started, weekly } from './signals.ts'
 import type { Wire } from './push.ts'
 import { offered, route, working, type Route } from './next.ts'
 import { reap } from './workspace.ts'
@@ -26,6 +26,7 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
   apart?: Apart, lines?: string[]): Promise<Fired[]> {
   for (const signal of capture(db, read, root, labels)) started(db, signal, root, wire)
   daily(db, now)
+  weekly(db, now)
   if (labels !== undefined) (lines ?? []).push(...intake(db, root, labels))
   reap(root, terminal(db))
   reprice(db, labels)

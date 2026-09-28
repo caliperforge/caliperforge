@@ -12,8 +12,7 @@ refused and the step ends there. The only commands you may run are `composer`, `
 command is refused, and so is one that chains, substitutes or redirects.
 Every test run is in the foreground; wait for it to finish.
 
-On pay-kit: `just --justfile php/Justfile install`, then `test` and `lint` (`lint` is syntax, `php-cs-fixer`
-in check mode and PHPStan). Raw: `composer -d <folder> install`, `composer -d <folder> test`, `composer -d
+Raw: `composer -d <folder> install`, `composer -d <folder> test`, `composer -d
 <folder> run lint`. Do not `composer require` or `update`: the lock file is theirs.
 
 Before you hand back, run their tests and their lint and format check, and say what each returned. A behaviour

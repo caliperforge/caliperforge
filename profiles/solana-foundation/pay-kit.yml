@@ -9,10 +9,19 @@ notes:
   - Each language lives in its own folder, whose Justfile recipes are the checks, run as `just --justfile <folder>/Justfile <recipe>`.
   - "rust/ ships no Justfile: `cargo fmt --all -- --check` at the rust/ workspace, then `cargo test -p <crate>` for the crates touched."
   - Lua's tests need `luarocks path` evaluated first, which only its Justfile recipes do.
-  - Ruby lints with standardrb, not rubocop.
-  - PHP's lint is syntax, php-cs-fixer in check mode and PHPStan.
+  - "On pay-kit: `just --justfile ruby/Justfile install`, then `test` and `lint`."
+  - "Pay-kit lints with `standardrb`, not rubocop: do not add a `.rubocop.yml` or rubocop comments."
+  - "On pay-kit: `just --justfile php/Justfile install`, then `test` and `lint` (`lint` is syntax, `php-cs-fixer` in check mode and PHPStan)."
   - Python's CI does not check `ruff format`, and its tree is not formatted by it.
-  - Go's Codama-generated clients under protocols/programs/ are regenerated from the IDL, never edited by hand.
+  - "On pay-kit: `just --justfile python/Justfile` `test`, `lint`, `typecheck`."
+  - Keys, signatures and hashes are `solders` types (`solders.pubkey.Pubkey`, `solders.signature.Signature`, `solders.hash.Hash`), compared as those types, never as strings.
+  - Parse a base58 key with `Pubkey.from_string`, which raises on a bad value; do not decode base58 by hand.
+  - Lamports and token amounts are `int`, never `float`, and are bounds-checked against `u64` before they reach a transaction.
+  - "On pay-kit: `just --justfile go/Justfile` `test` and `lint`."
+  - "Keys come from `solana-go` (`github.com/gagliardetto/solana-go`): parse input with `solana.PublicKeyFromBase58` and handle its error; `MustPublicKeyFromBase58` is for constants only."
+  - "Amounts are `uint64`: check for overflow before adding or multiplying."
+  - Codama-generated clients (`// DO NOT EDIT`, pay-kit's `protocols/programs/`) are regenerated from the IDL, never edited by hand.
+intake: { pace: { prs: 1, days: 7 } }
 sources:
   - sequencer/gates.ts
   - seats/python_specialist/prompt.md

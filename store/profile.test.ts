@@ -21,7 +21,21 @@ test('D2 pay-kit holds the org commit and pr shape and its own checks, notes and
   const org = profile(REPO, 'solana-foundation/other')
   const kit = profile(REPO, 'solana-foundation/pay-kit')
   expect(kit).toMatchObject({ commit: org?.commit, pr: org?.pr, checks: { go: ['lint', 'test'] } })
-  expect(Object.keys(kit ?? {}).sort()).toEqual(['checks', 'commit', 'notes', 'pr', 'sources'])
+  expect(Object.keys(kit ?? {}).sort()).toEqual(['checks', 'commit', 'intake', 'notes', 'pr', 'sources'])
+  expect(kit?.intake).toEqual({ claim_first: false, pace: { prs: 1, days: 7 } })
+  expect(profile(REPO, 'solana-foundation/surfpool')).not.toHaveProperty('intake')
+})
+
+test('D1 intake parses as an object whose claim_first defaults to false', () => {
+  const dir = root({ 'widget.yml': 'intake: { max_open_prs: 2 }\n' })
+  expect(profile(dir, 'acme/widget')?.intake).toEqual({ claim_first: false, max_open_prs: 2 })
+})
+
+test('D6 an intake key outside the three, or a claim_first that is not a boolean, is refused naming the file', () => {
+  const extra = root({ 'widget.yml': 'intake: { labels: [bug] }\n' })
+  expect(() => profile(extra, 'acme/widget')).toThrow(join(extra, 'profiles/acme/widget.yml'))
+  const claim = root({ 'widget.yml': 'intake: { claim_first: sure }\n' })
+  expect(() => profile(claim, 'acme/widget')).toThrow(join(claim, 'profiles/acme/widget.yml'))
 })
 
 test('D2 a field both files set comes out as the repo file has it, whole', () => {

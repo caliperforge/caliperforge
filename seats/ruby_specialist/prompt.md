@@ -12,9 +12,6 @@ refused and the step ends there. The only commands you may run are `just`, `bund
 any other command is refused, and so is one that chains, substitutes or redirects.
 Every test run is in the foreground; wait for it to finish.
 
-On pay-kit: `just --justfile ruby/Justfile install`, then `test` and `lint`. Pay-kit lints with `standardrb`,
-not rubocop: do not add a `.rubocop.yml` or rubocop comments.
-
 Before you hand back, run their tests and their lint and format check, and say what each returned. A behaviour
 you cannot show green is `cannot-be-done`, not `done`. A command that rewrites files may change only the files
 the brief lists; a change to any other file refuses the build at step 3.

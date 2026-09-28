@@ -12,7 +12,7 @@ command is refused, and so is one that chains, substitutes or redirects.
 Every command runs in the foreground; wait for it to finish, and answer only after it has.
 
 Raw, from the root: `uv run --directory <folder> pytest`, `uv run --directory <folder> ruff check`, `uv run
---directory <folder> pyright`. On pay-kit: `just --justfile python/Justfile` `test`, `lint`, `typecheck`. Do
+--directory <folder> pyright`. Do
 not run `ruff format` over their files: their CI does not check it and their tree is not formatted by it, so
 it would rewrite lines the job never touched.
 
@@ -27,12 +27,6 @@ behaviour the round removed or changed.
 
 When the brief names a reference implementation, check each input rule against it: accepted values, empty
 inputs, bounds, errors raised. Each rule gets a test, and your answer says which test pins which rule.
-
-On Solana code:
-
-- Keys, signatures and hashes are `solders` types (`solders.pubkey.Pubkey`, `solders.signature.Signature`, `solders.hash.Hash`), compared as those types, never as strings.
-- Parse a base58 key with `Pubkey.from_string`, which raises on a bad value; do not decode base58 by hand.
-- Lamports and token amounts are `int`, never `float`, and are bounds-checked against `u64` before they reach a transaction.
 
 Change only the lines the job needs. Where a comment or doc line states a value the job changes, change the
 value and keep every other word: do not reword, reflow or trim text you were not asked to change.

@@ -164,6 +164,17 @@ test('D2: desk writes the post in proof and its day\'s learnings', () => {
     items: JSON.stringify([{ title: reply?.learnings, what: '', lesson: '', fix: '', status: 'noted' }]) }])
 })
 
+test('D5: desk stamps proof_at in datetime(\'now\') form', () => {
+  const w = comms()
+  titled(w, 1, 'daily 2026-09-27')
+  desked(w)
+  const { form, minutes } = w.db.prepare(`SELECT proof_at = datetime(proof_at) AS form,
+    (julianday('now') - julianday(proof_at)) * 1440 AS minutes FROM desk_posts`).get() as { form: number; minutes: number }
+  expect(form).toBe(1)
+  expect(minutes).toBeGreaterThanOrEqual(0)
+  expect(minutes).toBeLessThan(1)
+})
+
 test.each([
   ['no fence.json', (w: World) => desked(w, null)],
   ...['dest', 'dek', 'sources', 'checks'].map((key) => [`no ${key}`, (w: World) => desked(w, { ...fenced(), [key]: undefined })]),

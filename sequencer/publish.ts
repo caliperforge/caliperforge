@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { approvedSite, published, type Approved } from '../store/desk.ts'
+import { dueSite, published, type Approved } from '../store/desk.ts'
 import type { Db } from '../store/index.ts'
 import { get } from '../store/lanes.ts'
 import type { Outcome } from './kind.ts'
@@ -20,8 +20,8 @@ const esc = (text: string): string => text.replace(/[&<>"']/g, (c) => ENTITIES[c
 const inline = (text: string): string => esc(text).replace(/`([^`]+)`/g, '<code>$1</code>')
 
 export function publish(db: Db): Outcome {
-  const posts = approvedSite(db)
-  if (posts.length === 0) return { outcome: 'pass', spans: [], note: 'no approved site post' }
+  const posts = dueSite(db)
+  if (posts.length === 0) return { outcome: 'pass', spans: [], note: 'no site post due' }
   const dir = get(db, 'comms.site_dir')
   if (dir === '') return { outcome: 'refuse', spans: ['settings:comms.site_dir'], note: 'comms.site_dir is empty' }
   for (const post of posts) {

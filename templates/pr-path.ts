@@ -30,6 +30,11 @@ export function builder(language: string | null): string {
   return (language === null ? undefined : BUILDERS[language]) ?? DEFAULT_BUILDER
 }
 
+/** The language whose builder is `seat`, or null when none is. */
+export function languageOfSeat(seat: string | null): string | null {
+  return Object.entries(BUILDERS).find(([, s]) => s === seat)?.[0] ?? null
+}
+
 export const steps: Step[] = [
   { step: 0, name: 'measure', seat: DEFAULT_BUILDER, fires: 'kernel', runs: 'target', gate: false, writes_verdict: false, verdict_gate: null },
   { step: 1, name: 'ruling', seat: BRIEF_WRITER, fires: 'brief', runs: BRIEF_WRITER, gate: false, writes_verdict: false, verdict_gate: null },

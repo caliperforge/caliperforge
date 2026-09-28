@@ -61,3 +61,12 @@ test('D5 a recent upstream branch on our file is flagged with its tree link, mai
   expect(theirs(canned([]))(w.db, w.root, 1, TARGET)).toEqual({ check: 'their work', ok: false,
     says: 'branch https://github.com/acme/widget/tree/fix-hello touches src/hello.ts' })
 })
+
+test('D6 an orphan upstream branch with no history in common with main passes', () => {
+  const w = ours()
+  const dir = srcDir(w.root, 1)
+  const tree = git(dir, ['hash-object', '-t', 'tree', '-w', '/dev/null']).trim()
+  const orphan = git(dir, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit-tree', tree, '-m', 'badges']).trim()
+  git(dir, ['push', '-q', 'upstream', `${orphan}:refs/heads/badges`])
+  expect(theirs(canned([]))(w.db, w.root, 1, TARGET)).toEqual(PASS)
+})

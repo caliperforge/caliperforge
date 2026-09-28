@@ -24,6 +24,8 @@ describe('usage', () => {
   it('throws, naming the fields, when hit and miss do not add up to the prompt', () => {
     expect(() => usage({ ...SPLIT, prompt_cache_miss_tokens: 50 }))
       .toThrow('prompt_cache_hit_tokens 60 + prompt_cache_miss_tokens 50 is not prompt_tokens 100')
+    expect(() => usage({ prompt_tokens: 100, completion_tokens: 7, prompt_cache_miss_tokens: 40 }))
+      .toThrow('prompt_cache_hit_tokens undefined + prompt_cache_miss_tokens 40 is not prompt_tokens 100')
   })
 
   it('throws, naming the fields, when more tokens were cached than prompted', () => {

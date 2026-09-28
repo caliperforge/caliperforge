@@ -61,7 +61,7 @@ const states = (db: Db): unknown[] => allPlans(db).map((p) => ({ origin: p.origi
 let root = ''
 beforeEach(() => { root = mkdtempSync(join(tmpdir(), 'cf-intake-')) })
 
-test('D1: each open lane issue on a switched-on lane home becomes a queued plan with its ask written', () => {
+test('D1: each lane issue on a live home is queued with its ask', () => {
   const db = piped()
   intake(db, root, canned(TWO))
   expect(allPlans(db).map((p) => ({ id: p.id, origin: p.origin, state: p.state, priority: p.priority }))).toEqual([
@@ -71,7 +71,7 @@ test('D1: each open lane issue on a switched-on lane home becomes a queued plan 
   for (const id of [1, 2]) expect(existsSync(join(root, '.cf/work', String(id), 'ask.md'))).toBe(true)
 })
 
-test('D2: the same list again adds no row, views no issue and leaves each ask alone', () => {
+test('D2: the same list again adds, views and rewrites nothing', () => {
   const db = piped()
   intake(db, root, canned(TWO))
   const ask = join(root, '.cf/work/1/ask.md')
@@ -83,7 +83,7 @@ test('D2: the same list again adds no row, views no issue and leaves each ask al
   expect(readFileSync(ask, 'utf8')).toBe('edited')
 })
 
-test('D3: a queued plan whose issue left the list is halted, and a running or blocked one keeps its state', () => {
+test('D3: a delisted queued plan halts; a running one does not', () => {
   const db = piped()
   queue(db, 50)
   queue(db, 51, 'running')
@@ -104,7 +104,7 @@ test('D4: an issue a part of a split names is not adopted', () => {
   expect(states(db)).toEqual([{ origin: url(30), state: 'done' }, { origin: url(41), state: 'queued' }])
 })
 
-test('D4: a lane whose pipe is off or missing has its home left unlisted', () => {
+test('D4: a lane with its pipe off or missing is left unlisted', () => {
   for (const db of [piped(0), fresh(schema)]) {
     const log: string[] = []
     intake(db, root, canned(TWO, log))
@@ -120,7 +120,7 @@ test('D4: a read that throws halts no plan and names the repo', () => {
   expect(states(db)).toEqual([{ origin: url(50), state: 'queued' }])
 })
 
-test('a parent read that throws skips that issue alone, names it, and makes no ticket its part', () => {
+test('a throwing parent read skips and names that issue alone', () => {
   const db = piped()
   const read = canned(TWO)
   const lines = intake(db, root, (args) => {
@@ -155,20 +155,20 @@ test('D5: the tick lists issues only when handed a reader', async () => {
   expect(tickNote([], [], sink)).toContain(`${REPO}: gh is down`)
 })
 
-test('#260: an issue with sub-issues is a parent and is not adopted; its parts are', () => {
+test('#260: sub-issues make a parent; only its parts are adopted', () => {
   const db = piped()
   intake(db, root, canned([{ number: 85, labels: ['lane:machine'], parts: 3 }, { number: 121, labels: ['lane:machine'] }]))
   expect(states(db)).toEqual([{ origin: url(121), state: 'queued' }])
 })
 
-test('#260: a parent split by hand, named only by its parts\' titles, is not adopted', () => {
+test('#260: a parent split by hand in part titles is not adopted', () => {
   const db = piped()
   intake(db, root, canned([{ number: 85, labels: ['lane:machine'] },
     { number: 121, labels: ['lane:machine'], title: '85a: each changed declaration whole' }]))
   expect(states(db)).toEqual([{ origin: url(121), state: 'queued' }])
 })
 
-test('D3: a part\'s own parts filed by the COO join that part\'s plan, part a queued, and neither is its own plan', () => {
+test('D3: a part\'s COO-filed parts join its plan, not their own', () => {
   const db = piped()
   queue(db, 200, 'done')
   queue(db, 223, 'blocked_on_ceo')
@@ -216,25 +216,25 @@ function five(): Db {
   return db
 }
 
-test('D1: every open lane issue listed is a ticket, and one closed since the last listing is gone', () => {
+test('D1: a listed lane issue is a ticket; a closed one is gone', () => {
   expect(tickets(five())).toEqual(RECORDED)
 })
 
-test('D2: a listed issue that lost its lane label loses its ticket, even from a list WINDOW long', () => {
+test('D2: an unlabelled issue loses its ticket even at WINDOW', () => {
   const db = piped()
   ticket(db, 50)
   intake(db, root, canned([...Array(WINDOW).keys()].map((i) => ({ number: 50 + i, labels: ['bug'] }))))
   expect(tickets(db)).toEqual([])
 })
 
-test('D3: a list exactly WINDOW long drops no ticket for an issue missing from it', () => {
+test('D3: a WINDOW-long list drops no ticket missing from it', () => {
   const db = piped()
   ticket(db, 50)
   intake(db, root, canned([...Array(WINDOW).keys()].map((i) => ({ number: 1000 + i, labels: i === 0 ? ['lane:machine'] : ['bug'] }))))
   expect(allTickets(db).map((t) => ({ number: t.number }))).toEqual([{ number: 50 }, { number: 1000 }])
 })
 
-test('D4: an issue with two P labels is recorded unpriced and the rest of its repo is still queued', () => {
+test('D4: two P labels leave it unpriced; its repo still queues', () => {
   const db = piped()
   intake(db, root, canned([{ number: 40, labels: ['lane:machine', 'P1', 'P2'] }, { number: 41, labels: ['lane:machine'] }]))
   expect(allTickets(db).map((t) => ({ number: t.number, priority: t.priority }))).toEqual([
@@ -274,7 +274,7 @@ const unblocked = (db: Db): unknown[] => ofKind(db, 'unblocked').map(({ plan, me
 
 const waits = (db: Db): unknown => ({ plan: allParts(db).find((p) => p.n === 1)?.plan })
 
-test('D1: a part whose After: issue closed off the machine is queued as its parent\'s, with its ask, and says so', () => {
+test('D1: a part whose After: closed is queued as its parent\'s', () => {
   const db = waiting()
   intake(db, root, canned([B]))
   const kin = allPlans(db).map((p) => ({ pipe_id: p.pipe_id, lane: p.lane, seat: p.seat, priority: p.priority }))
@@ -285,7 +285,7 @@ test('D1: a part whose After: issue closed off the machine is queued as its pare
   expect(unblocked(db)).toEqual([{ plan: 2, message: '#53 closed' }])
 })
 
-test('D2: a part whose After: issue is still open, lane-labelled or not, is not queued', () => {
+test('D2: a part whose After: is still open is not queued', () => {
   for (const labels of [['lane:machine'], ['bug']]) {
     const db = waiting()
     intake(db, root, canned([{ number: 53, labels, title: '30a: first' }, B]))
@@ -294,7 +294,7 @@ test('D2: a part whose After: issue is still open, lane-labelled or not, is not 
   }
 })
 
-test('D3: the same listing again makes no second plan and no second unblocked event', () => {
+test('D3: a repeat listing adds no plan and no unblocked event', () => {
   const db = waiting()
   intake(db, root, canned([B]))
   intake(db, root, canned([B]))
@@ -312,14 +312,14 @@ const A: Fixture = { number: 300, labels: ['lane:machine'] }
 
 const HAND: Fixture = { number: 301, labels: ['lane:machine'], body: 'After: #300' }
 
-test('D1: a hand-filed ticket whose After: issue is open gets no plan and its ticket records the wait', () => {
+test('D1: a hand-filed ticket on an open After: records a wait', () => {
   const db = piped()
   intake(db, root, canned([A, HAND]))
   expect(states(db)).toEqual([{ origin: url(300), state: 'queued' }])
   expect(allTickets(db).find((t) => t.number === 301)).toMatchObject({ after: 300 })
 })
 
-test('D2: once its After: issue leaves the list, the held ticket is queued with its ask', () => {
+test('D2: once its After: is delisted, the held ticket queues', () => {
   const db = piped()
   intake(db, root, canned([A, HAND]))
   intake(db, root, canned([HAND]))
@@ -333,7 +333,7 @@ test('D3: an After: issue missing from a whole list holds nothing', () => {
   expect(states(db)).toEqual([{ origin: url(301), state: 'queued' }])
 })
 
-test('D4: a list exactly WINDOW long holds a ticket whose After: issue is missing from it', () => {
+test('D4: a WINDOW-long list holds a ticket with After: absent', () => {
   const db = piped()
   intake(db, root, canned([HAND, ...[...Array(WINDOW - 1).keys()].map((i) => ({ number: 1000 + i, labels: ['bug'] }))]))
   expect(states(db)).toEqual([])
@@ -354,7 +354,7 @@ function pushed(db: Db, plans: number[]): void {
   }
 }
 
-test('#257: a running or blocked plan whose work was pushed and whose issue closed is done', () => {
+test('#257: a pushed running plan whose issue closed is done', () => {
   const db = piped()
   queue(db, 60, 'blocked_on_ceo')
   queue(db, 61, 'running')
@@ -372,7 +372,7 @@ const SHUT = '2026-09-25T10:00:00Z'
 
 const CLOSED: Fixture = { number: 90, labels: ['lane:machine'], createdAt: '2026-09-25T09:00:00Z', closedAt: SHUT }
 
-test('D1: an issue opened and closed between ticks has both times, and a ticket that closed keeps its row', () => {
+test('D1: an issue closed between ticks keeps both times and row', () => {
   const db = piped()
   intake(db, root, canned([{ number: 60, labels: ['lane:machine'] }]))
   intake(db, root, canned([], [], [CLOSED, { number: 60, labels: ['lane:machine'], closedAt: SHUT }]))
@@ -382,7 +382,7 @@ test('D1: an issue opened and closed between ticks has both times, and a ticket 
   ])
 })
 
-test('D2: one tick records kind fix for a fix-labelled issue and build for one without', () => {
+test('D2: kind is fix for a fix label, build without one', () => {
   const db = piped()
   intake(db, root, canned([{ number: 40, labels: ['lane:machine', 'fix'] }], [], [{ ...CLOSED, number: 41 }]))
   expect(allTickets(db).map((t) => ({ number: t.number, kind: t.kind }))).toEqual([
@@ -391,7 +391,7 @@ test('D2: one tick records kind fix for a fix-labelled issue and build for one w
   ])
 })
 
-test('D3: an issue only in the closed listing is not queued, holds and releases nothing, and is not open', () => {
+test('D3: an issue only in the closed listing changes nothing', () => {
   const db = waiting()
   queue(db, 300)
   intake(db, root, canned([HAND], [], [{ ...A, closedAt: SHUT }, { ...B, closedAt: SHUT }, CLOSED]))
@@ -403,7 +403,7 @@ test('D3: an issue only in the closed listing is not queued, holds and releases 
   ])
 })
 
-test('D1-D3: a queued plan at step 8 whose issue closed is done if pushed, halted if not, and queued while its issue is open', () => {
+test('D1-D3: a closed step 8 plan is done if pushed, else halted', () => {
   const db = piped()
   queue(db, 70, 'queued', 8)
   queue(db, 71, 'queued', 8)

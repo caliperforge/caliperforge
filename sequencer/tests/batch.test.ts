@@ -53,7 +53,7 @@ async function atBatch(): Promise<World> {
   return w
 }
 
-test('the batch is a card per plan at ready and per open proposal, with a green/red check list', async () => {
+test('a card per ready plan and open proposal, with checks', async () => {
   const w = await atBatch()
   const card = batch(w.db, w.root)[0]
   expect(card).toMatchObject({ kind: 'plan', id: 1, title: 'acme/widget#12 widget-12-a1' })
@@ -66,7 +66,7 @@ test('the batch is a card per plan at ready and per open proposal, with a green/
   ])
 })
 
-test('push refuses without a matching row, then pushes the approved head and opens the pr', async () => {
+test('push needs an approval row, then pushes and opens the pr', async () => {
   const w = await atBatch()
   const sent: string[] = []
   const wire = watched(sent, w.root, 1)
@@ -78,7 +78,7 @@ test('push refuses without a matching row, then pushes the approved head and ope
   expect(deliverablesOf(w.db, 1).at(-1)).toEqual({ state: 'pushed', evidence: URL })
 })
 
-test('an outside branch reaches the batch as one commit, titled off the brief, naming no upstream number', async () => {
+test('outside branch: one commit, brief title, no upstream number', async () => {
   const w = await atBatch()
   const log = execFileSync('git', ['log', '--format=%B%x00', 'refs/remotes/upstream/main..HEAD'],
     { cwd: srcDir(w.root, 1), encoding: 'utf8' }).split('\0').map((m) => m.trim()).filter((m) => m !== '')
@@ -99,7 +99,7 @@ test('a body the card set is the one the pull request opens with', async () => {
   expect(bodies).toEqual(['Addresses the defaults-table item in #12.\n'])
 })
 
-test('the pre-push hook asks of what lands on main whether the ceo signed it, and lets the fork branch by', async () => {
+test('pre-push hook checks ceo sign-off on main, not the fork', async () => {
   const w = await atBatch()
   const sha = headOf(w.root, 1).sha
   const onto = (ref: string): string[] => refusedPush(w.db, `refs/heads/x ${sha} ${ref} ${'0'.repeat(40)}\n`)
@@ -112,7 +112,7 @@ test('the pre-push hook asks of what lands on main whether the ceo signed it, an
   expect(headApproved(w.db, 'f'.repeat(40))).toBe(false)
 })
 
-test('the tick records every comment, review, bot review and merge on our open pr, once', async () => {
+test('each comment, review, bot review and merge on our pr, once', async () => {
   const w = await pushed()
   const view = pr({
     comments: [{ id: 'c1', author: { login: 'maintainer' }, body: 'please split this', createdAt: '2026-09-17T10:00:00Z' }],
@@ -129,7 +129,7 @@ test('the tick records every comment, review, bot review and merge on our open p
 })
 
 /** #103: on plan 65 Greptile's 5/5 summary comment rewound the finished job and told the CEO he was asked. */
-test('a review bot\'s summary comment is its score, not a person asking', async () => {
+test('a review bot\'s summary is its score, not a person asking', async () => {
   const w = await pushed()
   const summary = (n: number): string => `<h2><a href="https://app.greptile.com"><picture></picture></a>Confidence Score: ${String(n)}/5</h2>\n\n1 of 2 files\n\n${REVIEWED}`
   const view = pr({ comments: [
@@ -143,7 +143,7 @@ test('a review bot\'s summary comment is its score, not a person asking', async 
   expect(started(w.db, three)).toMatchObject({ step: 4 })
 })
 
-test('a Greptile summary is stored with the head it reviewed; one in the older format stores nothing', async () => {
+test('Greptile summary is kept with its head; old format is not', async () => {
   const w = await pushed()
   const at = new Date(Date.now() + 1000).toISOString()
   const view = pr({ comments: [
@@ -154,7 +154,7 @@ test('a Greptile summary is stored with the head it reviewed; one in the older f
   expect(others(w.db, SEEDED).map((s) => ({ external_id: s.external_id, score: s.score, head: s.head }))).toEqual([{ external_id: 'g1', score: 4, head: SHA }])
 })
 
-test('what we said on our own pull request is not a signal; their words and the review state are kept', async () => {
+test('our words are no signal; theirs and review state are kept', async () => {
   const w = await pushed()
   const view = pr({
     author: { login: 'michael-moffett' },
@@ -170,7 +170,7 @@ test('what we said on our own pull request is not a signal; their words and the 
   ])
 })
 
-test('a changes-requested review goes to the builder with the words; a plain comment waits there for a person', async () => {
+test('changes requested go to the builder; a comment to a person', async () => {
   const w = await pushed()
   const said = (id: string, state: string | undefined, body: string): SignalRow[] => capture(w.db, () => pr({
     reviews: [{ id, author: { login: 'maintainer' }, body, submittedAt: new Date(Date.now() + 60_000).toISOString(),
@@ -187,7 +187,7 @@ test('a changes-requested review goes to the builder with the words; a plain com
   expect(plan(w.db, 1)).toMatchObject({ step: 2, state: 'blocked_on_ceo' })
 })
 
-test('a round on an open pull request pushes its branch without opening another', async () => {
+test('a round on an open pr pushes its branch, opening no other', async () => {
   const w = await pushed()
   const sent: string[] = []
   const wire = watched(sent, w.root, 1)
@@ -200,7 +200,7 @@ test('a round on an open pull request pushes its branch without opening another'
   expect(sent.slice(2)).toEqual(['send src widget-12-a1', 'unrehearse caliperforge/widget widget-12-a1-next'])
 })
 
-test('a round whose -next the fork holds at a commit HEAD lacks folds onto it, forcing nothing', { timeout: 90_000 }, async () => {
+test('a fork -next HEAD lacks is folded onto, never forced', { timeout: 90_000 }, async () => {
   const w = await pushed()
   const src = srcDir(w.root, 1)
   const git = (args: string[]): string => execFileSync('git', args, { cwd: src, encoding: 'utf8' }).trim()
@@ -225,7 +225,7 @@ test('a round whose -next the fork holds at a commit HEAD lacks folds onto it, f
   expect(sent.filter((l) => l.includes('--force') || l.includes('+refs'))).toEqual([])
 })
 
-test('D1 D2 D3 rounds before the pull request fast-forward -next on tips the branch never holds, and push sends the branch itself and opens it', async () => {
+test('D1 D2 D3 pre-pr rounds move -next; push sends the branch', async () => {
   const w = world()
   approve(w.db, w.target)
   const src = srcDir(w.root, 1)
@@ -288,7 +288,7 @@ async function refollowed(handback: string): Promise<{ git: (args: string[]) => 
   return { git, again: () => { next(w.root, plan(w.db, 1), 'acme/widget', wire) } }
 }
 
-test('D1 D3 D4 a follow-up commit is the handback summary with no upstream number, and the next tick keeps it', async () => {
+test('D1 D3 D4 follow-up is the summary, no upstream #, kept', async () => {
   const { git, again } = await refollowed('Renamed.\n\n---\nsummary: rename hello for #12\ndone:\n  - id: D1\n---\n')
   const message = git(['log', '-1', '--format=%B'])
   expect(message).toBe('fix: rename hello for')
@@ -298,12 +298,12 @@ test('D1 D3 D4 a follow-up commit is the handback summary with no upstream numbe
   expect(git(['rev-parse', 'HEAD'])).toBe(head)
 })
 
-test('D2 a follow-up commit whose handback has no summary says it addresses review', async () => {
+test('D2 a follow-up with no summary says it addresses review', async () => {
   const { git } = await refollowed('Renamed.\n\n---\ndone:\n  - id: D1\n---\n')
   expect(git(['log', '-1', '--format=%B'])).toBe('fix: address review')
 })
 
-test('a counterparty finding on merged code is an escape against the step the map says owns it', async () => {
+test('merged-code finding is an escape on the step that owns it', async () => {
   const w = await pushed()
   const merged = pr({
     mergedAt: '2026-09-18T09:00:00Z', mergedBy: { login: 'maintainer' },
@@ -315,7 +315,7 @@ test('a counterparty finding on merged code is an escape against the step the ma
   expect(classOf('no class named here')).toBe('correctness')
 })
 
-test('a pull request read that throws leaves a swallowed event and no signal', async () => {
+test('a pr read that throws leaves a swallowed event, no signal', async () => {
   const w = await pushed()
   expect(capture(w.db, () => { throw new Error('HTTP 502\nbody') })).toEqual([])
   expect(ofKind(w.db, 'swallowed'))
@@ -346,7 +346,7 @@ const listing = (heads: string[]) => (args: string[]): unknown => {
   return head === 'widget-12-a1-next' ? [{ number: 3 }] : []
 }
 
-test('only the bot review on the rehearsal is kept, on the plan, and a merge upstream takes no escape from it', async () => {
+test('only the rehearsal bot review is kept; it takes no escape', async () => {
   const w = await pushed()
   expect(capture(w.db, forked, w.root, listing([]))).toEqual([])
   expect(others(w.db, SEEDED).map((s) => ({ repo: s.repo, pr: s.pr, kind: s.kind, score: s.score, head: s.head, plan: s.plan })))
@@ -355,7 +355,7 @@ test('only the bot review on the rehearsal is kept, on the plan, and a merge ups
   expect(dispositionsOf(w.db)).toEqual([])
 })
 
-test('D5 a rehearsal review at a -next tip is stored at the plan HEAD the tip carries', async () => {
+test('D5 a rehearsal review at -next is stored at its plan HEAD', async () => {
   const w = await pushed()
   const head = headOf(w.root, 1).sha
   put(w.root, 1, 'next.tips', `${SHA} ${head}\n`)
@@ -364,7 +364,7 @@ test('D5 a rehearsal review at a -next tip is stored at the plan HEAD the tip ca
   expect(graded(w.db, 1, head)).toMatchObject({ external_id: 'g3', score: 4 })
 })
 
-test('D1 a rehearsal review writes the bot\'s inline findings at its commit under the plan HEAD it carries', async () => {
+test('D1 rehearsal inline findings land under the plan HEAD', async () => {
   const w = await pushed()
   const head = headOf(w.root, 1).sha
   put(w.root, 1, 'next.tips', `${SHA} ${head}\n`)
@@ -380,14 +380,14 @@ test('a plan with no checkout is asked about no rehearsal', async () => {
   expect(heads).toEqual(['widget-12-a1-next'])
 })
 
-test('a pr the tick cannot read this time does not stop the pipes behind it', async () => {
+test('an unreadable pr does not stop the pipes behind it', async () => {
   const w = await pushed()
   expect(capture(w.db, () => { throw new Error('gh: could not resolve host') })).toEqual([])
   expect(capture(w.db, () => pr({ comments: [{ id: 'c1', author: { login: 'maintainer' }, body: 'hi', createdAt: '2026-09-17T10:00:00Z' }] })))
     .toHaveLength(1)
 })
 
-test('a vague bot finding does not take the disposition slot a named one earned', async () => {
+test('a vague bot finding does not take a named one\'s slot', async () => {
   const w = await pushed()
   const merged = pr({
     mergedAt: '2026-09-18T09:00:00Z', mergedBy: { login: 'maintainer' },
@@ -400,7 +400,7 @@ test('a vague bot finding does not take the disposition slot a named one earned'
   expect(dispositionsOf(w.db).map((d) => d.defect_class)).toEqual(['scope'])
 })
 
-test('an approval that cannot settle its row writes no approval row either', async () => {
+test('an approval that cannot settle its row records nothing', async () => {
   const w = await atBatch()
   const path = `${w.root}/one.md`
   writeFileSync(path, 'RULING batch.card = change_text_and_marks\n')
@@ -411,7 +411,7 @@ test('an approval that cannot settle its row writes no approval row either', asy
   expect(openProposals(w.db)).toHaveLength(1)
 })
 
-test('a plan at ready with no checkout stays on the card list and cannot be signed', async () => {
+test('a ready plan with no checkout stays listed, unsignable', async () => {
   const w = await atBatch()
   putPlan(w.db, SECOND)
   const blind = batch(w.db, w.root).find((c) => c.id === 2)
@@ -465,7 +465,7 @@ test('answered bot score stops holding', async () => {
   expect(unanswered(w.db, 1)).toBeUndefined()
 })
 
-test('D5 a rehearsal score on our fork leaves unanswered alone; one below 5 upstream still holds', async () => {
+test('D5 a fork score leaves unanswered; below 5 upstream holds', async () => {
   const w = await pushed()
   const bot = (repo: string, score: number): void => void record(w.db, {
     repo, pr: 7, kind: 'bot_review', author: 'greptile', at: new Date(Date.now() + 1000).toISOString(), external_id: repo, score, plan: 1,
@@ -476,7 +476,7 @@ test('D5 a rehearsal score on our fork leaves unanswered alone; one below 5 upst
   expect(unanswered(w.db, 1)).toBeDefined()
 })
 
-test('session close writes typed proposals and nothing else, and approval turns a ruling into a row', async () => {
+test('session close writes only proposals; approval makes a row', async () => {
   const w = await atBatch()
   const path = `${w.root}/session.md`
   writeFileSync(path, TRANSCRIPT)
@@ -495,7 +495,7 @@ test('session close writes typed proposals and nothing else, and approval turns 
   expect(approvalsOf(w.db, 'proposal')).toEqual([{ decision: 'approved', reason: null }, { decision: 'refused', reason: 'not_now' }])
 })
 
-test('a settled item already in rulings proposes nothing, and the pr body stays under twenty lines', async () => {
+test('a ruled item proposes nothing; pr body under twenty lines', async () => {
   const w = await atBatch()
   const path = `${w.root}/again.md`
   writeFileSync(path, 'RULING push.digest = approval_matches_branch_head_digest\n')
@@ -509,7 +509,7 @@ test('a settled item already in rulings proposes nothing, and the pr body stays 
  */
 const lap = (w: World) => tick(w.db, w.root, stub(CARRIED), new Date(), () => pr(), watched([], w.root, 1))
 
-test('a second lap after a rewind puts a fresh card in the batch and cannot leave on the first lap approval', async () => {
+test('a rewound lap needs a fresh card, not the first approval', async () => {
   const w = await pushed()
   rewind(w.db, 1, 4)
   expect(plan(w.db, 1).head_digest).toBeNull()
@@ -527,7 +527,7 @@ test('a second lap after a rewind puts a fresh card in the batch and cannot leav
   expect(plan(w.db, 1).step).toBe(8)
 })
 
-test('an approved non-ruling item said again in a later session leaves its evidence and the batch alone', async () => {
+test('an approved item said again later changes nothing', async () => {
   const w = await atBatch()
   const first = `${w.root}/first.md`
   writeFileSync(first, 'WORK batch.card = show_the_change_and_the_marks\n')
@@ -540,7 +540,7 @@ test('an approved non-ruling item said again in a later session leaves its evide
   expect(openProposals(w.db)).toHaveLength(0)
 })
 
-test('a review read on one tick and the merge on a later one is still one escape', async () => {
+test('review then merge on a later tick is still one escape', async () => {
   const w = await pushed()
   const review = { id: 'r9', author: { login: 'maintainer' }, body: 'this is a scope problem', submittedAt: '2026-09-18T08:00:00Z' }
   capture(w.db, () => pr({ reviews: [review] }))

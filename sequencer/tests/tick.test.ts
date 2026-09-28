@@ -35,7 +35,7 @@ const row = (over: Partial<PlanRow>): PlanRow =>
   ({ id: 1, pipe_id: 1, target_id: 1, template: 'pr_path', state: 'queued', queued_at: '', step: 0, retries: 0,
     head_digest: null, priority: 1, lane: null, seat: null, origin: null, wait_reason: null, ...over })
 
-test('on a stranger\'s repo the builder is the outside seat and may write only the brief\'s files', async () => {
+test('outside seat on a stranger\'s repo writes only brief files', async () => {
   const w = world()
   approve(w.db, w.target)
   const packets: Packet[] = []
@@ -52,7 +52,7 @@ test('on a stranger\'s repo the builder is the outside seat and may write only t
   expect(builder?.refuse('../hello.ts')).toMatchObject({ origin_ref: 'seat.write_paths' })
 })
 
-test('a plan on a real target is cloned from our fork and branched off upstream main', async () => {
+test('a target plan clones our fork, branching off upstream main', async () => {
   const w = world()
   approve(w.db, w.target)
   for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED))
@@ -66,7 +66,7 @@ test('a plan on a real target is cloned from our fork and branched off upstream 
   expect(readFileSync(join(src, '.git/info/exclude'), 'utf8')).toContain('.cf-derived/')
 })
 
-test('a brief wholly under kotlin/ routes the build to the kotlin seat, and the diff is against the branch base', async () => {
+test('a kotlin/ brief builds on the kotlin seat, diffed at base', async () => {
   const w = world('warm', undefined, KOTLIN)
   approve(w.db, w.target)
   for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
@@ -81,7 +81,7 @@ test('a brief wholly under kotlin/ routes the build to the kotlin seat, and the 
   expect(seen[0]?.prompt.split('# Diff')[1]?.trim()).toBe('')
 })
 
-test('D1 D2 a firing seat holds a model row in now for its plan, and the lap clears it', async () => {
+test('D1 D2 a firing seat holds a now row the lap clears', async () => {
   const w = world()
   approve(w.db, w.target)
   await tick(w.db, w.root, stub(CARRIED))
@@ -91,7 +91,7 @@ test('D1 D2 a firing seat holds a model row in now for its plan, and the lap cle
   expect(current(w.db)).toEqual([])
 })
 
-test('a pipe fires only inside its window, wrapping across midnight', () => {
+test('a pipe fires only in its window, wrapping across midnight', () => {
   expect(clock(new Date('2026-09-17T15:05:00Z'), -360)).toBe('09:05')
   expect(clock(new Date('2026-09-17T15:05:00Z'))).toBe('15:05')
   expect(inWindow(pipe({}), '09:00')).toBe(true)
@@ -100,7 +100,7 @@ test('a pipe fires only inside its window, wrapping across midnight', () => {
   expect(inWindow(pipe({ window_start: '22:00', window_end: '02:00' }), '12:00')).toBe(false)
 })
 
-test('a pipe at max_concurrent offers only the plans already running', () => {
+test('a pipe at max_concurrent offers only running plans', () => {
   const plans = [row({ id: 1, state: 'running' }), row({ id: 2, state: 'queued' })]
   expect(underCap(pipe({ max_concurrent: 1 }), plans).map((p) => p.id)).toEqual([1])
   expect(underCap(pipe({ max_concurrent: 2 }), plans).map((p) => p.id)).toEqual([1, 2])
@@ -112,7 +112,7 @@ test('an off pipe fires nothing', async () => {
   expect(await tick(w.db, w.root, stub(CARRIED))).toEqual([])
 })
 
-test('step 1 is blocked until cf approve target writes the row, and the plan records what it waits on', async () => {
+test('step 1 waits on cf approve target, and the plan says so', async () => {
   const w = world()
   expect(await tick(w.db, w.root, stub(CARRIED))).toHaveLength(1)
   expect(plan(w.db, 1).step).toBe(1)
@@ -123,21 +123,21 @@ test('step 1 is blocked until cf approve target writes the row, and the plan rec
   expect(blocked(w.db, plan(w.db, 1))).toBeNull()
 })
 
-test('D6: a refusal row for the target\'s digest still blocks step 1 on target_approval', async () => {
+test('D6: a refused target digest still blocks step 1', async () => {
   const w = world()
   await tick(w.db, w.root, stub(CARRIED))
   refuseTarget(w.db, w.target, 'not.ours')
   expect(blocked(w.db, plan(w.db, 1))).toBe('target_approval')
 })
 
-test('D8: a tick files no plan for a scanned ready target with no approval row', async () => {
+test('D8: a tick files no plan for an unapproved ready target', async () => {
   const w = world()
   const id = addTarget(w.db, { ...targetRow(w.db, 1), issue_no: 13, state: 'ready', evidence: 'https://github.com/acme/widget/issues/13' })
   await tick(w.db, w.root, stub(CARRIED))
   expect(allPlans(w.db).filter((p) => p.target_id === id)).toEqual([])
 })
 
-test('a parked target holds its plan and says so in the row; a cold pulse alone holds nothing', async () => {
+test('a parked target holds its plan; a cold pulse alone does not', async () => {
   const w = world('cold')
   expect(blocked(w.db, plan(w.db, 1))).toBe('target_parked')
   expect(await tick(w.db, w.root, stub(CARRIED))).toEqual([])
@@ -154,7 +154,7 @@ test('#140: the store takes only the reasons it lists', () => {
   expect(plan(w.db, 1).wait_reason).toBeNull()
 })
 
-test('old account evidence holds no plan; queueing still wants a fresh row, which cf queue add measures', () => {
+test('stale account evidence holds nothing; cf queue add measures', () => {
   const w = world('warm', '2026-01-01')
   expect(blocked(w.db, plan(w.db, 1))).toBeNull()
   expect(() => account(w.db, 'acme/widget', '2026-09-17')).toThrow(/re-measure before queueing/)
@@ -168,7 +168,7 @@ const measured = (day: string): Read => (args) => {
   return [{ author: { login: 'outsider' }, mergedBy: { login: 'maintainer' }, mergedAt: `${day}T00:00:00Z` }]
 }
 
-test('cf measure refreshes the pulse the tick reads, without a second cf queue add', async () => {
+test('cf measure refreshes the pulse the tick reads', async () => {
   const w = world('warm', '2026-01-01')
   approve(w.db, w.target)
   expect(measure(w.db, 'acme/widget', '2026-09-17', measured('2026-09-17'))).toMatchObject({ pulse: 'warm', doors: 1 })
@@ -178,7 +178,7 @@ test('cf measure refreshes the pulse the tick reads, without a second cf queue a
   expect(plan(w.db, 1).step).toBe(1)
 })
 
-test('a rail refusal names spans, sends the plan back one step, then to blocked_on_ceo', async () => {
+test('a rail refusal names spans, steps back, then blocks on ceo', async () => {
   const w = world()
   approve(w.db, w.target)
   for (const step of [0, 1, 2]) {
@@ -213,17 +213,17 @@ test('D1 D2 the same refusal after a retry stops again', async () => {
   expect(planFile(w.root, 'refusal.md')).toContain('# Stopped\n\nthe same refusal came back')
 })
 
-test('D2 the same refusal after a ruling added to the ask goes round again', async () => {
+test('D2 a refusal repeated after an ask ruling goes round again', async () => {
   const [, fired] = await retriedOnce((w) => { put(w.root, 1, 'ask.md', `${get(w.root, 1, 'ask.md')}\n## Ruling\n\nuse bye()\n`) })
   expect(fired).toMatchObject({ step: 3, outcome: 'refuse', state: 'retried' })
 })
 
-test('D4 the same refusal after a ruling written to rulings.md goes round again', async () => {
+test('D4 a refusal repeated after rulings.md goes round again', async () => {
   const [, fired] = await retriedOnce((w) => { put(w.root, 1, 'rulings.md', 'use bye()\n') })
   expect(fired).toMatchObject({ step: 3, outcome: 'refuse', state: 'retried' })
 })
 
-test('the sequencer hands the bench a maintainer view, and a wrong shape refuses before any model', async () => {
+test('the bench gets a maintainer view; bad shape refuses first', async () => {
   const w = world()
   approve(w.db, w.target)
   for (const step of [0, 1, 2, 3]) {
@@ -240,7 +240,7 @@ const planFile = (root: string, name: string): string => readFileSync(join(root,
 
 const PAIR = `${WORDS}\n\n---\noutcome: refuse\nclass: correctness\nspans:\n  - src/hello.ts:1\n  - src/parse.ts:3\n---\n`
 
-test('a rebuild keeps the hand-back it was refused on and hands its rows to the builder', async () => {
+test('a rebuild hands the builder the refused hand-back\'s rows', async () => {
   const w = world()
   approve(w.db, w.target)
   const sent: string[] = []
@@ -253,7 +253,7 @@ test('a rebuild keeps the hand-back it was refused on and hands its rows to the 
     .toContain('done:\n  - id: D1\n    status: done\n    pointer:')
 })
 
-test('a review refusal returns the plan to build with every span the reviewer named, then escalates', async () => {
+test('a review refusal rebuilds with every span, then escalates', async () => {
   const w = world()
   approve(w.db, w.target)
   const wire = watched([], w.root, 1)
@@ -273,7 +273,7 @@ test('a review refusal returns the plan to build with every span the reviewer na
   expect(plan(w.db, 1)).toMatchObject({ step: 4, retries: 1, state: 'blocked_on_ceo' })
 })
 
-test('a review needs_ceo holds the plan for the coo with the reviewer\'s question', async () => {
+test('a review needs_ceo holds for the coo with its question', async () => {
   const w = world()
   approve(w.db, w.target)
   for (let at = 0; at < 4; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
@@ -283,7 +283,7 @@ test('a review needs_ceo holds the plan for the coo with the reviewer\'s questio
   expect(w.db.prepare('SELECT message FROM verdicts WHERE plan = 1 AND step = 4').get()).toEqual({ message: WORDS })
 })
 
-test('a new refusal after a real rebuild goes round again; the same one again stops', async () => {
+test('a new refusal after a rebuild goes round; a repeat stops', async () => {
   const w = world()
   approve(w.db, w.target)
   const wire = watched([], w.root, 1)
@@ -335,7 +335,7 @@ test('D3 an outside review packet has no hand-back', async () => {
   expect(reviewer(packets)).not.toContain("# The builder's hand-back")
 })
 
-test('D3 our own plan hands no symbol map to the builder or the reviewer, and builds none', async () => {
+test('D3 our own plan builds and hands no symbol map', async () => {
   const w = world()
   dropPlan(w.db, 1)
   ours(w.root)
@@ -349,7 +349,7 @@ test('D3 our own plan hands no symbol map to the builder or the reviewer, and bu
   expect(existsSync(join(w.root, '.cf/maps'))).toBe(false)
 })
 
-test('a reviewer gets its own last verdict, the diff since the tree it judged and what did not move, neither on its first', async () => {
+test('a reviewer gets its last verdict and diff, not on its first', async () => {
   const w = world()
   dropPlan(w.db, 1)
   ours(w.root)
@@ -383,7 +383,7 @@ const HELLO = (word: string): string =>
 
 const section = (prompt: string, head: string): string => prompt.split(`\n# ${head}\n\n`)[1]?.split('\n\n# ')[0] ?? ''
 
-test('a reviewer step 5 sent back is handed the delta since the tree it passed, in its function, with the refusal', async () => {
+test('step 5 sent back gets its delta in function, with refusal', async () => {
   const w = world()
   dropPlan(w.db, 1)
   ours(w.root)
@@ -437,7 +437,7 @@ async function reworked(w: World, handback: string, ticks: number): Promise<stri
 
 const seniorRuns = (w: World): unknown => ({ n: runRows(w.db).filter((r) => r.plan === MINE && r.step === 5).length })
 
-test('D1 D2 a rework delta outside the passed diff, or over half of it, is reviewed in full', async () => {
+test('D1 D2 a stray or over-half rework delta is reviewed in full', async () => {
   const unseen = await passedOn(REFUSE)
   writeFileSync(join(srcDir(unseen.root, MINE), 'src/parse.ts'), 'export const parse = (): number => 1\n')
   const full = await reworked(unseen, OWNS, 3)
@@ -452,7 +452,7 @@ test('D1 D2 a rework delta outside the passed diff, or over half of it, is revie
   expect(modeOf(big.root, 4)).toBe('full: 3 delta lines is over half of 4 passed\n')
 })
 
-test('D3 a comment-only rework delta is reviewed as a delta and senior keeps its pass without a run', async () => {
+test('D3 a comment-only delta is a delta; senior keeps its pass', async () => {
   const w = await passedOn(PASS)
   built(w.root, MINE, '// one to four')
   expect(await reworked(w, CARRIED, 4)).toContain('# Changed since your last verdict')
@@ -494,7 +494,7 @@ async function greptiled(current: boolean): Promise<Packet[]> {
 
 const senior = (packets: Packet[]): string => packets.find((p) => p.prompt.includes('# First verdict'))?.prompt ?? ''
 
-test('D1 D2 D3 senior is handed Greptile on the current head only, and review never is', async () => {
+test('D1 D2 D3 only senior gets Greptile, and only at the head', async () => {
   const both = await greptiled(true)
   expect(section(senior(both), 'Greptile on this head')).toBe('NEW')
   expect(senior(both)).not.toContain('OLD')
@@ -506,7 +506,7 @@ test('D1 D2 D3 senior is handed Greptile on the current head only, and review ne
   expect(senior(stale)).not.toContain('OLD')
 })
 
-test('narrowing calls a moved path the plan does not touch main\'s, and proves the rest with its blob', () => {
+test('narrowing gives an untouched moved path to main', () => {
   const dir = mkdtempSync(join(tmpdir(), 'cf-narrow-'))
   const run = (...args: string[]): string => execFileSync('git', args, { cwd: dir, encoding: 'utf8' })
   const commit = (message: string, ...paths: string[]): string =>
@@ -532,7 +532,7 @@ test('narrowing calls a moved path the plan does not touch main\'s, and proves t
   })
 })
 
-test('a senior refusal lands on build too, and the ticks after it walk rails, review, senior', async () => {
+test('a senior refusal rebuilds, then walks rails, review, senior', async () => {
   const w = world()
   approve(w.db, w.target)
   const wire = watched([], w.root, 1)
@@ -547,7 +547,7 @@ test('a senior refusal lands on build too, and the ticks after it walk rails, re
   expect(walked).toEqual(['build', 'rails', 'review', 'senior'])
 })
 
-test('step 6 sends the branch to our fork, waits out a run still going, then records ci-green and ready', async () => {
+test('step 6 sends to our fork, waits the run, records ci-green', async () => {
   const w = world()
   approve(w.db, w.target)
   const sent: string[] = []
@@ -568,7 +568,7 @@ test('step 6 sends the branch to our fork, waits out a run still going, then rec
     .toMatchObject([{ rail_id: 'ci-green', gate: 'ready', outcome: 'pass' }, { rail_id: 'ready', gate: 'ready', outcome: 'pass' }])
 })
 
-test('step 3\'s pass sends and rehearses the branch before review fires, and step 6 opens no second rehearsal', async () => {
+test('step 3 rehearses before review; step 6 opens no second', async () => {
   const w = world()
   approve(w.db, w.target)
   const sent: string[] = []
@@ -586,7 +586,7 @@ test('step 3\'s pass sends and rehearses the branch before review fires, and ste
   expect(branches).toEqual(['widget-12-a1-next'])
 })
 
-test('a red run on the fork sends the plan to the builder with the failed log', async () => {
+test('a red fork run sends the plan to the builder with its log', async () => {
   const w = world()
   approve(w.db, w.target)
   for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
@@ -599,7 +599,7 @@ test('a red run on the fork sends the plan to the builder with the failed log', 
   expect(ciGreen(w)).toEqual([{ outcome: 'refuse' }])
 })
 
-test('a fork still red after a rebuild that changed nothing stops instead of cycling', async () => {
+test('a fork red after a no-op rebuild stops instead of cycling', async () => {
   const w = world()
   approve(w.db, w.target)
   for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
@@ -631,7 +631,7 @@ const redOnBase = async (g: { status: string; conclusion: string }, log: string[
 const ciGreen = (w: World): unknown =>
   verdictRows(w.db, 1).filter((v) => v.rail_id === 'ci-green').map(({ outcome }) => ({ outcome })).reverse()
 
-test('a job red at the head and red again at the re-run last green head is the base\'s: the plan goes on to sign-off', async () => {
+test('a job red at head and re-run last green is the base\'s', async () => {
   const g = { status: 'completed', conclusion: 'success' }
   const log: string[] = []
   const [w, wire] = await redOnBase(g, log)
@@ -649,7 +649,7 @@ test('a job red at the head and red again at the re-run last green head is the b
   expect(log).toHaveLength(1)
 })
 
-test('a job red at the head whose last green head re-runs green goes back to the builder', async () => {
+test('a red job whose last green re-runs green is the builder\'s', async () => {
   const g = { status: 'completed', conclusion: 'success' }
   const [w, wire] = await redOnBase(g, [])
   const lap = async (): Promise<unknown> => (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
@@ -662,7 +662,7 @@ test('a job red at the head whose last green head re-runs green goes back to the
   expect(ciGreen(w)).toEqual([{ outcome: 'refuse' }, { outcome: 'pass' }])
 })
 
-test('a last green head already red is read as it is, with no re-run asked', async () => {
+test('a last green head already red is read as is, no re-run', async () => {
   const log: string[] = []
   const [w, wire] = await redOnBase({ status: 'completed', conclusion: 'failure' }, log)
   expect((await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]).toMatchObject({ step: 6, outcome: 'pass' })
@@ -703,7 +703,7 @@ test('a CI run judged without a hold leaves no now row', async () => {
   expect(now(w)).toEqual([])
 })
 
-test('the push window is waited out: no run at the new head holds step 6, the run that appears is judged', async () => {
+test('step 6 waits out the push window, then judges the new run', async () => {
   const w = world()
   approve(w.db, w.target)
   for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
@@ -725,7 +725,7 @@ test('the push window is waited out: no run at the new head holds step 6, the ru
   expect(sent).toHaveLength(4)
 })
 
-test('a head still runless after the window is refused on ci-green, not waited on forever', async () => {
+test('a head runless after the window is refused on ci-green', async () => {
   const w = world()
   approve(w.db, w.target)
   for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
@@ -756,7 +756,7 @@ const FINDINGS = 'Confidence Score: 3/5\n\nThe empty name is never refused.'
 
 const readyVerdicts = (w: World): unknown => ({ n: verdictRows(w.db, 1).filter((v) => v.rail_id === 'ready').length })
 
-test('D1 no Greptile score at the head holds ready through tick 45; tick 46 goes on and says so', async () => {
+test('D1 no Greptile score holds ready to tick 45; 46 goes on', async () => {
   const [w, lap] = await atReady(() => undefined)
   expect(await lap()).toMatchObject({ step: 6, name: 'ready', outcome: 'pass', state: 'running', spans: ['greptile.missing'],
     note: expect.stringMatching(/has no Greptile score yet, tick 1 of 45$/) as unknown })
@@ -768,7 +768,7 @@ test('D1 no Greptile score at the head holds ready through tick 45; tick 46 goes
   expect(plan(w.db, 1).step).toBe(7)
 })
 
-test('D2 a 3/5 at the current head goes back to the builder with the findings; on another head it is no score', async () => {
+test('D2 a 3/5 at the head goes to the builder; at another, none', async () => {
   const [w, lap] = await atReady((at) => { scored(at.root, 1, 3, FINDINGS) })
   expect(await lap()).toMatchObject({ step: 6, name: 'ready', outcome: 'refuse', spans: ['greptile:3/5'] })
   expect(plan(w.db, 1).step).toBe(2)
@@ -782,7 +782,7 @@ test('D2 a 3/5 at the current head goes back to the builder with the findings; o
   expect(plan(old.db, 1).step).toBe(6)
 })
 
-test('D6 D7 each new passing head asks Greptile once; a fourth goes to the COO unasked', async () => {
+test('D6 D7 a new head asks Greptile once; a fourth goes to COO', async () => {
   const log: string[] = []
   const [w, lap] = await atReady(() => undefined, log)
   const asked = (): string[] => log.filter((l) => l.startsWith('review '))
@@ -817,7 +817,7 @@ const month = async (others: number): Promise<[World, () => string[], (line: str
   }]
 }
 
-test('D2 at 40 this month the first head is asked and the second goes to the COO unasked', async () => {
+test('D2 at 40 this month only the first head is asked', async () => {
   const [w, asked, round] = await month(40)
   expect(await round('export const two = 2')).toMatchObject({ step: 6, outcome: 'needs_ceo', state: 'blocked_on_ceo', spans: ['greptile.month'] })
   expect(asked()).toHaveLength(1)
@@ -836,7 +836,7 @@ test('D3 a 4/5 at the current head passes ready to sign-off', async () => {
   expect(plan(w.db, 1).step).toBe(7)
 })
 
-test('step 6 refuses a plan with no deliverable row instead of sending the branch and raising', async () => {
+test('step 6 refuses a plan with no deliverable row', async () => {
   const w = world()
   approve(w.db, w.target)
   for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
@@ -848,7 +848,7 @@ test('step 6 refuses a plan with no deliverable row instead of sending the branc
   expect(sent).toEqual([])
 })
 
-test('step 6 refuses a plan whose checkout is missing instead of staging in the parent repo', async () => {
+test('step 6 refuses a plan with no checkout', async () => {
   const w = world()
   approve(w.db, w.target)
   for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
@@ -872,7 +872,7 @@ test('every run row points at a transcript the provider wrote', async () => {
   }
 })
 
-test('pr-path is measure to push, 0 to 8, and every gate step writes a verdict', () => {
+test('pr-path is measure to push, and each gate writes a verdict', () => {
   expect(steps.map((s) => s.name)).toEqual(['measure', 'ruling', 'build', 'rails', 'review', 'senior', 'ready', 'batch', 'push'])
   expect(steps.map((s) => s.step)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8])
   expect(steps.filter((s) => s.gate && !s.writes_verdict)).toEqual([])
@@ -882,7 +882,7 @@ test('pr-path is measure to push, 0 to 8, and every gate step writes a verdict',
   expect(at(2, 'kotlin')).toMatchObject({ seat: 'kotlin_specialist', runs: 'kotlin_specialist' })
 })
 
-test('the ticket ids a rail expects come off the issue, falling back to D1', () => {
+test('a rail\'s ticket ids come off the issue, falling back to D1', () => {
   expect(doneIds('- **D1** one\n- **D2** two\n')).toEqual(['D1', 'D2'])
   expect(doneIds('no conditions here')).toEqual(['D1'])
   expect(parse('acme/widget', 'https://github.com/acme/widget/issues/12')).toBe(12)
@@ -907,7 +907,7 @@ test('cf brief and cf plan bind the plan they are asked for', async () => {
   expect(day(w.db)).toMatchObject({ runs: 2, tokens: 120 })
 })
 
-test('a builder names a file for deletion and the kernel removes it before the rails read the tree', async () => {
+test('the kernel deletes a named file before the rails read', async () => {
   const w = world()
   dropPlan(w.db, 1)
   ours(w.root)
@@ -923,7 +923,7 @@ test('a builder names a file for deletion and the kernel removes it before the r
   expect(diffOf(w.root, MINE)).not.toContain('export const gone = 1')
 })
 
-test('a deletion outside the fence refuses the build and names the path', async () => {
+test('a deletion outside the fence refuses the build, naming it', async () => {
   const w = world()
   approve(w.db, w.target)
   for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
@@ -935,7 +935,7 @@ test('a deletion outside the fence refuses the build and names the path', async 
   expect(existsSync(join(srcDir(w.root, 1), 'src/hello.ts'))).toBe(true)
 })
 
-test('a deletion of a path that is not in the tree refuses rather than passing as a no-op', async () => {
+test('deleting a path not in the tree refuses, not a no-op', async () => {
   const w = world()
   dropPlan(w.db, 1)
   ours(w.root)
@@ -948,7 +948,7 @@ test('a deletion of a path that is not in the tree refuses rather than passing a
   expect(fired?.note).toContain('is not in the tree')
 })
 
-test('the same path named twice is deleted once, not refused the second time as absent', async () => {
+test('a path named twice is deleted once, not refused as absent', async () => {
   const w = world()
   dropPlan(w.db, 1)
   ours(w.root)
@@ -979,7 +979,7 @@ test('#374 a path with a `+` in it is deleted', async () => {
   expect(diffOf(w.root, MINE)).not.toContain('export const ab = 1')
 })
 
-test('#374 a row naming no path refuses the build and removes nothing', async () => {
+test('#374 a row naming no path refuses and removes nothing', async () => {
   const w = world()
   approve(w.db, w.target)
   for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))

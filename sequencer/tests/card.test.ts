@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { approve as approvePlan } from '../../cli/batch.ts'
 import { decide, digestOf, headDigest } from '../../store/approvals.ts'
+import { eventsOf } from '../../store/events.ts'
 import { advance } from '../../store/plans.ts'
 import { approve, refuse, waiting } from '../card.ts'
 import { tick } from '../index.ts'
@@ -27,7 +28,7 @@ async function atBatch(): Promise<World> {
 
 async function atPush(): Promise<World> {
   const w = await atBatch()
-  approvePlan(w.db, w.root, 'plan', 1)
+  approvePlan(w.db, w.root, 'plan', 1, 'ceo')
   advance(w.db, plan(w.db, 1), 8)
   return w
 }
@@ -54,7 +55,7 @@ test('D9 a pr.md holding a tell flags its line on the card and sends nothing unt
   expect(push(w.db, w.root, plan(w.db, 1), wire)).toMatchObject({ outcome: 'pass', held: true, spans: ['card'] })
   expect(get(w.root, 1, 'maintainer.md')).toContain('\nflag\tprose\tbody:3 tell:robust\n')
   expect(sent).toEqual([])
-  approve(w.db, w.root, 1)
+  approve(w.db, w.root, 1, 'ceo')
   expect(push(w.db, w.root, plan(w.db, 1), wire)).toMatchObject({ note: `pushed widget-12-a1 as ${PR}` })
 })
 
@@ -64,12 +65,13 @@ test('D2 an approved card sends and opens as today, beside the one unchanged ste
   const wire = watched(sent, w.root, 1)
   const signed = rows(w, 'plan')
   push(w.db, w.root, plan(w.db, 1), wire)
-  approve(w.db, w.root, 1)
+  approve(w.db, w.root, 1, 'ceo')
   expect(push(w.db, w.root, plan(w.db, 1), wire)).toMatchObject({ outcome: 'pass', spans: [], note: `pushed widget-12-a1 as ${PR}` })
   expect(sent).toEqual(['send src widget-12-a1', 'unrehearse caliperforge/widget widget-12-a1-next', 'open acme/widget caliperforge:widget-12-a1'])
   expect(rows(w, 'publish')).toMatchObject([{ who: 'ceo', decision: 'approved', subject_digest: digestOf(get(w.root, 1, 'maintainer.md')) }])
   expect(rows(w, 'plan')).toEqual(signed)
   expect(signed).toHaveLength(1)
+  expect(eventsOf(w.db, 1, 'card')).toMatchObject([{ actor: 'ceo', outcome: 'pass' }])
 })
 
 test('D3 a failing check is a flag row and holds like a clean card until the card is approved', () => {
@@ -79,7 +81,7 @@ test('D3 a failing check is a flag row and holds like a clean card until the car
   expect(held).toMatchObject({ outcome: 'pass', held: true, spans: ['card'] })
   expect(held?.note).toContain('1 flag(s)')
   expect(get(w.root, 1, 'maintainer.md')).toBe(`plan 1 at ${SHA}\nflag\tlint\ttwo errors\n`)
-  approve(w.db, w.root, 1)
+  approve(w.db, w.root, 1, 'ceo')
   expect(waiting(w.db, w.root, 1, SHA, TARGET, [lint])).toBeNull()
 })
 
@@ -88,7 +90,7 @@ test('D4 an approval at an earlier card sends nothing: other rows or another hea
   const sent: string[] = []
   const wire = watched(sent, w.root, 1)
   push(w.db, w.root, plan(w.db, 1), wire)
-  approve(w.db, w.root, 1)
+  approve(w.db, w.root, 1, 'ceo')
   const pass = (): { check: string; ok: boolean; says: string } => ({ check: 'lint', ok: true, says: 'clean' })
   const sha = headOf(w.root, 1).sha
   expect(waiting(w.db, w.root, 1, sha, TARGET, [pass])).toMatchObject({ held: true })
@@ -103,7 +105,7 @@ test('D4 an approval at an earlier card sends nothing: other rows or another hea
   expect(push(w.db, w.root, plan(w.db, 1), wire)).toMatchObject({ outcome: 'pass', held: true, spans: ['card'] })
   expect(get(w.root, 1, 'maintainer.md')).toBe(`plan 1 at ${moved}\npass\tlead\twhole issue, 1 lead(s)\npass\ttests\t+0 test / +0 code lines\npass\tconventions\tmatches the last 1 commits\npass\tsize\t0 code lines (0 in all), limit 400\npass\tprose\tclean\n${NONE}`)
   expect(sent.slice(before)).toEqual([])
-  approve(w.db, w.root, 1)
+  approve(w.db, w.root, 1, 'ceo')
   expect(push(w.db, w.root, plan(w.db, 1), wire)).toMatchObject({ note: `pushed widget-12-a1 onto ${PR}` })
 })
 
@@ -112,16 +114,17 @@ test('D5 a refused card routes to the ceo and sends nothing', async () => {
   const sent: string[] = []
   const wire = watched(sent, w.root, 1)
   push(w.db, w.root, plan(w.db, 1), wire)
-  refuse(w.db, w.root, 1, 'not_yet')
+  refuse(w.db, w.root, 1, 'not_yet', 'ceo')
   expect(push(w.db, w.root, plan(w.db, 1), wire)).toMatchObject({ outcome: 'needs_ceo', spans: ['card'] })
   expect(sent).toEqual([])
 })
 
 test('D6 approving or refusing a plan with no card throws and writes no row', () => {
   const w = world()
-  expect(() => approve(w.db, w.root, 1)).toThrow('plan 1 has no card')
-  expect(() => refuse(w.db, w.root, 1, 'not_yet')).toThrow('plan 1 has no card')
+  expect(() => approve(w.db, w.root, 1, 'ceo')).toThrow('plan 1 has no card')
+  expect(() => refuse(w.db, w.root, 1, 'not_yet', 'ceo')).toThrow('plan 1 has no card')
   expect(rows(w, 'publish')).toEqual([])
+  expect(eventsOf(w.db, 1, 'card')).toEqual([])
 })
 
 test('D7 with no step-7 row push refuses on approvals and writes no card', async () => {

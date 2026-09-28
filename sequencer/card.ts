@@ -1,6 +1,8 @@
 import { decide, digestOf } from '../store/approvals.ts'
+import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { busy } from '../store/now.ts'
+import type { Holder } from '../store/plans.ts'
 import { conventions } from './conventions.ts'
 import type { Outcome } from './kind.ts'
 import { lead } from './lead.ts'
@@ -31,18 +33,22 @@ export function waiting(db: Db, root: string, plan: number, sha: string, target:
   return { outcome: 'pass', held: true, spans: ['card'], note }
 }
 
-export function approve(db: Db, root: string, plan: number): string {
-  return decided(db, root, plan, null)
+export function approve(db: Db, root: string, plan: number, by: Holder): string {
+  return decided(db, root, plan, null, by)
 }
 
-export function refuse(db: Db, root: string, plan: number, reason: string): string {
-  return decided(db, root, plan, reason)
+export function refuse(db: Db, root: string, plan: number, reason: string, by: Holder): string {
+  return decided(db, root, plan, reason, by)
 }
 
-function decided(db: Db, root: string, plan: number, reason: string | null): string {
+function decided(db: Db, root: string, plan: number, reason: string | null, by: Holder): string {
   const text = maybe(root, plan, CARD)
   if (text === null) throw new Error(`plan ${String(plan)} has no card`)
   const digest = digestOf(text)
-  decide(db, 'publish', plan, digest, reason)
+  db.transaction(() => {
+    decide(db, 'publish', plan, digest, reason)
+    logged(db, { plan, kind: 'card', actor: by, outcome: reason === null ? 'pass' : 'refuse',
+      message: reason ?? digest.slice(0, 12), pointer: null, run: null })
+  })()
   return digest
 }

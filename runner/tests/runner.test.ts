@@ -137,6 +137,14 @@ test('a write under a symlinked cwd resolves to the same root and is allowed', (
   expect(refuse(link, ['src'], join(realpathSync(target), 'package.json'))).toMatchObject({ path: 'package.json' })
 })
 
+test('a new file named through a symlink to the checkout is allowed', () => {
+  const target = mkdtempSync(join(tmpdir(), 'cf-real-'))
+  const link = join(mkdtempSync(join(tmpdir(), 'cf-link-')), 'seat')
+  symlinkSync(target, link)
+  expect(refuse(realpathSync(target), [], join(link, 'sequencer/publish.ts'), true)).toBeNull()
+  expect(refuse(realpathSync(target), [], join(link, '.cf/notes.md'), true)).toMatchObject({ path: '.cf/notes.md' })
+})
+
 test('a hook-stopped session lands non-zero carrying the refusal origin, a completed one lands zero', () => {
   const reason = 'ruling:seat.write_paths refuses a write to package.json'
   const stopped = fired(result({ result: '', terminal_reason: 'hook_stopped' }), Date.now(), [reason])

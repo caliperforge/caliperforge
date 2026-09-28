@@ -69,6 +69,7 @@ test('D1: each lane issue on a live home is queued with its ask', () => {
     { id: 2, origin: url(41), state: 'queued', priority: 2 },
   ])
   for (const id of [1, 2]) expect(existsSync(join(root, '.cf/work', String(id), 'ask.md'))).toBe(true)
+  expect(ofKind(db, 'filed').map((e) => e.actor)).toEqual(['intake', 'intake'])
 })
 
 test('D2: the same list again adds, views and rewrites nothing', () => {

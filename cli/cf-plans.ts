@@ -56,9 +56,11 @@ function planned(cf: Command, { root, db, out }: Cli): Command {
   const plan = cf.command('plan')
 
   plan.command('add').requiredOption('--issue <ref>', 'an <owner/repo>#<n> github issue')
+    .requiredOption('--by <who>', `who files it: ${HOLDERS.join(' or ')}`)
     .option('--pipe <name>', 'pipe to file the plan on; the lane\'s own by default')
-    .action((options: { issue: string; pipe?: string }) => {
-      const filed = fileIssue(db(), root, options.issue, options.pipe)
+    .action((options: { issue: string; by: string; pipe?: string }) => {
+      const by = holderOf(options.by)
+      const filed = fileIssue(db(), root, options.issue, by, options.pipe)
       const origin = filed.origin === null ? '-' : `${filed.origin.origin_kind}:${filed.origin.origin_ref}`
       const ruled = filed.ruling === null ? '-' : `ruling ${String(filed.ruling)}`
       out(`plan ${filed.plan === null ? '-' : String(filed.plan)} ${filed.state}\t${filed.lane ?? '-'}\t${filed.seat ?? '-'}\t${filed.why}\t${origin}\t${ruled}\n`)

@@ -87,6 +87,35 @@ test('a tick before 20:30 files no daily plan, and the next day after 20:30 file
   expect(dailies(w)).toEqual([{ title: 'daily 2026-09-27', state: 'queued' }, { title: 'daily 2026-09-28', state: 'queued' }])
 })
 
+const growths = (w: World): unknown[] =>
+  w.db.prepare("SELECT title, state FROM plans WHERE template = 'comms' AND title LIKE 'growth %' ORDER BY id").all()
+
+test('weekly D1: two ticks on one local Thursday file one growth plan, filed once by the weekly clock', async () => {
+  const w = clocked()
+  await tick(w.db, w.root, never, new Date('2026-10-02T03:00Z'))
+  await tick(w.db, w.root, never, new Date('2026-10-02T03:30Z'))
+  expect(growths(w)).toEqual([{ title: 'growth 2026-10-01', state: 'queued' }])
+  expect(w.db.prepare(`SELECT e.actor FROM events e JOIN plans p ON p.id = e.plan
+    WHERE p.title = 'growth 2026-10-01' AND e.kind = 'filed'`).all()).toEqual([{ actor: 'weekly clock' }])
+})
+
+test('weekly D2: a UTC Thursday that is local Wednesday, and a local Friday, file no growth plan', async () => {
+  const w = clocked()
+  await tick(w.db, w.root, never, new Date('2026-10-01T03:00Z'))
+  await tick(w.db, w.root, never, new Date('2026-10-03T03:00Z'))
+  expect(growths(w)).toEqual([])
+})
+
+test.each([
+  { why: 'missing', sql: "DELETE FROM pipes WHERE name = 'comms'" },
+  { why: 'off', sql: "UPDATE pipes SET enabled = 0 WHERE name = 'comms'" },
+])('weekly D3: a local Thursday with the comms lane $why files no growth plan', async ({ sql }) => {
+  const w = clocked()
+  w.db.prepare(sql).run()
+  await tick(w.db, w.root, never, new Date('2026-10-02T03:00Z'))
+  expect(growths(w)).toEqual([])
+})
+
 test('D3: facts refuses each line that names an issue, an outside login, or no packet entry', () => {
   const w = comms()
   const id = refusal(w, 0)

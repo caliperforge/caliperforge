@@ -99,9 +99,21 @@ function comms(db: Db, signal: SignalRow, from: number): Started | null {
 /** The day's comms plan, filed once from 20:30 local on a comms lane someone left on. */
 export function daily(db: Db, now: Date): void {
   if (hhmm(db, now) < '20:30') return
-  if (db.prepare("SELECT 1 FROM pipes WHERE name = 'comms' AND enabled = 1").get() === undefined) return
+  if (!commsOn(db)) return
   const day = new Date(now.getTime() + zone(db) * 60000).toISOString().slice(0, 10)
   file(db, `daily ${day}`, null, now, 'daily clock', day)
+}
+
+/** The week's growth comms plan, filed once on local Thursday on a comms lane someone left on. */
+export function weekly(db: Db, now: Date): void {
+  const local = new Date(now.getTime() + zone(db) * 60000)
+  if (local.getUTCDay() !== 4 || !commsOn(db)) return
+  const day = local.toISOString().slice(0, 10)
+  file(db, `growth ${day}`, null, now, 'weekly clock', day)
+}
+
+function commsOn(db: Db): boolean {
+  return db.prepare("SELECT 1 FROM pipes WHERE name = 'comms' AND enabled = 1").get() !== undefined
 }
 
 /** `plans_one_comms` holds a comms title to one plan, so a title already filed files nothing. */

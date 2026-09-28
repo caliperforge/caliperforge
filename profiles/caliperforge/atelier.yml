@@ -1,0 +1,7 @@
+builder: swift_specialist
+rails:
+  digests: false
+  ratchet: false
+  fence: false
+  tight_code: true
+  checks: local

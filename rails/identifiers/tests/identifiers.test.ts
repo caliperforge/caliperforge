@@ -53,6 +53,12 @@ function atelier(): string {
   return dir
 }
 
+test('passes a folder the diff deletes', () => {
+  const verdict = identifiers(atelier(), 'removed Atelier/Gone/ and Atelier/Go', deletion.replace('Atelier/X', 'Atelier/Gone/X'))
+  expect(verdict.message).toContain('name no source in the tree: Atelier/Go')
+  expect(verdict.spans).toHaveLength(1)
+})
+
 test('passes a path the diff deletes', () => {
   const verdict = identifiers(atelier(), 'removed Atelier/X.swift', deletion)
   expect(verdict.outcome).toBe('pass')

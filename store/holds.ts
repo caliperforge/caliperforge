@@ -52,3 +52,13 @@ export function retried(db: Db, id: number, actor: string): number {
     return step
   })()
 }
+
+export function closed(db: Db, id: number, state: 'refused' | 'done', actor: Holder, why: string): void {
+  const row = db.prepare('SELECT state FROM plans WHERE id = ?').get(id) as { state: string } | undefined
+  if (row === undefined) throw new Error(`no plan ${String(id)}`)
+  if (row.state === 'done' || row.state === 'refused') throw new Error(`plan ${String(id)} is already ${row.state}`)
+  db.transaction(() => {
+    db.prepare('UPDATE plans SET state = ? WHERE id = ?').run(state, id)
+    logged(db, { plan: id, kind: 'close', actor, outcome: state === 'refused' ? 'refuse' : 'pass', message: why, pointer: null, run: null })
+  })()
+}

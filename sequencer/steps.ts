@@ -7,7 +7,6 @@ import type { Db } from '../store/index.ts'
 import { builderRan, internal, originIssue, waiting, type PlanRow, type Wait } from '../store/plans.ts'
 import { desk, facts, gather, steps as comms } from '../templates/comms.ts'
 import { at, last, steps, type Step } from '../templates/pr-path.ts'
-import { capture } from '../templates/voice.ts'
 import { approved, approvedPlan, batch } from './approve.ts'
 import type { Outcome } from './kind.ts'
 import { preReview } from './rails.ts'
@@ -16,6 +15,7 @@ import { push, reviewable, type Wire } from './push.ts'
 import { diffOf, maybe, put } from './workspace.ts'
 import { homeOf } from './home.ts'
 import { freshBase } from './merge.ts'
+import { capture } from './voice.ts'
 
 export interface StepMap {
   steps: Step[]

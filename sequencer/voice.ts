@@ -1,8 +1,8 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import type { Outcome } from '../sequencer/kind.ts'
 import { edited } from '../store/desk.ts'
 import type { Db } from '../store/index.ts'
+import type { Outcome } from './kind.ts'
 
 const FIELDS = ['title', 'dek', 'body'] as const
 

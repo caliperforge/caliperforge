@@ -8,7 +8,7 @@ test('the manifest declares seat, model, effort, tools and write_paths', () => {
   expect(Seat.parse(seat(root, 'typescript_specialist').manifest)).toMatchObject({
     seat: 'typescript_specialist',
     effort: 'high',
-    write_paths: ['src'],
+    write_paths: ['brief:files'],
   })
 })
 

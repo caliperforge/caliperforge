@@ -1,8 +1,10 @@
+import { statSync } from 'node:fs'
+import { join } from 'node:path'
 import { z } from 'zod'
 import { gh, mentions, ours, WINDOW, type Read } from '../cli/gh.ts'
 import { parse } from '../rails/diff.ts'
 import type { Check, Target } from './card.ts'
-import { diffOf, git, MAIN, srcDir } from './workspace.ts'
+import { diffOf, git, MAIN, maybe, srcDir } from './workspace.ts'
 
 const Login = z.object({ login: z.string() })
 
@@ -20,13 +22,31 @@ const Siblings = z.array(z.object({ url: z.string(), repository: z.object({ name
 
 const RECENT = 30
 
-export function theirs(read: Read = gh): Check {
+type Paths = (root: string, plan: number) => string[]
+
+export function theirs(read: Read = gh, paths: Paths = diffed): Check {
   return (...[, root, plan, target]) => {
-    const paths = parse(diffOf(root, plan)).map((f) => f.path)
-    const hits = [...prs(read, target, paths), ...siblings(read, target), ...branches(srcDir(root, plan), target, paths)].sort()
+    const files = paths(root, plan)
+    const hits = [...prs(read, target, files), ...siblings(read, target), ...branches(srcDir(root, plan), target, files)].sort()
     return { check: 'their work', ok: hits.length === 0,
       says: hits.length === 0 ? `nothing of theirs touches our files or names #${String(target.issue_no)}` : hits.join('; ') }
   }
+}
+
+export function picked(read: Read = gh): Check {
+  return theirs(read, named)
+}
+
+function diffed(root: string, plan: number): string[] {
+  return parse(diffOf(root, plan)).map((f) => f.path)
+}
+
+/** The ask's tokens that are files in the checkout; before a build that tree is upstream main. */
+export function named(root: string, plan: number): string[] {
+  const dir = srcDir(root, plan)
+  const tokens = (maybe(root, plan, 'ask.md') ?? '').match(/[\w./-]+/g) ?? []
+  return [...new Set(tokens.map((t) => t.replace(/\.+$/, '')))]
+    .filter((t) => !t.includes('..') && statSync(join(dir, t), { throwIfNoEntry: false })?.isFile() === true)
 }
 
 function prs(read: Read, target: Target, paths: string[]): string[] {

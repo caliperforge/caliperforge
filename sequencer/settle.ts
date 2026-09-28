@@ -1,4 +1,5 @@
 import type { Read } from '../cli/gh.ts'
+import { vetted } from '../cli/queue.ts'
 import type { Provider } from '../providers/kind.ts'
 import { digestOf } from '../store/approvals.ts'
 import { hold } from '../store/holds.ts'
@@ -139,7 +140,11 @@ export function thrown(step: Step, message: string): Outcome {
 }
 
 function fire(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider, wire?: Wire, read?: Read): Promise<Outcome> {
-  if (step.fires === 'brief') return model(db, plan, step, () => fireBrief(db, root, plan, step, provider))
+  if (step.fires === 'brief') {
+    const says = plan.target_id !== null && wire?.intake !== undefined ? vetted(db, root, plan.id, plan.target_id, wire.intake) : null
+    if (says !== null) return Promise.resolve({ outcome: 'needs_ceo', spans: ['their work'], note: says })
+    return model(db, plan, step, () => fireBrief(db, root, plan, step, provider))
+  }
   if (step.fires === 'seat') return model(db, plan, step, () => fireSeat(db, root, plan, step, provider))
   if (step.fires === 'review') {
     const standing = kept(db, root, plan, step)

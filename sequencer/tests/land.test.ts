@@ -10,6 +10,7 @@ import { tick } from '../index.ts'
 import { LAPS } from '../merge.ts'
 import { COMMIT, commitMessage, headOf, land, sent, WIRE, type Wire } from '../push.ts'
 import { CARRY, carried, cloned, conflicted, diffOf, drop, fetchMain, get, liveTree, maybe, MAIN, put, SELF, srcDir } from '../workspace.ts'
+import { SCHEDULED } from './bases.ts'
 import { approve, built, CARRIED, internalPlan, moveMain, ours, PASS, plan, stub, watched, world, type World } from './world.ts'
 
 const ID = 2
@@ -135,6 +136,24 @@ test('an internal plan on a repo with no workflows lands on step 3\'s checks, ne
   await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
   const sha = git(srcDir(w.root, ID), ['rev-parse', 'main'])
   expect(sent).toEqual(['send src main', `close caliperforge/caliperforge#34 ${sha.slice(0, 7)}`])
+})
+
+test('D1 an internal plan whose only workflow runs on a schedule or by hand lands on step 3\'s checks', async () => {
+  const w = world()
+  w.db.prepare('DELETE FROM plans WHERE id = 1').run()
+  ours(w.root, SCHEDULED, false)
+  internalPlan(w.db, w.root, ID)
+  const sent: string[] = []
+  const wire = watched(sent, w.root, ID, () => { throw new Error('schedule only: github is never asked for runs') })
+  await atBatch(w, wire)
+  expect(plan(w.db, ID).step).toBe(7)
+  expect(sent).toEqual([])
+  expect(w.db.prepare("SELECT outcome, step FROM verdicts WHERE plan = ? AND rail_id = 'ci-green'").get(ID))
+    .toEqual({ outcome: 'pass', step: 6 })
+  expect(w.db.prepare("SELECT outcome FROM verdicts WHERE plan = ? AND rail_id = 'ready'").get(ID))
+    .toEqual({ outcome: 'pass' })
+  expect(w.db.prepare('SELECT fork_ci_green FROM deliverables WHERE plan_id = ? ORDER BY id DESC LIMIT 1').get(ID))
+    .toEqual({ fork_ci_green: 1 })
 })
 
 test('main moving between ready and batch rewinds to the rails and lands as a fast-forward on the second pass', async () => {

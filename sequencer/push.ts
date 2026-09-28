@@ -1,7 +1,9 @@
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync, readdirSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { parse as yaml } from 'yaml'
+import { z } from 'zod'
 import { closeIssue, commentIssue, fileIssue, gh, openPr, rehearse, review, unrehearse, type Read } from '../cli/gh.ts'
 import { alerter } from '../cli/watch.ts'
 import { judge, MISSING, PENDING, shell, type Board, type Gh } from '../rails/ci-green/index.ts'
@@ -181,10 +183,29 @@ function quiet(dir: string, ci: string): string {
     '-m', 'greptile.json: review on request only'])
 }
 
-/** A repo GitHub runs no workflow for: nothing on the fork will ever show a run at the head. */
+/** A repo GitHub runs no workflow for on a push or pull request: nothing on the fork will ever show a run at the head. */
 export function workflows(dir: string): boolean {
   const at = join(dir, '.github/workflows')
-  return existsSync(at) && readdirSync(at).some((f) => /\.ya?ml$/.test(f))
+  return existsSync(at) && readdirSync(at).filter((f) => /\.ya?ml$/.test(f)).some((f) => triggered(readFileSync(join(at, f), 'utf8')))
+}
+
+const On = z.object({ on: z.union([z.string(), z.array(z.string()), z.record(z.string(), z.unknown())]) })
+
+const TRIGGERS = ['push', 'pull_request']
+
+/** A file that does not parse, or whose `on` has no known shape, counts as one that runs. */
+function triggered(text: string): boolean {
+  let doc: unknown
+  try {
+    doc = yaml(text)
+  } catch {
+    return true
+  }
+  const found = On.safeParse(doc)
+  if (!found.success) return true
+  const { on } = found.data
+  const events = typeof on === 'string' ? [on] : Array.isArray(on) ? on : Object.keys(on)
+  return events.some((e) => TRIGGERS.includes(e))
 }
 
 /**

@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
@@ -14,7 +14,7 @@ import { addTarget, setTargetState, targetRow } from '../../store/targets.ts'
 import { at, steps } from '../../templates/pr-path.ts'
 import { tick } from '../index.ts'
 import { blocked, kernel } from '../steps.ts'
-import { diffOf, doneIds, get, narrowing, put, snapshot, srcDir } from '../workspace.ts'
+import { checkout, diffOf, doneIds, get, gitDiff, narrowing, put, snapshot, srcDir } from '../workspace.ts'
 import { GREEN } from '../base.ts'
 import { record } from '../../store/files.ts'
 import { runRows } from '../../store/events.ts'
@@ -64,6 +64,42 @@ test('a target plan clones our fork, branching off upstream main', async () => {
   expect(head(src, ['rev-parse', 'HEAD'])).toBe(readFileSync(join(w.root, '.cf/work/1/base.sha'), 'utf8').trim())
   expect(head(src, ['status', '--porcelain'])).toBe('')
   expect(readFileSync(join(src, '.git/info/exclude'), 'utf8')).toContain('.cf-derived/')
+})
+
+const PYC = 'pkg/__pycache__/m.cpython-312.pyc'
+
+const pytested = (): { dir: string; base: string; root: string } => {
+  const w = world()
+  const { dir, base } = checkout(w.root, 1, 'acme/widget', 'widget-12-a1')
+  mkdirSync(join(dir, 'pkg/__pycache__'), { recursive: true })
+  writeFileSync(join(dir, 'pkg/m.py'), 'x = 1\n')
+  writeFileSync(join(dir, PYC), 'compiled')
+  return { dir, base, root: w.root }
+}
+
+test('D2 a .pyc a test run wrote after the cut is not in the diff', () => {
+  const { dir, base } = pytested()
+  const diff = gitDiff(dir, base)
+  expect(diff).toContain('pkg/m.py')
+  expect(diff).not.toContain('.pyc')
+})
+
+test('D3 a reused checkout drops an intent-to-add .pyc from its index and keeps a staged .py', () => {
+  const { dir, base, root } = pytested()
+  head(dir, ['add', '-f', '--intent-to-add', PYC])
+  head(dir, ['add', 'pkg/m.py'])
+  checkout(root, 1, 'acme/widget', 'widget-12-a1')
+  expect(head(dir, ['ls-files', '--', PYC])).toBe('')
+  expect(head(dir, ['diff', '--cached', '--name-only'])).toBe('pkg/m.py')
+  expect(gitDiff(dir, base)).not.toContain('.pyc')
+})
+
+test('D4 a __pycache__ file HEAD holds stays in the index', () => {
+  const { dir, root } = pytested()
+  head(dir, ['add', '-f', PYC])
+  head(dir, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'tracked pyc'])
+  checkout(root, 1, 'acme/widget', 'widget-12-a1')
+  expect(head(dir, ['ls-files', '--', PYC])).toBe(PYC)
 })
 
 test('a kotlin/ brief builds on the kotlin seat, diffed at base', async () => {

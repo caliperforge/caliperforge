@@ -73,14 +73,14 @@ test('a brief on the template with every section filled passes', () => {
   expect(on(brief)).toBeNull()
 })
 
-test('an empty section, a path off the tree and a `(new)` path already in it are each refused', () => {
+test('empty section, off-tree path, present `(new)` path: refused', () => {
   expect(on(swap(brief, '## Out of scope', []))).toMatchObject({ span: '## Out of scope' })
   expect(on(fixture('absent-file.md'))).toMatchObject({ span: 'sequencer/nowhere.ts' })
   expect(on(swap(brief, '## Files', ['- sequencer/brief.ts (new)'])))
     .toMatchObject({ span: 'sequencer/brief.ts', reason: holding('already in the tree') })
 })
 
-test('a forced push, a squash, a person and an address are refused; CaliperForge and a repo are not', () => {
+test('force push, squash, person, address refused; a repo is not', () => {
   expect(on(saying('- force push the branch once the base moves'))).toMatchObject({ span: 'force push' })
   expect(on(saying('- squash the two commits into one'))).toMatchObject({ span: 'squash' })
   expect(on(saying('- keep the row Sam Hartley signed off'))).toMatchObject({ span: 'Sam Hartley' })
@@ -88,13 +88,13 @@ test('a forced push, a squash, a person and an address are refused; CaliperForge
   expect(on(saying('- CaliperForge keeps the caliperforge/widget fork'))).toBeNull()
 })
 
-test('a line forbidding a forced push, or naming `squash` as code, is not an ask to force push', () => {
+test('a line forbidding force push or naming `squash` is no ask', () => {
   expect(on(saying('- no send carries a `+` refspec or `--force`, and it never force pushes'))).toBeNull()
   expect(on(saying('- a plan with no open PR still goes through `squash` and `renamed`'))).toBeNull()
   expect(on(saying('- force push the branch, not a merge'))).toMatchObject({ span: 'force push' })
 })
 
-test('a brief asking the builder to run, count or report anything needing a shell is refused', () => {
+test('a brief asking the builder for shell work is refused', () => {
   const shell = 'the builder holds no shell'
   expect(on(saying('- run the tests in the checkout'))).toMatchObject({ span: 'run the tests' })
   expect(on(saying('- run the tests in the checkout'))?.reason).toContain(shell)
@@ -113,7 +113,7 @@ test('a brief over the line ceiling is refused on the cap', () => {
   expect(on(saying(Array.from({ length: 60 }, () => '- a line').join('\n')))).toMatchObject({ span: '100 lines' })
 })
 
-test('a change to the handback format names both its readers or is refused on the one left out', () => {
+test('a handback format change names both readers or is refused', () => {
   const unaffected = ['- sequencer/workspace.ts:44 — reads the D rows, unaffected']
   expect(on(handback([], unaffected))).toMatchObject({ span: 'sequencer/rails.ts' })
   expect(on(handback(['- sequencer/rails.ts'], unaffected)))
@@ -121,19 +121,19 @@ test('a change to the handback format names both its readers or is refused on th
   expect(on(handback([], ['- sequencer/rails.ts — reads it', '- rails/tight/prose.ts — reads it']))).toBeNull()
 })
 
-test('the handback format beside a path that is neither its reader nor a test is two jobs in one', () => {
+test('the handback format beside an unrelated path is two jobs', () => {
   const readers = ['- sequencer/rails.ts', '- rails/tight/prose.ts']
   expect(on(handback([...readers, '- store/plans.ts'], ['- nothing else'])))
     .toMatchObject({ span: 'store/plans.ts', reason: holding('two jobs in one brief') })
   expect(on(handback([...readers, '- sequencer/tests/brief.test.ts'], ['- nothing else']))).toBeNull()
 })
 
-test('the part that is missing is the span, and a section with one D row is its own', () => {
+test('the missing part is the span; one D row is its own section', () => {
   expect(on(fixture('no-must-not-break.md'))).toMatchObject({ span: '## Must not break' })
   expect(on(fixture('one-case.md'))).toMatchObject({ span: '## Cases' })
 })
 
-test('a title the ask does not carry, a dropped line and a part out of order are refused', () => {
+test('a wrong title, dropped line or misordered part is refused', () => {
   expect(on(brief.replace('# A seat', '# Some seat'))).toMatchObject({ span: '# <title>' })
   expect(on(brief.replace('# A seat that briefs before any build\n', ''))).toMatchObject({ span: '# <title>' })
   expect(on(brief.replace(/^\*\*Why:.*$/m, ''))).toMatchObject({ span: '**Why:**' })
@@ -141,7 +141,7 @@ test('a title the ask does not carry, a dropped line and a part out of order are
   expect(on(flipped)).toMatchObject({ span: '## Out of scope' })
 })
 
-test('only a fence that says unclear carries a question back to the COO', () => {
+test('only an unclear fence carries a question back to the COO', () => {
   expect(unclear(fixture('unclear.md'))).toBe('is the GitHub comment part of this change or its own issue?')
   expect(unclear(brief)).toBeNull()
   expect(unclear('---\noutcome: unclear\n---\n')).toBeNull()
@@ -151,7 +151,7 @@ test('a question naming an issue keeps everything after the #', () => {
   expect(unclear(asks('Has #3a landed, and on which commit?'))).toBe('Has #3a landed, and on which commit?')
 })
 
-test('prose with no title or fence is the question itself; a titled brief is not', () => {
+test('bare prose is the question itself; a titled brief is not', () => {
   expect(unclear('I could not brief this: the router it needs is not on main.\n')).toBe('I could not brief this: the router it needs is not on main.')
   expect(unclear(brief)).toBeNull()
   expect(unclear('')).toBeNull()
@@ -164,7 +164,7 @@ test('a fence wrapped in a code block still splits', () => {
   expect(unclear(`Two jobs.\n\n\`\`\`\n${parts}\n\`\`\``)).toBeNull()
 })
 
-test('step 1 fires the read-only seat once, saves its reply as the brief, and advances to the build', async () => {
+test('step 1 fires the seat once, saves the brief, goes to build', async () => {
   const w = mine()
   const packets: Packet[] = []
   await tick(w.db, w.root, stub(CARRIED))
@@ -208,7 +208,7 @@ test('the seat packet carries the template under the ask', async () => {
   expect(prompt).not.toContain('\n# Your last question\n')
 })
 
-test('the seat packet opens with the map of the plan\'s checkout, and no MAP.md is written', async () => {
+test('the packet opens on the checkout map; no MAP.md is written', async () => {
   const w = mine()
   const packets: Packet[] = []
   await tick(w.db, w.root, stub(CARRIED))
@@ -224,7 +224,7 @@ const FAILS = [
   ['absent-file.md', 'sequencer/nowhere.ts'],
 ] as const
 
-test('a reply that fails the shape check refuses step 1 on the missing part and writes no brief', async () => {
+test('a misshapen reply refuses step 1 and writes no brief', async () => {
   for (const [name, span] of FAILS) {
     const w = mine()
     await tick(w.db, w.root, stub(CARRIED))
@@ -243,7 +243,7 @@ async function turnedBack(): Promise<World> {
   return w
 }
 
-test('the seat is fired again with its last brief and the shape refusal under the ask', async () => {
+test('the seat refires with its last brief and the shape refusal', async () => {
   const w = await turnedBack()
   const packets: Packet[] = []
   const reply = titled('no-must-not-break.md')
@@ -258,7 +258,7 @@ test('the seat is fired again with its last brief and the shape refusal under th
   expect(maybe(w.root, ID, 'brief.refused.md')).toBeNull()
 })
 
-test('a brief saved after a shape refusal leaves the builder no refusal to read', async () => {
+test('a brief saved after a shape refusal leaves no refusal', async () => {
   const w = await turnedBack()
   const packets: Packet[] = []
   await tick(w.db, w.root, stub(CARRIED))
@@ -270,7 +270,7 @@ test('a brief saved after a shape refusal leaves the builder no refusal to read'
   expect(packets[0]?.prompt).not.toContain('# Refused')
 })
 
-test('an unclear reply stops the plan on the COO, saves the question, and spends no retry', async () => {
+test('an unclear reply holds for the COO and spends no retry', async () => {
   const w = mine()
   const question = 'is the comment on the issue part of this change?'
   await tick(w.db, w.root, stub(CARRIED))
@@ -284,7 +284,7 @@ test('an unclear reply stops the plan on the COO, saves the question, and spends
     .toEqual({ held_by: 'coo', held_why: `brief_writer: ${question}` })
 })
 
-test('a round that comes back to step 1 keeps the brief the reviewers read', async () => {
+test('a round back at step 1 keeps the brief the reviewers read', async () => {
   const w = mine()
   for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
   const saved = briefOf(w)
@@ -296,7 +296,7 @@ test('a round that comes back to step 1 keeps the brief the reviewers read', asy
   expect(w.db.prepare('SELECT count(*) AS n FROM runs WHERE step = 1').get()).toEqual({ n: 1 })
 })
 
-test('a plan a builder has run on keeps its hand-written ticket, its ask and its refusal through a rewind', async () => {
+test('a rewound built plan keeps its ticket, ask and refusal', async () => {
   const w = mine()
   for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
   await tick(w.db, w.root, stub(CARRIED, 1))
@@ -316,7 +316,7 @@ test('a plan a builder has run on keeps its hand-written ticket, its ask and its
 
 const STOPPED = `step 1 brief refused\n\n# Stopped\n\n${WHY.shared}.\n`
 
-test('afresh at step 1 moves the refusal and the question aside, byte for byte', () => {
+test('afresh at step 1 sets refusal and question aside intact', () => {
   const w = mine()
   put(w.root, ID, 'refusal.md', STOPPED)
   put(w.root, ID, 'question.md', 'which file?\n')
@@ -343,7 +343,7 @@ test('afresh on a plan with neither file writes nothing', () => {
   expect([maybe(w.root, ID, 'refusal.prev.md'), maybe(w.root, ID, 'question.prev.md')]).toEqual([null, null])
 })
 
-test('D2 rulings.md stays byte for byte through cf return and cf retry at steps 1 and 2, and afresh', () => {
+test('D2 rulings.md survives cf return, cf retry and afresh', () => {
   const w = mine()
   const ruling = '# Ruling\n\nuse bye()\n'
   put(w.root, ID, 'rulings.md', ruling)
@@ -358,7 +358,7 @@ test('D2 rulings.md stays byte for byte through cf return and cf retry at steps 
   }
 })
 
-test('a plan blocked at step 1 and retried is briefed from the ask alone', async () => {
+test('a plan retried at step 1 is briefed from the ask alone', async () => {
   const w = mine()
   const packets: Packet[] = []
   await tick(w.db, w.root, stub(CARRIED))
@@ -382,7 +382,7 @@ async function questioned(): Promise<World> {
   return w
 }
 
-test('a question sent back by cf return is re-briefed with the files it opened, marked against main', async () => {
+test('a returned question re-briefs with its files against main', async () => {
   const w = await questioned()
   const packets: Packet[] = []
   const read = (path: string): string => JSON.stringify({ type: 'assistant',
@@ -396,7 +396,7 @@ test('a question sent back by cf return is re-briefed with the files it opened, 
   expect(packets[0]?.prompt).toContain('# Files you opened last time\n\n- src/hello.ts — unchanged\n- src/next.ts — changed on main since\n')
 })
 
-test('a returned question whose transcript is gone is re-briefed from the ask alone and passes', async () => {
+test('a question with no transcript re-briefs from the ask alone', async () => {
   const w = await questioned()
   const packets: Packet[] = []
   rmSync(lastTranscript(w))
@@ -406,7 +406,7 @@ test('a returned question whose transcript is gone is re-briefed from the ask al
   expect(packets[0]?.prompt).not.toContain('\n# Your last question\n')
 })
 
-test('a plan re-briefed after a retry at step 1 replaces its file list', async () => {
+test('a re-brief after a step 1 retry replaces the file list', async () => {
   const w = mine()
   for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
   expect(listed(w)).toEqual([{ path: 'src/hello.ts' }])
@@ -422,7 +422,7 @@ test('a plan re-briefed after a retry at step 1 replaces its file list', async (
   expect(listed(w)).toEqual([{ path: 'src/bye.ts' }])
 })
 
-test('a plan queued before the brief seat has its raw issue moved to the ask and is briefed like any other', async () => {
+test('a pre-brief-seat plan moves its raw issue to the ask', async () => {
   const w = mine()
   const raw = move(w.root, ID, 'ask.md', 'issue.md')
   await tick(w.db, w.root, stub(CARRIED))
@@ -441,7 +441,7 @@ async function unread(): Promise<World> {
   return w
 }
 
-test('the first briefed plan waits on the coo at step 2, spends one read, and the next tick fires nothing', async () => {
+test('the first brief waits on the coo and spends one read', async () => {
   const w = await unread()
 
   expect((await tick(w.db, w.root, stub(CARRIED)))[0])
@@ -451,7 +451,7 @@ test('the first briefed plan waits on the coo at step 2, spends one read, and th
   expect(await tick(w.db, w.root, stub(CARRIED))).toEqual([])
 })
 
-test('released, the plan is queued at step 2 and the next tick fires the builder', async () => {
+test('released, the plan queues at step 2 and the builder fires', async () => {
   const w = await unread()
   await tick(w.db, w.root, stub(CARRIED))
 
@@ -460,7 +460,7 @@ test('released, the plan is queued at step 2 and the next tick fires the builder
   expect((await tick(w.db, w.root, stub(CARRIED)))[0]).toMatchObject({ step: 2, name: 'build', outcome: 'pass' })
 })
 
-test('cf return queues a blocked or halted plan at the step it holds, and refuses any other state', async () => {
+test('cf return requeues only a blocked or halted plan', async () => {
   const w = await unread()
   await tick(w.db, w.root, stub(CARRIED))
 
@@ -478,7 +478,7 @@ test('cf return queues a blocked or halted plan at the step it holds, and refuse
   expect(plan(w.db, ID)).toMatchObject({ step: 2, state: 'queued' })
 })
 
-test('release refuses a plan parked on the coo at step 1 and moves no row', async () => {
+test('release refuses a plan parked at step 1 and moves no row', async () => {
   const w = await unread()
   await tick(w.db, w.root, stub(CARRIED, 0, undefined, undefined, asks('is the comment part of this change?')))
   expect(plan(w.db, ID)).toMatchObject({ step: 1, state: 'blocked_on_ceo' })
@@ -489,7 +489,7 @@ test('release refuses a plan parked on the coo at step 1 and moves no row', asyn
   expect(hands(w)).toEqual([])
 })
 
-test('release, return, retry and priority by hand each write one event naming who did it', async () => {
+test('release, return, retry and priority each log who did it', async () => {
   const w = await unread()
   await tick(w.db, w.root, stub(CARRIED))
   const park = (): void => { w.db.prepare("UPDATE plans SET state = 'blocked_on_ceo' WHERE id = ?").run(ID) }
@@ -508,7 +508,7 @@ test('release, return, retry and priority by hand each write one event naming wh
   ])
 })
 
-test('a refused retry or priority, and a priority with no actor, write no event', () => {
+test('refused retry or priority, or no actor, writes no event', () => {
   const w = mine()
   w.db.prepare("UPDATE plans SET state = 'queued' WHERE id = ?").run(ID)
 
@@ -518,7 +518,7 @@ test('a refused retry or priority, and a priority with no actor, write no event'
   expect(hands(w)).toEqual([])
 })
 
-test('with the reads spent, step 1 passes to running and the builder fires in the next tick', async () => {
+test('with reads spent, step 1 passes and the builder fires next', async () => {
   const w = mine()
   await tick(w.db, w.root, stub(CARRIED))
 
@@ -527,7 +527,7 @@ test('with the reads spent, step 1 passes to running and the builder fires in th
   expect(left(w)).toBe('0')
 })
 
-test('a rewind onto a brief that stands holds nothing and spends no read', async () => {
+test('a rewind onto a standing brief holds and spends nothing', async () => {
   const w = mine()
   for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED))
   reads(w.db, 10)
@@ -539,7 +539,7 @@ test('a rewind onto a brief that stands holds nothing and spends no read', async
   expect(left(w)).toBe('10')
 })
 
-test('an external plan walks the same step 1 on the same seat, and never before cf approve target', async () => {
+test('an external plan walks step 1 only after cf approve target', async () => {
   const w = world()
   await tick(w.db, w.root, stub(CARRIED))
   expect(blocked(w.db, plan(w.db, 1))).toBe('target_approval')
@@ -551,7 +551,7 @@ test('an external plan walks the same step 1 on the same seat, and never before 
   expect(w.db.prepare('SELECT seat FROM runs WHERE step = 1').get()).toEqual({ seat: 'brief_writer' })
 })
 
-test('brief.ts is the only source that reads ## Files, and the shape check refuses through it', () => {
+test('only brief.ts reads ## Files, and the shape check uses it', () => {
   const readers = walk(repo, (name) => name.endsWith('.ts') && !name.endsWith('.test.ts'))
     .map((f) => relative(repo, f))
     // A live checkout carries `.cf/work/*/src`, each a copy of this tree rather than a second reader in it.
@@ -571,7 +571,7 @@ test('a Files row naming several paths lists each once', () => {
   ])
 })
 
-test('references are the Must not break lines outside the files the job changes', () => {
+test('references: Must not break lines outside the changed files', () => {
   const brief = ['# t', '', '## Must not break', '', '- empty RPC URL is unset (`python/src/solana_pay_kit/config.py:12`)',
     '- booleans stay `true`/`false` (`ruby/lib/pay_kit/config.rb:40`)', '', '## Files', '', '- `ruby/lib/pay_kit/config.rb:259`', ''].join('\n')
   expect(references(brief)).toEqual([{ path: 'python/src/solana_pay_kit/config.py', line: 12 }])
@@ -594,7 +594,7 @@ const PLUS = 'Sources/App/DashboardSource+Runs.swift'
 
 const plus = (row: string): string => ['# t', '', '## Files', '', row, '', '## Out of scope', ''].join('\n')
 
-test('a Files row naming a + path yields that path, backticked or bare', () => {
+test('a Files row with a + path yields it, backticked or bare', () => {
   for (const row of [`- \`${PLUS}:27\``, `- ${PLUS}:27 — the WHERE`]) {
     expect(files(plus(row))).toEqual([{ path: PLUS, is_new: false }])
   }
@@ -609,7 +609,7 @@ test('a + path off the tree is refused on the whole path', () => {
     .toMatchObject({ span: PLUS, reason: holding('not in the checkout') })
 })
 
-test('D4: estimate reads the integer from `Estimate:` under ## Approach, and is null without one there', () => {
+test('D4: estimate reads `Estimate:` under ## Approach, else null', () => {
   const at = (approach: string, after = ''): string => `# t\n\n## Approach\n\nx\n${approach}\n\n## Cases\n\n${after}\n`
   expect(estimate(at('Estimate: 1,300 lines'))).toBe(1300)
   expect(estimate(at('Estimate: ~420 lines'))).toBe(420)

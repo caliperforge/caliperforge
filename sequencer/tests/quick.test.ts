@@ -170,8 +170,12 @@ test('each applied note leaves one note event, and a refused set leaves none', a
   expect(notes(refusing)).toEqual({ n: 0 })
 })
 
-test('an admitted note the checkout\'s checks refuse is put back', async () => {
+test('admitted notes the checkout\'s checks refuse are put back and dropped, and the step passes', async () => {
   const w = await internalReview()
-  await refused(w, ID, stub(CARRIED, 0, noted(note('hello', 'oops'))))
+  const fired = (await tick(w.db, w.root, stub(CARRIED, 0, noted(note('hello', 'oops'), note('"hi"', '"hey"')))))[0]
+  expect(fired).toMatchObject({ step: 4, outcome: 'pass' })
+  expect(plan(w.db, ID)).toMatchObject({ step: 5, retries: 0 })
   expect(hello(w, ID)).toBe(HI)
+  expect(w.db.prepare("SELECT message FROM events WHERE plan = ? AND kind = 'note'").all(ID))
+    .toEqual([{ message: 'dropped: lint failed after the notes' }, { message: 'dropped: lint failed after the notes' }])
 }, SLOW)

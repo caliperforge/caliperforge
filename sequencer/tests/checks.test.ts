@@ -70,7 +70,7 @@ function last(db: Db, plan: number): unknown {
     FROM verdicts WHERE plan = ? ORDER BY id DESC LIMIT 1`).get(plan)
 }
 
-test('the three scripts run in order and stop at the first non-zero exit, which the failure names', () => {
+test('three scripts run in order and stop at the first failure', () => {
   const all = recorder('run lint')
   const src = tree({ 'package.json': pkg({ typecheck: 'tsc --noEmit', lint: 'eslint .', test: 'vitest run' }) })
   expect(checks(src, all.run)).toEqual({ script: 'lint', command: 'npm run lint', code: '2', output: 'boom', tests: [], retried: false })
@@ -81,7 +81,7 @@ test('the three scripts run in order and stop at the first non-zero exit, which 
   expect(some.seen).toEqual(['run test'])
 })
 
-test('a checkout whose lint exits non-zero is back on step 2 with the command and its output, and no reviewer fired', async () => {
+test('a red lint goes back to step 2 with its output, no reviewer', async () => {
   const w = mine(RED)
   for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED))
 
@@ -98,7 +98,7 @@ test('a checkout whose lint exits non-zero is back on step 2 with the command an
   })
 }, SLOW)
 
-test('a checkout whose scripts all exit zero is on step 4 with a pass row for `proof()` to read', async () => {
+test('green scripts move to step 4 with a pass row for `proof()`', async () => {
   const w = mine(GREEN)
   for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED))
 
@@ -116,26 +116,26 @@ const CALLS = { ...ONE, 'a.test.ts': "import { test } from 'vitest'\n\ntest('a c
 const CALL = ' FAIL a.test.ts > a call\nAssertionError: expected "hi" to be "ho"\n'
 const LAP = ' FAIL b.test.ts > a lap\nError: Test timed out in 5000ms.\n'
 
-test('D1 a failure names each failing test by file and line, marks the timeouts, and is refused after one run', () => {
+test('D1 a failure names tests by file:line and marks timeouts', () => {
   const once = replies({ ok: false, code: '1', output: `${CALL}${LAP}${CALL}` }, { ok: true, output: '' })
   expect(checks(tree(CALLS), once.run)).toMatchObject({ tests: ['a.test.ts:3 a call', 'b.test.ts:2 a lap (timeout)'], retried: false })
   expect(once.seen).toEqual(['run test'])
 })
 
-test('D2 a timeout-only vitest failure re-runs only the files it names, and that run settles it', () => {
+test('D2 a timeout-only failure re-runs only the files it names', () => {
   const twice = replies({ ok: false, code: '1', output: LAP }, { ok: true, output: '' })
   expect(checks(tree(CALLS), twice.run)).toBeNull()
   expect(twice.seen).toEqual(['run test', 'exec -- vitest run b.test.ts'])
 })
 
-test('D3 a re-run of the files alone that fails is refused under the first command, with its own tests', () => {
+test('D3 a red files-only re-run refuses under the first command', () => {
   const output = ' FAIL b.test.ts > a lap\nAssertionError: expected 1 to be 2\n'
   const twice = replies({ ok: false, code: '1', output: LAP }, { ok: false, code: '1', output })
   expect(checks(tree(CALLS), twice.run))
     .toEqual({ script: 'test', command: 'npm run test', code: '1', output, tests: ['b.test.ts:2 a lap'], retried: true })
 })
 
-test('D4 load with no FAIL line, a hung xcodebuild runner, or a test script that is not vitest re-runs the same command', () => {
+test('D4 load, a hung runner or non-vitest re-runs the command', () => {
   const xcode = tree({})
   mkdirSync(join(xcode, 'Atelier.xcodeproj'))
   const hung = 'The test runner hung before establishing connection.\n'
@@ -146,7 +146,7 @@ test('D4 load with no FAIL line, a hung xcodebuild runner, or a test script that
   }
 })
 
-test('a failure the output does not account for as load is refused on the first run', () => {
+test('a non-load failure is refused on the first run', () => {
   for (const output of [`${TIMEOUT}${ASSERTED}`, SILENT]) {
     const shell = replies({ ok: false, code: '1', output }, { ok: true, output: '' })
     expect(checks(tree(ONE), shell.run)).toMatchObject({ command: 'npm run test', code: '1', retried: false })
@@ -154,7 +154,7 @@ test('a failure the output does not account for as load is refused on the first 
   }
 })
 
-test('load-only on both runs is refused with the second run, and the note names the retry', async () => {
+test('load-only twice refuses on the second run, noting the retry', async () => {
   const both = replies({ ok: false, code: '1', output: TIMEOUT }, { ok: false, code: '7', output: BOUND })
   expect(checks(tree(ONE), both.run))
     .toEqual({ script: 'test', command: 'npm run test', code: '7', output: BOUND, tests: [], retried: true })
@@ -179,7 +179,7 @@ async function reddened(files: Record<string, string>): Promise<{ w: World; befo
   return { w, before, fired: (await tick(w.db, w.root, stub(CARRIED)))[0] }
 }
 
-test('#191 D1 a failing unlisted test that imports a changed file joins the job\'s files, with no stop', async () => {
+test('#191 D1 a red unlisted test on changed code joins the job', async () => {
   const { w, before, fired } = await reddened(BROKEN)
   expect(fired?.note).toBe("npm run test exit 1; added to this job's files: src/tests/hello.test.ts")
   expect(plan(w.db, ID)).toMatchObject({ step: 2 })
@@ -189,14 +189,14 @@ test('#191 D1 a failing unlisted test that imports a changed file joins the job\
   expect(w.db.prepare('SELECT 1 FROM decisions WHERE plan = ?').all(ID)).toEqual([])
 }, SLOW)
 
-test('#191 D2 a failing unlisted test that imports nothing changed is refused as before', async () => {
+test('#191 D2 a red unlisted test on unchanged code is refused', async () => {
   const { w, before, fired } = await reddened(ORPHANED)
   expect(fired).toMatchObject({ outcome: 'refuse', spans: ['checks:test', 'src/tests/hello.test.ts:3 says hi'] })
   expect(fired?.note).toBe('npm run test exit 1')
   expect(filesOf(w.db, ID).map((f) => f.path)).toEqual(before)
 }, SLOW)
 
-test('#77: a narrow list runs the tests it can reach, and only in place of a vitest suite', () => {
+test('#77: a narrow list runs reachable tests, only for vitest', () => {
   const some = recorder()
   const src = tree({ 'package.json': pkg({ typecheck: 'tsc --noEmit', lint: 'eslint .', test: 'vitest run' }) })
   expect(checks(src, some.run, ['store/plans.ts', 'store/lanes.ts'])).toBeNull()
@@ -211,7 +211,7 @@ test('#77: a narrow list runs the tests it can reach, and only in place of a vit
   expect(jest.seen).toEqual(['run test'])
 })
 
-test('#77: a narrow run that fails is still named by the script, not by the last path it was given', () => {
+test('#77: a failed narrow run is named by the script, not a path', () => {
   const red = recorder('exec -- vitest related --run store/plans.ts')
   const src = tree({ 'package.json': pkg({ test: 'vitest run' }) })
   expect(checks(src, red.run, ['store/plans.ts'])).toMatchObject({ script: 'test', code: '2' })
@@ -229,7 +229,7 @@ function built(w: World, at: number): void {
     .run(HASH, `step-2.${String(at)}.transcript.jsonl`)
 }
 
-test('#77: the first build is judged by the whole suite; a rebuild by what its own files reach', () => {
+test('#77: first build runs the suite; a rebuild what it reaches', () => {
   const w = world()
   const row = plan(w.db, 1)
   record(w.db, 1, [{ path: 'store/plans.ts', is_new: false }, { path: 'store/lanes.ts', is_new: false }])
@@ -250,7 +250,7 @@ test('a checkout with no package.json runs no command', () => {
   expect(none.seen).toEqual([])
 })
 
-test('npm ci runs for a lock file with no node_modules, and its own failure refuses the same way', () => {
+test('npm ci runs for a lock without node_modules, and can refuse', () => {
   const files = { 'package.json': pkg({ test: 'vitest run' }), 'package-lock.json': '{}' }
   const fresh = recorder('ci')
   expect(checks(tree(files), fresh.run)).toEqual({ script: 'ci', command: 'npm ci', code: '2', output: 'boom', tests: [], retried: false })
@@ -263,7 +263,7 @@ test('npm ci runs for a lock file with no node_modules, and its own failure refu
   expect(installed.seen).toEqual(['run test'])
 })
 
-test('a plan on a target runs none of the stranger\'s scripts and passes step 3 as before', async () => {
+test('a target plan runs no stranger scripts and passes step 3', async () => {
   const w = world('warm', undefined, RED)
   approve(w.db, w.target)
   for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED))
@@ -274,7 +274,7 @@ test('a plan on a target runs none of the stranger\'s scripts and passes step 3 
   expect(w.db.prepare("SELECT 1 FROM verdicts WHERE plan = ? AND rail_id = 'checks'").all(w.plan)).toEqual([])
 }, SLOW)
 
-test('D1 an xcode checkout runs xcodebuild test with its derived data inside', () => {
+test('D1 xcode runs xcodebuild test with its derived data inside', () => {
   const src = tree({})
   mkdirSync(join(src, 'Atelier.xcodeproj'))
   mkdirSync(join(src, '.git', 'info'), { recursive: true })
@@ -295,7 +295,7 @@ test('D1 a red xcodebuild names its command', () => {
   expect(checks(src, run)).toMatchObject({ script: 'test', code: '65', command: expect.stringMatching(/^xcodebuild -project Atelier\.xcodeproj/) as string })
 })
 
-test('an xcodebuild failure without the hung line is refused on the first run', () => {
+test('an xcodebuild failure not hung is refused on the first run', () => {
   const src = tree({})
   mkdirSync(join(src, 'Atelier.xcodeproj'))
   const once = replies({ ok: false, code: '65', output: '** TEST FAILED **' }, { ok: true, output: '' })
@@ -313,13 +313,13 @@ function xcode(): string {
   return src
 }
 
-test('#257 D1 an xcodebuild log saying CoreSimulator is out of date is a fault after one run', () => {
+test('#257 D1 an outdated CoreSimulator is a fault after one run', () => {
   const once = replies({ ok: false, code: '70', output: `building\n${STALE}\n` })
   expect(checks(xcode(), once.run)).toMatchObject({ fault: STALE, retried: false })
   expect(once.seen).toHaveLength(1)
 })
 
-test('#257 D1 a fault keeps the retries, switches the lane off and writes one inbox line, once', () => {
+test('#257 D1 a fault keeps retries, stops the lane, posts once', () => {
   const w = world()
   internalPlan(w.db, w.root, ID)
   expect(faulted(w.db, w.root, plan(w.db, ID), STALE)).toMatchObject({ outcome: 'pass', held: true })
@@ -334,26 +334,26 @@ test('#257 D2 a red xcodebuild test run carries no fault', () => {
   expect(checks(xcode(), () => ({ ok: false, code: '65', output: '** TEST FAILED **' }))).not.toHaveProperty('fault')
 })
 
-test('#257 D3 the linkd.autoShortcut lines are dropped from the output and every other line kept in order', () => {
+test('#257 D3 linkd.autoShortcut lines drop; the rest keep order', () => {
   const noise = 'Error Domain=NSCocoaErrorDomain Code=4097 "connection to service named com.apple.linkd.autoShortcut" UserInfo={}'
   const run: Run = () => ({ ok: false, code: '65', output: ['a', noise, 'b', noise, '** TEST FAILED **'].join('\n') })
   expect(checks(xcode(), run)?.output).toBe('a\nb\n** TEST FAILED **')
 })
 
-test('#257 D4 a runner that hangs on its retry too is a fault; a hang then a green run is not', () => {
+test('#257 D4 hung twice is a fault; hung then green is not', () => {
   const both = replies({ ok: false, code: '1', output: HANG }, { ok: false, code: '1', output: HANG })
   expect(checks(xcode(), both.run)).toMatchObject({ fault: HANG.trim(), retried: true })
   expect(checks(xcode(), replies({ ok: false, code: '1', output: HANG }).run)).toBeNull()
 })
 
-test('#257 D5 an npm failure naming CoreSimulator or the hung runner is an ordinary refusal', () => {
+test('#257 D5 npm naming CoreSimulator or a hang just refuses', () => {
   const output = `${STALE}\n${HANG}`
   const failed = checks(tree(ONE), replies({ ok: false, code: '1', output }, { ok: false, code: '1', output }).run)
   expect(failed).toMatchObject({ script: 'test', code: '1' })
   expect(failed).not.toHaveProperty('fault')
 })
 
-test('#257 D6 a faulted step 3 stays on its step and records no checks verdict', async () => {
+test('#257 D6 a faulted step 3 stays put with no checks verdict', async () => {
   const bin = mkdtempSync(join(tmpdir(), 'cf-bin-'))
   writeFileSync(join(bin, 'xcodebuild'), `#!/bin/sh\necho '${STALE}'\nexit 70\n`, { mode: 0o755 })
   const path = process.env.PATH
@@ -382,26 +382,26 @@ function atelier(): string {
   return src
 }
 
-test('#352 D1 a host exit in a class outside the diff runs the same xcodebuild once more, and a green run settles it', () => {
+test('#352 D1 a host exit outside the diff earns one re-run', () => {
   const twice = replies({ ok: false, code: '65', output: EXITED }, { ok: true, output: '' })
   expect(checks(atelier(), twice.run, [], null, ['src/hello.ts'])).toBeNull()
   expect(twice.seen).toHaveLength(2)
   expect(twice.seen[1]).toBe(twice.seen[0])
 })
 
-test('#352 D2 a host exit in a class the diff touches is refused after one run', () => {
+test('#352 D2 a host exit in the diff is refused after one run', () => {
   const once = replies({ ok: false, code: '65', output: EXITED }, { ok: true, output: '' })
   expect(checks(atelier(), once.run, [], null, [CARDS])).toMatchObject({ code: '65', retried: false })
   expect(once.seen).toHaveLength(1)
 })
 
-test('#352 D3 a host exit on both runs is refused with the second run', () => {
+test('#352 D3 a host exit on both runs refuses with the second', () => {
   const again = `${EXITED}again`
   const both = replies({ ok: false, code: '65', output: EXITED }, { ok: false, code: '66', output: again })
   expect(checks(atelier(), both.run)).toMatchObject({ code: '66', output: again, retried: true })
 })
 
-test('#352 D4 D5 no restart line, no class listed, or a class no swift file declares is refused after one run', () => {
+test('#352 D4 D5 no restart line or known class refuses at once', () => {
   const without = (text: string): string => EXITED.split('\n').filter((line) => !line.startsWith(text)).join('\n')
   for (const [src, output] of [[atelier(), without('Restarting')], [atelier(), without('\tFloorDecisionCardsTests')], [xcode(), EXITED]] as const) {
     const once = replies({ ok: false, code: '65', output }, { ok: true, output: '' })
@@ -427,12 +427,12 @@ async function exits(settles: boolean): Promise<{ w: World; fired: Awaited<Retur
   }
 }
 
-test('#352 D6 a host exit outside the diff and then a green run moves the plan to step 4', async () => {
+test('#352 D6 an outside host exit then green moves to step 4', async () => {
   const { w } = await exits(true)
   expect(plan(w.db, ID).step).toBe(4)
 }, SLOW)
 
-test('#352 D6 a host exit on both runs sends the plan back to step 2 with a checks:test refusal', async () => {
+test('#352 D6 a host exit twice goes to step 2 on checks:test', async () => {
   const { w, fired } = await exits(false)
   expect(plan(w.db, ID).step).toBe(2)
   expect(fired).toMatchObject({ outcome: 'refuse', spans: ['checks:test'], note: expect.stringMatching(/exit 65 after one retry$/) as string })
@@ -446,7 +446,7 @@ function locked(w: World, pid: number): string {
   return path
 }
 
-test('a checks lock a live tick holds leaves step 3 held on it, with no checks run or recorded', async () => {
+test('a live tick\'s checks lock holds step 3, running nothing', async () => {
   const w = mine(GREEN)
   locked(w, process.ppid)
   for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED))
@@ -457,7 +457,7 @@ test('a checks lock a live tick holds leaves step 3 held on it, with no checks r
   expect(w.db.prepare("SELECT 1 FROM verdicts WHERE plan = ? AND rail_id = 'checks'").all(ID)).toEqual([])
 }, SLOW)
 
-test('a checks lock whose holder is gone is taken over, and no lock is left after a pass or a refusal', async () => {
+test('a dead holder\'s checks lock is taken, then released', async () => {
   for (const [scripts, step] of [[GREEN, 4], [RED, 2]] as const) {
     const w = mine(scripts)
     const path = locked(w, spawnSync('/usr/bin/true').pid)
@@ -495,7 +495,7 @@ function heard(ran: Ran = { ok: true, output: '' }): { run: Run; calls: string[]
 
 const JUST = 'install:\n    bundle install\n\ntest:\n    bundle exec ruby -Itest test/run.rb\n\nfmt:\n    bundle exec standardrb --fix\n\nlint:\n    bundle exec standardrb\n'
 
-test('#204 an outside ruby plan runs its Justfile gates in ruby/, never npm at the root', () => {
+test('#204 outside ruby runs Justfile gates in ruby/, never npm', () => {
   const src = nested({ 'package.json': pkg({ test: 'vitest run' }), 'ruby/Justfile': JUST, 'ruby/Gemfile': '', 'ruby/lib/pay_kit/config.rb': '' })
   const { run, calls } = heard()
   expect(checks(src, run, [], { language: 'ruby', files: ['docs/x.md', 'ruby/lib/pay_kit/config.rb'] })).toBeNull()
@@ -503,7 +503,7 @@ test('#204 an outside ruby plan runs its Justfile gates in ruby/, never npm at t
   expect(calls).toEqual([`just --justfile Justfile install @${at}`, `just --justfile Justfile lint @${at}`, `just --justfile Justfile test @${at}`])
 })
 
-test('#192 an outside rust plan runs the fmt check its CI runs, then only the crates it touched', () => {
+test('#192 outside rust runs CI\'s fmt check, then touched crates', () => {
   const src = nested({
     'Cargo.toml': '[workspace]\nmembers = ["crates/*"]\n',
     'crates/core/Cargo.toml': '[package]\nname = "surfpool-core"\nversion = "0.1.0"\n',
@@ -516,7 +516,7 @@ test('#192 an outside rust plan runs the fmt check its CI runs, then only the cr
   expect(calls).toEqual([`cargo +nightly fmt --all -- --check @${src}`, `cargo test -p surfpool-types -p surfpool-core @${src}`])
 })
 
-test('#192 with no fmt line in the workflows, rust falls back to cargo fmt --all -- --check at the workspace', () => {
+test('#192 no CI fmt line falls back to cargo fmt --all --check', () => {
   const src = nested({ 'rust/Cargo.toml': '[workspace]\n', 'rust/crates/kit/Cargo.toml': '[package]\nname = "pay-kit"\n' })
   const { run, calls } = heard()
   expect(checks(src, run, [], { language: 'rust', files: ['rust/crates/kit/src/lib.rs'] })).toBeNull()
@@ -524,14 +524,14 @@ test('#192 with no fmt line in the workflows, rust falls back to cargo fmt --all
   expect(calls).toEqual([`cargo fmt --all -- --check @${at}`, `cargo test -p pay-kit @${at}`])
 })
 
-test('#192 a red format check refuses with the diff, named by folder', () => {
+test('#192 a red fmt check refuses with the diff, named by folder', () => {
   const src = nested({ 'Cargo.toml': '[package]\nname = "x"\n' })
   const { run } = heard({ ok: false, code: '1', output: 'Diff in src/lib.rs at line 3' })
   expect(checks(src, run, [], { language: 'rust', files: ['src/lib.rs'] }))
     .toEqual({ script: 'format', command: 'cargo fmt --all -- --check', code: '1', output: 'Diff in src/lib.rs at line 3', tests: [], retried: false })
 })
 
-test('#204 a go folder with no Justfile runs gofmt, vet and test raw; gofmt printing a file is a failure', () => {
+test('#204 bare go runs gofmt, vet and test; gofmt output fails', () => {
   const src = nested({ 'go/go.mod': 'module x\n', 'go/config.go': '' })
   const { run, calls } = heard({ ok: true, output: 'config.go\n' })
   expect(checks(src, run, [], { language: 'go', files: ['go/config.go'] }))
@@ -546,13 +546,13 @@ test('#204 a recipe the Justfile does not define is not run', () => {
   expect(calls).toEqual([`just --justfile Justfile test @${join(src, 'lua')}`])
 })
 
-test('#204 the recipe reader skips assignments and settings, and takes recipes with parameters', () => {
+test('#204 the recipe reader skips settings and takes parameters', () => {
   const src = nested({ 'Justfile': 'set shell := ["bash", "-uc"]\nuv_run := "uv run"\n\ndefault:\n    @just --list\n\ntest-cover gate="90":\n    x\n\n@lint:\n    y\n' })
   expect([...(recipes(join(src, 'Justfile')) ?? [])]).toEqual(['default', 'test-cover', 'lint'])
   expect(formatLine(src)).toEqual(['fmt', '--all', '--', '--check'])
 })
 
-test('#204 rust tests take the features their CI test line names, less a service it starts, on the crates that declare them', () => {
+test('#204 rust tests take CI features, less services, per crate', () => {
   const src = nested({
     'Cargo.toml': '[workspace]\n',
     'crates/core/Cargo.toml': '[package]\nname = "surfpool-core"\n\n[features]\ndefault = ["sqlite"]\npostgres = []\nignore_tests_ci = []\n\n[dependencies]\n',
@@ -578,7 +578,7 @@ function surfpool(sdk: string): string {
   })
 }
 
-test('#221 an outside rust plan stages, runs the bindings generator its CI runs, then diffs, at the root', () => {
+test('#221 outside rust stages, runs CI\'s generator, then diffs', () => {
   const src = surfpool(BINDINGS)
   const { run, calls } = heard()
   expect(checks(src, run, [], { language: 'rust', files: ['crates/core/src/a.rs'] })).toBeNull()
@@ -593,7 +593,7 @@ test('#221 a red diff after regenerating refuses with the diff', () => {
     .toEqual({ script: 'diff', command: 'git diff --exit-code', code: '1', output: '-a\n+b', tests: [], retried: false })
 })
 
-test('#221 a diff step with no generator, or one needing a shell, adds no gate', () => {
+test('#221 a diff step with no generator or a shell adds no gate', () => {
   const src = surfpool('jobs:\n  a:\n    steps:\n      - run: |\n          cd x && node gen.js\n          git diff --exit-code\n      - run: git diff --exit-code\n')
   const { run, calls } = heard()
   expect(checks(src, run, [], { language: 'rust', files: ['crates/core/src/a.rs'] })).toBeNull()

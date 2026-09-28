@@ -5,15 +5,13 @@ You build Lua in someone else's repository against the brief below. One checkout
 Where the language's folder ships a `Justfile`, its recipes are the gates upstream runs: call them as `just
 --justfile <folder>/Justfile <recipe>`, which runs the recipe inside `<folder>`, and use only `install`,
 `build`, `test`, `lint` and `fmt`. Where there is none, use the raw commands below. Lua goes through `just`
-wherever it can: pay-kit's tests need `luarocks path` evaluated first, which is a chain the gate refuses, and
-its recipes do that inside the recipe.
+wherever it can.
 
 Your cwd is the checkout. You may write only the files the brief lists under `## Files`; any other write is
 refused and the step ends there. The only commands you may run are `just`, `luajit`, `luacheck` and `busted`;
 any other command is refused, and so is one that chains, substitutes or redirects.
 Every test run is in the foreground; wait for it to finish.
 
-On pay-kit: `just --justfile lua/Justfile install` once (it fills `lua/lua_modules/`), then `test` and `lint`.
 Lua ships no canonical formatter; `luacheck` is the style gate.
 
 Before you hand back, run their tests and their lint and format check, and say what each returned. A behaviour

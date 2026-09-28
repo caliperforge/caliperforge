@@ -1,10 +1,17 @@
 checks:
   rust: [format, test, stage, generate, diff]
 notes:
-  - "The format check is the fmt line its workflows run: `cargo +nightly fmt --all -- --check`, with its rustfmt.toml."
-  - Tests run only on the crates touched, with the features its CI's `cargo test` line names less `postgres`, a service this host does not run; surfpool-core takes `ignore_tests_ci`.
+  - "You run `cargo` directly: surfpool ships no Justfile and pay-kit's `rust/` has none."
+  - "The format check is the one their CI runs, read off `.github/workflows` (surfpool: `cargo +nightly fmt --all -- --check`, with its `rustfmt.toml`); where the workflows name none, `cargo fmt --all -- --check`."
+  - "Scope tests to the crate you changed, `cargo test -p <crate>`: a whole-workspace build on surfpool takes minutes."
+  - "Pass the features their CI's `cargo test` line names where your crate declares them (surfpool: `--features surfpool-core/ignore_tests_ci`, which keeps its mainnet-fetching tests off); leave off a feature that needs a service their CI starts, such as `postgres`, since none runs here."
   - "The bindings workflow regenerates with `node crates/sdk-node/scripts/generate-kit-types.js`, then `git diff --exit-code`: crates/sdk-node/**/generated/*.ts must match it."
-  - "Clippy runs as its CI runs it: `cargo clippy -p <crate> --all-targets`."
+  - "Clippy runs as their CI runs it (surfpool: `cargo clippy -p <crate> --all-targets`); a warning on a line you wrote is yours to fix."
+  - "Every account in a `#[derive(Accounts)]` carries the constraint that proves it (`has_one`, `seeds` and `bump`, `owner`, `constraint =`); an `UncheckedAccount` carries a `/// CHECK:` line saying why it is safe."
+  - "Every account you read is owner-checked before its data is trusted: compare `owner` with the program you expect."
+  - "Amounts, lamports and indexes use checked arithmetic (`checked_add`, `checked_sub`, `checked_mul`, `try_from` for casts); no bare `as` that can truncate."
+  - "A mint or token account may belong to Token or Token-2022: match on its owner and handle both; never assume classic SPL Token."
+  - "Files a generator writes (surfpool's `crates/sdk-node/**/generated/*.ts`) match what the generator the brief names writes: step 3 runs that generator and fails on any diff. They are yours to write when the brief lists them."
 sources:
   - sequencer/gates.ts
   - seats/rust_specialist/prompt.md

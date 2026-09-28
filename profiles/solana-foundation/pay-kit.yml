@@ -8,7 +8,9 @@ checks:
 notes:
   - Each language lives in its own folder, whose Justfile recipes are the checks, run as `just --justfile <folder>/Justfile <recipe>`.
   - "rust/ ships no Justfile: `cargo fmt --all -- --check` at the rust/ workspace, then `cargo test -p <crate>` for the crates touched."
-  - Lua's tests need `luarocks path` evaluated first, which only its Justfile recipes do.
+  - "You run `cargo` directly: surfpool ships no Justfile and pay-kit's `rust/` has none."
+  - "Lua goes through `just` wherever it can: pay-kit's tests need `luarocks path` evaluated first, which is a chain the gate refuses, and its recipes do that inside the recipe."
+  - "On pay-kit: `just --justfile lua/Justfile install` once (it fills `lua/lua_modules/`), then `test` and `lint`."
   - "On pay-kit: `just --justfile ruby/Justfile install`, then `test` and `lint`."
   - "Pay-kit lints with `standardrb`, not rubocop: do not add a `.rubocop.yml` or rubocop comments."
   - "On pay-kit: `just --justfile php/Justfile install`, then `test` and `lint` (`lint` is syntax, `php-cs-fixer` in check mode and PHPStan)."
@@ -21,6 +23,11 @@ notes:
   - "Keys come from `solana-go` (`github.com/gagliardetto/solana-go`): parse input with `solana.PublicKeyFromBase58` and handle its error; `MustPublicKeyFromBase58` is for constants only."
   - "Amounts are `uint64`: check for overflow before adding or multiplying."
   - Codama-generated clients (`// DO NOT EDIT`, pay-kit's `protocols/programs/`) are regenerated from the IDL, never edited by hand.
+  - "Every account in a `#[derive(Accounts)]` carries the constraint that proves it (`has_one`, `seeds` and `bump`, `owner`, `constraint =`); an `UncheckedAccount` carries a `/// CHECK:` line saying why it is safe."
+  - "Every account you read is owner-checked before its data is trusted: compare `owner` with the program you expect."
+  - "Amounts, lamports and indexes use checked arithmetic (`checked_add`, `checked_sub`, `checked_mul`, `try_from` for casts); no bare `as` that can truncate."
+  - "A mint or token account may belong to Token or Token-2022: match on its owner and handle both; never assume classic SPL Token."
+  - "Files a generator writes (surfpool's `crates/sdk-node/**/generated/*.ts`) match what the generator the brief names writes: step 3 runs that generator and fails on any diff. They are yours to write when the brief lists them."
 intake: { pace: { prs: 1, days: 7 } }
 sources:
   - sequencer/gates.ts

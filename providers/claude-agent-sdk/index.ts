@@ -28,7 +28,7 @@ async function fire(packet: Packet): Promise<Fired> {
   const pace = { turns: new Set<string>(), wrote: false }
   const transcript = openTranscript(packet)
   const run = query({
-    prompt: packet.prompt,
+    prompt: `${packet.prompt}\n\n# Working folder\n\n${packet.cwd}`,
     options: {
       cwd: packet.cwd,
       env: credential().env,
@@ -37,7 +37,7 @@ async function fire(packet: Packet): Promise<Fired> {
       tools: offered(packet.tools),
       allowedTools: packet.tools,
       ...(packet.steps === undefined ? {} : { maxTurns: packet.steps }),
-      settingSources: [],
+      settingSources: [], systemPrompt: { type: 'preset', preset: 'claude_code', excludeDynamicSections: true },
       permissionMode: 'default',
       hooks: { PreToolUse: [{ hooks: [(input) => {
         const over = walled(packet.wall, total(spent)) ?? idle(packet.tools, pace.wrote, pace.turns.size)

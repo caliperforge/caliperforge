@@ -35,6 +35,7 @@ test('the store ships the three lanes the ceo opened, on, one at a time, 07:00 t
       { name: 'pr-path', enabled: 1, window_start: '07:00', window_end: '22:00', max_concurrent: 1 },
       { name: 'comms', enabled: 1, window_start: '07:00', window_end: '22:00', max_concurrent: 1 },
       { name: 'research', enabled: 1, window_start: '07:00', window_end: '22:00', max_concurrent: 1 },
+      { name: 'uniswap', enabled: 0, window_start: '07:00', window_end: '22:00', max_concurrent: 1 },
     ])
 })
 

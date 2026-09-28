@@ -1,0 +1,6 @@
+seat: growth_lead
+model: claude-opus-5-5
+effort: medium
+tools:
+  - Read
+write_paths: []

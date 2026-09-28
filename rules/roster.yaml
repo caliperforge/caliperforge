@@ -17,6 +17,7 @@ seats:
   - text_review
   - coo_lite
   - solidity_specialist
+  - growth_lead
 digests:
   typescript_specialist:
     manifest: a4ff87fd829db7a375989bb3c747d1cb6f2b59f17b47222ff1f76764d6a4c038
@@ -72,3 +73,6 @@ digests:
   solidity_specialist:
     manifest: cbd0015d48c5a86d0afb2ce4d80480746b33b7e3e51a96297cdab2deb1dcfea2
     prompt: 4727a0da187517bc9910a0e6e42671e9b1cd1de53a0fed695386ce53519125cb
+  growth_lead:
+    manifest: 0d18f8c4ae370bad1f932526c0dc0d2eb7da1c173dcd7a347be4e540b8cd8c3d
+    prompt: d73efc8a9b2726771b51bda28ea5c4e7be05b2a80fa62c5d434dd5a60d25d694

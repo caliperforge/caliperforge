@@ -1,6 +1,8 @@
 import { z } from 'zod'
 import { targetDigest } from '../sequencer/approve.ts'
-import { put } from '../sequencer/workspace.ts'
+import type { Check, Target } from '../sequencer/card.ts'
+import { picked } from '../sequencer/theirs.ts'
+import { branchOf, checkout, put } from '../sequencer/workspace.ts'
 import { decide } from '../store/approvals.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
@@ -137,26 +139,41 @@ function upsert(db: Db, pulse: z.infer<typeof Account>, repo: string, no: number
   return row.id
 }
 
-interface Scanned { repo: string; issue_no: number; evidence_measured_at: string; state: string; evidence: string }
+interface Scanned { repo: string; issue_no: number; part: string; evidence_measured_at: string; state: string; evidence: string }
 
 function targetOf(db: Db, id: number): Scanned {
-  const t = db.prepare('SELECT repo, issue_no, evidence_measured_at, state, evidence FROM targets WHERE id = ?').get(id) as Scanned | undefined
+  const t = db.prepare('SELECT repo, issue_no, part, evidence_measured_at, state, evidence FROM targets WHERE id = ?').get(id) as Scanned | undefined
   if (t === undefined) throw new Error(`no target ${String(id)}`)
   return t
 }
 
-export function approve(db: Db, root: string, id: number, pipe: string): { digest: string; plan: number | null } {
+export function vetted(db: Db, root: string, plan: number, id: number, check: Check): string | null {
+  const target = db.prepare('SELECT repo, issue_no, named_merger FROM targets WHERE id = ?').get(id) as Target
+  const { ok, says } = check(db, root, plan, target)
+  if (ok) return null
+  refuseTarget(db, id, 'their.work')
+  db.prepare('UPDATE targets SET evidence = coalesce(?, evidence) WHERE id = ?').run(/https:\/\/\S+/.exec(says)?.[0] ?? null, id)
+  return says
+}
+
+export function approve(db: Db, root: string, id: number, pipe: string, check: Check | null = picked()): { digest: string; plan: number | null } {
   const t = targetOf(db, id)
   if (t.state === 'refused') throw new Error(`target ${String(id)} is refused`)
   const unplanned = t.state === 'ready' && db.prepare('SELECT 1 FROM plans WHERE target_id = ?').get(id) === undefined
   const row = unplanned ? readIssue(t.repo, t.issue_no) : null
   const digest = targetDigest(t)
-  const filed = db.transaction(() => {
-    decide(db, 'target', id, digest, null)
-    return row === null ? null : { plan: planFor(db, pipe, id, t.evidence, 'cf approve target'), ask: askOf(row, undefined) }
-  })()
-  if (filed !== null) put(root, filed.plan, 'ask.md', filed.ask)
-  return { digest, plan: filed?.plan ?? null }
+  const plan = row === null ? null : planFor(db, pipe, id, t.evidence, 'cf approve target')
+  if (plan !== null && row !== null) put(root, plan, 'ask.md', askOf(row, undefined))
+  if (plan !== null && check !== null) {
+    checkout(root, plan, t.repo, branchOf(t.repo, t.issue_no, 1, t.part))
+    const says = vetted(db, root, plan, id, check)
+    if (says !== null) {
+      db.prepare("UPDATE plans SET state = 'refused' WHERE id = ?").run(plan)
+      throw new Error(`target ${String(id)} refused: ${says}`)
+    }
+  }
+  decide(db, 'target', id, digest, null)
+  return { digest, plan }
 }
 
 export function refuseTarget(db: Db, id: number, reason: string): string {

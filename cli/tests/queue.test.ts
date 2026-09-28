@@ -58,7 +58,7 @@ test('D1: approving a scanned ready target files one plan with its ask, once', (
   const db = world()
   const root = mkdtempSync(join(tmpdir(), 'cf-queue-'))
   const id = scanned(db)
-  const { plan } = approve(db, root, id, 'pr-path')
+  const { plan } = approve(db, root, id, 'pr-path', null)
   expect(decisions(db)).toEqual([{ decision: 'approved', reason: null }])
   expect(db.prepare('SELECT id, template, state FROM plans WHERE target_id = ?').all(id))
     .toEqual([{ id: plan, template: 'pr_path', state: 'queued' }])

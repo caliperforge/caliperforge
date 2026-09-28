@@ -25,7 +25,7 @@ import { assembly, homeOf } from './home.ts'
 import { clean, subjectOf } from './shape.ts'
 import { size } from './size.ts'
 import { prosed } from './tells.ts'
-import { theirs } from './theirs.ts'
+import { picked, theirs } from './theirs.ts'
 
 interface Head { dir: string; branch: string; sha: string }
 
@@ -42,6 +42,7 @@ export interface Wire {
   comment: (repo: string, no: number, body: string) => void
   install?: () => void
   card?: Check[]
+  intake?: Check
   merged: Read
 }
 
@@ -57,6 +58,7 @@ export const WIRE: Wire = {
   review,
   install: () => { reinstall(npm, alerter()) },
   card: [theirs()],
+  intake: picked(),
   merged: gh,
 }
 

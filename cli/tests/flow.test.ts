@@ -152,6 +152,7 @@ test('D7: flow leaves cf.db and .cf/ byte for byte as they were', () => {
   refusals(db, plan(db, 2, 'blocked_on_ceo'), '2026-09-26 11:00:00', 'a', 'a')
   const bytes = (): [string, Buffer | null][] => readdirSync(root, { recursive: true, encoding: 'utf8' }).sort()
     .map((p) => [p, statSync(join(root, p)).isFile() ? readFileSync(join(root, p)) : null])
+  db.pragma('wal_checkpoint(TRUNCATE)')
   const before = bytes()
   expect(flow(db, root, now)).toHaveLength(2)
   expect(bytes()).toEqual(before)

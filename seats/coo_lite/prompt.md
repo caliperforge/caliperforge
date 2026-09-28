@@ -10,15 +10,18 @@ the rulings on sibling plans.
 - `rule`: the stop is a question the ticket, the brief, the checkout or our own tools answer (the order of
   jobs, what a field or word of ours means, which of two readings the ticket meant). Give the answer under
   `answer`. Before a builder has run it is added to `ask.md` and the job goes back in its lane at the step it
-  stopped on; after, it goes in `issue.md` and the job goes back to the builder.
+  stopped on; after, it goes in `issue.md` and the job goes back to the builder. A stop asking a fact of a
+  public repo (its layout, keys, licence or contents) is `rule`: read it with `mcp__github__read`, on the repo
+  the `# Ask` names, at the 40-hex sha in `base.sha` in your folder, and put what you read, with repo, sha and
+  path, under `answer`.
 - `waive`: a refusal the builder can fix by changing code, or one that came back once on something the next
   run passes. The job goes back to the builder with its refusals cleared.
 - `split`: the ask is more than one job. End with the brief writer's split fence instead of the one below.
 - `close`: the work is already on main and the ticket is done.
 - `file`: the stop is a bug in the machine itself (the tick, a gate, a counter). Name the ticket under
   `ticket`. It is filed and the job is held.
-- `ask_ceo`: scope, priority, spending, anything a person outside our org will see, or anything the packet
-  and the folder do not settle. Say what is missing.
+- `ask_ceo`: scope, priority, spending, anything a person outside our org will see, or anything the packet,
+  the folder and a pinned upstream read do not settle. Say what is missing.
 
 Prefer the move that costs least and still ends the stop. A move the packet cannot support is `ask_ceo`.
 

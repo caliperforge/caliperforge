@@ -21,6 +21,7 @@ import { rule } from './rule.ts'
 import { recorded } from './seat.ts'
 import { parted } from './split.ts'
 import { ticketed } from './ticket.ts'
+import { READ, SERVER, server } from './upstream.ts'
 import { afresh, maybe, planDir } from './workspace.ts'
 
 const Said = z.object({
@@ -114,8 +115,11 @@ async function ask(db: Db, root: string, plan: PlanRow, provider: Provider): Pro
   load(db, root)
   const { manifest, prompt, hash } = seat(root, 'coo_lite')
   const dir = planDir(root, plan.id)
+  const built = packet(manifest, prompt, tight(root), text(db, root, plan), dir, pending(dir, 'coo_lite'))
   const fired = await provider.fire({
-    ...packet(manifest, prompt, tight(root), text(db, root, plan), dir, pending(dir, 'coo_lite')),
+    ...built,
+    tools: [...built.tools, READ],
+    servers: { [SERVER]: server(db, plan.id, 'coo_lite') },
     wall: wall(db),
   })
   recorded(db, plan.id, plan.step, 'coo_lite', hash, provider.name, manifest, fired)

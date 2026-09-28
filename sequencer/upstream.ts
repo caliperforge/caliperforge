@@ -23,7 +23,8 @@ const Listing = z.array(z.object({ type: z.string(), path: z.string(), size: z.n
 
 interface Result { [key: string]: unknown; content: { type: 'text'; text: string }[]; isError?: boolean }
 
-export function pinned(db: Db, plan: number, args: { repo: string; sha: string; path: string }, read: Read = gh): Result {
+export function pinned(db: Db, plan: number, args: { repo: string; sha: string; path: string }, read: Read = gh,
+  actor = 'brief_writer'): Result {
   const slug = REPO.exec(args.repo)?.[1]
   if (slug === undefined) return refused(`${args.repo} is not github.com/<owner>/<repo>`)
   if (!SHA.test(args.sha)) return refused(`${args.sha} is not a 40-hex commit sha`)
@@ -35,16 +36,16 @@ export function pinned(db: Db, plan: number, args: { repo: string; sha: string; 
     return refused((e as Error).message)
   }
   const sha256 = createHash('sha256').update(got).digest('hex')
-  logged(db, { plan, kind: 'github_read', actor: 'brief_writer', outcome: 'pass', run: null,
+  logged(db, { plan, kind: 'github_read', actor, outcome: 'pass', run: null,
     message: `${slug}@${args.sha} ${args.path} ${String(got.length)} bytes sha256 ${sha256}`,
     pointer: `https://github.com/${slug}/blob/${args.sha}/${args.path}` })
   return { content: [{ type: 'text', text: got.toString('utf8') }] }
 }
 
-export function server(db: Db, plan: number, read: Read = gh): McpSdkServerConfigWithInstance {
+export function server(db: Db, plan: number, actor = 'brief_writer', read: Read = gh): McpSdkServerConfigWithInstance {
   return createSdkMcpServer({ name: SERVER, tools: [tool('read',
     'One file, or one directory listing, from a public github.com repo at a 40-hex commit sha.',
-    Args, (args) => Promise.resolve(pinned(db, plan, args, read)))] })
+    Args, (args) => Promise.resolve(pinned(db, plan, args, read, actor)))] })
 }
 
 function body(got: unknown): Buffer {

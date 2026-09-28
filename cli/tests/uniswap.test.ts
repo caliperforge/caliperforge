@@ -33,7 +33,7 @@ test('the plans table takes the uniswap lane and no lane it does not list', () =
 test('a hook-index issue files on the uniswap lane, pipe and python seat, and branches in its home', () => {
   const d = fresh(schema)
   const at = root()
-  const filed = add(d, at, 'caliperforge/v4-hook-index#1', undefined, canned(HOOKS, ['lane:uniswap']))
+  const filed = add(d, at, 'caliperforge/v4-hook-index#1', 'ceo', undefined, canned(HOOKS, ['lane:uniswap']))
   expect(filed).toMatchObject({ state: 'queued', lane: 'uniswap', seat: 'python_specialist' })
   const plan = planOf(d, filed.plan)
   expect(d.prepare('SELECT name FROM pipes WHERE id = ?').get(plan.pipe_id)).toEqual({ name: 'uniswap' })
@@ -42,14 +42,14 @@ test('a hook-index issue files on the uniswap lane, pipe and python seat, and br
 })
 
 test('a uniswap issue off the hook index is refused', () => {
-  const filed = add(fresh(schema), root(), 'caliperforge/caliperforge#25', undefined, canned(OURS, ['lane:uniswap']))
+  const filed = add(fresh(schema), root(), 'caliperforge/caliperforge#25', 'ceo', undefined, canned(OURS, ['lane:uniswap']))
   expect(filed.state).toBe('refused')
   expect(filed.why).toContain('the uniswap lane builds in caliperforge/v4-hook-index')
 })
 
 test('with the lane off a uniswap plan is not picked', () => {
   const d = fresh(schema)
-  add(d, root(), 'caliperforge/v4-hook-index#1', undefined, canned(HOOKS, ['lane:uniswap']))
+  add(d, root(), 'caliperforge/v4-hook-index#1', 'ceo', undefined, canned(HOOKS, ['lane:uniswap']))
   expect(openPipes(d, '12:00').map((p) => p.name)).not.toContain('uniswap')
   d.prepare("UPDATE pipes SET enabled = 1 WHERE name = 'uniswap'").run()
   expect(openPipes(d, '12:00').map((p) => p.name)).toContain('uniswap')

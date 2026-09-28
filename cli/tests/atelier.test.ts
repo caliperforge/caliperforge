@@ -30,7 +30,7 @@ const pipeOf = (d: Db, name: string): PipeRow => d.prepare('SELECT * FROM pipes 
 test('an atelier issue files on the atelier lane, pipe and swift seat', () => {
   const d = db()
   const root = mkdtempSync(join(tmpdir(), 'cf-atelier-'))
-  const filed = add(d, root, 'caliperforge/atelier#3', undefined, canned(ATELIER, ['lane:atelier']))
+  const filed = add(d, root, 'caliperforge/atelier#3', 'ceo', undefined, canned(ATELIER, ['lane:atelier']))
   expect(filed).toMatchObject({ state: 'queued', lane: 'atelier', seat: 'swift_specialist' })
   const plan = planOf(d, filed.plan)
   expect(homeOf(plan)).toBe('caliperforge/atelier')
@@ -42,7 +42,7 @@ test('an atelier issue files on the atelier lane, pipe and swift seat', () => {
 
 test('an atelier checkout builds with the swift seat', () => {
   const d = db()
-  const filed = add(d, mkdtempSync(join(tmpdir(), 'cf-atelier-')), 'caliperforge/atelier#3', undefined, canned(ATELIER, ['lane:atelier']))
+  const filed = add(d, mkdtempSync(join(tmpdir(), 'cf-atelier-')), 'caliperforge/atelier#3', 'ceo', undefined, canned(ATELIER, ['lane:atelier']))
   const src = mkdtempSync(join(tmpdir(), 'cf-src-'))
   mkdirSync(join(src, 'Atelier.xcodeproj'))
   writeFileSync(join(src, 'package.json'), '{}')
@@ -51,7 +51,7 @@ test('an atelier checkout builds with the swift seat', () => {
 
 test('a machine plan still builds here with the typescript seat', () => {
   const d = db()
-  const filed = add(d, mkdtempSync(join(tmpdir(), 'cf-atelier-')), 'caliperforge/caliperforge#25', undefined, canned(OURS, ['lane:machine']))
+  const filed = add(d, mkdtempSync(join(tmpdir(), 'cf-atelier-')), 'caliperforge/caliperforge#25', 'ceo', undefined, canned(OURS, ['lane:machine']))
   const plan = planOf(d, filed.plan)
   expect([homeOf(plan), kernelPlan(plan)]).toEqual(['caliperforge/caliperforge', true])
   expect(builder(languageFor(d, plan, mkdtempSync(join(tmpdir(), 'cf-src-'))))).toBe('typescript_specialist')
@@ -59,14 +59,14 @@ test('a machine plan still builds here with the typescript seat', () => {
 
 test('an issue off its lane\'s home repo is refused', () => {
   const d = db()
-  const filed = add(d, mkdtempSync(join(tmpdir(), 'cf-atelier-')), 'caliperforge/caliperforge#25', undefined, canned(OURS, ['lane:atelier']))
+  const filed = add(d, mkdtempSync(join(tmpdir(), 'cf-atelier-')), 'caliperforge/caliperforge#25', 'ceo', undefined, canned(OURS, ['lane:atelier']))
   expect(filed.state).toBe('refused')
   expect(filed.why).toContain('the atelier lane builds in caliperforge/atelier')
 })
 
 test('with the lane off an atelier plan is not picked', () => {
   const d = db()
-  add(d, mkdtempSync(join(tmpdir(), 'cf-atelier-')), 'caliperforge/atelier#3', undefined, canned(ATELIER, ['lane:atelier']))
+  add(d, mkdtempSync(join(tmpdir(), 'cf-atelier-')), 'caliperforge/atelier#3', 'ceo', undefined, canned(ATELIER, ['lane:atelier']))
   expect(openPipes(d, '12:00').map((p) => p.name)).not.toContain('atelier')
   d.prepare("UPDATE pipes SET enabled = 1 WHERE name = 'atelier'").run()
   expect(openPipes(d, '12:00').map((p) => p.name)).toContain('atelier')

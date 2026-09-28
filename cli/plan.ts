@@ -3,6 +3,7 @@ import { FORK, put, SELF } from '../sequencer/workspace.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { templatePriority } from '../store/lanes.ts'
+import type { Holder } from '../store/plans.ts'
 import { DEFAULT_BUILDER } from '../templates/pr-path.ts'
 import { gh, type Read } from './gh.ts'
 import type { Origin } from './queue.ts'
@@ -94,7 +95,7 @@ export function priorityOf(labels: { name: string }[]): number | null {
   return one === undefined ? null : Number(one[1])
 }
 
-export function add(db: Db, root: string, ref: string, pipe?: string, read: Read = gh): Filed {
+export function add(db: Db, root: string, ref: string, by: Holder | 'intake', pipe?: string, read: Read = gh): Filed {
   const { repo, no } = parse(ref)
   const row = issue(repo, no, read)
   const lane = laneOf(row.labels)
@@ -111,7 +112,7 @@ export function add(db: Db, root: string, ref: string, pipe?: string, read: Read
     return refusal(db, ref, 'plan.lane_home', `is on ${repo}; the ${lane} lane builds in ${LANE[lane].home}`)
   }
   const seat = seatOf(row.labels) ?? LANE[lane].seat
-  const plan = file(db, pipe ?? LANE[lane].pipe, lane, seat, row.url, priority)
+  const plan = file(db, by, pipe ?? LANE[lane].pipe, lane, seat, row.url, priority)
   put(root, plan, 'ask.md', `# ${row.title}\n\n${row.body}\n`)
   return { plan, lane, seat, state: 'queued', why: `${ref} queued on ${lane} for ${seat}`, origin: null, ruling: null }
 }
@@ -145,7 +146,7 @@ function ruling(db: Db, subject: string): number | null {
   return row?.id ?? null
 }
 
-function file(db: Db, pipe: string, lane: Lane, seat: string, url: string, priority: number | null): number {
+function file(db: Db, by: Holder | 'intake', pipe: string, lane: Lane, seat: string, url: string, priority: number | null): number {
   const held = db.prepare('SELECT id FROM plans WHERE origin = ?').get(url) as { id: number } | undefined
   if (held !== undefined) return held.id
   if (pipe === LANE[lane].pipe) {
@@ -158,6 +159,6 @@ function file(db: Db, pipe: string, lane: Lane, seat: string, url: string, prior
     VALUES (?, ?, 'queued', ?, 0, 0, ?, ?, ?, ?)`)
     .run(row.id, template, new Date().toISOString(), priority ?? templatePriority(db, template), lane, seat, url)
   const id = Number(made.lastInsertRowid)
-  logged(db, { plan: id, kind: 'filed', actor: 'cf plan add', outcome: 'pass', message: url, pointer: null, run: null })
+  logged(db, { plan: id, kind: 'filed', actor: by, outcome: 'pass', message: url, pointer: null, run: null })
   return id
 }

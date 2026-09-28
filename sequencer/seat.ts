@@ -54,6 +54,7 @@ export async function fireSeat(db: Db, root: string, plan: PlanRow, step: Step, 
   const kept = await fenced(db, root, plan, step, provider, fired.text)
   if (typeof kept !== 'string') return kept
   return dropped(db, root, plan, step, kept)
+    ?? empty(root, plan, step, kept)
     ?? { outcome: 'pass', spans: [], note: `${step.runs} exit 0, ${String(tokens)} tokens` }
 }
 
@@ -103,6 +104,12 @@ function dropped(db: Db, root: string, plan: PlanRow, step: Step, handback: stri
   }
   for (const path of paths) rmSync(join(src, path))
   return null
+}
+
+function empty(root: string, plan: PlanRow, step: Step, handback: string): Outcome | null {
+  if (step.step !== 2 || FENCE.test(handback) || diffOf(root, plan.id).trim() !== '') return null
+  const note = `${step.runs}: the build changed no file and handed back no fence; a file the ask removes goes under \`## Deleted\``
+  return { outcome: 'refuse', spans: ['step-2.handback.md'], note }
 }
 
 /**

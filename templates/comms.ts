@@ -54,3 +54,32 @@ export function drafted(reply: string): (z.infer<typeof Fence> & { post: string 
   const got = Fence.safeParse(prose(fence[1] ?? '', ['learnings', 'dek']))
   return got.success ? { ...got.data, post: reply.slice(0, fence.index).trim() } : null
 }
+
+const Stored = Fence.extend({ learnings: z.string().optional() })
+
+export function desk(db: Db, root: string, plan: PlanRow): Outcome {
+  const draft = maybe(root, plan.id, 'draft.md')
+  if (draft === null) return { outcome: 'pass', spans: [], note: 'no draft' }
+  const fence = Stored.safeParse(JSON.parse(maybe(root, plan.id, 'fence.json') ?? 'null'))
+  if (!fence.success) return { outcome: 'refuse', spans: ['fence.json'], note: 'fence.json is missing or lacks a post field' }
+  const post = /^# (.+)\n([\s\S]*)$/.exec(draft)
+  const body = post?.[2]?.trim() ?? ''
+  if (post === null || body === '') return { outcome: 'refuse', spans: ['draft.md'], note: 'draft.md has no # title line or no body' }
+  const { title } = db.prepare('SELECT title FROM plans WHERE id = ?').get(plan.id) as { title: string | null }
+  if (title === null) return { outcome: 'refuse', spans: ['plans'], note: `plan ${String(plan.id)} has no title` }
+  const { dest, dek, sources, checks, learnings = '' } = fence.data
+  const work = /\d{4}-\d{2}-\d{2}$/.exec(title)?.[0] ?? plan.queued_at.slice(0, 10)
+  db.transaction(() => {
+    const added = db.prepare(`INSERT OR IGNORE INTO desk_posts (id, kind, dest, status, title, dek, body, sources, checks, work_date, written_date)
+      VALUES (?, ?, ?, 'proof', ?, ?, ?, ?, ?, ?, ?)`).run(plan.id, title.split(' ')[0], dest, (post[1] ?? '').trim(), dek, body,
+      JSON.stringify(sources), JSON.stringify(checks), work, new Date().toISOString().slice(0, 10))
+    if (added.changes === 0) return
+    const old = db.prepare('SELECT items, sources FROM desk_learnings WHERE date = ?').get(work) as { items: string; sources: string } | undefined
+    const items = [...JSON.parse(old?.items ?? '[]') as unknown[], ...learnings.split('\n').map((l) => l.trim()).filter((l) => l !== '')
+      .map((line) => ({ title: line, what: '', lesson: '', fix: '', status: 'noted' }))]
+    const refs = [...new Set([...JSON.parse(old?.sources ?? '[]') as string[], ...sources.map((s) => s.ref)])]
+    db.prepare(`INSERT INTO desk_learnings (date, numbers, items, sources) VALUES (?, '[]', ?, ?)
+      ON CONFLICT (date) DO UPDATE SET items = excluded.items, sources = excluded.sources`).run(work, JSON.stringify(items), JSON.stringify(refs))
+  })()
+  return { outcome: 'pass', spans: [], note: `desk_posts ${String(plan.id)} in proof for ${work}` }
+}

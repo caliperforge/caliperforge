@@ -123,6 +123,15 @@ function full(w: World = world()): World {
   return w
 }
 
+function banded(w: World = world()): World {
+  w.db.prepare("DELETE FROM settings WHERE key GLOB 'lanes.band.p*'").run()
+  const band = w.db.prepare("INSERT INTO settings VALUES (?, ?, 'pr', 'ruling', 'lanes-test', ?)")
+  for (const [key, value] of Object.entries({ p30: '3', p60: '2', p80: '1', p95: '1', p100: 'spot' })) {
+    band.run(`lanes.band.${key}`, value, TODAY)
+  }
+  return w
+}
+
 test('a plan retried onto a full lane waits queued at its kept step and fires once a slot frees', async () => {
   const w = world()
   approve(w.db, w.target)
@@ -187,7 +196,7 @@ test('a throw inside one plan\'s step is that plan\'s refusal, a repeat stops it
 })
 
 test('the usage band steps the cap down as the window fills, and back up when it drains', () => {
-  const w = world()
+  const w = banded()
   dial(w.db, 4, AT)
   const stepped: (number | null)[] = []
   for (const u of [0.1, 0.45, 0.7, 0.9, 0.97, 0.1]) {
@@ -200,7 +209,7 @@ test('the usage band steps the cap down as the window fills, and back up when it
 })
 
 test('the fuller of the two windows rules, and an old reading holds until its window resets', () => {
-  const w = world()
+  const w = banded()
   dial(w.db, 4, AT)
   record(w.db, reading(0.1, 'seven_day'))
   record(w.db, reading(0.97, 'five_hour'))
@@ -223,7 +232,7 @@ test('the latest reading is the one observed last, not the one recorded last', (
 })
 
 test('the dial never exceeds the band and the machine never exceeds the dial', () => {
-  const w = world()
+  const w = banded()
   dial(w.db, 1, AT)
   record(w.db, reading(0.1))
   expect(cap(w.db)).toMatchObject({ dial: 1, band: 3, ceiling: 4, cap: 1 })
@@ -288,7 +297,7 @@ test('the machine window view puts our tokens beside the cap, one row per window
 
 /** #104: nothing wrote `usage` before; a run's own reading now steps the band. */
 test('past 80% of the week one lane, past 95% none', async () => {
-  const w = world()
+  const w = banded()
   approve(w.db, w.target)
   dial(w.db, 4, AT)
   const inner = stub(CARRIED)

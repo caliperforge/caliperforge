@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { landed } from '../../cli/batch.ts'
 import type { Provider } from '../../providers/kind.ts'
-import { drafted, facts, gather } from '../../templates/comms.ts'
+import { desk, drafted, facts, gather } from '../../templates/comms.ts'
 import { tick } from '../index.ts'
 import { FORK, get, put } from '../workspace.ts'
 import { plan, reads, world, type World } from './world.ts'
@@ -32,6 +32,20 @@ const clocked = (): World => {
 const dailies = (w: World): unknown[] =>
   w.db.prepare("SELECT title, state FROM plans WHERE template = 'comms' ORDER BY id").all()
 
+const titled = (w: World, id: number, title: string | null): unknown =>
+  w.db.prepare('UPDATE plans SET title = ? WHERE id = ?').run(title, id)
+
+const fenced = (): Record<string, unknown> => ({ ...drafted(fixture('reply.md')), post: undefined })
+
+const desked = (w: World, fence: Record<string, unknown> | null = fenced(), draft = drafted(fixture('reply.md'))?.post ?? '',
+  id = 1): ReturnType<typeof desk> => {
+  put(w.root, id, 'draft.md', draft)
+  if (fence !== null) put(w.root, id, 'fence.json', JSON.stringify(fence))
+  return desk(w.db, w.root, plan(w.db, id))
+}
+
+const learned = (w: World): unknown[] => w.db.prepare('SELECT * FROM desk_learnings').all()
+
 const never: Provider = { name: 'claude-agent-sdk', fire: () => { throw new Error('no seat fires on comms') } }
 
 const judged =(w: World, line: string): ReturnType<typeof facts> => {
@@ -39,15 +53,18 @@ const judged =(w: World, line: string): ReturnType<typeof facts> => {
   return facts(w.root, plan(w.db, 1))
 }
 
-test('D2: a comms plan ticks gather through capture to done, and no seat or rail runs', async () => {
+test('D2 D7: a comms plan ticks gather through capture to done, no seat or rail runs, and desk leaves one post', async () => {
   const w = comms()
   reads(w.db, 1)
+  titled(w, 1, `daily ${new Date().toISOString().slice(0, 10)}`)
+  put(w.root, 1, 'fence.json', JSON.stringify(fenced()))
   put(w.root, 1, 'draft.md', `# The day\n\nOne job was refused. [refusal:${String(refusal(w, 0))}]\n`)
   for (let n = 0; n < 10 && plan(w.db, 1).state !== 'done'; n += 1) await tick(w.db, w.root, never)
   expect(plan(w.db, 1).state).toBe('done')
   expect(w.db.prepare('SELECT kind, outcome FROM events WHERE plan = 1 ORDER BY id').all())
     .toEqual(NAMES.map((kind) => ({ kind, outcome: 'pass' })))
   expect(w.db.prepare('SELECT (SELECT count(*) FROM runs) + (SELECT count(*) FROM verdicts) AS n').get()).toEqual({ n: 0 })
+  expect(w.db.prepare('SELECT id FROM desk_posts').all()).toEqual([{ id: 1 }])
 })
 
 test('two ticks after 20:30 on one local day file one daily comms plan', async () => {
@@ -128,4 +145,62 @@ test('D5: gather writes what landed and today\'s refusals, leaving blips and ear
   const packet = JSON.parse(get(w.root, 1, 'packet.json')) as { landed: unknown[]; refusals: { id: number }[] }
   expect(packet.landed).toEqual(landed(w.db))
   expect(packet.refusals.map((r) => r.id)).toEqual([today])
+})
+
+test('D2: desk writes the post in proof and its day\'s learnings', () => {
+  const w = comms()
+  titled(w, 1, 'daily 2026-09-27')
+  const reply = drafted(fixture('reply.md'))
+  expect(desked(w)).toMatchObject({ outcome: 'pass' })
+  expect(w.db.prepare('SELECT id, kind, status, dest, title, dek, body, sources, checks, work_date FROM desk_posts').all()).toEqual([{
+    id: 1, kind: 'daily', status: 'proof', dest: 'site', title: 'The day', dek: reply?.dek, body: reply?.post.split('\n').slice(1).join('\n').trim(),
+    sources: JSON.stringify(reply?.sources), checks: JSON.stringify(reply?.checks), work_date: '2026-09-27',
+  }])
+  expect(learned(w)).toEqual([{ date: '2026-09-27', numbers: '[]', sources: '["templates/comms.ts:16"]',
+    items: JSON.stringify([{ title: reply?.learnings, what: '', lesson: '', fix: '', status: 'noted' }]) }])
+})
+
+test.each([
+  ['no fence.json', (w: World) => desked(w, null)],
+  ...['dest', 'dek', 'sources', 'checks'].map((key) => [`no ${key}`, (w: World) => desked(w, { ...fenced(), [key]: undefined })]),
+  ['no # line', (w: World) => desked(w, fenced(), 'The day\n\nA line.\n')],
+  ['no body', (w: World) => desked(w, fenced(), '# The day\n\n')],
+  ['no title', (w: World) => { titled(w, 1, null); return desked(w) }],
+].map(([why, run]) => ({ why, run })) as { why: string; run: (w: World) => ReturnType<typeof desk> }[])('D3: desk refuses $why and writes no row', ({ run }) => {
+  const w = comms()
+  titled(w, 1, 'daily 2026-09-27')
+  expect(run(w)).toMatchObject({ outcome: 'refuse' })
+  expect(w.db.prepare('SELECT (SELECT count(*) FROM desk_posts) + (SELECT count(*) FROM desk_learnings) AS n').get()).toEqual({ n: 0 })
+})
+
+test('D4: a fence with no learnings writes the post and a learnings row with no items', () => {
+  const w = comms()
+  titled(w, 1, 'daily 2026-09-27')
+  expect(desked(w, { ...fenced(), learnings: undefined })).toMatchObject({ outcome: 'pass' })
+  expect(w.db.prepare('SELECT count(*) AS n FROM desk_posts').get()).toEqual({ n: 1 })
+  expect(learned(w)).toMatchObject([{ date: '2026-09-27', items: '[]' }])
+})
+
+test('D5: two plans on one work day share one learnings row, and a second desk on one plan doubles nothing', () => {
+  const w = comms()
+  titled(w, 1, 'daily 2026-09-27')
+  w.db.prepare(`INSERT INTO plans (id, pipe_id, template, state, queued_at, step, retries, title)
+    VALUES (2, 1, 'comms', 'queued', '2026-09-27T10:00:00.000Z', 0, 0, 'ship post acme/widget#7')`).run()
+  desked(w)
+  desked(w)
+  desked(w, { ...fenced(), learnings: 'a second line', sources: [{ claim: 'x', ref: 'cli/plan.ts:1' }] }, undefined, 2)
+  expect(w.db.prepare('SELECT id, kind, work_date FROM desk_posts ORDER BY id').all())
+    .toEqual([{ id: 1, kind: 'daily', work_date: '2026-09-27' }, { id: 2, kind: 'ship', work_date: '2026-09-27' }])
+  const [row] = learned(w) as { items: string; sources: string }[]
+  expect(learned(w)).toHaveLength(1)
+  expect((JSON.parse(row?.items ?? '[]') as { title: string }[]).map((i) => i.title))
+    .toEqual([drafted(fixture('reply.md'))?.learnings, 'a second line'])
+  expect(JSON.parse(row?.sources ?? '[]')).toEqual(['templates/comms.ts:16', 'cli/plan.ts:1'])
+})
+
+test('D6: desk passes a plan with no draft and writes no row', () => {
+  const w = comms()
+  titled(w, 1, 'daily 2026-09-27')
+  expect(desk(w.db, w.root, plan(w.db, 1))).toEqual({ outcome: 'pass', spans: [], note: 'no draft' })
+  expect(w.db.prepare('SELECT (SELECT count(*) FROM desk_posts) + (SELECT count(*) FROM desk_learnings) AS n').get()).toEqual({ n: 0 })
 })

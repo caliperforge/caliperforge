@@ -635,6 +635,11 @@ test('a folder row under ## Files is refused', () => {
     .toMatchObject({ span: '- sequencer/tests/ — the tests', reason: holding('names no file') })
 })
 
+test('D2: a Files row naming a root dotfile is not refused as a folder', () => {
+  expect(on(swap(brief, '## Files', ['- sequencer/brief.ts', '- `.gitignore`: `build/`.']))?.reason ?? '')
+    .not.toContain('names no file')
+})
+
 const PLUS = 'Sources/App/DashboardSource+Runs.swift'
 
 const plus = (row: string): string => ['# t', '', '## Files', '', row, '', '## Out of scope', ''].join('\n')
@@ -643,6 +648,10 @@ test('a Files row with a + path yields it, backticked or bare', () => {
   for (const row of [`- \`${PLUS}:27\``, `- ${PLUS}:27 — the WHERE`]) {
     expect(files(plus(row))).toEqual([{ path: PLUS, is_new: false }])
   }
+})
+
+test('D1: a Files row yields a root dotfile and not the folder after it', () => {
+  expect(files(plus('- `.gitignore` (new): `build/`.'))).toEqual([{ path: '.gitignore', is_new: true }])
 })
 
 test('a backticked + path keeps the line it points at', () => {

@@ -1,12 +1,23 @@
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { expect, test } from 'vitest'
+import { expect, test, vi } from 'vitest'
+import { approve } from '../../cli/queue.ts'
+import { addTarget, targetRow } from '../../store/targets.ts'
 import { waiting } from '../card.ts'
-import { theirs } from '../theirs.ts'
-import { checkout, get, git, srcDir } from '../workspace.ts'
-import { world, type World } from './world.ts'
+import { tick } from '../index.ts'
+import type { Fired } from '../kind.ts'
+import { named, picked, theirs } from '../theirs.ts'
+import { checkout, get, git, put, srcDir } from '../workspace.ts'
+import { approve as approveTarget, CARRIED, stub, watched, world, type World } from './world.ts'
+
+vi.mock('../../cli/gh.ts', async (importOriginal) => ({
+  ...await importOriginal<object>(),
+  issue: () => ({ number: 13, title: 'hello', body: 'Fix `src/hello.ts`.', state: 'OPEN', assignees: [], comments: [],
+    closedByPullRequestsReferences: [] }),
+}))
 
 const TARGET = { repo: 'acme/widget', issue_no: 12, named_merger: 'maintainer' }
+const TREE = 'https://github.com/acme/widget/tree/fix-hello'
 const URL = 'https://github.com/acme/widget/pull/40'
 const PASS = { check: 'their work', ok: true, says: 'nothing of theirs touches our files or names #12' }
 
@@ -78,4 +89,43 @@ test('D7 an upstream head the fetch refspec does not write is never read', () =>
   git(dir, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qam', 'hello'])
   git(dir, ['push', '-q', 'upstream', 'HEAD:refs/heads/fix-hello'])
   expect(theirs(canned([]))(w.db, w.root, 1, TARGET)).toEqual(PASS)
+})
+
+test('intake D1 the ask names the files the tree holds, never a missing one or one with ..', () => {
+  const w = world()
+  checkout(w.root, 1, 'acme/widget', 'widget-12-a1')
+  put(w.root, 1, 'ask.md', '# hello\n\nFix src/hello.ts. Not src/gone.ts or ../src/hello.ts\n')
+  expect(named(w.root, 1)).toEqual(['src/hello.ts'])
+})
+
+test('intake D2 approving a target an upstream branch works on refuses the target and its plan', () => {
+  const w = ours()
+  const dir = srcDir(w.root, 1)
+  git(dir, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qam', 'hello'])
+  git(dir, ['push', '-q', 'upstream', 'HEAD:refs/heads/fix-hello'])
+  const id = addTarget(w.db, { ...targetRow(w.db, 1), issue_no: 13, state: 'ready', evidence: 'https://github.com/acme/widget/issues/13' })
+  expect(() => approve(w.db, w.root, id, 'pr-path', picked(canned([]))))
+    .toThrow(`target ${String(id)} refused: branch ${TREE} touches src/hello.ts`)
+  expect(w.db.prepare('SELECT state, evidence FROM targets WHERE id = ?').get(id)).toEqual({ state: 'refused', evidence: TREE })
+  expect(w.db.prepare("SELECT decision, reason FROM approvals WHERE subject_kind = 'target' AND subject_id = ?").all(id))
+    .toEqual([{ decision: 'refused', reason: 'their.work' }])
+  expect(w.db.prepare('SELECT state FROM plans WHERE target_id = ?').all(id)).toEqual([{ state: 'refused' }])
+})
+
+test('intake D4 a flag at step 1 blocks the plan on the CEO before any model runs; with no intake step 1 runs', async () => {
+  const flag = { check: 'their work', ok: false, says: `branch ${TREE} touches src/hello.ts` }
+  const fires = async (flagged: boolean): Promise<{ state: string; note: string; fired: number }> => {
+    const w = world()
+    approveTarget(w.db, w.target)
+    let fired = 0
+    const wire = watched([], w.root, 1)
+    let one: Fired | undefined
+    for (let at = 0; at < 3 && one === undefined; at += 1) {
+      one = (await tick(w.db, w.root, stub(CARRIED, 0, undefined, () => { fired += 1 }), undefined, undefined,
+        flagged ? { ...wire, intake: () => flag } : wire)).find((f) => f.step === 1)
+    }
+    return { state: String(one?.state), note: String(one?.note), fired }
+  }
+  expect(await fires(true)).toEqual({ state: 'blocked_on_ceo', note: flag.says, fired: 0 })
+  expect(await fires(false)).toMatchObject({ fired: 1 })
 })

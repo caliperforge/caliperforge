@@ -81,3 +81,39 @@ test('D5 events by other actors add no row, and a blip neither answers nor misse
   refuse(db, BLIP, '2026-09-20 12:00:00', 1)
   expect(scored(db)).toEqual([{ event: 4, actor: 'ceo', outcome: 'open', refusal: null, close: null }])
 })
+
+const FILED = 'https://github.com/caliperforge/caliperforge/issues/534'
+
+function filed(db: Db, reason: string | null, wrong: number): void {
+  db.prepare(`INSERT INTO tickets (repo, number, title, lane, state_reason, diagnosis_wrong)
+    VALUES ('caliperforge/caliperforge', 534, 't', 'machine', ?, ?)`).run(reason, wrong)
+  db.prepare(`INSERT INTO events (plan, at, kind, actor, outcome, message, pointer)
+    VALUES (1, '2026-09-20 11:00:00', 'ticket', 'fixer', 'pass', '', ?)`).run(FILED)
+}
+
+const ticketed = (db: Db): unknown[] => db.prepare('SELECT outcome, refusal, ticket FROM outcomes').all()
+
+test('D4 a ticket closed NOT_PLANNED misses its intervention even on a done plan', () => {
+  const db = plan('done')
+  filed(db, 'NOT_PLANNED', 0)
+  expect(ticketed(db)).toEqual([{ outcome: 'missed', refusal: null, ticket: FILED }])
+})
+
+test('D5 an open ticket labelled diagnosis:wrong misses its intervention', () => {
+  const db = plan('running')
+  filed(db, null, 1)
+  expect(ticketed(db)).toEqual([{ outcome: 'missed', refusal: null, ticket: FILED }])
+})
+
+test.each([['done', 'held'], ['running', 'open']])('D6 a ticket closed COMPLETED leaves a %s plan %s', (state, outcome) => {
+  const db = plan(state)
+  filed(db, 'COMPLETED', 0)
+  expect(ticketed(db)).toEqual([{ outcome, refusal: null, ticket: null }])
+})
+
+test('D6 a pointer with no tickets row leaves the plan to decide', () => {
+  const db = plan('done')
+  filed(db, 'NOT_PLANNED', 0)
+  db.exec('DELETE FROM tickets')
+  expect(ticketed(db)).toEqual([{ outcome: 'held', refusal: null, ticket: null }])
+})

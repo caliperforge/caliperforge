@@ -172,7 +172,8 @@ test('D4: a part released early is not queued again when the part it waits on la
   const log: string[] = []
   await briefed(w, ID, AFTER(['none', 'a', 'none']), log)
   recordListing(w.db, 'caliperforge/caliperforge', [{ number: 902, title: 't', body: 'After: #901',
-    url: 'https://github.com/caliperforge/caliperforge/issues/902', labels: [{ name: 'lane:machine' }], createdAt: '2026-09-27T00:00:00Z', closedAt: null }], false)
+    url: 'https://github.com/caliperforge/caliperforge/issues/902', labels: [{ name: 'lane:machine' }], createdAt: '2026-09-27T00:00:00Z', closedAt: null,
+    stateReason: null }], false)
   released(w.db, w.root, 'caliperforge/caliperforge', new Set())
   expect(landing(w, 1, log)).toBeNull()
   expect(landing(w, 2, log)).toBeNull()

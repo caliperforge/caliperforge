@@ -130,6 +130,12 @@ test.each(Object.keys(REPLY))('live %s leaves plan 7 as its cf call does on a tw
   expect(told(live.db)).toEqual([{ actor: 'coo_lite', outcome: move === 'ask_ceo' ? 'needs_ceo' : 'pass', message: expect.stringMatching(new RegExp(`^${move}: `)) as string }])
 })
 
+test.each([['file', 'https://github.com/caliperforge/caliperforge/issues/900'], ['rule', null]])('D2 live %s logs pointer %s', async (move, pointer) => {
+  const { db, home } = seeded('1')
+  await run(db, home, REPLY[move] ?? '')
+  expect(db.prepare("SELECT pointer FROM events WHERE kind = 'coo_lite'").all()).toEqual([{ pointer }])
+})
+
 const answer = () => `## Answer from the coo_lite (${new Date().toISOString().slice(0, 10)})\n\nbuild on main, not on plan 8\n`
 
 test('D1: rule on a plan a builder ran on goes in issue.md above ## Standing and back to step 2', async () => {

@@ -15,7 +15,7 @@ const now = new Date('2026-09-28T09:00:00.000Z')
 
 function listing(number: number, body: string, closedAt: string | null = null) {
   return { number, title: `t${String(number)}`, body, url: `https://github.com/${home}/issues/${String(number)}`,
-    labels: [{ name: 'lane:machine' }], createdAt: '2026-09-27', closedAt }
+    labels: [{ name: 'lane:machine' }], createdAt: '2026-09-27', closedAt, stateReason: null }
 }
 
 function seeded(first: { state: PlanRow['state']; closedAt?: string } | null) {

@@ -34,7 +34,7 @@ const Said = z.object({
 
 type Move = z.infer<typeof Said> | { move: 'split'; why: string; parts: Part[] }
 
-interface Told { outcome: 'pass' | 'needs_ceo'; message: string; note?: string }
+interface Told { outcome: 'pass' | 'needs_ceo'; message: string; note?: string; pointer?: string | null }
 
 function applying(db: Db): boolean {
   const row = db.prepare("SELECT value FROM settings WHERE key = 'coo_lite.apply'").get() as { value: string } | undefined
@@ -50,7 +50,8 @@ export async function cooLite(db: Db, root: string, plan: PlanRow, provider: Pro
   if (m === null) return told(db, root, plan, now, { outcome: 'needs_ceo', message: 'ask_ceo: no readable answer' }, post)
   const message = `${m.move}: ${m.why}`
   if (!applying(db)) return told(db, root, plan, now, { outcome: 'needs_ceo', message, note: `proposes ${message}` })
-  if (m.move !== 'ask_ceo' && apply(db, root, plan, m, wire, now)) return told(db, root, plan, now, { outcome: 'pass', message })
+  const done = m.move !== 'ask_ceo' && apply(db, root, plan, m, wire, now)
+  if (done !== false) return told(db, root, plan, now, { outcome: 'pass', message, pointer: done === true ? null : done })
   hold(db, root, plan.id, m.why, now)
   held(db, plan.id, 'ceo', m.why)
   return told(db, root, plan, now, { outcome: 'needs_ceo', message }, post)
@@ -161,7 +162,7 @@ export function read(text: string): Move | null {
 }
 
 /** Each move is the call its `cf` command makes; false leaves the stop with a person. */
-function apply(db: Db, root: string, plan: PlanRow, m: Move, wire: Wire, now: Date): boolean {
+function apply(db: Db, root: string, plan: PlanRow, m: Move, wire: Wire, now: Date): boolean | string {
   switch (m.move) {
     case 'rule': {
       const to = rule(db, root, plan, 'coo_lite', m.answer ?? '')
@@ -183,14 +184,13 @@ function apply(db: Db, root: string, plan: PlanRow, m: Move, wire: Wire, now: Da
       db.prepare("UPDATE plans SET state = 'done', wait_reason = NULL WHERE id = ?").run(plan.id)
       return true
     case 'file':
-      ticketed(db, root, plan, m.ticket ?? m.why, `Filed by coo_lite on plan ${String(plan.id)}.\n\n${m.why}`, m.why, wire, now)
-      return true
+      return ticketed(db, root, plan, m.ticket ?? m.why, `Filed by coo_lite on plan ${String(plan.id)}.\n\n${m.why}`, m.why, wire, now)
     case 'ask_ceo': return false
   }
 }
 
 function told(db: Db, root: string, plan: PlanRow, now: Date, t: Told, post?: Post): string {
-  logged(db, { plan: plan.id, kind: 'coo_lite', actor: 'coo_lite', outcome: t.outcome, message: t.message, pointer: null, run: null })
+  logged(db, { plan: plan.id, kind: 'coo_lite', actor: 'coo_lite', outcome: t.outcome, message: t.message, pointer: t.pointer ?? null, run: null })
   const ticket = ticketOf(db, plan.id)
   const kind = t.outcome === 'pass' ? 'refused' : 'blocked'
   record(root, [{ at: now.toISOString(), plan: plan.id, ticket, kind, step: plan.step, name: 'coo_lite', note: t.note ?? t.message }])

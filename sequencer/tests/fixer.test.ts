@@ -107,6 +107,8 @@ test('ticket: filed, queued at P0, job held on it, checkout kept', async () => {
   expect(waitsOn(db)).toEqual({ waits_on: on?.id })
   expect(maybe(home, on?.id ?? 0, 'ask.md')).toContain('plan 7')
   expect(maybe(home, on?.id ?? 0, 'ask.md')).toContain('identifiers: schema/0036_x.sql')
+  expect(db.prepare("SELECT actor, pointer FROM events WHERE kind = 'ticket'").all())
+    .toEqual([{ actor: 'fixer', pointer: 'https://github.com/caliperforge/caliperforge/issues/999' }])
 })
 
 test('ticket: the job is back at its step when the ticket lands', async () => {

@@ -29,7 +29,8 @@ const TWO: Fixture[] = [{ number: 40, labels: ['lane:machine'] }, { number: 41, 
 const OPENED = '2026-09-20T09:00:00Z'
 
 const shape = (r: Fixture) => ({ number: r.number, title: r.title ?? `issue ${String(r.number)}`, body: r.body ?? 'the ask',
-  url: url(r.number), labels: r.labels.map((name) => ({ name })), createdAt: r.createdAt ?? OPENED, closedAt: r.closedAt ?? null })
+  url: url(r.number), labels: r.labels.map((name) => ({ name })), createdAt: r.createdAt ?? OPENED, closedAt: r.closedAt ?? null,
+  stateReason: null })
 
 function canned(rows: Fixture[], log: string[] = [], closed: Fixture[] = []): Read {
   return (args) => {
@@ -150,7 +151,7 @@ test('D5: the tick lists issues only when handed a reader', async () => {
     log.push(args.join(' '))
     throw new Error('gh is down')
   })
-  expect(log).toEqual([`issue list --repo ${REPO} --state open --limit ${String(WINDOW)} --json number,title,body,url,labels,createdAt,closedAt`])
+  expect(log).toEqual([`issue list --repo ${REPO} --state open --limit ${String(WINDOW)} --json number,title,body,url,labels,createdAt,closedAt,stateReason`])
   const sink: string[] = []
   await tick(db, root, stub(CARRIED), undefined, undefined, undefined, 0, () => { throw new Error('gh is down') }, undefined, undefined, sink)
   expect(tickNote([], [], sink)).toContain(`${REPO}: gh is down`)

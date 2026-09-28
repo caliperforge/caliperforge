@@ -3,15 +3,16 @@ import { expect, test } from 'vitest'
 import { fresh } from '../checks/sqlite.ts'
 import type { Read } from '../cli/gh.ts'
 import type { Db } from './index.ts'
-import { backfillTickets, HISTORY, type Listing } from './tickets.ts'
+import { backfillTickets, HISTORY, recordListing, type Listing } from './tickets.ts'
 
 const SELF = 'caliperforge/caliperforge'
 
 const ATELIER = 'caliperforge/atelier'
 
-const issue = (repo: string, number: number, labels: string[], closedAt: string | null = null): Listing => ({
+const issue = (repo: string, number: number, labels: string[], closedAt: string | null = null,
+  stateReason: string | null = null): Listing => ({
   number, title: `issue ${String(number)}`, body: 'the ask', url: `https://github.com/${repo}/issues/${String(number)}`,
-  labels: labels.map((name) => ({ name })), createdAt: `2026-01-0${String(number % 9 + 1)}T09:00:00Z`, closedAt,
+  labels: labels.map((name) => ({ name })), createdAt: `2026-01-0${String(number % 9 + 1)}T09:00:00Z`, closedAt, stateReason,
 })
 
 const LISTINGS: Record<string, Listing[]> = {
@@ -40,7 +41,17 @@ test('lists open and closed issues on all three repos with the history limit', (
   const log: string[] = []
   backfillTickets(schema(), canned(LISTINGS, log))
   expect(log).toEqual([SELF, ATELIER, 'caliperforge/v4-hook-index'].flatMap((repo) => ['open', 'closed'].map((state) =>
-    `issue list --repo ${repo} --state ${state} --limit 5000 --json number,title,body,url,labels,createdAt,closedAt`)))
+    `issue list --repo ${repo} --state ${state} --limit 5000 --json number,title,body,url,labels,createdAt,closedAt,stateReason`)))
+})
+
+test('D3 stores NOT_PLANNED as state_reason, an empty reason as NULL, and the diagnosis:wrong label as 1', () => {
+  const db = schema()
+  recordListing(db, SELF, [issue(SELF, 5, ['lane:machine'], '2026-02-01T09:00:00Z', 'NOT_PLANNED'),
+    issue(SELF, 6, ['lane:machine', 'diagnosis:wrong'], null, '')], false)
+  expect(db.prepare('SELECT number, state_reason, diagnosis_wrong FROM tickets ORDER BY number').all()).toEqual([
+    { number: 5, state_reason: 'NOT_PLANNED', diagnosis_wrong: 0 },
+    { number: 6, state_reason: null, diagnosis_wrong: 1 },
+  ])
 })
 
 test('fills opened_at, closed_at and kind, and a second run leaves the same rows', () => {

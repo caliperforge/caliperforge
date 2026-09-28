@@ -17,11 +17,12 @@ export const Listed = z.array(z.object({
   labels: z.array(z.object({ name: z.string() })),
   createdAt: z.string(),
   closedAt: z.string().nullable(),
+  stateReason: z.string().nullable(),
 }))
 
 export type Listing = z.infer<typeof Listed>[number]
 
-export const FIELDS = 'number,title,body,url,labels,createdAt,closedAt'
+export const FIELDS = 'number,title,body,url,labels,createdAt,closedAt,stateReason'
 
 export function partOf(title: string): number | null {
   const hit = PART.exec(title)?.[1]
@@ -35,11 +36,12 @@ export function afterOf(body: string): number | null {
 
 /** Only a `whole` listing, one shorter than the list limit, drops the rows of issues missing from it. */
 export function recordListing(db: Db, repo: string, listed: Listing[], whole: boolean): void {
-  const put = db.prepare(`INSERT INTO tickets (repo, number, title, lane, priority, after, parent, opened_at, closed_at, kind)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  const put = db.prepare(`INSERT INTO tickets (repo, number, title, lane, priority, after, parent, opened_at, closed_at, kind,
+    state_reason, diagnosis_wrong)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT (repo, number) DO UPDATE SET title = excluded.title, lane = excluded.lane, priority = excluded.priority,
     after = excluded.after, parent = excluded.parent, opened_at = excluded.opened_at, closed_at = excluded.closed_at,
-    kind = excluded.kind`)
+    kind = excluded.kind, state_reason = excluded.state_reason, diagnosis_wrong = excluded.diagnosis_wrong`)
   const drop = db.prepare('DELETE FROM tickets WHERE repo = ? AND number = ?')
   const kept: number[] = []
   for (const i of listed) {
@@ -49,7 +51,9 @@ export function recordListing(db: Db, repo: string, listed: Listing[], whole: bo
       continue
     }
     const kind = i.labels.some((l) => l.name === 'fix') ? 'fix' : 'build'
-    put.run(repo, i.number, i.title, lane, priority(i.labels), afterOf(i.body), partOf(i.title), i.createdAt, i.closedAt, kind)
+    const wrong = i.labels.some((l) => l.name === 'diagnosis:wrong') ? 1 : 0
+    put.run(repo, i.number, i.title, lane, priority(i.labels), afterOf(i.body), partOf(i.title), i.createdAt, i.closedAt, kind,
+      i.stateReason === '' ? null : i.stateReason, wrong)
     kept.push(i.number)
   }
   if (whole) {

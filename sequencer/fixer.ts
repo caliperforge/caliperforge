@@ -7,6 +7,7 @@ import type { Provider } from '../providers/kind.ts'
 import { packet } from '../runner/index.ts'
 import { load, seat, tight } from '../runner/rules.ts'
 import { mark } from '../store/decisions.ts'
+import { logged as event } from '../store/events.ts'
 import { listed } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
 import { returnToLane } from '../store/holds.ts'
@@ -189,9 +190,12 @@ function apply(db: Db, root: string, plan: PlanRow, f: Fix, wire: Wire, now: Dat
     case 'park': hold(db, root, plan.id, f.why, now); return 'park'
     case 'wait': return awaits(db, root, plan, f, now)
     case 'rebuild': return gone(root, plan) ? rebuild(db, root, plan) : 'escalated'
-    case 'ticket':
-      return `ticket ${ticketed(db, root, plan, f.ticket ?? f.why, `Filed by the fixer on plan ${String(plan.id)}.\n\n${f.why}\n\n${f.did}`,
-        f.why, wire, now)}`
+    case 'ticket': {
+      const url = ticketed(db, root, plan, f.ticket ?? f.why, `Filed by the fixer on plan ${String(plan.id)}.\n\n${f.why}\n\n${f.did}`,
+        f.why, wire, now)
+      event(db, { plan: plan.id, kind: 'ticket', actor: 'fixer', outcome: 'pass', message: f.why, pointer: url, run: null })
+      return `ticket ${url}`
+    }
     case 'ask_ceo': return 'escalated'
   }
 }

@@ -9,6 +9,7 @@ import type { Taken } from '../store/leases.ts'
 import { busy } from '../store/now.ts'
 import { advance, back, finish, internal, needsCeo, rewind, type PipeRow, type PlanRow, waiting } from '../store/plans.ts'
 import { blipped, peer, refused } from '../store/refusals.ts'
+import { grow } from '../templates/comms.ts'
 import type { Step } from '../templates/pr-path.ts'
 import type { Fired, Outcome } from './kind.ts'
 import { parted } from './split.ts'
@@ -86,7 +87,7 @@ export function ceilinged(db: Db, root: string, pipe: PipeRow, plan: PlanRow, ov
  */
 function workspace(db: Db, root: string, plan: PlanRow): { language: string | null; failed: Outcome | null } {
   const fires = mapOf(plan.template).at(plan.step).fires
-  const tree = fires === 'brief' || fires === 'seat' || fires === 'review' ? treeOf(db, root, plan) : null
+  const tree = plan.template !== 'comms' && (fires === 'brief' || fires === 'seat' || fires === 'review') ? treeOf(db, root, plan) : null
   if (tree === null) return { language: null, failed: null }
   try {
     checkout(root, plan.id, tree.repo, tree.branch, tree.from)
@@ -145,7 +146,9 @@ function fire(db: Db, root: string, plan: PlanRow, step: Step, provider: Provide
     if (says !== null) return Promise.resolve({ outcome: 'needs_ceo', spans: ['their work'], note: says })
     return model(db, plan, step, () => fireBrief(db, root, plan, step, provider))
   }
-  if (step.fires === 'seat') return model(db, plan, step, () => fireSeat(db, root, plan, step, provider))
+  if (step.fires === 'seat') {
+    return model(db, plan, step, () => plan.template === 'comms' ? grow(db, root, plan, step, provider) : fireSeat(db, root, plan, step, provider))
+  }
   if (step.fires === 'review') {
     const standing = kept(db, root, plan, step)
     return standing === null ? model(db, plan, step, () => fireRound(db, root, plan, step, provider)) : Promise.resolve(standing)

@@ -8,7 +8,7 @@ import { tick } from '../index.ts'
 import { FORK, get, put } from '../workspace.ts'
 import { plan, reads, world, type World } from './world.ts'
 
-const NAMES = ['gather', 'draft', 'facts', 'text_review', 'desk', 'publish', 'capture']
+const NAMES = ['gather', 'draft', 'facts', 'text_review', 'desk', 'publish', 'capture', 'grow', 'pack']
 
 const refusal = (w: World, blip: number, at = new Date().toISOString().replace('T', ' ').slice(0, 19)): number =>
   Number(w.db.prepare(`INSERT INTO refusals (plan, step, fingerprint, diff, blip, at) VALUES (1, 0, ?, NULL, ?, ?)`)

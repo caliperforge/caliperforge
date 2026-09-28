@@ -3,8 +3,10 @@ import { dirname, join } from 'node:path'
 import { z } from 'zod'
 import { landed, type Landed } from '../cli/batch.ts'
 import { ours } from '../cli/gh.ts'
+import type { Provider } from '../providers/kind.ts'
 import type { Outcome } from '../sequencer/kind.ts'
 import { prose } from '../sequencer/prose.ts'
+import { ran } from '../sequencer/seat.ts'
 import { get, maybe, put } from '../sequencer/workspace.ts'
 import { edited } from '../store/desk.ts'
 import type { Db } from '../store/index.ts'
@@ -16,7 +18,8 @@ const row = (name: string, step: number): Step =>
   ({ step, name, seat: DEFAULT_BUILDER, fires: 'kernel', runs: name, gate: false, writes_verdict: false, verdict_gate: null })
 
 /** A merge signal opens one of these. P7 fills the write-up and its voice fixtures. */
-export const steps: Step[] = ['gather', 'draft', 'facts', 'text_review', 'desk', 'publish', 'capture'].map((name, i) => row(name, i))
+export const steps: Step[] = ['gather', 'draft', 'facts', 'text_review', 'desk', 'publish', 'capture', 'grow', 'pack'].map((name, i) =>
+  name === 'grow' ? { ...row(name, i), seat: 'growth_lead', fires: 'seat', runs: 'growth_lead' } : row(name, i))
 
 export function gather(db: Db, root: string, plan: PlanRow): Outcome {
   const packet = { landed: landed(db), refusals: ofDay(db, new Date().toISOString().slice(0, 10)) }
@@ -51,8 +54,10 @@ const Fence = z.object({
   checks: z.array(z.object({ label: z.string().trim().min(1), ok: z.boolean() })),
 })
 
+const CLOSING = /(?:^|\n)---\n((?:\w+:.*\n)+)---\s*$/
+
 export function drafted(reply: string): (z.infer<typeof Fence> & { post: string }) | null {
-  const fence = /(?:^|\n)---\n((?:\w+:.*\n)+)---\s*$/.exec(reply)
+  const fence = CLOSING.exec(reply)
   if (fence === null) return null
   const got = Fence.safeParse(prose(fence[1] ?? '', ['learnings', 'dek']))
   return got.success ? { ...got.data, post: reply.slice(0, fence.index).trim() } : null
@@ -85,6 +90,45 @@ export function desk(db: Db, root: string, plan: PlanRow): Outcome {
       ON CONFLICT (date) DO UPDATE SET items = excluded.items, sources = excluded.sources`).run(work, JSON.stringify(items), JSON.stringify(refs))
   })()
   return { outcome: 'pass', spans: [], note: `desk_posts ${String(plan.id)} in proof for ${work}` }
+}
+
+function growth(db: Db, plan: PlanRow): string | null {
+  const { title } = db.prepare('SELECT title FROM plans WHERE id = ?').get(plan.id) as { title: string | null }
+  return title?.startsWith('growth ') === true ? title : null
+}
+
+export async function grow(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
+  if (growth(db, plan) === null) return { outcome: 'pass', spans: [], note: 'not a growth plan' }
+  const fired = await ran(db, root, plan, step, provider, `# packet.json\n\n${get(root, plan.id, 'packet.json')}`, false)
+  if (fired.ended !== 'completed') return { outcome: 'refuse', spans: [fired.stop_reason ?? 'seat.exit'], note: `${step.runs} ${fired.ended}` }
+  put(root, plan.id, 'growth.md', fired.text)
+  return { outcome: 'pass', spans: [], note: `${step.runs}: growth.md written` }
+}
+
+const Note = z.string().refine((note) => {
+  const words = note.trim().split(/\s+/).length
+  return words >= 31 && words <= 60 && !note.includes('?')
+})
+
+const Pack = z.object({
+  topic: z.string().trim().min(1),
+  notes: z.array(Note).length(14),
+  replies: z.array(z.object({ to: z.string(), draft: z.string() })),
+  partners: z.array(z.object({ name: z.string(), outreach: z.string() })),
+})
+
+export function pack(db: Db, root: string, plan: PlanRow): Outcome {
+  const title = growth(db, plan)
+  if (title === null) return { outcome: 'pass', spans: [], note: 'not a growth plan' }
+  const fence = CLOSING.exec(maybe(root, plan.id, 'growth.md') ?? '')
+  const got = Pack.safeParse(fence === null ? null : prose(fence[1] ?? '', ['topic']))
+  if (!got.success) return { outcome: 'refuse', spans: ['growth.md'], note: 'growth.md has no fence of a topic, 14 Notes of 31–60 words with no ?, replies and partners' }
+  const { topic, notes, replies, partners } = got.data
+  const work = /\d{4}-\d{2}-\d{2}$/.exec(title)?.[0] ?? plan.queued_at.slice(0, 10)
+  db.prepare(`INSERT OR IGNORE INTO desk_posts (id, kind, dest, status, title, dek, body, sources, checks, work_date, written_date, proof_at)
+    VALUES (?, 'growth', 'pack', 'proof', ?, '', ?, '[]', '[]', ?, ?, datetime('now'))`)
+    .run(plan.id, topic, JSON.stringify({ notes, replies, partners }), work, new Date().toISOString().slice(0, 10))
+  return { outcome: 'pass', spans: [], note: `desk_posts ${String(plan.id)} pack in proof for ${work}` }
 }
 
 const FIELDS = ['title', 'dek', 'body'] as const

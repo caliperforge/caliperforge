@@ -5,7 +5,7 @@ import { parse } from '../rails/diff.ts'
 import { building, filesOf, sharing, strays as recordStrays } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
 import { builderRan, held, internal, originIssue, originRef, waiting, type PlanRow, type Wait } from '../store/plans.ts'
-import { capture, desk, facts, gather, steps as comms } from '../templates/comms.ts'
+import { capture, desk, facts, gather, pack, steps as comms } from '../templates/comms.ts'
 import { at, last, steps, type Step } from '../templates/pr-path.ts'
 import { approved, approvedPlan, batch } from './approve.ts'
 import type { Outcome } from './kind.ts'
@@ -100,6 +100,7 @@ export function kernel(db: Db, root: string, plan: PlanRow, wire?: Wire, read?: 
   if (step.name === 'desk') return desk(db, root, plan)
   if (step.name === 'capture') return capture(db, root)
   if (step.name === 'publish') return publish(db)
+  if (step.name === 'pack') return pack(db, root, plan)
   return { outcome: 'pass', spans: [], note: step.name }
 }
 

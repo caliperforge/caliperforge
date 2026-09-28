@@ -52,17 +52,26 @@ function siblings(read: Read, target: Target): string[] {
 function branches(dir: string, target: Target, paths: string[]): string[] {
   git(dir, ['fetch', '--no-tags', 'upstream'])
   const since = Date.now() - RECENT * 86_400_000
-  return git(dir, ['ls-remote', '--heads', 'upstream']).split('\n').flatMap((line) => {
-    const name = line.split('\t')[1]?.replace(/^refs\/heads\//, '')
-    if (name === undefined || name === 'main') return []
+  return git(dir, ['for-each-ref', '--format=%(refname:strip=3)', 'refs/remotes/upstream']).split('\n').flatMap((name) => {
+    if (name === '' || name === 'main') return []
     const ref = `refs/remotes/upstream/${name}`
     if (Date.parse(git(dir, ['log', '-1', '--format=%cI', ref]).trim()) < since) return []
-    const base = git(dir, ['merge-base', MAIN, ref]).trim()
+    const base = baseOf(dir, ref)
+    if (base === null) return []
     const changed = git(dir, ['diff', '--name-only', base, ref]).split('\n')
     const said = git(dir, ['log', '-z', '--format=%B', `${base}..${ref}`])
     const found = hit(paths, changed, mentions(said, target.issue_no), target.issue_no)
     return found === null ? [] : [`branch https://github.com/${target.repo}/tree/${name} ${found}`]
   })
+}
+
+/** An orphan branch shares no history with main, so it holds no work on ours: php-sdk's `badges` threw at push (09-28). */
+function baseOf(dir: string, ref: string): string | null {
+  try {
+    return git(dir, ['merge-base', MAIN, ref]).trim()
+  } catch {
+    return null
+  }
 }
 
 function hit(paths: string[], touched: string[], named: boolean, no: number): string | null {

@@ -1,8 +1,0 @@
-seat: light_coo
-model: claude-opus-5-5
-effort: medium
-tools:
-  - Read
-  - Glob
-  - Grep
-write_paths: []

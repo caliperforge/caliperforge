@@ -97,7 +97,7 @@ async function internalReview(): Promise<World> {
   w.db.prepare('DELETE FROM plans WHERE id = 1').run()
   ours(w.root, OOPS)
   internalPlan(w.db, w.root, ID)
-  for (let at = 0; at < 4; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  for (let at = 0; at < 4; at += 1) await tick(w.db, w.root, builds(writes(w.root, ID, `// hi\n${HI}`)))
   return w
 }
 
@@ -147,10 +147,18 @@ test('a note that changes code refuses and leaves the file as reviewed', async (
   expect(readFileSync(path, 'utf8')).toBe(python)
 })
 
-test('a note whose old text is not in the file refuses', async () => {
-  const w = await toReview()
-  await refused(w, 1, stub(CARRIED, 0, noted(note('nowhere', 'here'))))
+test('notes on a missing old text or outside the diff are dropped, and the rest land', async () => {
+  const w = await toReview(`// one\n${HI}`)
+  const fired = (await tick(w.db, w.root, stub(CARRIED, 0, noted(note('nowhere', 'here'), note('x', 'y', 'text', 'PR body'), note('// one\n', '')))))[0]
+  expect(fired).toMatchObject({ step: 4, outcome: 'pass' })
+  expect(plan(w.db, 1)).toMatchObject({ step: 5, retries: 0 })
   expect(hello(w)).toBe(HI)
+  expect(w.db.prepare("SELECT message, pointer FROM events WHERE plan = 1 AND kind = 'note' AND message LIKE 'dropped:%' ORDER BY id").all())
+    .toEqual([
+      { message: 'dropped: old text matches 0 times', pointer: SPAN },
+      { message: 'dropped: not a file in the diff', pointer: 'PR body:1' },
+    ])
+  expect(w.db.prepare('SELECT count(*) AS n FROM refusals WHERE plan = 1').get()).toEqual({ n: 0 })
 })
 
 test('a restore note to the base\'s text lands though its tokens differ', async () => {
@@ -166,7 +174,7 @@ test('each applied note leaves one note event, and a refused set leaves none', a
   expect(notes(w)).toEqual({ n: 2 })
 
   const refusing = await toReview('export const hello = (): number => 1\n')
-  await refused(refusing, 1, stub(CARRIED, 0, noted(note('=> 1', '=> 2', 'count'))))
+  await refused(refusing, 1, stub(CARRIED, 0, noted(note('x', 'y', 'text', 'PR body'), note('=> 1', '=> 2', 'count'))))
   expect(notes(refusing)).toEqual({ n: 0 })
 })
 
@@ -175,7 +183,7 @@ test('admitted notes the checkout\'s checks refuse are put back and dropped, and
   const fired = (await tick(w.db, w.root, stub(CARRIED, 0, noted(note('hello', 'oops'), note('"hi"', '"hey"')))))[0]
   expect(fired).toMatchObject({ step: 4, outcome: 'pass' })
   expect(plan(w.db, ID)).toMatchObject({ step: 5, retries: 0 })
-  expect(hello(w, ID)).toBe(HI)
+  expect(hello(w, ID)).toBe(`// hi\n${HI}`)
   expect(w.db.prepare("SELECT message FROM events WHERE plan = ? AND kind = 'note'").all(ID))
     .toEqual([{ message: 'dropped: lint failed after the notes' }, { message: 'dropped: lint failed after the notes' }])
 }, SLOW)

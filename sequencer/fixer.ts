@@ -19,7 +19,8 @@ import { prose } from './prose.ts'
 import { WIRE, type Wire } from './push.ts'
 import { rule } from './rule.ts'
 import { recorded } from './seat.ts'
-import { afresh, cloned, drop, maybe, move, planDir, put, SELF, titleOf } from './workspace.ts'
+import { ticketed } from './ticket.ts'
+import { afresh, cloned, drop, maybe, move, planDir, put, titleOf } from './workspace.ts'
 
 /**
  * CEO 2026-09-25: the orchestrator's hands. An `ask_coo` decision goes to the fixer, which makes the hand fix
@@ -188,12 +189,9 @@ function apply(db: Db, root: string, plan: PlanRow, f: Fix, wire: Wire, now: Dat
     case 'park': hold(db, root, plan.id, f.why, now); return 'park'
     case 'wait': return awaits(db, root, plan, f, now)
     case 'rebuild': return gone(root, plan) ? rebuild(db, root, plan) : 'escalated'
-    case 'ticket': {
-      const url = wire.file(SELF, f.ticket ?? f.why, `Filed by the fixer on plan ${String(plan.id)}.\n\n${f.why}\n\n${f.did}`,
-        ['lane:machine', 'P0', 'fix'])
-      hold(db, root, plan.id, `${url}\n\n${f.why}`, now)
-      return `ticket ${url}`
-    }
+    case 'ticket':
+      return `ticket ${ticketed(db, root, plan, f.ticket ?? f.why, `Filed by the fixer on plan ${String(plan.id)}.\n\n${f.why}\n\n${f.did}`,
+        f.why, wire, now)}`
     case 'ask_ceo': return 'escalated'
   }
 }

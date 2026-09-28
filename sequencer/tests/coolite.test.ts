@@ -10,11 +10,13 @@ import { runAt } from '../../store/events.ts'
 import { retried } from '../../store/holds.ts'
 import { migrate, open, type Db } from '../../store/index.ts'
 import { busy } from '../../store/now.ts'
-import { held, PlanRow } from '../../store/plans.ts'
+import { held, PlanRow, retry } from '../../store/plans.ts'
+import { clear } from '../../store/refusals.ts'
 import { split } from '../brief.ts'
 import { byHand, cooLite, piled } from '../coolite.ts'
 import { hold, unhold } from '../hold.ts'
 import type { Wire } from '../push.ts'
+import { rule } from '../rule.ts'
 import { parted } from '../split.ts'
 import { afresh, maybe, put } from '../workspace.ts'
 
@@ -47,7 +49,10 @@ const REPLY: Record<string, string> = {
 const PARTS = split(SPLIT) ?? []
 
 const TWIN: Record<string, (db: Db, home: string) => void> = {
-  rule: (db, home) => void unhold(db, home, 7, 'ceo'),
+  rule: (db, home) => {
+    rule(db, home, row(db), 'coo_lite', 'build on main, not on plan 8')
+    afresh(home, 7, db.transaction(() => { clear(db, 7); return retry(db, row(db)) })())
+  },
   waive: (db, home) => { afresh(home, 7, retried(db, 7, 'ceo')) },
   split: (db, home) => {
     parted(db, home, row(db), PARTS, wire())
@@ -81,9 +86,12 @@ function seeded(apply: string | null) {
   cpSync(join(repo, 'rules.seed.sql'), join(home, 'rules.seed.sql'))
   fill(home, '2026-09-27')
   put(home, 7, 'ask.md', 'the ask\n')
+  put(home, 7, 'issue.md', ISSUE)
   put(home, 7, 'refusal.md', 'step 3 rails refused\n')
   return { db, home }
 }
+
+const ISSUE = '# Issue\n\nthe brief\n\n## Standing\n\n- no forced push\n'
 
 function stub(text: string): Provider {
   return {
@@ -118,10 +126,55 @@ test.each(Object.keys(REPLY))('live %s leaves plan 7 as its cf call does on a tw
   expect(told(live.db)).toEqual([{ actor: 'coo_lite', outcome: move === 'ask_ceo' ? 'needs_ceo' : 'pass', message: expect.stringMatching(new RegExp(`^${move}: `)) as string }])
 })
 
-test('rule adds the answer to ask.md', async () => {
+const answer = () => `## Answer from the coo_lite (${new Date().toISOString().slice(0, 10)})\n\nbuild on main, not on plan 8\n`
+
+test('D1: rule on a plan a builder ran on goes in issue.md above ## Standing and back to step 2', async () => {
   const { db, home } = seeded('1')
   await run(db, home, REPLY.rule ?? '')
-  expect(maybe(home, 7, 'ask.md')).toBe('the ask\n\n## Answer from the COO\n\nbuild on main, not on plan 8\n')
+  expect(maybe(home, 7, 'issue.md')).toBe(`# Issue\n\nthe brief\n\n${answer()}\n## Standing\n\n- no forced push\n`)
+  expect(maybe(home, 7, 'ask.md')).toBe('the ask\n')
+  expect(row(db).step).toBe(2)
+})
+
+test('D2: rule on a plan stopped at step 1 with no builder run goes in ask.md and back in its lane', async () => {
+  const live = seeded('1')
+  const twin = seeded('1')
+  for (const { db } of [live, twin]) db.exec('DELETE FROM runs; UPDATE plans SET step = 1 WHERE id = 7')
+  await run(live.db, live.home, REPLY.rule ?? '')
+  unhold(twin.db, twin.home, 7, 'coo_lite')
+  expect(maybe(live.home, 7, 'ask.md')).toBe(`the ask\n\n${answer()}`)
+  expect(plan7(live.db)).toEqual(plan7(twin.db))
+  expect(row(live.db).step).toBe(1)
+})
+
+test('D3: the packet carries the rulings of plans with the same parent, not of others', async () => {
+  const { db, home } = seeded('1')
+  const at = (n: number) => `https://github.com/caliperforge/caliperforge/issues/${String(n)}`
+  const plan = db.prepare(`INSERT INTO plans (id, pipe_id, template, state, queued_at, step, retries, priority, lane, seat, origin)
+    VALUES (?, 9, 'pr_path', 'queued', '2026-09-24', 2, 0, 1, 'machine', 'typescript_specialist', ?)`)
+  plan.run(8, at(140))
+  plan.run(9, at(141))
+  db.exec(`INSERT INTO tickets (repo, number, title, lane, parent) VALUES
+    ('caliperforge/caliperforge', 139, '138a one', 'machine', 138),
+    ('caliperforge/caliperforge', 140, '138b two', 'machine', 138),
+    ('caliperforge/caliperforge', 141, '200a three', 'machine', 200)`)
+  put(home, 8, 'ask.md', 'the ask\n\n## Ruling\n\nuse main\n\n## Notes\n\nnot this\n')
+  put(home, 9, 'ask.md', 'the ask\n\n## Ruling\n\nuse plan 8\n')
+  const prompts: string[] = []
+  const reply = stub(REPLY.ask_ceo ?? '')
+  const seen: Provider = { ...reply, fire: (p) => { prompts.push(p.prompt); return reply.fire(p) } }
+  await cooLite(db, home, row(db), seen, now, () => undefined, wire())
+  expect(prompts[0]).toContain('# Rulings on sibling plans\n\nplan 8, ask.md:\n## Ruling\n\nuse main')
+  expect(prompts[0]).not.toContain('not this')
+  expect(prompts[0]).not.toContain('use plan 8')
+})
+
+test.each(['/etc/x', '../x'])('D5: a rule naming %s writes nothing and is held by the ceo', async (path) => {
+  const { db, home } = seeded('1')
+  await run(db, home, `---\nmove: rule\nwhy: the path settles it\nanswer: read ${path}\n---\n`)
+  expect(maybe(home, 7, 'ask.md')).toBe('the ask\n')
+  expect(maybe(home, 7, 'issue.md')).toBe(ISSUE)
+  expect(db.prepare('SELECT state, held_by FROM plans WHERE id = 7').get()).toEqual({ state: 'blocked_on_ceo', held_by: 'ceo' })
 })
 
 test.each([[null], ['0']])('shadow (coo_lite.apply %s): no plan row changes and the proposal is in the inbox', async (apply) => {
@@ -210,15 +263,27 @@ test('a live coo_lite run holds the trigger', async () => {
   expect(fires(db)).toEqual([])
 })
 
-test('a second stop on a plan ruled today goes to a person, once', async () => {
+const passed = (db: Db, minutes: number) =>
+  db.prepare(`INSERT INTO events (plan, at, kind, actor, outcome, message) VALUES (7, ?, 'coo_lite', 'coo_lite', 'pass', 'rule: x')`).run(ago(minutes))
+
+test('D4: a new stop on a plan answered once today is fired on', async () => {
   const { db, home } = seeded('1')
   stopped(db, 7, 50)
-  db.prepare(`INSERT INTO events (plan, at, kind, actor, outcome, message) VALUES (7, ?, 'coo_lite', 'coo_lite', 'pass', 'rule: x')`).run(ago(60))
+  passed(db, 60)
+  await pile(db, home)
+  expect(fires(db)).toEqual([{ plan: 7 }])
+})
+
+test('D4: a new stop on a plan answered twice today goes to a person, once', async () => {
+  const { db, home } = seeded('1')
+  stopped(db, 7, 50)
+  passed(db, 60)
+  passed(db, 55)
   const posted: string[] = []
   await pile(db, home, posted)
   await pile(db, home, posted)
   expect(fires(db)).toEqual([])
-  expect(told(db).filter((t) => t.outcome === 'needs_ceo')).toEqual([{ actor: 'coo_lite', outcome: 'needs_ceo', message: 'ask_coo: coo_lite ruled on this plan today' }])
+  expect(told(db).filter((t) => t.outcome === 'needs_ceo')).toEqual([{ actor: 'coo_lite', outcome: 'needs_ceo', message: 'ask_coo: coo_lite answered this plan twice today' }])
   expect(all(home).filter((e) => e.kind === 'blocked')).toHaveLength(1)
   expect(posted).toHaveLength(1)
 })

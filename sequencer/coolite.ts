@@ -10,15 +10,17 @@ import type { Db } from '../store/index.ts'
 import { wall } from '../store/lanes.ts'
 import { clear as unlease, take } from '../store/leases.ts'
 import { busy, current, idle } from '../store/now.ts'
-import { held, PlanRow } from '../store/plans.ts'
+import { held, originRef, PlanRow, retry } from '../store/plans.ts'
+import { clear } from '../store/refusals.ts'
 import { pending } from '../store/transcript.ts'
 import { split, type Part } from './brief.ts'
 import { hold, isHeld, unhold } from './hold.ts'
 import { prose } from './prose.ts'
 import { WIRE, type Wire } from './push.ts'
+import { rule } from './rule.ts'
 import { recorded } from './seat.ts'
 import { parted } from './split.ts'
-import { afresh, maybe, planDir, put, SELF } from './workspace.ts'
+import { afresh, maybe, planDir, SELF } from './workspace.ts'
 
 const Said = z.object({
   move: z.enum(['rule', 'waive', 'close', 'file', 'ask_ceo']),
@@ -52,7 +54,7 @@ export async function cooLite(db: Db, root: string, plan: PlanRow, provider: Pro
   return told(db, root, plan, now, { outcome: 'needs_ceo', message }, post)
 }
 
-interface Stop { id: number; answered: number | null; today: number | null; old: number }
+interface Stop { id: number; answered: number | null; today: number; old: number }
 
 /** #483b: one coo_lite run on the oldest stop once 3 pile up or one has waited 45 minutes. */
 export async function piled(db: Db, root: string, provider: Provider, now: Date, post: Post = alerter(),
@@ -70,14 +72,15 @@ export async function byHand(db: Db, root: string, provider: Provider, now: Date
 
 function stops(db: Db, root: string, now: Date, post: Post): Stop[] {
   const rows = db.prepare(`SELECT p.id, e.ruled >= d.at AS answered,
-      e.ruled >= datetime(@at, '-1 day') AS today, d.at <= datetime(@at, '-45 minutes') AS old
+      (SELECT count(*) FROM events WHERE plan = p.id AND kind = 'coo_lite' AND outcome = 'pass'
+        AND at >= datetime(@at, '-1 day')) AS today, d.at <= datetime(@at, '-45 minutes') AS old
     FROM plans p JOIN decisions d ON d.id = (SELECT max(id) FROM decisions WHERE plan = p.id)
     LEFT JOIN (SELECT plan, max(at) AS ruled FROM events WHERE kind = 'coo_lite' GROUP BY plan) e ON e.plan = p.id
     WHERE p.state = 'blocked_on_ceo' AND p.held_by = 'coo' AND d.verb IN ('ask_coo', 'ask_ceo')
     ORDER BY d.at, p.id`).all({ at: now.toISOString() }) as Stop[]
   const fresh: Stop[] = []
   for (const s of rows.filter((s) => s.answered !== 1 && !isHeld(root, s.id))) {
-    if (s.today === 1) told(db, root, row(db, s.id), now, { outcome: 'needs_ceo', message: 'ask_coo: coo_lite ruled on this plan today' }, post)
+    if (s.today >= 2) told(db, root, row(db, s.id), now, { outcome: 'needs_ceo', message: 'ask_coo: coo_lite answered this plan twice today' }, post)
     else fresh.push(s)
   }
   return fresh
@@ -111,21 +114,35 @@ async function ask(db: Db, root: string, plan: PlanRow, provider: Provider): Pro
   const { manifest, prompt, hash } = seat(root, 'coo_lite')
   const dir = planDir(root, plan.id)
   const fired = await provider.fire({
-    ...packet(manifest, prompt, tight(root), text(root, plan), dir, pending(dir, 'coo_lite')),
+    ...packet(manifest, prompt, tight(root), text(db, root, plan), dir, pending(dir, 'coo_lite')),
     wall: wall(db),
   })
   recorded(db, plan.id, plan.step, 'coo_lite', hash, provider.name, manifest, fired)
   return fired.ended === 'completed' ? read(fired.text) : null
 }
 
-function text(root: string, plan: PlanRow): string {
+function text(db: Db, root: string, plan: PlanRow): string {
   const at = (name: string): string => maybe(root, plan.id, name) ?? 'none'
   return [
     `# Job\n\nplan ${String(plan.id)}, state ${plan.state}, step ${String(plan.step)}, lane ${plan.lane ?? '-'}, ${plan.origin ?? 'no ticket'}`,
     `# Stop\n\n${maybe(root, plan.id, 'refusal.md') ?? at('question.md')}`,
     `# Orchestrator\n\n${at('orchestrator.md')}`,
     `# Ask\n\n${at('ask.md')}`,
+    `# Rulings on sibling plans\n\n${siblings(db, root, plan)}`,
   ].join('\n\n')
+}
+
+function siblings(db: Db, root: string, plan: PlanRow): string {
+  const ref = originRef(plan)
+  if (ref === null) return 'none'
+  const ids = db.prepare(`SELECT p.id FROM plans p
+    JOIN tickets t ON p.origin = 'https://github.com/' || t.repo || '/issues/' || t.number
+    WHERE t.repo = ? AND t.parent = (SELECT parent FROM tickets WHERE repo = ? AND number = ?) AND p.id <> ?
+    ORDER BY p.id`).all(ref.repo, ref.repo, ref.no, plan.id) as { id: number }[]
+  const found = ids.flatMap(({ id }) => ['ask.md', 'issue.md'].flatMap((name) =>
+    (maybe(root, id, name) ?? '').split(/^(?=## )/m).filter((s) => /^## (?:Ruling|Answer)/.test(s))
+      .map((s) => `plan ${String(id)}, ${name}:\n${s.trim()}`)))
+  return found.length === 0 ? 'none' : found.join('\n\n').slice(0, 6000)
 }
 
 function read(text: string): Move | null {
@@ -140,10 +157,13 @@ function read(text: string): Move | null {
 /** Each move is the call its `cf` command makes; false leaves the stop with a person. */
 function apply(db: Db, root: string, plan: PlanRow, m: Move, wire: Wire, now: Date): boolean {
   switch (m.move) {
-    case 'rule':
-      put(root, plan.id, 'ask.md', `${maybe(root, plan.id, 'ask.md') ?? ''}\n## Answer from the COO\n\n${m.answer ?? ''}\n`)
-      unhold(db, root, plan.id, 'coo_lite')
+    case 'rule': {
+      const to = rule(db, root, plan, 'coo_lite', m.answer ?? '')
+      if (to === null) return false
+      if (to === 'ask.md') unhold(db, root, plan.id, 'coo_lite')
+      else afresh(root, plan.id, db.transaction(() => { clear(db, plan.id); return retry(db, plan) })())
       return true
+    }
     case 'waive':
       if (plan.state !== 'blocked_on_ceo') return false
       afresh(root, plan.id, retried(db, plan.id, 'coo_lite'))

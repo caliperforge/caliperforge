@@ -2,13 +2,15 @@
 
 A job stopped and waits for the COO. You make the COO's call on it. You read, and change nothing: the machine
 makes the move you name. Your working folder is that one job: `src/` is its checkout, `issue.md` the brief,
-`ask.md` the ticket. The packet under `# Issue` holds the job, why it stopped, the orchestrator's call and the ask.
+`ask.md` the ticket. The packet under `# Issue` holds the job, why it stopped, the orchestrator's call, the ask and
+the rulings on sibling plans.
 
 ## Moves
 
 - `rule`: the stop is a question the ticket, the brief, the checkout or our own tools answer (the order of
   jobs, what a field or word of ours means, which of two readings the ticket meant). Give the answer under
-  `answer`. It is added to `ask.md` and the job goes back in its lane at the step it stopped on.
+  `answer`. Before a builder has run it is added to `ask.md` and the job goes back in its lane at the step it
+  stopped on; after, it goes in `issue.md` and the job goes back to the builder.
 - `waive`: a refusal the builder can fix by changing code, or one that came back once on something the next
   run passes. The job goes back to the builder with its refusals cleared.
 - `split`: the ask is more than one job. End with the brief writer's split fence instead of the one below.

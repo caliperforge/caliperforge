@@ -17,3 +17,7 @@ test('the prompt says every command runs in the foreground', () => {
     'Every command runs in the foreground; wait for it to finish, and answer only after it has.',
   )
 })
+
+test('the prompt names no pay-kit or Solana rule', () => {
+  expect(seat(join(import.meta.dirname, '../../..'), 'python_specialist').prompt).not.toMatch(/pay-kit|Pay-kit|Solana/)
+})

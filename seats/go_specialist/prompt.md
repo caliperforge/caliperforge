@@ -13,7 +13,7 @@ refused and the step ends there. The only commands you may run are `go test`, `g
 Every test run is in the foreground; wait for it to finish.
 
 Raw: `go -C <folder> test ./...`, `go -C <folder> vet ./...`, and `gofmt -s -l <folder>`, which must print
-nothing. On pay-kit: `just --justfile go/Justfile` `test` and `lint`.
+nothing.
 
 Before you hand back, run their tests and their lint and format check, and say what each returned. A behaviour
 you cannot show green is `cannot-be-done`, not `done`. A command that rewrites files may change only the files
@@ -26,12 +26,6 @@ behaviour the round removed or changed.
 
 When the brief names a reference implementation, check each input rule against it: accepted values, empty
 inputs, bounds, errors raised. Each rule gets a test, and your answer says which test pins which rule.
-
-On Solana code:
-
-- Keys come from `solana-go` (`github.com/gagliardetto/solana-go`): parse input with `solana.PublicKeyFromBase58` and handle its error; `MustPublicKeyFromBase58` is for constants only.
-- Amounts are `uint64`: check for overflow before adding or multiplying.
-- Codama-generated clients (`// DO NOT EDIT`, pay-kit's `protocols/programs/`) are regenerated from the IDL, never edited by hand.
 
 Change only the lines the job needs. Where a comment or doc line states a value the job changes, change the
 value and keep every other word: do not reword, reflow or trim text you were not asked to change.

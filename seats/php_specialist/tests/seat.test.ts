@@ -17,3 +17,7 @@ languageSeat({
 test('the prompt says every test run is in the foreground', () => {
   expect(seat(root, 'php_specialist').prompt).toContain('Every test run is in the foreground; wait for it to finish.')
 })
+
+test('the prompt names no pay-kit or Solana rule', () => {
+  expect(seat(root, 'php_specialist').prompt).not.toMatch(/pay-kit|Pay-kit|Solana/)
+})

@@ -103,8 +103,8 @@ test('a released plan waits for a free slot and the lane never runs past its wid
   }
   expect((await tick(w.db, w.root, stub(CARRIED))).map((f) => f.plan)).toEqual([1, 2])
 
-  release(w.db, 3)
-  release(w.db, 4)
+  release(w.db, 3, 'coo')
+  release(w.db, 4, 'coo')
   expect((await tick(w.db, w.root, stub(CARRIED))).map((f) => f.plan)).toEqual([1, 2])
   expect(lanes(w.db, '09:00').live).toBe(2)
 

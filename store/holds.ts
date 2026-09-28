@@ -1,6 +1,6 @@
 import { logged } from './events.ts'
 import type { Db } from './index.ts'
-import { builderRan, PlanRow, retry } from './plans.ts'
+import { builderRan, type Holder, PlanRow, retry } from './plans.ts'
 import { clear } from './refusals.ts'
 
 const SPEND = `UPDATE settings SET value = CAST(CAST(value AS INTEGER) - 1 AS TEXT)
@@ -20,11 +20,11 @@ export function hold(db: Db, plan: number, step: number): 'running' | 'blocked_o
 }
 
 /** Lifting a hold queues the plan and never runs it: the lane's width is what admits, in `picks` (`sequencer/index.ts:56`). */
-export function release(db: Db, plan: number): void {
+export function release(db: Db, plan: number, actor: Holder): void {
   const done = db.prepare("UPDATE plans SET state = 'queued' WHERE id = ? AND step = 2 AND state = 'blocked_on_ceo'")
     .run(plan)
   if (done.changes === 0) throw new Error(`plan ${String(plan)} is not a brief waiting on the coo's read`)
-  logged(db, { plan, kind: 'release', actor: 'coo', outcome: 'pass', message: 'step 2', pointer: null, run: null })
+  logged(db, { plan, kind: 'release', actor, outcome: 'pass', message: 'step 2', pointer: null, run: null })
 }
 
 export function returnToLane(db: Db, plan: number, actor = 'orchestrator'): number {

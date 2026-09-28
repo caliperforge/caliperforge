@@ -50,13 +50,30 @@ export interface Run {
   fired: Pick<Fired, 'usage' | 'seconds' | 'transcript_path'>
 }
 
+// input_tokens already counts cache_write_tokens, so the uncached part is their difference.
+const PRICED = `UPDATE runs SET cost_computed_usd = (
+    SELECT ((runs.input_tokens - runs.cache_write_tokens) * p.input + runs.cache_write_tokens * p.cache_write
+      + runs.cache_read_tokens * p.cache_read + runs.output_tokens * p.output) / 1e6
+    FROM prices p WHERE p.provider = runs.provider AND p.model = runs.model AND julianday(p.effective_from) <= julianday(runs.at)
+    ORDER BY julianday(p.effective_from) DESC LIMIT 1)
+  WHERE cache_write_tokens IS NOT NULL`
+
 export function runLogged(db: Db, r: Run): number {
   const row = db.prepare(`INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort,
     input_tokens, cache_read_tokens, output_tokens, seconds, exit, transcript_path, cost_usd, cache_write_tokens)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(r.plan, r.step, r.seat, r.rule_hash, r.provider, r.model, r.effort, r.fired.usage.input, r.fired.usage.cache,
       r.fired.usage.output, r.fired.seconds, r.exit, r.fired.transcript_path, r.fired.usage.cost ?? null, r.fired.usage.write ?? null)
-  return Number(row.lastInsertRowid)
+  const id = Number(row.lastInsertRowid)
+  db.prepare(`${PRICED} AND id = ?`).run(id)
+  return id
+}
+
+export function repriced(db: Db): { priced: number; missing: number[] } {
+  const filled = db.prepare(`${PRICED} AND cost_computed_usd IS NULL RETURNING cost_computed_usd`)
+    .all() as { cost_computed_usd: number | null }[]
+  const missing = db.prepare('SELECT id FROM runs WHERE cache_write_tokens IS NULL ORDER BY id').pluck().all() as number[]
+  return { priced: filled.filter((r) => r.cost_computed_usd !== null).length, missing }
 }
 
 export function runAt(db: Db, plan: number, step: number, seat: string, at: string): number {

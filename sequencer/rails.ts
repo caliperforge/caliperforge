@@ -77,7 +77,7 @@ function suite(db: Db, root: string, plan: PlanRow, on: Rails, commands: Command
   // a stranger's npm scripts never run on this host. A stranger's repo in a language with its own seat runs that
   // language's gates (#204): its builder already ran them at step 2, and a red fork CI after the reviews costs more.
   const local = on?.checks !== undefined
-  const outside = local ? null : outsideLanguage(languageFor(db, plan, srcDir(root, plan.id)))
+  const outside = local ? null : outsideLanguage(languageFor(db, plan, srcDir(root, plan.id), false))
   const ci = on?.checks === 'ci' ? ciChecks(db, root, plan, wire) : null
   if (ci !== null && 'wait' in ci) return ci.wait
   if (ci !== null) {

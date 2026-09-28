@@ -10,7 +10,7 @@ import { dump, migrate, open as openDb, type Db } from '../store/index.ts'
 import { dial, hhmm, lanes, priority as setPriority, record, Reading, set, windows } from '../store/lanes.ts'
 import { refusedPush } from '../store/approvals.ts'
 import { repriced } from '../store/events.ts'
-import { holderOf, HOLDERS, overlapWaits } from '../store/plans.ts'
+import { holderOf, HOLDERS, overlapWaits, parked } from '../store/plans.ts'
 import { backfillTickets } from '../store/tickets.ts'
 import { backfill } from '../store/transcript.ts'
 import { actors, actorSection, byType, type ByType, costs, costSection, day, fileWaits, greptileLine, halted, hands, heldBy, laneLine, open as openPlans, rulings,
@@ -188,7 +188,7 @@ function briefs(cf: Command, { root, db, out }: Cli): void {
     out(section('open plans', openPlans(handle)))
     out(section('halted', halted(handle)))
     out(section('waiting on the CEO', heldBy(handle, 'ceo')))
-    out(section('waiting on the COO', heldBy(handle, 'coo')))
+    out(section('needs a decision', heldBy(handle, 'coo')) + section('parked on another job', parked(handle)))
     const d = day(handle)
     out(`last 24 h\n  ${String(d.runs)} run(s)\t${String(d.tokens)} tokens\t${d.seconds.toFixed(1)}s\n`)
     out(costSection(costs(handle), unpriced(handle)))

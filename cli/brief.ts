@@ -49,7 +49,7 @@ export function halted(db: Db): PlanLine[] {
 }
 
 export function heldBy(db: Db, by: Holder): PlanLine[] {
-  return db.prepare(`${LINES} WHERE p.held_by = ? ORDER BY p.queued_at, p.id`).all(by) as PlanLine[]
+  return db.prepare(`${LINES} WHERE p.held_by = ? AND p.waits_on IS NULL ORDER BY p.queued_at, p.id`).all(by) as PlanLine[]
 }
 
 export function day(db: Db): Day {

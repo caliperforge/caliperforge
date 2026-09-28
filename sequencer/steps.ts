@@ -9,6 +9,7 @@ import { capture, desk, facts, gather, steps as comms } from '../templates/comms
 import { at, last, steps, type Step } from '../templates/pr-path.ts'
 import { approved, approvedPlan, batch } from './approve.ts'
 import type { Outcome } from './kind.ts'
+import { publish } from './publish.ts'
 import { preReview } from './rails.ts'
 import { readyGate, proven, repoOf, target, type Target } from './ready.ts'
 import { push, reviewable, type Wire } from './push.ts'
@@ -97,6 +98,7 @@ export function kernel(db: Db, root: string, plan: PlanRow, wire?: Wire, read?: 
   if (step.name === 'facts') return facts(root, plan)
   if (step.name === 'desk') return desk(db, root, plan)
   if (step.name === 'capture') return capture(db, root)
+  if (step.name === 'publish') return publish(db)
   return { outcome: 'pass', spans: [], note: step.name }
 }
 

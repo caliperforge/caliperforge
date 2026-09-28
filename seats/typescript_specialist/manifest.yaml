@@ -12,4 +12,4 @@ tools:
   - Bash(npm run tight)
   - Bash(npm run test:*)
 write_paths:
-  - src
+  - brief:files

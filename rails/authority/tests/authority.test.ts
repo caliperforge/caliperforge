@@ -8,13 +8,14 @@ import { record } from '../../record.ts'
 import { authority } from '../index.ts'
 
 const root = join(import.meta.dirname, '../../..')
+const SRC = ['src']
 
 function fixture(name: string): string {
   return readFileSync(join(import.meta.dirname, name), 'utf8')
 }
 
 test('refuses a write outside write_paths and under a frozen migration', () => {
-  const verdict = authority(root, 'typescript_specialist', fixture('red.diff'))
+  const verdict = authority(root, 'typescript_specialist', fixture('red.diff'), false, SRC)
   expect(verdict.outcome).toBe('refuse')
   expect(verdict.origin_kind).toBe('rail')
   expect(verdict.origin_ref).toBe('authority')
@@ -22,14 +23,14 @@ test('refuses a write outside write_paths and under a frozen migration', () => {
 })
 
 test('passes a diff confined to the seat write_paths', () => {
-  const verdict = authority(root, 'typescript_specialist', fixture('green.diff'))
+  const verdict = authority(root, 'typescript_specialist', fixture('green.diff'), false, SRC)
   expect(verdict.outcome).toBe('pass')
   expect(verdict.spans).toEqual([])
 })
 
 test('refuses an escape above the root', () => {
   const diff = '--- a/x\n+++ b/../outside.ts\n@@ -1,0 +1,1 @@\n+export const x = 1\n'
-  expect(authority(root, 'typescript_specialist', diff).spans).toEqual(['../outside.ts:1 authority.write_paths'])
+  expect(authority(root, 'typescript_specialist', diff, false, SRC).spans).toEqual(['../outside.ts:1 authority.write_paths'])
 })
 
 /**
@@ -50,7 +51,7 @@ const NOTES = ['diff --git a/.cf/anything b/.cf/anything', '--- a/.cf/anything',
 
 test('an internal plan may write the kernel the issue named; an external plan may not', () => {
   expect(authority(root, 'typescript_specialist', KERNEL, true)).toMatchObject({ outcome: 'pass', spans: [] })
-  expect(authority(root, 'typescript_specialist', KERNEL, false).spans)
+  expect(authority(root, 'typescript_specialist', KERNEL, false, SRC).spans)
     .toEqual(['cli/x.ts:1 authority.write_paths', 'sequencer/y.ts:1 authority.write_paths'])
 })
 

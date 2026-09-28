@@ -53,10 +53,13 @@ const judged =(w: World, line: string): ReturnType<typeof facts> => {
   return facts(w.root, plan(w.db, 1))
 }
 
-test('D2 D7: a comms plan ticks gather through capture to done, no seat or rail runs, and desk leaves one post', async () => {
+test('D2 D7 D6: a comms plan ticks gather through capture to done, no seat or rail runs, desk leaves one post and capture one voice note', async () => {
   const w = comms()
+  const today = new Date().toISOString().slice(0, 10)
   reads(w.db, 1)
-  titled(w, 1, `daily ${new Date().toISOString().slice(0, 10)}`)
+  titled(w, 1, `daily ${today}`)
+  w.db.prepare(`INSERT INTO desk_posts (id, kind, dest, status, title, dek, body, edited_title, sources, checks, work_date, written_date)
+    VALUES (2, 'daily', 'site', 'proof', 'The day', 'What moved', 'One job landed.', 'The whole day', '[]', '[]', ?, ?)`).run(today, today)
   put(w.root, 1, 'fence.json', JSON.stringify(fenced()))
   put(w.root, 1, 'draft.md', `# The day\n\nOne job was refused. [refusal:${String(refusal(w, 0))}]\n`)
   for (let n = 0; n < 10 && plan(w.db, 1).state !== 'done'; n += 1) await tick(w.db, w.root, never)
@@ -64,7 +67,8 @@ test('D2 D7: a comms plan ticks gather through capture to done, no seat or rail 
   expect(w.db.prepare('SELECT kind, outcome FROM events WHERE plan = 1 ORDER BY id').all())
     .toEqual(NAMES.map((kind) => ({ kind, outcome: 'pass' })))
   expect(w.db.prepare('SELECT (SELECT count(*) FROM runs) + (SELECT count(*) FROM verdicts) AS n').get()).toEqual({ n: 0 })
-  expect(w.db.prepare('SELECT id FROM desk_posts').all()).toEqual([{ id: 1 }])
+  expect(w.db.prepare('SELECT id FROM desk_posts').all()).toEqual([{ id: 1 }, { id: 2 }])
+  expect(readFileSync(join(w.root, 'comms/voice-notes.md'), 'utf8')).toBe(`# Voice notes\n\n- ${today} 2 title: lengthened (7 → 13 chars)\n`)
 })
 
 test('two ticks after 20:30 on one local day file one daily comms plan', async () => {

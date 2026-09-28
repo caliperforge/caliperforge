@@ -5,9 +5,11 @@ import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import { registerLanes } from '../cf-lanes.ts'
-import { actors, actorSection, fileWaits, greptileLine, hands, heldBy, line, rulings, ticketSection, tickets, waitLine, waits } from '../brief.ts'
+import { actors, actorSection, costs, costSection, fileWaits, greptileLine, hands, heldBy, line, rulings, ticketSection, tickets, unpriced, waitLine,
+  waits } from '../brief.ts'
 import { monthly } from '../../sequencer/ready.ts'
 import { put } from '../../sequencer/workspace.ts'
+import { repriced } from '../../store/events.ts'
 import type { Db } from '../../store/index.ts'
 import { waiting } from '../../store/plans.ts'
 
@@ -272,6 +274,51 @@ test('D2 D3 D4 cf runs and cf usage print tokens by type, a null cache write as 
   const lines = printed.filter((l) => l.startsWith('  '))
   expect(lines).toHaveLength(2)
   for (const l of lines) expect(l).toContain('\t2 run(s)\t252 tokens\t20 uncached\t4 cache write\t220 cache read\t8 output\t')
+})
+
+function priced(db: Db, model: string): void {
+  db.prepare(`INSERT INTO prices (provider, model, input, cache_read, cache_write, output, effective_from, source_url)
+    VALUES ('claude-agent-sdk', ?, 1, 0.1, 2, 10, '2026-01-01', 'https://example.com/prices')`).run(model)
+}
+
+function costed(db: Db, model: string, ago: string, input: number, write: number, read: number, output: number, usd: number): void {
+  db.prepare(`INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_write_tokens,
+    cache_read_tokens, output_tokens, cost_usd, seconds, exit, at, transcript_path)
+    VALUES (1, 2, 'typescript_specialist', ?, 'claude-agent-sdk', ?, 'high', ?, ?, ?, ?, ?, 60, 0, datetime('now', ?), 'x.transcript.jsonl')`)
+    .run(HASH, model, input, write, read, output, usd, ago)
+}
+
+function twoModels(): Db {
+  const db = world()
+  plan(db, 1, 'running', 25)
+  priced(db, 'opus')
+  costed(db, 'opus', '-1 hour', 1000, 200, 5000, 300, 0.01)
+  costed(db, 'haiku', '-1 hour', 500, 100, 1000, 50, 0.002)
+  return db
+}
+
+test('D1 D2 each model of the last day has a line with computed and reported cost, and the unpriced one is named', () => {
+  const db = twoModels()
+  repriced(db)
+  expect(costSection(costs(db), unpriced(db))).toBe('cost last 24 h by model (2)\n' +
+    '  claude-agent-sdk/haiku\t1 run(s)\t400 uncached\t100 cache write\t1000 cache read\t50 output\tcomputed -\treported $0.0020\n' +
+    '  claude-agent-sdk/opus\t1 run(s)\t800 uncached\t200 cache write\t5000 cache read\t300 output\tcomputed $0.0047\treported $0.0100\n' +
+    '  no price row\tclaude-agent-sdk/haiku\n')
+})
+
+test('D3 a priced model gets no price line, and a run older than a day counts on no line', () => {
+  const db = twoModels()
+  priced(db, 'haiku')
+  costed(db, 'opus', '-2 days', 9000, 900, 9000, 900, 9)
+  repriced(db)
+  expect(costSection(costs(db), unpriced(db))).toBe('cost last 24 h by model (2)\n' +
+    '  claude-agent-sdk/haiku\t1 run(s)\t400 uncached\t100 cache write\t1000 cache read\t50 output\tcomputed $0.0012\treported $0.0020\n' +
+    '  claude-agent-sdk/opus\t1 run(s)\t800 uncached\t200 cache write\t5000 cache read\t300 output\tcomputed $0.0047\treported $0.0100\n')
+})
+
+test('D4 an empty day prints none', () => {
+  const db = world()
+  expect(costSection(costs(db), unpriced(db))).toBe('cost last 24 h by model (0)\n  none\n')
 })
 
 test('with no waiting live plan the waits line reads none', () => {

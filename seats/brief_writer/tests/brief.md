@@ -23,8 +23,8 @@ Step 1 fires the seat in the plan's checkout; the machine saves its reply as `is
 
 ## Files
 
-- sequencer/brief.ts
-- sequencer/seat.ts:39
+- sequencer/brief.ts:176-186
+- sequencer/seat.ts:39-60
 - sequencer/ask.ts (new)
 
 ## Files to read

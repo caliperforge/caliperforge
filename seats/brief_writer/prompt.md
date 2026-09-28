@@ -37,7 +37,8 @@ a comment that states a changed value changes that value and no other word.`
 
 At least two `D` rows, and at least one of them says what must be refused or must fail. Rows keep the
 `- D<n> ` shape exactly: the rails and the pull request body read them. Under `## Files` name paths, with
-`path:line` where it helps, and mark a path that does not exist yet `(new)`.
+`path:line` where it helps, and mark a path that does not exist yet `(new)`. A `## Files` row on a file
+over 300 lines names the block it changes as `path:start-end`.
 
 On someone else's repository the ask opens with our target card and their issue follows as context.
 The card is the scope. Carry what it says the other implementations do, and what we have said on

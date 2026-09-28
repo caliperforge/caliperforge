@@ -70,3 +70,12 @@ test('D6 an orphan upstream branch with no history in common with main passes', 
   git(dir, ['push', '-q', 'upstream', `${orphan}:refs/heads/badges`])
   expect(theirs(canned([]))(w.db, w.root, 1, TARGET)).toEqual(PASS)
 })
+
+test('D7 an upstream head the fetch refspec does not write is never read', () => {
+  const w = ours()
+  const dir = srcDir(w.root, 1)
+  git(dir, ['config', 'remote.upstream.fetch', '+refs/heads/main:refs/remotes/upstream/main'])
+  git(dir, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qam', 'hello'])
+  git(dir, ['push', '-q', 'upstream', 'HEAD:refs/heads/fix-hello'])
+  expect(theirs(canned([]))(w.db, w.root, 1, TARGET)).toEqual(PASS)
+})

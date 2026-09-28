@@ -52,9 +52,8 @@ function siblings(read: Read, target: Target): string[] {
 function branches(dir: string, target: Target, paths: string[]): string[] {
   git(dir, ['fetch', '--no-tags', 'upstream'])
   const since = Date.now() - RECENT * 86_400_000
-  return git(dir, ['ls-remote', '--heads', 'upstream']).split('\n').flatMap((line) => {
-    const name = line.split('\t')[1]?.replace(/^refs\/heads\//, '')
-    if (name === undefined || name === 'main') return []
+  return git(dir, ['for-each-ref', '--format=%(refname:strip=3)', 'refs/remotes/upstream']).split('\n').flatMap((name) => {
+    if (name === '' || name === 'main') return []
     const ref = `refs/remotes/upstream/${name}`
     if (Date.parse(git(dir, ['log', '-1', '--format=%cI', ref]).trim()) < since) return []
     const base = baseOf(dir, ref)

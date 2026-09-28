@@ -9,7 +9,8 @@ import { liveTree } from '../sequencer/workspace.ts'
 import { dump, migrate, open as openDb, type Db } from '../store/index.ts'
 import { dial, hhmm, lanes, priority as setPriority, record, Reading, set, windows } from '../store/lanes.ts'
 import { refusedPush } from '../store/approvals.ts'
-import { overlapWaits } from '../store/plans.ts'
+import { repriced } from '../store/events.ts'
+import { holderOf, HOLDERS, overlapWaits } from '../store/plans.ts'
 import { backfillTickets } from '../store/tickets.ts'
 import { backfill } from '../store/transcript.ts'
 import { byType, type ByType, day, fileWaits, greptileLine, halted, heldBy, laneLine, open as openPlans, rulings, section, tickets, ticketSection, waitLine,
@@ -72,7 +73,10 @@ function stores(cf: Command, { root, db, out }: Cli): void {
 
 function fires(cf: Command, { root, db, out }: Cli): void {
   cf.command('backfill-cost').action(() => {
-    out(`backfilled ${String(backfill(db()))} run(s)\n`)
+    const handle = db()
+    out(`backfilled ${String(backfill(handle))} run(s)\n`)
+    const { priced, missing } = repriced(handle)
+    out(`priced ${String(priced)} run(s); ${String(missing.length)} missing cache writes: ${missing.join(', ')}\n`)
   })
 
   cf.command('backfill-tickets').action(() => {
@@ -98,9 +102,11 @@ function fires(cf: Command, { root, db, out }: Cli): void {
   })
 
   cf.command('priority').argument('<plan>').argument('<n>', 'P0 first, up to P9')
-    .action((id: string, n: string) => {
+    .requiredOption('--by <actor>', `who ran it: ${HOLDERS.join(' or ')}`)
+    .action((id: string, n: string, options: { by: string }) => {
+      const by = holderOf(options.by)
       const handle = db()
-      setPriority(handle, Number(id), Number(n), 'ceo')
+      setPriority(handle, Number(id), Number(n), by)
       out(`plan ${id} priority P${n}\n`)
     })
 }

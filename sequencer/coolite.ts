@@ -24,9 +24,9 @@ import { afresh, maybe, planDir, SELF } from './workspace.ts'
 
 const Said = z.object({
   move: z.enum(['rule', 'waive', 'close', 'file', 'ask_ceo']),
-  why: z.string().trim().min(1).max(400),
+  why: z.string().trim().min(1),
   answer: z.string().trim().min(1).optional(),
-  ticket: z.string().trim().min(1).max(140).optional(),
+  ticket: z.string().trim().min(1).transform((t) => t.slice(0, 140)).optional(),
 }).strict().refine((m) => m.move !== 'rule' || m.answer !== undefined, { path: ['answer'] })
   .refine((m) => m.move !== 'file' || m.ticket !== undefined, { path: ['ticket'] })
 
@@ -145,7 +145,8 @@ function siblings(db: Db, root: string, plan: PlanRow): string {
   return found.length === 0 ? 'none' : found.join('\n\n').slice(0, 6000)
 }
 
-function read(text: string): Move | null {
+/** A why past 400 characters read as no answer and sent four plans to the COO on 09-28. */
+export function read(text: string): Move | null {
   const parts = split(text)
   if (parts !== null) return { move: 'split', why: `${String(parts.length)} jobs, not one`, parts }
   const fence = /^---\n([\s\S]*?)\n---$/m.exec(text)?.[1]

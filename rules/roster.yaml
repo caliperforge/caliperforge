@@ -19,7 +19,7 @@ seats:
   - solidity_specialist
 digests:
   typescript_specialist:
-    manifest: a8dd50ad9bc5d01f576bd87d7fc88bd0b518adb47d37468f28b24b02d4d730a1
+    manifest: a4ff87fd829db7a375989bb3c747d1cb6f2b59f17b47222ff1f76764d6a4c038
     prompt: 58beb82b577bffbb2c16634f025f01fc37a5ef5debf06554124c4a188c1e24fa
   kotlin_specialist:
     manifest: 0ac9229de8943374e26c0c570689ffcdad364ef90d0c03f6486bdc443419fd6b

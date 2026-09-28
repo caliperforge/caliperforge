@@ -1,5 +1,6 @@
+import { logged } from './events.ts'
 import type { Db } from './index.ts'
-import { BUILT } from './plans.ts'
+import { BUILT, type Holder } from './plans.ts'
 
 export interface PlanFile {
   path: string
@@ -30,6 +31,21 @@ export function listed(db: Db, plan: number, path: string): void {
   }
   const next = db.prepare('SELECT coalesce(max(position), -1) + 1 AS n FROM plan_files WHERE plan = ?').get(plan) as { n: number }
   db.prepare('INSERT INTO plan_files (plan, path, is_new, position, stray) VALUES (?, ?, 1, ?, 0)').run(plan, path, next.n)
+}
+
+export const VERBS = ['set', 'add', 'drop'] as const
+
+export function edit(db: Db, plan: number, verb: typeof VERBS[number], path: string, actor: Holder, why: string | null): void {
+  db.transaction(() => {
+    if (db.prepare('SELECT 1 FROM plans WHERE id = ?').get(plan) === undefined) throw new Error(`no plan ${String(plan)}`)
+    if (verb === 'drop' && db.prepare('DELETE FROM plan_files WHERE plan = ? AND path = ? AND stray = 0').run(plan, path).changes === 0) {
+      throw new Error(`plan ${String(plan)} does not list ${path}`)
+    }
+    if (verb === 'set') db.prepare('DELETE FROM plan_files WHERE plan = ? AND path <> ? AND stray = 0').run(plan, path)
+    if (verb !== 'drop') listed(db, plan, path)
+    const message = `${verb} ${path}${why === null ? '' : `: ${why}`}`
+    logged(db, { plan, kind: 'files', actor, outcome: 'pass', message, pointer: null, run: null })
+  })()
 }
 
 export function record(db: Db, plan: number, list: PlanFile[]): void {

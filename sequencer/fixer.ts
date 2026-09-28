@@ -11,7 +11,7 @@ import { listed } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
 import { returnToLane } from '../store/holds.ts'
 import { wall } from '../store/lanes.ts'
-import { retry, type PlanRow } from '../store/plans.ts'
+import { held, retry, type PlanRow } from '../store/plans.ts'
 import { clear } from '../store/refusals.ts'
 import { pending } from '../store/transcript.ts'
 import { hold, unhold } from './hold.ts'
@@ -161,6 +161,7 @@ export function released(db: Db, root: string, now: Date, post: Post): void {
     }
     db.prepare('UPDATE plans SET waits_on = NULL WHERE id = ?').run(r.id)
     const note = `plan ${String(r.on_)}, which this job waits on, ended ${r.theirs}`
+    held(db, r.id, 'coo', note)
     record(root, [{ at, plan: r.id, ticket, kind: 'blocked', step: r.step, name: 'fixer', note }])
     post(`CaliperForge · ${ticket} needs you`, `plan ${String(r.id)}, step ${String(r.step)}. ${note}`)
   }

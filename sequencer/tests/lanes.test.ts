@@ -5,7 +5,7 @@ import { release } from '../../store/holds.ts'
 import type { Read } from '../../cli/gh.ts'
 import { newestRun } from '../../store/events.ts'
 import { amend, cap, dial, forget, lanes, name, priority, record, set, templatePriority, usage, width, windows, type Reading } from '../../store/lanes.ts'
-import { addPipe, addPlan, allPlans, live, retry, rewind } from '../../store/plans.ts'
+import { addPipe, addPlan, allPlans, live, pipeNamed, retry, rewind } from '../../store/plans.ts'
 import { WHY } from '../../store/refusals.ts'
 import { tick } from '../index.ts'
 import { picks } from '../next.ts'
@@ -39,8 +39,9 @@ function queued(w: World, id: number, pipe: number, at: number): void {
 const labelled = (...names: string[]): Read => () => ({ number: 34, title: 'a plan of our own', body: 'ask',
   url: `https://github.com/${SELF}/issues/34`, labels: names.map((label) => ({ name: label })) })
 
-function second(w: World): void {
+function second(w: World): number {
   addPipe(w.db, { name: 'research', enabled: 1, window_start: '00:00', window_end: '23:59', max_concurrent: 1 })
+  return Number(pipeNamed(w.db, 'research')?.id)
 }
 
 test('a plan is queued at its template default priority, and cf priority moves it', async () => {
@@ -154,8 +155,7 @@ test('a retry onto a lane with a free slot runs at once', () => {
 
 test('the cap decides how many pipes worth of plans the tick opens', async () => {
   const w = world()
-  second(w)
-  queued(w, 2, 2, 1)
+  queued(w, 2, second(w), 1)
   dial(w.db, 2, AT)
   expect((await tick(w.db, w.root, stub(CARRIED))).map((f) => f.pipe)).toEqual(['pr-path', 'research'])
   for (const p of allPlans(w.db)) amend(w.db, p.id, { step: 0, state: 'queued' })
@@ -170,8 +170,7 @@ test('a throw inside one plan\'s step is that plan\'s refusal, a repeat stops it
   const w = world()
   approve(w.db, w.target)
   for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
-  second(w)
-  queued(w, 2, 2, 1)
+  queued(w, 2, second(w), 1)
   dial(w.db, 2, AT)
   const stderr = 'Command failed: git push …\n! [rejected] … (fetch first)'
   const wire = { ...watched([], w.root, 1), send: () => { throw new Error(stderr) } }
@@ -245,8 +244,7 @@ test('a usage band moves by pr and a new settings key is born in a migration', (
 
 test('cf brief and the queue query show live against open', async () => {
   const w = world()
-  second(w)
-  queued(w, 2, 2, 1)
+  queued(w, 2, second(w), 1)
   expect(laneLine(lanes(w.db, '09:00'))).toBe('lanes 0/2 live/open\tcap 2\tdial 2\tband none\tceiling 4\n')
   await tick(w.db, w.root, stub(CARRIED))
   expect(lanes(w.db, '09:00')).toMatchObject({ live: 2, open: 2 })

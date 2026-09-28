@@ -31,7 +31,7 @@ const Found = z.array(z.object({
   labels: z.array(z.object({ name: z.string() })),
 }))
 
-export const LANES = ['machine', 'atelier', 'comms', 'research'] as const
+export const LANES = ['machine', 'atelier', 'comms', 'research', 'uniswap'] as const
 
 export type Lane = typeof LANES[number]
 
@@ -46,6 +46,7 @@ export const LANE: Record<Lane, { template: Template; seat: string; home: string
   atelier: { template: 'pr_path', seat: 'swift_specialist', home: `${FORK}/atelier`, pipe: 'atelier' },
   comms: { template: 'comms', seat: DEFAULT_BUILDER, home: SELF, pipe: 'internal' },
   research: { template: 'research', seat: DEFAULT_BUILDER, home: SELF, pipe: 'internal' },
+  uniswap: { template: 'pr_path', seat: 'python_specialist', home: `${FORK}/v4-hook-index`, pipe: 'uniswap' },
 }
 
 export interface Filed {

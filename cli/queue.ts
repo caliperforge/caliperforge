@@ -5,7 +5,9 @@ import { decide } from '../store/approvals.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { templatePriority } from '../store/lanes.ts'
-import { claimed, implemented, issue as readIssue, lastMerger, type Issue } from './gh.ts'
+import { profile } from '../store/profile.ts'
+import { latest } from '../store/rulings.ts'
+import { claimed, gh, implemented, issue as readIssue, lastMerger, WINDOW, type Issue, type Read } from './gh.ts'
 import { measure } from './measure.ts'
 
 const Account = z.object({ id: z.int(), measured_at: z.string(), pulse: z.enum(['warm', 'cold']) })
@@ -86,6 +88,26 @@ export function askOf(row: Pick<Issue, 'title' | 'body'>, card: string | undefin
 }
 
 export const CARD = '## Their issue, for context only; the scope is the card above'
+
+const Opened = z.array(z.object({ createdAt: z.string() }))
+
+/** The first intake rule of the repo's profile this target breaks, named, or null. */
+export function waits(db: Db, root: string, repo: string, no: number, read: Read = gh, now = new Date()): string | null {
+  const rules = profile(root, repo)?.intake
+  if (rules === undefined) return null
+  const claim = `claim.${repo}#${String(no)}`
+  if (rules.claim_first && latest(db, claim)?.value !== 'confirmed') return `claim_first: no ruling ${claim} = confirmed`
+  const ours = (state: string, field: string): unknown[] => z.array(z.unknown()).parse(read(['pr', 'list', '--repo', repo,
+    '--author', '@me', '--state', state, '--limit', String(WINDOW), '--json', field]))
+  const cap = rules.max_open_prs
+  const open = cap === undefined ? 0 : ours('open', 'number').length
+  if (cap !== undefined && open >= cap) return `max_open_prs: ${String(open)} of ours open in ${repo}, cap ${String(cap)}`
+  if (rules.pace === undefined) return null
+  const { prs, days } = rules.pace
+  const since = now.getTime() - days * 86400000
+  const opened = Opened.parse(ours('all', 'createdAt')).filter((p) => Date.parse(p.createdAt) >= since).length
+  return opened >= prs ? `pace: ${String(opened)} opened in ${repo} in the last ${String(days)} days, cap ${String(prs)}` : null
+}
 
 function measured(db: Db, repo: string, today: string): z.infer<typeof Account> {
   try {

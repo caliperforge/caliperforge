@@ -1,10 +1,10 @@
 import { CHECK, find } from '../cli/find.ts'
 import type { Read } from '../cli/gh.ts'
-import { CARD } from '../cli/queue.ts'
+import { CARD, waits } from '../cli/queue.ts'
 import { parse } from '../rails/diff.ts'
 import { building, filesOf, sharing, strays as recordStrays } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
-import { builderRan, internal, originIssue, type PlanRow, type Wait } from '../store/plans.ts'
+import { builderRan, internal, originIssue, waiting, type PlanRow, type Wait } from '../store/plans.ts'
 import { facts, gather, steps as comms } from '../templates/comms.ts'
 import { at, last, steps, type Step } from '../templates/pr-path.ts'
 import { approved, approvedPlan, batch } from './approve.ts'
@@ -127,6 +127,11 @@ export function measure(db: Db, root: string, plan: PlanRow, read?: Read): Outco
   if (row === null) return { outcome: 'refuse', spans: ['targets'], note: `plan ${String(plan.id)} has no target row` }
   const span = `targets/${row.repo}#${String(row.issue_no)}`
   if (row.state !== 'ready' && row.state !== 'queued') return { outcome: 'refuse', spans: [span], note: `target state ${row.state}` }
+  const rule = waits(db, root, row.repo, row.issue_no, read)
+  if (rule !== null) {
+    waiting(db, [{ plan: plan.id, why: 'target_parked' }])
+    return { outcome: 'refuse', held: true, spans: [span], note: `target_parked: ${rule}` }
+  }
   const park = read === undefined ? null : checked(root, plan, row, read)
   if (park === null) return { outcome: 'pass', spans: [], note: `${row.repo}#${String(row.issue_no)} ${row.pulse}` }
   db.prepare("UPDATE targets SET state = 'parked' WHERE id = ?").run(plan.target_id)

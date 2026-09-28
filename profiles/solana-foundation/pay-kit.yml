@@ -13,6 +13,7 @@ notes:
   - PHP's lint is syntax, php-cs-fixer in check mode and PHPStan.
   - Python's CI does not check `ruff format`, and its tree is not formatted by it.
   - Go's Codama-generated clients under protocols/programs/ are regenerated from the IDL, never edited by hand.
+intake: { pace: { prs: 1, days: 7 } }
 sources:
   - sequencer/gates.ts
   - seats/python_specialist/prompt.md

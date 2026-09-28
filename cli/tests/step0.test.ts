@@ -1,6 +1,9 @@
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, it } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
+import { measure as stepZero } from '../../sequencer/steps.ts'
+import { plan, world } from '../../sequencer/tests/world.ts'
 import type { Issue, Read } from '../gh.ts'
 import { foreign, implemented, WINDOW } from '../gh.ts'
 import { measure } from '../measure.ts'
@@ -140,4 +143,76 @@ it('names a ruling that carries kernel issue 23 and the map line for each step-0
       { subject: 'queue.cold_pulse', origin_kind: 'ruling', origin_ref: 'buildmap-rev6-step0-must-not-trip', issue_no: 23 },
       { subject: 'queue.implemented', origin_kind: 'ruling', origin_ref: 'buildmap-rev6-step0-must-not-trip', issue_no: 23 },
     ])
+})
+
+const WIDGET = 'https://github.com/acme/widget/issues/12'
+const DAY = 86400000
+
+function intake(yml: string): ReturnType<typeof world> {
+  const w = world()
+  mkdirSync(join(w.root, 'profiles/acme'), { recursive: true })
+  writeFileSync(join(w.root, 'profiles/acme/widget.yml'), `intake: ${yml}\n`)
+  return w
+}
+
+/** `find` passes on everything but the `@me` lists, which answer `open` numbered rows and one row per day in `created`. */
+function ours(open: number, created: number[] = [], sent: string[][] = []): Read {
+  return (args) => {
+    if (args.includes('@me')) {
+      sent.push(args)
+      return args.includes('open') ? [...Array(open).keys()].map((number) => ({ number }))
+        : created.map((ago) => ({ createdAt: new Date(Date.now() - ago * DAY).toISOString() }))
+    }
+    if (args[0] === 'issue') {
+      return { number: 12, title: 'hello', body: 'b', state: 'OPEN', url: WIDGET, author: { login: 'keeper' },
+        assignees: [], comments: [], closedByPullRequestsReferences: [], projectItems: [] }
+    }
+    if (args[0] === 'search' || !args.includes('merged')) return []
+    return [{ url: 'https://github.com/acme/widget/pull/2', author: { login: 'outsider' }, mergedBy: { login: 'keeper' },
+      body: 'b', additions: 1, deletions: 0, files: [{ path: 'src/a.ts' }] }]
+  }
+}
+
+function rule(w: ReturnType<typeof world>, value: string): void {
+  w.db.prepare(`INSERT INTO rulings (subject, value, origin_kind, origin_ref, who, date, issue_no)
+    VALUES ('claim.acme/widget#12', ?, 'ruling', 'test', 'ceo', '2026-09-27', 12)`).run(value)
+}
+
+const PASS = { outcome: 'pass', note: 'acme/widget#12 warm' }
+
+it('D3: holds a claim_first target at step 0 on target_parked and leaves the target ready', () => {
+  const w = intake('{ claim_first: true }')
+  expect(stepZero(w.db, w.root, plan(w.db, 1), ours(0))).toMatchObject({ outcome: 'refuse', held: true,
+    note: 'target_parked: claim_first: no ruling claim.acme/widget#12 = confirmed' })
+  expect(w.db.prepare('SELECT wait_reason FROM plans WHERE id = 1').pluck().get()).toBe('target_parked')
+  expect(w.db.prepare('SELECT state FROM targets WHERE id = 1').pluck().get()).toBe('ready')
+})
+
+it('D4: a ruling of any other value still holds it; a confirmed one lets the next step 0 pass', () => {
+  const w = intake('{ claim_first: true }')
+  rule(w, 'asked')
+  expect(stepZero(w.db, w.root, plan(w.db, 1), ours(0))).toMatchObject({ outcome: 'refuse', held: true })
+  rule(w, 'confirmed')
+  expect(stepZero(w.db, w.root, plan(w.db, 1), ours(0))).toMatchObject(PASS)
+})
+
+it('D5: open pull requests at max_open_prs hold the target; below it passes', () => {
+  const w = intake('{ max_open_prs: 2 }')
+  expect(stepZero(w.db, w.root, plan(w.db, 1), ours(2))).toMatchObject({ outcome: 'refuse', held: true,
+    note: 'target_parked: max_open_prs: 2 of ours open in acme/widget, cap 2' })
+  expect(stepZero(w.db, w.root, plan(w.db, 1), ours(1))).toMatchObject(PASS)
+})
+
+it('D5: pull requests opened within pace.days at pace.prs hold the target; older ones do not count', () => {
+  const w = intake('{ pace: { prs: 1, days: 7 } }')
+  expect(stepZero(w.db, w.root, plan(w.db, 1), ours(0, [1, 30]))).toMatchObject({ outcome: 'refuse', held: true,
+    note: 'target_parked: pace: 1 opened in acme/widget in the last 7 days, cap 1' })
+  expect(stepZero(w.db, w.root, plan(w.db, 1), ours(0, [8, 30]))).toMatchObject(PASS)
+})
+
+it('D5: with neither key set, no --author @me read is made', () => {
+  const w = intake('{ claim_first: false }')
+  const sent: string[][] = []
+  expect(stepZero(w.db, w.root, plan(w.db, 1), ours(5, [1], sent))).toMatchObject(PASS)
+  expect(sent).toEqual([])
 })

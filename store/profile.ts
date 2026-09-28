@@ -20,6 +20,14 @@ export const Profile = z.strictObject({
   ai_trailer: z.boolean().optional(),
   trailer: z.string().optional(),
   disclosure: z.string().optional(),
+  builder: z.string().optional(),
+  rails: z.strictObject({
+    digests: z.boolean().default(false),
+    ratchet: z.boolean().default(false),
+    fence: z.boolean().default(false),
+    tight_code: z.boolean().default(false),
+    checks: z.enum(['ci', 'local']).optional(),
+  }).optional(),
 })
 
 export type Profile = z.infer<typeof Profile>

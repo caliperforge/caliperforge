@@ -16,7 +16,8 @@ import { filesOf, listed } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
 import { ratchetRules } from '../store/lanes.ts'
 import { busy } from '../store/now.ts'
-import { BUILT, internal, laneOff, type PlanRow } from '../store/plans.ts'
+import { BUILT, laneOff, type PlanRow } from '../store/plans.ts'
+import { profile, type Profile } from '../store/profile.ts'
 import { builder } from '../templates/pr-path.ts'
 import { checks, mode, npm, type Failure, type Run } from './checks.ts'
 import { ciChecks } from './ci.ts'
@@ -27,8 +28,10 @@ import { seat } from '../runner/rules.ts'
 import { broken, renumbered, strays } from './fence.ts'
 import { fenceFor, languageFor } from './route.ts'
 import { diffOf, doneIds, get, maybe, srcDir } from './workspace.ts'
-import { kernelPlan } from './home.ts'
 import type { Wire } from './push.ts'
+import { repoOf } from './ready.ts'
+
+type Rails = Profile['rails']
 
 /**
  * Step 3: the six rails the map's step list names, in its order, ending at the first refusal, and
@@ -37,7 +40,9 @@ import type { Wire } from './push.ts'
  * Our own repo's suite runs on GitHub CI when `checks.where` says so (#332), and on this laptop otherwise.
  */
 export function preReview(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
-  const refusal = kernelPlan(plan) ? unfilled(srcDir(root, plan.id)) : null
+  const repo = repoOf(db, plan)
+  const on = (repo === null ? null : profile(root, repo))?.rails
+  const refusal = on?.digests === true ? unfilled(srcDir(root, plan.id)) : null
   if (refusal !== null) return refusal
   const handback = get(root, plan.id, 'step-2.handback.md')
   const diff = diffOf(root, plan.id)
@@ -46,38 +51,39 @@ export function preReview(db: Db, root: string, plan: PlanRow, wire?: Wire): Out
   const first = audit(handback, [...doneIds(get(root, plan.id, 'issue.md')), ...ids], prev, diff)
   record(db, plan.id, first, 0)
   if (first.outcome !== 'pass') return unfinishedFirst(root, plan.id, named('completion-audit', first))
-  for (const [rail, run] of rest(db, root, plan, handback, diff)) {
+  for (const [rail, run] of rest(db, root, plan, handback, diff, on)) {
     const verdict = run()
     recordRail(db, join(root, 'rails', rail), plan.id, verdict, 0)
     if (verdict.outcome !== 'pass') return named(rail, verdict)
   }
-  return kernelPlan(plan) ? ratchetFirst(db, root, plan, diff, wire) : suite(db, root, plan, wire)
+  return on?.ratchet === true ? ratchetFirst(db, root, plan, diff, on, wire) : suite(db, root, plan, on, wire)
 }
 
 /** Only findings on paths the diff touches are the job's: the rest is main's debt. A held step comes round again, so it warns once not held. */
-function ratchetFirst(db: Db, root: string, plan: PlanRow, diff: string, wire?: Wire): Outcome {
+function ratchetFirst(db: Db, root: string, plan: PlanRow, diff: string, on: Rails, wire?: Wire): Outcome {
   const { mode: set, raises } = ratchetRules(db)
   const touched = new Set(parse(diff).map((f) => f.path))
   const found = ratcheted(srcDir(root, plan.id), raises).filter((f) => touched.has(f.path))
   const message = found.map((f) => f.message).join('; ')
   if (found.length > 0 && set === 'refuse') return { outcome: 'refuse', spans: found.map((f) => `ratchet:${f.path}`), note: 'ratchet: the job grew a file past its budget', message }
-  const outcome = suite(db, root, plan, wire)
+  const outcome = suite(db, root, plan, on, wire)
   if (found.length > 0 && outcome.held !== true) logged(db, { plan: plan.id, kind: 'ratchet', actor: 'ratchet', outcome: 'pass', message: `would refuse: ${message}`, pointer: null, run: null })
   return outcome
 }
 
-function suite(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
+function suite(db: Db, root: string, plan: PlanRow, on: Rails, wire?: Wire): Outcome {
   // a stranger's npm scripts never run on this host. A stranger's repo in a language with its own seat runs that
   // language's gates (#204): its builder already ran them at step 2, and a red fork CI after the reviews costs more.
-  const outside = internal(plan) ? null : outsideLanguage(languageFor(db, plan, srcDir(root, plan.id)))
-  const ci = internal(plan) ? ciChecks(db, root, plan, wire) : null
+  const local = on?.checks !== undefined
+  const outside = local ? null : outsideLanguage(languageFor(db, plan, srcDir(root, plan.id)))
+  const ci = on?.checks === 'ci' ? ciChecks(db, root, plan, wire) : null
   if (ci !== null && 'wait' in ci) return ci.wait
   if (ci !== null) {
     recordRail(db, join(root, 'rails', 'checks'), plan.id, checked(ci.failed, diffOf(root, plan.id)), 0)
     if (ci.failed !== null) return broke(db, root, plan, ci.failed)
     return { outcome: 'pass', spans: [], note: `pre-review: six rails pass; checks ran on GitHub CI at ${ci.at}` }
   }
-  if (internal(plan) || outside !== null) {
+  if (local || outside !== null) {
     const holder = lock(root, plan.id)
     if (holder !== null) return { outcome: 'pass', held: true, spans: ['checks'], note: `checks wait: plan ${String(holder.plan)} is running its tests` }
     try {
@@ -92,7 +98,7 @@ function suite(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
       unlock(root, plan.id)
     }
   }
-  const ran = internal(plan) ? mode(srcDir(root, plan.id)) : outside ?? 'none'
+  const ran = local ? mode(srcDir(root, plan.id)) : outside ?? 'none'
   return { outcome: 'pass', spans: [], note: `pre-review: six rails pass; checks ran ${ran}` }
 }
 
@@ -152,17 +158,18 @@ function broke(db: Db, root: string, plan: PlanRow, failed: Failure): Outcome {
  * plan lands as a commit named for its branch and opens no pull request, so it has no prose to judge; an outside
  * plan's body is built from the brief, never the handback (plan 70).
  */
-function rest(db: Db, root: string, plan: PlanRow, handback: string, diff: string): [string, () => Verdict][] {
+function rest(db: Db, root: string, plan: PlanRow, handback: string, diff: string, on: Rails): [string, () => Verdict][] {
   const src = srcDir(root, plan.id)
   const name = builder(languageFor(db, plan, src))
   const fence = fenceFor(db, plan.id, seat(root, name).manifest.write_paths)
-  const outside = kernelPlan(plan)
+  const ours = on?.fence === true
+  const outside = ours
     ? strays(parse(diff).map((f) => f.path), filesOf(db, plan.id).map((f) => f.path), handback)
     : []
   return [
     ['secret-scan', () => scan(diff)],
-    ['authority', () => authority(root, name, diff, kernelPlan(plan), fence, outside, kernelPlan(plan) ? renumbered(src, diff) : [])],
-    ['tight', () => tight(root, { diff, sources: sources(src, diff), ...prose(root, plan), code: internal(plan) })],
+    ['authority', () => authority(root, name, diff, ours, fence, outside, ours ? renumbered(src, diff) : [])],
+    ['tight', () => tight(root, { diff, sources: sources(src, diff), ...prose(root, plan), code: on?.tight_code === true })],
     ['test-weakened', () => weakened(diff, 'green', [maybe(root, plan.id, 'ask.md') ?? '', get(root, plan.id, 'issue.md'), prose(root, plan).description].join('\n'))],
     ['identifiers', () => identifiers(src, handback, diff)],
   ]

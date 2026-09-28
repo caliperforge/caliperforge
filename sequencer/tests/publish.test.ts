@@ -36,11 +36,11 @@ const INDEX = `<main>\n${CARDS}${OLD_CARD}    </div>\n</main>\n`
 
 interface Site { db: Db; dir: string }
 
-const site = (shell = SHELL, index: string | null = INDEX): Site => {
+const site = (): Site => {
   const db = fresh(join(import.meta.dirname, '../..', 'schema'))
   const dir = mkdtempSync(join(tmpdir(), 'cf-site-'))
-  writeFileSync(join(dir, '23_a.html'), shell)
-  if (index !== null) writeFileSync(join(dir, 'index.html'), index)
+  writeFileSync(join(dir, '23_a.html'), SHELL)
+  writeFileSync(join(dir, 'index.html'), INDEX)
   set(db, 'comms.site_dir', dir, 'ceo', '2026-09-28')
   return { db, dir }
 }

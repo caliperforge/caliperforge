@@ -17,7 +17,7 @@ const NUMBERED = /^(\d+)_.*\.html$/
 
 const ENTITIES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }
 const esc = (text: string): string => text.replace(/[&<>"']/g, (c) => ENTITIES[c] ?? c)
-const inline = (text: string): string => esc(text).replace(/`([^`]+)`/g, (code) => `<code>${code.slice(1, -1)}</code>`)
+const inline = (text: string): string => esc(text).replace(/`([^`]+)`/g, '<code>$1</code>')
 
 export function publish(db: Db): Outcome {
   const posts = approvedSite(db)

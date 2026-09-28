@@ -36,7 +36,7 @@ async function fire(packet: Packet): Promise<Fired> {
       effort: packet.effort,
       tools: offered(packet.tools),
       allowedTools: packet.tools,
-      ...(packet.steps === undefined ? {} : { maxTurns: packet.steps }),
+      ...(packet.steps === undefined ? {} : { maxTurns: packet.steps }), ...(packet.servers === undefined ? {} : { mcpServers: packet.servers }),
       settingSources: [], systemPrompt: { type: 'preset', preset: 'claude_code', excludeDynamicSections: true },
       permissionMode: 'default',
       hooks: { PreToolUse: [{ hooks: [(input) => {

@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { parse } from 'yaml'
 import { z } from 'zod'
 import type { PlanFile } from '../store/files.ts'
+import { WHOLE } from './handout.ts'
 
 const CEILING = 100
 
@@ -50,7 +51,7 @@ export const TEMPLATE = `The brief is exactly this, in this order, and at most $
 
 ## Files
 
-- <path:line> — the files this job changes, at most ${String(WIDE)} besides tests, \`(new)\` only for a path the tree does not hold yet; each row names files, never a folder
+- <path:line>, or <path:start-end> on a file over ${String(WHOLE)} lines — the files this job changes, at most ${String(WIDE)} besides tests, \`(new)\` only for a path the tree does not hold yet; each row names files, never a folder
 
 ## Files to read
 
@@ -176,7 +177,7 @@ export function shape(brief: string, ask: string, src: string): Refused | null {
   const title = titleOf(brief)
   if (title === null || title !== titleOf(ask)) return { span: '# <title>', reason: "the title is not the ask's" }
   const checks: ((b: string) => Refused | null)[] =
-    [order, empty, carried, cases, caps, folders, forbidden, (b) => shared(b, src), (b) => paths(b, src)]
+    [order, empty, carried, cases, caps, folders, forbidden, (b) => shared(b, src), (b) => paths(b, src), (b) => ranged(b, src)]
   for (const check of checks) {
     const refused = check(brief)
     if (refused !== null) return refused
@@ -290,6 +291,19 @@ function paths(brief: string, src: string): Refused | null {
     if (is_new !== existsSync(join(src, path))) continue
     const ground = is_new ? 'is marked (new) and is already in the tree' : 'is not in the checkout'
     return { span: path, reason: `${path} ${ground}` }
+  }
+  return null
+}
+
+/** A file past `WHOLE` lines is handed by its block, so its `## Files` row names where that block ends: `path:start-end`. */
+function ranged(brief: string, src: string): Refused | null {
+  for (const line of section(brief, '## Files').split('\n').filter((l) => /^\s*[-*]/.test(l))) {
+    for (const { path, is_new } of files(`## Files\n${line}`)) {
+      if (is_new || !existsSync(join(src, path))) continue
+      const n = readFileSync(join(src, path), 'utf8').split('\n').length
+      const named = line.split(`${path}:`).slice(1).some((after) => /^\d+-\d+/.test(after))
+      if (n > WHOLE && !named) return { span: path, reason: `${path} is ${String(n)} lines; name the range` }
+    }
   }
   return null
 }

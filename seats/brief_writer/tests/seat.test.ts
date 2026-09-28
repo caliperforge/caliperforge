@@ -73,5 +73,6 @@ test('the prompt states the path and length rules the brief check refuses on', (
     'A file you read from the machine\'s own tree for context (an Atelier brief reading `schema/` or `cli/`) is not in the checkout: what you read there goes under `## Settled facts`, never under `## Files`.',
     '`(new)` marks only a path you looked for in the checkout and did not find.',
     'The brief is at most 100 lines: count them before you answer.',
+    'A `## Files` row on a file over 300 lines names the block it changes as `path:start-end`.',
   ]) expect(prompt).toContain(rule)
 })

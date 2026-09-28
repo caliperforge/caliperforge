@@ -1,4 +1,5 @@
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { expect, test } from 'vitest'
 import { walk } from '../../checks/tree.ts'
@@ -125,7 +126,24 @@ test('the handback format beside an unrelated path is two jobs', () => {
   const readers = ['- sequencer/rails.ts', '- rails/tight/prose.ts']
   expect(on(handback([...readers, '- store/plans.ts'], ['- nothing else'])))
     .toMatchObject({ span: 'store/plans.ts', reason: holding('two jobs in one brief') })
-  expect(on(handback([...readers, '- sequencer/tests/brief.test.ts'], ['- nothing else']))).toBeNull()
+  expect(on(handback([...readers, '- sequencer/tests/brief.test.ts:116-129'], ['- nothing else']))).toBeNull()
+})
+
+test('D1-D3: a ## Files row on an existing file over 300 lines names its range', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ranged-'))
+  mkdirSync(join(dir, 'a'))
+  writeFileSync(join(dir, 'a/long.ts'), Array.from({ length: 301 }, () => 'x').join('\n'))
+  writeFileSync(join(dir, 'a/short.ts'), Array.from({ length: 299 }, () => 'x').join('\n'))
+  const row = (line: string): Refused | null =>
+    shape(swap(swap(brief, '## Files', [line]), '## Files to read', ['- a/short.ts — read']), ask, dir)
+  const refused = { span: 'a/long.ts', reason: 'a/long.ts is 301 lines; name the range' }
+  expect(row('- a/long.ts:40')).toEqual(refused)
+  expect(row('- a/long.ts')).toEqual(refused)
+  expect(row('- a/long.ts:40-90')).toBeNull()
+  expect(row('- a/short.ts:40')).toBeNull()
+  expect(row('- a/short.ts')).toBeNull()
+  expect(row('- a/new.ts (new)')).toBeNull()
+  expect(row('- a/long.ts (new)')).toMatchObject({ span: 'a/long.ts', reason: holding('already in the tree') })
 })
 
 const lua = 'seats/lua_specialist/prompt.md'

@@ -106,12 +106,16 @@ function settled(gate: Gate, ran: Ran): Ran {
   return gate.quiet === true && ran.ok && ran.output.trim() !== '' ? { ok: false, code: '1', output: ran.output } : ran
 }
 
+const BUILT = [`${DERIVED}/`, '__pycache__/']
+
 /** The derived data is build output: never staged, never in the diff the reviewers read. */
 export function excluded(src: string): void {
   const path = join(src, '.git', 'info', 'exclude')
   if (!existsSync(join(src, '.git'))) return
-  const held = existsSync(path) ? readFileSync(path, 'utf8') : ''
-  if (!held.split('\n').includes(`${DERIVED}/`)) appendFileSync(path, `${held.endsWith('\n') || held === '' ? '' : '\n'}${DERIVED}/\n`)
+  for (const line of BUILT) {
+    const held = existsSync(path) ? readFileSync(path, 'utf8') : ''
+    if (!held.split('\n').includes(line)) appendFileSync(path, `${held.endsWith('\n') || held === '' ? '' : '\n'}${line}\n`)
+  }
 }
 
 /** vitest names a failed test where it ran it and again under Failed Tests; each naming opens a block. */

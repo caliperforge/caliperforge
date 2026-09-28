@@ -209,7 +209,7 @@ export function checkout(root: string, plan: number, repo: string, branch: strin
   const dir = srcDir(root, plan)
   const done = maybe(root, plan, 'base.sha')
   if (done === null && readdirSync(dir).length > 0) renameSync(dir, `${dir}.stale-${String(Date.now())}`)
-  if (done !== null && cloned(dir)) { fetchMain(dir); excluded(dir); return { dir, branch, base: done.trim() } }
+  if (done !== null && cloned(dir)) { fetchMain(dir); excluded(dir); unstage(dir); return { dir, branch, base: done.trim() } }
   const base = gitBase(root)
   git(planDir(root, plan), ['clone', '--no-local', '--origin', 'origin',
     '-c', `remote.upstream.url=${remote(base, repo)}`,
@@ -226,6 +226,19 @@ export function checkout(root: string, plan: number, repo: string, branch: strin
   git(dir, ['checkout', '-B', branch, head])
   put(root, plan, 'base.sha', `${head}\n`)
   return { dir, branch, base: head }
+}
+
+/** The exclude file skips only untracked paths, so a `__pycache__/` file an earlier diff staged leaves the index here. */
+function unstage(dir: string): void {
+  const built = paths(git(dir, ['ls-files', '-z', '--cached', '--ignored', '--exclude-standard', '--', ':(glob)**/__pycache__/**']))
+  if (built.length === 0) return
+  const kept = new Set(paths(git(dir, ['ls-tree', '-r', '-z', '--name-only', 'HEAD', '--', ...built])))
+  const dropped = built.filter((path) => !kept.has(path))
+  if (dropped.length > 0) git(dir, ['rm', '--cached', '-q', '--', ...dropped])
+}
+
+function paths(listed: string): string[] {
+  return listed.split('\0').filter((path) => path !== '')
 }
 
 /** #202: a plan reopened after its checkout was reaped starts from the branch it already pushed, never a fresh cut of main. */

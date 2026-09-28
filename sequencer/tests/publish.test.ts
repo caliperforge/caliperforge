@@ -47,11 +47,14 @@ const site = (): Site => {
 
 const post = (db: Db, id: number, over: Record<string, string> = {}): void => {
   db.prepare(`INSERT INTO desk_posts (id, kind, dest, status, title, dek, body, edited_title, edited_dek, edited_body,
-    sources, checks, work_date, written_date) VALUES (@id, 'daily', @dest, @status, @title, @dek, @body, @edited_title,
-    @edited_dek, @edited_body, '[]', '[]', @work_date, @written_date)`).run({ id, dest: 'site', status: 'approved',
+    sources, checks, work_date, written_date, proof_at) VALUES (@id, @kind, @dest, @status, @title, @dek, @body, @edited_title,
+    @edited_dek, @edited_body, '[]', '[]', @work_date, @written_date, @proof_at)`).run({ id, kind: 'daily', dest: 'site', status: 'approved',
     title: 'First post', dek: 'What moved', body: 'One line.', edited_title: null, edited_dek: null, edited_body: null,
-    work_date: '2026-09-27', written_date: '2026-09-27', ...over })
+    work_date: '2026-09-27', written_date: '2026-09-27', proof_at: null, ...over })
 }
+
+const aged = (db: Db, id: number, age: string): unknown =>
+  db.prepare("UPDATE desk_posts SET proof_at = datetime('now', ?) WHERE id = ?").run(age, id)
 
 const status = (db: Db): unknown[] => db.prepare('SELECT id, status FROM desk_posts ORDER BY id').all()
 const read = (s: Site, name: string): string => readFileSync(join(s.dir, name), 'utf8')
@@ -164,6 +167,48 @@ test.each([
   expect(publish(s.db)).toMatchObject({ outcome: 'refuse' })
   expect(readdirSync(s.dir).sort()).toEqual(before)
   expect(status(s.db)).toEqual([{ id: 1, status: 'approved' }])
+})
+
+test('D1: a daily site proof 25 h old gets its page and card written and reads published', () => {
+  const s = site()
+  post(s.db, 1, { status: 'proof' })
+  aged(s.db, 1, '-25 hours')
+  expect(publish(s.db)).toMatchObject({ outcome: 'pass' })
+  expect(read(s, '24_first-post.html')).toContain(hero('First post', 'What moved'))
+  expect(read(s, 'index.html')).toContain(card('24_first-post', 'First post', 'What moved'))
+  expect(status(s.db)).toEqual([{ id: 1, status: 'published' }])
+})
+
+test('D2: a daily site row sent back 25 h after proof stays in changes, with no file written', () => {
+  const s = site()
+  post(s.db, 1, { status: 'changes' })
+  aged(s.db, 1, '-25 hours')
+  expect(publish(s.db)).toMatchObject({ outcome: 'pass' })
+  expect(status(s.db)).toEqual([{ id: 1, status: 'changes' }])
+  expect(readdirSync(s.dir).sort()).toEqual(['23_a.html', 'index.html'])
+})
+
+test('D3: ship and weekly site proofs and a daily substack proof 25 h old stay in proof, and an approved substack row is never written', () => {
+  const s = site()
+  post(s.db, 1, { status: 'proof', kind: 'ship' })
+  post(s.db, 2, { status: 'proof', kind: 'weekly' })
+  post(s.db, 3, { status: 'proof', dest: 'substack' })
+  post(s.db, 4, { dest: 'substack' })
+  for (const id of [1, 2, 3]) aged(s.db, id, '-25 hours')
+  expect(publish(s.db)).toMatchObject({ outcome: 'pass' })
+  expect(status(s.db)).toEqual([{ id: 1, status: 'proof' }, { id: 2, status: 'proof' }, { id: 3, status: 'proof' }, { id: 4, status: 'approved' }])
+  expect(readdirSync(s.dir).sort()).toEqual(['23_a.html', 'index.html'])
+  expect(read(s, 'index.html')).toBe(INDEX)
+})
+
+test('D4: a daily site proof 23 h old and one with no proof_at stay in proof', () => {
+  const s = site()
+  post(s.db, 1, { status: 'proof' })
+  post(s.db, 2, { status: 'proof' })
+  aged(s.db, 1, '-23 hours')
+  expect(publish(s.db)).toMatchObject({ outcome: 'pass' })
+  expect(status(s.db)).toEqual([{ id: 1, status: 'proof' }, { id: 2, status: 'proof' }])
+  expect(readdirSync(s.dir).sort()).toEqual(['23_a.html', 'index.html'])
 })
 
 test.each(['', '/nowhere/at/all', 'site'])('D9: with no approved site row, publish passes and writes nothing whatever comms.site_dir is (%s)', (dir) => {

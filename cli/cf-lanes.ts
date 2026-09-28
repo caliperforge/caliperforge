@@ -9,6 +9,7 @@ import { liveTree } from '../sequencer/workspace.ts'
 import { dump, migrate, open as openDb, type Db } from '../store/index.ts'
 import { dial, hhmm, lanes, priority as setPriority, record, Reading, set, windows } from '../store/lanes.ts'
 import { refusedPush } from '../store/approvals.ts'
+import { repriced } from '../store/events.ts'
 import { overlapWaits } from '../store/plans.ts'
 import { backfillTickets } from '../store/tickets.ts'
 import { backfill } from '../store/transcript.ts'
@@ -72,7 +73,10 @@ function stores(cf: Command, { root, db, out }: Cli): void {
 
 function fires(cf: Command, { root, db, out }: Cli): void {
   cf.command('backfill-cost').action(() => {
-    out(`backfilled ${String(backfill(db()))} run(s)\n`)
+    const handle = db()
+    out(`backfilled ${String(backfill(handle))} run(s)\n`)
+    const { priced, missing } = repriced(handle)
+    out(`priced ${String(priced)} run(s); ${String(missing.length)} missing cache writes: ${missing.join(', ')}\n`)
   })
 
   cf.command('backfill-tickets').action(() => {

@@ -12,7 +12,7 @@ import type { Db } from '../../store/index.ts'
 import { advance, pipeNamed, putPlan, rewind, titles } from '../../store/plans.ts'
 import { bySubject, open as openProposals } from '../../store/proposals.ts'
 import { latest } from '../../store/rulings.ts'
-import { ofKind, runAt } from '../../store/events.ts'
+import { eventsOf, ofKind, runAt } from '../../store/events.ts'
 import { graded, others, record, type SignalRow } from '../../store/signals.ts'
 import { capture } from '../capture.ts'
 import { classOf } from '../escapes.ts'
@@ -72,7 +72,7 @@ test('push needs an approval row, then pushes and opens the pr', async () => {
   const wire = watched(sent, w.root, 1)
   expect(push(w.db, w.root, plan(w.db, 1), wire)).toMatchObject({ outcome: 'refuse' })
   expect(sent).toEqual([])
-  approveCard(w.db, w.root, 'plan', 1)
+  approveCard(w.db, w.root, 'plan', 1, 'ceo')
   expect(published(w, wire)).toMatchObject({ outcome: 'pass' })
   expect(sent).toEqual(['send src widget-12-a1', 'unrehearse caliperforge/widget widget-12-a1-next', 'open acme/widget caliperforge:widget-12-a1'])
   expect(deliverablesOf(w.db, 1).at(-1)).toEqual({ state: 'pushed', evidence: URL })
@@ -94,7 +94,7 @@ test('a body the card set is the one the pull request opens with', async () => {
     bodies.push(readFileSync(args[3], 'utf8'))
     return URL
   } }
-  approveCard(w.db, w.root, 'plan', 1)
+  approveCard(w.db, w.root, 'plan', 1, 'ceo')
   expect(published(w, wire)).toMatchObject({ outcome: 'pass' })
   expect(bodies).toEqual(['Addresses the defaults-table item in #12.\n'])
 })
@@ -106,7 +106,7 @@ test('pre-push hook checks ceo sign-off on main, not the fork', async () => {
   expect(headApproved(w.db, sha)).toBe(false)
   expect(onto('refs/heads/main')).toEqual([sha])
   expect(onto('refs/heads/widget-12-a1')).toEqual([])
-  approveCard(w.db, w.root, 'plan', 1)
+  approveCard(w.db, w.root, 'plan', 1, 'ceo')
   expect(headApproved(w.db, sha)).toBe(true)
   expect(onto('refs/heads/main')).toEqual([])
   expect(headApproved(w.db, 'f'.repeat(40))).toBe(false)
@@ -194,7 +194,7 @@ test('a round on an open pr pushes its branch, opening no other', async () => {
   rewind(w.db, 1, 4)
   for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, () => pr(), wire)
   expect(sent).toEqual([`send src ${tip(w.root, 1)}:refs/heads/widget-12-a1-next`, 'rehearse caliperforge/widget widget-12-a1-next'])
-  approveCard(w.db, w.root, 'plan', 1)
+  approveCard(w.db, w.root, 'plan', 1, 'ceo')
   advance(w.db, plan(w.db, 1), 8)
   expect(push(w.db, w.root, plan(w.db, 1), wire)).toMatchObject({ outcome: 'pass', note: `pushed widget-12-a1 onto ${URL}` })
   expect(sent.slice(2)).toEqual(['send src widget-12-a1', 'unrehearse caliperforge/widget widget-12-a1-next'])
@@ -218,7 +218,7 @@ test('a fork -next HEAD lacks is folded onto, never forced', { timeout: 90_000 }
   for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, () => pr(), wire)
   expect(sent).toEqual([`send src ${tip(w.root, 1)}:refs/heads/widget-12-a1-next`, 'rehearse caliperforge/widget widget-12-a1-next'])
   git(['merge-base', '--is-ancestor', stale, 'HEAD'])
-  approveCard(w.db, w.root, 'plan', 1)
+  approveCard(w.db, w.root, 'plan', 1, 'ceo')
   advance(w.db, plan(w.db, 1), 8)
   published(w, wire)
   expect(sent.slice(2)).toEqual(['send src widget-12-a1', 'unrehearse caliperforge/widget widget-12-a1-next'])
@@ -258,7 +258,7 @@ test('D1 D2 D3 pre-pr rounds move -next; push sends the branch', async () => {
   expect(git(['log', '--format=%H', 'widget-12-a1']).split('\n').filter((h) => tips.includes(h))).toEqual([])
   const held = (): string => next(w.root, plan(w.db, 1), 'acme/widget', wire).tip
   expect([held(), held()]).toEqual([tip(w.root, 1), tip(w.root, 1)])
-  approveCard(w.db, w.root, 'plan', 1)
+  approveCard(w.db, w.root, 'plan', 1, 'ceo')
   advance(w.db, plan(w.db, 1), 8)
   const before = sent.length
   published(w, wire)
@@ -406,9 +406,20 @@ test('an approval that cannot settle its row records nothing', async () => {
   writeFileSync(path, 'RULING batch.card = change_text_and_marks\n')
   close(w.db, path, () => null)
   const id = Number(openProposals(w.db)[0]?.id)
-  expect(() => approveCard(w.db, w.root, 'proposal', id)).toThrow(/names no issue/)
+  expect(() => approveCard(w.db, w.root, 'proposal', id, 'ceo')).toThrow(/names no issue/)
   expect(approvalsOf(w.db, 'proposal')).toEqual([])
   expect(openProposals(w.db)).toHaveLength(1)
+})
+
+test('D3 signing a plan logs one signoff event with who signed', async () => {
+  const w = await atBatch()
+  refuseCard(w.db, w.root, 'plan', 1, 'not_yet', 'ceo')
+  approveCard(w.db, w.root, 'plan', 1, 'coo')
+  expect(eventsOf(w.db, 1, 'signoff')).toEqual([
+    { actor: 'ceo', outcome: 'refuse', message: 'not_yet' },
+    { actor: 'coo', outcome: 'pass', message: headDigest(headOf(w.root, 1).sha).slice(0, 12) },
+  ])
+  expect(approvalsOf(w.db, 'plan')).toEqual([{ decision: 'refused', reason: 'not_yet' }, { decision: 'approved', reason: null }])
 })
 
 test('a ready plan with no checkout stays listed, unsignable', async () => {
@@ -416,7 +427,8 @@ test('a ready plan with no checkout stays listed, unsignable', async () => {
   putPlan(w.db, SECOND)
   const blind = batch(w.db, w.root).find((c) => c.id === 2)
   expect(blind).toMatchObject({ kind: 'plan', digest: '', marks: [{ name: 'bytes on the branch', ok: false }] })
-  expect(() => approveCard(w.db, w.root, 'plan', 2)).toThrow(/no bytes on its branch/)
+  expect(() => approveCard(w.db, w.root, 'plan', 2, 'ceo')).toThrow(/no bytes on its branch/)
+  expect(eventsOf(w.db, 2, 'signoff')).toEqual([])
   expect(() => headOf(w.root, 2)).toThrow(/has no checkout/)
   expect(push(w.db, w.root, plan(w.db, 2), watched([], w.root, 2))).toMatchObject({ outcome: 'refuse' })
 })
@@ -488,9 +500,9 @@ test('session close writes only proposals; approval makes a row', async () => {
   expect(rows[0]?.evidence).toBe(`${path}:1`)
   expect(rows[0]?.match_ruling_id).not.toBeNull()
 
-  approveCard(w.db, w.root, 'proposal', Number(rows[0]?.id))
+  approveCard(w.db, w.root, 'proposal', Number(rows[0]?.id), 'ceo')
   expect(latest(w.db, 'push.digest')).toEqual({ value: 'approval_matches_head_and_the_hook', issue_no: 42 })
-  refuseCard(w.db, w.root, 'proposal', Number(rows[1]?.id), 'not_now')
+  refuseCard(w.db, w.root, 'proposal', Number(rows[1]?.id), 'not_now', 'ceo')
   expect(openProposals(w.db).map((r) => r.class)).toEqual(['ordering', 'world_fact', 'measurement'])
   expect(approvalsOf(w.db, 'proposal')).toEqual([{ decision: 'approved', reason: null }, { decision: 'refused', reason: 'not_now' }])
 })
@@ -520,7 +532,7 @@ test('a rewound lap needs a fresh card, not the first approval', async () => {
   expect(await lap(w)).toEqual([])
   expect(batch(w.db, w.root).map((c) => c.id)).toEqual([1])
 
-  approveCard(w.db, w.root, 'plan', 1)
+  approveCard(w.db, w.root, 'plan', 1, 'ceo')
   expect(approvalsOf(w.db, 'plan')).toHaveLength(1)
   expect(deliverablesOf(w.db, 1).at(-1)?.state).toBe('approved')
   advance(w.db, plan(w.db, 1), 8)
@@ -532,7 +544,7 @@ test('an approved item said again later changes nothing', async () => {
   const first = `${w.root}/first.md`
   writeFileSync(first, 'WORK batch.card = show_the_change_and_the_marks\n')
   const made = close(w.db, first, () => 42)
-  approveCard(w.db, w.root, 'proposal', Number(made[0]))
+  approveCard(w.db, w.root, 'proposal', Number(made[0]), 'ceo')
   const again = `${w.root}/again-later.md`
   writeFileSync(again, '\n\nWORK batch.card = show_the_change_and_the_marks\n')
   expect(close(w.db, again, () => 42)).toEqual([])
@@ -552,14 +564,14 @@ test('review then merge on a later tick is still one escape', async () => {
 
 async function pushed(): Promise<World> {
   const w = await atBatch()
-  approveCard(w.db, w.root, 'plan', 1)
+  approveCard(w.db, w.root, 'plan', 1, 'ceo')
   published(w, watched([], w.root, 1))
   return w
 }
 
 function published(w: World, wire: Wire): Outcome {
   push(w.db, w.root, plan(w.db, 1), wire)
-  approvePublish(w.db, w.root, 1)
+  approvePublish(w.db, w.root, 1, 'ceo')
   return push(w.db, w.root, plan(w.db, 1), wire)
 }
 

@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
@@ -22,10 +22,15 @@ function mine(): World {
 
 async function stray(handback: string): Promise<{ w: World; rails: unknown }> {
   const w = mine()
+  return { w, rails: await strayed(w, handback) }
+}
+
+async function strayed(w: World, handback: string, before = (): unknown => null): Promise<unknown> {
   for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(handback))
   mkdirSync(join(srcDir(w.root, ID), 'cli'), { recursive: true })
   writeFileSync(join(srcDir(w.root, ID), 'cli/extra.ts'), 'export const extra = 1\n')
-  return { w, rails: (await tick(w.db, w.root, stub(handback)))[0] }
+  before()
+  return (await tick(w.db, w.root, stub(handback)))[0]
 }
 
 test('listed, beside a listed file, or filled by step 3', () => {
@@ -58,6 +63,19 @@ test('an unowned stray refuses at the rails, before any review, naming its row; 
   writeFileSync(join(srcDir(w.root, ID), 'cli/extra.ts'), 'export const extra = 1\n')
   expect((await tick(w.db, w.root, stub(OWNS)))[0]).toMatchObject({ plan: ID, step: 3, name: 'rails', outcome: 'pass' })
   expect(plan(w.db, ID).step).toBe(4)
+})
+
+test('#498a D5 with no profiles, an unowned stray is refused by the write fence alone', async () => {
+  const w = mine()
+  rmSync(join(w.root, 'profiles'), { recursive: true })
+  const rails = await strayed(w, CARRIED)
+  expect(rails).toMatchObject({ plan: ID, step: 3, name: 'rails', outcome: 'refuse', spans: ['cli/extra.ts:1 authority.write_paths'] })
+})
+
+test('#498a D6 a plan with a target reads its target repo\'s profile, not ours', async () => {
+  const w = mine()
+  const rails = await strayed(w, CARRIED, () => w.db.prepare('UPDATE plans SET target_id = 1 WHERE id = ?').run(ID))
+  expect(rails).toMatchObject({ plan: ID, step: 3, name: 'rails', outcome: 'refuse', spans: ['cli/extra.ts:1 authority.write_paths'] })
 })
 
 test('#191 D3 a failing test is returned only when unlisted and importing a changed path', () => {

@@ -1,0 +1,7 @@
+builder: typescript_specialist
+rails:
+  digests: true
+  ratchet: true
+  fence: true
+  tight_code: true
+  checks: ci

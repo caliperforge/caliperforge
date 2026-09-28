@@ -188,7 +188,7 @@ const opened = new Map<string, Db>()
 export function world(pulse: 'warm' | 'cold' = 'warm', day = new Date().toISOString().slice(0, 10),
   files: Record<string, string> = TYPESCRIPT): World {
   const root = mkdtempSync(join(tmpdir(), 'cf-seq-'))
-  for (const dir of ['rules', 'seats', 'reviews', 'rails']) cpSync(join(repo, dir), join(root, dir), { recursive: true })
+  for (const dir of ['rules', 'seats', 'reviews', 'rails', 'profiles']) cpSync(join(repo, dir), join(root, dir), { recursive: true })
   remotes(root, files)
   const db = fresh(join(repo, 'schema'))
   opened.set(root, db)

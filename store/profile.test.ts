@@ -52,7 +52,21 @@ test('D1 the commit and PR rules parse, and a wrong issue_ref or ai_trailer is r
   expect(() => profile(yes, 'acme/widget')).toThrow(join(yes, 'profiles/acme/_org.yml'))
 })
 
-test('D3 a field outside the eleven, or checks that are not string lists, is refused naming the file', () => {
+test('#498a D1 our two repos name their builder and rails', () => {
+  expect(profile(REPO, 'caliperforge/caliperforge')).toEqual({ builder: 'typescript_specialist',
+    rails: { digests: true, ratchet: true, fence: true, tight_code: true, checks: 'ci' } })
+  expect(profile(REPO, 'caliperforge/atelier')).toEqual({ builder: 'swift_specialist',
+    rails: { digests: false, ratchet: false, fence: false, tight_code: true, checks: 'local' } })
+})
+
+test('#498a D2 a rail outside the five, a rail that is not a boolean, or checks on github, is refused naming the file', () => {
+  for (const rails of ['{ lint: true }', '{ fence: sure }', '{ checks: github }']) {
+    const dir = root({ 'widget.yml': `rails: ${rails}\n` })
+    expect(() => profile(dir, 'acme/widget')).toThrow(join(dir, 'profiles/acme/widget.yml'))
+  }
+})
+
+test('D3 a field outside the thirteen, or checks that are not string lists, is refused naming the file', () => {
   const extra = root({ '_org.yml': 'commit: x\nlabels: [bug]\n' })
   expect(() => profile(extra, 'acme/widget')).toThrow(join(extra, 'profiles/acme/_org.yml'))
   const checks = root({ '_org.yml': 'checks:\n  go: lint\n' })

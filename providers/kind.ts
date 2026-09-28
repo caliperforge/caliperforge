@@ -1,4 +1,4 @@
-import type { TerminalReason } from '@anthropic-ai/claude-agent-sdk'
+import type { McpSdkServerConfigWithInstance, TerminalReason } from '@anthropic-ai/claude-agent-sdk'
 import type { Reading } from '../store/lanes.ts'
 
 export interface Refusal {
@@ -21,6 +21,7 @@ export interface Packet {
   refuse: (path: string) => Refusal | null
   /** #274: folders outside the checkout this run may read, never write. */
   reads?: string[]
+  servers?: Record<string, McpSdkServerConfigWithInstance>
 }
 
 /** `stop_reason` is the SDK's `terminal_reason` verbatim, so the refire keys on the SDK's own spelling. */

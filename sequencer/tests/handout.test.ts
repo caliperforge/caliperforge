@@ -6,6 +6,8 @@ import type { Packet, Provider } from '../../providers/kind.ts'
 import { pointed, STANDING } from '../brief.ts'
 import { handout, WHOLE } from '../handout.ts'
 import { tick } from '../index.ts'
+import { PlanRow } from '../../store/plans.ts'
+import { rule } from '../rule.ts'
 import { stopped } from '../seat.ts'
 import { put, ruled } from '../workspace.ts'
 import { HANDOUT } from './bases.ts'
@@ -110,6 +112,17 @@ test('D1 a ruling appended to ask.md after the build reaches the next builder pa
   })
   for (let at = 0; at < 5 && packets.length < 2; at += 1) await tick(w.db, w.root, provider)
   expect(packets[1]?.prompt).toContain('# What the ask holds beyond this brief\n\n## Ruling\n\nuse bye()')
+  expect(packets[0]?.prompt).not.toContain('use bye()')
+})
+
+test('D2 a fixer answer ruled into issue.md after the build reaches the next builder packet', async () => {
+  const w = briefed()
+  const packets: Packet[] = []
+  const provider = builds(packets, (cwd) => { writeFileSync(join(cwd, 'src/extra.ts'), 'export const extra = 1\n') })
+  for (let at = 0; at < 5 && packets.length < 1; at += 1) await tick(w.db, w.root, provider)
+  expect(rule(w.db, w.root, PlanRow.parse(w.db.prepare('SELECT * FROM plans WHERE id = 1').get()), 'fixer', 'use bye()')).toBe('issue.md')
+  for (let at = 0; at < 5 && packets.length < 2; at += 1) await tick(w.db, w.root, provider)
+  expect(packets[1]?.prompt).toMatch(/## Answer from the fixer \(\d{4}-\d{2}-\d{2}\)\n\nuse bye\(\)\n\n## Standing/)
   expect(packets[0]?.prompt).not.toContain('use bye()')
 })
 

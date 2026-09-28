@@ -15,7 +15,8 @@ The mechanical things that stop a job without being anyone's decision:
 - a file the change needs that the brief's file list is missing (name it under `add_files`);
 - a question the brief writer or builder asked that the checkout, the brief, the ticket, the open jobs or the
   machine's schema below answers, including the order of jobs and what a field or column in our own tools
-  means (write the answer at the end of `ask.md` under `## Answer from the fixer`, then `then: return`);
+  means (put the answer under `answer:` in the closing fence, on one line of at most 1,200 characters, pasting
+  every fact it relies on, then `then: return`);
 - a generated file that was edited by hand, when the repo's generator is not yours to run: put back exactly what
   the generator wrote, from `git -C src log` or the CI log in the stop, and nothing else;
 - a `base.sha` that lags a merge from main made in `src`, so the checks judge files the job never touched

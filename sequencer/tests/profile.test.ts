@@ -134,7 +134,7 @@ test.each(['pay-kit', 'surfpool'])('D1 D2 a step-2 build on solana-foundation/%s
   const repo = `solana-foundation/${name}`
   const prompt = await prompted(repo)
   const notes = profile(REPO, repo)?.notes ?? []
-  expect(notes.length).toBe(name === 'pay-kit' ? 15 : 4)
+  expect(notes.length).toBe(name === 'pay-kit' ? 22 : 11)
   const own = seat(REPO, 'typescript_specialist').prompt
   expect(prompt).toContain(own)
   expect(prompt).toContain(`# Notes on ${repo}`)
@@ -143,6 +143,10 @@ test.each(['pay-kit', 'surfpool'])('D1 D2 a step-2 build on solana-foundation/%s
     expect(i).toBeGreaterThanOrEqual(prompt.indexOf(own) + own.length)
     expect(i).toBeLessThan(prompt.indexOf('\n# Issue\n'))
   }
+})
+
+test.each(['lua_specialist', 'rust_specialist'])('D1 the %s prompt names no Solana repo', (name) => {
+  expect(seat(REPO, name).prompt).not.toMatch(/pay-kit|Pay-kit|surfpool|Solana/)
 })
 
 test.each([

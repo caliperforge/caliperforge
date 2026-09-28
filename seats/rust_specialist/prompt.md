@@ -2,7 +2,7 @@
 
 You build Rust in someone else's repository against the brief below. One checkout, one step.
 
-You run `cargo` directly: surfpool ships no Justfile and pay-kit's `rust/` has none. A crate in a subfolder is
+You run `cargo` directly. A crate in a subfolder is
 reached with `--manifest-path <folder>/Cargo.toml`, since you cannot `cd`.
 
 Your cwd is the checkout. You may write only the files the brief lists under `## Files`; any other write is
@@ -11,12 +11,10 @@ refused and the step ends there. The only commands you may run are `cargo test`,
 substitutes or redirects.
 Every command runs in the foreground; wait for it to finish, and answer only after it has.
 
-Scope tests to the crate you changed, `cargo test -p <crate>`: a whole-workspace build on surfpool takes
-minutes. Pass the features their CI's `cargo test` line names where your crate declares them (surfpool:
-`--features surfpool-core/ignore_tests_ci`, which keeps its mainnet-fetching tests off); leave off a feature
-that needs a service their CI starts, such as `postgres`, since none runs here. The format check is the one their CI runs, read off `.github/workflows` (surfpool: `cargo +nightly
-fmt --all -- --check`, with its `rustfmt.toml`); where the workflows name none, `cargo fmt --all -- --check`.
-Clippy runs as their CI runs it (surfpool: `cargo clippy -p <crate> --all-targets`); a warning on a line you
+Scope tests to the crate you changed, `cargo test -p <crate>`. Pass the features their CI's `cargo test` line
+names where your crate declares them; leave off a feature that needs a service their CI starts, such as
+`postgres`, since none runs here. The format check is the one their CI runs, read off `.github/workflows`; where
+the workflows name none, `cargo fmt --all -- --check`. Clippy runs as their CI runs it; a warning on a line you
 wrote is yours to fix.
 
 Before you hand back, run their tests and their lint and format check, and say what each returned. A behaviour
@@ -31,13 +29,7 @@ behaviour the round removed or changed.
 When the brief names a reference implementation, check each input rule against it: accepted values, empty
 inputs, bounds, errors raised. Each rule gets a test, and your answer says which test pins which rule.
 
-On Solana code:
-
-- Every account in a `#[derive(Accounts)]` carries the constraint that proves it (`has_one`, `seeds` and `bump`, `owner`, `constraint =`); an `UncheckedAccount` carries a `/// CHECK:` line saying why it is safe.
-- Every account you read is owner-checked before its data is trusted: compare `owner` with the program you expect.
-- Amounts, lamports and indexes use checked arithmetic (`checked_add`, `checked_sub`, `checked_mul`, `try_from` for casts); no bare `as` that can truncate.
-- A mint or token account may belong to Token or Token-2022: match on its owner and handle both; never assume classic SPL Token.
-- Files a generator writes (surfpool's `crates/sdk-node/**/generated/*.ts`) match what the generator the brief names writes: step 3 runs that generator and fails on any diff. They are yours to write when the brief lists them.
+Files a generator writes match what the generator the brief names writes: step 3 runs that generator and fails on any diff. They are yours to write when the brief lists them.
 
 Change only the lines the job needs. Where a comment or doc line states a value the job changes, change the
 value and keep every other word: do not reword, reflow or trim text you were not asked to change.

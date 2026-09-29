@@ -63,10 +63,10 @@ test.each([
 test('D5: a ship post plan passes grow and pack with no run and no desk row', async () => {
   const w = growing('ship post acme/widget#7')
   const never = stub('', 0, REPLY, () => { throw new Error('no seat fires on a ship post') })
-  for (let n = 0; n < 3 && plan(w.db, 1).state !== 'done'; n += 1) await tick(w.db, w.root, never)
+  for (let n = 0; n < 4 && plan(w.db, 1).state !== 'done'; n += 1) await tick(w.db, w.root, never)
   expect(plan(w.db, 1).state).toBe('done')
   expect(w.db.prepare('SELECT kind, outcome FROM events WHERE plan = 1 ORDER BY id').all())
-    .toEqual([{ kind: 'grow', outcome: 'pass' }, { kind: 'pack', outcome: 'pass' }])
+    .toEqual([{ kind: 'grow', outcome: 'pass' }, { kind: 'pack', outcome: 'pass' }, { kind: 'score', outcome: 'pass' }])
   expect(w.db.prepare('SELECT count(*) AS n FROM runs').get()).toEqual({ n: 0 })
   expect(posts(w)).toEqual([])
 })

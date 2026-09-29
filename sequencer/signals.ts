@@ -105,12 +105,15 @@ export function daily(db: Db, now: Date): void {
   file(db, `daily ${day}`, null, now, 'daily clock', day)
 }
 
-/** The week's growth comms plan, filed once on local Thursday on a comms lane someone left on. */
+const WEEKLY: Record<number, string | undefined> = { 1: 'scorecard', 4: 'growth' }
+
+/** The week's scorecard and growth comms plans, filed once on local Monday and Thursday on a comms lane someone left on. */
 export function weekly(db: Db, now: Date): void {
   const local = new Date(now.getTime() + zone(db) * 60000)
-  if (local.getUTCDay() !== 4 || !commsOn(db)) return
+  const kind = WEEKLY[local.getUTCDay()]
+  if (kind === undefined || !commsOn(db)) return
   const day = local.toISOString().slice(0, 10)
-  file(db, `growth ${day}`, null, now, 'weekly clock', day)
+  file(db, `${kind} ${day}`, null, now, 'weekly clock', day)
 }
 
 /** From Friday 18:00 local, a Monday-to-Sunday week with no weekly post on the desk raises one card and one inbox event. */

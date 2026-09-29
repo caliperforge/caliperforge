@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import type { Read } from '../cli/gh.ts'
-import { LANE, LANES, laneOf, priorityOf } from '../cli/plan.ts'
 import type { Db } from './index.ts'
+import { LANE, LANES, laneOf, priorityOf } from './lanes.ts'
 
 export const HISTORY = 5000
 

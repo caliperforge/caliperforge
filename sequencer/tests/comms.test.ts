@@ -8,7 +8,7 @@ import { tick } from '../index.ts'
 import { FORK, get, put } from '../workspace.ts'
 import { plan, reads, world, type World } from './world.ts'
 
-const NAMES = ['gather', 'draft', 'facts', 'text_review', 'desk', 'publish', 'capture', 'grow', 'pack']
+const NAMES = ['gather', 'draft', 'facts', 'text_review', 'desk', 'publish', 'capture', 'grow', 'pack', 'score']
 
 const refusal = (w: World, blip: number, at = new Date().toISOString().replace('T', ' ').slice(0, 19)): number =>
   Number(w.db.prepare(`INSERT INTO refusals (plan, step, fingerprint, diff, blip, at) VALUES (1, 0, ?, NULL, ?, ?)`)
@@ -30,7 +30,7 @@ const clocked = (): World => {
 }
 
 const dailies = (w: World): unknown[] =>
-  w.db.prepare("SELECT title, state FROM plans WHERE template = 'comms' ORDER BY id").all()
+  w.db.prepare("SELECT title, state FROM plans WHERE template = 'comms' AND title LIKE 'daily %' ORDER BY id").all()
 
 const titled = (w: World, id: number, title: string | null): unknown =>
   w.db.prepare('UPDATE plans SET title = ? WHERE id = ?').run(title, id)
@@ -62,7 +62,7 @@ test('D2 D7 D6: a comms plan ticks gather through capture to done, no seat or ra
     VALUES (2, 'daily', 'site', 'proof', 'The day', 'What moved', 'One job landed.', 'The whole day', '[]', '[]', ?, ?)`).run(today, today)
   put(w.root, 1, 'fence.json', JSON.stringify(fenced()))
   put(w.root, 1, 'draft.md', `# The day\n\nOne job was refused. [refusal:${String(refusal(w, 0))}]\n`)
-  for (let n = 0; n < 10 && plan(w.db, 1).state !== 'done'; n += 1) await tick(w.db, w.root, never)
+  for (let n = 0; n < 11 && plan(w.db, 1).state !== 'done'; n += 1) await tick(w.db, w.root, never)
   expect(plan(w.db, 1).state).toBe('done')
   expect(w.db.prepare('SELECT kind, outcome FROM events WHERE plan = 1 ORDER BY id').all())
     .toEqual(NAMES.map((kind) => ({ kind, outcome: 'pass' })))

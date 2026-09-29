@@ -72,6 +72,12 @@ test('the prompt keeps views on plain values and asks for no #Preview', () => {
   expect(prompt).toContain('a view takes plain values')
 })
 
+test('D1: a behaviour is tested on its service or model', () => {
+  const prompt = seat(root, SEAT).prompt.replace(/\s+/g, ' ')
+  expect(prompt).toContain('Show a behaviour with a test on the service or model that produces it: the rows, the values, the plan a row opens.')
+  expect(prompt).toContain('Write an accessibility-tree UI test only when the behaviour is the control itself (a button exists and is labelled), at most one per screen.')
+})
+
 test('write_paths admit the app and its tests and refuse everything beside them', () => {
   const paths = seat(root, SEAT).manifest.write_paths
   expect(refuse(root, paths, 'Atelier/Views/NowView.swift')).toBeNull()

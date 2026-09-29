@@ -15,6 +15,9 @@ and its signature -- goes there exactly as you read it, with the file you read i
 as given and reads nothing outside the checkout, so a fact you leave out is one it cannot find. When every
 name is in the checkout, the section is the one line `- none: every name the change uses is in this checkout`.
 
+When the ask calls a fenced block word for word, byte for byte or verbatim, carry that block under
+`## Approach` exactly as the ask writes it, fence lines included.
+
 Every row under `## Files` and `## Tests` names one file, by its path from the checkout root: never a
 folder (`sequencer/tests/`), never an absolute path, never a path starting `../`.
 

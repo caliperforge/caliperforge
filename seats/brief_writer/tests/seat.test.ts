@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { Seat, rules, seat } from '../../../runner/rules.ts'
+import { shape } from '../../../sequencer/brief.ts'
 
 const root = join(import.meta.dirname, '../../..')
 
@@ -81,6 +82,34 @@ test('the prompt states the path and length rules the brief check refuses on', (
     'The brief is at most 100 lines: count them before you answer.',
     'A `## Files` row on a file over 300 lines names the block it changes as `path:start-end`.',
   ]) expect(prompt).toContain(rule)
+})
+
+test('the prompt carries a word-for-word block under Approach', () => {
+  expect(seat(root, 'brief_writer').prompt.replace(/\s+/g, ' ')).toContain(
+    'When the ask calls a fenced block word for word, byte for byte or verbatim, carry that block under `## Approach` exactly as the ask writes it, fence lines included.',
+  )
+})
+
+const fixture = (name: string): string => readFileSync(join(import.meta.dirname, name), 'utf8')
+const ask = fixture('verbatim-ask.md')
+const block = '```yaml\nseat: brief_writer\neffort: high\n```'
+const carrying = (copy: string): string => fixture('brief.md').replace('\n## Settled facts', `\n${copy}\n\n## Settled facts`)
+
+test('shape refuses a brief that drops the word-for-word block', () => {
+  expect(shape(fixture('brief.md'), ask, root)?.span).toBe('seat: brief_writer')
+})
+
+test('shape refuses the block with one byte changed', () => {
+  expect(shape(carrying(block.replace('high', 'low')), ask, root)?.span).toBe('seat: brief_writer')
+  expect(shape(carrying(block.replace('```yaml', '```')), ask, root)?.span).toBe('seat: brief_writer')
+})
+
+test('shape passes the block copied byte for byte', () => {
+  expect(shape(carrying(block), ask, root)).toBeNull()
+})
+
+test('a block the ask does not call word for word is not demanded', () => {
+  expect(shape(fixture('brief.md'), ask.replace('word for word', 'as below'), root)).toBeNull()
 })
 
 test('D2: an Atelier brief tests services, not the tree', () => {

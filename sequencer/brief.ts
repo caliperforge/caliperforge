@@ -4,6 +4,7 @@ import { parse } from 'yaml'
 import { z } from 'zod'
 import type { PlanFile } from '../store/files.ts'
 import { WHOLE } from './handout.ts'
+import { kept } from './verbatim.ts'
 
 const CEILING = 100
 
@@ -177,7 +178,7 @@ export function shape(brief: string, ask: string, src: string): Refused | null {
   const title = titleOf(brief)
   if (title === null || title !== titleOf(ask)) return { span: '# <title>', reason: "the title is not the ask's" }
   const checks: ((b: string) => Refused | null)[] =
-    [order, empty, carried, cases, caps, folders, forbidden, (b) => shared(b, src), (b) => paths(b, src), (b) => ranged(b, src)]
+    [order, empty, carried, cases, caps, folders, forbidden, (b) => shared(b, src), (b) => paths(b, src), (b) => ranged(b, src), (b) => kept(b, ask)]
   for (const check of checks) {
     const refused = check(brief)
     if (refused !== null) return refused

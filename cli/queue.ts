@@ -7,7 +7,7 @@ import { decide } from '../store/approvals.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { templatePriority } from '../store/lanes.ts'
-import type { Holder } from '../store/plans.ts'
+import { end, type Holder } from '../store/plans.ts'
 import { profile } from '../store/profile.ts'
 import { latest } from '../store/rulings.ts'
 import { claimed, gh, implemented, issue as readIssue, lastMerger, WINDOW, type Issue, type Read } from './gh.ts'
@@ -169,7 +169,7 @@ export function approve(db: Db, root: string, id: number, pipe: string, by: Hold
     checkout(root, plan, t.repo, branchOf(t.repo, t.issue_no, 1, t.part))
     const says = vetted(db, root, plan, id, check)
     if (says !== null) {
-      db.prepare("UPDATE plans SET state = 'refused' WHERE id = ?").run(plan)
+      end(db, plan, 'refused')
       throw new Error(`target ${String(id)} refused: ${says}`)
     }
   }

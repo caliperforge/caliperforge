@@ -18,6 +18,9 @@ name is in the checkout, the section is the one line `- none: every name the cha
 Every row under `## Files` and `## Tests` names one file, by its path from the checkout root: never a
 folder (`sequencer/tests/`), never an absolute path, never a path starting `../`.
 
+`## Tests` for an Atelier ticket names service and model tests, and names an accessibility-tree test only
+for a control.
+
 A file you read from the machine's own tree for context (an Atelier brief reading `schema/` or `cli/`) is
 not in the checkout: what you read there goes under `## Settled facts`, never under `## Files`.
 

@@ -1,8 +1,9 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { z } from 'zod'
 import { landed, type Landed } from '../cli/batch.ts'
 import { ours } from '../cli/gh.ts'
+import { record, ticketOf } from '../cli/inbox.ts'
 import type { Provider } from '../providers/kind.ts'
 import type { Outcome } from '../sequencer/kind.ts'
 import { prose } from '../sequencer/prose.ts'
@@ -18,7 +19,7 @@ const row = (name: string, step: number): Step =>
   ({ step, name, seat: DEFAULT_BUILDER, fires: 'kernel', runs: name, gate: false, writes_verdict: false, verdict_gate: null })
 
 /** A merge signal opens one of these. P7 fills the write-up and its voice fixtures. */
-export const steps: Step[] = ['gather', 'draft', 'facts', 'text_review', 'desk', 'publish', 'capture', 'grow', 'pack'].map((name, i) =>
+export const steps: Step[] = ['gather', 'draft', 'facts', 'text_review', 'desk', 'publish', 'capture', 'grow', 'pack', 'score'].map((name, i) =>
   name === 'grow' ? { ...row(name, i), seat: 'growth_lead', fires: 'seat', runs: 'growth_lead' } : row(name, i))
 
 export function gather(db: Db, root: string, plan: PlanRow): Outcome {
@@ -92,13 +93,13 @@ export function desk(db: Db, root: string, plan: PlanRow): Outcome {
   return { outcome: 'pass', spans: [], note: `desk_posts ${String(plan.id)} in proof for ${work}` }
 }
 
-function growth(db: Db, plan: PlanRow): string | null {
+function titled(db: Db, plan: PlanRow, kind: string): string | null {
   const { title } = db.prepare('SELECT title FROM plans WHERE id = ?').get(plan.id) as { title: string | null }
-  return title?.startsWith('growth ') === true ? title : null
+  return title?.startsWith(`${kind} `) === true ? title : null
 }
 
 export async function grow(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
-  if (growth(db, plan) === null) return { outcome: 'pass', spans: [], note: 'not a growth plan' }
+  if (titled(db, plan, 'growth') === null) return { outcome: 'pass', spans: [], note: 'not a growth plan' }
   const fired = await ran(db, root, plan, step, provider, `# packet.json\n\n${get(root, plan.id, 'packet.json')}`, false)
   if (fired.ended !== 'completed') return { outcome: 'refuse', spans: [fired.stop_reason ?? 'seat.exit'], note: `${step.runs} ${fired.ended}` }
   put(root, plan.id, 'growth.md', fired.text)
@@ -118,7 +119,7 @@ const Pack = z.object({
 })
 
 export function pack(db: Db, root: string, plan: PlanRow): Outcome {
-  const title = growth(db, plan)
+  const title = titled(db, plan, 'growth')
   if (title === null) return { outcome: 'pass', spans: [], note: 'not a growth plan' }
   const fence = CLOSING.exec(maybe(root, plan.id, 'growth.md') ?? '')
   const got = Pack.safeParse(fence === null ? null : prose(fence[1] ?? '', ['topic']))
@@ -129,6 +130,72 @@ export function pack(db: Db, root: string, plan: PlanRow): Outcome {
     VALUES (?, 'growth', 'pack', 'proof', ?, '', ?, '[]', '[]', ?, ?, datetime('now'))`)
     .run(plan.id, topic, JSON.stringify({ notes, replies, partners }), work, new Date().toISOString().slice(0, 10))
   return { outcome: 'pass', spans: [], note: `desk_posts ${String(plan.id)} pack in proof for ${work}` }
+}
+
+export const SCORECARD_COLUMNS = { subscribers: 'Subscribers', open_rate: 'Open rate', sources: 'Source' }
+
+const STATS = '.cf/growth/stats'
+
+const shift = (day: string, days: number): string => new Date(Date.parse(day) + days * 86400000).toISOString().slice(0, 10)
+
+interface Stats { subscribers: number; open_rate: number; sources: Record<string, number> | 'not in export'; swaps: number | null }
+
+function stats(root: string, day: string): Stats | Outcome {
+  const [head = [], ...rows] = readFileSync(join(root, STATS, `${day}.csv`), 'utf8').split('\n').filter((l) => l.trim() !== '')
+    .map((l) => l.split(',').map((cell) => cell.trim()))
+  const missing = [SCORECARD_COLUMNS.subscribers, SCORECARD_COLUMNS.open_rate].filter((h) => !head.includes(h))
+  if (missing.length > 0) return { outcome: 'refuse', spans: [`${STATS}/${day}.csv`], note: `${day}.csv has no ${missing.join(' or ')} column` }
+  const cell = (header: string): string => rows.at(-1)?.[head.indexOf(header)] ?? ''
+  const source = head.indexOf(SCORECARD_COLUMNS.sources)
+  const swaps = join(root, STATS, `${day}.swaps`)
+  return {
+    subscribers: Number(cell(SCORECARD_COLUMNS.subscribers)),
+    open_rate: Number(cell(SCORECARD_COLUMNS.open_rate).replace('%', '')),
+    sources: source === -1 ? 'not in export' : rows.map((r) => r[source] ?? '').filter((s) => s !== '')
+      .reduce<Record<string, number>>((n, s) => ({ ...n, [s]: (n[s] ?? 0) + 1 }), {}),
+    swaps: existsSync(swaps) ? Number(readFileSync(swaps, 'utf8').trim()) : null,
+  }
+}
+
+type Card = Stats & { post_by_friday: 'y' | 'n'; notes_ready: number }
+
+function card(db: Db, week: string, got: Stats): Card & { change: Record<string, number | null> | null } {
+  const post = db.prepare("SELECT 1 FROM desk_posts WHERE dest = 'substack' AND date(proof_at) BETWEEN ? AND ?").get(week, shift(week, 4))
+  const packs = db.prepare(`SELECT COALESCE(edited_body, body) AS body FROM desk_posts
+    WHERE kind = 'growth' AND dest = 'pack' AND work_date BETWEEN ? AND ?`).all(week, shift(week, 6)) as { body: string }[]
+  const notes = packs.reduce((n, p) => n + (JSON.parse(p.body) as { notes: string[] }).notes.length, 0)
+  const now: Card = { post_by_friday: post === undefined ? 'n' : 'y', notes_ready: notes, ...got }
+  const prior = db.prepare("SELECT body FROM desk_posts WHERE kind = 'scorecard' AND work_date = ?").get(shift(week, -7)) as { body: string } | undefined
+  const was = prior === undefined ? null : JSON.parse(prior.body) as Card
+  return { ...now, change: was === null ? null : {
+    subscribers: now.subscribers - was.subscribers, open_rate: now.open_rate - was.open_rate, notes_ready: now.notes_ready - was.notes_ready,
+    swaps: now.swaps === null || was.swaps === null ? null : now.swaps - was.swaps,
+  } }
+}
+
+export function score(db: Db, root: string, plan: PlanRow, step: Step): Outcome {
+  const title = titled(db, plan, 'scorecard')
+  if (title === null) return { outcome: 'pass', spans: [], note: 'not a scorecard plan' }
+  const week = shift(title.slice('scorecard '.length), -7)
+  const dir = join(root, STATS)
+  const day = (existsSync(dir) ? readdirSync(dir) : []).flatMap((f) => /^(\d{4}-\d{2}-\d{2})\.csv$/.exec(f)?.[1] ?? [])
+    .filter((d) => d >= week && d <= shift(week, 6)).sort().at(-1)
+  if (day === undefined) {
+    const note = `no stats CSV for week ${week}`
+    record(root, [{ at: new Date().toISOString(), plan: plan.id, ticket: ticketOf(db, plan.id), kind: 'late', step: step.step, name: step.name, note }])
+    return { outcome: 'pass', spans: [], note }
+  }
+  const got = stats(root, day)
+  if ('outcome' in got) return got
+  const body = card(db, week, got)
+  const { sources, swaps } = body
+  const dek = [`post ${body.post_by_friday}`, `${String(body.notes_ready)} Notes`, `swaps ${swaps === null ? 'not recorded' : String(swaps)}`,
+    `${String(body.subscribers)} subscribers`, `open rate ${String(body.open_rate)}`,
+    `sources ${typeof sources === 'string' ? sources : String(Object.keys(sources).length)}`].join(' · ')
+  db.prepare(`INSERT OR IGNORE INTO desk_posts (id, kind, dest, status, title, dek, body, sources, checks, work_date, written_date, proof_at)
+    VALUES (?, 'scorecard', 'scorecard', 'proof', ?, ?, ?, '[]', '[]', ?, ?, datetime('now'))`)
+    .run(plan.id, `scorecard/${week}`, dek, JSON.stringify(body), week, new Date().toISOString().slice(0, 10))
+  return { outcome: 'pass', spans: [], note: `desk_posts ${String(plan.id)} scorecard/${week} in proof` }
 }
 
 const FIELDS = ['title', 'dek', 'body'] as const

@@ -1,4 +1,5 @@
-import { notify, record as keep, type Event } from '../cli/inbox.ts'
+import type { Desk } from '../cli/gh.ts'
+import { all, notify, record as keep, type Event } from '../cli/inbox.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { hhmm, zone } from '../store/lanes.ts'
@@ -110,6 +111,25 @@ export function weekly(db: Db, now: Date): void {
   if (local.getUTCDay() !== 4 || !commsOn(db)) return
   const day = local.toISOString().slice(0, 10)
   file(db, `growth ${day}`, null, now, 'weekly clock', day)
+}
+
+/** From Friday 18:00 local, a Monday-to-Sunday week with no weekly post on the desk raises one card and one inbox event. */
+export function late(db: Db, root: string, board: Desk, now: Date): void {
+  const local = new Date(now.getTime() + zone(db) * 60000)
+  const dow = local.getUTCDay()
+  if (!(dow === 6 || dow === 0 || (dow === 5 && hhmm(db, now) >= '18:00'))) return
+  const since = (dow + 6) % 7
+  const day = (offset: number): string => new Date(local.getTime() + offset * 86400000).toISOString().slice(0, 10)
+  const monday = day(-since)
+  const posted = db.prepare("SELECT 1 FROM desk_posts WHERE kind = 'weekly' AND work_date BETWEEN ? AND ?")
+    .get(monday, day(6 - since))
+  const ticket = `week ${monday}`
+  if (posted !== undefined || all(root).some((e) => e.kind === 'late' && e.ticket === ticket)) return
+  const { url } = board.open('Weekly post not on the desk', `No weekly post is on the desk for the week of ${monday}.`)
+  const event: Event = { at: now.toISOString(), plan: 0, ticket, kind: 'late', step: 0, name: 'weekly',
+    note: `no weekly post on the desk: ${url}` }
+  keep(root, [event])
+  notify([event])
 }
 
 function commsOn(db: Db): boolean {

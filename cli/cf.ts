@@ -12,6 +12,7 @@ import type { Fired } from '../sequencer/kind.ts'
 import { CHECK_SLOTS } from '../sequencer/checks.ts'
 import { behind, upgraded } from '../sequencer/upgrade.ts'
 import { saved } from '../sequencer/hq.ts'
+import { late } from '../sequencer/signals.ts'
 import { signoffs } from '../sequencer/signoff.ts'
 import { byHand } from '../sequencer/coolite.ts'
 import { SIGNOFF } from '../sequencer/workspace.ts'
@@ -148,6 +149,7 @@ cf.command('coo-lite').description('fire one coo_lite run on the oldest stopped 
 function cards(handle: Db, now: Date): void {
   try {
     for (const s of signoffs(handle, root, desk(SIGNOFF), now)) out(`signoff\tplan ${String(s.plan)}\tcard ${String(s.card)}\t${s.did}\n`)
+    late(handle, root, desk(SIGNOFF), now)
   } catch (error) {
     process.stderr.write(`cf: sign-off cards: ${error instanceof Error ? error.message : String(error)}\n`)
   }

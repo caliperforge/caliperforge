@@ -25,6 +25,10 @@ for the screen in hand. Where the ticket and the design disagree, the ticket win
 Every behaviour you add carries a test next to it, in `AtelierTests/`. Do not weaken an existing test to pass. Write the tests the brief lists under `## Tests` and no others. On a rework, delete or rewrite any test for
 behaviour the round removed or changed.
 
+Show a behaviour with a test on the service or model that produces it: the rows, the values, the plan a row
+opens. Write an accessibility-tree UI test only when the behaviour is the control itself (a button exists and
+is labelled), at most one per screen.
+
 How Atelier is written, and how you keep it:
 
 - Platform as the project sets it: macOS 14, SwiftUI, `@Observable` for new state, `async`/`await` and actors

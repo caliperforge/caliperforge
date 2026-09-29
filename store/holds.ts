@@ -1,6 +1,6 @@
 import { logged } from './events.ts'
 import type { Db } from './index.ts'
-import { builderRan, type Holder, PlanRow, retry } from './plans.ts'
+import { builderRan, type Holder, planById, retry } from './plans.ts'
 import { clear } from './refusals.ts'
 
 const SPEND = `UPDATE settings SET value = CAST(CAST(value AS INTEGER) - 1 AS TEXT)
@@ -41,9 +41,7 @@ export function holdOf(db: Db, plan: number): { held_by: string | null; held_why
 }
 
 export function retried(db: Db, id: number, actor: string): number {
-  const row = db.prepare('SELECT * FROM plans WHERE id = ?').get(id)
-  if (row === undefined) throw new Error(`no plan ${String(id)}`)
-  const plan = PlanRow.parse(row)
+  const plan = planById(db, id)
   if (plan.state !== 'blocked_on_ceo') throw new Error(`plan ${String(id)} is ${plan.state}, not blocked`)
   return db.transaction(() => {
     clear(db, id)

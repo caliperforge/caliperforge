@@ -1,0 +1,26 @@
+checks:
+  rust: [format, test]
+notes:
+  - "Kora ships a Justfile: `just check` (cargo fmt --all -- --check, then cargo clippy -- -D warnings) must be clean; unit tests run as `cargo test -p kora-lib --lib <filter>` scoped to what you touched."
+  - "Run `just integration-test` only when the brief says the change touches validation, signing, fees or the RPC surface and a local validator is available; say in the handback when you could not run it."
+  - "Commit subjects and the PR title are Conventional Commits (`test:`, `fix:`, `feat:`): Kora's CHANGELOG is generated from them."
+  - "Do not update the Rust toolchain, Solana CLI or package-manager versions as part of another change."
+  - "Kora is a paymaster: any change to transaction validation, the fee payer policy, fee calculation or signer handling says in the PR what an attacker could submit and why the change does not let them move fee payer funds."
+  - "If a property or test you write FAILS against Kora's current code, that may be a fee-payer drain gap: stop, do not commit the reproducer, the failing seed or any `proptest-regressions` file, and hand back with `needs_ceo` naming the failing role. Kora takes these privately through SECURITY.md, never in a public PR."
+  - "A mutation proof, where an issue asks for one, is run and its output kept for the PR body: point one role at a different policy field, show the property failing, revert, show it passing."
+subject: conventional
+issue_ref: Fixes
+intake:
+  claim_first: true
+pr: >-
+  Kora's template, section for section: "## Linked issue" with "Fixes #<n>", "## What and why", "## Testing"
+  listing the commands run and their results (and the mutation proof where the issue asks for one), then
+  "## AI disclosure" with the second box checked.
+disclosure: >-
+  ## AI disclosure
+
+  - [x] AI tooling was used. Tool and extent: the change and its tests were written by Claude-based agents in
+  the CaliperForge pipeline and passed our automated code review and the checks above before I opened it.
+sources:
+  - CONTRIBUTING.md and .github/PULL_REQUEST_TEMPLATE.md of solana-foundation/kora
+  - justfile of solana-foundation/kora

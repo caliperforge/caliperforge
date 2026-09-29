@@ -91,6 +91,20 @@ test('D6 a repo with no file of its own reads the org file alone', () => {
   expect(Object.keys(profile(REPO, 'solana-foundation/other') ?? {}).sort()).toEqual(['commit', 'pr'])
 })
 
+test('kora parses with Conventional subjects, Fixes and claim_first', () => {
+  const org = profile(REPO, 'solana-foundation/other')
+  const kora = profile(REPO, 'solana-foundation/kora')
+  expect(kora).toMatchObject({ subject: 'conventional', issue_ref: 'Fixes', intake: { claim_first: true },
+    checks: { rust: ['format', 'test'] }, commit: org?.commit })
+  expect(Object.keys(kora ?? {}).sort()).toEqual(['checks', 'commit', 'disclosure', 'intake', 'issue_ref', 'notes', 'pr', 'sources', 'subject'])
+  expect(kora?.pr).not.toBe(org?.pr)
+  expect(kora?.pr).toMatch(/^Kora's template, section for section: .* with the second box checked\.$/)
+  expect(kora?.disclosure).toMatch(/^## AI disclosure\n- \[x\] AI tooling was used\. .* before I opened it\.$/)
+  expect(kora?.notes).toHaveLength(7)
+  expect(kora?.notes?.[0]).toMatch(/^Kora ships a Justfile/)
+  expect(kora?.notes?.[6]).toMatch(/^A mutation proof/)
+})
+
 test('both real repo profiles parse', () => {
   expect(profile(REPO, 'solana-foundation/surfpool')?.checks).toEqual({ rust: ['format', 'test', 'stage', 'generate', 'diff'] })
   expect(profile(REPO, 'solana-foundation/pay-kit')?.checks?.python).toEqual(['install', 'lint', 'typecheck', 'test'])

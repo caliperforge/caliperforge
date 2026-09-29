@@ -214,6 +214,11 @@ export function finish(db: Db, plan: PlanRow): void {
   db.prepare("UPDATE plans SET step = ?, state = 'done' WHERE id = ?").run(plan.step + 1, plan.id)
 }
 
+export function end(db: Db, plan: number, state: 'done' | 'refused' | 'halted', unwait = false): void {
+  db.prepare(unwait ? 'UPDATE plans SET state = ?, wait_reason = NULL WHERE id = ?' : 'UPDATE plans SET state = ? WHERE id = ?')
+    .run(state, plan)
+}
+
 /** A signal on a pushed PR puts the plan back on the review step it escaped; the head it was signed at is no longer the head. */
 export function rewind(db: Db, plan: number, step: number): void {
   db.prepare(`UPDATE plans SET step = ?, state = ${ENTER}, retries = 0, head_digest = NULL WHERE id = ?`)

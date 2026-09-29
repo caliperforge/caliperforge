@@ -10,7 +10,7 @@ import type { Db } from '../store/index.ts'
 import { wall } from '../store/lanes.ts'
 import { clear as unlease, take } from '../store/leases.ts'
 import { busy, current, idle } from '../store/now.ts'
-import { held, originRef, PlanRow, retry } from '../store/plans.ts'
+import { end, held, originRef, PlanRow, retry } from '../store/plans.ts'
 import { clear } from '../store/refusals.ts'
 import { pending } from '../store/transcript.ts'
 import { split, type Part } from './brief.ts'
@@ -177,11 +177,11 @@ function apply(db: Db, root: string, plan: PlanRow, m: Move, wire: Wire, now: Da
       return true
     case 'split':
       if (parted(db, root, plan, m.parts, wire).split !== true) return false
-      db.prepare("UPDATE plans SET state = 'done' WHERE id = ?").run(plan.id)
+      end(db, plan.id, 'done')
       return true
     case 'close':
       if (db.prepare("SELECT 1 FROM deliverables WHERE plan_id = ? AND state = 'pushed'").get(plan.id) === undefined) return false
-      db.prepare("UPDATE plans SET state = 'done', wait_reason = NULL WHERE id = ?").run(plan.id)
+      end(db, plan.id, 'done', true)
       return true
     case 'file':
       return ticketed(db, root, plan, m.ticket ?? m.why, `Filed by coo_lite on plan ${String(plan.id)}.\n\n${m.why}`, m.why, wire, now)

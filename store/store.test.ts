@@ -175,16 +175,17 @@ it('D4: resume leaves an unblocked plan alone and enters a blocked one running o
   const db = open(':memory:')
   migrate(db, join(root, 'schema'))
   db.prepare('UPDATE pipes SET max_concurrent = 1 WHERE id = 1').run()
-  const plan = (no: number): number => addPlan(db, { pipe_id: 1, target_id: null, template: 'pr_path', state: 'blocked_on_ceo',
-    queued_at: '2026-09-27T00:00:00.000Z', lane: 'machine', seat: 'typescript_specialist',
+  const plan = (no: number, from: 'queued' | 'blocked_on_ceo'): number => addPlan(db, { pipe_id: 1, target_id: null, template: 'pr_path',
+    state: from, queued_at: '2026-09-27T00:00:00.000Z', lane: 'machine', seat: 'typescript_specialist',
     origin: `https://github.com/caliperforge/caliperforge/issues/${String(no)}`, step: 2 })
   const state = (id: number): unknown => (db.prepare('SELECT state FROM plans WHERE id = ?').get(id) as { state: string }).state
-  const blocked = plan(1)
+  const queued = plan(1, 'queued')
+  resume(db, queued)
+  expect(state(queued)).toBe('queued')
+  const blocked = plan(2, 'blocked_on_ceo')
   resume(db, blocked)
   expect(state(blocked)).toBe('running')
-  resume(db, blocked)
-  expect(state(blocked)).toBe('running')
-  const full = plan(2)
+  const full = plan(3, 'blocked_on_ceo')
   resume(db, full)
   expect(state(full)).toBe('queued')
 })

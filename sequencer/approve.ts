@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
-import { gates } from '../store/approvals.ts'
-import { approved as settle } from '../store/deliverables.ts'
+import { gates, signedLatest, targetSigned } from '../store/approvals.ts'
+import { newest, approved as settle } from '../store/deliverables.ts'
 import type { Db } from '../store/index.ts'
 import { internal, type PlanRow } from '../store/plans.ts'
 import type { Outcome } from './kind.ts'
@@ -37,9 +37,7 @@ export function batch(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome
 
 /** The commit `land` stamped on the deliverable row, which is what closes a split ticket's parent. */
 function landedSha(db: Db, plan: number): string {
-  const row = db.prepare('SELECT evidence FROM deliverables WHERE plan_id = ? ORDER BY id DESC LIMIT 1').get(plan) as
-    { evidence: string } | undefined
-  return row?.evidence.split('/').at(-1) ?? ''
+  return newest(db, plan)?.evidence.split('/').at(-1) ?? ''
 }
 
 /** The digest `cf approve target` binds an approval to. */
@@ -54,9 +52,8 @@ export function targetDigest(t: { repo: string; issue_no: number; evidence_measu
 export function approved(db: Db, plan: PlanRow): boolean {
   const t = db.prepare('SELECT repo, issue_no, evidence_measured_at FROM targets WHERE id = ?').get(plan.target_id) as
     { repo: string; issue_no: number; evidence_measured_at: string } | undefined
-  if (t === undefined) return false
-  return db.prepare("SELECT 1 FROM approvals WHERE subject_kind = 'target' AND subject_id = ? AND subject_digest = ? AND decision = 'approved'")
-    .get(plan.target_id, targetDigest(t)) !== undefined
+  if (t === undefined || plan.target_id === null) return false
+  return targetSigned(db, plan.target_id, targetDigest(t))
 }
 
 /**
@@ -65,9 +62,5 @@ export function approved(db: Db, plan: PlanRow): boolean {
  * against the head it proved — a rewind opens a new row and clears the head, and the old approval is dead.
  */
 export function approvedPlan(db: Db, plan: PlanRow): boolean {
-  return db.prepare(`SELECT 1 FROM deliverables d JOIN approvals a ON a.id = d.approval_id
-    WHERE d.plan_id = ? AND d.state = 'approved'
-      AND d.id = (SELECT max(id) FROM deliverables WHERE plan_id = d.plan_id)
-      AND a.subject_kind = 'plan' AND a.subject_id = d.plan_id
-      AND a.decision = 'approved' AND a.subject_digest = ?`).get(plan.id, plan.head_digest) !== undefined
+  return signedLatest(db, plan.id, plan.head_digest) !== null
 }

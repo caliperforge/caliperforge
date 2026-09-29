@@ -1,4 +1,23 @@
+import { z } from 'zod'
 import type { Db } from './index.ts'
+
+export const DeliverableRow = z.object({
+  id: z.int(),
+  plan_id: z.int(),
+  step: z.int(),
+  seat: z.string(),
+  diff_digest: z.string(),
+  state: z.enum(['built', 'gated', 'ready', 'approved', 'pushed']),
+  tests_pass: z.int(),
+  byte_identical_elsewhere: z.int(),
+  fork_ci_green: z.int(),
+  bot_clean: z.int(),
+  target_warm: z.int(),
+  approval_id: z.int().nullable(),
+  evidence: z.string(),
+})
+
+export type DeliverableRow = z.infer<typeof DeliverableRow>
 
 /** The five proofs the ready gate reads. A row may only call itself ready with all five. */
 export interface Proven {
@@ -65,11 +84,15 @@ export function deliverablesOf(db: Db, plan: number): { state: string; evidence:
     .all(plan) as { state: string; evidence: string }[]
 }
 
+export function newest(db: Db, plan: number): DeliverableRow | null {
+  const row: unknown = db.prepare('SELECT * FROM deliverables WHERE plan_id = ? ORDER BY id DESC LIMIT 1').get(plan)
+  return row === undefined ? null : DeliverableRow.parse(row)
+}
+
 function latest(db: Db, plan: number): number {
-  const row = db.prepare('SELECT id FROM deliverables WHERE plan_id = ? ORDER BY id DESC LIMIT 1').get(plan) as
-    { id: number } | undefined
-  if (row === undefined) throw new Error(`plan ${String(plan)} has no deliverable row`)
-  return row.id
+  const id = newest(db, plan)?.id
+  if (id === undefined) throw new Error(`plan ${String(plan)} has no deliverable row`)
+  return id
 }
 
 function write(db: Db, made: Made, state: string, proof: Proven): void {

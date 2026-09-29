@@ -4,7 +4,7 @@ import { ready as readyRail, type Proof } from '../rails/ready/index.ts'
 import { record as recordRail } from '../rails/record.ts'
 import { parse } from '../rails/diff.ts'
 import { digestOf, headDigest } from '../store/approvals.ts'
-import { built, gated, ready as readyRow, type Made, type Proven } from '../store/deliverables.ts'
+import { built, gated, newest, ready as readyRow, type DeliverableRow, type Made, type Proven } from '../store/deliverables.ts'
 import { record as recordFiles } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
 import { BUILT, internal, stampHead, type PlanRow } from '../store/plans.ts'
@@ -39,7 +39,7 @@ export function readyGate(db: Db, root: string, plan: PlanRow, wire?: Wire): Out
   if (moved !== null) return moved
   const repo = repoOf(db, plan)
   if (repo === null) return { outcome: 'refuse', spans: ['targets'], note: `plan ${String(plan.id)} has no target row` }
-  const row = gatedRow(db, plan.id)
+  const row = newest(db, plan.id)
   if (row === null) return { outcome: 'refuse', spans: ['deliverables'], note: `plan ${String(plan.id)} has no deliverable row` }
   if (!cloned(srcDir(root, plan.id))) return { outcome: 'refuse', spans: ['checkout'], note: `plan ${String(plan.id)} has no checkout to send` }
   const waiting = forkCi(db, root, plan, repo, wire)
@@ -91,15 +91,7 @@ function asked(root: string, plan: number, sha: string, repo: string, wire: Wire
   return null
 }
 
-interface Gated { tests_pass: number; byte_identical_elsewhere: number; bot_clean: number; diff_digest: string }
-
-/** The row senior left, read before the branch is sent: `forkCi` has no row to stamp without one. */
-function gatedRow(db: Db, plan: number): Gated | null {
-  return (db.prepare(`SELECT tests_pass, byte_identical_elsewhere, bot_clean, diff_digest
-    FROM deliverables WHERE plan_id = ? ORDER BY id DESC LIMIT 1`).get(plan) ?? null) as Gated | null
-}
-
-function proofOf(db: Db, root: string, plan: PlanRow, repo: string, row: Gated): Proof {
+function proofOf(db: Db, root: string, plan: PlanRow, repo: string, row: DeliverableRow): Proof {
   const ci = db.prepare("SELECT outcome, subject_digest FROM verdicts WHERE plan = ? AND rail_id = 'ci-green' ORDER BY id DESC LIMIT 1")
     .get(plan.id) as { outcome: string; subject_digest: string } | undefined
   return {
@@ -119,9 +111,7 @@ function proofOf(db: Db, root: string, plan: PlanRow, repo: string, row: Gated):
 
 /** Read again after `forkCi`: the column it stamps is the fork-CI proof, and the row was found before it ran. */
 function forkGreened(db: Db, plan: number): boolean {
-  const row = db.prepare('SELECT fork_ci_green FROM deliverables WHERE plan_id = ? ORDER BY id DESC LIMIT 1')
-    .get(plan) as { fork_ci_green: number } | undefined
-  return row?.fork_ci_green === 1
+  return newest(db, plan)?.fork_ci_green === 1
 }
 
 /** The repository the ready rail reads a pulse for. Ours has none to read, and needs none (#20). */

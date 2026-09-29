@@ -2,7 +2,7 @@ import { rmSync } from 'node:fs'
 import { LANE } from '../cli/plan.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
-import { internal, originIssue, PlanRow, rewind } from '../store/plans.ts'
+import { internal, originIssue, planById, type PlanRow, rewind } from '../store/plans.ts'
 import type { SignalRow } from '../store/signals.ts'
 import type { Part } from './brief.ts'
 import type { Outcome } from './kind.ts'
@@ -55,7 +55,7 @@ export function parted(db: Db, root: string, plan: PlanRow, parts: Part[], wire:
 export function following(db: Db, root: string, plan: PlanRow, sha: string, wire: Wire = WIRE): string | null {
   const row = db.prepare('SELECT parent, n FROM parts WHERE plan = ?').get(plan.id) as { parent: number; n: number } | undefined
   if (row === undefined) return null
-  const parent = PlanRow.parse(db.prepare('SELECT * FROM plans WHERE id = ?').get(row.parent))
+  const parent = planById(db, row.parent)
   const waiting = db.prepare('SELECT n FROM parts WHERE parent = ? AND after = ? AND plan IS NULL').all(parent.id, row.n) as { n: number }[]
   if (waiting.length > 0) return waiting.map(({ n }) => `part ${letter(n)} queued as plan ${String(queue(db, root, parent, n))}`).join('; ')
   const rest = db.prepare('SELECT plan FROM parts WHERE parent = ? AND n != ?').all(parent.id, row.n) as { plan: number | null }[]
@@ -106,7 +106,7 @@ export function claimed(db: Db, root: string, issue: { url: string; title: strin
   const n = LETTERS.indexOf(at)
   db.prepare('INSERT INTO parts (parent, n, url, title, body, after) VALUES (?, ?, ?, ?, ?, ?)')
     .run(row.plan, n, issue.url, issue.title, issue.body, n === 0 ? null : n - 1)
-  queue(db, root, PlanRow.parse(db.prepare('SELECT * FROM plans WHERE id = ?').get(row.plan)), 0)
+  queue(db, root, planById(db, row.plan), 0)
   return true
 }
 
@@ -158,7 +158,7 @@ export function released(db: Db, root: string, repo: string, open: Set<number>):
     JOIN tickets t ON p.url = 'https://github.com/' || t.repo || '/issues/' || t.number
     WHERE p.plan IS NULL AND t.repo = ? AND t.after IS NOT NULL AND t.closed_at IS NULL`).all(repo) as { parent: number; n: number; after: number }[]
   for (const row of rows.filter((r) => !open.has(r.after))) {
-    const id = queue(db, root, PlanRow.parse(db.prepare('SELECT * FROM plans WHERE id = ?').get(row.parent)), row.n)
+    const id = queue(db, root, planById(db, row.parent), row.n)
     if (id !== null) {
       logged(db, { plan: id, kind: 'unblocked', actor: 'split', outcome: 'pass', message: `#${String(row.after)} closed`, pointer: null, run: null })
     }

@@ -3,7 +3,7 @@ import { all, notify, record as keep, type Event } from '../cli/inbox.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { hhmm, zone } from '../store/lanes.ts'
-import { internal, needsCeo, PlanRow, rewind } from '../store/plans.ts'
+import { internal, needsCeo, planById, type PlanRow, rewind } from '../store/plans.ts'
 import { clear } from '../store/refusals.ts'
 import type { SignalRow } from '../store/signals.ts'
 import { assembling } from './home.ts'
@@ -38,7 +38,7 @@ export function started(db: Db, signal: SignalRow, root?: string, wire: Wire = W
   if (signal.kind === 'bot_review' && (signal.score ?? 5) >= 5) return null
   if (signal.kind === 'comment' && signal.author === 'ci') return null
   if (signal.kind === 'review' && signal.state === 'CHANGES_REQUESTED' && root !== undefined) {
-    const parent = PlanRow.parse(db.prepare('SELECT * FROM plans WHERE id = ?').get(signal.plan))
+    const parent = planById(db, signal.plan)
     if (assembling(db, parent) !== null) return fix(db, signal, parent, root, wire)
   }
   const step = signal.kind === 'bot_review' ? REVIEW_STEP : BUILD_STEP
@@ -63,7 +63,7 @@ function fix(db: Db, signal: SignalRow, parent: PlanRow, root: string, wire: Wir
 function asked(db: Db, signal: SignalRow, plan: number, root: string | undefined,
   direct = signal.kind === 'ci_red' || signal.state === 'CHANGES_REQUESTED'): void {
   clear(db, plan)
-  if (!direct) needsCeo(db, PlanRow.parse(db.prepare('SELECT * FROM plans WHERE id = ?').get(plan)))
+  if (!direct) needsCeo(db, planById(db, plan))
   if (root === undefined) return
   put(root, plan, 'refusal.md', words(signal))
   const event: Event = { at: signal.at, plan, ticket: `${signal.repo}#${String(signal.pr)}`, kind: 'asked', step: BUILD_STEP,
@@ -88,7 +88,7 @@ function older(db: Db, signal: SignalRow, plan: number): boolean {
 
 /** The comms lane is on and holds no step map; the plan queued here waits there until P7 writes one. */
 function comms(db: Db, signal: SignalRow, from: number): Started | null {
-  const merged = PlanRow.parse(db.prepare('SELECT * FROM plans WHERE id = ?').get(from))
+  const merged = planById(db, from)
   if (internal(merged)) return null
   db.prepare(`INSERT OR IGNORE INTO pipes (name, enabled, window_start, window_end, max_concurrent)
     VALUES ('comms', 1, '07:00', '22:00', 1)`).run()

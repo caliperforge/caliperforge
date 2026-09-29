@@ -3,7 +3,7 @@ import { pr as readPr, prNumber, rehearsal, WINDOW, type Pr, type Read } from '.
 import { add, LANE, LANES, laneOf, seen } from '../cli/plan.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
-import { originRef, PlanRow } from '../store/plans.ts'
+import { end, originRef, PlanRow } from '../store/plans.ts'
 import { record, type Signal, type SignalRow } from '../store/signals.ts'
 import { afterOf, FIELDS, Listed, type Listing, partOf, recordListing } from '../store/tickets.ts'
 import { attribute } from './escapes.ts'
@@ -108,7 +108,7 @@ function halt(db: Db, repo: string, open: Set<string>): void {
   const queued = db.prepare(`SELECT * FROM plans WHERE state = 'queued' AND origin IS NOT NULL
     AND NOT EXISTS (SELECT 1 FROM deliverables d WHERE d.plan_id = plans.id AND d.state = 'pushed')`).all().map((r) => PlanRow.parse(r))
   for (const plan of queued.filter((p) => originRef(p)?.repo === repo && !open.has(p.origin ?? ''))) {
-    db.prepare("UPDATE plans SET state = 'halted' WHERE id = ?").run(plan.id)
+    end(db, plan.id, 'halted')
   }
   landed(db, repo, open)
 }
@@ -121,7 +121,7 @@ function landed(db: Db, repo: string, open: Set<string>): void {
   const live = db.prepare(`SELECT p.* FROM plans p WHERE p.state IN ('queued', 'running', 'blocked_on_ceo') AND p.origin IS NOT NULL
     AND EXISTS (SELECT 1 FROM deliverables d WHERE d.plan_id = p.id AND d.state = 'pushed')`).all().map((r) => PlanRow.parse(r))
   for (const plan of live.filter((p) => originRef(p)?.repo === repo && !open.has(p.origin ?? ''))) {
-    db.prepare("UPDATE plans SET state = 'done', wait_reason = NULL WHERE id = ?").run(plan.id)
+    end(db, plan.id, 'done', true)
   }
 }
 

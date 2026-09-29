@@ -7,7 +7,7 @@ import { logged, newestRun, runSince } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import type { Taken } from '../store/leases.ts'
 import { busy } from '../store/now.ts'
-import { advance, back, finish, internal, needsCeo, rewind, type PipeRow, type PlanRow, waiting } from '../store/plans.ts'
+import { advance, back, end, finish, internal, needsCeo, rewind, type PipeRow, type PlanRow, waiting } from '../store/plans.ts'
 import { blipped, peer, refused } from '../store/refusals.ts'
 import { grow } from '../templates/comms.ts'
 import type { Step } from '../templates/pr-path.ts'
@@ -165,7 +165,7 @@ function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcom
   if (outcome.held === true) return 'running'
   if (outcome.blip === true) return blip(db, root, plan, step, outcome)
   if (outcome.split === true) {
-    db.prepare("UPDATE plans SET state = 'done' WHERE id = ?").run(plan.id)
+    end(db, plan.id, 'done')
     return 'done'
   }
   if (outcome.outcome === 'refuse') put(root, plan.id, 'refusal.md', refusalText(step, outcome))

@@ -7,7 +7,7 @@ import { addRule, dump, migrate, open, rules } from './index.ts'
 import { get, set, windows } from './lanes.ts'
 import { setLimit } from './limits.ts'
 import { addPart, allParts } from './parts.ts'
-import { addPlan, builderRan } from './plans.ts'
+import { addPlan, builderRan, end } from './plans.ts'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -110,6 +110,19 @@ it('D3: a part keeps the after it is given, and null when it is given none', () 
   addPart(db, { parent, n: 0, url: 'https://github.com/a/b/issues/2', title: 't', body: 'b' })
   addPart(db, { parent, n: 1, url: 'https://github.com/a/b/issues/3', title: 't', body: 'b', after: 0 })
   expect(allParts(db).map((p) => p.after)).toEqual([null, 0])
+})
+
+it('D2: end sets the state and clears wait_reason only when asked', () => {
+  const db = open(':memory:')
+  migrate(db, join(root, 'schema'))
+  const plan = addPlan(db, { pipe_id: 1, target_id: null, template: 'pr_path', state: 'queued', queued_at: '2026-09-27T00:00:00.000Z',
+    lane: 'machine', seat: 'typescript_specialist', origin: 'https://github.com/caliperforge/caliperforge/issues/1', step: 0 })
+  db.prepare("UPDATE plans SET wait_reason = 'over_cap' WHERE id = ?").run(plan)
+  const row = (): unknown => db.prepare('SELECT state, wait_reason FROM plans WHERE id = ?').get(plan)
+  end(db, plan, 'halted')
+  expect(row()).toEqual({ state: 'halted', wait_reason: 'over_cap' })
+  end(db, plan, 'done', true)
+  expect(row()).toEqual({ state: 'done', wait_reason: null })
 })
 
 it('D1-D3: coo_lite runs at steps 2, 4 and 5 build nothing, and a builder still cannot review itself', () => {

@@ -1,5 +1,8 @@
 import { createHash } from 'node:crypto'
+import { z } from 'zod'
 import type { Db } from './index.ts'
+
+const Signed = z.object({ id: z.int() })
 
 export type SubjectKind = 'target' | 'plan' | 'proposal' | 'deliverable' | 'override' | 'publish'
 
@@ -63,6 +66,23 @@ export function headApproved(db: Db, sha: string): boolean {
     WHERE a.subject_kind = 'plan' AND a.subject_digest = ? AND a.decision = 'approved'
       AND (a.who = 'ceo' OR (a.who = 'gates' AND p.origin IS NOT NULL))`)
     .get(headDigest(sha)) !== undefined
+}
+
+export function signedLatest(db: Db, plan: number, digest: string | null): number | null {
+  const row: unknown = db.prepare(`SELECT a.id FROM deliverables d JOIN approvals a ON a.id = d.approval_id
+    WHERE d.plan_id = ? AND d.state = 'approved'
+      AND d.id = (SELECT max(id) FROM deliverables WHERE plan_id = d.plan_id)
+      AND a.subject_kind = 'plan' AND a.subject_id = d.plan_id
+      AND a.decision = 'approved' AND a.subject_digest = ?`).get(plan, digest)
+  return row === undefined ? null : Signed.parse(row).id
+}
+
+export function targetSigned(db: Db, target: number, digest: string): boolean {
+  const row: unknown = db.prepare("SELECT id FROM approvals WHERE subject_kind = 'target' AND subject_id = ? AND subject_digest = ? AND decision = 'approved'")
+    .get(target, digest)
+  if (row === undefined) return false
+  Signed.parse(row)
+  return true
 }
 
 export function approvalsOf(db: Db, kind: SubjectKind): { decision: string; reason: string | null }[] {

@@ -10,7 +10,7 @@ import { judge, MISSING, PENDING, shell, type Board, type Gh } from '../rails/ci
 import { parse } from '../rails/diff.ts'
 import { record, type Verdict } from '../rails/record.ts'
 import { headDigest, signedHead } from '../store/approvals.ts'
-import { forkGreen } from '../store/deliverables.ts'
+import { forkGreen, newest } from '../store/deliverables.ts'
 import type { Db } from '../store/index.ts'
 import { busy } from '../store/now.ts'
 import { internal, originIssue, originRef, type PlanRow } from '../store/plans.ts'
@@ -338,8 +338,7 @@ function merged(dir: string, branch: string): string | null {
  */
 function onMain(db: Db, plan: PlanRow): Outcome {
   const onto = assembly(db, plan)?.branch ?? 'main'
-  const row = db.prepare("SELECT state, evidence FROM deliverables WHERE plan_id = ? ORDER BY id DESC LIMIT 1")
-    .get(plan.id) as { state: string; evidence: string } | undefined
+  const row = newest(db, plan.id)
   if (row?.state !== 'pushed') return refuse('deliverables', `plan ${String(plan.id)} reached push without landing on ${onto}`)
   return { outcome: 'pass', spans: [], note: `on ${onto} at ${row.evidence}` }
 }
@@ -396,7 +395,7 @@ const GATES: [string, string][] = [
 
 function pushed(db: Db, plan: number, approval: number, url: string): void {
   db.prepare(`UPDATE deliverables SET state = 'pushed', approval_id = ?, evidence = ?
-    WHERE id = (SELECT id FROM deliverables WHERE plan_id = ? ORDER BY id DESC LIMIT 1)`).run(approval, url, plan)
+    WHERE id = ?`).run(approval, url, newest(db, plan)?.id ?? null)
 }
 
 /** The digest on the card must name bytes that are in the branch, so the plan's work lands before it is shown. */

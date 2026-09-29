@@ -6,7 +6,7 @@ import { approve as approveCard, batch, refuse as refuseCard } from '../../cli/b
 import type { Pr } from '../../cli/gh.ts'
 import { close, settled } from '../../cli/session.ts'
 import { approvalsOf, headApproved, headDigest, refusedPush } from '../../store/approvals.ts'
-import { deliverablesOf } from '../../store/deliverables.ts'
+import { deliverablesOf, newest } from '../../store/deliverables.ts'
 import { dispositionsOf } from '../../store/dispositions.ts'
 import type { Db } from '../../store/index.ts'
 import { advance, pipeNamed, putPlan, rewind, titles } from '../../store/plans.ts'
@@ -16,6 +16,7 @@ import { eventsOf, ofKind, runAt } from '../../store/events.ts'
 import { graded, others, record, type SignalRow } from '../../store/signals.ts'
 import { capture } from '../capture.ts'
 import { classOf } from '../escapes.ts'
+import { approvedPlan } from '../approve.ts'
 import { approve as approvePublish } from '../card.ts'
 import type { Outcome } from '../kind.ts'
 import { COMMIT, headOf, prBody, push, sent as next, type Wire } from '../push.ts'
@@ -64,6 +65,12 @@ test('a card per ready plan and open proposal, with checks', async () => {
     { name: 'pre_review', ok: true }, { name: 'review', ok: true },
     { name: 'senior_review', ok: true }, { name: 'ready', ok: true },
   ])
+})
+
+test('D1 newest is the plan\'s highest-id row, or null', async () => {
+  const w = await atBatch()
+  expect(newest(w.db, 99)).toBeNull()
+  expect(newest(w.db, 1)).toMatchObject({ plan_id: 1, state: 'ready' })
 })
 
 test('push needs an approval row, then pushes and opens the pr', async () => {
@@ -535,8 +542,10 @@ test('a rewound lap needs a fresh card, not the first approval', async () => {
   expect(() => { advance(w.db, plan(w.db, 1), 8) }).toThrow(/no ceo approval row/)
   expect(await lap(w)).toEqual([])
   expect(batch(w.db, w.root).map((c) => c.id)).toEqual([1])
+  expect(approvedPlan(w.db, plan(w.db, 1))).toBe(false)
 
   approveCard(w.db, w.root, 'plan', 1, 'ceo')
+  expect(approvedPlan(w.db, plan(w.db, 1))).toBe(true)
   expect(approvalsOf(w.db, 'plan')).toHaveLength(1)
   expect(deliverablesOf(w.db, 1).at(-1)?.state).toBe('approved')
   advance(w.db, plan(w.db, 1), 8)

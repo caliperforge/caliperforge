@@ -1,13 +1,14 @@
 import { copyFileSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { expect, it } from 'vitest'
+import { walk } from '../checks/tree.ts'
 import { addRule, dump, migrate, open, rules } from './index.ts'
 import { get, set, windows } from './lanes.ts'
 import { setLimit } from './limits.ts'
 import { addPart, allParts } from './parts.ts'
-import { addPlan, builderRan, end } from './plans.ts'
+import { addPlan, briefed, builderRan, clearWaitsOn, end, holdOn, requeue, resume } from './plans.ts'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -147,6 +148,54 @@ it('D2: end sets the state and clears wait_reason only when asked', () => {
   expect(row()).toEqual({ state: 'halted', wait_reason: 'over_cap' })
   end(db, plan, 'done', true)
   expect(row()).toEqual({ state: 'done', wait_reason: null })
+})
+
+it('D1 D5: requeue, clearWaitsOn, holdOn and briefed write the columns they name', () => {
+  const db = open(':memory:')
+  migrate(db, join(root, 'schema'))
+  const plan = addPlan(db, { pipe_id: 1, target_id: null, template: 'pr_path', state: 'running', queued_at: '2026-09-27T00:00:00.000Z',
+    lane: 'machine', seat: 'typescript_specialist', origin: 'https://github.com/caliperforge/caliperforge/issues/1', step: 4 })
+  const other = addPlan(db, { pipe_id: 1, target_id: null, template: 'pr_path', state: 'queued', queued_at: '2026-09-27T00:00:00.000Z',
+    lane: 'machine', seat: 'typescript_specialist', origin: 'https://github.com/caliperforge/caliperforge/issues/2', step: 0 })
+  const row = (cols: string): unknown => db.prepare(`SELECT ${cols} FROM plans WHERE id = ?`).get(plan)
+  requeue(db, plan, 2)
+  expect(row('step, state')).toEqual({ step: 2, state: 'queued' })
+  db.prepare("UPDATE plans SET held_why = 'kept' WHERE id = ?").run(plan)
+  holdOn(db, plan, 'parked\nmore', null)
+  expect(row('state, waits_on, held_why')).toEqual({ state: 'blocked_on_ceo', waits_on: null, held_why: 'kept' })
+  holdOn(db, plan, 'waits\nmore', other)
+  expect(row('state, waits_on, held_why')).toEqual({ state: 'blocked_on_ceo', waits_on: other, held_why: 'waits' })
+  clearWaitsOn(db, plan)
+  expect(row('waits_on, held_why')).toEqual({ waits_on: null, held_why: 'waits' })
+  briefed(db, plan, { title: 't', what: 'w', why: null, ends: 'e' })
+  expect(row('title, what, why, ends')).toEqual({ title: 't', what: 'w', why: null, ends: 'e' })
+})
+
+it('D4: resume leaves an unblocked plan alone and enters a blocked one running or queued by the pipe', () => {
+  const db = open(':memory:')
+  migrate(db, join(root, 'schema'))
+  db.prepare('UPDATE pipes SET max_concurrent = 1 WHERE id = 1').run()
+  const plan = (no: number): number => addPlan(db, { pipe_id: 1, target_id: null, template: 'pr_path', state: 'blocked_on_ceo',
+    queued_at: '2026-09-27T00:00:00.000Z', lane: 'machine', seat: 'typescript_specialist',
+    origin: `https://github.com/caliperforge/caliperforge/issues/${String(no)}`, step: 2 })
+  const state = (id: number): unknown => (db.prepare('SELECT state FROM plans WHERE id = ?').get(id) as { state: string }).state
+  const blocked = plan(1)
+  resume(db, blocked)
+  expect(state(blocked)).toBe('running')
+  resume(db, blocked)
+  expect(state(blocked)).toBe('running')
+  const full = plan(2)
+  resume(db, full)
+  expect(state(full)).toBe('queued')
+})
+
+it('D3: no non-test .ts file outside store/ and schema/ writes plans', () => {
+  const writers = walk(root, (name) => name.endsWith('.ts') && !name.endsWith('.test.ts'))
+    .map((path) => relative(root, path).split(sep))
+    .filter((parts) => !['store', 'schema'].includes(parts[0] ?? '') && !parts.includes('tests'))
+    .map((parts) => parts.join('/'))
+    .filter((path) => readFileSync(join(root, path), 'utf8').includes('UPDATE plans'))
+  expect(writers).toEqual([])
 })
 
 it('D1-D3: coo_lite runs at steps 2, 4 and 5 build nothing, and a builder still cannot review itself', () => {

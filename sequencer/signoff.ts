@@ -5,7 +5,7 @@ import { approve, batch, refuse, type Card } from '../cli/batch.ts'
 import type { Answer, Desk, Seen } from '../cli/gh.ts'
 import { notify, record, type Event, type Kind } from '../cli/inbox.ts'
 import type { Db } from '../store/index.ts'
-import { ENTER, needsCeo, PlanRow, rewind } from '../store/plans.ts'
+import { needsCeo, PlanRow, resume, rewind } from '../store/plans.ts'
 import { clear } from '../store/refusals.ts'
 import { graded } from '../store/signals.ts'
 import type { Board } from '../rails/ci-green/index.ts'
@@ -65,7 +65,7 @@ function answered(db: Db, root: string, card: Card, kept: Kept, seen: Seen & { a
   const close = (comment: string): void => { if (seen.open) desk.close(kept.no, comment) }
   if (seen.answer === 'go') {
     approve(db, root, 'plan', card.id, 'ceo')
-    db.prepare(`UPDATE plans SET state = ${ENTER} WHERE id = ? AND state = 'blocked_on_ceo'`).run(card.id)
+    resume(db, card.id)
     close(`Signed at ${card.digest.slice(0, 12)}. It goes out on the next tick.`)
     drop(root, card.id, FILE)
   } else if (seen.answer === 'talk') {

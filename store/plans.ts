@@ -174,12 +174,35 @@ export function held(db: Db, plan: number, by: Holder, why: string): void {
   db.prepare('UPDATE plans SET held_by = ?, held_why = ? WHERE id = ?').run(by, why, plan)
 }
 
-export const ENTER = `CASE WHEN state = 'running' OR (SELECT count(*) FROM plans o WHERE o.pipe_id = plans.pipe_id
+const ENTER = `CASE WHEN state = 'running' OR (SELECT count(*) FROM plans o WHERE o.pipe_id = plans.pipe_id
   AND o.id <> plans.id AND o.state = 'running') < (SELECT max_concurrent FROM pipes WHERE pipes.id = plans.pipe_id)
   THEN 'running' ELSE 'queued' END`
 
 export function advance(db: Db, plan: PlanRow, step: number): void {
   db.prepare(`UPDATE plans SET step = ?, state = ${ENTER} WHERE id = ?`).run(step, plan.id)
+}
+
+export function requeue(db: Db, plan: number, step: number): void {
+  db.prepare("UPDATE plans SET step = ?, state = 'queued' WHERE id = ?").run(step, plan)
+}
+
+export function clearWaitsOn(db: Db, plan: number): void {
+  db.prepare('UPDATE plans SET waits_on = NULL WHERE id = ?').run(plan)
+}
+
+export function holdOn(db: Db, plan: number, why: string, on: number | null): void {
+  db.prepare(`UPDATE plans SET state = 'blocked_on_ceo', waits_on = @on,
+    held_why = CASE WHEN @on IS NULL THEN held_why ELSE @why END WHERE id = @plan`)
+    .run({ on, why: why.split('\n')[0] ?? null, plan })
+}
+
+export function briefed(db: Db, plan: number, lines: Record<'title' | 'what' | 'why' | 'ends', string | null>): void {
+  db.prepare('UPDATE plans SET title = ?, what = ?, why = ?, ends = ? WHERE id = ?')
+    .run(lines.title, lines.what, lines.why, lines.ends, plan)
+}
+
+export function resume(db: Db, plan: number): void {
+  db.prepare(`UPDATE plans SET state = ${ENTER} WHERE id = ? AND state = 'blocked_on_ceo'`).run(plan)
 }
 
 /** `stop` is `store/refusals.ts`'s call; `retries` only marks that the plan has been round once, which names a target's branch. */

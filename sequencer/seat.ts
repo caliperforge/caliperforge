@@ -13,7 +13,7 @@ import type { Db } from '../store/index.ts'
 import { filesOf } from '../store/files.ts'
 import { profile } from '../store/profile.ts'
 import { observed, wall } from '../store/lanes.ts'
-import { builderRan, internal, type PlanRow } from '../store/plans.ts'
+import { briefed, builderRan, internal, type PlanRow } from '../store/plans.ts'
 import { byRun, opened, pending, unfinished } from '../store/transcript.ts'
 import type { Step } from '../templates/pr-path.ts'
 import { parse } from '../rails/diff.ts'
@@ -141,9 +141,7 @@ export async function fireBrief(db: Db, root: string, plan: PlanRow, step: Step,
   if (refused !== null || over !== null) put(root, plan.id, 'brief.refused.md', fired.text)
   if (refused !== null) return { outcome: 'refuse', spans: [refused.span], note: `${step.runs}: ${refused.reason}` }
   if (over !== null) return { outcome: 'refuse', spans: ['brief.wide'], note: `${step.runs}: ${over}, so answer with the split fence` }
-  const lines = human(fired.text)
-  db.prepare('UPDATE plans SET title = ?, what = ?, why = ?, ends = ? WHERE id = ?')
-    .run(lines.title, lines.what, lines.why, lines.ends, plan.id)
+  briefed(db, plan.id, human(fired.text))
   put(root, plan.id, 'issue.md', fired.text)
   put(root, plan.id, 'ask.briefed.md', ask)
   const message = commitMessage(root, plan)

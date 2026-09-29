@@ -12,7 +12,7 @@ import { listed } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
 import { returnToLane } from '../store/holds.ts'
 import { wall } from '../store/lanes.ts'
-import { held, retry, type PlanRow } from '../store/plans.ts'
+import { clearWaitsOn, end, held, requeue, retry, type PlanRow } from '../store/plans.ts'
 import { clear } from '../store/refusals.ts'
 import { pending } from '../store/transcript.ts'
 import { hold, unhold } from './hold.ts'
@@ -133,7 +133,7 @@ function rebuild(db: Db, root: string, plan: PlanRow): string {
   rmSync(join(planDir(root, plan.id), 'src'), { recursive: true, force: true })
   db.transaction(() => {
     clear(db, plan.id)
-    db.prepare("UPDATE plans SET step = 2, state = 'queued' WHERE id = ?").run(plan.id)
+    requeue(db, plan.id, 2)
   })()
   return 'rebuild'
 }
@@ -161,7 +161,7 @@ export function released(db: Db, root: string, now: Date, post: Post): void {
       record(root, [{ at, plan: r.id, ticket, kind: 'refused', step: r.step, name: 'fixer', note: `plan ${String(r.on_)} landed, so this job is back in its lane` }])
       continue
     }
-    db.prepare('UPDATE plans SET waits_on = NULL WHERE id = ?').run(r.id)
+    clearWaitsOn(db, r.id)
     const note = `plan ${String(r.on_)}, which this job waits on, ended ${r.theirs}`
     held(db, r.id, 'coo', note)
     record(root, [{ at, plan: r.id, ticket, kind: 'blocked', step: r.step, name: 'fixer', note }])
@@ -184,7 +184,7 @@ function apply(db: Db, root: string, plan: PlanRow, f: Fix, wire: Wire, now: Dat
     case 'done': {
       const pushed = db.prepare("SELECT 1 FROM deliverables WHERE plan_id = ? AND state = 'pushed'").get(plan.id)
       if (pushed === undefined) return 'escalated'
-      db.prepare("UPDATE plans SET state = 'done', wait_reason = NULL WHERE id = ?").run(plan.id)
+      end(db, plan.id, 'done', true)
       return 'done'
     }
     case 'park': hold(db, root, plan.id, f.why, now); return 'park'

@@ -1,8 +1,14 @@
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { Seat, rules, seat } from '../../../runner/rules.ts'
 
 const root = join(import.meta.dirname, '../../..')
+
+const servicesOnly = (brief: string): boolean => {
+  const rows = /^## Tests\n\n((?:- .*\n)+)/m.exec(brief)?.[1]?.trimEnd().split('\n') ?? []
+  return rows.length > 0 && rows.every((row) => /^- AtelierTests\/\w+(Service|Model)Tests\.swift /.test(row))
+}
 
 const card = { seat: 'brief_writer', model: 'claude-opus-5-5', effort: 'high', tools: ['Read', 'Glob', 'Grep'], write_paths: [] }
 
@@ -75,4 +81,16 @@ test('the prompt states the path and length rules the brief check refuses on', (
     'The brief is at most 100 lines: count them before you answer.',
     'A `## Files` row on a file over 300 lines names the block it changes as `path:start-end`.',
   ]) expect(prompt).toContain(rule)
+})
+
+test('D2: an Atelier brief tests services, not the tree', () => {
+  expect(seat(root, 'brief_writer').prompt.replace(/\s+/g, ' ')).toContain(
+    '`## Tests` for an Atelier ticket names service and model tests, and names an accessibility-tree test only for a control.',
+  )
+})
+
+test('D3: atelier.md tests only services and models', () => {
+  const brief = readFileSync(join(import.meta.dirname, 'atelier.md'), 'utf8')
+  expect(servicesOnly(brief)).toBe(true)
+  expect(servicesOnly(brief.replace('AtelierTests/NowRowModelTests.swift', 'AtelierUITests/NowScreenUITests.swift'))).toBe(false)
 })

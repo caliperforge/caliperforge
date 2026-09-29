@@ -112,6 +112,12 @@ export function allPlans(db: Db): PlanRow[] {
   return db.prepare('SELECT * FROM plans ORDER BY id').all().map((r) => PlanRow.parse(r))
 }
 
+export function planById(db: Db, id: number): PlanRow {
+  const row = db.prepare('SELECT * FROM plans WHERE id = ?').get(id)
+  if (row === undefined) throw new Error(`no plan ${String(id)}`)
+  return PlanRow.parse(row)
+}
+
 /** The pipe's name when this call switched it off; null when it was already off. */
 export function laneOff(db: Db, pipe: number): string | null {
   const row = db.prepare('UPDATE pipes SET enabled = 0 WHERE id = ? AND enabled = 1 RETURNING name').get(pipe) as { name: string } | undefined

@@ -4,7 +4,7 @@ import type { Db } from '../store/index.ts'
 import { clear as unlease, drop, handOver, held, take, type Lease, type Taken } from '../store/leases.ts'
 import { cap, hhmm, zone } from '../store/lanes.ts'
 import { idle, keepWait } from '../store/now.ts'
-import { PlanRow, live, openPipes, terminal, type PipeRow, waiting } from '../store/plans.ts'
+import { type PlanRow, live, openPipes, planById, terminal, type PipeRow, waiting } from '../store/plans.ts'
 import { capture, intake } from './capture.ts'
 import { piled } from './coolite.ts'
 import { woke } from './orchestrator.ts'
@@ -92,7 +92,7 @@ export async function lap(db: Db, root: string, provider: Provider, plan: number
   const lease = handOver(db, plan, from)
   if (lease === null) return []
   const taken = { ...lease, stole }
-  const row = PlanRow.parse(db.prepare('SELECT * FROM plans WHERE id = ?').get(plan))
+  const row = planById(db, plan)
   const pipe = openPipes(db, hhmm(db, new Date())).find((p) => p.id === row.pipe_id)
   if (pipe === undefined) {
     unlease(db, plan)
@@ -213,7 +213,7 @@ async function one(db: Db, root: string, pipe: PipeRow, first: Leg, lease: Taken
 
 /** The job as the store now has it, if it can take another step in this tick: still running, and routed to step. */
 function onward(db: Db, id: number, lease: Taken): Leg | null {
-  const plan = PlanRow.parse(db.prepare('SELECT * FROM plans WHERE id = ?').get(id))
+  const plan = planById(db, id)
   if (plan.state !== 'running') return null
   const r = route(db, plan, new Date(), lease)
   return stepping(r) ? { plan, route: r } : null

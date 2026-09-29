@@ -152,7 +152,9 @@ test('D4 cf close --as done finishes the plan with a pass event', () => {
 })
 
 test('D5 cf close and cf files on a missing plan write nothing', () => {
-  const { db, run } = driven()
+  const { db, printed, run } = driven()
+  expect(() => run('plan', '99')).toThrow('no plan 99')
+  expect(printed).toEqual([])
   expect(() => run('close', '99', '--why', 'x', '--by', 'coo')).toThrow('no plan 99')
   expect(() => run('files', '99', 'add', 'a.ts', '--by', 'coo')).toThrow('no plan 99')
   expect(db.prepare('SELECT count(*) AS n FROM plan_files WHERE plan = 99').get()).toEqual({ n: 0 })

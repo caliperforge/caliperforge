@@ -5,7 +5,7 @@ import { approve, batch, refuse, type Card } from '../cli/batch.ts'
 import type { Answer, Desk, Seen } from '../cli/gh.ts'
 import { notify, record, type Event, type Kind } from '../cli/inbox.ts'
 import type { Db } from '../store/index.ts'
-import { needsCeo, PlanRow, resume, rewind } from '../store/plans.ts'
+import { needsCeo, planById, resume, rewind } from '../store/plans.ts'
 import { clear } from '../store/refusals.ts'
 import { graded } from '../store/signals.ts'
 import type { Board } from '../rails/ci-green/index.ts'
@@ -41,7 +41,7 @@ export function signoffs(db: Db, root: string, desk: Desk, now: Date = new Date(
 
 /** An outside plan whose checkout still holds the head the ready gate proved: the only head a label can sign. */
 function waiting(db: Db, card: Card): boolean {
-  const plan = planOf(db, card.id)
+  const plan = planById(db, card.id)
   return plan.origin === null && plan.target_id !== null && plan.head_digest === card.digest
 }
 
@@ -75,7 +75,7 @@ function answered(db: Db, root: string, card: Card, kept: Kept, seen: Seen & { a
     const words = wordsOf(db, root, card.id, seen.words, desk)
     refuse(db, root, 'plan', card.id, words === null ? 'signoff.no_words' : 'signoff.no', 'ceo')
     if (words === null) {
-      needsCeo(db, planOf(db, card.id))
+      needsCeo(db, planById(db, card.id))
       save(root, card.id, { ...kept, shut: true })
       close('Refused with no words, so it waits for the COO.')
       tell(root, card, 'asked', `refused at sign-off with no words: ${kept.url}`, now)
@@ -282,10 +282,6 @@ function tell(root: string, card: Card, kind: Kind, note: string, now: Date): vo
     kind, step: 7, name: 'sign-off', note }
   record(root, [event])
   notify([event])
-}
-
-function planOf(db: Db, id: number): PlanRow {
-  return PlanRow.parse(db.prepare('SELECT * FROM plans WHERE id = ?').get(id))
 }
 
 function carded(db: Db, root: string): number[] {

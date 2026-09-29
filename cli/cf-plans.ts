@@ -8,7 +8,7 @@ import { edit, VERBS } from '../store/files.ts'
 import { closed, release, retried } from '../store/holds.ts'
 import { hhmm, lanes } from '../store/lanes.ts'
 import { holder } from '../store/leases.ts'
-import { held, holderOf, HOLDERS, PlanRow, terminal } from '../store/plans.ts'
+import { held, holderOf, HOLDERS, planById, terminal } from '../store/plans.ts'
 import { laneLine, open as openPlans, runsOf, section, verdictsOf } from './brief.ts'
 import type { Cli } from './cf-lanes.ts'
 import { add as fileIssue, render as renderUnfiled, unfiled } from './plan.ts'
@@ -88,9 +88,7 @@ function planned(cf: Command, { root, db, out }: Cli): Command {
 function shown(plan: Command, { db, out }: Cli): void {
   plan.argument('<id>').action((id: string) => {
     const handle = db()
-    const row = handle.prepare('SELECT * FROM plans WHERE id = ?').get(Number(id))
-    if (row === undefined) throw new Error(`no plan ${id}`)
-    const plan = PlanRow.parse(row)
+    const plan = planById(handle, Number(id))
     const code = blocked(handle, plan)
     const why = code === null ? 'unblocked' : parked(handle, plan) ?? WAITING[code]
     const lease = holder(handle, plan.id)

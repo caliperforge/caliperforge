@@ -10,7 +10,7 @@ import type { Db } from '../store/index.ts'
 import { wall } from '../store/lanes.ts'
 import { clear as unlease, take } from '../store/leases.ts'
 import { busy, current, idle } from '../store/now.ts'
-import { end, held, originRef, PlanRow, retry } from '../store/plans.ts'
+import { end, held, originRef, planById, type PlanRow, retry } from '../store/plans.ts'
 import { clear } from '../store/refusals.ts'
 import { pending } from '../store/transcript.ts'
 import { split, type Part } from './brief.ts'
@@ -83,7 +83,7 @@ function stops(db: Db, root: string, now: Date, post: Post): Stop[] {
     ORDER BY d.at, p.id`).all({ at: now.toISOString() }) as Stop[]
   const fresh: Stop[] = []
   for (const s of rows.filter((s) => s.answered !== 1 && !isHeld(root, s.id))) {
-    if (s.today >= 2) told(db, root, row(db, s.id), now, { outcome: 'needs_ceo', message: 'ask_coo: coo_lite answered this plan twice today' }, post)
+    if (s.today >= 2) told(db, root, planById(db, s.id), now, { outcome: 'needs_ceo', message: 'ask_coo: coo_lite answered this plan twice today' }, post)
     else fresh.push(s)
   }
   return fresh
@@ -101,15 +101,11 @@ async function fire(db: Db, root: string, provider: Provider, now: Date, post: P
   if (take(db, oldest.id, now) === null) return `plan ${String(oldest.id)} is leased`
   try {
     busy(db, oldest.id, 'coo_lite', `${String(fresh.length)} stops waiting`, now)
-    return await cooLite(db, root, row(db, oldest.id), provider, now, post, wire)
+    return await cooLite(db, root, planById(db, oldest.id), provider, now, post, wire)
   } finally {
     idle(db, oldest.id)
     unlease(db, oldest.id)
   }
-}
-
-function row(db: Db, id: number): PlanRow {
-  return PlanRow.parse(db.prepare('SELECT * FROM plans WHERE id = ?').get(id))
 }
 
 async function ask(db: Db, root: string, plan: PlanRow, provider: Provider): Promise<Move | null> {

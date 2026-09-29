@@ -31,6 +31,7 @@ test('D1 a waiting plan wakes with every section in order and no file content', 
   const { text } = wake(db, home, 7) as { text: string }
   expect([...text.matchAll(/^# (\w+)$/gm)].map((m) => m[1]))
     .toEqual(['card', 'step', 'verdict', 'stop', 'refusals', 'runs', 'queue', 'lanes', 'usage', 'base'])
+  expect(text).toContain('waits_on: null')
   expect(text).toContain('spans:\n  - runner/wake.ts\n---')
   expect(text).not.toContain(SENTINEL)
   expect(text).not.toContain(MESSAGE)
@@ -42,6 +43,11 @@ test('D2 a missing section refuses rather than sending a short packet', () => {
   expect(wake(db, home, 7)).toEqual(refusal('base'))
   db.exec('UPDATE plans SET wait_reason = NULL WHERE id = 7')
   expect(wake(db, home, 7)).toEqual(refusal('card'))
+})
+
+test('a plan with no row throws rather than waking', () => {
+  const { db, home } = seeded()
+  expect(() => wake(db, home, 99)).toThrow('no plan 99')
 })
 
 test('D3 an ask past the cap is refused whole, not cut', () => {

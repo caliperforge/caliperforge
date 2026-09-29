@@ -4,7 +4,7 @@ import { maybe } from '../sequencer/workspace.ts'
 import type { Db } from '../store/index.ts'
 import { count, hhmm, lanes, wall, windows } from '../store/lanes.ts'
 import { last } from '../store/merges.ts'
-import { BUILT, live, PipeRow, PlanRow } from '../store/plans.ts'
+import { BUILT, live, PipeRow, planById, PlanRow } from '../store/plans.ts'
 
 export const CAP = 15_000
 
@@ -19,8 +19,8 @@ type Section = [string, string | null]
 const CARD = ['id', 'state', 'template', 'lane', 'seat', 'priority', 'origin', 'wait_reason', 'waits_on']
 
 export function wake(db: Db, root: string, plan: number, now = new Date()): { text: string } | { refusal: Refusal } {
-  const found = db.prepare('SELECT * FROM plans WHERE id = ?').get(plan)
-  const all: Section[] = found === undefined ? [['card', null]] : sections(db, root, Row.parse(found), now)
+  const row = Row.parse({ ...planById(db, plan), waits_on: db.prepare('SELECT waits_on FROM plans WHERE id = ?').pluck().get(plan) })
+  const all = sections(db, root, row, now)
   const missing = all.find(([, body]) => body === null)
   if (missing !== undefined) return refused(missing[0])
   const text = all.map(([name, body]) => `# ${name}\n\n${String(body)}`).join('\n\n')

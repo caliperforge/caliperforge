@@ -1,20 +1,17 @@
 import { z } from 'zod'
-import { FORK, put, SELF } from '../sequencer/workspace.ts'
+import { put } from '../sequencer/workspace.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
-import { templatePriority } from '../store/lanes.ts'
+import { LANE, LANES, laneOf, priorityOf, templatePriority, type Lane } from '../store/lanes.ts'
 import type { Holder } from '../store/plans.ts'
-import { DEFAULT_BUILDER } from '../templates/pr-path.ts'
 import { gh, type Read } from './gh.ts'
 import type { Origin } from './queue.ts'
+
+export { LANE, LANES, laneOf, priorityOf }
 
 const REF = /^([^/\s]+\/[^/\s#]+)#(\d+)$/
 
 const SEAT_LABEL = /^seat:([a-z][a-z0-9_]*)$/
-
-const LANE_LABEL = /^lane:([a-z]+)$/
-
-const PRIORITY_LABEL = /^P([0-9])$/
 
 const Issue = z.object({
   number: z.int(),
@@ -31,24 +28,6 @@ const Found = z.array(z.object({
   repository: z.object({ nameWithOwner: z.string() }),
   labels: z.array(z.object({ name: z.string() })),
 }))
-
-export const LANES = ['machine', 'atelier', 'comms', 'research', 'uniswap'] as const
-
-export type Lane = typeof LANES[number]
-
-export type Template = 'pr_path' | 'research' | 'comms'
-
-/**
- * Each lane in one place (#69): the template it files on, the seat that template falls to when no `seat:`
- * label names one, the repo its jobs build and land in, and the pipe they queue on. A lane's pipe starts off.
- */
-export const LANE: Record<Lane, { template: Template; seat: string; home: string; pipe: string }> = {
-  machine: { template: 'pr_path', seat: DEFAULT_BUILDER, home: SELF, pipe: 'internal' },
-  atelier: { template: 'pr_path', seat: 'swift_specialist', home: `${FORK}/atelier`, pipe: 'atelier' },
-  comms: { template: 'comms', seat: DEFAULT_BUILDER, home: SELF, pipe: 'internal' },
-  research: { template: 'research', seat: DEFAULT_BUILDER, home: SELF, pipe: 'internal' },
-  uniswap: { template: 'pr_path', seat: 'python_specialist', home: `${FORK}/v4-hook-index`, pipe: 'uniswap' },
-}
 
 export interface Filed {
   plan: number | null
@@ -78,21 +57,8 @@ export function issue(repo: string, no: number, read: Read = gh): z.infer<typeof
   return Issue.parse(read(['issue', 'view', String(no), '--repo', repo, '--json', 'number,title,body,url,labels']))
 }
 
-export function laneOf(labels: { name: string }[]): Lane | null {
-  const named = labels.map((l) => LANE_LABEL.exec(l.name)?.[1]).find((n) => n !== undefined)
-  return LANES.find((l) => l === named) ?? null
-}
-
 export function seatOf(labels: { name: string }[]): string | null {
   return labels.map((l) => SEAT_LABEL.exec(l.name)?.[1]).find((n) => n !== undefined) ?? null
-}
-
-/** The priority the issue's one `P0`-`P9` label names: `null` for none, and refused for more than one. */
-export function priorityOf(labels: { name: string }[]): number | null {
-  const held = labels.map((l) => PRIORITY_LABEL.exec(l.name)).filter((hit) => hit !== null)
-  if (held.length > 1) throw new Error(`carries ${held.map((hit) => hit[0]).join(' and ')}; one priority label at most`)
-  const one = held[0]
-  return one === undefined ? null : Number(one[1])
 }
 
 export function add(db: Db, root: string, ref: string, by: Holder | 'intake', pipe?: string, read: Read = gh): Filed {

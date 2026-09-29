@@ -3,6 +3,43 @@ import { logged } from './events.ts'
 import type { Db } from './index.ts'
 import { held } from './leases.ts'
 import { clock, openPipes, type PlanRow } from './plans.ts'
+import { FORK, SELF } from '../sequencer/workspace.ts'
+import { DEFAULT_BUILDER } from '../templates/pr-path.ts'
+
+const LANE_LABEL = /^lane:([a-z]+)$/
+
+const PRIORITY_LABEL = /^P([0-9])$/
+
+export const LANES = ['machine', 'atelier', 'comms', 'research', 'uniswap'] as const
+
+export type Lane = typeof LANES[number]
+
+export type Template = 'pr_path' | 'research' | 'comms'
+
+/**
+ * Each lane in one place (#69): the template it files on, the seat that template falls to when no `seat:`
+ * label names one, the repo its jobs build and land in, and the pipe they queue on. A lane's pipe starts off.
+ */
+export const LANE: Record<Lane, { template: Template; seat: string; home: string; pipe: string }> = {
+  machine: { template: 'pr_path', seat: DEFAULT_BUILDER, home: SELF, pipe: 'internal' },
+  atelier: { template: 'pr_path', seat: 'swift_specialist', home: `${FORK}/atelier`, pipe: 'atelier' },
+  comms: { template: 'comms', seat: DEFAULT_BUILDER, home: SELF, pipe: 'internal' },
+  research: { template: 'research', seat: DEFAULT_BUILDER, home: SELF, pipe: 'internal' },
+  uniswap: { template: 'pr_path', seat: 'python_specialist', home: `${FORK}/v4-hook-index`, pipe: 'uniswap' },
+}
+
+export function laneOf(labels: { name: string }[]): Lane | null {
+  const named = labels.map((l) => LANE_LABEL.exec(l.name)?.[1]).find((n) => n !== undefined)
+  return LANES.find((l) => l === named) ?? null
+}
+
+/** The priority the issue's one `P0`-`P9` label names: `null` for none, and refused for more than one. */
+export function priorityOf(labels: { name: string }[]): number | null {
+  const held = labels.map((l) => PRIORITY_LABEL.exec(l.name)).filter((hit) => hit !== null)
+  if (held.length > 1) throw new Error(`carries ${held.map((hit) => hit[0]).join(' and ')}; one priority label at most`)
+  const one = held[0]
+  return one === undefined ? null : Number(one[1])
+}
 
 export const LaneCap = z.object({
   dial: z.int(),

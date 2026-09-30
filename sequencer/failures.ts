@@ -12,7 +12,7 @@ export interface Red {
 }
 
 /**
- * #71: what their CI says failed, in the words the builder needs -- each red run's workflow and
+ * What their CI says failed, in the words the builder needs -- each red run's workflow and
  * the tail of its failed steps' log. Timestamps go, so the same failure reads the same twice.
  */
 export function red(fork: string, spans: string[], gh: Gh): Red | null {

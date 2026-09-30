@@ -167,7 +167,6 @@
     "lines": 53
   },
   "rails/authority/index.ts": {
-    "citing-comment": 1,
     "lines": 40
   },
   "rails/authority/tests/authority.test.ts": {
@@ -194,8 +193,7 @@
     "lines": 63
   },
   "rails/identifiers/index.ts": {
-    "citing-comment": 1,
-    "lines": 63
+    "lines": 70
   },
   "rails/identifiers/tests/identifiers.test.ts": {
     "prepare": 1

@@ -5,7 +5,7 @@ import { subdirs, walk } from '../../checks/tree.ts'
 import { parse } from '../diff.ts'
 import type { Verdict } from '../record.ts'
 
-/** `+` belongs to a name: Swift's `Type+Extension.swift` read as `Type` and refused plan 155 (09-25). */
+/** `+` belongs to a name: Swift's `Type+Extension.swift` is one name, not `Type`. */
 const NAMED = /(?:^|[\s([<'"`])((?:[A-Za-z0-9_.+-]+\/)+[A-Za-z0-9_.+-]+)(?::(\d+))?/g
 const ADR = /\bADR[ -](\d{4})\b/g
 
@@ -45,7 +45,7 @@ function paths(root: string, ours: Set<string>, gone: Set<string>, l: Said): Nam
     .map((n) => ({ id: n.at === undefined ? n.id : `${n.id}:${n.at}`, line: l.line }))
 }
 
-/** A folder the diff empties counts as deleted too: plan 455 named `seats/light_coo/` and was refused (09-28). */
+/** A folder the diff empties counts as deleted too. */
 function deleted(gone: Set<string>, id: string): boolean {
   return gone.has(id) || [...gone].some((path) => path.startsWith(`${id}/`))
 }

@@ -7,12 +7,12 @@ import { seat } from '../../runner/rules.ts'
 const FROZEN = /^schema\/000[12]/
 
 /**
- * #41: the rail judges the finished diff with the same write rule the runner enforced while it was
+ * The rail judges the finished diff with the same write rule the runner enforced while it was
  * being written (`runner/index.ts:refuse`). With `ours` -- a plan filed from one of our own issues
  * -- a kernel build may touch the whole kernel, so the only refusals left are `.cf/` (the tick's own
  * notes) and the frozen migrations. Without it the manifest's `write_paths` stand, unchanged: that
  * is the narrow fence a counterparty never agreed to widen. `outside` is what a kernel build touched
- * beyond its brief's file list (#87), and `renumbered` the migrations it created under a number the
+ * beyond its brief's file list, and `renumbered` the migrations it created under a number the
  * checkout already holds (both `sequencer/fence.ts`).
  */
 export function authority(root: string, name: string, diff: string, ours = false,

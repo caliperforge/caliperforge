@@ -137,6 +137,11 @@ it('ready and tight/source meet their ratchet rows', () => {
   expect(ratcheted(join(import.meta.dirname, '..'), {}).filter((f) => paths.includes(f.path))).toEqual([])
 })
 
+it('authority and identifiers rails meet their ratchet rows', () => {
+  const paths = ['rails/authority/index.ts', 'rails/identifiers/index.ts']
+  expect(ratcheted(join(import.meta.dirname, '..'), {}).filter((f) => paths.includes(f.path))).toEqual([])
+})
+
 it('index.ts to wake.ts meet their ratchet rows', () => {
   const paths = ['runner/index.ts', 'runner/packet.ts', 'runner/wake.ts']
   expect(ratcheted(join(import.meta.dirname, '..'), {}).filter((f) => paths.includes(f.path))).toEqual([])

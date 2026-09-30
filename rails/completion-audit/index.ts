@@ -86,7 +86,7 @@ function carried(handback: string): Map<string, z.infer<typeof Envelope>['done']
   return new Map(rows.data.done.map((row) => [row.id, row]))
 }
 
-/** 09-26: a `summary:` line holding an unquoted `: ` broke the whole fence, so the rows the audit needs are read on their own. */
+/** An unquoted `: ` in a `summary:` line breaks the whole fence, so the audit reads the `done:` rows on their own. */
 function doneOnly(body: string): string {
   const at = /^done:/m.exec(body)
   if (at === null) return ''

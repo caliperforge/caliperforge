@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path'
 import { parse } from 'yaml'
 import { z } from 'zod'
 
-/** A language whose builder holds its own shell and brief-files fence on a stranger's repo (#204). */
+/** A language whose builder holds its own shell and brief-files fence on a stranger's repo. */
 export const OUTSIDE_LANGUAGES = ['rust', 'python', 'ruby', 'go', 'php', 'lua'] as const
 
 export type OutsideLanguage = (typeof OUTSIDE_LANGUAGES)[number]
@@ -130,7 +130,7 @@ export function recipes(path: string): Set<string> | null {
 }
 
 /**
- * #192: the format check their CI runs, read off `.github/workflows`, at the workspace root; then the tests of
+ * The format check their CI runs, read off `.github/workflows`, at the workspace root; then the tests of
  * the crates the brief touches, never the whole workspace, which on surfpool is minutes of build. The tests take
  * the features their CI's `cargo test` line names, where the crate declares them: surfpool's `ignore_tests_ci`
  * is what keeps its mainnet-fetching tests off a runner. A feature named for a service their CI starts
@@ -168,7 +168,7 @@ const Workflow = z.object({ jobs: z.record(z.string(), z.object({ steps: z.array
 /** `npm()` spawns without a shell, so a line needing one cannot become a gate. */
 const SHELL = /&&|[|;$`<>]/
 
-/** #221: each workflow step that runs a generator then `git diff --exit-code`, at the root. */
+/** Each workflow step that runs a generator then `git diff --exit-code`, at the root. */
 function regenerated(src: string): Gate[] {
   return workflows(src).flatMap((text) => {
     let doc: unknown

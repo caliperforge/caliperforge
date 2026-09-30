@@ -7,7 +7,7 @@ import { section, TEST } from './brief.ts'
 const OWNED = /^\s*[-*]\s*`?([A-Za-z0-9_./-]+\.[A-Za-z0-9]+)`?\s+(?:—|–|--?)\s+\S/
 
 /**
- * #87: the paths a kernel build touched that its brief's file list does not hold. A test beside a listed
+ * The paths a kernel build touched that its brief's file list does not hold. A test beside a listed
  * file is the builder's to write, and so is a path its handback owns under `## Outside the files` with the
  * reason the ask cannot be met without it: the reviewers judge the reason. A plan with no list is not fenced.
  */
@@ -32,7 +32,7 @@ function admits(listed: string[], path: string): boolean {
 const IMPORT = /\b(?:from|import)\s*\(?\s*['"](\.[^'"]+)['"]/g
 
 /**
- * #191: the failing test files, when none is listed and each directly imports a path the diff changed; `null` otherwise.
+ * The failing test files, when none is listed and each directly imports a path the diff changed; `null` otherwise.
  */
 export function broken(src: string, tests: string[], listed: string[], changed: string[]): string[] | null {
   const files = [...new Set(tests.map((t) => (t.split(' ')[0] ?? '').replace(/:\d+$/, '')))]
@@ -46,7 +46,7 @@ export function broken(src: string, tests: string[], listed: string[], changed: 
 const GONE = /^\s*[-*]\s*`?([A-Za-z0-9_+./-]+\.[A-Za-z0-9]+)`?\s*(?:(?:—|–|--?)\s+\S.*)?$/
 
 /**
- * #64: the paths a build says to remove. A builder holds Read, Write, Edit, Glob and Grep and no
+ * The paths a build says to remove. A builder holds Read, Write, Edit, Glob and Grep and no
  * shell, so a build that should drop a file can only empty it; it names the paths here instead and
  * the kernel does the removing. Named twice is named once. A non-blank row before the closing fence
  * that names no path is unread; a ``` code-fence line, wrapping the list or the done block, is not a row.
@@ -61,8 +61,7 @@ const MADE = /^--- \/dev\/null\n\+\+\+ b\/(schema\/(\d{4})_[^\n/]*\.sql)$/gm
 
 /**
  * A migration the build created, numbered at or below one the checkout already holds. `migrate` applies only
- * what is above the store's `user_version`, so the live store would never run it: plan 46 (#52) built a 0018
- * on a base that already had 0021.
+ * what is above the store's `user_version`, so the live store would never run it.
  */
 export function renumbered(src: string, diff: string): string[] {
   const made = [...diff.matchAll(MADE)].map((m) => ({ path: String(m[1]), n: Number(m[2]) }))

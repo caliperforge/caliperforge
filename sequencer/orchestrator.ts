@@ -33,7 +33,7 @@ const Answer = z.object({
 
 type Answer = z.infer<typeof Answer>
 
-/** #238: once `orchestrator.apply` is on, a decision is acted on as soon as it is made. The lease keeps two overlapping ticks off one stop. */
+/** Once `orchestrator.apply` is on, a decision is acted on as soon as it is made. The lease keeps two overlapping ticks off one stop. */
 export async function woke(db: Db, root: string, provider: Provider, now: Date, post: Post = alerter(), wire: Wire = WIRE): Promise<void> {
   released(db, root, now, post)
   const rows = db.prepare(`SELECT * FROM plans WHERE (wait_reason IN (${WAKE.map(() => '?').join(', ')})
@@ -54,7 +54,7 @@ export async function woke(db: Db, root: string, provider: Provider, now: Date, 
   }
 }
 
-/** An `ask_coo` goes to the fixer first; what it does not take is acted on or escalated as before. */
+/** An `ask_coo` goes to the fixer first; what it does not take is acted on or escalated. */
 async function handle(db: Db, root: string, plan: PlanRow, d: { id: number; verb: Verb; why: string }, provider: Provider,
   now: Date, post: Post, wire: Wire): Promise<void> {
   const ticket = ticketOf(db, plan.id)
@@ -62,7 +62,7 @@ async function handle(db: Db, root: string, plan: PlanRow, d: { id: number; verb
   try {
     fixed = d.verb === 'ask_coo' && await fixer(db, root, plan, d, ticket, provider, now, post, wire)
   } catch (error) {
-    // A fixer that throws must not take the tick down with it (09-25 11:15); the stop goes to a person as before.
+    // A fixer that throws must not take the tick down with it: its error is kept and `act` takes the stop.
     put(root, plan.id, 'fixer.error', error instanceof Error ? error.message : String(error))
   }
   if (!fixed) act(db, root, plan, d, ticket, now, post)
@@ -72,7 +72,7 @@ function woken(plan: PlanRow): Woken {
   return (WAKE as readonly string[]).includes(plan.wait_reason ?? '') ? plan.wait_reason as Woken : 'blocked_on_ceo'
 }
 
-/** #246: one stop is one refusal (or question) as written; the same words at the same step are the same stop. */
+/** One stop is one refusal (or question) as written; the same words at the same step are the same stop. */
 function stop(root: string, plan: number): string {
   const said = maybe(root, plan, 'refusal.md') ?? maybe(root, plan, 'question.md')
   return said === null ? 'none' : createHash('sha256').update(said).digest('hex').slice(0, 12)

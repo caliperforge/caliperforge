@@ -42,7 +42,7 @@ export type Run = (args: string[], cwd: string, bin?: string) => Ran
 
 export type Note = (doing: string, detail: string) => void
 
-/** #126: what a checkout is judged with, by what sits at its root; #204: an outside plan, by its language. */
+/** What a checkout is judged with: what sits at its root, or an outside plan's language. */
 export type Mode = 'xcodebuild' | 'npm' | 'gradle' | 'none' | OutsideLanguage
 
 /** Derived data stays inside the checkout, under `.cf/work`, and never under a folder macOS guards. */
@@ -62,7 +62,7 @@ function project(src: string): string | null {
 }
 
 /**
- * `narrow` is the plan's own file list (#77). Given one, the tests run is `vitest related` over those
+ * `narrow` is the plan's own file list. Given one, the tests run is `vitest related` over those
  * paths -- every test the import graph says they can reach -- instead of the whole suite. The first pass
  * through step 3 passes none, so every job still runs the suite whole once, against the tree it built on.
  */
@@ -88,7 +88,7 @@ function faultOf(bin: Mode, output: string): { fault?: string } {
 }
 
 /**
- * #204: a stranger's repo in a language with its own seat runs that language's gates in the language's own folder.
+ * A stranger's repo in a language with its own seat runs that language's gates in the language's own folder.
  * A gate marked `quiet` fails on any output, as `gofmt -l` exits zero and prints the files it would change.
  */
 function gated(src: string, list: Gate[], run: Run): Failure | null {
@@ -217,7 +217,7 @@ function tail(output: string): string {
 
 /**
  * A command the cap killed leaves no status, and that is the failure it is recorded as. A program that never
- * started has no output at all, so the spawn error is what the builder reads (09-24: cargo off launchd's PATH).
+ * started has no output at all, so the spawn error is what the builder reads.
  */
 export function npm(args: string[], cwd: string, bin = 'npm', note?: Note): Ran {
   const command = `${bin} ${args.join(' ')}`
@@ -235,8 +235,8 @@ export function npm(args: string[], cwd: string, bin = 'npm', note?: Note): Ran 
 }
 
 /**
- * The run's own tests must not queue for the slots the run holds: with both taken by the two step-3 runs #313 let
- * through, every test that reached `npm()` waited for ever and the cap killed the suite (exit 143, five jobs, 09-25).
+ * The run's own tests must not queue for the slots the run holds, or every test that reaches `npm()` waits until
+ * the cap kills the suite.
  */
 function unslotted(): NodeJS.ProcessEnv {
   const env = { ...process.env }
@@ -246,9 +246,9 @@ function unslotted(): NodeJS.ProcessEnv {
 }
 
 /**
- * #220's second half. Once each job ran in its own tick (#307), every lane's test suite, Swift build and cargo build
- * could run at once, which is the load that turned slow tests into fake failures on 09-24. The live tick sets
- * `CF_CHECK_SLOTS`; a check waits for one of that many slot files. Unset (tests, a person's shell) means no limit.
+ * Every lane's suite, Swift build and cargo build can run at once, and that load turns slow tests into false
+ * failures. The live tick sets `CF_CHECK_SLOTS`; a check waits for one of that many slot files. Unset (tests, a
+ * person's shell) means no limit.
  */
 export const CHECK_SLOTS = 2
 

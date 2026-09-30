@@ -320,14 +320,11 @@
     "silent-catch": 1
   },
   "runner/index.ts": {
-    "citing-comment": 1,
-    "lines": 78,
-    "prepare": 4,
-    "silent-catch": 1
+    "lines": 73,
+    "prepare": 3
   },
   "runner/packet.ts": {
-    "citing-comment": 1,
-    "lines": 160
+    "lines": 161
   },
   "runner/rules.ts": {
     "lines": 102,

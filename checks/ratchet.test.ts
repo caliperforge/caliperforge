@@ -146,3 +146,9 @@ it('pr-path.ts and vitest.config.ts meet their ratchet rows', () => {
   const paths = ['templates/pr-path.ts', 'vitest.config.ts']
   expect(ratcheted(join(import.meta.dirname, '..'), {}).filter((f) => paths.includes(f.path))).toEqual([])
 })
+
+it('cli/tests/ names and comments meet their ratchet rows', () => {
+  const owned = (f: { path: string, message: string }): boolean =>
+    f.path.startsWith('cli/tests/') && /test-name|citing-comment/.test(f.message)
+  expect(ratcheted(join(import.meta.dirname, '..'), {}).filter(owned)).toEqual([])
+})

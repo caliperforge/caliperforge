@@ -29,7 +29,7 @@ const LAP = [
   fired({ step: 2, name: 'build', note: 'typescript_specialist exit 0' }),
 ]
 
-test('a lap is blocked, landed and refused events; a passing step is none', () => {
+test('a lap is blocked, landed and refused events; a pass is none', () => {
   expect(events(world(), LAP, AT).map((e) => [e.kind, e.ticket])).toEqual([['blocked', '#49'], ['landed', '#49'], ['refused', '#49']])
 })
 

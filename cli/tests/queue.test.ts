@@ -54,7 +54,7 @@ const decisions = (db: Db): unknown => db.prepare("SELECT decision, reason FROM 
 
 const count = (db: Db, table: string): number => (db.prepare(`SELECT count(*) AS n FROM ${table}`).get() as { n: number }).n
 
-test('D1: approving a scanned ready target files one plan with its ask, once', () => {
+test('approving a ready target files one plan with its ask, once', () => {
   const db = world()
   const root = mkdtempSync(join(tmpdir(), 'cf-queue-'))
   const id = scanned(db)
@@ -78,7 +78,7 @@ test('D2: approving a refused target throws and writes nothing', () => {
   expect([decisions(db), count(db, 'plans'), count(db, 'events')]).toEqual([[], 0, 0])
 })
 
-test('D3: approving a target that already has a plan writes the row and files nothing', () => {
+test('approving a planned target writes the row and files nothing', () => {
   const db = world()
   const added = queued(db)
   expect(approve(db, mkdtempSync(join(tmpdir(), 'cf-queue-')), added.target, 'pr-path', 'ceo').plan).toBeNull()
@@ -86,7 +86,7 @@ test('D3: approving a target that already has a plan writes the row and files no
   expect([count(db, 'plans'), count(db, 'events')]).toEqual([1, 2])
 })
 
-test('D4: refuseTarget writes the refusal and refuses the target; a bad reason leaves it as it was', () => {
+test('refuseTarget writes and refuses; a bad reason leaves it be', () => {
   const db = world()
   const id = scanned(db)
   const state = (): unknown => db.prepare('SELECT state FROM targets WHERE id = ?').get(id)
@@ -100,7 +100,7 @@ test('D4: refuseTarget writes the refusal and refuses the target; a bad reason l
   ])
 })
 
-test('D7: note stores a take or skip line and the store refuses any other', () => {
+test('note stores take or skip lines; the store refuses others', () => {
   const db = world()
   const id = scanned(db)
   note(db, id, 'take small and warm')

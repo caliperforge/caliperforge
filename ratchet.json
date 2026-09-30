@@ -122,63 +122,37 @@
     "prepare": 1
   },
   "cli/tests/adopt.test.ts": {
-    "prepare": 4,
-    "test-name": 10
-  },
-  "cli/tests/ask.test.ts": {
-    "test-name": 1
-  },
-  "cli/tests/atelier.test.ts": {
-    "test-name": 1
+    "prepare": 4
   },
   "cli/tests/brief.test.ts": {
-    "prepare": 6,
-    "test-name": 8
-  },
-  "cli/tests/digests.test.ts": {
-    "test-name": 6
-  },
-  "cli/tests/find.test.ts": {
-    "test-name": 2
+    "prepare": 6
   },
   "cli/tests/inbox.test.ts": {
-    "prepare": 2,
-    "test-name": 1
-  },
-  "cli/tests/map.test.ts": {
-    "test-name": 2
+    "prepare": 2
   },
   "cli/tests/measure.test.ts": {
-    "prepare": 2,
-    "test-name": 4
+    "prepare": 2
   },
   "cli/tests/part.test.ts": {
     "prepare": 2
   },
   "cli/tests/plan.test.ts": {
-    "prepare": 12,
-    "test-name": 8
+    "prepare": 12
   },
   "cli/tests/queue.test.ts": {
     "prepare": 3
   },
   "cli/tests/record.test.ts": {
-    "prepare": 5,
-    "test-name": 4
+    "prepare": 5
   },
   "cli/tests/scan.test.ts": {
-    "prepare": 13,
-    "test-name": 4
+    "prepare": 13
   },
   "cli/tests/step0.test.ts": {
-    "citing-comment": 1,
-    "prepare": 2,
-    "test-name": 11
+    "prepare": 2
   },
   "cli/tests/watch.test.ts": {
-    "citing-comment": 1,
-    "prepare": 5,
-    "test-name": 1
+    "prepare": 5
   },
   "cli/watch.ts": {
     "lines": 128,

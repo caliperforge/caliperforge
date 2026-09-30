@@ -37,7 +37,7 @@ type Rails = Profile['rails']
  * Step 3: the six rails the map's step list names, in its order, ending at the first refusal, and
  * then the checkout's own type check, style check and tests. No reviewer tokens. The fill comes
  * first so that `rest()` reads a diff carrying the digests, not the ones the builder left behind.
- * Our own repo's suite runs on GitHub CI when `checks.where` says so (#332), and on this laptop otherwise.
+ * Our own repo's suite runs on GitHub CI when `checks.where` says so, and on this laptop otherwise.
  */
 export function preReview(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
   const repo = repoOf(db, plan)
@@ -75,7 +75,7 @@ function ratchetFirst(db: Db, root: string, plan: PlanRow, diff: string, on: Rai
 
 function suite(db: Db, root: string, plan: PlanRow, on: Rails, commands: Commands, wire?: Wire): Outcome {
   // a stranger's npm scripts never run on this host. A stranger's repo in a language with its own seat runs that
-  // language's gates (#204): its builder already ran them at step 2, and a red fork CI after the reviews costs more.
+  // language's gates: its builder already ran them at step 2, and a red fork CI after the reviews costs more.
   const local = on?.checks !== undefined
   const outside = local ? null : outsideLanguage(languageFor(db, plan, srcDir(root, plan.id), false))
   const ci = on?.checks === 'ci' ? ciChecks(db, root, plan, wire) : null
@@ -113,9 +113,9 @@ export function faulted(db: Db, root: string, plan: PlanRow, fault: string): Out
 }
 
 /**
- * #77. The first build's lap runs the whole suite, so every job is judged against it once, on the tree it
+ * The first build's lap runs the whole suite, so every job is judged against it once, on the tree it
  * built on. A rebuild only touched the plan's own files, so its lap runs the tests those files reach and
- * the suite is not paid for again -- the cost is in the laps after the first: plan 62 went round 25 times.
+ * the suite is not paid for again.
  * A rebuild with no recorded file list gets the whole suite, which is the safe way to know nothing.
  */
 export function narrow(db: Db, plan: PlanRow): string[] {
@@ -156,9 +156,9 @@ function broke(db: Db, root: string, plan: PlanRow, failed: Failure): Outcome {
 
 /**
  * Tight's prose rule reads what the maintainer will read: the pull request text the card set, where it set one.
- * The handback is the machine's; judging its prose sent a builder after a PR body it may not write. A kernel
+ * The handback is the machine's, and a builder may not write the PR body. A kernel
  * plan lands as a commit named for its branch and opens no pull request, so it has no prose to judge; an outside
- * plan's body is built from the brief, never the handback (plan 70).
+ * plan's body is built from the brief, never the handback.
  */
 function rest(db: Db, root: string, plan: PlanRow, handback: string, diff: string, on: Rails): [string, () => Verdict][] {
   const src = srcDir(root, plan.id)

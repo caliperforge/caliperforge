@@ -21,9 +21,9 @@ const ISSUE: Issue = {
 }
 
 /**
- * The nine pull requests github returns for `--search '#284'` on solana-foundation/pay-kit,
- * measured 2026-09-17. Eight are ours. The ninth is a stranger's; it surfaces in the search on a
- * comment *of ours* that cites #284, while the pull request's own text names #226 and #219.
+ * The nine pull requests github returns for a search on the issue number on solana-foundation/pay-kit.
+ * Eight are ours. The ninth is a stranger's; it surfaces in the search on a
+ * comment *of ours* that cites the issue, while the pull request's own text names two other issues.
  */
 const OURS = [320, 321, 317, 315, 318, 322].map((number) => ({
   number,
@@ -56,22 +56,22 @@ function reader(map: Record<string, unknown>): Read {
   }
 }
 
-it('counts one foreign pull request among the nine referencing pay-kit#284', () => {
+it('counts one foreign PR among nine referencing pay-kit#284', () => {
   expect(REFERENCES).toHaveLength(9)
   expect(foreign('solana-foundation/pay-kit', 284, reader({ list: REFERENCES })).map((p) => p.number)).toEqual([228])
 })
 
-it('asks for a page of referencing pull requests rather than the 30 rows an uncapped list returns', () => {
+it('asks a page of referencing PRs, not the uncapped 30 rows', () => {
   let sent: string[] = []
   foreign('solana-foundation/pay-kit', 284, (args) => { sent = args; return [] })
   expect(sent.slice(sent.indexOf('--limit'), sent.indexOf('--limit') + 2)).toEqual(['--limit', String(WINDOW)])
 })
 
-it('does not read the one foreign pull request as an implementation: it never names #284 itself', () => {
+it('the foreign PR is no implementation: it never names #284', () => {
   expect(implemented('solana-foundation/pay-kit', ISSUE, reader({ list: REFERENCES }))).toBeNull()
 })
 
-it('still refuses when a foreign pull request names the issue in its own text', () => {
+it('still refuses when a foreign PR names the issue in its text', () => {
   const claim = { ...STRANGER, body: 'Supersedes #284 for every SDK.\n' }
   expect(implemented('solana-foundation/pay-kit', ISSUE, reader({ list: [...OURS, claim] })))
     .toBe('open pull request #228 references it')
@@ -82,23 +82,23 @@ it('does not read #2840 as a reference to #284', () => {
   expect(implemented('solana-foundation/pay-kit', ISSUE, reader({ list: [near] }))).toBeNull()
 })
 
-it('reads no implementation when every referencing pull request is headed from our fork', () => {
+it('no implementation when every referencing PR is from our fork', () => {
   expect(implemented('solana-foundation/pay-kit', ISSUE, reader({ list: OURS }))).toBeNull()
 })
 
-it('reads a linked closer from our fork as an open loop, not as an implementation', () => {
+it('reads a linked closer from our fork as an open loop only', () => {
   const row = { ...ISSUE, closedByPullRequestsReferences: [{ number: 322 }] }
   const read = reader({ 'view:322': { headRepositoryOwner: { login: 'caliperforge' } }, list: [] })
   expect(implemented('solana-foundation/pay-kit', row, read)).toBeNull()
 })
 
-it('still reads a linked closer from anyone else as an implementation', () => {
+it('reads a linked closer from anyone else as an implementation', () => {
   const row = { ...ISSUE, closedByPullRequestsReferences: [{ number: 277 }] }
   const read = reader({ 'view:277': { headRepositoryOwner: { login: 'solana-foundation' } } })
   expect(implemented('solana-foundation/pay-kit', row, read)).toBe('pull request #277 implements it')
 })
 
-/** pay-kit as hand-measured on 2026-09-17: two maintainers, last outsider merge 2026-09-11, p50 46 days. */
+/** pay-kit as hand-measured: two maintainers, last outsider merge six days before, p50 46 days. */
 function payKit(mine: boolean): Read {
   const merged = [
     { author: { login: 'a-maintainer' }, mergedBy: { login: 'a-maintainer' }, mergedAt: '2026-09-15T00:00:00Z' },
@@ -117,26 +117,26 @@ function payKit(mine: boolean): Read {
   }
 }
 
-it('keeps an account with an open pull request of ours off the p50 cold axis', () => {
+it('keeps an account with our open PR off the p50 cold axis', () => {
   const db = fresh(join(root, 'schema'))
   const row = measure(db, 'solana-foundation/pay-kit', '2026-09-17', payKit(true))
   expect(row).toMatchObject({ maintainers: 2, last_outsider_merge: '2026-09-11', open_pr_age_p50_days: 46, open_loop: true, pulse: 'warm' })
   expect(db.prepare('SELECT open_loop, pulse FROM accounts WHERE repo = ?').get(row.repo)).toEqual({ open_loop: 1, pulse: 'warm' })
 })
 
-it('still calls the same row cold on the p50 axis with no open loop of ours', () => {
+it('still calls the row cold on p50 with no open loop of ours', () => {
   const db = fresh(join(root, 'schema'))
   expect(measure(db, 'solana-foundation/pay-kit', '2026-09-17', payKit(false)))
     .toMatchObject({ maintainers: 2, last_outsider_merge: '2026-09-11', open_pr_age_p50_days: 46, open_loop: false, pulse: 'cold' })
 })
 
-it('leaves the no-outsider-merge-in-21-days axis cold even under an open loop of ours', () => {
+it('21-day outsider-merge axis stays cold under our open loop', () => {
   const db = fresh(join(root, 'schema'))
   expect(measure(db, 'solana-foundation/pay-kit', '2026-10-17', payKit(true)))
     .toMatchObject({ open_loop: true, pulse: 'cold' })
 })
 
-it('names a ruling that carries kernel issue 23 and the map line for each step-0 trip', () => {
+it('step-0 trip ruling carries kernel issue 23 and the map line', () => {
   const db = fresh(join(root, 'schema'))
   expect(db.prepare("SELECT subject, origin_kind, origin_ref, issue_no FROM rulings WHERE origin_ref = 'buildmap-rev6-step0-must-not-trip' ORDER BY subject").all())
     .toEqual([
@@ -180,7 +180,7 @@ function rule(w: ReturnType<typeof world>, value: string): void {
 
 const PASS = { outcome: 'pass', note: 'acme/widget#12 warm' }
 
-it('D3: holds a claim_first target at step 0 on target_parked and leaves the target ready', () => {
+it('holds a claim_first target at step 0 on target_parked, ready', () => {
   const w = intake('{ claim_first: true }')
   expect(stepZero(w.db, w.root, plan(w.db, 1), ours(0))).toMatchObject({ outcome: 'refuse', held: true,
     note: 'target_parked: claim_first: no ruling claim.acme/widget#12 = confirmed' })
@@ -188,7 +188,7 @@ it('D3: holds a claim_first target at step 0 on target_parked and leaves the tar
   expect(w.db.prepare('SELECT state FROM targets WHERE id = 1').pluck().get()).toBe('ready')
 })
 
-it('D4: a ruling of any other value still holds it; a confirmed one lets the next step 0 pass', () => {
+it('any other ruling holds it; a confirmed one lets step 0 pass', () => {
   const w = intake('{ claim_first: true }')
   rule(w, 'asked')
   expect(stepZero(w.db, w.root, plan(w.db, 1), ours(0))).toMatchObject({ outcome: 'refuse', held: true })
@@ -196,14 +196,14 @@ it('D4: a ruling of any other value still holds it; a confirmed one lets the nex
   expect(stepZero(w.db, w.root, plan(w.db, 1), ours(0))).toMatchObject(PASS)
 })
 
-it('D5: open pull requests at max_open_prs hold the target; below it passes', () => {
+it('open PRs at max_open_prs hold the target; below it passes', () => {
   const w = intake('{ max_open_prs: 2 }')
   expect(stepZero(w.db, w.root, plan(w.db, 1), ours(2))).toMatchObject({ outcome: 'refuse', held: true,
     note: 'target_parked: max_open_prs: 2 of ours open in acme/widget, cap 2' })
   expect(stepZero(w.db, w.root, plan(w.db, 1), ours(1))).toMatchObject(PASS)
 })
 
-it('D5: pull requests opened within pace.days at pace.prs hold the target; older ones do not count', () => {
+it('PRs opened in pace.days at pace.prs hold; older do not count', () => {
   const w = intake('{ pace: { prs: 1, days: 7 } }')
   expect(stepZero(w.db, w.root, plan(w.db, 1), ours(0, [1, 30]))).toMatchObject({ outcome: 'refuse', held: true,
     note: 'target_parked: pace: 1 opened in acme/widget in the last 7 days, cap 1' })

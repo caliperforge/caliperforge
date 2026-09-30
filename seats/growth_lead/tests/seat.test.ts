@@ -15,16 +15,16 @@ test('D1: the manifest holds Read and no write tool or path', () => {
   expect(card.tools.filter((t) => WRITERS.has(bare(t)))).toEqual([])
 })
 
-test('D2: the roster carries growth_lead and the loader gives it a rules row', () => {
+test('D2: the roster carries growth_lead, loaded as a rules row', () => {
   expect(rules(root).find((r) => r.id === 'growth_lead')).toMatchObject({ kind: 'card', path: 'rules/roster.yaml' })
 })
 
-test('D3 and D4: the prompt names the Notes and their bounds, the partners and the fence', () => {
+test('D3 and D4: the Notes and their bounds, partners and fence', () => {
   const prompt = seat(root, 'growth_lead').prompt
   for (const part of ['14', '31', '60', 'question', 'topic:', 'notes:', 'replies:', 'partners:', 'swap', 'guest post', 'outreach']) expect(prompt).toContain(part)
 })
 
-test('D5: a roster without growth_lead digests fails the check, and a card with Bash does not parse', () => {
+test('D5: a roster without digests or a card with Bash fails', () => {
   const tree = mkdtempSync(join(tmpdir(), 'cf-growth-lead-'))
   for (const dir of ['rules', 'seats']) cpSync(join(root, dir), join(tree, dir), { recursive: true })
   cpSync(join(root, 'rules.seed.sql'), join(tree, 'rules.seed.sql'))

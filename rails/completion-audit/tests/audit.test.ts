@@ -18,7 +18,7 @@ test('passes when every expected done-condition carries a pointer', () => {
   expect(verdict.spans).toEqual([])
 })
 
-test('refuses an expected done-condition the handback does not carry', () => {
+test('refuses an expected done-condition the handback lacks', () => {
   const verdict = audit(fixture('handback-unpointed.md'), ['D1', 'D2', 'D3'])
   expect(verdict.outcome).toBe('refuse')
   expect(verdict.spans).toEqual(['D2', 'D3'])
@@ -28,7 +28,7 @@ test('refuses an expected done-condition the handback does not carry', () => {
 
 const touching = (path: string): string => `--- a/${path}\n+++ b/${path}\n@@ -1,1 +1,2 @@\n x\n+y\n`
 
-test('a one-line rebuild carries forward the rows its diff never touched', () => {
+test('a one-line rebuild carries the rows its diff never touched', () => {
   const verdict = audit(fixture('handback-rebuilt.md'), ['D1', 'D2', 'D3', 'D4', 'D5'],
     fixture('handback-five.md'), touching('src/hello.ts'))
   expect(verdict.outcome).toBe('pass')
@@ -36,21 +36,21 @@ test('a one-line rebuild carries forward the rows its diff never touched', () =>
   expect(verdict.message).toContain('D2, D3, D4, D5')
 })
 
-test('refuses an id neither the rebuild nor the previous handback carries', () => {
+test('refuses an id neither rebuild nor previous handback carries', () => {
   const verdict = audit(fixture('handback-rebuilt.md'), ['D1', 'D2', 'D6'],
     fixture('handback-five.md'), touching('src/hello.ts'))
   expect(verdict.outcome).toBe('refuse')
   expect(verdict.spans).toEqual(['D6'])
 })
 
-test('refuses an absent id whose previous pointer names a file the rebuild touched', () => {
+test('refuses an absent id whose old pointer names a touched file', () => {
   const verdict = audit(fixture('handback-rebuilt.md'), ['D1', 'D2'],
     fixture('handback-five.md'), touching('src/greet.ts'))
   expect(verdict.outcome).toBe('refuse')
   expect(verdict.spans).toEqual(['D2'])
 })
 
-test('refuses every expected done-condition when the handback carries no fence', () => {
+test('refuses every expected done-condition when there is no fence', () => {
   const verdict = audit('Not logged in \u00b7 Please run /login', ['D1'])
   expect(verdict.outcome).toBe('refuse')
   expect(verdict.spans).toEqual(['D1'])
@@ -69,7 +69,7 @@ test('writes a verdicts row the store accepts', () => {
   expect(row).toEqual({ gate: 'pre_review', kind: 'rail', outcome: 'refuse', rail_id: 'completion-audit', origin_kind: 'rail', origin_ref: 'completion-audit', tokens: 0 })
 })
 
-test('refuses rather than throws on a fence that is not a done envelope', () => {
+test('refuses, not throws, on a fence that is not a done envelope', () => {
   const fences = ['---\nstatus: partial\ndone: []\n---\n', '---\ndone:\n  - status: done\n---\n']
   for (const fence of fences) {
     const verdict = audit(fence, ['D1'])
@@ -78,7 +78,7 @@ test('refuses rather than throws on a fence that is not a done envelope', () => 
   }
 })
 
-test('refuses on the parse error when no rows can be read from the fence', () => {
+test('refuses on the parse error when the fence yields no rows', () => {
   for (const fence of [fixture('handback-unparsed.md'), '---\n: : :\n---\n']) {
     const verdict = audit(fence, ['D1', 'D2'])
     expect(verdict.outcome).toBe('refuse')
@@ -87,6 +87,6 @@ test('refuses on the parse error when no rows can be read from the fence', () =>
   }
 })
 
-test('a previous handback YAML cannot parse carries nothing and refuses nothing', () => {
+test('an unparsable previous handback carries and refuses nothing', () => {
   expect(audit(fixture('handback-carried.md'), ['D1', 'D2'], fixture('handback-unparsed.md'), '').outcome).toBe('pass')
 })

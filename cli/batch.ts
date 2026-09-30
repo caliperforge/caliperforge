@@ -28,11 +28,7 @@ export function batch(db: Db, root: string): Card[] {
 
 export interface Landed { plan: number; origin: string; digest: string }
 
-/**
- * #20: an internal plan lands on the gates alone, so it never becomes a card to sign.
- * It shows in the batch as the list of what landed — the issue it came from and the head
- * the gates signed — which is a read-out and asks the CEO for nothing.
- */
+/** An internal plan lands on the gates alone and is never a card to sign; the batch lists it as landed and asks nothing. */
 export function landed(db: Db): Landed[] {
   return db.prepare(`SELECT p.id AS plan, p.origin, a.subject_digest AS digest FROM plans p
     JOIN approvals a ON a.subject_kind = 'plan' AND a.subject_id = p.id AND a.who = 'gates'

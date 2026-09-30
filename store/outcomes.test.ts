@@ -28,7 +28,7 @@ function event(db: Db, actor: string, kind: string, at: string): void {
 const scored = (db: Db): unknown[] =>
   db.prepare('SELECT event, actor, outcome, refusal, close FROM outcomes ORDER BY event').all()
 
-test('D1 a retry whose refusal comes back is missed by that refusal', () => {
+test('D1 a retry whose refusal comes back is missed by it', () => {
   const db = plan('running')
   refuse(db, X, '2026-09-20 10:00:00')
   event(db, 'ceo', 'retry', '2026-09-20 11:00:00')
@@ -44,7 +44,7 @@ test.each([['done', 'held'], ['running', 'open']])('D2 a later refusal with anot
   expect(scored(db)).toEqual([{ event: 1, actor: 'ceo', outcome, refusal: null, close: null }])
 })
 
-test('D3 a return before a refused close is missed by the close, and the close itself is open', () => {
+test('D3 a refused close misses the return before it and is open', () => {
   const db = plan('halted')
   returnToLane(db, 1)
   closed(db, 1, 'refused', 'ceo', 'no')
@@ -54,7 +54,7 @@ test('D3 a return before a refused close is missed by the close, and the close i
   ])
 })
 
-test('D4 a release on a plan closed done holds, with the close as its row', () => {
+test('D4 a release on a done-closed plan holds, citing the close', () => {
   const db = plan('blocked_on_ceo', 2)
   refuse(db, X, '2026-09-19 10:00:00')
   release(db, 1, 'coo')
@@ -65,14 +65,14 @@ test('D4 a release on a plan closed done holds, with the close as its row', () =
   ])
 })
 
-test('D4 a release on a plan finished without a close holds with no close', () => {
+test('D4 release on a plan ended without a close holds, no close', () => {
   const db = plan('blocked_on_ceo', 2)
   release(db, 1, 'coo')
   db.prepare("UPDATE plans SET state = 'done' WHERE id = 1").run()
   expect(scored(db)).toEqual([{ event: 1, actor: 'coo', outcome: 'held', refusal: null, close: null }])
 })
 
-test('D5 events by other actors add no row, and a blip neither answers nor misses', () => {
+test('D5 other actors add no row, nor does a blip answer or miss', () => {
   const db = plan('running')
   for (const actor of ['split', 'ciChecks', 'cf plan add']) event(db, actor, 'filed', '2026-09-20 09:00:00')
   refuse(db, X, '2026-09-20 10:00:00')
@@ -93,13 +93,13 @@ function filed(db: Db, reason: string | null, wrong: number): void {
 
 const ticketed = (db: Db): unknown[] => db.prepare('SELECT outcome, refusal, ticket FROM outcomes').all()
 
-test('D4 a ticket closed NOT_PLANNED misses its intervention even on a done plan', () => {
+test('D4 NOT_PLANNED misses its intervention even on a done plan', () => {
   const db = plan('done')
   filed(db, 'NOT_PLANNED', 0)
   expect(ticketed(db)).toEqual([{ outcome: 'missed', refusal: null, ticket: FILED }])
 })
 
-test('D5 an open ticket labelled diagnosis:wrong misses its intervention', () => {
+test('D5 an open diagnosis:wrong ticket misses its intervention', () => {
   const db = plan('running')
   filed(db, null, 1)
   expect(ticketed(db)).toEqual([{ outcome: 'missed', refusal: null, ticket: FILED }])

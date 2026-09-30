@@ -9,7 +9,7 @@ test('with no card the ask is their issue', () => {
   expect(askOf(THEIRS, undefined)).toBe(`# ${THEIRS.title}\n\n${THEIRS.body}\n`)
 })
 
-test('with a card the card leads and titles the job, their issue follows as context', () => {
+test('the card leads and titles the job; their issue is context', () => {
   const ask = askOf(THEIRS, CARD)
   expect(ask.startsWith(CARD.trimEnd())).toBe(true)
   expect(/^#\s+(.*)$/m.exec(ask)?.[1]).toBe('fix(ruby,lua): default mpp.expires_in to 120 s')

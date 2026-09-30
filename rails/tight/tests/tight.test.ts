@@ -21,7 +21,7 @@ function subject(colour: string): Subject {
   }
 }
 
-test('refuses the nine Tight breaches over a diff, naming every span', () => {
+test('refuses the nine Tight breaches in a diff, naming every span', () => {
   const verdict = tight(root, subject('red'))
   expect(verdict.outcome).toBe('refuse')
   expect(verdict.origin_kind).toBe('rail')
@@ -52,7 +52,7 @@ test('refuses a function longer than the manifest ceiling', () => {
   expect(verdict.spans).toEqual(['src/long.ts:1 tight.length'])
 })
 
-test('on an outside repo the code limits are theirs; the prose is still judged', () => {
+test('outside repo: code limits are theirs, prose is still judged', () => {
   const body = [...Array(45).keys()].map((i) => `  const v${String(i)} = ${String(i)}`).join('\n')
   const source = `export function long(): number {\n${body}\n  return v0\n}\n`
   const diff = `--- /dev/null\n+++ b/src/long.ts\n@@ -0,0 +1,48 @@\n${source.split('\n').map((l) => `+${l}`).join('\n')}`
@@ -95,7 +95,7 @@ test('judges Swift func the same as Kotlin fun', () => {
   expect(tight(root, braced('src/Ledger.swift', fixture('swift.split.swift.txt'))).spans).toEqual([])
 })
 
-test('ends a Kotlin function at its brace, not at one inside a multi-line string', () => {
+test('ends a Kotlin function at its brace, not one in a string', () => {
   const verdict = tight(root, braced('src/Receipt.kt', fixture('kotlin.strings.kt.txt')))
   expect(verdict.spans).toEqual([])
   expect(verdict.message).not.toContain('src/Receipt.kt')
@@ -114,7 +114,7 @@ test('never judges an expression-bodied fun', () => {
   expect(tight(root, braced('src/Total.kt', source)).spans).toEqual(['src/Total.kt:3 tight.length'])
 })
 
-test('leaves the next function its brace when a declaration has no body', () => {
+test('a bodiless declaration leaves the next function its brace', () => {
   const doc = [...Array(45).keys()].map((i) => `    val step${String(i)}: Int`).join('\n')
   const body = [...Array(45).keys()].map((i) => `    val step${String(i)} = ${String(i)}`).join('\n')
   const kotlin = `fun interface Handler {\n${doc}\n    fun handle(row: Row): Int\n}\n\nfun settle(rows: List<Row>): Long {\n${body}\n    return 0L\n}\n`
@@ -144,7 +144,7 @@ const added = (path: string, source: string): string => {
   return `--- /dev/null\n+++ b/${path}\n@@ -0,0 +1,${String(lines.length)} @@\n${lines.map((l) => `+${l}`).join('\n')}\n`
 }
 
-/** #105: plan 47 was refused on a template line that writes `// step ${i}`, read as a comment once an earlier `${…}` threw the scan off. */
+/** A plan was refused on a template line that writes `// step ${i}`, read as a comment once an earlier `${…}` threw the scan off. */
 test('text in a template or a regex is not a comment', () => {
   const template = [
     'export const body = (i: number): string => `    val step${String(i)} = ${String(i)}`',
@@ -169,7 +169,7 @@ const commented = (comment: string, code = 'export const reap = 1'): Verdict => 
   return tight(root, { diff: added('src/x.ts', source), sources: { 'src/x.ts': source }, description: 'x.' })
 }
 
-test('refuses history in an added comment and says where it belongs', () => {
+test('refuses history in an added comment, saying where it belongs', () => {
   const verdict = commented('/** #154: reap on land */')
   expect(verdict.outcome).toBe('refuse')
   expect(verdict.spans).toEqual(['src/x.ts:1 tight.history'])
@@ -192,7 +192,7 @@ test('refuses each form of history', () => {
   }
 })
 
-test('passes ranges, bare hashes, the word plan and history in a string', () => {
+test('passes ranges, bare hashes, the word plan and string history', () => {
   for (const comment of ['// ports 80-99', '// the #private field', '// the plan holds']) {
     expect(commented(comment).spans).toEqual([])
   }

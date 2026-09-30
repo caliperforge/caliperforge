@@ -7,7 +7,7 @@ import { map, write } from '../map.ts'
 const text = map(join(import.meta.dirname, '../..'))
 const paths = [...text.matchAll(/^- `(.+?)`/gm)].map((m) => m[1])
 
-test('every non-test .ts file, sorted, with its purpose and exports', () => {
+test('each non-test .ts file, sorted, with its purpose and exports', () => {
   expect(text).toContain('- `store/verdict.ts` — The one verdict shape: a rail and a review both end in a `verdicts` row.\n  - Verdict\n')
   expect(text).toContain('- `cli/map.ts` — The repo map: every source file, its purpose and its exports, for the seats that read a checkout.\n  - MAP\n  - map\n  - write\n')
   expect(paths).not.toContain('cli/tests/digests.test.ts')
@@ -54,7 +54,7 @@ extension Array where Element == Int {
 func render(_ store: Store) {}
 `
 
-test('a Swift file lists its top-level declarations beside the .ts entries', () => {
+test('Swift files list top-level declarations beside .ts entries', () => {
   const root = mkdtempSync(join(tmpdir(), 'cf-map-'))
   mkdirSync(join(root, 'Sources'))
   mkdirSync(join(root, 'Tests'))

@@ -66,7 +66,7 @@ export const WIRE: Wire = {
 
 /**
  * From the first round, CI runs on this branch beside the real one: pushing the real branch would put
- * an unsigned-off round on the maintainer's screen before the CEO has seen it.
+ * an unsigned-off round on the maintainer's screen before it is signed off.
  */
 const NEXT = '-next'
 
@@ -155,7 +155,7 @@ function tips(root: string, plan: number): string[][] {
   return (maybe(root, plan, TIPS) ?? '').split('\n').filter((l) => l !== '').map((l) => l.split(' '))
 }
 
-/** The plan HEAD a -next tip carries; a -next pushed before tips were made is the plan HEAD itself. */
+/** The plan HEAD a -next tip carries; a -next tip not listed is the plan HEAD itself. */
 export function carried(root: string, plan: number, sha: string): string {
   return tips(root, plan).find(([tip]) => tip === sha)?.[1] ?? sha
 }
@@ -169,7 +169,7 @@ function tipOf(root: string, plan: number, head: Head, ci: string): string {
   return tip
 }
 
-/** HEAD plus `greptile.json` turning Greptile's own reviews off (#345b). */
+/** HEAD plus `greptile.json` turning Greptile's own reviews off. */
 function quiet(dir: string, ci: string): string {
   const env = { ...process.env, GIT_INDEX_FILE: join(git(dir, ['rev-parse', '--absolute-git-dir']).trim(), 'next.index') }
   const index = (args: string[]): string =>
@@ -209,8 +209,8 @@ function triggered(text: string): boolean {
 }
 
 /**
- * #206: our own repo with no workflows (Atelier) has no CI to wait on, so step 3's checks, run on this
- * Mac at this head, stand as it. Nothing is pushed: the branch lands on `main` from the checkout. An
+ * Our own repo with no workflows has no CI to wait on, so step 3's checks, run on this
+ * host at this head, stand as it. Nothing is pushed: the branch lands on `main` from the checkout. An
  * outside plan never comes here; its fork CI is the only test their code gets.
  */
 function checked(db: Db, root: string, plan: PlanRow, repo: string): null {
@@ -291,9 +291,9 @@ function touched(root: string, plan: number): string[] {
 }
 
 /**
- * #35 rule 1: the plan that passed the gates goes onto `main` in the tick that signs it, as a
+ * The plan that passed the gates goes onto `main` in the tick that signs it, as a
  * fast-forward of the head the gates signed, and its issue is closed with that sha. A `main` that
- * moved since ready is #35 rule 3's case and never lands here: step 7 sends it back through
+ * moved since ready never lands here: step 7 sends it back through
  * `baseMoved` first, so the sha `hooks/pre-push` lets out is the one the rails judged.
  */
 export function land(db: Db, root: string, plan: PlanRow, approval: number, wire: Wire = WIRE): Outcome {
@@ -443,8 +443,8 @@ function said(brief: string): string[] {
 }
 
 /**
- * A stranger's branch first goes out as one commit, signed as whoever this host's git says it is -- the
- * CEO, on his Mac -- with the brief's title as its subject. The rounds' commits and any merge of
+ * A stranger's branch first goes out as one commit, signed as whoever this host's git says it is,
+ * with the brief's title as its subject. The rounds' commits and any merge of
  * their main fold into it; a branch already in that shape is left alone, so a held CI keeps its head.
  */
 export function squash(root: string, plan: number, rules: Profile | null = null): void {
@@ -472,7 +472,7 @@ function ancestor(dir: string, older: string, newer: string): boolean {
   }
 }
 
-/** A round sent before the name was saved went to plain `-next`. */
+/** The rehearsal branch saved for the plan, else `<branch>-next`. */
 function rehearsed(root: string, plan: number, branch: string): string {
   return maybe(root, plan, REHEARSED) ?? `${branch}${NEXT}`
 }

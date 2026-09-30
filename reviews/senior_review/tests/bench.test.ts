@@ -38,7 +38,7 @@ function seeded(over: Record<string, unknown> = {}): Record<string, unknown> {
   return { repo, issue: fixture('code_quality', 'issue.md'), diff: fixture('code_quality', 'seeded.diff'), ...over }
 }
 
-test('the review refuses the seeded defect naming the span, and passes the clean diff', async () => {
+test('refuses the seeded defect by span, passes the clean diff',async () => {
   const { db, plan } = bench(root)
   const refused = await judge(db, root, 'code_quality', plan, seeded(), replies(fixture('code_quality', 'seeded.reply.md')), TRANSCRIPT)
   expect(refused.outcome).toMatchObject({ outcome: 'refuse', defect_class: 'correctness', spans: ['src/stats.ts:2'], origin_kind: 'ruling', origin_ref: 'reviewers.verdict' })
@@ -49,7 +49,7 @@ test('the review refuses the seeded defect naming the span, and passes the clean
   expect(clean.outcome).toMatchObject({ outcome: 'pass', spans: [], defect_class: null })
 })
 
-test('a reviewer run writes its cost to its runs row, and NULL when the provider reports none', async () => {
+test('a reviewer run writes its cost, NULL when none is reported',async () => {
   const { db, plan } = bench(root)
   const cost = async (provider: Provider): Promise<unknown> => {
     const out = await judge(db, root, 'code_quality', plan, seeded(), provider, TRANSCRIPT)
@@ -68,14 +68,14 @@ const PRIOR = (span: string): string => `---\noutcome: refuse\nclass: correctnes
 const AGAIN = (reopen: string): string =>
   `src/stats.ts:2 is still wrong\n\n---\noutcome: refuse\nclass: correctness\nspans:\n  - src/stats.ts:2\n${reopen}---\n`
 
-test('the verdict row carries the tree it judged, and takes nothing else for one', async () => {
+test('the verdict row carries the tree it judged, and only a tree',async () => {
   const { db, plan } = bench(root)
   const out = await judge(db, root, 'code_quality', plan, seeded({ tree: TREE }), replies(fixture('code_quality', 'clean.reply.md')), TRANSCRIPT)
   expect(db.prepare('SELECT tree FROM verdicts WHERE id = ?').get(out.verdict)).toEqual({ tree: TREE })
   expect(rejects(db, `UPDATE verdicts SET tree = 'not a tree' WHERE id = ${String(out.verdict)}`)).toBe(true)
 })
 
-test('a refusal on a path unchanged since this reviewer\'s last verdict leaves the fence for the prose', async () => {
+test('a refuse on a path unchanged since last verdict is noted',async () => {
   const { db, plan } = bench(root)
   const noted = await judge(db, root, 'code_quality', plan,
     seeded({ prior: PRIOR('src/stats.ts:9'), narrowing: FROZEN }), replies(AGAIN('')), TRANSCRIPT)
@@ -84,7 +84,7 @@ test('a refusal on a path unchanged since this reviewer\'s last verdict leaves t
   expect(db.prepare('SELECT outcome FROM verdicts WHERE id = ?').get(noted.verdict)).toEqual({ outcome: 'pass' })
 })
 
-test('that same span still refuses under reopen, named by the last verdict, or off the unchanged set', async () => {
+test('that span refuses if reopened, named before, or changed',async () => {
   const { db, plan } = bench(root)
   const outcome = async (input: Record<string, unknown>, reply: string): Promise<string> =>
     (await judge(db, root, 'code_quality', plan, input, replies(reply), TRANSCRIPT)).outcome.outcome
@@ -94,7 +94,7 @@ test('that same span still refuses under reopen, named by the last verdict, or o
   expect(await outcome(seeded({ prior: PRIOR('src/stats.ts:9'), narrowing: { ...FROZEN, unchanged: [] } }), AGAIN(''))).toBe('refuse')
 })
 
-test('senior review reads the first verdict and names what the first verdict missed', async () => {
+test('senior review reads the first verdict, names what it missed',async () => {
   const { db, plan } = bench(root)
   const sent: string[] = []
   const capture: Provider = { name: 'claude-agent-sdk', fire: (p) => { sent.push(p.prompt); return replies(fixture('senior_review', 'escape.reply.md')).fire(p) } }
@@ -106,7 +106,7 @@ test('senior review reads the first verdict and names what the first verdict mis
   expect(db.prepare('SELECT gate, step FROM verdicts WHERE id = ?').get(second.verdict)).toEqual({ gate: 'senior_review', step: 5 })
 })
 
-test('senior review handed the reference refuses the pay-kit#340 port on each rule it breaks', async () => {
+test('senior review with reference refuses pay-kit#340 per rule',async () => {
   const { db, plan } = bench(root)
   const sent: string[] = []
   const reference = fixture('senior_review', 'paykit340.reference.md')
@@ -120,7 +120,7 @@ test('senior review handed the reference refuses the pay-kit#340 port on each ru
   for (const rule of ['yes/no/on/off booleans', 'empty RPC URL as unset', 'non-positive expiry rejected']) expect(out.outcome.message).toContain(rule)
 })
 
-test('the prompt carries each changed declaration whole under Changed code in context', async () => {
+test('the prompt carries changed declarations whole in context',async () => {
   const { db, plan } = bench(root)
   const src = mkdtempSync(join(tmpdir(), 'cf-context-'))
   writeFileSync(join(src, 'a.ts'), 'const a = 1\n\nexport function one(): number {\n  return a\n}\n')
@@ -134,7 +134,7 @@ test('the prompt carries each changed declaration whole under Changed code in co
   expect(sent[0]).toContain('## a.ts:3-5\n\n````\nexport function one(): number {\n  return a\n}\n````')
 })
 
-test('two defects in two files come back as one refusal naming both spans', async () => {
+test('two defects in two files are one refusal naming both spans',async () => {
   const { db, plan } = bench(root)
   const out = await judge(db, root, 'code_quality', plan, seeded({ diff: fixture('code_quality', 'pair.diff') }),
     replies(fixture('code_quality', 'pair.reply.md')), TRANSCRIPT)
@@ -150,7 +150,7 @@ test('a replaced function left in place is a minimal refusal', async () => {
   expect(out.outcome).toMatchObject({ outcome: 'refuse', defect_class: 'minimal', spans: ['src/stats.ts:1'], origin_kind: 'ruling', origin_ref: 'reviewers.verdict' })
 })
 
-test('reviewer != builder is refused before the provider fires; the trigger still guards the rows', async () => {
+test('reviewer != builder: refused before firing, trigger holds',async () => {
   const { db, plan } = bench(root)
   const builder = `INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_read_tokens, output_tokens, seconds, exit, transcript_path)
     VALUES (${String(plan)}, 2, 'code_quality', '${specHash(root, 'code_quality')}', 'claude-agent-sdk', 'm', 'high', 0, 0, 0, 0, 0, 'x.transcript.jsonl')`
@@ -170,7 +170,7 @@ test('reviewer != builder is refused before the provider fires; the trigger stil
     VALUES (${String(fresh_.plan)}, 5, 'code_quality', '${specHash(root, 'code_quality')}', 'claude-agent-sdk', 'm', 'high', 0, 0, 0, 0, 0, 'x.transcript.jsonl')`)).toBe(true)
 })
 
-test('a verdict fence wrapped in a ``` block reads the same as a bare one', () => {
+test('a verdict fence in a ``` block reads as a bare one',() => {
   const prose = 'Which of the two callers keeps the old name?\n\n'
   for (const bare of ['---\noutcome: refuse\nclass: correctness\nspans:\n  - src/stats.ts:4\n---\n', '---\noutcome: needs_ceo\n---\n']) {
     const wrapped = read(`${prose}\`\`\`yaml\n${bare}\`\`\`\n`, 's')
@@ -179,7 +179,7 @@ test('a verdict fence wrapped in a ``` block reads the same as a bare one', () =
   }
 })
 
-test('a reviewer reply with no readable verdict fence is a failed run, not a verdict', async () => {
+test('a reply with no readable verdict fence is a failed run',async () => {
   for (const reply of ['looks fine to me', '---\noutcome: refuse\n---\n', '---\noutcome: refuse\nclass: correctness\nspans: []\n---\n', '---\n: : :\n---\n',
     '---\noutcome: refuse\nclass: Tests!\nspans:\n  - src/stats.ts:4\n---\n', '---\noutcome: refuse\nclass: test.weakened\nspans:\n  - src/stats.ts:4\n---\n']) {
     expect(read(reply, 'subject')).toBeNull()
@@ -203,13 +203,13 @@ test('D1 a pass carries its notes of known kinds as written', () => {
   })
 })
 
-test('D2 a note of no known kind turns the pass into a scope refuse naming it', () => {
+test('D2 a note of unknown kind makes a scope refuse naming it',() => {
   const out = read(`the rest reads fine\n\n${PASS(NOTE('text') + NOTE('logic', '9'))}`, 'subject')
   expect(out).toMatchObject({ outcome: 'refuse', defect_class: 'scope', spans: ['src/stats.ts:9'], notes: [], origin_kind: 'ruling', origin_ref: 'reviewers.verdict' })
   expect(out?.message).toBe('the rest reads fine\nnote of no known kind logic at src/stats.ts:9')
 })
 
-test('D3 a note missing a field or with a non-integer line is a failed fence', () => {
+test('D3 a note with a missing field or non-integer line fails',() => {
   expect(read(PASS(NOTE('text', '3', '')), 'subject')).toBeNull()
   expect(read(PASS(NOTE('text', '3.5')), 'subject')).toBeNull()
 })
@@ -227,7 +227,7 @@ test('a pass keeps its prose as message, else reads pass', () => {
   expect(read(PASS(NOTE('text')), 'subject')?.message).toBe('pass')
 })
 
-test('a run that ends at the step cap is fired once more with no tools, and that reply is the verdict', async () => {
+test('a capped run fires once more with no tools for the verdict',async () => {
   const { db, plan } = bench(root)
   const sent: Packet[] = []
   const provider: Provider = {
@@ -249,7 +249,7 @@ test('a run that ends at the step cap is fired once more with no tools, and that
     .toEqual([{ id: out.verdict, outcome: 'refuse', origin_kind: 'ruling', origin_ref: 'reviewers.verdict', tokens: 36, seconds: 1 }])
 })
 
-test('a refusal whose class is not one of the four is still a refusal carrying its spans', async () => {
+test('a refusal of an unlisted class still refuses with its spans',async () => {
   const reply = fixture('senior_review', 'unlisted.reply.md')
   expect(read(reply, 'subject')).toMatchObject({ outcome: 'refuse', defect_class: 'tests', spans: ['src/stats.ts:4'], origin_kind: 'ruling', origin_ref: 'reviewers.verdict' })
 
@@ -260,7 +260,7 @@ test('a refusal whose class is not one of the four is still a refusal carrying i
     .toEqual({ gate: 'senior_review', outcome: 'refuse', origin_kind: 'ruling', origin_ref: 'reviewers.verdict' })
 })
 
-test('a packet the bench refuses writes a refusal verdict and fires no provider', async () => {
+test('a refused packet writes its verdict and fires no provider',async () => {
   const { db, plan } = bench(root)
   const never: Provider = { name: 'claude-agent-sdk', fire: () => { throw new Error('the provider was fired on a refused packet') } }
   const out = await judge(db, root, 'code_quality', plan, seeded({ repo: '/Users/michael/Documents/Claude/Projects/crypto-contributor' }), never, TRANSCRIPT)

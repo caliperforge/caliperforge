@@ -33,7 +33,7 @@ test('refuses a red fork run and every upstream number named', () => {
 })
 
 /**
- * Measured on the fork 2026-09-08: pay-kit runs a workflow per language and the Go, Ruby and PHP
+ * Measured on the fork: pay-kit runs a workflow per language and the Go, Ruby and PHP
  * jobs were red for fork reasons while Kotlin passed. A Kotlin-only diff is judged by Kotlin alone.
  */
 test('passes a green fork run whose text names only our own repo', () => {
@@ -42,7 +42,7 @@ test('passes a green fork run whose text names only our own repo', () => {
   expect(verdict.spans).toEqual([])
 })
 
-test('a diff naming no workflow is judged by every run at the head, and never by an older one', () => {
+test('a diff naming no workflow: every run at the head, none older', () => {
   const verdict = ciGreen(head, { body: '', commits: [] }, ['README.md'], gh('green.gh.json'))
   expect(verdict.spans).toEqual([
     'https://github.com/caliperforge/caliperforge/actions/runs/3 ci.red',
@@ -51,7 +51,7 @@ test('a diff naming no workflow is judged by every run at the head, and never by
   ])
 })
 
-test('asks gh for a page of runs on the branch of the fork, not for the last one', () => {
+test('asks gh for a page of fork branch runs, not the last one', () => {
   let asked: string[] = []
   ciGreen(head, { body: '', commits: [] }, KOTLIN, (args) => {
     asked = args
@@ -61,7 +61,7 @@ test('asks gh for a page of runs on the branch of the fork, not for the last one
     '--limit', '100', '--json', 'headSha,status,conclusion,url,workflowName'])
 })
 
-test('refuses a run that is missing, stale against the head, or still pending', () => {
+test('refuses a run missing, stale against the head, or pending', () => {
   const run = (sha: string, status: string): string =>
     JSON.stringify([{ headSha: sha, status, conclusion: 'success', url: 'u', workflowName: 'Kotlin' }])
   const cases: [string, string][] = [
@@ -79,7 +79,7 @@ test('D2 Fixes #N passes only where issue_ref allows it', () => {
   expect(ciGreen(head, { body: '', commits: ['Fixes #412'] }, KOTLIN, gh('green.gh.json')).spans).toEqual(['commit:1 upstream.number'])
 })
 
-test('D3 under issue_ref Fixes, closes, bare and other-repo numbers are still refused', () => {
+test('D3 issue_ref Fixes still refuses closes, bare and other-repo', () => {
   const commits = ['closes #412', '#412', 'other/repo#1']
   expect(ciGreen(head, { body: '', commits, issue_ref: 'Fixes' }, KOTLIN, gh('green.gh.json')).spans)
     .toEqual(['commit:1 upstream.number', 'commit:2 upstream.number', 'commit:3 upstream.number'])

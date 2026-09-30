@@ -38,7 +38,7 @@ function listed(name: string, list: Step[]): StepMap {
 
 const MAPS: Record<PlanRow['template'], StepMap> = {
   pr_path: { steps, at, last },
-  /** templates/comms.ts imports back into this module, so its steps may not exist yet when this one loads. */
+  /** templates/comms.ts imports back into this module through sequencer/seat.ts, so its steps may not exist yet when this one loads. */
   get comms() { return listed('comms', comms) },
   research: listed('research', []),
 }
@@ -48,7 +48,7 @@ export function mapOf(template: PlanRow['template']): StepMap {
 }
 
 /**
- * #140: what the tick says when it passes a plan over, as a reason the store checks rather than a
+ * What the tick says when it passes a plan over, as a reason the store checks rather than a
  * string a caller formats. `WAITING` carries the words; a target that names itself gets them from `parked`.
  */
 export function blocked(db: Db, plan: PlanRow): Wait | null {
@@ -61,7 +61,7 @@ export function blocked(db: Db, plan: PlanRow): Wait | null {
 }
 
 /**
- * #88. A job about to build waits while another job in the same repo has one of its files in flight.
+ * A job about to build waits while another job in the same repo has one of its files in flight.
  * Only a build that has not started waits: a job already building is never stopped by this.
  */
 export function overlapping(db: Db, plan: PlanRow): { plan: number; path: string } | null {
@@ -113,10 +113,10 @@ function railed(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
 }
 
 /**
- * #89. #88 holds jobs apart on the paths their briefs named, and a build that wrote outside that list
- * breaks the promise silently. So every path the build wrote outside it is recorded as a stray -- which #88
- * reads on the next pick, and the rails do not -- and one an older job is building holds
- * this job here, that job named, until it settles. A path nobody else holds goes on to the rails as before.
+ * Jobs are held apart on the paths their briefs named, and a build that wrote outside that list
+ * breaks the promise silently. So every path the build wrote outside it goes into `plan_files` as a stray -- which
+ * `sharing()` in store/files.ts reads on the next pick, and the rails do not -- and one an older job is building holds
+ * this job here, that job named, until it settles. A path nobody else holds goes on to the rails.
  */
 function strayed(db: Db, root: string, plan: PlanRow): Outcome | null {
   const listed = filesOf(db, plan.id).map((f) => f.path)

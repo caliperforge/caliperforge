@@ -32,14 +32,14 @@ const setup = (): { db: Db; log: (usage: Fired['usage'], model?: string) => numb
 
 const usage = { input: 21000, write: 20000, cache: 100000, output: 5000, cost: 0.305 }
 
-test('D1: cost_computed_usd prices uncached input apart from cache writes and lands within 1% of cost_usd', () => {
+test('D1 cost_computed_usd prices cache writes apart, within 1%', () => {
   const { db, log, computed } = setup()
   price(db, 'm', '2026-01-01')
   const cost = computed(log(usage)) as number
   expect(Math.abs(cost - usage.cost) / usage.cost).toBeLessThan(0.01)
 })
 
-test('D2: a run is priced from the latest row in force at runs.at, and NULL before the first', () => {
+test('D2 a run takes the row in force at runs.at, NULL before any', () => {
   const { db, computed, dated } = setup()
   price(db, 'm', '2026-01-01')
   price(db, 'm', '2026-06-01', 50)
@@ -50,14 +50,14 @@ test('D2: a run is priced from the latest row in force at runs.at, and NULL befo
   expect(computed(before)).toBeNull()
 })
 
-test('D3: no price row, or no cache writes, leaves cost_computed_usd NULL', () => {
+test('D3 no price row or cache writes: cost_computed_usd is NULL', () => {
   const { db, log, computed } = setup()
   price(db, 'm', '2026-01-01')
   expect(computed(log(usage, 'unpriced'))).toBeNull()
   expect(computed(log({ input: 21000, cache: 100000, output: 5000, cost: 0.305 }))).toBeNull()
 })
 
-test('D4: repriced fills NULL priced runs, skips filled and unpriced ones, and lists runs missing cache writes', () => {
+test('D4 repriced fills only NULL priced runs, lists no-cache ones', () => {
   const { db, log, computed, dated } = setup()
   const filled = log(usage)
   price(db, 'm', '2026-01-01')
@@ -73,13 +73,13 @@ test('D4: repriced fills NULL priced runs, skips filled and unpriced ones, and l
   expect(repriced(db)).toEqual({ priced: 0, missing: [noWrites] })
 })
 
-test('D5: a negative price or a source_url that is not https fails its CHECK', () => {
+test('D5 a negative price or non-https source_url fails its CHECK', () => {
   const { db } = setup()
   expect(() => price(db, 'm', '2026-01-01', -1)).toThrow(/CHECK constraint failed/)
   expect(() => price(db, 'm', '2026-01-01', 5, 'http://example.com')).toThrow(/CHECK constraint failed/)
 })
 
-test('runLogged writes every column as given, cache into cache_read_tokens, and NULL for a missing cost', () => {
+test('runLogged: cache to cache_read_tokens, missing cost to NULL', () => {
   const db = fresh(join(root, 'schema'))
   load(db, root)
   const plan = planRow(db)
@@ -98,7 +98,7 @@ test('runLogged writes every column as given, cache into cache_read_tokens, and 
   expect(row({ input: 1, cache: 2, output: 3 })).toEqual({ ...written, cost_usd: null })
 })
 
-test('D2 D3: runLogged writes cache_write_tokens, NULL when absent, and refuses a negative one', () => {
+test('D2 D3 cache_write_tokens: NULL if absent, negative refused', () => {
   const db = fresh(join(root, 'schema'))
   load(db, root)
   const plan = planRow(db)

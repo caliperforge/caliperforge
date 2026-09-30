@@ -19,7 +19,7 @@ it('applies every migration once and records the version', () => {
   expect(migrate(db, join(root, 'schema'))).toEqual([])
 })
 
-it('D1: 0064 adds the desk tables and a comms.site_dir that holds a path, and no other key takes one', () => {
+it('D1 0064 adds desk tables; only comms.site_dir holds a path', () => {
   const db = open(':memory:')
   migrate(db, join(root, 'schema'))
   expect(db.prepare('SELECT count(*) AS n FROM desk_posts, desk_learnings').get()).toEqual({ n: 0 })
@@ -29,13 +29,13 @@ it('D1: 0064 adds the desk tables and a comms.site_dir that holds a path, and no
   expect(() => { set(db, 'brief.reads_left', '/tmp', 'ceo', '2026-09-28') }).toThrow(/CHECK constraint failed/)
 })
 
-it('D1: 0068 opens p80 and p95 to 8 and leaves p30, p60 and p100 as they were', () => {
+it('D1 0068 opens p80 and p95 to 8, leaves p30, p60 and p100', () => {
   const db = open(':memory:')
   migrate(db, join(root, 'schema'))
   expect(['p30', 'p60', 'p80', 'p95', 'p100'].map((p) => get(db, `lanes.band.${p}`))).toEqual(['3', '2', '8', '8', 'spot'])
 })
 
-it('D1 D5: 0060 to 0062 keep every run total and the cache read CHECK, and split each window by type', () => {
+it('D1 D5 0060-0062 keep totals and CHECK, split windows by type', () => {
   const old = mkdtempSync(join(tmpdir(), 'cf-0059-'))
   for (const file of readdirSync(join(root, 'schema')).filter((f) => f.endsWith('.sql') && f < '0060')) {
     copyFileSync(join(root, 'schema', file), join(old, file))
@@ -60,7 +60,7 @@ it('D1 D5: 0060 to 0062 keep every run total and the cache read CHECK, and split
     0, -1, 0, 1, 0, 'x.transcript.jsonl')`).run()).toThrow(/CHECK constraint failed: cache_read_tokens/)
 })
 
-it('D6: 0071 gives each existing desk post a proof_at of its written_date', () => {
+it('D6 0071 sets each desk post proof_at to its written_date', () => {
   const old = mkdtempSync(join(tmpdir(), 'cf-0070-'))
   for (const file of readdirSync(join(root, 'schema')).filter((f) => f.endsWith('.sql') && f < '0071')) {
     copyFileSync(join(root, 'schema', file), join(old, file))
@@ -73,7 +73,7 @@ it('D6: 0071 gives each existing desk post a proof_at of its written_date', () =
   expect(db.prepare('SELECT proof_at FROM desk_posts').get()).toEqual({ proof_at: '2026-09-21' })
 })
 
-it('D6: 0072 keeps every column of an existing desk post and admits dest pack, but not blog', () => {
+it('D6 0072 keeps desk post columns, admits dest pack, not blog', () => {
   const old = mkdtempSync(join(tmpdir(), 'cf-0071-'))
   for (const file of readdirSync(join(root, 'schema')).filter((f) => f.endsWith('.sql') && f < '0072')) {
     copyFileSync(join(root, 'schema', file), join(old, file))
@@ -92,7 +92,7 @@ it('D6: 0072 keeps every column of an existing desk post and admits dest pack, b
   expect(() => insert.run(3, 'blog')).toThrow(/CHECK constraint failed/)
 })
 
-it('D6: 0073 keeps every column of an existing desk post and plan, admits dest scorecard but not blog, and a plan at step 10', () => {
+it('D6 0073 keeps rows, admits scorecard and step 10, not blog', () => {
   const old = mkdtempSync(join(tmpdir(), 'cf-0072-'))
   for (const file of readdirSync(join(root, 'schema')).filter((f) => f.endsWith('.sql') && f < '0073')) {
     copyFileSync(join(root, 'schema', file), join(old, file))
@@ -116,7 +116,7 @@ it('D6: 0073 keeps every column of an existing desk post and plan, admits dest s
   expect(() => insert.run(3, 'blog')).toThrow(/CHECK constraint failed/)
 })
 
-it('holds a comms title to one plan, and leaves untitled comms plans alone', () => {
+it('holds a comms title to one plan and ignores untitled ones', () => {
   const db = open(':memory:')
   migrate(db, join(root, 'schema'))
   const comms = (title: string | null): unknown => db.prepare(`INSERT INTO plans (pipe_id, template, state, queued_at, step, retries, title)
@@ -127,7 +127,7 @@ it('holds a comms title to one plan, and leaves untitled comms plans alone', () 
   expect(() => comms('daily 2026-09-27')).toThrow(/UNIQUE/)
 })
 
-it('D3: a part keeps the after it is given, and null when it is given none', () => {
+it('D3 a part keeps its given after, or null when given none', () => {
   const db = open(':memory:')
   migrate(db, join(root, 'schema'))
   const parent = addPlan(db, { pipe_id: 1, target_id: null, template: 'pr_path', state: 'queued', queued_at: '2026-09-27T00:00:00.000Z',
@@ -157,7 +157,7 @@ it('D5: end clears wait_reason and waits_on on every end', () => {
   expect(row()).toEqual({ state: 'done', wait_reason: null, waits_on: null })
 })
 
-it('D1 D5: requeue, clearWaitsOn, holdOn and briefed write the columns they name', () => {
+it('D1 D5 requeue/clearWaitsOn/holdOn/briefed set their columns', () => {
   const db = open(':memory:')
   migrate(db, join(root, 'schema'))
   const plan = addPlan(db, { pipe_id: 1, target_id: null, template: 'pr_path', state: 'running', queued_at: '2026-09-27T00:00:00.000Z',
@@ -178,7 +178,7 @@ it('D1 D5: requeue, clearWaitsOn, holdOn and briefed write the columns they name
   expect(row('title, what, why, ends')).toEqual({ title: 't', what: 'w', why: null, ends: 'e' })
 })
 
-it('D4: resume leaves an unblocked plan alone and enters a blocked one running or queued by the pipe', () => {
+it('D4 resume skips unblocked plans, enters blocked ones by pipe', () => {
   const db = open(':memory:')
   migrate(db, join(root, 'schema'))
   db.prepare('UPDATE pipes SET max_concurrent = 1 WHERE id = 1').run()
@@ -197,7 +197,7 @@ it('D4: resume leaves an unblocked plan alone and enters a blocked one running o
   expect(state(full)).toBe('queued')
 })
 
-it('D3: no non-test .ts file outside store/ and schema/ writes plans', () => {
+it('D3 no non-test .ts outside store/ and schema/ writes plans', () => {
   const writers = walk(root, (name) => name.endsWith('.ts') && !name.endsWith('.test.ts'))
     .map((path) => relative(root, path).split(sep))
     .filter((parts) => !['store', 'schema'].includes(parts[0] ?? '') && !parts.includes('tests'))
@@ -206,7 +206,7 @@ it('D3: no non-test .ts file outside store/ and schema/ writes plans', () => {
   expect(writers).toEqual([])
 })
 
-it('D1-D3: coo_lite runs at steps 2, 4 and 5 build nothing, and a builder still cannot review itself', () => {
+it('D1-D3 coo_lite steps 2, 4, 5 build nothing; no self-review', () => {
   const db = open(':memory:')
   migrate(db, join(root, 'schema'))
   for (const seat of ['coo_lite', 'typescript_specialist']) {
@@ -239,13 +239,13 @@ it('dumps a database that replays into an identical one', () => {
   expect(replay.prepare('SELECT id FROM rules').all()).toEqual([{ id: 'r' }])
 })
 
-it('D1 D3: a new file opens in WAL mode with a 10 second busy timeout', () => {
+it('D1 D3 a new file opens in WAL mode with a 10s busy timeout', () => {
   const db = open(join(mkdtempSync(join(tmpdir(), 'cf-wal-')), 'cf.db'))
   expect(db.pragma('journal_mode', { simple: true })).toBe('wal')
   expect(db.pragma('busy_timeout', { simple: true })).toBe(10000)
 })
 
-it('D2 D4: a write commits while a second connection holds a read transaction', () => {
+it('D2 D4 a write commits while another connection holds a read', () => {
   const path = join(mkdtempSync(join(tmpdir(), 'cf-wal-')), 'cf.db')
   const writer = open(path)
   migrate(writer, join(root, 'schema'))
@@ -257,7 +257,7 @@ it('D2 D4: a write commits while a second connection holds a read transaction', 
   reader.exec('COMMIT')
 })
 
-it('a schema file that fails leaves the version and the half-written table behind', () => {
+it('a failed schema leaves the version and a half-written table', () => {
   const dir = mkdtempSync(join(tmpdir(), 'cf-schema-'))
   writeFileSync(join(dir, '0001_kept.sql'), 'CREATE TABLE kept (id INTEGER PRIMARY KEY);\n')
   writeFileSync(join(dir, '0002_half.sql'),

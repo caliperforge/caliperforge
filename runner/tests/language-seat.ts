@@ -36,7 +36,7 @@ export function languageSeat(s: LanguageSeat): void {
 
 /** What the seat's files say: manifest, roster row, prompt lines, and the language that picks it. */
 function declared(s: LanguageSeat): void {
-  test('the manifest declares seat, model, effort, tools and the brief-files fence', () => {
+  test('the manifest declares seat, model, effort, tools and fence', () => {
     expect(Seat.parse(seat(root, s.seat).manifest)).toMatchObject({
       seat: s.seat,
       model: 'claude-opus-5-5',
@@ -46,11 +46,11 @@ function declared(s: LanguageSeat): void {
     })
   })
 
-  test('the roster carries the seat and the loader gives it a rules row', () => {
+  test('the roster lists the seat and rules() gives it a row', () => {
     expect(rules(root).find((r) => r.id === s.seat)).toMatchObject({ kind: 'card', path: 'rules/roster.yaml' })
   })
 
-  test('the prompt closes with the handback fence and the rebuild line', () => {
+  test('the prompt closes with the handback fence and rebuild line', () => {
     const prompt = seat(root, s.seat).prompt
     expect(prompt).toMatch(/^---\nsummary: <the change in one line>\ndone:$/m)
     expect(prompt).toContain('- id: D1')
@@ -61,7 +61,7 @@ function declared(s: LanguageSeat): void {
     expect(prompt).toContain('follow it under `# The files`')
   })
 
-  test('the prompt carries their-repo, format-before-handback and parity', () => {
+  test('the prompt carries their-repo, format-first and parity', () => {
     const prompt = seat(root, s.seat).prompt.replace(/\s+/g, ' ')
     expect(prompt).toContain('Match their repository, not ours')
     expect(prompt).toContain('run their tests and their lint and format check, and say what each returned')
@@ -77,7 +77,7 @@ function declared(s: LanguageSeat): void {
 
 /** What the kernel holds the seat to: the command gate and the brief-files fence. */
 function enforced(s: LanguageSeat): void {
-  test('its own commands pass the gate; anything else, chained or redirected, is refused', () => {
+  test('own commands pass the gate; any other command is refused', () => {
     const { manifest, prompt } = seat(root, s.seat)
     const p = packet(manifest, prompt, '', '', root, join(root, 'x.transcript.jsonl'))
     for (const command of s.allowed) expect(ran(p, command)).toEqual({ continue: true })
@@ -90,7 +90,7 @@ function enforced(s: LanguageSeat): void {
     }
   })
 
-  test('the fence is the brief\'s files, and the authority rail refuses a diff beside them', () => {
+  test('the fence is the brief\'s files; authority refuses the rest', () => {
     const db = fresh(join(root, 'schema'))
     db.prepare(`INSERT INTO accounts (id, repo, measured_at, maintainers, doors, last_outsider_merge,
       open_pr_age_p50_days, cross_repo_activity, pulse, evidence)

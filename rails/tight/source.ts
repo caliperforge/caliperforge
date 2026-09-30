@@ -139,7 +139,7 @@ function depth(node: ts.Node, at: number): number {
 
 /**
  * Every comment, found from the parsed tree: the parser knows a template's tail and a regex from a comment,
- * where a bare scanner loses its place after the first `${…}` and reads the strings after it as code (#105).
+ * where a bare scanner loses its place after the first `${…}` and reads the strings after it as code.
  */
 function comments(src: ts.SourceFile): { line: number; text: string; end: number }[] {
   const text = src.text

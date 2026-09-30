@@ -23,7 +23,7 @@ function gh(c: Canned = {}): Read {
   }
 }
 
-test('D1: a maintainer comment, no claim and one outsider merge answer yes three times, each with a link', () => {
+test('maintainer comment, no claim, outsider merge: 3 linked yes', () => {
   expect(find('acme/widget', 12, false, gh())).toEqual({ park: null, section: ['## Target check', '',
     `- wanted: yes — a maintainer commented ${URL}#issuecomment-1`,
     `- unclaimed: yes — no assignee, claim, closer or sibling pull request ${URL}`,
@@ -51,7 +51,7 @@ test('D3: no merged outsider PR parks; a small, odd shape does not', () => {
   expect(find('acme/widget', 12, false, gh({ merged: [merge(1, 'keeper'), odd] })).park).toBeNull()
 })
 
-test('D6: a foreign PR that only references the issue parks an uncarded ask, not a carded one', () => {
+test('foreign referencing PR parks an uncarded ask, not a carded', () => {
   const open = [{ number: 5, title: 'x', body: 'fixes #12', headRepositoryOwner: { login: 'stranger' } }]
   expect(find('acme/widget', 12, true, gh({ open })).park).toBeNull()
   expect(find('acme/widget', 12, false, gh({ open })).park)

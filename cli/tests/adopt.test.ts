@@ -72,7 +72,7 @@ function adopted(db: Db, dir: string): number {
   return row.plan
 }
 
-test('cf adopt files one plan at the pushed step, with the targets and accounts rows it needs', () => {
+test('cf adopt files one pushed plan with target and account rows', () => {
   const db = fresh(schema)
   const log: string[] = []
   const row = adopt(db, root(), `${REPO}#282`, TODAY, canned(log))
@@ -85,14 +85,14 @@ test('cf adopt files one plan at the pushed step, with the targets and accounts 
   expect(log[0]).toBe('pr view 282 --repo solana-foundation/pay-kit --json number,url,state,title,body,closingIssuesReferences')
 })
 
-test('nothing is pushed: the adopted row carries no deliverable, no proof and no approval', () => {
+test('nothing pushed: no deliverable, proof or approval on the row', () => {
   const db = fresh(schema)
   adopt(db, root(), `${REPO}#282`, TODAY, canned())
   expect(rows(db, 'SELECT id FROM deliverables')).toEqual([])
   expect(rows(db, 'SELECT id FROM approvals')).toEqual([])
 })
 
-test('the adopted plan carries an issue packet: the pull request body, then the issue it closes', () => {
+test('adopted plan packet: the PR body, then the issue it closes', () => {
   const db = fresh(schema)
   const dir = root()
   const row = adopt(db, dir, `${REPO}#282`, TODAY, canned())
@@ -100,14 +100,14 @@ test('the adopted plan carries an issue packet: the pull request body, then the 
     + '\n# solana-foundation/pay-kit#270 no pay button\n\nthe kit ships without one\n')
 })
 
-test('a pull request that closes no issue is adopted with its own body as the ask', () => {
+test('a PR closing no issue is adopted with its body as the ask', () => {
   const db = fresh(schema)
   const dir = root()
   const row = adopt(db, dir, `${REPO}#282`, TODAY, canned([], null))
   expect(get(dir, row.plan, 'issue.md')).toBe('# add the pay button\n\nthe button, wired to the kit\n')
 })
 
-test('adopting the same pull request twice is one plan row, and the second call returns the first', () => {
+test('adopting a PR twice is one row; the second call returns it', () => {
   const db = fresh(schema)
   const dir = root()
   const first = adopt(db, dir, `${REPO}#282`, TODAY, canned())
@@ -122,7 +122,7 @@ test('adopting the same pull request twice is one plan row, and the second call 
   expect(render(again)).toContain('already watched')
 })
 
-test('capture reads an adopted pull request like any v2 pushed one, and replays nothing', () => {
+test('capture reads an adopted PR like any pushed one, no replay', () => {
   const db = fresh(schema)
   const plan = adopted(db, root())
   expect(capture(db, () => view()).map((s) => [s.kind, s.author, s.plan]))
@@ -134,7 +134,7 @@ test('capture reads an adopted pull request like any v2 pushed one, and replays 
   expect(capture(db, () => view()).filter((s) => s.kind === 'comment')).toEqual([])
 })
 
-test("a maintainer's comment on an adopted pull request goes to the build and waits there for a person", () => {
+test('adopted PR maintainer comment waits at build for a person', () => {
   const db = fresh(schema)
   const plan = adopted(db, root())
   const note = capture(db, () => view())[0]
@@ -142,7 +142,7 @@ test("a maintainer's comment on an adopted pull request goes to the build and wa
   expect(db.prepare('SELECT step, state FROM plans WHERE id = ?').get(plan)).toEqual({ step: 2, state: 'blocked_on_ceo' })
 })
 
-test('the thread the adoption inherited is recorded and starts nothing', () => {
+test('the inherited thread is recorded and starts nothing', () => {
   const db = fresh(schema)
   const plan = adopted(db, root())
   const history = capture(db, () => view({
@@ -155,7 +155,7 @@ test('the thread the adoption inherited is recorded and starts nothing', () => {
   expect(db.prepare('SELECT step, state FROM plans WHERE id = ?').get(plan)).toEqual({ step: 8, state: 'done' })
 })
 
-test('an approved pull request is left alone: what lands on it is recorded, and only the merge is acted on', () => {
+test('approved PR: records what lands, acts only on the merge', () => {
   const db = fresh(schema)
   const plan = adopted(db, root())
   expect(capture(db, () => view({ reviewDecision: 'APPROVED' }))).toEqual([])
@@ -166,7 +166,7 @@ test('an approved pull request is left alone: what lands on it is recorded, and 
   expect(started(db, SignalRow.parse(merged[0]))).toMatchObject({ template: 'comms', step: 0 })
 })
 
-test('a merge that predates the adoption is still acted on: history is never replayed, a merge is never dropped', () => {
+test('pre-adoption merge is acted on: no replay, never dropped', () => {
   const db = fresh(schema)
   adopted(db, root())
   const merged = capture(db, () => view({ mergedAt: '2026-09-17T23:00:00Z', mergedBy: { login: 'ludo' } }))

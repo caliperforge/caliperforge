@@ -17,24 +17,24 @@ test('the manifest holds Read, Glob and Grep, and no write path', () => {
   expect(Seat.parse(seat(root, 'brief_writer').manifest)).toEqual(card)
 })
 
-test('a seat with no write path that holds a writing tool does not load', () => {
+test('a seat with no write path but a writing tool does not load', () => {
   expect(Seat.safeParse({ ...card, tools: ['Read', 'Write'] }).success).toBe(false)
   expect(Seat.safeParse({ ...card, tools: ['Read', 'Bash(git:*)'] }).success).toBe(false)
   expect(Seat.safeParse({ ...card, tools: ['Read', 'Write'], write_paths: ['src'] }).success).toBe(true)
 })
 
-test('the roster carries the seat and the loader gives it a rules row', () => {
+test('the roster carries the seat and it loads as a rules row', () => {
   expect(rules(root).find((r) => r.id === 'brief_writer')).toMatchObject({ kind: 'card', path: 'rules/roster.yaml' })
 })
 
-test('the prompt names every part the shape check reads, and the unclear and split fences', () => {
+test('the prompt names each shape part and both fences', () => {
   const prompt = seat(root, 'brief_writer').prompt
   for (const part of ['## Approach', '## Settled facts', '## Cases', '## Must not break', '## Files', '## Out of scope', 'outcome: unclear', 'outcome: split']) {
     expect(prompt).toContain(part)
   }
 })
 
-test('D4: the split fence shows after on each part, and the prompt says when to name an earlier part', () => {
+test('D4: each split part shows after, and when to name one', () => {
   const prompt = seat(root, 'brief_writer').prompt
   const fence = /outcome: split[\s\S]*?\n---/.exec(prompt)?.[0] ?? ''
   expect(fence.match(/^ {4}after: /gm)).toHaveLength(fence.match(/^ {2}- title: /gm)?.length ?? -1)
@@ -43,37 +43,37 @@ test('D4: the split fence shows after on each part, and the prompt says when to 
   )
 })
 
-test('the prompt sends a reference implementation\'s input rules to Must not break', () => {
+test('a reference\'s input rules go to Must not break', () => {
   expect(seat(root, 'brief_writer').prompt.replace(/\s+/g, ' ')).toContain(
     'When the ask mirrors, ports or matches another implementation, list that implementation\'s input rules under `## Must not break`: the values it accepts, what it does with an empty input, its bounds and the errors it raises, each with its file:line.',
   )
 })
 
-test('the prompt makes a generated file\'s row name the workflow step that writes it', () => {
+test('a generated file\'s row names the workflow step writing it', () => {
   expect(seat(root, 'brief_writer').prompt.replace(/\s+/g, ' ')).toContain(
     'When `## Files` lists a file a workflow generates, that row names the workflow step that writes it, meaning its `.github/workflows` file and the generator line before `git diff --exit-code`, and says step 3 runs that generator and diffs the file against its output.',
   )
 })
 
-test('the prompt says how to answer a last brief and a last question', () => {
+test('the prompt says how to answer a last brief and question', () => {
   const prompt = seat(root, 'brief_writer').prompt.replace(/\s+/g, ' ')
   expect(prompt).toContain('When the ask carries `# Your last brief`, the refusal under it names what to fix: fix that, keep every other line, and open only the files the fix needs.')
   expect(prompt).toContain('When the ask carries `# Your last question`, its answer is at the end of the ask: re-read only the files under `# Files you opened last time` marked changed, and what the answer adds.')
 })
 
-test('the prompt sends every builder and implementer of a changed shared type or signature to the file list', () => {
+test('every builder of a changed type or signature is listed', () => {
   expect(seat(root, 'brief_writer').prompt.replace(/\s+/g, ' ')).toContain(
     'When the ask changes a shared type or a function\'s signature, search the checkout for its name and list every file that builds or implements it: under `## Files`, or under `## Tests` when it is a test or fixture.',
   )
 })
 
-test('D5: the prompt asks for the Estimate line and sends an outside brief past the size limit to the split fence', () => {
+test('D5: the Estimate line, and an outside brief too big splits', () => {
   const prompt = seat(root, 'brief_writer').prompt.replace(/\s+/g, ' ')
   expect(prompt).toContain('Under `## Approach`, write one line `Estimate: <n> lines`: the lines the change adds and removes, not counting tests or generated files.')
   expect(prompt).toContain('On someone else\'s repository, a brief past five files besides tests or past that repository\'s size limit is refused as more than one job: answer it with the split fence.')
 })
 
-test('the prompt states the path and length rules the brief check refuses on', () => {
+test('the prompt states the brief check\'s path and length rules', () => {
   const prompt = seat(root, 'brief_writer').prompt.replace(/\s+/g, ' ')
   for (const rule of [
     'Every row under `## Files` and `## Tests` names one file, by its path from the checkout root: never a folder (`sequencer/tests/`), never an absolute path, never a path starting `../`.',

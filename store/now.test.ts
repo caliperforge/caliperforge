@@ -16,7 +16,7 @@ function bench(): Db {
   return db
 }
 
-test('D3 a row whose pid is dead reads as stale, and one of this process does not', () => {
+test('D3 a row with a dead pid is stale, one with our pid is not', () => {
   const db = bench()
   const dead = spawnSync('/usr/bin/true').pid
   busy(db, PLAN, 'model', 'brief_writer step 1')
@@ -24,7 +24,7 @@ test('D3 a row whose pid is dead reads as stale, and one of this process does no
   expect(current(db).map((r) => [r.pid, r.stale])).toEqual([[process.pid, false], [dead, true]])
 })
 
-test('D4 the store refuses a pid of 0 and a since that is not an ISO date', () => {
+test('D4 the store refuses a pid of 0 and a non-ISO since', () => {
   const db = bench()
   expect(() => { busy(db, PLAN, 'model', 'brief_writer step 1', new Date(), 0) }).toThrow(/CHECK constraint/)
   expect(() => {

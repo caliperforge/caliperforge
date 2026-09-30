@@ -14,10 +14,10 @@ import { GRADING } from './ready.ts'
 import { diffOf, drop, FORK, get, maybe, put, repoName } from './workspace.ts'
 
 /**
- * 09-21 item 4: an outside job is signed off without a terminal. A plan waiting at step 7 gets one
+ * An outside job is signed off without a terminal. A plan waiting at step 7 gets one
  * card, an issue on our own repo, and a label answers it: `go` signs the head the card shows, `no`
- * refuses it -- with the CEO's comment it goes back to the builder, without one it waits for the
- * COO -- and `talk` hands it to the COO and leaves the card open. The card is for one head: a new
+ * refuses it -- with a comment from the person signing off it goes back to the builder, without one it
+ * waits for a person -- and `talk` hands it to a person and leaves the card open. The card is for one head: a new
  * round closes it and opens the next, so a label only ever signs the bytes its card showed.
  */
 export interface Signed { plan: number; card: number; did: 'opened' | Answer | 'superseded' | 'withdrawn' | 'shut' }
@@ -25,7 +25,7 @@ export interface Signed { plan: number; card: number; did: 'opened' | Answer | '
 const FILE = 'signoff'
 
 /**
- * Step 2 is the build in templates/pr-path.ts: the CEO's words go to whoever can change the code. The
+ * Step 2 is the build in templates/pr-path.ts: the words of a `no` go to whoever can change the code. The
  * approval row's reason is a slug (`approvals.reason` is checked); the words themselves go in `refusal.md`.
  */
 const BUILD = 2
@@ -139,9 +139,9 @@ function titleFor(db: Db, root: string, plan: number): string {
 }
 
 /**
- * Everything the CEO judges on, readable on a phone: what it is, what it changes, what passed, the
+ * Everything the person signing off judges on, readable on a phone: what it is, what it changes, what passed, the
  * commit on our fork, and the words the maintainer will read, fenced so no mention or reference in
- * them pings anyone or links anything before he says go.
+ * them pings anyone or links anything before that person says go.
  */
 export function bodyFor(db: Db, root: string, card: Card, desk: Desk): string {
   const s = subjectOf(db, card.id)
@@ -182,7 +182,7 @@ export function bodyFor(db: Db, root: string, card: Card, desk: Desk): string {
 }
 
 /**
- * #97: PR text written in advance (`cf queue add --pr`) can leave out a file the build changed. The card names
+ * PR text written in advance (`cf queue add --pr`) can leave out a file the build changed. The card names
  * each one the text never mentions, by path or by name, so the gap is seen before `go`.
  */
 function unsaid(root: string, plan: number, text: string | null): string[] {
@@ -245,7 +245,7 @@ function code(text: string): string {
 }
 
 /**
- * The CEO's `no` with words joins the brief: a D row the builder must answer and a Must not break line the
+ * A `no` with words joins the brief: a D row the builder must answer and a Must not break line the
  * reviewers hold. `refusal.md` carries them for one round; the brief carries them for every round after it.
  */
 export function ruled(brief: string, words: string, day: string): string {

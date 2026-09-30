@@ -25,7 +25,7 @@ function rows(db: Db): unknown[] {
   return db.prepare('SELECT path, is_new FROM plan_files WHERE plan = ? ORDER BY position').all(PLAN)
 }
 
-test('the three paths the brief names are three rows in the order it listed them', () => {
+test('the three paths the brief names are three rows in its order', () => {
   const db = bench()
   record(db, PLAN, files(briefOf('sequencer/brief.ts', 'store/files.ts', 'schema/0017_plan_files.sql')))
 
@@ -36,7 +36,7 @@ test('the three paths the brief names are three rows in the order it listed them
   ])
 })
 
-test('a line number is dropped from the path and (new) sets the flag', () => {
+test('a path drops its line number and (new) sets the flag', () => {
   const db = bench()
   record(db, PLAN, files(briefOf('`a/b.ts:41`', 'c/d.ts (new)')))
 
@@ -51,7 +51,7 @@ test('a second list leaves only its own paths', () => {
   expect(rows(db)).toEqual([{ path: 'e/f.ts', is_new: 0 }])
 })
 
-test('a brief with no ## Files heading leaves no rows and throws nothing', () => {
+test('a brief with no ## Files leaves no rows and throws nothing', () => {
   const db = bench()
 
   record(db, PLAN, files('# a job\n\n## Out of scope\n\n- the rest\n'))
@@ -73,7 +73,7 @@ test('D1 add lists a new path and writes one files event', () => {
   expect(events(db)).toEqual([{ plan: PLAN, kind: 'files', actor: 'coo', outcome: 'pass', message: 'add a.ts' }])
 })
 
-test('D2 drop removes the listed row, and a drop of an unlisted path changes nothing', () => {
+test('D2 drop removes a listed row and ignores an unlisted path', () => {
   const db = bench()
   record(db, PLAN, [{ path: 'a.ts', is_new: false }, { path: 'b.ts', is_new: false }])
   edit(db, PLAN, 'drop', 'a.ts', 'ceo', 'wrong file')

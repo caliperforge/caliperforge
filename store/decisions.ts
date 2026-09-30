@@ -1,7 +1,7 @@
 import type { Db } from './index.ts'
 import type { Wait } from './plans.ts'
 
-/** The closed menu #139 wakes the orchestrator with. The store is what holds it to these. */
+/** The closed menu the orchestrator is woken with. The store is what holds it to these. */
 export const VERBS = ['retry', 'return', 'halt', 'next', 'clear', 'split', 'ask_ceo', 'ask_coo'] as const
 
 export type Verb = typeof VERBS[number]

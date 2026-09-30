@@ -96,3 +96,8 @@ it('signoff.ts to steps.ts meet their ratchet rows', () => {
   const paths = ['sequencer/signoff.ts', 'sequencer/split.ts', 'sequencer/steps.ts']
   expect(ratcheted(join(import.meta.dirname, '..'), {}).filter((f) => paths.includes(f.path))).toEqual([])
 })
+
+it('theirs.ts to workspace.ts meet their ratchet rows', () => {
+  const paths = ['sequencer/theirs.ts', 'sequencer/upgrade.ts', 'sequencer/workspace.ts']
+  expect(ratcheted(join(import.meta.dirname, '..'), {}).filter((f) => paths.includes(f.path))).toEqual([])
+})

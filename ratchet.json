@@ -688,15 +688,18 @@
     "citing-comment": 1,
     "prepare": 11
   },
+  "sequencer/theirs.ts": {
+    "lines": 105,
+    "silent-catch": 1
+  },
   "sequencer/upgrade.ts": {
     "lines": 70,
     "prepare": 1,
     "silent-catch": 3
   },
   "sequencer/workspace.ts": {
-    "citing-comment": 1,
-    "lines": 358,
-    "silent-catch": 3
+    "lines": 390,
+    "silent-catch": 4
   },
   "store/approvals.ts": {
     "citing-comment": 3,

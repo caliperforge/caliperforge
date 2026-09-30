@@ -76,3 +76,8 @@ it('refuses a long test name and citing comments', async () => {
     'b.ts citing-comment 5 over budget 0: drop the ticket, date, name or plan number from the comment',
   ])
 })
+
+it('act.ts to brief.ts meet their ratchet rows', () => {
+  const paths = ['sequencer/act.ts', 'sequencer/approve.ts', 'sequencer/base.ts', 'sequencer/brief.ts']
+  expect(ratcheted(join(import.meta.dirname, '..'), {}).filter((f) => paths.includes(f.path))).toEqual([])
+})

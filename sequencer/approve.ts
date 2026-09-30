@@ -9,14 +9,9 @@ import { land, type Wire } from './push.ts'
 import { following } from './split.ts'
 
 /**
- * Step 7. An external plan only reaches here once `cf approve plan` wrote the CEO's row, so the
- * step has nothing left to do and says so. An internal plan lands on the gates alone (#20): the
- * four gate verdicts and the ready rail are the whole sign-off, the row that settles its
- * deliverable is signed `gates`, and the same step puts the branch on `main` (#35 rule 1). The
- * store's step-7 trigger reads that signature only on a plan that names an origin, so an external
- * plan still cannot leave ready on anything but the CEO's. The base is judged again before any of
- * that: a `main` that moved since ready is #35 rule 3's case, and nothing is signed for a head the
- * rails have not seen.
+ * Step 7. An external plan reaches here only once `cf approve plan` signed it, so the step passes. An internal plan
+ * lands on the gates alone: its deliverable is signed `gates` and its branch goes on `main` in the same step. The
+ * base is judged again first, and nothing is signed for a head the rails have not seen.
  */
 export function batch(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
   if (!internal(plan)) return { outcome: 'pass', spans: [], note: 'batch' }

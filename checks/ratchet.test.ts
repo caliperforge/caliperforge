@@ -106,3 +106,8 @@ it('approvals.ts to files.ts meet their ratchet rows', () => {
   const paths = ['store/approvals.ts', 'store/decisions.ts', 'store/deliverables.ts', 'store/files.ts']
   expect(ratcheted(join(import.meta.dirname, '..'), {}).filter((f) => paths.includes(f.path))).toEqual([])
 })
+
+it('holds.ts to merges.ts meet their ratchet rows', () => {
+  const paths = ['store/holds.ts', 'store/lanes.ts', 'store/leases.ts', 'store/merges.ts']
+  expect(ratcheted(join(import.meta.dirname, '..'), {}).filter((f) => paths.includes(f.path))).toEqual([])
+})

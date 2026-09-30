@@ -729,22 +729,19 @@
     "lines": 92
   },
   "store/holds.ts": {
-    "citing-comment": 1,
-    "lines": 49
+    "lines": 62
   },
   "store/index.ts": {
     "lines": 73
   },
   "store/lanes.ts": {
-    "lines": 128
+    "lines": 194
   },
   "store/leases.ts": {
-    "citing-comment": 1,
     "lines": 69,
     "silent-catch": 1
   },
   "store/merges.ts": {
-    "citing-comment": 1,
     "lines": 63
   },
   "store/now.test.ts": {

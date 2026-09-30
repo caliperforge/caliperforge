@@ -40,7 +40,7 @@ test('a verb off the menu is refused by the store', () => {
   expect(() => { decided(db, { ...ROW, verb: 'reassign' as never }) }).toThrow(/CHECK/)
 })
 
-test('every wait reason the tick writes is a reason the orchestrator can wake on', () => {
+test('the orchestrator wakes on every wait reason the tick writes', () => {
   const db = bench()
   for (const wait_reason of WAIT) decided(db, { ...ROW, wait_reason })
   expect(decisions(db, PLAN)).toHaveLength(WAIT.length)

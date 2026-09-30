@@ -26,7 +26,7 @@ function kindOf(db: Db, id: number): unknown {
   return db.prepare('SELECT kind, owner, defect_class FROM dispositions WHERE id = ?').get(id)
 }
 
-test('bytes changed at the span with a passing re-gate is fixed; no byte change is no_change_pass', () => {
+test('passing re-gate: fixed if span changed, else no_change_pass', () => {
   const { db, plan } = bench()
   const span = { verdict_id: verdict(db, plan, 'refuse'), defect_class: 'correctness', evidence }
   const fixed = settle(db, span, 'xs.sort()', '[...xs].sort((a, b) => a - b)', 'pass')
@@ -44,7 +44,7 @@ test('a re-gate that still refuses settles nothing', () => {
   expect(db.prepare('SELECT count(*) AS n FROM dispositions').get()).toEqual({ n: 0 })
 })
 
-test('escaped is attributed to the owning step and overridden carries the approval row', () => {
+test('escaped names its owning step, overridden its approval row', () => {
   const { db, plan } = bench()
   const miss = escaped(db, { verdict_id: verdict(db, plan, 'pass'), defect_class: 'tight.comment', evidence })
   expect(kindOf(db, miss)).toEqual({ kind: 'escaped', owner: 'step3', defect_class: 'tight.comment' })
@@ -55,7 +55,7 @@ test('escaped is attributed to the owning step and overridden carries the approv
   expect(kindOf(db, over)).toEqual({ kind: 'overridden', owner: 'review', defect_class: 'scope' })
 })
 
-test('every class in the build map maps to its owning step and an unknown class throws', () => {
+test('each build-map class has an owning step; an unknown throws', () => {
   const map: [string, string][] = [
     ['premise', 'step0'], ['secret', 'step3'], ['authority', 'step3'], ['tier', 'step3'], ['claim', 'step3'],
     ['tight.comment', 'step3'], ['test.weakened', 'step3'], ['test.untargeted', 'step3'], ['identifier.unresolved', 'step3'],
@@ -68,7 +68,7 @@ test('every class in the build map maps to its owning step and an unknown class 
   expect(() => owner('vibes')).toThrow(/no owning step/)
 })
 
-test('the store refuses an owner the class does not own and a second disposition on one verdict', () => {
+test('refuses a wrong owner and two dispositions on one verdict', () => {
   const { db, plan } = bench()
   const id = verdict(db, plan, 'refuse')
   expect(rejects(db, `INSERT INTO dispositions (verdict_id, kind, defect_class, owner, evidence)

@@ -713,9 +713,6 @@
     "citing-comment": 3,
     "lines": 81
   },
-  "store/decisions.test.ts": {
-    "test-name": 1
-  },
   "store/decisions.ts": {
     "citing-comment": 1,
     "lines": 42
@@ -724,17 +721,11 @@
     "citing-comment": 1,
     "lines": 64
   },
-  "store/dispositions.test.ts": {
-    "test-name": 4
-  },
   "store/dispositions.ts": {
     "lines": 51
   },
   "store/events.ts": {
     "lines": 28
-  },
-  "store/files.test.ts": {
-    "test-name": 3
   },
   "store/files.ts": {
     "citing-comment": 2,
@@ -759,9 +750,6 @@
     "citing-comment": 1,
     "lines": 63
   },
-  "store/now.test.ts": {
-    "test-name": 2
-  },
   "store/now.ts": {
     "lines": 31
   },
@@ -772,9 +760,6 @@
   "store/proposals.ts": {
     "lines": 61
   },
-  "store/refusals.test.ts": {
-    "test-name": 3
-  },
   "store/refusals.ts": {
     "lines": 96
   },
@@ -783,9 +768,6 @@
   },
   "store/signals.ts": {
     "lines": 41
-  },
-  "store/store.test.ts": {
-    "test-name": 1
   },
   "store/tickets.ts": {
     "lines": 42,

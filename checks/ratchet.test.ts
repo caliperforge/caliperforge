@@ -141,3 +141,8 @@ it('index.ts to wake.ts meet their ratchet rows', () => {
   const paths = ['runner/index.ts', 'runner/packet.ts', 'runner/wake.ts']
   expect(ratcheted(join(import.meta.dirname, '..'), {}).filter((f) => paths.includes(f.path))).toEqual([])
 })
+
+it('pr-path.ts and vitest.config.ts meet their ratchet rows', () => {
+  const paths = ['templates/pr-path.ts', 'vitest.config.ts']
+  expect(ratcheted(join(import.meta.dirname, '..'), {}).filter((f) => paths.includes(f.path))).toEqual([])
+})

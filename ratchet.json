@@ -777,11 +777,9 @@
     "lines": 43
   },
   "templates/pr-path.ts": {
-    "citing-comment": 1,
     "lines": 55
   },
   "vitest.config.ts": {
-    "citing-comment": 2,
     "lines": 8
   }
 }

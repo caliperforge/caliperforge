@@ -131,3 +131,8 @@ it('providers meet their ratchet rows', () => {
   const paths = ['providers/claude-agent-sdk/index.ts', 'providers/credential.ts', 'providers/kind.ts']
   expect(ratcheted(join(import.meta.dirname, '..'), {}).filter((f) => paths.includes(f.path))).toEqual([])
 })
+
+it('ready and tight/source meet their ratchet rows', () => {
+  const paths = ['rails/ready/index.ts', 'rails/tight/source.ts']
+  expect(ratcheted(join(import.meta.dirname, '..'), {}).filter((f) => paths.includes(f.path))).toEqual([])
+})

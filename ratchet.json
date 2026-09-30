@@ -252,7 +252,6 @@
     "test-name": 4
   },
   "rails/ready/index.ts": {
-    "citing-comment": 1,
     "lines": 55
   },
   "rails/ready/tests/ready.test.ts": {
@@ -288,7 +287,6 @@
     "lines": 38
   },
   "rails/tight/source.ts": {
-    "citing-comment": 1,
     "lines": 174
   },
   "rails/tight/tests/tight.test.ts": {

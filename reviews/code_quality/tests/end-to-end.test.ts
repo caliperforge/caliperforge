@@ -70,7 +70,7 @@ async function built(db: Db, repo: string): Promise<number> {
   return plan.plan
 }
 
-test('seeded defect: builder, rail, review refuses the span, fix, re-gate, dispositions.fixed', async () => {
+test('seeded defect: build, rail, refuse, fix, re-gate, fixed',async () => {
   const { db, repo } = bench()
   const plan = await built(db, repo)
   const packet = { repo, issue: fixture('issue.md'), diff: fixture('seeded.diff') }

@@ -307,21 +307,13 @@
     "prepare": 4
   },
   "reviews/code_quality/tests/end-to-end.test.ts": {
-    "prepare": 5,
-    "test-name": 1
-  },
-  "reviews/code_quality/tests/packet.test.ts": {
-    "test-name": 9
+    "prepare": 5
   },
   "reviews/package.ts": {
     "lines": 70
   },
   "reviews/senior_review/tests/bench.test.ts": {
-    "prepare": 16,
-    "test-name": 14
-  },
-  "reviews/senior_review/tests/package.test.ts": {
-    "test-name": 4
+    "prepare": 16
   },
   "reviews/verdict.ts": {
     "lines": 67,

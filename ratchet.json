@@ -376,23 +376,19 @@
     "test-name": 3
   },
   "sequencer/act.ts": {
-    "citing-comment": 2,
     "lines": 56,
     "prepare": 1
   },
   "sequencer/approve.ts": {
-    "citing-comment": 1,
-    "lines": 73,
-    "prepare": 4
+    "lines": 61,
+    "prepare": 1
   },
   "sequencer/base.ts": {
-    "citing-comment": 1,
     "lines": 64,
     "silent-catch": 1
   },
   "sequencer/brief.ts": {
-    "citing-comment": 6,
-    "lines": 353,
+    "lines": 401,
     "silent-catch": 1
   },
   "sequencer/capture.ts": {

@@ -5,8 +5,8 @@ import { maybe, put } from './workspace.ts'
 
 /**
  * A failed check or CI run is known by what failed, not by the one span every such failure shares. So is a
- * `text:N` span, a line of this job's own brief or handback: plans 24 and 130 both drew "text:5
- * identifier.unresolved" for different names, read as one fault on main, and the internal lane went off on 09-25.
+ * `text:N` span, a line of this job's own brief or handback: two jobs refused at the same `text:N` for different
+ * names are two faults, not one on main.
  */
 export function fingerprintOf(step: Step, outcome: Outcome): string {
   const checked = outcome.spans.some((s) => s.startsWith('checks:') || s.startsWith('ci.red'))

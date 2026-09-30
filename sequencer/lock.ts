@@ -8,8 +8,7 @@ const LOCK = '.cf/checks.lock'
 const MOST = 8
 
 /**
- * Step 3 test runs on the host at once: `CF_CHECK_SLOTS` of them, one when unset. It was one outright, so the
- * slots of #308 never saw a second run: on 09-25 two jobs sat behind one suite for ten minutes, a tick apiece.
+ * Step 3 test runs on the host at once: `CF_CHECK_SLOTS` of them, one when unset.
  * Null when this job holds a place, else a live holder's lease.
  */
 export function lock(root: string, plan: number, now: Date = new Date(), width = widthOf()): Lease | null {

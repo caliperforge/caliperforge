@@ -27,7 +27,7 @@ function db(): Db {
 const planOf = (d: Db, id: number | null): PlanRow => PlanRow.parse(d.prepare('SELECT * FROM plans WHERE id = ?').get(id))
 const pipeOf = (d: Db, name: string): PipeRow => d.prepare('SELECT * FROM pipes WHERE name = ?').get(name) as PipeRow
 
-test('an atelier issue files on the atelier lane, pipe and swift seat', () => {
+test('atelier issue files on the atelier lane, pipe and swift seat', () => {
   const d = db()
   const root = mkdtempSync(join(tmpdir(), 'cf-atelier-'))
   const filed = add(d, root, 'caliperforge/atelier#3', 'ceo', undefined, canned(ATELIER, ['lane:atelier']))

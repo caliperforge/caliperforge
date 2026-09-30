@@ -12,10 +12,7 @@ export const PipeRow = z.object({
 
 export type PipeRow = z.infer<typeof PipeRow>
 
-/**
- * #140: why the tick is not stepping this plan. The store checks the list, so a reason outside it is
- * refused on the way in rather than read back by #141's router or the #139 orchestrator as a surprise.
- */
+/** Why the tick is not stepping a plan; the store refuses a reason outside the list on the way in. */
 export const WAIT = ['ceo_batch', 'target_approval', 'ready_proof', 'target_parked', 'token_ceiling',
   'leased', 'over_cap', 'lane_over_cap', 'no_step_map', 'file_overlap'] as const
 
@@ -44,7 +41,7 @@ const ISSUE = /github\.com\/([^/]+\/[^/]+)\/issues\/(\d+)$/
 
 /**
  * A plan filed from one of our own issues: it names an `origin` and no target row.
- * Our repo needs no pulse, no target approval and no CEO signature to land (#20).
+ * Our repo needs no pulse, no target approval and no signature to land.
  */
 export function internal(plan: PlanRow): boolean {
   return plan.origin !== null
@@ -152,8 +149,10 @@ export function builderRan(db: Db, plan: number): boolean {
   return db.prepare(`SELECT 1 FROM runs WHERE plan = ? AND step >= 2 AND ${BUILT}`).get(plan) !== undefined
 }
 
-/** #140: a plan the tick stepped carries no reason; one it passed over carries why, from the list the store checks. */
-/** `on` is the plan a `file_overlap` waits for (#88); every other reason names none. */
+/**
+ * A plan the tick stepped carries no reason; one it passed over carries why, from the list the store checks.
+ * `on` is the plan a `file_overlap` waits for; every other reason names none.
+ */
 export function waiting(db: Db, rows: { plan: number; why: Wait | null; on?: number | null }[]): void {
   const set = db.prepare(`UPDATE plans SET wait_reason = @why, waits_on = @on,
     held_by = CASE WHEN state = 'blocked_on_ceo' THEN held_by WHEN ${ON_CEO} THEN 'ceo' WHEN held_by = 'ceo' THEN NULL ELSE held_by END,
@@ -260,7 +259,7 @@ export function stampHead(db: Db, plan: number, digest: string): void {
 
 export interface Overlap { plan: number; on: number; path: string | null }
 
-/** The plans the last tick held on another job's files, and the job each waits for (#88). */
+/** The plans the last tick held on another job's files, and the job each waits for. */
 export function overlapWaits(db: Db): Overlap[] {
   return db.prepare(`SELECT p.id AS plan, p.waits_on AS "on", (SELECT f.path FROM plan_files f
     JOIN plan_files mine ON mine.plan = p.id AND mine.path = f.path

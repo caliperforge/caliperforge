@@ -28,9 +28,9 @@ export function decide(db: Db, kind: SubjectKind, id: number, digest: string, re
 }
 
 /**
- * #20: an internal plan lands on the gates alone, so the row that settles its deliverable is signed
+ * An internal plan lands on the gates alone, so the row that settles its deliverable is signed
  * `gates`. The store takes that signature on a plan approval and nowhere else, and the step-7 trigger
- * reads it only when the plan names an origin — a stranger's repo still leaves ready on the CEO's row.
+ * reads it only when the plan names an origin — a stranger's repo still needs the `ceo` row for ready.
  */
 export function gates(db: Db, plan: number, digest: string): number {
   const row = db.prepare(`INSERT INTO approvals
@@ -44,7 +44,7 @@ export function gates(db: Db, plan: number, digest: string): number {
 
 /**
  * The row step 8 sends on. Its clause is the step-7 trigger's and `hooks/pre-push`'s, word for
- * word: the CEO's signature, or the gates' on a plan that names an origin. All three fences read
+ * word: the `ceo` row, or the gates' on a plan that names an origin. All three fences read
  * the same sentence, so none of them can drift into taking a signature the others would refuse.
  */
 export function signedHead(db: Db, plan: number, digest: string): number | null {
@@ -57,8 +57,8 @@ export function signedHead(db: Db, plan: number, digest: string): number | null 
 
 /**
  * What `hooks/pre-push` asks of a sha landing on `main`: was this head signed off? The clause is the
- * step-7 trigger's, word for word — the CEO's row, or the gates' row on a plan that names an
- * origin. An external branch is held to the CEO's row where it becomes a pull request, in
+ * step-7 trigger's, word for word — the `ceo` row, or the gates' row on a plan that names an
+ * origin. An external branch is held to the `ceo` row where it becomes a pull request, in
  * `sequencer/push.ts`, not here: `refusedPush` lets an unsigned branch reach our fork.
  */
 export function headApproved(db: Db, sha: string): boolean {

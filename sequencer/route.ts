@@ -9,8 +9,8 @@ import { languageOfSeat } from '../templates/pr-path.ts'
 export const BRIEF_FILES = 'brief:files'
 
 /**
- * Which builder a plan gets. The kernel's own repo is TypeScript; another repo of ours is what its tree is written in (#69), and an empty one goes by the plan's seat unless `bySeat` is false, as for the gates. On a stranger's repo the brief's files decide: all
- * under `kotlin/` is the Kotlin seat, whose fence is that folder; otherwise the files' language (#204),
+ * Which builder a plan gets. The kernel's own repo is TypeScript; another repo of ours is what its tree is written in, and an empty one goes by the plan's seat unless `bySeat` is false, as for the gates. On a stranger's repo the brief's files decide: all
+ * under `kotlin/` is the Kotlin seat, whose fence is that folder; otherwise the files' language,
  * and the outside seat only when no file is in a language with a seat of its own.
  */
 export function languageFor(db: Db, plan: PlanRow, src: string, bySeat = true): string | null {

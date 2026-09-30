@@ -45,7 +45,7 @@ export function fingerprint(step: number, spans: string[], output = ''): string 
  * took within a day (the fault is on main, and no build here can fix it), on one it has already had
  * against the same ticket, cleared or not, on a build that changed nothing since the last refusal, and past `ROUNDS`. Before the build nothing
  * of main has run, so a refusal there is never read as shared: two briefs refused alike are two
- * replies to two asks, and turned the internal lane off twice on 09-24. A branch behind main is never
+ * replies to two asks. A branch behind main is never
  * read as shared either, because main moving is not a fault on main, and nor is a branch cut
  * again because main moved under it: that one goes round until `ROUNDS`, and `base.laps` caps it sooner.
  */
@@ -92,8 +92,8 @@ export function blipped(db: Db, plan: number, step: number): Why {
 }
 
 /**
- * CEO 09-21: a job halts past the token ceiling. The count starts again when a person sends it round,
- * so it is every run since the latest refusal a person cleared. Cache reads are not counted (CEO 09-24).
+ * A job halts past the token ceiling: the count starts again when a person sends it round,
+ * so it is every run since the latest refusal a person cleared. Cache reads are not counted.
  */
 export function overBudget(db: Db, plan: number): { spent: number; ceiling: number } | null {
   const row = db.prepare(`SELECT

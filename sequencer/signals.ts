@@ -27,7 +27,7 @@ const BUILD_STEP = 2
 /**
  * A changes-requested review and a red check on the pull request go straight to the builder with the
  * words. A plain comment or review goes to the builder too, but waits there for a person: it may be a
- * question, and the CEO answers those himself (`cf retry` sends it on). Either way the words land in
+ * question, and a person answers those (`cf retry` sends it on). Either way the words land in
  * the refusal the builder reads, the refusal count starts over, and the inbox says who asked. A
  * changes-requested review on an assembled pull request is the exception: it becomes one fix part.
  */
@@ -77,16 +77,13 @@ export function words(signal: SignalRow): string {
   return `${signal.author} on ${signal.repo}#${String(signal.pr)} (${signal.kind}${signal.state === null ? '' : `, ${signal.state}`}, ${signal.at}):\n\n${said}\n\nspans:\n  - pr:${String(signal.pr)}\n`
 }
 
-/**
- * Ruling `signals.pre_adoption`: an adopted plan inherits the whole thread of a pull request v1
- * opened. What predates the row is history the plan already stands on — recorded, never replayed.
- */
+/** A signal older than the plan is recorded, never replayed (ruling `signals.pre_adoption`). */
 function older(db: Db, signal: SignalRow, plan: number): boolean {
   const row = db.prepare('SELECT queued_at FROM plans WHERE id = ?').get(plan) as { queued_at: string }
   return Date.parse(signal.at) < Date.parse(row.queued_at)
 }
 
-/** The comms lane is on and holds no step map; the plan queued here waits there until P7 writes one. */
+/** A merged outside pull request files one comms plan to post it, on a comms lane made on if missing. */
 function comms(db: Db, signal: SignalRow, from: number): Started | null {
   const merged = planById(db, from)
   if (internal(merged)) return null

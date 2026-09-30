@@ -51,7 +51,7 @@ export function upgraded(db: Db, root: string, lap: Receipt): Receipt {
 }
 
 /**
- * #337. The pinned tick tree (#168) sits on a detached HEAD, where `git pull` has no branch to pull. It moves the
+ * The pinned tick tree sits on a detached HEAD, where `git pull` has no branch to pull. It moves the
  * way tick.sh moves it: to origin/main, and only forward.
  */
 function forward(root: string): void {

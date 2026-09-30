@@ -457,26 +457,20 @@
     "silent-catch": 2
   },
   "sequencer/index.ts": {
-    "citing-comment": 6,
-    "lines": 445,
-    "prepare": 6,
-    "silent-catch": 2
+    "lines": 219
   },
   "sequencer/install.ts": {
     "lines": 41
   },
   "sequencer/kind.ts": {
-    "citing-comment": 2,
     "lines": 39
   },
   "sequencer/lock.ts": {
-    "citing-comment": 1,
-    "lines": 58,
+    "lines": 57,
     "silent-catch": 1
   },
   "sequencer/merge.ts": {
-    "citing-comment": 3,
-    "lines": 138,
+    "lines": 137,
     "prepare": 1,
     "silent-catch": 1
   },

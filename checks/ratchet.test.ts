@@ -152,3 +152,9 @@ it('cli/tests/ names and comments meet their ratchet rows', () => {
     f.path.startsWith('cli/tests/') && /test-name|citing-comment/.test(f.message)
   expect(ratcheted(join(import.meta.dirname, '..'), {}).filter(owned)).toEqual([])
 })
+
+it('checks/ tests meet their ratchet rows', () => {
+  const tests = ratcheted(join(import.meta.dirname, '..'), {})
+    .filter((f) => f.path.startsWith('checks/') && f.path.endsWith('.test.ts'))
+  expect(tests).toEqual([])
+})

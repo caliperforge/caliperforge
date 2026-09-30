@@ -21,7 +21,7 @@ describe.each(CHECKS)('$name', (check) => {
   })
 })
 
-it('a job checkout parked under .cf is not walked as our own tree', () => {
+it('a job checkout under .cf is not walked as our tree', () => {
   const dir = mkdtempSync(join(tmpdir(), 'cf-walk-'))
   mkdirSync(join(dir, '.cf/work/1/src'), { recursive: true })
   writeFileSync(join(dir, '.cf/work/1/src/theirs.ts'), '// a stranger\n')
@@ -37,7 +37,7 @@ it('runAll sees the repository as clean', async () => {
   expect(await runAll(root)).toEqual([])
 })
 
-it('migration-order judges new migrations against upstream main, then origin main', async () => {
+it('migration-order judges against upstream, then origin main', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'cf-order-'))
   const git = (args: string[]): void => {
     execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', '-c', 'commit.gpgsign=false', ...args], { cwd: dir, stdio: 'ignore' })

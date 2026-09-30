@@ -2,9 +2,6 @@
   "checks/all.ts": {
     "lines": 30
   },
-  "checks/checks.test.ts": {
-    "test-name": 2
-  },
   "checks/exit-code-routing.ts": {
     "lines": 50
   },

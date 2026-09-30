@@ -25,7 +25,7 @@ function built(input: unknown): { packet: { prompt: string; cwd: string; tools: 
   return out
 }
 
-test('the packet is the repo, the issue, the diff and the Tight spec and nothing else', () => {
+test('the packet is the repo, issue, diff and Tight spec only',() => {
   const { packet } = built(bench())
   const issue = fixture('issue.md')
   const diff = fixture('seeded.diff')
@@ -33,7 +33,7 @@ test('the packet is the repo, the issue, the diff and the Tight spec and nothing
   expect(packet.cwd).toBe(repo)
 })
 
-test('a ticket path and a crypto-contributor path are refused with an origin', () => {
+test('a ticket or crypto-contributor path is refused with origin',() => {
   for (const path of [
     '/Users/michael/Documents/Claude/Projects/crypto-contributor',
     '/Users/michael/cf_v2/agents/coo/inbox/T-COO-V2-P4B-REVIEW-BENCH-2026-09-17.md',
@@ -46,7 +46,7 @@ test('a ticket path and a crypto-contributor path are refused with an origin', (
   expect(admits(repo)).toBeNull()
 })
 
-test('a fifth source is refused, and the first verdict only where the manifest reads one', () => {
+test('a fifth source, or an unread first verdict, is refused',() => {
   expect(benchPacket(root, 'code_quality', bench({ ticket: 'T-X' }), TRANSCRIPT)).toMatchObject({ refusal: { path: 'ticket' } })
   expect(benchPacket(root, 'code_quality', bench({ card: 'agents/coo/CARD.md' }), TRANSCRIPT)).toMatchObject({ refusal: { path: 'card' } })
   expect(benchPacket(root, 'code_quality', bench({ verdict: 'refuse' }), TRANSCRIPT)).toMatchObject({ refusal: { path: 'verdict' } })
@@ -55,7 +55,7 @@ test('a fifth source is refused, and the first verdict only where the manifest r
   expect(benchPacket(root, 'code_quality', bench({ refusal: 'step 5 refused' }), TRANSCRIPT)).toMatchObject({ refusal: { path: 'refusal' } })
 })
 
-test('a reworked round hands the last verdict, the refusal, then the delta, and leads the whole diff as the map', () => {
+test('a rework hands verdict, refusal, delta; whole diff as map',() => {
   const { packet } = built(bench({ prior: 'my last verdict', refusal: 'step 5 refused', since: '+ a line since' }))
   expect(packet.prompt).toContain('\n\n# Diff\n\nThe whole diff, for the map. Judge what changed since your last verdict, handed below.\n\n'
     + fixture('seeded.diff'))
@@ -63,7 +63,7 @@ test('a reworked round hands the last verdict, the refusal, then the delta, and 
     + '\n\n# Changed since your last verdict\n\n+ a line since')
 })
 
-test('D5 a bench admits the symbol map and hands it under its own heading', () => {
+test('D5 the symbol map is handed under its own heading',() => {
   expect(built(bench({ symbols: 'a.ts:1 a\n' })).packet.prompt).toContain(
     '\n\n# Symbols at the branch base\n\nEach top-level export at the branch base, as path:line name.\n\na.ts:1 a\n')
 })
@@ -75,7 +75,7 @@ test('D1 the hand-back comes straight after the diff', () => {
 
 const BLOB = 'a'.repeat(40)
 
-test('a re-review packet carries the last verdict, the diff since it, then git on what did not move', () => {
+test('a re-review carries last verdict, delta, then git paths',() => {
   const out = benchPacket(root, 'senior_review', bench({
     verdict: 'the first verdict', prior: 'my last verdict', since: '+ a line since',
     narrowing: { changed: ['src/stats.ts'], merged: ['src/main.ts'], unchanged: [['src/parse.ts', BLOB]] },
@@ -89,7 +89,7 @@ test('a re-review packet carries the last verdict, the diff since it, then git o
     + `unchanged since you judged it, at the blob it had then:\n  - src/parse.ts ${BLOB}`)).toBe(true)
 })
 
-test('the reviewer manifest declares no write path, and holds no write or browse tool', () => {
+test('reviewer manifest has no write path, write or browse tool',() => {
   const manifest = reviewManifest(root, 'code_quality')
   expect(manifest.write_paths).toEqual([])
   expect(manifest.tools).toEqual(['Read'])
@@ -100,14 +100,14 @@ test('the reviewer manifest declares no write path, and holds no write or browse
   expect(Review.safeParse({ ...manifest, write_paths: ['src'] }).success).toBe(false)
 })
 
-test('the runner refuses every write from the reviewer packet, origin on refuse', () => {
+test('the runner refuses every reviewer write, origin on refuse',() => {
   const { packet } = built(bench())
   for (const path of ['src/stats.ts', `${repo}/src/stats.ts`, '/etc/passwd', '../escape.ts']) {
     expect(packet.refuse(path)).toMatchObject({ origin_kind: 'ruling', origin_ref: 'seat.write_paths' })
   }
 })
 
-test('the provider gate denies the reviewer a write and lets a read through', () => {
+test('the provider gate denies a reviewer write, allows a read',() => {
   const { packet } = built(bench())
   const pre = (tool: string, file: string): HookInput =>
     ({ hook_event_name: 'PreToolUse', tool_name: tool, tool_input: { file_path: file }, tool_use_id: 't', session_id: 's', transcript_path: '', cwd: repo })

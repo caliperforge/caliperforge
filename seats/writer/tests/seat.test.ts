@@ -11,11 +11,11 @@ test('D1: the manifest holds Read and no write tool or path', () => {
   expect(card.tools.filter((t) => WRITERS.has(bare(t)))).toEqual([])
 })
 
-test('D2: the roster carries the writer and the loader gives it a rules row', () => {
+test('D2: the roster carries the writer, loaded as a rules row', () => {
   expect(rules(root).find((r) => r.id === 'writer')).toMatchObject({ kind: 'card', path: 'rules/roster.yaml' })
 })
 
-test('D5: the prompt names the citations, the fence and each kind of post', () => {
+test('D5: the citations, the fence and each kind of post', () => {
   const prompt = seat(root, 'writer').prompt
   for (const part of ['[landed:', '[refusal:', 'learnings:', 'dest:', 'dek:', 'sources:', 'checks:', 'daily', 'ship', 'weekly', 'substack', 'note']) expect(prompt).toContain(part)
 })

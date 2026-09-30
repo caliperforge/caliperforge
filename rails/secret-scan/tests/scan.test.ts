@@ -21,7 +21,7 @@ test('refuses a diff carrying a key and a .env, naming both spans', () => {
   expect(verdict.spans).toEqual(['.env:1 secret.env_file', 'src/client.ts:5 secret.aws_key'])
 })
 
-test('passes a diff that reads its credentials from the environment', () => {
+test('passes a diff reading its credentials from the environment', () => {
   const verdict = scan(fixture('green.diff'))
   expect(verdict.outcome).toBe('pass')
   expect(verdict.spans).toEqual([])

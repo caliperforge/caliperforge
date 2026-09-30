@@ -7,7 +7,7 @@ import { exported } from '../rails/tight/source.ts'
 import { declaredNames } from '../reviews/package.ts'
 import { TEST } from '../sequencer/brief.ts'
 
-/** Generated where it is read and never committed: a committed map was touched by every job and held each one behind the next (plan 109). */
+/** Generated where it is read and never committed: a committed map is touched by every job and holds each one behind the next. */
 export const MAP = 'MAP.md'
 
 const SWIFT = /^(?:@\w+(?:\([^)]*\))?\s+)*(?:(?:public|open|internal|fileprivate|private|final|indirect)\s+)*(func|class|struct|enum|protocol|extension)\s+([\w.]+)/

@@ -26,7 +26,7 @@ export function take(db: Db, plan: number, now: Date = new Date(), pid: number =
   return won === undefined ? null : { ...won, stole }
 }
 
-/** #311: the tick that leased a job hands it to the process it forked to run it, so the lease lives and dies with that process. */
+/** The tick that leased a job hands it to the process it forked to run it, so the lease lives and dies with that process. */
 export function handOver(db: Db, plan: number, from: number, to: number = process.pid): Lease | null {
   return (db.prepare('UPDATE leases SET pid = ? WHERE plan = ? AND pid = ? RETURNING plan, pid, taken_at')
     .get(to, plan, from) as Lease | undefined) ?? null

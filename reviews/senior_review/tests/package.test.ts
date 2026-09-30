@@ -29,7 +29,7 @@ const hunk = (path: string, body: string): string => `--- a/${path}\n+++ b/${pat
 const ONE = hunk('src/a.ts', '@@ -2 +2 @@\n-  const x = 0\n+  const x = 1')
 const THREE = hunk('src/b.ts', "@@ -4 +4 @@\n-  return 'b'\n+  return 'c'")
 
-test('D1: a two-file diff carries each changed declaration whole and no other', () => {
+test('D1: a two-file diff carries only changed declarations whole',() => {
   const { db, plan, repo } = setup(['src/a.ts', 'src/b.ts'])
   expect(inContext(db, plan, repo, ONE + THREE)).toBe(`${fenced('src/a.ts:1-4', A.slice(0, 4))}\n\n${fenced('src/b.ts:3-5', B.slice(2, 5))}`)
 })
@@ -45,7 +45,7 @@ test('D3: two hunks in one declaration give one block', () => {
     .toBe(fenced('src/a.ts:1-4', A.slice(0, 4)))
 })
 
-test('D6: only the store\'s listed files are carried, never a stray, and no rows mean no context', () => {
+test('D6: only listed files, never a stray; no rows, no context',() => {
   const { db, plan, repo } = setup(['src/a.ts'])
   strays(db, plan, ['src/c.ts'])
   const diff = ONE + THREE + THREE.replaceAll('src/b.ts', 'src/c.ts')
@@ -56,12 +56,12 @@ test('D6: only the store\'s listed files are carried, never a stray, and no rows
 
 const BOTH = `${fenced('src/a.ts:1-4', A.slice(0, 4))}\n\n${fenced('src/b.ts:3-5', B.slice(2, 5))}`
 
-test('85b D1: a two-file diff lists the importers of its changed exports', () => {
+test('85b D1: a diff lists the importers of its changed exports',() => {
   const { db, plan, repo } = setup(['src/a.ts', 'src/b.ts'], { 'd.ts': "import { one } from './a.ts'\n", 'e.ts': "import { three } from './b.ts'\n" })
   expect(inContext(db, plan, repo, ONE + THREE)).toBe(`${BOTH}\n\n## Imported by\n\n- src/d.ts\n- src/e.ts`)
 })
 
-test('85b D2: an importer of an unchanged export or of an unlisted path is not listed', () => {
+test('85b D2: no importer of an unchanged export or unlisted path',() => {
   const { db, plan, repo } = setup(['src/a.ts', 'src/b.ts'], {
     'd.ts': "import { one } from './a.ts'\n",
     'f.ts': "import { two } from './a.ts'\n",

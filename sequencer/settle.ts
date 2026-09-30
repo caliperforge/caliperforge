@@ -125,11 +125,7 @@ async function made(db: Db, root: string, plan: PlanRow, step: Step, provider: P
   }
 }
 
-/**
- * The host losing its network is not the job's fault. On 09-25 a Wi-Fi drop made four jobs' `git fetch` throw at
- * step 3; each became a refusal, a person was asked, and two alike turned the Atelier lane off as a fault on main.
- * Such a throw holds the job on its step, uncounted, and the next tick tries again.
- */
+/** A throw that says the host lost its network is not the job's fault: it holds the job on its step, uncounted, and the next tick tries again. */
 const OFFLINE = /Could not resolve host|getaddrinfo|ENOTFOUND|EAI_AGAIN|ENETUNREACH|ETIMEDOUT|Network is unreachable|Failed to connect to|Connection timed out/
 
 export function thrown(step: Step, message: string): Outcome {
@@ -195,29 +191,15 @@ function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcom
     db.prepare('UPDATE pipes SET enabled = 0 WHERE id = ?').run(plan.pipe_id)
     outcome.note += `; lane off: plans ${String(plan.id)} and ${String(peer(db, r))} refused on ${outcome.spans.join(', ')}`
   }
-  if (outcome.rewind !== undefined && why === 'again') {
-    rewind(db, plan.id, outcome.rewind)
-    return 'running'
-  }
+  // A rewind costs no retry but is recorded like any refusal, so a second identical one waits for a person.
+  if (outcome.rewind !== undefined && why === 'again') { rewind(db, plan.id, outcome.rewind); return 'running' }
   return back(db, plan, outcome.to ?? backTo(step), why !== 'again', outcome.note)
 }
 
 /** Step 2 is the build in templates/pr-path.ts. */
 const BUILD = 2
 
-/**
- * #119. A conflicting merge at step 3 rewinds onto a build that cannot see main's side, so the
- * rebuild lands on the old base and the next merge conflicts the same way: plan 62 went round five
- * times on 09-21 at 300-470k a lap. The rewind stands -- a moved main is not the builder's fault and
- * costs it no retry -- but the refusal is now recorded like any other, so the second identical
- * conflict is a repeat and the plan waits for a person.
- */
-
-/**
- * Where a refusal sends the job: a review's to the build, a build's back to the build -- the brief it used to
- * fall back to never changes once a builder has run, so that detour cost a tick and bought nothing -- and a
- * kernel step's to the step before it.
- */
+/** Where a refusal sends the job: a review's and a build's to the build, a kernel step's to the step before it. */
 function backTo(step: Step): number {
   if (step.fires === 'review') return BUILD
   return step.fires === 'seat' ? step.step : step.step - 1

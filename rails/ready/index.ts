@@ -3,7 +3,7 @@ import type { Verdict } from '../record.ts'
 
 export interface Proof {
   repo: string
-  /** Our own repository: nobody measures us, so there is no account pulse to read (#20). */
+  /** Our own repository: nobody measures us, so there is no account pulse to read. */
   ours: boolean
   at: string
   tests_pass: boolean
@@ -41,7 +41,7 @@ export function ready(proof: Proof): Verdict {
   }
 }
 
-/** pay-kit#340: a title ending on a code-shaped word that some longer name in the ask or diff starts with. */
+/** A title ending on a code-shaped word that some longer name in the ask or diff starts with. */
 function clipped(title: string, named: string): boolean {
   const last = /([A-Za-z_][A-Za-z0-9_]*)\W*$/.exec(title)?.[1]
   if (last === undefined || !/_|[a-z][A-Z]/.test(last)) return false

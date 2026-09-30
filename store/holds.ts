@@ -7,7 +7,7 @@ const SPEND = `UPDATE settings SET value = CAST(CAST(value AS INTEGER) - 1 AS TE
   WHERE key = 'brief.reads_left' AND CAST(value AS INTEGER) > 0`
 
 /**
- * Ruling 2026-09-19: the COO reads the brief of the first ten jobs before a builder runs on one.
+ * While `brief.reads_left` is above 0, the brief of each job is read before a builder runs on it.
  * The read is spent and the plan parked in one transaction, so no brief is held off an unspent row.
  */
 export function hold(db: Db, plan: number, step: number): 'running' | 'blocked_on_ceo' {
@@ -19,7 +19,7 @@ export function hold(db: Db, plan: number, step: number): 'running' | 'blocked_o
   })()
 }
 
-/** Lifting a hold queues the plan and never runs it: the lane's width is what admits, in `picks` (`sequencer/index.ts:56`). */
+/** Lifting a hold queues the plan and never runs it: the lane's width is what admits, in `picks` (`sequencer/next.ts`). */
 export function release(db: Db, plan: number, actor: Holder): void {
   const done = db.prepare("UPDATE plans SET state = 'queued' WHERE id = ? AND step = 2 AND state = 'blocked_on_ceo'")
     .run(plan)

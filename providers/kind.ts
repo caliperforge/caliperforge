@@ -16,10 +16,10 @@ export interface Packet {
   tools: string[]
   /** The run's turn ceiling; a packet without one runs unbounded. */
   steps?: number
-  /** #148: what this one run may spend before it stops, cache reads left out. A packet without one is unwalled. */
+  /** What this one run may spend before it stops, cache reads left out. A packet without one is unwalled. */
   wall?: number
   refuse: (path: string) => Refusal | null
-  /** #274: folders outside the checkout this run may read, never write. */
+  /** Folders outside the checkout this run may read, never write. */
   reads?: string[]
   servers?: Record<string, McpSdkServerConfigWithInstance>
 }
@@ -43,7 +43,7 @@ export interface Fired {
   exit: number
   stop_reason: string | null
   denials: number
-  /** The subscription windows the provider reported during the run (#104): what the usage band steps the lanes by. */
+  /** The subscription windows the provider reported during the run: what the usage band steps the lanes by. */
   limits?: Reading[]
 }
 

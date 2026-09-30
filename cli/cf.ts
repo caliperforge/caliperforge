@@ -79,7 +79,7 @@ cf.command('lap').argument('<plan>', 'a plan the tick leased').requiredOption('-
     out(`\n${FIRED}${JSON.stringify(fired)}\n`)
   })
 
-/** #311: each leased job runs in a child process, so one job's synchronous checks never freeze another's agent. */
+/** Each leased job runs in a child process, so one job's synchronous checks never freeze another's agent. */
 const apart: Apart = (plan, stole) => new Promise((done, failed) => {
   const args = [...process.execArgv, fileURLToPath(import.meta.url), 'lap', String(plan), '--from', String(process.pid),
     ...(stole === null ? [] : ['--stole', String(stole)])]

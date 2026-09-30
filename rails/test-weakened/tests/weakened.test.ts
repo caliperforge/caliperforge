@@ -13,7 +13,7 @@ function fixture(name: string): string {
   return readFileSync(join(import.meta.dirname, name), 'utf8')
 }
 
-test('refuses a green suite over removed, loosened and skipped assertions', () => {
+test('refuses removed, loosened and skipped assertions when green', () => {
   const verdict = weakened(fixture('red.diff'), 'green')
   expect(verdict.outcome).toBe('refuse')
   expect(verdict.origin_kind).toBe('rail')
@@ -42,7 +42,7 @@ const block = '-test(\'parses\', () => {\n-  expect(parse(F)).toBe(1)\n-})\n'
 const header = '--- a/t/b.test.ts\n+++ b/t/b.test.ts\n@@ -1,6 +1,3 @@\n test(\'stays\', () => {\n'
 const dropped = `${header}   expect(keep()).toBe(1)\n })\n${block}`
 
-test('refuses the deletion of a whole test file while the suite is green', () => {
+test('refuses deleting a whole test file while the suite is green', () => {
   const verdict = weakened(deleted, 'green')
   expect(verdict.outcome).toBe('refuse')
   expect(verdict.spans).toEqual(['t/a.test.ts:1 test.weakened.removed'])
@@ -62,7 +62,7 @@ test('refuses a removed test block when named names another test', () => {
   expect(weakened(dropped, 'green', 'remove other').spans).toEqual(['t/b.test.ts:4 test.weakened.removed'])
 })
 
-test('refuses an assertion removed from a test that stays beside a named removal', () => {
+test('refuses a kept test\'s lost assertion beside a named removal', () => {
   const verdict = weakened(`${header}-  expect(keep()).toBe(1)\n })\n${block}`, 'green', 'remove parses')
   expect(verdict.outcome).toBe('refuse')
   expect(verdict.spans).toEqual(['t/b.test.ts:2 test.weakened.removed'])
@@ -76,7 +76,7 @@ test('passes a loose assertion added beside a named removal', () => {
   expect(verdict.spans).toEqual([])
 })
 
-test('refuses a loose assertion added beside a removal named for another test', () => {
+test('refuses a loose assertion beside a removal named for another', () => {
   expect(weakened(loosened, 'green', 'remove other').spans).toEqual(['t/b.test.ts:2 test.weakened.loosened'])
 })
 

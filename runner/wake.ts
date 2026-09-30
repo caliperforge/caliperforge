@@ -48,7 +48,7 @@ function card(root: string, row: Row): string | null {
   return !waiting || ask === null ? null : `${fields(row, CARD)}\n\n${ask}`
 }
 
-/** #246: what stopped a plan for a person, in the words it was stopped with. The orchestrator cannot judge a stop it cannot read. */
+/** What stopped a plan for a person, in the words it was stopped with. */
 export const STOP_CHARS = 6000
 
 function stopped(root: string, row: Row): string {

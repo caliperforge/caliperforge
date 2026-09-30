@@ -118,7 +118,7 @@ export function actorSection(rows: ActorRow[], hands: number): string {
   return `last 24 h by actor, held/missed/open over 7 d\n${rows.map(actorLine).join('')}  hand PRs merged\t${String(hands)}\n`
 }
 
-/** CEO 2026-09-19 12:15: per-ticket usage is read as two eras, split at this instant. */
+/** Per-ticket usage is read as two eras, split at this instant. */
 const ERA = '2026-09-19 11:21'
 
 const TICKETS = `SELECT p.id AS plan, p.origin, t.repo || '#' || t.issue_no AS target,
@@ -272,8 +272,7 @@ export function dryLines(d: Dry): string {
   return [head, ...would, ...leases, ...quiet].join('')
 }
 
-/** The receipt line a tick leaves in `ticks.note`, which is the only log launchd keeps. */
-/** `waits` are the plans held on another job's files (#88), so a wait reads as a wait and not an idle lane. */
+/** The receipt line a tick leaves in `ticks.note`, the only log launchd keeps; a plan held on another job's files reads as a wait, not an idle lane. */
 export function tickNote(fired: Fired[], waits: Overlap[] = [], lines: string[] = []): string {
   const held = waits.map((w) => `plan ${String(w.plan)} waits on plan ${String(w.on)}${w.path === null ? '' : ` for ${w.path}`}`)
   const steps = fired.map((f) => `${f.pipe} plan ${String(f.plan)} step ${String(f.step)} ${f.name} ${f.outcome}`
@@ -282,7 +281,7 @@ export function tickNote(fired: Fired[], waits: Overlap[] = [], lines: string[] 
   return all.length === 0 ? 'nothing to fire' : all.join('; ')
 }
 
-/** Why the tick passed this lane over: it had nothing to step, or the cap ran out before it (#125). */
+/** Why the tick passed this lane over: it had nothing to step, or the cap ran out before it. */
 function skipped(q: Quiet): string {
   if (q.ready > 0) return `on, ${String(q.ready)} ready, cap spent on a lower lane`
   return q.live === 0 ? 'on, nothing queued' : held(q.live)

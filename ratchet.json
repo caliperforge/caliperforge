@@ -702,19 +702,16 @@
     "silent-catch": 4
   },
   "store/approvals.ts": {
-    "citing-comment": 3,
-    "lines": 81
+    "lines": 106
   },
   "store/decisions.test.ts": {
     "test-name": 1
   },
   "store/decisions.ts": {
-    "citing-comment": 1,
     "lines": 42
   },
   "store/deliverables.ts": {
-    "citing-comment": 1,
-    "lines": 64
+    "lines": 102
   },
   "store/dispositions.test.ts": {
     "test-name": 4
@@ -729,8 +726,7 @@
     "test-name": 3
   },
   "store/files.ts": {
-    "citing-comment": 2,
-    "lines": 76
+    "lines": 92
   },
   "store/holds.ts": {
     "citing-comment": 1,

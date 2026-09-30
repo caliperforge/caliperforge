@@ -12,7 +12,7 @@ export function filesOf(db: Db, plan: number): PlanFile[] {
     { path: string; is_new: number }[]).map((r) => ({ path: r.path, is_new: r.is_new === 1 }))
 }
 
-/** #89: paths the build wrote that the list did not name, kept apart so only the overlap check reads them. */
+/** Paths the build wrote that the list did not name, kept apart so only the overlap check reads them. */
 export function strays(db: Db, plan: number, paths: string[]): void {
   const insert = db.prepare(`INSERT INTO plan_files (plan, path, is_new, position, stray)
     SELECT ?, ?, 0, coalesce(max(position) + 1, 0), 1 FROM plan_files WHERE plan = ?`)
@@ -60,9 +60,9 @@ export function record(db: Db, plan: number, list: PlanFile[]): void {
 const REPO = "COALESCE((SELECT t.repo FROM targets t WHERE t.id = %s.target_id), '')"
 
 /**
- * #88. The job this plan must wait for: one in the same repo, not settled, past its brief, whose file
+ * The job this plan must wait for: one in the same repo, not settled, past its brief, whose file
  * list shares a path with this one's -- and either building already or queued ahead of it, so two
- * unbuilt plans never wait on each other. A plan parked on the CEO or stopped holds nothing up.
+ * unbuilt plans never wait on each other. A plan waiting on a person or stopped holds nothing up.
  */
 export function sharing(db: Db, plan: number): { plan: number; path: string } | null {
   return (db.prepare(`SELECT o.id AS plan, f.path FROM plans me
@@ -76,8 +76,8 @@ export function sharing(db: Db, plan: number): { plan: number; path: string } | 
 }
 
 /**
- * #89. An older job already building, in the same repo, whose recorded set holds one of `paths`. Only an
- * older one that has built: a younger job, or one not yet built, is the one waiting under #88.
+ * An older job already building, in the same repo, whose recorded set holds one of `paths`. Only an
+ * older one that has built: a younger job, or one not yet built, is the one `sharing` holds back.
  */
 export function building(db: Db, plan: number, paths: string[]): { plan: number; path: string } | null {
   if (paths.length === 0) return null

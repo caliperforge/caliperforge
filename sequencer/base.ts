@@ -13,7 +13,7 @@ const ID = /\/actions\/runs\/(\d+)/
 type Run = NonNullable<ReturnType<typeof list>>[number]
 
 /**
- * #148: a job red at the head that fails again at the last green head, re-run, is the base's, not the
+ * A job red at the head that fails again at the last green head, re-run, is the base's, not the
  * build's. The board returned carries those jobs; a string is what the head waits on; null refuses as before.
  */
 export function onBase(root: string, plan: number, head: Head, spans: string[], board: Board[], gh: Gh): Board[] | string | null {

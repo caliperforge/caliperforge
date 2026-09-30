@@ -239,6 +239,18 @@ test('D4 D3 cf brief names each plan whose ask.md differs from its briefed copy,
   expect(rulings(db, root)).not.toContain('plan 2')
 })
 
+test('D1 D2 cf brief names a held plan whose ask.md differs from its briefed copy, and not a done one', () => {
+  const db = world()
+  const root = mkdtempSync(join(tmpdir(), 'cf-rulings-'))
+  plan(db, 1, 'done', 25)
+  plan(db, 2, 'blocked_on_ceo', 30)
+  for (const id of [1, 2]) {
+    put(root, id, 'ask.briefed.md', '# ask\n')
+    put(root, id, 'ask.md', '# ask\n\n## Ruling\n')
+  }
+  expect(rulings(db, root)).toBe('ask\tplan 2: ask.md differs from the ask its issue.md was briefed from\n')
+})
+
 const holding = (db: Db, id: number): unknown => db.prepare('SELECT held_by, held_why FROM plans WHERE id = ?').get(id)
 
 test('D2 a target approval holds the plan on the CEO until the reason clears', () => {

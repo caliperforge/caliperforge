@@ -3,8 +3,8 @@ import { internal, originRef, type PlanRow } from '../store/plans.ts'
 import { FORK, repoName, SELF } from './workspace.ts'
 
 /**
- * #69. The repo a plan of ours builds and lands in: the one its issue was filed on. A lane's home is
- * `cli/plan.ts` `LANE`; the kernel's own repo is `SELF`.
+ * The repo a plan of ours builds and lands in: the one its issue was filed on. A lane's home is
+ * `store/lanes.ts` `LANE`; the kernel's own repo is `SELF`.
  */
 export function homeOf(plan: PlanRow): string {
   return originRef(plan)?.repo ?? SELF

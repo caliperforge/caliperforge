@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { parse } from '../rails/diff.ts'
 
-/** The one size threshold (#67): up to this many lines a file is handed whole, past it by the blocks its named lines sit in. */
+/** Up to this many lines a file is handed whole, past it by the blocks its named lines sit in. */
 export const WHOLE = 300
 
 /** A span line of `refusal.md` that names a file: `  - src/x.ts:12 tight.restating`. */

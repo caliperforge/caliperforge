@@ -14,8 +14,8 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
 it('applies every migration once and records the version', () => {
   const db = open(':memory:')
-  expect(migrate(db, join(root, 'schema'))).toEqual(['0001_init.sql', '0002_rulings.sql', '0003_runs_rule_hash.sql', '0004_one_disposition_per_verdict.sql', '0005_tick.sql', '0006_runs_transcript_path.sql', '0007_batch.sql', '0008_head_digest.sql', '0009_open_loop.sql', '0010_lanes.sql', '0011_issue_plans.sql', '0012_feeder.sql', '0013_internal_plans.sql', '0014_adopted_pr.sql', '0015_brief_read.sql', '0017_plan_files.sql', '0018_refusals.sql', '0019_signal_words.sql', '0020_leases.sql', '0021_parts.sql', '0022_band_p95.sql', '0023_reading_holds_ceiling.sql', '0024_run_token_wall.sql', '0025_wait_reason.sql', '0026_decisions.sql', '0027_verdict_tree.sql', '0028_priority_label.sql', '0029_merges.sql', '0030_kept_verdicts.sql', '0031_file_overlap.sql', '0032_stray_files.sql', '0033_quick_lane.sql', '0034_target_part.sql', '0035_caps_skip_cache_reads.sql', '0036_decisions_blocked_on_ceo.sql', '0037_decisions_applied.sql', '0039_events.sql', '0040_hq_path.sql', '0041_signal_head.sql', '0042_now.sql', '0043_reviewer_not_builder_skips_fixer.sql', '0044_tickets.sql', '0045_records.sql', '0046_brief_lines.sql', '0047_runs_cost.sql', '0048_scan_evidence.sql', '0049_part_after.sql', '0050_target_take.sql', '0051_held_by.sql', '0052_ratchet_counts.sql', '0053_tick_lanes.sql', '0054_gardens.sql', '0055_ticket_times.sql', '0056_size_limits.sql', '0057_refusal_ticket.sql', '0058_comms_once.sql', '0059_reviewer_not_builder_skips_coo_lite.sql', '0060_cache_read_tokens.sql', '0061_cache_write_tokens.sql', '0062_window_tokens_by_type.sql', '0063_uniswap_lane.sql', '0064_desk.sql', '0065_prices.sql', '0066_parked_why.sql', '0067_outcomes.sql', '0068_band_open_0928.sql', '0069_events_plan_nullable.sql', '0070_ticket_outcomes.sql', '0071_desk_proof_at.sql', '0072_desk_pack.sql', '0073_desk_scorecard.sql'])
-  expect(db.pragma('user_version', { simple: true })).toBe(73)
+  expect(migrate(db, join(root, 'schema'))).toEqual(['0001_init.sql', '0002_rulings.sql', '0003_runs_rule_hash.sql', '0004_one_disposition_per_verdict.sql', '0005_tick.sql', '0006_runs_transcript_path.sql', '0007_batch.sql', '0008_head_digest.sql', '0009_open_loop.sql', '0010_lanes.sql', '0011_issue_plans.sql', '0012_feeder.sql', '0013_internal_plans.sql', '0014_adopted_pr.sql', '0015_brief_read.sql', '0017_plan_files.sql', '0018_refusals.sql', '0019_signal_words.sql', '0020_leases.sql', '0021_parts.sql', '0022_band_p95.sql', '0023_reading_holds_ceiling.sql', '0024_run_token_wall.sql', '0025_wait_reason.sql', '0026_decisions.sql', '0027_verdict_tree.sql', '0028_priority_label.sql', '0029_merges.sql', '0030_kept_verdicts.sql', '0031_file_overlap.sql', '0032_stray_files.sql', '0033_quick_lane.sql', '0034_target_part.sql', '0035_caps_skip_cache_reads.sql', '0036_decisions_blocked_on_ceo.sql', '0037_decisions_applied.sql', '0039_events.sql', '0040_hq_path.sql', '0041_signal_head.sql', '0042_now.sql', '0043_reviewer_not_builder_skips_fixer.sql', '0044_tickets.sql', '0045_records.sql', '0046_brief_lines.sql', '0047_runs_cost.sql', '0048_scan_evidence.sql', '0049_part_after.sql', '0050_target_take.sql', '0051_held_by.sql', '0052_ratchet_counts.sql', '0053_tick_lanes.sql', '0054_gardens.sql', '0055_ticket_times.sql', '0056_size_limits.sql', '0057_refusal_ticket.sql', '0058_comms_once.sql', '0059_reviewer_not_builder_skips_coo_lite.sql', '0060_cache_read_tokens.sql', '0061_cache_write_tokens.sql', '0062_window_tokens_by_type.sql', '0063_uniswap_lane.sql', '0064_desk.sql', '0065_prices.sql', '0066_parked_why.sql', '0067_outcomes.sql', '0068_band_open_0928.sql', '0069_events_plan_nullable.sql', '0070_ticket_outcomes.sql', '0071_desk_proof_at.sql', '0072_desk_pack.sql', '0073_desk_scorecard.sql', '0075_queue_order.sql'])
+  expect(db.pragma('user_version', { simple: true })).toBe(75)
   expect(migrate(db, join(root, 'schema'))).toEqual([])
 })
 
@@ -51,7 +51,7 @@ it('D1 D5: 0060 to 0062 keep every run total and the cache read CHECK, and split
   expect(before).toEqual([['five_hour', 1, 213], ['seven_day', 2, 638]])
   expect(() => windows(db)).toThrow()
 
-  expect(migrate(db, join(root, 'schema'))).toEqual(['0060_cache_read_tokens.sql', '0061_cache_write_tokens.sql', '0062_window_tokens_by_type.sql', '0063_uniswap_lane.sql', '0064_desk.sql', '0065_prices.sql', '0066_parked_why.sql', '0067_outcomes.sql', '0068_band_open_0928.sql', '0069_events_plan_nullable.sql', '0070_ticket_outcomes.sql', '0071_desk_proof_at.sql', '0072_desk_pack.sql', '0073_desk_scorecard.sql'])
+  expect(migrate(db, join(root, 'schema'))).toEqual(['0060_cache_read_tokens.sql', '0061_cache_write_tokens.sql', '0062_window_tokens_by_type.sql', '0063_uniswap_lane.sql', '0064_desk.sql', '0065_prices.sql', '0066_parked_why.sql', '0067_outcomes.sql', '0068_band_open_0928.sql', '0069_events_plan_nullable.sql', '0070_ticket_outcomes.sql', '0071_desk_proof_at.sql', '0072_desk_pack.sql', '0073_desk_scorecard.sql', '0075_queue_order.sql'])
   expect(windows(db).map((w) => [w.kind, w.runs, w.tokens])).toEqual(before)
   for (const w of windows(db)) expect(w.uncached_tokens + w.cache_write_tokens + w.cache_read_tokens + w.output_tokens).toBe(w.tokens)
   expect(db.prepare('SELECT sum(input_tokens + cache_read_tokens + output_tokens) AS n FROM runs').get()).toEqual({ n: 638 })
@@ -69,7 +69,7 @@ it('D6: 0071 gives each existing desk post a proof_at of its written_date', () =
   migrate(db, old)
   db.prepare(`INSERT INTO desk_posts (id, kind, dest, status, title, dek, body, sources, checks, work_date, written_date)
     VALUES (1, 'daily', 'site', 'proof', 't', 'd', 'b', '[]', '[]', '2026-09-20', '2026-09-21')`).run()
-  expect(migrate(db, join(root, 'schema'))).toEqual(['0071_desk_proof_at.sql', '0072_desk_pack.sql', '0073_desk_scorecard.sql'])
+  expect(migrate(db, join(root, 'schema'))).toEqual(['0071_desk_proof_at.sql', '0072_desk_pack.sql', '0073_desk_scorecard.sql', '0075_queue_order.sql'])
   expect(db.prepare('SELECT proof_at FROM desk_posts').get()).toEqual({ proof_at: '2026-09-21' })
 })
 
@@ -84,7 +84,7 @@ it('D6: 0072 keeps every column of an existing desk post and admits dest pack, b
     sources, checks, work_date, written_date, "order", proof_at)
     VALUES (1, 'daily', 'note', 'changes', 't', 'd', 'b', 'et', 'ed', 'eb', 'n', '["s"]', '["c"]', '2026-09-20', '2026-09-21', 3, '2026-09-22 10:00:00')`).run()
   const before = db.prepare('SELECT * FROM desk_posts').all()
-  expect(migrate(db, join(root, 'schema'))).toEqual(['0072_desk_pack.sql', '0073_desk_scorecard.sql'])
+  expect(migrate(db, join(root, 'schema'))).toEqual(['0072_desk_pack.sql', '0073_desk_scorecard.sql', '0075_queue_order.sql'])
   expect(db.prepare('SELECT * FROM desk_posts').all()).toEqual(before)
   const insert = db.prepare(`INSERT INTO desk_posts (id, kind, dest, status, title, dek, body, sources, checks, work_date, written_date)
     VALUES (?, 'growth', ?, 'proof', 't', '', 'b', '[]', '[]', '2026-09-28', '2026-09-28')`)
@@ -106,7 +106,7 @@ it('D6: 0073 keeps every column of an existing desk post and plan, admits dest s
     VALUES (1, (SELECT min(id) FROM pipes), 'comms', 'running', '2026-09-28', 9, 'scorecard 2026-09-28')`).run()
   const before = db.prepare('SELECT * FROM desk_posts').all()
   const plans = db.prepare('SELECT * FROM plans').all()
-  expect(migrate(db, join(root, 'schema'))).toEqual(['0073_desk_scorecard.sql'])
+  expect(migrate(db, join(root, 'schema'))).toEqual(['0073_desk_scorecard.sql', '0075_queue_order.sql'])
   expect(db.prepare('SELECT * FROM desk_posts').all()).toEqual(before)
   expect(db.prepare('SELECT * FROM plans').all()).toEqual(plans)
   db.prepare("UPDATE plans SET step = 10, state = 'done' WHERE id = 1").run()
@@ -137,17 +137,24 @@ it('D3: a part keeps the after it is given, and null when it is given none', () 
   expect(allParts(db).map((p) => p.after)).toEqual([null, 0])
 })
 
-it('D2: end sets the state and clears wait_reason only when asked', () => {
+it('D5: end clears wait_reason and waits_on on every end', () => {
   const db = open(':memory:')
   migrate(db, join(root, 'schema'))
   const plan = addPlan(db, { pipe_id: 1, target_id: null, template: 'pr_path', state: 'queued', queued_at: '2026-09-27T00:00:00.000Z',
     lane: 'machine', seat: 'typescript_specialist', origin: 'https://github.com/caliperforge/caliperforge/issues/1', step: 0 })
-  db.prepare("UPDATE plans SET wait_reason = 'over_cap' WHERE id = ?").run(plan)
-  const row = (): unknown => db.prepare('SELECT state, wait_reason FROM plans WHERE id = ?').get(plan)
+  const other = addPlan(db, { pipe_id: 1, target_id: null, template: 'pr_path', state: 'queued', queued_at: '2026-09-27T00:00:00.000Z',
+    lane: 'machine', seat: 'typescript_specialist', origin: 'https://github.com/caliperforge/caliperforge/issues/2', step: 0 })
+  const wait = (): unknown => db.prepare("UPDATE plans SET wait_reason = 'file_overlap', waits_on = ? WHERE id = ?").run(other, plan)
+  const row = (): unknown => db.prepare('SELECT state, wait_reason, waits_on FROM plans WHERE id = ?').get(plan)
+  wait()
   end(db, plan, 'halted')
-  expect(row()).toEqual({ state: 'halted', wait_reason: 'over_cap' })
-  end(db, plan, 'done', true)
-  expect(row()).toEqual({ state: 'done', wait_reason: null })
+  expect(row()).toEqual({ state: 'halted', wait_reason: null, waits_on: null })
+  wait()
+  end(db, plan, 'refused')
+  expect(row()).toEqual({ state: 'refused', wait_reason: null, waits_on: null })
+  wait()
+  end(db, plan, 'done')
+  expect(row()).toEqual({ state: 'done', wait_reason: null, waits_on: null })
 })
 
 it('D1 D5: requeue, clearWaitsOn, holdOn and briefed write the columns they name', () => {

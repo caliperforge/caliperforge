@@ -170,7 +170,7 @@ export function section(title: string, rows: PlanLine[]): string {
 }
 
 export function rulings(db: Db, root: string): string {
-  const plans = db.prepare('SELECT id FROM plans ORDER BY id').all() as { id: number }[]
+  const plans = db.prepare("SELECT id FROM plans WHERE state NOT IN ('done', 'refused') ORDER BY id").all() as { id: number }[]
   return plans.filter((p) => ruled(root, p.id) !== null)
     .map((p) => `ask\tplan ${String(p.id)}: ask.md differs from the ask its issue.md was briefed from\n`).join('')
 }

@@ -7,13 +7,13 @@ import { retry, type PlanRow } from '../store/plans.ts'
 import { clear } from '../store/refusals.ts'
 import { afresh } from './workspace.ts'
 
-/** #238, CEO 2026-09-25: the moves the orchestrator makes by itself. Every other verb goes to a person. */
+/** The moves the orchestrator makes by itself. Every other verb goes to a person. */
 export const MECHANICAL = new Set<Verb>(['retry', 'return', 'clear', 'next'])
 
 /** Past this many applied moves on one plan in a day it is spinning, and the next decision goes to a person. */
 export const TOUCHES = 2
 
-/** Off until the CEO's shadow comparison clears it: `orchestrator.apply` = 1 hands it the wheel. */
+/** Off until `orchestrator.apply` = 1 hands it the wheel. */
 export function applying(db: Db): boolean {
   const row = db.prepare("SELECT value FROM settings WHERE key = 'orchestrator.apply'").get() as { value: string } | undefined
   return row?.value === '1'

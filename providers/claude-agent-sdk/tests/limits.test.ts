@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { expect, test, vi } from 'vitest'
 import type { SDKRateLimitInfo } from '@anthropic-ai/claude-agent-sdk'
 
-/** As plan 65's last run logged it on 2026-09-21, 12:09 Guatemala. */
+/** As a live run logged it. */
 const INFO = {
   status: 'allowed_warning', resetsAt: 1790222400, rateLimitType: 'seven_day', utilization: 0.83,
   isUsingOverage: false, surpassedThreshold: 0.75,

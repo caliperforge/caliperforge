@@ -29,18 +29,18 @@ function packet(cwd: string, plan: string): Packet {
   }
 }
 
-test('every run gets the claude_code preset without dynamic sections', async () => {
+test('runs get the claude_code preset without dynamic sections', async () => {
   await claudeAgentSdk.fire(packet('/tmp/a/src', '1'))
   expect(sent.at(-1)?.options.systemPrompt).toEqual({ type: 'preset', preset: 'claude_code', excludeDynamicSections: true })
 })
 
-test('two packets with different folders and plans get the same system prompt', async () => {
+test('different folders and plans get one system prompt', async () => {
   await claudeAgentSdk.fire(packet('/tmp/a/src', '1'))
   await claudeAgentSdk.fire(packet('/tmp/b/src', '2'))
   expect(sent.at(-1)?.options.systemPrompt).toEqual(sent.at(-2)?.options.systemPrompt)
 })
 
-test('the working folder closes the prompt and a read outside it is still refused', async () => {
+test('working folder ends the prompt, a read outside is refused', async () => {
   await claudeAgentSdk.fire(packet('/tmp/a/src', '1'))
   expect(sent.at(-1)?.prompt.endsWith('# Working folder\n\n/tmp/a/src')).toBe(true)
   expect(readOutside('/tmp/a/src', 'Read', { file_path: '/tmp/b/x.ts' })).toMatch(/^ruling:run\.outside_checkout/)

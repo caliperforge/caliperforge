@@ -21,14 +21,14 @@ describe('usage', () => {
     expect(usage({ prompt_tokens: 100, completion_tokens: 7 })).toEqual({ input: 100, cache: 0, write: 0, output: 7 })
   })
 
-  it('throws, naming the fields, when hit and miss do not add up to the prompt', () => {
+  it('throws, naming the fields, when hit + miss is not prompt', () => {
     expect(() => usage({ ...SPLIT, prompt_cache_miss_tokens: 50 }))
       .toThrow('prompt_cache_hit_tokens 60 + prompt_cache_miss_tokens 50 is not prompt_tokens 100')
     expect(() => usage({ prompt_tokens: 100, completion_tokens: 7, prompt_cache_miss_tokens: 40 }))
       .toThrow('prompt_cache_hit_tokens undefined + prompt_cache_miss_tokens 40 is not prompt_tokens 100')
   })
 
-  it('throws, naming the fields, when more tokens were cached than prompted', () => {
+  it('throws, naming the fields, when cached exceeds prompt', () => {
     expect(() => usage({ ...COMBINED, prompt_tokens_details: { cached_tokens: 120 } }))
       .toThrow('prompt_tokens_details.cached_tokens 120 exceeds prompt_tokens 100')
   })

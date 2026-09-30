@@ -30,21 +30,21 @@ function packet(tools: string[]): Packet {
   }
 }
 
-/** The measured defect of kernel #29: the reviewer was offered Bash, opened on `git log`, and the gate ended the run. */
-test('a reviewer packet offers only the three tools its manifest names', async () => {
+/** The measured defect: the reviewer was offered Bash, opened on `git log`, and the gate ended the run. */
+test('a reviewer packet offers only the tools its manifest names', async () => {
   await claudeAgentSdk.fire(packet(['Read', 'Glob', 'Grep']))
   expect(sent.at(-1)?.tools).toEqual(['Read', 'Glob', 'Grep'])
   expect(sent.at(-1)?.allowedTools).toEqual(['Read', 'Glob', 'Grep'])
 })
 
-test('a packet carrying steps sends them as the query turn limit, and one without sends none', async () => {
+test('steps become maxTurns, and no steps sends none', async () => {
   await claudeAgentSdk.fire({ ...packet(['Read']), steps: 3 })
   expect(sent.at(-1)?.maxTurns).toBe(3)
   await claudeAgentSdk.fire(packet(['Read']))
   expect(sent.at(-1)).not.toHaveProperty('maxTurns')
 })
 
-test('a packet carrying servers sends them as mcpServers, and one without sends none', async () => {
+test('servers become mcpServers, and no servers sends none', async () => {
   const servers = { github: {} as McpSdkServerConfigWithInstance }
   await claudeAgentSdk.fire({ ...packet(['Read', 'mcp__github__read']), servers })
   expect(sent.at(-1)?.mcpServers).toBe(servers)
@@ -53,7 +53,7 @@ test('a packet carrying servers sends them as mcpServers, and one without sends 
   expect(sent.at(-1)).not.toHaveProperty('mcpServers')
 })
 
-test('a builder packet offers Bash once, under its bare name, and the patterns stay on allowedTools', async () => {
+test('Bash is offered once, bare; patterns stay on allowedTools', async () => {
   const tools = ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash(gradle:*)', 'Bash(./gradlew:*)']
   await claudeAgentSdk.fire(packet(tools))
   expect(sent.at(-1)?.tools).toEqual(['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash'])

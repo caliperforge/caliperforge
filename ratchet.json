@@ -192,16 +192,6 @@
   "providers/claude-agent-sdk/index.ts": {
     "lines": 253
   },
-  "providers/claude-agent-sdk/tests/limits.test.ts": {
-    "citing-comment": 1
-  },
-  "providers/claude-agent-sdk/tests/tools.test.ts": {
-    "citing-comment": 1,
-    "test-name": 3
-  },
-  "providers/claude-agent-sdk/tests/wall.test.ts": {
-    "test-name": 2
-  },
   "providers/credential.ts": {
     "citing-comment": 1,
     "lines": 88,
@@ -210,9 +200,6 @@
   "providers/kind.ts": {
     "citing-comment": 3,
     "lines": 52
-  },
-  "providers/tests/credential.test.ts": {
-    "test-name": 4
   },
   "rails/authority/index.ts": {
     "citing-comment": 1,

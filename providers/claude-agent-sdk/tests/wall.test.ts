@@ -64,7 +64,7 @@ function packet(): Packet {
   }
 }
 
-test('a run past its wall stops before the next model call, and the row says which wall', async () => {
+test('a run past its wall stops at the next call, naming the wall', async () => {
   decisions.length = 0
   const fired = await claudeAgentSdk.fire({ ...packet(), wall: 5_000_000 })
 
@@ -93,7 +93,7 @@ test('a packet with no wall runs every turn it was going to run', async () => {
   expect(fired.exit).toBe(0)
 })
 
-test('the wall is read as spent-or-past, and an absent wall never stops a run', () => {
+test('a wall stops at spent-or-past, an absent wall never does', () => {
   expect(walled(undefined, 9_000_000)).toBeNull()
   expect(walled(5_000_000, 4_999_999)).toBeNull()
   expect(walled(5_000_000, 5_000_000)).toContain('past the 5.0M wall')

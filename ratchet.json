@@ -65,16 +65,15 @@
     "prepare": 6
   },
   "cli/batch.ts": {
-    "citing-comment": 1,
-    "lines": 153,
+    "lines": 159,
     "prepare": 4
   },
   "cli/brief.ts": {
-    "lines": 174,
-    "prepare": 8
+    "lines": 299,
+    "prepare": 14
   },
   "cli/cf.ts": {
-    "lines": 159,
+    "lines": 179,
     "silent-catch": 2
   },
   "cli/digests.ts": {
@@ -84,7 +83,7 @@
     "lines": 82
   },
   "cli/gh.ts": {
-    "lines": 264,
+    "lines": 278,
     "silent-catch": 1
   },
   "cli/inbox.ts": {

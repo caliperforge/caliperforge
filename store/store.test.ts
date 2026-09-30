@@ -137,17 +137,24 @@ it('D3: a part keeps the after it is given, and null when it is given none', () 
   expect(allParts(db).map((p) => p.after)).toEqual([null, 0])
 })
 
-it('D2: end sets the state and clears wait_reason only when asked', () => {
+it('D5: end clears wait_reason and waits_on on every end', () => {
   const db = open(':memory:')
   migrate(db, join(root, 'schema'))
   const plan = addPlan(db, { pipe_id: 1, target_id: null, template: 'pr_path', state: 'queued', queued_at: '2026-09-27T00:00:00.000Z',
     lane: 'machine', seat: 'typescript_specialist', origin: 'https://github.com/caliperforge/caliperforge/issues/1', step: 0 })
-  db.prepare("UPDATE plans SET wait_reason = 'over_cap' WHERE id = ?").run(plan)
-  const row = (): unknown => db.prepare('SELECT state, wait_reason FROM plans WHERE id = ?').get(plan)
+  const other = addPlan(db, { pipe_id: 1, target_id: null, template: 'pr_path', state: 'queued', queued_at: '2026-09-27T00:00:00.000Z',
+    lane: 'machine', seat: 'typescript_specialist', origin: 'https://github.com/caliperforge/caliperforge/issues/2', step: 0 })
+  const wait = (): unknown => db.prepare("UPDATE plans SET wait_reason = 'file_overlap', waits_on = ? WHERE id = ?").run(other, plan)
+  const row = (): unknown => db.prepare('SELECT state, wait_reason, waits_on FROM plans WHERE id = ?').get(plan)
+  wait()
   end(db, plan, 'halted')
-  expect(row()).toEqual({ state: 'halted', wait_reason: 'over_cap' })
-  end(db, plan, 'done', true)
-  expect(row()).toEqual({ state: 'done', wait_reason: null })
+  expect(row()).toEqual({ state: 'halted', wait_reason: null, waits_on: null })
+  wait()
+  end(db, plan, 'refused')
+  expect(row()).toEqual({ state: 'refused', wait_reason: null, waits_on: null })
+  wait()
+  end(db, plan, 'done')
+  expect(row()).toEqual({ state: 'done', wait_reason: null, waits_on: null })
 })
 
 it('D1 D5: requeue, clearWaitsOn, holdOn and briefed write the columns they name', () => {

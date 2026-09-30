@@ -134,12 +134,15 @@ test('D1-D3: a ## Files row on an existing file over 300 lines names its range',
   mkdirSync(join(dir, 'a'))
   writeFileSync(join(dir, 'a/long.ts'), Array.from({ length: 301 }, () => 'x').join('\n'))
   writeFileSync(join(dir, 'a/short.ts'), Array.from({ length: 299 }, () => 'x').join('\n'))
-  const row = (line: string): Refused | null =>
-    shape(swap(swap(brief, '## Files', [line]), '## Files to read', ['- a/short.ts — read']), ask, dir)
+  const row = (...lines: string[]): Refused | null =>
+    shape(swap(swap(brief, '## Files', lines), '## Files to read', ['- a/short.ts — read']), ask, dir)
+  const other = '- a/short.ts:3 — called from `a/long.ts:12`'
   const refused = { span: 'a/long.ts', reason: 'a/long.ts is 301 lines; name the range' }
   expect(row('- a/long.ts:40')).toEqual(refused)
   expect(row('- a/long.ts')).toEqual(refused)
   expect(row('- a/long.ts:40-90')).toBeNull()
+  expect(row('- a/long.ts:40-90', other)).toBeNull()
+  expect(row('- a/long.ts:40', other)).toEqual(refused)
   expect(row('- a/short.ts:40')).toBeNull()
   expect(row('- a/short.ts')).toBeNull()
   expect(row('- a/new.ts (new)')).toBeNull()

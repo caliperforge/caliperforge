@@ -11,12 +11,12 @@ import { abortMerge, behindMain, cloned, conflicted, diffOf, diffSince, fetchMai
   srcDir, unmerged } from './workspace.ts'
 
 /**
- * Step 3's base, #35 rule 3 one tick before the ready and batch gates: a merge returns no outcome,
+ * Step 3's base, one tick before the ready and batch gates: a merge returns no outcome,
  * so the rails judge the merged tree in this same tick, and it spends none of the `base.merged`
  * budget those two count their one miss against. A conflict is the builder's to settle, so the
  * refusal names the unmerged paths and rewinds onto the build. A tick that stopped inside a merge
  * left that merge open, and its bytes were committed before it, so the abort loses nothing and this
- * tick merges again from the old base. #162: the rewind alone would hand the builder that same old
+ * tick merges again from the old base. The rewind alone would hand the builder that same old
  * base, so the checkout is cut again from main and the builder's diff carried across to be re-applied.
  */
 export function freshBase(db: Db, root: string, plan: PlanRow): Outcome | null {
@@ -32,7 +32,7 @@ export function freshBase(db: Db, root: string, plan: PlanRow): Outcome | null {
 }
 
 /**
- * The one merge, for step 3 and for the ready and batch gates. #130: every merge leaves its two file
+ * The one merge, for step 3 and for the ready and batch gates. Every merge leaves its two file
  * sets and their overlap on the plan, whether it went through or conflicted; `kept()` is the decision
  * that reads them. The builder's work is committed
  * first: a merge into a dirty tree is the one way main's bytes and the seat's could be lost against
@@ -62,7 +62,7 @@ export function kept(db: Db, root: string, plan: PlanRow, step: Step): Outcome |
   return merged(db, root, plan, step) ?? (step.step === 5 ? skipped(db, root, plan.id) : null)
 }
 
-/** #199: a rework whose delta since senior's pass is comments or docs alone keeps that pass. */
+/** A rework whose delta since senior's pass is comments or docs alone keeps that pass. */
 function skipped(db: Db, root: string, plan: number): Outcome | null {
   const given = lastReview(db, plan, 'senior_review')
   const passed = maybe(root, plan, 'step-5.passed.diff')
@@ -77,7 +77,7 @@ function skipped(db: Db, root: string, plan: number): Outcome | null {
 }
 
 /**
- * #131. A merge git took without help, that brought in no file the job changed, leaves the job's own diff
+ * A merge git took without help, that brought in no file the job changed, leaves the job's own diff
  * byte-identical: the reviewers already passed exactly these bytes, so their verdict stands and no seat is
  * fired. The rails and checks still run on the merged tree at step 3. Kept only for a verdict given before
  * that merge, and only while the diff is the one senior passed; anything else is a full review as before.
@@ -101,11 +101,9 @@ function passedDiff(db: Db, plan: number): string | null {
 }
 
 /**
- * #35 rule 3: nothing lands over a moved main. The first miss merges main into the branch and sends
- * the plan back to the rails, which judge the merged bytes. #295: a later miss, a conflict, or a tree
- * left mid-merge used to refuse with "cut it again", which nothing did: the builder had nothing to
- * change and every later move of main refused the job again. They go back to the rails instead, where
- * `freshBase` merges main or, on a conflict, cuts the checkout again and carries the build across.
+ * Nothing lands over a moved main. The first miss merges main into the branch and sends the plan back
+ * to the rails, which judge the merged bytes. A later miss, a conflict, or a tree left mid-merge goes
+ * back to the rails, where `freshBase` merges main or, on a conflict, cuts the checkout again and carries the build across.
  */
 export function baseMoved(db: Db, root: string, plan: PlanRow): Outcome | null {
   const src = srcDir(root, plan.id)

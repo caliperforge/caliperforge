@@ -18,7 +18,7 @@ import { ceilinged, stepped } from './settle.ts'
 
 /**
  * `read`, `wire` and `labels` are the network a tick touches on its own account; each is injected so a test can drive a lap
- * offline. `chain` is how many minutes a job may keep stepping inside this tick (#78, widened): the live tick passes
+ * offline. `chain` is how many minutes a job may keep stepping inside this tick: the live tick passes
  * `CHAIN_MINUTES`, and a test that leaves it at 0 still sees one step per tick.
  */
 export async function tick(db: Db, root: string, provider: Provider, now: Date = new Date(),
@@ -52,8 +52,8 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
 }
 
 /**
- * A lane's `each` jobs this tick. A job that only waited spent no model and does not count: on 09-25 plan 159
- * sat on the checks lock and took the Atelier lane's one lease every minute, so plans 164 and 166 never started.
+ * A lane's `each` jobs this tick. A job that only waited spent no model and does not count: a job parked on the
+ * checks lock must not take the lane's one lease from the jobs behind it.
  */
 async function lane(picks: Leg[], now: Date, each: number, run: (m: Leg & { lease: Taken }) => Promise<Fired[]>,
   db: Db): Promise<Fired[]> {
@@ -83,9 +83,9 @@ async function away(db: Db, leg: Leg & { lease: Taken }, apart: Apart): Promise<
 }
 
 /**
- * #311: one leased job's laps, in the process `cf lap` forked for it. Step 3's checks and the slot wait block
- * the event loop, and an agent whose tool hook cannot answer stops with it: on 09-25 two reviews logged 23
- * minutes for 12 seconds of model. One process per job keeps a check from freezing another lane's agent.
+ * One leased job's laps, in the process `cf lap` forked for it. Step 3's checks and the slot wait block
+ * the event loop, and an agent whose tool hook cannot answer stops with it. One process per job keeps a check
+ * from freezing another lane's agent.
  */
 export async function lap(db: Db, root: string, provider: Provider, plan: number, from: number, stole: number | null,
   chain = 0, read?: Read): Promise<Fired[]> {
@@ -107,9 +107,8 @@ function stepping(r: Route): boolean {
 }
 
 /**
- * Jobs the live tick leases per lane. Step 3's checks run synchronously, so every job in one tick waited on the slowest
- * test run: on 09-25 one job's suite froze five others for 20+ minutes, and the Atelier lane waited behind the machine
- * lane. One job per lane per tick, each in a process of its own (#311); the tick fires every minute, so the lanes fill in minutes.
+ * Jobs the live tick leases per lane: one job per lane per tick, each in a process of its own; the tick fires every
+ * minute, so the lanes fill in minutes.
  */
 export const EACH = 1
 
@@ -119,7 +118,7 @@ export const CHAIN_MINUTES = 45
 /** Steps one job may take in one tick: a full lap and two rebuilds, and a ceiling on a loop that spends no model. */
 const STEPS = 20
 
-/** #65: the picks this tick won the lease on; one another live tick holds is left where it stands. */
+/** The picks this tick won the lease on; one another live tick holds is left where it stands. */
 function leased(db: Db, picks: Leg[], now: Date, each = Infinity): (Leg & { lease: Taken })[] {
   const out: (Leg & { lease: Taken })[] = []
   for (const pick of picks) {
@@ -182,7 +181,7 @@ export function dry(db: Db, now: Date = new Date()): Dry {
 /**
  * The lease goes on every way out, a throw included: the plan is free for the next tick either way. With a
  * `chain` budget the job keeps its lease and takes its next step at once, until it has to wait on something
- * outside the machine -- their CI, a person, a lane the CEO turned off -- or the budget runs out.
+ * outside the machine -- their CI, a person, a lane a person turned off -- or the budget runs out.
  */
 async function one(db: Db, root: string, pipe: PipeRow, first: Leg, lease: Taken,
   provider: Provider, wire?: Wire, chain = 0, read?: Read): Promise<Fired[]> {

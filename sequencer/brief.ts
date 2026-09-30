@@ -292,15 +292,14 @@ function paths(brief: string, src: string): Refused | null {
   return null
 }
 
-/** A file past `WHOLE` lines is handed by its block, so its `## Files` row names where that block ends: `path:start-end`. */
+/** A file past `WHOLE` lines is handed by its block, so some `## Files` row names where that block ends: `path:start-end`. */
 function ranged(brief: string, src: string): Refused | null {
-  for (const line of section(brief, '## Files').split('\n').filter((l) => /^\s*[-*]/.test(l))) {
-    for (const { path, is_new } of files(`## Files\n${line}`)) {
-      if (is_new || !existsSync(join(src, path))) continue
-      const n = readFileSync(join(src, path), 'utf8').split('\n').length
-      const named = line.split(`${path}:`).slice(1).some((after) => /^\d+-\d+/.test(after))
-      if (n > WHOLE && !named) return { span: path, reason: `${path} is ${String(n)} lines; name the range` }
-    }
+  const rows = section(brief, '## Files').split('\n').filter((l) => /^\s*[-*]/.test(l))
+  for (const { path, is_new } of files(brief)) {
+    if (is_new || !existsSync(join(src, path))) continue
+    const n = readFileSync(join(src, path), 'utf8').split('\n').length
+    const named = rows.some((row) => row.split(`${path}:`).slice(1).some((after) => /^\d+-\d+/.test(after)))
+    if (n > WHOLE && !named) return { span: path, reason: `${path} is ${String(n)} lines; name the range` }
   }
   return null
 }

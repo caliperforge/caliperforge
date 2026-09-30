@@ -357,24 +357,6 @@
     "lines": 103,
     "prepare": 4
   },
-  "seats/brief_writer/tests/seat.test.ts": {
-    "test-name": 6
-  },
-  "seats/kotlin_specialist/tests/seat.test.ts": {
-    "test-name": 7
-  },
-  "seats/outside_specialist/tests/seat.test.ts": {
-    "test-name": 2
-  },
-  "seats/rust_specialist/tests/seat.test.ts": {
-    "test-name": 1
-  },
-  "seats/swift_specialist/tests/seat.test.ts": {
-    "test-name": 3
-  },
-  "seats/typescript_specialist/tests/seat.test.ts": {
-    "test-name": 3
-  },
   "sequencer/act.ts": {
     "lines": 56,
     "prepare": 1

@@ -12,7 +12,7 @@ languageSeat({
   beside: 'crates/cli/src/main.rs',
 })
 
-test('a generated file matches the generator the brief names, not a described byte format', () => {
+test('a generated file matches its generator, not a byte format', () => {
   const prompt = seat(join(import.meta.dirname, '../../..'), 'rust_specialist').prompt.replace(/\s+/g, ' ')
   expect(prompt).toContain('match what the generator the brief names writes: step 3 runs that generator and fails on any diff.')
   expect(prompt).not.toContain('header, field order, quoting and trailing newline')

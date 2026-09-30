@@ -1,7 +1,7 @@
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { migrate, open, type Db } from './index.ts'
-import { live, pipeNamed, planById, waiting, type PipeRow } from './plans.ts'
+import { finish, live, overlapWaits, pipeNamed, planById, waiting, type PipeRow } from './plans.ts'
 
 const root = join(import.meta.dirname, '..')
 
@@ -83,6 +83,18 @@ test('a plan not queued or running takes no place in the queue', () => {
   for (const [id, state] of [[6, 'done'], [7, 'refused'], [8, 'halted'], [9, 'blocked_on_ceo']] as const) add(db, id, state, T1)
   db.exec('UPDATE plans SET step = 2, priority = 0 WHERE id > 5')
   expect(order(db).map((r) => [r.plan, r.position])).toEqual([[3, 1], [1, 2], [4, 3], [5, 4], [2, 5]])
+})
+
+test('D3 D4 a finished plan drops its file wait and leaves overlapWaits, and a queued one waiting on files stays', () => {
+  const db = bench()
+  add(db, 2, 'queued', T1)
+  add(db, 3, 'queued', T1)
+  const file = db.prepare('INSERT INTO plan_files (plan, path, is_new, position) VALUES (?, ?, 0, 0)')
+  for (const plan of [PLAN, 2, 3]) file.run(plan, 'x.ts')
+  waiting(db, [{ plan: 2, why: 'file_overlap', on: PLAN }, { plan: 3, why: 'file_overlap', on: PLAN }])
+  finish(db, planById(db, 2))
+  expect(db.prepare('SELECT wait_reason, waits_on FROM plans WHERE id = 2').get()).toEqual({ wait_reason: null, waits_on: null })
+  expect(overlapWaits(db)).toEqual([{ plan: 3, on: PLAN, path: 'x.ts' }])
 })
 
 test('a second started rule is refused', () => {

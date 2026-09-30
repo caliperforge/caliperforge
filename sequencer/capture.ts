@@ -121,7 +121,7 @@ function landed(db: Db, repo: string, open: Set<string>): void {
   const live = db.prepare(`SELECT p.* FROM plans p WHERE p.state IN ('queued', 'running', 'blocked_on_ceo') AND p.origin IS NOT NULL
     AND EXISTS (SELECT 1 FROM deliverables d WHERE d.plan_id = p.id AND d.state = 'pushed')`).all().map((r) => PlanRow.parse(r))
   for (const plan of live.filter((p) => originRef(p)?.repo === repo && !open.has(p.origin ?? ''))) {
-    end(db, plan.id, 'done', true)
+    end(db, plan.id, 'done')
   }
 }
 

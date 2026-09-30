@@ -184,7 +184,7 @@ function apply(db: Db, root: string, plan: PlanRow, f: Fix, wire: Wire, now: Dat
     case 'done': {
       const pushed = db.prepare("SELECT 1 FROM deliverables WHERE plan_id = ? AND state = 'pushed'").get(plan.id)
       if (pushed === undefined) return 'escalated'
-      end(db, plan.id, 'done', true)
+      end(db, plan.id, 'done')
       return 'done'
     }
     case 'park': hold(db, root, plan.id, f.why, now); return 'park'

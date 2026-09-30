@@ -31,7 +31,7 @@ function recording(at: Places, log: string[], fails?: string): Run {
   }
 }
 
-test('a built app is quit, swapped for the new bundle in place and reopened; an existing clone is fetched, not cloned', () => {
+test('the app is quit, swapped and reopened; a clone is fetched', () => {
   const at = places(true)
   const log: string[] = []
   const posts: string[] = []

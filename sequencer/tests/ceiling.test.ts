@@ -4,11 +4,11 @@ import { retry } from '../../store/plans.ts'
 import { tick } from '../index.ts'
 import { approve, CARRIED, plan, stub, world } from './world.ts'
 
-test('a job past the token ceiling stops before its next model run, and a retry starts the count again', async () => {
+test('past the token ceiling a job stops, and a retry resets it', async () => {
   const w = world()
   approve(w.db, w.target)
   let fired = 0
-  // The orchestrator's wake on the stopped plan (#246) is not one of the job's own model runs.
+  // The orchestrator's wake on the stopped plan is not one of the job's own model runs.
   const provider = stub(CARRIED, 0, undefined, (p) => { if (!p.transcript.includes('orchestrator')) fired += 1 })
   while (fired === 0) await tick(w.db, w.root, provider)
   w.db.prepare('UPDATE runs SET input_tokens = 7000000').run()

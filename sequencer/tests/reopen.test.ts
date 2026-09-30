@@ -11,7 +11,7 @@ function git(dir: string, args: string[]): string {
   return execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', ...args], { cwd: dir, encoding: 'utf8' })
 }
 
-test('a reaped plan with a pushed branch reopens on that branch and keeps its base', () => {
+test('a reaped plan with a pushed branch reopens on it, same base', () => {
   const w = world()
   const first = checkout(w.root, 1, 'acme/widget', BRANCH)
   writeFileSync(join(first.dir, 'added.ts'), 'export const added = 1\n')
@@ -34,7 +34,7 @@ test('a reaped plan that never pushed is cut fresh from main', () => {
 
 const stale = (root: string): string[] => readdirSync(planDir(root, 1)).filter((n) => n.startsWith('src.stale-'))
 
-test('a leftover src with no base.sha is moved aside and cloned fresh', () => {
+test('a src with no base.sha is moved aside and cloned fresh', () => {
   const w = world()
   writeFileSync(join(srcDir(w.root, 1), 'leftover.txt'), 'partial\n')
 

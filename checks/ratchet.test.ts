@@ -146,3 +146,7 @@ it('pr-path.ts and vitest.config.ts meet their ratchet rows', () => {
   const paths = ['templates/pr-path.ts', 'vitest.config.ts']
   expect(ratcheted(join(import.meta.dirname, '..'), {}).filter((f) => paths.includes(f.path))).toEqual([])
 })
+
+it('sequencer/tests/ meets its ratchet rows', () => {
+  expect(ratcheted(join(import.meta.dirname, '..'), {}).filter((f) => f.path.startsWith('sequencer/tests/'))).toEqual([])
+})

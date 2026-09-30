@@ -24,7 +24,7 @@ const growing = (title: string, step = 7): World => {
 
 const posts = (w: World): unknown[] => w.db.prepare('SELECT * FROM desk_posts').all()
 
-test('D2: a growth plan at step 7 fires growth_lead once on packet.json, with no checkout, and keeps its reply', async () => {
+test('a growth plan at step 7 fires growth_lead once, no checkout', async () => {
   const w = growing('growth 2026-09-28')
   const seen: Packet[] = []
   await tick(w.db, w.root, stub('', 0, REPLY, (p) => seen.push(p)))
@@ -35,7 +35,7 @@ test('D2: a growth plan at step 7 fires growth_lead once on packet.json, with no
   expect(get(w.root, 1, 'growth.md')).toBe(REPLY)
 })
 
-test('D3: pack puts the fixture reply on the desk as one pack row in proof', () => {
+test('pack puts the reply on the desk as one pack row in proof', () => {
   const w = growing('growth 2026-09-28', 8)
   put(w.root, 1, 'growth.md', REPLY)
   expect(pack(w.db, w.root, plan(w.db, 1))).toMatchObject({ outcome: 'pass' })
@@ -60,7 +60,7 @@ test.each([
   expect(posts(w)).toEqual([])
 })
 
-test('D5: a ship post plan passes grow and pack with no run and no desk row', async () => {
+test('a ship post passes grow and pack with no run or desk row', async () => {
   const w = growing('ship post acme/widget#7')
   const never = stub('', 0, REPLY, () => { throw new Error('no seat fires on a ship post') })
   for (let n = 0; n < 4 && plan(w.db, 1).state !== 'done'; n += 1) await tick(w.db, w.root, never)

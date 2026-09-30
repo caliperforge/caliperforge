@@ -90,7 +90,7 @@ test('waits on every workflow, judges only its own', async () => {
   ])
 })
 
-test('three rounds before any PR go out on one branch, each a plain push', async () => {
+test('rounds before any PR go out on one branch, each a plain push', async () => {
   const w = ready()
   const src = srcDir(w.root, 1)
   const sent: string[] = []

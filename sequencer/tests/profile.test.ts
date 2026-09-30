@@ -66,7 +66,7 @@ const CASES: { src: string; repo: string; language: OutsideLanguage; file: strin
   ] },
 ]
 
-test.each(CASES)('D4 D5 $repo $language gates are pinned and follow its profile checks', (c) => {
+test.each(CASES)('$repo $language gates are pinned to its profile checks', (c) => {
   const found = gates(c.src, { language: c.language, files: [c.file] })
   expect(found).toEqual(c.gates)
   expect(found.map((g) => g.script)).toEqual(profile(REPO, `solana-foundation/${c.repo}`)?.checks?.[c.language])
@@ -87,7 +87,7 @@ const BRIEFS = [
   },
 ]
 
-test.each(BRIEFS)('D5 the outside commit message and PR body are pinned: $message', (b) => {
+test.each(BRIEFS)('the outside commit message and PR body are pinned: $message', (b) => {
   const w = world()
   checkout(w.root, 1, 'acme/widget', 'widget-12-a1')
   writeFileSync(join(srcDir(w.root, 1), 'src/hello.test.ts'), 'export {}\n')
@@ -108,7 +108,7 @@ function memo(): string {
   return w.root
 }
 
-test('D4 a go-sdk profile shapes the subject, keeps Fixes #N and adds the trailer and disclosure', () => {
+test('a go-sdk profile shapes subject, trailer and disclosure', () => {
   const root = memo()
   const rules = profile(MCP, 'modelcontextprotocol/go-sdk')
   expect(messageOf(root, 1, rules)).toBe('mcp: add a memo\n\nCarry a memo.\n\nFixes #35.\n\nCo-Authored-By: Claude')
@@ -130,7 +130,7 @@ async function prompted(repo: string, step = 2, id = 1): Promise<string> {
   return seen[0]?.prompt ?? ''
 }
 
-test.each(['pay-kit', 'surfpool'])('D1 D2 a step-2 build on solana-foundation/%s carries its notes between the seat prompt and # Issue', async (name) => {
+test.each(['pay-kit', 'surfpool'])('a step-2 build on %s carries its notes before # Issue', async (name) => {
   const repo = `solana-foundation/${name}`
   const prompt = await prompted(repo)
   const notes = profile(REPO, repo)?.notes ?? []

@@ -44,7 +44,7 @@ async function atBatch(w: World, wire: Wire): Promise<void> {
   for (let at = 0; at < 4; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
 }
 
-test('an internal plan that passed ready is on main, pushed and its issue closed, in the next tick', async () => {
+test('a ready internal plan lands and closes its issue next tick', async () => {
   const w = mine()
   const sent: string[] = []
   const wire = watched(sent, w.root, ID)
@@ -70,7 +70,7 @@ test('an internal plan that passed ready is on main, pushed and its issue closed
   expect(sent).toHaveLength(3)
 })
 
-test('D1 each commit a landed internal plan put on main carries its title, what, why, closing line and plan', async () => {
+test('each landed commit carries title, what, why, close and plan', async () => {
   const w = mine()
   const wire = watched([], w.root, ID)
   await atBatch(w, wire)
@@ -80,7 +80,7 @@ test('D1 each commit a landed internal plan put on main carries its title, what,
   expect(new Set(bodies(srcDir(w.root, ID), `${MAIN}..main`))).toEqual(new Set([MESSAGE]))
 })
 
-test('D2 a second round adds a commit with the same message and leaves the first in place', async () => {
+test('a second round adds a same-message commit after the first', async () => {
   const w = mine()
   await atRails(w, watched([], w.root, ID))
   const first = headOf(w.root, ID).sha
@@ -91,14 +91,14 @@ test('D2 a second round adds a commit with the same message and leaves the first
   expect(git(src, ['rev-parse', 'HEAD~1'])).toBe(first)
 })
 
-test('D3 a bare upstream number in the brief does not reach the commit message', () => {
+test('a bare upstream number in the brief stays out of the commit', () => {
   const w = mine()
   put(w.root, ID, 'issue.md', '# let #35 run\n\n**What:** add it.\n**Why:** #35 asks for it.\n')
   const message = commitMessage(w.root, plan(w.db, ID))
   expect(message).toBe('let run\n\nadd it.\n\nasks for it.\n\nCloses caliperforge/caliperforge#34\nPlan 2')
 })
 
-test('D5 an internal plan with no saved message commits under its branch name', async () => {
+test('with no saved message a plan commits under its branch name', async () => {
   const w = mine()
   await atRails(w, watched([], w.root, ID))
   drop(w.root, ID, COMMIT)
@@ -106,7 +106,7 @@ test('D5 an internal plan with no saved message commits under its branch name', 
   expect(bodies(srcDir(w.root, ID), `${MAIN}..HEAD`)).toEqual([BRANCH])
 })
 
-test('an atelier-lane plan that lands installs the app once, after the main send and the close', async () => {
+test('an atelier plan installs the app once, after send and close', async () => {
   const w = mine()
   const sent: string[] = []
   const wire = watched(sent, w.root, ID)
@@ -118,7 +118,7 @@ test('an atelier-lane plan that lands installs the app once, after the main send
   expect(sent).toEqual([FORKED, 'send src main', `close caliperforge/caliperforge#34 ${sha.slice(0, 7)}`, 'install'])
 })
 
-test('an internal plan on a repo with no workflows lands on step 3\'s checks, never waiting on a fork run', async () => {
+test('with no workflows a plan lands on step 3\'s checks', async () => {
   const w = world()
   w.db.prepare('DELETE FROM plans WHERE id = 1').run()
   ours(w.root, undefined, false)
@@ -138,7 +138,7 @@ test('an internal plan on a repo with no workflows lands on step 3\'s checks, ne
   expect(sent).toEqual(['send src main', `close caliperforge/caliperforge#34 ${sha.slice(0, 7)}`])
 })
 
-test('D1 an internal plan whose only workflow runs on a schedule or by hand lands on step 3\'s checks', async () => {
+test('a schedule-only workflow lands the plan on step 3\'s checks', async () => {
   const w = world()
   w.db.prepare('DELETE FROM plans WHERE id = 1').run()
   ours(w.root, SCHEDULED, false)
@@ -156,7 +156,7 @@ test('D1 an internal plan whose only workflow runs on a schedule or by hand land
     .toEqual({ fork_ci_green: 1 })
 })
 
-test('main moving between ready and batch rewinds to the rails and lands as a fast-forward on the second pass', async () => {
+test('main moving at batch rewinds, then lands fast-forward', async () => {
   const w = mine()
   const sent: string[] = []
   const wire = watched(sent, w.root, ID)
@@ -181,7 +181,7 @@ test('main moving between ready and batch rewinds to the rails and lands as a fa
   expect(headApproved(w.db, sha)).toBe(true)
 })
 
-test('conflict at batch: back to rails, merge aborted, nothing closed', async () => {
+test('conflict at batch: back to rails, merge aborted, none closed', async () => {
   const w = mine()
   const sent: string[] = []
   const wire = watched(sent, w.root, ID)
@@ -201,7 +201,7 @@ test('conflict at batch: back to rails, merge aborted, nothing closed', async ()
     .not.toEqual({ state: 'pushed' })
 })
 
-test('a main that moves inside the tick makes the land a refusal, not a merge commit', async () => {
+test('main moving mid-tick makes the land a refusal, not a merge', async () => {
   const w = mine()
   const sent: string[] = []
   const wire = watched(sent, w.root, ID)
@@ -257,7 +257,7 @@ test('behind main past the lap cap: refused', async () => {
   expect(refused?.note).toContain('have not caught main up')
 })
 
-test('a stale tree merges main before the rails read it and records the new base, in one tick', async () => {
+test('a stale tree merges main at the rails and records the base', async () => {
   const w = mine()
   const wire = watched([], w.root, ID)
   await atRails(w, wire)
@@ -280,7 +280,7 @@ test('a stale tree merges main before the rails read it and records the new base
   expect(row?.main).toBe(git(srcDir(w.root, ID), ['rev-parse', MAIN]))
 })
 
-test('a tree already at main\'s head gains no commit at the rails and its base.sha is byte-identical', async () => {
+test('a tree at main\'s head gains no commit at the rails', async () => {
   const w = mine()
   const wire = watched([], w.root, ID)
   await atRails(w, wire)
@@ -294,7 +294,7 @@ test('a tree already at main\'s head gains no commit at the rails and its base.s
   expect(get(w.root, ID, 'base.sha')).toBe(base)
 })
 
-test('a merge that conflicts at the rails aborts, hands the builder the paths and spends no retry', async () => {
+test('a rails conflict aborts and hands back its paths, no retry', async () => {
   const w = mine()
   const wire = watched([], w.root, ID)
   await atRails(w, wire)
@@ -316,7 +316,7 @@ test('a merge that conflicts at the rails aborts, hands the builder the paths an
   expect(row?.overlap).toBe(true)
 })
 
-test('the re-cut checkout is main\'s, and the builder is handed its own diff to re-apply onto it', async () => {
+test('the re-cut checkout is main\'s, with the diff to re-apply', async () => {
   const w = mine()
   const wire = watched([], w.root, ID)
   await atRails(w, wire)
@@ -341,7 +341,7 @@ test('the re-cut checkout is main\'s, and the builder is handed its own diff to 
   expect(diffOf(w.root, ID)).toContain('main took this line')
 })
 
-test('a branch re-cut after its push folds the pushed head in, so the ready push fast-forwards', async () => {
+test('a re-cut after push folds in the pushed head', async () => {
   const w = mine()
   const wire = { ...watched([], w.root, ID), send: WIRE.send }
   await atBatch(w, wire)
@@ -363,12 +363,12 @@ test('a branch re-cut after its push folds the pushed head in, so the ready push
 })
 
 /**
- * #160 gave the conflict loop a counter; #162 removed what it was counting. The same conflict cannot
+ * The conflict loop had a counter, and what it counted was removed. The same conflict cannot
  * come round a second time now, because the second lap is not on the old base -- it is on main. The
  * repeat rule itself is the refusals ledger's, and is proved there (`store/refusals.test.ts`); what is
  * proved here is that the lap the counter existed for no longer happens.
  */
-test('the conflict does not come round a second time: the next lap is on main, and the rails pass', async () => {
+test('a conflict comes round once: the next lap is on main', async () => {
   const w = mine()
   const wire = watched([], w.root, ID)
   await atRails(w, wire)
@@ -386,7 +386,7 @@ test('the conflict does not come round a second time: the next lap is on main, a
   expect(w.db.prepare('SELECT count(*) AS n FROM refusals WHERE plan = ? AND blip = 0').get(ID)).toEqual({ n: 1 })
 })
 
-test('a tree a tick stopped mid-merge in commits no conflict marker at the rails', async () => {
+test('a tree stopped mid-merge commits no conflict marker', async () => {
   const w = mine()
   const wire = watched([], w.root, ID)
   await atRails(w, wire)
@@ -409,7 +409,7 @@ test('a tree a tick stopped mid-merge in commits no conflict marker at the rails
   expect(git(src, ['log', '-p', BRANCH])).not.toContain('<<<<<<<')
 })
 
-test('a target\'s tree at the rails is untouched when our own main moves', async () => {
+test('a target\'s tree at the rails ignores our own main moving', async () => {
   const w = world()
   approve(w.db, w.target)
   const wire = watched([], w.root, 1)
@@ -426,7 +426,7 @@ test('a target\'s tree at the rails is untouched when our own main moves', async
   expect(get(w.root, 1, 'base.sha')).toBe(base)
 })
 
-test('a seat works in the plan checkout and nowhere else under the machine\'s own tree', () => {
+test('a seat works in its checkout and nowhere else in our tree', () => {
   const root = mkdtempSync(join(tmpdir(), 'cf-live-'))
   expect(liveTree(root, root)).toBe(true)
   expect(liveTree(root, join(root, 'store'))).toBe(true)

@@ -54,7 +54,7 @@ test('a clean HQ level with its upstream is left alone', () => {
   expect(git(remote, ['rev-parse', 'main'])).toBe(head)
 })
 
-test.each(['.env', 'keys/id_ed25519'])('an unignored %s beside a changed file stages and commits nothing', (secret) => {
+test.each(['.env', 'keys/id_ed25519'])('an unignored %s beside a change stages and commits nothing', (secret) => {
   const { db, dir } = hq()
   const head = git(dir, ['rev-parse', 'HEAD'])
   writeFileSync(join(dir, 'plan.md'), 'plan 7 done\n')
@@ -67,7 +67,7 @@ test.each(['.env', 'keys/id_ed25519'])('an unignored %s beside a changed file st
   expect(git(dir, ['rev-parse', 'HEAD'])).toBe(head)
 })
 
-test('an unreachable remote keeps the commit local, and the next job end pushes it', () => {
+test('an unreachable remote keeps the commit for the next job end', () => {
   const { db, dir, remote } = hq()
   writeFileSync(join(dir, 'plan.md'), 'plan 7 done\n')
   renameSync(remote, `${remote}.gone`)

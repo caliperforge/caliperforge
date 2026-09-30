@@ -56,14 +56,14 @@ async function fixed(step: number, fix: string) {
   return { state, applied, posted, ask: maybe(home, 7, 'ask.md'), issue: maybe(home, 7, 'issue.md') }
 }
 
-test('D1 before a build the answer is appended to ask.md and the plan returns to step 1', async () => {
+test('before a build the answer goes in ask.md and back to step 1', async () => {
   const got = await fixed(1, answered('call `bye()` from src/bye.ts'))
   expect(got.ask).toMatch(/^the ask\n\n## Answer from the fixer \(\d{4}-\d{2}-\d{2}\)\n\ncall `bye\(\)` from src\/bye.ts\n$/)
   expect(got.issue).toBe(ISSUE)
   expect(got.state).toEqual({ state: 'queued', step: 1 })
 })
 
-test('D2 after a build the answer sits directly above ## Standing and the plan goes back to the builder', async () => {
+test('after a build the answer goes above ## Standing', async () => {
   const got = await fixed(3, answered('call `bye()`'))
   expect(got.issue).toMatch(/\n- the rest\n\n## Answer from the fixer \(\d{4}-\d{2}-\d{2}\)\n\ncall `bye\(\)`\n\n## Standing\n\n- no forced push\n$/)
   expect(got.issue?.startsWith('# hello\n\n**What:** add it.\n**Why:** asked.\n')).toBe(true)
@@ -92,7 +92,7 @@ test('an answer holding only a URL is written', async () => {
   expect(got.applied).toEqual([{ applied: 'applied' }])
 })
 
-test('D4 a reply with no answer writes nothing and returns the plan as before', async () => {
+test('a reply with no answer writes nothing and returns the plan', async () => {
   const got = await fixed(3, '---\ndid: nothing\nthen: return\nwhy: the question is answered\n---\n')
   expect(got.ask).toBe('the ask\n')
   expect(got.issue).toBe(ISSUE)

@@ -28,7 +28,7 @@ function queued(db: Db, id: number, pipe: string, template: 'comms' | 'research'
     .run(id, row.id, template, AT, origin, ours, ours === null ? null : 'typescript_specialist')
 }
 
-test('the store ships the three lanes the ceo opened, on, one at a time, 07:00 to 22:00', () => {
+test('the store ships three lanes, one at a time, 07:00 to 22:00', () => {
   const db = fresh(schema)
   expect(db.prepare('SELECT name, enabled, window_start, window_end, max_concurrent FROM pipes ORDER BY id').all())
     .toEqual([
@@ -39,7 +39,7 @@ test('the store ships the three lanes the ceo opened, on, one at a time, 07:00 t
     ])
 })
 
-test('the zone rule is one row, Guatemala, and every window is read against it', () => {
+test('the zone rule is one row and every window reads against it', () => {
   const db = fresh(schema)
   expect(zone(db)).toBe(-360)
   expect(db.prepare("SELECT count(*) AS n FROM settings WHERE key LIKE 'tick.zone%'").get()).toEqual({ n: 1 })
@@ -50,7 +50,7 @@ test('the zone rule is one row, Guatemala, and every window is read against it',
   expect(openPipes(db, hhmm(db, new Date('2026-09-19T04:01:00.000Z')))).toEqual([])
 })
 
-test('a lane with no template reads as on with nothing queued, not as an error', async () => {
+test('a lane with no template reads as on with nothing queued', async () => {
   const db = fresh(schema)
   dial(db, 3, AT)
   const root = mkdtempSync(join(tmpdir(), 'cf-pipes-'))
@@ -65,7 +65,7 @@ test('a lane with no template reads as on with nothing queued, not as an error',
     + '  pr-path\ton, nothing queued\n  comms\ton, nothing queued\n  research\ton, nothing queued\n')
 })
 
-test('a plan queued on a lane with no step map is left where it stands, and stops no other lane', async () => {
+test('a plan on a lane with no step map stays and stops no lane', async () => {
   const db = fresh(schema)
   dial(db, 3, AT)
   queued(db, 2, 'research', 'research')
@@ -82,7 +82,7 @@ test('a plan queued on a lane with no step map is left where it stands, and stop
   expect(dryLines(would)).toContain('  research\ton, 1 queued and blocked\n')
 })
 
-test('#125: the cap goes to the lanes that can step, and a lane it did not reach says so', () => {
+test('the cap goes to lanes that can step; the rest say so', () => {
   const db = fresh(schema)
   dial(db, 1, AT)
   queued(db, 1, 'comms', 'pr_path')

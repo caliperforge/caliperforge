@@ -33,7 +33,7 @@ async function atBuild(): Promise<World> {
 
 const builderRuns = (w: World): unknown => w.db.prepare('SELECT count(*) AS n FROM runs WHERE plan = 1 AND step = 2').get()
 
-test('D1 a hand-back with no fence is asked once for the fence, and the audit passes on the diff it left', async () => {
+test('a fenceless hand-back is asked once for the fence', async () => {
   const w = await atBuild()
   const diffs: string[] = []
   const fired = (await tick(w.db, w.root, answers(['built', CARRIED], (n) => { if (n === 1) diffs.push(diffOf(w.root, 1)) })))[0]
@@ -47,14 +47,14 @@ test('D1 a hand-back with no fence is asked once for the fence, and the audit pa
     .toEqual({ outcome: 'pass' })
 })
 
-test('D1 a fence whose YAML does not parse is re-asked, and the kept file holds only the answer\'s fence', async () => {
+test('an unparsable fence is re-asked; only its answer is kept', async () => {
   const w = await atBuild()
   await tick(w.db, w.root, answers(['built\n\n---\ndone: [\n---\n', CARRIED]))
   expect(builderRuns(w)).toEqual({ n: 2 })
   expect(get(w.root, 1, 'step-2.handback.md')).toBe(CARRIED)
 })
 
-test('D2 a re-ask answer that edits the tree is refused on the hand-back', async () => {
+test('a re-ask answer that edits the tree is refused', async () => {
   const w = await atBuild()
   const fired = (await tick(w.db, w.root, answers(['built', CARRIED], (n) => { if (n === 1) built(w.root, 1, 'export const more = 1') })))[0]
   expect(fired).toMatchObject({ step: 2, outcome: 'refuse', spans: ['step-2.handback.md'] })
@@ -77,14 +77,14 @@ function unfinishedBuild(): Provider {
 
 const refusalNote = (w: World): string => get(w.root, 1, 'refusal.md').split('\n')[2] ?? ''
 
-test('D1 a build whose test run never finished is refused at step 3 leading with the command', async () => {
+test('an unfinished test run is refused at step 3, command first', async () => {
   const w = await atBuild()
   await tick(w.db, w.root, unfinishedBuild())
   expect((await tick(w.db, w.root, stub(UNPOINTED)))[0]).toMatchObject({ step: 3, outcome: 'refuse' })
   expect(refusalNote(w)).toMatch(/^the builder's test run did not finish: npm test; completion-audit: /)
 })
 
-test('D2 a build with no moved-to-background result is refused as today', async () => {
+test('a build with no backgrounded result is refused as today', async () => {
   const w = await atBuild()
   await tick(w.db, w.root, stub(UNPOINTED))
   expect((await tick(w.db, w.root, stub(UNPOINTED)))[0]).toMatchObject({ step: 3, outcome: 'refuse' })
@@ -94,7 +94,7 @@ test('D2 a build with no moved-to-background result is refused as today', async 
 
 const EMPTY = /changed no file and handed back no fence; a file the ask removes goes under `## Deleted`/
 
-test('D1 a build with an empty diff and no fence is refused at step 2', async () => {
+test('a build with an empty diff and no fence is refused at step 2', async () => {
   const w = await atBuild()
   const fired = (await tick(w.db, w.root, answers(['', ''])))[0]
   expect(fired).toMatchObject({ step: 2, outcome: 'refuse', spans: ['step-2.handback.md'] })
@@ -102,7 +102,7 @@ test('D1 a build with an empty diff and no fence is refused at step 2', async ()
   expect(plan(w.db, 1).step).toBe(2)
 })
 
-test('D2 the same empty build again stops the plan for a person with the note', async () => {
+test('the same empty build again stops the plan for a person', async () => {
   const w = await atBuild()
   await tick(w.db, w.root, answers(['', '']))
   const fired = (await tick(w.db, w.root, answers(['', ''])))[0]
@@ -110,13 +110,13 @@ test('D2 the same empty build again stops the plan for a person with the note', 
   expect(fired?.note).toMatch(EMPTY)
 })
 
-test('D3 a fenceless hand-back on a build that changed a file passes step 2', async () => {
+test('a fenceless hand-back that changed a file passes step 2', async () => {
   const w = await atBuild()
   const fired = (await tick(w.db, w.root, answers(['built', 'built'], (n) => { if (n === 0) built(w.root, 1, 'export const more = 1') })))[0]
   expect(fired).toMatchObject({ step: 2, outcome: 'pass' })
 })
 
-test('D5 a fenceless hand-back naming a file under ## Deleted passes step 2', async () => {
+test('a fenceless hand-back naming a ## Deleted file passes step 2', async () => {
   const w = await atBuild()
   const text = 'built\n\n## Deleted\n\n- src/hello.ts\n'
   expect((await tick(w.db, w.root, answers([text, text])))[0]).toMatchObject({ step: 2, outcome: 'pass' })

@@ -22,7 +22,7 @@ function gh(wanted: boolean): Read {
 
 const state = (w: ReturnType<typeof world>): unknown => w.db.prepare('SELECT state FROM targets WHERE id = 1').pluck().get()
 
-test('D4: a no parks the target held, and the next route for the plan waits on target_parked', () => {
+test('a no parks the target; the plan then waits on target_parked', () => {
   const w = world()
   expect(kernel(w.db, w.root, plan(w.db, 1), undefined, gh(false))).toMatchObject({ outcome: 'refuse', held: true,
     note: `wanted: no maintainer opened or commented on it, and it is on no board ${URL}` })
@@ -30,7 +30,7 @@ test('D4: a no parks the target held, and the next route for the plan waits on t
   expect(route(w.db, plan(w.db, 1), new Date())).toEqual({ wait: 'target_parked', on: null })
 })
 
-test('D5: step 0 run again replaces its section after the ask, passes, and leaves the target ready', () => {
+test('step 0 run again replaces its section and passes', () => {
   const w = world()
   kernel(w.db, w.root, plan(w.db, 1), undefined, gh(true))
   expect(kernel(w.db, w.root, plan(w.db, 1), undefined, gh(true))).toMatchObject({ outcome: 'pass', note: 'acme/widget#12 warm' })
@@ -40,7 +40,7 @@ test('D5: step 0 run again replaces its section after the ask, passes, and leave
   expect(state(w)).toBe('ready')
 })
 
-test('a lap with no Read steps past step 0 as it always has, leaving the ask alone', async () => {
+test('a lap with no Read steps past step 0, leaving the ask alone', async () => {
   const w = world()
   const before = get(w.root, 1, 'ask.md')
   expect((await tick(w.db, w.root, stub(CARRIED)))[0]).toMatchObject({ step: 0, name: 'measure', outcome: 'pass', note: 'acme/widget#12 warm' })

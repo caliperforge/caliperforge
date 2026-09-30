@@ -299,7 +299,7 @@ test('D1 xcode runs xcodebuild test with its derived data inside', () => {
   expect(readFileSync(join(src, '.git', 'info', 'exclude'), 'utf8')).toContain('.cf-derived/')
 })
 
-test('D1 excluded writes each build-output line once, after a missing newline', () => {
+test('excluded writes each line once, after a missing newline', () => {
   const src = tree({})
   mkdirSync(join(src, '.git', 'info'), { recursive: true })
   writeFileSync(join(src, '.git', 'info', 'exclude'), '# local')

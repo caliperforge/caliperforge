@@ -53,7 +53,7 @@ const judged =(w: World, line: string): ReturnType<typeof facts> => {
   return facts(w.root, plan(w.db, 1))
 }
 
-test('D2 D7 D6: a comms plan ticks gather through capture to done, no seat or rail runs, desk leaves one post and capture one voice note', async () => {
+test('a comms plan ticks from gather to done with no seat or rail', async () => {
   const w = comms()
   const today = new Date().toISOString().slice(0, 10)
   reads(w.db, 1)
@@ -71,14 +71,14 @@ test('D2 D7 D6: a comms plan ticks gather through capture to done, no seat or ra
   expect(readFileSync(join(w.root, 'comms/voice-notes.md'), 'utf8')).toBe(`# Voice notes\n\n- ${today} 2 title: lengthened (7 → 13 chars)\n`)
 })
 
-test('two ticks after 20:30 on one local day file one daily comms plan', async () => {
+test('two ticks after 20:30 on one local day file one daily plan', async () => {
   const w = clocked()
   await tick(w.db, w.root, never, new Date('2026-09-28T02:31Z'))
   await tick(w.db, w.root, never, new Date('2026-09-28T02:45Z'))
   expect(dailies(w)).toEqual([{ title: 'daily 2026-09-27', state: 'queued' }])
 })
 
-test('a tick before 20:30 files no daily plan, and the next day after 20:30 files a second', async () => {
+test('before 20:30 no daily plan; the next day after it, a second', async () => {
   const w = clocked()
   await tick(w.db, w.root, never, new Date('2026-09-28T02:29Z'))
   expect(dailies(w)).toEqual([])
@@ -90,7 +90,7 @@ test('a tick before 20:30 files no daily plan, and the next day after 20:30 file
 const growths = (w: World): unknown[] =>
   w.db.prepare("SELECT title, state FROM plans WHERE template = 'comms' AND title LIKE 'growth %' ORDER BY id").all()
 
-test('weekly D1: two ticks on one local Thursday file one growth plan, filed once by the weekly clock', async () => {
+test('two ticks on one local Thursday file one growth plan', async () => {
   const w = clocked()
   await tick(w.db, w.root, never, new Date('2026-10-02T03:00Z'))
   await tick(w.db, w.root, never, new Date('2026-10-02T03:30Z'))
@@ -99,7 +99,7 @@ test('weekly D1: two ticks on one local Thursday file one growth plan, filed onc
     WHERE p.title = 'growth 2026-10-01' AND e.kind = 'filed'`).all()).toEqual([{ actor: 'weekly clock' }])
 })
 
-test('weekly D2: a UTC Thursday that is local Wednesday, and a local Friday, file no growth plan', async () => {
+test('a UTC-only Thursday or a local Friday files no growth plan', async () => {
   const w = clocked()
   await tick(w.db, w.root, never, new Date('2026-10-01T03:00Z'))
   await tick(w.db, w.root, never, new Date('2026-10-03T03:00Z'))
@@ -109,14 +109,14 @@ test('weekly D2: a UTC Thursday that is local Wednesday, and a local Friday, fil
 test.each([
   { why: 'missing', sql: "DELETE FROM pipes WHERE name = 'comms'" },
   { why: 'off', sql: "UPDATE pipes SET enabled = 0 WHERE name = 'comms'" },
-])('weekly D3: a local Thursday with the comms lane $why files no growth plan', async ({ sql }) => {
+])('a Thursday with the comms lane $why files no growth plan', async ({ sql }) => {
   const w = clocked()
   w.db.prepare(sql).run()
   await tick(w.db, w.root, never, new Date('2026-10-02T03:00Z'))
   expect(growths(w)).toEqual([])
 })
 
-test('D3: facts refuses each line that names an issue, an outside login, or no packet entry', () => {
+test('facts refuses a line naming an issue, a login or no entry', () => {
   const w = comms()
   const id = refusal(w, 0)
   gather(w.db, w.root, plan(w.db, 1))
@@ -128,7 +128,7 @@ test('D3: facts refuses each line that names an issue, an outside login, or no p
   }
 })
 
-test('D4: facts passes a draft whose every line cites the packet and names no issue or outside login', () => {
+test('facts passes a draft citing the packet and naming no issue', () => {
   const w = comms()
   const id = refusal(w, 0)
   gather(w.db, w.root, plan(w.db, 1))
@@ -139,7 +139,7 @@ test('D4: facts passes a draft whose every line cites the packet and names no is
 const fixture = (name: string): string =>
   readFileSync(join(import.meta.dirname, '../..', 'seats/writer/tests', name), 'utf8')
 
-test('writer D3: the reply reads as learnings and a post facts passes', () => {
+test('the reply reads as learnings and a post facts passes', () => {
   const w = comms()
   const reply = drafted(fixture('reply.md'))
   expect(reply?.learnings).toMatch(/\S/)
@@ -169,7 +169,7 @@ test('writer D4: a reply with no learnings fence reads as null', () => {
   expect(drafted(fixture('no-learnings.md'))).toBeNull()
 })
 
-test('D5: gather writes what landed and today\'s refusals, leaving blips and earlier days out', () => {
+test('gather writes what landed and today\'s refusals, no blips', () => {
   const w = comms()
   const today = refusal(w, 0)
   refusal(w, 1)
@@ -217,7 +217,7 @@ test.each([
   expect(w.db.prepare('SELECT (SELECT count(*) FROM desk_posts) + (SELECT count(*) FROM desk_learnings) AS n').get()).toEqual({ n: 0 })
 })
 
-test('D4: a fence with no learnings writes the post and a learnings row with no items', () => {
+test('a fence with no learnings writes an empty learnings row', () => {
   const w = comms()
   titled(w, 1, 'daily 2026-09-27')
   expect(desked(w, { ...fenced(), learnings: undefined })).toMatchObject({ outcome: 'pass' })
@@ -225,7 +225,7 @@ test('D4: a fence with no learnings writes the post and a learnings row with no 
   expect(learned(w)).toMatchObject([{ date: '2026-09-27', items: '[]' }])
 })
 
-test('D5: two plans on one work day share one learnings row, and a second desk on one plan doubles nothing', () => {
+test('two plans on one work day share one learnings row', () => {
   const w = comms()
   titled(w, 1, 'daily 2026-09-27')
   w.db.prepare(`INSERT INTO plans (id, pipe_id, template, state, queued_at, step, retries, title)

@@ -26,7 +26,7 @@ async function built(): Promise<World> {
   return w
 }
 
-test('two ticks started together step the plan once and the loser leaves no run row', async () => {
+test('two ticks at once step the plan once, no run from the loser', async () => {
   const w = await built()
   const first = inFlight(w)
   expect(await tick(w.db, w.root, stub(CARRIED))).toEqual([])
@@ -36,7 +36,7 @@ test('two ticks started together step the plan once and the loser leaves no run 
   expect(held(w.db)).toEqual([])
 })
 
-test('take loses to a live holder and wins against a lease past the ceiling', async () => {
+test('take loses to a live holder and beats a stale lease', async () => {
   const w = await built()
   const now = new Date()
   expect(take(w.db, ID, now)).toMatchObject({ plan: ID, pid: process.pid, stole: null })
@@ -49,7 +49,7 @@ test('take loses to a live holder and wins against a lease past the ceiling', as
   expect(take(w.db, ID, now)).toMatchObject({ stole: process.pid })
 })
 
-test('a lease whose holder is gone is taken over, and the tick receipt names the pid it took it from', async () => {
+test('a dead holder\'s lease is taken over and its pid named', async () => {
   const w = await built()
   const dead = spawnSync('/usr/bin/true').pid
   w.db.prepare('INSERT INTO leases (plan, pid, taken_at) VALUES (?, ?, ?)')
@@ -62,7 +62,7 @@ test('a lease whose holder is gone is taken over, and the tick receipt names the
   expect(held(w.db)).toEqual([])
 })
 
-test('a slow seat holds one slot, a second tick takes the next, and the pipe width holds across them', async () => {
+test('a slow seat holds one slot; the next tick takes another', async () => {
   const w = await built()
   w.db.prepare('UPDATE pipes SET max_concurrent = 2 WHERE id = 1').run()
   const building = inFlight(w, 1500)
@@ -76,7 +76,7 @@ test('a slow seat holds one slot, a second tick takes the next, and the pipe wid
   expect(plan(w.db, THIRD).step).toBe(0)
 })
 
-test('a tick with nothing unheld to step writes a receipt of 0 and exits 0', async () => {
+test('a tick with nothing unheld writes a receipt of 0, exits 0', async () => {
   const w = await built()
   take(w.db, ID)
   const fired = await tick(w.db, w.root, stub(CARRIED))
@@ -86,7 +86,7 @@ test('a tick with nothing unheld to step writes a receipt of 0 and exits 0', asy
   expect(last(w.db)[0]).toMatchObject({ fired: 0, exit: 0, note: 'nothing to fire' })
 })
 
-test('a dry tick writes no lease of its own and names the pid holding each plan', async () => {
+test('a dry tick takes no lease and names each plan\'s holding pid', async () => {
   const w = await built()
   const now = new Date()
   take(w.db, ID, now)
@@ -97,10 +97,10 @@ test('a dry tick writes no lease of its own and names the pid holding each plan'
   expect(w.db.prepare('SELECT count(*) AS n FROM leases').get()).toEqual({ n: 1 })
 })
 
-test('the plist runs tick.sh, which returns before the tick it starts finishes', async () => {
+test('the plist runs tick.sh, which returns before the tick ends', async () => {
   expect(readFileSync(join(repo, 'launchd/com.caliperforge.tick.plist'), 'utf8'))
     .toContain('<string>/Users/michael/cf_v2_tick/launchd/tick.sh</string>')
-  // #168 D3: this temp directory is not a git repository, so the script's refresh fails and the tick
+  // This temp directory is not a git repository, so the script's refresh fails and the tick
   // still fires -- the case a fetch that cannot reach the remote has to behave like.
   const dir = mkdtempSync(join(tmpdir(), 'cf-tick-'))
   const fired = join(dir, 'fired')

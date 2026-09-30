@@ -20,7 +20,7 @@ const verdictAt = (db: Db, step: number): string =>
   `verdicts:${String((db.prepare(`SELECT max(id) AS id FROM verdicts
     WHERE plan = 1 AND step = ? AND kind = 'review' AND quick_lane = 0`).get(step) as { id: unknown }).id)}`
 
-test('a chained lap writes one row per step, pointing at its runs row', async () => {
+test('a chained lap writes one row per step, each at its runs row', async () => {
   const w = world()
   approve(w.db, w.target)
   const fired = await tick(w.db, w.root, stub(CARRIED, 0, undefined, writes), undefined, undefined, watched([], w.root, 1), 5)
@@ -33,7 +33,7 @@ test('a chained lap writes one row per step, pointing at its runs row', async ()
   expect(logged.map((r) => r.run)).toEqual(at)
 })
 
-test('the store holds the brief title and lines, and the reviewer prose the review event points at', async () => {
+test('the store holds the brief and the prose its events point at', async () => {
   const w = world()
   approve(w.db, w.target)
   await tick(w.db, w.root, stub(CARRIED, 0, REFUSE, writes), undefined, undefined, watched([], w.root, 1), 5)

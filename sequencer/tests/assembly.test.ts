@@ -53,7 +53,7 @@ async function laps(a: Assembly, n: number, wire: Wire, review?: string): Promis
   for (let at = 0; at < n; at += 1) await tick(a.w.db, a.w.root, stub(CARRIED, 0, review), undefined, undefined, wire)
 }
 
-test('D1 D4 a part cuts from asm/1 on the fork and lands there, with nothing sent upstream and no PR', async () => {
+test('a part lands on the fork\'s asm/1 and sends nothing upstream', async () => {
   const a = assembling()
   const log: string[] = []
   const wire = pushing(log, a)
@@ -78,7 +78,7 @@ test('D1 D4 a part cuts from asm/1 on the fork and lands there, with nothing sen
     .toEqual({ evidence: `https://github.com/${FORK}/widget/commit/${head}` })
 })
 
-test('D3 a checkout with cf.base fetches MAIN from the fork branch; one without fetches upstream main', async () => {
+test('MAIN comes from the fork with cf.base, else from upstream', async () => {
   const a = assembling()
   await laps(a, 2, watched([], a.w.root, ID))
   const src = srcDir(a.w.root, ID)
@@ -90,7 +90,7 @@ test('D3 a checkout with cf.base fetches MAIN from the fork branch; one without 
   expect(fetchMain(plain.dir)).toBe(git(a.upstream, ['rev-parse', 'main']))
 })
 
-test('D2 a part refused at review goes back to its own build, its sibling and asm/1 untouched', async () => {
+test('a part refused at review rebuilds alone, asm/1 untouched', async () => {
   const a = assembling()
   part(a.w, 3, 1, 'blocked_on_ceo')
   const sibling = a.w.db.prepare('SELECT * FROM plans WHERE id = 3').get()
@@ -116,7 +116,7 @@ async function landed(): Promise<Assembly> {
   return a
 }
 
-test('D1 landing the only part leaves the parent at senior with the parts and both cases in its brief', async () => {
+test('landing the only part puts the parent at senior', async () => {
   const a = await landed()
   expect(plan(a.w.db, 1)).toMatchObject({ step: 5, state: expect.stringMatching(/^(queued|running)$/) as unknown, retries: 0 })
   expect(get(a.w.root, 1, 'issue.md')).toBe(['# hello', '', '- **D1** add `hello()` in `src/hello.ts`', '', '## Parts, joined on asm/1', '',
@@ -124,7 +124,7 @@ test('D1 landing the only part leaves the parent at senior with the parts and bo
     '- D2 a gap between parts is refused: a case no part answers, a name one part adds and no part uses, a change two parts make twice', ''].join('\n'))
 })
 
-test('D2 D3 the parent reviews asm/1 against its base and opens one pull request from it, only after approval', async () => {
+test('the parent reviews asm/1 and opens one PR after approval', async () => {
   const a = await landed()
   const log: string[] = []
   const wire = watched(log, a.w.root, 1)
@@ -141,7 +141,7 @@ test('D2 D3 the parent reviews asm/1 against its base and opens one pull request
   expect(log.filter((l) => l.startsWith('open '))).toEqual(['open acme/widget caliperforge:asm/1'])
 })
 
-test('D4 a part whose last pre_review refused leaves the parent waiting on the ready proof', async () => {
+test('a part last refused at pre_review holds the parent at ready', async () => {
   const a = await landed()
   a.w.db.prepare(`INSERT INTO verdicts (gate, kind, subject_digest, plan, step, outcome, rail_id, origin_kind, origin_ref, tokens, seconds)
     VALUES ('pre_review', 'rail', ?, ?, 3, 'refuse', 'authority', 'rail', 'authority', 0, 0)`).run('0'.repeat(64), ID)
@@ -179,7 +179,7 @@ function filing(log: string[], a: Assembly, id = ID): Wire {
 const quiet = (): Pr => ({ number: 7, url: PR, state: 'OPEN', mergedAt: null, mergedBy: null, reviewDecision: null,
   comments: [], reviews: [], statusCheckRollup: [] })
 
-test('D1 D2 a requested change on the assembled pull request files p1b and queues it, the parent untouched', async () => {
+test('a requested change on the assembled PR files and queues p1b', async () => {
   const a = await landed()
   opened(a)
   const parent = plan(a.w.db, 1)
@@ -195,7 +195,7 @@ test('D1 D2 a requested change on the assembled pull request files p1b and queue
   expect(maybe(a.w.root, 1, 'refusal.md')).toBeNull()
 })
 
-test('D3 the fix part lands on the fork\'s asm/1 alone, and the parent comes back to senior with its pull request kept', async () => {
+test('the fix part lands on asm/1; the parent returns to senior', async () => {
   const a = await landed()
   opened(a)
   const log: string[] = []
@@ -217,7 +217,7 @@ test('D3 the fix part lands on the fork\'s asm/1 alone, and the parent comes bac
     .toEqual({ evidence: PR })
 })
 
-test('D4 D5 a plain comment still rewinds the parent to 2, and a filing that throws leaves no part and the parent with a person', async () => {
+test('a plain comment rewinds; a failed filing leaves no part', async () => {
   const a = await landed()
   opened(a)
   const wire = { ...watched([], a.w.root, 1), file: (): string => { throw new Error('gh is down') } }
@@ -233,7 +233,7 @@ test('D4 D5 a plain comment still rewinds the parent to 2, and a filing that thr
   expect(get(a.w.root, 1, 'refusal.md')).toContain('rename expires to expiry')
 })
 
-test('D5 a part plan is not the kernel\'s, and its repo is the target\'s', () => {
+test('a part plan is not the kernel\'s; its repo is the target\'s', () => {
   const a = assembling()
   expect(kernelPlan(plan(a.w.db, ID))).toBe(false)
   expect(repoOf(a.w.db, plan(a.w.db, ID))).toBe('acme/widget')

@@ -12,7 +12,7 @@ function gitless(run: () => void): void {
   try { run() } finally { process.env.PATH = path }
 }
 
-test('D1 every world and ours tree is copied from its base with no git on PATH', () => {
+test('each world and ours tree copies from its base with no git', () => {
   gitless(() => {
     for (const files of WORLDS) {
       const { root } = world('warm', undefined, files)

@@ -36,19 +36,19 @@ function world(): { db: Db; target: PlanRow; ours: PlanRow; hooks: PlanRow } {
 
 const listed = (paths: string[]) => paths.map((path) => ({ path, is_new: false }))
 
-test('a ruby and lua change in a repo with a kotlin folder ties, and the first file listed picks ruby', () => {
+test('a ruby-lua tie goes to the first file listed, ruby', () => {
   const w = world()
   record(w.db, 1, listed(['ruby/lib/pay_kit/config.rb', 'lua/pay_kit/internal/config.lua']))
   expect(builder(languageFor(w.db, w.target, monorepo()))).toBe('ruby_specialist')
 })
 
-test('pay-kit #166: ruby source, its test and a doc go to the ruby seat', () => {
+test('pay-kit: ruby source, its test and a doc go to the ruby seat', () => {
   const w = world()
   record(w.db, 1, listed(['ruby/lib/pay_kit/config.rb', 'docs/paykit-interface.md', 'ruby/test/pay_kit/config_test.rb']))
   expect(builder(languageFor(w.db, w.target, monorepo()))).toBe('ruby_specialist')
 })
 
-test('surfpool #706: rust with ts-rs output beside it goes to the rust seat', () => {
+test('surfpool: rust with ts-rs output goes to the rust seat', () => {
   const w = world()
   record(w.db, 1, listed(['crates/types/src/types.rs', 'crates/core/src/types.rs', 'crates/core/src/rpc/surfnet_cheatcodes.rs',
     'crates/sdk-node/surfpool-sdk/kit/types/api.ts', 'crates/sdk-node/surfpool-sdk/kit/generated/methods.ts',
@@ -56,7 +56,7 @@ test('surfpool #706: rust with ts-rs output beside it goes to the rust seat', ()
   expect(builder(languageFor(w.db, w.target, monorepo()))).toBe('rust_specialist')
 })
 
-test('a docs-only list, or one in a language with no seat, falls to the outside seat', () => {
+test('docs only or a seatless language falls to the outside seat', () => {
   const w = world()
   record(w.db, 1, listed(['docs/paykit-interface.md', 'README.md']))
   expect(builder(languageFor(w.db, w.target, monorepo()))).toBe('outside_specialist')
@@ -64,14 +64,14 @@ test('a docs-only list, or one in a language with no seat, falls to the outside 
   expect(builder(languageFor(w.db, w.target, monorepo()))).toBe('outside_specialist')
 })
 
-test('the most non-test files win; tests count only when there is nothing else', () => {
+test('the most non-test files win; tests count only when alone', () => {
   expect(majority(['python/tests/test_config.py', 'python/tests/test_env.py', 'go/config.go'])).toBe('go')
   expect(majority(['ruby/test/pay_kit/config_test.rb'])).toBe('ruby')
   expect(majority(['go/a.go', 'php/src/A.php', 'php/src/B.php'])).toBe('php')
   expect(majority(['lua/pay_kit/a.lua', 'go/a.go'])).toBe('lua')
 })
 
-test('each path is read by its name first, then its folder; docs and fixtures by nothing', () => {
+test('a path reads by name, then folder; docs and fixtures, none', () => {
   expect(['crates/x/Cargo.toml', 'python/pyproject.toml', 'ruby/Gemfile', 'go/go.mod', 'php/composer.json', 'lua/pay-kit-dev-1.rockspec']
     .map(languageOfPath)).toEqual(['rust', 'python', 'ruby', 'go', 'php', 'lua'])
   expect(languageOfPath('programs/escrow/Xargo.toml')).toBe('rust')
@@ -97,14 +97,14 @@ test('an empty repo of ours goes to the plan\'s seat', () => {
   expect(languageFor(w.db, w.hooks, empty, false)).toBeNull()
 })
 
-test('a repo of ours with a language goes by its tree, not the plan\'s seat', () => {
+test('our repo with a language goes by tree, not the plan\'s seat', () => {
   const w = world()
   const dir = mkdtempSync(join(tmpdir(), 'cf-route-'))
   writeFileSync(join(dir, 'Cargo.toml'), '')
   expect(builder(languageFor(w.db, w.hooks, dir))).toBe('rust_specialist')
 })
 
-test('an empty repo of ours with no seat falls to the default builder', () => {
+test('an empty repo of ours with no seat gets the default builder', () => {
   const w = world()
   expect(builder(languageFor(w.db, { ...w.hooks, seat: null }, mkdtempSync(join(tmpdir(), 'cf-route-'))))).toBe('typescript_specialist')
 })
@@ -115,7 +115,7 @@ test('a seat no language builds with has no language', () => {
   expect(languageOfSeat('python_specialist')).toBe('python')
 })
 
-test('the brief-files fence is the brief\'s paths; any other fence is the manifest\'s', () => {
+test('brief-files fences the brief\'s paths; others the manifest\'s', () => {
   const w = world()
   record(w.db, 1, [{ path: 'ruby/lib/pay_kit/config.rb', is_new: false }])
   expect(fenceFor(w.db, 1, [BRIEF_FILES])).toEqual(['ruby/lib/pay_kit/config.rb'])

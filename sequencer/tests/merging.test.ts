@@ -29,12 +29,12 @@ test('D1 no outsider merge in the 30 days before now is a flag', () => {
   expect(row([])).toEqual({ check: 'outside merges', ok: false, says: 'none in 30 days' })
 })
 
-test('D2 two outsider merges give their count and median days to merge', () => {
+test('two outsider merges give their count and median merge days', () => {
   expect(row([pr('ann', 'owner', 3, 2), pr('bo', 'owner', 10, 5)]))
     .toEqual({ check: 'outside merges', ok: true, says: '2 in 30 days, median 1d to merge' })
 })
 
-test('D3 a merger\'s own pr, a null author, an unmerged pr and a merge 31 days back do not count', () => {
+test('own, authorless, unmerged or 31-day-old merges do not count', () => {
   expect(row(MISSED)).toMatchObject({ ok: false, says: 'none in 30 days' })
   expect(row([...MISSED, pr('ann', 'owner', 3, 2)])).toMatchObject({ ok: true, says: '1 in 30 days, median 1d to merge' })
 })

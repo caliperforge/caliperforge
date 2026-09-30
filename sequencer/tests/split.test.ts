@@ -49,19 +49,19 @@ function landing(w: World, n: number, log: string[]): string | null {
   return note
 }
 
-test('a split fence is two or more parts in landing order; one part or a question is not a split', () => {
+test('a split is two or more parts; one part or a question is not', () => {
   expect(split(PARTS)?.map((p) => p.title)).toEqual(['file the parts', 'queue them in order'])
   expect(split(PARTS.replace(/ {2}- title: queue[\s\S]*?parent\n/, ''))).toBeNull()
   expect(split('---\noutcome: unclear\nquestion: which one?\n---\n')).toBeNull()
 })
 
-test('a part whose prose holds a colon still reads as a split, and a question with one still reads', () => {
+test('a colon in prose still reads, in a part or a question', () => {
   const colon = PARTS.replace('ends: two issues exist', 'ends: tests show all four cases: a 3/5 is refused')
   expect(split(colon)?.[0]?.ends).toBe('tests show all four cases: a 3/5 is refused')
   expect(unclear('---\noutcome: unclear\nquestion: which of these: a or b?\n---\n')).toBe('which of these: a or b?')
 })
 
-test('D1, D2: each part says which earlier part it builds on; a missing after is the part before', () => {
+test('each part builds on the part it names, else the one before', () => {
   expect(split(AFTER(['none', 'a', 'none']))?.map((p) => p.after)).toEqual(['none', 'a', 'none'])
   expect(split(AFTER(['none', 'A', 'none']))?.map((p) => p.after)).toEqual(['none', 'a', 'none'])
   expect(split(AFTER(['none', 'A', 'none']))).toEqual(split(AFTER(['none', 'a', 'none'])))
@@ -70,20 +70,20 @@ test('D1, D2: each part says which earlier part it builds on; a missing after is
   expect(split(AFTER([null, 'none', null]))?.map((p) => p.after)).toEqual(['none', 'none', 'b'])
 })
 
-test('D3: an after naming the part itself, a later part or no part is not a split', () => {
+test('an after naming itself, a later part or no part is no split', () => {
   for (const after of [['none', 'c', 'none'], ['a', 'none', 'none'], ['none', 'none', 'c'], ['none', 'z', 'none'], ['none', 'none', 'ab'],
     ['none', 'none', 'C'], ['B', 'none', 'none'], ['none', "''", 'none']]) {
     expect(split(AFTER(after))).toBeNull()
   }
 })
 
-test('past five files besides tests a brief is wide; tests do not count', () => {
+test('past five files besides tests a brief is wide', () => {
   const five = ['a.ts', 'b.ts', 'c.ts', 'd.ts', 'e.ts']
   expect(wide(BRIEF_OF([...five, 'tests/a.test.ts', 'x.test.ts', 'fixtures/y.md']))).toBeNull()
   expect(wide(BRIEF_OF([...five, 'f.ts']))).toBe(6)
 })
 
-test('an internal ticket split is filed as parts, the first queued, and the parent ends with no build', async () => {
+test('an internal split files its parts and queues the first', async () => {
   const w = mine()
   const log: string[] = []
   await briefed(w, ID, PARTS, log)
@@ -104,7 +104,7 @@ test('an internal ticket split is filed as parts, the first queued, and the pare
   expect(allParts(w.db).find((p) => p.n === 1)).toMatchObject({ body: expect.stringContaining('After: #901') as unknown })
 })
 
-test('a part landing queues the next; the last one landing closes the parent', async () => {
+test('a part landing queues the next; the last closes the parent', async () => {
   const w = mine()
   const log: string[] = []
   await briefed(w, ID, PARTS, log)
@@ -119,7 +119,7 @@ test('a part landing queues the next; the last one landing closes the parent', a
   expect(following(w.db, w.root, plan(w.db, ID), 'c'.repeat(40), watched(log, w.root, ID))).toBeNull()
 })
 
-test('D1, D2: a part split again files its parts, and its last one landing closes the part and queues the grandparent\'s next', async () => {
+test('a part split again closes when its last part lands', async () => {
   const w = mine()
   internalPlan(w.db, w.root, 3, 'the parent', 33)
   addPart(w.db, { parent: 3, n: 0, url: 'https://github.com/caliperforge/caliperforge/issues/34', title: 't', body: 'b', plan: ID })
@@ -142,7 +142,7 @@ test('D1, D2: a part split again files its parts, and its last one landing close
   expect(log.at(-1)).toBe('close caliperforge/caliperforge#34 bbbbbbb')
 })
 
-test('D1, D2, D6: parts with no after start at once, and only a waiting part names the issue it waits on', async () => {
+test('parts with no after start at once; waiters name their issue', async () => {
   const w = mine()
   const log: string[] = []
   const said: string[] = []
@@ -154,7 +154,7 @@ test('D1, D2, D6: parts with no after start at once, and only a waiting part nam
   expect(said).toEqual([expect.stringContaining('#901, #903 started; #902 waits on #901.') as unknown])
 })
 
-test('D3, D4: a landing queues the parts that wait on it, and the parent closes once, when the last part lands', async () => {
+test('a landing queues its waiters; the last one closes the parent', async () => {
   const w = mine()
   const log: string[] = []
   await briefed(w, ID, AFTER(['none', 'a', 'none']), log)
@@ -167,7 +167,7 @@ test('D3, D4: a landing queues the parts that wait on it, and the parent closes 
   expect(log.filter((l) => l.startsWith('close '))).toEqual(['close caliperforge/caliperforge#34 1111111'])
 })
 
-test('D4: a part released early is not queued again when the part it waits on lands last, and the parent closes', async () => {
+test('a part released early is not requeued when its wait lands', async () => {
   const w = mine()
   const log: string[] = []
   await briefed(w, ID, AFTER(['none', 'a', 'none']), log)
@@ -180,13 +180,13 @@ test('D4: a part released early is not queued again when the part it waits on la
   expect(landing(w, 0, log)).toBe('the last part landed; #34 closed')
 })
 
-test('D5: a split whose parts all say none queues every part at once', async () => {
+test('a split whose parts all say none queues them all at once', async () => {
   const w = mine()
   await briefed(w, ID, AFTER(['none', 'none']), [])
   expect(allParts(w.db).filter((p) => p.parent === ID && p.plan !== null && plan(w.db, p.plan).state === 'queued')).toHaveLength(2)
 })
 
-test('D1: an approved split of somebody else\'s ticket is filed on our repo as internal-only parts building against asm/<plan>', async () => {
+test('an approved outside split files internal-only parts', async () => {
   const out = world()
   approve(out.db, out.target)
   const log: string[] = []
@@ -200,7 +200,7 @@ test('D1: an approved split of somebody else\'s ticket is filed on our repo as i
   expect(assembly(out.db, plan(out.db, a))?.branch).toBe('asm/1')
 })
 
-test('D2: an unapproved split of somebody else\'s ticket files nothing and waits for the COO with the parts', () => {
+test('an unapproved outside split files nothing and asks the COO', () => {
   const out = world()
   const log: string[] = []
   expect(parted(out.db, out.root, plan(out.db, 1), split(PARTS) ?? [], watched(log, out.root, 1))).toMatchObject({ outcome: 'needs_ceo' })
@@ -208,7 +208,7 @@ test('D2: an unapproved split of somebody else\'s ticket files nothing and waits
   expect(maybe(out.root, 1, 'question.md')).toMatch(/split by the COO[\s\S]*a\. file the parts/)
 })
 
-test('a wide internal brief goes back to the brief writer to be split', async () => {
+test('a wide internal brief goes back to its writer to be split', async () => {
   const w = mine()
   const paths = ['a.ts', 'b.ts', 'c.ts', 'd.ts', 'e.ts', 'f.ts'].map((p) => `src/${p} (new)`)
   const log: string[] = []
@@ -232,7 +232,7 @@ async function outside(brief: string, limit?: number): Promise<{ w: World; fired
   return { w, fired }
 }
 
-test('D1: an outside brief naming six files besides tests is refused as wide and saved aside', async () => {
+test('an outside brief of six non-test files is refused as wide', async () => {
   const brief = wideBrief(SIX, 'hello')
   const { w, fired } = await outside(brief)
   expect(fired).toMatchObject({ step: 1, outcome: 'refuse', spans: ['brief.wide'] })
@@ -240,13 +240,13 @@ test('D1: an outside brief naming six files besides tests is refused as wide and
   expect(maybe(w.root, 1, 'brief.refused.md')).toBe(brief)
 })
 
-test('D2: an outside brief estimated past its repo\'s size limit is refused as wide, naming the limit', async () => {
+test('an outside brief estimated past its limit refuses as wide', async () => {
   const { w, fired } = await outside(wideBrief(SIX.slice(0, 5), 'hello', 'Estimate: ~1,300 lines'), 250)
   expect(fired).toMatchObject({ step: 1, outcome: 'refuse', spans: ['brief.wide'] })
   expect(maybe(w.root, 1, 'refusal.md')).toContain("the brief estimates 1300 lines besides tests and generated files; past acme/widget's 250 it is more than one job, so answer with the split fence")
 })
 
-test('D3: an outside brief of five files estimated at its repo\'s limit is saved as the issue', async () => {
+test('a five-file outside brief at the limit is saved as issue', async () => {
   const brief = wideBrief(SIX.slice(0, 5), 'hello', 'Estimate: 250 lines')
   const { w, fired } = await outside(brief, 250)
   expect(fired).toMatchObject({ step: 1, outcome: 'pass' })

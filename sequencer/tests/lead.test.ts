@@ -31,17 +31,17 @@ test('D1 each item of a numbered list is a lead', () => {
   expect(lead(w.db, w.root, 1).says).toBe('the target claims the whole issue of 3 leads')
 })
 
-test('D3 a part touching the second and third numbered items is a flag', () => {
+test('a part touching numbered items two and three is a flag', () => {
   const w = at('fix-a', '# numbered\n\n1. fix `src/a.ts`\n2. fix `src/b.ts`\n3. fix `lib/c.ts`\n', ['src/b.ts', 'lib/c.ts'])
   expect(lead(w.db, w.root, 1).says).toBe('covers fix-a but touches leads 2, 3')
 })
 
-test('D2 a part whose diff touches one lead passes, a name on a line under the lead counting for it', () => {
+test('a part touching one lead passes, a name under it counting', () => {
   const w = at('fix-b', '# two\n\n- fix a in `src/a.ts`\n- fix b\n  in `src/b.ts`\n', ['src/b.ts', 'README'])
   expect(lead(w.db, w.root, 1)).toEqual({ check: 'lead', ok: true, says: 'covers fix-b, one of 2 lead(s)' })
 })
 
-test('D3 a part whose diff touches two leads is a flag naming them in issue order', () => {
+test('a part touching two leads is flagged, leads in issue order', () => {
   const w = at('fix-a', THREE, ['pkg/src/a.ts', 'lib/c.ts'])
   expect(lead(w.db, w.root, 1)).toEqual({ check: 'lead', ok: false, says: 'covers fix-a but touches leads 1, 3' })
 })
@@ -53,7 +53,7 @@ test('D4 no part over at most one lead passes', () => {
   expect(lead(none.db, none.root, 1)).toEqual({ check: 'lead', ok: true, says: 'whole issue, 0 lead(s)' })
 })
 
-test('D5 our card, the target check and the fixer answer hold no leads', () => {
+test('our card, the target check and a fixer answer hold no leads', () => {
   const ask = `# card\n\n- D1 fix \`src/a.ts\`\n- D2 fix \`src/b.ts\`\n\n${CARD}\n\n### theirs\n\n- fix \`src/a.ts\`\n\n${CHECK}\n\n- \`src/b.ts\` checked\n`
   const w = at('', ask)
   expect(lead(w.db, w.root, 1).says).toBe('whole issue, 1 lead(s)')

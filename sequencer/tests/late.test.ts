@@ -37,7 +37,7 @@ function weekly(db: Db, day: string, status: string): void {
     VALUES ('weekly', 'site', ?, 'The week', 'What moved', 'Body.', '[]', '[]', ?, ?)`).run(status, day, day)
 }
 
-test('Friday 18:01 local with no weekly post raises one card and one event, and a later tick that week raises none', () => {
+test('Friday 18:01 with no weekly post raises one card and event', () => {
   const { db, root } = world()
   const board = fake()
   late(db, root, board, FRIDAY)
@@ -57,7 +57,7 @@ test('Friday 17:59 local and a Thursday raise nothing', () => {
   expect(all(root)).toEqual([])
 })
 
-test('a weekly post inside the week, whatever its status, raises nothing', () => {
+test('a weekly post this week raises nothing, whatever its status', () => {
   for (const [day, status] of [['2026-09-28', 'proof'], ['2026-10-04', 'published']] as const) {
     const { db, root } = world()
     const board = fake()
@@ -78,7 +78,7 @@ test('a weekly post from last week still raises, once', () => {
   expect(all(root)).toHaveLength(1)
 })
 
-test('a desk that cannot open leaves no event, and the next tick raises once', () => {
+test('an unopenable desk logs no event; the next tick raises once', () => {
   const { db, root } = world()
   expect(() => { late(db, root, fake(true), FRIDAY) }).toThrow('gh is down')
   expect(all(root)).toEqual([])

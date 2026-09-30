@@ -74,7 +74,7 @@ test('D4 a plan at step 1 is never file_overlap and holds nobody', () => {
   expect(blocked(w.db, plan(w.db, SECOND))).not.toBe('file_overlap')
 })
 
-test('D4 a plan with no file list blocks nothing and waits on nothing', async () => {
+test('a plan with no file list blocks nothing and waits on nothing', async () => {
   const w = pair()
   for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
   recordFiles(w.db, ID, [])
@@ -83,7 +83,7 @@ test('D4 a plan with no file list blocks nothing and waits on nothing', async ()
   expect([builds(w, ID) > 0, builds(w, SECOND) > 0]).toEqual([true, true])
 })
 
-test.each(['done', 'refused', 'halted'])('D5 D2 the wait clears on the first tick after the building plan is %s', async (state) => {
+test.each(['done', 'refused', 'halted'])('the wait clears the tick after the building plan is %s', async (state) => {
   const w = pair()
   await oneBuilding(w)
   w.db.prepare('UPDATE plans SET state = ? WHERE id = ?').run(state, ID)

@@ -19,7 +19,7 @@ test('D1 a tell on body line 5 flags with its line', () => {
   expect(row.says).toContain('body:5 tell:delve')
 })
 
-test('D2 a preamble title and a hedged body line flag with their kinds', () => {
+test('a preamble title and a hedged line flag with their kinds', () => {
   const row = checked('Here is the fix', 'Fixes #3.\n\nThis perhaps helps.\n')
   expect(row.ok).toBe(false)
   expect(row.says).toContain('title:1 tight.preamble')

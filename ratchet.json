@@ -87,13 +87,11 @@
     "silent-catch": 1
   },
   "cli/inbox.ts": {
-    "citing-comment": 1,
-    "lines": 139,
+    "lines": 141,
     "prepare": 1,
     "silent-catch": 1
   },
   "cli/map.ts": {
-    "citing-comment": 1,
     "lines": 46
   },
   "cli/measure.ts": {
@@ -107,8 +105,8 @@
     "silent-catch": 1
   },
   "cli/queue.ts": {
-    "lines": 127,
-    "prepare": 7,
+    "lines": 213,
+    "prepare": 14,
     "silent-catch": 1
   },
   "cli/record.ts": {
@@ -183,8 +181,7 @@
     "test-name": 1
   },
   "cli/watch.ts": {
-    "citing-comment": 1,
-    "lines": 131,
+    "lines": 128,
     "prepare": 2,
     "silent-catch": 2
   },

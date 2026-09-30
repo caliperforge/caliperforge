@@ -121,3 +121,8 @@ it('batch.ts to gh.ts meet their ratchet rows', () => {
   const paths = ['cli/batch.ts', 'cli/brief.ts', 'cli/cf.ts', 'cli/gh.ts']
   expect(ratcheted(join(import.meta.dirname, '..'), {}).filter((f) => paths.includes(f.path))).toEqual([])
 })
+
+it('inbox.ts to watch.ts meet their ratchet rows', () => {
+  const paths = ['cli/inbox.ts', 'cli/map.ts', 'cli/queue.ts', 'cli/watch.ts']
+  expect(ratcheted(join(import.meta.dirname, '..'), {}).filter((f) => paths.includes(f.path))).toEqual([])
+})

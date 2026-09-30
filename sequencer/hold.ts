@@ -7,9 +7,9 @@ import { WHY } from '../store/refusals.ts'
 import { afresh, drop, maybe, planDir, put } from './workspace.ts'
 
 /**
- * #291: a held job stays `blocked_on_ceo` with a note beside it, never `halted`. Halted is terminal, so the next
- * tick reaped the checkout of every job the fixer parked or ticketed (plan 70 on 09-25 13:07, plan 106 at 13:15).
- * The orchestrator does not wake on a held job; `released()` or `cf unpark` puts it back where it stopped.
+ * A held job stays `blocked_on_ceo` with this note beside it, never `halted`: halted is terminal, and a tick reaps
+ * a terminal job's checkout. The orchestrator does not wake on a held job; `released()` or `cf unpark` puts it back
+ * where it stopped.
  */
 const NOTE = 'parked.md'
 
@@ -39,7 +39,7 @@ export function unhold(db: Db, root: string, plan: number, actor: string): numbe
   return step
 }
 
-/** Plan 146 went back at step 1 on a checkout cut before the job it waited on landed. Nothing is built yet, so the brief gets today's main. */
+/** Nothing is built at step 1, so the brief gets today's main rather than a checkout cut before the job it waited on landed. */
 function fresh(root: string, plan: number): void {
   rmSync(join(planDir(root, plan), 'src'), { recursive: true, force: true })
   drop(root, plan, 'base.sha')

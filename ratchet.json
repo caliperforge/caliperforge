@@ -437,20 +437,18 @@
     "silent-catch": 1
   },
   "sequencer/handout.ts": {
-    "citing-comment": 1,
     "lines": 69
   },
   "sequencer/handover.ts": {
     "lines": 104
   },
   "sequencer/hold.ts": {
-    "citing-comment": 1,
     "lines": 37,
-    "prepare": 2
+    "prepare": 1
   },
   "sequencer/home.ts": {
-    "citing-comment": 1,
-    "lines": 15
+    "lines": 15,
+    "prepare": 2
   },
   "sequencer/hq.ts": {
     "lines": 49,

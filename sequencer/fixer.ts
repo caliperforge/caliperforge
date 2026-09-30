@@ -24,7 +24,7 @@ import { ticketed } from './ticket.ts'
 import { afresh, cloned, drop, maybe, move, planDir, put, titleOf } from './workspace.ts'
 
 /**
- * CEO 2026-09-25: the orchestrator's hands. An `ask_coo` decision goes to the fixer, which makes the hand fix
+ * The orchestrator's hands. An `ask_coo` decision goes to the fixer, which makes the hand fix
  * in that one job's folder and says where the job goes next. `fixer.mode` is off, shadow (reads only, changes
  * nothing, the decision still escalates) or live.
  */
@@ -113,8 +113,8 @@ async function ask(db: Db, root: string, plan: PlanRow, decision: { why: string 
 }
 
 /**
- * #286: plan 123 sat an hour on 09-25 with its checkout reaped. That needs no model: the builder takes it on a fresh one.
- * Our own tickets only: a reaped outside plan's re-cut restored an old rehearsal branch on 09-25, so those go to a person.
+ * A reaped checkout needs no model: the builder takes it again on a fresh one.
+ * Our own tickets only: an outside plan's re-cut can restore an old rehearsal branch, so those go to a person.
  */
 const GONE: Fix = {
   did: 'nothing; the checkout is gone, so no step can run against it',
@@ -126,7 +126,7 @@ function gone(root: string, plan: PlanRow): boolean {
   return plan.template === 'pr_path' && plan.origin !== null && plan.step >= 2 && !cloned(join(planDir(root, plan.id), 'src'))
 }
 
-/** `base.sha` stays so `checkout()` restores a pushed branch (#202); `retries` stays because it names an outside plan's branch. */
+/** `base.sha` stays so `checkout()` restores a pushed branch; `retries` stays: it names an outside plan's branch. */
 function rebuild(db: Db, root: string, plan: PlanRow): string {
   if (maybe(root, plan.id, 'refusal.md') !== null) move(root, plan.id, 'refusal.md', 'refusal.prev.md')
   drop(root, plan.id, 'base.merged')
@@ -138,7 +138,7 @@ function rebuild(db: Db, root: string, plan: PlanRow): string {
   return 'rebuild'
 }
 
-/** #287: the job it waits on must still be open, or nothing would ever release it. */
+/** The job it waits on must still be open, or nothing would ever release it. */
 function awaits(db: Db, root: string, plan: PlanRow, f: Fix, now: Date): string {
   const on = f.waits_on ?? 0
   const them = db.prepare("SELECT 1 FROM plans WHERE id = ? AND id <> ? AND state IN ('queued', 'running', 'blocked_on_ceo')")
@@ -148,7 +148,7 @@ function awaits(db: Db, root: string, plan: PlanRow, f: Fix, now: Date): string 
   return `wait ${String(on)}`
 }
 
-/** #287: a job the fixer set waiting goes back to its lane when the other lands, and to a person if it never will. */
+/** A job the fixer set waiting goes back to its lane when the other lands, and to a person if it never will. */
 export function released(db: Db, root: string, now: Date, post: Post): void {
   const rows = db.prepare(`SELECT p.id, p.step, p.waits_on AS on_, w.state AS theirs FROM plans p JOIN plans w ON w.id = p.waits_on
     WHERE p.state = 'blocked_on_ceo' AND w.state IN ('done', 'refused', 'halted') ORDER BY p.id`).all() as
@@ -184,7 +184,7 @@ function apply(db: Db, root: string, plan: PlanRow, f: Fix, wire: Wire, now: Dat
     case 'done': {
       const pushed = db.prepare("SELECT 1 FROM deliverables WHERE plan_id = ? AND state = 'pushed'").get(plan.id)
       if (pushed === undefined) return 'escalated'
-      end(db, plan.id, 'done', true)
+      end(db, plan.id, 'done')
       return 'done'
     }
     case 'park': hold(db, root, plan.id, f.why, now); return 'park'

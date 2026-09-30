@@ -128,10 +128,10 @@ export function dropPlan(db: Db, id: number): void {
   db.prepare('DELETE FROM plans WHERE id = ?').run(id)
 }
 
-/** Work already under way sorts first — `step = 0` is 1 for a plan not yet started — so a released plan waits behind no later P0. */
+/** Work already under way sorts first, so a released plan waits behind no later P0. */
 export function live(db: Db, pipe: PipeRow): PlanRow[] {
-  return db.prepare(`SELECT * FROM plans WHERE pipe_id = ? AND state IN ('queued', 'running')
-    ORDER BY step = 0, priority, queued_at, id`).all(pipe.id).map((r) => PlanRow.parse(r))
+  return db.prepare('SELECT p.* FROM queue_order q JOIN plans p ON p.id = q.plan WHERE q.pipe = ? ORDER BY q.position')
+    .all(pipe.id).map((r) => PlanRow.parse(r))
 }
 
 /** A leased plan is mid-fire: it holds the slot it took whatever state the row is caught at. */
@@ -240,12 +240,11 @@ export function terminal(db: Db): number[] {
 }
 
 export function finish(db: Db, plan: PlanRow): void {
-  db.prepare("UPDATE plans SET step = ?, state = 'done' WHERE id = ?").run(plan.step + 1, plan.id)
+  db.prepare("UPDATE plans SET step = ?, state = 'done', wait_reason = NULL, waits_on = NULL WHERE id = ?").run(plan.step + 1, plan.id)
 }
 
-export function end(db: Db, plan: number, state: 'done' | 'refused' | 'halted', unwait = false): void {
-  db.prepare(unwait ? 'UPDATE plans SET state = ?, wait_reason = NULL WHERE id = ?' : 'UPDATE plans SET state = ? WHERE id = ?')
-    .run(state, plan)
+export function end(db: Db, plan: number, state: 'done' | 'refused' | 'halted'): void {
+  db.prepare('UPDATE plans SET state = ?, wait_reason = NULL, waits_on = NULL WHERE id = ?').run(state, plan)
 }
 
 /** A signal on a pushed PR puts the plan back on the review step it escaped; the head it was signed at is no longer the head. */
@@ -266,7 +265,8 @@ export function overlapWaits(db: Db): Overlap[] {
   return db.prepare(`SELECT p.id AS plan, p.waits_on AS "on", (SELECT f.path FROM plan_files f
     JOIN plan_files mine ON mine.plan = p.id AND mine.path = f.path
     WHERE f.plan = p.waits_on AND f.path NOT LIKE '.cf/%' ORDER BY f.position LIMIT 1) AS path
-    FROM plans p WHERE p.wait_reason = 'file_overlap' AND p.waits_on IS NOT NULL ORDER BY p.id`).all() as Overlap[]
+    FROM plans p WHERE p.wait_reason = 'file_overlap' AND p.waits_on IS NOT NULL AND p.state IN ('queued', 'running')
+    ORDER BY p.id`).all() as Overlap[]
 }
 
 export interface Parked { id: number; step: number; state: string; repo: string | null; issue_no: number | null; held_why: string | null }

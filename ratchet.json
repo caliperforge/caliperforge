@@ -376,39 +376,37 @@
     "test-name": 3
   },
   "sequencer/act.ts": {
-    "citing-comment": 2,
     "lines": 56,
     "prepare": 1
   },
   "sequencer/approve.ts": {
-    "citing-comment": 1,
-    "lines": 73,
-    "prepare": 4
+    "lines": 61,
+    "prepare": 1
   },
   "sequencer/base.ts": {
-    "citing-comment": 1,
     "lines": 64,
     "silent-catch": 1
   },
   "sequencer/brief.ts": {
-    "citing-comment": 6,
-    "lines": 353,
+    "lines": 400,
     "silent-catch": 1
   },
   "sequencer/capture.ts": {
-    "lines": 221,
-    "prepare": 8,
-    "silent-catch": 4
+    "lines": 240,
+    "prepare": 6,
+    "silent-catch": 3
   },
   "sequencer/checks.ts": {
-    "citing-comment": 2,
-    "lines": 281,
+    "lines": 295,
     "silent-catch": 2
   },
   "sequencer/ci.ts": {
-    "lines": 88,
-    "prepare": 1,
-    "silent-catch": 1
+    "lines": 92,
+    "prepare": 1
+  },
+  "sequencer/coolite.ts": {
+    "lines": 195,
+    "prepare": 6
   },
   "sequencer/delta.ts": {
     "lines": 27
@@ -418,21 +416,17 @@
     "prepare": 1
   },
   "sequencer/failures.ts": {
-    "citing-comment": 1,
     "lines": 55,
     "silent-catch": 2
   },
   "sequencer/fence.ts": {
-    "citing-comment": 1,
-    "lines": 73
+    "lines": 74
   },
   "sequencer/fixer.ts": {
-    "citing-comment": 1,
-    "lines": 256,
+    "lines": 263,
     "prepare": 10
   },
   "sequencer/gates.ts": {
-    "citing-comment": 2,
     "lines": 247,
     "silent-catch": 1
   },

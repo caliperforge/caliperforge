@@ -416,21 +416,17 @@
     "prepare": 1
   },
   "sequencer/failures.ts": {
-    "citing-comment": 1,
     "lines": 55,
     "silent-catch": 2
   },
   "sequencer/fence.ts": {
-    "citing-comment": 1,
-    "lines": 73
+    "lines": 74
   },
   "sequencer/fixer.ts": {
-    "citing-comment": 1,
-    "lines": 256,
+    "lines": 263,
     "prepare": 10
   },
   "sequencer/gates.ts": {
-    "citing-comment": 2,
     "lines": 247,
     "silent-catch": 1
   },

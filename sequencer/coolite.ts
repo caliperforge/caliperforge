@@ -59,7 +59,7 @@ export async function cooLite(db: Db, root: string, plan: PlanRow, provider: Pro
 
 interface Stop { id: number; answered: number | null; today: number; old: number }
 
-/** #483b: one coo_lite run on the oldest stop once 3 pile up or one has waited 45 minutes. */
+/** One coo_lite run on the oldest stop once 3 pile up or one has waited 45 minutes. */
 export async function piled(db: Db, root: string, provider: Provider, now: Date, post: Post = alerter(),
   wire: Wire = WIRE): Promise<void> {
   const fresh = stops(db, root, now, post)
@@ -147,7 +147,7 @@ function siblings(db: Db, root: string, plan: PlanRow): string {
   return found.length === 0 ? 'none' : found.join('\n\n').slice(0, 6000)
 }
 
-/** A why past 400 characters read as no answer and sent four plans to the COO on 09-28. */
+/** `why` has no length cap: a long one is still an answer. */
 export function read(text: string): Move | null {
   const parts = split(text)
   if (parts !== null) return { move: 'split', why: `${String(parts.length)} jobs, not one`, parts }

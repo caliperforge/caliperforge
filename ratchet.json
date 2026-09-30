@@ -431,55 +431,45 @@
     "silent-catch": 1
   },
   "sequencer/handout.ts": {
-    "citing-comment": 1,
     "lines": 69
   },
   "sequencer/handover.ts": {
     "lines": 104
   },
   "sequencer/hold.ts": {
-    "citing-comment": 1,
     "lines": 37,
-    "prepare": 2
+    "prepare": 1
   },
   "sequencer/home.ts": {
-    "citing-comment": 1,
-    "lines": 15
+    "lines": 15,
+    "prepare": 2
   },
   "sequencer/hq.ts": {
     "lines": 49,
     "silent-catch": 2
   },
   "sequencer/index.ts": {
-    "citing-comment": 6,
-    "lines": 445,
-    "prepare": 6,
-    "silent-catch": 2
+    "lines": 219
   },
   "sequencer/install.ts": {
     "lines": 41
   },
   "sequencer/kind.ts": {
-    "citing-comment": 2,
     "lines": 39
   },
   "sequencer/lock.ts": {
-    "citing-comment": 1,
-    "lines": 58,
+    "lines": 57,
     "silent-catch": 1
   },
   "sequencer/merge.ts": {
-    "citing-comment": 3,
-    "lines": 138,
+    "lines": 137,
     "prepare": 1,
     "silent-catch": 1
   },
   "sequencer/next.ts": {
-    "citing-comment": 2,
     "lines": 74
   },
   "sequencer/orchestrator.ts": {
-    "citing-comment": 1,
     "lines": 125,
     "prepare": 1,
     "silent-catch": 1
@@ -490,31 +480,27 @@
     "silent-catch": 1
   },
   "sequencer/prose.ts": {
-    "citing-comment": 1,
     "lines": 19,
     "silent-catch": 1
   },
   "sequencer/push.ts": {
-    "citing-comment": 2,
-    "lines": 472,
-    "prepare": 6,
-    "silent-catch": 4
+    "lines": 571,
+    "prepare": 5,
+    "silent-catch": 5
   },
   "sequencer/quick.ts": {
     "lines": 75
   },
   "sequencer/rails.ts": {
-    "citing-comment": 3,
-    "lines": 145,
+    "lines": 191,
     "prepare": 1,
     "silent-catch": 1
   },
   "sequencer/ready.ts": {
-    "lines": 214,
-    "prepare": 9
+    "lines": 209,
+    "prepare": 8
   },
   "sequencer/route.ts": {
-    "citing-comment": 1,
     "lines": 65
   },
   "sequencer/seat.ts": {

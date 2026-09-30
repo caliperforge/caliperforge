@@ -114,7 +114,7 @@ function forkGreened(db: Db, plan: number): boolean {
   return newest(db, plan)?.fork_ci_green === 1
 }
 
-/** The repository the ready rail reads a pulse for. Ours has none to read, and needs none (#20). */
+/** The repository the ready rail reads a pulse for. Ours has none to read, and needs none. */
 export function repoOf(db: Db, plan: PlanRow): string | null {
   if (plan.target_id === null) return homeOf(plan)
   const row = db.prepare('SELECT repo FROM targets WHERE id = ?').get(plan.target_id) as { repo: string } | undefined
@@ -136,9 +136,8 @@ function green(ci: { outcome: string; subject_digest: string } | undefined): Pro
 }
 
 /**
- * The pulse is the repo's latest measurement — the row `rails/ready` already reads
- * (`rails/ready/index.ts:44`), not the one `cf queue add` froze in `targets.account_id`,
- * or a `cf measure` would refresh nothing the kernel reads. What the CEO approved is
+ * The pulse is the repo's latest measurement, not the one `cf queue add` froze in `targets.account_id`,
+ * or a `cf measure` would refresh nothing the kernel reads. What was approved is
  * still pinned by `targets.evidence_measured_at` in `targetDigest()`.
  */
 export function target(db: Db, plan: PlanRow): Target | null {

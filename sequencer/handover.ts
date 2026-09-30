@@ -35,7 +35,7 @@ export function capped(map: string): string | undefined {
 }
 
 /**
- * #132. What a reviewer of someone else's repository needs so it does not open files to find its
+ * What a reviewer of someone else's repository needs so it does not open files to find its
  * footing: each change inside the function that encloses it, and the files that sit beside it.
  */
 export function handover(src: string, base: string): Handover {

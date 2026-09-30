@@ -518,20 +518,17 @@
     "prepare": 6
   },
   "sequencer/signoff.ts": {
-    "citing-comment": 2,
-    "lines": 305,
-    "prepare": 5
+    "lines": 301,
+    "prepare": 3
   },
   "sequencer/split.ts": {
-    "citing-comment": 1,
-    "lines": 142,
-    "prepare": 13,
+    "lines": 199,
+    "prepare": 17,
     "silent-catch": 2
   },
   "sequencer/steps.ts": {
-    "citing-comment": 2,
-    "lines": 116,
-    "prepare": 2
+    "lines": 183,
+    "prepare": 4
   },
   "sequencer/symbols.ts": {
     "lines": 43

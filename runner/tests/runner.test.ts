@@ -25,7 +25,7 @@ function result(over: Record<string, unknown>): SDKResultMessage {
   return { ...base, ...over } as unknown as SDKResultMessage
 }
 
-test('a write inside write_paths is allowed and one outside is refused with an origin', () => {
+test('a write outside write_paths is refused with an origin', () => {
   expect(refuse(cwd, ['src'], 'src/hello.ts')).toBeNull()
   expect(refuse(cwd, ['src'], `${cwd}/src/nested/hello.ts`)).toBeNull()
   expect(refuse(cwd, ['src'], 'package.json')).toMatchObject({ origin_kind: 'ruling', origin_ref: 'seat.write_paths' })
@@ -33,7 +33,7 @@ test('a write inside write_paths is allowed and one outside is refused with an o
   expect(refuse(cwd, ['src'], 'srcery/hello.ts')).not.toBeNull()
 })
 
-test('a seat building our own kernel writes anywhere but .cf/, and a stranger\'s repo keeps write_paths', () => {
+test('ours writes all but .cf/; a stranger\'s keeps write_paths', () => {
   expect(refuse(cwd, ['src'], 'cli/gh.ts')).toMatchObject({ origin_ref: 'seat.write_paths', path: 'cli/gh.ts' })
   expect(refuse(cwd, ['src'], 'cli/gh.ts', true)).toBeNull()
   expect(refuse(cwd, ['src'], 'src/hello.ts', true)).toBeNull()
@@ -64,7 +64,7 @@ test('the gate stops a refused write and denies an outside read', () => {
 const bash = (command: string, background?: boolean): HookInput =>
   ({ hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: background === undefined ? { command } : { command, run_in_background: background }, tool_use_id: 't', session_id: 's', transcript_path: '', cwd })
 
-test('the builder runs its checks on our tree and holds no shell on a stranger\'s', () => {
+test('the builder holds checks on our tree and no shell on theirs', () => {
   const manifest = seat(root, 'typescript_specialist').manifest
   const ours = packet(manifest, 'p', 't', 'i', cwd, TRANSCRIPT, true)
   const theirs = packet(manifest, 'p', 't', 'i', cwd, TRANSCRIPT)
@@ -91,7 +91,7 @@ test('the kotlin seat keeps gradle on a stranger\'s tree', () => {
   expect(p.tools).toContain('Bash(gradle:*)')
 })
 
-test('the six language seats keep their commands on a stranger\'s tree', () => {
+test('six language seats keep their commands on a stranger\'s tree', () => {
   const held = { rust_specialist: 'Bash(cargo test:*)', python_specialist: 'Bash(uv run:*)', ruby_specialist: 'Bash(bundle exec:*)',
     go_specialist: 'Bash(go test:*)', php_specialist: 'Bash(composer:*)', lua_specialist: 'Bash(just:*)' }
   for (const [name, tool] of Object.entries(held)) {
@@ -99,14 +99,14 @@ test('the six language seats keep their commands on a stranger\'s tree', () => {
   }
 })
 
-test('a fence handed in replaces the manifest\'s on a stranger\'s tree', () => {
+test('a fence handed in replaces the manifest\'s on a stranger\'s', () => {
   const manifest = seat(root, 'outside_specialist').manifest
   const p = packet(manifest, 'p', 't', 'i', cwd, TRANSCRIPT, false, ['ruby/lib/config.rb'])
   expect(p.refuse('ruby/lib/config.rb')).toBeNull()
   expect(p.refuse('lua/config.lua')).toMatchObject({ origin_ref: 'seat.write_paths' })
 })
 
-test('the packet carries the Tight spec, the seat prompt and the issue', () => {
+test('the packet carries Tight, the seat prompt and the issue', () => {
   const p = packet(seat(root, 'typescript_specialist').manifest, 'SEAT', 'TIGHT', 'ISSUE', cwd, TRANSCRIPT)
   expect(p.prompt.indexOf('TIGHT')).toBeLessThan(p.prompt.indexOf('SEAT'))
   expect(p.prompt.indexOf('SEAT')).toBeLessThan(p.prompt.indexOf('ISSUE'))
@@ -121,7 +121,7 @@ test('the rules loader hashes roster, rails and Tight into rules', () => {
   expect(db.prepare('SELECT count(*) AS n FROM rules').get()).toEqual({ n: loaded.length })
 })
 
-test('seat() refuses a seat absent from the roster and one whose prompt drifted from its digest', () => {
+test('seat() refuses one off the roster or with a drifted prompt', () => {
   expect(() => seat(root, 'nobody')).toThrow(/absent from rules\/roster.yaml/)
   const drifted = mkdtempSync(join(tmpdir(), 'cf-drift-'))
   for (const dir of ['rules', 'seats']) cpSync(join(root, dir), join(drifted, dir), { recursive: true })
@@ -129,7 +129,7 @@ test('seat() refuses a seat absent from the roster and one whose prompt drifted 
   expect(() => seat(drifted, 'typescript_specialist')).toThrow(/prompt does not match its digest/)
 })
 
-test('a write under a symlinked cwd resolves to the same root and is allowed', () => {
+test('a write under a symlinked cwd resolves to the same root', () => {
   const target = mkdtempSync(join(tmpdir(), 'cf-real-'))
   const link = join(mkdtempSync(join(tmpdir(), 'cf-link-')), 'seat')
   symlinkSync(target, link)
@@ -137,7 +137,7 @@ test('a write under a symlinked cwd resolves to the same root and is allowed', (
   expect(refuse(link, ['src'], join(realpathSync(target), 'package.json'))).toMatchObject({ path: 'package.json' })
 })
 
-test('a new file named through a symlink to the checkout is allowed', () => {
+test('a new file named via a symlink to the checkout is allowed', () => {
   const target = mkdtempSync(join(tmpdir(), 'cf-real-'))
   const link = join(mkdtempSync(join(tmpdir(), 'cf-link-')), 'seat')
   symlinkSync(target, link)
@@ -145,7 +145,7 @@ test('a new file named through a symlink to the checkout is allowed', () => {
   expect(refuse(realpathSync(target), [], join(link, '.cf/notes.md'), true)).toMatchObject({ path: '.cf/notes.md' })
 })
 
-test('a hook-stopped session lands non-zero carrying the refusal origin, a completed one lands zero', () => {
+test('hook-stopped lands non-zero with its origin, completed zero', () => {
   const reason = 'ruling:seat.write_paths refuses a write to package.json'
   const stopped = fired(result({ result: '', terminal_reason: 'hook_stopped' }), Date.now(), [reason])
   expect(stopped).toMatchObject({ ended: 'stopped', exit: 1, denials: 1, stop_reason: reason, text: reason })
@@ -158,12 +158,12 @@ test('a session that spent its turns lands the cap in stop_reason', () => {
   expect(capped).toMatchObject({ ended: 'stopped', exit: 1, stop_reason: CAPPED })
 })
 
-test('a refused command is counted and the session still lands zero', () => {
+test('a refused command is counted and the session lands zero', () => {
   const denied = { tool_name: 'Bash', tool_use_id: 't', tool_input: { command: 'grep -rn x src' } }
   expect(fired(result({ result: 'done', permission_denials: [denied] }), Date.now(), [])).toMatchObject({ exit: 0, denials: 1 })
 })
 
-test('the runs rule_hash check refuses 64 characters that are not all hex', () => {
+test('runs.rule_hash refuses 64 characters that are not all hex', () => {
   const db = fresh(join(root, 'schema'))
   load(db, root)
   const plan = String(planRow(db))
@@ -174,7 +174,7 @@ test('the runs rule_hash check refuses 64 characters that are not all hex', () =
   expect(rejects(db, insert('a'.repeat(64)))).toBe(false)
 })
 
-test('firing one step writes one runs row carrying the rule hash as sent', async () => {
+test('one fired step writes one runs row with the rule hash sent', async () => {
   const db = fresh(join(root, 'schema'))
   const { id } = await fire(db, root, 'typescript_specialist', cwd, 'ISSUE', stub)
   const row = db.prepare('SELECT step, seat, rule_hash, provider, model, effort, input_tokens, cache_read_tokens, output_tokens, seconds, exit, cost_usd FROM runs WHERE id = ?').get(id)
@@ -194,7 +194,7 @@ test('the SDK\'s total_cost_usd lands in the runs row', async () => {
   expect(db.prepare('SELECT cost_usd FROM runs WHERE id = ?').get(id)).toEqual({ cost_usd: 0.42 })
 })
 
-test('D1: cache writes stay in input_tokens and land in cache_write_tokens', async () => {
+test('cache writes stay in input_tokens and cache_write_tokens', async () => {
   const db = fresh(join(root, 'schema'))
   const usage = { m: { inputTokens: 10, cacheCreationInputTokens: 4, cacheReadInputTokens: 20, outputTokens: 0 } }
   const written = fired(result({ result: 'done', modelUsage: usage }), Date.now(), [])

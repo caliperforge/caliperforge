@@ -26,7 +26,7 @@ function seeded(ask = 'the ask\n') {
   return { db, home }
 }
 
-test('D1 a waiting plan wakes with every section in order and no file content', () => {
+test('D1 wakes with every section in order and no file content', () => {
   const { db, home } = seeded()
   const { text } = wake(db, home, 7) as { text: string }
   expect([...text.matchAll(/^# (\w+)$/gm)].map((m) => m[1]))
@@ -37,7 +37,7 @@ test('D1 a waiting plan wakes with every section in order and no file content', 
   expect(text).not.toContain(MESSAGE)
 })
 
-test('D2 a missing section refuses rather than sending a short packet', () => {
+test('D2 a missing section refuses rather than a short packet', () => {
   const { db, home } = seeded()
   drop(home, 7, 'base.sha')
   expect(wake(db, home, 7)).toEqual(refusal('base'))
@@ -55,7 +55,7 @@ test('D3 an ask past the cap is refused whole, not cut', () => {
   expect(wake(db, home, 7)).toEqual(refusal('cap'))
 })
 
-test('#284b: fixer and orchestrator runs land at steps 4 and 5 and leave the ceiling and the packet alone', () => {
+test('fixer and orchestrator runs leave ceiling and packet alone', () => {
   const { db, home } = seeded()
   const before = [wake(db, home, 7), overBudget(db, 7)]
   for (const seat of ['fixer', 'orchestrator']) {
@@ -71,6 +71,6 @@ test('#284b: fixer and orchestrator runs land at steps 4 and 5 and leave the cei
   expect([wake(db, home, 7), overBudget(db, 7)]).toEqual(before)
 })
 
-test('#284b: a seat other than fixer or orchestrator is still refused at steps 4 and 5', async () => {
+test('another seat is still refused at steps 4 and 5', async () => {
   expect(await reviewerNotBuilder.run(root)).toEqual([])
 })

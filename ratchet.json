@@ -342,16 +342,13 @@
     "prepare": 1
   },
   "runner/tests/language-seat.ts": {
-    "prepare": 3,
-    "test-name": 6
+    "prepare": 3
   },
   "runner/tests/runner.test.ts": {
-    "prepare": 3,
-    "test-name": 12
+    "prepare": 3
   },
   "runner/tests/wake.test.ts": {
-    "prepare": 2,
-    "test-name": 4
+    "prepare": 2
   },
   "runner/wake.ts": {
     "lines": 103,

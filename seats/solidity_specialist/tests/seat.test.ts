@@ -9,7 +9,7 @@ import { Seat, rules, seat } from '../../../runner/rules.ts'
 const root = join(import.meta.dirname, '../../..')
 const SEAT = 'solidity_specialist'
 
-test('the manifest declares seat, model, effort, tools and write_paths', () => {
+test('the manifest declares seat, model, effort, tools and paths', () => {
   expect(Seat.parse(seat(root, SEAT).manifest)).toMatchObject({
     seat: SEAT,
     model: 'claude-opus-5-5',
@@ -23,7 +23,7 @@ test('the roster carries the seat', () => {
   expect(rules(root).find((r) => r.id === SEAT)).toMatchObject({ kind: 'card', path: 'rules/roster.yaml' })
 })
 
-test('the prompt carries the Foundry, solc, transaction and RPC lines', () => {
+test('the prompt carries Foundry, solc, transaction and RPC lines', () => {
   const { prompt } = seat(root, SEAT)
   for (const line of [
     'Foundry is on the host (`forge 1.7.1` as of 2026-09-27).',
@@ -33,7 +33,7 @@ test('the prompt carries the Foundry, solc, transaction and RPC lines', () => {
   ]) expect(prompt).toContain(line)
 })
 
-test('the prompt carries the own-repo rules, the outside comment-density line and the fence', () => {
+test('the prompt carries own-repo rules, density line and fence', () => {
   const { prompt } = seat(root, SEAT)
   for (const line of [
     'On our own repository:',
@@ -49,7 +49,7 @@ test('the prompt carries the own-repo rules, the outside comment-density line an
   ]) expect(prompt).toContain(line)
 })
 
-test('write_paths admit sample, test and index and refuse everything beside them', () => {
+test('write_paths admit sample, test and index, and nothing else', () => {
   const paths = seat(root, SEAT).manifest.write_paths
   expect(refuse(root, paths, 'sample/Hook.sol')).toBeNull()
   expect(refuse(root, paths, 'test/Invariant.t.sol')).toBeNull()
@@ -64,7 +64,7 @@ test('write_paths admit sample, test and index and refuse everything beside them
 const ran = (p: Packet, command: string, background?: boolean) =>
   gate(p, { hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: background === undefined ? { command } : { command, run_in_background: background } } as never)
 
-test('the seat may run forge, cast and python3, in the foreground, and nothing else', () => {
+test('only forge, cast and python3 run, in the foreground', () => {
   const { manifest, prompt } = seat(root, SEAT)
   const p = packet(manifest, prompt, '', '', root, join(root, 'x.transcript.jsonl'))
   for (const command of ['forge build', 'forge test', 'cast call', 'python3 sample/run.py']) {

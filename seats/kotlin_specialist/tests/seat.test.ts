@@ -9,7 +9,7 @@ import { builder } from '../../../templates/pr-path.ts'
 
 const root = join(import.meta.dirname, '../../..')
 
-test('the manifest declares seat, model, effort, tools and write_paths', () => {
+test('the manifest declares seat, model, effort, tools and paths', () => {
   expect(Seat.parse(seat(root, 'kotlin_specialist').manifest)).toMatchObject({
     seat: 'kotlin_specialist',
     effort: 'high',
@@ -18,7 +18,7 @@ test('the manifest declares seat, model, effort, tools and write_paths', () => {
   })
 })
 
-test('the roster carries the seat and the loader gives it a rules row', () => {
+test('the roster carries the seat and it loads as a rules row', () => {
   const row = rules(root).find((r) => r.id === 'kotlin_specialist')
   expect(row).toMatchObject({ kind: 'card', path: 'rules/roster.yaml' })
 })
@@ -27,26 +27,26 @@ test('the prompt tells the seat to close with the handback fence', () => {
   expect(seat(root, 'kotlin_specialist').prompt).toContain('- id: D1')
 })
 
-test('the prompt tells a rebuild to list every case, carrying the untouched rows forward', () => {
+test('a rebuild lists every case, carrying untouched rows forward', () => {
   expect(seat(root, 'kotlin_specialist').prompt).toContain(
     "A rebuild's fence lists every case again: carry forward the rows the refusal did not touch, update the ones it did.",
   )
 })
 
-test('a kotlin tree picks this seat and anything else falls to the default', () => {
+test('a kotlin tree picks this seat, anything else the default', () => {
   expect(builder('kotlin')).toBe('kotlin_specialist')
   expect(builder(null)).toBe('typescript_specialist')
   expect(builder('cobol')).toBe('typescript_specialist')
 })
 
-test('write_paths admit the kotlin module and refuse everything beside it', () => {
+test('write_paths admit the kotlin module and refuse the rest', () => {
   const paths = seat(root, 'kotlin_specialist').manifest.write_paths
   expect(refuse(root, paths, 'kotlin/src/main/kotlin/Types.kt')).toBeNull()
   expect(refuse(root, paths, 'swift/Sources/Expires.swift')).toMatchObject({ origin_ref: 'seat.write_paths' })
   expect(refuse(root, paths, '../escape.kt')).toMatchObject({ origin_ref: 'seat.write_paths' })
 })
 
-test('the authority rail reads the same write_paths off the finished diff', () => {
+test('the authority rail reads the same write_paths off the diff', () => {
   const hunk = (path: string) => `--- a/${path}\n+++ b/${path}\n@@ -1,1 +1,1 @@\n+x\n`
   expect(authority(root, 'kotlin_specialist', hunk('kotlin/src/main/kotlin/Types.kt')))
     .toMatchObject({ outcome: 'pass' })
@@ -57,7 +57,7 @@ test('the authority rail reads the same write_paths off the finished diff', () =
 const ran = (p: Packet, command: string) =>
   gate(p, { hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command } } as never)
 
-test('the seat may run gradle and nothing else, and a chained command is not gradle', () => {
+test('the seat runs only gradle, and not a chained command', () => {
   const { manifest, prompt } = seat(root, 'kotlin_specialist')
   const p = packet(manifest, prompt, '', '', root, join(root, 'x.transcript.jsonl'))
   expect(ran(p, 'gradle -p kotlin check')).toEqual({ continue: true })

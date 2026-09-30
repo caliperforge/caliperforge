@@ -11,14 +11,14 @@ const TEST: Failure = { script: 'test', command: 'npm run test', code: '1', outp
 
 const verdict = (failed: Failure): Verdict => checked(failed, DIFF)
 
-test('a script that exits non-zero refuses over the one span it ran in, owned by the rail', () => {
+test('a non-zero script refuses on its one span, owned by the rail', () => {
   expect(verdict(LINT)).toMatchObject({
     outcome: 'refuse', spans: ['checks:lint'], origin_kind: 'rail', origin_ref: 'checks',
     subject_digest: createHash('sha256').update(DIFF).digest('hex'),
   })
 })
 
-test('a lint reporter that opens a line with the same glyph still names the rail', () => {
+test('a lint line opening with the same glyph still names the rail', () => {
   expect(verdict({ ...LINT, output: '   × no-unused-vars  src/x.ts:3\n' }).origin_ref).toBe('checks')
 })
 

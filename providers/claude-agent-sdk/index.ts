@@ -62,7 +62,7 @@ async function fire(packet: Packet): Promise<Fired> {
 }
 
 /**
- * #148: the wall is read before the tool call that would feed another turn to the model, never after the
+ * The wall is read before the tool call that would feed another turn to the model, never after the
  * bill. A runaway run is tool-driven, so this is the seam every extra turn passes through; a run that spends
  * its wall inside one turn still stops at the next one, which is the earliest any brake can act.
  */
@@ -71,10 +71,7 @@ export function walled(wall: number | undefined, spent: number): string | null {
   return `ruling:run.token_wall stopped the run at ${million(spent)} tokens, past the ${million(wall)} wall`
 }
 
-/**
- * A builder that has spent `IDLE_TURNS` turns without one write stops, before the wall would catch it: on
- * 09-24 two surfpool fires read a dependency for 23 turns each and wrote nothing. Seats without Write never trip.
- */
+/** A builder that has spent `IDLE_TURNS` turns without one write stops, before the wall would catch it. Seats without Write never trip. */
 export function idle(tools: string[], wrote: boolean, turns: number): string | null {
   if (wrote || turns < IDLE_TURNS || !tools.some((t) => WRITES.has(bare(t)))) return null
   return `ruling:run.idle stopped the run after ${String(turns)} turns with nothing written`
@@ -84,11 +81,10 @@ function writing(input: HookInput): boolean {
   return input.hook_event_name === 'PreToolUse' && WRITES.has(input.tool_name)
 }
 
-/** What a turn adds against the wall. CEO 09-24: cache reads are recorded, never capped. */
 /**
- * The SDK sends one assistant message per content block, each carrying the whole turn's usage under the same
- * message id. Summed per message, a turn counted three or four times over, and the 0.4M wall stopped runs
- * that had spent about 0.1M (plans 85 and 94, 09-24). One turn is one id, counted once, at its largest.
+ * What a turn adds against the wall; cache reads are recorded, never capped. The SDK sends one assistant message
+ * per content block, each carrying the whole turn's usage under the same message id, so one turn is one id,
+ * counted once, at its largest.
  */
 function total(spent: Map<string, number>): number {
   let sum = 0
@@ -110,7 +106,7 @@ const WINDOWS = ['five_hour', 'seven_day'] as const
 type Unified = Partial<Record<string, { utilization?: number; resetsAt?: number }>>
 
 /**
- * The windows one rate-limit event reports (#104). The event names one window and its status; the CLI also
+ * The windows one rate-limit event reports. The event names one window and its status; the CLI also
  * sends `unifiedWindows` with both, and a window other than the named one is `allowed` until it is full.
  */
 export function readings(info: SDKRateLimitInfo, at: string): Reading[] {
@@ -140,10 +136,7 @@ function openTranscript(packet: Packet): (message: unknown) => void {
   return (message) => { appendFileSync(packet.transcript, `${JSON.stringify(message)}\n`) }
 }
 
-/**
- * A write outside the fence ends the step. A command outside the seat's list is refused and the seat goes on
- * with its other tools: once a builder held `npm`, a `grep` it reached for ended the whole build (plan 62, 09-21).
- */
+/** A write outside the fence ends the step. A command outside the seat's list is refused and the seat goes on with its other tools. */
 export function gate(packet: Packet, input: HookInput): SyncHookJSONOutput {
   if (input.hook_event_name !== 'PreToolUse') return { continue: true }
   if (input.tool_name === 'Bash') {
@@ -156,10 +149,7 @@ export function gate(packet: Packet, input: HookInput): SyncHookJSONOutput {
   return denied === null ? { continue: true } : stop(denied)
 }
 
-/**
- * A read outside the checkout is refused and the seat goes on: what it needs from a dependency is in the
- * brief's Settled facts. The registry dig this stops cost two surfpool fires their whole wall on 09-24.
- */
+/** A read outside the checkout is refused and the seat goes on: what it needs from a dependency is in the brief's Settled facts. */
 export function readOutside(cwd: string, tool: string, args: unknown, reads: string[] = []): string | null {
   if (!READS.has(tool)) return null
   const given = args as { file_path?: unknown; path?: unknown }

@@ -85,7 +85,7 @@ test('a plan not queued or running takes no place in the queue', () => {
   expect(order(db).map((r) => [r.plan, r.position])).toEqual([[3, 1], [1, 2], [4, 3], [5, 4], [2, 5]])
 })
 
-test('D3 D4 a finished plan drops its file wait and leaves overlapWaits, and a queued one waiting on files stays', () => {
+test('D3 D4 overlapWaits drops finished plans, keeps queued ones', () => {
   const db = bench()
   add(db, 2, 'queued', T1)
   add(db, 3, 'queued', T1)

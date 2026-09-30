@@ -85,7 +85,7 @@ function branches(dir: string, target: Target, paths: string[]): string[] {
   })
 }
 
-/** An orphan branch shares no history with main, so it holds no work on ours: php-sdk's `badges` threw at push (09-28). */
+/** An orphan branch shares no history with main, so it holds no work on ours; `merge-base` throws on one. */
 function baseOf(dir: string, ref: string): string | null {
   try {
     return git(dir, ['merge-base', MAIN, ref]).trim()

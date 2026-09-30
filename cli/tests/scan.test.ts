@@ -47,7 +47,7 @@ const row = (db: Db, no: number): Record<string, unknown> =>
 
 const count = (db: Db, table: string): number => (db.prepare(`SELECT count(*) AS n FROM ${table}`).get() as { n: number }).n
 
-test('D1: each open issue becomes a ready target with its evidence, and no plan is filed', () => {
+test('open issues become ready targets with evidence, no plan', () => {
   const db = world()
   const plans = count(db, 'plans')
   const got = scan(db, REPO, TODAY, canned({
@@ -64,7 +64,7 @@ test('D1: each open issue becomes a ready target with its evidence, and no plan 
   expect(render(db, row(db, 2).id as number)).toContain('pr #7 draft')
 })
 
-test('D2: two of ours open and unmerged refuse the scan before any read; one does not', () => {
+test('two of ours open refuse scan before any read; one does not', () => {
   const db = world()
   const pipe = Number(db.prepare(`INSERT INTO pipes (name, enabled, window_start, window_end, max_concurrent)
     VALUES ('scan', 1, '00:00', '23:59', 1)`).run().lastInsertRowid)
@@ -102,7 +102,7 @@ test('D3: a refused or queued target keeps every column', () => {
   expect(db.prepare('SELECT count(*) AS n FROM targets GROUP BY repo, issue_no, part HAVING n > 1').all()).toEqual([])
 })
 
-test('D5: a target the CEO refused is left as it was by a rescan and not returned', () => {
+test('a rescan leaves a CEO-refused target alone and omits it', () => {
   const db = world()
   const [id] = scan(db, REPO, TODAY, canned({ issues: [issue(1)] })).targets
   refuseTarget(db, Number(id), 'not.ours', 'coo')
@@ -118,13 +118,13 @@ test('D4: a repo with no named merger gets no targets', () => {
   expect(count(db, 'targets')).toBe(0)
 })
 
-test('D5: a pull request from our fork, or one naming #12, is not an open pr on #1', () => {
+test('a PR from our fork, or naming #12, is not an open pr on #1', () => {
   const db = world()
   scan(db, REPO, TODAY, canned({ issues: [issue(1)], prs: [pr(5, 'closes #1', false, FORK), pr(6, 'see #12', false, 'someone')] }))
   expect(row(db, 1)).toMatchObject({ state: 'ready', open_pr: null, open_pr_draft: null })
 })
 
-test('D6: the new columns refuse a bad date, a draft flag of 2 and a negative size', () => {
+test('new columns refuse bad date, draft flag 2 and negative size', () => {
   const db = world()
   const insert = (column: string, value: unknown): void => {
     db.prepare(`INSERT INTO targets (account_id, repo, issue_no, named_merger, state, evidence_measured_at, evidence, ${column})

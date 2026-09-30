@@ -22,7 +22,7 @@ const tree = (entries: string[]): string => {
   return dir
 }
 
-test('the manifest declares seat, model, effort, tools and write_paths', () => {
+test('the manifest declares seat, model, effort, tools and paths', () => {
   expect(Seat.parse(seat(root, SEAT).manifest)).toMatchObject({
     seat: SEAT,
     effort: 'high',
@@ -42,7 +42,7 @@ test('an xcode project or a swift package routes to this seat', () => {
   expect(builder(languageOf(tree(['package.json'])))).toBe('typescript_specialist')
 })
 
-test('the prompt carries the test command, the design line and the fence', () => {
+test('the prompt carries the test command, design line and fence', () => {
   const { prompt } = seat(root, SEAT)
   expect(prompt).toContain("xcodebuild -project Atelier.xcodeproj -scheme Atelier -destination 'platform=macOS'")
   expect(prompt).toContain('design/v2/TWO_PAGER.md')
@@ -53,7 +53,7 @@ test('the prompt carries the test command, the design line and the fence', () =>
   expect(prompt).toContain('follow it under `# The files`')
 })
 
-test('the prompt carries the own-repo rules and the outside comment-density line', () => {
+test('the prompt carries the own-repo and outside comment rules', () => {
   const { prompt } = seat(root, SEAT)
   for (const line of [
     'On our own repository:',
@@ -66,7 +66,7 @@ test('the prompt carries the own-repo rules and the outside comment-density line
   ]) expect(prompt).toContain(line)
 })
 
-test('the prompt keeps views on plain values and asks for no #Preview', () => {
+test('the prompt keeps views on plain values, with no #Preview', () => {
   const { prompt } = seat(root, SEAT)
   expect(prompt).not.toContain('#Preview')
   expect(prompt).toContain('a view takes plain values')
@@ -78,7 +78,7 @@ test('D1: a behaviour is tested on its service or model', () => {
   expect(prompt).toContain('Write an accessibility-tree UI test only when the behaviour is the control itself (a button exists and is labelled), at most one per screen.')
 })
 
-test('write_paths admit the app and its tests and refuse everything beside them', () => {
+test('write_paths admit the app and its tests and refuse the rest', () => {
   const paths = seat(root, SEAT).manifest.write_paths
   expect(refuse(root, paths, 'Atelier/Views/NowView.swift')).toBeNull()
   expect(refuse(root, paths, 'AtelierTests/NowViewTests.swift')).toBeNull()
@@ -108,7 +108,7 @@ test('the seat may run xcodebuild and swift and nothing else', () => {
   }
 })
 
-test('a background xcodebuild is denied and the seat stays in the session', () => {
+test('a background xcodebuild is denied and the seat stays on', () => {
   const { manifest, prompt } = seat(root, SEAT)
   const p = packet(manifest, prompt, '', '', root, join(root, 'x.transcript.jsonl'))
   const denied = ran(p, XCODEBUILD, true)
@@ -124,7 +124,7 @@ test('a background xcodebuild is denied and the seat stays in the session', () =
   expect(ran(p, XCODEBUILD)).toEqual({ continue: true })
 })
 
-test('both prompt commands cap each test at 60 seconds and the gate admits them', () => {
+test('both prompt commands cap each test at 60s and pass the gate', () => {
   const { manifest, prompt } = seat(root, SEAT)
   const flagged = '-derivedDataPath .cf-derived -test-timeouts-enabled YES -default-test-execution-time-allowance 60 -maximum-test-execution-time-allowance 60 test'
   expect(prompt.split(flagged)).toHaveLength(3)

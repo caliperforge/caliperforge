@@ -15,11 +15,11 @@ import { words } from './signals.ts'
 const LETTERS = 'abcdefghijklmnopqrstuvwxyz'
 
 /**
- * #72, filed. Every part becomes an issue of ours, titled `<parent><letter>: …` in the order the parts
+ * Every part becomes an issue of ours, titled `<parent><letter>: …` in the order the parts
  * land, carrying the parent's lane; every part with no `after` is queued at the parent's priority and the parent's
  * issue says where its work went. The parent plan ends here with no build. A split of somebody else's
  * approved ticket is filed on our repo as internal-only parts titled `p<plan><letter>: …` that build against
- * `asm/<plan>`; an unapproved one is not the machine's to file: the parts wait for the COO instead.
+ * `asm/<plan>`; an unapproved one is not the machine's to file: the parts wait for a person instead.
  * Filing is resumable -- a part already on file is not filed twice -- so a `gh` that fails half way is
  * a blip the next tick finishes.
  */
@@ -96,7 +96,7 @@ function close(plan: PlanRow, issue: number, sha: string, wire: Wire): string {
   }
 }
 
-/** A part's own split filed by the COO as `<part issue><letter>: …` joins the part's plan as the machine's would. */
+/** A part's own split filed by a person as `<part issue><letter>: …` joins the part's plan as the machine's would. */
 export function claimed(db: Db, root: string, issue: { url: string; title: string; body: string }): boolean {
   const [, no, at] = /^(\d+)([a-z])\b/.exec(issue.title) ?? []
   if (no === undefined || at === undefined) return false
@@ -136,7 +136,7 @@ function filed(db: Db, plan: PlanRow, prefix: string, parts: Part[], n: number, 
   return url
 }
 
-/** Intake re-prices a plan from its issue's P label, so a part filed without one fell to the default (9b ran P3 under a P0). */
+/** Intake re-prices a plan from its issue's P label, so a part filed without one falls to the default. */
 function labels(plan: PlanRow): string[] {
   return [...(plan.lane === null ? [] : [`lane:${plan.lane}`]), `P${String(plan.priority)}`]
 }

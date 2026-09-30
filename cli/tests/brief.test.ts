@@ -83,7 +83,7 @@ const merged = [
   { headRefName: 'p12-thing', mergedAt: at(1) },
 ]
 
-test('D1 D2 D4 each actor counts its own events and seat runs in the 24 h before now, and no one else\'s', () => {
+test('each actor counts its own events and seat runs over 24 h', () => {
   expect(actors(day24(), NOW)).toMatchObject([
     { actor: 'ceo', kinds: [{ kind: 'retry', n: 1 }, { kind: 'return', n: 1 }], runs: null },
     { actor: 'coo', kinds: [], runs: null },
@@ -93,7 +93,7 @@ test('D1 D2 D4 each actor counts its own events and seat runs in the 24 h before
   ])
 })
 
-test('D3 hand PRs merged in the window count across the three home repos, searched from the day before', () => {
+test('hand PRs merged in window: 3 home repos, searched a day back', () => {
   const seen: string[][] = []
   expect(hands(NOW, (args) => { seen.push(args); return merged })).toBe(6)
   expect(seen.map((a) => a[a.indexOf('--repo') + 1]))
@@ -116,7 +116,7 @@ test('D6 the fixture day renders the expected section exactly', () => {
     '  hand PRs merged\t6\n')
 })
 
-test('D6 each actor scores the week before now, and an event 8 days old counts nowhere', () => {
+test('each actor scores the past week, not an event 8 days old', () => {
   const db = world()
   plan(db, 1, 'done', 25)
   plan(db, 2, 'refused', 30)
@@ -128,7 +128,7 @@ test('D6 each actor scores the week before now, and an event 8 days old counts n
   expect(actors(db, NOW).map((r) => r.scored)).toEqual(Array.from({ length: 5 }, () => ({ held: 1, missed: 1, open: 1 })))
 })
 
-test('D4 an orchestrator run at step 4 adds to runs and tokens, not to review', () => {
+test('a step 4 orchestrator run adds runs and tokens, not review', () => {
   const db = world()
   plan(db, 1, 'blocked_on_ceo', 25)
   run(db, 1, 2, '2026-09-20 09:00:00')
@@ -136,7 +136,7 @@ test('D4 an orchestrator run at step 4 adds to runs and tokens, not to review', 
   expect(tickets(db)).toMatchObject([{ runs: 2, build: 1, review: 0, tokens: 200 }])
 })
 
-test('every plan with a run gets a row, newest run first, with its rounds, minutes, tokens and outcome', () => {
+test('plan rows newest run first: rounds, minutes, tokens, outcome', () => {
   const db = world()
   plan(db, 1, 'done', 25)
   plan(db, 2, 'running', 30)
@@ -152,7 +152,7 @@ test('every plan with a run gets a row, newest run first, with its rounds, minut
     '  since 2026-09-19 11:21\t2 ticket(s)\t3.0 min avg\n')
 })
 
-test('a halted or refused plan is wasted, and the eras average the minutes of their own tickets', () => {
+test('halted/refused plans are wasted; eras average own tickets', () => {
   const db = world()
   plan(db, 1, 'halted', 25)
   plan(db, 2, 'refused', 30)
@@ -164,7 +164,7 @@ test('a halted or refused plan is wasted, and the eras average the minutes of th
   expect(ticketSection(rows)).toContain('  since 2026-09-19 11:21\t1 ticket(s)\t2.0 min avg\n')
 })
 
-test('a plan with no run gets no row, and an empty era divides by nothing', () => {
+test('no run, no row; an empty era divides by nothing', () => {
   const db = world()
   plan(db, 1, 'queued', 25)
   expect(tickets(db)).toEqual([])
@@ -173,7 +173,7 @@ test('a plan with no run gets no row, and an empty era divides by nothing', () =
     '  since 2026-09-19 11:21\t0 ticket(s)\t- avg\n')
 })
 
-test('a plan with neither origin nor target is named by its plan id, and a target names the repo issue', () => {
+test('no origin or target: plan id; a target: the repo issue', () => {
   const db = world()
   plan(db, 1, 'queued', null)
   plan(db, 2, 'queued', null, 1)
@@ -184,7 +184,7 @@ test('a plan with neither origin nor target is named by its plan id, and a targe
       '  acme/widget#12\t1 run(s)\t1 build\t0 review\t1.0 min\t100 tokens\topen'])
 })
 
-test('tickets() reads the db alone: no provider, no gh, one statement', () => {
+test('tickets() reads db alone: no provider, no gh, one statement', () => {
   const db = world()
   plan(db, 1, 'done', 25)
   run(db, 1, 2, '2026-09-20 09:00:00')
@@ -196,7 +196,7 @@ test('tickets() reads the db alone: no provider, no gh, one statement', () => {
   expect(seen[0]).toContain('FROM runs r JOIN plans p')
 })
 
-test('the waits line counts live plans per stored reason, ordered by reason', () => {
+test('waits line counts live plans per stored reason, sorted', () => {
   const db = world()
   plan(db, 1, 'queued', 25)
   plan(db, 2, 'running', 30)
@@ -205,7 +205,7 @@ test('the waits line counts live plans per stored reason, ordered by reason', ()
   expect(waitLine(waits(db))).toBe('waits\tfile_overlap 2\tover_cap 1\n')
 })
 
-test('a stale reason on a blocked plan and a live plan with no reason add nothing', () => {
+test('stale reason on a blocked plan or none on a live plan adds 0', () => {
   const db = world()
   plan(db, 1, 'blocked_on_ceo', 25)
   plan(db, 2, 'queued', 30)
@@ -214,7 +214,7 @@ test('a stale reason on a blocked plan and a live plan with no reason add nothin
   expect(waitLine(waits(db))).toBe('waits\tleased 1\n')
 })
 
-test('D1 the Greptile line counts this UTC month\'s dated requests across plans, not last month\'s or undated ones', () => {
+test('Greptile counts dated requests of this UTC month, all plans', () => {
   const root = mkdtempSync(join(tmpdir(), 'cf-month-'))
   const now = new Date('2026-09-26T12:00:00.000Z')
   expect(monthly(root, now)).toBe(0)
@@ -225,7 +225,7 @@ test('D1 the Greptile line counts this UTC month\'s dated requests across plans,
   expect(greptileLine(12)).toBe('greptile 12/50 this month\n')
 })
 
-test('D4 D3 cf brief names each plan whose ask.md differs from its briefed copy, and no other', () => {
+test('cf brief names only plans whose ask.md drifted from brief', () => {
   const db = world()
   const root = mkdtempSync(join(tmpdir(), 'cf-rulings-'))
   expect(rulings(db, root)).toBe('')
@@ -239,7 +239,7 @@ test('D4 D3 cf brief names each plan whose ask.md differs from its briefed copy,
   expect(rulings(db, root)).not.toContain('plan 2')
 })
 
-test('D1 D2 cf brief names a held plan whose ask.md differs from its briefed copy, and not a done one', () => {
+test('names a held plan whose ask.md drifted, not a done one', () => {
   const db = world()
   const root = mkdtempSync(join(tmpdir(), 'cf-rulings-'))
   plan(db, 1, 'done', 25)
@@ -253,7 +253,7 @@ test('D1 D2 cf brief names a held plan whose ask.md differs from its briefed cop
 
 const holding = (db: Db, id: number): unknown => db.prepare('SELECT held_by, held_why FROM plans WHERE id = ?').get(id)
 
-test('D2 a target approval holds the plan on the CEO until the reason clears', () => {
+test('target approval holds a plan on the CEO until reason clears', () => {
   const db = world()
   plan(db, 1, 'queued', null, 1)
   waiting(db, [{ plan: 1, why: 'target_approval' }])
@@ -273,7 +273,7 @@ test('heldBy lists each held plan under who it waits on, with why', () => {
   expect(heldBy(db, 'coo').map(line)).toEqual(['  plan 2\tstep 0\tblocked_on_ceo\t-'])
 })
 
-test('D1 a plan parked on another is listed under parked with the plan it waits for, and not as needing a decision', () => {
+test('parked on another: listed with it, not as needing a decision', () => {
   const db = world()
   plan(db, 1, 'queued', 25)
   plan(db, 2, 'queued', 30)
@@ -283,7 +283,7 @@ test('D1 a plan parked on another is listed under parked with the plan it waits 
   expect(heldBy(db, 'coo')).toEqual([])
 })
 
-test('D2 a blocked plan with no park needs a decision, with its stop, and is not parked', () => {
+test('a blocked plan with no park needs a decision with its stop', () => {
   const db = world()
   plan(db, 1, 'running', 25)
   needsCeo(db, PlanRow.parse(db.prepare('SELECT * FROM plans WHERE id = 1').get()), 'code_quality refused: x')
@@ -299,12 +299,12 @@ test('D3 a plan waiting on another job\'s files is not parked', () => {
   expect(parked(db)).toEqual([])
 })
 
-test('D3 the files section names each waiting plan, its holder and the file, or none', () => {
+test('files section: waiting plan, holder and file, or none', () => {
   expect(fileWaits([{ plan: 3, on: 2, path: 'x.ts' }])).toBe('waiting on files (1)\n  plan 3\ton plan 2\tx.ts\n')
   expect(fileWaits([])).toBe('waiting on files (0)\n  none\n')
 })
 
-test('D2 D3 D4 cf runs and cf usage print tokens by type, a null cache write as 0, and the totals they printed before', () => {
+test('runs/usage: tokens by type, null cache write 0, same totals', () => {
   const db = world()
   plan(db, 1, 'running', 25)
   const seed = db.prepare(`INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort,
@@ -348,7 +348,7 @@ function twoModels(): Db {
   return db
 }
 
-test('D1 D2 each model of the last day has a line with computed and reported cost, and the unpriced one is named', () => {
+test('per-model lines: computed and reported cost; unpriced named', () => {
   const db = twoModels()
   repriced(db)
   expect(costSection(costs(db), unpriced(db))).toBe('cost last 24 h by model (2)\n' +
@@ -357,7 +357,7 @@ test('D1 D2 each model of the last day has a line with computed and reported cos
     '  no price row\tclaude-agent-sdk/haiku\n')
 })
 
-test('D3 a priced model gets no price line, and a run older than a day counts on no line', () => {
+test('priced models get no price line; day-old runs count nowhere', () => {
   const db = twoModels()
   priced(db, 'haiku')
   costed(db, 'opus', '-2 days', 9000, 900, 9000, 900, 9)

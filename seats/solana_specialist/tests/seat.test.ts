@@ -10,22 +10,22 @@ const root = join(import.meta.dirname, '../../..')
 
 const card = { seat: 'solana_specialist', model: 'claude-opus-5-5', effort: 'high', tools: ['Read', 'Glob', 'Grep'], write_paths: [] }
 
-test('D1: the manifest holds Read, Glob and Grep, and no write path', () => {
+test('D1: the manifest holds Read, Glob and Grep, no write path', () => {
   expect(seat(root, 'solana_specialist').manifest).toEqual(card)
 })
 
-test('D2: the roster carries the seat and the loader gives it a rules row', () => {
+test('D2: the roster carries the seat and it loads as a rules row', () => {
   expect(rules(root).find((r) => r.id === 'solana_specialist')).toMatchObject({ kind: 'card', path: 'rules/roster.yaml' })
 })
 
-test('D3: the prompt names the four card lines, the Shape rule and the refusal to act', () => {
+test('D3: four card lines, the Shape rule and the refusal to act', () => {
   const prompt = seat(root, 'solana_specialist').prompt.replace(/\s+/g, ' ')
   for (const part of ['**What:**', '**Why:**', '**When it ends:**', '**Shape:**']) expect(prompt).toContain(part)
   expect(prompt).toContain('The Shape line opens with a MERGED pull request url from `# Record`')
   expect(prompt).toContain('You never queue, approve or file a plan')
 })
 
-test('D4: a card whose Shape line opens with the MERGED url of the ask is cited, and one citing OPEN is refused', () => {
+test('D4: a Shape line on the MERGED url passes, OPEN is refused', () => {
   const { db, ready } = world()
   const line = askFor(db, ready).split('\n').find((l) => l.includes('\tMERGED\t')) ?? ''
   const url = /https:\/\/\S+/.exec(line)?.[0] ?? ''
@@ -35,7 +35,7 @@ test('D4: a card whose Shape line opens with the MERGED url of the ask is cited,
   expect(() => cites(shaped(OPEN), rows(db))).toThrow('the card cites no merged pull request on record')
 })
 
-test('D5: the seat is offered no Bash and every command that would queue, file or approve is refused', () => {
+test('D5: no Bash, and every queue, file or approve is refused', () => {
   const { manifest, prompt } = seat(root, 'solana_specialist')
   const p = packet(manifest, prompt, '', '', root, join(root, 'x.transcript.jsonl'))
   expect(offered(p.tools)).not.toContain('Bash')
@@ -52,7 +52,7 @@ test('D5: the seat is offered no Bash and every command that would queue, file o
   }
 })
 
-test('D6: the manifest with Bash(node:*) or Write added does not load', () => {
+test('D6: the manifest with Bash(node:*) or Write does not load', () => {
   expect(Seat.safeParse({ ...card, tools: [...card.tools, 'Bash(node:*)'] }).success).toBe(false)
   expect(Seat.safeParse({ ...card, tools: [...card.tools, 'Write'] }).success).toBe(false)
 })

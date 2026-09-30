@@ -128,10 +128,10 @@ export function dropPlan(db: Db, id: number): void {
   db.prepare('DELETE FROM plans WHERE id = ?').run(id)
 }
 
-/** Work already under way sorts first — `step = 0` is 1 for a plan not yet started — so a released plan waits behind no later P0. */
+/** Work already under way sorts first, so a released plan waits behind no later P0. */
 export function live(db: Db, pipe: PipeRow): PlanRow[] {
-  return db.prepare(`SELECT * FROM plans WHERE pipe_id = ? AND state IN ('queued', 'running')
-    ORDER BY step = 0, priority, queued_at, id`).all(pipe.id).map((r) => PlanRow.parse(r))
+  return db.prepare('SELECT p.* FROM queue_order q JOIN plans p ON p.id = q.plan WHERE q.pipe = ? ORDER BY q.position')
+    .all(pipe.id).map((r) => PlanRow.parse(r))
 }
 
 /** A leased plan is mid-fire: it holds the slot it took whatever state the row is caught at. */

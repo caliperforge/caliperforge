@@ -52,14 +52,14 @@ export function account(db: Db, repo: string, today: string): z.infer<typeof Acc
 export interface Scope {
   card?: string
   pr?: string
-  /** #181: one item of the issue, which the card scopes; its own target, plan and branch. */
+  /** One item of the issue, which the card scopes; its own target, plan and branch. */
   part?: string
 }
 
 const PART = /^[a-z0-9][a-z0-9-]{0,31}$/
 
 /**
- * A target is queued however slowly the repo merges: the CEO picks targets, not the pulse, which is
+ * A target is queued however slowly the repo merges: targets are picked by hand, not by the pulse, which is
  * measured here when missing or old and kept as data. A card of ours scopes one item of their
  * issue, so an issue other pull requests already touch is still open to it.
  */

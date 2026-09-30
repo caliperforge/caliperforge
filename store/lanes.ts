@@ -17,7 +17,7 @@ export type Lane = typeof LANES[number]
 export type Template = 'pr_path' | 'research' | 'comms'
 
 /**
- * Each lane in one place (#69): the template it files on, the seat that template falls to when no `seat:`
+ * Each lane in one place: the template it files on, the seat that template falls to when no `seat:`
  * label names one, the repo its jobs build and land in, and the pipe they queue on. A lane's pipe starts off.
  */
 export const LANE: Record<Lane, { template: Template; seat: string; home: string; pipe: string }> = {
@@ -74,7 +74,7 @@ export const WindowRow = z.object({
 
 export type WindowRow = z.infer<typeof WindowRow>
 
-/** The shape `RateLimitEvent` arrives in, the same one v1 parked in `ops/state/plan_usage.json`. */
+/** The shape `RateLimitEvent` arrives in. */
 export const Reading = z.object({
   observed_at: z.string(),
   rate_limit_type: z.enum(['five_hour', 'seven_day']),
@@ -131,7 +131,7 @@ export function hhmm(db: Db, now: Date = new Date()): string {
   return clock(now, zone(db))
 }
 
-/** #148: what one run may spend before it stops. Under `plan.token_ceiling`, so it is the brake that acts first. */
+/** What one run may spend before it stops. Under `plan.token_ceiling`, so it is the brake that acts first. */
 export function wall(db: Db): number {
   return count(db, 'run.token_wall')
 }

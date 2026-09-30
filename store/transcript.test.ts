@@ -36,11 +36,11 @@ test('backfill fills NULL costs once and never overwrites', () => {
   expect([spent(db, empty), spent(db, set)]).toEqual([0.43, 2.96])
 })
 
-test('D1 unfinished names the Bash command whose result was moved to the background', () => {
+test('D1 unfinished names the Bash command put in the background', () => {
   expect(unfinished(fixture('unfinished'))).toBe('npm test')
 })
 
-test('D3 unfinished is null for a missing file, no moved result, and a result matching no Bash call', () => {
+test('D3 null for a missing file, no moved result, no Bash match', () => {
   const unmatched = join(mkdtempSync(join(tmpdir(), 'cf-transcript-')), 'unmatched.transcript.jsonl')
   writeFileSync(unmatched, readFileSync(fixture('unfinished'), 'utf8').replace('"tool_use_id":"toolu_1"', '"tool_use_id":"toolu_2"'))
   expect([unfinished(fixture('absent')), unfinished(fixture('costed')), unfinished(unmatched)]).toEqual([null, null, null])

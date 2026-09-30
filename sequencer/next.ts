@@ -47,9 +47,9 @@ export function offered(db: Db, now: Date, mine: Lease | null = null): Offer[] {
 }
 
 /**
- * #125: the cap is spent on lanes that can use it. A lane with nothing to step takes no slot, so at
- * cap 1 an idle lane no longer holds the only slot against a lane with a plan it could step; among
- * lanes that can step, the lower id still wins, which is the order `openPipes` returns. A lane with a
+ * The cap is spent on lanes that can use it. A lane with nothing to step takes no slot, so at
+ * cap 1 an idle lane does not hold the only slot against a lane with a plan it could step; among
+ * lanes that can step, the lower id wins, which is the order `openPipes` returns. A lane with a
  * job in flight in another process holds its slot.
  */
 export function working(offers: Offer[], wide: number): Offer[] {
@@ -60,7 +60,7 @@ export function working(offers: Offer[], wide: number): Offer[] {
  * The plans this pipe steps this tick, in priority order. A queued plan that is
  * blocked holds no slot; a running one holds the slot it already took, and so does
  * one another tick has leased, which this tick offers to nobody; a running one that
- * waits on the CEO and is not leased gives its slot up.
+ * waits on an approval and is not leased gives its slot up.
  */
 export function picks(db: Db, pipe: PipeRow, now: Date = new Date(), mine: Lease | null = null): PlanRow[] {
   const leases = new Set(others(db, now, mine).map((l) => l.plan))

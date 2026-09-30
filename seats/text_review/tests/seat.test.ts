@@ -17,18 +17,18 @@ test('D1: the manifest holds Read and no write tool or path', () => {
   expect(card.tools.filter((t) => WRITERS.has(bare(t)))).toEqual([])
 })
 
-test('D2: the roster carries text_review and the loader gives it a rules row', () => {
+test('D2: the roster carries text_review, loaded as a rules row', () => {
   expect(rules(root).find((r) => r.id === 'text_review')).toMatchObject({ kind: 'card', path: 'rules/roster.yaml' })
 })
 
-test('D3: an unsourced number reads as a claim.unverified refuse on its draft line', () => {
+test('D3: an unsourced number is a claim.unverified refuse', () => {
   const judged = read(reply('unsourced.reply.md'), 'draft')
   expect(judged).toMatchObject({ outcome: 'refuse', defect_class: 'claim.unverified' })
   expect(judged?.spans[0]).toMatch(/^draft\.md:/)
   expect(judged?.message).toContain('12')
 })
 
-test('D4: a wording note reads as a pass that carries the note in its message', () => {
+test('D4: a wording note is a pass with the note in its message', () => {
   const judged = read(reply('wording.reply.md'), 'draft')
   expect(judged).toMatchObject({ outcome: 'pass', notes: [] })
   expect(judged?.message).toContain('"seamlessly" is an AI tell')
@@ -39,7 +39,7 @@ test('D5: the prompt names the inputs, the class and both fences', () => {
   for (const part of ['claim.unverified', 'draft.md', 'packet.json', 'outcome: refuse', 'outcome: pass']) expect(prompt).toContain(part)
 })
 
-test('D6: the digests hold, and a roster that lists text_review without them fails the check', () => {
+test('D6: the digests hold, and a roster without them fails', () => {
   expect(check(root, TODAY)).toEqual([])
   const tree = mkdtempSync(join(tmpdir(), 'cf-text-review-'))
   for (const dir of ['rules', 'seats']) cpSync(join(root, dir), join(tree, dir), { recursive: true })

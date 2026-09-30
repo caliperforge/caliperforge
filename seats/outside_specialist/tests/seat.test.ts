@@ -22,7 +22,7 @@ test('the roster carries the seat', () => {
   expect(rules(root).find((r) => r.id === 'outside_specialist')).toMatchObject({ kind: 'card' })
 })
 
-test('minimal-edit rule in every builder, the brief and the first review', () => {
+test('minimal-edit rule in each builder, brief and first review', () => {
   for (const name of ['outside_specialist', 'typescript_specialist', 'kotlin_specialist']) {
     expect(seat(root, name).prompt.replace(/\s+/g, ' ')).toContain('change the value and keep every other word')
   }
@@ -35,7 +35,7 @@ test('the prompt says the brief\'s files are handed', () => {
   expect(seat(root, 'outside_specialist').prompt).toContain('follow it under `# The files`')
 })
 
-test('the fence asks for a summary above done, and the audit still reads it', () => {
+test('the fence puts summary above done, and the audit reads it', () => {
   for (const name of ['go_specialist', 'kotlin_specialist', 'outside_specialist', 'swift_specialist', 'typescript_specialist']) {
     expect(seat(root, name).prompt).toMatch(/^---\nsummary: <the change in one line>\ndone:$/m)
     expect(seat(root, name).prompt).toContain(REASK)

@@ -3,11 +3,11 @@ import type { Part } from './brief.ts'
 
 /**
  * What a step produced. `outcome` is the routing decision; `spans` is what a refusal names.
- * `rewind` is the step an outcome goes back to -- the moved base of #35 rule 3 -- and clears the plan's
+ * `rewind` is the step an outcome goes back to -- the moved base `baseMoved` answers -- and clears the plan's
  * retries; `held` leaves the plan on its step with its retries intact. `message` is the reviewer's
  * own prose, which the builder rebuilds against. `blip` is a checkout the network failed. `to` is the
  * step a refusal goes back to when it is not the one the step map implies. `parts` is the brief writer's
- * answer that the ticket is more than one job (#72); `split` is that answer filed, which ends the plan.
+ * answer that the ticket is more than one job; `split` is that answer filed, which ends the plan.
  */
 export interface Outcome {
   outcome: Verdict['outcome']
@@ -20,7 +20,7 @@ export interface Outcome {
   to?: number
   parts?: Part[]
   split?: true
-  /** Main moved under the branch: nobody's fault, so never `shared` or `repeat` (plans 143 and 155 turned atelier off, 09-25). */
+  /** Main moved under the branch: nobody's fault, so never `shared` or `repeat`. */
   moved?: true
 }
 

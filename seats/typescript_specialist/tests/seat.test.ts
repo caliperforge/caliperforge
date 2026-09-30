@@ -4,7 +4,7 @@ import { Seat, rules, seat } from '../../../runner/rules.ts'
 
 const root = join(import.meta.dirname, '../../..')
 
-test('the manifest declares seat, model, effort, tools and write_paths', () => {
+test('the manifest declares seat, model, effort, tools and paths', () => {
   expect(Seat.parse(seat(root, 'typescript_specialist').manifest)).toMatchObject({
     seat: 'typescript_specialist',
     effort: 'high',
@@ -12,7 +12,7 @@ test('the manifest declares seat, model, effort, tools and write_paths', () => {
   })
 })
 
-test('the roster carries the seat and the loader gives it a rules row', () => {
+test('the roster carries the seat and it loads as a rules row', () => {
   const row = rules(root).find((r) => r.id === 'typescript_specialist')
   expect(row).toMatchObject({ kind: 'card', path: 'rules/roster.yaml' })
 })
@@ -39,13 +39,13 @@ test('the prompt says every command runs in the foreground', () => {
   )
 })
 
-test('the prompt tells a rebuild to list every case, carrying the untouched rows forward', () => {
+test('a rebuild lists every case, carrying untouched rows forward', () => {
   expect(seat(root, 'typescript_specialist').prompt).toContain(
     "A rebuild's fence lists every case again: carry forward the rows the refusal did not touch, update the ones it did.",
   )
 })
 
-test('the prompt carries the own-repo rules and the outside comment-density line', () => {
+test('the prompt carries the own-repo and outside comment rules', () => {
   const { prompt } = seat(root, 'typescript_specialist')
   for (const line of [
     'On our own repository:',

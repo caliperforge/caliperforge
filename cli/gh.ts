@@ -149,19 +149,19 @@ export function rehearsal(fork: string, branch: string, read: Read = gh): number
   return open[0]?.number ?? null
 }
 
-/** Opened under the CEO's `gh` credential; the machine holds no account of its own. */
+/** Opened under this host's `gh` credential; the machine holds no account of its own. */
 export function openPr(repo: string, head: string, title: string, bodyFile: string): string {
   return execFileSync('gh', ['pr', 'create', '--repo', repo, '--base', 'main', '--head', head,
     '--title', title, '--body-file', bodyFile], { encoding: 'utf8' }).trim()
 }
 
-/** #35 rule 1: an internal plan is closed by the commit that landed it on `main`, not by a pull request. */
+/** An internal plan is closed by the commit that landed it on `main`, not by a pull request. */
 export function closeIssue(repo: string, no: number, sha: string): void {
   execFileSync('gh', ['issue', 'close', String(no), '--repo', repo, '--comment', `landed on main as ${sha}`],
     { encoding: 'utf8' })
 }
 
-/** #72: a part of a split ticket, filed on our repo under the CEO's credential; the url is the part's name from here on. */
+/** A part of a split ticket, filed on our repo under this host's `gh` credential; the url is the part's name from here on. */
 export function fileIssue(repo: string, title: string, body: string, labels: string[]): string {
   return execFileSync('gh', ['issue', 'create', '--repo', repo, '--title', title, '--body-file', '-',
     ...labels.flatMap((l) => ['--label', l])], { encoding: 'utf8', input: body }).trim()
@@ -176,7 +176,7 @@ export function searchIssue(repo: string, subject: string): number | null {
   return found[0]?.number ?? null
 }
 
-/** The CEO's three answers to a sign-off card, as labels on our own repo. */
+/** The three answers to a sign-off card, as labels on our own repo. */
 export type Answer = 'go' | 'no' | 'talk'
 
 export const ANSWERS: readonly Answer[] = ['go', 'no', 'talk']
@@ -241,7 +241,7 @@ function run(args: string[], input?: string): string {
 
 /**
  * Only the label the owner of this host's `gh` credential set is an answer: the machine holds no account of
- * its own, and a collaborator's label is not the CEO's word, on the private card repo (#102) as anywhere.
+ * its own, and a collaborator's label is not the owner's word, on the private card repo as anywhere.
  */
 export function desk(repo: string, read: Read = gh, exec: Run = run): Desk {
   let owner: string | null = null

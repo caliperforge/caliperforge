@@ -64,7 +64,7 @@ export function ready(db: Db, plan: number): void {
   db.prepare("UPDATE deliverables SET state = 'ready' WHERE id = ?").run(latest(db, plan))
 }
 
-/** The card the CEO signed and the row it settles are the same row, and the push stamps it again. */
+/** The card signed off and the row it settles are the same row, and the push stamps it again. */
 export function approved(db: Db, plan: number, approval: number): void {
   db.prepare("UPDATE deliverables SET state = 'approved', approval_id = ? WHERE id = ?").run(approval, latest(db, plan))
 }

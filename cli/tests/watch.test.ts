@@ -10,7 +10,7 @@ import { CRASHED, down, liveness, livenessLine, watch } from '../watch.ts'
 
 const schema = join(import.meta.dirname, '../../schema')
 
-// 14:00Z is 08:00 in Guatemala, inside every pipe's 07:00-22:00 window.
+// 14:00Z is 08:00 in Guatemala, inside every pipe's 07:00 to 22:00 window.
 const NOW = new Date('2026-09-25T14:00:00.000Z')
 
 function world(open = true): Db {
@@ -83,7 +83,7 @@ test('a reporter with a store leaves a crash receipt and alerts', () => {
   expect(unread(root)).toEqual([])
 })
 
-test('a lane switched off with jobs in it alerts once, and not again until it is back on', () => {
+test('a lane off with jobs alerts once, not again until back on', () => {
   const db = world()
   const root = mkdtempSync(join(tmpdir(), 'cf-lanes-'))
   tickAt(db, 0)

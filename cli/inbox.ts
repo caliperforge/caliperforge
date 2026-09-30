@@ -7,8 +7,8 @@ import { zone } from '../store/lanes.ts'
 import { clock } from '../store/plans.ts'
 
 /**
- * #49: what a tick did that a person may have to act on, as one line per event in a file the COO
- * reads at every check-in (`cf inbox`), and a desktop notification for the ones that need one.
+ * What a tick did that a person may have to act on, as one line per event in a file `cf inbox`
+ * reads, and a desktop notification for the ones that need one.
  * Read is what `cf inbox --ack` has marked; nothing else counts as delivered.
  */
 export type Kind = 'blocked' | 'landed' | 'done' | 'refused' | 'asked' | 'signoff' | 'crashed' | 'flow' | 'late'

@@ -10,10 +10,8 @@ import { load, seat, tight, type Seat } from './rules.ts'
 const CF = '.cf'
 
 /**
- * #38: a seat building our own kernel writes anywhere in its checkout except `.cf/` -- the tree is
- * ours, and a fence that lets `src/` through but not `cli/` refuses the work the issue asked for.
- * A seat working a stranger's repository keeps the manifest's `write_paths`, which is the narrow
- * fence a counterparty never agreed to widen.
+ * A seat building our own kernel writes anywhere in its checkout except `.cf/`. A seat on a
+ * stranger's repository keeps the manifest's `write_paths`, the fence a counterparty agreed to.
  */
 export function refuse(cwd: string, writePaths: string[], path: string, ours = false): Refusal | null {
   const root = real(cwd)
@@ -24,7 +22,7 @@ export function refuse(cwd: string, writePaths: string[], path: string, ours = f
   return inside ? null : { origin_kind: 'ruling', origin_ref: 'seat.write_paths', path: rel }
 }
 
-/** A file not yet on disk resolves through its nearest existing parent: plan 438's new file, named through the tick's symlinked `.cf`, read as outside the checkout (09-28). */
+/** A path not yet on disk resolves through its nearest existing parent, so a new file named through a symlinked `.cf` stays inside the checkout. */
 function real(path: string): string {
   if (existsSync(path)) return realpathSync(path)
   const parent = dirname(path)

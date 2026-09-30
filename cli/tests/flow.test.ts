@@ -49,7 +49,7 @@ function refusals(db: Db, id: number, at: string, ...prints: string[]): void {
 
 const parked = (id: number): string => put(root, id, 'parked.md', '# Held\n\na person looks\n')
 
-test('D1-D4: one plan per case is listed once with the command that fixes it', () => {
+test('each case lists one plan once with the command fixing it', () => {
   const db = piped()
   pushed(db, plan(db, 1, 'halted'))
   parked(plan(db, 2, 'done'))
@@ -66,7 +66,7 @@ test('D1-D4: one plan per case is listed once with the command that fixes it', (
   ])
 })
 
-test('D4: a held plan whose ticket row is closed is held on a closed issue', () => {
+test('a held plan whose ticket closed is held on a closed issue', () => {
   const db = piped()
   hold(db, root, plan(db, 3, 'running'), 'the ticket', now)
   db.prepare("INSERT INTO tickets (repo, number, title, lane, closed_at) VALUES (?, 3, 'shut', 'machine', '2026-09-26T10:00:00Z')").run(REPO)
@@ -86,7 +86,7 @@ test('D5: a clean store lists nothing', () => {
   expect(flow(db, root, now)).toEqual([])
 })
 
-test('D6: a young repeat, a repeat with a later decision, a hold on a plan and a non-repeat are not listed', () => {
+test('skips a young repeat, later decision, plan hold, non-repeat', () => {
   const db = piped()
   refusals(db, plan(db, 1, 'blocked_on_ceo'), '2026-09-26 11:31:00', 'a', 'a')
   refusals(db, plan(db, 2, 'blocked_on_ceo'), '2026-09-26 11:00:00', 'a', 'a')
@@ -108,7 +108,7 @@ function part(db: Db, parent: number, number: number, after: number): void {
   db.prepare("INSERT INTO tickets (repo, number, title, lane, after) VALUES (?, ?, 'part', 'machine', ?)").run(REPO, number, after)
 }
 
-test('393b D1-D3: an overlap holding a slot, a part after a closed issue and an idle lane are each listed once', () => {
+test('lists once: slot overlap, part after closed issue, idle lane', () => {
   const db = piped()
   db.prepare("UPDATE pipes SET max_concurrent = 2, window_start = '00:00', window_end = '23:59' WHERE id = 1").run()
   plan(db, 2, 'queued')
@@ -123,7 +123,7 @@ test('393b D1-D3: an overlap holding a slot, a part after a closed issue and an 
   ])
 })
 
-test('393b D4: a lane idle on only the latest real tick, or across a dry one, is not listed', () => {
+test('skips a lane idle one real tick, or across a dry one', () => {
   const db = piped()
   tick(db, false, [1, 0, 1])
   tick(db, true, [1, 1, 1], [2, 1, 1])
@@ -131,7 +131,7 @@ test('393b D4: a lane idle on only the latest real tick, or across a dry one, is
   expect(flow(db, root, now)).toEqual([])
 })
 
-test('393b D2: a part whose After: issue is still open is not listed', () => {
+test('a part whose After: issue is still open is not listed', () => {
   const db = piped()
   plan(db, 2, 'queued')
   part(db, 2, 10, 9)
@@ -160,7 +160,7 @@ test('D7: flow leaves cf.db and .cf/ byte for byte as they were', () => {
 
 const later = (minutes: number): Date => new Date(now.getTime() + minutes * 60_000)
 
-test('reported D1: two hourly runs over the same stuck plan leave one flow line', () => {
+test('reported: two hourly runs on a stuck plan, one flow line', () => {
   const db = piped()
   refusals(db, plan(db, 4, 'blocked_on_ceo'), '2026-09-26 11:00:00', 'a', 'a')
   reported(db, root, now)
@@ -168,7 +168,7 @@ test('reported D1: two hourly runs over the same stuck plan leave one flow line'
   expect(all(root).map((e) => [e.kind, e.plan, e.ticket])).toEqual([['flow', 4, '#4']])
 })
 
-test('reported D2: a run inside the hour writes nothing; the next writes only the new finding', () => {
+test('reported: in-hour run writes nothing; next only new findings', () => {
   const db = piped()
   refusals(db, plan(db, 4, 'blocked_on_ceo'), '2026-09-26 11:00:00', 'a', 'a')
   reported(db, root, now)
@@ -179,7 +179,7 @@ test('reported D2: a run inside the hour writes nothing; the next writes only th
   expect(all(root).map((e) => e.plan)).toEqual([4, 6])
 })
 
-test('reported D3: with no open pipe it writes no inbox line and no stamp', () => {
+test('reported: no open pipe writes no inbox line and no stamp', () => {
   const db = fresh(schema)
   db.prepare("UPDATE settings SET value = '0' WHERE key = 'tick.zone_offset_minutes'").run()
   db.prepare("UPDATE pipes SET window_start = '03:00', window_end = '03:01'").run()

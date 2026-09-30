@@ -15,9 +15,9 @@ export interface Recorded extends Merge {
 }
 
 /**
- * #130. Every merge from main leaves this row: the files main brought in, the files the job had
+ * Every merge from main leaves this row: the files main brought in, the files the job had
  * changed since its branch point, whether they touch, and whether git took it. A merge that brings
- * in nothing still leaves a row with empty sets. #131 reads it to decide whether the reviews stand.
+ * in nothing still leaves a row with empty sets. `kept` in `sequencer/merge.ts` reads it to decide whether the reviews stand.
  */
 export function record(db: Db, plan: number, step: number, m: Merge): number {
   const newest = db.prepare('SELECT max(id) AS id FROM verdicts WHERE plan = ?').get(plan) as { id: number | null }

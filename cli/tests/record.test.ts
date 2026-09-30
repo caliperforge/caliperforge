@@ -73,7 +73,7 @@ function dir(): string {
   return mkdtempSync(join(tmpdir(), 'cf-record-'))
 }
 
-test('D1: the adopted #282 and a pushed #290 get rows in pr order; a pull request in another repo gets none', () => {
+test('adopted #282, pushed #290 get rows by pr; other repos none', () => {
   const db = fresh(schema)
   const d = dir()
   const first = adopted(db, d, REPO, 282)
@@ -91,7 +91,7 @@ test('D1: the adopted #282 and a pushed #290 get rows in pr order; a pull reques
   expect(db.prepare('SELECT count(*) AS n FROM records WHERE repo = ?').get(OTHER)).toEqual({ n: 0 })
 })
 
-test('D2: the last word skips the author and bots and takes the newest of the rest; an empty review gives its state', () => {
+test('last word: newest not by author or bot; empty review: state', () => {
   const db = fresh(schema)
   adopted(db, dir(), REPO, 282)
   const said = (over: Partial<Pr>): string => render(REPO, fill(db, REPO, (repo, no) => view(repo, no, over)), 0).split('\n')[1] ?? ''
@@ -120,7 +120,7 @@ test('D3: still counts only open, unmerged rows, per repo', () => {
   expect([still(db, REPO), still(db, OTHER)]).toEqual([2, 1])
 })
 
-test('D4: a second fill rewrites each row in place and shows the new state', () => {
+test('a second fill rewrites rows in place, showing the new state', () => {
   const db = fresh(schema)
   adopted(db, dir(), REPO, 282)
   fill(db, REPO, (repo, no) => view(repo, no))
@@ -129,7 +129,7 @@ test('D4: a second fill rewrites each row in place and shows the new state', () 
   expect(still(db, REPO)).toBe(0)
 })
 
-test('D5: a repo that is not owner/repo is refused before gh is read', () => {
+test('a repo that is not owner/repo is refused before gh is read', () => {
   const db = fresh(schema)
   const asked: number[] = []
   expect(() => fill(db, 'acme', (repo, no) => {

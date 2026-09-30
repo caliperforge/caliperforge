@@ -37,14 +37,14 @@ const count = (db: Db, table: string): number =>
 
 const schema = (): Db => fresh(join(import.meta.dirname, '..', 'schema'))
 
-test('lists open and closed issues on all three repos with the history limit', () => {
+test('lists open and closed issues per repo to the history limit', () => {
   const log: string[] = []
   backfillTickets(schema(), canned(LISTINGS, log))
   expect(log).toEqual([SELF, ATELIER, 'caliperforge/v4-hook-index'].flatMap((repo) => ['open', 'closed'].map((state) =>
     `issue list --repo ${repo} --state ${state} --limit 5000 --json number,title,body,url,labels,createdAt,closedAt,stateReason`)))
 })
 
-test('D3 stores NOT_PLANNED as state_reason, an empty reason as NULL, and the diagnosis:wrong label as 1', () => {
+test('D3 NOT_PLANNED, empty reason as NULL, diagnosis:wrong as 1', () => {
   const db = schema()
   recordListing(db, SELF, [issue(SELF, 5, ['lane:machine'], '2026-02-01T09:00:00Z', 'NOT_PLANNED'),
     issue(SELF, 6, ['lane:machine', 'diagnosis:wrong'], null, '')], false)
@@ -54,7 +54,7 @@ test('D3 stores NOT_PLANNED as state_reason, an empty reason as NULL, and the di
   ])
 })
 
-test('fills opened_at, closed_at and kind, and a second run leaves the same rows', () => {
+test('fills opened_at, closed_at and kind, idempotently', () => {
   const db = schema()
   expect(backfillTickets(db, canned(LISTINGS))).toBe(4)
   const first = rows(db)
@@ -68,7 +68,7 @@ test('fills opened_at, closed_at and kind, and a second run leaves the same rows
   expect(rows(db)).toEqual(first)
 })
 
-test('a listing as long as the history limit throws and writes nothing', () => {
+test('a listing at the history limit throws and writes nothing', () => {
   const db = schema()
   const full = [...Array(HISTORY).keys()].map((n) => issue(ATELIER, n + 10, ['lane:atelier'], '2026-02-02T09:00:00Z'))
   expect(() => backfillTickets(db, canned({ ...LISTINGS, [`${ATELIER} closed`]: full })))

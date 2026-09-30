@@ -24,13 +24,13 @@ const planOf = (d: Db, id: number | null): PlanRow => PlanRow.parse(d.prepare('S
 const row = (lane: string): string => `INSERT INTO plans (pipe_id, template, state, queued_at, lane, seat, origin)
   VALUES ((SELECT id FROM pipes WHERE name = 'uniswap'), 'pr_path', 'queued', '2026-09-27', '${lane}', 'python_specialist', '${HOOKS}')`
 
-test('the plans table takes the uniswap lane and no lane it does not list', () => {
+test('plans table takes the uniswap lane and no unlisted lane', () => {
   const d = fresh(schema)
   expect(rejects(d, row('uniswap'))).toBe(false)
   expect(rejects(fresh(schema), row('solana'))).toBe(true)
 })
 
-test('a hook-index issue files on the uniswap lane, pipe and python seat, and branches in its home', () => {
+test('hook-index: uniswap lane, pipe, python seat, branch in home', () => {
   const d = fresh(schema)
   const at = root()
   const filed = add(d, at, 'caliperforge/v4-hook-index#1', 'ceo', undefined, canned(HOOKS, ['lane:uniswap']))

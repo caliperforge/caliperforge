@@ -48,7 +48,7 @@ function piped(): Db {
 let root = ''
 beforeEach(() => { root = mkdtempSync(join(tmpdir(), 'cf-plan-')) })
 
-test('a labelled issue files one queued plan row on its lane, seat, and origin', () => {
+test('a labelled issue files one queued row: lane, seat, origin', () => {
   const db = piped()
   const filed = add(db, root, 'caliperforge/caliperforge#25', 'ceo', 'internal', canned([ISSUE]))
   expect(filed).toMatchObject({ state: 'queued', lane: 'machine', seat: 'typescript_specialist', origin: null })
@@ -56,7 +56,7 @@ test('a labelled issue files one queued plan row on its lane, seat, and origin',
     .toEqual({ lane: 'machine', seat: 'typescript_specialist', origin: URL, template: 'pr_path', state: 'queued', priority: 1 })
 })
 
-test('a seat label wins over the lane template, and each lane files on its own template', () => {
+test('seat label beats lane template; lanes file on own templates', () => {
   const db = piped()
   const rows = [
     { ...ISSUE, number: 30, url: `${URL.slice(0, -2)}30`, labels: ['lane:comms', 'seat:kotlin_specialist'] },
@@ -69,7 +69,7 @@ test('a seat label wins over the lane template, and each lane files on its own t
     .toEqual([{ template: 'comms' }, { template: 'research' }])
 })
 
-test('an issue with no lane label is refused, naming every label that would settle it, with a ruling', () => {
+test('no lane label refuses with a ruling naming each label to add', () => {
   const db = piped()
   const filed = add(db, root, 'caliperforge/caliperforge#25', 'ceo', 'internal', canned([{ ...ISSUE, labels: ['bug'] }]))
   expect(filed.state).toBe('refused')
@@ -81,7 +81,7 @@ test('an issue with no lane label is refused, naming every label that would sett
   expect(db.prepare('SELECT count(*) AS n FROM events').get()).toEqual({ n: 0 })
 })
 
-test('the P label on the issue is the priority it files at, and two of them file nothing', () => {
+test('the P label sets the priority; two P labels file nothing', () => {
   const db = piped()
   const rows = [{ ...ISSUE, labels: ['lane:machine', 'P2'] },
     { ...ISSUE, number: 26, url: `${URL.slice(0, -2)}26`, labels: ['lane:machine', 'P0', 'P2'] }]
@@ -97,7 +97,7 @@ test('the P label on the issue is the priority it files at, and two of them file
   expect(db.prepare('SELECT count(*) AS n FROM plans').get()).toEqual({ n: 1 })
 })
 
-test('the same issue twice is one row, and the second call returns the first plan', () => {
+test('the same issue twice is one row; the second call returns it', () => {
   const db = piped()
   const first = add(db, root, 'caliperforge/caliperforge#25', 'ceo', 'internal', canned([ISSUE]))
   const again = add(db, root, 'caliperforge/caliperforge#25', 'ceo', 'internal', canned([ISSUE]))
@@ -115,7 +115,7 @@ test('D3 the filed event names who filed the plan', () => {
   expect(db.prepare('SELECT actor FROM events ORDER BY id').all()).toEqual([{ actor: 'ceo' }, { actor: 'coo' }])
 })
 
-test('D1 cf plan add refuses a --by outside ceo and coo before it files or reads anything', () => {
+test('plan add refuses --by not ceo/coo before any file or read', () => {
   const db = piped()
   const cf = new Command()
   registerPlans(cf, { root, db: () => db, out: () => undefined })
@@ -132,7 +132,7 @@ test('the schema, not the code, is what holds one plan per issue', () => {
     VALUES (1, 'pr_path', 'queued', '2026-09-18', 'machine', 'typescript_specialist', ?)`).run(URL)).toThrow()
 })
 
-test('cf plans --unfiled lists the open issues no plan row names, and drops the one it does', () => {
+test('cf plans --unfiled lists only open issues no plan row names', () => {
   const db = piped()
   const rows = [ISSUE, { ...ISSUE, number: 26, url: `${URL.slice(0, -2)}26`, labels: [] }]
   const log: string[] = []
@@ -144,7 +144,7 @@ test('cf plans --unfiled lists the open issues no plan row names, and drops the 
   expect(log[0]).toContain('search issues --owner caliperforge --state open')
 })
 
-test('the filed plan carries the raw issue on disk as the ask step 1 briefs from', () => {
+test('filed plan keeps raw issue on disk as the ask step 1 briefs', () => {
   const db = piped()
   const carried = { ...ISSUE, body: 'What: run our own plan.\n\n- **D1** steps 0 and 1 pass\n- **D2** ask.md is written\n' }
   const filed = add(db, root, 'caliperforge/caliperforge#25', 'ceo', 'internal', canned([carried]))
@@ -153,7 +153,7 @@ test('the filed plan carries the raw issue on disk as the ask step 1 briefs from
   expect(doneIds(body)).toEqual(['D1', 'D2'])
 })
 
-test('the reference, the lane label, the seat label and the priority label are read off exactly', () => {
+test('reference and lane, seat, priority labels are read exactly', () => {
   expect(parse('caliperforge/caliperforge#25')).toEqual({ repo: 'caliperforge/caliperforge', no: 25 })
   expect(() => parse('caliperforge#25')).toThrow('is not an <owner/repo>#<n> issue reference')
   expect(laneOf([{ name: 'lane:atelier' }])).toBe('atelier')

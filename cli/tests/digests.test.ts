@@ -27,7 +27,7 @@ function rosterHashes(root: string): string[] {
   return rows(root).filter((r) => r.path === 'rules/roster.yaml').map((r) => r.hash)
 }
 
-test('a changed prompt fills that seat digest and every roster hash, and a second fill writes nothing', () => {
+test('changed prompt fills its digest and roster hashes, once', () => {
   const root = tree()
   appendFileSync(join(root, 'seats/brief_writer/prompt.md'), '\n')
   const stale = rosterHashes(root)
@@ -43,7 +43,7 @@ test('a changed prompt fills that seat digest and every roster hash, and a secon
   expect(fill(root, TODAY)).toEqual([])
 })
 
-test('an added seat fills both its digests and appends a row dated today, leaving the dates already written', () => {
+test('added seat: both digests, a row dated today, old dates kept', () => {
   const root = tree()
   const seat = join(root, 'seats/yaml_specialist')
   mkdirSync(seat)
@@ -63,7 +63,7 @@ test('an added seat fills both its digests and appends a row dated today, leavin
   expect(check(root, TODAY)).toEqual([])
 })
 
-test('check names a hand-edited digest and the hex that belongs there, writes nothing, and passes a clean tree', () => {
+test('check names edited digest and hex, no write; clean passes', () => {
   const root = tree()
   expect(check(root, TODAY)).toEqual([])
   const roster = join(root, 'rules/roster.yaml')
@@ -79,7 +79,7 @@ test('check names a hand-edited digest and the hex that belongs there, writes no
   expect(readFileSync(roster, 'utf8')).toBe(was)
 })
 
-test('a digest too short for the roster schema is named and filled, and what follows the block survives', () => {
+test('too-short digest is named and filled; text after block kept', () => {
   const root = tree()
   const roster = join(root, 'rules/roster.yaml')
   const hex = digest(join(root, 'seats/brief_writer/prompt.md'))
@@ -95,7 +95,7 @@ test('a digest too short for the roster schema is named and filled, and what fol
   expect(check(root, TODAY)).toEqual([])
 })
 
-test('a roster whose block was deleted gets one back and keeps its seats', () => {
+test('a roster with its block deleted gets it back, seats kept', () => {
   const root = tree()
   const roster = join(root, 'rules/roster.yaml')
   const was = readFileSync(roster, 'utf8')
@@ -106,7 +106,7 @@ test('a roster whose block was deleted gets one back and keeps its seats', () =>
   expect(check(root, TODAY)).toEqual([])
 })
 
-test('check names a seed a fill would rewrite, whatever the edited row holds, and the fill keeps its date', () => {
+test('check names a seed fill would rewrite; fill keeps its date', () => {
   const root = tree()
   const seed = join(root, 'rules.seed.sql')
   const was = readFileSync(seed, 'utf8')

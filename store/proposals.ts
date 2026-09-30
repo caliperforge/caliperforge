@@ -29,7 +29,7 @@ export function bytes(p: Pick<ProposalRow, 'class' | 'subject' | 'value'>): stri
   return `${p.class} ${p.subject} = ${p.value}`
 }
 
-/** The evidence on a signed row is what the CEO signed against, so the upsert stops at the card he has already settled. */
+/** The evidence on a signed row is what was signed against, so the upsert leaves a settled card as it is. */
 export function propose(db: Db, item: Item): number | null {
   const row = db.prepare(`INSERT INTO proposals
     (class, subject, value, state, match_ruling_id, match_issue_no, evidence)

@@ -8,7 +8,7 @@ import { tight, WRITERS } from './rules.ts'
 
 const OUTSIDE = /(^|\/)(crypto-contributor|agents|ops|knowledge|plans|escalations)(\/|$)|(^|\/)T-[A-Z][A-Z0-9-]*\.md$/
 
-/** #84: a reviewer judges the packet it was handed. Browsing the checkout is what re-reads the repository it already has. */
+/** A reviewer judges the packet it was handed, not the checkout. */
 export const BROWSE = new Set(['Glob', 'Grep'])
 
 export const Review = z.object({
@@ -81,7 +81,6 @@ const SMALL = 300
 const PER = 100
 export const CAP_MAX = 16
 
-/** A reviewer's turns grow with the diff it judges: 8 read a small diff, a 777-line one ran out before its verdict. */
 export function stepsFor(diff: string): number {
   const changed = diff.split('\n').filter((l) => /^[+-]/.test(l) && !/^(\+\+\+|---) /.test(l)).length
   return Math.min(CAP_MAX, STEP_CAP + Math.floor(Math.max(0, changed - SMALL) / PER))

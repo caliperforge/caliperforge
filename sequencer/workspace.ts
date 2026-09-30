@@ -49,11 +49,7 @@ export function drop(root: string, plan: number, name: string): void {
   rmSync(join(planDir(root, plan), name), { force: true })
 }
 
-/**
- * #154. A finished plan's checkout is 99% of what `.cf/work` holds -- 7.0G of the 7.1G the 39 terminal
- * plans carried on 2026-09-22. Its paper is the other 1% and stays: the ask, the refusals, the
- * handbacks, the transcripts and the verdict trees are the only record of what the seats said.
- */
+/** A finished plan's checkout goes; its paper stays: the ask, the refusals, the handbacks, the transcripts and the verdict trees are the only record of what the seats said. */
 export function reap(root: string, plans: number[]): number[] {
   return plans.filter((plan) => {
     const dir = join(planDir(root, plan), 'src')
@@ -89,10 +85,10 @@ export const FORK = 'caliperforge'
 /** Our own repository: the tree an internal plan is branched in, and the one its PR is opened on. */
 export const SELF = `${FORK}/caliperforge`
 
-/** #102: the private repo the sign-off cards live on, apart from our public tickets and pull requests. */
+/** the private repo the sign-off cards live on, apart from our public tickets and pull requests. */
 export const SIGNOFF = `${FORK}/signoff`
 
-/** A path at the checkout's root that names the language its builder must be able to compile (#204 added the manifests). */
+/** A path at the checkout's root that names the language its builder must be able to compile. */
 const LANGUAGES: [string, string][] = [['kotlin', 'kotlin'], ['Cargo.toml', 'rust'], ['go.mod', 'go'],
   ['pyproject.toml', 'python'], ['Gemfile', 'ruby'], ['composer.json', 'php']]
 
@@ -142,7 +138,7 @@ function remote(base: string, slug: string): string {
  */
 export const MAIN = 'refs/remotes/upstream/main'
 
-/** #35 rule 2: main is re-read before a tree is cut and before a base is judged, so nothing starts from a stale ref. */
+/** main is re-read before a tree is cut and before a base is judged, so nothing starts from a stale ref. */
 export function fetchMain(dir: string): string {
   git(dir, ['fetch', '--no-tags', 'origin', '+main:refs/remotes/origin/main'])
   const from = assembled(dir)
@@ -191,7 +187,7 @@ export function conflicted(dir: string): boolean {
 }
 
 /**
- * #35 rule 2: the live kernel tree is the machine's, not a seat's. Every seat and reviewer works in
+ * the live kernel tree is the machine's, not a seat's. Every seat and reviewer works in
  * `.cf/work/<plan>/src`, so a cwd under the root that is not one is the tree the tick itself runs from.
  */
 export function liveTree(root: string, cwd: string): boolean {
@@ -241,7 +237,7 @@ function paths(listed: string): string[] {
   return listed.split('\0').filter((path) => path !== '')
 }
 
-/** #202: a plan reopened after its checkout was reaped starts from the branch it already pushed, never a fresh cut of main. */
+/** a plan reopened after its checkout was reaped starts from the branch it already pushed, never a fresh cut of main. */
 function pushed(dir: string, branch: string): boolean {
   try {
     git(dir, ['rev-parse', '--verify', '--quiet', `refs/remotes/origin/${branch}`])
@@ -262,7 +258,7 @@ export function languageOf(dir: string): string | null {
   return null
 }
 
-/** #43: an Xcode project or a Swift package at the checkout's root is a Swift tree. */
+/** an Xcode project or a Swift package at the checkout's root is a Swift tree. */
 function swift(dir: string): boolean {
   if (existsSync(join(dir, 'Package.swift'))) return true
   return existsSync(dir) && readdirSync(dir).some((name) => name.endsWith('.xcodeproj'))
@@ -280,7 +276,7 @@ export function snapshot(dir: string): string {
   return git(dir, ['write-tree']).trim()
 }
 
-/** #251: a re-cut checkout no longer holds the tree a reviewer judged before it; asking git for it throws. */
+/** a re-cut checkout no longer holds the tree a reviewer judged before it; asking git for it throws. */
 export function holds(dir: string, sha: string): boolean {
   try {
     git(dir, ['cat-file', '-e', sha])
@@ -320,7 +316,7 @@ function blob(dir: string, tree: string, path: string): string {
 }
 
 /**
- * #130. The two file sets a merge is judged by, read before it is made: what main has changed since
+ * The two file sets a merge is judged by, read before it is made: what main has changed since
  * this branch was cut, and what the branch has changed over the same span. The builder's work is
  * committed by `headOf` before this is called, so `mine` is the whole of it.
  */
@@ -344,11 +340,9 @@ export function git(cwd: string, args: string[]): string {
 export const CARRY = 'step-2.diff.prev'
 
 /**
- * #162. A conflicting merge used to abort back onto the old base and hand the builder that same stale
- * tree, so the rebuild edited its own old file and the next merge met the same conflict: plan 62 went
- * round five times on 09-21 at 300-470k a lap. Handing main's version alongside is not enough -- git
- * still has two changes to the same lines. The base has to move. So the builder's diff is saved, the
- * checkout is dropped, and the next tick cuts a new one from main for that diff to be re-applied onto.
+ * A conflicting merge moves the base: git still meets two changes to the same lines if main's version is
+ * only handed alongside. So the builder's diff is saved, the checkout is dropped, and the next tick cuts a
+ * new one from main for that diff to be re-applied onto.
  */
 export function recut(root: string, plan: number): string {
   const diff = diffOf(root, plan)

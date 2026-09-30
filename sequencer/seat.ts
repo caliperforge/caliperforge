@@ -85,7 +85,7 @@ async function fenced(db: Db, root: string, plan: PlanRow, step: Step, provider:
 }
 
 /**
- * #64. The build names paths under `## Deleted` and the kernel removes them, before the rails read the
+ * The build names paths under `## Deleted` and the kernel removes them, before the rails read the
  * tree; `git add -A` at the commit stages the removal, so the deletion is in the diff the reviewers
  * judge. The fence that bars a write bars a delete -- the same `refuse()` the seat's own tools run
  * through -- and a path that is not there refuses rather than passing as a silent no-op.
@@ -203,15 +203,12 @@ function lastQuestion(db: Db, root: string, plan: number): string {
   return `\n# Your last question\n\n${question}\n# Files you opened last time\n\n${rows.join('\n')}\n`
 }
 
-/**
- * #274: Atelier reads cf.db, so its brief writer may read the machine's schema and CLI, read-only. Before this,
- * plans 114, 116, 143, 146 and 155 each stopped at step 1 to ask for a column name a person had to copy in.
- */
+/** Atelier reads cf.db, so its brief writer may read the machine's schema and CLI, read-only. */
 export function machineReads(root: string, plan: PlanRow, seat: string): string[] {
   return plan.lane === 'atelier' && seat === 'brief_writer' ? [join(root, 'schema'), join(root, 'cli')] : []
 }
 
-/** Parallel dashboard jobs kept colliding on the same four files (atelier #45 split them). */
+/** Dashboard jobs run side by side, so each section keeps to its own files. */
 const DASHBOARD = '\n# Dashboard layout\n\nEach dashboard section owns its files: a view in `Atelier/Views/Dashboard/`, its query as an extension on `DashboardSource` in `Atelier/Services/Dashboard/`, its models in `Atelier/Models/Dashboard/`, and its tests in `AtelierTests/Dashboard/`. A new table, chart or row gets new files there; only `Atelier/Views/DashboardView.swift` composes the sections, with one line per section. Do not add dashboard state or queries to `CFQueueStore`, and do not put a new section in another section\'s files.\n'
 
 function store(root: string, plan: PlanRow): string {
@@ -220,7 +217,7 @@ function store(root: string, plan: PlanRow): string {
   return `\n\n# The machine's store\n\nAtelier reads the machine's cf.db. Its tables are defined in \`${schema}/*.sql\` (later files alter earlier ones) and the \`cf\` commands in \`${cli}/\`. Read them for column names and values; you may not write there.\n${DASHBOARD}`
 }
 
-/** A plan queued before the brief seat carries its ask as `issue.md`, the name the brief now takes. */
+/** A plan with no `ask.md` carries its ask as `issue.md`, the name the brief takes over. */
 function askOf(root: string, plan: number): string {
   return maybe(root, plan, 'ask.md') ?? move(root, plan, 'issue.md', 'ask.md')
 }
@@ -256,9 +253,9 @@ function exited(step: Step, fired: Fired): Outcome {
 }
 
 /**
- * The builder's packet (#67): the brief and the text of the files it lists; on a rebuild, the spans the
+ * The builder's packet: the brief and the text of the files it lists; on a rebuild, the spans the
  * refusal named, the rows its last hand-back claimed, the builder's own diff so far, and the text of only
- * the files those touch. After a #162 re-cut the diff is the one carried across and the files are main's,
+ * the files those touch. After a re-cut from main the diff is the one carried across and the files are main's,
  * so the packet says to re-apply rather than to carry on: the builder is looking at a tree that has none
  * of its work in it.
  */
@@ -365,7 +362,7 @@ export async function fireReview(db: Db, root: string, plan: PlanRow, step: Step
   }
 }
 
-/** #132: on someone else's repository the reviewer is handed its footing instead of reading for it. */
+/** On someone else's repository the reviewer is handed its footing instead of reading for it. */
 function outside(db: Db, root: string, plan: PlanRow, src: string): Handover {
   const base = maybe(root, plan.id, 'base.sha')
   if (internal(plan) || base === null || !cloned(src)) return {}
@@ -397,8 +394,9 @@ function referenced(src: string, issue: string): Pick<Bench, 'reference'> {
 }
 
 /**
- * #86. Step 3 already ran the checkout's own checks on this diff; the reviewer is told so rather than
- * reasoning its way to it. #204: on a stranger's repo, once step 3 ran its language's gates. Read off the rail's row, never re-run, and only while the diff is the one it judged.
+ * Step 3 already ran the checkout's own checks on this diff, or on a stranger's repo its language's gates;
+ * the reviewer is told so rather than reasoning its way to it. Read off the rail's row, never re-run, and
+ * only while the diff is the one it judged.
  */
 export function checked(db: Db, plan: PlanRow, src: string, diff: string): { checks?: string } {
   const outside = internal(plan) ? null : outsideLanguage(languageFor(db, plan, src))
@@ -459,7 +457,7 @@ function verdictText(v: Judged): string {
   return `---\noutcome: ${v.outcome}\n${defect}spans:\n${v.findings.map(entry).join('\n')}\n---\n\n${v.message}\n`
 }
 
-/** A plain finding is the bare span the reviewers have always written; a cosmetic one carries its fix on. */
+/** A plain finding is the bare span; a cosmetic one carries its kind and fix. */
 function entry(f: Finding): string {
   if (f.kind === 'real' && f.fix === null) return `  - ${f.span}`
   return `  - span: ${f.span}\n    kind: ${f.kind}\n    fix: ${JSON.stringify(f.fix)}`

@@ -8,7 +8,7 @@ import { clock, inWindow, openPipes, PipeRow } from '../store/plans.ts'
 import { receipt } from '../store/ticks.ts'
 import { crashed } from './inbox.ts'
 
-/** #251. Inside an open window a real tick lands every minute; ten without one means the machine is down, not idle. */
+/** Inside an open window a real tick lands every minute; ten without one means the machine is down, not idle. */
 export const STALE_MINUTES = 10
 
 /** The note a tick that threw leaves on its receipt, so a crash reads as one in the table and not as a quiet minute. */
@@ -45,10 +45,7 @@ export function livenessLine(db: Db, l: Liveness): string {
 
 export type Post = (title: string, body: string) => void
 
-/**
- * A lane the shared-failure rule switched off keeps ticking with nothing to fire: alive, and stalled. On 09-25
- * two false run-wall stops turned `internal` off at 08:21 and five jobs sat until 08:55 with every tick green.
- */
+/** A lane the shared-failure rule switched off keeps ticking with nothing to fire: alive, and stalled. */
 export function stalledLanes(db: Db, now: Date): string[] {
   const at = hhmm(db, now)
   const rows = db.prepare(`SELECT p.*, count(pl.id) AS jobs FROM pipes p JOIN plans pl ON pl.pipe_id = p.id

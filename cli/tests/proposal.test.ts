@@ -5,7 +5,7 @@ import { MERGED, OPEN, REPO, rows, world } from './proposal-world.ts'
 
 const count = (db: Db, table: string): number => (db.prepare(`SELECT count(*) AS n FROM ${table}`).get() as { n: number }).n
 
-test('D1, D6: a ready target with a merged row gets its scan line and record, and nothing is written', () => {
+test('ready target with merged row: scan line, record, no write', () => {
   const { db, ready, plan } = world()
   const before = ['plans', 'targets', 'records'].map((t) => count(db, t))
   const p = String(plan)
@@ -21,7 +21,7 @@ test('D2: a queued target and a missing id are not ready', () => {
   expect(() => askFor(db, 999)).toThrow('target 999 is not ready')
 })
 
-test('D3: a repo with only open rows, or none, has no merged pull request on record', () => {
+test('repo with only open rows or none has no merged PR on record', () => {
   const { db, ready } = world()
   db.prepare('DELETE FROM records WHERE pr = 3').run()
   expect(() => askFor(db, ready)).toThrow(`${REPO} has no merged pull request on record`)
@@ -29,12 +29,12 @@ test('D3: a repo with only open rows, or none, has no merged pull request on rec
   expect(() => askFor(db, ready)).toThrow(`${REPO} has no merged pull request on record`)
 })
 
-test('D4: a card whose Shape line cites the merged row returns its url', () => {
+test('a card whose Shape line cites the merged row returns its url', () => {
   const { db } = world()
   expect(cites(`# Card\n**Shape:** like ${MERGED} but smaller\n`, rows(db))).toBe(MERGED)
 })
 
-test('D5: an open url, a foreign url and a missing Shape line are refused', () => {
+test('open url, foreign url and a missing Shape line are refused', () => {
   const { db } = world()
   const refused = 'the card cites no merged pull request on record'
   expect(() => cites(`**Shape:** ${OPEN}`, rows(db))).toThrow(refused)

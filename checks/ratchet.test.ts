@@ -126,3 +126,8 @@ it('inbox.ts to watch.ts meet their ratchet rows', () => {
   const paths = ['cli/inbox.ts', 'cli/map.ts', 'cli/queue.ts', 'cli/watch.ts']
   expect(ratcheted(join(import.meta.dirname, '..'), {}).filter((f) => paths.includes(f.path))).toEqual([])
 })
+
+it('providers meet their ratchet rows', () => {
+  const paths = ['providers/claude-agent-sdk/index.ts', 'providers/credential.ts', 'providers/kind.ts']
+  expect(ratcheted(join(import.meta.dirname, '..'), {}).filter((f) => paths.includes(f.path))).toEqual([])
+})

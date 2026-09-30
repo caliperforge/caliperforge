@@ -186,7 +186,7 @@
     "silent-catch": 2
   },
   "providers/claude-agent-sdk/index.ts": {
-    "lines": 253
+    "lines": 243
   },
   "providers/claude-agent-sdk/tests/limits.test.ts": {
     "citing-comment": 1
@@ -199,13 +199,11 @@
     "test-name": 2
   },
   "providers/credential.ts": {
-    "citing-comment": 1,
     "lines": 88,
     "silent-catch": 1
   },
   "providers/kind.ts": {
-    "citing-comment": 3,
-    "lines": 52
+    "lines": 53
   },
   "providers/tests/credential.test.ts": {
     "test-name": 4

@@ -37,10 +37,11 @@ const EXIT = /exit code (\d+)/
 export type Ci = { wait: Outcome } | { failed: Failure | null; at: string }
 
 /**
- * #332. Our own repo's suite runs on GitHub at the branch head instead of on the laptop, where under load it
- * ran past the ten-minute cap (09-26). The head is committed and force-sent to the job's own branch, which carries
- * no pull request and is re-cut from main when main moves under it (plan 130), and the runs at that sha are the checks. Null hands the checks back to the laptop: the switch is off, the repo runs no workflow, the push
- * or the listing failed, no run showed within `SHOWS` ticks, or one ran past `RUNS`.
+ * Our own repo's suite runs on GitHub at the branch head instead of on the laptop. The head is committed and
+ * force-sent to the job's own branch, which carries no pull request and is re-cut from main when main moves
+ * under it, and the runs at that sha are the checks. Null hands the checks back to the laptop: the switch is
+ * off, the repo runs no workflow, the push or the listing failed, no run showed within `SHOWS` ticks, or one
+ * ran past `RUNS`.
  */
 export function ciChecks(db: Db, root: string, plan: PlanRow, wire: Wire = WIRE): Ci | null {
   if (!on(db) || !kernelPlan(plan) || !workflows(srcDir(root, plan.id))) return null

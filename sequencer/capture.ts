@@ -92,8 +92,8 @@ function named(titles: string[]): Set<number> {
 const Summary = z.object({ sub_issues_summary: z.object({ total: z.int() }).optional() })
 
 /**
- * #260: an issue with sub-issues is a parent; its parts are the jobs, and building it repeats them (#139, #138
- * and #85 on 09-25). An answer that cannot be read counts as a parent this tick, and the next tick asks again.
+ * An issue with sub-issues is a parent: its parts are the jobs, and building it repeats them. An answer that
+ * cannot be read counts as a parent this tick, and the next tick asks again.
  */
 function parent(repo: string, no: number, read: Read, lines: string[]): boolean {
   try {
@@ -113,10 +113,7 @@ function halt(db: Db, repo: string, open: Set<string>): void {
   landed(db, repo, open)
 }
 
-/**
- * #257: a plan whose work is on main and whose issue is closed is finished, whatever step it thinks it is on.
- * Plans 88 and 89 were landed by hand and kept going; each lap after that reviewed an empty diff.
- */
+/** A plan whose work is on main and whose issue is closed is finished, whatever step it thinks it is on. */
 function landed(db: Db, repo: string, open: Set<string>): void {
   const live = db.prepare(`SELECT p.* FROM plans p WHERE p.state IN ('queued', 'running', 'blocked_on_ceo') AND p.origin IS NOT NULL
     AND EXISTS (SELECT 1 FROM deliverables d WHERE d.plan_id = p.id AND d.state = 'pushed')`).all().map((r) => PlanRow.parse(r))
@@ -167,7 +164,7 @@ export function signals(view: Pr, row: Pushed): Signal[] {
   ].filter((s) => s.kind !== 'bot_review' || typeof s.head === 'string')
 }
 
-/** #103: a review bot's summary comment carries its score as its review would; only a person's comment asks something of us. */
+/** A review bot's summary comment carries its score as its review would; only a person's comment asks something of us. */
 function comment(base: Base, c: Pr['comments'][number]): Signal {
   const bot = BOT.test(c.author.login)
   return { ...base, kind: bot ? 'bot_review' : 'comment', author: c.author.login, at: c.createdAt, external_id: c.id,

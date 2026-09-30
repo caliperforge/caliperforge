@@ -86,3 +86,8 @@ it('capture.ts to coolite.ts meet their ratchet rows', () => {
   const paths = ['sequencer/capture.ts', 'sequencer/checks.ts', 'sequencer/ci.ts', 'sequencer/coolite.ts']
   expect(ratcheted(join(import.meta.dirname, '..'), {}).filter((f) => paths.includes(f.path))).toEqual([])
 })
+
+it('seat.ts to signals.ts meet their ratchet rows', () => {
+  const paths = ['sequencer/seat.ts', 'sequencer/settle.ts', 'sequencer/signals.ts']
+  expect(ratcheted(join(import.meta.dirname, '..'), {}).filter((f) => paths.includes(f.path))).toEqual([])
+})

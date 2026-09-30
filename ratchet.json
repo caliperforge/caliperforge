@@ -518,13 +518,17 @@
     "lines": 65
   },
   "sequencer/seat.ts": {
-    "lines": 372,
+    "lines": 464,
     "prepare": 5,
     "silent-catch": 1
   },
+  "sequencer/settle.ts": {
+    "lines": 216,
+    "prepare": 3,
+    "silent-catch": 2
+  },
   "sequencer/signals.ts": {
-    "citing-comment": 1,
-    "lines": 78,
+    "lines": 148,
     "prepare": 6
   },
   "sequencer/signoff.ts": {

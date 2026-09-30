@@ -54,7 +54,7 @@ test('refuses every unmet ready condition by name', () => {
   ])
 })
 
-test('passes a title ending on a whole name, on a plain word, or on our own plan', () => {
+test('passes a title ending on a whole name, a plain word, or ours', () => {
   const green = proof('green.proof.json', 'pass')
   const red = proof('red.proof.json', 'refuse')
   const whole = { ...green, title: 'feat(ruby): PayKit.configure_from_env', named: red.named }
@@ -69,13 +69,13 @@ test('passes a green deliverable', () => {
   expect(verdict.spans).toEqual([])
 })
 
-test('refuses a green tree the counterparty bot flagged, and a fork nobody can read', () => {
+test('refuses a bot-flagged green tree and a fork nobody can read', () => {
   const clean = proof('green.proof.json', 'pass')
   expect(ready({ ...clean, bot_clean: false }).spans).toEqual(['bot:1 ready.bot_clean'])
   expect(ready({ ...clean, fork_public: false }).spans).toEqual(['fork:1 not.public'])
 })
 
-test('a slow or unmeasured repo does not hold a green deliverable back', () => {
+test('a slow or unmeasured repo holds no green deliverable back', () => {
   expect(ready({ ...proof('green.proof.json', 'pass'), repo: 'cold-org/project' }).spans).toEqual([])
   expect(ready({ ...proof('green.proof.json', 'pass'), repo: 'never-org/project' }).spans).toEqual([])
 })

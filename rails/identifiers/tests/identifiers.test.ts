@@ -14,7 +14,7 @@ function fixture(name: string): string {
   return readFileSync(join(import.meta.dirname, name), 'utf8')
 }
 
-test('refuses a path with no file, a line past the end of one, and an absent ADR', () => {
+test('refuses a missing file, a line past its end, an absent ADR', () => {
   const verdict = identifiers(root, fixture('red.text.md'))
   expect(verdict.outcome).toBe('refuse')
   expect(verdict.origin_kind).toBe('rail')
@@ -27,13 +27,13 @@ test('refuses a path with no file, a line past the end of one, and an absent ADR
   expect(verdict.message).toContain('rails/fact-light/index.ts, rails/diff.ts:900, ADR 0009')
 })
 
-test('passes a text whose every identifier resolves against the tree', () => {
+test('passes a text whose every identifier resolves in the tree', () => {
   const verdict = identifiers(root, fixture('green.text.md'))
   expect(verdict.outcome).toBe('pass')
   expect(verdict.spans).toEqual([])
 })
 
-test('leaves alone a name whose first segment is no directory of this tree', () => {
+test('ignores a name whose first segment is not a tree directory', () => {
   expect(identifiers(root, 'merged upstream-org/project and https://github.com/o/r/pull/3').spans).toEqual([])
 })
 
@@ -71,7 +71,7 @@ test('refuses a path neither on disk nor deleted', () => {
   expect(verdict.message).toContain('Atelier/Y.swift')
 })
 
-test('a sentence ending on a path keeps its full stop out of the name', () => {
+test('a path ending a sentence keeps its full stop out of the name', () => {
   expect(identifiers(root, 'the gate lives in rails/diff.ts.').outcome).toBe('pass')
 })
 

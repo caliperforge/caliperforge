@@ -14,7 +14,7 @@ function fixture(name: string): string {
   return readFileSync(join(import.meta.dirname, name), 'utf8')
 }
 
-test('refuses a write outside write_paths and under a frozen migration', () => {
+test('refuses writes outside write_paths and to a frozen migration', () => {
   const verdict = authority(root, 'typescript_specialist', fixture('red.diff'), false, SRC)
   expect(verdict.outcome).toBe('refuse')
   expect(verdict.origin_kind).toBe('rail')
@@ -34,8 +34,8 @@ test('refuses an escape above the root', () => {
 })
 
 /**
- * #41: the rail applies the runner's own-kernel rule. Measured 2026-09-18 16:04-16:19: the rail
- * kept the narrow fence, so plans 11 (#30) and 13 (#32) built and were then refused here for
+ * The rail applies the runner's own-kernel rule. Measured: the rail
+ * kept the narrow fence, so plans built and were then refused here for
  * `cli/adopt.ts` and `rails/tight/index.ts` -- the very files their issues named.
  */
 const KERNEL = ['diff --git a/cli/x.ts b/cli/x.ts', '--- a/cli/x.ts', '+++ b/cli/x.ts',
@@ -49,13 +49,13 @@ const FROZEN = ['diff --git a/schema/0001_init.sql b/schema/0001_init.sql', '---
 const NOTES = ['diff --git a/.cf/anything b/.cf/anything', '--- a/.cf/anything', '+++ b/.cf/anything',
   '@@ -1,0 +1,1 @@', '+{}', ''].join('\n')
 
-test('an internal plan may write the kernel the issue named; an external plan may not', () => {
+test('only an internal plan may write the kernel', () => {
   expect(authority(root, 'typescript_specialist', KERNEL, true)).toMatchObject({ outcome: 'pass', spans: [] })
   expect(authority(root, 'typescript_specialist', KERNEL, false, SRC).spans)
     .toEqual(['cli/x.ts:1 authority.write_paths', 'sequencer/y.ts:1 authority.write_paths'])
 })
 
-test('a frozen migration and the tick\'s own notes are refused on an internal plan too', () => {
+test('refuses a frozen migration and the tick\'s notes on any plan', () => {
   for (const ours of [true, false]) {
     expect(authority(root, 'typescript_specialist', FROZEN, ours).spans)
       .toEqual(['schema/0001_init.sql:1 authority.frozen_schema'])
@@ -69,7 +69,7 @@ test('an escape above the root is refused on an internal plan too', () => {
   expect(authority(root, 'typescript_specialist', diff, true).spans).toEqual(['../outside.ts:1 authority.write_paths'])
 })
 
-test('an unlisted path is refused with the row that owns it or a revert', () => {
+test('an unlisted path is refused with its row or a revert', () => {
   const { outcome, message } = authority(root, 'typescript_specialist', KERNEL, true, [], ['cli/extra.ts'])
   expect(outcome).toBe('refuse')
   for (const part of ['cli/extra.ts', '## Outside the files', '- `cli/extra.ts` — ', 'revert']) expect(message).toContain(part)

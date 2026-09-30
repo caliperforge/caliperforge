@@ -219,23 +219,16 @@
     "lines": 40
   },
   "rails/authority/tests/authority.test.ts": {
-    "citing-comment": 1,
-    "prepare": 1,
-    "test-name": 4
+    "prepare": 1
   },
   "rails/checks/index.ts": {
     "lines": 28
-  },
-  "rails/checks/tests/checks.test.ts": {
-    "test-name": 2
   },
   "rails/ci-green/index.ts": {
     "lines": 126
   },
   "rails/ci-green/tests/ci-green.test.ts": {
-    "citing-comment": 1,
-    "prepare": 1,
-    "test-name": 3
+    "prepare": 1
   },
   "rails/completion-audit/index.ts": {
     "lines": 104,
@@ -243,8 +236,7 @@
     "silent-catch": 1
   },
   "rails/completion-audit/tests/audit.test.ts": {
-    "prepare": 1,
-    "test-name": 8
+    "prepare": 1
   },
   "rails/diff.ts": {
     "lines": 63
@@ -254,16 +246,14 @@
     "lines": 63
   },
   "rails/identifiers/tests/identifiers.test.ts": {
-    "prepare": 1,
-    "test-name": 4
+    "prepare": 1
   },
   "rails/ready/index.ts": {
     "citing-comment": 1,
     "lines": 55
   },
   "rails/ready/tests/ready.test.ts": {
-    "prepare": 1,
-    "test-name": 3
+    "prepare": 1
   },
   "rails/record.ts": {
     "lines": 25,
@@ -273,15 +263,13 @@
     "lines": 38
   },
   "rails/secret-scan/tests/scan.test.ts": {
-    "prepare": 1,
-    "test-name": 1
+    "prepare": 1
   },
   "rails/test-weakened/index.ts": {
     "lines": 70
   },
   "rails/test-weakened/tests/weakened.test.ts": {
-    "prepare": 1,
-    "test-name": 3
+    "prepare": 1
   },
   "rails/tight/braces.ts": {
     "lines": 141
@@ -299,8 +287,7 @@
   },
   "rails/tight/tests/tight.test.ts": {
     "citing-comment": 1,
-    "prepare": 1,
-    "test-name": 6
+    "prepare": 1
   },
   "reviews/bench.ts": {
     "lines": 153,

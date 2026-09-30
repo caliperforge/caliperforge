@@ -20,7 +20,7 @@ export const STANDING = [
 const PARTS = ['**What:**', '**Why:**', '**When it ends:**', '## Approach', '## Settled facts', '## Cases', '## Must not break',
   '## Files', '## Files to read', '## Who else reads what this changes', '## Tests', '## Out of scope', '## Standing']
 
-/** #72: past this many files other than tests a brief is two jobs, and the brief writer is sent back to split it. */
+/** Past this many files other than tests a brief is two jobs, and the brief writer is sent back to split it. */
 export const WIDE = 5
 
 export const TEMPLATE = `The brief is exactly this, in this order, and at most ${String(CEILING)} lines:
@@ -98,11 +98,7 @@ const NEGATED = /\b(?:no|not|never|without|nor|nothing|none|isn't|doesn't|don't|
 
 const EMAIL = /[\w.%+-]+@[\w-]+\.[A-Za-z]{2,}/
 
-/**
- * An ask of the builder: a line that opens on the verb, or names the builder as the one who runs. A brief on our
- * own kernel describes code that runs git and npm ("the ready gate runs git add"), and read as an ask that sent
- * plans 127, 129 and 151 back three times each on 09-25.
- */
+/** An ask of the builder: a line that opens on the verb, or names the builder as the one who runs. */
 const SHELL = /(?:(?<=^\s*(?:[-*]|\d+\.)?\s*(?:then\s+|and\s+)?)|\b(?:you|the builder|builder)\s+(?:(?:should|must|will|can|needs? to)\s+)?)(?:run|re-?run|execute|count|report)s?\b[^.\n]*\b(?:shell|terminal|command|bash|npm|pnpm|npx|node|git|vitest|tsc|the tests|test suite)\b/i
 
 const GROUNDS: [RegExp, string][] = [
@@ -136,8 +132,8 @@ export interface Refused {
 }
 
 /**
- * The fence a seat ends with when the ask cannot be briefed against the code: the question goes back to the COO.
- * A reply with neither a fence nor a title is the same question in prose (#212), never a failed title check.
+ * The question a seat's closing fence asks when the ask cannot be briefed against the code. A reply with
+ * neither a fence nor a title is the same question in prose, never a failed title check.
  */
 export function unclear(reply: string): string | null {
   const fence = fenceOf(reply)
@@ -146,7 +142,7 @@ export function unclear(reply: string): string | null {
   return parsed.success ? parsed.data.question : null
 }
 
-/** #72: the fence a seat ends with when the ask is more than one job: the parts, in the order they must land. */
+/** The fence a seat ends with when the ask is more than one job: the parts, in the order they must land. */
 export function split(reply: string): Part[] | null {
   const fence = fenceOf(reply)
   if (fence === null) return null
@@ -155,7 +151,7 @@ export function split(reply: string): Part[] | null {
   return parsed.data.parts.map((p, i) => ({ ...p, after: p.after?.toLowerCase() ?? (i === 0 ? 'none' : LETTERS.charAt(i - 1)) }))
 }
 
-/** The fence a reply ends with, whether or not the seat wrapped it in a code block (#212: plans 71 and 78). */
+/** The fence a reply ends with, whether or not the seat wrapped it in a code block. */
 function fenceOf(reply: string): string | null {
   const bare = reply.trimEnd().replace(/\n```\s*$/, '').replace(/```[a-z]*\r?\n(?=---\r?\n(?:(?!```)[\s\S])*$)/, '')
   return /---\r?\n([\s\S]*?)\r?\n---$/.exec(bare.trimEnd())?.[1] ?? null
@@ -238,7 +234,7 @@ function forbidden(brief: string): Refused | null {
   return null
 }
 
-/** A ground a line asks for: a `code` name is not an ask, and neither is a line saying the thing must not happen (plan 82). */
+/** A ground a line asks for: a `code` name is not an ask, and neither is a line saying the thing must not happen. */
 function asked(body: string, pattern: RegExp): string | undefined {
   for (const line of body.split('\n')) {
     const prose = line.replace(/`[^`\n]*`/g, '``')
@@ -272,7 +268,7 @@ function lastFence(path: string): number {
   return fences.at(-2) ?? 0
 }
 
-/** A path with the last line a `## Files` row reaches: `a/b.md:40-57`, `a/b.md:7,57` and `a/b.md:7` with a later bare `:57` all reach 57. */
+/** A path with the last line a `## Files` row reaches: `a/b.md:4-57`, `a/b.md:7,57` and `a/b.md:7` with a later bare `:57` all reach 57. */
 const REACHED = /([A-Za-z0-9_.+-]*\/[A-Za-z0-9_./+-]*\.[A-Za-z0-9]+)(?::([\d,-]+))?|:(\d[\d,-]*)/g
 
 function reached(brief: string): { path: string; line: number }[] {
@@ -312,13 +308,13 @@ function ranged(brief: string, src: string): Refused | null {
 /** A path with the line it points at, anywhere on a `## Files` row: `` `a/b.rb:197` ``. */
 const POINTED = /([A-Za-z0-9_.+-]*\/[A-Za-z0-9_./+-]*\.[A-Za-z0-9]+):(\d+)/g
 
-/** Each line a `## Files` row points at, so a long file is handed by its block (#67). */
+/** Each line a `## Files` row points at, so a long file is handed by its block. */
 export function pointed(brief: string, heading = '## Files'): { path: string; line: number }[] {
   return section(brief, heading).split('\n').filter((l) => /^\s*[-*]/.test(l))
     .flatMap((l) => [...l.matchAll(POINTED)].map((m) => ({ path: String(m[1]), line: Number(m[2]) })))
 }
 
-/** #203b: the reference a port must match, each line a `## Must not break` row points at outside the files the job changes. */
+/** The reference a port must match, each line a `## Must not break` row points at outside the files the job changes. */
 export function references(brief: string): { path: string; line: number }[] {
   const changing = new Set(files(brief).map((f) => f.path))
   return pointed(brief, '## Must not break').filter((p) => !changing.has(p.path))
@@ -388,9 +384,8 @@ export function human(brief: string): Record<'title' | 'what' | 'why' | 'ends', 
 }
 
 /**
- * Each known key's value is read as one quoted string first. As plain YAML, `: ` breaks the parse (plan 77) and
- * ` #` silently ends the value: plan 114's question "Has #3a landed" reached the COO as "Has". A value that runs
- * onto a second line does not survive the quoting, and is read as plain YAML instead.
+ * Each known key's value is read as one quoted string first, since as plain YAML `: ` breaks the parse and ` #`
+ * ends the value. A value that runs onto a second line does not survive the quoting, and is read as plain YAML.
  */
 function yamlOf(text: string): unknown {
   const quoted = text.replace(/^(\s*(?:- )?(?:title|what|why|ends|question|outcome):[ \t]+)(?!["'|>])(.+)$/gm,

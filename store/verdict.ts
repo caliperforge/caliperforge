@@ -11,7 +11,7 @@ export interface Verdict {
   defect_class: string | null
 }
 
-export interface VerdictRow {
+interface VerdictRow {
   id: number
   gate: string
   kind: string

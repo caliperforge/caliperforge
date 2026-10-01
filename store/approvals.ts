@@ -4,7 +4,7 @@ import type { Db } from './index.ts'
 
 const Signed = z.object({ id: z.int() })
 
-export type SubjectKind = 'target' | 'plan' | 'proposal' | 'deliverable' | 'override' | 'publish'
+type SubjectKind = 'target' | 'plan' | 'proposal' | 'deliverable' | 'override' | 'publish'
 
 export function digestOf(bytes: string): string {
   return createHash('sha256').update(bytes).digest('hex')

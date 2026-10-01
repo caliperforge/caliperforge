@@ -1,8 +1,8 @@
 import type { Db } from './index.ts'
 
-export interface Count { metric: string; count: number }
-export interface Warning { plan: number; at: string; message: string }
-export interface Raise { key: string; value: string; origin_kind: string; origin_ref: string; set_at: string }
+interface Count { metric: string; count: number }
+interface Warning { plan: number; at: string; message: string }
+interface Raise { key: string; value: string; origin_kind: string; origin_ref: string; set_at: string }
 
 export function record(db: Db, day: string, rows: Count[]): void {
   const put = db.prepare('INSERT OR REPLACE INTO ratchet_counts (day, metric, count) VALUES (?, ?, ?)')

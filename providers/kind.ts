@@ -32,7 +32,7 @@ export function bare(tool: string): string {
   return tool.split('(')[0] ?? tool
 }
 
-export type Ended = 'completed' | 'stopped'
+type Ended = 'completed' | 'stopped'
 
 export interface Fired {
   text: string

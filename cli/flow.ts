@@ -14,7 +14,7 @@ type Row = z.infer<typeof Row>
 
 type Hit = [string, string] | null
 
-export interface Slack {
+interface Slack {
   pipe: PipeRow
   free: number
   startable: number

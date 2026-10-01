@@ -24,7 +24,7 @@ const LIVE = "('queued', 'running', 'blocked_on_ceo')"
 /** `gh search` is rate-limited at 30 a minute, so that is the window `elsewhere()` reads and the number of reads it makes. */
 const SEARCHES = 30
 
-export interface Pulse {
+interface Pulse {
   repo: string
   measured_at: string
   maintainers: number
@@ -53,7 +53,7 @@ export function measure(db: Db, repo: string, today: string, read: Read = gh): P
   return row
 }
 
-export function planOpen(db: Db, repo: string): boolean {
+function planOpen(db: Db, repo: string): boolean {
   return db.prepare(`SELECT 1 FROM plans JOIN targets ON targets.id = plans.target_id
     WHERE targets.repo = ? AND plans.state IN ${LIVE} LIMIT 1`).get(repo) !== undefined
 }

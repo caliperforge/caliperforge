@@ -9,9 +9,9 @@ import type { Db } from './index.ts'
 
 const root = join(import.meta.dirname, '..')
 
-const price = (db: Db, model: string, from: string, input = 5, url = 'https://example.com/pricing'): unknown =>
-  db.prepare(`INSERT INTO prices (provider, model, input, cache_read, cache_write, output, effective_from, source_url)
-    VALUES ('claude-agent-sdk', ?, ?, 0.5, 6.25, 25, ?, ?)`).run(model, input, from, url)
+const price = (db: Db, model: string, from: string, input = 5, url = 'https://example.com/pricing', write1h: number | null = 10): unknown =>
+  db.prepare(`INSERT INTO prices (provider, model, input, cache_read, cache_write, cache_write_1h, output, effective_from, source_url)
+    VALUES ('claude-agent-sdk', ?, ?, 0.5, 6.25, ?, 25, ?, ?)`).run(model, input, write1h, from, url)
 
 const setup = (): { db: Db; log: (usage: Fired['usage'], model?: string) => number; computed: (id: number) => unknown; dated: (at: string) => number } => {
   const db = fresh(join(root, 'schema'))
@@ -24,13 +24,40 @@ const setup = (): { db: Db; log: (usage: Fired['usage'], model?: string) => numb
     (db.prepare('SELECT cost_computed_usd FROM runs WHERE id = ?').get(id) as { cost_computed_usd: number | null }).cost_computed_usd
   const dated = (at: string): number => {
     const id = runAt(db, plan, 4, 'typescript_specialist', at)
-    db.prepare('UPDATE runs SET input_tokens = 21000, cache_write_tokens = 20000, cache_read_tokens = 100000, output_tokens = 5000 WHERE id = ?').run(id)
+    db.prepare('UPDATE runs SET input_tokens = 21000, cache_write_tokens = 20000, cache_write_1h_tokens = 0, cache_read_tokens = 100000, output_tokens = 5000 WHERE id = ?').run(id)
     return id
   }
   return { db, log, computed, dated }
 }
 
-const usage = { input: 21000, write: 20000, cache: 100000, output: 5000, cost: 0.305 }
+const usage = { input: 21000, write: 20000, write_1h: 0, cache: 100000, output: 5000, cost: 0.305 }
+
+test('D1 Opus 5.5 runs 3367, 3530, 3531 price at 1-hour writes', () => {
+  const { log, computed } = setup()
+  const opus = (input: number, write: number, cache: number, output: number): unknown =>
+    computed(log({ input, write, write_1h: write, cache, output }, 'claude-opus-5-5'))
+  expect(opus(35266, 20089, 2139, 1234)).toBeCloseTo(0.2465278, 7)
+  expect(opus(244508, 146841, 557024, 17100)).toBeCloseTo(2.0188008, 7)
+  expect(opus(6197, 3698, 2139, 611)).toBeCloseTo(0.0522278, 7)
+})
+
+test('D2 run 3367 with 10000 of its writes at 5 minutes', () => {
+  const { log, computed } = setup()
+  const id = log({ input: 35266, write: 20089, write_1h: 10089, cache: 2139, output: 1234 }, 'claude-opus-5-5')
+  expect(computed(id)).toBeCloseTo(0.2165278, 7)
+})
+
+test('D3 a negative 1-hour count or price fails its CHECK', () => {
+  const { db, log } = setup()
+  expect(() => log({ ...usage, write_1h: -1 })).toThrow(/CHECK constraint failed: cache_write_1h_tokens/)
+  expect(() => price(db, 'm', '2026-01-01', 5, 'https://example.com/pricing', -1)).toThrow(/CHECK constraint failed: cache_write_1h/)
+})
+
+test('D4 a price row with no cache_write_1h leaves the cost NULL', () => {
+  const { db, log, computed } = setup()
+  price(db, 'm', '2026-01-01', 5, 'https://example.com/pricing', null)
+  expect(computed(log(usage))).toBeNull()
+})
 
 test('D1 cost_computed_usd prices cache writes apart, within 1%', () => {
   const { db, log, computed } = setup()

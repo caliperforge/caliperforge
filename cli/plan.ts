@@ -39,7 +39,7 @@ export interface Filed {
   ruling: number | null
 }
 
-export interface Unfiled {
+interface Unfiled {
   repo: string
   no: number
   title: string

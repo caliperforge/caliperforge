@@ -8,10 +8,10 @@ import { clear } from '../store/refusals.ts'
 import { afresh } from './workspace.ts'
 
 /** The moves the orchestrator makes by itself. Every other verb goes to a person. */
-export const MECHANICAL = new Set<Verb>(['retry', 'return', 'clear', 'next'])
+const MECHANICAL = new Set<Verb>(['retry', 'return', 'clear', 'next'])
 
 /** Past this many applied moves on one plan in a day it is spinning, and the next decision goes to a person. */
-export const TOUCHES = 2
+const TOUCHES = 2
 
 /** Off until `orchestrator.apply` = 1 hands it the wheel. */
 export function applying(db: Db): boolean {

@@ -6,7 +6,7 @@ const STAMP = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z ?/g
 
 const TAIL = 60
 
-export interface Red {
+interface Red {
   spans: string[]
   log: string
 }

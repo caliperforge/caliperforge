@@ -11,7 +11,8 @@ const INFO = {
   unifiedWindows: { five_hour: { utilization: 0.06, resetsAt: 1790018400 }, seven_day: { utilization: 0.83, resetsAt: 1790222400 } },
 } as SDKRateLimitInfo
 
-const RESULT = { type: 'result', subtype: 'success', is_error: false, stop_reason: 'end_turn', modelUsage: {}, permission_denials: [], result: '' }
+const RESULT = { type: 'result', subtype: 'success', is_error: false, stop_reason: 'end_turn', modelUsage: {}, permission_denials: [], result: '',
+  usage: { cache_creation: { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: 0 } } }
 
 vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
   query: () => ({ [Symbol.asyncIterator]: () => [{ type: 'rate_limit_event', rate_limit_info: INFO }, RESULT][Symbol.iterator]() }),

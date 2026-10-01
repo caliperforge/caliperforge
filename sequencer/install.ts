@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path'
 import type { Post } from '../cli/watch.ts'
 import type { Run } from './checks.ts'
 
-export const PLACES = {
+const PLACES = {
   clone: join(homedir(), 'atelier_build'),
   derived: join(homedir(), '.cf-cache/atelier-release'),
   app: '/Applications/Atelier.app',

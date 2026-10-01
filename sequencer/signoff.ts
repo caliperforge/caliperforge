@@ -143,7 +143,7 @@ function titleFor(db: Db, root: string, plan: number): string {
  * commit on our fork, and the words the maintainer will read, fenced so no mention or reference in
  * them pings anyone or links anything before that person says go.
  */
-export function bodyFor(db: Db, root: string, card: Card, desk: Desk): string {
+function bodyFor(db: Db, root: string, card: Card, desk: Desk): string {
   const s = subjectOf(db, card.id)
   const head = headOf(root, card.id)
   const open = opened(db, card.id)

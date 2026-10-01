@@ -17,7 +17,7 @@ export const WHERE = 'checks.where'
 export const SHOWS = 5
 
 /** Ticks a run is given to finish. Our suite takes about two minutes on GitHub. */
-export const RUNS = 20
+const RUNS = 20
 
 const WAITS = 'ci.waits.checks'
 
@@ -34,7 +34,7 @@ const SCRIPT = /npm run (\w+)/
 
 const EXIT = /exit code (\d+)/
 
-export type Ci = { wait: Outcome } | { failed: Failure | null; at: string }
+type Ci = { wait: Outcome } | { failed: Failure | null; at: string }
 
 /**
  * Our own repo's suite runs on GitHub at the branch head instead of on the laptop. The head is committed and

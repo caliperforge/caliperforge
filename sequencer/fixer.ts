@@ -36,7 +36,7 @@ export const THEN = ['return', 'retry', 'done', 'park', 'wait', 'rebuild', 'tick
 export const FIXES = 2
 
 /** One fix may spend this much; the job's own run wall is higher and is for building, not repairing. */
-export const FIX_WALL = 400_000
+const FIX_WALL = 400_000
 
 const STORE_CHARS = 24_000
 const TEXT_CHARS = 8_000
@@ -61,7 +61,7 @@ export function mode(db: Db): Mode {
   return row?.value === 'live' || row?.value === 'shadow' ? row.value : 'off'
 }
 
-export function fixesToday(root: string, plan: number, now: Date): number {
+function fixesToday(root: string, plan: number, now: Date): number {
   const since = now.getTime() - 24 * 60 * 60 * 1000
   return logged(root, plan).filter((l) => l.mode === 'live' && Date.parse(l.at) >= since).length
 }

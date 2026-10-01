@@ -9,7 +9,7 @@ import { blocked, mapOf, overlapping } from './steps.ts'
 export type Route = { fire: Step } | { wait: Wait; on: number | null }
   | { wait: 'token_ceiling'; on: null; over: { spent: number; ceiling: number } }
 
-export interface Offer {
+interface Offer {
   pipe: PipeRow
   plans: PlanRow[]
   busy: boolean

@@ -1,6 +1,6 @@
 import type { Fired } from './kind.ts'
 
-export interface Usage {
+interface Usage {
   // https://platform.openai.com/docs/api-reference/chat/object
   prompt_tokens: number
   // https://platform.openai.com/docs/api-reference/chat/object

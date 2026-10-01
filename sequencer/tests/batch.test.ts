@@ -135,7 +135,7 @@ test('each comment, review, bot review and merge on our pr, once', async () => {
   ])
 })
 
-/** #103: on plan 65 Greptile's 5/5 summary comment rewound the finished job and told the CEO he was asked. */
+/** A review bot's 5/5 summary comment does not rewind a finished job or ask a person. */
 test('a review bot\'s summary is its score, not a person asking', async () => {
   const w = await pushed()
   const summary = (n: number): string => `<h2><a href="https://app.greptile.com"><picture></picture></a>Confidence Score: ${String(n)}/5</h2>\n\n1 of 2 files\n\n${REVIEWED}`

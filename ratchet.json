@@ -436,57 +436,68 @@
   "sequencer/symbols.ts": {
     "lines": 43
   },
-  "sequencer/tests/bases.test.ts": {
-    "test-name": 1
+  "sequencer/tests/after.test.ts": {
+    "prepare": 4
+  },
+  "sequencer/tests/assembly.test.ts": {
+    "prepare": 15
+  },
+  "sequencer/tests/batch.test.ts": {
+    "prepare": 1
   },
   "sequencer/tests/brief.test.ts": {
-    "prepare": 17
+    "prepare": 20
   },
   "sequencer/tests/built.test.ts": {
     "prepare": 5
   },
+  "sequencer/tests/card.test.ts": {
+    "prepare": 1
+  },
   "sequencer/tests/ceiling.test.ts": {
-    "citing-comment": 1,
-    "prepare": 1,
-    "test-name": 1
+    "prepare": 1
   },
   "sequencer/tests/chain.test.ts": {
-    "prepare": 1,
-    "test-name": 1
+    "prepare": 1
   },
   "sequencer/tests/checks.test.ts": {
-    "prepare": 8
+    "prepare": 10
   },
   "sequencer/tests/ci.test.ts": {
-    "prepare": 4,
-    "test-name": 1
+    "prepare": 5
   },
-  "sequencer/tests/delta.test.ts": {
-    "test-name": 3
+  "sequencer/tests/comms.test.ts": {
+    "prepare": 21
+  },
+  "sequencer/tests/coolite.test.ts": {
+    "prepare": 22
   },
   "sequencer/tests/each.test.ts": {
     "prepare": 7
   },
   "sequencer/tests/events.test.ts": {
-    "prepare": 8,
-    "test-name": 2
-  },
-  "sequencer/tests/failures.test.ts": {
-    "test-name": 2
+    "prepare": 8
   },
   "sequencer/tests/fence.test.ts": {
-    "prepare": 2,
-    "test-name": 2
+    "prepare": 3
+  },
+  "sequencer/tests/findings.test.ts": {
+    "prepare": 1
   },
   "sequencer/tests/fixer.test.ts": {
-    "prepare": 10,
-    "test-name": 5
+    "prepare": 14
+  },
+  "sequencer/tests/growth.test.ts": {
+    "prepare": 6
+  },
+  "sequencer/tests/handback.test.ts": {
+    "prepare": 2
   },
   "sequencer/tests/handout.test.ts": {
-    "test-name": 3
+    "prepare": 1
   },
   "sequencer/tests/hold.test.ts": {
-    "prepare": 2
+    "prepare": 11
   },
   "sequencer/tests/holds.test.ts": {
     "test-name": 1

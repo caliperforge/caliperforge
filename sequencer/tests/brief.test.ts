@@ -129,7 +129,7 @@ test('the handback format beside an unrelated path is two jobs', () => {
   expect(on(handback([...readers, '- sequencer/tests/brief.test.ts:116-129'], ['- nothing else']))).toBeNull()
 })
 
-test('D1-D3: a ## Files row on an existing file over 300 lines names its range', () => {
+test('D1-D3: a Files row on a file over 300 lines names its range', () => {
   const dir = mkdtempSync(join(tmpdir(), 'ranged-'))
   mkdirSync(join(dir, 'a'))
   writeFileSync(join(dir, 'a/long.ts'), Array.from({ length: 301 }, () => 'x').join('\n'))
@@ -154,11 +154,11 @@ const lua = 'seats/lua_specialist/prompt.md'
 const prompt = (rows: string[], others: string[]): string =>
   swap(swap(brief, '## Files', rows), '## Who else reads what this changes', others)
 
-test('a seat prompt row above its handback fence is no format change', () => {
+test('a seat prompt row above its fence is no format change', () => {
   expect(on(prompt([`- ${lua}:7`, '- profiles/solana-foundation/pay-kit.yml:8'], ['- nothing else']))).toBeNull()
 })
 
-test('a seat prompt row reaching into its fence, or with no line, is a format change', () => {
+test('a prompt row in its fence, or with no line, changes format', () => {
   const summary = String(readFileSync(join(repo, lua), 'utf8').split('\n').findIndex((l) => l.startsWith('summary:')) + 1)
   const readers = ['- sequencer/rails.ts', '- rails/tight/prose.ts']
   const later = `- ${lua}:7 — the body; \`:${summary}\` the summary row`
@@ -169,7 +169,7 @@ test('a seat prompt row reaching into its fence, or with no line, is a format ch
   }
 })
 
-test('the completion audit is a format change with a line or without', () => {
+test('the completion audit is a format change, line or not', () => {
   const unaffected = ['- nothing else']
   expect(on(handback([], unaffected))).toMatchObject({ span: 'sequencer/rails.ts' })
   expect(on(handback([], unaffected).replace('- rails/completion-audit/index.ts', '- rails/completion-audit/index.ts:12')))
@@ -639,7 +639,7 @@ test('a folder row under ## Files is refused', () => {
     .toMatchObject({ span: '- sequencer/tests/ — the tests', reason: holding('names no file') })
 })
 
-test('D2: a Files row naming a root dotfile is not refused as a folder', () => {
+test('D2: a root dotfile Files row is not refused as a folder', () => {
   expect(on(swap(brief, '## Files', ['- sequencer/brief.ts', '- `.gitignore`: `build/`.']))?.reason ?? '')
     .not.toContain('names no file')
 })
@@ -654,7 +654,7 @@ test('a Files row with a + path yields it, backticked or bare', () => {
   }
 })
 
-test('D1: a Files row yields a root dotfile and not the folder after it', () => {
+test('D1: a Files row yields a root dotfile, not the folder after', () => {
   expect(files(plus('- `.gitignore` (new): `build/`.'))).toEqual([{ path: '.gitignore', is_new: true }])
 })
 

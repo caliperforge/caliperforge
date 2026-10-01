@@ -53,7 +53,7 @@ function builds(packets: Packet[], write?: (cwd: string) => void): Provider {
   }, BRIEF)
 }
 
-test('short whole, long by its named block, long and unnamed by length', () => {
+test('short whole, long by named block, unnamed long by length', () => {
   const src = tree({ 'long.ts': LONG, 'short.ts': 'export const short = 1\n' })
   expect(handout(src, [{ path: 'short.ts', line: null }])).toContain('## short.ts\n\n````\nexport const short = 1')
 
@@ -91,7 +91,7 @@ test('a build packet opens with the map of the checkout', async () => {
   expect(packets[0]?.prompt).toMatch(/^# MAP\.md — written by `cf map`\n/)
 })
 
-test('a rebuild is handed its refusal, its diff and only the files those touch', async () => {
+test('a rebuild gets its refusal, its diff and only their files', async () => {
   const w = briefed()
   const packets: Packet[] = []
   const provider = builds(packets, (cwd) => { writeFileSync(join(cwd, 'src/extra.ts'), 'export const extra = 1\n') })
@@ -103,7 +103,7 @@ test('a rebuild is handed its refusal, its diff and only the files those touch',
   expect(again).not.toContain('export const bye')
 })
 
-test('D1 a ruling appended to ask.md after the build reaches the next builder packet', async () => {
+test('D1 a later ruling in ask.md reaches the next builder', async () => {
   const w = briefed()
   const packets: Packet[] = []
   const provider = builds(packets, (cwd) => {
@@ -115,7 +115,7 @@ test('D1 a ruling appended to ask.md after the build reaches the next builder pa
   expect(packets[0]?.prompt).not.toContain('use bye()')
 })
 
-test('D2 a fixer answer ruled into issue.md after the build reaches the next builder packet', async () => {
+test('D2 a fixer answer in issue.md reaches the next builder', async () => {
   const w = briefed()
   const packets: Packet[] = []
   const provider = builds(packets, (cwd) => { writeFileSync(join(cwd, 'src/extra.ts'), 'export const extra = 1\n') })
@@ -145,7 +145,7 @@ async function walked(rulings?: string): Promise<Packet[]> {
   return packets
 }
 
-test('D1 rulings.md reaches both reviewers between # Issue and # Diff', async () => {
+test('D1 reviewers get rulings.md between # Issue and # Diff', async () => {
   const packets = await walked('use bye()\n')
   for (const seat of ['# code_quality', '# senior_review']) {
     const prompt = packets.find((p) => !p.tools.includes('Write') && p.prompt.includes(seat))?.prompt ?? ''
@@ -153,7 +153,7 @@ test('D1 rulings.md reaches both reviewers between # Issue and # Diff', async ()
   }
 })
 
-test('D5 a missing or blank rulings.md puts no # Rulings in any packet', async () => {
+test('D5 a missing or blank rulings.md adds no # Rulings', async () => {
   for (const rulings of [undefined, ' \n']) {
     const packets = await walked(rulings)
     expect(packets.filter((p) => p.prompt.includes('# senior_review'))).toHaveLength(1)
@@ -161,7 +161,7 @@ test('D5 a missing or blank rulings.md puts no # Rulings in any packet', async (
   }
 })
 
-test('D2 D3 ruled: the tail past the copy, the whole ask once its start moved, else nothing', () => {
+test('D2 D3 ruled: tail past the copy, whole if moved, else none', () => {
   const root = mkdtempSync(join(tmpdir(), 'cf-ruled-'))
   put(root, 1, 'ask.md', '# ask\n')
   expect(ruled(root, 1)).toBeNull()
@@ -173,7 +173,7 @@ test('D2 D3 ruled: the tail past the copy, the whole ask once its start moved, e
   expect(ruled(root, 1)).toBe('# moved\nruling\n')
 })
 
-test('a stopped build resumes: kept diff, written files not re-handed', async () => {
+test('a stopped build resumes: diff kept, files not re-handed', async () => {
   const w = briefed()
   const packets: Packet[] = []
   let fired = 0

@@ -34,14 +34,14 @@ type Db = ReturnType<typeof open>
 const row = (db: Db, id: number) => db.prepare('SELECT state, step, waits_on, held_by, held_why FROM plans WHERE id = ?').get(id)
 const plan = (db: Db, id: number) => PlanRow.parse(db.prepare('SELECT * FROM plans WHERE id = ?').get(id))
 
-test('D1 a plan whose After issue is still in flight waits on its plan at step 0', () => {
+test('D1 an After issue in flight waits on its plan at step 0', () => {
   const { db, root, one, two } = seeded({ state: 'running' })
   expect(measure(db, root, plan(db, two))).toMatchObject({ outcome: 'pass', held: true, spans: ['#1'] })
   expect(row(db, two)).toMatchObject({ state: 'blocked_on_ceo', step: 0, waits_on: one })
   expect(maybe(root, two, 'parked.md')).toContain('#1')
 })
 
-test('D2 the plan goes back to its lane when the one it waits on lands, and then passes measure', () => {
+test('D2 back to its lane once After lands, then passes measure', () => {
   const { db, root, one, two } = seeded({ state: 'running' })
   measure(db, root, plan(db, two))
   db.prepare("UPDATE plans SET state = 'done' WHERE id = ?").run(one)
@@ -52,7 +52,7 @@ test('D2 the plan goes back to its lane when the one it waits on lands, and then
   expect(again.held).toBeUndefined()
 })
 
-test('D3 an After issue closed without landing, or with no plan, holds the plan for the COO', () => {
+test('D3 an After closed unlanded or planless holds for the COO', () => {
   const closed = seeded({ state: 'halted', closedAt: '2026-09-28' })
   expect(measure(closed.db, closed.root, plan(closed.db, closed.two)).held).toBe(true)
   expect(row(closed.db, closed.two)).toEqual({ state: 'blocked_on_ceo', step: 0, waits_on: null, held_by: 'coo',
@@ -62,7 +62,7 @@ test('D3 an After issue closed without landing, or with no plan, holds the plan 
   expect(row(none.db, none.two)).toEqual({ state: 'blocked_on_ceo', step: 0, waits_on: null, held_by: 'coo', held_why: '#1 has no plan' })
 })
 
-test('D4 a plan it waits on that ends refused leaves the reason with the COO', () => {
+test('D4 an After refused leaves its reason with the COO', () => {
   const { db, root, one, two } = seeded({ state: 'running' })
   measure(db, root, plan(db, two))
   db.prepare("UPDATE plans SET state = 'refused' WHERE id = ?").run(one)

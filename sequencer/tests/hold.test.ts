@@ -39,7 +39,7 @@ test('hold then unhold', () => {
 
 const holding = (db: ReturnType<typeof open>) => db.prepare('SELECT held_by, held_why FROM plans WHERE id = 7').get()
 
-test('D3 a held plan names who it waits on and why, and unhold clears both', () => {
+test('D3 a held plan names holder and why; unhold clears both', () => {
   const { db, home } = seeded()
   hold(db, home, 7, 'after #372', new Date())
   held(db, 7, 'coo', 'after #372')
@@ -48,7 +48,7 @@ test('D3 a held plan names who it waits on and why, and unhold clears both', () 
   expect(holding(db)).toEqual({ held_by: null, held_why: null })
 })
 
-test('D4 a hold on another plan keeps the first line of its why, and a hold on none leaves held_why as it was', () => {
+test('D4 a plan hold keeps a why line; no plan keeps held_why', () => {
   const { db, home } = seeded()
   db.exec("INSERT INTO plans (id, pipe_id, template, state, queued_at, lane, seat, origin) VALUES (8, 9, 'pr_path', 'queued', '2026-09-24', 'machine', 'typescript_specialist', 'https://github.com/caliperforge/caliperforge/issues/140')")
   hold(db, home, 7, 'after #140\nit edits the same file', new Date(), 8)
@@ -58,7 +58,7 @@ test('D4 a hold on another plan keeps the first line of its why, and a hold on n
   expect(holding(db)).toEqual({ held_by: 'ceo', held_why: 'set before' })
 })
 
-test('D4 a holder outside ceo and coo is refused by the store and by cf hold before any write', () => {
+test('D4 a holder not ceo or coo is refused by store and cf hold', () => {
   const { db, home } = seeded()
   expect(() => { held(db, 7, 'cto' as Holder, 'x') }).toThrow(/CHECK constraint/)
   expect(holding(db)).toEqual({ held_by: null, held_why: null })
@@ -96,7 +96,7 @@ function stoppedAtCheck(why: keyof typeof WHY) {
   return seed
 }
 
-test('unhold on a repeat stop at step 3 sends the plan back to the build', () => {
+test('unhold on a repeat stop at step 3 sends it back to build', () => {
   const { db, home } = stoppedAtCheck('repeat')
   expect(unhold(db, home, 7, 'ceo')).toBe(2)
   expect(db.prepare('SELECT step FROM plans WHERE id = 7').get()).toEqual({ step: 2 })
@@ -135,7 +135,7 @@ function driven() {
   return { db, printed, run, closes }
 }
 
-test('D4 cf close refuses the plan by default, keeps its step and logs one close event', () => {
+test('D4 cf close refuses by default, keeps its step, logs once', () => {
   const { db, printed, run, closes } = driven()
   run('close', '7', '--why', 'x', '--by', 'coo')
   expect(row(db)).toEqual({ state: 'refused', step: 4, waits_on: null })
@@ -161,7 +161,7 @@ test('D5 cf close and cf files on a missing plan write nothing', () => {
   expect(db.prepare('SELECT count(*) AS n FROM events WHERE plan = 99').get()).toEqual({ n: 0 })
 })
 
-test('D6 a bad holder, a bad --as, a closed plan and a leased plan are refused before any write', () => {
+test('D6 bad holders, --as, closed or leased plans write nothing', () => {
   const { db, run, closes } = driven()
   expect(() => run('close', '7', '--why', 'x', '--by', 'cto')).toThrow('--by takes ceo or coo, not cto')
   expect(() => run('files', '7', 'add', 'a.ts', '--by', 'cto')).toThrow('--by takes ceo or coo, not cto')
@@ -217,7 +217,7 @@ test('D4 an actor outside ceo and coo is refused before any write', () => {
   expect(logged(db)).toEqual([])
 })
 
-test('D2 return, unpark, retry, release and priority log the actor given', () => {
+test('D2 return, unpark, retry, release, priority log the actor', () => {
   const each = (setup: string, args: string[]) => {
     const { db, home } = seeded()
     db.exec(`UPDATE plans SET ${setup} WHERE id = 7`)
@@ -232,7 +232,7 @@ test('D2 return, unpark, retry, release and priority log the actor given', () =>
   expect(each('priority = 1', ['priority', '7', '3'])).toEqual([{ kind: 'priority', actor: 'coo', message: 'P3' }])
 })
 
-test('D2 unpark on a repeat stop at step 3 logs a retry by the actor given', () => {
+test('D2 unpark on a repeat step-3 stop logs the actor\'s retry', () => {
   const { db, home } = stoppedAtCheck('repeat')
   ran(db, home, ['unpark', '7', '--by', 'coo'])
   expect(logged(db)).toEqual([{ kind: 'retry', actor: 'coo', message: 'step 2' }])

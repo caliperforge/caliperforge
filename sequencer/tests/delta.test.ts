@@ -7,7 +7,7 @@ const diff = (path: string, lines: string[]): string =>
 const CODE = [...Array(10).keys()].map((i) => `export const v${String(i)} = ${String(i)}`)
 const PASSED = diff('a.ts', CODE) + diff('README.md', ['# t'])
 
-test('comment lines, a .md file and an empty delta are comment-only', () => {
+test('comments, a .md file and an empty delta are comment-only', () => {
   expect(classify(PASSED, diff('a.ts', ['// x', '', ' * y', '/* z']), ['a.ts']).mode).toBe('comment')
   expect(classify(PASSED, diff('README.md', ['const words = 1']), ['README.md']).mode).toBe('comment')
   expect(classify(PASSED, '', [])).toEqual({ mode: 'comment', why: '0 delta lines, comments and docs only' })

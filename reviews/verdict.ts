@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { parse } from 'yaml'
+import { parse, parseDocument } from 'yaml'
 import { z } from 'zod'
 import type { Verdict } from '../store/verdict.ts'
 
@@ -106,7 +106,8 @@ function passed(notes: Written[], prose: string, subject_digest: string): Judged
 
 function yaml(body: string): unknown {
   try {
-    return parse(body.replace(LOOSE, (value) => JSON.stringify(value)))
+    const doc = parseDocument(body)
+    return doc.errors.length === 0 ? doc.toJS() : parse(body.replace(LOOSE, (value) => JSON.stringify(value)))
   } catch {
     return null
   }

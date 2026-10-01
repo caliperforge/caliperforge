@@ -215,13 +215,15 @@ test('D3 a note with a missing field or non-integer line fails',() => {
 })
 
 test('a note value opening with a quoted phrase reads word for word', () => {
-  const why = NOTE('text', '3', '    why: "as today" points at the old name\n').replace('old: a', 'old: "x" stays')
-  expect(read(PASS(why), 'subject')).toMatchObject({ outcome: 'pass', notes: [{ old: '"x" stays', why: '"as today" points at the old name' }] })
+  const note = NOTE('text', '3', '    why: "as today" points at the old name\n').replace('old: a', 'old: "x" stays')
+  expect(read(PASS(note), 'subject')).toMatchObject({ outcome: 'pass', notes: [{ old: '"x" stays', why: '"as today" points at the old name' }] })
 })
 
 test('a single quoted note value reads as today, an unclosed quote fails', () => {
   const spec = '  - file: path/to/file.ts\n    line: 7\n    old: "// adds one to the count"\n    new: ""\n    why: the comment restates its line\n    kind: text\n'
   expect(read(PASS(spec), 'subject')).toMatchObject({ outcome: 'pass', notes: [{ old: '// adds one to the count', new: '' }] })
+  const block = NOTE('text', '3', '    why: "a" # see "b" c\n').replace('old: a', "old: |\n      label: 'x' + suffix,")
+  expect(read(PASS(block), 'subject')).toMatchObject({ outcome: 'pass', notes: [{ old: "label: 'x' + suffix,\n", why: 'a' }] })
   expect(read(PASS(NOTE('text', '3', '    why: "as today\n')), 'subject')).toBeNull()
 })
 

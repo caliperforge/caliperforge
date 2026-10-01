@@ -34,7 +34,7 @@ export const CHECK = '## Target check'
 
 interface Answer { yes: boolean; says: string }
 
-export interface Checked { section: string; park: string | null }
+interface Checked { section: string; park: string | null }
 
 export function find(repo: string, no: number, carded: boolean, read: Read): Checked {
   const row = Issue.parse(read(['issue', 'view', String(no), '--repo', repo, '--json',

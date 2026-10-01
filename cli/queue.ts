@@ -24,7 +24,7 @@ export interface Origin {
 
 const IMPLEMENTED: Origin = { origin_kind: 'ruling', origin_ref: 'queue.implemented' }
 
-export interface Added {
+interface Added {
   target: number
   plan: number | null
   state: 'ready' | 'refused'
@@ -49,7 +49,7 @@ export function account(db: Db, repo: string, today: string): z.infer<typeof Acc
 }
 
 /** Ours to say what the job is: `card` is the ask, their issue only its context; `pr` is the body the PR opens with. */
-export interface Scope {
+interface Scope {
   card?: string
   pr?: string
   /** One item of the issue, which the card scopes; its own target, plan and branch. */

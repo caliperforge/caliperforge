@@ -29,7 +29,7 @@ const turn = (n: number): unknown => ({
 const CALL = { hook_event_name: 'PreToolUse', tool_name: 'Read', tool_input: { file_path: '/tmp/x.ts' } }
 
 const RESULT = { type: 'result', subtype: 'success', is_error: false, stop_reason: 'end_turn',
-  modelUsage: {}, permission_denials: [], result: 'done' }
+  modelUsage: {}, permission_denials: [], result: 'done', usage: { cache_creation: { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: 0 } } }
 
 /** The SDK as far as the wall is concerned: a turn, then the tool call that would buy the next one. */
 vi.mock('@anthropic-ai/claude-agent-sdk', () => ({

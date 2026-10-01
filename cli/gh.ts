@@ -25,7 +25,7 @@ const Head = z.object({ headRepositoryOwner: z.object({ login: z.string() }).nul
 
 const Merged = z.array(z.object({ mergedBy: z.object({ login: z.string() }).nullable() }))
 
-export const CLAIM = /i'?ll take (this|it)|i'?m working on|working on (this|it)|taking this|assign (this )?to me|\/claim|dibs/i
+const CLAIM = /i'?ll take (this|it)|i'?m working on|working on (this|it)|taking this|assign (this )?to me|\/claim|dibs/i
 
 /** One page. Left off, `gh pr list` stops at 30 rows and anything past the cap is never read. */
 export const WINDOW = 100
@@ -179,7 +179,7 @@ export function searchIssue(repo: string, subject: string): number | null {
 /** The three answers to a sign-off card, as labels on our own repo. */
 export type Answer = 'go' | 'no' | 'talk'
 
-export const ANSWERS: readonly Answer[] = ['go', 'no', 'talk']
+const ANSWERS: readonly Answer[] = ['go', 'no', 'talk']
 
 const LOOKS: Record<Answer, { color: string; says: string }> = {
   go: { color: '2da44e', says: 'Sign-off: send it' },

@@ -1,3 +1,4 @@
+import { recount } from '../checks/ratchet.ts'
 import type { Db } from '../store/index.ts'
 import { digestOf } from '../store/approvals.ts'
 import { keep, last as lastMerge, lastReview, record as recordMerge } from '../store/merges.ts'
@@ -7,13 +8,13 @@ import { classify } from './delta.ts'
 import type { Outcome } from './kind.ts'
 import { headOf, opened } from './push.ts'
 import { mapOf } from './steps.ts'
-import { abortMerge, behindMain, cloned, conflicted, diffOf, diffSince, fetchMain, get, holds, maybe, merging, mergeMain, narrowing, put, recut,
-  srcDir, unmerged } from './workspace.ts'
+import { abortMerge, behindMain, cloned, commitMerge, conflicted, diffOf, diffSince, fetchMain, get, holds, maybe, merging, mergeMain, narrowing,
+  put, recut, srcDir, theirs, unmerged } from './workspace.ts'
 
 /**
  * Step 3's base, one tick before the ready and batch gates: a merge returns no outcome,
  * so the rails judge the merged tree in this same tick, and it spends none of the `base.merged`
- * budget those two count their one miss against. A conflict is the builder's to settle, so the
+ * budget those two count their one miss against. A conflict outside `ratchet.json` is the builder's to settle, so the
  * refusal names the unmerged paths and rewinds onto the build. A tick that stopped inside a merge
  * left that merge open, and its bytes were committed before it, so the abort loses nothing and this
  * tick merges again from the old base. The rewind alone would hand the builder that same old
@@ -49,9 +50,14 @@ function takeMain(db: Db, root: string, plan: PlanRow, src: string, main: string
     mergeMain(src)
   } catch {
     const paths = unmerged(src)
-    abortMerge(src)
-    recordMerge(db, plan.id, step, { main, incoming, mine, overlap, clean: false })
-    return paths
+    if (paths.length === 0 || paths.some((path) => path !== 'ratchet.json')) {
+      abortMerge(src)
+      recordMerge(db, plan.id, step, { main, incoming, mine, overlap, clean: false })
+      return paths
+    }
+    theirs(src, 'ratchet.json')
+    recount(src, [...incoming, ...mine])
+    commitMerge(src, 'ratchet.json')
   }
   recordMerge(db, plan.id, step, { main, incoming, mine, overlap, clean: true })
   put(root, plan.id, 'base.sha', `${main}\n`)

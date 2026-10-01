@@ -14,7 +14,7 @@ export const LANES = ['machine', 'atelier', 'comms', 'research', 'uniswap'] as c
 
 export type Lane = typeof LANES[number]
 
-export type Template = 'pr_path' | 'research' | 'comms'
+type Template = 'pr_path' | 'research' | 'comms'
 
 /**
  * Each lane in one place: the template it files on, the seat that template falls to when no `seat:`
@@ -41,14 +41,14 @@ export function priorityOf(labels: { name: string }[]): number | null {
   return one === undefined ? null : Number(one[1])
 }
 
-export const LaneCap = z.object({
+const LaneCap = z.object({
   dial: z.int(),
   band: z.int().nullable(),
   ceiling: z.int(),
   cap: z.int(),
 })
 
-export type LaneCap = z.infer<typeof LaneCap>
+type LaneCap = z.infer<typeof LaneCap>
 
 export const LaneState = LaneCap.extend({ live: z.int(), open: z.int() })
 

@@ -32,7 +32,7 @@ export const Seat = z.object({
 
 export type Seat = z.infer<typeof Seat>
 
-export interface Rule {
+interface Rule {
   id: string
   kind: 'roster' | 'rail' | 'card'
   path: string

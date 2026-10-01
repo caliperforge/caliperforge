@@ -6,11 +6,11 @@ const SPLIT = { prompt_tokens: 100, completion_tokens: 7, prompt_cache_hit_token
 
 describe('usage', () => {
   it('maps a combined cached count onto the four columns', () => {
-    expect(usage(COMBINED)).toEqual({ input: 40, cache: 60, write: 0, output: 7 })
+    expect(usage(COMBINED)).toEqual({ input: 40, cache: 60, write: 0, write_1h: 0, output: 7 })
   })
 
   it('maps a hit/miss split onto the four columns', () => {
-    expect(usage(SPLIT)).toEqual({ input: 40, cache: 60, write: 0, output: 7 })
+    expect(usage(SPLIT)).toEqual({ input: 40, cache: 60, write: 0, write_1h: 0, output: 7 })
   })
 
   it('gives the same columns for both shapes', () => {
@@ -18,7 +18,7 @@ describe('usage', () => {
   })
 
   it('counts every prompt token as input when nothing was cached', () => {
-    expect(usage({ prompt_tokens: 100, completion_tokens: 7 })).toEqual({ input: 100, cache: 0, write: 0, output: 7 })
+    expect(usage({ prompt_tokens: 100, completion_tokens: 7 })).toEqual({ input: 100, cache: 0, write: 0, write_1h: 0, output: 7 })
   })
 
   it('throws, naming the fields, when hit + miss is not prompt', () => {

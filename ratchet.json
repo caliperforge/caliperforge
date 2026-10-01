@@ -499,52 +499,50 @@
   "sequencer/tests/hold.test.ts": {
     "prepare": 11
   },
-  "sequencer/tests/holds.test.ts": {
-    "test-name": 1
-  },
-  "sequencer/tests/hq.test.ts": {
-    "test-name": 1
-  },
-  "sequencer/tests/install.test.ts": {
-    "test-name": 1
-  },
   "sequencer/tests/internal.test.ts": {
-    "citing-comment": 1,
-    "prepare": 10,
-    "test-name": 10
+    "prepare": 10
   },
   "sequencer/tests/kept.test.ts": {
     "prepare": 5
   },
   "sequencer/tests/land.test.ts": {
-    "prepare": 14,
-    "test-name": 14
+    "prepare": 19
   },
   "sequencer/tests/lanes.test.ts": {
-    "test-name": 15
+    "prepare": 2
+  },
+  "sequencer/tests/late.test.ts": {
+    "prepare": 2
+  },
+  "sequencer/tests/lead.test.ts": {
+    "prepare": 1
   },
   "sequencer/tests/leases.test.ts": {
-    "prepare": 6,
-    "test-name": 7
+    "prepare": 6
+  },
+  "sequencer/tests/life.test.ts": {
+    "prepare": 5
   },
   "sequencer/tests/next.test.ts": {
-    "prepare": 11
+    "prepare": 12
   },
   "sequencer/tests/orchestrator.test.ts": {
-    "prepare": 14,
-    "test-name": 10
+    "prepare": 14
   },
   "sequencer/tests/overlap.test.ts": {
-    "prepare": 5,
-    "test-name": 1
+    "prepare": 7
   },
   "sequencer/tests/park.test.ts": {
-    "prepare": 1,
-    "test-name": 3
+    "prepare": 1
   },
   "sequencer/tests/pipes.test.ts": {
-    "prepare": 6,
-    "test-name": 5
+    "prepare": 6
+  },
+  "sequencer/tests/profile.test.ts": {
+    "prepare": 1
+  },
+  "sequencer/tests/publish.test.ts": {
+    "prepare": 3
   },
   "sequencer/tests/quick.test.ts": {
     "prepare": 5,

@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { holds } from '../workspace.ts'
 
-test('a re-cut checkout does not hold the commit an earlier round judged', () => {
+test('a re-cut checkout lacks the commit judged earlier',() => {
   const dir = mkdtempSync(join(tmpdir(), 'cf-holds-'))
   const git = (...args: string[]): string =>
     execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', ...args], { cwd: dir, encoding: 'utf8' }).trim()

@@ -8,7 +8,7 @@ export interface Declaration {
   expression: boolean
 }
 
-export interface Scan {
+interface Scan {
   declarations: Declaration[]
   balanced: boolean
 }

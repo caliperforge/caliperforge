@@ -49,7 +49,7 @@ function card(root: string, row: Row): string | null {
 }
 
 /** What stopped a plan for a person, in the words it was stopped with. */
-export const STOP_CHARS = 6000
+const STOP_CHARS = 6000
 
 function stopped(root: string, row: Row): string {
   if (row.state !== 'blocked_on_ceo') return 'none'

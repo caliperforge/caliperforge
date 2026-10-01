@@ -93,15 +93,18 @@ export function blipped(db: Db, plan: number, step: number): Why {
 
 /**
  * A job halts past the token ceiling: the count starts again when a person sends it round,
- * so it is every run since the latest refusal a person cleared. Cache reads are not counted.
+ * so it is every run since the later of the latest refusal a person cleared and the latest
+ * `return` or `retry` by `ceo` or `coo`. Cache reads are not counted.
  */
 export function overBudget(db: Db, plan: number): { spent: number; ceiling: number } | null {
   const row = db.prepare(`SELECT
       (SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'plan.token_ceiling') AS ceiling,
       (SELECT coalesce(sum(r.input_tokens + r.output_tokens), 0) FROM runs r
-        WHERE r.plan = ? AND r.${BUILT} AND julianday(r.at) > coalesce(
-          (SELECT max(julianday(f.at)) FROM refusals f WHERE f.plan = ? AND f.cleared = 1), 0)) AS spent`)
-    .get(plan, plan) as { ceiling: number | null; spent: number }
+        WHERE r.plan = ? AND r.${BUILT} AND julianday(r.at) > max(coalesce(
+          (SELECT max(julianday(f.at)) FROM refusals f WHERE f.plan = ? AND f.cleared = 1), 0), coalesce(
+          (SELECT max(julianday(e.at)) FROM events e WHERE e.plan = ? AND e.kind IN ('return', 'retry')
+            AND e.actor IN ('ceo', 'coo')), 0))) AS spent`)
+    .get(plan, plan, plan) as { ceiling: number | null; spent: number }
   return row.ceiling !== null && row.spent >= row.ceiling ? { spent: row.spent, ceiling: row.ceiling } : null
 }
 

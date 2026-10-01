@@ -18,7 +18,7 @@ import { homeOf } from './home.ts'
 import { freshBase } from './merge.ts'
 import { hold } from './hold.ts'
 
-export interface StepMap {
+interface StepMap {
   steps: Step[]
   at(step: number, language?: string | null): Step
   last(step: number): boolean

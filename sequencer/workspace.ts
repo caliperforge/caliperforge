@@ -122,7 +122,7 @@ export function titleOf(root: string, plan: number): string | null {
   return body === null ? null : (/^#\s+(.*)$/m.exec(body)?.[1]?.trim() ?? null)
 }
 
-export function gitBase(root: string): string {
+function gitBase(root: string): string {
   const path = join(root, '.cf/git-base')
   return existsSync(path) ? readFileSync(path, 'utf8').trim() : 'https://github.com'
 }

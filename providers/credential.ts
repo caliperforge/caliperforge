@@ -3,12 +3,12 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 
 /** What the SDK subprocess will authenticate with, named without its value. */
-export interface Auth {
+interface Auth {
   kind: 'oauth' | 'api-key' | 'none'
   from: string
 }
 
-export interface Credential {
+interface Credential {
   auth: Auth
   env: Env
 }

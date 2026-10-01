@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import type { Db } from './index.ts'
 
-export const CLASSES = ['ruling', 'work', 'ordering', 'world_fact', 'measurement'] as const
+const CLASSES = ['ruling', 'work', 'ordering', 'world_fact', 'measurement'] as const
 
 export const ProposalRow = z.object({
   id: z.int(),

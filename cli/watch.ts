@@ -9,7 +9,7 @@ import { receipt } from '../store/ticks.ts'
 import { crashed } from './inbox.ts'
 
 /** Inside an open window a real tick lands every minute; ten without one means the machine is down, not idle. */
-export const STALE_MINUTES = 10
+const STALE_MINUTES = 10
 
 /** The note a tick that threw leaves on its receipt, so a crash reads as one in the table and not as a quiet minute. */
 export const CRASHED = 'crashed: '
@@ -19,7 +19,7 @@ const MARK = '.cf/watch.alerted'
 
 const LANES = '.cf/watch.lanes'
 
-export interface Liveness {
+interface Liveness {
   at: string | null
   minutes: number | null
   crash: string | null

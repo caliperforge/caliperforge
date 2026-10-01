@@ -1,4 +1,4 @@
-export type Fires = 'kernel' | 'brief' | 'seat' | 'review' | 'ceo'
+type Fires ='kernel' | 'brief' | 'seat' | 'review' | 'ceo'
 
 export type Gate = 'premise' | 'target' | 'pre_review' | 'review' | 'senior_review' | 'ready'
 

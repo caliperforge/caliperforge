@@ -134,7 +134,7 @@ interface Leg {
   route: Route
 }
 
-export interface Would {
+interface Would {
   pipe: string
   plan: number
   step: number

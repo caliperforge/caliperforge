@@ -4,7 +4,7 @@ import { parse } from 'yaml'
 import { z } from 'zod'
 
 /** A language whose builder holds its own shell and brief-files fence on a stranger's repo. */
-export const OUTSIDE_LANGUAGES = ['rust', 'python', 'ruby', 'go', 'php', 'lua'] as const
+const OUTSIDE_LANGUAGES = ['rust', 'python', 'ruby', 'go', 'php', 'lua'] as const
 
 export type OutsideLanguage = (typeof OUTSIDE_LANGUAGES)[number]
 

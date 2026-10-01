@@ -19,7 +19,7 @@ import { baseMoved } from './merge.ts'
 
 export const CREDITS = 50
 
-export const FIRST_ONLY = 40
+const FIRST_ONLY = 40
 
 export const ASKED = 'greptile.asked'
 

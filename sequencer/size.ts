@@ -6,9 +6,9 @@ import type { Check, Row } from './card.ts'
 import { TEST } from './route.ts'
 import { diffOf } from './workspace.ts'
 
-export const GENERATED = /(^|\/)generated\/|(^|\/)(Cargo\.lock|package-lock\.json|pnpm-lock\.yaml|yarn\.lock)$/
+const GENERATED =/(^|\/)generated\/|(^|\/)(Cargo\.lock|package-lock\.json|pnpm-lock\.yaml|yarn\.lock)$/
 
-export const FN = /^\s*(?:export\s+)?(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?(?:fn|func|def|function)\b/
+const FN =/^\s*(?:export\s+)?(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?(?:fn|func|def|function)\b/
 
 const linesOf = (file: FileDiff): number => file.added.length + file.removed.length
 

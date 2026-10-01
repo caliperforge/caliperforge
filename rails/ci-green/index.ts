@@ -35,7 +35,7 @@ export interface Head {
   sha: string
 }
 
-export interface Text {
+interface Text {
   body: string
   commits: string[]
   issue_ref?: 'Fixes' | undefined

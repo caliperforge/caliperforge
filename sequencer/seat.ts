@@ -7,6 +7,7 @@ import { packet, refuse } from '../runner/index.ts'
 import { reviewManifest, SYMBOLS_LEAD, type Bench } from '../runner/packet.ts'
 import { load, seat, tight, type Seat } from '../runner/rules.ts'
 import { judge, loadReviews } from '../reviews/bench.ts'
+import { coverage, type Gated } from '../reviews/package.ts'
 import type { Finding, Judged, Note } from '../reviews/verdict.ts'
 import { runLogged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
@@ -24,7 +25,7 @@ import { handout, touched, type Handed } from './handout.ts'
 import { capped, enclosed, handover, type Handover } from './handover.ts'
 import { symbolMap } from './symbols.ts'
 import { targetOf } from './steps.ts'
-import { install, mode } from './checks.ts'
+import { install, mode, type Mode } from './checks.ts'
 import { narrow } from './rails.ts'
 import { classify } from './delta.ts'
 import { deletions } from './fence.ts'
@@ -399,17 +400,26 @@ function referenced(src: string, issue: string): Pick<Bench, 'reference'> {
  * only while the diff is the one it judged.
  */
 export function checked(db: Db, plan: PlanRow, src: string, diff: string): { checks?: string } {
-  const outside = internal(plan) ? null : outsideLanguage(languageFor(db, plan, src))
-  if (!internal(plan) && outside === null) return {}
+  const checks = coverage(gated(db, plan, src, diff), diff)
+  return checks === undefined ? {} : { checks }
+}
+
+const LANGUAGE: Partial<Record<Mode, string>> = { npm: 'typescript', xcodebuild: 'swift', gradle: 'kotlin' }
+
+function gated(db: Db, plan: PlanRow, src: string, diff: string): Gated[] {
   const row = db.prepare(`SELECT outcome, subject_digest FROM verdicts WHERE plan = ? AND kind = 'rail' AND rail_id = 'checks'
     ORDER BY id DESC LIMIT 1`).get(plan.id) as { outcome: string; subject_digest: string } | undefined
-  if (row?.outcome !== 'pass' || row.subject_digest !== createHash('sha256').update(diff).digest('hex')) return {}
-  if (outside !== null) {
-    const ran = gates(src, { language: outside, files: filesOf(db, plan.id).map((f) => f.path) }).map((g) => g.script).join(', ')
-    return { checks: `Passed on this diff: their ${outside} gates exit zero (${ran}). Do not re-derive what they settle.` }
+  if (row?.outcome !== 'pass' || row.subject_digest !== createHash('sha256').update(diff).digest('hex')) return []
+  if (!internal(plan)) {
+    const outside = outsideLanguage(languageFor(db, plan, src))
+    if (outside === null) return []
+    return gates(src, { language: outside, files: filesOf(db, plan.id).map((f) => f.path) })
+      .map((g) => ({ language: outside, dir: g.dir, command: [g.bin, ...g.args].join(' ') }))
   }
+  const language = LANGUAGE[mode(src)]
+  if (language === undefined) return []
   const scope = narrow(db, plan).length > 0 ? 'the tests this plan\'s files reach' : 'the whole suite'
-  return { checks: `Passed on this diff: every script the checkout names exits zero (${mode(src)}, ${scope}). Do not re-derive what they settle.` }
+  return [{ language, dir: '', command: `every script the checkout names (${mode(src)}, ${scope})` }]
 }
 
 function greptile(db: Db, plan: number, head: string): Pick<Bench, 'bot'> {

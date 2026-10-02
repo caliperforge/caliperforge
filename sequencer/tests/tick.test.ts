@@ -121,7 +121,7 @@ test('a kotlin/ brief builds on the kotlin seat, diffed at base', async () => {
   expect(gated[0]).toMatchObject({ step: 3, outcome: 'pass', note: 'pre-review: six rails pass; checks ran kotlin' })
   await tick(w.db, w.root, stub(CARRIED, 0, PASS, (p) => seen.push(p)))
   expect(seen[0]?.prompt.split('# Diff')[1]?.trim())
-    .toBe('# Checks\n\nPassed on this diff: their kotlin gates exit zero (test). Do not re-derive what they settle.')
+    .toBe('# Checks that ran\n\n- kotlin | kotlin | gradle installDist test | pass')
 })
 
 test('D1 D2 a firing seat holds a now row the lap clears', async () => {
@@ -363,7 +363,7 @@ test('outside reviewer gets context and map; ours does not', async () => {
   expect(prompt).toContain('# Changed code in context')
   expect(prompt).toContain('# Files around the change')
   expect(prompt.indexOf('# Changed code in context')).toBeGreaterThan(prompt.indexOf('# Diff'))
-  expect(prompt).not.toContain('# Checks')
+  expect(prompt).not.toContain('\n# Checks that ran\n')
   expect(prompt).toContain('# Symbols at the branch base\n\nEach top-level export at the branch base, as path:line name.\n\nsrc/hello.ts:1 hello\n')
   expect(prompt.indexOf('# Symbols at the branch base')).toBeGreaterThan(prompt.indexOf('# Files around the change'))
 })
@@ -403,13 +403,13 @@ test('a reviewer gets its last verdict and diff, not on its first', async () => 
   await tick(w.db, w.root, stub(OWNS, 0, REFUSE, (p) => round1.push(p)))
   expect(reviewer(round1)).not.toContain('# Your last verdict')
   expect(reviewer(round1)).not.toContain('# Changed code in context')
-  expect(reviewer(round1)).not.toContain('# Checks')
+  expect(reviewer(round1)).not.toContain('\n# Checks that ran\n')
 
   built(w.root, MINE, 'export const two = (): number => 2')
   const round2: Packet[] = []
   for (let step = 0; step < 4; step += 1) await tick(w.db, w.root, stub(OWNS, 0, PASS, (p) => round2.push(p)))
   const prompt = reviewer(round2)
-  expect(prompt).toContain('# Checks\n\nPassed on this diff')
+  expect(prompt).not.toContain('\n# Checks that ran\n')
   expect(prompt).toContain(`# Your last verdict\n\n---\noutcome: refuse\nclass: correctness\nspans:\n  - src/hello.ts:1\n---\n\n${WORDS}`)
   expect(prompt.split('# Changed since your last verdict')[1]).toContain('+export const two = (): number => 2')
   expect(prompt.split('# Paths since your last verdict')[1]).toMatch(

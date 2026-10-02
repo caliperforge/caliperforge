@@ -4,15 +4,15 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { expect, test } from 'vitest'
 import { unread } from '../../cli/inbox.ts'
-import { filesOf, record } from '../../store/files.ts'
+import { filesOf, listed, record } from '../../store/files.ts'
 import type { Db } from '../../store/index.ts'
 import { profile } from '../../store/profile.ts'
 import { checks, excluded, mode, npm, type Ran, type Run } from '../checks.ts'
 import { ciFeatures, formatLine, recipes } from '../gates.ts'
 import { tick } from '../index.ts'
 import { faulted, narrow } from '../rails.ts'
-import { get, srcDir } from '../workspace.ts'
-import { ATELIER, BROKEN, GREEN, NAPPING, ORPHANED, pkg, RED, TIMEOUT } from './bases.ts'
+import { get, put, srcDir } from '../workspace.ts'
+import { ATELIER, BROKEN, GREEN, GREETED, NAPPING, ORPHANED, pkg, RED, TIMEOUT } from './bases.ts'
 import { approve, built as edited, CARRIED, internalPlan, ours, plan, stub, watched, world, type World } from './world.ts'
 
 const ID = 2
@@ -203,6 +203,31 @@ test('#191 D2 a red unlisted test on unchanged code is refused', async () => {
   expect(fired).toMatchObject({ outcome: 'refuse', spans: ['checks:test', 'src/tests/hello.test.ts:3 says hi'] })
   expect(fired?.note).toBe('npm run test exit 1')
   expect(filesOf(w.db, ID).map((f) => f.path)).toEqual(before)
+}, SLOW)
+
+/** A plan whose build removed the `greets with hi` block, with `ruling` in its `rulings.md` where one is given, and its step-3 lap. */
+async function ungreeted(ruling?: string): Promise<{ w: World; fired: Awaited<ReturnType<typeof tick>>[number] | undefined }> {
+  const w = mine(GREETED)
+  for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  listed(w.db, ID, 'src/tests/hello.test.ts')
+  writeFileSync(join(srcDir(w.root, ID), 'src/tests/hello.test.ts'), 'export {}\n')
+  if (ruling !== undefined) put(w.root, ID, 'rulings.md', ruling)
+  return { w, fired: (await tick(w.db, w.root, stub(CARRIED)))[0] }
+}
+
+test('#628 D1 a removed test named in rulings.md passes', async () => {
+  const { w, fired } = await ungreeted("- the 'greets with hi' test goes\n")
+  expect(fired).toMatchObject({ plan: ID, step: 3, name: 'rails', outcome: 'pass' })
+  expect(plan(w.db, ID).step).toBe(4)
+}, SLOW)
+
+test('#628 D2 D3 a removed test no ruling names is refused', async () => {
+  for (const ruling of [undefined, "- the 'greets with bye' test goes\n"]) {
+    const { w, fired } = await ungreeted(ruling)
+    expect(fired).toMatchObject({ plan: ID, step: 3, outcome: 'refuse', spans: ['src/tests/hello.test.ts:1 test.weakened.removed'] })
+    expect(fired?.note.startsWith('test-weakened: ')).toBe(true)
+    expect(plan(w.db, ID).step).toBe(2)
+  }
 }, SLOW)
 
 test('#77: a narrow list runs reachable tests, only for vitest', () => {

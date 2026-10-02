@@ -45,7 +45,7 @@ test('D1 typescript is an outside language', () => {
   expect(outsideLanguage('typescript')).toBe('typescript')
 })
 
-test('D2 D6 a pnpm package installs frozen, then runs only the scripts it defines, in its folder', () => {
+test('D2 D6 pnpm installs frozen, runs only defined scripts', () => {
   expect(ts(nested({ 'ts/package.json': PACKAGE, 'ts/pnpm-lock.yaml': '', 'ts/src/a.ts': '' }))).toEqual([
     { script: 'install', bin: 'pnpm', args: ['install', '--frozen-lockfile'], dir: 'ts' },
     { script: 'lint', bin: 'pnpm', args: ['run', 'lint'], dir: 'ts' },
@@ -53,7 +53,7 @@ test('D2 D6 a pnpm package installs frozen, then runs only the scripts it define
   ])
 })
 
-test('D3 a pnpm workspace installs at its lockfile and runs scripts in the package', () => {
+test('D3 workspace installs at its lockfile, runs in the package', () => {
   expect(ts(nested({ 'ts/pnpm-lock.yaml': '', 'ts/packages/mpp/package.json': PACKAGE }), 'ts/packages/mpp/src/a.ts')).toEqual([
     { script: 'install', bin: 'pnpm', args: ['install', '--frozen-lockfile'], dir: 'ts' },
     { script: 'lint', bin: 'pnpm', args: ['run', 'lint'], dir: 'ts/packages/mpp' },
@@ -61,7 +61,7 @@ test('D3 a pnpm workspace installs at its lockfile and runs scripts in the packa
   ])
 })
 
-test('D4 a package-lock.json installs with npm ci and runs scripts with npm', () => {
+test('D4 package-lock.json gives npm ci, then npm run', () => {
   expect(ts(nested({ 'ts/package.json': PACKAGE, 'ts/package-lock.json': '' }))).toEqual([
     { script: 'install', bin: 'npm', args: ['ci'], dir: 'ts' },
     { script: 'lint', bin: 'npm', args: ['run', 'lint'], dir: 'ts' },
@@ -69,7 +69,7 @@ test('D4 a package-lock.json installs with npm ci and runs scripts with npm', ()
   ])
 })
 
-test('D5 a Justfile runs its recipes after the lockfile install, not the package scripts', () => {
+test('D5 a Justfile runs its recipes after the lockfile install', () => {
   expect(ts(nested({ 'ts/Justfile': 'lint:\n    echo lint\n\ntest:\n    echo test\n', 'ts/package.json': PACKAGE, 'ts/pnpm-lock.yaml': '' }))).toEqual([
     { script: 'install', bin: 'pnpm', args: ['install', '--frozen-lockfile'], dir: 'ts' },
     { script: 'lint', bin: 'just', args: ['--justfile', 'Justfile', 'lint'], dir: 'ts' },
@@ -77,7 +77,7 @@ test('D5 a Justfile runs its recipes after the lockfile install, not the package
   ])
 })
 
-test('D6 no lockfile means no install gate, and npm runs the scripts', () => {
+test('D6 no lockfile: no install gate, npm runs the scripts', () => {
   expect(ts(nested({ 'ts/package.json': PACKAGE }))).toEqual([
     { script: 'lint', bin: 'npm', args: ['run', 'lint'], dir: 'ts' },
     { script: 'test', bin: 'npm', args: ['run', 'test'], dir: 'ts' },

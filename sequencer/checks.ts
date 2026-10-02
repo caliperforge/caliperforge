@@ -4,7 +4,8 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { Profile } from '../store/profile.ts'
 import { exitedOutside } from './exited.ts'
-import { gates, Package, type Gate, type Outside, type OutsideLanguage } from './gates.ts'
+import { gates, type Gate, type Outside, type OutsideLanguage } from './gates.ts'
+import { Package } from './node.ts'
 
 export type Commands = NonNullable<Profile['commands']>
 

@@ -323,7 +323,7 @@
     "prepare": 1
   },
   "sequencer/checks.ts": {
-    "lines": 295,
+    "lines": 293,
     "silent-catch": 2
   },
   "sequencer/ci.ts": {

@@ -13,6 +13,7 @@ import { put } from '../../sequencer/workspace.ts'
 import { repriced } from '../../store/events.ts'
 import type { Db } from '../../store/index.ts'
 import { needsCeo, parked, PlanRow, waiting } from '../../store/plans.ts'
+import { record } from '../../store/signals.ts'
 
 const schema = join(import.meta.dirname, '../../schema')
 
@@ -226,8 +227,7 @@ test('Greptile counts dated requests of this UTC month, all plans', () => {
 })
 
 function review(db: Db, id: number, repo: string, author: string, at: string, plan: number): void {
-  db.prepare(`INSERT INTO signals (repo, pr, kind, author, at, external_id, score, plan)
-    VALUES (?, 3, 'bot_review', ?, ?, ?, 4, ?)`).run(repo, author, at, `g${String(id)}`, plan)
+  record(db, { repo, pr: 3, kind: 'bot_review', author, at, external_id: `g${String(id)}`, score: 4, plan })
 }
 
 test('D1 D2 Greptile rehearsal reviews of this UTC month count', () => {

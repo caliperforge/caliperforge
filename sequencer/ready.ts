@@ -8,7 +8,7 @@ import { built, gated, newest, ready as readyRow, type DeliverableRow, type Made
 import { record as recordFiles } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
 import { BUILT, internal, stampHead, type PlanRow } from '../store/plans.ts'
-import { graded } from '../store/signals.ts'
+import { graded, greptiled } from '../store/signals.ts'
 import type { Step } from '../templates/pr-path.ts'
 import { writable } from './brief.ts'
 import type { Outcome } from './kind.ts'
@@ -33,10 +33,7 @@ export function monthly(root: string, now: Date): number {
 }
 
 export function reviewed(db: Db, now: Date): number {
-  const row = db.prepare(`SELECT count(*) AS n FROM signals s JOIN plans p ON p.id = s.plan
-    WHERE s.kind = 'bot_review' AND s.author LIKE '%greptile%' AND s.repo GLOB ? AND p.origin IS NULL AND substr(s.at, 1, 7) = ?`)
-    .get(`${FORK}/*`, now.toISOString().slice(0, 7)) as { n: number }
-  return row.n
+  return greptiled(db, `${FORK}/*`, now.toISOString().slice(0, 7))
 }
 
 export interface Target { repo: string; issue_no: number; state: string; measured_at: string; pulse: string }

@@ -36,6 +36,14 @@ export function graded(db: Db, plan: number, head: string): SignalRow | null {
   return row === undefined ? null : SignalRow.parse(row)
 }
 
+/** Greptile reviews in the month on repos matching `repos`, of plans with no origin. */
+export function greptiled(db: Db, repos: string, month: string): number {
+  const row = db.prepare(`SELECT count(*) AS n FROM signals s JOIN plans p ON p.id = s.plan
+    WHERE s.kind = 'bot_review' AND s.author LIKE '%greptile%' AND s.repo GLOB ? AND p.origin IS NULL AND substr(s.at, 1, 7) = ?`)
+    .get(repos, month) as { n: number }
+  return row.n
+}
+
 export function since(db: Db, plan: number): SignalRow[] {
   return db.prepare('SELECT * FROM signals WHERE plan = ? ORDER BY id').all(plan).map((r) => SignalRow.parse(r))
 }

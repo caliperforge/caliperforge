@@ -53,7 +53,7 @@ test('an owned stray passes the rails and goes to review', async () => {
   expect(plan(w.db, ID).step).toBe(4)
 })
 
-test('an unowned stray refuses at the rails, before any review, naming its row; the round that writes it passes', async () => {
+test('an unowned stray refuses at the rails; owning it passes', async () => {
   const { w, rails } = await stray(CARRIED)
   expect(rails).toMatchObject({ plan: ID, step: 3, name: 'rails', outcome: 'refuse', spans: ['cli/extra.ts:1 authority.outside_files'] })
   expect(w.db.prepare('SELECT 1 FROM runs WHERE plan = ? AND step > 3').all(ID)).toEqual([])
@@ -65,20 +65,20 @@ test('an unowned stray refuses at the rails, before any review, naming its row; 
   expect(plan(w.db, ID).step).toBe(4)
 })
 
-test('#498a D5 with no profiles, an unowned stray is refused by the write fence alone', async () => {
+test('D5 no profiles: the write fence refuses an unowned stray', async () => {
   const w = mine()
   rmSync(join(w.root, 'profiles'), { recursive: true })
   const rails = await strayed(w, CARRIED)
   expect(rails).toMatchObject({ plan: ID, step: 3, name: 'rails', outcome: 'refuse', spans: ['cli/extra.ts:1 authority.write_paths'] })
 })
 
-test('#498a D6 a plan with a target reads its target repo\'s profile, not ours', async () => {
+test('D6 a plan with a target reads its repo\'s profile, not ours', async () => {
   const w = mine()
   const rails = await strayed(w, CARRIED, () => w.db.prepare('UPDATE plans SET target_id = 1 WHERE id = ?').run(ID))
   expect(rails).toMatchObject({ plan: ID, step: 3, name: 'rails', outcome: 'refuse', spans: ['cli/extra.ts:1 authority.write_paths'] })
 })
 
-test('#191 D3 a failing test is returned only when unlisted and importing a changed path', () => {
+test('D3 only an unlisted failing test on a changed path returns', () => {
   const src = mkdtempSync(join(tmpdir(), 'cf-broken-'))
   mkdirSync(join(src, 'store/tests'), { recursive: true })
   writeFileSync(join(src, 'store/tests/x.test.ts'), "import { x } from '../x.ts'\n")
@@ -87,7 +87,7 @@ test('#191 D3 a failing test is returned only when unlisted and importing a chan
   expect(broken(src, [], ['store/y.ts'], ['store/x.ts'])).toBeNull()
 })
 
-test('#374 a `+` path reads, a row naming no path is unread, a blank line is not a row', () => {
+test('a `+` path reads, a pathless row is unread, blanks skipped', () => {
   const plus = 'Atelier/Services/Dashboard/DashboardSource+Spend.swift'
   expect(deletions(`## Deleted\n\n- ${plus}\n`)).toEqual({ paths: [plus], unread: [] })
   expect(deletions('## Deleted\n\n- src/a.ts — why\n\n- the old spend file\n\n---\ndone:\n---\n'))
@@ -96,7 +96,7 @@ test('#374 a `+` path reads, a row naming no path is unread, a blank line is not
     .toEqual({ paths: ['src/a.ts'], unread: [] })
 })
 
-test('#397 a code-fence line is not a row; a prose row is still unread', () => {
+test('a code-fence line is not a row; a prose row is still unread', () => {
   expect(deletions('## Deleted\n\n```\n- src/a.ts\n- src/b.ts\n```\n')).toEqual({ paths: ['src/a.ts', 'src/b.ts'], unread: [] })
   expect(deletions('## Deleted\n\n- src/a.ts\n```\n\n```yaml\n---\ndone:\n---\n```\n')).toEqual({ paths: ['src/a.ts'], unread: [] })
   expect(deletions('## Deleted\n\n```\n- the old spend file\n```\n')).toEqual({ paths: [], unread: ['- the old spend file'] })

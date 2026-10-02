@@ -30,13 +30,13 @@ function audited(w: World): { outcome: string }[] {
   return w.db.prepare("SELECT outcome FROM verdicts WHERE rail_id = 'completion-audit'").all() as { outcome: string }[]
 }
 
-test('D2 a 4/5 bot review at HEAD puts both findings in the builder packet', async () => {
+test('D2 a 4/5 review at HEAD puts both findings in the packet', async () => {
   const { packets } = await built(4)
   expect(packets[0]?.prompt).toContain(`# Bot review findings\n\nGreptile scored this head 4/5.`)
   expect(packets[0]?.prompt).toContain(FOUND)
 })
 
-test('D3 a 5/5 score, or none at HEAD, puts no findings in the packet and leaves no findings.md', async () => {
+test('D3 a 5/5 or no score at HEAD: no findings, no findings.md', async () => {
   for (const score of [5, null]) {
     const { w, packets } = await built(score)
     expect(packets[0]?.prompt).not.toContain('# Bot review findings')
@@ -44,7 +44,7 @@ test('D3 a 5/5 score, or none at HEAD, puts no findings in the packet and leaves
   }
 })
 
-test('D4 a hand-back answering one of two findings is refused naming the other; answering both passes', async () => {
+test('D4 answering one of two findings refuses; both passes', async () => {
   const one = await built(4, answering(['G11']))
   expect(audited(one.w)).toEqual([{ outcome: 'refuse' }])
   expect(maybe(one.w.root, 1, 'refusal.md')).toContain('- G12')

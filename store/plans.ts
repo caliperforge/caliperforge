@@ -268,7 +268,7 @@ export function overlapWaits(db: Db): Overlap[] {
     ORDER BY p.id`).all() as Overlap[]
 }
 
-export interface Parked { id: number; step: number; state: string; repo: string | null; issue_no: number | null; held_why: string | null }
+interface Parked { id: number; step: number; state: string; repo: string | null; issue_no: number | null; held_why: string | null }
 
 /** The blocked plans parked on another job, each named with the job it waits for and the hold's why. */
 export function parked(db: Db): Parked[] {

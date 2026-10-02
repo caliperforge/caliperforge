@@ -30,19 +30,19 @@ function repo(recent: Commit[], ours: Commit[]): string {
   return dir
 }
 
-test('D1 a plain subject in a conventional repo is flagged and quoted', () => {
+test('D1 a conventional repo flags and quotes a plain subject', () => {
   const row = conform(repo(['feat: a', 'fix: b', 'c'], ['add hello']))
   expect(row.ok).toBe(false)
   expect(row.says).toContain('"add hello"')
 })
 
-test('D2 a conventional subject in a plain repo is flagged and quoted', () => {
+test('D2 a plain repo flags and quotes a conventional subject', () => {
   const row = conform(repo(['a', 'b', 'fix: c'], ['feat: add hello']))
   expect(row.ok).toBe(false)
   expect(row.says).toContain('"feat: add hello"')
 })
 
-test('D3 a repo that signs off flags a commit without one and passes one with it', () => {
+test('D3 a sign-off repo passes signed commits, flags unsigned', () => {
   const recent = [signed('a'), signed('b')]
   const row = conform(repo(recent, ['add hello']))
   expect(row.ok).toBe(false)
@@ -50,7 +50,7 @@ test('D3 a repo that signs off flags a commit without one and passes one with it
   expect(conform(repo(recent, [signed('add hello')])).ok).toBe(true)
 })
 
-test('D4 a repo with a changelog flags a branch that leaves it untouched and passes one that touches it', () => {
+test('D4 a changelog repo flags only branches that skip it', () => {
   const recent: Commit[] = [['a', 'CHANGELOG.md'], 'b']
   const row = conform(repo(recent, ['add hello']))
   expect(row.ok).toBe(false)
@@ -58,7 +58,7 @@ test('D4 a repo with a changelog flags a branch that leaves it untouched and pas
   expect(conform(repo(recent, [['add hello', 'CHANGELOG.md']])).ok).toBe(true)
 })
 
-test('D5 plain subjects, no sign-off and no changelog pass a plain commit', () => {
+test('D5 a repo with no conventions passes a plain commit', () => {
   expect(conform(repo(['a', 'b'], ['add hello'])))
     .toEqual({ check: 'conventions', ok: true, says: 'matches the last 2 commits' })
 })

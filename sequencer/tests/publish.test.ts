@@ -74,7 +74,7 @@ const card = (name: string, title: string, dek: string): string => `      <artic
       </article>
 `
 
-test('D1: an approved site row becomes the next NN_slug.html off the newest shell, and its row reads published', () => {
+test('D1: an approved site row becomes the next NN_slug.html',() => {
   const s = site()
   post(s.db, 1)
   expect(publish(s.db)).toMatchObject({ outcome: 'pass' })
@@ -84,14 +84,14 @@ test('D1: an approved site row becomes the next NN_slug.html off the newest shel
   expect(status(s.db)).toEqual([{ id: 1, status: 'published' }])
 })
 
-test('D2: index.html gains the card as the first child of cf-blog-cards, every other byte unchanged', () => {
+test('D2: the card leads cf-blog-cards, all else unchanged',() => {
   const s = site()
   post(s.db, 1)
   publish(s.db)
   expect(read(s, 'index.html')).toBe(`<main>\n${CARDS}${card('24_first-post', 'First post', 'What moved')}${OLD_CARD}    </div>\n</main>\n`)
 })
 
-test('D3: approved substack and note rows and a site row in proof stay as they are, with no file written', () => {
+test('D3: substack, note and proof rows stay; no file written',() => {
   const s = site()
   post(s.db, 1, { dest: 'substack' })
   post(s.db, 2, { dest: 'note' })
@@ -102,7 +102,7 @@ test('D3: approved substack and note rows and a site row in proof stay as they a
   expect(read(s, 'index.html')).toBe(INDEX)
 })
 
-test('D4: the edited title, dek and body replace the drafted ones in the page, the card and the slug', () => {
+test('D4: edited title, dek and body replace the drafted ones',() => {
   const s = site()
   post(s.db, 1, { edited_title: 'Edited post', edited_dek: 'Edited dek', edited_body: 'Edited line.' })
   publish(s.db)
@@ -115,7 +115,7 @@ test('D4: the edited title, dek and body replace the drafted ones in the page, t
   expect(read(s, 'index.html')).toContain(card('24_edited-post', 'Edited post', 'Edited dek'))
 })
 
-test('D5: a post written on another day than its work carries the dated note after the lede', () => {
+test('D5: a post written later carries the dated note',() => {
   const s = site()
   post(s.db, 1, { written_date: '2026-09-28' })
   publish(s.db)
@@ -123,7 +123,7 @@ test('D5: a post written on another day than its work carries the dated note aft
     + '<strong>Dated note.</strong> The work is from 2026-09-27; this post was written on 2026-09-28.</p>\n'))
 })
 
-test('D6: headings open sections, line runs become paragraphs, code spans convert, and every other text is escaped', () => {
+test('D6: sections, paragraphs, code spans; the rest escaped',() => {
   expect(article('Intro one\nwith `a<b` and <script>x</script>\n\n## First & "more"\nIn **section**.\n\n- not a list\n## Second\nLast.'))
     .toBe(['<p>Intro one\nwith <code>a&lt;b</code> and &lt;script&gt;x&lt;/script&gt;</p>',
       '<section class="cf-article__section">', '<p class="cf-article__eyebrow">First &amp; &quot;more&quot;</p>',
@@ -137,7 +137,7 @@ test('D6: headings open sections, line runs become paragraphs, code spans conver
   expect(page).toContain('<article class="cf-article">\n<p>&lt;script&gt;</p>\n</article>')
 })
 
-test('D7: the slug is the title lowercased to ASCII, dashed, and cut at a dash within 60, and a second row takes the next number', () => {
+test('D7: slugs are ASCII, dashed, cut within 60; numbers go up',() => {
   expect(slug('Ça va — Blend V2\'s H-01!')).toBe('ca-va-blend-v2-s-h-01')
   expect(slug('abcdefghij '.repeat(7))).toBe(Array(5).fill('abcdefghij').join('-'))
   const s = site()
@@ -169,7 +169,7 @@ test.each([
   expect(status(s.db)).toEqual([{ id: 1, status: 'approved' }])
 })
 
-test('D1: a daily site proof 25 h old gets its page and card written and reads published', () => {
+test('D1: a daily site proof 25 h old is published',() => {
   const s = site()
   post(s.db, 1, { status: 'proof' })
   aged(s.db, 1, '-25 hours')
@@ -179,7 +179,7 @@ test('D1: a daily site proof 25 h old gets its page and card written and reads p
   expect(status(s.db)).toEqual([{ id: 1, status: 'published' }])
 })
 
-test('D2: a daily site row sent back 25 h after proof stays in changes, with no file written', () => {
+test('D2: a daily row sent back stays in changes, no file',() => {
   const s = site()
   post(s.db, 1, { status: 'changes' })
   aged(s.db, 1, '-25 hours')
@@ -188,7 +188,7 @@ test('D2: a daily site row sent back 25 h after proof stays in changes, with no 
   expect(readdirSync(s.dir).sort()).toEqual(['23_a.html', 'index.html'])
 })
 
-test('D3: ship and weekly site proofs and a daily substack proof 25 h old stay in proof, and an approved substack row is never written', () => {
+test('D3: ship, weekly and substack proofs stay in proof',() => {
   const s = site()
   post(s.db, 1, { status: 'proof', kind: 'ship' })
   post(s.db, 2, { status: 'proof', kind: 'weekly' })
@@ -201,7 +201,7 @@ test('D3: ship and weekly site proofs and a daily substack proof 25 h old stay i
   expect(read(s, 'index.html')).toBe(INDEX)
 })
 
-test('D4: a daily site proof 23 h old and one with no proof_at stay in proof', () => {
+test('D4: a proof 23 h old or with no proof_at stays in proof',() => {
   const s = site()
   post(s.db, 1, { status: 'proof' })
   post(s.db, 2, { status: 'proof' })

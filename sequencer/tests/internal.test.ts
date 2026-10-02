@@ -39,12 +39,12 @@ function pair(): World {
   return w
 }
 
-/** Every stub brief names `src/hello.ts`; the second plan is given its own file so #88 lets both build at once. */
+/** Every stub brief names `src/hello.ts`; the second plan is given its own file so the overlap rule lets both build at once. */
 function apart(w: World): void {
   recordFiles(w.db, SECOND, [{ path: `src/p${String(SECOND)}.ts`, is_new: true }])
 }
 
-test('a lap fires the picks of a pipe at once: two fires are in flight together and each leaves its own run row', async () => {
+test('two picks fire at once, each with its own run row',async () => {
   const w = pair()
   for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
   apart(w)
@@ -58,7 +58,7 @@ test('a lap fires the picks of a pipe at once: two fires are in flight together 
     .toEqual([{ plan: ID, seat: 'typescript_specialist' }, { plan: SECOND, seat: 'typescript_specialist' }])
 })
 
-test('two plans at batch in one lap: the first lands on main and the second is sent round again', async () => {
+test('two at batch: the first lands, the second goes again',async () => {
   const w = pair()
   const sent: string[] = []
   const wire = landing(watched(sent, w.root, ID, runsAll(w.root, [ID, SECOND])))
@@ -83,7 +83,7 @@ test('two plans at batch in one lap: the first lands on main and the second is s
   expect(plan(w.db, SECOND).step).toBe(3)
 })
 
-test('a plan with an origin and no target passes measure and ruling, and waits on no approval', async () => {
+test('origin, no target: measure and ruling pass unapproved',async () => {
   const w = mine()
   expect(blocked(w.db, plan(w.db, ID))).toBeNull()
   const first = (await tick(w.db, w.root, stub(CARRIED)))[0]
@@ -97,7 +97,7 @@ test('a plan with an origin and no target passes measure and ruling, and waits o
   expect(plan(w.db, ID).step).toBe(2)
 })
 
-test('the internal checkout is our own repo on p<plan>-<slug>, built by the typescript seat', async () => {
+test('our repo on p<plan>-<slug>, built by the typescript seat',async () => {
   const w = mine()
   for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED))
   const fired = (await tick(w.db, w.root, stub(CARRIED)))[0]
@@ -120,7 +120,7 @@ test('D2 our own review packet carries the hand-back', async () => {
   expect(review).toContain(`# The builder's hand-back\n\n${CARRIED}`)
 })
 
-test('step 3 fills the digests an internal checkout holds, and a target checkout has none to fill', async () => {
+test('step 3 fills internal digests; a target has none',async () => {
   const w = mine()
   const built = stub(owning(['seats/brief_writer/prompt.md']))
   for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, built)
@@ -140,7 +140,7 @@ test('step 3 fills the digests an internal checkout holds, and a target checkout
   expect(existsSync(join(srcDir(t.root, t.plan), 'rules'))).toBe(false)
 })
 
-test('a roster the build left unfillable refuses that plan back to step 2 and the lap still steps the other', async () => {
+test('an unfillable roster refuses one plan; the other steps',async () => {
   const w = pair()
   for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
   apart(w)
@@ -153,12 +153,8 @@ test('a roster the build left unfillable refuses that plan back to step 2 and th
   expect(plan(w.db, ID).step).toBe(2)
 })
 
-/**
- * #41: the authority rail reads the same write rule the runner did. Measured 2026-09-18 16:04-16:19,
- * plans 11 (#30) and 13 (#32) built and were then refused here for `cli/adopt.ts` and
- * `rails/tight/index.ts` -- the files their own issues named.
- */
-test('the rails let an internal build keep the kernel files outside `src/` that it changed', async () => {
+/** The authority rail reads the same write rule the runner did. */
+test('an internal build keeps kernel files outside `src/`',async () => {
   const w = mine()
   const built = stub(owning(['cli/x.ts']))
   for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, built)
@@ -171,7 +167,7 @@ test('the rails let an internal build keep the kernel files outside `src/` that 
     .toEqual({ outcome: 'pass' })
 })
 
-/** Plan 46 (#52) was refused twice on its handback's prose, which no one outside the machine reads. */
+/** No one outside the machine reads a kernel plan's handback prose. */
 test('Tight judges no prose on a kernel plan', async () => {
   const w = mine()
   const told = stub(`Updated \`src/hello.ts\` so hello() says hey.\n\n${CARRIED}`)
@@ -180,7 +176,7 @@ test('Tight judges no prose on a kernel plan', async () => {
   expect((await tick(w.db, w.root, told))[0]).toMatchObject({ plan: ID, step: 3, name: 'rails', outcome: 'pass' })
 })
 
-test('step 6 sends an internal branch to origin and judges the runs at its head on caliperforge/caliperforge', async () => {
+test('step 6 sends to origin and judges runs at its head',async () => {
   const w = mine()
   const listed = runsOn(w.root, ID)
   const read: string[] = []
@@ -197,7 +193,7 @@ test('step 6 sends an internal branch to origin and judges the runs at its head 
   expect(plan(w.db, ID).step).toBe(7)
 })
 
-test('step 7 signs an internal plan on the gates and shows it in the batch as a read-out', async () => {
+test('step 7 signs on the gates and shows a batch read-out',async () => {
   const w = mine()
   const wire = watched([], w.root, ID)
   for (let at = 0; at < 7; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
@@ -213,7 +209,7 @@ test('step 7 signs an internal plan on the gates and shows it in the batch as a 
   expect(headApproved(w.db, headOf(w.root, ID).sha)).toBe(true)
 })
 
-test('a gates signature does not let an external plan leave ready, and the hook will not take one', async () => {
+test('gates cannot sign an external plan past ready',async () => {
   const w = world()
   const wire = watched([], w.root, 1)
   approve(w.db, w.target)

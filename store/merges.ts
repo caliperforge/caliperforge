@@ -1,6 +1,6 @@
 import type { Db } from './index.ts'
 
-export interface Merge {
+interface Merge {
   main: string
   incoming: string[]
   mine: string[]
@@ -8,7 +8,7 @@ export interface Merge {
   clean: boolean
 }
 
-export interface Recorded extends Merge {
+interface Recorded extends Merge {
   id: number
   /** The newest verdict on the plan when the merge was made; null where there was none. */
   verdict: number | null

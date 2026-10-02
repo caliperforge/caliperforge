@@ -122,7 +122,7 @@ export function titleOf(root: string, plan: number): string | null {
   return body === null ? null : (/^#\s+(.*)$/m.exec(body)?.[1]?.trim() ?? null)
 }
 
-export function gitBase(root: string): string {
+function gitBase(root: string): string {
   const path = join(root, '.cf/git-base')
   return existsSync(path) ? readFileSync(path, 'utf8').trim() : 'https://github.com'
 }
@@ -160,9 +160,20 @@ export function behindMain(dir: string, main: string): boolean {
   return git(dir, ['merge-base', 'HEAD', MAIN]).trim() !== main
 }
 
+const COMMITTER = ['-c', 'user.email=cf@caliperforge.dev', '-c', 'user.name=caliperforge']
+
 export function mergeMain(dir: string): void {
-  git(dir, ['-c', 'user.email=cf@caliperforge.dev', '-c', 'user.name=caliperforge',
-    'merge', '--no-edit', MAIN])
+  git(dir, [...COMMITTER, 'merge', '--no-edit', MAIN])
+}
+
+/** In a merge of `MAIN` into HEAD, "theirs" is main. */
+export function theirs(dir: string, path: string): void {
+  git(dir, ['checkout', '--theirs', '--', path])
+}
+
+export function commitMerge(dir: string, path: string): void {
+  git(dir, ['add', '--', path])
+  git(dir, [...COMMITTER, 'commit', '--no-edit'])
 }
 
 /**

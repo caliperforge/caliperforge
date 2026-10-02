@@ -1,8 +1,8 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { expect, it } from 'vitest'
-import { ratchet, ratcheted, type Counts } from './ratchet.ts'
+import { ratchet, ratcheted, recount, type Counts } from './ratchet.ts'
 
 function tree(files: Record<string, string>, seed: Counts): string {
   const dir = mkdtempSync(join(tmpdir(), 'cf-ratchet-'))
@@ -42,6 +42,13 @@ it('refuses a silent catch, not one that throws or logs', async () => {
     'b.ts': 'try { f() } catch (e) { throw e }\ntry { f() } catch { logged(db, e) }\n',
   }, {})
   expect(await messages(dir)).toEqual(['a.ts silent-catch 1 over budget 0: rethrow or record an event with logged()'])
+})
+
+it('D3 recount drops a gone file\'s row and keeps keys sorted', () => {
+  const dir = tree({ 'b.ts': 'x\n'.repeat(3) }, { 'c.ts': { lines: 9 }, 'b.ts': { lines: 1 }, 'a.ts': { lines: 2 } })
+  recount(dir, ['a.ts', 'b.ts'])
+  expect(readFileSync(join(dir, 'ratchet.json'), 'utf8'))
+    .toBe(`${JSON.stringify({ 'b.ts': { lines: 3 }, 'c.ts': { lines: 9 } }, null, 2)}\n`)
 })
 
 it('refuses a removal until ratchet.json is lowered', async () => {

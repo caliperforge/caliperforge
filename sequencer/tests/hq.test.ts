@@ -67,7 +67,7 @@ test.each(['.env', 'keys/id_ed25519'])('an unignored %s beside a changed file st
   expect(git(dir, ['rev-parse', 'HEAD'])).toBe(head)
 })
 
-test('an unreachable remote keeps the commit local, and the next job end pushes it', () => {
+test('a failed push stays local and the next save pushes it',() => {
   const { db, dir, remote } = hq()
   writeFileSync(join(dir, 'plan.md'), 'plan 7 done\n')
   renameSync(remote, `${remote}.gone`)

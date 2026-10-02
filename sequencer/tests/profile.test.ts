@@ -108,7 +108,7 @@ function memo(): string {
   return w.root
 }
 
-test('D4 a go-sdk profile shapes the subject, keeps Fixes #N and adds the trailer and disclosure', () => {
+test('D4 go-sdk: subject, Fixes, trailer and disclosure',() => {
   const root = memo()
   const rules = profile(MCP, 'modelcontextprotocol/go-sdk')
   expect(messageOf(root, 1, rules)).toBe('mcp: add a memo\n\nCarry a memo.\n\nFixes #35.\n\nCo-Authored-By: Claude')

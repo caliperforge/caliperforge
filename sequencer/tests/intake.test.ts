@@ -144,7 +144,7 @@ test('D4: a list exactly WINDOW long halts no plan', () => {
 
 test('D5: the tick lists issues only when handed a reader', async () => {
   const db = piped()
-  await tick(db, root, stub(CARRIED))
+  await tick(db, root, stub(CARRIED), new Date('2026-09-29T12:00:00Z'))
   expect(allPlans(db).length).toBe(0)
   const log: string[] = []
   await tick(db, root, stub(CARRIED), undefined, undefined, undefined, 0, (args) => {

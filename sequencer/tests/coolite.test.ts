@@ -138,7 +138,7 @@ test.each([['file', 'https://github.com/caliperforge/caliperforge/issues/900'], 
 
 const answer = () => `## Answer from the coo_lite (${new Date().toISOString().slice(0, 10)})\n\nbuild on main, not on plan 8\n`
 
-test('D1: rule on a plan a builder ran on goes in issue.md above ## Standing and back to step 2', async () => {
+test('D1: a built plan\'s rule goes in issue.md and back to step 2', async () => {
   const { db, home } = seeded('1')
   await run(db, home, REPLY.rule ?? '')
   expect(maybe(home, 7, 'issue.md')).toBe(`# Issue\n\nthe brief\n\n${answer()}\n## Standing\n\n- no forced push\n`)
@@ -146,7 +146,7 @@ test('D1: rule on a plan a builder ran on goes in issue.md above ## Standing and
   expect(row(db).step).toBe(2)
 })
 
-test('D2: rule on a plan stopped at step 1 with no builder run goes in ask.md and back in its lane', async () => {
+test('D2: an unbuilt plan\'s rule goes in ask.md, back to its lane', async () => {
   const live = seeded('1')
   const twin = seeded('1')
   for (const { db } of [live, twin]) db.exec('DELETE FROM runs; UPDATE plans SET step = 1 WHERE id = 7')
@@ -157,7 +157,7 @@ test('D2: rule on a plan stopped at step 1 with no builder run goes in ask.md an
   expect(row(live.db).step).toBe(1)
 })
 
-test('D3: the packet carries the rulings of plans with the same parent, not of others', async () => {
+test('D3: the packet carries sibling plans\' rulings, not others', async () => {
   const { db, home } = seeded('1')
   const at = (n: number) => `https://github.com/caliperforge/caliperforge/issues/${String(n)}`
   const plan = db.prepare(`INSERT INTO plans (id, pipe_id, template, state, queued_at, step, retries, priority, lane, seat, origin)
@@ -179,7 +179,7 @@ test('D3: the packet carries the rulings of plans with the same parent, not of o
   expect(prompts[0]).not.toContain('use plan 8')
 })
 
-test('an upstream-key stop gets the pinned read tool and is ruled with the keys', async () => {
+test('an upstream-key stop gets the pinned read tool and its keys', async () => {
   const { db, home } = seeded('1')
   put(home, 7, 'refusal.md', 'which keys does upstream config.toml take?\n')
   const keys = `github.com/o/r@${'a'.repeat(40)} config.toml: name, port`
@@ -301,7 +301,7 @@ test('D4: a new stop on a plan answered once today is fired on', async () => {
   expect(fires(db)).toEqual([{ plan: 7 }])
 })
 
-test('D4: a new stop on a plan answered twice today goes to a person, once', async () => {
+test('D4: a third stop in a day goes to a person, once', async () => {
   const { db, home } = seeded('1')
   stopped(db, 7, 50)
   passed(db, 60)
@@ -366,7 +366,7 @@ test('by hand, a live coo_lite run fires nothing', async () => {
   expect(fires(db)).toEqual([])
 })
 
-test('a plan held by the ceo, a parked plan and a retried plan are not stops', async () => {
+test('ceo-held, parked and retried plans are not stops', async () => {
   const { db, home } = seeded('1')
   for (const [i, m] of [60, 60, 60].entries()) stopped(db, 7 + i, m)
   held(db, 7, 'ceo', 'his call')

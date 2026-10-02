@@ -1,6 +1,6 @@
 import { parse, type FileDiff } from '../rails/diff.ts'
 
-export interface Picked { mode: 'full' | 'delta' | 'comment'; why: string }
+interface Picked { mode: 'full' | 'delta' | 'comment'; why: string }
 
 const COMMENT = /^(\/\/|\/\*|\*|$)/
 

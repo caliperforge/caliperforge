@@ -328,15 +328,15 @@ test('runs/usage: tokens by type, null cache write 0, same totals', () => {
 })
 
 function priced(db: Db, model: string): void {
-  db.prepare(`INSERT INTO prices (provider, model, input, cache_read, cache_write, output, effective_from, source_url)
-    VALUES ('claude-agent-sdk', ?, 1, 0.1, 2, 10, '2026-01-01', 'https://example.com/prices')`).run(model)
+  db.prepare(`INSERT INTO prices (provider, model, input, cache_read, cache_write, cache_write_1h, output, effective_from, source_url)
+    VALUES ('claude-agent-sdk', ?, 1, 0.1, 2, 2, 10, '2026-01-01', 'https://example.com/prices')`).run(model)
 }
 
 function costed(db: Db, model: string, ago: string, input: number, write: number, read: number, output: number, usd: number): void {
   db.prepare(`INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_write_tokens,
-    cache_read_tokens, output_tokens, cost_usd, seconds, exit, at, transcript_path)
-    VALUES (1, 2, 'typescript_specialist', ?, 'claude-agent-sdk', ?, 'high', ?, ?, ?, ?, ?, 60, 0, datetime('now', ?), 'x.transcript.jsonl')`)
-    .run(HASH, model, input, write, read, output, usd, ago)
+    cache_write_1h_tokens, cache_read_tokens, output_tokens, cost_usd, seconds, exit, at, transcript_path)
+    VALUES (1, 2, 'typescript_specialist', ?, 'claude-agent-sdk', ?, 'high', ?, ?, ?, ?, ?, ?, 60, 0, datetime('now', ?), 'x.transcript.jsonl')`)
+    .run(HASH, model, input, write, write, read, output, usd, ago)
 }
 
 function twoModels(): Db {

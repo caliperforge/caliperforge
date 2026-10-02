@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import ts from 'typescript'
 import type { Check, Finding } from './kind.ts'
@@ -47,6 +47,18 @@ export function counts(root: string): Counts {
 function recorded(root: string): Counts {
   const file = join(root, 'ratchet.json')
   return existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) as Counts : {}
+}
+
+export function recount(root: string, paths: string[]): void {
+  const now = counts(root)
+  const rows = new Map(Object.entries(recorded(root)))
+  for (const path of paths) {
+    const tally = now[path]
+    if (tally === undefined) rows.delete(path)
+    else rows.set(path, tally)
+  }
+  const sorted = Object.fromEntries([...rows.keys()].sort().map((path) => [path, rows.get(path)]))
+  writeFileSync(join(root, 'ratchet.json'), `${JSON.stringify(sorted, null, 2)}\n`)
 }
 
 function inFile(path: string, text: string): Tally {

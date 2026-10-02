@@ -320,7 +320,7 @@ function handed(issue: string, files: string): string {
 }
 
 /** The verdict, the findings behind its spans, and the tree it was written against. */
-export interface Round {
+interface Round {
   outcome: Outcome
   findings: Finding[]
   notes: Note[]

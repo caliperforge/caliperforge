@@ -32,12 +32,12 @@ export function bare(tool: string): string {
   return tool.split('(')[0] ?? tool
 }
 
-export type Ended = 'completed' | 'stopped'
+type Ended = 'completed' | 'stopped'
 
 export interface Fired {
   text: string
   transcript_path: string
-  usage: { input: number; cache: number; write?: number; output: number; cost?: number }
+  usage: { input: number; cache: number; write?: number; write_1h?: number; output: number; cost?: number }
   seconds: number
   ended: Ended
   exit: number

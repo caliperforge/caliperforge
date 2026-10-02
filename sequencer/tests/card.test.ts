@@ -36,7 +36,7 @@ async function atPush(): Promise<World> {
 const rows = (w: World, kind: string): unknown[] =>
   w.db.prepare('SELECT * FROM approvals WHERE subject_kind = ? ORDER BY id').all(kind)
 
-test('D1 an outside plan at push writes the card, calls no wire and holds on step 8', async () => {
+test('D1 outside push: card written, no wire, held on step 8', async () => {
   const w = await atPush()
   const sent: string[] = []
   const held = push(w.db, w.root, plan(w.db, 1), watched(sent, w.root, 1))
@@ -47,7 +47,7 @@ test('D1 an outside plan at push writes the card, calls no wire and holds on ste
   expect(plan(w.db, 1).step).toBe(8)
 })
 
-test('D9 a pr.md holding a tell flags its line on the card and sends nothing until the card is approved', async () => {
+test('D9 a tell in pr.md is flagged and held until approved', async () => {
   const w = await atPush()
   const sent: string[] = []
   const wire = watched(sent, w.root, 1)
@@ -59,7 +59,7 @@ test('D9 a pr.md holding a tell flags its line on the card and sends nothing unt
   expect(push(w.db, w.root, plan(w.db, 1), wire)).toMatchObject({ note: `pushed widget-12-a1 as ${PR}` })
 })
 
-test('D2 an approved card sends and opens as today, beside the one unchanged step-7 row', async () => {
+test('D2 an approved card sends and opens beside one step-7 row', async () => {
   const w = await atPush()
   const sent: string[] = []
   const wire = watched(sent, w.root, 1)
@@ -74,7 +74,7 @@ test('D2 an approved card sends and opens as today, beside the one unchanged ste
   expect(eventsOf(w.db, 1, 'card')).toMatchObject([{ actor: 'ceo', outcome: 'pass' }])
 })
 
-test('D3 a failing check is a flag row and holds like a clean card until the card is approved', () => {
+test('D3 a failing check is a flag row, held until approved', () => {
   const w = world()
   const lint = (): { check: string; ok: boolean; says: string } => ({ check: 'lint', ok: false, says: 'two errors' })
   const held = waiting(w.db, w.root, 1, SHA, TARGET, [lint])
@@ -85,7 +85,7 @@ test('D3 a failing check is a flag row and holds like a clean card until the car
   expect(waiting(w.db, w.root, 1, SHA, TARGET, [lint])).toBeNull()
 })
 
-test('D4 an approval at an earlier card sends nothing: other rows or another head rewrite the card and hold', async () => {
+test('D4 approving a stale card rewrites it and sends nothing', async () => {
   const w = await atPush()
   const sent: string[] = []
   const wire = watched(sent, w.root, 1)
@@ -119,7 +119,7 @@ test('D5 a refused card routes to the ceo and sends nothing', async () => {
   expect(sent).toEqual([])
 })
 
-test('D6 approving or refusing a plan with no card throws and writes no row', () => {
+test('D6 approve or refuse with no card throws, writes no row', () => {
   const w = world()
   expect(() => approve(w.db, w.root, 1, 'ceo')).toThrow('plan 1 has no card')
   expect(() => refuse(w.db, w.root, 1, 'not_yet', 'ceo')).toThrow('plan 1 has no card')
@@ -127,7 +127,7 @@ test('D6 approving or refusing a plan with no card throws and writes no row', ()
   expect(eventsOf(w.db, 1, 'card')).toEqual([])
 })
 
-test('D7 with no step-7 row push refuses on approvals and writes no card', async () => {
+test('D7 with no step-7 row push refuses and writes no card', async () => {
   const w = await atBatch()
   expect(push(w.db, w.root, plan(w.db, 1), watched([], w.root, 1))).toMatchObject({ outcome: 'refuse', spans: ['approvals'] })
   expect(maybe(w.root, 1, 'maintainer.md')).toBeNull()

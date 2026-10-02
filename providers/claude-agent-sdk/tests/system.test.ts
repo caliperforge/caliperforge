@@ -6,7 +6,8 @@ import type { Packet } from '../../kind.ts'
 
 const sent: { prompt: string; options: Record<string, unknown> }[] = []
 
-const RESULT = { type: 'result', subtype: 'success', is_error: false, stop_reason: 'end_turn', modelUsage: {}, permission_denials: [], result: '' }
+const RESULT = { type: 'result', subtype: 'success', is_error: false, stop_reason: 'end_turn', modelUsage: {}, permission_denials: [], result: '',
+  usage: { cache_creation: { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: 0 } } }
 
 vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
   query: (call: { prompt: string; options: Record<string, unknown> }) => {

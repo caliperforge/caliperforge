@@ -5,8 +5,8 @@ import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import { registerLanes } from '../cf-lanes.ts'
-import { actors, actorSection, costs, costSection, fileWaits, greptileLine, hands, heldBy, line, rulings, section, ticketSection, tickets, unpriced,
-  waitLine, waits } from '../brief.ts'
+import { actors, actorSection, costs, costSection, fileWaits, greptileLine, hands, heldBy, line, misses, missSection, rulings, section, ticketSection,
+  tickets, unpriced, waitLine, waits } from '../brief.ts'
 import { hold } from '../../sequencer/hold.ts'
 import { monthly, reviewed } from '../../sequencer/ready.ts'
 import { put } from '../../sequencer/workspace.ts'
@@ -226,8 +226,8 @@ test('Greptile counts dated requests of this UTC month, all plans', () => {
   expect(greptileLine(12)).toBe('greptile 12/50 this month\n')
 })
 
-function review(db: Db, id: number, repo: string, author: string, at: string, plan: number): void {
-  record(db, { repo, pr: 3, kind: 'bot_review', author, at, external_id: `g${String(id)}`, score: 4, plan })
+function review(db: Db, id: number, repo: string, author: string, at: string, plan: number, score = 4, head: string | null = null): void {
+  record(db, { repo, pr: 3, kind: 'bot_review', author, at, external_id: `g${String(id)}`, score, plan, head })
 }
 
 test('D1 D2 Greptile rehearsal reviews of this UTC month count', () => {
@@ -244,6 +244,62 @@ test('D1 D2 Greptile rehearsal reviews of this UTC month count', () => {
   expect(reviewed(db, now)).toBe(1)
   review(db, 6, 'caliperforge/widget', 'greptile-apps', '2026-10-02T09:00:00Z', 1)
   expect(reviewed(db, now)).toBe(2)
+})
+
+const HEAD = 'a'.repeat(40)
+
+const MISSED = 'greptile after both reviewers passed, last 30 d\n'
+
+function passed(db: Db, id: number, path: string, gates = ['review', 'senior_review']): void {
+  db.prepare('INSERT INTO plan_files (plan, path, is_new, position) VALUES (?, ?, 0, 0)').run(id, path)
+  for (const gate of gates) {
+    db.prepare(`INSERT INTO verdicts (gate, kind, subject_digest, plan, step, outcome, tokens, seconds)
+      VALUES (?, 'review', ?, ?, ?, 'pass', 0, 0)`).run(gate, HASH, id, gate === 'review' ? 4 : 5)
+  }
+}
+
+function rehearsals(): { db: Db; root: string; now: Date } {
+  const db = world()
+  const root = mkdtempSync(join(tmpdir(), 'cf-misses-'))
+  plan(db, 1, 'running', null, 1)
+  plan(db, 2, 'running', null, 1)
+  passed(db, 1, 'kotlin/src/main/kotlin/Client.kt')
+  passed(db, 2, 'python/client.py')
+  review(db, 1, 'caliperforge/widget', 'greptile-apps', '2026-10-01T09:00:00Z', 1, 2, HEAD)
+  review(db, 2, 'caliperforge/widget', 'greptile-apps', '2026-10-01T09:00:00Z', 2, 5, HEAD)
+  put(root, 1, `findings-${HEAD}.md`, [1, 2, 3, 4].map((n) => `- G${String(n)} a finding\n`).join(''))
+  return { db, root, now: new Date('2026-10-02T12:00:00.000Z') }
+}
+
+const FIXTURE = `${MISSED}  kotlin 1 passed, 1 marked down, 4 findings\n  python 1 passed, 0 marked down\n`
+
+test('D1 per language: heads passed, marked down and their findings', () => {
+  const { db, root, now } = rehearsals()
+  expect(missSection(misses(db, root, now))).toBe(FIXTURE)
+})
+
+test('D2 no senior pass, stale, internal, other bot or repo: none count', () => {
+  const { db, root, now } = rehearsals()
+  plan(db, 3, 'running', null, 1)
+  passed(db, 3, 'python/other.py', ['review'])
+  review(db, 3, 'caliperforge/widget', 'greptile-apps', '2026-10-01T09:00:00Z', 3, 2, HEAD)
+  review(db, 4, 'caliperforge/widget', 'greptile-apps', '2026-08-01T09:00:00Z', 1, 2, 'b'.repeat(40))
+  plan(db, 4, 'running', 25)
+  passed(db, 4, 'cli/brief.ts')
+  review(db, 5, 'caliperforge/caliperforge', 'greptile-apps', '2026-10-01T09:00:00Z', 4, 2, HEAD)
+  review(db, 6, 'caliperforge/widget', 'coderabbitai', '2026-10-01T09:00:00Z', 1, 2, 'c'.repeat(40))
+  review(db, 7, 'acme/widget', 'greptile-apps', '2026-10-01T09:00:00Z', 1, 2, 'd'.repeat(40))
+  expect(missSection(misses(db, root, now))).toBe(FIXTURE)
+})
+
+test('D3 two scores at one head are one head; the newer decides', () => {
+  const { db, root, now } = rehearsals()
+  review(db, 3, 'caliperforge/widget', 'greptile-apps', '2026-10-02T09:00:00Z', 1, 5, HEAD)
+  expect(missSection(misses(db, root, now))).toContain('  kotlin 1 passed, 0 marked down\n')
+})
+
+test('D4 no counted head prints none', () => {
+  expect(missSection(misses(world(), mkdtempSync(join(tmpdir(), 'cf-misses-')), new Date()))).toBe(`${MISSED}  none\n`)
 })
 
 test('cf brief names only plans whose ask.md drifted from brief', () => {

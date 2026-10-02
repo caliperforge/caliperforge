@@ -105,7 +105,6 @@
     "silent-catch": 1
   },
   "cli/proposal.ts": {
-    "lines": 19,
     "prepare": 2
   },
   "cli/queue.ts": {
@@ -678,7 +677,6 @@
     "silent-catch": 1
   },
   "sequencer/ticket.ts": {
-    "lines": 25,
     "prepare": 1
   },
   "sequencer/upgrade.ts": {

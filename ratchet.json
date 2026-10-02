@@ -69,9 +69,6 @@
     "lines": 299,
     "prepare": 14
   },
-  "cli/cf-lanes.ts": {
-    "lines": 200
-  },
   "cli/cf.ts": {
     "lines": 179,
     "silent-catch": 2
@@ -680,7 +677,7 @@
     "lines": 73
   },
   "store/lanes.ts": {
-    "lines": 196
+    "lines": 194
   },
   "store/leases.ts": {
     "lines": 69,

@@ -33,21 +33,37 @@ function paykit(): string {
   return src
 }
 
-test('outside reviewer told its language gates passed', () => {
-  const { db, plan } = target(['ruby/lib/pay_kit/config.rb'])
-  expect(checked(db, plan, paykit(), DIFF)).toEqual({
-    checks: 'Passed on this diff: their ruby gates exit zero (install, lint, test). Do not re-derive what they settle.',
+const KOTLIN = '--- a/kotlin/src/Runner.kt\n+++ b/kotlin/src/Runner.kt\n@@ -1,1 +1,1 @@\n+x\n'
+
+const RUBY = ['install', 'lint', 'test'].map((r) => `- ruby | ruby | just --justfile Justfile ${r} | pass`).join('\n')
+
+const UNGATED = '- none\n\nNo gate ran for:\n- ruby/lib/pay_kit/config.rb'
+
+test('D1 a path no gate ran under is listed after the gates', () => {
+  const { db, plan } = target(['ruby/lib/pay_kit/config.rb', 'kotlin/src/Runner.kt'], 'pass', DIFF + KOTLIN)
+  expect(checked(db, plan, paykit(), DIFF + KOTLIN)).toEqual({ checks: `${RUBY}\n\nNo gate ran for:\n- kotlin/src/Runner.kt` })
+  const npm = paykit()
+  writeFileSync(join(npm, 'package.json'), '{}')
+  expect(checked(db, { ...plan, origin: 'https://github.com/acme/kit/issues/1' }, npm, DIFF + KOTLIN)).toEqual({
+    checks: '- typescript | . | every script the checkout names (npm, the whole suite) | pass\n\nNo gate ran for:\n- ruby/lib/pay_kit/config.rb\n- kotlin/src/Runner.kt',
   })
 })
 
-test('outside note needs a pass on this diff', () => {
-  const red = target(['ruby/lib/pay_kit/config.rb'], 'refuse')
-  expect(checked(red.db, red.plan, paykit(), DIFF)).toEqual({})
+test('D2 outside reviewer told its language gates ran', () => {
   const { db, plan } = target(['ruby/lib/pay_kit/config.rb'])
-  expect(checked(db, plan, paykit(), `${DIFF}+y\n`)).toEqual({})
+  expect(checked(db, plan, paykit(), DIFF)).toEqual({ checks: RUBY })
 })
 
-test('no seat language, no note', () => {
+test('D3 no pass on this diff, or mode none, lists no gate', () => {
+  const red = target(['ruby/lib/pay_kit/config.rb'], 'refuse')
+  expect(checked(red.db, red.plan, paykit(), DIFF)).toEqual({ checks: UNGATED })
+  const { db, plan } = target(['ruby/lib/pay_kit/config.rb'], 'pass', `${DIFF}+y\n`)
+  expect(checked(db, plan, paykit(), DIFF)).toEqual({ checks: UNGATED })
+  const ours = target(['ruby/lib/pay_kit/config.rb'])
+  expect(checked(ours.db, { ...ours.plan, origin: 'https://github.com/acme/kit/issues/1' }, paykit(), DIFF)).toEqual({ checks: UNGATED })
+})
+
+test('D6 no seat language and no gate, no section', () => {
   const { db, plan } = target(['docs/paykit-interface.md'])
-  expect(checked(db, plan, paykit(), DIFF)).toEqual({})
+  expect(checked(db, plan, paykit(), '--- a/docs/paykit-interface.md\n+++ b/docs/paykit-interface.md\n@@ -1,1 +1,1 @@\n+x\n')).toEqual({})
 })

@@ -116,7 +116,7 @@ test('640 D1: a .kt hunk carries the lines around it', () => {
   expect(kotlin(200, [50])).toBe(fenced('src/r.kt:20-80', R.slice(19, 80)))
 })
 
-test('640 D2: windows that meet merge; far ones stay apart in file order', () => {
+test('640 D2: meeting windows merge, far ones stay apart', () => {
   expect(kotlin(200, [111, 50])).toBe(fenced('src/r.kt:20-141', R.slice(19, 141)))
   expect(kotlin(200, [50, 112])).toBe(`${fenced('src/r.kt:20-80', R.slice(19, 80))}\n\n${fenced('src/r.kt:82-142', R.slice(81, 142))}`)
 })

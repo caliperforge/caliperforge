@@ -8,6 +8,7 @@ import { block } from '../sequencer/handout.ts'
 import { languageOfPath } from '../sequencer/route.ts'
 import { filesOf } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
+import { windows } from './windows.ts'
 
 export interface Gated {
   language: string
@@ -24,7 +25,7 @@ export function coverage(gates: Gated[], diff: string): string | undefined {
   return unchecked.length === 0 ? lines : `${lines}\n\nNo gate ran for:\n${unchecked.map((path) => `- ${path}`).join('\n')}`
 }
 
-interface Changed {
+export interface Changed {
   path: string
   blocks: string[]
   names: Set<string>
@@ -51,29 +52,6 @@ function declarations(repo: string, path: string, hunks: Set<number>): Changed {
     blocks: statements.map((s) => block(path, lines, lineAt(src, s.getStart(src)), lineAt(src, s.getEnd()))),
     names: new Set(statements.filter(exported).flatMap(declaredNames)),
   }
-}
-
-const AROUND = 30
-const CAP = 300
-
-function windows(repo: string, path: string, hunks: Set<number>): Changed {
-  const lines = readFileSync(join(repo, path), 'utf8').split('\n')
-  const spans: [number, number][] = []
-  for (const n of [...hunks].sort((a, b) => a - b)) {
-    const [from, to] = [Math.max(1, n - AROUND), Math.min(lines.length, n + AROUND)]
-    const last = spans.at(-1)
-    if (last !== undefined && from <= last[1] + 1) last[1] = to
-    else spans.push([from, to])
-  }
-  const blocks: string[] = []
-  let left = CAP
-  for (const [from, to] of spans) {
-    if (left <= 0) break
-    const end = Math.min(to, from + left - 1)
-    blocks.push(block(path, lines, from, end))
-    left -= end - from + 1
-  }
-  return { path, blocks, names: new Set() }
 }
 
 export function declaredNames(s: ts.Statement): string[] {

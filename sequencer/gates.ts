@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { parse } from 'yaml'
 import { z } from 'zod'
+import { lockfile, nodeGates } from './node.ts'
 
 /** A language whose builder holds its own shell and brief-files fence on a stranger's repo. */
 const OUTSIDE_LANGUAGES = ['rust', 'python', 'ruby', 'go', 'php', 'lua', 'kotlin', 'swift', 'typescript'] as const
@@ -110,33 +111,12 @@ function own(src: string, outside: Outside): Gate[] {
   if (outside.language === 'rust') return rust(src, outside.files)
   const recipe = RECIPES[outside.language]
   const dir = home(src, first(outside), (name) => name === JUSTFILE || recipe.markers.test(name))
-  const node = outside.language === 'typescript' ? nodeGates(src, dir, recipe.recipes) : null
+  const node = outside.language === 'typescript' ? nodeGates(src, dir, home(src, join(dir, 'package.json'), lockfile), recipe.recipes) : null
   const install = node?.install ?? (recipe.install === null ? [] : [{ ...recipe.install, dir }])
   const defined = recipes(join(src, dir, JUSTFILE))
   if (defined === null) return [...install, ...(node?.raw ?? recipe.raw.map((r) => ({ ...r, dir })))]
   const just = (script: string): Gate => ({ script, bin: 'just', args: ['--justfile', JUSTFILE, script], dir })
   return [...(defined.has('install') ? [just('install')] : install), ...recipe.recipes.filter((r) => defined.has(r)).map(just)]
-}
-
-export const Package = z.object({ scripts: z.record(z.string(), z.string()).default({}) })
-
-const LOCKS: Record<string, Raw> = {
-  'pnpm-lock.yaml': { script: 'install', bin: 'pnpm', args: ['install', '--frozen-lockfile'] },
-  'package-lock.json': { script: 'install', bin: 'npm', args: ['ci'] },
-}
-
-/** Install at the nearest lockfile's folder, a workspace's root; then the scripts `package.json` defines, run by that lockfile's manager. */
-function nodeGates(src: string, dir: string, scripts: string[]): { install: Gate[]; raw: Gate[] } {
-  const at = home(src, join(dir, 'package.json'), (name) => name in LOCKS)
-  const lock = Object.entries(LOCKS).find(([name]) => existsSync(join(src, at, name)))?.[1]
-  const bin = lock?.bin ?? 'npm'
-  const path = join(src, dir, 'package.json')
-  const got = existsSync(path) ? Package.safeParse(JSON.parse(readFileSync(path, 'utf8'))) : null
-  const defined = got?.success === true ? got.data.scripts : {}
-  return {
-    install: lock === undefined ? [] : [{ ...lock, dir: at }],
-    raw: scripts.filter((s) => defined[s] !== undefined).map((s) => ({ script: s, bin, args: ['run', s], dir })),
-  }
 }
 
 function first(outside: Outside): string {

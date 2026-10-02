@@ -14,14 +14,14 @@ const posted = (w: World, id: number, edits: { title?: string; dek?: string; bod
 
 const notes = (w: World): string => readFileSync(join(w.root, 'comms/voice-notes.md'), 'utf8')
 
-test('D1: a row with only edited_title adds one line under a new header', () => {
+test('D1: an edited_title-only row adds a line under a new header', () => {
   const w = world()
   posted(w, 1, { title: 'The whole day' })
   expect(capture(w.db, w.root)).toEqual({ outcome: 'pass', spans: [], note: '1 voice note(s) added' })
   expect(notes(w)).toBe(`# Voice notes\n\n- ${today} 1 title: lengthened (7 → 13 chars)\n`)
 })
 
-test('D2: a row with no edited field adds no line, and no file is made', () => {
+test('D2: a row with no edits adds no line and makes no file', () => {
   const w = world()
   posted(w, 1)
   expect(capture(w.db, w.root)).toMatchObject({ note: '0 voice note(s) added' })
@@ -45,7 +45,7 @@ test.each([['', 'cut'], ['a'.repeat(8), 'shortened'], ['a'.repeat(9), 'reworded'
     expect(notes(w)).toContain(`- ${today} 1 body: ${pattern} (10 → ${String(edit.length)} chars)\n`)
   })
 
-test('D5: a note ends each of its row\'s lines, and a null note adds nothing', () => {
+test('D5: a note ends each row line; a null note adds nothing', () => {
   const w = world()
   posted(w, 1, { title: 'The day!', dek: 'What moved!', note: 'less flat' })
   posted(w, 2, { title: 'A day' })
@@ -57,7 +57,7 @@ test('D5: a note ends each of its row\'s lines, and a null note adds nothing', (
   ])
 })
 
-test('D3 D5: a note with line breaks is one line, and a second capture adds nothing', () => {
+test('D3 D5: a multi-line note is one line; recapturing adds none', () => {
   const w = world()
   posted(w, 1, { title: 'A day', note: ' less flat\n\n  more  plain\r\n' })
   capture(w.db, w.root)

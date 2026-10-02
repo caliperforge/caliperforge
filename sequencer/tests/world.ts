@@ -33,10 +33,10 @@ export const CARRIED = 'built\n\n---\ndone:\n  - id: D1\n    status: done\n    p
 
 export const PASS = '---\noutcome: pass\n---\n'
 
-/** CARRIED from a build that also wrote `paths`, each owned under `## Outside the files` (#87). */
+/** CARRIED from a build that also wrote `paths`, each owned under `## Outside the files`. */
 export const owning = (paths: string[]): string =>
   CARRIED.replace('built\n\n', `built\n\n## Outside the files\n\n${paths.map((p) => `- \`${p}\` — the test writes it`).join('\n')}\n\n`)
-/** CARRIED from a build that also named `paths` for removal under `## Deleted` (#64). */
+/** CARRIED from a build that also named `paths` for removal under `## Deleted`. */
 export const dropping = (paths: string[]): string =>
   CARRIED.replace('built\n\n', `built\n\n## Deleted\n\n${paths.map((p) => `- ${p}`).join('\n')}\n\n`)
 export const WORDS = '`hello()` takes no name, so the call the issue names as D2 cannot be refused at all.'
@@ -146,7 +146,7 @@ function remotes(root: string, files: Record<string, string>): void {
  * stranger's: an internal plan clones it, fetches its `main` and branches off that. It is
  * not bare, so it takes a landing push onto its checked-out `main` only under `denyCurrentBranch`.
  * It carries the rules an internal checkout holds, because step 3 fills their digests in one, and a
- * workflow as the kernel's own repo does; `ci = false` is Atelier's, which runs none (#206).
+ * workflow as the kernel's own repo does; `ci = false` is Atelier's, which runs none.
  */
 export function ours(root: string, files: Record<string, string> = TYPESCRIPT, ci = true): void {
   copy('ours', files, ci, join(root, 'remotes', SELF))
@@ -217,7 +217,7 @@ function onePipe(db: Db): void {
   db.prepare("DELETE FROM pipes WHERE name IN ('comms', 'research')").run()
 }
 
-/** The COO's reads of the first ten briefs (`store/holds.ts`): spent in a world that is not driving them. */
+/** Reads of the first ten briefs (`store/holds.ts`): spent in a world that is not driving them. */
 export function reads(db: Db, n: number): void {
   db.prepare("UPDATE settings SET value = ? WHERE key = 'brief.reads_left'").run(String(n))
 }

@@ -545,59 +545,60 @@
     "prepare": 3
   },
   "sequencer/tests/quick.test.ts": {
-    "prepare": 5,
-    "test-name": 4
+    "prepare": 10
   },
   "sequencer/tests/reap.test.ts": {
     "prepare": 1
   },
   "sequencer/tests/recorded.test.ts": {
-    "prepare": 1,
-    "test-name": 1
-  },
-  "sequencer/tests/reopen.test.ts": {
-    "test-name": 1
+    "prepare": 1
   },
   "sequencer/tests/resume.test.ts": {
-    "citing-comment": 1,
     "prepare": 1
   },
   "sequencer/tests/route.test.ts": {
-    "prepare": 5,
-    "test-name": 7
+    "prepare": 6
+  },
+  "sequencer/tests/rule.test.ts": {
+    "prepare": 3
+  },
+  "sequencer/tests/scorecard.test.ts": {
+    "prepare": 6
   },
   "sequencer/tests/seat-checks.test.ts": {
     "prepare": 6
   },
-  "sequencer/tests/signoff.test.ts": {
-    "citing-comment": 2,
-    "prepare": 7,
-    "test-name": 15
+  "sequencer/tests/shared.test.ts": {
+    "prepare": 3
   },
-  "sequencer/tests/slots.test.ts": {
-    "test-name": 1
+  "sequencer/tests/signoff.test.ts": {
+    "prepare": 7
+  },
+  "sequencer/tests/size.test.ts": {
+    "prepare": 1
   },
   "sequencer/tests/spawns.test.ts": {
-    "prepare": 1,
-    "test-name": 1
-  },
-  "sequencer/tests/split.test.ts": {
-    "test-name": 8
+    "prepare": 1
   },
   "sequencer/tests/strays.test.ts": {
-    "prepare": 4,
-    "test-name": 1
+    "prepare": 4
   },
-  "sequencer/tests/symbols.test.ts": {
-    "test-name": 1
+  "sequencer/tests/theirs.test.ts": {
+    "prepare": 3
+  },
+  "sequencer/tests/tick.test.ts": {
+    "prepare": 1
   },
   "sequencer/tests/upgrade.test.ts": {
-    "citing-comment": 1,
-    "prepare": 1,
-    "test-name": 6
+    "prepare": 1
+  },
+  "sequencer/tests/upstream.test.ts": {
+    "prepare": 1
+  },
+  "sequencer/tests/voice.test.ts": {
+    "prepare": 1
   },
   "sequencer/tests/world.ts": {
-    "citing-comment": 1,
     "prepare": 11
   },
   "sequencer/theirs.ts": {

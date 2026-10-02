@@ -8,7 +8,7 @@ import { built, CARRIED, internalPlan, ours, stub, watched, world } from './worl
 
 const ID = 2
 
-test('D4 a step-3 tick spawns 12 git processes, 3 of them the live diff', async () => {
+test('D4 a step-3 tick spawns 12 git processes, 3 the live diff', async () => {
   const w = world()
   w.db.prepare('DELETE FROM plans WHERE id = 1').run()
   ours(w.root)

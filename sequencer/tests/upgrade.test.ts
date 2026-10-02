@@ -21,7 +21,7 @@ const store = (): Db => fresh(join(import.meta.dirname, '../../schema'))
 
 const version = (db: Db): number => Number(db.pragma('user_version', { simple: true }))
 
-/** The lap of `sequencer/tests/land.test.ts`, with `sql` on the main it lands over and the COO's tree cloned before it. */
+/** The lap of `sequencer/tests/land.test.ts`, with `sql` on the main it lands over and the live tree cloned before it. */
 async function lands(sql: string, detached = false): Promise<{ w: World; live: string; sha: string }> {
   const w = world()
   w.db.prepare('DELETE FROM plans WHERE id = 1').run()
@@ -60,7 +60,7 @@ function commit(dir: string, message: string): void {
   git(dir, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', message])
 }
 
-test('the tick whose lap lands one of ours leaves the live tree at that commit, migrated', async () => {
+test('landing one of ours moves the live tree to it, migrated', async () => {
   const { w, live, sha } = await lands('CREATE TABLE live (id INTEGER PRIMARY KEY);\n')
   expect(behind(w.db, live)).toBe(sha)
 
@@ -70,7 +70,7 @@ test('the tick whose lap lands one of ours leaves the live tree at that commit, 
   expect(behind(w.db, live)).toBeNull()
 })
 
-test('a live tree with a commit of its own is refused: no ref moves and no schema file runs', () => {
+test('a live tree with its own commit is refused: nothing moves', () => {
   const { live, sha } = diverged()
   const db = store()
   const head = git(live, ['rev-parse', 'HEAD'])
@@ -83,7 +83,7 @@ test('a live tree with a commit of its own is refused: no ref moves and no schem
   expect(version(db)).toBe(0)
 })
 
-test('a detached tick tree moves forward to the landing, migrated, and its receipt stays clean', async () => {
+test('a detached tick tree moves to the landing, migrated, clean', async () => {
   const { w, live, sha } = await lands('CREATE TABLE live (id INTEGER PRIMARY KEY);\n', true)
 
   expect(upgraded(w.db, live, LAP)).toEqual(LAP)
@@ -92,7 +92,7 @@ test('a detached tick tree moves forward to the landing, migrated, and its recei
   expect(version(w.db)).toBe(18)
 })
 
-test('a detached tick tree carrying a commit of its own is refused and does not move', () => {
+test('a detached tick tree with its own commit is refused, unmoved', () => {
   const { live, sha } = diverged()
   git(live, ['checkout', '-q', '--detach'])
   const head = git(live, ['rev-parse', 'HEAD'])
@@ -101,7 +101,7 @@ test('a detached tick tree carrying a commit of its own is refused and does not 
   expect(git(live, ['rev-parse', 'HEAD'])).toBe(head)
 })
 
-test('a schema file that throws puts the sqlite message in that tick\'s receipt at exit 1', async () => {
+test('a throwing schema file puts the sqlite error in the receipt', async () => {
   const { w, live } = await lands('CREATE TABLE plans (id INTEGER PRIMARY KEY);\n')
 
   receipt(w.db, upgraded(w.db, live, LAP))
@@ -112,7 +112,7 @@ test('a schema file that throws puts the sqlite message in that tick\'s receipt 
   expect(version(w.db)).toBe(0)
 })
 
-test('a store with no landing of ours leaves the live tree and its receipt alone', () => {
+test('no landing of ours leaves the live tree and receipt alone', () => {
   const db = store()
   const live = mkdtempSync(join(tmpdir(), 'cf-bare-'))
 

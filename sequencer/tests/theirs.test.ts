@@ -33,7 +33,7 @@ function ours(): World {
   return w
 }
 
-test('D1 a PR by the named merger on our file is flagged and the card holds', () => {
+test('D1 the named merger\'s PR on our file flags; the card holds', () => {
   const w = ours()
   const check = theirs(canned([pr({ files: [{ path: 'src/hello.ts' }] })]))
   expect(check(w.db, w.root, 1, TARGET)).toEqual({ check: 'their work', ok: false, says: `pr ${URL} touches src/hello.ts` })
@@ -41,13 +41,13 @@ test('D1 a PR by the named merger on our file is flagged and the card holds', ()
   expect(get(w.root, 1, 'maintainer.md')).toContain(`flag\ttheir work\tpr ${URL} touches src/hello.ts\n`)
 })
 
-test('D2 a draft naming the issue on none of our files is flagged as naming it', () => {
+test('D2 a draft naming the issue off our files flags as naming it', () => {
   const w = ours()
   const draft = pr({ isDraft: true, author: { login: 'other' }, headRepositoryOwner: { login: 'acme' }, body: 'fixes #12' })
   expect(theirs(canned([draft]))(w.db, w.root, 1, TARGET).says).toBe(`draft ${URL} names #12`)
 })
 
-test('D3 our fork, an outsider fork and a search hit in the repo itself pass', () => {
+test('D3 our fork, an outside fork and a hit in the repo pass', () => {
   const w = ours()
   const files = [{ path: 'src/hello.ts' }]
   const read = canned([
@@ -57,14 +57,14 @@ test('D3 our fork, an outsider fork and a search hit in the repo itself pass', (
   expect(theirs(read)(w.db, w.root, 1, TARGET)).toEqual(PASS)
 })
 
-test('D4 an open PR in another repo of the org naming the issue is flagged', () => {
+test('D4 an open PR in another org repo naming the issue flags', () => {
   const w = ours()
   const other = 'https://github.com/acme/gadget/pull/3'
   const read = canned([], [{ url: other, repository: { nameWithOwner: 'acme/gadget' } }])
   expect(theirs(read)(w.db, w.root, 1, TARGET)).toMatchObject({ ok: false, says: `pr ${other} names #12` })
 })
 
-test('D5 a recent upstream branch on our file is flagged with its tree link, main never', () => {
+test('D5 a recent upstream branch on our file flags, main never', () => {
   const w = ours()
   const dir = srcDir(w.root, 1)
   git(dir, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qam', 'hello'])
@@ -73,7 +73,7 @@ test('D5 a recent upstream branch on our file is flagged with its tree link, mai
     says: 'branch https://github.com/acme/widget/tree/fix-hello touches src/hello.ts' })
 })
 
-test('D6 an orphan upstream branch with no history in common with main passes', () => {
+test('D6 an upstream branch sharing no history with main passes', () => {
   const w = ours()
   const dir = srcDir(w.root, 1)
   const tree = git(dir, ['hash-object', '-t', 'tree', '-w', '/dev/null']).trim()
@@ -82,7 +82,7 @@ test('D6 an orphan upstream branch with no history in common with main passes', 
   expect(theirs(canned([]))(w.db, w.root, 1, TARGET)).toEqual(PASS)
 })
 
-test('D7 an upstream head the fetch refspec does not write is never read', () => {
+test('D7 an upstream head the refspec does not write is never read', () => {
   const w = ours()
   const dir = srcDir(w.root, 1)
   git(dir, ['config', 'remote.upstream.fetch', '+refs/heads/main:refs/remotes/upstream/main'])
@@ -91,14 +91,14 @@ test('D7 an upstream head the fetch refspec does not write is never read', () =>
   expect(theirs(canned([]))(w.db, w.root, 1, TARGET)).toEqual(PASS)
 })
 
-test('intake D1 the ask names the files the tree holds, never a missing one or one with ..', () => {
+test('intake D1 the ask names only files the tree holds, no ..', () => {
   const w = world()
   checkout(w.root, 1, 'acme/widget', 'widget-12-a1')
   put(w.root, 1, 'ask.md', '# hello\n\nFix src/hello.ts. Not src/gone.ts or ../src/hello.ts\n')
   expect(named(w.root, 1)).toEqual(['src/hello.ts'])
 })
 
-test('intake D2 approving a target an upstream branch works on refuses the target and its plan', () => {
+test('intake D2 a target an upstream branch works on is refused', () => {
   const w = ours()
   const dir = srcDir(w.root, 1)
   git(dir, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qam', 'hello'])
@@ -112,7 +112,7 @@ test('intake D2 approving a target an upstream branch works on refuses the targe
   expect(w.db.prepare('SELECT state FROM plans WHERE target_id = ?').all(id)).toEqual([{ state: 'refused' }])
 })
 
-test('intake D4 a flag at step 1 blocks the plan on the CEO before any model runs; with no intake step 1 runs', async () => {
+test('intake D4 a step-1 flag blocks before any model runs', async () => {
   const flag = { check: 'their work', ok: false, says: `branch ${TREE} touches src/hello.ts` }
   const fires = async (flagged: boolean): Promise<{ state: string; note: string; fired: number }> => {
     const w = world()

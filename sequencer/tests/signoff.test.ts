@@ -55,7 +55,7 @@ function fake(pr: number | null = null, lines: string[] = []): Desk & { cards: M
   }
 }
 
-test('an outside plan at sign-off gets one card, and the card links nothing on their thread', async () => {
+test('one card per outside plan, linking nothing on their thread', async () => {
   const w = await atBatch()
   const desk = fake()
   expect(signoffs(w.db, w.root, desk)).toEqual([{ plan: 1, card: 100, did: 'opened' }])
@@ -71,7 +71,7 @@ test('an outside plan at sign-off gets one card, and the card links nothing on t
   expect(unread(w.root).map((e) => [e.kind, e.ticket])).toEqual([['signoff', 'acme/widget#12']])
 })
 
-test('a card with a rehearsal PR links its files view before the commit, and still nothing on their thread', async () => {
+test('a rehearsal PR card links its files view, not their thread', async () => {
   const w = await atBatch()
   const desk = fake(5)
   signoffs(w.db, w.root, desk)
@@ -82,7 +82,7 @@ test('a card with a rehearsal PR links its files view before the commit, and sti
   expect(body.replace(/```markdown[\s\S]*?\n```\n/, '').replace(/`[^`]*`/g, '')).not.toMatch(/#\d|acme\/widget|github\.com\/acme/)
 })
 
-test('go signs the head the card showed, closes the card, and the next tick sends it', async () => {
+test('go signs the head shown, closes the card, next tick sends it', async () => {
   const w = await atBatch()
   const desk = fake()
   signoffs(w.db, w.root, desk)
@@ -133,7 +133,7 @@ test('no with words sends it back to the builder with them', async () => {
   expect(eventsOf(w.db, 1, 'signoff')).toEqual([{ actor: 'ceo', outcome: 'refuse', message: 'signoff.no' }])
 })
 
-test('D1 no with only a line comment on the rehearsal PR sends it back to the builder with it', async () => {
+test('D1 no with only a line comment carries it to the builder', async () => {
   const w = await atBatch()
   const desk = fake(5, ['src/hello.ts:1 Name it greet.'])
   signoffs(w.db, w.root, desk)
@@ -145,7 +145,7 @@ test('D1 no with only a line comment on the rehearsal PR sends it back to the bu
   expect(w.db.prepare("SELECT reason FROM approvals WHERE subject_kind = 'plan'").get()).toEqual({ reason: 'signoff.no' })
 })
 
-test('D2 only the credential owner\'s line comments come back, at the original line when outdated', () => {
+test('D2 only the owner\'s comments return, at their original line', () => {
   const read = (args: string[]): unknown => args[1]?.startsWith('repos/') === true && args[1].includes('/pulls/')
     ? [
       { id: 1, commit_id: 'c1', path: 'src/hello.ts', line: 3, original_line: 3, body: 'ship it', user: { login: 'stranger' } },
@@ -155,7 +155,7 @@ test('D2 only the credential owner\'s line comments come back, at the original l
   expect(ghDesk(SIGNOFF, read, () => 'michael-moffett\n').lines('caliperforge/widget', 5)).toEqual(['src/hello.ts:1 Name it greet.'])
 })
 
-test('D3 no with card words and a line comment carries both, card words first', async () => {
+test('D3 no with words and a line comment sends both, words first', async () => {
   const w = await atBatch()
   const desk = fake(5, ['src/hello.ts:1 Name it greet.'])
   signoffs(w.db, w.root, desk)
@@ -166,7 +166,7 @@ test('D3 no with card words and a line comment carries both, card words first', 
   expect(readFileSync(join(w.root, '.cf/work/1/issue.md'), 'utf8')).toContain('Call it expiry. src/hello.ts:1 Name it greet.')
 })
 
-test('D4 the card says a comment on a line of the diff plus no reaches the builder', async () => {
+test('D4 the card says a line comment plus no reaches the builder', async () => {
   const w = await atBatch()
   const desk = fake()
   signoffs(w.db, w.root, desk)
@@ -186,7 +186,7 @@ test('no alone waits for the coo', async () => {
   expect(unread(bare.root).map((e) => e.kind)).toEqual(['signoff', 'asked'])
 })
 
-test('talk hands it to the coo and leaves the card open for an answer', async () => {
+test('talk hands it to the coo and leaves the card open', async () => {
   const w = await atBatch()
   const desk = fake()
   signoffs(w.db, w.root, desk)
@@ -199,7 +199,7 @@ test('talk hands it to the coo and leaves the card open for an answer', async ()
   expect(signoffs(w.db, w.root, desk)).toEqual([])
 })
 
-test('a new head closes the old card and opens the next; a job sent back closes its card', async () => {
+test('a new head swaps the card; a job sent back closes its card', async () => {
   const w = await atBatch()
   const desk = fake()
   signoffs(w.db, w.root, desk)
@@ -211,7 +211,7 @@ test('a new head closes the old card and opens the next; a job sent back closes 
   expect(desk.cards.get(101)?.closing).toMatch(/^Withdrawn/)
 })
 
-test('only the label the owner of the gh credential set is an answer', () => {
+test('only a label the gh credential owner set is an answer', () => {
   const read = (args: string[]): unknown => args[0] === 'issue'
     ? { state: 'OPEN', labels: [{ name: 'go' }, { name: 'talk' }],
       comments: [{ author: { login: 'stranger' }, body: 'ship it' }, { author: { login: 'michael-moffett' }, body: 'one question' }] }
@@ -236,7 +236,7 @@ test('the card names every workflow and says green only of what is', async () =>
   expect(body).toContain('- Their CI on our fork: Ruby green; also ran, not judged on: Python red')
 })
 
-test('a workflow red on the base too is named so on the card, with its job and step', async () => {
+test('a workflow also red on base says so, with its job and step', async () => {
   const w = await atBatch()
   put(w.root, 1, 'ci.json', JSON.stringify([
     { workflow: 'Validate', status: 'completed', conclusion: 'failure', gates: true, base: ['validate: Install'] },
@@ -246,7 +246,7 @@ test('a workflow red on the base too is named so on the card, with its job and s
   expect(desk.cards.get(100)?.body).toContain('- Their CI on our fork: Validate red on the base too (validate: Install)')
 })
 
-test('a ruling lands as the next D row and a Must not break line, or in its own section', () => {
+test('a ruling adds a D row and Must not break line, or a section', () => {
   const brief = '# t\n\n## Cases\n\n- D1 a\n- D2 b\n\n## Must not break\n\n- c\n\n## Files\n\n- `a/b.ts`\n'
   expect(ruled(brief, 'Only\nthe number.', '2026-09-21')).toBe('# t\n\n## Cases\n\n- D1 a\n- D2 b\n'
     + "- D3 The CEO's ruling at sign-off (2026-09-21): Only the number.\n\n## Must not break\n\n- c\n"
@@ -254,8 +254,8 @@ test('a ruling lands as the next D row and a Must not break line, or in its own 
   expect(ruled('# t\n\nfree text\n', 'x', '2026-09-21')).toBe("# t\n\nfree text\n\n## The CEO's rulings\n\n- D1 The CEO's ruling at sign-off (2026-09-21): x\n")
 })
 
-/** #97: on plan 65 the PR text came from the hand build and never mentioned two Lua files the machine changed. */
-test('the card names a changed file the PR text written in advance leaves out', async () => {
+/** Hand-written PR text can leave out files the build changed. */
+test('the card names a changed file the prewritten PR text omits', async () => {
   const bodyWith = async (pr: string): Promise<string> => {
     const w = await atBatch()
     put(w.root, 1, 'pr.md', pr)
@@ -267,7 +267,7 @@ test('the card names a changed file the PR text written in advance leaves out', 
   expect(await bodyWith('`hello.ts` says hey.\n')).not.toContain('Not in the PR text')
 })
 
-test('D6 the card names each rework round\'s review mode, and a plan with none has no such line', async () => {
+test('D6 the card names each rework round\'s review mode, else none', async () => {
   const w = await atBatch()
   const plain = fake()
   signoffs(w.db, w.root, plain)
@@ -282,7 +282,7 @@ test('D6 the card names each rework round\'s review mode, and a plan with none h
     + '- Review mode: review full: src/parse.ts is not in the passed diff; senior_review skipped: 1 delta lines, comments and docs only\n')
 })
 
-test('D4 the card prints Greptile\'s score at this head, or that ready went on without one', async () => {
+test('D4 the card shows Greptile\'s score at this head, or none', async () => {
   const w = await atBatch()
   w.db.prepare('DELETE FROM signals').run()
   const unscored = fake()
@@ -296,7 +296,7 @@ test('D4 the card prints Greptile\'s score at this head, or that ready went on w
   expect(desk.cards.get(100)?.body).toContain('- Greptile on our fork: 4/5 at this head\n')
 })
 
-/** #102: the cards carry unposted PR text and the CEO's answers, so they live apart from our public repo. */
+/** The cards carry unposted PR text and sign-off answers, so they live apart from our public repo. */
 test('the cards live on the private sign-off repo, not ours', () => {
   expect(SIGNOFF).toBe('caliperforge/signoff')
   expect(SIGNOFF).not.toBe(SELF)

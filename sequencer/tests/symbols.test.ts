@@ -25,7 +25,7 @@ function repo(): { root: string; dir: string; sha: string } {
 
 const expected = 'a.ts:1 alpha\na.ts:4 Beta\na.ts:5 Color\nb.rs:1 gamma\nb.rs:3 Delta\nc.kt:1 toSlug\nc.kt:2 first\nc.kt:3 size\n'
 
-test('a map lists the top-level exports at sha and a second call reads the cache', () => {
+test('a map lists exports at sha and a second call reads the cache', () => {
   const { root, dir, sha } = repo()
   expect(symbolMap(root, 'org/surfpool', dir, sha)).toBe(expected)
   expect(readFileSync(join(root, '.cf/maps', `surfpool@${sha}`), 'utf8')).toBe(expected)

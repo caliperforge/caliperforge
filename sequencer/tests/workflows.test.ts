@@ -13,17 +13,17 @@ function tree(files: Record<string, string>): string {
   return dir
 }
 
-test('D2 a workflow on push or pull_request is waited on, in string, list and map form', () => {
+test('D2 a push or pull_request workflow is waited on in any form', () => {
   expect(workflows(tree({ 'ci.yml': 'on: push\n' }))).toBe(true)
   expect(workflows(tree({ 'ci.yml': 'on: [pull_request, workflow_dispatch]\n' }))).toBe(true)
   expect(workflows(tree({ 'ci.yml': 'on:\n  push:\n    branches: [main]\n' }))).toBe(true)
 })
 
-test('D2 a tree whose only workflows run on a schedule or by hand is not', () => {
+test('D2 a tree of only scheduled or manual workflows is not', () => {
   expect(workflows(tree({ 'weekly.yml': SCHEDULE, 'manual.yaml': 'on: workflow_dispatch\n' }))).toBe(false)
 })
 
-test('D3 push beside schedule, or a yml that does not parse, is still waited on', () => {
+test('D3 push beside schedule, or a bad yml, is still waited on', () => {
   expect(workflows(tree({ 'ci.yml': `${SCHEDULE}  push:\n` }))).toBe(true)
   expect(workflows(tree({ 'weekly.yml': SCHEDULE, 'broken.yml': 'on: [push\n' }))).toBe(true)
 })

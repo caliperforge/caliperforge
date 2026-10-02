@@ -22,7 +22,7 @@ test('other spans still match on the span alone', () => {
   expect(fingerprintOf(at(6), base('behind main'))).toBe(fingerprintOf(at(6), base('behind main again')))
 })
 
-test('D2 a shared refusal turns its lane off and names both plans and the span', async () => {
+test('D2 a shared refusal stops its lane and names plans and span', async () => {
   const w = world()
   w.db.prepare('DELETE FROM plans WHERE id = 1').run()
   ours(w.root)

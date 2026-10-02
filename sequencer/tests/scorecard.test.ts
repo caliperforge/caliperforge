@@ -36,7 +36,7 @@ const cards = (w: World): { id: number; title: string; dek: string; body: string
 
 const notes = (n: number): string => JSON.stringify({ notes: Array.from({ length: n }, () => 'a note') })
 
-test('D2 D3 D8: a seed-header CSV, a .swaps file, a pack and last week\'s scorecard give one row with every field and the deltas', () => {
+test('D2 D3 D8: CSV, .swaps, pack, last week: one row with deltas', () => {
   const w = scoring()
   dropped(w, '2026-09-28.csv', csv([[subscribers, openRate], ['1', '1%']]))
   dropped(w, '2026-10-04.csv', csv([[subscribers, openRate, sources], ['1200', '40%', 'substack'], ['1204', '41%', 'twitter'],
@@ -54,7 +54,7 @@ test('D2 D3 D8: a seed-header CSV, a .swaps file, a pack and last week\'s scorec
     sources: { substack: 2, twitter: 1 }, change: { subscribers: 54, open_rate: 3, notes_ready: 4, swaps: 1 } })
 })
 
-test('D4: a CSV without Open rate is refused on its path and writes no row', () => {
+test('D4: a CSV without Open rate is refused and writes no row', () => {
   const w = scoring()
   dropped(w, '2026-10-04.csv', csv([[subscribers, sources], ['1204', 'substack']]))
   const got = scored(w)
@@ -63,7 +63,7 @@ test('D4: a CSV without Open rate is refused on its path and writes no row', () 
   expect(cards(w)).toEqual([])
 })
 
-test('D5: no .swaps file and no Source column write swaps null, not recorded and not in export', () => {
+test('D5: no .swaps and no Source write swaps null, not exported', () => {
   const w = scoring()
   dropped(w, '2026-10-04.csv', csv([[subscribers, openRate], ['1204', '41']]))
   expect(scored(w)).toMatchObject({ outcome: 'pass' })
@@ -73,7 +73,7 @@ test('D5: no .swaps file and no Source column write swaps null, not recorded and
     sources: 'not in export', change: null })
 })
 
-test('D6: a week with no CSV, only the Mondays either side, writes no row and one late inbox line', () => {
+test('D6: a week with no CSV writes no row and one late inbox line', () => {
   const w = scoring()
   dropped(w, '2026-09-21.csv', csv([[subscribers, openRate], ['1', '1']]))
   dropped(w, '2026-10-05.csv', csv([[subscribers, openRate], ['1', '1']]))
@@ -84,7 +84,7 @@ test('D6: a week with no CSV, only the Mondays either side, writes no row and on
 
 const never: Provider = { name: 'claude-agent-sdk', fire: () => { throw new Error('no seat fires on comms') } }
 
-test('D7: two ticks on one local Monday file one scorecard plan, filed by the weekly clock', async () => {
+test('D7: two Monday ticks file one plan, by the weekly clock', async () => {
   const w = world()
   w.db.prepare("UPDATE plans SET state = 'done' WHERE id = 1").run()
   w.db.prepare(`INSERT INTO pipes (name, enabled, window_start, window_end, max_concurrent)

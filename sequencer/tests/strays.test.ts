@@ -55,7 +55,7 @@ test('D3 a stray nobody holds meets the authority rail as before', async () => {
   expect(second).toMatchObject({ outcome: 'refuse', spans: ['src/stray.ts:1 authority.outside_files'] })
 })
 
-test('a held job goes on when the older one settles when the older one settles', async () => {
+test('a held job goes on when the older one settles', async () => {
   const w = await builtPair()
   built(w.root, SECOND, 'export const also = true')
   await tick(w.db, w.root, stub(CARRIED))

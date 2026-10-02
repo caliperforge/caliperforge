@@ -84,7 +84,7 @@ test('D2 a .pyc a test run wrote after the cut is not in the diff', () => {
   expect(diff).not.toContain('.pyc')
 })
 
-test('D3 a reused checkout drops an intent-to-add .pyc from its index and keeps a staged .py', () => {
+test('D3 a reused checkout drops an intent-to-add .pyc, keeps .py', () => {
   const { dir, base, root } = pytested()
   head(dir, ['add', '-f', '--intent-to-add', PYC])
   head(dir, ['add', 'pkg/m.py'])
@@ -335,7 +335,7 @@ test('a new refusal after a rebuild goes round; a repeat stops', async () => {
 })
 
 /**
- * This round is on one of our own plans, not a stranger's. #87 landed after this test was written:
+ * This round is on one of our own plans, not a stranger's:
  * an outside seat may write only the files the brief lists, full stop, so a second file it needs in
  * the diff cannot be owned there at all. On our own repository it can, under `## Outside the files`.
  */

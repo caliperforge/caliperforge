@@ -69,7 +69,7 @@ test.each(['gitlab.com/o/r', 'https://example.com/o/r', 'o/r'])('repo %s is refu
   expect(rows(db)).toEqual([])
 })
 
-test('a file over the cap is refused, and a ref inside the path cannot move the pin', () => {
+test('a file over the cap is refused; a path ref leaves the pin', () => {
   const db = seeded()
   const { asked, read } = reader({ type: 'file', encoding: 'base64', size: CAP + 1, path: 'a?ref=main', content: '' })
   expect(pinned(db, 7, { repo: 'github.com/o/r', sha: SHA, path: 'a?ref=main' }, read).isError).toBe(true)

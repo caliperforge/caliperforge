@@ -6,7 +6,7 @@ import { hold, unhold } from '../hold.ts'
 import { cloned, planDir } from '../workspace.ts'
 import { built, CARRIED, internalPlan, moveMain, ours, plan, stub, watched, world, type World } from './world.ts'
 
-// 09-25: every way a job stops and comes back broke once. These drive a whole lap through the pause.
+// These drive a whole lap through the pause, every way a job stops and comes back.
 const ID = 2
 const src = (w: World) => join(planDir(w.root, ID), 'src')
 

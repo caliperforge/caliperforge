@@ -48,7 +48,7 @@ async function refused(w: World, id: number, provider: Provider): Promise<void> 
   expect(plan(w.db, id)).toMatchObject({ step: 2, retries: 1 })
 }
 
-test('a cosmetic-only refusal is fixed in place and ends step 4 pass on step 5 in the same tick', async () => {
+test('a cosmetic-only refusal is fixed in place and passes step 4', async () => {
   const w = await toReview()
   const fired = (await tick(w.db, w.root, builds(writes(w.root, 1, `${FIX}\n`), fence(cosmetic(SPAN, FIX)))))[0]
   expect(fired).toMatchObject({ step: 4, outcome: 'pass', state: 'running' })
@@ -57,7 +57,7 @@ test('a cosmetic-only refusal is fixed in place and ends step 4 pass on step 5 i
   expect(get(w.root, 1, 'step-2.handback.md')).toBe(CARRIED)
 })
 
-test('the round leaves a passing gate row marked quick_lane and the builder tokens in a step-2 run', async () => {
+test('the round leaves a quick_lane pass row and step-2 tokens', async () => {
   const w = await toReview()
   await tick(w.db, w.root, builds(writes(w.root, 1, `${FIX}\n`), fence(cosmetic(SPAN, FIX))))
   expect(w.db.prepare("SELECT outcome, quick_lane, step FROM verdicts WHERE plan = 1 AND gate = 'review' ORDER BY id").all())
@@ -67,7 +67,7 @@ test('the round leaves a passing gate row marked quick_lane and the builder toke
   expect(w.db.prepare('SELECT count(*) AS n FROM runs WHERE plan = 1 AND step IN (4, 5)').get()).toEqual({ n: 1 })
 })
 
-test('a bare span reads as real, so a fence carrying one keeps the lap, and both entries survive the round trip', async () => {
+test('a bare span keeps the lap and both entries round-trip', async () => {
   const w = await toReview()
   await refused(w, 1, stub(CARRIED, 0, fence(cosmetic(SPAN, FIX), `  - ${HELLO}:2`)))
   expect(w.db.prepare('SELECT count(*) AS n FROM runs WHERE plan = 1 AND step = 2').get()).toEqual({ n: 1 })
@@ -75,7 +75,7 @@ test('a bare span reads as real, so a fence carrying one keeps the lap, and both
     .toBe(`---\noutcome: refuse\nclass: minimal\nspans:\n${cosmetic(SPAN, FIX)}\n  - ${HELLO}:2\n---\n\n${WORDS}\n`)
 })
 
-test('a fix outside the named spans, over twenty lines, or in a test file keeps the lap', async () => {
+test('a fix off the spans, over 20 lines or in tests keeps the lap', async () => {
   const far = await toReview(grid([]))
   await refused(far, 1, builds(writes(far.root, 1, grid([20])), fence(cosmetic(SPAN, 'export const b20 = 20'))))
 
@@ -125,7 +125,7 @@ function notes(w: World, id = 1): unknown {
   return w.db.prepare("SELECT count(*) AS n FROM events WHERE plan = ? AND kind = 'note'").get(id)
 }
 
-test('a pass whose note removes a comment lands it and moves to step 5 with no new build', async () => {
+test('a note removing a comment lands; step 5 with no new build', async () => {
   const w = await toReview(`// the greeting\n${HI}`)
   const fired = (await tick(w.db, w.root, stub(CARRIED, 0, noted(note('// the greeting\n', '')))))[0]
   expect(fired).toMatchObject({ step: 4, outcome: 'pass', state: 'running' })
@@ -134,7 +134,7 @@ test('a pass whose note removes a comment lands it and moves to step 5 with no n
   expect(hello(w)).toBe(HI)
 })
 
-test('a note that changes code refuses and leaves the file as reviewed', async () => {
+test('a note that changes code refuses and leaves the file alone', async () => {
   const body = 'export const hello = (a: string): string => `${a} x`\nexport const LIMIT = 30 / 2\nexport const t = `y`\n'
   const w = await toReview(body)
   await refused(w, 1, stub(CARRIED, 0, noted(note('= 30', '= 31', 'count'))))
@@ -147,7 +147,7 @@ test('a note that changes code refuses and leaves the file as reviewed', async (
   expect(readFileSync(path, 'utf8')).toBe(python)
 })
 
-test('notes on a missing old text or outside the diff are dropped, and the rest land', async () => {
+test('notes on missing text or off the diff drop; the rest land', async () => {
   const w = await toReview(`// one\n${HI}`)
   const fired = (await tick(w.db, w.root, stub(CARRIED, 0, noted(note('nowhere', 'here'), note('x', 'y', 'text', 'PR body'), note('// one\n', '')))))[0]
   expect(fired).toMatchObject({ step: 4, outcome: 'pass' })
@@ -161,14 +161,14 @@ test('notes on a missing old text or outside the diff are dropped, and the rest 
   expect(w.db.prepare('SELECT count(*) AS n FROM refusals WHERE plan = 1').get()).toEqual({ n: 0 })
 })
 
-test('a restore note to the base\'s text lands though its tokens differ', async () => {
+test('a restore note to the base\'s text lands though tokens differ', async () => {
   const w = await toReview('export const hello = (): number => 1\n')
   await tick(w.db, w.root, stub(CARRIED, 0, noted(note('(): number => 1', '(): string => "hi"', 'restore'))))
   expect(plan(w.db, 1)).toMatchObject({ step: 5, retries: 0 })
   expect(hello(w)).toBe(HI)
 })
 
-test('each applied note leaves one note event, and a refused set leaves none', async () => {
+test('each applied note logs one event; a refused set logs none', async () => {
   const w = await toReview(`// one\n// two\n${HI}`)
   await tick(w.db, w.root, stub(CARRIED, 0, noted(note('// one\n', ''), note('// two\n', ''))))
   expect(notes(w)).toEqual({ n: 2 })
@@ -178,7 +178,7 @@ test('each applied note leaves one note event, and a refused set leaves none', a
   expect(notes(refusing)).toEqual({ n: 0 })
 })
 
-test('admitted notes the checkout\'s checks refuse are put back and dropped, and the step passes', async () => {
+test('notes the checks refuse are put back and dropped; it passes', async () => {
   const w = await internalReview()
   const fired = (await tick(w.db, w.root, stub(CARRIED, 0, noted(note('hello', 'oops'), note('"hi"', '"hey"')))))[0]
   expect(fired).toMatchObject({ step: 4, outcome: 'pass' })

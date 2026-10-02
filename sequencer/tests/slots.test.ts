@@ -33,7 +33,7 @@ test('a live holder is waited on', async () => {
   holder.kill()
 })
 
-test('a check that waits for a slot records the wait once, then the command', async () => {
+test('a waiting check records the wait once, then the command', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'cf-slot-'))
   const path = join(dir, 'slot-0')
   const holder = spawn(process.execPath, ['-e',

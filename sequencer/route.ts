@@ -1,6 +1,6 @@
 import { filesOf } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
-import { internal, type PlanRow } from '../store/plans.ts'
+import { internal, planById, type PlanRow } from '../store/plans.ts'
 import { languageOf } from './workspace.ts'
 import { kernelPlan } from './home.ts'
 import { languageOfSeat } from '../templates/pr-path.ts'
@@ -10,7 +10,7 @@ export const BRIEF_FILES = 'brief:files'
 
 /**
  * Which builder a plan gets. The kernel's own repo is TypeScript; another repo of ours is what its tree is written in, and an empty one goes by the plan's seat unless `bySeat` is false, as for the gates. On a stranger's repo the brief's files decide: all
- * under `kotlin/` is the Kotlin seat, whose fence is that folder; otherwise the files' language,
+ * under `kotlin/` is the Kotlin seat; otherwise the files' language,
  * and the outside seat only when no file is in a language with a seat of its own.
  */
 export function languageFor(db: Db, plan: PlanRow, src: string, bySeat = true): string | null {
@@ -63,7 +63,8 @@ export function majority(paths: string[]): string | null {
   return known.find((k) => tally.get(k.language) === top)?.language ?? null
 }
 
-/** The paths a seat may write: its manifest's, or the brief's files where the manifest says so. */
+/** The paths a seat may write: its manifest's, or the brief's files where the manifest says so or the plan is an outside one. */
 export function fenceFor(db: Db, plan: number, writePaths: string[]): string[] {
-  return writePaths.includes(BRIEF_FILES) ? filesOf(db, plan).map((f) => f.path) : writePaths
+  const brief = writePaths.includes(BRIEF_FILES) || (writePaths.length > 0 && planById(db, plan).target_id !== null)
+  return brief ? filesOf(db, plan).map((f) => f.path) : writePaths
 }

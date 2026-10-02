@@ -41,6 +41,8 @@ interface Recipe {
   install: Raw | null
   /** Justfile recipes upstream runs as its gates, in order; each is used only when the Justfile defines it. */
   recipes: string[]
+  /** Justfile recipes that build the language, by preference; only the first the Justfile defines runs, after install. */
+  build?: string[]
   /** What runs where the folder ships no Justfile. */
   raw: Raw[]
 }
@@ -96,6 +98,7 @@ const RECIPES: Record<Exclude<OutsideLanguage, 'rust'>, Recipe> = {
     markers: /^package\.json$/,
     install: null,
     recipes: ['lint', 'typecheck', 'test'],
+    build: ['ts-build', 'build'],
     raw: [],
   },
 }
@@ -116,7 +119,8 @@ function own(src: string, outside: Outside): Gate[] {
   const defined = recipes(join(src, dir, JUSTFILE))
   if (defined === null) return [...install, ...(node?.raw ?? recipe.raw.map((r) => ({ ...r, dir })))]
   const just = (script: string): Gate => ({ script, bin: 'just', args: ['--justfile', JUSTFILE, script], dir })
-  return [...(defined.has('install') ? [just('install')] : install), ...recipe.recipes.filter((r) => defined.has(r)).map(just)]
+  const build = recipe.build?.find((r) => defined.has(r))
+  return [...(defined.has('install') ? [just('install')] : install), ...(build === undefined ? [] : [just(build)]), ...recipe.recipes.filter((r) => defined.has(r)).map(just)]
 }
 
 function first(outside: Outside): string {

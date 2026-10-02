@@ -77,6 +77,32 @@ test('D5 a Justfile runs its recipes after the lockfile install', () => {
   ])
 })
 
+const just = (script: string): ReturnType<typeof gates>[number] => ({ script, bin: 'just', args: ['--justfile', 'Justfile', script], dir: '' })
+
+test('D1 a Justfile ts-build runs after the install, before its gates', () => {
+  const justfile = 'ts-install:\n    pnpm install\n\nts-build:\n    cd typescript && pnpm build\n\nts-test:\n    pnpm test\n\ntest: ts-test\n'
+  expect(ts(nested({ Justfile: justfile, 'package.json': PACKAGE, 'pnpm-lock.yaml': '' }), 'typescript/src/a.ts')).toEqual([
+    { script: 'install', bin: 'pnpm', args: ['install', '--frozen-lockfile'], dir: '' },
+    just('ts-build'),
+    just('test'),
+  ])
+})
+
+test('D2 ts-build is preferred over build, and build runs alone', () => {
+  const src = (justfile: string): string => nested({ Justfile: justfile, 'package.json': PACKAGE })
+  expect(ts(src('build:\n    b\n\nts-build:\n    t\n\ntest:\n    x\n'), 'src/a.ts')).toEqual([just('ts-build'), just('test')])
+  expect(ts(src('build:\n    b\n\ntest:\n    x\n'), 'src/a.ts')).toEqual([just('build'), just('test')])
+})
+
+test('D4 with no Justfile a package.json build script is not run', () => {
+  const scripts = JSON.stringify({ scripts: { build: 'tsc', lint: 'eslint .', test: 'vitest run' } })
+  expect(ts(nested({ 'ts/package.json': scripts, 'ts/pnpm-lock.yaml': '' }))).toEqual([
+    { script: 'install', bin: 'pnpm', args: ['install', '--frozen-lockfile'], dir: 'ts' },
+    { script: 'lint', bin: 'pnpm', args: ['run', 'lint'], dir: 'ts' },
+    { script: 'test', bin: 'pnpm', args: ['run', 'test'], dir: 'ts' },
+  ])
+})
+
 test('D6 no lockfile: no install gate, npm runs the scripts', () => {
   expect(ts(nested({ 'ts/package.json': PACKAGE }))).toEqual([
     { script: 'lint', bin: 'npm', args: ['run', 'lint'], dir: 'ts' },

@@ -17,8 +17,8 @@ interface Changed {
 export function inContext(db: Db, plan: number, repo: string, diff: string): string | undefined {
   const listed = new Set(filesOf(db, plan).map((f) => f.path))
   const changed = parse(diff)
-    .filter((f) => !f.deleted && f.path.endsWith('.ts') && listed.has(f.path) && existsSync(join(repo, f.path)))
-    .map((f) => declarations(repo, f.path, new Set([...f.added, ...f.removed].map((l) => l.line))))
+    .filter((f) => !f.deleted && listed.has(f.path) && existsSync(join(repo, f.path)))
+    .map((f) => (f.path.endsWith('.ts') ? declarations : windows)(repo, f.path, new Set([...f.added, ...f.removed].map((l) => l.line))))
   const blocks = changed.flatMap((c) => c.blocks)
   if (blocks.length === 0) return undefined
   const users = importers(repo, new Map(changed.map((c) => [c.path, c.names])))
@@ -35,6 +35,29 @@ function declarations(repo: string, path: string, hunks: Set<number>): Changed {
     blocks: statements.map((s) => block(path, lines, lineAt(src, s.getStart(src)), lineAt(src, s.getEnd()))),
     names: new Set(statements.filter(exported).flatMap(declaredNames)),
   }
+}
+
+const AROUND = 30
+const CAP = 300
+
+function windows(repo: string, path: string, hunks: Set<number>): Changed {
+  const lines = readFileSync(join(repo, path), 'utf8').split('\n')
+  const spans: [number, number][] = []
+  for (const n of [...hunks].sort((a, b) => a - b)) {
+    const [from, to] = [Math.max(1, n - AROUND), Math.min(lines.length, n + AROUND)]
+    const last = spans.at(-1)
+    if (last !== undefined && from <= last[1] + 1) last[1] = to
+    else spans.push([from, to])
+  }
+  const blocks: string[] = []
+  let left = CAP
+  for (const [from, to] of spans) {
+    if (left <= 0) break
+    const end = Math.min(to, from + left - 1)
+    blocks.push(block(path, lines, from, end))
+    left -= end - from + 1
+  }
+  return { path, blocks, names: new Set() }
 }
 
 export function declaredNames(s: ts.Statement): string[] {

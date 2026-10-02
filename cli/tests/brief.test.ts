@@ -11,7 +11,9 @@ import { hold } from '../../sequencer/hold.ts'
 import { monthly, reviewed } from '../../sequencer/ready.ts'
 import { put } from '../../sequencer/workspace.ts'
 import { repriced } from '../../store/events.ts'
+import { record as listFiles } from '../../store/files.ts'
 import type { Db } from '../../store/index.ts'
+import { keep } from '../../store/merges.ts'
 import { needsCeo, parked, PlanRow, waiting } from '../../store/plans.ts'
 import { record } from '../../store/signals.ts'
 
@@ -251,11 +253,8 @@ const HEAD = 'a'.repeat(40)
 const MISSED = 'greptile after both reviewers passed, last 30 d\n'
 
 function passed(db: Db, id: number, path: string, gates = ['review', 'senior_review']): void {
-  db.prepare('INSERT INTO plan_files (plan, path, is_new, position) VALUES (?, ?, 0, 0)').run(id, path)
-  for (const gate of gates) {
-    db.prepare(`INSERT INTO verdicts (gate, kind, subject_digest, plan, step, outcome, tokens, seconds)
-      VALUES (?, 'review', ?, ?, ?, 'pass', 0, 0)`).run(gate, HASH, id, gate === 'review' ? 4 : 5)
-  }
+  listFiles(db, id, [{ path, is_new: false }])
+  for (const gate of gates) keep(db, id, gate === 'review' ? 4 : 5, gate, { id: 0, outcome: 'pass', subject_digest: HASH, tree: null }, null)
 }
 
 function rehearsals(): { db: Db; root: string; now: Date } {
@@ -273,12 +272,12 @@ function rehearsals(): { db: Db; root: string; now: Date } {
 
 const FIXTURE = `${MISSED}  kotlin 1 passed, 1 marked down, 4 findings\n  python 1 passed, 0 marked down\n`
 
-test('D1 per language: heads passed, marked down and their findings', () => {
+test('D1 per language: passed, marked down and findings', () => {
   const { db, root, now } = rehearsals()
   expect(missSection(misses(db, root, now))).toBe(FIXTURE)
 })
 
-test('D2 no senior pass, stale, internal, other bot or repo: none count', () => {
+test('D2 no senior pass, stale, internal, other bot or repo', () => {
   const { db, root, now } = rehearsals()
   plan(db, 3, 'running', null, 1)
   passed(db, 3, 'python/other.py', ['review'])

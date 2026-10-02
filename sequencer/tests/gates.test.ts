@@ -79,7 +79,7 @@ test('D5 a Justfile runs its recipes after the lockfile install', () => {
 
 const just = (script: string): ReturnType<typeof gates>[number] => ({ script, bin: 'just', args: ['--justfile', 'Justfile', script], dir: '' })
 
-test('D1 a Justfile ts-build runs after the install, before its gates', () => {
+test('D1 a Justfile ts-build runs after install, before its gates', () => {
   const justfile = 'ts-install:\n    pnpm install\n\nts-build:\n    cd typescript && pnpm build\n\nts-test:\n    pnpm test\n\ntest: ts-test\n'
   expect(ts(nested({ Justfile: justfile, 'package.json': PACKAGE, 'pnpm-lock.yaml': '' }), 'typescript/src/a.ts')).toEqual([
     { script: 'install', bin: 'pnpm', args: ['install', '--frozen-lockfile'], dir: '' },

@@ -8,6 +8,7 @@ import { block } from '../sequencer/handout.ts'
 import { languageOfPath } from '../sequencer/route.ts'
 import { filesOf } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
+import { windows } from './windows.ts'
 
 export interface Gated {
   language: string
@@ -24,7 +25,7 @@ export function coverage(gates: Gated[], diff: string): string | undefined {
   return unchecked.length === 0 ? lines : `${lines}\n\nNo gate ran for:\n${unchecked.map((path) => `- ${path}`).join('\n')}`
 }
 
-interface Changed {
+export interface Changed {
   path: string
   blocks: string[]
   names: Set<string>
@@ -33,8 +34,8 @@ interface Changed {
 export function inContext(db: Db, plan: number, repo: string, diff: string): string | undefined {
   const listed = new Set(filesOf(db, plan).map((f) => f.path))
   const changed = parse(diff)
-    .filter((f) => !f.deleted && f.path.endsWith('.ts') && listed.has(f.path) && existsSync(join(repo, f.path)))
-    .map((f) => declarations(repo, f.path, new Set([...f.added, ...f.removed].map((l) => l.line))))
+    .filter((f) => !f.deleted && listed.has(f.path) && existsSync(join(repo, f.path)))
+    .map((f) => (f.path.endsWith('.ts') ? declarations : windows)(repo, f.path, new Set([...f.added, ...f.removed].map((l) => l.line))))
   const blocks = changed.flatMap((c) => c.blocks)
   if (blocks.length === 0) return undefined
   const users = importers(repo, new Map(changed.map((c) => [c.path, c.names])))

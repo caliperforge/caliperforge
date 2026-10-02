@@ -548,7 +548,7 @@ test('release, return, retry and priority each log who did it', async () => {
   returnToLane(w.db, ID, 'ceo')
   park()
   retried(w.db, ID, 'ceo')
-  priority(w.db, ID, 3, 'ceo')
+  priority(w.db, ID, 3, { actor: 'ceo', why: 'w' })
   expect(hands(w)).toEqual([
     { kind: 'release', actor: 'coo', outcome: 'pass' },
     { kind: 'return', actor: 'ceo', outcome: 'pass' },
@@ -562,7 +562,7 @@ test('refused retry or priority, or no actor, writes no event', () => {
   w.db.prepare("UPDATE plans SET state = 'queued' WHERE id = ?").run(ID)
 
   expect(() => retried(w.db, ID, 'ceo')).toThrow(/plan 2 is queued, not blocked/)
-  expect(() => { priority(w.db, ID, 10, 'ceo') }).toThrow(/cf priority takes P0 to P9/)
+  expect(() => { priority(w.db, ID, 10, { actor: 'ceo', why: 'w' }) }).toThrow(/cf priority takes P0 to P9/)
   priority(w.db, ID, 3)
   expect(hands(w)).toEqual([])
 })

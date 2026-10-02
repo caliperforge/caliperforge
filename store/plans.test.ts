@@ -1,6 +1,7 @@
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { migrate, open, type Db } from './index.ts'
+import { priority } from './lanes.ts'
 import { finish, live, overlapWaits, pipeNamed, planById, waiting, type PipeRow } from './plans.ts'
 
 const root = join(import.meta.dirname, '..')
@@ -35,6 +36,13 @@ test('a renamed plans column fails the parse in planById', () => {
 
 test('an id with no plans row throws no plan', () => {
   expect(() => planById(bench(), 99)).toThrow('no plan 99')
+})
+
+test('D2 a hand priority logs the old and new value and why', () => {
+  const db = bench()
+  priority(db, PLAN, 0, { actor: 'coo', why: 'w' })
+  expect(planById(db, PLAN).priority).toBe(0)
+  expect(db.prepare('SELECT kind, actor, message FROM events').all()).toEqual([{ kind: 'priority', actor: 'coo', message: 'P1 → P0: w' }])
 })
 
 function add(db: Db, id: number, state: string, at: string): void {

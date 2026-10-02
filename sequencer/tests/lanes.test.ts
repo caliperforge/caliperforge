@@ -44,7 +44,7 @@ function second(w: World): number {
   return Number(pipeNamed(w.db, 'research')?.id)
 }
 
-test('a plan is queued at its template default priority, and cf priority moves it', async () => {
+test('queued at the template priority; cf priority moves it',async () => {
   const w = world()
   expect([templatePriority(w.db, 'pr_path'), templatePriority(w.db, 'research'), templatePriority(w.db, 'comms')])
     .toEqual([1, 2, 3])
@@ -58,7 +58,7 @@ test('a plan is queued at its template default priority, and cf priority moves i
   expect((await tick(w.db, w.root, stub(CARRIED))).map((f) => f.plan)).toEqual([1])
 })
 
-test('within a lane the tick starts plans in priority order, in parallel up to max_concurrent', () => {
+test('a lane starts plans by priority, up to max_concurrent',() => {
   const w = world()
   queued(w, 2, 1, 0)
   queued(w, 3, 1, 2)
@@ -70,7 +70,7 @@ test('within a lane the tick starts plans in priority order, in parallel up to m
   expect(picks(w.db, { ...w.pipe, max_concurrent: 3 }).map((p) => p.id)).toEqual([2, 3, 1])
 })
 
-test('a plan already running keeps its slot and a blocked queued plan takes none', async () => {
+test('a running plan keeps its slot; a blocked one takes none',async () => {
   const w = world()
   queued(w, 2, 1, 2)
   width(w.db, 1, 2)
@@ -90,7 +90,7 @@ test('a plan already under way queues ahead of one not yet started', () => {
   expect(live(w.db, w.pipe).map((p) => p.id)).toEqual([1, 3, 2])
 })
 
-test('a released plan waits for a free slot and the lane never runs past its width', async () => {
+test('a released plan waits for a free slot within the width',async () => {
   const w = world()
   approve(w.db, w.target)
   width(w.db, 1, 2)
@@ -132,7 +132,7 @@ function banded(w: World = world()): World {
   return w
 }
 
-test('a plan retried onto a full lane waits queued at its kept step and fires once a slot frees', async () => {
+test('a retry onto a full lane waits until a slot frees',async () => {
   const w = world()
   approve(w.db, w.target)
   await tick(w.db, w.root, stub(CARRIED))
@@ -149,7 +149,7 @@ test('a plan retried onto a full lane waits queued at its kept step and fires on
   expect((await tick(w.db, w.root, stub(CARRIED))).map((f) => [f.plan, f.step])).toEqual([[2, 2]])
 })
 
-test('a rewind onto a full lane queues the plan with the step, retries and head it writes', () => {
+test('a rewind onto a full lane queues with step, retries, head',() => {
   const w = full()
   rewind(w.db, 2, 4)
   expect(plan(w.db, 2)).toMatchObject({ step: 4, state: 'queued', retries: 0, head_digest: null })
@@ -175,7 +175,7 @@ test('the cap decides how many pipes worth of plans the tick opens', async () =>
   expect(await tick(w.db, w.root, stub(CARRIED))).toEqual([])
 })
 
-test('a throw inside one plan\'s step is that plan\'s refusal, a repeat stops it, and the other lane still steps', async () => {
+test('a throw refuses one plan, a repeat stops it, others step',async () => {
   const w = world()
   approve(w.db, w.target)
   for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
@@ -195,7 +195,7 @@ test('a throw inside one plan\'s step is that plan\'s refusal, a repeat stops it
   expect(maybe(w.root, 1, 'refusal.md')).toMatch(new RegExp(`# Stopped\\n\\n${WHY.repeat}\\.\\n$`))
 })
 
-test('the usage band steps the cap down as the window fills, and back up when it drains', () => {
+test('the usage band steps the cap down and back up',() => {
   const w = banded()
   dial(w.db, 4, AT)
   const stepped: (number | null)[] = []
@@ -208,7 +208,7 @@ test('the usage band steps the cap down as the window fills, and back up when it
   expect(name(null)).toBe('none')
 })
 
-test('the fuller of the two windows rules, and an old reading holds until its window resets', () => {
+test('the fuller window rules; old readings hold until reset',() => {
   const w = banded()
   dial(w.db, 4, AT)
   record(w.db, reading(0.1, 'seven_day'))
@@ -222,7 +222,7 @@ test('the fuller of the two windows rules, and an old reading holds until its wi
   expect(cap(w.db)).toMatchObject({ dial: 4, band: null, cap: 4 })
 })
 
-test('the latest reading is the one observed last, not the one recorded last', () => {
+test('the latest reading is the last observed, not recorded',() => {
   const w = world()
   dial(w.db, 4, AT)
   record(w.db, reading(0.97, 'seven_day', 60))
@@ -231,7 +231,7 @@ test('the latest reading is the one observed last, not the one recorded last', (
   expect(cap(w.db)).toMatchObject({ band: 0, cap: 0 })
 })
 
-test('the dial never exceeds the band and the machine never exceeds the dial', () => {
+test('the band caps the dial and the dial caps the machine',() => {
   const w = banded()
   dial(w.db, 1, AT)
   record(w.db, reading(0.1))
@@ -243,7 +243,7 @@ test('the dial never exceeds the band and the machine never exceeds the dial', (
   expect(() => { dial(w.db, -1, AT) }).toThrow(/cf lanes takes 0 to 4/)
 })
 
-test('a usage band moves by pr and a new settings key is born in a migration', () => {
+test('a band moves by pr; a new key is born in a migration',() => {
   const w = world()
   expect(() => { set(w.db, 'lanes.band.p30', '4', 'pr', AT) }).toThrow(/moves by pr, in a migration/)
   expect(() => { set(w.db, 'lanes.spot', '1', 'ceo', AT) }).toThrow(/born in a migration/)
@@ -261,7 +261,7 @@ test('cf brief and the queue query show live against open', async () => {
   expect(laneLine(lanes(w.db, '09:00'))).toBe('lanes 2/0 live/open\tcap spot\tdial 0\tband none\tceiling 4\n')
 })
 
-test('a relabelled issue re-prices its plan within one tick, and steps it ahead of its lane-mates', async () => {
+test('a relabelled issue re-prices its plan and steps it first',async () => {
   const w = world()
   internalPlan(w.db, w.root, 2, 'a plan the ticket re-prices', 34, 2)
   expect(picks(w.db, w.pipe).map((p) => p.id)).toEqual([1])
@@ -270,7 +270,7 @@ test('a relabelled issue re-prices its plan within one tick, and steps it ahead 
   expect(fired.map((f) => f.plan)).toEqual([2])
 })
 
-test('an issue the tick cannot read, or one carrying two P labels, leaves the priority it has', async () => {
+test('an unread issue or two P labels keep the priority',async () => {
   const w = world()
   internalPlan(w.db, w.root, 2, 'a plan the ticket cannot re-price', 34, 2)
   const unread: Read = () => { throw new Error('gh: could not resolve to an issue') }
@@ -282,7 +282,7 @@ test('an issue the tick cannot read, or one carrying two P labels, leaves the pr
   }
 })
 
-test('the machine window view puts our tokens beside the cap, one row per window', async () => {
+test('one window row each: our tokens beside the cap',async () => {
   const w = world()
   approve(w.db, w.target)
   for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED))
@@ -295,7 +295,7 @@ test('the machine window view puts our tokens beside the cap, one row per window
   expect(rows.map((r) => r.utilisation)).toEqual([null, 0.45])
 })
 
-/** #104: nothing wrote `usage` before; a run's own reading now steps the band. */
+/** A run's own reading steps the band. */
 test('past 80% of the week one lane, past 95% none', async () => {
   const w = banded()
   approve(w.db, w.target)

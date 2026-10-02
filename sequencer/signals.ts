@@ -11,7 +11,7 @@ import { WIRE, type Wire } from './push.ts'
 import { fixed } from './split.ts'
 import { put } from './workspace.ts'
 
-export interface Started {
+interface Started {
   signal: number
   template: 'pr_path' | 'comms'
   plan: number

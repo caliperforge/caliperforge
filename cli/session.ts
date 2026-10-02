@@ -16,7 +16,7 @@ export interface Settled {
   line: number
 }
 
-export type FindIssue = (subject: string) => number | null
+type FindIssue = (subject: string) => number | null
 
 export function settled(transcript: string): Settled[] {
   return transcript.split('\n').flatMap((text, index) => {

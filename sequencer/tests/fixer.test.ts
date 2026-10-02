@@ -59,7 +59,7 @@ const RAN = [{ seat: 'orchestrator', input_tokens: 10, cache_read_tokens: 0, out
 
 const RETURN = '---\ndid: renamed schema/0036_x.sql to 0040_x.sql in src and issue.md\nthen: return\nwhy: the rails will find the file now\nadd_files: [schema/0040_x.sql]\n---\n'
 
-test('live: an ask_coo stop goes to the fixer, which fixes it and returns the job; nobody is pinged', async () => {
+test('live: the fixer fixes an ask_coo stop; nobody is pinged', async () => {
   const { db, home } = seeded('live')
   const packets: Packet[] = []
   const posted: string[] = []
@@ -74,7 +74,7 @@ test('live: an ask_coo stop goes to the fixer, which fixes it and returns the jo
   expect(runs(db)).toEqual(RAN)
 })
 
-test('shadow: the fixer reads only, changes nothing, and the stop still reaches a person', async () => {
+test('shadow: the fixer only reads, the stop reaches a person', async () => {
   const { db, home } = seeded('shadow')
   const packets: Packet[] = []
   const posted: string[] = []
@@ -146,7 +146,7 @@ test('ask_ceo from the fixer reaches the phone with its reason', async () => {
   expect(state(db)).toEqual({ state: 'blocked_on_ceo', step: 4 })
 })
 
-test('after two live fixes in a day the fixer is not called and the stop escalates as before', async () => {
+test('two live fixes a day, then stops escalate without the fixer', async () => {
   const { db, home } = seeded('live')
   const at = new Date(now.getTime() - 60_000).toISOString()
   const line = JSON.stringify({ at, mode: 'live', did: 'x', then: 'return', why: 'y', tokens: 1, applied: 'return' })
@@ -158,7 +158,7 @@ test('after two live fixes in a day the fixer is not called and the stop escalat
   expect(posted).toHaveLength(1)
 })
 
-test('a file the build already wrote as a stray is listed by clearing the flag, not by a second row', async () => {
+test('listing a built stray clears its flag, adding no second row', async () => {
   const { db, home } = seeded('live')
   db.prepare("INSERT INTO plan_files (plan, path, is_new, position, stray) VALUES (7, 'a.ts', 0, 0, 0), (7, 'schema/0040_x.sql', 1, 1, 1)").run()
   await woke(db, home, stub(RETURN, []), now, () => undefined, wire([]))
@@ -167,7 +167,7 @@ test('a file the build already wrote as a stray is listed by clearing the flag, 
   expect(state(db)).toEqual({ state: 'queued', step: 4 })
 })
 
-test('a fixer that throws leaves the tick running and the stop with a person', async () => {
+test('a throwing fixer: the tick goes on, a person gets the stop', async () => {
   const { db, home } = seeded('live')
   const posted: string[] = []
   const broken: Wire = { ...wire([]), file: () => { throw new Error('gh is down') } }

@@ -21,7 +21,8 @@ const stub: Provider = {
 }
 
 function result(over: Record<string, unknown>): SDKResultMessage {
-  const base = { type: 'result', subtype: 'success', is_error: false, stop_reason: 'end_turn', modelUsage: {}, permission_denials: [] }
+  const base = { type: 'result', subtype: 'success', is_error: false, stop_reason: 'end_turn', modelUsage: {}, permission_denials: [],
+    usage: { cache_creation: { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: 0 } } }
   return { ...base, ...over } as unknown as SDKResultMessage
 }
 
@@ -194,13 +195,14 @@ test('the SDK\'s total_cost_usd lands in the runs row', async () => {
   expect(db.prepare('SELECT cost_usd FROM runs WHERE id = ?').get(id)).toEqual({ cost_usd: 0.42 })
 })
 
-test('cache writes stay in input_tokens and cache_write_tokens', async () => {
+test('D6 cache writes stay in input_tokens and cache_write_tokens', async () => {
   const db = fresh(join(root, 'schema'))
   const usage = { m: { inputTokens: 10, cacheCreationInputTokens: 4, cacheReadInputTokens: 20, outputTokens: 0 } }
-  const written = fired(result({ result: 'done', modelUsage: usage }), Date.now(), [])
-  expect(written.usage).toMatchObject({ input: 14, cache: 20, write: 4 })
+  const split = { cache_creation: { ephemeral_5m_input_tokens: 1, ephemeral_1h_input_tokens: 3 } }
+  const written = fired(result({ result: 'done', modelUsage: usage, usage: split }), Date.now(), [])
+  expect(written.usage).toMatchObject({ input: 14, cache: 20, write: 4, write_1h: 3 })
   const provider: Provider = { name: 'claude-agent-sdk', fire: (p) => Promise.resolve({ ...written, transcript_path: p.transcript }) }
   const { id } = await fire(db, root, 'typescript_specialist', cwd, 'ISSUE', provider)
-  expect(db.prepare('SELECT input_tokens, cache_write_tokens, cache_read_tokens FROM runs WHERE id = ?').get(id))
-    .toEqual({ input_tokens: 14, cache_write_tokens: 4, cache_read_tokens: 20 })
+  expect(db.prepare('SELECT input_tokens, cache_write_tokens, cache_write_1h_tokens, cache_read_tokens FROM runs WHERE id = ?').get(id))
+    .toEqual({ input_tokens: 14, cache_write_tokens: 4, cache_write_1h_tokens: 3, cache_read_tokens: 20 })
 })

@@ -55,7 +55,7 @@ async function pushed(): Promise<{ w: World; id: number }> {
 
 const WALK = ['filed', 'ruling', 'build', 'rails', 'review', 'main merged', 'push', 'merge']
 
-test('D4 a job\'s whole life, filed to landed, reads back from events alone', async () => {
+test('D4 a job\'s life, filed to landed, reads from events alone',async () => {
   const { w, id } = await pushed()
   capture(w.db, () => pr({ mergedAt: '2026-09-26T09:00:00Z', mergedBy: { login: 'maintainer' } }))
   const rows = w.db.prepare('SELECT kind, message FROM events WHERE plan = ? ORDER BY id').all(id) as { kind: string; message: string }[]
@@ -66,7 +66,7 @@ test('D4 a job\'s whole life, filed to landed, reads back from events alone', as
   expect(found).not.toContain(-1)
 })
 
-test('D1 D2 D3 each stored signal leaves one event pointing at it, once; ours and a headless bot review leave neither', async () => {
+test('D1 D2 D3 each stored signal logs one event, once',async () => {
   const { w, id } = await pushed()
   const view = pr({
     author: { login: 'caliperforge' },

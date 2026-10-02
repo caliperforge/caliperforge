@@ -47,7 +47,7 @@ const decisions = (db: ReturnType<typeof open>) => db.prepare('SELECT plan, step
 const runs = (db: ReturnType<typeof open>) => db.prepare(`SELECT step, input_tokens, cache_read_tokens, output_tokens FROM runs
   WHERE plan = 7 AND seat = 'orchestrator'`).all()
 
-test('D1 a waiting plan gets one decision and is left byte-identical', async () => {
+test('D1 a waiting plan gets one decision, left byte-identical',async () => {
   const { db, home } = seeded()
   const fires: string[] = []
   const before = state(db, home)
@@ -77,7 +77,7 @@ test.each([
     .toBe(`step 4 token_ceiling\n\norigin_kind: ruling\norigin_ref: orchestrator.decision\npath: ${path}\n`)
 })
 
-test('D3 a packet wake() refuses fires no model and records the refusal', async () => {
+test('D3 a refused packet fires no model and records why',async () => {
   const { db, home } = seeded()
   drop(home, 7, 'base.sha')
   const fires: string[] = []
@@ -100,7 +100,7 @@ test('D4 a reason outside WAKE is not woken', async () => {
 const blocked = (db: ReturnType<typeof open>) =>
   db.exec("UPDATE plans SET state = 'blocked_on_ceo', wait_reason = NULL WHERE id = 7")
 
-test('#246 a plan stopped for a person gets one decision per distinct stop, and is left byte-identical', async () => {
+test('a stop for a person: one decision per distinct stop',async () => {
   const { db, home } = seeded()
   blocked(db)
   put(home, 7, 'refusal.md', 'step 4 review refused by code_quality\n\nthe binding is stale\n')
@@ -135,7 +135,7 @@ test('#246 the packet carries the words the plan stopped with', async () => {
   expect(packets[0]).toContain('the build changed nothing since the last refusal')
 })
 
-test('#246 a blocked plan with a reason on the wake list keeps that reason and is woken once', async () => {
+test('a blocked plan keeps a wake reason and wakes once',async () => {
   const { db, home } = seeded()
   db.exec("UPDATE plans SET state = 'blocked_on_ceo' WHERE id = 7")
   const fires: string[] = []
@@ -145,7 +145,7 @@ test('#246 a blocked plan with a reason on the wake list keeps that reason and i
   expect(fires).toHaveLength(1)
 })
 
-test('#246 the store takes blocked_on_ceo as a decision reason and still refuses an unknown one', () => {
+test('the store takes blocked_on_ceo, refuses an unknown reason',() => {
   const { db } = seeded()
   const insert = (reason: string) => db.prepare(`INSERT INTO decisions (plan, step, wait_reason, verb, why)
     VALUES (7, 4, ?, 'ask_coo', 'x')`).run(reason)
@@ -172,7 +172,7 @@ test('#238 in shadow a decision changes nothing', async () => {
   expect(applied(db)).toEqual([{ verb: 'retry', applied: null }])
 })
 
-test('#238 with the wheel, retry sends the plan back to the builder with its refusals cleared', async () => {
+test('with the wheel, retry sends it back with refusals cleared',async () => {
   const { db, home } = seeded()
   blocked(db)
   wheel(db)
@@ -184,7 +184,7 @@ test('#238 with the wheel, retry sends the plan back to the builder with its ref
   expect(db.prepare('SELECT count(*) AS n FROM leases').get()).toEqual({ n: 0 })
 })
 
-test('#238 a verb off the mechanical list goes to a person and moves nothing', async () => {
+test('a non-mechanical verb goes to a person, moves nothing',async () => {
   const { db, home } = seeded()
   blocked(db)
   wheel(db)
@@ -196,7 +196,7 @@ test('#238 a verb off the mechanical list goes to a person and moves nothing', a
   expect(posted).toEqual(['CaliperForge · #139 needs a person'])
 })
 
-test('#238 a plan moved twice in a day is capped and handed to a person', async () => {
+test('a plan moved twice in a day is capped and handed over',async () => {
   const { db, home } = seeded()
   blocked(db)
   wheel(db)
@@ -212,7 +212,7 @@ test('#238 a plan moved twice in a day is capped and handed to a person', async 
   expect(posted).toHaveLength(1)
 })
 
-test('#238 a stop another live tick holds is left for the next wake', async () => {
+test('a stop another live tick holds waits for the next wake',async () => {
   const { db, home } = seeded()
   blocked(db)
   put(home, 7, 'refusal.md', 'step 4 review refused\n')
@@ -223,7 +223,7 @@ test('#238 a stop another live tick holds is left for the next wake', async () =
   expect(maybe(home, 7, 'orchestrator.md')).toBeNull()
 })
 
-test('#238 a colon inside why or evidence is prose, not a broken fence', async () => {
+test('a colon in why or evidence is prose, not a broken fence',async () => {
   const { db, home } = seeded()
   blocked(db)
   put(home, 7, 'refusal.md', 'step 3 rails refused\n')

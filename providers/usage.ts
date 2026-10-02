@@ -1,6 +1,6 @@
 import type { Fired } from './kind.ts'
 
-export interface Usage {
+interface Usage {
   // https://platform.openai.com/docs/api-reference/chat/object
   prompt_tokens: number
   // https://platform.openai.com/docs/api-reference/chat/object
@@ -26,5 +26,5 @@ export function usage(payload: Usage): Fired['usage'] {
   const field = split ? 'prompt_cache_hit_tokens' : 'prompt_tokens_details.cached_tokens'
   const cache = split ? (hit ?? 0) : (payload.prompt_tokens_details?.cached_tokens ?? 0)
   if (cache > prompt) throw new Error(`${field} ${String(cache)} exceeds prompt_tokens ${String(prompt)}`)
-  return { input: prompt - cache, cache, write: 0, output: payload.completion_tokens }
+  return { input: prompt - cache, cache, write: 0, write_1h: 0, output: payload.completion_tokens }
 }

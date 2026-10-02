@@ -3,7 +3,7 @@ import { inProse } from '../rails/tight/prose.ts'
 import type { Check } from './card.ts'
 import { diffOf } from './workspace.ts'
 
-export const TELLS: RegExp[] = [
+const TELLS: RegExp[] = [
   /\bdelve\b/i, /\bseamless(?:ly)?\b/i, /\brobust\b/i, /\bleverag(?:e|es|ed|ing)\b/i, /\bcomprehensive\b/i,
   /\bstreamlin(?:e|es|ed|ing)\b/i, /\bit's worth noting\b/i, /\bin (?:summary|conclusion)\b/i, /\bfurthermore\b/i,
   /\bmoreover\b/i, /\badditionally\b/i, /\bcrucial\b/i, /\belevate\b/i, /\bempower\b/i, /\butiliz(?:e|es|ed|ing)\b/i,

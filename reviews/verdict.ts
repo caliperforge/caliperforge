@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { parse } from 'yaml'
+import { parse, parseDocument } from 'yaml'
 import { z } from 'zod'
 import type { Verdict } from '../store/verdict.ts'
 
@@ -45,6 +45,7 @@ const Fence = z.object({
 }).refine((f) => f.outcome !== 'refuse' || ((f.spans ?? []).length > 0 && f.class != null))
 
 const FENCE = /^(?:```\w*\r?\n)?---\r?\n([\s\S]*?)\r?\n---(?:\r?\n```)?\s*$/m
+const LOOSE = /(?<=^[ \t]*(?:- )?\w+: )(["']).*?\1[ \t]+[^\s#].*$/gm
 
 /** A verdict as the reviewer wrote it: the row, its findings, and the new fact it names for each span it re-opens. */
 export interface Judged extends Verdict {
@@ -105,7 +106,8 @@ function passed(notes: Written[], prose: string, subject_digest: string): Judged
 
 function yaml(body: string): unknown {
   try {
-    return parse(body)
+    const doc = parseDocument(body)
+    return doc.errors.length === 0 ? doc.toJS() : parse(body.replace(LOOSE, (value) => JSON.stringify(value)))
   } catch {
     return null
   }

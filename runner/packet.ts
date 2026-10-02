@@ -9,7 +9,7 @@ import { tight, WRITERS } from './rules.ts'
 const OUTSIDE = /(^|\/)(crypto-contributor|agents|ops|knowledge|plans|escalations)(\/|$)|(^|\/)T-[A-Z][A-Z0-9-]*\.md$/
 
 /** A reviewer judges the packet it was handed, not the checkout. */
-export const BROWSE = new Set(['Glob', 'Grep'])
+const BROWSE =new Set(['Glob', 'Grep'])
 
 export const Review = z.object({
   review: z.string(),

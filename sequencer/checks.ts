@@ -46,7 +46,7 @@ export type Note = (doing: string, detail: string) => void
 export type Mode = 'xcodebuild' | 'npm' | 'gradle' | 'none' | OutsideLanguage
 
 /** Derived data stays inside the checkout, under `.cf/work`, and never under a folder macOS guards. */
-export const DERIVED = '.cf-derived'
+const DERIVED = '.cf-derived'
 
 const GRADLE = ['-p', 'kotlin', 'check']
 
@@ -252,7 +252,7 @@ function unslotted(): NodeJS.ProcessEnv {
  */
 export const CHECK_SLOTS = 2
 
-export const SLOT_DIR = join(homedir(), '.cf-cache', 'check-slots')
+const SLOT_DIR = join(homedir(), '.cf-cache', 'check-slots')
 
 export function slot(dir = process.env.CF_CHECK_SLOTS_DIR ?? SLOT_DIR, n = Number(process.env.CF_CHECK_SLOTS ?? 0),
   wait = 2000, waiting?: () => void): string | null {

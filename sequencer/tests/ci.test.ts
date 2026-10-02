@@ -94,7 +94,7 @@ test('a push that fails runs the suite on the laptop', async () => {
     .toEqual([{ plan: ID, actor: 'ciChecks', message: 'offline' }])
 })
 
-test('without the switch the laptop runs the suite and nothing is sent', async () => {
+test('no switch: the laptop runs the suite and nothing is sent', async () => {
   const w = mine(null)
   const sent: string[] = []
   const wire = watched(sent, w.root, ID)

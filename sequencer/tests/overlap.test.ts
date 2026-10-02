@@ -74,7 +74,7 @@ test('D4 a plan at step 1 is never file_overlap and holds nobody', () => {
   expect(blocked(w.db, plan(w.db, SECOND))).not.toBe('file_overlap')
 })
 
-test('D4 a plan with no file list blocks nothing and waits on nothing', async () => {
+test('D4 a plan with no file list blocks and waits on nothing',async () => {
   const w = pair()
   for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
   recordFiles(w.db, ID, [])

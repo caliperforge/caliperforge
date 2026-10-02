@@ -16,6 +16,7 @@ export function packs(root: string, diff: string, repo: string | null): string {
 }
 
 function notes(root: string, repo: string | null): string {
-  const notes = repo === null ? [] : profile(root, repo)?.notes ?? []
-  return repo === null || notes.length === 0 ? '' : `\n\n# Notes on ${repo}\n\n${notes.map((n) => `- ${n}`).join('\n')}`
+  if (repo === null) return ''
+  const listed = profile(root, repo)?.notes ?? []
+  return listed.length === 0 ? '' : `\n\n# Notes on ${repo}\n\n${listed.map((n) => `- ${n}`).join('\n')}`
 }

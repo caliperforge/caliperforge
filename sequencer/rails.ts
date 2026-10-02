@@ -172,7 +172,7 @@ function rest(db: Db, root: string, plan: PlanRow, handback: string, diff: strin
     ['secret-scan', () => scan(diff)],
     ['authority', () => authority(root, name, diff, ours, fence, outside, ours ? renumbered(src, diff) : [])],
     ['tight', () => tight(root, { diff, sources: sources(src, diff), ...prose(root, plan), code: on?.tight_code === true })],
-    ['test-weakened', () => weakened(diff, 'green', [maybe(root, plan.id, 'ask.md') ?? '', get(root, plan.id, 'issue.md'), prose(root, plan).description].join('\n'))],
+    ['test-weakened', () => weakened(diff, 'green', [maybe(root, plan.id, 'ask.md') ?? '', get(root, plan.id, 'issue.md'), maybe(root, plan.id, 'rulings.md') ?? '', prose(root, plan).description].join('\n'))],
     ['identifiers', () => identifiers(src, handback, diff)],
   ]
 }

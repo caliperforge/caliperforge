@@ -41,7 +41,11 @@ const failing = (from: string): Tree => ({
 })
 export const BROKEN = { ...TYPESCRIPT, ...failing('../hello.ts') }
 export const ORPHANED = { ...HANDOUT, ...failing('../bye.ts') }
-export const ATELIER = { ...GREEN, 'AtelierTests/FloorDecisionCardsTests.swift': 'final class FloorDecisionCardsTests: XCTestCase {}\n' }
+export const GREETED = {
+  ...GREEN,
+  'src/tests/hello.test.ts': "import { expect, test } from 'vitest'\nimport { hello } from '../hello.ts'\n\ntest('greets with hi', () => {\n  expect(hello()).toBe('hi')\n})\n",
+}
+export const ATELIER ={ ...GREEN, 'AtelierTests/FloorDecisionCardsTests.swift': 'final class FloorDecisionCardsTests: XCTestCase {}\n' }
 export const SCHEDULED = {
   ...TYPESCRIPT,
   '.github/workflows/weekly.yml': "on:\n  schedule:\n    - cron: '0 6 * * 1'\n  workflow_dispatch:\n",
@@ -49,7 +53,7 @@ export const SCHEDULED = {
 
 export const WORLDS: Tree[] = [TYPESCRIPT, KOTLIN, HANDOUT, RED]
 export const OURS: [Tree, boolean][] = [[TYPESCRIPT, true], [TYPESCRIPT, false], [RED, true], [GREEN, true], [NAPPING, true], [OOPS, true],
-  [BROKEN, true], [ORPHANED, true], [ATELIER, true], [SCHEDULED, false]]
+  [BROKEN, true], [ORPHANED, true], [ATELIER, true], [SCHEDULED, false], [GREETED, true]]
 
 export function key(kind: 'world' | 'ours', files: Tree, ci: boolean): string {
   const sorted = Object.entries(files).sort(([a], [b]) => a.localeCompare(b))

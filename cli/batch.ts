@@ -8,7 +8,7 @@ import type { Holder } from '../store/plans.ts'
 import { profile } from '../store/profile.ts'
 import { bytes, byId, open as openProposals, stamp, strike, type ProposalRow } from '../store/proposals.ts'
 
-export interface Mark { name: string; ok: boolean }
+interface Mark { name: string; ok: boolean }
 
 export interface Card {
   kind: 'plan' | 'proposal'

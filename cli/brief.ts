@@ -9,7 +9,7 @@ import { BUILT, type Holder, type Overlap, type Wait } from '../store/plans.ts'
 import { gh, type Read, WINDOW } from './gh.ts'
 import { LANE, LANES } from './plan.ts'
 
-export interface PlanLine {
+interface PlanLine {
   id: number
   step: number
   state: string
@@ -18,7 +18,7 @@ export interface PlanLine {
   held_why: string | null
 }
 
-export interface Day {
+interface Day {
   runs: number
   tokens: number
   seconds: number
@@ -59,13 +59,13 @@ export function day(db: Db): Day {
     FROM runs WHERE julianday(at) >= julianday('now', '-1 day')`).get() as Day
 }
 
-export const ACTORS = ['ceo', 'coo', 'coo_lite', 'orchestrator', 'fixer'] as const
+const ACTORS = ['ceo', 'coo', 'coo_lite', 'orchestrator', 'fixer'] as const
 
-export type Actor = typeof ACTORS[number]
+type Actor = typeof ACTORS[number]
 
 const SEATED: readonly Actor[] = ['coo_lite', 'orchestrator', 'fixer']
 
-export interface ActorRow {
+interface ActorRow {
   actor: Actor
   kinds: { kind: string; n: number }[]
   runs: { runs: number; cost: number } | null
@@ -223,7 +223,7 @@ export function byType(t: ByType): string {
     `\t${String(t.cache_read_tokens)} cache read\t${String(t.output_tokens)} output`
 }
 
-export interface Cost extends ByType {
+interface Cost extends ByType {
   provider: string
   model: string
   runs: number

@@ -102,3 +102,31 @@ test('85b D4: an importer of several changed files appears once', () => {
   })
   expect(inContext(db, plan, repo, ONE + THREE)).toBe(`${BOTH}\n\n## Imported by\n\n- src/d.ts`)
 })
+
+const R = [...Array(5000).keys()].map((i) => `line ${String(i + 1)}`)
+
+function kotlin(length: number, at: number[], listed = ['src/r.kt']): string | undefined {
+  const { db, plan, repo } = setup(listed)
+  writeFileSync(join(repo, 'src/r.kt'), R.slice(0, length).join('\n'))
+  const diff = hunk('src/r.kt', at.map((n) => `@@ -${String(n)} +${String(n)} @@\n-old\n+line ${String(n)}`).join('\n'))
+  return inContext(db, plan, repo, diff)
+}
+
+test('640 D1: a .kt hunk carries the lines around it', () => {
+  expect(kotlin(200, [50])).toBe(fenced('src/r.kt:20-80', R.slice(19, 80)))
+})
+
+test('640 D2: meeting windows merge, far ones stay apart', () => {
+  expect(kotlin(200, [111, 50])).toBe(fenced('src/r.kt:20-141', R.slice(19, 141)))
+  expect(kotlin(200, [50, 112])).toBe(`${fenced('src/r.kt:20-80', R.slice(19, 80))}\n\n${fenced('src/r.kt:82-142', R.slice(81, 142))}`)
+})
+
+test('640 D3: a long .kt file is capped at 300 lines', () => {
+  const text = kotlin(5000, [...Array(50).keys()].map((i) => (i + 1) * 100)) ?? ''
+  expect([...text.matchAll(/^## (.+)$/gm)].map((m) => m[1])).toEqual(['src/r.kt:70-130', 'src/r.kt:170-230', 'src/r.kt:270-330', 'src/r.kt:370-430', 'src/r.kt:470-525'])
+  expect(text.match(/^line \d+$/gm)).toHaveLength(300)
+})
+
+test('640 D5: an unlisted .kt file gets no block', () => {
+  expect(kotlin(200, [50], ['src/a.ts'])).toBeUndefined()
+})

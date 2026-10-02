@@ -41,7 +41,8 @@ Each thing you find is a note, a refusal, or not raised:
   - #385 `sequencer/seat.ts:133`: a leftover `brief.refused.md` from an earlier run could put an old, refused brief into the builder's packet.
   - #346 `sequencer/tests/tick.test.ts:777`: an edit changed `month(40)` to `month(39)` and so dropped the one test case for the "first review only" rule.
 - not raised — what a check already settles: an already-large file that grows (the ratchet owns the
-  line budget), and whatever step 3's checks passed on this diff.
+  line budget), and whatever a gate under `# Checks that ran` passed on this diff.
+- A path under `No gate ran for` in `# Checks that ran` is refused, class `correctness`: each one a span at its first changed line.
 
 On a re-read the packet carries `Your last verdict`, `Changed since your last verdict` and
 `Paths since your last verdict`, which is git's, not a claim. Judge the changed paths, and answer

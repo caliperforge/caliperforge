@@ -5,8 +5,24 @@ import { walk } from '../checks/tree.ts'
 import { parse } from '../rails/diff.ts'
 import { exported, lineAt, touched } from '../rails/tight/source.ts'
 import { block } from '../sequencer/handout.ts'
+import { languageOfPath } from '../sequencer/route.ts'
 import { filesOf } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
+
+export interface Gated {
+  language: string
+  dir: string
+  command: string
+}
+
+export function coverage(gates: Gated[], diff: string): string | undefined {
+  const ran = new Set(gates.map((g) => g.language))
+  const unchecked = parse(diff).filter((f) => !f.deleted).map((f) => f.path)
+    .filter((path) => { const language = languageOfPath(path); return language !== null && !ran.has(language) })
+  if (gates.length === 0 && unchecked.length === 0) return undefined
+  const lines = gates.length === 0 ? '- none' : gates.map((g) => `- ${g.language} | ${g.dir === '' ? '.' : g.dir} | ${g.command} | pass`).join('\n')
+  return unchecked.length === 0 ? lines : `${lines}\n\nNo gate ran for:\n${unchecked.map((path) => `- ${path}`).join('\n')}`
+}
 
 interface Changed {
   path: string

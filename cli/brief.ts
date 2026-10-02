@@ -1,11 +1,14 @@
+import { join } from 'node:path'
 import { z } from 'zod'
 import type { Dry, Quiet } from '../sequencer/index.ts'
 import type { Fired } from '../sequencer/kind.ts'
 import { CREDITS } from '../sequencer/ready.ts'
-import { ruled } from '../sequencer/workspace.ts'
+import { languageFor } from '../sequencer/route.ts'
+import { FORK, maybe, planDir, ruled } from '../sequencer/workspace.ts'
 import type { Db } from '../store/index.ts'
 import { name, type LaneState, type WindowRow } from '../store/lanes.ts'
-import { BUILT, type Holder, type Overlap, type Wait } from '../store/plans.ts'
+import { BUILT, planById, type Holder, type Overlap, type Wait } from '../store/plans.ts'
+import { heads } from '../store/signals.ts'
 import { gh, type Read, WINDOW } from './gh.ts'
 import { LANE, LANES } from './plan.ts'
 
@@ -207,6 +210,28 @@ export function fileWaits(rows: Overlap[]): string {
 
 export function greptileLine(n: number): string {
   return `greptile ${String(n)}/${String(CREDITS)} this month\n`
+}
+
+interface Miss { language: string; passed: number; down: number; findings: number }
+
+export function misses(db: Db, root: string, now: Date): Miss[] {
+  const by = new Map<string, Miss>()
+  for (const h of heads(db, `${FORK}/*`, now)) {
+    const language = languageFor(db, planById(db, h.plan), join(planDir(root, h.plan), 'src')) ?? '-'
+    const row = by.get(language) ?? { language, passed: 0, down: 0, findings: 0 }
+    by.set(language, row)
+    row.passed++
+    if ((h.score ?? 0) >= 5) continue
+    row.down++
+    row.findings += (maybe(root, h.plan, `findings-${h.head}.md`) ?? '').split('\n').filter((l) => l.startsWith('- G')).length
+  }
+  return [...by.values()].sort((a, b) => a.language.localeCompare(b.language))
+}
+
+export function missSection(rows: Miss[]): string {
+  const lines = rows.map((m) => `  ${m.language} ${String(m.passed)} passed, ${String(m.down)} marked down` +
+    `${m.down > 0 ? `, ${String(m.findings)} findings` : ''}\n`)
+  return `greptile after both reviewers passed, last 30 d\n${rows.length === 0 ? '  none\n' : lines.join('')}`
 }
 
 /** One row per rate-limit window: our tokens inside it, the provider's utilisation of it, the cap. */

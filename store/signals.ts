@@ -44,6 +44,18 @@ export function greptiled(db: Db, repos: string, month: string): number {
   return row.n
 }
 
+/** Each head Greptile scored in the last 30 days on repos matching `repos`, of plans with no origin that passed both reviewers; its newest score decides. */
+export function heads(db: Db, repos: string, now: Date): { plan: number; head: string; score: number | null }[] {
+  return db.prepare(`SELECT plan, head, score FROM (SELECT s.plan, s.head, s.score,
+      row_number() OVER (PARTITION BY s.plan, s.head ORDER BY s.id DESC) AS n
+    FROM signals s JOIN plans p ON p.id = s.plan
+    WHERE s.kind = 'bot_review' AND s.author LIKE '%greptile%' AND s.repo GLOB ? AND s.head IS NOT NULL AND p.origin IS NULL
+      AND julianday(s.at) >= julianday(?, '-30 day')
+      AND (SELECT count(DISTINCT v.gate) FROM verdicts v
+        WHERE v.plan = s.plan AND v.outcome = 'pass' AND v.gate IN ('review', 'senior_review')) = 2)
+    WHERE n = 1 ORDER BY plan, head`).all(repos, now.toISOString()) as { plan: number; head: string; score: number | null }[]
+}
+
 export function since(db: Db, plan: number): SignalRow[] {
   return db.prepare('SELECT * FROM signals WHERE plan = ? ORDER BY id').all(plan).map((r) => SignalRow.parse(r))
 }

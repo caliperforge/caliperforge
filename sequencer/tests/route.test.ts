@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
+import { authority } from '../../rails/authority/index.ts'
 import { record } from '../../store/files.ts'
 import type { Db } from '../../store/index.ts'
 import { PlanRow } from '../../store/plans.ts'
@@ -128,5 +129,36 @@ test('the brief-files fence is the brief; any other, the manifest', () => {
   const w = world()
   record(w.db, 1, [{ path: 'ruby/lib/pay_kit/config.rb', is_new: false }])
   expect(fenceFor(w.db, 1, [BRIEF_FILES])).toEqual(['ruby/lib/pay_kit/config.rb'])
-  expect(fenceFor(w.db, 1, ['kotlin'])).toEqual(['kotlin'])
+  expect(fenceFor(w.db, 2, ['kotlin'])).toEqual(['kotlin'])
+})
+
+const SWIFT = ['Atelier', 'AtelierTests', 'Atelier.xcodeproj', 'swift']
+
+test('D1 an outside plan fences kotlin and swift to the brief', () => {
+  const w = world()
+  record(w.db, 1, listed(['harness/protocol-runners/kotlin.json']))
+  expect(fenceFor(w.db, 1, ['kotlin'])).toEqual(['harness/protocol-runners/kotlin.json'])
+  record(w.db, 1, listed(['Package.swift']))
+  expect(fenceFor(w.db, 1, SWIFT)).toEqual(['Package.swift'])
+})
+
+test('D2 an internal plan keeps the manifest\'s fence', () => {
+  const w = world()
+  expect(fenceFor(w.db, 2, ['kotlin'])).toEqual(['kotlin'])
+  expect(fenceFor(w.db, 2, SWIFT)).toEqual(SWIFT)
+})
+
+test('D3 an empty manifest stays empty on an outside plan', () => {
+  const w = world()
+  record(w.db, 1, listed(['Package.swift']))
+  expect(fenceFor(w.db, 1, [])).toEqual([])
+})
+
+test('D4 authority refuses an unlisted kotlin/ path', () => {
+  const w = world()
+  record(w.db, 1, listed(['harness/protocol-runners/kotlin.json']))
+  const hunk = (path: string) => `--- a/${path}\n+++ b/${path}\n@@ -1,1 +1,1 @@\n+x\n`
+  const root = join(import.meta.dirname, '../..')
+  expect(authority(root, 'kotlin_specialist', hunk('kotlin/Other.kt'), false, fenceFor(w.db, 1, ['kotlin'])))
+    .toMatchObject({ outcome: 'refuse', spans: ['kotlin/Other.kt:1 authority.write_paths'] })
 })

@@ -25,7 +25,7 @@ const Account = z.object({ id: z.int(), measured_at: z.string() })
 /** The step `templates/pr-path.ts` names `push`. An adopted row stands there without v2 having run it. */
 const PUSHED_STEP = 8
 
-export interface Adopted {
+interface Adopted {
   target: number
   plan: number
   repo: string

@@ -103,10 +103,11 @@ function fires(cf: Command, { root, db, out }: Cli): void {
 
   cf.command('priority').argument('<plan>').argument('<n>', 'P0 first, up to P9')
     .requiredOption('--by <actor>', `who ran it: ${HOLDERS.join(' or ')}`)
-    .action((id: string, n: string, options: { by: string }) => {
+    .requiredOption('--why <text>', 'why the order changes')
+    .action((id: string, n: string, options: { by: string; why: string }) => {
       const by = holderOf(options.by)
       const handle = db()
-      setPriority(handle, Number(id), Number(n), by)
+      setPriority(handle, Number(id), Number(n), { actor: by, why: options.why })
       out(`plan ${id} priority P${n}\n`)
     })
 }

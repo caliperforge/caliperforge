@@ -9,7 +9,7 @@ const KEYS = ['manifest', 'prompt'] as const
 const ROW = /^ {2}\('(.+?)', '.+?', '.+?', '.+?', '(.+?)'\)/gm
 const BLOCK = /^digests:\n(?:[ \t].*\n|\n)*/m
 
-export interface Stale {
+interface Stale {
   path: string
   digests: Record<string, string>
 }

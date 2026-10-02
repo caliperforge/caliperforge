@@ -41,6 +41,10 @@ When the packet carries `# Reference the brief names`, check the diff against ea
 lists under `## Must not break`: accepted values, empty input, bounds, errors raised. Any rule the
 port breaks is a `correctness` span on the diff's line, unless a brief line says why the port differs.
 
+When the packet carries `# Language rules`, judge the diff against every rule there and under `# Notes on`.
+Its commands, write fence and answer fence are the builder's, not yours. A line that breaks a rule is a
+span, and the finding quotes the rule's text.
+
 Close with this fence and nothing after it:
 
 ```

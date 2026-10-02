@@ -7,9 +7,12 @@ import { assembled, benchPacket, reviewManifest, type Bench, type Review } from 
 import { runLogged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { observed, wall } from '../store/lanes.ts'
+import { planById } from '../store/plans.ts'
+import { targetRow } from '../store/targets.ts'
 import { byRun } from '../store/transcript.ts'
 import { subdirs } from '../checks/tree.ts'
 import { inContext } from './package.ts'
+import { packs } from './packs.ts'
 import { read, type Judged, type Verdict } from './verdict.ts'
 
 export function loadReviews(db: Db, root: string): string[] {
@@ -46,7 +49,9 @@ export async function judge(
   }
   const context = built.bench.context ?? inContext(db, plan, built.bench.repo, built.bench.diff)
   const chosen = context === undefined ? built.packet : assembled(root, name, manifest, { ...built.bench, context }, transcript)
-  const packet = { ...chosen, prompt: `${map(built.bench.repo)}\n\n${chosen.prompt}` }
+  const target = planById(db, plan).target_id
+  const rules = packs(root, built.bench.diff, target === null ? null : targetRow(db, target).repo)
+  const packet = { ...chosen, prompt: `${map(built.bench.repo)}\n\n${chosen.prompt}${rules}` }
   const first = await ran(db, root, name, plan, manifest, provider, packet)
   const refired = first.capped && first.outcome === null
     ? await ran(db, root, name, plan, manifest, provider, { ...packet, tools: [] })

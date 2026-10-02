@@ -13,3 +13,4 @@ write_paths:
   - Atelier
   - AtelierTests
   - Atelier.xcodeproj
+  - swift

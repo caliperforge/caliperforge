@@ -85,6 +85,15 @@ test('a change wholly under kotlin/ still goes to the kotlin seat', () => {
   expect(builder(languageFor(w.db, w.target, monorepo()))).toBe('kotlin_specialist')
 })
 
+test('D5 kotlin beside a doc and swift get their own seats', () => {
+  const w = world()
+  record(w.db, 1, listed(['kotlin/runner/src/main/kotlin/Main.kt', 'README.md']))
+  expect(builder(languageFor(w.db, w.target, monorepo()))).toBe('kotlin_specialist')
+  record(w.db, 1, listed(['swift/Sources/PayKit/Memo.swift']))
+  expect(builder(languageFor(w.db, w.target, monorepo()))).toBe('swift_specialist')
+  expect(['kotlin/build.gradle.kts', 'swift/Package.swift'].map(languageOfPath)).toEqual(['kotlin', 'swift'])
+})
+
 test('our own plans stay with the typescript seat', () => {
   const w = world()
   expect(builder(languageFor(w.db, w.ours, monorepo()))).toBe('typescript_specialist')

@@ -4,7 +4,7 @@ import { parse } from 'yaml'
 import { z } from 'zod'
 
 /** A language whose builder holds its own shell and brief-files fence on a stranger's repo. */
-const OUTSIDE_LANGUAGES = ['rust', 'python', 'ruby', 'go', 'php', 'lua'] as const
+const OUTSIDE_LANGUAGES = ['rust', 'python', 'ruby', 'go', 'php', 'lua', 'kotlin', 'swift'] as const
 
 export type OutsideLanguage = (typeof OUTSIDE_LANGUAGES)[number]
 
@@ -79,6 +79,18 @@ const RECIPES: Record<Exclude<OutsideLanguage, 'rust'>, Recipe> = {
     recipes: ['lint', 'test'],
     raw: [{ script: 'lint', bin: 'luacheck', args: ['.'] }, { script: 'test', bin: 'busted', args: [] }],
   },
+  kotlin: {
+    markers: /^build\.gradle\.kts$/,
+    install: null,
+    recipes: ['lint', 'test'],
+    raw: [{ script: 'test', bin: 'gradle', args: ['installDist', 'test'] }],
+  },
+  swift: {
+    markers: /^Package\.swift$/,
+    install: null,
+    recipes: ['lint', 'test'],
+    raw: [{ script: 'build', bin: 'swift', args: ['build'] }, { script: 'test', bin: 'swift', args: ['test'] }],
+  },
 }
 
 const JUSTFILE = 'Justfile'
@@ -104,7 +116,7 @@ function first(outside: Outside): string {
 }
 
 const EXT: Record<OutsideLanguage, RegExp> = {
-  rust: /\.rs$/, python: /\.py$/, ruby: /\.rb$/, go: /\.go$/, php: /\.php$/, lua: /\.lua$/,
+  rust: /\.rs$/, python: /\.py$/, ruby: /\.rb$/, go: /\.go$/, php: /\.php$/, lua: /\.lua$/, kotlin: /\.kts?$/, swift: /\.swift$/,
 }
 
 function languageHint(path: string, language: OutsideLanguage): boolean {

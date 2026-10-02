@@ -27,7 +27,7 @@ test('the manifest declares seat, model, effort, tools and paths', () => {
     seat: SEAT,
     effort: 'high',
     tools: ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash(xcodebuild:*)', 'Bash(swift:*)'],
-    write_paths: ['Atelier', 'AtelierTests', 'Atelier.xcodeproj'],
+    write_paths: ['Atelier', 'AtelierTests', 'Atelier.xcodeproj', 'swift'],
   })
 })
 
@@ -82,8 +82,15 @@ test('write_paths admit the app and its tests and refuse the rest', () => {
   const paths = seat(root, SEAT).manifest.write_paths
   expect(refuse(root, paths, 'Atelier/Views/NowView.swift')).toBeNull()
   expect(refuse(root, paths, 'AtelierTests/NowViewTests.swift')).toBeNull()
+  expect(refuse(root, paths, 'swift/Sources/PayKit/Memo.swift')).toBeNull()
   expect(refuse(root, paths, 'Archive/Services/Old.swift')).toMatchObject({ origin_ref: 'seat.write_paths' })
+  expect(refuse(root, paths, 'Archive/Old.swift')).toMatchObject({ origin_ref: 'seat.write_paths' })
   expect(refuse(root, paths, '../escape.swift')).toMatchObject({ origin_ref: 'seat.write_paths' })
+})
+
+test('D6 the kotlin seat still refuses a swift write', () => {
+  const paths = seat(root, 'kotlin_specialist').manifest.write_paths
+  expect(refuse(root, paths, 'swift/Sources/Expires.swift')).toMatchObject({ origin_ref: 'seat.write_paths' })
 })
 
 test('the authority rail reads the same write_paths off the diff', () => {

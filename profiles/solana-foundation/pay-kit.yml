@@ -5,6 +5,8 @@ checks:
   lua: [install, lint, test]
   go: [lint, test]
   rust: [format, test]
+  kotlin: [lint, test]
+  swift: [lint, test]
 notes:
   - Each language lives in its own folder, whose Justfile recipes are the checks, run as `just --justfile <folder>/Justfile <recipe>`.
   - "rust/ ships no Justfile: `cargo fmt --all -- --check` at the rust/ workspace, then `cargo test -p <crate>` for the crates touched."

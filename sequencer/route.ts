@@ -30,12 +30,15 @@ const BY_NAME: [RegExp, string][] = [
   [/\.go$|(^|\/)go\.(mod|sum)$/, 'go'],
   [/\.php$|(^|\/)composer\.json$/, 'php'],
   [/\.lua$|\.rockspec$|(^|\/)\.luacheckrc$/, 'lua'],
+  [/\.kts?$/, 'kotlin'],
+  [/\.swift$/, 'swift'],
 ]
 
 /** A file no name rule claims goes by the folder it sits in, as the monorepos we work in lay their SDKs out. */
 const BY_FOLDER: [RegExp, string][] = [
   [/^(rust|crates|programs)\//, 'rust'], [/^python\//, 'python'], [/^ruby\//, 'ruby'],
   [/^go\//, 'go'], [/^php\//, 'php'], [/^lua\//, 'lua'],
+  [/^kotlin\//, 'kotlin'], [/^swift\//, 'swift'],
 ]
 
 /** Docs never pick a builder, nor do fixtures a test reads. */

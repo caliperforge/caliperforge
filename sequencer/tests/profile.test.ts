@@ -32,6 +32,8 @@ const PAY_KIT = nested({
   'lua/Justfile': just('install', 'test', 'lint'), 'lua/pay-kit-dev-1.rockspec': '',
   'go/Justfile': just('test', 'lint'), 'go/go.mod': 'module x\n',
   'rust/Cargo.toml': '[workspace]\n', 'rust/crates/kit/Cargo.toml': '[package]\nname = "pay-kit"\n',
+  'kotlin/Justfile': just('lint', 'test'), 'kotlin/build.gradle.kts': '',
+  'swift/Justfile': just('lint', 'test'), 'swift/Package.swift': '',
 })
 
 const SURFPOOL = nested({
@@ -53,6 +55,8 @@ const CASES: { src: string; repo: string; language: OutsideLanguage; file: strin
   { src: PAY_KIT, repo: 'pay-kit', language: 'php', file: 'php/src/Memo.php', gates: justGates('php', 'install', 'lint', 'test') },
   { src: PAY_KIT, repo: 'pay-kit', language: 'lua', file: 'lua/pay_kit/memo.lua', gates: justGates('lua', 'install', 'lint', 'test') },
   { src: PAY_KIT, repo: 'pay-kit', language: 'go', file: 'go/memo.go', gates: justGates('go', 'lint', 'test') },
+  { src: PAY_KIT, repo: 'pay-kit', language: 'kotlin', file: 'kotlin/src/main/kotlin/Runner.kt', gates: justGates('kotlin', 'lint', 'test') },
+  { src: PAY_KIT, repo: 'pay-kit', language: 'swift', file: 'swift/Sources/PayKit/Memo.swift', gates: justGates('swift', 'lint', 'test') },
   { src: PAY_KIT, repo: 'pay-kit', language: 'rust', file: 'rust/crates/kit/src/lib.rs', gates: [
     { script: 'format', bin: 'cargo', args: ['fmt', '--all', '--', '--check'], dir: 'rust' },
     { script: 'test', bin: 'cargo', args: ['test', '-p', 'pay-kit'], dir: 'rust' },

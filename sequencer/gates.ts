@@ -4,9 +4,11 @@ import { parse } from 'yaml'
 import { z } from 'zod'
 
 /** A language whose builder holds its own shell and brief-files fence on a stranger's repo. */
-const OUTSIDE_LANGUAGES = ['rust', 'python', 'ruby', 'go', 'php', 'lua', 'kotlin', 'swift'] as const
+const OUTSIDE_LANGUAGES = ['rust', 'python', 'ruby', 'go', 'php', 'lua', 'kotlin', 'swift', 'typescript'] as const
 
 export type OutsideLanguage = (typeof OUTSIDE_LANGUAGES)[number]
+
+export const Package = z.object({ scripts: z.record(z.string(), z.string()).default({}) })
 
 export function outsideLanguage(language: string | null): OutsideLanguage | null {
   return OUTSIDE_LANGUAGES.find((l) => l === language) ?? null
@@ -91,6 +93,12 @@ const RECIPES: Record<Exclude<OutsideLanguage, 'rust'>, Recipe> = {
     recipes: ['lint', 'test'],
     raw: [{ script: 'build', bin: 'swift', args: ['build'] }, { script: 'test', bin: 'swift', args: ['test'] }],
   },
+  typescript: {
+    markers: /^package\.json$/,
+    install: null,
+    recipes: ['lint', 'typecheck', 'test'],
+    raw: [],
+  },
 }
 
 const JUSTFILE = 'Justfile'
@@ -104,11 +112,31 @@ function own(src: string, outside: Outside): Gate[] {
   if (outside.language === 'rust') return rust(src, outside.files)
   const recipe = RECIPES[outside.language]
   const dir = home(src, first(outside), (name) => name === JUSTFILE || recipe.markers.test(name))
+  const node = outside.language === 'typescript' ? nodeGates(src, dir, recipe.recipes) : null
+  const install = node?.install ?? (recipe.install === null ? [] : [{ ...recipe.install, dir }])
   const defined = recipes(join(src, dir, JUSTFILE))
-  if (defined === null) return [...(recipe.install === null ? [] : [recipe.install]), ...recipe.raw].map((r) => ({ ...r, dir }))
+  if (defined === null) return [...install, ...(node?.raw ?? recipe.raw.map((r) => ({ ...r, dir })))]
   const just = (script: string): Gate => ({ script, bin: 'just', args: ['--justfile', JUSTFILE, script], dir })
-  const install = defined.has('install') ? [just('install')] : recipe.install === null ? [] : [{ ...recipe.install, dir }]
-  return [...install, ...recipe.recipes.filter((r) => defined.has(r)).map(just)]
+  return [...(defined.has('install') ? [just('install')] : install), ...recipe.recipes.filter((r) => defined.has(r)).map(just)]
+}
+
+const LOCKS: Record<string, Raw> = {
+  'pnpm-lock.yaml': { script: 'install', bin: 'pnpm', args: ['install', '--frozen-lockfile'] },
+  'package-lock.json': { script: 'install', bin: 'npm', args: ['ci'] },
+}
+
+/** Install where the nearest lockfile sits, a workspace's root; then the scripts `package.json` defines, run by that lockfile's manager. */
+function nodeGates(src: string, dir: string, scripts: string[]): { install: Gate[]; raw: Gate[] } {
+  const at = home(src, join(dir, 'package.json'), (name) => name in LOCKS)
+  const lock = Object.entries(LOCKS).find(([name]) => existsSync(join(src, at, name)))?.[1]
+  const bin = lock?.bin ?? 'npm'
+  const path = join(src, dir, 'package.json')
+  const got = existsSync(path) ? Package.safeParse(JSON.parse(readFileSync(path, 'utf8'))) : null
+  const defined = got?.success === true ? got.data.scripts : {}
+  return {
+    install: lock === undefined ? [] : [{ ...lock, dir: at }],
+    raw: scripts.filter((s) => defined[s] !== undefined).map((s) => ({ script: s, bin, args: ['run', s], dir })),
+  }
 }
 
 function first(outside: Outside): string {
@@ -117,6 +145,7 @@ function first(outside: Outside): string {
 
 const EXT: Record<OutsideLanguage, RegExp> = {
   rust: /\.rs$/, python: /\.py$/, ruby: /\.rb$/, go: /\.go$/, php: /\.php$/, lua: /\.lua$/, kotlin: /\.kts?$/, swift: /\.swift$/,
+  typescript: /\.[cm]?tsx?$/,
 }
 
 function languageHint(path: string, language: OutsideLanguage): boolean {

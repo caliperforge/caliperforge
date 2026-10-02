@@ -1,3 +1,5 @@
+checks:
+  typescript: [install, lint, typecheck, test]
 commit: >-
   One commit signed as the host's git identity: the brief's title as its subject, its What and Why lines
   as the body, and no upstream issue number anywhere, since the ci-green rail refuses a branch whose commits name one.

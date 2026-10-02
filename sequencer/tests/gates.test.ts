@@ -1,6 +1,6 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { expect, test } from 'vitest'
 import { gates, outsideLanguage } from '../gates.ts'
 
@@ -25,5 +25,61 @@ test('D3 swift with no Justfile builds, then tests, in its folder', () => {
   expect(gates(fixture('swift/Package.swift'), { language: 'swift', files: ['swift/Sources/PayKit/Memo.swift'] })).toEqual([
     { script: 'build', bin: 'swift', args: ['build'], dir: 'swift' },
     { script: 'test', bin: 'swift', args: ['test'], dir: 'swift' },
+  ])
+})
+
+function nested(files: Record<string, string>): string {
+  const dir = mkdtempSync(join(tmpdir(), 'cf-gates-'))
+  for (const [path, body] of Object.entries(files)) {
+    mkdirSync(dirname(join(dir, path)), { recursive: true })
+    writeFileSync(join(dir, path), body)
+  }
+  return dir
+}
+
+const PACKAGE = JSON.stringify({ scripts: { lint: 'eslint .', test: 'vitest run' } })
+
+const ts = (src: string, file = 'ts/src/a.ts'): ReturnType<typeof gates> => gates(src, { language: 'typescript', files: [file] })
+
+test('D1 typescript is an outside language', () => {
+  expect(outsideLanguage('typescript')).toBe('typescript')
+})
+
+test('D2 D6 a pnpm package installs frozen, then runs only the scripts it defines, in its folder', () => {
+  expect(ts(nested({ 'ts/package.json': PACKAGE, 'ts/pnpm-lock.yaml': '', 'ts/src/a.ts': '' }))).toEqual([
+    { script: 'install', bin: 'pnpm', args: ['install', '--frozen-lockfile'], dir: 'ts' },
+    { script: 'lint', bin: 'pnpm', args: ['run', 'lint'], dir: 'ts' },
+    { script: 'test', bin: 'pnpm', args: ['run', 'test'], dir: 'ts' },
+  ])
+})
+
+test('D3 a pnpm workspace installs at its lockfile and runs scripts in the package', () => {
+  expect(ts(nested({ 'ts/pnpm-lock.yaml': '', 'ts/packages/mpp/package.json': PACKAGE }), 'ts/packages/mpp/src/a.ts')).toEqual([
+    { script: 'install', bin: 'pnpm', args: ['install', '--frozen-lockfile'], dir: 'ts' },
+    { script: 'lint', bin: 'pnpm', args: ['run', 'lint'], dir: 'ts/packages/mpp' },
+    { script: 'test', bin: 'pnpm', args: ['run', 'test'], dir: 'ts/packages/mpp' },
+  ])
+})
+
+test('D4 a package-lock.json installs with npm ci and runs scripts with npm', () => {
+  expect(ts(nested({ 'ts/package.json': PACKAGE, 'ts/package-lock.json': '' }))).toEqual([
+    { script: 'install', bin: 'npm', args: ['ci'], dir: 'ts' },
+    { script: 'lint', bin: 'npm', args: ['run', 'lint'], dir: 'ts' },
+    { script: 'test', bin: 'npm', args: ['run', 'test'], dir: 'ts' },
+  ])
+})
+
+test('D5 a Justfile runs its recipes after the lockfile install, not the package scripts', () => {
+  expect(ts(nested({ 'ts/Justfile': 'lint:\n    echo lint\n\ntest:\n    echo test\n', 'ts/package.json': PACKAGE, 'ts/pnpm-lock.yaml': '' }))).toEqual([
+    { script: 'install', bin: 'pnpm', args: ['install', '--frozen-lockfile'], dir: 'ts' },
+    { script: 'lint', bin: 'just', args: ['--justfile', 'Justfile', 'lint'], dir: 'ts' },
+    { script: 'test', bin: 'just', args: ['--justfile', 'Justfile', 'test'], dir: 'ts' },
+  ])
+})
+
+test('D6 no lockfile means no install gate, and npm runs the scripts', () => {
+  expect(ts(nested({ 'ts/package.json': PACKAGE }))).toEqual([
+    { script: 'lint', bin: 'npm', args: ['run', 'lint'], dir: 'ts' },
+    { script: 'test', bin: 'npm', args: ['run', 'test'], dir: 'ts' },
   ])
 })

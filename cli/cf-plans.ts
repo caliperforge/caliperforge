@@ -119,8 +119,10 @@ function holds(cf: Command, { root, db, out }: Cli): void {
     })
 
   cf.command('return').argument('<plan>', 'a plan blocked on the ceo, held or halted').requiredOption(...BY)
-    .action((id: string, options: { by: string }) => {
-      const step = unhold(db(), root, Number(id), holderOf(options.by))
+    .option('--to <step>', 'an earlier step to resume at, retries and signed head cleared')
+    .action((id: string, options: { by: string; to?: string }) => {
+      const to = options.to === undefined ? undefined : Number(options.to)
+      const step = unhold(db(), root, Number(id), holderOf(options.by), to)
       out(`plan ${id} queued at step ${String(step)}\n`)
     })
 }

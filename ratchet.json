@@ -25,7 +25,7 @@
     "prepare": 2
   },
   "checks/ratchet.ts": {
-    "lines": 131,
+    "lines": 108,
     "prepare": 1
   },
   "checks/reachability.ts": {
@@ -185,9 +185,6 @@
   "providers/kind.ts": {
     "lines": 53
   },
-  "providers/usage.ts": {
-    "lines": 30
-  },
   "rails/authority/index.ts": {
     "lines": 40
   },
@@ -198,7 +195,7 @@
     "lines": 28
   },
   "rails/ci-green/index.ts": {
-    "lines": 128
+    "lines": 126
   },
   "rails/ci-green/tests/ci-green.test.ts": {
     "prepare": 1
@@ -396,7 +393,7 @@
     "silent-catch": 1
   },
   "sequencer/merge.ts": {
-    "lines": 143,
+    "lines": 137,
     "prepare": 1,
     "silent-catch": 1
   },
@@ -470,9 +467,6 @@
   },
   "sequencer/symbols.ts": {
     "lines": 43
-  },
-  "sequencer/tells.ts": {
-    "lines": 25
   },
   "sequencer/tests/after.test.ts": {
     "prepare": 4
@@ -697,7 +691,7 @@
     "silent-catch": 1
   },
   "sequencer/workspace.ts": {
-    "lines": 401,
+    "lines": 390,
     "silent-catch": 4
   },
   "store/approvals.ts": {
@@ -718,9 +712,6 @@
   "store/files.ts": {
     "lines": 92
   },
-  "store/health.ts": {
-    "lines": 25
-  },
   "store/holds.ts": {
     "lines": 62
   },
@@ -733,9 +724,6 @@
   "store/leases.ts": {
     "lines": 69,
     "silent-catch": 1
-  },
-  "store/limits.ts": {
-    "lines": 8
   },
   "store/merges.ts": {
     "lines": 63
@@ -750,7 +738,7 @@
     "lines": 66
   },
   "store/refusals.ts": {
-    "lines": 122
+    "lines": 119
   },
   "store/rows.ts": {
     "lines": 11
@@ -770,14 +758,14 @@
     "silent-catch": 2
   },
   "store/verdict.ts": {
-    "lines": 36
+    "lines": 10
   },
   "templates/comms.ts": {
     "lines": 225,
     "prepare": 10
   },
   "templates/pr-path.ts": {
-    "lines": 60
+    "lines": 55
   },
   "vitest.config.ts": {
     "lines": 8

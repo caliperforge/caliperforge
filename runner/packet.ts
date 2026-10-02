@@ -109,7 +109,7 @@ export function assembled(root: string, name: string, manifest: Review, bench: B
   const sections: [string, string | undefined][] = [
     ['The builder\'s hand-back', bench.handback],
     ['Changed code in context', framed(bench.context, 'Each hunk inside the function that encloses it. Judge from this and the diff; open a file only for what neither holds.')],
-    ['Checks', bench.checks],
+    ['Checks that ran', bench.checks],
     ['Files around the change', framed(bench.map, 'Every file in each touched directory, its length and its head comment; * marks a changed file.')],
     ['Symbols at the branch base', framed(bench.symbols, SYMBOLS_LEAD)],
     ['Reference the brief names', bench.reference],

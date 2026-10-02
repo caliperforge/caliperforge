@@ -70,7 +70,13 @@ test('D5 the symbol map is handed under its own heading',() => {
 
 test('D1 the hand-back comes straight after the diff', () => {
   expect(built(bench({ handback: 'removed: a.test.ts', checks: 'ok' })).packet.prompt).toContain(
-    `\n\n# Diff\n\n${fixture('seeded.diff')}\n\n# The builder's hand-back\n\nremoved: a.test.ts\n\n# Checks`)
+    `\n\n# Diff\n\n${fixture('seeded.diff')}\n\n# The builder's hand-back\n\nremoved: a.test.ts\n\n# Checks that ran\n\nok`)
+})
+
+test('639 D4 both specs refuse a path no gate ran for', () => {
+  for (const name of ['code_quality', 'senior_review']) {
+    expect(spec(root, name)).toContain('- A path under `No gate ran for` in `# Checks that ran` is refused, class `correctness`')
+  }
 })
 
 const BLOB = 'a'.repeat(40)

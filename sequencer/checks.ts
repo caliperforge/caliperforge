@@ -2,12 +2,10 @@ import { spawnSync } from 'node:child_process'
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { z } from 'zod'
 import type { Profile } from '../store/profile.ts'
 import { exitedOutside } from './exited.ts'
 import { gates, type Gate, type Outside, type OutsideLanguage } from './gates.ts'
-
-const Package = z.object({ scripts: z.record(z.string(), z.string()).default({}) })
+import { Package } from './node.ts'
 
 export type Commands = NonNullable<Profile['commands']>
 

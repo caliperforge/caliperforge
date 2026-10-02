@@ -88,7 +88,8 @@ test('D3 a stray field or checks not a string list is refused', () => {
 })
 
 test('D6 a repo with no file of its own reads the org file alone', () => {
-  expect(Object.keys(profile(REPO, 'solana-foundation/other') ?? {}).sort()).toEqual(['commit', 'pr'])
+  expect(Object.keys(profile(REPO, 'solana-foundation/other') ?? {}).sort()).toEqual(['checks', 'commit', 'pr'])
+  expect(profile(REPO, 'solana-foundation/other')?.checks).toEqual({ typescript: ['install', 'lint', 'typecheck', 'test'] })
 })
 
 test('kora parses Conventional subjects, Fixes and claim_first', () => {

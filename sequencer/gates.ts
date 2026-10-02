@@ -2,9 +2,10 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { parse } from 'yaml'
 import { z } from 'zod'
+import { lockfile, nodeGates } from './node.ts'
 
 /** A language whose builder holds its own shell and brief-files fence on a stranger's repo. */
-const OUTSIDE_LANGUAGES = ['rust', 'python', 'ruby', 'go', 'php', 'lua', 'kotlin', 'swift'] as const
+const OUTSIDE_LANGUAGES = ['rust', 'python', 'ruby', 'go', 'php', 'lua', 'kotlin', 'swift', 'typescript'] as const
 
 export type OutsideLanguage = (typeof OUTSIDE_LANGUAGES)[number]
 
@@ -91,6 +92,12 @@ const RECIPES: Record<Exclude<OutsideLanguage, 'rust'>, Recipe> = {
     recipes: ['lint', 'test'],
     raw: [{ script: 'build', bin: 'swift', args: ['build'] }, { script: 'test', bin: 'swift', args: ['test'] }],
   },
+  typescript: {
+    markers: /^package\.json$/,
+    install: null,
+    recipes: ['lint', 'typecheck', 'test'],
+    raw: [],
+  },
 }
 
 const JUSTFILE = 'Justfile'
@@ -104,11 +111,12 @@ function own(src: string, outside: Outside): Gate[] {
   if (outside.language === 'rust') return rust(src, outside.files)
   const recipe = RECIPES[outside.language]
   const dir = home(src, first(outside), (name) => name === JUSTFILE || recipe.markers.test(name))
+  const node = outside.language === 'typescript' ? nodeGates(src, dir, home(src, join(dir, 'package.json'), lockfile), recipe.recipes) : null
+  const install = node?.install ?? (recipe.install === null ? [] : [{ ...recipe.install, dir }])
   const defined = recipes(join(src, dir, JUSTFILE))
-  if (defined === null) return [...(recipe.install === null ? [] : [recipe.install]), ...recipe.raw].map((r) => ({ ...r, dir }))
+  if (defined === null) return [...install, ...(node?.raw ?? recipe.raw.map((r) => ({ ...r, dir })))]
   const just = (script: string): Gate => ({ script, bin: 'just', args: ['--justfile', JUSTFILE, script], dir })
-  const install = defined.has('install') ? [just('install')] : recipe.install === null ? [] : [{ ...recipe.install, dir }]
-  return [...install, ...recipe.recipes.filter((r) => defined.has(r)).map(just)]
+  return [...(defined.has('install') ? [just('install')] : install), ...recipe.recipes.filter((r) => defined.has(r)).map(just)]
 }
 
 function first(outside: Outside): string {
@@ -117,6 +125,7 @@ function first(outside: Outside): string {
 
 const EXT: Record<OutsideLanguage, RegExp> = {
   rust: /\.rs$/, python: /\.py$/, ruby: /\.rb$/, go: /\.go$/, php: /\.php$/, lua: /\.lua$/, kotlin: /\.kts?$/, swift: /\.swift$/,
+  typescript: /\.[cm]?tsx?$/,
 }
 
 function languageHint(path: string, language: OutsideLanguage): boolean {

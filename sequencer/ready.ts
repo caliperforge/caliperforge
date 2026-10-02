@@ -32,6 +32,13 @@ export function monthly(root: string, now: Date): number {
     .filter((l) => l.split(' ')[1]?.startsWith(month) === true).length
 }
 
+export function reviewed(db: Db, now: Date): number {
+  const row = db.prepare(`SELECT count(*) AS n FROM signals s JOIN plans p ON p.id = s.plan
+    WHERE s.kind = 'bot_review' AND s.author LIKE '%greptile%' AND s.repo GLOB ? AND p.origin IS NULL AND substr(s.at, 1, 7) = ?`)
+    .get(`${FORK}/*`, now.toISOString().slice(0, 7)) as { n: number }
+  return row.n
+}
+
 export interface Target { repo: string; issue_no: number; state: string; measured_at: string; pulse: string }
 
 export function readyGate(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {

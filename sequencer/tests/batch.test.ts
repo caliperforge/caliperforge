@@ -368,7 +368,17 @@ test('D5 a rehearsal review at -next is stored at its plan HEAD', async () => {
   put(w.root, 1, 'next.tips', `${SHA} ${head}\n`)
   capture(w.db, forked, w.root, listing([]))
   expect(others(w.db, SEEDED).map((s) => ({ head: s.head }))).toEqual([{ head }])
-  expect(graded(w.db, 1, head)).toMatchObject({ external_id: 'g3', score: 4 })
+  expect(graded(w.db, 1, head)).toMatchObject({ external_id: `g3@${SHA}`, score: 4 })
+})
+
+test('D3 one summary comment at two reviewed heads is two rows', async () => {
+  const w = await pushed()
+  const later = 'c'.repeat(40)
+  const moved = pr({ ...FORKED, reviews: FORKED.reviews.map((r) => ({ ...r, body: r.body.replace(SHA, later) })) })
+  capture(w.db, forked, w.root, listing([]))
+  capture(w.db, (repo) => (repo === 'caliperforge/widget' ? moved : pr()), w.root, listing([]))
+  capture(w.db, forked, w.root, listing([]))
+  expect(others(w.db, SEEDED).map((s) => s.external_id)).toEqual([`g3@${SHA}`, `g3@${later}`])
 })
 
 test('D1 rehearsal inline findings land under the plan HEAD', async () => {

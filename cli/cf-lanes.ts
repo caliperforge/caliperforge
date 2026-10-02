@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path'
 import { claudeAgentSdk } from '../providers/claude-agent-sdk/index.ts'
 import { self } from '../rails/tight/index.ts'
 import { fire } from '../runner/index.ts'
-import { monthly } from '../sequencer/ready.ts'
+import { reviewed } from '../sequencer/ready.ts'
 import { liveTree } from '../sequencer/workspace.ts'
 import { dump, migrate, open as openDb, type Db } from '../store/index.ts'
 import { dial, hhmm, lanes, priority as setPriority, record, Reading, set, windows } from '../store/lanes.ts'
@@ -185,7 +185,7 @@ function briefs(cf: Command, { root, db, out }: Cli): void {
     out(rulings(handle, root))
     out(laneLine(lanes(handle, hhmm(handle))))
     out(waitLine(waits(handle)) + fileWaits(overlapWaits(handle)))
-    out(greptileLine(monthly(root, new Date())))
+    out(greptileLine(reviewed(handle, new Date())))
     out(section('open plans', openPlans(handle)))
     out(section('halted', halted(handle)))
     out(section('waiting on the CEO', heldBy(handle, 'ceo')))

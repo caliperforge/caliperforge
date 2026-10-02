@@ -8,7 +8,7 @@ import { registerLanes } from '../cf-lanes.ts'
 import { actors, actorSection, costs, costSection, fileWaits, greptileLine, hands, heldBy, line, rulings, section, ticketSection, tickets, unpriced,
   waitLine, waits } from '../brief.ts'
 import { hold } from '../../sequencer/hold.ts'
-import { monthly } from '../../sequencer/ready.ts'
+import { monthly, reviewed } from '../../sequencer/ready.ts'
 import { put } from '../../sequencer/workspace.ts'
 import { repriced } from '../../store/events.ts'
 import type { Db } from '../../store/index.ts'
@@ -223,6 +223,27 @@ test('Greptile counts dated requests of this UTC month, all plans', () => {
   put(root, 2, 'greptile.asked', `${'c'.repeat(40)}\n` + at('d', '2026-09-01T00:00:00.000Z').repeat(5))
   expect(monthly(root, now)).toBe(12)
   expect(greptileLine(12)).toBe('greptile 12/50 this month\n')
+})
+
+function review(db: Db, id: number, repo: string, author: string, at: string, plan: number): void {
+  db.prepare(`INSERT INTO signals (repo, pr, kind, author, at, external_id, score, plan)
+    VALUES (?, 3, 'bot_review', ?, ?, ?, 4, ?)`).run(repo, author, at, `g${String(id)}`, plan)
+}
+
+test('D1 D2 Greptile rehearsal reviews of this UTC month count', () => {
+  const db = world()
+  const now = new Date('2026-10-02T12:00:00.000Z')
+  plan(db, 1, 'running', null, 1)
+  plan(db, 2, 'running', 25)
+  review(db, 1, 'acme/widget', 'greptile-apps', '2026-10-02T09:00:00Z', 1)
+  review(db, 2, 'caliperforge/widget', 'greptile-apps', '2026-10-02T09:00:00Z', 2)
+  review(db, 3, 'caliperforge/widget', 'coderabbitai', '2026-10-02T09:00:00Z', 1)
+  review(db, 4, 'caliperforge/widget', 'greptile-apps', '2026-08-31T23:59:59Z', 1)
+  expect(reviewed(db, now)).toBe(0)
+  review(db, 5, 'caliperforge/widget', 'greptile-apps', '2026-10-01T09:00:00Z', 1)
+  expect(reviewed(db, now)).toBe(1)
+  review(db, 6, 'caliperforge/widget', 'greptile-apps', '2026-10-02T09:00:00Z', 1)
+  expect(reviewed(db, now)).toBe(2)
 })
 
 test('cf brief names only plans whose ask.md drifted from brief', () => {

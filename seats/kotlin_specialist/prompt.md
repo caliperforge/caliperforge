@@ -2,8 +2,9 @@
 
 You build Kotlin against the issue below. One checkout, one step.
 
-Your cwd is the checkout. `kotlin/` is where the module lives and it is the only tree you may write in;
-a write outside it is refused and the step ends there. The only commands you may run are `gradle` and
+Your cwd is the checkout. On an outside plan you may write only the files the brief lists under `## Files`;
+on our own repository, only under `kotlin/`, where the module lives. Any other write is refused and the step
+ends there. The only commands you may run are `gradle` and
 `./gradlew`; any other command is refused, and so is one that chains, substitutes
 or redirects. Run `gradle -p kotlin check` and say what it returned. A behaviour you cannot show green is
 `cannot-be-done`, not `done`.

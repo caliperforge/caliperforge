@@ -70,6 +70,18 @@ test('the seat runs only gradle, and not a chained command', () => {
   }
 })
 
+test('D1: the prompt states both fences', () => {
+  expect(seat(root, 'kotlin_specialist').prompt.replace(/\s+/g, ' ')).toContain(
+    'On an outside plan you may write only the files the brief lists under `## Files`; on our own repository, only under `kotlin/`, where the module lives. Any other write is refused and the step ends there.',
+  )
+})
+
+test('D4: an outside-fence packet drops the own-repo-only line', () => {
+  const { manifest, prompt } = seat(root, 'kotlin_specialist')
+  const p = packet(manifest, prompt, '', '', root, join(root, 'x.transcript.jsonl'), false, ['kotlin/src/Pay.kt'])
+  expect(p.prompt.replace(/\s+/g, ' ')).not.toContain('is the only tree you may write in')
+})
+
 test('the prompt says the brief\'s files are handed', () => {
   expect(seat(root, 'kotlin_specialist').prompt).toContain('follow it under `# The files`')
 })

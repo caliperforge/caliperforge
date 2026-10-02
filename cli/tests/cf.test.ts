@@ -52,3 +52,7 @@ test.each([
 ])('D1 D2 cf %j is refused over --by before it acts', (args) => {
   expect(stderr(args)).toContain('--by')
 })
+
+test('cf priority without --why is refused', () => {
+  expect(stderr(['priority', '7', '0', '--by', 'coo'])).toContain('--why')
+})

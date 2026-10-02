@@ -112,9 +112,16 @@ test('a kotlin/ brief builds on the kotlin seat, diffed at base', async () => {
   expect(fired?.note).toMatch(/^kotlin_specialist /)
   expect(existsSync(join(srcDir(w.root, 1), 'kotlin/build.gradle.kts'))).toBe(true)
   const seen: Packet[] = []
-  await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
+  const bin = mkdtempSync(join(tmpdir(), 'cf-bin-'))
+  writeFileSync(join(bin, 'gradle'), '#!/bin/sh\nexit 0\n', { mode: 0o755 })
+  const path = process.env.PATH
+  process.env.PATH = `${bin}:${path ?? ''}`
+  const gated = await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
+    .finally(() => { process.env.PATH = path })
+  expect(gated[0]).toMatchObject({ step: 3, outcome: 'pass', note: 'pre-review: six rails pass; checks ran kotlin' })
   await tick(w.db, w.root, stub(CARRIED, 0, PASS, (p) => seen.push(p)))
-  expect(seen[0]?.prompt.split('# Diff')[1]?.trim()).toBe('')
+  expect(seen[0]?.prompt.split('# Diff')[1]?.trim())
+    .toBe('# Checks\n\nPassed on this diff: their kotlin gates exit zero (test). Do not re-derive what they settle.')
 })
 
 test('D1 D2 a firing seat holds a now row the lap clears', async () => {

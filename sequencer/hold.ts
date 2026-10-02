@@ -1,7 +1,7 @@
 import { rmSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Db } from '../store/index.ts'
-import { returnToLane, retried } from '../store/holds.ts'
+import { returnToLane, retried, rewound } from '../store/holds.ts'
 import { clearWaitsOn, holdOn } from '../store/plans.ts'
 import { WHY } from '../store/refusals.ts'
 import { afresh, drop, maybe, planDir, put } from './workspace.ts'
@@ -29,9 +29,9 @@ function repeatAtCheck(db: Db, root: string, plan: number): boolean {
   return !isHeld(root, plan) && row?.step === 3 && maybe(root, plan, 'refusal.md')?.endsWith(REPEAT) === true
 }
 
-export function unhold(db: Db, root: string, plan: number, actor: string): number {
-  if (repeatAtCheck(db, root, plan)) return retried(db, plan, actor)
-  const step = returnToLane(db, plan, actor)
+export function unhold(db: Db, root: string, plan: number, actor: string, to?: number): number {
+  if (to === undefined && repeatAtCheck(db, root, plan)) return retried(db, plan, actor)
+  const step = to === undefined ? returnToLane(db, plan, actor) : rewound(db, plan, to, actor)
   clearWaitsOn(db, plan)
   drop(root, plan, NOTE)
   if (step <= 1) fresh(root, plan)

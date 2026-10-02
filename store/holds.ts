@@ -1,6 +1,6 @@
 import { logged } from './events.ts'
 import type { Db } from './index.ts'
-import { builderRan, type Holder, planById, retry } from './plans.ts'
+import { builderRan, type Holder, planById, retry, rewind } from './plans.ts'
 import { clear } from './refusals.ts'
 
 const SPEND = `UPDATE settings SET value = CAST(CAST(value AS INTEGER) - 1 AS TEXT)
@@ -33,6 +33,17 @@ export function returnToLane(db: Db, plan: number, actor = 'orchestrator'): numb
   if (row === undefined) throw new Error(`plan ${String(plan)} is neither blocked on the ceo nor halted`)
   logged(db, { plan, kind: 'return', actor, outcome: 'pass', message: `step ${String(row.step)}`, pointer: null, run: null })
   return row.step
+}
+
+export function rewound(db: Db, plan: number, to: number, actor: string): number {
+  const row = db.prepare('SELECT step, state FROM plans WHERE id = ?').get(plan) as { step: number; state: string } | undefined
+  if (row?.state !== 'blocked_on_ceo' && row?.state !== 'halted') throw new Error(`plan ${String(plan)} is neither blocked on the ceo nor halted`)
+  if (!Number.isInteger(to) || to < 0 || to > row.step) throw new Error(`--to takes a step from 0 to ${String(row.step)}, not ${String(to)}`)
+  db.transaction(() => {
+    rewind(db, plan, to)
+    logged(db, { plan, kind: 'return', actor, outcome: 'pass', message: `step ${String(row.step)} → ${String(to)}`, pointer: null, run: null })
+  })()
+  return to
 }
 
 export function holdOf(db: Db, plan: number): { held_by: string | null; held_why: string | null } | undefined {

@@ -248,6 +248,47 @@ test('D3 park and hold log who ran them and why', () => {
   expect(holding(heldBy.db)).toEqual({ held_by: 'ceo', held_why: 'w' })
 })
 
+function heldAt4() {
+  const seed = seeded()
+  seed.db.exec(`UPDATE plans SET state = 'blocked_on_ceo', retries = 1, head_digest = '${'a'.repeat(64)}' WHERE id = 7`)
+  hold(seed.db, seed.home, 7, 'x', new Date(), null)
+  return seed
+}
+
+test('D1 return --to 2 rewinds and logs the move', () => {
+  const { db, home } = heldAt4()
+  ran(db, home, ['return', '7', '--to', '2', '--by', 'coo'])
+  expect(plan7(db)).toMatchObject({ step: 2, retries: 0, head_digest: null })
+  expect(['queued', 'running']).toContain((plan7(db) as { state: string }).state)
+  expect(logged(db)).toEqual([{ kind: 'return', actor: 'coo', message: 'step 4 → 2' }])
+})
+
+test('D2 D3 return --to past the step or not a step writes nothing', () => {
+  const { db, home } = heldAt4()
+  const before = plan7(db)
+  expect(() => { ran(db, home, ['return', '7', '--to', '5', '--by', 'coo']) }).toThrow('--to takes a step from 0 to 4')
+  expect(() => { ran(db, home, ['return', '7', '--to', 'x', '--by', 'coo']) }).toThrow('not NaN')
+  expect(() => { ran(db, home, ['return', '7', '--to', '-1', '--by', 'coo']) }).toThrow('not -1')
+  expect(plan7(db)).toEqual(before)
+  expect(logged(db)).toEqual([])
+  expect(isHeld(home, 7)).toBe(true)
+})
+
+test('D4 return --to on a running plan writes nothing', () => {
+  const { db, home } = seeded()
+  const before = plan7(db)
+  expect(() => { ran(db, home, ['return', '7', '--to', '2', '--by', 'coo']) }).toThrow('is neither blocked on the ceo nor halted')
+  expect(plan7(db)).toEqual(before)
+  expect(logged(db)).toEqual([])
+})
+
+test('D5 return --to 1 on a repeat stop logs return, not retry', () => {
+  const { db, home } = stoppedAtCheck('repeat')
+  ran(db, home, ['return', '7', '--to', '1', '--by', 'coo'])
+  expect(plan7(db)).toMatchObject({ step: 1 })
+  expect(logged(db)).toEqual([{ kind: 'return', actor: 'coo', message: 'step 3 → 1' }])
+})
+
 test('unhold past step 1 keeps the checkout', () => {
   const { db, home } = seeded()
   writeFileSync(join(srcDir(home, 7), 'built.ts'), 'x\n')

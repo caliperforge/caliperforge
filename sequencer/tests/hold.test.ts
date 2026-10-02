@@ -258,7 +258,7 @@ function heldAt4() {
 test('D1 return --to 2 rewinds and logs the move', () => {
   const { db, home } = heldAt4()
   ran(db, home, ['return', '7', '--to', '2', '--by', 'coo'])
-  expect(db.prepare('SELECT step, retries, head_digest FROM plans WHERE id = 7').get()).toEqual({ step: 2, retries: 0, head_digest: null })
+  expect(plan7(db)).toMatchObject({ step: 2, retries: 0, head_digest: null })
   expect(['queued', 'running']).toContain((plan7(db) as { state: string }).state)
   expect(logged(db)).toEqual([{ kind: 'return', actor: 'coo', message: 'step 4 → 2' }])
 })
@@ -285,7 +285,7 @@ test('D4 return --to on a running plan writes nothing', () => {
 test('D5 return --to 1 on a repeat stop logs return, not retry', () => {
   const { db, home } = stoppedAtCheck('repeat')
   ran(db, home, ['return', '7', '--to', '1', '--by', 'coo'])
-  expect(db.prepare('SELECT step FROM plans WHERE id = 7').get()).toEqual({ step: 1 })
+  expect(plan7(db)).toMatchObject({ step: 1 })
   expect(logged(db)).toEqual([{ kind: 'return', actor: 'coo', message: 'step 3 → 1' }])
 })
 

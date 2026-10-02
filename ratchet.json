@@ -79,6 +79,10 @@
   "cli/find.ts": {
     "lines": 82
   },
+  "cli/flow.ts": {
+    "lines": 123,
+    "prepare": 7
+  },
   "cli/gh.ts": {
     "lines": 278,
     "silent-catch": 1
@@ -96,10 +100,12 @@
     "prepare": 2
   },
   "cli/plan.ts": {
-    "citing-comment": 1,
-    "lines": 162,
+    "lines": 130,
     "prepare": 6,
     "silent-catch": 1
+  },
+  "cli/proposal.ts": {
+    "prepare": 2
   },
   "cli/queue.ts": {
     "lines": 213,
@@ -122,7 +128,13 @@
     "prepare": 4
   },
   "cli/tests/brief.test.ts": {
-    "prepare": 6
+    "prepare": 13
+  },
+  "cli/tests/cf.test.ts": {
+    "silent-catch": 1
+  },
+  "cli/tests/flow.test.ts": {
+    "prepare": 16
   },
   "cli/tests/inbox.test.ts": {
     "prepare": 2
@@ -134,10 +146,16 @@
     "prepare": 2
   },
   "cli/tests/plan.test.ts": {
-    "prepare": 12
+    "prepare": 15
+  },
+  "cli/tests/proposal-world.ts": {
+    "prepare": 7
+  },
+  "cli/tests/proposal.test.ts": {
+    "prepare": 3
   },
   "cli/tests/queue.test.ts": {
-    "prepare": 3
+    "prepare": 11
   },
   "cli/tests/record.test.ts": {
     "prepare": 5
@@ -146,7 +164,7 @@
     "prepare": 13
   },
   "cli/tests/step0.test.ts": {
-    "prepare": 2
+    "prepare": 5
   },
   "cli/tests/watch.test.ts": {
     "prepare": 5
@@ -239,7 +257,7 @@
   },
   "reviews/bench.ts": {
     "lines": 153,
-    "prepare": 4
+    "prepare": 3
   },
   "reviews/code_quality/tests/end-to-end.test.ts": {
     "prepare": 5
@@ -251,7 +269,7 @@
     "prepare": 16
   },
   "reviews/verdict.ts": {
-    "lines": 67,
+    "lines": 112,
     "silent-catch": 1
   },
   "runner/index.ts": {
@@ -269,7 +287,7 @@
     "prepare": 3
   },
   "runner/tests/runner.test.ts": {
-    "prepare": 3
+    "prepare": 4
   },
   "runner/tests/wake.test.ts": {
     "prepare": 2
@@ -299,6 +317,10 @@
     "prepare": 6,
     "silent-catch": 3
   },
+  "sequencer/card.ts": {
+    "lines": 54,
+    "prepare": 1
+  },
   "sequencer/checks.ts": {
     "lines": 295,
     "silent-catch": 2
@@ -327,7 +349,7 @@
   },
   "sequencer/fixer.ts": {
     "lines": 263,
-    "prepare": 10
+    "prepare": 7
   },
   "sequencer/gates.ts": {
     "lines": 247,
@@ -359,6 +381,10 @@
   },
   "sequencer/kind.ts": {
     "lines": 39
+  },
+  "sequencer/lead.ts": {
+    "lines": 51,
+    "prepare": 1
   },
   "sequencer/lock.ts": {
     "lines": 57,
@@ -424,6 +450,10 @@
     "lines": 301,
     "prepare": 3
   },
+  "sequencer/size.ts": {
+    "lines": 50,
+    "prepare": 1
+  },
   "sequencer/split.ts": {
     "lines": 199,
     "prepare": 17,
@@ -436,14 +466,30 @@
   "sequencer/symbols.ts": {
     "lines": 43
   },
+  "sequencer/tests/after.test.ts": {
+    "prepare": 4,
+    "test-name": 4
+  },
+  "sequencer/tests/assembly.test.ts": {
+    "prepare": 15,
+    "test-name": 10
+  },
   "sequencer/tests/bases.test.ts": {
     "test-name": 1
   },
+  "sequencer/tests/batch.test.ts": {
+    "prepare": 1
+  },
   "sequencer/tests/brief.test.ts": {
-    "prepare": 17
+    "prepare": 20,
+    "test-name": 6
   },
   "sequencer/tests/built.test.ts": {
     "prepare": 5
+  },
+  "sequencer/tests/card.test.ts": {
+    "prepare": 1,
+    "test-name": 7
   },
   "sequencer/tests/ceiling.test.ts": {
     "citing-comment": 1,
@@ -455,14 +501,26 @@
     "test-name": 1
   },
   "sequencer/tests/checks.test.ts": {
-    "prepare": 8
-  },
-  "sequencer/tests/ci.test.ts": {
-    "prepare": 4,
+    "prepare": 10,
     "test-name": 1
   },
+  "sequencer/tests/ci.test.ts": {
+    "prepare": 5,
+    "test-name": 1
+  },
+  "sequencer/tests/comms.test.ts": {
+    "prepare": 21,
+    "test-name": 11
+  },
+  "sequencer/tests/conventions.test.ts": {
+    "test-name": 5
+  },
+  "sequencer/tests/coolite.test.ts": {
+    "prepare": 22,
+    "test-name": 6
+  },
   "sequencer/tests/delta.test.ts": {
-    "test-name": 3
+    "test-name": 1
   },
   "sequencer/tests/each.test.ts": {
     "prepare": 7
@@ -475,18 +533,32 @@
     "test-name": 2
   },
   "sequencer/tests/fence.test.ts": {
-    "prepare": 2,
-    "test-name": 2
+    "prepare": 3,
+    "test-name": 6
   },
-  "sequencer/tests/fixer.test.ts": {
-    "prepare": 10,
-    "test-name": 5
-  },
-  "sequencer/tests/handout.test.ts": {
+  "sequencer/tests/findings.test.ts": {
+    "prepare": 1,
     "test-name": 3
   },
+  "sequencer/tests/fixer.test.ts": {
+    "prepare": 14,
+    "test-name": 5
+  },
+  "sequencer/tests/growth.test.ts": {
+    "prepare": 6,
+    "test-name": 3
+  },
+  "sequencer/tests/handback.test.ts": {
+    "prepare": 2,
+    "test-name": 9
+  },
+  "sequencer/tests/handout.test.ts": {
+    "prepare": 1,
+    "test-name": 8
+  },
   "sequencer/tests/hold.test.ts": {
-    "prepare": 2
+    "prepare": 11,
+    "test-name": 8
   },
   "sequencer/tests/holds.test.ts": {
     "test-name": 1
@@ -498,7 +570,7 @@
     "test-name": 1
   },
   "sequencer/tests/internal.test.ts": {
-    "citing-comment": 1,
+    "citing-comment": 3,
     "prepare": 10,
     "test-name": 10
   },
@@ -506,25 +578,41 @@
     "prepare": 5
   },
   "sequencer/tests/land.test.ts": {
-    "prepare": 14,
-    "test-name": 14
+    "prepare": 19,
+    "test-name": 20
   },
   "sequencer/tests/lanes.test.ts": {
+    "prepare": 2,
     "test-name": 15
+  },
+  "sequencer/tests/late.test.ts": {
+    "prepare": 2,
+    "test-name": 3
+  },
+  "sequencer/tests/lead.test.ts": {
+    "prepare": 1,
+    "test-name": 4
   },
   "sequencer/tests/leases.test.ts": {
     "prepare": 6,
     "test-name": 7
   },
+  "sequencer/tests/life.test.ts": {
+    "prepare": 5,
+    "test-name": 2
+  },
+  "sequencer/tests/merging.test.ts": {
+    "test-name": 2
+  },
   "sequencer/tests/next.test.ts": {
-    "prepare": 11
+    "prepare": 12
   },
   "sequencer/tests/orchestrator.test.ts": {
     "prepare": 14,
     "test-name": 10
   },
   "sequencer/tests/overlap.test.ts": {
-    "prepare": 5,
+    "prepare": 7,
     "test-name": 1
   },
   "sequencer/tests/park.test.ts": {
@@ -535,9 +623,17 @@
     "prepare": 6,
     "test-name": 5
   },
+  "sequencer/tests/profile.test.ts": {
+    "prepare": 1,
+    "test-name": 1
+  },
+  "sequencer/tests/publish.test.ts": {
+    "prepare": 3,
+    "test-name": 11
+  },
   "sequencer/tests/quick.test.ts": {
-    "prepare": 5,
-    "test-name": 4
+    "prepare": 10,
+    "test-name": 10
   },
   "sequencer/tests/reap.test.ts": {
     "prepare": 1
@@ -547,23 +643,39 @@
     "test-name": 1
   },
   "sequencer/tests/reopen.test.ts": {
-    "test-name": 1
+    "test-name": 2
   },
   "sequencer/tests/resume.test.ts": {
     "citing-comment": 1,
     "prepare": 1
   },
   "sequencer/tests/route.test.ts": {
-    "prepare": 5,
-    "test-name": 7
+    "prepare": 6,
+    "test-name": 9
+  },
+  "sequencer/tests/rule.test.ts": {
+    "prepare": 3,
+    "test-name": 3
+  },
+  "sequencer/tests/scorecard.test.ts": {
+    "prepare": 6,
+    "test-name": 5
   },
   "sequencer/tests/seat-checks.test.ts": {
     "prepare": 6
+  },
+  "sequencer/tests/shared.test.ts": {
+    "prepare": 3,
+    "test-name": 1
   },
   "sequencer/tests/signoff.test.ts": {
     "citing-comment": 2,
     "prepare": 7,
     "test-name": 15
+  },
+  "sequencer/tests/size.test.ts": {
+    "prepare": 1,
+    "test-name": 4
   },
   "sequencer/tests/slots.test.ts": {
     "test-name": 1
@@ -573,7 +685,7 @@
     "test-name": 1
   },
   "sequencer/tests/split.test.ts": {
-    "test-name": 8
+    "test-name": 18
   },
   "sequencer/tests/strays.test.ts": {
     "prepare": 4,
@@ -582,10 +694,35 @@
   "sequencer/tests/symbols.test.ts": {
     "test-name": 1
   },
+  "sequencer/tests/tells.test.ts": {
+    "test-name": 1
+  },
+  "sequencer/tests/theirs.test.ts": {
+    "prepare": 3,
+    "test-name": 10
+  },
+  "sequencer/tests/tick.test.ts": {
+    "prepare": 1,
+    "test-name": 1
+  },
   "sequencer/tests/upgrade.test.ts": {
     "citing-comment": 1,
     "prepare": 1,
     "test-name": 6
+  },
+  "sequencer/tests/upstream.test.ts": {
+    "prepare": 1,
+    "test-name": 1
+  },
+  "sequencer/tests/voice.test.ts": {
+    "prepare": 1,
+    "test-name": 4
+  },
+  "sequencer/tests/weight.test.ts": {
+    "test-name": 3
+  },
+  "sequencer/tests/workflows.test.ts": {
+    "test-name": 3
   },
   "sequencer/tests/world.ts": {
     "citing-comment": 1,
@@ -595,10 +732,17 @@
     "lines": 105,
     "silent-catch": 1
   },
+  "sequencer/ticket.ts": {
+    "prepare": 1
+  },
   "sequencer/upgrade.ts": {
     "lines": 70,
     "prepare": 1,
     "silent-catch": 3
+  },
+  "sequencer/upstream.ts": {
+    "lines": 60,
+    "silent-catch": 1
   },
   "sequencer/workspace.ts": {
     "lines": 390,
@@ -617,7 +761,7 @@
     "lines": 51
   },
   "store/events.ts": {
-    "lines": 28
+    "lines": 90
   },
   "store/files.ts": {
     "lines": 92
@@ -657,20 +801,22 @@
     "lines": 41
   },
   "store/tickets.ts": {
-    "lines": 42,
+    "lines": 94,
     "silent-catch": 1
   },
   "store/ticks.ts": {
     "lines": 24
   },
   "store/transcript.ts": {
-    "lines": 20
+    "lines": 94,
+    "silent-catch": 2
   },
   "store/verdict.ts": {
     "lines": 10
   },
   "templates/comms.ts": {
-    "lines": 43
+    "lines": 225,
+    "prepare": 10
   },
   "templates/pr-path.ts": {
     "lines": 55

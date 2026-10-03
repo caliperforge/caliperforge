@@ -10,7 +10,7 @@ import { holder } from '../store/leases.ts'
 import { needsCeo, planById } from '../store/plans.ts'
 import { repos } from '../store/record.ts'
 import type { Wire } from './push.ts'
-import { cloned, drop, maybe, planDir, put, SELF, snapshot } from './workspace.ts'
+import { cloned, conflicted, drop, maybe, planDir, put, SELF, snapshot } from './workspace.ts'
 
 const IDENT = /^[a-z_]+$/
 
@@ -59,14 +59,19 @@ function days(gap: string): number {
 
 interface Spell { step: number; tree: string; since: string; seen: string }
 
+/** `snapshot` stages with `git add -A`, which would mark a stopped merge's conflicts resolved before `conflicted` sees them. */
+function treeOf(src: string): string {
+  if (!cloned(src)) return 'none'
+  return conflicted(src) ? 'conflicted' : snapshot(src)
+}
+
 export function stuck(db: Db, root: string, registry: Entry[], now: Date): number[] {
   const gap = registry.find((e) => e.name === 'stuck_plans')?.gap
   if (gap === undefined) return []
   const window = days(gap) * 86_400_000
   return stalled(db).flatMap(({ id, step, wait_reason, waits_on, last }) => {
     if (holder(db, id, now) !== null) return []
-    const src = join(planDir(root, id), 'src')
-    const tree = cloned(src) ? snapshot(src) : 'none'
+    const tree = treeOf(join(planDir(root, id), 'src'))
     const saved = maybe(root, id, 'stuck.json')
     const was = saved === null ? null : JSON.parse(saved) as Spell
     const same = was !== null && was.step === step && was.tree === tree && now.getTime() - Date.parse(was.seen) <= window

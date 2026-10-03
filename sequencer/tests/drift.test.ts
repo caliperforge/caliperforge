@@ -12,7 +12,7 @@ import type { Db } from '../../store/index.ts'
 import { ratchetRules } from '../../store/lanes.ts'
 import { take } from '../../store/leases.ts'
 import { drift, due, Entry, filed, stuck } from '../drift.ts'
-import { git, maybe, SELF } from '../workspace.ts'
+import { conflicted, git, maybe, SELF } from '../workspace.ts'
 
 const schema = join(import.meta.dirname, '../../schema')
 const NOW = new Date('2026-10-03T10:00:00Z')
@@ -222,6 +222,28 @@ test('stuckRestarts', () => {
   expect(stuck(d, root, STUCK, at(61))).toEqual([])
   writeFileSync(join(src, 'b'), 'b')
   expect(stuck(d, root, STUCK, at(90))).toEqual([])
+})
+
+test('stuckMerging', () => {
+  const { d, root } = stalling()
+  const src = join(root, '.cf/work/1/src')
+  mkdirSync(src, { recursive: true })
+  const commit = (body: string): string => {
+    writeFileSync(join(src, 'a'), body)
+    return git(src, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qam', body])
+  }
+  git(src, ['init', '-q', '-b', 'main'])
+  writeFileSync(join(src, 'a'), 'a')
+  git(src, ['add', 'a'])
+  commit('a')
+  git(src, ['checkout', '-qb', 'other'])
+  commit('b')
+  git(src, ['checkout', '-q', 'main'])
+  commit('c')
+  expect(() => git(src, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'merge', '-q', 'other'])).toThrow()
+  for (const minutes of [0, 30]) expect(stuck(d, root, STUCK, at(minutes))).toEqual([])
+  expect(conflicted(src)).toBe(true)
+  expect(stuck(d, root, STUCK, at(61))).toEqual([1])
 })
 
 test('stuckNever', () => {

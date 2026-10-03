@@ -56,8 +56,9 @@
   where: kind = 'signoff'
   gap: 7d
 - name: proposals
-  table: proposals
-  column: id
+  table: approvals
+  column: approved_at
+  where: subject_kind = 'proposal'
 - name: ratchet_refuse
   switch: { key: ratchet.mode, value: refuse }
 - name: intake

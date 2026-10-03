@@ -4,6 +4,7 @@ import { parse } from 'yaml'
 import { z } from 'zod'
 import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
+import { decide } from '../../store/approvals.ts'
 import { setting } from '../../store/drift.ts'
 import type { Db } from '../../store/index.ts'
 import { ratchetRules } from '../../store/lanes.ts'
@@ -59,6 +60,15 @@ test('fresh', () => {
   for (const bad of [{ gap: '2 days' }, { table: 'events;' }, { column: 'At' }]) {
     expect(() => Entry.parse({ name: 'x', ...bad })).toThrow()
   }
+})
+
+test('proposals', () => {
+  const d = db()
+  const registry = z.array(Entry).parse(parse(readFileSync(join(import.meta.dirname, '../../rules/registry.yaml'), 'utf8')))
+  const proposals = registry.filter((e) => e.name === 'proposals')
+  expect(drift(d, proposals, NOW)).toEqual([{ name: 'proposals', state: 'silent', detail: "no row in approvals WHERE subject_kind = 'proposal'" }])
+  decide(d, 'proposal', 1, 'a'.repeat(64), 'no')
+  expect(drift(d, proposals, NOW)).toEqual([])
 })
 
 test('fileOnce', () => {

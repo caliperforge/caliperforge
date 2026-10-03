@@ -29,6 +29,7 @@ import { registerAdopt, registerApprovals, registerTargets } from './cf-targets.
 import { desk, fileIssue, gh } from './gh.ts'
 import { health } from './health.ts'
 import { crashed, events, notify, record as keep } from './inbox.ts'
+import { pull } from './science.ts'
 import { alerter, down, livenessLine, watch } from './watch.ts'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
@@ -56,6 +57,11 @@ registerAdopt(cf, cli)
 cf.command('health').action(() => {
   out(health(db(), root, new Date().toISOString().slice(0, 10)))
 })
+
+cf.command('science').command('pull').option('--since <date>', 'the first local day, YYYY-MM-DD')
+  .action((options: { since?: string }) => {
+    for (const path of pull(db(), new Date(), options.since)) out(`${path}\n`)
+  })
 
 cf.command('tick').option('--dry', 'read what a tick would do, fire nothing, call no network')
   .action(async (options: { dry?: boolean }) => {

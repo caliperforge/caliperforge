@@ -2,9 +2,12 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import type { Note } from '../../reviews/verdict.ts'
+import { record as stamp } from '../../rails/record.ts'
 import { digestOf } from '../../store/approvals.ts'
+import { lastChecks } from '../../store/checks.ts'
 import { record } from '../../store/files.ts'
-import type { Db } from '../../store/index.ts'
+import { addRule, type Db } from '../../store/index.ts'
+import { verdictRows } from '../../store/verdict.ts'
 import { at } from '../../templates/pr-path.ts'
 import { landed } from '../notes.ts'
 import { checked } from '../seat.ts'
@@ -21,14 +24,13 @@ function lay(root: string, id: number, files: Record<string, string>): void {
 }
 
 function passed(db: Db, id: number, digest: string): void {
-  db.prepare(`INSERT OR IGNORE INTO rules (id, kind, path, content_hash, loaded_at) VALUES ('checks', 'rail', 'rules/rails.yaml', ?, '2026-09-24')`).run('a'.repeat(64))
-  db.prepare(`INSERT INTO verdicts (gate, kind, subject_digest, plan, step, outcome, rail_id, origin_kind, origin_ref, tokens, seconds)
-    VALUES ('pre_review', 'rail', ?, ?, 3, 'pass', 'checks', NULL, NULL, 0, 0)`).run(digest, id)
+  addRule(db, { id: 'checks', kind: 'rail', path: 'rules/rails.yaml', content_hash: 'a'.repeat(64), loaded_at: '2026-09-24' })
+  stamp(db, join(import.meta.dirname, '../../rails/checks'), id,
+    { outcome: 'pass', subject_digest: digest, spans: [], origin_kind: null, origin_ref: null, message: '', defect_class: null }, 0)
 }
 
-function rows(db: Db, id: number): { message: string | null; subject_digest: string }[] {
-  return db.prepare("SELECT message, subject_digest FROM verdicts WHERE plan = ? AND rail_id = 'checks' ORDER BY id").all(id) as
-    { message: string | null; subject_digest: string }[]
+function rows(db: Db, id: number): number {
+  return verdictRows(db, id).filter((r) => r.rail_id === 'checks').length
 }
 
 function ruby(digest?: string): { db: Db; root: string } {
@@ -44,10 +46,11 @@ function ruby(digest?: string): { db: Db; root: string } {
   return { db, root }
 }
 
-test('D1 D2 a landed note re-stamps the checks pass on the new diff', () => {
+test('D1 D2 a landed note re-stamps the checks pass', () => {
   const { db, root } = ruby()
   const diff = diffOf(root, 1)
-  expect(rows(db, 1)[1]).toEqual({ message: 'checks re-stamped after notes', subject_digest: digestOf(diff) })
+  expect(rows(db, 1)).toBe(2)
+  expect(lastChecks(db, 1)).toEqual({ outcome: 'pass', subject_digest: digestOf(diff), message: 'checks re-stamped after notes' })
   const { checks } = checked(db, plan(db, 1), srcDir(root, 1), diff)
   expect(checks).toContain('just --justfile Justfile')
   expect(checks).not.toContain('No gate ran for')
@@ -59,11 +62,11 @@ test('D3 notes rolled back after failed checks write no checks row', () => {
   lay(root, 2, { 'package.json': '{"scripts":{"lint":"exit 1"}}', 'docs/notes.md': 'teh notes\n' })
   passed(db, 2, digestOf(diffOf(root, 2)))
   landed(db, root, plan(db, 2), at(4), [NOTE])
-  expect(rows(db, 2)).toHaveLength(1)
+  expect(rows(db, 2)).toBe(1)
 })
 
 test('D3 a checks pass on another diff is not re-stamped', () => {
   const { db, root } = ruby('b'.repeat(64))
-  expect(rows(db, 1)).toHaveLength(1)
+  expect(rows(db, 1)).toBe(1)
   expect(checked(db, plan(db, 1), srcDir(root, 1), diffOf(root, 1)).checks).toContain('No gate ran for')
 })

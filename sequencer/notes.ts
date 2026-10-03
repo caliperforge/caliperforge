@@ -4,6 +4,7 @@ import ts from 'typescript'
 import { parse } from '../rails/diff.ts'
 import type { Note } from '../reviews/verdict.ts'
 import { digestOf } from '../store/approvals.ts'
+import { restamp } from '../store/checks.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { internal, type PlanRow } from '../store/plans.ts'
@@ -70,19 +71,10 @@ export function landed(db: Db, root: string, plan: PlanRow, step: Step, notes: N
   write(src, after)
   const failed = internal(plan) && kept.length > 0 ? checks(src, profile(root, homeOf(plan))?.commands ?? {}) : null
   if (failed !== null) write(src, before)
-  if (kept.length > 0 && failed === null) restamped(db, root, plan, diff)
+  if (kept.length > 0 && failed === null) restamp(db, plan.id, digestOf(diff), digestOf(diffOf(root, plan.id)))
   const dropped = failed === null ? null : `dropped: ${failed.script} failed after the notes`
   for (const n of kept) noted(db, plan, step, n, dropped ?? `${n.kind}: ${n.why}`)
   return { outcome: 'pass', spans: [], note: `${step.runs} pass, ${String(kept.length)} note(s) ${dropped ?? 'applied'}` }
-}
-
-function restamped(db: Db, root: string, plan: PlanRow, diff: string): void {
-  const row = db.prepare(`SELECT outcome, subject_digest FROM verdicts WHERE plan = ? AND kind = 'rail' AND rail_id = 'checks'
-    ORDER BY id DESC LIMIT 1`).get(plan.id) as { outcome: string; subject_digest: string } | undefined
-  if (row?.outcome !== 'pass' || row.subject_digest !== digestOf(diff)) return
-  db.prepare(`INSERT INTO verdicts (gate, kind, subject_digest, plan, step, outcome, rail_id, origin_kind, origin_ref, tokens, seconds, message)
-    VALUES ('pre_review', 'rail', ?, ?, 3, 'pass', 'checks', NULL, NULL, 0, 0, 'checks re-stamped after notes')`)
-    .run(digestOf(diffOf(root, plan.id)), plan.id)
 }
 
 function unappliable(diffed: Set<string>, n: Note, text: string): string | null {

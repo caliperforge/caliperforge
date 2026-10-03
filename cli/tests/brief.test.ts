@@ -5,19 +5,17 @@ import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import { registerLanes } from '../cf-lanes.ts'
-import { actors, actorSection, costs, costSection, fileWaits, greptileLine, hands, heldBy, line, misses, missSection, rulings, section, ticketSection,
-  tickets, unpriced, waitLine, waits } from '../brief.ts'
-import { switchSection } from '../switches.ts'
+import { actors, actorSection, costs, costSection, drifts, driftSection, fileWaits, greptileLine, hands, heldBy, line, misses, missSection, rulings, section,
+  ticketSection, tickets, unpriced, waitLine, waits } from '../brief.ts'
 import { hold } from '../../sequencer/hold.ts'
 import { monthly, reviewed } from '../../sequencer/ready.ts'
-import { put } from '../../sequencer/workspace.ts'
+import { put, SELF } from '../../sequencer/workspace.ts'
 import { repriced } from '../../store/events.ts'
 import { record as listFiles } from '../../store/files.ts'
 import type { Db } from '../../store/index.ts'
 import { keep } from '../../store/merges.ts'
 import { needsCeo, parked, PlanRow, waiting } from '../../store/plans.ts'
 import { record } from '../../store/signals.ts'
-import { switches } from '../../store/switches.ts'
 
 const schema = join(import.meta.dirname, '../../schema')
 
@@ -450,21 +448,30 @@ test('D4 an empty day prints none', () => {
   expect(costSection(costs(db), unpriced(db))).toBe('cost last 24 h by model (0)\n  none\n')
 })
 
-const SHADOW_NOW = new Date('2026-10-03T12:00:00.000Z')
+function ticket(db: Db, repo: string, number: number, title: string, closed: string | null = null): void {
+  db.prepare("INSERT INTO tickets (repo, number, title, lane, opened_at, closed_at) VALUES (?, ?, ?, 'machine', ?, ?)")
+    .run(repo, number, title, at(48), closed)
+}
 
-test('shadowListed', () => {
-  const out = switchSection(switches(world()), SHADOW_NOW)
-  expect(out).toContain('  coo_lite.apply\tno row\t6 d\tstill in shadow since 2026-09-27: go live or remove\n')
-  expect(out).toContain('  orchestrator.apply\tno row\t11 d\tstill in shadow since 2026-09-22: go live or remove\n')
+const DRIFT = 'drift (1)\n  #1\tDrift: hq is off\t2 d\n'
+
+test('D1 an open drift ticket is listed with its age', () => {
+  const db = world()
+  ticket(db, SELF, 1, 'Drift: hq is off')
+  expect(driftSection(drifts(db, NOW))).toBe(DRIFT)
 })
 
-test('liveHidden', () => {
+test('D2 closed, non-drift and other-repo tickets are left out', () => {
   const db = world()
-  db.exec(`INSERT INTO settings (key, value, who, origin_kind, origin_ref, set_at) VALUES
-    ('coo_lite.apply', '1', 'ceo', 'ruling', 't', '2026-09-30'), ('fixer.apply', '0', 'ceo', 'ruling', 't', '2026-10-01')`)
-  const out = switchSection(switches(db), SHADOW_NOW)
-  expect(out).not.toContain('coo_lite.apply')
-  expect(out).toContain('  fixer.apply\t0\t2 d\n')
+  ticket(db, SELF, 1, 'Drift: hq is off')
+  ticket(db, SELF, 2, 'Drift: desk is off', '2026-09-19T12:00:00.000Z')
+  ticket(db, SELF, 3, 'hq is off')
+  ticket(db, 'acme/widget', 4, 'Drift: hq is off')
+  expect(driftSection(drifts(db, NOW))).toBe(DRIFT)
+})
+
+test('D3 no open drift ticket prints none', () => {
+  expect(driftSection(drifts(world(), NOW))).toBe('drift (0)\n  none\n')
 })
 
 test('with no waiting live plan the waits line reads none', () => {

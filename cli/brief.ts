@@ -4,7 +4,7 @@ import type { Dry, Quiet } from '../sequencer/index.ts'
 import type { Fired } from '../sequencer/kind.ts'
 import { CREDITS } from '../sequencer/ready.ts'
 import { languageFor } from '../sequencer/route.ts'
-import { FORK, maybe, planDir, ruled } from '../sequencer/workspace.ts'
+import { FORK, maybe, planDir, ruled, SELF } from '../sequencer/workspace.ts'
 import type { Db } from '../store/index.ts'
 import { name, type LaneState, type WindowRow } from '../store/lanes.ts'
 import { BUILT, planById, type Holder, type Overlap, type Wait } from '../store/plans.ts'
@@ -206,6 +206,18 @@ export function waitLine(rows: { reason: Wait; plans: number }[]): string {
 export function fileWaits(rows: Overlap[]): string {
   const body = rows.length === 0 ? '  none\n' : rows.map((w) => `  plan ${String(w.plan)}\ton plan ${String(w.on)}\t${w.path ?? '-'}\n`).join('')
   return `waiting on files (${String(rows.length)})\n${body}`
+}
+
+interface Drift { number: number; title: string; days: number | null }
+
+export function drifts(db: Db, now: Date): Drift[] {
+  return db.prepare(`SELECT number, title, CAST(julianday(?) - julianday(opened_at) AS INTEGER) AS days FROM tickets
+    WHERE repo = ? AND title GLOB 'Drift: *' AND closed_at IS NULL ORDER BY opened_at, number`).all(now.toISOString(), SELF) as Drift[]
+}
+
+export function driftSection(rows: Drift[]): string {
+  const body = rows.length === 0 ? '  none\n' : rows.map((d) => `  #${String(d.number)}\t${d.title}\t${d.days === null ? '-' : String(d.days)} d\n`).join('')
+  return `drift (${String(rows.length)})\n${body}`
 }
 
 export function greptileLine(n: number): string {

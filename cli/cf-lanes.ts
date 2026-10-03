@@ -14,7 +14,7 @@ import { holderOf, HOLDERS, overlapWaits, parked } from '../store/plans.ts'
 import { backfillTickets } from '../store/tickets.ts'
 import { backfill } from '../store/transcript.ts'
 import { actors, actorSection, byType, type ByType, costs, costSection, day, fileWaits, greptileLine, halted, hands, heldBy, laneLine, misses, missSection, open as openPlans,
-  rulings, section, tickets, ticketSection, unpriced, waitLine, waits, windowLine } from './brief.ts'
+  rulings, section, switches, switchSection, tickets, ticketSection, unpriced, waitLine, waits, windowLine } from './brief.ts'
 import { check, fill } from './digests.ts'
 import { flow } from './flow.ts'
 import { gh } from './gh.ts'
@@ -183,6 +183,7 @@ function briefs(cf: Command, { root, db, out }: Cli): void {
     out(livenessLine(handle, liveness(handle, new Date())))
     for (const lane of stalledLanes(handle, new Date())) out(`lane\tOFF with work: ${lane}\n`)
     out(rulings(handle, root))
+    out(switchSection(switches(handle), new Date()))
     out(laneLine(lanes(handle, hhmm(handle))))
     out(waitLine(waits(handle)) + fileWaits(overlapWaits(handle)))
     out(greptileLine(reviewed(handle, new Date())))

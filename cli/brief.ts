@@ -172,6 +172,27 @@ export function section(title: string, rows: PlanLine[]): string {
   return `${title} (${String(rows.length)})\n${body}`
 }
 
+const SHADOWS: Record<string, string> = { 'orchestrator.apply': '2026-09-22', 'coo_lite.apply': '2026-09-27' }
+
+interface Switch { key: string; value: string | null; since: string }
+
+export function switches(db: Db): Switch[] {
+  const rows = db.prepare("SELECT key, value, set_at AS since FROM settings WHERE key GLOB '*.apply'").all() as Switch[]
+  const unset = Object.entries(SHADOWS).filter(([key]) => !rows.some((r) => r.key === key)).map(([key, since]) => ({ key, value: null, since }))
+  return [...rows.filter((r) => r.value !== '1'), ...unset].sort((a, b) => a.key.localeCompare(b.key))
+}
+
+function switchLine(s: Switch, now: Date): string {
+  const days = Math.floor((now.getTime() - Date.parse(s.since)) / 86_400_000)
+  const stale = days > 3 ? `\tstill in shadow since ${s.since.slice(0, 10)}: go live or remove` : ''
+  return `  ${s.key}\t${s.value ?? 'no row'}\t${String(days)} d${stale}\n`
+}
+
+export function switchSection(rows: Switch[], now: Date): string {
+  const body = rows.length === 0 ? '  none\n' : rows.map((s) => switchLine(s, now)).join('')
+  return `switches (${String(rows.length)})\n${body}`
+}
+
 export function rulings(db: Db, root: string): string {
   const plans = db.prepare("SELECT id FROM plans WHERE state NOT IN ('done', 'refused') ORDER BY id").all() as { id: number }[]
   return plans.filter((p) => ruled(root, p.id) !== null)

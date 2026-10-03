@@ -5,8 +5,8 @@ import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import { registerLanes } from '../cf-lanes.ts'
-import { actors, actorSection, costs, costSection, fileWaits, greptileLine, hands, heldBy, line, misses, missSection, rulings, section, ticketSection,
-  tickets, unpriced, waitLine, waits } from '../brief.ts'
+import { actors, actorSection, costs, costSection, fileWaits, greptileLine, hands, heldBy, line, misses, missSection, rulings, section, switches,
+  switchSection, ticketSection, tickets, unpriced, waitLine, waits } from '../brief.ts'
 import { hold } from '../../sequencer/hold.ts'
 import { monthly, reviewed } from '../../sequencer/ready.ts'
 import { put } from '../../sequencer/workspace.ts'
@@ -446,6 +446,24 @@ test('priced models get no price line; day-old runs count nowhere', () => {
 test('D4 an empty day prints none', () => {
   const db = world()
   expect(costSection(costs(db), unpriced(db))).toBe('cost last 24 h by model (0)\n  none\n')
+})
+
+const SHADOW_NOW = new Date('2026-10-03T12:00:00.000Z')
+
+test('shadowListed', () => {
+  const out = switchSection(switches(world()), SHADOW_NOW)
+  expect(out).toContain('  coo_lite.apply\tno row\t6 d\tstill in shadow since 2026-09-27: go live or remove\n')
+  expect(out).toContain('  orchestrator.apply\tno row\t11 d\tstill in shadow since 2026-09-22: go live or remove\n')
+})
+
+test('liveHidden', () => {
+  const db = world()
+  const set = db.prepare("INSERT INTO settings (key, value, who, origin_kind, origin_ref, set_at) VALUES (?, ?, 'ceo', 'ruling', 't', ?)")
+  set.run('coo_lite.apply', '1', '2026-09-30')
+  set.run('fixer.apply', '0', '2026-10-01')
+  const out = switchSection(switches(db), SHADOW_NOW)
+  expect(out).not.toContain('coo_lite.apply')
+  expect(out).toContain('  fixer.apply\t0\t2 d\n')
 })
 
 test('with no waiting live plan the waits line reads none', () => {

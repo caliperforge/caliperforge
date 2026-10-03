@@ -123,7 +123,7 @@ test.each([
   expect(leases(db)).toEqual({ n: leased })
 })
 
-test('D4 a running plan past its ceiling goes to a person once per head', async () => {
+test('D4 a running plan at its ceiling: one post per head', async () => {
   const { db, home } = seeded()
   const fires: string[] = []
   const posted: string[] = []

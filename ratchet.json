@@ -549,7 +549,7 @@
     "prepare": 12
   },
   "sequencer/tests/orchestrator.test.ts": {
-    "prepare": 14
+    "prepare": 6
   },
   "sequencer/tests/overlap.test.ts": {
     "prepare": 7

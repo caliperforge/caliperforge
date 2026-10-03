@@ -46,7 +46,7 @@ function findings(view: Pr, seen: SignalRow[]): string[] {
   return [...found.filter((c) => c !== FALLBACK), ...found.filter((c) => c === FALLBACK)]
 }
 
-/** A review that passes on a re-gate settles the newest refusal at its step that nothing has settled yet. */
+/** `prior` was read from the newest refusal at the step; once that one is settled, an older one stays open. */
 export function regated(db: Db, plan: number, step: number, pass: number, prior: string | undefined, tree: string | undefined | null): number | null {
   const last = read(prior ?? '', '')
   if (last?.outcome !== 'refuse' || tree === undefined || tree === null) return null

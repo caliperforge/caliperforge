@@ -2,6 +2,7 @@ import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { filesOf, record as recordFiles, sharing } from '../../store/files.ts'
+import { advance, allPlans, overlapWaits } from '../../store/plans.ts'
 import { tick } from '../index.ts'
 import { srcDir } from '../workspace.ts'
 import { built, CARRIED, internalPlan, ours, plan, stub, world, type World } from './world.ts'
@@ -62,6 +63,26 @@ test('a held job goes on when the older one settles', async () => {
   w.db.prepare("UPDATE plans SET state = 'done' WHERE id = ?").run(ID)
   const second = (await tick(w.db, w.root, stub(CARRIED))).find((f) => f.plan === SECOND)
   expect(second?.note).not.toContain('is building')
+})
+
+test('heldWaitNamed', async () => {
+  const w = await builtPair()
+  built(w.root, SECOND, 'export const also = true')
+  await tick(w.db, w.root, stub(CARRIED))
+  advance(w.db, plan(w.db, ID), 6)
+  await tick(w.db, w.root, stub(CARRIED))
+  expect(plan(w.db, SECOND).wait_reason).toBe('file_overlap')
+  expect(overlapWaits(w.db)).toMatchObject([{ plan: SECOND, on: ID }])
+})
+
+test('laneWaitOnlyWhenLane', async () => {
+  const w = await builtPair()
+  built(w.root, SECOND, 'export const also = true')
+  await tick(w.db, w.root, stub(CARRIED))
+  advance(w.db, plan(w.db, ID), 4)
+  await tick(w.db, w.root, stub(CARRIED))
+  expect(allPlans(w.db).filter((p) => p.wait_reason === 'lane_over_cap' || p.wait_reason === 'over_cap')).toEqual([])
+  expect(overlapWaits(w.db)).toMatchObject([{ plan: SECOND, on: ID }])
 })
 
 test('D4 the next pick reads the stray', async () => {

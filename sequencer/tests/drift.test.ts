@@ -4,8 +4,9 @@ import { parse } from 'yaml'
 import { z } from 'zod'
 import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
+import { setting } from '../../store/drift.ts'
 import type { Db } from '../../store/index.ts'
-import { drift, Entry, filed } from '../drift.ts'
+import { drift, due, Entry, filed } from '../drift.ts'
 import { SELF } from '../workspace.ts'
 
 const schema = join(import.meta.dirname, '../../schema')
@@ -72,4 +73,18 @@ test('fileOnce', () => {
   expect(sent).toEqual([[SELF, 'Drift: desk is off', '**What:** desk is off: d\n' +
     '**Why:** rules/registry.yaml lists desk as a mechanism that runs\n**When it ends:** drift no longer reports desk\n',
   ['lane:machine', 'P1', 'drift']]])
+})
+
+test('dailyOnce', () => {
+  const d = db()
+  let sent = 0
+  const wire = { file: (): string => `u${String(++sent)}` }
+  const hq = [{ name: 'hq', switch: { key: 'hq.path' } }]
+  expect(due(d, hq, new Date('2026-10-03T11:29:00Z'), wire)).toEqual([])
+  expect(due(d, hq, new Date('2026-10-03T11:30:00Z'), wire)).toEqual(['u1'])
+  expect(due(d, hq, new Date('2026-10-04T05:00:00Z'), wire)).toEqual([])
+  expect(due(d, hq, new Date('2026-10-04T11:30:00Z'), wire)).toEqual(['u2'])
+  const e = db()
+  expect(() => due(e, hq, new Date('2026-10-03T11:30:00Z'), { file: () => { throw new Error('gh') } })).toThrow('gh')
+  expect(setting(e, 'drift.at')).toBe('2026-10-03')
 })

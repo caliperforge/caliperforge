@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { holds, newest, openTicket, setting } from '../store/drift.ts'
 import type { Db } from '../store/index.ts'
+import { get, hhmm, set, zone } from '../store/lanes.ts'
 import type { Wire } from './push.ts'
 import { SELF } from './workspace.ts'
 
@@ -55,4 +56,12 @@ export function filed(db: Db, drifted: Drifted[], wire: Pick<Wire, 'file'>): str
       `**When it ends:** drift no longer reports ${name}`, ''].join('\n')
     return [wire.file(SELF, title, body, ['lane:machine', 'P1', 'drift'])]
   })
+}
+
+export function due(db: Db, registry: Entry[], now: Date, wire: Pick<Wire, 'file'>): string[] {
+  if (hhmm(db, now) < '05:30') return []
+  const day = new Date(now.getTime() + zone(db) * 60000).toISOString().slice(0, 10)
+  if (day <= get(db, 'drift.at')) return []
+  set(db, 'drift.at', day, 'pr', now.toISOString())
+  return filed(db, drift(db, registry, now), wire)
 }

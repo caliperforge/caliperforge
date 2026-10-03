@@ -28,5 +28,11 @@
   if [ -n "$main" ] && git merge-base --is-ancestor HEAD "$main" 2>/dev/null; then
     git checkout -q --detach "$main" 2>/dev/null
   fi
-  node cli/cf.ts tick >/dev/null 2>&1 &
+  mkdir -p .cf
+  # Cut in place, never `mv`: the last minute's tick may still be appending to this file.
+  if [ -f .cf/tick.log ] && [ "$(wc -l < .cf/tick.log)" -gt 5000 ]; then
+    tail -n 5000 .cf/tick.log > .cf/tick.log.tail && cat .cf/tick.log.tail > .cf/tick.log
+    rm -f .cf/tick.log.tail
+  fi
+  node cli/cf.ts tick >>.cf/tick.log 2>&1 &
 }

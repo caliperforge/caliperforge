@@ -52,7 +52,7 @@ test('fresh', () => {
   const registry = z.array(Entry).parse(parse(readFileSync(join(import.meta.dirname, '../../rules/registry.yaml'), 'utf8')))
   expect(registry.map((e) => e.name)).toEqual(['coo_lite', 'orchestrator', 'fixer', 'brief_writer', 'text_review',
     'growth_lead', 'gardener', 'ratchet', 'accounts', 'records', 'dispositions', 'signoffs', 'proposals',
-    'ratchet_refuse', 'hq', 'desk', 'intake'])
+    'ratchet_refuse', 'hq', 'intake'])
   expect(() => drift(d, registry, NOW)).not.toThrow()
   for (const bad of [{ gap: '2 days' }, { table: 'events;' }, { column: 'At' }]) {
     expect(() => Entry.parse({ name: 'x', ...bad })).toThrow()

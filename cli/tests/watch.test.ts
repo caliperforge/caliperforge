@@ -1,4 +1,5 @@
-import { existsSync, mkdtempSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
@@ -24,6 +25,76 @@ function tickAt(db: Db, minutesAgo: number, note = 'nothing to fire', dry = fals
   const at = new Date(NOW.getTime() - minutesAgo * 60000).toISOString()
   receipt(db, { at, hhmm: '08:00', dry, pipes: 1, fired: 0, exit: 0, note })
 }
+
+interface Row { fired: number; exit: number; note: string }
+
+const NORMAL = { fired: 0, exit: 0, note: 'nothing to fire' }
+const HALT = { fired: 0, exit: 1, note: 'live tree is behind 0123456789ab; it fires nothing until it holds that commit' }
+const REFUSED = { fired: 2, exit: 1, note: 'refused' }
+const CRASH = { fired: 0, exit: 1, note: `${CRASHED}tick failed` }
+
+/** One receipt a minute, the last `ago` minutes before NOW. */
+function receipts(db: Db, rows: Row[], ago = 0): void {
+  rows.forEach((row, i) => {
+    const at = new Date(NOW.getTime() - (ago + rows.length - 1 - i) * 60000).toISOString()
+    receipt(db, { at, hhmm: '08:00', dry: false, pipes: 1, ...row })
+  })
+}
+
+function halts(n: number): Row[] {
+  return Array.from({ length: n }, () => HALT)
+}
+
+function watched(rows: Row[]): string[] {
+  const db = world()
+  const root = mkdtempSync(join(tmpdir(), 'cf-halt-'))
+  const posted: string[] = []
+  receipts(db, rows)
+  watch(db, root, NOW, (title) => void posted.push(title))
+  watch(db, root, NOW, (title) => void posted.push(title))
+  return posted
+}
+
+test('haltAlerts', () => {
+  expect(watched(halts(30))).toEqual(['CaliperForge · the tick is halted'])
+  expect(watched([NORMAL, ...halts(29)])).toEqual([])
+  expect(watched([...halts(15), REFUSED, ...halts(14)])).toEqual([])
+  expect(watched([...halts(15), CRASH, ...halts(14)])).toEqual([])
+})
+
+test('haltClears', () => {
+  const db = world()
+  const root = mkdtempSync(join(tmpdir(), 'cf-halt-'))
+  const posted: string[] = []
+  const post = (title: string): void => void posted.push(title)
+  receipts(db, halts(30), 1)
+  watch(db, root, NOW, post)
+  receipts(db, [NORMAL])
+  watch(db, root, NOW, post)
+  watch(db, root, NOW, post)
+  expect(posted).toEqual(['CaliperForge · the tick is halted', 'CaliperForge · the tick is firing again'])
+  expect(existsSync(join(root, '.cf/watch.halted'))).toBe(false)
+})
+
+test('crashUnchanged', () => {
+  expect(watched(Array.from({ length: 30 }, () => CRASH))).toEqual(['CaliperForge · the machine is down'])
+  const db = world()
+  receipts(db, [CRASH])
+  expect(liveness(db, NOW).crash).toBe('tick failed')
+})
+
+test('tickLogs', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cf-ticklog-'))
+  for (const sub of ['launchd', 'cli', '.cf']) mkdirSync(join(dir, sub))
+  cpSync(join(import.meta.dirname, '../../launchd/tick.sh'), join(dir, 'launchd/tick.sh'))
+  writeFileSync(join(dir, 'cli/cf.ts'), "process.stderr.write('stub tick failed\\n')\n")
+  const log = join(dir, '.cf/tick.log')
+  writeFileSync(log, 'line\n'.repeat(6000))
+  execFileSync('/bin/sh', [join(dir, 'launchd/tick.sh')])
+  const lines = (): string[] => readFileSync(log, 'utf8').trimEnd().split('\n')
+  await expect.poll(() => lines().at(-1), { timeout: 5000 }).toBe('stub tick failed')
+  expect(lines().length).toBeLessThanOrEqual(5001)
+})
 
 test('a real tick a minute ago is alive', () => {
   const db = world()

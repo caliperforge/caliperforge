@@ -36,7 +36,8 @@ function stub(text: string, fires: string[]): Provider {
 
 type Db = ReturnType<typeof open>
 
-const runs = (db: Db) => db.prepare("SELECT seat FROM runs WHERE plan = 7 AND seat = 'coo_lite'").all()
+const runs = (db: Db) => db.prepare(`SELECT step, input_tokens, cache_read_tokens, output_tokens FROM runs
+  WHERE plan = 7 AND seat = 'coo_lite'`).all()
 const told = (db: Db) => db.prepare("SELECT message FROM events WHERE plan = 7 AND kind = 'coo_lite'").all()
 
 const blocked = (db: Db, home: string) => {
@@ -49,7 +50,7 @@ test('firesOnStop', async () => {
   blocked(db, home)
   const fires: string[] = []
   await woke(db, home, stub(ASK_CEO, fires), now, () => undefined)
-  expect(runs(db)).toEqual([{ seat: 'coo_lite' }])
+  expect(runs(db)).toEqual([{ step: 4, input_tokens: 10, cache_read_tokens: 20, output_tokens: 30 }])
   expect(told(db)).toHaveLength(1)
   expect(maybe(home, 7, 'orchestrator.md')?.split('\n')[0]).toMatch(/^step 4 blocked [0-9a-f]{12}$/)
   expect(db.prepare('SELECT count(*) AS n FROM leases').get()).toEqual({ n: 0 })

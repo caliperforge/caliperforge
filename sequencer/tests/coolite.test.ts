@@ -179,6 +179,25 @@ test('D3: the packet carries sibling plans\' rulings, not others', async () => {
   expect(prompts[0]).not.toContain('use plan 8')
 })
 
+const prompted = async (db: Db, home: string) => {
+  const prompts: string[] = []
+  const reply = stub(REPLY.ask_ceo ?? '')
+  await cooLite(db, home, row(db), { ...reply, fire: (p) => { prompts.push(p.prompt); return reply.fire(p) } }, now, () => undefined, wire())
+  return prompts[0]
+}
+
+test('D1: the packet carries this plan\'s rulings.md and issue.md rulings, before the siblings', async () => {
+  const { db, home } = seeded('1')
+  put(home, 7, 'rulings.md', 'round 3: write the workflow\n')
+  put(home, 7, 'issue.md', '# Issue\n\nthe brief\n\n## Ruling\n\nkeep main\n\n## Standing\n\n- no forced push\n')
+  expect(await prompted(db, home)).toContain('# Rulings on this plan\n\nrulings.md:\nround 3: write the workflow\n\nissue.md:\n## Ruling\n\nkeep main\n\n# Rulings on sibling plans')
+})
+
+test('D2: a plan with no rulings carries none', async () => {
+  const { db, home } = seeded('1')
+  expect(await prompted(db, home)).toContain('# Rulings on this plan\n\nnone\n\n# Rulings on sibling plans')
+})
+
 test('an upstream-key stop gets the pinned read tool and its keys', async () => {
   const { db, home } = seeded('1')
   put(home, 7, 'refusal.md', 'which keys does upstream config.toml take?\n')

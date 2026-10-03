@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { appendFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import type { Packet, Provider } from '../../providers/kind.ts'
@@ -12,7 +12,7 @@ import { advance } from '../../store/plans.ts'
 import { tick } from '../index.ts'
 import { headOf, push } from '../push.ts'
 import { blocked } from '../steps.ts'
-import { internalBranch, SELF, srcDir } from '../workspace.ts'
+import { get, internalBranch, SELF, srcDir } from '../workspace.ts'
 import { approve, CARRIED, internalPlan, landing, ours, owning, plan, runsAll, runsOn, slow, stub, watched, world, type World } from './world.ts'
 
 const ID = 2
@@ -150,6 +150,32 @@ test('an unfillable roster refuses one plan; the other steps',async () => {
   const fired = await tick(w.db, w.root, stub(CARRIED))
   expect(fired[0]).toMatchObject({ plan: ID, step: 3, outcome: 'refuse', spans: ['rules/roster.yaml'] })
   expect(fired[1]).toMatchObject({ plan: SECOND, step: 3, outcome: 'pass' })
+  expect(plan(w.db, ID).step).toBe(2)
+})
+
+test('D1 a kernel checkout is filled by its own cli/cf.ts', async () => {
+  const w = mine()
+  const built = stub(owning(['cli/cf.ts']))
+  for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, built)
+  const src = srcDir(w.root, ID)
+  mkdirSync(join(src, 'cli'), { recursive: true })
+  writeFileSync(join(src, 'cli/cf.ts'), "import { appendFileSync } from 'node:fs'\nappendFileSync('rules.seed.sql', '-- marker\\n')\n")
+
+  expect((await tick(w.db, w.root, built))[0]).toMatchObject({ plan: ID, step: 3, name: 'rails', outcome: 'pass' })
+  expect(readFileSync(join(src, 'rules.seed.sql'), 'utf8')).toContain('-- marker\n')
+})
+
+test('D2 a cli/cf.ts digests that exits non-zero refuses its plan', async () => {
+  const w = mine()
+  const built = stub(owning(['cli/cf.ts']))
+  for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, built)
+  const src = srcDir(w.root, ID)
+  mkdirSync(join(src, 'cli'), { recursive: true })
+  writeFileSync(join(src, 'cli/cf.ts'), "process.stderr.write('roster broke\\n')\nprocess.exit(1)\n")
+
+  const rails = (await tick(w.db, w.root, built))[0]
+  expect(rails).toMatchObject({ plan: ID, step: 3, outcome: 'refuse', spans: ['rules/roster.yaml'], note: 'digests: the checkout could not be filled' })
+  expect(get(w.root, ID, 'refusal.md')).toContain('roster broke')
   expect(plan(w.db, ID).step).toBe(2)
 })
 

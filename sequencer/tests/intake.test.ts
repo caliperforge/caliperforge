@@ -99,7 +99,7 @@ test('D3: a delisted queued plan halts; a running one does not', () => {
   ])
 })
 
-test('haltSays: a halt leaves one event with its reason, and flow lists it', () => {
+test('haltSays: a halt logs its reason and flow lists it', () => {
   const db = piped()
   queue(db, 50)
   intake(db, root, canned([{ number: 50, labels: ['bug'] }]))

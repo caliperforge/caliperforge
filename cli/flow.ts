@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path'
 import { z } from 'zod'
 import { picks } from '../sequencer/next.ts'
 import { maybe } from '../sequencer/workspace.ts'
+import { eventsOf } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { hhmm } from '../store/lanes.ts'
 import { internal, openPipes, originRef, type PipeRow, PlanRow } from '../store/plans.ts'
@@ -81,8 +82,7 @@ function stale(db: Db, p: Row, note: string | null): Hit {
 
 function halted(db: Db, p: Row): Hit {
   if (p.state !== 'halted') return null
-  const row = db.prepare("SELECT message FROM events WHERE plan = ? AND kind = 'halted' ORDER BY id DESC LIMIT 1").get(p.id) as { message: string } | undefined
-  return [`halted: ${row?.message ?? 'no reason recorded'}`, `cf return ${String(p.id)}`]
+  return [`halted: ${eventsOf(db, p.id, 'halted').at(-1)?.message ?? 'no reason recorded'}`, `cf return ${String(p.id)}`]
 }
 
 function repeated(db: Db, p: Row, note: string | null, now: Date): Hit {

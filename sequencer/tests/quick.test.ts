@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import type { Provider } from '../../providers/kind.ts'
+import { dispositionsOf, unsettled } from '../../store/dispositions.ts'
 import { tick } from '../index.ts'
 import { get, srcDir } from '../workspace.ts'
 import { OOPS } from './bases.ts'
@@ -68,8 +69,14 @@ test('the round leaves a quick_lane pass row and step-2 tokens', async () => {
 })
 
 function dispositions(w: World): unknown[] {
-  return w.db.prepare(`SELECT d.kind, d.defect_class, d.owner, v.outcome, v.step FROM dispositions d
-    JOIN verdicts v ON v.id = d.verdict_id ORDER BY d.id`).all()
+  expect(unsettled(w.db, 1, 4, Number.MAX_SAFE_INTEGER)).toBeUndefined()
+  return dispositionsOf(w.db)
+}
+
+const EVIDENCE: unknown = expect.stringMatching(/^verdicts:\d+$/)
+
+function fixed(defect_class: string): unknown[] {
+  return [{ kind: 'fixed', defect_class, owner: 'review', evidence: EVIDENCE }]
 }
 
 /** Refused at step 4 with `review`, rebuilt to `FIX`, and passed at step 4. */
@@ -81,20 +88,20 @@ async function regated(review: string): Promise<World> {
   return w
 }
 
-test('a refusal passed after a rebuild is settled fixed on the refused verdict', async () => {
+test('a refusal passed after a rebuild settles fixed', async () => {
   const w = await regated(fence(`  - ${SPAN}`))
-  expect(dispositions(w)).toEqual([{ kind: 'fixed', defect_class: 'minimal', owner: 'review', outcome: 'refuse', step: 4 }])
+  expect(dispositions(w)).toEqual(fixed('minimal'))
 })
 
 test('the quick lane settles the refusal it fixed in place', async () => {
   const w = await toReview()
   await tick(w.db, w.root, builds(writes(w.root, 1, `${FIX}\n`), fence(cosmetic(SPAN, FIX))))
-  expect(dispositions(w)).toEqual([{ kind: 'fixed', defect_class: 'minimal', owner: 'review', outcome: 'refuse', step: 4 }])
+  expect(dispositions(w)).toEqual(fixed('minimal'))
 })
 
 test('a class outside the build map settles as correctness', async () => {
   const w = await regated(fence(`  - ${SPAN}`).replace('class: minimal', 'class: vibes'))
-  expect(dispositions(w)).toEqual([{ kind: 'fixed', defect_class: 'correctness', owner: 'review', outcome: 'refuse', step: 4 }])
+  expect(dispositions(w)).toEqual(fixed('correctness'))
 })
 
 test('a bare span keeps the lap and both entries round-trip', async () => {

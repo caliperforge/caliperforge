@@ -1,3 +1,5 @@
+import { execFileSync } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { ratcheted } from '../checks/ratchet.ts'
 import { fill } from '../cli/digests.ts'
@@ -130,7 +132,8 @@ function noted(db: Db, plan: number): Run {
 /** The roster and seat files a fill reads are the builder's, so their typo refuses this plan where a throw takes the lap. */
 function unfilled(src: string): Outcome | null {
   try {
-    fill(src, new Date().toISOString().slice(0, 10))
+    if (existsSync(join(src, 'cli/cf.ts'))) execFileSync('node', ['cli/cf.ts', 'digests'], { cwd: src, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
+    else fill(src, new Date().toISOString().slice(0, 10))
     return null
   } catch (error) {
     return {

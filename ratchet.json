@@ -461,7 +461,7 @@
     "silent-catch": 2
   },
   "sequencer/steps.ts": {
-    "lines": 183,
+    "lines": 181,
     "prepare": 4
   },
   "sequencer/symbols.ts": {
@@ -571,9 +571,6 @@
   },
   "sequencer/tests/profile.test.ts": {
     "prepare": 1
-  },
-  "sequencer/tests/publish.test.ts": {
-    "prepare": 3
   },
   "sequencer/tests/quick.test.ts": {
     "prepare": 10

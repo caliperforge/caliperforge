@@ -62,8 +62,6 @@
   switch: { key: ratchet.mode, value: refuse }
 - name: hq
   switch: { key: hq.path }
-- name: desk
-  switch: { key: comms.site_dir }
 - name: intake
   table: plans
   column: queued_at

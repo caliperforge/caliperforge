@@ -15,6 +15,9 @@ import { SELF } from '../workspace.ts'
 const schema = join(import.meta.dirname, '../../schema')
 const NOW = new Date('2026-10-03T10:00:00Z')
 const COO = { name: 'coo_lite', switch: { key: 'coo_lite.apply', value: '1' }, table: 'events', column: 'at', where: "kind = 'coo_lite'", gap: '2d' }
+const REGISTRY = z.array(Entry).parse(parse(readFileSync(join(import.meta.dirname, '../../rules/registry.yaml'), 'utf8')))
+const GARDENER = REGISTRY.filter((e) => e.name === 'gardener')
+const STALE = [{ name: 'gardener', state: 'stale', detail: 'newest gardens.day is 2026-09-28, older than 2d' }]
 
 function db(enabled = 1): Db {
   const d = fresh(schema)
@@ -52,12 +55,11 @@ test('fresh', () => {
   const d = db()
   event(d, '2026-10-02 10:00:00')
   expect(drift(d, [COO, { ...COO, name: 'six', gap: '24h' }], NOW)).toEqual([])
-  const registry = z.array(Entry).parse(parse(readFileSync(join(import.meta.dirname, '../../rules/registry.yaml'), 'utf8')))
-  expect(registry.map((e) => e.name)).toEqual(['coo_lite', 'orchestrator', 'fixer', 'brief_writer', 'text_review',
+  expect(REGISTRY.map((e) => e.name)).toEqual(['coo_lite', 'orchestrator', 'fixer', 'brief_writer', 'text_review',
     'growth_lead', 'gardener', 'ratchet', 'accounts', 'records', 'dispositions', 'signoffs', 'proposals',
     'ratchet_refuse', 'intake'])
   expect(ratchetRules(d).mode).toBe('refuse')
-  expect(drift(d, registry, NOW).map((r) => r.name)).not.toContain('ratchet_refuse')
+  expect(drift(d, REGISTRY, NOW).map((r) => r.name)).not.toContain('ratchet_refuse')
   for (const bad of [{ gap: '2 days' }, { table: 'events;' }, { column: 'At' }]) {
     expect(() => Entry.parse({ name: 'x', ...bad })).toThrow()
   }
@@ -65,11 +67,45 @@ test('fresh', () => {
 
 test('proposals', () => {
   const d = db()
-  const registry = z.array(Entry).parse(parse(readFileSync(join(import.meta.dirname, '../../rules/registry.yaml'), 'utf8')))
-  const proposals = registry.filter((e) => e.name === 'proposals')
+  const proposals = REGISTRY.filter((e) => e.name === 'proposals')
   expect(drift(d, proposals, NOW)).toEqual([{ name: 'proposals', state: 'silent', detail: "no row in approvals WHERE subject_kind = 'proposal'" }])
   decide(d, 'proposal', 1, 'a'.repeat(64), 'no')
   expect(drift(d, proposals, NOW)).toEqual([])
+})
+
+function internal(enabled = 1, max = 2): Db {
+  const d = fresh(schema)
+  d.exec(`INSERT INTO pipes (name, enabled, window_start, window_end, max_concurrent)
+    VALUES ('internal', ${String(enabled)}, '00:00', '23:59', ${String(max)});
+    INSERT INTO gardens (day, metric, url) VALUES ('2026-09-28', 'prepare', 'https://github.com/a/b/issues/9')`)
+  return d
+}
+
+function queue(d: Db, priority: number): void {
+  d.exec(`INSERT INTO plans (pipe_id, template, state, queued_at, lane, seat, origin, step, priority)
+    VALUES ((SELECT id FROM pipes WHERE name = 'internal'), 'pr_path', 'queued', '2026-10-01', 'machine', 'typescript_specialist', 'https://github.com/a/b/issues/1', 0, ${String(priority)})`)
+}
+
+test('gardenerWhile', () => {
+  expect(drift(internal(), GARDENER, NOW)).toEqual(STALE)
+  const busy = internal()
+  queue(busy, 1)
+  expect(drift(busy, GARDENER, NOW)).toEqual([])
+  const full = internal(1, 1)
+  queue(full, 3)
+  expect(drift(full, GARDENER, NOW)).toEqual([])
+  const open = internal()
+  for (const n of [11, 12]) {
+    open.exec(`INSERT INTO gardens (day, metric, url) VALUES ('2026-09-${String(n)}', 'prepare', 'https://github.com/a/b/issues/${String(n)}');
+      INSERT INTO tickets (repo, number, title, lane) VALUES ('a/b', ${String(n)}, 't', 'machine')`)
+  }
+  expect(drift(open, GARDENER, NOW)).toEqual([])
+  open.exec("UPDATE tickets SET closed_at = '2026-10-01' WHERE number = 11")
+  expect(drift(open, GARDENER, NOW)).toEqual(STALE)
+  const none = internal()
+  none.exec("DELETE FROM pipes WHERE name = 'internal'")
+  expect(drift(none, GARDENER, NOW)).toEqual([])
+  expect(drift(internal(0), GARDENER, NOW)).toEqual([])
 })
 
 test('fileOnce', () => {

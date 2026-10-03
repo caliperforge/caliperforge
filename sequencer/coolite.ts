@@ -5,7 +5,6 @@ import type { Provider } from '../providers/kind.ts'
 import { packet } from '../runner/index.ts'
 import { load, seat, tight } from '../runner/rules.ts'
 import { logged } from '../store/events.ts'
-import { decided } from '../store/decisions.ts'
 import { retried, returnToLane } from '../store/holds.ts'
 import type { Db } from '../store/index.ts'
 import { wall } from '../store/lanes.ts'
@@ -16,7 +15,7 @@ import { clear } from '../store/refusals.ts'
 import { pending } from '../store/transcript.ts'
 import { split, type Part } from './brief.ts'
 import { hold, isHeld, unhold } from './hold.ts'
-import { fixer } from './fixer.ts'
+import { fixed } from './fixed.ts'
 import { prose } from './prose.ts'
 import { WIRE, type Wire } from './push.ts'
 import { rule } from './rule.ts'
@@ -25,7 +24,7 @@ import { parted } from './split.ts'
 import { ticketed } from './ticket.ts'
 import { history, parentAsk } from './record.ts'
 import { READ, SERVER, server } from './upstream.ts'
-import { afresh, maybe, planDir, put } from './workspace.ts'
+import { afresh, maybe, planDir } from './workspace.ts'
 
 const Said = z.object({
   move: z.enum(['rule', 'waive', 'close', 'file', 'ask_ceo', 'return', 'fix']),
@@ -111,18 +110,6 @@ async function fire(db: Db, root: string, provider: Provider, now: Date, post: P
   } finally {
     idle(db, oldest.id)
     unlease(db, oldest.id)
-  }
-}
-
-/** The orchestrator's `handle()`: the fixer gets the full why, the decision row a cut one. */
-async function fixed(db: Db, root: string, plan: PlanRow, why: string, provider: Provider, now: Date, post: Post,
-  wire: Wire): Promise<boolean> {
-  const id = decided(db, { plan: plan.id, step: plan.step, wait_reason: 'blocked_on_ceo', verb: 'ask_coo', why: why.slice(0, 200), evidence: null, tokens: 0 })
-  try {
-    return await fixer(db, root, plan, { id, why }, ticketOf(db, plan.id), provider, now, post, wire)
-  } catch (error) {
-    put(root, plan.id, 'fixer.error', error instanceof Error ? error.message : String(error))
-    return false
   }
 }
 

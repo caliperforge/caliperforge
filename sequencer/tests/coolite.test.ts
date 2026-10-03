@@ -7,6 +7,7 @@ import { fill } from '../../cli/digests.ts'
 import { file, LANE } from '../../cli/plan.ts'
 import type { Packet, Provider } from '../../providers/kind.ts'
 import { load } from '../../runner/rules.ts'
+import { decisions, touches } from '../../store/decisions.ts'
 import { runAt } from '../../store/events.ts'
 import { retried, returnToLane } from '../../store/holds.ts'
 import { migrate, open, type Db } from '../../store/index.ts'
@@ -429,17 +430,18 @@ function bySeat(packets: Packet[], reply = FIX): Provider {
   return { ...coo, fire: (p) => { packets.push(p); return (basename(p.transcript).startsWith('fixer') ? fix : coo).fire(p) } }
 }
 
-const fixMode = (db: Db, mode: string) => db.prepare(`INSERT INTO settings (key, value, who, origin_kind, origin_ref, set_at)
-  VALUES ('fixer.mode', ?, 'ceo', 'ruling', 't', '2026-09-27')`).run(mode)
+const fixLive = (db: Db) => db.exec(`INSERT INTO settings (key, value, who, origin_kind, origin_ref, set_at)
+  VALUES ('fixer.mode', 'live', 'ceo', 'ruling', 't', '2026-09-27')`)
 
 test('fixHandsOff', async () => {
   const { db, home } = seeded('1')
-  fixMode(db, 'live')
+  fixLive(db)
   mkdirSync(join(srcDir(home, 7), '.git'), { recursive: true })
   const packets: Packet[] = []
   await cooLite(db, home, row(db), bySeat(packets), now, () => undefined, wire())
   expect(packets.find((p) => basename(p.transcript).startsWith('fixer'))?.prompt).toContain(`# Orchestrator\n\nask_coo: ${WHY}`)
-  expect(db.prepare('SELECT verb, applied FROM decisions').all()).toEqual([{ verb: 'ask_coo', applied: 'applied' }])
+  expect(decisions(db, 7).map((d) => d.verb)).toEqual(['ask_coo'])
+  expect(touches(db, 7, now)).toBe(1)
   expect(row(db).state).toBe('queued')
   expect(told(db)).toEqual([{ actor: 'coo_lite', outcome: 'pass', message: `fix: ${WHY}` }])
 })
@@ -450,7 +452,7 @@ test('fixFailsOnce', async () => {
   const posted: string[] = []
   await cooLite(db, home, row(db), bySeat(packets), now, (t) => void posted.push(t), wire())
   expect(packets.map((p) => p.prompt.includes('# Fixer'))).toEqual([false, true])
-  expect(db.prepare('SELECT held_by FROM plans WHERE id = 7').get()).toEqual({ held_by: 'ceo' })
+  expect(plan7(db)).toMatchObject({ held_by: 'ceo' })
   expect(posted).toHaveLength(1)
   expect(told(db).map((t) => t.outcome)).toEqual(['needs_ceo'])
 })
@@ -464,7 +466,7 @@ test('returnMove', async () => {
   expect(row(live.db)).toMatchObject({ state: 'queued', step: 4 })
   for (const reply of ['---\nmove: return\nwhy: a blip\n---\n', FIX]) {
     const { db, home } = seeded(null)
-    fixMode(db, 'live')
+    fixLive(db)
     const was = plans(db)
     const packets: Packet[] = []
     const posted: string[] = []
@@ -482,5 +484,5 @@ test('engineeringNeverCeo', async () => {
   held(db, 7, 'coo', 'a stop')
   await run(db, home, '---\nmove: ask_ceo\nwhy: which file\n---\n')
   expect(told(db)).toEqual([{ actor: 'coo_lite', outcome: 'needs_ceo', message: 'ask_ceo: no readable answer' }])
-  expect(db.prepare('SELECT held_by FROM plans WHERE id = 7').get()).toEqual({ held_by: 'coo' })
+  expect(plan7(db)).toMatchObject({ held_by: 'coo' })
 })

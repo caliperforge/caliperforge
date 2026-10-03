@@ -370,10 +370,6 @@
     "lines": 15,
     "prepare": 2
   },
-  "sequencer/hq.ts": {
-    "lines": 49,
-    "silent-catch": 2
-  },
   "sequencer/index.ts": {
     "lines": 219
   },

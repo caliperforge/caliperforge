@@ -70,6 +70,17 @@ test('every Kotlin example cites a pay-kit span at its sha', () => {
   for (const sha of ['efff41c', '8c59ab9', '2291822', 'c4341ee']) expect(kotlinExamples).toContain(`@${sha}:`)
 })
 
+test('a Swift and Ruby diff carries both example lists', () => {
+  const out = packs(root, diffOf('swift/Sources/Main.swift', 'ruby/lib/config.rb'), null)
+  for (const language of ['swift', 'ruby']) expect(out).toContain(readFileSync(join(root, `reviews/examples/${language}.md`), 'utf8'))
+})
+
+test('a Lua diff ends with the Lua rules and carries no examples', () => {
+  const out = packs(root, diffOf('lua/pay.lua'), null)
+  expect(out.endsWith(rules('lua_specialist'))).toBe(true)
+  expect(out).not.toContain('## Refused in')
+})
+
 test('the examples folder is not a reviewer', () => {
   expect(loadReviews(fresh(join(root, 'schema')), root)).toEqual(['code_quality', 'senior_review'])
 })

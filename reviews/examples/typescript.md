@@ -1,0 +1,7 @@
+## Refused in TypeScript
+
+- pay-kit#282 `solana-foundation/pay-kit@e2f2b1d:harness/src/protocol/vectors.ts:436`: `collectExpiresCases()` had no callers, though comments said the per-language tests used it (https://github.com/solana-foundation/pay-kit/pull/282#discussion_r3751682861).
+- pay-kit#282 `solana-foundation/pay-kit@faf3250:typescript/packages/mpp/src/__tests__/client-charge-validation.test.ts:449`: the test imported `../shared/rfc3339.js`, which did not exist at that SHA, so the whole file failed to load (https://github.com/solana-foundation/pay-kit/pull/282#discussion_r3960191945).
+- pay-kit#282 `solana-foundation/pay-kit@faf3250:typescript/packages/mpp/src/__tests__/client-charge-validation.test.ts:478`: the loop tested only `parseRfc3339` while the production guards still used `new Date(...)` and `Date.parse`, so the tests could pass without exercising the shipped code (https://github.com/solana-foundation/pay-kit/pull/282#discussion_r3960191963).
+- pay-kit#313 `solana-foundation/pay-kit@a752d51:typescript/packages/mpp/src/shared/rfc3339.ts:38`: rejected `second = 60`, which RFC 3339 allows for a positive leap second (https://github.com/solana-foundation/pay-kit/pull/313#discussion_r3962113765).
+- pay-kit#14 `caliperforge/pay-kit@208fbd7:harness/test/protocol-conformance.test.ts:179`: an expectation checked only that `description` was absent, so `result: {}` would also pass (https://github.com/caliperforge/pay-kit/pull/14#discussion_r4173234527).

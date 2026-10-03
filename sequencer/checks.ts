@@ -31,9 +31,11 @@ export interface Failure {
   retried: boolean
   /** The xcodebuild log line saying this Mac, not the job, cannot run tests. */
   fault?: string
+  /** The cap killed an npm run before it named a red test. */
+  capped?: true
 }
 
-export type Ran = { ok: true; output: string } | { ok: false; code: string; output: string }
+export type Ran = { ok: true; output: string } | { ok: false; code: string; output: string; capped?: true }
 
 /** `bin` is the program; left out it is `npm`, which is every checkout but an Xcode or a Kotlin one. */
 export type Run = (args: string[], cwd: string, bin?: string) => Ran
@@ -75,7 +77,7 @@ export function checks(src: string, given: Commands, run: Run = npm, narrow: str
     const retried = loadOnly(first.output) || (bin === 'xcodebuild' && exitedOutside(src, first.output, touched))
     const last = retried ? run(alone(first.output, read(src)?.[script] ?? '', args), src, bin) : first
     if (!last.ok) return { script, command: `${bin} ${args.join(' ')}`, code: last.code, output: tail(last.output), tests: entries(src, last.output), retried,
-      ...faultOf(bin, last.output) }
+      ...faultOf(bin, last.output), ...cappedOf(bin, last) }
   }
   return null
 }
@@ -83,6 +85,10 @@ export function checks(src: string, given: Commands, run: Run = npm, narrow: str
 function faultOf(bin: Mode, output: string): { fault?: string } {
   const line = bin === 'xcodebuild' ? output.split('\n').find((text) => FAULTS.some((f) => text.includes(f))) : undefined
   return line === undefined ? {} : { fault: line.trim() }
+}
+
+function cappedOf(bin: Mode, ran: Extract<Ran, { ok: false }>): { capped?: true } {
+  return bin === 'npm' && ran.capped === true && failures(ran.output).length === 0 ? { capped: true } : {}
 }
 
 /**
@@ -226,7 +232,8 @@ export function npm(args: string[], cwd: string, bin = 'npm', note?: Note): Ran 
       env: unslotted() })
     if (done.error !== undefined && typeof done.stdout !== 'string') return { ok: false, code: '127', output: `${bin}: ${done.error.message}` }
     const output = `${done.stdout}${done.stderr}`
-    return done.status === 0 ? { ok: true, output } : { ok: false, code: String(done.status ?? 1), output }
+    const capped = (done.error as NodeJS.ErrnoException | undefined)?.code === 'ETIMEDOUT' ? { capped: true as const } : {}
+    return done.status === 0 ? { ok: true, output } : { ok: false, code: String(done.status ?? 1), output, ...capped }
   } finally {
     if (held !== null) free(held)
   }

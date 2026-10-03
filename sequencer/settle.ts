@@ -9,7 +9,7 @@ import type { Taken } from '../store/leases.ts'
 import { busy } from '../store/now.ts'
 import { advance, back, end, finish, internal, needsCeo, rewind, type PipeRow, type PlanRow, waiting } from '../store/plans.ts'
 import { blipped, peer, refused } from '../store/refusals.ts'
-import { grow } from '../templates/comms.ts'
+import { draft, grow, review } from '../templates/comms.ts'
 import type { Step } from '../templates/pr-path.ts'
 import type { Fired, Outcome } from './kind.ts'
 import { parted } from './split.ts'
@@ -143,13 +143,21 @@ function fire(db: Db, root: string, plan: PlanRow, step: Step, provider: Provide
     return model(db, plan, step, () => fireBrief(db, root, plan, step, provider))
   }
   if (step.fires === 'seat') {
-    return model(db, plan, step, () => plan.template === 'comms' ? grow(db, root, plan, step, provider) : fireSeat(db, root, plan, step, provider))
+    return model(db, plan, step, () => plan.template === 'comms' ? comms(step)(db, root, plan, step, provider) : fireSeat(db, root, plan, step, provider))
   }
   if (step.fires === 'review') {
     const standing = kept(db, root, plan, step)
     return standing === null ? model(db, plan, step, () => fireRound(db, root, plan, step, provider)) : Promise.resolve(standing)
   }
   return Promise.resolve(kernel(db, root, plan, wire, read))
+}
+
+const COMMS: Record<string, typeof grow> = { draft, text_review: review, grow }
+
+function comms(step: Step): typeof grow {
+  const handler = COMMS[step.name]
+  if (handler === undefined) throw new Error(`comms has no handler for seat step ${step.name}`)
+  return handler
 }
 
 function model(db: Db, plan: PlanRow, step: Step, run: () => Promise<Outcome>): Promise<Outcome> {

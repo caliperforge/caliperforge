@@ -4,7 +4,8 @@ import { z } from 'zod'
 import { landed, type Landed } from '../cli/batch.ts'
 import { ours } from '../cli/gh.ts'
 import { record, ticketOf } from '../cli/inbox.ts'
-import type { Provider } from '../providers/kind.ts'
+import type { Fired, Provider } from '../providers/kind.ts'
+import { read } from '../reviews/verdict.ts'
 import type { Outcome } from '../sequencer/kind.ts'
 import { prose } from '../sequencer/prose.ts'
 import { ran } from '../sequencer/seat.ts'
@@ -20,7 +21,9 @@ const row = (name: string, step: number): Step =>
 
 /** A merge signal opens one of these. P7 fills the write-up and its voice fixtures. */
 export const steps: Step[] = ['gather', 'draft', 'facts', 'text_review', 'desk', 'publish', 'capture', 'grow', 'pack', 'score'].map((name, i) =>
-  name === 'grow' ? { ...row(name, i), seat: 'growth_lead', fires: 'seat', runs: 'growth_lead' } : row(name, i))
+  name === 'grow' ? { ...row(name, i), seat: 'growth_lead', fires: 'seat', runs: 'growth_lead' }
+  : name === 'draft' ? { ...row(name, i), seat: 'writer', fires: 'seat', runs: 'writer' }
+  : name === 'text_review' ? { ...row(name, i), seat: 'text_review', fires: 'seat', runs: 'text_review' } : row(name, i))
 
 export function gather(db: Db, root: string, plan: PlanRow): Outcome {
   const packet = { landed: landed(db), refusals: ofDay(db, new Date().toISOString().slice(0, 10)) }
@@ -101,9 +104,35 @@ function titled(db: Db, plan: PlanRow, kind: string): string | null {
 export async function grow(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
   if (titled(db, plan, 'growth') === null) return { outcome: 'pass', spans: [], note: 'not a growth plan' }
   const fired = await ran(db, root, plan, step, provider, `# packet.json\n\n${get(root, plan.id, 'packet.json')}`, false)
-  if (fired.ended !== 'completed') return { outcome: 'refuse', spans: [fired.stop_reason ?? 'seat.exit'], note: `${step.runs} ${fired.ended}` }
+  if (fired.ended !== 'completed') return halted(step, fired)
   put(root, plan.id, 'growth.md', fired.text)
   return { outcome: 'pass', spans: [], note: `${step.runs}: growth.md written` }
+}
+
+const halted = (step: Step, fired: Fired): Outcome => ({ outcome: 'refuse', spans: [fired.stop_reason ?? 'seat.exit'], note: `${step.runs} ${fired.ended}` })
+
+export async function draft(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
+  if ((titled(db, plan, 'daily') ?? titled(db, plan, 'ship')) === null) return { outcome: 'pass', spans: [], note: 'not a post plan' }
+  const fired = await ran(db, root, plan, step, provider, `# packet.json\n\n${get(root, plan.id, 'packet.json')}`, false)
+  if (fired.ended !== 'completed') return halted(step, fired)
+  const reply = drafted(fired.text)
+  if (reply === null) return { outcome: 'refuse', spans: ['writer.fence'], note: `${step.runs} reply has no valid closing fence` }
+  put(root, plan.id, 'draft.md', reply.post)
+  put(root, plan.id, 'fence.json', JSON.stringify({ ...reply, post: undefined }))
+  return { outcome: 'pass', spans: [], note: `${step.runs}: draft.md written` }
+}
+
+export async function review(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
+  const post = maybe(root, plan.id, 'draft.md')
+  if (post === null) return { outcome: 'pass', spans: [], note: 'no draft' }
+  const fired = await ran(db, root, plan, step, provider, `# draft.md\n\n${post}\n\n# packet.json\n\n${get(root, plan.id, 'packet.json')}`, false)
+  if (fired.ended !== 'completed') return halted(step, fired)
+  const judged = read(fired.text, post)
+  if (judged === null) return { outcome: 'refuse', spans: ['text_review.fence'], note: `${step.runs} reply has no valid verdict fence` }
+  if (judged.outcome === 'refuse') return { outcome: 'refuse', spans: judged.spans, note: judged.message, to: 1 }
+  if (judged.outcome === 'needs_ceo') return { outcome: 'needs_ceo', spans: [], note: judged.message }
+  put(root, plan.id, 'review.md', judged.message)
+  return { outcome: 'pass', spans: [], note: `${step.runs}: review.md written` }
 }
 
 const Note = z.string().refine((note) => {

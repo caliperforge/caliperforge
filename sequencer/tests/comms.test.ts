@@ -3,10 +3,13 @@ import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { landed } from '../../cli/batch.ts'
 import type { Provider } from '../../providers/kind.ts'
-import { desk, drafted, facts, gather } from '../../templates/comms.ts'
+import { runRows } from '../../store/events.ts'
+import { requeue } from '../../store/plans.ts'
+import { desk, draft, drafted, facts, gather, review } from '../../templates/comms.ts'
 import { tick } from '../index.ts'
-import { FORK, get, put } from '../workspace.ts'
-import { plan, reads, world, type World } from './world.ts'
+import { mapOf } from '../steps.ts'
+import { FORK, get, maybe, put } from '../workspace.ts'
+import { plan, reads, stub, world, type World } from './world.ts'
 
 const NAMES = ['gather', 'draft', 'facts', 'text_review', 'desk', 'publish', 'capture', 'grow', 'pack', 'score']
 
@@ -44,6 +47,8 @@ const desked = (w: World, fence: Record<string, unknown> | null = fenced(), draf
   return desk(w.db, w.root, plan(w.db, id))
 }
 
+const events = (w: World): unknown[] => w.db.prepare('SELECT kind, outcome FROM events WHERE plan = 1 ORDER BY id').all()
+
 const learned = (w: World): unknown[] => w.db.prepare('SELECT * FROM desk_learnings').all()
 
 const never: Provider = { name: 'claude-agent-sdk', fire: () => { throw new Error('no seat fires on comms') } }
@@ -53,20 +58,19 @@ const judged =(w: World, line: string): ReturnType<typeof facts> => {
   return facts(w.root, plan(w.db, 1))
 }
 
-test('D2 D7 D6: a comms plan runs to done with no seat or rail', async () => {
+test('D2 D7 D6: a comms plan runs writer and text_review to done', async () => {
   const w = comms()
   const today = new Date().toISOString().slice(0, 10)
   reads(w.db, 1)
   titled(w, 1, `daily ${today}`)
   w.db.prepare(`INSERT INTO desk_posts (id, kind, dest, status, title, dek, body, edited_title, sources, checks, work_date, written_date)
     VALUES (2, 'daily', 'site', 'proof', 'The day', 'What moved', 'One job landed.', 'The whole day', '[]', '[]', ?, ?)`).run(today, today)
-  put(w.root, 1, 'fence.json', JSON.stringify(fenced()))
-  put(w.root, 1, 'draft.md', `# The day\n\nOne job was refused. [refusal:${String(refusal(w, 0))}]\n`)
-  for (let n = 0; n < 11 && plan(w.db, 1).state !== 'done'; n += 1) await tick(w.db, w.root, never)
+  const seats = seated(writing(`# The day\n\nOne job was refused. [refusal:${String(refusal(w, 0))}]`))
+  for (let n = 0; n < 11 && plan(w.db, 1).state !== 'done'; n += 1) await tick(w.db, w.root, seats)
   expect(plan(w.db, 1).state).toBe('done')
-  expect(w.db.prepare('SELECT kind, outcome FROM events WHERE plan = 1 ORDER BY id').all())
-    .toEqual(NAMES.map((kind) => ({ kind, outcome: 'pass' })))
-  expect(w.db.prepare('SELECT (SELECT count(*) FROM runs) + (SELECT count(*) FROM verdicts) AS n').get()).toEqual({ n: 0 })
+  expect(events(w)).toEqual(NAMES.map((kind) => ({ kind, outcome: 'pass' })))
+  expect(ran(w)).toEqual(['writer', 'text_review'])
+  expect(w.db.prepare('SELECT count(*) AS n FROM verdicts').get()).toEqual({ n: 0 })
   expect(w.db.prepare('SELECT id FROM desk_posts').all()).toEqual([{ id: 1 }, { id: 2 }])
   expect(readFileSync(join(w.root, 'comms/voice-notes.md'), 'utf8')).toBe(`# Voice notes\n\n- ${today} 2 title: lengthened (7 → 13 chars)\n`)
 })
@@ -247,4 +251,72 @@ test('D6: desk passes a plan with no draft and writes no row', () => {
   titled(w, 1, 'daily 2026-09-27')
   expect(desk(w.db, w.root, plan(w.db, 1))).toEqual({ outcome: 'pass', spans: [], note: 'no draft' })
   expect(w.db.prepare('SELECT (SELECT count(*) FROM desk_posts) + (SELECT count(*) FROM desk_learnings) AS n').get()).toEqual({ n: 0 })
+})
+
+const verdict = (name: string): string =>
+  readFileSync(join(import.meta.dirname, '../..', 'seats/text_review/tests', name), 'utf8')
+
+/** `post` under reply.md's fence, as the writer answers. */
+const writing = (post: string): string => `${post}\n\n${fixture('reply.md').slice(fixture('reply.md').indexOf('---'))}`
+
+/** The text_review seat answers `review`; every other seat answers `writer`. */
+const seated = (writer: string, review = verdict('wording.reply.md')): Provider => ({
+  name: 'claude-agent-sdk',
+  fire: (packet) => stub('', 0, packet.prompt.includes('# text_review') ? review : writer).fire(packet),
+})
+
+const ran = (w: World): string[] => runRows(w.db).map((r) => r.seat)
+
+const posting = (title: string, step = 0): World => {
+  const w = comms()
+  titled(w, 1, title)
+  requeue(w.db, 1, step)
+  put(w.root, 1, 'packet.json', JSON.stringify({ landed: [{ plan: 7, origin: '', digest: '' }], refusals: [{ id: 3 }] }))
+  return w
+}
+
+const reviewing = (w: World, reply: string): ReturnType<typeof review> => {
+  put(w.root, 1, 'draft.md', drafted(fixture('reply.md'))?.post ?? '')
+  return review(w.db, w.root, plan(w.db, 1), mapOf('comms').at(3), seated('', reply))
+}
+
+test('draftWrites D1: a daily reply fills draft.md and fence.json', async () => {
+  const w = posting('daily 2026-09-27')
+  expect(await draft(w.db, w.root, plan(w.db, 1), mapOf('comms').at(1), seated(fixture('reply.md')))).toMatchObject({ outcome: 'pass' })
+  expect(get(w.root, 1, 'draft.md')).toBe(drafted(fixture('reply.md'))?.post)
+  expect(JSON.parse(get(w.root, 1, 'fence.json'))).toEqual(fenced())
+  expect(ran(w)).toEqual(['writer'])
+})
+
+test('draftBadFence D2: a bad fence refuses and writes no draft', async () => {
+  const w = posting('daily 2026-09-27')
+  expect(await draft(w.db, w.root, plan(w.db, 1), mapOf('comms').at(1), seated(fixture('no-learnings.md'))))
+    .toMatchObject({ outcome: 'refuse', spans: ['writer.fence'] })
+  expect(maybe(w.root, 1, 'draft.md')).toBeNull()
+})
+
+test('reviewRefuses D3: a refuse goes back to step 1 on its spans', async () => {
+  expect(await reviewing(posting('daily 2026-09-27'), verdict('unsourced.reply.md')))
+    .toMatchObject({ outcome: 'refuse', spans: ['draft.md:3'], to: 1 })
+})
+
+test('reviewPasses D4: a pass keeps its prose in review.md', async () => {
+  const w = posting('daily 2026-09-27')
+  expect(await reviewing(w, verdict('wording.reply.md'))).toMatchObject({ outcome: 'pass' })
+  expect(get(w.root, 1, 'review.md')).toContain('seamlessly')
+})
+
+test.each(['growth 2026-09-28', 'scorecard 2026-09-28'])('D5: a %s plan passes steps 1 and 3 with no run and no draft', async (title) => {
+  const w = posting(title, 1)
+  for (let n = 0; n < 3; n += 1) await tick(w.db, w.root, never)
+  expect(events(w)).toEqual(['draft', 'facts', 'text_review'].map((kind) => ({ kind, outcome: 'pass' })))
+  expect(ran(w)).toEqual([])
+  expect(maybe(w.root, 1, 'draft.md')).toBeNull()
+})
+
+test('growUnchanged D6: step 7 still runs growth_lead', async () => {
+  const w = posting('growth 2026-09-28', 7)
+  await tick(w.db, w.root, stub('', 0, 'the pack'))
+  expect(ran(w)).toEqual(['growth_lead'])
+  expect(get(w.root, 1, 'growth.md')).toBe('the pack')
 })

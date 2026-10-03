@@ -7,7 +7,9 @@ test('a comms plan steps through templates/comms.ts', () => {
   for (const n of [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]) expect(mapOf('comms').at(n)).toEqual(comms[n])
   expect(mapOf('comms').steps.map((s) => [s.step, s.name])).toEqual(
     ['gather', 'draft', 'facts', 'text_review', 'desk', 'publish', 'capture', 'grow', 'pack', 'score'].map((name, i) => [i, name]))
-  expect(mapOf('comms').steps.filter((s) => s.fires !== 'kernel')).toMatchObject([{ step: 7, name: 'grow', fires: 'seat', runs: 'growth_lead' }])
+  expect(mapOf('comms').steps.filter((s) => s.fires !== 'kernel')).toMatchObject([
+    { step: 1, name: 'draft', fires: 'seat', runs: 'writer' }, { step: 3, name: 'text_review', fires: 'seat', runs: 'text_review' },
+    { step: 7, name: 'grow', fires: 'seat', runs: 'growth_lead' }])
 })
 
 test('a step no map has throws, and research has none', () => {

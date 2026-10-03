@@ -5,11 +5,12 @@ import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import { registerLanes } from '../cf-lanes.ts'
-import { actors, actorSection, costs, costSection, drifts, driftSection, fileWaits, greptileLine, hands, heldBy, line, misses, missSection, rulings, section,
+import { actors, actorSection, costs, costSection, driftSection, fileWaits, greptileLine, hands, heldBy, line, misses, missSection, rulings, section,
   ticketSection, tickets, unpriced, waitLine, waits } from '../brief.ts'
 import { hold } from '../../sequencer/hold.ts'
 import { monthly, reviewed } from '../../sequencer/ready.ts'
 import { put, SELF } from '../../sequencer/workspace.ts'
+import { drifts } from '../../store/drift.ts'
 import { repriced } from '../../store/events.ts'
 import { record as listFiles } from '../../store/files.ts'
 import type { Db } from '../../store/index.ts'
@@ -449,8 +450,8 @@ test('D4 an empty day prints none', () => {
 })
 
 function ticket(db: Db, repo: string, number: number, title: string, closed: string | null = null): void {
-  db.prepare("INSERT INTO tickets (repo, number, title, lane, opened_at, closed_at) VALUES (?, ?, ?, 'machine', ?, ?)")
-    .run(repo, number, title, at(48), closed)
+  db.exec(`INSERT INTO tickets (repo, number, title, lane, opened_at, closed_at)
+    VALUES ('${repo}', ${String(number)}, '${title}', 'machine', '${at(48)}', ${closed === null ? 'NULL' : `'${closed}'`})`)
 }
 
 const DRIFT = 'drift (1)\n  #1\tDrift: hq is off\t2 d\n'

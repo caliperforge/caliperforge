@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { map } from '../cli/map.ts'
 import { CAPPED, type Packet, type Provider } from '../providers/kind.ts'
@@ -16,7 +16,7 @@ import { packs } from './packs.ts'
 import { read, type Judged, type Verdict } from './verdict.ts'
 
 export function loadReviews(db: Db, root: string): string[] {
-  const names = subdirs(join(root, 'reviews'))
+  const names = subdirs(join(root, 'reviews')).filter((n) => existsSync(join(root, 'reviews', n, 'manifest.yaml')))
   const put = db.prepare('INSERT OR REPLACE INTO rules (id, kind, path, content_hash, loaded_at) VALUES (?, ?, ?, ?, ?)')
   const at = new Date().toISOString()
   for (const name of names) put.run(name, 'card', `reviews/${name}/spec.md`, specHash(root, name), at)

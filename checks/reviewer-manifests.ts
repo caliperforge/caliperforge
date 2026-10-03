@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { parse } from 'yaml'
 import { Review } from '../runner/packet.ts'
@@ -12,7 +12,7 @@ export const reviewerManifests: Check = {
 }
 
 function findings(root: string): Finding[] {
-  return subdirs(join(root, 'reviews')).flatMap((name) => {
+  return subdirs(join(root, 'reviews')).filter((n) => existsSync(join(root, 'reviews', n, 'manifest.yaml'))).flatMap((name) => {
     const path = join('reviews', name, 'manifest.yaml')
     const read = Review.safeParse(parse(readFileSync(join(root, path), 'utf8')))
     if (read.success) return []

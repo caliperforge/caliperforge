@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { parse } from '../rails/diff.ts'
 import { languageOfPath } from '../sequencer/route.ts'
@@ -11,8 +11,14 @@ const LEAD = 'The rules each touched language\'s builder worked under: its promp
 export function packs(root: string, diff: string, repo: string | null): string {
   const languages = new Set(parse(diff).map(({ path }) => languageOfPath(path) ?? (/\.tsx?$/.test(path) ? 'typescript' : null)))
   languages.delete(null)
-  const rules = [...languages].map((l) => readFileSync(join(root, 'seats', builder(l), 'prompt.md'), 'utf8').replace(/^Answer the [\s\S]*/m, ''))
+  const rules = [...languages].map((l) => readFileSync(join(root, 'seats', builder(l), 'prompt.md'), 'utf8').replace(/^Answer the [\s\S]*/m, '')
+    + examples(root, String(l)))
   return (rules.length === 0 ? '' : `\n\n# Language rules\n\n${LEAD}\n\n${rules.join('')}`) + notes(root, repo)
+}
+
+function examples(root: string, language: string): string {
+  const path = join(root, 'reviews', 'examples', `${language}.md`)
+  return existsSync(path) ? `${readFileSync(path, 'utf8')}\n` : ''
 }
 
 function notes(root: string, repo: string | null): string {

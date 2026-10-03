@@ -50,6 +50,30 @@ test('each text is its seat prompt up to the answer line', () => {
   expect(out).not.toContain('summary:')
 })
 
+const kotlinExamples = readFileSync(join(root, 'reviews/examples/kotlin.md'), 'utf8')
+
+test('the Kotlin examples follow the Kotlin rules, before the next language', () => {
+  const out = packs(root, diffOf('kotlin/Runner.kt', 'python/client.py'), null)
+  const examples = out.indexOf(kotlinExamples)
+  expect(examples).toBeGreaterThan(out.indexOf(rules('kotlin_specialist')))
+  expect(examples).toBeLessThan(out.indexOf(rules('python_specialist')))
+})
+
+test('a language with no examples file adds nothing', () => {
+  expect(packs(root, diffOf('python/client.py'), null).endsWith(rules('python_specialist'))).toBe(true)
+})
+
+test('every Kotlin example cites a pay-kit span at its sha', () => {
+  const rows = kotlinExamples.split('\n').filter((l) => l.startsWith('- '))
+  expect(rows).toHaveLength(4)
+  for (const row of rows) expect(row).toMatch(/caliperforge\/pay-kit@[0-9a-f]{7}:\S+:\d+/)
+  for (const sha of ['efff41c', '8c59ab9', '2291822', 'c4341ee']) expect(kotlinExamples).toContain(`@${sha}:`)
+})
+
+test('the examples folder is not a reviewer', () => {
+  expect(loadReviews(fresh(join(root, 'schema')), root)).toEqual(['code_quality', 'senior_review'])
+})
+
 test('a diff no language claims carries nothing', () => {
   expect(packs(root, diffOf('README.md', 'docs/x.md'), null)).toBe('')
 })

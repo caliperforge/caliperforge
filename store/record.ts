@@ -17,3 +17,12 @@ export function refusedOf(db: Db, plan: number, limit = 12): Refused[] {
   return db.prepare(`SELECT step, coalesce(rail_id, gate) AS what, outcome, coalesce(message, '') AS message
     FROM verdicts WHERE plan = ? AND outcome <> 'pass' ORDER BY id DESC LIMIT ?`).all(plan, limit) as Refused[]
 }
+
+export function repos(db: Db): string[] {
+  return (db.prepare(`SELECT DISTINCT t.repo
+    FROM deliverables d JOIN plans p ON p.id = d.plan_id JOIN targets t ON t.id = p.target_id
+    WHERE d.state = 'pushed' AND d.evidence GLOB 'https://*/pull/*'
+    UNION
+    SELECT t.repo FROM plans p JOIN targets t ON t.id = p.target_id WHERE t.evidence GLOB 'https://*/pull/*'
+    ORDER BY repo`).all() as { repo: string }[]).map((r) => r.repo)
+}

@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
-import { landed } from '../../cli/batch.ts'
 import type { Provider } from '../../providers/kind.ts'
 import { runRows } from '../../store/events.ts'
+import { zone } from '../../store/lanes.ts'
 import { requeue } from '../../store/plans.ts'
 import { desk, draft, drafted, facts, gather, review } from '../../templates/comms.ts'
 import { tick } from '../index.ts'
@@ -16,6 +16,8 @@ const NAMES = ['gather', 'draft', 'facts', 'text_review', 'desk', 'publish', 'ca
 const refusal = (w: World, blip: number, at = new Date().toISOString().replace('T', ' ').slice(0, 19)): number =>
   Number(w.db.prepare(`INSERT INTO refusals (plan, step, fingerprint, diff, blip, at) VALUES (1, 0, ?, NULL, ?, ?)`)
     .run('0'.repeat(64), blip, at).lastInsertRowid)
+
+const local = (w: World): string => new Date(Date.now() + zone(w.db) * 60000).toISOString().slice(0, 10)
 
 const comms = (): World => {
   const w = world()
@@ -62,7 +64,7 @@ test('D2 D7 D6: a comms plan runs writer and text_review to done', async () => {
   const w = comms()
   const today = new Date().toISOString().slice(0, 10)
   reads(w.db, 1)
-  titled(w, 1, `daily ${today}`)
+  titled(w, 1, `daily ${local(w)}`)
   w.db.prepare(`INSERT INTO desk_posts (id, kind, dest, status, title, dek, body, edited_title, sources, checks, work_date, written_date)
     VALUES (2, 'daily', 'site', 'proof', 'The day', 'What moved', 'One job landed.', 'The whole day', '[]', '[]', ?, ?)`).run(today, today)
   const seats = seated(writing(`# The day\n\nOne job was refused. [refusal:${String(refusal(w, 0))}]`))
@@ -173,15 +175,45 @@ test('writer D4: a reply with no learnings fence reads as null', () => {
   expect(drafted(fixture('no-learnings.md'))).toBeNull()
 })
 
-test('D5: gather writes landings and today\'s non-blip refusals', () => {
+test('D5 D7: gather keys an untitled plan to the local day', () => {
   const w = comms()
   const today = refusal(w, 0)
   refusal(w, 1)
   refusal(w, 0, '2000-01-01 00:00:00')
   expect(gather(w.db, w.root, plan(w.db, 1))).toMatchObject({ outcome: 'pass', note: '0 landed, 1 refused' })
-  const packet = JSON.parse(get(w.root, 1, 'packet.json')) as { landed: unknown[]; refusals: { id: number }[] }
-  expect(packet.landed).toEqual(landed(w.db))
-  expect(packet.refusals.map((r) => r.id)).toEqual([today])
+  const packet = JSON.parse(get(w.root, 1, 'packet.json')) as { day: string; learned: unknown[]; landed: unknown[]; refusals: unknown[] }
+  expect(packet).toMatchObject({ day: local(w), learned: [], landed: [], refusals: [{ id: today, plan: 1, step: 0, title: null }] })
+})
+
+test('D1-D6: gather packs the titled day at local time', () => {
+  const w = comms()
+  titled(w, 1, 'daily 2026-09-27')
+  const [late, early, d] = ['2026-09-28 03:00:00', '2026-09-27 05:00:00', 'd'.repeat(64)]
+  w.db.exec(`INSERT INTO desk_learnings (date, numbers, items, sources) VALUES ('2026-09-27', '[]', '[{"title":"a lesson"}]', '[]');
+    INSERT INTO tickets (repo, number, title, lane, opened_at) VALUES
+      ('r', 1, 'Drift: hq is off', 'machine', '${late}'), ('r', 2, 'Drift: desk is off', 'machine', '${early}'), ('r', 3, 'not drift', 'machine', '${late}');
+    INSERT INTO events (plan, at, kind, actor, outcome, message) VALUES (1, '${late}', 'hold', 'coo_lite', 'pass', 'coo_lite hold'),
+      (1, '${late}', 'return', 'director', 'pass', 'director return'), (1, '${late}', 'retry', 'ceo', 'pass', 'ceo retry'),
+      (1, '${early}', 'hold', 'coo_lite', 'pass', 'coo_lite hold');
+    INSERT INTO plans (id, pipe_id, template, state, queued_at, step, retries, title, lane, seat, origin, head_digest) VALUES
+      (2, 1, 'pr_path', 'done', '${late}', 0, 0, 'job 2', 'machine', 'typescript_specialist', 'https://github.com/r/issues/2', '${d}'),
+      (3, 1, 'pr_path', 'done', '${early}', 0, 0, 'job 3', 'machine', 'typescript_specialist', 'https://github.com/r/issues/3', '${d}');
+    INSERT INTO approvals (subject_kind, subject_id, subject_digest, who, decision, approved_at) VALUES
+      ('plan', 2, '${d}', 'gates', 'approved', '${late}'), ('plan', 3, '${d}', 'gates', 'approved', '${early}')`)
+  const kept = refusal(w, 0, late)
+  refusal(w, 0, early)
+  refusal(w, 1, late)
+  gather(w.db, w.root, plan(w.db, 1))
+  const at = '2026-09-27 21:00:00'
+  expect(JSON.parse(get(w.root, 1, 'packet.json'))).toEqual({
+    day: '2026-09-27',
+    learned: [{ title: 'a lesson' }],
+    drift: [{ number: 1, title: 'Drift: hq is off', at }],
+    decisions: [{ plan: 1, title: 'daily 2026-09-27', actor: 'coo_lite', kind: 'hold', why: 'coo_lite hold', at },
+      { plan: 1, title: 'daily 2026-09-27', actor: 'director', kind: 'return', why: 'director return', at }],
+    landed: [{ plan: 2, origin: 'https://github.com/r/issues/2', digest: d, title: 'job 2', at }],
+    refusals: [{ id: kept, plan: 1, step: 0, title: 'daily 2026-09-27', at }],
+  })
 })
 
 test('D2: desk writes the post in proof and its day\'s learnings', () => {

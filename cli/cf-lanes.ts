@@ -7,7 +7,7 @@ import { fire } from '../runner/index.ts'
 import { reviewed } from '../sequencer/ready.ts'
 import { liveTree, SELF } from '../sequencer/workspace.ts'
 import { dump, migrate, open as openDb, type Db } from '../store/index.ts'
-import { dial, hhmm, lanes, priority as setPriority, record, Reading, set, windows } from '../store/lanes.ts'
+import { dial, hhmm, lanes, priority as setPriority, record, Reading, windows } from '../store/lanes.ts'
 import { refusedPush } from '../store/approvals.ts'
 import { drifts } from '../store/drift.ts'
 import { repriced } from '../store/events.ts'
@@ -119,11 +119,6 @@ function dials(cf: Command, { db, out }: Cli): void {
     const handle = db()
     if (n !== undefined) dial(handle, Number(n), new Date().toISOString())
     out(laneLine(lanes(handle, hhmm(handle))))
-  })
-
-  cf.command('hq').argument('<dir>', 'the HQ checkout every job end commits and pushes').action((dir: string) => {
-    set(db(), 'hq.path', resolve(dir), 'ceo', new Date().toISOString().slice(0, 10))
-    out(`hq ${resolve(dir)}\n`)
   })
 
   cf.command('usage').argument('[file]', 'a provider rate-limit reading, json').action((file: string | undefined) => {

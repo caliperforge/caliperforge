@@ -13,7 +13,6 @@ import { garden } from '../sequencer/garden.ts'
 import type { Fired } from '../sequencer/kind.ts'
 import { CHECK_SLOTS } from '../sequencer/checks.ts'
 import { behind, upgraded } from '../sequencer/upgrade.ts'
-import { saved } from '../sequencer/hq.ts'
 import { late } from '../sequencer/signals.ts'
 import { signoffs } from '../sequencer/signoff.ts'
 import { byHand } from '../sequencer/coolite.ts'
@@ -30,6 +29,7 @@ import { registerAdopt, registerApprovals, registerTargets } from './cf-targets.
 import { desk, fileIssue, gh } from './gh.ts'
 import { health } from './health.ts'
 import { crashed, events, notify, record as keep } from './inbox.ts'
+import { pull } from './science.ts'
 import { alerter, down, livenessLine, watch } from './watch.ts'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
@@ -57,6 +57,11 @@ registerAdopt(cf, cli)
 cf.command('health').action(() => {
   out(health(db(), root, new Date().toISOString().slice(0, 10)))
 })
+
+cf.command('science').command('pull').option('--since <date>', 'the first local day, YYYY-MM-DD')
+  .action((options: { since?: string }) => {
+    for (const path of pull(db(), new Date(), options.since)) out(`${path}\n`)
+  })
 
 cf.command('tick').option('--dry', 'read what a tick would do, fire nothing, call no network')
   .action(async (options: { dry?: boolean }) => {
@@ -119,10 +124,9 @@ async function ticked(options: { dry?: boolean }, now: Date): Promise<void> {
   const lines: string[] = []
   const fired = await tick(handle, root, claudeAgentSdk, now, undefined, undefined, CHAIN_MINUTES, gh, EACH, apart, lines,
     Entry.array().parse(parse(readFileSync(join(root, 'rules/registry.yaml'), 'utf8'))))
-  const id = receipt(handle, saved(handle, upgraded(handle, root, { at: now.toISOString(), hhmm: hhmm(handle, now), dry: false,
+  const id = receipt(handle, upgraded(handle, root, { at: now.toISOString(), hhmm: hhmm(handle, now), dry: false,
     pipes: openPipes(handle, hhmm(handle, now)).length, fired: fired.length,
-    exit: fired.some((f) => f.outcome === 'refuse') ? 1 : 0, note: tickNote(fired, overlapWaits(handle), lines) }),
-  fired.filter((f) => f.state === 'done').map((f) => f.plan)))
+    exit: fired.some((f) => f.outcome === 'refuse') ? 1 : 0, note: tickNote(fired, overlapWaits(handle), lines) }))
   slots(handle, id, slack(handle, now))
   watch(handle, root, now, alerter())
   const news = events(handle, fired, now.toISOString())

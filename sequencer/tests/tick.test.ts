@@ -6,13 +6,15 @@ import { expect, test } from 'vitest'
 import { day, halted, open as openPlans, runsOf, verdictsOf } from '../../cli/brief.ts'
 import { measure, type Read } from '../../cli/measure.ts'
 import { account, parse, refuseTarget } from '../../cli/queue.ts'
-import { allPlans, clock, dropPlan, inWindow, laneOff, rewind, underCap, waiting, type PipeRow, type PlanRow, type Wait } from '../../store/plans.ts'
+import { addPipe, allPlans, clock, dropPlan, inWindow, laneOff, overlapWaits, pipeNamed, requeue, rewind, underCap, waiting, type PipeRow, type PlanRow, type Wait } from '../../store/plans.ts'
+import { amend, width } from '../../store/lanes.ts'
 import { holdOf, retried } from '../../store/holds.ts'
 import { current } from '../../store/now.ts'
 import { dropDeliverables } from '../../store/deliverables.ts'
 import { addTarget, setTargetState, targetRow } from '../../store/targets.ts'
 import { at, steps } from '../../templates/pr-path.ts'
 import { tick } from '../index.ts'
+import { picks } from '../next.ts'
 import { blocked, kernel } from '../steps.ts'
 import { checkout, diffOf, doneIds, get, gitDiff, narrowing, put, snapshot, srcDir } from '../workspace.ts'
 import { GREEN } from '../base.ts'
@@ -1032,4 +1034,43 @@ test('#374 a row naming no path refuses and removes nothing', async () => {
   expect(fired).toMatchObject({ step: 2, outcome: 'refuse', spans: ['- the old spend file'] })
   expect(fired?.note).toContain('names no path')
   expect(existsSync(join(srcDir(w.root, 1), 'src/hello.ts'))).toBe(true)
+})
+
+const HELD = 3
+
+/** `HELD` held at the rails on src/hello.ts, which `MINE`, queued at its build in a one-wide pipe, is building. */
+async function heldOnMine(): Promise<World> {
+  const w = world()
+  dropPlan(w.db, 1)
+  ours(w.root)
+  internalPlan(w.db, w.root, MINE)
+  internalPlan(w.db, w.root, HELD, 'let a second internal plan run', 35)
+  width(w.db, 1, 2)
+  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  record(w.db, HELD, [{ path: 'src/p3.ts', is_new: true }])
+  await tick(w.db, w.root, stub(CARRIED))
+  built(w.root, MINE, 'export const landed = true')
+  writeFileSync(join(srcDir(w.root, HELD), 'src/p3.ts'), 'export const p3 = true\n')
+  built(w.root, HELD, 'export const also = true')
+  await tick(w.db, w.root, stub(CARRIED))
+  expect(plan(w.db, HELD)).toMatchObject({ step: 3, state: 'running' })
+  requeue(w.db, MINE, 2)
+  width(w.db, 1, 1)
+  return w
+}
+
+test('D1 D2 a plan held on one in its pipe gives it its slot', async () => {
+  const w = await heldOnMine()
+  expect(picks(w.db, { ...w.pipe, max_concurrent: 1 }).map((p) => p.id)).toEqual([MINE])
+  const fired = await tick(w.db, w.root, stub(CARRIED))
+  expect(fired.find((f) => f.plan === MINE)).toMatchObject({ step: 2, name: 'build' })
+  expect(fired.find((f) => f.plan === HELD)).toBeUndefined()
+  expect(overlapWaits(w.db)).toMatchObject([{ plan: HELD, on: MINE }])
+})
+
+test('D3 a plan held on one in another pipe keeps its slot', async () => {
+  const w = await heldOnMine()
+  addPipe(w.db, { name: 'research', enabled: 1, window_start: '00:00', window_end: '23:59', max_concurrent: 1 })
+  amend(w.db, MINE, { pipe_id: Number(pipeNamed(w.db, 'research')?.id) })
+  expect(picks(w.db, { ...w.pipe, max_concurrent: 1 }).map((p) => p.id)).toEqual([HELD])
 })

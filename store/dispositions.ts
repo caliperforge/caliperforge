@@ -46,6 +46,12 @@ export function dispositionsOf(db: Db): { kind: string; defect_class: string; ow
     .all() as { kind: string; defect_class: string; owner: Owner; evidence: string }[]
 }
 
+export function unsettled(db: Db, plan: number, step: number, before: number): { id: number; tree: string | null } | undefined {
+  return db.prepare(`SELECT v.id, v.tree FROM verdicts v WHERE v.id = (SELECT max(id) FROM verdicts WHERE plan = ? AND step = ?
+    AND kind = 'review' AND outcome = 'refuse' AND id < ?) AND NOT EXISTS (SELECT 1 FROM dispositions d WHERE d.verdict_id = v.id)`)
+    .get(plan, step, before) as { id: number; tree: string | null } | undefined
+}
+
 function put(db: Db, span: Span, kind: string, approval: number | null, tag: string | null): number {
   const row = Span.parse(span)
   const written = db.prepare(`INSERT INTO dispositions

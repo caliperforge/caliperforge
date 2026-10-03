@@ -1,7 +1,7 @@
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { z } from 'zod'
-import { landed, type Landed } from '../cli/batch.ts'
+import type { Landed } from '../cli/batch.ts'
 import { ours } from '../cli/gh.ts'
 import { record, ticketOf } from '../cli/inbox.ts'
 import type { Fired, Provider } from '../providers/kind.ts'
@@ -12,8 +12,8 @@ import { ran } from '../sequencer/seat.ts'
 import { get, maybe, put } from '../sequencer/workspace.ts'
 import { edited } from '../store/desk.ts'
 import type { Db } from '../store/index.ts'
+import { packetOf } from '../store/packet.ts'
 import type { PlanRow } from '../store/plans.ts'
-import { ofDay } from '../store/refusals.ts'
 import { DEFAULT_BUILDER, type Step } from './pr-path.ts'
 
 const row = (name: string, step: number): Step =>
@@ -26,7 +26,7 @@ export const steps: Step[] = ['gather', 'draft', 'facts', 'text_review', 'desk',
   : name === 'text_review' ? { ...row(name, i), seat: 'text_review', fires: 'seat', runs: 'text_review' } : row(name, i))
 
 export function gather(db: Db, root: string, plan: PlanRow): Outcome {
-  const packet = { landed: landed(db), refusals: ofDay(db, new Date().toISOString().slice(0, 10)) }
+  const packet = packetOf(db, plan.id)
   put(root, plan.id, 'packet.json', JSON.stringify(packet))
   return { outcome: 'pass', spans: [], note: `${String(packet.landed.length)} landed, ${String(packet.refusals.length)} refused` }
 }

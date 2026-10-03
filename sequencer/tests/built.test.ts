@@ -33,3 +33,19 @@ test('#284: a fixer or orchestrator run is never read as a build', () => {
   }
   expect(reads()).toEqual(before)
 })
+
+test('signoffFrees: a plan built and waiting only on the sign-off no longer holds a later plan on its files', () => {
+  const { db } = world()
+  db.prepare(`INSERT OR IGNORE INTO rules (id, kind, path, content_hash, loaded_at)
+    VALUES ('typescript_specialist', 'card', 'rules/roster.yaml', ?, '2026-09-22T00:00:00.000Z')`).run(HASH)
+  db.prepare("INSERT INTO plans (id, pipe_id, target_id, template, state, queued_at, step, retries) VALUES (2, 1, 1, 'pr_path', 'running', ?, 3, 0)")
+    .run(new Date().toISOString())
+  db.prepare("UPDATE plans SET state = 'running', step = 4 WHERE id = 1").run()
+  for (const id of [1, 2]) record(db, id, [{ path: PATH, is_new: false }])
+  db.prepare(`INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort,
+    input_tokens, cache_read_tokens, output_tokens, seconds, exit, at, transcript_path)
+    VALUES (1, 2, 'typescript_specialist', ?, 'claude-agent-sdk', 'm', 'high', 0, 0, 0, 0, 0, '2026-10-03 00:00:00', 'x.transcript.jsonl')`).run(HASH)
+  expect(building(db, 2, [PATH])?.plan).toBe(1)
+  db.prepare("UPDATE plans SET step = 7, wait_reason = 'ceo_batch', held_by = 'ceo' WHERE id = 1").run()
+  expect(building(db, 2, [PATH])).toBeNull()
+})

@@ -37,9 +37,10 @@ function seeded(): Db {
 
 const lines = (name: string): string[] => readFileSync(join(dir, 'data/v2', name), 'utf8').trim().split('\n')
 
-test('D1 a seeded store writes the four daily CSVs and due.md', () => {
+test('D1 D6 a seeded store writes the six CSVs and due.md', () => {
   const written = pull(seeded(), now)
-  expect(written).toEqual(['runs_daily', 'plans_daily', 'drift_daily', 'operator_daily'].map((n) => join(dir, 'data/v2', `${n}.csv`))
+  expect(written).toEqual(['runs_daily', 'plans_daily', 'drift_daily', 'operator_daily', 'stops', 'stalls']
+    .map((n) => join(dir, 'data/v2', `${n}.csv`))
     .concat(join(dir, 'data/v2/due.md')))
   expect(lines('runs_daily.csv')[0]).toBe('date,seat,runs,tokens,cost_computed_usd,cost_usd,query')
   expect(lines('runs_daily.csv')[1]).toMatch(/^2026-10-02,typescript_specialist,1,0,,,"SELECT .*"$/)
@@ -78,4 +79,50 @@ test('D4 due.md lists review dates from today to before today+7', () => {
   pull(seeded(), now)
   expect(lines('due.md')).toEqual(['| id | note | review_date |', '| --- | --- | --- |', '| 1 | soon, quoted | 2026-10-06 |',
     '|  | no id | 2026-10-04 |'])
+})
+
+const cells = (name: string): string[] => lines(name).slice(1).map((l) => l.split(',"')[0] ?? '')
+
+test('D1 D2 stops.csv gives one line per decision, who decided and how it held', () => {
+  const db = seeded()
+  db.exec(`INSERT INTO decisions (plan, step, wait_reason, verb, why, at) VALUES
+    (1, 3, 'ceo_batch', 'retry', 'w', '2026-10-02 19:00:00'), (1, 3, 'leased', 'halt', 'w', '2026-10-02T20:00:00.000Z');
+    INSERT INTO events (plan, at, kind, actor, outcome, message) VALUES (1, '2026-10-02T19:05:00.000Z', 'retry', 'coo', 'pass', 'z')`)
+  pull(db, now)
+  expect(lines('stops.csv')[0]).toBe('plan,step,wait_reason,decided_by,verb,outcome,query')
+  expect(cells('stops.csv')).toEqual(['1,3,ceo_batch,coo,retry,held', '1,3,leased,,halt,'])
+})
+
+const T = '2026-10-03T10:00:00.000Z'
+const plus = (minutes: number): string => new Date(Date.parse(T) + minutes * 60000).toISOString()
+
+function stalled(state: string, event: number, live = 70, steps: number[] = []): string[] {
+  const db = seeded()
+  db.exec(`INSERT INTO plans (id, pipe_id, template, state, queued_at, lane, seat, wait_reason, origin)
+    VALUES (2, 1, 'pr_path', '${state}', '${T}', 'machine', 'typescript_specialist', 'leased', 'https://github.com/o/r/issues/2');
+    INSERT INTO events (plan, at, kind, actor, outcome, message) VALUES (2, '${plus(event)}', 'note', 'ceo', 'pass', 'x')`)
+  for (let m = 5; m <= 70; m += 5) {
+    db.prepare("INSERT INTO ticks (at, hhmm, dry, pipes, fired, exit, note) VALUES (?, '10:00', ?, 1, 0, 0, '')").run(plus(m), m > live ? 1 : 0)
+  }
+  steps.forEach((step, i) => runAt(db, 2, step, 'typescript_specialist', plus(10 + i * 20)))
+  pull(db, now)
+  expect(lines('stalls.csv')[0]).toBe('plan,start,end,wait_reason,woken,query')
+  return cells('stalls.csv')
+}
+
+test('D3 an open plan with no mark for 61 minutes gives one stall to its last tick', () => {
+  expect(stalled('queued', 61)).toEqual([`2,${T},${plus(60)},leased,0`])
+})
+
+test('D3 59 minutes gives no stall', () => {
+  expect(stalled('queued', 59)).toEqual([])
+})
+
+test('D4 a run at the same step wakes the stretch without splitting it', () => {
+  expect(stalled('running', 61, 70, [2, 2])).toEqual([`2,${T},${plus(60)},leased,1`])
+})
+
+test('D5 a done plan gives no stall, nor do dry ticks extend one', () => {
+  expect(stalled('done', 61)).toEqual([])
+  expect(stalled('queued', 61, 55)).toEqual([])
 })

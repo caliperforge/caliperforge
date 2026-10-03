@@ -21,6 +21,7 @@ import { rule } from './rule.ts'
 import { recorded } from './seat.ts'
 import { parted } from './split.ts'
 import { ticketed } from './ticket.ts'
+import { history, parentAsk } from './record.ts'
 import { READ, SERVER, server } from './upstream.ts'
 import { afresh, maybe, planDir } from './workspace.ts'
 
@@ -130,6 +131,8 @@ function text(db: Db, root: string, plan: PlanRow): string {
     `# Stop\n\n${maybe(root, plan.id, 'refusal.md') ?? at('question.md')}`,
     `# Orchestrator\n\n${at('orchestrator.md')}`,
     `# Ask\n\n${at('ask.md')}`,
+    `# Parent ticket\n\n${parentAsk(db, root, plan)}`,
+    `# Record\n\n${history(db, plan)}`,
     `# Rulings on this plan\n\n${own(root, plan)}`,
     `# Rulings on sibling plans\n\n${siblings(db, root, plan)}`,
   ].join('\n\n')
@@ -165,7 +168,10 @@ export function read(text: string): Move | null {
   const fence = /^---\n([\s\S]*?)\n---$/m.exec(text)?.[1]
   if (fence === undefined) return null
   const got = Said.safeParse(prose(fence, ['why', 'answer', 'ticket']))
-  return got.success ? got.data : null
+  if (got.success) return got.data
+  const lined = Said.safeParse(Object.fromEntries([...fence.matchAll(/^(move|why|answer|ticket):[ \t]*(.+)$/gm)]
+    .map((m) => [m[1], (m[2] ?? '').trim()])))
+  return lined.success ? lined.data : null
 }
 
 /** Each move is the call its `cf` command makes; false leaves the stop with a person. */

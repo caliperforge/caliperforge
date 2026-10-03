@@ -7,6 +7,7 @@ import { SELF } from '../../sequencer/workspace.ts'
 import { ofKind, runAt } from '../../store/events.ts'
 import type { Db } from '../../store/index.ts'
 import { set } from '../../store/lanes.ts'
+import { receipt } from '../../store/ticks.ts'
 import { pull } from '../science.ts'
 
 const schema = join(import.meta.dirname, '../../schema')
@@ -83,7 +84,7 @@ test('D4 due.md lists review dates from today to before today+7', () => {
 
 const cells = (name: string): string[] => lines(name).slice(1).map((l) => l.split(',"')[0] ?? '')
 
-test('D1 D2 stops.csv gives one line per decision, who decided and how it held', () => {
+test('D1 D2 stops.csv: one line per decision, who and how it held', () => {
   const db = seeded()
   db.exec(`INSERT INTO decisions (plan, step, wait_reason, verb, why, at) VALUES
     (1, 3, 'ceo_batch', 'retry', 'w', '2026-10-02 19:00:00'), (1, 3, 'leased', 'halt', 'w', '2026-10-02T20:00:00.000Z');
@@ -102,7 +103,7 @@ function stalled(state: string, event: number, live = 70, steps: number[] = []):
     VALUES (2, 1, 'pr_path', '${state}', '${T}', 'machine', 'typescript_specialist', 'leased', 'https://github.com/o/r/issues/2');
     INSERT INTO events (plan, at, kind, actor, outcome, message) VALUES (2, '${plus(event)}', 'note', 'ceo', 'pass', 'x')`)
   for (let m = 5; m <= 70; m += 5) {
-    db.prepare("INSERT INTO ticks (at, hhmm, dry, pipes, fired, exit, note) VALUES (?, '10:00', ?, 1, 0, 0, '')").run(plus(m), m > live ? 1 : 0)
+    receipt(db, { at: plus(m), hhmm: '10:00', dry: m > live, pipes: 1, fired: 0, exit: 0, note: '' })
   }
   steps.forEach((step, i) => runAt(db, 2, step, 'typescript_specialist', plus(10 + i * 20)))
   pull(db, now)
@@ -110,7 +111,7 @@ function stalled(state: string, event: number, live = 70, steps: number[] = []):
   return cells('stalls.csv')
 }
 
-test('D3 an open plan with no mark for 61 minutes gives one stall to its last tick', () => {
+test('D3 61 minutes on an open plan gives one stall to last tick', () => {
   expect(stalled('queued', 61)).toEqual([`2,${T},${plus(60)},leased,0`])
 })
 
@@ -118,7 +119,7 @@ test('D3 59 minutes gives no stall', () => {
   expect(stalled('queued', 59)).toEqual([])
 })
 
-test('D4 a run at the same step wakes the stretch without splitting it', () => {
+test('D4 a same-step run wakes the stretch without splitting it', () => {
   expect(stalled('running', 61, 70, [2, 2])).toEqual([`2,${T},${plus(60)},leased,1`])
 })
 

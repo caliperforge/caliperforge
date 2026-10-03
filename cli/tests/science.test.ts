@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { beforeEach, expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import { SELF } from '../../sequencer/workspace.ts'
-import { runAt } from '../../store/events.ts'
+import { ofKind, runAt } from '../../store/events.ts'
 import type { Db } from '../../store/index.ts'
 import { set } from '../../store/lanes.ts'
 import { pull } from '../science.ts'
@@ -21,18 +21,17 @@ beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'cf-science-')) })
 function seeded(): Db {
   const db = fresh(schema)
   set(db, 'science.dir', dir, 'ceo', '2026-10-03')
-  db.prepare("INSERT INTO pipes (name, enabled, window_start, window_end, max_concurrent) VALUES ('internal', 1, '00:00', '23:59', 1)").run()
-  db.prepare(`INSERT INTO plans (id, pipe_id, template, state, queued_at, lane, seat, origin)
-    VALUES (1, 1, 'pr_path', 'done', ?, 'machine', 'typescript_specialist', 'https://github.com/o/r/issues/1')`).run(AT)
-  db.prepare(`INSERT INTO rules (id, kind, path, content_hash, loaded_at)
-    VALUES ('typescript_specialist', 'roster', 'seats/typescript_specialist', ?, '2026-09-25')`).run('0'.repeat(64))
+  db.exec(`INSERT INTO pipes (name, enabled, window_start, window_end, max_concurrent) VALUES ('internal', 1, '00:00', '23:59', 1);
+    INSERT INTO plans (id, pipe_id, template, state, queued_at, lane, seat, origin)
+    VALUES (1, 1, 'pr_path', 'done', '${AT}', 'machine', 'typescript_specialist', 'https://github.com/o/r/issues/1');
+    INSERT INTO rules (id, kind, path, content_hash, loaded_at)
+    VALUES ('typescript_specialist', 'roster', 'seats/typescript_specialist', printf('%064d', 0), '2026-09-25');
+    INSERT INTO signals (repo, pr, kind, author, at, external_id, plan) VALUES ('o/r', 1, 'merge', 'me', '${AT}', 'm1', 1);
+    INSERT INTO refusals (plan, step, fingerprint, blip, at) VALUES (1, 3, printf('%064d', 1), 0, '${AT}'), (1, 3, printf('%064d', 2), 0, '${AT}');
+    INSERT INTO tickets (repo, number, title, lane, opened_at) VALUES ('${SELF}', 9, 'Drift: records is silent', 'machine', '${AT}');
+    INSERT INTO events (plan, at, kind, actor, outcome, message) VALUES
+    (1, '${AT}', 'signoff', 'ceo', 'pass', 'x'), (1, '${AT}', 'approve', 'coo', 'pass', 'y')`)
   runAt(db, 1, 2, 'typescript_specialist', AT)
-  db.prepare("INSERT INTO signals (repo, pr, kind, author, at, external_id, plan) VALUES ('o/r', 1, 'merge', 'me', ?, 'm1', 1)").run(AT)
-  db.prepare('INSERT INTO refusals (plan, step, fingerprint, blip, at) VALUES (1, 3, ?, 0, ?), (1, 3, ?, 0, ?)')
-    .run('a'.repeat(64), AT, 'b'.repeat(64), AT)
-  db.prepare("INSERT INTO tickets (repo, number, title, lane, opened_at) VALUES (?, 9, 'Drift: records is silent', 'machine', ?)").run(SELF, AT)
-  db.prepare(`INSERT INTO events (plan, at, kind, actor, outcome, message) VALUES
-    (1, ?, 'signoff', 'ceo', 'pass', 'x'), (1, ?, 'approve', 'coo', 'pass', 'y')`).run(AT, AT)
   return db
 }
 
@@ -54,26 +53,25 @@ test('D1 a seeded store writes the four daily CSVs and due.md', () => {
   expect(lines('due.md')).toEqual(['no data/interventions_v2.csv'])
 })
 
-test('D2 an unset science.dir writes nothing and records one refusal', () => {
+test('D2 an unset science.dir writes nothing, records one refusal', () => {
   const db = seeded()
   set(db, 'science.dir', '', 'ceo', '2026-10-03')
   expect(pull(db, now)).toEqual([])
   expect(readdirSync(dir)).toEqual([])
-  expect(db.prepare("SELECT kind, actor, outcome, message FROM events WHERE kind = 'science_pull'").all())
-    .toEqual([{ kind: 'science_pull', actor: 'science', outcome: 'refuse', message: 'science.dir is unset' }])
+  expect(ofKind(db, 'science_pull'))
+    .toEqual([{ plan: null, kind: 'science_pull', actor: 'science', outcome: 'refuse', message: 'science.dir is unset' }])
 })
 
-test('D3 a science.dir that does not exist is not created and records one event', () => {
+test('D3 a missing science.dir is not created, records one event', () => {
   const db = seeded()
   const gone = join(dir, 'gone')
   set(db, 'science.dir', gone, 'ceo', '2026-10-03')
-  const before = (db.prepare('SELECT count(*) AS n FROM events').get() as { n: number }).n
   expect(pull(db, now)).toEqual([])
   expect(existsSync(gone)).toBe(false)
-  expect((db.prepare('SELECT count(*) AS n FROM events').get() as { n: number }).n).toBe(before + 1)
+  expect(ofKind(db, 'science_pull').map((e) => e.message)).toEqual([`science.dir ${gone} does not exist`])
 })
 
-test('D4 due.md lists review dates from today up to but not including today+7', () => {
+test('D4 due.md lists review dates from today to before today+7', () => {
   mkdirSync(join(dir, 'data'))
   writeFileSync(join(dir, 'data/interventions_v2.csv'), ['id,note,review_date', '1,"soon, quoted",2026-10-06',
     '2,week,2026-10-10', '3,"was ""late""",2026-10-02'].join('\n'))

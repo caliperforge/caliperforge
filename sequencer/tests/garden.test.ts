@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { beforeEach, expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
-import { gardened } from '../../store/gardens.ts'
+import { gardened, openGardens } from '../../store/gardens.ts'
 import type { Db } from '../../store/index.ts'
 import { garden } from '../garden.ts'
 import { SELF } from '../workspace.ts'
@@ -78,6 +78,19 @@ test('D3: two closed gardener tickets still file', () => {
   const db = piped()
   gardens(db, false)
   expect(garden(db, root, NOW, file)).toBe(`${URL}901`)
+})
+
+test('closedNotCounted', () => {
+  const db = piped()
+  gardens(db, true)
+  db.exec(`UPDATE tickets SET closed_at = '2026-09-28T10:00:00Z'`)
+  expect(openGardens(db)).toBe(0)
+})
+
+test('openCounted', () => {
+  const db = piped()
+  gardens(db, true)
+  expect(openGardens(db)).toBe(2)
 })
 
 test('D4: a second call on the same day files nothing', () => {

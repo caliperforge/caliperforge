@@ -7,7 +7,8 @@ export function gardened(db: Db, day: string): boolean {
 
 export function openGardens(db: Db): number {
   return (db.prepare(`SELECT count(*) AS n FROM gardens g
-    JOIN tickets t ON g.url = 'https://github.com/' || t.repo || '/issues/' || t.number`).get() as { n: number }).n
+    JOIN tickets t ON g.url = 'https://github.com/' || t.repo || '/issues/' || t.number
+    WHERE t.closed_at IS NULL`).get() as { n: number }).n
 }
 
 export function idle(db: Db, pipe: PipeRow): boolean {

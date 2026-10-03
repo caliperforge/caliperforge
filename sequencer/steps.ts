@@ -2,7 +2,7 @@ import { CHECK, find } from '../cli/find.ts'
 import type { Read } from '../cli/gh.ts'
 import { CARD, waits } from '../cli/queue.ts'
 import { parse } from '../rails/diff.ts'
-import { building, filesOf, sharing, strays as recordStrays } from '../store/files.ts'
+import { building, filesOf, recorded, sharing, strays as recordStrays } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
 import { builderRan, held, internal, originIssue, originRef, waiting, type PlanRow, type Wait } from '../store/plans.ts'
 import { capture, desk, facts, gather, pack, score, steps as comms } from '../templates/comms.ts'
@@ -124,6 +124,12 @@ function strayed(db: Db, root: string, plan: PlanRow): Outcome | null {
   const other = building(db, plan.id, wrote)
   if (other === null) return null
   return { outcome: 'pass', held: true, spans: [other.path], note: `wrote ${other.path}, which plan ${String(other.plan)} is building; waits for it` }
+}
+
+/** The plan `strayed` holds this one on, read back from the paths it recorded, since the hold itself is not stored. */
+export function heldOn(db: Db, plan: PlanRow): number | null {
+  if (mapOf(plan.template).at(plan.step).name !== 'rails') return null
+  return building(db, plan.id, recorded(db, plan.id))?.plan ?? null
 }
 
 /** A ticket with an `After:` line is not briefed until the plan of the issue it names lands; one that never will is held for a person. */

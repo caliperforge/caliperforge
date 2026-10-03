@@ -297,10 +297,6 @@
     "lines": 103,
     "prepare": 4
   },
-  "sequencer/act.ts": {
-    "lines": 56,
-    "prepare": 1
-  },
   "sequencer/approve.ts": {
     "lines": 61,
     "prepare": 1
@@ -331,7 +327,7 @@
     "prepare": 1
   },
   "sequencer/coolite.ts": {
-    "lines": 195,
+    "lines": 213,
     "prepare": 6
   },
   "sequencer/delta.ts": {
@@ -400,9 +396,8 @@
     "lines": 74
   },
   "sequencer/orchestrator.ts": {
-    "lines": 125,
-    "prepare": 1,
-    "silent-catch": 1
+    "lines": 44,
+    "prepare": 1
   },
   "sequencer/priority.ts": {
     "lines": 33,

@@ -65,14 +65,6 @@ export async function cooLite(db: Db, root: string, plan: PlanRow, provider: Pro
 
 interface Stop { id: number; answered: number | null; today: number }
 
-/** One coo_lite run on the oldest stop, as soon as there is one: a stop that waits is a job that waits. */
-export async function piled(db: Db, root: string, provider: Provider, now: Date, post: Post = alerter(),
-  wire: Wire = WIRE): Promise<void> {
-  const fresh = stops(db, root, now, post)
-  if (fresh[0] === undefined) return
-  await fire(db, root, provider, now, post, wire, fresh)
-}
-
 export async function byHand(db: Db, root: string, provider: Provider, now: Date, post: Post = alerter(),
   wire: Wire = WIRE): Promise<string> {
   return fire(db, root, provider, now, post, wire, stops(db, root, now, post))

@@ -6,7 +6,6 @@ import { cap, hhmm, zone } from '../store/lanes.ts'
 import { idle, keepWait } from '../store/now.ts'
 import { type PlanRow, live, openPipes, planById, terminal, type PipeRow, waiting } from '../store/plans.ts'
 import { capture, intake } from './capture.ts'
-import { piled } from './coolite.ts'
 import { woke } from './orchestrator.ts'
 import type { Fired } from './kind.ts'
 import { reprice } from './priority.ts'
@@ -49,7 +48,6 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
     }
   }
   await woke(db, root, provider, now)
-  await piled(db, root, provider, now)
   return out
 }
 

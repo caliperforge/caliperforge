@@ -130,8 +130,20 @@ function text(db: Db, root: string, plan: PlanRow): string {
     `# Stop\n\n${maybe(root, plan.id, 'refusal.md') ?? at('question.md')}`,
     `# Orchestrator\n\n${at('orchestrator.md')}`,
     `# Ask\n\n${at('ask.md')}`,
+    `# Rulings on this plan\n\n${own(root, plan)}`,
     `# Rulings on sibling plans\n\n${siblings(db, root, plan)}`,
   ].join('\n\n')
+}
+
+function sections(text: string | null): string[] {
+  return (text ?? '').split(/^(?=## )/m).filter((s) => /^## (?:Ruling|Answer)/.test(s)).map((s) => s.trim())
+}
+
+function own(root: string, plan: PlanRow): string {
+  const rulings = maybe(root, plan.id, 'rulings.md')?.trim() ?? ''
+  const found = [...(rulings === '' ? [] : [`rulings.md:\n${rulings}`]),
+    ...sections(maybe(root, plan.id, 'issue.md')).map((s) => `issue.md:\n${s}`)]
+  return found.length === 0 ? 'none' : found.join('\n\n').slice(0, 6000)
 }
 
 function siblings(db: Db, root: string, plan: PlanRow): string {
@@ -142,8 +154,7 @@ function siblings(db: Db, root: string, plan: PlanRow): string {
     WHERE t.repo = ? AND t.parent = (SELECT parent FROM tickets WHERE repo = ? AND number = ?) AND p.id <> ?
     ORDER BY p.id`).all(ref.repo, ref.repo, ref.no, plan.id) as { id: number }[]
   const found = ids.flatMap(({ id }) => ['ask.md', 'issue.md'].flatMap((name) =>
-    (maybe(root, id, name) ?? '').split(/^(?=## )/m).filter((s) => /^## (?:Ruling|Answer)/.test(s))
-      .map((s) => `plan ${String(id)}, ${name}:\n${s.trim()}`)))
+    sections(maybe(root, id, name)).map((s) => `plan ${String(id)}, ${name}:\n${s}`)))
   return found.length === 0 ? 'none' : found.join('\n\n').slice(0, 6000)
 }
 

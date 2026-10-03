@@ -13,6 +13,7 @@ import { dropDeliverables } from '../../store/deliverables.ts'
 import { addTarget, setTargetState, targetRow } from '../../store/targets.ts'
 import { at, steps } from '../../templates/pr-path.ts'
 import { tick } from '../index.ts'
+import { picks } from '../next.ts'
 import { blocked, kernel } from '../steps.ts'
 import { checkout, diffOf, doneIds, get, gitDiff, narrowing, put, snapshot, srcDir } from '../workspace.ts'
 import { GREEN } from '../base.ts'
@@ -1032,4 +1033,44 @@ test('#374 a row naming no path refuses and removes nothing', async () => {
   expect(fired).toMatchObject({ step: 2, outcome: 'refuse', spans: ['- the old spend file'] })
   expect(fired?.note).toContain('names no path')
   expect(existsSync(join(srcDir(w.root, 1), 'src/hello.ts'))).toBe(true)
+})
+
+const HELD = 3
+
+/** `HELD` held at the rails on src/hello.ts, which `MINE`, queued at its build in a one-wide pipe, is building. */
+async function heldOnMine(): Promise<World> {
+  const w = world()
+  dropPlan(w.db, 1)
+  ours(w.root)
+  internalPlan(w.db, w.root, MINE)
+  internalPlan(w.db, w.root, HELD, 'let a second internal plan run', 35)
+  w.db.prepare('UPDATE pipes SET max_concurrent = 2 WHERE id = 1').run()
+  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  record(w.db, HELD, [{ path: 'src/p3.ts', is_new: true }])
+  await tick(w.db, w.root, stub(CARRIED))
+  built(w.root, MINE, 'export const landed = true')
+  writeFileSync(join(srcDir(w.root, HELD), 'src/p3.ts'), 'export const p3 = true\n')
+  built(w.root, HELD, 'export const also = true')
+  await tick(w.db, w.root, stub(CARRIED))
+  expect(plan(w.db, HELD)).toMatchObject({ step: 3, state: 'running' })
+  w.db.prepare("UPDATE plans SET step = 2, state = 'queued' WHERE id = ?").run(MINE)
+  w.db.prepare('UPDATE pipes SET max_concurrent = 1 WHERE id = 1').run()
+  return w
+}
+
+test('D1 D2 a plan held at the rails on one in its pipe gives that one its slot', async () => {
+  const w = await heldOnMine()
+  expect(picks(w.db, { ...w.pipe, max_concurrent: 1 }).map((p) => p.id)).toEqual([MINE])
+  const fired = await tick(w.db, w.root, stub(CARRIED))
+  expect(fired.find((f) => f.plan === MINE)).toMatchObject({ step: 2, name: 'build' })
+  expect(fired.find((f) => f.plan === HELD)).toBeUndefined()
+  expect(plan(w.db, HELD).wait_reason).toBe('over_cap')
+})
+
+test('D3 a plan held on one in another pipe keeps its slot', async () => {
+  const w = await heldOnMine()
+  w.db.prepare(`INSERT INTO pipes (id, name, enabled, window_start, window_end, max_concurrent)
+    VALUES (2, 'research', 1, '00:00', '23:59', 1)`).run()
+  w.db.prepare('UPDATE plans SET pipe_id = 2 WHERE id = ?').run(MINE)
+  expect(picks(w.db, { ...w.pipe, max_concurrent: 1 }).map((p) => p.id)).toEqual([HELD])
 })

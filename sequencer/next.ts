@@ -4,7 +4,7 @@ import { cap, hhmm } from '../store/lanes.ts'
 import { live, openPipes, underCap, type PipeRow, type PlanRow, type Wait } from '../store/plans.ts'
 import { overBudget } from '../store/refusals.ts'
 import type { Step } from '../templates/pr-path.ts'
-import { blocked, mapOf, overlapping } from './steps.ts'
+import { blocked, heldOn, mapOf, overlapping } from './steps.ts'
 
 export type Route = { fire: Step } | { wait: Wait; on: number | null }
   | { wait: 'token_ceiling'; on: null; over: { spent: number; ceiling: number } }
@@ -60,14 +60,16 @@ export function working(offers: Offer[], wide: number): Offer[] {
  * The plans this pipe steps this tick, in priority order. A queued plan that is
  * blocked holds no slot; a running one holds the slot it already took, and so does
  * one another tick has leased, which this tick offers to nobody; a running one that
- * waits on an approval and is not leased gives its slot up.
+ * waits on an approval, or is held at the rails on a plan in its own pipe, and is not leased gives its slot up.
  */
 export function picks(db: Db, pipe: PipeRow, now: Date = new Date(), mine: Lease | null = null): PlanRow[] {
   const leases = new Set(others(db, now, mine).map((l) => l.plan))
   const mapped = live(db, pipe).filter((p) => MAPPED.has(p.template))
   const free = mapped.filter((p) => {
     const stop = blocked(db, p)
-    return leases.has(p.id) || stop === null || (p.state === 'running' && overlapping(db, p) === null && !ON_CEO.has(stop))
+    const on = p.state === 'running' ? heldOn(db, p) : null
+    return leases.has(p.id) || (!mapped.some((o) => o.id === on)
+      && (stop === null || (p.state === 'running' && overlapping(db, p) === null && !ON_CEO.has(stop))))
   })
   return underCap(pipe, free, leases)
     .filter((p) => !leases.has(p.id) && (p.state !== 'running' || blocked(db, p) === null))

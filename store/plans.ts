@@ -195,10 +195,10 @@ export function clearWaitsOn(db: Db, plan: number): void {
   db.prepare('UPDATE plans SET waits_on = NULL WHERE id = ?').run(plan)
 }
 
-export function holdOn(db: Db, plan: number, why: string, on: number | null): void {
-  db.prepare(`UPDATE plans SET state = 'blocked_on_ceo', waits_on = @on,
+export function holdOn(db: Db, plan: number, why: string, on: number | null, until: string | null = null): void {
+  db.prepare(`UPDATE plans SET state = 'blocked_on_ceo', waits_on = @on, held_until = @until,
     held_why = CASE WHEN @on IS NULL THEN held_why ELSE @why END WHERE id = @plan`)
-    .run({ on, why: why.split('\n')[0] ?? null, plan })
+    .run({ on, until, why: why.split('\n')[0] ?? null, plan })
 }
 
 export function briefed(db: Db, plan: number, lines: Record<'title' | 'what' | 'why' | 'ends', string | null>): void {

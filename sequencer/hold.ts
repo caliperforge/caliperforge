@@ -13,8 +13,9 @@ import { afresh, drop, maybe, planDir, put } from './workspace.ts'
  */
 const NOTE = 'parked.md'
 
-export function hold(db: Db, root: string, plan: number, why: string, now: Date, on: number | null = null): void {
-  holdOn(db, plan, why, on)
+export function hold(db: Db, root: string, plan: number, why: string, now: Date, on: number | null = null,
+  until: Date | null = null): void {
+  holdOn(db, plan, why, on, until?.toISOString() ?? null)
   put(root, plan, NOTE, `# Held ${now.toISOString()}\n\n${why}\n${on === null ? '' : `\nwaits on plan ${String(on)}\n`}`)
 }
 

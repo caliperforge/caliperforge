@@ -19,7 +19,7 @@ it('applies every migration once and records the version', () => {
   expect(migrate(db, join(root, 'schema'))).toEqual([])
 })
 
-it('D5 0078 births drift.at; set refuses a key no migration added', () => {
+it('D5 0078 adds drift.at; set refuses a key no migration added', () => {
   const db = open(':memory:')
   migrate(db, join(root, 'schema'))
   set(db, 'drift.at', '2026-10-03', 'pr', '2026-10-03')

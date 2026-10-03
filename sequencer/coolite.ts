@@ -5,7 +5,7 @@ import type { Provider } from '../providers/kind.ts'
 import { packet } from '../runner/index.ts'
 import { load, seat, tight } from '../runner/rules.ts'
 import { logged } from '../store/events.ts'
-import { retried } from '../store/holds.ts'
+import { retried, returnToLane } from '../store/holds.ts'
 import type { Db } from '../store/index.ts'
 import { wall } from '../store/lanes.ts'
 import { clear as unlease, take } from '../store/leases.ts'
@@ -15,6 +15,7 @@ import { clear } from '../store/refusals.ts'
 import { pending } from '../store/transcript.ts'
 import { split, type Part } from './brief.ts'
 import { hold, isHeld, unhold } from './hold.ts'
+import { fixed } from './fixed.ts'
 import { prose } from './prose.ts'
 import { WIRE, type Wire } from './push.ts'
 import { rule } from './rule.ts'
@@ -26,12 +27,14 @@ import { READ, SERVER, server } from './upstream.ts'
 import { afresh, maybe, planDir } from './workspace.ts'
 
 const Said = z.object({
-  move: z.enum(['rule', 'waive', 'close', 'file', 'ask_ceo']),
+  move: z.enum(['rule', 'waive', 'close', 'file', 'ask_ceo', 'return', 'fix']),
   why: z.string().trim().min(1),
   answer: z.string().trim().min(1).optional(),
   ticket: z.string().trim().min(1).transform((t) => t.slice(0, 140)).optional(),
+  class: z.coerce.number().int().min(1).max(4).optional(),
 }).strict().refine((m) => m.move !== 'rule' || m.answer !== undefined, { path: ['answer'] })
   .refine((m) => m.move !== 'file' || m.ticket !== undefined, { path: ['ticket'] })
+  .refine((m) => m.move !== 'ask_ceo' || m.class !== undefined, { path: ['class'] })
 
 type Move = z.infer<typeof Said> | { move: 'split'; why: string; parts: Part[] }
 
@@ -43,16 +46,18 @@ function applying(db: Db): boolean {
 }
 
 export async function cooLite(db: Db, root: string, plan: PlanRow, provider: Provider, now: Date, post: Post,
-  wire: Wire = WIRE): Promise<string> {
+  wire: Wire = WIRE, tried?: string): Promise<string> {
   if (plan.state !== 'blocked_on_ceo' && plan.state !== 'halted') {
     return told(db, root, plan, now, { outcome: 'needs_ceo', message: `ask_ceo: plan is ${plan.state}, not stopped` }, post)
   }
-  const m = await ask(db, root, plan, provider)
+  const m = await ask(db, root, plan, provider, tried)
   if (m === null) return told(db, root, plan, now, { outcome: 'needs_ceo', message: 'ask_ceo: no readable answer' }, post)
   const message = `${m.move}: ${m.why}`
   if (!applying(db)) return told(db, root, plan, now, { outcome: 'needs_ceo', message, note: `proposes ${message}` })
-  const done = m.move !== 'ask_ceo' && apply(db, root, plan, m, wire, now)
+  const done = m.move === 'fix' ? await fixed(db, root, plan, m.why, provider, now, post, wire)
+    : m.move !== 'ask_ceo' && apply(db, root, plan, m, wire, now)
   if (done !== false) return told(db, root, plan, now, { outcome: 'pass', message, pointer: done === true ? null : done })
+  if (m.move === 'fix' && tried === undefined) return cooLite(db, root, planById(db, plan.id), provider, now, post, wire, m.why)
   hold(db, root, plan.id, m.why, now)
   held(db, plan.id, 'ceo', m.why)
   return told(db, root, plan, now, { outcome: 'needs_ceo', message }, post)
@@ -108,11 +113,11 @@ async function fire(db: Db, root: string, provider: Provider, now: Date, post: P
   }
 }
 
-async function ask(db: Db, root: string, plan: PlanRow, provider: Provider): Promise<Move | null> {
+async function ask(db: Db, root: string, plan: PlanRow, provider: Provider, tried?: string): Promise<Move | null> {
   load(db, root)
   const { manifest, prompt, hash } = seat(root, 'coo_lite')
   const dir = planDir(root, plan.id)
-  const built = packet(manifest, prompt, tight(root), text(db, root, plan), dir, pending(dir, 'coo_lite'))
+  const built = packet(manifest, prompt, tight(root), text(db, root, plan, tried), dir, pending(dir, 'coo_lite'))
   const fired = await provider.fire({
     ...built,
     tools: [...built.tools, READ],
@@ -123,7 +128,7 @@ async function ask(db: Db, root: string, plan: PlanRow, provider: Provider): Pro
   return fired.ended === 'completed' ? read(fired.text) : null
 }
 
-function text(db: Db, root: string, plan: PlanRow): string {
+function text(db: Db, root: string, plan: PlanRow, tried?: string): string {
   const at = (name: string): string => maybe(root, plan.id, name) ?? 'none'
   return [
     `# Job\n\nplan ${String(plan.id)}, state ${plan.state}, step ${String(plan.step)}, lane ${plan.lane ?? '-'}, ${plan.origin ?? 'no ticket'}`,
@@ -134,6 +139,7 @@ function text(db: Db, root: string, plan: PlanRow): string {
     `# Record\n\n${history(db, plan)}`,
     `# Rulings on this plan\n\n${own(root, plan)}`,
     `# Rulings on sibling plans\n\n${siblings(db, root, plan)}`,
+    ...(tried === undefined ? [] : [`# Fixer\n\nthe fixer did not make this fix: ${tried}`]),
   ].join('\n\n')
 }
 
@@ -168,7 +174,7 @@ export function read(text: string): Move | null {
   if (fence === undefined) return null
   const got = Said.safeParse(prose(fence, ['why', 'answer', 'ticket']))
   if (got.success) return got.data
-  const lined = Said.safeParse(Object.fromEntries([...fence.matchAll(/^(move|why|answer|ticket):[ \t]*(.+)$/gm)]
+  const lined = Said.safeParse(Object.fromEntries([...fence.matchAll(/^(move|why|answer|ticket|class):[ \t]*(.+)$/gm)]
     .map((m) => [m[1], (m[2] ?? '').trim()])))
   return lined.success ? lined.data : null
 }
@@ -197,6 +203,10 @@ function apply(db: Db, root: string, plan: PlanRow, m: Move, wire: Wire, now: Da
       return true
     case 'file':
       return ticketed(db, root, plan, m.ticket ?? m.why, `Filed by coo_lite on plan ${String(plan.id)}.\n\n${m.why}`, m.why, wire, now)
+    case 'return':
+      afresh(root, plan.id, returnToLane(db, plan.id, 'coo_lite'))
+      return true
+    case 'fix':
     case 'ask_ceo': return false
   }
 }

@@ -11,16 +11,18 @@ import { dial, hhmm, lanes, priority as setPriority, record, Reading, set, windo
 import { refusedPush } from '../store/approvals.ts'
 import { repriced } from '../store/events.ts'
 import { holderOf, HOLDERS, overlapWaits, parked } from '../store/plans.ts'
+import { switches } from '../store/switches.ts'
 import { backfillTickets } from '../store/tickets.ts'
 import { backfill } from '../store/transcript.ts'
 import { actors, actorSection, byType, type ByType, costs, costSection, day, fileWaits, greptileLine, halted, hands, heldBy, laneLine, misses, missSection, open as openPlans,
-  rulings, section, switches, switchSection, tickets, ticketSection, unpriced, waitLine, waits, windowLine } from './brief.ts'
+  rulings, section, tickets, ticketSection, unpriced, waitLine, waits, windowLine } from './brief.ts'
 import { check, fill } from './digests.ts'
 import { flow } from './flow.ts'
 import { gh } from './gh.ts'
 import { write as writeMap } from './map.ts'
 import { ack, line, unread } from './inbox.ts'
 import { close } from './session.ts'
+import { switchSection } from './switches.ts'
 import { liveness, livenessLine, stalledLanes } from './watch.ts'
 
 export interface Cli { root: string; db: () => Db; out: (text: string) => void }

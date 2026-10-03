@@ -5,8 +5,9 @@ import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import { registerLanes } from '../cf-lanes.ts'
-import { actors, actorSection, costs, costSection, fileWaits, greptileLine, hands, heldBy, line, misses, missSection, rulings, section, switches,
-  switchSection, ticketSection, tickets, unpriced, waitLine, waits } from '../brief.ts'
+import { actors, actorSection, costs, costSection, fileWaits, greptileLine, hands, heldBy, line, misses, missSection, rulings, section, ticketSection,
+  tickets, unpriced, waitLine, waits } from '../brief.ts'
+import { switchSection } from '../switches.ts'
 import { hold } from '../../sequencer/hold.ts'
 import { monthly, reviewed } from '../../sequencer/ready.ts'
 import { put } from '../../sequencer/workspace.ts'
@@ -16,6 +17,7 @@ import type { Db } from '../../store/index.ts'
 import { keep } from '../../store/merges.ts'
 import { needsCeo, parked, PlanRow, waiting } from '../../store/plans.ts'
 import { record } from '../../store/signals.ts'
+import { switches } from '../../store/switches.ts'
 
 const schema = join(import.meta.dirname, '../../schema')
 
@@ -458,9 +460,8 @@ test('shadowListed', () => {
 
 test('liveHidden', () => {
   const db = world()
-  const set = db.prepare("INSERT INTO settings (key, value, who, origin_kind, origin_ref, set_at) VALUES (?, ?, 'ceo', 'ruling', 't', ?)")
-  set.run('coo_lite.apply', '1', '2026-09-30')
-  set.run('fixer.apply', '0', '2026-10-01')
+  db.exec(`INSERT INTO settings (key, value, who, origin_kind, origin_ref, set_at) VALUES
+    ('coo_lite.apply', '1', 'ceo', 'ruling', 't', '2026-09-30'), ('fixer.apply', '0', 'ceo', 'ruling', 't', '2026-10-01')`)
   const out = switchSection(switches(db), SHADOW_NOW)
   expect(out).not.toContain('coo_lite.apply')
   expect(out).toContain('  fixer.apply\t0\t2 d\n')

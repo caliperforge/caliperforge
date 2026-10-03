@@ -75,6 +75,11 @@ export function sharing(db: Db, plan: number): { plan: number; path: string } | 
     ORDER BY o.id LIMIT 1`).get(plan) ?? null) as { plan: number; path: string } | null
 }
 
+/** Every path the plan holds, strays included. */
+export function recorded(db: Db, plan: number): string[] {
+  return (db.prepare('SELECT path FROM plan_files WHERE plan = ? ORDER BY position').all(plan) as { path: string }[]).map((r) => r.path)
+}
+
 /**
  * An older job already building, in the same repo, whose recorded set holds one of `paths`. Only an
  * older one that has built: a younger job, or one not yet built, is the one `sharing` holds back.

@@ -108,7 +108,7 @@ function halt(db: Db, repo: string, open: Set<string>): void {
   const queued = db.prepare(`SELECT * FROM plans WHERE state = 'queued' AND origin IS NOT NULL
     AND NOT EXISTS (SELECT 1 FROM deliverables d WHERE d.plan_id = plans.id AND d.state = 'pushed')`).all().map((r) => PlanRow.parse(r))
   for (const plan of queued.filter((p) => originRef(p)?.repo === repo && !open.has(p.origin ?? ''))) {
-    end(db, plan.id, 'halted')
+    end(db, plan.id, 'halted', `${plan.origin ?? ''} is closed or has lost its lane label`)
   }
   landed(db, repo, open)
 }

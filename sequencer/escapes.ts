@@ -1,5 +1,6 @@
 import type { Pr } from '../cli/gh.ts'
-import { escaped, owner, type Owner } from '../store/dispositions.ts'
+import { read } from '../reviews/verdict.ts'
+import { escaped, owner, settle, type Owner } from '../store/dispositions.ts'
 import type { Db } from '../store/index.ts'
 import { since, type SignalRow } from '../store/signals.ts'
 
@@ -43,6 +44,19 @@ function findings(view: Pr, seen: SignalRow[]): string[] {
     .filter((s) => s.kind === 'review' || (s.kind === 'bot_review' && (s.score ?? 5) < 5))
     .map((s) => classOf(bodies.get(s.external_id) ?? ''))
   return [...found.filter((c) => c !== FALLBACK), ...found.filter((c) => c === FALLBACK)]
+}
+
+/** A review that passes on a re-gate settles the newest refusal at its step that nothing has settled yet. */
+export function regated(db: Db, plan: number, step: number, pass: number, prior: string | undefined, tree: string | undefined | null): number | null {
+  const last = read(prior ?? '', '')
+  if (last?.outcome !== 'refuse' || tree === undefined || tree === null) return null
+  const row = db.prepare(`SELECT v.id, v.tree FROM verdicts v WHERE v.plan = ? AND v.step = ? AND v.kind = 'review'
+    AND v.outcome = 'refuse' AND v.id < ? AND NOT EXISTS (SELECT 1 FROM dispositions d WHERE d.verdict_id = v.id)
+    ORDER BY v.id DESC LIMIT 1`).get(plan, step, pass) as { id: number; tree: string | null } | undefined
+  if (typeof row?.tree !== 'string') return null
+  const named = last.defect_class ?? ''
+  const defect_class = /^tight\.[a-z]+$/.test(named) || KNOWN.includes(named) ? named : FALLBACK
+  return settle(db, { verdict_id: row.id, defect_class, evidence: `verdicts:${String(pass)}` }, row.tree, tree, 'pass')
 }
 
 function verdictAt(db: Db, plan: number, gate: string): number | null {

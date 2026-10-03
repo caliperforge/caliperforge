@@ -67,6 +67,36 @@ test('the round leaves a quick_lane pass row and step-2 tokens', async () => {
   expect(w.db.prepare('SELECT count(*) AS n FROM runs WHERE plan = 1 AND step IN (4, 5)').get()).toEqual({ n: 1 })
 })
 
+function dispositions(w: World): unknown[] {
+  return w.db.prepare(`SELECT d.kind, d.defect_class, d.owner, v.outcome, v.step FROM dispositions d
+    JOIN verdicts v ON v.id = d.verdict_id ORDER BY d.id`).all()
+}
+
+/** Refused at step 4 with `review`, rebuilt to `FIX`, and passed at step 4. */
+async function regated(review: string): Promise<World> {
+  const w = await toReview()
+  await refused(w, 1, stub(CARRIED, 0, review))
+  for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, builds(writes(w.root, 1, `${FIX}\n`)), undefined, undefined, watched([], w.root, 1))
+  expect(plan(w.db, 1)).toMatchObject({ step: 5, retries: 1 })
+  return w
+}
+
+test('a refusal passed after a rebuild is settled fixed on the refused verdict', async () => {
+  const w = await regated(fence(`  - ${SPAN}`))
+  expect(dispositions(w)).toEqual([{ kind: 'fixed', defect_class: 'minimal', owner: 'review', outcome: 'refuse', step: 4 }])
+})
+
+test('the quick lane settles the refusal it fixed in place', async () => {
+  const w = await toReview()
+  await tick(w.db, w.root, builds(writes(w.root, 1, `${FIX}\n`), fence(cosmetic(SPAN, FIX))))
+  expect(dispositions(w)).toEqual([{ kind: 'fixed', defect_class: 'minimal', owner: 'review', outcome: 'refuse', step: 4 }])
+})
+
+test('a class outside the build map settles as correctness', async () => {
+  const w = await regated(fence(`  - ${SPAN}`).replace('class: minimal', 'class: vibes'))
+  expect(dispositions(w)).toEqual([{ kind: 'fixed', defect_class: 'correctness', owner: 'review', outcome: 'refuse', step: 4 }])
+})
+
 test('a bare span keeps the lap and both entries round-trip', async () => {
   const w = await toReview()
   await refused(w, 1, stub(CARRIED, 0, fence(cosmetic(SPAN, FIX), `  - ${HELLO}:2`)))
@@ -132,6 +162,7 @@ test('a note removing a comment lands; step 5 with no new build', async () => {
   expect(plan(w.db, 1)).toMatchObject({ step: 5, retries: 0 })
   expect(w.db.prepare('SELECT count(*) AS n FROM runs WHERE plan = 1 AND step = 2').get()).toEqual({ n: 1 })
   expect(hello(w)).toBe(HI)
+  expect(dispositions(w)).toEqual([])
 })
 
 test('a note that changes code refuses and leaves the file alone', async () => {

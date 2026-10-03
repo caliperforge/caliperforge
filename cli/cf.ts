@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url'
 import { claudeAgentSdk } from '../providers/claude-agent-sdk/index.ts'
 import { credential } from '../providers/credential.ts'
 import { spawn } from 'node:child_process'
+import { parse } from 'yaml'
+import { Entry } from '../sequencer/drift.ts'
 import { CHAIN_MINUTES, dry, EACH, lap, tick, type Apart } from '../sequencer/index.ts'
 import { garden } from '../sequencer/garden.ts'
 import type { Fired } from '../sequencer/kind.ts'
@@ -115,7 +117,8 @@ async function ticked(options: { dry?: boolean }, now: Date): Promise<void> {
   process.stderr.write(`auth ${auth.kind} from ${auth.from}\n`)
   process.env.CF_CHECK_SLOTS ??= String(CHECK_SLOTS)
   const lines: string[] = []
-  const fired = await tick(handle, root, claudeAgentSdk, now, undefined, undefined, CHAIN_MINUTES, gh, EACH, apart, lines)
+  const fired = await tick(handle, root, claudeAgentSdk, now, undefined, undefined, CHAIN_MINUTES, gh, EACH, apart, lines,
+    Entry.array().parse(parse(readFileSync(join(root, 'rules/registry.yaml'), 'utf8'))))
   const id = receipt(handle, saved(handle, upgraded(handle, root, { at: now.toISOString(), hhmm: hhmm(handle, now), dry: false,
     pipes: openPipes(handle, hhmm(handle, now)).length, fired: fired.length,
     exit: fired.some((f) => f.outcome === 'refuse') ? 1 : 0, note: tickNote(fired, overlapWaits(handle), lines) }),

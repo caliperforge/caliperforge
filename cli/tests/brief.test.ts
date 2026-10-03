@@ -5,11 +5,13 @@ import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import { registerLanes } from '../cf-lanes.ts'
-import { actors, actorSection, costs, costSection, drifts, driftSection, fileWaits, greptileLine, hands, heldBy, line, misses, missSection, rulings, section,
-  ticketSection, tickets, unpriced, waitLine, waits } from '../brief.ts'
+import { actors, actorSection, costs, costSection, fileWaits, greptileLine, hands, heldBy, line, misses, missSection, rulings, section, ticketSection,
+  tickets, unpriced, waitLine, waits } from '../brief.ts'
+import { driftSection } from '../drift.ts'
 import { hold } from '../../sequencer/hold.ts'
 import { monthly, reviewed } from '../../sequencer/ready.ts'
 import { put, SELF } from '../../sequencer/workspace.ts'
+import { drifts } from '../../store/drift.ts'
 import { repriced } from '../../store/events.ts'
 import { record as listFiles } from '../../store/files.ts'
 import type { Db } from '../../store/index.ts'
@@ -458,7 +460,7 @@ const DRIFT = 'drift (1)\n  #1\tDrift: hq is off\t2 d\n'
 test('D1 an open drift ticket is listed with its age', () => {
   const db = world()
   ticket(db, SELF, 1, 'Drift: hq is off')
-  expect(driftSection(drifts(db, NOW))).toBe(DRIFT)
+  expect(driftSection(drifts(db, SELF, NOW))).toBe(DRIFT)
 })
 
 test('D2 closed, non-drift and other-repo tickets are left out', () => {
@@ -467,11 +469,11 @@ test('D2 closed, non-drift and other-repo tickets are left out', () => {
   ticket(db, SELF, 2, 'Drift: desk is off', '2026-09-19T12:00:00.000Z')
   ticket(db, SELF, 3, 'hq is off')
   ticket(db, 'acme/widget', 4, 'Drift: hq is off')
-  expect(driftSection(drifts(db, NOW))).toBe(DRIFT)
+  expect(driftSection(drifts(db, SELF, NOW))).toBe(DRIFT)
 })
 
 test('D3 no open drift ticket prints none', () => {
-  expect(driftSection(drifts(world(), NOW))).toBe('drift (0)\n  none\n')
+  expect(driftSection(drifts(world(), SELF, NOW))).toBe('drift (0)\n  none\n')
 })
 
 test('with no waiting live plan the waits line reads none', () => {

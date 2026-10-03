@@ -37,7 +37,7 @@ it('D1 0064 adds desk tables; only comms.site_dir holds a path', () => {
   expect(() => { set(db, 'brief.reads_left', '/tmp', 'ceo', '2026-09-28') }).toThrow(/CHECK constraint failed/)
 })
 
-it('D1 D2 D3 0079 seeds comms.story_dir; it holds a path, brief.reads_left does not', () => {
+it('D1 D2 D3 0079 seeds comms.story_dir and lets it hold a path', () => {
   const db = open(':memory:')
   migrate(db, join(root, 'schema'))
   expect(get(db, 'comms.story_dir')).toBe('~/cf_comms/story')

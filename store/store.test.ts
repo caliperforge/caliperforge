@@ -14,8 +14,8 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
 it('applies every migration once and records the version', () => {
   const db = open(':memory:')
-  expect(migrate(db, join(root, 'schema'))).toEqual(['0001_init.sql', '0002_rulings.sql', '0003_runs_rule_hash.sql', '0004_one_disposition_per_verdict.sql', '0005_tick.sql', '0006_runs_transcript_path.sql', '0007_batch.sql', '0008_head_digest.sql', '0009_open_loop.sql', '0010_lanes.sql', '0011_issue_plans.sql', '0012_feeder.sql', '0013_internal_plans.sql', '0014_adopted_pr.sql', '0015_brief_read.sql', '0017_plan_files.sql', '0018_refusals.sql', '0019_signal_words.sql', '0020_leases.sql', '0021_parts.sql', '0022_band_p95.sql', '0023_reading_holds_ceiling.sql', '0024_run_token_wall.sql', '0025_wait_reason.sql', '0026_decisions.sql', '0027_verdict_tree.sql', '0028_priority_label.sql', '0029_merges.sql', '0030_kept_verdicts.sql', '0031_file_overlap.sql', '0032_stray_files.sql', '0033_quick_lane.sql', '0034_target_part.sql', '0035_caps_skip_cache_reads.sql', '0036_decisions_blocked_on_ceo.sql', '0037_decisions_applied.sql', '0039_events.sql', '0040_hq_path.sql', '0041_signal_head.sql', '0042_now.sql', '0043_reviewer_not_builder_skips_fixer.sql', '0044_tickets.sql', '0045_records.sql', '0046_brief_lines.sql', '0047_runs_cost.sql', '0048_scan_evidence.sql', '0049_part_after.sql', '0050_target_take.sql', '0051_held_by.sql', '0052_ratchet_counts.sql', '0053_tick_lanes.sql', '0054_gardens.sql', '0055_ticket_times.sql', '0056_size_limits.sql', '0057_refusal_ticket.sql', '0058_comms_once.sql', '0059_reviewer_not_builder_skips_coo_lite.sql', '0060_cache_read_tokens.sql', '0061_cache_write_tokens.sql', '0062_window_tokens_by_type.sql', '0063_uniswap_lane.sql', '0064_desk.sql', '0065_prices.sql', '0066_parked_why.sql', '0067_outcomes.sql', '0068_band_open_0928.sql', '0069_events_plan_nullable.sql', '0070_ticket_outcomes.sql', '0071_desk_proof_at.sql', '0072_desk_pack.sql', '0073_desk_scorecard.sql', '0075_queue_order.sql', '0076_prices_opus.sql', '0077_director_actor.sql', '0078_drift_at.sql', '0079_story_dir.sql', '0080_ratchet_mode.sql', '0081_science_dir.sql'])
-  expect(db.pragma('user_version', { simple: true })).toBe(81)
+  expect(migrate(db, join(root, 'schema'))).toEqual(['0001_init.sql', '0002_rulings.sql', '0003_runs_rule_hash.sql', '0004_one_disposition_per_verdict.sql', '0005_tick.sql', '0006_runs_transcript_path.sql', '0007_batch.sql', '0008_head_digest.sql', '0009_open_loop.sql', '0010_lanes.sql', '0011_issue_plans.sql', '0012_feeder.sql', '0013_internal_plans.sql', '0014_adopted_pr.sql', '0015_brief_read.sql', '0017_plan_files.sql', '0018_refusals.sql', '0019_signal_words.sql', '0020_leases.sql', '0021_parts.sql', '0022_band_p95.sql', '0023_reading_holds_ceiling.sql', '0024_run_token_wall.sql', '0025_wait_reason.sql', '0026_decisions.sql', '0027_verdict_tree.sql', '0028_priority_label.sql', '0029_merges.sql', '0030_kept_verdicts.sql', '0031_file_overlap.sql', '0032_stray_files.sql', '0033_quick_lane.sql', '0034_target_part.sql', '0035_caps_skip_cache_reads.sql', '0036_decisions_blocked_on_ceo.sql', '0037_decisions_applied.sql', '0039_events.sql', '0040_hq_path.sql', '0041_signal_head.sql', '0042_now.sql', '0043_reviewer_not_builder_skips_fixer.sql', '0044_tickets.sql', '0045_records.sql', '0046_brief_lines.sql', '0047_runs_cost.sql', '0048_scan_evidence.sql', '0049_part_after.sql', '0050_target_take.sql', '0051_held_by.sql', '0052_ratchet_counts.sql', '0053_tick_lanes.sql', '0054_gardens.sql', '0055_ticket_times.sql', '0056_size_limits.sql', '0057_refusal_ticket.sql', '0058_comms_once.sql', '0059_reviewer_not_builder_skips_coo_lite.sql', '0060_cache_read_tokens.sql', '0061_cache_write_tokens.sql', '0062_window_tokens_by_type.sql', '0063_uniswap_lane.sql', '0064_desk.sql', '0065_prices.sql', '0066_parked_why.sql', '0067_outcomes.sql', '0068_band_open_0928.sql', '0069_events_plan_nullable.sql', '0070_ticket_outcomes.sql', '0071_desk_proof_at.sql', '0072_desk_pack.sql', '0073_desk_scorecard.sql', '0075_queue_order.sql', '0076_prices_opus.sql', '0077_director_actor.sql', '0078_drift_at.sql', '0079_story_dir.sql', '0080_ratchet_mode.sql', '0081_science_dir.sql', '0082_held_until.sql'])
+  expect(db.pragma('user_version', { simple: true })).toBe(82)
   expect(migrate(db, join(root, 'schema'))).toEqual([])
 })
 
@@ -54,7 +54,7 @@ it('D4 0079 keeps every settings row', () => {
   const db = open(':memory:')
   migrate(db, old)
   const before = db.prepare('SELECT * FROM settings ORDER BY key').all()
-  expect(migrate(db, join(root, 'schema'))).toEqual(['0079_story_dir.sql', '0080_ratchet_mode.sql', '0081_science_dir.sql'])
+  expect(migrate(db, join(root, 'schema'))).toEqual(['0079_story_dir.sql', '0080_ratchet_mode.sql', '0081_science_dir.sql', '0082_held_until.sql'])
   expect(db.prepare("SELECT * FROM settings WHERE key NOT IN ('comms.story_dir', 'ratchet.mode', 'science.dir') ORDER BY key").all())
     .toEqual(before)
   expect(get(db, 'comms.story_dir')).toBe('~/cf_comms/story')
@@ -91,7 +91,7 @@ it('D1 D5 0060-0062 keep totals and CHECK, split windows by type', () => {
   expect(before).toEqual([['five_hour', 1, 213], ['seven_day', 2, 638]])
   expect(() => windows(db)).toThrow()
 
-  expect(migrate(db, join(root, 'schema'))).toEqual(['0060_cache_read_tokens.sql', '0061_cache_write_tokens.sql', '0062_window_tokens_by_type.sql', '0063_uniswap_lane.sql', '0064_desk.sql', '0065_prices.sql', '0066_parked_why.sql', '0067_outcomes.sql', '0068_band_open_0928.sql', '0069_events_plan_nullable.sql', '0070_ticket_outcomes.sql', '0071_desk_proof_at.sql', '0072_desk_pack.sql', '0073_desk_scorecard.sql', '0075_queue_order.sql', '0076_prices_opus.sql', '0077_director_actor.sql', '0078_drift_at.sql', '0079_story_dir.sql', '0080_ratchet_mode.sql', '0081_science_dir.sql'])
+  expect(migrate(db, join(root, 'schema'))).toEqual(['0060_cache_read_tokens.sql', '0061_cache_write_tokens.sql', '0062_window_tokens_by_type.sql', '0063_uniswap_lane.sql', '0064_desk.sql', '0065_prices.sql', '0066_parked_why.sql', '0067_outcomes.sql', '0068_band_open_0928.sql', '0069_events_plan_nullable.sql', '0070_ticket_outcomes.sql', '0071_desk_proof_at.sql', '0072_desk_pack.sql', '0073_desk_scorecard.sql', '0075_queue_order.sql', '0076_prices_opus.sql', '0077_director_actor.sql', '0078_drift_at.sql', '0079_story_dir.sql', '0080_ratchet_mode.sql', '0081_science_dir.sql', '0082_held_until.sql'])
   expect(windows(db).map((w) => [w.kind, w.runs, w.tokens])).toEqual(before)
   for (const w of windows(db)) expect(w.uncached_tokens + w.cache_write_tokens + w.cache_read_tokens + w.output_tokens).toBe(w.tokens)
   expect(db.prepare('SELECT sum(input_tokens + cache_read_tokens + output_tokens) AS n FROM runs').get()).toEqual({ n: 638 })
@@ -109,7 +109,7 @@ it('D6 0071 sets each desk post proof_at to its written_date', () => {
   migrate(db, old)
   db.prepare(`INSERT INTO desk_posts (id, kind, dest, status, title, dek, body, sources, checks, work_date, written_date)
     VALUES (1, 'daily', 'site', 'proof', 't', 'd', 'b', '[]', '[]', '2026-09-20', '2026-09-21')`).run()
-  expect(migrate(db, join(root, 'schema'))).toEqual(['0071_desk_proof_at.sql', '0072_desk_pack.sql', '0073_desk_scorecard.sql', '0075_queue_order.sql', '0076_prices_opus.sql', '0077_director_actor.sql', '0078_drift_at.sql', '0079_story_dir.sql', '0080_ratchet_mode.sql', '0081_science_dir.sql'])
+  expect(migrate(db, join(root, 'schema'))).toEqual(['0071_desk_proof_at.sql', '0072_desk_pack.sql', '0073_desk_scorecard.sql', '0075_queue_order.sql', '0076_prices_opus.sql', '0077_director_actor.sql', '0078_drift_at.sql', '0079_story_dir.sql', '0080_ratchet_mode.sql', '0081_science_dir.sql', '0082_held_until.sql'])
   expect(db.prepare('SELECT proof_at FROM desk_posts').get()).toEqual({ proof_at: '2026-09-21' })
 })
 
@@ -124,7 +124,7 @@ it('D6 0072 keeps desk post columns, admits dest pack, not blog', () => {
     sources, checks, work_date, written_date, "order", proof_at)
     VALUES (1, 'daily', 'note', 'changes', 't', 'd', 'b', 'et', 'ed', 'eb', 'n', '["s"]', '["c"]', '2026-09-20', '2026-09-21', 3, '2026-09-22 10:00:00')`).run()
   const before = db.prepare('SELECT * FROM desk_posts').all()
-  expect(migrate(db, join(root, 'schema'))).toEqual(['0072_desk_pack.sql', '0073_desk_scorecard.sql', '0075_queue_order.sql', '0076_prices_opus.sql', '0077_director_actor.sql', '0078_drift_at.sql', '0079_story_dir.sql', '0080_ratchet_mode.sql', '0081_science_dir.sql'])
+  expect(migrate(db, join(root, 'schema'))).toEqual(['0072_desk_pack.sql', '0073_desk_scorecard.sql', '0075_queue_order.sql', '0076_prices_opus.sql', '0077_director_actor.sql', '0078_drift_at.sql', '0079_story_dir.sql', '0080_ratchet_mode.sql', '0081_science_dir.sql', '0082_held_until.sql'])
   expect(db.prepare('SELECT * FROM desk_posts').all()).toEqual(before)
   const insert = db.prepare(`INSERT INTO desk_posts (id, kind, dest, status, title, dek, body, sources, checks, work_date, written_date)
     VALUES (?, 'growth', ?, 'proof', 't', '', 'b', '[]', '[]', '2026-09-28', '2026-09-28')`)
@@ -145,10 +145,10 @@ it('D6 0073 keeps rows, admits scorecard and step 10, not blog', () => {
   db.prepare(`INSERT INTO plans (id, pipe_id, template, state, queued_at, step, title)
     VALUES (1, (SELECT min(id) FROM pipes), 'comms', 'running', '2026-09-28', 9, 'scorecard 2026-09-28')`).run()
   const before = db.prepare('SELECT * FROM desk_posts').all()
-  const plans = db.prepare('SELECT * FROM plans').all()
-  expect(migrate(db, join(root, 'schema'))).toEqual(['0073_desk_scorecard.sql', '0075_queue_order.sql', '0076_prices_opus.sql', '0077_director_actor.sql', '0078_drift_at.sql', '0079_story_dir.sql', '0080_ratchet_mode.sql', '0081_science_dir.sql'])
+  const plans = db.prepare('SELECT * FROM plans').all() as object[]
+  expect(migrate(db, join(root, 'schema'))).toEqual(['0073_desk_scorecard.sql', '0075_queue_order.sql', '0076_prices_opus.sql', '0077_director_actor.sql', '0078_drift_at.sql', '0079_story_dir.sql', '0080_ratchet_mode.sql', '0081_science_dir.sql', '0082_held_until.sql'])
   expect(db.prepare('SELECT * FROM desk_posts').all()).toEqual(before)
-  expect(db.prepare('SELECT * FROM plans').all()).toEqual(plans)
+  expect(db.prepare('SELECT * FROM plans').all()).toEqual(plans.map((p) => ({ ...p, held_until: null })))
   db.prepare("UPDATE plans SET step = 10, state = 'done' WHERE id = 1").run()
   const insert = db.prepare(`INSERT INTO desk_posts (id, kind, dest, status, title, dek, body, sources, checks, work_date, written_date)
     VALUES (?, 'scorecard', ?, 'proof', 't', '', 'b', '[]', '[]', '2026-09-28', '2026-09-28')`)
@@ -170,7 +170,7 @@ it('D5 0076 seeds Opus prices, prices past runs at 1-hour', () => {
   seed.run('claude-opus-5-5', 20089)
   seed.run('m', 20089)
   seed.run('claude-opus-5-5', null)
-  expect(migrate(db, join(root, 'schema'))).toEqual(['0076_prices_opus.sql', '0077_director_actor.sql', '0078_drift_at.sql', '0079_story_dir.sql', '0080_ratchet_mode.sql', '0081_science_dir.sql'])
+  expect(migrate(db, join(root, 'schema'))).toEqual(['0076_prices_opus.sql', '0077_director_actor.sql', '0078_drift_at.sql', '0079_story_dir.sql', '0080_ratchet_mode.sql', '0081_science_dir.sql', '0082_held_until.sql'])
   expect(db.prepare('SELECT model, input, cache_write, cache_write_1h, cache_read, output FROM prices ORDER BY model').raw().all())
     .toEqual([['claude-opus-5', 5, 6.25, 10, 0.5, 25], ['claude-opus-5-5', 4, 5, 8, 0.2, 20]])
   const runs = db.prepare('SELECT cache_write_1h_tokens, cost_computed_usd FROM runs ORDER BY id').raw().all() as [number | null, number | null][]
@@ -239,6 +239,18 @@ it('D1 D5 requeue/clearWaitsOn/holdOn/briefed set their columns', () => {
   expect(row('waits_on, held_why')).toEqual({ waits_on: null, held_why: 'waits' })
   briefed(db, plan, { title: 't', what: 'w', why: null, ends: 'e' })
   expect(row('title, what, why, ends')).toEqual({ title: 't', what: 'w', why: null, ends: 'e' })
+})
+
+it('D1 0082 holdOn stores held_until; leaving the hold clears it', () => {
+  const db = open(':memory:')
+  migrate(db, join(root, 'schema'))
+  const plan = addPlan(db, { pipe_id: 1, target_id: null, template: 'pr_path', state: 'running', queued_at: '2026-09-27T00:00:00.000Z',
+    lane: 'machine', seat: 'typescript_specialist', origin: 'https://github.com/caliperforge/caliperforge/issues/1', step: 4 })
+  const until = (): unknown => db.prepare('SELECT held_until FROM plans WHERE id = ?').get(plan)
+  holdOn(db, plan, 'recheck', null, '2026-10-04T22:00:00.000Z')
+  expect(until()).toEqual({ held_until: '2026-10-04T22:00:00.000Z' })
+  requeue(db, plan, 4)
+  expect(until()).toEqual({ held_until: null })
 })
 
 it('D4 resume skips unblocked plans, enters blocked ones by pipe', () => {

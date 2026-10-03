@@ -1,14 +1,15 @@
-import { cpSync, mkdtempSync, readFileSync } from 'node:fs'
+import { cpSync, mkdirSync, mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { expect, test } from 'vitest'
 import { all } from '../../cli/inbox.ts'
 import { fill } from '../../cli/digests.ts'
 import { file, LANE } from '../../cli/plan.ts'
-import type { Provider } from '../../providers/kind.ts'
+import type { Packet, Provider } from '../../providers/kind.ts'
 import { load } from '../../runner/rules.ts'
+import { decisions, touches } from '../../store/decisions.ts'
 import { runAt } from '../../store/events.ts'
-import { retried } from '../../store/holds.ts'
+import { retried, returnToLane } from '../../store/holds.ts'
 import { migrate, open, type Db } from '../../store/index.ts'
 import { busy } from '../../store/now.ts'
 import { addPart } from '../../store/parts.ts'
@@ -20,7 +21,7 @@ import { hold, unhold } from '../hold.ts'
 import type { Wire } from '../push.ts'
 import { rule } from '../rule.ts'
 import { parted } from '../split.ts'
-import { afresh, maybe, put } from '../workspace.ts'
+import { afresh, maybe, put, srcDir } from '../workspace.ts'
 
 const repo = join(import.meta.dirname, '../..')
 const now = new Date('2026-09-27T09:00:00.000Z')
@@ -45,7 +46,7 @@ const REPLY: Record<string, string> = {
   split: SPLIT,
   close: '---\nmove: close\nwhy: the work is on main\n---\n',
   file: '---\nmove: file\nwhy: the tick counts a turn twice\nticket: the tick counts a turn twice\n---\n',
-  ask_ceo: '---\nmove: ask_ceo\nwhy: a maintainer outside our org sees this\n---\n',
+  ask_ceo: '---\nmove: ask_ceo\nwhy: a maintainer outside our org sees this\nclass: 2\n---\n',
 }
 
 const PARTS = split(SPLIT) ?? []
@@ -418,4 +419,70 @@ test('parentAsk', async () => {
 test('record', async () => {
   const { db, home } = seeded('1')
   expect(await prompted(db, home)).toMatch(/# Record\n\n\d+ runs, \d+ tokens, \$\d+\.\d\d\n/)
+})
+
+const WHY = 'rename schema/0036_x.sql to 0040_x.sql in src and issue.md. '.repeat(5).trim()
+const FIX = `---\nmove: fix\nwhy: ${WHY}\n---\n`
+
+function bySeat(packets: Packet[], reply = FIX): Provider {
+  const coo = stub(reply)
+  const fix = stub('---\ndid: renamed the migration\nthen: return\nwhy: the rails find the file now\n---\n')
+  return { ...coo, fire: (p) => { packets.push(p); return (basename(p.transcript).startsWith('fixer') ? fix : coo).fire(p) } }
+}
+
+const fixLive = (db: Db) => db.exec(`INSERT INTO settings (key, value, who, origin_kind, origin_ref, set_at)
+  VALUES ('fixer.mode', 'live', 'ceo', 'ruling', 't', '2026-09-27')`)
+
+test('fixHandsOff', async () => {
+  const { db, home } = seeded('1')
+  fixLive(db)
+  mkdirSync(join(srcDir(home, 7), '.git'), { recursive: true })
+  const packets: Packet[] = []
+  await cooLite(db, home, row(db), bySeat(packets), now, () => undefined, wire())
+  expect(packets.find((p) => basename(p.transcript).startsWith('fixer'))?.prompt).toContain(`# Orchestrator\n\nask_coo: ${WHY}`)
+  expect(decisions(db, 7).map((d) => d.verb)).toEqual(['ask_coo'])
+  expect(touches(db, 7, now)).toBe(1)
+  expect(row(db).state).toBe('queued')
+  expect(told(db)).toEqual([{ actor: 'coo_lite', outcome: 'pass', message: `fix: ${WHY}` }])
+})
+
+test('fixFailsOnce', async () => {
+  const { db, home } = seeded('1')
+  const packets: Packet[] = []
+  const posted: string[] = []
+  await cooLite(db, home, row(db), bySeat(packets), now, (t) => void posted.push(t), wire())
+  expect(packets.map((p) => p.prompt.includes('# Fixer'))).toEqual([false, true])
+  expect(plan7(db)).toMatchObject({ held_by: 'ceo' })
+  expect(posted).toHaveLength(1)
+  expect(told(db).map((t) => t.outcome)).toEqual(['needs_ceo'])
+})
+
+test('returnMove', async () => {
+  const live = seeded('1')
+  const twin = seeded('1')
+  await run(live.db, live.home, '---\nmove: return\nwhy: a one-off network blip\n---\n')
+  afresh(twin.home, 7, returnToLane(twin.db, 7, 'coo_lite'))
+  expect(plan7(live.db)).toEqual(plan7(twin.db))
+  expect(row(live.db)).toMatchObject({ state: 'queued', step: 4 })
+  for (const reply of ['---\nmove: return\nwhy: a blip\n---\n', FIX]) {
+    const { db, home } = seeded(null)
+    fixLive(db)
+    const was = plans(db)
+    const packets: Packet[] = []
+    const posted: string[] = []
+    await cooLite(db, home, row(db), bySeat(packets, reply), now, (t) => void posted.push(t), wire())
+    expect(plans(db)).toEqual(was)
+    expect(packets).toHaveLength(1)
+    expect(posted).toEqual([])
+  }
+})
+
+test('engineeringNeverCeo', async () => {
+  expect(read('---\nmove: ask_ceo\nwhy: which file\n---\n')).toBeNull()
+  expect(read('---\nmove: ask_ceo\nwhy: which file\nclass: 5\n---\n')).toBeNull()
+  const { db, home } = seeded('1')
+  held(db, 7, 'coo', 'a stop')
+  await run(db, home, '---\nmove: ask_ceo\nwhy: which file\n---\n')
+  expect(told(db)).toEqual([{ actor: 'coo_lite', outcome: 'needs_ceo', message: 'ask_ceo: no readable answer' }])
+  expect(plan7(db)).toMatchObject({ held_by: 'coo' })
 })

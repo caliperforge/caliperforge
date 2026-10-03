@@ -74,7 +74,8 @@ test('D3 a missing science.dir is not created, records one event', () => {
 test('D4 due.md lists review dates from today to before today+7', () => {
   mkdirSync(join(dir, 'data'))
   writeFileSync(join(dir, 'data/interventions_v2.csv'), ['id,note,review_date', '1,"soon, quoted",2026-10-06',
-    '2,week,2026-10-10', '3,"was ""late""",2026-10-02'].join('\n'))
+    '2,week,2026-10-10', '3,"was ""late""",2026-10-02', ',no id,2026-10-04'].join('\n'))
   pull(seeded(), now)
-  expect(lines('due.md')).toEqual(['| id | note | review_date |', '| --- | --- | --- |', '| 1 | soon, quoted | 2026-10-06 |'])
+  expect(lines('due.md')).toEqual(['| id | note | review_date |', '| --- | --- | --- |', '| 1 | soon, quoted | 2026-10-06 |',
+    '|  | no id | 2026-10-04 |'])
 })

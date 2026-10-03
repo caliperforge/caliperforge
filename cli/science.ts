@@ -47,7 +47,7 @@ function due(path: string, today: string): string[] {
 }
 
 function cells(line: string): string[] {
-  return [...line.matchAll(/(?:^|,)(?:"((?:[^"]|"")*)"|([^,]*))/g)].map((m) => m[1]?.replaceAll('""', '"') ?? m[2] ?? '')
+  return [...`,${line}`.matchAll(/,(?:"((?:[^"]|"")*)"|([^,]*))/g)].map((m) => m[1]?.replaceAll('""', '"') ?? m[2] ?? '')
 }
 
 const row = (r: string[]): string => `| ${r.map((c) => c.replaceAll('|', '\\|')).join(' | ')} |`

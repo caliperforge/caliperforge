@@ -28,10 +28,10 @@ function event(d: Db, at: string): void {
 
 test('switchOff', () => {
   const d = db()
-  const entries = [COO, { name: 'hq', switch: { key: 'hq.path' } }]
+  const entries = [COO, { name: 'desk', switch: { key: 'comms.site_dir' } }]
   event(d, '2026-10-03 09:00:00')
   d.exec("UPDATE settings SET value = '0' WHERE key = 'coo_lite.apply'")
-  expect(drift(d, entries, NOW).map((r) => [r.name, r.state])).toEqual([['coo_lite', 'off'], ['hq', 'off']])
+  expect(drift(d, entries, NOW).map((r) => [r.name, r.state])).toEqual([['coo_lite', 'off'], ['desk', 'off']])
   d.exec("DELETE FROM settings WHERE key = 'coo_lite.apply'")
   expect(drift(d, entries, NOW)[0]).toEqual({ name: 'coo_lite', state: 'off', detail: 'coo_lite.apply is unset' })
 })
@@ -52,7 +52,7 @@ test('fresh', () => {
   const registry = z.array(Entry).parse(parse(readFileSync(join(import.meta.dirname, '../../rules/registry.yaml'), 'utf8')))
   expect(registry.map((e) => e.name)).toEqual(['coo_lite', 'orchestrator', 'fixer', 'brief_writer', 'text_review',
     'growth_lead', 'gardener', 'ratchet', 'accounts', 'records', 'dispositions', 'signoffs', 'proposals',
-    'ratchet_refuse', 'hq', 'intake'])
+    'ratchet_refuse', 'intake'])
   expect(() => drift(d, registry, NOW)).not.toThrow()
   for (const bad of [{ gap: '2 days' }, { table: 'events;' }, { column: 'At' }]) {
     expect(() => Entry.parse({ name: 'x', ...bad })).toThrow()
@@ -79,12 +79,12 @@ test('dailyOnce', () => {
   const d = db()
   let sent = 0
   const wire = { file: (): string => `u${String(++sent)}` }
-  const hq = [{ name: 'hq', switch: { key: 'hq.path' } }]
-  expect(due(d, hq, new Date('2026-10-03T11:29:00Z'), wire)).toEqual([])
-  expect(due(d, hq, new Date('2026-10-03T11:30:00Z'), wire)).toEqual(['u1'])
-  expect(due(d, hq, new Date('2026-10-04T05:00:00Z'), wire)).toEqual([])
-  expect(due(d, hq, new Date('2026-10-04T11:30:00Z'), wire)).toEqual(['u2'])
+  const desk = [{ name: 'desk', switch: { key: 'comms.site_dir' } }]
+  expect(due(d, desk, new Date('2026-10-03T11:29:00Z'), wire)).toEqual([])
+  expect(due(d, desk, new Date('2026-10-03T11:30:00Z'), wire)).toEqual(['u1'])
+  expect(due(d, desk, new Date('2026-10-04T05:00:00Z'), wire)).toEqual([])
+  expect(due(d, desk, new Date('2026-10-04T11:30:00Z'), wire)).toEqual(['u2'])
   const e = db()
-  expect(() => due(e, hq, new Date('2026-10-03T11:30:00Z'), { file: () => { throw new Error('gh') } })).toThrow('gh')
+  expect(() => due(e, desk, new Date('2026-10-03T11:30:00Z'), { file: () => { throw new Error('gh') } })).toThrow('gh')
   expect(setting(e, 'drift.at')).toBe('2026-10-03')
 })

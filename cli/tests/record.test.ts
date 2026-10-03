@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import type { Db } from '../../store/index.ts'
+import { repos } from '../../store/record.ts'
 import { adopt } from '../adopt.ts'
 import type { Pr } from '../gh.ts'
 import { fill, render, still } from '../record.ts'
@@ -127,6 +128,16 @@ test('a second fill rewrites rows in place, showing the new state', () => {
   const rows = fill(db, REPO, (repo, no) => view(repo, no, { state: 'MERGED', mergedAt: `${TODAY}T10:00:00Z` }))
   expect(rows.map((r) => [r.pr, r.state, r.merged_at])).toEqual([[282, 'MERGED', `${TODAY}T10:00:00Z`]])
   expect(still(db, REPO)).toBe(0)
+})
+
+test('D4: repos lists each repo once, not an issue-only one', () => {
+  const db = fresh(schema)
+  const d = dir()
+  adopted(db, d, REPO, 282)
+  pushed(db, d, 290)
+  adopted(db, d, OTHER, 5)
+  db.exec(`UPDATE targets SET evidence = 'https://github.com/${OTHER}/issues/5' WHERE repo = '${OTHER}'`)
+  expect(repos(db)).toEqual([REPO])
 })
 
 test('a repo that is not owner/repo is refused before gh is read', () => {

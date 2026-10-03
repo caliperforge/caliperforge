@@ -28,7 +28,7 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
   for (const signal of capture(db, read, root, labels)) started(db, signal, root, wire)
   daily(db, now)
   weekly(db, now)
-  if (registry !== undefined) due(db, registry, now, wire ?? WIRE)
+  if (registry !== undefined) due(db, registry, now, wire ?? WIRE, read)
   if (labels !== undefined) (lines ?? []).push(...intake(db, root, labels))
   reap(root, terminal(db))
   reprice(db, labels)

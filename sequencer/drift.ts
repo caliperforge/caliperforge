@@ -1,7 +1,10 @@
 import { z } from 'zod'
+import type { Pr } from '../cli/gh.ts'
+import { fill } from '../cli/record.ts'
 import { holds, newest, openTicket, setting } from '../store/drift.ts'
 import type { Db } from '../store/index.ts'
 import { get, hhmm, set, zone } from '../store/lanes.ts'
+import { repos } from '../store/record.ts'
 import type { Wire } from './push.ts'
 import { SELF } from './workspace.ts'
 
@@ -58,10 +61,12 @@ export function filed(db: Db, drifted: Drifted[], wire: Pick<Wire, 'file'>): str
   })
 }
 
-export function due(db: Db, registry: Entry[], now: Date, wire: Pick<Wire, 'file'>): string[] {
+export function due(db: Db, registry: Entry[], now: Date, wire: Pick<Wire, 'file'>,
+  read: (repo: string, no: number) => Pr): string[] {
   if (hhmm(db, now) < '05:30') return []
   const day = new Date(now.getTime() + zone(db) * 60000).toISOString().slice(0, 10)
   if (day <= get(db, 'drift.at')) return []
   set(db, 'drift.at', day, 'pr', now.toISOString())
+  for (const repo of repos(db)) fill(db, repo, read)
   return filed(db, drift(db, registry, now), wire)
 }

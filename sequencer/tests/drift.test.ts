@@ -4,6 +4,7 @@ import { parse } from 'yaml'
 import { z } from 'zod'
 import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
+import type { Pr } from '../../cli/gh.ts'
 import { decide } from '../../store/approvals.ts'
 import { setting } from '../../store/drift.ts'
 import type { Db } from '../../store/index.ts'
@@ -92,11 +93,58 @@ test('dailyOnce', () => {
   let sent = 0
   const wire = { file: (): string => `u${String(++sent)}` }
   const desk = [{ name: 'desk', switch: { key: 'comms.site_dir' } }]
-  expect(due(d, desk, new Date('2026-10-03T11:29:00Z'), wire)).toEqual([])
-  expect(due(d, desk, new Date('2026-10-03T11:30:00Z'), wire)).toEqual(['u1'])
-  expect(due(d, desk, new Date('2026-10-04T05:00:00Z'), wire)).toEqual([])
-  expect(due(d, desk, new Date('2026-10-04T11:30:00Z'), wire)).toEqual(['u2'])
+  expect(due(d, desk, new Date('2026-10-03T11:29:00Z'), wire, unread)).toEqual([])
+  expect(due(d, desk, new Date('2026-10-03T11:30:00Z'), wire, unread)).toEqual(['u1'])
+  expect(due(d, desk, new Date('2026-10-04T05:00:00Z'), wire, unread)).toEqual([])
+  expect(due(d, desk, new Date('2026-10-04T11:30:00Z'), wire, unread)).toEqual(['u2'])
   const e = db()
-  expect(() => due(e, desk, new Date('2026-10-03T11:30:00Z'), { file: () => { throw new Error('gh') } })).toThrow('gh')
+  expect(() => due(e, desk, new Date('2026-10-03T11:30:00Z'), { file: () => { throw new Error('gh') } }, unread)).toThrow('gh')
   expect(setting(e, 'drift.at')).toBe('2026-10-03')
+})
+
+const RECORDS = [{ name: 'records', table: 'records', column: 'read_at', gap: '1d' }]
+const PR = 'https://github.com/acme/widget/pull/7'
+const unread = (): Pr => { throw new Error('read') }
+const nothing = { file: (): string => { throw new Error('filed') } }
+
+function ours(d: Db): Db {
+  d.exec(`INSERT INTO accounts (id, repo, measured_at, maintainers, doors, last_outsider_merge,
+    open_pr_age_p50_days, cross_repo_activity, pulse, evidence)
+    VALUES (1, 'acme/widget', '2026-09-01', 1, 1, '2026-08-01', 0, 0, 'cold', 'https://github.com/acme/widget/pulse');
+    INSERT INTO targets (id, account_id, repo, issue_no, named_merger, state, evidence_measured_at, evidence)
+    VALUES (1, 1, 'acme/widget', 7, 'maintainer', 'queued', '2026-09-01', '${PR}');
+    UPDATE plans SET target_id = 1`)
+  return d
+}
+
+function reader(asked: string[]): (repo: string, no: number) => Pr {
+  return (repo, no) => {
+    asked.push(`${repo}#${String(no)}`)
+    return { number: no, url: PR, state: 'OPEN', mergedAt: null, mergedBy: null, reviewDecision: null, comments: [],
+      reviews: [], author: { login: 'caliperforge' }, statusCheckRollup: null }
+  }
+}
+
+test('D1: the daily check reads our PRs into records first', () => {
+  const d = ours(db())
+  const asked: string[] = []
+  expect(due(d, RECORDS, new Date('2026-10-03T11:30:00Z'), nothing, reader(asked))).toEqual([])
+  expect(asked).toEqual(['acme/widget#7'])
+  expect(d.prepare('SELECT repo, pr, plan FROM records').all()).toEqual([{ repo: 'acme/widget', pr: 7, plan: 1 }])
+})
+
+test('D2: before 05:30 or again that day, nothing is read or filed', () => {
+  const d = ours(db())
+  expect(due(d, RECORDS, new Date('2026-10-03T11:29:00Z'), nothing, unread)).toEqual([])
+  d.exec("UPDATE settings SET value = '2026-10-03' WHERE key = 'drift.at'")
+  expect(due(d, RECORDS, new Date('2026-10-03T12:00:00Z'), nothing, unread)).toEqual([])
+})
+
+test('D3: a failed read throws, drift.at set, no retry that day', () => {
+  const d = ours(db())
+  expect(() => due(d, RECORDS, new Date('2026-10-03T11:30:00Z'), nothing, unread)).toThrow('read')
+  expect(setting(d, 'drift.at')).toBe('2026-10-03')
+  const asked: string[] = []
+  expect(due(d, RECORDS, new Date('2026-10-03T12:00:00Z'), nothing, reader(asked))).toEqual([])
+  expect(asked).toEqual([])
 })

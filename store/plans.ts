@@ -142,7 +142,7 @@ export function underCap(pipe: PipeRow, plans: PlanRow[], leased = new Set<numbe
   return out
 }
 
-export const BUILT = "seat NOT IN ('fixer', 'orchestrator', 'coo_lite')"
+export const BUILT = "seat NOT IN ('fixer', 'orchestrator', 'coo_lite', 'director')"
 
 /** Whether a builder has ever run on this plan: a rewind onto step 1 finds the ticket it was built against, not a fresh one. */
 export function builderRan(db: Db, plan: number): boolean {

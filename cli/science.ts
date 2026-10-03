@@ -1,16 +1,17 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { maybe } from '../sequencer/workspace.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { get, zone } from '../store/lanes.ts'
-import { DAILY, daily } from '../store/science.ts'
+import { type Cell, DAILY, daily, OUTSIDE } from '../store/science.ts'
 
 const DAY = 86400000
 
 const shift = (day: string, days: number): string => new Date(Date.parse(day) + days * DAY).toISOString().slice(0, 10)
 
-export function pull(db: Db, now: Date, since?: string): string[] {
+export function pull(db: Db, root: string, now: Date, since?: string): string[] {
   const value = get(db, 'science.dir')
   const dir = value.startsWith('~/') ? join(homedir(), value.slice(2)) : value
   if (dir === '' || !existsSync(dir)) {
@@ -25,12 +26,22 @@ export function pull(db: Db, now: Date, since?: string): string[] {
   mkdirSync(out, { recursive: true })
   const csvs = Object.entries(DAILY).map(([name, sql]) => {
     const { columns, rows } = daily(db, sql, days)
-    const query = `"${sql.replaceAll('"', '""')}"`
-    return put(join(out, `${name}.csv`), [`${columns.join(',')},query`,
-      ...rows.map((r) => `${r.map((c) => String(c ?? '')).join(',')},${query}`)])
+    return csv(join(out, `${name}.csv`), sql, columns, rows)
   })
-  return [...csvs, put(join(out, 'due.md'), due(join(dir, 'data/interventions_v2.csv'), today))]
+  const outside = daily(db, OUTSIDE, days)
+  const at = outside.columns.indexOf('greptile_head')
+  const reviewed = csv(join(out, 'review_vs_outside.csv'), OUTSIDE, outside.columns.map((c, i) => i === at ? 'greptile_findings' : c),
+    outside.rows.map((r) => r.map((c, i) => i === at && c !== null ? findings(root, Number(r[0]), String(c)) : c)))
+  return [...csvs, reviewed, put(join(out, 'due.md'), due(join(dir, 'data/interventions_v2.csv'), today))]
 }
+
+function csv(path: string, sql: string, columns: string[], rows: Cell[][]): string {
+  const query = `"${sql.replaceAll('"', '""')}"`
+  return put(path, [`${columns.join(',')},query`, ...rows.map((r) => `${r.map((c) => String(c ?? '')).join(',')},${query}`)])
+}
+
+const findings = (root: string, plan: number, head: string): number =>
+  (maybe(root, plan, `findings-${head}.md`) ?? '').split('\n').filter((l) => l.startsWith('- G')).length
 
 function put(path: string, lines: string[]): string {
   writeFileSync(path, `${lines.join('\n')}\n`)

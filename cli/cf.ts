@@ -13,7 +13,6 @@ import { garden } from '../sequencer/garden.ts'
 import type { Fired } from '../sequencer/kind.ts'
 import { CHECK_SLOTS } from '../sequencer/checks.ts'
 import { behind, upgraded } from '../sequencer/upgrade.ts'
-import { saved } from '../sequencer/hq.ts'
 import { late } from '../sequencer/signals.ts'
 import { signoffs } from '../sequencer/signoff.ts'
 import { byHand } from '../sequencer/coolite.ts'
@@ -119,10 +118,9 @@ async function ticked(options: { dry?: boolean }, now: Date): Promise<void> {
   const lines: string[] = []
   const fired = await tick(handle, root, claudeAgentSdk, now, undefined, undefined, CHAIN_MINUTES, gh, EACH, apart, lines,
     Entry.array().parse(parse(readFileSync(join(root, 'rules/registry.yaml'), 'utf8'))))
-  const id = receipt(handle, saved(handle, upgraded(handle, root, { at: now.toISOString(), hhmm: hhmm(handle, now), dry: false,
+  const id = receipt(handle, upgraded(handle, root, { at: now.toISOString(), hhmm: hhmm(handle, now), dry: false,
     pipes: openPipes(handle, hhmm(handle, now)).length, fired: fired.length,
-    exit: fired.some((f) => f.outcome === 'refuse') ? 1 : 0, note: tickNote(fired, overlapWaits(handle), lines) }),
-  fired.filter((f) => f.state === 'done').map((f) => f.plan)))
+    exit: fired.some((f) => f.outcome === 'refuse') ? 1 : 0, note: tickNote(fired, overlapWaits(handle), lines) }))
   slots(handle, id, slack(handle, now))
   watch(handle, root, now, alerter())
   const news = events(handle, fired, now.toISOString())

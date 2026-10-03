@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { beforeEach, expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import { tickNote } from '../../cli/brief.ts'
+import { flow } from '../../cli/flow.ts'
 import { WINDOW, type Read } from '../../cli/gh.ts'
 import { gates } from '../../store/approvals.ts'
 import { pushedRow } from '../../store/deliverables.ts'
@@ -96,6 +97,15 @@ test('D3: a delisted queued plan halts; a running one does not', () => {
     { origin: url(51), state: 'running' },
     { origin: url(52), state: 'blocked_on_ceo' },
   ])
+})
+
+test('haltSays: a halt leaves one event with its reason, and flow lists it', () => {
+  const db = piped()
+  queue(db, 50)
+  intake(db, root, canned([{ number: 50, labels: ['bug'] }]))
+  const why = `${url(50)} is closed or has lost its lane label`
+  expect(ofKind(db, 'halted')).toEqual([{ plan: 1, kind: 'halted', actor: 'tick', outcome: 'refuse', message: why }])
+  expect(flow(db, root, new Date('2026-09-29T12:00:00Z'))).toContain(`plan 1\thalted: ${why}\tcf return 1\n`)
 })
 
 test('D4: an issue a part of a split names is not adopted', () => {

@@ -4,6 +4,7 @@ import { dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { expect, it } from 'vitest'
 import { walk } from '../checks/tree.ts'
+import { eventsOf } from './events.ts'
 import { addRule, dump, migrate, open, rules } from './index.ts'
 import { get, set, windows } from './lanes.ts'
 import { setLimit } from './limits.ts'
@@ -199,15 +200,19 @@ it('D5: end clears wait_reason and waits_on on every end', () => {
     lane: 'machine', seat: 'typescript_specialist', origin: 'https://github.com/caliperforge/caliperforge/issues/2', step: 0 })
   const wait = (): unknown => db.prepare("UPDATE plans SET wait_reason = 'file_overlap', waits_on = ? WHERE id = ?").run(other, plan)
   const row = (): unknown => db.prepare('SELECT state, wait_reason, waits_on FROM plans WHERE id = ?').get(plan)
+  const halts = [{ actor: 'tick', outcome: 'refuse', message: 'issue 1 closed' }]
   wait()
-  end(db, plan, 'halted')
+  end(db, plan, 'halted', 'issue 1 closed')
   expect(row()).toEqual({ state: 'halted', wait_reason: null, waits_on: null })
+  expect(eventsOf(db, plan, 'halted')).toEqual(halts)
   wait()
   end(db, plan, 'refused')
   expect(row()).toEqual({ state: 'refused', wait_reason: null, waits_on: null })
   wait()
   end(db, plan, 'done')
   expect(row()).toEqual({ state: 'done', wait_reason: null, waits_on: null })
+  expect(eventsOf(db, plan, 'halted')).toEqual(halts)
+  expect(db.prepare('SELECT count(*) AS n FROM events').get()).toEqual({ n: 1 })
 })
 
 it('D1 D5 requeue/clearWaitsOn/holdOn/briefed set their columns', () => {

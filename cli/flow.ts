@@ -37,7 +37,7 @@ export function findings(db: Db, root: string, now: Date): Finding[] {
   const startable = new Set(slack(db, now).filter((s) => s.startable > 0).map((s) => s.pipe.id))
   return db.prepare('SELECT * FROM plans ORDER BY id').all().map((r) => Row.parse(r)).flatMap((p) => {
     const note = maybe(root, p.id, 'parked.md')
-    const hit = landed(db, p) ?? stale(db, p, note) ?? repeated(db, p, note, now) ?? ownerless(p, note) ?? overlapped(p, startable)
+    const hit = landed(db, p) ?? stale(db, p, note) ?? halted(db, p) ?? repeated(db, p, note, now) ?? ownerless(p, note) ?? overlapped(p, startable)
     return hit === null ? [] : [{ plan: p.id, step: p.step, what: hit[0], fix: hit[1] }]
   })
 }
@@ -77,6 +77,12 @@ function stale(db: Db, p: Row, note: string | null): Hit {
   const { closed } = db.prepare(`SELECT EXISTS (SELECT 1 FROM tickets WHERE repo = ?)
     AND NOT EXISTS (SELECT 1 FROM tickets WHERE repo = ? AND number = ? AND closed_at IS NULL) AS closed`).get(ref.repo, ref.repo, ref.no) as { closed: number }
   return closed === 1 ? [`held on closed issue #${String(ref.no)}`, `cf unpark ${String(p.id)}`] : null
+}
+
+function halted(db: Db, p: Row): Hit {
+  if (p.state !== 'halted') return null
+  const row = db.prepare("SELECT message FROM events WHERE plan = ? AND kind = 'halted' ORDER BY id DESC LIMIT 1").get(p.id) as { message: string } | undefined
+  return [`halted: ${row?.message ?? 'no reason recorded'}`, `cf return ${String(p.id)}`]
 }
 
 function repeated(db: Db, p: Row, note: string | null, now: Date): Hit {

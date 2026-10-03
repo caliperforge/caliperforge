@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { logged } from './events.ts'
 import type { Db } from './index.ts'
 
 export const PipeRow = z.object({
@@ -242,8 +243,11 @@ export function finish(db: Db, plan: PlanRow): void {
   db.prepare("UPDATE plans SET step = ?, state = 'done', wait_reason = NULL, waits_on = NULL WHERE id = ?").run(plan.step + 1, plan.id)
 }
 
-export function end(db: Db, plan: number, state: 'done' | 'refused' | 'halted'): void {
+export function end(db: Db, plan: number, state: 'done' | 'refused'): void
+export function end(db: Db, plan: number, state: 'halted', why: string): void
+export function end(db: Db, plan: number, state: 'done' | 'refused' | 'halted', why?: string): void {
   db.prepare('UPDATE plans SET state = ?, wait_reason = NULL, waits_on = NULL WHERE id = ?').run(state, plan)
+  if (why !== undefined) logged(db, { plan, kind: 'halted', actor: 'tick', outcome: 'refuse', message: why, pointer: null, run: null })
 }
 
 /** A signal on a pushed PR puts the plan back on the review step it escaped; the head it was signed at is no longer the head. */

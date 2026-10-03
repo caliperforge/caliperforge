@@ -1,0 +1,72 @@
+- name: coo_lite
+  switch: { key: coo_lite.apply, value: '1' }
+  table: events
+  column: at
+  where: kind = 'coo_lite'
+  gap: 2d
+- name: orchestrator
+  switch: { key: orchestrator.apply, value: '1' }
+  table: decisions
+  column: at
+  gap: 2d
+- name: fixer
+  switch: { key: fixer.mode, value: live }
+  table: runs
+  column: at
+  where: seat = 'fixer'
+  gap: 2d
+- name: brief_writer
+  table: runs
+  column: at
+  where: seat = 'brief_writer'
+  gap: 1d
+- name: text_review
+  table: runs
+  column: at
+  where: seat = 'text_review'
+  gap: 2d
+- name: growth_lead
+  table: runs
+  column: at
+  where: seat = 'growth_lead'
+  gap: 7d
+- name: gardener
+  table: gardens
+  column: day
+  gap: 2d
+- name: ratchet
+  table: events
+  column: at
+  where: kind = 'ratchet'
+  gap: 7d
+- name: accounts
+  table: accounts
+  column: measured_at
+  gap: 7d
+- name: records
+  table: records
+  column: read_at
+  gap: 1d
+- name: dispositions
+  table: dispositions
+  column: id
+- name: signoffs
+  table: events
+  column: at
+  where: kind = 'signoff'
+  gap: 7d
+- name: proposals
+  table: proposals
+  column: id
+- name: ratchet_refuse
+  switch: { key: ratchet.mode, value: refuse }
+- name: hq
+  switch: { key: hq.path }
+- name: desk
+  switch: { key: comms.site_dir }
+- name: intake
+  table: plans
+  column: queued_at
+  where: template IN ('pr_path', 'research', 'comms')
+  gap: 1d
+  while: EXISTS (SELECT 1 FROM pipes WHERE enabled = 1)

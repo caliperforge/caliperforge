@@ -102,8 +102,8 @@ function lanes(db: Db, root: string, now: Date, post: Post): void {
 }
 
 /** A halt is what `halt()` in cf.ts writes: a refused lap fired something, and a crash is the machine-down alert's. */
-function halt(r: Receipt): boolean {
-  return r.exit === 1 && r.fired === 0 && !r.note.startsWith(CRASHED)
+function halt({ exit, fired, note }: Receipt): boolean {
+  return exit === 1 && fired === 0 && !note.startsWith(CRASHED)
 }
 
 function halts(db: Db, root: string, post: Post): void {

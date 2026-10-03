@@ -175,7 +175,7 @@ test('writer D4: a reply with no learnings fence reads as null', () => {
   expect(drafted(fixture('no-learnings.md'))).toBeNull()
 })
 
-test('D5 D7: gather on an untitled plan keys to the local day\'s titled, non-blip refusals', () => {
+test('D5 D7: gather keys an untitled plan to the local day', () => {
   const w = comms()
   const today = refusal(w, 0)
   refusal(w, 1)
@@ -185,23 +185,21 @@ test('D5 D7: gather on an untitled plan keys to the local day\'s titled, non-bli
   expect(packet).toMatchObject({ day: local(w), learned: [], landed: [], refusals: [{ id: today, plan: 1, step: 0, title: null }] })
 })
 
-test('D1-D6: gather writes the titled day\'s learnings, drift, decisions, landings and refusals at local time', () => {
+test('D1-D6: gather packs the titled day at local time', () => {
   const w = comms()
   titled(w, 1, 'daily 2026-09-27')
-  const [late, early] = ['2026-09-28 03:00:00', '2026-09-27 05:00:00']
-  w.db.prepare("INSERT INTO desk_learnings (date, numbers, items, sources) VALUES ('2026-09-27', '[]', ?, '[]')").run('[{"title":"a lesson"}]')
-  w.db.prepare(`INSERT INTO tickets (repo, number, title, lane, opened_at) VALUES
-    ('r', 1, 'Drift: hq is off', 'machine', ?), ('r', 2, 'Drift: desk is off', 'machine', ?), ('r', 3, 'not drift', 'machine', ?)`).run(late, early, late)
-  const event = w.db.prepare("INSERT INTO events (plan, at, kind, actor, outcome, message) VALUES (1, ?, ?, ?, 'pass', ?)")
-  for (const [at, kind, actor] of [[late, 'hold', 'coo_lite'], [late, 'return', 'director'], [late, 'retry', 'ceo'], [early, 'hold', 'coo_lite']] as const) {
-    event.run(at, kind, actor, `${actor} ${kind}`)
-  }
-  for (const [id, at] of [[2, late], [3, early]] as const) {
-    w.db.prepare(`INSERT INTO plans (id, pipe_id, template, state, queued_at, step, retries, title, lane, seat, origin, head_digest)
-      VALUES (?, 1, 'pr_path', 'done', ?, 0, 0, ?, 'machine', 'typescript_specialist', ?, ?)`).run(id, at, `job ${String(id)}`, `https://github.com/r/issues/${String(id)}`, 'd'.repeat(64))
-    w.db.prepare(`INSERT INTO approvals (subject_kind, subject_id, subject_digest, who, decision, approved_at)
-      VALUES ('plan', ?, ?, 'gates', 'approved', ?)`).run(id, 'd'.repeat(64), at)
-  }
+  const [late, early, d] = ['2026-09-28 03:00:00', '2026-09-27 05:00:00', 'd'.repeat(64)]
+  w.db.exec(`INSERT INTO desk_learnings (date, numbers, items, sources) VALUES ('2026-09-27', '[]', '[{"title":"a lesson"}]', '[]');
+    INSERT INTO tickets (repo, number, title, lane, opened_at) VALUES
+      ('r', 1, 'Drift: hq is off', 'machine', '${late}'), ('r', 2, 'Drift: desk is off', 'machine', '${early}'), ('r', 3, 'not drift', 'machine', '${late}');
+    INSERT INTO events (plan, at, kind, actor, outcome, message) VALUES (1, '${late}', 'hold', 'coo_lite', 'pass', 'coo_lite hold'),
+      (1, '${late}', 'return', 'director', 'pass', 'director return'), (1, '${late}', 'retry', 'ceo', 'pass', 'ceo retry'),
+      (1, '${early}', 'hold', 'coo_lite', 'pass', 'coo_lite hold');
+    INSERT INTO plans (id, pipe_id, template, state, queued_at, step, retries, title, lane, seat, origin, head_digest) VALUES
+      (2, 1, 'pr_path', 'done', '${late}', 0, 0, 'job 2', 'machine', 'typescript_specialist', 'https://github.com/r/issues/2', '${d}'),
+      (3, 1, 'pr_path', 'done', '${early}', 0, 0, 'job 3', 'machine', 'typescript_specialist', 'https://github.com/r/issues/3', '${d}');
+    INSERT INTO approvals (subject_kind, subject_id, subject_digest, who, decision, approved_at) VALUES
+      ('plan', 2, '${d}', 'gates', 'approved', '${late}'), ('plan', 3, '${d}', 'gates', 'approved', '${early}')`)
   const kept = refusal(w, 0, late)
   refusal(w, 0, early)
   refusal(w, 1, late)
@@ -213,7 +211,7 @@ test('D1-D6: gather writes the titled day\'s learnings, drift, decisions, landin
     drift: [{ number: 1, title: 'Drift: hq is off', at }],
     decisions: [{ plan: 1, title: 'daily 2026-09-27', actor: 'coo_lite', kind: 'hold', why: 'coo_lite hold', at },
       { plan: 1, title: 'daily 2026-09-27', actor: 'director', kind: 'return', why: 'director return', at }],
-    landed: [{ plan: 2, origin: 'https://github.com/r/issues/2', digest: 'd'.repeat(64), title: 'job 2', at }],
+    landed: [{ plan: 2, origin: 'https://github.com/r/issues/2', digest: d, title: 'job 2', at }],
     refusals: [{ id: kept, plan: 1, step: 0, title: 'daily 2026-09-27', at }],
   })
 })

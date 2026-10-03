@@ -12,9 +12,8 @@ import { ran } from '../sequencer/seat.ts'
 import { get, maybe, put } from '../sequencer/workspace.ts'
 import { edited } from '../store/desk.ts'
 import type { Db } from '../store/index.ts'
-import { zone } from '../store/lanes.ts'
+import { packetOf } from '../store/packet.ts'
 import type { PlanRow } from '../store/plans.ts'
-import { ofDay } from '../store/refusals.ts'
 import { DEFAULT_BUILDER, type Step } from './pr-path.ts'
 
 const row = (name: string, step: number): Step =>
@@ -27,24 +26,7 @@ export const steps: Step[] = ['gather', 'draft', 'facts', 'text_review', 'desk',
   : name === 'text_review' ? { ...row(name, i), seat: 'text_review', fires: 'seat', runs: 'text_review' } : row(name, i))
 
 export function gather(db: Db, root: string, plan: PlanRow): Outcome {
-  const minutes = zone(db)
-  const { title } = db.prepare('SELECT title FROM plans WHERE id = ?').get(plan.id) as { title: string | null }
-  const day = /\d{4}-\d{2}-\d{2}$/.exec(title ?? '')?.[0] ?? new Date(Date.now() + minutes * 60000).toISOString().slice(0, 10)
-  const shift = `${String(minutes)} minutes`
-  const on = [shift, shift, day]
-  const learned = db.prepare('SELECT items FROM desk_learnings WHERE date = ?').get(day) as { items: string } | undefined
-  const packet = {
-    day,
-    learned: JSON.parse(learned?.items ?? '[]') as unknown[],
-    drift: db.prepare(`SELECT number, title, datetime(opened_at, ?) AS at FROM tickets
-      WHERE title GLOB 'Drift: *' AND date(opened_at, ?) = ? ORDER BY opened_at, number`).all(...on),
-    decisions: db.prepare(`SELECT e.plan, p.title, e.actor, e.kind, e.message AS why, datetime(e.at, ?) AS at FROM events e
-      LEFT JOIN plans p ON p.id = e.plan WHERE e.actor IN ('director', 'coo_lite') AND date(e.at, ?) = ? ORDER BY e.id`).all(...on),
-    landed: db.prepare(`SELECT p.id AS plan, p.origin, a.subject_digest AS digest, p.title, datetime(a.approved_at, ?) AS at FROM plans p
-      JOIN approvals a ON a.subject_kind = 'plan' AND a.subject_id = p.id AND a.who = 'gates'
-      WHERE p.origin IS NOT NULL AND a.subject_digest = p.head_digest AND date(a.approved_at, ?) = ? ORDER BY p.id`).all(...on),
-    refusals: ofDay(db, day, minutes),
-  }
+  const packet = packetOf(db, plan.id)
   put(root, plan.id, 'packet.json', JSON.stringify(packet))
   return { outcome: 'pass', spans: [], note: `${String(packet.landed.length)} landed, ${String(packet.refusals.length)} refused` }
 }

@@ -64,14 +64,13 @@ export async function cooLite(db: Db, root: string, plan: PlanRow, provider: Pro
   return told(db, root, plan, now, { outcome: 'needs_ceo', message }, post)
 }
 
-interface Stop { id: number; answered: number | null; today: number; old: number }
+interface Stop { id: number; answered: number | null; today: number }
 
-/** One coo_lite run on the oldest stop once 3 pile up or one has waited 45 minutes. */
+/** One coo_lite run on the oldest stop, as soon as there is one: a stop that waits is a job that waits. */
 export async function piled(db: Db, root: string, provider: Provider, now: Date, post: Post = alerter(),
   wire: Wire = WIRE): Promise<void> {
   const fresh = stops(db, root, now, post)
-  const [oldest] = fresh
-  if (oldest === undefined || (fresh.length < 3 && oldest.old !== 1)) return
+  if (fresh[0] === undefined) return
   await fire(db, root, provider, now, post, wire, fresh)
 }
 
@@ -83,7 +82,7 @@ export async function byHand(db: Db, root: string, provider: Provider, now: Date
 function stops(db: Db, root: string, now: Date, post: Post): Stop[] {
   const rows = db.prepare(`SELECT p.id, e.ruled >= d.at AS answered,
       (SELECT count(*) FROM events WHERE plan = p.id AND kind = 'coo_lite' AND outcome = 'pass'
-        AND at >= datetime(@at, '-1 day')) AS today, d.at <= datetime(@at, '-45 minutes') AS old
+        AND at >= datetime(@at, '-1 day')) AS today
     FROM plans p JOIN decisions d ON d.id = (SELECT max(id) FROM decisions WHERE plan = p.id)
     LEFT JOIN (SELECT plan, max(at) AS ruled FROM events WHERE kind = 'coo_lite' GROUP BY plan) e ON e.plan = p.id
     WHERE p.state = 'blocked_on_ceo' AND p.held_by = 'coo' AND d.verb IN ('ask_coo', 'ask_ceo')

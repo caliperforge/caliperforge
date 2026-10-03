@@ -292,9 +292,8 @@ const pile = (db: Db, home: string, posted: string[] = []) =>
   piled(db, home, stub(REPLY.ask_ceo ?? ''), clock, (t) => void posted.push(t), wire())
 
 test.each([
-  { name: '3 stops fire one run on the oldest', ages: [30, 20, 10], want: [{ plan: 7 }] },
-  { name: '2 young stops fire none', ages: [30, 20], want: [] },
-  { name: 'one 45-minute stop fires one', ages: [45], want: [{ plan: 7 }] },
+  { name: 'oldestFirst', ages: [30, 20, 10], want: [{ plan: 7 }] },
+  { name: 'youngFires', ages: [1], want: [{ plan: 7 }] },
 ])('$name', async ({ ages, want }) => {
   const { db, home } = seeded('1')
   ages.forEach((m, i) => { stopped(db, 7 + i, m) })
@@ -335,13 +334,12 @@ test('D4: a third stop in a day goes to a person, once', async () => {
   expect(posted).toHaveLength(1)
 })
 
-test('a stop already answered does not count and is not fired on', async () => {
+test('answeredSkipped', async () => {
   const { db, home } = seeded('1')
   for (const [i, m] of [30, 20, 10].entries()) stopped(db, 7 + i, m)
   db.prepare(`INSERT INTO events (plan, at, kind, actor, outcome, message) VALUES (7, ?, 'coo_lite', 'coo_lite', 'needs_ceo', 'x')`).run(ago(5))
   await pile(db, home)
-  expect(fires(db)).toEqual([])
-  expect(told(db)).toHaveLength(1)
+  expect(fires(db)).toEqual([{ plan: 8 }])
 })
 
 test('coo_lite.max_daily caps the runs a day', async () => {

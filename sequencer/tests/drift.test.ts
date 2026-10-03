@@ -6,6 +6,7 @@ import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import { setting } from '../../store/drift.ts'
 import type { Db } from '../../store/index.ts'
+import { ratchetRules } from '../../store/lanes.ts'
 import { drift, due, Entry, filed } from '../drift.ts'
 import { SELF } from '../workspace.ts'
 
@@ -53,7 +54,8 @@ test('fresh', () => {
   expect(registry.map((e) => e.name)).toEqual(['coo_lite', 'orchestrator', 'fixer', 'brief_writer', 'text_review',
     'growth_lead', 'gardener', 'ratchet', 'accounts', 'records', 'dispositions', 'signoffs', 'proposals',
     'ratchet_refuse', 'intake'])
-  expect(() => drift(d, registry, NOW)).not.toThrow()
+  expect(ratchetRules(d).mode).toBe('refuse')
+  expect(drift(d, registry, NOW).map((r) => r.name)).not.toContain('ratchet_refuse')
   for (const bad of [{ gap: '2 days' }, { table: 'events;' }, { column: 'At' }]) {
     expect(() => Entry.parse({ name: 'x', ...bad })).toThrow()
   }

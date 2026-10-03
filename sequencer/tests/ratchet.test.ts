@@ -10,9 +10,8 @@ const SLOW = 30000
 
 const CAUGHT = 'export const ask = (f: () => number): number | null => { try { return f() } catch { return null } }'
 
-function refusing(db: Db): void {
-  db.exec(`INSERT INTO settings (key, value, who, origin_kind, origin_ref, set_at)
-    VALUES ('ratchet.mode', 'refuse', 'ceo', 'ruling', 'test', '2026-09-26')`)
+function warning(db: Db): void {
+  db.exec("UPDATE settings SET value = 'warn' WHERE key = 'ratchet.mode'")
 }
 
 function kernel(debt = false): World {
@@ -31,8 +30,9 @@ async function railed(w: World, id: number, line: string, issue = 34): Promise<A
   return (await tick(w.db, w.root, stub(CARRIED))).find((f) => f.plan === id)
 }
 
-test('D3 with no mode row a job over budget passes, one event', async () => {
+test('D3 in warn mode a job over budget passes, one event', async () => {
   const w = kernel()
+  warning(w.db)
   lock(w.root, 9)
   expect(await railed(w, 2, CAUGHT)).toMatchObject({ step: 3, held: true })
   expect(eventsOf(w.db, 2, 'ratchet')).toEqual([])
@@ -45,7 +45,8 @@ test('D3 with no mode row a job over budget passes, one event', async () => {
 
 test('D4 in refuse mode the same job is refused before the checks', async () => {
   const w = kernel()
-  refusing(w.db)
+  expect(() => w.db.exec(`INSERT INTO settings (key, value, who, origin_kind, origin_ref, set_at)
+    VALUES ('ratchet.mode', 'refuse', 'ceo', 'ruling', 'test', '2026-09-26')`)).toThrow()
   lock(w.root, 9)
   expect(await railed(w, 2, CAUGHT)).toMatchObject({ step: 3, outcome: 'refuse', spans: ['ratchet:src/hello.ts'],
     note: 'ratchet: the job grew a file past its budget' })
@@ -53,14 +54,12 @@ test('D4 in refuse mode the same job is refused before the checks', async () => 
 
 test('D5 main\'s own debt neither refuses nor records an event', async () => {
   const w = kernel(true)
-  refusing(w.db)
   expect(await railed(w, 2, 'export const two = 2')).toMatchObject({ step: 3, outcome: 'pass' })
   expect(eventsOf(w.db, 2, 'ratchet')).toEqual([])
 }, SLOW)
 
 test('D5 a plan on a target never runs the ratchet', async () => {
   const w = world()
-  refusing(w.db)
   approve(w.db, w.target)
   for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED))
   built(w.root, w.plan, CAUGHT)
@@ -71,7 +70,6 @@ test('D5 a plan on a target never runs the ratchet', async () => {
 
 test('D7 two plans refused by the ratchet alike leave the lane on', async () => {
   const w = kernel()
-  refusing(w.db)
   expect(await railed(w, 2, CAUGHT)).toMatchObject({ outcome: 'refuse' })
   w.db.exec("UPDATE plans SET state = 'done' WHERE id = 2")
   expect(await railed(w, 3, CAUGHT, 35)).toMatchObject({ outcome: 'refuse', spans: ['ratchet:src/hello.ts'] })

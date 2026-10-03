@@ -7,12 +7,13 @@ import type { SignalRow } from '../store/signals.ts'
 import type { Part } from './brief.ts'
 import type { Outcome } from './kind.ts'
 import { WIRE, type Wire } from './push.ts'
-import { drop, get, put, srcDir } from './workspace.ts'
+import { drop, get, maybe, put, srcDir } from './workspace.ts'
 import { homeOf } from './home.ts'
 import { approved } from './approve.ts'
 import { words } from './signals.ts'
 
 const LETTERS = 'abcdefghijklmnopqrstuvwxyz'
+const CUT = 6000
 
 /**
  * Every part becomes an issue of ours, titled `<parent><letter>: …` in the order the parts
@@ -31,8 +32,10 @@ export function parted(db: Db, root: string, plan: PlanRow, parts: Part[], wire:
     return { outcome: 'needs_ceo', spans: ['split'], note: `${why}: ${String(parts.length)} parts wait for the COO` }
   }
   const parent = originIssue(plan)
+  const ask = maybe(root, plan.id, 'ask.md')
+  const section = ask === null ? '' : carried(ask, parent === null ? `plan ${String(plan.id)}` : `#${String(parent)}`)
   try {
-    const urls = [...parts.keys()].map((n) => filed(db, plan, parent === null ? `p${String(plan.id)}` : String(parent), parts, n, wire))
+    const urls = [...parts.keys()].map((n) => filed(db, plan, parent === null ? `p${String(plan.id)}` : String(parent), parts, n, section, wire))
     const on = (n: number): string => ref(urls[n] ?? '')
     const started = [...parts.keys()].filter((n) => parts[n]?.after === 'none')
     for (const n of started) queue(db, root, plan, n)
@@ -116,7 +119,13 @@ function unfileable(db: Db, plan: PlanRow): string | null {
   return approved(db, plan) ? null : 'an unapproved ticket on somebody else\'s repository is split by the COO, not the machine'
 }
 
-function filed(db: Db, plan: PlanRow, prefix: string, parts: Part[], n: number, wire: Wire): string {
+/** The parent's ask without its own `After:` gate, which `afterOf` would read as the part's. */
+function carried(ask: string, source: string): string {
+  const text = ask.replace(/^After: #\d+$\n?/gm, '')
+  return `## Parent ticket\n\n${text.length > CUT ? `${text.slice(0, CUT)}\ncut, see ${source}` : text.trimEnd()}`
+}
+
+function filed(db: Db, plan: PlanRow, prefix: string, parts: Part[], n: number, section: string, wire: Wire): string {
   const held = db.prepare('SELECT url FROM parts WHERE parent = ? AND n = ?').get(plan.id, n) as { url: string } | undefined
   if (held !== undefined) return held.url
   const part = parts[n]
@@ -130,7 +139,7 @@ function filed(db: Db, plan: PlanRow, prefix: string, parts: Part[], n: number, 
   const body = [`**What:** ${part.what}`, `**Why:** ${part.why}`, `**When it ends:** ${part.ends}`, '',
     internal(plan) ? `Part ${of} of #${prefix}, split by the brief writer.`
       : `Internal only: part ${of} of plan ${id}, split by the brief writer; it builds against asm/${id} on our fork and opens no pull request upstream.`,
-    ...(prior === undefined ? [] : [`After: ${ref(prior)}`]), ''].join('\n')
+    ...(prior === undefined ? [] : [`After: ${ref(prior)}`]), ...(section === '' ? [] : ['', section]), ''].join('\n')
   const url = wire.file(homeOf(plan), title, body, labels(plan))
   db.prepare('INSERT INTO parts (parent, n, url, title, body, after) VALUES (?, ?, ?, ?, ?, ?)').run(plan.id, n, url, title, body, after)
   return url

@@ -1,7 +1,4 @@
-import { SELF } from '../sequencer/workspace.ts'
 import type { Db } from './index.ts'
-
-export interface Drift { number: number; title: string; days: number | null }
 
 export function setting(db: Db, key: string): string | undefined {
   return (db.prepare('SELECT value FROM settings WHERE key = ?').get(key) as { value: string } | undefined)?.value
@@ -18,9 +15,4 @@ export function newest(db: Db, from: string, column: string, now: Date): { newes
 
 export function openTicket(db: Db, repo: string, title: string): boolean {
   return db.prepare('SELECT 1 FROM tickets WHERE repo = ? AND title = ? AND closed_at IS NULL').get(repo, title) !== undefined
-}
-
-export function drifts(db: Db, now: Date): Drift[] {
-  return db.prepare(`SELECT number, title, CAST(julianday(?) - julianday(opened_at) AS INTEGER) AS days FROM tickets
-    WHERE repo = ? AND title GLOB 'Drift: *' AND closed_at IS NULL ORDER BY opened_at, number`).all(now.toISOString(), SELF) as Drift[]
 }

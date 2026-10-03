@@ -5,12 +5,11 @@ import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import { registerLanes } from '../cf-lanes.ts'
-import { actors, actorSection, costs, costSection, driftSection, fileWaits, greptileLine, hands, heldBy, line, misses, missSection, rulings, section,
+import { actors, actorSection, costs, costSection, drifts, driftSection, fileWaits, greptileLine, hands, heldBy, line, misses, missSection, rulings, section,
   ticketSection, tickets, unpriced, waitLine, waits } from '../brief.ts'
 import { hold } from '../../sequencer/hold.ts'
 import { monthly, reviewed } from '../../sequencer/ready.ts'
 import { put, SELF } from '../../sequencer/workspace.ts'
-import { drifts } from '../../store/drift.ts'
 import { repriced } from '../../store/events.ts'
 import { record as listFiles } from '../../store/files.ts'
 import type { Db } from '../../store/index.ts'

@@ -28,6 +28,7 @@ import { targetOf } from './steps.ts'
 import { install, mode, type Mode } from './checks.ts'
 import { narrow } from './rails.ts'
 import { classify } from './delta.ts'
+import { regated } from './escapes.ts'
 import { deletions } from './fence.ts'
 import { findings } from './findings.ts'
 import { fenceFor, languageFor } from './route.ts'
@@ -347,7 +348,8 @@ export async function fireReview(db: Db, root: string, plan: PlanRow, step: Step
     ...rounds(db, root, plan.id, step.step),
   }
   try {
-    const { outcome } = await judge(db, root, step.runs, plan.id, input, provider, transcriptOf(root, plan.id, step.step))
+    const { verdict, outcome } = await judge(db, root, step.runs, plan.id, input, provider, transcriptOf(root, plan.id, step.step))
+    if (outcome.outcome === 'pass') regated(db, plan.id, step.step, verdict, input.prior, input.tree)
     put(root, plan.id, `step-${String(step.step)}.verdict.md`, verdictText(outcome))
     if (outcome.outcome === 'pass' && input.tree !== undefined) put(root, plan.id, `step-${String(step.step)}.passed.diff`, input.diff)
     const asked = outcome.outcome === 'needs_ceo' && outcome.message !== '' ? `: ${outcome.message.replace(/\s+/g, ' ')}` : ''

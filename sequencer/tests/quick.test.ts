@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import type { Provider } from '../../providers/kind.ts'
+import { dispositionsOf, unsettled } from '../../store/dispositions.ts'
 import { tick } from '../index.ts'
 import { get, srcDir } from '../workspace.ts'
 import { OOPS } from './bases.ts'
@@ -65,6 +66,42 @@ test('the round leaves a quick_lane pass row and step-2 tokens', async () => {
   expect(w.db.prepare('SELECT seat, input_tokens + cache_read_tokens + output_tokens AS tokens FROM runs WHERE plan = 1 AND step = 2').all())
     .toEqual([{ seat: 'outside_specialist', tokens: 60 }, { seat: 'outside_specialist', tokens: 60 }])
   expect(w.db.prepare('SELECT count(*) AS n FROM runs WHERE plan = 1 AND step IN (4, 5)').get()).toEqual({ n: 1 })
+})
+
+function dispositions(w: World): unknown[] {
+  expect(unsettled(w.db, 1, 4, Number.MAX_SAFE_INTEGER)).toBeUndefined()
+  return dispositionsOf(w.db)
+}
+
+const EVIDENCE: unknown = expect.stringMatching(/^verdicts:\d+$/)
+
+function fixed(defect_class: string): unknown[] {
+  return [{ kind: 'fixed', defect_class, owner: 'review', evidence: EVIDENCE }]
+}
+
+/** Refused at step 4 with `review`, rebuilt to `FIX`, and passed at step 4. */
+async function regated(review: string): Promise<World> {
+  const w = await toReview()
+  await refused(w, 1, stub(CARRIED, 0, review))
+  for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, builds(writes(w.root, 1, `${FIX}\n`)), undefined, undefined, watched([], w.root, 1))
+  expect(plan(w.db, 1)).toMatchObject({ step: 5, retries: 1 })
+  return w
+}
+
+test('a refusal passed after a rebuild settles fixed', async () => {
+  const w = await regated(fence(`  - ${SPAN}`))
+  expect(dispositions(w)).toEqual(fixed('minimal'))
+})
+
+test('the quick lane settles the refusal it fixed in place', async () => {
+  const w = await toReview()
+  await tick(w.db, w.root, builds(writes(w.root, 1, `${FIX}\n`), fence(cosmetic(SPAN, FIX))))
+  expect(dispositions(w)).toEqual(fixed('minimal'))
+})
+
+test('a class outside the build map settles as correctness', async () => {
+  const w = await regated(fence(`  - ${SPAN}`).replace('class: minimal', 'class: vibes'))
+  expect(dispositions(w)).toEqual(fixed('correctness'))
 })
 
 test('a bare span keeps the lap and both entries round-trip', async () => {
@@ -132,6 +169,7 @@ test('a note removing a comment lands; step 5 with no new build', async () => {
   expect(plan(w.db, 1)).toMatchObject({ step: 5, retries: 0 })
   expect(w.db.prepare('SELECT count(*) AS n FROM runs WHERE plan = 1 AND step = 2').get()).toEqual({ n: 1 })
   expect(hello(w)).toBe(HI)
+  expect(dispositions(w)).toEqual([])
 })
 
 test('a note that changes code refuses and leaves the file alone', async () => {

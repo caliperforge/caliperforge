@@ -186,7 +186,7 @@ const prompted = async (db: Db, home: string) => {
   return prompts[0]
 }
 
-test('D1: the packet carries this plan\'s rulings.md and issue.md rulings, before the siblings', async () => {
+test('D1: the packet carries the plan\'s own rulings first', async () => {
   const { db, home } = seeded('1')
   put(home, 7, 'rulings.md', 'round 3: write the workflow\n')
   put(home, 7, 'issue.md', '# Issue\n\nthe brief\n\n## Ruling\n\nkeep main\n\n## Standing\n\n- no forced push\n')

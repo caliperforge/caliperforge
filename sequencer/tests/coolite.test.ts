@@ -11,6 +11,7 @@ import { runAt } from '../../store/events.ts'
 import { retried } from '../../store/holds.ts'
 import { migrate, open, type Db } from '../../store/index.ts'
 import { busy } from '../../store/now.ts'
+import { addPart } from '../../store/parts.ts'
 import { held, PlanRow, retry } from '../../store/plans.ts'
 import { clear } from '../../store/refusals.ts'
 import { split } from '../brief.ts'
@@ -401,4 +402,22 @@ test('a long why and a long ticket title still read', () => {
   const got = read(`reasoning\n\n\`\`\`\n---\nmove: file\nwhy: ${why}\nticket: ${'t'.repeat(200)}\n---\n\`\`\``)
   expect(got).toMatchObject({ move: 'file', why })
   expect(got !== null && 'ticket' in got ? got.ticket?.length : 0).toBe(140)
+})
+
+test('quotedWhy', () => {
+  expect(read('---\nmove: rule\nwhy: "Desk alarm" means the sign-off card\nanswer: use the card\n---\n'))
+    .toMatchObject({ move: 'rule', why: '"Desk alarm" means the sign-off card', answer: 'use the card' })
+})
+
+test('parentAsk', async () => {
+  const { db, home } = seeded('1')
+  const parent = file(db, 'coo', LANE.machine.pipe, 'machine', LANE.machine.seat, 'https://github.com/caliperforge/caliperforge/issues/900', 0)
+  put(home, parent, 'ask.md', '# parent\n\nseed: coo_lite, fixer\n')
+  addPart(db, { parent, n: 0, url: 'https://github.com/caliperforge/caliperforge/issues/901', title: '9a: part', body: 'part body', plan: 7, after: null })
+  expect(await prompted(db, home)).toContain('# Parent ticket\n\n# parent\n\nseed: coo_lite, fixer\n')
+})
+
+test('record', async () => {
+  const { db, home } = seeded('1')
+  expect(await prompted(db, home)).toMatch(/# Record\n\n\d+ runs, \d+ tokens, \$\d+\.\d\d\n/)
 })

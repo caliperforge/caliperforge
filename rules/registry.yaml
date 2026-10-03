@@ -73,3 +73,5 @@
   where: template IN ('pr_path', 'research', 'comms')
   gap: 1d
   while: EXISTS (SELECT 1 FROM pipes WHERE enabled = 1)
+- name: stuck_plans
+  gap: 1h

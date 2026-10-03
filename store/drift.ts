@@ -13,6 +13,15 @@ export function newest(db: Db, from: string, column: string, now: Date): { newes
     .get(now.toISOString()) as { newest: string | number | null; days: number | null }
 }
 
+export interface Stalled { id: number; step: number; wait_reason: string | null; waits_on: number | null; last: string | null }
+
+export function stalled(db: Db): Stalled[] {
+  return db.prepare(`SELECT id, step, wait_reason, waits_on,
+      (SELECT message FROM events WHERE plan = plans.id ORDER BY id DESC LIMIT 1) AS last
+    FROM plans WHERE state IN ('queued', 'running') AND step > 0
+      AND coalesce(wait_reason, '') NOT IN ('ceo_batch', 'target_approval') ORDER BY id`).all() as Stalled[]
+}
+
 export function openTicket(db: Db, repo: string, title: string): boolean {
   return db.prepare('SELECT 1 FROM tickets WHERE repo = ? AND title = ? AND closed_at IS NULL').get(repo, title) !== undefined
 }

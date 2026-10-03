@@ -84,7 +84,36 @@ test('D1 a Justfile ts-build runs after install, before its gates', () => {
   expect(ts(nested({ Justfile: justfile, 'package.json': PACKAGE, 'pnpm-lock.yaml': '' }), 'typescript/src/a.ts')).toEqual([
     { script: 'install', bin: 'pnpm', args: ['install', '--frozen-lockfile'], dir: '' },
     just('ts-build'),
-    just('test'),
+    just('ts-test'),
+  ])
+})
+
+const POLYGLOT = {
+  Justfile: 'ts-build:\n    b\n\nts-test:\n    t\n\nkt-lint:\n    l\n\nkt-test:\n    k\n\ntest: ts-test kt-test\n',
+  'Package.swift': '',
+  'package.json': PACKAGE,
+  'pnpm-lock.yaml': '',
+  'Sources/PayKit/Memo.swift': '',
+  'kotlin/src/main/kotlin/Runner.kt': '',
+  'typescript/src/a.ts': '',
+}
+
+test('D1 swift on a polyglot root runs swift, not the root test', () => {
+  expect(gates(nested(POLYGLOT), { language: 'swift', files: ['Sources/PayKit/Memo.swift'] })).toEqual([
+    { script: 'build', bin: 'swift', args: ['build'], dir: '' },
+    { script: 'test', bin: 'swift', args: ['test'], dir: '' },
+  ])
+})
+
+test('D2 kotlin on a polyglot root runs its kt- recipes', () => {
+  expect(gates(nested(POLYGLOT), { language: 'kotlin', files: ['kotlin/src/main/kotlin/Runner.kt'] })).toEqual([just('kt-lint'), just('kt-test')])
+})
+
+test('D3 typescript on a polyglot root runs its ts- recipes', () => {
+  expect(ts(nested(POLYGLOT), 'typescript/src/a.ts')).toEqual([
+    { script: 'install', bin: 'pnpm', args: ['install', '--frozen-lockfile'], dir: '' },
+    just('ts-build'),
+    just('ts-test'),
   ])
 })
 

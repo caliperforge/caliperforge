@@ -103,6 +103,8 @@ const RECIPES: Record<Exclude<OutsideLanguage, 'rust'>, Recipe> = {
   },
 }
 
+const PREFIX: Record<OutsideLanguage, string> = { rust: 'rs-', python: 'py-', ruby: 'rb-', go: 'go-', php: 'php-', lua: 'lua-', kotlin: 'kt-', swift: 'swift-', typescript: 'ts-' }
+
 const JUSTFILE = 'Justfile'
 
 /** What step 3 runs on an outside plan: install, then the gates upstream runs, in the language's own folder, then its workflows' regenerate-and-diff steps at the root. */
@@ -113,14 +115,17 @@ export function gates(src: string, outside: Outside): Gate[] {
 function own(src: string, outside: Outside): Gate[] {
   if (outside.language === 'rust') return rust(src, outside.files)
   const recipe = RECIPES[outside.language]
-  const dir = home(src, first(outside), (name) => name === JUSTFILE || recipe.markers.test(name))
+  const near = home(src, first(outside), (name) => name === JUSTFILE || recipe.markers.test(name))
+  const found = recipes(join(src, near, JUSTFILE))
+  const prefix = PREFIX[outside.language]
+  const theirs = ![...(found ?? [])].some((n) => n.startsWith(prefix)) && [...(found ?? [])].some((n) => Object.values(PREFIX).some((p) => n.startsWith(p)))
+  const { dir, defined } = theirs ? { dir: home(src, first(outside), (name) => recipe.markers.test(name)), defined: null } : { dir: near, defined: found }
   const node = outside.language === 'typescript' ? nodeGates(src, dir, home(src, join(dir, 'package.json'), lockfile), recipe.recipes) : null
   const install = node?.install ?? (recipe.install === null ? [] : [{ ...recipe.install, dir }])
-  const defined = recipes(join(src, dir, JUSTFILE))
   if (defined === null) return [...install, ...(node?.raw ?? recipe.raw.map((r) => ({ ...r, dir })))]
   const just = (script: string): Gate => ({ script, bin: 'just', args: ['--justfile', JUSTFILE, script], dir })
   const build = recipe.build?.find((r) => defined.has(r))
-  return [...(defined.has('install') ? [just('install')] : install), ...(build === undefined ? [] : [just(build)]), ...recipe.recipes.filter((r) => defined.has(r)).map(just)]
+  return [...(defined.has('install') ? [just('install')] : install), ...(build === undefined ? [] : [just(build)]), ...recipe.recipes.map((r) => (defined.has(prefix + r) ? prefix + r : r)).filter((r) => defined.has(r)).map(just)]
 }
 
 function first(outside: Outside): string {

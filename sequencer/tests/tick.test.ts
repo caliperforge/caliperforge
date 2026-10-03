@@ -6,7 +6,8 @@ import { expect, test } from 'vitest'
 import { day, halted, open as openPlans, runsOf, verdictsOf } from '../../cli/brief.ts'
 import { measure, type Read } from '../../cli/measure.ts'
 import { account, parse, refuseTarget } from '../../cli/queue.ts'
-import { allPlans, clock, dropPlan, inWindow, laneOff, rewind, underCap, waiting, type PipeRow, type PlanRow, type Wait } from '../../store/plans.ts'
+import { addPipe, allPlans, clock, dropPlan, inWindow, laneOff, pipeNamed, requeue, rewind, underCap, waiting, type PipeRow, type PlanRow, type Wait } from '../../store/plans.ts'
+import { amend, width } from '../../store/lanes.ts'
 import { holdOf, retried } from '../../store/holds.ts'
 import { current } from '../../store/now.ts'
 import { dropDeliverables } from '../../store/deliverables.ts'
@@ -1044,7 +1045,7 @@ async function heldOnMine(): Promise<World> {
   ours(w.root)
   internalPlan(w.db, w.root, MINE)
   internalPlan(w.db, w.root, HELD, 'let a second internal plan run', 35)
-  w.db.prepare('UPDATE pipes SET max_concurrent = 2 WHERE id = 1').run()
+  width(w.db, 1, 2)
   for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
   record(w.db, HELD, [{ path: 'src/p3.ts', is_new: true }])
   await tick(w.db, w.root, stub(CARRIED))
@@ -1053,12 +1054,12 @@ async function heldOnMine(): Promise<World> {
   built(w.root, HELD, 'export const also = true')
   await tick(w.db, w.root, stub(CARRIED))
   expect(plan(w.db, HELD)).toMatchObject({ step: 3, state: 'running' })
-  w.db.prepare("UPDATE plans SET step = 2, state = 'queued' WHERE id = ?").run(MINE)
-  w.db.prepare('UPDATE pipes SET max_concurrent = 1 WHERE id = 1').run()
+  requeue(w.db, MINE, 2)
+  width(w.db, 1, 1)
   return w
 }
 
-test('D1 D2 a plan held at the rails on one in its pipe gives that one its slot', async () => {
+test('D1 D2 a plan held on one in its pipe gives it its slot', async () => {
   const w = await heldOnMine()
   expect(picks(w.db, { ...w.pipe, max_concurrent: 1 }).map((p) => p.id)).toEqual([MINE])
   const fired = await tick(w.db, w.root, stub(CARRIED))
@@ -1069,8 +1070,7 @@ test('D1 D2 a plan held at the rails on one in its pipe gives that one its slot'
 
 test('D3 a plan held on one in another pipe keeps its slot', async () => {
   const w = await heldOnMine()
-  w.db.prepare(`INSERT INTO pipes (id, name, enabled, window_start, window_end, max_concurrent)
-    VALUES (2, 'research', 1, '00:00', '23:59', 1)`).run()
-  w.db.prepare('UPDATE plans SET pipe_id = 2 WHERE id = ?').run(MINE)
+  addPipe(w.db, { name: 'research', enabled: 1, window_start: '00:00', window_end: '23:59', max_concurrent: 1 })
+  amend(w.db, MINE, { pipe_id: Number(pipeNamed(w.db, 'research')?.id) })
   expect(picks(w.db, { ...w.pipe, max_concurrent: 1 }).map((p) => p.id)).toEqual([HELD])
 })

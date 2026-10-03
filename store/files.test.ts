@@ -1,8 +1,9 @@
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { files } from '../sequencer/brief.ts'
-import { edit, filesOf, record, strays } from './files.ts'
+import { building, edit, filesOf, record, strays } from './files.ts'
 import { migrate, open, type Db } from './index.ts'
+import { world } from '../sequencer/tests/world.ts'
 
 const root = join(import.meta.dirname, '..')
 
@@ -98,4 +99,23 @@ test('D5 an edit on a missing plan writes nothing', () => {
   expect(() => { edit(db, 99, 'add', 'a.ts', 'coo', null) }).toThrow('no plan 99')
   expect(db.prepare('SELECT count(*) AS n FROM plan_files').get()).toEqual({ n: 0 })
   expect(events(db)).toEqual([])
+})
+
+// #712: a built plan parked on the CEO sign-off must not hold later plans on its files
+test('a plan waiting only on sign-off frees its files', () => {
+  const { db } = world()
+  const hash = '0'.repeat(64)
+  const path = 'src/hello.ts'
+  db.prepare(`INSERT OR IGNORE INTO rules (id, kind, path, content_hash, loaded_at)
+    VALUES ('typescript_specialist', 'card', 'rules/roster.yaml', ?, '2026-09-22T00:00:00.000Z')`).run(hash)
+  db.prepare("INSERT INTO plans (id, pipe_id, target_id, template, state, queued_at, step, retries) VALUES (2, 1, 1, 'pr_path', 'running', ?, 3, 0)")
+    .run(new Date().toISOString())
+  db.prepare("UPDATE plans SET state = 'running', step = 4 WHERE id = 1").run()
+  for (const id of [1, 2]) record(db, id, [{ path, is_new: false }])
+  db.prepare(`INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort,
+    input_tokens, cache_read_tokens, output_tokens, seconds, exit, at, transcript_path)
+    VALUES (1, 2, 'typescript_specialist', ?, 'claude-agent-sdk', 'm', 'high', 0, 0, 0, 0, 0, '2026-10-03 00:00:00', 'x.transcript.jsonl')`).run(hash)
+  expect(building(db, 2, [path])?.plan).toBe(1)
+  db.prepare("UPDATE plans SET step = 7, wait_reason = 'ceo_batch', held_by = 'ceo' WHERE id = 1").run()
+  expect(building(db, 2, [path])).toBeNull()
 })

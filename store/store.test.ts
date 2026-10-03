@@ -229,7 +229,7 @@ it('D3 no non-test .ts outside store/ and schema/ writes plans', () => {
   expect(writers).toEqual([])
 })
 
-it('D1-D3 coo_lite and director steps 2, 4, 5 build nothing; no self-review', () => {
+it('D1-D4 coo_lite and director build nothing; no self-review', () => {
   const db = open(':memory:')
   migrate(db, join(root, 'schema'))
   for (const seat of ['coo_lite', 'director', 'typescript_specialist']) {

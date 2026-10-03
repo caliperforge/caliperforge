@@ -82,14 +82,14 @@ test('D5 other actors add no row, nor does a blip answer or miss', () => {
   expect(scored(db)).toEqual([{ event: 4, actor: 'ceo', outcome: 'open', refusal: null, close: null }])
 })
 
-test('D1 D2 director, coo_lite and orchestrator each hold on a done plan; split adds no row', () => {
+test('D1 D2 director, coo_lite, orchestrator hold; split no row', () => {
   const db = plan('done')
   for (const actor of ['director', 'coo_lite', 'orchestrator', 'split']) event(db, actor, 'retry', '2026-09-20 11:00:00')
   expect(scored(db)).toEqual(['director', 'coo_lite', 'orchestrator'].map((actor, i) =>
     ({ event: i + 1, actor, outcome: 'held', refusal: null, close: null })))
 })
 
-const FILED ='https://github.com/caliperforge/caliperforge/issues/534'
+const FILED = 'https://github.com/caliperforge/caliperforge/issues/534'
 
 function filed(db: Db, reason: string | null, wrong: number): void {
   db.prepare(`INSERT INTO tickets (repo, number, title, lane, state_reason, diagnosis_wrong)

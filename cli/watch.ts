@@ -5,7 +5,7 @@ import { hostValue } from '../providers/credential.ts'
 import type { Db } from '../store/index.ts'
 import { hhmm, zone } from '../store/lanes.ts'
 import { clock, inWindow, openPipes, PipeRow } from '../store/plans.ts'
-import { receipt } from '../store/ticks.ts'
+import { real, receipt, type Receipt } from '../store/ticks.ts'
 import { crashed } from './inbox.ts'
 
 /** Inside an open window a real tick lands every minute; ten without one means the machine is down, not idle. */
@@ -18,6 +18,10 @@ export const CRASHED = 'crashed: '
 const MARK = '.cf/watch.alerted'
 
 const LANES = '.cf/watch.lanes'
+
+const HALTED = '.cf/watch.halted'
+
+const HALTS = 30
 
 interface Liveness {
   at: string | null
@@ -67,6 +71,7 @@ export function watch(db: Db, root: string, now: Date, post: Post): Liveness {
     rmSync(mark)
   }
   lanes(db, root, now, post)
+  halts(db, root, post)
   return l
 }
 
@@ -92,6 +97,26 @@ function lanes(db: Db, root: string, now: Date, post: Post): void {
     mkdirSync(dirname(mark), { recursive: true })
     writeFileSync(mark, off.join('\n'))
   } else if (off.length === 0 && was) {
+    rmSync(mark)
+  }
+}
+
+/** A halt is what `halt()` in cf.ts writes: a refused lap fired something, and a crash is the machine-down alert's. */
+function halt(r: Receipt): boolean {
+  return r.exit === 1 && r.fired === 0 && !r.note.startsWith(CRASHED)
+}
+
+function halts(db: Db, root: string, post: Post): void {
+  const rows = real(db, HALTS)
+  const halted = rows.length === HALTS && rows.every(halt)
+  const mark = join(root, HALTED)
+  const was = existsSync(mark)
+  if (halted && !was) {
+    post('CaliperForge · the tick is halted', `${String(HALTS)} ticks in a row: ${rows[0]?.note.split('\n')[0] ?? ''}`)
+    mkdirSync(dirname(mark), { recursive: true })
+    writeFileSync(mark, rows[0]?.at ?? '')
+  } else if (!halted && was) {
+    post('CaliperForge · the tick is firing again', '')
     rmSync(mark)
   }
 }

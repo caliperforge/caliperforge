@@ -29,3 +29,8 @@ export function last(db: Db, limit = 10): Receipt[] {
   return db.prepare('SELECT at, hhmm, dry, pipes, fired, exit, note FROM ticks ORDER BY id DESC LIMIT ?')
     .all(limit).map((r) => ({ ...(r as Receipt), dry: (r as { dry: number }).dry === 1 }))
 }
+
+export function real(db: Db, limit: number): Receipt[] {
+  return db.prepare('SELECT at, hhmm, dry, pipes, fired, exit, note FROM ticks WHERE dry = 0 ORDER BY at DESC LIMIT ?')
+    .all(limit).map((r) => ({ ...(r as Receipt), dry: (r as { dry: number }).dry === 1 }))
+}

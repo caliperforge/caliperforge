@@ -192,7 +192,8 @@ const at = (minutes: number): Date => new Date(NOW.getTime() + minutes * 60_000)
 
 function stalling(): { d: Db; root: string } {
   const d = db()
-  d.exec("UPDATE plans SET state = 'running', step = 3, wait_reason = 'lane_over_cap'")
+  d.exec(`UPDATE plans SET state = 'running', step = 3, wait_reason = 'lane_over_cap';
+    UPDATE pipes SET window_start = '00:00', window_end = '23:59'`)
   return { d, root: mkdtempSync(join(tmpdir(), 'stuck-')) }
 }
 
@@ -257,6 +258,14 @@ test('stuckNever', () => {
       ((SELECT min(id) FROM pipes), 'pr_path', 'done', '2026-10-01', 'machine', 'typescript_specialist', 'https://github.com/a/b/issues/4', 3, 3)`)
   take(d, 3, at(120))
   for (const minutes of [120, 150, 181]) expect(stuck(d, root, STUCK, at(minutes))).toEqual([])
+})
+
+test('stuckClosed', () => {
+  for (const pipe of ['enabled = 0', "window_start = '23:00', window_end = '23:01'"]) {
+    const { d, root } = stalling()
+    d.exec(`UPDATE pipes SET ${pipe}`)
+    for (const minutes of [0, 30, 61, 120]) expect(stuck(d, root, STUCK, at(minutes))).toEqual([])
+  }
 })
 
 test('stuckOff', () => {

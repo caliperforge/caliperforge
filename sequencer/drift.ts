@@ -7,7 +7,7 @@ import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { get, hhmm, set, zone } from '../store/lanes.ts'
 import { holder } from '../store/leases.ts'
-import { needsCeo, planById } from '../store/plans.ts'
+import { needsCeo, openPipes, planById } from '../store/plans.ts'
 import { repos } from '../store/record.ts'
 import type { Wire } from './push.ts'
 import { cloned, conflicted, drop, maybe, planDir, put, SELF, snapshot } from './workspace.ts'
@@ -69,7 +69,7 @@ export function stuck(db: Db, root: string, registry: Entry[], now: Date): numbe
   const gap = registry.find((e) => e.name === 'stuck_plans')?.gap
   if (gap === undefined) return []
   const window = days(gap) * 86_400_000
-  return stalled(db).flatMap(({ id, step, wait_reason, waits_on, last }) => {
+  return stalled(db, openPipes(db, hhmm(db, now)).map((p) => p.id)).flatMap(({ id, step, wait_reason, waits_on, last }) => {
     if (holder(db, id, now) !== null) return []
     const tree = treeOf(join(planDir(root, id), 'src'))
     const saved = maybe(root, id, 'stuck.json')

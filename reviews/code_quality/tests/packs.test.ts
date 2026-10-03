@@ -52,7 +52,7 @@ test('each text is its seat prompt up to the answer line', () => {
 
 const kotlinExamples = readFileSync(join(root, 'reviews/examples/kotlin.md'), 'utf8')
 
-test('the Kotlin examples follow the Kotlin rules, before the next language', () => {
+test('Kotlin examples sit after the Kotlin rules, before Python', () => {
   const out = packs(root, diffOf('kotlin/Runner.kt', 'python/client.py'), null)
   const examples = out.indexOf(kotlinExamples)
   expect(examples).toBeGreaterThan(out.indexOf(rules('kotlin_specialist')))

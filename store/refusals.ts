@@ -76,10 +76,12 @@ export function peer(db: Db, r: Refused): number | undefined {
   return row?.plan
 }
 
-/** The refusals recorded on `day` (UTC `yyyy-mm-dd`), blips left out. */
-export function ofDay(db: Db, day: string): { id: number; plan: number; step: number; at: string }[] {
-  return db.prepare('SELECT id, plan, step, at FROM refusals WHERE blip = 0 AND date(at) = ? ORDER BY id')
-    .all(day) as { id: number; plan: number; step: number; at: string }[]
+/** The refusals recorded on `day` (local `yyyy-mm-dd`, `minutes` from UTC), blips left out, at local time. */
+export function ofDay(db: Db, day: string, minutes: number): { id: number; plan: number; step: number; title: string | null; at: string }[] {
+  const shift = `${String(minutes)} minutes`
+  return db.prepare(`SELECT f.id, f.plan, f.step, p.title, datetime(f.at, ?) AS at FROM refusals f LEFT JOIN plans p ON p.id = f.plan
+    WHERE f.blip = 0 AND date(f.at, ?) = ? ORDER BY f.id`)
+    .all(shift, shift, day) as { id: number; plan: number; step: number; title: string | null; at: string }[]
 }
 
 /** A failed checkout: the plan stays on its step until `BLIPS` of them come in a row. */

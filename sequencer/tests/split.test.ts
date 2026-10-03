@@ -3,13 +3,13 @@ import { split, STANDING, unclear, wide } from '../brief.ts'
 import { tick } from '../index.ts'
 import { assembly } from '../home.ts'
 import { following, parted, released } from '../split.ts'
-import { maybe } from '../workspace.ts'
+import { maybe, put } from '../workspace.ts'
 import { ofKind, runRows } from '../../store/events.ts'
 import { priority } from '../../store/lanes.ts'
 import { setLimit } from '../../store/limits.ts'
 import { addPart, allParts } from '../../store/parts.ts'
 import { dropPlan, finish } from '../../store/plans.ts'
-import { recordListing } from '../../store/tickets.ts'
+import { afterOf, recordListing } from '../../store/tickets.ts'
 import { approve, CARRIED, internalPlan, ours, plan, stub, watched, world, type World } from './world.ts'
 
 const ID = 2
@@ -102,6 +102,30 @@ test('an internal split files parts, first queued, parent unbuilt', async () => 
     origin: 'https://github.com/caliperforge/caliperforge/issues/901' })
   expect(maybe(w.root, first, 'ask.md')).toMatch(/^# 34a: file the parts\n\n\*\*What:\*\* the machine files each part/)
   expect(allParts(w.db).find((p) => p.n === 1)).toMatchObject({ body: expect.stringContaining('After: #901') as unknown })
+})
+
+test('parentCarried', async () => {
+  const w = mine()
+  await briefed(w, ID, PARTS, [])
+  const parts = allParts(w.db).filter((p) => p.parent === ID)
+  for (const { body } of parts) expect(body).toContain('## Parent ticket\n\n# let an internal plan run')
+  expect(maybe(w.root, partPlan(w, 0) ?? 0, 'ask.md')).toContain('## Parent ticket\n\n# let an internal plan run')
+})
+
+test('parentCut', async () => {
+  const w = mine()
+  put(w.root, ID, 'ask.md', `${'a'.repeat(6000)}${'~'.repeat(1000)}`)
+  await briefed(w, ID, PARTS, [])
+  const body = allParts(w.db).find((p) => p.parent === ID && p.n === 0)?.body ?? ''
+  expect(body).toContain(`## Parent ticket\n\n${'a'.repeat(6000)}\ncut, see #34`)
+  expect(body).not.toContain('~')
+})
+
+test('a parent After: line gates no part', async () => {
+  const w = mine()
+  put(w.root, ID, 'ask.md', '# t\n\nAfter: #77\n\n- **D1** x\n')
+  await briefed(w, ID, AFTER(['none', 'none']), [])
+  expect(allParts(w.db).filter((p) => p.parent === ID).map((p) => afterOf(p.body))).toEqual([null, null])
 })
 
 test('a part landing queues the next; the last closes the parent', async () => {

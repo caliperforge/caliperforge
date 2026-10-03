@@ -5,10 +5,14 @@ import { Command } from 'commander'
 import { expect, test } from 'vitest'
 import { registerLanes } from '../../cli/cf-lanes.ts'
 import { registerPlans, registerRetry } from '../../cli/cf-plans.ts'
+import { all } from '../../cli/inbox.ts'
+import { eventsOf } from '../../store/events.ts'
 import { migrate, open } from '../../store/index.ts'
 import { drop, take } from '../../store/leases.ts'
 import { held, terminal, type Holder } from '../../store/plans.ts'
 import { WHY } from '../../store/refusals.ts'
+import { lapsed } from '../../store/until.ts'
+import { released } from '../fixer.ts'
 import { hold, isHeld, unhold } from '../hold.ts'
 import { maybe, put, srcDir } from '../workspace.ts'
 
@@ -287,6 +291,35 @@ test('D5 return --to 1 on a repeat stop logs return, not retry', () => {
   ran(db, home, ['return', '7', '--to', '1', '--by', 'coo'])
   expect(plan7(db)).toMatchObject({ step: 1 })
   expect(logged(db)).toEqual([{ kind: 'return', actor: 'coo', message: 'step 3 → 1' }])
+})
+
+const NOW = new Date('2026-10-04T22:00:00.000Z')
+const returns = (db: ReturnType<typeof open>) => eventsOf(db, 7, 'return').map((e) => ({ actor: e.actor }))
+
+test('holdUntil D2 D3 past time releases once, future time holds', () => {
+  const later = seeded()
+  hold(later.db, later.home, 7, 'recheck', NOW, null, new Date('2026-10-04T22:00:01.000Z'))
+  released(later.db, later.home, NOW, () => undefined)
+  expect(row(later.db)).toEqual({ state: 'blocked_on_ceo', step: 4, waits_on: null })
+  expect(returns(later.db)).toEqual([])
+  expect(all(later.home)).toEqual([])
+  const { db, home } = seeded()
+  hold(db, home, 7, 'recheck', NOW, null, new Date('2026-10-04T21:59:59.000Z'))
+  released(db, home, NOW, () => undefined)
+  expect(row(db)).toEqual({ state: 'queued', step: 4, waits_on: null })
+  expect(returns(db)).toEqual([{ actor: 'fixer' }])
+  expect(all(home)).toMatchObject([{ plan: 7, kind: 'refused', name: 'fixer', note: 'held until 2026-10-04T21:59:59.000Z passed, so this job is back in its lane' }])
+  db.exec("UPDATE plans SET state = 'blocked_on_ceo' WHERE id = 7")
+  expect(lapsed(db, NOW.toISOString())).toEqual([])
+})
+
+test('holdOnPlan D4 a hold on plan 8 is released when 8 lands', () => {
+  const { db, home } = seeded()
+  db.exec("INSERT INTO plans (id, pipe_id, template, state, queued_at, lane, seat, origin) VALUES (8, 9, 'pr_path', 'queued', '2026-09-24', 'machine', 'typescript_specialist', 'https://github.com/caliperforge/caliperforge/issues/140')")
+  hold(db, home, 7, 'after #140', NOW, 8)
+  db.exec("UPDATE plans SET state = 'done' WHERE id = 8")
+  released(db, home, NOW, () => undefined)
+  expect(row(db)).toEqual({ state: 'queued', step: 4, waits_on: null })
 })
 
 test('unhold past step 1 keeps the checkout', () => {

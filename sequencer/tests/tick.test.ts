@@ -6,7 +6,7 @@ import { expect, test } from 'vitest'
 import { day, halted, open as openPlans, runsOf, verdictsOf } from '../../cli/brief.ts'
 import { measure, type Read } from '../../cli/measure.ts'
 import { account, parse, refuseTarget } from '../../cli/queue.ts'
-import { addPipe, allPlans, clock, dropPlan, inWindow, laneOff, pipeNamed, requeue, rewind, underCap, waiting, type PipeRow, type PlanRow, type Wait } from '../../store/plans.ts'
+import { addPipe, allPlans, clock, dropPlan, inWindow, laneOff, overlapWaits, pipeNamed, requeue, rewind, underCap, waiting, type PipeRow, type PlanRow, type Wait } from '../../store/plans.ts'
 import { amend, width } from '../../store/lanes.ts'
 import { holdOf, retried } from '../../store/holds.ts'
 import { current } from '../../store/now.ts'
@@ -1065,7 +1065,7 @@ test('D1 D2 a plan held on one in its pipe gives it its slot', async () => {
   const fired = await tick(w.db, w.root, stub(CARRIED))
   expect(fired.find((f) => f.plan === MINE)).toMatchObject({ step: 2, name: 'build' })
   expect(fired.find((f) => f.plan === HELD)).toBeUndefined()
-  expect(plan(w.db, HELD).wait_reason).toBe('over_cap')
+  expect(overlapWaits(w.db)).toMatchObject([{ plan: HELD, on: MINE }])
 })
 
 test('D3 a plan held on one in another pipe keeps its slot', async () => {

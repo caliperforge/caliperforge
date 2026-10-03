@@ -96,6 +96,7 @@ function suite(db: Db, root: string, plan: PlanRow, on: Rails, commands: Command
         outside === null ? null : { language: outside, files: filesOf(db, plan.id).map((f) => f.path) },
         parse(diff).map((f) => f.path))
       if (failed?.fault !== undefined) return faulted(db, root, plan, failed.fault)
+      if (failed?.capped === true) return capped(failed)
       recordRail(db, join(root, 'rails', 'checks'), plan.id, checked(failed, diff), 0)
       if (failed !== null) return broke(db, root, plan, failed)
     } finally {
@@ -112,6 +113,11 @@ export function faulted(db: Db, root: string, plan: PlanRow, fault: string): Out
   const note = `Xcode on this Mac cannot run tests (${fault}): restart the Mac, or run xcodebuild -runFirstLaunch after an Xcode update, then cf pipe on ${name ?? 'its lane, already off'}`
   if (name !== null) inbox(root, [{ at: new Date().toISOString(), plan: plan.id, ticket: ticketOf(db, plan.id), kind: 'blocked', step: 3, name: 'rails', note }])
   return { outcome: 'pass', held: true, spans: ['xcode'], note }
+}
+
+/** A run the cap killed before any test went red is the gate's blip: it stays on step 3 until `BLIPS` in a row. */
+export function capped(failed: Failure): Outcome {
+  return { outcome: 'refuse', blip: true, spans: ['checks:cap'], note: `${failed.command} exit ${failed.code}: killed at the cap with no test red`, message: failed.output }
 }
 
 /**

@@ -1,7 +1,7 @@
 import type { Db } from '../store/index.ts'
 import { held, type Lease } from '../store/leases.ts'
 import { cap, hhmm } from '../store/lanes.ts'
-import { live, openPipes, underCap, type PipeRow, type PlanRow, type Wait } from '../store/plans.ts'
+import { live, openPipes, planById, underCap, type PipeRow, type PlanRow, type Wait } from '../store/plans.ts'
 import { overBudget } from '../store/refusals.ts'
 import type { Step } from '../templates/pr-path.ts'
 import { blocked, heldOn, mapOf, overlapping } from './steps.ts'
@@ -25,6 +25,8 @@ export function route(db: Db, plan: PlanRow, now: Date, mine: Lease | null = nul
   if (!MAPPED.has(plan.template)) return { wait: 'no_step_map', on: null }
   const stop = blocked(db, plan)
   if (stop !== null) return { wait: stop, on: stop === 'file_overlap' ? (overlapping(db, plan)?.plan ?? null) : null }
+  const on = plan.state === 'running' ? heldOn(db, plan) : null
+  if (on !== null && planById(db, on).pipe_id === plan.pipe_id) return { wait: 'file_overlap', on }
   const lane = working(offered(db, now, mine), cap(db).cap).find((o) => o.pipe.id === plan.pipe_id)
   if (lane === undefined) return { wait: 'lane_over_cap', on: null }
   if (!lane.plans.some((p) => p.id === plan.id)) return { wait: 'over_cap', on: null }

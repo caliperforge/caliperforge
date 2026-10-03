@@ -15,6 +15,7 @@ import { wall } from '../store/lanes.ts'
 import { clearWaitsOn, end, held, requeue, retry, type PlanRow } from '../store/plans.ts'
 import { clear } from '../store/refusals.ts'
 import { pending } from '../store/transcript.ts'
+import { lapsed } from '../store/until.ts'
 import { hold, unhold } from './hold.ts'
 import { prose } from './prose.ts'
 import { WIRE, type Wire } from './push.ts'
@@ -148,8 +149,19 @@ function awaits(db: Db, root: string, plan: PlanRow, f: Fix, now: Date): string 
   return `wait ${String(on)}`
 }
 
+/** A job held until a time goes back to its lane once that time has passed. */
+function overdue(db: Db, root: string, now: Date): void {
+  const at = now.toISOString()
+  for (const r of lapsed(db, at)) {
+    unhold(db, root, r.id, 'fixer')
+    record(root, [{ at, plan: r.id, ticket: ticketOf(db, r.id), kind: 'refused', step: r.step, name: 'fixer',
+      note: `held until ${r.held_until} passed, so this job is back in its lane` }])
+  }
+}
+
 /** A job the fixer set waiting goes back to its lane when the other lands, and to a person if it never will. */
 export function released(db: Db, root: string, now: Date, post: Post): void {
+  overdue(db, root, now)
   const rows = db.prepare(`SELECT p.id, p.step, p.waits_on AS on_, w.state AS theirs FROM plans p JOIN plans w ON w.id = p.waits_on
     WHERE p.state = 'blocked_on_ceo' AND w.state IN ('done', 'refused', 'halted') ORDER BY p.id`).all() as
     { id: number; step: number; on_: number; theirs: string }[]

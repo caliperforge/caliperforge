@@ -38,6 +38,11 @@ A daily reply is only this closing fence, with no post and no other key. Each it
 items: <JSON list of 3–5 {"title": ..., "what": ..., "lesson": ..., "fix": ..., "status": ...}, status one of fixed, open, ruled or noted>
 ---
 
+## Weekly
+
+A weekly post is in the CEO's voice: first person, as the one operator who runs the machine, for Substack.
+Its closing fence says `dest: substack`; a weekly reply with any other dest, or no `## Script`, is refused.
+
 ## Closing fence
 
 End a ship or weekly reply with this fence, as the last thing in it and not in a code block: one line of

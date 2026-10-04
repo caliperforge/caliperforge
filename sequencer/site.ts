@@ -2,7 +2,7 @@ import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { record, ticketOf } from '../cli/inbox.ts'
-import { pending, placed, published } from '../store/desk.ts'
+import { paste, pending, placed, published } from '../store/desk.ts'
 import type { Db } from '../store/index.ts'
 import { get } from '../store/lanes.ts'
 import type { PlanRow } from '../store/plans.ts'
@@ -61,6 +61,7 @@ export function publish(db: Db, root: string, plan: PlanRow, step: Step): Outcom
     commit(dir, name)
     placed(db, row.id, `https://caliperforge.com/blog/${name}.html`)
   }
+  paste(db)
   record(root, [{ at: new Date().toISOString(), plan: plan.id, ticket: ticketOf(db, plan.id), kind: 'signoff', step: step.step, name: step.name,
     note: 'site post ready: run `cf site push`' }])
   return { outcome: 'pass', spans: [], note: `${String(rows.length)} post(s) written to ${dir}` }

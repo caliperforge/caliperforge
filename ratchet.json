@@ -491,9 +491,6 @@
   "sequencer/tests/comms.test.ts": {
     "prepare": 21
   },
-  "sequencer/tests/coolite.test.ts": {
-    "prepare": 22
-  },
   "sequencer/tests/each.test.ts": {
     "prepare": 7
   },

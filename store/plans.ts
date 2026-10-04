@@ -91,9 +91,11 @@ export function addPlan(db: Db, row: Pick<PlanRow, 'pipe_id' | 'target_id' | 'te
     VALUES (@pipe_id, @target_id, @template, @state, @queued_at, @lane, @seat, @origin, @step)`).run(row).lastInsertRowid)
 }
 
-export function putPlan(db: Db, row: Pick<PlanRow, 'id' | 'pipe_id' | 'target_id' | 'template' | 'state' | 'queued_at' | 'step' | 'retries'>): void {
-  db.prepare(`INSERT INTO plans (id, pipe_id, target_id, template, state, queued_at, step, retries)
-    VALUES (@id, @pipe_id, @target_id, @template, @state, @queued_at, @step, @retries)`).run(row)
+export function putPlan(db: Db, row: Pick<PlanRow, 'id' | 'pipe_id' | 'target_id' | 'template' | 'state' | 'queued_at' | 'step' | 'retries'>
+  & Partial<Pick<PlanRow, 'lane' | 'seat' | 'origin'>>): void {
+  db.prepare(`INSERT INTO plans (id, pipe_id, target_id, template, state, queued_at, step, retries, lane, seat, origin)
+    VALUES (@id, @pipe_id, @target_id, @template, @state, @queued_at, @step, @retries, @lane, @seat, @origin)`)
+    .run({ lane: null, seat: null, origin: null, ...row })
 }
 
 export function titles(db: Db, template: PlanRow['template']): (string | null)[] {
@@ -108,6 +110,11 @@ export function pipeNamed(db: Db, name: string): PipeRow | null {
 
 export function allPlans(db: Db): PlanRow[] {
   return db.prepare('SELECT * FROM plans ORDER BY id').all().map((r) => PlanRow.parse(r))
+}
+
+/** Every column, `held_*` and `waits_on` included, which `PlanRow` drops. */
+export function planRows(db: Db): Record<string, unknown>[] {
+  return db.prepare('SELECT * FROM plans ORDER BY id').all() as Record<string, unknown>[]
 }
 
 export function planById(db: Db, id: number): PlanRow {

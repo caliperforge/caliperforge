@@ -12,11 +12,15 @@ export interface Event {
   run: number | null
 }
 
-export function logged(db: Db, e: Event): number {
-  const row = db.prepare(`INSERT INTO events (plan, kind, actor, outcome, message, pointer, run)
-    VALUES (?, ?, ?, ?, ?, ?, ?)`)
-    .run(e.plan, e.kind, e.actor, e.outcome, e.message, e.pointer, e.run)
+export function logged(db: Db, e: Event, at: string | null = null): number {
+  const row = db.prepare(`INSERT INTO events (plan, kind, actor, outcome, message, pointer, run, at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, coalesce(?, CURRENT_TIMESTAMP))`)
+    .run(e.plan, e.kind, e.actor, e.outcome, e.message, e.pointer, e.run, at)
   return Number(row.lastInsertRowid)
+}
+
+export function pointers(db: Db, kind: string): (string | null)[] {
+  return db.prepare('SELECT pointer FROM events WHERE kind = ? ORDER BY id').pluck().all(kind) as (string | null)[]
 }
 
 export function eventsOf(db: Db, plan: number, kind: string): Pick<Event, 'actor' | 'outcome' | 'message'>[] {

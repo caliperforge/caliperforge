@@ -18,10 +18,10 @@ export interface Decision {
   tokens: number
 }
 
-export function decided(db: Db, d: Decision): number {
-  const row = db.prepare(`INSERT INTO decisions (plan, step, wait_reason, verb, why, evidence, tokens)
-    VALUES (?, ?, ?, ?, ?, ?, ?)`)
-    .run(d.plan, d.step, d.wait_reason, d.verb, d.why, d.evidence, d.tokens)
+export function decided(db: Db, d: Decision, at: string | null = null): number {
+  const row = db.prepare(`INSERT INTO decisions (plan, step, wait_reason, verb, why, evidence, tokens, at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, coalesce(?, CURRENT_TIMESTAMP))`)
+    .run(d.plan, d.step, d.wait_reason, d.verb, d.why, d.evidence, d.tokens, at)
   return Number(row.lastInsertRowid)
 }
 

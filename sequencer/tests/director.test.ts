@@ -6,7 +6,7 @@ import { all } from '../../cli/inbox.ts'
 import { fill } from '../../cli/digests.ts'
 import { file, LANE } from '../../cli/plan.ts'
 import type { Packet, Provider } from '../../providers/kind.ts'
-import { load } from '../../runner/rules.ts'
+import { load, Seat } from '../../runner/rules.ts'
 import { gates } from '../../store/approvals.ts'
 import { decided, decisions, touches, type Verb } from '../../store/decisions.ts'
 import { pushedRow } from '../../store/deliverables.ts'
@@ -415,6 +415,14 @@ test('a long why and a long ticket title still read', () => {
   const got = read(`reasoning\n\n\`\`\`\n---\nmove: file\nwhy: ${why}\nticket: ${'t'.repeat(200)}\n---\n\`\`\``)
   expect(got).toMatchObject({ move: 'file', why })
   expect(got !== null && 'ticket' in got ? got.ticket?.length : 0).toBe(140)
+})
+
+test('a seat with no write_paths may hold only Bash(cf look:*)', () => {
+  const card = (tools: string[]) => ({ seat: 'director', model: 'm', effort: 'low', tools, write_paths: [] })
+  expect(Seat.parse(card(['Read', 'Bash(cf look:*)'])).tools).toEqual(['Read', 'Bash(cf look:*)'])
+  for (const tools of [['Read', 'Bash(git:*)'], ['Read', 'Bash(cf look:*)', 'Bash'], ['Read', 'Bash(cf look:x)'], ['Read', 'Bash(cf:*)']]) {
+    expect(() => Seat.parse(card(tools))).toThrow(/save Bash\(cf look:\*\)/)
+  }
 })
 
 test('quotedWhy', () => {

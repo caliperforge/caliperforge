@@ -227,10 +227,12 @@ function askOf(root: string, plan: number): string {
   return maybe(root, plan, 'ask.md') ?? move(root, plan, 'issue.md', 'ask.md')
 }
 
+const BUILD = new Set([...MODED, 'lua_specialist', 'typescript_specialist', 'outside_specialist'])
+
 export async function ran(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider,
   issue: string, ours: boolean): Promise<Fired> {
   load(db, root)
-  const mode = step.step === 2 && MODED.has(step.runs) ? 'build' : undefined
+  const mode = step.step === 2 && BUILD.has(step.runs) ? 'build' : undefined
   const { manifest, prompt, hash } = seat(root, step.runs, mode)
   const src = srcDir(root, plan.id)
   const built = packet(manifest, prompt + noteSection(db, root, plan, step), tight(root), issue, src,

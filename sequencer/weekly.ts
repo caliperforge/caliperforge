@@ -26,8 +26,7 @@ export function weekly(db: Db, root: string, plan: PlanRow, day: string): Outcom
 export const scripted = (title: string, { dest, post }: { dest: string; post: string }): boolean =>
   !title.startsWith('weekly ') || (dest === 'substack' && post.split('\n').includes('## Script'))
 
-export function sound(line: string, known: Set<string> | null): boolean {
-  const tags = line.match(/\[(landed|refusal):\d+\]/g) ?? []
-  return !/#\d|\/(issues|pull)\/\d/.test(line) && [...line.matchAll(/@([\w-]+)/g)].every((m) => ours(m[1]))
-    && (known === null || ((tags.length > 0 || line.startsWith('#')) && tags.every((t) => known.has(t))))
+export function sound(line: string, numbers: Set<string>): boolean {
+  return !/#\d|\/(issues|pull)\/\d|\[(landed|refusal):/.test(line) && [...line.matchAll(/@([\w-]+)/g)].every((m) => ours(m[1]))
+    && (line.match(/\d+/g) ?? []).every((n) => numbers.has(n))
 }

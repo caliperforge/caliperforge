@@ -36,7 +36,7 @@ test('D4: a wording note is a pass with the note in its message', () => {
 
 test('D5: the prompt names the inputs, the class and both fences', () => {
   const prompt = seat(root, 'text_review').prompt
-  for (const part of ['claim.unverified', 'draft.md', 'packet.json', 'outcome: refuse', 'outcome: pass']) expect(prompt).toContain(part)
+  for (const part of ['claim.unverified', 'draft.md', 'packet.json', 'outcome: refuse', 'outcome: pass', 'never seen the machine', 'class: unreadable']) expect(prompt).toContain(part)
 })
 
 test('D7: an unsourced item is a claim.unverified refuse', () => {

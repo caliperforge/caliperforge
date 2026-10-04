@@ -139,13 +139,19 @@ const CITING = PARTS.replace('what: the machine files each part', 'what: "the ma
 const commented = (w: World, body: string): Wire => ({ ...watched([], w.root, ID),
   thread: () => [{ author: { login: 'reviewer' }, body, url: 'https://github.com/caliperforge/caliperforge/issues/34#issuecomment-1' }] })
 
-test('D1, D2: only a part citing the parent carries its comments', async () => {
+test("D1: every part carries the parent's comments", async () => {
   const w = mine()
-  await briefed(w, ID, CITING, [], commented(w, TABLE))
+  await briefed(w, ID, PARTS, [], commented(w, TABLE))
   const [a, b] = allParts(w.db).filter((p) => p.parent === ID)
   expect(a?.body).toContain(`## Parent comments\n\n### reviewer\n\n${TABLE}`)
+  expect(b?.body).toContain(`## Parent comments\n\n### reviewer\n\n${TABLE}`)
   expect(maybe(w.root, partPlan(w, 0) ?? 0, 'ask.md')).toContain(`## Parent comments\n\n### reviewer\n\n${TABLE}`)
-  expect(b?.body).not.toContain('## Parent comments')
+})
+
+test('D2: a parent with no comments carries none', async () => {
+  const w = mine()
+  await briefed(w, ID, PARTS, [])
+  for (const { body } of allParts(w.db).filter((p) => p.parent === ID)) expect(body).not.toContain('## Parent comments')
 })
 
 test('D3: a thread read that throws files no part', () => {

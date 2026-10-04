@@ -17,8 +17,8 @@ export function packs(root: string, diff: string, repo: string | null): string {
 }
 
 function examples(root: string, language: string): string {
-  const path = join(root, 'reviews', 'examples', `${language}.md`)
-  return existsSync(path) ? `${readFileSync(path, 'utf8')}\n` : ''
+  return [join(root, 'reviews', 'examples', `${language}.md`), join(root, '.cf', 'examples', `${language}.md`)]
+    .map((path) => existsSync(path) ? `${readFileSync(path, 'utf8')}\n` : '').join('')
 }
 
 function notes(root: string, repo: string | null): string {

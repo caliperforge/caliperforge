@@ -25,3 +25,11 @@ test('D5: the citations, the fence and each kind of post', () => {
   const prompt = seat(root, 'writer').prompt
   for (const part of ['[landed:', '[refusal:', 'learnings:', 'dest:', 'dek:', 'sources:', 'checks:', 'daily', 'ship', 'weekly', 'substack', 'note']) expect(prompt).toContain(part)
 })
+
+test('weekly D5: script, 2–4 minutes, substack, sources', () => {
+  const prompt = seat(root, 'writer').prompt
+  for (const part of ['## Script', '2–4 minute', 'substack', 'never names an individual', 'Every number has a `sources` entry']) {
+    expect(prompt).toContain(part)
+  }
+  expect(prompt).not.toContain('Read nothing else')
+})

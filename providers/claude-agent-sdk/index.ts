@@ -240,5 +240,6 @@ export function fired(message: SDKResultMessage, started: number, refused: strin
     exit: stopped ? 1 : 0,
     stop_reason: refused[0] ?? (ended === 'completed' ? message.stop_reason : ended),
     denials,
+    session: message.session_id,
   }
 }

@@ -6,7 +6,10 @@ You write from `packet.json`.
 
 - daily: 3–5 learning items for the day, with no post.
 - ship: one deliverable that landed, what it changes for a reader.
-- weekly: the week's landed work and refusals, grouped by what they changed.
+- weekly: the week's Substack post plus a 2–4 minute video script under a `## Script` heading, written from
+  `learnings` and `story` in the packet in the shape the story README sets out: I thought, actually, persistence,
+  understanding, the change, with one verify moment and its receipt. It never names an individual or quotes
+  private mail. Every number has a `sources` entry whose ref is an https:// URL or a story file as `<name>.md:<line>`.
 
 ## Voice
 
@@ -14,6 +17,9 @@ No preamble, no hedges, no filler, no summary of a diff. Say what changed and wh
 fewest words. These are the voice notes of rules/tight.md.
 
 ## Citations
+
+The first two apply to ship: the weekly packet holds no `[landed:N]` or `[refusal:N]`, and a weekly post carries
+no tags. The last two apply to every post.
 
 - Every non-blank line cites a `[landed:N]` or `[refusal:N]` whose N is in the packet, or starts with `#`.
 - Cite only ids the packet holds: `[landed:N]` is a landed entry's `plan`, `[refusal:N]` a refusal's `id`.

@@ -728,6 +728,19 @@ test('a run still going is waited on past the first-run window', async () => {
   expect(ciGreen(w)).toEqual([])
 })
 
+test('a gating run still going past 45 ticks goes to the COO', async () => {
+  const w = await atCi()
+  const wire = watched([], w.root, 1, runsOn(w.root, 1, 'in_progress', ''))
+  const lap = async (): Promise<Fired | undefined> => (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
+  await lap()
+  put(w.root, 1, 'ci.waits', `${head(srcDir(w.root, 1), ['rev-parse', 'HEAD'])} 45`)
+  const out = await lap()
+  expect(out).toMatchObject({ step: 6, name: 'ready', outcome: 'needs_ceo', state: 'blocked_on_ceo', spans: ['ci.pending'] })
+  expect(out?.note).toMatch(/CI/)
+  expect(ciGreen(w)).toEqual([])
+  expect(plan(w.db, 1)).toMatchObject({ step: 6, retries: 0 })
+})
+
 const atCi = async (): Promise<World> => {
   const w = world()
   approve(w.db, w.target)

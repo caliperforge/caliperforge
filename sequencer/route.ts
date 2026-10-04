@@ -9,12 +9,12 @@ import { languageOfSeat } from '../templates/pr-path.ts'
 export const BRIEF_FILES = 'brief:files'
 
 /**
- * Which builder a plan gets. The kernel's own repo is TypeScript; another repo of ours is what its tree is written in, and an empty one goes by the plan's seat unless `bySeat` is false, as for the gates. On a stranger's repo the brief's files decide: all
+ * Which builder a plan gets; a part of an outside plan goes by its own files, as the outside plan does. The kernel's own repo is TypeScript; another repo of ours is what its tree is written in, and an empty one goes by the plan's seat unless `bySeat` is false, as for the gates. On a stranger's repo the brief's files decide: all
  * under `kotlin/` is the Kotlin seat; otherwise the files' language,
  * and the outside seat only when no file is in a language with a seat of its own.
  */
 export function languageFor(db: Db, plan: PlanRow, src: string, bySeat = true): string | null {
-  if (internal(plan)) return kernelPlan(plan) ? null : languageOf(src) ?? (bySeat ? languageOfSeat(plan.seat) : null)
+  if (internal(plan) && plan.target_id === null) return kernelPlan(plan) ? null : languageOf(src) ?? (bySeat ? languageOfSeat(plan.seat) : null)
   const paths = filesOf(db, plan.id).map((f) => f.path)
   if (paths.length === 0) return languageOf(src)
   if (paths.every((p) => p.startsWith('kotlin/'))) return 'kotlin'
@@ -44,7 +44,7 @@ const BY_FOLDER: [RegExp, string][] = [
 /** Docs never pick a builder, nor do fixtures a test reads. */
 const IGNORED = /\.(md|mdx|txt|rst)$|(^|\/)(docs?|fixtures|testdata)\//
 
-export const TEST = /(^|\/)(tests?|spec)\/|_test\.(go|rb)$|_spec\.rb$|(^|\/)test_[^/]*\.py$|_test\.py$|Test\.php$|_spec\.lua$/
+export const TEST = /(^|\/)([Tt]ests?|spec)\/|_test\.(go|rb)$|_spec\.rb$|(^|\/)test_[^/]*\.py$|_test\.py$|Test\.php$|_spec\.lua$/
 
 /** What one path is written in, or null: a TypeScript file generated beside Rust stays with the Rust. */
 export function languageOfPath(path: string): string | null {

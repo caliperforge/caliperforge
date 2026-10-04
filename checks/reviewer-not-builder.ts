@@ -9,6 +9,8 @@ const PROBES = [
   { name: 'step 4 with the builder seat', sql: [run(1, 2, 'builder'), run(1, 4, 'builder')] },
   { name: 'step 5 with the step-4 seat', sql: [run(2, 4, 'reviewer'), run(2, 5, 'reviewer')] },
   { name: 'update into a collision', sql: [run(3, 2, 'builder'), run(3, 4, 'reviewer'), "UPDATE runs SET seat = 'builder' WHERE plan = 3 AND step = 4"] },
+  { name: 'a review run in the build session', sql: [run(4, 2, 'builder', null, 's'), run(4, 4, 'reviewer', 'review', 's')] },
+  { name: 'update into the build session', sql: [run(5, 2, 'builder', null, 's'), run(5, 4, 'reviewer', 'review', 't'), "UPDATE runs SET session = 's' WHERE plan = 5 AND step = 4"] },
 ]
 
 export const reviewerNotBuilder: Check = {
@@ -37,9 +39,13 @@ function probe(db: Db, p: { name: string; sql: string[] }): Finding[] {
   return rejects(db, last) ? [] : [finding(`${p.name} was accepted`)]
 }
 
-function run(plan: number, step: number, seat: string): string {
-  return `INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_read_tokens, output_tokens, seconds, exit, transcript_path)
-VALUES (${String(plan)}, ${String(step)}, '${seat}', '${'0'.repeat(64)}', 'anthropic-api', 'm', 'low', 0, 0, 0, 0, 0, 'x.transcript.jsonl')`
+function run(plan: number, step: number, seat: string, mode: string | null = null, session: string | null = null): string {
+  return `INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_read_tokens, output_tokens, seconds, exit, transcript_path, mode, session)
+VALUES (${String(plan)}, ${String(step)}, '${seat}', '${'0'.repeat(64)}', 'anthropic-api', 'm', 'low', 0, 0, 0, 0, 0, 'x.transcript.jsonl', ${literal(mode)}, ${literal(session)})`
+}
+
+function literal(value: string | null): string {
+  return value === null ? 'NULL' : `'${value}'`
 }
 
 function finding(message: string): Finding {

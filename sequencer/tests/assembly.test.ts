@@ -1,10 +1,11 @@
 import { execFileSync } from 'node:child_process'
-import { writeFileSync } from 'node:fs'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { expect, test } from 'vitest'
 import { approve as approveCard } from '../../cli/batch.ts'
 import type { Pr } from '../../cli/gh.ts'
 import { record, type SignalRow } from '../../store/signals.ts'
+import { verdictRows } from '../../store/verdict.ts'
 import { approve as approvePublish } from '../card.ts'
 import { tick } from '../index.ts'
 import { kernelPlan } from '../home.ts'
@@ -12,7 +13,7 @@ import type { Wire } from '../push.ts'
 import { repoOf } from '../ready.ts'
 import { started } from '../signals.ts'
 import { checkout, diffOf, fetchMain, FORK, get, maybe, put, SELF, srcDir } from '../workspace.ts'
-import { built, CARRIED, plan, PR, REFUSE, stub, watched, world, type World } from './world.ts'
+import { built, CARRIED, plan, PR, REFUSE, stub, tip, watched, world, type World } from './world.ts'
 
 const ID = 2
 
@@ -28,13 +29,17 @@ function part(w: World, id: number, n: number, state = 'queued'): void {
   put(w.root, id, 'ask.md', '# hello part\n\n- **D1** add `hello()` in `src/hello.ts`\n')
 }
 
-function assembling(): Assembly {
+function assembling(ci = false): Assembly {
   const w = world()
   w.db.prepare("UPDATE plans SET state = 'done' WHERE id = 1").run()
   part(w, ID, 0)
   const fork = join(w.root, 'remotes', FORK, 'widget')
   git(fork, ['checkout', '-q', '-b', 'asm/1'])
   writeFileSync(join(fork, 'src/asm.ts'), 'export const asm = 1\n')
+  if (ci) {
+    mkdirSync(join(fork, '.github/workflows'), { recursive: true })
+    writeFileSync(join(fork, '.github/workflows/ci.yml'), 'name: CI\non: push\njobs: {}\n')
+  }
   git(fork, ['add', '-A'])
   git(fork, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'asm'])
   git(fork, ['checkout', '-q', 'main'])
@@ -106,8 +111,8 @@ test('D2 a refused part rebuilds; sibling and asm/1 untouched', async () => {
 })
 
 /** The part landed on asm/1, and the parent holding the `base.sha` its brief was written against. */
-async function landed(): Promise<Assembly> {
-  const a = assembling()
+async function landed(ci = false): Promise<Assembly> {
+  const a = assembling(ci)
   put(a.w.root, 1, 'base.sha', `${git(a.upstream, ['rev-parse', 'main'])}\n`)
   const wire = pushing([], a)
   await laps(a, 3, wire)
@@ -139,6 +144,33 @@ test('D2 D3 the parent reviews asm/1, opens one PR once approved', async () => {
   approvePublish(a.w.db, a.w.root, 1, 'ceo')
   await laps(a, 1, wire)
   expect(log.filter((l) => l.startsWith('open '))).toEqual(['open acme/widget caliperforge:asm/1'])
+})
+
+const ciGreen = (a: Assembly, id: number): string | undefined =>
+  verdictRows(a.w.db, id).findLast((v) => v.rail_id === 'ci-green')?.outcome
+
+test('D1 a part under a workflow sends only its landing', async () => {
+  const a = assembling(true)
+  const log: string[] = []
+  const wire = pushing(log, a)
+  await laps(a, 3, wire)
+  built(a.w.root, ID, 'export const landed = true')
+  await laps(a, 4, wire)
+  expect(plan(a.w.db, ID).step).toBe(7)
+  expect(ciGreen(a, ID)).toBe('pass')
+
+  await laps(a, 2, wire)
+  const head = git(srcDir(a.w.root, ID), ['rev-parse', 'HEAD'])
+  expect(log).toEqual(['send src main:refs/heads/asm/1', `close ${SELF}#901 ${head.slice(0, 7)}`])
+})
+
+test('D3 the parent still sends asm/1-next and judges its runs', async () => {
+  const a = await landed(true)
+  const log: string[] = []
+  await laps(a, 4, watched(log, a.w.root, 1))
+  expect(plan(a.w.db, 1).step).toBe(7)
+  expect(log).toContain(`send src ${tip(a.w.root, 1)}:refs/heads/asm/1-next`)
+  expect(ciGreen(a, 1)).toBe('pass')
 })
 
 test('D4 a refused pre_review leaves the parent on ready proof', async () => {

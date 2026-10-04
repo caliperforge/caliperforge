@@ -52,6 +52,17 @@ export function languageOfPath(path: string): string | null {
   return (BY_NAME.find(([re]) => re.test(path)) ?? BY_FOLDER.find(([re]) => re.test(path)))?.[1] ?? null
 }
 
+/** The path a refusal span names: its first word, less a `:N` or `:N-M` line. */
+export function pathOfSpan(span: string): string {
+  return (span.split(/\s/)[0] ?? '').replace(/:\d+(-\d+)?$/, '')
+}
+
+/** What a span's path is written in; TypeScript too, which `languageOfPath` never names. */
+export function languageOfSpan(span: string): string | null {
+  const path = pathOfSpan(span)
+  return languageOfPath(path) ?? (/\.tsx?$/.test(path) && !IGNORED.test(path) ? 'typescript' : null)
+}
+
 /** The language with the most non-test files; a list of tests alone counts its tests. A tie goes to the first listed. */
 export function majority(paths: string[]): string | null {
   const known = paths.map((p) => ({ p, language: languageOfPath(p) })).filter((k): k is { p: string; language: string } => k.language !== null)

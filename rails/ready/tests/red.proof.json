@@ -4,7 +4,6 @@
   "at": "2026-09-17",
   "tests_pass": false,
   "byte_identical_elsewhere": false,
-  "fork_public": false,
   "bot_clean": false,
   "spans": [],
   "title": "feat(ruby): PayKit.configure_from_env mirrors Python's configure_from",

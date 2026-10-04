@@ -24,6 +24,7 @@ import { overrule, verdictRows } from '../../store/verdict.ts'
 import { record as signal } from '../../store/signals.ts'
 import { benchPacket } from '../../runner/packet.ts'
 import type { Packet, Provider } from '../../providers/kind.ts'
+import type { Gh } from '../../rails/ci-green/index.ts'
 import type { Fired } from '../kind.ts'
 import { forkCi, type Wire } from '../push.ts'
 import { approve, builds, built, CARRIED, dropping, internalPlan, KOTLIN, ours, owning, PASS, plan, REFUSE, rerunning, RUN, runsAfter, runsOn, scored, stub, tip, watched, WORDS, world, type World } from './world.ts'
@@ -727,6 +728,19 @@ test('a run still going is waited on past the first-run window', async () => {
   expect(ciGreen(w)).toEqual([])
 })
 
+test('a gating run still going past 45 ticks goes to the COO', async () => {
+  const w = await atCi()
+  const wire = watched([], w.root, 1, runsOn(w.root, 1, 'in_progress', ''))
+  const lap = async (): Promise<Fired | undefined> => (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
+  await lap()
+  put(w.root, 1, 'ci.waits', `${head(srcDir(w.root, 1), ['rev-parse', 'HEAD'])} 45`)
+  const out = await lap()
+  expect(out).toMatchObject({ step: 6, name: 'ready', outcome: 'needs_ceo', state: 'blocked_on_ceo', spans: ['ci.pending'] })
+  expect(out?.note).toMatch(/CI/)
+  expect(ciGreen(w)).toEqual([])
+  expect(plan(w.db, 1)).toMatchObject({ step: 6, retries: 0 })
+})
+
 const atCi = async (): Promise<World> => {
   const w = world()
   approve(w.db, w.target)
@@ -746,6 +760,74 @@ test('a CI run judged without a hold leaves no now row', async () => {
   const w = await atCi()
   expect(forkCi(w.db, w.root, plan(w.db, 1), 'acme/widget', watched([], w.root, 1))).toBeNull()
   expect(now(w)).toEqual([])
+})
+
+interface Listed { status: string; conclusion: string }
+
+/** One run per workflow `runs` names at the head, run ids counting from 1; a `run rerun` goes in `log`. */
+const forkRuns = (log: string[], w: World, runs: Record<string, Listed>): Gh => (args) => {
+  if (args[1] === 'rerun') {
+    log.push(args.join(' '))
+    return ''
+  }
+  const names = Object.keys(runs)
+  if (args.includes('--log-failed')) return 'test\tRun\tboom\n'
+  if (args[1] === 'view') return JSON.stringify({ workflowName: names[Number(args[2]) - 1] })
+  return JSON.stringify(names.map((name, i) => ({ headSha: tip(w.root, 1), ...runs[name], url: RUN.replace(/1$/, String(i + 1)), workflowName: name })))
+}
+
+const GREEN_RUN = { status: 'completed', conclusion: 'success' }
+
+test('a head red only through a cancelled run re-runs it and holds', async () => {
+  const w = await atCi()
+  const log: string[] = []
+  const wire = watched([], w.root, 1, forkRuns(log, w, { Harness: { status: 'completed', conclusion: 'cancelled' }, CI: GREEN_RUN }))
+  expect(forkCi(w.db, w.root, plan(w.db, 1), 'acme/widget', wire))
+    .toMatchObject({ outcome: 'pass', held: true, note: expect.stringMatching(/re-running cancelled Harness, tick 1 of 10$/) as unknown })
+  expect(log).toEqual(['run rerun 1 --repo caliperforge/widget'])
+  expect(ciGreen(w)).toEqual([])
+  expect(plan(w.db, 1)).toMatchObject({ step: 6, retries: 0 })
+})
+
+test('a cancelled run re-run green passes ci-green', async () => {
+  const w = await atCi()
+  const log: string[] = []
+  const harness = { status: 'completed', conclusion: 'cancelled' }
+  const wire = watched([], w.root, 1, forkRuns(log, w, { Harness: harness, CI: GREEN_RUN }))
+  const lap = async (): Promise<Fired | undefined> => (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
+
+  expect(await lap()).toMatchObject({ step: 6, outcome: 'pass', state: 'running' })
+  Object.assign(harness, { status: 'in_progress', conclusion: '' })
+  expect((await lap())?.note).toMatch(/is still running CI, tick 1 of 45$/)
+  Object.assign(harness, GREEN_RUN)
+  expect(await lap()).toMatchObject({ step: 6, name: 'ready', outcome: 'pass' })
+  expect(ciGreen(w)).toEqual([{ outcome: 'pass' }])
+  expect(plan(w.db, 1)).toMatchObject({ step: 7, retries: 0 })
+  expect(log).toHaveLength(1)
+})
+
+test('a failed run beside a cancelled one goes to the builder', async () => {
+  const w = await atCi()
+  const log: string[] = []
+  const wire = watched([], w.root, 1, forkRuns(log, w, {
+    Harness: { status: 'completed', conclusion: 'failure' }, CI: { status: 'completed', conclusion: 'cancelled' } }))
+  const red = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
+  expect(red).toMatchObject({ step: 6, name: 'ready', outcome: 'refuse', state: 'retried', spans: ['ci.red Harness', 'ci.red CI'] })
+  expect(plan(w.db, 1)).toMatchObject({ step: 2, retries: 1 })
+  expect(planFile(w.root, 'refusal.md')).toContain('their CI is red')
+  expect(log).toEqual([])
+})
+
+test('a run that stays cancelled is re-run once, then to the ceo', async () => {
+  const w = await atCi()
+  const log: string[] = []
+  const wire = watched([], w.root, 1, forkRuns(log, w, { Harness: { status: 'completed', conclusion: 'cancelled' }, CI: GREEN_RUN }))
+  const states: (string | undefined)[] = []
+  for (let at = 0; at < 11; at += 1) states.push((await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]?.state)
+  expect(log).toEqual(['run rerun 1 --repo caliperforge/widget'])
+  expect(states.at(-1)).toBe('blocked_on_ceo')
+  expect(states).not.toContain('retried')
+  expect(plan(w.db, 1).step).toBe(6)
 })
 
 test('step 6 waits out the push window, then judges the new run', async () => {

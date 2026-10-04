@@ -300,6 +300,14 @@ test('D3 two scores at one head are one head; the newer decides', () => {
   expect(missSection(misses(db, root, now))).toContain('  kotlin 1 passed, 0 marked down\n')
 })
 
+test('D3 findings repeated on a later head count once', () => {
+  const { db, root, now } = rehearsals()
+  const next = 'e'.repeat(40)
+  review(db, 3, 'caliperforge/widget', 'greptile-apps', '2026-10-02T09:00:00Z', 1, 2, next)
+  put(root, 1, `findings-${next}.md`, [1, 2, 3, 4].map((n) => `- G${String(n)} a finding\n`).join(''))
+  expect(missSection(misses(db, root, now))).toContain('  kotlin 2 passed, 2 marked down, 4 findings\n')
+})
+
 test('D4 no counted head prints none', () => {
   expect(missSection(misses(world(), mkdtempSync(join(tmpdir(), 'cf-misses-')), new Date()))).toBe(`${MISSED}  none\n`)
 })

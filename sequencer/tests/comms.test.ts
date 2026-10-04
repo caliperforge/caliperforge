@@ -67,20 +67,22 @@ const judged =(w: World, line: string): ReturnType<typeof facts> => {
   return facts(w.root, plan(w.db, 1))
 }
 
-test('D2 D7 D6: a comms plan runs writer and text_review to done', async () => {
+test('dailyLogs D1 D4: a daily logs items and writes no post', async () => {
   const w = comms()
   const today = new Date().toISOString().slice(0, 10)
   reads(w.db, 1)
   titled(w, 1, `daily ${local(w)}`)
   putPost(w.db, { id: 2, kind: 'daily', dest: 'site', status: 'proof', title: 'The day', dek: 'What moved', body: 'One job landed.',
     edited_title: 'The whole day', sources: '[]', checks: '[]', work_date: today, written_date: today })
-  const seats = seated(writing(`# The day\n\nOne job was refused. [refusal:${String(refusal(w, 0))}]`))
+  const seats = seated(listing(items('a', 'b', 'c')))
   for (let n = 0; n < 11 && plan(w.db, 1).state !== 'done'; n += 1) await tick(w.db, w.root, seats)
   expect(plan(w.db, 1).state).toBe('done')
   expect(events(w)).toEqual(NAMES.map((kind) => ({ kind, outcome: 'pass' })))
   expect(ran(w)).toEqual(['writer', 'text_review'])
   expect(verdictRows(w.db, 1)).toEqual([])
-  expect(posts(w.db).map(({ id }) => ({ id }))).toEqual([{ id: 1 }, { id: 2 }])
+  expect([maybe(w.root, 1, 'draft.md'), maybe(w.root, 1, 'fence.json')]).toEqual([null, null])
+  expect(posts(w.db).map(({ id }) => ({ id }))).toEqual([{ id: 2 }])
+  expect(learned(w)).toEqual([{ date: local(w), numbers: '[]', items: JSON.stringify(items('a', 'b', 'c')), sources: '[]' }])
   expect(readFileSync(join(w.root, 'comms/voice-notes.md'), 'utf8')).toBe(`# Voice notes\n\n- ${today} 2 title: lengthened (7 → 13 chars)\n`)
 })
 
@@ -294,8 +296,11 @@ test('D6: desk passes a plan with no draft and writes no row', () => {
 const verdict = (name: string): string =>
   readFileSync(join(import.meta.dirname, '../..', 'seats/text_review/tests', name), 'utf8')
 
-/** `post` under reply.md's fence, as the writer answers. */
-const writing = (post: string): string => `${post}\n\n${fixture('reply.md').slice(fixture('reply.md').indexOf('---'))}`
+const ITEM = { what: 'a build was refused', lesson: 'name the test', fix: 'named it', status: 'fixed' }
+
+const items = (...titles: string[]): Record<string, string>[] => titles.map((title) => ({ title, ...ITEM }))
+
+const listing = (list: Record<string, string>[]): string => `The day.\n\n---\nitems: ${JSON.stringify(list)}\n---\n`
 
 /** The text_review seat answers `review`; every other seat answers `writer`. */
 const seated = (writer: string, review = verdict('wording.reply.md')): Provider => ({
@@ -318,8 +323,8 @@ const reviewing = (w: World, reply: string): ReturnType<typeof review> => {
   return review(w.db, w.root, plan(w.db, 1), mapOf('comms').at(3), seated('', reply))
 }
 
-test('draftWrites D1: a daily reply fills draft.md and fence.json', async () => {
-  const w = posting('daily 2026-09-27')
+test('draftWrites D1: a ship reply fills draft.md and fence.json', async () => {
+  const w = posting('ship post acme/widget#7')
   expect(await draft(w.db, w.root, plan(w.db, 1), mapOf('comms').at(1), seated(fixture('reply.md')))).toMatchObject({ outcome: 'pass' })
   expect(get(w.root, 1, 'draft.md')).toBe(drafted(fixture('reply.md'))?.post)
   expect(JSON.parse(get(w.root, 1, 'fence.json'))).toEqual(fenced())
@@ -327,10 +332,40 @@ test('draftWrites D1: a daily reply fills draft.md and fence.json', async () => 
 })
 
 test('draftBadFence D2: a bad fence refuses and writes no draft', async () => {
-  const w = posting('daily 2026-09-27')
+  const w = posting('ship post acme/widget#7')
   expect(await draft(w.db, w.root, plan(w.db, 1), mapOf('comms').at(1), seated(fixture('no-learnings.md'))))
     .toMatchObject({ outcome: 'refuse', spans: ['writer.fence'] })
   expect(maybe(w.root, 1, 'draft.md')).toBeNull()
+})
+
+test.each([
+  { why: '2 items', list: items('a', 'b') },
+  { why: '6 items', list: items('a', 'b', 'c', 'd', 'e', 'f') },
+  { why: 'a status of done', list: [...items('a', 'b'), { title: 'c', ...ITEM, status: 'done' }] },
+])('dailyRefuses D2: a daily reply of $why refuses on writer.fence and writes no items.json', async ({ list }) => {
+  const w = posting('daily 2026-09-27')
+  expect(await draft(w.db, w.root, plan(w.db, 1), mapOf('comms').at(1), seated(listing(list))))
+    .toMatchObject({ outcome: 'refuse', spans: ['writer.fence'] })
+  expect(maybe(w.root, 1, 'items.json')).toBeNull()
+})
+
+test('dailyReviews D3: text_review reads items.json on a daily', async () => {
+  const w = posting('daily 2026-09-27')
+  put(w.root, 1, 'items.json', JSON.stringify(items('a', 'b', 'c')))
+  expect(await review(w.db, w.root, plan(w.db, 1), mapOf('comms').at(3), seated('', verdict('wording.reply.md'))))
+    .toMatchObject({ outcome: 'pass' })
+  expect(ran(w)).toEqual(['text_review'])
+})
+
+test('dailyMerges D5: a title already in the day is added once', async () => {
+  const w = posting('daily 2026-09-27')
+  w.db.exec(`INSERT INTO desk_learnings (date, numbers, items, sources) VALUES ('2026-09-27', '[1]', '[{"title":"a lesson"}]', '["x.ts:1"]')`)
+  gather(w.db, w.root, plan(w.db, 1))
+  await draft(w.db, w.root, plan(w.db, 1), mapOf('comms').at(1), seated(listing(items('a lesson', 'b', 'c'))))
+  expect(desk(w.db, w.root, plan(w.db, 1))).toEqual({ outcome: 'pass', spans: [], note: '2 item(s) added to 2026-09-27' })
+  expect(learned(w)).toEqual([{ date: '2026-09-27', numbers: '[1]', sources: '["x.ts:1"]',
+    items: JSON.stringify([{ title: 'a lesson' }, ...items('b', 'c')]) }])
+  expect(posts(w.db)).toEqual([])
 })
 
 test('reviewRefuses D3: a refuse goes back to step 1 on its spans', async () => {

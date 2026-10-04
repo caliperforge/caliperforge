@@ -17,7 +17,8 @@ together in one message, never one per turn.
 
 On our own repository, before the fence, run what step 3 will judge and fix what it reports:
 `npm run typecheck`, `npm run lint` (`npm run lint -- --fix` for what it can fix), `npm run tight`,
-and `npm run test -- <path>` for each test file you touched. Leave the whole suite to step 3.
+`npm run test -- checks/ratchet.test.ts`, and `npm run test -- <path>` for each test file you touched. Leave the whole suite to step 3.
+The ratchet judges the files you touch: a test name at most 60 characters, no new `db.prepare(` outside `store/` (tests use store helpers), and a file at most 30 lines over its `ratchet.json` row (300 for a new file).
 Those npm scripts are the only commands you may run; any other is refused. Look around with Read, Glob and Grep.
 Every command runs in the foreground; wait for it to finish, and answer only after it has.
 On anyone else's repository you have no shell; their CI is the check.

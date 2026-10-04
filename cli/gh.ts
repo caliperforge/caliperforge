@@ -217,6 +217,7 @@ const Events = z.array(z.looseObject({
 const Lines = z.array(z.object({
   id: z.int(),
   commit_id: z.string(),
+  original_commit_id: z.string(),
   path: z.string(),
   line: z.int().nullable(),
   original_line: z.int().nullable(),

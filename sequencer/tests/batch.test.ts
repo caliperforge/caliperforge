@@ -341,9 +341,9 @@ const SECOND = { id: 2, pipe_id: 1, target_id: 1, template: 'pr_path', state: 'r
 const forked = (repo: string): Pr => (repo === 'caliperforge/widget' ? FORKED : pr())
 
 const INLINE = [
-  { id: 11, commit_id: SHA, path: 'src/hello.ts', line: 1, original_line: 1, body: 'a mint change is lost', user: { login: 'greptile-apps[bot]' } },
-  { id: 12, commit_id: SHA, path: 'src/hello.ts', line: 2, original_line: 2, body: 'rename it', user: { login: 'maintainer' } },
-  { id: 13, commit_id: 'b'.repeat(40), path: 'src/hello.ts', line: 3, original_line: 3, body: 'old', user: { login: 'greptile-apps[bot]' } },
+  { id: 11, commit_id: SHA, original_commit_id: SHA, path: 'src/hello.ts', line: 1, original_line: 1, body: 'a mint change is lost', user: { login: 'greptile-apps[bot]' } },
+  { id: 12, commit_id: SHA, original_commit_id: SHA, path: 'src/hello.ts', line: 2, original_line: 2, body: 'rename it', user: { login: 'maintainer' } },
+  { id: 13, commit_id: 'b'.repeat(40), original_commit_id: 'b'.repeat(40), path:'src/hello.ts', line: 3, original_line: 3, body: 'old', user: { login: 'greptile-apps[bot]' } },
 ]
 
 const listing = (heads: string[]) => (args: string[]): unknown => {

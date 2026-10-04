@@ -642,17 +642,11 @@
   "store/deliverables.ts": {
     "lines": 102
   },
-  "store/desk.ts": {
-    "lines": 44
-  },
   "store/dispositions.ts": {
     "lines": 51
   },
-  "store/drift.ts": {
-    "lines": 41
-  },
   "store/events.ts": {
-    "lines": 99
+    "lines": 91
   },
   "store/files.ts": {
     "lines": 92
@@ -676,17 +670,14 @@
   "store/now.ts": {
     "lines": 31
   },
-  "store/parts.ts": {
-    "lines": 49
-  },
   "store/plans.ts": {
-    "lines": 295
+    "lines": 279
   },
   "store/proposals.ts": {
     "lines": 66
   },
   "store/refusals.ts": {
-    "lines": 129
+    "lines": 119
   },
   "store/rows.ts": {
     "lines": 11

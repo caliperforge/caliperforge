@@ -7,9 +7,13 @@ import { CAPPED, type Packet, type Provider } from '../../../providers/kind.ts'
 import { planRow } from '../../../runner/index.ts'
 import { CAP_MAX, STEP_CAP, stepsFor } from '../../../runner/packet.ts'
 import { load } from '../../../runner/rules.ts'
+import { tick } from '../../../sequencer/index.ts'
+import { approve, builds, CARRIED, plan as planAt, stub, watched, world } from '../../../sequencer/tests/world.ts'
+import { srcDir } from '../../../sequencer/workspace.ts'
+import { eventsOf } from '../../../store/events.ts'
 import { record } from '../../../store/files.ts'
 import { judge, loadReviews, specHash } from '../../bench.ts'
-import { read } from '../../verdict.ts'
+import { type Judged, read } from '../../verdict.ts'
 
 const root = join(import.meta.dirname, '../../..')
 const TRANSCRIPT = join(tmpdir(), 'cf-review.transcript.jsonl')
@@ -280,6 +284,41 @@ test('a refused packet writes its verdict and fires no provider',async () => {
   expect(out.run).toBeNull()
   expect(db.prepare('SELECT outcome, origin_kind, origin_ref FROM verdicts WHERE id = ?').get(out.verdict))
     .toEqual({ outcome: 'refuse', origin_kind: 'ruling', origin_ref: 'reviewers.maintainers_view' })
+})
+
+const senior = async (reply: string): Promise<Judged> => {
+  const { db, plan } = bench(root)
+  const out = await judge(db, root, 'senior_review', plan, seeded({ verdict: fixture('senior_review', 'first.verdict.md') }),
+    replies(fixture('senior_review', reply)), TRANSCRIPT)
+  return out.outcome
+}
+
+test('D1 a Swift idiom reads as a pass with a language note', async () => {
+  expect(await senior('swift.reply.md')).toMatchObject({ outcome: 'pass', spans: [], notes: [{
+    file: 'Sources/Stats/Median.swift', line: 3, old: 'if let first = xs.first {',
+    new: 'guard let first = xs.first else { return nil }', why: 'an early exit reads as guard let in Swift', kind: 'language',
+  }] })
+})
+
+test('D2 a dropped spec field still refuses as correctness', async () => {
+  expect(await senior('dropped.reply.md')).toMatchObject({
+    outcome: 'refuse', defect_class: 'correctness', spans: ['src/stats.ts:2'], origin_kind: 'ruling', origin_ref: 'reviewers.verdict',
+  })
+})
+
+test('D3 a pass with only language notes logs them, writes none', async () => {
+  const w = world()
+  approve(w.db, w.target)
+  const hello = join(srcDir(w.root, 1), 'src/hello.ts')
+  const HI = 'export const hello = (): string => "hi"\n'
+  const provider = builds(() => { writeFileSync(hello, HI) })
+  for (let at = 0; at < 4; at += 1) await tick(w.db, w.root, provider, undefined, undefined, watched([], w.root, 1))
+  const note = `  - file: src/hello.ts\n    line: 1\n    old: ${JSON.stringify('"hi"')}\n    new: ${JSON.stringify('"hey"')}\n    why: idiom\n    kind: language\n`
+  const fired = (await tick(w.db, w.root, stub(CARRIED, 0, `---\noutcome: pass\nnotes:\n${note}---\n`)))[0]
+  expect(fired).toMatchObject({ step: 4, outcome: 'pass' })
+  expect(planAt(w.db, 1)).toMatchObject({ step: 5, retries: 0 })
+  expect(readFileSync(hello, 'utf8')).toBe(HI)
+  expect(eventsOf(w.db, 1, 'note')).toEqual([{ actor: 'code_quality', outcome: 'pass', message: 'language: idiom' }])
 })
 
 test('review turns grow with the diff', () => {

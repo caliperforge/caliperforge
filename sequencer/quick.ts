@@ -2,8 +2,9 @@ import type { Provider } from '../providers/kind.ts'
 import { parse } from '../rails/diff.ts'
 import { TEST_FILE } from '../rails/test-weakened/index.ts'
 import { record } from '../reviews/bench.ts'
-import type { Finding, Verdict } from '../reviews/verdict.ts'
+import type { Finding, Note, Verdict } from '../reviews/verdict.ts'
 import { digestOf } from '../store/approvals.ts'
+import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { internal, type PlanRow } from '../store/plans.ts'
 import { profile } from '../store/profile.ts'
@@ -28,7 +29,8 @@ const CAP = 20
  * lane cannot verify is the reviewer's own refusal, and the lap is the one the plan would have taken.
  */
 export async function fireRound(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
-  const { outcome: verdict, findings, notes, tree } = await fireReview(db, root, plan, step, provider)
+  const { outcome: verdict, findings, notes: all, tree } = await fireReview(db, root, plan, step, provider)
+  const notes = landable(db, plan, step, all)
   if (verdict.outcome === 'pass' && notes.length > 0) return landed(db, root, plan, step, notes)
   if (verdict.outcome !== 'refuse' || tree === null) return verdict
   if (findings.length === 0 || !findings.every((f) => f.kind === 'cosmetic')) return verdict
@@ -40,6 +42,13 @@ export async function fireRound(db: Db, root: string, plan: PlanRow, step: Step,
   const id = record(db, root, step.runs, plan.id, settled(diffOf(root, plan.id)), 0, fired.seconds, null, 1)
   regated(db, plan.id, step.step, id, get(root, plan.id, `step-${String(step.step)}.verdict.md`), snapshot(src))
   return { outcome: 'pass', spans: [], note: `${step.runs} ${String(findings.length)} cosmetic finding(s) fixed in place` }
+}
+
+function landable(db: Db, plan: PlanRow, step: Step, notes: Note[]): Note[] {
+  for (const n of notes.filter((n) => n.kind === 'language')) {
+    logged(db, { plan: plan.id, kind: 'note', actor: step.runs, outcome: 'pass', message: `language: ${n.why}`, pointer: `${n.file}:${String(n.line)}`, run: null })
+  }
+  return notes.filter((n) => n.kind !== 'language')
 }
 
 /** The builder's packet: the brief it built against, and each span with the text that replaces it. */

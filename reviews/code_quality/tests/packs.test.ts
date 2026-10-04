@@ -39,6 +39,30 @@ test('a .ts-only diff gets the TypeScript rules and no notes', () => {
   const out = packs(root, diffOf('reviews/packs.ts', 'reviews/bench.ts'), null)
   expect(out).toContain(rules('typescript_specialist'))
   expect(out).not.toContain('# Notes on')
+  expect(out).not.toContain('## Checks in')
+})
+
+const checksOf = (language: string): string => readFileSync(join(root, `reviews/checks/${language}.md`), 'utf8')
+
+test('Swift checks sit between the heading and the Swift rules', () => {
+  const out = packs(root, diffOf('swift/Sources/Main.swift'), null)
+  const checks = out.indexOf(checksOf('swift'))
+  expect(checks).toBeGreaterThan(out.indexOf('# Language rules'))
+  expect(checks).toBeLessThan(out.indexOf(rules('swift_specialist')))
+})
+
+test('Kotlin checks come before the lead to the builder rules', () => {
+  const out = packs(root, diffOf('kotlin/Runner.kt', 'python/client.py'), null)
+  const lead = out.indexOf('The rules each touched language\'s builder worked under')
+  expect(out.indexOf(checksOf('kotlin'))).toBeGreaterThan(out.indexOf('# Language rules'))
+  expect(out.indexOf(checksOf('kotlin'))).toBeLessThan(lead)
+  expect(lead).toBeLessThan(out.indexOf(rules('kotlin_specialist')))
+})
+
+test.each(['swift', 'kotlin'])('the %s checks fit 40 lines and hold the shared four', (language) => {
+  const pack = checksOf(language)
+  expect(pack.trimEnd().split('\n').length).toBeLessThanOrEqual(40)
+  for (const word of ['description', 'opaque', 'CI', 'filter']) expect(pack).toContain(word)
 })
 
 test('each text is its seat prompt up to the answer line', () => {

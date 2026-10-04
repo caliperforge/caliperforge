@@ -7,17 +7,18 @@ import { builder } from '../templates/pr-path.ts'
 
 const LEAD = 'The rules each touched language\'s builder worked under: its prompt up to its answer fence.'
 
-/** The builder rules of each language the diff touches, then the target's notes: what a reviewer of every language judges against. */
+/** The checks and builder rules of each language the diff touches, then the target's notes: what a reviewer of every language judges against. */
 export function packs(root: string, diff: string, repo: string | null): string {
   const languages = new Set(parse(diff).map(({ path }) => languageOfPath(path) ?? (/\.tsx?$/.test(path) ? 'typescript' : null)))
   languages.delete(null)
+  const checks = [...languages].map((l) => pack(root, 'checks', String(l))).join('')
   const rules = [...languages].map((l) => readFileSync(join(root, 'seats', builder(l), 'prompt.md'), 'utf8').replace(/^Answer the [\s\S]*/m, '')
-    + examples(root, String(l)))
-  return (rules.length === 0 ? '' : `\n\n# Language rules\n\n${LEAD}\n\n${rules.join('')}`) + notes(root, repo)
+    + pack(root, 'examples', String(l)))
+  return (rules.length === 0 ? '' : `\n\n# Language rules\n\n${checks}${LEAD}\n\n${rules.join('')}`) + notes(root, repo)
 }
 
-function examples(root: string, language: string): string {
-  const path = join(root, 'reviews', 'examples', `${language}.md`)
+function pack(root: string, folder: string, language: string): string {
+  const path = join(root, 'reviews', folder, `${language}.md`)
   return existsSync(path) ? `${readFileSync(path, 'utf8')}\n` : ''
 }
 

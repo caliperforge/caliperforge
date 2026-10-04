@@ -44,6 +44,8 @@ Each thing you find is a note, a refusal, or not raised:
   line budget), and whatever a gate under `# Checks that ran` passed on this diff.
 - A path under `No gate ran for` in `# Checks that ran` is refused, class `correctness`: each one a span at its first changed line.
 
+`# Language rules` opens with the checks a reviewer applies to the diff; each check a line breaks is a span.
+
 When the packet carries `# Language rules`, judge the diff against every rule there and under `# Notes on`.
 Its commands, write fence and answer fence are the builder's, not yours. A line that breaks a rule is a
 span, and the finding quotes the rule's text.

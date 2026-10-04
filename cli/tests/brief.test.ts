@@ -8,12 +8,13 @@ import { registerLanes } from '../cf-lanes.ts'
 import { registerPlans } from '../cf-plans.ts'
 import { actors, actorSection, costs, costSection, fileWaits, greptileLine, hands, heldBy, line, misses, missSection, rulings, section, ticketSection,
   tickets, unpriced, waitLine, waits } from '../brief.ts'
+import { handUpLine } from '../director.ts'
 import { driftSection } from '../drift.ts'
 import { hold } from '../../sequencer/hold.ts'
 import { monthly, reviewed } from '../../sequencer/ready.ts'
 import { put, SELF } from '../../sequencer/workspace.ts'
 import { drifts } from '../../store/drift.ts'
-import { repriced } from '../../store/events.ts'
+import { handUps, repriced } from '../../store/events.ts'
 import { record as listFiles } from '../../store/files.ts'
 import type { Db } from '../../store/index.ts'
 import { keep } from '../../store/merges.ts'
@@ -58,8 +59,8 @@ function run(db: Db, plan: number, step: number, at: string, seconds = 60, token
 
 const NOW = new Date('2026-09-20T12:00:00.000Z')
 
-function event(db: Db, actor: string, kind: string, at = '2026-09-20 11:00:00', id = 1): void {
-  db.prepare("INSERT INTO events (plan, at, kind, actor, outcome, message) VALUES (?, ?, ?, ?, 'pass', '')").run(id, at, kind, actor)
+function event(db: Db, actor: string, kind: string, at = '2026-09-20 11:00:00', id = 1, outcome = 'pass'): void {
+  db.prepare("INSERT INTO events (plan, at, kind, actor, outcome, message) VALUES (?, ?, ?, ?, ?, '')").run(id, at, kind, actor, outcome)
 }
 
 function day24(): Db {
@@ -120,6 +121,30 @@ test('D6 the fixture day renders the expected section exactly', () => {
     '  orchestrator\t1 intervention(s)\treturn 1\t0 run(s)\t$0.00\theld 0 missed 0 open 1\n' +
     '  fixer\t0 intervention(s)\t-\t2 run(s)\t$0.25\theld 0 missed 0 open 0\n' +
     '  hand PRs merged\t6\n')
+})
+
+const IN = '2026-09-20 11:00:00'
+
+test('D1 director line: decided, handed up, rate over 7 d', () => {
+  const db = world()
+  plan(db, 1, 'running', 25)
+  event(db, 'coo_lite', 'coo_lite')
+  event(db, 'coo_lite', 'coo_lite', '2026-09-14 12:00:00')
+  event(db, 'coo_lite', 'coo_lite', IN, 1, 'needs_ceo')
+  event(db, 'coo_lite', 'coo_lite', '2026-09-12 12:00:00', 1, 'needs_ceo')
+  expect(handUpLine(handUps(db, NOW))).toBe('director: 2 decided, 1 handed up (33%) over 7 d\n')
+})
+
+test('D2 no director events prints 0%, not NaN%', () => {
+  expect(handUpLine(handUps(world(), NOW))).toBe('director: 0 decided, 0 handed up (0%) over 7 d\n')
+})
+
+test('D3 events of another kind count in neither number', () => {
+  const db = world()
+  plan(db, 1, 'running', 25)
+  event(db, 'coo_lite', 'retry')
+  event(db, 'coo_lite', 'stuck', IN, 1, 'needs_ceo')
+  expect(handUps(db, NOW)).toEqual({ decided: 0, up: 0 })
 })
 
 test('each actor scores the past week, not an event 8 days old', () => {

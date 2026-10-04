@@ -114,12 +114,15 @@ export function learnings(db: Db): { date: string; numbers: string | null; items
     .all() as { date: string; numbers: string | null; items: string | null; sources: string | null }[]
 }
 
+export const STATUSES = ['fixed', 'open', 'ruled', 'noted'] as const
+
 export interface Item {
   title: string
   what: string
   lesson: string
   fix: string
-  status: 'fixed' | 'open' | 'ruled' | 'noted'
+  status: typeof STATUSES[number]
+  source?: 'coo'
 }
 
 export function log(db: Db, date: string, items: Item[]): number {

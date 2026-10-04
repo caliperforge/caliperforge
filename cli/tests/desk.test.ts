@@ -5,12 +5,12 @@ import { expect, test } from 'vitest'
 import { mapOf } from '../../sequencer/steps.ts'
 import { plan, PASS, stub, world, type World } from '../../sequencer/tests/world.ts'
 import { put } from '../../sequencer/workspace.ts'
-import { amend, approved, postOf, posts, putPost, sentBack } from '../../store/desk.ts'
+import { amend, approved, learnings, log, postOf, posts, putPost, sentBack } from '../../store/desk.ts'
 import { eventsOf, kindsOf } from '../../store/events.ts'
 import { take } from '../../store/leases.ts'
 import { briefed, dropPlan, end, putPlan } from '../../store/plans.ts'
 import { capture, draft } from '../../templates/comms.ts'
-import { giveBack } from '../desk.ts'
+import { giveBack, learn } from '../desk.ts'
 
 const comms = (status: 'proof' | 'approved' | 'published' = 'proof'): World => {
   const w = world()
@@ -86,6 +86,31 @@ test('D5 cf desk return --by cto is refused', () => {
   const run = (): string => execFileSync(process.execPath, [join(import.meta.dirname, '../cf.ts'), 'desk', 'return', '1',
     '--note', 'x', '--by', 'cto'], { encoding: 'utf8', stdio: 'pipe' })
   expect(run).toThrow('--by takes ceo or coo, not cto')
+})
+
+const AT = new Date('2026-10-04T05:00:00Z')
+const A = { title: 'a', what: 'w', lesson: 'l', fix: 'f', status: 'open' } as const
+
+test('learnAppends D1 one coo item on the local date', () => {
+  const w = world()
+  expect(learn(w.db, A, AT)).toBe(1)
+  expect(learnings(w.db)).toEqual([{ date: '2026-10-03', numbers: '[]', items: JSON.stringify([{ ...A, source: 'coo' }]), sources: '[]' }])
+})
+
+test('learnAppends D2 a repeated title adds nothing', () => {
+  const w = world()
+  log(w.db, '2026-10-03', [{ ...A, title: 'z' }])
+  learn(w.db, A, AT)
+  const was = learnings(w.db)
+  expect(learn(w.db, { ...A, what: 'other' }, AT)).toBe(0)
+  expect(learnings(w.db)).toEqual(was)
+  expect((JSON.parse(was[0]?.items ?? '[]') as { title: string }[]).map((i) => i.title)).toEqual(['z', 'a'])
+})
+
+test('D3 cf learn --status done is refused', () => {
+  const run = (): string => execFileSync(process.execPath, [join(import.meta.dirname, '../cf.ts'), 'learn', 'x', '--status', 'done'],
+    { encoding: 'utf8', stdio: 'pipe' })
+  expect(run).toThrow('--status takes fixed, open, ruled or noted, not done')
 })
 
 test('D6 an edit lands in comms/voice-notes.md on capture', () => {

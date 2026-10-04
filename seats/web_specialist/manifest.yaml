@@ -1,0 +1,13 @@
+seat: web_specialist
+model: claude-opus-5-5
+effort: high
+tools:
+  - Read
+  - Write
+  - Edit
+  - Glob
+  - Grep
+  - Bash(node --check:*)
+  - Bash(npm test:*)
+write_paths:
+  - brief:files

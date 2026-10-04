@@ -15,21 +15,21 @@ function copied(): string {
   return tree
 }
 
-test('D1: the manifest is coo_lite with the seat renamed', () => {
+test('D1: the manifest is the director seat', () => {
   expect(seat(root, 'director').manifest).toEqual({
     seat: 'director', model: 'claude-opus-5-5', effort: 'medium', tools: ['Read', 'Glob', 'Grep', 'Bash(cf look:*)'], write_paths: [],
   })
 })
 
-test('D2: the prompt is coo_lite with its heading renamed', () => {
-  const coo = seat(root, 'coo_lite').prompt
-  expect(seat(root, 'director').prompt).toBe(coo.replace(/^# coo_lite\n/, '# director\n'))
+test('D2: the prompt is headed director', () => {
+  expect(seat(root, 'director').prompt).toMatch(/^# director\n/)
 })
 
-test('D3: coo_lite still loads and director follows it', () => {
-  expect(seat(root, 'coo_lite').manifest.seat).toBe('coo_lite')
+test('D3: coo_lite is refused and director is listed', () => {
+  expect(() => seat(root, 'coo_lite')).toThrow(/absent from rules\/roster\.yaml/)
   const seats = listed(root).seats
-  expect(seats[seats.indexOf('coo_lite') + 1]).toBe('director')
+  expect(seats).toContain('director')
+  expect(seats).not.toContain('coo_lite')
 })
 
 test('D4: the digests hold and director is a card row', () => {
@@ -50,8 +50,8 @@ test('D6: a roster without the director digests is stale', () => {
   expect(check(tree, TODAY).map((s) => s.path)).toContain('rules/roster.yaml')
 })
 
-test('D7: coo_lite decides by default and names ask_coo', () => {
-  const prompt = seat(root, 'coo_lite').prompt
+test('D7: director decides by default and names ask_coo', () => {
+  const prompt = seat(root, 'director').prompt
   expect(prompt).toContain('## Decide by default')
   for (const n of [1, 2, 3, 4]) expect(prompt).toContain(`(${String(n)})`)
   expect(prompt).toContain('move: <rule | waive | return | fix | close | file | ask_ceo | ask_coo>')

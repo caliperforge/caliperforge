@@ -57,7 +57,7 @@ test('fresh', () => {
   const d = db()
   event(d, '2026-10-02 10:00:00')
   expect(drift(d, [COO, { ...COO, name: 'six', gap: '24h' }], NOW)).toEqual([])
-  expect(REGISTRY.map((e) => e.name)).toEqual(['coo_lite', 'orchestrator', 'fixer', 'brief_writer', 'text_review',
+  expect(REGISTRY.map((e) => e.name)).toEqual(['coo_lite', 'fixer', 'brief_writer', 'text_review',
     'growth_lead', 'gardener', 'ratchet', 'accounts', 'records', 'dispositions', 'signoffs', 'proposals',
     'ratchet_refuse', 'intake', 'stuck_plans'])
   expect(ratchetRules(d).mode).toBe('refuse')

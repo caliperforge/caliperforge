@@ -49,6 +49,10 @@ export function placed(db: Db, id: number, url: string): void {
   db.prepare('UPDATE desk_posts SET url = ? WHERE id = ?').run(url, id)
 }
 
+export function published(db: Db, at: string): number {
+  return db.prepare("UPDATE desk_posts SET status = 'published', published_at = ? WHERE status = 'approved' AND url IS NOT NULL").run(at).changes
+}
+
 export function postOf(db: Db, id: number): Post {
   const post = db.prepare('SELECT * FROM desk_posts WHERE id = ?').get(id) as Post | undefined
   if (post === undefined) throw new Error(`no desk post ${String(id)}`)

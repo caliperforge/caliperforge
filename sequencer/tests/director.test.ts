@@ -212,7 +212,7 @@ test('an upstream-key stop gets the pinned read tool and its keys', async () => 
   const packets: Parameters<Provider['fire']>[0][] = []
   const seen: Provider = { ...reply, fire: (p) => { packets.push(p); return reply.fire(p) } }
   await cooLite(db, home, row(db), seen, now, () => undefined, wire())
-  expect(packets[0]?.tools).toEqual(['Read', 'Glob', 'Grep', 'mcp__github__read'])
+  expect(packets[0]?.tools).toEqual(['Read', 'Glob', 'Grep', 'Bash(cf look:*)', 'mcp__github__read'])
   expect(basename(packets[0]?.transcript ?? '')).toBe('director.pending.transcript.jsonl')
   expect(Object.keys(packets[0]?.servers ?? {})).toEqual(['github'])
   expect(packets[0]?.prompt).toContain('mcp__github__read')

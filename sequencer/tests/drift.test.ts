@@ -61,7 +61,7 @@ test('fresh', () => {
   expect(drift(d, [COO, { ...COO, name: 'six', gap: '24h' }], NOW)).toEqual([])
   expect(REGISTRY.map((e) => e.name)).toEqual(['coo_lite', 'fixer', 'fix_mode', 'brief_writer', 'text_review',
     'growth_lead', 'web_specialist', 'gardener', 'ratchet', 'accounts', 'records', 'dispositions', 'signoffs', 'proposals',
-    'ratchet_refuse', 'intake', 'stuck_plans', 'science_pull', 'site_publish', 'director_look'])
+    'ratchet_refuse', 'intake', 'stuck_plans', 'science_pull', 'site_publish', 'director_look', 'daily_learnings'])
   expect(ratchetRules(d).mode).toBe('refuse')
   expect(drift(d, REGISTRY, NOW).map((r) => r.name)).not.toContain('ratchet_refuse')
   expect(drift(d, REGISTRY, NOW).map((r) => r.name)).not.toContain('accepted_findings')
@@ -137,6 +137,22 @@ test('D4 fix_mode is silent without a fix run, stale after 7d', () => {
   expect(drift(d, fix, NOW).map((r) => r.state)).toEqual(['stale'])
   ran('2026-10-02 10:00:00', 'fix')
   expect(drift(d, fix, NOW)).toEqual([])
+})
+
+test('daily_learnings: stale after 2d of no items, comms on', () => {
+  const daily = REGISTRY.filter((e) => e.name === 'daily_learnings')
+  const learned = (d: Db, date: string, items: string): Db => {
+    d.exec(`INSERT INTO desk_learnings (date, numbers, items, sources) VALUES ('${date}', '{}', ${items}, '[]')`)
+    return d
+  }
+  const d = learned(db(), '2026-09-29', 'NULL')
+  expect(drift(d, daily, NOW)).toEqual([{ name: 'daily_learnings', state: 'silent',
+    detail: 'no row in desk_learnings WHERE json_array_length(items) > 0' }])
+  const stale = [{ name: 'daily_learnings', state: 'stale', detail: 'newest desk_learnings.date is 2026-09-30, older than 2d' }]
+  expect(drift(learned(d, '2026-09-30', `'["a"]'`), daily, NOW)).toEqual(stale)
+  expect(drift(learned(d, '2026-10-02', "'[]'"), daily, NOW)).toEqual(stale)
+  expect(drift(learned(db(), '2026-10-02', `'["a"]'`), daily, NOW)).toEqual([])
+  expect(drift(learned(db(0), '2026-09-30', `'["a"]'`), daily, NOW)).toEqual([])
 })
 
 function internal(enabled = 1, max = 2): Db {

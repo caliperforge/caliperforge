@@ -17,7 +17,7 @@ function copied(): string {
 
 test('D1: the manifest is coo_lite with the seat renamed', () => {
   expect(seat(root, 'director').manifest).toEqual({
-    seat: 'director', model: 'claude-opus-5-5', effort: 'medium', tools: ['Read', 'Glob', 'Grep'], write_paths: [],
+    seat: 'director', model: 'claude-opus-5-5', effort: 'medium', tools: ['Read', 'Glob', 'Grep', 'Bash(cf look:*)'], write_paths: [],
   })
 })
 

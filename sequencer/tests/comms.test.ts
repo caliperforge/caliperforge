@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { all } from '../../cli/inbox.ts'
 import type { Provider } from '../../providers/kind.ts'
-import { learnings, learningsIn, placed, postOf, posts, putPost } from '../../store/desk.ts'
+import { amend, approved, learnings, learningsIn, paste, placed, postOf, posts, putPost } from '../../store/desk.ts'
 import { eventsOf, kindsOf, runRows } from '../../store/events.ts'
 import { set, zone } from '../../store/lanes.ts'
 import { addPipe, briefed, dropPlan, end, plansOf, putPlan, requeue } from '../../store/plans.ts'
@@ -604,4 +604,36 @@ test('push D5: an unset comms.site_dir throws', () => {
   const w = comms()
   set(w.db, 'comms.site_dir', '', 'ceo', '2026-10-04')
   expect(() => push(w.db, new Date())).toThrow('comms.site_dir is unset')
+})
+
+const PLACED = 'https://caliperforge.com/blog/06_week.html'
+
+test('paste D1 D2: a placed weekly leaves one paste row, once', () => {
+  const w = comms()
+  putPost(w.db, { ...SEED, id: 1, kind: 'weekly', dest: 'substack', status: 'proof' })
+  amend(w.db, 1, { title: 'T', dek: 'K', body: 'B' }, 'ceo')
+  approved(w.db, 1, 'ceo')
+  placed(w.db, 1, PLACED)
+  expect(paste(w.db)).toBe(1)
+  expect(postOf(w.db, 1_000_001)).toMatchObject({ kind: 'paste', dest: 'paste', status: 'proof', title: 'T', dek: 'K',
+    body: 'B\n\nhttps://medium.com/p/import https://caliperforge.com/blog/06_week.html', work_date: '2026-10-01' })
+  expect([paste(w.db), posts(w.db).length]).toEqual([0, 2])
+})
+
+test('paste D3: an unplaced weekly or a placed ship row gives none', () => {
+  const w = comms()
+  putPost(w.db, { ...SEED, kind: 'weekly', dest: 'substack', status: 'proof' })
+  putPost(w.db, { ...SEED, id: 3, kind: 'weekly', dest: 'substack' })
+  putPost(w.db, { ...SEED, id: 4, work_date: '2026-09-24' })
+  placed(w.db, 4, PLACED)
+  expect([paste(w.db), posts(w.db).length]).toEqual([0, 3])
+})
+
+test('publish D4: a placed weekly leaves its paste row', () => {
+  const w = comms()
+  putPost(w.db, { ...SEED, kind: 'weekly', dest: 'substack' })
+  expect(published(w, sited())).toMatchObject({ outcome: 'pass' })
+  const url = 'https://caliperforge.com/blog/06_a-post-more.html'
+  expect(postOf(w.db, 2).url).toBe(url)
+  expect(posts(w.db).filter((p) => p.kind === 'paste')).toMatchObject([{ id: 1_000_002, body: SEED.body.concat('\n\nhttps://medium.com/p/import ', url) }])
 })

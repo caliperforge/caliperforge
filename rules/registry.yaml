@@ -96,3 +96,9 @@
   column: at
   where: kind = 'look'
   gap: 7d
+- name: daily_learnings
+  table: desk_learnings
+  column: date
+  where: json_array_length(items) > 0
+  gap: 2d
+  while: EXISTS (SELECT 1 FROM pipes WHERE name = 'comms' AND enabled = 1)

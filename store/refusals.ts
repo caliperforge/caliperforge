@@ -84,6 +84,11 @@ export function ofDay(db: Db, day: string, minutes: number): { id: number; plan:
     .all(shift, shift, day) as { id: number; plan: number; step: number; title: string | null; at: string }[]
 }
 
+export function refusalAt(db: Db, plan: number, blip: number, at: string): number {
+  return Number(db.prepare('INSERT INTO refusals (plan, step, fingerprint, diff, blip, at) VALUES (?, 0, ?, NULL, ?, ?)')
+    .run(plan, '0'.repeat(64), blip, at).lastInsertRowid)
+}
+
 /** A failed checkout: the plan stays on its step until `BLIPS` of them come in a row. */
 export function blipped(db: Db, plan: number, step: number): Why {
   const rows = db.prepare('SELECT blip FROM refusals WHERE plan = ? AND cleared = 0 ORDER BY id DESC').all(plan) as { blip: number }[]

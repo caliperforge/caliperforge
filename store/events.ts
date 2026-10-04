@@ -89,3 +89,7 @@ export function runRows(db: Db): { plan: number; seat: string; step: number; tra
   return db.prepare('SELECT plan, seat, step, transcript_path FROM runs ORDER BY id')
     .all() as { plan: number; seat: string; step: number; transcript_path: string }[]
 }
+
+export function kindsOf(db: Db, plan: number): Pick<Event, 'kind' | 'outcome'>[] {
+  return db.prepare('SELECT kind, outcome FROM events WHERE plan = ? ORDER BY id').all(plan) as Pick<Event, 'kind' | 'outcome'>[]
+}

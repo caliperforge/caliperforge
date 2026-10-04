@@ -101,6 +101,11 @@ export function titles(db: Db, template: PlanRow['template']): (string | null)[]
     .map((r) => r.title)
 }
 
+export function plansOf(db: Db, template: PlanRow['template']): { id: number; title: string | null; state: PlanRow['state'] }[] {
+  return db.prepare('SELECT id, title, state FROM plans WHERE template = ? ORDER BY id')
+    .all(template) as { id: number; title: string | null; state: PlanRow['state'] }[]
+}
+
 export function pipeNamed(db: Db, name: string): PipeRow | null {
   const row = db.prepare('SELECT * FROM pipes WHERE name = ?').get(name)
   return row === undefined ? null : PipeRow.parse(row)

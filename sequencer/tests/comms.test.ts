@@ -2,9 +2,12 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import type { Provider } from '../../providers/kind.ts'
-import { runRows } from '../../store/events.ts'
+import { learnings, posts, putPost } from '../../store/desk.ts'
+import { eventsOf, kindsOf, runRows } from '../../store/events.ts'
 import { zone } from '../../store/lanes.ts'
-import { requeue } from '../../store/plans.ts'
+import { addPipe, briefed, dropPlan, end, plansOf, putPlan, requeue } from '../../store/plans.ts'
+import { refusalAt } from '../../store/refusals.ts'
+import { verdictRows } from '../../store/verdict.ts'
 import { desk, draft, drafted, facts, gather, review } from '../../templates/comms.ts'
 import { tick } from '../index.ts'
 import { mapOf } from '../steps.ts'
@@ -14,31 +17,34 @@ import { plan, reads, stub, world, type World } from './world.ts'
 const NAMES = ['gather', 'draft', 'facts', 'text_review', 'desk', 'publish', 'capture', 'grow', 'pack', 'score']
 
 const refusal = (w: World, blip: number, at = new Date().toISOString().replace('T', ' ').slice(0, 19)): number =>
-  Number(w.db.prepare(`INSERT INTO refusals (plan, step, fingerprint, diff, blip, at) VALUES (1, 0, ?, NULL, ?, ?)`)
-    .run('0'.repeat(64), blip, at).lastInsertRowid)
+  refusalAt(w.db, 1, blip, at)
 
 const local = (w: World): string => new Date(Date.now() + zone(w.db) * 60000).toISOString().slice(0, 10)
 
 const comms = (): World => {
   const w = world()
-  w.db.prepare("UPDATE plans SET template = 'comms' WHERE id = 1").run()
+  const { queued_at } = plan(w.db, 1)
+  dropPlan(w.db, 1)
+  putPlan(w.db, { id: 1, pipe_id: 1, target_id: 1, template: 'comms', state: 'queued', queued_at, step: 0, retries: 0 })
   return w
 }
 
 /** A comms lane that is on but shut by 20:30, so the daily plan stays queued. */
-const clocked = (): World => {
+const clocked = (enabled: number | null = 1): World => {
   const w = world()
-  w.db.prepare("UPDATE plans SET state = 'done' WHERE id = 1").run()
-  w.db.prepare(`INSERT INTO pipes (name, enabled, window_start, window_end, max_concurrent)
-    VALUES ('comms', 1, '07:00', '20:00', 1)`).run()
+  end(w.db, 1, 'done')
+  if (enabled !== null) addPipe(w.db, { name: 'comms', enabled, window_start: '07:00', window_end: '20:00', max_concurrent: 1 })
   return w
 }
 
-const dailies = (w: World): unknown[] =>
-  w.db.prepare("SELECT title, state FROM plans WHERE template = 'comms' AND title LIKE 'daily %' ORDER BY id").all()
+const filed = (w: World, prefix: string): unknown[] =>
+  plansOf(w.db, 'comms').filter((p) => p.title?.startsWith(prefix) === true).map(({ title, state }) => ({ title, state }))
 
-const titled = (w: World, id: number, title: string | null): unknown =>
-  w.db.prepare('UPDATE plans SET title = ? WHERE id = ?').run(title, id)
+const dailies = (w: World): unknown[] => filed(w, 'daily ')
+
+const titled = (w: World, id: number, title: string | null): void => {
+  briefed(w.db, id, { title, what: null, why: null, ends: null })
+}
 
 const fenced = (): Record<string, unknown> => ({ ...drafted(fixture('reply.md')), post: undefined })
 
@@ -49,9 +55,9 @@ const desked = (w: World, fence: Record<string, unknown> | null = fenced(), draf
   return desk(w.db, w.root, plan(w.db, id))
 }
 
-const events = (w: World): unknown[] => w.db.prepare('SELECT kind, outcome FROM events WHERE plan = 1 ORDER BY id').all()
+const events = (w: World): unknown[] => kindsOf(w.db, 1)
 
-const learned = (w: World): unknown[] => w.db.prepare('SELECT * FROM desk_learnings').all()
+const learned = (w: World): unknown[] => learnings(w.db)
 
 const never: Provider = { name: 'claude-agent-sdk', fire: () => { throw new Error('no seat fires on comms') } }
 
@@ -65,15 +71,15 @@ test('D2 D7 D6: a comms plan runs writer and text_review to done', async () => {
   const today = new Date().toISOString().slice(0, 10)
   reads(w.db, 1)
   titled(w, 1, `daily ${local(w)}`)
-  w.db.prepare(`INSERT INTO desk_posts (id, kind, dest, status, title, dek, body, edited_title, sources, checks, work_date, written_date)
-    VALUES (2, 'daily', 'site', 'proof', 'The day', 'What moved', 'One job landed.', 'The whole day', '[]', '[]', ?, ?)`).run(today, today)
+  putPost(w.db, { id: 2, kind: 'daily', dest: 'site', status: 'proof', title: 'The day', dek: 'What moved', body: 'One job landed.',
+    edited_title: 'The whole day', sources: '[]', checks: '[]', work_date: today, written_date: today })
   const seats = seated(writing(`# The day\n\nOne job was refused. [refusal:${String(refusal(w, 0))}]`))
   for (let n = 0; n < 11 && plan(w.db, 1).state !== 'done'; n += 1) await tick(w.db, w.root, seats)
   expect(plan(w.db, 1).state).toBe('done')
   expect(events(w)).toEqual(NAMES.map((kind) => ({ kind, outcome: 'pass' })))
   expect(ran(w)).toEqual(['writer', 'text_review'])
-  expect(w.db.prepare('SELECT count(*) AS n FROM verdicts').get()).toEqual({ n: 0 })
-  expect(w.db.prepare('SELECT id FROM desk_posts').all()).toEqual([{ id: 1 }, { id: 2 }])
+  expect(verdictRows(w.db, 1)).toEqual([])
+  expect(posts(w.db).map(({ id }) => ({ id }))).toEqual([{ id: 1 }, { id: 2 }])
   expect(readFileSync(join(w.root, 'comms/voice-notes.md'), 'utf8')).toBe(`# Voice notes\n\n- ${today} 2 title: lengthened (7 → 13 chars)\n`)
 })
 
@@ -93,16 +99,15 @@ test('a tick before 20:30 files none; next day after, a second', async () => {
   expect(dailies(w)).toEqual([{ title: 'daily 2026-09-27', state: 'queued' }, { title: 'daily 2026-09-28', state: 'queued' }])
 })
 
-const growths = (w: World): unknown[] =>
-  w.db.prepare("SELECT title, state FROM plans WHERE template = 'comms' AND title LIKE 'growth %' ORDER BY id").all()
+const growths = (w: World): unknown[] => filed(w, 'growth ')
 
 test('weekly D1: two local Thursday ticks file one growth plan', async () => {
   const w = clocked()
   await tick(w.db, w.root, never, new Date('2026-10-02T03:00Z'))
   await tick(w.db, w.root, never, new Date('2026-10-02T03:30Z'))
   expect(growths(w)).toEqual([{ title: 'growth 2026-10-01', state: 'queued' }])
-  expect(w.db.prepare(`SELECT e.actor FROM events e JOIN plans p ON p.id = e.plan
-    WHERE p.title = 'growth 2026-10-01' AND e.kind = 'filed'`).all()).toEqual([{ actor: 'weekly clock' }])
+  const id = plansOf(w.db, 'comms').find((p) => p.title === 'growth 2026-10-01')?.id ?? 0
+  expect(eventsOf(w.db, id, 'filed').map(({ actor }) => ({ actor }))).toEqual([{ actor: 'weekly clock' }])
 })
 
 test('weekly D2: no growth plan on a local Wednesday or Friday', async () => {
@@ -113,11 +118,10 @@ test('weekly D2: no growth plan on a local Wednesday or Friday', async () => {
 })
 
 test.each([
-  { why: 'missing', sql: "DELETE FROM pipes WHERE name = 'comms'" },
-  { why: 'off', sql: "UPDATE pipes SET enabled = 0 WHERE name = 'comms'" },
-])('weekly D3: a local Thursday with the comms lane $why files no growth plan', async ({ sql }) => {
-  const w = clocked()
-  w.db.prepare(sql).run()
+  { why: 'missing', enabled: null },
+  { why: 'off', enabled: 0 },
+])('weekly D3: a local Thursday with the comms lane $why files no growth plan', async ({ enabled }) => {
+  const w = clocked(enabled)
   await tick(w.db, w.root, never, new Date('2026-10-02T03:00Z'))
   expect(growths(w)).toEqual([])
 })
@@ -221,7 +225,7 @@ test('D2: desk writes the post in proof and its day\'s learnings', () => {
   titled(w, 1, 'daily 2026-09-27')
   const reply = drafted(fixture('reply.md'))
   expect(desked(w)).toMatchObject({ outcome: 'pass' })
-  expect(w.db.prepare('SELECT id, kind, status, dest, title, dek, body, sources, checks, work_date FROM desk_posts').all()).toEqual([{
+  expect(posts(w.db)).toMatchObject([{
     id: 1, kind: 'daily', status: 'proof', dest: 'site', title: 'The day', dek: reply?.dek, body: reply?.post.split('\n').slice(1).join('\n').trim(),
     sources: JSON.stringify(reply?.sources), checks: JSON.stringify(reply?.checks), work_date: '2026-09-27',
   }])
@@ -233,9 +237,9 @@ test('D5: desk stamps proof_at in datetime(\'now\') form', () => {
   const w = comms()
   titled(w, 1, 'daily 2026-09-27')
   desked(w)
-  const { form, minutes } = w.db.prepare(`SELECT proof_at = datetime(proof_at) AS form,
-    (julianday('now') - julianday(proof_at)) * 1440 AS minutes FROM desk_posts`).get() as { form: number; minutes: number }
-  expect(form).toBe(1)
+  const at = posts(w.db)[0]?.proof_at ?? ''
+  expect(at).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/)
+  const minutes = (Date.now() - Date.parse(`${at.replace(' ', 'T')}Z`)) / 60000
   expect(minutes).toBeGreaterThanOrEqual(0)
   expect(minutes).toBeLessThan(1)
 })
@@ -250,26 +254,27 @@ test.each([
   const w = comms()
   titled(w, 1, 'daily 2026-09-27')
   expect(run(w)).toMatchObject({ outcome: 'refuse' })
-  expect(w.db.prepare('SELECT (SELECT count(*) FROM desk_posts) + (SELECT count(*) FROM desk_learnings) AS n').get()).toEqual({ n: 0 })
+  expect([...posts(w.db), ...learnings(w.db)]).toEqual([])
 })
 
 test('D4: no learnings writes the post and an empty learnings row', () => {
   const w = comms()
   titled(w, 1, 'daily 2026-09-27')
   expect(desked(w, { ...fenced(), learnings: undefined })).toMatchObject({ outcome: 'pass' })
-  expect(w.db.prepare('SELECT count(*) AS n FROM desk_posts').get()).toEqual({ n: 1 })
+  expect(posts(w.db)).toHaveLength(1)
   expect(learned(w)).toMatchObject([{ date: '2026-09-27', items: '[]' }])
 })
 
 test('D5: one learnings row a day; a second desk doubles nothing', () => {
   const w = comms()
   titled(w, 1, 'daily 2026-09-27')
-  w.db.prepare(`INSERT INTO plans (id, pipe_id, template, state, queued_at, step, retries, title)
-    VALUES (2, 1, 'comms', 'queued', '2026-09-27T10:00:00.000Z', 0, 0, 'ship post acme/widget#7')`).run()
+  putPlan(w.db, { id: 2, pipe_id: 1, target_id: null, template: 'comms', state: 'queued', queued_at: '2026-09-27T10:00:00.000Z',
+    step: 0, retries: 0 })
+  titled(w, 2, 'ship post acme/widget#7')
   desked(w)
   desked(w)
   desked(w, { ...fenced(), learnings: 'a second line', sources: [{ claim: 'x', ref: 'cli/plan.ts:1' }] }, undefined, 2)
-  expect(w.db.prepare('SELECT id, kind, work_date FROM desk_posts ORDER BY id').all())
+  expect(posts(w.db).map(({ id, kind, work_date }) => ({ id, kind, work_date })))
     .toEqual([{ id: 1, kind: 'daily', work_date: '2026-09-27' }, { id: 2, kind: 'ship', work_date: '2026-09-27' }])
   const [row] = learned(w) as { items: string; sources: string }[]
   expect(learned(w)).toHaveLength(1)
@@ -282,7 +287,7 @@ test('D6: desk passes a plan with no draft and writes no row', () => {
   const w = comms()
   titled(w, 1, 'daily 2026-09-27')
   expect(desk(w.db, w.root, plan(w.db, 1))).toEqual({ outcome: 'pass', spans: [], note: 'no draft' })
-  expect(w.db.prepare('SELECT (SELECT count(*) FROM desk_posts) + (SELECT count(*) FROM desk_learnings) AS n').get()).toEqual({ n: 0 })
+  expect([...posts(w.db), ...learnings(w.db)]).toEqual([])
 })
 
 const verdict = (name: string): string =>

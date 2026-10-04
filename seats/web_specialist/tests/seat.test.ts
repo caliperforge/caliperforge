@@ -1,7 +1,5 @@
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
-import { gate } from '../../../providers/claude-agent-sdk/index.ts'
-import { packet } from '../../../runner/index.ts'
 import { seat } from '../../../runner/rules.ts'
 import { languageSeat } from '../../../runner/tests/language-seat.ts'
 
@@ -10,17 +8,10 @@ const root = join(import.meta.dirname, '../../..')
 languageSeat({
   seat: 'web_specialist',
   language: 'web',
-  commands: ['Bash(node --check:*)', 'Bash(npm test:*)'],
+  commands: ['Bash(node --check:*)'],
   allowed: ['node --check public/app.js'],
   listed: 'public/app.js',
   beside: 'public/index.html',
-})
-
-test('D2 npm test passes the gate on our own repo', () => {
-  const { manifest, prompt } = seat(root, 'web_specialist')
-  const p = packet(manifest, prompt, '', '', root, join(root, 'x.transcript.jsonl'), true)
-  expect(gate(p, { hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command: 'npm test' } } as never))
-    .toEqual({ continue: true })
 })
 
 test('D3 the six checks come before the answer fence', () => {

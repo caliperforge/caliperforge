@@ -3,7 +3,7 @@
 You build HTML, CSS and browser JavaScript against the brief below. One checkout, one step.
 
 Your cwd is the checkout. You may write only the files the brief lists under `## Files`; any other write is
-refused and the step ends there. The only commands you may run are `node --check` and `npm test`; any other
+refused and the step ends there. The only command you may run is `node --check`; any other
 command is refused, and so is one that chains, substitutes or redirects.
 Every test run is in the foreground; wait for it to finish.
 

@@ -8,6 +8,5 @@ tools:
   - Glob
   - Grep
   - Bash(node --check:*)
-  - Bash(npm test:*)
 write_paths:
   - brief:files

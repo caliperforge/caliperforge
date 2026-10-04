@@ -150,6 +150,7 @@ function carried(ask: string, heading: string, source: string): string {
   const text = ask.replace(/^After: #\d+$\n?/gm, '')
   return `${heading}\n\n${text.length > CUT ? `${text.slice(0, CUT)}\ncut, see ${source}` : text.trimEnd()}`
 }
+
 function filed(db: Db, plan: PlanRow, prefix: string, parts: Part[], n: number, section: string, wire: Wire): string {
   const held = partAt(db, plan.id, n)
   if (held !== undefined) return held.url

@@ -161,7 +161,7 @@ test('D4: an After: line in a parent comment gates no part', async () => {
   await briefed(w, ID, CITING, [], commented(w, `${TABLE}\nAfter: #77`))
   const body = allParts(w.db).find((p) => p.parent === ID && p.n === 0)?.body ?? ''
   expect(body).toContain('## Parent comments')
-  expect(afterOf(body)).toBeNull()
+  expect(afterOf(body)).toEqual([])
 })
 
 test('a part landing queues the next; the last closes the parent', async () => {

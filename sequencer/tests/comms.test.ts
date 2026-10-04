@@ -1,10 +1,11 @@
-import { readFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import type { Provider } from '../../providers/kind.ts'
-import { learnings, posts, putPost } from '../../store/desk.ts'
+import { learnings, learningsIn, posts, putPost } from '../../store/desk.ts'
 import { eventsOf, kindsOf, runRows } from '../../store/events.ts'
-import { zone } from '../../store/lanes.ts'
+import { set, zone } from '../../store/lanes.ts'
 import { addPipe, briefed, dropPlan, end, plansOf, putPlan, requeue } from '../../store/plans.ts'
 import { refusalAt } from '../../store/refusals.ts'
 import { verdictRows } from '../../store/verdict.ts'
@@ -356,4 +357,35 @@ test('growUnchanged D6: step 7 still runs growth_lead', async () => {
   await tick(w.db, w.root, stub('', 0, 'the pack'))
   expect(ran(w)).toEqual(['growth_lead'])
   expect(get(w.root, 1, 'growth.md')).toBe('the pack')
+})
+
+const storied = (dir: string): World => {
+  const w = comms()
+  titled(w, 1, 'weekly 2026-10-02')
+  set(w.db, 'comms.story_dir', dir, 'ceo', '2026-10-02')
+  return w
+}
+
+test('weeklyPacket D1 D2 D5: learnings in the window, .md by name', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cf-story-'))
+  mkdirSync(join(dir, 'sub'))
+  for (const [name, text] of [['b.md', 'bee'], ['a.md', 'ay'], ['notes.txt', 'no'], ['sub/c.md', 'sea']] as const) writeFileSync(join(dir, name), text)
+  const w = storied(dir)
+  w.db.exec(`INSERT INTO desk_learnings (date, numbers, items, sources) VALUES ${['2026-10-03', '2026-09-25', '2026-10-02', '2026-09-26']
+    .map((d) => `('${d}', '[]', '[{"title":"${d}"}]', '[]')`).join(', ')}`)
+  const kept = [{ date: '2026-09-26', items: [{ title: '2026-09-26' }] }, { date: '2026-10-02', items: [{ title: '2026-10-02' }] }]
+  expect(learningsIn(w.db, '2026-09-26', '2026-10-02')).toEqual(kept)
+  expect(gather(w.db, w.root, plan(w.db, 1))).toMatchObject({ outcome: 'pass' })
+  expect(JSON.parse(get(w.root, 1, 'packet.json'))).toEqual({ learnings: kept, story: [{ name: 'a.md', text: 'ay' }, { name: 'b.md', text: 'bee' }] })
+})
+
+test.each([
+  { dir: '', spans: ['comms.story_dir'], named: 'comms.story_dir' },
+  { dir: '~/cf-no-story-dir', spans: [`${homedir()}/cf-no-story-dir`], named: `${homedir()}/cf-no-story-dir` },
+])('storyDir D3 D4: story_dir "$dir" refuses and writes no packet', ({ dir, spans, named }) => {
+  const w = storied(dir)
+  const got = gather(w.db, w.root, plan(w.db, 1))
+  expect(got).toMatchObject({ outcome: 'refuse', spans })
+  expect(got.note).toContain(named)
+  expect(maybe(w.root, 1, 'packet.json')).toBeNull()
 })

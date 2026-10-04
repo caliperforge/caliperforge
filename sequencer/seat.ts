@@ -17,7 +17,7 @@ import { profile } from '../store/profile.ts'
 import { observed, wall } from '../store/lanes.ts'
 import { briefed, builderRan, internal, type PlanRow } from '../store/plans.ts'
 import { byRun, opened, pending, unfinished } from '../store/transcript.ts'
-import type { Step } from '../templates/pr-path.ts'
+import { MODED, type Step } from '../templates/pr-path.ts'
 import { parse } from '../rails/diff.ts'
 import { estimate, human, pointed, references, shape, split, TEMPLATE, unclear, wide, WIDE, type Part } from './brief.ts'
 import { repoOf } from './ready.ts'
@@ -227,9 +227,6 @@ function askOf(root: string, plan: number): string {
   return maybe(root, plan, 'ask.md') ?? move(root, plan, 'issue.md', 'ask.md')
 }
 
-const MODED = new Set(['swift_specialist', 'kotlin_specialist', 'python_specialist', 'ruby_specialist',
-  'rust_specialist', 'go_specialist', 'php_specialist'])
-
 export async function ran(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider,
   issue: string, ours: boolean): Promise<Fired> {
   load(db, root)
@@ -355,8 +352,9 @@ export async function fireReview(db: Db, root: string, plan: PlanRow, step: Step
     ...(manifest.gate === 'senior_review' && cloned(src) ? greptile(db, plan.id, headSha(src)) : {}),
     ...rounds(db, root, plan.id, step.step),
   }
+  const as = !internal(plan) && step.mode === 'review' ? step.seat : undefined
   try {
-    const { verdict, outcome } = await judge(db, root, step.runs, plan.id, input, provider, transcriptOf(root, plan.id, step.step))
+    const { verdict, outcome } = await judge(db, root, step.runs, plan.id, input, provider, transcriptOf(root, plan.id, step.step), as)
     if (outcome.outcome === 'pass') regated(db, plan.id, step.step, verdict, input.prior, input.tree)
     put(root, plan.id, `step-${String(step.step)}.verdict.md`, verdictText(outcome))
     if (outcome.outcome === 'pass' && input.tree !== undefined) put(root, plan.id, `step-${String(step.step)}.passed.diff`, input.diff)

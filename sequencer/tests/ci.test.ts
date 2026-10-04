@@ -1,5 +1,7 @@
 import { expect, test } from 'vitest'
 import type { Gh } from '../../rails/ci-green/index.ts'
+import { pointers } from '../../store/events.ts'
+import { rewind } from '../../store/plans.ts'
 import { tick } from '../index.ts'
 import { SHOWS } from '../ci.ts'
 import type { Wire } from '../push.ts'
@@ -92,6 +94,18 @@ test('a push that fails runs the suite on the laptop', async () => {
   expect((await rails(w, wire))?.note).toBe(LOCAL)
   expect(w.db.prepare("SELECT plan, actor, message FROM events WHERE kind = 'swallowed'").all())
     .toEqual([{ plan: ID, actor: 'ciChecks', message: 'offline' }])
+})
+
+test('D5 a deleted branch is gone and never sent or listed again', async () => {
+  const w = mine()
+  const sent: string[] = []
+  const wire = watched(sent, w.root, ID, (args) => { sent.push(args.slice(0, 2).join(' ')); throw new Error('HTTP 404: Not Found') })
+  await toRails(w, wire)
+  expect((await rails(w, wire))?.note).toBe(LOCAL)
+  expect(pointers(w.db, 'gone')).toEqual(['caliperforge/caliperforge:p2-let-an-internal-plan-run'])
+  rewind(w.db, ID, 3)
+  expect((await rails(w, wire))?.note).toBe(LOCAL)
+  expect(sent).toEqual(['send src +p2-let-an-internal-plan-run', 'run list'])
 })
 
 test('no switch: the laptop runs the suite and nothing is sent', async () => {

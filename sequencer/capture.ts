@@ -11,6 +11,7 @@ import { attribute } from './escapes.ts'
 import { rehearsed, type Rehearsal } from './findings.ts'
 import { rehearsalBranch } from './push.ts'
 import { claimed, released } from './split.ts'
+import { closed, firstLine, gone, polled } from './unpolled.ts'
 import { cloned, FORK, repoName, srcDir } from './workspace.ts'
 
 /** `rehearsal` holds the root whose `next.tips` traces a rehearsal's heads and the read its comments come by, null on a real pull request. */
@@ -37,13 +38,11 @@ function reachable(db: Db, row: Pushed, read: (repo: string, no: number) => Pr):
   try {
     return one(db, row, read)
   } catch (error) {
-    logged(db, { plan: row.plan, kind: 'swallowed', actor: 'reachable', outcome: 'pass', message: firstLine(error), pointer: null, run: null })
+    if (!gone(db, row.plan, row.evidence, error)) {
+      logged(db, { plan: row.plan, kind: 'swallowed', actor: 'reachable', outcome: 'pass', message: firstLine(error), pointer: null, run: null })
+    }
     return []
   }
-}
-
-export function firstLine(error: unknown): string {
-  return (error instanceof Error ? error.message : String(error)).split('\n')[0] ?? ''
 }
 
 export function intake(db: Db, root: string, read: Read): string[] {
@@ -160,6 +159,7 @@ function one(db: Db, row: Pushed, read: (repo: string, no: number) => Pr): Signa
   }
   const fresh = signals(view, row).map((s) => stored(db, row, s)).filter((s) => s !== null)
   attribute(db, row.plan, row.repo, view)
+  closed(db, row.plan, row.evidence, view.state)
   return acted(db, view, fresh)
 }
 
@@ -250,7 +250,7 @@ function pushed(db: Db, root?: string, list?: Read): Pushed[] {
     FROM plans p JOIN targets t ON t.id = p.target_id
     WHERE t.evidence GLOB 'https://*/pull/*'
     ORDER BY plan`).all() as Omit<Pushed, 'rehearsal'>[]).map((r) => ({ ...r, rehearsal: null }))
-  return root === undefined || list === undefined ? rows : [...rows, ...rehearsals(db, root, list)]
+  return (root === undefined || list === undefined ? rows : [...rows, ...rehearsals(db, root, list)]).filter(polled(db))
 }
 
 /** `git rev-parse` in a `srcDir` with no `.git` climbs to the repository around `root` and reads its branch. */

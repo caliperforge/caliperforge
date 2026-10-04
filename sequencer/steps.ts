@@ -17,7 +17,7 @@ import { homeOf } from './home.ts'
 import { freshBase } from './merge.ts'
 import { hold } from './hold.ts'
 import { publish } from './site.ts'
-import { landed } from './split.ts'
+import { landed } from './landed.ts'
 import { unlanded } from './unlanded.ts'
 
 interface StepMap {

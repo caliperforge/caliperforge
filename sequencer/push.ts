@@ -88,8 +88,8 @@ const REHEARSED = 'ci.next'
  * branch's own commit messages for an upstream number -- and `rails/ci-green` judges the runs at
  * that head. GitHub has no run at a head the moment the push returns, so a head with no run yet
  * waits as a run still going does. Both count on one tally: a head with no run is judged past `APPEARS`
- * ticks, one whose runs are going past `FINISHES`; then the spans are recorded as the refusal they
- * are, so a CI that never greens still reaches `back()`.
+ * ticks, one whose runs are going past `FINISHES`; then a head with no run has its spans recorded as the
+ * refusal they are, so a CI that never greens still reaches `back()`, and a gating run still going goes to `needs_ceo`.
  * A red run goes to the builder, not a reviewer: their CI is the only test an outside build gets.
  */
 export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire = WIRE): Outcome | null {
@@ -104,6 +104,10 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
   const window = carries(verdict.spans, MISSING) ? APPEARS : FINISHES
   const hold = waiting === null ? null : holding(root, plan.id, head.sha, verdict.spans, `${at} ${waiting}`, window)
   if (hold !== null) return onCi(db, plan.id, hold)
+  if (carries(verdict.spans, PENDING)) {
+    const running = board.filter((r) => r.gates && r.status !== 'completed').map((r) => r.workflow).join(', ')
+    return { outcome: 'needs_ceo', spans: [PENDING], note: `${at} is still running ${running} after ${String(FINISHES)} ticks` }
+  }
   const again = waiting === null && verdict.outcome === 'refuse' ? cancelled(root, plan.id, on, verdict.spans, wire.runs) : null
   if (again !== null) {
     const rerunning = holding(root, plan.id, head.sha, verdict.spans, `${at} ${again}`, APPEARS, RERUNS)

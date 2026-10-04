@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { ours } from '../cli/gh.ts'
 import { learningsIn } from '../store/desk.ts'
 import type { Db } from '../store/index.ts'
 import { get } from '../store/lanes.ts'
@@ -20,4 +21,13 @@ export function weekly(db: Db, root: string, plan: PlanRow, day: string): Outcom
   const learned = learningsIn(db, shift(day, -6), day)
   put(root, plan.id, 'packet.json', JSON.stringify({ learnings: learned, story }))
   return { outcome: 'pass', spans: [], note: `${String(learned.length)} learning day(s), ${String(story.length)} story file(s)` }
+}
+
+export const scripted = (title: string, { dest, post }: { dest: string; post: string }): boolean =>
+  !title.startsWith('weekly ') || (dest === 'substack' && post.split('\n').includes('## Script'))
+
+export function sound(line: string, known: Set<string> | null): boolean {
+  const tags = line.match(/\[(landed|refusal):\d+\]/g) ?? []
+  return !/#\d|\/(issues|pull)\/\d/.test(line) && [...line.matchAll(/@([\w-]+)/g)].every((m) => ours(m[1]))
+    && (known === null || ((tags.length > 0 || line.startsWith('#')) && tags.every((t) => known.has(t))))
 }

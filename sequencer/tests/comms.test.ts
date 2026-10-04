@@ -389,3 +389,42 @@ test.each([
   expect(got.note).toContain(named)
   expect(maybe(w.root, 1, 'packet.json')).toBeNull()
 })
+
+test('weeklyDraft D1: a substack reply with a script passes', async () => {
+  const w = posting('weekly 2026-10-02')
+  expect(await draft(w.db, w.root, plan(w.db, 1), mapOf('comms').at(1), seated(fixture('weekly.md')))).toMatchObject({ outcome: 'pass' })
+  expect(get(w.root, 1, 'draft.md')).toBe(drafted(fixture('weekly.md'))?.post)
+  expect(JSON.parse(get(w.root, 1, 'fence.json'))).toEqual({ ...drafted(fixture('weekly.md')), post: undefined })
+})
+
+test.each([
+  { why: 'dest site', reply: fixture('weekly.md').replace('dest: substack', 'dest: site') },
+  { why: 'dest note', reply: fixture('weekly.md').replace('dest: substack', 'dest: note') },
+  { why: 'no ## Script', reply: fixture('weekly.md').replace('## Script', '## The script') },
+])('weeklyFence D2: a weekly reply with $why refuses', async ({ reply }) => {
+  const w = posting('weekly 2026-10-02')
+  expect(await draft(w.db, w.root, plan(w.db, 1), mapOf('comms').at(1), seated(reply)))
+    .toMatchObject({ outcome: 'refuse', spans: ['writer.fence'] })
+  expect(maybe(w.root, 1, 'draft.md')).toBeNull()
+})
+
+test('weeklyFacts D3: untagged passes, links and logins refuse', () => {
+  const w = comms()
+  put(w.root, 1, 'packet.json', JSON.stringify({ learnings: [], story: [] }))
+  for (const line of ['One untagged line.', `Thanks @${FORK}`]) expect(judged(w, line)).toMatchObject({ outcome: 'pass', spans: [] })
+  for (const line of ['Fixed #12 today.', 'See /issues/12', 'See https://github.com/acme/widget/pull/7', 'Thanks @someone']) {
+    expect(judged(w, line)).toMatchObject({ outcome: 'refuse', spans: ['draft.md:3'] })
+  }
+})
+
+test('weeklyDesk D4: a weekly plan lands a substack post', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cf-story-'))
+  writeFileSync(join(dir, 'README.md'), '# The story\n')
+  const w = storied(dir)
+  reads(w.db, 1)
+  const seats = seated(fixture('weekly.md'))
+  for (let n = 0; n < 11 && plan(w.db, 1).state !== 'done'; n += 1) await tick(w.db, w.root, seats)
+  expect(plan(w.db, 1).state).toBe('done')
+  expect(posts(w.db)).toMatchObject([{ kind: 'weekly', dest: 'substack', status: 'proof', work_date: '2026-10-02' }])
+  expect(posts(w.db)[0]?.body).toContain('## Script')
+})

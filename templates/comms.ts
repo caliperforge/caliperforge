@@ -2,14 +2,13 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from
 import { dirname, join } from 'node:path'
 import { z } from 'zod'
 import type { Landed } from '../cli/batch.ts'
-import { ours } from '../cli/gh.ts'
 import { record, ticketOf } from '../cli/inbox.ts'
 import type { Fired, Provider } from '../providers/kind.ts'
 import { read } from '../reviews/verdict.ts'
 import type { Outcome } from '../sequencer/kind.ts'
 import { prose } from '../sequencer/prose.ts'
 import { ran } from '../sequencer/seat.ts'
-import { shift, weekly } from '../sequencer/weekly.ts'
+import { scripted, shift, sound, weekly } from '../sequencer/weekly.ts'
 import { get, maybe, put } from '../sequencer/workspace.ts'
 import { edited } from '../store/desk.ts'
 import type { Db } from '../store/index.ts'
@@ -37,18 +36,13 @@ export function gather(db: Db, root: string, plan: PlanRow): Outcome {
 export function facts(root: string, plan: PlanRow): Outcome {
   const draft = maybe(root, plan.id, 'draft.md')
   if (draft === null) return { outcome: 'pass', spans: [], note: 'no draft' }
-  const packet = JSON.parse(get(root, plan.id, 'packet.json')) as { landed: Landed[]; refusals: { id: number }[] }
-  const known = new Set([...packet.landed.map((l) => `[landed:${String(l.plan)}]`), ...packet.refusals.map((r) => `[refusal:${String(r.id)}]`)])
+  const { landed, refusals = [] } = JSON.parse(get(root, plan.id, 'packet.json')) as { landed?: Landed[]; refusals?: { id: number }[] }
+  const known = landed === undefined ? null
+    : new Set([...landed.map((l) => `[landed:${String(l.plan)}]`), ...refusals.map((r) => `[refusal:${String(r.id)}]`)])
   const spans = draft.split('\n').flatMap((line, i) =>
     line.trim() === '' || sound(line, known) ? [] : [`draft.md:${String(i + 1)}`])
   if (spans.length === 0) return { outcome: 'pass', spans, note: 'every line cites the packet' }
   return { outcome: 'refuse', spans, note: `${String(spans.length)} draft line(s) cite no packet entry, or name an issue or an outside login` }
-}
-
-function sound(line: string, known: Set<string>): boolean {
-  const tags = line.match(/\[(landed|refusal):\d+\]/g) ?? []
-  return !/#\d|\/(issues|pull)\/\d/.test(line) && [...line.matchAll(/@([\w-]+)/g)].every((m) => ours(m[1]))
-    && (tags.length > 0 || line.startsWith('#')) && tags.every((t) => known.has(t))
 }
 
 const REF = /^(https:\/\/\S+|[\w-][\w./-]*:[1-9]\d*)$/
@@ -115,11 +109,14 @@ export async function grow(db: Db, root: string, plan: PlanRow, step: Step, prov
 const halted = (step: Step, fired: Fired): Outcome => ({ outcome: 'refuse', spans: [fired.stop_reason ?? 'seat.exit'], note: `${step.runs} ${fired.ended}` })
 
 export async function draft(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
-  if ((titled(db, plan, 'daily') ?? titled(db, plan, 'ship')) === null) return { outcome: 'pass', spans: [], note: 'not a post plan' }
+  const title = titled(db, plan, 'daily') ?? titled(db, plan, 'ship') ?? titled(db, plan, 'weekly')
+  if (title === null) return { outcome: 'pass', spans: [], note: 'not a post plan' }
   const fired = await ran(db, root, plan, step, provider, `# packet.json\n\n${get(root, plan.id, 'packet.json')}`, false)
   if (fired.ended !== 'completed') return halted(step, fired)
   const reply = drafted(fired.text)
-  if (reply === null) return { outcome: 'refuse', spans: ['writer.fence'], note: `${step.runs} reply has no valid closing fence` }
+  if (reply === null || !scripted(title, reply)) {
+    return { outcome: 'refuse', spans: ['writer.fence'], note: `${step.runs} reply has no valid closing fence, or a weekly one no substack dest or ## Script` }
+  }
   put(root, plan.id, 'draft.md', reply.post)
   put(root, plan.id, 'fence.json', JSON.stringify({ ...reply, post: undefined }))
   return { outcome: 'pass', spans: [], note: `${step.runs}: draft.md written` }

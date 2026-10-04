@@ -110,10 +110,10 @@ function overlapped(p: Row, startable: Set<number>): Hit {
 }
 
 function parts(db: Db): string[] {
-  const rows = db.prepare(`SELECT t.number, t.after FROM parts p
-    JOIN tickets t ON p.url = 'https://github.com/' || t.repo || '/issues/' || t.number
-    WHERE p.plan IS NULL AND t.after IS NOT NULL
-      AND NOT EXISTS (SELECT 1 FROM tickets a WHERE a.repo = t.repo AND a.number = t.after)
+  const rows = db.prepare(`SELECT t.number, a.value AS after FROM parts p
+    JOIN tickets t ON p.url = 'https://github.com/' || t.repo || '/issues/' || t.number, json_each(t.after) a
+    WHERE p.plan IS NULL
+      AND NOT EXISTS (SELECT 1 FROM tickets o WHERE o.repo = t.repo AND o.number = a.value)
     ORDER BY t.repo, t.number`).all() as { number: number; after: number }[]
   return rows.map((r) => `part #${String(r.number)}\tafter #${String(r.after)}, which is closed\tcf tick\n`)
 }

@@ -110,8 +110,8 @@ function listed(db: Db, root: string, repo: string, read: Read, lines: string[])
 }
 
 function held(body: string, open: Set<number>, whole: boolean): boolean {
-  const after = afterOf(body)
-  return after !== null && (!whole || open.has(after))
+  const afters = afterOf(body)
+  return afters.length > 0 && (!whole || afters.some((n) => open.has(n)))
 }
 
 /** A part is titled `<parent><letter>: …` (\`85a: …\`); the numbers so named are parents, whoever split them. */

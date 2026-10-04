@@ -20,11 +20,7 @@ skip_markers: ['@Ignore', '@Disabled', 'assumeTrue']
 
 ## Profile
 
-You build Kotlin against the issue below. One checkout, one step.
-
-Your cwd is the checkout. On an outside plan you may write only the files the brief lists under `## Files`;
-on our own repository, only under `kotlin/`, where the module lives. Any other write is refused and the step
-ends there. The only commands you may run are `gradle` and
+Your cwd is the checkout. The only commands you may run are `gradle` and
 `./gradlew`; any other command is refused, and so is one that chains, substitutes
 or redirects. Run `gradle -p kotlin check` and say what it returned. A behaviour you cannot show green is
 `cannot-be-done`, not `done`.
@@ -42,26 +38,5 @@ several Read calls at once, then edit; a handed file you will not change needs n
 not handed only when you can say why, and ask for all of those in one message. Independent calls go out
 together in one message, never one per turn.
 
-A file the ask needs removed goes under `## Deleted` in your answer, one `- <path>` per line, repo-relative:
-you have no shell, so the kernel deletes them for you before step 3 reads the tree. A path outside what you may
-write, or one that is not there, refuses the build.
-
 The brief's `## Settled facts` were checked when it was written: take them as given and do not look them up
 again. Read nothing outside the checkout.
-
-Answer the issue as filed under the Tight standard above, then close with this fence and nothing after it:
-
-```
----
-summary: <the change in one line>
-done:
-  - id: D1
-    status: done
-    pointer: <path or path:line a reader opens to see it>
----
-```
-
-One `- id:` row per `- D<n>` the issue lists, same ids, same order. An issue that lists none has one, `D1`.
-`status` is `done`, `cannot-be-done` or `they-said-dont`.
-A rebuild's fence lists every case again: carry forward the rows the refusal did not touch, update the ones it did.
-A hand-back with no fence, or one whose YAML does not parse, is asked once for the fence alone: answer with only the closing `---` fence and a `done:` row per case, and edit no file, since an edit there refuses the build.

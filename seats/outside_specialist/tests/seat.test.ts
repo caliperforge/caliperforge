@@ -37,8 +37,9 @@ test('the prompt says the brief\'s files are handed', () => {
 
 test('the fence puts summary above done, and the audit reads it', () => {
   for (const name of ['go_specialist', 'kotlin_specialist', 'outside_specialist', 'swift_specialist', 'typescript_specialist']) {
-    expect(seat(root, name).prompt).toMatch(/^---\nsummary: <the change in one line>\ndone:$/m)
-    expect(seat(root, name).prompt).toContain(REASK)
+    const { prompt } = seat(root, name, ['kotlin_specialist', 'swift_specialist'].includes(name) ? 'build' : undefined)
+    expect(prompt).toMatch(/^---\nsummary: <the change in one line>\ndone:$/m)
+    expect(prompt).toContain(REASK)
   }
   const fence = (pointer: string) => `---\nsummary: x\ndone:\n  - id: D1\n    status: done\n${pointer}---\n`
   expect(audit(fence('    pointer: a.ts\n'), ['D1']).outcome).toBe('pass')

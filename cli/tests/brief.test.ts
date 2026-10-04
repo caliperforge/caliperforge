@@ -8,6 +8,7 @@ import { registerLanes } from '../cf-lanes.ts'
 import { registerPlans } from '../cf-plans.ts'
 import { actors, actorSection, costs, costSection, fileWaits, greptileLine, hands, heldBy, line, misses, missSection, rulings, section, ticketSection,
   tickets, unpriced, waitLine, waits } from '../brief.ts'
+import { refusalDays, refusalSection } from '../refusals.ts'
 import { handUpLine } from '../director.ts'
 import { driftSection } from '../drift.ts'
 import { hold } from '../../sequencer/hold.ts'
@@ -510,6 +511,30 @@ test('priced models get no price line; day-old runs count nowhere', () => {
 test('D4 an empty day prints none', () => {
   const db = world()
   expect(costSection(costs(db), unpriced(db))).toBe('cost last 24 h by model (0)\n  none\n')
+})
+
+function refusal(db: Db, plan: number, at: string, span: string, note: string | null, step = 1, blip = 0): void {
+  db.exec(`INSERT INTO refusals (plan, step, fingerprint, blip, at, span, note) VALUES (${String(plan)}, ${String(step)},
+    '${HASH}', ${String(blip)}, '${at}', '${span}', ${note === null ? 'NULL' : `'${note}'`})`)
+}
+
+test('D3-D6 seven days of step 1 refusals by reason, oldest first', () => {
+  const db = world()
+  plan(db, 1, 'running', 25)
+  plan(db, 2, 'running', null)
+  db.exec("UPDATE plans SET template = 'comms' WHERE id = 2")
+  refusal(db, 1, '2026-09-20 09:00:00', 'a.ts', 'brief_writer: a.ts is not in the checkout')
+  refusal(db, 1, '2026-09-20 10:00:00', 'b.ts', 'brief_writer: b.ts is not in the checkout')
+  refusal(db, 1, '2026-09-20 11:00:00', 'brief.wide', 'brief_writer: 412 lines over 300')
+  refusal(db, 1, '2026-09-18 08:00:00', 'a.ts', null)
+  refusal(db, 1, '2026-09-20 11:00:00', 'a.ts', 'brief_writer: blip', 1, 1)
+  refusal(db, 1, '2026-09-20 11:00:00', 'a.ts', 'typescript_specialist: step 3', 3)
+  refusal(db, 2, '2026-09-20 11:00:00', 'a.ts', 'brief_writer: comms')
+  refusal(db, 1, '2026-09-12 12:00:00', 'a.ts', 'brief_writer: old')
+  expect(refusalSection(refusalDays(db, NOW))).toBe('brief writer refusals last 7 d\n' +
+    '  2026-09-14\t0\tnone\n  2026-09-15\t0\tnone\n  2026-09-16\t0\tnone\n  2026-09-17\t0\tnone\n' +
+    '  2026-09-18\t1\tunrecorded 1\n  2026-09-19\t0\tnone\n' +
+    '  2026-09-20\t3\t<span> is not in the checkout 2\tn lines over n 1\n')
 })
 
 function ticket(db: Db, repo: string, number: number, title: string, closed: string | null = null): void {

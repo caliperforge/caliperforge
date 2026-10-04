@@ -1,0 +1,2 @@
+ALTER TABLE refusals ADD COLUMN span TEXT;
+ALTER TABLE refusals ADD COLUMN note TEXT;

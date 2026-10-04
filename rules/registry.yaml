@@ -4,11 +4,6 @@
   column: at
   where: kind = 'coo_lite'
   gap: 2d
-- name: orchestrator
-  switch: { key: orchestrator.apply, value: '1' }
-  table: decisions
-  column: at
-  gap: 2d
 - name: fixer
   switch: { key: fixer.mode, value: live }
   table: runs

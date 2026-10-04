@@ -16,7 +16,7 @@ import { addPart } from '../../store/parts.ts'
 import { held, PlanRow, retry } from '../../store/plans.ts'
 import { clear } from '../../store/refusals.ts'
 import { split } from '../brief.ts'
-import { byHand, cooLite, piled, read } from '../coolite.ts'
+import { byHand, cooLite, read } from '../coolite.ts'
 import { hold, unhold } from '../hold.ts'
 import type { Wire } from '../push.ts'
 import { rule } from '../rule.ts'
@@ -300,7 +300,7 @@ function stopped(db: Db, id: number, minutes: number, verb = 'ask_coo') {
 
 const fires = (db: Db) => db.prepare("SELECT plan FROM runs WHERE seat = 'coo_lite'").all()
 const pile = (db: Db, home: string, posted: string[] = []) =>
-  piled(db, home, stub(REPLY.ask_ceo ?? ''), clock, (t) => void posted.push(t), wire())
+  byHand(db, home, stub(REPLY.ask_ceo ?? ''), clock, (t) => void posted.push(t), wire())
 
 test.each([
   { name: 'oldestFirst', ages: [30, 20, 10], want: [{ plan: 7 }] },

@@ -10,7 +10,7 @@ import { profile } from '../../store/profile.ts'
 import { checks, excluded, mode, npm, type Ran, type Run } from '../checks.ts'
 import { ciFeatures, formatLine, recipes } from '../gates.ts'
 import { tick } from '../index.ts'
-import { faulted, narrow } from '../rails.ts'
+import { capped, faulted, narrow } from '../rails.ts'
 import { get, put, srcDir } from '../workspace.ts'
 import { ATELIER, BROKEN, GREEN, GREETED, NAPPING, ORPHANED, pkg, RED, TIMEOUT } from './bases.ts'
 import { approve, built as edited, CARRIED, internalPlan, ours, plan, stub, watched, world, type World } from './world.ts'
@@ -418,6 +418,28 @@ test('#257 D5 npm naming CoreSimulator or a hang just refuses', () => {
   const failed = checks(tree(ONE), OWN, replies({ ok: false, code: '1', output }, { ok: false, code: '1', output }).run)
   expect(failed).toMatchObject({ script: 'test', code: '1' })
   expect(failed).not.toHaveProperty('fault')
+})
+
+const KILLED = { ok: false, code: '143', output: ' ✓ a.test.ts (1 test)\n', capped: true } as const
+
+test('#700 D1 a cap-killed npm run with no red test is capped', () => {
+  expect(checks(tree(ONE), OWN, replies(KILLED).run)).toMatchObject({ script: 'test', code: '143', capped: true, retried: false })
+})
+
+test('#700 D2 a cap-killed run naming a red test is refused',() => {
+  const failed = checks(tree(CALLS), OWN, replies({ ...KILLED, output: CALL }).run)
+  expect(failed).not.toHaveProperty('capped')
+  expect(failed?.tests).toEqual(['a.test.ts:3 a call'])
+})
+
+test('#700 D3 a capped failure is a blip on checks:cap', () => {
+  const outcome = capped({ script: 'test', command: 'npm run test', code: '143', output: '', tests: [], retried: false, capped: true })
+  expect(outcome).toMatchObject({ outcome: 'refuse', blip: true, spans: ['checks:cap'] })
+  expect(outcome.note).toContain('exit 143')
+})
+
+test('#700 D4 a non-zero run the cap did not kill is not capped', () => {
+  expect(checks(tree(ONE), OWN, replies({ ok: false, code: '143', output: '' }).run)).not.toHaveProperty('capped')
 })
 
 /** Our own profile's yml ends in its `commands:` block, so atelier's xcodebuild line lands under it. */

@@ -1,0 +1,20 @@
+import { SELF } from '../sequencer/workspace.ts'
+import type { Db } from './index.ts'
+
+export interface Days { zone: number; since: string; today: string }
+
+type Cell = string | number | null
+
+export const DAILY = {
+  runs_daily: "SELECT date(at, printf('%+d minutes', :zone)) AS date, seat, count(*) AS runs, sum(input_tokens + cache_read_tokens + output_tokens) AS tokens, sum(cost_computed_usd) AS cost_computed_usd, sum(cost_usd) AS cost_usd FROM runs WHERE date(at, printf('%+d minutes', :zone)) BETWEEN :since AND :today GROUP BY 1, 2 ORDER BY 1, 2",
+  plans_daily: "SELECT date, lane, sum(kind = 'landed') AS landed, sum(kind = 'refused') AS refused, sum(kind = 'opened') AS opened FROM (SELECT date(queued_at, printf('%+d minutes', :zone)) AS date, id AS plan, lane, 'opened' AS kind FROM plans UNION ALL SELECT date(s.at, printf('%+d minutes', :zone)), p.id, p.lane, 'landed' FROM signals s JOIN plans p ON p.id = s.plan WHERE s.kind = 'merge' UNION ALL SELECT DISTINCT date(r.at, printf('%+d minutes', :zone)), p.id, p.lane, 'refused' FROM refusals r JOIN plans p ON p.id = r.plan WHERE r.blip = 0) WHERE date BETWEEN :since AND :today GROUP BY date, lane ORDER BY date, lane",
+  drift_daily: "WITH RECURSIVE days(day) AS (SELECT :since UNION ALL SELECT date(day, '+1 day') FROM days WHERE day < :today), drift AS (SELECT date(opened_at, printf('%+d minutes', :zone)) AS opened, date(closed_at, printf('%+d minutes', :zone)) AS closed FROM tickets WHERE repo = :self AND title GLOB 'Drift: *') SELECT day AS date, (SELECT count(*) FROM drift WHERE opened <= day AND (closed IS NULL OR closed > day)) AS open, (SELECT count(*) FROM drift WHERE opened = day) AS opened, (SELECT count(*) FROM drift WHERE closed = day) AS closed FROM days ORDER BY day",
+  operator_daily: "WITH RECURSIVE days(day) AS (SELECT :since UNION ALL SELECT date(day, '+1 day') FROM days WHERE day < :today) SELECT d.day AS date, coalesce(sum(e.actor = 'ceo'), 0) AS ceo, coalesce(sum(e.actor = 'coo'), 0) AS coo, coalesce(sum(e.kind = 'signoff'), 0) AS signoffs FROM days d LEFT JOIN events e ON date(e.at, printf('%+d minutes', :zone)) = d.day GROUP BY d.day ORDER BY d.day",
+  stops: "SELECT d.plan, d.step, d.wait_reason, o.actor AS decided_by, d.verb, o.outcome FROM decisions d LEFT JOIN outcomes o ON o.event = (SELECT min(x.event) FROM outcomes x WHERE x.plan = d.plan AND julianday(x.at) >= julianday(d.at) AND NOT EXISTS (SELECT 1 FROM decisions n WHERE n.plan = d.plan AND n.id > d.id AND julianday(n.at) <= julianday(x.at))) ORDER BY d.id",
+  stalls: "WITH open AS (SELECT id, queued_at FROM plans WHERE state IN ('queued', 'running', 'blocked_on_ceo')), steps AS (SELECT plan, at, step, lag(step) OVER (PARTITION BY plan ORDER BY julianday(at), id) AS before FROM runs), marks AS (SELECT id AS plan, queued_at AS at FROM open UNION ALL SELECT e.plan, e.at FROM events e JOIN open ON open.id = e.plan UNION ALL SELECT r.plan, r.at FROM refusals r JOIN open ON open.id = r.plan UNION ALL SELECT s.plan, s.at FROM steps s JOIN open ON open.id = s.plan WHERE s.before <> s.step), stretches AS (SELECT plan, at AS start, lead(at) OVER (PARTITION BY plan ORDER BY julianday(at)) AS next FROM marks), ended AS (SELECT plan, start, (SELECT t.at FROM ticks t WHERE t.dry = 0 AND julianday(t.at) > julianday(start) AND (next IS NULL OR julianday(t.at) <= julianday(next)) ORDER BY julianday(t.at) DESC LIMIT 1) AS stop FROM stretches) SELECT x.plan, x.start, x.stop AS \"end\", p.wait_reason, EXISTS (SELECT 1 FROM runs r WHERE r.plan = x.plan AND julianday(r.at) > julianday(x.start) AND julianday(r.at) <= julianday(x.stop)) AS woken FROM ended x JOIN plans p ON p.id = x.plan WHERE (julianday(x.stop) - julianday(x.start)) * 1440 >= 60 ORDER BY x.plan, x.start",
+} as const
+
+export function daily(db: Db, sql: string, days: Days): { columns: string[]; rows: Cell[][] } {
+  const statement = db.prepare(sql)
+  return { columns: statement.columns().map((c) => c.name), rows: statement.raw().all({ ...days, self: SELF }) as Cell[][] }
+}

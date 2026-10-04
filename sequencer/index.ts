@@ -6,13 +6,12 @@ import { cap, hhmm, zone } from '../store/lanes.ts'
 import { idle, keepWait } from '../store/now.ts'
 import { type PlanRow, live, openPipes, planById, terminal, type PipeRow, waiting } from '../store/plans.ts'
 import { capture, intake } from './capture.ts'
-import { piled } from './coolite.ts'
 import { woke } from './orchestrator.ts'
 import type { Fired } from './kind.ts'
 import { reprice } from './priority.ts'
 import { daily, started, weekly } from './signals.ts'
 import { WIRE, type Wire } from './push.ts'
-import { due, type Entry } from './drift.ts'
+import { due, type Entry, stuck } from './drift.ts'
 import { offered, route, working, type Route } from './next.ts'
 import { reap } from './workspace.ts'
 import { ceilinged, stepped } from './settle.ts'
@@ -28,7 +27,10 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
   for (const signal of capture(db, read, root, labels)) started(db, signal, root, wire)
   daily(db, now)
   weekly(db, now)
-  if (registry !== undefined) due(db, registry, now, wire ?? WIRE, read)
+  if (registry !== undefined) {
+    due(db, registry, now, wire ?? WIRE, read)
+    stuck(db, root, registry, now)
+  }
   if (labels !== undefined) (lines ?? []).push(...intake(db, root, labels))
   reap(root, terminal(db))
   reprice(db, labels)
@@ -49,7 +51,6 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
     }
   }
   await woke(db, root, provider, now)
-  await piled(db, root, provider, now)
   return out
 }
 

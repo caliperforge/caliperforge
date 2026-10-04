@@ -1,12 +1,16 @@
+import { join } from 'node:path'
 import { z } from 'zod'
 import type { Pr } from '../cli/gh.ts'
 import { fill } from '../cli/record.ts'
-import { holds, newest, openTicket, setting } from '../store/drift.ts'
+import { holds, newest, openTicket, setting, stalled } from '../store/drift.ts'
+import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { get, hhmm, set, zone } from '../store/lanes.ts'
+import { holder } from '../store/leases.ts'
+import { needsCeo, openPipes, planById } from '../store/plans.ts'
 import { repos } from '../store/record.ts'
 import type { Wire } from './push.ts'
-import { SELF } from './workspace.ts'
+import { cloned, conflicted, drop, maybe, planDir, put, SELF, snapshot } from './workspace.ts'
 
 const IDENT = /^[a-z_]+$/
 
@@ -46,8 +50,45 @@ function quiet(db: Db, entry: Entry, now: Date): Drifted | null {
   const last = newest(db, from, column, now)
   if (last.newest === null) return { name, state: 'silent', detail: `no row in ${from}` }
   if (gap === undefined || last.days === null) return null
-  const limit = Number(gap.slice(0, -1)) / (gap.endsWith('h') ? 24 : 1)
-  return last.days > limit ? { name, state: 'stale', detail: `newest ${table}.${column} is ${String(last.newest)}, older than ${gap}` } : null
+  return last.days > days(gap) ? { name, state: 'stale', detail: `newest ${table}.${column} is ${String(last.newest)}, older than ${gap}` } : null
+}
+
+function days(gap: string): number {
+  return Number(gap.slice(0, -1)) / (gap.endsWith('h') ? 24 : 1)
+}
+
+interface Spell { step: number; tree: string; since: string; seen: string }
+
+/** `snapshot` stages with `git add -A`, which would mark a stopped merge's conflicts resolved before `conflicted` sees them. */
+function treeOf(src: string): string {
+  if (!cloned(src)) return 'none'
+  return conflicted(src) ? 'conflicted' : snapshot(src)
+}
+
+export function stuck(db: Db, root: string, registry: Entry[], now: Date): number[] {
+  const gap = registry.find((e) => e.name === 'stuck_plans')?.gap
+  if (gap === undefined) return []
+  const window = days(gap) * 86_400_000
+  return stalled(db, openPipes(db, hhmm(db, now)).map((p) => p.id)).flatMap(({ id, step, wait_reason, waits_on, last }) => {
+    if (holder(db, id, now) !== null) return []
+    const tree = treeOf(join(planDir(root, id), 'src'))
+    const saved = maybe(root, id, 'stuck.json')
+    const was = saved === null ? null : JSON.parse(saved) as Spell
+    const same = was !== null && was.step === step && was.tree === tree && now.getTime() - Date.parse(was.seen) <= window
+    const since = same ? was.since : now.toISOString()
+    const spent = now.getTime() - Date.parse(since)
+    if (spent < window) {
+      put(root, id, 'stuck.json', JSON.stringify({ step, tree, since, seen: now.toISOString() }))
+      return []
+    }
+    const note = `step ${String(step)} and its tree unchanged for ${String(Math.floor(spent / 60_000))} min while the tick ran; ` +
+      `waits: ${wait_reason ?? 'none'}${waits_on === null ? '' : ` on plan ${String(waits_on)}`}; last: ${last ?? 'none'}`
+    put(root, id, 'refusal.md', `${maybe(root, id, 'refusal.md') ?? ''}\n# Stopped\n\n${note}.\n`)
+    needsCeo(db, planById(db, id), note)
+    logged(db, { plan: id, kind: 'stuck', actor: 'drift', outcome: 'needs_ceo', message: note, pointer: `step-${String(step)}`, run: null })
+    drop(root, id, 'stuck.json')
+    return [id]
+  })
 }
 
 export function filed(db: Db, drifted: Drifted[], wire: Pick<Wire, 'file'>): string[] {

@@ -80,6 +80,12 @@ test('D5: a plan both landed and held is listed once, as landed', () => {
   expect(flow(db, root, now)).toEqual(['plan 1\tlanded on main, state halted\tcf return 1\n'])
 })
 
+test('D4: a halted plan with no event has no reason recorded', () => {
+  const db = piped()
+  plan(db, 700, 'halted')
+  expect(flow(db, root, now)).toEqual(['plan 700\thalted: no reason recorded\tcf return 700\n'])
+})
+
 test('D5: a clean store lists nothing', () => {
   const db = piped()
   plan(db, 1, 'queued')

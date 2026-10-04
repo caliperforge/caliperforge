@@ -10,7 +10,7 @@ import { maybe, put, srcDir } from '../workspace.ts'
 
 const repo = join(import.meta.dirname, '../..')
 const now = new Date('2026-09-28T17:00:00.000Z')
-const ASK_COO = '---\nverb: ask_coo\nwhy: the builder asked which helper to call\n---\n'
+const FIX = '---\nmove: fix\nwhy: the builder asked which helper to call\n---\n'
 const ISSUE = '# hello\n\n**What:** add it.\n**Why:** asked.\n\n## Out of scope\n\n- the rest\n\n## Standing\n\n- no forced push\n'
 
 function seeded(step: number) {
@@ -20,7 +20,7 @@ function seeded(step: number) {
   db.prepare("UPDATE plans SET state = 'blocked_on_ceo', wait_reason = NULL, step = ? WHERE id = 7").run(step)
   if (step === 1) db.exec('UPDATE runs SET step = 1 WHERE plan = 7')
   db.exec(`INSERT INTO settings (key, value, who, origin_kind, origin_ref, set_at) VALUES
-    ('orchestrator.apply', '1', 'ceo', 'ruling', 't', '2026-09-28'), ('fixer.mode', 'live', 'ceo', 'ruling', 't', '2026-09-28')`)
+    ('coo_lite.apply', '1', 'ceo', 'ruling', 't', '2026-09-28'), ('fixer.mode', 'live', 'ceo', 'ruling', 't', '2026-09-28')`)
   const home = mkdtempSync(join(tmpdir(), 'cf-rule-'))
   for (const dir of ['rules', 'seats']) cpSync(join(repo, dir), join(home, dir), { recursive: true })
   put(home, 7, 'ask.md', 'the ask\n')
@@ -36,7 +36,7 @@ function seeded(step: number) {
 function stub(fix: string): Provider {
   return {
     name: 'claude-agent-sdk',
-    fire: (packet) => Promise.resolve({ text: basename(packet.transcript).startsWith('fixer') ? fix : ASK_COO,
+    fire: (packet) => Promise.resolve({ text: basename(packet.transcript).startsWith('fixer') ? fix : FIX,
       transcript_path: packet.transcript, usage: { input: 10, cache: 0, output: 5 },
       seconds: 0, ended: 'completed', exit: 0, stop_reason: 'end_turn', denials: 0 }),
   }

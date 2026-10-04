@@ -55,19 +55,11 @@ export async function cooLite(db: Db, root: string, plan: PlanRow, provider: Pro
   }
   let { m, said } = await ask(db, root, plan, provider, tried)
   const n = failures(db, root, plan)
-  if (m?.move === 'ask_coo' && n < 2) {
-    ({ m, said } = await ask(db, root, plan, provider, tried, `ask_coo is refused: ${String(n)} failed fixes on this stop, two are needed. Choose another move.`))
-    if (m?.move === 'ask_coo') {
-      return told(db, root, plan, now, { outcome: 'needs_ceo', message: `ask_coo: refused by the fence, ${String(n)} failed fixes on this stop` }, post)
-    }
-  }
-  let ceo = m?.move === 'ask_ceo' ? decision(said) : null
-  if (ceo !== null && 'refused' in ceo) {
-    ({ m, said } = await ask(db, root, plan, provider, tried, `ask_ceo is refused: ${ceo.refused}. Write the decision block, or choose another move.`))
-    ceo = m?.move === 'ask_ceo' ? decision(said) : null
-    if (ceo !== null && 'refused' in ceo) {
-      return told(db, root, plan, now, { outcome: 'needs_ceo', message: `ask_ceo: refused by the fence, ${ceo.refused}` }, post)
-    }
+  const first = refused(m, said, n)
+  if (first !== null) {
+    ({ m, said } = await ask(db, root, plan, provider, tried, first.fence))
+    const again = refused(m, said, n)
+    if (again !== null) return told(db, root, plan, now, { outcome: 'needs_ceo', message: again.message }, post)
   }
   if (m === null) return told(db, root, plan, now, { outcome: 'needs_ceo', message: 'ask_ceo: no readable answer' }, post)
   const message = `${m.move}: ${m.why}`
@@ -78,12 +70,24 @@ export async function cooLite(db: Db, root: string, plan: PlanRow, provider: Pro
   if (m.move === 'fix' && tried === undefined) return cooLite(db, root, planById(db, plan.id), provider, now, post, wire, m.why)
   if (m.move === 'ask_ceo' || m.move === 'ask_coo') {
     held(db, plan.id, m.move === 'ask_ceo' ? 'ceo' : 'coo', m.why)
-    return told(db, root, plan, now, { outcome: 'needs_ceo', message: ceo === null ? message : `${message}\n\n${ceo.block}` }, post)
+    const ceo = decision(said)
+    return told(db, root, plan, now, { outcome: 'needs_ceo', message: m.move === 'ask_ceo' && 'block' in ceo ? `${message}\n\n${ceo.block}` : message }, post)
   }
   const failed = `${m.move} did not apply, ${UNAPPLIED[m.move]}: ${m.why}`
   needsCeo(db, plan, failed)
   held(db, plan.id, 'coo', failed)
   return told(db, root, plan, now, { outcome: 'needs_ceo', message: failed }, post)
+}
+
+function refused(m: Move | null, said: string, n: number): { fence: string; message: string } | null {
+  if (m?.move === 'ask_coo' && n < 2) {
+    return { fence: `ask_coo is refused: ${String(n)} failed fixes on this stop, two are needed. Choose another move.`,
+      message: `ask_coo: refused by the fence, ${String(n)} failed fixes on this stop` }
+  }
+  const ceo = m?.move === 'ask_ceo' ? decision(said) : null
+  if (ceo === null || !('refused' in ceo)) return null
+  return { fence: `ask_ceo is refused: ${ceo.refused}. Write the decision block, or choose another move.`,
+    message: `ask_ceo: refused by the fence, ${ceo.refused}` }
 }
 
 interface Stop { id: number; answered: number | null; today: number }

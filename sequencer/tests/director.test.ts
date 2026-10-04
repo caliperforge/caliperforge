@@ -591,6 +591,17 @@ test('D3: an ask_ceo refused twice leaves the plans as they were', async () => {
   expect(told(db).map((t) => t.message)).toEqual(['ask_ceo: refused by the fence, no Decide line'])
 })
 
+test.each([
+  ['ask_coo: refused by the fence, 0 failed fixes on this stop', [askCeo(FAULTS[0][1]), ASK_COO]],
+  ['ask_ceo: refused by the fence, no Decide line', [ASK_COO, askCeo(FAULTS[0][1])]],
+])('D3: a second refused move logs %s', async (message, replies) => {
+  const { db, home } = seeded('1')
+  const was = plans(db)
+  await cooLite(db, home, row(db), inTurn(replies, []), now, () => undefined, wire())
+  expect(plans(db)).toEqual(was)
+  expect(told(db).map((t) => t.message)).toEqual([message])
+})
+
 test.each(FAULTS)('D1: decision refuses %s', (refused, block) => {
   expect(decision(askCeo(block))).toEqual({ refused })
 })

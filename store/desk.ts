@@ -28,6 +28,8 @@ export interface Post extends Edited {
   written_date: string
   order: number | null
   proof_at: string | null
+  url: string | null
+  published_at: string | null
 }
 
 export function posts(db: Db): Post[] {
@@ -36,6 +38,15 @@ export function posts(db: Db): Post[] {
 
 export function opened(db: Db): Post[] {
   return db.prepare("SELECT * FROM desk_posts WHERE status IN ('proof', 'changes') ORDER BY id").all() as Post[]
+}
+
+export function pending(db: Db): Post[] {
+  return db.prepare("SELECT * FROM desk_posts WHERE status = 'approved' AND dest IN ('site', 'substack') AND url IS NULL ORDER BY id")
+    .all() as Post[]
+}
+
+export function placed(db: Db, id: number, url: string): void {
+  db.prepare('UPDATE desk_posts SET url = ? WHERE id = ?').run(url, id)
 }
 
 export function postOf(db: Db, id: number): Post {

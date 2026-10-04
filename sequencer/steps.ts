@@ -16,6 +16,7 @@ import { diffOf, maybe, put } from './workspace.ts'
 import { homeOf } from './home.ts'
 import { freshBase } from './merge.ts'
 import { hold } from './hold.ts'
+import { publish } from './site.ts'
 
 interface StepMap {
   steps: Step[]
@@ -97,6 +98,7 @@ export function kernel(db: Db, root: string, plan: PlanRow, wire?: Wire, read?: 
   if (step.name === 'gather') return gather(db, root, plan)
   if (step.name === 'facts') return facts(root, plan)
   if (step.name === 'desk') return desk(db, root, plan)
+  if (step.name === 'publish') return publish(db, root, plan, step)
   if (step.name === 'capture') return capture(db, root)
   if (step.name === 'pack') return pack(db, root, plan)
   if (step.name === 'score') return score(db, root, plan, step)

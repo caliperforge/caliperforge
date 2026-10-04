@@ -1,9 +1,10 @@
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
+import { all } from '../../cli/inbox.ts'
 import type { Provider } from '../../providers/kind.ts'
-import { learnings, learningsIn, posts, putPost } from '../../store/desk.ts'
+import { learnings, learningsIn, placed, postOf, posts, putPost } from '../../store/desk.ts'
 import { eventsOf, kindsOf, runRows } from '../../store/events.ts'
 import { set, zone } from '../../store/lanes.ts'
 import { addPipe, briefed, dropPlan, end, plansOf, putPlan, requeue } from '../../store/plans.ts'
@@ -12,8 +13,9 @@ import { verdictRows } from '../../store/verdict.ts'
 import { desk, draft, drafted, facts, gather, review } from '../../templates/comms.ts'
 import { tick } from '../index.ts'
 import { weekly as clock } from '../signals.ts'
+import { publish } from '../site.ts'
 import { mapOf } from '../steps.ts'
-import { FORK, get, maybe, put } from '../workspace.ts'
+import { FORK, get, git, maybe, put } from '../workspace.ts'
 import { plan, reads, stub, world, type World } from './world.ts'
 
 const NAMES = ['gather', 'draft', 'facts', 'text_review', 'desk', 'publish', 'capture', 'grow', 'pack', 'score']
@@ -500,4 +502,77 @@ test('weeklyDesk D4: a weekly plan lands a substack post', async () => {
   for (const part of ['"learnings"', '"story"', '# The story']) expect(written).toContain(part)
   expect(posts(w.db)).toMatchObject([{ kind: 'weekly', dest: 'substack', status: 'proof', work_date: '2026-10-02' }])
   expect(posts(w.db)[0]?.body).toContain('## Script')
+})
+
+const POST05 = 'blog/05_jito-tippayment-and-ai-invariant-suggester-live.html'
+
+const SITE = { [POST05]: '<html><head><title>x</title></head><body><h1>x</h1><article>x</article></body></html>', 'blog/index.html': '<ul>\n</ul>' }
+
+const SEED = { id: 2, kind: 'ship', dest: 'site', status: 'approved', title: 'A <post> & more', dek: 'd', body: '## Why\n\nOne <b> line.\n\nTwo.',
+  edited_title: null, sources: '[]', checks: '[]', work_date: '2026-10-01', written_date: '2026-10-02' } satisfies Parameters<typeof putPost>[1]
+
+const sited = (files: Record<string, string> = SITE): string => {
+  const [origin, dir] = [mkdtempSync(join(tmpdir(), 'cf-origin-')), mkdtempSync(join(tmpdir(), 'cf-site-'))]
+  git(origin, ['init', '--bare', '-b', 'main'])
+  git(dir, ['init', '-b', 'main'])
+  for (const [key, value] of [['user.name', 'cf'], ['user.email', 'cf@example.com'], ['commit.gpgsign', 'false']] as const) git(dir, ['config', key, value])
+  mkdirSync(join(dir, 'blog'))
+  for (const [path, text] of Object.entries(files)) writeFileSync(join(dir, path), text)
+  git(dir, ['add', '.'])
+  git(dir, ['commit', '--allow-empty', '-m', 'seed'])
+  git(dir, ['remote', 'add', 'origin', origin])
+  git(dir, ['push', '-u', 'origin', 'main'])
+  return dir
+}
+
+const published = (w: World, dir: string, title = 'ship post acme/widget#7'): ReturnType<typeof publish> => {
+  titled(w, 1, title)
+  set(w.db, 'comms.site_dir', dir, 'ceo', '2026-10-04')
+  return publish(w.db, w.root, plan(w.db, 1), mapOf('comms').at(5))
+}
+
+const ahead = (dir: string): string => git(dir, ['rev-list', '--count', 'origin/main..HEAD']).trim()
+
+test('publish D1 D2 D3 D6: a site row is written and committed', () => {
+  const w = comms()
+  const dir = sited()
+  putPost(w.db, SEED)
+  expect(published(w, dir)).toEqual({ outcome: 'pass', spans: [], note: `1 post(s) written to ${dir}` })
+  const [name, title] = ['06_a-post-more', 'A &lt;post&gt; &amp; more']
+  expect(readFileSync(join(dir, `blog/${name}.html`), 'utf8')).toBe(`<html><head><title>${title}</title></head><body>\n<h1>${title}</h1>
+<p class="dateline">Work completed 2026-10-01 · written up 2026-10-02.</p>\n<h2>Why</h2>\n<p>One &lt;b&gt; line.</p>\n<p>Two.</p>
+</article></body></html>`)
+  expect(readFileSync(join(dir, 'blog/index.html'), 'utf8')).toBe(`<ul>\n<li><a href="${name}.html">${title}</a> · 2026-10-02</li>\n</ul>`)
+  expect(postOf(w.db, 2)).toMatchObject({ status: 'approved', url: `https://caliperforge.com/blog/${name}.html`, published_at: null })
+  expect([git(dir, ['log', '-1', '--format=%s']).trim(), ahead(dir)]).toEqual([`post: ${name}`, '1'])
+  expect(all(w.root)).toMatchObject([{ kind: 'signoff', plan: 1, step: 5, name: 'publish', note: 'site post ready: run `cf site push`' }])
+})
+
+test.each([
+  { why: 'a proof row', row: { status: 'proof' as const }, url: null, title: undefined },
+  { why: 'a note row', row: { dest: 'note' as const }, url: null, title: undefined },
+  { why: 'a placed row', row: {}, url: 'https://caliperforge.com/blog/05_x.html', title: undefined },
+  { why: 'a daily plan', row: {}, url: null, title: 'daily 2026-10-04' },
+])('publish D4: $why writes and commits nothing', ({ row, url, title }) => {
+  const w = comms()
+  const dir = sited()
+  putPost(w.db, { ...SEED, ...row })
+  if (url !== null) placed(w.db, 2, url)
+  expect(published(w, dir, title)).toMatchObject({ outcome: 'pass' })
+  expect(readdirSync(join(dir, 'blog')).sort()).toEqual([POST05.slice('blog/'.length), 'index.html'])
+  expect([ahead(dir), postOf(w.db, 2).url, all(w.root)]).toEqual(['0', url, []])
+})
+
+test('publish D5: an unset comms.site_dir refuses', () => {
+  const w = comms()
+  putPost(w.db, SEED)
+  expect(published(w, '')).toEqual({ outcome: 'refuse', spans: ['comms.site_dir'], note: 'comms.site_dir is unset' })
+})
+
+test.each([POST05, 'blog/index.html'])('publish D5: a site with no %s throws', (missing) => {
+  const w = comms()
+  const dir = sited(Object.fromEntries(Object.entries(SITE).filter(([path]) => path !== missing)))
+  putPost(w.db, SEED)
+  expect(() => published(w, dir)).toThrow(/ENOENT/)
+  expect([postOf(w.db, 2).url, ahead(dir)]).toEqual([null, '0'])
 })

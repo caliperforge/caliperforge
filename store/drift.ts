@@ -4,6 +4,13 @@ export function setting(db: Db, key: string): string | undefined {
   return (db.prepare('SELECT value FROM settings WHERE key = ?').get(key) as { value: string } | undefined)?.value
 }
 
+interface Setting { key: string; value: string; who: 'ceo' | 'pr'; origin_kind: 'rail' | 'ruling' | 'incident'; origin_ref: string; set_at: string }
+
+export function addSetting(db: Db, row: Setting): void {
+  db.prepare('INSERT INTO settings (key, value, who, origin_kind, origin_ref, set_at) VALUES (@key, @value, @who, @origin_kind, @origin_ref, @set_at)')
+    .run(row)
+}
+
 export function holds(db: Db, condition: string): boolean {
   return (db.prepare(`SELECT (${condition}) AS on_`).get() as { on_: number }).on_ === 1
 }

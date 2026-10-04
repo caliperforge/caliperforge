@@ -4,6 +4,7 @@ import { dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { expect, it } from 'vitest'
 import { walk } from '../checks/tree.ts'
+import { addSetting, setting } from './drift.ts'
 import { eventsOf } from './events.ts'
 import { addRule, dump, migrate, open, rules } from './index.ts'
 import { get, set, windows } from './lanes.ts'
@@ -314,6 +315,15 @@ it('D4: a size limit of 0 lines is refused', () => {
   const db = open(':memory:')
   migrate(db, join(root, 'schema'))
   expect(() => { setLimit(db, { repo: 'acme/widget', lines: 0, origin_kind: 'ruling', origin_ref: 't', set_at: '2026-09-27' }) }).toThrow(/CHECK/)
+})
+
+it('D5: addSetting on an existing key throws, keeps the value', () => {
+  const db = open(':memory:')
+  migrate(db, join(root, 'schema'))
+  const row = { key: 'coo_lite.apply', value: '1', who: 'ceo', origin_kind: 'ruling', origin_ref: 't', set_at: '2026-09-27' } as const
+  addSetting(db, row)
+  expect(() => { addSetting(db, { ...row, value: '0' }) }).toThrow(/UNIQUE|PRIMARY/)
+  expect(setting(db, 'coo_lite.apply')).toBe('1')
 })
 
 it('dumps a database that replays into an identical one', () => {

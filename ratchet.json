@@ -217,7 +217,7 @@
     "prepare": 1
   },
   "rails/ready/index.ts": {
-    "lines": 55
+    "lines": 53
   },
   "rails/ready/tests/ready.test.ts": {
     "prepare": 1

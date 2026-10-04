@@ -5,7 +5,7 @@ import { clear as unlease, drop, handOver, held, take, type Lease, type Taken } 
 import { cap, hhmm, zone } from '../store/lanes.ts'
 import { idle, keepWait } from '../store/now.ts'
 import { type PlanRow, live, openPipes, planById, terminal, type PipeRow, waiting } from '../store/plans.ts'
-import { capture, intake } from './capture.ts'
+import { capture, intake, refill } from './capture.ts'
 import { woke } from './director.ts'
 import type { Fired } from './kind.ts'
 import { reprice } from './priority.ts'
@@ -36,7 +36,7 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
     stuck(db, root, registry, now)
     sunday(db, root, now)
   }
-  if (labels !== undefined) (lines ?? []).push(...intake(db, root, labels))
+  if (labels !== undefined) (lines ?? []).push(...intake(db, root, labels), ...refill(db, root, labels, now))
   reap(root, terminal(db))
   reprice(db, labels)
   const out: Fired[] = []

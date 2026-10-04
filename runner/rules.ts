@@ -5,6 +5,7 @@ import { parse } from 'yaml'
 import { z } from 'zod'
 import { manifest } from '../checks/manifest.ts'
 import { bare } from '../providers/kind.ts'
+import type { Run } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 
 const Roster = z.object({
@@ -18,6 +19,7 @@ const Roster = z.object({
 const Written = Roster.extend({ digests: z.record(z.string(), z.record(z.string(), z.string())).catch({}) })
 
 export const WRITERS = new Set(['Write', 'Edit', 'NotebookEdit', 'Bash', 'MultiEdit'])
+const LOOK = 'Bash(cf look:*)'
 
 export const Seat = z.object({
   seat: z.string(),
@@ -25,8 +27,8 @@ export const Seat = z.object({
   effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']),
   tools: z.array(z.string()).min(1),
   write_paths: z.array(z.string()),
-}).refine((s) => s.write_paths.length > 0 || !s.tools.some((t) => WRITERS.has(bare(t))), {
-  message: `a seat with no write_paths may hold none of ${[...WRITERS].join(', ')}`,
+}).refine((s) => s.write_paths.length > 0 || !s.tools.some((t) => t !== LOOK && WRITERS.has(bare(t))), {
+  message: `a seat with no write_paths may hold none of ${[...WRITERS].join(', ')}, save ${LOOK}`,
   path: ['tools'],
 })
 
@@ -61,16 +63,17 @@ export function load(db: Db, root: string): Rule[] {
   return rows
 }
 
-export function seat(root: string, name: string): { manifest: Seat; prompt: string; hash: string } {
+export function seat(root: string, name: string, mode?: Run['mode']): { manifest: Seat; prompt: string; hash: string } {
   const want = listed(root).digests[name]
   if (want === undefined) throw new Error(`seat "${name}" is absent from rules/roster.yaml`)
   const paths = { manifest: join(root, 'seats', name, 'manifest.yaml'), prompt: join(root, 'seats', name, 'prompt.md') }
   for (const key of ['manifest', 'prompt'] as const) {
     if (digest(paths[key]) !== want[key]) throw new Error(`seat "${name}" ${key} does not match its digest in rules/roster.yaml`)
   }
+  const prompt = readFileSync(paths.prompt, 'utf8')
   return {
     manifest: Seat.parse(parse(readFileSync(paths.manifest, 'utf8'))),
-    prompt: readFileSync(paths.prompt, 'utf8'),
+    prompt: mode === undefined ? prompt : `${prompt}\n${readFileSync(join(root, 'seats/modes', `${mode}.md`), 'utf8')}`,
     hash: digest(join(root, 'rules/roster.yaml')),
   }
 }

@@ -18,8 +18,7 @@ const diffOf = (...paths: string[]): string =>
   paths.map((p) => `diff --git a/${p} b/${p}\n--- a/${p}\n+++ b/${p}\n@@ -1 +1 @@\n-old\n+new\n`).join('')
 
 const rules = (seat: string): string => {
-  const prompt = readFileSync(join(root, 'seats', seat, 'prompt.md'), 'utf8')
-  return prompt.slice(0, prompt.indexOf('\nAnswer the ') + 1)
+  return readFileSync(join(root, 'seats', seat, 'prompt.md'), 'utf8').replace(/^Answer the [\s\S]*/m, '')
 }
 
 test('Kotlin then Python rules, then every pay-kit note', () => {

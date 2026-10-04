@@ -4,10 +4,10 @@ import type { Db } from '../store/index.ts'
 import { busy } from '../store/now.ts'
 import type { PlanRow } from '../store/plans.ts'
 import { entries, type Failure } from './checks.ts'
-import { firstLine, gone } from './gone.ts'
 import { homeOf, kernelPlan } from './home.ts'
 import type { Outcome } from './kind.ts'
 import { carries, headOf, holding, unfinished, WIRE, workflows, type Wire } from './push.ts'
+import { firstLine, gone } from './unpolled.ts'
 import { srcDir } from './workspace.ts'
 
 /** The settings row that moves step 3's suite off this laptop: `ci`, or anything else for the laptop. */

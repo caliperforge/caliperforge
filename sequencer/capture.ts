@@ -9,9 +9,9 @@ import { record, type Signal, type SignalRow } from '../store/signals.ts'
 import { afterOf, FIELDS, Listed, type Listing, partOf, recordListing } from '../store/tickets.ts'
 import { attribute } from './escapes.ts'
 import { rehearsed, type Rehearsal } from './findings.ts'
-import { closed, firstLine, gone, polled } from './gone.ts'
 import { rehearsalBranch } from './push.ts'
 import { claimed, released } from './split.ts'
+import { closed, firstLine, gone, polled } from './unpolled.ts'
 import { cloned, FORK, repoName, srcDir } from './workspace.ts'
 
 /** `rehearsal` holds the root whose `next.tips` traces a rehearsal's heads and the read its comments come by, null on a real pull request. */

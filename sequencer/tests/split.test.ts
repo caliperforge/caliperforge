@@ -2,8 +2,11 @@ import { expect, test } from 'vitest'
 import { split, STANDING, unclear, wide } from '../brief.ts'
 import { tick } from '../index.ts'
 import { assembly } from '../home.ts'
-import { following, parted, released } from '../split.ts'
-import { maybe, put } from '../workspace.ts'
+import { following, languages, parted, released } from '../split.ts'
+import { languageFor } from '../route.ts'
+import { maybe, put, srcDir } from '../workspace.ts'
+import { record } from '../../store/files.ts'
+import { builder } from '../../templates/pr-path.ts'
 import { ofKind, runRows } from '../../store/events.ts'
 import { priority } from '../../store/lanes.ts'
 import { setLimit } from '../../store/limits.ts'
@@ -277,12 +280,59 @@ test('D3: an outside brief of five files at the limit is the issue', async () =>
   expect(maybe(w.root, 1, 'issue.md')).toBe(brief)
 })
 
-function wideBrief(paths: string[], title = 'let an internal plan run', approach = 'x'): string {
+const SPANNING = wideBrief(['kotlin/Main.kt (new)', '.github/workflows/k.yml (new)'], 'hello', 'x', 'harness/test/x.test.ts (new)')
+
+test('D1: an outside brief splits into one part per language', () => {
+  const out = world()
+  expect(split(languages(plan(out.db, 1), SPANNING) ?? '')?.map((p) => [p.title, p.what, p.after])).toEqual([
+    ['kotlin part of hello', "plan 1's kotlin files: kotlin/Main.kt, .github/workflows/k.yml", 'none'],
+    ['typescript part of hello', "plan 1's typescript files: harness/test/x.test.ts", 'a'],
+  ])
+})
+
+test('D2, D3: each language part files on asm/1 to its own builder', async () => {
+  const out = world()
+  approve(out.db, out.target)
+  const log: string[] = []
+  await briefed(out, 1, SPANNING, log)
+  expect(log).toEqual(['file caliperforge/caliperforge p1a: kotlin part of hello', 'file caliperforge/caliperforge p1b: typescript part of hello'])
+  expect(plan(out.db, 1)).toMatchObject({ state: 'done' })
+  expect(maybe(out.root, 1, 'issue.md')).toBeNull()
+  const at = (n: number) => allParts(out.db).find((p) => p.parent === 1 && p.n === n)
+  expect(at(1)?.body).toContain('After: #901')
+  const a = at(0)?.plan ?? 0
+  following(out.db, out.root, plan(out.db, a), 'a'.repeat(40), watched(log, out.root, a))
+  const b = at(1)?.plan ?? 0
+  record(out.db, a, [{ path: 'kotlin/Main.kt', is_new: true }, { path: '.github/workflows/k.yml', is_new: true }])
+  record(out.db, b, [{ path: 'harness/test/x.test.ts', is_new: true }])
+  expect([a, b].map((id) => builder(languageFor(out.db, plan(out.db, id), srcDir(out.root, id))))).toEqual(['kotlin_specialist', 'outside_specialist'])
+})
+
+test('D4: an outside brief in one language is not split', async () => {
+  const out = world()
+  approve(out.db, out.target)
+  const brief = wideBrief(['kotlin/Main.kt (new)', '.github/workflows/k.yml (new)', 'docs/k.md (new)'], 'hello', 'x', 'kotlin/test/MainTest.kt (new)')
+  const log: string[] = []
+  await briefed(out, 1, brief, log)
+  expect(maybe(out.root, 1, 'issue.md')).toBe(brief)
+  expect(log).toEqual([])
+})
+
+test('D5: an internal mixed brief is not split by language', async () => {
+  const w = mine()
+  const brief = wideBrief(['kotlin/Main.kt (new)', 'src/b.ts (new)'], 'let an internal plan run', 'x', 'harness/test/x.test.ts (new)')
+  expect(languages(plan(w.db, ID), brief)).toBeNull()
+  await briefed(w, ID, brief, [])
+  expect(maybe(w.root, ID, 'issue.md')).toBe(brief)
+  expect(allParts(w.db)).toEqual([])
+})
+
+function wideBrief(paths: string[], title = 'let an internal plan run', approach = 'x', tests = 'src/a.ts'): string {
   return [`# ${title}`, '', '**What:** a.', '**Why:** b.', '**When it ends:** c.', '',
     '## Approach', '', approach, '', '## Settled facts', '', '- none: every name the change uses is in this checkout', '', '## Cases', '', '- D1 one', '- D2 a call with no name is refused', '',
     '## Must not break', '', '- y', '', '## Files', '', ...paths.map((p) => `- ${p}`), '',
     '## Files to read', '', '- src/hello.ts — what it exports today', '',
-    '## Who else reads what this changes', '', '- nobody else', '', '## Tests', '', '- src/a.ts — the case', '',
+    '## Who else reads what this changes', '', '- nobody else', '', '## Tests', '', `- ${tests} — the case`, '',
     '## Out of scope', '', '- z', '', '## Standing', '', ...STANDING, ''].join('\n')
 }
 

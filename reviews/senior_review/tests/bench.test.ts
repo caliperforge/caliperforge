@@ -301,7 +301,9 @@ test('D1 a Swift idiom reads as a pass with a language note', async () => {
 })
 
 test('D2 a dropped spec field still refuses as correctness', async () => {
-  expect(await senior('dropped.reply.md')).toMatchObject({ outcome: 'refuse', defect_class: 'correctness', spans: ['src/stats.ts:2'] })
+  expect(await senior('dropped.reply.md')).toMatchObject({
+    outcome: 'refuse', defect_class: 'correctness', spans: ['src/stats.ts:2'], origin_kind: 'ruling', origin_ref: 'reviewers.verdict',
+  })
 })
 
 test('D3 a pass with only language notes logs them, writes none', async () => {

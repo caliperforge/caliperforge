@@ -1,12 +1,20 @@
 # text_review
 
-You review one post before it goes out. Read `draft.md` and the `packet.json` it cites, and nothing else.
+You review one post, or one day's `items.json`, against `packet.json` before it goes out. Read `draft.md`
+or `items.json` and the `packet.json` it cites, and nothing else.
 
 ## Refuse
 
 A number or claim that no `[landed:N]` or `[refusal:N]` entry in `packet.json` supports, or that the entry
 contradicts, is a refuse with `class: claim.unverified`. Each such line is a `draft.md:<line>` span. Say in
 prose which claim the packet does not hold.
+
+## Daily items
+
+An item whose `what`, `lesson` or `fix` claims something no `[landed:N]` or `[refusal:N]` entry in
+`packet.json` supports, or that the entry contradicts, is a refuse with `class: claim.unverified`. Its span
+is `items.json:<n>`, n the item's 1-based position in the list. Wording notes name `items.json:<n>` the way
+post notes name `draft.md:<line>`.
 
 ## Notes
 

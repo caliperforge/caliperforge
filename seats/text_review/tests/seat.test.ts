@@ -39,6 +39,12 @@ test('D5: the prompt names the inputs, the class and both fences', () => {
   for (const part of ['claim.unverified', 'draft.md', 'packet.json', 'outcome: refuse', 'outcome: pass']) expect(prompt).toContain(part)
 })
 
+test('D7: an unsourced item is a claim.unverified refuse', () => {
+  expect(seat(root, 'text_review').prompt).toContain('items.json')
+  const judged = read(reply('item.reply.md'), 'items')
+  expect(judged).toMatchObject({ outcome: 'refuse', defect_class: 'claim.unverified', spans: ['items.json:2'] })
+})
+
 test('D6: the digests hold, and a roster without them fails', () => {
   expect(check(root, TODAY)).toEqual([])
   const tree = mkdtempSync(join(tmpdir(), 'cf-text-review-'))

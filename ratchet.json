@@ -217,7 +217,7 @@
     "prepare": 1
   },
   "rails/ready/index.ts": {
-    "lines": 55
+    "lines": 53
   },
   "rails/ready/tests/ready.test.ts": {
     "prepare": 1
@@ -326,12 +326,12 @@
     "lines": 92,
     "prepare": 1
   },
-  "sequencer/coolite.ts": {
-    "lines": 263,
-    "prepare": 7
-  },
   "sequencer/delta.ts": {
     "lines": 27
+  },
+  "sequencer/director.ts": {
+    "lines": 263,
+    "prepare": 7
   },
   "sequencer/escapes.ts": {
     "lines": 53,
@@ -480,6 +480,9 @@
   "sequencer/tests/ci.test.ts": {
     "prepare": 5
   },
+  "sequencer/tests/director.test.ts": {
+    "prepare": 6
+  },
   "sequencer/tests/each.test.ts": {
     "prepare": 7
   },
@@ -530,9 +533,6 @@
   },
   "sequencer/tests/next.test.ts": {
     "prepare": 12
-  },
-  "sequencer/tests/orchestrator.test.ts": {
-    "prepare": 6
   },
   "sequencer/tests/overlap.test.ts": {
     "prepare": 7

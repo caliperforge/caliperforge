@@ -27,6 +27,9 @@ test('D2: the build mode, not the prompt, holds the framing', () => {
   for (const text of ['You build', '- id: D1', 'A file the ask needs removed goes under `## Deleted`']) {
     expect(prompt).not.toContain(text)
   }
+  const build = seat(root, 'typescript_specialist', 'build').prompt
+  expect(build).toContain('You build against the brief below. One checkout, one step.')
+  expect(build).toContain('- id: D1')
 })
 
 test('the prompt names the row a file outside the brief needs', () => {

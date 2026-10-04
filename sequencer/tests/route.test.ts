@@ -8,7 +8,7 @@ import { record } from '../../store/files.ts'
 import type { Db } from '../../store/index.ts'
 import { PlanRow } from '../../store/plans.ts'
 import { builder, languageOfSeat } from '../../templates/pr-path.ts'
-import { BRIEF_FILES, fenceFor, languageFor, languageOfPath, majority } from '../route.ts'
+import { BRIEF_FILES, fenceFor, languageFor, languageOfPath, languageOfSpan, majority } from '../route.ts'
 
 const schema = join(import.meta.dirname, '../../schema')
 
@@ -79,6 +79,11 @@ test('a path reads by name, then folder; docs and fixtures by none', () => {
   expect(languageOfPath('programs/escrow/Xargo.toml')).toBe('rust')
   expect(languageOfPath('go/testdata/vector.json')).toBeNull()
   expect(languageOfPath('ruby/README.md')).toBeNull()
+})
+
+test('D5 a span reads by its path, TypeScript included', () => {
+  expect(['swift/Sources/x.swift:10', 'x.test.ts a lap (timeout)', 'checks:test', 'base:stale', 'text:12', 'step-2.handback.md']
+    .map(languageOfSpan)).toEqual(['swift', 'typescript', null, null, null, null])
 })
 
 test('a change wholly under kotlin/ still goes to the kotlin seat', () => {

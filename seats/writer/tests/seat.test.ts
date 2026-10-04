@@ -21,6 +21,11 @@ test('D6: the items fence, each status, no "Read nothing else"', () => {
   expect(prompt).not.toContain('Read nothing else')
 })
 
+test('sources D6: the lead, tagless body and sources refs', () => {
+  const prompt = seat(root, 'writer').prompt
+  for (const part of ['comms.story_dir', '`learned`', '`learnings`', '`story`', 'no `[landed:N]`', '`landed:N`', '`refusal:N`']) expect(prompt).toContain(part)
+})
+
 test('D5: the citations, the fence and each kind of post', () => {
   const prompt = seat(root, 'writer').prompt
   for (const part of ['[landed:', '[refusal:', 'learnings:', 'dest:', 'dek:', 'sources:', 'checks:', 'daily', 'ship', 'weekly', 'substack', 'note']) expect(prompt).toContain(part)

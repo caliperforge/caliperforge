@@ -62,8 +62,9 @@ const learned = (w: World): unknown[] => learnings(w.db)
 
 const never: Provider = { name: 'claude-agent-sdk', fire: () => { throw new Error('no seat fires on comms') } }
 
-const judged =(w: World, line: string): ReturnType<typeof facts> => {
+const judged =(w: World, line: string, sources: { claim: string; ref: string }[] = []): ReturnType<typeof facts> => {
   put(w.root, 1, 'draft.md', `# The day\n\n${line}\n`)
+  put(w.root, 1, 'fence.json', JSON.stringify({ sources }))
   return facts(w.root, plan(w.db, 1))
 }
 
@@ -129,23 +130,25 @@ test.each([
   expect(growths(w)).toEqual([])
 })
 
-test('D3: facts refuses a line with an issue, login or no entry', () => {
+test('D2-D5: facts refuses a tag, issue, login, number or ref', () => {
   const w = comms()
-  const id = refusal(w, 0)
+  const id = String(refusal(w, 0))
   gather(w.db, w.root, plan(w.db, 1))
-  for (const line of [`Fixed #12 today. [refusal:${String(id)}]`, `See /issues/12 [refusal:${String(id)}]`,
-    `See https://github.com/acme/widget/pull/7 [refusal:${String(id)}]`, `Thanks @someone [refusal:${String(id)}]`,
-    'One job was refused.', 'One job was refused. [refusal:999]', 'One job landed. [landed:999]',
-    `#12 was refused. [refusal:${String(id)}]`, '## Fixed #12', '## Thanks @someone']) {
-    expect(judged(w, line)).toMatchObject({ outcome: 'refuse', spans: ['draft.md:3'] })
+  const sources = [{ claim: `jobs 1, 7, 12 and ${id} were refused`, ref: `refusal:${id}` }]
+  for (const line of ['Fixed #12 today.', 'See /issues/12', 'See https://github.com/acme/widget/pull/7', 'Thanks @someone',
+    `One job was refused. [refusal:${id}]`, 'One job landed. [landed:1]', '40 jobs were refused.',
+    '## Fixed #12', '## Thanks @someone', '## 40 refused']) {
+    expect(judged(w, line, sources)).toMatchObject({ outcome: 'refuse', spans: ['draft.md:3'] })
   }
+  expect(judged(w, 'One job was refused.', [{ claim: 'one job', ref: 'refusal:999' }]))
+    .toMatchObject({ outcome: 'refuse', spans: ['fence.json:refusal:999'] })
 })
 
-test('D4: facts passes a cited draft with no issue or login', () => {
+test('D1: facts passes tagless lines whose numbers are claimed', () => {
   const w = comms()
   const id = refusal(w, 0)
   gather(w.db, w.root, plan(w.db, 1))
-  expect(judged(w, `One job was refused. [refusal:${String(id)}]\nThanks @${FORK} [refusal:${String(id)}]`))
+  expect(judged(w, `## 2 refused\n2 jobs were refused.\nThanks @${FORK}`, [{ claim: '2 jobs were refused', ref: `refusal:${String(id)}` }]))
     .toMatchObject({ outcome: 'pass', spans: [] })
 })
 
@@ -159,10 +162,12 @@ test('writer D3: the reply reads as learnings and a passing post', () => {
   expect(reply?.post).toMatch(/\S/)
   expect(reply?.dest).toBe('site')
   expect(reply?.dek).toMatch(/\S/)
-  expect(reply?.sources).toEqual([{ claim: 'the writer reads the packet', ref: 'templates/comms.ts:16' }])
-  expect(reply?.checks).toEqual([{ label: 'every line cites the packet', ok: true }])
+  expect(reply?.sources).toEqual([{ claim: 'the writer seat drafts the post', ref: 'landed:7' },
+    { claim: 'one build was refused for a weakened test', ref: 'refusal:3' }])
+  expect(reply?.checks).toEqual([{ label: 'every number is in a source claim', ok: true }])
   put(w.root, 1, 'packet.json', JSON.stringify({ landed: [{ plan: 7, origin: '', digest: '' }], refusals: [{ id: 3 }] }))
   put(w.root, 1, 'draft.md', reply?.post ?? '')
+  put(w.root, 1, 'fence.json', JSON.stringify(fenced()))
   expect(facts(w.root, plan(w.db, 1))).toMatchObject({ outcome: 'pass', spans: [] })
 })
 
@@ -232,7 +237,7 @@ test('D2: desk writes the post in proof and its day\'s learnings', () => {
     id: 1, kind: 'daily', status: 'proof', dest: 'site', title: 'The day', dek: reply?.dek, body: reply?.post.split('\n').slice(1).join('\n').trim(),
     sources: JSON.stringify(reply?.sources), checks: JSON.stringify(reply?.checks), work_date: '2026-09-27',
   }])
-  expect(learned(w)).toEqual([{ date: '2026-09-27', numbers: '[]', sources: '["templates/comms.ts:16"]',
+  expect(learned(w)).toEqual([{ date: '2026-09-27', numbers: '[]', sources: '["landed:7","refusal:3"]',
     items: JSON.stringify([{ title: reply?.learnings, what: '', lesson: '', fix: '', status: 'noted' }]) }])
 })
 
@@ -283,7 +288,7 @@ test('D5: one learnings row a day; a second desk doubles nothing', () => {
   expect(learned(w)).toHaveLength(1)
   expect((JSON.parse(row?.items ?? '[]') as { title: string }[]).map((i) => i.title))
     .toEqual([drafted(fixture('reply.md'))?.learnings, 'a second line'])
-  expect(JSON.parse(row?.sources ?? '[]')).toEqual(['templates/comms.ts:16', 'cli/plan.ts:1'])
+  expect(JSON.parse(row?.sources ?? '[]')).toEqual(['landed:7', 'refusal:3', 'cli/plan.ts:1'])
 })
 
 test('D6: desk passes a plan with no draft and writes no row', () => {

@@ -18,7 +18,8 @@ classes. Say what is wrong at each span and stop; you do not write the fix.
 Each thing you find is a note, a refusal, or not raised:
 
 - note — on a `pass`, never a span: comment, name, doc or spacing text (`text`), a number the checks
-  compute (`count`), or a line put back to main's exact text (`restore`). A note names `file`, `line`,
+  compute (`count`), a line put back to main's exact text (`restore`), or a point about the language's
+  idiom or toolchain (`language`), which landing never applies. A note names `file`, `line`,
   the `old` text, the `new` text, `why` and its `kind`; a note of any other kind refuses the pass. A
   comment that restates its code and a test title are `text`, a ratchet line count off by one is
   `count`, an unrequested blank-line edit is `restore`.
@@ -31,6 +32,10 @@ Each thing you find is a note, a refusal, or not raised:
   line budget), and whatever a gate under `# Checks that ran` passed on this diff.
 - A path under `No gate ran for` in `# Checks that ran` is refused, class `correctness`: each one a span at its first changed line.
 
+A packet carrying `# Files around the change` and `# Symbols at the branch base` is an outside plan. On
+one you refuse only for correctness against the issue and the spec, for scope, for tests that prove
+nothing the diff changes, or for a path under `No gate ran for`. Any other point on idiom or toolchain is a `language` note on a pass, never a span.
+
 On a re-read the packet carries `Your last verdict`, `Changed since your last verdict` and
 `Paths since your last verdict`, which is git's, not a claim. Judge the changed paths, and answer
 your last verdict finding by finding: fixed, or still standing, and did the fix break what it
@@ -42,8 +47,9 @@ lists under `## Must not break`: accepted values, empty input, bounds, errors ra
 port breaks is a `correctness` span on the diff's line, unless a brief line says why the port differs.
 
 When the packet carries `# Language rules`, judge the diff against every rule there and under `# Notes on`.
-Its commands, write fence and answer fence are the builder's, not yours. A line that breaks a rule is a
-span, and the finding quotes the rule's text.
+Its commands, write fence and answer fence are the builder's, not yours. On a plan that is not outside,
+a line that breaks a rule is a span, and the finding quotes the rule's text. On an outside plan, a broken
+rule on idiom or toolchain is a `language` note quoting the rule.
 
 Close with this fence and nothing after it:
 

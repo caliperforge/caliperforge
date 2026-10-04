@@ -28,6 +28,7 @@ import { registerPlans, registerRetry } from './cf-plans.ts'
 import { registerAdopt, registerApprovals, registerTargets } from './cf-targets.ts'
 import { registerDesk } from './desk.ts'
 import { registerLook } from './look.ts'
+import { registerSite } from './site.ts'
 import { desk, fileIssue, gh } from './gh.ts'
 import { health } from './health.ts'
 import { crashed, events, notify, record as keep } from './inbox.ts'
@@ -57,6 +58,7 @@ registerSession(cf, cli)
 registerAdopt(cf, cli)
 registerDesk(cf, cli)
 registerLook(cf, cli)
+registerSite(cf, cli)
 
 cf.command('health').action(() => {
   out(health(db(), root, new Date().toISOString().slice(0, 10)))

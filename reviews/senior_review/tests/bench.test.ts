@@ -8,10 +8,12 @@ import { planRow } from '../../../runner/index.ts'
 import { CAP_MAX, STEP_CAP, stepsFor } from '../../../runner/packet.ts'
 import { load } from '../../../runner/rules.ts'
 import { tick } from '../../../sequencer/index.ts'
-import { approve, builds, CARRIED, plan as planAt, stub, watched, world } from '../../../sequencer/tests/world.ts'
+import { approve, builds, CARRIED, PASS as PASSED, plan as planAt, stub, watched, world } from '../../../sequencer/tests/world.ts'
 import { srcDir } from '../../../sequencer/workspace.ts'
 import { eventsOf } from '../../../store/events.ts'
 import { record } from '../../../store/files.ts'
+import { due, keep } from '../../../store/language-notes.ts'
+import { rewind } from '../../../store/plans.ts'
 import { judge, loadReviews, specHash } from '../../bench.ts'
 import { type Judged, read } from '../../verdict.ts'
 
@@ -319,6 +321,39 @@ test('D3 a pass with only language notes logs them, writes none', async () => {
   expect(planAt(w.db, 1)).toMatchObject({ step: 5, retries: 0 })
   expect(readFileSync(hello, 'utf8')).toBe(HI)
   expect(eventsOf(w.db, 1, 'note')).toEqual([{ actor: 'code_quality', outcome: 'pass', message: 'language: idiom' }])
+})
+
+test('D1-D4 a senior language note reaches one same-seat packet', async () => {
+  const w = world()
+  approve(w.db, w.target)
+  const elsewhere = { file: 'Sources/A.swift', line: 2, old: 'a', new: 'b', why: 'swift idiom', kind: 'language' as const }
+  keep(w.db, w.plan, 'swift_specialist', [elsewhere])
+  const provider = builds(() => { writeFileSync(join(srcDir(w.root, 1), 'src/hello.ts'), 'export const hello = (): string => "hi"\n') })
+  for (let at = 0; at < 5; at += 1) await tick(w.db, w.root, provider, undefined, undefined, watched([], w.root, 1))
+  const note = '  - file: src/hello.ts\n    line: 1\n    old: a\n    new: b\n    why: idiom\n    kind: language\n'
+  expect((await tick(w.db, w.root, stub(CARRIED, 0, `---\noutcome: pass\nnotes:\n${note}---\n`), undefined, undefined, watched([], w.root, 1)))[0])
+    .toMatchObject({ step: 5, outcome: 'pass' })
+  const review = async (): Promise<string> => {
+    rewind(w.db, w.plan, 4)
+    const sent: string[] = []
+    await tick(w.db, w.root, stub(CARRIED, 0, PASSED, (p) => { sent.push(p.prompt) }))
+    return sent.join('\n')
+  }
+  expect(await review()).toContain('# Language notes from senior review\n\n- src/hello.ts:1 idiom: a → b')
+  const again = await review()
+  expect(again).toContain('# Diff')
+  expect(again).not.toContain('# Language notes from senior review')
+  expect(due(w.db, 'swift_specialist', w.plan)).toEqual([{ file: 'Sources/A.swift', line: 2, old: 'a', new: 'b', why: 'swift idiom' }])
+})
+
+test('D5 senior on a Swift diff carries Swift What to check', async () => {
+  const { db, plan } = bench(root)
+  const sent: string[] = []
+  const capture: Provider = { name: 'claude-agent-sdk', fire: (p) => { sent.push(p.prompt); return replies(fixture('senior_review', 'clean.reply.md')).fire(p) } }
+  const diff = '--- a/Sources/Stats/Median.swift\n+++ b/Sources/Stats/Median.swift\n@@ -3 +3 @@\n-  return nil\n+  return xs.first\n'
+  await judge(db, root, 'senior_review', plan, seeded({ diff, verdict: fixture('senior_review', 'first.verdict.md') }), capture, TRANSCRIPT)
+  const swift = readFileSync(join(root, 'seats/swift_specialist/prompt.md'), 'utf8')
+  expect(sent[0]).toContain(/## What to check\n[\s\S]*?(?=\n## )/.exec(swift)?.[0])
 })
 
 test('review turns grow with the diff', () => {

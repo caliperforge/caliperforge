@@ -80,6 +80,23 @@ test('refuses a loose assertion beside a removal named for another', () => {
   expect(weakened(loosened, 'green', 'remove other').spans).toEqual(['t/b.test.ts:2 test.weakened.loosened'])
 })
 
+test('refuses a removed XCTAssert under a Swift Tests folder', () => {
+  const diff = '--- a/swift/Tests/A/B.swift\n+++ b/swift/Tests/A/B.swift\n@@ -1,2 +1,1 @@\n func testB() {\n-  XCTAssertEqual(a, b)\n'
+  expect(weakened(diff, 'green').spans).toEqual(['swift/Tests/A/B.swift:2 test.weakened.removed'])
+})
+
+test('refuses a t.Skip added to a Go test', () => {
+  const diff = '--- a/x_test.go\n+++ b/x_test.go\n@@ -1,1 +1,2 @@\n func TestX(t *testing.T) {\n+\tt.Skip("flaky")\n'
+  expect(weakened(diff, 'green').spans).toEqual(['x_test.go:2 test.weakened.skipped'])
+})
+
+test('refuses an assert_eq! removed from a Rust source file', () => {
+  const diff = '--- a/src/lib.rs\n+++ b/src/lib.rs\n@@ -1,2 +1,1 @@\n fn parses() {\n-    assert_eq!(parse("1"), 1);\n'
+  const verdict = weakened(diff, 'green')
+  expect(verdict.outcome).toBe('refuse')
+  expect(verdict.spans).toEqual(['src/lib.rs:2 test.weakened.removed'])
+})
+
 test('ignores a weakened line outside a test file', () => {
   const diff = '--- a/src/x.ts\n+++ b/src/x.ts\n@@ -1,1 +1,1 @@\n-expect(x).toBe(1)\n+expect(x).toBeDefined()\n'
   expect(weakened(diff, 'green').spans).toEqual([])

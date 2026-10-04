@@ -1,16 +1,16 @@
 import { createHash } from 'node:crypto'
 import { parse, type FileDiff, type Line } from '../diff.ts'
 import type { Verdict } from '../record.ts'
+import { conventionsOf } from './languages.ts'
 
-export const TEST_FILE = /(?:^|\/)tests?\/|\.(?:test|spec)\.[jt]sx?$/
-export const ASSERT = /\b(?:expect|assert)\s*\(/
+export { ASSERT } from './languages.ts'
+export const TEST_FILE = /(?:^|\/)[Tt]ests?\/|\.(?:test|spec)\.[jt]sx?$|_test\.(?:go|rb|py)$|_spec\.(?:rb|lua)$|(?:^|\/)test_[^/]*\.py$|Test\.php$/
 const STRICT = /\.(?:toBe|toEqual|toStrictEqual|toMatchObject|toMatchInlineSnapshot|toHaveBeenCalledWith|toThrowError|toContain)\s*\(/
 const LOOSE = /\.(?:toBeDefined|toBeTruthy|toBeFalsy|toBeUndefined|toBeNull)\s*\(\s*\)|\bexpect\.(?:anything|any)\s*\(/
-const SKIPPED = /\b(?:test|it|describe)\.(?:skip|todo|failing)\b|\bx(?:it|describe)\s*\(/
 const TITLE = /\b(?:test|it|describe)\s*\(\s*(['"`])(.+?)\1/
 
 export function weakened(diff: string, suite: 'green' | 'red', named = ''): Verdict {
-  const spans = parse(diff).filter((f) => TEST_FILE.test(f.path)).flatMap((f) => judge(f, named))
+  const spans = parse(diff).filter((f) => TEST_FILE.test(f.path) || f.path.endsWith('.rs')).flatMap((f) => judge(f, named))
   const subject_digest = createHash('sha256').update(`${diff}\n${suite}`).digest('hex')
   if (spans.length === 0 || suite === 'red') {
     return { outcome: 'pass', defect_class: null, origin_kind: null, origin_ref: null, subject_digest, spans, message: message(spans.length, suite) }
@@ -26,16 +26,17 @@ export function weakened(diff: string, suite: 'green' | 'red', named = ''): Verd
 }
 
 function judge(file: FileDiff, named: string): string[] {
-  if (file.deleted) return named.includes(file.path) ? [] : [gone(file)]
+  const { assert, skip } = conventionsOf(file.path)
+  if (file.deleted) return named.includes(file.path) ? [] : [gone(file, assert)]
   const spared = exempt(file.removed, named)
-  const removed = file.removed.filter((l) => ASSERT.test(l.text) && !spared.has(l))
-  const added = file.added.filter((l) => ASSERT.test(l.text))
+  const removed = file.removed.filter((l) => assert.test(l.text) && !spared.has(l))
+  const added = file.added.filter((l) => assert.test(l.text))
   const loose = file.added.filter((l) => LOOSE.test(l.text))
   const downgraded = count(file.removed.filter((l) => !spared.has(l)), STRICT) > count(file.added, STRICT) && loose.length > 0
   return [
     ...(removed.length > added.length ? [span(removed[0], 'test.weakened.removed')] : []),
     ...(downgraded ? [span(loose[0], 'test.weakened.loosened')] : []),
-    ...file.added.filter((l) => SKIPPED.test(l.text)).map((l) => span(l, 'test.weakened.skipped')),
+    ...file.added.filter((l) => skip.test(l.text)).map((l) => span(l, 'test.weakened.skipped')),
   ]
 }
 
@@ -51,8 +52,8 @@ function exempt(removed: Line[], named: string): Set<Line> {
   return spared
 }
 
-function gone(file: FileDiff): string {
-  const first = file.removed.find((l) => ASSERT.test(l.text))
+function gone(file: FileDiff, assert: RegExp): string {
+  const first = file.removed.find((l) => assert.test(l.text))
   return `${file.path}:${String(first?.line ?? 1)} test.weakened.removed`
 }
 

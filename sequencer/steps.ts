@@ -17,6 +17,8 @@ import { homeOf } from './home.ts'
 import { freshBase } from './merge.ts'
 import { hold } from './hold.ts'
 import { publish } from './site.ts'
+import { landed } from './split.ts'
+import { unlanded } from './unlanded.ts'
 
 interface StepMap {
   steps: Step[]
@@ -144,18 +146,23 @@ function after(db: Db, root: string, plan: PlanRow): Outcome | null {
   const pred = db.prepare(`SELECT p.id, p.state, t.closed_at FROM plans p LEFT JOIN tickets t ON t.repo = ? AND t.number = ?
     WHERE p.origin = ? ORDER BY p.id DESC LIMIT 1`).get(ref.repo, n, `https://github.com/${ref.repo}/issues/${String(n)}`) as
     { id: number; state: PlanRow['state']; closed_at: string | null } | undefined
-  if (pred?.state === 'done') return null
-  const open = pred?.closed_at === null &&['queued', 'running', 'blocked_on_ceo'].includes(pred.state)
-  const why = pred === undefined ? `#${String(n)} has no plan`
-    : open ? `waits for #${String(n)}, plan ${String(pred.id)}, to land`
-    : pred.closed_at === null ? `#${String(n)}'s plan ${String(pred.id)} ended ${pred.state}`
-    : `#${String(n)} closed without plan ${String(pred.id)} landing`
-  if (open) hold(db, root, plan.id, why, new Date(), pred.id)
+  if (pred?.state === 'done' && landed(db, pred.id)) return null
+  const part = pred?.state === 'done' ? unlanded(db, pred.id) : null
+  const on = part === null ? pred : { ...part, closed_at: pred?.closed_at ?? null }
+  const issue = part === null ? `#${String(n)}` : `#${String(originIssue(part))}`
+  const named = part === null ? issue : `${issue} (part of #${String(n)})`
+  const open = on?.closed_at === null &&['queued', 'running', 'blocked_on_ceo'].includes(on.state)
+  const why = on === undefined ? `#${String(n)} has no plan`
+    : on.state === 'done' ? `#${String(n)} split, and no open part of it has a plan`
+    : open ? `waits for ${named}, plan ${String(on.id)}, to land`
+    : on.closed_at === null ? (part === null ? `#${String(n)}'s plan ${String(on.id)} ended ${on.state}` : `${named} ended ${on.state}`)
+    : `#${String(n)} closed without plan ${String(on.id)} landing`
+  if (open) hold(db, root, plan.id, why, new Date(), on.id)
   else {
     needsCeo(db, plan, why)
     held(db, plan.id, 'coo', why)
   }
-  return { outcome: 'pass', held: true, spans: [`#${String(n)}`], note: why }
+  return { outcome: 'pass', held: true, spans: [issue], note: why }
 }
 
 export function measure(db: Db, root: string, plan: PlanRow, read?: Read): Outcome {

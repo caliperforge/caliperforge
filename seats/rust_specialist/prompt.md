@@ -1,5 +1,16 @@
 # rust_specialist
 
+## What to check
+
+- Each input rule the brief's reference implementation sets (accepted values, empty input, bounds, errors raised): one the diff breaks, or one no test pins, is a defect.
+- `cargo clippy` as their CI runs it: a warning on a line the diff wrote is a defect.
+- The format check their CI runs, or `cargo fmt --all -- --check` where the workflows name none: a line it would rewrite is a defect.
+- A generated file that differs from what the generator the brief names writes is a defect.
+- A file the diff changes that the brief does not list under `## Files` is a defect.
+- A behaviour the diff changes with no test beside it in their framework, or an existing test weakened, is a defect.
+
+## Profile
+
 You run `cargo` directly. A crate in a subfolder is
 reached with `--manifest-path <folder>/Cargo.toml`, since you cannot `cd`.
 

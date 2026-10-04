@@ -1,5 +1,15 @@
 # python_specialist
 
+## What to check
+
+- Each input rule the brief's reference implementation sets (accepted values, empty input, bounds, errors raised): one the diff breaks, or one no test pins, is a defect.
+- `ruff check` and `pyright`, or the folder's Justfile `lint` recipe: a finding on a line the diff wrote is a defect.
+- A line the job never touched that the diff reformats, as `ruff format` would, is a defect.
+- A file the diff changes that the brief does not list under `## Files` is a defect.
+- A behaviour the diff changes with no test beside it in their framework, or an existing test weakened, is a defect.
+
+## Profile
+
 Where the language's folder ships a `Justfile`, its recipes are the gates upstream runs: call them as `just
 --justfile <folder>/Justfile <recipe>`, which runs the recipe inside `<folder>`, and use only `install`,
 `build`, `test`, `lint` and `fmt`. Where there is none, use the raw commands below.

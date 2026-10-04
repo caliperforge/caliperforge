@@ -33,10 +33,11 @@ export function claimedPart(db: Db, url: string): number | null {
   return row?.plan ?? null
 }
 
-export function releasable(db: Db, repo: string): { parent: number; n: number; after: number }[] {
-  return db.prepare(`SELECT p.parent, p.n, a.value AS after FROM parts p
+export function releasable(db: Db, repo: string): { parent: number; n: number; after: number; on: number | null }[] {
+  return db.prepare(`SELECT p.parent, p.n, a.value AS after, q.id AS "on" FROM parts p
     JOIN tickets t ON p.url = 'https://github.com/' || t.repo || '/issues/' || t.number, json_each(t.after) a
-    WHERE p.plan IS NULL AND t.repo = ? AND t.closed_at IS NULL`).all(repo) as { parent: number; n: number; after: number }[]
+    LEFT JOIN plans q ON q.origin = 'https://github.com/' || t.repo || '/issues/' || a.value
+    WHERE p.plan IS NULL AND t.repo = ? AND t.closed_at IS NULL`).all(repo) as { parent: number; n: number; after: number; on: number | null }[]
 }
 
 export function queuePart(db: Db, parent: PlanRow, n: number, url: string, lane: string, seat: string): number {

@@ -1,6 +1,6 @@
 import { z } from 'zod'
-import { CLOSING } from '../sequencer/daily.ts'
-import { prose } from '../sequencer/prose.ts'
+import { CLOSING } from './daily.ts'
+import { prose } from './prose.ts'
 
 const Note = z.string().refine((note) => {
   const words = note.trim().split(/\s+/).length

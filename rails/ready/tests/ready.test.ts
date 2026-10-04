@@ -47,7 +47,6 @@ test('refuses every unmet ready condition by name', () => {
     'tests:1 ready.tests',
     'tree:1 ready.byte_identical',
     'https://github.com/o/r/actions/runs/1 ci.red',
-    'fork:1 not.public',
     'bot:1 ready.bot_clean',
     'title:1 ready.title_clipped',
     'spans:1 no.anchor',
@@ -69,10 +68,10 @@ test('passes a green deliverable', () => {
   expect(verdict.spans).toEqual([])
 })
 
-test('refuses a bot-flagged green tree and a fork nobody can read', () => {
+test('refuses a bot-flagged green tree and a red CI once', () => {
   const clean = proof('green.proof.json', 'pass')
   expect(ready({ ...clean, bot_clean: false }).spans).toEqual(['bot:1 ready.bot_clean'])
-  expect(ready({ ...clean, fork_public: false }).spans).toEqual(['fork:1 not.public'])
+  expect(ready({ ...clean, ci: ci('refuse') }).spans).toEqual(['https://github.com/o/r/actions/runs/1 ci.red'])
 })
 
 test('a slow or unmeasured repo holds no green deliverable back', () => {

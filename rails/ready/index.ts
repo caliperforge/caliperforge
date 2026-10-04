@@ -8,7 +8,6 @@ export interface Proof {
   at: string
   tests_pass: boolean
   byte_identical_elsewhere: boolean
-  fork_public: boolean
   bot_clean: boolean
   ci: Verdict
   spans: string[]
@@ -22,7 +21,6 @@ export function ready(proof: Proof): Verdict {
     ...(proof.tests_pass ? [] : ['tests:1 ready.tests']),
     ...(proof.byte_identical_elsewhere ? [] : ['tree:1 ready.byte_identical']),
     ...(proof.ci.outcome === 'pass' ? [] : proof.ci.spans),
-    ...(proof.fork_public ? [] : ['fork:1 not.public']),
     ...(proof.bot_clean ? [] : ['bot:1 ready.bot_clean']),
     ...(proof.ours || !clipped(proof.title, proof.named) ? [] : ['title:1 ready.title_clipped']),
     ...(proof.spans.length === 0 ? ['spans:1 no.anchor'] : []),

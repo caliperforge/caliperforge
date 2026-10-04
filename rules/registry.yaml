@@ -143,6 +143,12 @@
   column: at
   where: kind = 'look'
   gap: 7d
+- name: typescript_specialist
+  table: runs
+  column: at
+  where: seat = 'typescript_specialist'
+  gap: 2d
+  while: EXISTS (SELECT 1 FROM pipes WHERE name = 'internal' AND enabled = 1)
 - name: daily_learnings
   table: desk_learnings
   column: date

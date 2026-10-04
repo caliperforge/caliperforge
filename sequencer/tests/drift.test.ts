@@ -62,8 +62,8 @@ test('fresh', () => {
   expect(REGISTRY.map((e) => e.name)).toEqual(['coo_lite', 'fixer', 'fix_mode', 'swift_review', 'kotlin_review',
     'python_review', 'ruby_review', 'rust_review', 'go_review', 'php_review', 'brief_writer', 'text_review',
     'growth_lead', 'web_specialist', 'python_specialist', 'lua_specialist', 'rust_specialist', 'gardener', 'ratchet', 'accounts', 'records', 'dispositions', 'signoffs', 'proposals',
-    'ratchet_refuse', 'intake', 'stuck_plans', 'science_pull', 'site_publish', 'director_look', 'daily_learnings',
-    'review_examples'])
+    'ratchet_refuse', 'intake', 'stuck_plans', 'science_pull', 'site_publish', 'director_look', 'typescript_specialist',
+    'daily_learnings', 'review_examples'])
   expect(ratchetRules(d).mode).toBe('refuse')
   expect(drift(d, REGISTRY, NOW).map((r) => r.name)).not.toContain('ratchet_refuse')
   expect(drift(d, REGISTRY, NOW).map((r) => r.name)).not.toContain('accepted_findings')
@@ -182,6 +182,26 @@ function queue(d: Db, priority: number): void {
   d.exec(`INSERT INTO plans (pipe_id, template, state, queued_at, lane, seat, origin, step, priority)
     VALUES ((SELECT id FROM pipes WHERE name = 'internal'), 'pr_path', 'queued', '2026-10-01', 'machine', 'typescript_specialist', 'https://github.com/a/b/issues/1', 0, ${String(priority)})`)
 }
+
+test('D3 typescript_specialist: silent without a run, stale at 2d', () => {
+  const ts = REGISTRY.filter((e) => e.name === 'typescript_specialist')
+  const d = internal()
+  queue(d, 3)
+  const hash = '0'.repeat(64)
+  const ran = (at: string): void => {
+    d.exec(`INSERT OR IGNORE INTO rules (id, kind, path, content_hash, loaded_at)
+      VALUES ('typescript_specialist', 'card', 'rules/roster.yaml', '${hash}', '2026-09-22');
+      INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort,
+      input_tokens, cache_read_tokens, output_tokens, seconds, exit, at, transcript_path)
+      VALUES (1, 2, 'typescript_specialist', '${hash}', 'claude-agent-sdk', 'm', 'high', 0, 0, 0, 0, 0, '${at}', 'x.transcript.jsonl')`)
+  }
+  expect(drift(internal(0), ts, NOW)).toEqual([])
+  expect(drift(d, ts, NOW)).toEqual([{ name: 'typescript_specialist', state: 'silent', detail: "no row in runs WHERE seat = 'typescript_specialist'" }])
+  ran('2026-09-30 10:00:00')
+  expect(drift(d, ts, NOW).map((r) => r.state)).toEqual(['stale'])
+  ran('2026-10-02 10:00:00')
+  expect(drift(d, ts, NOW)).toEqual([])
+})
 
 test('gardenerWhile', () => {
   expect(drift(internal(), GARDENER, NOW)).toEqual(STALE)

@@ -1,5 +1,6 @@
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
+import { packs } from '../../../reviews/packs.ts'
 import { Seat, rules, seat } from '../../../runner/rules.ts'
 
 const root = join(import.meta.dirname, '../../..')
@@ -61,4 +62,20 @@ test('the prompt carries the own-repo and outside comment rules', () => {
     '- New logic goes in a new file rather than growing a file past its budget.',
     "On anyone else's repository, match its comment density instead.",
   ]) expect(prompt).toContain(line)
+})
+
+test('D1: What to check opens the prompt with TypeScript checks', () => {
+  const { prompt } = seat(root, 'typescript_specialist')
+  expect(prompt.startsWith('# typescript_specialist\n\n## What to check\n')).toBe(true)
+  const checks = prompt.slice(0, prompt.indexOf('## Profile'))
+  for (const word of ['caller', 'import', 'Date.parse', 'second = 60', 'description', 'result: {}']) expect(checks).toContain(word)
+})
+
+test('D2: review mode reads What to check before the profile', () => {
+  const p = 'cli/x.ts'
+  const out = packs(root, `diff --git a/${p} b/${p}\n--- a/${p}\n+++ b/${p}\n@@ -1 +1 @@\n-old\n+new\n`, null)
+  const at = out.indexOf('## What to check')
+  expect(at).toBeGreaterThan(-1)
+  expect(at).toBeLessThan(out.indexOf('## Profile'))
+  expect(out).not.toContain('- id: D1')
 })

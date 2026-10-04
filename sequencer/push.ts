@@ -19,7 +19,7 @@ import { GREEN, onBase } from './base.ts'
 import { CHECKS, waiting, type Check, type Target } from './card.ts'
 import { npm } from './checks.ts'
 import { red } from './failures.ts'
-import { reinstall } from './install.ts'
+import { refresh } from './install.ts'
 import { rerun as cancelled } from './rerun.ts'
 import type { Outcome } from './kind.ts'
 import { merging } from './merging.ts'
@@ -43,7 +43,7 @@ export interface Wire {
   review: (fork: string, branch: string) => void
   file: (repo: string, title: string, body: string, labels: string[]) => string
   comment: (repo: string, no: number, body: string) => void
-  install?: () => void
+  install?: (repo: string) => void
   card?: Check[]
   intake?: Check
   merged: Read
@@ -59,7 +59,7 @@ export const WIRE: Wire = {
   rehearse,
   unrehearse,
   review,
-  install: () => { reinstall(npm, alerter()) },
+  install: (repo) => { refresh(repo, npm, alerter()) },
   card: [theirs()],
   intake: picked(),
   merged: gh,
@@ -326,7 +326,7 @@ export function land(db: Db, root: string, plan: PlanRow, approval: number, wire
   wire.send(head.dir, asm === null ? 'main' : `main:refs/heads/${asm.branch}`)
   wire.close(homeOf(plan), issue, sha)
   pushed(db, plan.id, approval, `https://github.com/${asm?.fork ?? homeOf(plan)}/commit/${sha}`)
-  if (plan.lane === 'atelier') wire.install?.()
+  if (plan.lane === 'atelier') wire.install?.(homeOf(plan))
   return { outcome: 'pass', spans: [], note: `landed ${head.branch} on ${onto} as ${sha.slice(0, 12)}` }
 }
 

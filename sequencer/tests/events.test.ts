@@ -53,7 +53,8 @@ test('a job past the ceiling leaves one refuse row with no run', async () => {
   w.db.prepare('UPDATE runs SET input_tokens = 7000000').run()
   const before = rows(w.db).length
   await tick(w.db, w.root, provider)
-  expect(rows(w.db).slice(before)).toEqual([expect.objectContaining({ actor: 'token_ceiling', outcome: 'refuse', run: null })])
+  expect(rows(w.db).slice(before)).toEqual([expect.objectContaining({ actor: 'token_ceiling', outcome: 'refuse', run: null }),
+    expect.objectContaining({ kind: 'coo_lite', outcome: 'needs_ceo', run: null })])
 })
 
 test('events refuse UPDATE and DELETE and keep the row', async () => {

@@ -218,6 +218,7 @@ interface Miss { language: string; passed: number; down: number; findings: numbe
 
 export function misses(db: Db, root: string, now: Date): Miss[] {
   const by = new Map<string, Miss>()
+  const seen = new Set<string>()
   for (const h of heads(db, `${FORK}/*`, now)) {
     const language = languageFor(db, planById(db, h.plan), join(planDir(root, h.plan), 'src')) ?? '-'
     const row = by.get(language) ?? { language, passed: 0, down: 0, findings: 0 }
@@ -225,7 +226,8 @@ export function misses(db: Db, root: string, now: Date): Miss[] {
     row.passed++
     if ((h.score ?? 0) >= 5) continue
     row.down++
-    row.findings += (maybe(root, h.plan, `findings-${h.head}.md`) ?? '').split('\n').filter((l) => l.startsWith('- G')).length
+    for (const id of (maybe(root, h.plan, `findings-${h.head}.md`) ?? '').match(/^- G\d+/gm) ?? []) seen.add(`${language}\t${id}`)
+    row.findings = [...seen].filter((k) => k.startsWith(`${language}\t`)).length
   }
   return [...by.values()].sort((a, b) => a.language.localeCompare(b.language))
 }

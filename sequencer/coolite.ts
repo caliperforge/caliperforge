@@ -58,9 +58,15 @@ export async function cooLite(db: Db, root: string, plan: PlanRow, provider: Pro
     : m.move !== 'ask_ceo' && apply(db, root, plan, m, wire, now)
   if (done !== false) return told(db, root, plan, now, { outcome: 'pass', message, pointer: done === true ? null : done })
   if (m.move === 'fix' && tried === undefined) return cooLite(db, root, planById(db, plan.id), provider, now, post, wire, m.why)
-  hold(db, root, plan.id, m.why, now)
-  held(db, plan.id, 'ceo', m.why)
-  return told(db, root, plan, now, { outcome: 'needs_ceo', message }, post)
+  if (m.move === 'ask_ceo') {
+    hold(db, root, plan.id, m.why, now)
+    held(db, plan.id, 'ceo', m.why)
+    return told(db, root, plan, now, { outcome: 'needs_ceo', message }, post)
+  }
+  const failed = `${m.move} did not apply, ${UNAPPLIED[m.move]}: ${m.why}`
+  hold(db, root, plan.id, failed, now)
+  held(db, plan.id, 'coo', failed)
+  return told(db, root, plan, now, { outcome: 'needs_ceo', message: failed }, post)
 }
 
 interface Stop { id: number; answered: number | null; today: number }
@@ -169,6 +175,16 @@ export function read(text: string): Move | null {
   const lined = Said.safeParse(Object.fromEntries([...fence.matchAll(/^(move|why|answer|ticket|class):[ \t]*(.+)$/gm)]
     .map((m) => [m[1], (m[2] ?? '').trim()])))
   return lined.success ? lined.data : null
+}
+
+const UNAPPLIED: Record<Exclude<Move['move'], 'ask_ceo'>, string> = {
+  rule: 'the answer names a path a ruling may not carry',
+  waive: 'the plan is not blocked_on_ceo',
+  split: 'the parts were not filed',
+  close: 'no deliverable is pushed',
+  file: 'the ticket was not filed',
+  return: 'the plan did not go back to its lane',
+  fix: 'the fixer did not make the fix',
 }
 
 /** Each move is the call its `cf` command makes; false leaves the stop with a person. */

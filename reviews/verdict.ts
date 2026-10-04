@@ -20,7 +20,7 @@ const Named = z.object({
 
 const Span = z.union([z.string().transform((span) => ({ span, kind: 'real' as const, fix: null })), Named])
 
-const KINDS = ['text', 'count', 'restore'] as const
+const KINDS = ['text', 'count', 'restore', 'language'] as const
 
 /** A cosmetic edit a pass carries for landing to apply: `old` becomes `new` at `file:line`. */
 export interface Note {

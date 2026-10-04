@@ -668,6 +668,18 @@ test('D1: a Files row yields a root dotfile, not the folder after', () => {
   expect(files(plus('- `.gitignore` (new): `build/`.'))).toEqual([{ path: '.gitignore', is_new: true }])
 })
 
+test('D1: a Files row skips a backticked ./ import specifier', () => {
+  expect(files(plus('- sequencer/index.ts:9 — import from `./coolite.ts`'))).toEqual([{ path: 'sequencer/index.ts', is_new: false }])
+})
+
+test('D2: a Files row skips a backticked ../ import specifier', () => {
+  expect(files(plus('- sequencer/ready.ts — reads `../reviews/verdict.ts`'))).toEqual([{ path: 'sequencer/ready.ts', is_new: false }])
+})
+
+test('D3: a Files row still yields a backticked root path', () => {
+  expect(files(plus('- `sequencer/coolite.ts`'))).toEqual([{ path: 'sequencer/coolite.ts', is_new: false }])
+})
+
 test('a backticked + path keeps the line it points at', () => {
   expect(pointed(plus(`- \`${PLUS}:27\``))).toEqual([{ path: PLUS, line: 27 }])
 })

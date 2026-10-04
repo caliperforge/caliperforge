@@ -43,6 +43,7 @@ export interface Fired {
   exit: number
   stop_reason: string | null
   denials: number
+  session?: string
   /** The subscription windows the provider reported during the run: what the usage band steps the lanes by. */
   limits?: Reading[]
 }

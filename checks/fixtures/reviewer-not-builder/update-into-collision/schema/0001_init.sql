@@ -12,7 +12,9 @@ CREATE TABLE runs (
   output_tokens INTEGER NOT NULL,
   seconds       REAL NOT NULL,
   exit          INTEGER NOT NULL,
-  transcript_path TEXT NOT NULL
+  transcript_path TEXT NOT NULL,
+  mode          TEXT,
+  session       TEXT
 );
 CREATE TRIGGER runs_reviewer_not_builder BEFORE INSERT ON runs
 WHEN NEW.step IN (4, 5) AND EXISTS (

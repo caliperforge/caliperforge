@@ -125,6 +125,20 @@ test('runLogged: cache to cache_read_tokens, missing cost to NULL', () => {
   expect(row({ input: 1, cache: 2, output: 3 })).toEqual({ ...written, cost_usd: null })
 })
 
+test('D5 runLogged writes fired.session, NULL when absent', () => {
+  const db = fresh(join(root, 'schema'))
+  load(db, root)
+  const plan = planRow(db)
+  const { hash } = seat(root, 'typescript_specialist')
+  const session = (fired: Pick<Fired, 'session'>): unknown => {
+    const id = runLogged(db, { plan, step: 4, seat: 'typescript_specialist', rule_hash: hash, provider: 'claude-agent-sdk', model: 'm',
+      effort: 'high', exit: 0, fired: { ...fired, usage: { input: 1, cache: 0, output: 0 }, seconds: 1, transcript_path: 'x.transcript.jsonl' } })
+    return db.prepare('SELECT session FROM runs WHERE id = ?').pluck().get(id)
+  }
+  expect(session({ session: 's' })).toBe('s')
+  expect(session({})).toBeNull()
+})
+
 test('D4 ofKind with two kinds returns both in id order', () => {
   const db = fresh(join(root, 'schema'))
   for (const kind of ['retry', 'filed', 'release', 'retry']) {

@@ -70,6 +70,7 @@ test('the most non-test files win; tests count only when alone', () => {
   expect(majority(['ruby/test/pay_kit/config_test.rb'])).toBe('ruby')
   expect(majority(['go/a.go', 'php/src/A.php', 'php/src/B.php'])).toBe('php')
   expect(majority(['lua/pay_kit/a.lua', 'go/a.go'])).toBe('lua')
+  expect(majority(['swift/Tests/A/B.swift', 'swift/Tests/A/C.swift', 'go/a.go'])).toBe('go')
 })
 
 test('a path reads by name, then folder; docs and fixtures by none', () => {

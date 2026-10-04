@@ -245,17 +245,43 @@ test('D3, D4: a landing queues its waiters; the parent closes once', async () =>
   expect(log.filter((l) => l.startsWith('close '))).toEqual(['close caliperforge/caliperforge#34 1111111'])
 })
 
+function waiting902(w: World): void {
+  recordListing(w.db, 'caliperforge/caliperforge', [{ number: 902, title: 't', body: 'After: #901',
+    url: 'https://github.com/caliperforge/caliperforge/issues/902', labels: [{ name: 'lane:machine' }], createdAt: '2026-09-27T00:00:00Z', closedAt: null,
+    stateReason: null }], false)
+}
+
+function landedWithout(w: World, n: number): number {
+  const id = partPlan(w, n) ?? 0
+  pushed(w, id)
+  finish(w.db, plan(w.db, id))
+  return id
+}
+
 test('D4: a part released early is not queued again; parent closes', async () => {
   const w = mine()
   const log: string[] = []
   await briefed(w, ID, AFTER(['none', 'a', 'none']), log)
-  recordListing(w.db, 'caliperforge/caliperforge', [{ number: 902, title: 't', body: 'After: #901',
-    url: 'https://github.com/caliperforge/caliperforge/issues/902', labels: [{ name: 'lane:machine' }], createdAt: '2026-09-27T00:00:00Z', closedAt: null,
-    stateReason: null }], false)
+  waiting902(w)
+  const a = landedWithout(w, 0)
   released(w.db, w.root, 'caliperforge/caliperforge', new Set())
+  expect(following(w.db, w.root, plan(w.db, a), '0'.repeat(40), watched(log, w.root, a))).toBeNull()
   expect(landing(w, 1, log)).toBeNull()
-  expect(landing(w, 2, log)).toBeNull()
-  expect(landing(w, 0, log)).toBe('the last part landed; #34 closed')
+  expect(landing(w, 2, log)).toBe('the last part landed; #34 closed')
+  expect(log.filter((l) => l.startsWith('close '))).toHaveLength(1)
+})
+
+test('D1, D2: a closed After: waits for its plan to land', async () => {
+  const w = mine()
+  await briefed(w, ID, AFTER(['none', 'a']), [])
+  waiting902(w)
+  released(w.db, w.root, 'caliperforge/caliperforge', new Set())
+  expect(partPlan(w, 1)).toBeNull()
+  expect(ofKind(w.db, 'unblocked')).toEqual([])
+  landedWithout(w, 0)
+  released(w.db, w.root, 'caliperforge/caliperforge', new Set())
+  const b = partPlan(w, 1)
+  expect(ofKind(w.db, 'unblocked').map((e) => ({ plan: e.plan, message: e.message }))).toEqual([{ plan: b, message: '#901 closed' }])
 })
 
 test('D5: a split whose parts all say none queues them at once', async () => {

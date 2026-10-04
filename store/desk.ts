@@ -20,7 +20,7 @@ export function edited(db: Db): Edited[] {
 
 export interface Post extends Edited {
   kind: string
-  dest: 'site' | 'substack' | 'note' | 'pack' | 'scorecard'
+  dest: 'site' | 'substack' | 'note' | 'pack' | 'scorecard' | 'paste'
   status: 'proof' | 'approved' | 'changes' | 'published'
   sources: string
   checks: string
@@ -47,6 +47,17 @@ export function pending(db: Db): Post[] {
 
 export function placed(db: Db, id: number, url: string): void {
   db.prepare('UPDATE desk_posts SET url = ? WHERE id = ?').run(url, id)
+}
+
+/** Desk ids are plan ids, so a paste row's id sits this far above its weekly's to never take a plan's. */
+const PASTE = 1_000_000
+
+export function paste(db: Db): number {
+  return db.prepare(`INSERT INTO desk_posts (id, kind, dest, status, title, dek, body, sources, checks, work_date, written_date, proof_at)
+    SELECT ? + id, 'paste', 'paste', 'proof', COALESCE(edited_title, title), COALESCE(edited_dek, dek),
+      COALESCE(edited_body, body) || char(10, 10) || 'https://medium.com/p/import ' || url, '[]', '[]', work_date, date('now'), datetime('now')
+    FROM desk_posts w WHERE kind = 'weekly' AND dest = 'substack' AND url IS NOT NULL
+      AND NOT EXISTS (SELECT 1 FROM desk_posts p WHERE p.kind = 'paste' AND p.work_date = w.work_date)`).run(PASTE).changes
 }
 
 export function published(db: Db, at: string): number {

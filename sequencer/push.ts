@@ -323,7 +323,13 @@ export function land(db: Db, root: string, plan: PlanRow, approval: number, wire
   const head = headOf(root, plan.id)
   const sha = merged(head.dir, head.branch)
   if (sha === null) return refuse('base:stale', `${onto} moved under plan ${String(plan.id)} between ready and land; cut it again from ${onto}`)
-  wire.send(head.dir, asm === null ? 'main' : `main:refs/heads/${asm.branch}`)
+  try {
+    wire.send(head.dir, asm === null ? 'main' : `main:refs/heads/${asm.branch}`)
+  } catch (error) {
+    fetchMain(head.dir)
+    if (ancestor(head.dir, MAIN, sha)) throw error
+    return refuse('base:stale', `${onto} moved under plan ${String(plan.id)} between fetch and push; cut it again from ${onto}`)
+  }
   wire.close(homeOf(plan), issue, sha)
   pushed(db, plan.id, approval, `https://github.com/${asm?.fork ?? homeOf(plan)}/commit/${sha}`)
   if (plan.lane === 'atelier') wire.install?.(homeOf(plan))

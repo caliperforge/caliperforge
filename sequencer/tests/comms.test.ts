@@ -13,7 +13,7 @@ import { verdictRows } from '../../store/verdict.ts'
 import { desk, draft, drafted, facts, gather, review } from '../../templates/comms.ts'
 import { tick } from '../index.ts'
 import { weekly as clock } from '../signals.ts'
-import { publish } from '../site.ts'
+import { publish, push } from '../site.ts'
 import { mapOf } from '../steps.ts'
 import { FORK, get, git, maybe, put } from '../workspace.ts'
 import { plan, reads, stub, world, type World } from './world.ts'
@@ -575,4 +575,33 @@ test.each([POST05, 'blog/index.html'])('publish D5: a site with no %s throws', (
   putPost(w.db, SEED)
   expect(() => published(w, dir)).toThrow(/ENOENT/)
   expect([postOf(w.db, 2).url, ahead(dir)]).toEqual([null, '0'])
+})
+
+test('push D1 D2 D3: pushes and marks placed rows published', () => {
+  const w = comms()
+  const dir = sited()
+  putPost(w.db, SEED)
+  published(w, dir)
+  putPost(w.db, { ...SEED, id: 3 })
+  const now = new Date('2026-10-04T12:00:00.000Z')
+  expect(push(w.db, now)).toBe(1)
+  expect([ahead(dir), git(dir, ['ls-remote', 'origin', 'main']).split('\t')[0]]).toEqual(['0', git(dir, ['rev-parse', 'HEAD']).trim()])
+  expect(postOf(w.db, 2)).toMatchObject({ status: 'published', published_at: now.toISOString() })
+  expect(postOf(w.db, 3)).toMatchObject({ status: 'approved', url: null, published_at: null })
+})
+
+test('push D4: a failed push marks nothing', () => {
+  const w = comms()
+  const dir = sited()
+  putPost(w.db, SEED)
+  published(w, dir)
+  git(dir, ['remote', 'set-url', 'origin', join(dir, 'missing')])
+  expect(() => push(w.db, new Date())).toThrow()
+  expect(postOf(w.db, 2)).toMatchObject({ status: 'approved', published_at: null })
+})
+
+test('push D5: an unset comms.site_dir throws', () => {
+  const w = comms()
+  set(w.db, 'comms.site_dir', '', 'ceo', '2026-10-04')
+  expect(() => push(w.db, new Date())).toThrow('comms.site_dir is unset')
 })

@@ -20,14 +20,12 @@ skip_markers: ['XCTSkip', 'XCTSkipIf', 'XCTSkipUnless', '.disabled(']
 
 ## Profile
 
-You build Swift against the issue below. One checkout, one step. On an outside plan you build that
+On an outside plan you build that
 repository's Swift package as its maintainers would. On our own repository you are an expert macOS SwiftUI
 engineer on Atelier, the CEO's read-only window onto the machine, and the Atelier design rules below apply
 only there.
 
-Your cwd is the checkout. On an outside plan you may write only the files the brief lists under `## Files`;
-on our own repository, only under `Atelier/`, `AtelierTests/` and `Atelier.xcodeproj/`. Any other write is
-refused and the step ends there. The only commands you may run are
+Your cwd is the checkout. The only commands you may run are
 `xcodebuild` and `swift`; any other command is refused, and so is one that chains, substitutes or redirects.
 Every test run is in the foreground; wait for it to finish.
 While you work, run only the test classes you added or edited, plus any existing class that tests the code you
@@ -83,10 +81,6 @@ several Read calls at once, then edit; a handed file you will not change needs n
 not handed only when you can say why, and ask for all of those in one message. Independent calls go out
 together in one message, never one per turn.
 
-A file the ask needs removed goes under `## Deleted` in your answer, one `- <path>` per line, repo-relative:
-you have no shell, so the kernel deletes them for you before step 3 reads the tree. A path outside what you may
-write, or one that is not there, refuses the build.
-
 The brief's `## Settled facts` were checked when it was written: take them as given and do not look them up
 again. Read nothing outside the checkout.
 
@@ -98,20 +92,3 @@ On our own repository:
 - New logic goes in a new file rather than growing a file past its budget.
 
 On anyone else's repository, match its comment density instead.
-
-Answer the issue as filed under the Tight standard above, then close with this fence and nothing after it:
-
-```
----
-summary: <the change in one line>
-done:
-  - id: D1
-    status: done
-    pointer: <path or path:line a reader opens to see it>
----
-```
-
-One `- id:` row per `- D<n>` the issue lists, same ids, same order. An issue that lists none has one, `D1`.
-`status` is `done`, `cannot-be-done` or `they-said-dont`.
-A rebuild's fence lists every case again: carry forward the rows the refusal did not touch, update the ones it did.
-A hand-back with no fence, or one whose YAML does not parse, is asked once for the fence alone: answer with only the closing `---` fence and a `done:` row per case, and edit no file, since an edit there refuses the build.

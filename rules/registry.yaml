@@ -137,3 +137,8 @@
   where: json_array_length(items) > 0
   gap: 2d
   while: EXISTS (SELECT 1 FROM pipes WHERE name = 'comms' AND enabled = 1)
+- name: review_examples
+  table: events
+  column: at
+  where: kind = 'examples.learned'
+  gap: 7d

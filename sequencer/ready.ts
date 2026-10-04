@@ -17,6 +17,7 @@ import type { Outcome } from './kind.ts'
 import { forkCi, headOf, holding, rehearsalBranch, title, WIRE, type Wire } from './push.ts'
 import { cloned, diffOf, FORK, get, maybe, put, repoName, srcDir } from './workspace.ts'
 import { assembling, homeOf } from './home.ts'
+import { BLOCK, learned } from './learn.ts'
 import { baseMoved } from './merge.ts'
 
 export const CREDITS = 50
@@ -80,8 +81,6 @@ function greptile(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire)
   return { outcome: 'refuse', spans: [`greptile:${String(score)}/5`], message: row.body ?? '', to: 2,
     note: `Greptile scored ${at} ${String(score)}/5; back to the builder with its findings` }
 }
-
-const BLOCK = /^accepted:[ \t]*\r?\n((?:[ \t]+\S.*(?:\r?\n|$))*)/gm
 
 /** The findings on `sha` that rulings.md accepts, provided the hand-back carries every other one with a pointer. */
 function accepted(root: string, plan: number, sha: string): string[] {
@@ -174,7 +173,9 @@ export function proved(db: Db, root: string, plan: PlanRow, step: Step): void {
   if (step.name === 'senior') gated(db, made(db, root, plan, step), proof(db, plan))
   if (step.name === 'ready') {
     readyRow(db, plan.id)
-    stampHead(db, plan.id, headDigest(headOf(root, plan.id).sha))
+    const sha = headOf(root, plan.id).sha
+    stampHead(db, plan.id, headDigest(sha))
+    learned(db, root, plan.id, sha)
   }
 }
 

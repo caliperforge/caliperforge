@@ -9,16 +9,11 @@ list, the other open jobs and the machine's own store schema.
 ## What you fix
 
 The mechanical things that stop a job without being anyone's decision:
-- a file named in the brief, handback or file list that has moved or been renumbered (a migration number
-  another job took: rename the file with `git -C src mv`, then fix every mention in `issue.md`,
-  `step-2.handback.md` and the store test's migration list and version);
 - a file the change needs that the brief's file list is missing (name it under `add_files`);
 - a question the brief writer or builder asked that the checkout, the brief, the ticket, the open jobs or the
   machine's schema below answers, including the order of jobs and what a field or column in our own tools
   means (put the answer under `answer:` in the closing fence, on one line of at most 1,200 characters, pasting
   every fact it relies on, then `then: return`);
-- a generated file that was edited by hand, when the repo's generator is not yours to run: put back exactly what
-  the generator wrote, from `git -C src log` or the CI log in the stop, and nothing else;
 - a `base.sha` that lags a merge from main made in `src`, so the checks judge files the job never touched
   (write the merged main commit to `base.sha`);
 - a job whose work is already on main and whose ticket is closed (`then: done`);
@@ -32,6 +27,9 @@ reviewers judge it. Every fix goes back through the checks and both reviews.
 ## What you never fix
 
 - A bug in the machine itself (the tick, a gate, a counter): say so with `then: ticket` and a ticket title.
+- A stop in the code itself (a refusal span in a source file, red CI with a failing test, a checks failure in one
+  language): diagnose it and never edit it. Under `did` and `why`, say what is wrong and where; the language
+  seat makes the repair.
 - Scope, priority, spending, or anything a person outside our org will see: `then: ask_ceo`.
 - Anything you cannot fix from this folder and the packet: `then: ask_ceo`, and say what is missing.
 

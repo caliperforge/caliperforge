@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { desk as ghDesk, type Answer, type Desk, type Pr, type Seen } from '../../cli/gh.ts'
 import { unread } from '../../cli/inbox.ts'
-import { eventsOf } from '../../store/events.ts'
+import { eventsOf, logged, type Event } from '../../store/events.ts'
 import { rewind } from '../../store/plans.ts'
 import { approve as approvePublish } from '../card.ts'
 import { tick } from '../index.ts'
@@ -294,6 +294,38 @@ test('D4 the card shows Greptile\'s score at this head, or none', async () => {
   const desk = fake()
   signoffs(w.db, w.root, desk)
   expect(desk.cards.get(100)?.body).toContain('- Greptile on our fork: 4/5 at this head\n')
+})
+
+const BLOCK = `Decide: may the fix for #12 go upstream?
+Options: (a) send it: the maintainer sees it; (b) hold it: the plan waits
+Recommend: (a), the diff is signed off
+If no answer by 2026-09-28 09:00: the plan stays held`
+
+async function bodyAfter(...asks: [Event['outcome'], string][]): Promise<string> {
+  const w = await atBatch()
+  for (const [outcome, block] of asks) {
+    logged(w.db, { plan: 1, kind: 'coo_lite', actor: 'coo_lite', outcome, message: `ask_ceo: why\n\n${block}`, pointer: null, run: null })
+  }
+  const desk = fake()
+  signoffs(w.db, w.root, desk)
+  return desk.cards.get(100)?.body ?? ''
+}
+
+test('D1 the card shows the decision block as written', async () => {
+  const body = await bodyAfter(['needs_ceo', BLOCK])
+  expect(body).toContain(`**The decision asked of you**\n\n\`\`\`\n${BLOCK}\n\`\`\`\n\n**Answer with one label.**`)
+  expect(body.replace(/```markdown[\s\S]*?\n```\n/, '').replace(/`[^`]*`/g, '')).not.toMatch(/#\d|acme\/widget|github\.com\/acme/)
+})
+
+test('D2 a plan with no coo_lite event shows no decision', async () => {
+  const body = await bodyAfter()
+  expect(body).not.toContain('Decide:')
+  expect(body).not.toContain('The decision asked of you')
+})
+
+test('D3 an invalid or superseded block stays off the card', async () => {
+  expect(await bodyAfter(['needs_ceo', BLOCK.replace('upstream?', 'upstream')])).not.toContain('Decide:')
+  expect(await bodyAfter(['needs_ceo', BLOCK], ['pass', BLOCK])).not.toContain('Decide:')
 })
 
 /** The cards carry unposted PR text and sign-off answers, so they live apart from our public repo. */

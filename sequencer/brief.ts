@@ -320,7 +320,7 @@ export function references(brief: string): { path: string; line: number }[] {
 }
 
 /** A path in backticks anywhere on a `## Files` row; the directory in it is what tells it from a symbol. */
-const TICKED = /`([A-Za-z0-9_.+-]*\/[A-Za-z0-9_./+-]*\.[A-Za-z0-9]+)(?::[\d,-]+)?`/g
+const TICKED = /`(?!\.\.?\/)([A-Za-z0-9_.+-]*\/[A-Za-z0-9_./+-]*\.[A-Za-z0-9]+)(?::[\d,-]+)?`/g
 
 /**
  * The one reader of `## Files`: every path the brief says the job touches, in the order it listed them,

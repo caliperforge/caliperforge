@@ -1,11 +1,11 @@
 import { z } from 'zod'
-import type { Outcome } from '../sequencer/kind.ts'
-import { prose } from '../sequencer/prose.ts'
-import { get, maybe, put } from '../sequencer/workspace.ts'
 import { type Item, log } from '../store/desk.ts'
 import type { Db } from '../store/index.ts'
 import type { PlanRow } from '../store/plans.ts'
-import type { Step } from './pr-path.ts'
+import type { Step } from '../templates/pr-path.ts'
+import type { Outcome } from './kind.ts'
+import { prose } from './prose.ts'
+import { get, maybe, put } from './workspace.ts'
 
 export const CLOSING = /(?:^|\n)---\n((?:\w+:.*\n)+)---\s*$/
 

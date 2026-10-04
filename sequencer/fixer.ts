@@ -22,6 +22,8 @@ import { prose } from './prose.ts'
 import { WIRE, type Wire } from './push.ts'
 import { rule } from './rule.ts'
 import { recorded } from './seat.ts'
+import { landed } from './split.ts'
+import { stuck } from './stuck.ts'
 import { ticketed } from './ticket.ts'
 import { afresh, cloned, drop, maybe, move, planDir, put, titleOf } from './workspace.ts'
 
@@ -177,13 +179,15 @@ export function released(db: Db, root: string, now: Date, post: Post): void {
   for (const r of rows) {
     const ticket = ticketOf(db, r.id)
     const at = now.toISOString()
-    if (r.theirs === 'done') {
+    const ended = r.theirs === 'done' && !landed(db, r.on_) ? stuck(db, r.on_)[0] : { id: r.on_, state: r.theirs }
+    if (ended === undefined) continue
+    if (ended.state === 'done') {
       unhold(db, root, r.id, 'fixer')
       record(root, [{ at, plan: r.id, ticket, kind: 'refused', step: r.step, name: 'fixer', note: `plan ${String(r.on_)} landed, so this job is back in its lane` }])
       continue
     }
     clearWaitsOn(db, r.id)
-    const note = `plan ${String(r.on_)}, which this job waits on, ended ${r.theirs}`
+    const note = `plan ${String(ended.id)}, which this job waits on, ended ${ended.state}`
     held(db, r.id, 'coo', note)
     record(root, [{ at, plan: r.id, ticket, kind: 'blocked', step: r.step, name: 'fixer', note }])
     post(`CaliperForge · ${ticket} needs you`, `plan ${String(r.id)}, step ${String(r.step)}. ${note}`)

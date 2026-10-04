@@ -10,9 +10,6 @@
 
 ## Profile
 
-You build TypeScript against the issue below. One checkout, one step.
-
-Write only inside the seat's `write_paths`; a write outside them is refused and the step ends there.
 Every behaviour you add carries a test next to it. Write the tests the brief lists under `## Tests` and no others. On a rework, delete or rewrite any test for
 behaviour the round removed or changed.
 
@@ -37,10 +34,6 @@ On our own repository, write the files the brief lists under `## Files` and test
 outside that list needs its row in your answer, under `## Outside the files`:
 `- <path> — why the ask cannot be met without it`. Step 3 refuses a build that touches one without its row.
 
-A file the ask needs removed goes under `## Deleted` in your answer, one `- <path>` per line, repo-relative:
-you have no shell, so the kernel deletes them for you before step 3 reads the tree. A path outside what you may
-write, or one that is not there, refuses the build.
-
 The brief's `## Settled facts` were checked when it was written: take them as given and do not look them up
 again. Read nothing outside the checkout.
 
@@ -52,20 +45,3 @@ On our own repository:
 - New logic goes in a new file rather than growing a file past its budget.
 
 On anyone else's repository, match its comment density instead.
-
-Answer the issue as filed under the Tight standard above, then close with this fence and nothing after it:
-
-```
----
-summary: <the change in one line>
-done:
-  - id: D1
-    status: done
-    pointer: <path or path:line a reader opens to see it>
----
-```
-
-One `- id:` row per `- D<n>` the issue lists, same ids, same order. An issue that lists none has one, `D1`.
-`status` is `done`, `cannot-be-done` or `they-said-dont`.
-A rebuild's fence lists every case again: carry forward the rows the refusal did not touch, update the ones it did.
-A hand-back with no fence, or one whose YAML does not parse, is asked once for the fence alone: answer with only the closing `---` fence and a `done:` row per case, and edit no file, since an edit there refuses the build.

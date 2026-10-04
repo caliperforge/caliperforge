@@ -13,10 +13,18 @@ languageSeat({
   allowed: ['just --justfile lua/Justfile test', 'just --justfile lua/Justfile lint', 'luacheck lua/pay_kit', 'luajit tests/run.lua'],
   listed: 'lua/pay_kit/internal/config.lua',
   beside: 'ruby/lib/pay_kit/config.rb',
+  mode: 'build',
 })
 
 test('the prompt says every test run is in the foreground', () => {
   expect(seat(root, 'lua_specialist').prompt).toContain('Every test run is in the foreground; wait for it to finish.')
+})
+
+test('D1: the build mode, not the prompt, holds the framing', () => {
+  const { prompt } = seat(root, 'lua_specialist')
+  for (const text of ['You build', '- id: D1', 'A file the ask needs removed goes under `## Deleted`']) {
+    expect(prompt).not.toContain(text)
+  }
 })
 
 test('D1: What to check opens the prompt with the Lua checks', () => {

@@ -22,7 +22,7 @@ seats:
 digests:
   typescript_specialist:
     manifest: a4ff87fd829db7a375989bb3c747d1cb6f2b59f17b47222ff1f76764d6a4c038
-    prompt: 906fe75bf740f07f0dfdd1e3281f214c4b939ffefc7138a252ba1c6dec6c173d
+    prompt: a7ab19ab76fc18b2778fbd2448e3938e4e3234ffb0d17d1c61952c990813b1dd
   kotlin_specialist:
     manifest: 0ac9229de8943374e26c0c570689ffcdad364ef90d0c03f6486bdc443419fd6b
     prompt: bb1cceda063ac6f3e515879ce6e43e4f7ee7d40c238c3523c4b90468a4a7fd24
@@ -34,7 +34,7 @@ digests:
     prompt: e0b9fe5087b86112266327a389c02f079535af925204faf1105e7913be7b189f
   outside_specialist:
     manifest: 3897d50daa0caf59420769d972b0ed0dc67876076ba4373beeef28ba81dd33f4
-    prompt: d6a3ec151e453f6f7f5f969fb63cd9e19a06e0d2041a965f1c5c008141b0a6a3
+    prompt: a604004f11d07c30fb76a3445dbc97b3e2d371a18770944a30b4c9525547a7ac
   rust_specialist:
     manifest: 5090575dcb48be94bc22f4c8f4c7bcbca1fe02389697b1e6dd455d49e292235c
     prompt: d03ac7e5d2192fdba527ceb445e3963b71ab37c09d5f756034450956668a3278
@@ -52,7 +52,7 @@ digests:
     prompt: 224711360cc575ab4e2bf3cd6c97a1901fd3cd61d4d2fad625e8f8db8a76c54c
   lua_specialist:
     manifest: a1622ce0fe5d4526ee1a9a6efc84cbf1736c092e9af1ba4ed42c53ff5e3a6aa8
-    prompt: 977f64c3229a075c0e7736b199c3b902386de3a8da63f9d241d4c939e01d4010
+    prompt: 58cc79c3a6d92f6e0f60f3806d2c633fb86da09cc3449dbc5bc1c1d7a3f47b94
   web_specialist:
     manifest: 60ad61920b23c01a4ef282fcab810312a042142d77d6794727258ff9861cb647
     prompt: 86dfc1fad085e04ad1dcdd70f1e2564e86c33adfab443d753f42dc0885f9b55e

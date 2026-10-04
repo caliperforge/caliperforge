@@ -23,6 +23,7 @@ import { flow } from './flow.ts'
 import { gh } from './gh.ts'
 import { write as writeMap } from './map.ts'
 import { ack, line, unread } from './inbox.ts'
+import { refusalDays, refusalSection } from './refusals.ts'
 import { close } from './session.ts'
 import { liveness, livenessLine, stalledLanes } from './watch.ts'
 
@@ -193,6 +194,7 @@ function briefs(cf: Command, { root, db, out }: Cli): void {
     const d = day(handle)
     out(`last 24 h\n  ${String(d.runs)} run(s)\t${String(d.tokens)} tokens\t${d.seconds.toFixed(1)}s\n`)
     out(costSection(costs(handle), unpriced(handle)))
+    out(refusalSection(refusalDays(handle, new Date())))
     const now = new Date()
     out(handUpLine(handUps(handle, now)))
     out(actorSection(actors(handle, now), hands(now, gh)))

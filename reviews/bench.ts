@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { map } from '../cli/map.ts'
 import { CAPPED, type Packet, type Provider } from '../providers/kind.ts'
 import { assembled, benchPacket, reviewManifest, type Bench, type Review } from '../runner/packet.ts'
+import { seat } from '../runner/rules.ts'
 import { runLogged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { observed, wall } from '../store/lanes.ts'
@@ -35,9 +36,11 @@ export async function judge(
   input: unknown,
   provider: Provider,
   transcript: string,
+  as?: string,
 ): Promise<{ run: number | null; verdict: number; outcome: Judged }> {
   const manifest = reviewManifest(root, name)
-  const built = benchPacket(root, name, input, transcript)
+  const lead = as === undefined ? undefined : { as, ...seat(root, as, 'review') }
+  const built = benchPacket(root, name, input, transcript, lead?.prompt)
   if ('refusal' in built) {
     const outcome = barred(built.refusal.path, input)
     return { run: null, verdict: record(db, root, name, plan, outcome, 0, 0, null), outcome }
@@ -48,13 +51,13 @@ export async function judge(
     return { run: null, verdict: record(db, root, name, plan, outcome, 0, 0, tree), outcome }
   }
   const context = built.bench.context ?? inContext(db, plan, built.bench.repo, built.bench.diff)
-  const chosen = context === undefined ? built.packet : assembled(root, name, manifest, { ...built.bench, context }, transcript)
+  const chosen = context === undefined ? built.packet : assembled(root, name, manifest, { ...built.bench, context }, transcript, lead?.prompt)
   const target = planById(db, plan).target_id
   const rules = packs(root, built.bench.diff, target === null ? null : targetRow(db, target).repo)
   const packet = { ...chosen, prompt: `${map(built.bench.repo)}\n\n${chosen.prompt}${rules}` }
-  const first = await ran(db, root, name, plan, manifest, provider, packet)
+  const first = await ran(db, root, name, plan, manifest, provider, packet, lead)
   const refired = first.capped && first.outcome === null
-    ? await ran(db, root, name, plan, manifest, provider, { ...packet, tools: [] })
+    ? await ran(db, root, name, plan, manifest, provider, { ...packet, tools: [] }, lead)
     : null
   const last = refired ?? first
   if (last.outcome === null) throw new Error('reviewers.verdict_fence')
@@ -73,11 +76,12 @@ interface Ran {
 }
 
 async function ran(db: Db, root: string, name: string, plan: number, manifest: Review, provider: Provider,
-  packet: Packet): Promise<Ran> {
+  packet: Packet, lead?: { as: string; hash: string }): Promise<Ran> {
   const fired = await provider.fire({ ...packet, wall: wall(db) })
   const outcome = read(fired.text, packet.prompt)
-  const run = runLogged(db, { plan, step: manifest.step, seat: name, rule_hash: specHash(root, name), provider: provider.name,
-    model: manifest.model, effort: manifest.effort, exit: outcome === null ? 1 : fired.exit, fired })
+  const run = runLogged(db, { plan, step: manifest.step, seat: lead?.as ?? name, rule_hash: lead?.hash ?? specHash(root, name),
+    provider: provider.name, model: manifest.model, effort: manifest.effort, exit: outcome === null ? 1 : fired.exit, fired,
+    mode: lead === undefined ? undefined : 'review' })
   byRun(db, run, fired.transcript_path)
   observed(db, fired.limits)
   return {

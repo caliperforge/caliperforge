@@ -96,6 +96,7 @@ export function benchPacket(
   name: string,
   input: unknown,
   transcript: string,
+  lead = spec(root, name),
 ): { packet: Packet; bench: Bench } | { refusal: Refusal } {
   const manifest = reviewManifest(root, name)
   const bench = Bench.safeParse(input)
@@ -104,14 +105,15 @@ export function benchPacket(
   if ((bench.data.screenshots !== undefined) !== manifest.reads_screens) return { refusal: shape('screenshots') }
   const outside = admits(bench.data.repo)
   if (outside !== null) return { refusal: outside }
-  return { packet: assembled(root, name, manifest, bench.data, transcript), bench: bench.data }
+  return { packet: assembled(root, name, manifest, bench.data, transcript, lead), bench: bench.data }
 }
 
 const MAP = 'The whole diff, for the map. Judge what changed since your last verdict, handed below.'
 
 export const SYMBOLS_LEAD = 'Each top-level export at the branch base, as path:line name.'
 
-export function assembled(root: string, name: string, manifest: Review, bench: Bench, transcript: string): Packet {
+export function assembled(root: string, name: string, manifest: Review, bench: Bench, transcript: string,
+  lead = spec(root, name)): Packet {
   const sections: [string, string | undefined][] = [
     ['The builder\'s hand-back', bench.handback],
     ['Changed code in context', framed(bench.context, 'Each hunk inside the function that encloses it. Judge from this and the diff; open a file only for what neither holds.')],
@@ -133,7 +135,7 @@ export function assembled(root: string, name: string, manifest: Review, bench: B
   const tail = sections.map(([head, body]) => (body === undefined ? '' : `\n\n# ${head}\n\n${body}`)).join('')
   const diff = (bench.since === undefined ? undefined : framed(bench.diff, MAP)) ?? bench.diff
   return {
-    prompt: `${tight(root)}\n\n${spec(root, name)}\n\n# Issue\n\n${bench.issue}\n\n# Diff\n\n${diff}${tail}`,
+    prompt: `${tight(root)}\n\n${lead}\n\n# Issue\n\n${bench.issue}\n\n# Diff\n\n${diff}${tail}`,
     cwd: bench.repo,
     transcript,
     model: manifest.model,

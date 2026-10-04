@@ -447,8 +447,7 @@
     "prepare": 1
   },
   "sequencer/split.ts": {
-    "lines": 199,
-    "prepare": 17,
+    "lines": 194,
     "silent-catch": 2
   },
   "sequencer/steps.ts": {

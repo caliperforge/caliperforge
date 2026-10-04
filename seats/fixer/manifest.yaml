@@ -9,11 +9,8 @@ tools:
   - Write
   - Bash(git -C src status:*)
   - Bash(git -C src diff:*)
-  - Bash(git -C src add:*)
-  - Bash(git -C src mv:*)
   - Bash(git -C src log:*)
 write_paths:
-  - src
   - issue.md
   - ask.md
   - step-2.handback.md

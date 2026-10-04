@@ -39,6 +39,11 @@ test('the prompt says every command runs in the foreground', () => {
   )
 })
 
+test('the prompt runs the ratchet test and names its budgets', () => {
+  const { prompt } = seat(root, 'typescript_specialist')
+  for (const text of ['checks/ratchet.test.ts', '60 characters', '300 for a new file']) expect(prompt).toContain(text)
+})
+
 test('a rebuild lists every case, carrying untouched rows forward', () => {
   expect(seat(root, 'typescript_specialist').prompt).toContain(
     "A rebuild's fence lists every case again: carry forward the rows the refusal did not touch, update the ones it did.",

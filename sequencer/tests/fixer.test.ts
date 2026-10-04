@@ -11,7 +11,7 @@ import { maybe, put, srcDir } from '../workspace.ts'
 
 const repo = join(import.meta.dirname, '../..')
 const now = new Date('2026-09-25T17:00:00.000Z')
-const ASK_COO = '---\nverb: ask_coo\nwhy: the brief names a migration number another job took\n---\n'
+const FIX = '---\nmove: fix\nwhy: the brief names a migration number another job took\n---\n'
 
 function seeded(mode: string) {
   const db = open(':memory:')
@@ -19,7 +19,7 @@ function seeded(mode: string) {
   db.exec(readFileSync(join(repo, 'runner/tests/fixtures/waiting.sql'), 'utf8'))
   db.exec("UPDATE plans SET state = 'blocked_on_ceo', wait_reason = NULL WHERE id = 7")
   db.prepare(`INSERT INTO settings (key, value, who, origin_kind, origin_ref, set_at) VALUES
-    ('orchestrator.apply', '1', 'ceo', 'ruling', 't', '2026-09-25'), ('fixer.mode', ?, 'ceo', 'ruling', 't', '2026-09-25')`).run(mode)
+    ('coo_lite.apply', '1', 'ceo', 'ruling', 't', '2026-09-25'), ('fixer.mode', ?, 'ceo', 'ruling', 't', '2026-09-25')`).run(mode)
   const home = mkdtempSync(join(tmpdir(), 'cf-fx-'))
   for (const dir of ['rules', 'seats']) cpSync(join(repo, dir), join(home, dir), { recursive: true })
   put(home, 7, 'ask.md', 'the ask\n')
@@ -36,7 +36,7 @@ function stub(fix: string, packets: Packet[]): Provider {
     name: 'claude-agent-sdk',
     fire: (packet) => {
       packets.push(packet)
-      const text = basename(packet.transcript).startsWith('fixer') ? fix : ASK_COO
+      const text = basename(packet.transcript).startsWith('fixer') ? fix : FIX
       return Promise.resolve({ text, transcript_path: packet.transcript, usage: { input: 10, cache: 0, output: 5 },
         seconds: 0, ended: 'completed', exit: 0, stop_reason: 'end_turn', denials: 0 })
     },
@@ -53,8 +53,8 @@ const state = (db: ReturnType<typeof open>) => db.prepare('SELECT state, step FR
 const applied = (db: ReturnType<typeof open>) => db.prepare('SELECT applied FROM decisions').all()
 const runs = (db: ReturnType<typeof open>) => db.prepare(`SELECT seat, input_tokens, cache_read_tokens, output_tokens,
   transcript_path LIKE '%/run-' || id || '.transcript.jsonl' AS named FROM runs
-  WHERE plan = 7 AND seat IN ('fixer', 'orchestrator') ORDER BY id`).all()
-const RAN = [{ seat: 'orchestrator', input_tokens: 10, cache_read_tokens: 0, output_tokens: 5, named: 1 },
+  WHERE plan = 7 AND seat IN ('fixer', 'coo_lite') ORDER BY id`).all()
+const RAN = [{ seat: 'coo_lite', input_tokens: 10, cache_read_tokens: 0, output_tokens: 5, named: 1 },
   { seat: 'fixer', input_tokens: 10, cache_read_tokens: 0, output_tokens: 5, named: 1 }]
 
 const RETURN = '---\ndid: renamed schema/0036_x.sql to 0040_x.sql in src and issue.md\nthen: return\nwhy: the rails will find the file now\nadd_files: [schema/0040_x.sql]\n---\n'
@@ -83,7 +83,7 @@ test('shadow: the fixer only reads, the stop reaches a person', async () => {
   expect(packets.find((p) => basename(p.transcript).startsWith('fixer'))?.tools).toEqual(['Read', 'Glob', 'Grep'])
   expect(posted).toHaveLength(1)
   expect(maybe(home, 7, 'fixes.jsonl')).toContain('"mode":"shadow"')
-  expect(runs(db)).toEqual(RAN)
+  expect(runs(db)).toEqual([...RAN, ...RAN])
 })
 
 const TICKET = '---\ndid: nothing\nthen: ticket\nwhy: the spend wall counts a turn four times\nticket: the run wall counts each streamed block\n---\n'
@@ -290,7 +290,7 @@ test('park: held, not reaped, not re-woken', async () => {
   expect(terminal(db)).not.toContain(7)
   rmSync(join(home, '.cf/work/7/orchestrator.md'))
   await woke(db, home, stub(PARK, packets), now, () => undefined, wire([]))
-  expect(packets.filter((p) => basename(p.transcript).startsWith('orchestrator'))).toHaveLength(1)
+  expect(packets.filter((p) => basename(p.transcript).startsWith('coo_lite'))).toHaveLength(1)
 })
 
 test('a # in did or why is kept whole', async () => {

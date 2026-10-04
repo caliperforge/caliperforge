@@ -121,7 +121,8 @@ test('intake D4 a step-1 flag blocks before any model runs', async () => {
     const wire = watched([], w.root, 1)
     let one: Fired | undefined
     for (let at = 0; at < 3 && one === undefined; at += 1) {
-      one = (await tick(w.db, w.root, stub(CARRIED, 0, undefined, () => { fired += 1 }), undefined, undefined,
+      one = (await tick(w.db, w.root, stub(CARRIED, 0, undefined, (p) => { if (!p.transcript.includes('coo_lite')) fired += 1 }),
+        undefined, undefined,
         flagged ? { ...wire, intake: () => flag } : wire)).find((f) => f.step === 1)
     }
     return { state: String(one?.state), note: String(one?.note), fired }

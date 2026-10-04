@@ -1,7 +1,7 @@
 import type { Db } from '../store/index.ts'
 import { partsOf } from '../store/parts.ts'
 import { planById, type PlanRow } from '../store/plans.ts'
-import { landed } from './split.ts'
+import { landed } from './landed.ts'
 
 /** The last part of a split with a plan that has not landed, followed into a part that split too. */
 export function unlanded(db: Db, plan: number): PlanRow | null {

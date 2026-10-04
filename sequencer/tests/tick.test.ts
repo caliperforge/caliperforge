@@ -10,7 +10,8 @@ import { addPipe, advance, allPlans, clock, dropPlan, end, inWindow, laneOff, ov
 import { amend, width } from '../../store/lanes.ts'
 import { holdOf, retried } from '../../store/holds.ts'
 import { current } from '../../store/now.ts'
-import { dropDeliverables } from '../../store/deliverables.ts'
+import { dropDeliverables, pushedRow } from '../../store/deliverables.ts'
+import { gates } from '../../store/approvals.ts'
 import { addTarget, setTargetState, targetRow } from '../../store/targets.ts'
 import { at, steps } from '../../templates/pr-path.ts'
 import { tick } from '../index.ts'
@@ -1207,6 +1208,8 @@ test('D1 D2 D3 the tick parks a file wait for a queued plan', async () => {
   expect(eventsOf(w.db, HELD, 'park')).toEqual([{ actor: 'tick', outcome: 'pass', message: `waits on plan ${String(MINE)}'s files` }])
   expect(added.slice(3).map((id) => plan(w.db, id).state)).toContain('running')
   end(w.db, MINE, 'done')
+  pushedRow(w.db, { plan: MINE, step: 6, seat: 'typescript_specialist', diff_digest: 'd'.repeat(64),
+    evidence: 'https://github.com/caliperforge/caliperforge/pull/1' }, gates(w.db, MINE, 'd'.repeat(64)))
   await tick(w.db, w.root, stub(CARRIED))
   expect(parked(w.db)).toEqual([])
   expect(plan(w.db, HELD).state).not.toBe('blocked_on_ceo')

@@ -2,7 +2,9 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
-import { migrate, open } from '../../store/index.ts'
+import { gates } from '../../store/approvals.ts'
+import { pushedRow } from '../../store/deliverables.ts'
+import { addRule, migrate, open } from '../../store/index.ts'
 import { addPlan, PlanRow } from '../../store/plans.ts'
 import { recordListing } from '../../store/tickets.ts'
 import { released } from '../fixer.ts'
@@ -33,6 +35,11 @@ function seeded(first: { state: PlanRow['state']; closedAt?: string } | null) {
 type Db = ReturnType<typeof open>
 const row = (db: Db, id: number) => db.prepare('SELECT state, step, waits_on, held_by, held_why FROM plans WHERE id = ?').get(id)
 const plan = (db: Db, id: number) => PlanRow.parse(db.prepare('SELECT * FROM plans WHERE id = ?').get(id))
+const pushed = (db: Db, id: number) => {
+  addRule(db, { id: 'typescript_specialist', kind: 'roster', path: 'seats/typescript_specialist', content_hash: '0'.repeat(64), loaded_at: '2026-09-28' })
+  pushedRow(db, { plan: id, step: 6, seat: 'typescript_specialist', diff_digest: 'd'.repeat(64),
+    evidence: `https://github.com/${home}/pull/1` }, gates(db, id, 'd'.repeat(64)))
+}
 
 test('D1 an After issue in flight waits on its plan at step 0', () => {
   const { db, root, one, two } = seeded({ state: 'running' })
@@ -45,11 +52,24 @@ test('D2 back to its lane once After lands, then passes measure', () => {
   const { db, root, one, two } = seeded({ state: 'running' })
   measure(db, root, plan(db, two))
   db.prepare("UPDATE plans SET state = 'done' WHERE id = ?").run(one)
+  pushed(db, one ?? 0)
   released(db, root, now, () => undefined)
   expect(row(db, two)).toMatchObject({ state: 'queued', step: 0, waits_on: null })
   const again = measure(db, root, plan(db, two))
   expect(again.outcome).toBe('pass')
   expect(again.held).toBeUndefined()
+})
+
+test('D4 an After done with no push waits for the push', () => {
+  const { db, root, one, two } = seeded({ state: 'done' })
+  expect(measure(db, root, plan(db, two))).toMatchObject({ outcome: 'pass', held: true, spans: ['#1'] })
+  expect(row(db, two)).toEqual({ state: 'blocked_on_ceo', step: 0, waits_on: one, held_by: 'coo',
+    held_why: `waits for #1, plan ${String(one)}, to land` })
+  released(db, root, now, () => undefined)
+  expect(row(db, two)).toMatchObject({ state: 'blocked_on_ceo', waits_on: one })
+  pushed(db, one ?? 0)
+  released(db, root, now, () => undefined)
+  expect(row(db, two)).toMatchObject({ state: 'queued', step: 0, waits_on: null })
 })
 
 test('D3 an After closed unlanded or planless holds for the COO', () => {

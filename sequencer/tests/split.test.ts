@@ -6,6 +6,8 @@ import { following, languages, parted, released } from '../split.ts'
 import { languageFor } from '../route.ts'
 import type { Wire } from '../push.ts'
 import { maybe, put, srcDir } from '../workspace.ts'
+import { gates } from '../../store/approvals.ts'
+import { pushedRow } from '../../store/deliverables.ts'
 import { record } from '../../store/files.ts'
 import { builder } from '../../templates/pr-path.ts'
 import { ofKind, runRows } from '../../store/events.ts'
@@ -46,8 +48,14 @@ async function briefed(w: World, id: number, brief: string, log: string[], wire 
   await tick(w.db, w.root, stub(CARRIED, 0, undefined, undefined, brief), undefined, undefined, wire)
 }
 
+function pushed(w: World, plan: number): void {
+  pushedRow(w.db, { plan, step: 6, seat: 'typescript_specialist', diff_digest: 'd'.repeat(64),
+    evidence: 'https://github.com/caliperforge/caliperforge/pull/1' }, gates(w.db, plan, 'd'.repeat(64)))
+}
+
 function landing(w: World, n: number, log: string[]): string | null {
   const id = partPlan(w, n) ?? 0
+  pushed(w, id)
   const note = following(w.db, w.root, plan(w.db, id), String(n).repeat(40), watched(log, w.root, id))
   finish(w.db, plan(w.db, id))
   return note
@@ -169,11 +177,13 @@ test('a part landing queues the next; the last closes the parent', async () => {
   const log: string[] = []
   await briefed(w, ID, PARTS, log)
   const a = partPlan(w, 0) ?? 0
+  pushed(w, a)
   expect(following(w.db, w.root, plan(w.db, a), 'a'.repeat(40), watched(log, w.root, a))).toMatch(/^part b queued as plan \d+$/)
   finish(w.db, plan(w.db, a))
   const b = partPlan(w, 1) ?? 0
   expect(maybe(w.root, b, 'ask.md')).toContain('After: #901')
   expect(ofKind(w.db, 'filed').map((e) => ({ plan: e.plan }))).toEqual([{ plan: a }, { plan: b }])
+  pushed(w, b)
   expect(following(w.db, w.root, plan(w.db, b), 'b'.repeat(40), watched(log, w.root, b))).toBe('the last part landed; #34 closed')
   expect(log.at(-1)).toBe('close caliperforge/caliperforge#34 bbbbbbb')
   expect(following(w.db, w.root, plan(w.db, ID), 'c'.repeat(40), watched(log, w.root, ID))).toBeNull()
@@ -194,9 +204,11 @@ test('D1, D2: a re-split part closes and its grandparent goes on', async () => {
   ])
   expect(plan(w.db, ID)).toMatchObject({ state: 'done', step: 1 })
   const a = partPlan(w, 0) ?? 0
+  pushed(w, a)
   following(w.db, w.root, plan(w.db, a), 'a'.repeat(40), watched(log, w.root, a))
   finish(w.db, plan(w.db, a))
   const b = partPlan(w, 1) ?? 0
+  pushed(w, b)
   expect(following(w.db, w.root, plan(w.db, b), 'b'.repeat(40), watched(log, w.root, b)))
     .toMatch(/^the last part landed; #34 closed; part b queued as plan \d+$/)
   expect(log.at(-1)).toBe('close caliperforge/caliperforge#34 bbbbbbb')

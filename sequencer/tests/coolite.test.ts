@@ -217,12 +217,20 @@ test('an upstream-key stop gets the pinned read tool and its keys', async () => 
   expect(row(db).step).toBe(2)
 })
 
-test.each(['/etc/x', '../x'])('D5: a rule naming %s writes nothing and is held by the ceo', async (path) => {
+test.each(['/etc/x', '../x'])('D5: a rule naming %s writes nothing and is held by the coo', async (path) => {
   const { db, home } = seeded('1')
   await run(db, home, `---\nmove: rule\nwhy: the path settles it\nanswer: read ${path}\n---\n`)
   expect(maybe(home, 7, 'ask.md')).toBe('the ask\n')
   expect(maybe(home, 7, 'issue.md')).toBe(ISSUE)
-  expect(db.prepare('SELECT state, held_by FROM plans WHERE id = 7').get()).toEqual({ state: 'blocked_on_ceo', held_by: 'ceo' })
+  expect(db.prepare('SELECT state, held_by FROM plans WHERE id = 7').get()).toEqual({ state: 'blocked_on_ceo', held_by: 'coo' })
+})
+
+test('failedMoveToCoo', async () => {
+  const { db, home } = seeded('1')
+  await run(db, home, '---\nmove: rule\nwhy: the path settles it\nanswer: read /etc/x\n---\n')
+  expect(db.prepare('SELECT state, held_by FROM plans WHERE id = 7').get()).toEqual({ state: 'blocked_on_ceo', held_by: 'coo' })
+  expect(told(db)).toEqual([{ actor: 'coo_lite', outcome: 'needs_ceo',
+    message: 'rule did not apply, the answer names a path a ruling may not carry: the path settles it' }])
 })
 
 test.each([[null], ['0']])('shadow (coo_lite.apply %s): no plan row changes and the proposal is in the inbox', async (apply) => {
@@ -255,14 +263,15 @@ test.each([
   expect(posted).toHaveLength(1)
 })
 
-test('close with no pushed deliverable is held by the ceo', async () => {
+test('close with no pushed deliverable is held by the coo', async () => {
   const { db, home } = seeded('1')
   db.exec('DELETE FROM deliverables')
   await run(db, home, REPLY.close ?? '')
-  expect(db.prepare('SELECT state, held_by FROM plans WHERE id = 7').get()).toEqual({ state: 'blocked_on_ceo', held_by: 'ceo' })
+  expect(db.prepare('SELECT state, held_by FROM plans WHERE id = 7').get()).toEqual({ state: 'blocked_on_ceo', held_by: 'coo' })
+  expect(told(db).map((t) => t.message)).toEqual([expect.stringMatching(/^close did not apply, /)])
 })
 
-test('a split parted sends to the ceo is held by the ceo', async () => {
+test('a split parted cannot file is held by the coo', async () => {
   const { db, home } = seeded('1')
   db.exec(`INSERT INTO accounts (id, repo, measured_at, maintainers, doors, last_outsider_merge, open_pr_age_p50_days,
     cross_repo_activity, pulse, evidence) VALUES (1, 'acme/kit', '2026-09-24', 2, 1, '2026-09-24', 3, 4, 'warm', 'https://github.com/acme/kit');
@@ -270,7 +279,8 @@ test('a split parted sends to the ceo is held by the ceo', async () => {
     VALUES (1, 1, 'acme/kit', 706, 'ludo', 'ready', '2026-09-24', 'https://github.com/acme/kit/issues/706');
     UPDATE plans SET target_id = 1, lane = NULL, seat = NULL, origin = NULL WHERE id = 7`)
   await run(db, home, SPLIT)
-  expect(db.prepare('SELECT state, held_by FROM plans WHERE id = 7').get()).toEqual({ state: 'blocked_on_ceo', held_by: 'ceo' })
+  expect(db.prepare('SELECT state, held_by FROM plans WHERE id = 7').get()).toEqual({ state: 'blocked_on_ceo', held_by: 'coo' })
+  expect(told(db).map((t) => t.message)).toEqual([expect.stringMatching(/^split did not apply, /)])
   expect(db.prepare('SELECT count(*) AS n FROM plans').get()).toEqual({ n: 1 })
 })
 
@@ -452,9 +462,9 @@ test('fixFailsOnce', async () => {
   const posted: string[] = []
   await cooLite(db, home, row(db), bySeat(packets), now, (t) => void posted.push(t), wire())
   expect(packets.map((p) => p.prompt.includes('# Fixer'))).toEqual([false, true])
-  expect(plan7(db)).toMatchObject({ held_by: 'ceo' })
+  expect(plan7(db)).toMatchObject({ held_by: 'coo' })
   expect(posted).toHaveLength(1)
-  expect(told(db).map((t) => t.outcome)).toEqual(['needs_ceo'])
+  expect(told(db)).toEqual([{ actor: 'coo_lite', outcome: 'needs_ceo', message: expect.stringMatching(/^fix did not apply, /) as string }])
 })
 
 test('returnMove', async () => {
@@ -477,9 +487,13 @@ test('returnMove', async () => {
   }
 })
 
-test('engineeringNeverCeo', async () => {
+test('askCeoNeedsClass', async () => {
   expect(read('---\nmove: ask_ceo\nwhy: which file\n---\n')).toBeNull()
   expect(read('---\nmove: ask_ceo\nwhy: which file\nclass: 5\n---\n')).toBeNull()
+  const classed = seeded('1')
+  await run(classed.db, classed.home, REPLY.ask_ceo ?? '')
+  expect(plan7(classed.db)).toMatchObject({ held_by: 'ceo' })
+  expect(told(classed.db).map((t) => t.message)).toEqual(['ask_ceo: a maintainer outside our org sees this'])
   const { db, home } = seeded('1')
   held(db, 7, 'coo', 'a stop')
   await run(db, home, '---\nmove: ask_ceo\nwhy: which file\n---\n')

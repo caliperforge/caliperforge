@@ -6,9 +6,9 @@ import { fresh } from '../../checks/sqlite.ts'
 import { put, SELF } from '../../sequencer/workspace.ts'
 import { ofKind, runAt } from '../../store/events.ts'
 import type { Db } from '../../store/index.ts'
-import { set } from '../../store/lanes.ts'
+import { get, set } from '../../store/lanes.ts'
 import { receipt } from '../../store/ticks.ts'
-import { pull } from '../science.ts'
+import { pull, sunday } from '../science.ts'
 
 const schema = join(import.meta.dirname, '../../schema')
 
@@ -84,6 +84,38 @@ test('D4 due.md lists review dates from today to before today+7', () => {
   pull(seeded(), root, now)
   expect(lines('due.md')).toEqual(['| id | note | review_date |', '| --- | --- | --- |', '| 1 | soon, quoted | 2026-10-06 |',
     '|  | no id | 2026-10-04 |'])
+})
+
+function weekOld(): Db {
+  const db = seeded()
+  set(db, 'science.at', '2026-09-27', 'pr', '2026-09-27')
+  return db
+}
+
+test('700d D1 sunday pulls once after Sunday 05:45 local', () => {
+  const db = weekOld()
+  expect(sunday(db, root, new Date('2026-10-04T11:46:00Z'))).toEqual(['runs_daily', 'plans_daily', 'drift_daily', 'operator_daily',
+    'stops', 'stalls', 'review_vs_outside'].map((n) => join(dir, 'data/v2', `${n}.csv`)).concat(join(dir, 'data/v2/due.md')))
+  expect(get(db, 'science.at')).toBe('2026-10-04')
+  expect(sunday(db, root, new Date('2026-10-04T20:00:00Z'))).toEqual([])
+  expect(ofKind(db, 'science_pull')).toHaveLength(1)
+})
+
+test('700d D2 sunday waits for 05:45; a missed Sunday runs Monday', () => {
+  const db = weekOld()
+  expect(sunday(db, root, new Date('2026-10-04T11:44:00Z'))).toEqual([])
+  expect(readdirSync(dir)).toEqual([])
+  expect(get(db, 'science.at')).toBe('2026-09-27')
+  expect(sunday(db, root, new Date('2026-10-05T12:00:00Z'))).toHaveLength(8)
+  expect(sunday(db, root, new Date('2026-10-05T13:00:00Z'))).toEqual([])
+  expect(ofKind(db, 'science_pull')).toHaveLength(1)
+})
+
+test('700d D3 a pull that writes logs one pass event', () => {
+  const db = seeded()
+  pull(db, root, now)
+  expect(ofKind(db, 'science_pull')).toEqual([{ plan: null, kind: 'science_pull', actor: 'science', outcome: 'pass',
+    message: `wrote 8 files to ${join(dir, 'data/v2')}` }])
 })
 
 const cells = (name: string): string[] => lines(name).slice(1).map((l) => l.split(',"')[0] ?? '')

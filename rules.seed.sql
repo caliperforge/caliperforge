@@ -2,7 +2,7 @@ INSERT INTO rules (id, kind, path, content_hash, loaded_at)
 VALUES
   ('rules/rails.yaml', 'rail', 'rules/rails.yaml', 'b46b445806d399b61887a5259eb0a6893444efcbe5acf2e6dd534507bc0882f3', '2026-09-17'),
   ('rules/tight.md', 'card', 'rules/tight.md', '9c885ed2e62d432d95211fec25387da43261cd643e4eb56f73b00b9689a6e479', '2026-09-17'),
-  ('rules/registry.yaml', 'card', 'rules/registry.yaml', 'a8aeec89efbf93a120b2af97b45385806dd87e4679e29f11d50b281548c863a5', '2026-10-03'),
+  ('rules/registry.yaml', 'card', 'rules/registry.yaml', '154a69df302918265461801445ed5de330e7db8706f8363ae26c60c12928731d', '2026-10-03'),
   ('completion-audit', 'rail', 'rules/rails.yaml', 'b46b445806d399b61887a5259eb0a6893444efcbe5acf2e6dd534507bc0882f3', '2026-09-17'),
   ('secret-scan', 'rail', 'rules/rails.yaml', 'b46b445806d399b61887a5259eb0a6893444efcbe5acf2e6dd534507bc0882f3', '2026-09-17'),
   ('authority', 'rail', 'rules/rails.yaml', 'b46b445806d399b61887a5259eb0a6893444efcbe5acf2e6dd534507bc0882f3', '2026-09-17'),

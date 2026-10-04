@@ -7,7 +7,7 @@ import type { Packet } from '../../kind.ts'
 const sent: { prompt: string; options: Record<string, unknown> }[] = []
 
 const RESULT = { type: 'result', subtype: 'success', is_error: false, stop_reason: 'end_turn', modelUsage: {}, permission_denials: [], result: '',
-  usage: { cache_creation: { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: 0 } } }
+  session_id: 'abc', usage: { cache_creation: { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: 0 } } }
 
 vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
   query: (call: { prompt: string; options: Record<string, unknown> }) => {
@@ -33,6 +33,10 @@ function packet(cwd: string, plan: string): Packet {
 test('runs get the claude_code preset without dynamic sections', async () => {
   await claudeAgentSdk.fire(packet('/tmp/a/src', '1'))
   expect(sent.at(-1)?.options.systemPrompt).toEqual({ type: 'preset', preset: 'claude_code', excludeDynamicSections: true })
+})
+
+test('D5 fire returns the result session_id as session', async () => {
+  expect((await claudeAgentSdk.fire(packet('/tmp/a/src', '1'))).session).toBe('abc')
 })
 
 test('different folders and plans get one system prompt', async () => {

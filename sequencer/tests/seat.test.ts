@@ -15,7 +15,7 @@ async function fired(step: number, language: string | null = null): Promise<{ pr
   return { prompt: seen[0]?.prompt ?? '', mode: newestMode(w.db), root: w.root }
 }
 
-test.each(['swift', 'kotlin'])('D2 D3 a step-2 %s build carries build.md, mode build', async (language) => {
+test.each(['swift', 'kotlin', 'python', 'ruby', 'rust', 'go', 'php'])('D2 D3 a step-2 %s build carries build.md, mode build', async (language) => {
   const { prompt, mode, root } = await fired(2, language)
   const own = readFileSync(join(root, 'seats', `${language}_specialist`, 'prompt.md'), 'utf8')
   const build = readFileSync(join(root, 'seats/modes/build.md'), 'utf8')

@@ -7,6 +7,7 @@ import type { Fired, Provider } from '../providers/kind.ts'
 import { read } from '../reviews/verdict.ts'
 import { CLOSING, listed, merged, subject } from '../sequencer/daily.ts'
 import type { Outcome } from '../sequencer/kind.ts'
+import { packed } from '../sequencer/pack.ts'
 import { prose } from '../sequencer/prose.ts'
 import { ran } from '../sequencer/seat.ts'
 import { scripted, shift, sound, weekly } from '../sequencer/weekly.ts'
@@ -99,8 +100,10 @@ export function titled(db: Db, plan: PlanRow, kind: string): string | null {
   return title?.startsWith(`${kind} `) === true ? title : null
 }
 
+const grown = (db: Db, plan: PlanRow): string | null => titled(db, plan, 'growth') ?? titled(db, plan, 'weekly')
+
 export async function grow(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
-  if (titled(db, plan, 'growth') === null) return { outcome: 'pass', spans: [], note: 'not a growth plan' }
+  if (grown(db, plan) === null) return { outcome: 'pass', spans: [], note: 'skipped: not a growth or weekly plan' }
   const fired = await ran(db, root, plan, step, provider, `# packet.json\n\n${get(root, plan.id, 'packet.json')}`, false)
   if (fired.ended !== 'completed') return halted(step, fired)
   put(root, plan.id, 'growth.md', fired.text)
@@ -126,7 +129,7 @@ export async function draft(db: Db, root: string, plan: PlanRow, step: Step, pro
 
 export async function review(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
   const [name, post] = subject(root, plan.id)
-  if (post === null) return { outcome: 'pass', spans: [], note: 'no draft' }
+  if (post === null) return { outcome: 'pass', spans: [], note: 'skipped: no draft' }
   const fired = await ran(db, root, plan, step, provider, `# ${name}\n\n${post}\n\n# packet.json\n\n${get(root, plan.id, 'packet.json')}`, false)
   if (fired.ended !== 'completed') return halted(step, fired)
   const judged = read(fired.text, post)
@@ -137,30 +140,21 @@ export async function review(db: Db, root: string, plan: PlanRow, step: Step, pr
   return { outcome: 'pass', spans: [], note: `${step.runs}: review.md written` }
 }
 
-const Note = z.string().refine((note) => {
-  const words = note.trim().split(/\s+/).length
-  return words >= 31 && words <= 60 && !note.includes('?')
-})
-
-const Pack = z.object({
-  topic: z.string().trim().min(1),
-  notes: z.array(Note).length(14),
-  replies: z.array(z.object({ to: z.string(), draft: z.string() })),
-  partners: z.array(z.object({ name: z.string(), outreach: z.string() })),
-})
+/** A weekly plan's post already holds its plan id on the desk, so its pack row sits this far above it. */
+const PACK = 2_000_000
 
 export function pack(db: Db, root: string, plan: PlanRow): Outcome {
-  const title = titled(db, plan, 'growth')
-  if (title === null) return { outcome: 'pass', spans: [], note: 'not a growth plan' }
-  const fence = CLOSING.exec(maybe(root, plan.id, 'growth.md') ?? '')
-  const got = Pack.safeParse(fence === null ? null : prose(fence[1] ?? '', ['topic']))
-  if (!got.success) return { outcome: 'refuse', spans: ['growth.md'], note: 'growth.md has no fence of a topic, 14 Notes of 31–60 words with no ?, replies and partners' }
-  const { topic, notes, replies, partners } = got.data
+  const title = grown(db, plan)
+  if (title === null) return { outcome: 'pass', spans: [], note: 'skipped: not a growth or weekly plan' }
+  const got = packed(maybe(root, plan.id, 'growth.md') ?? '')
+  if (got === null) return { outcome: 'refuse', spans: ['growth.md'], note: 'growth.md has no fence of a topic, 14 Notes of 31–60 words with no ?, replies and partners' }
+  const { topic, notes, replies, partners } = got
   const work = /\d{4}-\d{2}-\d{2}$/.exec(title)?.[0] ?? plan.queued_at.slice(0, 10)
+  const id = title.startsWith('weekly ') ? PACK + plan.id : plan.id
   db.prepare(`INSERT OR IGNORE INTO desk_posts (id, kind, dest, status, title, dek, body, sources, checks, work_date, written_date, proof_at)
     VALUES (?, 'growth', 'pack', 'proof', ?, '', ?, '[]', '[]', ?, ?, datetime('now'))`)
-    .run(plan.id, topic, JSON.stringify({ notes, replies, partners }), work, new Date().toISOString().slice(0, 10))
-  return { outcome: 'pass', spans: [], note: `desk_posts ${String(plan.id)} pack in proof for ${work}` }
+    .run(id, topic, JSON.stringify({ notes, replies, partners }), work, new Date().toISOString().slice(0, 10))
+  return { outcome: 'pass', spans: [], note: `desk_posts ${String(id)} pack in proof for ${work}` }
 }
 
 export const SCORECARD_COLUMNS = { subscribers: 'Subscribers', open_rate: 'Open rate', sources: 'Source' }

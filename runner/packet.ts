@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { parse } from 'yaml'
 import { z } from 'zod'
 import { bare, type Packet, type Refusal } from '../providers/kind.ts'
@@ -26,6 +26,7 @@ export const Review = z.object({
     }),
   write_paths: z.tuple([]),
   reads_verdict: z.boolean(),
+  reads_screens: z.boolean().default(false),
 }).strict()
 
 export type Review = z.infer<typeof Review>
@@ -57,6 +58,9 @@ export const Bench = z.object({
   narrowing: Narrowing.optional(),
   reference: z.string().optional(),
   language: z.string().optional(),
+  screenshots: z.array(z.string()).min(1).optional(),
+  defects: z.string().optional(),
+  mockup: z.string().optional(),
 }).strict().refine((b) => b.since === undefined || b.prior !== undefined, { path: ['since'] })
   .refine((b) => b.refusal === undefined || b.prior !== undefined, { path: ['refusal'] })
 
@@ -92,25 +96,31 @@ export function benchPacket(
   name: string,
   input: unknown,
   transcript: string,
+  lead = spec(root, name),
 ): { packet: Packet; bench: Bench } | { refusal: Refusal } {
   const manifest = reviewManifest(root, name)
   const bench = Bench.safeParse(input)
   if (!bench.success) return { refusal: shape(named(bench.error)) }
   if ((bench.data.verdict !== undefined) !== manifest.reads_verdict) return { refusal: shape('verdict') }
+  if ((bench.data.screenshots !== undefined) !== manifest.reads_screens) return { refusal: shape('screenshots') }
   const outside = admits(bench.data.repo)
   if (outside !== null) return { refusal: outside }
-  return { packet: assembled(root, name, manifest, bench.data, transcript), bench: bench.data }
+  return { packet: assembled(root, name, manifest, bench.data, transcript, lead), bench: bench.data }
 }
 
 const MAP = 'The whole diff, for the map. Judge what changed since your last verdict, handed below.'
 
 export const SYMBOLS_LEAD = 'Each top-level export at the branch base, as path:line name.'
 
-export function assembled(root: string, name: string, manifest: Review, bench: Bench, transcript: string): Packet {
+export function assembled(root: string, name: string, manifest: Review, bench: Bench, transcript: string,
+  lead = spec(root, name)): Packet {
   const sections: [string, string | undefined][] = [
     ['The builder\'s hand-back', bench.handback],
     ['Changed code in context', framed(bench.context, 'Each hunk inside the function that encloses it. Judge from this and the diff; open a file only for what neither holds.')],
     ['Checks that ran', bench.checks],
+    ['Screenshots', bench.screenshots === undefined ? undefined : listed(bench.screenshots)],
+    ['Defects the capture found', bench.defects],
+    ['Mockup or ruling the brief names', bench.mockup],
     ['Files around the change', framed(bench.map, 'Every file in each touched directory, its length and its head comment; * marks a changed file.')],
     ['Symbols at the branch base', framed(bench.symbols, SYMBOLS_LEAD)],
     ['Reference the brief names', bench.reference],
@@ -125,7 +135,7 @@ export function assembled(root: string, name: string, manifest: Review, bench: B
   const tail = sections.map(([head, body]) => (body === undefined ? '' : `\n\n# ${head}\n\n${body}`)).join('')
   const diff = (bench.since === undefined ? undefined : framed(bench.diff, MAP)) ?? bench.diff
   return {
-    prompt: `${tight(root)}\n\n${spec(root, name)}\n\n# Issue\n\n${bench.issue}\n\n# Diff\n\n${diff}${tail}`,
+    prompt: `${tight(root)}\n\n${lead}\n\n# Issue\n\n${bench.issue}\n\n# Diff\n\n${diff}${tail}`,
     cwd: bench.repo,
     transcript,
     model: manifest.model,
@@ -133,6 +143,7 @@ export function assembled(root: string, name: string, manifest: Review, bench: B
     tools: manifest.tools,
     steps: stepsFor(bench.diff),
     refuse: (path) => refuse(bench.repo, manifest.write_paths, path),
+    ...(bench.screenshots === undefined ? {} : { reads: [...new Set(bench.screenshots.map((path) => dirname(path)))] }),
   }
 }
 

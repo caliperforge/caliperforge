@@ -405,9 +405,6 @@
     "prepare": 5,
     "silent-catch": 5
   },
-  "sequencer/quick.ts": {
-    "lines": 75
-  },
   "sequencer/rails.ts": {
     "lines": 191,
     "prepare": 1,
@@ -421,7 +418,7 @@
     "lines": 65
   },
   "sequencer/seat.ts": {
-    "lines": 464,
+    "lines": 501,
     "prepare": 5,
     "silent-catch": 1
   },
@@ -545,9 +542,6 @@
   },
   "sequencer/tests/profile.test.ts": {
     "prepare": 1
-  },
-  "sequencer/tests/quick.test.ts": {
-    "prepare": 10
   },
   "sequencer/tests/reap.test.ts": {
     "prepare": 1

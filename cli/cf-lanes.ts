@@ -7,11 +7,11 @@ import { fire } from '../runner/index.ts'
 import { reviewed } from '../sequencer/ready.ts'
 import { liveTree, SELF } from '../sequencer/workspace.ts'
 import { dump, migrate, open as openDb, type Db } from '../store/index.ts'
-import { dial, hhmm, lanes, priority as setPriority, record, Reading, windows } from '../store/lanes.ts'
+import { dial, hhmm, lanes, priority as setPriority, record, Reading, width, windows } from '../store/lanes.ts'
 import { refusedPush } from '../store/approvals.ts'
 import { drifts } from '../store/drift.ts'
-import { handUps, repriced } from '../store/events.ts'
-import { holderOf, HOLDERS, overlapWaits, parked } from '../store/plans.ts'
+import { handUps, logged, repriced } from '../store/events.ts'
+import { holderOf, HOLDERS, overlapWaits, parked, pipeNamed } from '../store/plans.ts'
 import { backfillTickets } from '../store/tickets.ts'
 import { backfill } from '../store/transcript.ts'
 import { actors, actorSection, byType, type ByType, costs, costSection, day, fileWaits, greptileLine, halted, hands, heldBy, laneLine, misses, missSection, open as openPlans,
@@ -23,6 +23,7 @@ import { flow } from './flow.ts'
 import { gh } from './gh.ts'
 import { write as writeMap } from './map.ts'
 import { ack, line, unread } from './inbox.ts'
+import { refusalDays, refusalSection } from './refusals.ts'
 import { close } from './session.ts'
 import { liveness, livenessLine, stalledLanes } from './watch.ts'
 
@@ -96,13 +97,7 @@ function fires(cf: Command, { root, db, out }: Cli): void {
       out(run.text)
     })
 
-  cf.command('pipe').argument('<state>', 'on or off').argument('<name>').action((state: string, name: string) => {
-    if (state !== 'on' && state !== 'off') throw new Error('cf pipe takes on or off')
-    const handle = db()
-    handle.prepare("INSERT OR IGNORE INTO pipes (name, enabled, window_start, window_end, max_concurrent) VALUES (?, 0, '00:00', '23:59', 1)").run(name)
-    handle.prepare('UPDATE pipes SET enabled = ? WHERE name = ?').run(state === 'on' ? 1 : 0, name)
-    out(`pipe ${name} ${state}\n`)
-  })
+  pipes(cf, db, out)
 
   cf.command('priority').argument('<plan>').argument('<n>', 'P0 first, up to P9')
     .requiredOption('--by <actor>', `who ran it: ${HOLDERS.join(' or ')}`)
@@ -112,6 +107,33 @@ function fires(cf: Command, { root, db, out }: Cli): void {
       const handle = db()
       setPriority(handle, Number(id), Number(n), { actor: by, why: options.why })
       out(`plan ${id} priority P${n}\n`)
+    })
+}
+
+function pipes(cf: Command, db: Cli['db'], out: Cli['out']): void {
+  const pipe = cf.command('pipe')
+  for (const state of ['on', 'off']) {
+    pipe.command(state).argument('<name>').action((name: string) => {
+      const handle = db()
+      handle.prepare("INSERT OR IGNORE INTO pipes (name, enabled, window_start, window_end, max_concurrent) VALUES (?, 0, '00:00', '23:59', 1)").run(name)
+      handle.prepare('UPDATE pipes SET enabled = ? WHERE name = ?').run(state === 'on' ? 1 : 0, name)
+      out(`pipe ${name} ${state}\n`)
+    })
+  }
+
+  pipe.command('width').argument('<name>').argument('<n>', '1 to 8')
+    .requiredOption('--by <actor>', `who ran it: ${HOLDERS.join(' or ')}`)
+    .action((name: string, n: string, options: { by: string }) => {
+      const by = holderOf(options.by)
+      const to = Number(n)
+      if (!Number.isInteger(to) || to < 1 || to > 8) throw new Error('cf pipe width takes 1 to 8')
+      const handle = db()
+      const row = pipeNamed(handle, name)
+      if (row === null) throw new Error(`no pipe "${name}"; cf pipe on ${name}`)
+      width(handle, row.id, to)
+      const message = `${name} width ${String(row.max_concurrent)} → ${n}`
+      logged(handle, { plan: null, kind: 'pipe', actor: by, outcome: 'pass', message, pointer: null, run: null })
+      out(`pipe ${name} width ${n}\n`)
     })
 }
 
@@ -193,6 +215,7 @@ function briefs(cf: Command, { root, db, out }: Cli): void {
     const d = day(handle)
     out(`last 24 h\n  ${String(d.runs)} run(s)\t${String(d.tokens)} tokens\t${d.seconds.toFixed(1)}s\n`)
     out(costSection(costs(handle), unpriced(handle)))
+    out(refusalSection(refusalDays(handle, new Date())))
     const now = new Date()
     out(handUpLine(handUps(handle, now)))
     out(actorSection(actors(handle, now), hands(now, gh)))

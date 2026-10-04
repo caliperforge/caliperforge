@@ -14,8 +14,7 @@ import type { Step } from '../templates/pr-path.ts'
 import type { Fired, Outcome } from './kind.ts'
 import { parted } from './split.ts'
 import type { Wire } from './push.ts'
-import { fireRound } from './quick.ts'
-import { fireBrief, fireSeat } from './seat.ts'
+import { fireBrief, fireLanded, fireSeat } from './seat.ts'
 import { proved } from './ready.ts'
 import { kernel, mapOf, targetOf } from './steps.ts'
 import { kept } from './merge.ts'
@@ -147,7 +146,7 @@ function fire(db: Db, root: string, plan: PlanRow, step: Step, provider: Provide
   }
   if (step.fires === 'review') {
     const standing = kept(db, root, plan, step)
-    return standing === null ? model(db, plan, step, () => fireRound(db, root, plan, step, provider)) : Promise.resolve(standing)
+    return standing === null ? model(db, plan, step, () => fireLanded(db, root, plan, step, provider)) : Promise.resolve(standing)
   }
   return Promise.resolve(kernel(db, root, plan, wire, read))
 }
@@ -191,7 +190,7 @@ function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcom
   }
   const r = { plan: plan.id, step: step.step, fingerprint: fingerprintOf(step, outcome),
     diff: step.step >= 3 ? digestOf(diffOf(root, plan.id)) : null, moved: outcome.moved,
-    own: outcome.spans.some((s) => s.startsWith('ratchet:')) || undefined,
+    own: outcome.spans.some((s) => s.startsWith('ratchet:')) || undefined, span: outcome.spans.join(', '), note: outcome.note,
     ticket: digestOf(`${maybe(root, plan.id, 'issue.md') ?? ''}${ruled(root, plan.id) ?? ''}${maybe(root, plan.id, 'rulings.md') ?? ''}`) }
   const why = refused(db, r)
   if (why !== 'again') stopped(root, plan.id, why)

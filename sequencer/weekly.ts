@@ -1,12 +1,12 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import type { Outcome } from '../sequencer/kind.ts'
-import { put } from '../sequencer/workspace.ts'
 import { learningsIn } from '../store/desk.ts'
 import type { Db } from '../store/index.ts'
 import { get } from '../store/lanes.ts'
 import type { PlanRow } from '../store/plans.ts'
+import type { Outcome } from './kind.ts'
+import { put } from './workspace.ts'
 
 export const shift = (day: string, days: number): string => new Date(Date.parse(day) + days * 86400000).toISOString().slice(0, 10)
 

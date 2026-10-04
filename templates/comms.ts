@@ -9,13 +9,13 @@ import { read } from '../reviews/verdict.ts'
 import type { Outcome } from '../sequencer/kind.ts'
 import { prose } from '../sequencer/prose.ts'
 import { ran } from '../sequencer/seat.ts'
+import { shift, weekly } from '../sequencer/weekly.ts'
 import { get, maybe, put } from '../sequencer/workspace.ts'
 import { edited } from '../store/desk.ts'
 import type { Db } from '../store/index.ts'
 import { packetOf } from '../store/packet.ts'
 import type { PlanRow } from '../store/plans.ts'
 import { DEFAULT_BUILDER, type Step } from './pr-path.ts'
-import { shift, weekly } from './weekly.ts'
 
 const row = (name: string, step: number): Step =>
   ({ step, name, seat: DEFAULT_BUILDER, fires: 'kernel', runs: name, gate: false, writes_verdict: false, verdict_gate: null })

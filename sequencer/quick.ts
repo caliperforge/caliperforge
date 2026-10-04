@@ -6,6 +6,7 @@ import type { Finding, Note, Verdict } from '../reviews/verdict.ts'
 import { digestOf } from '../store/approvals.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
+import { keep } from '../store/language-notes.ts'
 import { internal, type PlanRow } from '../store/plans.ts'
 import { profile } from '../store/profile.ts'
 import type { Step } from '../templates/pr-path.ts'
@@ -45,9 +46,11 @@ export async function fireRound(db: Db, root: string, plan: PlanRow, step: Step,
 }
 
 function landable(db: Db, plan: PlanRow, step: Step, notes: Note[]): Note[] {
-  for (const n of notes.filter((n) => n.kind === 'language')) {
+  const language = notes.filter((n) => n.kind === 'language')
+  for (const n of language) {
     logged(db, { plan: plan.id, kind: 'note', actor: step.runs, outcome: 'pass', message: `language: ${n.why}`, pointer: `${n.file}:${String(n.line)}`, run: null })
   }
+  if (step.verdict_gate === 'senior_review') keep(db, plan.id, step.seat, language)
   return notes.filter((n) => n.kind !== 'language')
 }
 

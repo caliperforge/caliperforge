@@ -25,12 +25,12 @@ test('the roster carries the seat and it loads as a rules row', () => {
   expect(row).toMatchObject({ kind: 'card', path: 'rules/roster.yaml' })
 })
 
-test('the prompt tells the seat to close with the handback fence', () => {
-  expect(seat(root, 'kotlin_specialist').prompt).toContain('- id: D1')
+test('the build prompt closes with the handback fence', () => {
+  expect(seat(root, 'kotlin_specialist', 'build').prompt).toContain('- id: D1')
 })
 
 test('a rebuild lists every case, carrying untouched rows forward', () => {
-  expect(seat(root, 'kotlin_specialist').prompt).toContain(
+  expect(seat(root, 'kotlin_specialist', 'build').prompt).toContain(
     "A rebuild's fence lists every case again: carry forward the rows the refusal did not touch, update the ones it did.",
   )
 })
@@ -72,9 +72,14 @@ test('the seat runs only gradle, and not a chained command', () => {
   }
 })
 
-test('D1: the prompt states both fences', () => {
-  expect(seat(root, 'kotlin_specialist').prompt.replace(/\s+/g, ' ')).toContain(
-    'On an outside plan you may write only the files the brief lists under `## Files`; on our own repository, only under `kotlin/`, where the module lives. Any other write is refused and the step ends there.',
+test('D1: the build mode, not the prompt, holds the framing', () => {
+  const { prompt } = seat(root, 'kotlin_specialist')
+  expect(prompt).not.toContain('You build')
+  expect(prompt).not.toContain('- id: D1')
+  const build = seat(root, 'kotlin_specialist', 'build').prompt.replace(/\s+/g, ' ')
+  expect(build).toContain('You build against the brief below. One checkout, one step.')
+  expect(build).toContain(
+    'On an outside plan you may write only the files the brief lists under `## Files`; otherwise, only inside the seat\'s write paths. Any other write is refused and the step ends there.',
   )
 })
 
@@ -90,7 +95,7 @@ test('D2: review mode reads What to check before the profile', () => {
   const out = packs(root, `diff --git a/${p} b/${p}\n--- a/${p}\n+++ b/${p}\n@@ -1 +1 @@\n-old\n+new\n`, null)
   const at = out.indexOf('## What to check')
   expect(at).toBeGreaterThan(-1)
-  expect(at).toBeLessThan(out.indexOf('You build Kotlin'))
+  expect(at).toBeLessThan(out.indexOf('## Profile'))
 })
 
 test('D3: the test conventions parse and pick out test files', () => {

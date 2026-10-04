@@ -170,6 +170,19 @@ test('a prompt row in its fence, or with no line, changes format', () => {
   }
 })
 
+test('D1: build.md in its fence beside store/plans.ts is two jobs', () => {
+  expect(on(prompt(['- seats/modes/build.md:16', '- store/plans.ts'], ['- sequencer/rails.ts', '- rails/tight/prose.ts'])))
+    .toMatchObject({ span: 'store/plans.ts', reason: holding('two jobs in one brief') })
+})
+
+test('D2: fix.md in its fence with no readers is refused', () => {
+  expect(on(prompt(['- seats/modes/fix.md:12'], ['- nothing else']))).toMatchObject({ span: 'sequencer/rails.ts' })
+})
+
+test('D3: build.md above its fence is no format change', () => {
+  expect(on(prompt(['- seats/modes/build.md:5', '- store/plans.ts'], ['- nothing else']))).toBeNull()
+})
+
 test('the completion audit is a format change, line or not', () => {
   const unaffected = ['- nothing else']
   expect(on(handback([], unaffected))).toMatchObject({ span: 'sequencer/rails.ts' })

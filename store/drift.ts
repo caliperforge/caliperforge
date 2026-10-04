@@ -26,7 +26,7 @@ export function stalled(db: Db, pipes: number[]): Stalled[] {
   return db.prepare(`SELECT id, step, wait_reason, waits_on,
       (SELECT message FROM events WHERE plan = plans.id ORDER BY id DESC LIMIT 1) AS last
     FROM plans WHERE state IN ('queued', 'running') AND step > 0 AND pipe_id IN (SELECT value FROM json_each(?))
-      AND coalesce(wait_reason, '') NOT IN ('ceo_batch', 'target_approval') ORDER BY id`).all(JSON.stringify(pipes)) as Stalled[]
+      AND coalesce(wait_reason, '') NOT IN ('ceo_batch', 'target_approval', 'file_overlap') ORDER BY id`).all(JSON.stringify(pipes)) as Stalled[]
 }
 
 export function openTicket(db: Db, repo: string, title: string): boolean {

@@ -56,8 +56,8 @@ const state = (db: ReturnType<typeof open>) => db.prepare('SELECT state, step FR
 const applied = (db: ReturnType<typeof open>) => db.prepare('SELECT applied FROM decisions').all()
 const runs = (db: ReturnType<typeof open>) => db.prepare(`SELECT seat, input_tokens, cache_read_tokens, output_tokens,
   transcript_path LIKE '%/run-' || id || '.transcript.jsonl' AS named, mode FROM runs
-  WHERE plan = 7 AND seat IN ('fixer', 'coo_lite', 'swift_specialist') ORDER BY id`).all()
-const RAN = [{ seat: 'coo_lite', input_tokens: 10, cache_read_tokens: 0, output_tokens: 5, named: 1, mode: null },
+  WHERE plan = 7 AND seat IN ('fixer', 'director', 'swift_specialist') ORDER BY id`).all()
+const RAN = [{ seat: 'director', input_tokens: 10, cache_read_tokens: 0, output_tokens: 5, named: 1, mode: null },
   { seat: 'fixer', input_tokens: 10, cache_read_tokens: 0, output_tokens: 5, named: 1, mode: null }]
 
 const RETURN = '---\ndid: renamed schema/0036_x.sql to 0040_x.sql in src and issue.md\nthen: return\nwhy: the rails will find the file now\nadd_files: [schema/0040_x.sql]\n---\n'
@@ -297,7 +297,7 @@ test('park: held, not reaped, not re-woken', async () => {
   expect(terminal(db)).not.toContain(7)
   rmSync(join(home, '.cf/work/7/orchestrator.md'))
   await woke(db, home, stub(PARK, packets), now, () => undefined, wire([]))
-  expect(packets.filter((p) => basename(p.transcript).startsWith('coo_lite'))).toHaveLength(1)
+  expect(packets.filter((p) => basename(p.transcript).startsWith('director'))).toHaveLength(1)
 })
 
 const LATER = '9999-12-31T00:00:00.000Z'

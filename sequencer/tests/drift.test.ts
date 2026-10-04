@@ -288,6 +288,17 @@ test('stuckNever', () => {
   for (const minutes of [120, 150, 181]) expect(stuck(d, root, STUCK, at(minutes))).toEqual([])
 })
 
+test('stuckOverlap', () => {
+  const { d, root } = stalling()
+  d.exec(`INSERT INTO plans (pipe_id, template, state, queued_at, lane, seat, origin, step, priority)
+    VALUES ((SELECT min(id) FROM pipes), 'pr_path', 'queued', '2026-10-01', 'machine', 'typescript_specialist', 'https://github.com/a/b/issues/2', 0, 3);
+    UPDATE plans SET wait_reason = 'file_overlap', waits_on = 2 WHERE id = 1`)
+  for (const minutes of [0, 30, 61, 90, 120]) expect(stuck(d, root, STUCK, at(minutes))).toEqual([])
+  expect(d.prepare('SELECT state FROM plans WHERE id = 1').get()).toEqual({ state: 'running' })
+  expect(maybe(root, 1, 'refusal.md')).toBeNull()
+  expect(d.prepare("SELECT count(*) AS n FROM events WHERE kind = 'stuck'").get()).toEqual({ n: 0 })
+})
+
 test('stuckClosed', () => {
   for (const pipe of ['enabled = 0', "window_start = '23:00', window_end = '23:01'"]) {
     const { d, root } = stalling()

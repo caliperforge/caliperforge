@@ -213,6 +213,7 @@ test('an upstream-key stop gets the pinned read tool and its keys', async () => 
   const seen: Provider = { ...reply, fire: (p) => { packets.push(p); return reply.fire(p) } }
   await cooLite(db, home, row(db), seen, now, () => undefined, wire())
   expect(packets[0]?.tools).toEqual(['Read', 'Glob', 'Grep', 'mcp__github__read'])
+  expect(basename(packets[0]?.transcript ?? '')).toBe('director.pending.transcript.jsonl')
   expect(Object.keys(packets[0]?.servers ?? {})).toEqual(['github'])
   expect(packets[0]?.prompt).toContain('mcp__github__read')
   expect(told(db)).toEqual([{ actor: 'coo_lite', outcome: 'pass', message: 'rule: the pinned read settles it' }])
@@ -303,7 +304,7 @@ function stopped(db: Db, id: number, minutes: number, verb: Verb = 'ask_coo') {
   decided(db, { plan: id, step: 4, wait_reason: 'blocked_on_ceo', verb, why: 'a stop', evidence: null, tokens: 0 }, ago(minutes))
 }
 
-const fires = (db: Db) => runRows(db).filter((r) => r.seat === 'coo_lite').map(({ plan }) => ({ plan }))
+const fires = (db: Db) => runRows(db).filter((r) => r.seat === 'director').map(({ plan }) => ({ plan }))
 const pile = (db: Db, home: string, posted: string[] = []) =>
   byHand(db, home, stub(REPLY.ask_ceo ?? ''), clock, (t) => void posted.push(t), wire())
 
@@ -317,10 +318,10 @@ test.each([
   expect(fires(db)).toEqual(want)
 })
 
-test('a live coo_lite run holds the trigger', async () => {
+test('a live director run holds the trigger', async () => {
   const { db, home } = seeded('1')
   for (const [i, m] of [30, 20, 10].entries()) stopped(db, 7 + i, m)
-  busy(db, 9, 'coo_lite', 'ruling', clock)
+  busy(db, 9, 'director', 'ruling', clock)
   await pile(db, home)
   expect(fires(db)).toEqual([])
 })
@@ -362,7 +363,7 @@ test('coo_lite.max_daily caps the runs a day', async () => {
   const { db, home } = seeded('1')
   for (const [i, m] of [30, 20, 10].entries()) stopped(db, 7 + i, m)
   load(db, home)
-  for (let i = 0; i < 12; i++) runAt(db, 7, 4, 'coo_lite', ago(60 + i))
+  for (let i = 0; i < 12; i++) runAt(db, 7, 4, 'director', ago(60 + i))
   await pile(db, home)
   expect(fires(db)).toHaveLength(12)
   addSetting(db, { key: 'coo_lite.max_daily', value: '13', who: 'ceo', origin_kind: 'ruling', origin_ref: 't', set_at: '2026-09-27' })
@@ -384,18 +385,18 @@ test('by hand, the day cap fires nothing', async () => {
   const { db, home } = seeded('1')
   stopped(db, 7, 10)
   load(db, home)
-  for (let i = 0; i < 12; i++) runAt(db, 7, 4, 'coo_lite', ago(60 + i))
-  expect(await byHanded(db, home)).toMatch(/^cap reached/)
+  for (let i = 0; i < 12; i++) runAt(db, 7, 4, 'director', ago(60 + i))
+  expect(await byHanded(db, home)).toBe('cap reached: 12 director runs today')
   expect(fires(db)).toHaveLength(12)
   expect(told(db)).toEqual([])
 })
 
-test('by hand, a live coo_lite run fires nothing', async () => {
+test('by hand, a live director run fires nothing', async () => {
   const { db, home } = seeded('1')
   stopped(db, 7, 10)
   stopped(db, 9, 5)
-  busy(db, 9, 'coo_lite', 'ruling', clock)
-  expect(await byHanded(db, home)).toBe('a coo_lite run is live')
+  busy(db, 9, 'director', 'ruling', clock)
+  expect(await byHanded(db, home)).toBe('a director run is live')
   expect(fires(db)).toEqual([])
 })
 
@@ -621,7 +622,7 @@ function state(db: Db, home: string) {
 }
 
 const wokeRuns = (db: Db) => db.prepare(`SELECT step, input_tokens, cache_read_tokens, output_tokens FROM runs
-  WHERE plan = 7 AND seat = 'coo_lite'`).all()
+  WHERE plan = 7 AND seat = 'director'`).all()
 const wokeTold = (db: Db) => db.prepare("SELECT outcome, message FROM events WHERE plan = 7 AND kind = 'coo_lite'").all()
 const leases = (db: Db) => db.prepare('SELECT count(*) AS n FROM leases').get()
 

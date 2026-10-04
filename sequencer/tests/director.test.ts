@@ -20,6 +20,7 @@ import { allPlans, held, needsCeo, planById, planRows, putPlan, requeue, retry }
 import { clear } from '../../store/refusals.ts'
 import { split } from '../brief.ts'
 import { byHand, cooLite, read, woke } from '../director.ts'
+import { decision } from '../fence.ts'
 import { stop } from '../fixed.ts'
 import { hold, unhold } from '../hold.ts'
 import type { Wire } from '../push.ts'
@@ -44,13 +45,29 @@ parts:
 ---
 `
 
+const BLOCK = `Decide: may the pull request go upstream?
+Options: (a) send it: the maintainer sees it; (b) hold it: the plan waits
+Recommend: (a), the diff is signed off
+If no answer by 2026-09-28 09:00: the plan stays held`
+
+const askCeo = (block: string) => `${block}\n\n---\nmove: ask_ceo\nwhy: a maintainer outside our org sees this\nclass: 2\n---\n`
+
+const FAULTS = [
+  ['no Decide line', BLOCK.replace(/^Decide:.*\n/, '')],
+  ['the Decide line does not end in "?"', BLOCK.replace('upstream?', 'upstream')],
+  ['Options names fewer than two choices', BLOCK.replace('; (b) hold it: the plan waits', '')],
+  ['the Recommend line names no option', BLOCK.replace('(a), ', '')],
+  ['Options names more than three choices', BLOCK.replace('the plan waits\n', 'the plan waits; (c) x: y; (d) z: w\n')],
+  ['no If no answer by line', BLOCK.replace(/\nIf no answer.*$/, '')],
+] as const
+
 const REPLY: Record<string, string> = {
   rule: '---\nmove: rule\nwhy: the ticket settles it\nanswer: build on main, not on plan 8\n---\n',
   waive: '---\nmove: waive\nwhy: the builder can fix the name\n---\n',
   split: SPLIT,
   close: '---\nmove: close\nwhy: the work is on main\n---\n',
   file: '---\nmove: file\nwhy: the tick counts a turn twice\nticket: the tick counts a turn twice\n---\n',
-  ask_ceo: '---\nmove: ask_ceo\nwhy: a maintainer outside our org sees this\nclass: 2\n---\n',
+  ask_ceo: askCeo(BLOCK),
 }
 
 const PARTS = split(SPLIT) ?? []
@@ -506,7 +523,7 @@ test('askCeoNeedsClass', async () => {
   const classed = seeded('1')
   await run(classed.db, classed.home, REPLY.ask_ceo ?? '')
   expect(plan7(classed.db)).toMatchObject({ held_by: 'ceo' })
-  expect(told(classed.db).map((t) => t.message)).toEqual(['ask_ceo: a maintainer outside our org sees this'])
+  expect(told(classed.db).map((t) => t.message)).toEqual([`ask_ceo: a maintainer outside our org sees this\n\n${BLOCK}`])
   const { db, home } = seeded('1')
   held(db, 7, 'coo', 'a stop')
   await run(db, home, '---\nmove: ask_ceo\nwhy: which file\n---\n')
@@ -557,6 +574,42 @@ test('D3: failed fixes on an earlier stop do not count', async () => {
   expect(told(db).map((t) => t.message)).toEqual([expect.stringMatching(/^ask_coo: refused by the fence/)])
 })
 
+test.each(FAULTS.slice(0, 4))('D2: an ask_ceo with %s is asked again', async (reason, block) => {
+  const { db, home } = seeded('1')
+  const prompts: string[] = []
+  await cooLite(db, home, row(db), inTurn([askCeo(block), REPLY.rule ?? ''], prompts), now, () => undefined, wire())
+  expect(prompts.map((p) => p.includes(`# Fence\n\nask_ceo is refused: ${reason}`))).toEqual([false, true])
+  expect(plan7(db)).not.toMatchObject({ held_by: 'ceo' })
+})
+
+test('D3: an ask_ceo refused twice leaves the plans as they were', async () => {
+  const { db, home } = seeded('1')
+  const was = plans(db)
+  const bad = askCeo(FAULTS[0][1])
+  await cooLite(db, home, row(db), inTurn([bad, bad], []), now, () => undefined, wire())
+  expect(plans(db)).toEqual(was)
+  expect(told(db).map((t) => t.message)).toEqual(['ask_ceo: refused by the fence, no Decide line'])
+})
+
+test.each([
+  ['ask_coo: refused by the fence, 0 failed fixes on this stop', [askCeo(FAULTS[0][1]), ASK_COO]],
+  ['ask_ceo: refused by the fence, no Decide line', [ASK_COO, askCeo(FAULTS[0][1])]],
+])('D3: a second refused move logs %s', async (message, replies) => {
+  const { db, home } = seeded('1')
+  const was = plans(db)
+  await cooLite(db, home, row(db), inTurn(replies, []), now, () => undefined, wire())
+  expect(plans(db)).toEqual(was)
+  expect(told(db).map((t) => t.message)).toEqual([message])
+})
+
+test.each(FAULTS)('D1: decision refuses %s', (refused, block) => {
+  expect(decision(askCeo(block))).toEqual({ refused })
+})
+
+test('D1: decision returns a valid block as written', () => {
+  expect(decision(`thinking\n\n${askCeo(BLOCK)}`)).toEqual({ block: BLOCK })
+})
+
 test('D4: the fix decision carries the stop hash', async () => {
   const { db, home } = seeded('1')
   fixLive(db)
@@ -587,7 +640,7 @@ test.each([
 })
 
 const wokeAt = new Date('2026-09-24T12:00:00.000Z')
-const ASK_CEO = 'thinking\n\n---\nmove: ask_ceo\nwhy: a maintainer outside our org sees this\nclass: 2\n---\n'
+const ASK_CEO = `thinking\n\n${askCeo(BLOCK)}`
 const SAID = 'ask_ceo: a maintainer outside our org sees this'
 
 function wokeSeeded() {

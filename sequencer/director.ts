@@ -17,6 +17,7 @@ import { pending } from '../store/transcript.ts'
 import { split, type Part } from './brief.ts'
 import { isHeld, unhold } from './hold.ts'
 import { fixed, stop } from './fixed.ts'
+import { decision } from './fence.ts'
 import { released } from './fixer.ts'
 import { prose } from './prose.ts'
 import { WIRE, type Wire } from './push.ts'
@@ -52,13 +53,13 @@ export async function cooLite(db: Db, root: string, plan: PlanRow, provider: Pro
   if (plan.state !== 'blocked_on_ceo' && plan.state !== 'halted') {
     return told(db, root, plan, now, { outcome: 'needs_ceo', message: `ask_ceo: plan is ${plan.state}, not stopped` }, post)
   }
-  let m = await ask(db, root, plan, provider, tried)
+  let { m, said } = await ask(db, root, plan, provider, tried)
   const n = failures(db, root, plan)
-  if (m?.move === 'ask_coo' && n < 2) {
-    m = await ask(db, root, plan, provider, tried, `ask_coo is refused: ${String(n)} failed fixes on this stop, two are needed. Choose another move.`)
-    if (m?.move === 'ask_coo') {
-      return told(db, root, plan, now, { outcome: 'needs_ceo', message: `ask_coo: refused by the fence, ${String(n)} failed fixes on this stop` }, post)
-    }
+  const first = refused(m, said, n)
+  if (first !== null) {
+    ({ m, said } = await ask(db, root, plan, provider, tried, first.fence))
+    const again = refused(m, said, n)
+    if (again !== null) return told(db, root, plan, now, { outcome: 'needs_ceo', message: again.message }, post)
   }
   if (m === null) return told(db, root, plan, now, { outcome: 'needs_ceo', message: 'ask_ceo: no readable answer' }, post)
   const message = `${m.move}: ${m.why}`
@@ -69,12 +70,24 @@ export async function cooLite(db: Db, root: string, plan: PlanRow, provider: Pro
   if (m.move === 'fix' && tried === undefined) return cooLite(db, root, planById(db, plan.id), provider, now, post, wire, m.why)
   if (m.move === 'ask_ceo' || m.move === 'ask_coo') {
     held(db, plan.id, m.move === 'ask_ceo' ? 'ceo' : 'coo', m.why)
-    return told(db, root, plan, now, { outcome: 'needs_ceo', message }, post)
+    const ceo = decision(said)
+    return told(db, root, plan, now, { outcome: 'needs_ceo', message: m.move === 'ask_ceo' && 'block' in ceo ? `${message}\n\n${ceo.block}` : message }, post)
   }
   const failed = `${m.move} did not apply, ${UNAPPLIED[m.move]}: ${m.why}`
   needsCeo(db, plan, failed)
   held(db, plan.id, 'coo', failed)
   return told(db, root, plan, now, { outcome: 'needs_ceo', message: failed }, post)
+}
+
+function refused(m: Move | null, said: string, n: number): { fence: string; message: string } | null {
+  if (m?.move === 'ask_coo' && n < 2) {
+    return { fence: `ask_coo is refused: ${String(n)} failed fixes on this stop, two are needed. Choose another move.`,
+      message: `ask_coo: refused by the fence, ${String(n)} failed fixes on this stop` }
+  }
+  const ceo = m?.move === 'ask_ceo' ? decision(said) : null
+  if (ceo === null || !('refused' in ceo)) return null
+  return { fence: `ask_ceo is refused: ${ceo.refused}. Write the decision block, or choose another move.`,
+    message: `ask_ceo: refused by the fence, ${ceo.refused}` }
 }
 
 interface Stop { id: number; answered: number | null; today: number }
@@ -124,7 +137,8 @@ function failures(db: Db, root: string, plan: PlanRow): number {
   return decisions(db, plan.id).filter((d) => d.verb === 'ask_coo' && d.evidence === at).length
 }
 
-async function ask(db: Db, root: string, plan: PlanRow, provider: Provider, tried?: string, fence?: string): Promise<Move | null> {
+async function ask(db: Db, root: string, plan: PlanRow, provider: Provider, tried?: string,
+  fence?: string): Promise<{ m: Move | null; said: string }> {
   load(db, root)
   const { manifest, prompt, hash } = seat(root, 'director')
   const dir = planDir(root, plan.id)
@@ -136,7 +150,7 @@ async function ask(db: Db, root: string, plan: PlanRow, provider: Provider, trie
     wall: wall(db),
   })
   recorded(db, plan.id, plan.step, 'director', hash, provider.name, manifest, fired)
-  return fired.ended === 'completed' ? read(fired.text) : null
+  return fired.ended === 'completed' ? { m: read(fired.text), said: fired.text } : { m: null, said: '' }
 }
 
 function text(db: Db, root: string, plan: PlanRow, tried?: string, fence?: string): string {

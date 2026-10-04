@@ -61,7 +61,7 @@ test('fresh', () => {
   expect(drift(d, [COO, { ...COO, name: 'six', gap: '24h' }], NOW)).toEqual([])
   expect(REGISTRY.map((e) => e.name)).toEqual(['coo_lite', 'fixer', 'fix_mode', 'swift_review', 'kotlin_review',
     'python_review', 'ruby_review', 'rust_review', 'go_review', 'php_review', 'brief_writer', 'text_review',
-    'growth_lead', 'web_specialist', 'gardener', 'ratchet', 'accounts', 'records', 'dispositions', 'signoffs', 'proposals',
+    'growth_lead', 'web_specialist', 'python_specialist', 'lua_specialist', 'rust_specialist', 'gardener', 'ratchet', 'accounts', 'records', 'dispositions', 'signoffs', 'proposals',
     'ratchet_refuse', 'intake', 'stuck_plans', 'science_pull', 'site_publish', 'director_look', 'daily_learnings',
     'review_examples'])
   expect(ratchetRules(d).mode).toBe('refuse')
@@ -118,6 +118,19 @@ test('D4 web_specialist is silent only once atelier-web has a plan', () => {
   addPlan(d, { pipe_id: 1, target_id: null, template: 'pr_path', state: 'queued', queued_at: '2026-10-01', lane: 'atelier',
     seat: 'web_specialist', origin: 'https://github.com/caliperforge/atelier-web/issues/1', step: 0 })
   expect(drift(d, web, NOW)).toEqual([{ name: 'web_specialist', state: 'silent', detail: "no row in runs WHERE seat = 'web_specialist'" }])
+})
+
+test('D4 each outside seat is silent until its first run', () => {
+  for (const name of ['python_specialist', 'lua_specialist', 'rust_specialist']) {
+    const entry = REGISTRY.filter((e) => e.name === name)
+    const d = db()
+    expect(drift(d, entry, NOW)).toEqual([{ name, state: 'silent', detail: `no row in runs WHERE seat = '${name}'` }])
+    d.exec(`INSERT INTO rules (id, kind, path, content_hash, loaded_at) VALUES ('${name}', 'card', 'rules/roster.yaml', '${'0'.repeat(64)}', '2026-09-22');
+      INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort,
+      input_tokens, cache_read_tokens, output_tokens, seconds, exit, at, mode, transcript_path)
+      VALUES (1, 2, '${name}', '${'0'.repeat(64)}', 'claude-agent-sdk', 'm', 'high', 0, 0, 0, 0, 0, '2026-10-02 10:00:00', 'build', 'x.transcript.jsonl')`)
+    expect(drift(d, entry, NOW)).toEqual([])
+  }
 })
 
 test('D4 fix_mode is silent without a fix run, stale after 7d', () => {

@@ -4,11 +4,13 @@ import { parse } from '../rails/diff.ts'
 import { approve, batch, refuse, type Card } from '../cli/batch.ts'
 import type { Answer, Desk, Seen } from '../cli/gh.ts'
 import { notify, record, type Event, type Kind } from '../cli/inbox.ts'
+import { eventsOf } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { needsCeo, planById, resume, rewind } from '../store/plans.ts'
 import { clear } from '../store/refusals.ts'
 import { graded } from '../store/signals.ts'
 import type { Board } from '../rails/ci-green/index.ts'
+import { decision } from './fence.ts'
 import { BOARD, headOf, opened, rehearsalBranch, title } from './push.ts'
 import { GRADING } from './ready.ts'
 import { diffOf, drop, FORK, get, maybe, put, repoName } from './workspace.ts'
@@ -174,6 +176,7 @@ function bodyFor(db: Db, root: string, card: Card, desk: Desk): string {
     fence,
     '',
     ...unsaid(root, card.id, open === null ? text : null),
+    ...decided(asked(db, card.id)),
     '**Answer with one label.** `go` sends it. `no` refuses it: comment on the card or on a line of the diff first and the builder reworks against your words. `talk` hands it to the COO.',
     '',
     `<sub>plan ${String(card.id)}, head ${head.sha.slice(0, 12)}, digest ${card.digest.slice(0, 12)}</sub>`,
@@ -189,6 +192,20 @@ function unsaid(root: string, plan: number, text: string | null): string[] {
   if (text === null || maybe(root, plan, 'pr.md') === null) return []
   const left = parse(diffOf(root, plan)).map((f) => f.path).filter((p) => !text.includes(p) && !text.includes(basename(p)))
   return left.length === 0 ? [] : [`**Not in the PR text:** ${left.map((p) => code(p)).join(', ')}`, '']
+}
+
+/** The valid decision block on the plan's newest `coo_lite` event; null when that event is anything but `needs_ceo`. */
+function asked(db: Db, plan: number): string | null {
+  const last = eventsOf(db, plan, 'coo_lite').at(-1)
+  if (last?.outcome !== 'needs_ceo') return null
+  const read = decision(last.message)
+  return 'block' in read ? read.block : null
+}
+
+function decided(block: string | null): string[] {
+  if (block === null) return []
+  const fence = '`'.repeat(Math.max(3, longest(block) + 1))
+  return ['**The decision asked of you**', '', fence, block, fence, '']
 }
 
 function modes(root: string, plan: number): string[] {

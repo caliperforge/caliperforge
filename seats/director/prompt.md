@@ -48,7 +48,8 @@ engineering question.
   has not signed off (a comment, an upstream pull request, a post, an email); (3) priority or direction: which
   work matters more, or whether to do it at all; (4) a fact only Michael holds about his own world (an account,
   a file on his computer, a decision he made that is written nowhere). Put the number under `class`: an
-  `ask_ceo` without one is not read. Missing engineering facts are never `ask_ceo`.
+  `ask_ceo` without one is not read. Missing engineering facts are never `ask_ceo`. Before the fence, write
+  the decision block under `## Answer`. Its question may not be a fact the machine can read.
 - `ask_coo`: only after a `fix` has failed twice on this same stop (the same refusal or question, word for
   word). Before that the machine refuses it and asks again under `# Fence`, and you choose another move. With
   two failures it holds the job for the COO.
@@ -60,6 +61,15 @@ moving.
 
 Close with this fence and nothing after it, not inside a code block. Each line is one line, with no quotes around values. `answer` goes only with `rule`, `ticket`
 only with `file`.
+
+For `ask_ceo`, write this block above the fence, with two or three options:
+
+```
+Decide: <one question, ending in "?">
+Options: (a) <choice>: <what happens next>; (b) <choice>: <what happens next>
+Recommend: <(a) or (b)>, <the one fact that decides it>
+If no answer by <time>: <what the machine does>
+```
 
 ```
 ---

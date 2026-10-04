@@ -70,6 +70,18 @@
   column: at
   where: seat = 'web_specialist'
   while: EXISTS (SELECT 1 FROM plans WHERE origin GLOB 'https://github.com/caliperforge/atelier-web/*')
+- name: go_specialist
+  table: runs
+  column: at
+  where: seat = 'go_specialist' AND mode = 'build'
+- name: php_specialist
+  table: runs
+  column: at
+  where: seat = 'php_specialist' AND mode = 'build'
+- name: ruby_specialist
+  table: runs
+  column: at
+  where: seat = 'ruby_specialist' AND mode = 'build'
 - name: python_specialist
   table: runs
   column: at

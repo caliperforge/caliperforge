@@ -97,6 +97,16 @@ test('refuses an assert_eq! removed from a Rust source file', () => {
   expect(verdict.spans).toEqual(['src/lib.rs:2 test.weakened.removed'])
 })
 
+const rust = (body: string) => `diff --git a/src/old.rs b/src/old.rs\ndeleted file mode 100644\n--- a/src/old.rs\n+++ /dev/null\n@@ -1,3 +0,0 @@\n${body}`
+
+test('passes deleting a Rust file with no assertion in it', () => {
+  expect(weakened(rust('-fn old() {\n-    1\n-}\n'), 'green').outcome).toBe('pass')
+})
+
+test('refuses deleting a Rust file that held an assert!', () => {
+  expect(weakened(rust('-fn t() {\n-    assert!(ok());\n-}\n'), 'green').spans).toEqual(['src/old.rs:1 test.weakened.removed'])
+})
+
 test('ignores a weakened line outside a test file', () => {
   const diff = '--- a/src/x.ts\n+++ b/src/x.ts\n@@ -1,1 +1,1 @@\n-expect(x).toBe(1)\n+expect(x).toBeDefined()\n'
   expect(weakened(diff, 'green').spans).toEqual([])

@@ -27,7 +27,10 @@ export function weakened(diff: string, suite: 'green' | 'red', named = ''): Verd
 
 function judge(file: FileDiff, named: string): string[] {
   const { assert, skip } = conventionsOf(file.path)
-  if (file.deleted) return named.includes(file.path) ? [] : [gone(file, assert)]
+  if (file.deleted) {
+    const asserted = TEST_FILE.test(file.path) || file.removed.some((l) => assert.test(l.text))
+    return asserted && !named.includes(file.path) ? [gone(file, assert)] : []
+  }
   const spared = exempt(file.removed, named)
   const removed = file.removed.filter((l) => assert.test(l.text) && !spared.has(l))
   const added = file.added.filter((l) => assert.test(l.text))

@@ -128,7 +128,7 @@ test('a parent After: line gates no part', async () => {
   const w = mine()
   put(w.root, ID, 'ask.md', '# t\n\nAfter: #77\n\n- **D1** x\n')
   await briefed(w, ID, AFTER(['none', 'none']), [])
-  expect(allParts(w.db).filter((p) => p.parent === ID).map((p) => afterOf(p.body))).toEqual([null, null])
+  expect(allParts(w.db).filter((p) => p.parent === ID).map((p) => afterOf(p.body))).toEqual([[], []])
 })
 
 test('a part landing queues the next; the last closes the parent', async () => {

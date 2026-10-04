@@ -6,7 +6,7 @@ import type { Packet } from '../../providers/kind.ts'
 import { seat } from '../../runner/rules.ts'
 import { newestMode, runRows } from '../../store/events.ts'
 import { at, MODED } from '../../templates/pr-path.ts'
-import { fireReview, ran } from '../seat.ts'
+import { fireLanded, ran } from '../seat.ts'
 import { checkout, put } from '../workspace.ts'
 import { built, CARRIED, PASS, plan, stub, world } from './world.ts'
 
@@ -52,7 +52,7 @@ async function reviewed(language: string, origin: string | null = null):
   writeFileSync(runRows(w.db).at(-1)?.transcript_path ?? '', 'TRANSCRIPT_MARKER\n')
   put(w.root, 1, 'step-2.handback.md', 'HANDBACK_MARKER\n')
   const seen: Packet[] = []
-  await fireReview(w.db, w.root, row, at(4, language), stub(CARRIED, 0, PASS, (p) => seen.push(p)))
+  await fireLanded(w.db, w.root, row, at(4, language), stub(CARRIED, 0, PASS, (p) => seen.push(p)))
   return { prompt: seen[0]?.prompt ?? '', root: w.root, seat: runRows(w.db).at(-1)?.seat, mode: newestMode(w.db) }
 }
 

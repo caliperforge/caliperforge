@@ -9,10 +9,10 @@ import { load, seat, tight, type Seat } from '../runner/rules.ts'
 import { judge, loadReviews } from '../reviews/bench.ts'
 import { coverage, type Gated } from '../reviews/package.ts'
 import type { Finding, Judged, Note } from '../reviews/verdict.ts'
-import { runLogged, type Run } from '../store/events.ts'
+import { logged, runLogged, type Run } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { filesOf } from '../store/files.ts'
-import { due } from '../store/language-notes.ts'
+import { due, keep } from '../store/language-notes.ts'
 import { profile } from '../store/profile.ts'
 import { observed, wall } from '../store/lanes.ts'
 import { briefed, builderRan, internal, type PlanRow } from '../store/plans.ts'
@@ -36,6 +36,7 @@ import { fenceFor, languageFor } from './route.ts'
 import { languages } from './split.ts'
 import { gates, outsideLanguage } from './gates.ts'
 import type { Outcome } from './kind.ts'
+import { landed } from './notes.ts'
 import { COMMIT, commitMessage } from './push.ts'
 import { carried, cloned, diffOf, diffSince, doneIds, drop, get, headSha, holds, MAIN, maybe, merging, move, narrowing, planDir, put, ruled, rulings, snapshot, srcDir } from './workspace.ts'
 import { kernelPlan } from './home.ts'
@@ -327,15 +328,13 @@ function handed(issue: string, files: string): string {
   return files === '' ? issue : `${issue}\n\n${files}`
 }
 
-/** The verdict, the findings behind its spans, and the tree it was written against. */
+/** The verdict and the notes beside it. */
 interface Round {
   outcome: Outcome
-  findings: Finding[]
   notes: Note[]
-  tree: string | null
 }
 
-export async function fireReview(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Round> {
+async function fireReview(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Round> {
   loadReviews(db, root)
   const manifest = reviewManifest(root, step.runs)
   const src = srcDir(root, plan.id)
@@ -363,14 +362,27 @@ export async function fireReview(db: Db, root: string, plan: PlanRow, step: Step
     const asked = outcome.outcome === 'needs_ceo' && outcome.message !== '' ? `: ${outcome.message.replace(/\s+/g, ' ')}` : ''
     return {
       outcome: { outcome: outcome.outcome, spans: outcome.spans, note: `${step.runs} ${outcome.outcome}${asked}`, message: outcome.message },
-      findings: outcome.findings,
       notes: outcome.notes,
-      tree: input.tree ?? null,
     }
   } catch (error) {
     const note = error instanceof Error ? error.message : String(error)
-    return { outcome: { outcome: 'refuse', spans: ['reviewers.verdict_fence'], note: `${step.runs} ${note}` }, findings: [], notes: [], tree: null }
+    return { outcome: { outcome: 'refuse', spans: ['reviewers.verdict_fence'], note: `${step.runs} ${note}` }, notes: [] }
   }
+}
+
+function landable(db: Db, plan: PlanRow, step: Step, notes: Note[]): Note[] {
+  const language = notes.filter((n) => n.kind === 'language')
+  for (const n of language) {
+    logged(db, { plan: plan.id, kind: 'note', actor: step.runs, outcome: 'pass', message: `language: ${n.why}`, pointer: `${n.file}:${String(n.line)}`, run: null })
+  }
+  if (step.verdict_gate === 'senior_review') keep(db, plan.id, step.seat, language)
+  return notes.filter((n) => n.kind !== 'language')
+}
+
+export async function fireLanded(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
+  const { outcome, notes: all } = await fireReview(db, root, plan, step, provider)
+  const notes = landable(db, plan, step, all)
+  return outcome.outcome === 'pass' && notes.length > 0 ? landed(db, root, plan, step, notes) : outcome
 }
 
 /** On someone else's repository the reviewer is handed its footing instead of reading for it. */

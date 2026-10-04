@@ -1,8 +1,10 @@
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
+import { parse } from 'yaml'
 import { gate } from '../../../providers/claude-agent-sdk/index.ts'
 import type { Packet } from '../../../providers/kind.ts'
 import { authority } from '../../../rails/authority/index.ts'
+import { packs } from '../../../reviews/packs.ts'
 import { packet, refuse } from '../../../runner/index.ts'
 import { Seat, rules, seat } from '../../../runner/rules.ts'
 import { builder } from '../../../templates/pr-path.ts'
@@ -74,6 +76,31 @@ test('D1: the prompt states both fences', () => {
   expect(seat(root, 'kotlin_specialist').prompt.replace(/\s+/g, ' ')).toContain(
     'On an outside plan you may write only the files the brief lists under `## Files`; on our own repository, only under `kotlin/`, where the module lives. Any other write is refused and the step ends there.',
   )
+})
+
+test('D1: What to check opens the prompt with the Kotlin checks', () => {
+  const { prompt } = seat(root, 'kotlin_specialist')
+  expect(prompt.startsWith('# kotlin_specialist\n\n## What to check\n')).toBe(true)
+  const checks = prompt.slice(0, prompt.indexOf('## Test conventions'))
+  for (const word of ['hash', 'opaque', 'Gradle', '!!', 'runCatching']) expect(checks).toContain(word)
+})
+
+test('D2: review mode reads What to check before the profile', () => {
+  const p = 'kotlin/Runner.kt'
+  const out = packs(root, `diff --git a/${p} b/${p}\n--- a/${p}\n+++ b/${p}\n@@ -1 +1 @@\n-old\n+new\n`, null)
+  const at = out.indexOf('## What to check')
+  expect(at).toBeGreaterThan(-1)
+  expect(at).toBeLessThan(out.indexOf('You build Kotlin'))
+})
+
+test('D3: the test conventions parse and pick out test files', () => {
+  const block = /## Test conventions\n\n```yaml\n([\s\S]*?)```/.exec(seat(root, 'kotlin_specialist').prompt)?.[1] ?? ''
+  const conventions = parse(block) as { test_path: string; assertions: string[]; skip_markers: string[] }
+  expect(conventions.assertions).toContain('assertEquals')
+  expect(conventions.skip_markers).toContain('@Ignore')
+  const path = new RegExp(conventions.test_path)
+  expect(path.test('kotlin/src/test/kotlin/MainTest.kt')).toBe(true)
+  expect(path.test('kotlin/src/main/kotlin/Main.kt')).toBe(false)
 })
 
 test('D4: an outside-fence packet drops the own-repo-only line', () => {

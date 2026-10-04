@@ -37,6 +37,10 @@ export function newestRun(db: Db): number {
   return (db.prepare('SELECT coalesce(max(id), 0) AS id FROM runs').get() as { id: number }).id
 }
 
+export function newestMode(db: Db): Run['mode'] | null {
+  return (db.prepare('SELECT mode FROM runs ORDER BY id DESC LIMIT 1').get() as { mode: Run['mode'] | null }).mode
+}
+
 export function runSince(db: Db, plan: number, step: number, after: number): number | null {
   return (db.prepare('SELECT max(id) AS id FROM runs WHERE plan = ? AND step = ? AND id > ?')
     .get(plan, step, after) as { id: number | null }).id

@@ -6,6 +6,7 @@ import { ours } from '../cli/gh.ts'
 import { record, ticketOf } from '../cli/inbox.ts'
 import type { Fired, Provider } from '../providers/kind.ts'
 import { read } from '../reviews/verdict.ts'
+import { CLOSING, listed, merged, subject } from '../sequencer/daily.ts'
 import type { Outcome } from '../sequencer/kind.ts'
 import { prose } from '../sequencer/prose.ts'
 import { ran } from '../sequencer/seat.ts'
@@ -61,8 +62,6 @@ const Fence = z.object({
   checks: z.array(z.object({ label: z.string().trim().min(1), ok: z.boolean() })),
 })
 
-const CLOSING = /(?:^|\n)---\n((?:\w+:.*\n)+)---\s*$/
-
 export function drafted(reply: string): (z.infer<typeof Fence> & { post: string }) | null {
   const fence = CLOSING.exec(reply)
   if (fence === null) return null
@@ -74,7 +73,7 @@ const Stored = Fence.extend({ learnings: z.string().optional() })
 
 export function desk(db: Db, root: string, plan: PlanRow): Outcome {
   const draft = maybe(root, plan.id, 'draft.md')
-  if (draft === null) return { outcome: 'pass', spans: [], note: 'no draft' }
+  if (draft === null) return merged(db, root, plan)
   const fence = Stored.safeParse(JSON.parse(maybe(root, plan.id, 'fence.json') ?? 'null'))
   if (!fence.success) return { outcome: 'refuse', spans: ['fence.json'], note: 'fence.json is missing or lacks a post field' }
   const post = /^# (.+)\n([\s\S]*)$/.exec(draft)
@@ -118,6 +117,7 @@ export async function draft(db: Db, root: string, plan: PlanRow, step: Step, pro
   if ((titled(db, plan, 'daily') ?? titled(db, plan, 'ship')) === null) return { outcome: 'pass', spans: [], note: 'not a post plan' }
   const fired = await ran(db, root, plan, step, provider, `# packet.json\n\n${get(root, plan.id, 'packet.json')}`, false)
   if (fired.ended !== 'completed') return halted(step, fired)
+  if (titled(db, plan, 'daily') !== null) return listed(root, plan, step, fired.text)
   const reply = drafted(fired.text)
   if (reply === null) return { outcome: 'refuse', spans: ['writer.fence'], note: `${step.runs} reply has no valid closing fence` }
   put(root, plan.id, 'draft.md', reply.post)
@@ -126,9 +126,9 @@ export async function draft(db: Db, root: string, plan: PlanRow, step: Step, pro
 }
 
 export async function review(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
-  const post = maybe(root, plan.id, 'draft.md')
+  const [name, post] = subject(root, plan.id)
   if (post === null) return { outcome: 'pass', spans: [], note: 'no draft' }
-  const fired = await ran(db, root, plan, step, provider, `# draft.md\n\n${post}\n\n# packet.json\n\n${get(root, plan.id, 'packet.json')}`, false)
+  const fired = await ran(db, root, plan, step, provider, `# ${name}\n\n${post}\n\n# packet.json\n\n${get(root, plan.id, 'packet.json')}`, false)
   if (fired.ended !== 'completed') return halted(step, fired)
   const judged = read(fired.text, post)
   if (judged === null) return { outcome: 'refuse', spans: ['text_review.fence'], note: `${step.runs} reply has no valid verdict fence` }

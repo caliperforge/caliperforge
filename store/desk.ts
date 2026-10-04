@@ -43,6 +43,23 @@ export function learnings(db: Db): { date: string; numbers: string | null; items
     .all() as { date: string; numbers: string | null; items: string | null; sources: string | null }[]
 }
 
+export interface Item {
+  title: string
+  what: string
+  lesson: string
+  fix: string
+  status: 'fixed' | 'open' | 'ruled' | 'noted'
+}
+
+export function log(db: Db, date: string, items: Item[]): number {
+  const old = db.prepare('SELECT items FROM desk_learnings WHERE date = ?').get(date) as { items: string | null } | undefined
+  const kept = JSON.parse(old?.items ?? '[]') as { title?: string }[]
+  const added = items.filter((item, i) => kept.every((k) => k.title !== item.title) && items.findIndex((o) => o.title === item.title) === i)
+  db.prepare(`INSERT INTO desk_learnings (date, numbers, items, sources) VALUES (?, '[]', ?, '[]')
+    ON CONFLICT (date) DO UPDATE SET items = excluded.items`).run(date, JSON.stringify([...kept, ...added]))
+  return added.length
+}
+
 export function learningsIn(db: Db, from: string, to: string): { date: string; items: unknown[] }[] {
   const rows = db.prepare('SELECT date, items FROM desk_learnings WHERE date BETWEEN ? AND ? ORDER BY date').all(from, to) as
     { date: string; items: string | null }[]

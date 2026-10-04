@@ -6,7 +6,7 @@ import { expect, test } from 'vitest'
 import { day, halted, open as openPlans, runsOf, verdictsOf } from '../../cli/brief.ts'
 import { measure, type Read } from '../../cli/measure.ts'
 import { account, parse, refuseTarget } from '../../cli/queue.ts'
-import { addPipe, allPlans, clock, dropPlan, inWindow, laneOff, overlapWaits, pipeNamed, requeue, rewind, underCap, waiting, type PipeRow, type PlanRow, type Wait } from '../../store/plans.ts'
+import { addPipe, advance, allPlans, clock, dropPlan, end, inWindow, laneOff, overlapWaits, parked, pipeNamed, requeue, rewind, underCap, waiting, type PipeRow, type PlanRow, type Wait } from '../../store/plans.ts'
 import { amend, width } from '../../store/lanes.ts'
 import { holdOf, retried } from '../../store/holds.ts'
 import { current } from '../../store/now.ts'
@@ -1184,7 +1184,33 @@ test('D1 D2 a plan held on one in its pipe gives it its slot', async () => {
   const fired = await tick(w.db, w.root, stub(CARRIED))
   expect(fired.find((f) => f.plan === MINE)).toMatchObject({ step: 2, name: 'build' })
   expect(fired.find((f) => f.plan === HELD)).toBeUndefined()
+  expect(parked(w.db).map((p) => [p.id, p.state, p.held_why?.startsWith(`until plan ${String(MINE)} lands`)]))
+    .toEqual([[HELD, 'blocked_on_ceo', true]])
+})
+
+test('D1 D2 D3 the tick parks a file wait for a queued plan', async () => {
+  const w = world()
+  dropPlan(w.db, 1)
+  ours(w.root)
+  internalPlan(w.db, w.root, MINE)
+  internalPlan(w.db, w.root, HELD, 'let a second internal plan run', 35)
+  width(w.db, 1, 2)
+  for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED))
   expect(overlapWaits(w.db)).toMatchObject([{ plan: HELD, on: MINE }])
+  width(w.db, 1, 5)
+  const added = [4, 5, 6, 7, 8, 9]
+  added.forEach((id, at) => internalPlan(w.db, w.root, id, `let plan ${String(id)} run`, 36 + at))
+  for (const id of added.slice(0, 3)) advance(w.db, plan(w.db, id), 0)
+  await tick(w.db, w.root, stub(CARRIED))
+  expect(parked(w.db).map((p) => [p.id, p.held_why?.startsWith(`until plan ${String(MINE)} lands`)])).toEqual([[HELD, true]])
+  expect(get(w.root, HELD, 'parked.md')).toContain(`waits on plan ${String(MINE)}`)
+  expect(eventsOf(w.db, HELD, 'park')).toEqual([{ actor: 'tick', outcome: 'pass', message: `waits on plan ${String(MINE)}'s files` }])
+  expect(added.slice(3).map((id) => plan(w.db, id).state)).toContain('running')
+  end(w.db, MINE, 'done')
+  await tick(w.db, w.root, stub(CARRIED))
+  expect(parked(w.db)).toEqual([])
+  expect(plan(w.db, HELD).state).not.toBe('blocked_on_ceo')
+  expect(existsSync(join(w.root, `.cf/work/${String(HELD)}/parked.md`))).toBe(false)
 })
 
 test('D3 a plan held on one in another pipe keeps its slot', async () => {

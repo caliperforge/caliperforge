@@ -317,7 +317,7 @@ it('D4: a size limit of 0 lines is refused', () => {
   expect(() => { setLimit(db, { repo: 'acme/widget', lines: 0, origin_kind: 'ruling', origin_ref: 't', set_at: '2026-09-27' }) }).toThrow(/CHECK/)
 })
 
-it('D5: addSetting on an existing key throws and keeps the old value', () => {
+it('D5: addSetting on an existing key throws, keeps the value', () => {
   const db = open(':memory:')
   migrate(db, join(root, 'schema'))
   const row = { key: 'coo_lite.apply', value: '1', who: 'ceo', origin_kind: 'ruling', origin_ref: 't', set_at: '2026-09-27' } as const

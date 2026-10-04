@@ -17,6 +17,7 @@ seats:
   - writer
   - text_review
   - coo_lite
+  - director
   - solidity_specialist
   - growth_lead
 digests:
@@ -74,6 +75,9 @@ digests:
   coo_lite:
     manifest: fbcf12aa267aa78a55f37db11224824b75e95044215a48565c95336399214051
     prompt: 0b5f8338531147ffb43d0bb39c645e5ae6286e60acd3ef360ad18bd080192775
+  director:
+    manifest: 4091eb562e19fd377ec0578022cf39df23dddd105be8231cccad3eee07b1b7e7
+    prompt: 45584f1b1d83ea5b26382aeba5f131e78b49656c13987e8dab636aaf8f94ee47
   solidity_specialist:
     manifest: cbd0015d48c5a86d0afb2ce4d80480746b33b7e3e51a96297cdab2deb1dcfea2
     prompt: 4727a0da187517bc9910a0e6e42671e9b1cd1de53a0fed695386ce53519125cb

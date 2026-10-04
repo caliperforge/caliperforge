@@ -22,7 +22,7 @@ const BRIEF_WRITER = 'brief_writer'
 const BUILDERS: Record<string, string> = {
   kotlin: 'kotlin_specialist', swift: 'swift_specialist', typescript: DEFAULT_BUILDER, outside: 'outside_specialist',
   rust: 'rust_specialist', python: 'python_specialist', ruby: 'ruby_specialist', go: 'go_specialist',
-  php: 'php_specialist', lua: 'lua_specialist',
+  php: 'php_specialist', lua: 'lua_specialist', web: 'web_specialist',
 }
 
 /** Which seat builds: the target's language picks it. */

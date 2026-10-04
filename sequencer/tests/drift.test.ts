@@ -12,6 +12,7 @@ import type { Db } from '../../store/index.ts'
 import { ratchetRules } from '../../store/lanes.ts'
 import { propose } from '../../store/proposals.ts'
 import { take } from '../../store/leases.ts'
+import { addPlan } from '../../store/plans.ts'
 import { drift, due, Entry, filed, stuck } from '../drift.ts'
 import { conflicted, git, maybe, SELF } from '../workspace.ts'
 
@@ -59,7 +60,7 @@ test('fresh', () => {
   event(d, '2026-10-02 10:00:00')
   expect(drift(d, [COO, { ...COO, name: 'six', gap: '24h' }], NOW)).toEqual([])
   expect(REGISTRY.map((e) => e.name)).toEqual(['coo_lite', 'fixer', 'brief_writer', 'text_review',
-    'growth_lead', 'gardener', 'ratchet', 'accounts', 'records', 'dispositions', 'signoffs', 'proposals',
+    'growth_lead', 'web_specialist', 'gardener', 'ratchet', 'accounts', 'records', 'dispositions', 'signoffs', 'proposals',
     'ratchet_refuse', 'intake', 'stuck_plans', 'science_pull'])
   expect(ratchetRules(d).mode).toBe('refuse')
   expect(drift(d, REGISTRY, NOW).map((r) => r.name)).not.toContain('ratchet_refuse')
@@ -91,6 +92,15 @@ test('D4 science_pull reads only pass events, stale after 7d', () => {
   expect(drift(d, science, NOW).map((r) => r.state)).toEqual(['stale'])
   pulled('2026-09-27 10:00:00', 'pass')
   expect(drift(d, science, NOW)).toEqual([])
+})
+
+test('D4 web_specialist is silent only once atelier-web has a plan', () => {
+  const web = REGISTRY.filter((e) => e.name === 'web_specialist')
+  const d = db()
+  expect(drift(d, web, NOW)).toEqual([])
+  addPlan(d, { pipe_id: 1, target_id: null, template: 'pr_path', state: 'queued', queued_at: '2026-10-01', lane: 'atelier',
+    seat: 'web_specialist', origin: 'https://github.com/caliperforge/atelier-web/issues/1', step: 0 })
+  expect(drift(d, web, NOW)).toEqual([{ name: 'web_specialist', state: 'silent', detail: "no row in runs WHERE seat = 'web_specialist'" }])
 })
 
 function internal(enabled = 1, max = 2): Db {

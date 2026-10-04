@@ -60,7 +60,7 @@ cf.command('health').action(() => {
 
 cf.command('science').command('pull').option('--since <date>', 'the first local day, YYYY-MM-DD')
   .action((options: { since?: string }) => {
-    for (const path of pull(db(), new Date(), options.since)) out(`${path}\n`)
+    for (const path of pull(db(), root, new Date(), options.since)) out(`${path}\n`)
   })
 
 cf.command('tick').option('--dry', 'read what a tick would do, fire nothing, call no network')

@@ -1,9 +1,9 @@
-import { SELF } from '../sequencer/workspace.ts'
+import { FORK, SELF } from '../sequencer/workspace.ts'
 import type { Db } from './index.ts'
 
 export interface Days { zone: number; since: string; today: string }
 
-type Cell = string | number | null
+export type Cell = string | number | null
 
 export const DAILY = {
   runs_daily: "SELECT date(at, printf('%+d minutes', :zone)) AS date, seat, count(*) AS runs, sum(input_tokens + cache_read_tokens + output_tokens) AS tokens, sum(cost_computed_usd) AS cost_computed_usd, sum(cost_usd) AS cost_usd FROM runs WHERE date(at, printf('%+d minutes', :zone)) BETWEEN :since AND :today GROUP BY 1, 2 ORDER BY 1, 2",
@@ -14,7 +14,9 @@ export const DAILY = {
   stalls: "WITH open AS (SELECT id, queued_at FROM plans WHERE state IN ('queued', 'running', 'blocked_on_ceo')), steps AS (SELECT plan, at, step, lag(step) OVER (PARTITION BY plan ORDER BY julianday(at), id) AS before FROM runs), marks AS (SELECT id AS plan, queued_at AS at FROM open UNION ALL SELECT e.plan, e.at FROM events e JOIN open ON open.id = e.plan UNION ALL SELECT r.plan, r.at FROM refusals r JOIN open ON open.id = r.plan UNION ALL SELECT s.plan, s.at FROM steps s JOIN open ON open.id = s.plan WHERE s.before <> s.step), stretches AS (SELECT plan, at AS start, lead(at) OVER (PARTITION BY plan ORDER BY julianday(at)) AS next FROM marks), ended AS (SELECT plan, start, (SELECT t.at FROM ticks t WHERE t.dry = 0 AND julianday(t.at) > julianday(start) AND (next IS NULL OR julianday(t.at) <= julianday(next)) ORDER BY julianday(t.at) DESC LIMIT 1) AS stop FROM stretches) SELECT x.plan, x.start, x.stop AS \"end\", p.wait_reason, EXISTS (SELECT 1 FROM runs r WHERE r.plan = x.plan AND julianday(r.at) > julianday(x.start) AND julianday(r.at) <= julianday(x.stop)) AS woken FROM ended x JOIN plans p ON p.id = x.plan WHERE (julianday(x.stop) - julianday(x.start)) * 1440 >= 60 ORDER BY x.plan, x.start",
 } as const
 
+export const OUTSIDE = "SELECT p.id AS plan, t.repo, (SELECT outcome FROM verdicts WHERE plan = p.id AND gate = 'review' ORDER BY id DESC LIMIT 1) AS code_quality, (SELECT outcome FROM verdicts WHERE plan = p.id AND gate = 'senior_review' ORDER BY id DESC LIMIT 1) AS senior, g.score AS greptile_score, g.head AS greptile_head, (SELECT count(DISTINCT gate) FROM verdicts WHERE plan = p.id AND outcome = 'pass' AND gate IN ('review', 'senior_review')) = 2 AS both_passed FROM plans p JOIN targets t ON t.id = p.target_id LEFT JOIN signals g ON g.id = (SELECT max(id) FROM signals WHERE plan = p.id AND kind = 'bot_review' AND author LIKE '%greptile%' AND repo GLOB :fork) WHERE p.origin IS NULL AND (p.step >= 6 OR g.id IS NOT NULL OR EXISTS (SELECT 1 FROM verdicts WHERE plan = p.id AND step >= 6)) ORDER BY p.id"
+
 export function daily(db: Db, sql: string, days: Days): { columns: string[]; rows: Cell[][] } {
   const statement = db.prepare(sql)
-  return { columns: statement.columns().map((c) => c.name), rows: statement.raw().all({ ...days, self: SELF }) as Cell[][] }
+  return { columns: statement.columns().map((c) => c.name), rows: statement.raw().all({ ...days, self: SELF, fork: `${FORK}/*` }) as Cell[][] }
 }

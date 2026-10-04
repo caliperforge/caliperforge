@@ -59,7 +59,7 @@ test('fresh', () => {
   expect(drift(d, [COO, { ...COO, name: 'six', gap: '24h' }], NOW)).toEqual([])
   expect(REGISTRY.map((e) => e.name)).toEqual(['coo_lite', 'fixer', 'brief_writer', 'text_review',
     'growth_lead', 'gardener', 'ratchet', 'accounts', 'records', 'dispositions', 'signoffs', 'proposals',
-    'ratchet_refuse', 'intake', 'stuck_plans'])
+    'ratchet_refuse', 'intake', 'stuck_plans', 'science_pull'])
   expect(ratchetRules(d).mode).toBe('refuse')
   expect(drift(d, REGISTRY, NOW).map((r) => r.name)).not.toContain('ratchet_refuse')
   for (const bad of [{ gap: '2 days' }, { table: 'events;' }, { column: 'At' }]) {
@@ -73,6 +73,21 @@ test('proposals', () => {
   expect(drift(d, proposals, NOW)).toEqual([{ name: 'proposals', state: 'silent', detail: "no row in approvals WHERE subject_kind = 'proposal'" }])
   decide(d, 'proposal', 1, 'a'.repeat(64), 'no')
   expect(drift(d, proposals, NOW)).toEqual([])
+})
+
+test('D4 science_pull reads only pass events, stale after 7d', () => {
+  const science = REGISTRY.filter((e) => e.name === 'science_pull')
+  const d = db()
+  const pulled = (at: string, outcome: string): void => {
+    d.prepare("INSERT INTO events (plan, at, kind, actor, outcome, message) VALUES (NULL, ?, 'science_pull', 'science', ?, 'm')").run(at, outcome)
+  }
+  expect(drift(d, science, NOW).map((r) => r.state)).toEqual(['silent'])
+  pulled('2026-10-02 10:00:00', 'refuse')
+  expect(drift(d, science, NOW).map((r) => r.state)).toEqual(['silent'])
+  pulled('2026-09-25 10:00:00', 'pass')
+  expect(drift(d, science, NOW).map((r) => r.state)).toEqual(['stale'])
+  pulled('2026-09-27 10:00:00', 'pass')
+  expect(drift(d, science, NOW)).toEqual([])
 })
 
 function internal(enabled = 1, max = 2): Db {

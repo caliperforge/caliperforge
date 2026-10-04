@@ -12,6 +12,7 @@ import { reprice } from './priority.ts'
 import { daily, started, weekly } from './signals.ts'
 import { WIRE, type Wire } from './push.ts'
 import { due, type Entry, stuck } from './drift.ts'
+import { sunday } from '../cli/science.ts'
 import { offered, route, working, type Route } from './next.ts'
 import { reap } from './workspace.ts'
 import { ceilinged, stepped } from './settle.ts'
@@ -30,6 +31,7 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
   if (registry !== undefined) {
     due(db, registry, now, wire ?? WIRE, read)
     stuck(db, root, registry, now)
+    sunday(db, root, now)
   }
   if (labels !== undefined) (lines ?? []).push(...intake(db, root, labels))
   reap(root, terminal(db))

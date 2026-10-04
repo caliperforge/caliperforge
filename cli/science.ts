@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { maybe } from '../sequencer/workspace.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
-import { get, zone } from '../store/lanes.ts'
+import { get, hhmm, set, zone } from '../store/lanes.ts'
 import { type Cell, DAILY, daily, OUTSIDE } from '../store/science.ts'
 
 const DAY = 86400000
@@ -32,7 +32,20 @@ export function pull(db: Db, root: string, now: Date, since?: string): string[] 
   const at = outside.columns.indexOf('greptile_head')
   const reviewed = csv(join(out, 'review_vs_outside.csv'), OUTSIDE, outside.columns.map((c, i) => i === at ? 'greptile_findings' : c),
     outside.rows.map((r) => r.map((c, i) => i === at && c !== null ? findings(root, Number(r[0]), String(c)) : c)))
-  return [...csvs, reviewed, put(join(out, 'due.md'), due(join(dir, 'data/interventions_v2.csv'), today))]
+  const written = [...csvs, reviewed, put(join(out, 'due.md'), due(join(dir, 'data/interventions_v2.csv'), today))]
+  logged(db, { plan: null, kind: 'science_pull', actor: 'science', outcome: 'pass',
+    message: `wrote ${String(written.length)} files to ${out}`, pointer: out, run: null })
+  return written
+}
+
+export function sunday(db: Db, root: string, now: Date): string[] {
+  const local = new Date(now.getTime() + zone(db) * 60000)
+  const day = local.toISOString().slice(0, 10)
+  const back = local.getUTCDay() === 0 && hhmm(db, now) < '05:45' ? 7 : local.getUTCDay()
+  const anchor = shift(day, -back)
+  if (anchor <= get(db, 'science.at')) return []
+  set(db, 'science.at', anchor, 'pr', now.toISOString())
+  return pull(db, root, now)
 }
 
 function csv(path: string, sql: string, columns: string[], rows: Cell[][]): string {

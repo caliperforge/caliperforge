@@ -14,12 +14,10 @@ const HEADING = '## Found by Greptile and fixed\n\n'
 
 /** Each Greptile finding an earlier head carried that `sha` no longer does, and no ruling accepted, becomes a worked example for its language. */
 export function learned(db: Db, root: string, plan: number, sha: string): void {
-  const dir = planDir(root, plan)
-  if (!existsSync(dir)) return
   const kept = [...(maybe(root, plan, `findings-${sha}.md`) ?? '').matchAll(/^- (G\d+) /gm)].map((m) => m[1])
   const ruled = [...(maybe(root, plan, 'rulings.md') ?? '').matchAll(BLOCK)]
     .flatMap(([, body = '']) => /^[ \t]+ids:(.*)$/m.exec(body)?.[1]?.match(/G\d+/g) ?? [])
-  for (const name of readdirSync(dir)) {
+  for (const name of readdirSync(planDir(root, plan))) {
     const head = /^findings-(.+)\.md$/.exec(name)?.[1]
     const signal = head === undefined || head === sha ? null : graded(db, plan, head)
     if (head === undefined || signal === null) continue

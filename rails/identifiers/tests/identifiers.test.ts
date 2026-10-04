@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -54,7 +55,7 @@ function atelier(): string {
 }
 
 test('passes a folder the diff deletes', () => {
-  const verdict = identifiers(atelier(), 'removed Atelier/Gone/ and Atelier/Go', deletion.replace('Atelier/X', 'Atelier/Gone/X'))
+  const verdict = identifiers(atelier(), 'removed Atelier/Gone/ and `Atelier/Go`', deletion.replace('Atelier/X', 'Atelier/Gone/X'))
   expect(verdict.message).toContain('name no source in the tree: Atelier/Go')
   expect(verdict.spans).toHaveLength(1)
 })
@@ -82,10 +83,34 @@ test('skips the hand-back summary line', () => {
 })
 
 test('refuses the name on a line after the summary', () => {
-  const verdict = identifiers(swift(), '---\nsummary: x\n---\nran swift/xcodebuild\n')
+  const verdict = identifiers(swift(), '---\nsummary: x\n---\nran `swift/xcodebuild`\n')
   expect(verdict.outcome).toBe('refuse')
   expect(verdict.spans).toEqual(['text:4 identifier.unresolved'])
   expect(verdict.message).toContain('swift/xcodebuild')
+})
+
+test('passes a gitignored path', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cf-ids-'))
+  execFileSync('git', ['init', '-q'], { cwd: dir })
+  mkdirSync(join(dir, 'typescript'))
+  writeFileSync(join(dir, '.gitignore'), 'dist\n')
+  expect(identifiers(dir, 'built `typescript/packages/mpp/dist`').outcome).toBe('pass')
+})
+
+test('passes an extensionless name in prose', () => {
+  expect(identifiers(swift(), 'ran swift/xcodebuild').outcome).toBe('pass')
+})
+
+test('refuses a backticked missing file with a line', () => {
+  const verdict = identifiers(swift(), 'see `swift/Missing.swift:12`')
+  expect(verdict.outcome).toBe('refuse')
+  expect(verdict.message).toContain('swift/Missing.swift:12')
+})
+
+test('refuses a backticked missing file in the repo', () => {
+  const verdict = identifiers(root, 'see `sequencer/gone.ts`')
+  expect(verdict.outcome).toBe('refuse')
+  expect(verdict.message).toContain('sequencer/gone.ts')
 })
 
 test('a path ending a sentence keeps its full stop out of the name', () => {

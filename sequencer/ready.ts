@@ -126,18 +126,12 @@ function proofOf(db: Db, root: string, plan: PlanRow, repo: string, row: Deliver
     at: new Date().toISOString().slice(0, 10),
     tests_pass: row.tests_pass === 1,
     byte_identical_elsewhere: row.byte_identical_elsewhere === 1,
-    fork_public: forkGreened(db, plan.id),
     bot_clean: row.bot_clean === 1,
     ci: green(ci),
     spans: [row.diff_digest.slice(0, 12)],
     title: title(root, plan.id),
     named: [maybe(root, plan.id, 'ask.md') ?? '', ...parse(diffOf(root, plan.id)).flatMap((f) => f.added.map((l) => l.text))].join('\n'),
   }
-}
-
-/** Read again after `forkCi`: the column it stamps is the fork-CI proof, and the row was found before it ran. */
-function forkGreened(db: Db, plan: number): boolean {
-  return newest(db, plan)?.fork_ci_green === 1
 }
 
 /** The repository the ready rail reads a pulse for. Ours has none to read, and needs none. */

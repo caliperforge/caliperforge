@@ -9,7 +9,7 @@ import { load, seat, tight, type Seat } from '../runner/rules.ts'
 import { judge, loadReviews } from '../reviews/bench.ts'
 import { coverage, type Gated } from '../reviews/package.ts'
 import type { Finding, Judged, Note } from '../reviews/verdict.ts'
-import { runLogged } from '../store/events.ts'
+import { runLogged, type Run } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { filesOf } from '../store/files.ts'
 import { profile } from '../store/profile.ts'
@@ -246,9 +246,9 @@ export async function ran(db: Db, root: string, plan: PlanRow, step: Step, provi
 }
 
 export function recorded(db: Db, plan: number, step: number, name: string, hash: string, provider: Provider['name'],
-  manifest: Seat, fired: Fired): void {
+  manifest: Seat, fired: Fired, mode?: Run['mode']): void {
   const id = runLogged(db, { plan, step, seat: name, rule_hash: hash, provider, model: manifest.model,
-    effort: manifest.effort, exit: fired.exit, fired })
+    effort: manifest.effort, exit: fired.exit, fired, mode })
   byRun(db, id, fired.transcript_path)
 }
 

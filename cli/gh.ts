@@ -43,6 +43,14 @@ export function issue(repo: string, no: number): Issue {
     'number,title,body,state,assignees,comments,closedByPullRequestsReferences']))
 }
 
+const Thread = z.object({ comments: z.array(z.object({ author: z.object({ login: z.string() }), body: z.string(), url: z.string() })) })
+
+export type IssueComment = z.infer<typeof Thread>['comments'][number]
+
+export function issueComments(repo: string, no: number, read: Read = gh): IssueComment[] {
+  return Thread.parse(read(['issue', 'view', String(no), '--repo', repo, '--json', 'comments'])).comments
+}
+
 export function claimed(row: Issue): string | null {
   const who = row.assignees[0]?.login
   if (who !== undefined) return `assigned to ${who}`

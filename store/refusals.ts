@@ -25,6 +25,8 @@ export interface Refused {
   own?: true | undefined
   /** The sha256 of the ticket the builder works from: a ruling changes it, and the repeat check starts again. */
   ticket?: string | undefined
+  span?: string | undefined
+  note?: string | undefined
 }
 
 const ANSI = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'g')
@@ -54,8 +56,8 @@ export function refused(db: Db, r: Refused): Why {
     .all(r.plan) as { fingerprint: string; diff: string | null }[]
   const had = db.prepare('SELECT 1 FROM refusals WHERE plan = ? AND blip = 0 AND fingerprint = ? AND ticket IS ?')
     .get(r.plan, r.fingerprint, r.ticket ?? null) !== undefined
-  db.prepare('INSERT INTO refusals (plan, step, fingerprint, diff, blip, ticket) VALUES (?, ?, ?, ?, 0, ?)')
-    .run(r.plan, r.step, r.fingerprint, r.diff, r.ticket ?? null)
+  db.prepare('INSERT INTO refusals (plan, step, fingerprint, diff, blip, ticket, span, note) VALUES (?, ?, ?, ?, 0, ?, ?, ?)')
+    .run(r.plan, r.step, r.fingerprint, r.diff, r.ticket ?? null, r.span ?? null, r.note ?? null)
   const elsewhere = peer(db, r)
   if (r.moved === true) return prior.length + 1 >= ROUNDS ? 'spent' : 'again'
   if (r.own !== true && elsewhere !== undefined && r.step >= BUILD && r.fingerprint !== fingerprint(r.step, ['base:stale'])) return 'shared'
@@ -82,6 +84,13 @@ export function ofDay(db: Db, day: string, minutes: number): { id: number; plan:
   return db.prepare(`SELECT f.id, f.plan, f.step, p.title, datetime(f.at, ?) AS at FROM refusals f LEFT JOIN plans p ON p.id = f.plan
     WHERE f.blip = 0 AND date(f.at, ?) = ? ORDER BY f.id`)
     .all(shift, shift, day) as { id: number; plan: number; step: number; title: string | null; at: string }[]
+}
+
+/** Step 1 refusals on `pr_path` plans in the 7 UTC days ending on `now`'s, blips left out. */
+export function briefRefusals(db: Db, now: Date): { day: string; span: string | null; note: string | null }[] {
+  return db.prepare(`SELECT date(f.at) AS day, f.span, f.note FROM refusals f JOIN plans p ON p.id = f.plan
+    WHERE f.blip = 0 AND f.step = 1 AND p.template = 'pr_path' AND date(f.at) BETWEEN date(?, '-6 days') AND date(?)`)
+    .all(now.toISOString(), now.toISOString()) as { day: string; span: string | null; note: string | null }[]
 }
 
 export function refusalsOf(db: Db, plan: number): number {

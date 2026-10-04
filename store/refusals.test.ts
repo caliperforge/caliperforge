@@ -164,6 +164,14 @@ test('a clear resets rounds; a refusal the plan had still stops', () => {
   expect(refused(db, { plan: PLAN, step: 3, fingerprint: fingerprint(3, ['0']), diff: D2 })).toBe('repeat')
 })
 
+test('D1 a refusal stores its span and note, or NULL for both', () => {
+  const db = bench()
+  refused(db, { plan: PLAN, step: 1, fingerprint: A, diff: null, span: 'a.ts', note: 'brief_writer: a.ts is not in the checkout' })
+  refused(db, { plan: PLAN, step: 3, fingerprint: B, diff: D1 })
+  expect(db.prepare('SELECT span, note FROM refusals ORDER BY id').all())
+    .toEqual([{ span: 'a.ts', note: 'brief_writer: a.ts is not in the checkout' }, { span: null, note: null }])
+})
+
 const T1 = 'd'.repeat(64)
 
 const T2 = 'e'.repeat(64)

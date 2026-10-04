@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
@@ -78,6 +78,18 @@ test('a Lua diff ends with the Lua rules and carries no examples', () => {
   const out = packs(root, diffOf('lua/pay.lua'), null)
   expect(out.endsWith(rules('lua_specialist'))).toBe(true)
   expect(out).not.toContain('## Refused in')
+})
+
+test('runtime Swift examples follow the repo Swift examples', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'cf-packs-'))
+  symlinkSync(join(root, 'seats'), join(tmp, 'seats'))
+  mkdirSync(join(tmp, 'reviews/examples'), { recursive: true })
+  writeFileSync(join(tmp, 'reviews/examples/swift.md'), '## Refused in Swift\n')
+  mkdirSync(join(tmp, '.cf/examples'), { recursive: true })
+  writeFileSync(join(tmp, '.cf/examples/swift.md'), '## Found by Greptile and fixed\n\n- learned\n')
+  const out = packs(tmp, diffOf('swift/Sources/Main.swift', 'python/client.py'), null)
+  expect(out).toContain(`${rules('swift_specialist')}## Refused in Swift\n\n## Found by Greptile and fixed\n\n- learned\n\n`)
+  expect(packs(tmp, diffOf('python/client.py'), null).endsWith(rules('python_specialist'))).toBe(true)
 })
 
 test('the examples folder is not a reviewer', () => {

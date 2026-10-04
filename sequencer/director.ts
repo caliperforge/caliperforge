@@ -104,14 +104,14 @@ async function fire(db: Db, root: string, provider: Provider, now: Date, post: P
   fresh: Stop[]): Promise<string> {
   const [oldest] = fresh
   if (oldest === undefined) return 'no stopped plan'
-  if (current(db).some((n) => n.doing === 'coo_lite' && !n.stale)) return 'a coo_lite run is live'
-  const ran = db.prepare("SELECT count(*) AS n FROM runs WHERE seat = 'coo_lite' AND at >= datetime(?, '-1 day')")
+  if (current(db).some((n) => n.doing === 'director' && !n.stale)) return 'a director run is live'
+  const ran = db.prepare("SELECT count(*) AS n FROM runs WHERE seat = 'director' AND at >= datetime(?, '-1 day')")
     .get(now.toISOString()) as { n: number }
   const cap = db.prepare("SELECT value FROM settings WHERE key = 'coo_lite.max_daily'").get() as { value: string } | undefined
-  if (ran.n >= Number(cap?.value ?? 12)) return `cap reached: ${String(ran.n)} coo_lite runs today`
+  if (ran.n >= Number(cap?.value ?? 12)) return `cap reached: ${String(ran.n)} director runs today`
   if (take(db, oldest.id, now) === null) return `plan ${String(oldest.id)} is leased`
   try {
-    busy(db, oldest.id, 'coo_lite', `${String(fresh.length)} stops waiting`, now)
+    busy(db, oldest.id, 'director', `${String(fresh.length)} stops waiting`, now)
     return await cooLite(db, root, planById(db, oldest.id), provider, now, post, wire)
   } finally {
     idle(db, oldest.id)
@@ -126,16 +126,16 @@ function failures(db: Db, root: string, plan: PlanRow): number {
 
 async function ask(db: Db, root: string, plan: PlanRow, provider: Provider, tried?: string, fence?: string): Promise<Move | null> {
   load(db, root)
-  const { manifest, prompt, hash } = seat(root, 'coo_lite')
+  const { manifest, prompt, hash } = seat(root, 'director')
   const dir = planDir(root, plan.id)
-  const built = packet(manifest, prompt, tight(root), text(db, root, plan, tried, fence), dir, pending(dir, 'coo_lite'))
+  const built = packet(manifest, prompt, tight(root), text(db, root, plan, tried, fence), dir, pending(dir, 'director'))
   const fired = await provider.fire({
     ...built,
     tools: [...built.tools, READ],
-    servers: { [SERVER]: server(db, plan.id, 'coo_lite') },
+    servers: { [SERVER]: server(db, plan.id, 'director') },
     wall: wall(db),
   })
-  recorded(db, plan.id, plan.step, 'coo_lite', hash, provider.name, manifest, fired)
+  recorded(db, plan.id, plan.step, 'director', hash, provider.name, manifest, fired)
   return fired.ended === 'completed' ? read(fired.text) : null
 }
 

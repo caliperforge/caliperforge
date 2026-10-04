@@ -161,7 +161,8 @@ test('D5: the tick lists issues only when handed a reader', async () => {
     log.push(args.join(' '))
     throw new Error('gh is down')
   })
-  expect(log).toEqual([`issue list --repo ${REPO} --state open --limit ${String(WINDOW)} --json number,title,body,url,labels,createdAt,closedAt,stateReason`])
+  expect(log).toEqual([`issue list --repo ${REPO} --state open --limit ${String(WINDOW)} --json number,title,body,url,labels,createdAt,closedAt,stateReason`,
+    'search issues --owner caliperforge --state open --limit 100 --json number,title,url,repository,labels'])
   const sink: string[] = []
   await tick(db, root, stub(CARRIED), undefined, undefined, undefined, 0, () => { throw new Error('gh is down') }, undefined, undefined, sink)
   expect(tickNote([], [], sink)).toContain(`${REPO}: gh is down`)

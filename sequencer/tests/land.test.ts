@@ -4,8 +4,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import type { Packet } from '../../providers/kind.ts'
-import { headApproved } from '../../store/approvals.ts'
+import { gatesSigned, headApproved } from '../../store/approvals.ts'
+import { deliverablesOf, newest } from '../../store/deliverables.ts'
 import { last as lastMerge } from '../../store/merges.ts'
+import { dropPlan, relane } from '../../store/plans.ts'
+import { refusalsOf } from '../../store/refusals.ts'
+import { verdictRows } from '../../store/verdict.ts'
 import { tick } from '../index.ts'
 import { LAPS } from '../merge.ts'
 import { COMMIT, commitMessage, headOf, land, sent, WIRE, type Wire } from '../push.ts'
@@ -24,9 +28,11 @@ const git = (cwd: string, args: string[]): string => execFileSync('git', args, {
 const bodies = (cwd: string, range: string): string[] =>
   git(cwd, ['log', '--no-merges', '--format=%B%x00', range]).split('\0').map((m) => m.trim()).filter((m) => m !== '')
 
+const rail = (w: World, id: string) => verdictRows(w.db, ID).find((v) => v.rail_id === id)
+
 function mine(): World {
   const w = world()
-  w.db.prepare('DELETE FROM plans WHERE id = 1').run()
+  dropPlan(w.db, 1)
   ours(w.root)
   internalPlan(w.db, w.root, ID)
   return w
@@ -51,8 +57,7 @@ test('past ready, the next tick lands, pushes and closes',async () => {
   await atBatch(w, wire)
   expect(plan(w.db, ID).step).toBe(7)
   expect(sent).toEqual([FORKED])
-  expect(w.db.prepare("SELECT outcome, step FROM verdicts WHERE plan = ? AND rail_id = 'ci-green'").get(ID))
-    .toEqual({ outcome: 'pass', step: 6 })
+  expect(rail(w, 'ci-green')).toMatchObject({ outcome: 'pass', step: 6 })
 
   const fired = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
   const src = srcDir(w.root, ID)
@@ -61,8 +66,7 @@ test('past ready, the next tick lands, pushes and closes',async () => {
   expect(fired?.note).toBe(`landed ${BRANCH} on main as ${sha.slice(0, 12)}`)
   expect(sha).toBe(git(src, ['rev-parse', BRANCH]))
   expect(sent).toEqual([FORKED, 'send src main', `close caliperforge/caliperforge#34 ${sha.slice(0, 7)}`])
-  expect(w.db.prepare('SELECT state, evidence FROM deliverables WHERE plan_id = ? ORDER BY id DESC LIMIT 1').get(ID))
-    .toEqual({ state: 'pushed', evidence: `https://github.com/caliperforge/caliperforge/commit/${sha}` })
+  expect(newest(w.db, ID)).toMatchObject({ state: 'pushed', evidence: `https://github.com/caliperforge/caliperforge/commit/${sha}` })
   expect(headApproved(w.db, sha)).toBe(true)
 
   const last = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
@@ -74,8 +78,7 @@ test('D1 landed commits carry title, what, why, closes, plan',async () => {
   const w = mine()
   const wire = watched([], w.root, ID)
   await atBatch(w, wire)
-  expect(w.db.prepare("SELECT outcome, step FROM verdicts WHERE plan = ? AND rail_id = 'ci-green'").get(ID))
-    .toEqual({ outcome: 'pass', step: 6 })
+  expect(rail(w, 'ci-green')).toMatchObject({ outcome: 'pass', step: 6 })
   await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
   expect(new Set(bodies(srcDir(w.root, ID), `${MAIN}..main`))).toEqual(new Set([MESSAGE]))
 })
@@ -111,7 +114,7 @@ test('an atelier plan installs once, after send and close',async () => {
   const sent: string[] = []
   const wire = watched(sent, w.root, ID)
   await atBatch(w, wire)
-  w.db.prepare("UPDATE plans SET lane = 'atelier' WHERE id = ?").run(ID)
+  relane(w.db, ID, 'atelier')
 
   await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
   const sha = git(srcDir(w.root, ID), ['rev-parse', 'main'])
@@ -120,7 +123,7 @@ test('an atelier plan installs once, after send and close',async () => {
 
 test('no workflows: lands on step 3\'s checks, no fork run',async () => {
   const w = world()
-  w.db.prepare('DELETE FROM plans WHERE id = 1').run()
+  dropPlan(w.db, 1)
   ours(w.root, undefined, false)
   internalPlan(w.db, w.root, ID)
   const sent: string[] = []
@@ -128,10 +131,8 @@ test('no workflows: lands on step 3\'s checks, no fork run',async () => {
   await atBatch(w, wire)
   expect(plan(w.db, ID).step).toBe(7)
   expect(sent).toEqual([])
-  expect(w.db.prepare("SELECT outcome, step FROM verdicts WHERE plan = ? AND rail_id = 'ci-green'").get(ID))
-    .toEqual({ outcome: 'pass', step: 6 })
-  expect(w.db.prepare("SELECT outcome FROM verdicts WHERE plan = ? AND rail_id = 'ready'").get(ID))
-    .toEqual({ outcome: 'pass' })
+  expect(rail(w, 'ci-green')).toMatchObject({ outcome: 'pass', step: 6 })
+  expect(rail(w, 'ready')).toMatchObject({ outcome: 'pass' })
 
   await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
   const sha = git(srcDir(w.root, ID), ['rev-parse', 'main'])
@@ -140,7 +141,7 @@ test('no workflows: lands on step 3\'s checks, no fork run',async () => {
 
 test('D1 schedule or manual workflows land on step 3\'s checks',async () => {
   const w = world()
-  w.db.prepare('DELETE FROM plans WHERE id = 1').run()
+  dropPlan(w.db, 1)
   ours(w.root, SCHEDULED, false)
   internalPlan(w.db, w.root, ID)
   const sent: string[] = []
@@ -148,12 +149,9 @@ test('D1 schedule or manual workflows land on step 3\'s checks',async () => {
   await atBatch(w, wire)
   expect(plan(w.db, ID).step).toBe(7)
   expect(sent).toEqual([])
-  expect(w.db.prepare("SELECT outcome, step FROM verdicts WHERE plan = ? AND rail_id = 'ci-green'").get(ID))
-    .toEqual({ outcome: 'pass', step: 6 })
-  expect(w.db.prepare("SELECT outcome FROM verdicts WHERE plan = ? AND rail_id = 'ready'").get(ID))
-    .toEqual({ outcome: 'pass' })
-  expect(w.db.prepare('SELECT fork_ci_green FROM deliverables WHERE plan_id = ? ORDER BY id DESC LIMIT 1').get(ID))
-    .toEqual({ fork_ci_green: 1 })
+  expect(rail(w, 'ci-green')).toMatchObject({ outcome: 'pass', step: 6 })
+  expect(rail(w, 'ready')).toMatchObject({ outcome: 'pass' })
+  expect(newest(w.db, ID)?.fork_ci_green).toBe(1)
 })
 
 test('main moving before batch rewinds, lands on pass two',async () => {
@@ -168,7 +166,7 @@ test('main moving before batch rewinds, lands on pass two',async () => {
   expect(held).toMatchObject({ step: 7, outcome: 'pass', state: 'running', spans: ['base:stale'] })
   expect(plan(w.db, ID).step).toBe(3)
   expect(sent).toEqual([FORKED])
-  expect(w.db.prepare("SELECT count(*) AS n FROM approvals WHERE who = 'gates'").get()).toEqual({ n: 0 })
+  expect(gatesSigned(w.db)).toBe(0)
   expect(git(src, ['rev-list', '--count', `main..${BRANCH}`])).not.toBe('0')
 
   for (let at = 0; at < 5; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
@@ -196,9 +194,8 @@ test('conflict at batch: back to rails, aborted, nothing closed',async () => {
   expect(git(src, ['rev-parse', '--abbrev-ref', 'HEAD'])).toBe(BRANCH)
   expect(git(src, ['diff', '--name-only', '--diff-filter=U'])).toBe('')
   expect(sent).toEqual([FORKED])
-  expect(w.db.prepare("SELECT count(*) AS n FROM approvals WHERE who = 'gates'").get()).toEqual({ n: 0 })
-  expect(w.db.prepare('SELECT state FROM deliverables WHERE plan_id = ? ORDER BY id DESC LIMIT 1').get(ID))
-    .not.toEqual({ state: 'pushed' })
+  expect(gatesSigned(w.db)).toBe(0)
+  expect(newest(w.db, ID)?.state).not.toBe('pushed')
 })
 
 test('main moving mid-tick refuses the land, no merge commit',async () => {
@@ -209,7 +206,7 @@ test('main moving mid-tick refuses the land, no merge commit',async () => {
   const src = srcDir(w.root, ID)
   const head = git(src, ['rev-parse', BRANCH])
   moveMain(w.root, 'racing.ts')
-  w.db.prepare("UPDATE plans SET lane = 'atelier' WHERE id = ?").run(ID)
+  relane(w.db, ID, 'atelier')
 
   const refused = land(w.db, w.root, plan(w.db, ID), 1, wire)
   expect(refused).toMatchObject({ outcome: 'refuse', spans: ['base:stale'] })
@@ -217,8 +214,7 @@ test('main moving mid-tick refuses the land, no merge commit',async () => {
   expect(git(src, ['rev-parse', BRANCH])).toBe(head)
   expect(git(src, ['status', '--porcelain'])).toBe('')
   expect(sent).toEqual([FORKED])
-  expect(w.db.prepare("SELECT count(*) AS n FROM deliverables WHERE plan_id = ? AND state = 'pushed'").get(ID))
-    .toEqual({ n: 0 })
+  expect(deliverablesOf(w.db, ID).filter((d) => d.state === 'pushed')).toEqual([])
 })
 
 test('behind main twice: rails merge it again', async () => {
@@ -375,13 +371,13 @@ test('a conflict does not repeat: the next lap is on main',async () => {
   expect((await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0])
     .toMatchObject({ step: 3, outcome: 'refuse', spans: ['src/hello.ts'] })
   expect(plan(w.db, ID)).toMatchObject({ step: 2, state: 'running', retries: 0 })
-  expect(w.db.prepare('SELECT count(*) AS n FROM refusals WHERE plan = ? AND blip = 0').get(ID)).toEqual({ n: 1 })
+  expect(refusalsOf(w.db, ID)).toBe(1)
 
   await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
   expect((await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0])
     .toMatchObject({ step: 3, outcome: 'pass', state: 'running' })
   expect(plan(w.db, ID).state).toBe('running')
-  expect(w.db.prepare('SELECT count(*) AS n FROM refusals WHERE plan = ? AND blip = 0').get(ID)).toEqual({ n: 1 })
+  expect(refusalsOf(w.db, ID)).toBe(1)
 })
 
 test('a tree stopped mid-merge commits no conflict marker',async () => {

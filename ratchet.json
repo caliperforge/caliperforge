@@ -517,9 +517,6 @@
   "sequencer/tests/kept.test.ts": {
     "prepare": 5
   },
-  "sequencer/tests/land.test.ts": {
-    "prepare": 19
-  },
   "sequencer/tests/lanes.test.ts": {
     "prepare": 2
   },

@@ -138,6 +138,10 @@ export function dropPlan(db: Db, id: number): void {
   db.prepare('DELETE FROM plans WHERE id = ?').run(id)
 }
 
+export function relane(db: Db, plan: number, lane: PlanRow['lane']): void {
+  db.prepare('UPDATE plans SET lane = ? WHERE id = ?').run(lane, plan)
+}
+
 /** Work already under way sorts first, so a released plan waits behind no later P0. */
 export function live(db: Db, pipe: PipeRow): PlanRow[] {
   return db.prepare('SELECT p.* FROM queue_order q JOIN plans p ON p.id = q.plan WHERE q.pipe = ? ORDER BY q.position')

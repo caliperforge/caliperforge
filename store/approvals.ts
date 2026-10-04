@@ -90,6 +90,10 @@ export function approvalsOf(db: Db, kind: SubjectKind): { decision: string; reas
     .all(kind) as { decision: string; reason: string | null }[]
 }
 
+export function gatesSigned(db: Db): number {
+  return (db.prepare("SELECT count(*) AS n FROM approvals WHERE who = 'gates'").get() as { n: number }).n
+}
+
 const LANDS = 'refs/heads/main'
 
 /**

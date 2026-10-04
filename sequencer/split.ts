@@ -5,8 +5,9 @@ import type { Db } from '../store/index.ts'
 import { addPart, claimedPart, partAt, partOf, partsOf, queuePart, releasable, waitingOn } from '../store/parts.ts'
 import { internal, originIssue, planById, type PlanRow, rewind } from '../store/plans.ts'
 import type { SignalRow } from '../store/signals.ts'
-import type { Part } from './brief.ts'
+import { human, type Part, writable } from './brief.ts'
 import type { Outcome } from './kind.ts'
+import { languageOfPath, TEST } from './route.ts'
 import { WIRE, type Wire } from './push.ts'
 import { drop, get, maybe, put, srcDir } from './workspace.ts'
 import { homeOf } from './home.ts'
@@ -49,6 +50,29 @@ export function parted(db: Db, root: string, plan: PlanRow, parts: Part[], wire:
     const note = error instanceof Error ? error.message : String(error)
     return { outcome: 'refuse', spans: ['gh'], blip: true, note: `split: ${note}` }
   }
+}
+
+/**
+ * An outside brief whose files span languages, as the split fence of one part per language, each After the one before:
+ * sources by language first, then tests, and files in no language with the first part. Null when it spans one.
+ */
+export function languages(plan: PlanRow, brief: string): string | null {
+  if (internal(plan)) return null
+  const paths = writable(brief).map((f) => f.path)
+  const groups = new Map<string | null, string[]>()
+  for (const path of [...paths.filter((p) => !TEST.test(p)), ...paths.filter((p) => TEST.test(p))]) {
+    const language = languageOfPath(path) ?? (/\.[cm]?tsx?$/.test(path) ? 'typescript' : null)
+    groups.set(language, [...groups.get(language) ?? [], path])
+  }
+  const parts = [...groups].filter((g): g is [string, string[]] => g[0] !== null)
+  if (parts.length < 2) return null
+  parts[0]?.[1].push(...groups.get(null) ?? [])
+  const id = String(plan.id)
+  const spans = parts.map(([language]) => language).join(' and ')
+  return ['---', 'outcome: split', 'parts:', ...parts.flatMap(([language, files]) => [
+    `  - title: ${language} part of ${human(brief).title ?? ''}`, `    what: plan ${id}'s ${language} files: ${files.join(', ')}`,
+    `    why: plan ${id}'s brief spans ${spans}; each language has its own builder`,
+    `    ends: every case of the brief those files answer holds on asm/${id}`]), '---', ''].join('\n')
 }
 
 /**

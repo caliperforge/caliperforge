@@ -95,6 +95,9 @@ parts:
 Name an earlier part in `after:` only when this part reads or changes code that part adds; parts that touch
 different files are `after: none`.
 
+On someone else's repository, a brief whose files span languages is still one brief, not a split: the machine
+splits it into one part per language, each built by that language's builder.
+
 The machine files each part as its own issue and queues them one at a time. On someone else's repository,
 the split goes to the COO instead, so answer it only when the ask
 really is more than one job.

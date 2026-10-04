@@ -32,6 +32,7 @@ import { regated } from './escapes.ts'
 import { deletions } from './fence.ts'
 import { findings } from './findings.ts'
 import { fenceFor, languageFor } from './route.ts'
+import { languages } from './split.ts'
 import { gates, outsideLanguage } from './gates.ts'
 import type { Outcome } from './kind.ts'
 import { COMMIT, commitMessage } from './push.ts'
@@ -133,12 +134,13 @@ export async function fireBrief(db: Db, root: string, plan: PlanRow, step: Step,
   if (fired.ended !== 'completed') return exited(step, fired)
   const question = unclear(fired.text)
   if (question !== null) return asking(root, plan.id, step, question)
-  const parts = split(fired.text)
+  const refused = shape(fired.text, ask, src)
+  const reply = refused === null ? languages(plan, fired.text) ?? fired.text : fired.text
+  const parts = split(reply)
   if (parts !== null) {
-    put(root, plan.id, 'split.md', fired.text)
+    put(root, plan.id, 'split.md', reply)
     return splitting(step, parts)
   }
-  const refused = shape(fired.text, ask, src)
   const over = refused === null ? oversized(db, plan, fired.text) : null
   if (refused !== null || over !== null) put(root, plan.id, 'brief.refused.md', fired.text)
   if (refused !== null) return { outcome: 'refuse', spans: [refused.span], note: `${step.runs}: ${refused.reason}` }

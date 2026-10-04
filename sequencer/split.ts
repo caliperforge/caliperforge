@@ -14,6 +14,7 @@ import { drop, get, maybe, put, srcDir } from './workspace.ts'
 import { homeOf } from './home.ts'
 import { approved } from './approve.ts'
 import { words } from './signals.ts'
+import { landed } from './landed.ts'
 
 const LETTERS = 'abcdefghijklmnopqrstuvwxyz'
 const CUT = 6000
@@ -99,12 +100,6 @@ export function following(db: Db, root: string, plan: PlanRow, sha: string, wire
   const closed = close(parent, issue, sha, wire)
   const up = following(db, root, parent, sha, wire)
   return up === null ? closed : `${closed}; ${up}`
-}
-
-/** A split part is `done` from the moment it splits, so it lands only when its own parts have. */
-export function landed(db: Db, plan: number | null): boolean {
-  if (plan === null) return false
-  return planById(db, plan).state === 'done' && partsOf(db, plan).every((p) => landed(db, p.plan))
 }
 
 /** An outside parent goes back to senior on its checkout of `asm/<id>`, to be sent upstream as one change. */

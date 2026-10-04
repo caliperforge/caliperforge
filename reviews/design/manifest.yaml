@@ -1,0 +1,10 @@
+review: design
+gate: review
+step: 4
+model: claude-opus-5-5
+effort: high
+tools:
+  - Read
+write_paths: []
+reads_verdict: false
+reads_screens: true

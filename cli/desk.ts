@@ -1,7 +1,8 @@
 import type { Command } from 'commander'
 import { readFileSync } from 'node:fs'
-import { amend, approved, opened, postOf, sentBack } from '../store/desk.ts'
+import { amend, approved, log, opened, postOf, sentBack, STATUSES, type Item } from '../store/desk.ts'
 import type { Db } from '../store/index.ts'
+import { zone } from '../store/lanes.ts'
 import { holder } from '../store/leases.ts'
 import { holderOf, HOLDERS, requeue, type Holder } from '../store/plans.ts'
 import { steps } from '../templates/comms.ts'
@@ -17,6 +18,17 @@ export function giveBack(db: Db, id: number, note: string, by: Holder): void {
     sentBack(db, id, note, by)
     requeue(db, id, DRAFT)
   })()
+}
+
+export function learn(db: Db, item: Item, now: Date): number {
+  const day = new Date(now.getTime() + zone(db) * 60000).toISOString().slice(0, 10)
+  return log(db, day, [{ ...item, source: 'coo' }])
+}
+
+function statusOf(status: string): Item['status'] {
+  const hit = STATUSES.find((s) => s === status)
+  if (hit === undefined) throw new Error(`--status takes fixed, open, ruled or noted, not ${status}`)
+  return hit
 }
 
 export function registerDesk(cf: Command, { db, out }: Cli): void {
@@ -53,5 +65,16 @@ export function registerDesk(cf: Command, { db, out }: Cli): void {
       const by = holderOf(options.by)
       giveBack(db(), Number(id), options.note, by)
       out(`desk post ${id} returned; plan ${id} queued at step ${String(DRAFT)}\n`)
+    })
+
+  registerLearn(cf, { db, out })
+}
+
+function registerLearn(cf: Command, { db, out }: Pick<Cli, 'db' | 'out'>): void {
+  cf.command('learn').argument('<title>').option('--what <text>', 'what happened', '').option('--lesson <text>', 'the lesson', '')
+    .option('--fix <text>', 'the fix', '').option('--status <status>', STATUSES.join(', '), 'noted')
+    .action((title: string, options: { what: string; lesson: string; fix: string; status: string }) => {
+      const status = statusOf(options.status)
+      out(`${String(learn(db(), { title, what: options.what, lesson: options.lesson, fix: options.fix, status }, new Date()))} item(s) added\n`)
     })
 }

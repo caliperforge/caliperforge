@@ -11,6 +11,7 @@ import { refusalAt } from '../../store/refusals.ts'
 import { verdictRows } from '../../store/verdict.ts'
 import { desk, draft, drafted, facts, gather, review } from '../../templates/comms.ts'
 import { tick } from '../index.ts'
+import { weekly as clock } from '../signals.ts'
 import { mapOf } from '../steps.ts'
 import { FORK, get, maybe, put } from '../workspace.ts'
 import { plan, reads, stub, world, type World } from './world.ts'
@@ -128,6 +129,34 @@ test.each([
   const w = clocked(enabled)
   await tick(w.db, w.root, never, new Date('2026-10-02T03:00Z'))
   expect(growths(w)).toEqual([])
+})
+
+const weeklies = (w: World): unknown[] => filed(w, 'weekly ')
+
+test('weeklyPost D1: two Thursday 07:01 ticks file one weekly plan', () => {
+  const w = clocked()
+  clock(w.db, new Date('2026-10-01T13:01Z'))
+  clock(w.db, new Date('2026-10-01T13:01Z'))
+  expect(weeklies(w)).toEqual([{ title: 'weekly 2026-09-28', state: 'queued' }])
+  const id = plansOf(w.db, 'comms').find((p) => p.title === 'weekly 2026-09-28')?.id ?? 0
+  expect(eventsOf(w.db, id, 'filed').map(({ actor }) => ({ actor }))).toEqual([{ actor: 'weekly clock' }])
+})
+
+test('weeklyPost D2: Thursday 06:59 files growth and no weekly', () => {
+  const w = clocked()
+  clock(w.db, new Date('2026-10-01T12:59Z'))
+  expect([...weeklies(w), ...growths(w)]).toEqual([{ title: 'growth 2026-10-01', state: 'queued' }])
+})
+
+test.each([
+  { why: 'a Wednesday', at: '2026-09-30T13:01Z', enabled: 1 },
+  { why: 'a Friday', at: '2026-10-02T13:01Z', enabled: 1 },
+  { why: 'the comms lane missing', at: '2026-10-01T13:01Z', enabled: null },
+  { why: 'the comms lane off', at: '2026-10-01T13:01Z', enabled: 0 },
+])('weeklyPost D2: $why at 07:01 files no weekly plan', ({ at, enabled }) => {
+  const w = clocked(enabled)
+  clock(w.db, new Date(at))
+  expect(weeklies(w)).toEqual([])
 })
 
 test('D2-D5: facts refuses a tag, issue, login, number or ref', () => {
@@ -462,9 +491,13 @@ test('weeklyDesk D4: a weekly plan lands a substack post', async () => {
   writeFileSync(join(dir, 'README.md'), '# The story\n')
   const w = storied(dir)
   reads(w.db, 1)
-  const seats = seated(fixture('weekly.md'))
+  const prompts: string[] = []
+  const writer = seated(fixture('weekly.md'))
+  const seats: Provider = { ...writer, fire: (packet) => { prompts.push(packet.prompt); return writer.fire(packet) } }
   for (let n = 0; n < 11 && plan(w.db, 1).state !== 'done'; n += 1) await tick(w.db, w.root, seats)
   expect(plan(w.db, 1).state).toBe('done')
+  const written = prompts.find((p) => p.includes('# writer')) ?? ''
+  for (const part of ['"learnings"', '"story"', '# The story']) expect(written).toContain(part)
   expect(posts(w.db)).toMatchObject([{ kind: 'weekly', dest: 'substack', status: 'proof', work_date: '2026-10-02' }])
   expect(posts(w.db)[0]?.body).toContain('## Script')
 })

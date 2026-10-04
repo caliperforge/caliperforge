@@ -10,13 +10,14 @@ import { dump, migrate, open as openDb, type Db } from '../store/index.ts'
 import { dial, hhmm, lanes, priority as setPriority, record, Reading, windows } from '../store/lanes.ts'
 import { refusedPush } from '../store/approvals.ts'
 import { drifts } from '../store/drift.ts'
-import { repriced } from '../store/events.ts'
+import { handUps, repriced } from '../store/events.ts'
 import { holderOf, HOLDERS, overlapWaits, parked } from '../store/plans.ts'
 import { backfillTickets } from '../store/tickets.ts'
 import { backfill } from '../store/transcript.ts'
 import { actors, actorSection, byType, type ByType, costs, costSection, day, fileWaits, greptileLine, halted, hands, heldBy, laneLine, misses, missSection, open as openPlans,
   rulings, section, tickets, ticketSection, unpriced, waitLine, waits, windowLine } from './brief.ts'
 import { check, fill } from './digests.ts'
+import { handUpLine } from './director.ts'
 import { driftSection } from './drift.ts'
 import { flow } from './flow.ts'
 import { gh } from './gh.ts'
@@ -193,6 +194,7 @@ function briefs(cf: Command, { root, db, out }: Cli): void {
     out(`last 24 h\n  ${String(d.runs)} run(s)\t${String(d.tokens)} tokens\t${d.seconds.toFixed(1)}s\n`)
     out(costSection(costs(handle), unpriced(handle)))
     const now = new Date()
+    out(handUpLine(handUps(handle, now)))
     out(actorSection(actors(handle, now), hands(now, gh)))
     out(ticketSection(tickets(handle)))
   })

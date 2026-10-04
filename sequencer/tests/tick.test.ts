@@ -839,7 +839,7 @@ const accepting = (findings: string[] | null, rulings: (sha: string) => string, 
   if (handback !== undefined) put(at.root, 1, 'step-2.handback.md', handback)
 }
 
-test('D1 D5 a 3/5 head passes ready when the COO accepted its findings and the hand-back answered the rest', async () => {
+test('D1 D5 a 3/5 head with its findings accepted or done passes', async () => {
   const [w, lap] = await atReady(accepting(['G11', 'G12'], (sha) => ruling(sha, 'G11, G12')))
   expect((await lap())?.note).toMatch(/the COO accepted G11, G12$/)
   expect(plan(w.db, 1).step).toBe(7)
@@ -851,7 +851,7 @@ test('D1 D5 a 3/5 head passes ready when the COO accepted its findings and the h
   expect(plan(d5.db, 1).step).toBe(7)
 })
 
-test('D2 D3 D4 a 3/5 head with a finding unanswered, another head\'s ruling or nothing to accept goes to the builder', async () => {
+test('D2 D3 D4 a 3/5 head not fully accepted goes to the builder', async () => {
   for (const grade of [
     accepting(['G11', 'G12', 'G13'], (sha) => ruling(sha, 'G11, G12')),
     accepting(['G11', 'G12'], () => ruling('f'.repeat(40), 'G11, G12')),

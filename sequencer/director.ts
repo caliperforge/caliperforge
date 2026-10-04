@@ -1,10 +1,10 @@
-import { createHash } from 'node:crypto'
 import { z } from 'zod'
 import { record, ticketOf } from '../cli/inbox.ts'
 import { alerter, type Post } from '../cli/watch.ts'
 import type { Provider } from '../providers/kind.ts'
 import { packet } from '../runner/index.ts'
 import { load, seat, tight } from '../runner/rules.ts'
+import { decisions } from '../store/decisions.ts'
 import { logged } from '../store/events.ts'
 import { retried, returnToLane } from '../store/holds.ts'
 import type { Db } from '../store/index.ts'
@@ -16,7 +16,7 @@ import { clear } from '../store/refusals.ts'
 import { pending } from '../store/transcript.ts'
 import { split, type Part } from './brief.ts'
 import { isHeld, unhold } from './hold.ts'
-import { fixed } from './fixed.ts'
+import { fixed, stop } from './fixed.ts'
 import { released } from './fixer.ts'
 import { prose } from './prose.ts'
 import { WIRE, type Wire } from './push.ts'
@@ -29,7 +29,7 @@ import { READ, SERVER, server } from './upstream.ts'
 import { afresh, maybe, planDir, put } from './workspace.ts'
 
 const Said = z.object({
-  move: z.enum(['rule', 'waive', 'close', 'file', 'ask_ceo', 'return', 'fix']),
+  move: z.enum(['rule', 'waive', 'close', 'file', 'ask_ceo', 'ask_coo', 'return', 'fix']),
   why: z.string().trim().min(1),
   answer: z.string().trim().min(1).optional(),
   ticket: z.string().trim().min(1).transform((t) => t.slice(0, 140)).optional(),
@@ -52,16 +52,23 @@ export async function cooLite(db: Db, root: string, plan: PlanRow, provider: Pro
   if (plan.state !== 'blocked_on_ceo' && plan.state !== 'halted') {
     return told(db, root, plan, now, { outcome: 'needs_ceo', message: `ask_ceo: plan is ${plan.state}, not stopped` }, post)
   }
-  const m = await ask(db, root, plan, provider, tried)
+  let m = await ask(db, root, plan, provider, tried)
+  const n = failures(db, root, plan)
+  if (m?.move === 'ask_coo' && n < 2) {
+    m = await ask(db, root, plan, provider, tried, `ask_coo is refused: ${String(n)} failed fixes on this stop, two are needed. Choose another move.`)
+    if (m?.move === 'ask_coo') {
+      return told(db, root, plan, now, { outcome: 'needs_ceo', message: `ask_coo: refused by the fence, ${String(n)} failed fixes on this stop` }, post)
+    }
+  }
   if (m === null) return told(db, root, plan, now, { outcome: 'needs_ceo', message: 'ask_ceo: no readable answer' }, post)
   const message = `${m.move}: ${m.why}`
   if (!applying(db)) return told(db, root, plan, now, { outcome: 'needs_ceo', message, note: `proposes ${message}` })
   const done = m.move === 'fix' ? await fixed(db, root, plan, m.why, provider, now, post, wire)
-    : m.move !== 'ask_ceo' && apply(db, root, plan, m, wire, now)
+    : m.move !== 'ask_ceo' && m.move !== 'ask_coo' && apply(db, root, plan, m, wire, now)
   if (done !== false) return told(db, root, plan, now, { outcome: 'pass', message, pointer: done === true ? null : done })
   if (m.move === 'fix' && tried === undefined) return cooLite(db, root, planById(db, plan.id), provider, now, post, wire, m.why)
-  if (m.move === 'ask_ceo') {
-    held(db, plan.id, 'ceo', m.why)
+  if (m.move === 'ask_ceo' || m.move === 'ask_coo') {
+    held(db, plan.id, m.move === 'ask_ceo' ? 'ceo' : 'coo', m.why)
     return told(db, root, plan, now, { outcome: 'needs_ceo', message }, post)
   }
   const failed = `${m.move} did not apply, ${UNAPPLIED[m.move]}: ${m.why}`
@@ -112,11 +119,16 @@ async function fire(db: Db, root: string, provider: Provider, now: Date, post: P
   }
 }
 
-async function ask(db: Db, root: string, plan: PlanRow, provider: Provider, tried?: string): Promise<Move | null> {
+function failures(db: Db, root: string, plan: PlanRow): number {
+  const at = stop(root, plan.id)
+  return decisions(db, plan.id).filter((d) => d.verb === 'ask_coo' && d.evidence === at).length
+}
+
+async function ask(db: Db, root: string, plan: PlanRow, provider: Provider, tried?: string, fence?: string): Promise<Move | null> {
   load(db, root)
   const { manifest, prompt, hash } = seat(root, 'coo_lite')
   const dir = planDir(root, plan.id)
-  const built = packet(manifest, prompt, tight(root), text(db, root, plan, tried), dir, pending(dir, 'coo_lite'))
+  const built = packet(manifest, prompt, tight(root), text(db, root, plan, tried, fence), dir, pending(dir, 'coo_lite'))
   const fired = await provider.fire({
     ...built,
     tools: [...built.tools, READ],
@@ -127,7 +139,7 @@ async function ask(db: Db, root: string, plan: PlanRow, provider: Provider, trie
   return fired.ended === 'completed' ? read(fired.text) : null
 }
 
-function text(db: Db, root: string, plan: PlanRow, tried?: string): string {
+function text(db: Db, root: string, plan: PlanRow, tried?: string, fence?: string): string {
   const at = (name: string): string => maybe(root, plan.id, name) ?? 'none'
   return [
     `# Job\n\nplan ${String(plan.id)}, state ${plan.state}, step ${String(plan.step)}, lane ${plan.lane ?? '-'}, ${plan.origin ?? 'no ticket'}`,
@@ -139,6 +151,7 @@ function text(db: Db, root: string, plan: PlanRow, tried?: string): string {
     `# Rulings on this plan\n\n${own(root, plan)}`,
     `# Rulings on sibling plans\n\n${siblings(db, root, plan)}`,
     ...(tried === undefined ? [] : [`# Fixer\n\nthe fixer did not make this fix: ${tried}`]),
+    ...(fence === undefined ? [] : [`# Fence\n\n${fence}`]),
   ].join('\n\n')
 }
 
@@ -178,7 +191,7 @@ export function read(text: string): Move | null {
   return lined.success ? lined.data : null
 }
 
-const UNAPPLIED: Record<Exclude<Move['move'], 'ask_ceo'>, string> = {
+const UNAPPLIED: Record<Exclude<Move['move'], 'ask_ceo' | 'ask_coo'>, string> = {
   rule: 'the answer names a path a ruling may not carry',
   waive: 'the plan is not blocked_on_ceo',
   split: 'the parts were not filed',
@@ -196,6 +209,8 @@ function apply(db: Db, root: string, plan: PlanRow, m: Move, wire: Wire, now: Da
       if (to === null) return false
       if (to === 'ask.md') unhold(db, root, plan.id, 'coo_lite')
       else afresh(root, plan.id, db.transaction(() => { clear(db, plan.id); return retry(db, plan) })())
+      const ref = originRef(plan)
+      if (ref !== null) wire.comment(ref.repo, ref.no, `Ruled by coo_lite on plan ${String(plan.id)}.\n\n${m.answer ?? ''}`)
       return true
     }
     case 'waive':
@@ -216,7 +231,8 @@ function apply(db: Db, root: string, plan: PlanRow, m: Move, wire: Wire, now: Da
       afresh(root, plan.id, returnToLane(db, plan.id, 'coo_lite'))
       return true
     case 'fix':
-    case 'ask_ceo': return false
+    case 'ask_ceo':
+    case 'ask_coo': return false
   }
 }
 
@@ -254,10 +270,4 @@ export async function woke(db: Db, root: string, provider: Provider, now: Date, 
 
 function woken(plan: PlanRow): Woken {
   return (WAKE as readonly string[]).includes(plan.wait_reason ?? '') ? plan.wait_reason as Woken : 'blocked_on_ceo'
-}
-
-/** One stop is one refusal (or question) as written; the same words at the same step are the same stop. */
-function stop(root: string, plan: number): string {
-  const said = maybe(root, plan, 'refusal.md') ?? maybe(root, plan, 'question.md')
-  return said === null ? 'none' : createHash('sha256').update(said).digest('hex').slice(0, 12)
 }

@@ -15,6 +15,9 @@ import { due, type Entry, stuck } from './drift.ts'
 import { sunday } from '../cli/science.ts'
 import { offered, route, working, type Route } from './next.ts'
 import { reap } from './workspace.ts'
+import { hold } from './hold.ts'
+import { logged } from '../store/events.ts'
+import { slack } from '../cli/flow.ts'
 import { ceilinged, stepped } from './settle.ts'
 
 /**
@@ -41,6 +44,7 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
     .map((pipe) => ({ pipe, routed: live(db, pipe).map((plan) => ({ plan, route: route(db, plan, now) })) }))
   waiting(db, lanes.flatMap((l) => l.routed.map(({ plan, route: r }) =>
     'fire' in r ? { plan: plan.id, why: null } : { plan: plan.id, why: r.wait, on: r.on })))
+  park(db, root, lanes.flatMap((l) => l.routed), now)
   if (Number.isFinite(each)) {
     const laps = lanes.map(({ pipe, routed }) => lane(routed.filter((r) => stepping(r.route)), now, each,
       (m) => apart === undefined ? one(db, root, pipe, m, m.lease, provider, wire, chain, labels) : away(db, m, apart), db))
@@ -54,6 +58,18 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
   }
   await woke(db, root, provider, now)
   return out
+}
+
+/** Parks a running job waiting on another job's files where its lane has a queued job to start, as `cf park --on` does. */
+function park(db: Db, root: string, legs: Leg[], now: Date): void {
+  const startable = new Set(slack(db, now).filter((s) => s.startable > 0).map((s) => s.pipe.id))
+  for (const { plan, route: r } of legs) {
+    if (plan.state !== 'running' || !('wait' in r) || r.wait !== 'file_overlap' || r.on === null) continue
+    if (!startable.has(plan.pipe_id)) continue
+    const why = `waits on plan ${String(r.on)}'s files`
+    hold(db, root, plan.id, why, now, r.on)
+    logged(db, { plan: plan.id, kind: 'park', actor: 'tick', outcome: 'pass', message: why, pointer: null, run: null })
+  }
 }
 
 /**

@@ -94,7 +94,7 @@ export function desk(db: Db, root: string, plan: PlanRow): Outcome {
   return { outcome: 'pass', spans: [], note: `desk_posts ${String(plan.id)} in proof for ${work}` }
 }
 
-function titled(db: Db, plan: PlanRow, kind: string): string | null {
+export function titled(db: Db, plan: PlanRow, kind: string): string | null {
   const { title } = db.prepare('SELECT title FROM plans WHERE id = ?').get(plan.id) as { title: string | null }
   return title?.startsWith(`${kind} `) === true ? title : null
 }

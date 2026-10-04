@@ -19,6 +19,7 @@ const Roster = z.object({
 const Written = Roster.extend({ digests: z.record(z.string(), z.record(z.string(), z.string())).catch({}) })
 
 export const WRITERS = new Set(['Write', 'Edit', 'NotebookEdit', 'Bash', 'MultiEdit'])
+const LOOK = 'Bash(cf look:*)'
 
 export const Seat = z.object({
   seat: z.string(),
@@ -26,8 +27,8 @@ export const Seat = z.object({
   effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']),
   tools: z.array(z.string()).min(1),
   write_paths: z.array(z.string()),
-}).refine((s) => s.write_paths.length > 0 || !s.tools.some((t) => WRITERS.has(bare(t))), {
-  message: `a seat with no write_paths may hold none of ${[...WRITERS].join(', ')}`,
+}).refine((s) => s.write_paths.length > 0 || !s.tools.some((t) => t !== LOOK && WRITERS.has(bare(t))), {
+  message: `a seat with no write_paths may hold none of ${[...WRITERS].join(', ')}, save ${LOOK}`,
   path: ['tools'],
 })
 

@@ -66,10 +66,7 @@ const TWIN: Record<string, (db: Db, home: string) => void> = {
     const url = 'https://github.com/caliperforge/caliperforge/issues/900'
     hold(db, home, 7, `${url}\n\nfiled`, now, file(db, 'coo', 'internal', 'machine', LANE.machine.seat, url, 0))
   },
-  ask_ceo: (db, home) => {
-    hold(db, home, 7, 'a maintainer outside our org sees this', now)
-    held(db, 7, 'ceo', 'a maintainer outside our org sees this')
-  },
+  ask_ceo: (db) => { held(db, 7, 'ceo', 'a maintainer outside our org sees this') },
 }
 
 function seeded(apply: string | null) {
@@ -130,6 +127,14 @@ test.each(Object.keys(REPLY))('live %s leaves plan 7 as its cf call does on a tw
   TWIN[move]?.(twin.db, twin.home)
   expect(plan7(live.db)).toEqual(plan7(twin.db))
   expect(told(live.db)).toEqual([{ actor: 'coo_lite', outcome: move === 'ask_ceo' ? 'needs_ceo' : 'pass', message: expect.stringMatching(new RegExp(`^${move}: `)) as string }])
+})
+
+test('live ask_ceo hands plan 7 to the ceo with no parked.md', async () => {
+  const { db, home } = seeded('1')
+  await run(db, home, REPLY.ask_ceo ?? '')
+  expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'ceo', held_why: 'a maintainer outside our org sees this',
+    held_until: null, waits_on: null })
+  expect(maybe(home, 7, 'parked.md')).toBeNull()
 })
 
 test.each([['file', 'https://github.com/caliperforge/caliperforge/issues/900'], ['rule', null]])('D2 live %s logs pointer %s', async (move, pointer) => {

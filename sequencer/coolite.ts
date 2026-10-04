@@ -59,7 +59,6 @@ export async function cooLite(db: Db, root: string, plan: PlanRow, provider: Pro
   if (done !== false) return told(db, root, plan, now, { outcome: 'pass', message, pointer: done === true ? null : done })
   if (m.move === 'fix' && tried === undefined) return cooLite(db, root, planById(db, plan.id), provider, now, post, wire, m.why)
   if (m.move === 'ask_ceo') {
-    hold(db, root, plan.id, m.why, now)
     held(db, plan.id, 'ceo', m.why)
     return told(db, root, plan, now, { outcome: 'needs_ceo', message }, post)
   }

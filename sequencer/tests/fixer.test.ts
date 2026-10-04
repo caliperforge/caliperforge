@@ -284,13 +284,31 @@ test('gone checkout, outside plan: to a person', async () => {
 test('park: held, not reaped, not re-woken', async () => {
   const { db, home } = seeded('live')
   const packets: Packet[] = []
-  const PARK = '---\ndid: nothing\nthen: park\nwhy: builds on a job not yet filed\n---\n'
-  await woke(db, home, stub(PARK, packets), now, () => undefined, wire([]))
+  const posted: string[] = []
+  const PARK = '---\ndid: nothing\nthen: park\nwhy: builds on a job not yet filed\nuntil: 2026-09-26T17:00:00.000Z\n---\n'
+  await woke(db, home, stub(PARK, packets), now, (t) => void posted.push(t), wire([]))
   expect(state(db)).toEqual({ state: 'blocked_on_ceo', step: 4 })
+  expect(posted).toEqual([])
+  expect(heldUntil(db)).toEqual({ held_until: '2026-09-26T17:00:00.000Z' })
+  expect(maybe(home, 7, 'parked.md')).not.toBeNull()
   expect(terminal(db)).not.toContain(7)
   rmSync(join(home, '.cf/work/7/orchestrator.md'))
   await woke(db, home, stub(PARK, packets), now, () => undefined, wire([]))
   expect(packets.filter((p) => basename(p.transcript).startsWith('coo_lite'))).toHaveLength(1)
+})
+
+const heldUntil = (db: ReturnType<typeof open>) => db.prepare('SELECT held_until FROM plans WHERE id = 7').get()
+
+test.each(['', 'until: next week\n'])('park without a time it parses is unreadable: %j', async (until) => {
+  const { db, home } = seeded('live')
+  const posted: string[] = []
+  await woke(db, home, stub(`---\ndid: nothing\nthen: park\nwhy: builds on a job not yet filed\n${until}---\n`, []),
+    now, (t) => void posted.push(t), wire([]))
+  expect(maybe(home, 7, 'fixes.jsonl')).toContain('"applied":"unreadable"')
+  expect(posted).toHaveLength(1)
+  expect(state(db)).toEqual({ state: 'blocked_on_ceo', step: 4 })
+  expect(heldUntil(db)).toEqual({ held_until: null })
+  expect(maybe(home, 7, 'parked.md')).toBeNull()
 })
 
 test('a # in did or why is kept whole', async () => {

@@ -47,9 +47,10 @@ why: <why this is the next move>
 ticket: <only with then: ticket, the ticket's title>
 add_files: [<only when the file list is missing files, the paths from the checkout root>]
 waits_on: <only with then: wait, the plan number of the job it builds on>
+until: <only with then: park, the ISO time it goes back to its lane, e.g. 2026-10-04T22:00:00Z>
 ---
 ```
 
 `return` puts the job back at the step it stopped on. `retry` sends it back to the builder with its refusals
-cleared: use it only when the builder must change code. `park` holds it until a person moves it.
+cleared: use it only when the builder must change code. `park` holds it until `until`, then puts it back in its lane.
 In shadow mode you may read but not write: describe under `did` the exact change you would make.

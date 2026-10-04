@@ -49,9 +49,11 @@ const Fix = z.object({
   ticket: z.string().trim().min(1).max(140).optional(),
   add_files: z.array(z.string().trim().min(1)).optional(),
   waits_on: z.coerce.number().int().positive().optional(),
+  until: z.string().trim().min(1).refine((t) => !Number.isNaN(Date.parse(t))).optional(),
   answer: z.string().trim().min(1).max(1200).optional(),
 }).strict().refine((f) => f.then !== 'ticket' || f.ticket !== undefined, { path: ['ticket'] })
   .refine((f) => f.then !== 'wait' || f.waits_on !== undefined, { path: ['waits_on'] })
+  .refine((f) => f.then !== 'park' || f.until !== undefined, { path: ['until'] })
 
 export type Fix = z.infer<typeof Fix>
 
@@ -199,7 +201,7 @@ function apply(db: Db, root: string, plan: PlanRow, f: Fix, wire: Wire, now: Dat
       end(db, plan.id, 'done')
       return 'done'
     }
-    case 'park': hold(db, root, plan.id, f.why, now); return 'park'
+    case 'park': hold(db, root, plan.id, f.why, now, null, new Date(f.until ?? '')); return 'park'
     case 'wait': return awaits(db, root, plan, f, now)
     case 'rebuild': return gone(root, plan) ? rebuild(db, root, plan) : 'escalated'
     case 'ticket': {

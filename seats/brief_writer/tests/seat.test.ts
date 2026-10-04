@@ -81,6 +81,7 @@ test('the prompt states the brief check\'s path and length rules', () => {
     '`(new)` marks only a path you looked for in the checkout and did not find.',
     'The brief is at most 100 lines: count them before you answer.',
     'A `## Files` row on a file over 300 lines names the block it changes as `path:start-end`.',
+    '`# Files over 300 lines`, after the template, lists every file in the checkout that rule applies to, with its length: check each `## Files` row against it before you answer.',
   ]) expect(prompt).toContain(rule)
 })
 

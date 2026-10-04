@@ -23,7 +23,7 @@ import { parse } from '../rails/diff.ts'
 import { estimate, human, pointed, references, shape, split, TEMPLATE, unclear, wide, WIDE, type Part } from './brief.ts'
 import { repoOf } from './ready.ts'
 import { limitOf } from './size.ts'
-import { handout, touched, type Handed } from './handout.ts'
+import { handout, long, touched, type Handed } from './handout.ts'
 import { capped, enclosed, handover, type Handover } from './handover.ts'
 import { symbolMap } from './symbols.ts'
 import { targetOf } from './steps.ts'
@@ -131,7 +131,7 @@ export async function fireBrief(db: Db, root: string, plan: PlanRow, step: Step,
   const src = srcDir(root, plan.id)
   const standing = maybe(root, plan.id, 'issue.md')
   if (standing !== null && shape(standing, ask, src) === null) return stands()
-  const fired = await ran(db, root, plan, step, provider, again(db, root, plan.id, ask) + store(root, plan), false)
+  const fired = await ran(db, root, plan, step, provider, again(db, root, plan.id, ask) + store(root, plan) + long(src), false)
   drop(root, plan.id, 'brief.refused.md')
   if (fired.ended !== 'completed') return exited(step, fired)
   const question = unclear(fired.text)

@@ -1,10 +1,10 @@
-import { appendFileSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { appendFileSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import type { Packet, Provider } from '../../providers/kind.ts'
 import { pointed, STANDING } from '../brief.ts'
-import { handout, WHOLE } from '../handout.ts'
+import { handout, long, WHOLE } from '../handout.ts'
 import { tick } from '../index.ts'
 import { PlanRow } from '../../store/plans.ts'
 import { rule } from '../rule.ts'
@@ -69,6 +69,17 @@ test('short whole, long by named block, unnamed long by length', () => {
 
 test('a file the checkout does not hold is handed nothing', () => {
   expect(handout(tree({}), [{ path: 'gone.ts', line: null }])).toBe('')
+})
+
+test('D1 D2 long lists text files past WHOLE lines, else nothing', () => {
+  const lines = (n: number): string => Array<string>(n).fill('x').join('\n')
+  const src = tree({ 'over.ts': lines(WHOLE + 1), 'at.ts': lines(WHOLE), 'bin.dat': `\0${lines(WHOLE + 1)}` })
+  for (const dir of ['fixtures', 'node_modules']) {
+    mkdirSync(join(src, dir))
+    writeFileSync(join(src, dir, 'big.ts'), lines(WHOLE + 1))
+  }
+  expect(long(src)).toBe('\n\n# Files over 300 lines\n\nA `## Files` row on one of these names the block it changes as `path:start-end`.\n\n- over.ts — 301 lines')
+  expect(long(tree({ 'at.ts': lines(WHOLE) }))).toBe('')
 })
 
 test('the brief points a file at its line', () => {

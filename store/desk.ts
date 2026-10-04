@@ -1,4 +1,6 @@
+import { logged } from './events.ts'
 import type { Db } from './index.ts'
+import type { Holder } from './plans.ts'
 
 export interface Edited {
   id: number
@@ -30,6 +32,49 @@ export interface Post extends Edited {
 
 export function posts(db: Db): Post[] {
   return db.prepare('SELECT * FROM desk_posts ORDER BY id').all() as Post[]
+}
+
+export function opened(db: Db): Post[] {
+  return db.prepare("SELECT * FROM desk_posts WHERE status IN ('proof', 'changes') ORDER BY id").all() as Post[]
+}
+
+export function postOf(db: Db, id: number): Post {
+  const post = db.prepare('SELECT * FROM desk_posts WHERE id = ?').get(id) as Post | undefined
+  if (post === undefined) throw new Error(`no desk post ${String(id)}`)
+  return post
+}
+
+function acted(db: Db, id: number, kind: string, by: Holder, message: string, set: () => void): void {
+  db.transaction(() => {
+    const { status } = postOf(db, id)
+    if (status !== 'proof' && status !== 'changes') throw new Error(`desk post ${String(id)} is ${status}, not in proof or changes`)
+    set()
+    logged(db, { plan: id, kind, actor: by, outcome: 'pass', message, pointer: null, run: null })
+  })()
+}
+
+export function amend(db: Db, id: number, fields: Partial<Record<'title' | 'dek' | 'body', string>>, by: Holder): void {
+  const names = (['title', 'dek', 'body'] as const).filter((f) => fields[f] !== undefined)
+  acted(db, id, 'desk_edit', by, names.join(', '), () => {
+    db.prepare(`UPDATE desk_posts SET ${names.map((f) => `edited_${f} = @${f}`).join(', ')} WHERE id = @id`).run({ ...fields, id })
+  })
+}
+
+export function approved(db: Db, id: number, by: Holder): void {
+  acted(db, id, 'desk_approve', by, 'approved', () => {
+    db.prepare("UPDATE desk_posts SET status = 'approved' WHERE id = ?").run(id)
+  })
+}
+
+export function sentBack(db: Db, id: number, note: string, by: Holder): void {
+  acted(db, id, 'desk_return', by, note.split('\n')[0] ?? '', () => {
+    db.prepare("UPDATE desk_posts SET status = 'changes', note = ? WHERE id = ?").run(note, id)
+  })
+}
+
+export function returned(db: Db, id: number): string | null {
+  const row = db.prepare("SELECT note FROM desk_posts WHERE id = ? AND status = 'changes'").get(id) as { note: string | null } | undefined
+  return row?.note ?? null
 }
 
 export function putPost(db: Db, p: Pick<Post, 'id' | 'kind' | 'dest' | 'status' | 'title' | 'dek' | 'body' | 'edited_title' | 'sources'

@@ -26,6 +26,7 @@ import { reported, slack } from './flow.ts'
 import { registerInbox, registerLanes, registerSession, type Cli } from './cf-lanes.ts'
 import { registerPlans, registerRetry } from './cf-plans.ts'
 import { registerAdopt, registerApprovals, registerTargets } from './cf-targets.ts'
+import { registerDesk } from './desk.ts'
 import { desk, fileIssue, gh } from './gh.ts'
 import { health } from './health.ts'
 import { crashed, events, notify, record as keep } from './inbox.ts'
@@ -53,6 +54,7 @@ registerRetry(cf, cli)
 registerApprovals(cf, cli)
 registerSession(cf, cli)
 registerAdopt(cf, cli)
+registerDesk(cf, cli)
 
 cf.command('health').action(() => {
   out(health(db(), root, new Date().toISOString().slice(0, 10)))

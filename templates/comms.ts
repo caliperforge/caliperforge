@@ -11,7 +11,7 @@ import { prose } from '../sequencer/prose.ts'
 import { ran } from '../sequencer/seat.ts'
 import { scripted, shift, sound, weekly } from '../sequencer/weekly.ts'
 import { get, maybe, put } from '../sequencer/workspace.ts'
-import { edited } from '../store/desk.ts'
+import { edited, returned } from '../store/desk.ts'
 import type { Db } from '../store/index.ts'
 import { packetOf } from '../store/packet.ts'
 import type { PlanRow } from '../store/plans.ts'
@@ -110,7 +110,7 @@ const halted = (step: Step, fired: Fired): Outcome => ({ outcome: 'refuse', span
 export async function draft(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
   const title = titled(db, plan, 'daily') ?? titled(db, plan, 'ship') ?? titled(db, plan, 'weekly')
   if (title === null) return { outcome: 'pass', spans: [], note: 'not a post plan' }
-  const fired = await ran(db, root, plan, step, provider, `# packet.json\n\n${get(root, plan.id, 'packet.json')}`, false)
+  const fired = await ran(db, root, plan, step, provider, `# packet.json\n\n${get(root, plan.id, 'packet.json')}${returned(db, plan.id)?.replace(/^/, '\n\n# Returned from the desk\n\n') ?? ''}`, false)
   if (fired.ended !== 'completed') return halted(step, fired)
   if (titled(db, plan, 'daily') !== null) return listed(root, plan, step, fired.text)
   const reply = drafted(fired.text)

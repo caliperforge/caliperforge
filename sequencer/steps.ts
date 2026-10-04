@@ -170,7 +170,7 @@ function unmet(db: Db, repo: string, n: number): { on: number | null; issue: str
   const open = on?.closed_at === null && (pushing || ['queued', 'running', 'blocked_on_ceo'].includes(on.state))
   const why = on === undefined ? `#${String(n)} has no plan`
     : open ? `waits for ${named}, plan ${String(on.id)}, to land`
-    : on.state === 'done' ? `#${String(n)} split, and no open part of it has a plan`
+    : on.state === 'done' && !pushing ? `#${String(n)} split, and no open part of it has a plan`
     : on.closed_at === null ? (part === null ? `#${String(n)}'s plan ${String(on.id)} ended ${on.state}` : `${named} ended ${on.state}`)
     : `#${String(n)} closed without plan ${String(on.id)} landing`
   return { on: open ? on.id : null, issue, why }

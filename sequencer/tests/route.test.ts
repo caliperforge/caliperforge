@@ -7,7 +7,7 @@ import { authority } from '../../rails/authority/index.ts'
 import { record } from '../../store/files.ts'
 import type { Db } from '../../store/index.ts'
 import { PlanRow } from '../../store/plans.ts'
-import { builder, languageOfSeat } from '../../templates/pr-path.ts'
+import { at, builder, languageOfSeat } from '../../templates/pr-path.ts'
 import { BRIEF_FILES, fenceFor, languageFor, languageOfPath, languageOfSpan, majority } from '../route.ts'
 
 const schema = join(import.meta.dirname, '../../schema')
@@ -19,7 +19,7 @@ function monorepo(): string {
   return dir
 }
 
-function world(): { db: Db; target: PlanRow; ours: PlanRow; hooks: PlanRow } {
+function world(): { db: Db; target: PlanRow; ours: PlanRow; hooks: PlanRow; web: PlanRow } {
   const db = fresh(schema)
   db.prepare(`INSERT INTO accounts (id, repo, measured_at, maintainers, doors, last_outsider_merge,
     open_pr_age_p50_days, cross_repo_activity, pulse, evidence)
@@ -30,9 +30,10 @@ function world(): { db: Db; target: PlanRow; ours: PlanRow; hooks: PlanRow } {
   db.prepare(`INSERT INTO plans (id, pipe_id, template, state, queued_at, lane, seat, origin)
     VALUES (2, 1, 'pr_path', 'running', '2026-09-21', 'machine', 'typescript_specialist', 'https://github.com/caliperforge/caliperforge/issues/1')`).run()
   db.prepare(`INSERT INTO plans (id, pipe_id, template, state, queued_at, lane, seat, origin)
-    VALUES (3, 1, 'pr_path', 'running', '2026-09-21', 'uniswap', 'python_specialist', 'https://github.com/caliperforge/v4-hook-index/issues/1')`).run()
+    VALUES (3, 1, 'pr_path', 'running', '2026-09-21', 'uniswap', 'python_specialist', 'https://github.com/caliperforge/v4-hook-index/issues/1'),
+    (4, 1, 'pr_path', 'running', '2026-09-21', 'atelier', 'swift_specialist', 'https://github.com/caliperforge/atelier-web/issues/1')`).run()
   const row = (id: number): PlanRow => PlanRow.parse(db.prepare('SELECT * FROM plans WHERE id = ?').get(id))
-  return { db, target: row(1), ours: row(2), hooks: row(3) }
+  return { db, target: row(1), ours: row(2), hooks: row(3), web: row(4) }
 }
 
 const listed = (paths: string[]) => paths.map((path) => ({ path, is_new: false }))
@@ -75,7 +76,7 @@ test('the most non-test files win; tests count only when alone', () => {
 
 test('a path reads by name, then folder; docs and fixtures by none', () => {
   expect(['crates/x/Cargo.toml', 'python/pyproject.toml', 'ruby/Gemfile', 'go/go.mod', 'php/composer.json', 'lua/pay-kit-dev-1.rockspec']
-    .map(languageOfPath)).toEqual(['rust', 'python', 'ruby', 'go', 'php', 'lua'])
+    .map((path) => languageOfPath(path))).toEqual(['rust', 'python', 'ruby', 'go', 'php', 'lua'])
   expect(languageOfPath('programs/escrow/Xargo.toml')).toBe('rust')
   expect(languageOfPath('go/testdata/vector.json')).toBeNull()
   expect(languageOfPath('ruby/README.md')).toBeNull()
@@ -98,7 +99,7 @@ test('D5 kotlin beside a doc and swift get their own seats', () => {
   expect(builder(languageFor(w.db, w.target, monorepo()))).toBe('kotlin_specialist')
   record(w.db, 1, listed(['swift/Sources/PayKit/Memo.swift']))
   expect(builder(languageFor(w.db, w.target, monorepo()))).toBe('swift_specialist')
-  expect(['kotlin/build.gradle.kts', 'swift/Package.swift'].map(languageOfPath)).toEqual(['kotlin', 'swift'])
+  expect(['kotlin/build.gradle.kts', 'swift/Package.swift'].map((path) => languageOfPath(path))).toEqual(['kotlin', 'swift'])
 })
 
 test('our own plans stay with the typescript seat', () => {
@@ -123,6 +124,23 @@ test('our repo with a language goes by tree, not the plan\'s seat', () => {
 test('our empty repo with no seat falls to the default builder', () => {
   const w = world()
   expect(builder(languageFor(w.db, { ...w.hooks, seat: null }, mkdtempSync(join(tmpdir(), 'cf-route-'))))).toBe('typescript_specialist')
+})
+
+test('760b D2 an atelier-web plan on app.js builds on web', () => {
+  const w = world()
+  record(w.db, 4, listed(['public/app.js']))
+  const language = languageFor(w.db, w.web, mkdtempSync(join(tmpdir(), 'cf-route-')))
+  expect(language).toBe('web')
+  expect([at(2, language).runs, at(4, language).seat]).toEqual(['web_specialist', 'web_specialist'])
+})
+
+test('760b D3 web paths stay unclaimed outside atelier-web', () => {
+  const w = world()
+  expect(languageOfPath('public/app.js')).toBeNull()
+  record(w.db, 1, listed(['public/app.js', 'index.html']))
+  expect(builder(languageFor(w.db, w.target, monorepo()))).toBe('outside_specialist')
+  record(w.db, 3, listed(['public/app.js']))
+  expect(builder(languageFor(w.db, w.hooks, mkdtempSync(join(tmpdir(), 'cf-route-'))))).toBe('python_specialist')
 })
 
 test('a seat no language builds with has no language', () => {

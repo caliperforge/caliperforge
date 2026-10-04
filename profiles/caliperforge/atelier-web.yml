@@ -1,0 +1,13 @@
+builder: web_specialist
+lane: atelier
+rails:
+  digests: false
+  ratchet: false
+  fence: false
+  tight_code: true
+  checks: local
+commands:
+  node:
+    - --check
+  npm:
+    - test

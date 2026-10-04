@@ -150,7 +150,7 @@ test('D1-D3: a Files row on a file over 300 lines names its range', () => {
   expect(row('- a/long.ts (new)')).toMatchObject({ span: 'a/long.ts', reason: holding('already in the tree') })
 })
 
-const lua = 'seats/lua_specialist/prompt.md'
+const lua = 'seats/modes/build.md'
 
 const prompt = (rows: string[], others: string[]): string =>
   swap(swap(brief, '## Files', rows), '## Who else reads what this changes', others)

@@ -37,11 +37,19 @@ test('the prompt says the brief\'s files are handed', () => {
 
 test('the fence puts summary above done, and the audit reads it', () => {
   for (const name of ['go_specialist', 'kotlin_specialist', 'outside_specialist', 'swift_specialist', 'typescript_specialist']) {
-    const { prompt } = seat(root, name, ['go_specialist', 'kotlin_specialist', 'swift_specialist'].includes(name) ? 'build' : undefined)
+    const { prompt } = seat(root, name, 'build')
     expect(prompt).toMatch(/^---\nsummary: <the change in one line>\ndone:$/m)
     expect(prompt).toContain(REASK)
   }
   const fence = (pointer: string) => `---\nsummary: x\ndone:\n  - id: D1\n    status: done\n${pointer}---\n`
   expect(audit(fence('    pointer: a.ts\n'), ['D1']).outcome).toBe('pass')
   expect(audit(fence(''), ['D1']).outcome).toBe('refuse')
+})
+
+test('D3: the build mode, not the prompt, holds the framing', () => {
+  const { prompt } = seat(root, 'outside_specialist')
+  for (const text of ['You build', '- id: D1', 'A file the ask needs removed goes under `## Deleted`']) {
+    expect(prompt).not.toContain(text)
+  }
+  expect(prompt).toContain('You have no shell.')
 })

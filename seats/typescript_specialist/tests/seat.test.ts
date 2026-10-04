@@ -19,7 +19,14 @@ test('the roster carries the seat and it loads as a rules row', () => {
 })
 
 test('the prompt tells the seat to close with the handback fence', () => {
-  expect(seat(root, 'typescript_specialist').prompt).toContain('- id: D1')
+  expect(seat(root, 'typescript_specialist', 'build').prompt).toContain('- id: D1')
+})
+
+test('D2: the build mode, not the prompt, holds the framing', () => {
+  const { prompt } = seat(root, 'typescript_specialist')
+  for (const text of ['You build', '- id: D1', 'A file the ask needs removed goes under `## Deleted`']) {
+    expect(prompt).not.toContain(text)
+  }
 })
 
 test('the prompt names the row a file outside the brief needs', () => {
@@ -46,7 +53,7 @@ test('the prompt runs the ratchet test and names its budgets', () => {
 })
 
 test('a rebuild lists every case, carrying untouched rows forward', () => {
-  expect(seat(root, 'typescript_specialist').prompt).toContain(
+  expect(seat(root, 'typescript_specialist', 'build').prompt).toContain(
     "A rebuild's fence lists every case again: carry forward the rows the refusal did not touch, update the ones it did.",
   )
 })

@@ -60,6 +60,7 @@
   table: approvals
   column: approved_at
   where: subject_kind = 'proposal'
+  while: EXISTS (SELECT 1 FROM proposals WHERE state = 'open')
 - name: ratchet_refuse
   switch: { key: ratchet.mode, value: refuse }
 - name: intake

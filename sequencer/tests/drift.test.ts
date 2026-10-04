@@ -10,6 +10,7 @@ import { decide } from '../../store/approvals.ts'
 import { setting } from '../../store/drift.ts'
 import type { Db } from '../../store/index.ts'
 import { ratchetRules } from '../../store/lanes.ts'
+import { propose } from '../../store/proposals.ts'
 import { take } from '../../store/leases.ts'
 import { drift, due, Entry, filed, stuck } from '../drift.ts'
 import { conflicted, git, maybe, SELF } from '../workspace.ts'
@@ -71,10 +72,11 @@ test('fresh', () => {
 test('proposals', () => {
   const d = db()
   const proposals = REGISTRY.filter((e) => e.name === 'proposals')
-  expect(drift(d, proposals, NOW)).toEqual([{ name: 'proposals', state: 'silent', detail: "no row in approvals WHERE subject_kind = 'proposal'" }])
-  decide(d, 'proposal', 1, 'a'.repeat(64), 'no')
   expect(drift(d, proposals, NOW)).toEqual([])
-})
+  const id = propose(d, { class: 'ruling', subject: 'fixer.mode', value: 'live', match_ruling_id: null, match_issue_no: null, evidence: 't.jsonl:1' }) ?? 0
+  expect(drift(d, proposals, NOW)).toEqual([{ name: 'proposals', state: 'silent', detail: "no row in approvals WHERE subject_kind = 'proposal'" }])
+  decide(d, 'proposal', id, 'a'.repeat(64), 'no')
+  expect(drift(d, proposals, NOW)).toEqual([])})
 
 test('D4 science_pull reads only pass events, stale after 7d', () => {
   const science = REGISTRY.filter((e) => e.name === 'science_pull')

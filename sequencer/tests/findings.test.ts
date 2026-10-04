@@ -1,6 +1,10 @@
 import { execFileSync } from 'node:child_process'
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import type { Packet } from '../../providers/kind.ts'
+import { rehearsed } from '../findings.ts'
 import { tick } from '../index.ts'
 import { maybe, put } from '../workspace.ts'
 import { approve, CARRIED, PASS, scored, stub, world, type World } from './world.ts'
@@ -34,6 +38,20 @@ test('D2 a 4/5 review at HEAD puts both findings in the packet', async () => {
   const { packets } = await built(4)
   expect(packets[0]?.prompt).toContain(`# Bot review findings\n\nGreptile scored this head 4/5.`)
   expect(packets[0]?.prompt).toContain(FOUND)
+})
+
+test('D1 D2 a bot comment is filed only under its own head', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cf-findings-'))
+  const [a, b] = ['a'.repeat(40), 'b'.repeat(40)]
+  const comments = [
+    { id: 11, commit_id: b, original_commit_id: a, path: 'src/hello.ts', line: 1, original_line: 1, body: 'lost', user: { login: 'greptile-apps[bot]' } },
+    { id: 12, commit_id: a, original_commit_id: a, path: 'src/hello.ts', line: 2, original_line: 2, body: 'rename', user: { login: 'maintainer' } },
+  ]
+  const signal = (head: string) => ({ repo: 'caliperforge/widget', pr: 3, kind: 'bot_review' as const, author: 'greptile-apps[bot]',
+    at: '2026-10-01T09:00:00Z', external_id: 'g1', score: 3, plan: 1, head })
+  rehearsed({ root, list: () => comments }, 1, 'caliperforge/widget', 3, [signal(a), signal(b)])
+  expect(maybe(root, 1, `findings-${a}.md`)).toBe('- G11 src/hello.ts:1 lost\n')
+  expect(maybe(root, 1, `findings-${b}.md`)).toBeNull()
 })
 
 test('D3 a 5/5 or no score at HEAD: no findings, no findings.md', async () => {

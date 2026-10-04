@@ -13,7 +13,7 @@ export function rehearsed({ root, list }: Rehearsal, plan: number, fork: string,
   const comments = bots.length === 0 ? [] : inline(fork, pr, list)
   return bots.map((s) => {
     const head = typeof s.head === 'string' ? carried(root, plan, s.head) : null
-    const found = comments.filter((c) => BOT.test(c.user.login) && c.commit_id === s.head)
+    const found = comments.filter((c) => BOT.test(c.user.login) && c.original_commit_id === s.head)
     if (head !== null && found.length > 0) put(root, plan, `findings-${head}.md`, found.map((c) => `- G${String(c.id)} ${said(c)}\n`).join(''))
     return { ...s, head, external_id: `${s.external_id}@${String(s.head)}` }
   })

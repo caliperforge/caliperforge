@@ -7,7 +7,7 @@ export const HISTORY = 5000
 
 const PART = /^(\d+)[a-z]\b/
 
-const AFTER = /^After: #(\d+)$/m
+const AFTER = /^After: (#\d+(?:, #\d+)*)$/m
 
 export const Listed = z.array(z.object({
   number: z.int(),
@@ -29,9 +29,9 @@ export function partOf(title: string): number | null {
   return hit === undefined ? null : Number(hit)
 }
 
-export function afterOf(body: string): number | null {
+export function afterOf(body: string): number[] {
   const hit = AFTER.exec(body)?.[1]
-  return hit === undefined ? null : Number(hit)
+  return hit === undefined ? [] : hit.split(', ').map((n) => Number(n.slice(1)))
 }
 
 /** Only a `whole` listing, one shorter than the list limit, drops the rows of issues missing from it. */
@@ -52,7 +52,9 @@ export function recordListing(db: Db, repo: string, listed: Listing[], whole: bo
     }
     const kind = i.labels.some((l) => l.name === 'fix') ? 'fix' : 'build'
     const wrong = i.labels.some((l) => l.name === 'diagnosis:wrong') ? 1 : 0
-    put.run(repo, i.number, i.title, lane, priority(i.labels), afterOf(i.body), partOf(i.title), i.createdAt, i.closedAt, kind,
+    const afters = afterOf(i.body)
+    put.run(repo, i.number, i.title, lane, priority(i.labels), afters.length === 0 ? null : JSON.stringify(afters), partOf(i.title),
+      i.createdAt, i.closedAt, kind,
       i.stateReason === '' ? null : i.stateReason, wrong)
     kept.push(i.number)
   }
@@ -63,7 +65,7 @@ export function recordListing(db: Db, repo: string, listed: Listing[], whole: bo
 }
 
 export interface Ticket {
-  repo: string; number: number; title: string; lane: string; priority: number | null; after: number | null
+  repo: string; number: number; title: string; lane: string; priority: number | null; after: string | null
   parent: number | null; opened_at: string | null; closed_at: string | null; kind: 'fix' | 'build' | null
 }
 

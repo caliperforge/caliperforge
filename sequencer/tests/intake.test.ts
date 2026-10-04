@@ -218,7 +218,7 @@ const RECORDED = [
   { number: 40, title: 'issue 40', lane: 'machine', priority: 2, after: null, parent: null },
   { number: 70, title: 'issue 70', lane: 'machine', priority: null, after: null, parent: null },
   { number: 85, title: 'issue 85', lane: 'machine', priority: 1, after: null, parent: null },
-  { number: 121, title: '85a: each changed declaration whole', lane: 'machine', priority: 1, after: 120, parent: 85 },
+  { number: 121, title: '85a: each changed declaration whole', lane: 'machine', priority: 1, after: '[120]', parent: 85 },
 ]
 
 function five(): Db {
@@ -329,7 +329,7 @@ test('D1: a hand-filed ticket on an open After: records a wait', () => {
   const db = piped()
   intake(db, root, canned([A, HAND]))
   expect(states(db)).toEqual([{ origin: url(300), state: 'queued' }])
-  expect(allTickets(db).find((t) => t.number === 301)).toMatchObject({ after: 300 })
+  expect(allTickets(db).find((t) => t.number === 301)).toMatchObject({ after: '[300]' })
 })
 
 test('D2: once its After: is delisted, the held ticket queues', () => {
@@ -357,6 +357,16 @@ test('D5: a held ticket listed again still gets no plan', () => {
   intake(db, root, canned([A, HAND]))
   intake(db, root, canned([A, HAND]))
   expect(states(db)).toEqual([{ origin: url(300), state: 'queued' }])
+})
+
+const BOTH: Fixture = { number: 303, labels: ['lane:machine'], body: 'After: #300, #302' }
+
+test('D5: a ticket After: two issues queues once both are delisted', () => {
+  const db = piped()
+  intake(db, root, canned([{ number: 302, labels: ['lane:machine'] }, BOTH]))
+  expect(states(db)).toEqual([{ origin: url(302), state: 'queued' }])
+  intake(db, root, canned([BOTH]))
+  expect(states(db)).toEqual([{ origin: url(302), state: 'halted' }, { origin: url(303), state: 'queued' }])
 })
 
 function pushed(db: Db, plans: number[]): void {

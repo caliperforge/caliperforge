@@ -129,7 +129,7 @@ test('a parent After: line gates no part', async () => {
   const w = mine()
   put(w.root, ID, 'ask.md', '# t\n\nAfter: #77\n\n- **D1** x\n')
   await briefed(w, ID, AFTER(['none', 'none']), [])
-  expect(allParts(w.db).filter((p) => p.parent === ID).map((p) => afterOf(p.body))).toEqual([null, null])
+  expect(allParts(w.db).filter((p) => p.parent === ID).map((p) => afterOf(p.body))).toEqual([[], []])
 })
 
 const TABLE = '| reason | count |\n| --- | --- |\n| slow | 3 |'

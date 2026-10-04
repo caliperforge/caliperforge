@@ -2,7 +2,7 @@ import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { record, ticketOf } from '../cli/inbox.ts'
-import { pending, placed } from '../store/desk.ts'
+import { pending, placed, published } from '../store/desk.ts'
 import type { Db } from '../store/index.ts'
 import { get } from '../store/lanes.ts'
 import type { PlanRow } from '../store/plans.ts'
@@ -38,13 +38,24 @@ export function commit(siteDir: string, name: string): void {
   git(siteDir, ['commit', '-m', `post: ${name}`])
 }
 
+export function push(db: Db, now: Date): number {
+  const dir = siteDir(db)
+  if (dir === null) throw new Error('comms.site_dir is unset')
+  git(dir, ['push'])
+  return published(db, now.toISOString())
+}
+
+function siteDir(db: Db): string | null {
+  const value = get(db, 'comms.site_dir')
+  return value === '' ? null : value.replace(/^~(?=\/|$)/, homedir())
+}
+
 export function publish(db: Db, root: string, plan: PlanRow, step: Step): Outcome {
   if (titled(db, plan, 'daily') !== null) return { outcome: 'pass', spans: [], note: 'daily plan; nothing to publish' }
   const rows = pending(db)
   if (rows.length === 0) return { outcome: 'pass', spans: [], note: 'nothing to publish' }
-  const value = get(db, 'comms.site_dir')
-  if (value === '') return { outcome: 'refuse', spans: ['comms.site_dir'], note: 'comms.site_dir is unset' }
-  const dir = value.replace(/^~(?=\/|$)/, homedir())
+  const dir = siteDir(db)
+  if (dir === null) return { outcome: 'refuse', spans: ['comms.site_dir'], note: 'comms.site_dir is unset' }
   for (const row of rows) {
     const name = render(dir, { ...row, title: row.edited_title ?? row.title, body: row.edited_body ?? row.body })
     commit(dir, name)

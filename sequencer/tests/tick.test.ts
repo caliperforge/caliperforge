@@ -793,7 +793,7 @@ test('a cancelled run re-run green passes ci-green', async () => {
   expect(log).toHaveLength(1)
 })
 
-test('a failed run beside a cancelled one still goes to the builder', async () => {
+test('a failed run beside a cancelled one goes to the builder', async () => {
   const w = await atCi()
   const log: string[] = []
   const wire = watched([], w.root, 1, forkRuns(log, w, {
@@ -805,7 +805,7 @@ test('a failed run beside a cancelled one still goes to the builder', async () =
   expect(log).toEqual([])
 })
 
-test('a run that stays cancelled is re-run once, then goes to the ceo', async () => {
+test('a run that stays cancelled is re-run once, then to the ceo', async () => {
   const w = await atCi()
   const log: string[] = []
   const wire = watched([], w.root, 1, forkRuns(log, w, { Harness: { status: 'completed', conclusion: 'cancelled' }, CI: GREEN_RUN }))

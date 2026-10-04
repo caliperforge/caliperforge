@@ -4,6 +4,7 @@ import { tick } from '../index.ts'
 import { assembly } from '../home.ts'
 import { following, languages, parted, released } from '../split.ts'
 import { languageFor } from '../route.ts'
+import type { Wire } from '../push.ts'
 import { maybe, put, srcDir } from '../workspace.ts'
 import { record } from '../../store/files.ts'
 import { builder } from '../../templates/pr-path.ts'
@@ -129,6 +130,38 @@ test('a parent After: line gates no part', async () => {
   put(w.root, ID, 'ask.md', '# t\n\nAfter: #77\n\n- **D1** x\n')
   await briefed(w, ID, AFTER(['none', 'none']), [])
   expect(allParts(w.db).filter((p) => p.parent === ID).map((p) => afterOf(p.body))).toEqual([[], []])
+})
+
+const TABLE = '| reason | count |\n| --- | --- |\n| slow | 3 |'
+
+const CITING = PARTS.replace('what: the machine files each part', 'what: "the machine files each part in the #34 breakdown table"')
+
+const commented = (w: World, body: string): Wire => ({ ...watched([], w.root, ID),
+  thread: () => [{ author: { login: 'reviewer' }, body, url: 'https://github.com/caliperforge/caliperforge/issues/34#issuecomment-1' }] })
+
+test('D1, D2: only a part citing the parent carries its comments', async () => {
+  const w = mine()
+  await briefed(w, ID, CITING, [], commented(w, TABLE))
+  const [a, b] = allParts(w.db).filter((p) => p.parent === ID)
+  expect(a?.body).toContain(`## Parent comments\n\n### reviewer\n\n${TABLE}`)
+  expect(maybe(w.root, partPlan(w, 0) ?? 0, 'ask.md')).toContain(`## Parent comments\n\n### reviewer\n\n${TABLE}`)
+  expect(b?.body).not.toContain('## Parent comments')
+})
+
+test('D3: a thread read that throws files no part', () => {
+  const w = mine()
+  const log: string[] = []
+  const wire = { ...watched(log, w.root, ID), thread: () => { throw new Error('gh down') } }
+  expect(parted(w.db, w.root, plan(w.db, ID), split(PARTS) ?? [], wire)).toMatchObject({ outcome: 'refuse', spans: ['gh'], blip: true })
+  expect(log.filter((l) => l.startsWith('file '))).toEqual([])
+})
+
+test('D4: an After: line in a parent comment gates no part', async () => {
+  const w = mine()
+  await briefed(w, ID, CITING, [], commented(w, `${TABLE}\nAfter: #77`))
+  const body = allParts(w.db).find((p) => p.parent === ID && p.n === 0)?.body ?? ''
+  expect(body).toContain('## Parent comments')
+  expect(afterOf(body)).toEqual([])
 })
 
 test('a part landing queues the next; the last closes the parent', async () => {

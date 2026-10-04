@@ -10,6 +10,7 @@ languageSeat({
   allowed: ['cargo test -p surfpool-core', 'cargo +nightly fmt --all -- --check', 'cargo fmt --manifest-path rust/Cargo.toml --all -- --check', 'cargo clippy -p surfpool-core --all-targets'],
   listed: 'crates/core/src/rpc/surfnet_cheatcodes.rs',
   beside: 'crates/cli/src/main.rs',
+  mode: 'build',
 })
 
 test('a generated file matches its generator, not a byte format', () => {

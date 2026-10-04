@@ -10,6 +10,7 @@ languageSeat({
   allowed: ['just --justfile python/Justfile test', 'uv run --directory python pytest', 'uv run --directory python ruff check', 'uv sync --directory python --extra dev'],
   listed: 'python/src/solana_pay_kit/config.py',
   beside: 'ruby/lib/pay_kit/config.rb',
+  mode: 'build',
 })
 
 test('the prompt says every command runs in the foreground', () => {

@@ -21,7 +21,7 @@ seats:
 digests:
   typescript_specialist:
     manifest: a4ff87fd829db7a375989bb3c747d1cb6f2b59f17b47222ff1f76764d6a4c038
-    prompt: 58beb82b577bffbb2c16634f025f01fc37a5ef5debf06554124c4a188c1e24fa
+    prompt: fd7a250d88a3bdec2b7cfb7bc7c9548ccc7894cf5dbb3f749fddae9a7c625ba0
   kotlin_specialist:
     manifest: 0ac9229de8943374e26c0c570689ffcdad364ef90d0c03f6486bdc443419fd6b
     prompt: 66d12522842c1b4335e6ce409699b32853e67ee12279490b45a3a94441b1b2de

@@ -226,10 +226,13 @@ function askOf(root: string, plan: number): string {
   return maybe(root, plan, 'ask.md') ?? move(root, plan, 'issue.md', 'ask.md')
 }
 
+const MODED = new Set(['swift_specialist', 'kotlin_specialist'])
+
 export async function ran(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider,
   issue: string, ours: boolean): Promise<Fired> {
   load(db, root)
-  const { manifest, prompt, hash } = seat(root, step.runs)
+  const mode = step.step === 2 && MODED.has(step.runs) ? 'build' : undefined
+  const { manifest, prompt, hash } = seat(root, step.runs, mode)
   const src = srcDir(root, plan.id)
   const built = packet(manifest, prompt + noteSection(db, root, plan, step), tight(root), issue, src,
     transcriptOf(root, plan.id, step.step), ours, fenceFor(db, plan.id, manifest.write_paths))
@@ -240,7 +243,7 @@ export async function ran(db: Db, root: string, plan: PlanRow, step: Step, provi
     wall: wall(db),
     reads: machineReads(root, plan, step.runs),
   })
-  recorded(db, plan.id, step.step, step.runs, hash, provider.name, manifest, fired)
+  recorded(db, plan.id, step.step, step.runs, hash, provider.name, manifest, fired, mode)
   observed(db, fired.limits)
   return fired
 }

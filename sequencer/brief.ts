@@ -88,7 +88,7 @@ const SHARED: Format[] = [{
   files: ['rails/completion-audit/index.ts', 'seats/typescript_specialist/prompt.md', 'seats/kotlin_specialist/prompt.md',
     'seats/swift_specialist/prompt.md', 'seats/outside_specialist/prompt.md', 'seats/rust_specialist/prompt.md',
     'seats/python_specialist/prompt.md', 'seats/ruby_specialist/prompt.md', 'seats/go_specialist/prompt.md',
-    'seats/php_specialist/prompt.md', 'seats/lua_specialist/prompt.md'],
+    'seats/php_specialist/prompt.md', 'seats/lua_specialist/prompt.md', 'seats/modes/build.md', 'seats/modes/fix.md'],
   readers: ['sequencer/rails.ts', 'rails/tight/prose.ts'],
 }]
 
@@ -250,7 +250,7 @@ function shared(brief: string, src: string): Refused | null {
   const rows = reached(brief)
   const moving = changing.filter((p) => {
     const lines = rows.filter((r) => r.path === p).map((r) => r.line)
-    return !p.endsWith('/prompt.md') || lines.length === 0 || lines.some((l) => l >= lastFence(join(src, p)))
+    return !p.endsWith('.md') || lines.length === 0 || lines.some((l) => l >= lastFence(join(src, p)))
   })
   for (const format of SHARED.filter((f) => f.files.some((p) => moving.includes(p)))) {
     const unlisted = format.readers.find((r) => !listed.includes(r))

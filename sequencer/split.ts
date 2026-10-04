@@ -96,7 +96,7 @@ export function following(db: Db, root: string, plan: PlanRow, sha: string, wire
 }
 
 /** A split part is `done` from the moment it splits, so it lands only when its own parts have. */
-function landed(db: Db, plan: number | null): boolean {
+export function landed(db: Db, plan: number | null): boolean {
   if (plan === null) return false
   return planById(db, plan).state === 'done' && partsOf(db, plan).every((p) => landed(db, p.plan))
 }

@@ -48,11 +48,12 @@ test('the prompt carries the test command, design line and fence', () => {
   const { prompt } = seat(root, SEAT)
   expect(prompt).toContain("xcodebuild -project Atelier.xcodeproj -scheme Atelier -destination 'platform=macOS'")
   expect(prompt).toContain('design/v2/TWO_PAGER.md')
-  expect(prompt).toContain('- id: D1')
-  expect(prompt).toContain(
+  expect(prompt).toContain('follow it under `# The files`')
+  const build = seat(root, SEAT, 'build').prompt
+  expect(build).toContain('- id: D1')
+  expect(build).toContain(
     "A rebuild's fence lists every case again: carry forward the rows the refusal did not touch, update the ones it did.",
   )
-  expect(prompt).toContain('follow it under `# The files`')
 })
 
 test('the prompt carries the own-repo and outside comment rules', () => {
@@ -80,10 +81,14 @@ test('D1: a behaviour is tested on its service or model', () => {
   expect(prompt).toContain('Write an accessibility-tree UI test only when the behaviour is the control itself (a button exists and is labelled), at most one per screen.')
 })
 
-test('D2, D3: the prompt states both fences and both openings', () => {
+test('D2, D3: the build mode, not the prompt, holds the framing', () => {
   const prompt = seat(root, SEAT).prompt.replace(/\s+/g, ' ')
-  expect(prompt).toContain('On an outside plan you may write only the files the brief lists under `## Files`; on our own repository, only under `Atelier/`, `AtelierTests/` and `Atelier.xcodeproj/`. Any other write is refused and the step ends there.')
-  expect(prompt).toContain("You build Swift against the issue below. One checkout, one step. On an outside plan you build that repository's Swift package as its maintainers would. On our own repository you are an expert macOS SwiftUI engineer on Atelier, the CEO's read-only window onto the machine, and the Atelier design rules below apply only there.")
+  expect(prompt).not.toContain('You build')
+  expect(prompt).not.toContain('- id: D1')
+  expect(prompt).toContain("On an outside plan you build that repository's Swift package as its maintainers would. On our own repository you are an expert macOS SwiftUI engineer on Atelier, the CEO's read-only window onto the machine, and the Atelier design rules below apply only there.")
+  const build = seat(root, SEAT, 'build').prompt.replace(/\s+/g, ' ')
+  expect(build).toContain('You build against the brief below. One checkout, one step.')
+  expect(build).toContain('On an outside plan you may write only the files the brief lists under `## Files`; otherwise, only inside the seat\'s write paths. Any other write is refused and the step ends there.')
 })
 
 test('D1: What to check opens the prompt with the Swift checks', () => {
@@ -98,7 +103,7 @@ test('D2: review mode reads What to check before the profile', () => {
   const out = packs(root, `diff --git a/${p} b/${p}\n--- a/${p}\n+++ b/${p}\n@@ -1 +1 @@\n-old\n+new\n`, null)
   const at = out.indexOf('## What to check')
   expect(at).toBeGreaterThan(-1)
-  expect(at).toBeLessThan(out.indexOf('You build Swift'))
+  expect(at).toBeLessThan(out.indexOf('## Profile'))
 })
 
 test('D3: the test conventions parse and pick out test files', () => {

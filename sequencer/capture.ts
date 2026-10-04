@@ -1,9 +1,10 @@
 import { z } from 'zod'
 import { pr as readPr, prNumber, rehearsal, WINDOW, type Pr, type Read } from '../cli/gh.ts'
-import { add, LANE, LANES, laneOf, seen } from '../cli/plan.ts'
-import { logged } from '../store/events.ts'
+import { add, LANE, LANES, laneOf, seen, unfiled } from '../cli/plan.ts'
+import { logged, loggedSince } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
-import { end, originRef, PlanRow } from '../store/plans.ts'
+import { cap, hhmm, zone } from '../store/lanes.ts'
+import { allPlans, end, originRef, PlanRow } from '../store/plans.ts'
 import { record, type Signal, type SignalRow } from '../store/signals.ts'
 import { afterOf, FIELDS, Listed, type Listing, partOf, recordListing } from '../store/tickets.ts'
 import { attribute } from './escapes.ts'
@@ -56,6 +57,35 @@ export function intake(db: Db, root: string, read: Read): string[] {
       continue
     }
   }
+  return lines
+}
+
+export function refill(db: Db, root: string, read: Read, now: Date): string[] {
+  const day = new Date(now.getTime() + zone(db) * 60000).toISOString().slice(0, 10)
+  const tonight = new Date(Date.parse(`${day}T21:00:00Z`) - zone(db) * 60000).toISOString()
+  const evening = hhmm(db, now) >= '21:00' && !loggedSince(db, 'refill', tonight)
+  if (allPlans(db).filter((p) => p.state === 'queued').length >= cap(db).dial && !evening) return []
+  let rows: ReturnType<typeof unfiled>
+  try {
+    rows = unfiled(db, read)
+  } catch (error) {
+    const line = `refill: ${firstLine(error)}`
+    logged(db, { plan: null, kind: 'swallowed', actor: 'refill', outcome: 'pass', message: line, pointer: null, run: null })
+    return [line]
+  }
+  const lines: string[] = []
+  let added = 0
+  for (const row of rows.filter((r) => r.lane !== null)) {
+    const ref = `${row.repo}#${String(row.no)}`
+    try {
+      if (add(db, root, ref, 'tick', undefined, read).state === 'queued') added += 1
+    } catch (error) {
+      const line = `${ref}: ${firstLine(error)}`
+      logged(db, { plan: null, kind: 'swallowed', actor: 'refill', outcome: 'pass', message: line, pointer: null, run: null })
+      lines.push(line)
+    }
+  }
+  logged(db, { plan: null, kind: 'refill', actor: 'tick', outcome: 'pass', message: String(added), pointer: null, run: null }, now.toISOString())
   return lines
 }
 

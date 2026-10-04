@@ -56,6 +56,7 @@ export const Bench = z.object({
   since: z.string().optional(),
   narrowing: Narrowing.optional(),
   reference: z.string().optional(),
+  language: z.string().optional(),
 }).strict().refine((b) => b.since === undefined || b.prior !== undefined, { path: ['since'] })
   .refine((b) => b.refusal === undefined || b.prior !== undefined, { path: ['refusal'] })
 
@@ -114,6 +115,7 @@ export function assembled(root: string, name: string, manifest: Review, bench: B
     ['Symbols at the branch base', framed(bench.symbols, SYMBOLS_LEAD)],
     ['Reference the brief names', bench.reference],
     ['First verdict', bench.verdict],
+    ['Language notes from senior review', bench.language],
     ['Greptile on this head', bench.bot],
     ['Your last verdict', bench.prior],
     ['Refusal that sent the build back', bench.refusal],

@@ -12,6 +12,7 @@ import type { Finding, Judged, Note } from '../reviews/verdict.ts'
 import { runLogged, type Run } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { filesOf } from '../store/files.ts'
+import { due } from '../store/language-notes.ts'
 import { profile } from '../store/profile.ts'
 import { observed, wall } from '../store/lanes.ts'
 import { briefed, builderRan, internal, type PlanRow } from '../store/plans.ts'
@@ -349,6 +350,7 @@ export async function fireReview(db: Db, root: string, plan: PlanRow, step: Step
     ...(manifest.gate === 'senior_review' ? referenced(src, issue) : {}),
     ...checked(db, plan, src, diffOf(root, plan.id)),
     ...(manifest.reads_verdict ? { verdict: priorVerdict(root, plan.id) } : {}),
+    ...(manifest.gate === 'review' ? senior(db, step.seat, plan.id) : {}),
     ...(manifest.gate === 'senior_review' && cloned(src) ? greptile(db, plan.id, headSha(src)) : {}),
     ...rounds(db, root, plan.id, step.step),
   }
@@ -427,6 +429,11 @@ function gated(db: Db, plan: PlanRow, src: string, diff: string): Gated[] {
   if (language === undefined) return []
   const scope = narrow(db, plan).length > 0 ? 'the tests this plan\'s files reach' : 'the whole suite'
   return [{ language, dir: '', command: `every script the checkout names (${mode(src)}, ${scope})` }]
+}
+
+function senior(db: Db, seat: string, plan: number): Pick<Bench, 'language'> {
+  const notes = due(db, seat, plan)
+  return notes.length === 0 ? {} : { language: notes.map((n) => `- ${n.file}:${String(n.line)} ${n.why}: ${n.old} → ${n.new}`).join('\n') }
 }
 
 function greptile(db: Db, plan: number, head: string): Pick<Bench, 'bot'> {

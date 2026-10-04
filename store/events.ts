@@ -33,6 +33,10 @@ export function ofKind(db: Db, ...kinds: string[]): Pick<Event, 'plan' | 'kind' 
     .all(JSON.stringify(kinds)) as Pick<Event, 'plan' | 'kind' | 'actor' | 'outcome' | 'message'>[]
 }
 
+export function loggedSince(db: Db, kind: string, at: string): boolean {
+  return db.prepare('SELECT 1 FROM events WHERE kind = ? AND julianday(at) >= julianday(?)').get(kind, at) !== undefined
+}
+
 export function newestRun(db: Db): number {
   return (db.prepare('SELECT coalesce(max(id), 0) AS id FROM runs').get() as { id: number }).id
 }

@@ -59,7 +59,7 @@ test('fresh', () => {
   const d = db()
   event(d, '2026-10-02 10:00:00')
   expect(drift(d, [COO, { ...COO, name: 'six', gap: '24h' }], NOW)).toEqual([])
-  expect(REGISTRY.map((e) => e.name)).toEqual(['coo_lite', 'fixer', 'brief_writer', 'text_review',
+  expect(REGISTRY.map((e) => e.name)).toEqual(['coo_lite', 'fixer', 'fix_mode', 'brief_writer', 'text_review',
     'growth_lead', 'web_specialist', 'gardener', 'ratchet', 'accounts', 'records', 'dispositions', 'signoffs', 'proposals',
     'ratchet_refuse', 'intake', 'stuck_plans', 'science_pull', 'site_publish'])
   expect(ratchetRules(d).mode).toBe('refuse')
@@ -101,6 +101,27 @@ test('D4 web_specialist is silent only once atelier-web has a plan', () => {
   addPlan(d, { pipe_id: 1, target_id: null, template: 'pr_path', state: 'queued', queued_at: '2026-10-01', lane: 'atelier',
     seat: 'web_specialist', origin: 'https://github.com/caliperforge/atelier-web/issues/1', step: 0 })
   expect(drift(d, web, NOW)).toEqual([{ name: 'web_specialist', state: 'silent', detail: "no row in runs WHERE seat = 'web_specialist'" }])
+})
+
+test('D4 fix_mode is silent without a fix run, stale after 7d', () => {
+  const fix = REGISTRY.filter((e) => e.name === 'fix_mode')
+  const d = db()
+  const hash = '0'.repeat(64)
+  const ran = (at: string, mode: string): void => {
+    d.exec(`INSERT OR IGNORE INTO rules (id, kind, path, content_hash, loaded_at)
+      VALUES ('typescript_specialist', 'card', 'rules/roster.yaml', '${hash}', '2026-09-22');
+      INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort,
+      input_tokens, cache_read_tokens, output_tokens, seconds, exit, at, mode, transcript_path)
+      VALUES (1, 2, 'typescript_specialist', '${hash}', 'claude-agent-sdk', 'm', 'high', 0, 0, 0, 0, 0, '${at}', '${mode}', 'x.transcript.jsonl')`)
+  }
+  const silent = [{ name: 'fix_mode', state: 'silent', detail: "no row in runs WHERE mode = 'fix'" }]
+  expect(drift(d, fix, NOW)).toEqual(silent)
+  ran('2026-10-02 10:00:00', 'build')
+  expect(drift(d, fix, NOW)).toEqual(silent)
+  ran('2026-09-25 10:00:00', 'fix')
+  expect(drift(d, fix, NOW).map((r) => r.state)).toEqual(['stale'])
+  ran('2026-10-02 10:00:00', 'fix')
+  expect(drift(d, fix, NOW)).toEqual([])
 })
 
 function internal(enabled = 1, max = 2): Db {
@@ -286,6 +307,17 @@ test('stuckNever', () => {
       ((SELECT min(id) FROM pipes), 'pr_path', 'done', '2026-10-01', 'machine', 'typescript_specialist', 'https://github.com/a/b/issues/4', 3, 3)`)
   take(d, 3, at(120))
   for (const minutes of [120, 150, 181]) expect(stuck(d, root, STUCK, at(minutes))).toEqual([])
+})
+
+test('stuckOverlap', () => {
+  const { d, root } = stalling()
+  d.exec(`INSERT INTO plans (pipe_id, template, state, queued_at, lane, seat, origin, step, priority)
+    VALUES ((SELECT min(id) FROM pipes), 'pr_path', 'queued', '2026-10-01', 'machine', 'typescript_specialist', 'https://github.com/a/b/issues/2', 0, 3);
+    UPDATE plans SET wait_reason = 'file_overlap', waits_on = 2 WHERE id = 1`)
+  for (const minutes of [0, 30, 61, 90, 120]) expect(stuck(d, root, STUCK, at(minutes))).toEqual([])
+  expect(d.prepare('SELECT state FROM plans WHERE id = 1').get()).toEqual({ state: 'running' })
+  expect(maybe(root, 1, 'refusal.md')).toBeNull()
+  expect(d.prepare("SELECT count(*) AS n FROM events WHERE kind = 'stuck'").get()).toEqual({ n: 0 })
 })
 
 test('stuckClosed', () => {

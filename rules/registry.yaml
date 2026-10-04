@@ -10,6 +10,11 @@
   column: at
   where: seat = 'fixer'
   gap: 2d
+- name: fix_mode
+  table: runs
+  column: at
+  where: mode = 'fix'
+  gap: 7d
 - name: brief_writer
   table: runs
   column: at

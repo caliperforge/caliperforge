@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Command } from 'commander'
@@ -151,6 +151,18 @@ test('filed plan keeps raw issue on disk as the ask step 1 briefs', () => {
   const body = readFileSync(join(root, '.cf/work', String(filed.plan), 'ask.md'), 'utf8')
   expect(body).toBe(`# ${carried.title}\n\n${carried.body}\n`)
   expect(doneIds(body)).toEqual(['D1', 'D2'])
+})
+
+test('760b D5 a profile naming the lane lets its repo file there', () => {
+  const db = piped()
+  mkdirSync(join(root, 'profiles/caliperforge'), { recursive: true })
+  writeFileSync(join(root, 'profiles/caliperforge/atelier-web.yml'), 'lane: atelier\n')
+  const web = { ...ISSUE, number: 1, url: 'https://github.com/caliperforge/atelier-web/issues/1', labels: ['lane:atelier'] }
+  expect(add(db, root, 'caliperforge/atelier-web#1', 'ceo', undefined, canned([web])))
+    .toMatchObject({ state: 'queued', lane: 'atelier', seat: 'swift_specialist' })
+  expect(add(db, root, 'caliperforge/atelier-web#1', 'ceo', undefined, canned([{ ...web, labels: ['lane:machine'] }]))).toMatchObject({
+    state: 'refused', why: 'caliperforge/atelier-web#1 is on caliperforge/atelier-web; the machine lane builds in caliperforge/caliperforge',
+    origin: { origin_kind: 'ruling', origin_ref: 'plan.lane_home' } })
 })
 
 test('reference and lane, seat, priority labels are read exactly', () => {

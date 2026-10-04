@@ -7,7 +7,7 @@ import { migrate, open } from '../../store/index.ts'
 import type { Wire } from '../push.ts'
 import { terminal } from '../../store/plans.ts'
 import { lapsed } from '../../store/until.ts'
-import { woke } from '../coolite.ts'
+import { woke } from '../director.ts'
 import { maybe, put, srcDir } from '../workspace.ts'
 
 const repo = join(import.meta.dirname, '../..')

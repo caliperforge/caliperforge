@@ -124,6 +124,7 @@ test('a seat no language builds with has no language', () => {
   expect(languageOfSeat('brief_writer')).toBeNull()
   expect(languageOfSeat(null)).toBeNull()
   expect(languageOfSeat('python_specialist')).toBe('python')
+  expect(languageOfSeat('web_specialist')).toBe('web')
 })
 
 test('the brief-files fence is the brief; any other, the manifest', () => {

@@ -42,3 +42,9 @@ export function learnings(db: Db): { date: string; numbers: string | null; items
   return db.prepare('SELECT date, numbers, items, sources FROM desk_learnings ORDER BY date')
     .all() as { date: string; numbers: string | null; items: string | null; sources: string | null }[]
 }
+
+export function learningsIn(db: Db, from: string, to: string): { date: string; items: unknown[] }[] {
+  const rows = db.prepare('SELECT date, items FROM desk_learnings WHERE date BETWEEN ? AND ? ORDER BY date').all(from, to) as
+    { date: string; items: string | null }[]
+  return rows.map((r) => ({ date: r.date, items: JSON.parse(r.items ?? '[]') as unknown[] }))
+}

@@ -9,6 +9,7 @@ import { read } from '../reviews/verdict.ts'
 import type { Outcome } from '../sequencer/kind.ts'
 import { prose } from '../sequencer/prose.ts'
 import { ran } from '../sequencer/seat.ts'
+import { shift, weekly } from '../sequencer/weekly.ts'
 import { get, maybe, put } from '../sequencer/workspace.ts'
 import { edited } from '../store/desk.ts'
 import type { Db } from '../store/index.ts'
@@ -26,6 +27,8 @@ export const steps: Step[] = ['gather', 'draft', 'facts', 'text_review', 'desk',
   : name === 'text_review' ? { ...row(name, i), seat: 'text_review', fires: 'seat', runs: 'text_review' } : row(name, i))
 
 export function gather(db: Db, root: string, plan: PlanRow): Outcome {
+  const week = titled(db, plan, 'weekly')
+  if (week !== null) return weekly(db, root, plan, week.slice('weekly '.length))
   const packet = packetOf(db, plan.id)
   put(root, plan.id, 'packet.json', JSON.stringify(packet))
   return { outcome: 'pass', spans: [], note: `${String(packet.landed.length)} landed, ${String(packet.refusals.length)} refused` }
@@ -164,8 +167,6 @@ export function pack(db: Db, root: string, plan: PlanRow): Outcome {
 export const SCORECARD_COLUMNS = { subscribers: 'Subscribers', open_rate: 'Open rate', sources: 'Source' }
 
 const STATS = '.cf/growth/stats'
-
-const shift = (day: string, days: number): string => new Date(Date.parse(day) + days * 86400000).toISOString().slice(0, 10)
 
 interface Stats { subscribers: number; open_rate: number; sources: Record<string, number> | 'not in export'; swaps: number | null }
 

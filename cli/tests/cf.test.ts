@@ -13,7 +13,7 @@ test('cf --help lists every command in registration order', () => {
   expect(commands()).toEqual([
     'migrate', 'digests', 'map', 'dump', 'runs', 'backfill-cost', 'backfill-tickets', 'fire', 'pipe', 'priority', 'lanes', 'usage',
     'measure', 'record', 'scan', 'queue', 'plan', 'plans', 'reap', 'release', 'return', 'park', 'hold', 'unpark', 'files', 'close',
-    'inbox', 'tight', 'retry', 'approve', 'refuse', 'batch', 'session', 'push-check', 'halted', 'flow', 'brief', 'adopt', 'health', 'science', 'tick', 'lap', 'watch',
+    'inbox', 'tight', 'retry', 'approve', 'refuse', 'batch', 'session', 'push-check', 'halted', 'flow', 'brief', 'adopt', 'desk', 'health', 'science', 'tick', 'lap', 'watch',
     'signoff', 'coo-lite',
   ])
 })
@@ -24,6 +24,7 @@ test.each([
   ['refuse', ['target', 'plan', 'proposal', 'card']],
   ['plan', ['add']],
   ['session', ['close']],
+  ['desk', ['list', 'show', 'edit', 'approve', 'return']],
 ])('cf %s --help keeps its subcommand order', (name, subcommands) => {
   expect(commands(name)).toEqual(subcommands)
 })

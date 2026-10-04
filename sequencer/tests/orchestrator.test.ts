@@ -5,7 +5,7 @@ import { expect, test } from 'vitest'
 import { all } from '../../cli/inbox.ts'
 import type { Provider } from '../../providers/kind.ts'
 import { migrate, open } from '../../store/index.ts'
-import { woke } from '../orchestrator.ts'
+import { woke } from '../coolite.ts'
 import { drop, maybe, put, srcDir } from '../workspace.ts'
 
 const repo = join(import.meta.dirname, '../..')

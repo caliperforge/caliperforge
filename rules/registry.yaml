@@ -91,3 +91,8 @@
   column: published_at
   where: status = 'published'
   gap: 14d
+- name: director_look
+  table: events
+  column: at
+  where: kind = 'look'
+  gap: 7d

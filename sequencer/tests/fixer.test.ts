@@ -6,6 +6,7 @@ import type { Packet, Provider } from '../../providers/kind.ts'
 import { migrate, open } from '../../store/index.ts'
 import type { Wire } from '../push.ts'
 import { terminal } from '../../store/plans.ts'
+import { lapsed } from '../../store/until.ts'
 import { woke } from '../orchestrator.ts'
 import { maybe, put, srcDir } from '../workspace.ts'
 
@@ -289,7 +290,7 @@ test('park: held, not reaped, not re-woken', async () => {
   await woke(db, home, stub(PARK, packets), now, (t) => void posted.push(t), wire([]))
   expect(state(db)).toEqual({ state: 'blocked_on_ceo', step: 4 })
   expect(posted).toEqual([])
-  expect(heldUntil(db)).toEqual({ held_until: '2026-09-26T17:00:00.000Z' })
+  expect(lapsed(db, LATER)).toEqual([{ id: 7, step: 4, held_until: '2026-09-26T17:00:00.000Z' }])
   expect(maybe(home, 7, 'parked.md')).not.toBeNull()
   expect(terminal(db)).not.toContain(7)
   rmSync(join(home, '.cf/work/7/orchestrator.md'))
@@ -297,7 +298,7 @@ test('park: held, not reaped, not re-woken', async () => {
   expect(packets.filter((p) => basename(p.transcript).startsWith('coo_lite'))).toHaveLength(1)
 })
 
-const heldUntil = (db: ReturnType<typeof open>) => db.prepare('SELECT held_until FROM plans WHERE id = 7').get()
+const LATER = '9999-12-31T00:00:00.000Z'
 
 test.each(['', 'until: next week\n'])('park without a time it parses is unreadable: %j', async (until) => {
   const { db, home } = seeded('live')
@@ -307,8 +308,8 @@ test.each(['', 'until: next week\n'])('park without a time it parses is unreadab
   expect(maybe(home, 7, 'fixes.jsonl')).toContain('"applied":"unreadable"')
   expect(posted).toHaveLength(1)
   expect(state(db)).toEqual({ state: 'blocked_on_ceo', step: 4 })
-  expect(heldUntil(db)).toEqual({ held_until: null })
-  expect(maybe(home, 7, 'parked.md')).toBeNull()
+  expect(lapsed(db, LATER)).toEqual([])
+  expect(maybe(home, 7, 'parked.md')).not.toContain('builds on a job not yet filed')
 })
 
 test('a # in did or why is kept whole', async () => {

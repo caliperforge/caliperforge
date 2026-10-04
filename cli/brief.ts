@@ -9,6 +9,7 @@ import type { Db } from '../store/index.ts'
 import { name, type LaneState, type WindowRow } from '../store/lanes.ts'
 import { BUILT, planById, type Holder, type Overlap, type Wait } from '../store/plans.ts'
 import { heads } from '../store/signals.ts'
+import { until } from '../store/until.ts'
 import { gh, type Read, WINDOW } from './gh.ts'
 import { LANE, LANES } from './plan.ts'
 
@@ -52,7 +53,8 @@ export function halted(db: Db): PlanLine[] {
 }
 
 export function heldBy(db: Db, by: Holder): PlanLine[] {
-  return db.prepare(`${LINES} WHERE p.held_by = ? AND p.waits_on IS NULL ORDER BY p.queued_at, p.id`).all(by) as PlanLine[]
+  return (db.prepare(`${LINES} WHERE p.held_by = ? AND p.waits_on IS NULL ORDER BY p.queued_at, p.id`).all(by) as PlanLine[])
+    .map((p) => ({ ...p, held_why: until(db, p.id) ?? p.held_why }))
 }
 
 export function day(db: Db): Day {

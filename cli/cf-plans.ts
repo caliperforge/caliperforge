@@ -9,6 +9,7 @@ import { closed, release, retried } from '../store/holds.ts'
 import { hhmm, lanes } from '../store/lanes.ts'
 import { holder } from '../store/leases.ts'
 import { held, holderOf, HOLDERS, planById, terminal } from '../store/plans.ts'
+import { until } from '../store/until.ts'
 import { laneLine, open as openPlans, runsOf, section, verdictsOf } from './brief.ts'
 import type { Cli } from './cf-lanes.ts'
 import { add as fileIssue, render as renderUnfiled, unfiled } from './plan.ts'
@@ -92,7 +93,8 @@ function shown(plan: Command, { db, out }: Cli): void {
     const code = blocked(handle, plan)
     const why = code === null ? 'unblocked' : parked(handle, plan) ?? WAITING[code]
     const lease = holder(handle, plan.id)
-    out(`plan ${String(plan.id)}\t${plan.template}\tstep ${String(plan.step)}\t${plan.state}\tretries ${String(plan.retries)}\t${why}\n`)
+    const condition = until(handle, plan.id)
+    out(`plan ${String(plan.id)}\t${plan.template}\tstep ${String(plan.step)}\t${plan.state}\tretries ${String(plan.retries)}\t${why}${condition === null ? '' : `\t${condition}`}\n`)
     const on = (handle.prepare('SELECT waits_on FROM plans WHERE id = ?').get(plan.id) as { waits_on: number | null }).waits_on
     const after = on === null ? '' : `\tplan ${String(on)}`
     out(`  waiting on ${plan.wait_reason === null ? '-' : `${plan.wait_reason}\t${WAITING[plan.wait_reason]}${after}`}\n`)

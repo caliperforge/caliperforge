@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import { registerLanes } from '../cf-lanes.ts'
+import { registerPlans } from '../cf-plans.ts'
 import { actors, actorSection, costs, costSection, fileWaits, greptileLine, hands, heldBy, line, misses, missSection, rulings, section, ticketSection,
   tickets, unpriced, waitLine, waits } from '../brief.ts'
 import { driftSection } from '../drift.ts'
@@ -16,7 +17,7 @@ import { repriced } from '../../store/events.ts'
 import { record as listFiles } from '../../store/files.ts'
 import type { Db } from '../../store/index.ts'
 import { keep } from '../../store/merges.ts'
-import { needsCeo, parked, PlanRow, waiting } from '../../store/plans.ts'
+import { held, needsCeo, parked, PlanRow, waiting } from '../../store/plans.ts'
 import { record } from '../../store/signals.ts'
 
 const schema = join(import.meta.dirname, '../../schema')
@@ -357,8 +358,36 @@ test('parked on another: listed with it, not as needing a decision', () => {
   plan(db, 2, 'queued', 30)
   hold(db, mkdtempSync(join(tmpdir(), 'cf-parked-')), 2, 'after #30', new Date(), 1)
   expect(section('parked on another job', parked(db)))
-    .toBe('parked on another job (1)\n  plan 2\tstep 0\tblocked_on_ceo\t-\twaits for plan 1 (queued, step 0)\tafter #30\n')
+    .toBe('parked on another job (1)\n  plan 2\tstep 0\tblocked_on_ceo\t-\tuntil plan 1 lands (queued, step 0)\n')
   expect(heldBy(db, 'coo')).toEqual([])
+})
+
+const LAPSES = new Date('2026-10-05T04:00:00.000Z')
+
+test('D1 a time hold needs a decision with its time, not its why', () => {
+  const db = world()
+  plan(db, 1, 'queued', 25)
+  hold(db, mkdtempSync(join(tmpdir(), 'cf-until-')), 1, 'wait a day', new Date(), null, LAPSES)
+  held(db, 1, 'coo', 'wait a day')
+  expect(heldBy(db, 'coo').map(line)).toEqual(['  plan 1\tstep 0\tblocked_on_ceo\t-\tuntil 10-04 22:00'])
+})
+
+test('D3 cf plan <id> ends the plan row with the hold\'s condition', () => {
+  const db = world()
+  const root = mkdtempSync(join(tmpdir(), 'cf-until-'))
+  plan(db, 1, 'queued', 25)
+  plan(db, 2, 'queued', 30)
+  plan(db, 3, 'queued', 31)
+  hold(db, root, 1, 'wait a day', new Date(), null, LAPSES)
+  hold(db, root, 2, 'after #31', new Date(), 3)
+  const printed: string[] = []
+  const cf = new Command()
+  registerPlans(cf, { root, db: () => db, out: (text: string) => { printed.push(text) } })
+  cf.parse(['plan', '1'], { from: 'user' })
+  expect(printed[0]).toMatch(/\tuntil 10-04 22:00\n$/)
+  printed.length = 0
+  cf.parse(['plan', '2'], { from: 'user' })
+  expect(printed[0]).toMatch(/\tuntil plan 3 lands\n$/)
 })
 
 test('a blocked plan with no park needs a decision with its stop', () => {

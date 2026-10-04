@@ -62,6 +62,19 @@ test('#498a D1 our two repos name their builder and rails', () => {
     commands: { xcodebuild: atelier?.commands?.xcodebuild } })
 })
 
+test('760b D1 atelier-web names its seat, lane, rails and checks', () => {
+  expect(profile(REPO, 'caliperforge/atelier-web')).toEqual({ builder: 'web_specialist', lane: 'atelier',
+    rails: { digests: false, ratchet: false, fence: false, tight_code: true, checks: 'local' },
+    commands: { node: ['--check'], npm: ['test'] } })
+})
+
+test('760b D6 an unknown lane or a non-list node is refused', () => {
+  for (const body of ['lane: nowhere\n', 'commands: { node: --check }\n']) {
+    const dir = root({ 'widget.yml': body })
+    expect(() => profile(dir, 'acme/widget')).toThrow(join(dir, 'profiles/acme/widget.yml'))
+  }
+})
+
 test('D2 atelier holds the xcodebuild args checks.ts builds today', () => {
   expect(profile(REPO, 'caliperforge/atelier')?.commands?.xcodebuild?.join(' ')).toBe('-project Atelier.xcodeproj -scheme Atelier -destination platform=macOS -derivedDataPath .cf-derived -test-timeouts-enabled YES -default-test-execution-time-allowance 60 -maximum-test-execution-time-allowance 60 test')
 })

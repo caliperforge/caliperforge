@@ -345,6 +345,21 @@ test('the caliperforge and atelier profiles run the same commands', () => {
   expect([bins, seen]).toEqual([['xcodebuild'], [XCODEBUILD]])
 })
 
+test('760b D4 node checks each touched .js on disk, then npm', () => {
+  const src = tree({ 'package.json': pkg({ test: 'node --test' }) })
+  mkdirSync(join(src, 'public'))
+  writeFileSync(join(src, 'public', 'app.js'), 'export {}\n')
+  const touched = ['public/app.js', 'README.md', 'gone.js']
+  const green = recorder()
+  expect(checks(src, { node: ['--check'], npm: ['test'] }, green.run, [], null, touched)).toBeNull()
+  expect(green.seen).toEqual(['--check public/app.js', 'run test'])
+
+  const red = recorder('--check public/app.js')
+  expect(checks(src, { node: ['--check'], npm: ['test'] }, red.run, [], null, touched))
+    .toEqual({ script: 'node', command: 'node --check public/app.js', code: '2', output: 'boom', tests: [], retried: false })
+  expect(red.seen).toEqual(['--check public/app.js'])
+})
+
 test('commands left out of the profile are not run', () => {
   const none = recorder()
   expect(checks(xcode(), {}, none.run)).toBeNull()

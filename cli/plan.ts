@@ -4,6 +4,7 @@ import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { LANE, LANES, laneOf, priorityOf, templatePriority, type Lane } from '../store/lanes.ts'
 import type { Holder } from '../store/plans.ts'
+import { profile } from '../store/profile.ts'
 import { gh, type Read } from './gh.ts'
 import type { Origin } from './queue.ts'
 
@@ -74,7 +75,7 @@ export function add(db: Db, root: string, ref: string, by: Holder | 'intake' | '
   } catch (error) {
     return refusal(db, ref, 'plan.priority_label', error instanceof Error ? error.message : String(error))
   }
-  if (repo !== LANE[lane].home) {
+  if (repo !== LANE[lane].home && profile(root, repo)?.lane !== lane) {
     return refusal(db, ref, 'plan.lane_home', `is on ${repo}; the ${lane} lane builds in ${LANE[lane].home}`)
   }
   const seat = seatOf(row.labels) ?? LANE[lane].seat

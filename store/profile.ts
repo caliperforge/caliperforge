@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { parse } from 'yaml'
 import { z } from 'zod'
+import { LANES } from './lanes.ts'
 
 export const Profile = z.strictObject({
   /** Per language, the `Gate.script` names `gates()` returns for it, in order. */
@@ -21,6 +22,7 @@ export const Profile = z.strictObject({
   trailer: z.string().optional(),
   disclosure: z.string().optional(),
   builder: z.string().optional(),
+  lane: z.enum(LANES).optional(),
   rails: z.strictObject({
     digests: z.boolean().default(false),
     ratchet: z.boolean().default(false),
@@ -29,6 +31,7 @@ export const Profile = z.strictObject({
     checks: z.enum(['ci', 'local']).optional(),
   }).optional(),
   commands: z.strictObject({
+    node: z.array(z.string()).optional(),
     npm: z.array(z.string()).optional(),
     xcodebuild: z.array(z.string()).optional(),
   }).optional(),

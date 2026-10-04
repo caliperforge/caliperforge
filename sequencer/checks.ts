@@ -69,6 +69,8 @@ function project(src: string): string | null {
 export function checks(src: string, given: Commands, run: Run = npm, narrow: string[] = [], outside: Outside | null = null,
   touched: string[] = []): Failure | null {
   if (outside !== null) return gated(src, gates(src, outside), run)
+  const parsed = given.node === undefined ? null : gated(src, syntax(src, given.node, touched), run)
+  if (parsed !== null) return parsed
   const bin = mode(src)
   if (bin === 'xcodebuild') excluded(src)
   for (const [script, args] of commands(src, given, narrow)) {
@@ -80,6 +82,11 @@ export function checks(src: string, given: Commands, run: Run = npm, narrow: str
       ...faultOf(bin, last.output), ...cappedOf(bin, last) }
   }
   return null
+}
+
+function syntax(src: string, flags: string[], touched: string[]): Gate[] {
+  return touched.filter((path) => path.endsWith('.js') && existsSync(join(src, path)))
+    .map((path) => ({ script: 'node', bin: 'node', args: [...flags, path], dir: '' }))
 }
 
 function faultOf(bin: Mode, output: string): { fault?: string } {

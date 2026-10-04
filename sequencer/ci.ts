@@ -27,7 +27,7 @@ const RED = /\/actions\/runs\/(\d+) ci\.red$/
 
 const STAMP = /^\d{4}-\d{2}-\d{2}T[\d:.]+Z ?/
 
-/** Colour codes, as raw escapes or as the `^[` text GitHub's log prints for them. */
+/** Colour codes, as raw escape codes or as the `^[` text GitHub's log prints for them. */
 const ANSI = new RegExp(`(?:${String.fromCharCode(27)}|\\^\\[)\\[[0-9;]*m`, 'g')
 
 const SCRIPT = /npm run (\w+)/

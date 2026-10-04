@@ -20,6 +20,7 @@ import { CHECKS, waiting, type Check, type Target } from './card.ts'
 import { npm } from './checks.ts'
 import { red } from './failures.ts'
 import { reinstall } from './install.ts'
+import { rerun as cancelled } from './rerun.ts'
 import type { Outcome } from './kind.ts'
 import { merging } from './merging.ts'
 import { cloned, conflicted, diffOf, fetchMain, FORK, get, MAIN, maybe, planDir, put, repoName, srcDir, titleOf } from './workspace.ts'
@@ -78,6 +79,8 @@ const FINISHES = 45
 
 const WAITS = 'ci.waits'
 
+const RERUNS = 'ci.waits.rerun'
+
 const REHEARSED = 'ci.next'
 
 /**
@@ -101,6 +104,13 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
   const window = carries(verdict.spans, MISSING) ? APPEARS : FINISHES
   const hold = waiting === null ? null : holding(root, plan.id, head.sha, verdict.spans, `${at} ${waiting}`, window)
   if (hold !== null) return onCi(db, plan.id, hold)
+  const again = waiting === null && verdict.outcome === 'refuse' ? cancelled(root, plan.id, on, verdict.spans, wire.runs) : null
+  if (again !== null) {
+    const rerunning = holding(root, plan.id, head.sha, verdict.spans, `${at} ${again}`, APPEARS, RERUNS)
+    return rerunning === null
+      ? { outcome: 'needs_ceo', spans: verdict.spans, note: `${at} ${again}: still cancelled after ${String(APPEARS)} ticks` }
+      : onCi(db, plan.id, rerunning)
+  }
   const base = waiting === null && verdict.outcome === 'refuse' ? onBase(root, plan.id, on, verdict.spans, board, wire.runs) : null
   const rerun = typeof base === 'string' ? holding(root, plan.id, head.sha, verdict.spans, `${at} ${base}`, FINISHES) : null
   if (rerun !== null) return onCi(db, plan.id, rerun)

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { z } from 'zod'
 import { record, ticketOf } from '../cli/inbox.ts'
 import { alerter, type Post } from '../cli/watch.ts'
@@ -10,12 +11,13 @@ import type { Db } from '../store/index.ts'
 import { wall } from '../store/lanes.ts'
 import { clear as unlease, take } from '../store/leases.ts'
 import { busy, current, idle } from '../store/now.ts'
-import { end, held, needsCeo, originRef, planById, type PlanRow, retry } from '../store/plans.ts'
+import { end, held, needsCeo, originRef, planById, PlanRow, retry } from '../store/plans.ts'
 import { clear } from '../store/refusals.ts'
 import { pending } from '../store/transcript.ts'
 import { split, type Part } from './brief.ts'
 import { isHeld, unhold } from './hold.ts'
 import { fixed } from './fixed.ts'
+import { released } from './fixer.ts'
 import { prose } from './prose.ts'
 import { WIRE, type Wire } from './push.ts'
 import { rule } from './rule.ts'
@@ -24,7 +26,7 @@ import { parted } from './split.ts'
 import { ticketed } from './ticket.ts'
 import { history, parentAsk } from './record.ts'
 import { READ, SERVER, server } from './upstream.ts'
-import { afresh, maybe, planDir } from './workspace.ts'
+import { afresh, maybe, planDir, put } from './workspace.ts'
 
 const Said = z.object({
   move: z.enum(['rule', 'waive', 'close', 'file', 'ask_ceo', 'return', 'fix']),
@@ -225,4 +227,37 @@ function told(db: Db, root: string, plan: PlanRow, now: Date, t: Told, post?: Po
   record(root, [{ at: now.toISOString(), plan: plan.id, ticket, kind, step: plan.step, name: 'coo_lite', note: t.note ?? t.message }])
   post?.(`CaliperForge · ${ticket} needs you`, `plan ${String(plan.id)}, step ${String(plan.step)}. coo_lite: ${t.message}`)
   return t.message
+}
+
+export const WAKE = ['token_ceiling', 'ready_proof', 'target_parked', 'no_step_map'] as const
+
+type Woken = (typeof WAKE)[number] | 'blocked_on_ceo'
+
+/** The lease keeps two overlapping ticks off one stop. */
+export async function woke(db: Db, root: string, provider: Provider, now: Date, post: Post = alerter(), wire: Wire = WIRE): Promise<void> {
+  released(db, root, now, post)
+  const rows = db.prepare(`SELECT * FROM plans WHERE ((wait_reason IN (${WAKE.map(() => '?').join(', ')})
+    AND state IN ('queued', 'running', 'blocked_on_ceo')) OR state = 'blocked_on_ceo') AND held_by IS NOT 'ceo' ORDER BY id`).all(...WAKE)
+  for (const plan of rows.map((r) => PlanRow.parse(r))) {
+    const reason = woken(plan)
+    const head = `step ${String(plan.step)} ${reason === 'blocked_on_ceo' ? `blocked ${stop(root, plan.id)}` : reason}`
+    if (isHeld(root, plan.id)) continue
+    if (maybe(root, plan.id, 'orchestrator.md')?.split('\n')[0] === head) continue
+    if (take(db, plan.id, now) === null) continue
+    try {
+      put(root, plan.id, 'orchestrator.md', `${head}\n\n${await cooLite(db, root, plan, provider, now, post, wire)}\n`)
+    } finally {
+      unlease(db, plan.id)
+    }
+  }
+}
+
+function woken(plan: PlanRow): Woken {
+  return (WAKE as readonly string[]).includes(plan.wait_reason ?? '') ? plan.wait_reason as Woken : 'blocked_on_ceo'
+}
+
+/** One stop is one refusal (or question) as written; the same words at the same step are the same stop. */
+function stop(root: string, plan: number): string {
+  const said = maybe(root, plan, 'refusal.md') ?? maybe(root, plan, 'question.md')
+  return said === null ? 'none' : createHash('sha256').update(said).digest('hex').slice(0, 12)
 }

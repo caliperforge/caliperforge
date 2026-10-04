@@ -13,7 +13,7 @@ test('cf --help lists every command in registration order', () => {
   expect(commands()).toEqual([
     'migrate', 'digests', 'map', 'dump', 'runs', 'backfill-cost', 'backfill-tickets', 'fire', 'pipe', 'priority', 'lanes', 'usage',
     'measure', 'record', 'scan', 'queue', 'plan', 'plans', 'reap', 'release', 'return', 'park', 'hold', 'unpark', 'files', 'close',
-    'inbox', 'tight', 'retry', 'approve', 'refuse', 'batch', 'session', 'push-check', 'halted', 'flow', 'brief', 'adopt', 'desk', 'look', 'site', 'health', 'science', 'tick', 'lap', 'watch',
+    'inbox', 'tight', 'retry', 'approve', 'refuse', 'batch', 'session', 'push-check', 'halted', 'flow', 'brief', 'adopt', 'desk', 'learn', 'look', 'site', 'health', 'science', 'tick', 'lap', 'watch',
     'signoff', 'coo-lite',
   ])
 })

@@ -641,8 +641,9 @@ test('only brief.ts reads ## Files, and the shape check uses it', () => {
   const readers = walk(repo, (name) => name.endsWith('.ts') && !name.endsWith('.test.ts'))
     .map((f) => relative(repo, f))
     // A live checkout carries `.cf/work/*/src`, each a copy of this tree rather than a second reader in it.
-    .filter((f) => !f.startsWith('.cf/') && !f.includes('/tests/') && readFileSync(join(repo, f), 'utf8').includes("'## Files'"))
-  expect(readers).toEqual(['sequencer/brief.ts'])
+    .filter((f) => !f.startsWith('.cf/') && !f.includes('/tests/') && readFileSync(join(repo, f), 'utf8').includes('## Files'))
+  // handout.ts names the section in the brief writer's packet text and does not parse it.
+  expect(readers.sort()).toEqual(['sequencer/brief.ts', 'sequencer/handout.ts'])
 
   const brief = fixture('absent-file.md')
   expect(files(brief).map((f) => f.path)).toEqual([shape(brief, ask, repo)?.span])

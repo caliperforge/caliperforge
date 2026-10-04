@@ -12,7 +12,7 @@ import type { Db } from '../../store/index.ts'
 import { advance, pipeNamed, putPlan, rewind, titles } from '../../store/plans.ts'
 import { bySubject, open as openProposals } from '../../store/proposals.ts'
 import { latest } from '../../store/rulings.ts'
-import { eventsOf, ofKind, runAt } from '../../store/events.ts'
+import { eventsOf, ofKind, pointers, runAt } from '../../store/events.ts'
 import { graded, others, record, type SignalRow } from '../../store/signals.ts'
 import { capture } from '../capture.ts'
 import { classOf } from '../escapes.ts'
@@ -327,6 +327,37 @@ test('a pr read that throws leaves a swallowed event, no signal', async () => {
   expect(capture(w.db, () => { throw new Error('HTTP 502\nbody') })).toEqual([])
   expect(ofKind(w.db, 'swallowed'))
     .toEqual([{ plan: 1, kind: 'swallowed', actor: 'reachable', outcome: 'pass', message: 'HTTP 502' }])
+})
+
+const counted = (view: () => Pr): { read: () => Pr; reads: () => number } => {
+  let reads = 0
+  return { read: () => { reads += 1; return view() }, reads: () => reads }
+}
+
+test('D1 a closed pr is read once across two captures', async () => {
+  const w = await pushed()
+  const { read, reads } = counted(() => pr({ state: 'CLOSED' }))
+  capture(w.db, read)
+  capture(w.db, read)
+  expect(reads()).toBe(1)
+  expect(pointers(w.db, 'gone')).toEqual([URL])
+})
+
+test('D2 a not-found pr is gone, not swallowed, and read once', async () => {
+  const w = await pushed()
+  const { read, reads } = counted(() => { throw new Error('GraphQL: Could not resolve to a PullRequest with the number of 7.\nbody') })
+  capture(w.db, read)
+  capture(w.db, read)
+  expect(reads()).toBe(1)
+  expect(ofKind(w.db, 'gone', 'swallowed').map((e) => e.kind)).toEqual(['gone'])
+})
+
+test('D3 a merged pr gives its merge once, then is not read', async () => {
+  const w = await pushed()
+  const { read, reads } = counted(() => pr({ state: 'MERGED', mergedAt: '2026-09-18T09:00:00Z', mergedBy: { login: 'maintainer' } }))
+  expect(capture(w.db, read).map((s) => s.kind)).toEqual(['merge'])
+  expect(capture(w.db, read)).toEqual([])
+  expect(reads()).toBe(1)
 })
 
 const FORKED = pr({

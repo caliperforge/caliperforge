@@ -1,10 +1,10 @@
 import { judge, MISSING, type Gh } from '../rails/ci-green/index.ts'
-import { logged } from '../store/events.ts'
+import { logged, pointers } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { busy } from '../store/now.ts'
 import type { PlanRow } from '../store/plans.ts'
-import { firstLine } from './capture.ts'
 import { entries, type Failure } from './checks.ts'
+import { firstLine, gone } from './gone.ts'
 import { homeOf, kernelPlan } from './home.ts'
 import type { Outcome } from './kind.ts'
 import { carries, headOf, holding, unfinished, WIRE, workflows, type Wire } from './push.ts'
@@ -45,9 +45,12 @@ type Ci = { wait: Outcome } | { failed: Failure | null; at: string }
  */
 export function ciChecks(db: Db, root: string, plan: PlanRow, wire: Wire = WIRE): Ci | null {
   if (!on(db) || !kernelPlan(plan) || !workflows(srcDir(root, plan.id))) return null
+  let pointer = ''
   try {
     const fork = homeOf(plan)
     const head = headOf(root, plan.id)
+    pointer = `${fork}:${head.branch}`
+    if (pointers(db, 'gone').includes(pointer)) return null
     wire.send(head.dir, `+${head.branch}`)
     const { verdict } = judge({ fork, branch: head.branch, sha: head.sha }, { body: '', commits: [] }, [], wire.runs)
     const at = `${fork}@${head.sha.slice(0, 12)}`
@@ -62,7 +65,9 @@ export function ciChecks(db: Db, root: string, plan: PlanRow, wire: Wire = WIRE)
     if (carries(verdict.spans, 'ci.unreadable')) return null
     return { failed: verdict.outcome === 'pass' ? null : failure(srcDir(root, plan.id), fork, verdict.spans, wire.runs), at }
   } catch (error) {
-    logged(db, { plan: plan.id, kind: 'swallowed', actor: 'ciChecks', outcome: 'pass', message: firstLine(error), pointer: null, run: null })
+    if (!gone(db, plan.id, pointer, error)) {
+      logged(db, { plan: plan.id, kind: 'swallowed', actor: 'ciChecks', outcome: 'pass', message: firstLine(error), pointer: null, run: null })
+    }
     return null
   }
 }

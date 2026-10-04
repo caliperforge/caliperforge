@@ -309,7 +309,7 @@ test.each(['', 'until: next week\n'])('park without a time it parses is unreadab
   expect(posted).toHaveLength(1)
   expect(state(db)).toEqual({ state: 'blocked_on_ceo', step: 4 })
   expect(lapsed(db, LATER)).toEqual([])
-  expect(maybe(home, 7, 'parked.md')).not.toContain('builds on a job not yet filed')
+  expect(maybe(home, 7, 'parked.md')).toBe(null)
 })
 
 test('a # in did or why is kept whole', async () => {

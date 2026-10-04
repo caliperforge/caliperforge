@@ -9,6 +9,7 @@ import type { SignalRow } from '../store/signals.ts'
 import { assembling } from './home.ts'
 import { WIRE, type Wire } from './push.ts'
 import { fixed } from './split.ts'
+import { shift } from './weekly.ts'
 import { put } from './workspace.ts'
 
 interface Started {
@@ -104,13 +105,15 @@ export function daily(db: Db, now: Date): void {
 
 const WEEKLY: Record<number, string | undefined> = { 1: 'scorecard', 4: 'growth' }
 
-/** The week's scorecard and growth comms plans, filed once on local Monday and Thursday on a comms lane someone left on. */
+/** The week's scorecard and growth comms plans, filed once on local Monday and Thursday, and the weekly post plan from Thursday 07:00, on a comms lane someone left on. */
 export function weekly(db: Db, now: Date): void {
   const local = new Date(now.getTime() + zone(db) * 60000)
-  const kind = WEEKLY[local.getUTCDay()]
+  const dow = local.getUTCDay()
+  const kind = WEEKLY[dow]
   if (kind === undefined || !commsOn(db)) return
   const day = local.toISOString().slice(0, 10)
   file(db, `${kind} ${day}`, null, now, 'weekly clock', day)
+  if (dow === 4 && hhmm(db, now) >= '07:00') file(db, `weekly ${shift(day, -3)}`, null, now, 'weekly clock', shift(day, -3))
 }
 
 /** From Friday 18:00 local, a Monday-to-Sunday week with no weekly post on the desk raises one card and one inbox event. */

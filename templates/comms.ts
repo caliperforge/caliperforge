@@ -39,11 +39,13 @@ export function facts(root: string, plan: PlanRow): Outcome {
   if (draft === null) return { outcome: 'pass', spans: [], note: 'no draft' }
   const { landed, refusals = [] } = JSON.parse(get(root, plan.id, 'packet.json')) as { landed?: Landed[]; refusals?: { id: number }[] }
   const known = landed === undefined ? null
-    : new Set([...landed.map((l) => `[landed:${String(l.plan)}]`), ...refusals.map((r) => `[refusal:${String(r.id)}]`)])
-  const spans = draft.split('\n').flatMap((line, i) =>
-    line.trim() === '' || sound(line, known) ? [] : [`draft.md:${String(i + 1)}`])
-  if (spans.length === 0) return { outcome: 'pass', spans, note: 'every line cites the packet' }
-  return { outcome: 'refuse', spans, note: `${String(spans.length)} draft line(s) cite no packet entry, or name an issue or an outside login` }
+    : new Set([...landed.map((l) => `landed:${String(l.plan)}`), ...refusals.map((r) => `refusal:${String(r.id)}`)])
+  const { sources } = JSON.parse(maybe(root, plan.id, 'fence.json') ?? '{"sources":[]}') as { sources: { claim: string; ref: string }[] }
+  const numbers = new Set(sources.flatMap((s) => s.claim.match(/\d+/g) ?? []))
+  const spans = [...sources.filter((s) => known?.has(s.ref) === false).map((s) => `fence.json:${s.ref}`), ...draft.split('\n').flatMap((line, i) =>
+    line.trim() === '' || sound(line, numbers) ? [] : [`draft.md:${String(i + 1)}`])]
+  if (spans.length === 0) return { outcome: 'pass', spans, note: 'every source is in the packet and every number in a source claim' }
+  return { outcome: 'refuse', spans, note: `${String(spans.length)} span(s) cite a ref the packet lacks, or carry an inline tag, an unclaimed number, an issue or an outside login` }
 }
 
 const REF = /^(https:\/\/\S+|[\w-][\w./-]*:[1-9]\d*)$/

@@ -5,9 +5,12 @@ or `items.json` and the `packet.json` it cites, and nothing else.
 
 ## Refuse
 
-A number or claim that no `[landed:N]` or `[refusal:N]` entry in `packet.json` supports, or that the entry
-contradicts, is a refuse with `class: claim.unverified`. Each such line is a `draft.md:<line>` span. Say in
-prose which claim the packet does not hold.
+A number or claim that no entry in `packet.json` supports, or that the entry contradicts, is a refuse with
+`class: claim.unverified`. Each such line is a `draft.md:<line>` span. Say in prose which claim the packet
+does not hold.
+
+A sentence a stranger who has never seen the machine could not follow, for a plan number, refusal id, step
+number, inline tag or the machine's own jargon, is a refuse with `class: unreadable` on its `draft.md:<line>`.
 
 ## Daily items
 

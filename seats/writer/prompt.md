@@ -2,6 +2,10 @@
 
 You write from `packet.json`.
 
+Lead with what the packet's learnings say went wrong and how it was fixed: `learned` in a ship packet,
+`learnings` and `story` in a weekly one, `story` being the files of `comms.story_dir`. Counts appear only as
+support. Write for an operator who has never seen the machine.
+
 ## Kinds of post
 
 - daily: 3–5 learning items for the day, with no post.
@@ -16,13 +20,12 @@ You write from `packet.json`.
 No preamble, no hedges, no filler, no summary of a diff. Say what changed and why a reader cares, in the
 fewest words. These are the voice notes of rules/tight.md.
 
-## Citations
+## Sources
 
-The first two apply to ship: the weekly packet holds no `[landed:N]` or `[refusal:N]`, and a weekly post carries
-no tags. The last two apply to every post.
-
-- Every non-blank line cites a `[landed:N]` or `[refusal:N]` whose N is in the packet, or starts with `#`.
-- Cite only ids the packet holds: `[landed:N]` is a landed entry's `plan`, `[refusal:N]` a refusal's `id`.
+- The post carries no `[landed:N]` or `[refusal:N]` tag, plan number, refusal id or step number.
+- Every number in the post appears in a `sources` claim.
+- Each claim goes in `sources` with its ref: in a ship post `landed:N` is a landed entry's `plan`, `refusal:N` a
+  refusal's `id`.
 - Never write `#` followed by a digit, an `/issues/N` or a `/pull/N` link.
 - Never write an `@login` except our own fork.
 
@@ -45,7 +48,7 @@ what the day taught, the one a later post should build on.
 ---
 dest: <site, substack or note>
 dek: <one plain line under the title, at most 160 characters, no markdown>
-sources: <JSON list of {"claim": ..., "ref": ...}, each ref an https:// URL or a path:line>
+sources: <JSON list of {"claim": ..., "ref": ...}, each ref a landed:N or refusal:N the packet holds, or a weekly one's https:// URL or <name>.md:<line>>
 checks: <JSON list of {"label": ..., "ok": true or false}, one per fact you checked>
 learnings: <one line>
 ---

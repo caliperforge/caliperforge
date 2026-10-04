@@ -5,9 +5,11 @@ import { expect, test } from 'vitest'
 import { walk } from '../../checks/tree.ts'
 import { MAP } from '../../cli/map.ts'
 import type { Packet } from '../../providers/kind.ts'
-import { release, retried, returnToLane } from '../../store/holds.ts'
+import { ofKind, runRows } from '../../store/events.ts'
+import { recorded } from '../../store/files.ts'
+import { holdOf, release, retried, returnToLane } from '../../store/holds.ts'
 import { get, priority } from '../../store/lanes.ts'
-import { retry } from '../../store/plans.ts'
+import { advance, dropPlan, end, needsCeo, requeue, retry, titles } from '../../store/plans.ts'
 import { WHY } from '../../store/refusals.ts'
 import { estimate, files, pointed, references, shape, split, TEMPLATE, unclear, writable, type Refused } from '../brief.ts'
 import { tick } from '../index.ts'
@@ -32,11 +34,10 @@ const askOf = (w: World): string => maybe(w.root, ID, 'ask.md') ?? ''
 
 const left = (w: World): string => get(w.db, 'brief.reads_left')
 
-const hands = (w: World): unknown[] => w.db.prepare(`SELECT kind, actor, outcome FROM events
-  WHERE kind IN ('release', 'return', 'retry', 'priority') ORDER BY id`).all()
+const hands = (w: World): unknown[] =>
+  ofKind(w.db, 'release', 'return', 'retry', 'priority').map(({ kind, actor, outcome }) => ({ kind, actor, outcome }))
 
-const listed = (w: World): unknown[] =>
-  w.db.prepare('SELECT path FROM plan_files WHERE plan = ? ORDER BY position').all(ID)
+const listed = (w: World): string[] => recorded(w.db, ID)
 
 const STOP = `CREATE TRIGGER stop BEFORE UPDATE OF step ON plans WHEN NEW.step = 2
   BEGIN SELECT RAISE(ABORT, 'advance refused'); END`
@@ -64,7 +65,7 @@ const asks = (question: string): string => `---\noutcome: unclear\nquestion: ${q
 
 function mine(): World {
   const w = world()
-  w.db.prepare('DELETE FROM plans WHERE id = 1').run()
+  dropPlan(w.db, 1)
   ours(w.root)
   internalPlan(w.db, w.root, ID)
   return w
@@ -225,7 +226,7 @@ test('step 1 fires the seat once, saves the brief, goes to build', async () => {
   expect(packets[0]?.refuse('src/hello.ts')).toMatchObject({ origin_ref: 'seat.write_paths' })
   expect(shape(briefOf(w), askOf(w), srcDir(w.root, ID))).toBeNull()
   expect(titleOf(w.root, ID)).toBe('let an internal plan run')
-  expect(w.db.prepare('SELECT seat, exit FROM runs WHERE step = 1').get()).toEqual({ seat: 'brief_writer', exit: 0 })
+  expect(runRows(w.db).find((r) => r.step === 1)).toMatchObject({ seat: 'brief_writer', exit: 0 })
   expect(plan(w.db, ID).step).toBe(2)
 })
 
@@ -241,7 +242,7 @@ test('a throw at the advance takes the file list back with it', async () => {
   w.db.exec('DROP TRIGGER stop')
   await tick(w.db, w.root, stub(CARRIED))
   expect(plan(w.db, ID).step).toBe(2)
-  expect(listed(w)).toEqual([{ path: 'src/hello.ts' }])
+  expect(listed(w)).toEqual(['src/hello.ts'])
 })
 
 test('the seat packet carries the template under the ask', async () => {
@@ -280,7 +281,7 @@ test('a misshapen reply refuses step 1 and writes no brief', async () => {
     const fired = (await tick(w.db, w.root, stub(CARRIED, 0, undefined, undefined, titled(name))))[0]
     expect(fired).toMatchObject({ step: 1, outcome: 'refuse', state: 'retried', spans: [span] })
     expect(maybe(w.root, ID, 'issue.md')).toBeNull()
-    expect(w.db.prepare('SELECT title FROM plans WHERE id = ?').get(ID)).toEqual({ title: null })
+    expect(titles(w.db, 'pr_path')).toEqual([null])
   }
 })
 
@@ -329,7 +330,7 @@ test('an unclear reply holds for the COO and spends no retry', async () => {
   expect(maybe(w.root, ID, 'question.md')).toBe(`${question}\n`)
   expect(maybe(w.root, ID, 'issue.md')).toBeNull()
   expect(plan(w.db, ID)).toMatchObject({ step: 1, retries: 0 })
-  expect(w.db.prepare('SELECT held_by, held_why FROM plans WHERE id = ?').get(ID))
+  expect(holdOf(w.db, ID))
     .toEqual({ held_by: 'coo', held_why: `brief_writer: ${question}` })
 })
 
@@ -337,12 +338,12 @@ test('a round back at step 1 keeps the brief the reviewers read', async () => {
   const w = mine()
   for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
   const saved = briefOf(w)
-  w.db.prepare("UPDATE plans SET step = 1, state = 'running' WHERE id = ?").run(ID)
+  advance(w.db, plan(w.db, ID), 1)
 
   const again = (await tick(w.db, w.root, stub(CARRIED)))[0]
   expect(again).toMatchObject({ step: 1, outcome: 'pass', note: 'the brief stands' })
   expect(briefOf(w)).toBe(saved)
-  expect(w.db.prepare('SELECT count(*) AS n FROM runs WHERE step = 1').get()).toEqual({ n: 1 })
+  expect(runRows(w.db).filter((r) => r.step === 1)).toHaveLength(1)
 })
 
 test('a rewound built plan keeps its ticket, ask and refusal', async () => {
@@ -350,7 +351,7 @@ test('a rewound built plan keeps its ticket, ask and refusal', async () => {
   for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
   await tick(w.db, w.root, stub(CARRIED, 1))
   expect(plan(w.db, ID)).toMatchObject({ step: 2, state: 'running' })
-  w.db.prepare("UPDATE plans SET step = 1 WHERE id = ?").run(ID)
+  advance(w.db, plan(w.db, ID), 1)
   const hand = '# a ticket the COO wrote\n\n- D1 do the thing\n'
   put(w.root, ID, 'issue.md', hand)
   drop(w.root, ID, 'ask.md')
@@ -360,7 +361,7 @@ test('a rewound built plan keeps its ticket, ask and refusal', async () => {
   expect(maybe(w.root, ID, 'issue.md')).toBe(hand)
   expect(maybe(w.root, ID, 'ask.md')).toBeNull()
   expect(maybe(w.root, ID, 'refusal.md')).toContain('step 2')
-  expect(w.db.prepare('SELECT count(*) AS n FROM runs WHERE step = 1').get()).toEqual({ n: 1 })
+  expect(runRows(w.db).filter((r) => r.step === 1)).toHaveLength(1)
 })
 
 const STOPPED = `step 1 brief refused\n\n# Stopped\n\n${WHY.shared}.\n`
@@ -396,7 +397,10 @@ test('D2 rulings.md survives cf return, cf retry and afresh', () => {
   const w = mine()
   const ruling = '# Ruling\n\nuse bye()\n'
   put(w.root, ID, 'rulings.md', ruling)
-  const park = (step: number): void => { w.db.prepare("UPDATE plans SET step = ?, state = 'blocked_on_ceo' WHERE id = ?").run(step, ID) }
+  const park = (step: number): void => {
+    requeue(w.db, ID, step)
+    needsCeo(w.db, plan(w.db, ID))
+  }
   for (const step of [1, 2]) {
     park(step)
     expect(unhold(w.db, w.root, ID, 'ceo')).toBe(step)
@@ -421,8 +425,8 @@ test('a plan retried at step 1 is briefed from the ask alone', async () => {
   expect(shape(briefOf(w), askOf(w), srcDir(w.root, ID))).toBeNull()
 })
 
-const lastTranscript = (w: World): string => (w.db.prepare(
-  'SELECT transcript_path FROM runs WHERE plan = ? AND step = 1 ORDER BY id DESC LIMIT 1').get(ID) as { transcript_path: string }).transcript_path
+const lastTranscript = (w: World): string =>
+  runRows(w.db).filter((r) => r.plan === ID && r.step === 1).at(-1)?.transcript_path ?? ''
 
 async function questioned(): Promise<World> {
   const w = mine()
@@ -458,9 +462,10 @@ test('a question with no transcript re-briefs from the ask alone', async () => {
 test('a re-brief after a step 1 retry replaces the file list', async () => {
   const w = mine()
   for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
-  expect(listed(w)).toEqual([{ path: 'src/hello.ts' }])
+  expect(listed(w)).toEqual(['src/hello.ts'])
   const first = briefOf(w)
-  w.db.prepare("UPDATE plans SET step = 1, state = 'blocked_on_ceo' WHERE id = ?").run(ID)
+  requeue(w.db, ID, 1)
+  needsCeo(w.db, plan(w.db, ID))
   drop(w.root, ID, 'issue.md')
   afresh(w.root, ID, retry(w.db, plan(w.db, ID)))
 
@@ -468,7 +473,7 @@ test('a re-brief after a step 1 retry replaces the file list', async () => {
   const fired = (await tick(w.db, w.root, stub(CARRIED, 0, undefined, undefined, second)))[0]
   expect(fired).toMatchObject({ step: 1, outcome: 'pass' })
   expect(fired).not.toMatchObject({ note: 'the brief stands' })
-  expect(listed(w)).toEqual([{ path: 'src/bye.ts' }])
+  expect(listed(w)).toEqual(['src/bye.ts'])
 })
 
 test('a pre-brief-seat plan moves its raw issue to the ask', async () => {
@@ -516,13 +521,19 @@ test('cf return requeues only a blocked or halted plan', async () => {
   expect(returnToLane(w.db, ID)).toBe(2)
   expect(plan(w.db, ID)).toMatchObject({ step: 2, state: 'queued' })
   const before = hands(w)
-  for (const state of ['queued', 'running', 'done', 'refused'] as const) {
-    w.db.prepare('UPDATE plans SET state = ? WHERE id = ?').run(state, ID)
+  const into = [
+    ['queued', () => { requeue(w.db, ID, 2) }],
+    ['running', () => { advance(w.db, plan(w.db, ID), 2) }],
+    ['done', () => { end(w.db, ID, 'done') }],
+    ['refused', () => { end(w.db, ID, 'refused') }],
+  ] as const
+  for (const [state, enter] of into) {
+    enter()
     expect(() => { returnToLane(w.db, ID) }).toThrow(/plan 2 is neither blocked on the ceo nor halted/)
     expect(plan(w.db, ID)).toMatchObject({ step: 2, state })
   }
   expect(hands(w)).toEqual(before)
-  w.db.prepare("UPDATE plans SET state = 'halted' WHERE id = ?").run(ID)
+  end(w.db, ID, 'halted', 'w')
   returnToLane(w.db, ID)
   expect(plan(w.db, ID)).toMatchObject({ step: 2, state: 'queued' })
 })
@@ -541,7 +552,7 @@ test('release refuses a plan parked at step 1 and moves no row', async () => {
 test('release, return, retry and priority each log who did it', async () => {
   const w = await unread()
   await tick(w.db, w.root, stub(CARRIED))
-  const park = (): void => { w.db.prepare("UPDATE plans SET state = 'blocked_on_ceo' WHERE id = ?").run(ID) }
+  const park = (): void => { needsCeo(w.db, plan(w.db, ID)) }
 
   release(w.db, ID, 'coo')
   park()
@@ -559,7 +570,6 @@ test('release, return, retry and priority each log who did it', async () => {
 
 test('refused retry or priority, or no actor, writes no event', () => {
   const w = mine()
-  w.db.prepare("UPDATE plans SET state = 'queued' WHERE id = ?").run(ID)
 
   expect(() => retried(w.db, ID, 'ceo')).toThrow(/plan 2 is queued, not blocked/)
   expect(() => { priority(w.db, ID, 10, { actor: 'ceo', why: 'w' }) }).toThrow(/cf priority takes P0 to P9/)
@@ -580,7 +590,7 @@ test('a rewind onto a standing brief holds and spends nothing', async () => {
   const w = mine()
   for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED))
   reads(w.db, 10)
-  w.db.prepare("UPDATE plans SET step = 1, state = 'running' WHERE id = ?").run(ID)
+  advance(w.db, plan(w.db, ID), 1)
 
   expect((await tick(w.db, w.root, stub(CARRIED)))[0])
     .toMatchObject({ step: 1, note: 'the brief stands', state: 'running' })
@@ -593,11 +603,11 @@ test('an external plan walks step 1 only after cf approve target', async () => {
   await tick(w.db, w.root, stub(CARRIED))
   expect(blocked(w.db, plan(w.db, 1))).toBe('target_approval')
   expect(await tick(w.db, w.root, stub(CARRIED))).toEqual([])
-  expect(w.db.prepare('SELECT count(*) AS n FROM runs').get()).toEqual({ n: 0 })
+  expect(runRows(w.db)).toEqual([])
 
   approve(w.db, w.target)
   expect((await tick(w.db, w.root, stub(CARRIED)))[0]).toMatchObject({ step: 1, outcome: 'pass' })
-  expect(w.db.prepare('SELECT seat FROM runs WHERE step = 1').get()).toEqual({ seat: 'brief_writer' })
+  expect(runRows(w.db).find((r) => r.step === 1)?.seat).toBe('brief_writer')
 })
 
 test('only brief.ts reads ## Files, and the shape check uses it', () => {

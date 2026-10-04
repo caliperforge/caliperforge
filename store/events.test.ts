@@ -4,7 +4,7 @@ import { fresh } from '../checks/sqlite.ts'
 import type { Fired } from '../providers/kind.ts'
 import { planRow } from '../runner/index.ts'
 import { load, seat } from '../runner/rules.ts'
-import { repriced, runAt, runLogged } from './events.ts'
+import { logged, ofKind, repriced, runAt, runLogged } from './events.ts'
 import type { Db } from './index.ts'
 
 const root = join(import.meta.dirname, '..')
@@ -123,6 +123,15 @@ test('runLogged: cache to cache_read_tokens, missing cost to NULL', () => {
   }
   expect(row({ input: 1, cache: 2, output: 3, cost: 0.42 })).toEqual({ ...written, cost_usd: 0.42 })
   expect(row({ input: 1, cache: 2, output: 3 })).toEqual({ ...written, cost_usd: null })
+})
+
+test('D4 ofKind with two kinds returns both in id order', () => {
+  const db = fresh(join(root, 'schema'))
+  for (const kind of ['retry', 'filed', 'release', 'retry']) {
+    logged(db, { plan: null, kind, actor: 'ceo', outcome: 'pass', message: kind, pointer: null, run: null })
+  }
+  expect(ofKind(db, 'release', 'retry').map((e) => e.message)).toEqual(['retry', 'release', 'retry'])
+  expect(ofKind(db, 'filed').map((e) => e.kind)).toEqual(['filed'])
 })
 
 test('D2 D3 cache_write_tokens: NULL if absent, negative refused', () => {

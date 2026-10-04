@@ -24,9 +24,9 @@ export function eventsOf(db: Db, plan: number, kind: string): Pick<Event, 'actor
     .all(plan, kind) as Pick<Event, 'actor' | 'outcome' | 'message'>[]
 }
 
-export function ofKind(db: Db, kind: string): Pick<Event, 'plan' | 'kind' | 'actor' | 'outcome' | 'message'>[] {
-  return db.prepare('SELECT plan, kind, actor, outcome, message FROM events WHERE kind = ? ORDER BY id')
-    .all(kind) as Pick<Event, 'plan' | 'kind' | 'actor' | 'outcome' | 'message'>[]
+export function ofKind(db: Db, ...kinds: string[]): Pick<Event, 'plan' | 'kind' | 'actor' | 'outcome' | 'message'>[] {
+  return db.prepare('SELECT plan, kind, actor, outcome, message FROM events WHERE kind IN (SELECT value FROM json_each(?)) ORDER BY id')
+    .all(JSON.stringify(kinds)) as Pick<Event, 'plan' | 'kind' | 'actor' | 'outcome' | 'message'>[]
 }
 
 export function newestRun(db: Db): number {
@@ -85,7 +85,7 @@ export function runAt(db: Db, plan: number, step: number, seat: string, at: stri
   return Number(row.lastInsertRowid)
 }
 
-export function runRows(db: Db): { plan: number; seat: string; step: number; transcript_path: string }[] {
-  return db.prepare('SELECT plan, seat, step, transcript_path FROM runs ORDER BY id')
-    .all() as { plan: number; seat: string; step: number; transcript_path: string }[]
+export function runRows(db: Db): { plan: number; seat: string; step: number; exit: number; transcript_path: string }[] {
+  return db.prepare('SELECT plan, seat, step, exit, transcript_path FROM runs ORDER BY id')
+    .all() as { plan: number; seat: string; step: number; exit: number; transcript_path: string }[]
 }

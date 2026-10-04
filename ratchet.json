@@ -467,9 +467,6 @@
   "sequencer/tests/batch.test.ts": {
     "prepare": 1
   },
-  "sequencer/tests/brief.test.ts": {
-    "prepare": 20
-  },
   "sequencer/tests/built.test.ts": {
     "prepare": 5
   },

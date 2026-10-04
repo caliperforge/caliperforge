@@ -51,7 +51,7 @@ test('D1 design refuses a screenshot region against the mockup', async () => {
   expect(sent[0]?.prompt).toContain(`\n\n# Screenshots\n\n${paths.map((p) => `  - ${p}`).join('\n')}`
     + '\n\n# Defects the capture found\n\noverflow at 390\n\n# Mockup or ruling the brief names\n\nlight canvas')
   expect(sent[0]?.reads).toEqual([dir])
-  expect(out.outcome).toMatchObject({ outcome: 'refuse', defect_class: 'design' })
+  expect(out.outcome).toMatchObject({ outcome: 'refuse', defect_class: 'design', origin_kind: 'ruling', origin_ref: 'reviewers.verdict' })
   expect(out.outcome.spans).toHaveLength(1)
   expect(out.outcome.spans[0]).toMatch(/^index\.html\.1440\.light\.png:\d+,\d+-\d+,\d+$/)
   expect(verdictRows(db, plan)).toMatchObject([{ id: out.verdict, gate: 'review', step: 4 }])

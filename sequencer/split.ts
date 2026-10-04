@@ -1,4 +1,5 @@
 import { rmSync } from 'node:fs'
+import { mentions } from '../cli/gh.ts'
 import { LANE } from '../cli/plan.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
@@ -35,9 +36,14 @@ export function parted(db: Db, root: string, plan: PlanRow, parts: Part[], wire:
   }
   const parent = originIssue(plan)
   const ask = maybe(root, plan.id, 'ask.md')
-  const section = ask === null ? '' : carried(ask, parent === null ? `plan ${String(plan.id)}` : `#${String(parent)}`)
+  const source = parent === null ? `plan ${String(plan.id)}` : `#${String(parent)}`
+  const section = ask === null ? '' : carried(ask, '## Parent ticket', source)
   try {
-    const urls = [...parts.keys()].map((n) => filed(db, plan, parent === null ? `p${String(plan.id)}` : String(parent), parts, n, section, wire))
+    const thread = parent === null ? [] : wire.thread?.(homeOf(plan), parent) ?? []
+    const said = thread.length === 0 ? '' : carried(thread.map((c) => `### ${c.author.login}\n\n${c.body.trim()}`).join('\n\n'), '## Parent comments', source)
+    const cites = (p: Part): boolean => [p.title, p.what, p.why, p.ends].some((t) => (parent !== null && mentions(t, parent)) || thread.some((c) => t.includes(c.url)))
+    const sections = parts.map((p) => [section, cites(p) ? said : ''].filter((s) => s !== '').join('\n\n'))
+    const urls = [...parts.keys()].map((n) => filed(db, plan, parent === null ? `p${String(plan.id)}` : String(parent), parts, n, sections[n] ?? '', wire))
     const on = (n: number): string => ref(urls[n] ?? '')
     const started = [...parts.keys()].filter((n) => parts[n]?.after === 'none')
     for (const n of started) queue(db, root, plan, n)
@@ -139,10 +145,10 @@ function unfileable(db: Db, plan: PlanRow): string | null {
   return approved(db, plan) ? null : 'an unapproved ticket on somebody else\'s repository is split by the COO, not the machine'
 }
 
-/** The parent's ask without its own `After:` gate, which `afterOf` would read as the part's. */
-function carried(ask: string, source: string): string {
+/** The parent's ask or comments without an `After:` gate, which `afterOf` would read as the part's. */
+function carried(ask: string, heading: string, source: string): string {
   const text = ask.replace(/^After: #\d+$\n?/gm, '')
-  return `## Parent ticket\n\n${text.length > CUT ? `${text.slice(0, CUT)}\ncut, see ${source}` : text.trimEnd()}`
+  return `${heading}\n\n${text.length > CUT ? `${text.slice(0, CUT)}\ncut, see ${source}` : text.trimEnd()}`
 }
 
 function filed(db: Db, plan: PlanRow, prefix: string, parts: Part[], n: number, section: string, wire: Wire): string {

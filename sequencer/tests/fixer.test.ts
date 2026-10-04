@@ -3,6 +3,8 @@ import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { expect, test } from 'vitest'
 import type { Fired, Packet, Provider } from '../../providers/kind.ts'
+import { gates } from '../../store/approvals.ts'
+import { pushedRow } from '../../store/deliverables.ts'
 import { record, strays } from '../../store/files.ts'
 import { migrate, open } from '../../store/index.ts'
 import type { Wire } from '../push.ts'
@@ -90,6 +92,10 @@ test('shadow: the fixer only reads, the stop reaches a person', async () => {
 })
 
 const TICKET = '---\ndid: nothing\nthen: ticket\nwhy: the spend wall counts a turn four times\nticket: the run wall counts each streamed block\n---\n'
+const pushed = (db: ReturnType<typeof open>, plan: number) => {
+  pushedRow(db, { plan, step: 6, seat: 'typescript_specialist', diff_digest: 'd'.repeat(64),
+    evidence: 'https://github.com/caliperforge/caliperforge/pull/1' }, gates(db, plan, 'd'.repeat(64)))
+}
 const ticketed = (db: ReturnType<typeof open>) => db.prepare(`SELECT id, priority, lane, state FROM plans
   WHERE origin = 'https://github.com/caliperforge/caliperforge/issues/999'`).get() as { id: number } | undefined
 
@@ -119,6 +125,7 @@ test('ticket: the job is back at its step when the ticket lands', async () => {
   const posted: string[] = []
   await woke(db, home, stub(TICKET, []), now, (t) => void posted.push(t), wire([]))
   db.prepare("UPDATE plans SET state = 'done' WHERE id = ?").run(ticketed(db)?.id)
+  pushed(db, ticketed(db)?.id ?? 0)
   await woke(db, home, stub(TICKET, []), now, (t) => void posted.push(t), wire([]))
   expect(state(db)).toEqual({ state: 'queued', step: 4 })
   expect(waitsOn(db)).toEqual({ waits_on: null })
@@ -242,6 +249,7 @@ test('wait: held quietly, released on land', async () => {
   await woke(db, home, stub(WAIT, []), now, (t) => void posted.push(t), wire([]))
   expect(state(db)).toEqual({ state: 'blocked_on_ceo', step: 4 })
   db.exec("UPDATE plans SET state = 'done' WHERE id = 8")
+  pushed(db, 8)
   await woke(db, home, stub(WAIT, []), now, (t) => void posted.push(t), wire([]))
   expect(state(db)).toEqual({ state: 'queued', step: 4 })
   expect(waitsOn(db)).toEqual({ waits_on: null })

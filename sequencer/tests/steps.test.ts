@@ -2,7 +2,9 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
-import { migrate, open } from '../../store/index.ts'
+import { gates } from '../../store/approvals.ts'
+import { pushedRow } from '../../store/deliverables.ts'
+import { addRule, migrate, open } from '../../store/index.ts'
 import { addPart } from '../../store/parts.ts'
 import { addPipe, addPlan, end, planById, planRows, type PlanRow } from '../../store/plans.ts'
 import { afterOf, allTickets, recordListing } from '../../store/tickets.ts'
@@ -14,10 +16,15 @@ import { maybe } from '../workspace.ts'
 
 const home = 'caliperforge/caliperforge'
 const url = (no: number) => `https://github.com/${home}/issues/${String(no)}`
+const pushed = (db: ReturnType<typeof open>, plan: number) => {
+  pushedRow(db, { plan, step: 6, seat: 'typescript_specialist', diff_digest: 'd'.repeat(64),
+    evidence: `https://github.com/${home}/pull/1` }, gates(db, plan, 'd'.repeat(64)))
+}
 
 function listed(after: string) {
   const db = open(':memory:')
   migrate(db, join(import.meta.dirname, '../../schema'))
+  addRule(db, { id: 'typescript_specialist', kind: 'roster', path: 'seats/typescript_specialist', content_hash: '0'.repeat(64), loaded_at: '2026-10-04' })
   addPipe(db, { name: 'after', enabled: 1, window_start: '00:00', window_end: '23:59', max_concurrent: 2 })
   recordListing(db, home, [1, 2, 3, 4, 5, 6].map((number) => ({ number, title: `t${String(number)}`,
     body: number === 2 ? `b\n\nAfter: ${after}\n` : 'x', url: url(number), labels: [{ name: 'lane:machine' }], createdAt: '2026-10-03',
@@ -30,6 +37,7 @@ function listed(after: string) {
 function split(a2: PlanRow['state']) {
   const { db, root, plan } = listed('#1')
   const [a, b, a1, a2Plan] = [plan(1, 'done'), plan(2, 'running'), plan(3, 'done'), plan(4, a2)]
+  pushed(db, a1)
   addPart(db, { parent: a, n: 0, url: url(3), title: 't3', body: 'x', plan: a1 })
   addPart(db, { parent: a, n: 1, url: url(4), title: 't4', body: 'x', plan: a2Plan, after: 0 })
   const row = () => planRows(db).find((r) => r.id === b)
@@ -38,7 +46,8 @@ function split(a2: PlanRow['state']) {
 
 function both(c: PlanRow['state']) {
   const { db, root, plan } = listed('#1, #6')
-  const [, b, cPlan] = [plan(1, 'done'), plan(2, 'running'), plan(6, c)]
+  const [a, b, cPlan] = [plan(1, 'done'), plan(2, 'running'), plan(6, c)]
+  pushed(db, a)
   const row = () => planRows(db).find((r) => r.id === b)
   return { db, root, b, c: cPlan, row }
 }
@@ -55,6 +64,7 @@ test('D2 once the last part lands, the After passes', () => {
   const { db, root, b, a2, row } = split('running')
   measure(db, root, planById(db, b))
   end(db, a2, 'done')
+  pushed(db, a2)
   released(db, root, new Date('2026-10-04T09:00:00.000Z'), () => undefined)
   expect(row()).toMatchObject({ state: 'queued', step: 0, waits_on: null })
   const again = measure(db, root, planById(db, b))
@@ -94,6 +104,7 @@ test('D3 once both issues land, the After passes', () => {
   const { db, root, b, c, row } = both('running')
   measure(db, root, planById(db, b))
   end(db, c, 'done')
+  pushed(db, c)
   released(db, root, new Date('2026-10-04T09:00:00.000Z'), () => undefined)
   expect(row()).toMatchObject({ state: 'queued', waits_on: null })
   const again = measure(db, root, planById(db, b))

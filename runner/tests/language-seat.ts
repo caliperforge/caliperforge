@@ -8,6 +8,7 @@ import { packet } from '../index.ts'
 import { Seat, rules, seat } from '../rules.ts'
 import { record } from '../../store/files.ts'
 import { BRIEF_FILES, fenceFor } from '../../sequencer/route.ts'
+import type { Run } from '../../store/events.ts'
 import { builder } from '../../templates/pr-path.ts'
 
 const root = join(import.meta.dirname, '../..')
@@ -22,6 +23,7 @@ export interface LanguageSeat {
   /** A file the brief lists, and one beside it the brief does not. */
   listed: string
   beside: string
+  mode?: Run['mode']
 }
 
 const hunk = (path: string) => `--- a/${path}\n+++ b/${path}\n@@ -1,1 +1,1 @@\n+x\n`
@@ -51,7 +53,7 @@ function declared(s: LanguageSeat): void {
   })
 
   test('the prompt closes with the handback fence and rebuild line', () => {
-    const prompt = seat(root, s.seat).prompt
+    const prompt = seat(root, s.seat, s.mode).prompt
     expect(prompt).toMatch(/^---\nsummary: <the change in one line>\ndone:$/m)
     expect(prompt).toContain('- id: D1')
     expect(prompt).toContain(

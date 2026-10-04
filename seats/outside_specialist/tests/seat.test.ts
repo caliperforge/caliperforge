@@ -37,7 +37,7 @@ test('the prompt says the brief\'s files are handed', () => {
 
 test('the fence puts summary above done, and the audit reads it', () => {
   for (const name of ['go_specialist', 'kotlin_specialist', 'outside_specialist', 'swift_specialist', 'typescript_specialist']) {
-    const { prompt } = seat(root, name, ['kotlin_specialist', 'swift_specialist'].includes(name) ? 'build' : undefined)
+    const { prompt } = seat(root, name, ['go_specialist', 'kotlin_specialist', 'swift_specialist'].includes(name) ? 'build' : undefined)
     expect(prompt).toMatch(/^---\nsummary: <the change in one line>\ndone:$/m)
     expect(prompt).toContain(REASK)
   }

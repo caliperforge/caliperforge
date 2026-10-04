@@ -61,7 +61,7 @@ test('fresh', () => {
   expect(drift(d, [COO, { ...COO, name: 'six', gap: '24h' }], NOW)).toEqual([])
   expect(REGISTRY.map((e) => e.name)).toEqual(['coo_lite', 'fixer', 'fix_mode', 'brief_writer', 'text_review',
     'growth_lead', 'web_specialist', 'gardener', 'ratchet', 'accounts', 'records', 'dispositions', 'signoffs', 'proposals',
-    'ratchet_refuse', 'intake', 'stuck_plans', 'science_pull', 'site_publish'])
+    'ratchet_refuse', 'intake', 'stuck_plans', 'science_pull', 'site_publish', 'director_look'])
   expect(ratchetRules(d).mode).toBe('refuse')
   expect(drift(d, REGISTRY, NOW).map((r) => r.name)).not.toContain('ratchet_refuse')
   expect(drift(d, REGISTRY, NOW).map((r) => r.name)).not.toContain('accepted_findings')
@@ -92,6 +92,21 @@ test('D4 science_pull reads only pass events, stale after 7d', () => {
   expect(drift(d, science, NOW).map((r) => r.state)).toEqual(['stale'])
   pulled('2026-09-27 10:00:00', 'pass')
   expect(drift(d, science, NOW)).toEqual([])
+})
+
+test('D2 director_look is silent until a look, stale after 7d', () => {
+  const look = REGISTRY.filter((e) => e.name === 'director_look')
+  const d = db()
+  const looked = (at: string, kind = 'look'): void => {
+    d.prepare("INSERT INTO events (plan, at, kind, actor, outcome, message) VALUES (NULL, ?, ?, 'coo_lite', 'pass', 'm')").run(at, kind)
+  }
+  looked('2026-10-02 10:00:00', 'coo_lite')
+  looked('2026-10-02 10:00:00', 'science_pull')
+  expect(drift(d, look, NOW)).toEqual([{ name: 'director_look', state: 'silent', detail: "no row in events WHERE kind = 'look'" }])
+  looked('2026-09-25 10:00:00')
+  expect(drift(d, look, NOW).map((r) => r.state)).toEqual(['stale'])
+  looked('2026-09-27 10:00:00')
+  expect(drift(d, look, NOW)).toEqual([])
 })
 
 test('D4 web_specialist is silent only once atelier-web has a plan', () => {

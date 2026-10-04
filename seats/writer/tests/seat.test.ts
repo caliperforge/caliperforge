@@ -38,3 +38,8 @@ test('weekly D5: script, 2–4 minutes, substack, sources', () => {
   }
   expect(prompt).not.toContain('Read nothing else')
 })
+
+test('weekly D4: the CEO\'s voice and dest: substack', () => {
+  const prompt = seat(root, 'writer').prompt
+  for (const part of ['## Weekly', 'CEO\'s voice', 'dest: substack']) expect(prompt).toContain(part)
+})

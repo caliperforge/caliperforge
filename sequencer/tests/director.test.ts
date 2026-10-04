@@ -20,6 +20,7 @@ import { allPlans, held, needsCeo, planById, planRows, putPlan, requeue, retry }
 import { clear } from '../../store/refusals.ts'
 import { split } from '../brief.ts'
 import { byHand, cooLite, read, woke } from '../director.ts'
+import { stop } from '../fixed.ts'
 import { hold, unhold } from '../hold.ts'
 import type { Wire } from '../push.ts'
 import { rule } from '../rule.ts'
@@ -275,13 +276,15 @@ test('close with no pushed deliverable is held by the coo', async () => {
   expect(told(db).map((t) => t.message)).toEqual([expect.stringMatching(/^close did not apply, /)])
 })
 
-test('a split parted cannot file is held by the coo', async () => {
-  const { db, home } = seeded('1')
-  db.exec(`INSERT INTO accounts (id, repo, measured_at, maintainers, doors, last_outsider_merge, open_pr_age_p50_days,
+const targeted = (db: Db) => db.exec(`INSERT INTO accounts (id, repo, measured_at, maintainers, doors, last_outsider_merge, open_pr_age_p50_days,
     cross_repo_activity, pulse, evidence) VALUES (1, 'acme/kit', '2026-09-24', 2, 1, '2026-09-24', 3, 4, 'warm', 'https://github.com/acme/kit');
     INSERT INTO targets (id, account_id, repo, issue_no, named_merger, state, evidence_measured_at, evidence)
     VALUES (1, 1, 'acme/kit', 706, 'ludo', 'ready', '2026-09-24', 'https://github.com/acme/kit/issues/706');
     UPDATE plans SET target_id = 1, lane = NULL, seat = NULL, origin = NULL WHERE id = 7`)
+
+test('a split parted cannot file is held by the coo', async () => {
+  const { db, home } = seeded('1')
+  targeted(db)
   await run(db, home, SPLIT)
   expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'coo' })
   expect(told(db).map((t) => t.message)).toEqual([expect.stringMatching(/^split did not apply, /)])
@@ -500,6 +503,78 @@ test('askCeoNeedsClass', async () => {
   await run(db, home, '---\nmove: ask_ceo\nwhy: which file\n---\n')
   expect(told(db)).toEqual([{ actor: 'coo_lite', outcome: 'needs_ceo', message: 'ask_ceo: no readable answer' }])
   expect(plan7(db)).toMatchObject({ held_by: 'coo' })
+})
+
+const ASK_COO = '---\nmove: ask_coo\nwhy: the coo should pick\n---\n'
+
+function inTurn(replies: string[], prompts: string[]): Provider {
+  return { ...stub(''), fire: (p) => { prompts.push(p.prompt); return stub(replies[prompts.length - 1] ?? '').fire(p) } }
+}
+
+function commenting(comments: [string, number, string][]): Wire {
+  return { ...wire(), comment: (repo, no, body) => { comments.push([repo, no, body]) } }
+}
+
+const failedFixes = (db: Db, evidence: string) => {
+  for (let i = 0; i < 2; i++) decided(db, { plan: 7, step: 4, wait_reason: 'blocked_on_ceo', verb: 'ask_coo', why: 'a fix', evidence, tokens: 0 })
+}
+
+test('D1: ask_coo on one failed fix is fenced, the next move runs', async () => {
+  const { db, home } = seeded('1')
+  decided(db, { plan: 7, step: 4, wait_reason: 'blocked_on_ceo', verb: 'ask_coo', why: 'a fix', evidence: stop(home, 7), tokens: 0 })
+  const prompts: string[] = []
+  await cooLite(db, home, row(db), inTurn([ASK_COO, REPLY.rule ?? ''], prompts), now, () => undefined, wire())
+  expect(prompts.map((p) => p.includes('# Fence\n\nask_coo is refused: 1 failed fixes'))).toEqual([false, true])
+  expect(told(db)).toEqual([{ actor: 'coo_lite', outcome: 'pass', message: 'rule: the ticket settles it' }])
+})
+
+test('D2: ask_coo after two failed fixes holds plan 7 for the coo', async () => {
+  const { db, home } = seeded('1')
+  failedFixes(db, stop(home, 7))
+  const prompts: string[] = []
+  await cooLite(db, home, row(db), inTurn([ASK_COO], prompts), now, () => undefined, wire())
+  expect(prompts).toHaveLength(1)
+  expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'coo', held_why: 'the coo should pick' })
+  expect(told(db)).toEqual([{ actor: 'coo_lite', outcome: 'needs_ceo', message: 'ask_coo: the coo should pick' }])
+})
+
+test('D3: failed fixes on an earlier stop do not count', async () => {
+  const { db, home } = seeded('1')
+  failedFixes(db, stop(home, 7))
+  put(home, 7, 'refusal.md', 'step 3 rails refused again\n')
+  const was = plans(db)
+  await cooLite(db, home, row(db), inTurn([ASK_COO, ASK_COO], []), now, () => undefined, wire())
+  expect(plans(db)).toEqual(was)
+  expect(told(db).map((t) => t.message)).toEqual([expect.stringMatching(/^ask_coo: refused by the fence/)])
+})
+
+test('D4: the fix decision carries the stop hash', async () => {
+  const { db, home } = seeded('1')
+  fixLive(db)
+  mkdirSync(join(srcDir(home, 7), '.git'), { recursive: true })
+  const at = stop(home, 7)
+  await cooLite(db, home, row(db), bySeat([]), now, () => undefined, wire())
+  expect(decisions(db, 7).map((d) => d.evidence)).toEqual([at])
+})
+
+test('D5: a rule writes the reading, comments once on the origin', async () => {
+  const { db, home } = seeded('1')
+  const comments: [string, number, string][] = []
+  await cooLite(db, home, row(db), stub(REPLY.rule ?? ''), now, () => undefined, commenting(comments))
+  expect(maybe(home, 7, 'issue.md')).toContain('build on main, not on plan 8')
+  expect(comments).toEqual([['caliperforge/caliperforge', 139, 'Ruled by coo_lite on plan 7.\n\nbuild on main, not on plan 8']])
+})
+
+test.each([
+  { name: 'a refused rule', reply: '---\nmove: rule\nwhy: the path settles it\nanswer: read /etc/x\n---\n', origin: true },
+  { name: 'a plan with no origin', reply: REPLY.rule ?? '', origin: false },
+])('D6: $name makes no comment', async ({ reply, origin }) => {
+  const { db, home } = seeded('1')
+  if (!origin) targeted(db)
+  const comments: [string, number, string][] = []
+  await cooLite(db, home, row(db), stub(reply), now, () => undefined, commenting(comments))
+  expect(told(db).map((t) => t.outcome)).toEqual([origin ? 'needs_ceo' : 'pass'])
+  expect(comments).toEqual([])
 })
 
 const wokeAt = new Date('2026-09-24T12:00:00.000Z')

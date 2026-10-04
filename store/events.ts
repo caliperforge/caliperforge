@@ -95,6 +95,13 @@ export function runRows(db: Db): { plan: number; seat: string; step: number; exi
     .all() as { plan: number; seat: string; step: number; exit: number; transcript_path: string }[]
 }
 
+export interface HandUps { decided: number; up: number }
+
+export function handUps(db: Db, now: Date): HandUps {
+  return db.prepare(`SELECT coalesce(sum(outcome = 'pass'), 0) AS decided, coalesce(sum(outcome = 'needs_ceo'), 0) AS up
+    FROM events WHERE kind = 'coo_lite' AND julianday(at) >= julianday(?, '-7 day')`).get(now.toISOString()) as HandUps
+}
+
 export function kindsOf(db: Db, plan: number): Pick<Event, 'kind' | 'outcome'>[] {
   return db.prepare('SELECT kind, outcome FROM events WHERE plan = ? ORDER BY id').all(plan) as Pick<Event, 'kind' | 'outcome'>[]
 }

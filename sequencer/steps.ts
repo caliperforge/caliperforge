@@ -4,6 +4,7 @@ import { CARD, waits } from '../cli/queue.ts'
 import { parse } from '../rails/diff.ts'
 import { building, filesOf, recorded, sharing, strays as recordStrays } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
+import { partsOf } from '../store/parts.ts'
 import { builderRan, held, internal, needsCeo, originIssue, originRef, waiting, type PlanRow, type Wait } from '../store/plans.ts'
 import { capture, desk, facts, gather, pack, score, steps as comms } from '../templates/comms.ts'
 import { at, last, steps, type Step } from '../templates/pr-path.ts'
@@ -165,10 +166,11 @@ function unmet(db: Db, repo: string, n: number): { on: number | null; issue: str
   const on = part === null ? pred : { ...part, closed_at: pred?.closed_at ?? null }
   const issue = part === null ? `#${String(n)}` : `#${String(originIssue(part))}`
   const named = part === null ? issue : `${issue} (part of #${String(n)})`
-  const open = on?.closed_at === null &&['queued', 'running', 'blocked_on_ceo'].includes(on.state)
+  const pushing = on?.state === 'done' && partsOf(db, on.id).length === 0
+  const open = on?.closed_at === null && (pushing || ['queued', 'running', 'blocked_on_ceo'].includes(on.state))
   const why = on === undefined ? `#${String(n)} has no plan`
-    : on.state === 'done' ? `#${String(n)} split, and no open part of it has a plan`
     : open ? `waits for ${named}, plan ${String(on.id)}, to land`
+    : on.state === 'done' ? `#${String(n)} split, and no open part of it has a plan`
     : on.closed_at === null ? (part === null ? `#${String(n)}'s plan ${String(on.id)} ended ${on.state}` : `${named} ended ${on.state}`)
     : `#${String(n)} closed without plan ${String(on.id)} landing`
   return { on: open ? on.id : null, issue, why }

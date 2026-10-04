@@ -60,10 +60,16 @@ test('D2 back to its lane once After lands, then passes measure', () => {
   expect(again.held).toBeUndefined()
 })
 
-test('D4 an After done with no push does not pass measure', () => {
-  const { db, root, two } = seeded({ state: 'done' })
+test('D4 an After done with no push waits for the push', () => {
+  const { db, root, one, two } = seeded({ state: 'done' })
   expect(measure(db, root, plan(db, two))).toMatchObject({ outcome: 'pass', held: true, spans: ['#1'] })
-  expect(row(db, two)).toMatchObject({ state: 'blocked_on_ceo', step: 0 })
+  expect(row(db, two)).toEqual({ state: 'blocked_on_ceo', step: 0, waits_on: one, held_by: 'coo',
+    held_why: `waits for #1, plan ${String(one)}, to land` })
+  released(db, root, now, () => undefined)
+  expect(row(db, two)).toMatchObject({ state: 'blocked_on_ceo', waits_on: one })
+  pushed(db, one ?? 0)
+  released(db, root, now, () => undefined)
+  expect(row(db, two)).toMatchObject({ state: 'queued', step: 0, waits_on: null })
 })
 
 test('D3 an After closed unlanded or planless holds for the COO', () => {

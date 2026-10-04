@@ -10,7 +10,7 @@ import { set, zone } from '../../store/lanes.ts'
 import { addPipe, briefed, dropPlan, end, plansOf, putPlan, requeue } from '../../store/plans.ts'
 import { refusalAt } from '../../store/refusals.ts'
 import { verdictRows } from '../../store/verdict.ts'
-import { desk, draft, drafted, facts, gather, review } from '../../templates/comms.ts'
+import { desk, draft, drafted, facts, gather, grow, review } from '../../templates/comms.ts'
 import { tick } from '../index.ts'
 import { weekly as clock } from '../signals.ts'
 import { publish, push } from '../site.ts'
@@ -419,6 +419,7 @@ test.each(['growth 2026-09-28', 'scorecard 2026-09-28'])('D5: a %s plan passes s
   const w = posting(title, 1)
   for (let n = 0; n < 3; n += 1) await tick(w.db, w.root, never)
   expect(events(w)).toEqual(['draft', 'facts', 'text_review'].map((kind) => ({ kind, outcome: 'pass' })))
+  expect(eventsOf(w.db, 1, 'text_review')).toEqual([{ actor: 'text_review', outcome: 'pass', message: 'skipped: no draft' }])
   expect(ran(w)).toEqual([])
   expect(maybe(w.root, 1, 'draft.md')).toBeNull()
 })
@@ -428,6 +429,13 @@ test('growUnchanged D6: step 7 still runs growth_lead', async () => {
   await tick(w.db, w.root, stub('', 0, 'the pack'))
   expect(ran(w)).toEqual(['growth_lead'])
   expect(get(w.root, 1, 'growth.md')).toBe('the pack')
+})
+
+test('weeklyGrows D2: a weekly plan runs text_review, growth_lead', async () => {
+  const w = posting('weekly 2026-10-05')
+  expect(await reviewing(w, verdict('wording.reply.md'))).toMatchObject({ outcome: 'pass' })
+  expect(await grow(w.db, w.root, plan(w.db, 1), mapOf('comms').at(7), stub('', 0, 'the pack'))).toMatchObject({ outcome: 'pass' })
+  expect(ran(w)).toEqual(['text_review', 'growth_lead'])
 })
 
 const storied = (dir: string): World => {
@@ -495,7 +503,11 @@ test('weeklyDesk D4: a weekly plan lands a substack post', async () => {
   reads(w.db, 1)
   const prompts: string[] = []
   const writer = seated(fixture('weekly.md'))
-  const seats: Provider = { ...writer, fire: (packet) => { prompts.push(packet.prompt); return writer.fire(packet) } }
+  const lead = stub('', 0, readFileSync(join(import.meta.dirname, '../../seats/growth_lead/tests/reply.md'), 'utf8'))
+  const seats: Provider = { ...writer, fire: (packet) => {
+    prompts.push(packet.prompt)
+    return (packet.prompt.includes('# growth_lead') ? lead : writer).fire(packet)
+  } }
   for (let n = 0; n < 11 && plan(w.db, 1).state !== 'done'; n += 1) await tick(w.db, w.root, seats)
   expect(plan(w.db, 1).state).toBe('done')
   const written = prompts.find((p) => p.includes('# writer')) ?? ''

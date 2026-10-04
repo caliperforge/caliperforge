@@ -99,8 +99,9 @@ export function titled(db: Db, plan: PlanRow, kind: string): string | null {
   return title?.startsWith(`${kind} `) === true ? title : null
 }
 
+const grown = (db: Db, plan: PlanRow): string | null => titled(db, plan, 'growth') ?? titled(db, plan, 'weekly')
 export async function grow(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
-  if (titled(db, plan, 'growth') === null) return { outcome: 'pass', spans: [], note: 'not a growth plan' }
+  if (grown(db, plan) === null) return { outcome: 'pass', spans: [], note: 'skipped: not a growth or weekly plan' }
   const fired = await ran(db, root, plan, step, provider, `# packet.json\n\n${get(root, plan.id, 'packet.json')}`, false)
   if (fired.ended !== 'completed') return halted(step, fired)
   put(root, plan.id, 'growth.md', fired.text)
@@ -126,7 +127,7 @@ export async function draft(db: Db, root: string, plan: PlanRow, step: Step, pro
 
 export async function review(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
   const [name, post] = subject(root, plan.id)
-  if (post === null) return { outcome: 'pass', spans: [], note: 'no draft' }
+  if (post === null) return { outcome: 'pass', spans: [], note: 'skipped: no draft' }
   const fired = await ran(db, root, plan, step, provider, `# ${name}\n\n${post}\n\n# packet.json\n\n${get(root, plan.id, 'packet.json')}`, false)
   if (fired.ended !== 'completed') return halted(step, fired)
   const judged = read(fired.text, post)
@@ -150,8 +151,8 @@ const Pack = z.object({
 })
 
 export function pack(db: Db, root: string, plan: PlanRow): Outcome {
-  const title = titled(db, plan, 'growth')
-  if (title === null) return { outcome: 'pass', spans: [], note: 'not a growth plan' }
+  const title = grown(db, plan)
+  if (title === null) return { outcome: 'pass', spans: [], note: 'skipped: not a growth or weekly plan' }
   const fence = CLOSING.exec(maybe(root, plan.id, 'growth.md') ?? '')
   const got = Pack.safeParse(fence === null ? null : prose(fence[1] ?? '', ['topic']))
   if (!got.success) return { outcome: 'refuse', spans: ['growth.md'], note: 'growth.md has no fence of a topic, 14 Notes of 31–60 words with no ?, replies and partners' }

@@ -274,10 +274,10 @@ export function overlapWaits(db: Db): Overlap[] {
 
 interface Parked { id: number; step: number; state: string; repo: string | null; issue_no: number | null; held_why: string | null }
 
-/** The blocked plans parked on another job, each named with the job it waits for and the hold's why. */
+/** The blocked plans parked on another job, each named with the job it waits for. */
 export function parked(db: Db): Parked[] {
   return db.prepare(`SELECT p.id, p.step, p.state, t.repo, t.issue_no,
-    'waits for plan ' || w.id || ' (' || w.state || ', step ' || w.step || ')' || coalesce(char(9) || p.held_why, '') AS held_why
+    'until plan ' || w.id || ' lands (' || w.state || ', step ' || w.step || ')' AS held_why
     FROM plans p JOIN plans w ON w.id = p.waits_on LEFT JOIN targets t ON t.id = p.target_id
     WHERE p.state = 'blocked_on_ceo' ORDER BY p.queued_at, p.id`).all() as Parked[]
 }

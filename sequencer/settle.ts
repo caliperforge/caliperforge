@@ -13,6 +13,7 @@ import { draft, grow, review } from '../templates/comms.ts'
 import type { Step } from '../templates/pr-path.ts'
 import type { Fired, Outcome } from './kind.ts'
 import { parted } from './split.ts'
+import { refilled } from './refill.ts'
 import type { Wire } from './push.ts'
 import { fireBrief, fireLanded, fireSeat } from './seat.ts'
 import { proved } from './ready.ts'
@@ -139,6 +140,7 @@ function fire(db: Db, root: string, plan: PlanRow, step: Step, provider: Provide
   if (step.fires === 'brief') {
     const says = plan.target_id !== null && wire?.intake !== undefined ? vetted(db, root, plan.id, plan.target_id, wire.intake) : null
     if (says !== null) return Promise.resolve({ outcome: 'needs_ceo', spans: ['their work'], note: says })
+    refilled(db, root, plan, wire)
     return model(db, plan, step, () => fireBrief(db, root, plan, step, provider))
   }
   if (step.fires === 'seat') {

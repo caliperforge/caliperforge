@@ -61,7 +61,7 @@ export function seatOf(labels: { name: string }[]): string | null {
   return labels.map((l) => SEAT_LABEL.exec(l.name)?.[1]).find((n) => n !== undefined) ?? null
 }
 
-export function add(db: Db, root: string, ref: string, by: Holder | 'intake', pipe?: string, read: Read = gh): Filed {
+export function add(db: Db, root: string, ref: string, by: Holder | 'intake' | 'tick', pipe?: string, read: Read = gh): Filed {
   const { repo, no } = parse(ref)
   const row = issue(repo, no, read)
   const lane = laneOf(row.labels)
@@ -112,7 +112,7 @@ function ruling(db: Db, subject: string): number | null {
   return row?.id ?? null
 }
 
-export function file(db: Db, by: Holder | 'intake', pipe: string, lane: Lane, seat: string, url: string, priority: number | null): number {
+export function file(db: Db, by: Holder | 'intake' | 'tick', pipe: string, lane: Lane, seat: string, url: string, priority: number | null): number {
   const held = db.prepare('SELECT id FROM plans WHERE origin = ?').get(url) as { id: number } | undefined
   if (held !== undefined) return held.id
   if (pipe === LANE[lane].pipe) {

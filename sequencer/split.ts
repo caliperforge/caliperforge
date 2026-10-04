@@ -1,5 +1,6 @@
 import { rmSync } from 'node:fs'
 import { LANE } from '../cli/plan.ts'
+import { deliverablesOf } from '../store/deliverables.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { addPart, claimedPart, partAt, partOf, partsOf, queuePart, releasable, waitingOn } from '../store/parts.ts'
@@ -95,10 +96,12 @@ export function following(db: Db, root: string, plan: PlanRow, sha: string, wire
   return up === null ? closed : `${closed}; ${up}`
 }
 
-/** A split part is `done` from the moment it splits, so it lands only when its own parts have. */
+/** A `done` plan lands once its work is pushed; a split one is `done` from the moment it splits, so it lands only when its own parts have. */
 export function landed(db: Db, plan: number | null): boolean {
-  if (plan === null) return false
-  return planById(db, plan).state === 'done' && partsOf(db, plan).every((p) => landed(db, p.plan))
+  if (plan === null || planById(db, plan).state !== 'done') return false
+  const parts = partsOf(db, plan)
+  if (parts.length > 0) return parts.every((p) => landed(db, p.plan))
+  return deliverablesOf(db, plan).some((d) => d.state === 'pushed')
 }
 
 /** An outside parent goes back to senior on its checkout of `asm/<id>`, to be sent upstream as one change. */

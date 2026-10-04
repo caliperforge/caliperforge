@@ -49,3 +49,10 @@ test('D6: a roster without the director digests is stale', () => {
   writeFileSync(roster, readFileSync(roster, 'utf8').replace(/ {2}director:\n(?: {4}.*\n){2}/, ''))
   expect(check(tree, TODAY).map((s) => s.path)).toContain('rules/roster.yaml')
 })
+
+test('D7: coo_lite decides by default and names ask_coo', () => {
+  const prompt = seat(root, 'coo_lite').prompt
+  expect(prompt).toContain('## Decide by default')
+  for (const n of [1, 2, 3, 4]) expect(prompt).toContain(`(${String(n)})`)
+  expect(prompt).toContain('move: <rule | waive | return | fix | close | file | ask_ceo | ask_coo>')
+})

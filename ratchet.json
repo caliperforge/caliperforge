@@ -327,8 +327,8 @@
     "prepare": 1
   },
   "sequencer/coolite.ts": {
-    "lines": 213,
-    "prepare": 6
+    "lines": 263,
+    "prepare": 7
   },
   "sequencer/delta.ts": {
     "lines": 27
@@ -390,10 +390,6 @@
   },
   "sequencer/next.ts": {
     "lines": 74
-  },
-  "sequencer/orchestrator.ts": {
-    "lines": 44,
-    "prepare": 1
   },
   "sequencer/priority.ts": {
     "lines": 33,

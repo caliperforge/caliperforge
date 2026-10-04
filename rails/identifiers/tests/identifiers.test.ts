@@ -71,6 +71,23 @@ test('refuses a path neither on disk nor deleted', () => {
   expect(verdict.message).toContain('Atelier/Y.swift')
 })
 
+function swift(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'cf-ids-'))
+  mkdirSync(join(dir, 'swift'))
+  return dir
+}
+
+test('skips the hand-back summary line', () => {
+  expect(identifiers(swift(), '---\nsummary: built with swift/xcodebuild\n---\n').outcome).toBe('pass')
+})
+
+test('refuses the name on a line after the summary', () => {
+  const verdict = identifiers(swift(), '---\nsummary: x\n---\nran swift/xcodebuild\n')
+  expect(verdict.outcome).toBe('refuse')
+  expect(verdict.spans).toEqual(['text:4 identifier.unresolved'])
+  expect(verdict.message).toContain('swift/xcodebuild')
+})
+
 test('a path ending a sentence keeps its full stop out of the name', () => {
   expect(identifiers(root, 'the gate lives in rails/diff.ts.').outcome).toBe('pass')
 })

@@ -66,5 +66,5 @@ function adrs(root: string, l: Said): Named[] {
 function lines(text: string): Said[] {
   return text.split('\n')
     .map((line, index) => ({ text: line, line: index + 1 }))
-    .filter((l) => l.text.trim() !== '')
+    .filter((l) => l.text.trim() !== '' && !l.text.startsWith('summary:'))
 }

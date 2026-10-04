@@ -52,6 +52,7 @@ export interface Run {
   effort: string
   exit: number
   fired: Pick<Fired, 'usage' | 'seconds' | 'transcript_path' | 'session'>
+  mode?: 'build' | 'review' | 'fix' | undefined
 }
 
 // input_tokens already counts cache_write_tokens, so the uncached part is their difference.
@@ -65,10 +66,10 @@ const PRICED = `UPDATE runs SET cost_computed_usd = (
 export function runLogged(db: Db, r: Run): number {
   const row = db.prepare(`INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort,
     input_tokens, cache_read_tokens, output_tokens, seconds, exit, transcript_path, cost_usd, cache_write_tokens,
-    cache_write_1h_tokens, session) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    cache_write_1h_tokens, session, mode) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(r.plan, r.step, r.seat, r.rule_hash, r.provider, r.model, r.effort, r.fired.usage.input, r.fired.usage.cache,
       r.fired.usage.output, r.fired.seconds, r.exit, r.fired.transcript_path, r.fired.usage.cost ?? null, r.fired.usage.write ?? null,
-      r.fired.usage.write_1h ?? null, r.fired.session ?? null)
+      r.fired.usage.write_1h ?? null, r.fired.session ?? null, r.mode ?? null)
   const id = Number(row.lastInsertRowid)
   db.prepare(`${PRICED} AND id = ?`).run(id)
   return id

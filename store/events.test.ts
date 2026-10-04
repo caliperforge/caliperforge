@@ -4,7 +4,7 @@ import { fresh } from '../checks/sqlite.ts'
 import type { Fired } from '../providers/kind.ts'
 import { planRow } from '../runner/index.ts'
 import { load, seat } from '../runner/rules.ts'
-import { logged, ofKind, repriced, runAt, runLogged } from './events.ts'
+import { logged, ofKind, repriced, runAt, runLogged, type Run } from './events.ts'
 import type { Db } from './index.ts'
 
 const root = join(import.meta.dirname, '..')
@@ -137,6 +137,20 @@ test('D5 runLogged writes fired.session, NULL when absent', () => {
   }
   expect(session({ session: 's' })).toBe('s')
   expect(session({})).toBeNull()
+})
+
+test('D1 runLogged writes mode, NULL when absent', () => {
+  const db = fresh(join(root, 'schema'))
+  load(db, root)
+  const plan = planRow(db)
+  const { hash } = seat(root, 'typescript_specialist')
+  const mode = (m: Run['mode']): unknown => {
+    const id = runLogged(db, { plan, step: 4, seat: 'typescript_specialist', rule_hash: hash, provider: 'claude-agent-sdk', model: 'm',
+      effort: 'high', exit: 0, fired: { usage: { input: 1, cache: 0, output: 0 }, seconds: 1, transcript_path: 'x.transcript.jsonl' }, mode: m })
+    return db.prepare('SELECT mode FROM runs WHERE id = ?').pluck().get(id)
+  }
+  expect(mode('fix')).toBe('fix')
+  expect(mode(undefined)).toBeNull()
 })
 
 test('D4 ofKind with two kinds returns both in id order', () => {

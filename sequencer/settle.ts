@@ -57,7 +57,7 @@ function pointer(db: Db, plan: number, step: Step, after: number): string {
   if (step.fires === 'brief') return `plans:${String(plan)}`
   const own = step.fires === 'review'
     ? (db.prepare(`SELECT max(id) AS id FROM verdicts
-        WHERE plan = ? AND step = ? AND kind = 'review' AND quick_lane = 0 AND id > ?`)
+        WHERE plan = ? AND step = ? AND kind = 'review' AND id > ?`)
       .get(plan, step.step, after) as { id: number | null }).id
     : null
   return own === null ? `step-${String(step.step)}` : `verdicts:${String(own)}`

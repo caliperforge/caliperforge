@@ -37,14 +37,14 @@ test.each(['growth 2026-09-28', 'weekly 2026-10-05'])('D1 D2: %s at step 7 fires
 })
 
 test.each([
-  { title: 'growth 2026-09-28', day: '2026-09-28' },
-  { title: 'weekly 2026-10-05', day: '2026-10-05' },
-])('D3: pack on $title puts one row in proof', ({ title, day }) => {
+  { title: 'growth 2026-09-28', day: '2026-09-28', id: 1 },
+  { title: 'weekly 2026-10-05', day: '2026-10-05', id: 2_000_001 },
+])('D3: pack on $title puts one row in proof', ({ title, day, id }) => {
   const w = growing(title, 8)
   put(w.root, 1, 'growth.md', REPLY)
   expect(pack(w.db, w.root, plan(w.db, 1))).toMatchObject({ outcome: 'pass' })
   expect(w.db.prepare('SELECT id, kind, dest, status, title, dek, body, sources, checks, work_date FROM desk_posts').all()).toEqual([{
-    id: 1, kind: 'growth', dest: 'pack', status: 'proof', title: 'What a refusal teaches the machine', dek: '',
+    id, kind: 'growth', dest: 'pack', status: 'proof', title: 'What a refusal teaches the machine', dek: '',
     body: JSON.stringify({ notes: NOTES, replies: fenced('replies'), partners: fenced('partners') }),
     sources: '[]', checks: '[]', work_date: day,
   }])

@@ -512,7 +512,8 @@ test('weeklyDesk D4: a weekly plan lands a substack post', async () => {
   expect(plan(w.db, 1).state).toBe('done')
   const written = prompts.find((p) => p.includes('# writer')) ?? ''
   for (const part of ['"learnings"', '"story"', '# The story']) expect(written).toContain(part)
-  expect(posts(w.db)).toMatchObject([{ kind: 'weekly', dest: 'substack', status: 'proof', work_date: '2026-10-02' }])
+  expect(posts(w.db)).toMatchObject([{ id: 1, kind: 'weekly', dest: 'substack', status: 'proof', work_date: '2026-10-02' },
+    { id: 2_000_001, kind: 'growth', dest: 'pack', status: 'proof', work_date: '2026-10-02' }])
   expect(posts(w.db)[0]?.body).toContain('## Script')
 })
 

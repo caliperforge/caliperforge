@@ -15,6 +15,41 @@
   column: at
   where: mode = 'fix'
   gap: 7d
+- name: swift_review
+  table: runs
+  column: at
+  where: seat = 'swift_specialist' AND mode = 'review'
+  gap: 7d
+- name: kotlin_review
+  table: runs
+  column: at
+  where: seat = 'kotlin_specialist' AND mode = 'review'
+  gap: 7d
+- name: python_review
+  table: runs
+  column: at
+  where: seat = 'python_specialist' AND mode = 'review'
+  gap: 7d
+- name: ruby_review
+  table: runs
+  column: at
+  where: seat = 'ruby_specialist' AND mode = 'review'
+  gap: 7d
+- name: rust_review
+  table: runs
+  column: at
+  where: seat = 'rust_specialist' AND mode = 'review'
+  gap: 7d
+- name: go_review
+  table: runs
+  column: at
+  where: seat = 'go_specialist' AND mode = 'review'
+  gap: 7d
+- name: php_review
+  table: runs
+  column: at
+  where: seat = 'php_specialist' AND mode = 'review'
+  gap: 7d
 - name: brief_writer
   table: runs
   column: at

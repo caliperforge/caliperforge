@@ -26,6 +26,7 @@ test.each([
   ['session', ['close']],
   ['desk', ['list', 'show', 'edit', 'approve', 'return']],
   ['site', ['push']],
+  ['pipe', ['on', 'off', 'width']],
 ])('cf %s --help keeps its subcommand order', (name, subcommands) => {
   expect(commands(name)).toEqual(subcommands)
 })
@@ -53,6 +54,8 @@ test.each([
   [['refuse', 'proposal', '3', 'x', '--by', 'cto']],
   [['site', 'push']],
   [['site', 'push', '--by', 'coo']],
+  [['pipe', 'width', 'internal', '3']],
+  [['pipe', 'width', 'internal', '3', '--by', 'cto']],
 ])('D1 D2 cf %j is refused over --by before it acts', (args) => {
   expect(stderr(args)).toContain('--by')
 })

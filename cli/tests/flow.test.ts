@@ -53,9 +53,9 @@ test('each case lists one plan once with the command fixing it', () => {
   const db = piped()
   pushed(db, plan(db, 1, 'halted'))
   parked(plan(db, 2, 'done'))
-  hold(db, root, plan(db, 3, 'running'), 'the ticket', now)
+  hold(db, root, plan(db, 3, 'running'), 'the ticket', now, null, later(60))
   refusals(db, plan(db, 4, 'blocked_on_ceo'), '2026-09-26 11:00:00', 'a', 'a')
-  hold(db, root, plan(db, 5, 'running'), 'no one', now)
+  hold(db, root, plan(db, 5, 'running'), 'no one', now, null, later(60))
   db.prepare("INSERT INTO tickets (repo, number, title, lane) VALUES (?, 5, 'open', 'machine')").run(REPO)
   expect(flow(db, root, now)).toEqual([
     'plan 1\tlanded on main, state halted\tcf return 1\n',
@@ -68,7 +68,7 @@ test('each case lists one plan once with the command fixing it', () => {
 
 test('a held plan whose ticket closed is held on a closed issue', () => {
   const db = piped()
-  hold(db, root, plan(db, 3, 'running'), 'the ticket', now)
+  hold(db, root, plan(db, 3, 'running'), 'the ticket', now, null, later(60))
   db.prepare("INSERT INTO tickets (repo, number, title, lane, closed_at) VALUES (?, 3, 'shut', 'machine', '2026-09-26T10:00:00Z')").run(REPO)
   expect(flow(db, root, now)).toEqual(['plan 3\theld on closed issue #3\tcf unpark 3\n'])
 })
@@ -114,11 +114,15 @@ function part(db: Db, parent: number, number: number, after: number): void {
   db.prepare("INSERT INTO tickets (repo, number, title, lane, after) VALUES (?, ?, 'part', 'machine', ?)").run(REPO, number, after)
 }
 
-test('lists once: slot overlap, part after closed issue, idle lane', () => {
-  const db = piped()
+function overlap(db: Db, on: number | null): void {
   db.prepare("UPDATE pipes SET max_concurrent = 2, window_start = '00:00', window_end = '23:59' WHERE id = 1").run()
   plan(db, 2, 'queued')
-  db.prepare("UPDATE plans SET wait_reason = 'file_overlap', waits_on = 2 WHERE id = ?").run(plan(db, 1, 'running'))
+  db.prepare("UPDATE plans SET wait_reason = 'file_overlap', waits_on = ? WHERE id = ?").run(on, plan(db, 1, 'running'))
+}
+
+test('lists once: slot overlap, part after closed issue, idle lane', () => {
+  const db = piped()
+  overlap(db, 2)
   part(db, 2, 10, 9)
   tick(db, false, [1, 1, 1])
   tick(db, false, [1, 2, 3])
@@ -127,6 +131,12 @@ test('lists once: slot overlap, part after closed issue, idle lane', () => {
     'part #10\tafter #9, which is closed\tcf tick\n',
     'lane pr-path\tidle two ticks: 2 free, 3 startable\tcf lanes\n',
   ])
+})
+
+test('D7: a slot overlap on no plan parks with a time', () => {
+  const db = piped()
+  overlap(db, null)
+  expect(flow(db, root, now)).toEqual(["plan 1\tholds a slot waiting on another job's files\tcf park 1 --until <time>\n"])
 })
 
 test('skips a lane idle one real tick, or across a dry one', () => {

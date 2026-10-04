@@ -234,6 +234,7 @@ test('failedMoveToCoo', async () => {
   const { db, home } = seeded('1')
   await run(db, home, '---\nmove: rule\nwhy: the path settles it\nanswer: read /etc/x\n---\n')
   expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'coo' })
+  expect(maybe(home, 7, 'parked.md')).toBeNull()
   expect(told(db)).toEqual([{ actor: 'coo_lite', outcome: 'needs_ceo',
     message: 'rule did not apply, the answer names a path a ruling may not carry: the path settles it' }])
 })
@@ -404,7 +405,7 @@ test('ceo-held, parked and retried plans are not stops', async () => {
   const { db, home } = seeded('1')
   for (const [i, m] of [60, 60, 60].entries()) stopped(db, 7 + i, m)
   held(db, 7, 'ceo', 'his call')
-  hold(db, home, 8, 'parked', clock)
+  hold(db, home, 8, 'parked', clock, null, new Date('2099-01-01T00:00:00Z'))
   stopped(db, 9, 55, 'retry')
   await pile(db, home)
   expect(fires(db)).toEqual([])

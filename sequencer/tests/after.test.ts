@@ -57,9 +57,11 @@ test('D3 an After closed unlanded or planless holds for the COO', () => {
   expect(measure(closed.db, closed.root, plan(closed.db, closed.two)).held).toBe(true)
   expect(row(closed.db, closed.two)).toEqual({ state: 'blocked_on_ceo', step: 0, waits_on: null, held_by: 'coo',
     held_why: `#1 closed without plan ${String(closed.one)} landing` })
+  expect(maybe(closed.root, closed.two, 'parked.md')).toBeNull()
   const none = seeded(null)
   expect(measure(none.db, none.root, plan(none.db, none.two)).held).toBe(true)
   expect(row(none.db, none.two)).toEqual({ state: 'blocked_on_ceo', step: 0, waits_on: null, held_by: 'coo', held_why: '#1 has no plan' })
+  expect(maybe(none.root, none.two, 'parked.md')).toBeNull()
 })
 
 test('D4 an After refused leaves its reason with the COO', () => {

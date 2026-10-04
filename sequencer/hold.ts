@@ -15,6 +15,7 @@ const NOTE = 'parked.md'
 
 export function hold(db: Db, root: string, plan: number, why: string, now: Date, on: number | null = null,
   until: Date | null = null): void {
+  if (on === null && until === null) throw new Error(`plan ${String(plan)} needs a time or a plan that releases it`)
   holdOn(db, plan, why, on, until?.toISOString() ?? null)
   put(root, plan, NOTE, `# Held ${now.toISOString()}\n\n${why}\n${on === null ? '' : `\nwaits on plan ${String(on)}\n`}`)
 }

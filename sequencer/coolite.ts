@@ -10,11 +10,11 @@ import type { Db } from '../store/index.ts'
 import { wall } from '../store/lanes.ts'
 import { clear as unlease, take } from '../store/leases.ts'
 import { busy, current, idle } from '../store/now.ts'
-import { end, held, originRef, planById, type PlanRow, retry } from '../store/plans.ts'
+import { end, held, needsCeo, originRef, planById, type PlanRow, retry } from '../store/plans.ts'
 import { clear } from '../store/refusals.ts'
 import { pending } from '../store/transcript.ts'
 import { split, type Part } from './brief.ts'
-import { hold, isHeld, unhold } from './hold.ts'
+import { isHeld, unhold } from './hold.ts'
 import { fixed } from './fixed.ts'
 import { prose } from './prose.ts'
 import { WIRE, type Wire } from './push.ts'
@@ -63,7 +63,7 @@ export async function cooLite(db: Db, root: string, plan: PlanRow, provider: Pro
     return told(db, root, plan, now, { outcome: 'needs_ceo', message }, post)
   }
   const failed = `${m.move} did not apply, ${UNAPPLIED[m.move]}: ${m.why}`
-  hold(db, root, plan.id, failed, now)
+  needsCeo(db, plan, failed)
   held(db, plan.id, 'coo', failed)
   return told(db, root, plan, now, { outcome: 'needs_ceo', message: failed }, post)
 }

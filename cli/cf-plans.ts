@@ -5,6 +5,7 @@ import { afresh, reap } from '../sequencer/workspace.ts'
 import { blocked, parked, WAITING } from '../sequencer/steps.ts'
 import { logged } from '../store/events.ts'
 import { edit, VERBS } from '../store/files.ts'
+import type { Db } from '../store/index.ts'
 import { closed, release, retried } from '../store/holds.ts'
 import { hhmm, lanes } from '../store/lanes.ts'
 import { holder } from '../store/leases.ts'
@@ -129,20 +130,28 @@ function holds(cf: Command, { root, db, out }: Cli): void {
     })
 }
 
+const ON = ['--on <plan>', 'the plan it waits on; it goes back in its lane when that one lands'] as const
+const UNTIL = ['--until <time>', 'when it goes back in its lane'] as const
+
+function releasing(handle: Db, id: string, options: { on?: string; until?: string }): { on: number | null; at: Date | null } {
+  const on = options.on === undefined ? null : Number(options.on)
+  if (on !== null && handle.prepare("SELECT 1 FROM plans WHERE id = ? AND state IN ('queued', 'running', 'blocked_on_ceo')").get(on) === undefined) {
+    throw new Error(`plan ${String(on)} is not open, so nothing would release plan ${id}`)
+  }
+  return { on, at: options.until === undefined ? null : new Date(options.until) }
+}
+
 function parks(cf: Command, { root, db, out }: Cli): void {
   cf.command('park').argument('<plan>', 'a plan to hold where it stands, checkout kept')
-    .option('--on <plan>', 'the plan it waits on; it goes back in its lane when that one lands')
+    .option(...ON).option(...UNTIL)
     .option('--why <text>', 'why it is held', 'held by a person').requiredOption(...BY)
-    .action((id: string, options: { on?: string; why: string; by: string }) => {
+    .action((id: string, options: { on?: string; until?: string; why: string; by: string }) => {
       const actor = holderOf(options.by)
       const handle = db()
       const n = Number(id)
       if (holder(handle, n) !== null) throw new Error(`plan ${id} is mid-step in a live tick; park it once the tick lets go`)
-      const on = options.on === undefined ? null : Number(options.on)
-      if (on !== null && handle.prepare("SELECT 1 FROM plans WHERE id = ? AND state IN ('queued', 'running', 'blocked_on_ceo')").get(on) === undefined) {
-        throw new Error(`plan ${String(on)} is not open, so nothing would release plan ${id}`)
-      }
-      hold(handle, root, n, options.why, new Date(), on)
+      const { on, at } = releasing(handle, id, options)
+      hold(handle, root, n, options.why, new Date(), on, at)
       logged(handle, { plan: n, kind: 'park', actor, outcome: 'pass', message: options.why, pointer: null, run: null })
       out(`plan ${id} held${on === null ? '' : ` on plan ${String(on)}`}\n`)
     })
@@ -151,13 +160,15 @@ function parks(cf: Command, { root, db, out }: Cli): void {
     .requiredOption('--by <holder>', `who it waits on: ${HOLDERS.join(' or ')}`)
     .requiredOption('--why <text>', 'why it is held')
     .requiredOption('--as <actor>', `who ran it: ${HOLDERS.join(' or ')}`)
-    .action((id: string, options: { by: string; why: string; as: string }) => {
+    .option(...ON).option(...UNTIL)
+    .action((id: string, options: { by: string; why: string; as: string; on?: string; until?: string }) => {
       const by = holderOf(options.by)
       const actor = holderOf(options.as)
       const handle = db()
       const n = Number(id)
       if (holder(handle, n) !== null) throw new Error(`plan ${id} is mid-step in a live tick; hold it once the tick lets go`)
-      hold(handle, root, n, options.why, new Date())
+      const { on, at } = releasing(handle, id, options)
+      hold(handle, root, n, options.why, new Date(), on, at)
       held(handle, n, by, options.why)
       logged(handle, { plan: n, kind: 'hold', actor, outcome: 'pass', message: options.why, pointer: null, run: null })
       out(`plan ${id} held on the ${by}\n`)

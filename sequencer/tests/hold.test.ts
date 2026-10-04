@@ -29,9 +29,11 @@ function seeded() {
 
 const row = (db: ReturnType<typeof open>) => db.prepare('SELECT state, step, waits_on FROM plans WHERE id = 7').get()
 
+const LATER = new Date('2099-01-01T00:00:00Z')
+
 test('hold then unhold', () => {
   const { db, home } = seeded()
-  hold(db, home, 7, 'paused by a person', new Date('2026-09-25T19:00:00Z'))
+  hold(db, home, 7, 'paused by a person', new Date('2026-09-25T19:00:00Z'), null, LATER)
   expect(row(db)).toEqual({ state: 'blocked_on_ceo', step: 4, waits_on: null })
   expect(isHeld(home, 7)).toBe(true)
   expect(terminal(db)).not.toContain(7)
@@ -45,7 +47,7 @@ const holding = (db: ReturnType<typeof open>) => db.prepare('SELECT held_by, hel
 
 test('D3 a held plan names holder and why; unhold clears both', () => {
   const { db, home } = seeded()
-  hold(db, home, 7, 'after #372', new Date())
+  hold(db, home, 7, 'after #372', new Date(), null, LATER)
   held(db, 7, 'coo', 'after #372')
   expect(holding(db)).toEqual({ held_by: 'coo', held_why: 'after #372' })
   unhold(db, home, 7, 'ceo')
@@ -58,7 +60,7 @@ test('D4 a plan hold keeps a why line; no plan keeps held_why', () => {
   hold(db, home, 7, 'after #140\nit edits the same file', new Date(), 8)
   expect(holding(db)).toEqual({ held_by: 'coo', held_why: 'after #140' })
   held(db, 7, 'ceo', 'set before')
-  hold(db, home, 7, 'paused', new Date())
+  hold(db, home, 7, 'paused', new Date(), null, LATER)
   expect(holding(db)).toEqual({ held_by: 'ceo', held_why: 'set before' })
 })
 
@@ -76,7 +78,7 @@ test('D4 a holder not ceo or coo is refused by store and cf hold', () => {
 test('unhold at step 1 sets the question aside', () => {
   const { db, home } = seeded()
   db.exec('UPDATE plans SET step = 1 WHERE id = 7')
-  hold(db, home, 7, 'x', new Date(), null)
+  hold(db, home, 7, 'x', new Date(), null, LATER)
   expect(unhold(db, home, 7, 'ceo')).toBe(1)
   expect(isHeld(home, 7)).toBe(false)
   expect(readFileSync(join(home, '.cf/work/7/question.prev.md'), 'utf8')).toBe('which one?\n')
@@ -87,7 +89,7 @@ test('unhold at step 1 drops a stale checkout', () => {
   db.exec('UPDATE plans SET step = 1 WHERE id = 7')
   writeFileSync(join(srcDir(home, 7), 'old.ts'), 'x\n')
   put(home, 7, 'base.sha', `${'c'.repeat(40)}\n`)
-  hold(db, home, 7, 'x', new Date(), null)
+  hold(db, home, 7, 'x', new Date(), null, LATER)
   unhold(db, home, 7, 'ceo')
   expect(existsSync(join(home, '.cf/work/7/src'))).toBe(false)
   expect(maybe(home, 7, 'base.sha')).toBeNull()
@@ -116,7 +118,7 @@ test('unhold on an unchanged stop at step 3 returns at step 3', () => {
 
 test('unhold on a held repeat stop at step 3 returns at step 3', () => {
   const { db, home } = stoppedAtCheck('repeat')
-  hold(db, home, 7, 'x', new Date(), null)
+  hold(db, home, 7, 'x', new Date(), null, LATER)
   expect(unhold(db, home, 7, 'ceo')).toBe(3)
 })
 
@@ -244,18 +246,54 @@ test('D2 unpark on a repeat step-3 stop logs the actor\'s retry', () => {
 
 test('D3 park and hold log who ran them and why', () => {
   const parkedBy = seeded()
-  ran(parkedBy.db, parkedBy.home, ['park', '7', '--by', 'coo', '--why', 'w'])
+  ran(parkedBy.db, parkedBy.home, ['park', '7', '--by', 'coo', '--why', 'w', '--until', '2026-10-04T22:00:00Z'])
   expect(logged(parkedBy.db)).toEqual([{ kind: 'park', actor: 'coo', message: 'w' }])
   const heldBy = seeded()
-  ran(heldBy.db, heldBy.home, ['hold', '7', '--by', 'ceo', '--as', 'coo', '--why', 'w'])
+  ran(heldBy.db, heldBy.home, ['hold', '7', '--by', 'ceo', '--as', 'coo', '--why', 'w', '--until', '2026-10-04T22:00:00Z'])
   expect(logged(heldBy.db)).toEqual([{ kind: 'hold', actor: 'coo', message: 'w' }])
   expect(holding(heldBy.db)).toEqual({ held_by: 'ceo', held_why: 'w' })
+})
+
+test('holdNeedsCondition D1 D2 no time or plan writes nothing', () => {
+  const { db, home } = seeded()
+  const before = plan7(db)
+  expect(() => { hold(db, home, 7, 'x', new Date()) }).toThrow('needs a time or a plan that releases it')
+  expect(() => { ran(db, home, ['hold', '7', '--by', 'coo', '--why', 'x', '--as', 'coo']) }).toThrow('needs a time or a plan that releases it')
+  expect(() => { ran(db, home, ['park', '7', '--by', 'coo']) }).toThrow('needs a time or a plan that releases it')
+  expect(plan7(db)).toEqual(before)
+  expect(plan7(db)).toMatchObject({ state: 'running', waits_on: null, held_until: null, held_by: null, held_why: null })
+  expect(isHeld(home, 7)).toBe(false)
+  expect(logged(db)).toEqual([])
+})
+
+test('D3 cf park --until holds the plan until that time', () => {
+  const { db, home } = seeded()
+  ran(db, home, ['park', '7', '--by', 'coo', '--until', '2026-10-04T22:00:00Z'])
+  expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', held_until: '2026-10-04T22:00:00.000Z' })
+  expect(logged(db)).toMatchObject([{ kind: 'park', actor: 'coo' }])
+})
+
+test('D4 cf hold --on waits on an open plan, refuses a closed one', () => {
+  const { db, home } = seeded()
+  db.exec("INSERT INTO plans (id, pipe_id, template, state, queued_at, lane, seat, origin) VALUES (8, 9, 'pr_path', 'queued', '2026-09-24', 'machine', 'typescript_specialist', 'https://github.com/caliperforge/caliperforge/issues/140')")
+  ran(db, home, ['hold', '7', '--by', 'ceo', '--as', 'coo', '--why', 'w', '--on', '8'])
+  expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', waits_on: 8, held_until: null, held_by: 'ceo', held_why: 'w' })
+  ran(db, home, ['hold', '7', '--by', 'ceo', '--as', 'coo', '--why', 'w', '--on', '8', '--until', '2026-10-04T22:00:00Z'])
+  expect(plan7(db)).toMatchObject({ waits_on: 8, held_until: '2026-10-04T22:00:00.000Z' })
+  const shut = seeded()
+  shut.db.exec("INSERT INTO plans (id, pipe_id, template, state, queued_at, lane, seat, origin) VALUES (8, 9, 'pr_path', 'done', '2026-09-24', 'machine', 'typescript_specialist', 'https://github.com/caliperforge/caliperforge/issues/140')")
+  const before = plan7(shut.db)
+  expect(() => { ran(shut.db, shut.home, ['hold', '7', '--by', 'ceo', '--as', 'coo', '--why', 'w', '--on', '8']) })
+    .toThrow('plan 8 is not open, so nothing would release plan 7')
+  expect(plan7(shut.db)).toEqual(before)
+  expect(isHeld(shut.home, 7)).toBe(false)
+  expect(logged(shut.db)).toEqual([])
 })
 
 function heldAt4() {
   const seed = seeded()
   seed.db.exec(`UPDATE plans SET state = 'blocked_on_ceo', retries = 1, head_digest = '${'a'.repeat(64)}' WHERE id = 7`)
-  hold(seed.db, seed.home, 7, 'x', new Date(), null)
+  hold(seed.db, seed.home, 7, 'x', new Date(), null, LATER)
   return seed
 }
 
@@ -325,7 +363,7 @@ test('holdOnPlan D4 a hold on plan 8 is released when 8 lands', () => {
 test('unhold past step 1 keeps the checkout', () => {
   const { db, home } = seeded()
   writeFileSync(join(srcDir(home, 7), 'built.ts'), 'x\n')
-  hold(db, home, 7, 'x', new Date(), null)
+  hold(db, home, 7, 'x', new Date(), null, LATER)
   unhold(db, home, 7, 'ceo')
   expect(existsSync(join(home, '.cf/work/7/src/built.ts'))).toBe(true)
 })

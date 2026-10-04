@@ -4,7 +4,7 @@ import { CARD, waits } from '../cli/queue.ts'
 import { parse } from '../rails/diff.ts'
 import { building, filesOf, recorded, sharing, strays as recordStrays } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
-import { builderRan, held, internal, originIssue, originRef, waiting, type PlanRow, type Wait } from '../store/plans.ts'
+import { builderRan, held, internal, needsCeo, originIssue, originRef, waiting, type PlanRow, type Wait } from '../store/plans.ts'
 import { capture, desk, facts, gather, pack, score, steps as comms } from '../templates/comms.ts'
 import { at, last, steps, type Step } from '../templates/pr-path.ts'
 import { approved, approvedPlan, batch } from './approve.ts'
@@ -148,8 +148,11 @@ function after(db: Db, root: string, plan: PlanRow): Outcome | null {
     : open ? `waits for #${String(n)}, plan ${String(pred.id)}, to land`
     : pred.closed_at === null ? `#${String(n)}'s plan ${String(pred.id)} ended ${pred.state}`
     : `#${String(n)} closed without plan ${String(pred.id)} landing`
-  hold(db, root, plan.id, why, new Date(), open ? pred.id : null)
-  if (!open) held(db, plan.id, 'coo', why)
+  if (open) hold(db, root, plan.id, why, new Date(), pred.id)
+  else {
+    needsCeo(db, plan, why)
+    held(db, plan.id, 'coo', why)
+  }
   return { outcome: 'pass', held: true, spans: [`#${String(n)}`], note: why }
 }
 

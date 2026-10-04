@@ -105,7 +105,7 @@ function ownerless(p: Row, note: string | null): Hit {
 function overlapped(p: Row, startable: Set<number>): Hit {
   if (p.state !== 'running' || p.wait_reason !== 'file_overlap' || !startable.has(p.pipe_id)) return null
   const id = String(p.id)
-  return p.waits_on === null ? ["holds a slot waiting on another job's files", `cf park ${id}`]
+  return p.waits_on === null ? ["holds a slot waiting on another job's files", `cf park ${id} --until <time>`]
     : [`holds a slot waiting on plan ${String(p.waits_on)}'s files`, `cf park ${id} --on ${String(p.waits_on)}`]
 }
 

@@ -93,7 +93,7 @@ const REHEARSED = 'ci.next'
  * A red run goes to the builder, not a reviewer: their CI is the only test an outside build gets.
  */
 export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire = WIRE): Outcome | null {
-  if (internal(plan) && !workflows(srcDir(root, plan.id))) return checked(db, root, plan, repo)
+  if (internal(plan) && (assembly(db, plan) !== null || !workflows(srcDir(root, plan.id)))) return checked(db, root, plan, repo)
   const { fork, head, ci, tip } = sent(root, plan, repo, wire)
   if (!internal(plan)) wire.rehearse?.(fork, ci)
   const on = { fork, branch: ci, sha: tip }
@@ -223,7 +223,7 @@ function triggered(text: string): boolean {
 }
 
 /**
- * Our own repo with no workflows has no CI to wait on, so step 3's checks, run on this
+ * Our own repo with no workflows, or a part whose fork CI runs once at its parent's step 6, has no CI to wait on, so step 3's checks, run on this
  * host at this head, stand as it. Nothing is pushed: the branch lands on `main` from the checkout. An
  * outside plan never comes here; its fork CI is the only test their code gets.
  */
@@ -232,6 +232,8 @@ function checked(db: Db, root: string, plan: PlanRow, repo: string): null {
     .get(plan.id) as { outcome: string } | undefined
   const passed = step3?.outcome === 'pass'
   const sha = headOf(root, plan.id).sha
+  const asm = assembly(db, plan)
+  const why = asm === null ? `${repo} runs no workflows` : `fork CI runs once on ${asm.branch}, at the parent's step 6`
   const verdict: Verdict = {
     outcome: passed ? 'pass' : 'refuse',
     defect_class: null,
@@ -239,7 +241,7 @@ function checked(db: Db, root: string, plan: PlanRow, repo: string): null {
     origin_ref: passed ? null : 'ci-green',
     subject_digest: createHash('sha256').update(`${repo}\nlocal\n${sha}`).digest('hex'),
     spans: passed ? [] : ['ci.local'],
-    message: `${repo} runs no workflows; step 3's checks at ${sha.slice(0, 12)} stand as its CI`,
+    message: `${why}; step 3's checks at ${sha.slice(0, 12)} stand as its CI`,
   }
   put(root, plan.id, BOARD, '[]\n')
   record(db, join(root, 'rails/ci-green'), plan.id, verdict, 0)

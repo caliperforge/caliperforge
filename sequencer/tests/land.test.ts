@@ -217,6 +217,32 @@ test('main moving mid-tick refuses the land, no merge commit',async () => {
   expect(deliverablesOf(w.db, ID).filter((d) => d.state === 'pushed')).toEqual([])
 })
 
+test('main moving during the push refuses base:stale',async () => {
+  const w = mine()
+  const sent: string[] = []
+  const wire = watched(sent, w.root, ID)
+  await atBatch(w, wire)
+  const src = srcDir(w.root, ID)
+  const head = git(src, ['rev-parse', BRANCH])
+  const racing = { ...wire, send: (dir: string) => { moveMain(w.root, 'racing.ts'); git(dir, ['push', 'origin', 'main']) } }
+
+  expect(land(w.db, w.root, plan(w.db, ID), 1, racing)).toMatchObject({ outcome: 'refuse', spans: ['base:stale'] })
+  expect(sent.filter((s) => s.startsWith('close'))).toEqual([])
+  expect(deliverablesOf(w.db, ID).filter((d) => d.state === 'pushed')).toEqual([])
+  expect(git(src, ['rev-parse', '--abbrev-ref', 'HEAD'])).toBe(BRANCH)
+  expect(git(src, ['rev-parse', BRANCH])).toBe(head)
+  expect(git(src, ['status', '--porcelain'])).toBe('')
+})
+
+test('a failed push with main unmoved still throws',async () => {
+  const w = mine()
+  const wire = watched([], w.root, ID)
+  await atBatch(w, wire)
+  const hung = { ...wire, send: () => { throw new Error('remote hung up') } }
+
+  expect(() => land(w.db, w.root, plan(w.db, ID), 1, hung)).toThrow('remote hung up')
+})
+
 test('behind main twice: rails merge it again', async () => {
   const w = mine()
   const wire = watched([], w.root, ID)

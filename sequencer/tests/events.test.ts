@@ -18,7 +18,7 @@ const runAt = (db: Db, step: number): unknown =>
 
 const verdictAt = (db: Db, step: number): string =>
   `verdicts:${String((db.prepare(`SELECT max(id) AS id FROM verdicts
-    WHERE plan = 1 AND step = ? AND kind = 'review' AND quick_lane = 0`).get(step) as { id: unknown }).id)}`
+    WHERE plan = 1 AND step = ? AND kind = 'review'`).get(step) as { id: unknown }).id)}`
 
 test('a chained lap writes one row per step, each at its runs row', async () => {
   const w = world()

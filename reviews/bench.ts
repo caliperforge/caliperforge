@@ -151,12 +151,12 @@ function digest(input: unknown): string {
 }
 
 export function record(db: Db, root: string, name: string, plan: number, v: Verdict,
-  tokens: number, seconds: number, tree: string | null, quick = 0): number {
+  tokens: number, seconds: number, tree: string | null): number {
   const manifest = reviewManifest(root, name)
   const row = db.prepare(`INSERT INTO verdicts
-    (gate, kind, subject_digest, plan, step, outcome, rail_id, origin_kind, origin_ref, tokens, seconds, tree, quick_lane, message)
-    VALUES (?, 'review', ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)`)
-    .run(manifest.gate, v.subject_digest, plan, manifest.step, v.outcome, v.origin_kind, v.origin_ref, tokens, seconds, tree, quick,
+    (gate, kind, subject_digest, plan, step, outcome, rail_id, origin_kind, origin_ref, tokens, seconds, tree, message)
+    VALUES (?, 'review', ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)`)
+    .run(manifest.gate, v.subject_digest, plan, manifest.step, v.outcome, v.origin_kind, v.origin_ref, tokens, seconds, tree,
       v.message)
   return Number(row.lastInsertRowid)
 }

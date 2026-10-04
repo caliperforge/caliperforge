@@ -280,9 +280,9 @@ test('D3 the packet lists long files after the template', async () => {
   await tick(w.db, w.root, stub(CARRIED, 0, undefined, (p) => packets.push(p)))
 
   const prompt = packets[0]?.prompt ?? ''
-  expect(prompt).toContain('# Files over 300 lines')
+  expect(prompt).toContain('\n# Files over 300 lines\n')
   expect(prompt).toContain('- long.ts — 301 lines')
-  expect(prompt.indexOf('# Files over 300 lines')).toBeGreaterThan(prompt.indexOf(TEMPLATE))
+  expect(prompt.indexOf('\n# Files over 300 lines\n')).toBeGreaterThan(prompt.indexOf(TEMPLATE))
 })
 
 test('the packet opens on the checkout map; no MAP.md is written', async () => {

@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -39,10 +40,15 @@ export function identifiers(root: string, text: string, diff = ''): Verdict {
 
 function paths(root: string, ours: Set<string>, gone: Set<string>, l: Said): Named[] {
   return [...l.text.matchAll(NAMED)]
-    .map((m) => ({ id: (m[1] ?? '').replace(/\.+$/, ''), at: m[2] }))
+    .map((m) => ({ id: (m[1] ?? '').replace(/\.+$/, ''), at: m[2], ticked: m[0].startsWith('`') }))
     .filter((n) => ours.has(n.id.split('/')[0] ?? ''))
-    .filter((n) => !deleted(gone, n.id) && !resolves(join(root, n.id), n.at))
+    .filter((n) => n.ticked || n.at !== undefined || /\.\w+$/.test(n.id))
+    .filter((n) => !deleted(gone, n.id) && !resolves(join(root, n.id), n.at) && !ignored(root, n.id))
     .map((n) => ({ id: n.at === undefined ? n.id : `${n.id}:${n.at}`, line: l.line }))
+}
+
+function ignored(root: string, id: string): boolean {
+  return spawnSync('git', ['check-ignore', '-q', '--', id], { cwd: root }).status === 0
 }
 
 /** A folder the diff empties counts as deleted too. */

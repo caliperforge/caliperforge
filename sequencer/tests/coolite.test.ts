@@ -228,7 +228,7 @@ test.each(['/etc/x', '../x'])('D5: a rule naming %s writes nothing and is held b
 test('failedMoveToCoo', async () => {
   const { db, home } = seeded('1')
   await run(db, home, '---\nmove: rule\nwhy: the path settles it\nanswer: read /etc/x\n---\n')
-  expect(db.prepare('SELECT state, held_by FROM plans WHERE id = 7').get()).toEqual({ state: 'blocked_on_ceo', held_by: 'coo' })
+  expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'coo' })
   expect(told(db)).toEqual([{ actor: 'coo_lite', outcome: 'needs_ceo',
     message: 'rule did not apply, the answer names a path a ruling may not carry: the path settles it' }])
 })

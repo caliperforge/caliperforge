@@ -447,8 +447,7 @@
     "prepare": 1
   },
   "sequencer/split.ts": {
-    "lines": 199,
-    "prepare": 17,
+    "lines": 194,
     "silent-catch": 2
   },
   "sequencer/steps.ts": {
@@ -487,9 +486,6 @@
   },
   "sequencer/tests/ci.test.ts": {
     "prepare": 5
-  },
-  "sequencer/tests/coolite.test.ts": {
-    "prepare": 22
   },
   "sequencer/tests/each.test.ts": {
     "prepare": 7
@@ -646,11 +642,17 @@
   "store/deliverables.ts": {
     "lines": 102
   },
+  "store/desk.ts": {
+    "lines": 44
+  },
   "store/dispositions.ts": {
     "lines": 51
   },
+  "store/drift.ts": {
+    "lines": 41
+  },
   "store/events.ts": {
-    "lines": 91
+    "lines": 99
   },
   "store/files.ts": {
     "lines": 92
@@ -674,14 +676,17 @@
   "store/now.ts": {
     "lines": 31
   },
+  "store/parts.ts": {
+    "lines": 49
+  },
   "store/plans.ts": {
-    "lines": 279
+    "lines": 295
   },
   "store/proposals.ts": {
     "lines": 66
   },
   "store/refusals.ts": {
-    "lines": 119
+    "lines": 129
   },
   "store/rows.ts": {
     "lines": 11

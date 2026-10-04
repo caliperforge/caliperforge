@@ -7,13 +7,16 @@ import { fill } from '../../cli/digests.ts'
 import { file, LANE } from '../../cli/plan.ts'
 import type { Packet, Provider } from '../../providers/kind.ts'
 import { load } from '../../runner/rules.ts'
-import { decisions, touches } from '../../store/decisions.ts'
-import { runAt } from '../../store/events.ts'
+import { gates } from '../../store/approvals.ts'
+import { decided, decisions, touches, type Verb } from '../../store/decisions.ts'
+import { pushedRow } from '../../store/deliverables.ts'
+import { addSetting } from '../../store/drift.ts'
+import { logged, ofKind, pointers, runAt, runRows } from '../../store/events.ts'
 import { retried, returnToLane } from '../../store/holds.ts'
 import { migrate, open, type Db } from '../../store/index.ts'
 import { busy } from '../../store/now.ts'
 import { addPart } from '../../store/parts.ts'
-import { held, PlanRow, retry } from '../../store/plans.ts'
+import { allPlans, held, needsCeo, planById, planRows, putPlan, requeue, retry } from '../../store/plans.ts'
 import { clear } from '../../store/refusals.ts'
 import { split } from '../brief.ts'
 import { byHand, cooLite, read } from '../coolite.ts'
@@ -75,15 +78,11 @@ function seeded(apply: string | null) {
   db.exec(readFileSync(join(repo, 'runner/tests/fixtures/waiting.sql'), 'utf8'))
   db.exec("UPDATE plans SET state = 'blocked_on_ceo', wait_reason = NULL WHERE id = 7")
   if (apply !== null) {
-    db.prepare(`INSERT INTO settings (key, value, who, origin_kind, origin_ref, set_at)
-      VALUES ('coo_lite.apply', ?, 'ceo', 'ruling', 't', '2026-09-27')`).run(apply)
+    addSetting(db, { key: 'coo_lite.apply', value: apply, who: 'ceo', origin_kind: 'ruling', origin_ref: 't', set_at: '2026-09-27' })
   }
-  const approval = db.prepare(`INSERT INTO approvals (subject_kind, subject_id, subject_digest, who, decision, approved_at)
-    VALUES ('plan', 7, ?, 'gates', 'approved', '2026-09-27T00:00:00.000Z') RETURNING id`).get('d'.repeat(64)) as { id: number }
-  db.prepare(`INSERT INTO deliverables (plan_id, step, seat, diff_digest, state, tests_pass, byte_identical_elsewhere,
-    fork_ci_green, bot_clean, target_warm, approval_id, evidence)
-    VALUES (7, 6, 'typescript_specialist', ?, 'pushed', 1, 1, 1, 1, 1, ?, 'https://github.com/caliperforge/caliperforge/pull/1')`)
-    .run('d'.repeat(64), approval.id)
+  const approval = gates(db, 7, 'd'.repeat(64))
+  pushedRow(db, { plan: 7, step: 6, seat: 'typescript_specialist', diff_digest: 'd'.repeat(64),
+    evidence: 'https://github.com/caliperforge/caliperforge/pull/1' }, approval)
   const home = mkdtempSync(join(tmpdir(), 'cf-coolite-'))
   for (const dir of ['rules', 'seats']) cpSync(join(repo, dir), join(home, dir), { recursive: true })
   cpSync(join(repo, 'rules.seed.sql'), join(home, 'rules.seed.sql'))
@@ -111,11 +110,10 @@ function wire(): Wire {
     file: () => `https://github.com/caliperforge/caliperforge/issues/${String(n++)}` }
 }
 
-const row = (db: Db) => PlanRow.parse(db.prepare('SELECT * FROM plans WHERE id = 7').get())
-const plan7 = (db: Db) => db.prepare('SELECT * FROM plans WHERE id = 7').get()
-const plans = (db: Db) => db.prepare('SELECT * FROM plans ORDER BY id').all()
-const told = (db: Db) => db.prepare("SELECT actor, outcome, message FROM events WHERE kind = 'coo_lite'").all() as
-  { actor: string; outcome: string; message: string }[]
+const row = (db: Db) => planById(db, 7)
+const plan7 = (db: Db) => planRows(db).find((p) => p.id === 7)
+const plans = (db: Db) => planRows(db)
+const told = (db: Db) => ofKind(db, 'coo_lite').map(({ actor, outcome, message }) => ({ actor, outcome, message }))
 
 const run = (db: Db, home: string, reply: string, posted: string[] = []) =>
   cooLite(db, home, row(db), stub(reply), now, (t) => void posted.push(t), wire())
@@ -140,7 +138,7 @@ test('live ask_ceo hands plan 7 to the ceo with no parked.md', async () => {
 test.each([['file', 'https://github.com/caliperforge/caliperforge/issues/900'], ['rule', null]])('D2 live %s logs pointer %s', async (move, pointer) => {
   const { db, home } = seeded('1')
   await run(db, home, REPLY[move] ?? '')
-  expect(db.prepare("SELECT pointer FROM events WHERE kind = 'coo_lite'").all()).toEqual([{ pointer }])
+  expect(pointers(db, 'coo_lite')).toEqual([pointer])
 })
 
 const answer = () => `## Answer from the coo_lite (${new Date().toISOString().slice(0, 10)})\n\nbuild on main, not on plan 8\n`
@@ -167,10 +165,10 @@ test('D2: an unbuilt plan\'s rule goes in ask.md, back to its lane', async () =>
 test('D3: the packet carries sibling plans\' rulings, not others', async () => {
   const { db, home } = seeded('1')
   const at = (n: number) => `https://github.com/caliperforge/caliperforge/issues/${String(n)}`
-  const plan = db.prepare(`INSERT INTO plans (id, pipe_id, template, state, queued_at, step, retries, priority, lane, seat, origin)
-    VALUES (?, 9, 'pr_path', 'queued', '2026-09-24', 2, 0, 1, 'machine', 'typescript_specialist', ?)`)
-  plan.run(8, at(140))
-  plan.run(9, at(141))
+  for (const [id, n] of [[8, 140], [9, 141]] as const) {
+    putPlan(db, { id, pipe_id: 9, target_id: null, template: 'pr_path', state: 'queued', queued_at: '2026-09-24', step: 2, retries: 0,
+      lane: 'machine', seat: 'typescript_specialist', origin: at(n) })
+  }
   db.exec(`INSERT INTO tickets (repo, number, title, lane, parent) VALUES
     ('caliperforge/caliperforge', 139, '138a one', 'machine', 138),
     ('caliperforge/caliperforge', 140, '138b two', 'machine', 138),
@@ -227,7 +225,7 @@ test.each(['/etc/x', '../x'])('D5: a rule naming %s writes nothing and is held b
   await run(db, home, `---\nmove: rule\nwhy: the path settles it\nanswer: read ${path}\n---\n`)
   expect(maybe(home, 7, 'ask.md')).toBe('the ask\n')
   expect(maybe(home, 7, 'issue.md')).toBe(ISSUE)
-  expect(db.prepare('SELECT state, held_by FROM plans WHERE id = 7').get()).toEqual({ state: 'blocked_on_ceo', held_by: 'coo' })
+  expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'coo' })
 })
 
 test('failedMoveToCoo', async () => {
@@ -259,7 +257,7 @@ test.each([
   { name: 'file without ticket', state: 'blocked_on_ceo', reply: '---\nmove: file\nwhy: a bug\n---\n' },
 ])('$name changes no plan row and tells a person', async ({ state, reply }) => {
   const { db, home } = seeded('1')
-  db.prepare('UPDATE plans SET state = ? WHERE id = 7').run(state)
+  if (state === 'queued') requeue(db, 7, row(db).step)
   const was = plans(db)
   const posted: string[] = []
   await run(db, home, reply, posted)
@@ -273,7 +271,7 @@ test('close with no pushed deliverable is held by the coo', async () => {
   const { db, home } = seeded('1')
   db.exec('DELETE FROM deliverables')
   await run(db, home, REPLY.close ?? '')
-  expect(db.prepare('SELECT state, held_by FROM plans WHERE id = 7').get()).toEqual({ state: 'blocked_on_ceo', held_by: 'coo' })
+  expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'coo' })
   expect(told(db).map((t) => t.message)).toEqual([expect.stringMatching(/^close did not apply, /)])
 })
 
@@ -285,26 +283,24 @@ test('a split parted cannot file is held by the coo', async () => {
     VALUES (1, 1, 'acme/kit', 706, 'ludo', 'ready', '2026-09-24', 'https://github.com/acme/kit/issues/706');
     UPDATE plans SET target_id = 1, lane = NULL, seat = NULL, origin = NULL WHERE id = 7`)
   await run(db, home, SPLIT)
-  expect(db.prepare('SELECT state, held_by FROM plans WHERE id = 7').get()).toEqual({ state: 'blocked_on_ceo', held_by: 'coo' })
+  expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'coo' })
   expect(told(db).map((t) => t.message)).toEqual([expect.stringMatching(/^split did not apply, /)])
-  expect(db.prepare('SELECT count(*) AS n FROM plans').get()).toEqual({ n: 1 })
+  expect(plans(db)).toHaveLength(1)
 })
 
 const clock = new Date()
 const ago = (minutes: number) => new Date(clock.getTime() - minutes * 60_000).toISOString().replace('T', ' ').slice(0, 19)
 
-function stopped(db: Db, id: number, minutes: number, verb = 'ask_coo') {
-  if (db.prepare('SELECT 1 FROM plans WHERE id = ?').get(id) === undefined) {
-    db.prepare(`INSERT INTO plans (id, pipe_id, template, state, queued_at, step, retries, priority, lane, seat, origin)
-      VALUES (?, 9, 'pr_path', 'running', '2026-09-24', 4, 0, 1, 'machine', 'typescript_specialist', ?)`)
-      .run(id, `https://github.com/caliperforge/caliperforge/issues/${String(id + 900)}`)
-    db.prepare("UPDATE plans SET state = 'blocked_on_ceo' WHERE id = ?").run(id)
+function stopped(db: Db, id: number, minutes: number, verb: Verb = 'ask_coo') {
+  if (!allPlans(db).some((p) => p.id === id)) {
+    putPlan(db, { id, pipe_id: 9, target_id: null, template: 'pr_path', state: 'running', queued_at: '2026-09-24', step: 4, retries: 0,
+      lane: 'machine', seat: 'typescript_specialist', origin: `https://github.com/caliperforge/caliperforge/issues/${String(id + 900)}` })
+    needsCeo(db, planById(db, id))
   }
-  db.prepare(`INSERT INTO decisions (plan, step, wait_reason, verb, why, at) VALUES (?, 4, 'blocked_on_ceo', ?, 'a stop', ?)`)
-    .run(id, verb, ago(minutes))
+  decided(db, { plan: id, step: 4, wait_reason: 'blocked_on_ceo', verb, why: 'a stop', evidence: null, tokens: 0 }, ago(minutes))
 }
 
-const fires = (db: Db) => db.prepare("SELECT plan FROM runs WHERE seat = 'coo_lite'").all()
+const fires = (db: Db) => runRows(db).filter((r) => r.seat === 'coo_lite').map(({ plan }) => ({ plan }))
 const pile = (db: Db, home: string, posted: string[] = []) =>
   byHand(db, home, stub(REPLY.ask_ceo ?? ''), clock, (t) => void posted.push(t), wire())
 
@@ -327,7 +323,7 @@ test('a live coo_lite run holds the trigger', async () => {
 })
 
 const passed = (db: Db, minutes: number) =>
-  db.prepare(`INSERT INTO events (plan, at, kind, actor, outcome, message) VALUES (7, ?, 'coo_lite', 'coo_lite', 'pass', 'rule: x')`).run(ago(minutes))
+  logged(db, { plan: 7, kind: 'coo_lite', actor: 'coo_lite', outcome: 'pass', message: 'rule: x', pointer: null, run: null }, ago(minutes))
 
 test('D4: a new stop on a plan answered once today is fired on', async () => {
   const { db, home } = seeded('1')
@@ -354,7 +350,7 @@ test('D4: a third stop in a day goes to a person, once', async () => {
 test('answeredSkipped', async () => {
   const { db, home } = seeded('1')
   for (const [i, m] of [30, 20, 10].entries()) stopped(db, 7 + i, m)
-  db.prepare(`INSERT INTO events (plan, at, kind, actor, outcome, message) VALUES (7, ?, 'coo_lite', 'coo_lite', 'needs_ceo', 'x')`).run(ago(5))
+  logged(db, { plan: 7, kind: 'coo_lite', actor: 'coo_lite', outcome: 'needs_ceo', message: 'x', pointer: null, run: null }, ago(5))
   await pile(db, home)
   expect(fires(db)).toEqual([{ plan: 8 }])
 })
@@ -366,8 +362,7 @@ test('coo_lite.max_daily caps the runs a day', async () => {
   for (let i = 0; i < 12; i++) runAt(db, 7, 4, 'coo_lite', ago(60 + i))
   await pile(db, home)
   expect(fires(db)).toHaveLength(12)
-  db.prepare(`INSERT INTO settings (key, value, who, origin_kind, origin_ref, set_at)
-    VALUES ('coo_lite.max_daily', '13', 'ceo', 'ruling', 't', '2026-09-27')`).run()
+  addSetting(db, { key: 'coo_lite.max_daily', value: '13', who: 'ceo', origin_kind: 'ruling', origin_ref: 't', set_at: '2026-09-27' })
   await pile(db, home)
   expect(fires(db)).toHaveLength(13)
 })

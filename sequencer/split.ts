@@ -2,6 +2,7 @@ import { rmSync } from 'node:fs'
 import { LANE } from '../cli/plan.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
+import { addPart, claimedPart, partAt, partOf, partsOf, queuePart, releasable, waitingOn } from '../store/parts.ts'
 import { internal, originIssue, planById, type PlanRow, rewind } from '../store/plans.ts'
 import type { SignalRow } from '../store/signals.ts'
 import type { Part } from './brief.ts'
@@ -56,12 +57,12 @@ export function parted(db: Db, root: string, plan: PlanRow, parts: Part[], wire:
  * said in the note rather than undoing a landing.
  */
 export function following(db: Db, root: string, plan: PlanRow, sha: string, wire: Wire = WIRE): string | null {
-  const row = db.prepare('SELECT parent, n FROM parts WHERE plan = ?').get(plan.id) as { parent: number; n: number } | undefined
+  const row = partOf(db, plan.id)
   if (row === undefined) return null
   const parent = planById(db, row.parent)
-  const waiting = db.prepare('SELECT n FROM parts WHERE parent = ? AND after = ? AND plan IS NULL').all(parent.id, row.n) as { n: number }[]
-  if (waiting.length > 0) return waiting.map(({ n }) => `part ${letter(n)} queued as plan ${String(queue(db, root, parent, n))}`).join('; ')
-  const rest = db.prepare('SELECT plan FROM parts WHERE parent = ? AND n != ?').all(parent.id, row.n) as { plan: number | null }[]
+  const waiting = waitingOn(db, parent.id, row.n)
+  if (waiting.length > 0) return waiting.map((n) => `part ${letter(n)} queued as plan ${String(queue(db, root, parent, n))}`).join('; ')
+  const rest = partsOf(db, parent.id).filter((p) => p.n !== row.n)
   if (!rest.every((p) => landed(db, p.plan))) return null
   const issue = originIssue(parent)
   if (issue === null) return assemble(db, root, parent)
@@ -73,17 +74,14 @@ export function following(db: Db, root: string, plan: PlanRow, sha: string, wire
 /** A split part is `done` from the moment it splits, so it lands only when its own parts have. */
 function landed(db: Db, plan: number | null): boolean {
   if (plan === null) return false
-  const row = db.prepare('SELECT state FROM plans WHERE id = ?').get(plan) as { state: string }
-  const parts = db.prepare('SELECT plan FROM parts WHERE parent = ?').all(plan) as { plan: number | null }[]
-  return row.state === 'done' && parts.every((p) => landed(db, p.plan))
+  return planById(db, plan).state === 'done' && partsOf(db, plan).every((p) => landed(db, p.plan))
 }
 
 /** An outside parent goes back to senior on its checkout of `asm/<id>`, to be sent upstream as one change. */
 function assemble(db: Db, root: string, parent: PlanRow): string {
   const branch = `asm/${String(parent.id)}`
-  const titles = db.prepare('SELECT title FROM parts WHERE parent = ? ORDER BY n').all(parent.id) as { title: string }[]
   put(root, parent.id, 'issue.md', [get(root, parent.id, 'ask.md').trimEnd(), '', `## Parts, joined on ${branch}`, '',
-    ...titles.map((p) => `- ${p.title}`), '', '## Cases', '', `- D1 every part's cases hold together on ${branch}`,
+    ...partsOf(db, parent.id).map((p) => `- ${p.title}`), '', '## Cases', '', `- D1 every part's cases hold together on ${branch}`,
     '- D2 a gap between parts is refused: a case no part answers, a name one part adds and no part uses, a change two parts make twice', ''].join('\n'))
   rmSync(srcDir(root, parent.id), { recursive: true, force: true })
   rewind(db, parent.id, 5)
@@ -103,13 +101,11 @@ function close(plan: PlanRow, issue: number, sha: string, wire: Wire): string {
 export function claimed(db: Db, root: string, issue: { url: string; title: string; body: string }): boolean {
   const [, no, at] = /^(\d+)([a-z])\b/.exec(issue.title) ?? []
   if (no === undefined || at === undefined) return false
-  const row = db.prepare('SELECT plan FROM parts WHERE url = ? AND plan IS NOT NULL').get(issue.url.replace(/\d+$/, no)) as
-    { plan: number } | undefined
-  if (row === undefined) return false
+  const plan = claimedPart(db, issue.url.replace(/\d+$/, no))
+  if (plan === null) return false
   const n = LETTERS.indexOf(at)
-  db.prepare('INSERT INTO parts (parent, n, url, title, body, after) VALUES (?, ?, ?, ?, ?, ?)')
-    .run(row.plan, n, issue.url, issue.title, issue.body, n === 0 ? null : n - 1)
-  queue(db, root, planById(db, row.plan), 0)
+  addPart(db, { parent: plan, n, url: issue.url, title: issue.title, body: issue.body, after: n === 0 ? null : n - 1 })
+  queue(db, root, planById(db, plan), 0)
   return true
 }
 
@@ -126,13 +122,12 @@ function carried(ask: string, source: string): string {
 }
 
 function filed(db: Db, plan: PlanRow, prefix: string, parts: Part[], n: number, section: string, wire: Wire): string {
-  const held = db.prepare('SELECT url FROM parts WHERE parent = ? AND n = ?').get(plan.id, n) as { url: string } | undefined
+  const held = partAt(db, plan.id, n)
   if (held !== undefined) return held.url
   const part = parts[n]
   if (part === undefined) throw new Error(`no part ${String(n)}`)
   const after = part.after === 'none' ? null : LETTERS.indexOf(part.after)
-  const prior = after === null ? undefined
-    : (db.prepare('SELECT url FROM parts WHERE parent = ? AND n = ?').get(plan.id, after) as { url: string } | undefined)?.url
+  const prior = after === null ? undefined : partAt(db, plan.id, after)?.url
   const title = `${prefix}${letter(n)}: ${part.title}`
   const of = `${letter(n)} of ${String(parts.length)}`
   const id = String(plan.id)
@@ -141,7 +136,7 @@ function filed(db: Db, plan: PlanRow, prefix: string, parts: Part[], n: number, 
       : `Internal only: part ${of} of plan ${id}, split by the brief writer; it builds against asm/${id} on our fork and opens no pull request upstream.`,
     ...(prior === undefined ? [] : [`After: ${ref(prior)}`]), ...(section === '' ? [] : ['', section]), ''].join('\n')
   const url = wire.file(homeOf(plan), title, body, labels(plan))
-  db.prepare('INSERT INTO parts (parent, n, url, title, body, after) VALUES (?, ?, ?, ?, ?, ?)').run(plan.id, n, url, title, body, after)
+  addPart(db, { parent: plan.id, n, url, title, body, after })
   return url
 }
 
@@ -152,21 +147,18 @@ function labels(plan: PlanRow): string[] {
 
 /** A requested change on an assembled pull request, filed and queued as one more internal part on `asm/<parent>`; returns its plan. */
 export function fixed(db: Db, root: string, parent: PlanRow, signal: SignalRow, wire: Wire): number {
-  const { n } = db.prepare('SELECT count(*) AS n FROM parts WHERE parent = ?').get(parent.id) as { n: number }
+  const n = partsOf(db, parent.id).length
   const id = String(parent.id)
   const title = `p${id}${letter(n)}: address ${signal.author}'s review on ${signal.repo}#${String(signal.pr)}`
   const body = `${words(signal)}\nInternal only: a fix of plan ${id}; it builds against asm/${id} on our fork and opens no pull request upstream.\n`
   const url = wire.file(homeOf(parent), title, body, labels(parent))
-  db.prepare('INSERT INTO parts (parent, n, url, title, body, after) VALUES (?, ?, ?, ?, ?, NULL)').run(parent.id, n, url, title, body)
+  addPart(db, { parent: parent.id, n, url, title, body, after: null })
   return made(db, root, parent, n, { url, title, body })
 }
 
 /** A part whose `After:` issue is closed, however it closed, is queued; `open` is every open issue number of `repo`. */
 export function released(db: Db, root: string, repo: string, open: Set<number>): void {
-  const rows = db.prepare(`SELECT p.parent, p.n, t.after FROM parts p
-    JOIN tickets t ON p.url = 'https://github.com/' || t.repo || '/issues/' || t.number
-    WHERE p.plan IS NULL AND t.repo = ? AND t.after IS NOT NULL AND t.closed_at IS NULL`).all(repo) as { parent: number; n: number; after: number }[]
-  for (const row of rows.filter((r) => !open.has(r.after))) {
+  for (const row of releasable(db, repo).filter((r) => !open.has(r.after))) {
     const id = queue(db, root, planById(db, row.parent), row.n)
     if (id !== null) {
       logged(db, { plan: id, kind: 'unblocked', actor: 'split', outcome: 'pass', message: `#${String(row.after)} closed`, pointer: null, run: null })
@@ -176,21 +168,15 @@ export function released(db: Db, root: string, repo: string, open: Set<number>):
 
 /** A part's plan is the parent's in every setting but its issue: same pipe, target, lane, seat and priority; an outside parent has no lane or seat, so its part takes the machine lane's. */
 function queue(db: Db, root: string, parent: PlanRow, n: number): number | null {
-  const row = db.prepare('SELECT url, title, body, plan FROM parts WHERE parent = ? AND n = ?').get(parent.id, n) as
-    { url: string; title: string; body: string; plan: number | null } | undefined
+  const row = partAt(db, parent.id, n)
   if (row === undefined) return null
   if (row.plan !== null) return row.plan
   return made(db, root, parent, n, row)
 }
 
 function made(db: Db, root: string, parent: PlanRow, n: number, row: { url: string; title: string; body: string }): number {
-  const inserted = db.prepare(`INSERT INTO plans (pipe_id, target_id, template, state, queued_at, step, retries, priority, lane, seat, origin)
-    VALUES (?, ?, ?, 'queued', ?, 0, 0, ?, ?, ?, ?)`)
-    .run(parent.pipe_id, parent.target_id, parent.template, new Date().toISOString(), parent.priority,
-      parent.lane ?? 'machine', parent.seat ?? LANE.machine.seat, row.url)
-  const id = Number(inserted.lastInsertRowid)
+  const id = queuePart(db, parent, n, row.url, parent.lane ?? 'machine', parent.seat ?? LANE.machine.seat)
   logged(db, { plan: id, kind: 'filed', actor: 'split', outcome: 'pass', message: row.url, pointer: null, run: null })
-  db.prepare('UPDATE parts SET plan = ? WHERE parent = ? AND n = ?').run(id, parent.id, n)
   put(root, id, 'ask.md', `# ${row.title}\n\n${row.body}`)
   return id
 }

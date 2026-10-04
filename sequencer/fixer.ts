@@ -16,6 +16,7 @@ import { clearWaitsOn, end, held, requeue, retry, type PlanRow } from '../store/
 import { clear } from '../store/refusals.ts'
 import { pending } from '../store/transcript.ts'
 import { lapsed } from '../store/until.ts'
+import { coder, repaired } from './coder.ts'
 import { hold, unhold } from './hold.ts'
 import { prose } from './prose.ts'
 import { WIRE, type Wire } from './push.ts'
@@ -78,13 +79,19 @@ export async function fixer(db: Db, root: string, plan: PlanRow, decision: { id:
   const m = mode(db)
   if (m === 'off') return false
   if (m === 'live' && fixesToday(root, plan.id, now) >= FIXES) return false
-  const { got, tokens } = gone(root, plan) ? { got: GONE, tokens: 0 } : await ask(db, root, plan, decision, m, provider)
+  const to = gone(root, plan) ? null : coder(db, root, plan)
+  const { got, tokens } = gone(root, plan) ? { got: GONE, tokens: 0 } : await ask(db, root, plan, decision, m, to, provider)
   if (got === null) {
     log(root, plan.id, { at: now.toISOString(), mode: m, did: 'nothing', then: 'ask_ceo', why: 'no readable answer', tokens, applied: 'unreadable' })
     return false
   }
   if (m === 'shadow') {
     log(root, plan.id, { at: now.toISOString(), mode: m, ...got, tokens, applied: 'shadow' })
+    return false
+  }
+  const stop = `# Diagnosis\n\n${got.did}\n\n${got.why}\n\n# Stop\n\n${cut(maybe(root, plan.id, 'refusal.md') ?? '', TEXT_CHARS)}`
+  if (to !== null && !(await repaired(db, root, plan, to, stop, Math.min(wall(db), FIX_WALL), provider))) {
+    log(root, plan.id, { at: now.toISOString(), mode: m, ...got, tokens, applied: 'unrepaired' })
     return false
   }
   const applied = apply(db, root, plan, got, wire, now)
@@ -101,14 +108,14 @@ export async function fixer(db: Db, root: string, plan: PlanRow, decision: { id:
   return true
 }
 
-async function ask(db: Db, root: string, plan: PlanRow, decision: { why: string }, m: Mode, provider: Provider):
+async function ask(db: Db, root: string, plan: PlanRow, decision: { why: string }, m: Mode, to: string | null, provider: Provider):
   Promise<{ got: Fix | null; tokens: number }> {
   load(db, root)
   const { manifest, prompt, hash } = seat(root, 'fixer')
   const dir = planDir(root, plan.id)
-  const tools = m === 'live' ? manifest.tools : manifest.tools.filter((t) => ['Read', 'Glob', 'Grep'].includes(t))
+  const tools = m === 'live' && to === null ? manifest.tools : manifest.tools.filter((t) => ['Read', 'Glob', 'Grep'].includes(t))
   const fired = await provider.fire({
-    ...packet({ ...manifest, tools }, prompt, tight(root), issue(db, root, plan, decision, m), dir, pending(dir, 'fixer')),
+    ...packet({ ...manifest, tools }, prompt, tight(root), issue(db, root, plan, decision, m, to), dir, pending(dir, 'fixer')),
     wall: Math.min(wall(db), FIX_WALL),
   })
   recorded(db, plan.id, plan.step, 'fixer', hash, provider.name, manifest, fired)
@@ -214,7 +221,7 @@ function apply(db: Db, root: string, plan: PlanRow, f: Fix, wire: Wire, now: Dat
   }
 }
 
-function issue(db: Db, root: string, plan: PlanRow, decision: { why: string }, m: Mode): string {
+function issue(db: Db, root: string, plan: PlanRow, decision: { why: string }, m: Mode, to: string | null): string {
   const said = maybe(root, plan.id, 'refusal.md') ?? maybe(root, plan.id, 'question.md') ?? 'none'
   const brief = maybe(root, plan.id, 'issue.md') ?? maybe(root, plan.id, 'ask.md') ?? 'none'
   const files = (db.prepare('SELECT path FROM plan_files WHERE plan = ? ORDER BY position').all(plan.id) as { path: string }[])
@@ -226,8 +233,9 @@ function issue(db: Db, root: string, plan: PlanRow, decision: { why: string }, m
     .join('\n') || 'none'
   const store = (db.prepare("SELECT sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'").all() as { sql: string }[])
     .map((r) => `${r.sql};`).join('\n')
+  const how = m === 'live' ? 'live: make the fix' : 'shadow: read only, change nothing, describe the fix under did'
   return [
-    `# Mode\n\n${m === 'live' ? 'live: make the fix' : 'shadow: read only, change nothing, describe the fix under did'}`,
+    `# Mode\n\n${to === null ? how : `diagnose: read only, change nothing; ${to} makes the fix from your did and why`}`,
     `# Job\n\nplan ${String(plan.id)}, state ${plan.state}, step ${String(plan.step)}, lane ${plan.lane ?? '-'}, ${plan.origin ?? 'no ticket'}`,
     `# Orchestrator\n\nask_coo: ${decision.why}`,
     `# Stop\n\n${cut(said, TEXT_CHARS)}`,

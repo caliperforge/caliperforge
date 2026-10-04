@@ -2,7 +2,8 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, write
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { expect, test } from 'vitest'
-import type { Packet, Provider } from '../../providers/kind.ts'
+import type { Fired, Packet, Provider } from '../../providers/kind.ts'
+import { record, strays } from '../../store/files.ts'
 import { migrate, open } from '../../store/index.ts'
 import type { Wire } from '../push.ts'
 import { terminal } from '../../store/plans.ts'
@@ -32,14 +33,15 @@ function seeded(mode: string) {
   return { db, home }
 }
 
-function stub(fix: string, packets: Packet[]): Provider {
+function stub(fix: string, packets: Packet[], seated: Fired['ended'] = 'completed'): Provider {
   return {
     name: 'claude-agent-sdk',
     fire: (packet) => {
       packets.push(packet)
-      const text = basename(packet.transcript).startsWith('fixer') ? fix : FIX
+      const name = basename(packet.transcript)
+      const text = name.startsWith('fixer') ? fix : FIX
       return Promise.resolve({ text, transcript_path: packet.transcript, usage: { input: 10, cache: 0, output: 5 },
-        seconds: 0, ended: 'completed', exit: 0, stop_reason: 'end_turn', denials: 0 })
+        seconds: 0, ended: name.startsWith('fix-') ? seated : 'completed', exit: 0, stop_reason: 'end_turn', denials: 0 })
     },
   }
 }
@@ -53,10 +55,10 @@ function wire(filed: string[]): Wire {
 const state = (db: ReturnType<typeof open>) => db.prepare('SELECT state, step FROM plans WHERE id = 7').get()
 const applied = (db: ReturnType<typeof open>) => db.prepare('SELECT applied FROM decisions').all()
 const runs = (db: ReturnType<typeof open>) => db.prepare(`SELECT seat, input_tokens, cache_read_tokens, output_tokens,
-  transcript_path LIKE '%/run-' || id || '.transcript.jsonl' AS named FROM runs
-  WHERE plan = 7 AND seat IN ('fixer', 'coo_lite') ORDER BY id`).all()
-const RAN = [{ seat: 'coo_lite', input_tokens: 10, cache_read_tokens: 0, output_tokens: 5, named: 1 },
-  { seat: 'fixer', input_tokens: 10, cache_read_tokens: 0, output_tokens: 5, named: 1 }]
+  transcript_path LIKE '%/run-' || id || '.transcript.jsonl' AS named, mode FROM runs
+  WHERE plan = 7 AND seat IN ('fixer', 'coo_lite', 'swift_specialist') ORDER BY id`).all()
+const RAN = [{ seat: 'coo_lite', input_tokens: 10, cache_read_tokens: 0, output_tokens: 5, named: 1, mode: null },
+  { seat: 'fixer', input_tokens: 10, cache_read_tokens: 0, output_tokens: 5, named: 1, mode: null }]
 
 const RETURN = '---\ndid: renamed schema/0036_x.sql to 0040_x.sql in src and issue.md\nthen: return\nwhy: the rails will find the file now\nadd_files: [schema/0040_x.sql]\n---\n'
 
@@ -319,4 +321,50 @@ test('a # in did or why is kept whole', async () => {
   const line = JSON.parse((maybe(home, 7, 'fixes.jsonl') ?? '').trim()) as { did: string; why: string }
   expect(line.did).toBe('nothing; #37 landed at 22775be')
   expect(line.why).toBe('#261: split of a split')
+})
+
+const SWIFT = 'step 3 rails refused by rails\n\nauthority\n\nspans:\n  - swift/Sources/x.swift:10\n'
+const of = (packets: Packet[], tag: string) => packets.find((p) => basename(p.transcript).startsWith(tag))
+
+function swift(mode: string, listed = true) {
+  const s = seeded(mode)
+  put(s.home, 7, 'refusal.md', SWIFT)
+  if (listed) record(s.db, 7, [{ path: 'swift/Sources/x.swift', is_new: false }])
+  return s
+}
+
+test('D1 a listed swift span goes to the swift seat in fix mode', async () => {
+  const { db, home } = swift('live')
+  const packets: Packet[] = []
+  await woke(db, home, stub(RETURN, packets), now, () => undefined, wire([]))
+  expect(runs(db)).toEqual([...RAN, { seat: 'swift_specialist', input_tokens: 10, cache_read_tokens: 0, output_tokens: 5, named: 1, mode: 'fix' }])
+  expect(of(packets, 'fix-')?.cwd).toBe(srcDir(home, 7))
+  expect(of(packets, 'fixer')?.tools).toEqual(['Read', 'Glob', 'Grep'])
+  expect(state(db)).toEqual({ state: 'queued', step: 4 })
+})
+
+test.each([false, true])('D2 an unlisted swift span stays with the fixer: stray %s', async (stray) => {
+  const { db, home } = swift('live', false)
+  if (stray) strays(db, 7, ['swift/Sources/x.swift'])
+  const packets: Packet[] = []
+  await woke(db, home, stub(RETURN, packets), now, () => undefined, wire([]))
+  expect(of(packets, 'fix-')).toBeUndefined()
+  expect(of(packets, 'fixer')?.tools).toContain('Edit')
+})
+
+test('D3 shadow fires no language seat', async () => {
+  const { db, home } = swift('shadow')
+  const packets: Packet[] = []
+  await woke(db, home, stub(RETURN, packets), now, () => undefined, wire([]))
+  expect(of(packets, 'fixer')).toBeDefined()
+  expect(of(packets, 'fix-')).toBeUndefined()
+})
+
+test('D4 a stopped seat run is unrepaired and reaches a person', async () => {
+  const { db, home } = swift('live')
+  const posted: string[] = []
+  await woke(db, home, stub(RETURN, [], 'stopped'), now, (t) => void posted.push(t), wire([]))
+  expect(maybe(home, 7, 'fixes.jsonl')).toContain('"applied":"unrepaired"')
+  expect(state(db)).toEqual({ state: 'blocked_on_ceo', step: 4 })
+  expect(posted).toHaveLength(1)
 })

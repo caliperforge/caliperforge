@@ -29,15 +29,15 @@ test('D1 select returns at most 200 rows and the look logs', () => {
   expect(ofKind(handle, 'look')).toEqual([{ plan: null, kind: 'look', actor: 'coo_lite', outcome: 'pass', message: 'store SELECT 1' }])
 })
 
-test.each([
-  "INSERT INTO settings (key, value) VALUES ('x', 'y')",
-  "INSERT INTO events (kind) VALUES ('x') RETURNING id",
-  'SELECT 1; SELECT 2',
-  'SELECT * FROM settings',
-])('D2 select refuses %s', (sql) => {
+test.each<[string, string | typeof RangeError]>([
+  ["INSERT INTO settings (key, value) VALUES ('x', 'y')", 'never reads settings'],
+  ["INSERT INTO events (kind) VALUES ('x') RETURNING id", 'runs one SELECT'],
+  ['SELECT 1; SELECT 2', RangeError],
+  ['SELECT * FROM settings', 'never reads settings'],
+])('D2 select refuses %s', (sql, refusal) => {
   const { path } = file()
   const before = select(path, COUNT)
-  expect(() => select(path, sql)).toThrow()
+  expect(() => select(path, sql)).toThrow(refusal)
   expect(select(path, COUNT)).toEqual(before)
 })
 

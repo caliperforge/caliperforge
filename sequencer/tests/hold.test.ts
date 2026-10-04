@@ -363,27 +363,33 @@ test('holdOnPlan D4 a hold on plan 8 is released when 8 lands', () => {
 
 function waitsOnSplit() {
   const seed = seeded()
-  for (const id of [8, 9]) {
+  for (const id of [8, 9, 10]) {
     seed.db.exec(`INSERT INTO plans (id, pipe_id, template, state, queued_at, lane, seat, origin) VALUES (${String(id)}, 9, 'pr_path', 'queued', '2026-09-24', 'machine', 'typescript_specialist', 'https://github.com/caliperforge/caliperforge/issues/14${String(id)}')`)
   }
   hold(seed.db, seed.home, 7, 'after #148', NOW, 8)
   seed.db.exec("UPDATE plans SET state = 'done' WHERE id = 8")
   addPart(seed.db, { parent: 8, n: 0, url: 'https://github.com/caliperforge/caliperforge/issues/149', title: '148a: x', body: 'x', plan: 9 })
+  addPart(seed.db, { parent: 8, n: 1, url: 'https://github.com/caliperforge/caliperforge/issues/150', title: '148b: x', body: 'x', after: 0 })
   released(seed.db, seed.home, NOW, () => undefined)
   return seed
 }
 
-test('D1 D2 a hold on a split plan waits for its part', () => {
+test('D1 D2 a hold on a split plan waits for every part', () => {
   const { db, home } = waitsOnSplit()
-  expect(row(db)).toEqual({ state: 'blocked_on_ceo', step: 4, waits_on: 9 })
+  expect(row(db)).toEqual({ state: 'blocked_on_ceo', step: 4, waits_on: 8 })
   expect(returns(db)).toEqual([])
   db.exec("UPDATE plans SET state = 'done' WHERE id = 9")
+  released(db, home, NOW, () => undefined)
+  expect(row(db)).toEqual({ state: 'blocked_on_ceo', step: 4, waits_on: 8 })
+  db.exec("UPDATE parts SET plan = 10 WHERE parent = 8 AND n = 1")
+  db.exec("UPDATE plans SET state = 'done' WHERE id = 10")
   released(db, home, NOW, () => undefined)
   expect(row(db)).toEqual({ state: 'queued', step: 4, waits_on: null })
 })
 
 test('D3 a refused part of a split plan sends the hold to the COO', () => {
   const { db, home } = waitsOnSplit()
+  db.exec("UPDATE parts SET plan = 10 WHERE parent = 8 AND n = 1")
   db.exec("UPDATE plans SET state = 'refused' WHERE id = 9")
   released(db, home, NOW, () => undefined)
   expect(row(db)).toEqual({ state: 'blocked_on_ceo', step: 4, waits_on: null })

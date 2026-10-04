@@ -28,6 +28,12 @@ test.each(['swift', 'kotlin', 'python', 'ruby', 'rust', 'go', 'php', 'lua', 'typ
     expect(mode).toBe('build')
   })
 
+test.each([...MODED])('D1 D4 %s leaves build framing to build.md', (name) => {
+  const own = readFileSync(join(import.meta.dirname, '../../seats', name, 'prompt.md'), 'utf8')
+  expect(own).not.toContain('You build')
+  expect(own).not.toContain('- id: D1')
+})
+
 test.each([{ step: 1, seat: 'brief_writer' }])(
   'D3 $seat at step $step carries no mode', async (c) => {
     const { prompt, mode, root } = await fired(c.step)

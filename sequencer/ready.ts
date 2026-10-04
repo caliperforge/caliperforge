@@ -1,11 +1,13 @@
 import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { audit } from '../rails/completion-audit/index.ts'
 import { ready as readyRail, type Proof } from '../rails/ready/index.ts'
 import { record as recordRail } from '../rails/record.ts'
 import { parse } from '../rails/diff.ts'
 import { digestOf, headDigest } from '../store/approvals.ts'
 import { built, gated, newest, ready as readyRow, type DeliverableRow, type Made, type Proven } from '../store/deliverables.ts'
 import { record as recordFiles } from '../store/files.ts'
+import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { BUILT, internal, stampHead, type PlanRow } from '../store/plans.ts'
 import { graded, greptiled } from '../store/signals.ts'
@@ -70,8 +72,28 @@ function greptile(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire)
   }
   const score = row.score ?? 0
   if (score >= 4) return ''
+  const ids = accepted(root, plan.id, sha)
+  if (ids.length > 0) {
+    logged(db, { plan: plan.id, kind: 'greptile.accepted', actor: 'ready', outcome: 'pass', message: ids.join(', '), pointer: at, run: null })
+    return `; Greptile scored ${at} ${String(score)}/5; the COO accepted ${ids.join(', ')}`
+  }
   return { outcome: 'refuse', spans: [`greptile:${String(score)}/5`], message: row.body ?? '', to: 2,
     note: `Greptile scored ${at} ${String(score)}/5; back to the builder with its findings` }
+}
+
+const BLOCK = /^accepted:[ \t]*\r?\n((?:[ \t]+\S.*(?:\r?\n|$))*)/gm
+
+/** The findings on `sha` that rulings.md accepts, provided the hand-back carries every other one with a pointer. */
+function accepted(root: string, plan: number, sha: string): string[] {
+  const found = [...(maybe(root, plan, `findings-${sha}.md`) ?? '').matchAll(/^- (G\d+) /gm)].map((m) => m[1] ?? '')
+  const ruled = [...(maybe(root, plan, 'rulings.md') ?? '').matchAll(BLOCK)].flatMap(([, body = '']) => {
+    const field = (key: string): string => new RegExp(`^[ \\t]+${key}:(.*)$`, 'm').exec(body)?.[1]?.trim() ?? ''
+    const head = field('head')
+    return /^[0-9a-f]{7,40}$/.test(head) && sha.startsWith(head) && field('reason') !== '' ? field('ids').match(/G\d+/g) ?? [] : []
+  })
+  const ids = found.filter((id) => ruled.includes(id))
+  const rest = found.filter((id) => !ruled.includes(id))
+  return ids.length > 0 && audit(maybe(root, plan, 'step-2.handback.md') ?? '', rest).outcome === 'pass' ? ids : []
 }
 
 /** Greptile's plan gives {@link CREDITS} credits a month, so a job asks for at most this many reviews. */

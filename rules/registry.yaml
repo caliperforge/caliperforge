@@ -75,3 +75,7 @@
   column: at
   where: kind = 'science_pull' AND outcome = 'pass'
   gap: 7d
+- name: accepted_findings
+  table: events
+  column: at
+  where: kind = 'greptile.accepted'

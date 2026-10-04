@@ -59,7 +59,7 @@ test('fresh', () => {
   expect(drift(d, [COO, { ...COO, name: 'six', gap: '24h' }], NOW)).toEqual([])
   expect(REGISTRY.map((e) => e.name)).toEqual(['coo_lite', 'fixer', 'brief_writer', 'text_review',
     'growth_lead', 'gardener', 'ratchet', 'accounts', 'records', 'dispositions', 'signoffs', 'proposals',
-    'ratchet_refuse', 'intake', 'stuck_plans', 'science_pull'])
+    'ratchet_refuse', 'intake', 'stuck_plans', 'science_pull', 'accepted_findings'])
   expect(ratchetRules(d).mode).toBe('refuse')
   expect(drift(d, REGISTRY, NOW).map((r) => r.name)).not.toContain('ratchet_refuse')
   for (const bad of [{ gap: '2 days' }, { table: 'events;' }, { column: 'At' }]) {

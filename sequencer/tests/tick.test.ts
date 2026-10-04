@@ -19,7 +19,7 @@ import { blocked, kernel } from '../steps.ts'
 import { checkout, diffOf, doneIds, get, gitDiff, narrowing, put, snapshot, srcDir } from '../workspace.ts'
 import { GREEN } from '../base.ts'
 import { record } from '../../store/files.ts'
-import { runRows } from '../../store/events.ts'
+import { eventsOf, runRows } from '../../store/events.ts'
 import { overrule, verdictRows } from '../../store/verdict.ts'
 import { record as signal } from '../../store/signals.ts'
 import { benchPacket } from '../../runner/packet.ts'
@@ -825,6 +825,43 @@ test('D2 a 3/5 at the head goes to the builder; at another, none', async () => {
   })
   expect(await again()).toMatchObject({ step: 6, outcome: 'pass', state: 'running', spans: ['greptile.missing'] })
   expect(plan(old.db, 1).step).toBe(6)
+})
+
+const ruling = (sha: string, ids: string): string =>
+  `# Rulings\n\naccepted:\n  head: ${sha.slice(0, 12)}\n  ids: ${ids}\n  reason: the SDK divergence is recorded, not patched\n`
+
+/** A 3/5 at the head with `findings` listed for it (`null`: no file), `rulings` and, when given, a hand-back. */
+const accepting = (findings: string[] | null, rulings: (sha: string) => string, handback?: string) => (at: World): void => {
+  scored(at.root, 1, 3, FINDINGS)
+  const sha = head(srcDir(at.root, 1), ['rev-parse', 'HEAD'])
+  if (findings !== null) put(at.root, 1, `findings-${sha}.md`, findings.map((id) => `- ${id} the empty name is never refused\n`).join(''))
+  put(at.root, 1, 'rulings.md', rulings(sha))
+  if (handback !== undefined) put(at.root, 1, 'step-2.handback.md', handback)
+}
+
+test('D1 D5 a 3/5 head passes ready when the COO accepted its findings and the hand-back answered the rest', async () => {
+  const [w, lap] = await atReady(accepting(['G11', 'G12'], (sha) => ruling(sha, 'G11, G12')))
+  expect((await lap())?.note).toMatch(/the COO accepted G11, G12$/)
+  expect(plan(w.db, 1).step).toBe(7)
+  expect(eventsOf(w.db, 1, 'greptile.accepted')).toEqual([{ actor: 'ready', outcome: 'pass', message: 'G11, G12' }])
+
+  const answered = CARRIED.replace(/---\n$/, '  - id: G12\n    status: done\n    pointer: src/hello.ts:1\n---\n')
+  const [d5, again] = await atReady(accepting(['G11', 'G12'], (sha) => ruling(sha, 'G11'), answered))
+  expect((await again())?.note).toMatch(/the COO accepted G11$/)
+  expect(plan(d5.db, 1).step).toBe(7)
+})
+
+test('D2 D3 D4 a 3/5 head with a finding unanswered, another head\'s ruling or nothing to accept goes to the builder', async () => {
+  for (const grade of [
+    accepting(['G11', 'G12', 'G13'], (sha) => ruling(sha, 'G11, G12')),
+    accepting(['G11', 'G12'], () => ruling('f'.repeat(40), 'G11, G12')),
+    accepting(null, (sha) => ruling(sha, 'G11, G12')),
+    accepting([], (sha) => ruling(sha, 'G11, G12')),
+  ]) {
+    const [w, lap] = await atReady(grade)
+    expect(await lap()).toMatchObject({ step: 6, name: 'ready', outcome: 'refuse', spans: ['greptile:3/5'] })
+    expect(plan(w.db, 1).step).toBe(2)
+  }
 })
 
 test('D6 D7 a new head asks Greptile once; a fourth goes to COO', async () => {

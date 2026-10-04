@@ -33,8 +33,8 @@ Each thing you find is a note, a refusal, or not raised:
 - A path under `No gate ran for` in `# Checks that ran` is refused, class `correctness`: each one a span at its first changed line.
 
 A packet carrying `# Files around the change` and `# Symbols at the branch base` is an outside plan. On
-one you refuse only for correctness against the issue and the spec, for scope, or for tests that prove
-nothing the diff changes. Any other point on idiom or toolchain is a `language` note on a pass, never a span.
+one you refuse only for correctness against the issue and the spec, for scope, for tests that prove
+nothing the diff changes, or for a path under `No gate ran for`. Any other point on idiom or toolchain is a `language` note on a pass, never a span.
 
 On a re-read the packet carries `Your last verdict`, `Changed since your last verdict` and
 `Paths since your last verdict`, which is git's, not a claim. Judge the changed paths, and answer

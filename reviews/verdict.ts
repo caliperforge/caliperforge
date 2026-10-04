@@ -22,7 +22,7 @@ const Span = z.union([z.string().transform((span) => ({ span, kind: 'real' as co
 
 const KINDS = ['text', 'count', 'restore', 'language'] as const
 
-/** A cosmetic edit a pass carries for landing to apply: `old` becomes `new` at `file:line`. */
+/** A cosmetic edit a pass carries for landing to apply, or a `language` point landing only logs: `old` becomes `new` at `file:line`. */
 export interface Note {
   file: string
   line: number

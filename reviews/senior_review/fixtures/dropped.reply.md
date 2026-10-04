@@ -1,5 +1,5 @@
-The first verdict passed the sort and missed the input. The issue says `median` must not change the
-list the caller passed; `src/stats.ts:2` sorts `xs` in place, so the caller's list comes back reordered.
+The first verdict passed the shape and missed a field. The issue's spec says `Summary` carries `median`;
+`src/stats.ts:2` builds a `Summary` without it, so every caller reads `median` as `undefined`.
 
 ---
 outcome: refuse

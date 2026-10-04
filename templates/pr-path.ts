@@ -1,3 +1,5 @@
+import type { Run } from '../store/events.ts'
+
 type Fires ='kernel' | 'brief' | 'seat' | 'review' | 'ceo'
 
 export type Gate = 'premise' | 'target' | 'pre_review' | 'review' | 'senior_review' | 'ready'
@@ -11,7 +13,11 @@ export interface Step {
   gate: boolean
   writes_verdict: boolean
   verdict_gate: Gate | null
+  mode?: Run['mode']
 }
+
+export const MODED = new Set(['swift_specialist', 'kotlin_specialist', 'python_specialist', 'ruby_specialist',
+  'rust_specialist', 'go_specialist', 'php_specialist'])
 
 /** The builder a target whose language names no seat of its own falls to. */
 export const DEFAULT_BUILDER = 'typescript_specialist'
@@ -56,5 +62,6 @@ export function at(step: number, language: string | null = null): Step {
   if (found === undefined) throw new Error(`pr-path has no step ${String(step)}`)
   if (found.fires === 'brief') return found
   const seat = builder(language)
+  if (found.verdict_gate === 'review' && MODED.has(seat)) return { ...found, seat, mode: 'review' }
   return found.fires === 'seat' ? { ...found, seat, runs: seat } : { ...found, seat }
 }

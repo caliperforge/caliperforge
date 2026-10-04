@@ -12,7 +12,7 @@ import { listed } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
 import { returnToLane } from '../store/holds.ts'
 import { wall } from '../store/lanes.ts'
-import { clearWaitsOn, end, held, requeue, retry, type PlanRow } from '../store/plans.ts'
+import { clearWaitsOn, end, held, holdOn, requeue, retry, type PlanRow } from '../store/plans.ts'
 import { clear } from '../store/refusals.ts'
 import { pending } from '../store/transcript.ts'
 import { lapsed } from '../store/until.ts'
@@ -22,7 +22,9 @@ import { prose } from './prose.ts'
 import { WIRE, type Wire } from './push.ts'
 import { rule } from './rule.ts'
 import { recorded } from './seat.ts'
+import { landed } from './split.ts'
 import { ticketed } from './ticket.ts'
+import { unlanded } from './unlanded.ts'
 import { afresh, cloned, drop, maybe, move, planDir, put, titleOf } from './workspace.ts'
 
 /**
@@ -171,12 +173,17 @@ function overdue(db: Db, root: string, now: Date): void {
 /** A job the fixer set waiting goes back to its lane when the other lands, and to a person if it never will. */
 export function released(db: Db, root: string, now: Date, post: Post): void {
   overdue(db, root, now)
-  const rows = db.prepare(`SELECT p.id, p.step, p.waits_on AS on_, w.state AS theirs FROM plans p JOIN plans w ON w.id = p.waits_on
-    WHERE p.state = 'blocked_on_ceo' AND w.state IN ('done', 'refused', 'halted') ORDER BY p.id`).all() as
-    { id: number; step: number; on_: number; theirs: string }[]
+  const rows = db.prepare(`SELECT p.id, p.step, p.waits_on AS on_, p.held_until AS until, w.state AS theirs FROM plans p
+    JOIN plans w ON w.id = p.waits_on WHERE p.state = 'blocked_on_ceo' AND w.state IN ('done', 'refused', 'halted') ORDER BY p.id`).all() as
+    { id: number; step: number; on_: number; until: string | null; theirs: string }[]
   for (const r of rows) {
     const ticket = ticketOf(db, r.id)
     const at = now.toISOString()
+    if (r.theirs === 'done' && !landed(db, r.on_)) {
+      const part = unlanded(db, r.on_)
+      if (part !== null) holdOn(db, r.id, `until plan ${String(part.id)}, a part of plan ${String(r.on_)}, lands`, part.id, r.until)
+      continue
+    }
     if (r.theirs === 'done') {
       unhold(db, root, r.id, 'fixer')
       record(root, [{ at, plan: r.id, ticket, kind: 'refused', step: r.step, name: 'fixer', note: `plan ${String(r.on_)} landed, so this job is back in its lane` }])

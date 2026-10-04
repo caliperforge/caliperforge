@@ -136,15 +136,29 @@ export function heldOn(db: Db, plan: PlanRow): number | null {
   return building(db, plan.id, recorded(db, plan.id))?.plan ?? null
 }
 
-/** A ticket with an `After:` line is not briefed until the plan of the issue it names lands; one that never will is held for a person. */
+/** A ticket with an `After:` line is not briefed until the plan of each issue it names lands; one that never will is held for a person. */
 function after(db: Db, root: string, plan: PlanRow): Outcome | null {
   const ref = originRef(plan)
   if (ref === null) return null
-  const ticket = db.prepare('SELECT after FROM tickets WHERE repo = ? AND number = ?').get(ref.repo, ref.no) as { after: number | null } | undefined
-  const n = ticket?.after ?? null
-  if (n === null) return null
+  const ns = db.prepare('SELECT a.value FROM tickets t, json_each(t.after) a WHERE t.repo = ? AND t.number = ? ORDER BY a.key')
+    .all(ref.repo, ref.no) as { value: number }[]
+  for (const { value } of ns) {
+    const gate = unmet(db, ref.repo, value)
+    if (gate === null) continue
+    if (gate.on !== null) hold(db, root, plan.id, gate.why, new Date(), gate.on)
+    else {
+      needsCeo(db, plan, gate.why)
+      held(db, plan.id, 'coo', gate.why)
+    }
+    return { outcome: 'pass', held: true, spans: [gate.issue], note: gate.why }
+  }
+  return null
+}
+
+/** Why `After: #n` still holds, and the plan to wait on when one is open; null once #n has landed. */
+function unmet(db: Db, repo: string, n: number): { on: number | null; issue: string; why: string } | null {
   const pred = db.prepare(`SELECT p.id, p.state, t.closed_at FROM plans p LEFT JOIN tickets t ON t.repo = ? AND t.number = ?
-    WHERE p.origin = ? ORDER BY p.id DESC LIMIT 1`).get(ref.repo, n, `https://github.com/${ref.repo}/issues/${String(n)}`) as
+    WHERE p.origin = ? ORDER BY p.id DESC LIMIT 1`).get(repo, n, `https://github.com/${repo}/issues/${String(n)}`) as
     { id: number; state: PlanRow['state']; closed_at: string | null } | undefined
   if (pred?.state === 'done' && landed(db, pred.id)) return null
   const part = pred?.state === 'done' ? unlanded(db, pred.id) : null
@@ -157,12 +171,7 @@ function after(db: Db, root: string, plan: PlanRow): Outcome | null {
     : open ? `waits for ${named}, plan ${String(on.id)}, to land`
     : on.closed_at === null ? (part === null ? `#${String(n)}'s plan ${String(on.id)} ended ${on.state}` : `${named} ended ${on.state}`)
     : `#${String(n)} closed without plan ${String(on.id)} landing`
-  if (open) hold(db, root, plan.id, why, new Date(), on.id)
-  else {
-    needsCeo(db, plan, why)
-    held(db, plan.id, 'coo', why)
-  }
-  return { outcome: 'pass', held: true, spans: [issue], note: why }
+  return { on: open ? on.id : null, issue, why }
 }
 
 export function measure(db: Db, root: string, plan: PlanRow, read?: Read): Outcome {

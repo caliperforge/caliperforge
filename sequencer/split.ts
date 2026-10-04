@@ -1,5 +1,4 @@
 import { rmSync } from 'node:fs'
-import { mentions } from '../cli/gh.ts'
 import { LANE } from '../cli/plan.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
@@ -42,9 +41,8 @@ export function parted(db: Db, root: string, plan: PlanRow, parts: Part[], wire:
   try {
     const thread = parent === null ? [] : wire.thread?.(homeOf(plan), parent) ?? []
     const said = thread.length === 0 ? '' : carried(thread.map((c) => `### ${c.author.login}\n\n${c.body.trim()}`).join('\n\n'), '## Parent comments', source)
-    const cites = (p: Part): boolean => [p.title, p.what, p.why, p.ends].some((t) => (parent !== null && mentions(t, parent)) || thread.some((c) => t.includes(c.url)))
-    const sections = parts.map((p) => [section, cites(p) ? said : ''].filter((s) => s !== '').join('\n\n'))
-    const urls = [...parts.keys()].map((n) => filed(db, plan, parent === null ? `p${String(plan.id)}` : String(parent), parts, n, sections[n] ?? '', wire))
+    const carry = [section, said].filter((s) => s !== '').join('\n\n')
+    const urls = [...parts.keys()].map((n) => filed(db, plan, parent === null ? `p${String(plan.id)}` : String(parent), parts, n, carry, wire))
     const on = (n: number): string => ref(urls[n] ?? '')
     const started = [...parts.keys()].filter((n) => parts[n]?.after === 'none')
     for (const n of started) queue(db, root, plan, n)

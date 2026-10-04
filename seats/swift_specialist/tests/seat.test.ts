@@ -2,9 +2,11 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
+import { parse } from 'yaml'
 import { gate } from '../../../providers/claude-agent-sdk/index.ts'
 import type { Packet } from '../../../providers/kind.ts'
 import { authority } from '../../../rails/authority/index.ts'
+import { packs } from '../../../reviews/packs.ts'
 import { packet, refuse } from '../../../runner/index.ts'
 import { Seat, rules, seat } from '../../../runner/rules.ts'
 import { languageOf } from '../../../sequencer/workspace.ts'
@@ -82,6 +84,31 @@ test('D2, D3: the prompt states both fences and both openings', () => {
   const prompt = seat(root, SEAT).prompt.replace(/\s+/g, ' ')
   expect(prompt).toContain('On an outside plan you may write only the files the brief lists under `## Files`; on our own repository, only under `Atelier/`, `AtelierTests/` and `Atelier.xcodeproj/`. Any other write is refused and the step ends there.')
   expect(prompt).toContain("You build Swift against the issue below. One checkout, one step. On an outside plan you build that repository's Swift package as its maintainers would. On our own repository you are an expert macOS SwiftUI engineer on Atelier, the CEO's read-only window onto the machine, and the Atelier design rules below apply only there.")
+})
+
+test('D1: What to check opens the prompt with the Swift checks', () => {
+  const { prompt } = seat(root, SEAT)
+  expect(prompt.startsWith(`# ${SEAT}\n\n## What to check\n`)).toBe(true)
+  const checks = prompt.slice(0, prompt.indexOf('## Test conventions'))
+  for (const word of ['description', 'opaque', 'Package.swift', 'try!', 'fatalError', 'Codable']) expect(checks).toContain(word)
+})
+
+test('D2: review mode reads What to check before the profile', () => {
+  const p = 'swift/Sources/Main.swift'
+  const out = packs(root, `diff --git a/${p} b/${p}\n--- a/${p}\n+++ b/${p}\n@@ -1 +1 @@\n-old\n+new\n`, null)
+  const at = out.indexOf('## What to check')
+  expect(at).toBeGreaterThan(-1)
+  expect(at).toBeLessThan(out.indexOf('You build Swift'))
+})
+
+test('D3: the test conventions parse and pick out test files', () => {
+  const block = /## Test conventions\n\n```yaml\n([\s\S]*?)```/.exec(seat(root, SEAT).prompt)?.[1] ?? ''
+  const conventions = parse(block) as { test_path: string; assertions: string[]; skip_markers: string[] }
+  expect(conventions.assertions).toContain('#expect')
+  expect(conventions.skip_markers).toContain('.disabled(')
+  const path = new RegExp(conventions.test_path)
+  expect(path.test('swift/Tests/PayKitTests/MemoTests.swift')).toBe(true)
+  expect(path.test('swift/Sources/PayKit/Memo.swift')).toBe(false)
 })
 
 test('D4: an outside-fence packet drops the own-repo-only lines', () => {

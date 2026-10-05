@@ -45,7 +45,7 @@ export interface Wire {
   file: (repo: string, title: string, body: string, labels: string[]) => string
   comment: (repo: string, no: number, body: string) => void
   thread?: (repo: string, no: number) => IssueComment[]
-  install?: (repo: string) => void
+  install?: () => void
   card?: Check[]
   intake?: Check
   merged: Read
@@ -62,7 +62,7 @@ export const WIRE: Wire = {
   rehearse,
   unrehearse,
   review,
-  install: (repo) => { refresh(repo, npm, alerter()) },
+  install: () => { refresh(npm, alerter()) },
   card: [theirs()],
   intake: picked(),
   merged: gh,
@@ -186,7 +186,7 @@ function tipOf(root: string, plan: number, head: Head, ci: string): string {
   return tip
 }
 
-/** HEAD plus `greptile.json` turning Greptile's own reviews off. */
+/** HEAD plus `greptile.json` turning Greptile's own reviews off, signed as the host is (#939: an unsigned tip turns the target's PR hygiene red). */
 function quiet(dir: string, ci: string): string {
   const env = { ...process.env, GIT_INDEX_FILE: join(git(dir, ['rev-parse', '--absolute-git-dir']).trim(), 'next.index') }
   const index = (args: string[]): string =>
@@ -196,7 +196,7 @@ function quiet(dir: string, ci: string): string {
   index(['update-index', '--add', '--cacheinfo', `100644,${blob},greptile.json`])
   const next = `refs/remotes/origin/${ci}`
   const parents = published(dir, ci, next) && !ancestor(dir, next, 'HEAD') ? ['HEAD', next] : ['HEAD']
-  return index(['-c', 'user.email=cf@caliperforge.dev', '-c', 'user.name=caliperforge', 'commit-tree', index(['write-tree']), ...parents.flatMap((p) => ['-p', p]),
+  return index([...identity(dir), 'commit-tree', index(['write-tree']), ...parents.flatMap((p) => ['-p', p]),
     '-m', 'greptile.json: review on request only'])
 }
 
@@ -335,7 +335,7 @@ export function land(db: Db, root: string, plan: PlanRow, approval: number, wire
   }
   wire.close(homeOf(plan), issue, sha)
   pushed(db, plan.id, approval, `https://github.com/${asm?.fork ?? homeOf(plan)}/commit/${sha}`)
-  if (plan.lane === 'atelier') wire.install?.(homeOf(plan))
+  if (plan.lane === 'atelier') wire.install?.()
   return { outcome: 'pass', spans: [], note: `landed ${head.branch} on ${onto} as ${sha.slice(0, 12)}` }
 }
 

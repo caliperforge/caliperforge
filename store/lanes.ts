@@ -20,7 +20,7 @@ type Template = 'pr_path' | 'research' | 'comms'
  */
 export const LANE: Record<Lane, { template: Template; seat: string; home: string; pipe: string }> = {
   machine: { template: 'pr_path', seat: 'typescript_specialist', home: 'caliperforge/caliperforge', pipe: 'internal' },
-  atelier: { template: 'pr_path', seat: 'swift_specialist', home: 'caliperforge/atelier', pipe: 'atelier' },
+  atelier: { template: 'pr_path', seat: 'web_specialist', home: 'caliperforge/atelier-web', pipe: 'atelier' },
   comms: { template: 'comms', seat: 'typescript_specialist', home: 'caliperforge/caliperforge', pipe: 'internal' },
   research: { template: 'research', seat: 'typescript_specialist', home: 'caliperforge/caliperforge', pipe: 'research' },
   uniswap: { template: 'pr_path', seat: 'python_specialist', home: 'caliperforge/v4-hook-index', pipe: 'uniswap' },

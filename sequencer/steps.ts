@@ -8,7 +8,7 @@ import { partsOf } from '../store/parts.ts'
 import { builderRan, held, internal, needsCeo, originIssue, originRef, waiting, type PlanRow, type Wait } from '../store/plans.ts'
 import { capture, desk, facts, gather, pack, score, steps as comms } from '../templates/comms.ts'
 import { at, last, steps, type Step } from '../templates/pr-path.ts'
-import { question, steps as research } from '../templates/research.ts'
+import { question, record, steps as research } from '../templates/research.ts'
 import { approved, approvedPlan, batch } from './approve.ts'
 import type { Outcome } from './kind.ts'
 import { preReview } from './rails.ts'
@@ -106,7 +106,7 @@ export function kernel(db: Db, root: string, plan: PlanRow, wire?: Wire, read?: 
   if (step.name === 'capture') return capture(db, root)
   if (step.name === 'pack') return pack(db, root, plan)
   if (step.name === 'score') return score(db, root, plan, step)
-  if (step.name === 'question') return question(root, plan)
+  if (step.name === 'question' || step.name === 'record') return step.name === 'question' ? question(root, plan) : record(db, root, plan, wire)
   return { outcome: 'pass', spans: [], note: step.name }
 }
 

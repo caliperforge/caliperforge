@@ -56,3 +56,14 @@ test('D7: director decides by default and names ask_coo', () => {
   for (const n of [1, 2, 3, 4]) expect(prompt).toContain(`(${String(n)})`)
   expect(prompt).toContain('move: <rule | waive | return | fix | close | file | ask_ceo | ask_coo>')
 })
+
+test('D8: orchestrator is refused, unlisted and unseeded', () => {
+  expect(() => seat(root, 'orchestrator')).toThrow(/absent from rules\/roster\.yaml/)
+  const ids = rules(root).map((r) => r.id)
+  const seed = readFileSync(join(root, 'rules.seed.sql'), 'utf8')
+  for (const gone of ['orchestrator', 'coo_lite']) {
+    expect(listed(root).seats).not.toContain(gone)
+    expect(ids).not.toContain(gone)
+    expect(seed).not.toContain(`('${gone}',`)
+  }
+})

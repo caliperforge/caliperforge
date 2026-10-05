@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { decision } from '../sequencer/fence.ts'
+import { decision } from './ask.ts'
 import { logged } from './events.ts'
 import type { Db } from './index.ts'
 

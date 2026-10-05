@@ -10,12 +10,12 @@ import { actors, actorSection, costs, costSection, fileWaits, greptileLine, hand
   tickets, unpriced, waitLine, waits } from '../brief.ts'
 import { refusalDays, refusalSection } from '../refusals.ts'
 import { directorSection, handUpLine } from '../director.ts'
-import { driftSection } from '../drift.ts'
+import { decisionSection, driftSection } from '../drift.ts'
 import { hold } from '../../sequencer/hold.ts'
 import { monthly, reviewed } from '../../sequencer/ready.ts'
-import { put, SELF } from '../../sequencer/workspace.ts'
+import { put } from '../../sequencer/workspace.ts'
 import { decided, directorDays } from '../../store/decisions.ts'
-import { drifts } from '../../store/drift.ts'
+import { addFinding, closeFinding, type Finding, overdue, week } from '../../store/drift.ts'
 import { handUps, repriced } from '../../store/events.ts'
 import { record as listFiles } from '../../store/files.ts'
 import type { Db } from '../../store/index.ts'
@@ -569,30 +569,40 @@ test('D3-D6 seven days of step 1 refusals by reason, oldest first', () => {
     '  2026-09-20\t3\t<span> is not in the checkout 2\tn lines over n 1\n')
 })
 
-function ticket(db: Db, repo: string, number: number, title: string, closed: string | null = null): void {
-  db.exec(`INSERT INTO tickets (repo, number, title, lane, opened_at, closed_at)
-    VALUES ('${repo}', ${String(number)}, '${title}', 'machine', '${at(48)}', ${closed === null ? 'NULL' : `'${closed}'`})`)
+function found(db: Db, name: string, hours: number, outcome?: NonNullable<Finding['outcome']>): void {
+  const id = addFinding(db, { name, state: 'off', detail: `${name} is off` }, new Date(at(hours)))
+  if (outcome !== undefined) closeFinding(db, Number(id), outcome, 'x', null, NOW)
 }
 
-const DRIFT = 'drift (1)\n  #1\tDrift: hq is off\t2 d\n'
-
-test('D1 an open drift ticket is listed with its age', () => {
+test('D1 drift counts findings of 7 days by outcome', () => {
   const db = world()
-  ticket(db, SELF, 1, 'Drift: hq is off')
-  expect(driftSection(drifts(db, SELF, NOW))).toBe(DRIFT)
+  found(db, 'hq', 1, 'fixed')
+  found(db, 'desk', 30, 'fixed')
+  found(db, 'site', 50, 'covered')
+  found(db, 'watch', 100, 'retire')
+  found(db, 'flow', 150, 'defect')
+  found(db, 'old', 192, 'fixed')
+  expect(driftSection(week(db, NOW))).toBe('drift last 7 d\t5 found → 2 fixed\t1 covered\t1 retire\t1 defect\n')
 })
 
-test('D2 closed, non-drift and other-repo tickets are left out', () => {
-  const db = world()
-  ticket(db, SELF, 1, 'Drift: hq is off')
-  ticket(db, SELF, 2, 'Drift: desk is off', '2026-09-19T12:00:00.000Z')
-  ticket(db, SELF, 3, 'hq is off')
-  ticket(db, 'acme/widget', 4, 'Drift: hq is off')
-  expect(driftSection(drifts(db, SELF, NOW))).toBe(DRIFT)
+test('D2 no finding in 7 days reads zero', () => {
+  expect(driftSection(week(world(), NOW))).toBe('drift last 7 d\t0 found → 0 fixed\t0 covered\t0 retire\t0 defect\n')
 })
 
-test('D3 no open drift ticket prints none', () => {
-  expect(driftSection(drifts(world(), SELF, NOW))).toBe('drift (0)\n  none\n')
+test('D3 a finding open past 24 h needs a decision', () => {
+  const db = world()
+  plan(db, 1, 'blocked_on_ceo', 25)
+  held(db, 1, 'coo', 'stop')
+  found(db, 'hq', 25)
+  found(db, 'desk', 23)
+  found(db, 'site', 30, 'fixed')
+  expect(decisionSection(heldBy(db, 'coo'), overdue(db, NOW), NOW))
+    .toBe('needs a decision (2)\n  plan 1\tstep 0\tblocked_on_ceo\t-\tstop\n  finding 1\thq\toff\t25 h\thq is off\n')
+})
+
+test('D4 no held plan and no overdue finding prints none', () => {
+  const db = world()
+  expect(decisionSection(heldBy(db, 'coo'), overdue(db, NOW), NOW)).toBe('needs a decision (0)\n  none\n')
 })
 
 test('with no waiting live plan the waits line reads none', () => {

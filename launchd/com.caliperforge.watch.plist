@@ -9,8 +9,7 @@
   <key>ProgramArguments</key>
   <array>
     <string>/opt/homebrew/bin/node</string>
-    <string>/Users/michael/cf_v2_tick/cli/cf.ts</string>
-    <string>watch</string>
+    <string>/Users/michael/cf_v2_tick/cli/watch-main.ts</string>
   </array>
 
   <key>WorkingDirectory</key>
@@ -28,6 +27,6 @@
   <key>StandardOutPath</key>
   <string>/dev/null</string>
   <key>StandardErrorPath</key>
-  <string>/dev/null</string>
+  <string>/Users/michael/cf_v2_tick/.cf/watch.err.log</string>
 </dict>
 </plist>

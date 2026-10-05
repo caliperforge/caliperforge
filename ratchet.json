@@ -80,6 +80,9 @@
   "reviews/package.ts": {
     "lines": 70
   },
+  "reviews/packs.ts": {
+    "lines": 31
+  },
   "reviews/senior_review/tests/bench.test.ts": {
     "prepare": 16,
     "test-name": 2
@@ -96,7 +99,7 @@
     "lines": 161
   },
   "runner/rules.ts": {
-    "lines": 102,
+    "lines": 109,
     "prepare": 1
   },
   "runner/tests/language-seat.ts": {
@@ -113,11 +116,11 @@
     "prepare": 4
   },
   "templates/comms.ts": {
-    "lines": 225,
+    "lines": 252,
     "prepare": 10
   },
   "templates/pr-path.ts": {
-    "lines": 55
+    "lines": 68
   },
   "vitest.config.ts": {
     "lines": 8

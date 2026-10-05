@@ -39,10 +39,11 @@ const rows = (w: World, kind: string): unknown[] =>
 test('D1 outside push: card written, no wire, held on step 8', async () => {
   const w = await atPush()
   const sent: string[] = []
+  const signed = headOf(w.root, 1).sha
   const held = push(w.db, w.root, plan(w.db, 1), watched(sent, w.root, 1))
   expect(held).toMatchObject({ outcome: 'pass', held: true, spans: ['card'] })
   expect(held.note).toContain('cf approve card 1')
-  expect(get(w.root, 1, 'maintainer.md')).toBe(`plan 1 at ${headOf(w.root, 1).sha}\npass\tlead\twhole issue, 1 lead(s)\npass\ttests\t+0 test / +1 code lines\npass\tconventions\tmatches the last 1 commits\npass\tsize\t2 code lines (2 in all), limit 400\npass\tprose\tclean\n${NONE}`)
+  expect(get(w.root, 1, 'maintainer.md')).toBe(`plan 1 at ${signed}\npass\tlead\twhole issue, 1 lead(s)\npass\ttests\t+0 test / +1 code lines\npass\tconventions\tmatches the last 1 commits\npass\tsize\t2 code lines (2 in all), limit 400\npass\tprose\tclean\n${NONE}`)
   expect(sent).toEqual([])
   expect(plan(w.db, 1).step).toBe(8)
 })
@@ -57,6 +58,15 @@ test('D9 a tell in pr.md is flagged and held until approved', async () => {
   expect(sent).toEqual([])
   approve(w.db, w.root, 1, 'ceo')
   expect(push(w.db, w.root, plan(w.db, 1), wire)).toMatchObject({ note: `pushed widget-12-a1 as ${PR}` })
+})
+
+test('a pr.md line naming a changed file flags on the card', async () => {
+  const w = await atPush()
+  const sent: string[] = []
+  put(w.root, 1, 'pr.md', 'Addresses #12.\n\n- Updated src/hello.ts so hello() says hey.\n')
+  expect(push(w.db, w.root, plan(w.db, 1), watched(sent, w.root, 1))).toMatchObject({ outcome: 'pass', held: true, spans: ['card'] })
+  expect(get(w.root, 1, 'maintainer.md')).toContain('\nflag\tprose\tbody:3 tight.summary')
+  expect(sent).toEqual([])
 })
 
 test('D2 an approved card sends and opens beside one step-7 row', async () => {

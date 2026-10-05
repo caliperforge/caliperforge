@@ -106,6 +106,44 @@ test('D4 a __pycache__ file HEAD holds stays in the index', () => {
   expect(head(dir, ['ls-files', '--', PYC])).toBe(PYC)
 })
 
+const CACHE = 'kotlin/.gradle/9.7.1/gc.properties'
+const JAR = 'kotlin/build/libs/a.jar'
+
+const gradled = (): { dir: string; base: string; root: string } => {
+  const w = world()
+  const { dir, base } = checkout(w.root, 1, 'acme/widget', 'widget-12-a1')
+  mkdirSync(join(dir, 'kotlin/.gradle/9.7.1'), { recursive: true })
+  mkdirSync(join(dir, 'kotlin/build/libs'), { recursive: true })
+  writeFileSync(join(dir, 'kotlin/Main.kt'), 'fun main() {}\n')
+  writeFileSync(join(dir, CACHE), 'gc')
+  writeFileSync(join(dir, JAR), 'jar')
+  return { dir, base, root: w.root }
+}
+
+test('D2 Gradle cache and build output are not in the diff', () => {
+  const { dir, base } = gradled()
+  const diff = gitDiff(dir, base)
+  expect(diff).toContain('kotlin/Main.kt')
+  expect(diff).not.toContain('.gradle')
+  expect(diff).not.toContain('kotlin/build')
+})
+
+test('D3 a reused checkout drops an intent-to-add .gradle file', () => {
+  const { dir, base, root } = gradled()
+  head(dir, ['add', '-f', '--intent-to-add', CACHE])
+  checkout(root, 1, 'acme/widget', 'widget-12-a1')
+  expect(head(dir, ['ls-files', '--', CACHE])).toBe('')
+  expect(gitDiff(dir, base)).not.toContain('.gradle')
+})
+
+test('D4 a build/ file HEAD holds stays in the index', () => {
+  const { dir, root } = gradled()
+  head(dir, ['add', '-f', JAR])
+  head(dir, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'tracked jar'])
+  checkout(root, 1, 'acme/widget', 'widget-12-a1')
+  expect(head(dir, ['ls-files', '--', JAR])).toBe(JAR)
+})
+
 test('a kotlin/ brief builds on the kotlin seat, diffed at base', async () => {
   const w = world('warm', undefined, KOTLIN)
   approve(w.db, w.target)
@@ -1234,4 +1272,52 @@ test('D3 a plan held on one in another pipe keeps its slot', async () => {
   addPipe(w.db, { name: 'research', enabled: 1, window_start: '00:00', window_end: '23:59', max_concurrent: 1 })
   amend(w.db, MINE, { pipe_id: Number(pipeNamed(w.db, 'research')?.id) })
   expect(picks(w.db, { ...w.pipe, max_concurrent: 1 }).map((p) => p.id)).toEqual([HELD])
+})
+
+function pinned(): { origin: string; work: string; fire: (code: number) => string[]; land: (lock: string) => void } {
+  const dir = mkdtempSync(join(tmpdir(), 'cf-deps-'))
+  const [origin, work, bin, calls] = ['origin', 'work', 'bin', 'calls'].map((name) => join(dir, name)) as [string, string, string, string]
+  for (const sub of ['launchd', 'cli']) mkdirSync(join(origin, sub), { recursive: true })
+  mkdirSync(bin)
+  writeFileSync(join(origin, 'launchd/tick.sh'), readFileSync(join(import.meta.dirname, '../../launchd/tick.sh')))
+  writeFileSync(join(origin, 'cli/cf.ts'), '')
+  writeFileSync(join(bin, 'npm'), `#!/bin/sh\necho "$*" >> ${calls}\nexit $NPM_EXIT\n`, { mode: 0o755 })
+  const land = (lock: string): void => {
+    writeFileSync(join(origin, 'package-lock.json'), lock)
+    head(origin, ['add', '-A'])
+    head(origin, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', lock])
+  }
+  head(origin, ['init', '-q', '-b', 'main'])
+  land('{}\n')
+  head(dir, ['clone', '-q', origin, work])
+  const fire = (code: number): string[] => {
+    execFileSync('/bin/sh', [join(work, 'launchd/tick.sh')],
+      { env: { ...process.env, PATH: `${bin}:${process.env.PATH ?? ''}`, NPM_EXIT: String(code) } })
+    return existsSync(calls) ? readFileSync(calls, 'utf8').trim().split('\n') : []
+  }
+  return { origin, work, fire, land }
+}
+
+test('D1 D2 a changed lockfile installs once and keeps its hash', () => {
+  const { origin, work, fire, land } = pinned()
+  const sha = (): string => readFileSync(join(work, '.cf/deps.lock.sha'), 'utf8').trim()
+  expect(fire(0)).toEqual(['ci --include=dev'])
+  expect(sha()).toBe(head(origin, ['hash-object', 'package-lock.json']))
+  expect(fire(0)).toHaveLength(1)
+  land('{"v":2}\n')
+  expect(fire(0)).toEqual(['ci --include=dev', 'ci --include=dev'])
+  expect(head(work, ['rev-parse', 'HEAD'])).toBe(head(origin, ['rev-parse', 'HEAD']))
+  expect(sha()).toBe(head(origin, ['hash-object', 'package-lock.json']))
+})
+
+test('D3 a failed install steps HEAD back and logs one deps line', () => {
+  const { work, fire, land } = pinned()
+  fire(0)
+  const was = head(work, ['rev-parse', 'HEAD'])
+  const sha = readFileSync(join(work, '.cf/deps.lock.sha'), 'utf8')
+  land('{"v":2}\n')
+  expect(fire(1)).toHaveLength(2)
+  expect(head(work, ['rev-parse', 'HEAD'])).toBe(was)
+  expect(readFileSync(join(work, '.cf/deps.lock.sha'), 'utf8')).toBe(sha)
+  expect(readFileSync(join(work, '.cf/tick.log'), 'utf8').split('\n').filter((l) => l.startsWith('deps '))).toHaveLength(1)
 })

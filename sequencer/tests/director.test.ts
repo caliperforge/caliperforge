@@ -9,6 +9,7 @@ import { file, LANE } from '../../cli/plan.ts'
 import type { Packet, Provider } from '../../providers/kind.ts'
 import { load, Seat } from '../../runner/rules.ts'
 import { gates } from '../../store/approvals.ts'
+import { decision } from '../../store/ask.ts'
 import { decided, decisions, touches, type Verb } from '../../store/decisions.ts'
 import { pushedRow } from '../../store/deliverables.ts'
 import { addSetting } from '../../store/drift.ts'
@@ -21,7 +22,6 @@ import { allPlans, held, needsCeo, planById, planRows, putPlan, requeue, retry }
 import { clear } from '../../store/refusals.ts'
 import { split } from '../brief.ts'
 import { byHand, cooLite, read, woke } from '../director.ts'
-import { decision } from '../fence.ts'
 import { stop } from '../fixed.ts'
 import { hold, unhold } from '../hold.ts'
 import type { Wire } from '../push.ts'
@@ -499,7 +499,7 @@ test('record', async () => {
   expect(await prompted(db, home)).toMatch(/# Record\n\n\d+ runs, \d+ tokens, \$\d+\.\d\d\n/)
 })
 
-const WHY = 'rename schema/0036_x.sql to 0040_x.sql in src and issue.md. '.repeat(5).trim()
+const WHY = 'rewrite commit.msg to name plan 7 and its ticket. '.repeat(5).trim()
 const FIX = `---\nmove: fix\nwhy: ${WHY}\n---\n`
 
 function bySeat(packets: Packet[], reply = FIX): Provider {
@@ -533,6 +533,33 @@ test('fixFailsOnce', async () => {
   expect(plan7(db)).toMatchObject({ held_by: 'coo' })
   expect(posted).toHaveLength(1)
   expect(told(db)).toEqual([{ actor: 'director', outcome:'needs_ceo', message: expect.stringMatching(/^fix did not apply, /) as string }])
+})
+
+test('fixOutOfReach', async () => {
+  const outside = (path: string) => `\`${path}\` is outside the fixer's write_paths`
+  for (const [why, reason] of [
+    ['edit src/sequencer/x.ts to drop the guard', outside('src/sequencer/x.ts')],
+    ['run gh issue create for the gap', 'the fixer has no git and no GitHub'],
+    ['run UPDATE plans SET step = 2 in cf.db', outside('cf.db')],
+  ] as const) {
+    const { db, home } = seeded('1')
+    fixLive(db)
+    const was = plans(db)
+    const packets: Packet[] = []
+    await cooLite(db, home, row(db), bySeat(packets, `---\nmove: fix\nwhy: ${why}\n---\n`), now, () => undefined, wire())
+    expect(packets.map((p) => p.prompt.includes(`# Fence\n\nfix is refused: ${reason}. The fixer writes only issue.md`)))
+      .toEqual([false, true])
+    expect(decisions(db, 7)).toEqual([])
+    expect(plans(db)).toEqual(was)
+    expect(told(db)).toEqual([{ actor: 'director', outcome: 'needs_ceo', message: `fix: refused by the fence, ${reason}` }])
+  }
+  const { db, home } = seeded('1')
+  fixLive(db)
+  mkdirSync(join(srcDir(home, 7), '.git'), { recursive: true })
+  const packets: Packet[] = []
+  await cooLite(db, home, row(db), bySeat(packets, '---\nmove: fix\nwhy: rewrite `commit.msg`.\n---\n'), now, () => undefined, wire())
+  expect(packets.filter((p) => basename(p.transcript).startsWith('fixer'))).toHaveLength(1)
+  expect(decisions(db, 7).map((d) => d.verb)).toEqual(['ask_coo'])
 })
 
 test('returnMove', async () => {

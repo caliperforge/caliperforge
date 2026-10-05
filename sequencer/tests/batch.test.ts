@@ -5,7 +5,7 @@ import { expect, test } from 'vitest'
 import { approve as approveCard, batch, refuse as refuseCard } from '../../cli/batch.ts'
 import type { Pr } from '../../cli/gh.ts'
 import { close, settled } from '../../cli/session.ts'
-import { approvalsOf, headApproved, headDigest, refusedPush } from '../../store/approvals.ts'
+import { approvalsOf, headApproved, headDigest, refusedPush, signedHead } from '../../store/approvals.ts'
 import { deliverablesOf, newest } from '../../store/deliverables.ts'
 import { classOf, dispositionsOf } from '../../store/dispositions.ts'
 import type { Db } from '../../store/index.ts'
@@ -202,7 +202,7 @@ test('a round on an open pr pushes its branch, opening no other', async () => {
   expect(sent).toEqual([`send src ${tip(w.root, 1)}:refs/heads/widget-12-a1-next`, 'rehearse caliperforge/widget widget-12-a1-next'])
   approveCard(w.db, w.root, 'plan', 1, 'ceo')
   advance(w.db, plan(w.db, 1), 8)
-  expect(push(w.db, w.root, plan(w.db, 1), wire)).toMatchObject({ outcome: 'pass', note: `pushed widget-12-a1 onto ${URL}` })
+  expect(published(w, wire)).toMatchObject({ outcome: 'pass', note: `pushed widget-12-a1 onto ${URL}` })
   expect(sent.slice(2)).toEqual(['send src widget-12-a1', 'unrehearse caliperforge/widget widget-12-a1-next'])
 })
 
@@ -226,7 +226,9 @@ test('a fork -next HEAD lacks is folded onto, never forced', { timeout: 90_000 }
   git(['merge-base', '--is-ancestor', stale, 'HEAD'])
   approveCard(w.db, w.root, 'plan', 1, 'ceo')
   advance(w.db, plan(w.db, 1), 8)
+  const head = git(['rev-parse', 'HEAD'])
   published(w, wire)
+  expect(git(['rev-parse', 'HEAD'])).toBe(head)
   expect(sent.slice(2)).toEqual(['send src widget-12-a1', 'unrehearse caliperforge/widget widget-12-a1-next'])
   expect(sent.filter((l) => l.includes('--force') || l.includes('+refs'))).toEqual([])
 })
@@ -272,7 +274,7 @@ test('D1 D2 D3 pre-pr rounds move -next; push sends the branch', async () => {
     'open acme/widget caliperforge:widget-12-a1'])
 })
 
-async function refollowed(handback: string): Promise<{ git: (args: string[]) => string; again: () => void }> {
+async function refollowed(handback: string): Promise<{ w: World; wire: Wire; git: (args: string[]) => string; again: () => void }> {
   const w = world()
   approve(w.db, w.target)
   const src = srcDir(w.root, 1)
@@ -290,9 +292,59 @@ async function refollowed(handback: string): Promise<{ git: (args: string[]) => 
   await round('hey', 7)
   put(w.root, 1, 'step-2.handback.md', handback)
   rewind(w.db, 1, 4)
-  await round('hi', 3)
-  return { git, again: () => { next(w.root, plan(w.db, 1), 'acme/widget', wire) } }
+  await round('hello', 3)
+  return { w, wire, git, again: () => { next(w.root, plan(w.db, 1), 'acme/widget', wire) } }
 }
+
+/** Two rounds signed at step 8, then a first push whose `open` throws once, after the fold went out. */
+async function folded(): Promise<{ w: World; wire: Wire; git: (args: string[]) => string; approval: number | null }> {
+  const { w, wire, git } = await refollowed(CARRIED)
+  approveCard(w.db, w.root, 'plan', 1, 'ceo')
+  advance(w.db, plan(w.db, 1), 8)
+  const approval = signedHead(w.db, 1, headDigest(git(['rev-parse', 'HEAD'])))
+  let opens = 0
+  const flaky = { ...wire, open: (...args: Parameters<Wire['open']>): string => {
+    opens += 1
+    if (opens === 1) throw new Error('HTTP 502')
+    return wire.open(...args)
+  } }
+  expect(() => published(w, flaky)).toThrow('HTTP 502')
+  return { w, wire: flaky, git, approval }
+}
+
+test('D1 the first push sends one commit titled as the pr', async () => {
+  const { w, wire, git } = await refollowed(CARRIED)
+  approveCard(w.db, w.root, 'plan', 1, 'ceo')
+  advance(w.db, plan(w.db, 1), 8)
+  const tree = git(['rev-parse', 'HEAD^{tree}'])
+  expect(published(w, wire)).toMatchObject({ outcome: 'pass' })
+  const sent = git(['ls-remote', 'origin', 'refs/heads/widget-12-a1']).split('\t')[0] ?? ''
+  git(['merge-base', '--is-ancestor', 'refs/remotes/upstream/main', sent])
+  const log = git(['log', '--format=%B%x00', `refs/remotes/upstream/main..${sent}`]).split('\0').map((m) => m.trim()).filter((m) => m !== '')
+  expect(log).toEqual(['hello\n\nadd `hello()`.'])
+  expect(git(['rev-parse', `${sent}^{tree}`])).toBe(tree)
+})
+
+test('D2 a push resumed after open threw opens on the fold', async () => {
+  const { w, wire, git, approval } = await folded()
+  const head = git(['rev-parse', 'HEAD'])
+  expect(push(w.db, w.root, plan(w.db, 1), wire)).toMatchObject({ outcome: 'pass', note: `pushed widget-12-a1 as ${URL}` })
+  expect(git(['rev-parse', 'HEAD'])).toBe(head)
+  expect(git(['ls-remote', 'origin', 'refs/heads/widget-12-a1']).split('\t')[0]).toBe(head)
+  expect(newest(w.db, 1)).toMatchObject({ state: 'pushed', approval_id: approval, evidence: URL })
+})
+
+test('D3 a head committed after the fold is refused', async () => {
+  const { w, wire, git } = await folded()
+  const before = git(['ls-remote', 'origin', 'refs/heads/widget-12-a1'])
+  writeFileSync(join(srcDir(w.root, 1), 'src/hello.ts'), 'export const hello = (): string => "later"\n')
+  git(['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qam', 'later'])
+  const sent: string[] = []
+  expect(push(w.db, w.root, plan(w.db, 1), { ...wire, send: (...[, ref]: Parameters<Wire['send']>) => void sent.push(ref) }))
+    .toMatchObject({ outcome: 'refuse', spans: ['approvals'] })
+  expect(sent).toEqual([])
+  expect(git(['ls-remote', 'origin', 'refs/heads/widget-12-a1'])).toBe(before)
+})
 
 test('D1 D3 D4 follow-up is the summary, no upstream #, kept', async () => {
   const { git, again } = await refollowed('Renamed.\n\n---\nsummary: rename hello for #12\ndone:\n  - id: D1\n---\n')
@@ -586,7 +638,7 @@ test('a rewound lap needs a fresh card, not the first approval', async () => {
 
   approveCard(w.db, w.root, 'plan', 1, 'ceo')
   expect(approvedPlan(w.db, plan(w.db, 1))).toBe(true)
-  expect(approvalsOf(w.db, 'plan')).toHaveLength(1)
+  expect(approvalsOf(w.db, 'plan')).toHaveLength(2)
   expect(deliverablesOf(w.db, 1).at(-1)?.state).toBe('approved')
   advance(w.db, plan(w.db, 1), 8)
   expect(plan(w.db, 1).step).toBe(8)

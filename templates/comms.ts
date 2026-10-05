@@ -10,22 +10,26 @@ import type { Outcome } from '../sequencer/kind.ts'
 import { packed } from '../sequencer/pack.ts'
 import { prose } from '../sequencer/prose.ts'
 import { ran } from '../sequencer/seat.ts'
+import { staffed } from '../sequencer/staffing.ts'
 import { scripted, shift, sound, weekly } from '../sequencer/weekly.ts'
 import { get, maybe, put } from '../sequencer/workspace.ts'
 import { edited, returned } from '../store/desk.ts'
 import type { Db } from '../store/index.ts'
 import { packetOf } from '../store/packet.ts'
 import type { PlanRow } from '../store/plans.ts'
-import { DEFAULT_BUILDER, type Step } from './pr-path.ts'
+import { ROOT, type Step } from './pr-path.ts'
 
-const row = (name: string, step: number): Step =>
-  ({ step, name, seat: DEFAULT_BUILDER, fires: 'kernel', runs: name, gate: false, writes_verdict: false, verdict_gate: null })
+const SEATED = new Set(['draft', 'text_review', 'grow'])
+
+function row(name: string, step: number): Step {
+  const seat = staffed(ROOT, 'comms', step, null)?.seat
+  if (seat === undefined) throw new Error(`comms step ${String(step)} ${name} has no seat in rules/staffing.yaml`)
+  const fires = SEATED.has(name) ? 'seat' : 'kernel'
+  return { step, name, seat, fires, runs: fires === 'seat' ? seat : name, gate: false, writes_verdict: false, verdict_gate: null }
+}
 
 /** A merge signal opens one of these. P7 fills the write-up and its voice fixtures. */
-export const steps: Step[] = ['gather', 'draft', 'facts', 'text_review', 'desk', 'publish', 'capture', 'grow', 'pack', 'score'].map((name, i) =>
-  name === 'grow' ? { ...row(name, i), seat: 'growth_lead', fires: 'seat', runs: 'growth_lead' }
-  : name === 'draft' ? { ...row(name, i), seat: 'writer', fires: 'seat', runs: 'writer' }
-  : name === 'text_review' ? { ...row(name, i), seat: 'text_review', fires: 'seat', runs: 'text_review' } : row(name, i))
+export const steps: Step[] = ['gather', 'draft', 'facts', 'text_review', 'desk', 'publish', 'capture', 'grow', 'pack', 'score'].map((name, i) => row(name, i))
 
 export function gather(db: Db, root: string, plan: PlanRow): Outcome {
   const week = titled(db, plan, 'weekly')

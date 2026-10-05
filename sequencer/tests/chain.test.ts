@@ -114,10 +114,10 @@ test('three pre-PR rounds go out on one branch, each a plain push', async () => 
   expect(git(['ls-remote', 'origin', 'refs/heads/widget-12-a1-next']).split('\t')[0]).toBe(tip(w.root, 1))
 })
 
-test('Tight reads the PR text the card set, and never the handback', async () => {
+test('step 3 passes a person\'s pr.md prose, never the handback', async () => {
   const told = 'Updated `src/hello.ts` so hello() says hey.\n\n' + CARRIED
   const w = ready()
-  put(w.root, 1, 'pr.md', 'Addresses #12.\n\n## Summary\n\n- `hello()` says hey.\n')
+  put(w.root, 1, 'pr.md', 'Addresses #12.\n\n## Summary\n\n- Updated `src/hello.ts` so hello() says hey.\n')
   const fired = await tick(w.db, w.root, stub(told, 0, undefined, writes), undefined, undefined, watched([], w.root, 1), 5)
   expect(fired.find((f) => f.step === 3)).toMatchObject({ outcome: 'pass' })
 

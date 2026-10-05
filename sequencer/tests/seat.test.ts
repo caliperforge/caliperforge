@@ -5,8 +5,9 @@ import { parse } from 'yaml'
 import type { Packet } from '../../providers/kind.ts'
 import { seat } from '../../runner/rules.ts'
 import { newestMode, runRows } from '../../store/events.ts'
-import { at, MODED } from '../../templates/pr-path.ts'
+import { at } from '../../templates/pr-path.ts'
 import { fireLanded, ran } from '../seat.ts'
+import { staffing } from '../staffing.ts'
 import { checkout, put } from '../workspace.ts'
 import { built, CARRIED, PASS, plan, stub, world } from './world.ts'
 
@@ -28,7 +29,9 @@ test.each(['swift', 'kotlin', 'python', 'ruby', 'rust', 'go', 'php', 'lua', 'typ
     expect(mode).toBe('build')
   })
 
-test.each([...MODED])('D1 D4 %s leaves build framing to build.md', (name) => {
+const REVIEWING = [...new Set(staffing(join(import.meta.dirname, '../..')).flatMap((r) => r.mode === 'review' ? [r.seat] : []))]
+
+test.each(REVIEWING)('D1 D4 %s leaves build framing to build.md', (name) => {
   const own = readFileSync(join(import.meta.dirname, '../../seats', name, 'prompt.md'), 'utf8')
   expect(own).not.toContain('You build')
   expect(own).not.toContain('- id: D1')
@@ -50,7 +53,8 @@ test('D3 a step carrying mode ship records ship', async () => {
 
 test.each(['swift', 'kotlin', 'typescript'])('D1 at(4, %s) is the builder in review mode', (language) => {
   expect(at(4, language)).toMatchObject({ seat: `${language}_specialist`, runs: 'code_quality', mode: 'review' })
-  for (const step of [2, 5]) expect(at(step, language).mode).toBeUndefined()
+  expect(at(2, language).mode).toBe('build')
+  expect(at(5, language).mode).toBeUndefined()
   expect(at(4, 'lua').mode).toBeUndefined()
 })
 
@@ -90,7 +94,7 @@ test('D3 an outside typescript plan keeps code_quality at step 4', async () => {
 
 test('D5 each moded seat has its review-mode registry entry', () => {
   const entries = parse(readFileSync(join(import.meta.dirname, '../../rules/registry.yaml'), 'utf8')) as Record<string, unknown>[]
-  for (const name of MODED) {
+  for (const name of REVIEWING) {
     const where = `seat = '${name}' AND mode = 'review'`
     expect(entries.filter((e) => e.table === 'runs' && e.column === 'at' && e.where === where && e.gap === '7d')).toHaveLength(1)
   }

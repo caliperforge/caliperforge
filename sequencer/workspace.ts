@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { mkdirSync, existsSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
 import type { Narrowing } from '../runner/packet.ts'
-import { excluded } from './checks.ts'
+import { BUILT, excluded } from './checks.ts'
 
 /** The plan's scratch checkout. No `plans/` segment: `runner/packet.ts:admits()` bars one from a reviewer cwd. */
 export function planDir(root: string, plan: number): string {
@@ -81,6 +81,9 @@ export function doneIds(issue: string): string[] {
 
 /** The org account every target is forked into. A branch is pushed here; it is never cut from here. */
 export const FORK = 'caliperforge'
+
+/** The GitHub account that comments, claims and gets assigned on our behalf. */
+export const OPERATOR = 'michael-moffett'
 
 /** Our own repository: the tree an internal plan is branched in, and the one its PR is opened on. */
 export const SELF = `${FORK}/caliperforge`
@@ -235,9 +238,9 @@ export function checkout(root: string, plan: number, repo: string, branch: strin
   return { dir, branch, base: head }
 }
 
-/** The exclude file skips only untracked paths, so a `__pycache__/` file an earlier diff staged leaves the index here. */
+/** The exclude file skips only untracked paths, so a file in a `BUILT` folder an earlier diff staged leaves the index here. */
 function unstage(dir: string): void {
-  const built = paths(git(dir, ['ls-files', '-z', '--cached', '--ignored', '--exclude-standard', '--', ':(glob)**/__pycache__/**']))
+  const built = paths(git(dir, ['ls-files', '-z', '--cached', '--ignored', '--exclude-standard', '--', ...BUILT.map((out) => `:(glob)**/${out}**`)]))
   if (built.length === 0) return
   const kept = new Set(paths(git(dir, ['ls-tree', '-r', '-z', '--name-only', 'HEAD', '--', ...built])))
   const dropped = built.filter((path) => !kept.has(path))

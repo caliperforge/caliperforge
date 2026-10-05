@@ -1,8 +1,12 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
+import type { Packet } from '../../../providers/kind.ts'
 import { Seat, rules, seat } from '../../../runner/rules.ts'
+import { dropPlan } from '../../../store/plans.ts'
 import { section, shape } from '../../../sequencer/brief.ts'
+import { tick } from '../../../sequencer/index.ts'
+import { approve, CARRIED, internalPlan, ours, stub, world, type World } from '../../../sequencer/tests/world.ts'
 
 const root = join(import.meta.dirname, '../../..')
 
@@ -149,4 +153,31 @@ test('D4: no Seams, 16 lines, or a later heading fails', () => {
   expect(seams(`# s\n\n## Profile\n\n${rows(1)}`)).toBe(false)
   expect(seams(`# s\n\n## Seams\n\n${rows(16)}`)).toBe(false)
   expect(seams(`# s\n\n## Seams\n\n${rows(1)}\n## After\n`)).toBe(false)
+})
+
+const briefPacket = async (w: World, ready: () => void): Promise<string> => {
+  const packets: Packet[] = []
+  await tick(w.db, w.root, stub(CARRIED))
+  ready()
+  await tick(w.db, w.root, stub(CARRIED, 0, undefined, (p) => packets.push(p)))
+  return packets[0]?.prompt ?? ''
+}
+
+test('D1-D2: a Swift packet holds its Seams, not its Profile', async () => {
+  const w = world()
+  dropPlan(w.db, 1)
+  ours(w.root)
+  internalPlan(w.db, w.root, 2)
+  w.db.exec("UPDATE plans SET seat = 'swift_specialist' WHERE id = 2")
+  const swift = readFileSync(join(root, 'seats/swift_specialist/prompt.md'), 'utf8')
+  const prompt = await briefPacket(w, () => undefined)
+  expect(prompt).toContain(`\n# Seams\n\n${section(swift, '## Seams').trim()}\n`)
+  expect(prompt).not.toContain(section(swift, '## Profile').trim())
+})
+
+test('D3: a plan with no seat gets no Seams heading', async () => {
+  const w = world()
+  const prompt = await briefPacket(w, () => { approve(w.db, w.target) })
+  expect(prompt).toContain('# hello')
+  expect(prompt).not.toContain('\n# Seams\n')
 })

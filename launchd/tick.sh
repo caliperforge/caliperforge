@@ -1,6 +1,6 @@
 #!/bin/sh
 # #168. The tick runs main's bytes, never the tree a person is working in. This script lives in the
-# pinned worktree (`cf_v2_tick`), whose `cf.db`, `.cf` and `node_modules` are symlinks to the one
+# pinned worktree (`cf_v2_tick`), whose `cf.db` and `.cf` are symlinks to the one
 # canonical tree: the code is pinned, the state is shared.
 #
 # The braces are load-bearing: `sh` reads the whole group before running any of it, and the checkout
@@ -23,6 +23,7 @@
   # landed between these two lines, so FETCH_HEAD's first line was a 09-22 branch. The tick checked it out,
   # and that commit's tick.sh had no fetch, so the tree stayed there all night. The tree only moves
   # forward: a commit that is not ahead of the one it holds is left alone.
+  was=$(git rev-parse -q --verify HEAD 2>/dev/null)
   git fetch -q --no-tags origin +refs/heads/main:refs/remotes/origin/main 2>/dev/null
   main=$(git rev-parse -q --verify refs/remotes/origin/main 2>/dev/null)
   if [ -n "$main" ] && git merge-base --is-ancestor HEAD "$main" 2>/dev/null; then
@@ -37,6 +38,16 @@
   if [ -f .cf/tick.log ] && [ "$(wc -l < .cf/tick.log)" -gt 5000 ]; then
     tail -n 5000 .cf/tick.log > .cf/tick.log.tail && cat .cf/tick.log.tail > .cf/tick.log
     rm -f .cf/tick.log.tail
+  fi
+  lock=$(git hash-object package-lock.json 2>/dev/null)
+  if [ -n "$lock" ] && [ "$lock" != "$(cat .cf/deps.lock.sha 2>/dev/null)" ]; then
+    # launchd's NODE_ENV=production would drop the dev dependencies the tick imports.
+    if npm ci --include=dev >/dev/null 2>&1; then
+      echo "$lock" > .cf/deps.lock.sha
+    else
+      git checkout -q --detach "$was" 2>/dev/null
+      echo "deps npm ci failed for lockfile $lock, back on $was" >> .cf/tick.log
+    fi
   fi
   node cli/cf.ts tick >>.cf/tick.log 2>&1 &
 }

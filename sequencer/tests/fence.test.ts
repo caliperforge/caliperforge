@@ -41,6 +41,12 @@ test('listed, beside a listed file, or filled by step 3', () => {
   expect(strays(['sequencer/seat.ts'], [], '')).toEqual([])
 })
 
+test('a per-seat roster file is admitted, its neighbours are not', () => {
+  expect(strays(['rules/roster/fixer.yaml'], LISTED, '')).toEqual([])
+  const outside = ['rules/rosters/x.yaml', 'rules/registry/x.yaml']
+  expect(strays(outside, LISTED, '')).toEqual(outside)
+})
+
 test('a row owns a stray only with its reason, under its heading', () => {
   expect(strays(['cli/extra.ts'], LISTED, OWNED)).toEqual([])
   expect(strays(['cli/extra.ts'], LISTED, '## Outside the files\n\n- `cli/extra.ts`\n')).toEqual(['cli/extra.ts'])

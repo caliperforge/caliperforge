@@ -3,8 +3,6 @@ import { logged } from './events.ts'
 import type { Db } from './index.ts'
 import { held } from './leases.ts'
 import { clock, openPipes, planById, type PlanRow } from './plans.ts'
-import { FORK, SELF } from '../sequencer/workspace.ts'
-import { DEFAULT_BUILDER } from '../templates/pr-path.ts'
 
 const LANE_LABEL = /^lane:([a-z]+)$/
 
@@ -21,11 +19,11 @@ type Template = 'pr_path' | 'research' | 'comms'
  * label names one, the repo its jobs build and land in, and the pipe they queue on. A lane's pipe starts off.
  */
 export const LANE: Record<Lane, { template: Template; seat: string; home: string; pipe: string }> = {
-  machine: { template: 'pr_path', seat: DEFAULT_BUILDER, home: SELF, pipe: 'internal' },
-  atelier: { template: 'pr_path', seat: 'swift_specialist', home: `${FORK}/atelier`, pipe: 'atelier' },
-  comms: { template: 'comms', seat: DEFAULT_BUILDER, home: SELF, pipe: 'internal' },
-  research: { template: 'research', seat: DEFAULT_BUILDER, home: SELF, pipe: 'research' },
-  uniswap: { template: 'pr_path', seat: 'python_specialist', home: `${FORK}/v4-hook-index`, pipe: 'uniswap' },
+  machine: { template: 'pr_path', seat: 'typescript_specialist', home: 'caliperforge/caliperforge', pipe: 'internal' },
+  atelier: { template: 'pr_path', seat: 'swift_specialist', home: 'caliperforge/atelier', pipe: 'atelier' },
+  comms: { template: 'comms', seat: 'typescript_specialist', home: 'caliperforge/caliperforge', pipe: 'internal' },
+  research: { template: 'research', seat: 'typescript_specialist', home: 'caliperforge/caliperforge', pipe: 'research' },
+  uniswap: { template: 'pr_path', seat: 'python_specialist', home: 'caliperforge/v4-hook-index', pipe: 'uniswap' },
 }
 
 export function laneOf(labels: { name: string }[]): Lane | null {

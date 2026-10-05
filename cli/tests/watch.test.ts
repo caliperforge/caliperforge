@@ -1,15 +1,19 @@
 import { execFileSync } from 'node:child_process'
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { expect, test } from 'vitest'
+import { dirname, join, relative } from 'node:path'
+import { expect, test, vi } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
-import type { Db } from '../../store/index.ts'
+import { migrate, open, type Db } from '../../store/index.ts'
 import { receipt } from '../../store/ticks.ts'
 import { unread } from '../inbox.ts'
 import { CRASHED, down, liveness, livenessLine, watch } from '../watch.ts'
 
 const schema = join(import.meta.dirname, '../../schema')
+
+vi.mock('playwright-core', () => { throw new Error('playwright-core failed to load') })
+vi.mock('../../sequencer/workspace.ts', () => { throw new Error('sequencer/workspace.ts failed to load') })
+vi.mock('../../templates/pr-path.ts', () => { throw new Error('templates/pr-path.ts failed to load') })
 
 // 14:00Z is 08:00 in Guatemala, inside every pipe's 07:00 to 22:00 window.
 const NOW = new Date('2026-09-25T14:00:00.000Z')
@@ -94,6 +98,32 @@ test('tickLogs', async () => {
   const lines = (): string[] => readFileSync(log, 'utf8').trimEnd().split('\n')
   await expect.poll(() => lines().at(-1), { timeout: 5000 }).toBe('stub tick failed')
   expect(lines().length).toBeLessThanOrEqual(5001)
+})
+
+/** Every repo file a module loads: its relative imports and re-exports, less those erased as `import type`. */
+function loads(file: string, seen = new Set<string>()): Set<string> {
+  if (seen.has(file)) return seen
+  seen.add(file)
+  for (const m of readFileSync(file, 'utf8').matchAll(/^(?:import|export) (?!type )[^']*from '(\.[^']+)'/gm)) loads(join(dirname(file), m[1] ?? ''), seen)
+  return seen
+}
+
+test('watchLoadsAlone', async () => {
+  const repo = join(import.meta.dirname, '../..')
+  expect([...loads(join(repo, 'cli/watch-main.ts'))].map((f) => relative(repo, f)).filter((f) => /^(sequencer|templates)\//.test(f))).toEqual([])
+  const dir = mkdtempSync(join(tmpdir(), 'cf-watch-main-'))
+  cpSync(schema, join(dir, 'schema'), { recursive: true })
+  const db = open(join(dir, 'cf.db'))
+  migrate(db, join(dir, 'schema'))
+  db.exec("UPDATE pipes SET enabled = 1, window_start = '00:00', window_end = '23:59'")
+  tickAt(db, 20)
+  db.close()
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(NOW)
+  vi.spyOn(process, 'cwd').mockReturnValue(dir)
+  await import('../watch-main.ts')
+  vi.useRealTimers()
+  expect(existsSync(join(dir, '.cf/watch.alerted'))).toBe(true)
 })
 
 test('a real tick a minute ago is alive', () => {

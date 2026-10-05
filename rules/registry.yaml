@@ -1,3 +1,4 @@
+# drift files at most 3 tickets a day; the rest show in cf brief as not filed (cap)
 - name: director
   switch: { key: director.apply, value: '1' }
   table: events
@@ -19,36 +20,43 @@
   table: runs
   column: at
   where: seat = 'swift_specialist' AND mode = 'review'
+  when: SELECT 1 FROM plans p JOIN plan_files f ON f.plan = p.id WHERE p.step > 4 AND f.stray = 0 AND f.path GLOB '*.swift'
   gap: 7d
 - name: kotlin_review
   table: runs
   column: at
   where: seat = 'kotlin_specialist' AND mode = 'review'
+  when: SELECT 1 FROM plans p JOIN plan_files f ON f.plan = p.id WHERE p.step > 4 AND f.stray = 0 AND (f.path GLOB '*.kt' OR f.path GLOB '*.kts')
   gap: 7d
 - name: python_review
   table: runs
   column: at
   where: seat = 'python_specialist' AND mode = 'review'
+  when: SELECT 1 FROM plans p JOIN plan_files f ON f.plan = p.id WHERE p.step > 4 AND f.stray = 0 AND f.path GLOB '*.py'
   gap: 7d
 - name: ruby_review
   table: runs
   column: at
   where: seat = 'ruby_specialist' AND mode = 'review'
+  when: SELECT 1 FROM plans p JOIN plan_files f ON f.plan = p.id WHERE p.step > 4 AND f.stray = 0 AND f.path GLOB '*.rb'
   gap: 7d
 - name: rust_review
   table: runs
   column: at
   where: seat = 'rust_specialist' AND mode = 'review'
+  when: SELECT 1 FROM plans p JOIN plan_files f ON f.plan = p.id WHERE p.step > 4 AND f.stray = 0 AND f.path GLOB '*.rs'
   gap: 7d
 - name: go_review
   table: runs
   column: at
   where: seat = 'go_specialist' AND mode = 'review'
+  when: SELECT 1 FROM plans p JOIN plan_files f ON f.plan = p.id WHERE p.step > 4 AND f.stray = 0 AND f.path GLOB '*.go'
   gap: 7d
 - name: php_review
   table: runs
   column: at
   where: seat = 'php_specialist' AND mode = 'review'
+  when: SELECT 1 FROM plans p JOIN plan_files f ON f.plan = p.id WHERE p.step > 4 AND f.stray = 0 AND f.path GLOB '*.php'
   gap: 7d
 - name: typescript_review
   table: runs
@@ -84,14 +92,17 @@
   table: runs
   column: at
   where: seat = 'go_specialist' AND mode = 'build'
+  when: SELECT 1 FROM plans p JOIN plan_files f ON f.plan = p.id WHERE p.step > 2 AND f.stray = 0 AND f.path GLOB '*.go'
 - name: php_specialist
   table: runs
   column: at
   where: seat = 'php_specialist' AND mode = 'build'
+  when: SELECT 1 FROM plans p JOIN plan_files f ON f.plan = p.id WHERE p.step > 2 AND f.stray = 0 AND f.path GLOB '*.php'
 - name: ruby_specialist
   table: runs
   column: at
   where: seat = 'ruby_specialist' AND mode = 'build'
+  when: SELECT 1 FROM plans p JOIN plan_files f ON f.plan = p.id WHERE p.step > 2 AND f.stray = 0 AND f.path GLOB '*.rb'
 - name: python_specialist
   table: runs
   column: at
@@ -100,6 +111,7 @@
   table: runs
   column: at
   where: seat = 'lua_specialist'
+  when: SELECT 1 FROM plans p JOIN plan_files f ON f.plan = p.id WHERE p.step > 2 AND f.stray = 0 AND f.path GLOB '*.lua'
 - name: rust_specialist
   table: runs
   column: at
@@ -182,3 +194,14 @@
   column: at
   where: kind = 'examples.learned'
   gap: 7d
+- name: director_fix_reach
+  table: events
+  column: at
+  where: kind IN ('director', 'coo_lite') AND message LIKE 'fix did not apply%'
+  gap: 7d
+  expected: 0
+- name: tick_deps
+  evidence: .cf/deps.lock.sha matches main's package-lock.json
+  gap: 0h
+# launchd/com.caliperforge.watch.plist runs cli/watch-main.ts
+- name: watch

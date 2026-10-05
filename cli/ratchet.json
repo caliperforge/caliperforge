@@ -11,12 +11,21 @@
     "lines": 299,
     "prepare": 14
   },
+  "cf-lanes.ts": {
+    "lines": 228
+  },
+  "cf-plans.ts": {
+    "lines": 228
+  },
   "cf.ts": {
     "lines": 179,
     "silent-catch": 2
   },
   "digests.ts": {
     "lines": 59
+  },
+  "drift.ts": {
+    "lines": 15
   },
   "find.ts": {
     "lines": 82
@@ -26,7 +35,7 @@
     "prepare": 7
   },
   "gh.ts": {
-    "lines": 278,
+    "lines": 288,
     "silent-catch": 1
   },
   "inbox.ts": {
@@ -65,6 +74,9 @@
   "session.ts": {
     "lines": 63,
     "prepare": 1
+  },
+  "staffing.ts": {
+    "lines": 19
   },
   "tests/adopt.test.ts": {
     "prepare": 4
@@ -110,6 +122,9 @@
   },
   "tests/watch.test.ts": {
     "prepare": 5
+  },
+  "watch-main.ts": {
+    "lines": 8
   },
   "watch.ts": {
     "lines": 128,

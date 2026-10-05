@@ -5,12 +5,12 @@ import { claudeAgentSdk } from '../providers/claude-agent-sdk/index.ts'
 import { self } from '../rails/tight/index.ts'
 import { fire } from '../runner/index.ts'
 import { reviewed } from '../sequencer/ready.ts'
-import { liveTree, SELF } from '../sequencer/workspace.ts'
+import { liveTree } from '../sequencer/workspace.ts'
 import { dump, migrate, open as openDb, type Db } from '../store/index.ts'
 import { dial, hhmm, lanes, priority as setPriority, record, Reading, width, windows } from '../store/lanes.ts'
 import { refusedPush } from '../store/approvals.ts'
 import { directorDays } from '../store/decisions.ts'
-import { drifts } from '../store/drift.ts'
+import { overdue, week } from '../store/drift.ts'
 import { handUps, logged, repriced } from '../store/events.ts'
 import { holderOf, HOLDERS, overlapWaits, parked, pipeNamed } from '../store/plans.ts'
 import { backfillTickets } from '../store/tickets.ts'
@@ -19,13 +19,14 @@ import { actors, actorSection, byType, type ByType, costs, costSection, day, fil
   rulings, section, tickets, ticketSection, unpriced, waitLine, waits, windowLine } from './brief.ts'
 import { check, fill } from './digests.ts'
 import { directorSection, handUpLine } from './director.ts'
-import { driftSection } from './drift.ts'
+import { decisionSection, driftSection } from './drift.ts'
 import { flow } from './flow.ts'
 import { gh } from './gh.ts'
 import { write as writeMap } from './map.ts'
 import { ack, line, unread } from './inbox.ts'
 import { refusalDays, refusalSection } from './refusals.ts'
 import { close } from './session.ts'
+import { staffingSection, unstaffed } from './staffing.ts'
 import { liveness, livenessLine, stalledLanes } from './watch.ts'
 
 export interface Cli { root: string; db: () => Db; out: (text: string) => void }
@@ -204,7 +205,8 @@ function briefs(cf: Command, { root, db, out }: Cli): void {
     out(livenessLine(handle, liveness(handle, new Date())))
     for (const lane of stalledLanes(handle, new Date())) out(`lane\tOFF with work: ${lane}\n`)
     out(rulings(handle, root))
-    out(driftSection(drifts(handle, SELF, new Date())))
+    out(driftSection(week(handle, new Date())))
+    out(staffingSection(unstaffed(root)))
     out(laneLine(lanes(handle, hhmm(handle))))
     out(waitLine(waits(handle)) + fileWaits(overlapWaits(handle)))
     out(greptileLine(reviewed(handle, new Date())))
@@ -212,7 +214,7 @@ function briefs(cf: Command, { root, db, out }: Cli): void {
     out(section('open plans', openPlans(handle)))
     out(section('halted', halted(handle)))
     out(section('waiting on the CEO', heldBy(handle, 'ceo')))
-    out(section('needs a decision', heldBy(handle, 'coo')) + section('parked on another job', parked(handle)))
+    out(decisionSection(heldBy(handle, 'coo'), overdue(handle, new Date()), new Date()) + section('parked on another job', parked(handle)))
     const d = day(handle)
     out(`last 24 h\n  ${String(d.runs)} run(s)\t${String(d.tokens)} tokens\t${d.seconds.toFixed(1)}s\n`)
     out(costSection(costs(handle), unpriced(handle)))

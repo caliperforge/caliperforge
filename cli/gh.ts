@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import { z } from 'zod'
-import { FORK } from '../sequencer/workspace.ts'
+import { FORK, OPERATOR } from '../sequencer/workspace.ts'
 
 const Issue = z.object({
   number: z.int(),
@@ -8,7 +8,7 @@ const Issue = z.object({
   body: z.string(),
   state: z.string(),
   assignees: z.array(z.object({ login: z.string() })),
-  comments: z.array(z.object({ body: z.string() })),
+  comments: z.array(z.object({ body: z.string(), author: z.object({ login: z.string() }).nullish() })),
   closedByPullRequestsReferences: z.array(z.object({ number: z.int() })),
 })
 
@@ -51,10 +51,11 @@ export function issueComments(repo: string, no: number, read: Read = gh): IssueC
   return Thread.parse(read(['issue', 'view', String(no), '--repo', repo, '--json', 'comments'])).comments
 }
 
+/** Someone else holding the issue; our own assignment or claim is not a claim against us. */
 export function claimed(row: Issue): string | null {
-  const who = row.assignees[0]?.login
+  const who = row.assignees.find((a) => a.login !== OPERATOR)?.login
   if (who !== undefined) return `assigned to ${who}`
-  return row.comments.some((c) => CLAIM.test(c.body)) ? 'a comment claims the issue' : null
+  return row.comments.some((c) => c.author?.login !== OPERATOR && CLAIM.test(c.body)) ? 'a comment claims the issue' : null
 }
 
 export function ours(login: string | null | undefined): boolean {

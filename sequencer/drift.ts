@@ -2,7 +2,7 @@ import { join } from 'node:path'
 import { z } from 'zod'
 import type { Pr } from '../cli/gh.ts'
 import { fill } from '../cli/record.ts'
-import { holds, newest, openTicket, setting, stalled } from '../store/drift.ts'
+import { holds, newest, setting, stalled, standing, worked } from '../store/drift.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { get, hhmm, set, zone } from '../store/lanes.ts'
@@ -22,6 +22,7 @@ export const Entry = z.object({
   where: z.string().optional(),
   gap: z.string().regex(/^\d+[hd]$/).optional(),
   while: z.string().optional(),
+  when: z.string().optional(),
 })
 
 export type Entry = z.infer<typeof Entry>
@@ -43,12 +44,12 @@ function off(db: Db, { name, switch: wanted }: Entry): Drifted | null {
 }
 
 function quiet(db: Db, entry: Entry, now: Date): Drifted | null {
-  const { name, table, column, where, gap } = entry
+  const { name, table, column, where, gap, when } = entry
   if (table === undefined || column === undefined) return null
   if (entry.while !== undefined && !holds(db, entry.while)) return null
   const from = `${table}${where === undefined ? '' : ` WHERE ${where}`}`
   const last = newest(db, from, column, now)
-  if (last.newest === null) return { name, state: 'silent', detail: `no row in ${from}` }
+  if (last.newest === null) return when === undefined || worked(db, when) ? { name, state: 'silent', detail: `no row in ${from}` } : null
   if (gap === undefined || last.days === null) return null
   return last.days > days(gap) ? { name, state: 'stale', detail: `newest ${table}.${column} is ${String(last.newest)}, older than ${gap}` } : null
 }
@@ -91,14 +92,18 @@ export function stuck(db: Db, root: string, registry: Entry[], now: Date): numbe
   })
 }
 
-export function filed(db: Db, drifted: Drifted[], wire: Pick<Wire, 'file'>): string[] {
-  return drifted.flatMap(({ name, state, detail }) => {
-    const title = `Drift: ${name} is ${state}`
-    if (openTicket(db, SELF, title)) return []
+const CAP = 3
+
+export function filed(db: Db, drifted: Drifted[], wire: Pick<Wire, 'file'>, now: Date): string[] {
+  const fresh = drifted.map((d) => ({ ...d, title: `Drift: ${d.name} is ${d.state}` })).filter((d) => !standing(db, SELF, d.title, now))
+  for (const { title } of fresh.slice(CAP)) {
+    logged(db, { plan: null, kind: 'drift_capped', actor: 'drift', outcome: 'refuse', message: title, pointer: null, run: null }, now.toISOString())
+  }
+  return fresh.slice(0, CAP).map(({ name, state, detail, title }) => {
     const body = [`**What:** ${name} is ${state}: ${detail}`,
       `**Why:** rules/registry.yaml lists ${name} as a mechanism that runs`,
       `**When it ends:** drift no longer reports ${name}`, ''].join('\n')
-    return [wire.file(SELF, title, body, ['lane:machine', 'P1', 'drift'])]
+    return wire.file(SELF, title, body, ['lane:machine', 'P1', 'drift'])
   })
 }
 
@@ -109,5 +114,5 @@ export function due(db: Db, registry: Entry[], now: Date, wire: Pick<Wire, 'file
   if (day <= get(db, 'drift.at')) return []
   set(db, 'drift.at', day, 'pr', now.toISOString())
   for (const repo of repos(db)) fill(db, repo, read)
-  return filed(db, drift(db, registry, now), wire)
+  return filed(db, drift(db, registry, now), wire, now)
 }

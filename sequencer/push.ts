@@ -36,7 +36,7 @@ interface Head { dir: string; branch: string; sha: string }
 export interface Wire {
   send: (dir: string, branch: string) => void
   open: (repo: string, head: string, title: string, bodyFile: string) => string
-  close: (repo: string, no: number, sha: string) => void
+  close: (repo: string, no: number, sha: string, comment?: string) => void
   runs: Gh
   rehearse?: (fork: string, branch: string) => void
   unrehearse?: (fork: string, branch: string) => void

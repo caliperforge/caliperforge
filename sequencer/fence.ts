@@ -19,7 +19,7 @@ export function strays(touched: string[], listed: string[], handback: string): s
 
 /** A listed path, a test beside one, or a digest file step 3 fills itself. */
 function admits(listed: string[], path: string): boolean {
-  if (listed.includes(path) || path === ROSTER || path === SEED) return true
+  if (listed.includes(path) || path === ROSTER || path === SEED || path.startsWith('rules/roster/')) return true
   if (!TEST.test(path)) return false
   const dir = dirname(path)
   return listed.some((l) => {

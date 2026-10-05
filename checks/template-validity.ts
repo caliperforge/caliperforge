@@ -1,8 +1,7 @@
-import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { parse } from 'yaml'
 import { z } from 'zod'
+import { written } from '../runner/rules.ts'
 import type { Check, Finding } from './kind.ts'
 import { walk } from './tree.ts'
 
@@ -13,8 +12,6 @@ const StepList = z.array(z.object({
   writes_verdict: z.boolean(),
 })).min(1)
 
-const Roster = z.object({ seats: z.array(z.string()) })
-
 export const templateValidity: Check = {
   name: 'template-validity',
   run: (root: string) => findings(root),
@@ -22,7 +19,7 @@ export const templateValidity: Check = {
 
 async function findings(root: string): Promise<Finding[]> {
   const files = walk(join(root, 'templates'), (f) => f.endsWith('.ts'))
-  const seats = new Set(roster(root))
+  const seats = new Set(written(root).seats)
   const out: Finding[] = []
   for (const file of files) out.push(...await inFile(root, file, seats))
   return out
@@ -49,11 +46,6 @@ function order(steps: z.infer<typeof StepList>, path: string): Finding[] {
   if (!path.includes('pr_path')) return []
   const want = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].join(',')
   return steps.map((s) => s.step).join(',') === want ? [] : [finding(path, 'pr_path steps are not 0-9 in order')]
-}
-
-function roster(root: string): string[] {
-  const path = join(root, 'rules/roster.yaml')
-  return existsSync(path) ? Roster.parse(parse(readFileSync(path, 'utf8'))).seats : []
 }
 
 function finding(path: string, message: string): Finding {

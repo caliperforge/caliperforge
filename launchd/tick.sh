@@ -29,6 +29,10 @@
     git checkout -q --detach "$main" 2>/dev/null
   fi
   mkdir -p .cf
+  # launchd's PATH (the plist) has no cf; without it a seat's `cf look` is "command not found" (#879)
+  mkdir -p .cf/bin
+  printf '#!/bin/sh\nexec node "$HOME/cf_v2_tick/cli/cf.ts" "$@"\n' > .cf/bin/cf.new && chmod +x .cf/bin/cf.new && mv .cf/bin/cf.new .cf/bin/cf
+  PATH="$PWD/.cf/bin:$PATH"
   # Cut in place, never `mv`: the last minute's tick may still be appending to this file.
   if [ -f .cf/tick.log ] && [ "$(wc -l < .cf/tick.log)" -gt 5000 ]; then
     tail -n 5000 .cf/tick.log > .cf/tick.log.tail && cat .cf/tick.log.tail > .cf/tick.log

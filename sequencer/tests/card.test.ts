@@ -39,10 +39,11 @@ const rows = (w: World, kind: string): unknown[] =>
 test('D1 outside push: card written, no wire, held on step 8', async () => {
   const w = await atPush()
   const sent: string[] = []
+  const signed = headOf(w.root, 1).sha
   const held = push(w.db, w.root, plan(w.db, 1), watched(sent, w.root, 1))
   expect(held).toMatchObject({ outcome: 'pass', held: true, spans: ['card'] })
   expect(held.note).toContain('cf approve card 1')
-  expect(get(w.root, 1, 'maintainer.md')).toBe(`plan 1 at ${headOf(w.root, 1).sha}\npass\tlead\twhole issue, 1 lead(s)\npass\ttests\t+0 test / +1 code lines\npass\tconventions\tmatches the last 1 commits\npass\tsize\t2 code lines (2 in all), limit 400\npass\tprose\tclean\n${NONE}`)
+  expect(get(w.root, 1, 'maintainer.md')).toBe(`plan 1 at ${signed}\npass\tlead\twhole issue, 1 lead(s)\npass\ttests\t+0 test / +1 code lines\npass\tconventions\tmatches the last 1 commits\npass\tsize\t2 code lines (2 in all), limit 400\npass\tprose\tclean\n${NONE}`)
   expect(sent).toEqual([])
   expect(plan(w.db, 1).step).toBe(8)
 })

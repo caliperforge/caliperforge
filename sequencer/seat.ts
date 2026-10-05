@@ -30,6 +30,7 @@ import { targetOf } from './steps.ts'
 import { install, mode, type Mode } from './checks.ts'
 import { narrow } from './rails.ts'
 import { classify } from './delta.ts'
+import { looked } from './design.ts'
 import { deletions } from './fence.ts'
 import { findings } from './findings.ts'
 import { fenceFor, languageFor } from './route.ts'
@@ -391,7 +392,8 @@ function landable(db: Db, plan: PlanRow, step: Step, notes: Note[]): Note[] {
 export async function fireLanded(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
   const { outcome, notes: all } = await fireReview(db, root, plan, step, provider)
   const notes = landable(db, plan, step, all)
-  return outcome.outcome === 'pass' && notes.length > 0 ? landed(db, root, plan, step, notes) : outcome
+  const done = outcome.outcome === 'pass' && notes.length > 0 ? landed(db, root, plan, step, notes) : outcome
+  return step.design === true && done.outcome === 'pass' ? looked(db, root, plan, provider) : done
 }
 
 /** On someone else's repository the reviewer is handed its footing instead of reading for it. */

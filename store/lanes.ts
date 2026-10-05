@@ -24,7 +24,7 @@ export const LANE: Record<Lane, { template: Template; seat: string; home: string
   machine: { template: 'pr_path', seat: DEFAULT_BUILDER, home: SELF, pipe: 'internal' },
   atelier: { template: 'pr_path', seat: 'swift_specialist', home: `${FORK}/atelier`, pipe: 'atelier' },
   comms: { template: 'comms', seat: DEFAULT_BUILDER, home: SELF, pipe: 'internal' },
-  research: { template: 'research', seat: DEFAULT_BUILDER, home: SELF, pipe: 'internal' },
+  research: { template: 'research', seat: DEFAULT_BUILDER, home: SELF, pipe: 'research' },
   uniswap: { template: 'pr_path', seat: 'python_specialist', home: `${FORK}/v4-hook-index`, pipe: 'uniswap' },
 }
 

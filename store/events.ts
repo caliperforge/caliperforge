@@ -60,7 +60,7 @@ export interface Run {
   effort: string
   exit: number
   fired: Pick<Fired, 'usage' | 'seconds' | 'transcript_path' | 'session'>
-  mode?: 'build' | 'review' | 'fix' | undefined
+  mode?: 'build' | 'review' | 'fix' | 'log' | 'ship' | 'weekly' | undefined
 }
 
 // input_tokens already counts cache_write_tokens, so the uncached part is their difference.

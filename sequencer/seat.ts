@@ -233,7 +233,7 @@ const BUILD = new Set([...MODED, 'lua_specialist', 'typescript_specialist', 'out
 export async function ran(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider,
   issue: string, ours: boolean): Promise<Fired> {
   load(db, root)
-  const mode = step.step === 2 && BUILD.has(step.runs) ? 'build' : undefined
+  const mode = step.mode ?? (step.step === 2 && BUILD.has(step.runs) ? 'build' : undefined)
   const { manifest, prompt, hash } = seat(root, step.runs, mode)
   const src = srcDir(root, plan.id)
   const built = packet(manifest, prompt + noteSection(db, root, plan, step), tight(root), issue, src,

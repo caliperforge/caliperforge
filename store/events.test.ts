@@ -153,6 +153,20 @@ test('D1 runLogged writes mode, NULL when absent', () => {
   expect(mode(undefined)).toBeNull()
 })
 
+test('D1 D2 runLogged keeps writer modes, refuses draft', () => {
+  const db = fresh(join(root, 'schema'))
+  load(db, root)
+  const plan = planRow(db)
+  const { hash } = seat(root, 'typescript_specialist')
+  const mode = (m: Run['mode']): unknown => {
+    const id = runLogged(db, { plan, step: 4, seat: 'typescript_specialist', rule_hash: hash, provider: 'claude-agent-sdk', model: 'm',
+      effort: 'high', exit: 0, fired: { usage: { input: 1, cache: 0, output: 0 }, seconds: 1, transcript_path: 'x.transcript.jsonl' }, mode: m })
+    return db.prepare('SELECT mode FROM runs WHERE id = ?').pluck().get(id)
+  }
+  for (const m of ['log', 'ship', 'weekly'] as const) expect(mode(m)).toBe(m)
+  expect(() => mode('draft' as Run['mode'])).toThrow(/CHECK constraint failed: mode/)
+})
+
 test('D4 ofKind with two kinds returns both in id order', () => {
   const db = fresh(join(root, 'schema'))
   for (const kind of ['retry', 'filed', 'release', 'retry']) {

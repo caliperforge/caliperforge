@@ -65,21 +65,18 @@ test('a lane with no template reads as on, nothing queued',async () => {
     + '  pr-path\ton, nothing queued\n  comms\ton, nothing queued\n  research\ton, nothing queued\n')
 })
 
-test('a plan with no step map stays put and stops no other lane',async () => {
+test('a queued research plan steps and stops no other lane',async () => {
   const db = fresh(schema)
   dial(db, 3, AT)
   queued(db, 2, 'research', 'research')
   const root = mkdtempSync(join(tmpdir(), 'cf-pipes-'))
-  expect(await tick(db, root, stub(CARRIED), OPENS)).toEqual([])
-  expect(db.prepare("SELECT count(*) AS n FROM plans WHERE state <> 'queued'").get()).toEqual({ n: 0 })
-  expect(db.prepare('SELECT count(*) AS n FROM runs').get()).toEqual({ n: 0 })
   const would = dry(db, OPENS)
-  expect(would.would).toEqual([])
-  expect(would.quiet).toEqual([
-    { pipe: 'pr-path', live: 0, ready: 0 }, { pipe: 'comms', live: 0, ready: 0 },
-    { pipe: 'research', live: 1, ready: 0 },
-  ])
-  expect(dryLines(would)).toContain('  research\ton, 1 queued and blocked\n')
+  expect(would.would).toEqual([{ pipe: 'research', plan: 2, step: 0, template: 'research' }])
+  expect(would.quiet).toEqual([{ pipe: 'pr-path', live: 0, ready: 0 }, { pipe: 'comms', live: 0, ready: 0 }])
+  expect(dryLines(would)).toContain('  research\tplan 2\tstep 0\tresearch\twould fire\n')
+  expect(await tick(db, root, stub(CARRIED), OPENS)).toMatchObject([{ pipe: 'research', plan: 2, step: 0, name: 'question' }])
+  expect(db.prepare("SELECT count(*) AS n FROM plans WHERE state <> 'queued'").get()).toEqual({ n: 1 })
+  expect(db.prepare('SELECT count(*) AS n FROM runs').get()).toEqual({ n: 0 })
 })
 
 test('the cap goes to steppable lanes; a missed one says so',() => {

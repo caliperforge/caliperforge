@@ -171,7 +171,9 @@ function broke(db: Db, root: string, plan: PlanRow, failed: Failure): Outcome {
  */
 function rest(db: Db, root: string, plan: PlanRow, handback: string, diff: string, on: Rails): [string, () => Verdict][] {
   const src = srcDir(root, plan.id)
-  const name = builder(languageFor(db, plan, src))
+  const language = languageFor(db, plan, src)
+  const name = builder(language)
+  if (name === null) throw new Error(`no ${String(language)} build seat`)
   const fence = fenceFor(db, plan.id, seat(root, name).manifest.write_paths)
   const ours = on?.fence === true
   const outside = ours

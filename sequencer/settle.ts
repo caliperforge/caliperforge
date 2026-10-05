@@ -10,7 +10,7 @@ import { busy } from '../store/now.ts'
 import { advance, back, end, finish, internal, needsCeo, rewind, type PipeRow, type PlanRow, waiting } from '../store/plans.ts'
 import { blipped, peer, refused } from '../store/refusals.ts'
 import { draft, grow, review } from '../templates/comms.ts'
-import type { Step } from '../templates/pr-path.ts'
+import { builder, type Step } from '../templates/pr-path.ts'
 import { answered, check, gather } from '../templates/research.ts'
 import type { Fired, Outcome } from './kind.ts'
 import { parted } from './split.ts'
@@ -32,7 +32,7 @@ export async function stepped(db: Db, root: string, pipe: PipeRow, plan: PlanRow
   const step = mapOf(plan.template).at(plan.step, tree.language)
   const mark = newestRun(db)
   const verdicts = newestVerdict(db)
-  const outcome = tree.failed ?? await made(db, root, plan, step, provider, wire, read)
+  const outcome = tree.failed ?? seatless(plan, step, tree.language) ?? await made(db, root, plan, step, provider, wire, read)
   const state = settle(db, root, plan, step, outcome)
   logged(db, { plan: plan.id, kind: step.name, actor: step.runs, outcome: outcome.outcome, message: outcome.note,
     pointer: pointer(db, plan.id, step, verdicts), run: runSince(db, plan.id, step.step, mark) })
@@ -49,6 +49,11 @@ export async function stepped(db: Db, root: string, pipe: PipeRow, plan: PlanRow
     ...(outcome.held === true ? { held: true as const } : {}),
   }
   return { fired, wait: outcome.held === true || outcome.blip === true }
+}
+
+function seatless(plan: PlanRow, step: Step, language: string | null): Outcome | null {
+  if (plan.template !== 'pr_path' || step.fires !== 'seat' || builder(language) !== null) return null
+  return { outcome: 'needs_ceo', spans: ['staffing'], note: `no ${String(language)} ${String(step.mode)} seat` }
 }
 
 function newestVerdict(db: Db): number {

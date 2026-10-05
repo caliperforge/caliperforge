@@ -35,10 +35,10 @@ test('a rebuild lists every case, carrying untouched rows forward', () => {
   )
 })
 
-test('a kotlin tree picks this seat, anything else the default', () => {
+test('a kotlin tree picks this seat, an unknown language none', () => {
   expect(builder('kotlin')).toBe('kotlin_specialist')
   expect(builder(null)).toBe('typescript_specialist')
-  expect(builder('cobol')).toBe('typescript_specialist')
+  expect(builder('cobol')).toBe(null)
 })
 
 test('write_paths admit the kotlin module and refuse the rest', () => {

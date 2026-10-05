@@ -64,11 +64,11 @@ export function day(db: Db): Day {
     FROM runs WHERE julianday(at) >= julianday('now', '-1 day')`).get() as Day
 }
 
-const ACTORS = ['ceo', 'coo', 'coo_lite', 'orchestrator', 'fixer'] as const
+const ACTORS = ['ceo', 'coo', 'director', 'orchestrator', 'fixer'] as const
 
 type Actor = typeof ACTORS[number]
 
-const SEATED: readonly Actor[] = ['coo_lite', 'orchestrator', 'fixer']
+const SEATED: readonly Actor[] = ['director', 'orchestrator', 'fixer']
 
 interface ActorRow {
   actor: Actor
@@ -79,14 +79,15 @@ interface ActorRow {
 
 export function actors(db: Db, now: Date): ActorRow[] {
   const at = now.toISOString()
-  const kinds = db.prepare(`SELECT actor, kind, count(*) AS n FROM events
-    WHERE julianday(at) >= julianday(?, '-1 day') GROUP BY actor, kind ORDER BY kind`)
+  const kinds = db.prepare(`SELECT CASE actor WHEN 'coo_lite' THEN 'director' ELSE actor END AS actor, kind, count(*) AS n FROM events
+    WHERE julianday(at) >= julianday(?, '-1 day') GROUP BY 1, kind ORDER BY kind`)
     .all(at) as { actor: string; kind: string; n: number }[]
-  const runs = db.prepare(`SELECT seat, count(*) AS runs, coalesce(sum(cost_usd), 0) AS cost FROM runs
-    WHERE NOT (${BUILT}) AND julianday(at) >= julianday(?, '-1 day') GROUP BY seat`)
+  const runs = db.prepare(`SELECT CASE seat WHEN 'coo_lite' THEN 'director' ELSE seat END AS seat, count(*) AS runs,
+    coalesce(sum(cost_usd), 0) AS cost FROM runs
+    WHERE NOT (${BUILT}) AND julianday(at) >= julianday(?, '-1 day') GROUP BY 1`)
     .all(at) as { seat: string; runs: number; cost: number }[]
-  const scored = db.prepare(`SELECT actor, outcome, count(*) AS n FROM outcomes
-    WHERE julianday(at) >= julianday(?, '-7 day') GROUP BY actor, outcome`)
+  const scored = db.prepare(`SELECT CASE actor WHEN 'coo_lite' THEN 'director' ELSE actor END AS actor, outcome, count(*) AS n FROM outcomes
+    WHERE julianday(at) >= julianday(?, '-7 day') GROUP BY 1, outcome`)
     .all(at) as { actor: string; outcome: 'held' | 'missed' | 'open'; n: number }[]
   return ACTORS.map((actor) => ({
     actor,

@@ -96,7 +96,7 @@ function seeded(apply: string | null) {
   db.exec(readFileSync(join(repo, 'runner/tests/fixtures/waiting.sql'), 'utf8'))
   db.exec("UPDATE plans SET state = 'blocked_on_ceo', wait_reason = NULL WHERE id = 7")
   if (apply !== null) {
-    addSetting(db, { key: 'coo_lite.apply', value: apply, who: 'ceo', origin_kind: 'ruling', origin_ref: 't', set_at: '2026-09-27' })
+    addSetting(db, { key: 'director.apply', value: apply, who: 'ceo', origin_kind: 'ruling', origin_ref: 't', set_at: '2026-09-27' })
   }
   const approval = gates(db, 7, 'd'.repeat(64))
   pushedRow(db, { plan: 7, step: 6, seat: 'typescript_specialist', diff_digest: 'd'.repeat(64),
@@ -131,7 +131,7 @@ function wire(): Wire {
 const row = (db: Db) => planById(db, 7)
 const plan7 = (db: Db) => planRows(db).find((p) => p.id === 7)
 const plans = (db: Db) => planRows(db)
-const told = (db: Db) => ofKind(db, 'coo_lite').map(({ actor, outcome, message }) => ({ actor, outcome, message }))
+const told = (db: Db) => ofKind(db, 'director').map(({ actor, outcome, message }) => ({ actor, outcome, message }))
 
 const run = (db: Db, home: string, reply: string, posted: string[] = []) =>
   cooLite(db, home, row(db), stub(reply), now, (t) => void posted.push(t), wire())
@@ -142,7 +142,7 @@ test.each(Object.keys(REPLY))('live %s leaves plan 7 as its cf call does on a tw
   await run(live.db, live.home, REPLY[move] ?? '')
   TWIN[move]?.(twin.db, twin.home)
   expect(plan7(live.db)).toEqual(plan7(twin.db))
-  expect(told(live.db)).toEqual([{ actor: 'coo_lite', outcome: move === 'ask_ceo' ? 'needs_ceo' : 'pass', message: expect.stringMatching(new RegExp(`^${move}: `)) as string }])
+  expect(told(live.db)).toEqual([{ actor: 'director', outcome: move ==='ask_ceo' ? 'needs_ceo' : 'pass', message: expect.stringMatching(new RegExp(`^${move}: `)) as string }])
 })
 
 test('live ask_ceo hands plan 7 to the ceo with no parked.md', async () => {
@@ -156,10 +156,10 @@ test('live ask_ceo hands plan 7 to the ceo with no parked.md', async () => {
 test.each([['file', 'https://github.com/caliperforge/caliperforge/issues/900'], ['rule', null]])('D2 live %s logs pointer %s', async (move, pointer) => {
   const { db, home } = seeded('1')
   await run(db, home, REPLY[move] ?? '')
-  expect(pointers(db, 'coo_lite')).toEqual([pointer])
+  expect(pointers(db, 'director')).toEqual([pointer])
 })
 
-const answer = () => `## Answer from the coo_lite (${new Date().toISOString().slice(0, 10)})\n\nbuild on main, not on plan 8\n`
+const answer = () => `## Answer from the director (${new Date().toISOString().slice(0, 10)})\n\nbuild on main, not on plan 8\n`
 
 test('D1: a built plan\'s rule goes in issue.md and back to step 2', async () => {
   const { db, home } = seeded('1')
@@ -174,7 +174,7 @@ test('D2: an unbuilt plan\'s rule goes in ask.md, back to its lane', async () =>
   const twin = seeded('1')
   for (const { db } of [live, twin]) db.exec('DELETE FROM runs; UPDATE plans SET step = 1 WHERE id = 7')
   await run(live.db, live.home, REPLY.rule ?? '')
-  unhold(twin.db, twin.home, 7, 'coo_lite')
+  unhold(twin.db, twin.home, 7, 'director')
   expect(maybe(live.home, 7, 'ask.md')).toBe(`the ask\n\n${answer()}`)
   expect(plan7(live.db)).toEqual(plan7(twin.db))
   expect(row(live.db).step).toBe(1)
@@ -233,9 +233,9 @@ test('an upstream-key stop gets the pinned read tool and its keys', async () => 
   expect(basename(packets[0]?.transcript ?? '')).toBe('director.pending.transcript.jsonl')
   expect(Object.keys(packets[0]?.servers ?? {})).toEqual(['github'])
   expect(packets[0]?.prompt).toContain('mcp__github__read')
-  expect(told(db)).toEqual([{ actor: 'coo_lite', outcome: 'pass', message: 'rule: the pinned read settles it' }])
+  expect(told(db)).toEqual([{ actor: 'director', outcome:'pass', message: 'rule: the pinned read settles it' }])
   const day = new Date().toISOString().slice(0, 10)
-  expect(maybe(home, 7, 'issue.md')).toBe(`# Issue\n\nthe brief\n\n## Answer from the coo_lite (${day})\n\n${keys}\n\n## Standing\n\n- no forced push\n`)
+  expect(maybe(home, 7, 'issue.md')).toBe(`# Issue\n\nthe brief\n\n## Answer from the director (${day})\n\n${keys}\n\n## Standing\n\n- no forced push\n`)
   expect(row(db).step).toBe(2)
 })
 
@@ -252,19 +252,20 @@ test('failedMoveToCoo', async () => {
   await run(db, home, '---\nmove: rule\nwhy: the path settles it\nanswer: read /etc/x\n---\n')
   expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'coo' })
   expect(maybe(home, 7, 'parked.md')).toBeNull()
-  expect(told(db)).toEqual([{ actor: 'coo_lite', outcome: 'needs_ceo',
+  expect(told(db)).toEqual([{ actor: 'director', outcome:'needs_ceo',
     message: 'rule did not apply, the answer names a path a ruling may not carry: the path settles it' }])
 })
 
-test.each([[null], ['0']])('shadow (coo_lite.apply %s): no plan row changes and the proposal is in the inbox', async (apply) => {
+test.each([[null], ['0']])('shadow (director.apply %s): only proposes, in the inbox', async (apply) => {
   for (const [move, reply] of Object.entries(REPLY)) {
     const { db, home } = seeded(apply)
+    addSetting(db, { key: 'coo_lite.apply', value: '1', who: 'ceo', origin_kind: 'ruling', origin_ref: 't', set_at: '2026-09-27' })
     const was = plans(db)
     const posted: string[] = []
     await run(db, home, reply, posted)
     expect(plans(db)).toEqual(was)
     expect(posted).toEqual([])
-    expect(all(home).at(-1)).toMatchObject({ kind: 'blocked', name: 'coo_lite', note: expect.stringMatching(new RegExp(`^proposes ${move}: `)) as string })
+    expect(all(home).at(-1)).toMatchObject({ kind: 'blocked', name: 'director', note: expect.stringMatching(new RegExp(`^proposes ${move}: `)) as string })
     expect(told(db).map((t) => t.outcome)).toEqual(['needs_ceo'])
   }
 })
@@ -282,7 +283,7 @@ test.each([
   await run(db, home, reply, posted)
   expect(plans(db)).toEqual(was)
   expect(told(db).map((t) => t.outcome)).toEqual(['needs_ceo'])
-  expect(all(home).at(-1)).toMatchObject({ kind: 'blocked', name: 'coo_lite' })
+  expect(all(home).at(-1)).toMatchObject({ kind: 'blocked', name: 'director' })
   expect(posted).toHaveLength(1)
 })
 
@@ -363,7 +364,7 @@ test('D4: a third stop in a day goes to a person, once', async () => {
   await pile(db, home, posted)
   await pile(db, home, posted)
   expect(fires(db)).toEqual([])
-  expect(told(db).filter((t) => t.outcome === 'needs_ceo')).toEqual([{ actor: 'coo_lite', outcome: 'needs_ceo', message: 'ask_coo: coo_lite answered this plan twice today' }])
+  expect(told(db).filter((t) => t.outcome === 'needs_ceo')).toEqual([{ actor: 'director', outcome:'needs_ceo', message: 'ask_coo: director answered this plan twice today' }])
   expect(all(home).filter((e) => e.kind === 'blocked')).toHaveLength(1)
   expect(posted).toHaveLength(1)
 })
@@ -483,7 +484,7 @@ test('fixHandsOff', async () => {
   expect(decisions(db, 7).map((d) => d.verb)).toEqual(['ask_coo'])
   expect(touches(db, 7, now)).toBe(1)
   expect(row(db).state).toBe('queued')
-  expect(told(db)).toEqual([{ actor: 'coo_lite', outcome: 'pass', message: `fix: ${WHY}` }])
+  expect(told(db)).toEqual([{ actor: 'director', outcome:'pass', message: `fix: ${WHY}` }])
 })
 
 test('fixFailsOnce', async () => {
@@ -494,14 +495,14 @@ test('fixFailsOnce', async () => {
   expect(packets.map((p) => p.prompt.includes('# Fixer'))).toEqual([false, true])
   expect(plan7(db)).toMatchObject({ held_by: 'coo' })
   expect(posted).toHaveLength(1)
-  expect(told(db)).toEqual([{ actor: 'coo_lite', outcome: 'needs_ceo', message: expect.stringMatching(/^fix did not apply, /) as string }])
+  expect(told(db)).toEqual([{ actor: 'director', outcome:'needs_ceo', message: expect.stringMatching(/^fix did not apply, /) as string }])
 })
 
 test('returnMove', async () => {
   const live = seeded('1')
   const twin = seeded('1')
   await run(live.db, live.home, '---\nmove: return\nwhy: a one-off network blip\n---\n')
-  afresh(twin.home, 7, returnToLane(twin.db, 7, 'coo_lite'))
+  afresh(twin.home, 7, returnToLane(twin.db, 7, 'director'))
   expect(plan7(live.db)).toEqual(plan7(twin.db))
   expect(row(live.db)).toMatchObject({ state: 'queued', step: 4 })
   for (const reply of ['---\nmove: return\nwhy: a blip\n---\n', FIX]) {
@@ -527,7 +528,7 @@ test('askCeoNeedsClass', async () => {
   const { db, home } = seeded('1')
   held(db, 7, 'coo', 'a stop')
   await run(db, home, '---\nmove: ask_ceo\nwhy: which file\n---\n')
-  expect(told(db)).toEqual([{ actor: 'coo_lite', outcome: 'needs_ceo', message: 'ask_ceo: no readable answer' }])
+  expect(told(db)).toEqual([{ actor: 'director', outcome:'needs_ceo', message: 'ask_ceo: no readable answer' }])
   expect(plan7(db)).toMatchObject({ held_by: 'coo' })
 })
 
@@ -551,7 +552,7 @@ test('D1: ask_coo on one failed fix is fenced, the next move runs', async () => 
   const prompts: string[] = []
   await cooLite(db, home, row(db), inTurn([ASK_COO, REPLY.rule ?? ''], prompts), now, () => undefined, wire())
   expect(prompts.map((p) => p.includes('# Fence\n\nask_coo is refused: 1 failed fixes'))).toEqual([false, true])
-  expect(told(db)).toEqual([{ actor: 'coo_lite', outcome: 'pass', message: 'rule: the ticket settles it' }])
+  expect(told(db)).toEqual([{ actor: 'director', outcome:'pass', message: 'rule: the ticket settles it' }])
 })
 
 test('D2: ask_coo after two failed fixes holds plan 7 for the coo', async () => {
@@ -561,7 +562,7 @@ test('D2: ask_coo after two failed fixes holds plan 7 for the coo', async () => 
   await cooLite(db, home, row(db), inTurn([ASK_COO], prompts), now, () => undefined, wire())
   expect(prompts).toHaveLength(1)
   expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'coo', held_why: 'the coo should pick' })
-  expect(told(db)).toEqual([{ actor: 'coo_lite', outcome: 'needs_ceo', message: 'ask_coo: the coo should pick' }])
+  expect(told(db)).toEqual([{ actor: 'director', outcome:'needs_ceo', message: 'ask_coo: the coo should pick' }])
 })
 
 test('D3: failed fixes on an earlier stop do not count', async () => {
@@ -624,7 +625,7 @@ test('D5: a rule writes the reading, comments once on the origin', async () => {
   const comments: [string, number, string][] = []
   await cooLite(db, home, row(db), stub(REPLY.rule ?? ''), now, () => undefined, commenting(comments))
   expect(maybe(home, 7, 'issue.md')).toContain('build on main, not on plan 8')
-  expect(comments).toEqual([['caliperforge/caliperforge', 139, 'Ruled by coo_lite on plan 7.\n\nbuild on main, not on plan 8']])
+  expect(comments).toEqual([['caliperforge/caliperforge', 139, 'Ruled by director on plan 7.\n\nbuild on main, not on plan 8']])
 })
 
 test.each([
@@ -676,7 +677,7 @@ function state(db: Db, home: string) {
 
 const wokeRuns = (db: Db) => db.prepare(`SELECT step, input_tokens, cache_read_tokens, output_tokens FROM runs
   WHERE plan = 7 AND seat = 'director'`).all()
-const wokeTold = (db: Db) => db.prepare("SELECT outcome, message FROM events WHERE plan = 7 AND kind = 'coo_lite'").all()
+const wokeTold = (db: Db) => db.prepare("SELECT outcome, message FROM events WHERE plan = 7 AND kind = 'director'").all()
 const leases = (db: Db) => db.prepare('SELECT count(*) AS n FROM leases').get()
 
 const blocked = (db: Db, home: string) => {

@@ -20,7 +20,7 @@ function seeded(step: number) {
   db.prepare("UPDATE plans SET state = 'blocked_on_ceo', wait_reason = NULL, step = ? WHERE id = 7").run(step)
   if (step === 1) db.exec('UPDATE runs SET step = 1 WHERE plan = 7')
   db.exec(`INSERT INTO settings (key, value, who, origin_kind, origin_ref, set_at) VALUES
-    ('coo_lite.apply', '1', 'ceo', 'ruling', 't', '2026-09-28'), ('fixer.mode', 'live', 'ceo', 'ruling', 't', '2026-09-28')`)
+    ('director.apply', '1', 'ceo', 'ruling', 't', '2026-09-28'), ('fixer.mode', 'live', 'ceo', 'ruling', 't', '2026-09-28')`)
   const home = mkdtempSync(join(tmpdir(), 'cf-rule-'))
   for (const dir of ['rules', 'seats']) cpSync(join(repo, dir), join(home, dir), { recursive: true })
   put(home, 7, 'ask.md', 'the ask\n')

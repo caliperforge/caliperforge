@@ -304,7 +304,7 @@ If no answer by 2026-09-28 09:00: the plan stays held`
 async function bodyAfter(...asks: [Event['outcome'], string][]): Promise<string> {
   const w = await atBatch()
   for (const [outcome, block] of asks) {
-    logged(w.db, { plan: 1, kind: 'coo_lite', actor: 'coo_lite', outcome, message: `ask_ceo: why\n\n${block}`, pointer: null, run: null })
+    logged(w.db, { plan: 1, kind: 'director', actor: 'director', outcome, message: `ask_ceo: why\n\n${block}`, pointer: null, run: null })
   }
   const desk = fake()
   signoffs(w.db, w.root, desk)
@@ -317,7 +317,7 @@ test('D1 the card shows the decision block as written', async () => {
   expect(body.replace(/```markdown[\s\S]*?\n```\n/, '').replace(/`[^`]*`/g, '')).not.toMatch(/#\d|acme\/widget|github\.com\/acme/)
 })
 
-test('D2 a plan with no coo_lite event shows no decision', async () => {
+test('D2 a plan with no director event shows no decision', async () => {
   const body = await bodyAfter()
   expect(body).not.toContain('Decide:')
   expect(body).not.toContain('The decision asked of you')

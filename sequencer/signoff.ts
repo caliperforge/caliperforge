@@ -4,7 +4,7 @@ import { parse } from '../rails/diff.ts'
 import { approve, batch, refuse, type Card } from '../cli/batch.ts'
 import type { Answer, Desk, Seen } from '../cli/gh.ts'
 import { notify, record, type Event, type Kind } from '../cli/inbox.ts'
-import { eventsOf } from '../store/events.ts'
+import { ofKind } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { needsCeo, planById, resume, rewind } from '../store/plans.ts'
 import { clear } from '../store/refusals.ts'
@@ -194,9 +194,9 @@ function unsaid(root: string, plan: number, text: string | null): string[] {
   return left.length === 0 ? [] : [`**Not in the PR text:** ${left.map((p) => code(p)).join(', ')}`, '']
 }
 
-/** The valid decision block on the plan's newest `coo_lite` event; null when that event is anything but `needs_ceo`. */
+/** The valid decision block on the plan's newest `director` event; null when that event is anything but `needs_ceo`. */
 function asked(db: Db, plan: number): string | null {
-  const last = eventsOf(db, plan, 'coo_lite').at(-1)
+  const last = ofKind(db, 'director', 'coo_lite').filter((e) => e.plan === plan).at(-1)
   if (last?.outcome !== 'needs_ceo') return null
   const read = decision(last.message)
   return 'block' in read ? read.block : null

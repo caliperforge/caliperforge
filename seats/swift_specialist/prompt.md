@@ -92,3 +92,11 @@ On our own repository:
 - New logic goes in a new file rather than growing a file past its budget.
 
 On anyone else's repository, match its comment density instead.
+
+## Seams
+
+- A screen: its view under `Atelier/Views/`, the service under `Atelier/Services/` that maps its query, and that service's test in `AtelierTests/`.
+- A new colour, type or spacing value: `Atelier/DesignSystem/Tokens.swift`.
+- A new file under `Atelier/` or `AtelierTests/` needs no `project.pbxproj` edit; only a build setting or a folder outside them touches it.
+- On a Swift package: a new `Sources/` or `Tests/` folder and its `Package.swift` target.
+- On a Swift package: the CI workflow step that builds what the tests start.

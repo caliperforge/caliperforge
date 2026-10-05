@@ -18,28 +18,29 @@ seats:
   - director
   - solidity_specialist
   - growth_lead
+  - researcher
 digests:
   typescript_specialist:
     manifest: a4ff87fd829db7a375989bb3c747d1cb6f2b59f17b47222ff1f76764d6a4c038
-    prompt: fd7a250d88a3bdec2b7cfb7bc7c9548ccc7894cf5dbb3f749fddae9a7c625ba0
+    prompt: d3ad2cabdf3913f95d9e17ac7741361a93664ab560744a8357bef1fab11a45c9
   kotlin_specialist:
     manifest: 0ac9229de8943374e26c0c570689ffcdad364ef90d0c03f6486bdc443419fd6b
-    prompt: bb1cceda063ac6f3e515879ce6e43e4f7ee7d40c238c3523c4b90468a4a7fd24
+    prompt: 51b6c76d4ee2fbe9a98beb163ced980311d8d3a32872dd9debeef7011a709adc
   swift_specialist:
     manifest: 0f91e3f2fa2e0a4fe5d8bedeb7c453d4cc4addbbe42ffd3591c4f0e0a7b18ca1
-    prompt: 442983f84be97ab63bd2980b39ce1cf5d238df42ed8ac3188cf145352944c92f
+    prompt: ddddd76fdb99fe246d756ba2dd197128433a90d45eca25a1c7a7432f711664cc
   brief_writer:
     manifest: 9f242cf80f39b12b889aa092dca097abe8d1260a8014e05f0af3bd5b8ccc86a5
-    prompt: e0b9fe5087b86112266327a389c02f079535af925204faf1105e7913be7b189f
+    prompt: bb0872d03a7ef4e7201b1cd9e2b3b9a3af0da51bbd068be4db8cef41329c0afc
   outside_specialist:
     manifest: 3897d50daa0caf59420769d972b0ed0dc67876076ba4373beeef28ba81dd33f4
-    prompt: d6a3ec151e453f6f7f5f969fb63cd9e19a06e0d2041a965f1c5c008141b0a6a3
+    prompt: a604004f11d07c30fb76a3445dbc97b3e2d371a18770944a30b4c9525547a7ac
   rust_specialist:
     manifest: 5090575dcb48be94bc22f4c8f4c7bcbca1fe02389697b1e6dd455d49e292235c
-    prompt: b9f3b66ed6bfe85f613287afcfc3b9801ba6a1c5c5f7dc1ea0d9669bcb17e532
+    prompt: d03ac7e5d2192fdba527ceb445e3963b71ab37c09d5f756034450956668a3278
   python_specialist:
     manifest: cd93446f89a0345e256335bf8665c166ceafabec78c1341f44f576bd0cd541fb
-    prompt: ea5438e70210d5405f4d5f796e7171853705a3a93330024fd8f928c298d213fd
+    prompt: b349b41f6633dc88743af0fa34f2940a630ce5cce763c6670eddfc4acd9c46bc
   ruby_specialist:
     manifest: ac857c4d8fc3b53d7d87afca059941513dd0af0370e58d6c35a663ea61738a84
     prompt: 2417dcca4e8fcd9fe221107187ca3f85813d1bece7e5c00b4153e2fc4e55c8ab
@@ -51,7 +52,7 @@ digests:
     prompt: 224711360cc575ab4e2bf3cd6c97a1901fd3cd61d4d2fad625e8f8db8a76c54c
   lua_specialist:
     manifest: a1622ce0fe5d4526ee1a9a6efc84cbf1736c092e9af1ba4ed42c53ff5e3a6aa8
-    prompt: 0ea9c68b70fafb71fd240dc6f3713d3a6fe2774ddf2c5ecdc163d993a5328649
+    prompt: 58cc79c3a6d92f6e0f60f3806d2c633fb86da09cc3449dbc5bc1c1d7a3f47b94
   web_specialist:
     manifest: 60ad61920b23c01a4ef282fcab810312a042142d77d6794727258ff9861cb647
     prompt: 86dfc1fad085e04ad1dcdd70f1e2564e86c33adfab443d753f42dc0885f9b55e
@@ -72,10 +73,13 @@ digests:
     prompt: f5644a16584e2a185d5892e4854fbaa58062f41c75e5c5a37b7f5c558014397f
   director:
     manifest: 40f5ac678e1874414f061a8af8868383cd61239dae4d610aa5a65a055422ffbe
-    prompt: a121c834538ad3456313aa57775bba4fc87fabf51733c72e8aee677b65f9a837
+    prompt: 125c4fc132f72c87cf5d5488184eee06a2760612ed19002a4d79d60c4e8bb5e4
   solidity_specialist:
     manifest: cbd0015d48c5a86d0afb2ce4d80480746b33b7e3e51a96297cdab2deb1dcfea2
     prompt: 4727a0da187517bc9910a0e6e42671e9b1cd1de53a0fed695386ce53519125cb
   growth_lead:
     manifest: 0d18f8c4ae370bad1f932526c0dc0d2eb7da1c173dcd7a347be4e540b8cd8c3d
     prompt: d73efc8a9b2726771b51bda28ea5c4e7be05b2a80fa62c5d434dd5a60d25d694
+  researcher:
+    manifest: 9797d41d05fc82b7f7eb64c3b9f9454fb52b3f9bc8b8e68f0a09635afdc0529b
+    prompt: 2a12f14af60315cecb569c6ac80ef1872a60d9ffd33a00bd74d4e696123af01d

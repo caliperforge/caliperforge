@@ -1,5 +1,6 @@
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
+import { packs } from '../../../reviews/packs.ts'
 import { Seat, rules, seat } from '../../../runner/rules.ts'
 
 const root = join(import.meta.dirname, '../../..')
@@ -18,7 +19,17 @@ test('the roster carries the seat and it loads as a rules row', () => {
 })
 
 test('the prompt tells the seat to close with the handback fence', () => {
-  expect(seat(root, 'typescript_specialist').prompt).toContain('- id: D1')
+  expect(seat(root, 'typescript_specialist', 'build').prompt).toContain('- id: D1')
+})
+
+test('D2: the build mode, not the prompt, holds the framing', () => {
+  const { prompt } = seat(root, 'typescript_specialist')
+  for (const text of ['You build', '- id: D1', 'A file the ask needs removed goes under `## Deleted`']) {
+    expect(prompt).not.toContain(text)
+  }
+  const build = seat(root, 'typescript_specialist', 'build').prompt
+  expect(build).toContain('You build against the brief below. One checkout, one step.')
+  expect(build).toContain('- id: D1')
 })
 
 test('the prompt names the row a file outside the brief needs', () => {
@@ -45,7 +56,7 @@ test('the prompt runs the ratchet test and names its budgets', () => {
 })
 
 test('a rebuild lists every case, carrying untouched rows forward', () => {
-  expect(seat(root, 'typescript_specialist').prompt).toContain(
+  expect(seat(root, 'typescript_specialist', 'build').prompt).toContain(
     "A rebuild's fence lists every case again: carry forward the rows the refusal did not touch, update the ones it did.",
   )
 })
@@ -61,4 +72,20 @@ test('the prompt carries the own-repo and outside comment rules', () => {
     '- New logic goes in a new file rather than growing a file past its budget.',
     "On anyone else's repository, match its comment density instead.",
   ]) expect(prompt).toContain(line)
+})
+
+test('D1: What to check opens the prompt with TypeScript checks', () => {
+  const { prompt } = seat(root, 'typescript_specialist')
+  expect(prompt.startsWith('# typescript_specialist\n\n## What to check\n')).toBe(true)
+  const checks = prompt.slice(0, prompt.indexOf('## Profile'))
+  for (const word of ['caller', 'import', 'Date.parse', 'second = 60', 'description', 'result: {}']) expect(checks).toContain(word)
+})
+
+test('D2: review mode reads What to check before the profile', () => {
+  const p = 'cli/x.ts'
+  const out = packs(root, `diff --git a/${p} b/${p}\n--- a/${p}\n+++ b/${p}\n@@ -1 +1 @@\n-old\n+new\n`, null)
+  const at = out.indexOf('## What to check')
+  expect(at).toBeGreaterThan(-1)
+  expect(at).toBeLessThan(out.indexOf('## Profile'))
+  expect(out).not.toContain('- id: D1')
 })

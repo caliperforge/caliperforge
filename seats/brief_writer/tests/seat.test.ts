@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { Seat, rules, seat } from '../../../runner/rules.ts'
-import { shape } from '../../../sequencer/brief.ts'
+import { section, shape } from '../../../sequencer/brief.ts'
 
 const root = join(import.meta.dirname, '../../..')
 
@@ -67,10 +67,16 @@ test('every builder of a changed type or signature is listed', () => {
   )
 })
 
-test('D5: the Estimate line, and an outside brief too big splits', () => {
+test('D5: the Estimate line, and a brief too big splits', () => {
   const prompt = seat(root, 'brief_writer').prompt.replace(/\s+/g, ' ')
   expect(prompt).toContain('Under `## Approach`, write one line `Estimate: <n> lines`: the lines the change adds and removes, not counting tests or generated files.')
-  expect(prompt).toContain('On someone else\'s repository, a brief past five files besides tests or past that repository\'s size limit is refused as more than one job: answer it with the split fence.')
+  expect(prompt).toContain('A brief past five files besides tests, on any repository, or on someone else\'s repository past that repository\'s size limit, is refused as more than one job: answer it with the split fence.')
+})
+
+test('D4: the writer counts files before it drafts', () => {
+  expect(seat(root, 'brief_writer').prompt.replace(/\s+/g, ' ')).toContain(
+    'Before you draft, count the files the change touches besides tests, every file that builds or implements a changed type included; past five, answer with the split fence first.',
+  )
 })
 
 test('the prompt states the brief check\'s path and length rules', () => {
@@ -81,6 +87,7 @@ test('the prompt states the brief check\'s path and length rules', () => {
     '`(new)` marks only a path you looked for in the checkout and did not find.',
     'The brief is at most 100 lines: count them before you answer.',
     'A `## Files` row on a file over 300 lines names the block it changes as `path:start-end`.',
+    '`# Files over 300 lines`, after the template, lists every file in the checkout that rule applies to, with its length: check each `## Files` row against it before you answer.',
   ]) expect(prompt).toContain(rule)
 })
 
@@ -122,4 +129,24 @@ test('D3: atelier.md tests only services and models', () => {
   const brief = readFileSync(join(import.meta.dirname, 'atelier.md'), 'utf8')
   expect(servicesOnly(brief)).toBe(true)
   expect(servicesOnly(brief.replace('AtelierTests/NowRowModelTests.swift', 'AtelierUITests/NowScreenUITests.swift'))).toBe(false)
+})
+
+const seams = (prompt: string): boolean => {
+  const headings = prompt.split('\n').filter((l) => l.startsWith('## '))
+  const rows = section(prompt, '## Seams').split('\n').filter((l) => l.trim() !== '')
+  return headings.at(-1) === '## Seams' && rows.length >= 1 && rows.length <= 15
+}
+
+test('D1-D3: each language prompt ends with 1 to 15 Seams lines', () => {
+  for (const language of ['typescript', 'swift', 'kotlin', 'python']) {
+    expect(seams(readFileSync(join(root, `seats/${language}_specialist/prompt.md`), 'utf8'))).toBe(true)
+  }
+})
+
+test('D4: no Seams, 16 lines, or a later heading fails', () => {
+  const rows = (n: number): string => '- row\n'.repeat(n)
+  expect(seams(`# s\n\n## Seams\n\n${rows(15)}`)).toBe(true)
+  expect(seams(`# s\n\n## Profile\n\n${rows(1)}`)).toBe(false)
+  expect(seams(`# s\n\n## Seams\n\n${rows(16)}`)).toBe(false)
+  expect(seams(`# s\n\n## Seams\n\n${rows(1)}\n## After\n`)).toBe(false)
 })

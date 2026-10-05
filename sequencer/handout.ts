@@ -1,9 +1,22 @@
-import { existsSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, lstatSync, readFileSync } from 'node:fs'
+import { join, relative } from 'node:path'
+import { walk } from '../checks/tree.ts'
 import { parse } from '../rails/diff.ts'
 
 /** Up to this many lines a file is handed whole, past it by the blocks its named lines sit in. */
 export const WHOLE = 300
+
+/** The checkout's text files past `WHOLE` lines, counted as `ranged()` counts them, for the brief writer to name by range. */
+export function long(src: string): string {
+  const rows = walk(src, () => true).filter((path) => lstatSync(path).isFile()).flatMap((path) => {
+    const text = readFileSync(path, 'utf8')
+    const n = text.split('\n').length
+    return text.includes('\0') || n <= WHOLE ? [] : [{ path: relative(src, path), n }]
+  }).sort((a, b) => a.path.localeCompare(b.path))
+  if (rows.length === 0) return ''
+  const list = rows.map(({ path, n }) => `- ${path} — ${String(n)} lines`).join('\n')
+  return `\n\n# Files over ${String(WHOLE)} lines\n\nA \`## Files\` row on one of these names the block it changes as \`path:start-end\`.\n\n${list}`
+}
 
 /** A span line of `refusal.md` that names a file: `  - src/x.ts:12 tight.restating`. */
 const SPAN = /^\s*[-*]\s*`?([A-Za-z0-9_.-]*\/[A-Za-z0-9_./-]*\.[A-Za-z0-9]+|[A-Za-z0-9_-]+\.[A-Za-z0-9]+)(?::(\d+))?/

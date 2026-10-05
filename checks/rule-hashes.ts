@@ -36,7 +36,7 @@ function unhashed(rows: { path: string }[], onDisk: Map<string, string>): Findin
 }
 
 function files(root: string): string[] {
-  return walk(join(root, 'rules'), () => true).map((p) => relative(root, p))
+  return walk(join(root, 'rules'), () => true).map((p) => relative(root, p)).filter((p) => !p.startsWith('rules/tests/'))
 }
 
 function hash(path: string): string {

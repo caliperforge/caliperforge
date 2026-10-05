@@ -1,8 +1,8 @@
-- name: coo_lite
-  switch: { key: coo_lite.apply, value: '1' }
+- name: director
+  switch: { key: director.apply, value: '1' }
   table: events
   column: at
-  where: kind = 'coo_lite'
+  where: kind IN ('director', 'coo_lite')
   gap: 2d
 - name: fixer
   switch: { key: fixer.mode, value: live }
@@ -70,6 +70,35 @@
   column: at
   where: seat = 'web_specialist'
   while: EXISTS (SELECT 1 FROM plans WHERE origin GLOB 'https://github.com/caliperforge/atelier-web/*')
+- name: design
+  table: runs
+  column: at
+  where: seat = 'design'
+  while: EXISTS (SELECT 1 FROM plans WHERE origin GLOB 'https://github.com/caliperforge/atelier-web/*' AND step > 4)
+- name: go_specialist
+  table: runs
+  column: at
+  where: seat = 'go_specialist' AND mode = 'build'
+- name: php_specialist
+  table: runs
+  column: at
+  where: seat = 'php_specialist' AND mode = 'build'
+- name: ruby_specialist
+  table: runs
+  column: at
+  where: seat = 'ruby_specialist' AND mode = 'build'
+- name: python_specialist
+  table: runs
+  column: at
+  where: seat = 'python_specialist'
+- name: lua_specialist
+  table: runs
+  column: at
+  where: seat = 'lua_specialist'
+- name: rust_specialist
+  table: runs
+  column: at
+  where: seat = 'rust_specialist'
 - name: gardener
   table: gardens
   column: day
@@ -131,6 +160,12 @@
   column: at
   where: kind = 'look'
   gap: 7d
+- name: typescript_specialist
+  table: runs
+  column: at
+  where: seat = 'typescript_specialist'
+  gap: 2d
+  while: EXISTS (SELECT 1 FROM pipes WHERE name = 'internal' AND enabled = 1)
 - name: daily_learnings
   table: desk_learnings
   column: date

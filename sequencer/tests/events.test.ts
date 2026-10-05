@@ -18,7 +18,7 @@ const runAt = (db: Db, step: number): unknown =>
 
 const verdictAt = (db: Db, step: number): string =>
   `verdicts:${String((db.prepare(`SELECT max(id) AS id FROM verdicts
-    WHERE plan = 1 AND step = ? AND kind = 'review' AND quick_lane = 0`).get(step) as { id: unknown }).id)}`
+    WHERE plan = 1 AND step = ? AND kind = 'review'`).get(step) as { id: unknown }).id)}`
 
 test('a chained lap writes one row per step, each at its runs row', async () => {
   const w = world()
@@ -54,7 +54,7 @@ test('a job past the ceiling leaves one refuse row with no run', async () => {
   const before = rows(w.db).length
   await tick(w.db, w.root, provider)
   expect(rows(w.db).slice(before)).toEqual([expect.objectContaining({ actor: 'token_ceiling', outcome: 'refuse', run: null }),
-    expect.objectContaining({ kind: 'coo_lite', outcome: 'needs_ceo', run: null })])
+    expect.objectContaining({ kind: 'director', outcome: 'needs_ceo', run: null })])
 })
 
 test('events refuse UPDATE and DELETE and keep the row', async () => {

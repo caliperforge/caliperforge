@@ -11,7 +11,7 @@ import { ran } from '../sequencer/seat.ts'
 import { get, maybe, planDir, put, srcDir } from '../sequencer/workspace.ts'
 import { runLogged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
-import { wall } from '../store/lanes.ts'
+import { observed, wall } from '../store/lanes.ts'
 import type { PlanRow } from '../store/plans.ts'
 import { byRun, pending } from '../store/transcript.ts'
 import { DEFAULT_BUILDER, type Step } from './pr-path.ts'
@@ -42,7 +42,7 @@ const row = (name: string, step: number): Step =>
 
 export const steps: Step[] = ['question', 'gather', 'check', 'review', 'record'].map((name, i) =>
   name === 'gather' ? { ...row(name, i), seat: 'researcher', fires: 'seat', runs: 'researcher' }
-  : name === 'review' ? { ...row(name, i), fires: 'seat', runs: 'senior_review' } : row(name, i))
+  : name === 'review' ? { ...row(name, i), seat: 'senior_review', fires: 'seat', runs: 'senior_review' } : row(name, i))
 
 const LINES = [['question', '**Question:**'], ['wrong_if', '**Would be wrong if:**'], ['done_when', '**Done when:**']] as const
 
@@ -76,6 +76,8 @@ export async function answered(db: Db, root: string, plan: PlanRow, step: Step, 
   const run = runLogged(db, { plan: plan.id, step: step.step, seat: step.runs, rule_hash: specHash(root, step.runs), provider: provider.name,
     model: built.packet.model, effort: built.packet.effort, exit: fired.exit, fired })
   byRun(db, run, fired.transcript_path)
+  observed(db, fired.limits)
+  if (fired.ended !== 'completed') return { outcome: 'refuse', spans: [fired.stop_reason ?? 'seat.exit'], note: `${step.runs} ${fired.ended}` }
   const judged = read(fired.text, answer)
   if (judged === null) return { outcome: 'refuse', spans: ['senior_review.fence'], note: `${step.runs} reply has no valid verdict fence` }
   if (judged.outcome === 'refuse') return { outcome: 'refuse', spans: judged.spans, note: judged.message, to: 1 }

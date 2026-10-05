@@ -18,7 +18,7 @@ import { profile } from '../store/profile.ts'
 import { observed, wall } from '../store/lanes.ts'
 import { briefed, builderRan, internal, type PlanRow } from '../store/plans.ts'
 import { byRun, opened, pending, unfinished } from '../store/transcript.ts'
-import { MODED, type Step } from '../templates/pr-path.ts'
+import type { Step } from '../templates/pr-path.ts'
 import { parse } from '../rails/diff.ts'
 import { estimate, human, pointed, references, section, shape, split, TEMPLATE, unclear, wide, WIDE, type Part } from './brief.ts'
 import { repoOf } from './ready.ts'
@@ -244,13 +244,10 @@ function askOf(root: string, plan: number): string {
   return maybe(root, plan, 'ask.md') ?? move(root, plan, 'issue.md', 'ask.md')
 }
 
-export const BUILD = new Set([...MODED, 'lua_specialist', 'outside_specialist'])
-
 export async function ran(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider,
   issue: string, ours: boolean): Promise<Fired> {
   load(db, root)
-  const mode = step.mode ?? (step.step === 2 && BUILD.has(step.runs) ? 'build' : undefined)
-  const { manifest, prompt, hash } = seat(root, step.runs, mode)
+  const { manifest, prompt, hash } = seat(root, step.runs, step.mode)
   const src = srcDir(root, plan.id)
   const built = packet(manifest, prompt + noteSection(db, root, plan, step), tight(root), issue, src,
     transcriptOf(root, plan.id, step.step), ours, fenceFor(db, plan.id, manifest.write_paths))
@@ -261,7 +258,7 @@ export async function ran(db: Db, root: string, plan: PlanRow, step: Step, provi
     wall: wall(db),
     reads: machineReads(root, plan, step.runs),
   })
-  recorded(db, plan.id, step.step, step.runs, hash, provider.name, manifest, fired, mode)
+  recorded(db, plan.id, step.step, step.runs, hash, provider.name, manifest, fired, step.mode)
   observed(db, fired.limits)
   return fired
 }

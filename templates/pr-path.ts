@@ -1,3 +1,5 @@
+import { join } from 'node:path'
+import { staffed, staffing } from '../sequencer/staffing.ts'
 import type { Run } from '../store/events.ts'
 
 type Fires ='kernel' | 'brief' | 'seat' | 'review' | 'ceo'
@@ -17,29 +19,27 @@ export interface Step {
   design?: true
 }
 
-export const MODED = new Set(['swift_specialist', 'kotlin_specialist', 'python_specialist', 'ruby_specialist',
-  'rust_specialist', 'go_specialist', 'php_specialist', 'typescript_specialist'])
+export const ROOT = join(import.meta.dirname, '..')
 
 /** The builder a target whose language names no seat of its own falls to. */
 export const DEFAULT_BUILDER = 'typescript_specialist'
 
 const BRIEF_WRITER = 'brief_writer'
 
-/** `outside` is the last resort, never the default. */
-const BUILDERS: Record<string, string> = {
-  kotlin: 'kotlin_specialist', swift: 'swift_specialist', typescript: DEFAULT_BUILDER, outside: 'outside_specialist',
-  rust: 'rust_specialist', python: 'python_specialist', ruby: 'ruby_specialist', go: 'go_specialist',
-  php: 'php_specialist', lua: 'lua_specialist', web: 'web_specialist',
+function staff(step: number, language: string | null): { seat: string; mode?: Run['mode'] } {
+  const row = staffed(ROOT, 'pr_path', step, language) ?? staffed(ROOT, 'pr_path', step, null)
+  if (row === null) throw new Error(`pr-path step ${String(step)} has no seat in rules/staffing.yaml`)
+  return row
 }
 
 /** Which seat builds: the target's language picks it. */
 export function builder(language: string | null): string {
-  return (language === null ? undefined : BUILDERS[language]) ?? DEFAULT_BUILDER
+  return staff(2, language).seat
 }
 
 /** The language whose builder is `seat`, or null when none is. */
 export function languageOfSeat(seat: string | null): string | null {
-  return Object.entries(BUILDERS).find(([, s]) => s === seat)?.[0] ?? null
+  return staffing(ROOT).find((r) => r.template === 'pr_path' && r.step === 2 && r.key !== undefined && r.seat === seat)?.key ?? null
 }
 
 export const steps: Step[] = [
@@ -61,9 +61,8 @@ export function last(step: number): boolean {
 export function at(step: number, language: string | null = null): Step {
   const found = steps.find((s) => s.step === step)
   if (found === undefined) throw new Error(`pr-path has no step ${String(step)}`)
-  if (found.fires === 'brief') return found
-  const seat = builder(language)
-  if (found.verdict_gate === 'review' && MODED.has(seat)) return { ...found, seat, mode: 'review' }
-  if (found.verdict_gate === 'review' && language === 'web') return { ...found, seat, design: true }
-  return found.fires === 'seat' ? { ...found, seat, runs: seat } : { ...found, seat }
+  const { seat, mode } = staff(step, language)
+  const seated: Step = { ...found, seat, ...(mode === undefined ? {} : { mode }) }
+  if (found.verdict_gate === 'review' && language === 'web') return { ...seated, design: true }
+  return found.fires === 'seat' ? { ...seated, runs: seat } : seated
 }

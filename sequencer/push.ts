@@ -18,6 +18,7 @@ import { profile, type Profile } from '../store/profile.ts'
 import { GREEN, onBase } from './base.ts'
 import { CHECKS, waiting, type Check, type Target } from './card.ts'
 import { npm } from './checks.ts'
+import { bind, prMessage, signedAt } from './folded.ts'
 import { red } from './failures.ts'
 import { refresh } from './install.ts'
 import { rerun as cancelled } from './rerun.ts'
@@ -373,15 +374,21 @@ export function push(db: Db, root: string, plan: PlanRow, wire: Wire = WIRE): Ou
   if (target === null) return refuse('targets', `plan ${String(plan.id)} has no target row`)
   if (!cloned(srcDir(root, plan.id))) return refuse('checkout', `plan ${String(plan.id)} has no checkout to send`)
   const head = headOf(root, plan.id)
-  const approval = signedHead(db, plan.id, headDigest(head.sha))
+  const signed = signedAt(root, plan.id, head.sha)
+  const approval = signedHead(db, plan.id, headDigest(signed))
   if (approval === null) return refuse('approvals', `no ceo approval row for ${head.branch} at ${head.sha.slice(0, 12)}`)
   const cold = unproven(db, plan.id)
   if (cold !== null) return refuse(cold, `${cold} left no passing verdict on plan ${String(plan.id)}`)
-  const text = maybe(root, plan.id, 'pr.md') ?? prBody(target.issue_no, root, plan.id, profile(root, target.repo))
+  const rules = profile(root, target.repo)
+  const text = maybe(root, plan.id, 'pr.md') ?? prBody(target.issue_no, root, plan.id, rules)
   const checks = [...CHECKS, size(target.repo), prosed(title(root, plan.id), text), merging(target.repo, wire.merged), ...(wire.card ?? [])]
-  const card = waiting(db, root, plan.id, head.sha, target, checks)
+  const card = signed === head.sha ? waiting(db, root, plan.id, signed, target, checks) : null
   if (card !== null) return card
   const open = opened(db, plan.id)
+  if (open === null && !onFork(head.dir, head.branch)) {
+    squash(root, plan.id, rules, prMessage(title(root, plan.id), text, rules))
+    bind(root, plan.id, headOf(root, plan.id).sha, signed)
+  }
   wire.send(head.dir, head.branch)
   wire.unrehearse?.(`${FORK}/${repoName(target.repo)}`, rehearsed(root, plan.id, head.branch))
   if (open !== null) {
@@ -471,9 +478,8 @@ function said(brief: string): string[] {
  * with the brief's title as its subject. The rounds' commits and any merge of
  * their main fold into it; a branch already in that shape is left alone, so a held CI keeps its head.
  */
-export function squash(root: string, plan: number, rules: Profile | null = null): void {
+export function squash(root: string, plan: number, rules: Profile | null = null, message = messageOf(root, plan, rules)): void {
   const dir = srcDir(root, plan)
-  const message = messageOf(root, plan, rules)
   git(dir, ['add', '-A', '--', '.'])
   const base = git(dir, ['merge-base', 'HEAD', MAIN]).trim()
   const count = Number(git(dir, ['rev-list', '--count', `${base}..HEAD`]).trim())

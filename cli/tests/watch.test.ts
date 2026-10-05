@@ -2,14 +2,18 @@ import { execFileSync } from 'node:child_process'
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { expect, test } from 'vitest'
+import { expect, test, vi } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
-import type { Db } from '../../store/index.ts'
+import { migrate, open, type Db } from '../../store/index.ts'
 import { receipt } from '../../store/ticks.ts'
 import { unread } from '../inbox.ts'
 import { CRASHED, down, liveness, livenessLine, watch } from '../watch.ts'
 
 const schema = join(import.meta.dirname, '../../schema')
+
+vi.mock('playwright-core', () => { throw new Error('playwright-core failed to load') })
+vi.mock('../../sequencer/workspace.ts', () => { throw new Error('sequencer/workspace.ts failed to load') })
+vi.mock('../../templates/pr-path.ts', () => { throw new Error('templates/pr-path.ts failed to load') })
 
 // 14:00Z is 08:00 in Guatemala, inside every pipe's 07:00 to 22:00 window.
 const NOW = new Date('2026-09-25T14:00:00.000Z')
@@ -94,6 +98,19 @@ test('tickLogs', async () => {
   const lines = (): string[] => readFileSync(log, 'utf8').trimEnd().split('\n')
   await expect.poll(() => lines().at(-1), { timeout: 5000 }).toBe('stub tick failed')
   expect(lines().length).toBeLessThanOrEqual(5001)
+})
+
+test('watchLoadsAlone', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cf-watch-main-'))
+  cpSync(schema, join(dir, 'schema'), { recursive: true })
+  const db = open(join(dir, 'cf.db'))
+  migrate(db, join(dir, 'schema'))
+  db.exec("UPDATE pipes SET enabled = 1, window_start = '00:00', window_end = '23:59'")
+  receipt(db, { at: new Date(Date.now() - 20 * 60000).toISOString(), hhmm: '00:00', dry: false, pipes: 1, fired: 0, exit: 0, note: 'nothing to fire' })
+  db.close()
+  vi.spyOn(process, 'cwd').mockReturnValue(dir)
+  await import('../watch-main.ts')
+  expect(existsSync(join(dir, '.cf/watch.alerted'))).toBe(true)
 })
 
 test('a real tick a minute ago is alive', () => {

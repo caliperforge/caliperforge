@@ -95,7 +95,7 @@ test('writes a verdicts row the store accepts', () => {
   expect(row).toEqual({ gate: 'ready', step: 6, kind: 'rail', outcome: 'refuse', rail_id: 'ci-green', origin_kind: 'rail', origin_ref: 'ci-green' })
 })
 
-test('a language workflow named with a suffix is the only one judged', () => {
+test('judges Kotlin CI alone', () => {
   const runs = JSON.stringify([
     { headSha: '9f2c1ab', status: 'completed', conclusion: 'success', url: 'k', workflowName: 'Kotlin CI' },
     { headSha: '9f2c1ab', status: 'completed', conclusion: 'failure', url: 'f', workflowName: 'Fork Live Gate' },

@@ -1,8 +1,12 @@
-import { join } from 'node:path'
+import { readFileSync } from 'node:fs'
+import { join, relative, sep } from 'node:path'
 import { expect, test } from 'vitest'
+import { walk } from '../checks/tree.ts'
+import { eventsOf } from './events.ts'
 import { migrate, open, type Db } from './index.ts'
 import { priority } from './lanes.ts'
-import { finish, live, overlapWaits, pipeNamed, planById, waiting, type PipeRow } from './plans.ts'
+import { addPlan, briefed, clearWaitsOn, end, finish, holdOn, live, overlapWaits, pipeNamed, planById, requeue, resume, waiting,
+  type PipeRow } from './plans.ts'
 
 const root = join(import.meta.dirname, '..')
 
@@ -107,4 +111,77 @@ test('D3 D4 overlapWaits drops finished plans, keeps queued ones', () => {
 
 test('a second started rule is refused', () => {
   expect(() => bench().prepare("INSERT INTO queue_rules (key, wording) VALUES ('started', 'again')").run()).toThrow(/UNIQUE/)
+})
+
+test('D5: end clears wait_reason and waits_on on every end', () => {
+  const db = open(':memory:')
+  migrate(db, join(root, 'schema'))
+  const plan = addPlan(db, { pipe_id: 1, target_id: null, template: 'pr_path', state: 'queued', queued_at: '2026-09-27T00:00:00.000Z',
+    lane: 'machine', seat: 'typescript_specialist', origin: 'https://github.com/caliperforge/caliperforge/issues/1', step: 0 })
+  const other = addPlan(db, { pipe_id: 1, target_id: null, template: 'pr_path', state: 'queued', queued_at: '2026-09-27T00:00:00.000Z',
+    lane: 'machine', seat: 'typescript_specialist', origin: 'https://github.com/caliperforge/caliperforge/issues/2', step: 0 })
+  const wait = (): unknown => db.prepare("UPDATE plans SET wait_reason = 'file_overlap', waits_on = ? WHERE id = ?").run(other, plan)
+  const row = (): unknown => db.prepare('SELECT state, wait_reason, waits_on FROM plans WHERE id = ?').get(plan)
+  const halts = [{ actor: 'tick', outcome: 'refuse', message: 'issue 1 closed' }]
+  wait()
+  end(db, plan, 'halted', 'issue 1 closed')
+  expect(row()).toEqual({ state: 'halted', wait_reason: null, waits_on: null })
+  expect(eventsOf(db, plan, 'halted')).toEqual(halts)
+  wait()
+  end(db, plan, 'refused')
+  expect(row()).toEqual({ state: 'refused', wait_reason: null, waits_on: null })
+  wait()
+  end(db, plan, 'done')
+  expect(row()).toEqual({ state: 'done', wait_reason: null, waits_on: null })
+  expect(eventsOf(db, plan, 'halted')).toEqual(halts)
+  expect(db.prepare('SELECT count(*) AS n FROM events').get()).toEqual({ n: 1 })
+})
+
+test('D1 D5 requeue/clearWaitsOn/holdOn/briefed set their columns', () => {
+  const db = open(':memory:')
+  migrate(db, join(root, 'schema'))
+  const plan = addPlan(db, { pipe_id: 1, target_id: null, template: 'pr_path', state: 'running', queued_at: '2026-09-27T00:00:00.000Z',
+    lane: 'machine', seat: 'typescript_specialist', origin: 'https://github.com/caliperforge/caliperforge/issues/1', step: 4 })
+  const other = addPlan(db, { pipe_id: 1, target_id: null, template: 'pr_path', state: 'queued', queued_at: '2026-09-27T00:00:00.000Z',
+    lane: 'machine', seat: 'typescript_specialist', origin: 'https://github.com/caliperforge/caliperforge/issues/2', step: 0 })
+  const row = (cols: string): unknown => db.prepare(`SELECT ${cols} FROM plans WHERE id = ?`).get(plan)
+  requeue(db, plan, 2)
+  expect(row('step, state')).toEqual({ step: 2, state: 'queued' })
+  db.prepare("UPDATE plans SET held_why = 'kept' WHERE id = ?").run(plan)
+  holdOn(db, plan, 'parked\nmore', null)
+  expect(row('state, waits_on, held_why')).toEqual({ state: 'blocked_on_ceo', waits_on: null, held_why: 'kept' })
+  holdOn(db, plan, 'waits\nmore', other)
+  expect(row('state, waits_on, held_why')).toEqual({ state: 'blocked_on_ceo', waits_on: other, held_why: 'waits' })
+  clearWaitsOn(db, plan)
+  expect(row('waits_on, held_why')).toEqual({ waits_on: null, held_why: 'waits' })
+  briefed(db, plan, { title: 't', what: 'w', why: null, ends: 'e' })
+  expect(row('title, what, why, ends')).toEqual({ title: 't', what: 'w', why: null, ends: 'e' })
+})
+
+test('D4 resume skips unblocked plans, enters blocked ones by pipe', () => {
+  const db = open(':memory:')
+  migrate(db, join(root, 'schema'))
+  db.prepare('UPDATE pipes SET max_concurrent = 1 WHERE id = 1').run()
+  const plan = (no: number, from: 'queued' | 'blocked_on_ceo'): number => addPlan(db, { pipe_id: 1, target_id: null, template: 'pr_path',
+    state: from, queued_at: '2026-09-27T00:00:00.000Z', lane: 'machine', seat: 'typescript_specialist',
+    origin: `https://github.com/caliperforge/caliperforge/issues/${String(no)}`, step: 2 })
+  const state = (id: number): unknown => (db.prepare('SELECT state FROM plans WHERE id = ?').get(id) as { state: string }).state
+  const queued = plan(1, 'queued')
+  resume(db, queued)
+  expect(state(queued)).toBe('queued')
+  const blocked = plan(2, 'blocked_on_ceo')
+  resume(db, blocked)
+  expect(state(blocked)).toBe('running')
+  const full = plan(3, 'blocked_on_ceo')
+  resume(db, full)
+  expect(state(full)).toBe('queued')
+})
+
+test('D3 no non-test .ts outside store/ and schema/ writes plans', () => {
+  const writers = walk(root, (name) => name.endsWith('.ts') && !name.endsWith('.test.ts'))
+    .map((path) => relative(root, path).split(sep))
+    .filter((parts) => !['store', 'schema'].includes(parts[0] ?? '') && !parts.includes('tests'))
+    .map((parts) => parts.join('/'))
+    .filter((path) => readFileSync(join(root, path), 'utf8').includes('UPDATE plans'))
+  expect(writers).toEqual([])
 })

@@ -1,0 +1,60 @@
+{
+  "all.ts": {
+    "lines": 30
+  },
+  "exit-code-routing.ts": {
+    "lines": 50
+  },
+  "fixture-per-rail.ts": {
+    "lines": 19
+  },
+  "kind.ts": {
+    "lines": 11
+  },
+  "manifest.ts": {
+    "lines": 18
+  },
+  "migration-order.ts": {
+    "lines": 45,
+    "silent-catch": 1
+  },
+  "origin-on-refuse.ts": {
+    "lines": 61
+  },
+  "ratchet.test.ts": {
+    "prepare": 2
+  },
+  "ratchet.ts": {
+    "lines": 108,
+    "prepare": 1
+  },
+  "reachability.ts": {
+    "lines": 27
+  },
+  "reviewer-manifests.ts": {
+    "lines": 24
+  },
+  "reviewer-not-builder.ts": {
+    "lines": 47,
+    "prepare": 1
+  },
+  "rule-hashes.ts": {
+    "lines": 48
+  },
+  "run.ts": {
+    "lines": 9
+  },
+  "sqlite.ts": {
+    "lines": 21,
+    "silent-catch": 1
+  },
+  "template-validity.ts": {
+    "lines": 60
+  },
+  "tight.ts": {
+    "lines": 86
+  },
+  "tree.ts": {
+    "lines": 26
+  }
+}

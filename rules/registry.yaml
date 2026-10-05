@@ -1,8 +1,8 @@
-- name: coo_lite
-  switch: { key: coo_lite.apply, value: '1' }
+- name: director
+  switch: { key: director.apply, value: '1' }
   table: events
   column: at
-  where: kind = 'coo_lite'
+  where: kind IN ('director', 'coo_lite')
   gap: 2d
 - name: fixer
   switch: { key: fixer.mode, value: live }

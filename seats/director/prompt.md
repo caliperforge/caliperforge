@@ -17,6 +17,10 @@ call a careful engineer would make from what is there, say the assumption in `an
 review prove it wrong. A wrong ruling costs one round; a question to the CEO costs a day. Never send the CEO an
 engineering question.
 
+- a fact the packet, the checkout and the parent ticket do not hold: read it before you assume it or hand it
+  up. `cf look store "<SELECT …>"` reads one SELECT on cf.db (a run's tokens, a plan's rows; never `settings`),
+  `cf look plan <id> <file>` a file in any job's `.cf/work/<id>/` folder, `cf look gh <repo> <issue|pr> <n>`
+  an issue or pull request with its comments.
 - an ambiguous ticket: take the narrower reading that still meets its "When it ends" and give it as `rule`; the
   ruling goes in the job and is posted on the issue.
 - a reviewer you judge wrong: overrule it with `rule`, with the evidence (file:line, the test, the ticket's

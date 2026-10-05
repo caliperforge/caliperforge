@@ -375,6 +375,40 @@ test('a wide internal brief goes back to the brief writer', async () => {
   expect(maybe(w.root, ID, 'issue.md')).toBeNull()
 })
 
+async function briefPacket(ask: string): Promise<string> {
+  const w = mine()
+  put(w.root, ID, 'ask.md', ask)
+  const prompts: string[] = []
+  const seen = (p: { prompt: string }): void => { prompts.push(p.prompt) }
+  const log: string[] = []
+  await tick(w.db, w.root, stub(CARRIED, 0, undefined, seen), undefined, undefined, watched(log, w.root, ID))
+  await tick(w.db, w.root, stub(CARRIED, 0, undefined, seen), undefined, undefined, watched(log, w.root, ID))
+  return prompts.find((p) => p.includes('The brief is exactly this')) ?? ''
+}
+
+test('D1: an ask naming six files is told to split', async () => {
+  const prompt = await briefPacket(BRIEF_OF(['a', 'b', 'c', 'd', 'e', 'f'].map((p) => `src/${p}.ts`)))
+  expect(prompt).toContain('# More than one job')
+  expect(prompt).toContain('names 6 files')
+  expect(prompt).toContain('answer with the split fence')
+})
+
+test('D2: five files plus a test, or no Files, is not told', async () => {
+  const five = await briefPacket(BRIEF_OF([...['a', 'b', 'c', 'd', 'e'].map((p) => `src/${p}.ts`), 'tests/a.test.ts']))
+  expect(five).toContain('tests/a.test.ts')
+  expect(five).not.toContain('# More than one job')
+  const none = await briefPacket('# t\n\nno files\n')
+  expect(none).toContain('no files')
+  expect(none).not.toContain('# More than one job')
+})
+
+test('D3: Files under the parent ticket are not counted', async () => {
+  const parent = BRIEF_OF(['a', 'b', 'c', 'd', 'e', 'f'].map((p) => `src/${p}.ts`))
+  const prompt = await briefPacket(`# t\n\nown text\n\n## Parent ticket\n\n${parent}`)
+  expect(prompt).toContain('## Parent ticket')
+  expect(prompt).not.toContain('# More than one job')
+})
+
 const SIX = ['a.ts', 'b.ts', 'c.ts', 'd.ts', 'e.ts', 'f.ts'].map((p) => `src/${p} (new)`)
 
 async function outside(brief: string, limit?: number): Promise<{ w: World; fired: unknown }> {

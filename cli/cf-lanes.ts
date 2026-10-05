@@ -10,7 +10,7 @@ import { dump, migrate, open as openDb, type Db } from '../store/index.ts'
 import { dial, hhmm, lanes, priority as setPriority, record, Reading, width, windows } from '../store/lanes.ts'
 import { refusedPush } from '../store/approvals.ts'
 import { directorDays } from '../store/decisions.ts'
-import { drifts } from '../store/drift.ts'
+import { capped, drifts } from '../store/drift.ts'
 import { handUps, logged, repriced } from '../store/events.ts'
 import { holderOf, HOLDERS, overlapWaits, parked, pipeNamed } from '../store/plans.ts'
 import { backfillTickets } from '../store/tickets.ts'
@@ -205,7 +205,7 @@ function briefs(cf: Command, { root, db, out }: Cli): void {
     out(livenessLine(handle, liveness(handle, new Date())))
     for (const lane of stalledLanes(handle, new Date())) out(`lane\tOFF with work: ${lane}\n`)
     out(rulings(handle, root))
-    out(driftSection(drifts(handle, SELF, new Date())))
+    out(driftSection(drifts(handle, SELF, new Date()), capped(handle, new Date())))
     out(staffingSection(unstaffed(root)))
     out(laneLine(lanes(handle, hhmm(handle))))
     out(waitLine(waits(handle)) + fileWaits(overlapWaits(handle)))

@@ -15,6 +15,10 @@ export function holds(db: Db, condition: string): boolean {
   return (db.prepare(`SELECT (${condition}) AS on_`).get() as { on_: number }).on_ === 1
 }
 
+export function worked(db: Db, select: string): boolean {
+  return db.prepare(select).get() !== undefined
+}
+
 export function newest(db: Db, from: string, column: string, now: Date): { newest: string | number | null; days: number | null } {
   return db.prepare(`SELECT max(${column}) AS newest, julianday(?) - julianday(max(${column})) AS days FROM ${from}`)
     .get(now.toISOString()) as { newest: string | number | null; days: number | null }
@@ -29,8 +33,14 @@ export function stalled(db: Db, pipes: number[]): Stalled[] {
       AND coalesce(wait_reason, '') NOT IN ('ceo_batch', 'target_approval', 'file_overlap') ORDER BY id`).all(JSON.stringify(pipes)) as Stalled[]
 }
 
-export function openTicket(db: Db, repo: string, title: string): boolean {
-  return db.prepare('SELECT 1 FROM tickets WHERE repo = ? AND title = ? AND closed_at IS NULL').get(repo, title) !== undefined
+export function standing(db: Db, repo: string, title: string, now: Date): boolean {
+  return db.prepare('SELECT 1 FROM tickets WHERE repo = ? AND title = ? AND (closed_at IS NULL OR julianday(?) - julianday(closed_at) <= 7)')
+    .get(repo, title, now.toISOString()) !== undefined
+}
+
+export function capped(db: Db, now: Date): string[] {
+  return db.prepare("SELECT message FROM events WHERE kind = 'drift_capped' AND julianday(at) >= julianday(?, '-1 day') ORDER BY id")
+    .pluck().all(now.toISOString()) as string[]
 }
 
 export interface Drift { number: number; title: string; days: number | null }

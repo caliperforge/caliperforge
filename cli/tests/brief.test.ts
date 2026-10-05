@@ -579,7 +579,13 @@ const DRIFT = 'drift (1)\n  #1\tDrift: hq is off\t2 d\n'
 test('D1 an open drift ticket is listed with its age', () => {
   const db = world()
   ticket(db, SELF, 1, 'Drift: hq is off')
-  expect(driftSection(drifts(db, SELF, NOW))).toBe(DRIFT)
+  expect(driftSection(drifts(db, SELF, NOW), [])).toBe(DRIFT)
+})
+
+test('D5 a capped title shows as not filed (cap)', () => {
+  const db = world()
+  ticket(db, SELF, 1, 'Drift: hq is off')
+  expect(driftSection(drifts(db, SELF, NOW), ['Drift: desk is off'])).toBe(`${DRIFT}  not filed (cap)\tDrift: desk is off\n`)
 })
 
 test('D2 closed, non-drift and other-repo tickets are left out', () => {
@@ -588,11 +594,11 @@ test('D2 closed, non-drift and other-repo tickets are left out', () => {
   ticket(db, SELF, 2, 'Drift: desk is off', '2026-09-19T12:00:00.000Z')
   ticket(db, SELF, 3, 'hq is off')
   ticket(db, 'acme/widget', 4, 'Drift: hq is off')
-  expect(driftSection(drifts(db, SELF, NOW))).toBe(DRIFT)
+  expect(driftSection(drifts(db, SELF, NOW), [])).toBe(DRIFT)
 })
 
 test('D3 no open drift ticket prints none', () => {
-  expect(driftSection(drifts(world(), SELF, NOW))).toBe('drift (0)\n  none\n')
+  expect(driftSection(drifts(world(), SELF, NOW), [])).toBe('drift (0)\n  none\n')
 })
 
 test('with no waiting live plan the waits line reads none', () => {

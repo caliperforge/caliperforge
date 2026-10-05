@@ -260,7 +260,7 @@ function tokenStop() {
 test('D3: a run\'s token count is ruled after a cf look store', async () => {
   const { db, home } = tokenStop()
   await cooLite(db, home, row(db), looker(db, home), now, () => undefined, wire())
-  expect(told(db)).toEqual([{ actor: 'coo_lite', outcome: 'pass', message: 'rule: cf look store read the run' }])
+  expect(told(db)).toEqual([{ actor: 'director', outcome: 'pass', message: 'rule: cf look store read the run' }])
   expect(ofKind(db, 'look')).toEqual([{ plan: 7, kind: 'look', actor: 'coo_lite', outcome: 'pass', message: LOOK }])
   expect(maybe(home, 7, 'issue.md')).toContain('plan 7 step 2 took 1000 input tokens')
   expect(plan7(db)?.held_by).not.toBe('ceo')

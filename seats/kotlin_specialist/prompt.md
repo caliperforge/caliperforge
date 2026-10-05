@@ -40,3 +40,9 @@ together in one message, never one per turn.
 
 The brief's `## Settled facts` were checked when it was written: take them as given and do not look them up
 again. Read nothing outside the checkout.
+
+## Seams
+
+- A source file under `src/main/kotlin/` and its test under `src/test/kotlin/`.
+- A new dependency or task: the Gradle build file.
+- The CI workflow step that builds what the tests start.

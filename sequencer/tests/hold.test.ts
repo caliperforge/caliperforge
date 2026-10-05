@@ -306,6 +306,7 @@ test('D4 cf hold --on waits on an open plan, refuses a closed one', () => {
   db.exec("INSERT INTO plans (id, pipe_id, template, state, queued_at, lane, seat, origin) VALUES (8, 9, 'pr_path', 'queued', '2026-09-24', 'machine', 'typescript_specialist', 'https://github.com/caliperforge/caliperforge/issues/140')")
   ran(db, home, ['hold', '7', '--by', 'ceo', '--as', 'coo', '--why', BLOCK, '--on', '8'])
   expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', waits_on: 8, held_until: null, held_by: 'ceo', held_why: DECIDE })
+  expect(logged(db)).toEqual([{ kind: 'hold', actor: 'coo', message: BLOCK }])
   ran(db, home, ['hold', '7', '--by', 'ceo', '--as', 'coo', '--why', BLOCK, '--on', '8', '--until', '2026-10-04T22:00:00Z'])
   expect(plan7(db)).toMatchObject({ waits_on: 8, held_until: '2026-10-04T22:00:00.000Z' })
   const shut = seeded()

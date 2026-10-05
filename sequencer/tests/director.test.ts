@@ -790,14 +790,15 @@ test.each([
 })
 
 test.each([
-  { why: 'the binding is stale\nmore', by: 'coo', said: 'the binding is stale', fired: 1 },
-  { why: `thinking\n${BLOCK}`, by: 'ceo', said: 'Decide: may the pull request go upstream?', fired: 0 },
-])('D4 D5 needsCeo holds on the $by', async ({ why, by, said, fired }) => {
+  { why: 'the binding is stale\nmore', by: 'coo', said: 'the binding is stale', blocks: [], fired: 1 },
+  { why: `thinking\n${BLOCK}`, by: 'ceo', said: 'Decide: may the pull request go upstream?', blocks: [BLOCK], fired: 0 },
+])('D4 D5 needsCeo holds on the $by', async ({ why, by, said, blocks, fired }) => {
   const { db, home } = wokeSeeded()
   blocked(db, home)
   db.exec("UPDATE plans SET held_by = 'ceo' WHERE id = 7")
   needsCeo(db, planById(db, 7), why)
   expect(planRows(db).find((r) => r.id === 7)).toMatchObject({ state: 'blocked_on_ceo', held_by: by, held_why: said })
+  expect(ofKind(db, 'needs_ceo').map((e) => e.message)).toEqual(blocks)
   const fires: string[] = []
   await woke(db, home, wokeStub(ASK_CEO, fires), wokeAt, () => undefined)
   expect(fires).toHaveLength(fired)

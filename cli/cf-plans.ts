@@ -142,7 +142,7 @@ function releasing(handle: Db, id: string, options: { on?: string; until?: strin
   return { on, at: options.until === undefined ? null : new Date(options.until) }
 }
 
-/** The block's Decide line: `held_why` refuses a newline (schema/0051_held_by.sql). */
+/** The block's Decide line: the `plans.held_why` CHECK refuses a newline (schema/0073_desk_scorecard.sql:54). */
 function fenced(why: string): string {
   const ceo = decision(why)
   if ('refused' in ceo) throw new Error(`hold --by ceo is refused: ${ceo.refused}`)

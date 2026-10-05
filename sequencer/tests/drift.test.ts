@@ -7,7 +7,8 @@ import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import type { Pr } from '../../cli/gh.ts'
 import { decide } from '../../store/approvals.ts'
-import { setting } from '../../store/drift.ts'
+import { capped, setting } from '../../store/drift.ts'
+import { listed } from '../../store/files.ts'
 import type { Db } from '../../store/index.ts'
 import { ratchetRules } from '../../store/lanes.ts'
 import { propose } from '../../store/proposals.ts'
@@ -30,6 +31,11 @@ function db(enabled = 1): Db {
     VALUES ((SELECT min(id) FROM pipes), 'pr_path', 'queued', '2026-10-01', 'machine', 'typescript_specialist', 'https://github.com/a/b/issues/1', 0, 3);
     INSERT INTO settings (key, value, who, origin_kind, origin_ref, set_at) VALUES ('director.apply', '1', 'ceo', 'ruling', 'r', '2026-10-01')`)
   return d
+}
+
+function work(d: Db, step: number, path: string): void {
+  d.exec(`UPDATE plans SET step = ${String(step)} WHERE id = 1`)
+  listed(d, 1, path)
 }
 
 function event(d: Db, at: string, kind = 'director'): void {
@@ -148,6 +154,7 @@ test('D2 go_specialist is silent until a build run, at any age', () => {
       VALUES (1, 2, 'go_specialist', '${hash}', 'claude-agent-sdk', 'm', 'high', 0, 0, 0, 0, 0, '2026-01-01 10:00:00', '${mode}', 'x.transcript.jsonl')`)
   }
   const silent = [{ name: 'go_specialist', state: 'silent', detail: "no row in runs WHERE seat = 'go_specialist' AND mode = 'build'" }]
+  work(d, 3, 'main.go')
   expect(drift(d, go, NOW)).toEqual(silent)
   ran('fix')
   expect(drift(d, go, NOW)).toEqual(silent)
@@ -159,6 +166,7 @@ test('D4 each outside seat is silent until its first run', () => {
   for (const name of ['python_specialist', 'lua_specialist', 'rust_specialist']) {
     const entry = REGISTRY.filter((e) => e.name === name)
     const d = db()
+    work(d, 3, 'main.lua')
     expect(drift(d, entry, NOW)).toEqual([{ name, state: 'silent', detail: `no row in runs WHERE seat = '${name}'` }])
     d.exec(`INSERT INTO rules (id, kind, path, content_hash, loaded_at) VALUES ('${name}', 'card', 'rules/roster.yaml', '${'0'.repeat(64)}', '2026-09-22');
       INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort,
@@ -270,10 +278,43 @@ test('fileOnce', () => {
   d.exec(`INSERT INTO tickets (repo, number, title, lane) VALUES ('${SELF}', 1, 'Drift: hq is off', 'machine');
     INSERT INTO tickets (repo, number, title, lane, closed_at) VALUES ('${SELF}', 2, 'Drift: desk is off', 'machine', '2026-10-01')`)
   const rows = [{ name: 'hq', state: 'off', detail: 'd' }, { name: 'desk', state: 'off', detail: 'd' }] as const
-  expect(filed(d, [...rows], wire)).toEqual(['u1'])
+  expect(filed(d, [...rows], wire, new Date('2026-10-09T10:00:00Z'))).toEqual(['u1'])
   expect(sent).toEqual([[SELF, 'Drift: desk is off', '**What:** desk is off: d\n' +
     '**Why:** rules/registry.yaml lists desk as a mechanism that runs\n**When it ends:** drift no longer reports desk\n',
   ['lane:machine', 'P1', 'drift']]])
+})
+
+test('silentNeedsWork', () => {
+  const go = REGISTRY.filter((e) => e.name === 'go_review')
+  const d = db()
+  expect(drift(d, go, NOW)).toEqual([])
+  work(d, 5, 'main.go')
+  expect(drift(d, go, NOW)).toEqual([{ name: 'go_review', state: 'silent', detail: "no row in runs WHERE seat = 'go_specialist' AND mode = 'review'" }])
+})
+
+function titled(sent: string[][]): { file: (repo: string, title: string) => string } {
+  return { file: (repo, title) => String(sent.push([repo, title])) }
+}
+
+const off = (name: string): { name: string; state: 'off'; detail: string } => ({ name, state: 'off', detail: 'd' })
+const sends = (names: string[]): string[][] => names.map((n) => [SELF, `Drift: ${n} is off`])
+
+test('capThree', () => {
+  const d = db()
+  d.exec(`INSERT INTO tickets (repo, number, title, lane) VALUES ('${SELF}', 1, 'Drift: a is off', 'machine')`)
+  const sent: string[][] = []
+  expect(filed(d, ['a', 'b', 'c', 'd', 'e', 'f'].map(off), titled(sent), NOW)).toEqual(['1', '2', '3'])
+  expect(sent).toEqual(sends(['b', 'c', 'd']))
+  expect(capped(d, NOW)).toEqual(['Drift: e is off', 'Drift: f is off'])
+})
+
+test('closedNotRefiled', () => {
+  const d = db()
+  d.exec(`INSERT INTO tickets (repo, number, title, lane, closed_at) VALUES ('${SELF}', 1, 'Drift: a is off', 'machine', '2026-10-02T10:00:00Z'),
+    ('${SELF}', 2, 'Drift: b is off', 'machine', '2026-09-25T10:00:00Z')`)
+  const sent: string[][] = []
+  expect(filed(d, ['a', 'b'].map(off), titled(sent), NOW)).toEqual(['1'])
+  expect(sent).toEqual(sends(['b']))
 })
 
 test('dailyOnce', () => {

@@ -41,10 +41,17 @@ test.each([{ step: 1, seat: 'brief_writer' }])(
     expect(mode).toBeNull()
   })
 
-test.each(['swift', 'kotlin'])('D1 at(4, %s) is the builder in review mode', (language) => {
+test('D3 a step carrying mode ship records ship', async () => {
+  const w = world()
+  writeFileSync(join(w.root, 'seats/modes/ship.md'), 'ship\n')
+  await ran(w.db, w.root, plan(w.db, 1), { ...at(2), mode: 'ship' }, stub(CARRIED), 'the ask', false)
+  expect(newestMode(w.db)).toBe('ship')
+})
+
+test.each(['swift', 'kotlin', 'typescript'])('D1 at(4, %s) is the builder in review mode', (language) => {
   expect(at(4, language)).toMatchObject({ seat: `${language}_specialist`, runs: 'code_quality', mode: 'review' })
   for (const step of [2, 5]) expect(at(step, language).mode).toBeUndefined()
-  expect(at(4, 'typescript').mode).toBeUndefined()
+  expect(at(4, 'lua').mode).toBeUndefined()
 })
 
 async function reviewed(language: string, origin: string | null = null):
@@ -75,6 +82,10 @@ test.each(['swift', 'kotlin'])('D2 D3 outside %s step 4 fires its seat in review
 test('D4 an internal plan keeps code_quality at step 4', async () => {
   const r = await reviewed('swift', 'https://github.com/caliperforge/cf/issues/1')
   expect(r).toMatchObject({ seat: 'code_quality', mode: null })
+})
+
+test('D3 an outside typescript plan keeps code_quality at step 4', async () => {
+  expect(await reviewed('typescript')).toMatchObject({ seat: 'code_quality', mode: null })
 })
 
 test('D5 each moded seat has its review-mode registry entry', () => {

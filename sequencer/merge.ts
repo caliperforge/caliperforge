@@ -14,7 +14,7 @@ import { abortMerge, behindMain, cloned, commitMerge, conflicted, diffOf, diffSi
 /**
  * Step 3's base, one tick before the ready and batch gates: a merge returns no outcome,
  * so the rails judge the merged tree in this same tick, and it spends none of the `base.merged`
- * budget those two count their one miss against. A conflict outside `ratchet.json` is the builder's to settle, so the
+ * budget those two count their one miss against. A conflict outside the ratchet files is the builder's to settle, so the
  * refusal names the unmerged paths and rewinds onto the build. A tick that stopped inside a merge
  * left that merge open, and its bytes were committed before it, so the abort loses nothing and this
  * tick merges again from the old base. The rewind alone would hand the builder that same old
@@ -50,14 +50,13 @@ function takeMain(db: Db, root: string, plan: PlanRow, src: string, main: string
     mergeMain(src)
   } catch {
     const paths = unmerged(src)
-    if (paths.length === 0 || paths.some((path) => path !== 'ratchet.json')) {
+    if (paths.length === 0 || paths.some((path) => path !== 'ratchet.json' && !path.endsWith('/ratchet.json'))) {
       abortMerge(src)
       recordMerge(db, plan.id, step, { main, incoming, mine, overlap, clean: false })
       return paths
     }
-    theirs(src, 'ratchet.json')
-    recount(src, [...incoming, ...mine])
-    commitMerge(src, 'ratchet.json')
+    for (const path of paths) theirs(src, path)
+    commitMerge(src, recount(src, [...incoming, ...mine]))
   }
   recordMerge(db, plan.id, step, { main, incoming, mine, overlap, clean: true })
   put(root, plan.id, 'base.sha', `${main}\n`)

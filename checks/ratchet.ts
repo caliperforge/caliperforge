@@ -1,7 +1,8 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { readFileSync } from 'node:fs'
+import { dirname, join, relative } from 'node:path'
 import ts from 'typescript'
 import type { Check, Finding } from './kind.ts'
+import { write } from './ratchet-files.ts'
 import { walk } from './tree.ts'
 
 export const METRICS = ['citing-comment', 'lines', 'prepare', 'silent-catch', 'test-name'] as const
@@ -31,7 +32,13 @@ export const ratchet: Check = {
 
 /** `raises` is keyed by the settings row `ratchet.raise.<metric>.<path>`, `/` read as `.` and `-` as `_`. */
 export function ratcheted(root: string, raises: Record<string, number>): Finding[] {
-  return judged(counts(root), recorded(root), raises)
+  return judged(counts(root), budgets(root), raises)
+}
+
+function budgets(root: string): Counts {
+  const files = walk(root, (f) => f === 'ratchet.json').sort((a, b) => a.split('/').length - b.split('/').length)
+  return Object.fromEntries(files.flatMap((file) => Object.entries(JSON.parse(readFileSync(file, 'utf8')) as Counts)
+    .map(([path, tally]): [string, Tally] => [join(relative(root, dirname(file)), path), tally])))
 }
 
 export function counts(root: string): Counts {
@@ -44,21 +51,15 @@ export function counts(root: string): Counts {
   return out
 }
 
-function recorded(root: string): Counts {
-  const file = join(root, 'ratchet.json')
-  return existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) as Counts : {}
-}
-
-export function recount(root: string, paths: string[]): void {
+export function recount(root: string, paths: string[]): string[] {
   const now = counts(root)
-  const rows = new Map(Object.entries(recorded(root)))
+  const rows = new Map(Object.entries(budgets(root)))
   for (const path of paths) {
     const tally = now[path]
     if (tally === undefined) rows.delete(path)
     else rows.set(path, tally)
   }
-  const sorted = Object.fromEntries([...rows.keys()].sort().map((path) => [path, rows.get(path)]))
-  writeFileSync(join(root, 'ratchet.json'), `${JSON.stringify(sorted, null, 2)}\n`)
+  return write(root, Object.fromEntries(rows))
 }
 
 function inFile(path: string, text: string): Tally {

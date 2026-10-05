@@ -20,7 +20,7 @@ import { blocked, kernel } from '../steps.ts'
 import { checkout, diffOf, doneIds, get, gitDiff, narrowing, put, snapshot, srcDir } from '../workspace.ts'
 import { GREEN } from '../base.ts'
 import { record } from '../../store/files.ts'
-import { eventsOf, runRows } from '../../store/events.ts'
+import { eventsOf, newestMode, runRows } from '../../store/events.ts'
 import { overrule, verdictRows } from '../../store/verdict.ts'
 import { record as signal } from '../../store/signals.ts'
 import { benchPacket } from '../../runner/packet.ts'
@@ -459,6 +459,19 @@ test('step 5 sent back gets its delta in function, with refusal', async () => {
 })
 
 const FOUR = 'export const one = 1\nexport const two = 2\nexport const three = 3\nexport const four = 4'
+
+test('D2 our own step 4 runs typescript_specialist in review', async () => {
+  const w = world()
+  dropPlan(w.db, 1)
+  ours(w.root)
+  internalPlan(w.db, w.root, MINE)
+  for (let step = 0; step < 2; step += 1) await tick(w.db, w.root, stub(CARRIED))
+  built(w.root, MINE, FOUR)
+  for (let step = 0; step < 3; step += 1) await tick(w.db, w.root, stub(CARRIED, 0, PASS))
+  expect(runRows(w.db).filter((r) => r.plan === MINE && r.step === 4).map((r) => r.seat)).toEqual(['typescript_specialist'])
+  expect(newestMode(w.db)).toBe('review')
+  expect(verdictRows(w.db, MINE).find((v) => v.step === 4)).toMatchObject({ gate: 'review', kind: 'review', outcome: 'pass' })
+})
 
 const modeOf = (root: string, step: number): string => readFileSync(join(root, `.cf/work/${String(MINE)}/step-${String(step)}.mode`), 'utf8')
 

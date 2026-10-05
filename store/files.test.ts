@@ -1,7 +1,8 @@
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
+import { SEED } from '../cli/digests.ts'
 import { files } from '../sequencer/brief.ts'
-import { building, edit, filesOf, record, strays } from './files.ts'
+import { building, edit, filesOf, record, sharing, strays } from './files.ts'
 import { migrate, open, type Db } from './index.ts'
 import { world } from '../sequencer/tests/world.ts'
 
@@ -99,6 +100,19 @@ test('D5 an edit on a missing plan writes nothing', () => {
   expect(() => { edit(db, 99, 'add', 'a.ts', 'coo', null) }).toThrow('no plan 99')
   expect(db.prepare('SELECT count(*) AS n FROM plan_files').get()).toEqual({ n: 0 })
   expect(events(db)).toEqual([])
+})
+
+test('two plans sharing only the seed file do not wait', () => {
+  const db = bench()
+  db.prepare(`INSERT INTO plans (id, pipe_id, template, state, queued_at, lane, seat, origin)
+    VALUES (2, 1, 'pr_path', 'queued', '2026-09-21T00:00:00.000Z', 'machine', 'typescript_specialist',
+      'https://github.com/caliperforge/caliperforge/issues/62')`).run()
+  db.prepare('UPDATE plans SET step = 2').run()
+  const both = (paths: string[]) => { for (const id of [1, 2]) record(db, id, paths.map((path) => ({ path, is_new: false }))) }
+  both([SEED, '.cf/plan.md'])
+  expect(sharing(db, 2)).toBeNull()
+  both([SEED, 'src/a.ts'])
+  expect(sharing(db, 2)).toEqual({ plan: 1, path: 'src/a.ts' })
 })
 
 // #712: a built plan parked on the CEO sign-off must not hold later plans on its files

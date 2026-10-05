@@ -9,6 +9,7 @@ import { liveTree, SELF } from '../sequencer/workspace.ts'
 import { dump, migrate, open as openDb, type Db } from '../store/index.ts'
 import { dial, hhmm, lanes, priority as setPriority, record, Reading, width, windows } from '../store/lanes.ts'
 import { refusedPush } from '../store/approvals.ts'
+import { directorDays } from '../store/decisions.ts'
 import { drifts } from '../store/drift.ts'
 import { handUps, logged, repriced } from '../store/events.ts'
 import { holderOf, HOLDERS, overlapWaits, parked, pipeNamed } from '../store/plans.ts'
@@ -17,7 +18,7 @@ import { backfill } from '../store/transcript.ts'
 import { actors, actorSection, byType, type ByType, costs, costSection, day, fileWaits, greptileLine, halted, hands, heldBy, laneLine, misses, missSection, open as openPlans,
   rulings, section, tickets, ticketSection, unpriced, waitLine, waits, windowLine } from './brief.ts'
 import { check, fill } from './digests.ts'
-import { handUpLine } from './director.ts'
+import { directorSection, handUpLine } from './director.ts'
 import { driftSection } from './drift.ts'
 import { flow } from './flow.ts'
 import { gh } from './gh.ts'
@@ -218,6 +219,7 @@ function briefs(cf: Command, { root, db, out }: Cli): void {
     out(refusalSection(refusalDays(handle, new Date())))
     const now = new Date()
     out(handUpLine(handUps(handle, now)))
+    out(directorSection(directorDays(handle, now), now))
     out(actorSection(actors(handle, now), hands(now, gh)))
     out(ticketSection(tickets(handle)))
   })

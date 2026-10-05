@@ -244,12 +244,12 @@ function askOf(root: string, plan: number): string {
   return maybe(root, plan, 'ask.md') ?? move(root, plan, 'issue.md', 'ask.md')
 }
 
-const BUILD = new Set([...MODED, 'lua_specialist', 'typescript_specialist', 'outside_specialist'])
+export const BUILD = new Set([...MODED, 'lua_specialist', 'outside_specialist'])
 
 export async function ran(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider,
   issue: string, ours: boolean): Promise<Fired> {
   load(db, root)
-  const mode = step.step === 2 && BUILD.has(step.runs) ? 'build' : undefined
+  const mode = step.mode ?? (step.step === 2 && BUILD.has(step.runs) ? 'build' : undefined)
   const { manifest, prompt, hash } = seat(root, step.runs, mode)
   const src = srcDir(root, plan.id)
   const built = packet(manifest, prompt + noteSection(db, root, plan, step), tight(root), issue, src,
@@ -369,7 +369,7 @@ async function fireReview(db: Db, root: string, plan: PlanRow, step: Step, provi
     ...(manifest.gate === 'senior_review' && cloned(src) ? greptile(db, plan.id, headSha(src)) : {}),
     ...rounds(db, root, plan.id, step.step),
   }
-  const as = !internal(plan) && step.mode === 'review' ? step.seat : undefined
+  const as = step.mode === 'review' && internal(plan) === (step.seat === 'typescript_specialist') ? step.seat : undefined
   try {
     const { verdict, outcome } = await judge(db, root, step.runs, plan.id, input, provider, transcriptOf(root, plan.id, step.step), as)
     if (outcome.outcome === 'pass') regated(db, plan.id, step.step, verdict, input.prior, input.tree)

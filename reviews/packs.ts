@@ -11,8 +11,11 @@ const LEAD = 'The rules each touched language\'s builder worked under: its promp
 export function packs(root: string, diff: string, repo: string | null): string {
   const languages = new Set(parse(diff).map(({ path }) => languageOfPath(path) ?? (/\.tsx?$/.test(path) ? 'typescript' : null)))
   languages.delete(null)
-  const rules = [...languages].map((l) => readFileSync(join(root, 'seats', builder(l), 'prompt.md'), 'utf8').replace(/^Answer the [\s\S]*/m, '')
-    + examples(root, String(l)))
+  const rules = [...languages].flatMap((l) => {
+    const seat = builder(l)
+    return seat === null ? [] : [readFileSync(join(root, 'seats', seat, 'prompt.md'), 'utf8').replace(/^Answer the [\s\S]*/m, '')
+      + examples(root, String(l))]
+  })
   return (rules.length === 0 ? '' : `\n\n# Language rules\n\n${LEAD}\n\n${rules.join('')}`) + notes(root, repo)
 }
 

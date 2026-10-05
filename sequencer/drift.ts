@@ -2,15 +2,14 @@ import { join } from 'node:path'
 import { z } from 'zod'
 import type { Pr } from '../cli/gh.ts'
 import { fill } from '../cli/record.ts'
-import { holds, newest, setting, stalled, standing, worked } from '../store/drift.ts'
+import { addFinding, holds, newest, setting, stalled, worked } from '../store/drift.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { get, hhmm, set, zone } from '../store/lanes.ts'
 import { holder } from '../store/leases.ts'
 import { needsCeo, openPipes, planById } from '../store/plans.ts'
 import { repos } from '../store/record.ts'
-import type { Wire } from './push.ts'
-import { cloned, conflicted, drop, maybe, planDir, put, SELF, snapshot } from './workspace.ts'
+import { cloned, conflicted, drop, maybe, planDir, put, snapshot } from './workspace.ts'
 
 const IDENT = /^[a-z_]+$/
 
@@ -23,11 +22,12 @@ export const Entry = z.object({
   gap: z.string().regex(/^\d+[hd]$/).optional(),
   while: z.string().optional(),
   when: z.string().optional(),
+  expected: z.literal(0).optional(),
 })
 
 export type Entry = z.infer<typeof Entry>
 
-export interface Drifted { name: string; state: 'off' | 'silent' | 'stale'; detail: string }
+export interface Drifted { name: string; state: 'off' | 'silent' | 'stale' | 'seen'; detail: string }
 
 export function drift(db: Db, registry: Entry[], now: Date): Drifted[] {
   return registry.flatMap((entry) => {
@@ -49,6 +49,10 @@ function quiet(db: Db, entry: Entry, now: Date): Drifted | null {
   if (entry.while !== undefined && !holds(db, entry.while)) return null
   const from = `${table}${where === undefined ? '' : ` WHERE ${where}`}`
   const last = newest(db, from, column, now)
+  if (entry.expected === 0) {
+    return last.days !== null && gap !== undefined && last.days <= days(gap)
+      ? { name, state: 'seen', detail: `newest ${table}.${column} is ${String(last.newest)}, within ${gap}; expected none` } : null
+  }
   if (last.newest === null) return when === undefined || worked(db, when) ? { name, state: 'silent', detail: `no row in ${from}` } : null
   if (gap === undefined || last.days === null) return null
   return last.days > days(gap) ? { name, state: 'stale', detail: `newest ${table}.${column} is ${String(last.newest)}, older than ${gap}` } : null
@@ -92,27 +96,18 @@ export function stuck(db: Db, root: string, registry: Entry[], now: Date): numbe
   })
 }
 
-const CAP = 3
-
-export function filed(db: Db, drifted: Drifted[], wire: Pick<Wire, 'file'>, now: Date): string[] {
-  const fresh = drifted.map((d) => ({ ...d, title: `Drift: ${d.name} is ${d.state}` })).filter((d) => !standing(db, SELF, d.title, now))
-  for (const { title } of fresh.slice(CAP)) {
-    logged(db, { plan: null, kind: 'drift_capped', actor: 'drift', outcome: 'refuse', message: title, pointer: null, run: null }, now.toISOString())
-  }
-  return fresh.slice(0, CAP).map(({ name, state, detail, title }) => {
-    const body = [`**What:** ${name} is ${state}: ${detail}`,
-      `**Why:** rules/registry.yaml lists ${name} as a mechanism that runs`,
-      `**When it ends:** drift no longer reports ${name}`, ''].join('\n')
-    return wire.file(SELF, title, body, ['lane:machine', 'P1', 'drift'])
+export function recorded(db: Db, drifted: Drifted[], now: Date): number[] {
+  return drifted.flatMap((found) => {
+    const id = addFinding(db, found, now)
+    return id === null ? [] : [id]
   })
 }
 
-export function due(db: Db, registry: Entry[], now: Date, wire: Pick<Wire, 'file'>,
-  read: (repo: string, no: number) => Pr): string[] {
+export function due(db: Db, registry: Entry[], now: Date, read: (repo: string, no: number) => Pr): number[] {
   if (hhmm(db, now) < '05:30') return []
   const day = new Date(now.getTime() + zone(db) * 60000).toISOString().slice(0, 10)
   if (day <= get(db, 'drift.at')) return []
   set(db, 'drift.at', day, 'pr', now.toISOString())
   for (const repo of repos(db)) fill(db, repo, read)
-  return filed(db, drift(db, registry, now), wire, now)
+  return recorded(db, drift(db, registry, now), now)
 }

@@ -33,19 +33,39 @@ export function stalled(db: Db, pipes: number[]): Stalled[] {
       AND coalesce(wait_reason, '') NOT IN ('ceo_batch', 'target_approval', 'file_overlap') ORDER BY id`).all(JSON.stringify(pipes)) as Stalled[]
 }
 
-export function standing(db: Db, repo: string, title: string, now: Date): boolean {
-  return db.prepare('SELECT 1 FROM tickets WHERE repo = ? AND title = ? AND (closed_at IS NULL OR julianday(?) - julianday(closed_at) <= 7)')
-    .get(repo, title, now.toISOString()) !== undefined
+export interface Finding {
+  id: number
+  name: string
+  state: 'off' | 'silent' | 'stale' | 'seen'
+  detail: string
+  found_at: string
+  outcome: 'fixed' | 'covered' | 'retire' | 'defect' | null
+  why: string | null
+  ref: string | null
+  closed_at: string | null
 }
 
-export function capped(db: Db, now: Date): string[] {
-  return db.prepare("SELECT message FROM events WHERE kind = 'drift_capped' AND julianday(at) >= julianday(?, '-1 day') ORDER BY id")
-    .pluck().all(now.toISOString()) as string[]
+export function addFinding(db: Db, found: Pick<Finding, 'name' | 'state' | 'detail'>, now: Date): number | null {
+  const ran = db.prepare('INSERT OR IGNORE INTO drift_findings (name, state, detail, found_at) VALUES (@name, @state, @detail, @at)')
+    .run({ ...found, at: now.toISOString() })
+  return ran.changes === 1 ? Number(ran.lastInsertRowid) : null
 }
 
-export interface Drift { number: number; title: string; days: number | null }
+export function closeFinding(db: Db, id: number, outcome: NonNullable<Finding['outcome']>, why: string, ref: string | null, now: Date): void {
+  db.prepare('UPDATE drift_findings SET outcome = ?, why = ?, ref = ?, closed_at = ? WHERE id = ? AND closed_at IS NULL')
+    .run(outcome, why, ref, now.toISOString(), id)
+}
 
-export function drifts(db: Db, repo: string, now: Date): Drift[] {
-  return db.prepare(`SELECT number, title, CAST(julianday(?) - julianday(opened_at) AS INTEGER) AS days FROM tickets
-    WHERE repo = ? AND title GLOB 'Drift: *' AND closed_at IS NULL ORDER BY opened_at, number`).all(now.toISOString(), repo) as Drift[]
+export function findings(db: Db): Finding[] {
+  return db.prepare('SELECT * FROM drift_findings ORDER BY id').all() as Finding[]
+}
+
+export function week(db: Db, now: Date): Finding[] {
+  return db.prepare("SELECT * FROM drift_findings WHERE julianday(found_at) >= julianday(?, '-7 day') ORDER BY id")
+    .all(now.toISOString()) as Finding[]
+}
+
+export function overdue(db: Db, now: Date): Finding[] {
+  return db.prepare('SELECT * FROM drift_findings WHERE closed_at IS NULL AND julianday(?) - julianday(found_at) > 1 ORDER BY id')
+    .all(now.toISOString()) as Finding[]
 }

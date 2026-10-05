@@ -20,6 +20,7 @@ import { isHeld, unhold } from './hold.ts'
 import { fixed, stop } from './fixed.ts'
 import { released } from './fixer.ts'
 import { prose } from './prose.ts'
+import { outOfReach } from './reach.ts'
 import { WIRE, type Wire } from './push.ts'
 import { rule } from './rule.ts'
 import { recorded } from './seat.ts'
@@ -55,10 +56,10 @@ export async function cooLite(db: Db, root: string, plan: PlanRow, provider: Pro
   }
   let { m, said } = await ask(db, root, plan, provider, tried)
   const n = failures(db, root, plan)
-  const first = refused(m, said, n)
+  const first = refused(m, said, n, root)
   if (first !== null) {
     ({ m, said } = await ask(db, root, plan, provider, tried, first.fence))
-    const again = refused(m, said, n)
+    const again = refused(m, said, n, root)
     if (again !== null) return told(db, root, plan, now, { outcome: 'needs_ceo', message: again.message }, post)
   }
   if (m === null) return told(db, root, plan, now, { outcome: 'needs_ceo', message: 'ask_ceo: no readable answer' }, post)
@@ -79,7 +80,8 @@ export async function cooLite(db: Db, root: string, plan: PlanRow, provider: Pro
   return told(db, root, plan, now, { outcome: 'needs_ceo', message: failed }, post)
 }
 
-function refused(m: Move | null, said: string, n: number): { fence: string; message: string } | null {
+function refused(m: Move | null, said: string, n: number, root: string): { fence: string; message: string } | null {
+  if (m?.move === 'fix') return outOfReach(root, m.why)
   if (m?.move === 'ask_coo' && n < 2) {
     return { fence: `ask_coo is refused: ${String(n)} failed fixes on this stop, two are needed. Choose another move.`,
       message: `ask_coo: refused by the fence, ${String(n)} failed fixes on this stop` }

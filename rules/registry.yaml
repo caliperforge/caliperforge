@@ -50,6 +50,11 @@
   column: at
   where: seat = 'php_specialist' AND mode = 'review'
   gap: 7d
+- name: typescript_review
+  table: runs
+  column: at
+  where: seat = 'typescript_specialist' AND mode = 'review'
+  gap: 7d
 - name: brief_writer
   table: runs
   column: at

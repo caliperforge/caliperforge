@@ -49,7 +49,7 @@
     "silent-catch": 1
   },
   "checks/template-validity.ts": {
-    "lines": 60
+    "lines": 53
   },
   "checks/tight.ts": {
     "lines": 86

@@ -26,6 +26,7 @@ import { write as writeMap } from './map.ts'
 import { ack, line, unread } from './inbox.ts'
 import { refusalDays, refusalSection } from './refusals.ts'
 import { close } from './session.ts'
+import { staffingSection, unstaffed } from './staffing.ts'
 import { liveness, livenessLine, stalledLanes } from './watch.ts'
 
 export interface Cli { root: string; db: () => Db; out: (text: string) => void }
@@ -205,6 +206,7 @@ function briefs(cf: Command, { root, db, out }: Cli): void {
     for (const lane of stalledLanes(handle, new Date())) out(`lane\tOFF with work: ${lane}\n`)
     out(rulings(handle, root))
     out(driftSection(drifts(handle, SELF, new Date())))
+    out(staffingSection(unstaffed(root)))
     out(laneLine(lanes(handle, hhmm(handle))))
     out(waitLine(waits(handle)) + fileWaits(overlapWaits(handle)))
     out(greptileLine(reviewed(handle, new Date())))

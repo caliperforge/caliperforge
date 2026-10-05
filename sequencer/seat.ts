@@ -35,6 +35,7 @@ import { deletions } from './fence.ts'
 import { findings } from './findings.ts'
 import { fenceFor, languageFor } from './route.ts'
 import { languages } from './split.ts'
+import { staffed } from './staffing.ts'
 import { gates, outsideLanguage } from './gates.ts'
 import type { Outcome } from './kind.ts'
 import { landed } from './notes.ts'
@@ -251,6 +252,7 @@ export async function ran(db: Db, root: string, plan: PlanRow, step: Step, provi
   const src = srcDir(root, plan.id)
   const built = packet(manifest, prompt + noteSection(db, root, plan, step), tight(root), issue, src,
     transcriptOf(root, plan.id, step.step), ours, fenceFor(db, plan.id, manifest.write_paths))
+  const staffing = staffedOn(db, root, plan, step.step)
   const fired = await provider.fire({
     ...built,
     ...(step.runs === 'brief_writer' ? { tools: [...built.tools, READ], servers: { [SERVER]: server(db, plan.id) } } : {}),
@@ -258,16 +260,21 @@ export async function ran(db: Db, root: string, plan: PlanRow, step: Step, provi
     wall: wall(db),
     reads: machineReads(root, plan, step.runs),
   })
-  recorded(db, plan.id, step.step, step.runs, hash, provider.name, manifest, fired, step.mode)
+  recorded(db, plan.id, step.step, step.runs, hash, provider.name, manifest, fired, step.mode, staffing)
   observed(db, fired.limits)
   return fired
 }
 
 export function recorded(db: Db, plan: number, step: number, name: string, hash: string, provider: Provider['name'],
-  manifest: Seat, fired: Fired, mode?: Run['mode']): void {
+  manifest: Seat, fired: Fired, mode?: Run['mode'], staffed?: string): void {
   const id = runLogged(db, { plan, step, seat: name, rule_hash: hash, provider, model: manifest.model,
-    effort: manifest.effort, exit: fired.exit, fired, mode })
+    effort: manifest.effort, exit: fired.exit, fired, mode, staffed })
   byRun(db, id, fired.transcript_path)
+}
+
+function staffedOn(db: Db, root: string, plan: PlanRow, step: number): string | undefined {
+  if (plan.template === 'research') return undefined
+  return staffed(root, plan.template, step, plan.template === 'pr_path' ? languageFor(db, plan, srcDir(root, plan.id)) : null)?.seat
 }
 
 function exited(step: Step, fired: Fired): Outcome {
@@ -368,7 +375,8 @@ async function fireReview(db: Db, root: string, plan: PlanRow, step: Step, provi
   }
   const as = step.mode === 'review' && internal(plan) === (step.seat === 'typescript_specialist') ? step.seat : undefined
   try {
-    const { verdict, outcome } = await judge(db, root, step.runs, plan.id, input, provider, transcriptOf(root, plan.id, step.step), as)
+    const { verdict, outcome } = await judge(db, root, step.runs, plan.id, input, provider, transcriptOf(root, plan.id, step.step), as,
+      staffedOn(db, root, plan, step.step))
     if (outcome.outcome === 'pass') regated(db, plan.id, step.step, verdict, input.prior, input.tree)
     put(root, plan.id, `step-${String(step.step)}.verdict.md`, verdictText(outcome))
     if (outcome.outcome === 'pass' && input.tree !== undefined) put(root, plan.id, `step-${String(step.step)}.passed.diff`, input.diff)

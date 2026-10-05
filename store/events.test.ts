@@ -153,6 +153,20 @@ test('D1 runLogged writes mode, NULL when absent', () => {
   expect(mode(undefined)).toBeNull()
 })
 
+test('D1 D2 runLogged writes staffed beside seat, NULL when absent', () => {
+  const db = fresh(join(root, 'schema'))
+  load(db, root)
+  const plan = planRow(db)
+  const { hash } = seat(root, 'typescript_specialist')
+  const row = (staffed: string | undefined): unknown => {
+    const id = runLogged(db, { plan, step: 1, seat: 'typescript_specialist', rule_hash: hash, provider: 'claude-agent-sdk', model: 'm',
+      effort: 'high', exit: 0, fired: { usage: { input: 1, cache: 0, output: 0 }, seconds: 1, transcript_path: 'x.transcript.jsonl' }, staffed })
+    return db.prepare('SELECT seat, staffed FROM runs WHERE id = ?').get(id)
+  }
+  expect(row('brief_writer')).toEqual({ seat: 'typescript_specialist', staffed: 'brief_writer' })
+  expect(row(undefined)).toEqual({ seat: 'typescript_specialist', staffed: null })
+})
+
 test('D1 D2 runLogged keeps writer modes, refuses draft', () => {
   const db = fresh(join(root, 'schema'))
   load(db, root)

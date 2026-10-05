@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join, relative } from 'node:path'
 import { expect, test, vi } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import { migrate, open, type Db } from '../../store/index.ts'
@@ -100,16 +100,29 @@ test('tickLogs', async () => {
   expect(lines().length).toBeLessThanOrEqual(5001)
 })
 
+/** Every repo file a module loads: its relative imports and re-exports, less those erased as `import type`. */
+function loads(file: string, seen = new Set<string>()): Set<string> {
+  if (seen.has(file)) return seen
+  seen.add(file)
+  for (const m of readFileSync(file, 'utf8').matchAll(/^(?:import|export) (?!type )[^']*from '(\.[^']+)'/gm)) loads(join(dirname(file), m[1] ?? ''), seen)
+  return seen
+}
+
 test('watchLoadsAlone', async () => {
+  const repo = join(import.meta.dirname, '../..')
+  expect([...loads(join(repo, 'cli/watch-main.ts'))].map((f) => relative(repo, f)).filter((f) => /^(sequencer|templates)\//.test(f))).toEqual([])
   const dir = mkdtempSync(join(tmpdir(), 'cf-watch-main-'))
   cpSync(schema, join(dir, 'schema'), { recursive: true })
   const db = open(join(dir, 'cf.db'))
   migrate(db, join(dir, 'schema'))
   db.exec("UPDATE pipes SET enabled = 1, window_start = '00:00', window_end = '23:59'")
-  receipt(db, { at: new Date(Date.now() - 20 * 60000).toISOString(), hhmm: '00:00', dry: false, pipes: 1, fired: 0, exit: 0, note: 'nothing to fire' })
+  tickAt(db, 20)
   db.close()
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(NOW)
   vi.spyOn(process, 'cwd').mockReturnValue(dir)
   await import('../watch-main.ts')
+  vi.useRealTimers()
   expect(existsSync(join(dir, '.cf/watch.alerted'))).toBe(true)
 })
 

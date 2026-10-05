@@ -25,7 +25,7 @@ it('D4 0079 keeps every settings row', () => {
   const db = open(':memory:')
   migrate(db, old)
   const before = db.prepare('SELECT * FROM settings ORDER BY key').all()
-  expect(migrate(db, join(root, 'schema'))).toEqual(['0079_story_dir.sql', '0080_ratchet_mode.sql', '0081_science_dir.sql', '0082_held_until.sql', '0083_science_at.sql', '0084_runs_mode_session.sql', '0085_desk_url.sql', '0086_language_notes.sql', '0087_desk_paste.sql', '0088_refusal_note.sql', '0089_drop_quick_lane.sql', '0090_director_apply.sql', '0091_runs_mode_writer.sql', '0092_decisions_widen.sql', '0093_drift_findings.sql'])
+  expect(migrate(db, join(root, 'schema'))).toEqual(['0079_story_dir.sql', '0080_ratchet_mode.sql', '0081_science_dir.sql', '0082_held_until.sql', '0083_science_at.sql', '0084_runs_mode_session.sql', '0085_desk_url.sql', '0086_language_notes.sql', '0087_desk_paste.sql', '0088_refusal_note.sql', '0089_drop_quick_lane.sql', '0090_director_apply.sql', '0091_runs_mode_writer.sql', '0092_decisions_widen.sql', '0093_drift_findings.sql', '0094_runs_staffed.sql'])
   expect(db.prepare("SELECT * FROM settings WHERE key NOT IN ('comms.story_dir', 'ratchet.mode', 'science.dir', 'science.at') ORDER BY key").all())
     .toEqual(before)
   expect(get(db, 'comms.story_dir')).toBe('~/cf_comms/story')

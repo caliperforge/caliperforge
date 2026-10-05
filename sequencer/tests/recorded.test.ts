@@ -38,3 +38,14 @@ test('D2 recorded() writes the mode, or NULL without one', () => {
   recorded(db, plan, 2, 'typescript_specialist', hash, 'claude-agent-sdk', manifest, fired({ input: 1, cache: 0, output: 0 }))
   expect(newest(db, 'mode')).toBeNull()
 })
+
+test('D4 recorded() writes the staffed seat, or NULL without one', () => {
+  const db = fresh(join(root, 'schema'))
+  load(db, root)
+  const plan = planRow(db)
+  const { manifest, hash } = seat(root, 'typescript_specialist')
+  recorded(db, plan, 1, 'typescript_specialist', hash, 'claude-agent-sdk', manifest, fired({ input: 1, cache: 0, output: 0 }), undefined, 'brief_writer')
+  expect(newest(db, 'staffed')).toBe('brief_writer')
+  recorded(db, plan, 1, 'typescript_specialist', hash, 'claude-agent-sdk', manifest, fired({ input: 1, cache: 0, output: 0 }))
+  expect(newest(db, 'staffed')).toBeNull()
+})

@@ -21,3 +21,13 @@ export function outOfReach(root: string, why: string): { fence: string; message:
   return { fence: `fix is refused: ${r}. The fixer writes only ${paths.join(', ')} in this job's folder. Choose another move.`,
     message: `fix: refused by the fence, ${r}` }
 }
+
+/** A fix that only reaches past the fixer's files, into the job's code: the builder can take it as a ruling. */
+export function builderWork(root: string, why: string): boolean {
+  const r = reach(why, seat(root, 'fixer').manifest.write_paths)
+  return r !== null && r.endsWith("is outside the fixer's write_paths") && !/\bcf\.db\b|\.cf\//.test(why)
+    && !BARRED.some(([barred]) => barred.test(why))
+}
+
+/** Waits a plan is right to sit in: a fork CI or a pace window. Nobody needs telling. */
+export const WAITING = new Set(['ready_proof', 'target_parked'])

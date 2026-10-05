@@ -171,8 +171,8 @@ export function theirs(dir: string, path: string): void {
   git(dir, ['checkout', '--theirs', '--', path])
 }
 
-export function commitMerge(dir: string, path: string): void {
-  git(dir, ['add', '--', path])
+export function commitMerge(dir: string, paths: string[]): void {
+  git(dir, ['add', '--', ...paths])
   git(dir, [...COMMITTER, 'commit', '--no-edit'])
 }
 

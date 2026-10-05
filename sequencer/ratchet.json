@@ -1,0 +1,318 @@
+{
+  "approve.ts": {
+    "lines": 61,
+    "prepare": 1
+  },
+  "base.ts": {
+    "lines": 64,
+    "silent-catch": 1
+  },
+  "brief.ts": {
+    "lines": 400,
+    "silent-catch": 1
+  },
+  "capture.ts": {
+    "lines": 240,
+    "prepare": 6,
+    "silent-catch": 3
+  },
+  "card.ts": {
+    "lines": 54,
+    "prepare": 1
+  },
+  "checks.ts": {
+    "lines": 292,
+    "silent-catch": 2
+  },
+  "ci.ts": {
+    "lines": 92,
+    "prepare": 1
+  },
+  "delta.ts": {
+    "lines": 27
+  },
+  "director.ts": {
+    "lines": 263,
+    "prepare": 7
+  },
+  "failures.ts": {
+    "lines": 55,
+    "silent-catch": 2
+  },
+  "fence.ts": {
+    "lines": 74
+  },
+  "fixer.ts": {
+    "lines": 263,
+    "prepare": 7
+  },
+  "gates.ts": {
+    "lines": 247,
+    "silent-catch": 1
+  },
+  "handout.ts": {
+    "lines": 69
+  },
+  "handover.ts": {
+    "lines": 104
+  },
+  "hold.ts": {
+    "lines": 37,
+    "prepare": 1
+  },
+  "home.ts": {
+    "lines": 15,
+    "prepare": 2
+  },
+  "index.ts": {
+    "lines": 222
+  },
+  "install.ts": {
+    "lines": 41
+  },
+  "kind.ts": {
+    "lines": 39
+  },
+  "lead.ts": {
+    "lines": 51,
+    "prepare": 1
+  },
+  "lock.ts": {
+    "lines": 57,
+    "silent-catch": 1
+  },
+  "merge.ts": {
+    "lines": 137,
+    "prepare": 1,
+    "silent-catch": 1
+  },
+  "next.ts": {
+    "lines": 74
+  },
+  "priority.ts": {
+    "lines": 33,
+    "prepare": 1,
+    "silent-catch": 1
+  },
+  "prose.ts": {
+    "lines": 19,
+    "silent-catch": 1
+  },
+  "push.ts": {
+    "lines": 571,
+    "prepare": 5,
+    "silent-catch": 5
+  },
+  "rails.ts": {
+    "lines": 191,
+    "prepare": 1,
+    "silent-catch": 1
+  },
+  "ready.ts": {
+    "lines": 209,
+    "prepare": 8
+  },
+  "route.ts": {
+    "lines": 65
+  },
+  "seat.ts": {
+    "lines": 501,
+    "prepare": 5,
+    "silent-catch": 1
+  },
+  "settle.ts": {
+    "lines": 216,
+    "prepare": 3,
+    "silent-catch": 2
+  },
+  "signals.ts": {
+    "lines": 148,
+    "prepare": 6
+  },
+  "signoff.ts": {
+    "lines": 301,
+    "prepare": 3
+  },
+  "size.ts": {
+    "lines": 50,
+    "prepare": 1
+  },
+  "split.ts": {
+    "lines": 194,
+    "silent-catch": 2
+  },
+  "steps.ts": {
+    "lines": 182,
+    "prepare": 4
+  },
+  "symbols.ts": {
+    "lines": 43
+  },
+  "tests/after.test.ts": {
+    "prepare": 4
+  },
+  "tests/assembly.test.ts": {
+    "prepare": 15
+  },
+  "tests/batch.test.ts": {
+    "prepare": 1
+  },
+  "tests/built.test.ts": {
+    "prepare": 5
+  },
+  "tests/card.test.ts": {
+    "prepare": 1
+  },
+  "tests/ceiling.test.ts": {
+    "prepare": 5
+  },
+  "tests/chain.test.ts": {
+    "prepare": 1
+  },
+  "tests/checks.test.ts": {
+    "prepare": 10
+  },
+  "tests/ci.test.ts": {
+    "prepare": 5
+  },
+  "tests/director.test.ts": {
+    "prepare": 6
+  },
+  "tests/each.test.ts": {
+    "prepare": 7
+  },
+  "tests/events.test.ts": {
+    "prepare": 8
+  },
+  "tests/fence.test.ts": {
+    "prepare": 3
+  },
+  "tests/findings.test.ts": {
+    "prepare": 1
+  },
+  "tests/fixer.test.ts": {
+    "prepare": 14
+  },
+  "tests/growth.test.ts": {
+    "prepare": 6
+  },
+  "tests/handback.test.ts": {
+    "prepare": 2
+  },
+  "tests/handout.test.ts": {
+    "prepare": 1
+  },
+  "tests/hold.test.ts": {
+    "prepare": 11
+  },
+  "tests/internal.test.ts": {
+    "prepare": 10
+  },
+  "tests/kept.test.ts": {
+    "prepare": 5
+  },
+  "tests/lanes.test.ts": {
+    "prepare": 2
+  },
+  "tests/late.test.ts": {
+    "prepare": 2
+  },
+  "tests/lead.test.ts": {
+    "prepare": 1
+  },
+  "tests/leases.test.ts": {
+    "prepare": 6
+  },
+  "tests/life.test.ts": {
+    "prepare": 5
+  },
+  "tests/next.test.ts": {
+    "prepare": 12
+  },
+  "tests/overlap.test.ts": {
+    "prepare": 7
+  },
+  "tests/park.test.ts": {
+    "prepare": 1
+  },
+  "tests/pipes.test.ts": {
+    "prepare": 6
+  },
+  "tests/profile.test.ts": {
+    "prepare": 1
+  },
+  "tests/reap.test.ts": {
+    "prepare": 1
+  },
+  "tests/recorded.test.ts": {
+    "prepare": 1
+  },
+  "tests/resume.test.ts": {
+    "prepare": 1
+  },
+  "tests/route.test.ts": {
+    "prepare": 6
+  },
+  "tests/rule.test.ts": {
+    "prepare": 3
+  },
+  "tests/scorecard.test.ts": {
+    "prepare": 6
+  },
+  "tests/seat-checks.test.ts": {
+    "prepare": 6
+  },
+  "tests/shared.test.ts": {
+    "prepare": 3
+  },
+  "tests/signoff.test.ts": {
+    "prepare": 7
+  },
+  "tests/size.test.ts": {
+    "prepare": 1
+  },
+  "tests/spawns.test.ts": {
+    "prepare": 1
+  },
+  "tests/strays.test.ts": {
+    "prepare": 4
+  },
+  "tests/theirs.test.ts": {
+    "prepare": 3
+  },
+  "tests/tick.test.ts": {
+    "prepare": 1
+  },
+  "tests/upgrade.test.ts": {
+    "prepare": 1
+  },
+  "tests/upstream.test.ts": {
+    "prepare": 1
+  },
+  "tests/voice.test.ts": {
+    "prepare": 1
+  },
+  "tests/world.ts": {
+    "prepare": 11
+  },
+  "theirs.ts": {
+    "lines": 105,
+    "silent-catch": 1
+  },
+  "ticket.ts": {
+    "prepare": 1
+  },
+  "upgrade.ts": {
+    "lines": 70,
+    "prepare": 1,
+    "silent-catch": 3
+  },
+  "upstream.ts": {
+    "lines": 60,
+    "silent-catch": 1
+  },
+  "workspace.ts": {
+    "lines": 390,
+    "silent-catch": 4
+  }
+}

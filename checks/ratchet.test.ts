@@ -106,9 +106,33 @@ it('recount leaves folder rows out of the root file', () => {
   const dir = tree({ 'a.ts': 'x\n', [FOLDER]: '{"x.ts":{"prepare":1}}' }, {})
   recount(dir, ['a.ts'])
   expect(readFileSync(join(dir, 'ratchet.json'), 'utf8')).toBe(`${JSON.stringify({ 'a.ts': { lines: 1 } }, null, 2)}\n`)
-  expect(readFileSync(join(dir, FOLDER), 'utf8')).toBe('{"x.ts":{"prepare":1}}')
+  expect(readFileSync(join(dir, FOLDER), 'utf8')).toBe(`${JSON.stringify({ 'x.ts': { prepare: 1 } }, null, 2)}\n`)
+})
+
+it('D1 rows split across folder files judge as one file', async () => {
+  const files = { 'a.ts': 'x\n'.repeat(41), 'sequencer/x.ts': 'x\n' }
+  const rows = { 'a.ts': { lines: 10 }, 'sequencer/x.ts': { lines: 1, prepare: 1 } }
+  const split = tree({ ...files, [FOLDER]: JSON.stringify({ 'x.ts': rows['sequencer/x.ts'] }) }, { 'a.ts': rows['a.ts'] })
+  expect(await messages(split)).toEqual([GROWN, 'lower ratchet.json sequencer/x.ts prepare to 0'])
+  expect(await messages(split)).toEqual(await messages(tree(files, rows)))
+})
+
+it('D2 recount writes a row to its folder file, else the root', () => {
+  const dir = tree({ 'a.ts': 'x\n'.repeat(2), 'sequencer/x.ts': 'x\n'.repeat(3), [FOLDER]: '{}' },
+    { 'sequencer/y.ts': { lines: 5 }, 'a.ts': { lines: 1 } })
+  expect(recount(dir, ['a.ts', 'sequencer/x.ts'])).toEqual(['ratchet.json', FOLDER])
+  expect(readFileSync(join(dir, 'ratchet.json'), 'utf8')).toBe(`${JSON.stringify({ 'a.ts': { lines: 2 } }, null, 2)}\n`)
+  expect(readFileSync(join(dir, FOLDER), 'utf8'))
+    .toBe(`${JSON.stringify({ 'x.ts': { lines: 3 }, 'y.ts': { lines: 5 } }, null, 2)}\n`)
+
+  const flat = tree({ 'sequencer/x.ts': 'x\n' }, {})
+  expect(recount(flat, ['sequencer/x.ts'])).toEqual(['ratchet.json'])
+  expect(readFileSync(join(flat, 'ratchet.json'), 'utf8')).toBe(`${JSON.stringify({ 'sequencer/x.ts': { lines: 1 } }, null, 2)}\n`)
 })
 
 it('the whole tree meets ratchet.json', () => {
-  expect(ratcheted(join(import.meta.dirname, '..'), {}).map((f) => f.message)).toEqual([])
+  const root = join(import.meta.dirname, '..')
+  expect(ratcheted(root, {}).map((f) => f.message)).toEqual([])
+  expect(Object.keys(JSON.parse(readFileSync(join(root, 'ratchet.json'), 'utf8')) as Counts)
+    .filter((path) => path.startsWith('sequencer/'))).toEqual([])
 })

@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { z } from 'zod'
 import type { Provider } from '../providers/kind.ts'
@@ -7,12 +8,14 @@ import { read } from '../reviews/verdict.ts'
 import { benchPacket, spec } from '../runner/packet.ts'
 import type { Outcome } from '../sequencer/kind.ts'
 import { prose } from '../sequencer/prose.ts'
+import { WIRE, type Wire } from '../sequencer/push.ts'
 import { ran } from '../sequencer/seat.ts'
-import { get, maybe, planDir, put, srcDir } from '../sequencer/workspace.ts'
+import { get, maybe, planDir, put, srcDir, titleOf } from '../sequencer/workspace.ts'
 import { runLogged } from '../store/events.ts'
+import { proofed } from '../store/desk.ts'
 import type { Db } from '../store/index.ts'
-import { observed, wall } from '../store/lanes.ts'
-import type { PlanRow } from '../store/plans.ts'
+import { get as setting, observed, wall } from '../store/lanes.ts'
+import { originRef, type PlanRow } from '../store/plans.ts'
 import { byRun, pending } from '../store/transcript.ts'
 import { DEFAULT_BUILDER, type Step } from './pr-path.ts'
 
@@ -46,7 +49,7 @@ const page = (url: string): Promise<{ ok: boolean; text: string }> => fetch(url)
 export async function check(root: string, plan: PlanRow): Promise<Outcome> {
   const sources = JSON.parse(get(root, plan.id, 'sources.json')) as { url: string; quote: string }[]
   if (sources.length === 0) return { outcome: 'pass', spans: [], note: 'no sources: nothing found' }
-  const claims = get(root, plan.id, 'answer.md').split('\n').filter((l) => l.trim() !== '' && !l.startsWith('#'))
+  const claims = get(root, plan.id, 'answer.md').replace(/\n## Still unknown$[\s\S]*/m, '').split('\n').filter((l) => l.trim() !== '' && !l.startsWith('#'))
     .flatMap((l) => l.split(/(?<=[.!?]|\[source:\d+\])\s+(?!\[source:)/)).map((sentence) => {
       const cited = [...sentence.matchAll(/\[source:(\d+)\]/g)].map((m) => sources[Number(m[1]) - 1])
       return { sentence, cited: cited.length > 0 && cited.every((s) => s !== undefined) ? cited : null }
@@ -109,4 +112,36 @@ export async function answered(db: Db, root: string, plan: PlanRow, step: Step, 
   if (judged.outcome === 'needs_ceo') return { outcome: 'needs_ceo', spans: [], note: judged.message }
   put(root, plan.id, 'review.md', judged.message)
   return { outcome: 'pass', spans: [], note: `${step.runs}: review.md written` }
+}
+
+const [WRONG, UNKNOWN] = ['## Would be wrong if', '## Still unknown']
+
+export function record(db: Db, root: string, plan: PlanRow, wire: Wire = WIRE): Outcome {
+  const lines = get(root, plan.id, 'answer.md').split('\n')
+  const wrong = lines.indexOf(WRONG)
+  const unknown = lines.indexOf(UNKNOWN, wrong)
+  if (wrong === -1 || unknown === -1) return { outcome: 'refuse', spans: ['answer.md'], note: `answer.md has no ${wrong === -1 ? WRONG : UNKNOWN} section` }
+  const value = setting(db, 'science.dir')
+  const dir = value.startsWith('~/') ? join(homedir(), value.slice(2)) : value
+  if (dir === '' || !existsSync(dir)) return { outcome: 'refuse', spans: ['science.dir'], note: dir === '' ? 'science.dir is unset' : `science.dir ${dir} does not exist` }
+  const title = titleOf(root, plan.id)
+  if (title === null) return { outcome: 'refuse', spans: ['ask.md'], note: 'ask.md has no # title' }
+  const day = new Date().toISOString().slice(0, 10)
+  const path = join(dir, 'findings', `${day}_${title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}.md`)
+  const asked = JSON.parse(get(root, plan.id, 'question.json')) as { question: string; wrong_if: string }
+  const sources = JSON.parse(get(root, plan.id, 'sources.json')) as { url: string; fetched_at: string; quote: string; claim: string }[]
+  const part = (from: number, to?: number): string => lines.slice(from, to).join('\n').trim()
+  const answer = part(0, wrong)
+  const added = db.transaction(() => {
+    if (!proofed(db, { id: plan.id, kind: 'note', dest: 'site', title, dek: asked.question, body: answer.split(/\s+/).slice(0, 150).join(' '),
+      sources: JSON.stringify(sources.map((s) => ({ claim: s.claim, ref: s.url }))), checks: '[]', work_date: day, written_date: day })) return false
+    mkdirSync(join(dir, 'findings'), { recursive: true })
+    writeFileSync(path, `${[`# ${title}`, '## Question', asked.question, '## Answer', answer, WRONG, asked.wrong_if, part(wrong + 1, unknown), '## Sources',
+      sources.map((s, i) => `${String(i + 1)}. ${s.url} (${s.fetched_at}): "${s.quote}"`).join('\n'), UNKNOWN, part(unknown + 1)].join('\n\n')}\n`)
+    return true
+  })()
+  if (!added) return { outcome: 'pass', spans: [], note: 'already recorded' }
+  const ref = originRef(plan)
+  if (ref !== null) wire.close(ref.repo, ref.no, '', `Finding: ${path}`)
+  return { outcome: 'pass', spans: [], note: `finding at ${path}` }
 }

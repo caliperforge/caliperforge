@@ -164,8 +164,8 @@ export function openPr(repo: string, head: string, title: string, bodyFile: stri
 }
 
 /** An internal plan is closed by the commit that landed it on `main`, not by a pull request. */
-export function closeIssue(repo: string, no: number, sha: string): void {
-  execFileSync('gh', ['issue', 'close', String(no), '--repo', repo, '--comment', `landed on main as ${sha}`],
+export function closeIssue(repo: string, no: number, sha: string, comment = `landed on main as ${sha}`): void {
+  execFileSync('gh', ['issue', 'close', String(no), '--repo', repo, '--comment', comment],
     { encoding: 'utf8' })
 }
 

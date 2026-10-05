@@ -33,7 +33,7 @@ test('an unreadable log still sends the builder its run', () => {
 const emptyLog = (jobs: () => string): Gh => (args) => {
   if (args.includes('--log-failed')) return '\n'
   if (args.includes('conclusion,jobs')) return jobs()
-  if (args[0] === 'api') return '2026-09-21T13:55:02.1234567Z Expected: 120\n2026-09-21T13:55:03Z Actual: 60'
+  if (args[0] === 'api') return [...Array(80).keys()].map((i) => `2026-09-21T13:55:02.1234567Z line ${String(i)}`).join('\n')
   return JSON.stringify({ workflowName: 'Ruby' })
 }
 
@@ -41,7 +41,8 @@ test('an empty failed log falls back to the failed job and its log', () => {
   const steps = [{ name: 'setup', number: 1, conclusion: 'success' }, { name: 'run', number: 2, conclusion: 'failure' }]
   const jobs = [{ databaseId: 9, name: 'Ruby tests', conclusion: 'failure', steps }]
   const found = red(FORK, [`${RUN} ci.red`], emptyLog(() => JSON.stringify({ conclusion: 'failure', jobs })))
-  expect(found?.log).toContain('Ruby tests: run\nExpected: 120\nActual: 60')
+  expect(found?.log).toContain('Ruby tests: run\nline 20\n')
+  expect(found?.log).toMatch(/line 79$/)
   expect(found?.log).not.toMatch(/2026-/)
 })
 

@@ -49,11 +49,13 @@ function nameOf(fork: string, id: string, gh: Gh): string {
 function logOf(fork: string, id: string, gh: Gh): string {
   try {
     const failed = gh(['run', 'view', id, '--repo', fork, '--log-failed'])
-    return (failed.trim() ? failed : jobsOf(fork, id, gh)).replace(STAMP, '').split('\n').slice(-TAIL).join('\n')
+    return failed.trim() ? tail(failed) : jobsOf(fork, id, gh)
   } catch {
     return '(the failed log could not be read)'
   }
 }
+
+const tail = (log: string): string => log.replace(STAMP, '').split('\n').slice(-TAIL).join('\n')
 
 interface Job { databaseId: number; name: string; conclusion: string; steps: { name: string; conclusion: string }[] }
 
@@ -66,6 +68,6 @@ function jobsOf(fork: string, id: string, gh: Gh): string {
   if (jobs.length === 0) return `run ${id} ended ${run.conclusion} with no failed job`
   return jobs.map((j) => {
     const steps = j.steps.filter((s) => !PASSED.includes(s.conclusion)).map((s) => s.name).join(', ')
-    return `${j.name}: ${steps}\n${gh(['api', `repos/${fork}/actions/jobs/${String(j.databaseId)}/logs`])}`
+    return `${j.name}: ${steps}\n${tail(gh(['api', `repos/${fork}/actions/jobs/${String(j.databaseId)}/logs`]))}`
   }).join('\n')
 }

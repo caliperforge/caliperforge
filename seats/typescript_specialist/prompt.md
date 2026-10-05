@@ -45,3 +45,11 @@ On our own repository:
 - New logic goes in a new file rather than growing a file past its budget.
 
 On anyone else's repository, match its comment density instead.
+
+## Seams
+
+- A table: its `schema/NNNN_*.sql` migration, the `store/` module that reads it, and that module's tests.
+- A `cf` command: `cli/<name>.ts`, its `register*` call in `cli/cf.ts` or `cli/cf-*.ts`, and its test under `cli/tests/`.
+- A seat prompt or manifest: its digests in `rules/roster.yaml` and `rules.seed.sql`, which step 3 fills.
+- The handback fence in `seats/*_specialist/prompt.md`, `seats/modes/build.md` and `seats/modes/fix.md`: `rails/completion-audit/index.ts`, `sequencer/rails.ts` and `rails/tight/prose.ts`.
+- A file that grows: its `ratchet.json` row.

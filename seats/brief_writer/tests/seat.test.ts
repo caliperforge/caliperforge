@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { Seat, rules, seat } from '../../../runner/rules.ts'
-import { shape } from '../../../sequencer/brief.ts'
+import { section, shape } from '../../../sequencer/brief.ts'
 
 const root = join(import.meta.dirname, '../../..')
 
@@ -129,4 +129,24 @@ test('D3: atelier.md tests only services and models', () => {
   const brief = readFileSync(join(import.meta.dirname, 'atelier.md'), 'utf8')
   expect(servicesOnly(brief)).toBe(true)
   expect(servicesOnly(brief.replace('AtelierTests/NowRowModelTests.swift', 'AtelierUITests/NowScreenUITests.swift'))).toBe(false)
+})
+
+const seams = (prompt: string): boolean => {
+  const headings = prompt.split('\n').filter((l) => l.startsWith('## '))
+  const rows = section(prompt, '## Seams').split('\n').filter((l) => l.trim() !== '')
+  return headings.at(-1) === '## Seams' && rows.length >= 1 && rows.length <= 15
+}
+
+test('D1-D3: each language prompt ends with 1 to 15 Seams lines', () => {
+  for (const language of ['typescript', 'swift', 'kotlin', 'python']) {
+    expect(seams(readFileSync(join(root, `seats/${language}_specialist/prompt.md`), 'utf8'))).toBe(true)
+  }
+})
+
+test('D4: no Seams, 16 lines, or a later heading fails', () => {
+  const rows = (n: number): string => '- row\n'.repeat(n)
+  expect(seams(`# s\n\n## Seams\n\n${rows(15)}`)).toBe(true)
+  expect(seams(`# s\n\n## Profile\n\n${rows(1)}`)).toBe(false)
+  expect(seams(`# s\n\n## Seams\n\n${rows(16)}`)).toBe(false)
+  expect(seams(`# s\n\n## Seams\n\n${rows(1)}\n## After\n`)).toBe(false)
 })

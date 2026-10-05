@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { existsSync, rmSync } from 'node:fs'
+import { existsSync, readFileSync, rmSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { map } from '../cli/map.ts'
 import type { Fired, Provider } from '../providers/kind.ts'
@@ -20,7 +20,7 @@ import { briefed, builderRan, internal, type PlanRow } from '../store/plans.ts'
 import { byRun, opened, pending, unfinished } from '../store/transcript.ts'
 import { MODED, type Step } from '../templates/pr-path.ts'
 import { parse } from '../rails/diff.ts'
-import { estimate, human, pointed, references, shape, split, TEMPLATE, unclear, wide, WIDE, type Part } from './brief.ts'
+import { estimate, human, pointed, references, section, shape, split, TEMPLATE, unclear, wide, WIDE, type Part } from './brief.ts'
 import { repoOf } from './ready.ts'
 import { limitOf } from './size.ts'
 import { handout, long, touched, type Handed } from './handout.ts'
@@ -132,7 +132,7 @@ export async function fireBrief(db: Db, root: string, plan: PlanRow, step: Step,
   const src = srcDir(root, plan.id)
   const standing = maybe(root, plan.id, 'issue.md')
   if (standing !== null && shape(standing, ask, src) === null) return stands()
-  const fired = await ran(db, root, plan, step, provider, again(db, root, plan.id, ask) + store(root, plan) + long(src) + wideAsk(ask), false)
+  const fired = await ran(db, root, plan, step, provider, again(db, root, plan.id, ask) + store(root, plan) + seams(root, plan.seat) + long(src) + wideAsk(ask), false)
   drop(root, plan.id, 'brief.refused.md')
   if (fired.ended !== 'completed') return exited(step, fired)
   const question = unclear(fired.text)
@@ -231,6 +231,12 @@ function store(root: string, plan: PlanRow): string {
   const [schema, cli] = machineReads(root, plan, 'brief_writer')
   if (schema === undefined || cli === undefined) return ''
   return `\n\n# The machine's store\n\nAtelier reads the machine's cf.db. Its tables are defined in \`${schema}/*.sql\` (later files alter earlier ones) and the \`cf\` commands in \`${cli}/\`. Read them for column names and values; you may not write there.\n${DASHBOARD}`
+}
+
+function seams(root: string, seat: string | null): string {
+  const path = seat === null ? null : join(root, 'seats', seat, 'prompt.md')
+  const body = path === null || !existsSync(path) ? '' : section(readFileSync(path, 'utf8'), '## Seams').trim()
+  return body === '' ? '' : `\n\n# Seams\n\n${body}\n`
 }
 
 /** A plan with no `ask.md` carries its ask as `issue.md`, the name the brief takes over. */

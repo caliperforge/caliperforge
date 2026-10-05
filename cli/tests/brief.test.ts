@@ -9,11 +9,12 @@ import { registerPlans } from '../cf-plans.ts'
 import { actors, actorSection, costs, costSection, fileWaits, greptileLine, hands, heldBy, line, misses, missSection, rulings, section, ticketSection,
   tickets, unpriced, waitLine, waits } from '../brief.ts'
 import { refusalDays, refusalSection } from '../refusals.ts'
-import { handUpLine } from '../director.ts'
+import { directorSection, handUpLine } from '../director.ts'
 import { driftSection } from '../drift.ts'
 import { hold } from '../../sequencer/hold.ts'
 import { monthly, reviewed } from '../../sequencer/ready.ts'
 import { put, SELF } from '../../sequencer/workspace.ts'
+import { decided, directorDays } from '../../store/decisions.ts'
 import { drifts } from '../../store/drift.ts'
 import { handUps, repriced } from '../../store/events.ts'
 import { record as listFiles } from '../../store/files.ts'
@@ -146,6 +147,27 @@ test('D3 events of another kind count in neither number', () => {
   event(db, 'coo_lite', 'retry')
   event(db, 'coo_lite', 'stuck', IN, 1, 'needs_ceo')
   expect(handUps(db, NOW)).toEqual({ decided: 0, up: 0 })
+})
+
+test('directorSection by day', () => {
+  const db = world()
+  plan(db, 1, 'done', 25)
+  plan(db, 2, 'refused', 30)
+  plan(db, 3, 'running', 31)
+  event(db, 'director', 'director', IN, 1)
+  event(db, 'coo_lite', 'coo_lite', '2026-09-20 10:00:00', 2, 'needs_ceo')
+  event(db, 'director', 'director', '2026-09-18 10:00:00', 3)
+  event(db, 'director', 'retry')
+  event(db, 'director', 'director', '2026-09-13 12:00:00')
+  for (const verb of ['ask_coo', 'retry'] as const) {
+    decided(db, { plan: 3, step: 2, wait_reason: 'blocked_on_ceo', verb, why: 'x', evidence: null, tokens: 0 }, '2026-09-20 09:00:00')
+  }
+  const none = '0 seen\t0 decided\t0 to fixer\t0 to ceo\theld 0 missed 0\n'
+  expect(directorSection(directorDays(db, NOW), NOW)).toBe('director by day, last 7 d\n' +
+    `  2026-09-14\t${none}  2026-09-15\t${none}  2026-09-16\t${none}  2026-09-17\t${none}` +
+    '  2026-09-18\t1 seen\t1 decided\t0 to fixer\t0 to ceo\theld 0 missed 0\n' +
+    `  2026-09-19\t${none}` +
+    '  2026-09-20\t2 seen\t1 decided\t1 to fixer\t1 to ceo\theld 1 missed 1\n')
 })
 
 test('each actor scores the past week, not an event 8 days old', () => {

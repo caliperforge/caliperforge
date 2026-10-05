@@ -117,7 +117,7 @@ function settled(gate: Gate, ran: Ran): Ran {
   return gate.quiet === true && ran.ok && ran.output.trim() !== '' ? { ok: false, code: '1', output: ran.output } : ran
 }
 
-const BUILT = [`${DERIVED}/`, '__pycache__/']
+export const BUILT = [`${DERIVED}/`, '__pycache__/', '.gradle/', 'build/']
 
 /** The derived data is build output: never staged, never in the diff the reviewers read. */
 export function excluded(src: string): void {

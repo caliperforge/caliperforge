@@ -61,8 +61,8 @@ const REPO = "COALESCE((SELECT t.repo FROM targets t WHERE t.id = %s.target_id),
 
 /**
  * The job this plan must wait for: one in the same repo, not settled, past its brief, whose file
- * list shares a path with this one's -- and either building already or queued ahead of it, so two
- * unbuilt plans never wait on each other. A plan waiting on a person or stopped holds nothing up.
+ * list shares a path with this one's -- and either building already or ahead of it in queue order
+ * (priority, then age), so two unbuilt plans never wait on each other and a P0 never waits on an unbuilt P1. A plan waiting on a person or stopped holds nothing up.
  */
 export function sharing(db: Db, plan: number): { plan: number; path: string } | null {
   return (db.prepare(`SELECT o.id AS plan, f.path FROM plans me
@@ -71,8 +71,9 @@ export function sharing(db: Db, plan: number): { plan: number; path: string } | 
     JOIN plans o ON o.id = f.plan
     WHERE me.id = ? AND o.state IN ('queued', 'running') AND o.step >= 2 AND mine.path NOT LIKE '.cf/%'
       AND ${REPO.replace('%s', 'o')} = ${REPO.replace('%s', 'me')}
-      AND (o.id < me.id OR EXISTS (SELECT 1 FROM runs r WHERE r.plan = o.id AND r.step >= 2 AND r.${BUILT}))
-    ORDER BY o.id LIMIT 1`).get(plan) ?? null) as { plan: number; path: string } | null
+      AND (o.priority < me.priority OR (o.priority = me.priority AND o.id < me.id)
+        OR EXISTS (SELECT 1 FROM runs r WHERE r.plan = o.id AND r.step >= 2 AND r.${BUILT}))
+    ORDER BY o.priority, o.id LIMIT 1`).get(plan) ?? null) as { plan: number; path: string } | null
 }
 
 /** Every path the plan holds, strays included. */

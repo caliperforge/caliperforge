@@ -11,7 +11,7 @@ import { advance, back, end, finish, internal, needsCeo, rewind, type PipeRow, t
 import { blipped, peer, refused } from '../store/refusals.ts'
 import { draft, grow, review } from '../templates/comms.ts'
 import type { Step } from '../templates/pr-path.ts'
-import { answered, gather } from '../templates/research.ts'
+import { answered, check, gather } from '../templates/research.ts'
 import type { Fired, Outcome } from './kind.ts'
 import { parted } from './split.ts'
 import { refilled } from './refill.ts'
@@ -151,6 +151,7 @@ function fire(db: Db, root: string, plan: PlanRow, step: Step, provider: Provide
     const standing = kept(db, root, plan, step)
     return standing === null ? model(db, plan, step, () => fireLanded(db, root, plan, step, provider)) : Promise.resolve(standing)
   }
+  if (step.name === 'check') return check(root, plan)
   return Promise.resolve(kernel(db, root, plan, wire, read))
 }
 

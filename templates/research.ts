@@ -37,6 +37,31 @@ export function sourced(root: string, plan: PlanRow, reply: string): Outcome {
   return { outcome: 'pass', spans: [], note: `sources.json written with ${String(got.data.sources.length)} source(s)` }
 }
 
+const flat = (s: string): string => s.replace(/\s+/g, ' ').trim()
+
+const page = (url: string): Promise<{ ok: boolean; text: string }> => fetch(url).then(
+  async (res) => res.ok ? { ok: true, text: flat(await res.text()) } : { ok: false, text: String(res.status) },
+  (error: unknown) => ({ ok: false, text: error instanceof Error ? error.message : String(error) }))
+
+export async function check(root: string, plan: PlanRow): Promise<Outcome> {
+  const sources = JSON.parse(get(root, plan.id, 'sources.json')) as { url: string; quote: string }[]
+  if (sources.length === 0) return { outcome: 'pass', spans: [], note: 'no sources: nothing found' }
+  const claims = get(root, plan.id, 'answer.md').split('\n').filter((l) => l.trim() !== '' && !l.startsWith('#'))
+    .flatMap((l) => l.split(/(?<=[.!?]|\[source:\d+\])\s+(?!\[source:)/)).map((sentence) => {
+      const cited = [...sentence.matchAll(/\[source:(\d+)\]/g)].map((m) => sources[Number(m[1]) - 1])
+      return { sentence, cited: cited.length > 0 && cited.every((s) => s !== undefined) ? cited : null }
+    })
+  const unsourced = claims.filter((c) => c.cited === null).map((c) => `"${c.sentence}"`)
+  if (unsourced.length > 0) return { outcome: 'refuse', spans: ['research.unsourced'], note: `no source for ${unsourced.join(', ')}` }
+  const cites = claims.flatMap((c) => (c.cited ?? []).map((s) => ({ claim: c.sentence, url: s.url, quote: flat(s.quote) })))
+  const pages = new Map(await Promise.all([...new Set(cites.map((c) => c.url))].map(async (url) => [url, await page(url)] as const)))
+  const dead = [...pages].filter(([, p]) => !p.ok).map(([url, p]) => `${url} (${p.text})`)
+  if (dead.length > 0) return { outcome: 'refuse', spans: ['research.dead_source'], note: `dead source: ${dead.join(', ')}` }
+  const missing = cites.filter((c) => pages.get(c.url)?.text.includes(c.quote) !== true).map((c) => `"${c.claim}" (${c.url})`)
+  if (missing.length > 0) return { outcome: 'refuse', spans: ['research.quote_missing'], note: `quote not on the page for ${missing.join(', ')}` }
+  return { outcome: 'pass', spans: [], note: `${String(claims.length)} sentence(s) checked against ${String(pages.size)} url(s)` }
+}
+
 const row = (name: string, step: number): Step =>
   ({ step, name, seat: DEFAULT_BUILDER, fires: 'kernel', runs: name, gate: false, writes_verdict: false, verdict_gate: null })
 

@@ -61,7 +61,7 @@ test('fresh', () => {
   expect(drift(d, [COO, { ...COO, name: 'six', gap: '24h' }], NOW)).toEqual([])
   expect(REGISTRY.map((e) => e.name)).toEqual(['coo_lite', 'fixer', 'fix_mode', 'swift_review', 'kotlin_review',
     'python_review', 'ruby_review', 'rust_review', 'go_review', 'php_review', 'brief_writer', 'text_review',
-    'growth_lead', 'web_specialist', 'go_specialist', 'php_specialist', 'ruby_specialist', 'python_specialist', 'lua_specialist', 'rust_specialist', 'gardener', 'ratchet', 'accounts', 'records', 'dispositions', 'signoffs', 'proposals',
+    'growth_lead', 'web_specialist', 'design', 'go_specialist', 'php_specialist', 'ruby_specialist', 'python_specialist', 'lua_specialist', 'rust_specialist', 'gardener', 'ratchet', 'accounts', 'records', 'dispositions', 'signoffs', 'proposals',
     'ratchet_refuse', 'intake', 'stuck_plans', 'science_pull', 'site_publish', 'director_look', 'typescript_specialist',
     'daily_learnings', 'review_examples'])
   expect(ratchetRules(d).mode).toBe('refuse')
@@ -118,6 +118,18 @@ test('D4 web_specialist is silent only once atelier-web has a plan', () => {
   addPlan(d, { pipe_id: 1, target_id: null, template: 'pr_path', state: 'queued', queued_at: '2026-10-01', lane: 'atelier',
     seat: 'web_specialist', origin: 'https://github.com/caliperforge/atelier-web/issues/1', step: 0 })
   expect(drift(d, web, NOW)).toEqual([{ name: 'web_specialist', state: 'silent', detail: "no row in runs WHERE seat = 'web_specialist'" }])
+})
+
+test('D6 design is silent only once atelier-web is past step 4', () => {
+  const design = REGISTRY.filter((e) => e.name === 'design')
+  const d = db()
+  expect(drift(d, design, NOW)).toEqual([])
+  const running = (issue: number, step: number): number => addPlan(d, { pipe_id: 1, target_id: null, template: 'pr_path', state: 'running',
+    queued_at: '2026-10-01', lane: 'atelier', seat: 'web_specialist', origin: `https://github.com/caliperforge/atelier-web/issues/${String(issue)}`, step })
+  running(1, 4)
+  expect(drift(d, design, NOW)).toEqual([])
+  running(2, 5)
+  expect(drift(d, design, NOW)).toEqual([{ name: 'design', state: 'silent', detail: "no row in runs WHERE seat = 'design'" }])
 })
 
 test('D2 go_specialist is silent until a build run, at any age', () => {

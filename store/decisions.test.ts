@@ -1,6 +1,6 @@
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
-import { decided, decisions, VERBS, type Decision } from './decisions.ts'
+import { decided, decisions, mark, VERBS, type Decision } from './decisions.ts'
 import { migrate, open, type Db } from './index.ts'
 import { WAIT } from './plans.ts'
 
@@ -50,6 +50,13 @@ test('a why that is blank, and an unknown wait reason, are refused', () => {
   const db = bench()
   expect(() => { decided(db, { ...ROW, why: '   ' }) }).toThrow(/CHECK/)
   expect(() => { decided(db, { ...ROW, wait_reason: 'bored' as never }) }).toThrow(/CHECK/)
+})
+
+test('a marked decision keeps its applied value', () => {
+  const db = bench()
+  const id = decided(db, ROW)
+  mark(db, id, 'applied')
+  expect(db.prepare('SELECT applied FROM decisions WHERE id = ?').get(id)).toEqual({ applied: 'applied' })
 })
 
 test('a decision with no evidence keeps its null', () => {

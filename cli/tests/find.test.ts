@@ -57,3 +57,9 @@ test('foreign referencing PR parks an uncarded ask, not a carded', () => {
   expect(find('acme/widget', 12, false, gh({ open })).park)
     .toBe('unclaimed: open pull request #5 references it https://github.com/acme/widget/pull/5')
 })
+
+test('our own assignment and claim leave it unclaimed', () => {
+  const ours = issue({ assignees: [{ login: 'michael-moffett' }],
+    comments: [SAID, { author: { login: 'michael-moffett' }, body: "I'd like to take this one", url: `${URL}#c3` }] })
+  expect(find('acme/widget', 12, false, gh({ issue: ours })).park).toBeNull()
+})

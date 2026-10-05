@@ -11,6 +11,7 @@ import { advance, back, end, finish, internal, needsCeo, rewind, type PipeRow, t
 import { blipped, peer, refused } from '../store/refusals.ts'
 import { draft, grow, review } from '../templates/comms.ts'
 import type { Step } from '../templates/pr-path.ts'
+import { answered, gather } from '../templates/research.ts'
 import type { Fired, Outcome } from './kind.ts'
 import { parted } from './split.ts'
 import { refilled } from './refill.ts'
@@ -144,7 +145,7 @@ function fire(db: Db, root: string, plan: PlanRow, step: Step, provider: Provide
     return model(db, plan, step, () => fireBrief(db, root, plan, step, provider))
   }
   if (step.fires === 'seat') {
-    return model(db, plan, step, () => plan.template === 'comms' ? comms(step)(db, root, plan, step, provider) : fireSeat(db, root, plan, step, provider))
+    return model(db, plan, step, () => plan.template === 'pr_path' ? fireSeat(db, root, plan, step, provider) : seated(plan, step)(db, root, plan, step, provider))
   }
   if (step.fires === 'review') {
     const standing = kept(db, root, plan, step)
@@ -153,11 +154,14 @@ function fire(db: Db, root: string, plan: PlanRow, step: Step, provider: Provide
   return Promise.resolve(kernel(db, root, plan, wire, read))
 }
 
-const COMMS: Record<string, typeof grow> = { draft, text_review: review, grow }
+const SEATS: Partial<Record<PlanRow['template'], Record<string, typeof grow>>> = {
+  comms: { draft, text_review: review, grow },
+  research: { gather, review: answered },
+}
 
-function comms(step: Step): typeof grow {
-  const handler = COMMS[step.name]
-  if (handler === undefined) throw new Error(`comms has no handler for seat step ${step.name}`)
+function seated(plan: PlanRow, step: Step): typeof grow {
+  const handler = SEATS[plan.template]?.[step.name]
+  if (handler === undefined) throw new Error(`${plan.template} has no handler for seat step ${step.name}`)
   return handler
 }
 

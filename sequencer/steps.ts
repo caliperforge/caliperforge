@@ -8,6 +8,7 @@ import { partsOf } from '../store/parts.ts'
 import { builderRan, held, internal, needsCeo, originIssue, originRef, waiting, type PlanRow, type Wait } from '../store/plans.ts'
 import { capture, desk, facts, gather, pack, score, steps as comms } from '../templates/comms.ts'
 import { at, last, steps, type Step } from '../templates/pr-path.ts'
+import { question, steps as research } from '../templates/research.ts'
 import { approved, approvedPlan, batch } from './approve.ts'
 import type { Outcome } from './kind.ts'
 import { preReview } from './rails.ts'
@@ -41,9 +42,9 @@ function listed(name: string, list: Step[]): StepMap {
 
 const MAPS: Record<PlanRow['template'], StepMap> = {
   pr_path: { steps, at, last },
-  /** templates/comms.ts imports back into this module through sequencer/seat.ts, so its steps may not exist yet when this one loads. */
+  /** templates/comms.ts and templates/research.ts import back into this module through sequencer/seat.ts, so their steps may not exist yet when this one loads. */
   get comms() { return listed('comms', comms) },
-  research: listed('research', []),
+  get research() { return listed('research', research) },
 }
 
 export function mapOf(template: PlanRow['template']): StepMap {
@@ -105,7 +106,7 @@ export function kernel(db: Db, root: string, plan: PlanRow, wire?: Wire, read?: 
   if (step.name === 'capture') return capture(db, root)
   if (step.name === 'pack') return pack(db, root, plan)
   if (step.name === 'score') return score(db, root, plan, step)
-  return { outcome: 'pass', spans: [], note: step.name }
+  return step.name === 'question' ? question(root, plan) : { outcome: 'pass', spans: [], note: step.name }
 }
 
 function railed(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {

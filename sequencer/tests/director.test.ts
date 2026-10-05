@@ -535,10 +535,16 @@ test('fixFailsOnce', async () => {
   expect(told(db)).toEqual([{ actor: 'director', outcome:'needs_ceo', message: expect.stringMatching(/^fix did not apply, /) as string }])
 })
 
+test('code out of reach goes to the builder', async () => {
+  const { db, home } = seeded('1')
+  fixLive(db)
+  await cooLite(db, home, row(db), bySeat([], '---\nmove: fix\nwhy: edit src/sequencer/x.ts to drop the guard\n---\n'), now, () => undefined, wire())
+  expect(told(db)).toEqual([{ actor: 'director', outcome: 'pass', message: expect.stringMatching(/^rule: edit src\/sequencer\/x\.ts/) as string }])
+})
+
 test('fixOutOfReach', async () => {
   const outside = (path: string) => `\`${path}\` is outside the fixer's write_paths`
   for (const [why, reason] of [
-    ['edit src/sequencer/x.ts to drop the guard', outside('src/sequencer/x.ts')],
     ['run gh issue create for the gap', 'the fixer has no git and no GitHub'],
     ['run UPDATE plans SET step = 2 in cf.db', outside('cf.db')],
   ] as const) {
@@ -848,8 +854,8 @@ test('D4 a running plan at its ceiling: one post per head', async () => {
   expect(leases(db)).toEqual({ n: 0 })
   db.exec("UPDATE plans SET wait_reason = 'ready_proof' WHERE id = 7")
   await wake()
-  expect(posted).toHaveLength(2)
-  expect(wokeTold(db)).toHaveLength(2)
+  expect(posted).toHaveLength(1)
+  expect(wokeTold(db).at(-1)).toEqual({ outcome: 'pass', message: 'left alone: plan is running, waiting on ready_proof' })
   expect(maybe(home, 7, 'orchestrator.md')?.split('\n')[0]).toBe('step 4 ready_proof')
 })
 
@@ -859,4 +865,13 @@ test('the store takes blocked_on_ceo, refuses an unknown reason',() => {
     VALUES (7, 4, ?, 'ask_coo', 'x')`).run(reason)
   expect(() => insert('blocked_on_ceo')).not.toThrow()
   expect(() => insert('made_up')).toThrow(/CHECK/)
+})
+
+test('a plan waiting on fork CI is left alone', async () => {
+  const { db, home } = seeded('1')
+  db.exec("UPDATE plans SET state = 'running', wait_reason = 'ready_proof' WHERE id = 7")
+  const posted: string[] = []
+  await cooLite(db, home, row(db), bySeat([]), now, (t) => void posted.push(t), wire())
+  expect(told(db).map((t) => t.outcome)).toEqual(['pass'])
+  expect(posted).toEqual([])
 })

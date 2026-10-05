@@ -33,8 +33,8 @@ function staff(step: number, language: string | null): { seat: string; mode?: Ru
 }
 
 /** Which seat builds: the target's language picks it. */
-export function builder(language: string | null): string {
-  return staff(2, language).seat
+export function builder(language: string | null): string | null {
+  return staffed(ROOT, 'pr_path', 2, language)?.seat ?? null
 }
 
 /** The language whose builder is `seat`, or null when none is. */

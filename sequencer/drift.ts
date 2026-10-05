@@ -23,11 +23,12 @@ export const Entry = z.object({
   gap: z.string().regex(/^\d+[hd]$/).optional(),
   while: z.string().optional(),
   when: z.string().optional(),
+  expected: z.literal(0).optional(),
 })
 
 export type Entry = z.infer<typeof Entry>
 
-export interface Drifted { name: string; state: 'off' | 'silent' | 'stale'; detail: string }
+export interface Drifted { name: string; state: 'off' | 'silent' | 'stale' | 'seen'; detail: string }
 
 export function drift(db: Db, registry: Entry[], now: Date): Drifted[] {
   return registry.flatMap((entry) => {
@@ -49,6 +50,10 @@ function quiet(db: Db, entry: Entry, now: Date): Drifted | null {
   if (entry.while !== undefined && !holds(db, entry.while)) return null
   const from = `${table}${where === undefined ? '' : ` WHERE ${where}`}`
   const last = newest(db, from, column, now)
+  if (entry.expected === 0) {
+    return last.days !== null && gap !== undefined && last.days <= days(gap)
+      ? { name, state: 'seen', detail: `newest ${table}.${column} is ${String(last.newest)}, within ${gap}; expected none` } : null
+  }
   if (last.newest === null) return when === undefined || worked(db, when) ? { name, state: 'silent', detail: `no row in ${from}` } : null
   if (gap === undefined || last.days === null) return null
   return last.days > days(gap) ? { name, state: 'stale', detail: `newest ${table}.${column} is ${String(last.newest)}, older than ${gap}` } : null

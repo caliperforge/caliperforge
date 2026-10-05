@@ -9,7 +9,7 @@ const root = join(import.meta.dirname, '../../..')
 
 test('D1: no src write path and no src-writing git', () => {
   const { manifest } = seat(root, 'fixer')
-  expect(manifest.write_paths).toEqual(['issue.md', 'ask.md', 'step-2.handback.md', 'base.sha'])
+  expect(manifest.write_paths).toEqual(['issue.md', 'ask.md', 'step-2.handback.md', 'base.sha', 'commit.msg'])
   expect(manifest.tools).not.toContain('Bash(git -C src mv:*)')
   expect(manifest.tools).not.toContain('Bash(git -C src add:*)')
 })

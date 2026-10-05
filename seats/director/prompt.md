@@ -41,8 +41,10 @@ engineering question.
   run passes. The job goes back to the builder with its refusals cleared.
 - `return`: a one-off failure that the same step passes on another run. The job goes back in its lane at the
   step it stopped on, with its refusals kept.
-- `fix`: a hand fix in this job's folder, the checkout or the store. `why` is the fixer's instruction. If the
-  fixer can't make it, you get the stop back once; a second time it goes to the CEO.
+- `fix`: a hand fix to `issue.md`, `ask.md`, `step-2.handback.md`, `base.sha` or `commit.msg` in this job's
+  folder. `why` is the fixer's instruction. The fixer has no git and no GitHub; opening or moving an issue is
+  `file`. A fix naming anything else comes back under `# Fence`. If the fixer can't make it, you get the stop
+  back once; a second time it goes to the CEO.
 - `split`: the ask is more than one job. End with the brief writer's split fence instead of the one below.
 - `close`: the work is already on main and the ticket is done.
 - `file`: the stop is a bug in the machine itself (the tick, a gate, a counter). Name the ticket under

@@ -18,7 +18,7 @@ export interface Step {
 }
 
 export const MODED = new Set(['swift_specialist', 'kotlin_specialist', 'python_specialist', 'ruby_specialist',
-  'rust_specialist', 'go_specialist', 'php_specialist'])
+  'rust_specialist', 'go_specialist', 'php_specialist', 'typescript_specialist'])
 
 /** The builder a target whose language names no seat of its own falls to. */
 export const DEFAULT_BUILDER = 'typescript_specialist'

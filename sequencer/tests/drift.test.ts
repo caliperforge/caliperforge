@@ -60,7 +60,7 @@ test('fresh', () => {
   event(d, '2026-10-02 10:00:00')
   expect(drift(d, [COO, { ...COO, name: 'six', gap: '24h' }], NOW)).toEqual([])
   expect(REGISTRY.map((e) => e.name)).toEqual(['director', 'fixer', 'fix_mode', 'swift_review', 'kotlin_review',
-    'python_review', 'ruby_review', 'rust_review', 'go_review', 'php_review', 'brief_writer', 'text_review',
+    'python_review', 'ruby_review', 'rust_review', 'go_review', 'php_review', 'typescript_review', 'brief_writer', 'text_review',
     'growth_lead', 'web_specialist', 'design', 'go_specialist', 'php_specialist', 'ruby_specialist', 'python_specialist', 'lua_specialist', 'rust_specialist', 'gardener', 'ratchet', 'accounts', 'records', 'dispositions', 'signoffs', 'proposals',
     'ratchet_refuse', 'intake', 'stuck_plans', 'science_pull', 'site_publish', 'director_look', 'typescript_specialist',
     'daily_learnings', 'review_examples'])

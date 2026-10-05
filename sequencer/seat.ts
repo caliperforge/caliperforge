@@ -238,7 +238,7 @@ function askOf(root: string, plan: number): string {
   return maybe(root, plan, 'ask.md') ?? move(root, plan, 'issue.md', 'ask.md')
 }
 
-const BUILD = new Set([...MODED, 'lua_specialist', 'outside_specialist'])
+export const BUILD = new Set([...MODED, 'lua_specialist', 'outside_specialist'])
 
 export async function ran(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider,
   issue: string, ours: boolean): Promise<Fired> {

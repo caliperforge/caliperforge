@@ -1,0 +1,118 @@
+- { template: pr_path, step: 0, key: kotlin, seat: kotlin_specialist }
+- { template: pr_path, step: 0, key: swift, seat: swift_specialist }
+- { template: pr_path, step: 0, key: typescript, seat: typescript_specialist }
+- { template: pr_path, step: 0, key: outside, seat: outside_specialist }
+- { template: pr_path, step: 0, key: rust, seat: rust_specialist }
+- { template: pr_path, step: 0, key: python, seat: python_specialist }
+- { template: pr_path, step: 0, key: ruby, seat: ruby_specialist }
+- { template: pr_path, step: 0, key: go, seat: go_specialist }
+- { template: pr_path, step: 0, key: php, seat: php_specialist }
+- { template: pr_path, step: 0, key: lua, seat: lua_specialist }
+- { template: pr_path, step: 0, key: web, seat: web_specialist }
+- { template: pr_path, step: 0, seat: typescript_specialist }
+- { template: pr_path, step: 1, key: kotlin, seat: brief_writer }
+- { template: pr_path, step: 1, key: swift, seat: brief_writer }
+- { template: pr_path, step: 1, key: typescript, seat: brief_writer }
+- { template: pr_path, step: 1, key: outside, seat: brief_writer }
+- { template: pr_path, step: 1, key: rust, seat: brief_writer }
+- { template: pr_path, step: 1, key: python, seat: brief_writer }
+- { template: pr_path, step: 1, key: ruby, seat: brief_writer }
+- { template: pr_path, step: 1, key: go, seat: brief_writer }
+- { template: pr_path, step: 1, key: php, seat: brief_writer }
+- { template: pr_path, step: 1, key: lua, seat: brief_writer }
+- { template: pr_path, step: 1, key: web, seat: brief_writer }
+- { template: pr_path, step: 1, seat: brief_writer }
+- { template: pr_path, step: 2, key: kotlin, seat: kotlin_specialist, mode: build }
+- { template: pr_path, step: 2, key: swift, seat: swift_specialist, mode: build }
+- { template: pr_path, step: 2, key: typescript, seat: typescript_specialist, mode: build }
+- { template: pr_path, step: 2, key: outside, seat: outside_specialist, mode: build }
+- { template: pr_path, step: 2, key: rust, seat: rust_specialist, mode: build }
+- { template: pr_path, step: 2, key: python, seat: python_specialist, mode: build }
+- { template: pr_path, step: 2, key: ruby, seat: ruby_specialist, mode: build }
+- { template: pr_path, step: 2, key: go, seat: go_specialist, mode: build }
+- { template: pr_path, step: 2, key: php, seat: php_specialist, mode: build }
+- { template: pr_path, step: 2, key: lua, seat: lua_specialist, mode: build }
+- { template: pr_path, step: 2, key: web, seat: web_specialist }
+- { template: pr_path, step: 2, seat: typescript_specialist, mode: build }
+- { template: pr_path, step: 3, key: kotlin, seat: kotlin_specialist }
+- { template: pr_path, step: 3, key: swift, seat: swift_specialist }
+- { template: pr_path, step: 3, key: typescript, seat: typescript_specialist }
+- { template: pr_path, step: 3, key: outside, seat: outside_specialist }
+- { template: pr_path, step: 3, key: rust, seat: rust_specialist }
+- { template: pr_path, step: 3, key: python, seat: python_specialist }
+- { template: pr_path, step: 3, key: ruby, seat: ruby_specialist }
+- { template: pr_path, step: 3, key: go, seat: go_specialist }
+- { template: pr_path, step: 3, key: php, seat: php_specialist }
+- { template: pr_path, step: 3, key: lua, seat: lua_specialist }
+- { template: pr_path, step: 3, key: web, seat: web_specialist }
+- { template: pr_path, step: 3, seat: typescript_specialist }
+- { template: pr_path, step: 4, key: kotlin, seat: kotlin_specialist, mode: review }
+- { template: pr_path, step: 4, key: swift, seat: swift_specialist, mode: review }
+- { template: pr_path, step: 4, key: typescript, seat: typescript_specialist, mode: review }
+- { template: pr_path, step: 4, key: outside, seat: outside_specialist }
+- { template: pr_path, step: 4, key: rust, seat: rust_specialist, mode: review }
+- { template: pr_path, step: 4, key: python, seat: python_specialist, mode: review }
+- { template: pr_path, step: 4, key: ruby, seat: ruby_specialist, mode: review }
+- { template: pr_path, step: 4, key: go, seat: go_specialist, mode: review }
+- { template: pr_path, step: 4, key: php, seat: php_specialist, mode: review }
+- { template: pr_path, step: 4, key: lua, seat: lua_specialist }
+- { template: pr_path, step: 4, key: web, seat: web_specialist }
+- { template: pr_path, step: 4, seat: typescript_specialist, mode: review }
+- { template: pr_path, step: 5, key: kotlin, seat: kotlin_specialist }
+- { template: pr_path, step: 5, key: swift, seat: swift_specialist }
+- { template: pr_path, step: 5, key: typescript, seat: typescript_specialist }
+- { template: pr_path, step: 5, key: outside, seat: outside_specialist }
+- { template: pr_path, step: 5, key: rust, seat: rust_specialist }
+- { template: pr_path, step: 5, key: python, seat: python_specialist }
+- { template: pr_path, step: 5, key: ruby, seat: ruby_specialist }
+- { template: pr_path, step: 5, key: go, seat: go_specialist }
+- { template: pr_path, step: 5, key: php, seat: php_specialist }
+- { template: pr_path, step: 5, key: lua, seat: lua_specialist }
+- { template: pr_path, step: 5, key: web, seat: web_specialist }
+- { template: pr_path, step: 5, seat: typescript_specialist }
+- { template: pr_path, step: 6, key: kotlin, seat: kotlin_specialist }
+- { template: pr_path, step: 6, key: swift, seat: swift_specialist }
+- { template: pr_path, step: 6, key: typescript, seat: typescript_specialist }
+- { template: pr_path, step: 6, key: outside, seat: outside_specialist }
+- { template: pr_path, step: 6, key: rust, seat: rust_specialist }
+- { template: pr_path, step: 6, key: python, seat: python_specialist }
+- { template: pr_path, step: 6, key: ruby, seat: ruby_specialist }
+- { template: pr_path, step: 6, key: go, seat: go_specialist }
+- { template: pr_path, step: 6, key: php, seat: php_specialist }
+- { template: pr_path, step: 6, key: lua, seat: lua_specialist }
+- { template: pr_path, step: 6, key: web, seat: web_specialist }
+- { template: pr_path, step: 6, seat: typescript_specialist }
+- { template: pr_path, step: 7, key: kotlin, seat: kotlin_specialist }
+- { template: pr_path, step: 7, key: swift, seat: swift_specialist }
+- { template: pr_path, step: 7, key: typescript, seat: typescript_specialist }
+- { template: pr_path, step: 7, key: outside, seat: outside_specialist }
+- { template: pr_path, step: 7, key: rust, seat: rust_specialist }
+- { template: pr_path, step: 7, key: python, seat: python_specialist }
+- { template: pr_path, step: 7, key: ruby, seat: ruby_specialist }
+- { template: pr_path, step: 7, key: go, seat: go_specialist }
+- { template: pr_path, step: 7, key: php, seat: php_specialist }
+- { template: pr_path, step: 7, key: lua, seat: lua_specialist }
+- { template: pr_path, step: 7, key: web, seat: web_specialist }
+- { template: pr_path, step: 7, seat: typescript_specialist }
+- { template: pr_path, step: 8, key: kotlin, seat: kotlin_specialist }
+- { template: pr_path, step: 8, key: swift, seat: swift_specialist }
+- { template: pr_path, step: 8, key: typescript, seat: typescript_specialist }
+- { template: pr_path, step: 8, key: outside, seat: outside_specialist }
+- { template: pr_path, step: 8, key: rust, seat: rust_specialist }
+- { template: pr_path, step: 8, key: python, seat: python_specialist }
+- { template: pr_path, step: 8, key: ruby, seat: ruby_specialist }
+- { template: pr_path, step: 8, key: go, seat: go_specialist }
+- { template: pr_path, step: 8, key: php, seat: php_specialist }
+- { template: pr_path, step: 8, key: lua, seat: lua_specialist }
+- { template: pr_path, step: 8, key: web, seat: web_specialist }
+- { template: pr_path, step: 8, seat: typescript_specialist }
+- { template: comms, step: 0, seat: typescript_specialist }
+- { template: comms, step: 1, seat: writer }
+- { template: comms, step: 2, seat: typescript_specialist }
+- { template: comms, step: 3, seat: text_review }
+- { template: comms, step: 4, seat: typescript_specialist }
+- { template: comms, step: 5, seat: typescript_specialist }
+- { template: comms, step: 6, seat: typescript_specialist }
+- { template: comms, step: 7, seat: growth_lead }
+- { template: comms, step: 8, seat: typescript_specialist }
+- { template: comms, step: 9, seat: typescript_specialist }

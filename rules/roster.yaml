@@ -56,9 +56,6 @@ digests:
   web_specialist:
     manifest: 60ad61920b23c01a4ef282fcab810312a042142d77d6794727258ff9861cb647
     prompt: 86dfc1fad085e04ad1dcdd70f1e2564e86c33adfab443d753f42dc0885f9b55e
-  orchestrator:
-    manifest: 5c83eed74d97d77b459e19b21bc244a9a600e3423969eff7d497de7d8debce8f
-    prompt: dcbc3b6b2ec26f418c79da0248b318f8db1f3aef9b611da87fec37360063ed6a
   fixer:
     manifest: 2caa5663144b5f4771e11177f9f8ae1e0cc6f88089cf30bd07a623a3e734c196
     prompt: dce592b4daa940381974f218612a14c8f5f287361588a6ac93f1979fbf1e6a5d

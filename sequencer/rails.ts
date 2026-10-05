@@ -164,10 +164,8 @@ function broke(db: Db, root: string, plan: PlanRow, failed: Failure): Outcome {
 }
 
 /**
- * Tight's prose rule reads what the maintainer will read: the pull request text the card set, where it set one.
- * The handback is the machine's, and a builder may not write the PR body. A kernel
- * plan lands as a commit named for its branch and opens no pull request, so it has no prose to judge; an outside
- * plan's body is built from the brief, never the handback.
+ * Step 3 judges no prose: pr.md is a person's or step 8's, out of the builder's reach, and step 8's prose check
+ * flags it on the card.
  */
 function rest(db: Db, root: string, plan: PlanRow, handback: string, diff: string, on: Rails): [string, () => Verdict][] {
   const src = srcDir(root, plan.id)
@@ -182,14 +180,10 @@ function rest(db: Db, root: string, plan: PlanRow, handback: string, diff: strin
   return [
     ['secret-scan', () => scan(diff)],
     ['authority', () => authority(root, name, diff, ours, fence, outside, ours ? renumbered(src, diff) : [])],
-    ['tight', () => tight(root, { diff, sources: sources(src, diff), ...prose(root, plan), code: on?.tight_code === true })],
-    ['test-weakened', () => weakened(diff, 'green', [maybe(root, plan.id, 'ask.md') ?? '', get(root, plan.id, 'issue.md'), maybe(root, plan.id, 'rulings.md') ?? '', prose(root, plan).description].join('\n'))],
+    ['tight', () => tight(root, { diff, sources: sources(src, diff), description: '', code: on?.tight_code === true })],
+    ['test-weakened', () => weakened(diff, 'green', [maybe(root, plan.id, 'ask.md') ?? '', get(root, plan.id, 'issue.md'), maybe(root, plan.id, 'rulings.md') ?? '', maybe(root, plan.id, 'pr.md') ?? ''].join('\n'))],
     ['identifiers', () => identifiers(src, handback, diff)],
   ]
-}
-
-function prose(root: string, plan: PlanRow): { description: string } {
-  return { description: maybe(root, plan.id, 'pr.md') ?? '' }
 }
 
 function unfinishedFirst(root: string, plan: number, outcome: Outcome): Outcome {

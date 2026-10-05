@@ -10,7 +10,7 @@ import { load } from '../../../runner/rules.ts'
 import { tick } from '../../../sequencer/index.ts'
 import { approve, builds, CARRIED, PASS as PASSED, plan as planAt, stub, watched, world } from '../../../sequencer/tests/world.ts'
 import { srcDir } from '../../../sequencer/workspace.ts'
-import { eventsOf } from '../../../store/events.ts'
+import { eventsOf, runRows } from '../../../store/events.ts'
 import { record } from '../../../store/files.ts'
 import { due, keep } from '../../../store/language-notes.ts'
 import { rewind } from '../../../store/plans.ts'
@@ -63,6 +63,16 @@ test('a reviewer run writes its cost, NULL when none is reported',async () => {
   }
   expect(await cost(replies(fixture('code_quality', 'clean.reply.md'), 0.42))).toEqual({ cost_usd: 0.42 })
   expect(await cost(replies(fixture('code_quality', 'clean.reply.md')))).toEqual({ cost_usd: null })
+})
+
+test('D5 a reviewer run writes its staffed seat, NULL without one',async () => {
+  const { db, plan } = bench(root)
+  const staffed = async (seat?: string): Promise<unknown> => {
+    const out = await judge(db, root, 'code_quality', plan, seeded(), replies(fixture('code_quality', 'clean.reply.md')), TRANSCRIPT, undefined, seat)
+    return runRows(db).find((r) => r.id === out.run)?.staffed
+  }
+  expect(await staffed('typescript_specialist')).toBe('typescript_specialist')
+  expect(await staffed()).toBeNull()
 })
 
 const TREE = 'c'.repeat(40)

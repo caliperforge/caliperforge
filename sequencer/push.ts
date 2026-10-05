@@ -44,7 +44,7 @@ export interface Wire {
   file: (repo: string, title: string, body: string, labels: string[]) => string
   comment: (repo: string, no: number, body: string) => void
   thread?: (repo: string, no: number) => IssueComment[]
-  install?: (repo: string) => void
+  install?: () => void
   card?: Check[]
   intake?: Check
   merged: Read
@@ -61,7 +61,7 @@ export const WIRE: Wire = {
   rehearse,
   unrehearse,
   review,
-  install: (repo) => { refresh(repo, npm, alerter()) },
+  install: () => { refresh(npm, alerter()) },
   card: [theirs()],
   intake: picked(),
   merged: gh,
@@ -334,7 +334,7 @@ export function land(db: Db, root: string, plan: PlanRow, approval: number, wire
   }
   wire.close(homeOf(plan), issue, sha)
   pushed(db, plan.id, approval, `https://github.com/${asm?.fork ?? homeOf(plan)}/commit/${sha}`)
-  if (plan.lane === 'atelier') wire.install?.(homeOf(plan))
+  if (plan.lane === 'atelier') wire.install?.()
   return { outcome: 'pass', spans: [], note: `landed ${head.branch} on ${onto} as ${sha.slice(0, 12)}` }
 }
 

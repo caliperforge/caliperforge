@@ -106,7 +106,7 @@ test('hand PRs merged in window: 3 home repos, searched a day back', () => {
   const seen: string[][] = []
   expect(hands(NOW, (args) => { seen.push(args); return merged })).toBe(6)
   expect(seen.map((a) => a[a.indexOf('--repo') + 1]))
-    .toEqual(['caliperforge/caliperforge', 'caliperforge/atelier', 'caliperforge/v4-hook-index'])
+    .toEqual(['caliperforge/caliperforge', 'caliperforge/atelier-web', 'caliperforge/v4-hook-index'])
   for (const a of seen) expect(a).toContain('merged:>=2026-09-19')
 })
 

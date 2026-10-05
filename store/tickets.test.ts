@@ -7,7 +7,7 @@ import { backfillTickets, HISTORY, recordListing, type Listing } from './tickets
 
 const SELF = 'caliperforge/caliperforge'
 
-const ATELIER = 'caliperforge/atelier'
+const ATELIER = 'caliperforge/atelier-web'
 
 const issue = (repo: string, number: number, labels: string[], closedAt: string | null = null,
   stateReason: string | null = null): Listing => ({

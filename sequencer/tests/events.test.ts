@@ -54,7 +54,7 @@ test('a job past the ceiling leaves one refuse row with no run', async () => {
   const before = rows(w.db).length
   await tick(w.db, w.root, provider)
   expect(rows(w.db).slice(before)).toEqual([expect.objectContaining({ actor: 'token_ceiling', outcome: 'refuse', run: null }),
-    expect.objectContaining({ kind: 'coo_lite', outcome: 'needs_ceo', run: null })])
+    expect.objectContaining({ kind: 'director', outcome: 'needs_ceo', run: null })])
 })
 
 test('events refuse UPDATE and DELETE and keep the row', async () => {

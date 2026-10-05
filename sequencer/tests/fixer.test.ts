@@ -23,7 +23,7 @@ function seeded(mode: string) {
   db.exec(readFileSync(join(repo, 'runner/tests/fixtures/waiting.sql'), 'utf8'))
   db.exec("UPDATE plans SET state = 'blocked_on_ceo', wait_reason = NULL WHERE id = 7")
   db.prepare(`INSERT INTO settings (key, value, who, origin_kind, origin_ref, set_at) VALUES
-    ('coo_lite.apply', '1', 'ceo', 'ruling', 't', '2026-09-25'), ('fixer.mode', ?, 'ceo', 'ruling', 't', '2026-09-25')`).run(mode)
+    ('director.apply', '1', 'ceo', 'ruling', 't', '2026-09-25'), ('fixer.mode', ?, 'ceo', 'ruling', 't', '2026-09-25')`).run(mode)
   const home = mkdtempSync(join(tmpdir(), 'cf-fx-'))
   for (const dir of ['rules', 'seats']) cpSync(join(repo, dir), join(home, dir), { recursive: true })
   put(home, 7, 'ask.md', 'the ask\n')

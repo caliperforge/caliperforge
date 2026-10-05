@@ -18,7 +18,7 @@ import { conflicted, git, maybe, SELF } from '../workspace.ts'
 
 const schema = join(import.meta.dirname, '../../schema')
 const NOW = new Date('2026-10-03T10:00:00Z')
-const COO = { name: 'coo_lite', switch: { key: 'coo_lite.apply', value: '1' }, table: 'events', column: 'at', where: "kind = 'coo_lite'", gap: '2d' }
+const COO = { name: 'director', switch: { key: 'director.apply', value: '1' }, table: 'events', column: 'at', where: "kind = 'director'", gap: '2d' }
 const REGISTRY = z.array(Entry).parse(parse(readFileSync(join(import.meta.dirname, '../../rules/registry.yaml'), 'utf8')))
 const GARDENER = REGISTRY.filter((e) => e.name === 'gardener')
 const STALE = [{ name: 'gardener', state: 'stale', detail: 'newest gardens.day is 2026-09-28, older than 2d' }]
@@ -28,27 +28,27 @@ function db(enabled = 1): Db {
   d.exec(`UPDATE pipes SET enabled = ${String(enabled)};
     INSERT INTO plans (pipe_id, template, state, queued_at, lane, seat, origin, step, priority)
     VALUES ((SELECT min(id) FROM pipes), 'pr_path', 'queued', '2026-10-01', 'machine', 'typescript_specialist', 'https://github.com/a/b/issues/1', 0, 3);
-    INSERT INTO settings (key, value, who, origin_kind, origin_ref, set_at) VALUES ('coo_lite.apply', '1', 'ceo', 'ruling', 'r', '2026-10-01')`)
+    INSERT INTO settings (key, value, who, origin_kind, origin_ref, set_at) VALUES ('director.apply', '1', 'ceo', 'ruling', 'r', '2026-10-01')`)
   return d
 }
 
-function event(d: Db, at: string): void {
-  d.prepare("INSERT INTO events (plan, at, kind, actor, outcome, message) VALUES (1, ?, 'coo_lite', 'coo_lite', 'pass', 'm')").run(at)
+function event(d: Db, at: string, kind = 'director'): void {
+  d.prepare("INSERT INTO events (plan, at, kind, actor, outcome, message) VALUES (1, ?, ?, ?, 'pass', 'm')").run(at, kind, kind)
 }
 
 test('switchOff', () => {
   const d = db()
   const entries = [COO, { name: 'desk', switch: { key: 'comms.site_dir' } }]
   event(d, '2026-10-03 09:00:00')
-  d.exec("UPDATE settings SET value = '0' WHERE key = 'coo_lite.apply'")
-  expect(drift(d, entries, NOW).map((r) => [r.name, r.state])).toEqual([['coo_lite', 'off'], ['desk', 'off']])
-  d.exec("DELETE FROM settings WHERE key = 'coo_lite.apply'")
-  expect(drift(d, entries, NOW)[0]).toEqual({ name: 'coo_lite', state: 'off', detail: 'coo_lite.apply is unset' })
+  d.exec("UPDATE settings SET value = '0' WHERE key = 'director.apply'")
+  expect(drift(d, entries, NOW).map((r) => [r.name, r.state])).toEqual([['director', 'off'], ['desk', 'off']])
+  d.exec("DELETE FROM settings WHERE key = 'director.apply'")
+  expect(drift(d, entries, NOW)[0]).toEqual({ name: 'director', state: 'off', detail: 'director.apply is unset' })
 })
 
 test('staleRow', () => {
   const d = db(0)
-  expect(drift(d, [COO], NOW)).toEqual([{ name: 'coo_lite', state: 'silent', detail: "no row in events WHERE kind = 'coo_lite'" }])
+  expect(drift(d, [COO], NOW)).toEqual([{ name: 'director', state: 'silent', detail: "no row in events WHERE kind = 'director'" }])
   event(d, '2026-09-30 10:00:00')
   expect(drift(d, [COO], NOW).map((r) => r.state)).toEqual(['stale'])
   expect(drift(d, [{ ...COO, gap: undefined }], NOW)).toEqual([])
@@ -59,7 +59,7 @@ test('fresh', () => {
   const d = db()
   event(d, '2026-10-02 10:00:00')
   expect(drift(d, [COO, { ...COO, name: 'six', gap: '24h' }], NOW)).toEqual([])
-  expect(REGISTRY.map((e) => e.name)).toEqual(['coo_lite', 'fixer', 'fix_mode', 'swift_review', 'kotlin_review',
+  expect(REGISTRY.map((e) => e.name)).toEqual(['director', 'fixer', 'fix_mode', 'swift_review', 'kotlin_review',
     'python_review', 'ruby_review', 'rust_review', 'go_review', 'php_review', 'brief_writer', 'text_review',
     'growth_lead', 'web_specialist', 'design', 'go_specialist', 'php_specialist', 'ruby_specialist', 'python_specialist', 'lua_specialist', 'rust_specialist', 'gardener', 'ratchet', 'accounts', 'records', 'dispositions', 'signoffs', 'proposals',
     'ratchet_refuse', 'intake', 'stuck_plans', 'science_pull', 'site_publish', 'director_look', 'typescript_specialist',
@@ -70,6 +70,9 @@ test('fresh', () => {
   for (const bad of [{ gap: '2 days' }, { table: 'events;' }, { column: 'At' }]) {
     expect(() => Entry.parse({ name: 'x', ...bad })).toThrow()
   }
+  const old = db()
+  event(old, '2026-10-02 10:00:00', 'coo_lite')
+  expect(drift(old, REGISTRY.filter((e) => e.name === 'director'), NOW)).toEqual([])
 })
 
 test('proposals', () => {

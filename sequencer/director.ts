@@ -44,7 +44,7 @@ type Move = z.infer<typeof Said> | { move: 'split'; why: string; parts: Part[] }
 interface Told { outcome: 'pass' | 'needs_ceo'; message: string; note?: string; pointer?: string | null }
 
 function applying(db: Db): boolean {
-  const row = db.prepare("SELECT value FROM settings WHERE key = 'coo_lite.apply'").get() as { value: string } | undefined
+  const row = db.prepare("SELECT value FROM settings WHERE key = 'director.apply'").get() as { value: string } | undefined
   return row?.value === '1'
 }
 
@@ -99,15 +99,15 @@ export async function byHand(db: Db, root: string, provider: Provider, now: Date
 
 function stops(db: Db, root: string, now: Date, post: Post): Stop[] {
   const rows = db.prepare(`SELECT p.id, e.ruled >= d.at AS answered,
-      (SELECT count(*) FROM events WHERE plan = p.id AND kind = 'coo_lite' AND outcome = 'pass'
+      (SELECT count(*) FROM events WHERE plan = p.id AND kind IN ('director', 'coo_lite') AND outcome = 'pass'
         AND at >= datetime(@at, '-1 day')) AS today
     FROM plans p JOIN decisions d ON d.id = (SELECT max(id) FROM decisions WHERE plan = p.id)
-    LEFT JOIN (SELECT plan, max(at) AS ruled FROM events WHERE kind = 'coo_lite' GROUP BY plan) e ON e.plan = p.id
+    LEFT JOIN (SELECT plan, max(at) AS ruled FROM events WHERE kind IN ('director', 'coo_lite') GROUP BY plan) e ON e.plan = p.id
     WHERE p.state = 'blocked_on_ceo' AND p.held_by = 'coo' AND d.verb IN ('ask_coo', 'ask_ceo')
     ORDER BY d.at, p.id`).all({ at: now.toISOString() }) as Stop[]
   const fresh: Stop[] = []
   for (const s of rows.filter((s) => s.answered !== 1 && !isHeld(root, s.id))) {
-    if (s.today >= 2) told(db, root, planById(db, s.id), now, { outcome: 'needs_ceo', message: 'ask_coo: coo_lite answered this plan twice today' }, post)
+    if (s.today >= 2) told(db, root, planById(db, s.id), now, { outcome: 'needs_ceo', message: 'ask_coo: director answered this plan twice today' }, post)
     else fresh.push(s)
   }
   return fresh
@@ -219,17 +219,17 @@ const UNAPPLIED: Record<Exclude<Move['move'], 'ask_ceo' | 'ask_coo'>, string> = 
 function apply(db: Db, root: string, plan: PlanRow, m: Move, wire: Wire, now: Date): boolean | string {
   switch (m.move) {
     case 'rule': {
-      const to = rule(db, root, plan, 'coo_lite', m.answer ?? '')
+      const to = rule(db, root, plan, 'director', m.answer ?? '')
       if (to === null) return false
-      if (to === 'ask.md') unhold(db, root, plan.id, 'coo_lite')
+      if (to === 'ask.md') unhold(db, root, plan.id, 'director')
       else afresh(root, plan.id, db.transaction(() => { clear(db, plan.id); return retry(db, plan) })())
       const ref = originRef(plan)
-      if (ref !== null) wire.comment(ref.repo, ref.no, `Ruled by coo_lite on plan ${String(plan.id)}.\n\n${m.answer ?? ''}`)
+      if (ref !== null) wire.comment(ref.repo, ref.no, `Ruled by director on plan ${String(plan.id)}.\n\n${m.answer ?? ''}`)
       return true
     }
     case 'waive':
       if (plan.state !== 'blocked_on_ceo') return false
-      afresh(root, plan.id, retried(db, plan.id, 'coo_lite'))
+      afresh(root, plan.id, retried(db, plan.id, 'director'))
       return true
     case 'split':
       if (parted(db, root, plan, m.parts, wire).split !== true) return false
@@ -240,9 +240,9 @@ function apply(db: Db, root: string, plan: PlanRow, m: Move, wire: Wire, now: Da
       end(db, plan.id, 'done')
       return true
     case 'file':
-      return ticketed(db, root, plan, m.ticket ?? m.why, `Filed by coo_lite on plan ${String(plan.id)}.\n\n${m.why}`, m.why, wire, now)
+      return ticketed(db, root, plan, m.ticket ?? m.why, `Filed by director on plan ${String(plan.id)}.\n\n${m.why}`, m.why, wire, now)
     case 'return':
-      afresh(root, plan.id, returnToLane(db, plan.id, 'coo_lite'))
+      afresh(root, plan.id, returnToLane(db, plan.id, 'director'))
       return true
     case 'fix':
     case 'ask_ceo':
@@ -251,11 +251,11 @@ function apply(db: Db, root: string, plan: PlanRow, m: Move, wire: Wire, now: Da
 }
 
 function told(db: Db, root: string, plan: PlanRow, now: Date, t: Told, post?: Post): string {
-  logged(db, { plan: plan.id, kind: 'coo_lite', actor: 'coo_lite', outcome: t.outcome, message: t.message, pointer: t.pointer ?? null, run: null })
+  logged(db, { plan: plan.id, kind: 'director', actor: 'director', outcome: t.outcome, message: t.message, pointer: t.pointer ?? null, run: null })
   const ticket = ticketOf(db, plan.id)
   const kind = t.outcome === 'pass' ? 'refused' : 'blocked'
-  record(root, [{ at: now.toISOString(), plan: plan.id, ticket, kind, step: plan.step, name: 'coo_lite', note: t.note ?? t.message }])
-  post?.(`CaliperForge · ${ticket} needs you`, `plan ${String(plan.id)}, step ${String(plan.step)}. coo_lite: ${t.message}`)
+  record(root, [{ at: now.toISOString(), plan: plan.id, ticket, kind, step: plan.step, name: 'director', note: t.note ?? t.message }])
+  post?.(`CaliperForge · ${ticket} needs you`, `plan ${String(plan.id)}, step ${String(plan.step)}. director: ${t.message}`)
   return t.message
 }
 

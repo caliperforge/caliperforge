@@ -5,7 +5,8 @@ import { get, maybe, put } from './workspace.ts'
 const PATH = /(?:^|[\s`'"(])(~?\/[^\s`'"()]+)/g
 
 export function rule(db: Db, root: string, plan: PlanRow, who: string, text: string): 'ask.md' | 'issue.md' | null {
-  if (text.includes('.cf/work/') || text.includes('../')) return null
+  const other = [...text.matchAll(/\.cf\/work\/(\d+)/g)].some((m) => Number(m[1]) !== plan.id)
+  if (other || /(?:^|[^.])\.\.\//.test(text)) return null
   if ([...text.matchAll(PATH)].some((m) => !(m[1] ?? '').startsWith(`${root}/`))) return null
   const section = `## Answer from the ${who} (${new Date().toISOString().slice(0, 10)})\n\n${text.trim()}\n`
   if (!builderRan(db, plan.id)) {

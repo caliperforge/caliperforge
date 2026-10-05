@@ -109,6 +109,12 @@ export function putPost(db: Db, p: Pick<Post, 'id' | 'kind' | 'dest' | 'status' 
     VALUES (@id, @kind, @dest, @status, @title, @dek, @body, @edited_title, @sources, @checks, @work_date, @written_date)`).run(p)
 }
 
+/** False when the plan already has its post. */
+export function proofed(db: Db, p: Pick<Post, 'id' | 'kind' | 'dest' | 'title' | 'dek' | 'body' | 'sources' | 'checks' | 'work_date' | 'written_date'>): boolean {
+  return db.prepare(`INSERT OR IGNORE INTO desk_posts (id, kind, dest, status, title, dek, body, sources, checks, work_date, written_date, proof_at)
+    VALUES (@id, @kind, @dest, 'proof', @title, @dek, @body, @sources, @checks, @work_date, @written_date, datetime('now'))`).run(p).changes > 0
+}
+
 export function learnings(db: Db): { date: string; numbers: string | null; items: string | null; sources: string | null }[] {
   return db.prepare('SELECT date, numbers, items, sources FROM desk_learnings ORDER BY date')
     .all() as { date: string; numbers: string | null; items: string | null; sources: string | null }[]

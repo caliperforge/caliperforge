@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { chromium } from 'playwright-core'
 import { expect, test } from 'vitest'
+import { load } from '../../runner/rules.ts'
 import { runRows } from '../../store/events.ts'
 import { verdictRows, type Verdict } from '../../store/verdict.ts'
 import { at } from '../../templates/pr-path.ts'
@@ -68,6 +69,7 @@ test('D5 screens skips deleted html; css alone means index.html', () => {
 
 const stepped = async (name: string, body: string, language: string): Promise<{ w: World; outcome: Outcome; seats: string[] }> => {
   const w = world()
+  load(w.db, w.root)
   writeFileSync(join(srcDir(w.root, 1), name), body)
   put(w.root, 1, 'issue.md', '# a screen\n\n- D1 add a screen\n')
   const row = { ...plan(w.db, 1), origin: 'https://github.com/caliperforge/atelier-web/issues/1' }

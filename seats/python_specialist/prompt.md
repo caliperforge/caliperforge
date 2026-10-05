@@ -46,3 +46,10 @@ together in one message, never one per turn.
 
 The brief's `## Settled facts` were checked when it was written: take them as given and do not look them up
 again. Read nothing outside the checkout.
+
+## Seams
+
+- A module and its test, in their framework.
+- A new dependency: the package manifest `uv sync` reads.
+- A new gate: the folder's `Justfile` recipe.
+- A rule mirrored from a reference implementation in a sibling language folder, and the test that pins it.

@@ -23,13 +23,13 @@ seats:
 digests:
   typescript_specialist:
     manifest: a4ff87fd829db7a375989bb3c747d1cb6f2b59f17b47222ff1f76764d6a4c038
-    prompt: a7ab19ab76fc18b2778fbd2448e3938e4e3234ffb0d17d1c61952c990813b1dd
+    prompt: d3ad2cabdf3913f95d9e17ac7741361a93664ab560744a8357bef1fab11a45c9
   kotlin_specialist:
     manifest: 0ac9229de8943374e26c0c570689ffcdad364ef90d0c03f6486bdc443419fd6b
-    prompt: bb1cceda063ac6f3e515879ce6e43e4f7ee7d40c238c3523c4b90468a4a7fd24
+    prompt: 51b6c76d4ee2fbe9a98beb163ced980311d8d3a32872dd9debeef7011a709adc
   swift_specialist:
     manifest: 0f91e3f2fa2e0a4fe5d8bedeb7c453d4cc4addbbe42ffd3591c4f0e0a7b18ca1
-    prompt: 442983f84be97ab63bd2980b39ce1cf5d238df42ed8ac3188cf145352944c92f
+    prompt: ddddd76fdb99fe246d756ba2dd197128433a90d45eca25a1c7a7432f711664cc
   brief_writer:
     manifest: 9f242cf80f39b12b889aa092dca097abe8d1260a8014e05f0af3bd5b8ccc86a5
     prompt: bb0872d03a7ef4e7201b1cd9e2b3b9a3af0da51bbd068be4db8cef41329c0afc
@@ -41,7 +41,7 @@ digests:
     prompt: d03ac7e5d2192fdba527ceb445e3963b71ab37c09d5f756034450956668a3278
   python_specialist:
     manifest: cd93446f89a0345e256335bf8665c166ceafabec78c1341f44f576bd0cd541fb
-    prompt: 76da24ff15d0e9c886e2bfe374e88561b7cb4397ae3963fa6805e25d01532e59
+    prompt: b349b41f6633dc88743af0fa34f2940a630ce5cce763c6670eddfc4acd9c46bc
   ruby_specialist:
     manifest: ac857c4d8fc3b53d7d87afca059941513dd0af0370e58d6c35a663ea61738a84
     prompt: 2417dcca4e8fcd9fe221107187ca3f85813d1bece7e5c00b4153e2fc4e55c8ab

@@ -107,6 +107,29 @@ test('refuses a backticked missing file with a line', () => {
   expect(verdict.message).toContain('swift/Missing.swift:12')
 })
 
+function kotlin(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'cf-ids-'))
+  mkdirSync(join(dir, 'kotlin'))
+  return dir
+}
+
+test('passes a path shortened with a ... segment', () => {
+  const verdict = identifiers(kotlin(), 'see `kotlin/.../mpp/core/Headers.kt:124`')
+  expect(verdict.outcome).toBe('pass')
+  expect(verdict.spans).toEqual([])
+})
+
+test('refuses the same path written out in full', () => {
+  const verdict = identifiers(kotlin(), 'see `kotlin/mpp/core/Headers.kt:124`')
+  expect(verdict.outcome).toBe('refuse')
+  expect(verdict.message).toContain('kotlin/mpp/core/Headers.kt:124')
+})
+
+test('refuses only the full path beside a shortened one', () => {
+  const verdict = identifiers(kotlin(), 'see `kotlin/.../mpp/core/Headers.kt:124`\nand `kotlin/Missing.kt`')
+  expect(verdict.spans).toEqual(['text:2 identifier.unresolved'])
+})
+
 test('refuses a backticked missing file in the repo', () => {
   const verdict = identifiers(root, 'see `sequencer/gone.ts`')
   expect(verdict.outcome).toBe('refuse')

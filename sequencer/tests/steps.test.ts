@@ -127,10 +127,10 @@ test('a comms plan steps through templates/comms.ts', () => {
     { step: 7, name: 'grow', fires: 'seat', runs: 'growth_lead' }])
 })
 
-test('a step no map has throws, and research has none', () => {
+test('D5: a step no map has throws; research has five', () => {
   expect(() => mapOf('comms').at(10)).toThrow('comms has no step 10')
-  expect(() => mapOf('research').at(0)).toThrow('research has no step 0')
-  expect(mapOf('research').steps).toEqual([])
+  expect(() => mapOf('research').at(5)).toThrow('research has no step 5')
+  expect(mapOf('research').steps.map((s) => s.name)).toEqual(['question', 'gather', 'check', 'review', 'record'])
 })
 
 test('a pr_path plan steps as templates/pr-path.ts does', () => {

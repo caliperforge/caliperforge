@@ -46,13 +46,13 @@ const TABLE: Record<string, Row> = {
   'a queued plan at its first step': { state: () => world(), want: { fire: at(0) } },
   'a plan this tick leased': { state: leased, mine: true, want: { fire: at(0) } },
   'a plan another live pid leased': { state: leased, want: { wait: 'leased', on: null } },
-  'a template with no step map': {
+  'a research plan at its first step': {
     state: () => {
       const w = world()
       w.db.prepare("UPDATE plans SET template = 'research' WHERE id = 1").run()
       return w
     },
-    want: { wait: 'no_step_map', on: null },
+    want: { fire: mapOf('research').at(0) },
   },
   'a comms plan at its first step': {
     state: () => {
@@ -141,5 +141,5 @@ for (const [name, { state, id = 1, mine = false, want }] of Object.entries(TABLE
 
 test('the table has a row for every reason a plan waits', () => {
   const decided = new Set(Object.values(TABLE).map(({ want }) => 'fire' in want ? 'fire' : want.wait))
-  expect(decided).toEqual(new Set([...WAIT, 'fire']))
+  expect(decided).toEqual(new Set([...WAIT.filter((w) => w !== 'no_step_map'), 'fire']))
 })

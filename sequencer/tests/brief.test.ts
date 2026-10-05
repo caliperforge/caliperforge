@@ -181,7 +181,7 @@ test('D2: fix.md in its fence with no readers is refused', () => {
 })
 
 test('D3: build.md above its fence is no format change', () => {
-  expect(on(prompt(['- seats/modes/build.md:5', '- store/plans.ts'], ['- nothing else']))).toBeNull()
+  expect(on(prompt(['- seats/modes/build.md:5', '- store/plans.ts:249-253'], ['- nothing else']))).toBeNull()
 })
 
 test('the completion audit is a format change, line or not', () => {

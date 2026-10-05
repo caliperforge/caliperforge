@@ -16,7 +16,7 @@ interface Offer {
 }
 
 /** The templates a step map exists for. A lane whose map is unwritten is on with nothing to step. */
-const MAPPED = new Set(['pr_path', 'comms'])
+const MAPPED = new Set(['pr_path', 'comms', 'research'])
 
 const ON_CEO = new Set<Wait>(['target_approval', 'ceo_batch'])
 

@@ -381,14 +381,14 @@ export function push(db: Db, root: string, plan: PlanRow, wire: Wire = WIRE): Ou
   if (cold !== null) return refuse(cold, `${cold} left no passing verdict on plan ${String(plan.id)}`)
   const rules = profile(root, target.repo)
   const text = maybe(root, plan.id, 'pr.md') ?? prBody(target.issue_no, root, plan.id, rules)
-  const checks = [...CHECKS, size(target.repo), prosed(title(root, plan.id), text), merging(target.repo, wire.merged), ...(wire.card ?? [])]
-  const card = signed === head.sha ? waiting(db, root, plan.id, signed, target, checks) : null
-  if (card !== null) return card
   const open = opened(db, plan.id)
   if (open === null && !onFork(head.dir, head.branch)) {
     squash(root, plan.id, rules, prMessage(title(root, plan.id), text, rules))
     bind(root, plan.id, headOf(root, plan.id).sha, signed)
   }
+  const checks = [...CHECKS, size(target.repo), prosed(title(root, plan.id), text), merging(target.repo, wire.merged), ...(wire.card ?? [])]
+  const card = waiting(db, root, plan.id, signed, target, checks)
+  if (card !== null) return card
   wire.send(head.dir, head.branch)
   wire.unrehearse?.(`${FORK}/${repoName(target.repo)}`, rehearsed(root, plan.id, head.branch))
   if (open !== null) {

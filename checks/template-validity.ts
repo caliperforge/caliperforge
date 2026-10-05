@@ -31,6 +31,7 @@ async function findings(root: string): Promise<Finding[]> {
 async function inFile(root: string, file: string, seats: Set<string>): Promise<Finding[]> {
   const path = file.slice(root.length + 1)
   const module = await import(pathToFileURL(file).href) as { steps?: unknown }
+  if (!('steps' in module)) return []
   const parsed = StepList.safeParse(module.steps)
   if (!parsed.success) return [finding(path, parsed.error.issues.map((i) => i.message).join('; '))]
   return [...unknownSeats(parsed.data, seats, path), ...gateless(parsed.data, path), ...order(parsed.data, path)]

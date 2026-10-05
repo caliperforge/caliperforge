@@ -31,7 +31,7 @@ const SEATS: Record<number, string> = { 2: 'typescript_specialist', 4: 'code_qua
 
 function world(): Db {
   const db = fresh(schema)
-  for (const seat of [...Object.values(SEATS), 'orchestrator', 'coo_lite', 'fixer']) {
+  for (const seat of [...Object.values(SEATS), 'orchestrator', 'coo_lite', 'director', 'fixer']) {
     db.prepare("INSERT INTO rules VALUES (?, 'card', 'seats/seat.md', ?, '2026-09-19')").run(seat, HASH)
   }
   db.prepare(`INSERT INTO accounts (id, repo, measured_at, maintainers, doors, last_outsider_merge,
@@ -95,7 +95,7 @@ test('each actor counts its own events and seat runs over 24 h', () => {
   expect(actors(day24(), NOW)).toMatchObject([
     { actor: 'ceo', kinds: [{ kind: 'retry', n: 1 }, { kind: 'return', n: 1 }], runs: null },
     { actor: 'coo', kinds: [], runs: null },
-    { actor: 'coo_lite', kinds: [{ kind: 'coo_lite', n: 1 }], runs: { runs: 2, cost: 1.5 } },
+    { actor: 'director', kinds: [{ kind: 'coo_lite', n: 1 }], runs: { runs: 2, cost: 1.5 } },
     { actor: 'orchestrator', kinds: [{ kind: 'return', n: 1 }], runs: { runs: 0, cost: 0 } },
     { actor: 'fixer', kinds: [], runs: { runs: 2, cost: 0.25 } },
   ])
@@ -118,7 +118,7 @@ test('D6 the fixture day renders the expected section exactly', () => {
   expect(actorSection(actors(day24(), NOW), hands(NOW, () => merged))).toBe('last 24 h by actor, held/missed/open over 7 d\n' +
     '  ceo\t2 intervention(s)\tretry 1, return 1\theld 0 missed 0 open 3\n' +
     '  coo\t0 intervention(s)\t-\theld 0 missed 0 open 0\n' +
-    '  coo_lite\t1 intervention(s)\tcoo_lite 1\t2 run(s)\t$1.50\theld 0 missed 0 open 1\n' +
+    '  director\t1 intervention(s)\tcoo_lite 1\t2 run(s)\t$1.50\theld 0 missed 0 open 1\n' +
     '  orchestrator\t1 intervention(s)\treturn 1\t0 run(s)\t$0.00\theld 0 missed 0 open 1\n' +
     '  fixer\t0 intervention(s)\t-\t2 run(s)\t$0.25\theld 0 missed 0 open 0\n' +
     '  hand PRs merged\t6\n')
@@ -153,11 +153,21 @@ test('each actor scores the past week, not an event 8 days old', () => {
   plan(db, 1, 'done', 25)
   plan(db, 2, 'refused', 30)
   plan(db, 3, 'running', 31)
-  for (const actor of ['ceo', 'coo', 'coo_lite', 'orchestrator', 'fixer']) {
+  for (const actor of ['ceo', 'coo', 'director', 'orchestrator', 'fixer']) {
     for (const id of [1, 2, 3]) event(db, actor, 'retry', '2026-09-14 12:00:00', id)
   }
   event(db, 'ceo', 'retry', '2026-09-12 12:00:00', 3)
   expect(actors(db, NOW).map((r) => r.scored)).toEqual(Array.from({ length: 5 }, () => ({ held: 1, missed: 1, open: 1 })))
+})
+
+test('oldActorScored', () => {
+  const db = world()
+  plan(db, 1, 'done', 25)
+  event(db, 'coo_lite', 'retry', '2026-09-14 12:00:00')
+  run(db, 1, 3, '2026-09-20 09:00:00', 60, 100, 'coo_lite')
+  const rows = actors(db, NOW)
+  expect(rows.find((r) => r.actor === 'director')).toMatchObject({ runs: { runs: 1 }, scored: { held: 1, missed: 0, open: 0 } })
+  expect(rows.map((r) => r.actor)).not.toContain('coo_lite')
 })
 
 test('a step 4 orchestrator run adds runs and tokens, not review', () => {

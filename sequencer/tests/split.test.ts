@@ -3,6 +3,7 @@ import { split, STANDING, unclear, wide } from '../brief.ts'
 import { tick } from '../index.ts'
 import { assembly } from '../home.ts'
 import { following, languages, parted, released } from '../split.ts'
+import { refilled } from '../refill.ts'
 import { languageFor } from '../route.ts'
 import type { Wire } from '../push.ts'
 import { maybe, put, srcDir } from '../workspace.ts'
@@ -10,7 +11,7 @@ import { gates } from '../../store/approvals.ts'
 import { pushedRow } from '../../store/deliverables.ts'
 import { record } from '../../store/files.ts'
 import { builder } from '../../templates/pr-path.ts'
-import { ofKind, runRows } from '../../store/events.ts'
+import { ofKind, runLogged, runRows } from '../../store/events.ts'
 import { priority } from '../../store/lanes.ts'
 import { setLimit } from '../../store/limits.ts'
 import { addPart, allParts } from '../../store/parts.ts'
@@ -178,6 +179,57 @@ test('D4: an After: line in a parent comment gates no part', async () => {
   expect(afterOf(body)).toEqual([])
 })
 
+async function unrefilled(): Promise<{ w: World; a: number; ask: string | null }> {
+  const w = mine()
+  await briefed(w, ID, PARTS, [])
+  const a = partPlan(w, 0) ?? 0
+  return { w, a, ask: maybe(w.root, a, 'ask.md') }
+}
+
+test('D1: an older part gets the parent comments refilled', async () => {
+  const { w, a, ask } = await unrefilled()
+  refilled(w.db, w.root, plan(w.db, a), commented(w, TABLE))
+  expect(maybe(w.root, a, 'ask.md')).toBe(`${ask?.trimEnd() ?? ''}\n\n## Parent comments\n\n### reviewer\n\n${TABLE}\n`)
+})
+
+test('D2: a refill that already holds the comments is not doubled', async () => {
+  const { w, a } = await unrefilled()
+  let reads = 0
+  const said = commented(w, TABLE)
+  const wire = { ...said, thread: (repo: string, no: number) => { reads += 1; return said.thread?.(repo, no) ?? [] } }
+  refilled(w.db, w.root, plan(w.db, a), wire)
+  refilled(w.db, w.root, plan(w.db, a), wire)
+  expect(reads).toBe(1)
+  expect(maybe(w.root, a, 'ask.md')?.split('## Parent comments')).toHaveLength(2)
+})
+
+test('D3: no comments or no part leaves ask.md unchanged', async () => {
+  const { w, a, ask } = await unrefilled()
+  refilled(w.db, w.root, plan(w.db, a), { ...watched([], w.root, a), thread: () => [] })
+  expect(maybe(w.root, a, 'ask.md')).toBe(ask)
+  const parent = maybe(w.root, ID, 'ask.md')
+  refilled(w.db, w.root, plan(w.db, ID), commented(w, TABLE))
+  expect(maybe(w.root, ID, 'ask.md')).toBe(parent)
+})
+
+test('D4: a refill read that throws fires no brief', async () => {
+  const { w, a, ask } = await unrefilled()
+  const wire = { ...watched([], w.root, a), thread: () => { throw new Error('gh down') } }
+  await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  const fired = await tick(w.db, w.root, stub(CARRIED, 0, undefined, undefined, PARTS), undefined, undefined, wire)
+  expect(fired[0]).toMatchObject({ plan: a, step: 1, outcome: 'refuse', spans: ['threw: gh down'] })
+  expect(maybe(w.root, a, 'issue.md')).toBeNull()
+  expect(maybe(w.root, a, 'ask.md')).toBe(ask)
+})
+
+test('D5: a part a builder ran on keeps its ask.md', async () => {
+  const { w, a, ask } = await unrefilled()
+  runLogged(w.db, { plan: a, step: 2, seat: 'typescript_specialist', rule_hash: 'a'.repeat(64), provider: 'claude-agent-sdk', model: 'm', effort: 'low',
+    exit: 0, fired: { usage: { input: 0, cache: 0, output: 0 }, seconds: 0, transcript_path: 't.transcript.jsonl' } })
+  refilled(w.db, w.root, plan(w.db, a), commented(w, TABLE))
+  expect(maybe(w.root, a, 'ask.md')).toBe(ask)
+})
+
 test('a part landing queues the next; the last closes the parent', async () => {
   const w = mine()
   const log: string[] = []
@@ -245,17 +297,43 @@ test('D3, D4: a landing queues its waiters; the parent closes once', async () =>
   expect(log.filter((l) => l.startsWith('close '))).toEqual(['close caliperforge/caliperforge#34 1111111'])
 })
 
+function waiting902(w: World): void {
+  recordListing(w.db, 'caliperforge/caliperforge', [{ number: 902, title: 't', body: 'After: #901',
+    url: 'https://github.com/caliperforge/caliperforge/issues/902', labels: [{ name: 'lane:machine' }], createdAt: '2026-09-27T00:00:00Z', closedAt: null,
+    stateReason: null }], false)
+}
+
+function landedWithout(w: World, n: number): number {
+  const id = partPlan(w, n) ?? 0
+  pushed(w, id)
+  finish(w.db, plan(w.db, id))
+  return id
+}
+
 test('D4: a part released early is not queued again; parent closes', async () => {
   const w = mine()
   const log: string[] = []
   await briefed(w, ID, AFTER(['none', 'a', 'none']), log)
-  recordListing(w.db, 'caliperforge/caliperforge', [{ number: 902, title: 't', body: 'After: #901',
-    url: 'https://github.com/caliperforge/caliperforge/issues/902', labels: [{ name: 'lane:machine' }], createdAt: '2026-09-27T00:00:00Z', closedAt: null,
-    stateReason: null }], false)
+  waiting902(w)
+  const a = landedWithout(w, 0)
   released(w.db, w.root, 'caliperforge/caliperforge', new Set())
+  expect(following(w.db, w.root, plan(w.db, a), '0'.repeat(40), watched(log, w.root, a))).toBeNull()
   expect(landing(w, 1, log)).toBeNull()
-  expect(landing(w, 2, log)).toBeNull()
-  expect(landing(w, 0, log)).toBe('the last part landed; #34 closed')
+  expect(landing(w, 2, log)).toBe('the last part landed; #34 closed')
+  expect(log.filter((l) => l.startsWith('close '))).toHaveLength(1)
+})
+
+test('D1, D2: a closed After: waits for its plan to land', async () => {
+  const w = mine()
+  await briefed(w, ID, AFTER(['none', 'a']), [])
+  waiting902(w)
+  released(w.db, w.root, 'caliperforge/caliperforge', new Set())
+  expect(partPlan(w, 1)).toBeNull()
+  expect(ofKind(w.db, 'unblocked')).toEqual([])
+  landedWithout(w, 0)
+  released(w.db, w.root, 'caliperforge/caliperforge', new Set())
+  const b = partPlan(w, 1)
+  expect(ofKind(w.db, 'unblocked').map((e) => ({ plan: e.plan, message: e.message }))).toEqual([{ plan: b, message: '#901 closed' }])
 })
 
 test('D5: a split whose parts all say none queues them at once', async () => {
@@ -295,6 +373,40 @@ test('a wide internal brief goes back to the brief writer', async () => {
   expect(fired[0]).toMatchObject({ step: 1, outcome: 'refuse', spans: ['brief.wide'] })
   expect(maybe(w.root, ID, 'refusal.md')).toContain('answer with the split fence')
   expect(maybe(w.root, ID, 'issue.md')).toBeNull()
+})
+
+async function briefPacket(ask: string): Promise<string> {
+  const w = mine()
+  put(w.root, ID, 'ask.md', ask)
+  const prompts: string[] = []
+  const seen = (p: { prompt: string }): void => { prompts.push(p.prompt) }
+  const log: string[] = []
+  await tick(w.db, w.root, stub(CARRIED, 0, undefined, seen), undefined, undefined, watched(log, w.root, ID))
+  await tick(w.db, w.root, stub(CARRIED, 0, undefined, seen), undefined, undefined, watched(log, w.root, ID))
+  return prompts.find((p) => p.includes('The brief is exactly this')) ?? ''
+}
+
+test('D1: an ask naming six files is told to split', async () => {
+  const prompt = await briefPacket(BRIEF_OF(['a', 'b', 'c', 'd', 'e', 'f'].map((p) => `src/${p}.ts`)))
+  expect(prompt).toContain('# More than one job')
+  expect(prompt).toContain('names 6 files')
+  expect(prompt).toContain('answer with the split fence')
+})
+
+test('D2: five files plus a test, or no Files, is not told', async () => {
+  const five = await briefPacket(BRIEF_OF([...['a', 'b', 'c', 'd', 'e'].map((p) => `src/${p}.ts`), 'tests/a.test.ts']))
+  expect(five).toContain('tests/a.test.ts')
+  expect(five).not.toContain('# More than one job')
+  const none = await briefPacket('# t\n\nno files\n')
+  expect(none).toContain('no files')
+  expect(none).not.toContain('# More than one job')
+})
+
+test('D3: Files under the parent ticket are not counted', async () => {
+  const parent = BRIEF_OF(['a', 'b', 'c', 'd', 'e', 'f'].map((p) => `src/${p}.ts`))
+  const prompt = await briefPacket(`# t\n\nown text\n\n## Parent ticket\n\n${parent}`)
+  expect(prompt).toContain('## Parent ticket')
+  expect(prompt).not.toContain('# More than one job')
 })
 
 const SIX = ['a.ts', 'b.ts', 'c.ts', 'd.ts', 'e.ts', 'f.ts'].map((p) => `src/${p} (new)`)

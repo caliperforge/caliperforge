@@ -1,4 +1,5 @@
 import { rmSync } from 'node:fs'
+import type { IssueComment } from '../cli/gh.ts'
 import { LANE } from '../cli/plan.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
@@ -39,8 +40,7 @@ export function parted(db: Db, root: string, plan: PlanRow, parts: Part[], wire:
   const source = parent === null ? `plan ${String(plan.id)}` : `#${String(parent)}`
   const section = ask === null ? '' : carried(ask, '## Parent ticket', source)
   try {
-    const thread = parent === null ? [] : wire.thread?.(homeOf(plan), parent) ?? []
-    const said = thread.length === 0 ? '' : carried(thread.map((c) => `### ${c.author.login}\n\n${c.body.trim()}`).join('\n\n'), '## Parent comments', source)
+    const said = comments(parent === null ? [] : wire.thread?.(homeOf(plan), parent) ?? [], source)
     const carry = [section, said].filter((s) => s !== '').join('\n\n')
     const urls = [...parts.keys()].map((n) => filed(db, plan, parent === null ? `p${String(plan.id)}` : String(parent), parts, n, carry, wire))
     const on = (n: number): string => ref(urls[n] ?? '')
@@ -55,6 +55,10 @@ export function parted(db: Db, root: string, plan: PlanRow, parts: Part[], wire:
     const note = error instanceof Error ? error.message : String(error)
     return { outcome: 'refuse', spans: ['gh'], blip: true, note: `split: ${note}` }
   }
+}
+
+export function comments(thread: IssueComment[], source: string): string {
+  return thread.length === 0 ? '' : carried(thread.map((c) => `### ${c.author.login}\n\n${c.body.trim()}`).join('\n\n'), '## Parent comments', source)
 }
 
 /**
@@ -179,9 +183,9 @@ export function fixed(db: Db, root: string, parent: PlanRow, signal: SignalRow, 
   return made(db, root, parent, n, { url, title, body })
 }
 
-/** A part whose `After:` issue is closed, however it closed, is queued; `open` is every open issue number of `repo`. */
+/** A part whose `After:` issue is closed is queued, once the plan of ours behind that issue has landed; `open` is every open issue number of `repo`. */
 export function released(db: Db, root: string, repo: string, open: Set<number>): void {
-  for (const row of releasable(db, repo).filter((r) => !open.has(r.after))) {
+  for (const row of releasable(db, repo).filter((r) => !open.has(r.after) && (r.on === null || landed(db, r.on)))) {
     const id = queue(db, root, planById(db, row.parent), row.n)
     if (id !== null) {
       logged(db, { plan: id, kind: 'unblocked', actor: 'split', outcome: 'pass', message: `#${String(row.after)} closed`, pointer: null, run: null })

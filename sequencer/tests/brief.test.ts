@@ -15,6 +15,7 @@ import { estimate, files, pointed, references, shape, split, TEMPLATE, unclear, 
 import { tick } from '../index.ts'
 import { unhold } from '../hold.ts'
 import { blocked } from '../steps.ts'
+import { WHOLE } from '../handout.ts'
 import { afresh, drop, maybe, move, put, srcDir, titleOf } from '../workspace.ts'
 import { approve, CARRIED, internalPlan, moveMain, ours, plan, reads, stub, world, type World } from './world.ts'
 
@@ -150,7 +151,7 @@ test('D1-D3: a Files row on a file over 300 lines names its range', () => {
   expect(row('- a/long.ts (new)')).toMatchObject({ span: 'a/long.ts', reason: holding('already in the tree') })
 })
 
-const lua = 'seats/lua_specialist/prompt.md'
+const lua = 'seats/modes/build.md'
 
 const prompt = (rows: string[], others: string[]): string =>
   swap(swap(brief, '## Files', rows), '## Who else reads what this changes', others)
@@ -269,6 +270,19 @@ test('the seat packet carries the template under the ask', async () => {
   expect(prompt.indexOf(TEMPLATE)).toBeGreaterThan(prompt.indexOf('# let an internal plan run'))
   expect(prompt).not.toContain('\n# Your last brief\n')
   expect(prompt).not.toContain('\n# Your last question\n')
+})
+
+test('D3 the packet lists long files after the template', async () => {
+  const w = mine()
+  const packets: Packet[] = []
+  moveMain(w.root, 'long.ts', 'x\n'.repeat(WHOLE))
+  await tick(w.db, w.root, stub(CARRIED))
+  await tick(w.db, w.root, stub(CARRIED, 0, undefined, (p) => packets.push(p)))
+
+  const prompt = packets[0]?.prompt ?? ''
+  expect(prompt).toContain('\n# Files over 300 lines\n')
+  expect(prompt).toContain('- long.ts — 301 lines')
+  expect(prompt.indexOf('\n# Files over 300 lines\n')).toBeGreaterThan(prompt.indexOf(TEMPLATE))
 })
 
 test('the packet opens on the checkout map; no MAP.md is written', async () => {
@@ -628,7 +642,8 @@ test('only brief.ts reads ## Files, and the shape check uses it', () => {
     .map((f) => relative(repo, f))
     // A live checkout carries `.cf/work/*/src`, each a copy of this tree rather than a second reader in it.
     .filter((f) => !f.startsWith('.cf/') && !f.includes('/tests/') && readFileSync(join(repo, f), 'utf8').includes('## Files'))
-  expect(readers).toEqual(['sequencer/brief.ts'])
+  // handout.ts and seat.ts name the section in the brief writer's packet text and do not parse it.
+  expect(readers.sort()).toEqual(['sequencer/brief.ts', 'sequencer/handout.ts', 'sequencer/seat.ts'])
 
   const brief = fixture('absent-file.md')
   expect(files(brief).map((f) => f.path)).toEqual([shape(brief, ask, repo)?.span])

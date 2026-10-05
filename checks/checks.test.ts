@@ -1,11 +1,12 @@
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { CHECKS, runAll } from './all.ts'
 import { migrationOrder } from './migration-order.ts'
+import { ruleHashes } from './rule-hashes.ts'
 import { walk } from './tree.ts'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -35,6 +36,17 @@ it('every check owns at least one fixture', () => {
 
 it('runAll sees the repository as clean', async () => {
   expect(await runAll(root)).toEqual([])
+})
+
+it('rule-hashes skips rules/tests but not a new rule file', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cf-rules-'))
+  for (const p of ['schema', 'rules', 'rules.seed.sql']) cpSync(join(root, p), join(dir, p), { recursive: true })
+  mkdirSync(join(dir, 'rules/tests'), { recursive: true })
+  writeFileSync(join(dir, 'rules/tests/x.test.ts'), '// a test\n')
+  expect(await ruleHashes.run(dir)).toEqual([])
+
+  writeFileSync(join(dir, 'rules/x.yaml'), 'x: 1\n')
+  expect(await ruleHashes.run(dir)).toEqual([{ check: 'rule-hashes', path: 'rules/x.yaml', line: 1, message: 'file under rules/ has no row' }])
 })
 
 it('migration-order judges against upstream, then origin main', async () => {

@@ -67,10 +67,16 @@ test('every builder of a changed type or signature is listed', () => {
   )
 })
 
-test('D5: the Estimate line, and an outside brief too big splits', () => {
+test('D5: the Estimate line, and a brief too big splits', () => {
   const prompt = seat(root, 'brief_writer').prompt.replace(/\s+/g, ' ')
   expect(prompt).toContain('Under `## Approach`, write one line `Estimate: <n> lines`: the lines the change adds and removes, not counting tests or generated files.')
-  expect(prompt).toContain('On someone else\'s repository, a brief past five files besides tests or past that repository\'s size limit is refused as more than one job: answer it with the split fence.')
+  expect(prompt).toContain('A brief past five files besides tests, on any repository, or on someone else\'s repository past that repository\'s size limit, is refused as more than one job: answer it with the split fence.')
+})
+
+test('D4: the writer counts files before it drafts', () => {
+  expect(seat(root, 'brief_writer').prompt.replace(/\s+/g, ' ')).toContain(
+    'Before you draft, count the files the change touches besides tests, every file that builds or implements a changed type included; past five, answer with the split fence first.',
+  )
 })
 
 test('the prompt states the brief check\'s path and length rules', () => {
@@ -81,6 +87,7 @@ test('the prompt states the brief check\'s path and length rules', () => {
     '`(new)` marks only a path you looked for in the checkout and did not find.',
     'The brief is at most 100 lines: count them before you answer.',
     'A `## Files` row on a file over 300 lines names the block it changes as `path:start-end`.',
+    '`# Files over 300 lines`, after the template, lists every file in the checkout that rule applies to, with its length: check each `## Files` row against it before you answer.',
   ]) expect(prompt).toContain(rule)
 })
 

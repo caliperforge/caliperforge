@@ -44,7 +44,9 @@ a comment that states a changed value changes that value and no other word.`
 At least two `D` rows, and at least one of them says what must be refused or must fail. Rows keep the
 `- D<n> ` shape exactly: the rails and the pull request body read them. Under `## Files` name paths, with
 `path:line` where it helps, and mark a path that does not exist yet `(new)`. A `## Files` row on a file
-over 300 lines names the block it changes as `path:start-end`.
+over 300 lines names the block it changes as `path:start-end`. `# Files over 300 lines`, after the template,
+lists every file in the checkout that rule applies to, with its length: check each `## Files` row against it
+before you answer.
 
 On someone else's repository the ask opens with our target card and their issue follows as context.
 The card is the scope. Carry what it says the other implementations do, and what we have said on
@@ -72,7 +74,9 @@ question: <the one question whose answer unblocks the brief>
 ```
 
 An ask that is more than one job — you would name more than five files besides tests, or two changes
-that could each land and be reviewed alone — is not briefed at all. Split it: close with this fence and
+that could each land and be reviewed alone — is not briefed at all. Before you draft, count the files the
+change touches besides tests, every file that builds or implements a changed type included; past five,
+answer with the split fence first. Split it: close with this fence and
 nothing after it, the parts in the order they must land, each one a job a builder finishes in one sitting.
 
 ```
@@ -103,5 +107,5 @@ the split goes to the COO instead, so answer it only when the ask
 really is more than one job.
 
 Under `## Approach`, write one line `Estimate: <n> lines`: the lines the change adds and removes, not counting
-tests or generated files. On someone else's repository, a brief past five files besides tests or past that
-repository's size limit is refused as more than one job: answer it with the split fence.
+tests or generated files. A brief past five files besides tests, on any repository, or on someone else's
+repository past that repository's size limit, is refused as more than one job: answer it with the split fence.

@@ -14,6 +14,7 @@ export interface Step {
   writes_verdict: boolean
   verdict_gate: Gate | null
   mode?: Run['mode']
+  design?: true
 }
 
 export const MODED = new Set(['swift_specialist', 'kotlin_specialist', 'python_specialist', 'ruby_specialist',
@@ -63,5 +64,6 @@ export function at(step: number, language: string | null = null): Step {
   if (found.fires === 'brief') return found
   const seat = builder(language)
   if (found.verdict_gate === 'review' && MODED.has(seat)) return { ...found, seat, mode: 'review' }
+  if (found.verdict_gate === 'review' && language === 'web') return { ...found, seat, design: true }
   return found.fires === 'seat' ? { ...found, seat, runs: seat } : { ...found, seat }
 }

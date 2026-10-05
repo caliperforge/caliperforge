@@ -18,7 +18,7 @@ import { conflicted, git, maybe, SELF } from '../workspace.ts'
 
 const schema = join(import.meta.dirname, '../../schema')
 const NOW = new Date('2026-10-03T10:00:00Z')
-const COO = { name: 'coo_lite', switch: { key: 'coo_lite.apply', value: '1' }, table: 'events', column: 'at', where: "kind = 'coo_lite'", gap: '2d' }
+const COO = { name: 'director', switch: { key: 'director.apply', value: '1' }, table: 'events', column: 'at', where: "kind = 'director'", gap: '2d' }
 const REGISTRY = z.array(Entry).parse(parse(readFileSync(join(import.meta.dirname, '../../rules/registry.yaml'), 'utf8')))
 const GARDENER = REGISTRY.filter((e) => e.name === 'gardener')
 const STALE = [{ name: 'gardener', state: 'stale', detail: 'newest gardens.day is 2026-09-28, older than 2d' }]
@@ -28,27 +28,27 @@ function db(enabled = 1): Db {
   d.exec(`UPDATE pipes SET enabled = ${String(enabled)};
     INSERT INTO plans (pipe_id, template, state, queued_at, lane, seat, origin, step, priority)
     VALUES ((SELECT min(id) FROM pipes), 'pr_path', 'queued', '2026-10-01', 'machine', 'typescript_specialist', 'https://github.com/a/b/issues/1', 0, 3);
-    INSERT INTO settings (key, value, who, origin_kind, origin_ref, set_at) VALUES ('coo_lite.apply', '1', 'ceo', 'ruling', 'r', '2026-10-01')`)
+    INSERT INTO settings (key, value, who, origin_kind, origin_ref, set_at) VALUES ('director.apply', '1', 'ceo', 'ruling', 'r', '2026-10-01')`)
   return d
 }
 
-function event(d: Db, at: string): void {
-  d.prepare("INSERT INTO events (plan, at, kind, actor, outcome, message) VALUES (1, ?, 'coo_lite', 'coo_lite', 'pass', 'm')").run(at)
+function event(d: Db, at: string, kind = 'director'): void {
+  d.prepare("INSERT INTO events (plan, at, kind, actor, outcome, message) VALUES (1, ?, ?, ?, 'pass', 'm')").run(at, kind, kind)
 }
 
 test('switchOff', () => {
   const d = db()
   const entries = [COO, { name: 'desk', switch: { key: 'comms.site_dir' } }]
   event(d, '2026-10-03 09:00:00')
-  d.exec("UPDATE settings SET value = '0' WHERE key = 'coo_lite.apply'")
-  expect(drift(d, entries, NOW).map((r) => [r.name, r.state])).toEqual([['coo_lite', 'off'], ['desk', 'off']])
-  d.exec("DELETE FROM settings WHERE key = 'coo_lite.apply'")
-  expect(drift(d, entries, NOW)[0]).toEqual({ name: 'coo_lite', state: 'off', detail: 'coo_lite.apply is unset' })
+  d.exec("UPDATE settings SET value = '0' WHERE key = 'director.apply'")
+  expect(drift(d, entries, NOW).map((r) => [r.name, r.state])).toEqual([['director', 'off'], ['desk', 'off']])
+  d.exec("DELETE FROM settings WHERE key = 'director.apply'")
+  expect(drift(d, entries, NOW)[0]).toEqual({ name: 'director', state: 'off', detail: 'director.apply is unset' })
 })
 
 test('staleRow', () => {
   const d = db(0)
-  expect(drift(d, [COO], NOW)).toEqual([{ name: 'coo_lite', state: 'silent', detail: "no row in events WHERE kind = 'coo_lite'" }])
+  expect(drift(d, [COO], NOW)).toEqual([{ name: 'director', state: 'silent', detail: "no row in events WHERE kind = 'director'" }])
   event(d, '2026-09-30 10:00:00')
   expect(drift(d, [COO], NOW).map((r) => r.state)).toEqual(['stale'])
   expect(drift(d, [{ ...COO, gap: undefined }], NOW)).toEqual([])
@@ -59,17 +59,20 @@ test('fresh', () => {
   const d = db()
   event(d, '2026-10-02 10:00:00')
   expect(drift(d, [COO, { ...COO, name: 'six', gap: '24h' }], NOW)).toEqual([])
-  expect(REGISTRY.map((e) => e.name)).toEqual(['coo_lite', 'fixer', 'fix_mode', 'swift_review', 'kotlin_review',
+  expect(REGISTRY.map((e) => e.name)).toEqual(['director', 'fixer', 'fix_mode', 'swift_review', 'kotlin_review',
     'python_review', 'ruby_review', 'rust_review', 'go_review', 'php_review', 'brief_writer', 'text_review',
-    'growth_lead', 'web_specialist', 'gardener', 'ratchet', 'accounts', 'records', 'dispositions', 'signoffs', 'proposals',
-    'ratchet_refuse', 'intake', 'stuck_plans', 'science_pull', 'site_publish', 'director_look', 'daily_learnings',
-    'review_examples'])
+    'growth_lead', 'web_specialist', 'design', 'go_specialist', 'php_specialist', 'ruby_specialist', 'python_specialist', 'lua_specialist', 'rust_specialist', 'gardener', 'ratchet', 'accounts', 'records', 'dispositions', 'signoffs', 'proposals',
+    'ratchet_refuse', 'intake', 'stuck_plans', 'science_pull', 'site_publish', 'director_look', 'typescript_specialist',
+    'daily_learnings', 'review_examples'])
   expect(ratchetRules(d).mode).toBe('refuse')
   expect(drift(d, REGISTRY, NOW).map((r) => r.name)).not.toContain('ratchet_refuse')
   expect(drift(d, REGISTRY, NOW).map((r) => r.name)).not.toContain('accepted_findings')
   for (const bad of [{ gap: '2 days' }, { table: 'events;' }, { column: 'At' }]) {
     expect(() => Entry.parse({ name: 'x', ...bad })).toThrow()
   }
+  const old = db()
+  event(old, '2026-10-02 10:00:00', 'coo_lite')
+  expect(drift(old, REGISTRY.filter((e) => e.name === 'director'), NOW)).toEqual([])
 })
 
 test('proposals', () => {
@@ -118,6 +121,50 @@ test('D4 web_specialist is silent only once atelier-web has a plan', () => {
   addPlan(d, { pipe_id: 1, target_id: null, template: 'pr_path', state: 'queued', queued_at: '2026-10-01', lane: 'atelier',
     seat: 'web_specialist', origin: 'https://github.com/caliperforge/atelier-web/issues/1', step: 0 })
   expect(drift(d, web, NOW)).toEqual([{ name: 'web_specialist', state: 'silent', detail: "no row in runs WHERE seat = 'web_specialist'" }])
+})
+
+test('D6 design is silent only once atelier-web is past step 4', () => {
+  const design = REGISTRY.filter((e) => e.name === 'design')
+  const d = db()
+  expect(drift(d, design, NOW)).toEqual([])
+  const running = (issue: number, step: number): number => addPlan(d, { pipe_id: 1, target_id: null, template: 'pr_path', state: 'running',
+    queued_at: '2026-10-01', lane: 'atelier', seat: 'web_specialist', origin: `https://github.com/caliperforge/atelier-web/issues/${String(issue)}`, step })
+  running(1, 4)
+  expect(drift(d, design, NOW)).toEqual([])
+  running(2, 5)
+  expect(drift(d, design, NOW)).toEqual([{ name: 'design', state: 'silent', detail: "no row in runs WHERE seat = 'design'" }])
+})
+
+test('D2 go_specialist is silent until a build run, at any age', () => {
+  const go = REGISTRY.filter((e) => e.name === 'go_specialist')
+  const d = db()
+  const hash = '0'.repeat(64)
+  const ran = (mode: string): void => {
+    d.exec(`INSERT OR IGNORE INTO rules (id, kind, path, content_hash, loaded_at)
+      VALUES ('go_specialist', 'card', 'rules/roster.yaml', '${hash}', '2026-09-24');
+      INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort,
+      input_tokens, cache_read_tokens, output_tokens, seconds, exit, at, mode, transcript_path)
+      VALUES (1, 2, 'go_specialist', '${hash}', 'claude-agent-sdk', 'm', 'high', 0, 0, 0, 0, 0, '2026-01-01 10:00:00', '${mode}', 'x.transcript.jsonl')`)
+  }
+  const silent = [{ name: 'go_specialist', state: 'silent', detail: "no row in runs WHERE seat = 'go_specialist' AND mode = 'build'" }]
+  expect(drift(d, go, NOW)).toEqual(silent)
+  ran('fix')
+  expect(drift(d, go, NOW)).toEqual(silent)
+  ran('build')
+  expect(drift(d, go, NOW)).toEqual([])
+})
+
+test('D4 each outside seat is silent until its first run', () => {
+  for (const name of ['python_specialist', 'lua_specialist', 'rust_specialist']) {
+    const entry = REGISTRY.filter((e) => e.name === name)
+    const d = db()
+    expect(drift(d, entry, NOW)).toEqual([{ name, state: 'silent', detail: `no row in runs WHERE seat = '${name}'` }])
+    d.exec(`INSERT INTO rules (id, kind, path, content_hash, loaded_at) VALUES ('${name}', 'card', 'rules/roster.yaml', '${'0'.repeat(64)}', '2026-09-22');
+      INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort,
+      input_tokens, cache_read_tokens, output_tokens, seconds, exit, at, mode, transcript_path)
+      VALUES (1, 2, '${name}', '${'0'.repeat(64)}', 'claude-agent-sdk', 'm', 'high', 0, 0, 0, 0, 0, '2026-10-02 10:00:00', 'build', 'x.transcript.jsonl')`)
+    expect(drift(d, entry, NOW)).toEqual([])
+  }
 })
 
 test('D4 fix_mode is silent without a fix run, stale after 7d', () => {
@@ -169,6 +216,26 @@ function queue(d: Db, priority: number): void {
   d.exec(`INSERT INTO plans (pipe_id, template, state, queued_at, lane, seat, origin, step, priority)
     VALUES ((SELECT id FROM pipes WHERE name = 'internal'), 'pr_path', 'queued', '2026-10-01', 'machine', 'typescript_specialist', 'https://github.com/a/b/issues/1', 0, ${String(priority)})`)
 }
+
+test('D3 typescript_specialist: silent without a run, stale at 2d', () => {
+  const ts = REGISTRY.filter((e) => e.name === 'typescript_specialist')
+  const d = internal()
+  queue(d, 3)
+  const hash = '0'.repeat(64)
+  const ran = (at: string): void => {
+    d.exec(`INSERT OR IGNORE INTO rules (id, kind, path, content_hash, loaded_at)
+      VALUES ('typescript_specialist', 'card', 'rules/roster.yaml', '${hash}', '2026-09-22');
+      INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort,
+      input_tokens, cache_read_tokens, output_tokens, seconds, exit, at, transcript_path)
+      VALUES (1, 2, 'typescript_specialist', '${hash}', 'claude-agent-sdk', 'm', 'high', 0, 0, 0, 0, 0, '${at}', 'x.transcript.jsonl')`)
+  }
+  expect(drift(internal(0), ts, NOW)).toEqual([])
+  expect(drift(d, ts, NOW)).toEqual([{ name: 'typescript_specialist', state: 'silent', detail: "no row in runs WHERE seat = 'typescript_specialist'" }])
+  ran('2026-09-30 10:00:00')
+  expect(drift(d, ts, NOW).map((r) => r.state)).toEqual(['stale'])
+  ran('2026-10-02 10:00:00')
+  expect(drift(d, ts, NOW)).toEqual([])
+})
 
 test('gardenerWhile', () => {
   expect(drift(internal(), GARDENER, NOW)).toEqual(STALE)

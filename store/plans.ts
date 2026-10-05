@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { decision } from '../sequencer/fence.ts'
 import { logged } from './events.ts'
 import type { Db } from './index.ts'
 
@@ -246,7 +247,9 @@ export function retry(db: Db, plan: PlanRow): number {
 }
 
 export function needsCeo(db: Db, plan: PlanRow, why: string | null = null): void {
-  db.prepare("UPDATE plans SET state = 'blocked_on_ceo', held_why = ? WHERE id = ?").run(why?.split('\n')[0] ?? null, plan.id)
+  db.prepare("UPDATE plans SET state = 'blocked_on_ceo', held_by = 'coo', held_why = ? WHERE id = ?").run(why?.split('\n')[0] ?? null, plan.id)
+  const ceo = decision(why ?? '')
+  if ('block' in ceo) held(db, plan.id, 'ceo', ceo.block.split('\n')[0] ?? ceo.block)
 }
 
 /** The plans whose checkout no step is coming back for. */

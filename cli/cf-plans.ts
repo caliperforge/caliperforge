@@ -1,5 +1,6 @@
 import type { Command } from 'commander'
 import { readFileSync } from 'node:fs'
+import { decision } from '../sequencer/fence.ts'
 import { hold, unhold } from '../sequencer/hold.ts'
 import { afresh, reap } from '../sequencer/workspace.ts'
 import { blocked, parked, WAITING } from '../sequencer/steps.ts'
@@ -141,6 +142,13 @@ function releasing(handle: Db, id: string, options: { on?: string; until?: strin
   return { on, at: options.until === undefined ? null : new Date(options.until) }
 }
 
+/** The block's Decide line, since `held_why` holds one line. */
+function fenced(why: string): string {
+  const ceo = decision(why)
+  if ('refused' in ceo) throw new Error(`hold --by ceo is refused: ${ceo.refused}`)
+  return ceo.block.split('\n')[0] ?? why
+}
+
 function parks(cf: Command, { root, db, out }: Cli): void {
   cf.command('park').argument('<plan>', 'a plan to hold where it stands, checkout kept')
     .option(...ON).option(...UNTIL)
@@ -158,18 +166,19 @@ function parks(cf: Command, { root, db, out }: Cli): void {
 
   cf.command('hold').argument('<plan>', 'a plan to hold where it stands, checkout kept')
     .requiredOption('--by <holder>', `who it waits on: ${HOLDERS.join(' or ')}`)
-    .requiredOption('--why <text>', 'why it is held')
+    .requiredOption('--why <text>', 'why it is held; with --by ceo, the decision block')
     .requiredOption('--as <actor>', `who ran it: ${HOLDERS.join(' or ')}`)
     .option(...ON).option(...UNTIL)
     .action((id: string, options: { by: string; why: string; as: string; on?: string; until?: string }) => {
       const by = holderOf(options.by)
       const actor = holderOf(options.as)
+      const why = by === 'ceo' ? fenced(options.why) : options.why
       const handle = db()
       const n = Number(id)
       if (holder(handle, n) !== null) throw new Error(`plan ${id} is mid-step in a live tick; hold it once the tick lets go`)
       const { on, at } = releasing(handle, id, options)
       hold(handle, root, n, options.why, new Date(), on, at)
-      held(handle, n, by, options.why)
+      held(handle, n, by, why)
       logged(handle, { plan: n, kind: 'hold', actor, outcome: 'pass', message: options.why, pointer: null, run: null })
       out(`plan ${id} held on the ${by}\n`)
     })

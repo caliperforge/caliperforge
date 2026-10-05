@@ -34,6 +34,12 @@ const row = (db: ReturnType<typeof open>) => db.prepare('SELECT state, step, wai
 
 const LATER = new Date('2099-01-01T00:00:00Z')
 
+const BLOCK = `Decide: may the pull request go upstream?
+Options: (a) send it: the maintainer sees it; (b) hold it: the plan waits
+Recommend: (a), the diff is signed off
+If no answer by 2026-09-28 09:00: the plan stays held`
+const DECIDE = 'Decide: may the pull request go upstream?'
+
 test('hold then unhold', () => {
   const { db, home } = seeded()
   hold(db, home, 7, 'paused by a person', new Date('2026-09-25T19:00:00Z'), null, LATER)
@@ -252,9 +258,28 @@ test('D3 park and hold log who ran them and why', () => {
   ran(parkedBy.db, parkedBy.home, ['park', '7', '--by', 'coo', '--why', 'w', '--until', '2026-10-04T22:00:00Z'])
   expect(logged(parkedBy.db)).toEqual([{ kind: 'park', actor: 'coo', message: 'w' }])
   const heldBy = seeded()
-  ran(heldBy.db, heldBy.home, ['hold', '7', '--by', 'ceo', '--as', 'coo', '--why', 'w', '--until', '2026-10-04T22:00:00Z'])
-  expect(logged(heldBy.db)).toEqual([{ kind: 'hold', actor: 'coo', message: 'w' }])
-  expect(holding(heldBy.db)).toEqual({ held_by: 'ceo', held_why: 'w' })
+  ran(heldBy.db, heldBy.home, ['hold', '7', '--by', 'ceo', '--as', 'coo', '--why', BLOCK, '--until', '2026-10-04T22:00:00Z'])
+  expect(logged(heldBy.db)).toEqual([{ kind: 'hold', actor: 'coo', message: BLOCK }])
+  expect(holding(heldBy.db)).toEqual({ held_by: 'ceo', held_why: DECIDE })
+  const byCoo = seeded()
+  ran(byCoo.db, byCoo.home, ['hold', '7', '--by', 'coo', '--as', 'coo', '--why', 'w', '--until', '2026-10-04T22:00:00Z'])
+  expect(logged(byCoo.db)).toEqual([{ kind: 'hold', actor: 'coo', message: 'w' }])
+  expect(holding(byCoo.db)).toEqual({ held_by: 'coo', held_why: 'w' })
+})
+
+test.each([
+  ['no Decide line', 'w'],
+  ['the Decide line does not end in "?"', BLOCK.replace('upstream?', 'upstream')],
+  ['Options names fewer than two choices', BLOCK.replace('; (b) hold it: the plan waits', '')],
+  ['the Recommend line names no option', BLOCK.replace('(a), ', '')],
+])('D1 hold --by ceo refuses %s, writes nothing', (reason, why) => {
+  const { db, home } = seeded()
+  const before = plan7(db)
+  expect(() => { ran(db, home, ['hold', '7', '--by', 'ceo', '--as', 'coo', '--why', why, '--until', '2026-10-04T22:00:00Z']) })
+    .toThrow(`hold --by ceo is refused: ${reason}`)
+  expect(plan7(db)).toEqual(before)
+  expect(isHeld(home, 7)).toBe(false)
+  expect(logged(db)).toEqual([])
 })
 
 test('holdNeedsCondition D1 D2 no time or plan writes nothing', () => {
@@ -279,14 +304,14 @@ test('D3 cf park --until holds the plan until that time', () => {
 test('D4 cf hold --on waits on an open plan, refuses a closed one', () => {
   const { db, home } = seeded()
   db.exec("INSERT INTO plans (id, pipe_id, template, state, queued_at, lane, seat, origin) VALUES (8, 9, 'pr_path', 'queued', '2026-09-24', 'machine', 'typescript_specialist', 'https://github.com/caliperforge/caliperforge/issues/140')")
-  ran(db, home, ['hold', '7', '--by', 'ceo', '--as', 'coo', '--why', 'w', '--on', '8'])
-  expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', waits_on: 8, held_until: null, held_by: 'ceo', held_why: 'w' })
-  ran(db, home, ['hold', '7', '--by', 'ceo', '--as', 'coo', '--why', 'w', '--on', '8', '--until', '2026-10-04T22:00:00Z'])
+  ran(db, home, ['hold', '7', '--by', 'ceo', '--as', 'coo', '--why', BLOCK, '--on', '8'])
+  expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', waits_on: 8, held_until: null, held_by: 'ceo', held_why: DECIDE })
+  ran(db, home, ['hold', '7', '--by', 'ceo', '--as', 'coo', '--why', BLOCK, '--on', '8', '--until', '2026-10-04T22:00:00Z'])
   expect(plan7(db)).toMatchObject({ waits_on: 8, held_until: '2026-10-04T22:00:00.000Z' })
   const shut = seeded()
   shut.db.exec("INSERT INTO plans (id, pipe_id, template, state, queued_at, lane, seat, origin) VALUES (8, 9, 'pr_path', 'done', '2026-09-24', 'machine', 'typescript_specialist', 'https://github.com/caliperforge/caliperforge/issues/140')")
   const before = plan7(shut.db)
-  expect(() => { ran(shut.db, shut.home, ['hold', '7', '--by', 'ceo', '--as', 'coo', '--why', 'w', '--on', '8']) })
+  expect(() => { ran(shut.db, shut.home, ['hold', '7', '--by', 'ceo', '--as', 'coo', '--why', BLOCK, '--on', '8']) })
     .toThrow('plan 8 is not open, so nothing would release plan 7')
   expect(plan7(shut.db)).toEqual(before)
   expect(isHeld(shut.home, 7)).toBe(false)

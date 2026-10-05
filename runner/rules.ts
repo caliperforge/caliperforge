@@ -46,10 +46,12 @@ export function rules(root: string): Rule[] {
   const roster = digest(join(root, 'rules/roster.yaml'))
   const tight = digest(join(root, 'rules/tight.md'))
   const registry = digest(join(root, 'rules/registry.yaml'))
+  const staffing = digest(join(root, 'rules/staffing.yaml'))
   return [
     { id: 'rules/rails.yaml', kind: 'rail', path: 'rules/rails.yaml', content_hash: rails },
     { id: 'rules/tight.md', kind: 'card', path: 'rules/tight.md', content_hash: tight },
     { id: 'rules/registry.yaml', kind: 'card', path: 'rules/registry.yaml', content_hash: registry },
+    { id: 'rules/staffing.yaml', kind: 'card', path: 'rules/staffing.yaml', content_hash: staffing },
     ...manifest(root).rails.map((id) => ({ id, kind: 'rail' as const, path: 'rules/rails.yaml', content_hash: rails })),
     ...written(root).seats.map((id) => ({ id, kind: 'card' as const, path: 'rules/roster.yaml', content_hash: roster })),
   ]

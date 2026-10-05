@@ -19,6 +19,7 @@ seats:
   - director
   - solidity_specialist
   - growth_lead
+  - researcher
 digests:
   typescript_specialist:
     manifest: a4ff87fd829db7a375989bb3c747d1cb6f2b59f17b47222ff1f76764d6a4c038
@@ -31,7 +32,7 @@ digests:
     prompt: 442983f84be97ab63bd2980b39ce1cf5d238df42ed8ac3188cf145352944c92f
   brief_writer:
     manifest: 9f242cf80f39b12b889aa092dca097abe8d1260a8014e05f0af3bd5b8ccc86a5
-    prompt: e0b9fe5087b86112266327a389c02f079535af925204faf1105e7913be7b189f
+    prompt: bb0872d03a7ef4e7201b1cd9e2b3b9a3af0da51bbd068be4db8cef41329c0afc
   outside_specialist:
     manifest: 3897d50daa0caf59420769d972b0ed0dc67876076ba4373beeef28ba81dd33f4
     prompt: a604004f11d07c30fb76a3445dbc97b3e2d371a18770944a30b4c9525547a7ac
@@ -80,3 +81,6 @@ digests:
   growth_lead:
     manifest: 0d18f8c4ae370bad1f932526c0dc0d2eb7da1c173dcd7a347be4e540b8cd8c3d
     prompt: d73efc8a9b2726771b51bda28ea5c4e7be05b2a80fa62c5d434dd5a60d25d694
+  researcher:
+    manifest: 9797d41d05fc82b7f7eb64c3b9f9454fb52b3f9bc8b8e68f0a09635afdc0529b
+    prompt: 2a12f14af60315cecb569c6ac80ef1872a60d9ffd33a00bd74d4e696123af01d

@@ -23,13 +23,14 @@ import { parse } from '../rails/diff.ts'
 import { estimate, human, pointed, references, shape, split, TEMPLATE, unclear, wide, WIDE, type Part } from './brief.ts'
 import { repoOf } from './ready.ts'
 import { limitOf } from './size.ts'
-import { handout, touched, type Handed } from './handout.ts'
+import { handout, long, touched, type Handed } from './handout.ts'
 import { capped, enclosed, handover, type Handover } from './handover.ts'
 import { symbolMap } from './symbols.ts'
 import { targetOf } from './steps.ts'
 import { install, mode, type Mode } from './checks.ts'
 import { narrow } from './rails.ts'
 import { classify } from './delta.ts'
+import { looked } from './design.ts'
 import { deletions } from './fence.ts'
 import { findings } from './findings.ts'
 import { fenceFor, languageFor } from './route.ts'
@@ -131,7 +132,7 @@ export async function fireBrief(db: Db, root: string, plan: PlanRow, step: Step,
   const src = srcDir(root, plan.id)
   const standing = maybe(root, plan.id, 'issue.md')
   if (standing !== null && shape(standing, ask, src) === null) return stands()
-  const fired = await ran(db, root, plan, step, provider, again(db, root, plan.id, ask) + store(root, plan), false)
+  const fired = await ran(db, root, plan, step, provider, again(db, root, plan.id, ask) + store(root, plan) + long(src) + wideAsk(ask), false)
   drop(root, plan.id, 'brief.refused.md')
   if (fired.ended !== 'completed') return exited(step, fired)
   const question = unclear(fired.text)
@@ -166,6 +167,15 @@ function oversized(db: Db, plan: PlanRow, brief: string): string | null {
   if (repo === null || lines === null) return null
   const limit = limitOf(db, repo)
   return lines > limit ? `the brief estimates ${String(lines)} lines besides tests and generated files; past ${repo}'s ${String(limit)} it is more than one job` : null
+}
+
+/** Only the ask's own text counts: a part carrying a wide parent's ticket told to split again would loop. */
+function wideAsk(ask: string): string {
+  const lines = ask.split('\n')
+  const parent = lines.findIndex((l) => l === '## Parent ticket' || l === '## Parent comments')
+  const width = wide((parent === -1 ? lines : lines.slice(0, parent)).join('\n'))
+  if (width === null) return ''
+  return `\n\n# More than one job\n\nThe ask names ${String(width)} files besides tests under \`## Files\`; past ${String(WIDE)} it is more than one job: answer with the split fence and write no brief.\n`
 }
 
 /** The answer is kept until it is filed, so a `gh` that fails half way does not buy a second brief. */
@@ -382,7 +392,8 @@ function landable(db: Db, plan: PlanRow, step: Step, notes: Note[]): Note[] {
 export async function fireLanded(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
   const { outcome, notes: all } = await fireReview(db, root, plan, step, provider)
   const notes = landable(db, plan, step, all)
-  return outcome.outcome === 'pass' && notes.length > 0 ? landed(db, root, plan, step, notes) : outcome
+  const done = outcome.outcome === 'pass' && notes.length > 0 ? landed(db, root, plan, step, notes) : outcome
+  return step.design === true && done.outcome === 'pass' ? looked(db, root, plan, provider) : done
 }
 
 /** On someone else's repository the reviewer is handed its footing instead of reading for it. */

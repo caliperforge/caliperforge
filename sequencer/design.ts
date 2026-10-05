@@ -1,12 +1,19 @@
 import { createHash } from 'node:crypto'
-import { mkdirSync } from 'node:fs'
+import { mkdirSync, readdirSync, rmSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { extname, join, resolve, sep } from 'node:path'
 import { chromium, type Browser } from 'playwright-core'
+import type { Provider } from '../providers/kind.ts'
 import { parse } from '../rails/diff.ts'
+import { judge } from '../reviews/bench.ts'
+import type { Db } from '../store/index.ts'
+import type { PlanRow } from '../store/plans.ts'
+import { pending } from '../store/transcript.ts'
 import type { Verdict } from '../store/verdict.ts'
+import type { Outcome } from './kind.ts'
+import { diffOf, get, planDir, rulings, srcDir } from './workspace.ts'
 
 interface Shot {
   screen: string
@@ -48,6 +55,29 @@ export function screens(diff: string): string[] {
   const files = parse(diff)
   if (files.length > 0 && files.every((f) => SOURCE.test(f.path))) return ['index.html']
   return files.filter((f) => !f.deleted && f.path.endsWith('.html')).map((f) => f.path)
+}
+
+export async function looked(db: Db, root: string, plan: PlanRow, provider: Provider): Promise<Outcome> {
+  const diff = diffOf(root, plan.id)
+  const pages = screens(diff)
+  if (pages.length === 0) return { outcome: 'pass', spans: [], note: 'design: the diff changes no screen' }
+  const src = srcDir(root, plan.id)
+  const out = planDir(root, plan.id)
+  const dir = join(out, 'design')
+  rmSync(dir, { recursive: true, force: true })
+  const capture = await design(src, out, pages)
+  const input = {
+    repo: src,
+    issue: get(root, plan.id, 'issue.md') + rulings(root, plan.id),
+    diff,
+    screenshots: readdirSync(dir).map((n) => join(dir, n)),
+    ...(capture.spans.length > 0 ? { defects: capture.spans.join('\n') } : {}),
+  }
+  const { outcome } = await judge(db, root, 'design', plan.id, input, provider, pending(out, 'step-4-design'))
+  const spans = [...capture.spans, ...outcome.spans]
+  if (outcome.outcome === 'needs_ceo') return { outcome: 'needs_ceo', spans: outcome.spans, note: 'design needs_ceo', message: outcome.message }
+  if (spans.length > 0) return { outcome: 'refuse', spans, note: 'design refuse', message: [capture.message, outcome.message].join('\n\n') }
+  return { outcome: 'pass', spans: [], note: 'design pass' }
 }
 
 export async function design(src: string, out: string, pages: string[]): Promise<Verdict> {

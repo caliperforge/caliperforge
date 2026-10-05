@@ -8,6 +8,7 @@ import { fresh } from '../../checks/sqlite.ts'
 import type { Pr } from '../../cli/gh.ts'
 import { decide } from '../../store/approvals.ts'
 import { capped, setting } from '../../store/drift.ts'
+import { logged } from '../../store/events.ts'
 import { listed } from '../../store/files.ts'
 import type { Db } from '../../store/index.ts'
 import { ratchetRules } from '../../store/lanes.ts'
@@ -69,7 +70,7 @@ test('fresh', () => {
     'python_review', 'ruby_review', 'rust_review', 'go_review', 'php_review', 'typescript_review', 'brief_writer', 'text_review',
     'growth_lead', 'web_specialist', 'design', 'go_specialist', 'php_specialist', 'ruby_specialist', 'python_specialist', 'lua_specialist', 'rust_specialist', 'gardener', 'ratchet', 'accounts', 'records', 'dispositions', 'signoffs', 'proposals',
     'ratchet_refuse', 'intake', 'stuck_plans', 'science_pull', 'site_publish', 'director_look', 'typescript_specialist',
-    'daily_learnings', 'review_examples', 'tick_deps', 'watch'])
+    'daily_learnings', 'review_examples', 'director_fix_reach', 'tick_deps', 'watch'])
   expect(drift(d, REGISTRY.filter((e) => e.name === 'watch'), NOW)).toEqual([])
   expect(ratchetRules(d).mode).toBe('refuse')
   expect(drift(d, REGISTRY, NOW).map((r) => r.name)).not.toContain('tick_deps')
@@ -120,6 +121,24 @@ test('D2 director_look is silent until a look, stale after 7d', () => {
   expect(drift(d, look, NOW).map((r) => r.state)).toEqual(['stale'])
   looked('2026-09-27 10:00:00')
   expect(drift(d, look, NOW)).toEqual([])
+})
+
+test('D5 director_fix_reach is seen only on a failed fix in 7d', () => {
+  const reach = REGISTRY.filter((e) => e.name === 'director_fix_reach')
+  const d = db()
+  const told = (at: string, kind: string, message: string): void => {
+    logged(d, { plan: 1, kind, actor: kind, outcome: 'needs_ceo', message, pointer: null, run: null }, at)
+  }
+  expect(drift(d, reach, NOW)).toEqual([])
+  told('2026-10-02 10:00:00', 'director', 'fix: refused by the fence, the fixer makes no commit')
+  expect(drift(d, reach, NOW)).toEqual([])
+  told('2026-09-25 10:00:00', 'coo_lite', 'fix did not apply, the fixer did not make the fix: x')
+  expect(drift(d, reach, NOW)).toEqual([])
+  told('2026-09-27 10:00:00', 'coo_lite', 'fix did not apply, the fixer did not make the fix: y')
+  expect(drift(d, reach, NOW)).toEqual([{ name: 'director_fix_reach', state: 'seen',
+    detail: 'newest events.at is 2026-09-27 10:00:00, within 7d; expected none' }])
+  told('2026-10-02 10:00:00', 'director', 'fix did not apply, the fixer did not make the fix: z')
+  expect(drift(d, reach, NOW).map((r) => r.detail)).toEqual(['newest events.at is 2026-10-02 10:00:00, within 7d; expected none'])
 })
 
 test('D4 web_specialist is silent only once atelier-web has a plan', () => {

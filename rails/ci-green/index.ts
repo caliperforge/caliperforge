@@ -98,7 +98,7 @@ function runs(head: Head, judged: Run[] | null): string[] {
  */
 function mine(at: Run[], touched: string[]): Run[] {
   const languages = new Set(touched.map((path) => path.split('/')[0]?.toLowerCase()))
-  const named = at.filter((r) => languages.has(r.workflowName.toLowerCase()))
+  const named = at.filter((r) => languages.has(r.workflowName.toLowerCase().split(/\s+/)[0] ?? ''))
   return named.length === 0 ? at : named
 }
 

@@ -20,6 +20,7 @@ import { CHECKS, waiting, type Check, type Target } from './card.ts'
 import { npm } from './checks.ts'
 import { bind, prMessage, signedAt } from './folded.ts'
 import { red } from './failures.ts'
+import { config } from './greptile.ts'
 import { refresh } from './install.ts'
 import { rerun as cancelled } from './rerun.ts'
 import type { Outcome } from './kind.ts'
@@ -150,7 +151,7 @@ export function sent(root: string, plan: PlanRow, repo: string, wire: Wire): { f
     else squash(root, plan.id, profile(root, repo))
   }
   const head = outside ? headOf(root, plan.id) : onward(headOf(root, plan.id))
-  const tip = outside ? tipOf(root, plan.id, head, ci) : head.sha
+  const tip = outside ? tipOf(root, plan.id, head, ci, repo) : head.sha
   wire.send(head.dir, outside ? `${tip}:refs/heads/${ci}` : head.branch)
   return { fork, head, ci, tip }
 }
@@ -178,20 +179,19 @@ export function carried(root: string, plan: number, sha: string): string {
 }
 
 /** A head sent again keeps its tip, so its CI is not restarted. */
-function tipOf(root: string, plan: number, head: Head, ci: string): string {
+function tipOf(root: string, plan: number, head: Head, ci: string, repo: string): string {
   const known = tips(root, plan).find(([, of]) => of === head.sha)?.[0]
   if (known !== undefined) return known
-  const tip = quiet(head.dir, ci)
+  const tip = quiet(head.dir, ci, config(root, repo))
   put(root, plan, TIPS, `${maybe(root, plan, TIPS) ?? ''}${tip} ${head.sha}\n`)
   return tip
 }
 
 /** HEAD plus `greptile.json` turning Greptile's own reviews off, signed as the host is (#939: an unsigned tip turns the target's PR hygiene red). */
-function quiet(dir: string, ci: string): string {
+function quiet(dir: string, ci: string, greptile: string): string {
   const env = { ...process.env, GIT_INDEX_FILE: join(git(dir, ['rev-parse', '--absolute-git-dir']).trim(), 'next.index') }
-  const index = (args: string[]): string =>
-    execFileSync('git', args, { cwd: dir, encoding: 'utf8', env, stdio: ['ignore', 'pipe', 'pipe'] }).trim()
-  const blob = execFileSync('git', ['hash-object', '-w', '--stdin'], { cwd: dir, encoding: 'utf8', input: '{"autoReview": []}\n' }).trim()
+  const index = (args: string[]): string => execFileSync('git', args, { cwd: dir, encoding: 'utf8', env, stdio: ['ignore', 'pipe', 'pipe'] }).trim()
+  const blob = execFileSync('git', ['hash-object', '-w', '--stdin'], { cwd: dir, encoding: 'utf8', input: greptile }).trim()
   index(['read-tree', 'HEAD'])
   index(['update-index', '--add', '--cacheinfo', `100644,${blob},greptile.json`])
   const next = `refs/remotes/origin/${ci}`

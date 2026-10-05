@@ -106,6 +106,44 @@ test('D4 a __pycache__ file HEAD holds stays in the index', () => {
   expect(head(dir, ['ls-files', '--', PYC])).toBe(PYC)
 })
 
+const CACHE = 'kotlin/.gradle/9.7.1/gc.properties'
+const JAR = 'kotlin/build/libs/a.jar'
+
+const gradled = (): { dir: string; base: string; root: string } => {
+  const w = world()
+  const { dir, base } = checkout(w.root, 1, 'acme/widget', 'widget-12-a1')
+  mkdirSync(join(dir, 'kotlin/.gradle/9.7.1'), { recursive: true })
+  mkdirSync(join(dir, 'kotlin/build/libs'), { recursive: true })
+  writeFileSync(join(dir, 'kotlin/Main.kt'), 'fun main() {}\n')
+  writeFileSync(join(dir, CACHE), 'gc')
+  writeFileSync(join(dir, JAR), 'jar')
+  return { dir, base, root: w.root }
+}
+
+test('D2 Gradle cache and build output are not in the diff', () => {
+  const { dir, base } = gradled()
+  const diff = gitDiff(dir, base)
+  expect(diff).toContain('kotlin/Main.kt')
+  expect(diff).not.toContain('.gradle')
+  expect(diff).not.toContain('kotlin/build')
+})
+
+test('D3 a reused checkout drops an intent-to-add .gradle file', () => {
+  const { dir, base, root } = gradled()
+  head(dir, ['add', '-f', '--intent-to-add', CACHE])
+  checkout(root, 1, 'acme/widget', 'widget-12-a1')
+  expect(head(dir, ['ls-files', '--', CACHE])).toBe('')
+  expect(gitDiff(dir, base)).not.toContain('.gradle')
+})
+
+test('D4 a build/ file HEAD holds stays in the index', () => {
+  const { dir, root } = gradled()
+  head(dir, ['add', '-f', JAR])
+  head(dir, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'tracked jar'])
+  checkout(root, 1, 'acme/widget', 'widget-12-a1')
+  expect(head(dir, ['ls-files', '--', JAR])).toBe(JAR)
+})
+
 test('a kotlin/ brief builds on the kotlin seat, diffed at base', async () => {
   const w = world('warm', undefined, KOTLIN)
   approve(w.db, w.target)

@@ -7,7 +7,6 @@ import { db, unread } from './drifting.ts'
 
 const RECORDS = [{ name: 'records', table: 'records', column: 'read_at', gap: '1d' }]
 const PR = 'https://github.com/acme/widget/pull/7'
-const nothing = { file: (): string => { throw new Error('filed') } }
 
 function ours(d: Db): Db {
   d.exec(`INSERT INTO accounts (id, repo, measured_at, maintainers, doors, last_outsider_merge,
@@ -30,23 +29,23 @@ function reader(asked: string[]): (repo: string, no: number) => Pr {
 test('D1: the daily check reads our PRs into records first', () => {
   const d = ours(db())
   const asked: string[] = []
-  expect(due(d, RECORDS, new Date('2026-10-03T11:30:00Z'), nothing, reader(asked))).toEqual([])
+  expect(due(d, RECORDS, new Date('2026-10-03T11:30:00Z'), reader(asked))).toEqual([])
   expect(asked).toEqual(['acme/widget#7'])
   expect(d.prepare('SELECT repo, pr, plan FROM records').all()).toEqual([{ repo: 'acme/widget', pr: 7, plan: 1 }])
 })
 
 test('D2: before 05:30 or again that day, nothing is read or filed', () => {
   const d = ours(db())
-  expect(due(d, RECORDS, new Date('2026-10-03T11:29:00Z'), nothing, unread)).toEqual([])
+  expect(due(d, RECORDS, new Date('2026-10-03T11:29:00Z'), unread)).toEqual([])
   d.exec("UPDATE settings SET value = '2026-10-03' WHERE key = 'drift.at'")
-  expect(due(d, RECORDS, new Date('2026-10-03T12:00:00Z'), nothing, unread)).toEqual([])
+  expect(due(d, RECORDS, new Date('2026-10-03T12:00:00Z'), unread)).toEqual([])
 })
 
 test('D3: a failed read throws, drift.at set, no retry that day', () => {
   const d = ours(db())
-  expect(() => due(d, RECORDS, new Date('2026-10-03T11:30:00Z'), nothing, unread)).toThrow('read')
+  expect(() => due(d, RECORDS, new Date('2026-10-03T11:30:00Z'), unread)).toThrow('read')
   expect(setting(d, 'drift.at')).toBe('2026-10-03')
   const asked: string[] = []
-  expect(due(d, RECORDS, new Date('2026-10-03T12:00:00Z'), nothing, reader(asked))).toEqual([])
+  expect(due(d, RECORDS, new Date('2026-10-03T12:00:00Z'), reader(asked))).toEqual([])
   expect(asked).toEqual([])
 })

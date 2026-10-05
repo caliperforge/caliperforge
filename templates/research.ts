@@ -42,7 +42,7 @@ const row = (name: string, step: number): Step =>
 
 export const steps: Step[] = ['question', 'gather', 'check', 'review', 'record'].map((name, i) =>
   name === 'gather' ? { ...row(name, i), seat: 'researcher', fires: 'seat', runs: 'researcher' }
-  : name === 'review' ? { ...row(name, i), seat: 'senior_review', fires: 'seat', runs: 'senior_review' } : row(name, i))
+  : name === 'review' ? { ...row(name, i), fires: 'seat', runs: 'senior_review' } : row(name, i))
 
 const LINES = [['question', '**Question:**'], ['wrong_if', '**Would be wrong if:**'], ['done_when', '**Done when:**']] as const
 

@@ -1,8 +1,10 @@
 import { expect, test } from 'vitest'
+import { ofKind } from '../../store/events.ts'
 import { fingerprint, refused } from '../../store/refusals.ts'
 import { at } from '../../templates/pr-path.ts'
 import { tick } from '../index.ts'
 import { fingerprintOf } from '../refusal.ts'
+import { CI_ONLY } from '../settle.ts'
 import { CARRIED, internalPlan, ours, REFUSE, stub, world } from './world.ts'
 
 const text = (note: string) => ({ outcome: 'refuse' as const, spans: ['text:5 identifier.unresolved'], note })
@@ -34,4 +36,10 @@ test('D2 a shared refusal stops its lane and names plans and span', async () => 
   const fired = (await tick(w.db, w.root, stub(CARRIED, 0, REFUSE)))[0]
   expect(fired?.note).toContain('lane off: plans 2 and 3 refused on src/hello.ts:1')
   expect(w.db.prepare('SELECT enabled FROM pipes WHERE id = 1').get()).toEqual({ enabled: 0 })
+  expect(ofKind(w.db, 'pipe').map((e) => [e.actor, e.outcome])).toEqual([['settle', 'needs_ceo']])
+})
+
+test('CI state never switches a lane off', () => {
+  expect(['checks:CI', 'https://x/runs/1 ci.red', 'u ci.pending'].every((s) => CI_ONLY.test(s))).toBe(true)
+  expect(['src/hello.ts:1', 'base:stale', 'text:5 identifier.unresolved'].some((s) => CI_ONLY.test(s))).toBe(false)
 })

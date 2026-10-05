@@ -82,6 +82,9 @@ export function doneIds(issue: string): string[] {
 /** The org account every target is forked into. A branch is pushed here; it is never cut from here. */
 export const FORK = 'caliperforge'
 
+/** The GitHub account that comments, claims and gets assigned on our behalf. */
+export const OPERATOR = 'michael-moffett'
+
 /** Our own repository: the tree an internal plan is branched in, and the one its PR is opened on. */
 export const SELF = `${FORK}/caliperforge`
 

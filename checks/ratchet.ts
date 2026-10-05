@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join, relative } from 'node:path'
 import ts from 'typescript'
 import type { Check, Finding } from './kind.ts'
 import { walk } from './tree.ts'
@@ -31,7 +31,13 @@ export const ratchet: Check = {
 
 /** `raises` is keyed by the settings row `ratchet.raise.<metric>.<path>`, `/` read as `.` and `-` as `_`. */
 export function ratcheted(root: string, raises: Record<string, number>): Finding[] {
-  return judged(counts(root), recorded(root), raises)
+  return judged(counts(root), budgets(root), raises)
+}
+
+function budgets(root: string): Counts {
+  const files = walk(root, (f) => f === 'ratchet.json').sort((a, b) => a.split('/').length - b.split('/').length)
+  return Object.fromEntries(files.flatMap((file) => Object.entries(JSON.parse(readFileSync(file, 'utf8')) as Counts)
+    .map(([path, tally]): [string, Tally] => [join(relative(root, dirname(file)), path), tally])))
 }
 
 export function counts(root: string): Counts {

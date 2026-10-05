@@ -30,9 +30,10 @@ it('refuses a file grown past its budget, and a new one past 300', async () => {
   ])
 })
 
+const QUERY = 'db.prepare(\'SELECT 1\')\n'
+
 it('refuses db.prepare( in sequencer/ but not in store/', async () => {
-  const query = 'db.prepare(\'SELECT 1\')\n'
-  const dir = tree({ 'sequencer/x.ts': query, 'store/x.ts': query }, {})
+  const dir = tree({ 'sequencer/x.ts': QUERY, 'store/x.ts': QUERY }, {})
   expect(await messages(dir)).toEqual(['sequencer/x.ts prepare 1 over budget 0: move the query into store/'])
 })
 
@@ -82,6 +83,30 @@ it('refuses a long test name and citing comments', async () => {
     'a.test.ts test-name 1 over budget 0: shorten the test name to 60 characters',
     'b.ts citing-comment 5 over budget 0: drop the ticket, date, name or plan number from the comment',
   ])
+})
+
+const FOLDER = 'sequencer/ratchet.json'
+
+it('D1 D2 a folder ratchet.json row is read from its folder', async () => {
+  const dir = tree({ 'sequencer/merge.ts': QUERY, [FOLDER]: '{"merge.ts":{"prepare":1}}' }, {})
+  expect(await messages(dir)).toEqual([])
+})
+
+it('D3 a folder row replaces the root row for one path', async () => {
+  const dir = tree({ 'sequencer/x.ts': 'x\n'.repeat(401), [FOLDER]: '{"x.ts":{"lines":400}}' }, { 'sequencer/x.ts': { lines: 10 } })
+  expect(await messages(dir)).toEqual([])
+})
+
+it('D4 a folder row above the count is refused', async () => {
+  const dir = tree({ 'sequencer/x.ts': 'x\n', [FOLDER]: '{"x.ts":{"prepare":1}}' }, {})
+  expect(await messages(dir)).toEqual(['lower ratchet.json sequencer/x.ts prepare to 0'])
+})
+
+it('recount leaves folder rows out of the root file', () => {
+  const dir = tree({ 'a.ts': 'x\n', [FOLDER]: '{"x.ts":{"prepare":1}}' }, {})
+  recount(dir, ['a.ts'])
+  expect(readFileSync(join(dir, 'ratchet.json'), 'utf8')).toBe(`${JSON.stringify({ 'a.ts': { lines: 1 } }, null, 2)}\n`)
+  expect(readFileSync(join(dir, FOLDER), 'utf8')).toBe('{"x.ts":{"prepare":1}}')
 })
 
 it('the whole tree meets ratchet.json', () => {

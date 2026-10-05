@@ -4,6 +4,7 @@ import { basename, join } from 'node:path'
 import { expect, test } from 'vitest'
 import { all } from '../../cli/inbox.ts'
 import { fill } from '../../cli/digests.ts'
+import { looked } from '../../cli/look.ts'
 import { file, LANE } from '../../cli/plan.ts'
 import type { Packet, Provider } from '../../providers/kind.ts'
 import { load, Seat } from '../../runner/rules.ts'
@@ -26,7 +27,7 @@ import { hold, unhold } from '../hold.ts'
 import type { Wire } from '../push.ts'
 import { rule } from '../rule.ts'
 import { parted } from '../split.ts'
-import { afresh, drop, maybe, put, srcDir } from '../workspace.ts'
+import { afresh, drop, maybe, planDir, put, srcDir } from '../workspace.ts'
 
 const repo = join(import.meta.dirname, '../..')
 const now = new Date('2026-09-27T09:00:00.000Z')
@@ -237,6 +238,42 @@ test('an upstream-key stop gets the pinned read tool and its keys', async () => 
   const day = new Date().toISOString().slice(0, 10)
   expect(maybe(home, 7, 'issue.md')).toBe(`# Issue\n\nthe brief\n\n## Answer from the coo_lite (${day})\n\n${keys}\n\n## Standing\n\n- no forced push\n`)
   expect(row(db).step).toBe(2)
+})
+
+const LOOK = 'store SELECT input_tokens FROM runs WHERE plan = 7 AND step = 2'
+const TOKENS = '---\nmove: rule\nwhy: cf look store read the run\nanswer: plan 7 step 2 took 1000 input tokens\n---\n'
+
+function looker(db: Db, home: string): Provider {
+  return { ...stub(''), fire: (p) => {
+    if (!p.prompt.includes('cf look store')) return stub(REPLY.ask_ceo ?? '').fire(p)
+    looked(db, home, planDir(home, 7), LOOK)
+    return stub(TOKENS).fire(p)
+  } }
+}
+
+function tokenStop() {
+  const seed = seeded('1')
+  put(seed.home, 7, 'refusal.md', 'how many input tokens did plan 7\'s step 2 run take?\n')
+  return seed
+}
+
+test('D3: a run\'s token count is ruled after a cf look store', async () => {
+  const { db, home } = tokenStop()
+  await cooLite(db, home, row(db), looker(db, home), now, () => undefined, wire())
+  expect(told(db)).toEqual([{ actor: 'coo_lite', outcome: 'pass', message: 'rule: cf look store read the run' }])
+  expect(ofKind(db, 'look')).toEqual([{ plan: 7, kind: 'look', actor: 'coo_lite', outcome: 'pass', message: LOOK }])
+  expect(maybe(home, 7, 'issue.md')).toContain('plan 7 step 2 took 1000 input tokens')
+  expect(plan7(db)?.held_by).not.toBe('ceo')
+})
+
+test('D4: a prompt without cf look store hands the stop up', async () => {
+  const { db, home } = tokenStop()
+  const prompt = join(home, 'seats/director/prompt.md')
+  writeFileSync(prompt, readFileSync(prompt, 'utf8').replace(/`cf look store[^`]*`/, 'it'))
+  fill(home, '2026-09-27')
+  await cooLite(db, home, row(db), looker(db, home), now, () => undefined, wire())
+  expect(ofKind(db, 'look')).toEqual([])
+  expect(plan7(db)).toMatchObject({ held_by: 'ceo' })
 })
 
 test.each(['/etc/x', '../x'])('D5: a rule naming %s writes nothing and is held by the coo', async (path) => {

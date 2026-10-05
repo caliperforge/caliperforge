@@ -1,8 +1,8 @@
-import { expect, test } from 'vitest'
+import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import type { Provider } from '../../providers/kind.ts'
 import { eventsOf, kindsOf, runRows } from '../../store/events.ts'
 import { dropPlan, putPlan } from '../../store/plans.ts'
-import { gather, question } from '../../templates/research.ts'
+import { check, gather, question } from '../../templates/research.ts'
 import { tick } from '../index.ts'
 import { mapOf } from '../steps.ts'
 import { maybe, put } from '../workspace.ts'
@@ -11,7 +11,7 @@ import { PASS, plan, stub, world, type World } from './world.ts'
 const ASK = '# The cap\n\n**Question:** what is the cap?\n**Would be wrong if:** a page names another cap\n**Done when:** a quote names it\n'
 
 const source = (quote: string): string =>
-  `The cap is 3.\n\n---\nsources:\n  - url: https://a.example/doc\n    fetched_at: 2026-10-04T10:00:00Z\n${quote}    claim: The cap is 3\n---\n`
+  `The cap is 3 [source:1].\n\n---\nsources:\n  - url: https://a.example/doc\n    fetched_at: 2026-10-04T10:00:00Z\n${quote}    claim: The cap is 3\n---\n`
 
 const FOUND = source('    quote: The cap is 3.\n')
 
@@ -34,6 +34,24 @@ const seats = (reply: string, verdict = PASS): Provider => ({
 
 const ran = (w: World): string[] => runRows(w.db).map((r) => r.seat)
 
+let fetched = vi.fn<typeof fetch>()
+
+beforeEach(() => {
+  fetched = vi.fn<typeof fetch>(() => Promise.resolve(new Response('The cap\n  is 3.')))
+  vi.stubGlobal('fetch', fetched)
+})
+
+afterEach(() => { vi.unstubAllGlobals() })
+
+const SOURCES = JSON.stringify([{ url: 'https://a.example/doc', fetched_at: '2026-10-04T10:00:00Z', quote: 'The cap is 3.', claim: 'The cap is 3' }])
+
+const checked = (answer: string, sources = SOURCES): ReturnType<typeof check> => {
+  const w = researching()
+  put(w.root, 1, 'sources.json', sources)
+  put(w.root, 1, 'answer.md', answer)
+  return check(w.root, plan(w.db, 1))
+}
+
 test('D1: a full ask walks question to record and is done', async () => {
   const w = researching()
   for (let n = 0; n < 6 && plan(w.db, 1).state !== 'done'; n += 1) await tick(w.db, w.root, seats(FOUND))
@@ -41,7 +59,36 @@ test('D1: a full ask walks question to record and is done', async () => {
   expect(kindsOf(w.db, 1)).toEqual(['question', 'gather', 'check', 'review', 'record'].map((kind) => ({ kind, outcome: 'pass' })))
   expect(ran(w)).toEqual(['researcher', 'senior_review'])
   for (const name of ['question.json', 'sources.json', 'answer.md', 'review.md']) expect(maybe(w.root, 1, name)).not.toBeNull()
-  expect(maybe(w.root, 1, 'answer.md')).toBe('The cap is 3.')
+  expect(maybe(w.root, 1, 'answer.md')).toBe('The cap is 3 [source:1].')
+})
+
+test('check: two claims on one page pass, fetched once', async () => {
+  expect(await checked('# Cap\n\nThe cap is 3 [source:1]. It is 3. [source:1]')).toMatchObject({ outcome: 'pass' })
+  expect(fetched).toHaveBeenCalledTimes(1)
+})
+
+test('check: a quote not on the page is quote_missing', async () => {
+  fetched.mockResolvedValue(new Response('The cap is 4.'))
+  expect(await checked('The cap is 3 [source:1].'))
+    .toMatchObject({ outcome: 'refuse', spans: ['research.quote_missing'], note: expect.stringContaining('"The cap is 3 [source:1]." (https://a.example/doc)') as unknown })
+})
+
+test('check: an unmarked sentence is unsourced, unfetched', async () => {
+  expect(await checked('The cap is 3 [source:1]. It never moves.'))
+    .toMatchObject({ outcome: 'refuse', spans: ['research.unsourced'], note: 'no source for "It never moves."' })
+  expect(await checked('The cap is 3 [source:2].')).toMatchObject({ spans: ['research.unsourced'] })
+  expect(fetched).not.toHaveBeenCalled()
+})
+
+test('check: a 404 is a dead source', async () => {
+  fetched.mockResolvedValue(new Response('', { status: 404 }))
+  expect(await checked('The cap is 3 [source:1].'))
+    .toMatchObject({ outcome: 'refuse', spans: ['research.dead_source'], note: 'dead source: https://a.example/doc (404)' })
+})
+
+test('check: no sources passes without fetching', async () => {
+  expect(await checked('Nothing found.', '[]')).toMatchObject({ outcome: 'pass', note: 'no sources: nothing found' })
+  expect(fetched).not.toHaveBeenCalled()
 })
 
 test('D2: an ask with no wrong-if line is refused at step 0', async () => {

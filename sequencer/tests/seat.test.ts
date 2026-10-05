@@ -41,6 +41,13 @@ test.each([{ step: 1, seat: 'brief_writer' }])(
     expect(mode).toBeNull()
   })
 
+test('D3 a step carrying mode ship records ship', async () => {
+  const w = world()
+  writeFileSync(join(w.root, 'seats/modes/ship.md'), 'ship\n')
+  await ran(w.db, w.root, plan(w.db, 1), { ...at(2), mode: 'ship' }, stub(CARRIED), 'the ask', false)
+  expect(newestMode(w.db)).toBe('ship')
+})
+
 test.each(['swift', 'kotlin'])('D1 at(4, %s) is the builder in review mode', (language) => {
   expect(at(4, language)).toMatchObject({ seat: `${language}_specialist`, runs: 'code_quality', mode: 'review' })
   for (const step of [2, 5]) expect(at(step, language).mode).toBeUndefined()

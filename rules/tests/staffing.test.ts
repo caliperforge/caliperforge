@@ -2,7 +2,6 @@ import { appendFileSync, cpSync, existsSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
-import { BUILD } from '../../sequencer/seat.ts'
 import { staffed, staffing } from '../../sequencer/staffing.ts'
 import { steps as comms } from '../../templates/comms.ts'
 import { at, steps } from '../../templates/pr-path.ts'
@@ -13,7 +12,7 @@ test('every pr_path step and key is staffed as at() picks it', () => {
   const keys = [...new Set(staffing(root).flatMap((r) => r.template === 'pr_path' && r.key !== undefined ? [r.key] : [])), null]
   for (const { step } of steps) for (const key of keys) {
     const { seat, mode } = at(step, key)
-    expect(staffed(root, 'pr_path', step, key)).toEqual({ seat, mode: mode ?? (step === 2 && BUILD.has(seat) ? 'build' : undefined) })
+    expect(staffed(root, 'pr_path', step, key)).toEqual({ seat, mode })
   }
 })
 

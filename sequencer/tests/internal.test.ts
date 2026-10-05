@@ -8,6 +8,7 @@ import { check } from '../../cli/digests.ts'
 import { digest, listed } from '../../runner/rules.ts'
 import { headApproved, headDigest } from '../../store/approvals.ts'
 import { record as recordFiles } from '../../store/files.ts'
+import { runRows } from '../../store/events.ts'
 import { advance } from '../../store/plans.ts'
 import { tick } from '../index.ts'
 import { headOf, push } from '../push.ts'
@@ -107,6 +108,8 @@ test('our repo on p<plan>-<slug>, built by the typescript seat',async () => {
   expect(git(src, ['remote', 'get-url', 'origin'])).toMatch(/remotes\/caliperforge\/caliperforge$/)
   expect(git(src, ['remote', 'get-url', 'upstream'])).toMatch(/remotes\/caliperforge\/caliperforge$/)
   expect(w.db.prepare('SELECT seat FROM runs WHERE step = 2').get()).toEqual({ seat: 'typescript_specialist' })
+  expect(runRows(w.db).filter((r) => r.step === 1 || r.step === 2).map(({ step, staffed }) => ({ step, staffed })))
+    .toEqual([{ step: 1, staffed: 'brief_writer' }, { step: 2, staffed: 'typescript_specialist' }])
   expect(internalBranch(7, 'A/B: an issue — with punctuation!')).toBe('p7-a-b-an-issue-with-punctuation')
   expect(internalBranch(7, '!!!')).toBe('p7-issue')
 })

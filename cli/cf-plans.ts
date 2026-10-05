@@ -142,11 +142,11 @@ function releasing(handle: Db, id: string, options: { on?: string; until?: strin
   return { on, at: options.until === undefined ? null : new Date(options.until) }
 }
 
-/** The block's Decide line, since `held_why` holds one line. */
+/** The block's Decide line: `held_why` refuses a newline (schema/0051_held_by.sql). */
 function fenced(why: string): string {
   const ceo = decision(why)
   if ('refused' in ceo) throw new Error(`hold --by ceo is refused: ${ceo.refused}`)
-  return ceo.block.split('\n')[0] ?? why
+  return ceo.block.slice(0, ceo.block.indexOf('\n'))
 }
 
 function parks(cf: Command, { root, db, out }: Cli): void {

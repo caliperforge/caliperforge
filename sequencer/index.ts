@@ -10,7 +10,7 @@ import { woke } from './director.ts'
 import type { Fired } from './kind.ts'
 import { reprice } from './priority.ts'
 import { daily, started, weekly } from './signals.ts'
-import { WIRE, type Wire } from './push.ts'
+import { type Wire } from './push.ts'
 import { due, type Entry, stuck } from './drift.ts'
 import { sunday } from '../cli/science.ts'
 import { offered, route, working, type Route } from './next.ts'
@@ -32,7 +32,7 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
   daily(db, now)
   weekly(db, now)
   if (registry !== undefined) {
-    due(db, registry, now, wire ?? WIRE, read)
+    due(db, registry, now, read)
     stuck(db, root, registry, now)
     sunday(db, root, now)
   }

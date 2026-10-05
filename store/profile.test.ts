@@ -22,7 +22,7 @@ test('D2 pay-kit: org commit/pr shape, own checks, notes, sources', () => {
   const kit = profile(REPO, 'solana-foundation/pay-kit')
   expect(kit).toMatchObject({ commit: org?.commit, pr: org?.pr, checks: { go: ['lint', 'test'] } })
   expect(Object.keys(kit ?? {}).sort()).toEqual(['checks', 'commit', 'intake', 'notes', 'pr', 'sources'])
-  expect(kit?.intake).toEqual({ claim_first: false, pace: { prs: 1, days: 7 } })
+  expect(kit?.intake).toEqual({ claim_first: false, pace: { prs: 3, days: 7 } })
   expect(profile(REPO, 'solana-foundation/surfpool')).not.toHaveProperty('intake')
 })
 

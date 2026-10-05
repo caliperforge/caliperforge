@@ -94,3 +94,11 @@ test('writes a verdicts row the store accepts', () => {
   const row = db.prepare('SELECT gate, step, kind, outcome, rail_id, origin_kind, origin_ref FROM verdicts WHERE id = ?').get(id)
   expect(row).toEqual({ gate: 'ready', step: 6, kind: 'rail', outcome: 'refuse', rail_id: 'ci-green', origin_kind: 'rail', origin_ref: 'ci-green' })
 })
+
+test('judges Kotlin CI alone', () => {
+  const runs = JSON.stringify([
+    { headSha: '9f2c1ab', status: 'completed', conclusion: 'success', url: 'k', workflowName: 'Kotlin CI' },
+    { headSha: '9f2c1ab', status: 'completed', conclusion: 'failure', url: 'f', workflowName: 'Fork Live Gate' },
+  ])
+  expect(ciGreen(head, { body: '', commits: [] }, KOTLIN, () => runs).spans).toEqual([])
+})

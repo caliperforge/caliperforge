@@ -20,7 +20,7 @@ import { isHeld, unhold } from './hold.ts'
 import { fixed, stop } from './fixed.ts'
 import { released } from './fixer.ts'
 import { prose } from './prose.ts'
-import { outOfReach } from './reach.ts'
+import { builderWork, outOfReach, WAITING } from './reach.ts'
 import { WIRE, type Wire } from './push.ts'
 import { rule } from './rule.ts'
 import { recorded } from './seat.ts'
@@ -52,7 +52,8 @@ function applying(db: Db): boolean {
 export async function cooLite(db: Db, root: string, plan: PlanRow, provider: Provider, now: Date, post: Post,
   wire: Wire = WIRE, tried?: string): Promise<string> {
   if (plan.state !== 'blocked_on_ceo' && plan.state !== 'halted') {
-    return told(db, root, plan, now, { outcome: 'needs_ceo', message: `ask_ceo: plan is ${plan.state}, not stopped` }, post)
+    return WAITING.has(plan.wait_reason ?? '') ? told(db, root, plan, now, { outcome: 'pass', message: `left alone: plan is ${plan.state}, waiting on ${plan.wait_reason ?? ''}` })
+      : told(db, root, plan, now, { outcome: 'needs_ceo', message: `ask_ceo: plan is ${plan.state}, not stopped` }, post)
   }
   let { m, said } = await ask(db, root, plan, provider, tried)
   const n = failures(db, root, plan)
@@ -60,7 +61,9 @@ export async function cooLite(db: Db, root: string, plan: PlanRow, provider: Pro
   if (first !== null) {
     ({ m, said } = await ask(db, root, plan, provider, tried, first.fence))
     const again = refused(m, said, n, root)
-    if (again !== null) return told(db, root, plan, now, { outcome: 'needs_ceo', message: again.message }, post)
+    if (again !== null) return m?.move === 'fix' && builderWork(root, m.why) && applying(db) && apply(db, root, plan, { move: 'rule', why: m.why, answer: m.why }, wire, now) === true
+      ? told(db, root, plan, now, { outcome: 'pass', message: `rule: ${m.why} (out of the fixer's reach, so the builder takes it)` })
+      : told(db, root, plan, now, { outcome: 'needs_ceo', message: again.message }, post)
   }
   if (m === null) return told(db, root, plan, now, { outcome: 'needs_ceo', message: 'ask_ceo: no readable answer' }, post)
   const message = `${m.move}: ${m.why}`

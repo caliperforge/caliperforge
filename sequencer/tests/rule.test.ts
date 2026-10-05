@@ -98,3 +98,18 @@ test('D4 a reply with no answer writes nothing; the plan returns', async () => {
   expect(got.issue).toBe(ISSUE)
   expect(got.state).toEqual({ state: 'queued', step: 3 })
 })
+
+test('an elided path is written', async () => {
+  const got = await fixed(1, answered('the parser in kotlin/.../core/Headers.kt decodes it'))
+  expect(got.applied).toEqual([{ applied: 'applied' }])
+})
+
+test('its own plan folder is written', async () => {
+  const got = await fixed(1, answered('see .cf/work/7/question.md'))
+  expect(got.applied).toEqual([{ applied: 'applied' }])
+})
+
+test('a parent path is refused', async () => {
+  const got = await fixed(1, answered('see ../other/repo'))
+  expect(got.applied).toEqual([{ applied: 'escalated' }])
+})

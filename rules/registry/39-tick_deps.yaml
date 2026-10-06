@@ -1,0 +1,3 @@
+- name: tick_deps
+  evidence: .cf/deps.lock.sha matches main's package-lock.json
+  gap: 0h

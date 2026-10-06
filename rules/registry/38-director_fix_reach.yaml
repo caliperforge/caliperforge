@@ -1,0 +1,6 @@
+- name: director_fix_reach
+  table: events
+  column: at
+  where: kind IN ('director', 'coo_lite') AND message LIKE 'fix did not apply%'
+  gap: 7d
+  expected: 0

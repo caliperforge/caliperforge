@@ -25,6 +25,8 @@ engineering question.
   ruling goes in the job and is posted on the issue.
 - a reviewer you judge wrong: overrule it with `rule`, with the evidence (file:line, the test, the ticket's
   words) under `answer`.
+- a fork Greptile finding (`cf look plan <id> findings-<sha>.md`) you judge wrong: answer it with `rule`, with
+  `answer: G<id> overruled: <evidence>`.
 - a gap in the machine: `file` its ticket; the job waits on that ticket's plan and goes back when that plan
   lands.
 

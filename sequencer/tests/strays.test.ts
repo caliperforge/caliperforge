@@ -2,6 +2,7 @@ import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { filesOf, record as recordFiles, sharing } from '../../store/files.ts'
+import { returnToLane } from '../../store/holds.ts'
 import { advance, allPlans, overlapWaits } from '../../store/plans.ts'
 import { tick } from '../index.ts'
 import { srcDir } from '../workspace.ts'
@@ -89,6 +90,7 @@ test('D4 the next pick reads the stray', async () => {
   const w = await builtPair()
   writeFileSync(join(srcDir(w.root, SECOND), 'src/stray.ts'), 'export const stray = 1\n')
   await tick(w.db, w.root, stub(CARRIED))
+  returnToLane(w.db, SECOND)
   internalPlan(w.db, w.root, 4, 'let a third internal plan run', 36)
   recordFiles(w.db, 4, [{ path: 'src/stray.ts', is_new: false }])
   expect(sharing(w.db, 4)).toEqual({ plan: SECOND, path: 'src/stray.ts' })

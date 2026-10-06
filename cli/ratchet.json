@@ -1,0 +1,137 @@
+{
+  "adopt.ts": {
+    "lines": 108,
+    "prepare": 6
+  },
+  "batch.ts": {
+    "lines": 159,
+    "prepare": 4
+  },
+  "brief.ts": {
+    "lines": 299,
+    "prepare": 14
+  },
+  "cf-lanes.ts": {
+    "lines": 228
+  },
+  "cf-plans.ts": {
+    "lines": 228
+  },
+  "cf.ts": {
+    "lines": 194,
+    "silent-catch": 2
+  },
+  "digests.ts": {
+    "lines": 59
+  },
+  "drift.ts": {
+    "lines": 15
+  },
+  "find.ts": {
+    "lines": 82
+  },
+  "flow.ts": {
+    "lines": 123,
+    "prepare": 7
+  },
+  "gh.ts": {
+    "lines": 288,
+    "silent-catch": 1
+  },
+  "inbox.ts": {
+    "lines": 141,
+    "prepare": 1,
+    "silent-catch": 1
+  },
+  "map.ts": {
+    "lines": 46
+  },
+  "measure.ts": {
+    "lines": 118,
+    "prepare": 2
+  },
+  "plan.ts": {
+    "lines": 130,
+    "prepare": 6,
+    "silent-catch": 1
+  },
+  "proposal.ts": {
+    "prepare": 2
+  },
+  "queue.ts": {
+    "lines": 213,
+    "prepare": 14,
+    "silent-catch": 1
+  },
+  "record.ts": {
+    "lines": 62,
+    "prepare": 4
+  },
+  "refile.ts": {
+    "lines": 30
+  },
+  "scan.ts": {
+    "lines": 77,
+    "prepare": 2
+  },
+  "session.ts": {
+    "lines": 63,
+    "prepare": 1
+  },
+  "staffing.ts": {
+    "lines": 19
+  },
+  "tests/adopt.test.ts": {
+    "prepare": 4
+  },
+  "tests/brief.test.ts": {
+    "prepare": 13
+  },
+  "tests/cf.test.ts": {
+    "silent-catch": 1
+  },
+  "tests/flow.test.ts": {
+    "prepare": 16
+  },
+  "tests/inbox.test.ts": {
+    "prepare": 2
+  },
+  "tests/measure.test.ts": {
+    "prepare": 2
+  },
+  "tests/part.test.ts": {
+    "prepare": 2
+  },
+  "tests/plan.test.ts": {
+    "prepare": 15
+  },
+  "tests/proposal-world.ts": {
+    "prepare": 7
+  },
+  "tests/proposal.test.ts": {
+    "prepare": 3
+  },
+  "tests/queue.test.ts": {
+    "prepare": 11
+  },
+  "tests/record.test.ts": {
+    "prepare": 5
+  },
+  "tests/scan.test.ts": {
+    "prepare": 13
+  },
+  "tests/step0.test.ts": {
+    "prepare": 5
+  },
+  "tests/watch.test.ts": {
+    "prepare": 5
+  },
+  "watch-main.ts": {
+    "lines": 8
+  },
+  "watch.ts": {
+    "lines": 128,
+    "prepare": 2,
+    "silent-catch": 2
+  }
+}

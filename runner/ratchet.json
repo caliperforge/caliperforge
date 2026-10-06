@@ -1,0 +1,26 @@
+{
+  "index.ts": {
+    "lines": 73,
+    "prepare": 3
+  },
+  "packet.ts": {
+    "lines": 161
+  },
+  "rules.ts": {
+    "lines": 109,
+    "prepare": 1
+  },
+  "tests/language-seat.ts": {
+    "prepare": 3
+  },
+  "tests/runner.test.ts": {
+    "prepare": 4
+  },
+  "tests/wake.test.ts": {
+    "prepare": 2
+  },
+  "wake.ts": {
+    "lines": 103,
+    "prepare": 4
+  }
+}

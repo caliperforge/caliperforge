@@ -2,7 +2,10 @@ INSERT INTO rules (id, kind, path, content_hash, loaded_at)
 VALUES
   ('rules/rails.yaml', 'rail', 'rules/rails.yaml', 'b46b445806d399b61887a5259eb0a6893444efcbe5acf2e6dd534507bc0882f3', '2026-09-17'),
   ('rules/tight.md', 'card', 'rules/tight.md', '9c885ed2e62d432d95211fec25387da43261cd643e4eb56f73b00b9689a6e479', '2026-09-17'),
-  ('rules/registry.yaml', 'card', 'rules/registry.yaml', 'c4b70d539fa474df50032462020280303fb4e8ec90db582805bcfb74d5824a38', '2026-10-04'),
+  ('rules/registry.yaml', 'card', 'rules/registry.yaml', '4a3abcd68a5e34ff4d556c0eb2b0858ef4dc4d6de84257f6aaa91b8e7f731541', '2026-10-04'),
+  ('rules/registry/32-science_pull.yaml', 'card', 'rules/registry/32-science_pull.yaml', 'd3b2b519475c5c2089fb906190e9030c4a76dad70fb38c38bd0e09b60fbc5068', '2026-10-04'),
+  ('rules/registry/33-site_publish.yaml', 'card', 'rules/registry/33-site_publish.yaml', '1ba4f97cfa0b255b8fbccd3bd569a6e945110ae3980a34efdcf35cfc63534e65', '2026-10-04'),
+  ('rules/registry/34-director_look.yaml', 'card', 'rules/registry/34-director_look.yaml', 'fbc0b9608a43e08f95843fbd445a8d0d5d00eb34c5c8f8f0e310cc901629b308', '2026-10-04'),
   ('rules/registry/35-typescript_specialist.yaml', 'card', 'rules/registry/35-typescript_specialist.yaml', 'd2af5779d023cadb5cfaeb6152ff4d0338aff18d1d1ea7277d743bf4be2740e8', '2026-10-04'),
   ('rules/registry/36-daily_learnings.yaml', 'card', 'rules/registry/36-daily_learnings.yaml', '276e911d3afacc26623cda9127a97c03bfd016859da31ba0d633b68be76c5cf8', '2026-10-04'),
   ('rules/registry/37-review_examples.yaml', 'card', 'rules/registry/37-review_examples.yaml', '562d0cc7192ae5f929afa25c3f8e9ece639e8b49ae2e70ad2e05298090af7fe6', '2026-10-04'),

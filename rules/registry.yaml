@@ -179,18 +179,3 @@
   while: EXISTS (SELECT 1 FROM pipes WHERE enabled = 1)
 - name: stuck_plans
   gap: 1h
-- name: science_pull
-  table: events
-  column: at
-  where: kind = 'science_pull' AND outcome = 'pass'
-  gap: 7d
-- name: site_publish
-  table: desk_posts
-  column: published_at
-  where: status = 'published'
-  gap: 14d
-- name: director_look
-  table: events
-  column: at
-  where: kind = 'look'
-  gap: 7d

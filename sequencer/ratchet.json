@@ -28,9 +28,6 @@
     "lines": 92,
     "prepare": 1
   },
-  "command.ts": {
-    "lines": 36
-  },
   "delta.ts": {
     "lines": 27
   },
@@ -86,7 +83,7 @@
     "lines": 21
   },
   "kind.ts": {
-    "lines": 43
+    "lines": 39
   },
   "lead.ts": {
     "lines": 51,
@@ -144,12 +141,12 @@
     "lines": 57
   },
   "seat.ts": {
-    "lines": 527,
+    "lines": 515,
     "prepare": 5,
     "silent-catch": 1
   },
   "settle.ts": {
-    "lines": 245,
+    "lines": 243,
     "prepare": 3,
     "silent-catch": 2
   },

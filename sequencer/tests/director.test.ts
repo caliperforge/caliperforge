@@ -21,7 +21,7 @@ import { cap, width } from '../../store/lanes.ts'
 import { busy } from '../../store/now.ts'
 import { addPart } from '../../store/parts.ts'
 import { allPlans, held, needsCeo, pipeOf, planById, planRows, putPlan, requeue, retry } from '../../store/plans.ts'
-import { clear, overBudget } from '../../store/refusals.ts'
+import { clear, fingerprint, overBudget } from '../../store/refusals.ts'
 import { split } from '../brief.ts'
 import { byHand, cooLite, read, woke } from '../director.ts'
 import { mechanisms } from '../drift.ts'
@@ -1005,6 +1005,50 @@ test('widenMove', async () => {
   await run(shadow.db, shadow.home, WIDEN)
   expect(pipeOf(shadow.db, 9).max_concurrent).toBe(1)
   expect(widened(shadow.db)).toEqual([])
+})
+
+const SAME = 'e'.repeat(64)
+const three = (print: string): [number, string, number][] => [[8, print, 3], [10, print, 2], [7, print, 1]]
+
+function alikeStops(apply: string | null, prints: readonly (readonly [number, string, number])[]) {
+  const seed = seeded(apply)
+  for (const id of [8, 10]) {
+    putPlan(seed.db, { id, pipe_id: 9, target_id: null, template: 'pr_path', state: 'blocked_on_ceo', queued_at: '2026-09-24', step: 4,
+      retries: 0, lane: 'machine', seat: 'typescript_specialist', origin: `https://github.com/caliperforge/caliperforge/issues/${String(id + 140)}` })
+  }
+  for (const [plan, print, hours] of prints) {
+    const at = new Date(now.getTime() - hours * 3_600_000).toISOString()
+    seed.db.exec(`INSERT INTO refusals (plan, step, fingerprint, blip, at) VALUES (${String(plan)}, 4, '${print}', 0, '${at}')`)
+  }
+  return seed
+}
+
+test('repeatFilesTicket', async () => {
+  const { db, home } = alikeStops('1', three(SAME))
+  const bodies: string[] = []
+  const fires: string[] = []
+  const url = 'https://github.com/caliperforge/caliperforge/issues/900'
+  const waits = (id: number) => planRows(db).find((p) => p.id === id)?.waits_on
+  await cooLite(db, home, row(db), wokeStub(REPLY.ask_ceo ?? '', fires), now, () => undefined, filing(bodies))
+  const ticket = allPlans(db).find((p) => p.origin === url)?.id
+  expect(bodies).toEqual([expect.stringMatching(/^Filed by director: plans 7, 8, 10 stopped at step 4 with refusal e{64} within a day\./)])
+  expect(waits(7)).toBe(ticket)
+  expect(fires).toEqual([])
+  await cooLite(db, home, planById(db, 10), wokeStub(REPLY.ask_ceo ?? '', fires), now, () => undefined, filing(bodies))
+  expect(bodies).toHaveLength(1)
+  expect(waits(10)).toBe(ticket)
+  expect(fires).toEqual([])
+  expect(told(db).map((t) => t.message)).toEqual(Array(2).fill('file: the same stop on 3 plans within a day'))
+  expect(pointers(db, 'director')).toEqual([url, url])
+  for (const [apply, prints] of [['1', [[8, SAME, 2], [7, SAME, 1]]], ['1', [[8, SAME, 25], [10, SAME, 2], [7, SAME, 1]]],
+    ['1', three(fingerprint(4, ['base:stale']))], [null, three(SAME)]] as const) {
+    const quiet = alikeStops(apply, prints)
+    const filed: string[] = []
+    const fired: string[] = []
+    await cooLite(quiet.db, quiet.home, row(quiet.db), wokeStub(REPLY.ask_ceo ?? '', fired), now, () => undefined, filing(filed))
+    expect(filed).toEqual([])
+    expect(fired).toHaveLength(1)
+  }
 })
 
 test('the store takes blocked_on_ceo, refuses an unknown reason',() => {

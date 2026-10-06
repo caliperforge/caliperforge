@@ -142,6 +142,18 @@ export function sentOnce(db: Db, plan: number): boolean {
   return db.prepare(`SELECT ${SENT("'director'")} > ${SENT("'ceo', 'coo'")}`).pluck().get(plan, plan) === 1
 }
 
+/** The plan's newest refusal within a day of `now`, and each plan refused alike in that day, cleared or not. */
+export function alike(db: Db, plan: number, now: Date): { step: number; fingerprint: string; plans: number[] } | null {
+  const day = "blip = 0 AND julianday(at) > julianday(?, '-1 day')"
+  const at = now.toISOString()
+  const row = db.prepare(`SELECT step, fingerprint FROM refusals WHERE plan = ? AND ${day} ORDER BY id DESC LIMIT 1`)
+    .get(plan, at) as { step: number; fingerprint: string } | undefined
+  if (row === undefined || row.fingerprint === fingerprint(row.step, ['base:stale'])) return null
+  const plans = db.prepare(`SELECT DISTINCT plan FROM refusals WHERE step = ? AND fingerprint = ? AND ${day} ORDER BY plan`)
+    .pluck().all(row.step, row.fingerprint, at) as number[]
+  return { ...row, plans }
+}
+
 /** A person sent the plan round again: its round count starts over, but a refusal it already had still stops it. */
 export function clear(db: Db, plan: number): void {
   db.prepare('UPDATE refusals SET cleared = 1 WHERE plan = ?').run(plan)

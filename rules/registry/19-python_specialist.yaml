@@ -1,0 +1,4 @@
+- name: python_specialist
+  table: runs
+  column: at
+  where: seat = 'python_specialist'

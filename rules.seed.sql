@@ -2,7 +2,10 @@ INSERT INTO rules (id, kind, path, content_hash, loaded_at)
 VALUES
   ('rules/rails.yaml', 'rail', 'rules/rails.yaml', 'b46b445806d399b61887a5259eb0a6893444efcbe5acf2e6dd534507bc0882f3', '2026-09-17'),
   ('rules/tight.md', 'card', 'rules/tight.md', '9c885ed2e62d432d95211fec25387da43261cd643e4eb56f73b00b9689a6e479', '2026-09-17'),
-  ('rules/registry.yaml', 'card', 'rules/registry.yaml', '7fbed200cdb259626a9840d58eb944b06c2ddede8d32fc4c301a4668e2c9e5f7', '2026-10-04'),
+  ('rules/registry.yaml', 'card', 'rules/registry.yaml', '4237c1fc63da4d8d0beb953c6f286fdc2a5e852baa4b73b3e9963f411315878a', '2026-10-04'),
+  ('rules/registry/17-php_specialist.yaml', 'card', 'rules/registry/17-php_specialist.yaml', '210a675d79bf824f5297286fcd926021b2c6e9686bb00532c8c6fc9aa238f49e', '2026-10-04'),
+  ('rules/registry/18-ruby_specialist.yaml', 'card', 'rules/registry/18-ruby_specialist.yaml', '03851af938777759dce6d5f89047e4e8e908c684556574ace7876e260255efa7', '2026-10-04'),
+  ('rules/registry/19-python_specialist.yaml', 'card', 'rules/registry/19-python_specialist.yaml', '7ad8089b1a92b2cb61721c0e9c15d8419f14a5496c9e5cc675655d851baa262e', '2026-10-04'),
   ('rules/registry/20-lua_specialist.yaml', 'card', 'rules/registry/20-lua_specialist.yaml', '8a4f692d3c81f14350304929a35b7b6a50041a7dd7da54e9527e809dcf8fe613', '2026-10-04'),
   ('rules/registry/21-rust_specialist.yaml', 'card', 'rules/registry/21-rust_specialist.yaml', '317ee698a3cd9298f9660830cd98b907c37994a4b86e96764a3f20a7a36e3f06', '2026-10-04'),
   ('rules/registry/22-gardener.yaml', 'card', 'rules/registry/22-gardener.yaml', '5cf9364803a3b8c01bb86b73c1f8b559ebba2dc976ba43cfb972a33d4e911443', '2026-10-04'),

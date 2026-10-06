@@ -49,6 +49,9 @@ export function readyGate(db: Db, root: string, plan: PlanRow, wire?: Wire): Out
   const row = newest(db, plan.id)
   if (row === null) return { outcome: 'refuse', spans: ['deliverables'], note: `plan ${String(plan.id)} has no deliverable row` }
   if (!cloned(srcDir(root, plan.id))) return { outcome: 'refuse', spans: ['checkout'], note: `plan ${String(plan.id)} has no checkout to send` }
+  if (row.state === 'built' || row.diff_digest !== digestOf(diffOf(root, plan.id))) {
+    return { outcome: 'pass', spans: ['ready.unproven'], rewind: 3, note: 'the head\'s bytes are not the ones senior passed; back to the rails' }
+  }
   const waiting = forkCi(db, root, plan, repo, wire)
   if (waiting !== null) return waiting
   const bot = internal(plan) ? '' : greptile(db, root, plan, repo, wire ?? WIRE)

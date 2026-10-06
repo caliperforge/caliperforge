@@ -563,7 +563,16 @@ test('weeklyPacket D1 D2 D5: learnings in the window, .md by name', () => {
   const kept = [{ date: '2026-09-26', items: [{ title: '2026-09-26' }] }, { date: '2026-10-02', items: [{ title: '2026-10-02' }] }]
   expect(learningsIn(w.db, '2026-09-26', '2026-10-02')).toEqual(kept)
   expect(gather(w.db, w.root, plan(w.db, 1))).toMatchObject({ outcome: 'pass' })
-  expect(JSON.parse(get(w.root, 1, 'packet.json'))).toEqual({ learnings: kept, story: [{ name: 'a.md', text: 'ay' }, { name: 'b.md', text: 'bee' }] })
+  expect(JSON.parse(get(w.root, 1, 'packet.json'))).toEqual({ learnings: kept, story: [{ name: 'a.md', text: 'ay' }, { name: 'b.md', text: 'bee' }],
+    voice_notes: '' })
+})
+
+test('weeklyVoice D4: the packet carries comms/voice-notes.md', () => {
+  const w = storied(mkdtempSync(join(tmpdir(), 'cf-story-')))
+  mkdirSync(join(w.root, 'comms'), { recursive: true })
+  writeFileSync(join(w.root, 'comms/voice-notes.md'), '# Voice notes\n\n- cut\n')
+  gather(w.db, w.root, plan(w.db, 1))
+  expect(JSON.parse(get(w.root, 1, 'packet.json'))).toMatchObject({ voice_notes: '# Voice notes\n\n- cut\n' })
 })
 
 test.each([
@@ -593,6 +602,7 @@ test.each([
   expect(await draft(w.db, w.root, plan(w.db, 1), mapOf('comms').at(1), seated(reply)))
     .toMatchObject({ outcome: 'refuse', spans: ['writer.fence'] })
   expect(maybe(w.root, 1, 'draft.md')).toBeNull()
+  expect(newestMode(w.db)).toBe('weekly')
 })
 
 test('weeklyFacts D3: untagged passes, links and logins refuse', () => {

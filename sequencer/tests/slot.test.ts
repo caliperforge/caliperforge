@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import { expect, test } from 'vitest'
 import { kindsOf } from '../../store/events.ts'
 import { record as recordFiles } from '../../store/files.ts'
@@ -7,7 +8,7 @@ import { holder, took, waitsFor } from '../../store/slot.ts'
 import { addTarget, targetRow } from '../../store/targets.ts'
 import { tick } from '../index.ts'
 import type { Wire } from '../push.ts'
-import { put } from '../workspace.ts'
+import { put, srcDir } from '../workspace.ts'
 import { approve, CARRIED, internalPlan, plan, runsAll, runsOn, scored, stub, watched, world, type World } from './world.ts'
 
 const SECOND = 2
@@ -94,6 +95,21 @@ test('D3: at equal priority the lower id is sent first', async () => {
   expect(sends(log).filter((l) => l.includes('widget-13-'))).toEqual([])
   expect(plan(w.db, SECOND)).toMatchObject({ step: 6, wait_reason: 'ready_proof' })
   expect(sent(w, SECOND)).toBe(false)
+})
+
+test('D5: a holder stuck on CI is freed for its return', async () => {
+  const w = pair()
+  const log: string[] = []
+  await atReady(w, log)
+  needsCeo(w.db, plan(w.db, HOLDER))
+  const running = wire(log, w, runsOn(w.root, 1, 'in_progress', ''))
+  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, running)
+  const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: srcDir(w.root, 1), encoding: 'utf8' }).trim()
+  put(w.root, 1, 'ci.waits', `${head} 45`)
+  await tick(w.db, w.root, stub(CARRIED), undefined, undefined, running)
+  expect(plan(w.db, 1).state).toBe('blocked_on_ceo')
+  resume(w.db, 1)
+  expect(holder(w.db, plan(w.db, SECOND))).toBeNull()
 })
 
 test('D5 D6: a departed holder loses the slot; internal is free', () => {

@@ -113,14 +113,15 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
   if (hold !== null) return onCi(db, plan.id, hold)
   if (carries(verdict.spans, PENDING)) {
     const running = board.filter((r) => r.gates && r.status !== 'completed').map((r) => r.workflow).join(', ')
+    freed(db, plan.id)
     return { outcome: 'needs_ceo', spans: [PENDING], note: `${at} is still running ${running} after ${String(FINISHES)} ticks` }
   }
   const again = waiting === null && verdict.outcome === 'refuse' ? cancelled(root, plan.id, on, verdict.spans, wire.runs) : null
   if (again !== null) {
     const rerunning = holding(root, plan.id, head.sha, verdict.spans, `${at} ${again}`, APPEARS, RERUNS)
-    return rerunning === null
-      ? { outcome: 'needs_ceo', spans: verdict.spans, note: `${at} ${again}: still cancelled after ${String(APPEARS)} ticks` }
-      : onCi(db, plan.id, rerunning)
+    if (rerunning !== null) return onCi(db, plan.id, rerunning)
+    freed(db, plan.id)
+    return { outcome: 'needs_ceo', spans: verdict.spans, note: `${at} ${again}: still cancelled after ${String(APPEARS)} ticks` }
   }
   const base = waiting === null && verdict.outcome === 'refuse' ? onBase(root, plan.id, on, verdict.spans, board, wire.runs) : null
   const rerun = typeof base === 'string' ? holding(root, plan.id, head.sha, verdict.spans, `${at} ${base}`, FINISHES) : null

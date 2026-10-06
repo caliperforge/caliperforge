@@ -118,7 +118,7 @@ test('the rules loader hashes roster, rails and Tight into rules', () => {
   const db = fresh(join(root, 'schema'))
   const loaded = load(db, root)
   expect(loaded.map((r) => r.id)).toContain('typescript_specialist')
-  expect(new Set(rules(root).map((r) => r.path))).toEqual(new Set(['rules/rails.yaml', 'rules/roster.yaml', 'rules/tight.md', 'rules/registry.yaml', 'rules/registry/40-watch.yaml', 'rules/registry/41-director_widen.yaml', 'rules/registry/42-target_parked_once.yaml', 'rules/registry/43-director_ceiling.yaml', 'rules/staffing.yaml']))
+  expect(new Set(rules(root).map((r) => r.path))).toEqual(new Set(['rules/rails.yaml', 'rules/roster.yaml', 'rules/tight.md', 'rules/registry.yaml', 'rules/registry/38-director_fix_reach.yaml', 'rules/registry/39-tick_deps.yaml', 'rules/registry/40-watch.yaml', 'rules/registry/41-director_widen.yaml', 'rules/registry/42-target_parked_once.yaml', 'rules/registry/43-director_ceiling.yaml', 'rules/staffing.yaml']))
   expect(db.prepare('SELECT count(*) AS n FROM rules').get()).toEqual({ n: loaded.length })
 })
 

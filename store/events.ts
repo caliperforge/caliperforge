@@ -33,6 +33,10 @@ export function ofKind(db: Db, ...kinds: string[]): Pick<Event, 'plan' | 'kind' 
     .all(JSON.stringify(kinds)) as Pick<Event, 'plan' | 'kind' | 'actor' | 'outcome' | 'message'>[]
 }
 
+export function allEvents(db: Db): Pick<Event, 'plan' | 'kind' | 'actor' | 'outcome' | 'message'>[] {
+  return db.prepare('SELECT plan, kind, actor, outcome, message FROM events ORDER BY id').all() as Pick<Event, 'plan' | 'kind' | 'actor' | 'outcome' | 'message'>[]
+}
+
 export function loggedSince(db: Db, kind: string, at: string): boolean {
   return db.prepare('SELECT 1 FROM events WHERE kind = ? AND julianday(at) >= julianday(?)').get(kind, at) !== undefined
 }

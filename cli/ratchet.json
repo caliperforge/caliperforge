@@ -87,9 +87,6 @@
   "tests/cf.test.ts": {
     "silent-catch": 1
   },
-  "tests/flow.test.ts": {
-    "prepare": 16
-  },
   "tests/inbox.test.ts": {
     "prepare": 2
   },

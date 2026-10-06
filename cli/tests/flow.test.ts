@@ -5,7 +5,15 @@ import { beforeEach, expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import { hold } from '../../sequencer/hold.ts'
 import { put } from '../../sequencer/workspace.ts'
-import { migrate, open, type Db } from '../../store/index.ts'
+import { gates } from '../../store/approvals.ts'
+import { decided } from '../../store/decisions.ts'
+import { pushedRow } from '../../store/deliverables.ts'
+import { addRule, migrate, open, type Db } from '../../store/index.ts'
+import { hhmm, hours, set, width } from '../../store/lanes.ts'
+import { addPart } from '../../store/parts.ts'
+import { addPipe, openPipes, putPlan, waiting, type PlanRow } from '../../store/plans.ts'
+import { refusalAt } from '../../store/refusals.ts'
+import { recordListing } from '../../store/tickets.ts'
 import { receipt, slots } from '../../store/ticks.ts'
 import { flow, reported } from '../flow.ts'
 import { all } from '../inbox.ts'
@@ -20,31 +28,29 @@ let root = ''
 beforeEach(() => { root = mkdtempSync(join(tmpdir(), 'cf-flow-')) })
 
 function piped(db: Db = fresh(schema)): Db {
-  db.prepare("INSERT INTO pipes (name, enabled, window_start, window_end, max_concurrent) VALUES ('internal', 1, '00:00', '23:59', 1)").run()
+  addPipe(db, { name: 'internal', enabled: 1, window_start: '00:00', window_end: '23:59', max_concurrent: 1 })
   return db
 }
 
-function plan(db: Db, n: number, state: string): number {
-  return (db.prepare(`INSERT INTO plans (id, pipe_id, template, state, queued_at, lane, seat, origin)
-    VALUES (?, 1, 'pr_path', ?, '2026-09-18', 'machine', 'typescript_specialist', ?) RETURNING id`)
-    .get(n, state, `https://github.com/${REPO}/issues/${String(n)}`) as { id: number }).id
+function plan(db: Db, n: number, state: PlanRow['state']): number {
+  putPlan(db, { id: n, pipe_id: 1, target_id: null, template: 'pr_path', state, queued_at: '2026-09-18', step: 0, retries: 0,
+    lane: 'machine', seat: 'typescript_specialist', origin: `https://github.com/${REPO}/issues/${String(n)}` })
+  return n
 }
 
 function pushed(db: Db, id: number): void {
-  db.prepare(`INSERT INTO rules (id, kind, path, content_hash, loaded_at)
-    VALUES ('typescript_specialist', 'roster', 'seats/typescript_specialist', ?, '2026-09-25')`).run('0'.repeat(64))
-  const approval = db.prepare(`INSERT INTO approvals (subject_kind, subject_id, subject_digest, who, decision, approved_at)
-    VALUES ('plan', ?, ?, 'gates', 'approved', '2026-09-25T00:00:00.000Z') RETURNING id`).get(id, 'd'.repeat(64)) as { id: number }
-  db.prepare(`INSERT INTO deliverables (plan_id, step, seat, diff_digest, state, tests_pass, byte_identical_elsewhere,
-    fork_ci_green, bot_clean, target_warm, approval_id, evidence)
-    VALUES (?, 7, 'typescript_specialist', ?, 'pushed', 1, 1, 1, 1, 1, ?, 'https://github.com/caliperforge/caliperforge/commit/abc')`)
-    .run(id, 'd'.repeat(64), approval.id)
+  addRule(db, { id: 'typescript_specialist', kind: 'roster', path: 'seats/typescript_specialist', content_hash: '0'.repeat(64), loaded_at: '2026-09-25' })
+  pushedRow(db, { plan: id, step: 7, seat: 'typescript_specialist', diff_digest: 'd'.repeat(64),
+    evidence: 'https://github.com/caliperforge/caliperforge/commit/abc' }, gates(db, id, 'd'.repeat(64)))
 }
 
 function refusals(db: Db, id: number, at: string, ...prints: string[]): void {
-  for (const p of prints) {
-    db.prepare('INSERT INTO refusals (plan, step, fingerprint, blip, at) VALUES (?, 3, ?, 0, ?)').run(id, p.repeat(64), at)
-  }
+  for (const p of prints) refusalAt(db, id, 0, at, p.repeat(64))
+}
+
+function ticket(db: Db, number: number, title: string, closedAt: string | null = null, body = ''): void {
+  recordListing(db, REPO, [{ number, title, body, url: `https://github.com/${REPO}/issues/${String(number)}`,
+    labels: [{ name: 'lane:machine' }], createdAt: '2026-09-18T00:00:00Z', closedAt, stateReason: null }], false)
 }
 
 const parked = (id: number): string => put(root, id, 'parked.md', '# Held\n\na person looks\n')
@@ -56,7 +62,7 @@ test('each case lists one plan once with the command fixing it', () => {
   hold(db, root, plan(db, 3, 'running'), 'the ticket', now, null, later(60))
   refusals(db, plan(db, 4, 'blocked_on_ceo'), '2026-09-26 11:00:00', 'a', 'a')
   hold(db, root, plan(db, 5, 'running'), 'no one', now, null, later(60))
-  db.prepare("INSERT INTO tickets (repo, number, title, lane) VALUES (?, 5, 'open', 'machine')").run(REPO)
+  ticket(db, 5, 'open')
   expect(flow(db, root, now)).toEqual([
     'plan 1\tlanded on main, state halted\tcf return 1\n',
     'plan 2\theld, state done\trm .cf/work/2/parked.md\n',
@@ -69,7 +75,7 @@ test('each case lists one plan once with the command fixing it', () => {
 test('a held plan whose ticket closed is held on a closed issue', () => {
   const db = piped()
   hold(db, root, plan(db, 3, 'running'), 'the ticket', now, null, later(60))
-  db.prepare("INSERT INTO tickets (repo, number, title, lane, closed_at) VALUES (?, 3, 'shut', 'machine', '2026-09-26T10:00:00Z')").run(REPO)
+  ticket(db, 3, 'shut', '2026-09-26T10:00:00Z')
   expect(flow(db, root, now)).toEqual(['plan 3\theld on closed issue #3\tcf unpark 3\n'])
 })
 
@@ -96,8 +102,7 @@ test('skips a young repeat, later decision, plan hold, non-repeat', () => {
   const db = piped()
   refusals(db, plan(db, 1, 'blocked_on_ceo'), '2026-09-26 11:31:00', 'a', 'a')
   refusals(db, plan(db, 2, 'blocked_on_ceo'), '2026-09-26 11:00:00', 'a', 'a')
-  db.prepare(`INSERT INTO decisions (plan, step, wait_reason, verb, why, at)
-    VALUES (2, 3, 'blocked_on_ceo', 'next', 'looked', '2026-09-26 11:10:00')`).run()
+  decided(db, { plan: 2, step: 3, wait_reason: 'blocked_on_ceo', verb: 'next', why: 'looked', evidence: null, tokens: 0 }, '2026-09-26 11:10:00')
   hold(db, root, plan(db, 3, 'running'), 'after plan 1', now, 1)
   refusals(db, plan(db, 4, 'blocked_on_ceo'), '2026-09-26 11:00:00', 'a', 'b')
   expect(flow(db, root, now)).toEqual([])
@@ -109,15 +114,15 @@ function tick(db: Db, dry: boolean, ...lanes: [number, number, number][]): void 
 }
 
 function part(db: Db, parent: number, number: number, after: number): void {
-  db.prepare("INSERT INTO parts (parent, n, url, title, body) VALUES (?, ?, ?, 'part', 'body')")
-    .run(parent, number, `https://github.com/${REPO}/issues/${String(number)}`)
-  db.prepare("INSERT INTO tickets (repo, number, title, lane, after) VALUES (?, ?, 'part', 'machine', ?)").run(REPO, number, after)
+  addPart(db, { parent, n: number, url: `https://github.com/${REPO}/issues/${String(number)}`, title: 'part', body: 'body' })
+  ticket(db, number, 'part', null, `After: #${String(after)}`)
 }
 
 function overlap(db: Db, on: number | null): void {
-  db.prepare("UPDATE pipes SET max_concurrent = 2, window_start = '00:00', window_end = '23:59' WHERE id = 1").run()
+  width(db, 1, 2)
+  hours(db, 1, '00:00', '23:59')
   plan(db, 2, 'queued')
-  db.prepare("UPDATE plans SET wait_reason = 'file_overlap', waits_on = ? WHERE id = ?").run(on, plan(db, 1, 'running'))
+  waiting(db, [{ plan: plan(db, 1, 'running'), why: 'file_overlap', on }])
 }
 
 test('lists once: slot overlap, part after closed issue, idle lane', () => {
@@ -151,7 +156,7 @@ test('a part whose After: issue is still open is not listed', () => {
   const db = piped()
   plan(db, 2, 'queued')
   part(db, 2, 10, 9)
-  db.prepare("INSERT INTO tickets (repo, number, title, lane) VALUES (?, 9, 'open', 'machine')").run(REPO)
+  ticket(db, 9, 'open')
   expect(flow(db, root, now)).toEqual([])
 })
 
@@ -197,8 +202,8 @@ test('reported: in-hour run writes nothing; next only new findings', () => {
 
 test('reported: no open pipe writes no inbox line and no stamp', () => {
   const db = fresh(schema)
-  db.prepare("UPDATE settings SET value = '0' WHERE key = 'tick.zone_offset_minutes'").run()
-  db.prepare("UPDATE pipes SET window_start = '03:00', window_end = '03:01'").run()
+  set(db, 'tick.zone_offset_minutes', '0', 'ceo', now.toISOString())
+  for (const p of openPipes(db, hhmm(db, now))) hours(db, p.id, '03:00', '03:01')
   refusals(db, plan(db, 4, 'blocked_on_ceo'), '2026-09-26 11:00:00', 'a', 'a')
   reported(db, root, now)
   expect([existsSync(join(root, '.cf/inbox.jsonl')), existsSync(join(root, '.cf/flow.at'))]).toEqual([false, false])

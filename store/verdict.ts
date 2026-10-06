@@ -18,14 +18,16 @@ interface VerdictRow {
   step: number
   rail_id: string | null
   outcome: Verdict['outcome']
+  origin_kind: Verdict['origin_kind']
   origin_ref: string | null
   tree: string | null
   tokens: number
+  seconds: number
   kept_by: number | null
 }
 
 export function verdictRows(db: Db, plan: number): VerdictRow[] {
-  return db.prepare(`SELECT id, gate, kind, step, rail_id, outcome, origin_ref, tree, tokens, kept_by
+  return db.prepare(`SELECT id, gate, kind, step, rail_id, outcome, origin_kind, origin_ref, tree, tokens, seconds, kept_by
     FROM verdicts WHERE plan = ? ORDER BY id`).all(plan) as VerdictRow[]
 }
 

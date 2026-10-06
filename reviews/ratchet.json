@@ -13,7 +13,6 @@
     "lines": 31
   },
   "senior_review/tests/bench.test.ts": {
-    "prepare": 16,
     "test-name": 2
   },
   "verdict.ts": {

@@ -1,9 +1,9 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { z } from 'zod'
 import type { Provider } from '../providers/kind.ts'
 import { packet } from '../runner/index.ts'
-import { load, seat, tight } from '../runner/rules.ts'
+import { load, registered, seat, tight } from '../runner/rules.ts'
 import { closeFinding, type Finding, unanswered } from '../store/drift.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
@@ -38,18 +38,18 @@ export async function answer(db: Db, root: string, provider: Provider, now: Date
   const { manifest, prompt } = seat(root, 'director')
   const dir = join(root, '.cf/drift')
   mkdirSync(dir, { recursive: true })
-  const registry = join(root, 'rules/registry.yaml')
-  const lines = readFileSync(registry, 'utf8').split('\n')
-  const at = entryOf(lines, found.name)
+  const held = holder(root, found.name)
   const text = `# Finding\n\n${line(found)}, found ${found.found_at}\n\n# Registry entry\n\n${
-    at === null ? 'none' : lines.slice(at.from, at.to).join('\n')}`
+    held === null ? 'none' : held.lines.slice(held.at.from, held.at.to).join('\n')}`
   const built = packet(manifest, prompt, tight(root), text, dir, pending(dir, `finding-${String(found.id)}`))
   const fired = await provider.fire({ ...built, wall: wall(db) })
   const m = fired.ended === 'completed' ? read(fired.text) : null
   if (m === null) return told(db, found, now, 'needs_ceo', `finding ${String(found.id)}: no outcome`)
   if (m.outcome === 'retire') {
-    if (at === null) return told(db, found, now, 'needs_ceo', `retire did not apply: no entry ${found.name}`)
-    writeFileSync(registry, [...lines.slice(0, at.from), ...lines.slice(at.to)].join('\n'))
+    if (held === null) return told(db, found, now, 'needs_ceo', `retire did not apply: no entry ${found.name}`)
+    const left = [...held.lines.slice(0, held.at.from), ...held.lines.slice(held.at.to)]
+    if (left.some((l) => l.startsWith('- name: '))) writeFileSync(held.path, left.join('\n'))
+    else rmSync(held.path)
   }
   closeFinding(db, found.id, m.outcome, m.why, refOf(m, found, wire), now)
   return told(db, found, now, 'pass', `${m.outcome}: ${m.why}`)
@@ -60,6 +60,15 @@ function read(text: string): Said | null {
   if (fence === undefined || fence.match(/^outcome:/gm)?.length !== 1) return null
   const got = Said.safeParse(prose(fence, ['why', 'ref', 'title', 'files', 'ends']))
   return got.success ? got.data : null
+}
+
+function holder(root: string, name: string): { path: string; lines: string[]; at: Entry } | null {
+  for (const path of registered(root)) {
+    const lines = readFileSync(join(root, path), 'utf8').split('\n')
+    const at = entryOf(lines, name)
+    if (at !== null) return { path: join(root, path), lines, at }
+  }
+  return null
 }
 
 function entryOf(lines: string[], name: string): Entry | null {

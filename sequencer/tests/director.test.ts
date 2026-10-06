@@ -1,4 +1,4 @@
-import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { expect, test } from 'vitest'
@@ -24,6 +24,7 @@ import { allPlans, held, needsCeo, pipeOf, planById, planRows, putPlan, requeue,
 import { clear } from '../../store/refusals.ts'
 import { split } from '../brief.ts'
 import { byHand, cooLite, read, woke } from '../director.ts'
+import { mechanisms } from '../drift.ts'
 import { answer as decide } from '../finding.ts'
 import { stop } from '../fixed.ts'
 import { hold, unhold } from '../hold.ts'
@@ -1023,6 +1024,19 @@ test('D3: retire drops the fixer entry and keeps the rest', async () => {
   expect(names(left)).toEqual(names(was).filter((l) => l !== '- name: fixer'))
   expect(names(left)).toEqual(expect.arrayContaining(['- name: director', '- name: tick_deps']))
   expect(left.filter((l) => l.startsWith('#'))).toEqual(was.filter((l) => l.startsWith('#')))
+})
+
+test('D3: retire cuts an entry from its rules/registry/ file', async () => {
+  const { db, home } = seeded('1')
+  addFinding(db, { name: 'director_widen', state: 'silent', detail: 'no widen' }, now)
+  const path = join(home, 'rules/registry/41-director_widen.yaml')
+  const entry = readFileSync(path, 'utf8').trimEnd()
+  const fires: string[] = []
+  await decide(db, home, wokeStub(said('retire'), fires), now, wire())
+  expect(fires[0]).toContain(`# Registry entry\n\n${entry}`)
+  expect(existsSync(path)).toBe(false)
+  expect(mechanisms(home).map((e) => e.name)).toEqual(mechanisms(repo).map((e) => e.name).filter((n) => n !== 'director_widen'))
+  expect(findings(db)).toMatchObject([{ outcome: 'retire', closed_at: now.toISOString() }])
 })
 
 test.each([

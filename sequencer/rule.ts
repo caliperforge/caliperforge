@@ -1,6 +1,7 @@
 import type { Db } from '../store/index.ts'
 import { builderRan, type PlanRow } from '../store/plans.ts'
-import { get, maybe, put } from './workspace.ts'
+import { unruled } from './unruled.ts'
+import { get, headSha, maybe, put, srcDir } from './workspace.ts'
 
 const PATH = /(?:^|[\s`'"(])(~?\/[^\s`'"()]+)/g
 
@@ -17,6 +18,18 @@ export function rule(db: Db, root: string, plan: PlanRow, who: string, text: str
   }
   put(root, plan.id, 'issue.md', above(get(root, plan.id, 'issue.md'), section))
   return 'issue.md'
+}
+
+/** A ruling on a Greptile stop at ready accepts the findings still open at the head. */
+export function accepted(root: string, plan: PlanRow, answer: string): boolean {
+  const text = maybe(root, plan.id, 'refusal.md') ?? ''
+  if (!text.startsWith(`step ${String(plan.step)} ready `) || !/^ {2}- greptile:\d\/5$/m.test(text)) return false
+  const sha = headSha(srcDir(root, plan.id))
+  const { open } = unruled(root, plan.id, sha)
+  if (open.length === 0) return false
+  put(root, plan.id, 'rulings.md', `${maybe(root, plan.id, 'rulings.md') ?? ''}\naccepted:\n  head: ${sha.slice(0, 12)}\n  ids: ${
+    open.join(', ')}\n  reason: ${answer.replace(/\s+/g, ' ').trim()}\n`)
+  return true
 }
 
 /** Each path refused as outside the files that `answer` names gets a row under the brief's `## Outside the files`. */

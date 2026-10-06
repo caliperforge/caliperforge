@@ -514,7 +514,8 @@ export function rehearsalBranch(root: string, plan: number): string {
 
 /**
  * Once our fork holds the branch it only moves forward -- no force-push, ever. The rounds'
- * commits since the head its rehearsal shows fold into one signed follow-up commit on top of it.
+ * commits since the head its rehearsal shows fold into one signed follow-up commit on top of it,
+ * with a main merged since that head as its second parent.
  */
 export function follow(root: string, plan: number, name: string): void {
   const dir = srcDir(root, plan)
@@ -535,6 +536,12 @@ export function follow(root: string, plan: number, name: string): void {
   const staged = git(dir, ['diff', '--cached', '--name-only']).trim() !== ''
   const same = count === 0 || (count === 1 && git(dir, ['log', '-1', '--format=%B']).trim() === message)
   if (!staged && same && ancestor(dir, tip, 'HEAD')) return
+  const base = git(dir, ['merge-base', 'HEAD', MAIN]).trim()
+  if (!ancestor(dir, base, tip)) {
+    const sha = git(dir, [...identity(dir), 'commit-tree', git(dir, ['write-tree']).trim(), '-p', tip, '-p', base, '-m', message]).trim()
+    git(dir, ['update-ref', `refs/heads/${branch}`, sha])
+    return
+  }
   git(dir, ['reset', '--soft', tip])
   sign(dir, message)
 }

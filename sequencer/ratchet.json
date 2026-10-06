@@ -325,6 +325,7 @@
     "silent-catch": 1
   },
   "ticket.ts": {
+    "lines": 39,
     "prepare": 1
   },
   "unruled.ts": {

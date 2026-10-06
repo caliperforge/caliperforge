@@ -25,7 +25,7 @@ import { WIRE, type Wire } from './push.ts'
 import { accepted, fenced, owned, rule } from './rule.ts'
 import { recorded } from './seat.ts'
 import { parted } from './split.ts'
-import { ticketed } from './ticket.ts'
+import { repeated, ticketed } from './ticket.ts'
 import { history, parentAsk } from './record.ts'
 import { READ, SERVER, server } from './upstream.ts'
 import { widen } from './widen.ts'
@@ -57,6 +57,8 @@ export async function cooLite(db: Db, root: string, plan: PlanRow, provider: Pro
       : told(db, root, plan, now, { outcome: 'needs_ceo', message: `ask_ceo: plan is ${plan.state}, not stopped` }, post)
   }
   if (plan.wait_reason === 'token_ceiling' && sentOnce(db, plan.id)) return twice(db, root, plan, now, post)
+  const filed = applying(db) ? repeated(db, root, plan, wire, now) : null
+  if (filed !== null) return told(db, root, plan, now, { outcome: 'pass', message: `file: ${filed.why}`, pointer: filed.url })
   let { m, said } = await ask(db, root, plan, provider, tried)
   const n = failures(db, root, plan)
   const first = refused(m, said, n, root)

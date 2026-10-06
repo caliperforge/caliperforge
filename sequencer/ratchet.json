@@ -179,9 +179,6 @@
   "tests/after.test.ts": {
     "prepare": 4
   },
-  "tests/assembly.test.ts": {
-    "prepare": 15
-  },
   "tests/batch.test.ts": {
     "prepare": 1
   },

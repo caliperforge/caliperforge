@@ -968,30 +968,53 @@ const ruling = (sha: string, ids: string): string =>
 const accepting = (findings: string[] | null, rulings: (sha: string) => string, handback?: string) => (at: World): void => {
   scored(at.root, 1, 3, FINDINGS)
   const sha = head(srcDir(at.root, 1), ['rev-parse', 'HEAD'])
-  if (findings !== null) put(at.root, 1, `findings-${sha}.md`, findings.map((id) => `- ${id} the empty name is never refused\n`).join(''))
+  if (findings !== null) put(at.root, 1, `findings-${sha}.md`, findings.map((id) => `- ${id} ${P2} the empty name is never refused\n`).join(''))
   put(at.root, 1, 'rulings.md', rulings(sha))
   if (handback !== undefined) put(at.root, 1, 'step-2.handback.md', handback)
 }
 
-test('D1 D5 a 3/5 head with its findings accepted or done passes', async () => {
+const P2 = '<img alt="P2" src="https://greptile.com/p2.svg">'
+
+test('D2 D7 a 3/5 head with findings accepted or overruled passes', async () => {
   const [w, lap] = await atReady(accepting(['G11', 'G12'], (sha) => ruling(sha, 'G11, G12')))
   expect((await lap())?.note).toMatch(/the COO accepted G11, G12$/)
   expect(plan(w.db, 1).step).toBe(7)
   expect(eventsOf(w.db, 1, 'greptile.accepted')).toEqual([{ actor: 'ready', outcome: 'pass', message: 'G11, G12' }])
 
-  const answered = CARRIED.replace(/---\n$/, '  - id: G12\n    status: done\n    pointer: src/hello.ts:1\n---\n')
-  const [d5, again] = await atReady(accepting(['G11', 'G12'], (sha) => ruling(sha, 'G11'), answered))
-  expect((await again())?.note).toMatch(/the COO accepted G11$/)
-  expect(plan(d5.db, 1).step).toBe(7)
+  const [d2, again] = await atReady(accepting(['G11', 'G12'], (sha) => `${ruling(sha, 'G11')}G12 overruled: src/hello.ts:1 refuses it\n`))
+  expect((await again())?.note).toMatch(/the COO accepted G11, G12$/)
+  expect(plan(d2.db, 1).step).toBe(7)
 })
 
-test('D2 D3 D4 a 3/5 head not fully accepted goes to the builder', async () => {
+test('D3 a 5/5 head with no findings passes', async () => {
+  const [w, lap] = await atReady((at) => { scored(at.root, 1, 5, 'Confidence Score: 5/5') })
+  await lap()
+  expect(plan(w.db, 1).step).toBe(7)
+})
+
+test('D1 D5 D7 an open P2 at senior holds ready on ready_proof', async () => {
+  const answered = CARRIED.replace(/---\n$/, '  - id: G12\n    status: done\n    pointer: src/hello.ts:1\n---\n')
   for (const grade of [
     accepting(['G11', 'G12', 'G13'], (sha) => ruling(sha, 'G11, G12')),
     accepting(['G11', 'G12'], () => ruling('f'.repeat(40), 'G11, G12')),
-    accepting(null, (sha) => ruling(sha, 'G11, G12')),
-    accepting([], (sha) => ruling(sha, 'G11, G12')),
+    accepting(['G11', 'G12'], (sha) => ruling(sha, 'G11'), answered),
+    accepting(['G11'], () => 'G11 overruled:\n'),
   ]) {
+    const [w, lap] = await atReady(grade)
+    await lap()
+    expect(plan(w.db, 1)).toMatchObject({ step: 6, wait_reason: 'ready_proof' })
+  }
+})
+
+test('D4 a 4/5 with a P2 opened after senior goes to the builder', async () => {
+  const [w, lap] = await atReady((at) => { scored(at.root, 1, 4, FINDINGS) })
+  put(w.root, 1, `findings-${head(srcDir(w.root, 1), ['rev-parse', 'HEAD'])}.md`, `- G11 ${P2} the empty name is never refused\n`)
+  expect(await lap()).toMatchObject({ step: 6, name: 'ready', outcome: 'refuse', spans: ['greptile:4/5'] })
+  expect(plan(w.db, 1).step).toBe(2)
+})
+
+test('D8 a 3/5 head with no findings listed goes to the builder', async () => {
+  for (const grade of [accepting(null, (sha) => ruling(sha, 'G11, G12')), accepting([], (sha) => ruling(sha, 'G11, G12'))]) {
     const [w, lap] = await atReady(grade)
     expect(await lap()).toMatchObject({ step: 6, name: 'ready', outcome: 'refuse', spans: ['greptile:3/5'] })
     expect(plan(w.db, 1).step).toBe(2)

@@ -114,7 +114,7 @@
     "silent-catch": 1
   },
   "push.ts": {
-    "lines": 608,
+    "lines": 610,
     "prepare": 5,
     "silent-catch": 5
   },
@@ -129,6 +129,10 @@
   "ready.ts": {
     "lines": 219,
     "prepare": 8
+  },
+  "retire.ts": {
+    "lines": 40,
+    "silent-catch": 1
   },
   "route.ts": {
     "lines": 65

@@ -681,7 +681,7 @@ test('step 3 rehearses before review; step 6 opens no second', async () => {
   for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
   expect(plan(w.db, 1).step).toBe(7)
   expect(sent.slice(2)).toEqual([next])
-  expect(branches).toEqual(['widget-12-a1-next'])
+  expect(branches).toEqual(['main', 'main', 'widget-12-a1-next'])
 })
 
 test('a red fork run sends the plan to the builder with its log', async () => {

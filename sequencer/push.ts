@@ -24,6 +24,7 @@ import { red } from './failures.ts'
 import { config } from './greptile.ts'
 import { refresh } from './install.ts'
 import { rerun as cancelled } from './rerun.ts'
+import { moved, rehearsing, retire } from './retire.ts'
 import type { Outcome } from './kind.ts'
 import { merging } from './merging.ts'
 import { cloned, conflicted, diffOf, fetchMain, FORK, get, MAIN, maybe, planDir, put, repoName, srcDir, titleOf } from './workspace.ts'
@@ -102,7 +103,7 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
   const holder = waitsFor(db, plan)
   if (holder !== null) return { outcome: 'pass', held: true, spans: ['fork.slot'], note: `waits for plan ${String(holder)}'s fork CI` }
   const { fork, head, ci, tip } = sent(root, plan, repo, wire)
-  if (!internal(plan)) { wire.rehearse?.(fork, ci); took(db, plan) }
+  if (!internal(plan)) { rehearsing(fork, ci, wire); took(db, plan) }
   const on = { fork, branch: ci, sha: tip }
   const { verdict, board } = judge(on, { body: '', commits: commits(head.dir), issue_ref: profile(root, repo)?.issue_ref }, touched(root, plan.id), wire.runs)
   put(root, plan.id, BOARD, `${JSON.stringify(board)}\n`)
@@ -142,7 +143,7 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
 export function reviewable(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire = WIRE): void {
   if (internal(plan)) return
   const { fork, ci } = sent(root, plan, repo, wire)
-  wire.rehearse?.(fork, ci)
+  rehearsing(fork, ci, wire)
   took(db, plan)
 }
 
@@ -159,6 +160,7 @@ export function sent(root: string, plan: PlanRow, repo: string, wire: Wire): { f
   const head = outside ? headOf(root, plan.id) : onward(headOf(root, plan.id))
   const tip = outside ? tipOf(root, plan.id, head, ci, repo) : head.sha
   wire.send(head.dir, outside ? `${tip}:refs/heads/${ci}` : head.branch)
+  if (outside) moved(root, plan.id, fork, ci, wire)
   return { fork, head, ci, tip }
 }
 
@@ -397,7 +399,7 @@ export function push(db: Db, root: string, plan: PlanRow, wire: Wire = WIRE): Ou
   const card = waiting(db, root, plan.id, signed, target, checks)
   if (card !== null) return card
   wire.send(head.dir, head.branch)
-  wire.unrehearse?.(`${FORK}/${repoName(target.repo)}`, rehearsed(root, plan.id, head.branch))
+  retire(`${FORK}/${repoName(target.repo)}`, rehearsed(root, plan.id, head.branch), wire)
   if (open !== null) {
     pushed(db, plan.id, approval, open)
     return { outcome: 'pass', spans: [], note: `pushed ${head.branch} onto ${open}` }

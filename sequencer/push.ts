@@ -24,6 +24,7 @@ import { red } from './failures.ts'
 import { config } from './greptile.ts'
 import { refresh } from './install.ts'
 import { rerun as cancelled } from './rerun.ts'
+import { moved, rehearsing, retire } from './retire.ts'
 import type { Outcome } from './kind.ts'
 import { merging } from './merging.ts'
 import { cloned, conflicted, diffOf, fetchMain, FORK, get, MAIN, maybe, planDir, put, repoName, srcDir, titleOf } from './workspace.ts'
@@ -102,7 +103,7 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
   const holder = waitsFor(db, plan)
   if (holder !== null) return { outcome: 'pass', held: true, spans: ['fork.slot'], note: `waits for plan ${String(holder)}'s fork CI` }
   const { fork, head, ci, tip } = sent(root, plan, repo, wire)
-  if (!internal(plan)) { wire.rehearse?.(fork, ci); took(db, plan) }
+  if (!internal(plan)) { rehearsing(fork, ci, wire); took(db, plan) }
   const on = { fork, branch: ci, sha: tip }
   const { verdict, board } = judge(on, { body: '', commits: commits(head.dir), issue_ref: profile(root, repo)?.issue_ref }, touched(root, plan.id), wire.runs)
   put(root, plan.id, BOARD, `${JSON.stringify(board)}\n`)
@@ -142,7 +143,7 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
 export function reviewable(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire = WIRE): void {
   if (internal(plan)) return
   const { fork, ci } = sent(root, plan, repo, wire)
-  wire.rehearse?.(fork, ci)
+  rehearsing(fork, ci, wire)
   took(db, plan)
 }
 
@@ -159,6 +160,7 @@ export function sent(root: string, plan: PlanRow, repo: string, wire: Wire): { f
   const head = outside ? headOf(root, plan.id) : onward(headOf(root, plan.id))
   const tip = outside ? tipOf(root, plan.id, head, ci, repo) : head.sha
   wire.send(head.dir, outside ? `${tip}:refs/heads/${ci}` : head.branch)
+  if (outside) moved(root, plan.id, fork, ci, wire)
   return { fork, head, ci, tip }
 }
 
@@ -166,7 +168,7 @@ export function sent(root: string, plan: PlanRow, repo: string, wire: Wire): { f
 function onward(head: Head): Head {
   const shown = `refs/remotes/origin/${head.branch}`
   if (!published(head.dir, head.branch, shown) || ancestor(head.dir, shown, 'HEAD')) return head
-  const sha = git(head.dir, [...identity(head.dir), 'commit-tree', 'HEAD^{tree}', '-p', 'HEAD', '-p', shown,
+  const sha = git(head.dir, [...identity(head.dir), 'commit-tree', ...signing(head.dir), 'HEAD^{tree}', '-p', 'HEAD', '-p', shown,
     '-m', 'carry the earlier push of this branch']).trim()
   git(head.dir, ['update-ref', `refs/heads/${head.branch}`, sha])
   return { ...head, sha }
@@ -203,7 +205,7 @@ function quiet(dir: string, ci: string, greptile: string): string {
   index(['update-index', '--add', '--cacheinfo', `100644,${blob},greptile.json`])
   const next = `refs/remotes/origin/${ci}`
   const parents = published(dir, ci, next) && !ancestor(dir, next, 'HEAD') ? ['HEAD', next] : ['HEAD']
-  return index([...identity(dir), 'commit-tree', index(['write-tree']), ...parents.flatMap((p) => ['-p', p]),
+  return index([...identity(dir), 'commit-tree', ...signing(dir), index(['write-tree']), ...parents.flatMap((p) => ['-p', p]),
     '-m', 'greptile.json: review on request only'])
 }
 
@@ -397,7 +399,7 @@ export function push(db: Db, root: string, plan: PlanRow, wire: Wire = WIRE): Ou
   const card = waiting(db, root, plan.id, signed, target, checks)
   if (card !== null) return card
   wire.send(head.dir, head.branch)
-  wire.unrehearse?.(`${FORK}/${repoName(target.repo)}`, rehearsed(root, plan.id, head.branch))
+  retire(`${FORK}/${repoName(target.repo)}`, rehearsed(root, plan.id, head.branch), wire)
   if (open !== null) {
     pushed(db, plan.id, approval, open)
     return { outcome: 'pass', spans: [], note: `pushed ${head.branch} onto ${open}` }
@@ -521,7 +523,8 @@ export function rehearsalBranch(root: string, plan: number): string {
 
 /**
  * Once our fork holds the branch it only moves forward -- no force-push, ever. The rounds'
- * commits since the head its rehearsal shows fold into one signed follow-up commit on top of it.
+ * commits since the head its rehearsal shows fold into one signed follow-up commit on top of it,
+ * with a main merged since that head as its second parent.
  */
 export function follow(root: string, plan: number, name: string): void {
   const dir = srcDir(root, plan)
@@ -542,6 +545,12 @@ export function follow(root: string, plan: number, name: string): void {
   const staged = git(dir, ['diff', '--cached', '--name-only']).trim() !== ''
   const same = count === 0 || (count === 1 && git(dir, ['log', '-1', '--format=%B']).trim() === message)
   if (!staged && same && ancestor(dir, tip, 'HEAD')) return
+  const base = git(dir, ['merge-base', 'HEAD', MAIN]).trim()
+  if (!ancestor(dir, base, tip)) {
+    const sha = git(dir, [...identity(dir), 'commit-tree', git(dir, ['write-tree']).trim(), '-p', tip, '-p', base, '-m', message]).trim()
+    git(dir, ['update-ref', `refs/heads/${branch}`, sha])
+    return
+  }
   git(dir, ['reset', '--soft', tip])
   sign(dir, message)
 }
@@ -591,6 +600,11 @@ function identity(dir: string): string[] {
   } catch {
     return ['-c', 'user.email=cf@caliperforge.dev', '-c', 'user.name=caliperforge']
   }
+}
+
+/** `commit-tree` ignores `commit.gpgsign` and signs only when given `-S` (git-commit-tree(1)). */
+function signing(dir: string): string[] {
+  return git(dir, ['config', '--type=bool', '--default=false', 'commit.gpgsign']).trim() === 'true' ? ['-S'] : []
 }
 
 function refuse(span: string, note: string): Outcome {

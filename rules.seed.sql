@@ -3,6 +3,8 @@ VALUES
   ('rules/rails.yaml', 'rail', 'rules/rails.yaml', 'b46b445806d399b61887a5259eb0a6893444efcbe5acf2e6dd534507bc0882f3', '2026-09-17'),
   ('rules/tight.md', 'card', 'rules/tight.md', '9c885ed2e62d432d95211fec25387da43261cd643e4eb56f73b00b9689a6e479', '2026-09-17'),
   ('rules/registry.yaml', 'card', 'rules/registry.yaml', '859daefd2303c38f25c84895ac009646f6c396957383b8bd142fd05437ce2b65', '2026-10-04'),
+  ('rules/registry/38-director_fix_reach.yaml', 'card', 'rules/registry/38-director_fix_reach.yaml', '0000000000000000000000000000000000000000000000000000000000000000', '2026-10-04'),
+  ('rules/registry/39-tick_deps.yaml', 'card', 'rules/registry/39-tick_deps.yaml', '0000000000000000000000000000000000000000000000000000000000000000', '2026-10-04'),
   ('rules/registry/40-watch.yaml', 'card', 'rules/registry/40-watch.yaml', 'e6383a2ba8c5217a3eca39de0da96ab4409327d4bdc93c2e006724dfd131645b', '2026-10-04'),
   ('rules/registry/41-director_widen.yaml', 'card', 'rules/registry/41-director_widen.yaml', 'c5c091d9536cb5bcbbe8aefa09bfa43c4dd1efd4a30f5f868fdd673e5e0f81ab', '2026-10-04'),
   ('rules/registry/42-target_parked_once.yaml', 'card', 'rules/registry/42-target_parked_once.yaml', 'e1d0db6ef46f3b21c386f38072b249560ef8bef3547e775562891eee3ef1f4b0', '2026-10-04'),

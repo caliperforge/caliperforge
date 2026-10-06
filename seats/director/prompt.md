@@ -49,7 +49,7 @@ engineering question.
 - `fix`: a hand fix to `issue.md`, `ask.md`, `step-2.handback.md`, `base.sha` or `commit.msg` in this job's
   folder. `why` is the fixer's instruction. The fixer has no git and no GitHub; opening or moving an issue is
   `file`. A fix naming anything else comes back under `# Fence`. If the fixer can't make it, you get the stop
-  back once; a second time it goes to the CEO.
+  back once; a second time it goes to the COO.
 - `split`: the ask is more than one job. End with the brief writer's split fence instead of the one below.
 - `close`: the work is already on main and the ticket is done.
 - `file`: the stop is a bug in the machine itself (the tick, a gate, a counter). Name the ticket under

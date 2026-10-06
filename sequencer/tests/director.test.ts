@@ -580,6 +580,20 @@ test('fixFailsOnce', async () => {
   expect(told(db)).toEqual([{ actor: 'director', outcome:'needs_ceo', message: expect.stringMatching(/^fix did not apply, /) as string }])
 })
 
+test('secondFixToCoo', async () => {
+  const { db, home } = seeded('1')
+  const fix = `---\nmove: fix\nwhy: |\n  rewrite commit.msg to name plan 7.\n${BLOCK.replace(/^/gm, '  ')}\n---\n`
+  await cooLite(db, home, row(db), inTurn([fix, fix], []), now, () => undefined, wire())
+  expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'coo',
+    held_why: expect.stringMatching(/^fix did not apply, the fixer did not make the fix:/) as string })
+  expect(heldBy(db, 'coo').map((p) => p.id)).toContain(7)
+  expect(heldBy(db, 'ceo').map((p) => p.id)).not.toContain(7)
+  expect(ofKind(db, 'needs_ceo')).toEqual([])
+  const classed = seeded('1')
+  await cooLite(classed.db, classed.home, row(classed.db), inTurn([FIX, askCeo(BLOCK)], []), now, () => undefined, wire())
+  expect(plan7(classed.db)).toMatchObject({ held_by: 'ceo' })
+})
+
 test('code out of reach goes to the builder', async () => {
   const { db, home } = seeded('1')
   fixLive(db)

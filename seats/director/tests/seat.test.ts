@@ -62,6 +62,12 @@ test('D4: a brief writer question the ticket answers is rule', () => {
     "A brief writer's question (a stop at step 1) that `ask.md` or `issue.md` answers is `rule`")
 })
 
+test('D4: a fix that fails twice goes to the COO', () => {
+  const prompt = seat(root, 'director').prompt.replace(/\n {2}/g, ' ')
+  expect(prompt).toContain('a second time it goes to the COO')
+  expect(prompt).not.toContain('a second time it goes to the CEO')
+})
+
 test('D8: orchestrator is refused, unlisted and unseeded', () => {
   expect(() => seat(root, 'orchestrator')).toThrow(/absent from rules\/roster\.yaml/)
   const ids = rules(root).map((r) => r.id)

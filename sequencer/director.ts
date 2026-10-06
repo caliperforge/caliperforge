@@ -45,7 +45,7 @@ type Move = z.infer<typeof Said> | { move: 'split'; why: string; parts: Part[] }
 
 interface Told { outcome: 'pass' | 'needs_ceo'; message: string; note?: string; pointer?: string | null }
 
-function applying(db: Db): boolean {
+export function applying(db: Db): boolean {
   const row = db.prepare("SELECT value FROM settings WHERE key = 'director.apply'").get() as { value: string } | undefined
   return row?.value === '1'
 }
@@ -123,12 +123,8 @@ async function fire(db: Db, root: string, provider: Provider, now: Date, post: P
   fresh: Stop[]): Promise<string> {
   const [oldest] = fresh
   if (oldest === undefined) return 'no stopped plan'
-  if (current(db).some((n) => n.doing === 'director' && !n.stale)) return 'a director run is live'
-  const ran = db.prepare("SELECT count(*) AS n FROM runs WHERE seat = 'director' AND at >= datetime(?, '-1 day')")
-    .get(now.toISOString()) as { n: number }
-  const cap = db.prepare("SELECT value FROM settings WHERE key = 'coo_lite.max_daily'").get() as { value: string } | undefined
-  if (ran.n >= Number(cap?.value ?? 12)) return `cap reached: ${String(ran.n)} director runs today`
-  if (take(db, oldest.id, now) === null) return `plan ${String(oldest.id)} is leased`
+  const busied = free(db, now) ?? (take(db, oldest.id, now) === null ? `plan ${String(oldest.id)} is leased` : null)
+  if (busied !== null) return busied
   try {
     busy(db, oldest.id, 'director', `${String(fresh.length)} stops waiting`, now)
     return await cooLite(db, root, planById(db, oldest.id), provider, now, post, wire)
@@ -136,6 +132,14 @@ async function fire(db: Db, root: string, provider: Provider, now: Date, post: P
     idle(db, oldest.id)
     unlease(db, oldest.id)
   }
+}
+
+export function free(db: Db, now: Date): string | null {
+  if (current(db).some((n) => n.doing === 'director' && !n.stale)) return 'a director run is live'
+  const ran = db.prepare(`SELECT (SELECT count(*) FROM runs WHERE seat = 'director' AND at >= datetime(@at, '-1 day')) + (SELECT count(*)
+    FROM events WHERE kind = 'director' AND plan IS NULL AND julianday(at) >= julianday(@at, '-1 day'))`).pluck().get({ at: now.toISOString() }) as number
+  const cap = db.prepare("SELECT value FROM settings WHERE key = 'coo_lite.max_daily'").get() as { value: string } | undefined
+  return ran >= Number(cap?.value ?? 12) ? `cap reached: ${String(ran)} director runs today` : null
 }
 
 function failures(db: Db, root: string, plan: PlanRow): number {

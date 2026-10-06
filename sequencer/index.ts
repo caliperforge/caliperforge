@@ -7,6 +7,7 @@ import { idle, keepWait } from '../store/now.ts'
 import { type PlanRow, live, openPipes, planById, terminal, type PipeRow, waiting } from '../store/plans.ts'
 import { capture, intake, refill } from './capture.ts'
 import { woke } from './director.ts'
+import { answer } from './finding.ts'
 import type { Fired } from './kind.ts'
 import { reprice } from './priority.ts'
 import { daily, started, weekly } from './signals.ts'
@@ -57,6 +58,7 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
     }
   }
   await woke(db, root, provider, now)
+  await answer(db, root, provider, now, wire)
   return out
 }
 

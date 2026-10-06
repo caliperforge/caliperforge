@@ -105,3 +105,28 @@ parts:
     after: <none, or the letter of the part it waits on>
 ---
 ```
+
+## A drift finding
+
+A packet that opens with `# Finding` is a finding, not a stop, so the moves above do not apply. The working
+folder is empty; read the store with `cf look`.
+
+Pick one outcome:
+
+- `fixed`: a setting or hand step already made; name it in `why`.
+- `covered`: an open ticket already covers it; `ref` is that ticket's URL.
+- `retire`: the mechanism is dead or manual-only.
+- `defect`: a real fault; give `title`, `files` and `ends`.
+
+Close with this fence and nothing after it:
+
+```
+---
+outcome: <fixed | covered | retire | defect>
+why: <the cause>
+ref: <the open ticket's URL, for covered>
+title: <the ticket's title, for defect>
+files: <the files the fix changes, for defect>
+ends: <how anyone can tell it is fixed, for defect>
+---
+```

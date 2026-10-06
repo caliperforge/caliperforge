@@ -159,17 +159,18 @@ test('D4: a list exactly WINDOW long halts no plan', () => {
 
 test('D5: the tick lists issues only when handed a reader', async () => {
   const db = piped()
-  await tick(db, root, stub(CARRIED), new Date('2026-09-29T12:00:00Z'))
+  const now = new Date('2026-09-29T12:00:00Z')
+  await tick(db, root, stub(CARRIED), now)
   expect(allPlans(db).length).toBe(0)
   const log: string[] = []
-  await tick(db, root, stub(CARRIED), undefined, undefined, undefined, 0, (args) => {
+  await tick(db, root, stub(CARRIED), now, undefined, undefined, 0, (args) => {
     log.push(args.join(' '))
     throw new Error('gh is down')
   })
   expect(log).toEqual([`issue list --repo ${REPO} --state open --limit ${String(WINDOW)} --json number,title,body,url,labels,createdAt,closedAt,stateReason`,
     'search issues --owner caliperforge --state open --limit 100 --json number,title,url,repository,labels'])
   const sink: string[] = []
-  await tick(db, root, stub(CARRIED), undefined, undefined, undefined, 0, () => { throw new Error('gh is down') }, undefined, undefined, sink)
+  await tick(db, root, stub(CARRIED), now, undefined, undefined, 0, () => { throw new Error('gh is down') }, undefined, undefined, sink)
   expect(tickNote([], [], sink)).toContain(`${REPO}: gh is down`)
 })
 

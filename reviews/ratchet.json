@@ -1,0 +1,23 @@
+{
+  "bench.ts": {
+    "lines": 153,
+    "prepare": 3
+  },
+  "code_quality/tests/end-to-end.test.ts": {
+    "prepare": 5
+  },
+  "package.ts": {
+    "lines": 70
+  },
+  "packs.ts": {
+    "lines": 31
+  },
+  "senior_review/tests/bench.test.ts": {
+    "prepare": 16,
+    "test-name": 2
+  },
+  "verdict.ts": {
+    "lines": 114,
+    "silent-catch": 1
+  }
+}

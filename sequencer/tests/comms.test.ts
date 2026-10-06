@@ -15,6 +15,7 @@ import { desk, draft, drafted, facts, gather, grow, review } from '../../templat
 import { tick } from '../index.ts'
 import { weekly as clock } from '../signals.ts'
 import { publish, push } from '../site.ts'
+import { hold, unhold } from '../hold.ts'
 import { mapOf } from '../steps.ts'
 import { rule } from '../rule.ts'
 import { afresh, drop, FORK, get, git, maybe, put } from '../workspace.ts'
@@ -546,6 +547,41 @@ test('retried D2: the writer reruns with the step-3 refusal', async () => {
   } })
   expect(ran(w)).toEqual(['writer'])
   expect(prompts[0]).toContain(`${REFUSED}, keep every item it does not name\n\nitem b is unsourced`)
+})
+
+const heldAt3 = (refusal: string | null): World => {
+  const w = posting('daily 2026-09-27', 3)
+  if (refusal !== null) put(w.root, 1, 'refusal.md', refusal)
+  needsCeo(w.db, plan(w.db, 1))
+  hold(w.db, w.root, 1, 'x', new Date(), null, new Date(Date.now() + 3600000))
+  return w
+}
+
+test('heldRefused D1: a held step-3 refusal goes to the writer', async () => {
+  const text = `step 3 text_review refused\n\nitem 4 is unsourced\n\n# Stopped\n\n${WHY.repeat}.\n`
+  const w = heldAt3(text)
+  expect(unhold(w.db, w.root, 1, 'fixer')).toBe(1)
+  expect(get(w.root, 1, 'refusal.prev.md')).toBe(text)
+  const prompts: string[] = []
+  const writer = seated(listing(items('a', 'b', 'c')))
+  await tick(w.db, w.root, { ...writer, fire: (packet) => {
+    prompts.push(packet.prompt)
+    return writer.fire(packet)
+  } })
+  expect(ran(w)).toEqual(['writer'])
+  expect(prompts[0]).toContain(`${REFUSED}, keep every item it does not name\n\nstep 3 text_review refused\n\nitem 4 is unsourced`)
+})
+
+test('heldUnrefused D4: held with no refusal.md returns at 3', () => {
+  const w = heldAt3(null)
+  expect(unhold(w.db, w.root, 1, 'fixer')).toBe(3)
+})
+
+test('haltedRefused D4: a halted step-3 refusal returns at 3', () => {
+  const w = posting('daily 2026-09-27', 3)
+  put(w.root, 1, 'refusal.md', 'step 3 text_review refused\n\nitem 4 is unsourced\n')
+  end(w.db, 1, 'halted', 'x')
+  expect(unhold(w.db, w.root, 1, 'cf')).toBe(3)
 })
 
 test('ruledComms D3: a reviewed comms plan gets issue.md', async () => {

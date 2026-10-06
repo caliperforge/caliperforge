@@ -31,7 +31,7 @@ digests:
     prompt: ddddd76fdb99fe246d756ba2dd197128433a90d45eca25a1c7a7432f711664cc
   brief_writer:
     manifest: 9f242cf80f39b12b889aa092dca097abe8d1260a8014e05f0af3bd5b8ccc86a5
-    prompt: bb0872d03a7ef4e7201b1cd9e2b3b9a3af0da51bbd068be4db8cef41329c0afc
+    prompt: 2f4aaf62ba47dc37fbed2b0f2d2ba83d2d738539667a197d1631ecd5638bd91a
   outside_specialist:
     manifest: 3897d50daa0caf59420769d972b0ed0dc67876076ba4373beeef28ba81dd33f4
     prompt: a604004f11d07c30fb76a3445dbc97b3e2d371a18770944a30b4c9525547a7ac

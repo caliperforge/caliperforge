@@ -21,7 +21,7 @@ it('D5 0076 seeds Opus prices, prices past runs at 1-hour', () => {
   seed.run('claude-opus-5-5', 20089)
   seed.run('m', 20089)
   seed.run('claude-opus-5-5', null)
-  expect(migrate(db, join(root, 'schema'))).toEqual(['0076_prices_opus.sql', '0077_director_actor.sql', '0078_drift_at.sql', '0079_story_dir.sql', '0080_ratchet_mode.sql', '0081_science_dir.sql', '0082_held_until.sql', '0083_science_at.sql', '0084_runs_mode_session.sql', '0085_desk_url.sql', '0086_language_notes.sql', '0087_desk_paste.sql', '0088_refusal_note.sql', '0089_drop_quick_lane.sql', '0090_director_apply.sql', '0091_runs_mode_writer.sql', '0092_decisions_widen.sql', '0093_drift_findings.sql'])
+  expect(migrate(db, join(root, 'schema'))).toEqual(['0076_prices_opus.sql', '0077_director_actor.sql', '0078_drift_at.sql', '0079_story_dir.sql', '0080_ratchet_mode.sql', '0081_science_dir.sql', '0082_held_until.sql', '0083_science_at.sql', '0084_runs_mode_session.sql', '0085_desk_url.sql', '0086_language_notes.sql', '0087_desk_paste.sql', '0088_refusal_note.sql', '0089_drop_quick_lane.sql', '0090_director_apply.sql', '0091_runs_mode_writer.sql', '0092_decisions_widen.sql', '0093_drift_findings.sql', '0094_runs_staffed.sql'])
   expect(db.prepare('SELECT model, input, cache_write, cache_write_1h, cache_read, output FROM prices ORDER BY model').raw().all())
     .toEqual([['claude-opus-5', 5, 6.25, 10, 0.5, 25], ['claude-opus-5-5', 4, 5, 8, 0.2, 20]])
   const runs = db.prepare('SELECT cache_write_1h_tokens, cost_computed_usd FROM runs ORDER BY id').raw().all() as [number | null, number | null][]

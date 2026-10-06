@@ -21,7 +21,7 @@
     "prepare": 1
   },
   "checks.ts": {
-    "lines": 292,
+    "lines": 307,
     "silent-catch": 2
   },
   "ci.ts": {
@@ -32,8 +32,11 @@
     "lines": 27
   },
   "director.ts": {
-    "lines": 263,
+    "lines": 289,
     "prepare": 7
+  },
+  "drift.ts": {
+    "lines": 113
   },
   "failures.ts": {
     "lines": 55,
@@ -45,6 +48,9 @@
   "fixer.ts": {
     "lines": 263,
     "prepare": 7
+  },
+  "folded.ts": {
+    "lines": 22
   },
   "gates.ts": {
     "lines": 247,
@@ -65,7 +71,7 @@
     "prepare": 2
   },
   "index.ts": {
-    "lines": 222
+    "lines": 240
   },
   "install.ts": {
     "lines": 21
@@ -99,14 +105,17 @@
     "silent-catch": 1
   },
   "push.ts": {
-    "lines": 571,
+    "lines": 601,
     "prepare": 5,
     "silent-catch": 5
   },
   "rails.ts": {
-    "lines": 191,
+    "lines": 196,
     "prepare": 1,
     "silent-catch": 1
+  },
+  "reach.ts": {
+    "lines": 23
   },
   "ready.ts": {
     "lines": 209,
@@ -116,12 +125,12 @@
     "lines": 65
   },
   "seat.ts": {
-    "lines": 501,
+    "lines": 515,
     "prepare": 5,
     "silent-catch": 1
   },
   "settle.ts": {
-    "lines": 216,
+    "lines": 235,
     "prepare": 3,
     "silent-catch": 2
   },
@@ -130,7 +139,7 @@
     "prepare": 6
   },
   "signoff.ts": {
-    "lines": 301,
+    "lines": 318,
     "prepare": 3
   },
   "size.ts": {
@@ -140,6 +149,9 @@
   "split.ts": {
     "lines": 194,
     "silent-catch": 2
+  },
+  "staffing.ts": {
+    "lines": 26
   },
   "steps.ts": {
     "lines": 182,
@@ -312,7 +324,7 @@
     "silent-catch": 1
   },
   "workspace.ts": {
-    "lines": 390,
+    "lines": 404,
     "silent-catch": 4
   }
 }

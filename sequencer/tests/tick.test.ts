@@ -1021,14 +1021,19 @@ test('D8 a 3/5 head with no findings listed goes to the builder', async () => {
   }
 })
 
-test('D6 D7 a new head asks Greptile once; a fourth goes to COO', async () => {
+/** A new head at ready goes back through rails, review and senior before ready judges it. */
+const reproved = async (w: World, lap: () => Promise<Fired | undefined>, line: string): Promise<Fired | undefined> => {
+  built(w.root, 1, line)
+  for (let at = 0; at < 4; at += 1) await lap()
+  expect(plan(w.db, 1).step).toBe(6)
+  return lap()
+}
+
+test('D6 D7 a new head asks Greptile once; a fourth goes to COO', { timeout: 90_000 }, async () => {
   const log: string[] = []
   const [w, lap] = await atReady(() => undefined, log)
   const asked = (): string[] => log.filter((l) => l.startsWith('review '))
-  const round = (line: string): Promise<Fired | undefined> => {
-    built(w.root, 1, line)
-    return lap()
-  }
+  const round = (line: string): Promise<Fired | undefined> => reproved(w, lap, line)
   expect(await lap()).toMatchObject({ step: 6, outcome: 'pass', spans: ['greptile.missing'] })
   await lap()
   expect(asked()).toEqual(['review caliperforge/widget widget-12-a1-next'])
@@ -1050,10 +1055,7 @@ const month = async (others: number): Promise<[World, () => string[], (line: str
   await lap()
   const asked = (): string[] => log.filter((l) => l.startsWith('review '))
   expect(asked()).toHaveLength(1)
-  return [w, asked, (line) => {
-    built(w.root, 1, line)
-    return lap()
-  }]
+  return [w, asked, (line) => reproved(w, lap, line)]
 }
 
 test('D2 at 40 this month only the first head is asked', async () => {

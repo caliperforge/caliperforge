@@ -20,9 +20,10 @@ const NONE = 'flag\toutside merges\tnone in 30 days\n'
 async function atBatch(): Promise<World> {
   const w = world()
   approveTarget(w.db, w.target)
-  for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
-  writeFileSync(join(srcDir(w.root, 1), 'src/hello.ts'), 'export const hello = (): string => "hey"\n')
-  await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
+  for (let at = 0; at < 7; at += 1) {
+    if (at === 2) writeFileSync(join(srcDir(w.root, 1), 'src/hello.ts'), 'export const hello = (): string => "hey"\n')
+    await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
+  }
   return w
 }
 

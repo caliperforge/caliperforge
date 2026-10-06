@@ -48,9 +48,10 @@ const pr = (over: Partial<Pr> = {}): Pr => ({
 async function atBatch(): Promise<World> {
   const w = world()
   approve(w.db, w.target)
-  for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
-  writeFileSync(join(srcDir(w.root, 1), 'src/hello.ts'), 'export const hello = (): string => "hey"\n')
-  await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
+  for (let at = 0; at < 7; at += 1) {
+    if (at === 2) writeFileSync(join(srcDir(w.root, 1), 'src/hello.ts'), 'export const hello = (): string => "hey"\n')
+    await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
+  }
   expect(plan(w.db, 1).step).toBe(7)
   return w
 }
@@ -235,6 +236,14 @@ test('a fork -next HEAD lacks is folded onto, never forced', { timeout: 90_000 }
   expect(sent.filter((l) => l.includes('--force') || l.includes('+refs'))).toEqual([])
 })
 
+/** `ticks` ticks, with `src/hello.ts` saying `said` from the review on, so senior passes the bytes ready reads. */
+async function round(w: World, wire: Wire, said: string, ticks: number): Promise<void> {
+  for (let at = 0; at < ticks; at += 1) {
+    if (at === ticks - 3) writeFileSync(join(srcDir(w.root, 1), 'src/hello.ts'), `export const hello = (): string => "${said}"\n`)
+    await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  }
+}
+
 test('D1 D2 D3 pre-pr rounds move -next; push sends the branch', async () => {
   const w = world()
   approve(w.db, w.target)
@@ -246,16 +255,12 @@ test('D1 D2 D3 pre-pr rounds move -next; push sends the branch', async () => {
     log.send(dir, ref)
     execFileSync('git', ['push', '-q', 'origin', ref], { cwd: dir })
   } }
-  const round = async (said: string, ticks: number): Promise<void> => {
-    for (let at = 1; at < ticks; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
-    writeFileSync(join(src, 'src/hello.ts'), `export const hello = (): string => "${said}"\n`)
-    await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
-    expect(plan(w.db, 1).step).toBe(7)
-  }
-  await round('hey', 7)
+  await round(w, wire, 'hey', 7)
+  expect(plan(w.db, 1).step).toBe(7)
   const first = git(['rev-parse', 'HEAD'])
   rewind(w.db, 1, 4)
-  await round('hi', 3)
+  await round(w, wire, 'hi', 3)
+  expect(plan(w.db, 1).step).toBe(7)
   git(['merge-base', '--is-ancestor', first, 'HEAD'])
   expect(git(['rev-parse', 'HEAD'])).not.toBe(first)
   expect(git(['ls-remote', 'origin', 'refs/heads/widget-12-a1-next']).split('\t')[0]).toBe(tip(w.root, 1))
@@ -319,15 +324,10 @@ async function refollowed(handback: string): Promise<{ w: World; wire: Wire; git
     log.send(dir, ref)
     execFileSync('git', ['push', '-q', 'origin', ref], { cwd: dir })
   } }
-  const round = async (said: string, ticks: number): Promise<void> => {
-    for (let at = 1; at < ticks; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
-    writeFileSync(join(src, 'src/hello.ts'), `export const hello = (): string => "${said}"\n`)
-    await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
-  }
-  await round('hey', 7)
+  await round(w, wire, 'hey', 7)
   put(w.root, 1, 'step-2.handback.md', handback)
   rewind(w.db, 1, 4)
-  await round('hello', 3)
+  await round(w, wire, 'hello', 3)
   return { w, wire, git, again: () => { next(w.root, plan(w.db, 1), 'acme/widget', wire) } }
 }
 

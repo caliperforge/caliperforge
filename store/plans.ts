@@ -114,6 +114,10 @@ export function pipeNamed(db: Db, name: string): PipeRow | null {
   return row === undefined ? null : PipeRow.parse(row)
 }
 
+export function pipeOf(db: Db, id: number): PipeRow {
+  return PipeRow.parse(db.prepare('SELECT * FROM pipes WHERE id = ?').get(id))
+}
+
 export function allPlans(db: Db): PlanRow[] {
   return db.prepare('SELECT * FROM plans ORDER BY id').all().map((r) => PlanRow.parse(r))
 }

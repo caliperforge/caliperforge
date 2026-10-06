@@ -79,8 +79,8 @@ export async function cooLite(db: Db, root: string, plan: PlanRow, provider: Pro
     return told(db, root, plan, now, { outcome: 'needs_ceo', message: m.move === 'ask_ceo' && 'block' in ceo ? `${message}\n\n${ceo.block}` : message }, post)
   }
   const failed = `${m.move} did not apply, ${UNAPPLIED[m.move]}: ${m.why}`
-  needsCeo(db, plan, failed)
-  held(db, plan.id, 'coo', failed)
+  needsCeo(db, plan)
+  held(db, plan.id, 'coo', failed.split('\n')[0] ?? failed)
   return told(db, root, plan, now, { outcome: 'needs_ceo', message: failed }, post)
 }
 

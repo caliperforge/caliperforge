@@ -118,7 +118,7 @@ test('the rules loader hashes roster, rails and Tight into rules', () => {
   const db = fresh(join(root, 'schema'))
   const loaded = load(db, root)
   expect(loaded.map((r) => r.id)).toContain('typescript_specialist')
-  expect(new Set(rules(root).map((r) => r.path))).toEqual(new Set(['rules/rails.yaml', 'rules/roster.yaml', 'rules/tight.md', 'rules/registry.yaml', 'rules/registry/35-typescript_specialist.yaml', 'rules/registry/36-daily_learnings.yaml', 'rules/registry/37-review_examples.yaml', 'rules/registry/38-director_fix_reach.yaml', 'rules/registry/39-tick_deps.yaml', 'rules/registry/40-watch.yaml', 'rules/registry/41-director_widen.yaml', 'rules/registry/42-target_parked_once.yaml', 'rules/registry/43-director_ceiling.yaml', 'rules/staffing.yaml']))
+  expect(new Set(rules(root).map((r) => r.path))).toEqual(new Set(['rules/rails.yaml', 'rules/roster.yaml', 'rules/tight.md', 'rules/registry.yaml', 'rules/registry/32-science_pull.yaml', 'rules/registry/33-site_publish.yaml', 'rules/registry/34-director_look.yaml', 'rules/registry/35-typescript_specialist.yaml', 'rules/registry/36-daily_learnings.yaml', 'rules/registry/37-review_examples.yaml', 'rules/registry/38-director_fix_reach.yaml', 'rules/registry/39-tick_deps.yaml', 'rules/registry/40-watch.yaml', 'rules/registry/41-director_widen.yaml', 'rules/registry/42-target_parked_once.yaml', 'rules/registry/43-director_ceiling.yaml', 'rules/staffing.yaml']))
   expect(db.prepare('SELECT count(*) AS n FROM rules').get()).toEqual({ n: loaded.length })
 })
 

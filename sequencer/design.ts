@@ -98,6 +98,7 @@ export async function design(src: string, out: string, pages: string[]): Promise
     return verdict(pngs, spans)
   } finally {
     await browser?.close()
+    server.closeAllConnections()
     await new Promise((done) => server.close(done))
   }
 }

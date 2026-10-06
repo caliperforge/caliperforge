@@ -136,3 +136,9 @@ it('the whole tree meets ratchet.json', () => {
   expect(Object.keys(JSON.parse(readFileSync(join(root, 'ratchet.json'), 'utf8')) as Counts)
     .filter((path) => path.startsWith('sequencer/'))).toEqual([])
 })
+
+it('no store, cli, checks or providers row at the root', () => {
+  const root = join(import.meta.dirname, '..')
+  expect(Object.keys(JSON.parse(readFileSync(join(root, 'ratchet.json'), 'utf8')) as Counts)
+    .filter((path) => /^(store|cli|checks|providers)\//.test(path))).toEqual([])
+})

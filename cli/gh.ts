@@ -245,7 +245,7 @@ export function said(c: Line): string {
   return `${c.path}${at === null ? '' : `:${String(at)}`} ${c.body.trim()}`
 }
 
-function run(args: string[], input?: string): string {
+export function run(args: string[], input?: string): string {
   return execFileSync('gh', args, { encoding: 'utf8', ...(input === undefined ? {} : { input }) })
 }
 

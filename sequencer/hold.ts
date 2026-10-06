@@ -27,13 +27,21 @@ export function isHeld(root: string, plan: number): boolean {
 const REPEAT = `# Stopped\n\n${WHY.repeat}.\n`
 
 function repeatAtCheck(db: Db, root: string, plan: number): boolean {
-  const row = db.prepare('SELECT step FROM plans WHERE id = ?').get(plan) as { step: number } | undefined
-  return !isHeld(root, plan) && row?.step === 3 && maybe(root, plan, 'refusal.md')?.endsWith(REPEAT) === true
+  const row = db.prepare('SELECT step, template, state FROM plans WHERE id = ?').get(plan) as
+    { step: number; template: string; state: string } | undefined
+  const refusal = maybe(root, plan, 'refusal.md')
+  if (row?.step !== 3 || refusal === null) return false
+  if (row.template !== 'comms') return !isHeld(root, plan) && refusal.endsWith(REPEAT)
+  return row.state === 'blocked_on_ceo' && refusal.startsWith('step 3 ')
+}
+
+function next(db: Db, root: string, plan: number, actor: string, to?: number): number {
+  if (to !== undefined) return rewound(db, plan, to, actor)
+  return repeatAtCheck(db, root, plan) ? retried(db, plan, actor) : returnToLane(db, plan, actor)
 }
 
 export function unhold(db: Db, root: string, plan: number, actor: string, to?: number): number {
-  if (to === undefined && repeatAtCheck(db, root, plan)) return retried(db, plan, actor)
-  const step = to === undefined ? returnToLane(db, plan, actor) : rewound(db, plan, to, actor)
+  const step = next(db, root, plan, actor, to)
   clearWaitsOn(db, plan)
   drop(root, plan, NOTE)
   if (step <= 1) fresh(root, plan)

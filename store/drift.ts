@@ -60,6 +60,12 @@ export function findings(db: Db): Finding[] {
   return db.prepare('SELECT * FROM drift_findings ORDER BY id').all() as Finding[]
 }
 
+export function unanswered(db: Db, now: Date): Finding[] {
+  return db.prepare(`SELECT * FROM drift_findings f WHERE closed_at IS NULL AND NOT EXISTS (SELECT 1 FROM events
+    WHERE kind = 'director' AND plan IS NULL AND pointer = 'finding ' || f.id AND julianday(at) >= julianday(?, '-1 day'))
+    ORDER BY id`).all(now.toISOString()) as Finding[]
+}
+
 export function week(db: Db, now: Date): Finding[] {
   return db.prepare("SELECT * FROM drift_findings WHERE julianday(found_at) >= julianday(?, '-7 day') ORDER BY id")
     .all(now.toISOString()) as Finding[]

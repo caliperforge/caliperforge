@@ -39,8 +39,10 @@ export async function stepped(db: Db, root: string, pipe: PipeRow, plan: PlanRow
   const verdicts = newestVerdict(db)
   const outcome = tree.failed ?? seatless(plan, step, tree.language) ?? await made(db, root, plan, step, provider, wire, read)
   const state = settle(db, root, plan, step, outcome)
-  logged(db, { plan: plan.id, kind: step.name, actor: step.runs, outcome: outcome.outcome, message: outcome.note,
-    pointer: pointer(db, plan.id, step, verdicts), run: runSince(db, plan.id, step.step, mark) })
+  if (outcome.quiet !== true) {
+    logged(db, { plan: plan.id, kind: step.name, actor: step.runs, outcome: outcome.outcome, message: outcome.note,
+      pointer: pointer(db, plan.id, step, verdicts), run: runSince(db, plan.id, step.step, mark) })
+  }
   const fired: Fired = {
     pipe: pipe.name,
     plan: plan.id,

@@ -13,7 +13,7 @@ import { gates } from '../../store/approvals.ts'
 import { decision } from '../../store/ask.ts'
 import { decided, decisions, touches, type Verb } from '../../store/decisions.ts'
 import { pushedRow } from '../../store/deliverables.ts'
-import { addSetting, setting } from '../../store/drift.ts'
+import { addFinding, addSetting, findings, setting } from '../../store/drift.ts'
 import { logged, ofKind, pointers, runAt, runRows } from '../../store/events.ts'
 import { retried, returnToLane } from '../../store/holds.ts'
 import { migrate, open, type Db } from '../../store/index.ts'
@@ -24,12 +24,14 @@ import { allPlans, held, needsCeo, pipeOf, planById, planRows, putPlan, requeue,
 import { clear } from '../../store/refusals.ts'
 import { split } from '../brief.ts'
 import { byHand, cooLite, read, woke } from '../director.ts'
+import { answer as decide } from '../finding.ts'
 import { stop } from '../fixed.ts'
 import { hold, unhold } from '../hold.ts'
 import type { Wire } from '../push.ts'
 import { rule } from '../rule.ts'
 import { parted } from '../split.ts'
-import { afresh, drop, maybe, planDir, put, srcDir } from '../workspace.ts'
+import { unruled } from '../unruled.ts'
+import { afresh, drop, git, headSha, maybe, planDir, put, srcDir } from '../workspace.ts'
 
 const repo = join(import.meta.dirname, '../..')
 const now = new Date('2026-09-27T09:00:00.000Z')
@@ -181,6 +183,46 @@ test('D2: an unbuilt plan\'s rule goes in ask.md, back to its lane', async () =>
   expect(maybe(live.home, 7, 'ask.md')).toBe(`the ask\n\n${answer()}`)
   expect(plan7(live.db)).toEqual(plan7(twin.db))
   expect(row(live.db).step).toBe(1)
+})
+
+const P2 = '<img alt="P2" src="https://greptile.com/p2.svg">'
+
+function greptileStop() {
+  const { db, home } = seeded('1')
+  db.exec('UPDATE plans SET step = 6 WHERE id = 7')
+  const src = srcDir(home, 7)
+  git(src, ['init', '-q'])
+  git(src, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '--allow-empty', '-m', 'built'])
+  const sha = headSha(src)
+  put(home, 7, `findings-${sha}.md`, `- G11 ${P2} the empty name is never refused\n- G12 ${P2} the port is unchecked\n`)
+  put(home, 7, 'refusal.md', 'step 6 ready refused by kernel\n\nGreptile scored it 3/5\n\nspans:\n  - greptile:3/5\n')
+  return { db, home, sha }
+}
+
+test('D1 D2: a rule on a Greptile stop accepts its open ids', async () => {
+  const { db, home, sha } = greptileStop()
+  put(home, 7, 'rulings.md', '# Rulings\n')
+  await run(db, home, '---\nmove: rule\nwhy: the SDK settles it\nanswer: the SDK   refuses it upstream\n---\n')
+  expect(maybe(home, 7, 'rulings.md')).toBe(
+    `# Rulings\n\naccepted:\n  head: ${sha.slice(0, 12)}\n  ids: G11, G12\n  reason: the SDK refuses it upstream\n`)
+  expect(unruled(home, 7, sha).open).toEqual([])
+  expect(maybe(home, 7, 'issue.md')).toContain('## Answer from the director')
+  expect(row(db)).toMatchObject({ step: 6, state: 'queued' })
+  expect(ofKind(db, 'return').map((e) => e.message)).toEqual(['step 6'])
+})
+
+test('D3: a rails stop or no open ids writes no rulings.md', async () => {
+  const rails = seeded('1')
+  await run(rails.db, rails.home, REPLY.rule ?? '')
+  expect(maybe(rails.home, 7, 'rulings.md')).toBeNull()
+  for (const findings of [null, `- G11 <img alt="P3" src="x"> a nit\n`]) {
+    const { db, home, sha } = greptileStop()
+    if (findings === null) drop(home, 7, `findings-${sha}.md`)
+    else put(home, 7, `findings-${sha}.md`, findings)
+    await run(db, home, REPLY.rule ?? '')
+    expect(maybe(home, 7, 'rulings.md')).toBeNull()
+    expect(row(db).step).toBe(2)
+  }
 })
 
 test('D3: the packet carries sibling plans\' rulings, not others', async () => {
@@ -953,4 +995,84 @@ test('a plan waiting on fork CI is left alone', async () => {
   await cooLite(db, home, row(db), bySeat([]), now, (t) => void posted.push(t), wire())
   expect(told(db).map((t) => t.outcome)).toEqual(['pass'])
   expect(posted).toEqual([])
+})
+
+const COVER = 'https://github.com/caliperforge/caliperforge/issues/77'
+const DEFECT = 'title: the tick skips fixer.mode\nfiles: sequencer/fixer.ts\nends: a live fixer.mode fires the fixer\n'
+const said = (outcome: string, extra = '') => `---\noutcome: ${outcome}\nwhy: the cause\n${extra}---\n`
+
+function found(apply: string | null = '1') {
+  const seed = seeded(apply)
+  addFinding(seed.db, { name: 'fixer', state: 'off', detail: 'fixer.mode is not live' }, now)
+  return seed
+}
+
+function filing(bodies: string[]): Wire {
+  const base = wire()
+  return { ...base, file: (repo, title, body, labels) => { bodies.push(body); return base.file(repo, title, body, labels) } }
+}
+
+test.each([
+  ['fixed', '', null],
+  ['covered', `ref: ${COVER}\n`, COVER],
+  ['retire', '', null],
+  ['defect', DEFECT, 'https://github.com/caliperforge/caliperforge/issues/900'],
+])('D1 D2: %s closes the finding with its ref', async (outcome, extra, ref) => {
+  const { db, home } = found()
+  const bodies: string[] = []
+  await decide(db, home, stub(said(outcome, extra)), now, filing(bodies))
+  expect(findings(db)).toMatchObject([{ outcome, why: 'the cause', ref, closed_at: now.toISOString() }])
+  expect(bodies).toEqual(outcome === 'defect' ? ['**What:** the tick skips fixer.mode\n**Why:** the cause\n'
+    + '**Files:** sequencer/fixer.ts\n**When it ends:** a live fixer.mode fires the fixer\n\n'
+    + 'Drift finding 1: fixer is off, fixer.mode is not live'] : [])
+})
+
+test('D3: retire drops the fixer entry and keeps the rest', async () => {
+  const { db, home } = found()
+  const path = join(home, 'rules/registry.yaml')
+  const was = readFileSync(path, 'utf8').split('\n')
+  await decide(db, home, stub(said('retire')), now, wire())
+  const left = readFileSync(path, 'utf8').split('\n')
+  const names = (lines: string[]) => lines.filter((l) => l.startsWith('- name: '))
+  expect(names(left)).toEqual(names(was).filter((l) => l !== '- name: fixer'))
+  expect(names(left)).toEqual(expect.arrayContaining(['- name: director', '- name: watch']))
+  expect(left.filter((l) => l.startsWith('#'))).toEqual(was.filter((l) => l.startsWith('#')))
+})
+
+test.each([
+  { name: 'no outcome', reply: '---\nwhy: the cause\n---\n' },
+  { name: 'two outcomes', reply: '---\noutcome: fixed\noutcome: retire\nwhy: the cause\n---\n' },
+  { name: 'covered with no ref', reply: said('covered') },
+])('D4: $name leaves the finding open', async ({ reply }) => {
+  const { db, home } = found()
+  await decide(db, home, stub(reply), now, wire())
+  expect(findings(db)).toMatchObject([{ outcome: null, closed_at: null }])
+  expect(ofKind(db, 'director')).toEqual([{ plan: null, kind: 'director', actor: 'director', outcome: 'needs_ceo',
+    message: 'finding 1: no outcome' }])
+})
+
+test.each([
+  { name: 'a live plan director run', apply: '1', set: (db: Db) => { busy(db, 7, 'director', 'ruling', now) } },
+  { name: 'coo_lite.max_daily at 0', apply: '1', set: (db: Db) => {
+    addSetting(db, { key: 'coo_lite.max_daily', value: '0', who: 'ceo', origin_kind: 'ruling', origin_ref: 't', set_at: '2026-09-27' })
+  } },
+  { name: 'director.apply unset', apply: null, set: () => undefined },
+])('D5: $name fires nothing on a finding', async ({ apply, set }) => {
+  const { db, home } = found(apply)
+  set(db)
+  const fires: string[] = []
+  await decide(db, home, wokeStub(said('fixed'), fires), now, wire())
+  expect(fires).toEqual([])
+  expect(findings(db)).toMatchObject([{ closed_at: null }])
+})
+
+test('D6: a finding answered today waits a day', async () => {
+  const { db, home } = found()
+  const fires: string[] = []
+  const reply = wokeStub('no fence', fires)
+  await decide(db, home, reply, now, wire())
+  await decide(db, home, reply, now, wire())
+  expect(fires).toHaveLength(1)
+  await decide(db, home, reply, new Date(now.getTime() + 86_400_001), wire())
+  expect(fires).toHaveLength(2)
 })

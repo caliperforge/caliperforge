@@ -3,6 +3,7 @@ import type { Read } from '../cli/gh.ts'
 import { CARD, waits } from '../cli/queue.ts'
 import { parse } from '../rails/diff.ts'
 import { building, filesOf, recorded, sharing, strays as recordStrays } from '../store/files.ts'
+import { eventsOf } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { partsOf } from '../store/parts.ts'
 import { holder, waitsFor } from '../store/slot.ts'
@@ -190,7 +191,9 @@ export function measure(db: Db, root: string, plan: PlanRow, read?: Read): Outco
   const rule = waits(db, root, row.repo, row.issue_no, read)
   if (rule !== null) {
     waiting(db, [{ plan: plan.id, why: 'target_parked' }])
-    return { outcome: 'refuse', held: true, spans: [span], note: `target_parked: ${rule}` }
+    const note = `target_parked: ${rule}`
+    const quiet = eventsOf(db, plan.id, 'measure').at(-1)?.message === note ? { quiet: true as const } : {}
+    return { outcome: 'refuse', held: true, spans: [span], note, ...quiet }
   }
   const park = read === undefined ? null : checked(root, plan, row, read)
   if (park === null) return { outcome: 'pass', spans: [], note: `${row.repo}#${String(row.issue_no)} ${row.pulse}` }

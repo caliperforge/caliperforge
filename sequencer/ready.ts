@@ -9,13 +9,14 @@ import { record as recordFiles } from '../store/files.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { BUILT, internal, stampHead, type PlanRow } from '../store/plans.ts'
+import { diffAt } from '../store/refusals.ts'
 import { graded, greptiled } from '../store/signals.ts'
 import type { Step } from '../templates/pr-path.ts'
 import { writable } from './brief.ts'
 import type { Outcome } from './kind.ts'
 import { forkCi, headOf, holding, rehearsalBranch, title, WIRE, type Wire } from './push.ts'
 import { cloned, diffOf, FORK, get, headSha, maybe, put, repoName, srcDir } from './workspace.ts'
-import { assembling, homeOf } from './home.ts'
+import { homeOf } from './home.ts'
 import { learned } from './learn.ts'
 import { baseMoved } from './merge.ts'
 import { unruled } from './unruled.ts'
@@ -54,7 +55,7 @@ export function readyGate(db: Db, root: string, plan: PlanRow, wire?: Wire): Out
   }
   const waiting = forkCi(db, root, plan, repo, wire)
   if (waiting !== null) return waiting
-  const bot = internal(plan) ? '' : greptile(db, root, plan, repo, wire ?? WIRE)
+  const bot = internal(plan) ? '' : greptile(db, root, plan, repo, wire ?? WIRE, row.diff_digest)
   if (typeof bot !== 'string') return bot
   const verdict = readyRail(proofOf(db, root, plan, repo, row))
   recordRail(db, join(root, 'rails/ready'), plan.id, verdict, 0)
@@ -65,7 +66,7 @@ export function readyGate(db: Db, root: string, plan: PlanRow, wire?: Wire): Out
 export const GRADING = 45
 
 /** Nothing leaves our fork with an open P0–P2 Greptile finding at this head, nor below 4/5 with none listed. */
-function greptile(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire): Outcome | string {
+function greptile(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire, diff: string): Outcome | string {
   const sha = headOf(root, plan.id).sha
   const at = `${FORK}/${repoName(repo)}@${sha.slice(0, 12)}`
   const row = graded(db, plan.id, sha)
@@ -77,8 +78,9 @@ function greptile(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire)
   const score = row.score ?? 0
   const { found, ruled, open } = unruled(root, plan.id, sha)
   if (open.length > 0 || (score < 4 && found === 0)) {
-    return { outcome: 'refuse', spans: [`greptile:${String(score)}/5`], message: row.body ?? '', to: 2,
-      note: `Greptile scored ${at} ${String(score)}/5; back to the builder with its findings` }
+    const same = diffAt(db, plan.id, plan.step) === diff
+    return { outcome: 'refuse', spans: [`greptile:${String(score)}/5`], message: row.body ?? '', to: same ? plan.step : 2,
+      note: `Greptile scored ${at} ${String(score)}/5; ${same ? 'the diff is unchanged since the last ready refusal' : 'back to the builder with its findings'}` }
   }
   if (ruled.length === 0) return ''
   logged(db, { plan: plan.id, kind: 'greptile.accepted', actor: 'ready', outcome: 'pass', message: ruled.join(', '), pointer: at, run: null })
@@ -184,28 +186,34 @@ function evidenceOf(db: Db, plan: PlanRow): string {
 
 /** Each of the five is a row somebody else wrote: a gate verdict, the ci-green rail, a bot signal, the account pulse. */
 function proof(db: Db, root: string, plan: PlanRow): Proven {
-  const railed = assembling(db, plan) === null ? [plan.id] : partsOf(db, plan.id)
+  const parts = partsOf(db, plan.id)
+  const railed = parts.length === 0 ? [plan.id] : parts
   const src = srcDir(root, plan.id)
-  const forkClean = internal(plan) || !cloned(src) || unruled(root, plan.id, headSha(src)).open.length === 0
+  const head = cloned(src) ? headSha(src) : undefined
+  const forkClean = internal(plan) || head === undefined || unruled(root, plan.id, head).open.length === 0
   return {
     tests_pass: railed.every((id) => passed(db, id, 'gate', 'pre_review')),
     byte_identical_elsewhere: railed.every((id) => passed(db, id, 'gate', 'review')) && passed(db, plan.id, 'gate', 'senior_review'),
     fork_ci_green: passed(db, plan.id, 'rail_id', 'ci-green'),
-    bot_clean: unanswered(db, plan.id) === undefined && forkClean,
+    bot_clean: unanswered(db, plan.id, head) === undefined && forkClean,
     target_warm: internal(plan) || target(db, plan)?.state !== 'parked',
   }
 }
 
-/** A low bot score a later build has answered no longer holds the plan; the bot scores the new head once it is pushed. */
-export function unanswered(db: Db, plan: number): unknown {
-  return db.prepare(`SELECT 1 FROM signals s WHERE s.plan = ? AND s.kind = 'bot_review' AND s.score < 5 AND s.repo NOT GLOB ?
-    AND julianday(s.at) > coalesce((SELECT max(julianday(r.at)) FROM runs r WHERE r.plan = ? AND r.step = 2 AND r.${BUILT}), 0)`)
-    .get(plan, `${FORK}/*`, plan)
+/** A low bot score a later build, or another `head`, has answered no longer holds the plan; the bot scores the new head once it is pushed. */
+export function unanswered(db: Db, plan: number, head?: string): unknown {
+  return db.prepare(`SELECT 1 FROM signals s WHERE s.plan = @plan AND s.kind = 'bot_review' AND s.score < 5 AND s.repo NOT GLOB @fork
+    AND (@head IS NULL OR s.head IS NULL OR s.head = @head)
+    AND julianday(s.at) > coalesce((SELECT max(julianday(r.at)) FROM runs r WHERE r.plan = @plan AND r.step = 2 AND r.${BUILT}), 0)`)
+    .get({ plan, fork: `${FORK}/*`, head: head ?? null })
 }
 
-/** An assembling parent runs no rails or review of its own: each part passed them on the bytes it put on the branch. */
+/** The parts while one ran its rails after the parent's own last `pre_review`: each passed them on the bytes it put on the branch. */
 function partsOf(db: Db, plan: number): number[] {
-  return (db.prepare('SELECT plan FROM parts WHERE parent = ? AND plan IS NOT NULL').all(plan) as { plan: number }[]).map((p) => p.plan)
+  return (db.prepare(`SELECT plan FROM parts WHERE parent = @plan AND plan IS NOT NULL
+    AND (SELECT max(v.id) FROM verdicts v JOIN parts q ON q.plan = v.plan WHERE q.parent = @plan AND v.gate = 'pre_review')
+      > coalesce((SELECT max(id) FROM verdicts WHERE plan = @plan AND gate = 'pre_review'), 0)`)
+    .all({ plan }) as { plan: number }[]).map((p) => p.plan)
 }
 
 function passed(db: Db, plan: number, column: 'gate' | 'rail_id', value: string): boolean {

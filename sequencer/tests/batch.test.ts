@@ -658,6 +658,20 @@ test('D5 a fork score leaves unanswered; below 5 upstream holds', async () => {
   expect(unanswered(w.db, 1)).toBeDefined()
 })
 
+test('D3 D4 a low upstream score holds only at its own head', async () => {
+  const w = await pushed()
+  const bot = (head: string | null): void => void record(w.db, {
+    repo: 'acme/widget', pr: 7, kind: 'bot_review', author: 'greptile', at: new Date(Date.now() + 1000).toISOString(),
+    external_id: String(head), score: 3, plan: 1, head,
+  })
+  bot('f'.repeat(40))
+  expect(unanswered(w.db, 1, SHA)).toBeUndefined()
+  expect(unanswered(w.db, 1, 'f'.repeat(40))).toBeDefined()
+  expect(unanswered(w.db, 1)).toBeDefined()
+  bot(null)
+  expect(unanswered(w.db, 1, SHA)).toBeDefined()
+})
+
 test('session close writes only proposals; approval makes a row', async () => {
   const w = await atBatch()
   const path = `${w.root}/session.md`

@@ -9,7 +9,8 @@ import type { Part } from './brief.ts'
  * step a refusal goes back to when it is not the one the step map implies. `parts` is the brief writer's
  * answer that the ticket is more than one job; `split` is that answer filed, which ends the plan.
  * `command` is the brief writer's answer that the whole job is one allow-listed command; `ran` is that
- * command run, which ends the plan.
+ * command run, which ends the plan. `quiet` is an outcome whose `events` row would repeat the plan's newest
+ * row of its kind, so the tick writes none.
  */
 export interface Outcome {
   outcome: Verdict['outcome']
@@ -24,6 +25,7 @@ export interface Outcome {
   split?: true
   command?: string
   ran?: true
+  quiet?: true
   /** Main moved under the branch: nobody's fault, so never `shared` or `repeat`. */
   moved?: true
 }

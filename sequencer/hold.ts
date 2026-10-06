@@ -27,10 +27,12 @@ export function isHeld(root: string, plan: number): boolean {
 const REPEAT = `# Stopped\n\n${WHY.repeat}.\n`
 
 function repeatAtCheck(db: Db, root: string, plan: number): boolean {
-  const row = db.prepare('SELECT step, template FROM plans WHERE id = ?').get(plan) as { step: number; template: string } | undefined
+  const row = db.prepare('SELECT step, template, state FROM plans WHERE id = ?').get(plan) as
+    { step: number; template: string; state: string } | undefined
   const refusal = maybe(root, plan, 'refusal.md')
   if (row?.step !== 3 || refusal === null) return false
-  return row.template === 'comms' ? refusal.startsWith('step 3 ') : !isHeld(root, plan) && refusal.endsWith(REPEAT)
+  if (row.template !== 'comms') return !isHeld(root, plan) && refusal.endsWith(REPEAT)
+  return row.state === 'blocked_on_ceo' && refusal.startsWith('step 3 ')
 }
 
 function next(db: Db, root: string, plan: number, actor: string, to?: number): number {

@@ -577,6 +577,13 @@ test('heldUnrefused D4: held with no refusal.md returns at 3', () => {
   expect(unhold(w.db, w.root, 1, 'fixer')).toBe(3)
 })
 
+test('haltedRefused D4: a halted step-3 refusal returns at 3', () => {
+  const w = posting('daily 2026-09-27', 3)
+  put(w.root, 1, 'refusal.md', 'step 3 text_review refused\n\nitem 4 is unsourced\n')
+  end(w.db, 1, 'halted', 'x')
+  expect(unhold(w.db, w.root, 1, 'cf')).toBe(3)
+})
+
 test('ruledComms D3: a reviewed comms plan gets issue.md', async () => {
   const w = posting('daily 2026-09-27', 3)
   await reviewing(w, verdict('wording.reply.md'))

@@ -956,7 +956,8 @@ test('D4 a running plan at its ceiling: one post per head', async () => {
 
 test('ceilingOnce', async () => {
   const { db, home } = seeded('1')
-  db.exec("UPDATE plans SET wait_reason = 'token_ceiling' WHERE id = 7; UPDATE settings SET value = '4600' WHERE key = 'plan.token_ceiling'")
+  db.exec(`DELETE FROM refusals WHERE plan = 7; UPDATE plans SET wait_reason = 'token_ceiling' WHERE id = 7;
+    UPDATE settings SET value = '4600' WHERE key = 'plan.token_ceiling'`)
   expect(overBudget(db, 7)).toEqual({ spent: 4600, ceiling: 4600 })
   await run(db, home, REPLY.waive ?? '')
   expect(told(db)).toEqual([{ actor: 'director', outcome: 'pass', message: 'waive: the builder can fix the name' }])

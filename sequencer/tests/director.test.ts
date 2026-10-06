@@ -13,13 +13,14 @@ import { gates } from '../../store/approvals.ts'
 import { decision } from '../../store/ask.ts'
 import { decided, decisions, touches, type Verb } from '../../store/decisions.ts'
 import { pushedRow } from '../../store/deliverables.ts'
-import { addSetting } from '../../store/drift.ts'
+import { addSetting, setting } from '../../store/drift.ts'
 import { logged, ofKind, pointers, runAt, runRows } from '../../store/events.ts'
 import { retried, returnToLane } from '../../store/holds.ts'
 import { migrate, open, type Db } from '../../store/index.ts'
+import { cap, width } from '../../store/lanes.ts'
 import { busy } from '../../store/now.ts'
 import { addPart } from '../../store/parts.ts'
-import { allPlans, held, needsCeo, planById, planRows, putPlan, requeue, retry } from '../../store/plans.ts'
+import { allPlans, held, needsCeo, pipeOf, planById, planRows, putPlan, requeue, retry } from '../../store/plans.ts'
 import { clear } from '../../store/refusals.ts'
 import { split } from '../brief.ts'
 import { byHand, cooLite, read, woke } from '../director.ts'
@@ -894,6 +895,33 @@ test('D4 a running plan at its ceiling: one post per head', async () => {
   expect(posted).toHaveLength(1)
   expect(wokeTold(db).at(-1)).toEqual({ outcome: 'pass', message: 'left alone: plan is running, waiting on ready_proof' })
   expect(maybe(home, 7, 'orchestrator.md')?.split('\n')[0]).toBe('step 4 ready_proof')
+})
+
+const WIDEN = '---\nmove: widen\nwhy: the wake pipe is full\n---\n'
+const widths = (db: Db) => ({ cap: cap(db), dial: setting(db, 'lanes.dial'), ceiling: setting(db, 'lanes.ceiling') })
+const widened = (db: Db) => decisions(db, 7).filter((d) => d.verb === 'widen')
+
+test('widenMove', async () => {
+  const { db, home } = seeded('1')
+  const was = widths(db)
+  await run(db, home, WIDEN)
+  expect(pipeOf(db, 9).max_concurrent).toBe(2)
+  expect(widened(db)).toEqual([{ plan: 7, step: 4, wait_reason: 'blocked_on_ceo', verb: 'widen', why: 'the wake pipe is full',
+    evidence: 'wake width 1 → 2', tokens: 0 }])
+  expect(row(db).state).toBe('queued')
+  expect(told(db)).toEqual([{ actor: 'director', outcome: 'pass', message: 'widen: the wake pipe is full' }])
+  expect(widths(db)).toEqual(was)
+  const full = seeded('1')
+  width(full.db, 9, 8)
+  await run(full.db, full.home, WIDEN)
+  expect(pipeOf(full.db, 9).max_concurrent).toBe(8)
+  expect(widened(full.db)).toEqual([])
+  expect(plan7(full.db)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'coo' })
+  expect(told(full.db).map((t) => t.message)).toEqual([expect.stringMatching(/^widen did not apply, the pipe is already 8 wide/)])
+  const shadow = seeded(null)
+  await run(shadow.db, shadow.home, WIDEN)
+  expect(pipeOf(shadow.db, 9).max_concurrent).toBe(1)
+  expect(widened(shadow.db)).toEqual([])
 })
 
 test('the store takes blocked_on_ceo, refuses an unknown reason',() => {

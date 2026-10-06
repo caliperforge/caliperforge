@@ -28,10 +28,11 @@ import { parted } from './split.ts'
 import { ticketed } from './ticket.ts'
 import { history, parentAsk } from './record.ts'
 import { READ, SERVER, server } from './upstream.ts'
+import { widen } from './widen.ts'
 import { afresh, maybe, planDir, put } from './workspace.ts'
 
 const Said = z.object({
-  move: z.enum(['rule', 'waive', 'close', 'file', 'ask_ceo', 'ask_coo', 'return', 'fix']),
+  move: z.enum(['rule', 'waive', 'close', 'file', 'ask_ceo', 'ask_coo', 'return', 'fix', 'widen']),
   why: z.string().trim().min(1),
   answer: z.string().trim().min(1).optional(),
   ticket: z.string().trim().min(1).transform((t) => t.slice(0, 140)).optional(),
@@ -218,6 +219,7 @@ const UNAPPLIED: Record<Exclude<Move['move'], 'ask_ceo' | 'ask_coo'>, string> = 
   file: 'the ticket was not filed',
   return: 'the plan did not go back to its lane',
   fix: 'the fixer did not make the fix',
+  widen: 'the pipe is already 8 wide',
 }
 
 /** Each move is the call its `cf` command makes; false leaves the stop with a person. */
@@ -249,6 +251,8 @@ function apply(db: Db, root: string, plan: PlanRow, m: Move, wire: Wire, now: Da
     case 'return':
       afresh(root, plan.id, fenced(root, plan) ? retry(db, plan) : returnToLane(db, plan.id, 'director'))
       return true
+    case 'widen':
+      return widen(db, root, plan, m.why)
     case 'fix':
     case 'ask_ceo':
     case 'ask_coo': return false

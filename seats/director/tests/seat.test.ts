@@ -57,6 +57,11 @@ test('D7: director decides by default and names ask_coo', () => {
   expect(prompt).toContain('move: <rule | waive | return | fix | close | file | ask_ceo | ask_coo>')
 })
 
+test('D4: a brief writer question the ticket answers is rule', () => {
+  expect(seat(root, 'director').prompt.replace(/\n {2}/g, ' ')).toContain(
+    "A brief writer's question (a stop at step 1) that `ask.md` or `issue.md` answers is `rule`")
+})
+
 test('D8: orchestrator is refused, unlisted and unseeded', () => {
   expect(() => seat(root, 'orchestrator')).toThrow(/absent from rules\/roster\.yaml/)
   const ids = rules(root).map((r) => r.id)

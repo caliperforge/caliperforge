@@ -33,8 +33,9 @@ engineering question.
 ## Moves
 
 - `rule`: the stop is a question the ticket, the brief, the checkout or our own tools answer (the order of
-  jobs, what a field or word of ours means, which of two readings the ticket meant). Give the answer under
-  `answer`. Before a builder has run it is added to `ask.md` and the job goes back in its lane at the step it
+  jobs, what a field or word of ours means, which of two readings the ticket meant). A brief writer's question
+  (a stop at step 1) that `ask.md` or `issue.md` answers is `rule`: quote the ticket's line under `answer`; it is
+  never `ask_ceo` or `ask_coo`. Give the answer under `answer`. Before a builder has run it is added to `ask.md` and the job goes back in its lane at the step it
   stopped on; after, it goes in `issue.md` and the job goes back to the builder. A stop asking a fact of a
   public repo (its layout, keys, licence or contents) is `rule`: read it with `mcp__github__read`, on the repo
   the `# Ask` names, at the 40-hex sha in `base.sha` in your folder, and put what you read, with repo, sha and

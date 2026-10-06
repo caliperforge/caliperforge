@@ -361,6 +361,19 @@ test('an unclear reply holds for the COO and spends no retry', async () => {
     .toEqual({ held_by: 'coo', held_why: `brief_writer: ${question}` })
 })
 
+test('D1: a question after a shape refusal sets the refusal aside', async () => {
+  const w = await turnedBack()
+  const question = 'which greeting?'
+  await tick(w.db, w.root, stub(CARRIED))
+  const refusal = maybe(w.root, ID, 'refusal.md')
+  expect(refusal).toContain('## Must not break')
+
+  await tick(w.db, w.root, stub(CARRIED, 0, undefined, undefined, asks(question)))
+  expect(maybe(w.root, ID, 'refusal.md')).toBeNull()
+  expect(maybe(w.root, ID, 'refusal.prev.md')).toBe(refusal)
+  expect(maybe(w.root, ID, 'question.md')).toBe(`${question}\n`)
+})
+
 test('a round back at step 1 keeps the brief the reviewers read', async () => {
   const w = mine()
   for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))

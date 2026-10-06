@@ -2,6 +2,7 @@ import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSyn
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { expect, test } from 'vitest'
+import { heldBy } from '../../cli/brief.ts'
 import { all } from '../../cli/inbox.ts'
 import { fill } from '../../cli/digests.ts'
 import { looked } from '../../cli/look.ts'
@@ -643,6 +644,42 @@ test('D3: failed fixes on an earlier stop do not count', async () => {
   await cooLite(db, home, row(db), inTurn([ASK_COO, ASK_COO], []), now, () => undefined, wire())
   expect(plans(db)).toEqual(was)
   expect(told(db).map((t) => t.message)).toEqual([expect.stringMatching(/^ask_coo: refused by the fence/)])
+})
+
+const QUESTION = 'which greeting does the banner use?'
+const LINE = 'the banner greets with hello, not hi'
+
+function asked(ask: string) {
+  const seed = seeded('1')
+  seed.db.exec('DELETE FROM runs; UPDATE plans SET step = 1 WHERE id = 7')
+  held(seed.db, 7, 'coo', `brief_writer: ${QUESTION}`)
+  drop(seed.home, 7, 'refusal.md')
+  put(seed.home, 7, 'question.md', `${QUESTION}\n`)
+  put(seed.home, 7, 'ask.md', ask)
+  return seed
+}
+
+const reader: Provider = { ...stub(''), fire: (p) =>
+  stub(p.prompt.includes(`# Stop\n\n${QUESTION}`) && p.prompt.includes(`# Ask\n\nthe ask\n\n${LINE}`)
+    ? `---\nmove: rule\nwhy: ask.md answers it\nanswer: ${LINE}\n---\n` : ASK_COO).fire(p) }
+
+test('D2: a question ask.md answers is ruled, back at step 1', async () => {
+  const { db, home } = asked(`the ask\n\n${LINE}\n`)
+  await cooLite(db, home, row(db), reader, now, () => undefined, wire())
+  const day = new Date().toISOString().slice(0, 10)
+  expect(maybe(home, 7, 'ask.md')).toBe(`the ask\n\n${LINE}\n\n## Answer from the director (${day})\n\n${LINE}\n`)
+  expect(row(db)).toMatchObject({ state: 'queued', step: 1 })
+  expect(heldBy(db, 'coo').map((p) => p.id)).not.toContain(7)
+})
+
+test('D3: a question the ticket leaves open stays with the coo', async () => {
+  const { db, home } = asked('the ask\n')
+  await cooLite(db, home, row(db), reader, now, () => undefined, wire())
+  expect(told(db)).toEqual([{ actor: 'director', outcome: 'needs_ceo',
+    message: 'ask_coo: refused by the fence, 0 failed fixes on this stop' }])
+  expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'coo' })
+  expect(heldBy(db, 'coo').map((p) => p.id)).toContain(7)
+  expect(maybe(home, 7, 'ask.md')).toBe('the ask\n')
 })
 
 test.each(FAULTS.slice(0, 4))('D2: an ask_ceo with %s is asked again', async (reason, block) => {

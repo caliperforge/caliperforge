@@ -1,0 +1,12 @@
+{
+  "claude-agent-sdk/index.ts": {
+    "lines": 244
+  },
+  "credential.ts": {
+    "lines": 88,
+    "silent-catch": 1
+  },
+  "kind.ts": {
+    "lines": 53
+  }
+}

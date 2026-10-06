@@ -70,7 +70,8 @@ test('a refused build rebuilds in the same tick', async () => {
 test('waits on every workflow, judges only its own', async () => {
   const w = ready()
   let reads = 0
-  const runs: Gh = () => {
+  const runs: Gh = (args) => {
+    if (args.includes('main')) return '[]'
     reads += 1
     const headSha = tip(w.root, 1)
     const url = 'https://github.com/caliperforge/widget/actions/runs/2'

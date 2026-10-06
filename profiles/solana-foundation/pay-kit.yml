@@ -31,6 +31,7 @@ notes:
   - "A mint or token account may belong to Token or Token-2022: match on its owner and handle both; never assume classic SPL Token."
   - "Files a generator writes (surfpool's `crates/sdk-node/**/generated/*.ts`) match what the generator the brief names writes: step 3 runs that generator and fails on any diff. They are yours to write when the brief lists them."
 intake: { pace: { prs: 3, days: 7 } }
+greptile_files: [docs/paykit-interface.md]
 sources:
   - sequencer/gates.ts
   - seats/python_specialist/prompt.md

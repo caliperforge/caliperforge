@@ -175,7 +175,7 @@ function rest(db: Db, root: string, plan: PlanRow, handback: string, diff: strin
   const fence = fenceFor(db, plan.id, seat(root, name).manifest.write_paths)
   const ours = on?.fence === true
   const outside = ours
-    ? strays(parse(diff).map((f) => f.path), filesOf(db, plan.id).map((f) => f.path), handback)
+    ? strays(parse(diff).map((f) => f.path), filesOf(db, plan.id).map((f) => f.path), handback, get(root, plan.id, 'issue.md'))
     : []
   return [
     ['secret-scan', () => scan(diff)],

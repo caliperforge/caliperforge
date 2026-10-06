@@ -15,13 +15,16 @@ import type { Db } from '../store/index.ts'
 import { busy } from '../store/now.ts'
 import { internal, originIssue, originRef, type PlanRow } from '../store/plans.ts'
 import { profile, type Profile } from '../store/profile.ts'
+import { freed, took, waitsFor } from '../store/slot.ts'
 import { GREEN, onBase } from './base.ts'
 import { CHECKS, waiting, type Check, type Target } from './card.ts'
 import { npm } from './checks.ts'
 import { bind, prMessage, signedAt } from './folded.ts'
 import { red } from './failures.ts'
+import { config } from './greptile.ts'
 import { refresh } from './install.ts'
 import { rerun as cancelled } from './rerun.ts'
+import { moved, rehearsing, retire } from './retire.ts'
 import type { Outcome } from './kind.ts'
 import { merging } from './merging.ts'
 import { cloned, conflicted, diffOf, fetchMain, FORK, get, MAIN, maybe, planDir, put, repoName, srcDir, titleOf } from './workspace.ts'
@@ -97,8 +100,10 @@ const REHEARSED = 'ci.next'
  */
 export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire = WIRE): Outcome | null {
   if (internal(plan) && (assembly(db, plan) !== null || !workflows(srcDir(root, plan.id)))) return checked(db, root, plan, repo)
+  const holder = waitsFor(db, plan)
+  if (holder !== null) return { outcome: 'pass', held: true, spans: ['fork.slot'], note: `waits for plan ${String(holder)}'s fork CI` }
   const { fork, head, ci, tip } = sent(root, plan, repo, wire)
-  if (!internal(plan)) wire.rehearse?.(fork, ci)
+  if (!internal(plan)) { rehearsing(fork, ci, wire); took(db, plan) }
   const on = { fork, branch: ci, sha: tip }
   const { verdict, board } = judge(on, { body: '', commits: commits(head.dir), issue_ref: profile(root, repo)?.issue_ref }, touched(root, plan.id), wire.runs)
   put(root, plan.id, BOARD, `${JSON.stringify(board)}\n`)
@@ -109,14 +114,15 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
   if (hold !== null) return onCi(db, plan.id, hold)
   if (carries(verdict.spans, PENDING)) {
     const running = board.filter((r) => r.gates && r.status !== 'completed').map((r) => r.workflow).join(', ')
+    freed(db, plan.id)
     return { outcome: 'needs_ceo', spans: [PENDING], note: `${at} is still running ${running} after ${String(FINISHES)} ticks` }
   }
   const again = waiting === null && verdict.outcome === 'refuse' ? cancelled(root, plan.id, on, verdict.spans, wire.runs) : null
   if (again !== null) {
     const rerunning = holding(root, plan.id, head.sha, verdict.spans, `${at} ${again}`, APPEARS, RERUNS)
-    return rerunning === null
-      ? { outcome: 'needs_ceo', spans: verdict.spans, note: `${at} ${again}: still cancelled after ${String(APPEARS)} ticks` }
-      : onCi(db, plan.id, rerunning)
+    if (rerunning !== null) return onCi(db, plan.id, rerunning)
+    freed(db, plan.id)
+    return { outcome: 'needs_ceo', spans: verdict.spans, note: `${at} ${again}: still cancelled after ${String(APPEARS)} ticks` }
   }
   const base = waiting === null && verdict.outcome === 'refuse' ? onBase(root, plan.id, on, verdict.spans, board, wire.runs) : null
   const rerun = typeof base === 'string' ? holding(root, plan.id, head.sha, verdict.spans, `${at} ${base}`, FINISHES) : null
@@ -124,6 +130,7 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
   if (Array.isArray(base)) put(root, plan.id, BOARD, `${JSON.stringify(base)}\n`)
   const passed = verdict.outcome === 'pass' || Array.isArray(base)
   record(db, join(root, 'rails/ci-green'), plan.id, passed ? { ...verdict, outcome: 'pass', origin_kind: null, origin_ref: null } : verdict, 0)
+  freed(db, plan.id)
   forkGreen(db, plan.id, passed)
   if (verdict.outcome === 'pass') put(root, plan.id, GREEN, `${ci} ${tip}\n`)
   const failed = passed ? null : red(fork, verdict.spans, wire.runs)
@@ -133,10 +140,11 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
 }
 
 /** Step 3's pass opens the rehearsal: a review bot reads only an open pull request. */
-export function reviewable(root: string, plan: PlanRow, repo: string, wire: Wire = WIRE): void {
+export function reviewable(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire = WIRE): void {
   if (internal(plan)) return
   const { fork, ci } = sent(root, plan, repo, wire)
-  wire.rehearse?.(fork, ci)
+  rehearsing(fork, ci, wire)
+  took(db, plan)
 }
 
 export function sent(root: string, plan: PlanRow, repo: string, wire: Wire): { fork: string; head: Head; ci: string; tip: string } {
@@ -150,8 +158,9 @@ export function sent(root: string, plan: PlanRow, repo: string, wire: Wire): { f
     else squash(root, plan.id, profile(root, repo))
   }
   const head = outside ? headOf(root, plan.id) : onward(headOf(root, plan.id))
-  const tip = outside ? tipOf(root, plan.id, head, ci) : head.sha
+  const tip = outside ? tipOf(root, plan.id, head, ci, repo) : head.sha
   wire.send(head.dir, outside ? `${tip}:refs/heads/${ci}` : head.branch)
+  if (outside) moved(root, plan.id, fork, ci, wire)
   return { fork, head, ci, tip }
 }
 
@@ -178,20 +187,20 @@ export function carried(root: string, plan: number, sha: string): string {
 }
 
 /** A head sent again keeps its tip, so its CI is not restarted. */
-function tipOf(root: string, plan: number, head: Head, ci: string): string {
+function tipOf(root: string, plan: number, head: Head, ci: string, repo: string): string {
   const known = tips(root, plan).find(([, of]) => of === head.sha)?.[0]
   if (known !== undefined) return known
-  const tip = quiet(head.dir, ci)
+  const tip = quiet(head.dir, ci, config(root, repo))
   put(root, plan, TIPS, `${maybe(root, plan, TIPS) ?? ''}${tip} ${head.sha}\n`)
   return tip
 }
 
-/** HEAD plus `greptile.json` turning Greptile's own reviews off, signed as the host is (#939: an unsigned tip turns the target's PR hygiene red). */
-function quiet(dir: string, ci: string): string {
+/** HEAD plus the rehearsal's `greptile.json`, signed as the host is (an unsigned tip turns the target's PR hygiene red). */
+function quiet(dir: string, ci: string, greptile: string): string {
   const env = { ...process.env, GIT_INDEX_FILE: join(git(dir, ['rev-parse', '--absolute-git-dir']).trim(), 'next.index') }
   const index = (args: string[]): string =>
     execFileSync('git', args, { cwd: dir, encoding: 'utf8', env, stdio: ['ignore', 'pipe', 'pipe'] }).trim()
-  const blob = execFileSync('git', ['hash-object', '-w', '--stdin'], { cwd: dir, encoding: 'utf8', input: '{"autoReview": []}\n' }).trim()
+  const blob = execFileSync('git', ['hash-object', '-w', '--stdin'], { cwd: dir, encoding: 'utf8', input: greptile }).trim()
   index(['read-tree', 'HEAD'])
   index(['update-index', '--add', '--cacheinfo', `100644,${blob},greptile.json`])
   const next = `refs/remotes/origin/${ci}`
@@ -390,7 +399,7 @@ export function push(db: Db, root: string, plan: PlanRow, wire: Wire = WIRE): Ou
   const card = waiting(db, root, plan.id, signed, target, checks)
   if (card !== null) return card
   wire.send(head.dir, head.branch)
-  wire.unrehearse?.(`${FORK}/${repoName(target.repo)}`, rehearsed(root, plan.id, head.branch))
+  retire(`${FORK}/${repoName(target.repo)}`, rehearsed(root, plan.id, head.branch), wire)
   if (open !== null) {
     pushed(db, plan.id, approval, open)
     return { outcome: 'pass', spans: [], note: `pushed ${head.branch} onto ${open}` }
@@ -514,7 +523,8 @@ export function rehearsalBranch(root: string, plan: number): string {
 
 /**
  * Once our fork holds the branch it only moves forward -- no force-push, ever. The rounds'
- * commits since the head its rehearsal shows fold into one signed follow-up commit on top of it.
+ * commits since the head its rehearsal shows fold into one signed follow-up commit on top of it,
+ * with a main merged since that head as its second parent.
  */
 export function follow(root: string, plan: number, name: string): void {
   const dir = srcDir(root, plan)
@@ -535,6 +545,12 @@ export function follow(root: string, plan: number, name: string): void {
   const staged = git(dir, ['diff', '--cached', '--name-only']).trim() !== ''
   const same = count === 0 || (count === 1 && git(dir, ['log', '-1', '--format=%B']).trim() === message)
   if (!staged && same && ancestor(dir, tip, 'HEAD')) return
+  const base = git(dir, ['merge-base', 'HEAD', MAIN]).trim()
+  if (!ancestor(dir, base, tip)) {
+    const sha = git(dir, [...identity(dir), 'commit-tree', git(dir, ['write-tree']).trim(), '-p', tip, '-p', base, '-m', message]).trim()
+    git(dir, ['update-ref', `refs/heads/${branch}`, sha])
+    return
+  }
   git(dir, ['reset', '--soft', tip])
   sign(dir, message)
 }

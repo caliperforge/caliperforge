@@ -9,6 +9,7 @@ import { allPlans, end, originRef, PlanRow } from '../store/plans.ts'
 import { record, type Signal, type SignalRow } from '../store/signals.ts'
 import { afterOf, FIELDS, Listed, type Listing, partOf, recordListing } from '../store/tickets.ts'
 import { rehearsed, type Rehearsal } from './findings.ts'
+import { mended } from './mended.ts'
 import { rehearsalBranch } from './push.ts'
 import { claimed, released } from './split.ts'
 import { closed, firstLine, gone, polled } from './unpolled.ts'
@@ -98,7 +99,7 @@ function listed(db: Db, root: string, repo: string, read: Read, lines: string[])
   const whole = found.length < WINDOW
   recordListing(db, repo, [...found, ...list('closed')], whole)
   if (whole) {
-    halt(db, repo, new Set(kept.map((i) => i.url)))
+    halt(db, repo, new Set(kept.map((i) => i.url)), read, lines)
     released(db, root, repo, open)
   }
   const known = seen(db)
@@ -133,12 +134,10 @@ function parent(repo: string, no: number, read: Read, lines: string[]): boolean 
   }
 }
 
-function halt(db: Db, repo: string, open: Set<string>): void {
+function halt(db: Db, repo: string, open: Set<string>, read: Read, lines: string[]): void {
   const queued = db.prepare(`SELECT * FROM plans WHERE state = 'queued' AND origin IS NOT NULL
     AND NOT EXISTS (SELECT 1 FROM deliverables d WHERE d.plan_id = plans.id AND d.state = 'pushed')`).all().map((r) => PlanRow.parse(r))
-  for (const plan of queued.filter((p) => originRef(p)?.repo === repo && !open.has(p.origin ?? ''))) {
-    end(db, plan.id, 'halted', `${plan.origin ?? ''} is closed or has lost its lane label`)
-  }
+  for (const plan of queued.filter((p) => originRef(p)?.repo === repo && !open.has(p.origin ?? ''))) mended(db, plan, read, lines)
   landed(db, repo, open)
 }
 

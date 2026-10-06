@@ -7,7 +7,7 @@ import { measure as stepZero } from '../../sequencer/steps.ts'
 import { CARRIED, plan, stub, world } from '../../sequencer/tests/world.ts'
 import { eventsOf } from '../../store/events.ts'
 import { take } from '../../store/leases.ts'
-import { rewind } from '../../store/plans.ts'
+import { rewind, waiting } from '../../store/plans.ts'
 import type { Issue, Read } from '../gh.ts'
 import { foreign, implemented, WINDOW } from '../gh.ts'
 import { measure } from '../measure.ts'
@@ -221,6 +221,7 @@ it('a pace park logs once per park and rule text, not per tick', async () => {
   const tick = (read: Read): Promise<unknown> => stepped(w.db, w.root, w.pipe, plan(w.db, 1), lease, stub(CARRIED), undefined, read)
   const parks = (): string[] => eventsOf(w.db, 1, 'measure').map((e) => e.message).filter((m) => m.startsWith('target_parked:'))
   for (let n = 0; n < 5; n += 1) {
+    waiting(w.db, [{ plan: 1, why: null }])
     await tick(ours(0, [1]))
     expect(parks()).toHaveLength(1)
     expect(plan(w.db, 1).wait_reason).toBe('target_parked')

@@ -5,7 +5,7 @@ import { expect, test } from 'vitest'
 import { all } from '../../cli/inbox.ts'
 import type { Provider } from '../../providers/kind.ts'
 import { amend, approved, learnings, learningsIn, paste, placed, postOf, posts, putPost } from '../../store/desk.ts'
-import { eventsOf, kindsOf, runRows } from '../../store/events.ts'
+import { eventsOf, kindsOf, newestMode, runRows } from '../../store/events.ts'
 import { set, zone } from '../../store/lanes.ts'
 import { addPipe, briefed, dropPlan, end, plansOf, putPlan, requeue } from '../../store/plans.ts'
 import { refusalAt } from '../../store/refusals.ts'
@@ -375,12 +375,29 @@ test('draftBadFence D2: a bad fence refuses and writes no draft', async () => {
 })
 
 test.each([
-  { why: '2 items', list: items('a', 'b') },
-  { why: '6 items', list: items('a', 'b', 'c', 'd', 'e', 'f') },
-  { why: 'a status of done', list: [...items('a', 'b'), { title: 'c', ...ITEM, status: 'done' }] },
-])('dailyRefuses D2: a daily reply of $why refuses on writer.fence and writes no items.json', async ({ list }) => {
+  { title: 'daily 2026-09-27', mode: 'log', reply: listing(items('a', 'b', 'c')) },
+  { title: 'ship post acme/widget#7', mode: 'ship', reply: fixture('reply.md') },
+  { title: 'weekly 2026-10-02', mode: 'weekly', reply: fixture('weekly.md') },
+])('writerMode D1 D2: a $title writer runs in $mode', async ({ title, mode, reply }) => {
+  const w = posting(title)
+  const prompts: string[] = []
+  const writer = seated(reply)
+  await draft(w.db, w.root, plan(w.db, 1), mapOf('comms').at(1), { ...writer, fire: (packet) => {
+    prompts.push(packet.prompt)
+    return writer.fire(packet)
+  } })
+  expect(prompts[0]).toContain(readFileSync(join(import.meta.dirname, '../../seats/modes', `${mode}.md`), 'utf8'))
+  expect(newestMode(w.db)).toBe(mode)
+})
+
+test.each([
+  { why: '2 items', reply: listing(items('a', 'b')) },
+  { why: '6 items', reply: listing(items('a', 'b', 'c', 'd', 'e', 'f')) },
+  { why: 'a status of done', reply: listing([...items('a', 'b'), { title: 'c', ...ITEM, status: 'done' }]) },
+  { why: 'only the ship fence', reply: fixture('reply.md') },
+])('dailyRefuses D2: a daily reply of $why refuses on writer.fence and writes no items.json', async ({ reply }) => {
   const w = posting('daily 2026-09-27')
-  expect(await draft(w.db, w.root, plan(w.db, 1), mapOf('comms').at(1), seated(listing(list))))
+  expect(await draft(w.db, w.root, plan(w.db, 1), mapOf('comms').at(1), seated(reply)))
     .toMatchObject({ outcome: 'refuse', spans: ['writer.fence'] })
   expect(maybe(w.root, 1, 'items.json')).toBeNull()
 })

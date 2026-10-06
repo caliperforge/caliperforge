@@ -123,7 +123,7 @@ export async function draft(db: Db, root: string, plan: PlanRow, step: Step, pro
   const title = titled(db, plan, 'daily') ?? titled(db, plan, 'ship') ?? titled(db, plan, 'weekly')
   if (title === null) return { outcome: 'pass', spans: [], note: 'not a post plan' }
   const input = `# packet.json\n\n${get(root, plan.id, 'packet.json')}${returned(db, plan.id)?.replace(/^/, '\n\n# Returned from the desk\n\n') ?? ''}${
-    maybe(root, plan.id, 'refusal.md')?.replace(/^/, '\n\n# Refused — answer what this names, keep every item it does not name\n\n') ?? ''}`
+    (maybe(root, plan.id, 'refusal.md') ?? maybe(root, plan.id, 'refusal.prev.md'))?.replace(/^/, '\n\n# Refused — answer what this names, keep every item it does not name\n\n') ?? ''}`
   const fired = await ran(db, root, plan, { ...step, mode: MODES[title.slice(0, title.indexOf(' '))] }, provider, input, false)
   if (fired.ended !== 'completed') return halted(step, fired)
   if (titled(db, plan, 'daily') !== null) return listed(root, plan, step, fired.text)
@@ -147,6 +147,7 @@ export async function review(db: Db, root: string, plan: PlanRow, step: Step, pr
   if (judged.outcome === 'needs_ceo') return { outcome: 'needs_ceo', spans: [], note: judged.message }
   put(root, plan.id, 'review.md', judged.message)
   drop(root, plan.id, 'refusal.md')
+  drop(root, plan.id, 'refusal.prev.md')
   return { outcome: 'pass', spans: [], note: `${step.runs}: review.md written` }
 }
 

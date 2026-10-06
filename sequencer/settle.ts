@@ -216,7 +216,11 @@ function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcom
   }
   // A rewind costs no retry but is recorded like any refusal, so a second identical one waits for a person.
   if (outcome.rewind !== undefined && why === 'again') { rewind(db, plan.id, outcome.rewind); return 'running' }
-  return back(db, plan, outcome.to ?? backTo(step), why !== 'again', outcome.note)
+  return back(db, plan, outcome.to ?? backTo(step), why !== 'again' || fenced(outcome), outcome.note)
+}
+
+function fenced(outcome: Outcome): boolean {
+  return outcome.spans.length > 0 && outcome.spans.every((s) => / authority\.(?:outside_files|write_paths)$/.test(s))
 }
 
 /** Step 2 is the build in templates/pr-path.ts. */

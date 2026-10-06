@@ -19,7 +19,9 @@ export function weekly(db: Db, root: string, plan: PlanRow, day: string): Outcom
   const story = readdirSync(dir, { withFileTypes: true }).filter((e) => e.isFile() && e.name.endsWith('.md'))
     .map(({ name }) => ({ name, text: readFileSync(join(dir, name), 'utf8') })).sort((a, b) => a.name.localeCompare(b.name))
   const learned = learningsIn(db, shift(day, -6), day)
-  put(root, plan.id, 'packet.json', JSON.stringify({ learnings: learned, story }))
+  const notes = join(root, 'comms/voice-notes.md')
+  const voice_notes = existsSync(notes) ? readFileSync(notes, 'utf8') : ''
+  put(root, plan.id, 'packet.json', JSON.stringify({ learnings: learned, story, voice_notes }))
   return { outcome: 'pass', spans: [], note: `${String(learned.length)} learning day(s), ${String(story.length)} story file(s)` }
 }
 

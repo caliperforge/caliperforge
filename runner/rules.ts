@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { parse } from 'yaml'
 import { z } from 'zod'
@@ -45,15 +45,22 @@ export function rules(root: string): Rule[] {
   const rails = digest(join(root, 'rules/rails.yaml'))
   const roster = digest(join(root, 'rules/roster.yaml'))
   const tight = digest(join(root, 'rules/tight.md'))
-  const registry = digest(join(root, 'rules/registry.yaml'))
   const staffing = digest(join(root, 'rules/staffing.yaml'))
   return [
     { id: 'rules/rails.yaml', kind: 'rail', path: 'rules/rails.yaml', content_hash: rails },
     { id: 'rules/tight.md', kind: 'card', path: 'rules/tight.md', content_hash: tight },
-    { id: 'rules/registry.yaml', kind: 'card', path: 'rules/registry.yaml', content_hash: registry },
+    ...registered(root).map((path) => ({ id: path, kind: 'card' as const, path, content_hash: digest(join(root, path)) })),
     { id: 'rules/staffing.yaml', kind: 'card', path: 'rules/staffing.yaml', content_hash: staffing },
     ...manifest(root).rails.map((id) => ({ id, kind: 'rail' as const, path: 'rules/rails.yaml', content_hash: rails })),
     ...written(root).seats.map((id) => ({ id, kind: 'card' as const, path: 'rules/roster.yaml', content_hash: roster })),
+  ]
+}
+
+export function registered(root: string): string[] {
+  const folder = join(root, 'rules/registry')
+  return [
+    ...existsSync(join(root, 'rules/registry.yaml')) ? ['rules/registry.yaml'] : [],
+    ...existsSync(folder) ? readdirSync(folder).filter((name) => name.endsWith('.yaml')).sort().map((name) => `rules/registry/${name}`) : [],
   ]
 }
 

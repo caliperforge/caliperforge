@@ -22,8 +22,9 @@ export function rule(db: Db, root: string, plan: PlanRow, who: string, text: str
 /** Each path refused as outside the files that `answer` names gets a row under the brief's `## Outside the files`. */
 export function owned(root: string, plan: PlanRow, answer: string): boolean {
   const why = answer.replace(/\s+/g, ' ').trim()
-  const rows = [...(maybe(root, plan.id, 'refusal.md') ?? '').matchAll(OUTSIDE)]
-    .flatMap((m) => answer.includes(m[1] ?? '') ? [`- \`${m[1] ?? ''}\` — ${why}`] : [])
+  const words = new Set(answer.split(/[^\w./-]+/).map((w) => w.replace(/\.+$/, '')))
+  const rows = [...railed(root, plan).matchAll(OUTSIDE)]
+    .flatMap((m) => words.has(m[1] ?? '') ? [`- \`${m[1] ?? ''}\` — ${why}`] : [])
   if (rows.length === 0) return false
   const issue = get(root, plan.id, 'issue.md')
   const lines = issue.split('\n')
@@ -40,7 +41,13 @@ export function owned(root: string, plan: PlanRow, answer: string): boolean {
 }
 
 export function fenced(root: string, plan: PlanRow): boolean {
-  return /^ {2}- \S+ authority\./m.test(maybe(root, plan.id, 'refusal.md') ?? '')
+  return /^ {2}- \S+ authority\./m.test(railed(root, plan))
+}
+
+/** `refusal.md` outlives the stop that wrote it, so it counts only while the plan still stands on that step-3 refusal. */
+function railed(root: string, plan: PlanRow): string {
+  const text = maybe(root, plan.id, 'refusal.md') ?? ''
+  return plan.step === 3 && text.startsWith('step 3 ') ? text : ''
 }
 
 function above(issue: string, section: string): string {

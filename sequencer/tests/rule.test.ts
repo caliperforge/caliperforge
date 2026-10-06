@@ -7,7 +7,7 @@ import { migrate, open } from '../../store/index.ts'
 import { planById } from '../../store/plans.ts'
 import type { Wire } from '../push.ts'
 import { woke } from '../director.ts'
-import { owned } from '../rule.ts'
+import { fenced, owned } from '../rule.ts'
 import { maybe, put, srcDir } from '../workspace.ts'
 
 const repo = join(import.meta.dirname, '../..')
@@ -133,4 +133,19 @@ test('D5 only a named outside_files path gets a row', () => {
   expect(maybe(home, 7, 'issue.md')).toBe(once)
   expect(owned(home, plan, 'cli/extra.ts again')).toBe(true)
   expect(maybe(home, 7, 'issue.md')).toContain(`${row}- \`cli/extra.ts\` — cli/extra.ts again\n\n## Standing`)
+})
+
+test('a path is named only as a whole word', () => {
+  const { db, home } = seeded(3)
+  put(home, 7, 'refusal.md', SPANS.replace('cli/extra.ts', 'extra.ts'))
+  expect(owned(home, planById(db, 7), 'cli/extra.ts holds it')).toBe(false)
+  expect(owned(home, planById(db, 7), 'extra.ts holds it.')).toBe(true)
+})
+
+test('a step-4 stop on an old step-3 refusal is not fenced', () => {
+  const { db, home } = seeded(4)
+  put(home, 7, 'refusal.md', `${SPANS}\n# Stopped\n\nspent 9.0M tokens.\n`)
+  expect(fenced(home, planById(db, 7))).toBe(false)
+  expect(owned(home, planById(db, 7), 'cli/extra.ts holds it')).toBe(false)
+  expect(maybe(home, 7, 'issue.md')).toBe(ISSUE)
 })

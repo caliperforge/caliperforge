@@ -28,7 +28,8 @@ engineering question.
 - a fork Greptile finding (`cf look plan <id> findings-<sha>.md`) you judge wrong: answer it with `rule`, with
   `answer: G<id> overruled: <evidence>`.
 - a gap in the machine: `file` its ticket; the job waits on that ticket's plan and goes back when that plan
-  lands.
+  lands. Three jobs refused alike within a day file one machine ticket without you, and later ones wait
+  on it.
 
 ## Moves
 

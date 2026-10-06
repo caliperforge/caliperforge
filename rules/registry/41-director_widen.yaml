@@ -1,0 +1,5 @@
+- name: director_widen
+  table: decisions
+  column: at
+  where: verb = 'widen'
+  while: EXISTS (SELECT 1 FROM events WHERE kind = 'director' AND outcome = 'pass' AND message GLOB 'widen:*')

@@ -1,0 +1,2 @@
+# launchd/com.caliperforge.watch.plist runs cli/watch-main.ts
+- name: watch

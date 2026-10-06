@@ -1,0 +1,2 @@
+- name: target_parked_once
+  evidence: events rows with kind = 'measure' AND message GLOB 'target_parked:*', at most one per plan per park

@@ -1,17 +1,14 @@
-import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { parse } from 'yaml'
-import { z } from 'zod'
 import { fresh } from '../../checks/sqlite.ts'
 import type { Pr } from '../../cli/gh.ts'
 import { listed } from '../../store/files.ts'
 import type { Db } from '../../store/index.ts'
-import { Entry } from '../drift.ts'
+import { mechanisms } from '../drift.ts'
 
 const schema = join(import.meta.dirname, '../../schema')
 export const NOW = new Date('2026-10-03T10:00:00Z')
 export const COO = { name: 'director', switch: { key: 'director.apply', value: '1' }, table: 'events', column: 'at', where: "kind = 'director'", gap: '2d' }
-export const REGISTRY = z.array(Entry).parse(parse(readFileSync(join(import.meta.dirname, '../../rules/registry.yaml'), 'utf8')))
+export const REGISTRY = mechanisms(join(import.meta.dirname, '../..'))
 
 export function db(enabled = 1): Db {
   const d = fresh(schema)

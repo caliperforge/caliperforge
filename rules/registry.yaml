@@ -220,12 +220,3 @@
 - name: tick_deps
   evidence: .cf/deps.lock.sha matches main's package-lock.json
   gap: 0h
-# launchd/com.caliperforge.watch.plist runs cli/watch-main.ts
-- name: watch
-- name: director_widen
-  table: decisions
-  column: at
-  where: verb = 'widen'
-  while: EXISTS (SELECT 1 FROM events WHERE kind = 'director' AND outcome = 'pass' AND message GLOB 'widen:*')
-- name: target_parked_once
-  evidence: events rows with kind = 'measure' AND message GLOB 'target_parked:*', at most one per plan per park

@@ -1,0 +1,5 @@
+- name: lua_specialist
+  table: runs
+  column: at
+  where: seat = 'lua_specialist'
+  when: SELECT 1 FROM plans p JOIN plan_files f ON f.plan = p.id WHERE p.step > 2 AND f.stray = 0 AND f.path GLOB '*.lua'

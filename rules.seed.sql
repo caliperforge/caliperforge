@@ -2,7 +2,10 @@ INSERT INTO rules (id, kind, path, content_hash, loaded_at)
 VALUES
   ('rules/rails.yaml', 'rail', 'rules/rails.yaml', 'b46b445806d399b61887a5259eb0a6893444efcbe5acf2e6dd534507bc0882f3', '2026-09-17'),
   ('rules/tight.md', 'card', 'rules/tight.md', '9c885ed2e62d432d95211fec25387da43261cd643e4eb56f73b00b9689a6e479', '2026-09-17'),
-  ('rules/registry.yaml', 'card', 'rules/registry.yaml', 'bb54cc8a0bb97a463db610335290bc96b9b85e24adfa3cba9d7a318dd11a8507', '2026-10-04'),
+  ('rules/registry.yaml', 'card', 'rules/registry.yaml', '7fbed200cdb259626a9840d58eb944b06c2ddede8d32fc4c301a4668e2c9e5f7', '2026-10-04'),
+  ('rules/registry/20-lua_specialist.yaml', 'card', 'rules/registry/20-lua_specialist.yaml', '8a4f692d3c81f14350304929a35b7b6a50041a7dd7da54e9527e809dcf8fe613', '2026-10-04'),
+  ('rules/registry/21-rust_specialist.yaml', 'card', 'rules/registry/21-rust_specialist.yaml', '317ee698a3cd9298f9660830cd98b907c37994a4b86e96764a3f20a7a36e3f06', '2026-10-04'),
+  ('rules/registry/22-gardener.yaml', 'card', 'rules/registry/22-gardener.yaml', '5cf9364803a3b8c01bb86b73c1f8b559ebba2dc976ba43cfb972a33d4e911443', '2026-10-04'),
   ('rules/registry/23-ratchet.yaml', 'card', 'rules/registry/23-ratchet.yaml', 'bdddec1387f5d3170f08400c6a1739b447b9fce3afdd4118b49edefdbe243db4', '2026-10-06'),
   ('rules/registry/24-accounts.yaml', 'card', 'rules/registry/24-accounts.yaml', '2f161bdc31bb2742e4228745f3ee84d34673bf19d54088cb5d0da7ae9460fa0d', '2026-10-06'),
   ('rules/registry/25-records.yaml', 'card', 'rules/registry/25-records.yaml', '4e805b48d48a9c07e6926640b1b6aec52b4ed32dfbc67a3dd4bb827ae659f63f', '2026-10-06'),

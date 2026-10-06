@@ -1,0 +1,10 @@
+- name: gardener
+  table: gardens
+  column: day
+  gap: 2d
+  while: >-
+    EXISTS (SELECT 1 FROM pipes p WHERE p.name = 'internal' AND p.enabled = 1
+    AND (SELECT count(*) < p.max_concurrent AND coalesce(min(priority), 9) > 2 FROM plans
+    WHERE pipe_id = p.id AND state IN ('queued', 'running')))
+    AND (SELECT count(*) FROM gardens g JOIN tickets t ON g.url = 'https://github.com/' || t.repo || '/issues/' || t.number
+    WHERE t.closed_at IS NULL) < 2

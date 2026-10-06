@@ -274,6 +274,39 @@ test('D1 D2 D3 pre-pr rounds move -next; push sends the branch', async () => {
     'open acme/widget caliperforge:widget-12-a1'])
 })
 
+/** The checkout signs through `gpg`, and HEAD is amended to a head no tip carries yet. */
+function signer(w: World, gpg: string): (args: string[]) => string {
+  const src = srcDir(w.root, 1)
+  const git = (args: string[]): string => execFileSync('git', args, { cwd: src, encoding: 'utf8' }).trim()
+  const program = join(w.root, 'gpg.sh')
+  writeFileSync(program, `#!/bin/sh\ncat >/dev/null\n${gpg}\n`, { mode: 0o755 })
+  git(['config', 'commit.gpgsign', 'true'])
+  git(['config', 'gpg.program', program])
+  writeFileSync(join(src, 'src/hello.ts'), 'export const hello = (): string => "signed"\n')
+  git(['-c', 'commit.gpgsign=false', '-c', 'user.email=cf@caliperforge.dev', '-c', 'user.name=caliperforge',
+    'commit', '-qa', '--amend', '--no-edit'])
+  return git
+}
+
+test('D1 a -next tip is signed where the checkout signs', async () => {
+  const w = await atBatch()
+  const git = signer(w, String.raw`printf '\n[GNUPG:] SIG_CREATED \n' >&2
+printf -- '-----BEGIN PGP SIGNATURE-----\n\nc2ln\n-----END PGP SIGNATURE-----\n'`)
+  const { tip: signed } = next(w.root, plan(w.db, 1), 'acme/widget', watched([], w.root, 1))
+  expect(get(w.root, 1, 'next.tips')).toContain(`${signed} ${git(['rev-parse', 'HEAD'])}\n`)
+  expect(git(['cat-file', 'commit', signed])).toMatch(/^gpgsig /m)
+  expect(git(['show', `${signed}:greptile.json`])).toBe('{"autoReview": []}')
+})
+
+test('D4 a signature that fails sends no unsigned tip', async () => {
+  const w = await atBatch()
+  signer(w, 'exit 1')
+  const tips = get(w.root, 1, 'next.tips')
+  const sent: string[] = []
+  expect(() => next(w.root, plan(w.db, 1), 'acme/widget', watched(sent, w.root, 1))).toThrow()
+  expect([sent, get(w.root, 1, 'next.tips')]).toEqual([[], tips])
+})
+
 async function refollowed(handback: string): Promise<{ w: World; wire: Wire; git: (args: string[]) => string; again: () => void }> {
   const w = world()
   approve(w.db, w.target)

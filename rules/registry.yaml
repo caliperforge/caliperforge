@@ -156,16 +156,3 @@
   table: records
   column: read_at
   gap: 1d
-- name: dispositions
-  table: dispositions
-  column: id
-- name: signoffs
-  table: events
-  column: at
-  where: kind = 'signoff'
-  gap: 7d
-- name: proposals
-  table: approvals
-  column: approved_at
-  where: subject_kind = 'proposal'
-  while: EXISTS (SELECT 1 FROM proposals WHERE state = 'open')

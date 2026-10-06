@@ -1,0 +1,5 @@
+- name: signoffs
+  table: events
+  column: at
+  where: kind = 'signoff'
+  gap: 7d

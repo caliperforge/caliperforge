@@ -1,0 +1,5 @@
+- name: proposals
+  table: approvals
+  column: approved_at
+  where: subject_kind = 'proposal'
+  while: EXISTS (SELECT 1 FROM proposals WHERE state = 'open')

@@ -2,7 +2,10 @@ INSERT INTO rules (id, kind, path, content_hash, loaded_at)
 VALUES
   ('rules/rails.yaml', 'rail', 'rules/rails.yaml', 'b46b445806d399b61887a5259eb0a6893444efcbe5acf2e6dd534507bc0882f3', '2026-09-17'),
   ('rules/tight.md', 'card', 'rules/tight.md', '9c885ed2e62d432d95211fec25387da43261cd643e4eb56f73b00b9689a6e479', '2026-09-17'),
-  ('rules/registry.yaml', 'card', 'rules/registry.yaml', 'ad1094797f735683ab7df718b94bf8371025d38cee213b31a11d9f58b7db1a02', '2026-10-04'),
+  ('rules/registry.yaml', 'card', 'rules/registry.yaml', '0789f33c70811b9f05559a09e6f6c86eaf58c0f17c135ab88b0bceea5ce65119', '2026-10-04'),
+  ('rules/registry/26-dispositions.yaml', 'card', 'rules/registry/26-dispositions.yaml', '419ec098837238da47223cbb7f45cca4a9e595e52e2e2dc4fad3f5d40c193488', '2026-10-06'),
+  ('rules/registry/27-signoffs.yaml', 'card', 'rules/registry/27-signoffs.yaml', '23ca902dc6101c529dcf0a111663564a6078552937afc941e461890a0f944527', '2026-10-06'),
+  ('rules/registry/28-proposals.yaml', 'card', 'rules/registry/28-proposals.yaml', '53f992792520ecc98d04cd1d80a2ffbd578173c85a15100204e771b8a85429ff', '2026-10-06'),
   ('rules/registry/29-ratchet_refuse.yaml', 'card', 'rules/registry/29-ratchet_refuse.yaml', 'b377b0b7fcbc9125888c10b1dc1cb5c864f7381bbb2b645298cc8b698e794863', '2026-10-04'),
   ('rules/registry/30-intake.yaml', 'card', 'rules/registry/30-intake.yaml', '4d0eff3ecb4de586a8dbb3e20a1c463f074341a1cd1cdd389988a7808006dd70', '2026-10-04'),
   ('rules/registry/31-stuck_plans.yaml', 'card', 'rules/registry/31-stuck_plans.yaml', 'ab3b3d5f898d9dfe485eb605b401c2ba8e9566e121b3110b3ae6b5868596be69', '2026-10-04'),

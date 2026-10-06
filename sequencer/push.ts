@@ -187,10 +187,11 @@ function tipOf(root: string, plan: number, head: Head, ci: string, repo: string)
   return tip
 }
 
-/** HEAD plus `greptile.json` turning Greptile's own reviews off, signed as the host is (#939: an unsigned tip turns the target's PR hygiene red). */
+/** HEAD plus the rehearsal's `greptile.json`, signed as the host is (an unsigned tip turns the target's PR hygiene red). */
 function quiet(dir: string, ci: string, greptile: string): string {
   const env = { ...process.env, GIT_INDEX_FILE: join(git(dir, ['rev-parse', '--absolute-git-dir']).trim(), 'next.index') }
-  const index = (args: string[]): string => execFileSync('git', args, { cwd: dir, encoding: 'utf8', env, stdio: ['ignore', 'pipe', 'pipe'] }).trim()
+  const index = (args: string[]): string =>
+    execFileSync('git', args, { cwd: dir, encoding: 'utf8', env, stdio: ['ignore', 'pipe', 'pipe'] }).trim()
   const blob = execFileSync('git', ['hash-object', '-w', '--stdin'], { cwd: dir, encoding: 'utf8', input: greptile }).trim()
   index(['read-tree', 'HEAD'])
   index(['update-index', '--add', '--cacheinfo', `100644,${blob},greptile.json`])

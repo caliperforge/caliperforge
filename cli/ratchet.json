@@ -95,9 +95,6 @@
   "tests/part.test.ts": {
     "prepare": 2
   },
-  "tests/plan.test.ts": {
-    "prepare": 15
-  },
   "tests/proposal-world.ts": {
     "prepare": 7
   },

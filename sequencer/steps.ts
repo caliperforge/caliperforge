@@ -5,7 +5,7 @@ import { parse } from '../rails/diff.ts'
 import { building, filesOf, recorded, sharing, strays as recordStrays } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
 import { partsOf } from '../store/parts.ts'
-import { waitsFor } from '../store/slot.ts'
+import { holder, waitsFor } from '../store/slot.ts'
 import { builderRan, held, internal, needsCeo, originIssue, originRef, waiting, type PlanRow, type Wait } from '../store/plans.ts'
 import { capture, desk, facts, gather, pack, score, steps as comms } from '../templates/comms.ts'
 import { at, last, steps, type Step } from '../templates/pr-path.ts'
@@ -114,7 +114,7 @@ export function kernel(db: Db, root: string, plan: PlanRow, wire?: Wire, read?: 
 function railed(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
   const judged = preReview(db, root, plan, wire)
   const repo = repoOf(db, plan)
-  if (judged.outcome === 'pass' && judged.held !== true && repo !== null && waitsFor(db, plan) === null) reviewable(db, root, plan, repo, wire)
+  if (judged.outcome === 'pass' && judged.held !== true && repo !== null && holder(db, plan) === null) reviewable(db, root, plan, repo, wire)
   return judged
 }
 

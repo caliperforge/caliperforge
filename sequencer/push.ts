@@ -102,7 +102,7 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
   const holder = waitsFor(db, plan)
   if (holder !== null) return { outcome: 'pass', held: true, spans: ['fork.slot'], note: `waits for plan ${String(holder)}'s fork CI` }
   const { fork, head, ci, tip } = sent(root, plan, repo, wire)
-  if (!internal(plan)) { wire.rehearse?.(fork, ci); took(db, plan.id) }
+  if (!internal(plan)) { wire.rehearse?.(fork, ci); took(db, plan) }
   const on = { fork, branch: ci, sha: tip }
   const { verdict, board } = judge(on, { body: '', commits: commits(head.dir), issue_ref: profile(root, repo)?.issue_ref }, touched(root, plan.id), wire.runs)
   put(root, plan.id, BOARD, `${JSON.stringify(board)}\n`)
@@ -142,7 +142,7 @@ export function reviewable(db: Db, root: string, plan: PlanRow, repo: string, wi
   if (internal(plan)) return
   const { fork, ci } = sent(root, plan, repo, wire)
   wire.rehearse?.(fork, ci)
-  took(db, plan.id)
+  took(db, plan)
 }
 
 export function sent(root: string, plan: PlanRow, repo: string, wire: Wire): { fork: string; head: Head; ci: string; tip: string } {

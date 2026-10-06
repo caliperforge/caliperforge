@@ -2,8 +2,8 @@ import { expect, test } from 'vitest'
 import { kindsOf } from '../../store/events.ts'
 import { record as recordFiles } from '../../store/files.ts'
 import { priority, width } from '../../store/lanes.ts'
-import { addPipe, needsCeo, pipeNamed, putPlan } from '../../store/plans.ts'
-import { took, waitsFor } from '../../store/slot.ts'
+import { addPipe, needsCeo, pipeNamed, putPlan, resume } from '../../store/plans.ts'
+import { holder, took, waitsFor } from '../../store/slot.ts'
 import { addTarget, targetRow } from '../../store/targets.ts'
 import { tick } from '../index.ts'
 import type { Wire } from '../push.ts'
@@ -29,7 +29,7 @@ function pair(): World {
   addPipe(w.db, { name: 'closed', enabled: 0, window_start: '00:00', window_end: '23:59', max_concurrent: 1 })
   putPlan(w.db, { id: HOLDER, pipe_id: pipeNamed(w.db, 'closed')?.id ?? 0, target_id: issue(w, 14), template: 'pr_path',
     state: 'running', queued_at: AT, step: 6, retries: 0 })
-  took(w.db, HOLDER)
+  took(w.db, plan(w.db, HOLDER))
   return w
 }
 
@@ -70,6 +70,7 @@ test('D1 D2 D5: P0 is sent first, P1 after its verdict', async () => {
   await atReady(w, log)
   needsCeo(w.db, plan(w.db, HOLDER))
   expect(waitsFor(w.db, plan(w.db, 1))).toBe(SECOND)
+  expect(holder(w.db, plan(w.db, 1))).toBeNull()
 
   await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire(log, w))
   expect(sends(log)).toEqual([expect.stringMatching(/^send .*widget-13-a1-next$/), 'rehearse caliperforge/widget widget-13-a1-next'])
@@ -95,7 +96,7 @@ test('D3: at equal priority the lower id is sent first', async () => {
   expect(sent(w, SECOND)).toBe(false)
 })
 
-test('D5 D6: the holder never waits; an internal plan is not held', () => {
+test('D5 D6: a departed holder loses the slot; internal is free', () => {
   const w = pair()
   expect(waitsFor(w.db, plan(w.db, HOLDER))).toBeNull()
   expect(waitsFor(w.db, plan(w.db, 1))).toBe(HOLDER)
@@ -103,4 +104,7 @@ test('D5 D6: the holder never waits; an internal plan is not held', () => {
   expect(waitsFor(w.db, plan(w.db, 4))).toBeNull()
   needsCeo(w.db, plan(w.db, HOLDER))
   expect(waitsFor(w.db, plan(w.db, 1))).toBeNull()
+  took(w.db, plan(w.db, 1))
+  resume(w.db, HOLDER)
+  expect(waitsFor(w.db, plan(w.db, HOLDER))).toBe(1)
 })

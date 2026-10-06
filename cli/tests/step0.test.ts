@@ -2,8 +2,12 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, it } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
+import { stepped } from '../../sequencer/settle.ts'
 import { measure as stepZero } from '../../sequencer/steps.ts'
-import { plan, world } from '../../sequencer/tests/world.ts'
+import { CARRIED, plan, stub, world } from '../../sequencer/tests/world.ts'
+import { eventsOf } from '../../store/events.ts'
+import { take } from '../../store/leases.ts'
+import { rewind } from '../../store/plans.ts'
 import type { Issue, Read } from '../gh.ts'
 import { foreign, implemented, WINDOW } from '../gh.ts'
 import { measure } from '../measure.ts'
@@ -208,6 +212,31 @@ it('PRs opened in pace.days at pace.prs hold; older do not count', () => {
   expect(stepZero(w.db, w.root, plan(w.db, 1), ours(0, [1, 30]))).toMatchObject({ outcome: 'refuse', held: true,
     note: 'target_parked: pace: 1 opened in acme/widget in the last 7 days, cap 1' })
   expect(stepZero(w.db, w.root, plan(w.db, 1), ours(0, [8, 30]))).toMatchObject(PASS)
+})
+
+it('a pace park logs once per park and rule text, not per tick', async () => {
+  const w = intake('{ pace: { prs: 1, days: 7 } }')
+  const lease = take(w.db, 1)
+  if (lease === null) throw new Error('plan 1 is leased')
+  const tick = (read: Read): Promise<unknown> => stepped(w.db, w.root, w.pipe, plan(w.db, 1), lease, stub(CARRIED), undefined, read)
+  const parks = (): string[] => eventsOf(w.db, 1, 'measure').map((e) => e.message).filter((m) => m.startsWith('target_parked:'))
+  for (let n = 0; n < 5; n += 1) {
+    await tick(ours(0, [1]))
+    expect(parks()).toHaveLength(1)
+    expect(plan(w.db, 1).wait_reason).toBe('target_parked')
+    expect(stepZero(w.db, w.root, plan(w.db, 1), ours(0, [1]))).toMatchObject({ outcome: 'refuse', held: true,
+      note: 'target_parked: pace: 1 opened in acme/widget in the last 7 days, cap 1' })
+  }
+  await tick(ours(0, [1, 2]))
+  await tick(ours(0, [1, 2]))
+  expect(parks()).toEqual(['target_parked: pace: 1 opened in acme/widget in the last 7 days, cap 1',
+    'target_parked: pace: 2 opened in acme/widget in the last 7 days, cap 1'])
+  await tick(ours(0, [8, 30]))
+  expect(eventsOf(w.db, 1, 'measure').at(-1)).toMatchObject({ outcome: 'pass', message: PASS.note })
+  expect(plan(w.db, 1).step).toBe(1)
+  rewind(w.db, 1, 0)
+  await tick(ours(0, [1]))
+  expect(parks()).toHaveLength(3)
 })
 
 it('D5: with neither key set, no --author @me read is made', () => {

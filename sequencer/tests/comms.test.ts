@@ -7,7 +7,8 @@ import type { Provider } from '../../providers/kind.ts'
 import { amend, approved, learnings, learningsIn, paste, placed, postOf, posts, putPost, sentBack } from '../../store/desk.ts'
 import { eventsOf, kindsOf, newestMode, runRows } from '../../store/events.ts'
 import { set, zone } from '../../store/lanes.ts'
-import { addPipe, briefed, dropPlan, end, plansOf, putPlan, requeue } from '../../store/plans.ts'
+import { retried } from '../../store/holds.ts'
+import { addPipe, briefed, dropPlan, end, needsCeo, plansOf, putPlan, requeue, retry } from '../../store/plans.ts'
 import { refusalAt, WHY } from '../../store/refusals.ts'
 import { verdictRows } from '../../store/verdict.ts'
 import { desk, draft, drafted, facts, gather, grow, review } from '../../templates/comms.ts'
@@ -15,7 +16,8 @@ import { tick } from '../index.ts'
 import { weekly as clock } from '../signals.ts'
 import { publish, push } from '../site.ts'
 import { mapOf } from '../steps.ts'
-import { FORK, get, git, maybe, put } from '../workspace.ts'
+import { rule } from '../rule.ts'
+import { afresh, drop, FORK, get, git, maybe, put } from '../workspace.ts'
 import { plan, reads, stub, world, type World } from './world.ts'
 
 const NAMES = ['gather', 'draft', 'facts', 'text_review', 'desk', 'publish', 'capture', 'grow', 'pack', 'score']
@@ -521,6 +523,48 @@ test('deskThenRefused D4: the desk note comes before the refusal', async () => {
   const prompt = await prompted(w)
   expect(prompt).toContain('# Returned from the desk\n\nwarmer')
   expect(prompt.indexOf('# Returned from the desk')).toBeLessThan(prompt.indexOf(REFUSED))
+})
+
+test('retry D1: comms 3 goes to 1; comms 7, pr_path 3 and 4 to 2', () => {
+  const at = (w: World, step: number): number[] => {
+    requeue(w.db, 1, step)
+    return [retry(w.db, plan(w.db, 1)), plan(w.db, 1).step]
+  }
+  expect([at(comms(), 3), at(comms(), 7), at(world(), 3), at(world(), 4)]).toEqual([[1, 1], [2, 2], [2, 2], [2, 2]])
+})
+
+test('retried D2: the writer reruns with the step-3 refusal', async () => {
+  const w = posting('daily 2026-09-27', 3)
+  put(w.root, 1, 'refusal.md', 'item b is unsourced')
+  needsCeo(w.db, plan(w.db, 1))
+  afresh(w.root, 1, retried(w.db, 1, 'ceo'))
+  const prompts: string[] = []
+  const writer = seated(listing(items('a', 'b', 'c')))
+  await tick(w.db, w.root, { ...writer, fire: (packet) => {
+    prompts.push(packet.prompt)
+    return writer.fire(packet)
+  } })
+  expect(ran(w)).toEqual(['writer'])
+  expect(prompts[0]).toContain(`${REFUSED}, keep every item it does not name\n\nitem b is unsourced`)
+})
+
+test('ruledComms D3: a reviewed comms plan gets issue.md', async () => {
+  const w = posting('daily 2026-09-27', 3)
+  await reviewing(w, verdict('wording.reply.md'))
+  expect(rule(w.db, w.root, plan(w.db, 1), 'director', 'keep item b')).toBe('issue.md')
+  expect(get(w.root, 1, 'issue.md')).toContain(`## Answer from the director (${new Date().toISOString().slice(0, 10)})\n\nkeep item b\n`)
+})
+
+test('ruledDraft D4: issue.md goes under # Rulings, none without', async () => {
+  const w = posting('daily 2026-09-27')
+  put(w.root, 1, 'refusal.md', 'was refused')
+  put(w.root, 1, 'issue.md', 'keep item b')
+  const prompt = await prompted(w)
+  expect(prompt).toContain('# Rulings\n\nkeep item b')
+  expect(prompt.indexOf('# Rulings')).toBeLessThan(prompt.indexOf(REFUSED))
+  drop(w.root, 1, 'issue.md')
+  drop(w.root, 1, 'ask.md')
+  expect(await prompted(w)).not.toContain('# Rulings')
 })
 
 test.each(['growth 2026-09-28', 'scorecard 2026-09-28'])('D5: a %s plan passes steps 1 and 3 with no run and no draft', async (title) => {

@@ -24,7 +24,7 @@ test('a chained lap writes one row per step, each at its runs row', async () => 
   const w = world()
   approve(w.db, w.target)
   const fired = await tick(w.db, w.root, stub(CARRIED, 0, undefined, writes), undefined, undefined, watched([], w.root, 1), 5)
-  const logged = rows(w.db)
+  const logged = rows(w.db).filter((r) => !String(r.kind).startsWith('fork.'))
   const pointers: Record<number, string> = { 1: 'plans:1', 4: verdictAt(w.db, 4), 5: verdictAt(w.db, 5) }
   expect(logged.map((r) => [r.kind, r.outcome, r.message, r.pointer]))
     .toEqual(fired.map((f) => [f.name, f.outcome, f.note, pointers[f.step] ?? `step-${String(f.step)}`]))

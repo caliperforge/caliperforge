@@ -6,7 +6,7 @@ import { approve as approveCard } from '../../cli/batch.ts'
 import type { Pr } from '../../cli/gh.ts'
 import { audit } from '../../rails/completion-audit/index.ts'
 import { record as recordVerdict } from '../../rails/record.ts'
-import { decide } from '../../store/approvals.ts'
+import { decide, digestOf } from '../../store/approvals.ts'
 import { deliverablesOf, newest, pushedRow } from '../../store/deliverables.ts'
 import { filesOf, listed } from '../../store/files.ts'
 import { addPart, partAt, partsOf } from '../../store/parts.ts'
@@ -18,7 +18,7 @@ import { tick } from '../index.ts'
 import { kernelPlan } from '../home.ts'
 import type { Fired } from '../kind.ts'
 import type { Wire } from '../push.ts'
-import { repoOf } from '../ready.ts'
+import { readyGate, repoOf } from '../ready.ts'
 import { started } from '../signals.ts'
 import { checkout, diffOf, doneIds, fetchMain, FORK, get, maybe, put, SELF, srcDir } from '../workspace.ts'
 import { built, CARRIED, plan, PR, REFUSE, stub, tip, watched, world, type World } from './world.ts'
@@ -210,13 +210,23 @@ test('D3 the parent still sends asm/1-next and judges its runs', async () => {
   expect(ciGreen(a, 1)).toBe('pass')
 })
 
-test('D4 a refused pre_review leaves the parent on ready proof', async () => {
-  const a = await landed()
+test('D1 D2 a re-cut parent passes ready on its own rails', async () => {
+  const a = await landed(false, true)
   recordVerdict(a.w.db, join(a.w.root, 'rails/authority'), ID, { outcome: 'refuse', subject_digest: '0'.repeat(64), spans: [],
     origin_kind: 'rail', origin_ref: 'authority', message: '', defect_class: 'authority' }, 0)
-  await laps(a, 3, watched([], a.w.root, 1))
+  const wire = watched([], a.w.root, 1)
+  await laps(a, 3, wire)
   expect(plan(a.w.db, 1)).toMatchObject({ step: 6, wait_reason: 'ready_proof' })
   expect(newest(a.w.db, 1)).toMatchObject({ tests_pass: 0 })
+  expect(readyGate(a.w.db, a.w.root, plan(a.w.db, 1), wire).spans).toContain('tests:1 ready.tests')
+
+  built(a.w.root, 1, 'export const recut = true')
+  rewind(a.w.db, 1, 3)
+  await laps(a, 5, wire)
+  expect(plan(a.w.db, 1)).toMatchObject({ step: 7, wait_reason: 'ceo_batch' })
+  expect(verdict(a, 'authority')).toBe('pass')
+  expect(verdict(a, 'ready')).toBe('pass')
+  expect(newest(a.w.db, 1)).toMatchObject({ tests_pass: 1, diff_digest: digestOf(diffOf(a.w.root, 1)) })
 })
 
 /** The parent done, its pull request from asm/1 open. */

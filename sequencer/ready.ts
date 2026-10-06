@@ -16,7 +16,7 @@ import { writable } from './brief.ts'
 import type { Outcome } from './kind.ts'
 import { forkCi, headOf, holding, rehearsalBranch, title, WIRE, type Wire } from './push.ts'
 import { cloned, diffOf, FORK, get, headSha, maybe, put, repoName, srcDir } from './workspace.ts'
-import { assembling, homeOf } from './home.ts'
+import { homeOf } from './home.ts'
 import { learned } from './learn.ts'
 import { baseMoved } from './merge.ts'
 import { unruled } from './unruled.ts'
@@ -186,28 +186,34 @@ function evidenceOf(db: Db, plan: PlanRow): string {
 
 /** Each of the five is a row somebody else wrote: a gate verdict, the ci-green rail, a bot signal, the account pulse. */
 function proof(db: Db, root: string, plan: PlanRow): Proven {
-  const railed = assembling(db, plan) === null ? [plan.id] : partsOf(db, plan.id)
+  const parts = partsOf(db, plan.id)
+  const railed = parts.length === 0 ? [plan.id] : parts
   const src = srcDir(root, plan.id)
-  const forkClean = internal(plan) || !cloned(src) || unruled(root, plan.id, headSha(src)).open.length === 0
+  const head = cloned(src) ? headSha(src) : undefined
+  const forkClean = internal(plan) || head === undefined || unruled(root, plan.id, head).open.length === 0
   return {
     tests_pass: railed.every((id) => passed(db, id, 'gate', 'pre_review')),
     byte_identical_elsewhere: railed.every((id) => passed(db, id, 'gate', 'review')) && passed(db, plan.id, 'gate', 'senior_review'),
     fork_ci_green: passed(db, plan.id, 'rail_id', 'ci-green'),
-    bot_clean: unanswered(db, plan.id) === undefined && forkClean,
+    bot_clean: unanswered(db, plan.id, head) === undefined && forkClean,
     target_warm: internal(plan) || target(db, plan)?.state !== 'parked',
   }
 }
 
-/** A low bot score a later build has answered no longer holds the plan; the bot scores the new head once it is pushed. */
-export function unanswered(db: Db, plan: number): unknown {
-  return db.prepare(`SELECT 1 FROM signals s WHERE s.plan = ? AND s.kind = 'bot_review' AND s.score < 5 AND s.repo NOT GLOB ?
-    AND julianday(s.at) > coalesce((SELECT max(julianday(r.at)) FROM runs r WHERE r.plan = ? AND r.step = 2 AND r.${BUILT}), 0)`)
-    .get(plan, `${FORK}/*`, plan)
+/** A low bot score a later build, or another `head`, has answered no longer holds the plan; the bot scores the new head once it is pushed. */
+export function unanswered(db: Db, plan: number, head?: string): unknown {
+  return db.prepare(`SELECT 1 FROM signals s WHERE s.plan = @plan AND s.kind = 'bot_review' AND s.score < 5 AND s.repo NOT GLOB @fork
+    AND (@head IS NULL OR s.head IS NULL OR s.head = @head)
+    AND julianday(s.at) > coalesce((SELECT max(julianday(r.at)) FROM runs r WHERE r.plan = @plan AND r.step = 2 AND r.${BUILT}), 0)`)
+    .get({ plan, fork: `${FORK}/*`, head: head ?? null })
 }
 
-/** An assembling parent runs no rails or review of its own: each part passed them on the bytes it put on the branch. */
+/** The parts while one ran its rails after the parent's own last `pre_review`: each passed them on the bytes it put on the branch. */
 function partsOf(db: Db, plan: number): number[] {
-  return (db.prepare('SELECT plan FROM parts WHERE parent = ? AND plan IS NOT NULL').all(plan) as { plan: number }[]).map((p) => p.plan)
+  return (db.prepare(`SELECT plan FROM parts WHERE parent = @plan AND plan IS NOT NULL
+    AND (SELECT max(v.id) FROM verdicts v JOIN parts q ON q.plan = v.plan WHERE q.parent = @plan AND v.gate = 'pre_review')
+      > coalesce((SELECT max(id) FROM verdicts WHERE plan = @plan AND gate = 'pre_review'), 0)`)
+    .all({ plan }) as { plan: number }[]).map((p) => p.plan)
 }
 
 function passed(db: Db, plan: number, column: 'gate' | 'rail_id', value: string): boolean {

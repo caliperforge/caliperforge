@@ -16,7 +16,7 @@ export function rule(db: Db, root: string, plan: PlanRow, who: string, text: str
     put(root, plan.id, 'ask.md', `${maybe(root, plan.id, 'ask.md') ?? ''}\n${section}`)
     return 'ask.md'
   }
-  put(root, plan.id, 'issue.md', above(get(root, plan.id, 'issue.md'), section))
+  put(root, plan.id, 'issue.md', above(maybe(root, plan.id, 'issue.md') ?? '', section))
   return 'issue.md'
 }
 

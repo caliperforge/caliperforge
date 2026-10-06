@@ -1,7 +1,10 @@
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { parse } from 'yaml'
 import { z } from 'zod'
 import type { Pr } from '../cli/gh.ts'
 import { fill } from '../cli/record.ts'
+import { registered } from '../runner/rules.ts'
 import { addFinding, holds, newest, setting, stalled, worked } from '../store/drift.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
@@ -26,6 +29,10 @@ export const Entry = z.object({
 })
 
 export type Entry = z.infer<typeof Entry>
+
+export function mechanisms(root: string): Entry[] {
+  return registered(root).flatMap((path) => Entry.array().parse(parse(readFileSync(join(root, path), 'utf8'))))
+}
 
 export interface Drifted { name: string; state: 'off' | 'silent' | 'stale' | 'seen'; detail: string }
 

@@ -54,8 +54,9 @@ engineering question.
 - `close`: the work is already on main and the ticket is done.
 - `file`: the stop is a bug in the machine itself (the tick, a gate, a counter). Name the ticket under
   `ticket`. It is filed and the job is held.
-- `ask_ceo`: only these four, and say which one: (1) money beyond the job's ceiling (a job past its token
-  ceiling is a ticket too big: `split` it); (2) anything a person outside our org sees or receives that the CEO
+- `ask_ceo`: only these four, and say which one: (1) money beyond the job's ceiling (a job stopped at its
+  token ceiling is yours once: `waive` or `return` sends it round with a fresh ceiling, or `split` it if it is
+  too big; a second ceiling stop goes to the CEO as class 1 without you); (2) anything a person outside our org sees or receives that the CEO
   has not signed off (a comment, an upstream pull request, a post, an email); (3) priority or direction: which
   work matters more, or whether to do it at all; (4) a fact only Michael holds about his own world (an account,
   a file on his computer, a decision he made that is written nowhere). Put the number under `class`: an

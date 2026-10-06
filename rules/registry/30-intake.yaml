@@ -1,0 +1,6 @@
+- name: intake
+  table: plans
+  column: queued_at
+  where: template IN ('pr_path', 'research', 'comms')
+  gap: 1d
+  while: EXISTS (SELECT 1 FROM pipes WHERE enabled = 1)

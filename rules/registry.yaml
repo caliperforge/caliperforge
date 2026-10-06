@@ -169,13 +169,3 @@
   column: approved_at
   where: subject_kind = 'proposal'
   while: EXISTS (SELECT 1 FROM proposals WHERE state = 'open')
-- name: ratchet_refuse
-  switch: { key: ratchet.mode, value: refuse }
-- name: intake
-  table: plans
-  column: queued_at
-  where: template IN ('pr_path', 'research', 'comms')
-  gap: 1d
-  while: EXISTS (SELECT 1 FROM pipes WHERE enabled = 1)
-- name: stuck_plans
-  gap: 1h

@@ -68,6 +68,11 @@ test('D4: a fix that fails twice goes to the COO', () => {
   expect(prompt).not.toContain('a second time it goes to the CEO')
 })
 
+test('D1: three alike stops file one machine ticket', () => {
+  expect(seat(root, 'director').prompt.replace(/\n {2}/g, ' ')).toContain(
+    'Three jobs refused alike within a day file one machine ticket without you, and later ones wait on it.')
+})
+
 test('D8: orchestrator is refused, unlisted and unseeded', () => {
   expect(() => seat(root, 'orchestrator')).toThrow(/absent from rules\/roster\.yaml/)
   const ids = rules(root).map((r) => r.id)

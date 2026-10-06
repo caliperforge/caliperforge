@@ -1,0 +1,5 @@
+- name: writer_ship
+  table: runs
+  column: at
+  where: seat = 'writer' AND mode = 'ship'
+  when: SELECT 1 FROM plans WHERE template = 'comms' AND title GLOB 'ship *'

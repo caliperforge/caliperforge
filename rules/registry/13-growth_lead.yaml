@@ -1,0 +1,5 @@
+- name: growth_lead
+  table: runs
+  column: at
+  where: seat = 'growth_lead'
+  gap: 7d

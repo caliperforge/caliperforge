@@ -79,19 +79,3 @@
   where: seat = 'writer' AND mode = 'log'
   gap: 2d
   while: EXISTS (SELECT 1 FROM pipes WHERE name = 'comms' AND enabled = 1)
-- name: writer_ship
-  table: runs
-  column: at
-  where: seat = 'writer' AND mode = 'ship'
-  when: SELECT 1 FROM plans WHERE template = 'comms' AND title GLOB 'ship *'
-- name: writer_weekly
-  table: runs
-  column: at
-  where: seat = 'writer' AND mode = 'weekly'
-  gap: 7d
-  while: EXISTS (SELECT 1 FROM pipes WHERE name = 'comms' AND enabled = 1)
-- name: growth_lead
-  table: runs
-  column: at
-  where: seat = 'growth_lead'
-  gap: 7d

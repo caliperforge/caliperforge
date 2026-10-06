@@ -9,6 +9,7 @@ import { record as recordFiles } from '../store/files.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { BUILT, internal, stampHead, type PlanRow } from '../store/plans.ts'
+import { diffAt } from '../store/refusals.ts'
 import { graded, greptiled } from '../store/signals.ts'
 import type { Step } from '../templates/pr-path.ts'
 import { writable } from './brief.ts'
@@ -54,7 +55,7 @@ export function readyGate(db: Db, root: string, plan: PlanRow, wire?: Wire): Out
   }
   const waiting = forkCi(db, root, plan, repo, wire)
   if (waiting !== null) return waiting
-  const bot = internal(plan) ? '' : greptile(db, root, plan, repo, wire ?? WIRE)
+  const bot = internal(plan) ? '' : greptile(db, root, plan, repo, wire ?? WIRE, row.diff_digest)
   if (typeof bot !== 'string') return bot
   const verdict = readyRail(proofOf(db, root, plan, repo, row))
   recordRail(db, join(root, 'rails/ready'), plan.id, verdict, 0)
@@ -65,7 +66,7 @@ export function readyGate(db: Db, root: string, plan: PlanRow, wire?: Wire): Out
 export const GRADING = 45
 
 /** Nothing leaves our fork with an open P0–P2 Greptile finding at this head, nor below 4/5 with none listed. */
-function greptile(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire): Outcome | string {
+function greptile(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire, diff: string): Outcome | string {
   const sha = headOf(root, plan.id).sha
   const at = `${FORK}/${repoName(repo)}@${sha.slice(0, 12)}`
   const row = graded(db, plan.id, sha)
@@ -77,8 +78,9 @@ function greptile(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire)
   const score = row.score ?? 0
   const { found, ruled, open } = unruled(root, plan.id, sha)
   if (open.length > 0 || (score < 4 && found === 0)) {
-    return { outcome: 'refuse', spans: [`greptile:${String(score)}/5`], message: row.body ?? '', to: 2,
-      note: `Greptile scored ${at} ${String(score)}/5; back to the builder with its findings` }
+    const same = diffAt(db, plan.id, plan.step) === diff
+    return { outcome: 'refuse', spans: [`greptile:${String(score)}/5`], message: row.body ?? '', to: same ? plan.step : 2,
+      note: `Greptile scored ${at} ${String(score)}/5; ${same ? 'the diff is unchanged since the last ready refusal' : 'back to the builder with its findings'}` }
   }
   if (ruled.length === 0) return ''
   logged(db, { plan: plan.id, kind: 'greptile.accepted', actor: 'ready', outcome: 'pass', message: ruled.join(', '), pointer: at, run: null })

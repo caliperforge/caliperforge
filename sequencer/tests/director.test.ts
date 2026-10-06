@@ -30,7 +30,8 @@ import { hold, unhold } from '../hold.ts'
 import type { Wire } from '../push.ts'
 import { rule } from '../rule.ts'
 import { parted } from '../split.ts'
-import { afresh, drop, maybe, planDir, put, srcDir } from '../workspace.ts'
+import { unruled } from '../unruled.ts'
+import { afresh, drop, git, headSha, maybe, planDir, put, srcDir } from '../workspace.ts'
 
 const repo = join(import.meta.dirname, '../..')
 const now = new Date('2026-09-27T09:00:00.000Z')
@@ -182,6 +183,46 @@ test('D2: an unbuilt plan\'s rule goes in ask.md, back to its lane', async () =>
   expect(maybe(live.home, 7, 'ask.md')).toBe(`the ask\n\n${answer()}`)
   expect(plan7(live.db)).toEqual(plan7(twin.db))
   expect(row(live.db).step).toBe(1)
+})
+
+const P2 = '<img alt="P2" src="https://greptile.com/p2.svg">'
+
+function greptileStop() {
+  const { db, home } = seeded('1')
+  db.exec('UPDATE plans SET step = 6 WHERE id = 7')
+  const src = srcDir(home, 7)
+  git(src, ['init', '-q'])
+  git(src, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '--allow-empty', '-m', 'built'])
+  const sha = headSha(src)
+  put(home, 7, `findings-${sha}.md`, `- G11 ${P2} the empty name is never refused\n- G12 ${P2} the port is unchecked\n`)
+  put(home, 7, 'refusal.md', 'step 6 ready refused by kernel\n\nGreptile scored it 3/5\n\nspans:\n  - greptile:3/5\n')
+  return { db, home, sha }
+}
+
+test('D1 D2: a rule on a Greptile stop accepts its open ids', async () => {
+  const { db, home, sha } = greptileStop()
+  put(home, 7, 'rulings.md', '# Rulings\n')
+  await run(db, home, '---\nmove: rule\nwhy: the SDK settles it\nanswer: the SDK   refuses it upstream\n---\n')
+  expect(maybe(home, 7, 'rulings.md')).toBe(
+    `# Rulings\n\naccepted:\n  head: ${sha.slice(0, 12)}\n  ids: G11, G12\n  reason: the SDK refuses it upstream\n`)
+  expect(unruled(home, 7, sha).open).toEqual([])
+  expect(maybe(home, 7, 'issue.md')).toContain('## Answer from the director')
+  expect(row(db)).toMatchObject({ step: 6, state: 'queued' })
+  expect(ofKind(db, 'return').map((e) => e.message)).toEqual(['step 6'])
+})
+
+test('D3: a rails stop or no open ids writes no rulings.md', async () => {
+  const rails = seeded('1')
+  await run(rails.db, rails.home, REPLY.rule ?? '')
+  expect(maybe(rails.home, 7, 'rulings.md')).toBeNull()
+  for (const findings of [null, `- G11 <img alt="P3" src="x"> a nit\n`]) {
+    const { db, home, sha } = greptileStop()
+    if (findings === null) drop(home, 7, `findings-${sha}.md`)
+    else put(home, 7, `findings-${sha}.md`, findings)
+    await run(db, home, REPLY.rule ?? '')
+    expect(maybe(home, 7, 'rulings.md')).toBeNull()
+    expect(row(db).step).toBe(2)
+  }
 })
 
 test('D3: the packet carries sibling plans\' rulings, not others', async () => {

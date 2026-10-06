@@ -97,6 +97,13 @@ export function refusalsOf(db: Db, plan: number): number {
   return (db.prepare('SELECT count(*) AS n FROM refusals WHERE plan = ? AND blip = 0').get(plan) as { n: number }).n
 }
 
+/** The diff of the plan's newest refusal at `step`, cleared or not: a ruling clears refusals, and the diff is unchanged by it. */
+export function diffAt(db: Db, plan: number, step: number): string | null {
+  const row = db.prepare('SELECT diff FROM refusals WHERE plan = ? AND step = ? AND blip = 0 ORDER BY id DESC LIMIT 1')
+    .get(plan, step) as { diff: string | null } | undefined
+  return row?.diff ?? null
+}
+
 export function refusalAt(db: Db, plan: number, blip: number, at: string, fingerprint = '0'.repeat(64)): number {
   return Number(db.prepare('INSERT INTO refusals (plan, step, fingerprint, diff, blip, at) VALUES (?, 0, ?, NULL, ?, ?)')
     .run(plan, fingerprint, blip, at).lastInsertRowid)

@@ -10,6 +10,7 @@ import { addPipe, advance, allPlans, clock, dropPlan, end, inWindow, laneOff, ov
 import { amend, width } from '../../store/lanes.ts'
 import { holdOf, retried } from '../../store/holds.ts'
 import { current } from '../../store/now.ts'
+import { clear } from '../../store/refusals.ts'
 import { dropDeliverables, pushedRow } from '../../store/deliverables.ts'
 import { gates } from '../../store/approvals.ts'
 import { addTarget, setTargetState, targetRow } from '../../store/targets.ts'
@@ -1019,6 +1020,19 @@ test('D8 a 3/5 head with no findings listed goes to the builder', async () => {
     expect(await lap()).toMatchObject({ step: 6, name: 'ready', outcome: 'refuse', spans: ['greptile:3/5'] })
     expect(plan(w.db, 1).step).toBe(2)
   }
+})
+
+test('D4 a 3/5 on an unchanged diff stays at ready', async () => {
+  const [w, lap] = await atReady((at) => { scored(at.root, 1, 3, FINDINGS) })
+  expect(await lap()).toMatchObject({ step: 6, outcome: 'refuse', state: 'retried' })
+  for (let at = 0; plan(w.db, 1).step !== 6 && at < 8; at += 1) await lap()
+  expect(plan(w.db, 1).step).toBe(6)
+  put(w.root, 1, 'issue.md', `${get(w.root, 1, 'issue.md')}\n## Answer from the director\n\nthe SDK refuses it\n`)
+  clear(w.db, 1)
+  expect(await lap()).toMatchObject({ step: 6, outcome: 'refuse', spans: ['greptile:3/5'], state: 'retried' })
+  expect(plan(w.db, 1).step).toBe(6)
+  expect(await lap()).toMatchObject({ step: 6, outcome: 'refuse', spans: ['greptile:3/5'], state: 'blocked_on_ceo' })
+  expect(plan(w.db, 1)).toMatchObject({ step: 6, state: 'blocked_on_ceo' })
 })
 
 /** A new head at ready goes back through rails, review and senior before ready judges it. */

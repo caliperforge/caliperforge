@@ -194,20 +194,3 @@
   column: at
   where: kind = 'look'
   gap: 7d
-- name: typescript_specialist
-  table: runs
-  column: at
-  where: seat = 'typescript_specialist'
-  gap: 2d
-  while: EXISTS (SELECT 1 FROM pipes WHERE name = 'internal' AND enabled = 1)
-- name: daily_learnings
-  table: desk_learnings
-  column: date
-  where: json_array_length(items) > 0
-  gap: 2d
-  while: EXISTS (SELECT 1 FROM pipes WHERE name = 'comms' AND enabled = 1)
-- name: review_examples
-  table: events
-  column: at
-  where: kind = 'examples.learned'
-  gap: 7d

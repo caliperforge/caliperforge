@@ -1,0 +1,6 @@
+- name: typescript_specialist
+  table: runs
+  column: at
+  where: seat = 'typescript_specialist'
+  gap: 2d
+  while: EXISTS (SELECT 1 FROM pipes WHERE name = 'internal' AND enabled = 1)

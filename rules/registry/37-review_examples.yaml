@@ -1,0 +1,5 @@
+- name: review_examples
+  table: events
+  column: at
+  where: kind = 'examples.learned'
+  gap: 7d

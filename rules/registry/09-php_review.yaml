@@ -1,0 +1,6 @@
+- name: php_review
+  table: runs
+  column: at
+  where: seat = 'php_specialist' AND mode = 'review'
+  when: SELECT 1 FROM plans p JOIN plan_files f ON f.plan = p.id WHERE p.step > 4 AND f.stray = 0 AND f.path GLOB '*.php'
+  gap: 7d

@@ -1,0 +1,5 @@
+- name: typescript_review
+  table: runs
+  column: at
+  where: seat = 'typescript_specialist' AND mode = 'review'
+  gap: 7d

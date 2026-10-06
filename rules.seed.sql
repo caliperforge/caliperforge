@@ -2,7 +2,10 @@ INSERT INTO rules (id, kind, path, content_hash, loaded_at)
 VALUES
   ('rules/rails.yaml', 'rail', 'rules/rails.yaml', 'b46b445806d399b61887a5259eb0a6893444efcbe5acf2e6dd534507bc0882f3', '2026-09-17'),
   ('rules/tight.md', 'card', 'rules/tight.md', '9c885ed2e62d432d95211fec25387da43261cd643e4eb56f73b00b9689a6e479', '2026-09-17'),
-  ('rules/registry.yaml', 'card', 'rules/registry.yaml', 'ab74352c6b41f6fed65a3487bddcccbee15185675268536cc12d960d6edb348f', '2026-10-04'),
+  ('rules/registry.yaml', 'card', 'rules/registry.yaml', 'c7e009b31bcfe4bc39af210310dedf5dd0d97c65fea833f4c1d7921f13729bf7', '2026-10-04'),
+  ('rules/registry/08-go_review.yaml', 'card', 'rules/registry/08-go_review.yaml', 'e512eb8a33588fa0249736e65c686f6be58cfba94a15fd2e53a2b61a2d2ad432', '2026-10-04'),
+  ('rules/registry/09-php_review.yaml', 'card', 'rules/registry/09-php_review.yaml', '5a6168184be2ee025023f7a54f98d93bd1c7cbaa2644aa72146c4ad089db5965', '2026-10-04'),
+  ('rules/registry/10-typescript_review.yaml', 'card', 'rules/registry/10-typescript_review.yaml', 'dcf63250338d9f701d3c1b44da0d34c7d7fe9be65256df2ce7d414e506fa7922', '2026-10-04'),
   ('rules/registry/11-brief_writer.yaml', 'card', 'rules/registry/11-brief_writer.yaml', '35990c92b827768465b12194a7bda4a5b7a8e14d73c383840c8c8a71556c3d15', '2026-10-04'),
   ('rules/registry/12-text_review.yaml', 'card', 'rules/registry/12-text_review.yaml', '8a3b3fc3d609a0e6deca3e6411e5f2242aa28dc7b560f1e2ea5c06b2c834342e', '2026-10-04'),
   ('rules/registry/12-writer_log.yaml', 'card', 'rules/registry/12-writer_log.yaml', '3995e86189488b802406786ef138d26447810c793bc979c656c6020f0407291e', '2026-10-04'),

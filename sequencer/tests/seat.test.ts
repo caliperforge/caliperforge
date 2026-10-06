@@ -1,11 +1,11 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
-import { parse } from 'yaml'
 import type { Packet } from '../../providers/kind.ts'
 import { seat } from '../../runner/rules.ts'
 import { newestMode, runRows } from '../../store/events.ts'
 import { at } from '../../templates/pr-path.ts'
+import { mechanisms } from '../drift.ts'
 import { fireLanded, ran } from '../seat.ts'
 import { staffing } from '../staffing.ts'
 import { checkout, put } from '../workspace.ts'
@@ -93,7 +93,7 @@ test('D3 an outside typescript plan keeps code_quality at step 4', async () => {
 })
 
 test('D5 each moded seat has its review-mode registry entry', () => {
-  const entries = parse(readFileSync(join(import.meta.dirname, '../../rules/registry.yaml'), 'utf8')) as Record<string, unknown>[]
+  const entries = mechanisms(join(import.meta.dirname, '../..'))
   for (const name of REVIEWING) {
     const where = `seat = '${name}' AND mode = 'review'`
     expect(entries.filter((e) => e.table === 'runs' && e.column === 'at' && e.where === where && e.gap === '7d')).toHaveLength(1)

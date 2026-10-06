@@ -106,6 +106,16 @@ The machine files each part as its own issue and queues them one at a time. On s
 the split goes to the COO instead, so answer it only when the ask
 really is more than one job.
 
+An ask whose whole deliverable is one command on the machine's allow-list (today only
+`cf gh refile <owner/name#n> <owner/name>`) is not briefed. Close with this fence and nothing after it:
+
+```
+---
+outcome: command
+run: cf gh refile <owner/name#n> <owner/name>
+---
+```
+
 Under `## Approach`, write one line `Estimate: <n> lines`: the lines the change adds and removes, not counting
 tests or generated files. A brief past five files besides tests, on any repository, or on someone else's
 repository past that repository's size limit, is refused as more than one job: answer it with the split fence.

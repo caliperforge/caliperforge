@@ -12,8 +12,9 @@ import { prose } from '../sequencer/prose.ts'
 import { ran } from '../sequencer/seat.ts'
 import { staffed } from '../sequencer/staffing.ts'
 import { scripted, shift, sound, weekly } from '../sequencer/weekly.ts'
-import { get, maybe, put } from '../sequencer/workspace.ts'
+import { drop, get, maybe, put } from '../sequencer/workspace.ts'
 import { edited, returned } from '../store/desk.ts'
+import type { Run } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { packetOf } from '../store/packet.ts'
 import type { PlanRow } from '../store/plans.ts'
@@ -116,10 +117,14 @@ export async function grow(db: Db, root: string, plan: PlanRow, step: Step, prov
 
 const halted = (step: Step, fired: Fired): Outcome => ({ outcome: 'refuse', spans: [fired.stop_reason ?? 'seat.exit'], note: `${step.runs} ${fired.ended}` })
 
+const MODES: Record<string, Run['mode']> = { daily: 'log', ship: 'ship', weekly: 'weekly' }
+
 export async function draft(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
   const title = titled(db, plan, 'daily') ?? titled(db, plan, 'ship') ?? titled(db, plan, 'weekly')
   if (title === null) return { outcome: 'pass', spans: [], note: 'not a post plan' }
-  const fired = await ran(db, root, plan, step, provider, `# packet.json\n\n${get(root, plan.id, 'packet.json')}${returned(db, plan.id)?.replace(/^/, '\n\n# Returned from the desk\n\n') ?? ''}`, false)
+  const input = `# packet.json\n\n${get(root, plan.id, 'packet.json')}${returned(db, plan.id)?.replace(/^/, '\n\n# Returned from the desk\n\n') ?? ''}${
+    maybe(root, plan.id, 'refusal.md')?.replace(/^/, '\n\n# Refused — answer what this names, keep every item it does not name\n\n') ?? ''}`
+  const fired = await ran(db, root, plan, { ...step, mode: MODES[title.slice(0, title.indexOf(' '))] }, provider, input, false)
   if (fired.ended !== 'completed') return halted(step, fired)
   if (titled(db, plan, 'daily') !== null) return listed(root, plan, step, fired.text)
   const reply = drafted(fired.text)
@@ -141,6 +146,7 @@ export async function review(db: Db, root: string, plan: PlanRow, step: Step, pr
   if (judged.outcome === 'refuse') return { outcome: 'refuse', spans: judged.spans, note: judged.message, to: 1 }
   if (judged.outcome === 'needs_ceo') return { outcome: 'needs_ceo', spans: [], note: judged.message }
   put(root, plan.id, 'review.md', judged.message)
+  drop(root, plan.id, 'refusal.md')
   return { outcome: 'pass', spans: [], note: `${step.runs}: review.md written` }
 }
 

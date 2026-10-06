@@ -38,15 +38,25 @@ function tree(files: Record<string, string>): string {
   return dir
 }
 
+const RETURN = '---\nmove: return\nwhy: the builder reverts it\n---\n'
+
 function briefed(): World {
   const w = world('warm', undefined, HANDOUT)
   approve(w.db, w.target)
   return w
 }
 
+/** A fence refusal stops for the director; this one sends it back to the builder. */
+function returning(): World {
+  const w = briefed()
+  w.db.exec(`INSERT INTO settings (key, value, who, origin_kind, origin_ref, set_at)
+    VALUES ('director.apply', '1', 'ceo', 'ruling', 't', '2026-09-28')`)
+  return w
+}
+
 /** The builder's packets, in order; `write` is what each build leaves in the checkout. */
-function builds(packets: Packet[], write?: (cwd: string) => void): Provider {
-  return stub(CARRIED, 0, PASS, (p) => {
+function builds(packets: Packet[], write?: (cwd: string) => void, review = PASS): Provider {
+  return stub(CARRIED, 0, review, (p) => {
     if (!p.tools.includes('Write')) return
     packets.push(p)
     write?.(p.cwd)
@@ -103,9 +113,9 @@ test('a build packet opens with the map of the checkout', async () => {
 })
 
 test('a rebuild gets its refusal, its diff and only their files', async () => {
-  const w = briefed()
+  const w = returning()
   const packets: Packet[] = []
-  const provider = builds(packets, (cwd) => { writeFileSync(join(cwd, 'src/extra.ts'), 'export const extra = 1\n') })
+  const provider = builds(packets, (cwd) => { writeFileSync(join(cwd, 'src/extra.ts'), 'export const extra = 1\n') }, RETURN)
   for (let at = 0; at < 5 && packets.length < 2; at += 1) await tick(w.db, w.root, provider)
   const again = packets[1]?.prompt ?? ''
   expect(again).toContain('# Refused — rebuild only these spans')
@@ -115,21 +125,21 @@ test('a rebuild gets its refusal, its diff and only their files', async () => {
 })
 
 test('D1 a later ruling in ask.md reaches the next builder', async () => {
-  const w = briefed()
+  const w = returning()
   const packets: Packet[] = []
   const provider = builds(packets, (cwd) => {
     writeFileSync(join(cwd, 'src/extra.ts'), 'export const extra = 1\n')
     appendFileSync(join(cwd, '..', 'ask.md'), '## Ruling\n\nuse bye()\n')
-  })
+  }, RETURN)
   for (let at = 0; at < 5 && packets.length < 2; at += 1) await tick(w.db, w.root, provider)
   expect(packets[1]?.prompt).toContain('# What the ask holds beyond this brief\n\n## Ruling\n\nuse bye()')
   expect(packets[0]?.prompt).not.toContain('use bye()')
 })
 
 test('D2 a fixer answer in issue.md reaches the next builder', async () => {
-  const w = briefed()
+  const w = returning()
   const packets: Packet[] = []
-  const provider = builds(packets, (cwd) => { writeFileSync(join(cwd, 'src/extra.ts'), 'export const extra = 1\n') })
+  const provider = builds(packets, (cwd) => { writeFileSync(join(cwd, 'src/extra.ts'), 'export const extra = 1\n') }, RETURN)
   for (let at = 0; at < 5 && packets.length < 1; at += 1) await tick(w.db, w.root, provider)
   expect(rule(w.db, w.root, PlanRow.parse(w.db.prepare('SELECT * FROM plans WHERE id = 1').get()), 'fixer', 'use bye()')).toBe('issue.md')
   for (let at = 0; at < 5 && packets.length < 2; at += 1) await tick(w.db, w.root, provider)

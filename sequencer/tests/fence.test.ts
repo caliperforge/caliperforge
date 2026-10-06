@@ -2,15 +2,20 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
+import { runRows } from '../../store/events.ts'
+import { refusalsOf } from '../../store/refusals.ts'
+import { cooLite } from '../director.ts'
 import { broken, deletions, renumbered, strays } from '../fence.ts'
 import { tick } from '../index.ts'
 import { get, srcDir } from '../workspace.ts'
-import { CARRIED, internalPlan, ours, plan, stub, world, type World } from './world.ts'
+import { CARRIED, internalPlan, ours, plan, stub, watched, world, type World } from './world.ts'
 
 const ID = 2
 const LISTED = ['sequencer/fence.ts', 'sequencer/rails.ts']
 const OWNED = '## Outside the files\n\n- `cli/extra.ts` — the command the ask names lives there\n'
 const OWNS = CARRIED.replace('built\n\n', `built\n\n${OWNED}\n`)
+const RULE = '---\nmove: rule\nwhy: the ask needs it\nanswer: the command the ask names lives in cli/extra.ts\n---\n'
+const RETURN = '---\nmove: return\nwhy: the builder reverts it\n---\n'
 
 function mine(): World {
   const w = world()
@@ -25,12 +30,21 @@ async function stray(handback: string): Promise<{ w: World; rails: unknown }> {
   return { w, rails: await strayed(w, handback) }
 }
 
-async function strayed(w: World, handback: string, before = (): unknown => null): Promise<unknown> {
+async function strayed(w: World, handback: string, before = (): unknown => null, director?: string): Promise<unknown> {
   for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(handback))
   mkdirSync(join(srcDir(w.root, ID), 'cli'), { recursive: true })
   writeFileSync(join(srcDir(w.root, ID), 'cli/extra.ts'), 'export const extra = 1\n')
   before()
-  return (await tick(w.db, w.root, stub(handback)))[0]
+  return (await tick(w.db, w.root, stub(handback, 0, director)))[0]
+}
+
+async function directed(move: string): Promise<World> {
+  const w = mine()
+  await strayed(w, CARRIED, undefined, RULE)
+  w.db.exec(`INSERT INTO settings (key, value, who, origin_kind, origin_ref, set_at)
+    VALUES ('director.apply', '1', 'ceo', 'ruling', 't', '2026-09-28')`)
+  await cooLite(w.db, w.root, plan(w.db, ID), stub(CARRIED, 0, move), new Date(), () => undefined, watched([], w.root, ID))
+  return w
 }
 
 test('listed, beside a listed file, or filled by step 3', () => {
@@ -53,22 +67,50 @@ test('a row owns a stray only with its reason, under its heading', () => {
   expect(strays(['cli/extra.ts'], LISTED, OWNED.replace('## Outside the files', '## Notes'))).toEqual(['cli/extra.ts'])
 })
 
+test('D6 a brief row owns a stray only with its reason', () => {
+  expect(strays(['cli/extra.ts'], LISTED, '', OWNED)).toEqual([])
+  expect(strays(['cli/extra.ts'], LISTED, '', '## Outside the files\n\n- `cli/extra.ts`\n')).toEqual(['cli/extra.ts'])
+})
+
 test('an owned stray passes the rails and goes to review', async () => {
   const { w, rails } = await stray(OWNS)
   expect(rails).toMatchObject({ plan: ID, step: 3, name: 'rails', outcome: 'pass' })
   expect(plan(w.db, ID).step).toBe(4)
 })
 
-test('an unowned stray refuses at the rails; owning it passes', async () => {
-  const { w, rails } = await stray(CARRIED)
+test('D1 an unowned stray stops for the director', async () => {
+  const w = mine()
+  const rails = await strayed(w, CARRIED, undefined, RULE)
   expect(rails).toMatchObject({ plan: ID, step: 3, name: 'rails', outcome: 'refuse', spans: ['cli/extra.ts:1 authority.outside_files'] })
   expect(w.db.prepare('SELECT 1 FROM runs WHERE plan = ? AND step > 3').all(ID)).toEqual([])
-  expect(plan(w.db, ID).step).toBe(2)
+  expect(plan(w.db, ID)).toMatchObject({ state: 'blocked_on_ceo', step: 3 })
+  expect(runRows(w.db).filter((r) => r.plan === ID && r.seat === 'director')).toHaveLength(1)
   for (const part of ['cli/extra.ts', '- `cli/extra.ts` — ']) expect(get(w.root, ID, 'refusal.md')).toContain(part)
-  await tick(w.db, w.root, stub(OWNS))
-  writeFileSync(join(srcDir(w.root, ID), 'cli/extra.ts'), 'export const extra = 1\n')
-  expect((await tick(w.db, w.root, stub(OWNS)))[0]).toMatchObject({ plan: ID, step: 3, name: 'rails', outcome: 'pass' })
+})
+
+test('D2 a director rule owns the stray; the rails pass', async () => {
+  const w = await directed(RULE)
+  expect(get(w.root, ID, 'issue.md')).toContain('## Outside the files\n\n- `cli/extra.ts` — the command the ask names lives in cli/extra.ts\n')
+  expect(plan(w.db, ID)).toMatchObject({ state: 'queued', step: 3 })
+  expect((await tick(w.db, w.root, stub(CARRIED)))[0]).toMatchObject({ plan: ID, step: 3, name: 'rails', outcome: 'pass' })
   expect(plan(w.db, ID).step).toBe(4)
+})
+
+test('D3 a director return sends the stray to the builder', async () => {
+  const w = await directed(RETURN)
+  expect(plan(w.db, ID)).toMatchObject({ state: 'running', step: 2 })
+  expect(refusalsOf(w.db, ID)).toBe(1)
+})
+
+test('D4 a frozen migration goes back to the builder', async () => {
+  const w = mine()
+  for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  mkdirSync(join(srcDir(w.root, ID), 'schema'), { recursive: true })
+  writeFileSync(join(srcDir(w.root, ID), 'schema/0001_x.sql'), 'SELECT 1;\n')
+  const rails = (await tick(w.db, w.root, stub(CARRIED, 0, RULE)))[0]
+  expect(rails).toMatchObject({ plan: ID, step: 3, outcome: 'refuse', spans: ['schema/0001_x.sql:1 authority.frozen_schema'] })
+  expect(plan(w.db, ID).step).toBe(2)
+  expect(runRows(w.db).filter((r) => r.seat === 'director')).toEqual([])
 })
 
 test('D5 no profiles: the write fence refuses an unowned stray', async () => {

@@ -14,6 +14,7 @@ import { builder, type Step } from '../templates/pr-path.ts'
 import { answered, check, gather } from '../templates/research.ts'
 import type { Fired, Outcome } from './kind.ts'
 import { parted } from './split.ts'
+import { executed } from './command.ts'
 import { refilled } from './refill.ts'
 import type { Wire } from './push.ts'
 import { fireBrief, fireLanded, fireSeat } from './seat.ts'
@@ -128,6 +129,7 @@ function treeOf(db: Db, root: string, plan: PlanRow): { repo: string; branch: st
 async function made(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider, wire?: Wire, read?: Read): Promise<Outcome> {
   try {
     const out = await fire(db, root, plan, step, provider, wire, read)
+    if (out.command !== undefined) return executed(db, root, plan, out.command)
     return out.parts === undefined ? out : parted(db, root, plan, out.parts, wire)
   } catch (error) {
     return thrown(step, error instanceof Error ? error.message : String(error))
@@ -182,7 +184,7 @@ function model(db: Db, plan: PlanRow, step: Step, run: () => Promise<Outcome>): 
 function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcome): string {
   if (outcome.held === true) return 'running'
   if (outcome.blip === true) return blip(db, root, plan, step, outcome)
-  if (outcome.split === true) {
+  if (outcome.split === true || outcome.ran === true) {
     end(db, plan.id, 'done')
     return 'done'
   }
@@ -216,7 +218,11 @@ function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcom
   }
   // A rewind costs no retry but is recorded like any refusal, so a second identical one waits for a person.
   if (outcome.rewind !== undefined && why === 'again') { rewind(db, plan.id, outcome.rewind); return 'running' }
-  return back(db, plan, outcome.to ?? backTo(step), why !== 'again', outcome.note)
+  return back(db, plan, outcome.to ?? backTo(step), why !== 'again' || fenced(outcome), outcome.note)
+}
+
+function fenced(outcome: Outcome): boolean {
+  return outcome.spans.length > 0 && outcome.spans.every((s) => / authority\.(?:outside_files|write_paths)$/.test(s))
 }
 
 /** Step 2 is the build in templates/pr-path.ts. */

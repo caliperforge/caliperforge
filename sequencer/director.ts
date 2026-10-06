@@ -22,7 +22,7 @@ import { released } from './fixer.ts'
 import { prose } from './prose.ts'
 import { builderWork, outOfReach, WAITING } from './reach.ts'
 import { WIRE, type Wire } from './push.ts'
-import { rule } from './rule.ts'
+import { fenced, owned, rule } from './rule.ts'
 import { recorded } from './seat.ts'
 import { parted } from './split.ts'
 import { ticketed } from './ticket.ts'
@@ -227,7 +227,7 @@ function apply(db: Db, root: string, plan: PlanRow, m: Move, wire: Wire, now: Da
       const to = rule(db, root, plan, 'director', m.answer ?? '')
       if (to === null) return false
       if (to === 'ask.md') unhold(db, root, plan.id, 'director')
-      else afresh(root, plan.id, db.transaction(() => { clear(db, plan.id); return retry(db, plan) })())
+      else afresh(root, plan.id, owned(root, plan, m.answer ?? '') ? returnToLane(db, plan.id, 'director') : db.transaction(() => { clear(db, plan.id); return retry(db, plan) })())
       const ref = originRef(plan)
       if (ref !== null) wire.comment(ref.repo, ref.no, `Ruled by director on plan ${String(plan.id)}.\n\n${m.answer ?? ''}`)
       return true
@@ -247,7 +247,7 @@ function apply(db: Db, root: string, plan: PlanRow, m: Move, wire: Wire, now: Da
     case 'file':
       return ticketed(db, root, plan, m.ticket ?? m.why, `Filed by director on plan ${String(plan.id)}.\n\n${m.why}`, m.why, wire, now)
     case 'return':
-      afresh(root, plan.id, returnToLane(db, plan.id, 'director'))
+      afresh(root, plan.id, fenced(root, plan) ? retry(db, plan) : returnToLane(db, plan.id, 'director'))
       return true
     case 'fix':
     case 'ask_ceo':

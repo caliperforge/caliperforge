@@ -297,7 +297,7 @@ printf -- '-----BEGIN PGP SIGNATURE-----\n\nc2ln\n-----END PGP SIGNATURE-----\n'
   const { tip: signed } = next(w.root, plan(w.db, 1), 'acme/widget', watched([], w.root, 1))
   expect(get(w.root, 1, 'next.tips')).toContain(`${signed} ${git(['rev-parse', 'HEAD'])}\n`)
   expect(git(['cat-file', 'commit', signed])).toMatch(/^gpgsig /m)
-  expect(git(['show', `${signed}:greptile.json`])).toBe('{"autoReview": []}')
+  expect(JSON.parse(git(['show', `${signed}:greptile.json`])) as unknown).toEqual(QUIET)
 })
 
 test('D4 a signature that fails sends no unsigned tip', async () => {

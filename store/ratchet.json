@@ -45,9 +45,6 @@
   "plans.ts": {
     "lines": 304
   },
-  "profile.ts": {
-    "lines": 56
-  },
   "proposals.ts": {
     "lines": 66
   },
@@ -59,9 +56,6 @@
   },
   "signals.ts": {
     "lines": 41
-  },
-  "slot.ts": {
-    "lines": 39
   },
   "tickets.ts": {
     "lines": 94,

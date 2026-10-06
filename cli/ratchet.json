@@ -18,7 +18,7 @@
     "lines": 228
   },
   "cf.ts": {
-    "lines": 194,
+    "lines": 179,
     "silent-catch": 2
   },
   "digests.ts": {
@@ -66,9 +66,6 @@
   "record.ts": {
     "lines": 62,
     "prepare": 4
-  },
-  "refile.ts": {
-    "lines": 30
   },
   "scan.ts": {
     "lines": 77,

@@ -8,7 +8,7 @@ import { flow } from '../../cli/flow.ts'
 import { WINDOW, type Read } from '../../cli/gh.ts'
 import { gates } from '../../store/approvals.ts'
 import { pushedRow } from '../../store/deliverables.ts'
-import { ofKind } from '../../store/events.ts'
+import { ofKind, pointers } from '../../store/events.ts'
 import { addRule, type Db } from '../../store/index.ts'
 import { addPart, allParts } from '../../store/parts.ts'
 import { addPipe, addPlan, allPlans, laneOff, pipeNamed, type PlanRow } from '../../store/plans.ts'
@@ -16,7 +16,7 @@ import { allTickets, recordListing } from '../../store/tickets.ts'
 import { question } from '../../templates/research.ts'
 import { intake } from '../capture.ts'
 import { tick } from '../index.ts'
-import { maybe } from '../workspace.ts'
+import { maybe, OPERATOR } from '../workspace.ts'
 import { CARRIED, stub } from './world.ts'
 
 const schema = join(import.meta.dirname, '../../schema')
@@ -39,12 +39,14 @@ function canned(rows: Fixture[], log: string[] = [], closed: Fixture[] = []): Re
   return (args) => {
     log.push(args.join(' '))
     const shaped = rows.map(shape)
+    if (args[0] === 'pr') return []
     if (args[1] === 'list') return args[5] === 'closed' ? closed.map(shape) : shaped
     if (args[0] === 'api') {
       const no = Number(args[1]?.split('/').at(-1))
       return { sub_issues_summary: { total: rows.find((r) => r.number === no)?.parts ?? 0 } }
     }
     const hit = shaped.find((r) => String(r.number) === args[2])
+    if (args.at(-1) === 'state,comments') return { state: hit === undefined ? 'CLOSED' : 'OPEN', comments: [] }
     if (hit === undefined) throw new Error(`no fixture for ${args.join(' ')}`)
     return hit
   }
@@ -441,6 +443,70 @@ test('D1-D3: a closed step 8 plan is done if pushed, else halted', () => {
     { origin: url(71), state: 'halted' },
     { origin: url(72), state: 'queued' },
   ])
+})
+
+const PULL = `https://github.com/${REPO}/pull/77`
+
+function mend(answers: Record<string, unknown>, log: string[] = []): Read {
+  const read = canned([], log)
+  return (args) => {
+    const key = args.slice(0, 2).join(' ')
+    if (!(key in answers)) return read(args)
+    log.push(args.join(' '))
+    if (answers[key] instanceof Error) throw answers[key]
+    return answers[key]
+  }
+}
+
+function mended(read: Read): Db {
+  const db = piped()
+  queue(db, 50)
+  intake(db, root, read)
+  return db
+}
+
+const HALTED = [{ origin: url(50), state: 'halted' }]
+
+test('D1: a merged PR saying Fixes #50 closes the plan done', () => {
+  const db = mended(mend({ 'pr list': [{ url: PULL, title: 'mend it', body: 'Fixes #50' }] }))
+  expect(states(db)).toEqual([{ origin: url(50), state: 'done' }])
+  expect(ofKind(db, 'close', 'halted')).toEqual([{ plan: 1, kind: 'close', actor: 'tick', outcome: 'pass', message: `fixed by ${PULL}` }])
+  expect(pointers(db, 'close')).toEqual([PULL])
+})
+
+test('D2: a closed issue with no fixing PR still halts', () => {
+  const db = mended(mend({}))
+  expect(states(db)).toEqual(HALTED)
+  expect(ofKind(db, 'halted').map((e) => e.message)).toEqual([`${url(50)} is closed or has lost its lane label`])
+})
+
+test('D3: an operator note naming a merged PR closes it done', () => {
+  for (const [mergedAt, state] of [['2026-10-01T09:00:00Z', 'done'], [null, 'halted']] as const) {
+    const db = mended(mend({ 'issue view': { state: 'CLOSED', comments: [{ author: { login: OPERATOR }, body: `fixed by hand in ${PULL}` }] },
+      'pr view': { url: PULL, mergedAt } }))
+    expect(states(db)).toEqual([{ origin: url(50), state }])
+    expect(pointers(db, 'close')).toEqual(mergedAt === null ? [] : [PULL])
+  }
+})
+
+test('D4: a bare #50 or Fixes #500 is no fix; the plan halts', () => {
+  for (const body of ['see #50', 'Fixes #500']) {
+    expect(states(mended(mend({ 'pr list': [{ url: PULL, title: 'mend it', body }] })))).toEqual(HALTED)
+  }
+})
+
+test('D5: an open issue off its lane halts; no PR is read', () => {
+  const log: string[] = []
+  expect(states(mended(canned([{ number: 50, labels: ['bug'] }], log)))).toEqual(HALTED)
+  expect(log.filter((l) => l.startsWith('pr '))).toEqual([])
+})
+
+test('D6: a mend read that throws keeps the plan queued', () => {
+  const db = piped()
+  queue(db, 50)
+  expect(intake(db, root, mend({ 'pr list': new Error('HTTP 502\nbody') }))).toEqual([`${url(50)}: HTTP 502`])
+  expect(states(db)).toEqual([{ origin: url(50), state: 'queued' }])
+  expect(ofKind(db, 'swallowed')).toEqual([{ plan: 1, kind: 'swallowed', actor: 'halt', outcome: 'pass', message: 'HTTP 502' }])
 })
 
 const ASKED = '**Question:** what is the cap?\n**Would be wrong if:** a page names another cap\n**Done when:** a quote names it'

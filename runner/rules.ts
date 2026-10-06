@@ -58,10 +58,7 @@ export function rules(root: string): Rule[] {
 
 export function registered(root: string): string[] {
   const folder = join(root, 'rules/registry')
-  return [
-    ...existsSync(join(root, 'rules/registry.yaml')) ? ['rules/registry.yaml'] : [],
-    ...existsSync(folder) ? readdirSync(folder).filter((name) => name.endsWith('.yaml')).sort().map((name) => `rules/registry/${name}`) : [],
-  ]
+  return existsSync(folder) ? readdirSync(folder).filter((name) => name.endsWith('.yaml')).sort().map((name) => `rules/registry/${name}`) : []
 }
 
 export function load(db: Db, root: string): Rule[] {

@@ -1,0 +1,6 @@
+- name: fixer
+  switch: { key: fixer.mode, value: live }
+  table: runs
+  column: at
+  where: seat = 'fixer'
+  gap: 2d

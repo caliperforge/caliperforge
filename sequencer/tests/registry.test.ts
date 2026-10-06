@@ -18,15 +18,21 @@ test('checkoutMatchesFixture', () => {
   expect(mechanisms(join(import.meta.dirname, '../..'))).toEqual(Entry.array().parse(parse(fixture)))
 })
 
-test('fileThenFolderInNameOrder', () => {
+test('checkoutJoinsToFixture', () => {
+  const repo = join(import.meta.dirname, '../..')
+  const joined = registered(repo).map((path) => readFileSync(join(repo, path), 'utf8')).join('')
+  expect(joined).toBe(readFileSync(join(import.meta.dirname, 'fixtures/registry.yaml'), 'utf8'))
+})
+
+test('registryFileIgnored', () => {
   const dir = root({
     'rules/registry.yaml': '- name: a\n',
     'rules/registry/01-c.yaml': '- name: c\n',
     'rules/registry/00-b.yaml': '- name: b\n',
     'rules/registry/notes.md': '- name: d\n',
   })
-  expect(registered(dir)).toEqual(['rules/registry.yaml', 'rules/registry/00-b.yaml', 'rules/registry/01-c.yaml'])
-  expect(mechanisms(dir).map((e) => e.name)).toEqual(['a', 'b', 'c'])
+  expect(registered(dir)).toEqual(['rules/registry/00-b.yaml', 'rules/registry/01-c.yaml'])
+  expect(mechanisms(dir).map((e) => e.name)).toEqual(['b', 'c'])
 })
 
 test('folderAlone', () => {

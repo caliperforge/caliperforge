@@ -1100,14 +1100,12 @@ test.each([
 
 test('D3: retire drops the fixer entry and keeps the rest', async () => {
   const { db, home } = found()
-  const path = join(home, 'rules/registry.yaml')
-  const was = readFileSync(path, 'utf8').split('\n')
+  const director = join(home, 'rules/registry/00-director.yaml')
+  const was = readFileSync(director, 'utf8')
   await decide(db, home, stub(said('retire')), now, wire())
-  const left = readFileSync(path, 'utf8').split('\n')
-  const names = (lines: string[]) => lines.filter((l) => l.startsWith('- name: '))
-  expect(names(left)).toEqual(names(was).filter((l) => l !== '- name: fixer'))
-  expect(names(left)).toEqual(expect.arrayContaining(['- name: director']))
-  expect(left.filter((l) => l.startsWith('#'))).toEqual(was.filter((l) => l.startsWith('#')))
+  expect(existsSync(join(home, 'rules/registry/01-fixer.yaml'))).toBe(false)
+  expect(readFileSync(director, 'utf8')).toBe(was)
+  expect(mechanisms(home).map((e) => e.name)).toEqual(mechanisms(repo).map((e) => e.name).filter((n) => n !== 'fixer'))
 })
 
 test('D3: retire cuts an entry from its rules/registry/ file', async () => {

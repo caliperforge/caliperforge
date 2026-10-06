@@ -4,20 +4,23 @@ import { basename, join } from 'node:path'
 import { expect, test } from 'vitest'
 import { approve as approveCard } from '../../cli/batch.ts'
 import type { Pr } from '../../cli/gh.ts'
+import { audit } from '../../rails/completion-audit/index.ts'
 import { record as recordVerdict } from '../../rails/record.ts'
 import { decide } from '../../store/approvals.ts'
 import { deliverablesOf, newest, pushedRow } from '../../store/deliverables.ts'
+import { filesOf, listed } from '../../store/files.ts'
 import { addPart, partAt, partsOf } from '../../store/parts.ts'
-import { end, planRows, type PlanRow, putPlan, requeue, stampHead } from '../../store/plans.ts'
+import { end, planRows, type PlanRow, putPlan, requeue, rewind, stampHead } from '../../store/plans.ts'
 import { record, type SignalRow } from '../../store/signals.ts'
 import { verdictRows } from '../../store/verdict.ts'
 import { approve as approvePublish } from '../card.ts'
 import { tick } from '../index.ts'
 import { kernelPlan } from '../home.ts'
+import type { Fired } from '../kind.ts'
 import type { Wire } from '../push.ts'
 import { repoOf } from '../ready.ts'
 import { started } from '../signals.ts'
-import { checkout, diffOf, fetchMain, FORK, get, maybe, put, SELF, srcDir } from '../workspace.ts'
+import { checkout, diffOf, doneIds, fetchMain, FORK, get, maybe, put, SELF, srcDir } from '../workspace.ts'
 import { built, CARRIED, plan, PR, REFUSE, stub, tip, watched, world, type World } from './world.ts'
 
 const ID = 2
@@ -115,22 +118,52 @@ test('D2 a refused part rebuilds; sibling and asm/1 untouched', async () => {
 })
 
 /** The part landed on asm/1, and the parent holding the `base.sha` its brief was written against. */
-async function landed(ci = false): Promise<Assembly> {
+async function landed(ci = false, asm = false): Promise<Assembly> {
   const a = assembling(ci)
   put(a.w.root, 1, 'base.sha', `${git(a.upstream, ['rev-parse', 'main'])}\n`)
   const wire = pushing([], a)
   await laps(a, 3, wire)
+  if (asm) listed(a.w.db, ID, 'src/asm.ts')
   built(a.w.root, ID, 'export const landed = true')
   await laps(a, 5, wire)
   return a
 }
 
-test('D1 the parent goes to senior with its parts and cases', async () => {
+test('D1 the parent goes to senior with its parts, cases and files', async () => {
   const a = await landed()
   expect(plan(a.w.db, 1)).toMatchObject({ step: 5, state: expect.stringMatching(/^(queued|running)$/) as unknown, retries: 0 })
-  expect(get(a.w.root, 1, 'issue.md')).toBe(['# hello', '', '- **D1** add `hello()` in `src/hello.ts`', '', '## Parts, joined on asm/1', '',
+  const issue = get(a.w.root, 1, 'issue.md')
+  expect(issue).toBe(['# hello', '', '- **D1** add `hello()` in `src/hello.ts`', '', '## Parts, joined on asm/1', '',
     '- part', '', '## Cases', '', '- D1 every part\'s cases hold together on asm/1',
-    '- D2 a gap between parts is refused: a case no part answers, a name one part adds and no part uses, a change two parts make twice', ''].join('\n'))
+    '- D2 a gap between parts is refused: a case no part answers, a name one part adds and no part uses, a change two parts make twice', '',
+    '## Files', '', '- src/hello.ts', ''].join('\n'))
+  expect(filesOf(a.w.db, 1)).toEqual(filesOf(a.w.db, ID))
+  expect(audit(get(a.w.root, 1, 'step-2.handback.md'), doneIds(issue))).toMatchObject({ outcome: 'pass' })
+})
+
+/** The parent at its PR card, rewound by hand to step 3 for one lap. */
+async function rewound(asm: boolean): Promise<{ a: Assembly; fired: Fired[] }> {
+  const a = await landed(false, asm)
+  const wire = watched([], a.w.root, 1)
+  await laps(a, 4, wire)
+  expect(plan(a.w.db, 1).step).toBe(7)
+  rewind(a.w.db, 1, 3)
+  return { a, fired: await tick(a.w.db, a.w.root, stub(CARRIED), undefined, undefined, wire) }
+}
+
+const verdict = (a: Assembly, rail: string): string | undefined =>
+  verdictRows(a.w.db, 1).findLast((v) => v.rail_id === rail)?.outcome
+
+test('D2 a rewound parent passes audit and authority', async () => {
+  const { a } = await rewound(true)
+  expect(verdict(a, 'completion-audit')).toBe('pass')
+  expect(verdict(a, 'authority')).toBe('pass')
+})
+
+test('D3 a rewound parent touching a path no part lists is refused', async () => {
+  const { a, fired } = await rewound(false)
+  expect(verdict(a, 'authority')).toBe('refuse')
+  expect(fired).toContainEqual(expect.objectContaining({ plan: 1, step: 3, outcome: 'refuse', spans: ['src/asm.ts:1 authority.write_paths'] }))
 })
 
 test('D2 D3 the parent reviews asm/1, opens one PR once approved', async () => {

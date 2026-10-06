@@ -1,0 +1,5 @@
+- name: ratchet
+  table: events
+  column: at
+  where: kind = 'ratchet'
+  gap: 7d

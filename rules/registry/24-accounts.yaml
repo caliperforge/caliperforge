@@ -1,0 +1,4 @@
+- name: accounts
+  table: accounts
+  column: measured_at
+  gap: 7d

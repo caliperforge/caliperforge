@@ -1,0 +1,4 @@
+- name: records
+  table: records
+  column: read_at
+  gap: 1d

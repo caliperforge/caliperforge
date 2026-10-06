@@ -143,16 +143,3 @@
     WHERE pipe_id = p.id AND state IN ('queued', 'running')))
     AND (SELECT count(*) FROM gardens g JOIN tickets t ON g.url = 'https://github.com/' || t.repo || '/issues/' || t.number
     WHERE t.closed_at IS NULL) < 2
-- name: ratchet
-  table: events
-  column: at
-  where: kind = 'ratchet'
-  gap: 7d
-- name: accounts
-  table: accounts
-  column: measured_at
-  gap: 7d
-- name: records
-  table: records
-  column: read_at
-  gap: 1d

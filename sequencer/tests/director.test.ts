@@ -1106,7 +1106,7 @@ test('D3: retire drops the fixer entry and keeps the rest', async () => {
   const left = readFileSync(path, 'utf8').split('\n')
   const names = (lines: string[]) => lines.filter((l) => l.startsWith('- name: '))
   expect(names(left)).toEqual(names(was).filter((l) => l !== '- name: fixer'))
-  expect(names(left)).toEqual(expect.arrayContaining(['- name: director', '- name: records']))
+  expect(names(left)).toEqual(expect.arrayContaining(['- name: director', '- name: gardener']))
   expect(left.filter((l) => l.startsWith('#'))).toEqual(was.filter((l) => l.startsWith('#')))
 })
 

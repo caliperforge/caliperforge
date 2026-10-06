@@ -38,6 +38,8 @@ const TRANSCRIPT = [
 const SHA = 'a'.repeat(40)
 const REVIEWED = `Last reviewed commit: [fix](https://github.com/acme/widget/commit/${SHA})`
 
+const QUIET = { autoReview: [], strictness: 1, customContext: { rules: [], files: [] } }
+
 const pr = (over: Partial<Pr> = {}): Pr => ({
   number: 7, url: URL, state: 'OPEN', mergedAt: null, mergedBy: null, reviewDecision: null,
   comments: [], reviews: [], statusCheckRollup: [], ...over,
@@ -260,7 +262,7 @@ test('D1 D2 D3 pre-pr rounds move -next; push sends the branch', async () => {
   expect(git(['ls-remote', 'origin', 'refs/heads/widget-12-a1'])).toBe('')
   const tips = get(w.root, 1, 'next.tips').trim().split('\n').map((l) => l.slice(0, 40))
   expect(new Set(sent.filter((l) => l.startsWith('send ')))).toEqual(new Set(tips.map((t) => `send src ${t}:refs/heads/widget-12-a1-next`)))
-  expect(tips.map((t) => git(['show', `${t}:greptile.json`]))).toEqual(tips.map(() => '{"autoReview": []}'))
+  expect(tips.map((t) => JSON.parse(git(['show', `${t}:greptile.json`])) as unknown)).toEqual(tips.map(() => QUIET))
   tips.reduce((older, newer) => { git(['merge-base', '--is-ancestor', older, newer]); return newer })
   expect(git(['ls-tree', '-r', 'widget-12-a1', 'greptile.json'])).toBe('')
   expect(git(['log', '--format=%H', 'widget-12-a1']).split('\n').filter((h) => tips.includes(h))).toEqual([])

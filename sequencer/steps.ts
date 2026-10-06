@@ -5,6 +5,7 @@ import { parse } from '../rails/diff.ts'
 import { building, filesOf, recorded, sharing, strays as recordStrays } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
 import { partsOf } from '../store/parts.ts'
+import { waitsFor } from '../store/slot.ts'
 import { builderRan, held, internal, needsCeo, originIssue, originRef, waiting, type PlanRow, type Wait } from '../store/plans.ts'
 import { capture, desk, facts, gather, pack, score, steps as comms } from '../templates/comms.ts'
 import { at, last, steps, type Step } from '../templates/pr-path.ts'
@@ -59,7 +60,7 @@ export function blocked(db: Db, plan: PlanRow): Wait | null {
   const step = mapOf(plan.template).at(plan.step)
   if (step.fires === 'ceo') return internal(plan) || approvedPlan(db, plan) ? null : 'ceo_batch'
   if (step.name === 'ruling') return internal(plan) || approved(db, plan) ? null : 'target_approval'
-  if (step.name === 'ready') return proven(db, plan) ? null : 'ready_proof'
+  if (step.name === 'ready') return proven(db, plan) && waitsFor(db, plan) === null ? null : 'ready_proof'
   if (target(db, plan)?.state === 'parked') return 'target_parked'
   return overlapping(db, plan) === null ? null : 'file_overlap'
 }
@@ -113,7 +114,7 @@ export function kernel(db: Db, root: string, plan: PlanRow, wire?: Wire, read?: 
 function railed(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
   const judged = preReview(db, root, plan, wire)
   const repo = repoOf(db, plan)
-  if (judged.outcome === 'pass' && judged.held !== true && repo !== null) reviewable(root, plan, repo, wire)
+  if (judged.outcome === 'pass' && judged.held !== true && repo !== null && waitsFor(db, plan) === null) reviewable(db, root, plan, repo, wire)
   return judged
 }
 

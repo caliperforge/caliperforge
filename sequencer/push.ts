@@ -15,6 +15,7 @@ import type { Db } from '../store/index.ts'
 import { busy } from '../store/now.ts'
 import { internal, originIssue, originRef, type PlanRow } from '../store/plans.ts'
 import { profile, type Profile } from '../store/profile.ts'
+import { freed, took, waitsFor } from '../store/slot.ts'
 import { GREEN, onBase } from './base.ts'
 import { CHECKS, waiting, type Check, type Target } from './card.ts'
 import { npm } from './checks.ts'
@@ -97,8 +98,10 @@ const REHEARSED = 'ci.next'
  */
 export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire = WIRE): Outcome | null {
   if (internal(plan) && (assembly(db, plan) !== null || !workflows(srcDir(root, plan.id)))) return checked(db, root, plan, repo)
+  const holder = waitsFor(db, plan)
+  if (holder !== null) return { outcome: 'pass', held: true, spans: ['fork.slot'], note: `waits for plan ${String(holder)}'s fork CI` }
   const { fork, head, ci, tip } = sent(root, plan, repo, wire)
-  if (!internal(plan)) wire.rehearse?.(fork, ci)
+  if (!internal(plan)) { wire.rehearse?.(fork, ci); took(db, plan.id) }
   const on = { fork, branch: ci, sha: tip }
   const { verdict, board } = judge(on, { body: '', commits: commits(head.dir), issue_ref: profile(root, repo)?.issue_ref }, touched(root, plan.id), wire.runs)
   put(root, plan.id, BOARD, `${JSON.stringify(board)}\n`)
@@ -124,6 +127,7 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
   if (Array.isArray(base)) put(root, plan.id, BOARD, `${JSON.stringify(base)}\n`)
   const passed = verdict.outcome === 'pass' || Array.isArray(base)
   record(db, join(root, 'rails/ci-green'), plan.id, passed ? { ...verdict, outcome: 'pass', origin_kind: null, origin_ref: null } : verdict, 0)
+  freed(db, plan.id)
   forkGreen(db, plan.id, passed)
   if (verdict.outcome === 'pass') put(root, plan.id, GREEN, `${ci} ${tip}\n`)
   const failed = passed ? null : red(fork, verdict.spans, wire.runs)
@@ -133,10 +137,11 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
 }
 
 /** Step 3's pass opens the rehearsal: a review bot reads only an open pull request. */
-export function reviewable(root: string, plan: PlanRow, repo: string, wire: Wire = WIRE): void {
+export function reviewable(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire = WIRE): void {
   if (internal(plan)) return
   const { fork, ci } = sent(root, plan, repo, wire)
   wire.rehearse?.(fork, ci)
+  took(db, plan.id)
 }
 
 export function sent(root: string, plan: PlanRow, repo: string, wire: Wire): { fork: string; head: Head; ci: string; tip: string } {

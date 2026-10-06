@@ -8,7 +8,7 @@ import { amend, approved, learnings, learningsIn, paste, placed, postOf, posts, 
 import { eventsOf, kindsOf, newestMode, runRows } from '../../store/events.ts'
 import { set, zone } from '../../store/lanes.ts'
 import { addPipe, briefed, dropPlan, end, plansOf, putPlan, requeue } from '../../store/plans.ts'
-import { refusalAt } from '../../store/refusals.ts'
+import { refusalAt, WHY } from '../../store/refusals.ts'
 import { verdictRows } from '../../store/verdict.ts'
 import { desk, draft, drafted, facts, gather, grow, review } from '../../templates/comms.ts'
 import { tick } from '../index.ts'
@@ -465,6 +465,51 @@ test('reviewDrops D3: a pass drops refusal.md, a refuse keeps it', async () => {
   expect(maybe(w.root, 1, 'refusal.md')).toBe('was refused')
   expect(await reviewing(w, verdict('wording.reply.md'))).toMatchObject({ outcome: 'pass' })
   expect(maybe(w.root, 1, 'refusal.md')).toBeNull()
+})
+
+test('prevDraft D1: no refusal.md carries refusal.prev.md', async () => {
+  const w = posting('daily 2026-09-27')
+  put(w.root, 1, 'refusal.prev.md', 'item c is unsourced')
+  expect(await prompted(w)).toContain(`${REFUSED}, keep every item it does not name\n\nitem c is unsourced`)
+  put(w.root, 1, 'refusal.md', 'item b is unsourced')
+  const prompt = await prompted(w)
+  expect(prompt).toContain(`${REFUSED}, keep every item it does not name\n\nitem b is unsourced`)
+  expect(prompt).not.toContain('item c is unsourced')
+})
+
+test('prevDrops D2: a pass drops refusal.prev.md, refuse keeps', async () => {
+  const w = posting('daily 2026-09-27')
+  put(w.root, 1, 'refusal.prev.md', 'was refused')
+  await reviewing(w, verdict('unsourced.reply.md'))
+  expect(maybe(w.root, 1, 'refusal.prev.md')).toBe('was refused')
+  expect(await reviewing(w, verdict('wording.reply.md'))).toMatchObject({ outcome: 'pass' })
+  expect(maybe(w.root, 1, 'refusal.prev.md')).toBeNull()
+})
+
+const turns = (writer: string[], review: string[]): Provider => ({
+  name: 'claude-agent-sdk',
+  fire: (packet) => stub('', 0, (packet.prompt.includes('# text_review') ? review : writer).shift() ?? '').fire(packet),
+})
+
+const rerun = async (second: string): Promise<World> => {
+  const w = posting('daily 2026-09-27', 1)
+  const seats = turns([listing(items('a', 'b', 'c')), second], [verdict('item.reply.md'), verdict('unsourced.reply.md')])
+  for (let n = 0; n < 6; n += 1) await tick(w.db, w.root, seats)
+  return w
+}
+
+test('rerunChanged D3: a new items.json goes round again', async () => {
+  const w = await rerun(listing(items('a', 'b', 'd')))
+  expect(plan(w.db, 1).step).toBe(1)
+  expect(plan(w.db, 1).state).not.toBe('blocked_on_ceo')
+  expect(get(w.root, 1, 'refusal.md')).not.toContain('# Stopped')
+})
+
+test('rerunSame D4: the same items.json stops as unchanged', async () => {
+  const w = await rerun(listing(items('a', 'b', 'c')))
+  const stop = `# Stopped\n\n${WHY.unchanged}.\n`
+  expect(plan(w.db, 1).state).toBe('blocked_on_ceo')
+  expect(get(w.root, 1, 'refusal.md').slice(-stop.length)).toBe(stop)
 })
 
 test('deskThenRefused D4: the desk note comes before the refusal', async () => {

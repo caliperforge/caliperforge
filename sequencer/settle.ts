@@ -15,6 +15,7 @@ import { answered, check, gather } from '../templates/research.ts'
 import type { Fired, Outcome } from './kind.ts'
 import { parted } from './split.ts'
 import { executed } from './command.ts'
+import { subject } from './daily.ts'
 import { refilled } from './refill.ts'
 import type { Wire } from './push.ts'
 import { fireBrief, fireLanded, fireSeat } from './seat.ts'
@@ -206,7 +207,7 @@ function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcom
     })()
   }
   const r = { plan: plan.id, step: step.step, fingerprint: fingerprintOf(step, outcome),
-    diff: step.step >= 3 ? digestOf(diffOf(root, plan.id)) : null, moved: outcome.moved,
+    diff: step.step >= 3 ? digestOf(plan.template === 'comms' ? subject(root, plan.id)[1] ?? '' : diffOf(root, plan.id)) : null, moved: outcome.moved,
     own: outcome.spans.some((s) => s.startsWith('ratchet:')) || undefined, span: outcome.spans.join(', '), note: outcome.note,
     ticket: digestOf(`${maybe(root, plan.id, 'issue.md') ?? ''}${ruled(root, plan.id) ?? ''}${maybe(root, plan.id, 'rulings.md') ?? ''}`) }
   const why = refused(db, r)

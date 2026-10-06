@@ -1,0 +1,5 @@
+- name: fix_mode
+  table: runs
+  column: at
+  where: mode = 'fix'
+  gap: 7d

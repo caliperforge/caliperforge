@@ -2,7 +2,10 @@ INSERT INTO rules (id, kind, path, content_hash, loaded_at)
 VALUES
   ('rules/rails.yaml', 'rail', 'rules/rails.yaml', 'b46b445806d399b61887a5259eb0a6893444efcbe5acf2e6dd534507bc0882f3', '2026-09-17'),
   ('rules/tight.md', 'card', 'rules/tight.md', '9c885ed2e62d432d95211fec25387da43261cd643e4eb56f73b00b9689a6e479', '2026-09-17'),
-  ('rules/registry.yaml', 'card', 'rules/registry.yaml', '2600067a21ed14eacb9c8fc61347374e5bc5af7663d743727b232cc2cf3fb015', '2026-10-04'),
+  ('rules/registry.yaml', 'card', 'rules/registry.yaml', '53eee9d56770fc226d7819c656c3401b8dbb272ae6a70631c9ef2cd27c6a924d', '2026-10-04'),
+  ('rules/registry/02-fix_mode.yaml', 'card', 'rules/registry/02-fix_mode.yaml', 'c1e040b05b79fd9034efee36f5aee3850ba2d89ed4c0c8ad898ba1e0a99fce23', '2026-10-04'),
+  ('rules/registry/03-swift_review.yaml', 'card', 'rules/registry/03-swift_review.yaml', '151d45965ce9525c70ee50193766e0dedff77db66b9d2f57e09ef8c941cba215', '2026-10-04'),
+  ('rules/registry/04-kotlin_review.yaml', 'card', 'rules/registry/04-kotlin_review.yaml', 'a3a113a042a9e0e52315c5dac1e59849e52827a32b3ab5834b3af0e2387bcbc1', '2026-10-04'),
   ('rules/registry/05-python_review.yaml', 'card', 'rules/registry/05-python_review.yaml', '503eda4b6e34d6bf77c3b3e20f1d94d4fd3650cc65939c12e07a75af309fbd52', '2026-10-04'),
   ('rules/registry/06-ruby_review.yaml', 'card', 'rules/registry/06-ruby_review.yaml', '3e7a48c794a713dcee3182451e53452e71481611eb94b4226576f678130ea436', '2026-10-04'),
   ('rules/registry/07-rust_review.yaml', 'card', 'rules/registry/07-rust_review.yaml', 'cf449c8f87e6cd5f6d707ae98b56d4841e86c46c8535a67ea7da5348ebd0165f', '2026-10-04'),

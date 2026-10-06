@@ -118,21 +118,28 @@ export function blipped(db: Db, plan: number, step: number): Why {
   return (run === -1 ? rows.length : run) + 1 >= BLIPS ? 'blips' : 'again'
 }
 
+const SENT = (actors: string): string => `coalesce((SELECT max(julianday(e.at)) FROM events e WHERE e.plan = ?
+  AND e.kind IN ('return', 'retry') AND e.actor IN (${actors})), 0)`
+
 /**
  * A job halts past the token ceiling: the count starts again when a person sends it round,
  * so it is every run since the later of the latest refusal a person cleared and the latest
- * `return` or `retry` by `ceo` or `coo`. Cache reads are not counted.
+ * `return` or `retry` by `ceo`, `coo` or `director`. Cache reads are not counted.
  */
 export function overBudget(db: Db, plan: number): { spent: number; ceiling: number } | null {
   const row = db.prepare(`SELECT
       (SELECT CAST(value AS INTEGER) FROM settings WHERE key = 'plan.token_ceiling') AS ceiling,
       (SELECT coalesce(sum(r.input_tokens + r.output_tokens), 0) FROM runs r
         WHERE r.plan = ? AND r.${BUILT} AND julianday(r.at) > max(coalesce(
-          (SELECT max(julianday(f.at)) FROM refusals f WHERE f.plan = ? AND f.cleared = 1), 0), coalesce(
-          (SELECT max(julianday(e.at)) FROM events e WHERE e.plan = ? AND e.kind IN ('return', 'retry')
-            AND e.actor IN ('ceo', 'coo')), 0))) AS spent`)
+          (SELECT max(julianday(f.at)) FROM refusals f WHERE f.plan = ? AND f.cleared = 1), 0),
+          ${SENT("'ceo', 'coo', 'director'")})) AS spent`)
     .get(plan, plan, plan) as { ceiling: number | null; spent: number }
   return row.ceiling !== null && row.spent >= row.ceiling ? { spent: row.spent, ceiling: row.ceiling } : null
+}
+
+/** The director has sent the plan round since a person last did. */
+export function sentOnce(db: Db, plan: number): boolean {
+  return db.prepare(`SELECT ${SENT("'director'")} > ${SENT("'ceo', 'coo'")}`).pluck().get(plan, plan) === 1
 }
 
 /** A person sent the plan round again: its round count starts over, but a refusal it already had still stops it. */

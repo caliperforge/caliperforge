@@ -21,7 +21,7 @@ import { cap, width } from '../../store/lanes.ts'
 import { busy } from '../../store/now.ts'
 import { addPart } from '../../store/parts.ts'
 import { allPlans, held, needsCeo, pipeOf, planById, planRows, putPlan, requeue, retry } from '../../store/plans.ts'
-import { clear } from '../../store/refusals.ts'
+import { clear, overBudget } from '../../store/refusals.ts'
 import { split } from '../brief.ts'
 import { byHand, cooLite, read, woke } from '../director.ts'
 import { mechanisms } from '../drift.ts'
@@ -952,6 +952,31 @@ test('D4 a running plan at its ceiling: one post per head', async () => {
   expect(posted).toHaveLength(1)
   expect(wokeTold(db).at(-1)).toEqual({ outcome: 'pass', message: 'left alone: plan is running, waiting on ready_proof' })
   expect(maybe(home, 7, 'orchestrator.md')?.split('\n')[0]).toBe('step 4 ready_proof')
+})
+
+test('ceilingOnce', async () => {
+  const { db, home } = seeded('1')
+  db.exec("UPDATE plans SET wait_reason = 'token_ceiling' WHERE id = 7; UPDATE settings SET value = '4600' WHERE key = 'plan.token_ceiling'")
+  expect(overBudget(db, 7)).toEqual({ spent: 4600, ceiling: 4600 })
+  await run(db, home, REPLY.waive ?? '')
+  expect(told(db)).toEqual([{ actor: 'director', outcome: 'pass', message: 'waive: the builder can fix the name' }])
+  expect(row(db).state).not.toBe('blocked_on_ceo')
+  expect(overBudget(db, 7)).toBeNull()
+  db.exec(`UPDATE runs SET at = datetime('now', '+1 minute');
+    UPDATE plans SET state = 'blocked_on_ceo', held_by = 'coo', wait_reason = 'token_ceiling' WHERE id = 7`)
+  const fires: string[] = []
+  const posted: string[] = []
+  await cooLite(db, home, row(db), wokeStub(REPLY.waive ?? '', fires), now, (t) => void posted.push(t), wire())
+  expect(fires).toEqual([])
+  expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'ceo' })
+  expect(heldBy(db, 'ceo').map((p) => p.id)).toContain(7)
+  expect(decisions(db, 7)).toEqual([expect.objectContaining({ verb: 'ask_ceo', wait_reason: 'token_ceiling',
+    why: expect.stringMatching(/^class 1/) as string })])
+  expect(told(db).at(-1)).toMatchObject({ outcome: 'needs_ceo', message: expect.stringMatching(/^ask_ceo: class 1/) as string })
+  expect(posted).toHaveLength(1)
+  await woke(db, home, wokeStub(REPLY.waive ?? '', fires), now, () => undefined, wire())
+  expect(await byHand(db, home, wokeStub(REPLY.waive ?? '', fires), now, () => undefined, wire())).toBe('no stopped plan')
+  expect(fires).toEqual([])
 })
 
 const WIDEN = '---\nmove: widen\nwhy: the wake pipe is full\n---\n'

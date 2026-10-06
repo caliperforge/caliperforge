@@ -5,7 +5,7 @@ import type { Provider } from '../providers/kind.ts'
 import { packet } from '../runner/index.ts'
 import { load, seat, tight } from '../runner/rules.ts'
 import { decision } from '../store/ask.ts'
-import { decisions } from '../store/decisions.ts'
+import { decided, decisions } from '../store/decisions.ts'
 import { logged } from '../store/events.ts'
 import { retried, returnToLane } from '../store/holds.ts'
 import type { Db } from '../store/index.ts'
@@ -13,7 +13,7 @@ import { wall } from '../store/lanes.ts'
 import { clear as unlease, take } from '../store/leases.ts'
 import { busy, current, idle } from '../store/now.ts'
 import { end, held, needsCeo, originRef, planById, PlanRow, retry } from '../store/plans.ts'
-import { clear } from '../store/refusals.ts'
+import { clear, sentOnce } from '../store/refusals.ts'
 import { pending } from '../store/transcript.ts'
 import { split, type Part } from './brief.ts'
 import { isHeld, unhold } from './hold.ts'
@@ -56,6 +56,7 @@ export async function cooLite(db: Db, root: string, plan: PlanRow, provider: Pro
     return WAITING.has(plan.wait_reason ?? '') ? told(db, root, plan, now, { outcome: 'pass', message: `left alone: plan is ${plan.state}, waiting on ${plan.wait_reason ?? ''}` })
       : told(db, root, plan, now, { outcome: 'needs_ceo', message: `ask_ceo: plan is ${plan.state}, not stopped` }, post)
   }
+  if (plan.wait_reason === 'token_ceiling' && sentOnce(db, plan.id)) return twice(db, root, plan, now, post)
   let { m, said } = await ask(db, root, plan, provider, tried)
   const n = failures(db, root, plan)
   const first = refused(m, said, n, root)
@@ -82,6 +83,15 @@ export async function cooLite(db: Db, root: string, plan: PlanRow, provider: Pro
   needsCeo(db, plan)
   held(db, plan.id, 'coo', failed.split('\n')[0] ?? failed)
   return told(db, root, plan, now, { outcome: 'needs_ceo', message: failed }, post)
+}
+
+function twice(db: Db, root: string, plan: PlanRow, now: Date, post: Post): string {
+  const why = 'class 1, money beyond the job: it reached its token ceiling again after the director sent it round'
+  db.transaction(() => {
+    decided(db, { plan: plan.id, step: plan.step, wait_reason: 'token_ceiling', verb: 'ask_ceo', why, evidence: null, tokens: 0 })
+    held(db, plan.id, 'ceo', why)
+  })()
+  return told(db, root, plan, now, { outcome: 'needs_ceo', message: `ask_ceo: ${why}` }, post)
 }
 
 function refused(m: Move | null, said: string, n: number, root: string): { fence: string; message: string } | null {

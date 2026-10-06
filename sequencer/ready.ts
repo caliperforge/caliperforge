@@ -1,6 +1,5 @@
 import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { audit } from '../rails/completion-audit/index.ts'
 import { ready as readyRail, type Proof } from '../rails/ready/index.ts'
 import { record as recordRail } from '../rails/record.ts'
 import { parse } from '../rails/diff.ts'
@@ -15,10 +14,11 @@ import type { Step } from '../templates/pr-path.ts'
 import { writable } from './brief.ts'
 import type { Outcome } from './kind.ts'
 import { forkCi, headOf, holding, rehearsalBranch, title, WIRE, type Wire } from './push.ts'
-import { cloned, diffOf, FORK, get, maybe, put, repoName, srcDir } from './workspace.ts'
+import { cloned, diffOf, FORK, get, headSha, maybe, put, repoName, srcDir } from './workspace.ts'
 import { assembling, homeOf } from './home.ts'
-import { BLOCK, learned } from './learn.ts'
+import { learned } from './learn.ts'
 import { baseMoved } from './merge.ts'
+import { unruled } from './unruled.ts'
 
 export const CREDITS = 50
 
@@ -61,7 +61,7 @@ export function readyGate(db: Db, root: string, plan: PlanRow, wire?: Wire): Out
 /** Ticks an outside head waits for Greptile's score before ready goes on without one. */
 export const GRADING = 45
 
-/** Nothing leaves our fork below 4/5 from Greptile at this head. */
+/** Nothing leaves our fork with an open P0–P2 Greptile finding at this head, nor below 4/5 with none listed. */
 function greptile(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire): Outcome | string {
   const sha = headOf(root, plan.id).sha
   const at = `${FORK}/${repoName(repo)}@${sha.slice(0, 12)}`
@@ -72,27 +72,14 @@ function greptile(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire)
       ?? `; Greptile gave no score in ${String(GRADING)} ticks`
   }
   const score = row.score ?? 0
-  if (score >= 4) return ''
-  const ids = accepted(root, plan.id, sha)
-  if (ids.length > 0) {
-    logged(db, { plan: plan.id, kind: 'greptile.accepted', actor: 'ready', outcome: 'pass', message: ids.join(', '), pointer: at, run: null })
-    return `; Greptile scored ${at} ${String(score)}/5; the COO accepted ${ids.join(', ')}`
+  const { found, ruled, open } = unruled(root, plan.id, sha)
+  if (open.length > 0 || (score < 4 && found === 0)) {
+    return { outcome: 'refuse', spans: [`greptile:${String(score)}/5`], message: row.body ?? '', to: 2,
+      note: `Greptile scored ${at} ${String(score)}/5; back to the builder with its findings` }
   }
-  return { outcome: 'refuse', spans: [`greptile:${String(score)}/5`], message: row.body ?? '', to: 2,
-    note: `Greptile scored ${at} ${String(score)}/5; back to the builder with its findings` }
-}
-
-/** The findings on `sha` that rulings.md accepts, provided the hand-back carries every other one with a pointer. */
-function accepted(root: string, plan: number, sha: string): string[] {
-  const found = [...(maybe(root, plan, `findings-${sha}.md`) ?? '').matchAll(/^- (G\d+) /gm)].map((m) => m[1] ?? '')
-  const ruled = [...(maybe(root, plan, 'rulings.md') ?? '').matchAll(BLOCK)].flatMap(([, body = '']) => {
-    const field = (key: string): string => new RegExp(`^[ \\t]+${key}:(.*)$`, 'm').exec(body)?.[1]?.trim() ?? ''
-    const head = field('head')
-    return /^[0-9a-f]{7,40}$/.test(head) && sha.startsWith(head) && field('reason') !== '' ? field('ids').match(/G\d+/g) ?? [] : []
-  })
-  const ids = found.filter((id) => ruled.includes(id))
-  const rest = found.filter((id) => !ruled.includes(id))
-  return ids.length > 0 && audit(maybe(root, plan, 'step-2.handback.md') ?? '', rest).outcome === 'pass' ? ids : []
+  if (ruled.length === 0) return ''
+  logged(db, { plan: plan.id, kind: 'greptile.accepted', actor: 'ready', outcome: 'pass', message: ruled.join(', '), pointer: at, run: null })
+  return `; Greptile scored ${at} ${String(score)}/5; the COO accepted ${ruled.join(', ')}`
 }
 
 /** Greptile's plan gives {@link CREDITS} credits a month, so a job asks for at most this many reviews. */
@@ -170,7 +157,7 @@ export function target(db: Db, plan: PlanRow): Target | null {
 export function proved(db: Db, root: string, plan: PlanRow, step: Step): void {
   if (step.fires === 'brief') recordFiles(db, plan.id, writable(get(root, plan.id, 'issue.md')))
   if (step.name === 'build') built(db, made(db, root, plan, step))
-  if (step.name === 'senior') gated(db, made(db, root, plan, step), proof(db, plan))
+  if (step.name === 'senior') gated(db, made(db, root, plan, step), proof(db, root, plan))
   if (step.name === 'ready') {
     readyRow(db, plan.id)
     const sha = headOf(root, plan.id).sha
@@ -193,13 +180,15 @@ function evidenceOf(db: Db, plan: PlanRow): string {
 }
 
 /** Each of the five is a row somebody else wrote: a gate verdict, the ci-green rail, a bot signal, the account pulse. */
-function proof(db: Db, plan: PlanRow): Proven {
+function proof(db: Db, root: string, plan: PlanRow): Proven {
   const railed = assembling(db, plan) === null ? [plan.id] : partsOf(db, plan.id)
+  const src = srcDir(root, plan.id)
+  const forkClean = internal(plan) || !cloned(src) || unruled(root, plan.id, headSha(src)).open.length === 0
   return {
     tests_pass: railed.every((id) => passed(db, id, 'gate', 'pre_review')),
     byte_identical_elsewhere: railed.every((id) => passed(db, id, 'gate', 'review')) && passed(db, plan.id, 'gate', 'senior_review'),
     fork_ci_green: passed(db, plan.id, 'rail_id', 'ci-green'),
-    bot_clean: unanswered(db, plan.id) === undefined,
+    bot_clean: unanswered(db, plan.id) === undefined && forkClean,
     target_warm: internal(plan) || target(db, plan)?.state !== 'parked',
   }
 }

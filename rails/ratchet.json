@@ -1,0 +1,73 @@
+{
+  "authority/index.ts": {
+    "lines": 40
+  },
+  "authority/tests/authority.test.ts": {
+    "prepare": 1
+  },
+  "checks/index.ts": {
+    "lines": 28
+  },
+  "ci-green/index.ts": {
+    "lines": 126
+  },
+  "ci-green/tests/ci-green.test.ts": {
+    "prepare": 1
+  },
+  "completion-audit/index.ts": {
+    "lines": 104,
+    "prepare": 1,
+    "silent-catch": 1
+  },
+  "completion-audit/tests/audit.test.ts": {
+    "prepare": 1
+  },
+  "diff.ts": {
+    "lines": 63
+  },
+  "identifiers/index.ts": {
+    "lines": 70
+  },
+  "identifiers/tests/identifiers.test.ts": {
+    "prepare": 1
+  },
+  "ready/index.ts": {
+    "lines": 53
+  },
+  "ready/tests/ready.test.ts": {
+    "prepare": 1
+  },
+  "record.ts": {
+    "lines": 25,
+    "prepare": 1
+  },
+  "secret-scan/index.ts": {
+    "lines": 38
+  },
+  "secret-scan/tests/scan.test.ts": {
+    "prepare": 1
+  },
+  "test-weakened/index.ts": {
+    "lines": 70
+  },
+  "test-weakened/tests/weakened.test.ts": {
+    "prepare": 1
+  },
+  "tight/braces.ts": {
+    "lines": 141
+  },
+  "tight/index.ts": {
+    "lines": 120,
+    "silent-catch": 1
+  },
+  "tight/prose.ts": {
+    "lines": 38
+  },
+  "tight/source.ts": {
+    "lines": 174
+  },
+  "tight/tests/tight.test.ts": {
+    "citing-comment": 1,
+    "prepare": 1
+  }
+}

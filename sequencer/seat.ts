@@ -192,6 +192,7 @@ function stands(): Outcome {
 }
 
 function asking(root: string, plan: number, step: Step, question: string): Outcome {
+  if (maybe(root, plan, 'refusal.md') !== null) move(root, plan, 'refusal.md', 'refusal.prev.md')
   put(root, plan, 'question.md', `${question}\n`)
   const base = maybe(root, plan, 'base.sha')
   if (base !== null) put(root, plan, 'question.sha', base)

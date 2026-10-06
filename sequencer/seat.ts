@@ -30,6 +30,7 @@ import { targetOf } from './steps.ts'
 import { install, mode, type Mode } from './checks.ts'
 import { narrow } from './rails.ts'
 import { classify } from './delta.ts'
+import { commanded } from './command.ts'
 import { looked } from './design.ts'
 import { deletions } from './fence.ts'
 import { findings } from './findings.ts'
@@ -136,6 +137,8 @@ export async function fireBrief(db: Db, root: string, plan: PlanRow, step: Step,
   const fired = await ran(db, root, plan, step, provider, again(db, root, plan.id, ask) + store(root, plan) + seams(root, plan.seat) + long(src) + wideAsk(ask), false)
   drop(root, plan.id, 'brief.refused.md')
   if (fired.ended !== 'completed') return exited(step, fired)
+  const line = commanded(fired.text)
+  if (line !== null) return { outcome: 'pass', spans: [], note: `${step.runs}: ${line}`, command: line }
   const question = unclear(fired.text)
   if (question !== null) return asking(root, plan.id, step, question)
   const refused = shape(fired.text, ask, src)

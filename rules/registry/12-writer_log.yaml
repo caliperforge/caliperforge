@@ -1,0 +1,6 @@
+- name: writer_log
+  table: runs
+  column: at
+  where: seat = 'writer' AND mode = 'log'
+  gap: 2d
+  while: EXISTS (SELECT 1 FROM pipes WHERE name = 'comms' AND enabled = 1)

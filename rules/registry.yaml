@@ -63,19 +63,3 @@
   column: at
   where: seat = 'typescript_specialist' AND mode = 'review'
   gap: 7d
-- name: brief_writer
-  table: runs
-  column: at
-  where: seat = 'brief_writer'
-  gap: 1d
-- name: text_review
-  table: runs
-  column: at
-  where: seat = 'text_review'
-  gap: 2d
-- name: writer_log
-  table: runs
-  column: at
-  where: seat = 'writer' AND mode = 'log'
-  gap: 2d
-  while: EXISTS (SELECT 1 FROM pipes WHERE name = 'comms' AND enabled = 1)

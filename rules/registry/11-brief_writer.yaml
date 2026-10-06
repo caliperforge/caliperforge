@@ -1,0 +1,5 @@
+- name: brief_writer
+  table: runs
+  column: at
+  where: seat = 'brief_writer'
+  gap: 1d

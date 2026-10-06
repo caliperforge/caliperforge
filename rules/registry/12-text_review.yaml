@@ -1,0 +1,5 @@
+- name: text_review
+  table: runs
+  column: at
+  where: seat = 'text_review'
+  gap: 2d

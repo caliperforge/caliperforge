@@ -20,18 +20,19 @@ import { isHeld, unhold } from './hold.ts'
 import { fixed, stop } from './fixed.ts'
 import { released } from './fixer.ts'
 import { prose } from './prose.ts'
-import { outOfReach } from './reach.ts'
+import { builderWork, outOfReach, WAITING } from './reach.ts'
 import { WIRE, type Wire } from './push.ts'
-import { rule } from './rule.ts'
+import { fenced, owned, rule } from './rule.ts'
 import { recorded } from './seat.ts'
 import { parted } from './split.ts'
 import { ticketed } from './ticket.ts'
 import { history, parentAsk } from './record.ts'
 import { READ, SERVER, server } from './upstream.ts'
+import { widen } from './widen.ts'
 import { afresh, maybe, planDir, put } from './workspace.ts'
 
 const Said = z.object({
-  move: z.enum(['rule', 'waive', 'close', 'file', 'ask_ceo', 'ask_coo', 'return', 'fix']),
+  move: z.enum(['rule', 'waive', 'close', 'file', 'ask_ceo', 'ask_coo', 'return', 'fix', 'widen']),
   why: z.string().trim().min(1),
   answer: z.string().trim().min(1).optional(),
   ticket: z.string().trim().min(1).transform((t) => t.slice(0, 140)).optional(),
@@ -52,7 +53,8 @@ function applying(db: Db): boolean {
 export async function cooLite(db: Db, root: string, plan: PlanRow, provider: Provider, now: Date, post: Post,
   wire: Wire = WIRE, tried?: string): Promise<string> {
   if (plan.state !== 'blocked_on_ceo' && plan.state !== 'halted') {
-    return told(db, root, plan, now, { outcome: 'needs_ceo', message: `ask_ceo: plan is ${plan.state}, not stopped` }, post)
+    return WAITING.has(plan.wait_reason ?? '') ? told(db, root, plan, now, { outcome: 'pass', message: `left alone: plan is ${plan.state}, waiting on ${plan.wait_reason ?? ''}` })
+      : told(db, root, plan, now, { outcome: 'needs_ceo', message: `ask_ceo: plan is ${plan.state}, not stopped` }, post)
   }
   let { m, said } = await ask(db, root, plan, provider, tried)
   const n = failures(db, root, plan)
@@ -60,7 +62,9 @@ export async function cooLite(db: Db, root: string, plan: PlanRow, provider: Pro
   if (first !== null) {
     ({ m, said } = await ask(db, root, plan, provider, tried, first.fence))
     const again = refused(m, said, n, root)
-    if (again !== null) return told(db, root, plan, now, { outcome: 'needs_ceo', message: again.message }, post)
+    if (again !== null) return m?.move === 'fix' && builderWork(root, m.why) && applying(db) && apply(db, root, plan, { move: 'rule', why: m.why, answer: m.why }, wire, now) === true
+      ? told(db, root, plan, now, { outcome: 'pass', message: `rule: ${m.why} (out of the fixer's reach, so the builder takes it)` })
+      : told(db, root, plan, now, { outcome: 'needs_ceo', message: again.message }, post)
   }
   if (m === null) return told(db, root, plan, now, { outcome: 'needs_ceo', message: 'ask_ceo: no readable answer' }, post)
   const message = `${m.move}: ${m.why}`
@@ -215,6 +219,7 @@ const UNAPPLIED: Record<Exclude<Move['move'], 'ask_ceo' | 'ask_coo'>, string> = 
   file: 'the ticket was not filed',
   return: 'the plan did not go back to its lane',
   fix: 'the fixer did not make the fix',
+  widen: 'the pipe is already 8 wide',
 }
 
 /** Each move is the call its `cf` command makes; false leaves the stop with a person. */
@@ -224,7 +229,7 @@ function apply(db: Db, root: string, plan: PlanRow, m: Move, wire: Wire, now: Da
       const to = rule(db, root, plan, 'director', m.answer ?? '')
       if (to === null) return false
       if (to === 'ask.md') unhold(db, root, plan.id, 'director')
-      else afresh(root, plan.id, db.transaction(() => { clear(db, plan.id); return retry(db, plan) })())
+      else afresh(root, plan.id, owned(root, plan, m.answer ?? '') ? returnToLane(db, plan.id, 'director') : db.transaction(() => { clear(db, plan.id); return retry(db, plan) })())
       const ref = originRef(plan)
       if (ref !== null) wire.comment(ref.repo, ref.no, `Ruled by director on plan ${String(plan.id)}.\n\n${m.answer ?? ''}`)
       return true
@@ -244,8 +249,10 @@ function apply(db: Db, root: string, plan: PlanRow, m: Move, wire: Wire, now: Da
     case 'file':
       return ticketed(db, root, plan, m.ticket ?? m.why, `Filed by director on plan ${String(plan.id)}.\n\n${m.why}`, m.why, wire, now)
     case 'return':
-      afresh(root, plan.id, returnToLane(db, plan.id, 'director'))
+      afresh(root, plan.id, fenced(root, plan) ? retry(db, plan) : returnToLane(db, plan.id, 'director'))
       return true
+    case 'widen':
+      return widen(db, root, plan, m.why)
     case 'fix':
     case 'ask_ceo':
     case 'ask_coo': return false

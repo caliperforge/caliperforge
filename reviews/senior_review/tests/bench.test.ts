@@ -10,10 +10,11 @@ import { load } from '../../../runner/rules.ts'
 import { tick } from '../../../sequencer/index.ts'
 import { approve, builds, CARRIED, PASS as PASSED, plan as planAt, stub, watched, world } from '../../../sequencer/tests/world.ts'
 import { srcDir } from '../../../sequencer/workspace.ts'
-import { eventsOf } from '../../../store/events.ts'
+import { eventsOf, runRows } from '../../../store/events.ts'
 import { record } from '../../../store/files.ts'
 import { due, keep } from '../../../store/language-notes.ts'
 import { rewind } from '../../../store/plans.ts'
+import { verdictRows } from '../../../store/verdict.ts'
 import { judge, loadReviews, specHash } from '../../bench.ts'
 import { type Judged, read } from '../../verdict.ts'
 
@@ -48,8 +49,8 @@ test('refuses the seeded defect by span, passes the clean diff',async () => {
   const { db, plan } = bench(root)
   const refused = await judge(db, root, 'code_quality', plan, seeded(), replies(fixture('code_quality', 'seeded.reply.md')), TRANSCRIPT)
   expect(refused.outcome).toMatchObject({ outcome: 'refuse', defect_class: 'correctness', spans: ['src/stats.ts:2'], origin_kind: 'ruling', origin_ref: 'reviewers.verdict' })
-  expect(db.prepare('SELECT gate, kind, outcome, origin_kind, origin_ref, tokens FROM verdicts WHERE id = ?').get(refused.verdict))
-    .toEqual({ gate: 'review', kind: 'review', outcome: 'refuse', origin_kind: 'ruling', origin_ref: 'reviewers.verdict', tokens: 18 })
+  expect(verdictRows(db, plan).find((v) => v.id === refused.verdict))
+    .toMatchObject({ gate: 'review', kind: 'review', outcome: 'refuse', origin_kind: 'ruling', origin_ref: 'reviewers.verdict', tokens: 18 })
 
   const clean = await judge(db, root, 'code_quality', plan, seeded({ diff: fixture('code_quality', 'clean.diff') }), replies(fixture('code_quality', 'clean.reply.md')), TRANSCRIPT)
   expect(clean.outcome).toMatchObject({ outcome: 'pass', spans: [], defect_class: null })
@@ -59,10 +60,20 @@ test('a reviewer run writes its cost, NULL when none is reported',async () => {
   const { db, plan } = bench(root)
   const cost = async (provider: Provider): Promise<unknown> => {
     const out = await judge(db, root, 'code_quality', plan, seeded(), provider, TRANSCRIPT)
-    return db.prepare('SELECT cost_usd FROM runs WHERE id = ?').get(out.run ?? 0)
+    return runRows(db).find((r) => r.id === out.run)?.cost_usd
   }
-  expect(await cost(replies(fixture('code_quality', 'clean.reply.md'), 0.42))).toEqual({ cost_usd: 0.42 })
-  expect(await cost(replies(fixture('code_quality', 'clean.reply.md')))).toEqual({ cost_usd: null })
+  expect(await cost(replies(fixture('code_quality', 'clean.reply.md'), 0.42))).toBe(0.42)
+  expect(await cost(replies(fixture('code_quality', 'clean.reply.md')))).toBe(null)
+})
+
+test('D5 a reviewer run writes its staffed seat, NULL without one',async () => {
+  const { db, plan } = bench(root)
+  const staffed = async (seat?: string): Promise<unknown> => {
+    const out = await judge(db, root, 'code_quality', plan, seeded(), replies(fixture('code_quality', 'clean.reply.md')), TRANSCRIPT, undefined, seat)
+    return runRows(db).find((r) => r.id === out.run)?.staffed
+  }
+  expect(await staffed('typescript_specialist')).toBe('typescript_specialist')
+  expect(await staffed()).toBeNull()
 })
 
 const TREE = 'c'.repeat(40)
@@ -77,7 +88,7 @@ const AGAIN = (reopen: string): string =>
 test('the verdict row carries the tree it judged, and only a tree',async () => {
   const { db, plan } = bench(root)
   const out = await judge(db, root, 'code_quality', plan, seeded({ tree: TREE }), replies(fixture('code_quality', 'clean.reply.md')), TRANSCRIPT)
-  expect(db.prepare('SELECT tree FROM verdicts WHERE id = ?').get(out.verdict)).toEqual({ tree: TREE })
+  expect(verdictRows(db, plan).find((v) => v.id === out.verdict)).toMatchObject({ tree: TREE })
   expect(rejects(db, `UPDATE verdicts SET tree = 'not a tree' WHERE id = ${String(out.verdict)}`)).toBe(true)
 })
 
@@ -87,7 +98,7 @@ test('a refuse on a path unchanged since last verdict is noted',async () => {
     seeded({ prior: PRIOR('src/stats.ts:9'), narrowing: FROZEN }), replies(AGAIN('')), TRANSCRIPT)
   expect(noted.outcome).toMatchObject({ outcome: 'pass', spans: [], defect_class: null, origin_kind: null, origin_ref: null })
   expect(noted.outcome.message).toContain('Noted, not refused, unchanged since my last verdict:\n  - src/stats.ts:2')
-  expect(db.prepare('SELECT outcome FROM verdicts WHERE id = ?').get(noted.verdict)).toEqual({ outcome: 'pass' })
+  expect(verdictRows(db, plan).find((v) => v.id === noted.verdict)).toMatchObject({ outcome: 'pass' })
 })
 
 test('that span refuses if reopened, named before, or changed',async () => {
@@ -109,7 +120,7 @@ test('senior review reads the first verdict, names what it missed',async () => {
   expect(sent[0]).toContain('# First verdict')
   expect(sent[0]).toContain('src/stats.ts:2')
   expect(second.outcome.spans).toEqual(['src/stats.ts:4'])
-  expect(db.prepare('SELECT gate, step FROM verdicts WHERE id = ?').get(second.verdict)).toEqual({ gate: 'senior_review', step: 5 })
+  expect(verdictRows(db, plan).find((v) => v.id === second.verdict)).toMatchObject({ gate: 'senior_review', step: 5 })
 })
 
 test('senior review with reference refuses pay-kit#340 per rule',async () => {
@@ -146,7 +157,7 @@ test('two defects in two files are one refusal naming both spans',async () => {
     replies(fixture('code_quality', 'pair.reply.md')), TRANSCRIPT)
   expect(out.outcome).toMatchObject({ outcome: 'refuse', defect_class: 'correctness', spans: ['src/stats.ts:2', 'src/parse.ts:1'], origin_kind: 'ruling', origin_ref: 'reviewers.verdict' })
   expect(out.outcome.message).toContain('scope')
-  expect(db.prepare('SELECT count(*) AS n FROM verdicts WHERE plan = ?').get(plan)).toEqual({ n: 1 })
+  expect(verdictRows(db, plan)).toHaveLength(1)
 })
 
 test('a replaced function left in place is a minimal refusal', async () => {
@@ -164,9 +175,9 @@ test('reviewer != builder: refused before firing, trigger holds',async () => {
   const never: Provider = { name: 'claude-agent-sdk', fire: () => { throw new Error('the provider was fired on a barred packet') } }
   const barred = await judge(db, root, 'code_quality', plan, seeded(), never, TRANSCRIPT)
   expect(barred.run).toBeNull()
-  expect(db.prepare('SELECT outcome, origin_kind, origin_ref, tokens FROM verdicts WHERE id = ?').get(barred.verdict))
-    .toEqual({ outcome: 'refuse', origin_kind: 'ruling', origin_ref: 'runs.reviewer_not_builder', tokens: 0 })
-  expect(db.prepare('SELECT count(*) AS n FROM runs WHERE plan = ?').get(plan)).toEqual({ n: 1 })
+  expect(verdictRows(db, plan).find((v) => v.id === barred.verdict))
+    .toMatchObject({ outcome: 'refuse', origin_kind: 'ruling', origin_ref: 'runs.reviewer_not_builder', tokens: 0 })
+  expect(runRows(db).filter((r) => r.plan === plan)).toHaveLength(1)
 
   const fresh_ = bench(root)
   const first = await judge(fresh_.db, root, 'code_quality', fresh_.plan, seeded(), replies(fixture('code_quality', 'seeded.reply.md')), TRANSCRIPT)
@@ -194,8 +205,8 @@ test('a reply with no readable verdict fence is a failed run',async () => {
   const { db, plan } = bench(root)
   await expect(judge(db, root, 'code_quality', plan, seeded(), replies('looks fine to me'), TRANSCRIPT))
     .rejects.toThrow('reviewers.verdict_fence')
-  expect(db.prepare('SELECT exit FROM runs WHERE plan = ?').all(plan)).toEqual([{ exit: 1 }])
-  expect(db.prepare('SELECT count(*) AS n FROM verdicts WHERE plan = ?').get(plan)).toEqual({ n: 0 })
+  expect(runRows(db).filter((r) => r.plan === plan).map(({ exit }) => ({ exit }))).toEqual([{ exit: 1 }])
+  expect(verdictRows(db, plan)).toHaveLength(0)
 })
 
 const NOTE = (kind: string, line = '3', why = '    why: w\n'): string =>
@@ -262,10 +273,10 @@ test('a capped run fires once more with no tools for the verdict',async () => {
   expect(sent[1]?.tools).toEqual([])
   expect(sent[1]?.prompt).toMatch(MAPPED)
   expect(out.outcome).toMatchObject({ outcome: 'refuse', spans: ['src/stats.ts:2'], origin_kind: 'ruling', origin_ref: 'reviewers.verdict' })
-  expect(db.prepare('SELECT exit FROM runs WHERE plan = ? ORDER BY id').all(plan)).toEqual([{ exit: 1 }, { exit: 0 }])
-  expect(db.prepare('SELECT max(id) AS id FROM runs WHERE plan = ?').get(plan)).toEqual({ id: out.run })
-  expect(db.prepare('SELECT id, outcome, origin_kind, origin_ref, tokens, seconds FROM verdicts WHERE plan = ?').all(plan))
-    .toEqual([{ id: out.verdict, outcome: 'refuse', origin_kind: 'ruling', origin_ref: 'reviewers.verdict', tokens: 36, seconds: 1 }])
+  expect(runRows(db).filter((r) => r.plan === plan).map(({ exit }) => ({ exit }))).toEqual([{ exit: 1 }, { exit: 0 }])
+  expect(runRows(db).filter((r) => r.plan === plan).at(-1)?.id).toBe(out.run)
+  expect(verdictRows(db, plan))
+    .toMatchObject([{ id: out.verdict, outcome: 'refuse', origin_kind: 'ruling', origin_ref: 'reviewers.verdict', tokens: 36, seconds: 1 }])
 })
 
 test('a refusal of an unlisted class still refuses with its spans',async () => {
@@ -274,9 +285,9 @@ test('a refusal of an unlisted class still refuses with its spans',async () => {
 
   const { db, plan } = bench(root)
   const out = await judge(db, root, 'senior_review', plan, seeded({ verdict: fixture('senior_review', 'first.verdict.md') }), replies(reply), TRANSCRIPT)
-  expect(db.prepare('SELECT exit FROM runs WHERE id = ?').get(out.run ?? 0)).toEqual({ exit: 0 })
-  expect(db.prepare('SELECT gate, outcome, origin_kind, origin_ref FROM verdicts WHERE id = ?').get(out.verdict))
-    .toEqual({ gate: 'senior_review', outcome: 'refuse', origin_kind: 'ruling', origin_ref: 'reviewers.verdict' })
+  expect(runRows(db).find((r) => r.id === out.run)).toMatchObject({ exit: 0 })
+  expect(verdictRows(db, plan).find((v) => v.id === out.verdict))
+    .toMatchObject({ gate: 'senior_review', outcome: 'refuse', origin_kind: 'ruling', origin_ref: 'reviewers.verdict' })
 })
 
 test('a refused packet writes its verdict and fires no provider',async () => {
@@ -284,8 +295,8 @@ test('a refused packet writes its verdict and fires no provider',async () => {
   const never: Provider = { name: 'claude-agent-sdk', fire: () => { throw new Error('the provider was fired on a refused packet') } }
   const out = await judge(db, root, 'code_quality', plan, seeded({ repo: '/Users/michael/Documents/Claude/Projects/crypto-contributor' }), never, TRANSCRIPT)
   expect(out.run).toBeNull()
-  expect(db.prepare('SELECT outcome, origin_kind, origin_ref FROM verdicts WHERE id = ?').get(out.verdict))
-    .toEqual({ outcome: 'refuse', origin_kind: 'ruling', origin_ref: 'reviewers.maintainers_view' })
+  expect(verdictRows(db, plan).find((v) => v.id === out.verdict))
+    .toMatchObject({ outcome: 'refuse', origin_kind: 'ruling', origin_ref: 'reviewers.maintainers_view' })
 })
 
 const senior = async (reply: string): Promise<Judged> => {

@@ -4,11 +4,11 @@ import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { all } from '../../cli/inbox.ts'
 import type { Provider } from '../../providers/kind.ts'
-import { amend, approved, learnings, learningsIn, paste, placed, postOf, posts, putPost } from '../../store/desk.ts'
-import { eventsOf, kindsOf, runRows } from '../../store/events.ts'
+import { amend, approved, learnings, learningsIn, paste, placed, postOf, posts, putPost, sentBack } from '../../store/desk.ts'
+import { eventsOf, kindsOf, newestMode, runRows } from '../../store/events.ts'
 import { set, zone } from '../../store/lanes.ts'
 import { addPipe, briefed, dropPlan, end, plansOf, putPlan, requeue } from '../../store/plans.ts'
-import { refusalAt } from '../../store/refusals.ts'
+import { refusalAt, WHY } from '../../store/refusals.ts'
 import { verdictRows } from '../../store/verdict.ts'
 import { desk, draft, drafted, facts, gather, grow, review } from '../../templates/comms.ts'
 import { tick } from '../index.ts'
@@ -375,12 +375,29 @@ test('draftBadFence D2: a bad fence refuses and writes no draft', async () => {
 })
 
 test.each([
-  { why: '2 items', list: items('a', 'b') },
-  { why: '6 items', list: items('a', 'b', 'c', 'd', 'e', 'f') },
-  { why: 'a status of done', list: [...items('a', 'b'), { title: 'c', ...ITEM, status: 'done' }] },
-])('dailyRefuses D2: a daily reply of $why refuses on writer.fence and writes no items.json', async ({ list }) => {
+  { title: 'daily 2026-09-27', mode: 'log', reply: listing(items('a', 'b', 'c')) },
+  { title: 'ship post acme/widget#7', mode: 'ship', reply: fixture('reply.md') },
+  { title: 'weekly 2026-10-02', mode: 'weekly', reply: fixture('weekly.md') },
+])('writerMode D1 D2: a $title writer runs in $mode', async ({ title, mode, reply }) => {
+  const w = posting(title)
+  const prompts: string[] = []
+  const writer = seated(reply)
+  await draft(w.db, w.root, plan(w.db, 1), mapOf('comms').at(1), { ...writer, fire: (packet) => {
+    prompts.push(packet.prompt)
+    return writer.fire(packet)
+  } })
+  expect(prompts[0]).toContain(readFileSync(join(import.meta.dirname, '../../seats/modes', `${mode}.md`), 'utf8'))
+  expect(newestMode(w.db)).toBe(mode)
+})
+
+test.each([
+  { why: '2 items', reply: listing(items('a', 'b')) },
+  { why: '6 items', reply: listing(items('a', 'b', 'c', 'd', 'e', 'f')) },
+  { why: 'a status of done', reply: listing([...items('a', 'b'), { title: 'c', ...ITEM, status: 'done' }]) },
+  { why: 'only the ship fence', reply: fixture('reply.md') },
+])('dailyRefuses D2: a daily reply of $why refuses on writer.fence and writes no items.json', async ({ reply }) => {
   const w = posting('daily 2026-09-27')
-  expect(await draft(w.db, w.root, plan(w.db, 1), mapOf('comms').at(1), seated(listing(list))))
+  expect(await draft(w.db, w.root, plan(w.db, 1), mapOf('comms').at(1), seated(reply)))
     .toMatchObject({ outcome: 'refuse', spans: ['writer.fence'] })
   expect(maybe(w.root, 1, 'items.json')).toBeNull()
 })
@@ -413,6 +430,97 @@ test('reviewPasses D4: a pass keeps its prose in review.md', async () => {
   const w = posting('daily 2026-09-27')
   expect(await reviewing(w, verdict('wording.reply.md'))).toMatchObject({ outcome: 'pass' })
   expect(get(w.root, 1, 'review.md')).toContain('seamlessly')
+})
+
+const REFUSED = '# Refused — answer what this names'
+
+const prompted = async (w: World): Promise<string> => {
+  const prompts: string[] = []
+  const writer = seated(listing(items('a', 'b', 'c')))
+  await draft(w.db, w.root, plan(w.db, 1), mapOf('comms').at(1), { ...writer, fire: (packet) => {
+    prompts.push(packet.prompt)
+    return writer.fire(packet)
+  } })
+  return prompts[0] ?? ''
+}
+
+test('refusedDraft D1: the writer prompt carries refusal.md', async () => {
+  const w = posting('daily 2026-09-27')
+  put(w.root, 1, 'refusal.md', 'item b is unsourced')
+  expect(await prompted(w)).toContain(`${REFUSED}, keep every item it does not name\n\nitem b is unsourced`)
+})
+
+test('unrefusedDraft D2: no refusal.md, no # Refused heading', async () => {
+  const w = posting('daily 2026-09-27')
+  const prompt = await prompted(w)
+  expect(prompt).toContain(`# packet.json\n\n${get(w.root, 1, 'packet.json')}`)
+  expect(prompt).not.toContain('# Refused')
+  expect(prompt).not.toContain('# Returned from the desk')
+})
+
+test('reviewDrops D3: a pass drops refusal.md, a refuse keeps it', async () => {
+  const w = posting('daily 2026-09-27')
+  put(w.root, 1, 'refusal.md', 'was refused')
+  await reviewing(w, verdict('unsourced.reply.md'))
+  expect(maybe(w.root, 1, 'refusal.md')).toBe('was refused')
+  expect(await reviewing(w, verdict('wording.reply.md'))).toMatchObject({ outcome: 'pass' })
+  expect(maybe(w.root, 1, 'refusal.md')).toBeNull()
+})
+
+test('prevDraft D1: no refusal.md carries refusal.prev.md', async () => {
+  const w = posting('daily 2026-09-27')
+  put(w.root, 1, 'refusal.prev.md', 'item c is unsourced')
+  expect(await prompted(w)).toContain(`${REFUSED}, keep every item it does not name\n\nitem c is unsourced`)
+  put(w.root, 1, 'refusal.md', 'item b is unsourced')
+  const prompt = await prompted(w)
+  expect(prompt).toContain(`${REFUSED}, keep every item it does not name\n\nitem b is unsourced`)
+  expect(prompt).not.toContain('item c is unsourced')
+})
+
+test('prevDrops D2: a pass drops refusal.prev.md, refuse keeps', async () => {
+  const w = posting('daily 2026-09-27')
+  put(w.root, 1, 'refusal.prev.md', 'was refused')
+  await reviewing(w, verdict('unsourced.reply.md'))
+  expect(maybe(w.root, 1, 'refusal.prev.md')).toBe('was refused')
+  expect(await reviewing(w, verdict('wording.reply.md'))).toMatchObject({ outcome: 'pass' })
+  expect(maybe(w.root, 1, 'refusal.prev.md')).toBeNull()
+})
+
+const turns = (writer: string[], review: string[]): Provider => ({
+  name: 'claude-agent-sdk',
+  fire: (packet) => stub('', 0, (packet.prompt.includes('# text_review') ? review : writer).shift() ?? '').fire(packet),
+})
+
+const rerun = async (second: string): Promise<World> => {
+  const w = posting('daily 2026-09-27', 1)
+  const seats = turns([listing(items('a', 'b', 'c')), second], [verdict('item.reply.md'), verdict('unsourced.reply.md')])
+  for (let n = 0; n < 6; n += 1) await tick(w.db, w.root, seats)
+  return w
+}
+
+test('rerunChanged D3: a new items.json goes round again', async () => {
+  const w = await rerun(listing(items('a', 'b', 'd')))
+  expect(plan(w.db, 1).step).toBe(1)
+  expect(plan(w.db, 1).state).not.toBe('blocked_on_ceo')
+  expect(get(w.root, 1, 'refusal.md')).not.toContain('# Stopped')
+})
+
+test('rerunSame D4: the same items.json stops as unchanged', async () => {
+  const w = await rerun(listing(items('a', 'b', 'c')))
+  const stop = `# Stopped\n\n${WHY.unchanged}.\n`
+  expect(plan(w.db, 1).state).toBe('blocked_on_ceo')
+  expect(get(w.root, 1, 'refusal.md').slice(-stop.length)).toBe(stop)
+})
+
+test('deskThenRefused D4: the desk note comes before the refusal', async () => {
+  const w = posting('daily 2026-09-27')
+  putPost(w.db, { id: 1, kind: 'daily', dest: 'site', status: 'proof', title: 'The day', dek: 'What moved', body: 'One job landed.',
+    edited_title: null, sources: '[]', checks: '[]', work_date: '2026-09-27', written_date: '2026-09-27' })
+  sentBack(w.db, 1, 'warmer', 'ceo')
+  put(w.root, 1, 'refusal.md', 'was refused')
+  const prompt = await prompted(w)
+  expect(prompt).toContain('# Returned from the desk\n\nwarmer')
+  expect(prompt.indexOf('# Returned from the desk')).toBeLessThan(prompt.indexOf(REFUSED))
 })
 
 test.each(['growth 2026-09-28', 'scorecard 2026-09-28'])('D5: a %s plan passes steps 1 and 3 with no run and no draft', async (title) => {

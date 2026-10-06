@@ -14,6 +14,8 @@ import { builder, type Step } from '../templates/pr-path.ts'
 import { answered, check, gather } from '../templates/research.ts'
 import type { Fired, Outcome } from './kind.ts'
 import { parted } from './split.ts'
+import { executed } from './command.ts'
+import { subject } from './daily.ts'
 import { refilled } from './refill.ts'
 import type { Wire } from './push.ts'
 import { fireBrief, fireLanded, fireSeat } from './seat.ts'
@@ -24,6 +26,9 @@ import { languageFor } from './route.ts'
 import { branchOf, checkout, diffOf, internalBranch, maybe, put, ruled, srcDir, titleOf } from './workspace.ts'
 import { assembling, assembly, homeOf } from './home.ts'
 import { fingerprintOf, refusalText, stopped } from './refusal.ts'
+
+/** CI that failed, waited or never showed is GitHub's state, not a fault on main: it never switches a lane off. */
+export const CI_ONLY = /^(?:checks:CI|.* ci\.(?:red|pending|missing))$/
 
 /** `wait` is a step that settled by waiting: a CI still running, or a checkout the network failed. Neither is worth asking again in the same tick. */
 export async function stepped(db: Db, root: string, pipe: PipeRow, plan: PlanRow, lease: Taken,
@@ -125,6 +130,7 @@ function treeOf(db: Db, root: string, plan: PlanRow): { repo: string; branch: st
 async function made(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider, wire?: Wire, read?: Read): Promise<Outcome> {
   try {
     const out = await fire(db, root, plan, step, provider, wire, read)
+    if (out.command !== undefined) return executed(db, root, plan, out.command)
     return out.parts === undefined ? out : parted(db, root, plan, out.parts, wire)
   } catch (error) {
     return thrown(step, error instanceof Error ? error.message : String(error))
@@ -179,7 +185,7 @@ function model(db: Db, plan: PlanRow, step: Step, run: () => Promise<Outcome>): 
 function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcome): string {
   if (outcome.held === true) return 'running'
   if (outcome.blip === true) return blip(db, root, plan, step, outcome)
-  if (outcome.split === true) {
+  if (outcome.split === true || outcome.ran === true) {
     end(db, plan.id, 'done')
     return 'done'
   }
@@ -201,18 +207,23 @@ function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcom
     })()
   }
   const r = { plan: plan.id, step: step.step, fingerprint: fingerprintOf(step, outcome),
-    diff: step.step >= 3 ? digestOf(diffOf(root, plan.id)) : null, moved: outcome.moved,
+    diff: step.step >= 3 ? digestOf(plan.template === 'comms' ? subject(root, plan.id)[1] ?? '' : diffOf(root, plan.id)) : null, moved: outcome.moved,
     own: outcome.spans.some((s) => s.startsWith('ratchet:')) || undefined, span: outcome.spans.join(', '), note: outcome.note,
     ticket: digestOf(`${maybe(root, plan.id, 'issue.md') ?? ''}${ruled(root, plan.id) ?? ''}${maybe(root, plan.id, 'rulings.md') ?? ''}`) }
   const why = refused(db, r)
   if (why !== 'again') stopped(root, plan.id, why)
-  if (why === 'shared') {
+  if (why === 'shared' && !outcome.spans.every((s) => CI_ONLY.test(s))) {
     db.prepare('UPDATE pipes SET enabled = 0 WHERE id = ?').run(plan.pipe_id)
     outcome.note += `; lane off: plans ${String(plan.id)} and ${String(peer(db, r))} refused on ${outcome.spans.join(', ')}`
+    logged(db, { plan: plan.id, kind: 'pipe', actor: 'settle', outcome: 'needs_ceo', message: outcome.note, pointer: null, run: null })
   }
   // A rewind costs no retry but is recorded like any refusal, so a second identical one waits for a person.
   if (outcome.rewind !== undefined && why === 'again') { rewind(db, plan.id, outcome.rewind); return 'running' }
-  return back(db, plan, outcome.to ?? backTo(step), why !== 'again', outcome.note)
+  return back(db, plan, outcome.to ?? backTo(step), why !== 'again' || fenced(outcome), outcome.note)
+}
+
+function fenced(outcome: Outcome): boolean {
+  return outcome.spans.length > 0 && outcome.spans.every((s) => / authority\.(?:outside_files|write_paths)$/.test(s))
 }
 
 /** Step 2 is the build in templates/pr-path.ts. */

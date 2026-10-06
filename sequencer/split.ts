@@ -2,6 +2,7 @@ import { rmSync } from 'node:fs'
 import type { IssueComment } from '../cli/gh.ts'
 import { LANE } from '../cli/plan.ts'
 import { logged } from '../store/events.ts'
+import { filesOf, record } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
 import { addPart, claimedPart, partAt, partOf, partsOf, queuePart, releasable, waitingOn } from '../store/parts.ts'
 import { internal, originIssue, planById, type PlanRow, rewind } from '../store/plans.ts'
@@ -10,7 +11,7 @@ import { human, type Part, writable } from './brief.ts'
 import type { Outcome } from './kind.ts'
 import { languageOfPath, TEST } from './route.ts'
 import { WIRE, type Wire } from './push.ts'
-import { drop, get, maybe, put, srcDir } from './workspace.ts'
+import { doneIds, drop, get, maybe, put, srcDir } from './workspace.ts'
 import { homeOf } from './home.ts'
 import { approved } from './approve.ts'
 import { words } from './signals.ts'
@@ -107,9 +108,16 @@ export function following(db: Db, root: string, plan: PlanRow, sha: string, wire
 /** An outside parent goes back to senior on its checkout of `asm/<id>`, to be sent upstream as one change. */
 function assemble(db: Db, root: string, parent: PlanRow): string {
   const branch = `asm/${String(parent.id)}`
-  put(root, parent.id, 'issue.md', [get(root, parent.id, 'ask.md').trimEnd(), '', `## Parts, joined on ${branch}`, '',
-    ...partsOf(db, parent.id).map((p) => `- ${p.title}`), '', '## Cases', '', `- D1 every part's cases hold together on ${branch}`,
-    '- D2 a gap between parts is refused: a case no part answers, a name one part adds and no part uses, a change two parts make twice', ''].join('\n'))
+  const parts = partsOf(db, parent.id)
+  const files = parts.flatMap((p) => p.plan === null ? [] : filesOf(db, p.plan)).filter((f, at, all) => all.findIndex((g) => g.path === f.path) === at)
+  const issue = [get(root, parent.id, 'ask.md').trimEnd(), '', `## Parts, joined on ${branch}`, '',
+    ...parts.map((p) => `- ${p.title}`), '', '## Cases', '', `- D1 every part's cases hold together on ${branch}`,
+    '- D2 a gap between parts is refused: a case no part answers, a name one part adds and no part uses, a change two parts make twice', '',
+    '## Files', '', ...files.map((f) => `- ${f.path}`), ''].join('\n')
+  put(root, parent.id, 'issue.md', issue)
+  record(db, parent.id, files)
+  put(root, parent.id, 'step-2.handback.md', ['---', 'done:',
+    ...doneIds(issue).flatMap((id) => [`  - id: ${id}`, '    status: done', `    pointer: ${branch}`]), '---', ''].join('\n'))
   rmSync(srcDir(root, parent.id), { recursive: true, force: true })
   rewind(db, parent.id, 5)
   return `the last part landed; plan ${String(parent.id)} assembles ${branch} at senior`

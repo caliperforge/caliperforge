@@ -21,8 +21,8 @@ test('D2 pay-kit: org commit/pr shape, own checks, notes, sources', () => {
   const org = profile(REPO, 'solana-foundation/other')
   const kit = profile(REPO, 'solana-foundation/pay-kit')
   expect(kit).toMatchObject({ commit: org?.commit, pr: org?.pr, checks: { go: ['lint', 'test'] } })
-  expect(Object.keys(kit ?? {}).sort()).toEqual(['checks', 'commit', 'intake', 'notes', 'pr', 'sources'])
-  expect(kit?.intake).toEqual({ claim_first: false, pace: { prs: 1, days: 7 } })
+  expect(Object.keys(kit ?? {}).sort()).toEqual(['checks', 'commit', 'greptile_files', 'intake', 'notes', 'pr', 'sources'])
+  expect(kit?.intake).toEqual({ claim_first: false, pace: { prs: 3, days: 7 } })
   expect(profile(REPO, 'solana-foundation/surfpool')).not.toHaveProperty('intake')
 })
 
@@ -117,6 +117,11 @@ test('kora parses Conventional subjects, Fixes and claim_first', () => {
   expect(kora?.notes).toHaveLength(7)
   expect(kora?.notes?.[0]).toMatch(/^Kora ships a Justfile/)
   expect(kora?.notes?.[6]).toMatch(/^A mutation proof/)
+})
+
+test('914 D4 greptile_files not a string list is refused', () => {
+  const dir = root({ 'widget.yml': 'greptile_files: 3\n' })
+  expect(() => profile(dir, 'acme/widget')).toThrow(join(dir, 'profiles/acme/widget.yml'))
 })
 
 test('both real repo profiles parse', () => {

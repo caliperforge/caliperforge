@@ -681,7 +681,7 @@ test('step 3 rehearses before review; step 6 opens no second', async () => {
   for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
   expect(plan(w.db, 1).step).toBe(7)
   expect(sent.slice(2)).toEqual([next])
-  expect(branches).toEqual(['widget-12-a1-next'])
+  expect(branches).toEqual(['main', 'main', 'widget-12-a1-next'])
 })
 
 test('a red fork run sends the plan to the builder with its log', async () => {
@@ -968,44 +968,72 @@ const ruling = (sha: string, ids: string): string =>
 const accepting = (findings: string[] | null, rulings: (sha: string) => string, handback?: string) => (at: World): void => {
   scored(at.root, 1, 3, FINDINGS)
   const sha = head(srcDir(at.root, 1), ['rev-parse', 'HEAD'])
-  if (findings !== null) put(at.root, 1, `findings-${sha}.md`, findings.map((id) => `- ${id} the empty name is never refused\n`).join(''))
+  if (findings !== null) put(at.root, 1, `findings-${sha}.md`, findings.map((id) => `- ${id} ${P2} the empty name is never refused\n`).join(''))
   put(at.root, 1, 'rulings.md', rulings(sha))
   if (handback !== undefined) put(at.root, 1, 'step-2.handback.md', handback)
 }
 
-test('D1 D5 a 3/5 head with its findings accepted or done passes', async () => {
+const P2 = '<img alt="P2" src="https://greptile.com/p2.svg">'
+
+test('D2 D7 a 3/5 head with findings accepted or overruled passes', async () => {
   const [w, lap] = await atReady(accepting(['G11', 'G12'], (sha) => ruling(sha, 'G11, G12')))
   expect((await lap())?.note).toMatch(/the COO accepted G11, G12$/)
   expect(plan(w.db, 1).step).toBe(7)
   expect(eventsOf(w.db, 1, 'greptile.accepted')).toEqual([{ actor: 'ready', outcome: 'pass', message: 'G11, G12' }])
 
-  const answered = CARRIED.replace(/---\n$/, '  - id: G12\n    status: done\n    pointer: src/hello.ts:1\n---\n')
-  const [d5, again] = await atReady(accepting(['G11', 'G12'], (sha) => ruling(sha, 'G11'), answered))
-  expect((await again())?.note).toMatch(/the COO accepted G11$/)
-  expect(plan(d5.db, 1).step).toBe(7)
+  const [d2, again] = await atReady(accepting(['G11', 'G12'], (sha) => `${ruling(sha, 'G11')}G12 overruled: src/hello.ts:1 refuses it\n`))
+  expect((await again())?.note).toMatch(/the COO accepted G11, G12$/)
+  expect(plan(d2.db, 1).step).toBe(7)
 })
 
-test('D2 D3 D4 a 3/5 head not fully accepted goes to the builder', async () => {
+test('D3 a 5/5 head with no findings passes', async () => {
+  const [w, lap] = await atReady((at) => { scored(at.root, 1, 5, 'Confidence Score: 5/5') })
+  await lap()
+  expect(plan(w.db, 1).step).toBe(7)
+})
+
+test('D1 D5 D7 an open P2 at senior holds ready on ready_proof', async () => {
+  const answered = CARRIED.replace(/---\n$/, '  - id: G12\n    status: done\n    pointer: src/hello.ts:1\n---\n')
   for (const grade of [
     accepting(['G11', 'G12', 'G13'], (sha) => ruling(sha, 'G11, G12')),
     accepting(['G11', 'G12'], () => ruling('f'.repeat(40), 'G11, G12')),
-    accepting(null, (sha) => ruling(sha, 'G11, G12')),
-    accepting([], (sha) => ruling(sha, 'G11, G12')),
+    accepting(['G11', 'G12'], (sha) => ruling(sha, 'G11'), answered),
+    accepting(['G11'], () => 'G11 overruled:\n'),
   ]) {
+    const [w, lap] = await atReady(grade)
+    await lap()
+    expect(plan(w.db, 1)).toMatchObject({ step: 6, wait_reason: 'ready_proof' })
+  }
+})
+
+test('D4 a 4/5 with a P2 opened after senior goes to the builder', async () => {
+  const [w, lap] = await atReady((at) => { scored(at.root, 1, 4, FINDINGS) })
+  put(w.root, 1, `findings-${head(srcDir(w.root, 1), ['rev-parse', 'HEAD'])}.md`, `- G11 ${P2} the empty name is never refused\n`)
+  expect(await lap()).toMatchObject({ step: 6, name: 'ready', outcome: 'refuse', spans: ['greptile:4/5'] })
+  expect(plan(w.db, 1).step).toBe(2)
+})
+
+test('D8 a 3/5 head with no findings listed goes to the builder', async () => {
+  for (const grade of [accepting(null, (sha) => ruling(sha, 'G11, G12')), accepting([], (sha) => ruling(sha, 'G11, G12'))]) {
     const [w, lap] = await atReady(grade)
     expect(await lap()).toMatchObject({ step: 6, name: 'ready', outcome: 'refuse', spans: ['greptile:3/5'] })
     expect(plan(w.db, 1).step).toBe(2)
   }
 })
 
-test('D6 D7 a new head asks Greptile once; a fourth goes to COO', async () => {
+/** A new head at ready goes back through rails, review and senior before ready judges it. */
+const reproved = async (w: World, lap: () => Promise<Fired | undefined>, line: string): Promise<Fired | undefined> => {
+  built(w.root, 1, line)
+  for (let at = 0; at < 4; at += 1) await lap()
+  expect(plan(w.db, 1).step).toBe(6)
+  return lap()
+}
+
+test('D6 D7 a new head asks Greptile once; a fourth goes to COO', { timeout: 90_000 }, async () => {
   const log: string[] = []
   const [w, lap] = await atReady(() => undefined, log)
   const asked = (): string[] => log.filter((l) => l.startsWith('review '))
-  const round = (line: string): Promise<Fired | undefined> => {
-    built(w.root, 1, line)
-    return lap()
-  }
+  const round = (line: string): Promise<Fired | undefined> => reproved(w, lap, line)
   expect(await lap()).toMatchObject({ step: 6, outcome: 'pass', spans: ['greptile.missing'] })
   await lap()
   expect(asked()).toEqual(['review caliperforge/widget widget-12-a1-next'])
@@ -1027,10 +1055,7 @@ const month = async (others: number): Promise<[World, () => string[], (line: str
   await lap()
   const asked = (): string[] => log.filter((l) => l.startsWith('review '))
   expect(asked()).toHaveLength(1)
-  return [w, asked, (line) => {
-    built(w.root, 1, line)
-    return lap()
-  }]
+  return [w, asked, (line) => reproved(w, lap, line)]
 }
 
 test('D2 at 40 this month only the first head is asked', async () => {

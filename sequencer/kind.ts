@@ -8,6 +8,8 @@ import type { Part } from './brief.ts'
  * own prose, which the builder rebuilds against. `blip` is a checkout the network failed. `to` is the
  * step a refusal goes back to when it is not the one the step map implies. `parts` is the brief writer's
  * answer that the ticket is more than one job; `split` is that answer filed, which ends the plan.
+ * `command` is the brief writer's answer that the whole job is one allow-listed command; `ran` is that
+ * command run, which ends the plan.
  */
 export interface Outcome {
   outcome: Verdict['outcome']
@@ -20,6 +22,8 @@ export interface Outcome {
   to?: number
   parts?: Part[]
   split?: true
+  command?: string
+  ran?: true
   /** Main moved under the branch: nobody's fault, so never `shared` or `repeat`. */
   moved?: true
 }

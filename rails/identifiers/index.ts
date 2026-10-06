@@ -43,6 +43,7 @@ function paths(root: string, ours: Set<string>, gone: Set<string>, l: Said): Nam
     .map((m) => ({ id: (m[1] ?? '').replace(/\.+$/, ''), at: m[2], ticked: m[0].startsWith('`') }))
     .filter((n) => ours.has(n.id.split('/')[0] ?? ''))
     .filter((n) => n.ticked || n.at !== undefined || /\.\w+$/.test(n.id))
+    .filter((n) => !n.id.split('/').includes('...'))
     .filter((n) => !deleted(gone, n.id) && !resolves(join(root, n.id), n.at) && !ignored(root, n.id))
     .map((n) => ({ id: n.at === undefined ? n.id : `${n.id}:${n.at}`, line: l.line }))
 }

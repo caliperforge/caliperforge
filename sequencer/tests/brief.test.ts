@@ -361,6 +361,19 @@ test('an unclear reply holds for the COO and spends no retry', async () => {
     .toEqual({ held_by: 'coo', held_why: `brief_writer: ${question}` })
 })
 
+test('D1: a question after a shape refusal sets the refusal aside', async () => {
+  const w = await turnedBack()
+  const question = 'which greeting?'
+  await tick(w.db, w.root, stub(CARRIED))
+  const refusal = maybe(w.root, ID, 'refusal.md')
+  expect(refusal).toContain('## Must not break')
+
+  await tick(w.db, w.root, stub(CARRIED, 0, undefined, undefined, asks(question)))
+  expect(maybe(w.root, ID, 'refusal.md')).toBeNull()
+  expect(maybe(w.root, ID, 'refusal.prev.md')).toBe(refusal)
+  expect(maybe(w.root, ID, 'question.md')).toBe(`${question}\n`)
+})
+
 test('a round back at step 1 keeps the brief the reviewers read', async () => {
   const w = mine()
   for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
@@ -642,8 +655,8 @@ test('only brief.ts reads ## Files, and the shape check uses it', () => {
     .map((f) => relative(repo, f))
     // A live checkout carries `.cf/work/*/src`, each a copy of this tree rather than a second reader in it.
     .filter((f) => !f.startsWith('.cf/') && !f.includes('/tests/') && readFileSync(join(repo, f), 'utf8').includes('## Files'))
-  // handout.ts and seat.ts name the section in the brief writer's packet text and do not parse it.
-  expect(readers.sort()).toEqual(['sequencer/brief.ts', 'sequencer/handout.ts', 'sequencer/seat.ts'])
+  // handout.ts and seat.ts name the section in the brief writer's packet text, split.ts writes it into an assembled parent's issue, and none parses it.
+  expect(readers.sort()).toEqual(['sequencer/brief.ts', 'sequencer/handout.ts', 'sequencer/seat.ts', 'sequencer/split.ts'])
 
   const brief = fixture('absent-file.md')
   expect(files(brief).map((f) => f.path)).toEqual([shape(brief, ask, repo)?.span])

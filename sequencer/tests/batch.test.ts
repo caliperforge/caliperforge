@@ -38,6 +38,8 @@ const TRANSCRIPT = [
 const SHA = 'a'.repeat(40)
 const REVIEWED = `Last reviewed commit: [fix](https://github.com/acme/widget/commit/${SHA})`
 
+const QUIET = { autoReview: [], strictness: 1, customContext: { rules: [], files: [] } }
+
 const pr = (over: Partial<Pr> = {}): Pr => ({
   number: 7, url: URL, state: 'OPEN', mergedAt: null, mergedBy: null, reviewDecision: null,
   comments: [], reviews: [], statusCheckRollup: [], ...over,
@@ -46,9 +48,10 @@ const pr = (over: Partial<Pr> = {}): Pr => ({
 async function atBatch(): Promise<World> {
   const w = world()
   approve(w.db, w.target)
-  for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
-  writeFileSync(join(srcDir(w.root, 1), 'src/hello.ts'), 'export const hello = (): string => "hey"\n')
-  await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
+  for (let at = 0; at < 7; at += 1) {
+    if (at === 2) writeFileSync(join(srcDir(w.root, 1), 'src/hello.ts'), 'export const hello = (): string => "hey"\n')
+    await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
+  }
   expect(plan(w.db, 1).step).toBe(7)
   return w
 }
@@ -233,6 +236,14 @@ test('a fork -next HEAD lacks is folded onto, never forced', { timeout: 90_000 }
   expect(sent.filter((l) => l.includes('--force') || l.includes('+refs'))).toEqual([])
 })
 
+/** `ticks` ticks, with `src/hello.ts` saying `said` from the review on, so senior passes the bytes ready reads. */
+async function round(w: World, wire: Wire, said: string, ticks: number): Promise<void> {
+  for (let at = 0; at < ticks; at += 1) {
+    if (at === ticks - 3) writeFileSync(join(srcDir(w.root, 1), 'src/hello.ts'), `export const hello = (): string => "${said}"\n`)
+    await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  }
+}
+
 test('D1 D2 D3 pre-pr rounds move -next; push sends the branch', async () => {
   const w = world()
   approve(w.db, w.target)
@@ -244,23 +255,19 @@ test('D1 D2 D3 pre-pr rounds move -next; push sends the branch', async () => {
     log.send(dir, ref)
     execFileSync('git', ['push', '-q', 'origin', ref], { cwd: dir })
   } }
-  const round = async (said: string, ticks: number): Promise<void> => {
-    for (let at = 1; at < ticks; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
-    writeFileSync(join(src, 'src/hello.ts'), `export const hello = (): string => "${said}"\n`)
-    await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
-    expect(plan(w.db, 1).step).toBe(7)
-  }
-  await round('hey', 7)
+  await round(w, wire, 'hey', 7)
+  expect(plan(w.db, 1).step).toBe(7)
   const first = git(['rev-parse', 'HEAD'])
   rewind(w.db, 1, 4)
-  await round('hi', 3)
+  await round(w, wire, 'hi', 3)
+  expect(plan(w.db, 1).step).toBe(7)
   git(['merge-base', '--is-ancestor', first, 'HEAD'])
   expect(git(['rev-parse', 'HEAD'])).not.toBe(first)
   expect(git(['ls-remote', 'origin', 'refs/heads/widget-12-a1-next']).split('\t')[0]).toBe(tip(w.root, 1))
   expect(git(['ls-remote', 'origin', 'refs/heads/widget-12-a1'])).toBe('')
   const tips = get(w.root, 1, 'next.tips').trim().split('\n').map((l) => l.slice(0, 40))
   expect(new Set(sent.filter((l) => l.startsWith('send ')))).toEqual(new Set(tips.map((t) => `send src ${t}:refs/heads/widget-12-a1-next`)))
-  expect(tips.map((t) => git(['show', `${t}:greptile.json`]))).toEqual(tips.map(() => '{"autoReview": []}'))
+  expect(tips.map((t) => JSON.parse(git(['show', `${t}:greptile.json`])) as unknown)).toEqual(tips.map(() => QUIET))
   tips.reduce((older, newer) => { git(['merge-base', '--is-ancestor', older, newer]); return newer })
   expect(git(['ls-tree', '-r', 'widget-12-a1', 'greptile.json'])).toBe('')
   expect(git(['log', '--format=%H', 'widget-12-a1']).split('\n').filter((h) => tips.includes(h))).toEqual([])
@@ -274,6 +281,39 @@ test('D1 D2 D3 pre-pr rounds move -next; push sends the branch', async () => {
     'open acme/widget caliperforge:widget-12-a1'])
 })
 
+/** The checkout signs through `gpg`, and HEAD is amended to a head no tip carries yet. */
+function signer(w: World, gpg: string): (args: string[]) => string {
+  const src = srcDir(w.root, 1)
+  const git = (args: string[]): string => execFileSync('git', args, { cwd: src, encoding: 'utf8' }).trim()
+  const program = join(w.root, 'gpg.sh')
+  writeFileSync(program, `#!/bin/sh\ncat >/dev/null\n${gpg}\n`, { mode: 0o755 })
+  git(['config', 'commit.gpgsign', 'true'])
+  git(['config', 'gpg.program', program])
+  writeFileSync(join(src, 'src/hello.ts'), 'export const hello = (): string => "signed"\n')
+  git(['-c', 'commit.gpgsign=false', '-c', 'user.email=cf@caliperforge.dev', '-c', 'user.name=caliperforge',
+    'commit', '-qa', '--amend', '--no-edit'])
+  return git
+}
+
+test('D1 a -next tip is signed where the checkout signs', async () => {
+  const w = await atBatch()
+  const git = signer(w, String.raw`printf '\n[GNUPG:] SIG_CREATED \n' >&2
+printf -- '-----BEGIN PGP SIGNATURE-----\n\nc2ln\n-----END PGP SIGNATURE-----\n'`)
+  const { tip: signed } = next(w.root, plan(w.db, 1), 'acme/widget', watched([], w.root, 1))
+  expect(get(w.root, 1, 'next.tips')).toContain(`${signed} ${git(['rev-parse', 'HEAD'])}\n`)
+  expect(git(['cat-file', 'commit', signed])).toMatch(/^gpgsig /m)
+  expect(JSON.parse(git(['show', `${signed}:greptile.json`])) as unknown).toEqual(QUIET)
+})
+
+test('D4 a signature that fails sends no unsigned tip', async () => {
+  const w = await atBatch()
+  signer(w, 'exit 1')
+  const tips = get(w.root, 1, 'next.tips')
+  const sent: string[] = []
+  expect(() => next(w.root, plan(w.db, 1), 'acme/widget', watched(sent, w.root, 1))).toThrow()
+  expect([sent, get(w.root, 1, 'next.tips')]).toEqual([[], tips])
+})
+
 async function refollowed(handback: string): Promise<{ w: World; wire: Wire; git: (args: string[]) => string; again: () => void }> {
   const w = world()
   approve(w.db, w.target)
@@ -284,15 +324,10 @@ async function refollowed(handback: string): Promise<{ w: World; wire: Wire; git
     log.send(dir, ref)
     execFileSync('git', ['push', '-q', 'origin', ref], { cwd: dir })
   } }
-  const round = async (said: string, ticks: number): Promise<void> => {
-    for (let at = 1; at < ticks; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
-    writeFileSync(join(src, 'src/hello.ts'), `export const hello = (): string => "${said}"\n`)
-    await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
-  }
-  await round('hey', 7)
+  await round(w, wire, 'hey', 7)
   put(w.root, 1, 'step-2.handback.md', handback)
   rewind(w.db, 1, 4)
-  await round('hello', 3)
+  await round(w, wire, 'hello', 3)
   return { w, wire, git, again: () => { next(w.root, plan(w.db, 1), 'acme/widget', wire) } }
 }
 
@@ -359,6 +394,42 @@ test('D1 D3 D4 follow-up is the summary, no upstream #, kept', async () => {
 test('D2 a follow-up with no summary says it addresses review', async () => {
   const { git } = await refollowed('Renamed.\n\n---\ndone:\n  - id: D1\n---\n')
   expect(git(['log', '-1', '--format=%B'])).toBe('fix: address review')
+})
+
+test('D1 D2 D3 D4 a moved main stays the fold\'s second parent', { timeout: 90_000 }, async () => {
+  const w = world()
+  approve(w.db, w.target)
+  const src = srcDir(w.root, 1)
+  const upstream = join(w.root, 'remotes/acme/widget')
+  const git = (args: string[], cwd = src): string => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim()
+  const refs: string[] = []
+  const log = watched([], w.root, 1)
+  const wire = { ...log, send: (dir: string, ref: string) => {
+    refs.push(ref)
+    execFileSync('git', ['push', '-q', 'origin', ref], { cwd: dir })
+  } }
+  const until = async (step: number): Promise<void> => {
+    for (let at = 0; at < 20 && plan(w.db, 1).step !== step; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  }
+  await until(6)
+  writeFileSync(join(src, 'src/hello.ts'), 'export const hello = (): string => "hey"\n')
+  expect(git(['ls-remote', 'origin', 'refs/heads/widget-12-a1-next'])).not.toBe('')
+  writeFileSync(join(upstream, 'moved.ts'), 'export const moved = 1\n')
+  git(['add', '-A'], upstream)
+  git(['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'main moves on'], upstream)
+  const main = git(['rev-parse', 'HEAD'], upstream)
+  await until(7)
+  expect(plan(w.db, 1).step).toBe(7)
+  expect(maybe(w.root, 1, 'base.laps')).toBeNull()
+  expect(git(['merge-base', 'HEAD', 'refs/remotes/upstream/main'])).toBe(main)
+  expect(git(['rev-parse', 'HEAD^2'])).toBe(main)
+  expect(git(['diff', '--name-only', 'refs/remotes/upstream/main...HEAD'])).toBe('src/hello.ts')
+  expect(git(['log', '--no-merges', '--format=%s', 'refs/remotes/upstream/main..HEAD'])).not.toContain('main moves on')
+  const head = git(['rev-parse', 'HEAD'])
+  const shown = git(['ls-remote', 'origin', 'refs/heads/widget-12-a1-next'])
+  next(w.root, plan(w.db, 1), 'acme/widget', wire)
+  expect([git(['rev-parse', 'HEAD']), git(['ls-remote', 'origin', 'refs/heads/widget-12-a1-next'])]).toEqual([head, shown])
+  expect(refs.filter((r) => r.startsWith('+') || r.includes('--force'))).toEqual([])
 })
 
 test('merged-code finding is an escape on the step that owns it', async () => {

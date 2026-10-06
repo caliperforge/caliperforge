@@ -2,6 +2,7 @@ import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSyn
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { expect, test } from 'vitest'
+import { heldBy } from '../../cli/brief.ts'
 import { all } from '../../cli/inbox.ts'
 import { fill } from '../../cli/digests.ts'
 import { looked } from '../../cli/look.ts'
@@ -12,13 +13,14 @@ import { gates } from '../../store/approvals.ts'
 import { decision } from '../../store/ask.ts'
 import { decided, decisions, touches, type Verb } from '../../store/decisions.ts'
 import { pushedRow } from '../../store/deliverables.ts'
-import { addSetting } from '../../store/drift.ts'
+import { addSetting, setting } from '../../store/drift.ts'
 import { logged, ofKind, pointers, runAt, runRows } from '../../store/events.ts'
 import { retried, returnToLane } from '../../store/holds.ts'
 import { migrate, open, type Db } from '../../store/index.ts'
+import { cap, width } from '../../store/lanes.ts'
 import { busy } from '../../store/now.ts'
 import { addPart } from '../../store/parts.ts'
-import { allPlans, held, needsCeo, planById, planRows, putPlan, requeue, retry } from '../../store/plans.ts'
+import { allPlans, held, needsCeo, pipeOf, planById, planRows, putPlan, requeue, retry } from '../../store/plans.ts'
 import { clear } from '../../store/refusals.ts'
 import { split } from '../brief.ts'
 import { byHand, cooLite, read, woke } from '../director.ts'
@@ -535,10 +537,16 @@ test('fixFailsOnce', async () => {
   expect(told(db)).toEqual([{ actor: 'director', outcome:'needs_ceo', message: expect.stringMatching(/^fix did not apply, /) as string }])
 })
 
+test('code out of reach goes to the builder', async () => {
+  const { db, home } = seeded('1')
+  fixLive(db)
+  await cooLite(db, home, row(db), bySeat([], '---\nmove: fix\nwhy: edit src/sequencer/x.ts to drop the guard\n---\n'), now, () => undefined, wire())
+  expect(told(db)).toEqual([{ actor: 'director', outcome: 'pass', message: expect.stringMatching(/^rule: edit src\/sequencer\/x\.ts/) as string }])
+})
+
 test('fixOutOfReach', async () => {
   const outside = (path: string) => `\`${path}\` is outside the fixer's write_paths`
   for (const [why, reason] of [
-    ['edit src/sequencer/x.ts to drop the guard', outside('src/sequencer/x.ts')],
     ['run gh issue create for the gap', 'the fixer has no git and no GitHub'],
     ['run UPDATE plans SET step = 2 in cf.db', outside('cf.db')],
   ] as const) {
@@ -637,6 +645,42 @@ test('D3: failed fixes on an earlier stop do not count', async () => {
   await cooLite(db, home, row(db), inTurn([ASK_COO, ASK_COO], []), now, () => undefined, wire())
   expect(plans(db)).toEqual(was)
   expect(told(db).map((t) => t.message)).toEqual([expect.stringMatching(/^ask_coo: refused by the fence/)])
+})
+
+const QUESTION = 'which greeting does the banner use?'
+const LINE = 'the banner greets with hello, not hi'
+
+function asked(ask: string) {
+  const seed = seeded('1')
+  seed.db.exec('DELETE FROM runs; UPDATE plans SET step = 1 WHERE id = 7')
+  held(seed.db, 7, 'coo', `brief_writer: ${QUESTION}`)
+  drop(seed.home, 7, 'refusal.md')
+  put(seed.home, 7, 'question.md', `${QUESTION}\n`)
+  put(seed.home, 7, 'ask.md', ask)
+  return seed
+}
+
+const reader: Provider = { ...stub(''), fire: (p) =>
+  stub(p.prompt.includes(`# Stop\n\n${QUESTION}`) && p.prompt.includes(`# Ask\n\nthe ask\n\n${LINE}`)
+    ? `---\nmove: rule\nwhy: ask.md answers it\nanswer: ${LINE}\n---\n` : ASK_COO).fire(p) }
+
+test('D2: a question ask.md answers is ruled, back at step 1', async () => {
+  const { db, home } = asked(`the ask\n\n${LINE}\n`)
+  await cooLite(db, home, row(db), reader, now, () => undefined, wire())
+  const day = new Date().toISOString().slice(0, 10)
+  expect(maybe(home, 7, 'ask.md')).toBe(`the ask\n\n${LINE}\n\n## Answer from the director (${day})\n\n${LINE}\n`)
+  expect(row(db)).toMatchObject({ state: 'queued', step: 1 })
+  expect(heldBy(db, 'coo').map((p) => p.id)).not.toContain(7)
+})
+
+test('D3: a question the ticket leaves open stays with the coo', async () => {
+  const { db, home } = asked('the ask\n')
+  await cooLite(db, home, row(db), reader, now, () => undefined, wire())
+  expect(told(db)).toEqual([{ actor: 'director', outcome: 'needs_ceo',
+    message: 'ask_coo: refused by the fence, 0 failed fixes on this stop' }])
+  expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'coo' })
+  expect(heldBy(db, 'coo').map((p) => p.id)).toContain(7)
+  expect(maybe(home, 7, 'ask.md')).toBe('the ask\n')
 })
 
 test.each(FAULTS.slice(0, 4))('D2: an ask_ceo with %s is asked again', async (reason, block) => {
@@ -848,9 +892,36 @@ test('D4 a running plan at its ceiling: one post per head', async () => {
   expect(leases(db)).toEqual({ n: 0 })
   db.exec("UPDATE plans SET wait_reason = 'ready_proof' WHERE id = 7")
   await wake()
-  expect(posted).toHaveLength(2)
-  expect(wokeTold(db)).toHaveLength(2)
+  expect(posted).toHaveLength(1)
+  expect(wokeTold(db).at(-1)).toEqual({ outcome: 'pass', message: 'left alone: plan is running, waiting on ready_proof' })
   expect(maybe(home, 7, 'orchestrator.md')?.split('\n')[0]).toBe('step 4 ready_proof')
+})
+
+const WIDEN = '---\nmove: widen\nwhy: the wake pipe is full\n---\n'
+const widths = (db: Db) => ({ cap: cap(db), dial: setting(db, 'lanes.dial'), ceiling: setting(db, 'lanes.ceiling') })
+const widened = (db: Db) => decisions(db, 7).filter((d) => d.verb === 'widen')
+
+test('widenMove', async () => {
+  const { db, home } = seeded('1')
+  const was = widths(db)
+  await run(db, home, WIDEN)
+  expect(pipeOf(db, 9).max_concurrent).toBe(2)
+  expect(widened(db)).toEqual([{ plan: 7, step: 4, wait_reason: 'blocked_on_ceo', verb: 'widen', why: 'the wake pipe is full',
+    evidence: 'wake width 1 → 2', tokens: 0 }])
+  expect(row(db).state).toBe('queued')
+  expect(told(db)).toEqual([{ actor: 'director', outcome: 'pass', message: 'widen: the wake pipe is full' }])
+  expect(widths(db)).toEqual(was)
+  const full = seeded('1')
+  width(full.db, 9, 8)
+  await run(full.db, full.home, WIDEN)
+  expect(pipeOf(full.db, 9).max_concurrent).toBe(8)
+  expect(widened(full.db)).toEqual([])
+  expect(plan7(full.db)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'coo' })
+  expect(told(full.db).map((t) => t.message)).toEqual([expect.stringMatching(/^widen did not apply, the pipe is already 8 wide/)])
+  const shadow = seeded(null)
+  await run(shadow.db, shadow.home, WIDEN)
+  expect(pipeOf(shadow.db, 9).max_concurrent).toBe(1)
+  expect(widened(shadow.db)).toEqual([])
 })
 
 test('the store takes blocked_on_ceo, refuses an unknown reason',() => {
@@ -859,4 +930,13 @@ test('the store takes blocked_on_ceo, refuses an unknown reason',() => {
     VALUES (7, 4, ?, 'ask_coo', 'x')`).run(reason)
   expect(() => insert('blocked_on_ceo')).not.toThrow()
   expect(() => insert('made_up')).toThrow(/CHECK/)
+})
+
+test('a plan waiting on fork CI is left alone', async () => {
+  const { db, home } = seeded('1')
+  db.exec("UPDATE plans SET state = 'running', wait_reason = 'ready_proof' WHERE id = 7")
+  const posted: string[] = []
+  await cooLite(db, home, row(db), bySeat([]), now, (t) => void posted.push(t), wire())
+  expect(told(db).map((t) => t.outcome)).toEqual(['pass'])
+  expect(posted).toEqual([])
 })

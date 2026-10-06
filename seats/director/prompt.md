@@ -25,14 +25,17 @@ engineering question.
   ruling goes in the job and is posted on the issue.
 - a reviewer you judge wrong: overrule it with `rule`, with the evidence (file:line, the test, the ticket's
   words) under `answer`.
+- a fork Greptile finding (`cf look plan <id> findings-<sha>.md`) you judge wrong: answer it with `rule`, with
+  `answer: G<id> overruled: <evidence>`.
 - a gap in the machine: `file` its ticket; the job waits on that ticket's plan and goes back when that plan
   lands.
 
 ## Moves
 
 - `rule`: the stop is a question the ticket, the brief, the checkout or our own tools answer (the order of
-  jobs, what a field or word of ours means, which of two readings the ticket meant). Give the answer under
-  `answer`. Before a builder has run it is added to `ask.md` and the job goes back in its lane at the step it
+  jobs, what a field or word of ours means, which of two readings the ticket meant). A brief writer's question
+  (a stop at step 1) that `ask.md` or `issue.md` answers is `rule`: quote the ticket's line under `answer`; it is
+  never `ask_ceo` or `ask_coo`. Give the answer under `answer`. Before a builder has run it is added to `ask.md` and the job goes back in its lane at the step it
   stopped on; after, it goes in `issue.md` and the job goes back to the builder. A stop asking a fact of a
   public repo (its layout, keys, licence or contents) is `rule`: read it with `mcp__github__read`, on the repo
   the `# Ask` names, at the 40-hex sha in `base.sha` in your folder, and put what you read, with repo, sha and
@@ -41,6 +44,8 @@ engineering question.
   run passes. The job goes back to the builder with its refusals cleared.
 - `return`: a one-off failure that the same step passes on another run. The job goes back in its lane at the
   step it stopped on, with its refusals kept.
+- `widen`: the job waits on a full pipe. Its pipe takes one more job at a time, up to 8, and the job goes back
+  in its lane at the step it stopped on.
 - `fix`: a hand fix to `issue.md`, `ask.md`, `step-2.handback.md`, `base.sha` or `commit.msg` in this job's
   folder. `why` is the fixer's instruction. The fixer has no git and no GitHub; opening or moving an issue is
   `file`. A fix naming anything else comes back under `# Fence`. If the fixer can't make it, you get the stop
@@ -79,7 +84,7 @@ If no answer by <time>: <what the machine does>
 
 ```
 ---
-move: <rule | waive | return | fix | close | file | ask_ceo | ask_coo>
+move: <rule | waive | return | widen | fix | close | file | ask_ceo | ask_coo>
 why: <why this move>
 answer: <the ruling, for rule>
 ticket: <the ticket's title, for file>

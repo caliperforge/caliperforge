@@ -4,8 +4,10 @@ import { basename, join } from 'node:path'
 import { expect, test } from 'vitest'
 import type { Provider } from '../../providers/kind.ts'
 import { migrate, open } from '../../store/index.ts'
+import { planById } from '../../store/plans.ts'
 import type { Wire } from '../push.ts'
 import { woke } from '../director.ts'
+import { fenced, owned } from '../rule.ts'
 import { maybe, put, srcDir } from '../workspace.ts'
 
 const repo = join(import.meta.dirname, '../..')
@@ -97,4 +99,53 @@ test('D4 a reply with no answer writes nothing; the plan returns', async () => {
   expect(got.ask).toBe('the ask\n')
   expect(got.issue).toBe(ISSUE)
   expect(got.state).toEqual({ state: 'queued', step: 3 })
+})
+
+test('an elided path is written', async () => {
+  const got = await fixed(1, answered('the parser in kotlin/.../core/Headers.kt decodes it'))
+  expect(got.applied).toEqual([{ applied: 'applied' }])
+})
+
+test('its own plan folder is written', async () => {
+  const got = await fixed(1, answered('see .cf/work/7/question.md'))
+  expect(got.applied).toEqual([{ applied: 'applied' }])
+})
+
+test('a parent path is refused', async () => {
+  const got = await fixed(1, answered('see ../other/repo'))
+  expect(got.applied).toEqual([{ applied: 'escalated' }])
+})
+
+const SPANS = 'step 3 rails refused by rails\n\nauthority: 3 span(s)\n\nspans:\n  - cli/extra.ts:1 authority.outside_files\n'
+  + '  - schema/0001_x.sql:1 authority.frozen_schema\n  - src/far.ts:1 authority.write_paths\n'
+
+test('D5 only a named outside_files path gets a row', () => {
+  const { db, home } = seeded(3)
+  put(home, 7, 'refusal.md', SPANS)
+  const plan = planById(db, 7)
+  expect(owned(home, plan, 'schema/0001_x.sql and src/far.ts')).toBe(false)
+  expect(maybe(home, 7, 'issue.md')).toBe(ISSUE)
+  expect(owned(home, plan, 'cli/extra.ts\nholds   it')).toBe(true)
+  const row = '- `cli/extra.ts` — cli/extra.ts holds it\n'
+  expect(maybe(home, 7, 'issue.md')).toBe(ISSUE.replace('## Standing', `## Outside the files\n\n${row}\n## Standing`))
+  const once = maybe(home, 7, 'issue.md')
+  expect(owned(home, plan, 'nothing refused is named')).toBe(false)
+  expect(maybe(home, 7, 'issue.md')).toBe(once)
+  expect(owned(home, plan, 'cli/extra.ts again')).toBe(true)
+  expect(maybe(home, 7, 'issue.md')).toContain(`${row}- \`cli/extra.ts\` — cli/extra.ts again\n\n## Standing`)
+})
+
+test('a path is named only as a whole word', () => {
+  const { db, home } = seeded(3)
+  put(home, 7, 'refusal.md', SPANS.replace('cli/extra.ts', 'extra.ts'))
+  expect(owned(home, planById(db, 7), 'cli/extra.ts holds it')).toBe(false)
+  expect(owned(home, planById(db, 7), 'extra.ts holds it.')).toBe(true)
+})
+
+test('a step-4 stop on an old step-3 refusal is not fenced', () => {
+  const { db, home } = seeded(4)
+  put(home, 7, 'refusal.md', `${SPANS}\n# Stopped\n\nspent 9.0M tokens.\n`)
+  expect(fenced(home, planById(db, 7))).toBe(false)
+  expect(owned(home, planById(db, 7), 'cli/extra.ts holds it')).toBe(false)
+  expect(maybe(home, 7, 'issue.md')).toBe(ISSUE)
 })

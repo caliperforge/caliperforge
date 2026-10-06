@@ -97,9 +97,9 @@ export function refusalsOf(db: Db, plan: number): number {
   return (db.prepare('SELECT count(*) AS n FROM refusals WHERE plan = ? AND blip = 0').get(plan) as { n: number }).n
 }
 
-export function refusalAt(db: Db, plan: number, blip: number, at: string): number {
+export function refusalAt(db: Db, plan: number, blip: number, at: string, fingerprint = '0'.repeat(64)): number {
   return Number(db.prepare('INSERT INTO refusals (plan, step, fingerprint, diff, blip, at) VALUES (?, 0, ?, NULL, ?, ?)')
-    .run(plan, '0'.repeat(64), blip, at).lastInsertRowid)
+    .run(plan, fingerprint, blip, at).lastInsertRowid)
 }
 
 /** A failed checkout: the plan stays on its step until `BLIPS` of them come in a row. */

@@ -37,6 +37,7 @@ export async function judge(
   provider: Provider,
   transcript: string,
   as?: string,
+  staffed?: string,
 ): Promise<{ run: number | null; verdict: number; outcome: Judged }> {
   const manifest = reviewManifest(root, name)
   const lead = as === undefined ? undefined : { as, ...seat(root, as, 'review') }
@@ -55,9 +56,9 @@ export async function judge(
   const target = planById(db, plan).target_id
   const rules = packs(root, built.bench.diff, target === null ? null : targetRow(db, target).repo)
   const packet = { ...chosen, prompt: `${map(built.bench.repo)}\n\n${chosen.prompt}${rules}` }
-  const first = await ran(db, root, name, plan, manifest, provider, packet, lead)
+  const first = await ran(db, root, name, plan, manifest, provider, packet, lead, staffed)
   const refired = first.capped && first.outcome === null
-    ? await ran(db, root, name, plan, manifest, provider, { ...packet, tools: [] }, lead)
+    ? await ran(db, root, name, plan, manifest, provider, { ...packet, tools: [] }, lead, staffed)
     : null
   const last = refired ?? first
   if (last.outcome === null) throw new Error('reviewers.verdict_fence')
@@ -76,12 +77,12 @@ interface Ran {
 }
 
 async function ran(db: Db, root: string, name: string, plan: number, manifest: Review, provider: Provider,
-  packet: Packet, lead?: { as: string; hash: string }): Promise<Ran> {
+  packet: Packet, lead?: { as: string; hash: string }, staffed?: string): Promise<Ran> {
   const fired = await provider.fire({ ...packet, wall: wall(db) })
   const outcome = read(fired.text, packet.prompt)
   const run = runLogged(db, { plan, step: manifest.step, seat: lead?.as ?? name, rule_hash: lead?.hash ?? specHash(root, name),
     provider: provider.name, model: manifest.model, effort: manifest.effort, exit: outcome === null ? 1 : fired.exit, fired,
-    mode: lead === undefined ? undefined : 'review' })
+    mode: lead === undefined ? undefined : 'review', staffed })
   byRun(db, run, fired.transcript_path)
   observed(db, fired.limits)
   return {

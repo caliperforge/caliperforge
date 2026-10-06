@@ -48,8 +48,26 @@ function nameOf(fork: string, id: string, gh: Gh): string {
 
 function logOf(fork: string, id: string, gh: Gh): string {
   try {
-    return gh(['run', 'view', id, '--repo', fork, '--log-failed']).replace(STAMP, '').split('\n').slice(-TAIL).join('\n')
+    const failed = gh(['run', 'view', id, '--repo', fork, '--log-failed'])
+    return failed.trim() ? tail(failed) : jobsOf(fork, id, gh)
   } catch {
     return '(the failed log could not be read)'
   }
+}
+
+const tail = (log: string): string => log.replace(STAMP, '').split('\n').slice(-TAIL).join('\n')
+
+interface Job { databaseId: number; name: string; conclusion: string; steps: { name: string; conclusion: string }[] }
+
+const PASSED = ['success', 'skipped', 'neutral']
+
+/** `--log-failed` prints nothing when gh cannot match a job's steps in the run's log archive. */
+function jobsOf(fork: string, id: string, gh: Gh): string {
+  const run = JSON.parse(gh(['run', 'view', id, '--repo', fork, '--json', 'conclusion,jobs'])) as { conclusion: string; jobs: Job[] }
+  const jobs = run.jobs.filter((j) => !PASSED.includes(j.conclusion))
+  if (jobs.length === 0) return `run ${id} ended ${run.conclusion} with no failed job`
+  return jobs.map((j) => {
+    const steps = j.steps.filter((s) => !PASSED.includes(s.conclusion)).map((s) => s.name).join(', ')
+    return `${j.name}: ${steps}\n${tail(gh(['api', `repos/${fork}/actions/jobs/${String(j.databaseId)}/logs`]))}`
+  }).join('\n')
 }

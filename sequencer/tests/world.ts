@@ -257,6 +257,7 @@ export function runsAfter(root: string, id: number, misses: number): Gh {
   const listed = runsOn(root, id)
   let read = 0
   return (args) => {
+    if (args.includes('main')) return '[]'
     read += 1
     return read <= misses ? '[]' : listed(args)
   }
@@ -267,6 +268,7 @@ export function redLaps(root: string, id: number): Gh {
   const red = runsOn(root, id, 'completed', 'failure')
   let read = 0
   return (args) => {
+    if (args.includes('main')) return '[]'
     read += 1
     return read % 2 === 1 ? '[]' : red(args)
   }

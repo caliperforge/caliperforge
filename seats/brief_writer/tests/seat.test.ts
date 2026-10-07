@@ -28,7 +28,7 @@ test('a seat with no write path but a writing tool does not load', () => {
 })
 
 test('the roster carries the seat and it loads as a rules row', () => {
-  expect(rules(root).find((r) => r.id === 'brief_writer')).toMatchObject({ kind: 'card', path: 'rules/roster.yaml' })
+  expect(rules(root).find((r) => r.id === 'brief_writer')).toMatchObject({ kind: 'card', path: 'rules/roster/brief_writer.yaml' })
 })
 
 test('the prompt names each shape part and both fences', () => {

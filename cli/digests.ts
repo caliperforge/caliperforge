@@ -1,17 +1,21 @@
 import { createHash } from 'node:crypto'
 import { readFileSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
-import { expected, rules, written } from '../runner/rules.ts'
+import { basename, join } from 'node:path'
+import { expected, rosterOf, rules, written } from '../runner/rules.ts'
 
-export const ROSTER = 'rules/roster.yaml'
+export const ROSTER = 'rules/roster'
 export const SEED = 'rules.seed.sql'
 const KEYS = ['manifest', 'prompt'] as const
 const ROW = /^ {2}\('(.+?)', '.+?', '.+?', '.+?', '(.+?)'\)/gm
-const BLOCK = /^digests:\n(?:[ \t].*\n|\n)*/m
 
 interface Stale {
   path: string
   digests: Record<string, string>
+}
+
+interface Body {
+  path: string
+  body: string
 }
 
 export function fill(root: string, today: string): string[] {
@@ -21,35 +25,31 @@ export function fill(root: string, today: string): string[] {
 }
 
 export function check(root: string, today: string): Stale[] {
-  return stale(root, today).map(({ path }): Stale => ({ path, digests: path === ROSTER ? wrong(root) : {} }))
+  return stale(root, today).map(({ path }): Stale => ({ path, digests: path === SEED ? {} : wrong(root, basename(path, '.yaml')) }))
 }
 
-function stale(root: string, today: string): { path: string; body: string }[] {
-  const roster = filled(root)
-  return [{ path: ROSTER, body: roster }, { path: SEED, body: seeded(root, roster, today) }]
+function stale(root: string, today: string): Body[] {
+  const seats = filled(root)
+  return [...seats, { path: SEED, body: seeded(root, seats, today) }]
     .filter(({ path, body }) => readFileSync(join(root, path), 'utf8') !== body)
 }
 
-function wrong(root: string): Record<string, string> {
-  const have = written(root).digests
-  return Object.fromEntries(Object.entries(expected(root)).flatMap(([name, want]) =>
-    KEYS.filter((key) => have[name]?.[key] !== want[key]).map((key): [string, string] => [`${name}.${key}`, want[key]])))
+function wrong(root: string, seat: string): Record<string, string> {
+  const have = written(root).digests[seat]
+  return Object.fromEntries(Object.entries(expected(root)).filter(([name]) => name === seat).flatMap(([name, want]) =>
+    KEYS.filter((key) => have?.[key] !== want[key]).map((key): [string, string] => [`${name}.${key}`, want[key]])))
 }
 
-/** Only the block moves: the rest of the roster is the builder's, and a roster that lost its block gets one appended. */
-function filled(root: string): string {
-  const text = readFileSync(join(root, ROSTER), 'utf8')
-  const block = `digests:\n${Object.entries(expected(root))
-    .map(([name, d]) => `  ${name}:\n    manifest: ${d.manifest}\n    prompt: ${d.prompt}\n`).join('')}`
-  return BLOCK.test(text) ? text.replace(BLOCK, () => block) : `${text.replace(/\n*$/, '\n')}${block}`
+function filled(root: string): Body[] {
+  return Object.entries(expected(root)).map(([name, d]) => ({ path: rosterOf(name), body: `manifest: ${d.manifest}\nprompt: ${d.prompt}\n` }))
 }
 
-/** The roster's own hash is one of the rows, so the seed is rendered from the roster a fill writes, not the one on disk. */
-function seeded(root: string, roster: string, today: string): string {
-  const hash = createHash('sha256').update(roster).digest('hex')
+/** A seat file's own hash is its row's, so the seed is rendered from the files a fill writes, not the ones on disk. */
+function seeded(root: string, seats: Body[], today: string): string {
+  const hashes = new Map(seats.map(({ path, body }) => [path, createHash('sha256').update(body).digest('hex')]))
   const at = dated(root)
   const values = rules(root).map((row) =>
-    `  ('${row.id}', '${row.kind}', '${row.path}', '${row.path === ROSTER ? hash : row.content_hash}', '${at.get(row.id) ?? today}')`)
+    `  ('${row.id}', '${row.kind}', '${row.path}', '${hashes.get(row.path) ?? row.content_hash}', '${at.get(row.id) ?? today}')`)
   return `INSERT INTO rules (id, kind, path, content_hash, loaded_at)\nVALUES\n${values.join(',\n')};\n`
 }
 

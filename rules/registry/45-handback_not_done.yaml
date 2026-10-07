@@ -1,0 +1,5 @@
+- name: handback_not_done
+  table: verdicts
+  column: id
+  where: rail_id = 'completion-audit' AND outcome = 'refuse' AND message LIKE '%Not done%'
+  expected: 0

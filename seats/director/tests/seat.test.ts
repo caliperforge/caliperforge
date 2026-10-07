@@ -26,7 +26,7 @@ test('D2: the prompt is headed director', () => {
 })
 
 test('D3: coo_lite is refused and director is listed', () => {
-  expect(() => seat(root, 'coo_lite')).toThrow(/absent from rules\/roster\.yaml/)
+  expect(() => seat(root, 'coo_lite')).toThrow(/absent from rules\/roster\/coo_lite\.yaml/)
   const seats = listed(root).seats
   expect(seats).toContain('director')
   expect(seats).not.toContain('coo_lite')
@@ -34,7 +34,7 @@ test('D3: coo_lite is refused and director is listed', () => {
 
 test('D4: the digests hold and director is a card row', () => {
   expect(check(root, TODAY)).toEqual([])
-  expect(rules(root).find((r) => r.id === 'director')).toMatchObject({ kind: 'card', path: 'rules/roster.yaml' })
+  expect(rules(root).find((r) => r.id === 'director')).toMatchObject({ kind: 'card', path: 'rules/roster/director.yaml' })
 })
 
 test('D5: a drifted director prompt is refused', () => {
@@ -45,9 +45,8 @@ test('D5: a drifted director prompt is refused', () => {
 
 test('D6: a roster without the director digests is stale', () => {
   const tree = copied()
-  const roster = join(tree, 'rules/roster.yaml')
-  writeFileSync(roster, readFileSync(roster, 'utf8').replace(/ {2}director:\n(?: {4}.*\n){2}/, ''))
-  expect(check(tree, TODAY).map((s) => s.path)).toContain('rules/roster.yaml')
+  writeFileSync(join(tree, 'rules/roster/director.yaml'), '')
+  expect(check(tree, TODAY).map((s) => s.path)).toContain('rules/roster/director.yaml')
 })
 
 test('D7: director decides by default and names ask_coo', () => {
@@ -74,7 +73,7 @@ test('D1: three alike stops file one machine ticket', () => {
 })
 
 test('D8: orchestrator is refused, unlisted and unseeded', () => {
-  expect(() => seat(root, 'orchestrator')).toThrow(/absent from rules\/roster\.yaml/)
+  expect(() => seat(root, 'orchestrator')).toThrow(/absent from rules\/roster\/orchestrator\.yaml/)
   const ids = rules(root).map((r) => r.id)
   const seed = readFileSync(join(root, 'rules.seed.sql'), 'utf8')
   for (const gone of ['orchestrator', 'coo_lite']) {

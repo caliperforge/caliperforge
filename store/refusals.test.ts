@@ -1,7 +1,9 @@
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
+import { load } from '../runner/rules.ts'
+import { logged, runAt } from './events.ts'
 import { migrate, open, type Db } from './index.ts'
-import { blipped, clear, fingerprint, refused, ROUNDS } from './refusals.ts'
+import { blipped, builds, clear, fingerprint, refusalRows, refused, ROUNDS } from './refusals.ts'
 
 const root = join(import.meta.dirname, '..')
 
@@ -189,6 +191,27 @@ test('D2 a clear keeps the repeat; a new ticket goes round again', () => {
   expect(refused(db, { plan: PLAN, step: 3, fingerprint: A, diff: D2, ticket: T1 })).toBe('repeat')
   clear(db, PLAN)
   expect(refused(db, { plan: PLAN, step: 3, fingerprint: A, diff: D1, ticket: T2 })).toBe('again')
+})
+
+test('builds counts build events that ran a model', () => {
+  const db = bench()
+  load(db, root)
+  const run = runAt(db, PLAN, 2, 'typescript_specialist', '2026-09-21T00:00:00.000Z')
+  const rows: [string, number | null][] = [['build', run], ['build', null], ['rails', run], ['build', run]]
+  for (const [kind, ran] of rows) {
+    logged(db, { plan: PLAN, kind, actor: 'typescript_specialist', outcome: 'pass', message: '', pointer: null, run: ran })
+  }
+  clear(db, PLAN)
+  expect(builds(db, PLAN)).toBe(2)
+})
+
+test('refusalRows keeps cleared rows, newest first, no blips', () => {
+  const db = bench()
+  refused(db, { plan: PLAN, step: 3, fingerprint: A, diff: D1, span: 'src/a.ts:4', note: 'tight: long' })
+  clear(db, PLAN)
+  blipped(db, PLAN, 3)
+  refused(db, { plan: PLAN, step: 4, fingerprint: B, diff: D2 })
+  expect(refusalRows(db, PLAN)).toEqual([{ step: 4, span: null, note: null }, { step: 3, span: 'src/a.ts:4', note: 'tight: long' }])
 })
 
 test('D3 two fingerprints go round again, cleared or not', () => {

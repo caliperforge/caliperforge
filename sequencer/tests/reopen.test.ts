@@ -38,7 +38,7 @@ test('an unpushed branch reopens on the fork branch of pr.head', () => {
   writeFileSync(join(first.dir, 'added.ts'), 'export const added = 1\n')
   git(first.dir, ['add', '-A'])
   git(first.dir, ['commit', '-qm', 'round one'])
-  git(first.dir, ['push', '-q', 'origin', 'HEAD:asm/1-a3','HEAD:asm/1-a3-next'])
+  git(first.dir, ['push', '-q', 'origin', 'HEAD:asm/1-a3', 'HEAD:asm/1-a3-next'])
   const sha = git(first.dir, ['rev-parse', 'HEAD']).trim()
   put(w.root, 1, PR_HEAD, `${sha} ${sha}\n`)
   rmSync(srcDir(w.root, 1), { recursive: true, force: true })
@@ -57,6 +57,22 @@ test('a pr.head on no fork branch throws and keeps base.sha', () => {
   rmSync(srcDir(w.root, 1), { recursive: true, force: true })
 
   expect(() => checkout(w.root, 1, 'acme/widget', BRANCH)).toThrow(`pr.head ${first.base.slice(0, 12)}`)
+  expect(() => checkout(w.root, 1, 'acme/widget', BRANCH)).toThrow(`pr.head ${first.base.slice(0, 12)}`)
+  expect(cloned(srcDir(w.root, 1))).toBe(false)
+  expect(maybe(w.root, 1, 'base.sha')).toBe(`${first.base}\n`)
+})
+
+test('a pr.head never pushed throws on every later checkout', () => {
+  const w = world()
+  const first = checkout(w.root, 1, 'acme/widget', BRANCH)
+  git(first.dir, ['commit', '-q', '--allow-empty', '-m', 'never pushed'])
+  const sha = git(first.dir, ['rev-parse', 'HEAD']).trim()
+  put(w.root, 1, PR_HEAD, `${sha} ${sha}\n`)
+  rmSync(srcDir(w.root, 1), { recursive: true, force: true })
+
+  expect(() => checkout(w.root, 1, 'acme/widget', BRANCH)).toThrow(sha.slice(0, 12))
+  expect(() => checkout(w.root, 1, 'acme/widget', BRANCH)).toThrow(sha.slice(0, 12))
+  expect(cloned(srcDir(w.root, 1))).toBe(false)
   expect(maybe(w.root, 1, 'base.sha')).toBe(`${first.base}\n`)
 })
 

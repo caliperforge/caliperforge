@@ -265,16 +265,24 @@ function pushed(dir: string, branch: string): boolean {
 /** `<folded> <signed>`: the one commit the first push sent, and the approved head it was folded from. */
 export const PR_HEAD = 'pr.head'
 
-/** The fork branch holding the commit the first push sent, apart from `main` and the rehearsal `-next`. */
+/**
+ * The fork branch holding the commit the first push sent, apart from `main` and the rehearsal `-next`.
+ * A throw removes `dir`: a clone left on `main` would be reused on the next tick as the plan's branch.
+ */
 function prBranch(root: string, plan: number, dir: string): string | null {
   const head = maybe(root, plan, PR_HEAD)
   if (head === null) return null
   const sha = head.trim().split(' ')[0] ?? ''
-  const names = git(dir, ['for-each-ref', '--contains', sha, '--format=%(refname:lstrip=3)', 'refs/remotes/origin/'])
-    .split('\n').filter((name) => name !== '' && name !== 'HEAD' && name !== 'main' && !name.endsWith('-next'))
-  const [name, ...rest] = names
-  if (name !== undefined && rest.length === 0) return name
-  throw new Error(`pr.head ${sha.slice(0, 12)} is on ${String(names.length)} fork branches: ${names.join(', ')}`)
+  try {
+    const names = git(dir, ['for-each-ref', '--contains', sha, '--format=%(refname:lstrip=3)', 'refs/remotes/origin/'])
+      .split('\n').filter((name) => name !== '' && name !== 'HEAD' && name !== 'main' && !name.endsWith('-next'))
+    const [name, ...rest] = names
+    if (name !== undefined && rest.length === 0) return name
+    throw new Error(`pr.head ${sha.slice(0, 12)} is on ${String(names.length)} fork branches: ${names.join(', ')}`)
+  } catch (err) {
+    rmSync(dir, { recursive: true, force: true })
+    throw err
+  }
 }
 
 export function cloned(dir: string): boolean {

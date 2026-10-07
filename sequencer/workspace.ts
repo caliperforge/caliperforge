@@ -229,10 +229,12 @@ export function checkout(root: string, plan: number, repo: string, branch: strin
   if (from !== 'main') git(dir, ['config', 'cf.base', from])
   excluded(dir)
   const head = fetchMain(dir)
-  const restored = done === null ? null : pushed(dir, branch) ? branch : prBranch(root, plan, dir)
-  if (done !== null && restored !== null) {
+  const restored = prBranch(root, plan, dir) ?? (done !== null && pushed(dir, branch) ? branch : null)
+  if (restored !== null) {
     git(dir, ['checkout', '-B', restored, `origin/${restored}`])
-    return { dir, branch: restored, base: done.trim() }
+    const forked = git(dir, ['merge-base', 'HEAD', MAIN]).trim()
+    put(root, plan, 'base.sha', `${forked}\n`)
+    return { dir, branch: restored, base: forked }
   }
   git(dir, ['checkout', '-B', branch, head])
   put(root, plan, 'base.sha', `${head}\n`)

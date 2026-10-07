@@ -129,15 +129,13 @@ export function prNumber(url: string): number {
  * starts it. Its title and body name nothing upstream: a number there would put a permanent
  * "mentioned" line on the maintainer's thread.
  */
-export function rehearse(fork: string, branch: string): void {
-  if (rehearsal(fork, branch) !== null) return
-  try {
-    execFileSync('gh', ['repo', 'sync', fork, '--branch', 'main'], { encoding: 'utf8', stdio: 'pipe' })
-  } catch {
-    // a fork main that cannot fast-forward still carries the branch's own CI
-  }
-  execFileSync('gh', ['pr', 'create', '--repo', fork, '--base', 'main', '--head', branch,
-    '--title', 'CI rehearsal only (do not merge)', '--body', 'Fork CI only. Do not merge.'], { encoding: 'utf8' })
+export function rehearse(fork: string, branch: string, base: string, read: Read = gh, exec: Run = run): void {
+  const { status } = z.object({ status: z.string() }).parse(read(['api', `repos/${fork}/compare/main...${base}`]))
+  if (status === 'diverged') throw new Error(`${fork} main has diverged from ${base}`)
+  if (status === 'ahead') exec(['api', '-X', 'PATCH', `repos/${fork}/git/refs/heads/main`, '-f', `sha=${base}`])
+  if (rehearsal(fork, branch, read) !== null) return
+  exec(['pr', 'create', '--repo', fork, '--base', 'main', '--head', branch,
+    '--title', 'CI rehearsal only (do not merge)', '--body', 'Fork CI only. Do not merge.'])
 }
 
 /** Closed with no comment and the branch kept: the branch is the head the real pull request opens from. */

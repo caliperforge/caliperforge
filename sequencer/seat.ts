@@ -49,6 +49,9 @@ import { audit } from '../rails/completion-audit/index.ts'
 const FENCE = /^---\r?\n[\s\S]*?\r?\n---\s*$/m
 
 export async function fireSeat(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
+  if (step.step === 2 && maybe(root, plan.id, 'issue.md') === null) {
+    return { outcome: 'pass', spans: [], note: `${step.runs}: no issue.md to build from; back to the brief`, rewind: 1 }
+  }
   if (kernelPlan(plan)) install(srcDir(root, plan.id))
   const name = `step-${String(step.step)}.handback.md`
   const prev = maybe(root, plan.id, name)
@@ -127,7 +130,11 @@ function empty(root: string, plan: PlanRow, step: Step, handback: string): Outco
  * contract the reviewers read does not move under them between rebuild rounds.
  */
 export async function fireBrief(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
-  if (builderRan(db, plan.id)) return stands()
+  const ticket = maybe(root, plan.id, 'issue.md')
+  if (ticket === null && maybe(root, plan.id, 'ask.md') === null) {
+    return { outcome: 'needs_ceo', spans: ['ask.md'], note: `plan ${String(plan.id)} has no ask.md or issue.md: write the ask to ask.md, then cf retry ${String(plan.id)}` }
+  }
+  if (ticket !== null && builderRan(db, plan.id)) return stands()
   const saved = split(maybe(root, plan.id, 'split.md') ?? '')
   if (saved !== null) return splitting(step, saved)
   const ask = askOf(root, plan.id)

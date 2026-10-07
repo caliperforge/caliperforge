@@ -30,7 +30,9 @@ test('fresh', () => {
     'python_review', 'ruby_review', 'rust_review', 'go_review', 'php_review', 'typescript_review', 'brief_writer', 'text_review',
     'writer_log', 'writer_ship', 'writer_weekly', 'growth_lead', 'web_specialist', 'design', 'go_specialist', 'php_specialist', 'ruby_specialist', 'python_specialist', 'lua_specialist', 'rust_specialist', 'gardener', 'ratchet', 'accounts', 'records', 'dispositions', 'signoffs', 'proposals',
     'ratchet_refuse', 'intake', 'stuck_plans', 'science_pull', 'site_publish', 'director_look', 'typescript_specialist',
-    'daily_learnings', 'review_examples', 'director_fix_reach', 'tick_deps', 'watch', 'director_widen', 'target_parked_once', 'director_ceiling'])
+    'daily_learnings', 'review_examples', 'director_fix_reach', 'tick_deps', 'watch', 'director_widen', 'target_parked_once', 'director_ceiling',
+    'close_landed', 'handback_not_done', 'ruling_files', 'build_cap'])
+  expect(drift(d, REGISTRY, NOW).map((r) => r.name)).not.toContain('build_cap')
   expect(drift(d, REGISTRY, NOW).map((r) => r.name)).not.toContain('director_widen')
   expect(drift(d, REGISTRY.filter((e) => e.name === 'watch'), NOW)).toEqual([])
   expect(ratchetRules(d).mode).toBe('refuse')

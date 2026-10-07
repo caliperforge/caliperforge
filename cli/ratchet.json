@@ -34,8 +34,7 @@
     "prepare": 7
   },
   "gh.ts": {
-    "lines": 288,
-    "silent-catch": 1
+    "lines": 286
   },
   "inbox.ts": {
     "lines": 141,

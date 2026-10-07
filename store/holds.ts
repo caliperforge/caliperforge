@@ -1,3 +1,4 @@
+import { approvedRow, landedRow } from './deliverables.ts'
 import { logged } from './events.ts'
 import type { Db } from './index.ts'
 import { builderRan, type Holder, planById, retry, rewind } from './plans.ts'
@@ -62,12 +63,20 @@ export function retried(db: Db, id: number, actor: string): number {
   })()
 }
 
-export function closed(db: Db, id: number, state: 'refused' | 'done', actor: Holder, why: string): void {
+export function closed(db: Db, id: number, state: 'refused' | 'done', actor: Holder, why: string,
+  landed: { sha: string; url: string } | null = null): void {
   const row = db.prepare('SELECT state FROM plans WHERE id = ?').get(id) as { state: string } | undefined
   if (row === undefined) throw new Error(`no plan ${String(id)}`)
   if (row.state === 'done' || row.state === 'refused') throw new Error(`plan ${String(id)} is already ${row.state}`)
+  const approved = approvedRow(db, id)
+  if (state === 'done' && landed === null && approved !== null) {
+    throw new Error(`plan ${String(id)} has an approved deliverable; close it --as done --landed <sha>`)
+  }
+  if (landed !== null && approved === null) throw new Error(`plan ${String(id)} has no approved deliverable to mark landed`)
   db.transaction(() => {
     db.prepare('UPDATE plans SET state = ? WHERE id = ?').run(state, id)
-    logged(db, { plan: id, kind: 'close', actor, outcome: state === 'refused' ? 'refuse' : 'pass', message: why, pointer: null, run: null })
+    if (landed !== null && approved !== null) landedRow(db, approved, landed.url)
+    const message = landed === null ? why : `landed ${landed.sha}: ${why}`
+    logged(db, { plan: id, kind: 'close', actor, outcome: state === 'refused' ? 'refuse' : 'pass', message, pointer: null, run: null })
   })()
 }

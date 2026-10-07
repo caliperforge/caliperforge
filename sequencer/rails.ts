@@ -2,12 +2,12 @@ import { execFileSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { ratcheted } from '../checks/ratchet.ts'
-import { fill } from '../cli/digests.ts'
+import { fill, ROSTER } from '../cli/digests.ts'
 import { record as inbox, ticketOf } from '../cli/inbox.ts'
 import { authority } from '../rails/authority/index.ts'
 import { checked } from '../rails/checks/index.ts'
 import { parse } from '../rails/diff.ts'
-import { audit, record } from '../rails/completion-audit/index.ts'
+import { audit, record, undone } from '../rails/completion-audit/index.ts'
 import { identifiers } from '../rails/identifiers/index.ts'
 import { record as recordRail, type Verdict } from '../rails/record.ts'
 import { scan } from '../rails/secret-scan/index.ts'
@@ -16,6 +16,7 @@ import { sources, tight } from '../rails/tight/index.ts'
 import { logged } from '../store/events.ts'
 import { filesOf, listed } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
+import { digestOf } from '../store/approvals.ts'
 import { ratchetRules } from '../store/lanes.ts'
 import { busy } from '../store/now.ts'
 import { BUILT, laneOff, type PlanRow } from '../store/plans.ts'
@@ -29,7 +30,7 @@ import { lock, unlock } from './lock.ts'
 import { seat } from '../runner/rules.ts'
 import { broken, renumbered, strays } from './fence.ts'
 import { fenceFor, languageFor } from './route.ts'
-import { diffOf, doneIds, get, maybe, srcDir } from './workspace.ts'
+import { diffOf, doneIds, get, maybe, put, srcDir } from './workspace.ts'
 import type { Wire } from './push.ts'
 import { repoOf } from './ready.ts'
 
@@ -50,6 +51,11 @@ export function preReview(db: Db, root: string, plan: PlanRow, wire?: Wire): Out
   if (refusal !== null) return refusal
   const handback = get(root, plan.id, 'step-2.handback.md')
   const diff = diffOf(root, plan.id)
+  const stop = undone(handback, judged(root, plan.id, diff))
+  if (stop.outcome !== 'pass') {
+    record(db, plan.id, stop, 0)
+    return { outcome: 'needs_ceo', spans: stop.spans, note: `completion-audit: ${stop.message}` }
+  }
   const prev = maybe(root, plan.id, 'step-2.handback.prev.md') ?? ''
   const ids = [...(maybe(root, plan.id, 'findings.md') ?? '').matchAll(/^- (G\d+) /gm)].map((m) => m[1] ?? '')
   const first = audit(handback, [...doneIds(get(root, plan.id, 'issue.md')), ...ids], prev, diff)
@@ -61,6 +67,15 @@ export function preReview(db: Db, root: string, plan: PlanRow, wire?: Wire): Out
     if (verdict.outcome !== 'pass') return named(rail, verdict)
   }
   return on?.ratchet === true ? ratchetFirst(db, root, plan, diff, on, commands, wire) : suite(db, root, plan, on, commands, wire)
+}
+
+/** `step-3.judged` holds the last lap's diff and rulings.md digests: the diff standing still under a new ruling is unmoved. */
+function judged(root: string, plan: number, diff: string): boolean {
+  const rulings = maybe(root, plan, 'rulings.md')
+  const now = [digestOf(diff), rulings === null ? '' : digestOf(rulings)]
+  const last = maybe(root, plan, 'step-3.judged')?.split('\n')
+  put(root, plan, 'step-3.judged', now.join('\n'))
+  return last !== undefined && last[0] === now[0] && last[1] !== now[1]
 }
 
 /** Only findings on paths the diff touches are the job's: the rest is main's debt. A held step comes round again, so it warns once not held. */
@@ -144,7 +159,7 @@ function unfilled(src: string): Outcome | null {
   } catch (error) {
     return {
       outcome: 'refuse',
-      spans: ['rules/roster.yaml'],
+      spans: [ROSTER],
       note: 'digests: the checkout could not be filled',
       message: error instanceof Error ? error.message : String(error),
     }

@@ -49,7 +49,7 @@ function declared(s: LanguageSeat): void {
   })
 
   test('the roster lists the seat and rules() gives it a row', () => {
-    expect(rules(root).find((r) => r.id === s.seat)).toMatchObject({ kind: 'card', path: 'rules/roster.yaml' })
+    expect(rules(root).find((r) => r.id === s.seat)).toMatchObject({ kind: 'card', path: `rules/roster/${s.seat}.yaml` })
   })
 
   test('the prompt closes with the handback fence and rebuild line', () => {

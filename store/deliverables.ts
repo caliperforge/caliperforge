@@ -59,6 +59,10 @@ export function forkGreen(db: Db, plan: number, green: boolean): void {
   db.prepare('UPDATE deliverables SET fork_ci_green = ? WHERE id = ?').run(Number(green), latest(db, plan))
 }
 
+export function botClean(db: Db, plan: number, clean: boolean): void {
+  db.prepare('UPDATE deliverables SET bot_clean = ? WHERE id = ?').run(Number(clean), latest(db, plan))
+}
+
 /** A `CHECK` on the table refuses a ready row missing any of the five, so the store is what says no. */
 export function ready(db: Db, plan: number): void {
   db.prepare("UPDATE deliverables SET state = 'ready' WHERE id = ?").run(latest(db, plan))

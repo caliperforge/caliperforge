@@ -99,7 +99,7 @@
   table: runs
   column: at
   where: seat = 'web_specialist'
-  while: EXISTS (SELECT 1 FROM plans WHERE origin GLOB 'https://github.com/caliperforge/atelier-web/*')
+  while: EXISTS (SELECT 1 FROM plans WHERE origin GLOB 'https://github.com/caliperforge/atelier-web/*' AND state IN ('queued', 'running', 'blocked_on_ceo') AND queued_at >= $since)
 - name: design
   table: runs
   column: at

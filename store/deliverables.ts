@@ -69,6 +69,16 @@ export function approved(db: Db, plan: number, approval: number): void {
   db.prepare("UPDATE deliverables SET state = 'approved', approval_id = ? WHERE id = ?").run(approval, latest(db, plan))
 }
 
+export function approvedRow(db: Db, plan: number): number | null {
+  const row = db.prepare("SELECT id FROM deliverables WHERE plan_id = ? AND state = 'approved' ORDER BY id DESC LIMIT 1")
+    .get(plan) as { id: number } | undefined
+  return row?.id ?? null
+}
+
+export function landedRow(db: Db, id: number, url: string): void {
+  db.prepare("UPDATE deliverables SET state = 'pushed', evidence = ? WHERE id = ?").run(url, id)
+}
+
 export function pushedRow(db: Db, made: Made, approval: number): void {
   db.prepare(`INSERT INTO deliverables (plan_id, step, seat, diff_digest, state, tests_pass, byte_identical_elsewhere,
     fork_ci_green, bot_clean, target_warm, approval_id, evidence) VALUES (?, ?, ?, ?, 'pushed', 1, 1, 1, 1, 1, ?, ?)`)

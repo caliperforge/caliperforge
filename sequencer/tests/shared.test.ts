@@ -36,7 +36,7 @@ test('D2 a shared refusal stops its lane and names plans and span', async () => 
   const fired = (await tick(w.db, w.root, stub(CARRIED, 0, REFUSE)))[0]
   expect(fired?.note).toContain('lane off: plans 2 and 3 refused on src/hello.ts:1')
   expect(w.db.prepare('SELECT enabled FROM pipes WHERE id = 1').get()).toEqual({ enabled: 0 })
-  expect(ofKind(w.db, 'pipe').map((e) => [e.actor, e.outcome])).toEqual([['settle', 'needs_ceo']])
+  expect(ofKind(w.db, 'pipe').map((e) => [e.actor, e.outcome])).toEqual([['settle', 'escalate']])
 })
 
 test('CI state never switches a lane off', () => {

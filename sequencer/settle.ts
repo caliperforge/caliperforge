@@ -40,7 +40,7 @@ export async function stepped(db: Db, root: string, pipe: PipeRow, plan: PlanRow
   const outcome = tree.failed ?? seatless(plan, step, tree.language) ?? await made(db, root, plan, step, provider, wire, read)
   const state = settle(db, root, plan, step, outcome)
   if (outcome.quiet !== true) {
-    logged(db, { plan: plan.id, kind: step.name, actor: step.runs, outcome: outcome.outcome, message: outcome.note,
+    logged(db, { plan: plan.id, kind: step.name, actor: step.runs, outcome: outcome.outcome === 'needs_ceo' ? 'escalate' : outcome.outcome, message: outcome.note,
       pointer: pointer(db, plan.id, step, verdicts), run: runSince(db, plan.id, step.step, mark) })
   }
   const fired: Fired = {
@@ -217,7 +217,7 @@ function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcom
   if (why === 'shared' && !outcome.spans.every((s) => CI_ONLY.test(s))) {
     db.prepare('UPDATE pipes SET enabled = 0 WHERE id = ?').run(plan.pipe_id)
     outcome.note += `; lane off: plans ${String(plan.id)} and ${String(peer(db, r))} refused on ${outcome.spans.join(', ')}`
-    logged(db, { plan: plan.id, kind: 'pipe', actor: 'settle', outcome: 'needs_ceo', message: outcome.note, pointer: null, run: null })
+    logged(db, { plan: plan.id, kind: 'pipe', actor: 'settle', outcome: 'escalate', message: outcome.note, pointer: null, run: null })
   }
   // A rewind costs no retry but is recorded like any refusal, so a second identical one waits for a person.
   if (outcome.rewind !== undefined && why === 'again') { rewind(db, plan.id, outcome.rewind); return 'running' }

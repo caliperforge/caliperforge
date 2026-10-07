@@ -233,3 +233,11 @@
   table: decisions
   column: at
   where: verb = 'ask_ceo' AND wait_reason = 'token_ceiling'
+- name: close_landed
+  table: events
+  column: at
+  where: kind = 'close' AND message GLOB 'landed [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]*'
+- name: ruling_files
+  table: events
+  column: at
+  where: kind = 'files' AND actor = 'ruling' AND outcome = 'pass'

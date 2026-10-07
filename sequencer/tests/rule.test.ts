@@ -3,11 +3,13 @@ import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { expect, test } from 'vitest'
 import type { Provider } from '../../providers/kind.ts'
+import { eventsOf } from '../../store/events.ts'
+import { filesOf, recorded, strays } from '../../store/files.ts'
 import { migrate, open } from '../../store/index.ts'
 import { planById } from '../../store/plans.ts'
 import type { Wire } from '../push.ts'
 import { woke } from '../director.ts'
-import { fenced, owned } from '../rule.ts'
+import { fenced, opened, owned } from '../rule.ts'
 import { maybe, put, srcDir } from '../workspace.ts'
 
 const repo = join(import.meta.dirname, '../..')
@@ -35,10 +37,10 @@ function seeded(step: number) {
   return { db, home }
 }
 
-function stub(fix: string): Provider {
+function stub(fix: string, said = FIX): Provider {
   return {
     name: 'claude-agent-sdk',
-    fire: (packet) => Promise.resolve({ text: basename(packet.transcript).startsWith('fixer') ? fix : FIX,
+    fire: (packet) => Promise.resolve({ text: basename(packet.transcript).startsWith('fixer') ? fix : said,
       transcript_path: packet.transcript, usage: { input: 10, cache: 0, output: 5 },
       seconds: 0, ended: 'completed', exit: 0, stop_reason: 'end_turn', denials: 0 }),
   }
@@ -148,4 +150,21 @@ test('a step-4 stop on an old step-3 refusal is not fenced', () => {
   expect(fenced(home, planById(db, 7))).toBe(false)
   expect(owned(home, planById(db, 7), 'cli/extra.ts holds it')).toBe(false)
   expect(maybe(home, 7, 'issue.md')).toBe(ISSUE)
+})
+
+test('D4 opened lists a stray row by clearing its flag', () => {
+  const { db, home } = seeded(3)
+  strays(db, 7, ['index.ts'])
+  put(home, 7, 'rulings.md', 'see `index.ts`\n')
+  expect(opened(db, home, 7)).toEqual([])
+  expect(recorded(db, 7)).toEqual(['index.ts'])
+  expect(filesOf(db, 7)).toEqual([{ path: 'index.ts', is_new: false }])
+})
+
+test('D5 a director return opens the path rulings.md names', async () => {
+  const { db, home } = seeded(3)
+  put(home, 7, 'rulings.md', 'the builder edits `index.ts`\n')
+  await woke(db, home, stub('', '---\nmove: return\nwhy: the ruling names the file\n---\n'), now, () => undefined, wire)
+  expect(filesOf(db, 7)).toEqual([{ path: 'index.ts', is_new: true }])
+  expect(eventsOf(db, 7, 'files')).toEqual([{ actor: 'ruling', outcome: 'pass', message: 'add index.ts: named in rulings.md' }])
 })

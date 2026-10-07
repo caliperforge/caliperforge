@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Command } from 'commander'
@@ -9,6 +9,7 @@ import { all } from '../../cli/inbox.ts'
 import { gates } from '../../store/approvals.ts'
 import { pushedRow } from '../../store/deliverables.ts'
 import { eventsOf } from '../../store/events.ts'
+import { filesOf } from '../../store/files.ts'
 import { migrate, open } from '../../store/index.ts'
 import { drop, take } from '../../store/leases.ts'
 import { addPart } from '../../store/parts.ts'
@@ -138,6 +139,28 @@ test('cf return prints the step the plan runs next', () => {
   registerPlans(cf, { root: home, db: () => db, out: (line: string) => { printed.push(line) } })
   cf.parse(['return', '7', '--by', 'ceo'], { from: 'user' })
   expect(printed).toEqual(['plan 7 queued at step 2\n'])
+})
+
+test('D1 D2 D3 cf return opens the paths rulings.md names', () => {
+  const { db, home } = stoppedAtCheck('unchanged')
+  const path = 'kotlin/src/test/kotlin/MemorySignerTest.kt'
+  const elided = 'kotlin/src/test/.../MemorySignerTest.kt'
+  mkdirSync(join(srcDir(home, 7), 'kotlin/src/test/kotlin'), { recursive: true })
+  writeFileSync(join(srcDir(home, 7), path), 'class MemorySignerTest\n')
+  put(home, 7, 'rulings.md', `edit \`${path}:12-20\`, not \`${elided}\`\n`)
+  const printed: string[] = []
+  const cf = new Command()
+  registerPlans(cf, { root: home, db: () => db, out: (line: string) => { printed.push(line) } })
+  cf.parse(['return', '7', '--by', 'ceo'], { from: 'user' })
+  expect(printed).toEqual(['plan 7 queued at step 3\n', `  not in the checkout: ${elided}\n`])
+  expect(filesOf(db, 7)).toEqual([{ path, is_new: true }])
+  const pass = { actor: 'ruling', outcome: 'pass', message: `add ${path}: named in rulings.md` }
+  const refuse = { actor: 'ruling', outcome: 'refuse', message: `not in the checkout: ${elided}` }
+  expect(eventsOf(db, 7, 'files')).toEqual([pass, refuse])
+  db.exec("UPDATE plans SET state = 'blocked_on_ceo' WHERE id = 7")
+  cf.parse(['return', '7', '--by', 'ceo'], { from: 'user' })
+  expect(filesOf(db, 7)).toEqual([{ path, is_new: true }])
+  expect(eventsOf(db, 7, 'files')).toEqual([pass, refuse, refuse])
 })
 
 function driven() {

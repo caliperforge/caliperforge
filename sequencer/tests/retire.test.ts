@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import type { Gh } from '../../rails/ci-green/index.ts'
 import { cancel, moved, rehearsing } from '../retire.ts'
+import { put } from '../workspace.ts'
 import { watched } from './world.ts'
 
 const FORK = 'caliperforge/widget'
@@ -49,11 +50,28 @@ test('a first send or the same -next again retires nothing', () => {
   expect(log).toEqual([])
 })
 
+function rehearsed(log: string[], at: string, statuses: string[]): ReturnType<typeof watched> {
+  return { ...watched(log, at, 1, runs(log, 'main', statuses)),
+    rehearse: (fork: string, branch: string, base: string) => void log.push(`rehearse ${fork} ${branch} ${base}`) }
+}
+
 test('a rehearse cancels the fork’s running main runs', () => {
   const log: string[] = []
-  const wire = { ...watched(log, root(), 1, runs(log, 'main', ['in_progress'])), rehearse: (fork: string, branch: string) => void log.push(`rehearse ${fork} ${branch}`) }
-  rehearsing(FORK, NEW, wire)
-  expect(log).toEqual([`rehearse ${FORK} ${NEW}`, `run cancel 1 --repo ${FORK}`])
+  const at = root()
+  put(at, 1, 'base.sha', 'a1\n')
+  rehearsing(at, 1, FORK, NEW, rehearsed(log, at, ['in_progress']))
+  expect(log).toEqual([`rehearse ${FORK} ${NEW} a1`, `run cancel 1 --repo ${FORK}`])
+})
+
+test('D6 a rewritten base.sha reaches the next rehearse', () => {
+  const log: string[] = []
+  const at = root()
+  const wire = rehearsed(log, at, [])
+  put(at, 1, 'base.sha', 'a1\n')
+  rehearsing(at, 1, FORK, NEW, wire)
+  put(at, 1, 'base.sha', 'b2\n')
+  rehearsing(at, 1, FORK, NEW, wire)
+  expect(log).toEqual([`rehearse ${FORK} ${NEW} a1`, `rehearse ${FORK} ${NEW} b2`])
 })
 
 test('a cancel that throws leaves the rest cancelled', () => {

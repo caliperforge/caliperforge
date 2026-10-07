@@ -1,3 +1,7 @@
+import { statSync } from 'node:fs'
+import { join } from 'node:path'
+import { logged } from '../store/events.ts'
+import { edit, filesOf } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
 import { builderRan, type PlanRow } from '../store/plans.ts'
 import { unruled } from './unruled.ts'
@@ -6,6 +10,19 @@ import { get, headSha, maybe, put, srcDir } from './workspace.ts'
 const PATH = /(?:^|[\s`'"(])(~?\/[^\s`'"()]+)/g
 
 const OUTSIDE = /^ {2}- (\S+):1 authority\.outside_files$/gm
+
+export function opened(db: Db, root: string, plan: number): string[] {
+  const tokens = [...(maybe(root, plan, 'rulings.md') ?? '').matchAll(/`([^`\s]+)`/g)]
+    .map((m) => (m[1] ?? '').replace(/:\d+(?:-\d+)?$/, '')).filter((t) => t.includes('/') || /\.\w+$/.test(t))
+  const listed = new Set(filesOf(db, plan).map((f) => f.path))
+  const missed: string[] = []
+  for (const t of new Set(tokens)) {
+    if (t.includes('..') || statSync(join(srcDir(root, plan), t), { throwIfNoEntry: false })?.isFile() !== true) missed.push(t)
+    else if (!listed.has(t)) edit(db, plan, 'add', t, 'ruling', 'named in rulings.md')
+  }
+  if (missed.length > 0) logged(db, { plan, kind: 'files', actor: 'ruling', outcome: 'refuse', message: `not in the checkout: ${missed.join(', ')}`, pointer: null, run: null })
+  return missed
+}
 
 export function rule(db: Db, root: string, plan: PlanRow, who: string, text: string): 'ask.md' | 'issue.md' | null {
   const other = [...text.matchAll(/\.cf\/work\/(\d+)/g)].some((m) => Number(m[1]) !== plan.id)

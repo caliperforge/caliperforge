@@ -11,7 +11,7 @@ import { amend, width } from '../../store/lanes.ts'
 import { holdOf, retried } from '../../store/holds.ts'
 import { current } from '../../store/now.ts'
 import { clear } from '../../store/refusals.ts'
-import { dropDeliverables, pushedRow } from '../../store/deliverables.ts'
+import { dropDeliverables, gated, newest, pushedRow } from '../../store/deliverables.ts'
 import { gates } from '../../store/approvals.ts'
 import { addTarget, setTargetState, targetRow } from '../../store/targets.ts'
 import { at, steps } from '../../templates/pr-path.ts'
@@ -340,7 +340,7 @@ test('D2 a refusal repeated after an ask ruling goes round again', async () => {
 })
 
 test('D4 a refusal repeated after rulings.md goes round again', async () => {
-  const [, fired] = await retriedOnce((w) => { put(w.root, 1, 'rulings.md', 'use bye()\n') })
+  const [, fired] = await retriedOnce((w) => { put(w.root, 1, 'rulings.md', 'use bye()\n'); built(w.root, 1, 'export const more = 1') })
   expect(fired).toMatchObject({ step: 3, outcome: 'refuse', state: 'retried' })
 })
 
@@ -1022,6 +1022,51 @@ test('D2 D7 a 3/5 head with findings accepted or overruled passes', async () => 
   expect(plan(d2.db, 1).step).toBe(7)
 })
 
+/** A 0/5 whose summary links `ids` as P1 findings, with G11 and G12 accepted at an earlier head. */
+const linking = (ids: number[]) => (at: World): void => {
+  scored(at.root, 1, 0, `Confidence Score: 0/5\n\n${ids.map((n) =>
+    `1. ${P1}&nbsp;**Bug** <a href="https://github.com/caliperforge/widget/pull/1#discussion_r${String(n)}">▶</a>\n`).join('')}`)
+  put(at.root, 1, 'rulings.md', ruling('f'.repeat(40), 'G11, G12'))
+}
+
+const P1 = '<img alt="P1" src="https://greptile.com/p1.svg">'
+
+test('D3 a 0/5 linking only earlier accepted findings passes', async () => {
+  const [w, lap] = await atReady(linking([11, 12]))
+  expect((await lap())?.note).toMatch(/the COO accepted G11, G12$/)
+  expect(plan(w.db, 1).step).toBe(7)
+  expect(eventsOf(w.db, 1, 'greptile.accepted')).toEqual([{ actor: 'ready', outcome: 'pass', message: 'G11, G12' }])
+})
+
+test('D4 a 0/5 linking an unaccepted P1 refuses', async () => {
+  const [, lap] = await atReady(linking([11, 12, 13]))
+  expect(await lap()).toMatchObject({ step: 6, name: 'ready', outcome: 'refuse', spans: ['greptile:0/5'] })
+})
+
+/** An accepted head whose newest row senior wrote with `bot_clean = 0` before the ruling. */
+const staleSenior = async (): Promise<[World, () => Promise<Fired | undefined>]> => {
+  const [w, lap] = await atReady(accepting(['G11', 'G12'], (sha) => ruling(sha, 'G11, G12')))
+  const { seat, diff_digest, evidence } = newest(w.db, 1) ?? expect.fail('no deliverable row')
+  gated(w.db, { plan: 1, step: 5, seat, diff_digest, evidence },
+    { tests_pass: true, byte_identical_elsewhere: true, fork_ci_green: true, bot_clean: false, target_warm: true })
+  return [w, lap]
+}
+
+test('D1 a stale senior row on an accepted head passes ready', async () => {
+  const [w, lap] = await staleSenior()
+  expect((await lap())?.note).toMatch(/the COO accepted G11, G12$/)
+  expect(plan(w.db, 1).step).toBe(7)
+  expect(newest(w.db, 1)).toMatchObject({ state: 'ready', bot_clean: 1 })
+})
+
+test('D2 an outside bot score under 5 at the head still refuses', async () => {
+  const [w, lap] = await staleSenior()
+  signal(w.db, { repo: 'acme/widget', pr: 1, kind: 'bot_review', author: 'greptile', at: new Date().toISOString(),
+    external_id: 'outside', score: 3, plan: 1, body: FINDINGS, head: head(srcDir(w.root, 1), ['rev-parse', 'HEAD']) })
+  expect((await lap())?.spans).toContain('bot:1 ready.bot_clean')
+  expect(newest(w.db, 1)?.bot_clean).toBe(0)
+})
+
 test('D3 a 5/5 head with no findings passes', async () => {
   const [w, lap] = await atReady((at) => { scored(at.root, 1, 5, 'Confidence Score: 5/5') })
   await lap()
@@ -1032,7 +1077,6 @@ test('D1 D5 D7 an open P2 at senior holds ready on ready_proof', async () => {
   const answered = CARRIED.replace(/---\n$/, '  - id: G12\n    status: done\n    pointer: src/hello.ts:1\n---\n')
   for (const grade of [
     accepting(['G11', 'G12', 'G13'], (sha) => ruling(sha, 'G11, G12')),
-    accepting(['G11', 'G12'], () => ruling('f'.repeat(40), 'G11, G12')),
     accepting(['G11', 'G12'], (sha) => ruling(sha, 'G11'), answered),
     accepting(['G11'], () => 'G11 overruled:\n'),
   ]) {

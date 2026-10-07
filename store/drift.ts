@@ -11,12 +11,12 @@ export function addSetting(db: Db, row: Setting): void {
     .run(row)
 }
 
-export function holds(db: Db, condition: string): boolean {
-  return (db.prepare(`SELECT (${condition}) AS on_`).get() as { on_: number }).on_ === 1
+export function holds(db: Db, condition: string, since: string): boolean {
+  return (db.prepare(`SELECT (${condition}) AS on_`).get({ since }) as { on_: number }).on_ === 1
 }
 
-export function worked(db: Db, select: string): boolean {
-  return db.prepare(select).get() !== undefined
+export function worked(db: Db, select: string, since: string): boolean {
+  return db.prepare(select).get({ since }) !== undefined
 }
 
 export function newest(db: Db, from: string, column: string, now: Date): { newest: string | number | null; days: number | null } {

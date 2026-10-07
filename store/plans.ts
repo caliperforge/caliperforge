@@ -114,6 +114,21 @@ export function pipeNamed(db: Db, name: string): PipeRow | null {
   return row === undefined ? null : PipeRow.parse(row)
 }
 
+export function newestPlan(db: Db, target: number): number | null {
+  return db.prepare('SELECT max(id) FROM plans WHERE target_id = ?').pluck().get(target) as number | null
+}
+
+export function openPlan(db: Db, target: number): number | null {
+  const row = db.prepare("SELECT id FROM plans WHERE target_id = ? AND state IN ('queued', 'running')").get(target) as { id: number } | undefined
+  return row?.id ?? null
+}
+
+export function queueTargetPlan(db: Db, pipe: number, target: number, priority: number): number {
+  return Number(db.prepare(`INSERT INTO plans (pipe_id, target_id, template, state, queued_at, step, retries, priority)
+    VALUES (?, ?, 'pr_path', 'queued', ?, 0, 0, ?)`)
+    .run(pipe, target, new Date().toISOString(), priority).lastInsertRowid)
+}
+
 export function pipeOf(db: Db, id: number): PipeRow {
   return PipeRow.parse(db.prepare('SELECT * FROM pipes WHERE id = ?').get(id))
 }

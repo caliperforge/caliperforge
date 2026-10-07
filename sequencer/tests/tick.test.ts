@@ -11,7 +11,7 @@ import { amend, width } from '../../store/lanes.ts'
 import { holdOf, retried } from '../../store/holds.ts'
 import { current } from '../../store/now.ts'
 import { clear } from '../../store/refusals.ts'
-import { dropDeliverables, pushedRow } from '../../store/deliverables.ts'
+import { dropDeliverables, gated, newest, pushedRow } from '../../store/deliverables.ts'
 import { gates } from '../../store/approvals.ts'
 import { addTarget, setTargetState, targetRow } from '../../store/targets.ts'
 import { at, steps } from '../../templates/pr-path.ts'
@@ -985,6 +985,30 @@ test('D2 D7 a 3/5 head with findings accepted or overruled passes', async () => 
   const [d2, again] = await atReady(accepting(['G11', 'G12'], (sha) => `${ruling(sha, 'G11')}G12 overruled: src/hello.ts:1 refuses it\n`))
   expect((await again())?.note).toMatch(/the COO accepted G11, G12$/)
   expect(plan(d2.db, 1).step).toBe(7)
+})
+
+/** An accepted head whose newest row senior wrote with `bot_clean = 0` before the ruling. */
+const staleSenior = async (): Promise<[World, () => Promise<Fired | undefined>]> => {
+  const [w, lap] = await atReady(accepting(['G11', 'G12'], (sha) => ruling(sha, 'G11, G12')))
+  const { seat, diff_digest, evidence } = newest(w.db, 1) ?? expect.fail('no deliverable row')
+  gated(w.db, { plan: 1, step: 5, seat, diff_digest, evidence },
+    { tests_pass: true, byte_identical_elsewhere: true, fork_ci_green: true, bot_clean: false, target_warm: true })
+  return [w, lap]
+}
+
+test('D1 a stale senior row on an accepted head passes ready', async () => {
+  const [w, lap] = await staleSenior()
+  expect((await lap())?.note).toMatch(/the COO accepted G11, G12$/)
+  expect(plan(w.db, 1).step).toBe(7)
+  expect(newest(w.db, 1)).toMatchObject({ state: 'ready', bot_clean: 1 })
+})
+
+test('D2 an outside bot score under 5 at the head still refuses', async () => {
+  const [w, lap] = await staleSenior()
+  signal(w.db, { repo: 'acme/widget', pr: 1, kind: 'bot_review', author: 'greptile', at: new Date().toISOString(),
+    external_id: 'outside', score: 3, plan: 1, body: FINDINGS, head: head(srcDir(w.root, 1), ['rev-parse', 'HEAD']) })
+  expect((await lap())?.spans).toContain('bot:1 ready.bot_clean')
+  expect(newest(w.db, 1)?.bot_clean).toBe(0)
 })
 
 test('D3 a 5/5 head with no findings passes', async () => {

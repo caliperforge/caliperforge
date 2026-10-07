@@ -36,7 +36,7 @@ export function listed(db: Db, plan: number, path: string): void {
 
 export const VERBS = ['set', 'add', 'drop'] as const
 
-export function edit(db: Db, plan: number, verb: typeof VERBS[number], path: string, actor: Holder, why: string | null): void {
+export function edit(db: Db, plan: number, verb: typeof VERBS[number], path: string, actor: Holder | 'ruling', why: string | null): void {
   db.transaction(() => {
     if (db.prepare('SELECT 1 FROM plans WHERE id = ?').get(plan) === undefined) throw new Error(`no plan ${String(plan)}`)
     if (verb === 'drop' && db.prepare('DELETE FROM plan_files WHERE plan = ? AND path = ? AND stray = 0').run(plan, path).changes === 0) {

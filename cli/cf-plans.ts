@@ -2,6 +2,7 @@ import type { Command } from 'commander'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { hold, unhold } from '../sequencer/hold.ts'
+import { opened } from '../sequencer/rule.ts'
 import { afresh, cloned, fetchMain, git, MAIN, planDir, reap } from '../sequencer/workspace.ts'
 import { blocked, parked, WAITING } from '../sequencer/steps.ts'
 import { decision } from '../store/ask.ts'
@@ -127,8 +128,12 @@ function holds(cf: Command, { root, db, out }: Cli): void {
     .option('--to <step>', 'an earlier step to resume at, retries and signed head cleared')
     .action((id: string, options: { by: string; to?: string }) => {
       const to = options.to === undefined ? undefined : Number(options.to)
-      const step = unhold(db(), root, Number(id), holderOf(options.by), to)
+      const by = holderOf(options.by)
+      const handle = db()
+      const missed = opened(handle, root, Number(id))
+      const step = unhold(handle, root, Number(id), by, to)
       out(`plan ${id} queued at step ${String(step)}\n`)
+      if (missed.length > 0) out(`  not in the checkout: ${missed.join(', ')}\n`)
     })
 }
 

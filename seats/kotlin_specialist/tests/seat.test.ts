@@ -22,7 +22,7 @@ test('the manifest declares seat, model, effort, tools and paths', () => {
 
 test('the roster carries the seat and it loads as a rules row', () => {
   const row = rules(root).find((r) => r.id === 'kotlin_specialist')
-  expect(row).toMatchObject({ kind: 'card', path: 'rules/roster.yaml' })
+  expect(row).toMatchObject({ kind: 'card', path: 'rules/roster/kotlin_specialist.yaml' })
 })
 
 test('the build prompt closes with the handback fence', () => {

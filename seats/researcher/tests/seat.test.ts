@@ -1,4 +1,4 @@
-import { appendFileSync, cpSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { appendFileSync, cpSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
@@ -40,7 +40,7 @@ test('D3: the prompt holds the four rules and the sources fence', () => {
 
 test('D4: the digests hold and researcher is a card row', () => {
   expect(check(root, TODAY)).toEqual([])
-  expect(rules(root).find((r) => r.id === 'researcher')).toMatchObject({ kind: 'card', path: 'rules/roster.yaml' })
+  expect(rules(root).find((r) => r.id === 'researcher')).toMatchObject({ kind: 'card', path: 'rules/roster/researcher.yaml' })
 })
 
 test('D5: a card with Bash fails', () => {
@@ -50,9 +50,8 @@ test('D5: a card with Bash fails', () => {
 
 test('D5: a roster without the researcher digests is stale', () => {
   const tree = copied()
-  const roster = join(tree, 'rules/roster.yaml')
-  writeFileSync(roster, readFileSync(roster, 'utf8').replace(/ {2}researcher:\n(?: {4}.*\n){2}/, ''))
-  expect(check(tree, TODAY).map((s) => s.path)).toContain('rules/roster.yaml')
+  writeFileSync(join(tree, 'rules/roster/researcher.yaml'), '')
+  expect(check(tree, TODAY).map((s) => s.path)).toContain('rules/roster/researcher.yaml')
 })
 
 test('D5: a drifted researcher prompt is refused', () => {

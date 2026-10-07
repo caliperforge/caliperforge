@@ -237,6 +237,11 @@
   table: events
   column: at
   where: kind = 'close' AND message GLOB 'landed [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]*'
+- name: handback_not_done
+  table: verdicts
+  column: id
+  where: rail_id = 'completion-audit' AND outcome = 'refuse' AND message LIKE '%Not done%'
+  expected: 0
 - name: ruling_files
   table: events
   column: at

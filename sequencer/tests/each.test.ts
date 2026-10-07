@@ -1,4 +1,5 @@
 import { expect, test } from 'vitest'
+import { held, take } from '../../store/leases.ts'
 import { lap, tick } from '../index.ts'
 import { CARRIED, internalPlan, ours, plan, stub, watched, world } from './world.ts'
 
@@ -58,6 +59,23 @@ test('lap steps nothing its tick no longer holds', async () => {
   w.db.prepare('INSERT INTO leases (plan, pid, taken_at) VALUES (2, 8, ?)').run(new Date().toISOString())
   expect(await lap(w.db, w.root, stub(CARRIED), 2, 7, null)).toEqual([])
   expect(plan(w.db, 2).step).toBe(0)
+})
+
+test('lap takes no second step once the install moved', async () => {
+  const w = two()
+  take(w.db, 2, new Date(), 7)
+  watched([], w.root, 2)
+  const fired = await lap(w.db, w.root, stub(CARRIED), 2, 7, null, 5, undefined, () => true)
+  expect(fired).toHaveLength(1)
+  expect(plan(w.db, 2).step).toBe(1)
+  expect(held(w.db)).toEqual([])
+})
+
+test('lap keeps stepping while the install holds', async () => {
+  const w = two()
+  take(w.db, 2, new Date(), 7)
+  watched([], w.root, 2)
+  expect((await lap(w.db, w.root, stub(CARRIED), 2, 7, null, 5)).length).toBeGreaterThan(1)
 })
 
 test('a job that only waited leaves the lane its job for this tick', async () => {

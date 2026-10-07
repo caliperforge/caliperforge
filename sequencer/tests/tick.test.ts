@@ -305,7 +305,7 @@ test('D2 a refusal repeated after an ask ruling goes round again', async () => {
 })
 
 test('D4 a refusal repeated after rulings.md goes round again', async () => {
-  const [, fired] = await retriedOnce((w) => { put(w.root, 1, 'rulings.md', 'use bye()\n') })
+  const [, fired] = await retriedOnce((w) => { put(w.root, 1, 'rulings.md', 'use bye()\n'); built(w.root, 1, 'export const more = 1') })
   expect(fired).toMatchObject({ step: 3, outcome: 'refuse', state: 'retried' })
 })
 

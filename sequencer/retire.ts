@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import type { Gh } from '../rails/ci-green/index.ts'
 import type { Wire } from './push.ts'
-import { maybe, put } from './workspace.ts'
+import { get, maybe, put } from './workspace.ts'
 
 /** The `-next` branch `sent` last pushed. */
 const SENT = 'ci.sent'
@@ -33,8 +33,8 @@ export function moved(root: string, plan: number, fork: string, ci: string, wire
   put(root, plan, SENT, ci)
 }
 
-/** A rehearsal's `gh repo sync` starts the fork's `main` workflows. */
-export function rehearsing(fork: string, ci: string, wire: Wire): void {
-  wire.rehearse?.(fork, ci)
+/** A rehearsal's move of the fork's `main` to `base.sha` starts the fork's `main` workflows. */
+export function rehearsing(root: string, plan: number, fork: string, ci: string, wire: Wire): void {
+  wire.rehearse?.(fork, ci, get(root, plan, 'base.sha').trim())
   cancel(fork, 'main', wire.runs)
 }

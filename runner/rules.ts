@@ -43,7 +43,6 @@ interface Rule {
 
 export function rules(root: string): Rule[] {
   const rails = digest(join(root, 'rules/rails.yaml'))
-  const roster = digest(join(root, 'rules/roster.yaml'))
   const tight = digest(join(root, 'rules/tight.md'))
   const staffing = digest(join(root, 'rules/staffing.yaml'))
   return [
@@ -52,8 +51,12 @@ export function rules(root: string): Rule[] {
     ...registered(root).map((path) => ({ id: path, kind: 'card' as const, path, content_hash: digest(join(root, path)) })),
     { id: 'rules/staffing.yaml', kind: 'card', path: 'rules/staffing.yaml', content_hash: staffing },
     ...manifest(root).rails.map((id) => ({ id, kind: 'rail' as const, path: 'rules/rails.yaml', content_hash: rails })),
-    ...written(root).seats.map((id) => ({ id, kind: 'card' as const, path: 'rules/roster.yaml', content_hash: roster })),
+    ...written(root).seats.map((id) => ({ id, kind: 'card' as const, path: rosterOf(id), content_hash: digest(join(root, rosterOf(id))) })),
   ]
+}
+
+export function rosterOf(name: string): string {
+  return `rules/roster/${name}.yaml`
 }
 
 export function registered(root: string): string[] {
@@ -70,17 +73,18 @@ export function load(db: Db, root: string): Rule[] {
 }
 
 export function seat(root: string, name: string, mode?: Run['mode']): { manifest: Seat; prompt: string; hash: string } {
+  const file = rosterOf(name)
   const want = listed(root).digests[name]
-  if (want === undefined) throw new Error(`seat "${name}" is absent from rules/roster.yaml`)
+  if (want === undefined) throw new Error(`seat "${name}" is absent from ${file}`)
   const paths = { manifest: join(root, 'seats', name, 'manifest.yaml'), prompt: join(root, 'seats', name, 'prompt.md') }
   for (const key of ['manifest', 'prompt'] as const) {
-    if (digest(paths[key]) !== want[key]) throw new Error(`seat "${name}" ${key} does not match its digest in rules/roster.yaml`)
+    if (digest(paths[key]) !== want[key]) throw new Error(`seat "${name}" ${key} does not match its digest in ${file}`)
   }
   const prompt = readFileSync(paths.prompt, 'utf8')
   return {
     manifest: Seat.parse(parse(readFileSync(paths.manifest, 'utf8'))),
     prompt: mode === undefined ? prompt : `${prompt}\n${readFileSync(join(root, 'seats/modes', `${mode}.md`), 'utf8')}`,
-    hash: digest(join(root, 'rules/roster.yaml')),
+    hash: digest(join(root, file)),
   }
 }
 
@@ -98,7 +102,8 @@ export function written(root: string): z.infer<typeof Written> {
 }
 
 function read(root: string): unknown {
-  return parse(readFileSync(join(root, 'rules/roster.yaml'), 'utf8'))
+  const seats = readdirSync(join(root, 'rules/roster')).filter((name) => name.endsWith('.yaml')).sort().map((name) => name.slice(0, -'.yaml'.length))
+  return { seats, digests: Object.fromEntries(seats.map((name) => [name, parse(readFileSync(join(root, rosterOf(name)), 'utf8'))])) }
 }
 
 export function expected(root: string): Record<string, { manifest: string; prompt: string }> {

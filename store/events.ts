@@ -109,13 +109,6 @@ export function runRows(db: Db): RunRow[] {
   return db.prepare('SELECT id, plan, seat, staffed, step, exit, transcript_path, cost_usd FROM runs ORDER BY id').all() as RunRow[]
 }
 
-interface RunTokens { id: number; seat: string; input_tokens: number; cache_read_tokens: number; output_tokens: number; transcript_path: string; mode: Run['mode'] | null }
-
-export function runTokens(db: Db, plan: number): RunTokens[] {
-  return db.prepare(`SELECT id, seat, input_tokens, cache_read_tokens, output_tokens, transcript_path, mode
-    FROM runs WHERE plan = ? ORDER BY id`).all(plan) as RunTokens[]
-}
-
 export interface HandUps { decided: number; up: number }
 
 export function handUps(db: Db, now: Date): HandUps {

@@ -603,6 +603,47 @@ test('ruledDraft D4: issue.md goes under # Rulings, none without', async () => {
   expect(await prompted(w)).not.toContain('# Rulings')
 })
 
+test('rulingsDraft D1: a daily writer sees rulings.md', async () => {
+  const w = posting('daily 2026-09-27')
+  drop(w.root, 1, 'ask.md')
+  put(w.root, 1, 'refusal.md', 'was refused')
+  put(w.root, 1, 'rulings.md', 'keep item 4\n')
+  const prompt = await prompted(w)
+  expect(prompt).toContain('# Rulings\n\nkeep item 4')
+  expect(prompt.indexOf('# Rulings')).toBeLessThan(prompt.indexOf(REFUSED))
+})
+
+test('rulingsJoined D2: one # Rulings, issue.md then rulings.md', async () => {
+  const w = posting('daily 2026-09-27')
+  put(w.root, 1, 'issue.md', 'keep item b')
+  put(w.root, 1, 'rulings.md', 'keep item 4')
+  const prompt = await prompted(w)
+  expect(prompt.split('# Rulings')).toHaveLength(2)
+  expect(prompt).toContain('# Rulings\n\nkeep item b\n\nkeep item 4')
+})
+
+test('refusedKept D3: a step-1 refusal keeps the step-3 text', async () => {
+  const w = posting('daily 2026-09-27', 1)
+  put(w.root, 1, 'refusal.md', 'step 3 text_review refused by text_review\n\nitem 4 is unsourced\n')
+  await tick(w.db, w.root, seated('The day.'))
+  expect(get(w.root, 1, 'refusal.md')).toMatch(/^step 1 draft refused/)
+  const prompt = await prompted(w)
+  expect(prompt).toContain(`${REFUSED}, keep every item it does not name\n\nstep 1 draft refused`)
+  expect(prompt).toContain('item 4 is unsourced')
+})
+
+test('rulingsBlank D4: blank rulings.md, no heading; prev kept out', async () => {
+  const w = posting('daily 2026-09-27')
+  drop(w.root, 1, 'ask.md')
+  put(w.root, 1, 'rulings.md', '  \n')
+  put(w.root, 1, 'refusal.md', 'item b is unsourced')
+  put(w.root, 1, 'refusal.prev.md', 'step 1 draft refused\n\nitem c is unsourced')
+  const prompt = await prompted(w)
+  expect(prompt).toContain(`${REFUSED}, keep every item it does not name\n\nitem b is unsourced`)
+  expect(prompt).not.toContain('# Rulings')
+  expect(prompt).not.toContain('item c is unsourced')
+})
+
 test.each(['growth 2026-09-28', 'scorecard 2026-09-28'])('D5: a %s plan passes steps 1 and 3 with no run and no draft', async (title) => {
   const w = posting(title, 1)
   for (let n = 0; n < 3; n += 1) await tick(w.db, w.root, never)

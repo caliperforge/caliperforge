@@ -12,7 +12,7 @@ import { prose } from '../sequencer/prose.ts'
 import { ran } from '../sequencer/seat.ts'
 import { staffed } from '../sequencer/staffing.ts'
 import { scripted, shift, sound, weekly } from '../sequencer/weekly.ts'
-import { drop, get, maybe, put } from '../sequencer/workspace.ts'
+import { drop, get, maybe, move, put } from '../sequencer/workspace.ts'
 import { edited, returned } from '../store/desk.ts'
 import type { Run } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
@@ -122,9 +122,14 @@ const MODES: Record<string, Run['mode']> = { daily: 'log', ship: 'ship', weekly:
 export async function draft(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
   const title = titled(db, plan, 'daily') ?? titled(db, plan, 'ship') ?? titled(db, plan, 'weekly')
   if (title === null) return { outcome: 'pass', spans: [], note: 'not a post plan' }
-  const input = `# packet.json\n\n${get(root, plan.id, 'packet.json')}${
-    (maybe(root, plan.id, 'issue.md') ?? maybe(root, plan.id, 'ask.md'))?.replace(/^/, '\n\n# Rulings\n\n') ?? ''}${returned(db, plan.id)?.replace(/^/, '\n\n# Returned from the desk\n\n') ?? ''}${
-    (maybe(root, plan.id, 'refusal.md') ?? maybe(root, plan.id, 'refusal.prev.md'))?.replace(/^/, '\n\n# Refused — answer what this names, keep every item it does not name\n\n') ?? ''}`
+  if (maybe(root, plan.id, 'refusal.md')?.startsWith('step 3 ') === true) move(root, plan.id, 'refusal.md', 'refusal.prev.md')
+  const ruling = [maybe(root, plan.id, 'issue.md') ?? maybe(root, plan.id, 'ask.md'), maybe(root, plan.id, 'rulings.md')]
+    .map((text) => text?.trim() ?? '').filter((text) => text !== '').join('\n\n')
+  const [refusal, prev] = [maybe(root, plan.id, 'refusal.md'), maybe(root, plan.id, 'refusal.prev.md')]
+  const refused = refusal === null ? prev : prev?.startsWith('step 3 ') === true ? `${refusal}\n\n${prev}` : refusal
+  const input = `# packet.json\n\n${get(root, plan.id, 'packet.json')}${ruling === '' ? '' : `\n\n# Rulings\n\n${ruling}`}${
+    returned(db, plan.id)?.replace(/^/, '\n\n# Returned from the desk\n\n') ?? ''}${
+    refused?.replace(/^/, '\n\n# Refused — answer what this names, keep every item it does not name\n\n') ?? ''}`
   const fired = await ran(db, root, plan, { ...step, mode: MODES[title.slice(0, title.indexOf(' '))] }, provider, input, false)
   if (fired.ended !== 'completed') return halted(step, fired)
   if (titled(db, plan, 'daily') !== null) return listed(root, plan, step, fired.text)

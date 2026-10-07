@@ -3,8 +3,11 @@ import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import { FORK } from '../../sequencer/workspace.ts'
 import type { Db } from '../../store/index.ts'
+import { addPipe, addPlan, pipeNamed, planRows } from '../../store/plans.ts'
+import { addRecord, dropRecord } from '../../store/record.ts'
+import { accountRows, addAccount, addTarget, putTarget, targetRows } from '../../store/targets.ts'
 import type { Read } from '../gh.ts'
-import { refuseTarget } from '../queue.ts'
+import { account, refuseTarget } from '../queue.ts'
 import { render, scan } from '../scan.ts'
 
 const schema = join(import.meta.dirname, '../../schema')
@@ -36,16 +39,19 @@ const pr = (no: number, body: string, isDraft: boolean, owner: string): unknown 
 
 function world(): Db {
   const db = fresh(schema)
-  db.prepare(`INSERT INTO accounts (id, repo, measured_at, maintainers, doors, last_outsider_merge,
-    open_pr_age_p50_days, cross_repo_activity, pulse, evidence)
-    VALUES (1, ?, '2026-09-01', 1, 1, '2026-08-01', 0, 0, 'cold', 'https://github.com/acme/widget/pulse')`).run(REPO)
+  addAccount(db, { id: 1, repo: REPO, measured_at: '2026-09-01', maintainers: 1, doors: 1, last_outsider_merge: '2026-08-01',
+    open_pr_age_p50_days: 0, cross_repo_activity: 0, pulse: 'cold', evidence: 'https://github.com/acme/widget/pulse' })
   return db
 }
 
-const row = (db: Db, no: number): Record<string, unknown> =>
-  db.prepare('SELECT * FROM targets WHERE repo = ? AND issue_no = ?').get(REPO, no) as Record<string, unknown>
+const row = (db: Db, no: number): Record<string, unknown> | undefined =>
+  targetRows(db).find((t) => t.repo === REPO && t.issue_no === no)
 
-const count = (db: Db, table: string): number => (db.prepare(`SELECT count(*) AS n FROM ${table}`).get() as { n: number }).n
+const ROWS = { accounts: accountRows, plans: planRows, targets: targetRows }
+
+const count = (db: Db, table: keyof typeof ROWS): number => ROWS[table](db).length
+
+const TARGET = { account_id: 1, repo: REPO, evidence_measured_at: '2026-09-01' }
 
 test('open issues become ready targets with evidence, no plan', () => {
   const db = world()
@@ -55,26 +61,26 @@ test('open issues become ready targets with evidence, no plan', () => {
     prs: [pr(9, 'also #2', false, 'other'), pr(7, 'fixes #2', true, 'someone')],
   }))
   expect(got).toEqual({ targets: [expect.any(Number), expect.any(Number)], why: null })
-  const today = (db.prepare('SELECT id FROM accounts WHERE repo = ? AND measured_at = ?').get(REPO, TODAY) as { id: number }).id
+  const today = account(db, REPO, TODAY).id
   expect(row(db, 1)).toMatchObject({ state: 'ready', named_merger: 'maintainer', account_id: today, evidence_measured_at: TODAY,
     issue_opened_at: '2026-09-01', issue_active_at: '2026-09-20', size_lines: 3, open_pr: null, open_pr_draft: null })
   expect(row(db, 2)).toMatchObject({ state: 'ready', named_merger: 'maintainer', account_id: today, size_lines: 1,
     open_pr: 7, open_pr_draft: 1 })
   expect(count(db, 'plans')).toBe(plans)
-  expect(render(db, row(db, 2).id as number)).toContain('pr #7 draft')
+  expect(render(db, row(db, 2)?.id as number)).toContain('pr #7 draft')
 })
 
 test('two of ours open refuse scan before any read; one does not', () => {
   const db = world()
-  const pipe = Number(db.prepare(`INSERT INTO pipes (name, enabled, window_start, window_end, max_concurrent)
-    VALUES ('scan', 1, '00:00', '23:59', 1)`).run().lastInsertRowid)
-  const target = Number(db.prepare(`INSERT INTO targets (account_id, repo, issue_no, named_merger, state, evidence_measured_at, evidence)
-    VALUES (1, ?, 50, 'maintainer', 'queued', '2026-09-01', 'https://github.com/acme/widget/issues/50')`).run(REPO).lastInsertRowid)
-  const plan = Number(db.prepare(`INSERT INTO plans (pipe_id, target_id, template, state, queued_at, step, retries)
-    VALUES (?, ?, 'pr_path', 'queued', '2026-09-20T00:00:00.000Z', 0, 0)`).run(pipe, target).lastInsertRowid)
+  addPipe(db, { name: 'scan', enabled: 1, window_start: '00:00', window_end: '23:59', max_concurrent: 1 })
+  const pipe = Number(pipeNamed(db, 'scan')?.id)
+  const target = addTarget(db, { ...TARGET, issue_no: 50, named_merger: 'maintainer', state: 'queued',
+    evidence: 'https://github.com/acme/widget/issues/50' })
+  const plan = addPlan(db, { pipe_id: pipe, target_id: target, template: 'pr_path', state: 'queued', queued_at: '2026-09-20T00:00:00.000Z',
+    lane: null, seat: null, origin: null, step: 0 })
   for (const no of [3, 4]) {
-    db.prepare(`INSERT INTO records (repo, pr, plan, url, state, merged_at, read_at)
-      VALUES (?, ?, ?, ?, 'OPEN', NULL, '2026-09-25T00:00:00Z')`).run(REPO, no, plan, `https://github.com/${REPO}/pull/${String(no)}`)
+    addRecord(db, { repo: REPO, pr: no, plan, url: `https://github.com/${REPO}/pull/${String(no)}`, state: 'OPEN', merged_at: null,
+      read_at: '2026-09-25T00:00:00Z' })
   }
   const log: string[] = []
   const got = scan(db, REPO, TODAY, canned({ issues: [issue(1), issue(2)] }, log))
@@ -82,24 +88,22 @@ test('two of ours open refuse scan before any read; one does not', () => {
   expect(got.why).toMatch(/2 pull requests of ours open and unmerged/)
   expect(log).toEqual([])
   expect([count(db, 'targets'), count(db, 'accounts')]).toEqual([1, 1])
-  db.prepare('DELETE FROM records WHERE pr = 4').run()
+  dropRecord(db, REPO, 4)
   expect(scan(db, REPO, TODAY, canned({ issues: [issue(1), issue(2)] })).targets).toHaveLength(2)
 })
 
 test('D3: a refused or queued target keeps every column', () => {
   const db = world()
-  db.prepare(`INSERT INTO targets (account_id, repo, issue_no, named_merger, state, evidence_measured_at, evidence,
-    ineligible_ruling_id, issue_opened_at, issue_active_at, open_pr, open_pr_draft, size_lines)
-    VALUES (1, ?, 1, 'old', 'refused', '2026-09-01', 'https://github.com/acme/widget/pull/3',
-      (SELECT min(id) FROM rulings), '2026-01-01', '2026-01-02', 4, 0, 9)`).run(REPO)
-  db.prepare(`INSERT INTO targets (account_id, repo, issue_no, named_merger, state, evidence_measured_at, evidence)
-    VALUES (1, ?, 2, 'old', 'queued', '2026-09-01', 'https://github.com/acme/widget/issues/2')`).run(REPO)
+  putTarget(db, { ...TARGET, issue_no: 1, named_merger: 'old', state: 'refused', evidence: 'https://github.com/acme/widget/pull/3',
+    ineligible_ruling_id: 1, issue_opened_at: '2026-01-01', issue_active_at: '2026-01-02', open_pr: 4, open_pr_draft: 0, size_lines: 9 })
+  addTarget(db, { ...TARGET, issue_no: 2, named_merger: 'old', state: 'queued', evidence: 'https://github.com/acme/widget/issues/2' })
   const refused = row(db, 1)
   const got = scan(db, REPO, TODAY, canned({ issues: [issue(1), issue(2), issue(3)] }))
   expect(got.targets).toHaveLength(1)
   expect(row(db, 1)).toEqual(refused)
   expect(row(db, 2)).toMatchObject({ state: 'queued', named_merger: 'old' })
-  expect(db.prepare('SELECT count(*) AS n FROM targets GROUP BY repo, issue_no, part HAVING n > 1').all()).toEqual([])
+  const keys = targetRows(db).map((t) => `${String(t.repo)}#${String(t.issue_no)}#${String(t.part)}`)
+  expect(keys.filter((k, i) => keys.indexOf(k) !== i)).toEqual([])
 })
 
 test('a rescan leaves a CEO-refused target alone and omits it', () => {
@@ -127,8 +131,8 @@ test('a PR from our fork, or naming #12, is not an open pr on #1', () => {
 test('new columns refuse bad date, draft flag 2 and negative size', () => {
   const db = world()
   const insert = (column: string, value: unknown): void => {
-    db.prepare(`INSERT INTO targets (account_id, repo, issue_no, named_merger, state, evidence_measured_at, evidence, ${column})
-      VALUES (1, ?, 1, 'm', 'ready', '2026-09-01', 'https://github.com/acme/widget/issues/1', ?)`).run(REPO, value)
+    putTarget(db, { ...TARGET, issue_no: 1, named_merger: 'm', state: 'ready', evidence: 'https://github.com/acme/widget/issues/1',
+      [column]: value })
   }
   expect(() => { insert('issue_opened_at', '2026-09-01T10:00:00Z') }).toThrow(/CHECK/)
   expect(() => { insert('open_pr_draft', 2) }).toThrow(/CHECK/)

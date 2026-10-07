@@ -16,12 +16,15 @@ import { monthly, reviewed } from '../../sequencer/ready.ts'
 import { put } from '../../sequencer/workspace.ts'
 import { decided, directorDays } from '../../store/decisions.ts'
 import { addFinding, closeFinding, type Finding, overdue, week } from '../../store/drift.ts'
-import { handUps, repriced } from '../../store/events.ts'
+import { addPrice, addRun } from '../../store/brief.ts'
+import { type Event, handUps, logged, repriced } from '../../store/events.ts'
 import { record as listFiles } from '../../store/files.ts'
-import type { Db } from '../../store/index.ts'
+import { holdOf } from '../../store/holds.ts'
+import { addRule, type Db, spied } from '../../store/index.ts'
 import { keep } from '../../store/merges.ts'
-import { held, needsCeo, parked, PlanRow, waiting } from '../../store/plans.ts'
+import { held, holdOn, needsCeo, parked, planById, type PlanRow, putPlan, waiting } from '../../store/plans.ts'
 import { record } from '../../store/signals.ts'
+import { addAccount, addTarget } from '../../store/targets.ts'
 
 const schema = join(import.meta.dirname, '../../schema')
 
@@ -33,36 +36,35 @@ const SEATS: Record<number, string> = { 2: 'typescript_specialist', 4: 'code_qua
 function world(): Db {
   const db = fresh(schema)
   for (const seat of [...Object.values(SEATS), 'orchestrator', 'coo_lite', 'director', 'fixer']) {
-    db.prepare("INSERT INTO rules VALUES (?, 'card', 'seats/seat.md', ?, '2026-09-19')").run(seat, HASH)
+    addRule(db, { id: seat, kind: 'card', path: 'seats/seat.md', content_hash: HASH, loaded_at: '2026-09-19' })
   }
-  db.prepare(`INSERT INTO accounts (id, repo, measured_at, maintainers, doors, last_outsider_merge,
-    open_pr_age_p50_days, cross_repo_activity, pulse, evidence)
-    VALUES (1, 'acme/widget', '2026-09-19', 2, 1, '2026-09-19', 3, 4, 'warm', 'https://github.com/acme/widget')`).run()
-  db.prepare(`INSERT INTO targets (id, account_id, repo, issue_no, named_merger, state, evidence_measured_at, evidence)
-    VALUES (1, 1, 'acme/widget', 12, 'maintainer', 'ready', '2026-09-19', 'https://github.com/acme/widget/issues/12')`).run()
+  addAccount(db, { id: 1, repo: 'acme/widget', measured_at: '2026-09-19', maintainers: 2, doors: 1, last_outsider_merge: '2026-09-19',
+    open_pr_age_p50_days: 3, cross_repo_activity: 4, pulse: 'warm', evidence: 'https://github.com/acme/widget' })
+  addTarget(db, { account_id: 1, repo: 'acme/widget', issue_no: 12, named_merger: 'maintainer', state: 'ready',
+    evidence_measured_at: '2026-09-19', evidence: 'https://github.com/acme/widget/issues/12' })
   return db
 }
 
-function plan(db: Db, id: number, state: string, issue: number | null, target: number | null = null): void {
+function plan(db: Db, id: number, state: PlanRow['state'], issue: number | null, target: number | null = null): void {
   const origin = issue === null ? null : `https://github.com/caliperforge/caliperforge/issues/${String(issue)}`
-  db.prepare(`INSERT INTO plans (id, pipe_id, target_id, template, state, queued_at, lane, seat, origin)
-    VALUES (?, 1, ?, ?, ?, '2026-09-19T00:00:00.000Z', ?, 'typescript_specialist', ?)`)
-    .run(id, target, issue === null ? 'research' : 'pr_path', state,
-      issue === null ? null : 'machine', origin)
+  putPlan(db, { id, pipe_id: 1, target_id: target, template: issue === null ? 'research' : 'pr_path', state,
+    queued_at: '2026-09-19T00:00:00.000Z', step: 0, retries: 0, lane: issue === null ? null : 'machine', seat: 'typescript_specialist', origin })
 }
 
-function run(db: Db, plan: number, step: number, at: string, seconds = 60, tokens = 100, seat = SEATS[step],
+const RUN = { rule_hash: HASH, provider: 'claude-agent-sdk', model: 'opus', effort: 'high', cache_write_tokens: null,
+  cache_write_1h_tokens: null, exit: 0, transcript_path: 'x.transcript.jsonl' }
+
+function run(db: Db, plan: number, step: number, at: string, seconds = 60, tokens = 100, seat = String(SEATS[step]),
   cost: number | null = null): void {
-  db.prepare(`INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort,
-    input_tokens, cache_read_tokens, output_tokens, seconds, exit, at, transcript_path, cost_usd)
-    VALUES (?, ?, ?, ?, 'claude-agent-sdk', 'opus', 'high', ?, 0, 0, ?, 0, ?, 'x.transcript.jsonl', ?)`)
-    .run(plan, step, seat, HASH, tokens, seconds, at, cost)
+  addRun(db, { ...RUN, plan, step, seat, input_tokens: tokens, cache_read_tokens: 0, output_tokens: 0, seconds, at, cost_usd: cost })
 }
+
+const ago = (hours: number): string => new Date(Date.now() - hours * 3_600_000).toISOString().slice(0, 19).replace('T', ' ')
 
 const NOW = new Date('2026-09-20T12:00:00.000Z')
 
-function event(db: Db, actor: string, kind: string, at = '2026-09-20 11:00:00', id = 1, outcome = 'pass'): void {
-  db.prepare("INSERT INTO events (plan, at, kind, actor, outcome, message) VALUES (?, ?, ?, ?, ?, '')").run(id, at, kind, actor, outcome)
+function event(db: Db, actor: string, kind: string, at = '2026-09-20 11:00:00', id = 1, outcome: Event['outcome'] = 'pass'): void {
+  logged(db, { plan: id, kind, actor, outcome, message: '', pointer: null, run: null }, at)
 }
 
 function day24(): Db {
@@ -253,8 +255,7 @@ test('tickets() reads db alone: no provider, no gh, one statement', () => {
   plan(db, 1, 'done', 25)
   run(db, 1, 2, '2026-09-20 09:00:00')
   const seen: string[] = []
-  const handle = { prepare: (sql: string) => { seen.push(sql); return db.prepare(sql) } } as unknown as Db
-  expect(tickets(handle)).toHaveLength(1)
+  expect(tickets(spied(db, seen))).toHaveLength(1)
   expect(tickets).toHaveLength(1)
   expect(seen).toHaveLength(1)
   expect(seen[0]).toContain('FROM runs r JOIN plans p')
@@ -396,15 +397,13 @@ test('names a held plan whose ask.md drifted, not a done one', () => {
   expect(rulings(db, root)).toBe('ask\tplan 2: ask.md differs from the ask its issue.md was briefed from\n')
 })
 
-const holding = (db: Db, id: number): unknown => db.prepare('SELECT held_by, held_why FROM plans WHERE id = ?').get(id)
-
 test('target approval holds a plan on the CEO until reason clears', () => {
   const db = world()
   plan(db, 1, 'queued', null, 1)
   waiting(db, [{ plan: 1, why: 'target_approval' }])
-  expect(holding(db, 1)).toEqual({ held_by: 'ceo', held_why: 'target_approval' })
+  expect(holdOf(db, 1)).toEqual({ held_by: 'ceo', held_why: 'target_approval' })
   waiting(db, [{ plan: 1, why: null }])
-  expect(holding(db, 1)).toEqual({ held_by: null, held_why: null })
+  expect(holdOf(db, 1)).toEqual({ held_by: null, held_why: null })
 })
 
 test('heldBy lists each held plan under who it waits on, with why', () => {
@@ -413,7 +412,7 @@ test('heldBy lists each held plan under who it waits on, with why', () => {
   plan(db, 2, 'queued', 30)
   plan(db, 3, 'queued', 31)
   waiting(db, [{ plan: 1, why: 'target_approval' }])
-  db.prepare("UPDATE plans SET state = 'blocked_on_ceo' WHERE id = 2").run()
+  holdOn(db, 2, '', null)
   expect(heldBy(db, 'ceo').map(line)).toEqual(['  plan 1\tstep 0\tqueued\tacme/widget#12\ttarget_approval'])
   expect(heldBy(db, 'coo').map(line)).toEqual(['  plan 2\tstep 0\tblocked_on_ceo\t-'])
 })
@@ -459,7 +458,7 @@ test('D3 cf plan <id> ends the plan row with the hold\'s condition', () => {
 test('a blocked plan with no park needs a decision with its stop', () => {
   const db = world()
   plan(db, 1, 'running', 25)
-  needsCeo(db, PlanRow.parse(db.prepare('SELECT * FROM plans WHERE id = 1').get()), 'code_quality refused: x')
+  needsCeo(db, planById(db, 1), 'code_quality refused: x')
   expect(heldBy(db, 'coo').map(line)).toEqual(['  plan 1\tstep 0\tblocked_on_ceo\t-\tcode_quality refused: x'])
   expect(parked(db)).toEqual([])
 })
@@ -480,11 +479,12 @@ test('files section: waiting plan, holder and file, or none', () => {
 test('runs/usage: tokens by type, null cache write 0, same totals', () => {
   const db = world()
   plan(db, 1, 'running', 25)
-  const seed = db.prepare(`INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort,
-    input_tokens, cache_write_tokens, cache_read_tokens, output_tokens, seconds, exit, at, transcript_path)
-    VALUES (1, 2, 'typescript_specialist', ?, 'claude-agent-sdk', 'opus', 'high', ?, ?, ?, ?, 60, 0, datetime('now', '-1 hour'), 'x.transcript.jsonl')`)
-  seed.run(HASH, 10, null, 200, 3)
-  seed.run(HASH, 14, 4, 20, 5)
+  const seed = (input: number, write: number | null, read: number, output: number): void => {
+    addRun(db, { ...RUN, plan: 1, step: 2, seat: 'typescript_specialist', input_tokens: input, cache_write_tokens: write,
+      cache_read_tokens: read, output_tokens: output, seconds: 60, at: ago(1), cost_usd: null })
+  }
+  seed(10, null, 200, 3)
+  seed(14, 4, 20, 5)
   const printed: string[] = []
   const cf = new Command()
   registerLanes(cf, { root: '', db: () => db, out: (text: string) => { printed.push(text) } })
@@ -501,23 +501,21 @@ test('runs/usage: tokens by type, null cache write 0, same totals', () => {
 })
 
 function priced(db: Db, model: string): void {
-  db.prepare(`INSERT INTO prices (provider, model, input, cache_read, cache_write, cache_write_1h, output, effective_from, source_url)
-    VALUES ('claude-agent-sdk', ?, 1, 0.1, 2, 2, 10, '2026-01-01', 'https://example.com/prices')`).run(model)
+  addPrice(db, { provider: 'claude-agent-sdk', model, input: 1, cache_read: 0.1, cache_write: 2, cache_write_1h: 2, output: 10,
+    effective_from: '2026-01-01', source_url: 'https://example.com/prices' })
 }
 
-function costed(db: Db, model: string, ago: string, input: number, write: number, read: number, output: number, usd: number): void {
-  db.prepare(`INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_write_tokens,
-    cache_write_1h_tokens, cache_read_tokens, output_tokens, cost_usd, seconds, exit, at, transcript_path)
-    VALUES (1, 2, 'typescript_specialist', ?, 'claude-agent-sdk', ?, 'high', ?, ?, ?, ?, ?, ?, 60, 0, datetime('now', ?), 'x.transcript.jsonl')`)
-    .run(HASH, model, input, write, write, read, output, usd, ago)
+function costed(db: Db, model: string, hours: number, input: number, write: number, read: number, output: number, usd: number): void {
+  addRun(db, { ...RUN, plan: 1, step: 2, seat: 'typescript_specialist', model, input_tokens: input, cache_write_tokens: write,
+    cache_write_1h_tokens: write, cache_read_tokens: read, output_tokens: output, cost_usd: usd, seconds: 60, at: ago(hours) })
 }
 
 function twoModels(): Db {
   const db = world()
   plan(db, 1, 'running', 25)
   priced(db, 'opus')
-  costed(db, 'opus', '-1 hour', 1000, 200, 5000, 300, 0.01)
-  costed(db, 'haiku', '-1 hour', 500, 100, 1000, 50, 0.002)
+  costed(db, 'opus', 1, 1000, 200, 5000, 300, 0.01)
+  costed(db, 'haiku', 1, 500, 100, 1000, 50, 0.002)
   return db
 }
 
@@ -533,7 +531,7 @@ test('per-model lines: computed and reported cost; unpriced named', () => {
 test('priced models get no price line; day-old runs count nowhere', () => {
   const db = twoModels()
   priced(db, 'haiku')
-  costed(db, 'opus', '-2 days', 9000, 900, 9000, 900, 9)
+  costed(db, 'opus', 48, 9000, 900, 9000, 900, 9)
   repriced(db)
   expect(costSection(costs(db), unpriced(db))).toBe('cost last 24 h by model (2)\n' +
     '  claude-agent-sdk/haiku\t1 run(s)\t400 uncached\t100 cache write\t1000 cache read\t50 output\tcomputed $0.0012\treported $0.0020\n' +

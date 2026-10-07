@@ -80,9 +80,6 @@
   "tests/adopt.test.ts": {
     "prepare": 4
   },
-  "tests/brief.test.ts": {
-    "prepare": 13
-  },
   "tests/cf.test.ts": {
     "silent-catch": 1
   },
@@ -106,9 +103,6 @@
   },
   "tests/record.test.ts": {
     "prepare": 5
-  },
-  "tests/scan.test.ts": {
-    "prepare": 13
   },
   "tests/step0.test.ts": {
     "prepare": 5

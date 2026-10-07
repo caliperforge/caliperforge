@@ -147,6 +147,50 @@ export function costs(db: Db): Cost[] {
     FROM runs WHERE ${LAST_DAY} GROUP BY provider, model ORDER BY provider, model`).all() as Cost[]
 }
 
+interface Run {
+  plan: number
+  step: number
+  seat: string
+  rule_hash: string
+  provider: string
+  model: string
+  effort: string
+  input_tokens: number
+  cache_write_tokens: number | null
+  cache_write_1h_tokens: number | null
+  cache_read_tokens: number
+  output_tokens: number
+  seconds: number
+  exit: number
+  at: string
+  transcript_path: string
+  cost_usd: number | null
+}
+
+export function addRun(db: Db, row: Run): void {
+  db.prepare(`INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_write_tokens,
+    cache_write_1h_tokens, cache_read_tokens, output_tokens, seconds, exit, at, transcript_path, cost_usd)
+    VALUES (@plan, @step, @seat, @rule_hash, @provider, @model, @effort, @input_tokens, @cache_write_tokens,
+    @cache_write_1h_tokens, @cache_read_tokens, @output_tokens, @seconds, @exit, @at, @transcript_path, @cost_usd)`).run(row)
+}
+
+interface Price {
+  provider: string
+  model: string
+  input: number
+  cache_read: number
+  cache_write: number
+  cache_write_1h: number
+  output: number
+  effective_from: string
+  source_url: string
+}
+
+export function addPrice(db: Db, row: Price): void {
+  db.prepare(`INSERT INTO prices (provider, model, input, cache_read, cache_write, cache_write_1h, output, effective_from, source_url)
+    VALUES (@provider, @model, @input, @cache_read, @cache_write, @cache_write_1h, @output, @effective_from, @source_url)`).run(row)
+}
+
 export function unpriced(db: Db): Model[] {
   return db.prepare(`SELECT DISTINCT provider, model FROM runs r WHERE ${LAST_DAY}
     AND NOT EXISTS (SELECT 1 FROM prices p WHERE p.provider = r.provider AND p.model = r.model

@@ -62,6 +62,10 @@ export function addRule(db: Db, r: RuleRow): void {
     .run(r.id, r.kind, r.path, r.content_hash, r.loaded_at)
 }
 
+export function spied(db: Db, seen: string[]): Db {
+  return { prepare: (sql: string) => { seen.push(sql); return db.prepare(sql) } } as unknown as Db
+}
+
 function version(file: string): number {
   return Number(file.slice(0, 4))
 }

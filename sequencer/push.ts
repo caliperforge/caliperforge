@@ -4,7 +4,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { parse as yaml } from 'yaml'
 import { z } from 'zod'
-import { closeIssue, commentIssue, fileIssue, gh, issueComments, openPr, rehearse, review, unrehearse, type IssueComment, type Read } from '../cli/gh.ts'
+import { closeIssue, commentIssue, fileIssue, gh, issueComments, forward, openPr, rehearse, review, unrehearse, type IssueComment, type Read } from '../cli/gh.ts'
 import { alerter } from '../cli/watch.ts'
 import { judge, MISSING, PENDING, shell, type Board, type Gh } from '../rails/ci-green/index.ts'
 import { parse } from '../rails/diff.ts'
@@ -24,7 +24,7 @@ import { red } from './failures.ts'
 import { config } from './greptile.ts'
 import { refresh } from './install.ts'
 import { rerun as cancelled } from './rerun.ts'
-import { moved, rehearsing, retire } from './retire.ts'
+import { based, moved, retire } from './retire.ts'
 import type { Outcome } from './kind.ts'
 import { merging } from './merging.ts'
 import { cloned, conflicted, diffOf, fetchMain, FORK, get, MAIN, maybe, planDir, put, repoName, srcDir, titleOf } from './workspace.ts'
@@ -42,7 +42,8 @@ export interface Wire {
   open: (repo: string, head: string, title: string, bodyFile: string) => string
   close: (repo: string, no: number, sha: string, comment?: string) => void
   runs: Gh
-  rehearse?: (fork: string, branch: string, base: string) => void
+  forward?: (fork: string, base: string) => void
+  rehearse?: (fork: string, branch: string) => void
   unrehearse?: (fork: string, branch: string) => void
   review: (fork: string, branch: string) => void
   file: (repo: string, title: string, body: string, labels: string[]) => string
@@ -62,6 +63,7 @@ export const WIRE: Wire = {
   comment: commentIssue,
   thread: issueComments,
   runs: shell,
+  forward,
   rehearse,
   unrehearse,
   review,
@@ -103,7 +105,7 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
   const holder = waitsFor(db, plan)
   if (holder !== null) return { outcome: 'pass', held: true, spans: ['fork.slot'], note: `waits for plan ${String(holder)}'s fork CI` }
   const { fork, head, ci, tip } = sent(root, plan, repo, wire)
-  if (!internal(plan)) { rehearsing(root, plan.id, fork, ci, wire); took(db, plan) }
+  if (!internal(plan)) { wire.rehearse?.(fork, ci); took(db, plan) }
   const on = { fork, branch: ci, sha: tip }
   const { verdict, board } = judge(on, { body: '', commits: commits(head.dir), issue_ref: profile(root, repo)?.issue_ref }, touched(root, plan.id), wire.runs)
   put(root, plan.id, BOARD, `${JSON.stringify(board)}\n`)
@@ -143,7 +145,7 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
 export function reviewable(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire = WIRE): void {
   if (internal(plan)) return
   const { fork, ci } = sent(root, plan, repo, wire)
-  rehearsing(root, plan.id, fork, ci, wire)
+  wire.rehearse?.(fork, ci)
   took(db, plan)
 }
 
@@ -159,6 +161,7 @@ export function sent(root: string, plan: PlanRow, repo: string, wire: Wire): { f
   }
   const head = outside ? headOf(root, plan.id) : onward(headOf(root, plan.id))
   const tip = outside ? tipOf(root, plan.id, head, ci, repo) : head.sha
+  if (outside) based(root, plan.id, fork, wire)
   wire.send(head.dir, outside ? `${tip}:refs/heads/${ci}` : head.branch)
   if (outside) moved(root, plan.id, fork, ci, wire)
   return { fork, head, ci, tip }

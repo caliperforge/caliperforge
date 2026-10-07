@@ -7,9 +7,12 @@ import { fresh, rejects } from '../../checks/sqlite.ts'
 import { fired, gate } from '../../providers/claude-agent-sdk/index.ts'
 import { CAPPED, type Provider } from '../../providers/kind.ts'
 import { fire, packet, planRow, refuse } from '../index.ts'
-import { load, rules, seat } from '../rules.ts'
+import { digest, expected, listed, load, rules, seat } from '../rules.ts'
 
 const root = join(import.meta.dirname, '../..')
+const SEATS = ['brief_writer', 'director', 'fixer', 'go_specialist', 'growth_lead', 'kotlin_specialist', 'lua_specialist',
+  'outside_specialist', 'php_specialist', 'python_specialist', 'researcher', 'ruby_specialist', 'rust_specialist',
+  'solana_specialist', 'solidity_specialist', 'swift_specialist', 'text_review', 'typescript_specialist', 'web_specialist', 'writer']
 const cwd = '/tmp/cf-seat'
 const TRANSCRIPT = '/tmp/cf-seat/run.transcript.jsonl'
 
@@ -118,16 +121,22 @@ test('the rules loader hashes roster, rails and Tight into rules', () => {
   const db = fresh(join(root, 'schema'))
   const loaded = load(db, root)
   expect(loaded.map((r) => r.id)).toContain('typescript_specialist')
-  expect(new Set(rules(root).map((r) => r.path))).toEqual(new Set(['rules/rails.yaml', 'rules/roster.yaml', 'rules/tight.md', 'rules/registry/00-director.yaml', 'rules/registry/01-fixer.yaml', 'rules/registry/02-fix_mode.yaml', 'rules/registry/03-swift_review.yaml', 'rules/registry/04-kotlin_review.yaml', 'rules/registry/05-python_review.yaml', 'rules/registry/06-ruby_review.yaml', 'rules/registry/07-rust_review.yaml', 'rules/registry/08-go_review.yaml', 'rules/registry/09-php_review.yaml', 'rules/registry/10-typescript_review.yaml', 'rules/registry/11-brief_writer.yaml', 'rules/registry/12-text_review.yaml', 'rules/registry/12-writer_log.yaml', 'rules/registry/12-writer_ship.yaml', 'rules/registry/12-writer_weekly.yaml', 'rules/registry/13-growth_lead.yaml', 'rules/registry/14-web_specialist.yaml', 'rules/registry/15-design.yaml', 'rules/registry/16-go_specialist.yaml', 'rules/registry/17-php_specialist.yaml', 'rules/registry/18-ruby_specialist.yaml', 'rules/registry/19-python_specialist.yaml', 'rules/registry/20-lua_specialist.yaml', 'rules/registry/21-rust_specialist.yaml', 'rules/registry/22-gardener.yaml', 'rules/registry/23-ratchet.yaml', 'rules/registry/24-accounts.yaml', 'rules/registry/25-records.yaml', 'rules/registry/26-dispositions.yaml', 'rules/registry/27-signoffs.yaml', 'rules/registry/28-proposals.yaml', 'rules/registry/29-ratchet_refuse.yaml', 'rules/registry/30-intake.yaml', 'rules/registry/31-stuck_plans.yaml', 'rules/registry/32-science_pull.yaml', 'rules/registry/33-site_publish.yaml', 'rules/registry/34-director_look.yaml', 'rules/registry/35-typescript_specialist.yaml', 'rules/registry/36-daily_learnings.yaml', 'rules/registry/37-review_examples.yaml', 'rules/registry/38-director_fix_reach.yaml', 'rules/registry/39-tick_deps.yaml', 'rules/registry/40-watch.yaml', 'rules/registry/41-director_widen.yaml', 'rules/registry/42-target_parked_once.yaml', 'rules/registry/43-director_ceiling.yaml', 'rules/staffing.yaml']))
+  expect(new Set(rules(root).map((r) => r.path))).toEqual(new Set(['rules/rails.yaml', ...SEATS.map((s) => `rules/roster/${s}.yaml`), 'rules/tight.md', 'rules/registry/00-director.yaml', 'rules/registry/01-fixer.yaml', 'rules/registry/02-fix_mode.yaml', 'rules/registry/03-swift_review.yaml', 'rules/registry/04-kotlin_review.yaml', 'rules/registry/05-python_review.yaml', 'rules/registry/06-ruby_review.yaml', 'rules/registry/07-rust_review.yaml', 'rules/registry/08-go_review.yaml', 'rules/registry/09-php_review.yaml', 'rules/registry/10-typescript_review.yaml', 'rules/registry/11-brief_writer.yaml', 'rules/registry/12-text_review.yaml', 'rules/registry/12-writer_log.yaml', 'rules/registry/12-writer_ship.yaml', 'rules/registry/12-writer_weekly.yaml', 'rules/registry/13-growth_lead.yaml', 'rules/registry/14-web_specialist.yaml', 'rules/registry/15-design.yaml', 'rules/registry/16-go_specialist.yaml', 'rules/registry/17-php_specialist.yaml', 'rules/registry/18-ruby_specialist.yaml', 'rules/registry/19-python_specialist.yaml', 'rules/registry/20-lua_specialist.yaml', 'rules/registry/21-rust_specialist.yaml', 'rules/registry/22-gardener.yaml', 'rules/registry/23-ratchet.yaml', 'rules/registry/24-accounts.yaml', 'rules/registry/25-records.yaml', 'rules/registry/26-dispositions.yaml', 'rules/registry/27-signoffs.yaml', 'rules/registry/28-proposals.yaml', 'rules/registry/29-ratchet_refuse.yaml', 'rules/registry/30-intake.yaml', 'rules/registry/31-stuck_plans.yaml', 'rules/registry/32-science_pull.yaml', 'rules/registry/33-site_publish.yaml', 'rules/registry/34-director_look.yaml', 'rules/registry/35-typescript_specialist.yaml', 'rules/registry/36-daily_learnings.yaml', 'rules/registry/37-review_examples.yaml', 'rules/registry/38-director_fix_reach.yaml', 'rules/registry/39-tick_deps.yaml', 'rules/registry/40-watch.yaml', 'rules/registry/41-director_widen.yaml', 'rules/registry/42-target_parked_once.yaml', 'rules/registry/43-director_ceiling.yaml', 'rules/staffing.yaml']))
   expect(db.prepare('SELECT count(*) AS n FROM rules').get()).toEqual({ n: loaded.length })
 })
 
 test('seat() refuses one off the roster or with a drifted prompt', () => {
-  expect(() => seat(root, 'nobody')).toThrow(/absent from rules\/roster.yaml/)
+  expect(() => seat(root, 'nobody')).toThrow(/absent from rules\/roster\/nobody\.yaml/)
   const drifted = mkdtempSync(join(tmpdir(), 'cf-drift-'))
   for (const dir of ['rules', 'seats']) cpSync(join(root, dir), join(drifted, dir), { recursive: true })
   appendFileSync(join(drifted, 'seats/typescript_specialist/prompt.md'), '\n')
-  expect(() => seat(drifted, 'typescript_specialist')).toThrow(/prompt does not match its digest/)
+  expect(() => seat(drifted, 'typescript_specialist')).toThrow(/prompt does not match its digest in rules\/roster\/typescript_specialist\.yaml/)
+})
+
+test('each seat file lists one seat and hashes its own', () => {
+  expect(listed(root).seats).toEqual(SEATS)
+  expect(listed(root).digests).toEqual(expected(root))
+  for (const name of SEATS) expect(seat(root, name).hash).toBe(digest(join(root, `rules/roster/${name}.yaml`)))
 })
 
 test('a write under a symlinked cwd resolves to the same root', () => {

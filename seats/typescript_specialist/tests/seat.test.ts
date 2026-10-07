@@ -15,7 +15,7 @@ test('the manifest declares seat, model, effort, tools and paths', () => {
 
 test('the roster carries the seat and it loads as a rules row', () => {
   const row = rules(root).find((r) => r.id === 'typescript_specialist')
-  expect(row).toMatchObject({ kind: 'card', path: 'rules/roster.yaml' })
+  expect(row).toMatchObject({ kind: 'card', path: 'rules/roster/typescript_specialist.yaml' })
 })
 
 test('the prompt tells the seat to close with the handback fence', () => {

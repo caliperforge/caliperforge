@@ -1,12 +1,11 @@
 import type { Fired, Provider } from '../providers/kind.ts'
 import type { Db } from './index.ts'
-import type { Verdict } from './verdict.ts'
 
 export interface Event {
   plan: number | null
   kind: string
   actor: string
-  outcome: Verdict['outcome']
+  outcome: 'pass' | 'refuse' | 'needs_ceo' | 'escalate' | 'needs_coo'
   message: string
   pointer: string | null
   run: number | null

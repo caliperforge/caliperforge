@@ -20,7 +20,7 @@ test('the manifest declares seat, model, effort, tools and paths', () => {
 })
 
 test('the roster carries the seat', () => {
-  expect(rules(root).find((r) => r.id === SEAT)).toMatchObject({ kind: 'card', path: 'rules/roster.yaml' })
+  expect(rules(root).find((r) => r.id === SEAT)).toMatchObject({ kind: 'card', path: `rules/roster/${SEAT}.yaml` })
 })
 
 test('the prompt carries Foundry, solc, transaction and RPC lines', () => {

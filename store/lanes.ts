@@ -184,7 +184,7 @@ export function hours(db: Db, pipe: number, start: string, end: string): void {
   db.prepare('UPDATE pipes SET window_start = ?, window_end = ? WHERE id = ?').run(start, end, pipe)
 }
 
-export function amend(db: Db, plan: number, fields: Partial<Pick<PlanRow, 'pipe_id' | 'step' | 'state' | 'retries' | 'head_digest' | 'priority'>>): void {
+export function amend(db: Db, plan: number, fields: Partial<Pick<PlanRow, 'pipe_id' | 'step' | 'state' | 'retries' | 'head_digest' | 'priority' | 'template'>>): void {
   const cols = Object.keys(fields).map((k) => `${k} = @${k}`).join(', ')
   db.prepare(`UPDATE plans SET ${cols} WHERE id = @id`).run({ ...fields, id: plan })
 }

@@ -4,11 +4,16 @@ import { basename, join } from 'node:path'
 import { expect, test } from 'vitest'
 import type { Fired, Packet, Provider } from '../../providers/kind.ts'
 import { gates } from '../../store/approvals.ts'
+import { appliedOf } from '../../store/decisions.ts'
 import { pushedRow } from '../../store/deliverables.ts'
-import { record, strays } from '../../store/files.ts'
+import { addSetting } from '../../store/drift.ts'
+import { ofKind, pointers, runTokens } from '../../store/events.ts'
+import { filesOf, record, recorded, strays } from '../../store/files.ts'
 import { migrate, open } from '../../store/index.ts'
+import { amend } from '../../store/lanes.ts'
+import { clearedOf } from '../../store/refusals.ts'
 import type { Wire } from '../push.ts'
-import { terminal } from '../../store/plans.ts'
+import { allPlans, end, planById, planRows, putPlan, terminal, type PlanRow } from '../../store/plans.ts'
 import { lapsed } from '../../store/until.ts'
 import { woke } from '../director.ts'
 import { maybe, put, srcDir } from '../workspace.ts'
@@ -22,8 +27,8 @@ function seeded(mode: string) {
   migrate(db, join(repo, 'schema'))
   db.exec(readFileSync(join(repo, 'runner/tests/fixtures/waiting.sql'), 'utf8'))
   db.exec("UPDATE plans SET state = 'blocked_on_ceo', wait_reason = NULL WHERE id = 7")
-  db.prepare(`INSERT INTO settings (key, value, who, origin_kind, origin_ref, set_at) VALUES
-    ('director.apply', '1', 'ceo', 'ruling', 't', '2026-09-25'), ('fixer.mode', ?, 'ceo', 'ruling', 't', '2026-09-25')`).run(mode)
+  addSetting(db, { key: 'director.apply', value: '1', who: 'ceo', origin_kind: 'ruling', origin_ref: 't', set_at: '2026-09-25' })
+  addSetting(db, { key: 'fixer.mode', value: mode, who: 'ceo', origin_kind: 'ruling', origin_ref: 't', set_at: '2026-09-25' })
   const home = mkdtempSync(join(tmpdir(), 'cf-fx-'))
   for (const dir of ['rules', 'seats']) cpSync(join(repo, dir), join(home, dir), { recursive: true })
   put(home, 7, 'ask.md', 'the ask\n')
@@ -54,11 +59,10 @@ function wire(filed: string[]): Wire {
     file: (...args) => { const title = args[1]; filed.push(title); return 'https://github.com/caliperforge/caliperforge/issues/999' } }
 }
 
-const state = (db: ReturnType<typeof open>) => db.prepare('SELECT state, step FROM plans WHERE id = 7').get()
-const applied = (db: ReturnType<typeof open>) => db.prepare('SELECT applied FROM decisions').all()
-const runs = (db: ReturnType<typeof open>) => db.prepare(`SELECT seat, input_tokens, cache_read_tokens, output_tokens,
-  transcript_path LIKE '%/run-' || id || '.transcript.jsonl' AS named, mode FROM runs
-  WHERE plan = 7 AND seat IN ('fixer', 'director', 'swift_specialist') ORDER BY id`).all()
+const state = (db: ReturnType<typeof open>) => (({ state, step }: PlanRow) => ({ state, step }))(planById(db, 7))
+const applied = (db: ReturnType<typeof open>) => appliedOf(db, 7).map((applied) => ({ applied }))
+const runs = (db: ReturnType<typeof open>) => runTokens(db, 7).filter((r) => ['fixer', 'director', 'swift_specialist'].includes(r.seat))
+  .map(({ id, transcript_path, ...r }) => ({ ...r, named: Number(transcript_path.endsWith(`/run-${String(id)}.transcript.jsonl`)) }))
 const RAN = [{ seat: 'director', input_tokens: 10, cache_read_tokens: 0, output_tokens: 5, named: 1, mode: null },
   { seat: 'fixer', input_tokens: 10, cache_read_tokens: 0, output_tokens: 5, named: 1, mode: null }]
 
@@ -72,7 +76,7 @@ test('live: the fixer fixes an ask_coo stop; nobody is pinged', async () => {
   expect(state(db)).toEqual({ state: 'queued', step: 4 })
   expect(applied(db)).toEqual([{ applied: 'applied' }])
   expect(posted).toEqual([])
-  expect(db.prepare("SELECT path FROM plan_files WHERE plan = 7").all()).toEqual([{ path: 'schema/0040_x.sql' }])
+  expect(recorded(db, 7)).toEqual(['schema/0040_x.sql'])
   const fixerPacket = packets.find((p) => basename(p.transcript).startsWith('fixer'))
   expect(fixerPacket?.tools).toContain('Edit')
   expect(fixerPacket?.prompt).toContain('# The machine\'s store')
@@ -96,8 +100,7 @@ const pushed = (db: ReturnType<typeof open>, plan: number) => {
   pushedRow(db, { plan, step: 6, seat: 'typescript_specialist', diff_digest: 'd'.repeat(64),
     evidence: 'https://github.com/caliperforge/caliperforge/pull/1' }, gates(db, plan, 'd'.repeat(64)))
 }
-const ticketed = (db: ReturnType<typeof open>) => db.prepare(`SELECT id, priority, lane, state FROM plans
-  WHERE origin = 'https://github.com/caliperforge/caliperforge/issues/999'`).get() as { id: number } | undefined
+const ticketed = (db: ReturnType<typeof open>) => allPlans(db).find((p) => p.origin === 'https://github.com/caliperforge/caliperforge/issues/999')
 
 test('ticket: filed, queued at P0, job held on it, checkout kept', async () => {
   const { db, home } = seeded('live')
@@ -116,15 +119,15 @@ test('ticket: filed, queued at P0, job held on it, checkout kept', async () => {
   expect(waitsOn(db)).toEqual({ waits_on: on?.id })
   expect(maybe(home, on?.id ?? 0, 'ask.md')).toContain('plan 7')
   expect(maybe(home, on?.id ?? 0, 'ask.md')).toContain('identifiers: schema/0036_x.sql')
-  expect(db.prepare("SELECT actor, pointer FROM events WHERE kind = 'ticket'").all())
-    .toEqual([{ actor: 'fixer', pointer: 'https://github.com/caliperforge/caliperforge/issues/999' }])
+  expect(ofKind(db, 'ticket').map((e) => e.actor)).toEqual(['fixer'])
+  expect(pointers(db, 'ticket')).toEqual(['https://github.com/caliperforge/caliperforge/issues/999'])
 })
 
 test('ticket: the job is back at its step when the ticket lands', async () => {
   const { db, home } = seeded('live')
   const posted: string[] = []
   await woke(db, home, stub(TICKET, []), now, (t) => void posted.push(t), wire([]))
-  db.prepare("UPDATE plans SET state = 'done' WHERE id = ?").run(ticketed(db)?.id)
+  end(db, ticketed(db)?.id ?? 0, 'done')
   pushed(db, ticketed(db)?.id ?? 0)
   await woke(db, home, stub(TICKET, []), now, (t) => void posted.push(t), wire([]))
   expect(state(db)).toEqual({ state: 'queued', step: 4 })
@@ -136,7 +139,7 @@ test('ticket: the job is back at its step when the ticket lands', async () => {
 test.each([
   { was: 'running', want: [], on: 8 },
   { was: 'done', want: ['the run wall counts each streamed block'], on: null },
-])('ticket: plan 8 $was with the same title files $want', async ({ was, want, on }) => {
+] as const)('ticket: plan 8 $was with the same title files $want', async ({ was, want, on }) => {
   const { db, home } = seeded('live')
   second(db, was)
   put(home, 8, 'ask.md', '# the run wall counts each streamed block\n')
@@ -170,10 +173,11 @@ test('two live fixes a day, then stops escalate without the fixer', async () => 
 
 test('listing a built stray clears its flag, adding no second row', async () => {
   const { db, home } = seeded('live')
-  db.prepare("INSERT INTO plan_files (plan, path, is_new, position, stray) VALUES (7, 'a.ts', 0, 0, 0), (7, 'schema/0040_x.sql', 1, 1, 1)").run()
+  record(db, 7, [{ path: 'a.ts', is_new: false }])
+  strays(db, 7, ['schema/0040_x.sql'])
   await woke(db, home, stub(RETURN, []), now, () => undefined, wire([]))
-  expect(db.prepare('SELECT path, position, stray FROM plan_files WHERE plan = 7 ORDER BY position').all()).toEqual([
-    { path: 'a.ts', position: 0, stray: 0 }, { path: 'schema/0040_x.sql', position: 1, stray: 0 }])
+  expect(recorded(db, 7)).toEqual(['a.ts', 'schema/0040_x.sql'])
+  expect(filesOf(db, 7).map((f) => f.path)).toEqual(['a.ts', 'schema/0040_x.sql'])
   expect(state(db)).toEqual({ state: 'queued', step: 4 })
 })
 
@@ -181,7 +185,7 @@ test('a throwing fixer: the tick goes on, a person gets the stop', async () => {
   const { db, home } = seeded('live')
   const posted: string[] = []
   const broken: Wire = { ...wire([]), file: () => { throw new Error('gh is down') } }
-  const count = () => db.prepare('SELECT count(*) AS n FROM plans').get()
+  const count = () => planRows(db).length
   const was = count()
   await woke(db, home, stub('---\ndid: nothing\nthen: ticket\nwhy: a bug\nticket: a bug\n---\n', []), now, (t) => void posted.push(t), broken)
   expect(maybe(home, 7, 'fixer.error')).toBe('gh is down')
@@ -192,13 +196,13 @@ test('a throwing fixer: the tick goes on, a person gets the stop', async () => {
 
 const WAIT = '---\ndid: answered in ask.md that it builds on plan 8\nthen: wait\nwhy: plan 8 has not landed\nwaits_on: 8\n---\n'
 
-function second(db: ReturnType<typeof open>, state = 'running') {
-  db.prepare(`INSERT INTO plans (id, pipe_id, template, state, queued_at, step, retries, priority, lane, seat, origin)
-    VALUES (8, 9, 'pr_path', ?, '2026-09-24', 2, 0, 1, 'machine', 'typescript_specialist',
-    'https://github.com/caliperforge/caliperforge/issues/140')`).run(state)
+function second(db: ReturnType<typeof open>, state: PlanRow['state'] = 'running') {
+  putPlan(db, { id: 8, pipe_id: 9, target_id: null, template: 'pr_path', state, queued_at: '2026-09-24', step: 2, retries: 0,
+    lane: 'machine', seat: 'typescript_specialist', origin: 'https://github.com/caliperforge/caliperforge/issues/140' })
+  amend(db, 8, { priority: 1 })
 }
 
-const waitsOn = (db: ReturnType<typeof open>) => db.prepare('SELECT waits_on FROM plans WHERE id = 7').get()
+const waitsOn = (db: ReturnType<typeof open>) => ({ waits_on: planRows(db).find((r) => r.id === 7)?.waits_on })
 
 test('gone checkout: rebuilt, no model', async () => {
   const { db, home } = seeded('live')
@@ -214,7 +218,7 @@ test('gone checkout: rebuilt, no model', async () => {
   expect(maybe(home, 7, 'refusal.md')).toBeNull()
   expect(maybe(home, 7, 'base.merged')).toBeNull()
   expect(maybe(home, 7, 'base.sha')).not.toBeNull()
-  expect(db.prepare('SELECT cleared FROM refusals WHERE plan = 7').all()).toEqual([{ cleared: 1 }])
+  expect(clearedOf(db, 7)).toEqual([1])
   expect(maybe(home, 7, 'fixes.jsonl')).toContain('"applied":"rebuild"')
 })
 

@@ -159,6 +159,10 @@ export function clear(db: Db, plan: number): void {
   db.prepare('UPDATE refusals SET cleared = 1 WHERE plan = ?').run(plan)
 }
 
+export function clearedOf(db: Db, plan: number): number[] {
+  return db.prepare('SELECT cleared FROM refusals WHERE plan = ? ORDER BY id').pluck().all(plan) as number[]
+}
+
 export const WHY: Record<Exclude<Why, 'again'>, string> = {
   shared: 'another job was refused for the same failure within a day, so the fault is on main and this lane is off until a person looks',
   repeat: 'the same refusal came back, so another round would repeat it',

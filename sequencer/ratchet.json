@@ -215,9 +215,6 @@
   "tests/findings.test.ts": {
     "prepare": 1
   },
-  "tests/fixer.test.ts": {
-    "prepare": 14
-  },
   "tests/growth.test.ts": {
     "prepare": 6
   },
@@ -250,9 +247,6 @@
   },
   "tests/life.test.ts": {
     "prepare": 5
-  },
-  "tests/next.test.ts": {
-    "prepare": 12
   },
   "tests/overlap.test.ts": {
     "prepare": 7

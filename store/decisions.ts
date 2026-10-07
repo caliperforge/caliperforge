@@ -46,6 +46,10 @@ export function mark(db: Db, id: number, applied: Applied): void {
   db.prepare('UPDATE decisions SET applied = ? WHERE id = ?').run(applied, id)
 }
 
+export function appliedOf(db: Db, plan: number): (Applied | null)[] {
+  return db.prepare('SELECT applied FROM decisions WHERE plan = ? ORDER BY id').pluck().all(plan) as (Applied | null)[]
+}
+
 /** Moves the orchestrator made on this plan in the day before `now`. */
 export function touches(db: Db, plan: number, now: Date): number {
   const row = db.prepare(`SELECT count(*) AS n FROM decisions WHERE plan = ? AND applied = 'applied'

@@ -1,8 +1,8 @@
 import { expect, test } from 'vitest'
 import { record as recordFiles } from '../../store/files.ts'
-import { dial } from '../../store/lanes.ts'
-import { holder, take } from '../../store/leases.ts'
-import { WAIT } from '../../store/plans.ts'
+import { amend, dial, set, width } from '../../store/lanes.ts'
+import { held, holder, take } from '../../store/leases.ts'
+import { addPipe, pipeNamed, planRows, putPlan, WAIT, type PlanRow } from '../../store/plans.ts'
 import { at } from '../../templates/pr-path.ts'
 import { route, type Route } from '../next.ts'
 import { mapOf } from '../steps.ts'
@@ -18,22 +18,24 @@ interface Row {
 }
 
 const stepTo = (w: World, id: number, step: number): World => {
-  w.db.prepare("UPDATE plans SET step = ?, state = 'running' WHERE id = ?").run(step, id)
+  amend(w.db, id, { step, state: 'running' })
   return w
 }
 
-const another = (w: World, id: number, pipe: number, step: number): World => {
-  w.db.prepare(`INSERT INTO plans (id, pipe_id, target_id, template, state, queued_at, step, retries)
-    VALUES (?, ?, 1, 'pr_path', 'running', '2026-09-18T00:00:00.000Z', ?, 0)`).run(id, pipe, step)
+const another = (w: World, id: number, pipe: number, step: number, state: PlanRow['state'] = 'running'): World => {
+  putPlan(w.db, { id, pipe_id: pipe, target_id: 1, template: 'pr_path', state, queued_at: '2026-09-18T00:00:00.000Z', step, retries: 0 })
   return w
 }
 
 const behind = (step: number) => (): World => {
   const w = stepTo(world(), 1, step)
-  w.db.prepare('UPDATE pipes SET max_concurrent = 1 WHERE id = 1').run()
-  w.db.prepare(`INSERT INTO plans (id, pipe_id, target_id, template, state, queued_at, step, retries)
-    VALUES (2, 1, 1, 'pr_path', 'queued', '2026-09-18T00:00:00.000Z', 0, 0)`).run()
-  return w
+  width(w.db, 1, 1)
+  return another(w, 2, 1, 0, 'queued')
+}
+
+const research = (w: World): number => {
+  addPipe(w.db, { name: 'research', enabled: 1, window_start: '00:00', window_end: '23:59', max_concurrent: 1 })
+  return pipeNamed(w.db, 'research')?.id ?? 0
 }
 
 const leased = (): World => {
@@ -49,7 +51,7 @@ const TABLE: Record<string, Row> = {
   'a research plan at its first step': {
     state: () => {
       const w = world()
-      w.db.prepare("UPDATE plans SET template = 'research' WHERE id = 1").run()
+      amend(w.db, 1, { template: 'research' })
       return w
     },
     want: { fire: mapOf('research').at(0) },
@@ -57,7 +59,7 @@ const TABLE: Record<string, Row> = {
   'a comms plan at its first step': {
     state: () => {
       const w = world()
-      w.db.prepare("UPDATE plans SET template = 'comms' WHERE id = 1").run()
+      amend(w.db, 1, { template: 'comms' })
       return w
     },
     want: { fire: mapOf('comms').at(0) },
@@ -78,7 +80,7 @@ const TABLE: Record<string, Row> = {
   'a queued plan behind a running one in a one-wide lane': {
     state: () => {
       const w = another(world(), 2, 1, 0)
-      w.db.prepare('UPDATE pipes SET max_concurrent = 1 WHERE id = 1').run()
+      width(w.db, 1, 1)
       return w
     },
     want: { wait: 'over_cap', on: null },
@@ -95,10 +97,9 @@ const TABLE: Record<string, Row> = {
   'a plan on a second lane at cap 1': {
     state: () => {
       const w = world()
-      w.db.prepare(`INSERT INTO pipes (id, name, enabled, window_start, window_end, max_concurrent)
-        VALUES (2, 'research', 1, '00:00', '23:59', 1)`).run()
+      const pipe = research(w)
       dial(w.db, 1, NOW.toISOString())
-      return another(w, 2, 2, 0)
+      return another(w, 2, pipe, 0)
     },
     id: 2,
     want: { wait: 'lane_over_cap', on: null },
@@ -106,13 +107,10 @@ const TABLE: Record<string, Row> = {
   'a plan on a second lane at cap 1 while another pid runs the first lane': {
     state: () => {
       const w = world()
-      w.db.prepare(`INSERT INTO pipes (id, name, enabled, window_start, window_end, max_concurrent)
-        VALUES (2, 'research', 1, '00:00', '23:59', 1)`).run()
+      const pipe = research(w)
       dial(w.db, 1, NOW.toISOString())
       take(w.db, 1, NOW)
-      w.db.prepare(`INSERT INTO plans (id, pipe_id, target_id, template, state, queued_at, step, retries)
-        VALUES (2, 2, 1, 'pr_path', 'queued', '2026-09-18T00:00:00.000Z', 0, 0)`).run()
-      return w
+      return another(w, 2, pipe, 0, 'queued')
     },
     id: 2,
     want: { wait: 'lane_over_cap', on: null },
@@ -121,14 +119,14 @@ const TABLE: Record<string, Row> = {
     state: () => {
       const w = stepTo(world(), 1, 1)
       approve(w.db, w.target)
-      w.db.prepare("UPDATE settings SET value = '0' WHERE key = 'plan.token_ceiling'").run()
+      set(w.db, 'plan.token_ceiling', '0', 'ceo', NOW.toISOString())
       return w
     },
     want: { wait: 'token_ceiling', on: null, over: { spent: 0, ceiling: 0 } },
   },
 }
 
-const stored = (w: World): unknown[] => ['plans', 'leases'].map((t) => w.db.prepare(`SELECT * FROM ${t}`).all())
+const stored = (w: World): unknown[] => [planRows(w.db), held(w.db, NOW)]
 
 for (const [name, { state, id = 1, mine = false, want }] of Object.entries(TABLE)) {
   test(name, () => {

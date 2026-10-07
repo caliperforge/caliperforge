@@ -53,14 +53,15 @@ function off(db: Db, { name, switch: wanted }: Entry): Drifted | null {
 function quiet(db: Db, entry: Entry, now: Date): Drifted | null {
   const { name, table, column, where, gap, when } = entry
   if (table === undefined || column === undefined) return null
-  if (entry.while !== undefined && !holds(db, entry.while)) return null
+  const since = new Date(now.getTime() - days(gap ?? '7d') * 86_400_000).toISOString()
+  if (entry.while !== undefined && !holds(db, entry.while, since)) return null
   const from = `${table}${where === undefined ? '' : ` WHERE ${where}`}`
   const last = newest(db, from, column, now)
   if (entry.expected === 0) {
     return last.days !== null && gap !== undefined && last.days <= days(gap)
       ? { name, state: 'seen', detail: `newest ${table}.${column} is ${String(last.newest)}, within ${gap}; expected none` } : null
   }
-  if (last.newest === null) return when === undefined || worked(db, when) ? { name, state: 'silent', detail: `no row in ${from}` } : null
+  if (last.newest === null) return when === undefined || worked(db, when, since) ? { name, state: 'silent', detail: `no row in ${from}` } : null
   if (gap === undefined || last.days === null) return null
   return last.days > days(gap) ? { name, state: 'stale', detail: `newest ${table}.${column} is ${String(last.newest)}, older than ${gap}` } : null
 }

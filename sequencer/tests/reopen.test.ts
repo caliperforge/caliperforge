@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
-import { checkout, cloned, maybe, planDir, srcDir } from '../workspace.ts'
+import { checkout, cloned, maybe, planDir, PR_HEAD, put, srcDir } from '../workspace.ts'
 import { world } from './world.ts'
 
 const BRANCH = 'widget-12-a1'
@@ -30,6 +30,50 @@ test('a reaped plan that never pushed is cut fresh from main', () => {
   const first = checkout(w.root, 1, 'acme/widget', BRANCH)
   rmSync(srcDir(w.root, 1), { recursive: true, force: true })
   expect(checkout(w.root, 1, 'acme/widget', BRANCH).base).toBe(first.base)
+})
+
+test('an unpushed branch reopens on the fork branch of pr.head', () => {
+  const w = world()
+  const first = checkout(w.root, 1, 'acme/widget', BRANCH)
+  writeFileSync(join(first.dir, 'added.ts'), 'export const added = 1\n')
+  git(first.dir, ['add', '-A'])
+  git(first.dir, ['commit', '-qm', 'round one'])
+  git(first.dir, ['push', '-q', 'origin', 'HEAD:asm/1-a3', 'HEAD:asm/1-a3-next'])
+  const sha = git(first.dir, ['rev-parse', 'HEAD']).trim()
+  put(w.root, 1, PR_HEAD, `${sha} ${sha}\n`)
+  rmSync(srcDir(w.root, 1), { recursive: true, force: true })
+
+  const again = checkout(w.root, 1, 'acme/widget', BRANCH)
+  expect(again.branch).toBe('asm/1-a3')
+  expect(git(again.dir, ['rev-parse', '--abbrev-ref', 'HEAD']).trim()).toBe('asm/1-a3')
+  expect(existsSync(join(again.dir, 'added.ts'))).toBe(true)
+  expect(again.base).toBe(first.base)
+})
+
+test('a pr.head on no fork branch throws and keeps base.sha', () => {
+  const w = world()
+  const first = checkout(w.root, 1, 'acme/widget', BRANCH)
+  put(w.root, 1, PR_HEAD, `${first.base} ${first.base}\n`)
+  rmSync(srcDir(w.root, 1), { recursive: true, force: true })
+
+  expect(() => checkout(w.root, 1, 'acme/widget', BRANCH)).toThrow(`pr.head ${first.base.slice(0, 12)}`)
+  expect(() => checkout(w.root, 1, 'acme/widget', BRANCH)).toThrow(`pr.head ${first.base.slice(0, 12)}`)
+  expect(cloned(srcDir(w.root, 1))).toBe(false)
+  expect(maybe(w.root, 1, 'base.sha')).toBe(`${first.base}\n`)
+})
+
+test('a pr.head never pushed throws on every later checkout', () => {
+  const w = world()
+  const first = checkout(w.root, 1, 'acme/widget', BRANCH)
+  git(first.dir, ['commit', '-q', '--allow-empty', '-m', 'never pushed'])
+  const sha = git(first.dir, ['rev-parse', 'HEAD']).trim()
+  put(w.root, 1, PR_HEAD, `${sha} ${sha}\n`)
+  rmSync(srcDir(w.root, 1), { recursive: true, force: true })
+
+  expect(() => checkout(w.root, 1, 'acme/widget', BRANCH)).toThrow(sha.slice(0, 12))
+  expect(() => checkout(w.root, 1, 'acme/widget', BRANCH)).toThrow(sha.slice(0, 12))
+  expect(cloned(srcDir(w.root, 1))).toBe(false)
+  expect(maybe(w.root, 1, 'base.sha')).toBe(`${first.base}\n`)
 })
 
 const stale = (root: string): string[] => readdirSync(planDir(root, 1)).filter((n) => n.startsWith('src.stale-'))

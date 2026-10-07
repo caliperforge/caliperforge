@@ -334,14 +334,18 @@ test('D1 D2 the same refusal after a retry stops again', async () => {
   expect(planFile(w.root, 'refusal.md')).toContain('# Stopped\n\nthe same refusal came back')
 })
 
-test('D2 a refusal repeated after an ask ruling goes round again', async () => {
-  const [, fired] = await retriedOnce((w) => { put(w.root, 1, 'ask.md', `${get(w.root, 1, 'ask.md')}\n## Ruling\n\nuse bye()\n`) })
-  expect(fired).toMatchObject({ step: 3, outcome: 'refuse', state: 'retried' })
+const capped = (w: World, fired: Fired | undefined): void => {
+  expect(fired).toMatchObject({ step: 3, outcome: 'refuse', state: 'blocked_on_ceo' })
+  expect(planFile(w.root, 'refusal.md')).not.toContain('# Stopped')
+  expect(planFile(w.root, 'director.md')).toContain('\ncompletion-audit refused it 3 times in a row\n')
+}
+
+test('D2 an ask ruling clears the repeat; the streak cap stops it', async () => {
+  capped(...await retriedOnce((w) => { put(w.root, 1, 'ask.md', `${get(w.root, 1, 'ask.md')}\n## Ruling\n\nuse bye()\n`) }))
 })
 
-test('D4 a refusal repeated after rulings.md goes round again', async () => {
-  const [, fired] = await retriedOnce((w) => { put(w.root, 1, 'rulings.md', 'use bye()\n'); built(w.root, 1, 'export const more = 1') })
-  expect(fired).toMatchObject({ step: 3, outcome: 'refuse', state: 'retried' })
+test('D4 rulings.md clears the repeat; the streak cap stops it', async () => {
+  capped(...await retriedOnce((w) => { put(w.root, 1, 'rulings.md', 'use bye()\n'); built(w.root, 1, 'export const more = 1') }))
 })
 
 test('the bench gets a maintainer view; bad shape refuses first', async () => {

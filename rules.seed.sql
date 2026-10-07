@@ -51,6 +51,7 @@ VALUES
   ('rules/registry/43-director_ceiling.yaml', 'card', 'rules/registry/43-director_ceiling.yaml', '27eb8c137177471c8117b9d9f82772917c21166ad1077cd14baca66502eac1c0', '2026-10-06'),
   ('rules/registry/44-close_landed.yaml', 'card', 'rules/registry/44-close_landed.yaml', '1802f50060ac20419442211874c2f7c551ce51cc3f9f2c9b48fbed31c4e7a658', '2026-10-07'),
   ('rules/registry/46-ruling_files.yaml', 'card', 'rules/registry/46-ruling_files.yaml', 'b6ed2e1b6cc84daf006c9d22d1571611679893671c99eacd386dc6473661bef5', '2026-10-07'),
+  ('rules/registry/48-build_cap.yaml', 'card', 'rules/registry/48-build_cap.yaml', 'c62c0a02c2ee9d957696d5c2995ef5c642a6b7178bb50fbb9640728e555f5e55', '2026-10-07'),
   ('rules/staffing.yaml', 'card', 'rules/staffing.yaml', '5505b1016244ee8d5a5c03cdcf8cbb178011c063ed004dce7ee0ec90a295f87a', '2026-10-05'),
   ('completion-audit', 'rail', 'rules/rails.yaml', 'b46b445806d399b61887a5259eb0a6893444efcbe5acf2e6dd534507bc0882f3', '2026-09-17'),
   ('secret-scan', 'rail', 'rules/rails.yaml', 'b46b445806d399b61887a5259eb0a6893444efcbe5acf2e6dd534507bc0882f3', '2026-09-17'),

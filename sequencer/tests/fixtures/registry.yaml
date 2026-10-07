@@ -241,3 +241,8 @@
   table: events
   column: at
   where: kind = 'files' AND actor = 'ruling' AND outcome = 'pass'
+- name: build_cap
+  table: events
+  column: at
+  where: kind = 'build_cap'
+  when: SELECT 1 FROM events e WHERE e.kind = 'build' AND e.run IS NOT NULL AND julianday(e.at) > julianday('now', '-1 day') AND (SELECT count(*) FROM events b WHERE b.plan = e.plan AND b.kind = 'build' AND b.run IS NOT NULL AND b.id < e.id) >= 5

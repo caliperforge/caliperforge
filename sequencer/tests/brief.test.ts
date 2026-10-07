@@ -9,7 +9,7 @@ import { ofKind, runRows } from '../../store/events.ts'
 import { recorded } from '../../store/files.ts'
 import { holdOf, release, retried, returnToLane } from '../../store/holds.ts'
 import { get, priority } from '../../store/lanes.ts'
-import { advance, dropPlan, end, needsCeo, requeue, retry, titles } from '../../store/plans.ts'
+import { advance, briefed, dropPlan, end, needsCeo, requeue, retry, titles } from '../../store/plans.ts'
 import { WHY } from '../../store/refusals.ts'
 import { estimate, files, pointed, references, shape, split, TEMPLATE, unclear, writable, type Refused } from '../brief.ts'
 import { tick } from '../index.ts'
@@ -402,6 +402,51 @@ test('a rewound built plan keeps its ticket, ask and refusal', async () => {
   expect(maybe(w.root, ID, 'ask.md')).toBeNull()
   expect(maybe(w.root, ID, 'refusal.md')).toContain('step 2')
   expect(runRows(w.db).filter((r) => r.step === 1)).toHaveLength(1)
+})
+
+test('D1: step 2 with no issue.md rewinds to step 1 unbuilt', async () => {
+  const w = mine()
+  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  expect(plan(w.db, ID)).toMatchObject({ step: 2, state: 'running' })
+  drop(w.root, ID, 'issue.md')
+
+  expect((await tick(w.db, w.root, stub(CARRIED)))[0]).toMatchObject({ step: 2, outcome: 'pass' })
+  expect(plan(w.db, ID)).toMatchObject({ step: 1, state: 'running' })
+  expect(runRows(w.db).filter((r) => r.step === 2)).toEqual([])
+})
+
+test('D2/D4: no ask.md or issue.md holds step 1 for a person', async () => {
+  const w = mine()
+  await tick(w.db, w.root, stub(CARRIED))
+  drop(w.root, ID, 'ask.md')
+
+  const fired = (await tick(w.db, w.root, stub(CARRIED)))[0]
+  expect(fired).toMatchObject({ step: 1, outcome: 'needs_ceo', state: 'blocked_on_ceo', spans: ['ask.md'] })
+  expect(holdOf(w.db, ID)?.held_why).toContain('write the ask to ask.md')
+  expect(runRows(w.db).filter((r) => r.seat === 'brief_writer')).toEqual([])
+})
+
+test('D3: a built plan with ask.md and no issue.md is briefed', async () => {
+  const w = mine()
+  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  await tick(w.db, w.root, stub(CARRIED, 1))
+  advance(w.db, plan(w.db, ID), 1)
+  drop(w.root, ID, 'issue.md')
+  briefed(w.db, ID, { title: null, what: null, why: null, ends: null })
+
+  const fired = (await tick(w.db, w.root, stub(CARRIED)))[0]
+  expect(fired).toMatchObject({ step: 1, outcome: 'pass', note: 'brief_writer: brief written' })
+  expect(maybe(w.root, ID, 'issue.md')).not.toBeNull()
+  expect(titles(w.db, 'pr_path')).toEqual(['let an internal plan run'])
+})
+
+test('D5: a built plan with issue.md keeps the brief standing', async () => {
+  const w = mine()
+  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  await tick(w.db, w.root, stub(CARRIED, 1))
+  advance(w.db, plan(w.db, ID), 1)
+
+  expect((await tick(w.db, w.root, stub(CARRIED)))[0]).toMatchObject({ step: 1, outcome: 'pass', note: 'the brief stands' })
 })
 
 const STOPPED = `step 1 brief refused\n\n# Stopped\n\n${WHY.shared}.\n`

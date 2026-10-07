@@ -4,7 +4,7 @@ import { fresh } from '../checks/sqlite.ts'
 import type { Fired } from '../providers/kind.ts'
 import { planRow } from '../runner/index.ts'
 import { load, seat } from '../runner/rules.ts'
-import { logged, ofKind, repriced, runAt, runLogged, type Run } from './events.ts'
+import { logged, ofKind, repriced, runAt, runLogged, type Event, type Run } from './events.ts'
 import type { Db } from './index.ts'
 
 const root = join(import.meta.dirname, '..')
@@ -188,6 +188,16 @@ test('D4 ofKind with two kinds returns both in id order', () => {
   }
   expect(ofKind(db, 'release', 'retry').map((e) => e.message)).toEqual(['retry', 'release', 'retry'])
   expect(ofKind(db, 'filed').map((e) => e.kind)).toEqual(['filed'])
+})
+
+test('D1 D2 events take escalate and needs_coo, refuse others', () => {
+  const db = fresh(join(root, 'schema'))
+  const log = (outcome: Event['outcome']): number =>
+    logged(db, { plan: null, kind: 'director', actor: 'director', outcome, message: outcome, pointer: null, run: null })
+  log('escalate')
+  log('needs_coo')
+  expect(ofKind(db, 'director').map((e) => e.outcome)).toEqual(['escalate', 'needs_coo'])
+  expect(() => log('maybe' as Event['outcome'])).toThrow(/CHECK constraint failed/)
 })
 
 test('D2 D3 cache_write_tokens: NULL if absent, negative refused', () => {

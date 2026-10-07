@@ -33,8 +33,8 @@ export function moved(root: string, plan: number, fork: string, ci: string, wire
   put(root, plan, SENT, ci)
 }
 
-/** A rehearsal's move of the fork's `main` to `base.sha` starts the fork's `main` workflows. */
-export function rehearsing(root: string, plan: number, fork: string, ci: string, wire: Wire): void {
-  wire.rehearse?.(fork, ci, get(root, plan, 'base.sha').trim())
+/** The move of the fork's `main` to `base.sha`, before the head goes out, starts the fork's `main` workflows. */
+export function based(root: string, plan: number, fork: string, wire: Wire): void {
+  wire.forward?.(fork, get(root, plan, 'base.sha').trim())
   cancel(fork, 'main', wire.runs)
 }

@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { rehearse, type Read, type Run } from '../gh.ts'
+import { forward, rehearse, type Read, type Run } from '../gh.ts'
 
 const FORK = 'caliperforge/widget'
 const BRANCH = 'widget-12-a1-next'
@@ -20,33 +20,39 @@ function recorder(calls: string[][], fails = false): Run {
   }
 }
 
-test('D1 an open rehearsal moves main and opens nothing', () => {
+test('D2 ahead moves main', () => {
   const calls: string[][] = []
-  rehearse(FORK, BRANCH, BASE, read('ahead', [15]), recorder(calls))
+  forward(FORK, BASE, read('ahead', []), recorder(calls))
   expect(calls).toEqual([PATCH])
 })
 
-test('D2 no rehearsal moves main, then opens it', () => {
+test.each(['behind', 'identical'])('D2 %s sends no PATCH', (status) => {
   const calls: string[][] = []
-  rehearse(FORK, BRANCH, BASE, read('ahead', []), recorder(calls))
-  expect(calls).toEqual([PATCH, CREATE])
+  forward(FORK, BASE, read(status, []), recorder(calls))
+  expect(calls).toEqual([])
 })
 
-test.each(['behind', 'identical'])('D3 %s sends no PATCH and still opens', (status) => {
+test('D2 diverged throws and sends nothing', () => {
   const calls: string[][] = []
-  rehearse(FORK, BRANCH, BASE, read(status, []), recorder(calls))
-  expect(calls).toEqual([CREATE])
-})
-
-test('D4 diverged throws and sends nothing', () => {
-  const calls: string[][] = []
-  expect(() => { rehearse(FORK, BRANCH, BASE, read('diverged', []), recorder(calls)) })
+  expect(() => { forward(FORK, BASE, read('diverged', []), recorder(calls)) })
     .toThrow(`${FORK} main has diverged from ${BASE}`)
   expect(calls).toEqual([])
 })
 
-test('D5 a failed PATCH propagates and opens nothing', () => {
+test('D2 a failed PATCH propagates', () => {
   const calls: string[][] = []
-  expect(() => { rehearse(FORK, BRANCH, BASE, read('ahead', []), recorder(calls, true)) }).toThrow('422')
+  expect(() => { forward(FORK, BASE, read('ahead', []), recorder(calls, true)) }).toThrow('422')
   expect(calls).toEqual([PATCH])
+})
+
+test('D3 an open rehearsal opens nothing and moves nothing', () => {
+  const calls: string[][] = []
+  rehearse(FORK, BRANCH, read('ahead', [15]), recorder(calls))
+  expect(calls).toEqual([])
+})
+
+test('D3 no rehearsal opens one and moves nothing', () => {
+  const calls: string[][] = []
+  rehearse(FORK, BRANCH, read('ahead', []), recorder(calls))
+  expect(calls).toEqual([CREATE])
 })

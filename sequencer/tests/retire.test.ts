@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import type { Gh } from '../../rails/ci-green/index.ts'
-import { cancel, moved, rehearsing } from '../retire.ts'
+import { based, cancel, moved } from '../retire.ts'
 import { put } from '../workspace.ts'
 import { watched } from './world.ts'
 
@@ -50,28 +50,28 @@ test('a first send or the same -next again retires nothing', () => {
   expect(log).toEqual([])
 })
 
-function rehearsed(log: string[], at: string, statuses: string[]): ReturnType<typeof watched> {
+function forwarded(log: string[], at: string, statuses: string[]): ReturnType<typeof watched> {
   return { ...watched(log, at, 1, runs(log, 'main', statuses)),
-    rehearse: (fork: string, branch: string, base: string) => void log.push(`rehearse ${fork} ${branch} ${base}`) }
+    forward: (fork: string, base: string) => void log.push(`forward ${fork} ${base}`) }
 }
 
-test('a rehearse cancels the fork’s running main runs', () => {
+test('D4 a move cancels the fork’s running main runs', () => {
   const log: string[] = []
   const at = root()
   put(at, 1, 'base.sha', 'a1\n')
-  rehearsing(at, 1, FORK, NEW, rehearsed(log, at, ['in_progress']))
-  expect(log).toEqual([`rehearse ${FORK} ${NEW} a1`, `run cancel 1 --repo ${FORK}`])
+  based(at, 1, FORK, forwarded(log, at, ['in_progress']))
+  expect(log).toEqual([`forward ${FORK} a1`, `run cancel 1 --repo ${FORK}`])
 })
 
-test('D6 a rewritten base.sha reaches the next rehearse', () => {
+test('D4 a rewritten base.sha reaches the next move', () => {
   const log: string[] = []
   const at = root()
-  const wire = rehearsed(log, at, [])
+  const wire = forwarded(log, at, [])
   put(at, 1, 'base.sha', 'a1\n')
-  rehearsing(at, 1, FORK, NEW, wire)
+  based(at, 1, FORK, wire)
   put(at, 1, 'base.sha', 'b2\n')
-  rehearsing(at, 1, FORK, NEW, wire)
-  expect(log).toEqual([`rehearse ${FORK} ${NEW} a1`, `rehearse ${FORK} ${NEW} b2`])
+  based(at, 1, FORK, wire)
+  expect(log).toEqual([`forward ${FORK} a1`, `forward ${FORK} b2`])
 })
 
 test('a cancel that throws leaves the rest cancelled', () => {

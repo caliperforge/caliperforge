@@ -124,15 +124,19 @@ export function prNumber(url: string): number {
   return Number(hit[1])
 }
 
+/** The fork's `main` holds the head's base before the head is pushed onto it. */
+export function forward(fork: string, base: string, read: Read = gh, exec: Run = run): void {
+  const { status } = z.object({ status: z.string() }).parse(read(['api', `repos/${fork}/compare/main...${base}`]))
+  if (status === 'diverged') throw new Error(`${fork} main has diverged from ${base}`)
+  if (status === 'ahead') exec(['api', '-X', 'PATCH', `repos/${fork}/git/refs/heads/main`, '-f', `sha=${base}`])
+}
+
 /**
  * Their CI runs on pull requests, not on a pushed branch, so a pull request on our own fork is what
  * starts it. Its title and body name nothing upstream: a number there would put a permanent
  * "mentioned" line on the maintainer's thread.
  */
-export function rehearse(fork: string, branch: string, base: string, read: Read = gh, exec: Run = run): void {
-  const { status } = z.object({ status: z.string() }).parse(read(['api', `repos/${fork}/compare/main...${base}`]))
-  if (status === 'diverged') throw new Error(`${fork} main has diverged from ${base}`)
-  if (status === 'ahead') exec(['api', '-X', 'PATCH', `repos/${fork}/git/refs/heads/main`, '-f', `sha=${base}`])
+export function rehearse(fork: string, branch: string, read: Read = gh, exec: Run = run): void {
   if (rehearsal(fork, branch, read) !== null) return
   exec(['pr', 'create', '--repo', fork, '--base', 'main', '--head', branch,
     '--title', 'CI rehearsal only (do not merge)', '--body', 'Fork CI only. Do not merge.'])

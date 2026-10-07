@@ -639,6 +639,7 @@ test('rulingsBlank D4: blank rulings.md, no heading; prev kept out', async () =>
   put(w.root, 1, 'refusal.md', 'item b is unsourced')
   put(w.root, 1, 'refusal.prev.md', 'step 1 draft refused\n\nitem c is unsourced')
   const prompt = await prompted(w)
+  expect(prompt).toContain(`${REFUSED}, keep every item it does not name\n\nitem b is unsourced`)
   expect(prompt).not.toContain('# Rulings')
   expect(prompt).not.toContain('item c is unsourced')
 })

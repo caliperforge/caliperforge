@@ -4,7 +4,7 @@ import { expect, test } from 'vitest'
 import { fresh } from '../../../checks/sqlite.ts'
 import { planRow } from '../../../runner/index.ts'
 import { load } from '../../../runner/rules.ts'
-import { audit, record } from '../index.ts'
+import { audit, record, undone } from '../index.ts'
 
 const root = join(import.meta.dirname, '../../..')
 
@@ -65,8 +65,26 @@ test('writes a verdicts row the store accepts', () => {
   load(db, root)
   const plan = planRow(db)
   const id = record(db, plan, audit(fixture('handback-unpointed.md'), ['D1', 'D2']), 0.01)
-  const row = db.prepare('SELECT gate, kind, outcome, rail_id, origin_kind, origin_ref, tokens FROM verdicts WHERE id = ?').get(id)
-  expect(row).toEqual({ gate: 'pre_review', kind: 'rail', outcome: 'refuse', rail_id: 'completion-audit', origin_kind: 'rail', origin_ref: 'completion-audit', tokens: 0 })
+  const row = db.prepare('SELECT gate, kind, outcome, rail_id, origin_kind, origin_ref, message, tokens FROM verdicts WHERE id = ?').get(id)
+  expect(row).toEqual({ gate: 'pre_review', kind: 'rail', outcome: 'refuse', rail_id: 'completion-audit', origin_kind: 'rail', origin_ref: 'completion-audit',
+    message: 'D2 expected by the ticket, absent from the handback or carried with no pointer', tokens: 0 })
+})
+
+test('D1 undone refuses a handback with a Not done line', () => {
+  const verdict = undone(fixture('handback-not-done.md'), false)
+  expect(verdict.outcome).toBe('refuse')
+  expect(verdict.spans).toEqual(['step-2.handback.md'])
+  expect(verdict.message).toMatch(/^Not done: the 18:48 COO ruling .* kotlin-ci\.yml:23$/)
+})
+
+test('D2 undone refuses an unmoved diff after a new ruling', () => {
+  const verdict = undone(fixture('handback-carried.md'), true)
+  expect(verdict.outcome).toBe('refuse')
+  expect(verdict.spans).toEqual(['rulings.md'])
+})
+
+test('D3 undone passes a carried handback', () => {
+  expect(undone(fixture('handback-carried.md'), false).outcome).toBe('pass')
 })
 
 test('refuses, not throws, on a fence that is not a done envelope', () => {

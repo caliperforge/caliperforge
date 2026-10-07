@@ -36,6 +36,14 @@ export function audit(handback: string, expected: string[], prev = '', diff = ''
   return refuse(subject, spans, `${spans.join(', ')} expected by the ticket, absent from the handback or carried with no pointer`)
 }
 
+export function undone(handback: string, unmoved: boolean): Verdict {
+  const subject = createHash('sha256').update(handback).digest('hex')
+  const line = /^[-*>_ ]*Not done.*$/m.exec(handback)?.[0]
+  if (line !== undefined) return refuse(subject, ['step-2.handback.md'], line.trim())
+  if (unmoved) return refuse(subject, ['rulings.md'], 'rulings.md changed since the last step-3 lap and the diff did not')
+  return { outcome: 'pass', defect_class: null, origin_kind: null, origin_ref: null, subject_digest: subject, spans: [], message: 'no case handed back not done' }
+}
+
 function refuse(subject: string, spans: string[], message: string): Verdict {
   return {
     outcome: 'refuse', defect_class: null,
@@ -50,10 +58,10 @@ function refuse(subject: string, spans: string[], message: string): Verdict {
 export function record(db: Db, plan: number, verdict: Verdict, seconds: number): number {
   const manifest = Manifest.parse(parse(readFileSync(join(import.meta.dirname, 'manifest.yaml'), 'utf8')))
   const row = db.prepare(`INSERT INTO verdicts
-    (gate, kind, subject_digest, plan, step, outcome, rail_id, origin_kind, origin_ref, tokens, seconds)
-    VALUES (?, 'rail', ?, ?, ?, ?, ?, ?, ?, 0, ?)`)
+    (gate, kind, subject_digest, plan, step, outcome, rail_id, origin_kind, origin_ref, message, tokens, seconds)
+    VALUES (?, 'rail', ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`)
     .run(manifest.gate, verdict.subject_digest, plan, manifest.step, verdict.outcome,
-      manifest.rail, verdict.origin_kind, verdict.origin_ref, seconds)
+      manifest.rail, verdict.origin_kind, verdict.origin_ref, verdict.message, seconds)
   return Number(row.lastInsertRowid)
 }
 

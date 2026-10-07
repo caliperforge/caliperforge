@@ -1,15 +1,16 @@
 import { z } from 'zod'
 import { targetDigest } from '../sequencer/approve.ts'
-import type { Check, Target } from '../sequencer/card.ts'
+import type { Check } from '../sequencer/card.ts'
 import { picked } from '../sequencer/theirs.ts'
 import { branchOf, checkout, put } from '../sequencer/workspace.ts'
 import { decide } from '../store/approvals.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { templatePriority } from '../store/lanes.ts'
-import { end, type Holder } from '../store/plans.ts'
+import { end, newestPlan, openPlan, pipeNamed, queueTargetPlan, type Holder } from '../store/plans.ts'
 import { profile } from '../store/profile.ts'
-import { latest } from '../store/rulings.ts'
+import { latest, rulingId } from '../store/rulings.ts'
+import { newestAccount, scannedTarget, setEvidence, setTake, setTargetState, targetRow, upsertTarget } from '../store/targets.ts'
 import { claimed, gh, implemented, issue as readIssue, lastMerger, WINDOW, type Issue, type Read } from './gh.ts'
 import { measure } from './measure.ts'
 
@@ -40,7 +41,7 @@ export function parse(repo: string, url: string): number {
 }
 
 export function account(db: Db, repo: string, today: string): z.infer<typeof Account> {
-  const row = db.prepare('SELECT id, measured_at, pulse FROM accounts WHERE repo = ? ORDER BY measured_at DESC LIMIT 1').get(repo)
+  const row = newestAccount(db, repo)
   if (row === undefined) throw new Error(`no accounts row for ${repo}; measure it before queueing`)
   const parsed = Account.parse(row)
   const days = Math.floor((Date.parse(today) - Date.parse(parsed.measured_at.slice(0, 10))) / 86400000)
@@ -76,7 +77,8 @@ export function add(db: Db, root: string, repo: string, url: string, pipe: strin
   const why = claim ?? shipped ?? (merger === null ? `${repo} has no named merger` : null)
   const state = why !== null ? 'refused' : 'ready'
   const origin = shipped !== null ? IMPLEMENTED : null
-  const target = upsert(db, pulse, repo, no, part, merger ?? '', state, url, ruling(db, origin, state))
+  const target = upsertTarget(db, { account_id: pulse.id, repo, issue_no: no, part, named_merger: merger ?? '', state,
+    evidence_measured_at: pulse.measured_at.slice(0, 10), evidence: url, ineligible_ruling_id: ruling(db, origin, state) })
   if (why !== null) return { target, plan: null, state, why, origin }
   const plan = planFor(db, pipe, target, url, 'cf queue add')
   put(root, plan, 'ask.md', askOf(row, scope.card))
@@ -124,43 +126,21 @@ function measured(db: Db, repo: string, today: string): z.infer<typeof Account> 
 /** `targets.ineligible_ruling_id` is the refused trip's law-4 home; the parked trip has no column, only the row. */
 function ruling(db: Db, origin: Origin | null, state: string): number | null {
   if (origin === null || state !== 'refused') return null
-  const row = db.prepare('SELECT id FROM rulings WHERE subject = ? ORDER BY id DESC LIMIT 1')
-    .get(origin.origin_ref) as { id: number } | undefined
-  return row?.id ?? null
-}
-
-function upsert(db: Db, pulse: z.infer<typeof Account>, repo: string, no: number, part: string, merger: string, state: string, url: string, ruled: number | null): number {
-  db.prepare(`INSERT INTO targets (account_id, repo, issue_no, part, named_merger, state, evidence_measured_at, evidence, ineligible_ruling_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT (repo, issue_no, part) DO UPDATE SET account_id = excluded.account_id, named_merger = excluded.named_merger,
-      state = excluded.state, evidence_measured_at = excluded.evidence_measured_at, evidence = excluded.evidence,
-      ineligible_ruling_id = excluded.ineligible_ruling_id`)
-    .run(pulse.id, repo, no, part, merger, state, pulse.measured_at.slice(0, 10), url, ruled)
-  const row = db.prepare('SELECT id FROM targets WHERE repo = ? AND issue_no = ? AND part = ?').get(repo, no, part) as { id: number }
-  return row.id
-}
-
-interface Scanned { repo: string; issue_no: number; part: string; evidence_measured_at: string; state: string; evidence: string }
-
-function targetOf(db: Db, id: number): Scanned {
-  const t = db.prepare('SELECT repo, issue_no, part, evidence_measured_at, state, evidence FROM targets WHERE id = ?').get(id) as Scanned | undefined
-  if (t === undefined) throw new Error(`no target ${String(id)}`)
-  return t
+  return rulingId(db, origin.origin_ref)
 }
 
 export function vetted(db: Db, root: string, plan: number, id: number, check: Check): string | null {
-  const target = db.prepare('SELECT repo, issue_no, named_merger FROM targets WHERE id = ?').get(id) as Target
-  const { ok, says } = check(db, root, plan, target)
+  const { ok, says } = check(db, root, plan, targetRow(db, id))
   if (ok) return null
   refuseTarget(db, id, 'their.work')
-  db.prepare('UPDATE targets SET evidence = coalesce(?, evidence) WHERE id = ?').run(/https:\/\/\S+/.exec(says)?.[0] ?? null, id)
+  setEvidence(db, id, /https:\/\/\S+/.exec(says)?.[0] ?? null)
   return says
 }
 
 export function approve(db: Db, root: string, id: number, pipe: string, by: Holder, check: Check | null = picked()): { digest: string; plan: number | null } {
-  const t = targetOf(db, id)
+  const t = scannedTarget(db, id)
   if (t.state === 'refused') throw new Error(`target ${String(id)} is refused`)
-  const unplanned = t.state === 'ready' && db.prepare('SELECT 1 FROM plans WHERE target_id = ?').get(id) === undefined
+  const unplanned = t.state === 'ready' && newestPlan(db, id) === null
   const row = unplanned ? readIssue(t.repo, t.issue_no) : null
   const digest = targetDigest(t)
   const plan = row === null ? null : planFor(db, pipe, id, t.evidence, by)
@@ -181,33 +161,29 @@ export function approve(db: Db, root: string, id: number, pipe: string, by: Hold
 }
 
 export function refuseTarget(db: Db, id: number, reason: string, by?: Holder): string {
-  const digest = targetDigest(targetOf(db, id))
+  const digest = targetDigest(scannedTarget(db, id))
   db.transaction(() => {
     decide(db, 'target', id, digest, reason)
-    db.prepare("UPDATE targets SET state = 'refused' WHERE id = ?").run(id)
+    setTargetState(db, id, 'refused')
     if (by !== undefined) signed(db, id, by, 'refuse', reason)
   })()
   return digest
 }
 
 function signed(db: Db, target: number, by: Holder, outcome: 'pass' | 'refuse', message: string): void {
-  const plan = db.prepare('SELECT max(id) FROM plans WHERE target_id = ?').pluck().get(target) as number | null
-  logged(db, { plan, kind: 'signoff', actor: by, outcome, message, pointer: `target:${String(target)}`, run: null })
+  logged(db, { plan: newestPlan(db, target), kind: 'signoff', actor: by, outcome, message, pointer: `target:${String(target)}`, run: null })
 }
 
 export function note(db: Db, id: number, take: string): void {
-  if (db.prepare('UPDATE targets SET coo_take = ? WHERE id = ?').run(take, id).changes === 0) throw new Error(`no target ${String(id)}`)
+  setTake(db, id, take)
 }
 
 function planFor(db: Db, pipe: string, target: number, url: string, actor: string): number {
-  const row = db.prepare('SELECT id FROM pipes WHERE name = ?').get(pipe) as { id: number } | undefined
-  if (row === undefined) throw new Error(`no pipe "${pipe}"; cf pipe on ${pipe}`)
-  const open = db.prepare("SELECT id FROM plans WHERE target_id = ? AND state IN ('queued', 'running')").get(target) as { id: number } | undefined
-  if (open !== undefined) return open.id
-  const made = db.prepare(`INSERT INTO plans (pipe_id, target_id, template, state, queued_at, step, retries, priority)
-    VALUES (?, ?, 'pr_path', 'queued', ?, 0, 0, ?)`)
-    .run(row.id, target, new Date().toISOString(), templatePriority(db, 'pr_path'))
-  const id = Number(made.lastInsertRowid)
+  const row = pipeNamed(db, pipe)
+  if (row === null) throw new Error(`no pipe "${pipe}"; cf pipe on ${pipe}`)
+  const open = openPlan(db, target)
+  if (open !== null) return open
+  const id = queueTargetPlan(db, row.id, target, templatePriority(db, 'pr_path'))
   logged(db, { plan: id, kind: 'filed', actor, outcome: 'pass', message: url, pointer: null, run: null })
   return id
 }

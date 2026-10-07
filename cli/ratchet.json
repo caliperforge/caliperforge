@@ -58,8 +58,7 @@
     "prepare": 2
   },
   "queue.ts": {
-    "lines": 213,
-    "prepare": 14,
+    "lines": 189,
     "silent-catch": 1
   },
   "record.ts": {

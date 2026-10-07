@@ -49,6 +49,7 @@ VALUES
   ('rules/registry/41-director_widen.yaml', 'card', 'rules/registry/41-director_widen.yaml', 'c5c091d9536cb5bcbbe8aefa09bfa43c4dd1efd4a30f5f868fdd673e5e0f81ab', '2026-10-04'),
   ('rules/registry/42-target_parked_once.yaml', 'card', 'rules/registry/42-target_parked_once.yaml', 'e1d0db6ef46f3b21c386f38072b249560ef8bef3547e775562891eee3ef1f4b0', '2026-10-04'),
   ('rules/registry/43-director_ceiling.yaml', 'card', 'rules/registry/43-director_ceiling.yaml', '27eb8c137177471c8117b9d9f82772917c21166ad1077cd14baca66502eac1c0', '2026-10-06'),
+  ('rules/registry/44-close_landed.yaml', 'card', 'rules/registry/44-close_landed.yaml', '1802f50060ac20419442211874c2f7c551ce51cc3f9f2c9b48fbed31c4e7a658', '2026-10-07'),
   ('rules/staffing.yaml', 'card', 'rules/staffing.yaml', '5505b1016244ee8d5a5c03cdcf8cbb178011c063ed004dce7ee0ec90a295f87a', '2026-10-05'),
   ('completion-audit', 'rail', 'rules/rails.yaml', 'b46b445806d399b61887a5259eb0a6893444efcbe5acf2e6dd534507bc0882f3', '2026-09-17'),
   ('secret-scan', 'rail', 'rules/rails.yaml', 'b46b445806d399b61887a5259eb0a6893444efcbe5acf2e6dd534507bc0882f3', '2026-09-17'),

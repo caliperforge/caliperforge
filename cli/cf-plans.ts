@@ -2,7 +2,6 @@ import type { Command } from 'commander'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { hold, unhold } from '../sequencer/hold.ts'
-import { homeOf } from '../sequencer/home.ts'
 import { afresh, cloned, fetchMain, git, MAIN, planDir, reap } from '../sequencer/workspace.ts'
 import { blocked, parked, WAITING } from '../sequencer/steps.ts'
 import { decision } from '../store/ask.ts'
@@ -12,7 +11,7 @@ import type { Db } from '../store/index.ts'
 import { closed, release, retried } from '../store/holds.ts'
 import { hhmm, lanes } from '../store/lanes.ts'
 import { holder } from '../store/leases.ts'
-import { held, holderOf, HOLDERS, planById, terminal } from '../store/plans.ts'
+import { held, holderOf, HOLDERS, originRef, planById, terminal } from '../store/plans.ts'
 import { until } from '../store/until.ts'
 import { laneLine, open as openPlans, runsOf, section, verdictsOf } from './brief.ts'
 import type { Cli } from './cf-lanes.ts'
@@ -193,6 +192,8 @@ function parks(cf: Command, { root, db, out }: Cli): void {
 }
 
 function landing(handle: Db, root: string, plan: number, sha: string): { sha: string; url: string } {
+  const ref = originRef(planById(handle, plan))
+  if (ref === null) throw new Error(`plan ${String(plan)} names no issue of ours to land`)
   const dir = join(planDir(root, plan), 'src')
   if (!cloned(dir)) throw new Error(`plan ${String(plan)} has no checkout to read main in`)
   fetchMain(dir)
@@ -203,7 +204,7 @@ function landing(handle: Db, root: string, plan: number, sha: string): { sha: st
   } catch {
     throw new Error(`${sha} is not on main`)
   }
-  return { sha: full, url: `https://github.com/${homeOf(planById(handle, plan))}/commit/${full}` }
+  return { sha: full, url: `https://github.com/${ref.repo}/commit/${full}` }
 }
 
 function closes(cf: Command, { root, db, out }: Cli): void {

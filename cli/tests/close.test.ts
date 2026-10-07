@@ -94,3 +94,13 @@ test('D5 --landed with --as refused or no approved row', () => {
   expect(() => run('--as', 'done', '--landed', main)).toThrow('plan 2 has no approved deliverable to mark landed')
   unchanged(db, 'gated')
 })
+
+test('D5 --landed on an outside plan is refused', () => {
+  const { db, root } = world()
+  const cf = new Command()
+  registerPlans(cf, { root, db: () => db, out: () => undefined })
+  const args = ['close', '1', '--why', 'x', '--by', 'coo', '--as', 'done', '--landed', 'abc1234']
+  expect(() => cf.parse(args, { from: 'user' })).toThrow('plan 1 names no issue of ours to land')
+  expect(plan(db, 1).state).toBe('queued')
+  expect(eventsOf(db, 1, 'close')).toEqual([])
+})

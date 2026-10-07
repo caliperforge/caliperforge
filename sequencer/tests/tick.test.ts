@@ -145,6 +145,41 @@ test('D4 a build/ file HEAD holds stays in the index', () => {
   expect(head(dir, ['ls-files', '--', JAR])).toBe(JAR)
 })
 
+const APP = 'rust/target/debug/app'
+
+const cargoed = (): { dir: string; base: string; root: string } => {
+  const w = world()
+  const { dir, base } = checkout(w.root, 1, 'acme/widget', 'widget-12-a1')
+  mkdirSync(join(dir, 'rust/target/debug'), { recursive: true })
+  mkdirSync(join(dir, 'rust/src'), { recursive: true })
+  writeFileSync(join(dir, 'rust/src/main.rs'), 'fn main() {}\n')
+  writeFileSync(join(dir, APP), 'elf')
+  return { dir, base, root: w.root }
+}
+
+test('D2 target/ build output is not in the diff', () => {
+  const { dir, base } = cargoed()
+  const diff = gitDiff(dir, base)
+  expect(diff).toContain('rust/src/main.rs')
+  expect(diff).not.toContain('rust/target')
+})
+
+test('D3 a reused checkout drops an intent-to-add target/ file', () => {
+  const { dir, base, root } = cargoed()
+  head(dir, ['add', '-f', '--intent-to-add', APP])
+  checkout(root, 1, 'acme/widget', 'widget-12-a1')
+  expect(head(dir, ['ls-files', '--', APP])).toBe('')
+  expect(gitDiff(dir, base)).not.toContain('target/')
+})
+
+test('D4 a target/ file HEAD holds stays in the index', () => {
+  const { dir, root } = cargoed()
+  head(dir, ['add', '-f', APP])
+  head(dir, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'tracked app'])
+  checkout(root, 1, 'acme/widget', 'widget-12-a1')
+  expect(head(dir, ['ls-files', '--', APP])).toBe(APP)
+})
+
 test('a kotlin/ brief builds on the kotlin seat, diffed at base', async () => {
   const w = world('warm', undefined, KOTLIN)
   approve(w.db, w.target)

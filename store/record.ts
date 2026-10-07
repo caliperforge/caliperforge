@@ -22,6 +22,16 @@ export function repos(db: Db): string[] {
     ORDER BY repo`).all() as { repo: string }[]).map((r) => r.repo)
 }
 
+export function addRecord(db: Db, row: { repo: string; pr: number; plan: number; url: string; state: string; merged_at: string | null;
+  read_at: string }): void {
+  db.prepare(`INSERT INTO records (repo, pr, plan, url, state, merged_at, read_at)
+    VALUES (@repo, @pr, @plan, @url, @state, @merged_at, @read_at)`).run(row)
+}
+
+export function dropRecord(db: Db, repo: string, pr: number): void {
+  db.prepare('DELETE FROM records WHERE repo = ? AND pr = ?').run(repo, pr)
+}
+
 export function refusedOf(db: Db, plan: number, limit = 12): Refused[] {
   return db.prepare(`SELECT step, coalesce(rail_id, gate) AS what, outcome, coalesce(message, '') AS message
     FROM verdicts WHERE plan = ? AND outcome <> 'pass' ORDER BY id DESC LIMIT ?`).all(plan, limit) as Refused[]

@@ -111,7 +111,7 @@ async function away(db: Db, leg: Leg & { lease: Taken }, apart: Apart): Promise<
  * from freezing another lane's agent.
  */
 export async function lap(db: Db, root: string, provider: Provider, plan: number, from: number, stole: number | null,
-  chain = 0, read?: Read): Promise<Fired[]> {
+  chain = 0, read?: Read, moved: () => boolean = () => false): Promise<Fired[]> {
   const lease = handOver(db, plan, from)
   if (lease === null) return []
   const taken = { ...lease, stole }
@@ -121,7 +121,7 @@ export async function lap(db: Db, root: string, provider: Provider, plan: number
     unlease(db, plan)
     return []
   }
-  return one(db, root, pipe, { plan: row, route: route(db, row, new Date(), taken) }, taken, provider, undefined, chain, read)
+  return one(db, root, pipe, { plan: row, route: route(db, row, new Date(), taken) }, taken, provider, undefined, chain, read, moved)
 }
 
 /** A `token_ceiling` plan is leased too: `ceilinged` is its step. */
@@ -204,10 +204,11 @@ export function dry(db: Db, now: Date = new Date()): Dry {
 /**
  * The lease goes on every way out, a throw included: the plan is free for the next tick either way. With a
  * `chain` budget the job keeps its lease and takes its next step at once, until it has to wait on something
- * outside the machine -- their CI, a person, a lane a person turned off -- or the budget runs out.
+ * outside the machine -- their CI, a person, a lane a person turned off -- or the budget runs out, or the install
+ * moved under the code.
  */
 async function one(db: Db, root: string, pipe: PipeRow, first: Leg, lease: Taken,
-  provider: Provider, wire?: Wire, chain = 0, read?: Read): Promise<Fired[]> {
+  provider: Provider, wire?: Wire, chain = 0, read?: Read, moved: () => boolean = () => false): Promise<Fired[]> {
   const until = Date.now() + chain * 60_000
   const out: Fired[] = []
   let waited = false
@@ -222,7 +223,7 @@ async function one(db: Db, root: string, pipe: PipeRow, first: Leg, lease: Taken
       const lap = await stepped(db, root, pipe, plan, lease, provider, wire, read)
       out.push(lap.fired)
       waited = lap.wait
-      const more = chain > 0 && Date.now() < until && out.length < STEPS && !lap.wait
+      const more = chain > 0 && Date.now() < until && out.length < STEPS && !lap.wait && !moved()
       leg = more ? onward(db, first.plan.id, lease) : null
     }
     return out

@@ -1,0 +1,4 @@
+- name: ruling_files
+  table: events
+  column: at
+  where: kind = 'files' AND actor = 'ruling' AND outcome = 'pass'

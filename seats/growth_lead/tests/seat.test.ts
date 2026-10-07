@@ -1,4 +1,4 @@
-import { cpSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { cpSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
@@ -16,7 +16,7 @@ test('D1: the manifest holds Read and no write tool or path', () => {
 })
 
 test('D2: the roster carries growth_lead, loaded as a rules row', () => {
-  expect(rules(root).find((r) => r.id === 'growth_lead')).toMatchObject({ kind: 'card', path: 'rules/roster.yaml' })
+  expect(rules(root).find((r) => r.id === 'growth_lead')).toMatchObject({ kind: 'card', path: 'rules/roster/growth_lead.yaml' })
 })
 
 test('D3 and D4: the Notes and their bounds, partners and fence', () => {
@@ -28,9 +28,8 @@ test('D5: a roster without digests or a card with Bash fails', () => {
   const tree = mkdtempSync(join(tmpdir(), 'cf-growth-lead-'))
   for (const dir of ['rules', 'seats']) cpSync(join(root, dir), join(tree, dir), { recursive: true })
   cpSync(join(root, 'rules.seed.sql'), join(tree, 'rules.seed.sql'))
-  const roster = join(tree, 'rules/roster.yaml')
-  writeFileSync(roster, readFileSync(roster, 'utf8').replace(/ {2}growth_lead:\n(?: {4}.*\n){2}/, ''))
-  expect(check(tree, TODAY).map((s) => s.path)).toContain('rules/roster.yaml')
+  writeFileSync(join(tree, 'rules/roster/growth_lead.yaml'), '')
+  expect(check(tree, TODAY).map((s) => s.path)).toContain('rules/roster/growth_lead.yaml')
   const card = seat(root, 'growth_lead').manifest
   expect(() => Seat.parse({ ...card, tools: [...card.tools, 'Bash'] })).toThrow()
 })

@@ -59,6 +59,10 @@ export function forkGreen(db: Db, plan: number, green: boolean): void {
   db.prepare('UPDATE deliverables SET fork_ci_green = ? WHERE id = ?').run(Number(green), latest(db, plan))
 }
 
+export function botClean(db: Db, plan: number, clean: boolean): void {
+  db.prepare('UPDATE deliverables SET bot_clean = ? WHERE id = ?').run(Number(clean), latest(db, plan))
+}
+
 /** A `CHECK` on the table refuses a ready row missing any of the five, so the store is what says no. */
 export function ready(db: Db, plan: number): void {
   db.prepare("UPDATE deliverables SET state = 'ready' WHERE id = ?").run(latest(db, plan))
@@ -67,6 +71,16 @@ export function ready(db: Db, plan: number): void {
 /** The card signed off and the row it settles are the same row, and the push stamps it again. */
 export function approved(db: Db, plan: number, approval: number): void {
   db.prepare("UPDATE deliverables SET state = 'approved', approval_id = ? WHERE id = ?").run(approval, latest(db, plan))
+}
+
+export function approvedRow(db: Db, plan: number): number | null {
+  const row = db.prepare("SELECT id FROM deliverables WHERE plan_id = ? AND state = 'approved' ORDER BY id DESC LIMIT 1")
+    .get(plan) as { id: number } | undefined
+  return row?.id ?? null
+}
+
+export function landedRow(db: Db, id: number, url: string): void {
+  db.prepare("UPDATE deliverables SET state = 'pushed', evidence = ? WHERE id = ?").run(url, id)
 }
 
 export function pushedRow(db: Db, made: Made, approval: number): void {

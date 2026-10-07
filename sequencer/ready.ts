@@ -4,7 +4,7 @@ import { ready as readyRail, type Proof } from '../rails/ready/index.ts'
 import { record as recordRail } from '../rails/record.ts'
 import { parse } from '../rails/diff.ts'
 import { digestOf, headDigest } from '../store/approvals.ts'
-import { built, gated, newest, ready as readyRow, type DeliverableRow, type Made, type Proven } from '../store/deliverables.ts'
+import { botClean, built, gated, newest, ready as readyRow, type DeliverableRow, type Made, type Proven } from '../store/deliverables.ts'
 import { record as recordFiles } from '../store/files.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
@@ -57,7 +57,9 @@ export function readyGate(db: Db, root: string, plan: PlanRow, wire?: Wire): Out
   if (waiting !== null) return waiting
   const bot = internal(plan) ? '' : greptile(db, root, plan, repo, wire ?? WIRE, row.diff_digest)
   if (typeof bot !== 'string') return bot
-  const verdict = readyRail(proofOf(db, root, plan, repo, row))
+  const fresh = clean(db, root, plan)
+  botClean(db, plan.id, fresh)
+  const verdict = readyRail(proofOf(db, root, plan, repo, { ...row, bot_clean: Number(fresh) }))
   recordRail(db, join(root, 'rails/ready'), plan.id, verdict, 0)
   return { outcome: verdict.outcome, spans: verdict.spans, note: `ready: ${verdict.message}${bot}` }
 }
@@ -76,7 +78,7 @@ function greptile(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire,
       ?? `; Greptile gave no score in ${String(GRADING)} ticks`
   }
   const score = row.score ?? 0
-  const { found, ruled, open } = unruled(root, plan.id, sha)
+  const { found, ruled, open } = unruled(root, plan.id, sha, row.body ?? '')
   if (open.length > 0 || (score < 4 && found === 0)) {
     const same = diffAt(db, plan.id, plan.step) === diff
     return { outcome: 'refuse', spans: [`greptile:${String(score)}/5`], message: row.body ?? '', to: same ? plan.step : 2,
@@ -188,16 +190,20 @@ function evidenceOf(db: Db, plan: PlanRow): string {
 function proof(db: Db, root: string, plan: PlanRow): Proven {
   const parts = partsOf(db, plan.id)
   const railed = parts.length === 0 ? [plan.id] : parts
-  const src = srcDir(root, plan.id)
-  const head = cloned(src) ? headSha(src) : undefined
-  const forkClean = internal(plan) || head === undefined || unruled(root, plan.id, head).open.length === 0
   return {
     tests_pass: railed.every((id) => passed(db, id, 'gate', 'pre_review')),
     byte_identical_elsewhere: railed.every((id) => passed(db, id, 'gate', 'review')) && passed(db, plan.id, 'gate', 'senior_review'),
     fork_ci_green: passed(db, plan.id, 'rail_id', 'ci-green'),
-    bot_clean: unanswered(db, plan.id, head) === undefined && forkClean,
+    bot_clean: clean(db, root, plan),
     target_warm: internal(plan) || target(db, plan)?.state !== 'parked',
   }
+}
+
+function clean(db: Db, root: string, plan: PlanRow): boolean {
+  const src = srcDir(root, plan.id)
+  const head = cloned(src) ? headSha(src) : undefined
+  const forkClean = internal(plan) || head === undefined || unruled(root, plan.id, head).open.length === 0
+  return unanswered(db, plan.id, head) === undefined && forkClean
 }
 
 /** A low bot score a later build, or another `head`, has answered no longer holds the plan; the bot scores the new head once it is pushed. */

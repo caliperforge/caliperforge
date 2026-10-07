@@ -8,7 +8,7 @@ import type { Db } from '../store/index.ts'
 import type { Taken } from '../store/leases.ts'
 import { busy } from '../store/now.ts'
 import { advance, back, end, finish, internal, needsCeo, rewind, type PipeRow, type PlanRow, waiting } from '../store/plans.ts'
-import { blipped, peer, refused } from '../store/refusals.ts'
+import { blipped, builds, peer, refused } from '../store/refusals.ts'
 import { draft, grow, review } from '../templates/comms.ts'
 import { builder, type Step } from '../templates/pr-path.ts'
 import { answered, check, gather } from '../templates/research.ts'
@@ -25,7 +25,7 @@ import { kept } from './merge.ts'
 import { languageFor } from './route.ts'
 import { branchOf, checkout, diffOf, internalBranch, maybe, put, ruled, srcDir, titleOf } from './workspace.ts'
 import { assembling, assembly, homeOf } from './home.ts'
-import { fingerprintOf, refusalText, stopped } from './refusal.ts'
+import { BUILDS, capped, fingerprintOf, refusalText, stopped, streak, STREAK } from './refusal.ts'
 
 /** CI that failed, waited or never showed is GitHub's state, not a fault on main: it never switches a lane off. */
 export const CI_ONLY = /^(?:checks:CI|.* ci\.(?:red|pending|missing))$/
@@ -33,6 +33,8 @@ export const CI_ONLY = /^(?:checks:CI|.* ci\.(?:red|pending|missing))$/
 /** `wait` is a step that settled by waiting: a CI still running, or a checkout the network failed. Neither is worth asking again in the same tick. */
 export async function stepped(db: Db, root: string, pipe: PipeRow, plan: PlanRow, lease: Taken,
   provider: Provider, wire?: Wire, read?: Read): Promise<{ fired: Fired; wait: boolean }> {
+  const cap = overBuilt(db, root, pipe, plan, lease)
+  if (cap !== null) return { fired: cap, wait: false }
   const tree = workspace(db, root, plan)
   const step = mapOf(plan.template).at(plan.step, tree.language)
   const mark = newestRun(db)
@@ -90,6 +92,16 @@ export function ceilinged(db: Db, root: string, pipe: PipeRow, plan: PlanRow, ov
     pointer: `step-${String(step.step)}`, run: null })
   return { pipe: pipe.name, plan: plan.id, step: step.step, name: step.name, outcome: 'refuse',
     state: 'blocked_on_ceo', spans: ['ceiling'], note, stole: lease.stole }
+}
+
+/** A pr_path plan that has run `BUILDS` builds stops before the next, with every reason it was refused in director.md. */
+function overBuilt(db: Db, root: string, pipe: PipeRow, plan: PlanRow, lease: Taken): Fired | null {
+  const n = builds(db, plan.id)
+  if (plan.template !== 'pr_path' || plan.step !== BUILD || n < BUILDS) return null
+  const note = capped(db, root, plan.id, `${String(n)} builds ran; the next waits for the director`)
+  needsCeo(db, plan, note)
+  return { pipe: pipe.name, plan: plan.id, step: BUILD, name: 'build', outcome: 'refuse',
+    state: 'blocked_on_ceo', spans: ['build_cap'], note, stole: lease.stole }
 }
 
 /**
@@ -213,6 +225,7 @@ function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcom
     own: outcome.spans.some((s) => s.startsWith('ratchet:')) || undefined, span: outcome.spans.join(', '), note: outcome.note,
     ticket: digestOf(`${maybe(root, plan.id, 'issue.md') ?? ''}${ruled(root, plan.id) ?? ''}${maybe(root, plan.id, 'rulings.md') ?? ''}`) }
   const why = refused(db, r)
+  const cap = streaked(db, root, plan, step)
   if (why !== 'again') stopped(root, plan.id, why)
   if (why === 'shared' && !outcome.spans.every((s) => CI_ONLY.test(s))) {
     db.prepare('UPDATE pipes SET enabled = 0 WHERE id = ?').run(plan.pipe_id)
@@ -220,8 +233,14 @@ function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcom
     logged(db, { plan: plan.id, kind: 'pipe', actor: 'settle', outcome: 'escalate', message: outcome.note, pointer: null, run: null })
   }
   // A rewind costs no retry but is recorded like any refusal, so a second identical one waits for a person.
-  if (outcome.rewind !== undefined && why === 'again') { rewind(db, plan.id, outcome.rewind); return 'running' }
-  return back(db, plan, outcome.to ?? backTo(step), why !== 'again' || fenced(outcome), outcome.note)
+  if (outcome.rewind !== undefined && why === 'again' && cap === null) { rewind(db, plan.id, outcome.rewind); return 'running' }
+  return back(db, plan, outcome.to ?? backTo(step), cap !== null || why !== 'again' || fenced(outcome), cap ?? outcome.note)
+}
+
+/** The note a `STREAK`th refusal in a row from one rail or reviewer past the build stops a pr_path plan with, or null. */
+function streaked(db: Db, root: string, plan: PlanRow, step: Step): string | null {
+  const run = plan.template === 'pr_path' && step.step > BUILD ? streak(db, plan.id) : null
+  return run === null || run.n < STREAK ? null : capped(db, root, plan.id, `${run.source} refused it ${String(run.n)} times in a row`)
 }
 
 function fenced(outcome: Outcome): boolean {

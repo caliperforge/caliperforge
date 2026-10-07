@@ -18,7 +18,7 @@ test('D1: the manifest holds Read and no write tool or path', () => {
 })
 
 test('D2: the roster carries text_review, loaded as a rules row', () => {
-  expect(rules(root).find((r) => r.id === 'text_review')).toMatchObject({ kind: 'card', path: 'rules/roster.yaml' })
+  expect(rules(root).find((r) => r.id === 'text_review')).toMatchObject({ kind: 'card', path: 'rules/roster/text_review.yaml' })
 })
 
 test('D3: an unsourced number is a claim.unverified refuse', () => {
@@ -50,7 +50,6 @@ test('D6: the digests hold, and a roster without them fails', () => {
   const tree = mkdtempSync(join(tmpdir(), 'cf-text-review-'))
   for (const dir of ['rules', 'seats']) cpSync(join(root, dir), join(tree, dir), { recursive: true })
   cpSync(join(root, 'rules.seed.sql'), join(tree, 'rules.seed.sql'))
-  const roster = join(tree, 'rules/roster.yaml')
-  writeFileSync(roster, readFileSync(roster, 'utf8').replace(/ {2}text_review:\n(?: {4}.*\n){2}/, ''))
-  expect(check(tree, TODAY).map((s) => s.path)).toContain('rules/roster.yaml')
+  writeFileSync(join(tree, 'rules/roster/text_review.yaml'), '')
+  expect(check(tree, TODAY).map((s) => s.path)).toContain('rules/roster/text_review.yaml')
 })

@@ -2,8 +2,10 @@ import { copyFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import type { Provider } from '../../providers/kind.ts'
+import { holdOf } from '../../store/holds.ts'
+import { refusedOf } from '../../store/record.ts'
 import { tick } from '../index.ts'
-import { diffOf, get, maybe } from '../workspace.ts'
+import { diffOf, get, maybe, put } from '../workspace.ts'
 import { approve, built, CARRIED, plan, stub, watched, world, type World } from './world.ts'
 
 const UNPOINTED = 'built\n\n---\ndone:\n  - id: D1\n    status: done\n    pointer:\n---\n'
@@ -120,6 +122,26 @@ test('D5 a fenceless hand-back with ## Deleted passes step 2', async () => {
   const w = await atBuild()
   const text = 'built\n\n## Deleted\n\n- src/hello.ts\n'
   expect((await tick(w.db, w.root, answers([text, text])))[0]).toMatchObject({ step: 2, outcome: 'pass' })
+})
+
+const NOT_DONE = 'Not done: this round only allowed changes to kotlin-ci.yml:23'
+
+test('D4 a Not done hand-back stops for the director at step 3', async () => {
+  const w = await atBuild()
+  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(`${NOT_DONE}\n\n${CARRIED}`))
+  expect(plan(w.db, 1)).toMatchObject({ state: 'blocked_on_ceo', step: 3 })
+  expect(holdOf(w.db, 1)?.held_why).toMatch(/^completion-audit: Not done: /)
+  expect(refusedOf(w.db, 1)[0]?.message).toBe(NOT_DONE)
+})
+
+test('D5 an unmoved diff after a new ruling stops at step 3', async () => {
+  const w = await atBuild()
+  await tick(w.db, w.root, stub(UNPOINTED))
+  expect((await tick(w.db, w.root, stub(UNPOINTED)))[0]).toMatchObject({ step: 3, outcome: 'refuse' })
+  put(w.root, 1, 'rulings.md', 'use bye()\n')
+  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(UNPOINTED))
+  expect(plan(w.db, 1)).toMatchObject({ state: 'blocked_on_ceo', step: 3 })
+  expect(holdOf(w.db, 1)?.held_why).toMatch(/^completion-audit: rulings.md/)
 })
 
 test('D3 a hand-back whose fence parses fires the builder once', async () => {

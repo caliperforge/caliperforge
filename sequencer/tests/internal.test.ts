@@ -148,10 +148,10 @@ test('an unfillable roster refuses one plan; the other steps',async () => {
   for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
   apart(w)
   await tick(w.db, w.root, stub(CARRIED))
-  writeFileSync(join(srcDir(w.root, ID), 'rules/roster.yaml'), 'seats: []\n')
+  writeFileSync(join(srcDir(w.root, ID), 'rules/roster/ghost.yaml'), '')
 
   const fired = await tick(w.db, w.root, stub(CARRIED))
-  expect(fired[0]).toMatchObject({ plan: ID, step: 3, outcome: 'refuse', spans: ['rules/roster.yaml'] })
+  expect(fired[0]).toMatchObject({ plan: ID, step: 3, outcome: 'refuse', spans: ['rules/roster'] })
   expect(fired[1]).toMatchObject({ plan: SECOND, step: 3, outcome: 'pass' })
   expect(plan(w.db, ID).step).toBe(2)
 })
@@ -177,7 +177,7 @@ test('D2 a cli/cf.ts digests that exits non-zero refuses its plan', async () => 
   writeFileSync(join(src, 'cli/cf.ts'), "process.stderr.write('roster broke\\n')\nprocess.exit(1)\n")
 
   const rails = (await tick(w.db, w.root, built))[0]
-  expect(rails).toMatchObject({ plan: ID, step: 3, outcome: 'refuse', spans: ['rules/roster.yaml'], note: 'digests: the checkout could not be filled' })
+  expect(rails).toMatchObject({ plan: ID, step: 3, outcome: 'refuse', spans: ['rules/roster'], note: 'digests: the checkout could not be filled' })
   expect(get(w.root, ID, 'refusal.md')).toContain('roster broke')
   expect(plan(w.db, ID).step).toBe(2)
 })

@@ -15,7 +15,7 @@ import { behind, upgraded } from '../sequencer/upgrade.ts'
 import { late } from '../sequencer/signals.ts'
 import { signoffs } from '../sequencer/signoff.ts'
 import { byHand } from '../sequencer/director.ts'
-import { SIGNOFF } from '../sequencer/workspace.ts'
+import { headSha, SIGNOFF } from '../sequencer/workspace.ts'
 import { migrate, open as openDb, type Db } from '../store/index.ts'
 import { hhmm } from '../store/lanes.ts'
 import { openPipes, overlapWaits } from '../store/plans.ts'
@@ -87,9 +87,10 @@ cf.command('lap').argument('<plan>', 'a plan the tick leased').requiredOption('-
   .option('--stole <pid>', 'the dead tick the lease was taken over from')
   .description('run one leased job in this process, for the tick that forked it (#311)')
   .action(async (id: string, options: { from: string; stole?: string }) => {
+    const at = headSha(root)
     process.env.CF_CHECK_SLOTS ??= String(CHECK_SLOTS)
     const fired = await lap(db(), root, claudeAgentSdk, Number(id), Number(options.from),
-      options.stole === undefined ? null : Number(options.stole), CHAIN_MINUTES, gh)
+      options.stole === undefined ? null : Number(options.stole), CHAIN_MINUTES, gh, () => headSha(root) !== at)
     out(`\n${FIRED}${JSON.stringify(fired)}\n`)
   })
 

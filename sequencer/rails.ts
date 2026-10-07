@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { ratcheted } from '../checks/ratchet.ts'
-import { fill } from '../cli/digests.ts'
+import { fill, ROSTER } from '../cli/digests.ts'
 import { record as inbox, ticketOf } from '../cli/inbox.ts'
 import { authority } from '../rails/authority/index.ts'
 import { checked } from '../rails/checks/index.ts'
@@ -144,7 +144,7 @@ function unfilled(src: string): Outcome | null {
   } catch (error) {
     return {
       outcome: 'refuse',
-      spans: ['rules/roster.yaml'],
+      spans: [ROSTER],
       note: 'digests: the checkout could not be filled',
       message: error instanceof Error ? error.message : String(error),
     }

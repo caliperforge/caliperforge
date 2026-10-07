@@ -15,7 +15,7 @@ test('D1: the manifest holds Read, Glob and Grep, no write path', () => {
 })
 
 test('D2: the roster carries the seat and it loads as a rules row', () => {
-  expect(rules(root).find((r) => r.id === 'solana_specialist')).toMatchObject({ kind: 'card', path: 'rules/roster.yaml' })
+  expect(rules(root).find((r) => r.id === 'solana_specialist')).toMatchObject({ kind: 'card', path: 'rules/roster/solana_specialist.yaml' })
 })
 
 test('D3: four card lines, the Shape rule and the refusal to act', () => {

@@ -5,7 +5,9 @@ import { expect, test, vi } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import { get } from '../../sequencer/workspace.ts'
 import type { Db } from '../../store/index.ts'
-import { claimed } from '../gh.ts'
+import { rulingId } from '../../store/rulings.ts'
+import { ineligibleRuling } from '../../store/targets.ts'
+import { claimed, implemented } from '../gh.ts'
 import { add, approve, note, refuseTarget } from '../queue.ts'
 
 vi.mock('../gh.ts', async (importOriginal) => ({
@@ -13,7 +15,7 @@ vi.mock('../gh.ts', async (importOriginal) => ({
   issue: () => ({ number: 166, title: 't', body: 'b', state: 'OPEN', assignees: [], comments: [], closedByPullRequestsReferences: [] }),
   lastMerger: () => 'maintainer',
   claimed: vi.fn(() => null),
-  implemented: () => null,
+  implemented: vi.fn(() => null),
 }))
 
 const schema = join(import.meta.dirname, '../../schema')
@@ -44,6 +46,15 @@ test('a refused target writes no event', () => {
   vi.mocked(claimed).mockReturnValueOnce('assigned to someone')
   expect(queued(db)).toMatchObject({ state: 'refused', plan: null })
   expect(db.prepare('SELECT count(*) AS n FROM events').get()).toEqual({ n: 0 })
+})
+
+test('D4: a shipped issue is refused on the newest ruling', () => {
+  const db = world()
+  vi.mocked(implemented).mockReturnValueOnce('shipped')
+  const added = add(db, mkdtempSync(join(tmpdir(), 'cf-queue-')), REPO, URL, 'pr-path', TODAY)
+  expect(added).toMatchObject({ state: 'refused', plan: null })
+  expect(ineligibleRuling(db, added.target)).toBe(rulingId(db, 'queue.implemented'))
+  expect(rulingId(db, 'queue.implemented')).not.toBeNull()
 })
 
 const scanned = (db: Db, state = 'ready'): number => Number(db.prepare(`INSERT INTO targets

@@ -42,7 +42,7 @@ export interface Wire {
   open: (repo: string, head: string, title: string, bodyFile: string) => string
   close: (repo: string, no: number, sha: string, comment?: string) => void
   runs: Gh
-  rehearse?: (fork: string, branch: string) => void
+  rehearse?: (fork: string, branch: string, base: string) => void
   unrehearse?: (fork: string, branch: string) => void
   review: (fork: string, branch: string) => void
   file: (repo: string, title: string, body: string, labels: string[]) => string
@@ -103,7 +103,7 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
   const holder = waitsFor(db, plan)
   if (holder !== null) return { outcome: 'pass', held: true, spans: ['fork.slot'], note: `waits for plan ${String(holder)}'s fork CI` }
   const { fork, head, ci, tip } = sent(root, plan, repo, wire)
-  if (!internal(plan)) { rehearsing(fork, ci, wire); took(db, plan) }
+  if (!internal(plan)) { rehearsing(root, plan.id, fork, ci, wire); took(db, plan) }
   const on = { fork, branch: ci, sha: tip }
   const { verdict, board } = judge(on, { body: '', commits: commits(head.dir), issue_ref: profile(root, repo)?.issue_ref }, touched(root, plan.id), wire.runs)
   put(root, plan.id, BOARD, `${JSON.stringify(board)}\n`)
@@ -143,7 +143,7 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
 export function reviewable(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire = WIRE): void {
   if (internal(plan)) return
   const { fork, ci } = sent(root, plan, repo, wire)
-  rehearsing(fork, ci, wire)
+  rehearsing(root, plan.id, fork, ci, wire)
   took(db, plan)
 }
 

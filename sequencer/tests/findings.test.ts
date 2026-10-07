@@ -52,6 +52,7 @@ test('D1 D2 a bot comment is filed only under its own head', () => {
   rehearsed({ root, list: () => comments }, 1, 'caliperforge/widget', 3, [signal(a), signal(b)])
   expect(maybe(root, 1, `findings-${a}.md`)).toBe('- G11 src/hello.ts:1 lost\n')
   expect(maybe(root, 1, `findings-${b}.md`)).toBeNull()
+  expect(maybe(root, 1, 'findings.paths')).toBe('G11 src/hello.ts\n')
 })
 
 test('D3 a 5/5 or no score at HEAD: no findings, no findings.md', async () => {

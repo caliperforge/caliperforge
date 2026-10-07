@@ -987,6 +987,27 @@ test('D2 D7 a 3/5 head with findings accepted or overruled passes', async () => 
   expect(plan(d2.db, 1).step).toBe(7)
 })
 
+/** A 0/5 whose summary links `ids` as P1 findings, with G11 and G12 accepted at an earlier head. */
+const linking = (ids: number[]) => (at: World): void => {
+  scored(at.root, 1, 0, `Confidence Score: 0/5\n\n${ids.map((n) =>
+    `1. ${P1}&nbsp;**Bug** <a href="https://github.com/caliperforge/widget/pull/1#discussion_r${String(n)}">▶</a>\n`).join('')}`)
+  put(at.root, 1, 'rulings.md', ruling('f'.repeat(40), 'G11, G12'))
+}
+
+const P1 = '<img alt="P1" src="https://greptile.com/p1.svg">'
+
+test('D3 a 0/5 linking only earlier accepted findings passes', async () => {
+  const [w, lap] = await atReady(linking([11, 12]))
+  expect((await lap())?.note).toMatch(/the COO accepted G11, G12$/)
+  expect(plan(w.db, 1).step).toBe(7)
+  expect(eventsOf(w.db, 1, 'greptile.accepted')).toEqual([{ actor: 'ready', outcome: 'pass', message: 'G11, G12' }])
+})
+
+test('D4 a 0/5 linking an unaccepted P1 refuses', async () => {
+  const [, lap] = await atReady(linking([11, 12, 13]))
+  expect(await lap()).toMatchObject({ step: 6, name: 'ready', outcome: 'refuse', spans: ['greptile:0/5'] })
+})
+
 /** An accepted head whose newest row senior wrote with `bot_clean = 0` before the ruling. */
 const staleSenior = async (): Promise<[World, () => Promise<Fired | undefined>]> => {
   const [w, lap] = await atReady(accepting(['G11', 'G12'], (sha) => ruling(sha, 'G11, G12')))
@@ -1021,7 +1042,6 @@ test('D1 D5 D7 an open P2 at senior holds ready on ready_proof', async () => {
   const answered = CARRIED.replace(/---\n$/, '  - id: G12\n    status: done\n    pointer: src/hello.ts:1\n---\n')
   for (const grade of [
     accepting(['G11', 'G12', 'G13'], (sha) => ruling(sha, 'G11, G12')),
-    accepting(['G11', 'G12'], () => ruling('f'.repeat(40), 'G11, G12')),
     accepting(['G11', 'G12'], (sha) => ruling(sha, 'G11'), answered),
     accepting(['G11'], () => 'G11 overruled:\n'),
   ]) {

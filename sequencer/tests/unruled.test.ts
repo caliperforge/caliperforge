@@ -36,10 +36,25 @@ test('D5 overruled with an empty reason leaves it open', () => {
   expect(unruled(root, 1, SHA)).toEqual({ found: 1, ruled: [], open: ['G1'] })
 })
 
-test('D7 an accepted block at the head rules a finding', () => {
+test('D1 D7 an accepted block rules a finding at every head', () => {
   const rulings = `accepted:\n  head: ${SHA.slice(0, 12)}\n  ids: G1\n  reason: recorded upstream\n`
   const found = `- G1 src/a.ts:1 ${badge(0)} x\n- G2 src/a.ts:2 ${badge(2)} y\n`
   const root = at({ [`findings-${SHA}.md`]: found, [`findings-${'b'.repeat(40)}.md`]: found, 'rulings.md': rulings })
   expect(unruled(root, 1, SHA)).toEqual({ found: 2, ruled: ['G1'], open: ['G2'] })
-  expect(unruled(root, 1, 'b'.repeat(40))).toEqual({ found: 2, ruled: [], open: ['G1', 'G2'] })
+  expect(unruled(root, 1, 'b'.repeat(40))).toEqual({ found: 2, ruled: ['G1'], open: ['G2'] })
+})
+
+test('D2 a summary link is a finding graded by its own badge', () => {
+  const link = (n: number): string => `<a href="https://github.com/o/r/pull/15#discussion_r${String(n)}">▶</a>`
+  const summary = ['Confidence Score: 0/5', `1. ${badge(1)}&nbsp;**Bug** ${link(7)}`, `2. ${badge(3)}&nbsp;**Style** ${link(8)}`,
+    `3. **No badge** ${link(9)}`, `4. ${badge(3)}&nbsp;**Again** ${link(1)}`,
+    '<a href="https://app.greptile.com/retrigger">Retrigger</a> <a href="https://github.com/o/r/commit/abc">abc</a>'].join('\n')
+  const root = at({ [`findings-${SHA}.md`]: `- G1 src/a.ts:1 ${badge(2)} x\n` })
+  expect(unruled(root, 1, SHA, summary)).toEqual({ found: 4, ruled: [], open: ['G1', 'G7', 'G9'] })
+})
+
+test('D5 an accepted block with a bad head or no reason rules none', () => {
+  const rulings = `accepted:\n  head: not-a-sha\n  ids: G1\n  reason: recorded\n\naccepted:\n  head: ${SHA.slice(0, 12)}\n  ids: G2\n  reason:\n`
+  const root = at({ [`findings-${SHA}.md`]: `- G1 src/a.ts:1 ${badge(2)} x\n- G2 src/a.ts:2 ${badge(2)} y\n`, 'rulings.md': rulings })
+  expect(unruled(root, 1, SHA)).toEqual({ found: 2, ruled: [], open: ['G1', 'G2'] })
 })

@@ -1,7 +1,8 @@
 import { expect, test } from 'vitest'
 import type { Provider } from '../../providers/kind.ts'
-import { eventsOf, runRows } from '../../store/events.ts'
+import { eventsOf } from '../../store/events.ts'
 import { dropPlan } from '../../store/plans.ts'
+import { runTokens } from '../../store/runs.ts'
 import { verdictRows } from '../../store/verdict.ts'
 import { tick } from '../index.ts'
 import { approve, built, CARRIED, internalPlan, ours, PASS, plan, REFUSE, stub, watched, world, type World } from './world.ts'
@@ -22,8 +23,8 @@ async function outside(provider: Provider, sent: string[] = []): Promise<World> 
   return w
 }
 
-const fifth = (w: World, id: number): unknown => runRows(w.db).filter((r) => r.plan === id && r.step === 5)
-  .map(({ seat, mode }) => ({ seat, mode }))
+const fifth = (w: World, id: number): unknown => runTokens(w.db, id)
+  .filter((r) => r.seat === 'blind_review' || r.seat === 'senior_review').map(({ seat, mode }) => ({ seat, mode }))
 
 test('D1 an outside plan runs blind_review before senior, unsent', async () => {
   const sent: string[] = []

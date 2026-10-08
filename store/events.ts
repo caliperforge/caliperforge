@@ -102,10 +102,10 @@ export function runAt(db: Db, plan: number, step: number, seat: string, at: stri
   return Number(row.lastInsertRowid)
 }
 
-interface RunRow { id: number; plan: number; seat: string; staffed: string | null; step: number; exit: number; transcript_path: string; cost_usd: number | null; mode: Run['mode'] | null }
+interface RunRow { id: number; plan: number; seat: string; staffed: string | null; step: number; exit: number; transcript_path: string; cost_usd: number | null }
 
 export function runRows(db: Db): RunRow[] {
-  return db.prepare('SELECT id, plan, seat, staffed, step, exit, transcript_path, cost_usd, mode FROM runs ORDER BY id').all() as RunRow[]
+  return db.prepare('SELECT id, plan, seat, staffed, step, exit, transcript_path, cost_usd FROM runs ORDER BY id').all() as RunRow[]
 }
 
 export interface HandUps { decided: number; up: number }

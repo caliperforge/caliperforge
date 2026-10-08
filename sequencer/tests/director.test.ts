@@ -30,6 +30,7 @@ import { stop } from '../fixed.ts'
 import { hold, unhold } from '../hold.ts'
 import type { Wire } from '../push.ts'
 import { rule } from '../rule.ts'
+import { capped } from '../refusal.ts'
 import { parted } from '../split.ts'
 import { unruled } from '../unruled.ts'
 import { afresh, drop, git, headSha, maybe, planDir, put, srcDir } from '../workspace.ts'
@@ -74,6 +75,7 @@ const REPLY: Record<string, string> = {
   close: '---\nmove: close\nwhy: the work is on main\n---\n',
   file: '---\nmove: file\nwhy: the tick counts a turn twice\nticket: the tick counts a turn twice\n---\n',
   ask_ceo: askCeo(BLOCK),
+  park: '---\nmove: park\nwhy: not worth a build yet\nuntil: 2026-10-01T00:00:00.000Z\n---\n',
 }
 
 const PARTS = split(SPLIT) ?? []
@@ -94,6 +96,7 @@ const TWIN: Record<string, (db: Db, home: string) => void> = {
     hold(db, home, 7, `${url}\n\nfiled`, now, file(db, 'coo', 'internal', 'machine', LANE.machine.seat, url, 0))
   },
   ask_ceo: (db) => { held(db, 7, 'ceo', 'a maintainer outside our org sees this') },
+  park: (db, home) => { hold(db, home, 7, 'not worth a build yet', now, null, new Date('2026-10-01T00:00:00.000Z')) },
 }
 
 function seeded(apply: string | null) {
@@ -766,6 +769,57 @@ test.each([
   await cooLite(db, home, row(db), inTurn(replies, []), now, () => undefined, wire())
   expect(plans(db)).toEqual(was)
   expect(told(db).map((t) => t.message)).toEqual([message])
+})
+
+function capStop() {
+  const seed = seeded('1')
+  capped(seed.db, seed.home, 7, 'the 6th build')
+  return seed
+}
+
+const RETURN = '---\nmove: return\nwhy: a one-off blip\n---\n'
+
+test('D1: a cap stop carries director.md after # Stop', async () => {
+  const { db, home } = capStop()
+  const cap = maybe(home, 7, 'director.md') ?? ''
+  expect(cap).toMatch(/^# Build cap\n\nthe 6th build\n/)
+  expect(await prompted(db, home)).toContain(`# Stop\n\nstep 3 rails refused\n\n\n${cap}\n\n# Orchestrator`)
+  expect(await prompted(db, home)).not.toContain(cap)
+})
+
+test.each([['return', RETURN], ['fix', FIX], ['ask_ceo', REPLY.ask_ceo ?? '']])('D2: %s on a cap stop is fenced', async (move, reply) => {
+  const { db, home } = capStop()
+  const prompts: string[] = []
+  await cooLite(db, home, row(db), inTurn([reply, REPLY.rule ?? ''], prompts), now, () => undefined, wire())
+  expect(prompts.map((p) => p.includes(`# Fence\n\n${move} is refused: the plan stopped at its build cap`))).toEqual([false, true])
+  expect(told(db)).toEqual([{ actor: 'director', outcome: 'pass', message: 'rule: the ticket settles it' }])
+})
+
+test('D2: two refused moves on a cap stop go to a person', async () => {
+  const { db, home } = capStop()
+  const was = plans(db)
+  const posted: string[] = []
+  await cooLite(db, home, row(db), inTurn([RETURN, RETURN], []), now, (t) => void posted.push(t), wire())
+  expect(plans(db)).toEqual(was)
+  expect(told(db)).toEqual([{ actor: 'director', outcome: 'needs_coo', message: 'return: refused by the fence, the plan stopped at its build cap' }])
+  expect(posted).toHaveLength(1)
+})
+
+test.each(['rule', 'waive', 'split', 'park'])('D3: %s on a cap stop leaves plan 7 as its twin', async (move) => {
+  const live = capStop()
+  const twin = capStop()
+  await run(live.db, live.home, REPLY[move] ?? '')
+  TWIN[move]?.(twin.db, twin.home)
+  expect(plan7(live.db)).toEqual(plan7(twin.db))
+  expect(told(live.db)).toEqual([{ actor: 'director', outcome: 'pass', message: expect.stringMatching(new RegExp(`^${move}: `)) as string }])
+})
+
+test('D4: park holds plan 7 until its time', async () => {
+  const { db, home } = capStop()
+  await run(db, home, REPLY.park ?? '')
+  expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', held_until: '2026-10-01T00:00:00.000Z' })
+  expect(maybe(home, 7, 'parked.md')).toMatch(/^# Held .*\n\nnot worth a build yet\n/)
+  expect(read('---\nmove: park\nwhy: not worth a build yet\n---\n')).toBeNull()
 })
 
 test.each(FAULTS)('D1: decision refuses %s', (refused, block) => {

@@ -1062,8 +1062,19 @@ const linking = (ids: number[]) => (at: World): void => {
 
 const P1 = '<img alt="P1" src="https://greptile.com/p1.svg">'
 
-test('D3 a 0/5 linking only earlier accepted findings passes', async () => {
+test('D4 a 0/5 linking only accepted P1s goes to the builder', async () => {
   const [w, lap] = await atReady(linking([11, 12]))
+  const fired = await lap()
+  expect(fired).toMatchObject({ step: 6, name: 'ready', outcome: 'refuse', spans: ['greptile:0/5'] })
+  expect(fired?.note).toContain('the COO accepted G11, G12, but a P1 needs a ruling citing the code')
+  expect(plan(w.db, 1).step).toBe(2)
+})
+
+test('D5 a 0/5 whose P1s are overruled citing the code passes', async () => {
+  const [w, lap] = await atReady((at) => {
+    linking([11, 12])(at)
+    put(at.root, 1, 'rulings.md', 'G11, G12 overruled: src/hello.ts:1 already refuses it\n')
+  })
   expect((await lap())?.note).toMatch(/the COO accepted G11, G12$/)
   expect(plan(w.db, 1).step).toBe(7)
   expect(eventsOf(w.db, 1, 'greptile.accepted')).toEqual([{ actor: 'ready', outcome: 'pass', message: 'G11, G12' }])

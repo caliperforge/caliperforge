@@ -1,6 +1,6 @@
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { basename, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { expect, test } from 'vitest'
 import type { Provider } from '../../providers/kind.ts'
 import { eventsOf } from '../../store/events.ts'
@@ -159,6 +159,49 @@ test('D4 opened lists a stray row by clearing its flag', () => {
   expect(opened(db, home, 7)).toEqual([])
   expect(recorded(db, 7)).toEqual(['index.ts'])
   expect(filesOf(db, 7)).toEqual([{ path: 'index.ts', is_new: false }])
+})
+
+const ROUND_6 = ['**Ruling (CEO, 2026-10-05, round 6, pre-upstream):** Two small changes before this goes upstream.',
+  '- `harness/kotlin-protocol-runner/src/main/kotlin/com/solana/paykit/protocolrunner/Main.kt`: add a 3-line header comment ... per the contract in `harness/src/protocol/runners/spawn.ts`. No other comments.']
+const ROUND_9 = ['**Ruling (COO, 2026-10-06, round 9):** ... against a version `typescript/pnpm-lock.yaml` already pins on main.',
+  '- Audit is ruled unrelated to this card. It must not send this job back as `ci_red`, and no builder touches `typescript/`, the lockfile or the audit shim.']
+const RULINGS = [...ROUND_6, ...ROUND_9,
+  '**Ruling (COO, 2026-10-07, round 10, Greptile on caliperforge/pay-kit#21 at 85236297):** Both P1 findings are overruled.',
+  '- G4192451832 (opaque is decoded): the reference contract decodes `opaque` as base64url JSON (`go/cmd/protocol-runner/main.go:93` and `:142-146`)',
+  '- G4192451856 ...: `harness/runners/kotlin.json` on main (from #179) calls the same prebuilt `build/install/...` binary',
+  '**Ruling (COO, 2026-10-08):** The step-6 hold is the machine, not this job. #989 (2257679) makes the ready gate recompute bot_clean from current rulings, but the tick only lets step 6 run when the deliverable row already says bot_clean=1, and senior saved 0 before the round-10 ruling. Back to step 5 so senior writes a fresh deliverable under rounds 9 and 10; no code change, no builder run. A ticket fixes the pre-check so this does not recur.',
+].join('\n')
+
+function cited() {
+  const { db, home } = seeded(3)
+  for (const path of ['typescript/pnpm-lock.yaml', 'go/cmd/protocol-runner/main.go', 'harness/runners/kotlin.json', 'harness/src/protocol/runners/spawn.ts']) {
+    mkdirSync(dirname(join(srcDir(home, 7), path)), { recursive: true })
+    writeFileSync(join(srcDir(home, 7), path), '\n')
+  }
+  return { db, home }
+}
+
+test('D1 opened adds no path an older round cites', () => {
+  const { db, home } = cited()
+  put(home, 7, 'rulings.md', RULINGS)
+  expect(opened(db, home, 7)).toEqual([])
+  expect(filesOf(db, 7)).toEqual([])
+})
+
+test('D2 a line saying no builder touches it opens none', () => {
+  const { db, home } = cited()
+  put(home, 7, 'rulings.md', [...ROUND_6, ...ROUND_9].join('\n'))
+  expect(opened(db, home, 7)).toEqual([])
+  expect(filesOf(db, 7)).toEqual([{ path: 'typescript/pnpm-lock.yaml', is_new: true }])
+})
+
+test('D3 D4 the newest ruling adds its path, an older one not', () => {
+  const { db, home } = seeded(3)
+  mkdirSync(join(srcDir(home, 7), 'src'))
+  writeFileSync(join(srcDir(home, 7), 'src/x.ts'), 'export {}\n')
+  put(home, 7, 'rulings.md', '**Ruling (COO, 2026-10-07):** the builder edits `index.ts`.\n**Ruling (COO, 2026-10-08):** add `src/x.ts`.\n')
+  expect(opened(db, home, 7)).toEqual([])
+  expect(filesOf(db, 7)).toEqual([{ path: 'src/x.ts', is_new: true }])
 })
 
 test('D5 a director return opens the path rulings.md names', async () => {

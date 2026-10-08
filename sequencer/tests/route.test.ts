@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import { authority } from '../../rails/authority/index.ts'
+import { refuse } from '../../runner/index.ts'
 import { record } from '../../store/files.ts'
 import type { Db } from '../../store/index.ts'
 import { PlanRow } from '../../store/plans.ts'
@@ -155,6 +156,18 @@ test('the brief-files fence is the brief; any other, the manifest', () => {
   record(w.db, 1, [{ path: 'ruby/lib/pay_kit/config.rb', is_new: false }])
   expect(fenceFor(w.db, 1, [BRIEF_FILES])).toEqual(['ruby/lib/pay_kit/config.rb'])
   expect(fenceFor(w.db, 2, ['kotlin'])).toEqual(['kotlin'])
+})
+
+test('1033 D1 D2 a listed test admits its test folder only', () => {
+  const w = world()
+  record(w.db, 1, listed(['python/src/pkg/config.py', 'python/tests/test_allowlist.py']))
+  const fence = fenceFor(w.db, 1, [BRIEF_FILES])
+  expect(fence).toEqual(['python/src/pkg/config.py', 'python/tests/test_allowlist.py', 'python/tests'])
+  const src = mkdtempSync(join(tmpdir(), 'cf-route-'))
+  expect(refuse(src, fence, 'python/tests/allowlist_generator.py')).toBeNull()
+  for (const path of ['python/conftest.py', 'python/src/pkg/other.py']) {
+    expect(refuse(src, fence, path)).toMatchObject({ origin_ref: 'seat.write_paths' })
+  }
 })
 
 const SWIFT = ['Atelier', 'AtelierTests', 'Atelier.xcodeproj', 'swift']

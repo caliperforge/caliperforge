@@ -18,7 +18,8 @@ import { capture } from '../capture.ts'
 import { approvedPlan } from '../approve.ts'
 import { approve as approvePublish } from '../card.ts'
 import type { Fired, Outcome } from '../kind.ts'
-import { COMMIT, headOf, prBody, push, sent as next, type Wire } from '../push.ts'
+import { profile } from '../../store/profile.ts'
+import { COMMIT, forkCi, headOf, messageOf, prBody, push, sent as next, type Wire } from '../push.ts'
 import { started } from '../signals.ts'
 import { unanswered } from '../ready.ts'
 import { unread } from '../../cli/inbox.ts'
@@ -243,7 +244,9 @@ test('a fork -next HEAD lacks is folded onto, never forced', { timeout: 90_000 }
   writeFileSync(join(src, 'src/hello.ts'), 'export const hello = (): string => "hi"\n')
   for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, () => pr(), wire)
   expect(sent).toEqual([`send src ${tip(w.root, 1)}:refs/heads/widget-12-a1-next`, 'rehearse caliperforge/widget widget-12-a1-next'])
-  git(['merge-base', '--is-ancestor', stale, 'HEAD'])
+  git(['merge-base', '--is-ancestor', stale, tip(w.root, 1)])
+  expect(() => git(['merge-base', '--is-ancestor', stale, 'HEAD'])).toThrow()
+  expect(git(['rev-parse', 'HEAD^'])).toBe(git(['ls-remote', 'origin', 'refs/heads/widget-12-a1']).split('\t')[0])
   approveCard(w.db, w.root, 'plan', 1, 'ceo')
   advance(w.db, plan(w.db, 1), 8)
   const head = git(['rev-parse', 'HEAD'])
@@ -278,7 +281,7 @@ test('D1 D2 D3 pre-pr rounds move -next; push sends the branch', async () => {
   rewind(w.db, 1, 4)
   await round(w, wire, 'hi', 3)
   expect(plan(w.db, 1).step).toBe(7)
-  git(['merge-base', '--is-ancestor', first, 'HEAD'])
+  expect(git(['rev-parse', 'HEAD^'])).toBe(git(['merge-base', 'HEAD', 'refs/remotes/upstream/main']))
   expect(git(['rev-parse', 'HEAD'])).not.toBe(first)
   expect(git(['ls-remote', 'origin', 'refs/heads/widget-12-a1-next']).split('\t')[0]).toBe(tip(w.root, 1))
   expect(git(['ls-remote', 'origin', 'refs/heads/widget-12-a1'])).toBe('')
@@ -398,22 +401,34 @@ test('D3 a head committed after the fold is refused', async () => {
   expect(git(['ls-remote', 'origin', 'refs/heads/widget-12-a1'])).toBe(before)
 })
 
-test('D1 D3 D4 follow-up is the summary, no upstream #, kept', async () => {
-  const { git, again } = await refollowed('Renamed.\n\n---\nsummary: rename hello for #12\ndone:\n  - id: D1\n---\n')
+test('D1 D2 a second round is one commit with the brief message', async () => {
+  const { w, git, again } = await refollowed('Renamed.\n\n---\nsummary: rename hello\ndone:\n  - id: D1\n---\n')
+  expect(plan(w.db, 1).step).toBe(7)
+  expect(git(['rev-parse', 'HEAD^'])).toBe(git(['merge-base', 'HEAD', 'refs/remotes/upstream/main']))
   const message = git(['log', '-1', '--format=%B'])
-  expect(message).toBe('fix: rename hello for')
-  expect(message).not.toMatch(/#\d/)
+  expect(message).toBe(messageOf(w.root, 1, profile(w.root, 'acme/widget')))
+  expect(message).not.toContain('rename hello')
   const head = git(['rev-parse', 'HEAD'])
   again()
   expect(git(['rev-parse', 'HEAD'])).toBe(head)
 })
 
-test('D2 a follow-up with no summary says it addresses review', async () => {
-  const { git } = await refollowed('Renamed.\n\n---\ndone:\n  - id: D1\n---\n')
-  expect(git(['log', '-1', '--format=%B'])).toBe('fix: address review')
+test('D3 a follow-up with the handback summary is refused', async () => {
+  const w = await pushed()
+  const src = srcDir(w.root, 1)
+  const git = (args: string[]): string => execFileSync('git', args, { cwd: src, encoding: 'utf8' }).trim()
+  git(['push', '-q', 'origin', 'widget-12-a1'])
+  writeFileSync(join(src, 'src/hello.ts'), 'export const hello = (): string => "hi"\n')
+  put(w.root, 1, 'step-2.handback.md', 'Renamed.\n\n---\nsummary: rename hello\ndone:\n  - id: D1\n---\n')
+  const log = watched([], w.root, 1)
+  const wire = { ...log, send: (dir: string, ref: string) => {
+    log.send(dir, ref)
+    git(['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '--amend', '-qm', 'fix: rename hello'])
+  } }
+  expect(forkCi(w.db, w.root, plan(w.db, 1), 'acme/widget', wire)).toMatchObject({ outcome: 'refuse', spans: ['fold'], to: 2 })
 })
 
-test('D1 D2 D3 D4 a moved main stays the fold\'s second parent', { timeout: 90_000 }, async () => {
+test('D1 a moved main is the parent of a one-commit head', { timeout: 90_000 }, async () => {
   const w = world()
   approve(w.db, w.target)
   const src = srcDir(w.root, 1)
@@ -439,7 +454,8 @@ test('D1 D2 D3 D4 a moved main stays the fold\'s second parent', { timeout: 90_0
   expect(plan(w.db, 1).step).toBe(7)
   expect(maybe(w.root, 1, 'base.laps')).toBeNull()
   expect(git(['merge-base', 'HEAD', 'refs/remotes/upstream/main'])).toBe(main)
-  expect(git(['rev-parse', 'HEAD^2'])).toBe(main)
+  expect(git(['rev-parse', 'HEAD^'])).toBe(main)
+  expect(() => git(['rev-parse', '-q', '--verify', 'HEAD^2'])).toThrow()
   expect(git(['diff', '--name-only', 'refs/remotes/upstream/main...HEAD'])).toBe('src/hello.ts')
   expect(git(['log', '--no-merges', '--format=%s', 'refs/remotes/upstream/main..HEAD'])).not.toContain('main moves on')
   const head = git(['rev-parse', 'HEAD'])

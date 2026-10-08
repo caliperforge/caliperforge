@@ -105,7 +105,9 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
   if (internal(plan) && (assembly(db, plan) !== null || !workflows(srcDir(root, plan.id)))) return checked(db, root, plan, repo)
   const holder = waitsFor(db, plan)
   if (holder !== null) return { outcome: 'pass', held: true, spans: ['fork.slot'], note: `waits for plan ${String(holder)}'s fork CI` }
-  const { fork, head, ci, tip } = sent(root, plan, repo, wire)
+  const { fork, head, ci, tip, base: onto } = sent(root, plan, repo, wire)
+  const off = onto === null ? null : unfolded(head.dir, onto, messageOf(root, plan.id, profile(root, repo)))
+  if (off !== null) return { outcome: 'refuse', spans: ['fold'], to: 2, note: off }
   if (!internal(plan)) { wire.rehearse?.(fork, ci); took(db, plan) }
   const on = { fork, branch: ci, sha: tip }
   const { verdict, board } = judge(on, { body: '', commits: commits(head.dir), issue_ref: profile(root, repo)?.issue_ref }, touched(root, plan.id), wire.runs)
@@ -137,9 +139,7 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
   forkGreen(db, plan.id, passed)
   if (verdict.outcome === 'pass') put(root, plan.id, GREEN, `${ci} ${tip}\n`)
   const failed = passed ? null : red(fork, verdict.spans, wire.runs)
-  if (failed === null) return null
-  return { outcome: 'refuse', spans: failed.spans, message: failed.log, to: 2,
-    note: `their CI is red on ${fork}@${head.sha.slice(0, 12)}; back to the builder with the failed log` }
+  return failed === null ? null : { outcome: 'refuse', spans: failed.spans, message: failed.log, to: 2, note: `their CI is red on ${at}; back to the builder with the failed log` }
 }
 
 /** Step 3's pass opens the rehearsal: a review bot reads only an open pull request. */
@@ -150,22 +150,20 @@ export function reviewable(db: Db, root: string, plan: PlanRow, repo: string, wi
   took(db, plan)
 }
 
-export function sent(root: string, plan: PlanRow, repo: string, wire: Wire): { fork: string; head: Head; ci: string; tip: string } {
+export function sent(root: string, plan: PlanRow, repo: string, wire: Wire): { fork: string; head: Head; ci: string; tip: string; base: string | null } {
   const outside = !internal(plan)
   const fork = `${FORK}/${repoName(repo)}`
   const dir = srcDir(root, plan.id)
   const branch = git(dir, ['rev-parse', '--abbrev-ref', 'HEAD']).trim()
   const ci = outside ? rehearsed(root, plan.id, branch) : branch
-  if (outside) {
-    if (onFork(dir, branch) || onFork(dir, ci)) follow(root, plan.id, ci)
-    else squash(root, plan.id, profile(root, repo))
-  }
+  const rules = profile(root, repo)
+  const base = !outside ? null : onFork(dir, branch) ? follow(root, plan.id, messageOf(root, plan.id, rules)) : squash(root, plan.id, rules)
   const head = outside ? headOf(root, plan.id) : onward(headOf(root, plan.id))
   const tip = outside ? tipOf(root, plan.id, head, ci, repo) : head.sha
   if (outside) based(root, plan.id, fork, wire)
   wire.send(head.dir, outside ? `${tip}:refs/heads/${ci}` : head.branch)
   if (outside) moved(root, plan.id, fork, ci, wire)
-  return { fork, head, ci, tip }
+  return { fork, head, ci, tip, base }
 }
 
 /** A head re-cut from main after its branch was pushed takes the pushed head as a second parent and keeps its own tree. */
@@ -499,15 +497,24 @@ function said(brief: string): string[] {
  * with the brief's title as its subject. The rounds' commits and any merge of
  * their main fold into it; a branch already in that shape is left alone, so a held CI keeps its head.
  */
-export function squash(root: string, plan: number, rules: Profile | null = null, message = messageOf(root, plan, rules)): void {
+export function squash(root: string, plan: number, rules: Profile | null = null, message = messageOf(root, plan, rules)): string {
   const dir = srcDir(root, plan)
   git(dir, ['add', '-A', '--', '.'])
   const base = git(dir, ['merge-base', 'HEAD', MAIN]).trim()
   const count = Number(git(dir, ['rev-list', '--count', `${base}..HEAD`]).trim())
   const staged = git(dir, ['diff', '--cached', '--name-only']).trim() !== ''
-  if (!staged && count === 1 && git(dir, ['log', '-1', '--format=%B']).trim() === message) return
+  if (!staged && count === 1 && git(dir, ['log', '-1', '--format=%B']).trim() === message) return base
   git(dir, ['reset', '--soft', base])
   sign(dir, message)
+  return base
+}
+
+function unfolded(dir: string, base: string, message: string): string | null {
+  const head = git(dir, ['rev-parse', 'HEAD']).trim()
+  if (head === base) return null
+  const parent = git(dir, ['rev-parse', 'HEAD^']).trim()
+  if (parent === base && git(dir, ['log', '-1', '--format=%B']).trim() === message) return null
+  return `${head.slice(0, 12)} is not one commit over ${base.slice(0, 12)} with the brief's message; fold it again`
 }
 
 function onFork(dir: string, branch: string): boolean {
@@ -535,36 +542,32 @@ export function rehearsalBranch(root: string, plan: number): string {
 
 /**
  * Once our fork holds the branch it only moves forward -- no force-push, ever. The rounds'
- * commits since the head its rehearsal shows fold into one signed follow-up commit on top of it,
+ * commits since the head our fork shows fold into one signed follow-up commit on top of it,
  * with a main merged since that head as its second parent.
  */
-export function follow(root: string, plan: number, name: string): void {
+export function follow(root: string, plan: number, message: string): string {
   const dir = srcDir(root, plan)
   const branch = git(dir, ['rev-parse', '--abbrev-ref', 'HEAD']).trim()
   const shown = `refs/remotes/origin/${branch}`
-  const summary = clean(/^summary:[ \t]*(.*)$/m.exec(maybe(root, plan, 'step-2.handback.md') ?? '')?.[1] ?? '')
-  const message = `${kindOf(title(root, plan))}: ${summary === '' ? 'address review' : summary}`
   git(dir, ['add', '-A', '--', '.'])
-  const own = published(dir, branch, shown)
-  const next = `refs/remotes/origin/${name}`
-  const ahead = name !== branch && published(dir, name, next)
-  if (!own && !ahead) {
+  if (!published(dir, branch, shown)) {
     sign(dir, message)
-    return
+    return git(dir, ['merge-base', 'HEAD', MAIN]).trim()
   }
-  const tip = ahead && (!own || ancestor(dir, shown, next)) ? carried(root, plan, git(dir, ['rev-parse', next]).trim()) : shown
+  const tip = git(dir, ['rev-parse', shown]).trim()
   const count = Number(git(dir, ['rev-list', '--count', `${tip}..HEAD`]).trim())
   const staged = git(dir, ['diff', '--cached', '--name-only']).trim() !== ''
   const same = count === 0 || (count === 1 && git(dir, ['log', '-1', '--format=%B']).trim() === message)
-  if (!staged && same && ancestor(dir, tip, 'HEAD')) return
+  if (!staged && same && ancestor(dir, tip, 'HEAD')) return tip
   const base = git(dir, ['merge-base', 'HEAD', MAIN]).trim()
   if (!ancestor(dir, base, tip)) {
     const sha = git(dir, [...identity(dir), 'commit-tree', git(dir, ['write-tree']).trim(), '-p', tip, '-p', base, '-m', message]).trim()
     git(dir, ['update-ref', `refs/heads/${branch}`, sha])
-    return
+    return tip
   }
   git(dir, ['reset', '--soft', tip])
   sign(dir, message)
+  return tip
 }
 
 /** Whether we know the head the pull request shows; not knowing it, nothing already committed is folded. */
@@ -582,11 +585,6 @@ function sign(dir: string, message: string): void {
   if (git(dir, ['diff', '--cached', '--name-only']).trim() === '') return
   execFileSync('git', [...identity(dir), 'commit', '-q', '-m', message],
     { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 60_000 })
-}
-
-/** The conventional-commit type and scope of the pull request's title, for its follow-up commits. */
-function kindOf(title: string): string {
-  return /^([a-z]+(?:\([^)]*\))?)!?:/.exec(title)?.[1] ?? 'fix'
 }
 
 /** Subject and body with no upstream number the profile's `issue_ref` does not allow: the ci-green rail refuses a branch whose commits name one. */

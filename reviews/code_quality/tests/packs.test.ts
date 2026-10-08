@@ -93,7 +93,7 @@ test('runtime Swift examples follow the repo Swift examples', () => {
 })
 
 test('the examples folder is not a reviewer', () => {
-  expect(loadReviews(fresh(join(root, 'schema')), root)).toEqual(['code_quality', 'design', 'senior_review'])
+  expect(loadReviews(fresh(join(root, 'schema')), root)).toEqual(['blind_review', 'code_quality', 'design', 'senior_review'])
 })
 
 test('a diff no language claims carries nothing', () => {

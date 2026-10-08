@@ -13,7 +13,7 @@ const BROWSE =new Set(['Glob', 'Grep'])
 
 export const Review = z.object({
   review: z.string(),
-  gate: z.enum(['review', 'senior_review']),
+  gate: z.enum(['review', 'senior_review', 'blind_review']),
   step: z.int().min(4).max(5),
   model: z.string(),
   effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']),
@@ -42,7 +42,7 @@ export type Narrowing = z.infer<typeof Narrowing>
 
 export const Bench = z.object({
   repo: z.string(),
-  issue: z.string(),
+  issue: z.string().optional(),
   diff: z.string(),
   tree: z.string().optional(),
   handback: z.string().optional(),
@@ -134,8 +134,9 @@ export function assembled(root: string, name: string, manifest: Review, bench: B
   ]
   const tail = sections.map(([head, body]) => (body === undefined ? '' : `\n\n# ${head}\n\n${body}`)).join('')
   const diff = (bench.since === undefined ? undefined : framed(bench.diff, MAP)) ?? bench.diff
+  const issue = bench.issue === undefined ? '' : `# Issue\n\n${bench.issue}\n\n`
   return {
-    prompt: `${tight(root)}\n\n${lead}\n\n# Issue\n\n${bench.issue}\n\n# Diff\n\n${diff}${tail}`,
+    prompt: `${tight(root)}\n\n${lead}\n\n${issue}# Diff\n\n${diff}${tail}`,
     cwd: bench.repo,
     transcript,
     model: manifest.model,

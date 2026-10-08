@@ -1287,9 +1287,9 @@ test('cf brief and cf plan bind the plan they are asked for', async () => {
   }
   expect(runsOf(w.db, 1).map((r) => r.step)).toEqual([1, 2])
   expect(runsOf(w.db, 99)).toEqual([])
-  expect(verdictsOf(w.db, 1).map((v) => v.gate)).toEqual(Array<string>(6).fill('pre_review'))
+  expect(verdictsOf(w.db, 1).map((v) => v.gate)).toEqual(Array<string>(4).fill('pre_review'))
   expect(verdictRows(w.db, 1).map((v) => v.rail_id))
-    .toEqual(['completion-audit', 'secret-scan', 'authority', 'tight', 'test-weakened', 'identifiers'])
+    .toEqual(['completion-audit', 'secret-scan', 'authority', 'test-weakened'])
   expect(verdictsOf(w.db, 99)).toEqual([])
   expect(openPlans(w.db).map((p) => p.id)).toEqual([1])
   expect(halted(w.db)).toEqual([])

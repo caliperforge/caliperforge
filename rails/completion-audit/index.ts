@@ -83,7 +83,7 @@ function also(forward: string[]): string {
   return forward.length === 0 ? '' : `, ${forward.join(', ')} carried forward from the previous handback`
 }
 
-function carried(handback: string): Map<string, z.infer<typeof Envelope>['done'][number]> | string {
+export function carried(handback: string): Map<string, z.infer<typeof Envelope>['done'][number]> | string {
   const fence = /^---\r?\n([\s\S]*?)\r?\n---\s*$/m.exec(handback)
   if (fence === null) return new Map()
   const body = fence[1] ?? ''

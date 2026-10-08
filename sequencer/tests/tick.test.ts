@@ -409,7 +409,8 @@ test('a review needs_ceo holds for the coo with its question', async () => {
   for (let at = 0; at < 4; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
   const fired = (await tick(w.db, w.root, stub(CARRIED, 0, `${WORDS}\n\n${BLOCK}\n\n---\noutcome: needs_ceo\n---\n`)))[0]
   expect(fired).toMatchObject({ step: 4, outcome: 'needs_ceo', state: 'blocked_on_ceo' })
-  expect(holdOf(w.db, 1)).toMatchObject({ held_by: 'coo' })
+  expect(holdOf(w.db, 1)).toEqual({ held_by: 'coo', held_why: `code_quality needs_ceo: ${`${WORDS}\n\n${BLOCK}`.replace(/\s+/g, ' ')}` })
+  expect(w.db.prepare('SELECT message FROM verdicts WHERE plan = 1 AND step = 4').get()).toEqual({ message: `${WORDS}\n\n${BLOCK}` })
   const plan1 = allEvents(w.db).filter((e) => e.plan === 1)
   expect(plan1.filter((e) => e.actor === 'code_quality').map((e) => e.outcome)).toEqual(['escalate'])
   expect(plan1.filter((e) => e.kind !== 'director' && e.outcome === 'needs_ceo')).toEqual([])

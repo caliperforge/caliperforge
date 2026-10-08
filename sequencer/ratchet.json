@@ -299,6 +299,9 @@
   "tests/theirs.test.ts": {
     "prepare": 3
   },
+  "tests/tick.test.ts": {
+    "prepare": 1
+  },
   "tests/upgrade.test.ts": {
     "prepare": 1
   },

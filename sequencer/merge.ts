@@ -2,11 +2,11 @@ import { recount } from '../checks/ratchet.ts'
 import type { Db } from '../store/index.ts'
 import { digestOf } from '../store/approvals.ts'
 import { keep, last as lastMerge, lastReview, record as recordMerge } from '../store/merges.ts'
-import { internal, type PlanRow } from '../store/plans.ts'
+import type { PlanRow } from '../store/plans.ts'
 import type { Step } from '../templates/pr-path.ts'
 import { classify } from './delta.ts'
 import type { Outcome } from './kind.ts'
-import { headOf, opened } from './push.ts'
+import { headOf } from './push.ts'
 import { mapOf } from './steps.ts'
 import { abortMerge, behindMain, cloned, commitMerge, conflicted, diffOf, diffSince, fetchMain, get, holds, maybe, merging, mergeMain, narrowing,
   put, recut, srcDir, theirs, unmerged } from './workspace.ts'
@@ -22,7 +22,7 @@ import { abortMerge, behindMain, cloned, commitMerge, conflicted, diffOf, diffSi
  */
 export function freshBase(db: Db, root: string, plan: PlanRow): Outcome | null {
   const src = srcDir(root, plan.id)
-  if (!cloned(src) || shown(db, plan)) return null
+  if (!cloned(src)) return null
   if (conflicted(src)) abortMerge(src)
   const main = fetchMain(src)
   if (!behindMain(src, main)) return null
@@ -112,7 +112,7 @@ function passedDiff(db: Db, plan: number): string | null {
  */
 export function baseMoved(db: Db, root: string, plan: PlanRow): Outcome | null {
   const src = srcDir(root, plan.id)
-  if (!cloned(src) || shown(db, plan)) return null
+  if (!cloned(src)) return null
   if (conflicted(src)) return toRails(root, plan, 'base:conflict', 'the checkout has unmerged paths from a tick that stopped mid-merge')
   const main = fetchMain(src)
   if (!behindMain(src, main)) return null
@@ -134,9 +134,4 @@ function toRails(root: string, plan: PlanRow, span: 'base:stale' | 'base:conflic
   }
   put(root, plan.id, LAPPED, `${laps}${span}\n`)
   return { outcome: 'pass', spans: [span], note: `${note}; back to the rails to take main`, rewind: 3 }
-}
-
-/** A stranger's pull request that is already open is not merged into: their main moving is theirs to settle. */
-function shown(db: Db, plan: PlanRow): boolean {
-  return !internal(plan) && opened(db, plan.id) !== null
 }

@@ -44,7 +44,7 @@ interface Text {
 export type Gh = (args: string[]) => string
 
 /** One run at the head as the sign-off card shows it; `gates` is whether the verdict counts it; `base`, the `<job>: <step>` red at the last green head too. */
-export interface Board { workflow: string; status: string; conclusion: string; gates: boolean; base?: string[] }
+export interface Board { workflow: string; status: string; conclusion: string; gates: boolean; base?: string[]; url?: string }
 
 export function ciGreen(head: Head, text: Text, touched: string[], gh: Gh = shell): Verdict {
   return judge(head, text, touched, gh).verdict
@@ -58,7 +58,7 @@ export function judge(head: Head, text: Text, touched: string[], gh: Gh = shell)
   const listed = list(head, gh)
   const at = listed?.filter((r) => r.headSha === head.sha) ?? []
   const judged = new Set(mine(at, touched))
-  const board = at.map((r) => ({ workflow: r.workflowName, status: r.status, conclusion: r.conclusion, gates: judged.has(r) }))
+  const board = at.map((r) => ({ workflow: r.workflowName, status: r.status, conclusion: r.conclusion, gates: judged.has(r), url: r.url }))
   return { verdict: verdictOf(head, text, listed === null ? null : [...judged]), board }
 }
 

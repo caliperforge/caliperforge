@@ -308,9 +308,6 @@
   "tests/voice.test.ts": {
     "prepare": 1
   },
-  "tests/world.ts": {
-    "prepare": 11
-  },
   "theirs.ts": {
     "lines": 105,
     "silent-catch": 1

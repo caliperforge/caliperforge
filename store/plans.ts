@@ -158,6 +158,10 @@ export function dropPlan(db: Db, id: number): void {
   db.prepare('DELETE FROM plans WHERE id = ?').run(id)
 }
 
+export function dropPipes(db: Db, names: string[]): void {
+  db.prepare(`DELETE FROM pipes WHERE name IN (${names.map(() => '?').join(', ')})`).run(...names)
+}
+
 export function relane(db: Db, plan: number, lane: PlanRow['lane']): void {
   db.prepare('UPDATE plans SET lane = ? WHERE id = ?').run(lane, plan)
 }

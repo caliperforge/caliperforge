@@ -1,5 +1,6 @@
+import { parse } from '../rails/diff.ts'
 import { BLOCK } from './learn.ts'
-import { maybe } from './workspace.ts'
+import { diffOf, maybe } from './workspace.ts'
 
 const OVERRULED = /^[ \t]*((?:G\d+[ \t,]*)+)overruled:[ \t]*\S/gm
 
@@ -17,6 +18,9 @@ export function unruled(root: string, plan: number, sha: string, summary = ''): 
   const overruled = [rulings, maybe(root, plan, 'issue.md') ?? '']
     .flatMap((text) => [...text.matchAll(OVERRULED)].flatMap(([, ids = '']) => ids.match(/G\d+/g) ?? []))
   const ruled = findings.filter((f) => accepted.includes(f.id) || overruled.includes(f.id))
-  const open = findings.filter((f) => !ruled.includes(f) && Number(/alt="P(\d)"/.exec(f.text)?.[1] ?? 0) <= 2)
+  const paths = new Map([...(maybe(root, plan, 'findings.paths') ?? '').matchAll(/^(G\d+) (.+)$/gm)].map(([, id = '', path = '']) => [id, path]))
+  const diffed = paths.size === 0 ? [] : parse(diffOf(root, plan)).map((f) => f.path)
+  const off = (id: string): boolean => paths.has(id) && !diffed.includes(paths.get(id) ?? '')
+  const open = findings.filter((f) => !ruled.includes(f) && !off(f.id) && Number(/alt="P(\d)"/.exec(f.text)?.[1] ?? 0) <= 2)
   return { found: findings.length, ruled: ruled.map((f) => f.id), open: open.map((f) => f.id) }
 }

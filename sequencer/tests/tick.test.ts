@@ -21,7 +21,7 @@ import { blocked, kernel } from '../steps.ts'
 import { checkout, diffOf, doneIds, get, gitDiff, narrowing, put, snapshot, srcDir } from '../workspace.ts'
 import { GREEN } from '../base.ts'
 import { record } from '../../store/files.ts'
-import { eventsOf, newestMode, runRows } from '../../store/events.ts'
+import { allEvents, eventsOf, newestMode, runRows } from '../../store/events.ts'
 import { overrule, verdictRows } from '../../store/verdict.ts'
 import { record as signal } from '../../store/signals.ts'
 import { benchPacket } from '../../runner/packet.ts'
@@ -398,14 +398,23 @@ test('a review refusal rebuilds with every span, then escalates', async () => {
   expect(plan(w.db, 1)).toMatchObject({ step: 4, retries: 1, state: 'blocked_on_ceo' })
 })
 
+const BLOCK = `Decide: may the pull request go upstream?
+Options: (a) send it: the maintainer sees it; (b) hold it: the plan waits
+Recommend: (a), the diff is signed off
+If no answer by 2026-09-28 09:00: the plan stays held`
+
 test('a review needs_ceo holds for the coo with its question', async () => {
   const w = world()
   approve(w.db, w.target)
   for (let at = 0; at < 4; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
-  const fired = (await tick(w.db, w.root, stub(CARRIED, 0, `${WORDS}\n\n---\noutcome: needs_ceo\n---\n`)))[0]
+  const fired = (await tick(w.db, w.root, stub(CARRIED, 0, `${WORDS}\n\n${BLOCK}\n\n---\noutcome: needs_ceo\n---\n`)))[0]
   expect(fired).toMatchObject({ step: 4, outcome: 'needs_ceo', state: 'blocked_on_ceo' })
-  expect(holdOf(w.db, 1)).toEqual({ held_by: 'coo', held_why: `code_quality needs_ceo: ${WORDS}` })
-  expect(w.db.prepare('SELECT message FROM verdicts WHERE plan = 1 AND step = 4').get()).toEqual({ message: WORDS })
+  expect(holdOf(w.db, 1)).toEqual({ held_by: 'coo', held_why: `code_quality needs_ceo: ${`${WORDS}\n\n${BLOCK}`.replace(/\s+/g, ' ')}` })
+  expect(w.db.prepare('SELECT message FROM verdicts WHERE plan = 1 AND step = 4').get()).toEqual({ message: `${WORDS}\n\n${BLOCK}` })
+  const plan1 = allEvents(w.db).filter((e) => e.plan === 1)
+  expect(plan1.filter((e) => e.actor === 'code_quality').map((e) => e.outcome)).toEqual(['escalate'])
+  expect(plan1.filter((e) => e.kind !== 'director' && e.outcome === 'needs_ceo')).toEqual([])
+  expect(eventsOf(w.db, 1, 'director')).toHaveLength(1)
 })
 
 test('a new refusal after a rebuild goes round; a repeat stops', async () => {
@@ -712,15 +721,17 @@ test('step 3 rehearses before review; step 6 opens no second', async () => {
   const sent: string[] = []
   const branches: string[] = []
   const runs = runsOn(w.root, 1)
-  const wire = watched(sent, w.root, 1, (args) => { branches.push(String(args[args.indexOf('--branch') + 1])); return runs(args) })
+  const wire = { ...watched(sent, w.root, 1, (args) => { branches.push(String(args[args.indexOf('--branch') + 1])); return runs(args) }),
+    forward: (fork: string, base: string) => void sent.push(`forward ${fork} ${base}`) }
   for (let at = 0; at < 4; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
   expect(plan(w.db, 1).step).toBe(4)
+  const moved = `forward caliperforge/widget ${get(w.root, 1, 'base.sha').trim()}`
   const next = `send src ${tip(w.root, 1)}:refs/heads/widget-12-a1-next`
-  expect(sent).toEqual([next, 'rehearse caliperforge/widget widget-12-a1-next'])
+  expect(sent).toEqual([moved, next, 'rehearse caliperforge/widget widget-12-a1-next'])
 
   for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
   expect(plan(w.db, 1).step).toBe(7)
-  expect(sent.slice(2)).toEqual([next])
+  expect(sent.slice(3)).toEqual([moved, next])
   expect(branches).toEqual(['main', 'main', 'widget-12-a1-next'])
 })
 

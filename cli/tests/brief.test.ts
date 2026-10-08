@@ -136,7 +136,8 @@ test('D1 director line: decided, handed up, rate over 7 d', () => {
   event(db, 'coo_lite', 'coo_lite', '2026-09-14 12:00:00')
   event(db, 'coo_lite', 'coo_lite', IN, 1, 'needs_ceo')
   event(db, 'coo_lite', 'coo_lite', '2026-09-12 12:00:00', 1, 'needs_ceo')
-  expect(handUpLine(handUps(db, NOW))).toBe('director: 2 decided, 1 handed up (33%) over 7 d\n')
+  event(db, 'director', 'director', IN, 1, 'needs_coo')
+  expect(handUpLine(handUps(db, NOW))).toBe('director: 2 decided, 2 handed up (50%) over 7 d\n')
 })
 
 test('D2 no director events prints 0%, not NaN%', () => {
@@ -148,6 +149,7 @@ test('D3 events of another kind count in neither number', () => {
   plan(db, 1, 'running', 25)
   event(db, 'coo_lite', 'retry')
   event(db, 'coo_lite', 'stuck', IN, 1, 'needs_ceo')
+  event(db, 'coo_lite', 'stuck', IN, 1, 'needs_coo')
   expect(handUps(db, NOW)).toEqual({ decided: 0, up: 0 })
 })
 
@@ -159,6 +161,7 @@ test('directorSection by day', () => {
   event(db, 'director', 'director', IN, 1)
   event(db, 'coo_lite', 'coo_lite', '2026-09-20 10:00:00', 2, 'needs_ceo')
   event(db, 'director', 'director', '2026-09-18 10:00:00', 3)
+  event(db, 'director', 'director', '2026-09-19 10:00:00', 3, 'needs_coo')
   event(db, 'director', 'retry')
   event(db, 'director', 'director', '2026-09-13 12:00:00')
   for (const verb of ['ask_coo', 'retry'] as const) {
@@ -168,7 +171,7 @@ test('directorSection by day', () => {
   expect(directorSection(directorDays(db, NOW), NOW)).toBe('director by day, last 7 d\n' +
     `  2026-09-14\t${none}  2026-09-15\t${none}  2026-09-16\t${none}  2026-09-17\t${none}` +
     '  2026-09-18\t1 seen\t1 decided\t0 to fixer\t0 to ceo\theld 0 missed 0\n' +
-    `  2026-09-19\t${none}` +
+    '  2026-09-19\t1 seen\t0 decided\t0 to fixer\t1 to ceo\theld 0 missed 0\n' +
     '  2026-09-20\t2 seen\t1 decided\t1 to fixer\t1 to ceo\theld 1 missed 1\n')
 })
 

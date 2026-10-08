@@ -32,7 +32,7 @@
   table: runs
   column: at
   where: seat = 'python_specialist' AND mode = 'review'
-  when: SELECT 1 FROM plans p JOIN plan_files f ON f.plan = p.id WHERE p.step > 4 AND f.stray = 0 AND f.path GLOB '*.py'
+  when: SELECT 1 FROM plans p JOIN plan_files f ON f.plan = p.id WHERE p.step > 4 AND f.stray = 0 AND f.path GLOB '*.py' AND p.queued_at >= $since
   gap: 7d
 - name: ruby_review
   table: runs
@@ -44,7 +44,7 @@
   table: runs
   column: at
   where: seat = 'rust_specialist' AND mode = 'review'
-  when: SELECT 1 FROM plans p JOIN plan_files f ON f.plan = p.id WHERE p.step > 4 AND f.stray = 0 AND f.path GLOB '*.rs'
+  when: SELECT 1 FROM plans p JOIN plan_files f ON f.plan = p.id WHERE p.step > 4 AND f.stray = 0 AND f.path GLOB '*.rs' AND p.queued_at >= $since
   gap: 7d
 - name: go_review
   table: runs
@@ -99,7 +99,7 @@
   table: runs
   column: at
   where: seat = 'web_specialist'
-  while: EXISTS (SELECT 1 FROM plans WHERE origin GLOB 'https://github.com/caliperforge/atelier-web/*')
+  while: EXISTS (SELECT 1 FROM plans WHERE origin GLOB 'https://github.com/caliperforge/atelier-web/*' AND state IN ('queued', 'running', 'blocked_on_ceo') AND queued_at >= $since)
 - name: design
   table: runs
   column: at
@@ -128,7 +128,7 @@
   table: runs
   column: at
   where: seat = 'lua_specialist'
-  when: SELECT 1 FROM plans p JOIN plan_files f ON f.plan = p.id WHERE p.step > 2 AND f.stray = 0 AND f.path GLOB '*.lua'
+  when: SELECT 1 FROM plans p JOIN plan_files f ON f.plan = p.id WHERE p.step > 2 AND f.stray = 0 AND f.path GLOB '*.lua' AND p.queued_at >= $since
 - name: rust_specialist
   table: runs
   column: at
@@ -237,6 +237,11 @@
   table: events
   column: at
   where: kind = 'close' AND message GLOB 'landed [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]*'
+- name: handback_not_done
+  table: verdicts
+  column: id
+  where: rail_id = 'completion-audit' AND outcome = 'refuse' AND message LIKE '%Not done%'
+  expected: 0
 - name: ruling_files
   table: events
   column: at

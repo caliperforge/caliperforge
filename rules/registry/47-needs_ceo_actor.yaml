@@ -1,0 +1,6 @@
+- name: needs_ceo_actor
+  table: events
+  column: at
+  where: outcome = 'needs_ceo' AND actor <> 'coo'
+  gap: 7d
+  expected: 0

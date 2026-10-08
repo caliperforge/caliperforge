@@ -1090,6 +1090,19 @@ test('D1 a stale senior row on an accepted head passes ready', async () => {
   expect(newest(w.db, 1)).toMatchObject({ state: 'ready', bot_clean: 1 })
 })
 
+test('D1 D2 a ruling after senior raises bot_clean at the tick', async () => {
+  let ids = 'G11'
+  const [w, lap] = await atReady(accepting(['G11', 'G12'], (sha) => ruling(sha, ids)))
+  await lap()
+  expect(plan(w.db, 1)).toMatchObject({ step: 6, wait_reason: 'ready_proof' })
+  expect(newest(w.db, 1)?.bot_clean).toBe(0)
+  ids = 'G11, G12'
+  put(w.root, 1, 'rulings.md', ruling(head(srcDir(w.root, 1), ['rev-parse', 'HEAD']), ids))
+  expect((await lap())?.note).toMatch(/the COO accepted G11, G12$/)
+  expect(plan(w.db, 1).step).toBe(7)
+  expect(newest(w.db, 1)?.bot_clean).toBe(1)
+})
+
 test('D2 an outside bot score under 5 at the head still refuses', async () => {
   const [w, lap] = await staleSenior()
   signal(w.db, { repo: 'acme/widget', pr: 1, kind: 'bot_review', author: 'greptile', at: new Date().toISOString(),

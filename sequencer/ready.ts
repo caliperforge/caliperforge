@@ -19,6 +19,7 @@ import { cloned, diffOf, FORK, get, headSha, maybe, put, repoName, srcDir } from
 import { homeOf } from './home.ts'
 import { learned } from './learn.ts'
 import { baseMoved } from './merge.ts'
+import { stacked } from './stacked.ts'
 import { unruled } from './unruled.ts'
 
 export const CREDITS = 50
@@ -53,6 +54,8 @@ export function readyGate(db: Db, root: string, plan: PlanRow, wire?: Wire): Out
   if (row.state === 'built' || row.diff_digest !== digestOf(diffOf(root, plan.id))) {
     return { outcome: 'pass', spans: ['ready.unproven'], rewind: 3, note: 'the head\'s bytes are not the ones senior passed; back to the rails' }
   }
+  const stack = stacked(root, plan, repo, (wire ?? WIRE).merged)
+  if (stack !== null) return stack
   const waiting = forkCi(db, root, plan, repo, wire)
   if (waiting !== null) return waiting
   const bot = internal(plan) ? '' : greptile(db, root, plan, repo, wire ?? WIRE, row.diff_digest)

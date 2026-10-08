@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
-import { checkout, cloned, diffOf, drop, maybe, planDir, PR_HEAD, put, srcDir } from '../workspace.ts'
+import { checkout, cloned, diffOf, drop, maybe, planDir, PR_HEAD, put, recut, srcDir } from '../workspace.ts'
 import { world } from './world.ts'
 
 const BRANCH = 'widget-12-a1'
@@ -99,6 +99,24 @@ test('no base.sha still reopens on the pr.head branch', () => {
   expect(git(again.dir, ['rev-parse', '--abbrev-ref', 'HEAD']).trim()).toBe('asm/1-a3')
   expect(existsSync(join(again.dir, 'added.ts'))).toBe(true)
   expect(maybe(w.root, 1, 'base.sha')).toBe(`${first.base}\n`)
+})
+
+test('D3 a recut pr.head plan reopens on its branch at main', () => {
+  const w = world()
+  sent(w.root)
+  checkout(w.root, 1, 'acme/widget', BRANCH)
+  const upstream = join(w.root, 'remotes', 'acme/widget')
+  writeFileSync(join(upstream, 'later.ts'), 'export const later = 1\n')
+  git(upstream, ['add', '-A'])
+  git(upstream, ['commit', '-qm', 'main moves on'])
+  const main = git(upstream, ['rev-parse', 'HEAD']).trim()
+  recut(w.root, 1)
+
+  const again = checkout(w.root, 1, 'acme/widget', BRANCH)
+  expect(again.branch).toBe('asm/1-a3')
+  expect(git(again.dir, ['rev-parse', 'HEAD']).trim()).toBe(main)
+  expect(maybe(w.root, 1, 'base.sha')).toBe(`${main}\n`)
+  expect(existsSync(join(again.dir, 'added.ts'))).toBe(false)
 })
 
 test('pr.head wins over a pushed branch of the same name', () => {

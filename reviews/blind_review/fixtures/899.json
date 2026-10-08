@@ -1,0 +1,10 @@
+{
+  "repo": "https://github.com/caliperforge/solana-keychain",
+  "base": "44b479df245167ca3b3a4e04d6d907146306d342",
+  "head": "9e2feff7178a25fa2f379fa7877b19a0a713ad1c",
+  "expected": [
+    "G4201372238 kotlin/src/main/kotlin/com/solana/keychain/SolanaSigner.kt:96",
+    "G4201372246 .github/workflows/kotlin-ci.yml:24",
+    "G4201372252 justfile:401"
+  ]
+}

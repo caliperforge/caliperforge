@@ -1,0 +1,11 @@
+{
+  "repo": "https://github.com/caliperforge/pay-kit",
+  "base": "262c6b9a9f8b9d7b339e1ea83fe1b5a852f90ff5",
+  "head": "85236297027b999d49fa7c1d60a442d2ba0de934",
+  "expected": [
+    "G4187711379 harness/kotlin-protocol-runner/src/main/kotlin/com/solana/paykit/protocolrunner/Main.kt:74",
+    "G4187711399 harness/kotlin-protocol-runner/src/main/kotlin/com/solana/paykit/protocolrunner/Main.kt:70",
+    "G4192451832 harness/kotlin-protocol-runner/src/main/kotlin/com/solana/paykit/protocolrunner/Main.kt:74",
+    "G4192451856 harness/protocol-runners/kotlin.json:3"
+  ]
+}

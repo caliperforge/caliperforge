@@ -17,7 +17,7 @@ import { graded, others, record, type SignalRow } from '../../store/signals.ts'
 import { capture } from '../capture.ts'
 import { approvedPlan } from '../approve.ts'
 import { approve as approvePublish } from '../card.ts'
-import type { Outcome } from '../kind.ts'
+import type { Fired, Outcome } from '../kind.ts'
 import { COMMIT, headOf, prBody, push, sent as next, type Wire } from '../push.ts'
 import { started } from '../signals.ts'
 import { unanswered } from '../ready.ts'
@@ -207,6 +207,23 @@ test('a round on an open pr pushes its branch, opening no other', async () => {
   advance(w.db, plan(w.db, 1), 8)
   expect(published(w, wire)).toMatchObject({ outcome: 'pass', note: `pushed widget-12-a1 onto ${URL}` })
   expect(sent.slice(2)).toEqual(['send src widget-12-a1', 'unrehearse caliperforge/widget widget-12-a1-next'])
+})
+
+test('D1 D2 an open pr round conflicting with main goes back', { timeout: 90_000 }, async () => {
+  const w = await pushed()
+  const sent: string[] = []
+  const wire = watched(sent, w.root, 1)
+  const upstream = join(w.root, 'remotes/acme/widget')
+  rewind(w.db, 1, 4)
+  writeFileSync(join(upstream, 'src/hello.ts'), 'export const hello = (): string => "upstream"\n')
+  execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qam', 'main moves on'], { cwd: upstream })
+  const fired: Fired[] = []
+  for (let at = 0; at < 6 && !fired.some((f) => f.step === 6); at += 1) fired.push(...await tick(w.db, w.root, stub(CARRIED), undefined, () => pr(), wire))
+  expect(fired.find((f) => f.step === 6)).toMatchObject({ outcome: 'pass', spans: ['base:conflict'] })
+  expect(plan(w.db, 1).step).toBe(3)
+  expect(sent).toEqual([])
+  expect(await tick(w.db, w.root, stub(CARRIED), undefined, () => pr(), wire)).toMatchObject([{ step: 3, outcome: 'refuse', spans: ['src/hello.ts'] }])
+  expect(plan(w.db, 1)).toMatchObject({ step: 2, state: 'running' })
 })
 
 test('a fork -next HEAD lacks is folded onto, never forced', { timeout: 90_000 }, async () => {

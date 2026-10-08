@@ -96,9 +96,6 @@
   "tests/proposal.test.ts": {
     "prepare": 3
   },
-  "tests/queue.test.ts": {
-    "prepare": 11
-  },
   "tests/record.test.ts": {
     "prepare": 5
   },

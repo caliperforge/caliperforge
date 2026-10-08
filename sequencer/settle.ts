@@ -8,7 +8,7 @@ import type { Db } from '../store/index.ts'
 import type { Taken } from '../store/leases.ts'
 import { busy } from '../store/now.ts'
 import { advance, back, end, finish, internal, needsCeo, rewind, type PipeRow, type PlanRow, waiting } from '../store/plans.ts'
-import { blipped, builds, peer, refused } from '../store/refusals.ts'
+import { blipped, peer, refused, sinceSent } from '../store/refusals.ts'
 import { draft, grow, review } from '../templates/comms.ts'
 import { builder, type Step } from '../templates/pr-path.ts'
 import { answered, check, gather } from '../templates/research.ts'
@@ -94,9 +94,9 @@ export function ceilinged(db: Db, root: string, pipe: PipeRow, plan: PlanRow, ov
     state: 'blocked_on_ceo', spans: ['ceiling'], note, stole: lease.stole }
 }
 
-/** A pr_path plan that has run `BUILDS` builds stops before the next, with every reason it was refused in director.md. */
+/** A pr_path plan that has run `BUILDS` builds since a ceo or coo last sent it round stops before the next, with every reason it was refused in director.md. */
 function overBuilt(db: Db, root: string, pipe: PipeRow, plan: PlanRow, lease: Taken): Fired | null {
-  const n = builds(db, plan.id)
+  const n = sinceSent(db, plan.id)
   if (plan.template !== 'pr_path' || plan.step !== BUILD || n < BUILDS) return null
   const note = capped(db, root, plan.id, `${String(n)} builds ran; the next waits for the director`)
   needsCeo(db, plan, note)

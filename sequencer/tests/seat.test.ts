@@ -2,13 +2,14 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import type { Packet } from '../../providers/kind.ts'
+import { benchPacket, reviewManifest } from '../../runner/packet.ts'
 import { seat } from '../../runner/rules.ts'
 import { newestMode, runRows } from '../../store/events.ts'
 import { at } from '../../templates/pr-path.ts'
 import { mechanisms } from '../drift.ts'
-import { fireLanded, ran } from '../seat.ts'
+import { blind, fireLanded, ran } from '../seat.ts'
 import { staffing } from '../staffing.ts'
-import { checkout, put } from '../workspace.ts'
+import { checkout, diffOf, put, srcDir } from '../workspace.ts'
 import { built, CARRIED, PASS, plan, stub, world } from './world.ts'
 
 async function fired(step: number, language: string | null = null): Promise<{ prompt: string; mode: unknown; root: string }> {
@@ -90,6 +91,34 @@ test('D4 an internal plan keeps code_quality at step 4', async () => {
 
 test('D3 an outside typescript plan keeps code_quality at step 4', async () => {
   expect(await reviewed('typescript')).toMatchObject({ seat: 'code_quality', mode: null })
+})
+
+function blinded(): { root: string; bench: ReturnType<typeof blind> } {
+  const w = world()
+  checkout(w.root, 1, 'acme/widget', 'widget-12-a1')
+  built(w.root, 1, 'export const two = 2')
+  put(w.root, 1, 'issue.md', 'ISSUE_MARKER\n')
+  put(w.root, 1, 'rulings.md', 'RULINGS_MARKER\n')
+  return { root: w.root, bench: blind(w.db, w.root, plan(w.db, 1)) }
+}
+
+test('D1 D2 a blind packet holds the diff and no issue or rulings', () => {
+  const { root, bench } = blinded()
+  const built = benchPacket(root, 'blind_review', bench, 't')
+  if ('refusal' in built) throw new Error(built.refusal.path)
+  expect(built.packet.cwd).toBe(srcDir(root, 1))
+  expect(built.packet.prompt).toContain(diffOf(root, 1))
+  expect(built.packet.prompt).not.toMatch(/ISSUE_MARKER|RULINGS_MARKER|^# Issue$|^# Rulings$/m)
+})
+
+test('D3 a blind bench carrying a verdict is refused', () => {
+  const { root, bench } = blinded()
+  expect(benchPacket(root, 'blind_review', { ...bench, verdict: 'v' }, 't')).toMatchObject({ refusal: { path: 'verdict' } })
+})
+
+test('D4 the blind_review manifest parses', () => {
+  expect(reviewManifest(join(import.meta.dirname, '../..'), 'blind_review'))
+    .toMatchObject({ gate: 'blind_review', step: 5, tools: ['Read'] })
 })
 
 test('D5 each moded seat has its review-mode registry entry', () => {

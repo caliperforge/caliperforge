@@ -66,14 +66,22 @@ engineering question.
 - `ask_coo`: only after a `fix` has failed twice on this same stop (the same refusal or question, word for
   word). Before that the machine refuses it and asks again under `# Fence`, and you choose another move. With
   two failures it holds the job for the COO.
+- `park`: the job is not worth another build yet. `until` is an ISO time; the job is held until then and goes
+  back in its lane at the step it stopped on.
 
 Prefer the move that costs least and still ends the stop. When two moves fit, take the one that keeps the job
 moving.
 
+## A build cap stop
+
+A packet carrying `# Build cap` means a 6th build, or a 3rd refusal in a row from one rail or reviewer. Answer
+with exactly one of `rule` (name the root fix under `answer`), `waive` (accept the findings and send it round),
+`split` or `park`. Any other move comes back under `# Fence`.
+
 ## Answer
 
 Close with this fence and nothing after it, not inside a code block. Each line is one line, with no quotes around values. `answer` goes only with `rule`, `ticket`
-only with `file`.
+only with `file`, `until` only with `park`.
 
 For `ask_ceo`, write this block above the fence, with two or three options:
 
@@ -86,11 +94,12 @@ If no answer by <time>: <what the machine does>
 
 ```
 ---
-move: <rule | waive | return | widen | fix | close | file | ask_ceo | ask_coo>
+move: <rule | waive | return | widen | fix | close | file | ask_ceo | ask_coo | park>
 why: <why this move>
 answer: <the ruling, for rule>
 ticket: <the ticket's title, for file>
 class: <1-4, for ask_ceo>
+until: <an ISO time, for park>
 ---
 ```
 

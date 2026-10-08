@@ -5,7 +5,7 @@ import type { Step } from '../templates/pr-path.ts'
 import type { Outcome } from './kind.ts'
 import { maybe, put } from './workspace.ts'
 
-/** Builds a plan runs before the next waits for the director, whatever `clear()` and `retry()` reset. */
+/** Builds a plan runs, since a ceo or coo last returned or retried it, before the next waits for the director, whatever `clear()` and `retry()` reset. */
 export const BUILDS = 5
 
 /** Refusals in a row from one rail or reviewer past the build before the plan waits for the director. */

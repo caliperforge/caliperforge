@@ -1,7 +1,8 @@
 import { expect, test } from 'vitest'
 import { eventsOf, logged, newestRun, pointers } from '../../store/events.ts'
+import { returnToLane } from '../../store/holds.ts'
 import { retry } from '../../store/plans.ts'
-import { builds, clear, fingerprint, refused } from '../../store/refusals.ts'
+import { builds, clear, fingerprint, refused, sinceSent } from '../../store/refusals.ts'
 import { tick } from '../index.ts'
 import { reasons, streak } from '../refusal.ts'
 import { maybe } from '../workspace.ts'
@@ -28,6 +29,30 @@ test('D1 a plan stops before its 6th build, after clear and retry', async () => 
     expect(plan(w.db, 1).state).toBe('blocked_on_ceo')
     expect(pointers(w.db, 'build_cap')).toEqual(Array<string>(round).fill('director.md'))
   }
+  expect(maybe(w.root, 1, 'director.md')).toBe('# Build cap\n\n5 builds ran; the next waits for the director\n')
+})
+
+test('D3 D4 a coo return lets 5 more builds run', async () => {
+  const w = world()
+  approve(w.db, w.target)
+  let fired = 0
+  const provider = stub(CARRIED, 0, undefined, (p) => { if (!p.transcript.includes('director')) fired += 1 })
+  const build = (): void =>
+    void logged(w.db, { plan: 1, kind: 'build', actor: 'typescript_specialist', outcome: 'pass', message: '', pointer: null, run: newestRun(w.db) })
+  while (builds(w.db, 1) === 0) await tick(w.db, w.root, provider)
+  for (let n = 0; n < 4; n += 1) build()
+  retry(w.db, plan(w.db, 1))
+  await tick(w.db, w.root, provider)
+  expect(pointers(w.db, 'build_cap')).toEqual(['director.md'])
+  returnToLane(w.db, 1, 'coo')
+  const before = fired
+  await tick(w.db, w.root, provider)
+  expect(fired).toBe(before + 1)
+  while (sinceSent(w.db, 1) < 5) build()
+  retry(w.db, plan(w.db, 1))
+  await tick(w.db, w.root, provider)
+  expect(plan(w.db, 1).state).toBe('blocked_on_ceo')
+  expect(pointers(w.db, 'build_cap')).toEqual(['director.md', 'director.md'])
   expect(maybe(w.root, 1, 'director.md')).toBe('# Build cap\n\n5 builds ran; the next waits for the director\n')
 })
 

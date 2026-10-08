@@ -196,6 +196,14 @@ test('the missing part is the span; one D row is its own section', () => {
   expect(on(fixture('one-case.md'))).toMatchObject({ span: '## Cases' })
 })
 
+test('D1 D2 an outside brief may carry a conventional title', () => {
+  const drifts = ask.replace('# A seat that briefs before any build', '# PayKit interface drifts')
+  const feat = brief.replace('# A seat that briefs before any build', '# feat(php): Config::fromEnv reads prefixed variables')
+  expect(shape(feat, drifts, repo, true)).toBeNull()
+  expect(shape(feat, drifts, repo)).toMatchObject({ span: '# <title>' })
+  expect(shape(brief.replace('# A seat', '# Some seat'), ask, repo, true)).toMatchObject({ span: '# <title>' })
+})
+
 test('a wrong title, dropped line or misordered part is refused', () => {
   expect(on(brief.replace('# A seat', '# Some seat'))).toMatchObject({ span: '# <title>' })
   expect(on(brief.replace('# A seat that briefs before any build\n', ''))).toMatchObject({ span: '# <title>' })

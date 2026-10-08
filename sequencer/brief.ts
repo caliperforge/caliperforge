@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { parse } from 'yaml'
 import { z } from 'zod'
 import type { PlanFile } from '../store/files.ts'
+import { CONVENTIONAL } from './conventions.ts'
 import { WHOLE } from './handout.ts'
 import { kept } from './verbatim.ts'
 
@@ -26,7 +27,7 @@ export const WIDE = 5
 export const TEMPLATE = `The brief is exactly this, in this order, and at most ${String(CEILING)} lines:
 
 \`\`\`
-# <the ask's title, unchanged>
+# <the ask's title, unchanged; on someone else's repository, a conventional-commit title for this part in their style>
 
 **What:** <one line>
 **Why:** <one line>
@@ -170,9 +171,9 @@ export function estimate(brief: string): number | null {
 }
 
 /** The span of the brief a builder cannot work from, with the ground it is turned back on; null is a brief that stands. */
-export function shape(brief: string, ask: string, src: string): Refused | null {
+export function shape(brief: string, ask: string, src: string, outside = false): Refused | null {
   const title = titleOf(brief)
-  if (title === null || title !== titleOf(ask)) return { span: '# <title>', reason: "the title is not the ask's" }
+  if (title === null || (title !== titleOf(ask) && !(outside && CONVENTIONAL.test(title)))) return { span: '# <title>', reason: "the title is not the ask's" }
   const checks: ((b: string) => Refused | null)[] =
     [order, empty, carried, cases, caps, folders, forbidden, (b) => shared(b, src), (b) => paths(b, src), (b) => ranged(b, src), (b) => kept(b, ask)]
   for (const check of checks) {

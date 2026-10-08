@@ -10,6 +10,7 @@ import { woke } from './director.ts'
 import { answer } from './finding.ts'
 import type { Fired } from './kind.ts'
 import { reprice } from './priority.ts'
+import { rescored } from './ready.ts'
 import { daily, started, weekly } from './signals.ts'
 import { type Wire } from './push.ts'
 import { due, type Entry, stuck } from './drift.ts'
@@ -40,6 +41,7 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
   if (labels !== undefined) (lines ?? []).push(...intake(db, root, labels), ...refill(db, root, labels, now))
   reap(root, terminal(db))
   reprice(db, labels)
+  rescored(db, root)
   const out: Fired[] = []
   const lanes = openPipes(db, hhmm(db, now))
     .map((pipe) => ({ pipe, routed: live(db, pipe).map((plan) => ({ plan, route: route(db, plan, now) })) }))

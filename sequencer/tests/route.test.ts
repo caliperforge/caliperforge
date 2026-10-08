@@ -168,6 +168,8 @@ test('1033 D1 D2 a listed test admits its test folder only', () => {
   for (const path of ['python/conftest.py', 'python/src/pkg/other.py']) {
     expect(refuse(src, fence, path)).toMatchObject({ origin_ref: 'seat.write_paths' })
   }
+  record(w.db, 1, listed(['tests/unit/tests/test_a.py']))
+  expect(fenceFor(w.db, 1, [BRIEF_FILES])).toEqual(['tests/unit/tests/test_a.py', 'tests'])
 })
 
 const SWIFT = ['Atelier', 'AtelierTests', 'Atelier.xcodeproj', 'swift']

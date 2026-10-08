@@ -1,0 +1,6 @@
+- name: ready_proof_stuck
+  table: events
+  column: at
+  where: kind = 'stuck' AND message LIKE '%waits: ready_proof%'
+  gap: 7d
+  expected: 0

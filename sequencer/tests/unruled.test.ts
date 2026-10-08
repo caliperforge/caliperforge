@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
-import { unruled } from '../unruled.ts'
+import { settled, unruled } from '../unruled.ts'
 import { put, srcDir } from '../workspace.ts'
 
 const SHA = 'a'.repeat(40)
@@ -102,4 +102,26 @@ test('D5 an accepted block with a bad head or no reason rules none', () => {
   const rulings = `accepted:\n  head: not-a-sha\n  ids: G1\n  reason: recorded\n\naccepted:\n  head: ${SHA.slice(0, 12)}\n  ids: G2\n  reason:\n`
   const root = at({ [`findings-${SHA}.md`]: `- G1 src/a.ts:1 ${badge(2)} x\n- G2 src/a.ts:2 ${badge(2)} y\n`, 'rulings.md': rulings })
   expect(unruled(root, 1, SHA)).toEqual({ found: 2, ruled: [], open: ['G1', 'G2'], refused: [] })
+})
+
+const fence = (rows: string): string => `---\ndone:\n${rows}---\n`
+
+test('D1 D2 D4 settled maps fixed and accepted, not unanswered', () => {
+  const root = at({ [`findings-${SHA}.md`]: `- G1 src/a.ts:1 x\n- G2 src/a.ts:2 y\n- G3 src/a.ts:3 z\n`,
+    'rulings.md': `accepted:\n  head: ${SHA.slice(0, 12)}\n  ids: G2\n  reason: recorded upstream\n`,
+    'step-2.handback.md': fence('  - id: G1\n    status: done\n    pointer: src/a.ts:3\n') })
+  expect(settled(root, 1, SHA)).toEqual(new Map([['G1', 'fixed: src/a.ts:3'], ['G2', 'accepted: recorded upstream']]))
+})
+
+test('D3 D4 settled maps an overrule line, not undone rows', () => {
+  const line = 'G4 overruled: src/a.ts:1 already refuses it'
+  const root = at({ [`findings-${SHA}.md`]: '- G4 src/a.ts:1 x\n- G5 src/a.ts:2 y\n- G6 src/a.ts:3 z\n',
+    'issue.md': `# Issue\n\n${line}\n`,
+    'step-2.handback.md': fence('  - id: G5\n    status: cannot-be-done\n    pointer: src/a.ts:2\n  - id: G6\n    status: done\n') })
+  expect(settled(root, 1, SHA)).toEqual(new Map([['G4', line]]))
+})
+
+test('D4 settled fixes nothing when the fence does not parse', () => {
+  const root = at({ [`findings-${SHA}.md`]: '- G1 src/a.ts:1 x\n', 'step-2.handback.md': fence('  - id: G1\n    status: done\n    pointer: src/a.ts:1\n  - [\n') })
+  expect(settled(root, 1, SHA)).toEqual(new Map())
 })

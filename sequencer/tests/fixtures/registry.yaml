@@ -7,9 +7,9 @@
   gap: 2d
 - name: fixer
   switch: { key: fixer.mode, value: live }
-  table: runs
+  table: events
   column: at
-  where: seat = 'fixer'
+  where: actor = 'fixer'
   gap: 2d
 - name: fix_mode
   table: runs

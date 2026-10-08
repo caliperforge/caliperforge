@@ -269,8 +269,7 @@ export function needsCeo(db: Db, plan: PlanRow, why: string | null = null): void
   db.prepare("UPDATE plans SET state = 'blocked_on_ceo', held_by = 'coo', held_why = ? WHERE id = ?").run(why?.split('\n')[0] ?? null, plan.id)
   const ceo = decision(why ?? '')
   if (!('block' in ceo)) return
-  held(db, plan.id, 'ceo', ceo.block.slice(0, ceo.block.indexOf('\n')))
-  logged(db, { plan: plan.id, kind: 'needs_ceo', actor: 'tick', outcome: 'needs_ceo', message: ceo.block, pointer: null, run: null })
+  logged(db, { plan: plan.id, kind: 'needs_ceo', actor: 'tick', outcome: 'escalate', message: ceo.block, pointer: null, run: null })
 }
 
 /** The plans whose checkout no step is coming back for. */

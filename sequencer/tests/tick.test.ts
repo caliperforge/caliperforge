@@ -11,7 +11,7 @@ import { amend, width } from '../../store/lanes.ts'
 import { holdOf, retried } from '../../store/holds.ts'
 import { current } from '../../store/now.ts'
 import { clear } from '../../store/refusals.ts'
-import { dropDeliverables, pushedRow } from '../../store/deliverables.ts'
+import { dropDeliverables, gated, newest, pushedRow } from '../../store/deliverables.ts'
 import { gates } from '../../store/approvals.ts'
 import { addTarget, setTargetState, targetRow } from '../../store/targets.ts'
 import { at, steps } from '../../templates/pr-path.ts'
@@ -21,7 +21,7 @@ import { blocked, kernel } from '../steps.ts'
 import { checkout, diffOf, doneIds, get, gitDiff, narrowing, put, snapshot, srcDir } from '../workspace.ts'
 import { GREEN } from '../base.ts'
 import { record } from '../../store/files.ts'
-import { eventsOf, newestMode, runRows } from '../../store/events.ts'
+import { allEvents, eventsOf, newestMode, runRows } from '../../store/events.ts'
 import { overrule, verdictRows } from '../../store/verdict.ts'
 import { record as signal } from '../../store/signals.ts'
 import { benchPacket } from '../../runner/packet.ts'
@@ -143,6 +143,41 @@ test('D4 a build/ file HEAD holds stays in the index', () => {
   head(dir, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'tracked jar'])
   checkout(root, 1, 'acme/widget', 'widget-12-a1')
   expect(head(dir, ['ls-files', '--', JAR])).toBe(JAR)
+})
+
+const APP = 'rust/target/debug/app'
+
+const cargoed = (): { dir: string; base: string; root: string } => {
+  const w = world()
+  const { dir, base } = checkout(w.root, 1, 'acme/widget', 'widget-12-a1')
+  mkdirSync(join(dir, 'rust/target/debug'), { recursive: true })
+  mkdirSync(join(dir, 'rust/src'), { recursive: true })
+  writeFileSync(join(dir, 'rust/src/main.rs'), 'fn main() {}\n')
+  writeFileSync(join(dir, APP), 'elf')
+  return { dir, base, root: w.root }
+}
+
+test('D2 target/ build output is not in the diff', () => {
+  const { dir, base } = cargoed()
+  const diff = gitDiff(dir, base)
+  expect(diff).toContain('rust/src/main.rs')
+  expect(diff).not.toContain('rust/target')
+})
+
+test('D3 a reused checkout drops an intent-to-add target/ file', () => {
+  const { dir, base, root } = cargoed()
+  head(dir, ['add', '-f', '--intent-to-add', APP])
+  checkout(root, 1, 'acme/widget', 'widget-12-a1')
+  expect(head(dir, ['ls-files', '--', APP])).toBe('')
+  expect(gitDiff(dir, base)).not.toContain('target/')
+})
+
+test('D4 a target/ file HEAD holds stays in the index', () => {
+  const { dir, root } = cargoed()
+  head(dir, ['add', '-f', APP])
+  head(dir, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'tracked app'])
+  checkout(root, 1, 'acme/widget', 'widget-12-a1')
+  expect(head(dir, ['ls-files', '--', APP])).toBe(APP)
 })
 
 test('a kotlin/ brief builds on the kotlin seat, diffed at base', async () => {
@@ -299,14 +334,18 @@ test('D1 D2 the same refusal after a retry stops again', async () => {
   expect(planFile(w.root, 'refusal.md')).toContain('# Stopped\n\nthe same refusal came back')
 })
 
-test('D2 a refusal repeated after an ask ruling goes round again', async () => {
-  const [, fired] = await retriedOnce((w) => { put(w.root, 1, 'ask.md', `${get(w.root, 1, 'ask.md')}\n## Ruling\n\nuse bye()\n`) })
-  expect(fired).toMatchObject({ step: 3, outcome: 'refuse', state: 'retried' })
+const capped = (w: World, fired: Fired | undefined): void => {
+  expect(fired).toMatchObject({ step: 3, outcome: 'refuse', state: 'blocked_on_ceo' })
+  expect(planFile(w.root, 'refusal.md')).not.toContain('# Stopped')
+  expect(planFile(w.root, 'director.md')).toContain('\ncompletion-audit refused it 3 times in a row\n')
+}
+
+test('D2 an ask ruling clears the repeat; the streak cap stops it', async () => {
+  capped(...await retriedOnce((w) => { put(w.root, 1, 'ask.md', `${get(w.root, 1, 'ask.md')}\n## Ruling\n\nuse bye()\n`) }))
 })
 
-test('D4 a refusal repeated after rulings.md goes round again', async () => {
-  const [, fired] = await retriedOnce((w) => { put(w.root, 1, 'rulings.md', 'use bye()\n') })
-  expect(fired).toMatchObject({ step: 3, outcome: 'refuse', state: 'retried' })
+test('D4 rulings.md clears the repeat; the streak cap stops it', async () => {
+  capped(...await retriedOnce((w) => { put(w.root, 1, 'rulings.md', 'use bye()\n'); built(w.root, 1, 'export const more = 1') }))
 })
 
 test('the bench gets a maintainer view; bad shape refuses first', async () => {
@@ -359,14 +398,23 @@ test('a review refusal rebuilds with every span, then escalates', async () => {
   expect(plan(w.db, 1)).toMatchObject({ step: 4, retries: 1, state: 'blocked_on_ceo' })
 })
 
+const BLOCK = `Decide: may the pull request go upstream?
+Options: (a) send it: the maintainer sees it; (b) hold it: the plan waits
+Recommend: (a), the diff is signed off
+If no answer by 2026-09-28 09:00: the plan stays held`
+
 test('a review needs_ceo holds for the coo with its question', async () => {
   const w = world()
   approve(w.db, w.target)
   for (let at = 0; at < 4; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
-  const fired = (await tick(w.db, w.root, stub(CARRIED, 0, `${WORDS}\n\n---\noutcome: needs_ceo\n---\n`)))[0]
+  const fired = (await tick(w.db, w.root, stub(CARRIED, 0, `${WORDS}\n\n${BLOCK}\n\n---\noutcome: needs_ceo\n---\n`)))[0]
   expect(fired).toMatchObject({ step: 4, outcome: 'needs_ceo', state: 'blocked_on_ceo' })
-  expect(holdOf(w.db, 1)).toEqual({ held_by: 'coo', held_why: `code_quality needs_ceo: ${WORDS}` })
-  expect(w.db.prepare('SELECT message FROM verdicts WHERE plan = 1 AND step = 4').get()).toEqual({ message: WORDS })
+  expect(holdOf(w.db, 1)).toEqual({ held_by: 'coo', held_why: `code_quality needs_ceo: ${`${WORDS}\n\n${BLOCK}`.replace(/\s+/g, ' ')}` })
+  expect(w.db.prepare('SELECT message FROM verdicts WHERE plan = 1 AND step = 4').get()).toEqual({ message: `${WORDS}\n\n${BLOCK}` })
+  const plan1 = allEvents(w.db).filter((e) => e.plan === 1)
+  expect(plan1.filter((e) => e.actor === 'code_quality').map((e) => e.outcome)).toEqual(['escalate'])
+  expect(plan1.filter((e) => e.kind !== 'director' && e.outcome === 'needs_ceo')).toEqual([])
+  expect(eventsOf(w.db, 1, 'director')).toHaveLength(1)
 })
 
 test('a new refusal after a rebuild goes round; a repeat stops', async () => {
@@ -673,15 +721,17 @@ test('step 3 rehearses before review; step 6 opens no second', async () => {
   const sent: string[] = []
   const branches: string[] = []
   const runs = runsOn(w.root, 1)
-  const wire = watched(sent, w.root, 1, (args) => { branches.push(String(args[args.indexOf('--branch') + 1])); return runs(args) })
+  const wire = { ...watched(sent, w.root, 1, (args) => { branches.push(String(args[args.indexOf('--branch') + 1])); return runs(args) }),
+    forward: (fork: string, base: string) => void sent.push(`forward ${fork} ${base}`) }
   for (let at = 0; at < 4; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
   expect(plan(w.db, 1).step).toBe(4)
+  const moved = `forward caliperforge/widget ${get(w.root, 1, 'base.sha').trim()}`
   const next = `send src ${tip(w.root, 1)}:refs/heads/widget-12-a1-next`
-  expect(sent).toEqual([next, 'rehearse caliperforge/widget widget-12-a1-next'])
+  expect(sent).toEqual([moved, next, 'rehearse caliperforge/widget widget-12-a1-next'])
 
   for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
   expect(plan(w.db, 1).step).toBe(7)
-  expect(sent.slice(2)).toEqual([next])
+  expect(sent.slice(3)).toEqual([moved, next])
   expect(branches).toEqual(['main', 'main', 'widget-12-a1-next'])
 })
 
@@ -987,6 +1037,51 @@ test('D2 D7 a 3/5 head with findings accepted or overruled passes', async () => 
   expect(plan(d2.db, 1).step).toBe(7)
 })
 
+/** A 0/5 whose summary links `ids` as P1 findings, with G11 and G12 accepted at an earlier head. */
+const linking = (ids: number[]) => (at: World): void => {
+  scored(at.root, 1, 0, `Confidence Score: 0/5\n\n${ids.map((n) =>
+    `1. ${P1}&nbsp;**Bug** <a href="https://github.com/caliperforge/widget/pull/1#discussion_r${String(n)}">▶</a>\n`).join('')}`)
+  put(at.root, 1, 'rulings.md', ruling('f'.repeat(40), 'G11, G12'))
+}
+
+const P1 = '<img alt="P1" src="https://greptile.com/p1.svg">'
+
+test('D3 a 0/5 linking only earlier accepted findings passes', async () => {
+  const [w, lap] = await atReady(linking([11, 12]))
+  expect((await lap())?.note).toMatch(/the COO accepted G11, G12$/)
+  expect(plan(w.db, 1).step).toBe(7)
+  expect(eventsOf(w.db, 1, 'greptile.accepted')).toEqual([{ actor: 'ready', outcome: 'pass', message: 'G11, G12' }])
+})
+
+test('D4 a 0/5 linking an unaccepted P1 refuses', async () => {
+  const [, lap] = await atReady(linking([11, 12, 13]))
+  expect(await lap()).toMatchObject({ step: 6, name: 'ready', outcome: 'refuse', spans: ['greptile:0/5'] })
+})
+
+/** An accepted head whose newest row senior wrote with `bot_clean = 0` before the ruling. */
+const staleSenior = async (): Promise<[World, () => Promise<Fired | undefined>]> => {
+  const [w, lap] = await atReady(accepting(['G11', 'G12'], (sha) => ruling(sha, 'G11, G12')))
+  const { seat, diff_digest, evidence } = newest(w.db, 1) ?? expect.fail('no deliverable row')
+  gated(w.db, { plan: 1, step: 5, seat, diff_digest, evidence },
+    { tests_pass: true, byte_identical_elsewhere: true, fork_ci_green: true, bot_clean: false, target_warm: true })
+  return [w, lap]
+}
+
+test('D1 a stale senior row on an accepted head passes ready', async () => {
+  const [w, lap] = await staleSenior()
+  expect((await lap())?.note).toMatch(/the COO accepted G11, G12$/)
+  expect(plan(w.db, 1).step).toBe(7)
+  expect(newest(w.db, 1)).toMatchObject({ state: 'ready', bot_clean: 1 })
+})
+
+test('D2 an outside bot score under 5 at the head still refuses', async () => {
+  const [w, lap] = await staleSenior()
+  signal(w.db, { repo: 'acme/widget', pr: 1, kind: 'bot_review', author: 'greptile', at: new Date().toISOString(),
+    external_id: 'outside', score: 3, plan: 1, body: FINDINGS, head: head(srcDir(w.root, 1), ['rev-parse', 'HEAD']) })
+  expect((await lap())?.spans).toContain('bot:1 ready.bot_clean')
+  expect(newest(w.db, 1)?.bot_clean).toBe(0)
+})
+
 test('D3 a 5/5 head with no findings passes', async () => {
   const [w, lap] = await atReady((at) => { scored(at.root, 1, 5, 'Confidence Score: 5/5') })
   await lap()
@@ -997,7 +1092,6 @@ test('D1 D5 D7 an open P2 at senior holds ready on ready_proof', async () => {
   const answered = CARRIED.replace(/---\n$/, '  - id: G12\n    status: done\n    pointer: src/hello.ts:1\n---\n')
   for (const grade of [
     accepting(['G11', 'G12', 'G13'], (sha) => ruling(sha, 'G11, G12')),
-    accepting(['G11', 'G12'], () => ruling('f'.repeat(40), 'G11, G12')),
     accepting(['G11', 'G12'], (sha) => ruling(sha, 'G11'), answered),
     accepting(['G11'], () => 'G11 overruled:\n'),
   ]) {

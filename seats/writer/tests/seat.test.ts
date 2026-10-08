@@ -15,7 +15,7 @@ test('D1: the manifest holds Read and no write tool or path', () => {
 })
 
 test('D2: the roster carries the writer, loaded as a rules row', () => {
-  expect(rules(root).find((r) => r.id === 'writer')).toMatchObject({ kind: 'card', path: 'rules/roster.yaml' })
+  expect(rules(root).find((r) => r.id === 'writer')).toMatchObject({ kind: 'card', path: 'rules/roster/writer.yaml' })
 })
 
 test('D6: the items fence, each status, no "Read nothing else"', () => {

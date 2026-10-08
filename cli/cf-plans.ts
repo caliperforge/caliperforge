@@ -1,7 +1,9 @@
 import type { Command } from 'commander'
 import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { hold, unhold } from '../sequencer/hold.ts'
-import { afresh, reap } from '../sequencer/workspace.ts'
+import { opened } from '../sequencer/rule.ts'
+import { afresh, cloned, fetchMain, git, MAIN, planDir, reap } from '../sequencer/workspace.ts'
 import { blocked, parked, WAITING } from '../sequencer/steps.ts'
 import { decision } from '../store/ask.ts'
 import { logged } from '../store/events.ts'
@@ -10,7 +12,7 @@ import type { Db } from '../store/index.ts'
 import { closed, release, retried } from '../store/holds.ts'
 import { hhmm, lanes } from '../store/lanes.ts'
 import { holder } from '../store/leases.ts'
-import { held, holderOf, HOLDERS, planById, terminal } from '../store/plans.ts'
+import { held, holderOf, HOLDERS, originRef, planById, terminal } from '../store/plans.ts'
 import { until } from '../store/until.ts'
 import { laneLine, open as openPlans, runsOf, section, verdictsOf } from './brief.ts'
 import type { Cli } from './cf-lanes.ts'
@@ -126,8 +128,12 @@ function holds(cf: Command, { root, db, out }: Cli): void {
     .option('--to <step>', 'an earlier step to resume at, retries and signed head cleared')
     .action((id: string, options: { by: string; to?: string }) => {
       const to = options.to === undefined ? undefined : Number(options.to)
-      const step = unhold(db(), root, Number(id), holderOf(options.by), to)
+      const by = holderOf(options.by)
+      const handle = db()
+      const missed = opened(handle, root, Number(id))
+      const step = unhold(handle, root, Number(id), by, to)
       out(`plan ${id} queued at step ${String(step)}\n`)
+      if (missed.length > 0) out(`  not in the checkout: ${missed.join(', ')}\n`)
     })
 }
 
@@ -190,7 +196,23 @@ function parks(cf: Command, { root, db, out }: Cli): void {
     })
 }
 
-function closes(cf: Command, { db, out }: Cli): void {
+function landing(handle: Db, root: string, plan: number, sha: string): { sha: string; url: string } {
+  const ref = originRef(planById(handle, plan))
+  if (ref === null) throw new Error(`plan ${String(plan)} names no issue of ours to land`)
+  const dir = join(planDir(root, plan), 'src')
+  if (!cloned(dir)) throw new Error(`plan ${String(plan)} has no checkout to read main in`)
+  fetchMain(dir)
+  let full: string
+  try {
+    full = git(dir, ['rev-parse', '--verify', `${sha}^{commit}`]).trim()
+    git(dir, ['merge-base', '--is-ancestor', full, MAIN])
+  } catch {
+    throw new Error(`${sha} is not on main`)
+  }
+  return { sha: full, url: `https://github.com/${ref.repo}/commit/${full}` }
+}
+
+function closes(cf: Command, { root, db, out }: Cli): void {
   cf.command('files').argument('<plan>').argument('<verb>', VERBS.join(', ')).argument('<path>')
     .requiredOption(...BY)
     .option('--why <text>', 'why the list changes')
@@ -206,12 +228,16 @@ function closes(cf: Command, { db, out }: Cli): void {
     .requiredOption('--why <text>', 'why it is closed')
     .requiredOption(...BY)
     .option('--as <state>', 'refused or done', 'refused')
-    .action((id: string, options: { why: string; by: string; as: string }) => {
+    .option('--landed <sha>', 'the commit on main the plan landed as')
+    .action((id: string, options: { why: string; by: string; as: string; landed?: string }) => {
       const by = holderOf(options.by)
       if (options.as !== 'refused' && options.as !== 'done') throw new Error(`--as takes refused or done, not ${options.as}`)
+      if (options.landed !== undefined && options.as !== 'done') throw new Error('--landed takes --as done')
       const handle = db()
-      if (holder(handle, Number(id)) !== null) throw new Error(`plan ${id} is mid-step in a live tick; close it once the tick lets go`)
-      closed(handle, Number(id), options.as, by, options.why)
+      const n = Number(id)
+      if (holder(handle, n) !== null) throw new Error(`plan ${id} is mid-step in a live tick; close it once the tick lets go`)
+      const landed = options.landed === undefined ? null : landing(handle, root, n, options.landed)
+      closed(handle, n, options.as, by, options.why, landed)
       out(`plan ${id} ${options.as}\n`)
     })
 }

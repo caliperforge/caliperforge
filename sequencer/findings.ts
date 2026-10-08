@@ -11,6 +11,8 @@ export interface Rehearsal { root: string; list: Read }
 export function rehearsed({ root, list }: Rehearsal, plan: number, fork: string, pr: number, all: Signal[]): Signal[] {
   const bots = all.filter((s) => s.kind === 'bot_review')
   const comments = bots.length === 0 ? [] : inline(fork, pr, list)
+  const paths = comments.filter((c) => BOT.test(c.user.login)).map((c) => `G${String(c.id)} ${c.path}\n`).join('')
+  if (paths !== '') put(root, plan, 'findings.paths', paths)
   return bots.map((s) => {
     const head = typeof s.head === 'string' ? carried(root, plan, s.head) : null
     const found = comments.filter((c) => BOT.test(c.user.login) && c.original_commit_id === s.head)

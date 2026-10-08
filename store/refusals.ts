@@ -9,7 +9,7 @@ export const ROUNDS = 6
 export const BLIPS = 3
 
 /** The first step that runs anything of main's. */
-const BUILD = 2
+export const BUILD = 2
 
 export type Why = 'again' | 'shared' | 'repeat' | 'unchanged' | 'spent' | 'blips'
 
@@ -95,6 +95,17 @@ export function briefRefusals(db: Db, now: Date): { day: string; span: string | 
 
 export function refusalsOf(db: Db, plan: number): number {
   return (db.prepare('SELECT count(*) AS n FROM refusals WHERE plan = ? AND blip = 0').get(plan) as { n: number }).n
+}
+
+/** Builds that fired a model on the plan, however often a person cleared or retried it. */
+export function builds(db: Db, plan: number): number {
+  return db.prepare("SELECT count(*) FROM events WHERE plan = ? AND kind = 'build' AND run IS NOT NULL").pluck().get(plan) as number
+}
+
+/** Every refusal the plan had, newest first, cleared or not, blips left out. */
+export function refusalRows(db: Db, plan: number): { step: number; span: string | null; note: string | null }[] {
+  return db.prepare('SELECT step, span, note FROM refusals WHERE plan = ? AND blip = 0 ORDER BY id DESC')
+    .all(plan) as { step: number; span: string | null; note: string | null }[]
 }
 
 /** The diff of the plan's newest refusal at `step`, cleared or not: a ruling clears refusals, and the diff is unchanged by it. */

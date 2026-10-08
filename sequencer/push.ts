@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { parse as yaml } from 'yaml'
 import { z } from 'zod'
 import { closeIssue, commentIssue, fileIssue, gh, issueComments, forward, openPr, rehearse, review, unrehearse, type IssueComment, type Read } from '../cli/gh.ts'
+import { CARD } from '../cli/queue.ts'
 import { alerter } from '../cli/watch.ts'
 import { judge, MISSING, PENDING, shell, type Board, type Gh } from '../rails/ci-green/index.ts'
 import { parse } from '../rails/diff.ts'
@@ -17,7 +18,7 @@ import { internal, originIssue, originRef, type PlanRow } from '../store/plans.t
 import { profile, type Profile } from '../store/profile.ts'
 import { freed, took, waitsFor } from '../store/slot.ts'
 import { GREEN, onBase } from './base.ts'
-import { CHECKS, waiting, type Check, type Target } from './card.ts'
+import { CHECKS, waiting, type Check, type Row, type Target } from './card.ts'
 import { npm } from './checks.ts'
 import { bind, prMessage, signedAt } from './folded.ts'
 import { red } from './failures.ts'
@@ -398,7 +399,7 @@ export function push(db: Db, root: string, plan: PlanRow, wire: Wire = WIRE): Ou
     squash(root, plan.id, rules, prMessage(title(root, plan.id), text, rules))
     bind(root, plan.id, headOf(root, plan.id).sha, signed)
   }
-  const checks = [...CHECKS, size(target.repo), prosed(title(root, plan.id), text), merging(target.repo, wire.merged), ...(wire.card ?? [])]
+  const checks = [...CHECKS, size(target.repo), prosed(title(root, plan.id), text), titled, merging(target.repo, wire.merged), ...(wire.card ?? [])]
   const card = waiting(db, root, plan.id, signed, target, checks)
   if (card !== null) return card
   wire.send(head.dir, head.branch)
@@ -462,6 +463,14 @@ function commitWork(dir: string, message: string | null): void {
 
 export function title(root: string, plan: number): string {
   return titleOf(root, plan) ?? `plan ${String(plan)}`
+}
+
+function titled(...[, root, plan, target]: Parameters<Check>): Row {
+  const lines = (maybe(root, plan, 'ask.md') ?? '').split('\n')
+  const theirs = /^#{1,3}\s+(.*)$/m.exec(lines.slice(lines.findIndex((l) => l.includes(CARD)) + 1).join('\n'))?.[1]?.trim()
+  const mine = title(root, plan)
+  const no = `#${String(target.issue_no)}'s title`
+  return mine === theirs ? { check: 'title', ok: false, says: `"${mine}" is ${no}` } : { check: 'title', ok: true, says: `not ${no}` }
 }
 
 const TEST = /(^|\/)(tests?|spec|__tests__)\/|[._](test|spec)\.|Tests?\./

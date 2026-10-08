@@ -64,7 +64,7 @@ VALUES
   ('checks', 'rail', 'rules/rails.yaml', 'b46b445806d399b61887a5259eb0a6893444efcbe5acf2e6dd534507bc0882f3', '2026-09-22'),
   ('ci-green', 'rail', 'rules/rails.yaml', 'b46b445806d399b61887a5259eb0a6893444efcbe5acf2e6dd534507bc0882f3', '2026-09-17'),
   ('ready', 'rail', 'rules/rails.yaml', 'b46b445806d399b61887a5259eb0a6893444efcbe5acf2e6dd534507bc0882f3', '2026-09-17'),
-  ('brief_writer', 'card', 'rules/roster/brief_writer.yaml', 'a16966cc5c82011a816a3a9570031a26771a72f278c6a09dc10777c44a2e227f', '2026-09-17'),
+  ('brief_writer', 'card', 'rules/roster/brief_writer.yaml', '35c2e3640c7dcd43cd695105941b6690580219fae62c327501bc8c9b110aaab8', '2026-09-17'),
   ('director', 'card', 'rules/roster/director.yaml', 'efe9da3ad097300d8a665e53b54d34426d9b8e8926d16e7ca34962b9aaf250e3', '2026-10-04'),
   ('fixer', 'card', 'rules/roster/fixer.yaml', 'e77b7a291c81dfa4ca72c8adcb2d4a1a1840a477d9fdf52d542172425a6ce575', '2026-09-25'),
   ('go_specialist', 'card', 'rules/roster/go_specialist.yaml', '82e7a06c787e46c9e188ac044522059a2fdbf9ae154942a60e9cd52fe5924707', '2026-09-24'),

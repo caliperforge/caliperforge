@@ -50,7 +50,9 @@ before you answer.
 
 On someone else's repository the ask opens with our target card and their issue follows as context.
 The card is the scope. Carry what it says the other implementations do, and what we have said on
-their threads, into `## Must not break`: the reviewers see the brief, not the card.
+their threads, into `## Must not break`: the reviewers see the brief, not the card. There the brief's first
+heading is a conventional-commit title for this part in their repo's style
+(e.g. `feat(php): Config::fromEnv reads prefixed variables`): it becomes the pull request's title and is never their issue's title.
 
 When the ask mirrors, ports or matches another implementation, list that implementation's input rules
 under `## Must not break`: the values it accepts, what it does with an empty input, its bounds and the

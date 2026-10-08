@@ -801,7 +801,7 @@ test('D2: two refused moves on a cap stop go to a person', async () => {
   const posted: string[] = []
   await cooLite(db, home, row(db), inTurn([RETURN, RETURN], []), now, (t) => void posted.push(t), wire())
   expect(plans(db)).toEqual(was)
-  expect(told(db)).toEqual([{ actor: 'director', outcome: 'needs_ceo', message: 'return: refused by the fence, the plan stopped at its build cap' }])
+  expect(told(db)).toEqual([{ actor: 'director', outcome: 'needs_coo', message: 'return: refused by the fence, the plan stopped at its build cap' }])
   expect(posted).toHaveLength(1)
 })
 

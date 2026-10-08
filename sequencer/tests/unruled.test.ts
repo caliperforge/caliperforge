@@ -31,6 +31,12 @@ test('D2 an overruled line in issue.md rules a finding', () => {
   expect(unruled(root, 1, SHA)).toEqual({ found: 2, ruled: ['G1', 'G2'], open: [] })
 })
 
+test('D5 two overrules on one line rule both', () => {
+  const root = at({ [`findings-${SHA}.md`]: `- G4188597529 src/a.ts:1 ${badge(2)} x\n- G4188597530 src/a.ts:2 ${badge(2)} y\n`,
+    'issue.md': '- G4188597529 overruled: src/a.ts:1 already refuses it. G4188597530 overruled: the reference does the same\n' })
+  expect(unruled(root, 1, SHA)).toEqual({ found: 2, ruled: ['G4188597529', 'G4188597530'], open: [] })
+})
+
 test('D5 overruled with an empty reason leaves it open', () => {
   const root = at({ [`findings-${SHA}.md`]: `- G1 src/a.ts:1 ${badge(2)} x\n`, 'rulings.md': 'G1 overruled:   \n' })
   expect(unruled(root, 1, SHA)).toEqual({ found: 1, ruled: [], open: ['G1'] })

@@ -2,7 +2,7 @@ import { parse } from '../rails/diff.ts'
 import { BLOCK } from './learn.ts'
 import { diffOf, maybe } from './workspace.ts'
 
-const OVERRULED = /^[ \t]*((?:G\d+[ \t,]*)+)overruled:[ \t]*\S/gm
+const OVERRULED = /\b((?:G\d+[ \t,]*)+)overruled:(?=[ \t]*\S)/g
 
 /** A finding with no `P<n>` badge stays open, so a change to Greptile's format holds plans rather than passing them. */
 export function unruled(root: string, plan: number, sha: string, summary = ''): { found: number; ruled: string[]; open: string[] } {

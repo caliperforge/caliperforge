@@ -6,7 +6,7 @@ import { expect, test } from 'vitest'
 import { day, halted, open as openPlans, runsOf, verdictsOf } from '../../cli/brief.ts'
 import { measure, type Read } from '../../cli/measure.ts'
 import { account, parse, refuseTarget } from '../../cli/queue.ts'
-import { addPipe, advance, allPlans, clock, dropPlan, end, inWindow, laneOff, overlapWaits, parked, pipeNamed, requeue, rewind, underCap, waiting, type PipeRow, type PlanRow, type Wait } from '../../store/plans.ts'
+import { addPipe, advance, allPlans, clock, dropPlan, end, inWindow, laneOff, overlapWaits, parked, pipeNamed, requeue, resume, rewind, underCap, waiting, type PipeRow, type PlanRow, type Wait } from '../../store/plans.ts'
 import { amend, width } from '../../store/lanes.ts'
 import { holdOf, retried } from '../../store/holds.ts'
 import { current } from '../../store/now.ts'
@@ -415,6 +415,22 @@ test('a review needs_ceo holds for the coo with its question', async () => {
   expect(plan1.filter((e) => e.actor === 'code_quality').map((e) => e.outcome)).toEqual(['escalate'])
   expect(plan1.filter((e) => e.kind !== 'director' && e.outcome === 'needs_ceo')).toEqual([])
   expect(eventsOf(w.db, 1, 'director')).toHaveLength(1)
+})
+
+test('a repeat escalate on an unchanged tree logs nothing', async () => {
+  const w = world()
+  approve(w.db, w.target)
+  for (let at = 0; at < 4; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
+  const ask = `${WORDS}\n\n${BLOCK}\n\n---\noutcome: needs_ceo\n---\n`
+  const escalates = (): string[] => allEvents(w.db).filter((e) => e.plan === 1 && e.actor === 'code_quality').map((e) => e.outcome)
+  await tick(w.db, w.root, stub(CARRIED, 0, ask))
+  resume(w.db, 1)
+  expect((await tick(w.db, w.root, stub(CARRIED, 0, ask)))).toMatchObject([{ outcome: 'needs_ceo', state: 'running' }])
+  expect(escalates()).toEqual(['escalate'])
+  built(w.root, 1, 'export const two = (): number => 2')
+  await tick(w.db, w.root, stub(CARRIED, 0, ask))
+  expect(escalates()).toEqual(['escalate', 'escalate'])
+  expect(plan(w.db, 1)).toMatchObject({ state: 'blocked_on_ceo' })
 })
 
 test('a new refusal after a rebuild goes round; a repeat stops', async () => {

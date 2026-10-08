@@ -146,7 +146,7 @@
     "silent-catch": 1
   },
   "settle.ts": {
-    "lines": 244,
+    "lines": 282,
     "prepare": 3,
     "silent-catch": 2
   },

@@ -57,7 +57,7 @@ export async function stepped(db: Db, root: string, pipe: PipeRow, plan: PlanRow
     stole: lease.stole,
     ...(outcome.held === true ? { held: true as const } : {}),
   }
-  return { fired, wait: outcome.held === true || outcome.blip === true }
+  return { fired, wait: outcome.held === true || outcome.blip === true || outcome.quiet === true }
 }
 
 function seatless(plan: PlanRow, step: Step, language: string | null): Outcome | null {
@@ -209,6 +209,7 @@ function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcom
     return 'running'
   }
   if (outcome.outcome === 'needs_ceo') {
+    if (repeated(root, plan, step)) { outcome.quiet = true; return plan.state }
     needsCeo(db, plan, outcome.note)
     return 'blocked_on_ceo'
   }
@@ -220,10 +221,8 @@ function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcom
       return plan.template === 'pr_path' ? hold(db, plan.id, step.step) : 'running'
     })()
   }
-  const r = { plan: plan.id, step: step.step, fingerprint: fingerprintOf(step, outcome),
-    diff: step.step >= 3 ? digestOf(plan.template === 'comms' ? subject(root, plan.id)[1] ?? '' : diffOf(root, plan.id)) : null, moved: outcome.moved,
-    own: outcome.spans.some((s) => s.startsWith('ratchet:')) || undefined, span: outcome.spans.join(', '), note: outcome.note,
-    ticket: digestOf(`${maybe(root, plan.id, 'issue.md') ?? ''}${ruled(root, plan.id) ?? ''}${maybe(root, plan.id, 'rulings.md') ?? ''}`) }
+  const r = { plan: plan.id, step: step.step, fingerprint: fingerprintOf(step, outcome), ...digests(root, plan, step), moved: outcome.moved,
+    own: outcome.spans.some((s) => s.startsWith('ratchet:')) || undefined, span: outcome.spans.join(', '), note: outcome.note }
   const why = refused(db, r)
   const cap = streaked(db, root, plan, step)
   if (why !== 'again') stopped(root, plan.id, why)
@@ -235,6 +234,22 @@ function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcom
   // A rewind costs no retry but is recorded like any refusal, so a second identical one waits for a person.
   if (outcome.rewind !== undefined && why === 'again' && cap === null) { rewind(db, plan.id, outcome.rewind); return 'running' }
   return back(db, plan, outcome.to ?? backTo(step), cap !== null || why !== 'again' || fenced(outcome), cap ?? outcome.note)
+}
+
+/** True when the step's last escalate saw the same diff and ticket; otherwise this one is recorded as the last. */
+function repeated(root: string, plan: PlanRow, step: Step): boolean {
+  const seen = JSON.stringify(digests(root, plan, step))
+  const file = `step-${String(step.step)}.escalate.md`
+  if (maybe(root, plan.id, file) === seen) return true
+  put(root, plan.id, file, seen)
+  return false
+}
+
+function digests(root: string, plan: PlanRow, step: Step): { diff: string | null; ticket: string } {
+  return {
+    diff: step.step >= 3 ? digestOf(plan.template === 'comms' ? subject(root, plan.id)[1] ?? '' : diffOf(root, plan.id)) : null,
+    ticket: digestOf(`${maybe(root, plan.id, 'issue.md') ?? ''}${ruled(root, plan.id) ?? ''}${maybe(root, plan.id, 'rulings.md') ?? ''}`),
+  }
 }
 
 /** The note a `STREAK`th refusal in a row from one rail or reviewer past the build stops a pr_path plan with, or null. */

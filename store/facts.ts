@@ -3,10 +3,12 @@ import type { Board } from '../rails/ci-green/index.ts'
 import { parse, type FileDiff } from '../rails/diff.ts'
 import { TEST_FILE } from '../rails/test-weakened/index.ts'
 import { conventionsOf } from '../rails/test-weakened/languages.ts'
+import { listed, settled } from '../sequencer/unruled.ts'
 import { lastChecks } from './checks.ts'
 import type { Db } from './index.ts'
 import { lastReview } from './merges.ts'
 import { builds } from './refusals.ts'
+import { graded } from './signals.ts'
 
 export interface Fact { name: string; ok: boolean; says: string }
 
@@ -102,4 +104,16 @@ function ciFact(r: Board): Omit<Fact, 'name'> {
   if (reason !== undefined) return { ok: true, says: `red, expected on a fork: ${reason[0]}` }
   if (!r.gates) return { ok: true, says: 'red, not judged: the diff touches no file it runs on' }
   return { ok: false, says: `red${link}` }
+}
+
+export function greptileFacts(db: Db, root: string, plan: number, head: string): Fact[] {
+  const found = listed(root, plan, head)
+  const lines = settled(root, plan, head)
+  const row = graded(db, plan, head)
+  const score = row?.score ?? 0
+  return [
+    row === null ? { name: 'greptile', ok: false, says: 'no score' } : { name: 'greptile', ok: score >= 4 || found.length > 0, says: `${String(score)}/5` },
+    { name: 'findings', ok: true, says: `${String(found.length)} findings` },
+    ...found.map(({ id }) => ({ name: id, ok: lines.has(id), says: lines.get(id) ?? 'open' })),
+  ]
 }

@@ -34,7 +34,7 @@ export function settled(root: string, plan: number, sha: string): Map<string, st
   }))
 }
 
-function listed(root: string, plan: number, sha: string): { id: string; text: string }[] {
+export function listed(root: string, plan: number, sha: string): { id: string; text: string }[] {
   return (maybe(root, plan, `findings-${sha}.md`) ?? '').split(/^(?=- G\d+ )/m)
     .filter((text) => /^- G\d+ /.test(text)).map((text) => ({ id: text.split(' ')[1] ?? '', text }))
 }

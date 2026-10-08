@@ -17,37 +17,44 @@ const at = (files: Record<string, string>): string => {
 
 test('D6 P3 findings hold nothing; one with no badge holds', () => {
   const root = at({ [`findings-${SHA}.md`]: `- G1 src/a.ts:1 ${badge(3)} style\n- G2 src/a.ts:2 no badge here\n` })
-  expect(unruled(root, 1, SHA)).toEqual({ found: 2, ruled: [], open: ['G2'] })
+  expect(unruled(root, 1, SHA)).toEqual({ found: 2, ruled: [], open: ['G2'], refused: [] })
 })
 
 test('a badge on a later line of a body counts', () => {
   const root = at({ [`findings-${SHA}.md`]: `- G1 src/a.ts:1 **Title**\n\n${badge(3)} style\n- G2 src/a.ts:2 **Bug**\n${badge(1)}\n` })
-  expect(unruled(root, 1, SHA)).toEqual({ found: 2, ruled: [], open: ['G2'] })
+  expect(unruled(root, 1, SHA)).toEqual({ found: 2, ruled: [], open: ['G2'], refused: [] })
 })
 
 test('D2 an overruled line in issue.md rules a finding', () => {
   const root = at({ [`findings-${SHA}.md`]: `- G1 src/a.ts:1 ${badge(2)} x\n- G2 src/a.ts:2 ${badge(2)} y\n`,
     'issue.md': '# Issue\n\n## Answer from the director (2026-10-05)\n\nG1, G2 overruled: src/a.ts:1 already refuses it\n' })
-  expect(unruled(root, 1, SHA)).toEqual({ found: 2, ruled: ['G1', 'G2'], open: [] })
+  expect(unruled(root, 1, SHA)).toEqual({ found: 2, ruled: ['G1', 'G2'], open: [], refused: [] })
 })
 
 test('D5 two overrules on one line rule both', () => {
   const root = at({ [`findings-${SHA}.md`]: `- G4188597529 src/a.ts:1 ${badge(2)} x\n- G4188597530 src/a.ts:2 ${badge(2)} y\n`,
     'issue.md': '- G4188597529 overruled: src/a.ts:1 already refuses it. G4188597530 overruled: the reference does the same\n' })
-  expect(unruled(root, 1, SHA)).toEqual({ found: 2, ruled: ['G4188597529', 'G4188597530'], open: [] })
+  expect(unruled(root, 1, SHA)).toEqual({ found: 2, ruled: ['G4188597529', 'G4188597530'], open: [], refused: [] })
 })
 
 test('D5 overruled with an empty reason leaves it open', () => {
   const root = at({ [`findings-${SHA}.md`]: `- G1 src/a.ts:1 ${badge(2)} x\n`, 'rulings.md': 'G1 overruled:   \n' })
-  expect(unruled(root, 1, SHA)).toEqual({ found: 1, ruled: [], open: ['G1'] })
+  expect(unruled(root, 1, SHA)).toEqual({ found: 1, ruled: [], open: ['G1'], refused: [] })
 })
 
 test('D1 D7 an accepted block rules a finding at every head', () => {
   const rulings = `accepted:\n  head: ${SHA.slice(0, 12)}\n  ids: G1\n  reason: recorded upstream\n`
-  const found = `- G1 src/a.ts:1 ${badge(0)} x\n- G2 src/a.ts:2 ${badge(2)} y\n`
+  const found = `- G1 src/a.ts:1 ${badge(2)} x\n- G2 src/a.ts:2 ${badge(2)} y\n`
   const root = at({ [`findings-${SHA}.md`]: found, [`findings-${'b'.repeat(40)}.md`]: found, 'rulings.md': rulings })
-  expect(unruled(root, 1, SHA)).toEqual({ found: 2, ruled: ['G1'], open: ['G2'] })
-  expect(unruled(root, 1, 'b'.repeat(40))).toEqual({ found: 2, ruled: ['G1'], open: ['G2'] })
+  expect(unruled(root, 1, SHA)).toEqual({ found: 2, ruled: ['G1'], open: ['G2'], refused: [] })
+  expect(unruled(root, 1, 'b'.repeat(40))).toEqual({ found: 2, ruled: ['G1'], open: ['G2'], refused: [] })
+})
+
+test('D1 an accepted block rules no P0, P1 or unbadged finding', () => {
+  const rulings = `accepted:\n  head: ${SHA.slice(0, 12)}\n  ids: G1, G2, G3, G4\n  reason: recorded upstream\n`
+  const found = `- G1 src/a.ts:1 ${badge(1)} x\n- G2 src/a.ts:2 ${badge(0)} y\n- G3 src/a.ts:3 z\n- G4 src/a.ts:4 ${badge(2)} w\n`
+  const root = at({ [`findings-${SHA}.md`]: found, 'rulings.md': rulings })
+  expect(unruled(root, 1, SHA)).toEqual({ found: 4, ruled: ['G4'], open: ['G1', 'G2', 'G3'], refused: ['G1', 'G2', 'G3'] })
 })
 
 test('D2 a summary link is a finding graded by its own badge', () => {
@@ -56,7 +63,7 @@ test('D2 a summary link is a finding graded by its own badge', () => {
     `3. **No badge** ${link(9)}`, `4. ${badge(3)}&nbsp;**Again** ${link(1)}`,
     '<a href="https://app.greptile.com/retrigger">Retrigger</a> <a href="https://github.com/o/r/commit/abc">abc</a>'].join('\n')
   const root = at({ [`findings-${SHA}.md`]: `- G1 src/a.ts:1 ${badge(2)} x\n` })
-  expect(unruled(root, 1, SHA, summary)).toEqual({ found: 4, ruled: [], open: ['G1', 'G7', 'G9'] })
+  expect(unruled(root, 1, SHA, summary)).toEqual({ found: 4, ruled: [], open: ['G1', 'G7', 'G9'], refused: [] })
 })
 
 const onDiff = (files: Record<string, string>): string => {
@@ -68,7 +75,7 @@ const onDiff = (files: Record<string, string>): string => {
 
 test('D1 D2 an off-diff finding is found but not open', () => {
   const root = onDiff({ [`findings-${SHA}.md`]: `- G1 harness/src/artifacts.ts:1 ${badge(1)} x\n- G2 php/src/Config.php:1 ${badge(2)} y\n- G3 php/src/Other.php:1 ${badge(0)} z\n` })
-  expect(unruled(root, 1, SHA)).toEqual({ found: 3, ruled: [], open: ['G2', 'G3'] })
+  expect(unruled(root, 1, SHA)).toEqual({ found: 3, ruled: [], open: ['G2', 'G3'], refused: [] })
 })
 
 test('D4 off-diff P1s and overruled P2s pass at 3/5', () => {
@@ -76,11 +83,23 @@ test('D4 off-diff P1s and overruled P2s pass at 3/5', () => {
   const summary = [`1. ${badge(1)}&nbsp;**Bug** ${link(1)}`, `2. ${badge(1)}&nbsp;**Bug** ${link(4)}`].join('\n')
   const root = onDiff({ [`findings-${SHA}.md`]: `- G2 php/src/Config.php:1 ${badge(2)} y\n- G5 php/src/Config.php:2 ${badge(2)} w\n`,
     'rulings.md': 'G2, G5 overruled: Config.php already refuses it\n' })
-  expect(unruled(root, 1, SHA, summary)).toEqual({ found: 4, ruled: ['G2', 'G5'], open: [] })
+  expect(unruled(root, 1, SHA, summary)).toEqual({ found: 4, ruled: ['G2', 'G5'], open: [], refused: [] })
+})
+
+test('D2 a P1 overruled citing no file in the checkout stays open', () => {
+  const root = onDiff({ [`findings-${SHA}.md`]: `- G2 php/src/Config.php:1 ${badge(1)} y\n- G5 php/src/Config.php:2 ${badge(1)} w\n- G6 php/src/Config.php:3 ${badge(1)} v\n`,
+    'rulings.md': 'G2 overruled: Config.php already refuses it\nG5 overruled: php/src/Missing.php:1 refuses it\nG6 overruled: php/src/../src/Config.php:1 refuses it\n' })
+  expect(unruled(root, 1, SHA)).toEqual({ found: 3, ruled: [], open: ['G2', 'G5', 'G6'], refused: [] })
+})
+
+test('D3 a P1 overruled citing a checkout file is ruled', () => {
+  const root = onDiff({ [`findings-${SHA}.md`]: `- G2 php/src/Config.php:1 ${badge(1)} y\n`,
+    'rulings.md': 'G2 overruled: php/src/Config.php:1 already refuses it\n' })
+  expect(unruled(root, 1, SHA)).toEqual({ found: 1, ruled: ['G2'], open: [], refused: [] })
 })
 
 test('D5 an accepted block with a bad head or no reason rules none', () => {
   const rulings = `accepted:\n  head: not-a-sha\n  ids: G1\n  reason: recorded\n\naccepted:\n  head: ${SHA.slice(0, 12)}\n  ids: G2\n  reason:\n`
   const root = at({ [`findings-${SHA}.md`]: `- G1 src/a.ts:1 ${badge(2)} x\n- G2 src/a.ts:2 ${badge(2)} y\n`, 'rulings.md': rulings })
-  expect(unruled(root, 1, SHA)).toEqual({ found: 2, ruled: [], open: ['G1', 'G2'] })
+  expect(unruled(root, 1, SHA)).toEqual({ found: 2, ruled: [], open: ['G1', 'G2'], refused: [] })
 })

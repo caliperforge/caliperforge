@@ -140,7 +140,7 @@ export async function fireBrief(db: Db, root: string, plan: PlanRow, step: Step,
   const ask = askOf(root, plan.id)
   const src = srcDir(root, plan.id)
   const standing = maybe(root, plan.id, 'issue.md')
-  if (standing !== null && shape(standing, ask, src) === null) return stands()
+  if (standing !== null && shape(standing, ask, src, !internal(plan)) === null) return stands()
   const fired = await ran(db, root, plan, step, provider, again(db, root, plan.id, ask) + store(root, plan) + seams(root, plan.seat) + long(src) + wideAsk(ask), false)
   drop(root, plan.id, 'brief.refused.md')
   if (fired.ended !== 'completed') return exited(step, fired)
@@ -148,7 +148,7 @@ export async function fireBrief(db: Db, root: string, plan: PlanRow, step: Step,
   if (line !== null) return { outcome: 'pass', spans: [], note: `${step.runs}: ${line}`, command: line }
   const question = unclear(fired.text)
   if (question !== null) return asking(root, plan.id, step, question)
-  const refused = shape(fired.text, ask, src)
+  const refused = shape(fired.text, ask, src, !internal(plan))
   const reply = refused === null ? languages(plan, fired.text) ?? fired.text : fired.text
   const parts = split(reply)
   if (parts !== null) {

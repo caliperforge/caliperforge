@@ -2,7 +2,7 @@ import { basename } from 'node:path'
 import type { Check, Row } from './card.ts'
 import { git, MAIN, srcDir } from './workspace.ts'
 
-const CONVENTIONAL = /^[a-z]+(\([^)]*\))?!?: /
+export const CONVENTIONAL = /^[a-z]+(\([^)]*\))?!?: /
 const SIGNED = /^Signed-off-by: /m
 const CHANGELOG = /^change(s|log)\b/i
 

@@ -28,7 +28,7 @@ test('stuckOnce', () => {
   expect(d.prepare('SELECT state, held_by, held_why FROM plans WHERE id = 1').get())
     .toEqual({ state: 'blocked_on_ceo', held_by: 'coo', held_why: note })
   expect(maybe(root, 1, 'refusal.md')).toBe(`\n# Stopped\n\n${note}.\n`)
-  expect(d.prepare("SELECT count(*) AS n FROM events WHERE kind = 'stuck'").get()).toEqual({ n: 1 })
+  expect(d.prepare("SELECT actor, outcome FROM events WHERE kind = 'stuck'").all()).toEqual([{ actor: 'drift', outcome: 'escalate' }])
   expect(stuck(d, root, STUCK, at(62))).toEqual([])
 })
 

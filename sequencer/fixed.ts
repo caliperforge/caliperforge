@@ -25,7 +25,7 @@ export async function fixed(db: Db, root: string, plan: PlanRow, why: string, pr
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     put(root, plan.id, 'fixer.error', message)
-    logged(db, { plan: plan.id, kind: 'fixer_error', actor: 'fixer_error', outcome: 'needs_ceo', message, pointer: null, run: null })
+    logged(db, { plan: plan.id, kind: 'fixer_error', actor: 'fixer_error', outcome: 'escalate', message, pointer: null, run: null })
     return false
   }
 }

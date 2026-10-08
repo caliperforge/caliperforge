@@ -1129,7 +1129,7 @@ test.each([
   const { db, home } = found()
   await decide(db, home, stub(reply), now, wire())
   expect(findings(db)).toMatchObject([{ outcome: null, closed_at: null }])
-  expect(ofKind(db, 'director')).toEqual([{ plan: null, kind: 'director', actor: 'director', outcome: 'needs_ceo',
+  expect(ofKind(db, 'director')).toEqual([{ plan: null, kind: 'director', actor: 'director', outcome: 'escalate',
     message: 'finding 1: no outcome' }])
 })
 

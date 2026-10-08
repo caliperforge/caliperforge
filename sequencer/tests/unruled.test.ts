@@ -88,7 +88,7 @@ test('D4 off-diff P1s and overruled P2s pass at 3/5', () => {
 
 test('D2 a P1 overruled citing no file in the checkout stays open', () => {
   const root = onDiff({ [`findings-${SHA}.md`]: `- G2 php/src/Config.php:1 ${badge(1)} y\n- G5 php/src/Config.php:2 ${badge(1)} w\n- G6 php/src/Config.php:3 ${badge(1)} v\n`,
-    'rulings.md': 'G2 overruled: Config.php already refuses it\nG5 overruled: php/src/Missing.php:1 refuses it\nG6 overruled: php/../src/Config.php:1 refuses it\n' })
+    'rulings.md': 'G2 overruled: Config.php already refuses it\nG5 overruled: php/src/Missing.php:1 refuses it\nG6 overruled: php/src/../src/Config.php:1 refuses it\n' })
   expect(unruled(root, 1, SHA)).toEqual({ found: 3, ruled: [], open: ['G2', 'G5', 'G6'], refused: [] })
 })
 

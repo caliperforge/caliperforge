@@ -86,8 +86,8 @@ test('waits on every workflow, judges only its own', async () => {
   await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire, 5)
   expect(plan(w.db, 1).step).toBe(7)
   expect(JSON.parse(readFileSync(join(w.root, '.cf/work/1/ci.json'), 'utf8'))).toEqual([
-    { workflow: 'Src', status: 'completed', conclusion: 'success', gates: true },
-    { workflow: 'Python', status: 'completed', conclusion: 'failure', gates: false },
+    { workflow: 'Src', status: 'completed', conclusion: 'success', gates: true, url: 'https://github.com/caliperforge/widget/actions/runs/2' },
+    { workflow: 'Python', status: 'completed', conclusion: 'failure', gates: false, url: 'https://github.com/caliperforge/widget/actions/runs/2' },
   ])
 })
 

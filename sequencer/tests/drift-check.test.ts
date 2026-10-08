@@ -1,4 +1,5 @@
 import { expect, test } from 'vitest'
+import { logged } from '../../store/events.ts'
 import { ratchetRules } from '../../store/lanes.ts'
 import { drift, Entry } from '../drift.ts'
 import { COO, db, event, NOW, REGISTRY } from './drifting.ts'
@@ -31,7 +32,7 @@ test('fresh', () => {
     'writer_log', 'writer_ship', 'writer_weekly', 'growth_lead', 'web_specialist', 'design', 'go_specialist', 'php_specialist', 'ruby_specialist', 'python_specialist', 'lua_specialist', 'rust_specialist', 'gardener', 'ratchet', 'accounts', 'records', 'dispositions', 'signoffs', 'proposals',
     'ratchet_refuse', 'intake', 'stuck_plans', 'science_pull', 'site_publish', 'director_look', 'typescript_specialist',
     'daily_learnings', 'review_examples', 'director_fix_reach', 'tick_deps', 'watch', 'director_widen', 'target_parked_once', 'director_ceiling',
-    'close_landed', 'handback_not_done', 'ruling_files', 'needs_ceo_actor', 'build_cap', 'ready_proof_stuck'])
+    'close_landed', 'handback_not_done', 'ruling_files', 'needs_ceo_actor', 'build_cap', 'ready_proof_stuck', 'card_facts'])
   expect(drift(d, REGISTRY, NOW).map((r) => r.name)).not.toContain('build_cap')
   expect(drift(d, REGISTRY, NOW).map((r) => r.name)).not.toContain('director_widen')
   expect(drift(d, REGISTRY.filter((e) => e.name === 'watch'), NOW)).toEqual([])
@@ -46,4 +47,13 @@ test('fresh', () => {
   const old = db()
   event(old, '2026-10-02 10:00:00', 'coo_lite')
   expect(drift(old, REGISTRY.filter((e) => e.name === 'director'), NOW)).toEqual([])
+})
+
+test('D4 a card opened without its sheet is seen', () => {
+  const d = db()
+  logged(d, { plan: 1, kind: 'card_facts', actor: 'signoff', outcome: 'pass', message: 'with fact sheet', pointer: null, run: null })
+  expect(drift(d, REGISTRY, NOW).map((r) => r.name)).not.toContain('card_facts')
+  logged(d, { plan: 1, kind: 'card_facts', actor: 'signoff', outcome: 'refuse', message: 'without fact sheet', pointer: null, run: null },
+    '2026-10-02 10:00:00')
+  expect(drift(d, REGISTRY, NOW).find((r) => r.name === 'card_facts')?.state).toBe('seen')
 })

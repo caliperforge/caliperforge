@@ -370,7 +370,7 @@ async function fireReview(db: Db, root: string, plan: PlanRow, step: Step, provi
   const manifest = reviewManifest(root, step.runs)
   const src = srcDir(root, plan.id)
   const issue = get(root, plan.id, 'issue.md')
-  const input: Bench = {
+  const input: Bench = manifest.gate === 'blind_review' ? blind(db, root, plan) : {
     repo: src,
     issue: issue + rulings(root, plan.id),
     diff: diffOf(root, plan.id),
@@ -423,6 +423,12 @@ function outside(db: Db, root: string, plan: PlanRow, src: string): Handover {
   const base = maybe(root, plan.id, 'base.sha')
   if (internal(plan) || base === null || !cloned(src)) return {}
   return { ...handover(src, base.trim()), ...symbolsOf(db, root, plan, src) }
+}
+
+/** A blind reviewer reads the change as the upstream maintainer would: no issue, brief or rulings. */
+export function blind(db: Db, root: string, plan: PlanRow): Bench {
+  const src = srcDir(root, plan.id)
+  return { repo: src, diff: diffOf(root, plan.id), ...(cloned(src) ? { tree: snapshot(src) } : {}), ...outside(db, root, plan, src) }
 }
 
 function symbolsOf(db: Db, root: string, plan: PlanRow, src: string): Pick<Handover, 'symbols'> {

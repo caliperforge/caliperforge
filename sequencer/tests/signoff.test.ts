@@ -1,14 +1,14 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
-import { desk as ghDesk, type Answer, type Desk, type Pr, type Seen } from '../../cli/gh.ts'
+import { desk as ghDesk, type Answer, type Desk, type Issue, type Pr, type Seen } from '../../cli/gh.ts'
 import { unread } from '../../cli/inbox.ts'
 import { eventsOf, logged, type Event } from '../../store/events.ts'
 import { rewind } from '../../store/plans.ts'
 import { approve as approvePublish } from '../card.ts'
 import { tick } from '../index.ts'
-import { ruled, signoffs } from '../signoff.ts'
-import { drop, put, SELF, SIGNOFF, srcDir } from '../workspace.ts'
+import { ruled, signoffs, verdict } from '../signoff.ts'
+import { drop, OPERATOR, put, SELF, SIGNOFF, srcDir } from '../workspace.ts'
 import { approve, CARRIED, plan, scored, stub, watched, world, type World } from './world.ts'
 
 /** Their pull request as the tick reads it, offline: open and quiet. */
@@ -31,7 +31,7 @@ async function atBatch(): Promise<World> {
 interface Held { title: string; body: string; open: boolean; answer: Answer | null; words: string | null; closing: string | null }
 
 /** The tracker as a map: a test answers a card by setting its label and words. */
-function fake(pr: number | null = null, lines: string[] = []): Desk & { cards: Map<number, Held>; log: string[] } {
+function fake(pr: number | null = null, lines: string[] = [], assignees = [OPERATOR]): Desk & { cards: Map<number, Held>; log: string[] } {
   const cards = new Map<number, Held>()
   const log: string[] = []
   const card = (no: number): Held => {
@@ -53,8 +53,38 @@ function fake(pr: number | null = null, lines: string[] = []): Desk & { cards: M
     close: (no, comment) => { log.push(`close ${String(no)}`); card(no).open = false; card(no).closing = comment },
     rehearsal: () => pr,
     lines: () => lines,
+    issue: (): Issue => ({ number: 12, title: 'hello', body: '', state: 'OPEN',
+      assignees: assignees.map((login) => ({ login })), comments: [], closedByPullRequestsReferences: [] }),
   }
 }
+
+test('D1 the card opens with the fact sheet and its verdict', async () => {
+  const w = await atBatch()
+  const desk = fake()
+  signoffs(w.db, w.root, desk)
+  const body = desk.cards.get(100)?.body ?? ''
+  expect(body.startsWith('**Fact sheet**\n\n- Diff: files: ')).toBe(true)
+  expect(body.indexOf('\n- Verdict: ')).toBeGreaterThan(-1)
+  expect(body.indexOf('\n- Verdict: ')).toBeLessThan(body.indexOf('**widget 12**'))
+  expect(eventsOf(w.db, 1, 'card_facts')).toEqual([{ actor: 'signoff', outcome: 'pass', message: 'with fact sheet' }])
+})
+
+test('D2 the verdict is taste only when every fact is ok', () => {
+  const clean = [{ name: 'files', ok: true, says: '1 files' }, { name: 'assigned', ok: true, says: 'assigned to us' }]
+  expect(verdict(clean)).toBe('All checks clean; your call is taste only')
+  expect(verdict([...clean, { name: 'rails', ok: false, says: 'no verdict' }])).toBe('Open: rails: `no verdict`')
+})
+
+test('D3 an open fact is named and its line ends open', async () => {
+  const open = { name: 'assigned', ok: false, says: 'assigned to nobody' }
+  expect(verdict([{ name: 'files', ok: true, says: '1 files' }, open])).toBe('Open: assigned: `assigned to nobody`')
+  const w = await atBatch()
+  const desk = fake(null, [], [])
+  signoffs(w.db, w.root, desk)
+  const body = desk.cards.get(100)?.body ?? ''
+  expect(body).toMatch(/assigned: `assigned to nobody` \(open\)(;|\n)/)
+  expect(body.split('\n').find((l) => l.startsWith('- Verdict: '))).not.toContain('taste only')
+})
 
 test('one card per outside plan, linking nothing on their thread', async () => {
   const w = await atBatch()

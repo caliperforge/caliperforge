@@ -55,6 +55,7 @@ VALUES
   ('rules/registry/47-needs_ceo_actor.yaml', 'card', 'rules/registry/47-needs_ceo_actor.yaml', '038b61228a7cf23b0736d4ce1d9eb01ab96e74a2f37e20d9a2bfa4e2aed10e0a', '2026-10-08'),
   ('rules/registry/48-build_cap.yaml', 'card', 'rules/registry/48-build_cap.yaml', 'c62c0a02c2ee9d957696d5c2995ef5c642a6b7178bb50fbb9640728e555f5e55', '2026-10-07'),
   ('rules/registry/49-ready_proof_stuck.yaml', 'card', 'rules/registry/49-ready_proof_stuck.yaml', '7a73d7e917f13e356b90a7e5a9bc3821c5608281769b1e8e83712c9e932b2a71', '2026-10-08'),
+  ('rules/registry/50-card_facts.yaml', 'card', 'rules/registry/50-card_facts.yaml', 'da8a4de881b369d46ce096dddf8b72b96cdc5a8f4e382bf495153695567917b6', '2026-10-08'),
   ('rules/staffing.yaml', 'card', 'rules/staffing.yaml', '5505b1016244ee8d5a5c03cdcf8cbb178011c063ed004dce7ee0ec90a295f87a', '2026-10-05'),
   ('completion-audit', 'rail', 'rules/rails.yaml', 'b46b445806d399b61887a5259eb0a6893444efcbe5acf2e6dd534507bc0882f3', '2026-09-17'),
   ('secret-scan', 'rail', 'rules/rails.yaml', 'b46b445806d399b61887a5259eb0a6893444efcbe5acf2e6dd534507bc0882f3', '2026-09-17'),

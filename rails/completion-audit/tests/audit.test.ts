@@ -4,7 +4,7 @@ import { expect, test } from 'vitest'
 import { fresh } from '../../../checks/sqlite.ts'
 import { planRow } from '../../../runner/index.ts'
 import { load } from '../../../runner/rules.ts'
-import { audit, record, undone } from '../index.ts'
+import { audit, carried, record, undone } from '../index.ts'
 
 const root = join(import.meta.dirname, '../../..')
 
@@ -107,4 +107,15 @@ test('refuses on the parse error when the fence yields no rows', () => {
 
 test('an unparsable previous handback carries and refuses nothing', () => {
   expect(audit(fixture('handback-carried.md'), ['D1', 'D2'], fixture('handback-unparsed.md'), '').outcome).toBe('pass')
+})
+
+test('D1 carried reads the done rows past a broken summary', () => {
+  expect(carried(fixture('handback-colon.md'))).toEqual(new Map([
+    ['D1', { id: 'D1', status: 'done', pointer: 'sequencer/tests/intake.test.ts:252' }],
+    ['D2', { id: 'D2', status: 'done', pointer: 'sequencer/tests/intake.test.ts:263' }],
+  ]))
+})
+
+test('D2 carried gives the parse error when no rows parse', () => {
+  expect(typeof carried(fixture('handback-unparsed.md'))).toBe('string')
 })

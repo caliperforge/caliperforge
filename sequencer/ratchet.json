@@ -227,9 +227,6 @@
   "tests/hold.test.ts": {
     "prepare": 11
   },
-  "tests/internal.test.ts": {
-    "prepare": 10
-  },
   "tests/kept.test.ts": {
     "prepare": 5
   },

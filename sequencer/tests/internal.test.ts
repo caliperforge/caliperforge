@@ -6,10 +6,13 @@ import type { Packet, Provider } from '../../providers/kind.ts'
 import { landed } from '../../cli/batch.ts'
 import { check } from '../../cli/digests.ts'
 import { digest, listed } from '../../runner/rules.ts'
-import { headApproved, headDigest } from '../../store/approvals.ts'
+import { gates, gatesSigned, headApproved, headDigest, signedHead } from '../../store/approvals.ts'
+import { approved, deliverablesOf } from '../../store/deliverables.ts'
 import { record as recordFiles } from '../../store/files.ts'
 import { runRows } from '../../store/events.ts'
-import { advance } from '../../store/plans.ts'
+import { width } from '../../store/lanes.ts'
+import { advance, dropPlan } from '../../store/plans.ts'
+import { verdictRows } from '../../store/verdict.ts'
 import { tick } from '../index.ts'
 import { headOf, push } from '../push.ts'
 import { blocked } from '../steps.ts'
@@ -26,7 +29,7 @@ const git = (cwd: string, args: string[]): string => execFileSync('git', args, {
 /** The pr-path world with its target plan taken out, so the one lane carries our own issue alone. */
 function mine(): World {
   const w = world()
-  w.db.prepare('DELETE FROM plans WHERE id = 1').run()
+  dropPlan(w.db, 1)
   ours(w.root)
   internalPlan(w.db, w.root, ID)
   return w
@@ -36,7 +39,7 @@ function mine(): World {
 function pair(): World {
   const w = mine()
   internalPlan(w.db, w.root, SECOND, 'let a second internal plan run', 35)
-  w.db.prepare('UPDATE pipes SET max_concurrent = 2 WHERE id = 1').run()
+  width(w.db, 1, 2)
   return w
 }
 
@@ -55,7 +58,7 @@ test('two picks fire at once, each with its own run row',async () => {
   expect(provider.peak()).toBe(2)
   expect(fired.map((f) => f.plan)).toEqual([ID, SECOND])
   expect([plan(w.db, ID).state, plan(w.db, SECOND).state]).toEqual(['running', 'running'])
-  expect(w.db.prepare('SELECT plan, seat FROM runs WHERE step = 2 ORDER BY plan').all())
+  expect(runRows(w.db).filter((r) => r.step === 2).map(({ plan, seat }) => ({ plan, seat })).sort((a, b) => a.plan - b.plan))
     .toEqual([{ plan: ID, seat: 'typescript_specialist' }, { plan: SECOND, seat: 'typescript_specialist' }])
 })
 
@@ -80,7 +83,7 @@ test('two at batch: the first lands, the second goes again',async () => {
   expect(sent.filter((s) => s === 'send src main')).toEqual(['send src main'])
   expect(git(remote, ['rev-list', '--count', 'main'])).toBe('2')
   expect(git(remote, ['rev-parse', 'main'])).toBe(git(srcDir(w.root, ID), ['rev-parse', 'HEAD']))
-  expect(w.db.prepare("SELECT plan_id FROM deliverables WHERE state = 'pushed'").all()).toEqual([{ plan_id: ID }])
+  expect([ID, SECOND].filter((id) => deliverablesOf(w.db, id).some((d) => d.state === 'pushed'))).toEqual([ID])
   expect(plan(w.db, SECOND).step).toBe(3)
 })
 
@@ -107,7 +110,7 @@ test('our repo on p<plan>-<slug>, built by the typescript seat',async () => {
   expect(git(src, ['rev-parse', '--abbrev-ref', 'HEAD'])).toBe('p2-let-an-internal-plan-run')
   expect(git(src, ['remote', 'get-url', 'origin'])).toMatch(/remotes\/caliperforge\/caliperforge$/)
   expect(git(src, ['remote', 'get-url', 'upstream'])).toMatch(/remotes\/caliperforge\/caliperforge$/)
-  expect(w.db.prepare('SELECT seat FROM runs WHERE step = 2').get()).toEqual({ seat: 'typescript_specialist' })
+  expect(runRows(w.db).find((r) => r.step === 2)?.seat).toBe('typescript_specialist')
   expect(runRows(w.db).filter((r) => r.step === 1 || r.step === 2).map(({ step, staffed }) => ({ step, staffed })))
     .toEqual([{ step: 1, staffed: 'brief_writer' }, { step: 2, staffed: 'typescript_specialist' }])
   expect(internalBranch(7, 'A/B: an issue — with punctuation!')).toBe('p7-a-b-an-issue-with-punctuation')
@@ -192,8 +195,7 @@ test('an internal build keeps kernel files outside `src/`',async () => {
 
   const rails = (await tick(w.db, w.root, built))[0]
   expect(rails).toMatchObject({ plan: ID, step: 3, name: 'rails', outcome: 'pass' })
-  expect(w.db.prepare("SELECT outcome FROM verdicts WHERE plan = ? AND rail_id = 'authority'").get(ID))
-    .toEqual({ outcome: 'pass' })
+  expect(verdictRows(w.db, ID).find((v) => v.rail_id === 'authority')?.outcome).toBe('pass')
 })
 
 /** No one outside the machine reads a kernel plan's handback prose. */
@@ -217,8 +219,7 @@ test('step 6 sends to origin and judges runs at its head',async () => {
   expect(fired).toMatchObject({ plan: ID, step: 6, name: 'ready', outcome: 'pass' })
   expect(sent).toEqual(['send src p2-let-an-internal-plan-run'])
   expect(read[0]).toContain('--repo caliperforge/caliperforge --branch p2-let-an-internal-plan-run')
-  expect(w.db.prepare("SELECT outcome FROM verdicts WHERE plan = ? AND rail_id = 'ci-green'").get(ID))
-    .toEqual({ outcome: 'pass' })
+  expect(verdictRows(w.db, ID).find((v) => v.rail_id === 'ci-green')?.outcome).toBe('pass')
   expect(plan(w.db, ID).step).toBe(7)
 })
 
@@ -231,8 +232,8 @@ test('step 7 signs on the gates and shows a batch read-out',async () => {
 
   const signed = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
   expect(signed).toMatchObject({ step: 7, name: 'batch', outcome: 'pass', state: 'running' })
-  expect(w.db.prepare("SELECT who, decision, subject_digest FROM approvals WHERE subject_kind = 'plan'").get())
-    .toEqual({ who: 'gates', decision: 'approved', subject_digest: plan(w.db, ID).head_digest })
+  expect(gatesSigned(w.db)).toBe(1)
+  expect(signedHead(w.db, ID, String(plan(w.db, ID).head_digest))).not.toBeNull()
   expect(plan(w.db, ID).step).toBe(8)
   expect(landed(w.db)).toEqual([{ plan: ID, origin: ISSUE, digest: plan(w.db, ID).head_digest }])
   expect(headApproved(w.db, headOf(w.root, ID).sha)).toBe(true)
@@ -246,10 +247,7 @@ test('gates cannot sign an external plan past ready',async () => {
   expect(plan(w.db, 1).step).toBe(7)
 
   const digest = String(plan(w.db, 1).head_digest)
-  const row = w.db.prepare(`INSERT INTO approvals (subject_kind, subject_id, subject_digest, who, decision, approved_at)
-    VALUES ('plan', 1, ?, 'gates', 'approved', '2026-09-18T00:00:00.000Z') RETURNING id`).get(digest) as { id: number }
-  w.db.prepare("UPDATE deliverables SET state = 'approved', approval_id = ? WHERE plan_id = 1 AND id = (SELECT max(id) FROM deliverables WHERE plan_id = 1)")
-    .run(row.id)
+  approved(w.db, 1, gates(w.db, 1, digest))
   expect(() => { advance(w.db, plan(w.db, 1), 8) }).toThrow(/no ceo approval row/)
   expect(headApproved(w.db, headOf(w.root, 1).sha)).toBe(false)
   expect(push(w.db, w.root, plan(w.db, 1), wire)).toMatchObject({ outcome: 'refuse' })

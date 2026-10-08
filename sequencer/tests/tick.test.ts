@@ -1254,7 +1254,7 @@ test('every run row points at a transcript the provider wrote', async () => {
   approve(w.db, w.target)
   for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
   const rows = runRows(w.db)
-  expect(rows.map((r) => r.step)).toEqual([1, 2, 4, 5])
+  expect(rows.map((r) => r.step)).toEqual([1, 2, 4, 5, 5])
   for (const r of rows) {
     expect(r.transcript_path).toMatch(/\.transcript\.jsonl$/)
     expect(existsSync(r.transcript_path)).toBe(true)

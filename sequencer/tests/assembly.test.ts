@@ -178,6 +178,8 @@ test('D2 D3 the parent reviews asm/1, opens one PR once approved', async () => {
 
   approveCard(a.w.db, a.w.root, 'plan', 1, 'ceo')
   await laps(a, 2, wire)
+  expect(maybe(a.w.root, 1, 'maintainer.md')).toContain('\nflag\ttitle\t"hello" is #12\'s title\n')
+  expect(log.filter((l) => l.startsWith('open '))).toEqual([])
   approvePublish(a.w.db, a.w.root, 1, 'ceo')
   await laps(a, 1, wire)
   expect(log.filter((l) => l.startsWith('open '))).toEqual(['open acme/widget caliperforge:asm/1'])

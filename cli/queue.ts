@@ -183,7 +183,9 @@ function planFor(db: Db, pipe: string, target: number, url: string, actor: strin
   if (row === null) throw new Error(`no pipe "${pipe}"; cf pipe on ${pipe}`)
   const open = openPlan(db, target)
   if (open !== null) return open
-  const id = queueTargetPlan(db, row.id, target, templatePriority(db, 'pr_path'))
+  // CEO 2026-10-08: outside work runs ahead of every internal ticket.
+  const priority = targetRow(db, target).repo.startsWith('caliperforge/') ? templatePriority(db, 'pr_path') : 0
+  const id = queueTargetPlan(db, row.id, target, priority)
   logged(db, { plan: id, kind: 'filed', actor, outcome: 'pass', message: url, pointer: null, run: null })
   return id
 }

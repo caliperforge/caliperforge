@@ -1062,8 +1062,19 @@ const linking = (ids: number[]) => (at: World): void => {
 
 const P1 = '<img alt="P1" src="https://greptile.com/p1.svg">'
 
-test('D3 a 0/5 linking only earlier accepted findings passes', async () => {
+test('D4 a 0/5 linking only accepted P1s goes to the builder', async () => {
   const [w, lap] = await atReady(linking([11, 12]))
+  const fired = await lap()
+  expect(fired).toMatchObject({ step: 6, name: 'ready', outcome: 'refuse', spans: ['greptile:0/5'] })
+  expect(fired?.note).toContain('the COO accepted G11, G12, but a P1 needs a ruling citing the code')
+  expect(plan(w.db, 1).step).toBe(2)
+})
+
+test('D5 a 0/5 whose P1s are overruled citing the code passes', async () => {
+  const [w, lap] = await atReady((at) => {
+    linking([11, 12])(at)
+    put(at.root, 1, 'rulings.md', 'G11, G12 overruled: src/hello.ts:1 already refuses it\n')
+  })
   expect((await lap())?.note).toMatch(/the COO accepted G11, G12$/)
   expect(plan(w.db, 1).step).toBe(7)
   expect(eventsOf(w.db, 1, 'greptile.accepted')).toEqual([{ actor: 'ready', outcome: 'pass', message: 'G11, G12' }])
@@ -1088,6 +1099,19 @@ test('D1 a stale senior row on an accepted head passes ready', async () => {
   expect((await lap())?.note).toMatch(/the COO accepted G11, G12$/)
   expect(plan(w.db, 1).step).toBe(7)
   expect(newest(w.db, 1)).toMatchObject({ state: 'ready', bot_clean: 1 })
+})
+
+test('D1 D2 a ruling after senior raises bot_clean at the tick', async () => {
+  let ids = 'G11'
+  const [w, lap] = await atReady(accepting(['G11', 'G12'], (sha) => ruling(sha, ids)))
+  await lap()
+  expect(plan(w.db, 1)).toMatchObject({ step: 6, wait_reason: 'ready_proof' })
+  expect(newest(w.db, 1)?.bot_clean).toBe(0)
+  ids = 'G11, G12'
+  put(w.root, 1, 'rulings.md', ruling(head(srcDir(w.root, 1), ['rev-parse', 'HEAD']), ids))
+  expect((await lap())?.note).toMatch(/the COO accepted G11, G12$/)
+  expect(plan(w.db, 1).step).toBe(7)
+  expect(newest(w.db, 1)?.bot_clean).toBe(1)
 })
 
 test('D2 an outside bot score under 5 at the head still refuses', async () => {
@@ -1263,9 +1287,9 @@ test('cf brief and cf plan bind the plan they are asked for', async () => {
   }
   expect(runsOf(w.db, 1).map((r) => r.step)).toEqual([1, 2])
   expect(runsOf(w.db, 99)).toEqual([])
-  expect(verdictsOf(w.db, 1).map((v) => v.gate)).toEqual(Array<string>(6).fill('pre_review'))
+  expect(verdictsOf(w.db, 1).map((v) => v.gate)).toEqual(Array<string>(4).fill('pre_review'))
   expect(verdictRows(w.db, 1).map((v) => v.rail_id))
-    .toEqual(['completion-audit', 'secret-scan', 'authority', 'tight', 'test-weakened', 'identifiers'])
+    .toEqual(['completion-audit', 'secret-scan', 'authority', 'test-weakened'])
   expect(verdictsOf(w.db, 99)).toEqual([])
   expect(openPlans(w.db).map((p) => p.id)).toEqual([1])
   expect(halted(w.db)).toEqual([])

@@ -7,9 +7,9 @@
   gap: 2d
 - name: fixer
   switch: { key: fixer.mode, value: live }
-  table: runs
+  table: events
   column: at
-  where: seat = 'fixer'
+  where: actor = 'fixer'
   gap: 2d
 - name: fix_mode
   table: runs
@@ -257,3 +257,9 @@
   column: at
   where: kind = 'build_cap'
   when: SELECT 1 FROM events e WHERE e.kind = 'build' AND e.run IS NOT NULL AND julianday(e.at) > julianday('now', '-1 day') AND (SELECT count(*) FROM events b WHERE b.plan = e.plan AND b.kind = 'build' AND b.run IS NOT NULL AND b.id < e.id) >= 5
+- name: ready_proof_stuck
+  table: events
+  column: at
+  where: "kind = 'stuck' AND message LIKE '%waits: ready_proof%'"
+  gap: 7d
+  expected: 0

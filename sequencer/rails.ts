@@ -182,6 +182,12 @@ function broke(db: Db, root: string, plan: PlanRow, failed: Failure): Outcome {
  * Step 3 judges no prose: pr.md is a person's or step 8's, out of the builder's reach, and step 8's prose check
  * flags it on the card.
  */
+function strangers(db: Db, plan: PlanRow): boolean {
+  if (plan.target_id === null) return false
+  const repo = repoOf(db, plan)
+  return repo !== null && !repo.startsWith('caliperforge/')
+}
+
 function rest(db: Db, root: string, plan: PlanRow, handback: string, diff: string, on: Rails): [string, () => Verdict][] {
   const src = srcDir(root, plan.id)
   const language = languageFor(db, plan, src)
@@ -192,11 +198,17 @@ function rest(db: Db, root: string, plan: PlanRow, handback: string, diff: strin
   const outside = ours
     ? strays(parse(diff).map((f) => f.path), filesOf(db, plan.id).map((f) => f.path), handback, get(root, plan.id, 'issue.md'))
     : []
-  return [
+  const weakenedRail: [string, () => Verdict] = ['test-weakened', () => weakened(diff, 'green', [maybe(root, plan.id, 'ask.md') ?? '', get(root, plan.id, 'issue.md'), maybe(root, plan.id, 'rulings.md') ?? '', maybe(root, plan.id, 'pr.md') ?? ''].join('\n'))]
+  const scope: [string, () => Verdict][] = [
     ['secret-scan', () => scan(diff)],
     ['authority', () => authority(root, name, diff, ours, fence, outside, ours ? renumbered(src, diff) : [])],
+  ]
+  // A stranger's repo is judged by its own CI and maintainers, not our house style rails.
+  if (strangers(db, plan)) return [...scope, weakenedRail]
+  return [
+    ...scope,
     ['tight', () => tight(root, { diff, sources: sources(src, diff), description: '', code: on?.tight_code === true })],
-    ['test-weakened', () => weakened(diff, 'green', [maybe(root, plan.id, 'ask.md') ?? '', get(root, plan.id, 'issue.md'), maybe(root, plan.id, 'rulings.md') ?? '', maybe(root, plan.id, 'pr.md') ?? ''].join('\n'))],
+    weakenedRail,
     ['identifiers', () => identifiers(src, handback, diff)],
   ]
 }

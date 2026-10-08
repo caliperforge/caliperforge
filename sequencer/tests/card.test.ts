@@ -16,6 +16,7 @@ const SHA = 'a'.repeat(40)
 const TARGET = { repo: 'acme/widget', issue_no: 12, named_merger: 'maintainer' }
 
 const NONE = 'flag\toutside merges\tnone in 30 days\n'
+const TITLE = 'flag\ttitle\t"hello" is #12\'s title\n'
 
 async function atBatch(): Promise<World> {
   const w = world()
@@ -44,9 +45,16 @@ test('D1 outside push: card written, no wire, held on step 8', async () => {
   const held = push(w.db, w.root, plan(w.db, 1), watched(sent, w.root, 1))
   expect(held).toMatchObject({ outcome: 'pass', held: true, spans: ['card'] })
   expect(held.note).toContain('cf approve card 1')
-  expect(get(w.root, 1, 'maintainer.md')).toBe(`plan 1 at ${signed}\npass\tlead\twhole issue, 1 lead(s)\npass\ttests\t+0 test / +1 code lines\npass\tconventions\tmatches the last 1 commits\npass\tsize\t2 code lines (2 in all), limit 400\npass\tprose\tclean\n${NONE}`)
+  expect(get(w.root, 1, 'maintainer.md')).toBe(`plan 1 at ${signed}\npass\tlead\twhole issue, 1 lead(s)\npass\ttests\t+0 test / +1 code lines\npass\tconventions\tmatches the last 1 commits\npass\tsize\t2 code lines (2 in all), limit 400\npass\tprose\tclean\n${TITLE}${NONE}`)
   expect(sent).toEqual([])
   expect(plan(w.db, 1).step).toBe(8)
+})
+
+test('D5 a PR title that is not their issue title passes', async () => {
+  const w = await atPush()
+  put(w.root, 1, 'issue.md', get(w.root, 1, 'issue.md').replace('# hello', '# feat: hello says hey'))
+  push(w.db, w.root, plan(w.db, 1), watched([], w.root, 1))
+  expect(get(w.root, 1, 'maintainer.md')).toContain("\npass\ttitle\tnot #12's title\n")
 })
 
 test('D9 a tell in pr.md is flagged and held until approved', async () => {
@@ -114,7 +122,7 @@ test('D4 approving a stale card rewrites it and sends nothing', async () => {
   decide(w.db, 'plan', 1, headDigest(moved), null)
   const before = sent.length
   expect(push(w.db, w.root, plan(w.db, 1), wire)).toMatchObject({ outcome: 'pass', held: true, spans: ['card'] })
-  expect(get(w.root, 1, 'maintainer.md')).toBe(`plan 1 at ${moved}\npass\tlead\twhole issue, 1 lead(s)\npass\ttests\t+0 test / +0 code lines\npass\tconventions\tmatches the last 1 commits\npass\tsize\t0 code lines (0 in all), limit 400\npass\tprose\tclean\n${NONE}`)
+  expect(get(w.root, 1, 'maintainer.md')).toBe(`plan 1 at ${moved}\npass\tlead\twhole issue, 1 lead(s)\npass\ttests\t+0 test / +0 code lines\npass\tconventions\tmatches the last 1 commits\npass\tsize\t0 code lines (0 in all), limit 400\npass\tprose\tclean\n${TITLE}${NONE}`)
   expect(sent.slice(before)).toEqual([])
   approve(w.db, w.root, 1, 'ceo')
   expect(push(w.db, w.root, plan(w.db, 1), wire)).toMatchObject({ note: `pushed widget-12-a1 onto ${PR}` })

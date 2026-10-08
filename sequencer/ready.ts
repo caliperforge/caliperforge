@@ -8,7 +8,7 @@ import { botClean, built, gated, newest, ready as readyRow, type DeliverableRow,
 import { record as recordFiles } from '../store/files.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
-import { BUILT, internal, stampHead, type PlanRow } from '../store/plans.ts'
+import { allPlans, BUILT, internal, stampHead, type PlanRow } from '../store/plans.ts'
 import { diffAt } from '../store/refusals.ts'
 import { graded, greptiled } from '../store/signals.ts'
 import type { Step } from '../templates/pr-path.ts'
@@ -78,11 +78,13 @@ function greptile(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire,
       ?? `; Greptile gave no score in ${String(GRADING)} ticks`
   }
   const score = row.score ?? 0
-  const { found, ruled, open } = unruled(root, plan.id, sha, row.body ?? '')
+  const { found, ruled, open, refused } = unruled(root, plan.id, sha, row.body ?? '')
   if (open.length > 0 || (score < 4 && found === 0)) {
     const same = diffAt(db, plan.id, plan.step) === diff
-    return { outcome: 'refuse', spans: [`greptile:${String(score)}/5`], message: row.body ?? '', to: same ? plan.step : 2,
-      note: `Greptile scored ${at} ${String(score)}/5; ${same ? 'the diff is unchanged since the last ready refusal' : 'back to the builder with its findings'}` }
+    const why = refused.length > 0 ? `the COO accepted ${refused.join(', ')}, but a P1 needs a ruling citing the code; back to the builder with its findings`
+      : same ? 'the diff is unchanged since the last ready refusal' : 'back to the builder with its findings'
+    return { outcome: 'refuse', spans: [`greptile:${String(score)}/5`], message: row.body ?? '', to: same && refused.length === 0 ? plan.step : 2,
+      note: `Greptile scored ${at} ${String(score)}/5; ${why}` }
   }
   if (ruled.length === 0) return ''
   logged(db, { plan: plan.id, kind: 'greptile.accepted', actor: 'ready', outcome: 'pass', message: ruled.join(', '), pointer: at, run: null })
@@ -204,6 +206,14 @@ function clean(db: Db, root: string, plan: PlanRow): boolean {
   const head = cloned(src) ? headSha(src) : undefined
   const forkClean = internal(plan) || head === undefined || unruled(root, plan.id, head).open.length === 0
   return unanswered(db, plan.id, head) === undefined && forkClean
+}
+
+/** Raises the newest row of each step-6 plan a ruling after senior made clean; only the ready gate lowers it. */
+export function rescored(db: Db, root: string): void {
+  for (const plan of allPlans(db)) {
+    if (plan.template !== 'pr_path' || plan.step !== 6 || !['queued', 'running'].includes(plan.state)) continue
+    if (newest(db, plan.id)?.bot_clean === 0 && clean(db, root, plan)) botClean(db, plan.id, true)
+  }
 }
 
 /** A low bot score a later build, or another `head`, has answered no longer holds the plan; the bot scores the new head once it is pushed. */

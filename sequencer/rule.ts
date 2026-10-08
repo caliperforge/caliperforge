@@ -4,6 +4,7 @@ import { logged } from '../store/events.ts'
 import { edit, filesOf } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
 import { builderRan, type PlanRow } from '../store/plans.ts'
+import { cited } from './cited.ts'
 import { unruled } from './unruled.ts'
 import { get, headSha, maybe, put, srcDir } from './workspace.ts'
 
@@ -12,8 +13,7 @@ const PATH = /(?:^|[\s`'"(])(~?\/[^\s`'"()]+)/g
 const OUTSIDE = /^ {2}- (\S+):1 authority\.outside_files$/gm
 
 export function opened(db: Db, root: string, plan: number): string[] {
-  const tokens = [...(maybe(root, plan, 'rulings.md') ?? '').matchAll(/`([^`\s]+)`/g)]
-    .map((m) => (m[1] ?? '').replace(/:\d+(?:-\d+)?$/, '')).filter((t) => t.includes('/') || /\.\w+$/.test(t))
+  const tokens = cited(maybe(root, plan, 'rulings.md') ?? '')
   const listed = new Set(filesOf(db, plan).map((f) => f.path))
   const missed: string[] = []
   for (const t of new Set(tokens)) {

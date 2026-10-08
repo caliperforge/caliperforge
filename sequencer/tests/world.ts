@@ -7,9 +7,12 @@ import { inject } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import type { Packet, Provider } from '../../providers/kind.ts'
 import type { Gh } from '../../rails/ci-green/index.ts'
+import { decide } from '../../store/approvals.ts'
 import type { Db } from '../../store/index.ts'
-import { PlanRow, type PipeRow } from '../../store/plans.ts'
+import { amend, hours, set } from '../../store/lanes.ts'
+import { dropPipes, pipeOf, planById, putPlan, type PipeRow, type PlanRow } from '../../store/plans.ts'
 import { record } from '../../store/signals.ts'
+import { addAccount, putTarget, targetRow } from '../../store/targets.ts'
 import { STANDING } from '../brief.ts'
 import { tick } from '../index.ts'
 import type { Fired } from '../kind.ts'
@@ -176,9 +179,9 @@ export function moveMain(root: string, name: string, body?: string): void {
 /** A plan filed from one of our own issues: an origin, a lane, a seat, and no target row. `plans_one_per_issue` holds one plan per url, so a second plan names a second issue. */
 export function internalPlan(db: Db, root: string, id: number, title = 'let an internal plan run', issue = 34,
   priority = 1): number {
-  db.prepare(`INSERT INTO plans (id, pipe_id, target_id, template, state, queued_at, step, retries, priority, lane, seat, origin)
-    VALUES (?, 1, NULL, 'pr_path', 'queued', '2026-09-18T00:00:00.000Z', 0, 0, ?, 'machine', 'typescript_specialist', ?)`)
-    .run(id, priority, `https://github.com/${SELF}/issues/${String(issue)}`)
+  putPlan(db, { id, pipe_id: 1, target_id: null, template: 'pr_path', state: 'queued', queued_at: '2026-09-18T00:00:00.000Z',
+    step: 0, retries: 0, lane: 'machine', seat: 'typescript_specialist', origin: `https://github.com/${SELF}/issues/${String(issue)}` })
+  amend(db, id, { priority })
   put(root, id, 'ask.md', `# ${title}\n\n- **D1** add \`hello()\` in \`src/hello.ts\`\n`)
   return id
 }
@@ -193,18 +196,15 @@ export function world(pulse: 'warm' | 'cold' = 'warm', day = new Date().toISOStr
   const db = fresh(join(repo, 'schema'))
   opened.set(root, db)
   const merge = pulse === 'warm' ? day : '2000-01-01'
-  db.prepare(`INSERT INTO accounts (id, repo, measured_at, maintainers, doors, last_outsider_merge,
-    open_pr_age_p50_days, cross_repo_activity, pulse, evidence)
-    VALUES (1, 'acme/widget', ?, 2, 1, ?, 3, 4, ?, 'https://github.com/acme/widget')`).run(day, merge, pulse)
-  db.prepare(`INSERT INTO targets (id, account_id, repo, issue_no, named_merger, state, evidence_measured_at, evidence)
-    VALUES (1, 1, 'acme/widget', 12, 'maintainer', ?, ?, 'https://github.com/acme/widget/issues/12')`)
-    .run(pulse === 'warm' ? 'ready' : 'parked', day)
+  addAccount(db, { id: 1, repo: 'acme/widget', measured_at: day, maintainers: 2, doors: 1, last_outsider_merge: merge,
+    open_pr_age_p50_days: 3, cross_repo_activity: 4, pulse, evidence: 'https://github.com/acme/widget' })
+  putTarget(db, { id: 1, account_id: 1, repo: 'acme/widget', issue_no: 12, named_merger: 'maintainer',
+    state: pulse === 'warm' ? 'ready' : 'parked', evidence_measured_at: day, evidence: 'https://github.com/acme/widget/issues/12' })
   onePipe(db)
   reads(db, 0)
-  db.prepare("INSERT INTO plans (id, pipe_id, target_id, template, state, queued_at, step, retries) VALUES (1, 1, 1, 'pr_path', 'queued', ?, 0, 0)")
-    .run(`${day}T00:00:00.000Z`)
+  putPlan(db, { id: 1, pipe_id: 1, target_id: 1, template: 'pr_path', state: 'queued', queued_at: `${day}T00:00:00.000Z`, step: 0, retries: 0 })
   put(root, 1, 'ask.md', '# hello\n\n- **D1** add `hello()` in `src/hello.ts`\n')
-  return { db, root, pipe: pipeRow(db), plan: 1, target: 1 }
+  return { db, root, pipe: pipeOf(db, 1), plan: 1, target: 1 }
 }
 
 /**
@@ -213,20 +213,17 @@ export function world(pulse: 'warm' | 'cold' = 'warm', day = new Date().toISOStr
  * day and drops the two lanes it does not drive; a test that wants a second names it itself.
  */
 function onePipe(db: Db): void {
-  db.prepare("UPDATE pipes SET window_start = '00:00', window_end = '23:59' WHERE name = 'pr-path'").run()
-  db.prepare("DELETE FROM pipes WHERE name IN ('comms', 'research')").run()
+  hours(db, 1, '00:00', '23:59')
+  dropPipes(db, ['comms', 'research'])
 }
 
 /** Reads of the first ten briefs (`store/holds.ts`): spent in a world that is not driving them. */
 export function reads(db: Db, n: number): void {
-  db.prepare("UPDATE settings SET value = ? WHERE key = 'brief.reads_left'").run(String(n))
+  set(db, 'brief.reads_left', String(n), 'pr', '2026-09-19')
 }
 
 export function approve(db: Db, target: number): void {
-  const t = db.prepare('SELECT repo, issue_no, evidence_measured_at FROM targets WHERE id = ?').get(target) as
-    { repo: string; issue_no: number; evidence_measured_at: string }
-  db.prepare(`INSERT INTO approvals (subject_kind, subject_id, subject_digest, who, decision, approved_at)
-    VALUES ('target', ?, ?, 'ceo', 'approved', '2026-09-17T00:00:00.000Z')`).run(target, targetDigest(t))
+  decide(db, 'target', target, targetDigest(targetRow(db, target)), null)
 }
 
 export const RUN = 'https://github.com/caliperforge/widget/actions/runs/1'
@@ -339,9 +336,5 @@ export function landing(wire: Wire): Wire {
 }
 
 export function plan(db: Db, id: number): PlanRow {
-  return PlanRow.parse(db.prepare('SELECT * FROM plans WHERE id = ?').get(id))
-}
-
-function pipeRow(db: Db): PipeRow {
-  return db.prepare('SELECT * FROM pipes WHERE id = 1').get() as PipeRow
+  return planById(db, id)
 }

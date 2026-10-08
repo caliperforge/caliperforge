@@ -194,9 +194,6 @@
   "tests/chain.test.ts": {
     "prepare": 1
   },
-  "tests/checks.test.ts": {
-    "prepare": 10
-  },
   "tests/ci.test.ts": {
     "prepare": 5
   },

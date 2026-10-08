@@ -4,9 +4,14 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { expect, test } from 'vitest'
 import { unread } from '../../cli/inbox.ts'
+import { addRun } from '../../store/brief.ts'
+import { decisions } from '../../store/decisions.ts'
+import { runRows } from '../../store/events.ts'
 import { filesOf, listed, record } from '../../store/files.ts'
-import type { Db } from '../../store/index.ts'
+import { addRule, type Db } from '../../store/index.ts'
+import { dropPlan, pipeOf } from '../../store/plans.ts'
 import { profile } from '../../store/profile.ts'
+import { verdictRows } from '../../store/verdict.ts'
 import { checks, excluded, mode, npm, type Ran, type Run } from '../checks.ts'
 import { ciFeatures, formatLine, recipes } from '../gates.ts'
 import { tick } from '../index.ts'
@@ -67,7 +72,7 @@ function recorder(red?: string): { run: Run; seen: string[] } {
 /** Our own repo carrying the scripts, so the plan's checkout is the one the checks run in. */
 function mine(files: Record<string, string>): World {
   const w = world()
-  w.db.prepare('DELETE FROM plans WHERE id = 1').run()
+  dropPlan(w.db, 1)
   ours(w.root, files)
   internalPlan(w.db, w.root, ID)
   return w
@@ -75,8 +80,9 @@ function mine(files: Record<string, string>): World {
 
 /** The row `proof()` reads for `tests_pass`: the last `pre_review` verdict the lap wrote. */
 function last(db: Db, plan: number): unknown {
-  return db.prepare(`SELECT gate, kind, step, outcome, rail_id, origin_kind, origin_ref, tokens, seconds
-    FROM verdicts WHERE plan = ? ORDER BY id DESC LIMIT 1`).get(plan)
+  const row = verdictRows(db, plan).at(-1)
+  return row && { gate: row.gate, kind: row.kind, step: row.step, outcome: row.outcome, rail_id: row.rail_id,
+    origin_kind: row.origin_kind, origin_ref: row.origin_ref, tokens: row.tokens, seconds: row.seconds }
 }
 
 test('three scripts run in order and stop at the first failure', () => {
@@ -98,7 +104,7 @@ test('a red lint goes back to step 2 with its output, no reviewer', async () => 
   expect(fired).toMatchObject({ plan: ID, step: 3, name: 'rails', outcome: 'refuse', spans: ['checks:lint'] })
   expect(fired?.note).toBe('npm run lint exit 3')
   expect(plan(w.db, ID).step).toBe(2)
-  expect(w.db.prepare('SELECT 1 FROM runs WHERE plan = ? AND step > 3').all(ID)).toEqual([])
+  expect(runRows(w.db).filter((r) => r.plan === ID && r.step > 3)).toEqual([])
   expect(get(w.root, ID, 'refusal.md')).toContain('npm run lint')
   expect(get(w.root, ID, 'refusal.md')).toContain('lint is red')
   expect(last(w.db, ID)).toEqual({
@@ -195,7 +201,7 @@ test('#191 D1 a red unlisted test on changed code joins the job', async () => {
   expect(plan(w.db, ID).state).not.toBe('blocked_on_ceo')
   expect(filesOf(w.db, ID).map((f) => f.path)).toEqual([...before, 'src/tests/hello.test.ts'])
   expect(get(w.root, ID, 'refusal.md')).toContain('src/tests/hello.test.ts')
-  expect(w.db.prepare('SELECT 1 FROM decisions WHERE plan = ?').all(ID)).toEqual([])
+  expect(decisions(w.db, ID)).toEqual([])
 }, SLOW)
 
 test('#191 D2 a red unlisted test on unchanged code is refused', async () => {
@@ -255,16 +261,16 @@ const HASH = '0'.repeat(64)
 
 /** A step-2 run row, which is all `narrow` reads to tell a first build from a rebuild. */
 function built(w: World, at: number): void {
-  w.db.prepare(`INSERT OR IGNORE INTO rules (id, kind, path, content_hash, loaded_at)
-    VALUES ('typescript_specialist', 'card', 'rules/roster.yaml', ?, '2026-09-22T00:00:00.000Z')`).run(HASH)
-  w.db.prepare(`INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort,
-    input_tokens, cache_read_tokens, output_tokens, seconds, exit, transcript_path)
-    VALUES (1, 2, 'typescript_specialist', ?, 'anthropic-api', 'm', 'low', 0, 0, 0, 0, 0, ?)`)
-    .run(HASH, `step-2.${String(at)}.transcript.jsonl`)
+  addRun(w.db, {
+    plan: 1, step: 2, seat: 'typescript_specialist', rule_hash: HASH, provider: 'anthropic-api', model: 'm', effort: 'low',
+    input_tokens: 0, cache_write_tokens: null, cache_write_1h_tokens: null, cache_read_tokens: 0, output_tokens: 0,
+    seconds: 0, exit: 0, at: '2026-09-22T00:00:00.000Z', transcript_path: `step-2.${String(at)}.transcript.jsonl`, cost_usd: null,
+  })
 }
 
 test('#77: first build runs the suite; a rebuild what it reaches', () => {
   const w = world()
+  addRule(w.db, { id: 'typescript_specialist', kind: 'card', path: 'rules/roster.yaml', content_hash: HASH, loaded_at: '2026-09-22T00:00:00.000Z' })
   const row = plan(w.db, 1)
   record(w.db, 1, [{ path: 'store/plans.ts', is_new: false }, { path: 'store/lanes.ts', is_new: false }])
 
@@ -305,7 +311,7 @@ test('a target plan runs no stranger scripts and passes step 3', async () => {
   const fired = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, w.plan)))[0]
   expect(fired).toMatchObject({ plan: w.plan, step: 3, name: 'rails', outcome: 'pass' })
   expect(plan(w.db, w.plan).step).toBe(4)
-  expect(w.db.prepare("SELECT 1 FROM verdicts WHERE plan = ? AND rail_id = 'checks'").all(w.plan)).toEqual([])
+  expect(verdictRows(w.db, w.plan).filter((v) => v.rail_id === 'checks')).toEqual([])
 }, SLOW)
 
 const XCODEBUILD = '-project Atelier.xcodeproj -scheme Atelier -destination platform=macOS -derivedDataPath .cf-derived -test-timeouts-enabled YES -default-test-execution-time-allowance 60 -maximum-test-execution-time-allowance 60 test'
@@ -406,7 +412,7 @@ test('#257 D1 a fault keeps retries, stops the lane, posts once', () => {
   internalPlan(w.db, w.root, ID)
   expect(faulted(w.db, w.root, plan(w.db, ID), STALE)).toMatchObject({ outcome: 'pass', held: true })
   expect(plan(w.db, ID).retries).toBe(0)
-  expect(w.db.prepare('SELECT enabled FROM pipes WHERE id = 1').get()).toEqual({ enabled: 0 })
+  expect(pipeOf(w.db, 1).enabled).toBe(0)
   expect(unread(w.root).map((e) => e.note)).toEqual([expect.stringMatching(/restart the Mac.*xcodebuild -runFirstLaunch/) as string])
   faulted(w.db, w.root, plan(w.db, ID), STALE)
   expect(unread(w.root)).toHaveLength(1)
@@ -475,7 +481,7 @@ test('#257 D6 a faulted step 3 stays put with no checks verdict', async () => {
     const fired = (await tick(w.db, w.root, stub(CARRIED)))[0]
     expect(fired).toMatchObject({ plan: ID, step: 3, name: 'rails', spans: ['xcode'] })
     expect(plan(w.db, ID)).toMatchObject({ step: 3, retries: 0 })
-    expect(w.db.prepare("SELECT 1 FROM verdicts WHERE plan = ? AND rail_id = 'checks'").all(ID)).toEqual([])
+    expect(verdictRows(w.db, ID).filter((v) => v.rail_id === 'checks')).toEqual([])
   } finally {
     process.env.PATH = path
   }
@@ -565,7 +571,7 @@ test('a live tick\'s checks lock holds step 3, running nothing', async () => {
   const fired = (await tick(w.db, w.root, stub(CARRIED)))[0]
   expect(fired).toMatchObject({ plan: ID, step: 3, name: 'rails', note: 'checks wait: plan 9 is running its tests' })
   expect(plan(w.db, ID).step).toBe(3)
-  expect(w.db.prepare("SELECT 1 FROM verdicts WHERE plan = ? AND rail_id = 'checks'").all(ID)).toEqual([])
+  expect(verdictRows(w.db, ID).filter((v) => v.rail_id === 'checks')).toEqual([])
 }, SLOW)
 
 test('a dead holder\'s checks lock is taken, then released', async () => {

@@ -184,8 +184,8 @@ function broke(db: Db, root: string, plan: PlanRow, failed: Failure): Outcome {
  */
 function strangers(db: Db, plan: PlanRow): boolean {
   if (plan.target_id === null) return false
-  const row = db.prepare('SELECT repo FROM targets WHERE id = ?').get(plan.target_id) as { repo: string } | undefined
-  return row !== undefined && !row.repo.startsWith('caliperforge/')
+  const repo = repoOf(db, plan)
+  return repo !== null && !repo.startsWith('caliperforge/')
 }
 
 function rest(db: Db, root: string, plan: PlanRow, handback: string, diff: string, on: Rails): [string, () => Verdict][] {

@@ -38,8 +38,8 @@ export function gh(args: string[]): unknown {
   return JSON.parse(execFileSync('gh', args, { encoding: 'utf8' })) as unknown
 }
 
-export function issue(repo: string, no: number): Issue {
-  return Issue.parse(gh(['issue', 'view', String(no), '--repo', repo, '--json',
+export function issue(repo: string, no: number, read: Read = gh): Issue {
+  return Issue.parse(read(['issue', 'view', String(no), '--repo', repo, '--json',
     'number,title,body,state,assignees,comments,closedByPullRequestsReferences']))
 }
 
@@ -209,6 +209,7 @@ export interface Desk {
   close: (no: number, comment: string) => void
   rehearsal: (fork: string, branch: string) => number | null
   lines: (fork: string, pr: number) => string[]
+  issue: (repo: string, no: number) => Issue
 }
 
 export type Run = (args: string[], input?: string) => string
@@ -280,6 +281,7 @@ export function desk(repo: string, read: Read = gh, exec: Run = run): Desk {
     close: (no, comment) => void exec(['issue', 'close', String(no), '--repo', repo, '--comment', comment]),
     rehearsal: (fork, branch) => rehearsal(fork, branch, read),
     lines: (fork, pr) => inline(fork, pr, read).filter((c) => c.user.login === me() && c.body.trim() !== '').map(said),
+    issue: (repo, no) => issue(repo, no, read),
   }
 }
 

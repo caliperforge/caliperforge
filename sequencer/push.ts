@@ -190,8 +190,8 @@ export function carried(root: string, plan: number, sha: string): string {
 
 /** A head sent again keeps its tip, so its CI is not restarted. */
 function tipOf(root: string, plan: number, head: Head, ci: string, repo: string): string {
-  const known = tips(root, plan).find(([, of]) => of === head.sha)?.[0]
-  if (known !== undefined) return known
+  const [known, of] = tips(root, plan).at(-1) ?? []
+  if (known !== undefined && of === head.sha) return known
   const tip = quiet(head.dir, ci, config(root, repo))
   put(root, plan, TIPS, `${maybe(root, plan, TIPS) ?? ''}${tip} ${head.sha}\n`)
   return tip

@@ -279,7 +279,7 @@ test('D1 D2 D3 pre-pr rounds move -next; push sends the branch', async () => {
   expect(plan(w.db, 1).step).toBe(7)
   const first = git(['rev-parse', 'HEAD'])
   rewind(w.db, 1, 4)
-  await round(w, wire, 'hi', 3)
+  await round(w, wire, 'ho', 3)
   expect(plan(w.db, 1).step).toBe(7)
   expect(git(['rev-parse', 'HEAD^'])).toBe(git(['merge-base', 'HEAD', 'refs/remotes/upstream/main']))
   expect(git(['rev-parse', 'HEAD'])).not.toBe(first)

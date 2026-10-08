@@ -102,15 +102,21 @@ export function waits(db: Db, root: string, repo: string, no: number, read: Read
   if (rules === undefined) return null
   const claim = `claim.${repo}#${String(no)}`
   if (rules.claim_first && latest(db, claim)?.value !== 'confirmed') return `claim_first: no ruling ${claim} = confirmed`
-  const ours = (state: string, field: string): unknown[] => z.array(z.unknown()).parse(read(['pr', 'list', '--repo', repo,
-    '--author', '@me', '--state', state, '--limit', String(WINDOW), '--json', field]))
   const cap = rules.max_open_prs
-  const open = cap === undefined ? 0 : ours('open', 'number').length
+  const open = cap === undefined ? 0 : ours(read, repo, 'open', 'number').length
   if (cap !== undefined && open >= cap) return `max_open_prs: ${String(open)} of ours open in ${repo}, cap ${String(cap)}`
-  if (rules.pace === undefined) return null
-  const { prs, days } = rules.pace
+  return rules.pace === undefined ? null : paced(repo, rules.pace, read, now)
+}
+
+function ours(read: Read, repo: string, state: string, field: string): unknown[] {
+  return z.array(z.unknown()).parse(read(['pr', 'list', '--repo', repo,
+    '--author', '@me', '--state', state, '--limit', String(WINDOW), '--json', field]))
+}
+
+export function paced(repo: string, pace: { prs: number; days: number }, read: Read, now: Date): string | null {
+  const { prs, days } = pace
   const since = now.getTime() - days * 86400000
-  const opened = Opened.parse(ours('all', 'createdAt')).filter((p) => Date.parse(p.createdAt) >= since).length
+  const opened = Opened.parse(ours(read, repo, 'all', 'createdAt')).filter((p) => Date.parse(p.createdAt) >= since).length
   return opened >= prs ? `pace: ${String(opened)} opened in ${repo} in the last ${String(days)} days, cap ${String(prs)}` : null
 }
 

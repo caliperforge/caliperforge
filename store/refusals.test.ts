@@ -3,7 +3,7 @@ import { expect, test } from 'vitest'
 import { load } from '../runner/rules.ts'
 import { logged, runAt } from './events.ts'
 import { migrate, open, type Db } from './index.ts'
-import { blipped, builds, clear, fingerprint, refusalRows, refused, ROUNDS } from './refusals.ts'
+import { blipped, builds, clear, fingerprint, refusalRows, refused, ROUNDS, sinceSent } from './refusals.ts'
 
 const root = join(import.meta.dirname, '..')
 
@@ -203,6 +203,23 @@ test('builds counts build events that ran a model', () => {
   }
   clear(db, PLAN)
   expect(builds(db, PLAN)).toBe(2)
+})
+
+test('D1 D2 sinceSent counts from a ceo or coo send only', () => {
+  const db = bench()
+  load(db, root)
+  const run = runAt(db, PLAN, 2, 'typescript_specialist', '2026-09-21T00:00:00.000Z')
+  const log = (kind: string, actor: string, ran: number | null): void =>
+    void logged(db, { plan: PLAN, kind, actor, outcome: 'pass', message: '', pointer: null, run: ran })
+  for (let n = 0; n < 3; n += 1) log('build', 'typescript_specialist', run)
+  expect(sinceSent(db, PLAN)).toBe(3)
+  log('retry', 'coo', null)
+  log('build', 'typescript_specialist', run)
+  log('build', 'typescript_specialist', run)
+  expect(sinceSent(db, PLAN)).toBe(2)
+  for (const actor of ['director', 'fixer', 'orchestrator']) log('return', actor, null)
+  expect(sinceSent(db, PLAN)).toBe(2)
+  expect(builds(db, PLAN)).toBe(5)
 })
 
 test('refusalRows keeps cleared rows, newest first, no blips', () => {

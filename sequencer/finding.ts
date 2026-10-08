@@ -44,9 +44,9 @@ export async function answer(db: Db, root: string, provider: Provider, now: Date
   const built = packet(manifest, prompt, tight(root), text, dir, pending(dir, `finding-${String(found.id)}`))
   const fired = await provider.fire({ ...built, wall: wall(db) })
   const m = fired.ended === 'completed' ? read(fired.text) : null
-  if (m === null) return told(db, found, now, 'escalate', `finding ${String(found.id)}: no outcome`)
+  if (m === null) return told(db, found, now, 'needs_coo', `finding ${String(found.id)}: no outcome`)
   if (m.outcome === 'retire') {
-    if (held === null) return told(db, found, now, 'escalate', `retire did not apply: no entry ${found.name}`)
+    if (held === null) return told(db, found, now, 'needs_coo', `retire did not apply: no entry ${found.name}`)
     const left = [...held.lines.slice(0, held.at.from), ...held.lines.slice(held.at.to)]
     if (left.some((l) => l.startsWith('- name: '))) writeFileSync(held.path, left.join('\n'))
     else rmSync(held.path)
@@ -89,7 +89,7 @@ function refOf(m: Said, found: Finding, wire: Wire): string | null {
   return wire.file(SELF, m.title ?? m.why, body, ['lane:machine', 'P0', 'fix'])
 }
 
-function told(db: Db, found: Finding, now: Date, outcome: 'pass' | 'escalate', message: string): string {
+function told(db: Db, found: Finding, now: Date, outcome: 'pass' | 'needs_coo', message: string): string {
   logged(db, { plan: null, kind: 'director', actor: 'director', outcome, message, pointer: `finding ${String(found.id)}`, run: null },
     now.toISOString())
   return message

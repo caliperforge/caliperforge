@@ -43,7 +43,7 @@ const Said = z.object({
 
 type Move = z.infer<typeof Said> | { move: 'split'; why: string; parts: Part[] }
 
-interface Told { outcome: 'pass' | 'needs_ceo'; message: string; note?: string; pointer?: string | null }
+interface Told { outcome: 'pass' | 'needs_coo'; message: string; note?: string; pointer?: string | null }
 
 export function applying(db: Db): boolean {
   const row = db.prepare("SELECT value FROM settings WHERE key = 'director.apply'").get() as { value: string } | undefined
@@ -54,7 +54,7 @@ export async function cooLite(db: Db, root: string, plan: PlanRow, provider: Pro
   wire: Wire = WIRE, tried?: string): Promise<string> {
   if (plan.state !== 'blocked_on_ceo' && plan.state !== 'halted') {
     return WAITING.has(plan.wait_reason ?? '') ? told(db, root, plan, now, { outcome: 'pass', message: `left alone: plan is ${plan.state}, waiting on ${plan.wait_reason ?? ''}` })
-      : told(db, root, plan, now, { outcome: 'needs_ceo', message: `ask_ceo: plan is ${plan.state}, not stopped` }, post)
+      : told(db, root, plan, now, { outcome: 'needs_coo', message: `ask_ceo: plan is ${plan.state}, not stopped` }, post)
   }
   if (plan.wait_reason === 'token_ceiling' && sentOnce(db, plan.id)) return twice(db, root, plan, now, post)
   const filed = applying(db) ? repeated(db, root, plan, wire, now) : null
@@ -67,11 +67,11 @@ export async function cooLite(db: Db, root: string, plan: PlanRow, provider: Pro
     const again = refused(m, said, n, root)
     if (again !== null) return m?.move === 'fix' && builderWork(root, m.why) && applying(db) && apply(db, root, plan, { move: 'rule', why: m.why, answer: m.why }, wire, now) === true
       ? told(db, root, plan, now, { outcome: 'pass', message: `rule: ${m.why} (out of the fixer's reach, so the builder takes it)` })
-      : told(db, root, plan, now, { outcome: 'needs_ceo', message: again.message }, post)
+      : told(db, root, plan, now, { outcome: 'needs_coo', message: again.message }, post)
   }
-  if (m === null) return told(db, root, plan, now, { outcome: 'needs_ceo', message: 'ask_ceo: no readable answer' }, post)
+  if (m === null) return told(db, root, plan, now, { outcome: 'needs_coo', message: 'ask_ceo: no readable answer' }, post)
   const message = `${m.move}: ${m.why}`
-  if (!applying(db)) return told(db, root, plan, now, { outcome: 'needs_ceo', message, note: `proposes ${message}` })
+  if (!applying(db)) return told(db, root, plan, now, { outcome: 'needs_coo', message, note: `proposes ${message}` })
   const done = m.move === 'fix' ? await fixed(db, root, plan, m.why, provider, now, post, wire)
     : m.move !== 'ask_ceo' && m.move !== 'ask_coo' && apply(db, root, plan, m, wire, now)
   if (done !== false) return told(db, root, plan, now, { outcome: 'pass', message, pointer: done === true ? null : done })
@@ -79,12 +79,12 @@ export async function cooLite(db: Db, root: string, plan: PlanRow, provider: Pro
   if (m.move === 'ask_ceo' || m.move === 'ask_coo') {
     held(db, plan.id, m.move === 'ask_ceo' ? 'ceo' : 'coo', m.why)
     const ceo = decision(said)
-    return told(db, root, plan, now, { outcome: 'needs_ceo', message: m.move === 'ask_ceo' && 'block' in ceo ? `${message}\n\n${ceo.block}` : message }, post)
+    return told(db, root, plan, now, { outcome: 'needs_coo', message: m.move === 'ask_ceo' && 'block' in ceo ? `${message}\n\n${ceo.block}` : message }, post)
   }
   const failed = `${m.move} did not apply, ${UNAPPLIED[m.move]}: ${m.why}`
   needsCeo(db, plan)
   held(db, plan.id, 'coo', failed.split('\n')[0] ?? failed)
-  return told(db, root, plan, now, { outcome: 'needs_ceo', message: failed }, post)
+  return told(db, root, plan, now, { outcome: 'needs_coo', message: failed }, post)
 }
 
 function twice(db: Db, root: string, plan: PlanRow, now: Date, post: Post): string {
@@ -93,7 +93,7 @@ function twice(db: Db, root: string, plan: PlanRow, now: Date, post: Post): stri
     decided(db, { plan: plan.id, step: plan.step, wait_reason: 'token_ceiling', verb: 'ask_ceo', why, evidence: null, tokens: 0 })
     held(db, plan.id, 'ceo', why)
   })()
-  return told(db, root, plan, now, { outcome: 'needs_ceo', message: `ask_ceo: ${why}` }, post)
+  return told(db, root, plan, now, { outcome: 'needs_coo', message: `ask_ceo: ${why}` }, post)
 }
 
 function refused(m: Move | null, said: string, n: number, root: string): { fence: string; message: string } | null {
@@ -125,7 +125,7 @@ function stops(db: Db, root: string, now: Date, post: Post): Stop[] {
     ORDER BY d.at, p.id`).all({ at: now.toISOString() }) as Stop[]
   const fresh: Stop[] = []
   for (const s of rows.filter((s) => s.answered !== 1 && !isHeld(root, s.id))) {
-    if (s.today >= 2) told(db, root, planById(db, s.id), now, { outcome: 'needs_ceo', message: 'ask_coo: director answered this plan twice today' }, post)
+    if (s.today >= 2) told(db, root, planById(db, s.id), now, { outcome: 'needs_coo', message: 'ask_coo: director answered this plan twice today' }, post)
     else fresh.push(s)
   }
   return fresh

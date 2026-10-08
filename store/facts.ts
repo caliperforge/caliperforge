@@ -1,12 +1,18 @@
-import { extname } from 'node:path'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { extname, join } from 'node:path'
+import { gh, type Issue, type Read } from '../cli/gh.ts'
+import { paced } from '../cli/queue.ts'
 import type { Board } from '../rails/ci-green/index.ts'
 import { parse, type FileDiff } from '../rails/diff.ts'
 import { TEST_FILE } from '../rails/test-weakened/index.ts'
 import { conventionsOf } from '../rails/test-weakened/languages.ts'
+import { unsigned } from '../sequencer/conventions.ts'
 import { listed, settled } from '../sequencer/unruled.ts'
+import { OPERATOR, srcDir } from '../sequencer/workspace.ts'
 import { lastChecks } from './checks.ts'
 import type { Db } from './index.ts'
 import { lastReview } from './merges.ts'
+import { profile, type Profile } from './profile.ts'
 import { builds } from './refusals.ts'
 import { graded } from './signals.ts'
 
@@ -116,4 +122,52 @@ export function greptileFacts(db: Db, root: string, plan: number, head: string):
     { name: 'findings', ok: true, says: `${String(found.length)} findings` },
     ...found.map(({ id }) => ({ name: id, ok: lines.has(id), says: lines.get(id) ?? 'open' })),
   ]
+}
+
+export function ruleFacts(root: string, plan: number, repo: string, row: Issue, body: string, read: Read = gh, now = new Date()): Fact[] {
+  const rules = profile(root, repo)
+  const dir = srcDir(root, plan)
+  const no = `#${String(row.number)}`
+  const logins = row.assignees.map((a) => a.login)
+  const misses = unsigned(dir)
+  return [
+    templateFact(dir, body),
+    disclosed(rules?.disclosure, body),
+    new RegExp(`${no}(?!\\d)`).test(body) ? { name: 'linked', ok: true, says: `${no} linked` } : { name: 'linked', ok: false, says: `${no} not in the body` },
+    logins.includes(OPERATOR) ? { name: 'assigned', ok: true, says: 'assigned to us' }
+      : { name: 'assigned', ok: false, says: `assigned to ${logins.length === 0 ? 'nobody' : logins.join(', ')}` },
+    { name: 'signed', ok: misses.length === 0, says: misses.length === 0 ? 'no Signed-off-by missing' : misses.join('; ') },
+    paceFact(repo, rules?.intake?.pace, read, now),
+  ]
+}
+
+function template(dir: string): string | undefined {
+  for (const at of [join(dir, '.github'), dir, join(dir, 'docs')]) {
+    const name = existsSync(at) ? readdirSync(at).find((f) => f.toLowerCase() === 'pull_request_template.md') : undefined
+    if (name !== undefined) return readFileSync(join(at, name), 'utf8')
+  }
+  return undefined
+}
+
+function templateFact(dir: string, body: string): Fact {
+  const text = template(dir)
+  if (text === undefined) return { name: 'template', ok: true, says: 'no template' }
+  const lines = new Set(body.split('\n').map((l) => l.trim()))
+  const sections = text.split('\n').filter((l) => /^#{1,6}\s/.test(l)).map((l) => l.trim())
+  const missing = sections.filter((s) => !lines.has(s))
+  if (missing.length === 0) return { name: 'template', ok: true, says: `${String(sections.length)} sections present` }
+  return { name: 'template', ok: false, says: `missing ${missing.join(', ')}` }
+}
+
+function disclosed(disclosure: string | undefined, body: string): Fact {
+  if (disclosure === undefined) return { name: 'disclosure', ok: true, says: 'no disclosure rule' }
+  const flat = (s: string): string => s.replace(/\s+/g, ' ')
+  const ok = flat(body).includes(flat(disclosure).trim())
+  return { name: 'disclosure', ok, says: ok ? 'present' : 'missing' }
+}
+
+function paceFact(repo: string, pace: NonNullable<Profile['intake']>['pace'], read: Read, now: Date): Fact {
+  if (pace === undefined) return { name: 'pace', ok: true, says: 'no pace rule' }
+  const says = paced(repo, pace, read, now)
+  return says === null ? { name: 'pace', ok: true, says: `under ${String(pace.prs)} in ${String(pace.days)} days` } : { name: 'pace', ok: false, says }
 }

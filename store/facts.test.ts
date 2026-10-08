@@ -1,13 +1,15 @@
-import { mkdtempSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { expect, test } from 'vitest'
+import type { Issue, Read } from '../cli/gh.ts'
 import { fresh } from '../checks/sqlite.ts'
 import { planRow } from '../runner/index.ts'
 import { load } from '../runner/rules.ts'
-import { put } from '../sequencer/workspace.ts'
+import { MAIN, OPERATOR, put, srcDir } from '../sequencer/workspace.ts'
 import { logged, runAt } from './events.ts'
-import { ciFacts, diffFacts, facts, greptileFacts, testFacts } from './facts.ts'
+import { ciFacts, diffFacts, facts, greptileFacts, ruleFacts, testFacts, type Fact } from './facts.ts'
 import type { Db } from './index.ts'
 import { record } from './signals.ts'
 
@@ -155,4 +157,91 @@ test('D3 greptileFacts with no score and no findings file', () => {
     { name: 'greptile', ok: false, says: 'no score' },
     { name: 'findings', ok: true, says: '0 findings' },
   ])
+})
+
+const PLAN = 1
+const NOW = new Date('2026-10-08T00:00:00Z')
+const DAY = 86400000
+const PROFILE = 'disclosure: >-\n  Built with an AI agent\n  and reviewed by a person.\nintake: { pace: { prs: 1, days: 7 } }\n'
+const DISCLOSURE = 'Built with an AI\nagent and reviewed by a person.'
+const ISSUE: Issue = { number: 12, title: 't', body: '', state: 'OPEN', assignees: [{ login: OPERATOR }], comments: [],
+  closedByPullRequestsReferences: [] }
+const signedOff = (subject: string): string => `${subject}\n\nSigned-off-by: t <t@t>`
+
+function git(dir: string, args: string[]): void {
+  execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', ...args], { cwd: dir, stdio: 'ignore' })
+}
+
+function rooted(profile: string | null, files: Record<string, string> = {}, ours = signedOff('add hello')): string {
+  const root = mkdtempSync(join(tmpdir(), 'cf-rules-'))
+  if (profile !== null) {
+    mkdirSync(join(root, 'profiles/acme'), { recursive: true })
+    writeFileSync(join(root, 'profiles/acme/widget.yml'), profile)
+  }
+  const src = srcDir(root, PLAN)
+  git(src, ['init', '-q', '-b', 'main'])
+  for (const [name, text] of Object.entries(files)) {
+    mkdirSync(dirname(join(src, name)), { recursive: true })
+    writeFileSync(join(src, name), text)
+  }
+  git(src, ['add', '-A'])
+  git(src, ['commit', '-q', '--allow-empty', '-m', signedOff('a')])
+  git(src, ['update-ref', MAIN, 'HEAD'])
+  git(src, ['commit', '-q', '--allow-empty', '-m', ours])
+  return root
+}
+
+function opened(days: number[], sent: string[][] = []): Read {
+  return (args) => {
+    sent.push(args)
+    return days.map((ago) => ({ createdAt: new Date(NOW.getTime() - ago * DAY).toISOString() }))
+  }
+}
+
+function rule(root: string, name: string, body: string, read = opened([]), row = ISSUE): Fact | undefined {
+  return ruleFacts(root, PLAN, 'acme/widget', row, body, read, NOW).find((f) => f.name === name)
+}
+
+test('D1 a missing disclosure is no, a reflowed one present', () => {
+  const root = rooted(PROFILE)
+  expect(rule(root, 'disclosure', 'Closes #12')).toEqual({ name: 'disclosure', ok: false, says: 'missing' })
+  expect(rule(root, 'disclosure', `Closes #12\n\n${DISCLOSURE}\n`)).toEqual({ name: 'disclosure', ok: true, says: 'present' })
+})
+
+test('D2 the pace cap reached is no, older PRs do not count', () => {
+  const root = rooted(PROFILE)
+  expect(rule(root, 'pace', '', opened([1]))).toEqual({ name: 'pace', ok: false,
+    says: 'pace: 1 opened in acme/widget in the last 7 days, cap 1' })
+  expect(rule(root, 'pace', '', opened([8]))).toEqual({ name: 'pace', ok: true, says: 'under 1 in 7 days' })
+})
+
+test('D3 a template section missing from the body is named', () => {
+  const root = rooted(null, { '.github/PULL_REQUEST_TEMPLATE.md': '## Linked issue\n\nsay which\n\n## Testing\n' })
+  expect(rule(root, 'template', '## Linked issue\n\nCloses #12\n'))
+    .toEqual({ name: 'template', ok: false, says: 'missing ## Testing' })
+})
+
+test('D4 an unlinked body and an unassigned issue are no', () => {
+  const root = rooted(null)
+  expect(rule(root, 'linked', 'Closes #123')).toEqual({ name: 'linked', ok: false, says: '#12 not in the body' })
+  expect(rule(root, 'assigned', 'Closes #12', opened([]), { ...ISSUE, assignees: [] }))
+    .toEqual({ name: 'assigned', ok: false, says: 'assigned to nobody' })
+})
+
+test('D5 our unsigned commit in a signing repo is named', () => {
+  const root = rooted(null, {}, 'add hello')
+  expect(rule(root, 'signed', '')).toEqual({ name: 'signed', ok: false, says: '"add hello" has no Signed-off-by' })
+})
+
+test('D6 no profile passes disclosure and pace with no gh call', () => {
+  const sent: string[][] = []
+  expect(ruleFacts(rooted(null), PLAN, 'acme/widget', ISSUE, 'Closes #12', opened([1], sent), NOW)).toEqual([
+    { name: 'template', ok: true, says: 'no template' },
+    { name: 'disclosure', ok: true, says: 'no disclosure rule' },
+    { name: 'linked', ok: true, says: '#12 linked' },
+    { name: 'assigned', ok: true, says: 'assigned to us' },
+    { name: 'signed', ok: true, says: 'no Signed-off-by missing' },
+    { name: 'pace', ok: true, says: 'no pace rule' },
+  ])
+  expect(sent).toEqual([])
 })

@@ -8,7 +8,7 @@ import { botClean, built, gated, newest, ready as readyRow, type DeliverableRow,
 import { record as recordFiles } from '../store/files.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
-import { BUILT, internal, stampHead, type PlanRow } from '../store/plans.ts'
+import { allPlans, BUILT, internal, stampHead, type PlanRow } from '../store/plans.ts'
 import { diffAt } from '../store/refusals.ts'
 import { graded, greptiled } from '../store/signals.ts'
 import type { Step } from '../templates/pr-path.ts'
@@ -204,6 +204,14 @@ function clean(db: Db, root: string, plan: PlanRow): boolean {
   const head = cloned(src) ? headSha(src) : undefined
   const forkClean = internal(plan) || head === undefined || unruled(root, plan.id, head).open.length === 0
   return unanswered(db, plan.id, head) === undefined && forkClean
+}
+
+/** Raises the newest row of each step-6 plan a ruling after senior made clean; only the ready gate lowers it. */
+export function rescored(db: Db, root: string): void {
+  for (const plan of allPlans(db)) {
+    if (plan.template !== 'pr_path' || plan.step !== 6 || !['queued', 'running'].includes(plan.state)) continue
+    if (newest(db, plan.id)?.bot_clean === 0 && clean(db, root, plan)) botClean(db, plan.id, true)
+  }
 }
 
 /** A low bot score a later build, or another `head`, has answered no longer holds the plan; the bot scores the new head once it is pushed. */

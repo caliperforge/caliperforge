@@ -246,6 +246,12 @@
   table: events
   column: at
   where: kind = 'files' AND actor = 'ruling' AND outcome = 'pass'
+- name: needs_ceo_actor
+  table: events
+  column: at
+  where: outcome = 'needs_ceo' AND actor <> 'coo'
+  gap: 7d
+  expected: 0
 - name: build_cap
   table: events
   column: at

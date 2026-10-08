@@ -190,6 +190,7 @@ test('a throwing fixer: the tick goes on, a person gets the stop', async () => {
   const was = count()
   await woke(db, home, stub('---\ndid: nothing\nthen: ticket\nwhy: a bug\nticket: a bug\n---\n', []), now, (t) => void posted.push(t), broken)
   expect(maybe(home, 7, 'fixer.error')).toBe('gh is down')
+  expect(ofKind(db, 'fixer_error').map((e) => e.outcome)).toEqual(['escalate', 'escalate'])
   expect(posted).toHaveLength(1)
   expect(count()).toEqual(was)
   expect(waitsOn(db)).toEqual({ waits_on: null })

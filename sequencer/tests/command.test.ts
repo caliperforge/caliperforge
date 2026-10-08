@@ -1,7 +1,7 @@
 import { expect, test, vi } from 'vitest'
 import { tick } from '../index.ts'
 import { diffOf, maybe, SELF } from '../workspace.ts'
-import { logged, runRows } from '../../store/events.ts'
+import { logged, ofKind, runRows } from '../../store/events.ts'
 import { dropPlan } from '../../store/plans.ts'
 import { CARRIED, internalPlan, ours, plan, stub, watched, world, type World } from './world.ts'
 
@@ -41,6 +41,7 @@ test('D2: a refile that throws blocks the plan on the CEO', async () => {
   const w = await commanding(REFILE)
   expect(plan(w.db, ID)).toMatchObject({ state: 'blocked_on_ceo' })
   expect(maybe(w.root, ID, 'command.md')).toBe(`${REFILE}\n\ngh exited 1\n`)
+  expect(ofKind(w.db, 'command').map((e) => e.outcome)).toEqual(['escalate'])
 })
 
 test('D3: a command off the allow-list is refused with no gh call', async () => {

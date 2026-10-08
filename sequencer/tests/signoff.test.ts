@@ -313,7 +313,7 @@ async function bodyAfter(...asks: [Event['outcome'], string][]): Promise<string>
 }
 
 test('D1 the card shows the decision block as written', async () => {
-  const body = await bodyAfter(['needs_ceo', BLOCK])
+  const body = await bodyAfter(['needs_coo', BLOCK])
   expect(body).toContain(`**The decision asked of you**\n\n\`\`\`\n${BLOCK}\n\`\`\`\n\n**Answer with one label.**`)
   expect(body.replace(/```markdown[\s\S]*?\n```\n/, '').replace(/`[^`]*`/g, '')).not.toMatch(/#\d|acme\/widget|github\.com\/acme/)
 })
@@ -325,8 +325,8 @@ test('D2 a plan with no director event shows no decision', async () => {
 })
 
 test('D3 an invalid or superseded block stays off the card', async () => {
-  expect(await bodyAfter(['needs_ceo', BLOCK.replace('upstream?', 'upstream')])).not.toContain('Decide:')
-  expect(await bodyAfter(['needs_ceo', BLOCK], ['pass', BLOCK])).not.toContain('Decide:')
+  expect(await bodyAfter(['needs_coo', BLOCK.replace('upstream?', 'upstream')])).not.toContain('Decide:')
+  expect(await bodyAfter(['needs_coo', BLOCK], ['pass', BLOCK])).not.toContain('Decide:')
 })
 
 /** The cards carry unposted PR text and sign-off answers, so they live apart from our public repo. */

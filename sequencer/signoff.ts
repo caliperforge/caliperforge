@@ -194,10 +194,10 @@ function unsaid(root: string, plan: number, text: string | null): string[] {
   return left.length === 0 ? [] : [`**Not in the PR text:** ${left.map((p) => code(p)).join(', ')}`, '']
 }
 
-/** The valid decision block on the plan's newest `director` event; null when that event is anything but `needs_ceo`. */
+/** The valid decision block on the plan's newest `director` event; null when that event is anything but `needs_coo` or `needs_ceo`. */
 function asked(db: Db, plan: number): string | null {
   const last = ofKind(db, 'director', 'coo_lite').filter((e) => e.plan === plan).at(-1)
-  if (last?.outcome !== 'needs_ceo') return null
+  if (last?.outcome !== 'needs_coo' && last?.outcome !== 'needs_ceo') return null
   const read = decision(last.message)
   return 'block' in read ? read.block : null
 }

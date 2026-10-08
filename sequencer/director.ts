@@ -6,7 +6,7 @@ import { packet } from '../runner/index.ts'
 import { load, seat, tight } from '../runner/rules.ts'
 import { decision } from '../store/ask.ts'
 import { decided, decisions } from '../store/decisions.ts'
-import { logged } from '../store/events.ts'
+import { kindsOf, logged } from '../store/events.ts'
 import { retried, returnToLane } from '../store/holds.ts'
 import type { Db } from '../store/index.ts'
 import { wall } from '../store/lanes.ts'
@@ -16,7 +16,7 @@ import { end, held, needsCeo, originRef, planById, PlanRow, retry } from '../sto
 import { clear, sentOnce } from '../store/refusals.ts'
 import { pending } from '../store/transcript.ts'
 import { split, type Part } from './brief.ts'
-import { isHeld, unhold } from './hold.ts'
+import { hold, isHeld, unhold } from './hold.ts'
 import { fixed, stop } from './fixed.ts'
 import { released } from './fixer.ts'
 import { prose } from './prose.ts'
@@ -32,18 +32,22 @@ import { widen } from './widen.ts'
 import { afresh, maybe, planDir, put } from './workspace.ts'
 
 const Said = z.object({
-  move: z.enum(['rule', 'waive', 'close', 'file', 'ask_ceo', 'ask_coo', 'return', 'fix', 'widen']),
+  move: z.enum(['rule', 'waive', 'close', 'file', 'ask_ceo', 'ask_coo', 'return', 'fix', 'widen', 'park']),
   why: z.string().trim().min(1),
   answer: z.string().trim().min(1).optional(),
   ticket: z.string().trim().min(1).transform((t) => t.slice(0, 140)).optional(),
   class: z.coerce.number().int().min(1).max(4).optional(),
+  until: z.string().trim().min(1).refine((t) => !Number.isNaN(Date.parse(t))).optional(),
 }).strict().refine((m) => m.move !== 'rule' || m.answer !== undefined, { path: ['answer'] })
   .refine((m) => m.move !== 'file' || m.ticket !== undefined, { path: ['ticket'] })
   .refine((m) => m.move !== 'ask_ceo' || m.class !== undefined, { path: ['class'] })
+  .refine((m) => m.move !== 'park' || m.until !== undefined, { path: ['until'] })
+
+const CAPPED = ['rule', 'waive', 'split', 'park']
 
 type Move = z.infer<typeof Said> | { move: 'split'; why: string; parts: Part[] }
 
-interface Told { outcome: 'pass' | 'needs_ceo'; message: string; note?: string; pointer?: string | null }
+interface Told { outcome: 'pass' | 'needs_coo'; message: string; note?: string; pointer?: string | null }
 
 export function applying(db: Db): boolean {
   const row = db.prepare("SELECT value FROM settings WHERE key = 'director.apply'").get() as { value: string } | undefined
@@ -54,24 +58,25 @@ export async function cooLite(db: Db, root: string, plan: PlanRow, provider: Pro
   wire: Wire = WIRE, tried?: string): Promise<string> {
   if (plan.state !== 'blocked_on_ceo' && plan.state !== 'halted') {
     return WAITING.has(plan.wait_reason ?? '') ? told(db, root, plan, now, { outcome: 'pass', message: `left alone: plan is ${plan.state}, waiting on ${plan.wait_reason ?? ''}` })
-      : told(db, root, plan, now, { outcome: 'needs_ceo', message: `ask_ceo: plan is ${plan.state}, not stopped` }, post)
+      : told(db, root, plan, now, { outcome: 'needs_coo', message: `ask_ceo: plan is ${plan.state}, not stopped` }, post)
   }
   if (plan.wait_reason === 'token_ceiling' && sentOnce(db, plan.id)) return twice(db, root, plan, now, post)
   const filed = applying(db) ? repeated(db, root, plan, wire, now) : null
   if (filed !== null) return told(db, root, plan, now, { outcome: 'pass', message: `file: ${filed.why}`, pointer: filed.url })
   let { m, said } = await ask(db, root, plan, provider, tried)
   const n = failures(db, root, plan)
-  const first = refused(m, said, n, root)
+  const cap = capStop(db, plan.id)
+  const first = refused(m, said, n, root, cap)
   if (first !== null) {
     ({ m, said } = await ask(db, root, plan, provider, tried, first.fence))
-    const again = refused(m, said, n, root)
+    const again = refused(m, said, n, root, cap)
     if (again !== null) return m?.move === 'fix' && builderWork(root, m.why) && applying(db) && apply(db, root, plan, { move: 'rule', why: m.why, answer: m.why }, wire, now) === true
       ? told(db, root, plan, now, { outcome: 'pass', message: `rule: ${m.why} (out of the fixer's reach, so the builder takes it)` })
-      : told(db, root, plan, now, { outcome: 'needs_ceo', message: again.message }, post)
+      : told(db, root, plan, now, { outcome: 'needs_coo', message: again.message }, post)
   }
-  if (m === null) return told(db, root, plan, now, { outcome: 'needs_ceo', message: 'ask_ceo: no readable answer' }, post)
+  if (m === null) return told(db, root, plan, now, { outcome: 'needs_coo', message: 'ask_ceo: no readable answer' }, post)
   const message = `${m.move}: ${m.why}`
-  if (!applying(db)) return told(db, root, plan, now, { outcome: 'needs_ceo', message, note: `proposes ${message}` })
+  if (!applying(db)) return told(db, root, plan, now, { outcome: 'needs_coo', message, note: `proposes ${message}` })
   const done = m.move === 'fix' ? await fixed(db, root, plan, m.why, provider, now, post, wire)
     : m.move !== 'ask_ceo' && m.move !== 'ask_coo' && apply(db, root, plan, m, wire, now)
   if (done !== false) return told(db, root, plan, now, { outcome: 'pass', message, pointer: done === true ? null : done })
@@ -79,12 +84,12 @@ export async function cooLite(db: Db, root: string, plan: PlanRow, provider: Pro
   if (m.move === 'ask_ceo' || m.move === 'ask_coo') {
     held(db, plan.id, m.move === 'ask_ceo' ? 'ceo' : 'coo', m.why)
     const ceo = decision(said)
-    return told(db, root, plan, now, { outcome: 'needs_ceo', message: m.move === 'ask_ceo' && 'block' in ceo ? `${message}\n\n${ceo.block}` : message }, post)
+    return told(db, root, plan, now, { outcome: 'needs_coo', message: m.move === 'ask_ceo' && 'block' in ceo ? `${message}\n\n${ceo.block}` : message }, post)
   }
   const failed = `${m.move} did not apply, ${UNAPPLIED[m.move]}: ${m.why}`
   needsCeo(db, plan)
   held(db, plan.id, 'coo', failed.split('\n')[0] ?? failed)
-  return told(db, root, plan, now, { outcome: 'needs_ceo', message: failed }, post)
+  return told(db, root, plan, now, { outcome: 'needs_coo', message: failed }, post)
 }
 
 function twice(db: Db, root: string, plan: PlanRow, now: Date, post: Post): string {
@@ -93,10 +98,14 @@ function twice(db: Db, root: string, plan: PlanRow, now: Date, post: Post): stri
     decided(db, { plan: plan.id, step: plan.step, wait_reason: 'token_ceiling', verb: 'ask_ceo', why, evidence: null, tokens: 0 })
     held(db, plan.id, 'ceo', why)
   })()
-  return told(db, root, plan, now, { outcome: 'needs_ceo', message: `ask_ceo: ${why}` }, post)
+  return told(db, root, plan, now, { outcome: 'needs_coo', message: `ask_ceo: ${why}` }, post)
 }
 
-function refused(m: Move | null, said: string, n: number, root: string): { fence: string; message: string } | null {
+function refused(m: Move | null, said: string, n: number, root: string, cap: boolean): { fence: string; message: string } | null {
+  if (cap && m !== null && !CAPPED.includes(m.move)) {
+    return { fence: `${m.move} is refused: the plan stopped at its build cap. Choose rule, waive, split or park.`,
+      message: `${m.move}: refused by the fence, the plan stopped at its build cap` }
+  }
   if (m?.move === 'fix') return outOfReach(root, m.why)
   if (m?.move === 'ask_coo' && n < 2) {
     return { fence: `ask_coo is refused: ${String(n)} failed fixes on this stop, two are needed. Choose another move.`,
@@ -125,7 +134,7 @@ function stops(db: Db, root: string, now: Date, post: Post): Stop[] {
     ORDER BY d.at, p.id`).all({ at: now.toISOString() }) as Stop[]
   const fresh: Stop[] = []
   for (const s of rows.filter((s) => s.answered !== 1 && !isHeld(root, s.id))) {
-    if (s.today >= 2) told(db, root, planById(db, s.id), now, { outcome: 'needs_ceo', message: 'ask_coo: director answered this plan twice today' }, post)
+    if (s.today >= 2) told(db, root, planById(db, s.id), now, { outcome: 'needs_coo', message: 'ask_coo: director answered this plan twice today' }, post)
     else fresh.push(s)
   }
   return fresh
@@ -180,6 +189,7 @@ function text(db: Db, root: string, plan: PlanRow, tried?: string, fence?: strin
   return [
     `# Job\n\nplan ${String(plan.id)}, state ${plan.state}, step ${String(plan.step)}, lane ${plan.lane ?? '-'}, ${plan.origin ?? 'no ticket'}`,
     `# Stop\n\n${maybe(root, plan.id, 'refusal.md') ?? at('question.md')}`,
+    ...(capStop(db, plan.id) ? [at('director.md')] : []),
     `# Orchestrator\n\n${at('orchestrator.md')}`,
     `# Ask\n\n${at('ask.md')}`,
     `# Parent ticket\n\n${parentAsk(db, root, plan)}`,
@@ -189,6 +199,10 @@ function text(db: Db, root: string, plan: PlanRow, tried?: string, fence?: strin
     ...(tried === undefined ? [] : [`# Fixer\n\nthe fixer did not make this fix: ${tried}`]),
     ...(fence === undefined ? [] : [`# Fence\n\n${fence}`]),
   ].join('\n\n')
+}
+
+function capStop(db: Db, plan: number): boolean {
+  return kindsOf(db, plan).filter((e) => e.kind === 'build_cap' || e.kind === 'director').at(-1)?.kind === 'build_cap'
 }
 
 function sections(text: string | null): string[] {
@@ -222,7 +236,7 @@ export function read(text: string): Move | null {
   if (fence === undefined) return null
   const got = Said.safeParse(prose(fence, ['why', 'answer', 'ticket']))
   if (got.success) return got.data
-  const lined = Said.safeParse(Object.fromEntries([...fence.matchAll(/^(move|why|answer|ticket|class):[ \t]*(.+)$/gm)]
+  const lined = Said.safeParse(Object.fromEntries([...fence.matchAll(/^(move|why|answer|ticket|class|until):[ \t]*(.+)$/gm)]
     .map((m) => [m[1], (m[2] ?? '').trim()])))
   return lined.success ? lined.data : null
 }
@@ -236,6 +250,7 @@ const UNAPPLIED: Record<Exclude<Move['move'], 'ask_ceo' | 'ask_coo'>, string> = 
   return: 'the plan did not go back to its lane',
   fix: 'the fixer did not make the fix',
   widen: 'the pipe is already 8 wide',
+  park: 'the plan was not held',
 }
 
 /** Each move is the call its `cf` command makes; false leaves the stop with a person. */
@@ -271,6 +286,9 @@ function apply(db: Db, root: string, plan: PlanRow, m: Move, wire: Wire, now: Da
       return true
     case 'widen':
       return widen(db, root, plan, m.why)
+    case 'park':
+      hold(db, root, plan.id, m.why, now, null, new Date(m.until ?? ''))
+      return true
     case 'fix':
     case 'ask_ceo':
     case 'ask_coo': return false

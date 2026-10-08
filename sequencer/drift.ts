@@ -98,7 +98,7 @@ export function stuck(db: Db, root: string, registry: Entry[], now: Date): numbe
       `waits: ${wait_reason ?? 'none'}${waits_on === null ? '' : ` on plan ${String(waits_on)}`}; last: ${last ?? 'none'}`
     put(root, id, 'refusal.md', `${maybe(root, id, 'refusal.md') ?? ''}\n# Stopped\n\n${note}.\n`)
     needsCeo(db, planById(db, id), note)
-    logged(db, { plan: id, kind: 'stuck', actor: 'drift', outcome: 'needs_ceo', message: note, pointer: `step-${String(step)}`, run: null })
+    logged(db, { plan: id, kind: 'stuck', actor: 'drift', outcome: 'escalate', message: note, pointer: `step-${String(step)}`, run: null })
     drop(root, id, 'stuck.json')
     return [id]
   })

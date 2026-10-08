@@ -53,7 +53,12 @@ test('D7: director decides by default and names ask_coo', () => {
   const prompt = seat(root, 'director').prompt
   expect(prompt).toContain('## Decide by default')
   for (const n of [1, 2, 3, 4]) expect(prompt).toContain(`(${String(n)})`)
-  expect(prompt).toContain('move: <rule | waive | return | widen | fix | close | file | ask_ceo | ask_coo>')
+  expect(prompt).toContain('move: <rule | waive | return | widen | fix | close | file | ask_ceo | ask_coo | park>')
+})
+
+test('D5: a build cap stop names its four moves', () => {
+  expect(seat(root, 'director').prompt.replace(/\n/g, ' ')).toContain(
+    'Answer with exactly one of `rule` (name the root fix under `answer`), `waive` (accept the findings and send it round), `split` or `park`.')
 })
 
 test('D4: a brief writer question the ticket answers is rule', () => {

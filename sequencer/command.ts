@@ -30,7 +30,7 @@ export function executed(db: Db, root: string, plan: PlanRow, line: string): Out
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     put(root, plan.id, 'command.md', `${line}\n\n${message}\n`)
-    logged(db, { plan: plan.id, kind: 'command', actor: 'command', outcome: 'needs_ceo', message, pointer: 'command.md', run: null })
+    logged(db, { plan: plan.id, kind: 'command', actor: 'command', outcome: 'escalate', message, pointer: 'command.md', run: null })
     return { outcome: 'needs_ceo', spans: ['command'], note: `command: ${message.split('\n')[0] ?? ''}` }
   }
 }

@@ -1,9 +1,9 @@
-import { mkdtempSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { unruled } from '../unruled.ts'
-import { put } from '../workspace.ts'
+import { put, srcDir } from '../workspace.ts'
 
 const SHA = 'a'.repeat(40)
 
@@ -51,6 +51,26 @@ test('D2 a summary link is a finding graded by its own badge', () => {
     '<a href="https://app.greptile.com/retrigger">Retrigger</a> <a href="https://github.com/o/r/commit/abc">abc</a>'].join('\n')
   const root = at({ [`findings-${SHA}.md`]: `- G1 src/a.ts:1 ${badge(2)} x\n` })
   expect(unruled(root, 1, SHA, summary)).toEqual({ found: 4, ruled: [], open: ['G1', 'G7', 'G9'] })
+})
+
+const onDiff = (files: Record<string, string>): string => {
+  const root = at({ ...files, 'findings.paths': 'G1 harness/src/artifacts.ts\nG2 php/src/Config.php\nG4 harness/src/Charge.ts\n' })
+  mkdirSync(join(srcDir(root, 1), 'php/src'), { recursive: true })
+  writeFileSync(join(srcDir(root, 1), 'php/src/Config.php'), '<?php\n')
+  return root
+}
+
+test('D1 D2 an off-diff finding is found but not open', () => {
+  const root = onDiff({ [`findings-${SHA}.md`]: `- G1 harness/src/artifacts.ts:1 ${badge(1)} x\n- G2 php/src/Config.php:1 ${badge(2)} y\n- G3 php/src/Other.php:1 ${badge(0)} z\n` })
+  expect(unruled(root, 1, SHA)).toEqual({ found: 3, ruled: [], open: ['G2', 'G3'] })
+})
+
+test('D4 off-diff P1s and overruled P2s pass at 3/5', () => {
+  const link = (n: number): string => `<a href="https://github.com/o/r/pull/18#discussion_r${String(n)}">▶</a>`
+  const summary = [`1. ${badge(1)}&nbsp;**Bug** ${link(1)}`, `2. ${badge(1)}&nbsp;**Bug** ${link(4)}`].join('\n')
+  const root = onDiff({ [`findings-${SHA}.md`]: `- G2 php/src/Config.php:1 ${badge(2)} y\n- G5 php/src/Config.php:2 ${badge(2)} w\n`,
+    'rulings.md': 'G2, G5 overruled: Config.php already refuses it\n' })
+  expect(unruled(root, 1, SHA, summary)).toEqual({ found: 4, ruled: ['G2', 'G5'], open: [] })
 })
 
 test('D5 an accepted block with a bad head or no reason rules none', () => {

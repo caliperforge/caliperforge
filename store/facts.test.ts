@@ -1,11 +1,15 @@
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { fresh } from '../checks/sqlite.ts'
 import { planRow } from '../runner/index.ts'
 import { load } from '../runner/rules.ts'
+import { put } from '../sequencer/workspace.ts'
 import { logged, runAt } from './events.ts'
-import { ciFacts, diffFacts, facts, testFacts } from './facts.ts'
+import { ciFacts, diffFacts, facts, greptileFacts, testFacts } from './facts.ts'
 import type { Db } from './index.ts'
+import { record } from './signals.ts'
 
 const root = join(import.meta.dirname, '..')
 
@@ -115,5 +119,40 @@ test('D4 D5 D6 ciFacts gives one row per workflow', () => {
     { name: 'Build', ok: false, says: `red ${run(4)}` },
     { name: 'Python', ok: true, says: 'red, not judged: the diff touches no file it runs on' },
     { name: 'Lint', ok: false, says: 'still running' },
+  ])
+})
+
+const HEAD = 'a'.repeat(40)
+
+function greptiled(files: Record<string, string>): { db: Db; dir: string; plan: number } {
+  const db = fresh(join(root, 'schema'))
+  load(db, root)
+  const plan = planRow(db)
+  const dir = mkdtempSync(join(tmpdir(), 'cf-facts-'))
+  for (const [name, body] of Object.entries(files)) put(dir, plan, name, body)
+  return { db, dir, plan }
+}
+
+test('D1 D2 greptileFacts gives score and each ruling', () => {
+  const { db, dir, plan } = greptiled({ [`findings-${HEAD}.md`]: '- G1 src/a.ts:1 x\n- G2 src/a.ts:2 y\n',
+    'rulings.md': `accepted:\n  head: ${HEAD.slice(0, 12)}\n  ids: G2\n  reason: recorded upstream\n`,
+    'step-2.handback.md': '---\ndone:\n  - id: G1\n    status: done\n    pointer: src/a.ts:3\n---\n' })
+  record(db, { repo: 'o/r', pr: 1, kind: 'bot_review', author: 'greptile-apps[bot]', at: '2026-10-08T00:00:00Z',
+    external_id: 'x', score: 4, plan, head: HEAD })
+  expect(greptileFacts(db, dir, plan, HEAD)).toEqual([
+    { name: 'greptile', ok: true, says: '4/5' },
+    { name: 'findings', ok: true, says: '2 findings' },
+    { name: 'G1', ok: true, says: 'fixed: src/a.ts:3' },
+    { name: 'G2', ok: true, says: 'accepted: recorded upstream' },
+  ])
+  put(dir, plan, `findings-${HEAD}.md`, '- G1 src/a.ts:1 x\n- G2 src/a.ts:2 y\n- G3 src/a.ts:3 z\n')
+  expect(greptileFacts(db, dir, plan, HEAD).at(-1)).toEqual({ name: 'G3', ok: false, says: 'open' })
+})
+
+test('D3 greptileFacts with no score and no findings file', () => {
+  const { db, dir, plan } = greptiled({})
+  expect(greptileFacts(db, dir, plan, HEAD)).toEqual([
+    { name: 'greptile', ok: false, says: 'no score' },
+    { name: 'findings', ok: true, says: '0 findings' },
   ])
 })

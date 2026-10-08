@@ -102,6 +102,12 @@ export function builds(db: Db, plan: number): number {
   return db.prepare("SELECT count(*) FROM events WHERE plan = ? AND kind = 'build' AND run IS NOT NULL").pluck().get(plan) as number
 }
 
+/** Builds that fired a model on the plan since a ceo or coo last returned or retried it; `id`, as `at` is to the second. */
+export function sinceSent(db: Db, plan: number): number {
+  return db.prepare(`SELECT count(*) FROM events WHERE plan = ? AND kind = 'build' AND run IS NOT NULL AND id > (SELECT coalesce(max(id), 0)
+    FROM events WHERE plan = ? AND kind IN ('return', 'retry') AND actor IN ('ceo', 'coo'))`).pluck().get(plan, plan) as number
+}
+
 /** Every refusal the plan had, newest first, cleared or not, blips left out. */
 export function refusalRows(db: Db, plan: number): { step: number; span: string | null; note: string | null }[] {
   return db.prepare('SELECT step, span, note FROM refusals WHERE plan = ? AND blip = 0 ORDER BY id DESC')

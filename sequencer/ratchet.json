@@ -224,9 +224,6 @@
   "tests/handout.test.ts": {
     "prepare": 1
   },
-  "tests/hold.test.ts": {
-    "prepare": 11
-  },
   "tests/internal.test.ts": {
     "prepare": 10
   },

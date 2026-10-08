@@ -8,13 +8,14 @@ import { registerPlans, registerRetry } from '../../cli/cf-plans.ts'
 import { all } from '../../cli/inbox.ts'
 import { gates } from '../../store/approvals.ts'
 import { pushedRow } from '../../store/deliverables.ts'
-import { eventsOf } from '../../store/events.ts'
-import { filesOf } from '../../store/files.ts'
+import { allEvents, eventsOf, kindsOf, ofKind } from '../../store/events.ts'
+import { filesOf, recorded } from '../../store/files.ts'
+import { holdOf } from '../../store/holds.ts'
 import { migrate, open } from '../../store/index.ts'
 import { drop, take } from '../../store/leases.ts'
 import { addPart } from '../../store/parts.ts'
-import { held, terminal, type Holder } from '../../store/plans.ts'
-import { WHY } from '../../store/refusals.ts'
+import { held, planById, planRows, terminal, type Holder } from '../../store/plans.ts'
+import { clearedOf, WHY } from '../../store/refusals.ts'
 import { lapsed } from '../../store/until.ts'
 import { released } from '../fixer.ts'
 import { hold, isHeld, unhold } from '../hold.ts'
@@ -31,7 +32,10 @@ function seeded() {
   return { db, home }
 }
 
-const row = (db: ReturnType<typeof open>) => db.prepare('SELECT state, step, waits_on FROM plans WHERE id = 7').get()
+const row = (db: ReturnType<typeof open>) => {
+  const p = plan7(db)
+  return { state: p?.state, step: p?.step, waits_on: p?.waits_on }
+}
 
 const LATER = new Date('2099-01-01T00:00:00Z')
 
@@ -49,11 +53,11 @@ test('hold then unhold', () => {
   expect(terminal(db)).not.toContain(7)
   expect(unhold(db, home, 7, 'ceo')).toBe(4)
   expect(row(db)).toEqual({ state: 'queued', step: 4, waits_on: null })
-  expect(db.prepare("SELECT actor FROM events WHERE plan = 7 AND kind = 'return'").all()).toEqual([{ actor: 'ceo' }])
+  expect(returns(db)).toEqual([{ actor: 'ceo' }])
   expect(isHeld(home, 7)).toBe(false)
 })
 
-const holding = (db: ReturnType<typeof open>) => db.prepare('SELECT held_by, held_why FROM plans WHERE id = 7').get()
+const holding = (db: ReturnType<typeof open>) => holdOf(db, 7)
 
 test('D3 a held plan names holder and why; unhold clears both', () => {
   const { db, home } = seeded()
@@ -115,9 +119,9 @@ function stoppedAtCheck(why: keyof typeof WHY) {
 test('unhold on a repeat stop at step 3 sends it back to build', () => {
   const { db, home } = stoppedAtCheck('repeat')
   expect(unhold(db, home, 7, 'ceo')).toBe(2)
-  expect(db.prepare('SELECT step FROM plans WHERE id = 7').get()).toEqual({ step: 2 })
-  expect(db.prepare('SELECT DISTINCT cleared FROM refusals WHERE plan = 7').all()).toEqual([{ cleared: 1 }])
-  expect(db.prepare("SELECT actor FROM events WHERE plan = 7 AND kind = 'retry'").all()).toEqual([{ actor: 'ceo' }])
+  expect(planById(db, 7).step).toBe(2)
+  expect(clearedOf(db, 7)).toEqual([1])
+  expect(eventsOf(db, 7, 'retry').map((e) => ({ actor: e.actor }))).toEqual([{ actor: 'ceo' }])
   expect(maybe(home, 7, 'refusal.md')).not.toBeNull()
 })
 
@@ -169,7 +173,7 @@ function driven() {
   const cf = new Command()
   registerPlans(cf, { root: home, db: () => db, out: (line: string) => { printed.push(line) } })
   const run = (...args: string[]) => cf.parse(args, { from: 'user' })
-  const closes = () => db.prepare("SELECT actor, outcome, message FROM events WHERE kind = 'close'").all()
+  const closes = () => ofKind(db, 'close').map(({ actor, outcome, message }) => ({ actor, outcome, message }))
   return { db, printed, run, closes }
 }
 
@@ -195,8 +199,8 @@ test('D5 cf close and cf files on a missing plan write nothing', () => {
   expect(printed).toEqual([])
   expect(() => run('close', '99', '--why', 'x', '--by', 'coo')).toThrow('no plan 99')
   expect(() => run('files', '99', 'add', 'a.ts', '--by', 'coo')).toThrow('no plan 99')
-  expect(db.prepare('SELECT count(*) AS n FROM plan_files WHERE plan = 99').get()).toEqual({ n: 0 })
-  expect(db.prepare('SELECT count(*) AS n FROM events WHERE plan = 99').get()).toEqual({ n: 0 })
+  expect(recorded(db, 99)).toEqual([])
+  expect(kindsOf(db, 99)).toEqual([])
 })
 
 test('D6 bad holders, --as, closed or leased plans write nothing', () => {
@@ -229,8 +233,8 @@ function ran(db: ReturnType<typeof open>, home: string, args: string[]): void {
   cf.parse(args, { from: 'user' })
 }
 
-const logged = (db: ReturnType<typeof open>) => db.prepare('SELECT kind, actor, message FROM events WHERE plan = 7 ORDER BY id').all()
-const plan7 = (db: ReturnType<typeof open>) => db.prepare('SELECT * FROM plans WHERE id = 7').get()
+const logged = (db: ReturnType<typeof open>) => allEvents(db).filter((e) => e.plan === 7).map(({ kind, actor, message }) => ({ kind, actor, message }))
+const plan7 = (db: ReturnType<typeof open>) => planRows(db).find((p) => p.id === 7)
 
 const EACH = [['return', '7'], ['retry', '7'], ['release', '7'], ['park', '7'], ['unpark', '7'], ['priority', '7', '3', '--why', 'w']]
 

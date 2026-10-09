@@ -288,3 +288,9 @@
   where: "kind = 'director' AND message LIKE '%builder takes it%' AND NOT EXISTS (SELECT 1 FROM runs WHERE runs.plan = events.plan AND runs.step = 2 AND runs.seat NOT IN ('fixer', 'orchestrator', 'coo_lite', 'director') AND julianday(runs.at) BETWEEN julianday(events.at) AND julianday(events.at, '+1 day'))"
   gap: 7d
   expected: 0
+- name: blind_review
+  table: runs
+  column: at
+  where: seat = 'blind_review' AND mode = 'review'
+  gap: 7d
+  while: EXISTS (SELECT 1 FROM runs r JOIN plans p ON p.id = r.plan WHERE p.template = 'pr_path' AND p.origin IS NULL AND r.step = 5 AND julianday(r.at) >= julianday($since))

@@ -34,7 +34,7 @@ test('fresh', () => {
     'ratchet_refuse', 'intake', 'stuck_plans', 'science_pull', 'site_publish', 'director_look', 'typescript_specialist',
     'daily_learnings', 'review_examples', 'director_fix_reach', 'tick_deps', 'watch', 'director_widen', 'target_parked_once', 'director_ceiling',
     'close_landed', 'handback_not_done', 'ruling_files', 'needs_ceo_actor', 'build_cap', 'ready_proof_stuck', 'card_facts',
-    'director_findings', 'director_rule_dropped', 'rule_to_build'])
+    'director_findings', 'director_rule_dropped', 'rule_to_build', 'blind_review'])
   expect(drift(d, REGISTRY, NOW).map((r) => r.name)).not.toContain('build_cap')
   expect(drift(d, REGISTRY, NOW).map((r) => r.name)).not.toContain('director_widen')
   expect(drift(d, REGISTRY.filter((e) => e.name === 'watch'), NOW)).toEqual([])

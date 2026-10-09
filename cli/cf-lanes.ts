@@ -15,7 +15,7 @@ import { handUps, logged, repriced } from '../store/events.ts'
 import { holderOf, HOLDERS, overlapWaits, parked, pipeNamed } from '../store/plans.ts'
 import { backfillTickets } from '../store/tickets.ts'
 import { backfill } from '../store/transcript.ts'
-import { actors, actorSection, byType, type ByType, costs, costSection, day, fileWaits, greptileLine, halted, hands, heldBy, laneLine, misses, missSection, open as openPlans,
+import { actors, actorSection, byType, type ByType, caught, caughtSection, costs, costSection, day, fileWaits, greptileLine, halted, hands, heldBy, laneLine, misses, missSection, open as openPlans,
   rulings, section, tickets, ticketSection, unpriced, waitLine, waits, windowLine } from './brief.ts'
 import { check, fill } from './digests.ts'
 import { directorSection, handUpLine } from './director.ts'
@@ -211,6 +211,7 @@ function briefs(cf: Command, { root, db, out }: Cli): void {
     out(waitLine(waits(handle)) + fileWaits(overlapWaits(handle)))
     out(greptileLine(reviewed(handle, new Date())))
     out(missSection(misses(handle, root, new Date())))
+    out(caughtSection(caught(handle, root, new Date())))
     out(section('open plans', openPlans(handle)))
     out(section('halted', halted(handle)))
     out(section('waiting on the CEO', heldBy(handle, 'ceo')))

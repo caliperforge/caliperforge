@@ -783,6 +783,7 @@ test('D1: a cap stop carries director.md after # Stop', async () => {
   const { db, home } = capStop()
   const cap = maybe(home, 7, 'director.md') ?? ''
   expect(cap).toMatch(/^# Build cap\n\nthe 6th build\n/)
+  expect(ofKind(db, 'build_cap').map((e) => ({ actor: e.actor, outcome: e.outcome }))).toEqual([{ actor: 'settle', outcome: 'needs_coo' }])
   expect(await prompted(db, home)).toContain(`# Stop\n\nstep 3 rails refused\n\n\n${cap}\n\n# Orchestrator`)
   expect(await prompted(db, home)).not.toContain(cap)
 })

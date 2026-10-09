@@ -42,7 +42,7 @@ export function reasons(db: Db, plan: number): { source: string; n: number; span
 export function capped(db: Db, root: string, plan: number, why: string): string {
   const groups = reasons(db, plan).map((g) => `## ${g.source}: ${String(g.n)}\n\n${g.spans.map((s) => `- ${s.span} (${String(s.n)})`).join('\n')}\n`)
   put(root, plan, 'director.md', ['# Build cap', '', why, '', ...groups].join('\n'))
-  logged(db, { plan, kind: 'build_cap', actor: 'settle', outcome: 'needs_ceo', message: why, pointer: 'director.md', run: null })
+  logged(db, { plan, kind: 'build_cap', actor: 'settle', outcome: 'needs_coo', message: why, pointer: 'director.md', run: null })
   return why
 }
 

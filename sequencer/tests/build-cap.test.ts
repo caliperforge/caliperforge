@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { eventsOf, logged, newestRun, pointers } from '../../store/events.ts'
+import { allEvents, eventsOf, logged, newestRun, pointers } from '../../store/events.ts'
 import { returnToLane } from '../../store/holds.ts'
 import { retry } from '../../store/plans.ts'
 import { builds, clear, fingerprint, refused, sinceSent } from '../../store/refusals.ts'
@@ -30,6 +30,9 @@ test('D1 a plan stops before its 6th build, after clear and retry', async () => 
     expect(pointers(w.db, 'build_cap')).toEqual(Array<string>(round).fill('director.md'))
   }
   expect(maybe(w.root, 1, 'director.md')).toBe('# Build cap\n\n5 builds ran; the next waits for the director\n')
+  const stop = { actor: 'settle', outcome: 'needs_coo', message: '5 builds ran; the next waits for the director' }
+  expect(eventsOf(w.db, 1, 'build_cap')).toEqual([stop, stop])
+  expect(allEvents(w.db).filter((e) => e.outcome === 'needs_ceo' && e.actor !== 'coo')).toEqual([])
 })
 
 test('D3 D4 a coo return lets 5 more builds run', async () => {
@@ -73,7 +76,7 @@ test('D2 D4 a third code_quality refusal in a row stops the plan', async () => {
   expect(states).toEqual(['retried', 'retried', 'blocked_on_ceo'])
   const why = 'code_quality refused it 3 times in a row'
   expect(plan(w.db, 1).state).toBe('blocked_on_ceo')
-  expect(eventsOf(w.db, 1, 'build_cap')).toEqual([{ actor: 'settle', outcome: 'needs_ceo', message: why }])
+  expect(eventsOf(w.db, 1, 'build_cap')).toEqual([{ actor: 'settle', outcome: 'needs_coo', message: why }])
   expect(maybe(w.root, 1, 'director.md')).toBe(['# Build cap', '', why, '', '## code_quality: 3', '',
     '- src/hello.ts:3 (1)', '- src/hello.ts:2 (1)', '- src/hello.ts:1 (1)', ''].join('\n'))
 })

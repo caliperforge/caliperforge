@@ -51,6 +51,18 @@ test('fresh', () => {
   expect(drift(old, REGISTRY.filter((e) => e.name === 'director'), NOW)).toEqual([])
 })
 
+test('growth_lead is silent only after a growth plan', () => {
+  const d = db()
+  const growth = REGISTRY.filter((e) => e.name === 'growth_lead')
+  const comms = (title: string, step: number) => d.exec(`INSERT INTO plans (pipe_id, template, state, queued_at, step, title)
+    VALUES ((SELECT id FROM pipes WHERE name = 'comms'), 'comms', 'queued', '2026-10-01', ${String(step)}, '${title}')`)
+  expect(drift(d, growth, NOW)).toEqual([])
+  comms('scorecard 2026-09-28', 9)
+  expect(drift(d, growth, NOW)).toEqual([])
+  comms('growth 2026-10-01', 7)
+  expect(drift(d, growth, NOW)).toEqual([{ name: 'growth_lead', state: 'silent', detail: "no row in runs WHERE seat = 'growth_lead'" }])
+})
+
 test('D4 a card opened without its sheet is seen', () => {
   const d = db()
   logged(d, { plan: 1, kind: 'card_facts', actor: 'signoff', outcome: 'pass', message: 'with fact sheet', pointer: null, run: null })

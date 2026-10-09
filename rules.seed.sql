@@ -18,7 +18,7 @@ VALUES
   ('rules/registry/12-writer_log.yaml', 'card', 'rules/registry/12-writer_log.yaml', '3995e86189488b802406786ef138d26447810c793bc979c656c6020f0407291e', '2026-10-04'),
   ('rules/registry/12-writer_ship.yaml', 'card', 'rules/registry/12-writer_ship.yaml', 'cf574f2183a698dda0469641dd5f60f980c6b7487e05148fb7815566328afbae', '2026-10-04'),
   ('rules/registry/12-writer_weekly.yaml', 'card', 'rules/registry/12-writer_weekly.yaml', 'd99f0270d1a6f05a50ed029ae69badc441ec3cf35ae428506d8163feda62f41d', '2026-10-04'),
-  ('rules/registry/13-growth_lead.yaml', 'card', 'rules/registry/13-growth_lead.yaml', '928c93a263a0064d107da1a5867c9cef4e32fb56a8590fdb67fc281fd201dfe9', '2026-10-04'),
+  ('rules/registry/13-growth_lead.yaml', 'card', 'rules/registry/13-growth_lead.yaml', '98df571ff57eade5331349b1eb566c04867cf727ac047d390f3ef9dfb2a9a34b', '2026-10-04'),
   ('rules/registry/14-web_specialist.yaml', 'card', 'rules/registry/14-web_specialist.yaml', 'd0d26bf363ae1dec1bdf2925d18a029c6f8a7edb272203b9a41d0aae22a5ff24', '2026-10-04'),
   ('rules/registry/15-design.yaml', 'card', 'rules/registry/15-design.yaml', '2f3c9774afd39322e017bbb4cdcc82576408759988e5ed2e76410dbdff3f2363', '2026-10-04'),
   ('rules/registry/16-go_specialist.yaml', 'card', 'rules/registry/16-go_specialist.yaml', '32fc8ef01b468557067bf1257f3891070111dac4e54ccb421cb40ac68a8c47e0', '2026-10-04'),

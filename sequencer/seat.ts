@@ -412,6 +412,9 @@ function landable(db: Db, plan: PlanRow, step: Step, notes: Note[]): Note[] {
 }
 
 export async function fireLanded(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
+  const also = internal(plan) ? undefined : step.outside
+  if (also !== undefined) await judge(db, root, also, plan.id, blind(db, root, plan), provider, transcriptOf(root, plan.id, step.step))
+    .catch((error: unknown) => logged(db, { plan: plan.id, kind: step.name, actor: also, outcome: 'refuse', message: String(error), pointer: null, run: null }))
   const { outcome, notes: all } = await fireReview(db, root, plan, step, provider)
   const notes = landable(db, plan, step, all)
   const done = outcome.outcome === 'pass' && notes.length > 0 ? landed(db, root, plan, step, notes) : outcome
@@ -513,7 +516,7 @@ function rounds(db: Db, root: string, plan: number, step: number): Pick<Bench, '
 
 /** The tree the reviewer last passed, else the one its last verdict judged, off the row `judge()` wrote it on. */
 function judged(db: Db, plan: number, step: number): string | null {
-  const row = db.prepare(`SELECT tree FROM verdicts WHERE plan = ? AND step = ? AND kind = 'review'
+  const row = db.prepare(`SELECT tree FROM verdicts WHERE plan = ? AND step = ? AND kind = 'review' AND gate <> 'blind_review'
     ORDER BY outcome = 'pass' AND tree IS NOT NULL DESC, id DESC LIMIT 1`)
     .get(plan, step) as { tree: string | null } | undefined
   return row?.tree ?? null

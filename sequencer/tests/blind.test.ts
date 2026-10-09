@@ -1,3 +1,4 @@
+import { readdirSync } from 'node:fs'
 import { expect, test } from 'vitest'
 import type { Provider } from '../../providers/kind.ts'
 import { eventsOf } from '../../store/events.ts'
@@ -5,6 +6,7 @@ import { dropPlan, rewind } from '../../store/plans.ts'
 import { runTokens } from '../../store/runs.ts'
 import { verdictRows } from '../../store/verdict.ts'
 import { tick } from '../index.ts'
+import { maybe, planDir } from '../workspace.ts'
 import { approve, built, CARRIED, internalPlan, ours, PASS, plan, REFUSE, stub, watched, world, type World } from './world.ts'
 
 const MINE = 2
@@ -47,6 +49,15 @@ test('D3 a blind refuse leaves step 5 to senior', async () => {
   const w = await outside(blindly(REFUSE))
   expect(plan(w.db, 1).step).toBe(6)
   expect(verdictRows(w.db, 1).find((v) => v.gate === 'blind_review')).toMatchObject({ step: 5, outcome: 'refuse' })
+})
+
+test('D3 blind B rows land at the blind tree; no fence, none', async () => {
+  const row = '- B1 P2 src/hello.ts:1 the greeting is lost\n'
+  const w = await outside(blindly(`${row}\n${REFUSE}`))
+  const tree = verdictRows(w.db, 1).find((v) => v.gate === 'blind_review')?.tree ?? ''
+  expect(maybe(w.root, 1, `findings-${tree}.md`)).toBe(row)
+  const bare = await outside(blindly('no fence here'))
+  expect(readdirSync(planDir(bare.root, 1)).filter((f) => f.startsWith('findings-'))).toEqual([])
 })
 
 test('D4 a blind reply with no fence is logged and senior judges', async () => {

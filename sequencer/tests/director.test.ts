@@ -1,4 +1,4 @@
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { expect, test } from 'vitest'
@@ -191,13 +191,17 @@ test('D2: an unbuilt plan\'s rule goes in ask.md, back to its lane', async () =>
 
 const P2 = '<img alt="P2" src="https://greptile.com/p2.svg">'
 
-function greptileStop() {
-  const { db, home } = seeded('1')
-  db.exec('UPDATE plans SET step = 6 WHERE id = 7')
+function committed(home: string): string {
   const src = srcDir(home, 7)
   git(src, ['init', '-q'])
   git(src, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '--allow-empty', '-m', 'built'])
-  const sha = headSha(src)
+  return headSha(src)
+}
+
+function greptileStop() {
+  const { db, home } = seeded('1')
+  db.exec('UPDATE plans SET step = 6 WHERE id = 7')
+  const sha = committed(home)
   put(home, 7, `findings-${sha}.md`, `- G11 ${P2} the empty name is never refused\n- G12 ${P2} the port is unchecked\n`)
   put(home, 7, 'refusal.md', 'step 6 ready refused by kernel\n\nGreptile scored it 3/5\n\nspans:\n  - greptile:3/5\n')
   return { db, home, sha }
@@ -257,6 +261,20 @@ const prompted = async (db: Db, home: string) => {
   await cooLite(db, home, row(db), { ...reply, fire: (p) => { prompts.push(p.prompt); return reply.fire(p) } }, now, () => undefined, wire())
   return prompts[0]
 }
+
+test('D4: # Findings lists Greptile rows, then blind rows', async () => {
+  const { db, home } = greptileStop()
+  const tree = 'e'.repeat(40)
+  db.exec(`INSERT INTO verdicts (gate, kind, subject_digest, plan, step, outcome, origin_kind, origin_ref, tokens, seconds, tree)
+    VALUES ('blind_review', 'review', '${'d'.repeat(64)}', 7, 5, 'refuse', 'ruling', 'reviewers.verdict', 0, 0, '${tree}')`)
+  put(home, 7, `findings-${tree}.md`, '- B1 P2 src/a.ts:4 the name is lost\n')
+  expect(await prompted(db, home)).toMatch(/# Findings\n\n.+\n\n- G11 .+\n- G12 .+\n- B1 P2 src\/a\.ts:4 the name is lost\n/)
+})
+
+test('D5: a plan with no findings reads none', async () => {
+  const { db, home } = seeded('1')
+  expect(await prompted(db, home)).toContain('# Findings\n\nnone')
+})
 
 test('D1: the packet carries the plan\'s own rulings first', async () => {
   const { db, home } = seeded('1')
@@ -562,7 +580,7 @@ const fixLive = (db: Db) => db.exec(`INSERT INTO settings (key, value, who, orig
 test('fixHandsOff', async () => {
   const { db, home } = seeded('1')
   fixLive(db)
-  mkdirSync(join(srcDir(home, 7), '.git'), { recursive: true })
+  committed(home)
   const packets: Packet[] = []
   await cooLite(db, home, row(db), bySeat(packets), now, () => undefined, wire())
   expect(packets.find((p) => basename(p.transcript).startsWith('fixer'))?.prompt).toContain(`# Orchestrator\n\nask_coo: ${WHY}`)
@@ -659,7 +677,7 @@ test('fixOutOfReach', async () => {
   }
   const { db, home } = seeded('1')
   fixLive(db)
-  mkdirSync(join(srcDir(home, 7), '.git'), { recursive: true })
+  committed(home)
   const packets: Packet[] = []
   await cooLite(db, home, row(db), bySeat(packets, '---\nmove: fix\nwhy: rewrite `commit.msg`.\n---\n'), now, () => undefined, wire())
   expect(packets.filter((p) => basename(p.transcript).startsWith('fixer'))).toHaveLength(1)
@@ -820,7 +838,7 @@ test('D1: a cap stop carries director.md after # Stop', async () => {
   const cap = maybe(home, 7, 'director.md') ?? ''
   expect(cap).toMatch(/^# Build cap\n\nthe 6th build\n/)
   expect(ofKind(db, 'build_cap').map((e) => ({ actor: e.actor, outcome: e.outcome }))).toEqual([{ actor: 'settle', outcome: 'needs_coo' }])
-  expect(await prompted(db, home)).toContain(`# Stop\n\nstep 3 rails refused\n\n\n${cap}\n\n# Orchestrator`)
+  expect(await prompted(db, home)).toContain(`# Stop\n\nstep 3 rails refused\n\n\n${cap}\n\n# Findings\n\nnone\n\n# Orchestrator`)
   expect(await prompted(db, home)).not.toContain(cap)
 })
 
@@ -870,7 +888,7 @@ test('D1: decision returns a valid block as written', () => {
 test('D4: the fix decision carries the stop hash', async () => {
   const { db, home } = seeded('1')
   fixLive(db)
-  mkdirSync(join(srcDir(home, 7), '.git'), { recursive: true })
+  committed(home)
   const at = stop(home, 7)
   await cooLite(db, home, row(db), bySeat([]), now, () => undefined, wire())
   expect(decisions(db, 7).map((d) => d.evidence)).toEqual([at])

@@ -10,7 +10,7 @@ import { planById } from '../../store/plans.ts'
 import type { Wire } from '../push.ts'
 import { woke } from '../director.ts'
 import { fenced, opened, owned } from '../rule.ts'
-import { maybe, put, srcDir } from '../workspace.ts'
+import { git, maybe, put, srcDir } from '../workspace.ts'
 
 const repo = join(import.meta.dirname, '../..')
 const now = new Date('2026-09-28T17:00:00.000Z')
@@ -33,7 +33,8 @@ function seeded(step: number) {
   put(home, 7, 'step-4.verdict.md', '---\noutcome: refuse\nspans:\n  - x\n---\n')
   put(home, 7, 'base.sha', `${'a'.repeat(40)}\n`)
   writeFileSync(join(srcDir(home, 7), 'index.ts'), 'export {}\n')
-  mkdirSync(join(srcDir(home, 7), '.git'))
+  git(srcDir(home, 7), ['init', '-q'])
+  git(srcDir(home, 7), ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '--allow-empty', '-m', 'built'])
   return { db, home }
 }
 

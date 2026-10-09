@@ -1,13 +1,14 @@
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, readdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import type { Packet } from '../../providers/kind.ts'
 import { record, since } from '../../store/signals.ts'
-import { rehearsed } from '../findings.ts'
+import { verdictRows } from '../../store/verdict.ts'
+import { blinded, rehearsed } from '../findings.ts'
 import { tick } from '../index.ts'
-import { maybe, put } from '../workspace.ts'
+import { maybe, planDir, put } from '../workspace.ts'
 import { approve, CARRIED, PASS, scored, stub, world, type World } from './world.ts'
 
 const FOUND = '- G11 src/hello.ts:1 a mint change is lost\n- G12 src/hello.ts:2 the name is wrong\n'
@@ -58,6 +59,26 @@ test('D1 D2 a bot comment is filed only under its own head', () => {
   expect(maybe(root, 1, `findings-${a}.md`)).toBe('- G11 src/hello.ts:1 lost\n')
   expect(maybe(root, 1, `findings-${b}.md`)).toBeNull()
   expect(maybe(root, 1, 'findings.paths')).toBe('G11 src/hello.ts\n')
+})
+
+const TREE = 'e'.repeat(40)
+const BLIND = '- B1 P2 src/hello.ts:1 the name is lost\n- B2 P3 src/hello.ts:2 a nit\n'
+
+function blindRow(w: World, tree: string | null): number {
+  w.db.exec(`INSERT INTO verdicts (gate, kind, subject_digest, plan, step, outcome, origin_kind, origin_ref, tokens, seconds, tree)
+    VALUES ('blind_review', 'review', '${'d'.repeat(64)}', 1, 5, 'refuse', 'ruling', 'reviewers.verdict', 0, 0, ${tree === null ? 'NULL' : `'${tree}'`})`)
+  return verdictRows(w.db, 1).at(-1)?.id ?? 0
+}
+
+test('D1 D2 blinded keeps only B rows at the verdict tree', () => {
+  const w = world()
+  const message = `prose\n${BLIND}- B3 P4 src/hello.ts:3 no such priority\n- a prose bullet\n- G11 src/hello.ts:1 a bot row\n`
+  blinded(w.db, w.root, 1, { verdict: blindRow(w, TREE), outcome: { message } })
+  expect(maybe(w.root, 1, `findings-${TREE}.md`)).toBe(BLIND)
+  blinded(w.db, w.root, 1, { verdict: blindRow(w, TREE), outcome: { message: '- B3 P4 src/hello.ts:3 x\n- a bullet' } })
+  expect(maybe(w.root, 1, `findings-${TREE}.md`)).toBeNull()
+  blinded(w.db, w.root, 1, { verdict: blindRow(w, null), outcome: { message: BLIND } })
+  expect(readdirSync(planDir(w.root, 1)).filter((f) => f.startsWith('findings-'))).toEqual([])
 })
 
 test('D3 a 5/5 or no score at HEAD: no findings, no findings.md', async () => {

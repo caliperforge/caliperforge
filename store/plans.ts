@@ -104,6 +104,10 @@ export function titles(db: Db, template: PlanRow['template']): (string | null)[]
     .map((r) => r.title)
 }
 
+export function planTitle(db: Db, id: number): string | null {
+  return db.prepare('SELECT title FROM plans WHERE id = ?').pluck().get(id) as string | null
+}
+
 export function plansOf(db: Db, template: PlanRow['template']): { id: number; title: string | null; state: PlanRow['state'] }[] {
   return db.prepare('SELECT id, title, state FROM plans WHERE template = ? ORDER BY id')
     .all(template) as { id: number; title: string | null; state: PlanRow['state'] }[]

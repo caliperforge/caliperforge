@@ -7,3 +7,7 @@ export function runTokens(db: Db, plan: number): RunTokens[] {
   return db.prepare(`SELECT id, seat, input_tokens, cache_read_tokens, output_tokens, transcript_path, mode
     FROM runs WHERE plan = ? ORDER BY id`).all(plan) as RunTokens[]
 }
+
+export function setInputTokens(db: Db, tokens: number): void {
+  db.prepare('UPDATE runs SET input_tokens = ?').run(tokens)
+}

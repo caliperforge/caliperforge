@@ -8,7 +8,7 @@ import { cited } from './cited.ts'
 import { unruled } from './unruled.ts'
 import { get, headSha, maybe, put, srcDir } from './workspace.ts'
 
-const PATH = /(?:^|[\s`'"(])(~?\/[^\s`'"()]+)/g
+const PATH = /(?:^|[\s`'"(])(~?\/[\w.-][^\s`'"()]+)/g
 
 const OUTSIDE = /^ {2}- (\S+):1 authority\.outside_files$/gm
 

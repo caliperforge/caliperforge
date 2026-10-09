@@ -1,0 +1,6 @@
+- name: director_rule_dropped
+  table: events
+  column: at
+  where: kind = 'director' AND message LIKE 'rule did not apply, the answer names a path%'
+  gap: 7d
+  expected: 0

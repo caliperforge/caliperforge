@@ -90,6 +90,19 @@ test('an absolute path outside the root is refused', async () => {
   expect(got.applied).toEqual([{ applied: 'escalated' }])
 })
 
+test('D1 quoted code starting with / is written', async () => {
+  const got = await fixed(3, answered('remove `/** a comment */` and `// note`'))
+  expect(got.issue).toContain('\n\nremove `/** a comment */` and `// note`\n\n## Standing\n')
+  expect(got.applied).toEqual([{ applied: 'applied' }])
+})
+
+test('D2 an absolute path elsewhere is refused', async () => {
+  const got = await fixed(1, answered('see /Users/x/elsewhere/file.ts'))
+  expect(got.ask).toBe('the ask\n')
+  expect(got.issue).toBe(ISSUE)
+  expect(got.applied).toEqual([{ applied: 'escalated' }])
+})
+
 test('an answer holding only a URL is written', async () => {
   const got = await fixed(1, answered('https://github.com/caliperforge/caliperforge/issues/139'))
   expect(got.ask).toContain('\n\nhttps://github.com/caliperforge/caliperforge/issues/139\n')

@@ -3,3 +3,4 @@
   column: at
   where: seat = 'growth_lead'
   gap: 7d
+  while: EXISTS (SELECT 1 FROM plans WHERE template = 'comms' AND (title GLOB 'growth *' OR title GLOB 'weekly *') AND step >= 7 AND queued_at >= $since)

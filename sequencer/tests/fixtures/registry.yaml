@@ -281,3 +281,9 @@
   where: kind = 'director' AND message LIKE 'rule did not apply, the answer names a path%'
   gap: 7d
   expected: 0
+- name: rule_to_build
+  table: events
+  column: at
+  where: "kind = 'director' AND message LIKE '%builder takes it%' AND NOT EXISTS (SELECT 1 FROM runs WHERE runs.plan = events.plan AND runs.step = 2 AND runs.seat NOT IN ('fixer', 'orchestrator', 'coo_lite', 'director') AND julianday(runs.at) BETWEEN julianday(events.at) AND julianday(events.at, '+1 day'))"
+  gap: 7d
+  expected: 0

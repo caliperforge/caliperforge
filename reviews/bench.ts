@@ -82,7 +82,7 @@ async function ran(db: Db, root: string, name: string, plan: number, manifest: R
   const outcome = read(fired.text, packet.prompt)
   const run = runLogged(db, { plan, step: manifest.step, seat: lead?.as ?? name, rule_hash: lead?.hash ?? specHash(root, name),
     provider: provider.name, model: manifest.model, effort: manifest.effort, exit: outcome === null ? 1 : fired.exit, fired,
-    mode: lead === undefined ? undefined : 'review', staffed })
+    mode: lead !== undefined || manifest.gate === 'blind_review' ? 'review' : undefined, staffed })
   byRun(db, run, fired.transcript_path)
   observed(db, fired.limits)
   return {

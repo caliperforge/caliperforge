@@ -16,7 +16,7 @@ it('D1 0090 moves coo_lite.apply to director.apply', () => {
   const db = open(':memory:')
   migrate(db, old)
   addSetting(db, { key: 'coo_lite.apply', value: '1', who: 'ceo', origin_kind: 'ruling', origin_ref: 't', set_at: '2026-10-04' })
-  expect(migrate(db, join(root, 'schema'))).toEqual(['0090_director_apply.sql', '0091_runs_mode_writer.sql', '0092_decisions_widen.sql', '0093_drift_findings.sql', '0094_runs_staffed.sql', '0095_events_escalate.sql'])
+  expect(migrate(db, join(root, 'schema'))).toEqual(['0090_director_apply.sql', '0091_runs_mode_writer.sql', '0092_decisions_widen.sql', '0093_drift_findings.sql', '0094_runs_staffed.sql', '0095_events_escalate.sql', '0096_verdicts_blind.sql'])
   expect(setting(db, 'director.apply')).toBe('1')
   expect(setting(db, 'coo_lite.apply')).toBeUndefined()
 })

@@ -13,7 +13,7 @@ import { current } from '../../store/now.ts'
 import { clear } from '../../store/refusals.ts'
 import { dropDeliverables, gated, newest, pushedRow } from '../../store/deliverables.ts'
 import { gates } from '../../store/approvals.ts'
-import { addTarget, setTargetState, targetRow } from '../../store/targets.ts'
+import { addTarget, setEvidence, setTargetState, targetRow } from '../../store/targets.ts'
 import { at, steps } from '../../templates/pr-path.ts'
 import { tick } from '../index.ts'
 import { picks } from '../next.ts'
@@ -29,7 +29,9 @@ import type { Packet, Provider } from '../../providers/kind.ts'
 import type { Gh } from '../../rails/ci-green/index.ts'
 import type { Fired } from '../kind.ts'
 import { forkCi, type Wire } from '../push.ts'
-import { approve, builds, built, CARRIED, dropping, internalPlan, KOTLIN, ours, owning, PASS, plan, REFUSE, rerunning, RUN, runsAfter, runsOn, scored, stub, tip, watched, WORDS, world, type World } from './world.ts'
+import { started } from '../signals.ts'
+import { closed } from '../unpolled.ts'
+import { approve, builds, built, CARRIED, dropping, internalPlan, KOTLIN, ours, owning, PASS, plan, PR, REFUSE, rerunning, RUN, runsAfter, runsOn, scored, stub, tip, watched, WORDS, world, type World } from './world.ts'
 
 const head = (cwd: string, args: string[]): string => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim()
 
@@ -248,6 +250,28 @@ test('D6: a refused target digest still blocks step 1', async () => {
   const w = world()
   await tick(w.db, w.root, stub(CARRIED))
   refuseTarget(w.db, w.target, 'not.ours', 'coo')
+  expect(blocked(w.db, plan(w.db, 1))).toBe('target_approval')
+})
+
+test('D5 a comment on our open PR fires the brief, no approval', async () => {
+  const w = world()
+  await tick(w.db, w.root, stub(CARRIED))
+  setEvidence(w.db, w.target, PR)
+  const said = signal(w.db, { repo: 'acme/widget', pr: 7, kind: 'comment', author: 'maintainer', at: new Date().toISOString(),
+    external_id: 'c1', score: null, plan: 1, body: 'one nit here' })
+  expect(said === null ? null : started(w.db, said, w.root)).toMatchObject({ plan: 1, step: 1 })
+  const seen: Packet[] = []
+  expect(await tick(w.db, w.root, stub(CARRIED, 0, PASS, (p) => seen.push(p)))).toMatchObject([{ step: 1, outcome: 'pass' }])
+  expect(seen.map((p) => p.prompt.includes('# brief_writer') && p.prompt.includes('one nit here'))).toEqual([true])
+  expect(plan(w.db, 1).wait_reason).toBeNull()
+})
+
+test('D3 D4 our open PR passes step 1 until it is gone', async () => {
+  const w = world()
+  await tick(w.db, w.root, stub(CARRIED))
+  setEvidence(w.db, w.target, PR)
+  expect(blocked(w.db, plan(w.db, 1))).toBeNull()
+  closed(w.db, 1, PR, 'MERGED')
   expect(blocked(w.db, plan(w.db, 1))).toBe('target_approval')
 })
 

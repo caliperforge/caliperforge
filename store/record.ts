@@ -28,6 +28,10 @@ export function addRecord(db: Db, row: { repo: string; pr: number; plan: number;
     VALUES (@repo, @pr, @plan, @url, @state, @merged_at, @read_at)`).run(row)
 }
 
+export function recordsOf(db: Db, repo: string): unknown[] {
+  return db.prepare('SELECT * FROM records WHERE repo = ? ORDER BY pr').all(repo)
+}
+
 export function dropRecord(db: Db, repo: string, pr: number): void {
   db.prepare('DELETE FROM records WHERE repo = ? AND pr = ?').run(repo, pr)
 }

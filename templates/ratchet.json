@@ -1,7 +1,6 @@
 {
   "comms.ts": {
-    "lines": 252,
-    "prepare": 10
+    "lines": 252
   },
   "pr-path.ts": {
     "lines": 68

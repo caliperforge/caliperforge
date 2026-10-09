@@ -1,14 +1,15 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
-import { desk as ghDesk, type Answer, type Desk, type Pr, type Seen } from '../../cli/gh.ts'
+import { desk as ghDesk, type Answer, type Desk, type Issue, type Pr, type Seen } from '../../cli/gh.ts'
 import { unread } from '../../cli/inbox.ts'
 import { eventsOf, logged, type Event } from '../../store/events.ts'
 import { rewind } from '../../store/plans.ts'
+import { record as signal, type SignalRow } from '../../store/signals.ts'
 import { approve as approvePublish } from '../card.ts'
 import { tick } from '../index.ts'
-import { ruled, signoffs } from '../signoff.ts'
-import { drop, put, SELF, SIGNOFF, srcDir } from '../workspace.ts'
+import { ruled, signoffs, verdict } from '../signoff.ts'
+import { drop, OPERATOR, put, SELF, SIGNOFF, srcDir } from '../workspace.ts'
 import { approve, CARRIED, plan, scored, stub, watched, world, type World } from './world.ts'
 
 /** Their pull request as the tick reads it, offline: open and quiet. */
@@ -31,7 +32,7 @@ async function atBatch(): Promise<World> {
 interface Held { title: string; body: string; open: boolean; answer: Answer | null; words: string | null; closing: string | null }
 
 /** The tracker as a map: a test answers a card by setting its label and words. */
-function fake(pr: number | null = null, lines: string[] = []): Desk & { cards: Map<number, Held>; log: string[] } {
+function fake(pr: number | null = null, lines: string[] = [], assignees = [OPERATOR]): Desk & { cards: Map<number, Held>; log: string[] } {
   const cards = new Map<number, Held>()
   const log: string[] = []
   const card = (no: number): Held => {
@@ -53,8 +54,38 @@ function fake(pr: number | null = null, lines: string[] = []): Desk & { cards: M
     close: (no, comment) => { log.push(`close ${String(no)}`); card(no).open = false; card(no).closing = comment },
     rehearsal: () => pr,
     lines: () => lines,
+    issue: (): Issue => ({ number: 12, title: 'hello', body: '', state: 'OPEN',
+      assignees: assignees.map((login) => ({ login })), comments: [], closedByPullRequestsReferences: [] }),
   }
 }
+
+test('D1 the card opens with the fact sheet and its verdict', async () => {
+  const w = await atBatch()
+  const desk = fake()
+  signoffs(w.db, w.root, desk)
+  const body = desk.cards.get(100)?.body ?? ''
+  expect(body.startsWith('**Fact sheet**\n\n- Diff: files: ')).toBe(true)
+  expect(body.indexOf('\n- Verdict: ')).toBeGreaterThan(-1)
+  expect(body.indexOf('\n- Verdict: ')).toBeLessThan(body.indexOf('**widget 12**'))
+  expect(eventsOf(w.db, 1, 'card_facts')).toEqual([{ actor: 'signoff', outcome: 'pass', message: 'with fact sheet' }])
+})
+
+test('D2 the verdict is taste only when every fact is ok', () => {
+  const clean = [{ name: 'files', ok: true, says: '1 files' }, { name: 'assigned', ok: true, says: 'assigned to us' }]
+  expect(verdict(clean)).toBe('All checks clean; your call is taste only')
+  expect(verdict([...clean, { name: 'rails', ok: false, says: 'no verdict' }])).toBe('Open: rails: `no verdict`')
+})
+
+test('D3 an open fact is named and its line ends open', async () => {
+  const open = { name: 'assigned', ok: false, says: 'assigned to nobody' }
+  expect(verdict([{ name: 'files', ok: true, says: '1 files' }, open])).toBe('Open: assigned: `assigned to nobody`')
+  const w = await atBatch()
+  const desk = fake(null, [], [])
+  signoffs(w.db, w.root, desk)
+  const body = desk.cards.get(100)?.body ?? ''
+  expect(body).toMatch(/assigned: `assigned to nobody` \(open\)(;|\n)/)
+  expect(body.split('\n').find((l) => l.startsWith('- Verdict: '))).not.toContain('taste only')
+})
 
 test('one card per outside plan, linking nothing on their thread', async () => {
   const w = await atBatch()
@@ -327,6 +358,56 @@ test('D2 a plan with no director event shows no decision', async () => {
 test('D3 an invalid or superseded block stays off the card', async () => {
   expect(await bodyAfter(['needs_coo', BLOCK.replace('upstream?', 'upstream')])).not.toContain('Decide:')
   expect(await bodyAfter(['needs_coo', BLOCK], ['pass', BLOCK])).not.toContain('Decide:')
+})
+
+function ask(w: World, kind: SignalRow['kind'], body: string, at = new Date().toISOString(), repo = 'acme/widget'): number {
+  return signal(w.db, { repo, pr: 7, kind, author: 'maintainer', at, external_id: `${repo}:${kind}:${body.replace(/\s/g, '_')}`,
+    score: kind === 'bot_review' ? 4 : null, plan: 1, body })?.id ?? 0
+}
+
+const answered = (rows: [number, string][]): string =>
+  CARRIED.replace(/---\n$/, `${rows.map(([id, pointer]) => `  - id: R${String(id)}\n    status: done\n    pointer: '${pointer}'\n`).join('')}---\n`)
+
+function cardWith(w: World, handback: string): string {
+  put(w.root, 1, 'step-2.handback.md', handback)
+  drop(w.root, 1, 'signoff')
+  const desk = fake()
+  signoffs(w.db, w.root, desk)
+  return desk.cards.get(100)?.body ?? ''
+}
+
+test('D1 the card lists each reviewer ask with its pointer', async () => {
+  const w = await atBatch()
+  const [a, b] = [ask(w, 'review', 'Name it greet.'), ask(w, 'comment', 'Add a test\nfor it.')]
+  const body = cardWith(w, answered([[a, 'src/hello.ts:1'], [b, 'src/hello.test.ts:4']]))
+  expect(body).toContain(`**Reviewer asks since the last push**\n\n- \`R${String(a)}\` maintainer: \`Name it greet.\` — done at \`src/hello.ts:1\`\n`
+    + `- \`R${String(b)}\` maintainer: \`Add a test for it.\` — done at \`src/hello.test.ts:4\`\n\n`)
+  expect(body.replace(/```markdown[\s\S]*?\n```\n/, '').replace(/`[^`]*`/g, '')).not.toMatch(/#\d|acme\/widget|github\.com\/acme/)
+})
+
+test('D2 an ask with no row or no pointer ends open', async () => {
+  const w = await atBatch()
+  const [a, b] = [ask(w, 'review', 'Name it greet.'), ask(w, 'comment', 'Add a test.')]
+  const body = cardWith(w, answered([[a, 'src/hello.ts:1']]))
+  expect(body).toContain(`- \`R${String(a)}\` maintainer: \`Name it greet.\` — done at \`src/hello.ts:1\`\n`)
+  expect(body).toContain(`- \`R${String(b)}\` maintainer: \`Add a test.\` — open\n`)
+  expect(cardWith(w, answered([[a, ' '], [b, 'src/hello.ts:1']]))).toContain(`- \`R${String(a)}\` maintainer: \`Name it greet.\` — open\n`)
+  const broken = cardWith(w, 'built\n\n---\ndone: [\n---\n')
+  expect(broken.startsWith('**Fact sheet**')).toBe(true)
+  expect(broken.split('\n').filter((l) => l.startsWith('- `R')).map((l) => l.endsWith('— open'))).toEqual([true, true])
+})
+
+test('D3 only asks on their PR since the last push show', async () => {
+  const w = await atBatch()
+  const now = Date.now()
+  ask(w, 'review', 'Before the push.', new Date(now - 120_000).toISOString())
+  logged(w.db, { plan: 1, kind: 'push', actor: 'push', outcome: 'pass', message: 'pushed', pointer: null, run: null }, new Date(now - 60_000).toISOString())
+  const late = ask(w, 'comment', 'After the push.')
+  ask(w, 'review', 'On the fork.', undefined, 'caliperforge/widget')
+  for (const kind of ['bot_review', 'ci_red', 'merge'] as const) ask(w, kind, `A ${kind}.`)
+  ask(w, 'review', ' \n ')
+  const body = cardWith(w, CARRIED)
+  expect(body.split('\n').filter((l) => l.startsWith('- `R'))).toEqual([`- \`R${String(late)}\` maintainer: \`After the push.\` — open`])
 })
 
 /** The cards carry unposted PR text and sign-off answers, so they live apart from our public repo. */

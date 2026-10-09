@@ -8,7 +8,8 @@ import { botClean, built, gated, newest, ready as readyRow, type DeliverableRow,
 import { record as recordFiles } from '../store/files.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
-import { allPlans, BUILT, internal, stampHead, type PlanRow } from '../store/plans.ts'
+import { allPlans, internal, stampHead, type PlanRow } from '../store/plans.ts'
+import { evidenceOf, lastCi, passed, railedParts, target, targetRepo, unanswered } from '../store/ready.ts'
 import { diffAt } from '../store/refusals.ts'
 import { graded, greptiled } from '../store/signals.ts'
 import type { Step } from '../templates/pr-path.ts'
@@ -21,6 +22,8 @@ import { learned } from './learn.ts'
 import { baseMoved } from './merge.ts'
 import { stacked } from './stacked.ts'
 import { unruled } from './unruled.ts'
+
+export { proven, target, unanswered, type Target } from '../store/ready.ts'
 
 export const CREDITS = 50
 
@@ -40,8 +43,6 @@ export function monthly(root: string, now: Date): number {
 export function reviewed(db: Db, now: Date): number {
   return greptiled(db, `${FORK}/*`, now.toISOString().slice(0, 7))
 }
-
-export interface Target { repo: string; issue_no: number; state: string; measured_at: string; pulse: string }
 
 export function readyGate(db: Db, root: string, plan: PlanRow, wire?: Wire): Outcome {
   const moved = baseMoved(db, root, plan)
@@ -116,8 +117,7 @@ function asked(root: string, plan: number, sha: string, repo: string, wire: Wire
 }
 
 function proofOf(db: Db, root: string, plan: PlanRow, repo: string, row: DeliverableRow): Proof {
-  const ci = db.prepare("SELECT outcome, subject_digest FROM verdicts WHERE plan = ? AND rail_id = 'ci-green' ORDER BY id DESC LIMIT 1")
-    .get(plan.id) as { outcome: string; subject_digest: string } | undefined
+  const ci = lastCi(db, plan.id)
   return {
     repo,
     ours: internal(plan),
@@ -135,8 +135,7 @@ function proofOf(db: Db, root: string, plan: PlanRow, repo: string, row: Deliver
 /** The repository the ready rail reads a pulse for. Ours has none to read, and needs none. */
 export function repoOf(db: Db, plan: PlanRow): string | null {
   if (plan.target_id === null) return homeOf(plan)
-  const row = db.prepare('SELECT repo FROM targets WHERE id = ?').get(plan.target_id) as { repo: string } | undefined
-  return row?.repo ?? null
+  return targetRepo(db, plan.target_id)
 }
 
 /** No `ci-green` verdict is not a green CI. The ready gate's CI input is a row the rail wrote or a refusal. */
@@ -151,18 +150,6 @@ function green(ci: { outcome: string; subject_digest: string } | undefined): Pro
     spans: passed ? [] : ['ci-green'],
     message: ci === undefined ? 'ci-green left no verdict on this plan' : 'ci-green',
   }
-}
-
-/**
- * The pulse is the repo's latest measurement, not the one `cf queue add` froze in `targets.account_id`,
- * or a `cf measure` would refresh nothing the kernel reads. What was approved is
- * still pinned by `targets.evidence_measured_at` in `targetDigest()`.
- */
-export function target(db: Db, plan: PlanRow): Target | null {
-  const row = db.prepare(`SELECT t.repo, t.issue_no, t.state, a.measured_at, a.pulse
-    FROM targets t JOIN accounts a ON a.repo = t.repo
-    WHERE t.id = ? ORDER BY a.measured_at DESC LIMIT 1`).get(plan.target_id)
-  return (row ?? null) as Target | null
 }
 
 /** What the step leaves in the store where it proved it: the file list at the brief, the handback at build, the gates at senior, the rail at ready. */
@@ -182,18 +169,9 @@ function made(db: Db, root: string, plan: PlanRow, step: Step): Made {
   return { plan: plan.id, step: step.step, seat: step.seat, diff_digest: digestOf(diffOf(root, plan.id)), evidence: evidenceOf(db, plan) }
 }
 
-/** What the deliverable row points at: the target's issue url, or the issue of ours the plan was filed from. */
-function evidenceOf(db: Db, plan: PlanRow): string {
-  if (plan.origin !== null) return plan.origin
-  const row = db.prepare('SELECT evidence FROM targets WHERE id = ?').get(plan.target_id) as
-    { evidence: string } | undefined
-  if (row === undefined) throw new Error(`plan ${String(plan.id)} has no target row`)
-  return row.evidence
-}
-
 /** Each of the five is a row somebody else wrote: a gate verdict, the ci-green rail, a bot signal, the account pulse. */
 function proof(db: Db, root: string, plan: PlanRow): Proven {
-  const parts = partsOf(db, plan.id)
+  const parts = railedParts(db, plan.id)
   const railed = parts.length === 0 ? [plan.id] : parts
   return {
     tests_pass: railed.every((id) => passed(db, id, 'gate', 'pre_review')),
@@ -217,33 +195,4 @@ export function rescored(db: Db, root: string): void {
     if (plan.template !== 'pr_path' || plan.step !== 6 || !['queued', 'running'].includes(plan.state)) continue
     if (newest(db, plan.id)?.bot_clean === 0 && clean(db, root, plan)) botClean(db, plan.id, true)
   }
-}
-
-/** A low bot score a later build, or another `head`, has answered no longer holds the plan; the bot scores the new head once it is pushed. */
-export function unanswered(db: Db, plan: number, head?: string): unknown {
-  return db.prepare(`SELECT 1 FROM signals s WHERE s.plan = @plan AND s.kind = 'bot_review' AND s.score < 5 AND s.repo NOT GLOB @fork
-    AND (@head IS NULL OR s.head IS NULL OR s.head = @head)
-    AND julianday(s.at) > coalesce((SELECT max(julianday(r.at)) FROM runs r WHERE r.plan = @plan AND r.step = 2 AND r.${BUILT}), 0)`)
-    .get({ plan, fork: `${FORK}/*`, head: head ?? null })
-}
-
-/** The parts while one ran its rails after the parent's own last `pre_review`: each passed them on the bytes it put on the branch. */
-function partsOf(db: Db, plan: number): number[] {
-  return (db.prepare(`SELECT plan FROM parts WHERE parent = @plan AND plan IS NOT NULL
-    AND (SELECT max(v.id) FROM verdicts v JOIN parts q ON q.plan = v.plan WHERE q.parent = @plan AND v.gate = 'pre_review')
-      > coalesce((SELECT max(id) FROM verdicts WHERE plan = @plan AND gate = 'pre_review'), 0)`)
-    .all({ plan }) as { plan: number }[]).map((p) => p.plan)
-}
-
-function passed(db: Db, plan: number, column: 'gate' | 'rail_id', value: string): boolean {
-  const row = db.prepare(`SELECT outcome FROM verdicts WHERE plan = ? AND ${column} = ? ORDER BY id DESC LIMIT 1`)
-    .get(plan, value) as { outcome: string } | undefined
-  return row?.outcome === 'pass'
-}
-
-/** The four the gates left at senior. The fifth, fork CI, is the ready step's own first act. */
-export function proven(db: Db, plan: PlanRow): boolean {
-  return db.prepare(`SELECT 1 FROM deliverables WHERE plan_id = ? AND tests_pass = 1
-    AND byte_identical_elsewhere = 1 AND bot_clean = 1 AND target_warm = 1`)
-    .get(plan.id) !== undefined
 }

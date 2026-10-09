@@ -28,7 +28,7 @@ function fake(broken = false): Desk & { titles: string[] } {
       titles.push(title)
       return { no: 100 + titles.length, url: `https://github.com/o/r/issues/${String(100 + titles.length)}` }
     },
-    seen: no, unlabel: no, close: no, rehearsal: no, lines: no,
+    seen: no, unlabel: no, close: no, rehearsal: no, lines: no, issue: no,
   }
 }
 

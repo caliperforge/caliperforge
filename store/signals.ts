@@ -60,6 +60,15 @@ export function since(db: Db, plan: number): SignalRow[] {
   return db.prepare('SELECT * FROM signals WHERE plan = ? ORDER BY id').all(plan).map((r) => SignalRow.parse(r))
 }
 
+/** Reviews and comments with words on the plan's own upstream pull request since its newest passing push, or since it was queued. */
+export function asks(db: Db, plan: number): SignalRow[] {
+  return db.prepare(`SELECT s.* FROM signals s JOIN plans p ON p.id = s.plan JOIN targets t ON t.id = p.target_id
+    WHERE s.plan = ? AND s.kind IN ('review', 'comment') AND trim(coalesce(s.body, ''), ' ' || char(9, 10, 13)) != '' AND s.repo = t.repo
+      AND julianday(s.at) > coalesce((SELECT max(julianday(e.at)) FROM events e
+        WHERE e.plan = p.id AND e.kind = 'push' AND e.outcome = 'pass'), julianday(p.queued_at))
+    ORDER BY s.id`).all(plan).map((r) => SignalRow.parse(r))
+}
+
 export function others(db: Db, author: string): SignalRow[] {
   return db.prepare('SELECT * FROM signals WHERE author != ? ORDER BY id').all(author).map((r) => SignalRow.parse(r))
 }

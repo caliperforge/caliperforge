@@ -1,6 +1,6 @@
 import { inline, said, type Read } from '../cli/gh.ts'
 import type { Db } from '../store/index.ts'
-import { graded, type Signal } from '../store/signals.ts'
+import { asks, graded, type Signal } from '../store/signals.ts'
 import { BOT } from './capture.ts'
 import { carried } from './push.ts'
 import { cloned, drop, headSha, maybe, put } from './workspace.ts'
@@ -32,4 +32,11 @@ export function findings(db: Db, root: string, plan: number, src: string): strin
   }
   put(root, plan, 'findings.md', lines)
   return `\n\n# Bot review findings\n\nGreptile scored this head ${String(score)}/5. Answer each finding under its id in your hand-back's done rows, with a pointer.\n\n${lines}`
+}
+
+/** An ask is named by its `signals` id, as a finding is by its comment id: the sign-off card reads its `R` row back. */
+export function asked(db: Db, plan: number): string {
+  const lines = asks(db, plan).map((s) =>
+    `- R${String(s.id)} ${s.author} (${s.kind}${s.state === null ? '' : `, ${s.state}`}): ${(s.body ?? '').replace(/\s+/g, ' ').trim()}\n`).join('')
+  return lines === '' ? '' : `\n\n# Reviewer asks\n\nAnswer each ask under its id in your hand-back's done rows, with a pointer.\n\n${lines}`
 }

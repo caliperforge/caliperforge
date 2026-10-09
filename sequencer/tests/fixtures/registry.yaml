@@ -263,3 +263,9 @@
   where: "kind = 'stuck' AND message LIKE '%waits: ready_proof%'"
   gap: 7d
   expected: 0
+- name: card_facts
+  table: events
+  column: at
+  where: "kind = 'card_facts' AND outcome = 'refuse'"
+  gap: 7d
+  expected: 0

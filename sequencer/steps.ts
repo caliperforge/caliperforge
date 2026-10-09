@@ -15,7 +15,8 @@ import { approved, approvedPlan, batch } from './approve.ts'
 import type { Outcome } from './kind.ts'
 import { preReview } from './rails.ts'
 import { readyGate, proven, repoOf, target, type Target } from './ready.ts'
-import { push, reviewable, type Wire } from './push.ts'
+import { opened, push, reviewable, type Wire } from './push.ts'
+import { polled } from './unpolled.ts'
 import { diffOf, maybe, put } from './workspace.ts'
 import { homeOf } from './home.ts'
 import { freshBase } from './merge.ts'
@@ -60,10 +61,16 @@ export function mapOf(template: PlanRow['template']): StepMap {
 export function blocked(db: Db, plan: PlanRow): Wait | null {
   const step = mapOf(plan.template).at(plan.step)
   if (step.fires === 'ceo') return internal(plan) || approvedPlan(db, plan) ? null : 'ceo_batch'
-  if (step.name === 'ruling') return internal(plan) || approved(db, plan) ? null : 'target_approval'
+  if (step.name === 'ruling') return internal(plan) || approved(db, plan) || up(db, plan) ? null : 'target_approval'
   if (step.name === 'ready') return proven(db, plan) && waitsFor(db, plan) === null ? null : 'ready_proof'
   if (target(db, plan)?.state === 'parked') return 'target_parked'
   return overlapping(db, plan) === null ? null : 'file_overlap'
+}
+
+/** The pull request step 8 or `cf adopt` stamped is still open: the target was approved when it went up. */
+function up(db: Db, plan: PlanRow): boolean {
+  const url = opened(db, plan.id)
+  return url !== null && /\/pull\/\d+$/.test(url) && polled(db)({ evidence: url })
 }
 
 /**

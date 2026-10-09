@@ -23,7 +23,8 @@ const url = (repo: string, no: number): string => `https://github.com/${repo}/pu
 function canned(args: string[]): unknown {
   if (args[0] === 'pr' && args[1] === 'view') {
     const [no, repo] = [Number(args[2]), String(args[4])]
-    return { number: no, url: url(repo, no), state: 'OPEN', title: 't', body: 'b', closingIssuesReferences: [] }
+    return { number: no, url: url(repo, no), state: 'OPEN', title: 't', body: 'b', closingIssuesReferences: [],
+      headRefName: `${repo}-${String(no)}`, headRepositoryOwner: { login: 'caliperforge' } }
   }
   if (args[0] === 'search') return [{ repository: { nameWithOwner: OTHER } }]
   if (args.includes('createdAt,headRepositoryOwner')) {

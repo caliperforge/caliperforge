@@ -30,8 +30,7 @@
     "lines": 82
   },
   "flow.ts": {
-    "lines": 123,
-    "prepare": 7
+    "lines": 107
   },
   "gh.ts": {
     "lines": 286
@@ -89,9 +88,6 @@
   },
   "tests/part.test.ts": {
     "prepare": 2
-  },
-  "tests/proposal-world.ts": {
-    "prepare": 7
   },
   "tests/proposal.test.ts": {
     "prepare": 3

@@ -17,7 +17,6 @@ import { preReview } from './rails.ts'
 import { readyGate, proven, repoOf, target, type Target } from './ready.ts'
 import { opened, push, reviewable, type Wire } from './push.ts'
 import { polled } from './unpolled.ts'
-import { targetRow } from '../store/targets.ts'
 import { diffOf, maybe, put } from './workspace.ts'
 import { homeOf } from './home.ts'
 import { freshBase } from './merge.ts'
@@ -70,7 +69,7 @@ export function blocked(db: Db, plan: PlanRow): Wait | null {
 
 /** The pull request step 8 or `cf adopt` stamped is still open: the target was approved when it went up. */
 function up(db: Db, plan: PlanRow): boolean {
-  const url = opened(db, plan.id) ?? (plan.target_id === null ? null : targetRow(db, plan.target_id).evidence)
+  const url = opened(db, plan.id)
   return url !== null && /\/pull\/\d+$/.test(url) && polled(db)({ evidence: url })
 }
 

@@ -18,6 +18,7 @@ import { clear, sentOnce } from '../store/refusals.ts'
 import { pending } from '../store/transcript.ts'
 import { split, type Part } from './brief.ts'
 import { hold, isHeld, unhold } from './hold.ts'
+import { found } from './findings.ts'
 import { fixed, stop } from './fixed.ts'
 import { released } from './fixer.ts'
 import { prose } from './prose.ts'
@@ -203,6 +204,7 @@ function text(db: Db, root: string, plan: PlanRow, tried?: string, fence?: strin
     `# Job\n\nplan ${String(plan.id)}, state ${plan.state}, step ${String(plan.step)}, lane ${plan.lane ?? '-'}, ${plan.origin ?? 'no ticket'}`,
     `# Stop\n\n${maybe(root, plan.id, 'refusal.md') ?? at('question.md')}`,
     ...(capStop(db, plan.id) ? [at('director.md')] : []),
+    `# Findings\n\n${found(db, root, plan.id)}`,
     `# Orchestrator\n\n${at('orchestrator.md')}`,
     `# Ask\n\n${at('ask.md')}`,
     `# Parent ticket\n\n${parentAsk(db, root, plan)}`,

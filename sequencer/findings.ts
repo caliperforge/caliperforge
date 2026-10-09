@@ -1,9 +1,10 @@
 import { inline, said, type Read } from '../cli/gh.ts'
 import type { Db } from '../store/index.ts'
 import { asks, graded, type Signal } from '../store/signals.ts'
+import { verdictRows } from '../store/verdict.ts'
 import { BOT } from './capture.ts'
 import { carried } from './push.ts'
-import { cloned, drop, headSha, maybe, put } from './workspace.ts'
+import { cloned, drop, headSha, maybe, put, srcDir } from './workspace.ts'
 
 export interface Rehearsal { root: string; list: Read }
 
@@ -32,6 +33,23 @@ export function findings(db: Db, root: string, plan: number, src: string): strin
   }
   put(root, plan, 'findings.md', lines)
   return `\n\n# Bot review findings\n\nGreptile scored this head ${String(score)}/5. Answer each finding under its id in your hand-back's done rows, with a pointer.\n\n${lines}`
+}
+
+/** Step 5 has no commit yet, so the blind pass files its rows under the tree it judged. */
+export function blinded(db: Db, root: string, plan: number, { verdict, outcome }: { verdict: number; outcome: { message: string } }): void {
+  const tree = verdictRows(db, plan).find((v) => v.id === verdict)?.tree ?? null
+  if (tree === null) return
+  const lines = outcome.message.split('\n').filter((l) => /^- B\d+ P[1-3] /.test(l)).map((l) => `${l}\n`).join('')
+  if (lines === '') drop(root, plan, `findings-${tree}.md`)
+  else put(root, plan, `findings-${tree}.md`, lines)
+}
+
+export function found(db: Db, root: string, plan: number): string {
+  const src = srcDir(root, plan)
+  const greptile = cloned(src) ? maybe(root, plan, `findings-${headSha(src)}.md`) ?? '' : ''
+  const tree = verdictRows(db, plan).findLast((v) => v.gate === 'blind_review' && v.tree !== null)?.tree ?? null
+  const rows = greptile + (tree === null ? '' : maybe(root, plan, `findings-${tree}.md`) ?? '')
+  return rows === '' ? 'none' : `Answer a finding you judge wrong with \`rule\`, \`answer: <id> overruled: <evidence>\`.\n\n${rows}`
 }
 
 /** An ask is named by its `signals` id, as a finding is by its comment id: the sign-off card reads its `R` row back. */

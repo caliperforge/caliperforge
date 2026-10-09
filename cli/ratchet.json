@@ -90,9 +90,6 @@
   "tests/part.test.ts": {
     "prepare": 2
   },
-  "tests/proposal-world.ts": {
-    "prepare": 7
-  },
   "tests/proposal.test.ts": {
     "prepare": 3
   },

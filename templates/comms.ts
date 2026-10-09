@@ -13,11 +13,11 @@ import { ran } from '../sequencer/seat.ts'
 import { staffed } from '../sequencer/staffing.ts'
 import { scripted, shift, sound, weekly } from '../sequencer/weekly.ts'
 import { drop, get, maybe, move, put } from '../sequencer/workspace.ts'
-import { edited, returned } from '../store/desk.ts'
+import { edited, noted, packsIn, proofed, returned, scorecardOf, substackIn } from '../store/desk.ts'
 import type { Run } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { packetOf } from '../store/packet.ts'
-import type { PlanRow } from '../store/plans.ts'
+import { planTitle, type PlanRow } from '../store/plans.ts'
 import { ROOT, type Step } from './pr-path.ts'
 
 const SEATED = new Set(['draft', 'text_review', 'grow'])
@@ -81,27 +81,21 @@ export function desk(db: Db, root: string, plan: PlanRow): Outcome {
   const post = /^# (.+)\n([\s\S]*)$/.exec(draft)
   const body = post?.[2]?.trim() ?? ''
   if (post === null || body === '') return { outcome: 'refuse', spans: ['draft.md'], note: 'draft.md has no # title line or no body' }
-  const { title } = db.prepare('SELECT title FROM plans WHERE id = ?').get(plan.id) as { title: string | null }
+  const title = planTitle(db, plan.id)
   if (title === null) return { outcome: 'refuse', spans: ['plans'], note: `plan ${String(plan.id)} has no title` }
   const { dest, dek, sources, checks, learnings = '' } = fence.data
   const work = /\d{4}-\d{2}-\d{2}$/.exec(title)?.[0] ?? plan.queued_at.slice(0, 10)
   db.transaction(() => {
-    const added = db.prepare(`INSERT OR IGNORE INTO desk_posts (id, kind, dest, status, title, dek, body, sources, checks, work_date, written_date, proof_at)
-      VALUES (?, ?, ?, 'proof', ?, ?, ?, ?, ?, ?, ?, datetime('now'))`).run(plan.id, title.split(' ')[0], dest, (post[1] ?? '').trim(), dek, body,
-      JSON.stringify(sources), JSON.stringify(checks), work, new Date().toISOString().slice(0, 10))
-    if (added.changes === 0) return
-    const old = db.prepare('SELECT items, sources FROM desk_learnings WHERE date = ?').get(work) as { items: string; sources: string } | undefined
-    const items = [...JSON.parse(old?.items ?? '[]') as unknown[], ...learnings.split('\n').map((l) => l.trim()).filter((l) => l !== '')
-      .map((line) => ({ title: line, what: '', lesson: '', fix: '', status: 'noted' }))]
-    const refs = [...new Set([...JSON.parse(old?.sources ?? '[]') as string[], ...sources.map((s) => s.ref)])]
-    db.prepare(`INSERT INTO desk_learnings (date, numbers, items, sources) VALUES (?, '[]', ?, ?)
-      ON CONFLICT (date) DO UPDATE SET items = excluded.items, sources = excluded.sources`).run(work, JSON.stringify(items), JSON.stringify(refs))
+    if (!proofed(db, { id: plan.id, kind: title.replace(/ .*/, ''), dest, title: (post[1] ?? '').trim(), dek, body, sources: JSON.stringify(sources),
+      checks: JSON.stringify(checks), work_date: work, written_date: new Date().toISOString().slice(0, 10) })) return
+    noted(db, work, learnings.split('\n').map((l) => l.trim()).filter((l) => l !== '')
+      .map((line) => ({ title: line, what: '', lesson: '', fix: '', status: 'noted' })), sources.map((s) => s.ref))
   })()
   return { outcome: 'pass', spans: [], note: `desk_posts ${String(plan.id)} in proof for ${work}` }
 }
 
 export function titled(db: Db, plan: PlanRow, kind: string): string | null {
-  const { title } = db.prepare('SELECT title FROM plans WHERE id = ?').get(plan.id) as { title: string | null }
+  const title = planTitle(db, plan.id)
   return title?.startsWith(`${kind} `) === true ? title : null
 }
 
@@ -168,9 +162,8 @@ export function pack(db: Db, root: string, plan: PlanRow): Outcome {
   const { topic, notes, replies, partners } = got
   const work = /\d{4}-\d{2}-\d{2}$/.exec(title)?.[0] ?? plan.queued_at.slice(0, 10)
   const id = title.startsWith('weekly ') ? PACK + plan.id : plan.id
-  db.prepare(`INSERT OR IGNORE INTO desk_posts (id, kind, dest, status, title, dek, body, sources, checks, work_date, written_date, proof_at)
-    VALUES (?, 'growth', 'pack', 'proof', ?, '', ?, '[]', '[]', ?, ?, datetime('now'))`)
-    .run(id, topic, JSON.stringify({ notes, replies, partners }), work, new Date().toISOString().slice(0, 10))
+  proofed(db, { id, kind: 'growth', dest: 'pack', title: topic, dek: '', body: JSON.stringify({ notes, replies, partners }), sources: '[]', checks: '[]',
+    work_date: work, written_date: new Date().toISOString().slice(0, 10) })
   return { outcome: 'pass', spans: [], note: `desk_posts ${String(id)} pack in proof for ${work}` }
 }
 
@@ -200,13 +193,10 @@ function stats(root: string, day: string): Stats | Outcome {
 type Card = Stats & { post_by_friday: 'y' | 'n'; notes_ready: number }
 
 function card(db: Db, week: string, got: Stats): Card & { change: Record<string, number | null> | null } {
-  const post = db.prepare("SELECT 1 FROM desk_posts WHERE dest = 'substack' AND date(proof_at) BETWEEN ? AND ?").get(week, shift(week, 4))
-  const packs = db.prepare(`SELECT COALESCE(edited_body, body) AS body FROM desk_posts
-    WHERE kind = 'growth' AND dest = 'pack' AND work_date BETWEEN ? AND ?`).all(week, shift(week, 6)) as { body: string }[]
-  const notes = packs.reduce((n, p) => n + (JSON.parse(p.body) as { notes: string[] }).notes.length, 0)
-  const now: Card = { post_by_friday: post === undefined ? 'n' : 'y', notes_ready: notes, ...got }
-  const prior = db.prepare("SELECT body FROM desk_posts WHERE kind = 'scorecard' AND work_date = ?").get(shift(week, -7)) as { body: string } | undefined
-  const was = prior === undefined ? null : JSON.parse(prior.body) as Card
+  const notes = packsIn(db, week, shift(week, 6)).reduce((n, body) => n + (JSON.parse(body) as { notes: string[] }).notes.length, 0)
+  const now: Card = { post_by_friday: substackIn(db, week, shift(week, 4)) ? 'y' : 'n', notes_ready: notes, ...got }
+  const prior = scorecardOf(db, shift(week, -7))
+  const was = prior === null ? null : JSON.parse(prior) as Card
   return { ...now, change: was === null ? null : {
     subscribers: now.subscribers - was.subscribers, open_rate: now.open_rate - was.open_rate, notes_ready: now.notes_ready - was.notes_ready,
     swaps: now.swaps === null || was.swaps === null ? null : now.swaps - was.swaps,
@@ -232,9 +222,8 @@ export function score(db: Db, root: string, plan: PlanRow, step: Step): Outcome 
   const dek = [`post ${body.post_by_friday}`, `${String(body.notes_ready)} Notes`, `swaps ${swaps === null ? 'not recorded' : String(swaps)}`,
     `${String(body.subscribers)} subscribers`, `open rate ${String(body.open_rate)}`,
     `sources ${typeof sources === 'string' ? sources : String(Object.keys(sources).length)}`].join(' · ')
-  db.prepare(`INSERT OR IGNORE INTO desk_posts (id, kind, dest, status, title, dek, body, sources, checks, work_date, written_date, proof_at)
-    VALUES (?, 'scorecard', 'scorecard', 'proof', ?, ?, ?, '[]', '[]', ?, ?, datetime('now'))`)
-    .run(plan.id, `scorecard/${week}`, dek, JSON.stringify(body), week, new Date().toISOString().slice(0, 10))
+  proofed(db, { id: plan.id, kind: 'scorecard', dest: 'scorecard', title: `scorecard/${week}`, dek, body: JSON.stringify(body), sources: '[]',
+    checks: '[]', work_date: week, written_date: new Date().toISOString().slice(0, 10) })
   return { outcome: 'pass', spans: [], note: `desk_posts ${String(plan.id)} scorecard/${week} in proof` }
 }
 

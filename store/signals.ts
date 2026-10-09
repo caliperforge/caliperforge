@@ -56,6 +56,14 @@ export function heads(db: Db, repos: string, now: Date): { plan: number; head: s
     WHERE n = 1 ORDER BY plan, head`).all(repos, now.toISOString()) as { plan: number; head: string; score: number | null }[]
 }
 
+/** Each PR head Greptile reviewed in the last 30 days on repos matching `repos`, of plans with no origin. */
+export function scored(db: Db, repos: string, now: Date): { plan: number; repo: string; pr: number; head: string }[] {
+  return db.prepare(`SELECT DISTINCT s.plan, s.repo, s.pr, s.head FROM signals s JOIN plans p ON p.id = s.plan
+    WHERE s.kind = 'bot_review' AND s.author LIKE '%greptile%' AND s.repo GLOB ? AND s.head IS NOT NULL AND p.origin IS NULL
+      AND julianday(s.at) >= julianday(?, '-30 day')
+    ORDER BY s.plan, s.pr, s.head`).all(repos, now.toISOString()) as { plan: number; repo: string; pr: number; head: string }[]
+}
+
 export function since(db: Db, plan: number): SignalRow[] {
   return db.prepare('SELECT * FROM signals WHERE plan = ? ORDER BY id').all(plan).map((r) => SignalRow.parse(r))
 }

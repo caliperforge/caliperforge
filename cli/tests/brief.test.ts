@@ -7,7 +7,7 @@ import { fresh } from '../../checks/sqlite.ts'
 import { registerLanes } from '../cf-lanes.ts'
 import { registerPlans } from '../cf-plans.ts'
 import { actors, actorSection, costs, costSection, fileWaits, greptileLine, hands, heldBy, line, misses, missSection, rulings, section, ticketSection,
-  tickets, unpriced, waitLine, waits } from '../brief.ts'
+  tickets, unpriced, waitLine, waits, caught, caughtSection } from '../brief.ts'
 import { refusalDays, refusalSection } from '../refusals.ts'
 import { directorSection, handUpLine } from '../director.ts'
 import { decisionSection, driftSection } from '../drift.ts'
@@ -372,6 +372,54 @@ test('D3 findings repeated on a later head count once', () => {
 
 test('D4 no counted head prints none', () => {
   expect(missSection(misses(world(), mkdtempSync(join(tmpdir(), 'cf-misses-')), new Date()))).toBe(`${MISSED}  none\n`)
+})
+
+const CAUGHT = "blind review caught of greptile's findings, last 30 d, target 70-90%\n"
+
+const TREE = 'f'.repeat(40)
+
+function blinds(): { db: Db; root: string; now: Date } {
+  const db = world()
+  const root = mkdtempSync(join(tmpdir(), 'cf-caught-'))
+  plan(db, 1, 'running', null, 1)
+  review(db, 1, 'caliperforge/widget', 'greptile-apps', '2026-10-01T09:00:00Z', 1, 2, HEAD)
+  put(root, 1, `findings-${HEAD}.md`, '- G1 src/a.ts:1 x\n- G2 src/b.ts:2 y\n')
+  keep(db, 1, 5, 'blind_review', { id: 0, outcome: 'pass', subject_digest: HASH, tree: TREE }, null)
+  put(root, 1, `findings-${TREE}.md`, '- B1 P2 src/a.ts:4 z\n')
+  return { db, root, now: new Date('2026-10-02T12:00:00.000Z') }
+}
+
+test('D1 one of two Greptile findings caught prints 50%', () => {
+  const { db, root, now } = blinds()
+  expect(caughtSection(caught(db, root, now))).toBe(`${CAUGHT}  plan 1\tcaliperforge/widget#3\t1/2\t50%\n`)
+})
+
+test('D2 a plan with no blind tree prints 0%', () => {
+  const { db, root, now } = blinds()
+  plan(db, 2, 'running', null, 1)
+  review(db, 2, 'caliperforge/widget', 'greptile-apps', '2026-10-01T09:00:00Z', 2, 2, HEAD)
+  put(root, 2, `findings-${HEAD}.md`, '- G3 src/a.ts:1 x\n')
+  expect(caughtSection(caught(db, root, now))).toContain('  plan 2\tcaliperforge/widget#3\t0/1\t0%\n')
+})
+
+test('D3 internal, other bot, other repo or stale prints none', () => {
+  const db = world()
+  const root = mkdtempSync(join(tmpdir(), 'cf-caught-'))
+  plan(db, 1, 'running', null, 1)
+  plan(db, 2, 'running', 25)
+  review(db, 1, 'caliperforge/widget', 'greptile-apps', '2026-10-01T09:00:00Z', 2, 2, HEAD)
+  review(db, 2, 'caliperforge/widget', 'coderabbitai', '2026-10-01T09:00:00Z', 1, 2, HEAD)
+  review(db, 3, 'acme/widget', 'greptile-apps', '2026-10-01T09:00:00Z', 1, 2, HEAD)
+  review(db, 4, 'caliperforge/widget', 'greptile-apps', '2026-08-01T09:00:00Z', 1, 2, HEAD)
+  expect(caughtSection(caught(db, root, new Date('2026-10-02T12:00:00.000Z')))).toBe(`${CAUGHT}  none\n`)
+})
+
+test('D4 a G id repeated on a second head counts once', () => {
+  const { db, root, now } = blinds()
+  const next = 'e'.repeat(40)
+  review(db, 2, 'caliperforge/widget', 'greptile-apps', '2026-10-02T09:00:00Z', 1, 2, next)
+  put(root, 1, `findings-${next}.md`, '- G2 src/b.ts:7 y\n')
+  expect(caughtSection(caught(db, root, now))).toBe(`${CAUGHT}  plan 1\tcaliperforge/widget#3\t1/2\t50%\n`)
 })
 
 test('cf brief names only plans whose ask.md drifted from brief', () => {

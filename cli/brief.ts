@@ -9,7 +9,8 @@ import { ERA, openIds, type ActorRow, type ByType, type Cost, type Model, type P
 import type { Db } from '../store/index.ts'
 import { name, type LaneState, type WindowRow } from '../store/lanes.ts'
 import { planById, type Overlap, type Wait } from '../store/plans.ts'
-import { heads } from '../store/signals.ts'
+import { heads, scored } from '../store/signals.ts'
+import { verdictRows } from '../store/verdict.ts'
 import { gh, type Read, WINDOW } from './gh.ts'
 import { LANE, LANES } from './plan.ts'
 
@@ -120,6 +121,34 @@ export function missSection(rows: Miss[]): string {
   const lines = rows.map((m) => `  ${m.language} ${String(m.passed)} passed, ${String(m.down)} marked down` +
     `${m.down > 0 ? `, ${String(m.findings)} findings` : ''}\n`)
   return `greptile after both reviewers passed, last 30 d\n${rows.length === 0 ? '  none\n' : lines.join('')}`
+}
+
+interface Caught { plan: number; pr: string; caught: number; found: number }
+
+/** Lines move between the tree the blind pass judged and the fork head, so a row keys on its path alone. */
+function named(text: string | null, row: RegExp): Map<string, string> {
+  return new Map([...(text ?? '').matchAll(row)].map(([, id = '', path = '']) => [id, path]))
+}
+
+export function caughtSection(rows: Caught[]): string {
+  const lines = rows.map((r) => `  plan ${String(r.plan)}\t${r.pr}\t${String(r.caught)}/${String(r.found)}` +
+    `\t${r.found === 0 ? '-' : `${String(Math.round(r.caught * 100 / r.found))}%`}\n`)
+  return `blind review caught of greptile's findings, last 30 d, target 70-90%\n${rows.length === 0 ? '  none\n' : lines.join('')}`
+}
+
+export function caught(db: Db, root: string, now: Date): Caught[] {
+  const by = new Map<string, { plan: number; pr: string; found: Map<string, string> }>()
+  for (const s of scored(db, `${FORK}/*`, now)) {
+    const pr = `${s.repo}#${String(s.pr)}`
+    const row = by.get(`${String(s.plan)}\t${pr}`) ?? { plan: s.plan, pr, found: new Map<string, string>() }
+    by.set(`${String(s.plan)}\t${pr}`, row)
+    for (const [id, path] of named(maybe(root, s.plan, `findings-${s.head}.md`), /^- (G\d+) ([^\s:]+)/gm)) row.found.set(id, path)
+  }
+  return [...by.values()].map(({ plan, pr, found }) => {
+    const blind = new Set(verdictRows(db, plan).flatMap((v) => v.gate === 'blind_review' && v.tree !== null
+      ? [...named(maybe(root, plan, `findings-${v.tree}.md`), /^- (B\d+) P[1-3] ([^\s:]+)/gm).values()] : []))
+    return { plan, pr, found: found.size, caught: [...found.values()].filter((p) => blind.has(p)).length }
+  })
 }
 
 /** One row per rate-limit window: our tokens inside it, the provider's utilisation of it, the cap. */

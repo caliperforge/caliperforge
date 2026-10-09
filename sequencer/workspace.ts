@@ -229,7 +229,7 @@ export function checkout(root: string, plan: number, repo: string, branch: strin
   if (from !== 'main') git(dir, ['config', 'cf.base', from])
   excluded(dir)
   const head = fetchMain(dir)
-  const restored = prBranch(root, plan, dir) ?? (done !== null && pushed(dir, branch) ? branch : null)
+  const restored = prBranch(root, plan, dir) ?? maybe(root, plan, PR_BRANCH)?.trim() ?? (done !== null && pushed(dir, branch) ? branch : null)
   if (restored !== null) {
     const start = done === null && maybe(root, plan, CARRY) !== null ? head : `origin/${restored}`
     git(dir, ['checkout', '-B', restored, start])
@@ -267,6 +267,9 @@ function pushed(dir: string, branch: string): boolean {
 
 /** `<folded> <signed>`: the one commit the first push sent, and the approved head it was folded from. */
 export const PR_HEAD = 'pr.head'
+
+/** The head branch of a pull request `cf adopt` took on, which the plan's checkout starts from. */
+export const PR_BRANCH = 'pr.branch'
 
 /**
  * The fork branch holding the commit the first push sent, apart from `main` and the rehearsal `-next`.

@@ -1,9 +1,9 @@
 import { z } from 'zod'
-import { put } from '../sequencer/workspace.ts'
+import { PR_BRANCH, put } from '../sequencer/workspace.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { templatePriority } from '../store/lanes.ts'
-import { gh, type Read } from './gh.ts'
+import { gh, ours, type Read } from './gh.ts'
 import { measure } from './measure.ts'
 import { parse } from './plan.ts'
 
@@ -14,11 +14,13 @@ const View = z.object({
   title: z.string(),
   body: z.string(),
   closingIssuesReferences: z.array(z.object({ number: z.int() })),
+  headRefName: z.string(),
+  headRepositoryOwner: z.object({ login: z.string() }).nullable(),
 })
 
 const Linked = z.object({ title: z.string(), body: z.string() })
 
-const PR_FIELDS = 'number,url,state,title,body,closingIssuesReferences'
+const PR_FIELDS = 'number,url,state,title,body,closingIssuesReferences,headRefName,headRepositoryOwner'
 
 const Account = z.object({ id: z.int(), measured_at: z.string() })
 
@@ -46,12 +48,15 @@ export function view(repo: string, no: number, read: Read = gh): z.infer<typeof 
 export function adopt(db: Db, root: string, ref: string, today: string, read: Read = gh): Adopted {
   const { repo, no } = parse(ref)
   const row = view(repo, no, read)
+  const owner = row.headRepositoryOwner?.login
+  if (!ours(owner)) throw new Error(`${ref} is pushed from ${owner ?? 'a deleted fork'}, not our fork`)
   const account = accountOf(db, repo, today, read)
   const target = upsert(db, account, repo, row.number, row.url)
   const held = db.prepare('SELECT id FROM plans WHERE target_id = ? ORDER BY id LIMIT 1').get(target) as
     { id: number } | undefined
   const plan = held?.id ?? file(db, target, row.url)
   put(root, plan, 'issue.md', packet(repo, row, read))
+  put(root, plan, PR_BRANCH, `${row.headRefName}\n`)
   return { target, plan, repo, pr: row.number, url: row.url, fresh: held === undefined }
 }
 

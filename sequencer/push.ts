@@ -414,11 +414,13 @@ export function push(db: Db, root: string, plan: PlanRow, wire: Wire = WIRE): Ou
   return { outcome: 'pass', spans: [], note: `pushed ${head.branch} as ${url}` }
 }
 
-/** The pull request this plan already opened, if it did: the row step 8 stamped carries its url. */
+/** The pull request this plan already opened, if it did: the row step 8 stamped carries its url, else the target `cf adopt` wrote. */
 export function opened(db: Db, plan: number): string | null {
-  const row = db.prepare(`SELECT evidence FROM deliverables WHERE plan_id = ? AND state = 'pushed'
-    AND evidence GLOB 'https://*/pull/*' ORDER BY id DESC LIMIT 1`).get(plan) as { evidence: string } | undefined
-  return row?.evidence ?? null
+  const row = db.prepare(`SELECT COALESCE(
+    (SELECT evidence FROM deliverables WHERE plan_id = ? AND state = 'pushed' AND evidence GLOB 'https://*/pull/*' ORDER BY id DESC LIMIT 1),
+    (SELECT t.evidence FROM plans p JOIN targets t ON t.id = p.target_id WHERE p.id = ? AND t.evidence GLOB 'https://*/pull/*')
+  ) AS evidence`).get(plan, plan) as { evidence: string | null }
+  return row.evidence
 }
 
 /** The ready gate already consumed fork CI and the counterparty bot; push reads its rows, never reruns them. */

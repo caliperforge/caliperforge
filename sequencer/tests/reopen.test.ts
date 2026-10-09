@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
-import { checkout, cloned, diffOf, drop, maybe, planDir, PR_HEAD, put, recut, srcDir } from '../workspace.ts'
+import { checkout, cloned, diffOf, drop, maybe, planDir, PR_BRANCH, PR_HEAD, put, recut, srcDir } from '../workspace.ts'
 import { world } from './world.ts'
 
 const BRANCH = 'widget-12-a1'
@@ -155,6 +155,24 @@ test('no base.sha and a pr.head on no branch throws', () => {
 })
 
 const stale = (root: string): string[] => readdirSync(planDir(root, 1)).filter((n) => n.startsWith('src.stale-'))
+
+test('D2 an adopted plan checks out its pr.branch at the tip', () => {
+  const w = world()
+  const first = checkout(w.root, 1, 'acme/widget', BRANCH)
+  writeFileSync(join(first.dir, 'added.ts'), 'export const added = 1\n')
+  git(first.dir, ['add', '-A'])
+  git(first.dir, ['commit', '-qm', 'their round'])
+  git(first.dir, ['push', '-q', 'origin', 'HEAD:pay-button'])
+  const sha = git(first.dir, ['rev-parse', 'HEAD']).trim()
+  rmSync(planDir(w.root, 1), { recursive: true, force: true })
+  put(w.root, 1, PR_BRANCH, 'pay-button\n')
+
+  const again = checkout(w.root, 1, 'acme/widget', BRANCH)
+  expect(again.branch).toBe('pay-button')
+  expect(git(again.dir, ['rev-parse', 'HEAD']).trim()).toBe(sha)
+  expect(again.base).toBe(first.base)
+  expect(maybe(w.root, 1, 'base.sha')).toBe(`${first.base}\n`)
+})
 
 test('a src with no base.sha is moved aside and cloned fresh', () => {
   const w = world()

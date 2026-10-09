@@ -4,10 +4,13 @@ import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import { capture } from '../../sequencer/capture.ts'
+import { opened } from '../../sequencer/push.ts'
 import { started } from '../../sequencer/signals.ts'
-import { get } from '../../sequencer/workspace.ts'
+import { drop, get, maybe, PR_BRANCH } from '../../sequencer/workspace.ts'
+import { decide } from '../../store/approvals.ts'
+import { pushedRow } from '../../store/deliverables.ts'
 import { SignalRow } from '../../store/signals.ts'
-import type { Db } from '../../store/index.ts'
+import { addRule, type Db } from '../../store/index.ts'
 import { adopt, render } from '../adopt.ts'
 import type { Pr, Read } from '../gh.ts'
 
@@ -19,15 +22,17 @@ const URL = `https://github.com/${REPO}/pull/282`
 
 const TODAY = '2026-09-18'
 
+const BRANCH = 'pay-kit-270-a1'
+
 const ADOPTED = '2026-09-18T09:09:00.000Z'
 
 /** The `gh` shapes adopt reads: the pull request, the issue it closes, and the three `cf measure` takes its pulse from. */
-function canned(log: string[] = [], linked: number | null = 270): Read {
+function canned(log: string[] = [], linked: number | null = 270, owner = 'caliperforge'): Read {
   return (args) => {
     log.push(args.join(' '))
     if (args[0] === 'pr' && args[1] === 'view') {
       return { number: 282, url: URL, state: 'OPEN', title: 'add the pay button', body: 'the button, wired to the kit',
-        closingIssuesReferences: linked === null ? [] : [{ number: linked }] }
+        closingIssuesReferences: linked === null ? [] : [{ number: linked }], headRefName: BRANCH, headRepositoryOwner: { login: owner } }
     }
     if (args[0] === 'issue' && args[1] === 'view') {
       return { number: 270, title: 'no pay button', body: 'the kit ships without one' }
@@ -82,7 +87,36 @@ test('cf adopt files one pushed plan with target and account rows', () => {
     .toEqual([{ repo: REPO, issue_no: 282, state: 'queued', evidence: URL }])
   expect(rows(db, 'SELECT id, template, state, step, target_id FROM plans'))
     .toEqual([{ id: row.plan, template: 'pr_path', state: 'done', step: 8, target_id: row.target }])
-  expect(log[0]).toBe('pr view 282 --repo solana-foundation/pay-kit --json number,url,state,title,body,closingIssuesReferences')
+  expect(log[0]).toBe('pr view 282 --repo solana-foundation/pay-kit --json number,url,state,title,body,closingIssuesReferences,headRefName,headRepositoryOwner')
+})
+
+test('D1 adopting writes the head branch, again on a re-adopt', () => {
+  const db = fresh(schema)
+  const dir = root()
+  const first = adopt(db, dir, `${REPO}#282`, TODAY, canned())
+  expect(get(dir, first.plan, PR_BRANCH)).toBe(`${BRANCH}\n`)
+  drop(dir, first.plan, PR_BRANCH)
+  adopt(db, dir, `${REPO}#282`, TODAY, canned())
+  expect(get(dir, first.plan, PR_BRANCH)).toBe(`${BRANCH}\n`)
+})
+
+test('D3 opened reads the adopted url; a pushed row wins', () => {
+  const db = fresh(schema)
+  const { plan } = adopt(db, root(), `${REPO}#282`, TODAY, canned())
+  expect(opened(db, plan)).toBe(URL)
+  const later = `https://github.com/${REPO}/pull/300`
+  addRule(db, { id: 'typescript_specialist', kind: 'roster', path: 'seats/typescript_specialist', content_hash: '0'.repeat(64), loaded_at: TODAY })
+  const approval = decide(db, 'plan', plan, 'd'.repeat(64), null)
+  pushedRow(db, { plan, step: 8, seat: 'typescript_specialist', diff_digest: 'd'.repeat(64), evidence: later }, approval)
+  expect(opened(db, plan)).toBe(later)
+})
+
+test('D4 a PR off another fork is refused and nothing written', () => {
+  const db = fresh(schema)
+  const dir = root()
+  expect(() => adopt(db, dir, `${REPO}#282`, TODAY, canned([], 270, 'outsider'))).toThrow('outsider')
+  for (const table of ['accounts', 'targets', 'plans']) expect(rows(db, `SELECT id FROM ${table}`)).toEqual([])
+  expect(maybe(dir, 1, PR_BRANCH)).toBeNull()
 })
 
 test('nothing pushed: no deliverable, proof or approval on the row', () => {

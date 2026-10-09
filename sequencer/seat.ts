@@ -516,7 +516,7 @@ function rounds(db: Db, root: string, plan: number, step: number): Pick<Bench, '
 
 /** The tree the reviewer last passed, else the one its last verdict judged, off the row `judge()` wrote it on. */
 function judged(db: Db, plan: number, step: number): string | null {
-  const row = db.prepare(`SELECT tree FROM verdicts WHERE plan = ? AND step = ? AND kind = 'review'
+  const row = db.prepare(`SELECT tree FROM verdicts WHERE plan = ? AND step = ? AND kind = 'review' AND gate <> 'blind_review'
     ORDER BY outcome = 'pass' AND tree IS NOT NULL DESC, id DESC LIMIT 1`)
     .get(plan, step) as { tree: string | null } | undefined
   return row?.tree ?? null

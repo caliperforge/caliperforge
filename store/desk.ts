@@ -140,6 +140,28 @@ export function log(db: Db, date: string, items: Item[]): number {
   return added.length
 }
 
+export function noted(db: Db, date: string, items: Item[], refs: string[]): void {
+  const old = db.prepare('SELECT items, sources FROM desk_learnings WHERE date = ?').get(date) as { items: string | null; sources: string | null } | undefined
+  const all = [...JSON.parse(old?.items ?? '[]') as unknown[], ...items]
+  const sources = [...new Set([...JSON.parse(old?.sources ?? '[]') as string[], ...refs])]
+  db.prepare(`INSERT INTO desk_learnings (date, numbers, items, sources) VALUES (?, '[]', ?, ?)
+    ON CONFLICT (date) DO UPDATE SET items = excluded.items, sources = excluded.sources`).run(date, JSON.stringify(all), JSON.stringify(sources))
+}
+
+export function substackIn(db: Db, from: string, to: string): boolean {
+  return db.prepare("SELECT 1 FROM desk_posts WHERE dest = 'substack' AND date(proof_at) BETWEEN ? AND ?").get(from, to) !== undefined
+}
+
+export function packsIn(db: Db, from: string, to: string): string[] {
+  return db.prepare(`SELECT COALESCE(edited_body, body) FROM desk_posts
+    WHERE kind = 'growth' AND dest = 'pack' AND work_date BETWEEN ? AND ?`).pluck().all(from, to) as string[]
+}
+
+export function scorecardOf(db: Db, date: string): string | null {
+  const row = db.prepare("SELECT body FROM desk_posts WHERE kind = 'scorecard' AND work_date = ?").get(date) as { body: string } | undefined
+  return row?.body ?? null
+}
+
 export function learningsIn(db: Db, from: string, to: string): { date: string; items: unknown[] }[] {
   const rows = db.prepare('SELECT date, items FROM desk_learnings WHERE date BETWEEN ? AND ? ORDER BY date').all(from, to) as
     { date: string; items: string | null }[]

@@ -30,8 +30,7 @@
     "lines": 82
   },
   "flow.ts": {
-    "lines": 123,
-    "prepare": 7
+    "lines": 107
   },
   "gh.ts": {
     "lines": 286

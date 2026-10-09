@@ -1190,8 +1190,8 @@ test.each([
 
 test.each([
   { name: 'a live plan director run', apply: '1', set: (db: Db) => { busy(db, 7, 'director', 'ruling', now) } },
-  { name: 'coo_lite.max_daily at 0', apply: '1', set: (db: Db) => {
-    addSetting(db, { key: 'coo_lite.max_daily', value: '0', who: 'ceo', origin_kind: 'ruling', origin_ref: 't', set_at: '2026-09-27' })
+  { name: 'director.findings_daily at 0', apply: '1', set: (db: Db) => {
+    addSetting(db, { key: 'director.findings_daily', value: '0', who: 'ceo', origin_kind: 'ruling', origin_ref: 't', set_at: '2026-09-27' })
   } },
   { name: 'director.apply unset', apply: null, set: () => undefined },
 ])('D5: $name fires nothing on a finding', async ({ apply, set }) => {

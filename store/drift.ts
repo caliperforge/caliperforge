@@ -66,6 +66,11 @@ export function unanswered(db: Db, now: Date): Finding[] {
     ORDER BY id`).all(now.toISOString()) as Finding[]
 }
 
+export function asked(db: Db, now: Date): number {
+  return db.prepare(`SELECT count(*) FROM events WHERE kind = 'director' AND plan IS NULL AND pointer LIKE 'finding %'
+    AND julianday(at) >= julianday(?, '-1 day')`).pluck().get(now.toISOString()) as number
+}
+
 export function week(db: Db, now: Date): Finding[] {
   return db.prepare("SELECT * FROM drift_findings WHERE julianday(found_at) >= julianday(?, '-7 day') ORDER BY id")
     .all(now.toISOString()) as Finding[]

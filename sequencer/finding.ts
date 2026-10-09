@@ -9,7 +9,7 @@ import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { wall } from '../store/lanes.ts'
 import { pending } from '../store/transcript.ts'
-import { applying, free } from './director.ts'
+import { applying, spare } from './director.ts'
 import { prose } from './prose.ts'
 import { WIRE, type Wire } from './push.ts'
 import { SELF } from './workspace.ts'
@@ -32,7 +32,7 @@ export async function answer(db: Db, root: string, provider: Provider, now: Date
   if (!applying(db)) return 'director.apply is off'
   const [found] = unanswered(db, now)
   if (found === undefined) return 'no open finding'
-  const busied = free(db, now)
+  const busied = spare(db, now)
   if (busied !== null) return busied
   load(db, root)
   const { manifest, prompt } = seat(root, 'director')

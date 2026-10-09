@@ -17,6 +17,6 @@ it('0085 keeps desk posts, adds url and published_at as NULL', () => {
   db.prepare(`INSERT INTO desk_posts (id, kind, dest, status, title, dek, body, sources, checks, work_date, written_date)
     VALUES (1, 'ship', 'site', 'approved', 't', 'd', 'b', '[]', '[]', '2026-10-01', '2026-10-02')`).run()
   const before = db.prepare('SELECT * FROM desk_posts').all() as object[]
-  expect(migrate(db, join(root, 'schema'))).toEqual(['0085_desk_url.sql', '0086_language_notes.sql', '0087_desk_paste.sql', '0088_refusal_note.sql', '0089_drop_quick_lane.sql', '0090_director_apply.sql', '0091_runs_mode_writer.sql', '0092_decisions_widen.sql', '0093_drift_findings.sql', '0094_runs_staffed.sql', '0095_events_escalate.sql'])
+  expect(migrate(db, join(root, 'schema'))).toEqual(['0085_desk_url.sql', '0086_language_notes.sql', '0087_desk_paste.sql', '0088_refusal_note.sql', '0089_drop_quick_lane.sql', '0090_director_apply.sql', '0091_runs_mode_writer.sql', '0092_decisions_widen.sql', '0093_drift_findings.sql', '0094_runs_staffed.sql', '0095_events_escalate.sql', '0096_verdicts_blind.sql'])
   expect(db.prepare('SELECT * FROM desk_posts').all()).toEqual(before.map((p) => ({ ...p, url: null, published_at: null })))
 })

@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest'
-import { logged } from '../../store/events.ts'
+import { logged, runAt } from '../../store/events.ts'
+import { addRule } from '../../store/index.ts'
 import { ratchetRules } from '../../store/lanes.ts'
 import { drift, Entry } from '../drift.ts'
 import { COO, db, event, NOW, REGISTRY } from './drifting.ts'
@@ -32,7 +33,8 @@ test('fresh', () => {
     'writer_log', 'writer_ship', 'writer_weekly', 'growth_lead', 'web_specialist', 'design', 'go_specialist', 'php_specialist', 'ruby_specialist', 'python_specialist', 'lua_specialist', 'rust_specialist', 'gardener', 'ratchet', 'accounts', 'records', 'dispositions', 'signoffs', 'proposals',
     'ratchet_refuse', 'intake', 'stuck_plans', 'science_pull', 'site_publish', 'director_look', 'typescript_specialist',
     'daily_learnings', 'review_examples', 'director_fix_reach', 'tick_deps', 'watch', 'director_widen', 'target_parked_once', 'director_ceiling',
-    'close_landed', 'handback_not_done', 'ruling_files', 'needs_ceo_actor', 'build_cap', 'ready_proof_stuck', 'card_facts'])
+    'close_landed', 'handback_not_done', 'ruling_files', 'needs_ceo_actor', 'build_cap', 'ready_proof_stuck', 'card_facts',
+    'director_findings', 'director_rule_dropped', 'rule_to_build'])
   expect(drift(d, REGISTRY, NOW).map((r) => r.name)).not.toContain('build_cap')
   expect(drift(d, REGISTRY, NOW).map((r) => r.name)).not.toContain('director_widen')
   expect(drift(d, REGISTRY.filter((e) => e.name === 'watch'), NOW)).toEqual([])
@@ -56,4 +58,14 @@ test('D4 a card opened without its sheet is seen', () => {
   logged(d, { plan: 1, kind: 'card_facts', actor: 'signoff', outcome: 'refuse', message: 'without fact sheet', pointer: null, run: null },
     '2026-10-02 10:00:00')
   expect(drift(d, REGISTRY, NOW).find((r) => r.name === 'card_facts')?.state).toBe('seen')
+})
+
+test('D5 a builder hand-off with no step-2 build is seen', () => {
+  const d = db()
+  logged(d, { plan: 1, kind: 'director', actor: 'director', outcome: 'pass',
+    message: "rule: x (out of the fixer's reach, so the builder takes it)", pointer: null, run: null }, '2026-10-02 10:00:00')
+  expect(drift(d, REGISTRY, NOW).find((r) => r.name === 'rule_to_build')?.state).toBe('seen')
+  addRule(d, { id: 'typescript_specialist', kind: 'card', path: 'rules/roster.yaml', content_hash: '0'.repeat(64), loaded_at: '2026-09-22' })
+  runAt(d, 1, 2, 'typescript_specialist', '2026-10-02 12:00:00')
+  expect(drift(d, REGISTRY, NOW).map((r) => r.name)).not.toContain('rule_to_build')
 })

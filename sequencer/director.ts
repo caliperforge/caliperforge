@@ -6,6 +6,7 @@ import { packet } from '../runner/index.ts'
 import { load, seat, tight } from '../runner/rules.ts'
 import { decision } from '../store/ask.ts'
 import { decided, decisions } from '../store/decisions.ts'
+import { asked, setting } from '../store/drift.ts'
 import { kindsOf, logged } from '../store/events.ts'
 import { retried, returnToLane } from '../store/holds.ts'
 import type { Db } from '../store/index.ts'
@@ -22,7 +23,7 @@ import { released } from './fixer.ts'
 import { prose } from './prose.ts'
 import { builderWork, outOfReach, WAITING } from './reach.ts'
 import { WIRE, type Wire } from './push.ts'
-import { accepted, fenced, opened, owned, rule } from './rule.ts'
+import { accepted, edits, fenced, opened, owned, rule } from './rule.ts'
 import { recorded } from './seat.ts'
 import { parted } from './split.ts'
 import { repeated, ticketed } from './ticket.ts'
@@ -71,7 +72,7 @@ export async function cooLite(db: Db, root: string, plan: PlanRow, provider: Pro
     ({ m, said } = await ask(db, root, plan, provider, tried, first.fence))
     const again = refused(m, said, n, root, cap)
     if (again !== null) return m?.move === 'fix' && builderWork(root, m.why) && applying(db) && apply(db, root, plan, { move: 'rule', why: m.why, answer: m.why }, wire, now) === true
-      ? told(db, root, plan, now, { outcome: 'pass', message: `rule: ${m.why} (out of the fixer's reach, so the builder takes it)` })
+      ? told(db, root, plan, now, { outcome: 'pass', message: `rule: ${m.why}${planById(db, plan.id).step <= 2 ? " (out of the fixer's reach, so the builder takes it)" : ''}` })
       : told(db, root, plan, now, { outcome: 'needs_coo', message: again.message }, post)
   }
   if (m === null) return told(db, root, plan, now, { outcome: 'needs_coo', message: 'ask_ceo: no readable answer' }, post)
@@ -155,12 +156,24 @@ async function fire(db: Db, root: string, provider: Provider, now: Date, post: P
   }
 }
 
+function live(db: Db): string | null {
+  return current(db).some((n) => n.doing === 'director' && !n.stale) ? 'a director run is live' : null
+}
+
 export function free(db: Db, now: Date): string | null {
-  if (current(db).some((n) => n.doing === 'director' && !n.stale)) return 'a director run is live'
+  return live(db) ?? capped(db, now)
+}
+
+function capped(db: Db, now: Date): string | null {
   const ran = db.prepare(`SELECT (SELECT count(*) FROM runs WHERE seat = 'director' AND at >= datetime(@at, '-1 day')) + (SELECT count(*)
     FROM events WHERE kind = 'director' AND plan IS NULL AND julianday(at) >= julianday(@at, '-1 day'))`).pluck().get({ at: now.toISOString() }) as number
   const cap = db.prepare("SELECT value FROM settings WHERE key = 'coo_lite.max_daily'").get() as { value: string } | undefined
   return ran >= Number(cap?.value ?? 12) ? `cap reached: ${String(ran)} director runs today` : null
+}
+
+export function spare(db: Db, now: Date): string | null {
+  const ran = asked(db, now)
+  return live(db) ?? (ran >= Number(setting(db, 'director.findings_daily') ?? 3) ? `cap reached: ${String(ran)} finding runs today` : null)
 }
 
 function failures(db: Db, root: string, plan: PlanRow): number {
@@ -261,7 +274,7 @@ function apply(db: Db, root: string, plan: PlanRow, m: Move, wire: Wire, now: Da
       if (to === null) return false
       opened(db, root, plan.id)
       if (to === 'ask.md') unhold(db, root, plan.id, 'director')
-      else afresh(root, plan.id, owned(root, plan, m.answer ?? '') || accepted(root, plan, m.answer ?? '') ? returnToLane(db, plan.id, 'director') : db.transaction(() => { clear(db, plan.id); return retry(db, plan) })())
+      else afresh(root, plan.id, (owned(root, plan, m.answer ?? '') ? !edits(root, plan, m.answer ?? '') : accepted(root, plan, m.answer ?? '')) ? returnToLane(db, plan.id, 'director') : db.transaction(() => { clear(db, plan.id); return retry(db, plan) })())
       const ref = originRef(plan)
       if (ref !== null) wire.comment(ref.repo, ref.no, `Ruled by director on plan ${String(plan.id)}.\n\n${m.answer ?? ''}`)
       return true

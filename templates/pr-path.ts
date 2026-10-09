@@ -17,6 +17,7 @@ export interface Step {
   verdict_gate: Gate | null
   mode?: Run['mode']
   design?: true
+  outside?: string
 }
 
 export const ROOT = join(import.meta.dirname, '..')
@@ -48,7 +49,7 @@ export const steps: Step[] = [
   { step: 2, name: 'build', seat: DEFAULT_BUILDER, fires: 'seat', runs: DEFAULT_BUILDER, gate: false, writes_verdict: false, verdict_gate: null },
   { step: 3, name: 'rails', seat: DEFAULT_BUILDER, fires: 'kernel', runs: 'pre_review', gate: true, writes_verdict: true, verdict_gate: 'pre_review' },
   { step: 4, name: 'review', seat: DEFAULT_BUILDER, fires: 'review', runs: 'code_quality', gate: true, writes_verdict: true, verdict_gate: 'review' },
-  { step: 5, name: 'senior', seat: DEFAULT_BUILDER, fires: 'review', runs: 'senior_review', gate: true, writes_verdict: true, verdict_gate: 'senior_review' },
+  { step: 5, name: 'senior', seat: DEFAULT_BUILDER, fires: 'review', runs: 'senior_review', gate: true, writes_verdict: true, verdict_gate: 'senior_review', outside: 'blind_review' },
   { step: 6, name: 'ready', seat: DEFAULT_BUILDER, fires: 'kernel', runs: 'ready', gate: true, writes_verdict: true, verdict_gate: 'ready' },
   { step: 7, name: 'batch', seat: DEFAULT_BUILDER, fires: 'ceo', runs: 'approval', gate: false, writes_verdict: false, verdict_gate: null },
   { step: 8, name: 'push', seat: DEFAULT_BUILDER, fires: 'kernel', runs: 'push', gate: false, writes_verdict: false, verdict_gate: null },

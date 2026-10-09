@@ -269,3 +269,21 @@
   where: "kind = 'card_facts' AND outcome = 'refuse'"
   gap: 7d
   expected: 0
+- name: director_findings
+  table: events
+  column: at
+  where: "kind = 'director' AND plan IS NULL AND pointer LIKE 'finding %'"
+  gap: 2d
+  while: EXISTS (SELECT 1 FROM drift_findings WHERE closed_at IS NULL AND julianday(found_at) < julianday($since, '+1 day'))
+- name: director_rule_dropped
+  table: events
+  column: at
+  where: kind = 'director' AND message LIKE 'rule did not apply, the answer names a path%'
+  gap: 7d
+  expected: 0
+- name: rule_to_build
+  table: events
+  column: at
+  where: "kind = 'director' AND message LIKE '%builder takes it%' AND NOT EXISTS (SELECT 1 FROM runs WHERE runs.plan = events.plan AND runs.step = 2 AND runs.seat NOT IN ('fixer', 'orchestrator', 'coo_lite', 'director') AND julianday(runs.at) BETWEEN julianday(events.at) AND julianday(events.at, '+1 day'))"
+  gap: 7d
+  expected: 0

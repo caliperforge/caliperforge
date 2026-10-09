@@ -604,6 +604,42 @@ test('code out of reach goes to the builder', async () => {
   expect(told(db)).toEqual([{ actor: 'director', outcome: 'pass', message: expect.stringMatching(/^rule: edit src\/sequencer\/x\.ts/) as string }])
 })
 
+const EXTRA = 'cli/extra.ts is outside the files'
+const HANDBACK = `${EXTRA}, and the hand-back marks D1 done`
+
+function outsideStop() {
+  const seed = seeded('1')
+  seed.db.exec('UPDATE plans SET step = 3 WHERE id = 7')
+  put(seed.home, 7, 'refusal.md', 'step 3 rails refused by rails\n\nspans:\n  - cli/extra.ts:1 authority.outside_files\n')
+  return seed
+}
+
+test('D1: a rule naming a builder edit goes back to step 2', async () => {
+  const { db, home } = outsideStop()
+  await run(db, home, `---\nmove: rule\nwhy: the ask needs it\nanswer: ${HANDBACK}\n---\n`)
+  expect(maybe(home, 7, 'issue.md')).toContain(`## Outside the files\n\n- \`cli/extra.ts\` — ${HANDBACK}\n`)
+  expect(row(db).step).toBe(2)
+  expect(ofKind(db, 'return')).toEqual([])
+})
+
+test('D2: a rule naming only the outside path returns to step 3', async () => {
+  const { db, home } = outsideStop()
+  await run(db, home, `---\nmove: rule\nwhy: the ask needs it\nanswer: ${EXTRA}\n---\n`)
+  expect(row(db).step).toBe(3)
+  expect(ofKind(db, 'return').map((e) => e.message)).toEqual(['step 3'])
+})
+
+test.each([
+  { why: HANDBACK, message: `rule: ${HANDBACK} (out of the fixer's reach, so the builder takes it)`, step: 2 },
+  { why: EXTRA, message: `rule: ${EXTRA}`, step: 3 },
+])('D3 D4: an out-of-reach fix at step $step', async ({ why, message, step }) => {
+  const { db, home } = outsideStop()
+  fixLive(db)
+  await cooLite(db, home, row(db), bySeat([], `---\nmove: fix\nwhy: ${why}\n---\n`), now, () => undefined, wire())
+  expect(told(db)).toEqual([{ actor: 'director', outcome: 'pass', message }])
+  expect(row(db).step).toBe(step)
+})
+
 test('fixOutOfReach', async () => {
   const outside = (path: string) => `\`${path}\` is outside the fixer's write_paths`
   for (const [why, reason] of [
@@ -783,6 +819,7 @@ test('D1: a cap stop carries director.md after # Stop', async () => {
   const { db, home } = capStop()
   const cap = maybe(home, 7, 'director.md') ?? ''
   expect(cap).toMatch(/^# Build cap\n\nthe 6th build\n/)
+  expect(ofKind(db, 'build_cap').map((e) => ({ actor: e.actor, outcome: e.outcome }))).toEqual([{ actor: 'settle', outcome: 'needs_coo' }])
   expect(await prompted(db, home)).toContain(`# Stop\n\nstep 3 rails refused\n\n\n${cap}\n\n# Orchestrator`)
   expect(await prompted(db, home)).not.toContain(cap)
 })
@@ -1189,8 +1226,8 @@ test.each([
 
 test.each([
   { name: 'a live plan director run', apply: '1', set: (db: Db) => { busy(db, 7, 'director', 'ruling', now) } },
-  { name: 'coo_lite.max_daily at 0', apply: '1', set: (db: Db) => {
-    addSetting(db, { key: 'coo_lite.max_daily', value: '0', who: 'ceo', origin_kind: 'ruling', origin_ref: 't', set_at: '2026-09-27' })
+  { name: 'director.findings_daily at 0', apply: '1', set: (db: Db) => {
+    addSetting(db, { key: 'director.findings_daily', value: '0', who: 'ceo', origin_kind: 'ruling', origin_ref: 't', set_at: '2026-09-27' })
   } },
   { name: 'director.apply unset', apply: null, set: () => undefined },
 ])('D5: $name fires nothing on a finding', async ({ apply, set }) => {

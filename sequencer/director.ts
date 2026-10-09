@@ -24,7 +24,7 @@ import { released } from './fixer.ts'
 import { prose } from './prose.ts'
 import { builderWork, outOfReach, WAITING } from './reach.ts'
 import { WIRE, type Wire } from './push.ts'
-import { accepted, fenced, opened, owned, rule } from './rule.ts'
+import { accepted, edits, fenced, opened, owned, rule } from './rule.ts'
 import { recorded } from './seat.ts'
 import { parted } from './split.ts'
 import { repeated, ticketed } from './ticket.ts'
@@ -73,7 +73,7 @@ export async function cooLite(db: Db, root: string, plan: PlanRow, provider: Pro
     ({ m, said } = await ask(db, root, plan, provider, tried, first.fence))
     const again = refused(m, said, n, root, cap)
     if (again !== null) return m?.move === 'fix' && builderWork(root, m.why) && applying(db) && apply(db, root, plan, { move: 'rule', why: m.why, answer: m.why }, wire, now) === true
-      ? told(db, root, plan, now, { outcome: 'pass', message: `rule: ${m.why} (out of the fixer's reach, so the builder takes it)` })
+      ? told(db, root, plan, now, { outcome: 'pass', message: `rule: ${m.why}${planById(db, plan.id).step <= 2 ? " (out of the fixer's reach, so the builder takes it)" : ''}` })
       : told(db, root, plan, now, { outcome: 'needs_coo', message: again.message }, post)
   }
   if (m === null) return told(db, root, plan, now, { outcome: 'needs_coo', message: 'ask_ceo: no readable answer' }, post)
@@ -276,7 +276,7 @@ function apply(db: Db, root: string, plan: PlanRow, m: Move, wire: Wire, now: Da
       if (to === null) return false
       opened(db, root, plan.id)
       if (to === 'ask.md') unhold(db, root, plan.id, 'director')
-      else afresh(root, plan.id, owned(root, plan, m.answer ?? '') || accepted(root, plan, m.answer ?? '') ? returnToLane(db, plan.id, 'director') : db.transaction(() => { clear(db, plan.id); return retry(db, plan) })())
+      else afresh(root, plan.id, (owned(root, plan, m.answer ?? '') ? !edits(root, plan, m.answer ?? '') : accepted(root, plan, m.answer ?? '')) ? returnToLane(db, plan.id, 'director') : db.transaction(() => { clear(db, plan.id); return retry(db, plan) })())
       const ref = originRef(plan)
       if (ref !== null) wire.comment(ref.repo, ref.no, `Ruled by director on plan ${String(plan.id)}.\n\n${m.answer ?? ''}`)
       return true

@@ -9,7 +9,6 @@ import { approve, built, CARRIED, internalPlan, ours, PASS, plan, REFUSE, stub, 
 
 const MINE = 2
 
-/** The stub, answering `blind` to the blind reviewer's prompt and a pass to every other reviewer. */
 const blindly = (blind: string): Provider => {
   const rest = stub(CARRIED)
   const own = stub(CARRIED, 0, blind)

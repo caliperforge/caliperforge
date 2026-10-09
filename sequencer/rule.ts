@@ -6,20 +6,19 @@ import type { Db } from '../store/index.ts'
 import { builderRan, type PlanRow } from '../store/plans.ts'
 import { cited } from './cited.ts'
 import { unruled } from './unruled.ts'
-import { get, headSha, maybe, put, srcDir } from './workspace.ts'
+import { get, headSha, maybe, planDir, put, srcDir } from './workspace.ts'
 
 const PATH = /(?:^|[\s`'"(])(~?\/[^\s`'"()]+)/g
 
 const OUTSIDE = /^ {2}- (\S+):1 authority\.outside_files$/gm
 
 export function opened(db: Db, root: string, plan: number): string[] {
-  const tokens = cited(maybe(root, plan, 'rulings.md') ?? '')
+  const tokens = [...new Set(cited(maybe(root, plan, 'rulings.md') ?? ''))]
   const listed = new Set(filesOf(db, plan).map((f) => f.path))
-  const missed: string[] = []
-  for (const t of new Set(tokens)) {
-    if (t.includes('..') || statSync(join(srcDir(root, plan), t), { throwIfNoEntry: false })?.isFile() !== true) missed.push(t)
-    else if (!listed.has(t)) edit(db, plan, 'add', t, 'ruling', 'named in rulings.md')
-  }
+  const file = (dir: string, t: string) => statSync(join(dir, t), { throwIfNoEntry: false })?.isFile() === true
+  const here = tokens.filter((t) => !t.includes('..') && file(srcDir(root, plan), t))
+  for (const t of here.filter((h) => !listed.has(h))) edit(db, plan, 'add', t, 'ruling', 'named in rulings.md')
+  const missed = tokens.filter((t) => !here.includes(t) && (t.includes('..') || t.includes('/') || !file(planDir(root, plan), t)))
   if (missed.length > 0) logged(db, { plan, kind: 'files', actor: 'ruling', outcome: 'refuse', message: `not in the checkout: ${missed.join(', ')}`, pointer: null, run: null })
   return missed
 }

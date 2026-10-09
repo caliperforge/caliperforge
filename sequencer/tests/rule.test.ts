@@ -204,6 +204,24 @@ test('D3 D4 the newest ruling adds its path, an older one not', () => {
   expect(filesOf(db, 7)).toEqual([{ path: 'src/x.ts', is_new: true }])
 })
 
+test('D1 D3 plan files and placeholders are not refused', () => {
+  const { db, home } = seeded(3)
+  put(home, 7, 'step-2.handback.md', 'handed back\n')
+  mkdirSync(join(srcDir(home, 7), 'src'))
+  writeFileSync(join(srcDir(home, 7), 'src/x.ts'), 'export {}\n')
+  put(home, 7, 'rulings.md', 'see `step-2.handback.md:9`, `store/<file>` and `src/x.ts`\n')
+  expect(opened(db, home, 7)).toEqual([])
+  expect(filesOf(db, 7)).toEqual([{ path: 'src/x.ts', is_new: true }])
+  expect(eventsOf(db, 7, 'files')).toEqual([{ actor: 'ruling', outcome: 'pass', message: 'add src/x.ts: named in rulings.md' }])
+})
+
+test('D2 a path in neither folder is refused', () => {
+  const { db, home } = seeded(3)
+  put(home, 7, 'rulings.md', 'see `src/gone.ts`\n')
+  expect(opened(db, home, 7)).toEqual(['src/gone.ts'])
+  expect(eventsOf(db, 7, 'files')).toEqual([{ actor: 'ruling', outcome: 'refuse', message: 'not in the checkout: src/gone.ts' }])
+})
+
 test('D5 a director return opens the path rulings.md names', async () => {
   const { db, home } = seeded(3)
   put(home, 7, 'rulings.md', 'the builder edits `index.ts`\n')

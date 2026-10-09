@@ -4,9 +4,10 @@ import { z } from 'zod'
 import { picks } from '../sequencer/next.ts'
 import { maybe } from '../sequencer/workspace.ts'
 import { eventsOf } from '../store/events.ts'
+import { idled, orphans, pushed, running, shut, stuck } from '../store/flow.ts'
 import type { Db } from '../store/index.ts'
 import { hhmm } from '../store/lanes.ts'
-import { internal, openPipes, originRef, type PipeRow, PlanRow } from '../store/plans.ts'
+import { internal, openPipes, originRef, type PipeRow, planRows, PlanRow } from '../store/plans.ts'
 import { all, record, ticketOf, type Event } from './inbox.ts'
 
 const Row = PlanRow.extend({ waits_on: z.int().nullable() })
@@ -22,10 +23,8 @@ interface Slack {
 }
 
 export function slack(db: Db, now: Date): Slack[] {
-  return openPipes(db, hhmm(db, now)).map((pipe) => {
-    const { n } = db.prepare("SELECT count(*) AS n FROM plans WHERE pipe_id = ? AND state = 'running'").get(pipe.id) as { n: number }
-    return { pipe, free: Math.max(pipe.max_concurrent - n, 0), startable: picks(db, pipe, now).filter((q) => q.state === 'queued').length }
-  })
+  return openPipes(db, hhmm(db, now)).map((pipe) =>
+    ({ pipe, free: Math.max(pipe.max_concurrent - running(db, pipe.id), 0), startable: picks(db, pipe, now).filter((q) => q.state === 'queued').length }))
 }
 
 interface Finding { plan: number; step: number; what: string; fix: string }
@@ -36,7 +35,7 @@ const HOUR = 60 * 60 * 1000
 
 export function findings(db: Db, root: string, now: Date): Finding[] {
   const startable = new Set(slack(db, now).filter((s) => s.startable > 0).map((s) => s.pipe.id))
-  return db.prepare('SELECT * FROM plans ORDER BY id').all().map((r) => Row.parse(r)).flatMap((p) => {
+  return planRows(db).map((r) => Row.parse(r)).flatMap((p) => {
     const note = maybe(root, p.id, 'parked.md')
     const hit = landed(db, p) ?? stale(db, p, note) ?? halted(db, p) ?? repeated(db, p, note, now) ?? ownerless(p, note) ?? overlapped(p, startable)
     return hit === null ? [] : [{ plan: p.id, step: p.step, what: hit[0], fix: hit[1] }]
@@ -64,8 +63,7 @@ export function reported(db: Db, root: string, now: Date): void {
 
 function landed(db: Db, p: Row): Hit {
   if (!internal(p) || (p.state !== 'blocked_on_ceo' && p.state !== 'halted')) return null
-  const pushed = db.prepare("SELECT 1 FROM deliverables WHERE plan_id = ? AND state = 'pushed'").get(p.id)
-  return pushed === undefined ? null : [`landed on main, state ${p.state}`, `cf return ${String(p.id)}`]
+  return pushed(db, p.id) ? [`landed on main, state ${p.state}`, `cf return ${String(p.id)}`] : null
 }
 
 function stale(db: Db, p: Row, note: string | null): Hit {
@@ -75,9 +73,7 @@ function stale(db: Db, p: Row, note: string | null): Hit {
   }
   const ref = originRef(p)
   if (p.state !== 'blocked_on_ceo' || ref === null) return null
-  const { closed } = db.prepare(`SELECT EXISTS (SELECT 1 FROM tickets WHERE repo = ?)
-    AND NOT EXISTS (SELECT 1 FROM tickets WHERE repo = ? AND number = ? AND closed_at IS NULL) AS closed`).get(ref.repo, ref.repo, ref.no) as { closed: number }
-  return closed === 1 ? [`held on closed issue #${String(ref.no)}`, `cf unpark ${String(p.id)}`] : null
+  return shut(db, ref.repo, ref.no) ?[`held on closed issue #${String(ref.no)}`, `cf unpark ${String(p.id)}`] : null
 }
 
 function halted(db: Db, p: Row): Hit {
@@ -87,14 +83,7 @@ function halted(db: Db, p: Row): Hit {
 
 function repeated(db: Db, p: Row, note: string | null, now: Date): Hit {
   if (p.state !== 'blocked_on_ceo' || note !== null) return null
-  const stuck = db.prepare(`SELECT 1 FROM refusals f
-    WHERE f.id = (SELECT max(id) FROM refusals WHERE plan = ? AND cleared = 0 AND blip = 0)
-      AND EXISTS (SELECT 1 FROM refusals e WHERE e.plan = f.plan AND e.id < f.id AND e.cleared = 0 AND e.blip = 0
-        AND e.fingerprint = f.fingerprint)
-      AND julianday(f.at) < julianday(?, '-30 minutes')
-      AND NOT EXISTS (SELECT 1 FROM decisions d WHERE d.plan = f.plan AND julianday(d.at) > julianday(f.at))`)
-    .get(p.id, now.toISOString())
-  return stuck === undefined ? null : ['stopped on a repeated refusal', `cf retry ${String(p.id)}`]
+  return stuck(db, p.id, now) ? ['stopped on a repeated refusal', `cf retry ${String(p.id)}`] : null
 }
 
 function ownerless(p: Row, note: string | null): Hit {
@@ -110,20 +99,9 @@ function overlapped(p: Row, startable: Set<number>): Hit {
 }
 
 function parts(db: Db): string[] {
-  const rows = db.prepare(`SELECT t.number, a.value AS after FROM parts p
-    JOIN tickets t ON p.url = 'https://github.com/' || t.repo || '/issues/' || t.number, json_each(t.after) a
-    WHERE p.plan IS NULL
-      AND NOT EXISTS (SELECT 1 FROM tickets o WHERE o.repo = t.repo AND o.number = a.value)
-    ORDER BY t.repo, t.number`).all() as { number: number; after: number }[]
-  return rows.map((r) => `part #${String(r.number)}\tafter #${String(r.after)}, which is closed\tcf tick\n`)
+  return orphans(db).map((r) => `part #${String(r.number)}\tafter #${String(r.after)}, which is closed\tcf tick\n`)
 }
 
 function idle(db: Db): string[] {
-  const rows = db.prepare(`WITH recent AS (SELECT id FROM ticks WHERE dry = 0 ORDER BY id DESC LIMIT 2)
-    SELECT p.name, l.free, l.startable FROM tick_lanes l
-      JOIN pipes p ON p.id = l.pipe
-      JOIN tick_lanes e ON e.pipe = l.pipe AND e.tick < l.tick AND e.tick IN (SELECT id FROM recent)
-    WHERE l.tick = (SELECT max(id) FROM recent) AND l.free > 0 AND l.startable > 0 AND e.free > 0 AND e.startable > 0
-    ORDER BY p.id`).all() as { name: string; free: number; startable: number }[]
-  return rows.map((r) => `lane ${r.name}\tidle two ticks: ${String(r.free)} free, ${String(r.startable)} startable\tcf lanes\n`)
+  return idled(db).map((r) => `lane ${r.name}\tidle two ticks: ${String(r.free)} free, ${String(r.startable)} startable\tcf lanes\n`)
 }

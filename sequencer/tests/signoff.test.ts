@@ -5,6 +5,7 @@ import { desk as ghDesk, type Answer, type Desk, type Issue, type Pr, type Seen 
 import { unread } from '../../cli/inbox.ts'
 import { eventsOf, logged, type Event } from '../../store/events.ts'
 import { rewind } from '../../store/plans.ts'
+import { record as signal, type SignalRow } from '../../store/signals.ts'
 import { approve as approvePublish } from '../card.ts'
 import { tick } from '../index.ts'
 import { ruled, signoffs, verdict } from '../signoff.ts'
@@ -357,6 +358,56 @@ test('D2 a plan with no director event shows no decision', async () => {
 test('D3 an invalid or superseded block stays off the card', async () => {
   expect(await bodyAfter(['needs_coo', BLOCK.replace('upstream?', 'upstream')])).not.toContain('Decide:')
   expect(await bodyAfter(['needs_coo', BLOCK], ['pass', BLOCK])).not.toContain('Decide:')
+})
+
+function ask(w: World, kind: SignalRow['kind'], body: string, at = new Date().toISOString(), repo = 'acme/widget'): number {
+  return signal(w.db, { repo, pr: 7, kind, author: 'maintainer', at, external_id: `${repo}:${kind}:${body.replace(/\s/g, '_')}`,
+    score: kind === 'bot_review' ? 4 : null, plan: 1, body })?.id ?? 0
+}
+
+const answered = (rows: [number, string][]): string =>
+  CARRIED.replace(/---\n$/, `${rows.map(([id, pointer]) => `  - id: R${String(id)}\n    status: done\n    pointer: '${pointer}'\n`).join('')}---\n`)
+
+function cardWith(w: World, handback: string): string {
+  put(w.root, 1, 'step-2.handback.md', handback)
+  drop(w.root, 1, 'signoff')
+  const desk = fake()
+  signoffs(w.db, w.root, desk)
+  return desk.cards.get(100)?.body ?? ''
+}
+
+test('D1 the card lists each reviewer ask with its pointer', async () => {
+  const w = await atBatch()
+  const [a, b] = [ask(w, 'review', 'Name it greet.'), ask(w, 'comment', 'Add a test\nfor it.')]
+  const body = cardWith(w, answered([[a, 'src/hello.ts:1'], [b, 'src/hello.test.ts:4']]))
+  expect(body).toContain(`**Reviewer asks since the last push**\n\n- \`R${String(a)}\` maintainer: \`Name it greet.\` — done at \`src/hello.ts:1\`\n`
+    + `- \`R${String(b)}\` maintainer: \`Add a test for it.\` — done at \`src/hello.test.ts:4\`\n\n`)
+  expect(body.replace(/```markdown[\s\S]*?\n```\n/, '').replace(/`[^`]*`/g, '')).not.toMatch(/#\d|acme\/widget|github\.com\/acme/)
+})
+
+test('D2 an ask with no row or no pointer ends open', async () => {
+  const w = await atBatch()
+  const [a, b] = [ask(w, 'review', 'Name it greet.'), ask(w, 'comment', 'Add a test.')]
+  const body = cardWith(w, answered([[a, 'src/hello.ts:1']]))
+  expect(body).toContain(`- \`R${String(a)}\` maintainer: \`Name it greet.\` — done at \`src/hello.ts:1\`\n`)
+  expect(body).toContain(`- \`R${String(b)}\` maintainer: \`Add a test.\` — open\n`)
+  expect(cardWith(w, answered([[a, ' '], [b, 'src/hello.ts:1']]))).toContain(`- \`R${String(a)}\` maintainer: \`Name it greet.\` — open\n`)
+  const broken = cardWith(w, 'built\n\n---\ndone: [\n---\n')
+  expect(broken.startsWith('**Fact sheet**')).toBe(true)
+  expect(broken.split('\n').filter((l) => l.startsWith('- `R')).map((l) => l.endsWith('— open'))).toEqual([true, true])
+})
+
+test('D3 only asks on their PR since the last push show', async () => {
+  const w = await atBatch()
+  const now = Date.now()
+  ask(w, 'review', 'Before the push.', new Date(now - 120_000).toISOString())
+  logged(w.db, { plan: 1, kind: 'push', actor: 'push', outcome: 'pass', message: 'pushed', pointer: null, run: null }, new Date(now - 60_000).toISOString())
+  const late = ask(w, 'comment', 'After the push.')
+  ask(w, 'review', 'On the fork.', undefined, 'caliperforge/widget')
+  for (const kind of ['bot_review', 'ci_red', 'merge'] as const) ask(w, kind, `A ${kind}.`)
+  ask(w, 'review', ' \n ')
+  const body = cardWith(w, CARRIED)
+  expect(body.split('\n').filter((l) => l.startsWith('- `R'))).toEqual([`- \`R${String(late)}\` maintainer: \`After the push.\` — open`])
 })
 
 /** The cards carry unposted PR text and sign-off answers, so they live apart from our public repo. */

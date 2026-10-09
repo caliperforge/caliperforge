@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import type { Packet } from '../../providers/kind.ts'
+import { record, since } from '../../store/signals.ts'
 import { rehearsed } from '../findings.ts'
 import { tick } from '../index.ts'
 import { maybe, put } from '../workspace.ts'
@@ -15,7 +16,7 @@ const answering = (ids: string[]): string =>
   CARRIED.replace(/---\n$/, `${ids.map((id) => `  - id: ${id}\n    status: done\n    pointer: src/hello.ts:1\n`).join('')}---\n`)
 
 /** Ticks until step 3 has judged the build, with FOUND stored at the checkout HEAD once the brief is asked for, and `score` recorded there unless null. */
-async function built(score: number | null, handback = CARRIED): Promise<{ w: World; packets: Packet[] }> {
+async function built(score: number | null, handback = CARRIED, ask = false): Promise<{ w: World; packets: Packet[] }> {
   const w = world()
   approve(w.db, w.target)
   const packets: Packet[] = []
@@ -23,6 +24,10 @@ async function built(score: number | null, handback = CARRIED): Promise<{ w: Wor
     if (p.tools.includes('Write')) packets.push(p)
     else if (p.prompt.includes('# brief_writer')) {
       if (score !== null) scored(w.root, 1, score)
+      if (ask) {
+        record(w.db, { repo: 'acme/widget', pr: 7, kind: 'review', author: 'maintainer', at: new Date().toISOString(),
+          external_id: 'r1', score: null, plan: 1, body: 'Name it\n  greet.', state: 'CHANGES_REQUESTED' })
+      }
       put(w.root, 1, `findings-${execFileSync('git', ['rev-parse', 'HEAD'], { cwd: p.cwd, encoding: 'utf8' }).trim()}.md`, FOUND)
     }
   })
@@ -61,6 +66,14 @@ test('D3 a 5/5 or no score at HEAD: no findings, no findings.md', async () => {
     expect(packets[0]?.prompt).not.toContain('# Bot review findings')
     expect(maybe(w.root, 1, 'findings.md')).toBeNull()
   }
+})
+
+test('D4 a reviewer ask reaches the packet under its R id', async () => {
+  const { w, packets } = await built(null, CARRIED, true)
+  const id = since(w.db, 1).find((s) => s.kind === 'review')?.id
+  expect(packets[0]?.prompt).toContain("# Reviewer asks\n\nAnswer each ask under its id in your hand-back's done rows, with a pointer.\n\n"
+    + `- R${String(id)} maintainer (review, CHANGES_REQUESTED): Name it greet.\n`)
+  expect((await built(null)).packets[0]?.prompt).not.toContain('# Reviewer asks')
 })
 
 test('D4 answering one of two findings refuses; both passes', async () => {

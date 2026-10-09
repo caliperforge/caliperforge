@@ -10,8 +10,9 @@ import { ciFacts, diffFacts, facts, greptileFacts, ruleFacts, testFacts, type Fa
 import type { Db } from '../store/index.ts'
 import { needsCeo, planById, resume, rewind } from '../store/plans.ts'
 import { clear } from '../store/refusals.ts'
-import { graded } from '../store/signals.ts'
+import { asks, graded } from '../store/signals.ts'
 import type { Board } from '../rails/ci-green/index.ts'
+import { carried as rows } from '../rails/completion-audit/index.ts'
 import { BOARD, headOf, opened, rehearsalBranch, title } from './push.ts'
 import { GRADING } from './ready.ts'
 import { diffOf, drop, FORK, get, maybe, put, repoName } from './workspace.ts'
@@ -182,6 +183,7 @@ function bodyFor(db: Db, root: string, card: Card, desk: Desk): string {
     fence,
     '',
     ...unsaid(root, card.id, open === null ? text : null),
+    ...answers(db, root, card.id),
     ...decided(asked(db, card.id)),
     '**Answer with one label.** `go` sends it. `no` refuses it: comment on the card or on a line of the diff first and the builder reworks against your words. `talk` hands it to the COO.',
     '',
@@ -220,6 +222,18 @@ function unsaid(root: string, plan: number, text: string | null): string[] {
   if (text === null || maybe(root, plan, 'pr.md') === null) return []
   const left = parse(diffOf(root, plan)).map((f) => f.path).filter((p) => !text.includes(p) && !text.includes(basename(p)))
   return left.length === 0 ? [] : [`**Not in the PR text:** ${left.map((p) => code(p)).join(', ')}`, '']
+}
+
+/** Each reviewer ask with the hand-back's `R` row that answers it; with no row, no pointer or no readable fence, the ask is open. */
+function answers(db: Db, root: string, plan: number): string[] {
+  const all = asks(db, plan)
+  if (all.length === 0) return []
+  const done = rows(maybe(root, plan, 'step-2.handback.md') ?? '')
+  return ['**Reviewer asks since the last push**', '', ...all.map((s) => {
+    const row = typeof done === 'string' ? undefined : done.get(`R${String(s.id)}`)
+    const pointer = row?.pointer?.trim() ?? ''
+    return `- \`R${String(s.id)}\` ${s.author}: ${code(flat(s.body ?? ''))} — ${row === undefined || pointer === '' ? 'open' : `${row.status} at ${code(pointer)}`}`
+  }), '']
 }
 
 /** The valid decision block on the plan's newest `director` event; null when that event is anything but `needs_coo` or `needs_ceo`. */

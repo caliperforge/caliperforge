@@ -33,7 +33,7 @@ import { classify } from './delta.ts'
 import { commanded } from './command.ts'
 import { looked } from './design.ts'
 import { deletions } from './fence.ts'
-import { findings } from './findings.ts'
+import { asked, findings } from './findings.ts'
 import { fenceFor, languageFor } from './route.ts'
 import { languages } from './split.ts'
 import { staffed } from './staffing.ts'
@@ -302,7 +302,7 @@ function exited(step: Step, fired: Fired): Outcome {
 function rebuild(db: Db, root: string, plan: PlanRow, prev: string | null): string {
   const src = srcDir(root, plan.id)
   const ruling = ruled(root, plan.id)
-  const issue = get(root, plan.id, 'issue.md') + rulings(root, plan.id) + (ruling === null ? '' : `\n\n# What the ask holds beyond this brief\n\n${ruling.trim()}`) + findings(db, root, plan.id, src)
+  const issue = get(root, plan.id, 'issue.md') + rulings(root, plan.id) + (ruling === null ? '' : `\n\n# What the ask holds beyond this brief\n\n${ruling.trim()}`) + findings(db, root, plan.id, src) + asked(db, plan.id)
   const refusal = maybe(root, plan.id, 'refusal.md')
   const rows = lastRows(prev)
   if (refusal === null) return handed(`${issue}${rows}`, handout(src, listed(db, plan.id, issue)))

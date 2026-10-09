@@ -202,9 +202,6 @@
   "tests/each.test.ts": {
     "prepare": 7
   },
-  "tests/events.test.ts": {
-    "prepare": 8
-  },
   "tests/fence.test.ts": {
     "prepare": 3
   },

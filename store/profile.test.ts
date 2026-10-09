@@ -21,8 +21,8 @@ test('D2 pay-kit: org commit/pr shape, own checks, notes, sources', () => {
   const org = profile(REPO, 'solana-foundation/other')
   const kit = profile(REPO, 'solana-foundation/pay-kit')
   expect(kit).toMatchObject({ commit: org?.commit, pr: org?.pr, checks: { go: ['lint', 'test'] } })
-  expect(Object.keys(kit ?? {}).sort()).toEqual(['checks', 'commit', 'greptile_files', 'intake', 'notes', 'pr', 'sources'])
-  expect(kit?.intake).toEqual({ claim_first: false, pace: { prs: 3, days: 7 } })
+  expect(Object.keys(kit ?? {}).sort()).toEqual(['checks', 'commit', 'greptile_files', 'notes', 'pr', 'sources'])
+  expect(kit).not.toHaveProperty('intake')
   expect(profile(REPO, 'solana-foundation/surfpool')).not.toHaveProperty('intake')
 })
 

@@ -5,7 +5,7 @@ import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import { capture } from '../../sequencer/capture.ts'
 import { opened } from '../../sequencer/push.ts'
-import { started } from '../../sequencer/signals.ts'
+import { started, words } from '../../sequencer/signals.ts'
 import { drop, get, maybe, PR_BRANCH } from '../../sequencer/workspace.ts'
 import { decide } from '../../store/approvals.ts'
 import { pushedRow } from '../../store/deliverables.ts'
@@ -168,12 +168,16 @@ test('capture reads an adopted PR like any pushed one, no replay', () => {
   expect(capture(db, () => view()).filter((s) => s.kind === 'comment')).toEqual([])
 })
 
-test('adopted PR maintainer comment waits at build for a person', () => {
+test('adopted PR maintainer comment goes back to the brief', () => {
   const db = fresh(schema)
-  const plan = adopted(db, root())
-  const note = capture(db, () => view())[0]
-  expect(started(db, SignalRow.parse(note))).toMatchObject({ template: 'pr_path', plan, step: 2 })
-  expect(db.prepare('SELECT step, state FROM plans WHERE id = ?').get(plan)).toEqual({ step: 2, state: 'blocked_on_ceo' })
+  const dir = root()
+  const plan = adopted(db, dir)
+  const packet = get(dir, plan, 'issue.md')
+  const note = SignalRow.parse(capture(db, () => view())[0])
+  expect(started(db, note, dir)).toMatchObject({ template: 'pr_path', plan, step: 1 })
+  expect(db.prepare('SELECT step, state FROM plans WHERE id = ?').get(plan)).toEqual({ step: 1, state: 'running' })
+  expect(words(note)).toContain('one nit here')
+  expect(get(dir, plan, 'ask.md')).toBe(`${packet.trimEnd()}\n\n${words(note)}`)
 })
 
 test('the inherited thread is recorded and starts nothing', () => {

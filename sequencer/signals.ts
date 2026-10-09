@@ -10,7 +10,7 @@ import { assembling } from './home.ts'
 import { WIRE, type Wire } from './push.ts'
 import { fixed } from './split.ts'
 import { shift } from './weekly.ts'
-import { put } from './workspace.ts'
+import { maybe, put } from './workspace.ts'
 
 interface Started {
   signal: number
@@ -22,15 +22,18 @@ interface Started {
 /** A bot's finding re-enters at the first review; the reviewers weigh it. */
 const REVIEW_STEP = 4
 
-/** A person's words, or their red CI, re-enter at the build: that is who can change the code. */
+/** A person's words re-enter at the brief: they grow the ask the brief is written from. */
+const BRIEF_STEP = 1
+
+/** Their red CI re-enters at the build: that is who can change the code. */
 const BUILD_STEP = 2
 
 /**
- * A changes-requested review and a red check on the pull request go straight to the builder with the
- * words. A plain comment or review goes to the builder too, but waits there for a person: it may be a
- * question, and a person answers those (`cf retry` sends it on). Either way the words land in
- * the refusal the builder reads, the refusal count starts over, and the inbox says who asked. A
- * changes-requested review on an assembled pull request is the exception: it becomes one fix part.
+ * A person's review or comment goes back to the brief writer with the words added to the ask; a question
+ * among them comes back from its `unclear` fence, which holds the plan for a person. A red check on the
+ * pull request goes straight to the builder with the words in the refusal it reads. Either way the refusal
+ * count starts over, and the inbox says who asked. A changes-requested review on an assembled pull
+ * request is the exception: it becomes one fix part.
  */
 export function started(db: Db, signal: SignalRow, root?: string, wire: Wire = WIRE): Started | null {
   if (signal.plan === null) return null
@@ -42,9 +45,10 @@ export function started(db: Db, signal: SignalRow, root?: string, wire: Wire = W
     const parent = planById(db, signal.plan)
     if (assembling(db, parent) !== null) return fix(db, signal, parent, root, wire)
   }
-  const step = signal.kind === 'bot_review' ? REVIEW_STEP : BUILD_STEP
+  const step = signal.kind === 'bot_review' ? REVIEW_STEP : signal.kind === 'ci_red' ? BUILD_STEP : BRIEF_STEP
   rewind(db, signal.plan, step)
   if (step === BUILD_STEP) asked(db, signal, signal.plan, root)
+  if (step === BRIEF_STEP) reasked(db, signal, signal.plan, root)
   return { signal: signal.id, template: 'pr_path', plan: signal.plan, step }
 }
 
@@ -61,14 +65,26 @@ function fix(db: Db, signal: SignalRow, parent: PlanRow, root: string, wire: Wir
   }
 }
 
-function asked(db: Db, signal: SignalRow, plan: number, root: string | undefined,
-  direct = signal.kind === 'ci_red' || signal.state === 'CHANGES_REQUESTED'): void {
+function asked(db: Db, signal: SignalRow, plan: number, root: string | undefined, direct = true): void {
   clear(db, plan)
   if (!direct) needsCeo(db, planById(db, plan))
   if (root === undefined) return
   put(root, plan, 'refusal.md', words(signal))
-  const event: Event = { at: signal.at, plan, ticket: `${signal.repo}#${String(signal.pr)}`, kind: 'asked', step: BUILD_STEP,
-    name: direct ? 'build' : 'waits for a person', note: `${signal.author}: ${(signal.body ?? '').replace(/\s+/g, ' ').slice(0, 140)}` }
+  inbox(root, signal, plan, BUILD_STEP, direct ? 'build' : 'waits for a person')
+}
+
+/** An adopted plan holds only `issue.md`, so its ask starts from that. */
+function reasked(db: Db, signal: SignalRow, plan: number, root: string | undefined): void {
+  clear(db, plan)
+  if (root === undefined) return
+  const ask = maybe(root, plan, 'ask.md') ?? maybe(root, plan, 'issue.md') ?? ''
+  put(root, plan, 'ask.md', `${ask.trimEnd()}\n\n${words(signal)}`)
+  inbox(root, signal, plan, BRIEF_STEP, 'brief')
+}
+
+function inbox(root: string, signal: SignalRow, plan: number, step: number, name: string): void {
+  const event: Event = { at: signal.at, plan, ticket: `${signal.repo}#${String(signal.pr)}`, kind: 'asked', step,
+    name, note: `${signal.author}: ${(signal.body ?? '').replace(/\s+/g, ' ').slice(0, 140)}` }
   keep(root, [event])
   notify([event])
 }

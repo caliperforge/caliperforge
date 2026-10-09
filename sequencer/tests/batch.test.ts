@@ -20,7 +20,7 @@ import { approve as approvePublish } from '../card.ts'
 import type { Fired, Outcome } from '../kind.ts'
 import { profile } from '../../store/profile.ts'
 import { COMMIT, forkCi, headOf, messageOf, prBody, push, sent as next, type Wire } from '../push.ts'
-import { started } from '../signals.ts'
+import { started, words } from '../signals.ts'
 import { unanswered } from '../ready.ts'
 import { unread } from '../../cli/inbox.ts'
 import { get, maybe, put, srcDir } from '../workspace.ts'
@@ -180,21 +180,23 @@ test('our words are no signal; theirs and review state are kept', async () => {
   ])
 })
 
-test('changes requested go to the builder; a comment to a person', async () => {
+test('changes requested and a comment both go to the brief', async () => {
   const w = await pushed()
   const said = (id: string, state: string | undefined, body: string): SignalRow[] => capture(w.db, () => pr({
     reviews: [{ id, author: { login: 'maintainer' }, body, submittedAt: new Date(Date.now() + 60_000).toISOString(),
       ...(state === undefined ? {} : { state }) }],
   }))
-  const [asked] = said('r1', 'CHANGES_REQUESTED', 'rename expires to expiry')
-  expect(asked === undefined ? null : started(w.db, asked, w.root)).toMatchObject({ plan: 1, step: 2 })
-  expect(plan(w.db, 1)).toMatchObject({ step: 2, state: 'running' })
-  expect(readFileSync(join(w.root, '.cf/work/1/refusal.md'), 'utf8')).toContain('rename expires to expiry')
-  expect(unread(w.root).map((e) => e.kind)).toEqual(['asked'])
-
-  const [plain] = said('r2', 'COMMENTED', 'why 120 and not 60?')
-  if (plain !== undefined) started(w.db, plain, w.root)
-  expect(plan(w.db, 1)).toMatchObject({ step: 2, state: 'blocked_on_ceo' })
+  let ask = get(w.root, 1, 'ask.md')
+  for (const [id, state, body] of [['r1', 'CHANGES_REQUESTED', 'rename expires to expiry'], ['r2', 'COMMENTED', 'why 120 and not 60?']] as const) {
+    const [asked] = said(id, state, body) as [SignalRow]
+    expect(started(w.db, asked, w.root)).toMatchObject({ plan: 1, step: 1 })
+    expect(plan(w.db, 1)).toMatchObject({ step: 1, state: 'running' })
+    ask = `${ask.trimEnd()}\n\n${words(asked)}`
+    expect(get(w.root, 1, 'ask.md')).toBe(ask)
+    expect(words(asked)).toContain(body)
+  }
+  expect(maybe(w.root, 1, 'refusal.md')).toBe(null)
+  expect(unread(w.root).map((e) => [e.kind, e.step])).toEqual([['asked', 1], ['asked', 1]])
 })
 
 test('a round on an open pr pushes its branch, opening no other', async () => {

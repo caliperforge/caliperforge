@@ -296,14 +296,15 @@ test('D3 the fix lands on asm/1 alone, parent at senior, PR kept', async () => {
   expect(deliverablesOf(a.w.db, 1).findLast((d) => d.state === 'pushed')).toMatchObject({ evidence: PR })
 })
 
-test('D4 D5 a comment rewinds to 2; a failed filing adds no part', async () => {
+test('D4 D5 a comment rewinds to 1; a failed filing adds no part', async () => {
   const a = await landed()
   opened(a)
   const wire = { ...watched([], a.w.root, 1), file: (): string => { throw new Error('gh is down') } }
   const parts = (): unknown[] => partsOf(a.w.db, 1)
 
   started(a.w.db, said(a, 'comment', null), a.w.root, wire)
-  expect(plan(a.w.db, 1)).toMatchObject({ step: 2, state: 'blocked_on_ceo' })
+  expect(plan(a.w.db, 1)).toMatchObject({ step: 1, state: 'queued' })
+  expect(maybe(a.w.root, 1, 'refusal.md')).toBeNull()
 
   stampHead(a.w.db, 1, '0'.repeat(64))
   requeue(a.w.db, 1, 9)

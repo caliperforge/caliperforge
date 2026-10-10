@@ -93,14 +93,16 @@ const SHARED: Format[] = [{
   readers: ['sequencer/rails.ts', 'rails/tight/prose.ts'],
 }]
 
-const FORCED = /forced?[- ]push|--force\b|force-with-lease|\bsquash|rewrit\w+ (?:the )?history|history rewrit\w+/i
+/** An ask of the builder: a line that opens on the verb, or names the builder as the one who runs. */
+const LEAD = String.raw`(?:(?<=^\s*(?:[-*]|\d+\.)?\s*(?:then\s+|and\s+)?)|\b(?:you|the builder|builder)\s+(?:(?:should|must|will|can|needs? to)\s+)?)`
+
+const FORCED = new RegExp(LEAD + String.raw`(?:force[- ]push(?:es)?\b|squash(?:es)?\b|rewrites? (?:the )?history|push(?:es)?\b[^.\n]*--force\b)`, 'i')
 
 const NEGATED = /\b(?:no|not|never|without|nor|nothing|none|isn't|doesn't|don't|won't|cannot)\b/i
 
 const EMAIL = /[\w.%+-]+@[\w-]+\.[A-Za-z]{2,}/
 
-/** An ask of the builder: a line that opens on the verb, or names the builder as the one who runs. */
-const SHELL = /(?:(?<=^\s*(?:[-*]|\d+\.)?\s*(?:then\s+|and\s+)?)|\b(?:you|the builder|builder)\s+(?:(?:should|must|will|can|needs? to)\s+)?)(?:run|re-?run|execute|count|report)s?\b[^.\n]*\b(?:shell|terminal|command|bash|npm|pnpm|npx|node|git|vitest|tsc|the tests|test suite)\b/i
+const SHELL = new RegExp(LEAD + String.raw`(?:run|re-?run|execute|count|report)s?\b[^.\n]*\b(?:shell|terminal|command|bash|npm|pnpm|npx|node|git|vitest|tsc|the tests|test suite)\b`, 'i')
 
 const GROUNDS: [RegExp, string][] = [
   [FORCED, 'the builder does not force push, squash or rewrite history'],

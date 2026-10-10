@@ -17,6 +17,7 @@ import { unhold } from '../hold.ts'
 import { blocked } from '../steps.ts'
 import { WHOLE } from '../handout.ts'
 import { afresh, drop, maybe, move, put, srcDir, titleOf } from '../workspace.ts'
+import { git } from './bases.ts'
 import { approve, CARRIED, internalPlan, moveMain, ours, plan, reads, stub, world, type World } from './world.ts'
 
 const repo = join(import.meta.dirname, '../..')
@@ -156,6 +157,27 @@ test('D1-D3: a Files row on a file over 300 lines names its range', () => {
   expect(row('- a/short.ts')).toBeNull()
   expect(row('- a/new.ts (new)')).toBeNull()
   expect(row('- a/long.ts (new)')).toMatchObject({ span: 'a/long.ts', reason: holding('already in the tree') })
+})
+
+test('D1-D4: an off-tree path names tracked files ending with it', () => {
+  const refusal = (tracked: string[], path: string): Refused | null => {
+    const dir = mkdtempSync(join(tmpdir(), 'meant-'))
+    git(dir, ['init', '-q'])
+    for (const file of tracked) {
+      mkdirSync(join(dir, file, '..'), { recursive: true })
+      writeFileSync(join(dir, file), '')
+    }
+    git(dir, ['add', '-A'])
+    return shape(swap(brief, '## Files', [`- ${path}`]), ask, dir)
+  }
+  const each = 'tests/each.test.ts'
+  expect(refusal([`sequencer/${each}`], each))
+    .toEqual({ span: each, reason: `${each} is not in the checkout; did you mean sequencer/${each}?` })
+  expect(refusal([`sequencer/${each}`, `cli/${each}`], each))
+    .toEqual({ span: each, reason: `${each} is not in the checkout; did you mean cli/${each}, sequencer/${each}?` })
+  expect(refusal(['a', 'b', 'c', 'd'].map((d) => `${d}/${each}`), each))
+    .toEqual({ span: each, reason: `${each} is not in the checkout; did you mean a/${each}, b/${each}, c/${each}?` })
+  expect(refusal([`sequencer/${each}`], 'tests/gone.ts')).toEqual({ span: 'tests/gone.ts', reason: 'tests/gone.ts is not in the checkout' })
 })
 
 const lua = 'seats/modes/build.md'

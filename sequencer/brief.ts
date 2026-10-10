@@ -6,6 +6,7 @@ import type { PlanFile } from '../store/files.ts'
 import { CONVENTIONAL } from './conventions.ts'
 import { WHOLE } from './handout.ts'
 import { kept } from './verbatim.ts'
+import { git } from './workspace.ts'
 
 const CEILING = 100
 
@@ -289,10 +290,15 @@ function paths(brief: string, src: string): Refused | null {
   const named = [...files(brief), ...leads(brief, '## Files to read').map((path) => ({ path, is_new: false }))]
   for (const { path, is_new } of named) {
     if (is_new !== existsSync(join(src, path))) continue
-    const ground = is_new ? 'is marked (new) and is already in the tree' : 'is not in the checkout'
+    const ground = is_new ? 'is marked (new) and is already in the tree' : `is not in the checkout${meant(path, src)}`
     return { span: path, reason: `${path} ${ground}` }
   }
   return null
+}
+
+function meant(path: string, src: string): string {
+  const near = git(src, ['ls-files']).split('\n').filter((f) => f.endsWith(`/${path}`))
+  return near.length === 0 ? '' : `; did you mean ${near.slice(0, 3).join(', ')}?`
 }
 
 /** A file past `WHOLE` lines is handed by its block, so some `## Files` row names where that block ends: `path:start-end`. */

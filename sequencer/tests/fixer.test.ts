@@ -383,3 +383,27 @@ test('D4 a stopped seat run is unrepaired and reaches a person', async () => {
   expect(state(db)).toEqual({ state: 'blocked_on_ceo', step: 4 })
   expect(posted).toHaveLength(1)
 })
+
+const DONE = '---\ndid: nothing\nthen: done\nwhy: the pull request is up\n---\n'
+
+test.each([
+  { shipped: false, want: 'escalated', ends: 'blocked_on_ceo' },
+  { shipped: true, want: 'applied', ends: 'done' },
+] as const)('done with pushed $shipped ends $ends', async ({ shipped, want, ends }) => {
+  const { db, home } = seeded('live')
+  if (shipped) pushed(db, 7)
+  await woke(db, home, stub(DONE, []), now, () => undefined, wire([]))
+  expect(applied(db)).toEqual([{ applied: want }])
+  expect(state(db)).toEqual({ state: ends, step: 4 })
+})
+
+test('the packet lists the other open jobs and the store', async () => {
+  const { db, home } = seeded('live')
+  second(db)
+  const packets: Packet[] = []
+  await woke(db, home, stub(RETURN, packets), now, () => undefined, wire([]))
+  const prompt = of(packets, 'fixer')?.prompt ?? ''
+  expect(prompt).toMatch(/# Open jobs\n\n- plan 8, /)
+  expect(prompt).not.toContain('- plan 7,')
+  expect(prompt).toMatch(/CREATE TABLE "plans" \([\s\S]*?\);\n/)
+})

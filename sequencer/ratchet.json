@@ -48,8 +48,7 @@
     "lines": 74
   },
   "fixer.ts": {
-    "lines": 263,
-    "prepare": 7
+    "lines": 263
   },
   "folded.ts": {
     "lines": 19

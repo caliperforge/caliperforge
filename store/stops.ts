@@ -25,6 +25,23 @@ export function kin(db: Db, repo: string, no: number, plan: number): number[] {
     ORDER BY p.id`).pluck().all(repo, repo, no, plan) as number[]
 }
 
+export function waitable(db: Db, on: number, plan: number): boolean {
+  return db.prepare("SELECT 1 FROM plans WHERE id = ? AND id <> ? AND state IN ('queued', 'running', 'blocked_on_ceo')")
+    .get(on, plan) !== undefined
+}
+
+export function waitsEnded(db: Db): { id: number; step: number; on_: number; theirs: string }[] {
+  return db.prepare(`SELECT p.id, p.step, p.waits_on AS on_, w.state AS theirs FROM plans p JOIN plans w ON w.id = p.waits_on
+    WHERE p.state = 'blocked_on_ceo' AND w.state IN ('done', 'refused', 'halted') ORDER BY p.id`).all() as
+    { id: number; step: number; on_: number; theirs: string }[]
+}
+
+export function openJobs(db: Db, plan: number): { id: number; state: string; step: number; lane: string | null; origin: string | null }[] {
+  return db.prepare(`SELECT id, state, step, lane, origin FROM plans
+    WHERE state IN ('queued', 'running', 'blocked_on_ceo') AND id <> ? ORDER BY id`).all(plan) as
+    { id: number; state: string; step: number; lane: string | null; origin: string | null }[]
+}
+
 export function waking(db: Db, wake: readonly string[]): PlanRow[] {
   return db.prepare(`SELECT * FROM plans WHERE ((wait_reason IN (${wake.map(() => '?').join(', ')})
     AND state IN ('queued', 'running', 'blocked_on_ceo')) OR state = 'blocked_on_ceo') AND held_by IS NOT 'ceo' ORDER BY id`)

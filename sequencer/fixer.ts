@@ -7,13 +7,16 @@ import type { Provider } from '../providers/kind.ts'
 import { packet } from '../runner/index.ts'
 import { load, seat, tight } from '../runner/rules.ts'
 import { mark } from '../store/decisions.ts'
+import { pushed } from '../store/deliverables.ts'
+import { setting } from '../store/drift.ts'
 import { logged as event } from '../store/events.ts'
-import { listed } from '../store/files.ts'
-import type { Db } from '../store/index.ts'
+import { listed, recorded as paths } from '../store/files.ts'
+import { schema, type Db } from '../store/index.ts'
 import { returnToLane } from '../store/holds.ts'
 import { wall } from '../store/lanes.ts'
 import { clearWaitsOn, end, held, requeue, retry, type PlanRow } from '../store/plans.ts'
 import { clear } from '../store/refusals.ts'
+import { openJobs, waitable, waitsEnded } from '../store/stops.ts'
 import { pending } from '../store/transcript.ts'
 import { lapsed } from '../store/until.ts'
 import { coder, repaired } from './coder.ts'
@@ -63,8 +66,8 @@ export type Fix = z.infer<typeof Fix>
 interface Logged { at: string; mode: Mode; did: string; then: string; why: string; tokens: number; applied: string }
 
 export function mode(db: Db): Mode {
-  const row = db.prepare("SELECT value FROM settings WHERE key = 'fixer.mode'").get() as { value: string } | undefined
-  return row?.value === 'live' || row?.value === 'shadow' ? row.value : 'off'
+  const value = setting(db, 'fixer.mode')
+  return value === 'live' || value === 'shadow' ? value : 'off'
 }
 
 function fixesToday(root: string, plan: number, now: Date): number {
@@ -153,9 +156,7 @@ function rebuild(db: Db, root: string, plan: PlanRow): string {
 /** The job it waits on must still be open, or nothing would ever release it. */
 function awaits(db: Db, root: string, plan: PlanRow, f: Fix, now: Date): string {
   const on = f.waits_on ?? 0
-  const them = db.prepare("SELECT 1 FROM plans WHERE id = ? AND id <> ? AND state IN ('queued', 'running', 'blocked_on_ceo')")
-    .get(on, plan.id)
-  if (them === undefined) return 'escalated'
+  if (!waitable(db, on, plan.id)) return 'escalated'
   hold(db, root, plan.id, f.why, now, on)
   return `wait ${String(on)}`
 }
@@ -173,10 +174,7 @@ function overdue(db: Db, root: string, now: Date): void {
 /** A job the fixer set waiting goes back to its lane when the other lands, and to a person if it never will. */
 export function released(db: Db, root: string, now: Date, post: Post): void {
   overdue(db, root, now)
-  const rows = db.prepare(`SELECT p.id, p.step, p.waits_on AS on_, w.state AS theirs FROM plans p JOIN plans w ON w.id = p.waits_on
-    WHERE p.state = 'blocked_on_ceo' AND w.state IN ('done', 'refused', 'halted') ORDER BY p.id`).all() as
-    { id: number; step: number; on_: number; theirs: string }[]
-  for (const r of rows) {
+  for (const r of waitsEnded(db)) {
     const ticket = ticketOf(db, r.id)
     const at = now.toISOString()
     const ended = r.theirs === 'done' && !landed(db, r.on_) ? stuck(db, r.on_)[0] : { id: r.on_, state: r.theirs }
@@ -207,8 +205,7 @@ function apply(db: Db, root: string, plan: PlanRow, f: Fix, wire: Wire, now: Dat
       return 'retry'
     }
     case 'done': {
-      const pushed = db.prepare("SELECT 1 FROM deliverables WHERE plan_id = ? AND state = 'pushed'").get(plan.id)
-      if (pushed === undefined) return 'escalated'
+      if (!pushed(db, plan.id)) return 'escalated'
       end(db, plan.id, 'done')
       return 'done'
     }
@@ -228,15 +225,11 @@ function apply(db: Db, root: string, plan: PlanRow, f: Fix, wire: Wire, now: Dat
 function issue(db: Db, root: string, plan: PlanRow, decision: { why: string }, m: Mode, to: string | null): string {
   const said = maybe(root, plan.id, 'refusal.md') ?? maybe(root, plan.id, 'question.md') ?? 'none'
   const brief = maybe(root, plan.id, 'issue.md') ?? maybe(root, plan.id, 'ask.md') ?? 'none'
-  const files = (db.prepare('SELECT path FROM plan_files WHERE plan = ? ORDER BY position').all(plan.id) as { path: string }[])
-    .map((r) => `- ${r.path}`).join('\n') || 'none'
-  const open = (db.prepare(`SELECT id, state, step, lane, origin FROM plans
-    WHERE state IN ('queued', 'running', 'blocked_on_ceo') AND id <> ? ORDER BY id`).all(plan.id) as
-    { id: number; state: string; step: number; lane: string | null; origin: string | null }[])
+  const files = paths(db, plan.id).map((p) => `- ${p}`).join('\n') || 'none'
+  const open = openJobs(db, plan.id)
     .map((r) => `- plan ${String(r.id)}, ${r.state}, step ${String(r.step)}, ${r.lane ?? '-'}, ${r.origin ?? 'no ticket'}: ${titleOf(root, r.id) ?? 'no title yet'}`)
     .join('\n') || 'none'
-  const store = (db.prepare("SELECT sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'").all() as { sql: string }[])
-    .map((r) => `${r.sql};`).join('\n')
+  const store = schema(db).map((s) => `${s};`).join('\n')
   const how = m === 'live' ? 'live: make the fix' : 'shadow: read only, change nothing, describe the fix under did'
   return [
     `# Mode\n\n${to === null ? how : `diagnose: read only, change nothing; ${to} makes the fix from your did and why`}`,

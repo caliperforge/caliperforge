@@ -53,6 +53,10 @@ export function dump(db: Db, out: string): void {
   writeFileSync(out, `PRAGMA foreign_keys = OFF;\nBEGIN;\n${[...body, ...tables].join('\n')}\nCOMMIT;\nPRAGMA user_version = ${at};\n`)
 }
 
+export function schema(db: Db): string[] {
+  return db.prepare("SELECT sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'").pluck().all() as string[]
+}
+
 export function rules(db: Db): RuleRow[] {
   return db.prepare('SELECT * FROM rules ORDER BY id').all().map((r) => RuleRow.parse(r))
 }

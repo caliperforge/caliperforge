@@ -7,6 +7,12 @@ export function firstLine(error: unknown): string {
   return (error instanceof Error ? error.message : String(error)).split('\n')[0] ?? ''
 }
 
+export function cause(error: unknown): string {
+  const stderr = error instanceof Error && 'stderr' in error ? error.stderr : undefined
+  const last = typeof stderr === 'string' ? stderr.split('\n').findLast((l) => l.trim() !== '') : undefined
+  return last ?? firstLine(error)
+}
+
 export function gone(db: Db, plan: number, pointer: string, error: unknown): boolean {
   const message = firstLine(error)
   if (!GONE.test(message)) return false

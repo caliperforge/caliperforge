@@ -34,7 +34,7 @@ test('fresh', () => {
     'ratchet_refuse', 'intake', 'stuck_plans', 'science_pull', 'site_publish', 'director_look', 'typescript_specialist',
     'daily_learnings', 'review_examples', 'director_fix_reach', 'tick_deps', 'watch', 'director_widen', 'target_parked_once', 'director_ceiling',
     'close_landed', 'handback_not_done', 'ruling_files', 'needs_ceo_actor', 'build_cap', 'ready_proof_stuck', 'card_facts',
-    'director_findings', 'director_rule_dropped', 'rule_to_build', 'blind_review', 'drift_recovered', 'drift_refile'])
+    'director_findings', 'director_rule_dropped', 'rule_to_build', 'blind_review', 'drift_recovered', 'drift_refile', 'capture_swallowed_once'])
   expect(drift(d, REGISTRY, NOW).map((r) => r.name)).not.toContain('build_cap')
   expect(drift(d, REGISTRY, NOW).map((r) => r.name)).not.toContain('director_widen')
   expect(drift(d, REGISTRY.filter((e) => e.name === 'watch'), NOW)).toEqual([])
@@ -80,4 +80,17 @@ test('D5 a builder hand-off with no step-2 build is seen', () => {
   addRule(d, { id: 'typescript_specialist', kind: 'card', path: 'rules/roster.yaml', content_hash: '0'.repeat(64), loaded_at: '2026-09-22' })
   runAt(d, 1, 2, 'typescript_specialist', '2026-10-02 12:00:00')
   expect(drift(d, REGISTRY, NOW).map((r) => r.name)).not.toContain('rule_to_build')
+})
+
+test('D2 a second swallowed before a back is seen', () => {
+  const d = db()
+  const once = REGISTRY.filter((e) => e.name === 'capture_swallowed_once')
+  const read = (kind: string, at: string): number =>
+    logged(d, { plan: 1, kind, actor: 'reachable', outcome: 'pass', message: 'm', pointer: null, run: null }, at)
+  read('swallowed', '2026-10-02 10:00:00')
+  read('back', '2026-10-02 11:00:00')
+  read('swallowed', '2026-10-02 12:00:00')
+  expect(drift(d, once, NOW)).toEqual([])
+  read('swallowed', '2026-10-02 13:00:00')
+  expect(drift(d, once, NOW).map((r) => r.state)).toEqual(['seen'])
 })

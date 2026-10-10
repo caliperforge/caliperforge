@@ -51,6 +51,12 @@ export function addFinding(db: Db, found: Pick<Finding, 'name' | 'state' | 'deta
   return ran.changes === 1 ? Number(ran.lastInsertRowid) : null
 }
 
+export function answered(db: Db, name: string, newest: string | number | null | undefined): boolean {
+  return db.prepare(`SELECT 1 FROM drift_findings WHERE name = @name AND closed_at IS NOT NULL AND (julianday(closed_at) > julianday(@newest)
+    OR (outcome = 'covered' AND EXISTS (SELECT 1 FROM plans WHERE state NOT IN ('done', 'refused', 'halted') AND drift_findings.ref LIKE '%/' || plans.id)))`)
+    .get({ name, newest: newest ?? null }) !== undefined
+}
+
 export function closeFinding(db: Db, id: number, outcome: NonNullable<Finding['outcome']>, why: string, ref: string | null, now: Date): void {
   db.prepare('UPDATE drift_findings SET outcome = ?, why = ?, ref = ?, closed_at = ? WHERE id = ? AND closed_at IS NULL')
     .run(outcome, why, ref, now.toISOString(), id)

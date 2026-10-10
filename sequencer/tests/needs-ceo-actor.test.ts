@@ -31,5 +31,5 @@ test('only the coo writes needs_ceo across the three stops', async () => {
   logged(w.db, { plan: 1, kind: 'director', actor: 'coo', outcome: 'needs_ceo', message: 'm', pointer: null, run: null }, at)
   expect(drift(w.db, LINE, later)).toEqual([])
   logged(w.db, { plan: 1, kind: 'review', actor: 'code_quality', outcome: 'needs_ceo', message: 'm', pointer: null, run: null }, at)
-  expect(drift(w.db, LINE, later)).toEqual([{ name: 'needs_ceo_actor', state: 'seen', detail: `newest events.at is ${at}, within 7d; expected none` }])
+  expect(drift(w.db, LINE, later)).toEqual([{ name: 'needs_ceo_actor', state: 'seen', detail: `newest events.at is ${at}, within 7d; expected none`, newest: at }])
 })

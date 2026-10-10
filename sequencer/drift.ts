@@ -5,7 +5,7 @@ import { z } from 'zod'
 import type { Pr } from '../cli/gh.ts'
 import { fill } from '../cli/record.ts'
 import { registered } from '../runner/rules.ts'
-import { addFinding, closeFinding, holds, newest, setting, stalled, unclosed, worked } from '../store/drift.ts'
+import { addFinding, answered, closeFinding, holds, newest, setting, stalled, unclosed, worked } from '../store/drift.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { get, hhmm, set, zone } from '../store/lanes.ts'
@@ -34,7 +34,7 @@ export function mechanisms(root: string): Entry[] {
   return registered(root).flatMap((path) => Entry.array().parse(parse(readFileSync(join(root, path), 'utf8'))))
 }
 
-export interface Drifted { name: string; state: 'off' | 'silent' | 'stale' | 'seen'; detail: string }
+export interface Drifted { name: string; state: 'off' | 'silent' | 'stale' | 'seen'; detail: string; newest?: string | number | null }
 
 export function drift(db: Db, registry: Entry[], now: Date): Drifted[] {
   return registry.flatMap((entry) => {
@@ -59,11 +59,11 @@ function quiet(db: Db, entry: Entry, now: Date): Drifted | null {
   const last = newest(db, from, column, now)
   if (entry.expected === 0) {
     return last.days !== null && gap !== undefined && last.days <= days(gap)
-      ? { name, state: 'seen', detail: `newest ${table}.${column} is ${String(last.newest)}, within ${gap}; expected none` } : null
+      ? { name, state: 'seen', detail: `newest ${table}.${column} is ${String(last.newest)}, within ${gap}; expected none`, newest: last.newest } : null
   }
   if (last.newest === null) return when === undefined || worked(db, when, since) ? { name, state: 'silent', detail: `no row in ${from}` } : null
   if (gap === undefined || last.days === null) return null
-  return last.days > days(gap) ? { name, state: 'stale', detail: `newest ${table}.${column} is ${String(last.newest)}, older than ${gap}` } : null
+  return last.days > days(gap) ? { name, state: 'stale', detail: `newest ${table}.${column} is ${String(last.newest)}, older than ${gap}`, newest: last.newest } : null
 }
 
 function days(gap: string): number {
@@ -105,8 +105,8 @@ export function stuck(db: Db, root: string, registry: Entry[], now: Date): numbe
 }
 
 export function recorded(db: Db, drifted: Drifted[], now: Date): number[] {
-  return drifted.flatMap((found) => {
-    const id = addFinding(db, found, now)
+  return drifted.flatMap(({ name, state, detail, newest: last }) => {
+    const id = answered(db, name, last) ? null : addFinding(db, { name, state, detail }, now)
     return id === null ? [] : [id]
   })
 }

@@ -306,3 +306,9 @@
   where: "state IN ('seen', 'stale') AND EXISTS (SELECT 1 FROM drift_findings c WHERE c.name = drift_findings.name AND c.id < drift_findings.id AND c.outcome <> 'covered' AND c.detail = drift_findings.detail)"
   gap: 7d
   expected: 0
+- name: capture_swallowed_once
+  table: events
+  column: at
+  where: "actor = 'reachable' AND kind = 'swallowed' AND EXISTS (SELECT 1 FROM events s WHERE s.plan = events.plan AND s.actor = 'reachable' AND s.kind = 'swallowed' AND s.id < events.id AND NOT EXISTS (SELECT 1 FROM events b WHERE b.plan = events.plan AND b.actor = 'reachable' AND b.kind = 'back' AND b.id > s.id AND b.id < events.id))"
+  gap: 7d
+  expected: 0

@@ -60,6 +60,10 @@ export function findings(db: Db): Finding[] {
   return db.prepare('SELECT * FROM drift_findings ORDER BY id').all() as Finding[]
 }
 
+export function unclosed(db: Db): Finding[] {
+  return db.prepare('SELECT * FROM drift_findings WHERE closed_at IS NULL ORDER BY id').all() as Finding[]
+}
+
 export function unanswered(db: Db, now: Date): Finding[] {
   return db.prepare(`SELECT * FROM drift_findings f WHERE closed_at IS NULL AND NOT EXISTS (SELECT 1 FROM events
     WHERE kind = 'director' AND plan IS NULL AND pointer = 'finding ' || f.id AND julianday(at) >= julianday(?, '-1 day'))

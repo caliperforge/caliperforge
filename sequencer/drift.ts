@@ -5,7 +5,7 @@ import { z } from 'zod'
 import type { Pr } from '../cli/gh.ts'
 import { fill } from '../cli/record.ts'
 import { registered } from '../runner/rules.ts'
-import { addFinding, holds, newest, setting, stalled, worked } from '../store/drift.ts'
+import { addFinding, closeFinding, holds, newest, setting, stalled, unclosed, worked } from '../store/drift.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { get, hhmm, set, zone } from '../store/lanes.ts'
@@ -111,11 +111,33 @@ export function recorded(db: Db, drifted: Drifted[], now: Date): number[] {
   })
 }
 
+export function recovered(db: Db, registry: Entry[], drifted: Drifted[], now: Date): number[] {
+  return unclosed(db).flatMap((found) => {
+    const entry = registry.find((e) => e.name === found.name)
+    const line = entry === undefined || drifted.some((d) => d.name === found.name) ? null : why(db, entry, found.state, now)
+    if (line === null) return []
+    closeFinding(db, found.id, 'fixed', line, null, now)
+    logged(db, { plan: null, kind: 'drift', actor: 'drift', outcome: 'pass', message: `recovered finding ${String(found.id)} ${found.name}`,
+      pointer: null, run: null }, now.toISOString())
+    return [found.id]
+  })
+}
+
+function why(db: Db, { switch: wanted, table, column, where }: Entry, state: Drifted['state'], now: Date): string | null {
+  if (state === 'off' && wanted !== undefined) return `recovered: ${wanted.key} is '${String(setting(db, wanted.key))}'`
+  if (table === undefined || column === undefined) return null
+  const last = newest(db, `${table}${where === undefined ? '' : ` WHERE ${where}`}`, column, now)
+  return `recovered: newest ${table}.${column} is ${String(last.newest)}`
+}
+
 export function due(db: Db, registry: Entry[], now: Date, read: (repo: string, no: number) => Pr): number[] {
   if (hhmm(db, now) < '05:30') return []
   const day = new Date(now.getTime() + zone(db) * 60000).toISOString().slice(0, 10)
   if (day <= get(db, 'drift.at')) return []
   set(db, 'drift.at', day, 'pr', now.toISOString())
   for (const repo of repos(db)) fill(db, repo, read)
-  return recorded(db, drift(db, registry, now), now)
+  const drifted = drift(db, registry, now)
+  const added = recorded(db, drifted, now)
+  recovered(db, registry, drifted, now)
+  return added
 }

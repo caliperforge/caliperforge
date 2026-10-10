@@ -294,3 +294,9 @@
   where: seat = 'blind_review' AND mode = 'review'
   gap: 7d
   while: EXISTS (SELECT 1 FROM runs r JOIN plans p ON p.id = r.plan WHERE p.template = 'pr_path' AND p.origin IS NULL AND r.step = 5 AND julianday(r.at) >= julianday($since))
+- name: drift_recovered
+  table: events
+  column: at
+  where: kind = 'drift' AND message LIKE 'recovered finding%'
+  gap: 7d
+  while: EXISTS (SELECT 1 FROM drift_findings WHERE closed_at IS NULL AND julianday(found_at) < julianday($since, '+5 day'))

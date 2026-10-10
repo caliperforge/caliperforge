@@ -60,6 +60,7 @@ VALUES
   ('rules/registry/51-director_rule_dropped.yaml', 'card', 'rules/registry/51-director_rule_dropped.yaml', '8961ee8ab54b77743087138ef8a1ef31a555a40862ece1b280a836d5b0037e97', '2026-10-09'),
   ('rules/registry/51-rule_to_build.yaml', 'card', 'rules/registry/51-rule_to_build.yaml', '202634723ad7575e12466dfce147265bab35c94a3c4a7c4563192f503d78176e', '2026-10-09'),
   ('rules/registry/52-blind_review.yaml', 'card', 'rules/registry/52-blind_review.yaml', '7dd2323e2ab92b6af9a85c1f3f6a2a4a6e7785133691cf0ef60c6aecca93add8', '2026-10-09'),
+  ('rules/registry/53-drift_recovered.yaml', 'card', 'rules/registry/53-drift_recovered.yaml', 'd5bfe15161b8575fdc1cbe224caf296bfe31aa71a19d5e4d01a5828394d5e5b5', '2026-10-10'),
   ('rules/staffing.yaml', 'card', 'rules/staffing.yaml', '5505b1016244ee8d5a5c03cdcf8cbb178011c063ed004dce7ee0ec90a295f87a', '2026-10-05'),
   ('completion-audit', 'rail', 'rules/rails.yaml', 'b46b445806d399b61887a5259eb0a6893444efcbe5acf2e6dd534507bc0882f3', '2026-09-17'),
   ('secret-scan', 'rail', 'rules/rails.yaml', 'b46b445806d399b61887a5259eb0a6893444efcbe5acf2e6dd534507bc0882f3', '2026-09-17'),

@@ -1178,6 +1178,7 @@ test('a plan waiting on fork CI is left alone', async () => {
 })
 
 const COVER = 'https://github.com/caliperforge/caliperforge/issues/77'
+const FILED = 'https://github.com/caliperforge/caliperforge/issues/900'
 const DEFECT = 'title: the tick skips fixer.mode\nfiles: sequencer/fixer.ts\nends: a live fixer.mode fires the fixer\n'
 const said = (outcome: string, extra = '') => `---\noutcome: ${outcome}\nwhy: the cause\n${extra}---\n`
 
@@ -1193,31 +1194,30 @@ function filing(bodies: string[]): Wire {
 }
 
 test.each([
-  ['fixed', '', null],
-  ['covered', `ref: ${COVER}\n`, COVER],
-  ['retire', '', null],
-  ['defect', DEFECT, 'https://github.com/caliperforge/caliperforge/issues/900'],
-])('D1 D2: %s closes the finding with its ref', async (outcome, extra, ref) => {
+  ['fixed', '', null, null],
+  ['covered', `ref: ${COVER}\n`, COVER, null],
+  ['retire', '', FILED, '**What:** Retire registry entry fixer\n**Why:** the cause\n**Files:** rules/registry/01-fixer.yaml\n'
+    + '**When it ends:** main no longer has the fixer entry in rules/registry/01-fixer.yaml\n\n'
+    + 'Drift finding 1: fixer is off, fixer.mode is not live'],
+  ['defect', DEFECT, FILED, '**What:** the tick skips fixer.mode\n**Why:** the cause\n'
+    + '**Files:** sequencer/fixer.ts\n**When it ends:** a live fixer.mode fires the fixer\n\n'
+    + 'Drift finding 1: fixer is off, fixer.mode is not live'],
+])('D1 D2: %s closes the finding with its ref', async (outcome, extra, ref, body) => {
   const { db, home } = found()
   const bodies: string[] = []
   await decide(db, home, stub(said(outcome, extra)), now, filing(bodies))
   expect(findings(db)).toMatchObject([{ outcome, why: 'the cause', ref, closed_at: now.toISOString() }])
-  expect(bodies).toEqual(outcome === 'defect' ? ['**What:** the tick skips fixer.mode\n**Why:** the cause\n'
-    + '**Files:** sequencer/fixer.ts\n**When it ends:** a live fixer.mode fires the fixer\n\n'
-    + 'Drift finding 1: fixer is off, fixer.mode is not live'] : [])
+  expect(bodies).toEqual(body === null ? [] : [body])
 })
 
-test('D3: retire drops the fixer entry and keeps the rest', async () => {
+test('D3: retire keeps the fixer entry and the rest', async () => {
   const { db, home } = found()
-  const director = join(home, 'rules/registry/00-director.yaml')
-  const was = readFileSync(director, 'utf8')
   await decide(db, home, stub(said('retire')), now, wire())
-  expect(existsSync(join(home, 'rules/registry/01-fixer.yaml'))).toBe(false)
-  expect(readFileSync(director, 'utf8')).toBe(was)
-  expect(mechanisms(home).map((e) => e.name)).toEqual(mechanisms(repo).map((e) => e.name).filter((n) => n !== 'fixer'))
+  expect(existsSync(join(home, 'rules/registry/01-fixer.yaml'))).toBe(true)
+  expect(mechanisms(home)).toEqual(mechanisms(repo))
 })
 
-test('D3: retire cuts an entry from its rules/registry/ file', async () => {
+test('D3: retire keeps an entry in its rules/registry/ file', async () => {
   const { db, home } = seeded('1')
   addFinding(db, { name: 'director_widen', state: 'silent', detail: 'no widen' }, now)
   const path = join(home, 'rules/registry/41-director_widen.yaml')
@@ -1225,9 +1225,19 @@ test('D3: retire cuts an entry from its rules/registry/ file', async () => {
   const fires: string[] = []
   await decide(db, home, wokeStub(said('retire'), fires), now, wire())
   expect(fires[0]).toContain(`# Registry entry\n\n${entry}`)
-  expect(existsSync(path)).toBe(false)
-  expect(mechanisms(home).map((e) => e.name)).toEqual(mechanisms(repo).map((e) => e.name).filter((n) => n !== 'director_widen'))
-  expect(findings(db)).toMatchObject([{ outcome: 'retire', closed_at: now.toISOString() }])
+  expect(readFileSync(path, 'utf8').trimEnd()).toBe(entry)
+  expect(mechanisms(home)).toEqual(mechanisms(repo))
+  expect(findings(db)).toMatchObject([{ outcome: 'retire', ref: FILED, closed_at: now.toISOString() }])
+})
+
+test('D3: retire on a name with no entry files nothing', async () => {
+  const { db, home } = seeded('1')
+  addFinding(db, { name: 'gone', state: 'off', detail: 'no entry' }, now)
+  const bodies: string[] = []
+  await decide(db, home, stub(said('retire')), now, filing(bodies))
+  expect(bodies).toEqual([])
+  expect(findings(db)).toMatchObject([{ outcome: null, closed_at: null }])
+  expect(told(db)).toEqual([{ actor: 'director', outcome: 'needs_coo', message: 'retire did not apply: no entry gone' }])
 })
 
 test.each([

@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { z } from 'zod'
 import type { Provider } from '../providers/kind.ts'
@@ -45,13 +45,8 @@ export async function answer(db: Db, root: string, provider: Provider, now: Date
   const fired = await provider.fire({ ...built, wall: wall(db) })
   const m = fired.ended === 'completed' ? read(fired.text) : null
   if (m === null) return told(db, found, now, 'needs_coo', `finding ${String(found.id)}: no outcome`)
-  if (m.outcome === 'retire') {
-    if (held === null) return told(db, found, now, 'needs_coo', `retire did not apply: no entry ${found.name}`)
-    const left = [...held.lines.slice(0, held.at.from), ...held.lines.slice(held.at.to)]
-    if (left.some((l) => l.startsWith('- name: '))) writeFileSync(held.path, left.join('\n'))
-    else rmSync(held.path)
-  }
-  closeFinding(db, found.id, m.outcome, m.why, refOf(m, found, wire), now)
+  if (m.outcome === 'retire' && held === null) return told(db, found, now, 'needs_coo', `retire did not apply: no entry ${found.name}`)
+  closeFinding(db, found.id, m.outcome, m.why, refOf(m, found, wire, held?.path), now)
   return told(db, found, now, 'pass', `${m.outcome}: ${m.why}`)
 }
 
@@ -66,7 +61,7 @@ function holder(root: string, name: string): { path: string; lines: string[]; at
   for (const path of registered(root)) {
     const lines = readFileSync(join(root, path), 'utf8').split('\n')
     const at = entryOf(lines, name)
-    if (at !== null) return { path: join(root, path), lines, at }
+    if (at !== null) return { path, lines, at }
   }
   return null
 }
@@ -82,11 +77,14 @@ function line(found: Finding): string {
   return `finding ${String(found.id)}: ${found.name} is ${found.state}, ${found.detail}`
 }
 
-function refOf(m: Said, found: Finding, wire: Wire): string | null {
+function refOf(m: Said, found: Finding, wire: Wire, path = ''): string | null {
   if (m.outcome === 'covered') return m.ref ?? null
-  if (m.outcome !== 'defect') return null
-  const body = `**What:** ${m.title ?? ''}\n**Why:** ${m.why}\n**Files:** ${m.files ?? ''}\n**When it ends:** ${m.ends ?? ''}\n\nDrift ${line(found)}`
-  return wire.file(SELF, m.title ?? m.why, body, ['lane:machine', 'P0', 'fix'])
+  if (m.outcome === 'fixed') return null
+  const [title, files, ends, priority] = m.outcome === 'retire'
+    ? [`Retire registry entry ${found.name}`, path, `main no longer has the ${found.name} entry in ${path}`, 'P2']
+    : [m.title ?? m.why, m.files ?? '', m.ends ?? '', 'P0']
+  const body = `**What:** ${title}\n**Why:** ${m.why}\n**Files:** ${files}\n**When it ends:** ${ends}\n\nDrift ${line(found)}`
+  return wire.file(SELF, title, body, ['lane:machine', priority, 'fix'])
 }
 
 function told(db: Db, found: Finding, now: Date, outcome: 'pass' | 'needs_coo', message: string): string {

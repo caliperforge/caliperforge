@@ -1,5 +1,0 @@
-- name: site_publish
-  table: desk_posts
-  column: published_at
-  where: status = 'published'
-  gap: 14d

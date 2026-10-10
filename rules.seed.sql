@@ -38,7 +38,6 @@ VALUES
   ('rules/registry/30-intake.yaml', 'card', 'rules/registry/30-intake.yaml', '4d0eff3ecb4de586a8dbb3e20a1c463f074341a1cd1cdd389988a7808006dd70', '2026-10-04'),
   ('rules/registry/31-stuck_plans.yaml', 'card', 'rules/registry/31-stuck_plans.yaml', 'ab3b3d5f898d9dfe485eb605b401c2ba8e9566e121b3110b3ae6b5868596be69', '2026-10-04'),
   ('rules/registry/32-science_pull.yaml', 'card', 'rules/registry/32-science_pull.yaml', 'd3b2b519475c5c2089fb906190e9030c4a76dad70fb38c38bd0e09b60fbc5068', '2026-10-04'),
-  ('rules/registry/33-site_publish.yaml', 'card', 'rules/registry/33-site_publish.yaml', '1ba4f97cfa0b255b8fbccd3bd569a6e945110ae3980a34efdcf35cfc63534e65', '2026-10-04'),
   ('rules/registry/34-director_look.yaml', 'card', 'rules/registry/34-director_look.yaml', 'fbc0b9608a43e08f95843fbd445a8d0d5d00eb34c5c8f8f0e310cc901629b308', '2026-10-04'),
   ('rules/registry/35-typescript_specialist.yaml', 'card', 'rules/registry/35-typescript_specialist.yaml', 'd2af5779d023cadb5cfaeb6152ff4d0338aff18d1d1ea7277d743bf4be2740e8', '2026-10-04'),
   ('rules/registry/36-daily_learnings.yaml', 'card', 'rules/registry/36-daily_learnings.yaml', '276e911d3afacc26623cda9127a97c03bfd016859da31ba0d633b68be76c5cf8', '2026-10-04'),

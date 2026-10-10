@@ -1,4 +1,4 @@
-import { cpSync, mkdtempSync, readFileSync } from 'node:fs'
+import { cpSync, mkdtempSync, readdirSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
@@ -11,6 +11,7 @@ import { migrate, open } from '../../store/index.ts'
 import { drift } from '../drift.ts'
 import { answer } from '../finding.ts'
 import type { Wire } from '../push.ts'
+import { SELF } from '../workspace.ts'
 import { db as drifting, NOW, REGISTRY } from './drifting.ts'
 
 const repo = join(import.meta.dirname, '../..')
@@ -31,12 +32,12 @@ function seeded() {
   return { db, home }
 }
 
-function stub(fires: string[]): Provider {
+function stub(fires: string[], outcome = 'fixed'): Provider {
   return {
     name: 'claude-agent-sdk',
     fire: (packet) => {
       fires.push(packet.prompt)
-      return Promise.resolve({ text: '---\noutcome: fixed\nwhy: the cause\n---\n', transcript_path: packet.transcript,
+      return Promise.resolve({ text: `---\noutcome: ${outcome}\nwhy: the cause\n---\n`, transcript_path: packet.transcript,
         usage: { input: 10, cache: 0, output: 5 }, seconds: 0, ended: 'completed', exit: 0, stop_reason: 'end_turn', denials: 0 })
     },
   }
@@ -63,6 +64,21 @@ test('D2: three finding runs today fire nothing', async () => {
   expect(await answer(db, home, stub(fires), now, wire)).toBe('cap reached: 3 finding runs today')
   expect(fires).toEqual([])
   expect(findings(db)).toMatchObject([{ closed_at: null }])
+})
+
+test('retire files a ticket and leaves the registry', async () => {
+  const { db, home } = seeded()
+  const dir = join(home, 'rules/registry')
+  const registry = () => readdirSync(dir).map((f) => [f, readFileSync(join(dir, f), 'utf8')])
+  const before = registry()
+  const url = 'https://github.com/caliperforge/caliperforge/issues/900'
+  const calls: Parameters<Wire['file']>[] = []
+  const filing = { file: (...call: Parameters<Wire['file']>) => { calls.push(call); return url } } as Wire
+  await answer(db, home, stub([], 'retire'), now, filing)
+  expect(registry()).toEqual(before)
+  expect(calls.map(([repo, title, , labels]) => [repo, title, labels])).toEqual([[SELF, 'Retire registry entry fixer', ['lane:machine', 'P2', 'fix']]])
+  expect(calls[0]?.[2]).toContain('\n**Files:** rules/registry/01-fixer.yaml\n')
+  expect(findings(db)).toMatchObject([{ outcome: 'retire', why: 'the cause', ref: url }])
 })
 
 test('D4: an unanswered finding two days old is silent', () => {

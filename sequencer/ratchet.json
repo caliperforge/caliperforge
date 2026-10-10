@@ -197,9 +197,6 @@
   "tests/director.test.ts": {
     "prepare": 6
   },
-  "tests/each.test.ts": {
-    "prepare": 7
-  },
   "tests/fence.test.ts": {
     "prepare": 3
   },
@@ -233,9 +230,6 @@
   "tests/life.test.ts": {
     "prepare": 5
   },
-  "tests/overlap.test.ts": {
-    "prepare": 7
-  },
   "tests/park.test.ts": {
     "prepare": 1
   },
@@ -268,9 +262,6 @@
   },
   "tests/shared.test.ts": {
     "prepare": 3
-  },
-  "tests/signoff.test.ts": {
-    "prepare": 7
   },
   "tests/size.test.ts": {
     "prepare": 1

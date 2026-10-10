@@ -3,9 +3,11 @@ import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { desk as ghDesk, type Answer, type Desk, type Issue, type Pr, type Seen } from '../../cli/gh.ts'
 import { unread } from '../../cli/inbox.ts'
+import { approvalsOf, signersOf } from '../../store/approvals.ts'
 import { eventsOf, logged, type Event } from '../../store/events.ts'
-import { rewind } from '../../store/plans.ts'
-import { record as signal, type SignalRow } from '../../store/signals.ts'
+import { amend, width } from '../../store/lanes.ts'
+import { putPlan, rewind } from '../../store/plans.ts'
+import { dropSignals, record as signal, type SignalRow } from '../../store/signals.ts'
 import { approve as approvePublish } from '../card.ts'
 import { tick } from '../index.ts'
 import { ruled, signoffs, verdict } from '../signoff.ts'
@@ -121,7 +123,7 @@ test('go signs the head shown, closes the card, next tick sends it', async () =>
   const card = desk.cards.get(100)
   if (card !== undefined) card.answer = 'go'
   expect(signoffs(w.db, w.root, desk)).toEqual([{ plan: 1, card: 100, did: 'go' }])
-  expect(w.db.prepare("SELECT who, decision, subject_digest FROM approvals WHERE subject_kind = 'plan'").get())
+  expect(signersOf(w.db, 'plan')[0])
     .toEqual({ who: 'ceo', decision: 'approved', subject_digest: plan(w.db, 1).head_digest })
   expect(eventsOf(w.db, 1, 'signoff')).toMatchObject([{ actor: 'ceo', outcome: 'pass' }])
   expect(card).toMatchObject({ open: false })
@@ -136,10 +138,9 @@ test('go signs the head shown, closes the card, next tick sends it', async () =>
 
 test('go on a card whose lane is full leaves the plan queued', async () => {
   const w = await atBatch()
-  w.db.prepare('UPDATE pipes SET max_concurrent = 1 WHERE id = 1').run()
-  w.db.prepare("UPDATE plans SET state = 'blocked_on_ceo' WHERE id = 1").run()
-  w.db.prepare(`INSERT INTO plans (id, pipe_id, target_id, template, state, queued_at, step, retries)
-    VALUES (2, 1, 1, 'pr_path', 'running', '2000-01-01T00:00:00.000Z', 2, 0)`).run()
+  width(w.db, 1, 1)
+  amend(w.db, 1, { state: 'blocked_on_ceo' })
+  putPlan(w.db, { id: 2, pipe_id: 1, target_id: 1, template: 'pr_path', state: 'running', queued_at: '2000-01-01T00:00:00.000Z', step: 2, retries: 0 })
   const desk = fake()
   signoffs(w.db, w.root, desk)
   const card = desk.cards.get(100)
@@ -160,7 +161,7 @@ test('no with words sends it back to the builder with them', async () => {
   const brief = readFileSync(join(w.root, '.cf/work/1/issue.md'), 'utf8')
   expect(brief).toContain(`- D3 The CEO's ruling at sign-off (${new Date().toISOString().slice(0, 10)}): Call it expiry, not expires.`)
   expect(brief.split('## Must not break')[1]?.split('## ')[0]).toContain("The CEO's ruling at sign-off")
-  expect(w.db.prepare("SELECT decision, reason FROM approvals WHERE subject_kind = 'plan'").get())
+  expect(approvalsOf(w.db, 'plan')[0])
     .toEqual({ decision: 'refused', reason: 'signoff.no' })
   expect(eventsOf(w.db, 1, 'signoff')).toEqual([{ actor: 'ceo', outcome: 'refuse', message: 'signoff.no' }])
 })
@@ -174,7 +175,7 @@ test('D1 no with only a line comment carries it to the builder', async () => {
   expect(signoffs(w.db, w.root, desk)).toEqual([{ plan: 1, card: 100, did: 'no' }])
   expect(plan(w.db, 1)).toMatchObject({ step: 2, state: 'running' })
   expect(readFileSync(join(w.root, '.cf/work/1/refusal.md'), 'utf8')).toContain('src/hello.ts:1 Name it greet.')
-  expect(w.db.prepare("SELECT reason FROM approvals WHERE subject_kind = 'plan'").get()).toEqual({ reason: 'signoff.no' })
+  expect(approvalsOf(w.db, 'plan')[0]?.reason).toBe('signoff.no')
 })
 
 test('D2 only the owner\'s comments return, at their original line', () => {
@@ -316,7 +317,7 @@ test('D6 the card names each rework round\'s review mode, else none', async () =
 
 test('D4 the card shows Greptile\'s score at this head, or none', async () => {
   const w = await atBatch()
-  w.db.prepare('DELETE FROM signals').run()
+  dropSignals(w.db)
   const unscored = fake()
   signoffs(w.db, w.root, unscored)
   expect(unscored.cards.get(100)?.body).toContain('- Greptile on our fork: no score at this head; ready went on after 45 ticks without one\n')

@@ -19,7 +19,7 @@ it('D5 0087 keeps desk posts, admits dest paste, not blog', () => {
     VALUES (1, 'weekly', 'substack', 'approved', 't', 'd', 'b', 'et', 'ed', 'eb', 'n', '["s"]', '["c"]', '2026-10-01', '2026-10-02', 3,
     '2026-10-02 10:00:00', 'https://caliperforge.com/blog/06_t.html', '2026-10-03 10:00:00')`).run()
   const before = db.prepare('SELECT * FROM desk_posts').all() as object[]
-  expect(migrate(db, join(root, 'schema'))).toEqual(['0087_desk_paste.sql', '0088_refusal_note.sql', '0089_drop_quick_lane.sql', '0090_director_apply.sql', '0091_runs_mode_writer.sql', '0092_decisions_widen.sql', '0093_drift_findings.sql', '0094_runs_staffed.sql', '0095_events_escalate.sql', '0096_verdicts_blind.sql'])
+  expect(migrate(db, join(root, 'schema'))).toEqual(['0087_desk_paste.sql', '0088_refusal_note.sql', '0089_drop_quick_lane.sql', '0090_director_apply.sql', '0091_runs_mode_writer.sql', '0092_decisions_widen.sql', '0093_drift_findings.sql', '0094_runs_staffed.sql', '0095_events_escalate.sql', '0096_verdicts_blind.sql', '0097_unreached.sql'])
   expect(db.prepare('SELECT * FROM desk_posts').all()).toEqual(before)
   const insert = db.prepare(`INSERT INTO desk_posts (id, kind, dest, status, title, dek, body, sources, checks, work_date, written_date)
     VALUES (?, 'paste', ?, 'proof', 't', 'd', 'b', '[]', '[]', '2026-10-01', '2026-10-04')`)

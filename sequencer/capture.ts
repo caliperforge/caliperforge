@@ -8,11 +8,12 @@ import { cap, hhmm, zone } from '../store/lanes.ts'
 import { allPlans, end, originRef, PlanRow } from '../store/plans.ts'
 import { record, type Signal, type SignalRow } from '../store/signals.ts'
 import { afterOf, FIELDS, Listed, type Listing, partOf, recordListing } from '../store/tickets.ts'
+import { missed, reached } from '../store/unreached.ts'
 import { rehearsed, type Rehearsal } from './findings.ts'
 import { mended } from './mended.ts'
 import { rehearsalBranch } from './push.ts'
 import { claimed, released } from './split.ts'
-import { closed, firstLine, gone, polled } from './unpolled.ts'
+import { cause, closed, firstLine, gone, polled } from './unpolled.ts'
 import { cloned, FORK, repoName, srcDir } from './workspace.ts'
 
 /** `rehearsal` holds the root whose `next.tips` traces a rehearsal's heads and the read its comments come by, null on a real pull request. */
@@ -37,10 +38,15 @@ export function capture(db: Db, read: (repo: string, no: number) => Pr = readPr,
 /** A pr `gh` cannot reach this tick is read again next tick; it does not stop the pipes behind it. */
 function reachable(db: Db, row: Pushed, read: (repo: string, no: number) => Pr): SignalRow[] {
   try {
-    return one(db, row, read)
+    const found = one(db, row, read)
+    const failed = reached(db, row.plan)
+    if (failed > 0) {
+      logged(db, { plan: row.plan, kind: 'back', actor: 'reachable', outcome: 'pass', message: `back after ${String(failed)} failed reads`, pointer: null, run: null })
+    }
+    return found
   } catch (error) {
-    if (!gone(db, row.plan, row.evidence, error)) {
-      logged(db, { plan: row.plan, kind: 'swallowed', actor: 'reachable', outcome: 'pass', message: firstLine(error), pointer: null, run: null })
+    if (!gone(db, row.plan, row.evidence, error) && missed(db, row.plan) === 1) {
+      logged(db, { plan: row.plan, kind: 'swallowed', actor: 'reachable', outcome: 'pass', message: cause(error), pointer: null, run: null })
     }
     return []
   }

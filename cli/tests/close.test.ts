@@ -51,13 +51,18 @@ test('D1 D6 --landed marks the approved row pushed and lands it', () => {
   expect(deliverablesOf(db, 2)).toEqual([{ state: 'pushed', evidence: `https://github.com/${SELF}/commit/${main}` }])
   expect(landed(db, 2)).toBe(true)
   expect(eventsOf(db, 2, 'close')).toEqual([{ actor: 'coo', outcome: 'pass', message: `landed ${main}: a 502 at step 7` }])
-  expect(drift(db, entry, new Date())).toEqual([])
+  expect(drift(db, entry, new Date())).toMatchObject([{ name: 'close_landed', state: 'silent' }])
 })
 
-test('D6 the registry does not count a close landed by hand', () => {
+test.each([
+  ['batch', 'landed p2-x on main as 1c4263c33106', []],
+  ['close', 'landed 1c4263c33106: a 502 at step 7', [{ name: 'close_landed', state: 'silent' }]],
+  ['batch', 'batch', [{ name: 'close_landed', state: 'silent' }]],
+])('close_landed counts a %s row "%s" only as a landing', (kind, message, want) => {
   const db = fresh(join(repo, 'schema'))
   logged(db, { plan: null, kind: 'close', actor: 'coo', outcome: 'pass', message: 'landed by hand', pointer: null, run: null })
-  expect(drift(db, entry, new Date())).toMatchObject([{ name: 'close_landed', state: 'silent' }])
+  logged(db, { plan: null, kind, actor: 'tick', outcome: 'pass', message, pointer: null, run: null })
+  expect(drift(db, entry, new Date())).toMatchObject(want)
 })
 
 test('D1 D2 no hand close as done gives no finding', () => {

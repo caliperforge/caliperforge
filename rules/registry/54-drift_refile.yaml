@@ -1,0 +1,6 @@
+- name: drift_refile
+  table: drift_findings
+  column: found_at
+  where: "state IN ('seen', 'stale') AND EXISTS (SELECT 1 FROM drift_findings c WHERE c.name = drift_findings.name AND c.id < drift_findings.id AND c.outcome <> 'covered' AND c.detail = drift_findings.detail)"
+  gap: 7d
+  expected: 0

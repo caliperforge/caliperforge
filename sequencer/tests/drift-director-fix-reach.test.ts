@@ -16,7 +16,7 @@ test('D5 director_fix_reach is seen only on a failed fix in 7d', () => {
   expect(drift(d, reach, NOW)).toEqual([])
   told('2026-09-27 10:00:00', 'coo_lite', 'fix did not apply, the fixer did not make the fix: y')
   expect(drift(d, reach, NOW)).toEqual([{ name: 'director_fix_reach', state: 'seen',
-    detail: 'newest events.at is 2026-09-27 10:00:00, within 7d; expected none' }])
+    detail: 'newest events.at is 2026-09-27 10:00:00, within 7d; expected none', newest: '2026-09-27 10:00:00' }])
   told('2026-10-02 10:00:00', 'director', 'fix did not apply, the fixer did not make the fix: z')
   expect(drift(d, reach, NOW).map((r) => r.detail)).toEqual(['newest events.at is 2026-10-02 10:00:00, within 7d; expected none'])
 })

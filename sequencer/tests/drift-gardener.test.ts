@@ -3,7 +3,7 @@ import { drift } from '../drift.ts'
 import { internal, NOW, queue, REGISTRY } from './drifting.ts'
 
 const GARDENER = REGISTRY.filter((e) => e.name === 'gardener')
-const STALE = [{ name: 'gardener', state: 'stale', detail: 'newest gardens.day is 2026-09-28, older than 2d' }]
+const STALE = [{ name: 'gardener', state: 'stale', detail: 'newest gardens.day is 2026-09-28, older than 2d', newest: '2026-09-28' }]
 
 test('gardenerWhile', () => {
   expect(drift(internal(), GARDENER, NOW)).toEqual(STALE)

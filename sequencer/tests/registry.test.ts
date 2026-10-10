@@ -69,7 +69,8 @@ test('fixerEventFresh', () => {
 test('fixerEventStale', () => {
   const d = live()
   act(d, '2026-09-30 10:00:00')
-  expect(drift(d, FIXER, NOW)).toEqual([{ name: 'fixer', state: 'stale', detail: 'newest events.at is 2026-09-30 10:00:00, older than 2d' }])
+  expect(drift(d, FIXER, NOW)).toEqual([{ name: 'fixer', state: 'stale', detail: 'newest events.at is 2026-09-30 10:00:00, older than 2d',
+    newest: '2026-09-30 10:00:00' }])
 })
 
 test('otherActorSilent', () => {

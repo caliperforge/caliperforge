@@ -49,7 +49,7 @@ VALUES
   ('rules/registry/41-director_widen.yaml', 'card', 'rules/registry/41-director_widen.yaml', 'c5c091d9536cb5bcbbe8aefa09bfa43c4dd1efd4a30f5f868fdd673e5e0f81ab', '2026-10-04'),
   ('rules/registry/42-target_parked_once.yaml', 'card', 'rules/registry/42-target_parked_once.yaml', 'e1d0db6ef46f3b21c386f38072b249560ef8bef3547e775562891eee3ef1f4b0', '2026-10-04'),
   ('rules/registry/43-director_ceiling.yaml', 'card', 'rules/registry/43-director_ceiling.yaml', '27eb8c137177471c8117b9d9f82772917c21166ad1077cd14baca66502eac1c0', '2026-10-06'),
-  ('rules/registry/44-close_landed.yaml', 'card', 'rules/registry/44-close_landed.yaml', '1802f50060ac20419442211874c2f7c551ce51cc3f9f2c9b48fbed31c4e7a658', '2026-10-07'),
+  ('rules/registry/44-close_landed.yaml', 'card', 'rules/registry/44-close_landed.yaml', '7cdf3dc14c27bdb8a7c5cf6073c7f382d93819713391bfa09fb70420a7ba2c0c', '2026-10-07'),
   ('rules/registry/45-handback_not_done.yaml', 'card', 'rules/registry/45-handback_not_done.yaml', '8818ab25aaa17d7495d8346350070072b2e01a5b3aeffc5c4e7021b89ccea399', '2026-10-07'),
   ('rules/registry/46-ruling_files.yaml', 'card', 'rules/registry/46-ruling_files.yaml', 'b6ed2e1b6cc84daf006c9d22d1571611679893671c99eacd386dc6473661bef5', '2026-10-07'),
   ('rules/registry/47-needs_ceo_actor.yaml', 'card', 'rules/registry/47-needs_ceo_actor.yaml', '038b61228a7cf23b0736d4ce1d9eb01ab96e74a2f37e20d9a2bfa4e2aed10e0a', '2026-10-08'),

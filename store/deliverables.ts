@@ -79,6 +79,10 @@ export function approvedRow(db: Db, plan: number): number | null {
   return row?.id ?? null
 }
 
+export function pushed(db: Db, plan: number): boolean {
+  return db.prepare("SELECT 1 FROM deliverables WHERE plan_id = ? AND state = 'pushed'").get(plan) !== undefined
+}
+
 export function landedRow(db: Db, id: number, url: string): void {
   db.prepare("UPDATE deliverables SET state = 'pushed', evidence = ? WHERE id = ?").run(url, id)
 }

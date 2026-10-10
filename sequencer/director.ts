@@ -6,6 +6,7 @@ import { packet } from '../runner/index.ts'
 import { load, seat, tight } from '../runner/rules.ts'
 import { decision } from '../store/ask.ts'
 import { decided, decisions } from '../store/decisions.ts'
+import { pushed } from '../store/deliverables.ts'
 import { asked, setting } from '../store/drift.ts'
 import { kindsOf, logged } from '../store/events.ts'
 import { retried, returnToLane } from '../store/holds.ts'
@@ -15,6 +16,7 @@ import { clear as unlease, take } from '../store/leases.ts'
 import { busy, current, idle } from '../store/now.ts'
 import { end, held, needsCeo, originRef, planById, PlanRow, retry } from '../store/plans.ts'
 import { clear, sentOnce } from '../store/refusals.ts'
+import { kin, runs, stopped, waking, type Stop } from '../store/stops.ts'
 import { pending } from '../store/transcript.ts'
 import { split, type Part } from './brief.ts'
 import { hold, isHeld, unhold } from './hold.ts'
@@ -52,8 +54,7 @@ type Move = z.infer<typeof Said> | { move: 'split'; why: string; parts: Part[] }
 interface Told { outcome: 'pass' | 'needs_coo'; message: string; note?: string; pointer?: string | null }
 
 export function applying(db: Db): boolean {
-  const row = db.prepare("SELECT value FROM settings WHERE key = 'director.apply'").get() as { value: string } | undefined
-  return row?.value === '1'
+  return setting(db, 'director.apply') === '1'
 }
 
 export async function cooLite(db: Db, root: string, plan: PlanRow, provider: Provider, now: Date, post: Post,
@@ -119,23 +120,14 @@ function refused(m: Move | null, said: string, n: number, root: string, cap: boo
     message: `ask_ceo: refused by the fence, ${ceo.refused}` }
 }
 
-interface Stop { id: number; answered: number | null; today: number }
-
 export async function byHand(db: Db, root: string, provider: Provider, now: Date, post: Post = alerter(),
   wire: Wire = WIRE): Promise<string> {
   return fire(db, root, provider, now, post, wire, stops(db, root, now, post))
 }
 
 function stops(db: Db, root: string, now: Date, post: Post): Stop[] {
-  const rows = db.prepare(`SELECT p.id, e.ruled >= d.at AS answered,
-      (SELECT count(*) FROM events WHERE plan = p.id AND kind IN ('director', 'coo_lite') AND outcome = 'pass'
-        AND at >= datetime(@at, '-1 day')) AS today
-    FROM plans p JOIN decisions d ON d.id = (SELECT max(id) FROM decisions WHERE plan = p.id)
-    LEFT JOIN (SELECT plan, max(at) AS ruled FROM events WHERE kind IN ('director', 'coo_lite') GROUP BY plan) e ON e.plan = p.id
-    WHERE p.state = 'blocked_on_ceo' AND p.held_by = 'coo' AND d.verb IN ('ask_coo', 'ask_ceo')
-    ORDER BY d.at, p.id`).all({ at: now.toISOString() }) as Stop[]
   const fresh: Stop[] = []
-  for (const s of rows.filter((s) => s.answered !== 1 && !isHeld(root, s.id))) {
+  for (const s of stopped(db, now).filter((s) => s.answered !== 1 && !isHeld(root, s.id))) {
     if (s.today >= 2) told(db, root, planById(db, s.id), now, { outcome: 'needs_coo', message: 'ask_coo: director answered this plan twice today' }, post)
     else fresh.push(s)
   }
@@ -166,10 +158,8 @@ export function free(db: Db, now: Date): string | null {
 }
 
 function capped(db: Db, now: Date): string | null {
-  const ran = db.prepare(`SELECT (SELECT count(*) FROM runs WHERE seat = 'director' AND at >= datetime(@at, '-1 day')) + (SELECT count(*)
-    FROM events WHERE kind = 'director' AND plan IS NULL AND julianday(at) >= julianday(@at, '-1 day'))`).pluck().get({ at: now.toISOString() }) as number
-  const cap = db.prepare("SELECT value FROM settings WHERE key = 'coo_lite.max_daily'").get() as { value: string } | undefined
-  return ran >= Number(cap?.value ?? 12) ? `cap reached: ${String(ran)} director runs today` : null
+  const ran = runs(db, now)
+  return ran >= Number(setting(db, 'coo_lite.max_daily') ?? 12) ? `cap reached: ${String(ran)} director runs today` : null
 }
 
 export function spare(db: Db, now: Date): string | null {
@@ -234,11 +224,7 @@ function own(root: string, plan: PlanRow): string {
 function siblings(db: Db, root: string, plan: PlanRow): string {
   const ref = originRef(plan)
   if (ref === null) return 'none'
-  const ids = db.prepare(`SELECT p.id FROM plans p
-    JOIN tickets t ON p.origin = 'https://github.com/' || t.repo || '/issues/' || t.number
-    WHERE t.repo = ? AND t.parent = (SELECT parent FROM tickets WHERE repo = ? AND number = ?) AND p.id <> ?
-    ORDER BY p.id`).all(ref.repo, ref.repo, ref.no, plan.id) as { id: number }[]
-  const found = ids.flatMap(({ id }) => ['ask.md', 'issue.md'].flatMap((name) =>
+  const found = kin(db, ref.repo, ref.no, plan.id).flatMap((id) => ['ask.md', 'issue.md'].flatMap((name) =>
     sections(maybe(root, id, name)).map((s) => `plan ${String(id)}, ${name}:\n${s}`)))
   return found.length === 0 ? 'none' : found.join('\n\n').slice(0, 6000)
 }
@@ -290,7 +276,7 @@ function apply(db: Db, root: string, plan: PlanRow, m: Move, wire: Wire, now: Da
       end(db, plan.id, 'done')
       return true
     case 'close':
-      if (db.prepare("SELECT 1 FROM deliverables WHERE plan_id = ? AND state = 'pushed'").get(plan.id) === undefined) return false
+      if (!pushed(db, plan.id)) return false
       end(db, plan.id, 'done')
       return true
     case 'file':
@@ -326,9 +312,7 @@ type Woken = (typeof WAKE)[number] | 'blocked_on_ceo'
 /** The lease keeps two overlapping ticks off one stop. */
 export async function woke(db: Db, root: string, provider: Provider, now: Date, post: Post = alerter(), wire: Wire = WIRE): Promise<void> {
   released(db, root, now, post)
-  const rows = db.prepare(`SELECT * FROM plans WHERE ((wait_reason IN (${WAKE.map(() => '?').join(', ')})
-    AND state IN ('queued', 'running', 'blocked_on_ceo')) OR state = 'blocked_on_ceo') AND held_by IS NOT 'ceo' ORDER BY id`).all(...WAKE)
-  for (const plan of rows.map((r) => PlanRow.parse(r))) {
+  for (const plan of waking(db, WAKE)) {
     const reason = woken(plan)
     const head = `step ${String(plan.step)} ${reason === 'blocked_on_ceo' ? `blocked ${stop(root, plan.id)}` : reason}`
     if (isHeld(root, plan.id)) continue

@@ -80,3 +80,7 @@ export function asks(db: Db, plan: number): SignalRow[] {
 export function others(db: Db, author: string): SignalRow[] {
   return db.prepare('SELECT * FROM signals WHERE author != ? ORDER BY id').all(author).map((r) => SignalRow.parse(r))
 }
+
+export function dropSignals(db: Db): void {
+  db.prepare('DELETE FROM signals').run()
+}

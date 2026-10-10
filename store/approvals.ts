@@ -90,6 +90,11 @@ export function approvalsOf(db: Db, kind: SubjectKind): { decision: string; reas
     .all(kind) as { decision: string; reason: string | null }[]
 }
 
+export function signersOf(db: Db, kind: SubjectKind): { who: string; decision: string; subject_digest: string }[] {
+  return db.prepare('SELECT who, decision, subject_digest FROM approvals WHERE subject_kind = ? ORDER BY id')
+    .all(kind) as { who: string; decision: string; subject_digest: string }[]
+}
+
 export function gatesSigned(db: Db): number {
   return (db.prepare("SELECT count(*) AS n FROM approvals WHERE who = 'gates'").get() as { n: number }).n
 }

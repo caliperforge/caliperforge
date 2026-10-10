@@ -1,7 +1,9 @@
 import { expect, test } from 'vitest'
 import { tickNote } from '../../cli/brief.ts'
+import { runRows } from '../../store/events.ts'
 import { record as recordFiles } from '../../store/files.ts'
-import { overlapWaits } from '../../store/plans.ts'
+import { amend, width } from '../../store/lanes.ts'
+import { dropPlan, overlapWaits } from '../../store/plans.ts'
 import { tick } from '../index.ts'
 import { picks } from '../next.ts'
 import { blocked } from '../steps.ts'
@@ -13,16 +15,16 @@ const SECOND = 3
 /** Two of our own issues in one lane with the cap open for both; every stub brief names `src/hello.ts`. */
 function pair(): World {
   const w = world()
-  w.db.prepare('DELETE FROM plans WHERE id = 1').run()
+  dropPlan(w.db, 1)
   ours(w.root)
   internalPlan(w.db, w.root, ID)
   internalPlan(w.db, w.root, SECOND, 'let a second internal plan run', 35)
-  w.db.prepare('UPDATE pipes SET max_concurrent = 2 WHERE id = 1').run()
+  width(w.db, 1, 2)
   return w
 }
 
 const builds = (w: World, id: number): number =>
-  (w.db.prepare('SELECT count(*) AS n FROM runs WHERE plan = ? AND step = 2').get(id) as { n: number }).n
+  runRows(w.db).filter((r) => r.plan === id && r.step === 2).length
 
 /** Both plans briefed, and the first one's builder has run. */
 async function oneBuilding(w: World): Promise<void> {
@@ -68,9 +70,10 @@ test('D4 a plan at step 1 is never file_overlap and holds nobody', () => {
   const w = pair()
   recordFiles(w.db, ID, [{ path: 'src/hello.ts', is_new: false }])
   recordFiles(w.db, SECOND, [{ path: 'src/hello.ts', is_new: false }])
-  w.db.prepare('UPDATE plans SET step = 1 WHERE id IN (?, ?)').run(ID, SECOND)
+  amend(w.db, ID, { step: 1 })
+  amend(w.db, SECOND, { step: 1 })
   expect(blocked(w.db, plan(w.db, SECOND))).not.toBe('file_overlap')
-  w.db.prepare('UPDATE plans SET step = 2 WHERE id = ?').run(SECOND)
+  amend(w.db, SECOND, { step: 2 })
   expect(blocked(w.db, plan(w.db, SECOND))).not.toBe('file_overlap')
 })
 
@@ -83,10 +86,10 @@ test('D4 a plan with no file list blocks and waits on nothing',async () => {
   expect([builds(w, ID) > 0, builds(w, SECOND) > 0]).toEqual([true, true])
 })
 
-test.each(['done', 'refused', 'halted'])('D5 D2 the wait clears on the first tick after the building plan is %s', async (state) => {
+test.each(['done', 'refused', 'halted'] as const)('D5 D2 the wait clears on the first tick after the building plan is %s', async (state) => {
   const w = pair()
   await oneBuilding(w)
-  w.db.prepare('UPDATE plans SET state = ? WHERE id = ?').run(state, ID)
+  amend(w.db, ID, { state })
   await tick(w.db, w.root, stub(CARRIED))
   expect(builds(w, SECOND)).toBeGreaterThan(0)
   expect(plan(w.db, SECOND).wait_reason).toBeNull()
@@ -95,7 +98,7 @@ test.each(['done', 'refused', 'halted'])('D5 D2 the wait clears on the first tic
 test('a plan parked on the ceo holds nothing up', async () => {
   const w = pair()
   await oneBuilding(w)
-  w.db.prepare("UPDATE plans SET state = 'blocked_on_ceo' WHERE id = ?").run(ID)
+  amend(w.db, ID, { state: 'blocked_on_ceo' })
   await tick(w.db, w.root, stub(CARRIED))
   expect(builds(w, SECOND)).toBeGreaterThan(0)
 })

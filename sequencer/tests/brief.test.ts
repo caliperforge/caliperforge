@@ -86,6 +86,8 @@ test('empty section, off-tree path, present `(new)` path: refused', () => {
 test('force push, squash, person, address refused; a repo is not', () => {
   expect(on(saying('- force push the branch once the base moves'))).toMatchObject({ span: 'force push' })
   expect(on(saying('- squash the two commits into one'))).toMatchObject({ span: 'squash' })
+  expect(on(saying('- the builder force-pushes the branch'))).toMatchObject({ span: 'the builder force-pushes' })
+  expect(on(saying('- Squash the commits before step 8'))).toMatchObject({ span: 'Squash' })
   expect(on(saying('- keep the row Sam Hartley signed off'))).toMatchObject({ span: 'Sam Hartley' })
   expect(on(saying('- mail coo@example.com when it lands'))).toMatchObject({ span: 'coo@example.com' })
   expect(on(saying('- CaliperForge keeps the caliperforge/widget fork'))).toBeNull()
@@ -94,6 +96,11 @@ test('force push, squash, person, address refused; a repo is not', () => {
 test('a line forbidding force push or naming `squash` is no ask', () => {
   expect(on(saying('- no send carries a `+` refspec or `--force`, and it never force pushes'))).toBeNull()
   expect(on(saying('- a plan with no open PR still goes through `squash` and `renamed`'))).toBeNull()
+  expect(on(saying('- `squash` (push.ts:502) `returns the base`'))).toBeNull()
+  expect(on(saying('- the commits pushed upstream are squashed to one commit'))).toBeNull()
+  expect(on(saying('- the step-8 squash'))).toBeNull()
+  expect(on(saying('- No force-push.'))).toBeNull()
+  expect(on(saying('- Editing past commit messages. That would rewrite history.'))).toBeNull()
   expect(on(saying('- force push the branch, not a merge'))).toMatchObject({ span: 'force push' })
 })
 

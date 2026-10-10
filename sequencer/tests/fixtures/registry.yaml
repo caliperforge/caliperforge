@@ -238,6 +238,7 @@
   table: events
   column: at
   where: kind = 'close' AND message GLOB 'landed [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]*'
+  when: SELECT 1 FROM events WHERE kind = 'close' AND outcome = 'pass' AND actor IN ('ceo', 'coo') AND julianday(at) >= julianday($since)
 - name: handback_not_done
   table: verdicts
   column: id

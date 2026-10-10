@@ -60,6 +60,14 @@ test('D6 the registry does not count a close landed by hand', () => {
   expect(drift(db, entry, new Date())).toMatchObject([{ name: 'close_landed', state: 'silent' }])
 })
 
+test('D1 D2 no hand close as done gives no finding', () => {
+  const db = fresh(join(repo, 'schema'))
+  expect(drift(db, entry, new Date())).toEqual([])
+  logged(db, { plan: null, kind: 'close', actor: 'coo', outcome: 'refuse', message: 'a 502', pointer: null, run: null })
+  logged(db, { plan: null, kind: 'close', actor: 'tick', outcome: 'pass', message: 'fixed by https://x', pointer: null, run: null })
+  expect(drift(db, entry, new Date())).toEqual([])
+})
+
 test('D2 an After on a plan closed --landed passes measure', () => {
   const { db, root, main, run } = setup()
   const listing = (number: number, body: string) => ({ number, title: `t${String(number)}`, body,

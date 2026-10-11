@@ -148,8 +148,7 @@
     "silent-catch": 2
   },
   "signals.ts": {
-    "lines": 148,
-    "prepare": 6
+    "lines": 148
   },
   "signoff.ts": {
     "lines": 346,

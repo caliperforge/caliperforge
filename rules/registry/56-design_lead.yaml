@@ -1,0 +1,7 @@
+- name: design_lead
+  table: runs
+  column: at
+  where: seat = 'design_lead'
+  gap: 14d
+  while: EXISTS (SELECT 1 FROM plans WHERE origin GLOB 'https://github.com/caliperforge/atelier-web/*' AND queued_at >= $since)
+  when: SELECT 1 FROM runs WHERE seat = 'design_lead'

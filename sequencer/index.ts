@@ -22,6 +22,7 @@ import { logged } from '../store/events.ts'
 import { slack } from '../cli/flow.ts'
 import { ceilinged, stepped } from './settle.ts'
 import { closing } from './wave.ts'
+import { ripe } from './site.ts'
 
 /**
  * `read`, `wire` and `labels` are the network a tick touches on its own account; each is injected so a test can drive a lap
@@ -34,6 +35,7 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
   for (const signal of capture(db, read, root, labels)) started(db, signal, root, wire)
   daily(db, now)
   weekly(db, now)
+  ripe(db, now)
   if (registry !== undefined) {
     due(db, registry, now, read)
     stuck(db, root, registry, now)

@@ -2,13 +2,15 @@ import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { record, ticketOf } from '../cli/inbox.ts'
-import { paste, pending, placed, published } from '../store/desk.ts'
+import { aged, aired, awaiting, paste, pending, placed, type Post, published } from '../store/desk.ts'
+import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { get } from '../store/lanes.ts'
 import type { PlanRow } from '../store/plans.ts'
 import { titled } from '../templates/comms.ts'
 import type { Step } from '../templates/pr-path.ts'
 import type { Outcome } from './kind.ts'
+import { firstLine } from './unpolled.ts'
 import { git } from './workspace.ts'
 
 const TEMPLATE = '05_jito-tippayment-and-ai-invariant-suggester-live.html'
@@ -45,6 +47,25 @@ export function push(db: Db, now: Date): number {
   return published(db, now.toISOString())
 }
 
+export function ripe(db: Db, now: Date): void {
+  const dir = siteDir(db)
+  const rows = aged(db, new Date(now.getTime() - 86_400_000).toISOString().replace('T', ' ').slice(0, 19))
+  if (dir === null || rows.length === 0 || awaiting(db)) return
+  try {
+    for (const row of rows.filter((r) => r.url === null)) place(db, dir, row)
+    git(dir, ['push'])
+    aired(db, rows.map((r) => r.id), now.toISOString())
+  } catch (error) {
+    logged(db, { plan: null, kind: 'site_push', actor: 'tick', outcome: 'refuse', message: firstLine(error), pointer: null, run: null })
+  }
+}
+
+function place(db: Db, dir: string, row: Post): void {
+  const name = render(dir, { ...row, title: row.edited_title ?? row.title, body: row.edited_body ?? row.body })
+  commit(dir, name)
+  placed(db, row.id, `https://caliperforge.com/blog/${name}.html`)
+}
+
 function siteDir(db: Db): string | null {
   const value = get(db, 'comms.site_dir')
   return value === '' ? null : value.replace(/^~(?=\/|$)/, homedir())
@@ -56,11 +77,7 @@ export function publish(db: Db, root: string, plan: PlanRow, step: Step): Outcom
   if (rows.length === 0) return { outcome: 'pass', spans: [], note: 'nothing to publish' }
   const dir = siteDir(db)
   if (dir === null) return { outcome: 'refuse', spans: ['comms.site_dir'], note: 'comms.site_dir is unset' }
-  for (const row of rows) {
-    const name = render(dir, { ...row, title: row.edited_title ?? row.title, body: row.edited_body ?? row.body })
-    commit(dir, name)
-    placed(db, row.id, `https://caliperforge.com/blog/${name}.html`)
-  }
+  for (const row of rows) place(db, dir, row)
   paste(db)
   record(root, [{ at: new Date().toISOString(), plan: plan.id, ticket: ticketOf(db, plan.id), kind: 'signoff', step: step.step, name: step.name,
     note: 'site post ready: run `cf site push`' }])

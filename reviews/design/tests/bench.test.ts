@@ -86,7 +86,8 @@ async function held(diff: string, system: string, reply: string): Promise<{ prom
 test('D3 a colour DESIGN.md does not name is refused', async () => {
   const { prompt, outcome } = await held(PINK, PALETTE, 'unnamed.reply.md')
   expect(prompt).toContain(`# Mockup or ruling the brief names\n\nlight canvas\n\n# DESIGN.md in the checkout\n\n${PALETTE}`)
-  expect(outcome).toMatchObject({ outcome: 'refuse', defect_class: 'design', spans: [expect.stringMatching(/^index\.html\.1440\.light\.png:/)] })
+  expect(outcome).toMatchObject({ outcome: 'refuse', defect_class: 'design', origin_kind: 'ruling', origin_ref: 'reviewers.verdict',
+    spans: [expect.stringMatching(/^index\.html\.1440\.light\.png:/)] })
   expect(outcome.message).toContain(PALETTE)
 })
 

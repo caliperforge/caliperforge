@@ -1025,7 +1025,7 @@ test('a refused ci-green with no red run refuses before Greptile', async () => {
   expect(out?.spans[0]).toMatch(/ ci\.missing$/)
   expect(out?.spans).not.toEqual(['ci-green'])
   expect(log.filter((l) => l.startsWith('review '))).toEqual([])
-  expect(maybe(w.root, 1, 'greptile.asked')).toBeUndefined()
+  expect(maybe(w.root, 1, 'greptile.asked')).toBeNull()
   expect(ciGreen(w)).toEqual([{ outcome: 'refuse' }])
   expect(readyVerdicts(w)).toEqual({ n: 0 })
 })

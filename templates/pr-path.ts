@@ -26,6 +26,7 @@ export const ROOT = join(import.meta.dirname, '..')
 export const DEFAULT_BUILDER = 'typescript_specialist'
 
 const BRIEF_WRITER = 'brief_writer'
+const DESIGN_LEAD = 'design_lead'
 
 function staff(step: number, language: string | null): { seat: string; mode?: Run['mode'] } {
   const row = staffed(ROOT, 'pr_path', step, language) ?? staffed(ROOT, 'pr_path', step, null)
@@ -59,11 +60,12 @@ export function last(step: number): boolean {
   return step === (steps.at(-1)?.step ?? 0)
 }
 
-export function at(step: number, language: string | null = null): Step {
+export function at(step: number, language: string | null = null, label: string | null = null): Step {
   const found = steps.find((s) => s.step === step)
   if (found === undefined) throw new Error(`pr-path has no step ${String(step)}`)
   const { seat, mode } = staff(step, language)
   const seated: Step = { ...found, seat, ...(mode === undefined ? {} : { mode }) }
   if (found.verdict_gate === 'review' && language === 'web') return { ...seated, design: true }
+  if (found.fires === 'seat' && label === DESIGN_LEAD) return { ...seated, seat: label, runs: label }
   return found.fires === 'seat' ? { ...seated, runs: seat } : seated
 }

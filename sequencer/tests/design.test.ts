@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { chromium } from 'playwright-core'
 import { expect, test } from 'vitest'
+import type { Packet } from '../../providers/kind.ts'
 import { load } from '../../runner/rules.ts'
 import { runRows } from '../../store/events.ts'
 import { verdictRows, type Verdict } from '../../store/verdict.ts'
@@ -67,13 +68,15 @@ test('D5 screens skips deleted html; css alone means index.html', () => {
   expect(screens(file('a/style.css', 'b/style.css'))).toEqual(['index.html'])
 })
 
-const stepped = async (name: string, body: string, language: string): Promise<{ w: World; outcome: Outcome; seats: string[] }> => {
+const stepped = async (name: string, body: string, language: string, seen?: (packet: Packet) => void,
+  system?: string): Promise<{ w: World; outcome: Outcome; seats: string[] }> => {
   const w = world()
   load(w.db, w.root)
   writeFileSync(join(srcDir(w.root, 1), name), body)
+  if (system !== undefined) writeFileSync(join(srcDir(w.root, 1), 'DESIGN.md'), system)
   put(w.root, 1, 'issue.md', '# a screen\n\n- D1 add a screen\n')
   const row = { ...plan(w.db, 1), origin: 'https://github.com/caliperforge/atelier-web/issues/1' }
-  const outcome = await fireLanded(w.db, w.root, row, at(4, language), stub(CARRIED))
+  const outcome = await fireLanded(w.db, w.root, row, at(4, language), stub(CARRIED, 0, undefined, seen))
   return { w, outcome, seats: runRows(w.db).map((r) => r.seat) }
 }
 
@@ -102,6 +105,22 @@ test('D4 a typescript step 4 runs no design review', async () => {
   expect(outcome.outcome).toBe('pass')
   expect(seats).not.toContain('design')
   expect(existsSync(join(planDir(w.root, 1), 'design'))).toBe(false)
+})
+
+const designed = async (system?: string): Promise<string | undefined> => {
+  const sent: Packet[] = []
+  await stepped('index.html', page('<h1>Plans</h1>'), 'web', (p) => sent.push(p), system)
+  return sent.find((p) => p.reads !== undefined)?.prompt
+}
+
+browsed('D1 the design packet carries the checkout DESIGN.md', async () => {
+  expect(await designed('Palette: ink `#1a1a1a`')).toContain('\n\n# DESIGN.md in the checkout\n\nPalette: ink `#1a1a1a`')
+})
+
+browsed('D2 no DESIGN.md in the checkout, no section', async () => {
+  const prompt = await designed()
+  expect(prompt).toContain('# Screenshots')
+  expect(prompt).not.toContain('\n# DESIGN.md in the checkout\n')
 })
 
 test('D5 a web diff with no screen passes uncaptured', async () => {

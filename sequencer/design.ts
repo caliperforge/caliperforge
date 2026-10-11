@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { mkdirSync, readdirSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
@@ -66,12 +66,14 @@ export async function looked(db: Db, root: string, plan: PlanRow, provider: Prov
   const dir = join(out, 'design')
   rmSync(dir, { recursive: true, force: true })
   const capture = await design(src, out, pages)
+  const system = join(src, 'DESIGN.md')
   const input = {
     repo: src,
     issue: get(root, plan.id, 'issue.md') + rulings(root, plan.id),
     diff,
     screenshots: readdirSync(dir).map((n) => join(dir, n)),
     ...(capture.spans.length > 0 ? { defects: capture.spans.join('\n') } : {}),
+    ...(existsSync(system) ? { system: readFileSync(system, 'utf8') } : {}),
   }
   const { outcome } = await judge(db, root, 'design', plan.id, input, provider, pending(out, 'step-4-design'))
   const spans = [...capture.spans, ...outcome.spans]

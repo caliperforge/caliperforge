@@ -21,6 +21,7 @@ import { hold } from './hold.ts'
 import { logged } from '../store/events.ts'
 import { slack } from '../cli/flow.ts'
 import { ceilinged, stepped } from './settle.ts'
+import { closing } from './wave.ts'
 
 /**
  * `read`, `wire` and `labels` are the network a tick touches on its own account; each is injected so a test can drive a lap
@@ -61,6 +62,7 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
   }
   await woke(db, root, provider, now)
   await answer(db, root, provider, now, wire)
+  if (labels !== undefined) (lines ?? []).push(...await closing(db, root, provider, labels, now))
   return out
 }
 

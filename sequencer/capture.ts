@@ -16,6 +16,7 @@ import { mended } from './mended.ts'
 import { rehearsalBranch } from './push.ts'
 import { claimed, released } from './split.ts'
 import { cause, closed, firstLine, gone, polled } from './unpolled.ts'
+import { waits } from './wave.ts'
 import { cloned, FORK, repoName, srcDir } from './workspace.ts'
 
 /** `rehearsal` holds the root whose `next.tips` traces a rehearsal's heads and the read its comments come by, null on a real pull request. */
@@ -113,7 +114,7 @@ function listed(db: Db, root: string, repo: string, read: Read, lines: string[])
   const known = seen(db)
   const split = named(found.map((i) => i.title))
   for (const i of kept.filter((k) => !known.has(k.url) && !split.has(k.number) && !parent(repo, k.number, read, lines))) {
-    if (!claimed(db, root, i) && !held(i.body, open, whole)) add(db, root, `${repo}#${String(i.number)}`, 'intake', undefined, read)
+    if (!claimed(db, root, i) && !held(i.body, open, whole) && !waits(db, repo, i.labels)) add(db, root, `${repo}#${String(i.number)}`, 'intake', undefined, read)
   }
 }
 

@@ -86,6 +86,12 @@ test('the title names the repo and issue, not the org', () => {
   expect(posted).toEqual(['CaliperForge · surfpool #706'])
 })
 
+test('a passed wave reaches the desktop with its head', () => {
+  const posted: string[] = []
+  notify([ev({ kind: 'wave', ticket: 'wave 1', note: 'wave 1 pass' })], (title, body) => posted.push(title, body))
+  expect(posted).toEqual(['CaliperForge · wave 1', 'A wave passed the whole-app design pass. wave 1 pass'])
+})
+
 test('D4: a flow event reaches the file only, never the desktop', () => {
   const posted: string[] = []
   notify([ev({ kind: 'flow', note: 'stopped on a repeated refusal: cf retry 70' })], (title) => posted.push(title))

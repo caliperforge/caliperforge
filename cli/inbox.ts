@@ -11,7 +11,7 @@ import { clock } from '../store/plans.ts'
  * reads, and a desktop notification for the ones that need one.
  * Read is what `cf inbox --ack` has marked; nothing else counts as delivered.
  */
-export type Kind = 'blocked' | 'landed' | 'done' | 'refused' | 'asked' | 'signoff' | 'crashed' | 'flow' | 'late'
+export type Kind = 'blocked' | 'landed' | 'done' | 'refused' | 'asked' | 'signoff' | 'crashed' | 'flow' | 'late' | 'wave'
 
 export interface Event {
   at: string
@@ -27,7 +27,7 @@ const INBOX = '.cf/inbox.jsonl'
 
 const READ = '.cf/inbox.read'
 
-const LOUD = new Set<Kind>(['blocked', 'landed', 'done', 'asked', 'signoff', 'late'])
+const LOUD = new Set<Kind>(['blocked', 'landed', 'done', 'asked', 'signoff', 'late', 'wave'])
 
 export type Post = (title: string, body: string) => void
 
@@ -91,7 +91,7 @@ export function line(db: Db, e: Event): string {
   return `${clock(new Date(e.at), zone(db))}  ${e.kind.padEnd(7)}  ${where}: ${e.note}`
 }
 
-/** Blocked, landed, done, an ask, a card to sign and a late weekly post reach the desktop; a refusal going round again only reaches the file. */
+/** Blocked, landed, done, an ask, a card to sign, a late weekly post and a passed wave reach the desktop; a refusal going round again only reaches the file. */
 export function notify(news: Event[], post: Post = desktop): void {
   for (const e of news.filter((n) => LOUD.has(n.kind))) post(`CaliperForge · ${short(e.ticket)}`, plain(e))
 }
@@ -106,6 +106,7 @@ const HEAD: Record<Kind, string> = {
   crashed: 'The tick crashed',
   flow: 'Stuck, cf flow names the fix',
   late: 'Weekly post not on the desk',
+  wave: 'A wave passed the whole-app design pass',
 }
 
 /** Why a job stopped, in the words a person reads on a phone; an unknown reason falls back to the machine's note. */

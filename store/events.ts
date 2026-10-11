@@ -40,6 +40,11 @@ export function loggedSince(db: Db, kind: string, at: string): boolean {
   return db.prepare('SELECT 1 FROM events WHERE kind = ? AND julianday(at) >= julianday(?)').get(kind, at) !== undefined
 }
 
+export function lastLogged(db: Db, kind: string, pointer: string): (Pick<Event, 'outcome'> & { at: string }) | undefined {
+  return db.prepare(`SELECT outcome, strftime('%Y-%m-%dT%H:%M:%SZ', at) AS at FROM events WHERE kind = ? AND pointer = ?
+    ORDER BY id DESC LIMIT 1`).get(kind, pointer) as (Pick<Event, 'outcome'> & { at: string }) | undefined
+}
+
 export function newestRun(db: Db): number {
   return (db.prepare('SELECT coalesce(max(id), 0) AS id FROM runs').get() as { id: number }).id
 }

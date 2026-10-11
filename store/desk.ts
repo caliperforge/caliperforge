@@ -64,6 +64,19 @@ export function published(db: Db, at: string): number {
   return db.prepare("UPDATE desk_posts SET status = 'published', published_at = ? WHERE status = 'approved' AND url IS NOT NULL").run(at).changes
 }
 
+export function aged(db: Db, before: string): Post[] {
+  return db.prepare("SELECT * FROM desk_posts WHERE kind = 'daily' AND status = 'proof' AND proof_at < ? ORDER BY id").all(before) as Post[]
+}
+
+export function awaiting(db: Db): boolean {
+  return db.prepare("SELECT 1 FROM desk_posts WHERE status = 'approved' AND url IS NOT NULL").get() !== undefined
+}
+
+export function aired(db: Db, ids: number[], at: string): void {
+  const air = db.prepare("UPDATE desk_posts SET status = 'published', published_at = ? WHERE id = ? AND status = 'proof'")
+  for (const id of ids) air.run(at, id)
+}
+
 export function postOf(db: Db, id: number): Post {
   const post = db.prepare('SELECT * FROM desk_posts WHERE id = ?').get(id) as Post | undefined
   if (post === undefined) throw new Error(`no desk post ${String(id)}`)

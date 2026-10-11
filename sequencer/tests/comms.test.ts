@@ -4,8 +4,8 @@ import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { all } from '../../cli/inbox.ts'
 import type { Provider } from '../../providers/kind.ts'
-import { amend, approved, learnings, learningsIn, paste, placed, postOf, posts, putPost, sentBack } from '../../store/desk.ts'
-import { eventsOf, kindsOf, newestMode, runRows } from '../../store/events.ts'
+import { amend, approved, learnings, learningsIn, paste, placed, postOf, posts, proofed, putPost, sentBack } from '../../store/desk.ts'
+import { eventsOf, kindsOf, newestMode, ofKind, runRows } from '../../store/events.ts'
 import { set, zone } from '../../store/lanes.ts'
 import { retried } from '../../store/holds.ts'
 import { addPipe, briefed, dropPlan, end, needsCeo, plansOf, putPlan, requeue, retry } from '../../store/plans.ts'
@@ -14,7 +14,7 @@ import { verdictRows } from '../../store/verdict.ts'
 import { desk, draft, drafted, facts, gather, grow, review } from '../../templates/comms.ts'
 import { tick } from '../index.ts'
 import { weekly as clock } from '../signals.ts'
-import { publish, push } from '../site.ts'
+import { commit, publish, push, render } from '../site.ts'
 import { hold, unhold } from '../hold.ts'
 import { mapOf } from '../steps.ts'
 import { rule } from '../rule.ts'
@@ -871,6 +871,81 @@ test('push D5: an unset comms.site_dir throws', () => {
   const w = comms()
   set(w.db, 'comms.site_dir', '', 'ceo', '2026-10-04')
   expect(() => push(w.db, new Date())).toThrow('comms.site_dir is unset')
+})
+
+const DAILY = { id: 1, kind: 'daily', dest: 'site', title: 'The day', dek: 'd', body: 'One job landed.', sources: '[]', checks: '[]',
+  work_date: '2026-10-01', written_date: '2026-10-02' } satisfies Parameters<typeof proofed>[1]
+
+const DAY_URL = 'https://caliperforge.com/blog/06_the-day.html'
+
+const later = (hours: number): Date => new Date(Date.now() + hours * 3_600_000)
+
+const aging = (dir: string): World => {
+  const w = clocked(null)
+  set(w.db, 'comms.site_dir', dir, 'ceo', '2026-10-04')
+  proofed(w.db, DAILY)
+  return w
+}
+
+test('ripe D1: tick publishes a daily 25 hours in proof', async () => {
+  const dir = sited()
+  const w = aging(dir)
+  const now = later(25)
+  await tick(w.db, w.root, never, now)
+  expect(readdirSync(join(dir, 'blog'))).toContain('06_the-day.html')
+  expect(postOf(w.db, 1)).toMatchObject({ status: 'published', url: DAY_URL, published_at: now.toISOString() })
+  expect(git(dir, ['ls-remote', 'origin', 'main']).split('\t')[0]).toBe(git(dir, ['rev-parse', 'HEAD']).trim())
+})
+
+test.each([
+  { why: 'a sent-back row at 25h', back: true, hours: 25 },
+  { why: 'a proof row at 23h', back: false, hours: 23 },
+])('ripe D2: $why stays unpublished', async ({ back, hours }) => {
+  const dir = sited()
+  const w = aging(dir)
+  if (back) sentBack(w.db, 1, 'redo', 'ceo')
+  const before = postOf(w.db, 1)
+  await tick(w.db, w.root, never, later(hours))
+  expect(postOf(w.db, 1)).toEqual(before)
+  expect(readdirSync(join(dir, 'blog')).sort()).toEqual([POST05.slice('blog/'.length), 'index.html'])
+  expect(git(dir, ['rev-list', '--count', 'HEAD']).trim()).toBe('1')
+})
+
+test('ripe D3: an approved unplaced ship row is not published', async () => {
+  const dir = sited()
+  const w = aging(dir)
+  putPost(w.db, SEED)
+  await tick(w.db, w.root, never, later(25))
+  expect(postOf(w.db, 2)).toMatchObject({ status: 'approved', url: null, published_at: null })
+  expect(postOf(w.db, 1)).toMatchObject({ status: 'published', url: DAY_URL })
+})
+
+test('ripe D4: a placed approved ship row holds the push', async () => {
+  const dir = sited()
+  const w = aging(dir)
+  putPost(w.db, SEED)
+  const name = render(dir, SEED)
+  commit(dir, name)
+  placed(w.db, 2, `https://caliperforge.com/blog/${name}.html`)
+  await tick(w.db, w.root, never, later(25))
+  expect(postOf(w.db, 1)).toMatchObject({ status: 'proof', url: null })
+  expect(postOf(w.db, 2)).toMatchObject({ status: 'approved' })
+  expect(ahead(dir)).toBe('1')
+})
+
+test('ripe D5: an unset site_dir neither renders nor throws', async () => {
+  const w = aging('')
+  await expect(tick(w.db, w.root, never, later(25))).resolves.toEqual([])
+  expect(postOf(w.db, 1)).toMatchObject({ status: 'proof', url: null })
+})
+
+test('ripe D5: a failed push keeps the daily in proof, logged', async () => {
+  const dir = sited()
+  const w = aging(dir)
+  git(dir, ['remote', 'set-url', 'origin', join(dir, 'missing')])
+  await tick(w.db, w.root, never, later(25))
+  expect(postOf(w.db, 1)).toMatchObject({ status: 'proof', url: DAY_URL, published_at: null })
+  expect(ofKind(w.db, 'site_push')).toMatchObject([{ plan: null, actor: 'tick', outcome: 'refuse' }])
 })
 
 const PLACED = 'https://caliperforge.com/blog/06_week.html'

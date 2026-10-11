@@ -152,6 +152,10 @@ export function substackIn(db: Db, from: string, to: string): boolean {
   return db.prepare("SELECT 1 FROM desk_posts WHERE dest = 'substack' AND date(proof_at) BETWEEN ? AND ?").get(from, to) !== undefined
 }
 
+export function weeklyIn(db: Db, from: string, to: string): boolean {
+  return db.prepare("SELECT 1 FROM desk_posts WHERE kind = 'weekly' AND work_date BETWEEN ? AND ?").get(from, to) !== undefined
+}
+
 export function packsIn(db: Db, from: string, to: string): string[] {
   return db.prepare(`SELECT COALESCE(edited_body, body) FROM desk_posts
     WHERE kind = 'growth' AND dest = 'pack' AND work_date BETWEEN ? AND ?`).pluck().all(from, to) as string[]

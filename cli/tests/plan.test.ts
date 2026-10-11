@@ -7,10 +7,10 @@ import { fresh } from '../../checks/sqlite.ts'
 import { registerPlans } from '../cf-plans.ts'
 import type { Read } from '../gh.ts'
 import { doneIds } from '../../sequencer/workspace.ts'
-import { add, laneOf, parse, priorityOf, seatOf, unfiled } from '../plan.ts'
+import { add, LANE, laneOf, parse, priorityOf, seatOf, unfiled } from '../plan.ts'
 import { allEvents } from '../../store/events.ts'
 import type { Db } from '../../store/index.ts'
-import { addPipe, addPlan, allPlans } from '../../store/plans.ts'
+import { addPipe, addPlan, allPlans, pipeNamed } from '../../store/plans.ts'
 import { rulingSubject } from '../../store/rulings.ts'
 
 const schema = join(import.meta.dirname, '../../schema')
@@ -113,6 +113,19 @@ test('D3 the filed event names who filed the plan', () => {
   add(db, root, 'caliperforge/caliperforge#25', 'ceo', 'internal', canned(rows))
   add(db, root, 'caliperforge/caliperforge#26', 'coo', 'internal', canned(rows))
   expect(allEvents(db).map((e) => e.actor)).toEqual(['ceo', 'coo'])
+})
+
+test('D3 an unknown pipe throws and files nothing', () => {
+  const db = piped()
+  expect(() => add(db, root, 'caliperforge/caliperforge#25', 'ceo', 'nowhere', canned([ISSUE])))
+    .toThrow('no pipe "nowhere"; cf pipe on nowhere')
+  expect(allPlans(db)).toEqual([])
+})
+
+test('D3 a missing lane pipe is made disabled, 07:00 to 22:00', () => {
+  const db = fresh(schema)
+  add(db, root, 'caliperforge/caliperforge#25', 'ceo', undefined, canned([ISSUE]))
+  expect(pipeNamed(db, LANE.machine.pipe)).toMatchObject({ enabled: 0, window_start: '07:00', window_end: '22:00' })
 })
 
 test('plan add refuses --by not ceo/coo before any file or read', () => {

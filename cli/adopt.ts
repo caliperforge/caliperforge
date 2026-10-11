@@ -1,8 +1,11 @@
 import { z } from 'zod'
 import { PR_BRANCH, put } from '../sequencer/workspace.ts'
+import { adoptedPlan, adoptTarget, heldPlan } from '../store/adopted.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { templatePriority } from '../store/lanes.ts'
+import { pipeNamed } from '../store/plans.ts'
+import { newestAccount } from '../store/targets.ts'
 import { gh, ours, type Read } from './gh.ts'
 import { measure } from './measure.ts'
 import { parse } from './plan.ts'
@@ -51,13 +54,12 @@ export function adopt(db: Db, root: string, ref: string, today: string, read: Re
   const owner = row.headRepositoryOwner?.login
   if (!ours(owner)) throw new Error(`${ref} is pushed from ${owner ?? 'a deleted fork'}, not our fork`)
   const account = accountOf(db, repo, today, read)
-  const target = upsert(db, account, repo, row.number, row.url)
-  const held = db.prepare('SELECT id FROM plans WHERE target_id = ? ORDER BY id LIMIT 1').get(target) as
-    { id: number } | undefined
-  const plan = held?.id ?? file(db, target, row.url)
+  const target = adoptTarget(db, account, repo, row.number, row.url)
+  const held = heldPlan(db, target)
+  const plan = held ?? file(db, target, row.url)
   put(root, plan, 'issue.md', packet(repo, row, read))
   put(root, plan, PR_BRANCH, `${row.headRefName}\n`)
-  return { target, plan, repo, pr: row.number, url: row.url, fresh: held === undefined }
+  return { target, plan, repo, pr: row.number, url: row.url, fresh: held === null }
 }
 
 /** Ruling `adopt.issue_packet`: the ask a review rewound onto this plan reads it against. */
@@ -80,29 +82,14 @@ function accountOf(db: Db, repo: string, today: string, read: Read): z.infer<typ
 }
 
 function latest(db: Db, repo: string): z.infer<typeof Account> | null {
-  const row = db.prepare('SELECT id, measured_at FROM accounts WHERE repo = ? ORDER BY measured_at DESC LIMIT 1').get(repo)
+  const row = newestAccount(db, repo)
   return row === undefined ? null : Account.parse(row)
 }
 
-/** On github a pull request and an issue share one number space, so `targets.issue_no` holds the pull number. */
-function upsert(db: Db, account: z.infer<typeof Account>, repo: string, no: number, url: string): number {
-  db.prepare(`INSERT INTO targets (account_id, repo, issue_no, named_merger, state, evidence_measured_at, evidence, ineligible_ruling_id)
-    VALUES (?, ?, ?, '', 'queued', ?, ?, NULL)
-    ON CONFLICT (repo, issue_no, part) DO UPDATE SET account_id = excluded.account_id, state = 'queued',
-      evidence_measured_at = excluded.evidence_measured_at, evidence = excluded.evidence,
-      ineligible_ruling_id = NULL`)
-    .run(account.id, repo, no, account.measured_at.slice(0, 10), url)
-  const row = db.prepare("SELECT id FROM targets WHERE repo = ? AND issue_no = ? AND part = ''").get(repo, no) as { id: number }
-  return row.id
-}
-
 function file(db: Db, target: number, url: string): number {
-  const pipe = db.prepare("SELECT id FROM pipes WHERE name = 'pr-path'").get() as { id: number } | undefined
-  if (pipe === undefined) throw new Error('no pipe "pr-path"; cf pipe on pr-path')
-  const made = db.prepare(`INSERT INTO plans (pipe_id, target_id, template, state, queued_at, step, retries, priority)
-    VALUES (?, ?, 'pr_path', 'done', ?, ?, 0, ?)`)
-    .run(pipe.id, target, new Date().toISOString(), PUSHED_STEP, templatePriority(db, 'pr_path'))
-  const id = Number(made.lastInsertRowid)
+  const pipe = pipeNamed(db, 'pr-path')
+  if (pipe === null) throw new Error('no pipe "pr-path"; cf pipe on pr-path')
+  const id = adoptedPlan(db, pipe.id, target, PUSHED_STEP, templatePriority(db, 'pr_path'))
   logged(db, { plan: id, kind: 'filed', actor: 'cf adopt', outcome: 'pass', message: url, pointer: null, run: null })
   return id
 }

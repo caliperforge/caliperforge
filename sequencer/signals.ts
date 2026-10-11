@@ -1,9 +1,11 @@
 import type { Desk } from '../cli/gh.ts'
 import { all, notify, record as keep, type Event } from '../cli/inbox.ts'
+import { commsLane, fileComms } from '../store/comms.ts'
+import { weeklyIn } from '../store/desk.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { hhmm, zone } from '../store/lanes.ts'
-import { internal, needsCeo, planById, type PlanRow, rewind } from '../store/plans.ts'
+import { internal, needsCeo, pipeNamed, planById, type PlanRow, rewind } from '../store/plans.ts'
 import { clear } from '../store/refusals.ts'
 import type { SignalRow } from '../store/signals.ts'
 import { assembling } from './home.ts'
@@ -96,16 +98,14 @@ export function words(signal: SignalRow): string {
 
 /** A signal older than the plan is recorded, never replayed (ruling `signals.pre_adoption`). */
 function older(db: Db, signal: SignalRow, plan: number): boolean {
-  const row = db.prepare('SELECT queued_at FROM plans WHERE id = ?').get(plan) as { queued_at: string }
-  return Date.parse(signal.at) < Date.parse(row.queued_at)
+  return Date.parse(signal.at) < Date.parse(planById(db, plan).queued_at)
 }
 
 /** A merged outside pull request files one comms plan to post it, on a comms lane made on if missing. */
 function comms(db: Db, signal: SignalRow, from: number): Started | null {
   const merged = planById(db, from)
   if (internal(merged)) return null
-  db.prepare(`INSERT OR IGNORE INTO pipes (name, enabled, window_start, window_end, max_concurrent)
-    VALUES ('comms', 1, '07:00', '22:00', 1)`).run()
+  commsLane(db)
   const ticket = `${signal.repo}#${String(signal.pr)}`
   const plan = file(db, `ship post ${ticket}`, merged.target_id, new Date(), 'merge signal', ticket)
   return plan === null ? null : { signal: signal.id, template: 'comms', plan, step: 0 }
@@ -140,10 +140,8 @@ export function late(db: Db, root: string, board: Desk, now: Date): void {
   const since = (dow + 6) % 7
   const day = (offset: number): string => new Date(local.getTime() + offset * 86400000).toISOString().slice(0, 10)
   const monday = day(-since)
-  const posted = db.prepare("SELECT 1 FROM desk_posts WHERE kind = 'weekly' AND work_date BETWEEN ? AND ?")
-    .get(monday, day(6 - since))
   const ticket = `week ${monday}`
-  if (posted !== undefined || all(root).some((e) => e.kind === 'late' && e.ticket === ticket)) return
+  if (weeklyIn(db, monday, day(6 - since)) || all(root).some((e) => e.kind === 'late' && e.ticket === ticket)) return
   const { url } = board.open('Weekly post not on the desk', `No weekly post is on the desk for the week of ${monday}.`)
   const event: Event = { at: now.toISOString(), plan: 0, ticket, kind: 'late', step: 0, name: 'weekly',
     note: `no weekly post on the desk: ${url}` }
@@ -152,16 +150,12 @@ export function late(db: Db, root: string, board: Desk, now: Date): void {
 }
 
 function commsOn(db: Db): boolean {
-  return db.prepare("SELECT 1 FROM pipes WHERE name = 'comms' AND enabled = 1").get() !== undefined
+  return pipeNamed(db, 'comms')?.enabled === 1
 }
 
-/** `plans_one_comms` holds a comms title to one plan, so a title already filed files nothing. */
 function file(db: Db, title: string, target: number | null, at: Date, actor: string, message: string): number | null {
-  const pipe = db.prepare("SELECT id FROM pipes WHERE name = 'comms'").get() as { id: number }
-  const made = db.prepare(`INSERT OR IGNORE INTO plans (pipe_id, target_id, template, state, queued_at, step, retries, title)
-    VALUES (?, ?, 'comms', 'queued', ?, 0, 0, ?)`).run(pipe.id, target, at.toISOString(), title)
-  if (made.changes !== 1) return null
-  const plan = Number(made.lastInsertRowid)
+  const plan = fileComms(db, title, target, at.toISOString())
+  if (plan === null) return null
   logged(db, { plan, kind: 'filed', actor, outcome: 'pass', message, pointer: null, run: null })
   return plan
 }

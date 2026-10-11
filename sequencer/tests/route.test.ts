@@ -135,6 +135,12 @@ test('760b D2 an atelier-web plan on app.js builds on web', () => {
   expect([at(2, language).runs, at(4, language).seat]).toEqual(['web_specialist', 'web_specialist'])
 })
 
+test('1108a D3 a design_lead plan on DESIGN.md builds on web', () => {
+  const w = world()
+  record(w.db, 4, listed(['DESIGN.md', 'design/tickets/a.md']))
+  expect(languageFor(w.db, { ...w.web, seat: 'design_lead' }, mkdtempSync(join(tmpdir(), 'cf-route-')))).toBe('web')
+})
+
 test('760b D3 web paths stay unclaimed outside atelier-web', () => {
   const w = world()
   expect(languageOfPath('public/app.js')).toBeNull()

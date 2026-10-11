@@ -50,7 +50,7 @@ The site reads like a lab notebook: claims in prose, evidence in monospace, one 
 - Evidence: `ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace`. What a check
   reads (a status, a field, a price) is set the way it was read.
 
-**Palette.** Paper and ink with one accent; the accent marks verification and nothing else.
+**Palette.** Paper and ink with one accent, used only on links and evidence.
 
 | Role   | Hex       | Use                                          |
 |--------|-----------|----------------------------------------------|
@@ -59,7 +59,7 @@ The site reads like a lab notebook: claims in prose, evidence in monospace, one 
 | Muted  | `#5b6170` | dates, captions, secondary text              |
 | Rule   | `#d9d4c7` | hairlines between sections and table rows    |
 | Panel  | `#eeebe3` | evidence blocks                              |
-| Check  | `#1f6f5c` | links, the check mark, the one call to act   |
+| Check  | `#1f6f5c` | links and the call to act; evidence markers  |
 
 Ink on paper is 16.2:1 and check on paper 5.5:1, both above WCAG AA.
 

@@ -35,7 +35,7 @@
   }
   .main { grid-column: 1 / 9; max-width: 38rem; }
   .aside { grid-column: 9 / 13; }
-  .full { grid-column: 1 / 13; }
+  .note { color: var(--muted); margin-top: 1rem; }
   h1, h2, h3 { font-family: var(--serif); font-weight: 600; line-height: 1.2; margin: 0 0 1rem; }
   h1 { font-size: clamp(2.25rem, 5vw, 3.5rem); letter-spacing: -0.01em; }
   h2 { font-size: 1.75rem; }
@@ -93,7 +93,7 @@
 
   @media (max-width: 48rem) {
     .wrap { padding: 0 1.25rem; }
-    .main, .aside, .full, .card, .cards-head, .mark, nav, footer p, footer nav { grid-column: 1 / -1; }
+    .main, .aside, .card, .cards-head, .mark, nav, footer p, footer nav { grid-column: 1 / -1; }
     nav { justify-self: start; margin-top: 0.75rem; }
     nav ul { gap: 1.25rem; }
     .aside { margin-top: 2rem; }
@@ -189,7 +189,7 @@
           <li><time>[date]</time><a href="/writing/">[Second post title]</a></li>
           <li><time>[date]</time><a href="/writing/">[Third post title]</a></li>
         </ul>
-        <p class="muted" style="margin-top: 1rem;">Every post shows its date.</p>
+        <p class="note">Every post shows its date.</p>
         <p><a href="/writing/">All writing</a></p>
       </div>
       <aside class="aside">

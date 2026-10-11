@@ -3,12 +3,14 @@ import { put } from '../sequencer/workspace.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { LANE, LANES, laneOf, priorityOf, templatePriority, type Lane } from '../store/lanes.ts'
-import type { Holder } from '../store/plans.ts'
+import { lanePipe, planOfOrigin, queueOrigin, seen } from '../store/origins.ts'
+import { pipeNamed, type Holder } from '../store/plans.ts'
 import { profile } from '../store/profile.ts'
+import { rulingId } from '../store/rulings.ts'
 import { gh, type Read } from './gh.ts'
 import type { Origin } from './queue.ts'
 
-export { LANE, LANES, laneOf, priorityOf }
+export { LANE, LANES, laneOf, priorityOf, seen }
 
 const REF = /^([^/\s]+\/[^/\s#]+)#(\d+)$/
 
@@ -93,39 +95,23 @@ export function unfiled(db: Db, read: Read = gh): Unfiled[] {
     .map((f) => ({ repo: f.repository.nameWithOwner, no: f.number, title: f.title, url: f.url, lane: laneOf(f.labels) }))
 }
 
-export function seen(db: Db): Set<string> {
-  return new Set((db.prepare('SELECT origin AS url FROM plans WHERE origin IS NOT NULL UNION SELECT url FROM parts').all() as
-    { url: string }[]).map((r) => r.url))
-}
-
 export function render(row: Unfiled): string {
   return `${row.repo}#${String(row.no)}\t${row.lane ?? 'no lane'}\tfiled, not queued\t${row.title}\n`
 }
 
 function refusal(db: Db, ref: string, subject: string, why: string): Filed {
   const origin: Origin = { origin_kind: 'ruling', origin_ref: subject }
-  return { plan: null, lane: null, seat: null, state: 'refused', why: `${ref} ${why}`, origin, ruling: ruling(db, subject) }
-}
-
-function ruling(db: Db, subject: string): number | null {
-  const row = db.prepare('SELECT id FROM rulings WHERE subject = ? ORDER BY id DESC LIMIT 1')
-    .get(subject) as { id: number } | undefined
-  return row?.id ?? null
+  return { plan: null, lane: null, seat: null, state: 'refused', why: `${ref} ${why}`, origin, ruling: rulingId(db, subject) }
 }
 
 export function file(db: Db, by: Holder | 'intake' | 'tick', pipe: string, lane: Lane, seat: string, url: string, priority: number | null): number {
-  const held = db.prepare('SELECT id FROM plans WHERE origin = ?').get(url) as { id: number } | undefined
-  if (held !== undefined) return held.id
-  if (pipe === LANE[lane].pipe) {
-    db.prepare("INSERT OR IGNORE INTO pipes (name, enabled, window_start, window_end, max_concurrent) VALUES (?, 0, '07:00', '22:00', 1)").run(pipe)
-  }
-  const row = db.prepare('SELECT id FROM pipes WHERE name = ?').get(pipe) as { id: number } | undefined
-  if (row === undefined) throw new Error(`no pipe "${pipe}"; cf pipe on ${pipe}`)
+  const held = planOfOrigin(db, url)
+  if (held !== null) return held
+  if (pipe === LANE[lane].pipe) lanePipe(db, pipe)
+  const row = pipeNamed(db, pipe)
+  if (row === null) throw new Error(`no pipe "${pipe}"; cf pipe on ${pipe}`)
   const template = LANE[lane].template
-  const made = db.prepare(`INSERT INTO plans (pipe_id, template, state, queued_at, step, retries, priority, lane, seat, origin)
-    VALUES (?, ?, 'queued', ?, 0, 0, ?, ?, ?, ?)`)
-    .run(row.id, template, new Date().toISOString(), priority ?? templatePriority(db, template), lane, seat, url)
-  const id = Number(made.lastInsertRowid)
+  const id = queueOrigin(db, { pipe_id: row.id, template, priority: priority ?? templatePriority(db, template), lane, seat, origin: url })
   logged(db, { plan: id, kind: 'filed', actor: by, outcome: 'pass', message: url, pointer: null, run: null })
   return id
 }

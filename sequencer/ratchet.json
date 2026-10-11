@@ -12,8 +12,7 @@
     "silent-catch": 1
   },
   "capture.ts": {
-    "lines": 269,
-    "prepare": 6,
+    "lines": 262,
     "silent-catch": 3
   },
   "card.ts": {
@@ -148,8 +147,7 @@
     "silent-catch": 2
   },
   "signals.ts": {
-    "lines": 148,
-    "prepare": 6
+    "lines": 148
   },
   "signoff.ts": {
     "lines": 346,

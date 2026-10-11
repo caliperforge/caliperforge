@@ -68,7 +68,7 @@ function project(src: string): string | null {
  */
 export function checks(src: string, given: Commands, run: Run = npm, narrow: string[] = [], outside: Outside | null = null,
   touched: string[] = []): Failure | null {
-  if (outside !== null) return gated(src, gates(src, outside), run)
+  if (outside !== null) return gated(src, gates(src, outside, given.excused), run, given.excused ?? [])
   const parsed = given.node === undefined ? null : gated(src, syntax(src, given.node, touched), run)
   if (parsed !== null) return parsed
   const bin = mode(src)
@@ -102,19 +102,21 @@ function cappedOf(bin: Mode, ran: Extract<Ran, { ok: false }>): { capped?: true 
  * A stranger's repo in a language with its own seat runs that language's gates in the language's own folder.
  * A gate marked `quiet` fails on any output, as `gofmt -l` exits zero and prints the files it would change.
  */
-function gated(src: string, list: Gate[], run: Run): Failure | null {
+function gated(src: string, list: Gate[], run: Run, excused: string[] = []): Failure | null {
   for (const gate of list) {
     const cwd = join(src, gate.dir)
     const where = gate.dir === '' ? '' : ` (in ${gate.dir}/)`
-    const first = settled(gate, run(gate.args, cwd, gate.bin))
+    const first = settled(gate, run(gate.args, cwd, gate.bin), excused)
     if (first.ok) continue
     return { script: gate.script, command: `${gate.bin} ${gate.args.join(' ')}${where}`, code: first.code, output: tail(first.output), tests: [], retried: false }
   }
   return null
 }
 
-function settled(gate: Gate, ran: Ran): Ran {
-  return gate.quiet === true && ran.ok && ran.output.trim() !== '' ? { ok: false, code: '1', output: ran.output } : ran
+function settled(gate: Gate, ran: Ran, excused: string[]): Ran {
+  if (gate.quiet === true && ran.ok && ran.output.trim() !== '') return { ok: false, code: '1', output: ran.output }
+  const spans = ran.ok ? [] : [...ran.output.matchAll(/`(-p [^`]+)`/g)].map((m) => m[1] ?? '')
+  return spans.length > 0 && spans.every((s) => excused.includes(s)) ? { ok: true, output: ran.output } : ran
 }
 
 export const BUILT = [`${DERIVED}/`, '__pycache__/', '.gradle/', 'build/', 'target/']

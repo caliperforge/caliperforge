@@ -11,17 +11,19 @@ import type { Packet, Provider } from '../../providers/kind.ts'
 import { load, Seat } from '../../runner/rules.ts'
 import { gates } from '../../store/approvals.ts'
 import { decision } from '../../store/ask.ts'
-import { decided, decisions, touches, type Verb } from '../../store/decisions.ts'
+import { decided, decisions, touches, type Decision, type Verb } from '../../store/decisions.ts'
 import { pushedRow } from '../../store/deliverables.ts'
 import { addFinding, addSetting, findings, setting } from '../../store/drift.ts'
-import { logged, ofKind, pointers, runAt, runRows } from '../../store/events.ts'
+import { eventsOf, logged, ofKind, pointers, runAt, runRows } from '../../store/events.ts'
 import { retried, returnToLane } from '../../store/holds.ts'
 import { migrate, open, type Db } from '../../store/index.ts'
 import { cap, width } from '../../store/lanes.ts'
+import { held as holding, take } from '../../store/leases.ts'
 import { busy } from '../../store/now.ts'
 import { addPart } from '../../store/parts.ts'
 import { allPlans, held, needsCeo, pipeOf, planById, planRows, putPlan, requeue, retry } from '../../store/plans.ts'
 import { clear, fingerprint, overBudget } from '../../store/refusals.ts'
+import { runTokens } from '../../store/runs.ts'
 import { split } from '../brief.ts'
 import { byHand, cooLite, read, woke } from '../director.ts'
 import { mechanisms } from '../drift.ts'
@@ -944,15 +946,15 @@ function wokeStub(text: string, fires: string[]): Provider {
 function state(db: Db, home: string) {
   const src = srcDir(home, 7)
   return {
-    plan: db.prepare('SELECT * FROM plans WHERE id = 7').get(),
+    plan: planRows(db).find((r) => r.id === 7),
     files: readdirSync(src, { recursive: true, encoding: 'utf8' }).map((f) => [f, readFileSync(join(src, f), 'utf8')]),
   }
 }
 
-const wokeRuns = (db: Db) => db.prepare(`SELECT step, input_tokens, cache_read_tokens, output_tokens FROM runs
-  WHERE plan = 7 AND seat = 'director'`).all()
-const wokeTold = (db: Db) => db.prepare("SELECT outcome, message FROM events WHERE plan = 7 AND kind = 'director'").all()
-const leases = (db: Db) => db.prepare('SELECT count(*) AS n FROM leases').get()
+const wokeRuns = (db: Db) => runTokens(db, 7).filter((r) => r.seat === 'director').map(({ id, input_tokens, cache_read_tokens, output_tokens }) =>
+  ({ step: runRows(db).find((r) => r.id === id)?.step, input_tokens, cache_read_tokens, output_tokens }))
+const wokeTold = (db: Db) => eventsOf(db, 7, 'director').map(({ outcome, message }) => ({ outcome, message }))
+const leases = (db: Db) => ({ n: holding(db, wokeAt).length })
 
 const blocked = (db: Db, home: string) => {
   db.exec("UPDATE plans SET state = 'blocked_on_ceo', wait_reason = NULL WHERE id = 7")
@@ -1006,7 +1008,7 @@ test.each([
   { name: 'parked', leased: 0, set: (db: Db, home: string) => { blocked(db, home); put(home, 7, 'parked.md', '# Held\n') } },
   { name: 'leased by another live tick', leased: 1, set: (db: Db, home: string) => {
     blocked(db, home)
-    db.prepare('INSERT INTO leases (plan, pid, taken_at) VALUES (7, ?, ?)').run(process.ppid, wokeAt.toISOString())
+    take(db, 7, wokeAt, process.ppid)
   } },
   { name: 'a reason outside WAKE', leased: 0, set: (db: Db) => db.exec("UPDATE plans SET wait_reason = 'over_cap' WHERE id = 7") },
 ])('D3 a plan $name is not woken', async ({ leased, set }) => {
@@ -1162,8 +1164,8 @@ test('repeatFilesTicket', async () => {
 
 test('the store takes blocked_on_ceo, refuses an unknown reason',() => {
   const { db } = wokeSeeded()
-  const insert = (reason: string) => db.prepare(`INSERT INTO decisions (plan, step, wait_reason, verb, why)
-    VALUES (7, 4, ?, 'ask_coo', 'x')`).run(reason)
+  const insert = (reason: string) => decided(db, { plan: 7, step: 4, wait_reason: reason as Decision['wait_reason'], verb: 'ask_coo',
+    why: 'x', evidence: null, tokens: 0 })
   expect(() => insert('blocked_on_ceo')).not.toThrow()
   expect(() => insert('made_up')).toThrow(/CHECK/)
 })

@@ -194,9 +194,6 @@
   "tests/ci.test.ts": {
     "prepare": 5
   },
-  "tests/director.test.ts": {
-    "prepare": 6
-  },
   "tests/fence.test.ts": {
     "prepare": 3
   },

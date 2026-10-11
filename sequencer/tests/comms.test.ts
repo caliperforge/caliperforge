@@ -74,7 +74,7 @@ const judged =(w: World, line: string, sources: { claim: string; ref: string }[]
   return facts(w.root, plan(w.db, 1))
 }
 
-test('dailyLogs D1 D4: a daily logs items and writes no post', async () => {
+test('dailyLogs D1 D4: a daily logs items and writes its post', async () => {
   const w = comms()
   const today = new Date().toISOString().slice(0, 10)
   reads(w.db, 1)
@@ -88,7 +88,8 @@ test('dailyLogs D1 D4: a daily logs items and writes no post', async () => {
   expect(ran(w)).toEqual(['writer', 'text_review'])
   expect(verdictRows(w.db, 1)).toEqual([])
   expect([maybe(w.root, 1, 'draft.md'), maybe(w.root, 1, 'fence.json')]).toEqual([null, null])
-  expect(posts(w.db).map(({ id }) => ({ id }))).toEqual([{ id: 2 }])
+  expect(posts(w.db).map(({ id }) => ({ id }))).toEqual([{ id: 1 }, { id: 2 }])
+  expect(postOf(w.db, 1)).toMatchObject({ kind: 'daily', status: 'proof' })
   expect(learned(w)).toEqual([{ date: local(w), numbers: '[]', items: JSON.stringify(items('a', 'b', 'c')), sources: '[]' }])
   expect(readFileSync(join(w.root, 'comms/voice-notes.md'), 'utf8')).toBe(`# Voice notes\n\n- ${today} 2 title: lengthened (7 → 13 chars)\n`)
 })
@@ -421,7 +422,21 @@ test('dailyMerges D5: a title already in the day is added once', async () => {
   expect(desk(w.db, w.root, plan(w.db, 1))).toEqual({ outcome: 'pass', spans: [], note: '2 item(s) added to 2026-09-27' })
   expect(learned(w)).toEqual([{ date: '2026-09-27', numbers: '[1]', sources: '["x.ts:1"]',
     items: JSON.stringify([{ title: 'a lesson' }, ...items('b', 'c')]) }])
-  expect(posts(w.db)).toEqual([])
+  expect(posts(w.db)).toMatchObject([{ id: 1, kind: 'daily', dest: 'site', status: 'proof', work_date: '2026-09-27' }])
+  const [row] = posts(w.db)
+  expect(row?.proof_at).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/)
+  expect(row?.body).toContain('## b')
+  expect(row?.body).toContain('## c')
+})
+
+test('dailyTwice D4: a second desk adds no row and no item', async () => {
+  const w = posting('daily 2026-09-27')
+  gather(w.db, w.root, plan(w.db, 1))
+  await draft(w.db, w.root, plan(w.db, 1), mapOf('comms').at(1), seated(listing(items('a', 'b', 'c'))))
+  desk(w.db, w.root, plan(w.db, 1))
+  expect(desk(w.db, w.root, plan(w.db, 1))).toEqual({ outcome: 'pass', spans: [], note: '0 item(s) added to 2026-09-27' })
+  expect(posts(w.db)).toHaveLength(1)
+  expect(learned(w)).toMatchObject([{ date: '2026-09-27', items: JSON.stringify(items('a', 'b', 'c')) }])
 })
 
 test('reviewRefuses D3: a refuse goes back to step 1 on its spans', async () => {

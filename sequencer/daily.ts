@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { type Item, log } from '../store/desk.ts'
+import { type Item, log, proofed } from '../store/desk.ts'
 import type { Db } from '../store/index.ts'
 import type { PlanRow } from '../store/plans.ts'
 import type { Step } from '../templates/pr-path.ts'
@@ -36,5 +36,12 @@ export function merged(db: Db, root: string, plan: PlanRow): Outcome {
   const items = maybe(root, plan.id, 'items.json')
   if (items === null) return { outcome: 'pass', spans: [], note: 'no draft' }
   const { day } = JSON.parse(get(root, plan.id, 'packet.json')) as { day: string }
-  return { outcome: 'pass', spans: [], note: `${String(log(db, day, JSON.parse(items) as Item[]))} item(s) added to ${day}` }
+  const list = JSON.parse(items) as Item[]
+  const body = list.map((i) => [`## ${i.title}`, i.what, i.lesson, i.fix].filter((p) => p !== '').join('\n\n')).join('\n\n')
+  const added = db.transaction(() => {
+    proofed(db, { id: plan.id, kind: 'daily', dest: 'site', title: `Learnings for ${day}`, dek: '', body, sources: '[]', checks: '[]',
+      work_date: day, written_date: new Date().toISOString().slice(0, 10) })
+    return log(db, day, list)
+  })()
+  return { outcome: 'pass', spans: [], note: `${String(added)} item(s) added to ${day}` }
 }

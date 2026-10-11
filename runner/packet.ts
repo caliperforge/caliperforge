@@ -61,6 +61,7 @@ export const Bench = z.object({
   screenshots: z.array(z.string()).min(1).optional(),
   defects: z.string().optional(),
   mockup: z.string().optional(),
+  system: z.string().optional(),
 }).strict().refine((b) => b.since === undefined || b.prior !== undefined, { path: ['since'] })
   .refine((b) => b.refusal === undefined || b.prior !== undefined, { path: ['refusal'] })
 
@@ -121,6 +122,7 @@ export function assembled(root: string, name: string, manifest: Review, bench: B
     ['Screenshots', bench.screenshots === undefined ? undefined : listed(bench.screenshots)],
     ['Defects the capture found', bench.defects],
     ['Mockup or ruling the brief names', bench.mockup],
+    ['DESIGN.md in the checkout', bench.system],
     ['Files around the change', framed(bench.map, 'Every file in each touched directory, its length and its head comment; * marks a changed file.')],
     ['Symbols at the branch base', framed(bench.symbols, SYMBOLS_LEAD)],
     ['Reference the brief names', bench.reference],

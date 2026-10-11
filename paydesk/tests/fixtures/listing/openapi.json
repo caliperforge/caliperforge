@@ -1,0 +1,13 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/paid": { "get": { "operationId": "getPaid" } },
+    "/quote": {
+      "post": {
+        "operationId": "getQuote",
+        "requestBody": { "content": { "application/json": { "example": { "symbol": "SOL" } } } }
+      }
+    },
+    "/sms/send": { "post": { "operationId": "sendSMS" } }
+  }
+}

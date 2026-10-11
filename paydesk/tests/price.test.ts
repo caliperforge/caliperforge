@@ -1,10 +1,27 @@
 import { expect, test } from 'vitest'
 import { declaredUsd, pathMatches } from '../price.ts'
 
-test('the first source in order 1 to 5 wins', () => {
-  const op = { 'x-payment-info': { offers: [{ amount: '30000' }], price: '$9' }, 'x-price-usd': '5' }
-  expect(declaredUsd(op, { dimensions: [{ tiers: [{ price_usd: 7 }] }] })).toBe(0.03)
-  expect(declaredUsd({ 'x-payment-info': { price: '$9' }, 'x-price-usd': '5' })).toBe(9)
+test('each source beats every later one, in order 1 to 5', () => {
+  const accepts = [{ network: 'solana', amount: '70000' }]
+  const info = { offers: [{ amount: '10000' }], price: '$2', fixedPrice: '3', amount: 4, price_usd: 5, priceUsd: 6, accepts }
+  const op = { 'x-payment-info': info, 'x-price-usd': 8, 'x-price': '$9' }
+  const pricing = { dimensions: [{ tiers: [{ price_usd: 10 }] }] }
+  const order: [object, string, number][] = [
+    [info, 'offers', 0.01],
+    [info, 'price', 2],
+    [info, 'fixedPrice', 3],
+    [info, 'amount', 4],
+    [info, 'price_usd', 5],
+    [info, 'priceUsd', 6],
+    [info, 'accepts', 0.07],
+    [op, 'x-price-usd', 8],
+    [op, 'x-price', 9],
+  ]
+  for (const [from, key, want] of order) {
+    expect(declaredUsd(op, pricing)).toBe(want)
+    Reflect.deleteProperty(from, key)
+  }
+  expect(declaredUsd(op, pricing)).toBe(10)
 })
 
 test('the first offer with a non-empty amount gives micro-USD', () => {

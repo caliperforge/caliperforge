@@ -3,7 +3,7 @@ import { vetted } from '../cli/queue.ts'
 import type { Provider } from '../providers/kind.ts'
 import { digestOf } from '../store/approvals.ts'
 import { hold } from '../store/holds.ts'
-import { logged, newestRun, runSince } from '../store/events.ts'
+import { kindsOf, logged, newestRun, runSince } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import type { Taken } from '../store/leases.ts'
 import { busy } from '../store/now.ts'
@@ -98,10 +98,15 @@ export function ceilinged(db: Db, root: string, pipe: PipeRow, plan: PlanRow, ov
 function overBuilt(db: Db, root: string, pipe: PipeRow, plan: PlanRow, lease: Taken): Fired | null {
   const n = sinceSent(db, plan.id)
   if (plan.template !== 'pr_path' || plan.step !== BUILD || n < BUILDS) return null
-  const note = capped(db, root, plan.id, `${String(n)} builds ran; the next waits for the director`)
+  const why = `${String(n)} builds ran; the next waits for the director`
+  const note = stillCapped(db, plan.id) ? why : capped(db, root, plan.id, why)
   needsCeo(db, plan, note)
   return { pipe: pipe.name, plan: plan.id, step: BUILD, name: 'build', outcome: 'refuse',
     state: 'blocked_on_ceo', spans: ['build_cap'], note, stole: lease.stole }
+}
+
+function stillCapped(db: Db, plan: number): boolean {
+  return kindsOf(db, plan).filter((e) => ['build', 'build_cap', 'director'].includes(e.kind)).at(-1)?.kind === 'build_cap'
 }
 
 /**

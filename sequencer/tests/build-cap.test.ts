@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { allEvents, eventsOf, logged, newestRun, pointers } from '../../store/events.ts'
+import { allEvents, eventsOf, kindsOf, logged, newestRun, pointers } from '../../store/events.ts'
 import { returnToLane } from '../../store/holds.ts'
 import { retry } from '../../store/plans.ts'
 import { builds, clear, fingerprint, refused, sinceSent } from '../../store/refusals.ts'
@@ -11,7 +11,7 @@ import { approve, CARRIED, plan, REFUSE, stub, watched, world, type World } from
 const refuse = (w: World, step: number, span: string, note: string): void =>
   void refused(w.db, { plan: 1, step, fingerprint: fingerprint(step, [span, note]), diff: null, span, note })
 
-test('D1 a plan stops before its 6th build, after clear and retry', async () => {
+test('D1 D2 a plan stops before its 6th build, once per answer', async () => {
   const w = world()
   approve(w.db, w.target)
   let fired = 0
@@ -21,18 +21,38 @@ test('D1 a plan stops before its 6th build, after clear and retry', async () => 
     logged(w.db, { plan: 1, kind: 'build', actor: 'typescript_specialist', outcome: 'pass', message: '', pointer: null, run: newestRun(w.db) })
   }
   const before = fired
-  for (let round = 1; round <= 2; round += 1) {
+  const caps: string[] = []
+  for (let round = 1; round <= 3; round += 1) {
     clear(w.db, 1)
     retry(w.db, plan(w.db, 1))
     await tick(w.db, w.root, provider)
     expect(fired).toBe(before)
     expect(plan(w.db, 1).state).toBe('blocked_on_ceo')
-    expect(pointers(w.db, 'build_cap')).toEqual(Array<string>(round).fill('director.md'))
+    caps.push(kindsOf(w.db, 1).filter((e) => e.kind === 'build_cap' || e.kind === 'director').map((e) => e.kind).join(' '))
   }
+  expect(caps).toEqual(['build_cap director', 'build_cap director build_cap', 'build_cap director build_cap'])
   expect(maybe(w.root, 1, 'director.md')).toBe('# Build cap\n\n5 builds ran; the next waits for the director\n')
   const stop = { actor: 'settle', outcome: 'needs_coo', message: '5 builds ran; the next waits for the director' }
   expect(eventsOf(w.db, 1, 'build_cap')).toEqual([stop, stop])
   expect(allEvents(w.db).filter((e) => e.outcome === 'needs_ceo' && e.actor !== 'coo')).toEqual([])
+})
+
+test('D3 a director event makes the next cap stop a new one', async () => {
+  const w = world()
+  approve(w.db, w.target)
+  const provider = stub(CARRIED)
+  while (builds(w.db, 1) === 0) await tick(w.db, w.root, provider)
+  for (let n = 0; n < 4; n += 1) {
+    logged(w.db, { plan: 1, kind: 'build', actor: 'typescript_specialist', outcome: 'pass', message: '', pointer: null, run: newestRun(w.db) })
+  }
+  for (let round = 0; round < 2; round += 1) {
+    retry(w.db, plan(w.db, 1))
+    await tick(w.db, w.root, provider)
+  }
+  logged(w.db, { plan: 1, kind: 'director', actor: 'director', outcome: 'pass', message: '', pointer: null, run: null })
+  retry(w.db, plan(w.db, 1))
+  await tick(w.db, w.root, provider)
+  expect(pointers(w.db, 'build_cap')).toEqual(Array<string>(3).fill('director.md'))
 })
 
 test('D3 D4 a coo return lets 5 more builds run', async () => {

@@ -9,9 +9,10 @@ import type { Read } from '../../cli/gh.ts'
 import { all } from '../../cli/inbox.ts'
 import type { Provider } from '../../providers/kind.ts'
 import { load } from '../../runner/rules.ts'
-import { lastLogged, logged } from '../../store/events.ts'
+import { logged } from '../../store/events.ts'
 import type { Db } from '../../store/index.ts'
 import { addPipe, allPlans } from '../../store/plans.ts'
+import { lastLogged } from '../../store/wave.ts'
 import { intake } from '../capture.ts'
 import { closing } from '../wave.ts'
 
@@ -155,6 +156,15 @@ browsed('D6: a design span refuses over a pass fence', async () => {
   expect(lastLogged(db, 'wave', 'wave 1')?.outcome).toBe('refuse')
   expect(all(home)).toMatchObject([{ kind: 'refused', ticket: 'wave 1' }])
   expect(all(home)[0]?.note).toContain('index.html design.overflow 400 light')
+})
+
+browsed('D6: a fence refuse in the asked shape refuses', async () => {
+  const { db, home } = seeded()
+  const reply = '---\noutcome: refuse\nclass: drift\nspans:\n  - "index.html: the status pill differs from plans.html"\n---\n'
+  await closing(db, home, stub([], reply), canned([], WAVE_ONE), NOW, web())
+  expect(lastLogged(db, 'wave', 'wave 1')?.outcome).toBe('refuse')
+  expect(all(home)).toMatchObject([{ kind: 'refused', ticket: 'wave 1' }])
+  expect(all(home)[0]?.note).toContain('index.html: the status pill differs from plans.html')
 })
 
 browsed('D7: a reply with no fence is needs_ceo and blocked', async () => {

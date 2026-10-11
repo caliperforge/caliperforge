@@ -9,11 +9,12 @@ import { read as verdict } from '../reviews/verdict.ts'
 import { packet } from '../runner/index.ts'
 import { load, seat, tight } from '../runner/rules.ts'
 import { pipesOn } from '../store/capture.ts'
-import { lastLogged, logged } from '../store/events.ts'
+import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { LANE, wall } from '../store/lanes.ts'
 import { FIELDS, Listed, type Listing } from '../store/tickets.ts'
 import { pending } from '../store/transcript.ts'
+import { lastLogged } from '../store/wave.ts'
 import { design } from './design.ts'
 import { firstLine } from './unpolled.ts'
 
@@ -101,6 +102,6 @@ Close with this fence and nothing after it; a refuse names a snake_case \`class\
 outcome: pass | refuse | needs_ceo
 class: <on a refuse>
 spans:
-  - <page: what drifts, on a refuse>
+  - "<page>: <what drifts, on a refuse>"
 ---`
 }

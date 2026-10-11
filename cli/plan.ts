@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { put } from '../sequencer/workspace.ts'
+import { commsLane, commsPlan, fileComms } from '../store/comms.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { LANE, LANES, laneOf, priorityOf, templatePriority, type Lane } from '../store/lanes.ts'
@@ -15,6 +16,10 @@ export { LANE, LANES, laneOf, priorityOf, seen }
 const REF = /^([^/\s]+\/[^/\s#]+)#(\d+)$/
 
 const SEAT_LABEL = /^seat:([a-z][a-z0-9_]*)$/
+
+const COMMS = '**Files:** comms desk rows only; no code'
+
+const POST = /\b(?:(?:weekly|daily) \d{4}-\d{2}-\d{2}|ship post [^\s/#]+\/[^\s#]+#\d+)/
 
 const Issue = z.object({
   number: z.int(),
@@ -80,6 +85,7 @@ export function add(db: Db, root: string, ref: string, by: Holder | 'intake' | '
   if (repo !== LANE[lane].home && profile(root, repo)?.lane !== lane) {
     return refusal(db, ref, 'plan.lane_home', `is on ${repo}; the ${lane} lane builds in ${LANE[lane].home}`)
   }
+  if (row.body.includes(COMMS)) return desk(db, root, ref, row, by)
   const seat = seatOf(row.labels) ?? LANE[lane].seat
   const plan = file(db, by, pipe ?? LANE[lane].pipe, lane, seat, row.url, priority)
   put(root, plan, 'ask.md', `# ${row.title}\n\n${row.body}\n`)
@@ -102,6 +108,22 @@ export function render(row: Unfiled): string {
 function refusal(db: Db, ref: string, subject: string, why: string): Filed {
   const origin: Origin = { origin_kind: 'ruling', origin_ref: subject }
   return { plan: null, lane: null, seat: null, state: 'refused', why: `${ref} ${why}`, origin, ruling: rulingId(db, subject) }
+}
+
+function desk(db: Db, root: string, ref: string, row: z.infer<typeof Issue>, by: Holder | 'intake' | 'tick'): Filed {
+  const title = POST.exec(row.body)?.[0]
+  if (title === undefined) {
+    return refusal(db, ref, 'plan.comms_title', 'names no post title (weekly|daily YYYY-MM-DD or ship post <owner/repo#n>)')
+  }
+  commsLane(db)
+  const seat = seatOf(row.labels) ?? LANE.comms.seat
+  const plan = fileComms(db, title, null, new Date().toISOString(), { origin: row.url, seat })
+  if (plan === null) {
+    return refusal(db, ref, 'plan.comms_title', `"${title}" is already filed as plan ${String(commsPlan(db, title) ?? planOfOrigin(db, row.url))}`)
+  }
+  logged(db, { plan, kind: 'filed', actor: by, outcome: 'pass', message: row.url, pointer: null, run: null })
+  put(root, plan, 'ask.md', `# ${row.title}\n\n${row.body}\n`)
+  return { plan, lane: 'comms', seat, state: 'queued', why: `${ref} queued on comms as "${title}"`, origin: null, ruling: null }
 }
 
 export function file(db: Db, by: Holder | 'intake' | 'tick', pipe: string, lane: Lane, seat: string, url: string, priority: number | null): number {

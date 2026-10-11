@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Command } from 'commander'
@@ -8,9 +8,10 @@ import { registerPlans } from '../cf-plans.ts'
 import type { Read } from '../gh.ts'
 import { doneIds } from '../../sequencer/workspace.ts'
 import { add, LANE, laneOf, parse, priorityOf, seatOf, unfiled } from '../plan.ts'
+import { commsLane, fileComms } from '../../store/comms.ts'
 import { allEvents } from '../../store/events.ts'
 import type { Db } from '../../store/index.ts'
-import { addPipe, addPlan, allPlans, pipeNamed } from '../../store/plans.ts'
+import { addPipe, addPlan, allPlans, pipeNamed, planRows } from '../../store/plans.ts'
 import { rulingSubject } from '../../store/rulings.ts'
 
 const schema = join(import.meta.dirname, '../../schema')
@@ -176,6 +177,51 @@ test('760b D5 a profile naming the lane lets its repo file there', () => {
   expect(add(db, root, 'caliperforge/atelier-web#1', 'ceo', undefined, canned([{ ...web, labels: ['lane:machine'] }]))).toMatchObject({
     state: 'refused', why: 'caliperforge/atelier-web#1 is on caliperforge/atelier-web; the machine lane builds in caliperforge/caliperforge',
     origin: { origin_kind: 'ruling', origin_ref: 'plan.lane_home' } })
+})
+
+const MARKED: Fixture = { ...ISSUE, body: 'Write weekly 2026-10-12.\n\n**Files:** comms desk rows only; no code\n' }
+
+test('D1 a marked ticket files a titled comms plan with ask.md', () => {
+  const db = piped()
+  const filed = add(db, root, 'caliperforge/caliperforge#25', 'ceo', undefined, canned([MARKED]))
+  expect(filed).toMatchObject({ state: 'queued', lane: 'comms', seat: 'typescript_specialist' })
+  expect(planRows(db)).toMatchObject([{ id: filed.plan, template: 'comms', title: 'weekly 2026-10-12', state: 'queued',
+    pipe_id: pipeNamed(db, 'comms')?.id, lane: 'comms', origin: URL }])
+  expect(readFileSync(join(root, '.cf/work', String(filed.plan), 'ask.md'), 'utf8'))
+    .toBe(`# ${MARKED.title}\n\n${MARKED.body}\n`)
+})
+
+test('D2 the clock files nothing for a ticket-filed title', () => {
+  const db = piped()
+  add(db, root, 'caliperforge/caliperforge#25', 'ceo', undefined, canned([MARKED]))
+  expect(fileComms(db, 'weekly 2026-10-12', null, '2026-10-12T09:00:00.000Z')).toBeNull()
+  expect(planRows(db).filter((p) => p.title === 'weekly 2026-10-12')).toHaveLength(1)
+})
+
+test('D3 a marked body with no title is refused, writing nothing', () => {
+  const db = piped()
+  const filed = add(db, root, 'caliperforge/caliperforge#25', 'ceo', undefined,
+    canned([{ ...MARKED, body: '**Files:** comms desk rows only; no code' }]))
+  expect(filed).toMatchObject({ state: 'refused', plan: null, origin: { origin_kind: 'ruling', origin_ref: 'plan.comms_title' } })
+  expect(allPlans(db)).toEqual([])
+  expect(allEvents(db)).toEqual([])
+})
+
+test('D4 a title the clock filed refuses with that plan id', () => {
+  const db = piped()
+  commsLane(db)
+  const held = fileComms(db, 'weekly 2026-10-12', null, '2026-10-11T09:00:00.000Z')
+  const filed = add(db, root, 'caliperforge/caliperforge#25', 'ceo', undefined, canned([MARKED]))
+  expect(filed).toMatchObject({ state: 'refused', plan: null })
+  expect(filed.why).toContain(`already filed as plan ${String(held)}`)
+  expect(allPlans(db).map((p) => p.id)).toEqual([held])
+  expect(existsSync(join(root, '.cf/work', String(held), 'ask.md'))).toBe(false)
+})
+
+test('D5 unfiled no longer lists a filed marked ticket', () => {
+  const db = piped()
+  add(db, root, 'caliperforge/caliperforge#25', 'ceo', undefined, canned([MARKED]))
+  expect(unfiled(db, canned([MARKED]))).toEqual([])
 })
 
 test('reference and lane, seat, priority labels are read exactly', () => {

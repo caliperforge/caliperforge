@@ -23,7 +23,8 @@ import { proved } from './ready.ts'
 import { kernel, mapOf, targetOf } from './steps.ts'
 import { kept } from './merge.ts'
 import { languageFor } from './route.ts'
-import { branchOf, checkout, diffOf, internalBranch, maybe, put, ruled, srcDir, titleOf } from './workspace.ts'
+import { unbuilt } from './rails.ts'
+import { branchOf, checkout, cloned, diffOf, drop, git, internalBranch, maybe, PR_BRANCH, put, ruled, srcDir, titleOf } from './workspace.ts'
 import { assembling, assembly, homeOf } from './home.ts'
 import { BUILDS, capped, fingerprintOf, refusalText, stopped, streak, STREAK } from './refusal.ts'
 
@@ -116,10 +117,12 @@ function stillCapped(db: Db, plan: number): boolean {
  * time; the language it turns out to be written in is what picks the builder.
  */
 function workspace(db: Db, root: string, plan: PlanRow): { language: string | null; failed: Outcome | null } {
-  const fires = mapOf(plan.template).at(plan.step).fires
-  const tree = plan.template !== 'comms' && (fires === 'brief' || fires === 'seat' || fires === 'review') ? treeOf(db, root, plan) : null
+  const { fires, name } = mapOf(plan.template).at(plan.step)
+  const bare = name === 'rails' && unbuilt(root, plan.id)
+  const tree = plan.template !== 'comms' && (fires === 'brief' || fires === 'seat' || fires === 'review' || bare) ? treeOf(db, root, plan) : null
   if (tree === null) return { language: null, failed: null }
   try {
+    if (bare) rebranched(root, plan.id)
     checkout(root, plan.id, tree.repo, tree.branch, tree.from)
   } catch (error) {
     const note = error instanceof Error ? error.message : String(error)
@@ -127,6 +130,12 @@ function workspace(db: Db, root: string, plan: PlanRow): { language: string | nu
     return { language: null, failed: { outcome: 'refuse', spans: [tree.repo], note: `checkout: ${note}`, blip: true } }
   }
   return { language: languageFor(db, plan, srcDir(root, plan.id)), failed: null }
+}
+
+/** A clone on any branch but `pr.branch` loses its `base.sha`, so `checkout` moves it aside and clones the fork again. */
+function rebranched(root: string, plan: number): void {
+  const src = srcDir(root, plan)
+  if (cloned(src) && git(src, ['rev-parse', '--abbrev-ref', 'HEAD']).trim() !== maybe(root, plan, PR_BRANCH)?.trim()) drop(root, plan, 'base.sha')
 }
 
 /**

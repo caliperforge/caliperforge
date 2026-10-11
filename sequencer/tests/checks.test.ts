@@ -13,7 +13,7 @@ import { dropPlan, pipeOf } from '../../store/plans.ts'
 import { profile } from '../../store/profile.ts'
 import { verdictRows } from '../../store/verdict.ts'
 import { checks, excluded, mode, npm, type Ran, type Run } from '../checks.ts'
-import { ciFeatures, formatLine, recipes } from '../gates.ts'
+import { ciFeatures, formatLine, type Outside, recipes } from '../gates.ts'
 import { tick } from '../index.ts'
 import { capped, faulted, narrow } from '../rails.ts'
 import { get, put, srcDir } from '../workspace.ts'
@@ -715,6 +715,46 @@ test('#221 a diff step with no generator or a shell adds no gate', () => {
   const { run, calls } = heard()
   expect(checks(src, {}, run, [], { language: 'rust', files: ['crates/core/src/a.rs'] })).toBeNull()
   expect(calls).toEqual([`cargo +nightly fmt --all -- --check @${src}`, `cargo test -p surfpool-core @${src}`])
+})
+
+const PAY = { 'rust/Cargo.toml': '[workspace]\n', 'rust/crates/core/Cargo.toml': '[package]\nname = "pay-core"\n' }
+const KIT: Outside = { language: 'rust', files: ['rust/crates/core/src/lib.rs'] }
+const SURFPOOL = '-p pay-core --test surfpool_tests'
+const SURFPOOL_RED = `error: test failed, to rerun pass \`${SURFPOOL}\`\n`
+
+function cargoRed(output: string): { run: Run; calls: string[] } {
+  const calls: string[] = []
+  const run: Run = (...[args, , bin]) => {
+    calls.push(`${bin ?? 'npm'} ${args.join(' ')}`)
+    return args[0] === 'test' ? { ok: false, code: '101', output } : { ok: true, output: '' }
+  }
+  return { run, calls }
+}
+
+test('1122 D3 an excused crate under test adds --no-fail-fast', () => {
+  const src = nested(PAY)
+  const at = join(src, 'rust')
+  for (const [excused, args] of [[[SURFPOOL], 'test -p pay-core --no-fail-fast'], [[], 'test -p pay-core'], [['-p pay-kit --test x'], 'test -p pay-core']] as const) {
+    const { run, calls } = heard()
+    expect(checks(src, { excused: [...excused] }, run, [], KIT)).toBeNull()
+    expect(calls[1]).toBe(`cargo ${args} @${at}`)
+  }
+})
+
+test('1122 D4 a red run of only excused spans runs on', () => {
+  const src = nested({ ...PAY, '.github/workflows/sdk.yml': BINDINGS })
+  const { run, calls } = cargoRed(SURFPOOL_RED)
+  expect(checks(src, { excused: [SURFPOOL] }, run, [], KIT)).toBeNull()
+  expect(calls.slice(1)).toEqual(['cargo test -p pay-core --no-fail-fast', 'git add -A', 'node crates/sdk-node/scripts/generate-kit-types.js', 'git diff --exit-code'])
+})
+
+test('1122 D5 an unexcused span, or none, still refuses', () => {
+  const src = nested(PAY)
+  for (const output of [`${SURFPOOL_RED}error: test failed, to rerun pass \`-p pay-core --test server_tests\`\n`, 'error: could not compile `pay-core`\n']) {
+    const { run } = cargoRed(output)
+    expect(checks(src, { excused: [SURFPOOL] }, run, [], KIT))
+      .toEqual({ script: 'test', command: 'cargo test -p pay-core --no-fail-fast (in rust/)', code: '101', output, tests: [], retried: false })
+  }
 })
 
 test('a program that never starts is named', () => {

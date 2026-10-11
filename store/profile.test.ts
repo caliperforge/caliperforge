@@ -21,7 +21,8 @@ test('D2 pay-kit: org commit/pr shape, own checks, notes, sources', () => {
   const org = profile(REPO, 'solana-foundation/other')
   const kit = profile(REPO, 'solana-foundation/pay-kit')
   expect(kit).toMatchObject({ commit: org?.commit, pr: org?.pr, checks: { go: ['lint', 'test'] } })
-  expect(Object.keys(kit ?? {}).sort()).toEqual(['checks', 'commit', 'greptile_files', 'notes', 'pr', 'sources'])
+  expect(Object.keys(kit ?? {}).sort()).toEqual(['checks', 'commands', 'commit', 'greptile_files', 'notes', 'pr', 'sources'])
+  expect(kit?.commands).toEqual({ excused: ['-p pay-core --test surfpool_tests'] })
   expect(kit).not.toHaveProperty('intake')
   expect(profile(REPO, 'solana-foundation/surfpool')).not.toHaveProperty('intake')
 })
@@ -66,6 +67,12 @@ test('760b D1 atelier-web names its seat, lane, rails and checks', () => {
   expect(profile(REPO, 'caliperforge/atelier-web')).toEqual({ builder: 'web_specialist', lane: 'atelier',
     rails: { digests: false, ratchet: false, fence: false, tight_code: true, checks: 'local' },
     commands: { node: ['--check'], npm: ['test'] } })
+})
+
+test('1122 D1 excused parses as a list; a non-list is refused', () => {
+  expect(profile(root({ 'widget.yml': 'commands: { excused: [-p x] }\n' }), 'acme/widget')?.commands).toEqual({ excused: ['-p x'] })
+  const dir = root({ 'widget.yml': 'commands: { excused: -p x }\n' })
+  expect(() => profile(dir, 'acme/widget')).toThrow(join(dir, 'profiles/acme/widget.yml'))
 })
 
 test('760b D6 an unknown lane or a non-list node is refused', () => {

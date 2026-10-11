@@ -1,7 +1,6 @@
 {
   "adopt.ts": {
-    "lines": 108,
-    "prepare": 6
+    "lines": 100
   },
   "batch.ts": {
     "lines": 159,

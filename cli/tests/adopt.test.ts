@@ -11,6 +11,7 @@ import { decide } from '../../store/approvals.ts'
 import { pushedRow } from '../../store/deliverables.ts'
 import { SignalRow } from '../../store/signals.ts'
 import { addRule, type Db } from '../../store/index.ts'
+import { addAccount, addTarget, targetRow } from '../../store/targets.ts'
 import { adopt, render } from '../adopt.ts'
 import type { Pr, Read } from '../gh.ts'
 
@@ -117,6 +118,16 @@ test('D4 a PR off another fork is refused and nothing written', () => {
   expect(() => adopt(db, dir, `${REPO}#282`, TODAY, canned([], 270, 'outsider'))).toThrow('outsider')
   for (const table of ['accounts', 'targets', 'plans']) expect(rows(db, `SELECT id FROM ${table}`)).toEqual([])
   expect(maybe(dir, 1, PR_BRANCH)).toBeNull()
+})
+
+test('D4 re-adopting leaves the named merger alone', () => {
+  const db = fresh(schema)
+  addAccount(db, { id: 1, repo: REPO, measured_at: TODAY, maintainers: 1, doors: 1, last_outsider_merge: null,
+    open_pr_age_p50_days: 0, cross_repo_activity: 0, pulse: 'cold', evidence: URL })
+  const target = addTarget(db, { account_id: 1, repo: REPO, issue_no: 282, named_merger: 'maintainer', state: 'cold',
+    evidence_measured_at: TODAY, evidence: URL })
+  expect(adopt(db, root(), `${REPO}#282`, TODAY, canned()).target).toBe(target)
+  expect(targetRow(db, target).named_merger).toBe('maintainer')
 })
 
 test('nothing pushed: no deliverable, proof or approval on the row', () => {

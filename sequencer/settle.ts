@@ -37,7 +37,7 @@ export async function stepped(db: Db, root: string, pipe: PipeRow, plan: PlanRow
   const cap = overBuilt(db, root, pipe, plan, lease)
   if (cap !== null) return { fired: cap, wait: false }
   const tree = workspace(db, root, plan)
-  const step = mapOf(plan.template).at(plan.step, tree.language)
+  const step = mapOf(plan.template).at(plan.step, tree.language, plan.seat)
   const mark = newestRun(db)
   const verdicts = newestVerdict(db)
   const outcome = tree.failed ?? seatless(plan, step, tree.language) ?? await made(db, root, plan, step, provider, wire, read)

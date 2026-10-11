@@ -14,7 +14,7 @@ import { scan } from '../rails/secret-scan/index.ts'
 import { weakened } from '../rails/test-weakened/index.ts'
 import { sources, tight } from '../rails/tight/index.ts'
 import { logged } from '../store/events.ts'
-import { filesOf, listed } from '../store/files.ts'
+import { filesOf, listed, record as recordFiles } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
 import { digestOf } from '../store/approvals.ts'
 import { ratchetRules } from '../store/lanes.ts'
@@ -30,7 +30,7 @@ import { lock, unlock } from './lock.ts'
 import { seat } from '../runner/rules.ts'
 import { broken, renumbered, strays } from './fence.ts'
 import { fenceFor, languageFor } from './route.ts'
-import { diffOf, doneIds, get, maybe, put, srcDir } from './workspace.ts'
+import { diffOf, doneIds, get, maybe, PR_BRANCH, put, srcDir } from './workspace.ts'
 import type { Wire } from './push.ts'
 import { repoOf } from './ready.ts'
 
@@ -49,24 +49,36 @@ export function preReview(db: Db, root: string, plan: PlanRow, wire?: Wire): Out
   const commands = read?.commands ?? {}
   const refusal = on?.digests === true ? unfilled(srcDir(root, plan.id)) : null
   if (refusal !== null) return refusal
-  const handback = get(root, plan.id, 'step-2.handback.md')
+  const bare = unbuilt(root, plan.id)
+  const handback = bare ? '' : get(root, plan.id, 'step-2.handback.md')
   const diff = diffOf(root, plan.id)
-  const stop = undone(handback, judged(root, plan.id, diff))
-  if (stop.outcome !== 'pass') {
-    record(db, plan.id, stop, 0)
-    return { outcome: 'needs_ceo', spans: stop.spans, note: `completion-audit: ${stop.message}` }
-  }
-  const prev = maybe(root, plan.id, 'step-2.handback.prev.md') ?? ''
-  const ids = [...(maybe(root, plan.id, 'findings.md') ?? '').matchAll(/^- (G\d+) /gm)].map((m) => m[1] ?? '')
-  const first = audit(handback, [...doneIds(get(root, plan.id, 'issue.md')), ...ids], prev, diff)
-  record(db, plan.id, first, 0)
-  if (first.outcome !== 'pass') return unfinishedFirst(root, plan.id, named('completion-audit', first))
+  if (bare && filesOf(db, plan.id).length === 0) recordFiles(db, plan.id, parse(diff).map((f) => ({ path: f.path, is_new: false })))
+  const unaudited = bare ? null : completed(db, root, plan.id, handback, diff)
+  if (unaudited !== null) return unaudited
   for (const [rail, run] of rest(db, root, plan, handback, diff, on)) {
     const verdict = run()
     recordRail(db, join(root, 'rails', rail), plan.id, verdict, 0)
     if (verdict.outcome !== 'pass') return named(rail, verdict)
   }
   return on?.ratchet === true ? ratchetFirst(db, root, plan, diff, on, commands, wire) : suite(db, root, plan, on, commands, wire)
+}
+
+/** An adopted branch no builder has handed back yet. */
+export function unbuilt(root: string, plan: number): boolean {
+  return maybe(root, plan, PR_BRANCH) !== null && maybe(root, plan, 'step-2.handback.md') === null
+}
+
+function completed(db: Db, root: string, plan: number, handback: string, diff: string): Outcome | null {
+  const stop = undone(handback, judged(root, plan, diff))
+  if (stop.outcome !== 'pass') {
+    record(db, plan, stop, 0)
+    return { outcome: 'needs_ceo', spans: stop.spans, note: `completion-audit: ${stop.message}` }
+  }
+  const prev = maybe(root, plan, 'step-2.handback.prev.md') ?? ''
+  const ids = [...(maybe(root, plan, 'findings.md') ?? '').matchAll(/^- (G\d+) /gm)].map((m) => m[1] ?? '')
+  const first = audit(handback, [...doneIds(get(root, plan, 'issue.md')), ...ids], prev, diff)
+  record(db, plan, first, 0)
+  return first.outcome === 'pass' ? null : unfinishedFirst(root, plan, named('completion-audit', first))
 }
 
 /** `step-3.judged` holds the last lap's diff and rulings.md digests: the diff standing still under a new ruling is unmoved. */

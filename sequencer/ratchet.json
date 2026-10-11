@@ -116,7 +116,7 @@
     "silent-catch": 5
   },
   "rails.ts": {
-    "lines": 196,
+    "lines": 235,
     "prepare": 1,
     "silent-catch": 1
   },
@@ -142,7 +142,7 @@
     "silent-catch": 1
   },
   "settle.ts": {
-    "lines": 282,
+    "lines": 296,
     "prepare": 3,
     "silent-catch": 2
   },

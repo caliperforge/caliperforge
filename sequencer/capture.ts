@@ -180,7 +180,7 @@ function stored(db: Db, row: Pushed, s: Signal): SignalRow | null {
  * on such a pull request is recorded and starts nothing, and the merge is the one signal left.
  */
 function acted(db: Db, view: Pr, fresh: SignalRow[]): SignalRow[] {
-  return view.reviewDecision?.toLowerCase() === latest(db, 'signals.left_alone')?.value ?fresh.filter((s) => s.kind === 'merge') : fresh
+  return view.reviewDecision?.toLowerCase() === latest(db, 'signals.left_alone')?.value ? fresh.filter((s) => s.kind === 'merge') : fresh
 }
 
 /** Everything on our open pull request but what we said ourselves: our own comment asks nothing of us. */

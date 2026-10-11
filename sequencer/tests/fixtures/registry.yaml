@@ -308,3 +308,10 @@
   where: "actor = 'reachable' AND kind = 'swallowed' AND EXISTS (SELECT 1 FROM events s WHERE s.plan = events.plan AND s.actor = 'reachable' AND s.kind = 'swallowed' AND s.id < events.id AND NOT EXISTS (SELECT 1 FROM events b WHERE b.plan = events.plan AND b.actor = 'reachable' AND b.kind = 'back' AND b.id > s.id AND b.id < events.id))"
   gap: 7d
   expected: 0
+- name: design_lead
+  table: runs
+  column: at
+  where: seat = 'design_lead'
+  gap: 14d
+  while: EXISTS (SELECT 1 FROM plans WHERE origin GLOB 'https://github.com/caliperforge/atelier-web/*' AND queued_at >= $since)
+  when: SELECT 1 FROM runs WHERE seat = 'design_lead'

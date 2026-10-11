@@ -47,8 +47,7 @@
     "prepare": 2
   },
   "plan.ts": {
-    "lines": 130,
-    "prepare": 6,
+    "lines": 117,
     "silent-catch": 1
   },
   "proposal.ts": {

@@ -12,7 +12,7 @@
     "silent-catch": 1
   },
   "capture.ts": {
-    "lines": 256,
+    "lines": 262,
     "silent-catch": 3
   },
   "card.ts": {

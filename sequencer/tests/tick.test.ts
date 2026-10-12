@@ -18,7 +18,7 @@ import { at, steps } from '../../templates/pr-path.ts'
 import { tick } from '../index.ts'
 import { picks } from '../next.ts'
 import { blocked, kernel } from '../steps.ts'
-import { checkout, diffOf, doneIds, get, gitDiff, narrowing, put, snapshot, srcDir } from '../workspace.ts'
+import { checkout, diffOf, doneIds, get, gitDiff, maybe, narrowing, put, snapshot, srcDir } from '../workspace.ts'
 import { GREEN } from '../base.ts'
 import { record } from '../../store/files.ts'
 import { allEvents, eventsOf, newestMode, runRows } from '../../store/events.ts'
@@ -1009,6 +1009,25 @@ test('a head runless after the window is refused on ci-green', async () => {
   expect(out).toMatchObject({ step: 6, name: 'ready', outcome: 'refuse', state: 'retried' })
   expect(ciGreen(w)).toEqual([{ outcome: 'refuse' }])
   expect(plan(w.db, 1).step).toBe(5)
+})
+
+test('a refused ci-green with no red run refuses before Greptile', async () => {
+  const w = world()
+  approve(w.db, w.target)
+  const log: string[] = []
+  const unscored = { ...watched(log, w.root, 1), rehearse: () => undefined }
+  for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, unscored)
+  const wire = { ...watched(log, w.root, 1, () => '[]'), rehearse: () => undefined }
+  for (let at = 0; at < 10; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+
+  const out = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
+  expect(out).toMatchObject({ step: 6, name: 'ready', outcome: 'refuse' })
+  expect(out?.spans[0]).toMatch(/ ci\.missing$/)
+  expect(out?.spans).not.toEqual(['ci-green'])
+  expect(log.filter((l) => l.startsWith('review '))).toEqual([])
+  expect(maybe(w.root, 1, 'greptile.asked')).toBeNull()
+  expect(ciGreen(w)).toEqual([{ outcome: 'refuse' }])
+  expect(readyVerdicts(w)).toEqual({ n: 0 })
 })
 
 /** An outside plan at ready, green on the fork, whose every rehearsal `grade` scores for Greptile or leaves unscored. */

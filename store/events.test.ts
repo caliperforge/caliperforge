@@ -177,7 +177,7 @@ test('D1 D2 runLogged keeps writer modes, refuses draft', () => {
       effort: 'high', exit: 0, fired: { usage: { input: 1, cache: 0, output: 0 }, seconds: 1, transcript_path: 'x.transcript.jsonl' }, mode: m })
     return db.prepare('SELECT mode FROM runs WHERE id = ?').pluck().get(id)
   }
-  for (const m of ['log', 'ship', 'weekly'] as const) expect(mode(m)).toBe(m)
+  for (const m of ['log', 'ship', 'weekly', 'catchup'] as const) expect(mode(m)).toBe(m)
   expect(() => mode('draft' as Run['mode'])).toThrow(/CHECK constraint failed: mode/)
 })
 

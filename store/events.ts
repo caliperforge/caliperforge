@@ -63,7 +63,7 @@ export interface Run {
   effort: string
   exit: number
   fired: Pick<Fired, 'usage' | 'seconds' | 'transcript_path' | 'session'>
-  mode?: 'build' | 'review' | 'fix' | 'log' | 'ship' | 'weekly' | undefined
+  mode?: 'build' | 'review' | 'fix' | 'log' | 'ship' | 'weekly' | 'catchup' | undefined
   staffed?: string | undefined
 }
 

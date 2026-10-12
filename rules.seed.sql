@@ -63,7 +63,7 @@ VALUES
   ('rules/registry/53-drift_recovered.yaml', 'card', 'rules/registry/53-drift_recovered.yaml', 'd5bfe15161b8575fdc1cbe224caf296bfe31aa71a19d5e4d01a5828394d5e5b5', '2026-10-10'),
   ('rules/registry/54-drift_refile.yaml', 'card', 'rules/registry/54-drift_refile.yaml', '291029a62e05fd1b2d082c462fe4f17cebae55332b841468252f754b58a9c75c', '2026-10-10'),
   ('rules/registry/55-capture_swallowed_once.yaml', 'card', 'rules/registry/55-capture_swallowed_once.yaml', 'e69b94e18f0b9c182252aea14c2595d032ced88ddb2818c446f4788f43ce092f', '2026-10-10'),
-  ('rules/registry/56-design_lead.yaml', 'card', 'rules/registry/56-design_lead.yaml', '67e5479cd2f04aabc13c463c7b8fa8230ed70aadc22f23a25375eca469900d56', '2026-10-11'),
+  ('rules/registry/56-design_lead.yaml', 'card', 'rules/registry/56-design_lead.yaml', '8b32d08c48df0c064a0021ec80aee40d48c95fefe224a4d025c971e756f1ae61', '2026-10-11'),
   ('rules/staffing.yaml', 'card', 'rules/staffing.yaml', '5505b1016244ee8d5a5c03cdcf8cbb178011c063ed004dce7ee0ec90a295f87a', '2026-10-05'),
   ('completion-audit', 'rail', 'rules/rails.yaml', 'b46b445806d399b61887a5259eb0a6893444efcbe5acf2e6dd534507bc0882f3', '2026-09-17'),
   ('secret-scan', 'rail', 'rules/rails.yaml', 'b46b445806d399b61887a5259eb0a6893444efcbe5acf2e6dd534507bc0882f3', '2026-09-17'),

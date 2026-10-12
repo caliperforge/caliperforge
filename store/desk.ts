@@ -30,6 +30,7 @@ export interface Post extends Edited {
   proof_at: string | null
   url: string | null
   published_at: string | null
+  release: string | null
 }
 
 export function posts(db: Db): Post[] {
@@ -64,8 +65,9 @@ export function published(db: Db, at: string): number {
   return db.prepare("UPDATE desk_posts SET status = 'published', published_at = ? WHERE status = 'approved' AND url IS NOT NULL").run(at).changes
 }
 
-export function aged(db: Db, before: string): Post[] {
-  return db.prepare("SELECT * FROM desk_posts WHERE kind = 'daily' AND status = 'proof' AND proof_at < ? ORDER BY id").all(before) as Post[]
+export function aged(db: Db, before: string, at: string): Post[] {
+  return db.prepare(`SELECT * FROM desk_posts WHERE status = 'proof' AND proof_at < @before
+    AND (kind = 'daily' OR (kind = 'catchup' AND release <= @at)) ORDER BY id`).all({ before, at }) as Post[]
 }
 
 export function awaiting(db: Db): boolean {
@@ -124,9 +126,11 @@ export function putPost(db: Db, p: Pick<Post, 'id' | 'kind' | 'dest' | 'status' 
 }
 
 /** False when the plan already has its post. */
-export function proofed(db: Db, p: Pick<Post, 'id' | 'kind' | 'dest' | 'title' | 'dek' | 'body' | 'sources' | 'checks' | 'work_date' | 'written_date'>): boolean {
-  return db.prepare(`INSERT OR IGNORE INTO desk_posts (id, kind, dest, status, title, dek, body, sources, checks, work_date, written_date, proof_at)
-    VALUES (@id, @kind, @dest, 'proof', @title, @dek, @body, @sources, @checks, @work_date, @written_date, datetime('now'))`).run(p).changes > 0
+export function proofed(db: Db, p: Pick<Post, 'id' | 'kind' | 'dest' | 'title' | 'dek' | 'body' | 'sources' | 'checks' | 'work_date' | 'written_date'>
+  & Partial<Pick<Post, 'release'>>): boolean {
+  return db.prepare(`INSERT OR IGNORE INTO desk_posts (id, kind, dest, status, title, dek, body, sources, checks, work_date, written_date, proof_at, release)
+    VALUES (@id, @kind, @dest, 'proof', @title, @dek, @body, @sources, @checks, @work_date, @written_date, datetime('now'), @release)`)
+    .run({ release: null, ...p }).changes > 0
 }
 
 export function learnings(db: Db): { date: string; numbers: string | null; items: string | null; sources: string | null }[] {

@@ -872,10 +872,13 @@ test('catchupDesk D1 D2: desk proofs one row per dated post', async () => {
   const w = await caughtUp()
   expect(desk(w.db, w.root, plan(w.db, 1))).toEqual({ outcome: 'pass', spans: [], note: '2 catchup post(s) in proof' })
   const bodies = CATCHUP.map((text) => drafted(text)?.post.split('\n').slice(1).join('\n').trim())
+  const start = new Date(plan(w.db, 1).queued_at.slice(0, 10))
+  const released = (k: number): string => `${new Date(start.getTime() + k * 86_400_000).toISOString().slice(0, 10)} 12:00:00`
   expect(posts(w.db)).toMatchObject([
-    { id: 3_000_001, kind: 'catchup', dest: 'site', status: 'proof', title: 'The day a refusal named the wrong file', body: bodies[0], work_date: '2026-09-26–2026-09-26' },
+    { id: 3_000_001, kind: 'catchup', dest: 'site', status: 'proof', title: 'The day a refusal named the wrong file', body: bodies[0], work_date: '2026-09-26–2026-09-26',
+      release: released(1) },
     { id: 4_000_001, kind: 'catchup', dest: 'site', status: 'proof', title: 'Two learnings from a quiet day', body: bodies[1],
-      work_date: '2026-09-27–2026-10-02' },
+      work_date: '2026-09-27–2026-10-02', release: released(2) },
   ])
   const dir = sited()
   const name = render(dir, postOf(w.db, 4_000_001))
@@ -1045,12 +1048,14 @@ const DAY_URL = 'https://caliperforge.com/blog/06_the-day.html'
 
 const later = (hours: number): Date => new Date(Date.now() + hours * 3_600_000)
 
-const aging = (dir: string): World => {
+const aging = (dir: string, post: Parameters<typeof proofed>[1] = DAILY): World => {
   const w = clocked(null)
   set(w.db, 'comms.site_dir', dir, 'ceo', '2026-10-04')
-  proofed(w.db, DAILY)
+  proofed(w.db, post)
   return w
 }
+
+const [RELEASED, AHEAD] = ['2026-01-01 12:00:00', '2999-01-01 12:00:00']
 
 test('ripe D1: tick publishes a daily 25 hours in proof', async () => {
   const dir = sited()
@@ -1111,6 +1116,31 @@ test('ripe D5: a failed push keeps the daily in proof, logged', async () => {
   await tick(w.db, w.root, never, later(25))
   expect(postOf(w.db, 1)).toMatchObject({ status: 'proof', url: DAY_URL, published_at: null })
   expect(ofKind(w.db, 'site_push')).toMatchObject([{ plan: null, actor: 'tick', outcome: 'refuse' }])
+})
+
+test.each([
+  { why: 'a catchup past its release', post: { ...DAILY, kind: 'catchup', release: RELEASED } },
+  { why: 'a daily before its release', post: { ...DAILY, release: AHEAD } },
+])('ripe D2 D5: $why airs at 25h', async ({ post }) => {
+  const dir = sited()
+  const w = aging(dir, post)
+  const now = later(25)
+  await tick(w.db, w.root, never, now)
+  expect(postOf(w.db, 1)).toMatchObject({ status: 'published', url: DAY_URL, published_at: now.toISOString() })
+})
+
+test.each([
+  { why: 'past release at 23h', release: RELEASED, hours: 23 },
+  { why: 'before release at 25h', release: AHEAD, hours: 25 },
+  { why: 'with no release at 25h', release: null, hours: 25 },
+])('ripe D3 D4: a catchup $why stays in proof', async ({ release, hours }) => {
+  const dir = sited()
+  const w = aging(dir, { ...DAILY, kind: 'catchup', release })
+  const before = postOf(w.db, 1)
+  await tick(w.db, w.root, never, later(hours))
+  expect(postOf(w.db, 1)).toEqual(before)
+  expect(readdirSync(join(dir, 'blog')).sort()).toEqual([POST05.slice('blog/'.length), 'index.html'])
+  expect(git(dir, ['rev-list', '--count', 'HEAD']).trim()).toBe('1')
 })
 
 const PLACED = 'https://caliperforge.com/blog/06_week.html'

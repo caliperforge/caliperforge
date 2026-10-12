@@ -318,5 +318,11 @@
   column: at
   where: seat = 'design_lead'
   gap: 14d
-  while: EXISTS (SELECT 1 FROM plans WHERE origin GLOB 'https://github.com/caliperforge/atelier-web/*' AND queued_at >= $since)
+  while: EXISTS (SELECT 1 FROM tickets WHERE repo = 'caliperforge/atelier-web' AND wave IS NOT NULL AND closed_at IS NULL)
   when: SELECT 1 FROM runs WHERE seat = 'design_lead'
+- name: daily_live
+  table: desk_posts
+  column: published_at
+  where: kind = 'daily' AND published_at IS NOT NULL
+  gap: 30h
+  while: EXISTS (SELECT 1 FROM pipes WHERE name = 'comms' AND enabled = 1)

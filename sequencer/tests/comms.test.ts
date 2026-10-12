@@ -218,6 +218,10 @@ test.each([
   expect(drafted(varied(key, value))).toBeNull()
 })
 
+test('catchupRefs D1: a fence may cite learnings:<date>', () => {
+  expect(drafted(varied('sources', '[{"claim": "x", "ref": "learnings:2026-09-26"}]'))?.sources).toEqual([{ claim: 'x', ref: 'learnings:2026-09-26' }])
+})
+
 test('writer D4: a reply with no learnings fence reads as null', () => {
   expect(drafted(fixture('no-learnings.md'))).toBeNull()
 })
@@ -777,6 +781,21 @@ test.each([
     .toMatchObject({ outcome: 'refuse', spans: ['writer.fence'] })
   expect(maybe(w.root, 1, 'posts.json')).toBeNull()
 })
+
+test('catchupFacts D2: held dates and real path:line refs pass', async () => {
+  const w = catchup()
+  await draft(w.db, w.root, plan(w.db, 1), mapOf('comms').at(1), seated(CATCHUP.join('\n')))
+  expect(facts(w.root, plan(w.db, 1))).toMatchObject({ outcome: 'pass', spans: [] })
+})
+
+const PAST = `rails/diff.ts:${String(readFileSync(join(import.meta.dirname, '../../rails/diff.ts'), 'utf8').replace(/\n$/, '').split('\n').length + 1)}`
+
+test.each(['learnings:2026-10-03', 'nope/missing.ts:1', PAST, '../x.ts:1', 'landed:7', 'refusal:3', 'https://example.com/a'])(
+  'catchupFacts D3: a post citing %s refuses', (ref) => {
+    const w = catchup()
+    put(w.root, 1, 'posts.json', JSON.stringify([{ ...drafted(CATCHUP[0] ?? ''), sources: [{ claim: 'x', ref }] }]))
+    expect(facts(w.root, plan(w.db, 1))).toMatchObject({ outcome: 'refuse', spans: [`fence.json:${ref}`] })
+  })
 
 test('weeklyFacts D3: untagged passes, links and logins refuse', () => {
   const w = comms()

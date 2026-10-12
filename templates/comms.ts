@@ -18,6 +18,7 @@ import type { Run } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { packetOf } from '../store/packet.ts'
 import { planTitle, type PlanRow } from '../store/plans.ts'
+import { held } from './held.ts'
 import { ROOT, type Step } from './pr-path.ts'
 
 const SEATED = new Set(['draft', 'text_review', 'grow'])
@@ -47,6 +48,10 @@ export function gather(db: Db, root: string, plan: PlanRow): Outcome {
 }
 
 export function facts(root: string, plan: PlanRow): Outcome {
+  const posts = JSON.parse(maybe(root, plan.id, 'posts.json') ?? 'null') as { sources: { ref: string }[] }[] | null
+  const dates = posts === null ? [] : (JSON.parse(get(root, plan.id, 'packet.json')) as { learnings: { date: string }[] }).learnings.map((l) => l.date)
+  const unheld = posts?.flatMap((p) => p.sources.flatMap((s) => (held(root, dates, s.ref) ? [] : [`fence.json:${s.ref}`])))
+  if (unheld !== undefined) return { outcome: unheld.length === 0 ? 'pass' : 'refuse', spans: unheld, note: `${String(unheld.length)} catchup ref(s) not a held learnings:<date> or a path:line in the root` }
   const draft = maybe(root, plan.id, 'draft.md')
   if (draft === null) return { outcome: 'pass', spans: [], note: 'no draft' }
   const { landed, refusals = [] } = JSON.parse(get(root, plan.id, 'packet.json')) as { landed?: Landed[]; refusals?: { id: number }[] }
@@ -60,7 +65,7 @@ export function facts(root: string, plan: PlanRow): Outcome {
   return { outcome: 'refuse', spans, note: `${String(spans.length)} span(s) cite a ref the packet lacks, or carry an inline tag, an unclaimed number, an issue or an outside login` }
 }
 
-const REF = /^(https:\/\/\S+|[\w-][\w./-]*:[1-9]\d*)$/
+const REF = /^(https:\/\/\S+|learnings:\d{4}-\d{2}-\d{2}|[\w-][\w./-]*:[1-9]\d*)$/
 
 const Fence = z.object({
   learnings: z.string().trim().min(1),

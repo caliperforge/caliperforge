@@ -28,7 +28,7 @@ test('D6: the items fence, each status, no "Read nothing else"', () => {
 
 test('sources D6: the lead, tagless body and sources refs', () => {
   const prompt = seat(root, 'writer').prompt
-  for (const part of ['comms.story_dir', '`learned`', '`learnings`', '`story`', 'no `[landed:N]`', '`landed:N`', '`refusal:N`']) expect(prompt).toContain(part)
+  for (const part of ['comms.story_dir', '`learned`', '`learnings`', '`story`', 'no `[landed:N]`', '`landed:N`', '`refusal:N`', 'learnings:<date>']) expect(prompt).toContain(part)
 })
 
 test('D5: the citations, the fence and each kind of post', () => {

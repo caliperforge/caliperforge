@@ -995,7 +995,7 @@ test('step 6 waits out the push window, then judges the new run', async () => {
   expect(sent).toHaveLength(4)
 })
 
-test('a head runless after the window is refused on ci-green', async () => {
+test('a head runless after the window goes to the ceo', async () => {
   const w = world()
   approve(w.db, w.target)
   for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
@@ -1006,12 +1006,13 @@ test('a head runless after the window is refused on ci-green', async () => {
   }
 
   const out = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
-  expect(out).toMatchObject({ step: 6, name: 'ready', outcome: 'refuse', state: 'retried' })
-  expect(ciGreen(w)).toEqual([{ outcome: 'refuse' }])
-  expect(plan(w.db, 1).step).toBe(5)
+  expect(out).toMatchObject({ step: 6, name: 'ready', outcome: 'needs_ceo', state: 'blocked_on_ceo' })
+  expect(out?.note).toMatch(/ran no workflow at [0-9a-f]{12} in 10 ticks$/)
+  expect(ciGreen(w)).toEqual([])
+  expect(plan(w.db, 1)).toMatchObject({ step: 6, retries: 0 })
 })
 
-test('a refused ci-green with no red run refuses before Greptile', async () => {
+test('a runless head goes to the ceo before Greptile', async () => {
   const w = world()
   approve(w.db, w.target)
   const log: string[] = []
@@ -1021,12 +1022,12 @@ test('a refused ci-green with no red run refuses before Greptile', async () => {
   for (let at = 0; at < 10; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
 
   const out = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
-  expect(out).toMatchObject({ step: 6, name: 'ready', outcome: 'refuse' })
+  expect(out).toMatchObject({ step: 6, name: 'ready', outcome: 'needs_ceo' })
   expect(out?.spans[0]).toMatch(/ ci\.missing$/)
   expect(out?.spans).not.toEqual(['ci-green'])
   expect(log.filter((l) => l.startsWith('review '))).toEqual([])
   expect(maybe(w.root, 1, 'greptile.asked')).toBeNull()
-  expect(ciGreen(w)).toEqual([{ outcome: 'refuse' }])
+  expect(ciGreen(w)).toEqual([])
   expect(readyVerdicts(w)).toEqual({ n: 0 })
 })
 

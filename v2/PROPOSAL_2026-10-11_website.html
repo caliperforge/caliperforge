@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Caliperforge: security and verification for payment systems</title>
+<meta name="description" content="A research lab that checks payment rails and paid APIs end to end.">
+<style>
+  :root {
+    --paper: #f7f5f0;
+    --ink: #16191f;
+    --muted: #5b6170;
+    --rule: #d9d4c7;
+    --panel: #eeebe3;
+    --check: #1f6f5c;
+    --serif: ui-serif, "Iowan Old Style", Georgia, Cambria, "Times New Roman", serif;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    --gutter: 1.5rem;
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--paper); color: var(--ink); }
+  body {
+    margin: 0;
+    font: 1.0625rem/1.6 var(--sans);
+  }
+  a { color: var(--check); text-underline-offset: 0.2em; }
+  .wrap {
+    max-width: 72rem;
+    margin: 0 auto;
+    padding: 0 2rem;
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    column-gap: var(--gutter);
+  }
+  .main { grid-column: 1 / 9; max-width: 38rem; }
+  .aside { grid-column: 9 / 13; }
+  .note { color: var(--muted); margin-top: 1rem; }
+  h1, h2, h3 { font-family: var(--serif); font-weight: 600; line-height: 1.2; margin: 0 0 1rem; }
+  h1 { font-size: clamp(2.25rem, 5vw, 3.5rem); letter-spacing: -0.01em; }
+  h2 { font-size: 1.75rem; }
+  h3 { font-size: 1.25rem; }
+  p { margin: 0 0 1rem; }
+  .mono { font-family: var(--mono); font-size: 0.9375rem; }
+
+  header { border-bottom: 1px solid var(--rule); }
+  header .wrap { align-items: baseline; padding-top: 1.25rem; padding-bottom: 1.25rem; }
+  .mark { grid-column: 1 / 5; font-family: var(--serif); font-size: 1.25rem; font-weight: 600; color: var(--ink); text-decoration: none; }
+  nav { grid-column: 5 / 13; justify-self: end; }
+  nav ul { list-style: none; margin: 0; padding: 0; display: flex; gap: 2rem; }
+  nav a { color: var(--ink); text-decoration: none; }
+  nav a[aria-current="page"] { text-decoration: underline; text-decoration-color: var(--check); text-decoration-thickness: 2px; }
+
+  section { border-bottom: 1px solid var(--rule); }
+  section .wrap { padding-top: 4rem; padding-bottom: 4rem; }
+  .lede { font-size: 1.25rem; }
+  .eyebrow { font-family: var(--mono); font-size: 0.8125rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 1rem; }
+  .act {
+    display: inline-block;
+    margin-top: 0.5rem;
+    padding: 0.625rem 1.125rem;
+    background: var(--check);
+    color: var(--paper);
+    text-decoration: none;
+    border-radius: 2px;
+  }
+
+  .evidence {
+    background: var(--panel);
+    border-left: 3px solid var(--check);
+    padding: 1.25rem 1.5rem;
+    font-family: var(--mono);
+    font-size: 0.875rem;
+    line-height: 1.7;
+  }
+  .evidence ol { margin: 0; padding-left: 1.25rem; }
+  .evidence li::marker { color: var(--check); }
+
+  .cards { list-style: none; margin: 0; padding: 0; display: contents; }
+  .card { grid-column: span 4; border-top: 2px solid var(--ink); padding-top: 1.25rem; }
+  .card .mono { color: var(--muted); }
+  .cards-head { grid-column: 1 / 13; margin-bottom: 2rem; }
+
+  .posts { list-style: none; margin: 0; padding: 0; }
+  .posts li { display: grid; grid-template-columns: 8rem 1fr; gap: var(--gutter); padding: 0.875rem 0; border-top: 1px solid var(--rule); }
+  .posts time { font-family: var(--mono); font-size: 0.875rem; color: var(--muted); padding-top: 0.15rem; }
+
+  footer .wrap { padding-top: 2rem; padding-bottom: 3rem; color: var(--muted); font-size: 0.9375rem; }
+  footer p { grid-column: 1 / 7; }
+  footer nav { grid-column: 7 / 13; }
+  footer nav a { color: var(--muted); }
+
+  @media (max-width: 48rem) {
+    .wrap { padding: 0 1.25rem; }
+    .main, .aside, .card, .cards-head, .mark, nav, footer p, footer nav { grid-column: 1 / -1; }
+    nav { justify-self: start; margin-top: 0.75rem; }
+    nav ul { gap: 1.25rem; }
+    .aside { margin-top: 2rem; }
+    .card + .card { margin-top: 2rem; }
+    .posts li { grid-template-columns: 1fr; gap: 0.25rem; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <a class="mark" href="/">Caliperforge</a>
+    <nav aria-label="Site">
+      <ul>
+        <li><a href="/" aria-current="page">Home</a></li>
+        <li><a href="/work/">Work</a></li>
+        <li><a href="/writing/">Writing</a></li>
+        <li><a href="/about/">About</a></li>
+      </ul>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section>
+    <div class="wrap">
+      <div class="main">
+        <p class="eyebrow">A research lab</p>
+        <h1>Security and verification for payment systems.</h1>
+        <p class="lede">For teams that ship payment rails and paid APIs and need them checked end to end: from the offer an endpoint quotes to the price its listing declares.</p>
+        <a class="act" href="/work/">See how a check runs</a>
+      </div>
+      <aside class="aside">
+        <div class="evidence" aria-label="What a paid check reads">
+          <ol>
+            <li>pay the endpoint</li>
+            <li>read the 402 offer</li>
+            <li>network, coin</li>
+            <li>quoted price vs declared</li>
+            <li>host, listing text</li>
+          </ol>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <section aria-labelledby="capabilities">
+    <div class="wrap">
+      <div class="cards-head">
+        <p class="eyebrow">What we do</p>
+        <h2 id="capabilities">Three ways we check a payment system</h2>
+      </div>
+      <ul class="cards">
+        <li class="card">
+          <p class="mono">01 · audit</p>
+          <h3>Paid end-to-end audits</h3>
+          <p>We pay each endpoint a catalog lists and check its 402 offer, its network, its coin and its declared price against what it quotes. The listing is read too: whether its host resolves, where it is hosted, what its text claims.</p>
+        </li>
+        <li class="card">
+          <p class="mono">02 · fix</p>
+          <h3>Fixes in payment code</h3>
+          <p>Where a check finds a fault, we send the fix to the code that owns it.</p>
+        </li>
+        <li class="card">
+          <p class="mono">03 · hold</p>
+          <h3>Invariants and regression suites</h3>
+          <p>We write down what a payment flow must always hold and keep the tests that check it on every change.</p>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <section aria-labelledby="method">
+    <div class="wrap">
+      <div class="main">
+        <p class="eyebrow">Method</p>
+        <h2 id="method">We pay, then we read</h2>
+        <p>A payment endpoint is only checked once it has been paid. We send the payment it asks for, record what comes back, and set it beside what the endpoint and its listing claim.</p>
+        <p>The work page sets out each check step by step.</p>
+        <p><a href="/work/">Read the work</a></p>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="writing">
+    <div class="wrap">
+      <div class="main">
+        <p class="eyebrow">Writing</p>
+        <h2 id="writing">Newest from the lab</h2>
+        <ul class="posts">
+          <li><time>[date]</time><a href="/writing/">[Newest post title]</a></li>
+          <li><time>[date]</time><a href="/writing/">[Second post title]</a></li>
+          <li><time>[date]</time><a href="/writing/">[Third post title]</a></li>
+        </ul>
+        <p class="note">Every post shows its date.</p>
+        <p><a href="/writing/">All writing</a></p>
+      </div>
+      <aside class="aside">
+        <p class="eyebrow">About</p>
+        <p>Caliperforge is a research lab. It checks payment systems and publishes how.</p>
+        <p><a href="/about/">About the lab</a></p>
+      </aside>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>Caliperforge · security and verification for payment systems</p>
+    <nav aria-label="Footer">
+      <ul>
+        <li><a href="/">Home</a></li>
+        <li><a href="/work/">Work</a></li>
+        <li><a href="/writing/">Writing</a></li>
+        <li><a href="/about/">About</a></li>
+      </ul>
+    </nav>
+  </div>
+</footer>
+
+</body>
+</html>

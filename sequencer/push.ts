@@ -97,8 +97,7 @@ const REHEARSED = 'ci.next'
  * branch's own commit messages for an upstream number -- and `rails/ci-green` judges the runs at
  * that head. GitHub has no run at a head the moment the push returns, so a head with no run yet
  * waits as a run still going does. Both count on one tally: a head with no run is judged past `APPEARS`
- * ticks, one whose runs are going past `FINISHES`; then a head with no run has its spans recorded as the
- * refusal they are, so a CI that never greens still reaches `back()`, and a gating run still going goes to `needs_ceo`.
+ * ticks, one whose runs are going past `FINISHES`; then a head with no run, as a gating run still going, goes to `needs_ceo`.
  * A red run goes to the builder, not a reviewer: their CI is the only test an outside build gets.
  */
 export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire = WIRE): Outcome | null {
@@ -117,11 +116,8 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
   const window = carries(verdict.spans, MISSING) ? APPEARS : FINISHES
   const hold = waiting === null ? null : holding(root, plan.id, head.sha, verdict.spans, `${at} ${waiting}`, window)
   if (hold !== null) return onCi(db, plan.id, hold)
-  if (carries(verdict.spans, PENDING)) {
-    const running = board.filter((r) => r.gates && r.status !== 'completed').map((r) => r.workflow).join(', ')
-    freed(db, plan.id)
-    return { outcome: 'needs_ceo', spans: [PENDING], note: `${at} is still running ${running} after ${String(FINISHES)} ticks` }
-  }
+  const stop = stalled(verdict.spans, board, at, fork, tip)
+  if (stop !== null) { freed(db, plan.id); return stop }
   const again = waiting === null && verdict.outcome === 'refuse' ? cancelled(root, plan.id, on, verdict.spans, wire.runs) : null
   if (again !== null) {
     const rerunning = holding(root, plan.id, head.sha, verdict.spans, `${at} ${again}`, APPEARS, RERUNS)
@@ -144,6 +140,13 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
 function refused(at: string, verdict: Verdict, failed: ReturnType<typeof red>): Outcome {
   if (failed === null) return { outcome: 'refuse', spans: verdict.spans, message: verdict.message, note: `ci-green refused ${at}: ${verdict.message}` }
   return { outcome: 'refuse', spans: failed.spans, message: failed.log, to: 2, note: `their CI is red on ${at}; back to the builder with the failed log` }
+}
+
+function stalled(spans: string[], board: Board[], at: string, fork: string, tip: string): Outcome | null {
+  if (carries(spans, MISSING)) return { outcome: 'needs_ceo', spans, note: `${fork} ran no workflow at ${tip.slice(0, 12)} in ${String(APPEARS)} ticks` }
+  if (!carries(spans, PENDING)) return null
+  const running = board.filter((r) => r.gates && r.status !== 'completed').map((r) => r.workflow).join(', ')
+  return { outcome: 'needs_ceo', spans: [PENDING], note: `${at} is still running ${running} after ${String(FINISHES)} ticks` }
 }
 
 /** Step 3's pass opens the rehearsal: a review bot reads only an open pull request. */

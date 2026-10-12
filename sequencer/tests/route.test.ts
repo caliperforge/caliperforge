@@ -7,7 +7,8 @@ import { authority } from '../../rails/authority/index.ts'
 import { refuse } from '../../runner/index.ts'
 import { record } from '../../store/files.ts'
 import type { Db } from '../../store/index.ts'
-import { PlanRow } from '../../store/plans.ts'
+import { planById, putPlan, type PlanRow } from '../../store/plans.ts'
+import { addAccount, putTarget } from '../../store/targets.ts'
 import { at, builder, languageOfSeat } from '../../templates/pr-path.ts'
 import { BRIEF_FILES, fenceFor, languageFor, languageOfPath, languageOfSpan, majority } from '../route.ts'
 
@@ -22,18 +23,16 @@ function monorepo(): string {
 
 function world(): { db: Db; target: PlanRow; ours: PlanRow; hooks: PlanRow; web: PlanRow } {
   const db = fresh(schema)
-  db.prepare(`INSERT INTO accounts (id, repo, measured_at, maintainers, doors, last_outsider_merge,
-    open_pr_age_p50_days, cross_repo_activity, pulse, evidence)
-    VALUES (1, 'acme/kit', '2026-09-21', 2, 1, '2026-09-21', 3, 4, 'warm', 'https://github.com/acme/kit')`).run()
-  db.prepare(`INSERT INTO targets (id, account_id, repo, issue_no, named_merger, state, evidence_measured_at, evidence)
-    VALUES (1, 1, 'acme/kit', 166, 'ludo', 'ready', '2026-09-21', 'https://github.com/acme/kit/issues/166')`).run()
-  db.prepare(`INSERT INTO plans (id, pipe_id, target_id, template, state, queued_at) VALUES (1, 1, 1, 'pr_path', 'running', '2026-09-21')`).run()
-  db.prepare(`INSERT INTO plans (id, pipe_id, template, state, queued_at, lane, seat, origin)
-    VALUES (2, 1, 'pr_path', 'running', '2026-09-21', 'machine', 'typescript_specialist', 'https://github.com/caliperforge/caliperforge/issues/1')`).run()
-  db.prepare(`INSERT INTO plans (id, pipe_id, template, state, queued_at, lane, seat, origin)
-    VALUES (3, 1, 'pr_path', 'running', '2026-09-21', 'uniswap', 'python_specialist', 'https://github.com/caliperforge/v4-hook-index/issues/1'),
-    (4, 1, 'pr_path', 'running', '2026-09-21', 'atelier', 'swift_specialist', 'https://github.com/caliperforge/atelier-web/issues/1')`).run()
-  const row = (id: number): PlanRow => PlanRow.parse(db.prepare('SELECT * FROM plans WHERE id = ?').get(id))
+  addAccount(db, { id: 1, repo: 'acme/kit', measured_at: '2026-09-21', maintainers: 2, doors: 1, last_outsider_merge: '2026-09-21',
+    open_pr_age_p50_days: 3, cross_repo_activity: 4, pulse: 'warm', evidence: 'https://github.com/acme/kit' })
+  putTarget(db, { id: 1, account_id: 1, repo: 'acme/kit', issue_no: 166, named_merger: 'ludo', state: 'ready',
+    evidence_measured_at: '2026-09-21', evidence: 'https://github.com/acme/kit/issues/166' })
+  const running = { pipe_id: 1, target_id: null, template: 'pr_path', state: 'running', queued_at: '2026-09-21', step: 0, retries: 0 } as const
+  putPlan(db, { ...running, id: 1, target_id: 1 })
+  putPlan(db, { ...running, id: 2, lane: 'machine', seat: 'typescript_specialist', origin: 'https://github.com/caliperforge/caliperforge/issues/1' })
+  putPlan(db, { ...running, id: 3, lane: 'uniswap', seat: 'python_specialist', origin: 'https://github.com/caliperforge/v4-hook-index/issues/1' })
+  putPlan(db, { ...running, id: 4, lane: 'atelier', seat: 'swift_specialist', origin: 'https://github.com/caliperforge/atelier-web/issues/1' })
+  const row = (id: number): PlanRow => planById(db, id)
   return { db, target: row(1), ours: row(2), hooks: row(3), web: row(4) }
 }
 

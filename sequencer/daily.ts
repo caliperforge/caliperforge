@@ -28,8 +28,8 @@ export function listed(root: string, plan: PlanRow, step: Step, text: string): O
 }
 
 export function subject(root: string, plan: number): [string, string | null] {
-  const items = maybe(root, plan, 'items.json')
-  return items === null ? ['draft.md', maybe(root, plan, 'draft.md')] : ['items.json', items]
+  const name = ['items.json', 'posts.json'].find((n) => maybe(root, plan, n) !== null) ?? 'draft.md'
+  return [name, maybe(root, plan, name)]
 }
 
 export function merged(db: Db, root: string, plan: PlanRow): Outcome {

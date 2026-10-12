@@ -13,11 +13,14 @@ import { ran } from '../sequencer/seat.ts'
 import { staffed } from '../sequencer/staffing.ts'
 import { scripted, shift, sound, weekly } from '../sequencer/weekly.ts'
 import { drop, get, maybe, move, put } from '../sequencer/workspace.ts'
-import { edited, noted, packsIn, proofed, returned, scorecardOf, substackIn } from '../store/desk.ts'
+import { edited, learningsIn, noted, packsIn, proofed, returned, scorecardOf, substackIn } from '../store/desk.ts'
 import type { Run } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { packetOf } from '../store/packet.ts'
 import { planTitle, type PlanRow } from '../store/plans.ts'
+import { caught } from './catchup.ts'
+import { Fence, HEAD, noting, Stored } from './fence.ts'
+import { held } from './held.ts'
 import { ROOT, type Step } from './pr-path.ts'
 
 const SEATED = new Set(['draft', 'text_review', 'grow'])
@@ -35,12 +38,22 @@ export const steps: Step[] = ['gather', 'draft', 'facts', 'text_review', 'desk',
 export function gather(db: Db, root: string, plan: PlanRow): Outcome {
   const week = titled(db, plan, 'weekly')
   if (week !== null) return weekly(db, root, plan, week.slice('weekly '.length))
+  const [, from = '', to = ''] = titled(db, plan, 'catchup')?.split(' ') ?? []
+  if (from !== '') {
+    const learnings = learningsIn(db, from, to)
+    put(root, plan.id, 'packet.json', JSON.stringify({ learnings }))
+    return { outcome: 'pass', spans: [], note: `${String(learnings.length)} date(s)` }
+  }
   const packet = packetOf(db, plan.id)
   put(root, plan.id, 'packet.json', JSON.stringify(packet))
   return { outcome: 'pass', spans: [], note: `${String(packet.landed.length)} landed, ${String(packet.refusals.length)} refused` }
 }
 
 export function facts(root: string, plan: PlanRow): Outcome {
+  const posts = JSON.parse(maybe(root, plan.id, 'posts.json') ?? 'null') as { sources: { ref: string }[] }[] | null
+  const dates = posts === null ? [] : (JSON.parse(get(root, plan.id, 'packet.json')) as { learnings: { date: string }[] }).learnings.map((l) => l.date)
+  const unheld = posts?.flatMap((p) => p.sources.flatMap((s) => (held(root, dates, s.ref) ? [] : [`fence.json:${s.ref}`])))
+  if (unheld !== undefined) return { outcome: unheld.length === 0 ? 'pass' : 'refuse', spans: unheld, note: `${String(unheld.length)} catchup ref(s) not a held learnings:<date> or a path:line in the root` }
   const draft = maybe(root, plan.id, 'draft.md')
   if (draft === null) return { outcome: 'pass', spans: [], note: 'no draft' }
   const { landed, refusals = [] } = JSON.parse(get(root, plan.id, 'packet.json')) as { landed?: Landed[]; refusals?: { id: number }[] }
@@ -54,31 +67,21 @@ export function facts(root: string, plan: PlanRow): Outcome {
   return { outcome: 'refuse', spans, note: `${String(spans.length)} span(s) cite a ref the packet lacks, or carry an inline tag, an unclaimed number, an issue or an outside login` }
 }
 
-const REF = /^(https:\/\/\S+|[\w-][\w./-]*:[1-9]\d*)$/
-
-const Fence = z.object({
-  learnings: z.string().trim().min(1),
-  dest: z.enum(['site', 'substack', 'note']),
-  dek: z.string().trim().min(1).max(160).regex(/^[^`*_#[\]<>~]*$/),
-  sources: z.array(z.object({ claim: z.string().trim().min(1), ref: z.string().regex(REF) })),
-  checks: z.array(z.object({ label: z.string().trim().min(1), ok: z.boolean() })),
-})
-
 export function drafted(reply: string): (z.infer<typeof Fence> & { post: string }) | null {
   const fence = CLOSING.exec(reply)
   if (fence === null) return null
-  const got = Fence.safeParse(prose(fence[1] ?? '', ['learnings', 'dek']))
+  const got = Fence.safeParse(prose(fence[1] ?? '', ['learnings', 'dek', 'date']))
   return got.success ? { ...got.data, post: reply.slice(0, fence.index).trim() } : null
 }
 
-const Stored = Fence.extend({ learnings: z.string().optional() })
-
 export function desk(db: Db, root: string, plan: PlanRow): Outcome {
+  const posts = maybe(root, plan.id, 'posts.json')
+  if (posts !== null) return caught(db, plan, posts)
   const draft = maybe(root, plan.id, 'draft.md')
   if (draft === null) return merged(db, root, plan)
   const fence = Stored.safeParse(JSON.parse(maybe(root, plan.id, 'fence.json') ?? 'null'))
   if (!fence.success) return { outcome: 'refuse', spans: ['fence.json'], note: 'fence.json is missing or lacks a post field' }
-  const post = /^# (.+)\n([\s\S]*)$/.exec(draft)
+  const post = HEAD.exec(draft)
   const body = post?.[2]?.trim() ?? ''
   if (post === null || body === '') return { outcome: 'refuse', spans: ['draft.md'], note: 'draft.md has no # title line or no body' }
   const title = planTitle(db, plan.id)
@@ -88,8 +91,7 @@ export function desk(db: Db, root: string, plan: PlanRow): Outcome {
   db.transaction(() => {
     if (!proofed(db, { id: plan.id, kind: title.replace(/ .*/, ''), dest, title: (post[1] ?? '').trim(), dek, body, sources: JSON.stringify(sources),
       checks: JSON.stringify(checks), work_date: work, written_date: new Date().toISOString().slice(0, 10) })) return
-    noted(db, work, learnings.split('\n').map((l) => l.trim()).filter((l) => l !== '')
-      .map((line) => ({ title: line, what: '', lesson: '', fix: '', status: 'noted' })), sources.map((s) => s.ref))
+    noted(db, work, noting(learnings), sources.map((s) => s.ref))
   })()
   return { outcome: 'pass', spans: [], note: `desk_posts ${String(plan.id)} in proof for ${work}` }
 }
@@ -111,10 +113,24 @@ export async function grow(db: Db, root: string, plan: PlanRow, step: Step, prov
 
 const halted = (step: Step, fired: Fired): Outcome => ({ outcome: 'refuse', spans: [fired.stop_reason ?? 'seat.exit'], note: `${step.runs} ${fired.ended}` })
 
-const MODES: Record<string, Run['mode']> = { daily: 'log', ship: 'ship', weekly: 'weekly' }
+const MODES: Record<string, Run['mode']> = { daily: 'log', ship: 'ship', weekly: 'weekly', catchup: 'catchup' }
+
+const POST = /[\s\S]*?\n---\n(?:\w+:.*\n)+---[ \t]*(?=\n|$)/g
+
+function dated(root: string, plan: PlanRow, step: Step, text: string): Outcome {
+  const parts = text.match(POST) ?? []
+  const posts = parts.map(drafted)
+  const { learnings } = JSON.parse(get(root, plan.id, 'packet.json')) as { learnings: { date: string }[] }
+  if (text.slice(parts.join('').length).trim() !== '' || posts.some((p) => p?.date === undefined)
+    || posts.map((p) => p?.date).join() !== learnings.map((l) => l.date).join()) {
+    return { outcome: 'refuse', spans: ['writer.fence'], note: `${step.runs} reply needs one post per packet date, each closing with a dated fence` }
+  }
+  put(root, plan.id, 'posts.json', JSON.stringify(posts))
+  return { outcome: 'pass', spans: [], note: `${step.runs}: posts.json written` }
+}
 
 export async function draft(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
-  const title = titled(db, plan, 'daily') ?? titled(db, plan, 'ship') ?? titled(db, plan, 'weekly')
+  const title = titled(db, plan, 'daily') ?? titled(db, plan, 'ship') ?? titled(db, plan, 'weekly') ?? titled(db, plan, 'catchup')
   if (title === null) return { outcome: 'pass', spans: [], note: 'not a post plan' }
   if (maybe(root, plan.id, 'refusal.md')?.startsWith('step 3 ') === true) move(root, plan.id, 'refusal.md', 'refusal.prev.md')
   const ruling = [maybe(root, plan.id, 'issue.md') ?? maybe(root, plan.id, 'ask.md'), maybe(root, plan.id, 'rulings.md')]
@@ -127,6 +143,7 @@ export async function draft(db: Db, root: string, plan: PlanRow, step: Step, pro
   const fired = await ran(db, root, plan, { ...step, mode: MODES[title.slice(0, title.indexOf(' '))] }, provider, input, false)
   if (fired.ended !== 'completed') return halted(step, fired)
   if (titled(db, plan, 'daily') !== null) return listed(root, plan, step, fired.text)
+  if (title.startsWith('catchup ')) return dated(root, plan, step, fired.text)
   const reply = drafted(fired.text)
   if (reply === null || !scripted(title, reply)) {
     return { outcome: 'refuse', spans: ['writer.fence'], note: `${step.runs} reply has no valid closing fence, or a weekly one no substack dest or ## Script` }

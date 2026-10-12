@@ -5,7 +5,10 @@ import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { expect, test } from 'vitest'
 import { dryLines, tickNote } from '../../cli/brief.ts'
-import { held, holder, take } from '../../store/leases.ts'
+import { runRows } from '../../store/events.ts'
+import { width } from '../../store/lanes.ts'
+import { clear, held, holder, take } from '../../store/leases.ts'
+import { dropPlan } from '../../store/plans.ts'
 import { last, receipt } from '../../store/ticks.ts'
 import { dry, tick } from '../index.ts'
 import { CARRIED, inFlight, internalPlan, ours, plan, stub, world, type World } from './world.ts'
@@ -19,7 +22,7 @@ const THIRD = 4
 /** Our own issue alone in the one lane, walked to the build step, where a seat is what takes the time. */
 async function built(): Promise<World> {
   const w = world()
-  w.db.prepare('DELETE FROM plans WHERE id = 1').run()
+  dropPlan(w.db, 1)
   ours(w.root)
   internalPlan(w.db, w.root, ID)
   for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
@@ -31,7 +34,7 @@ test('two racing ticks step once; the loser leaves no run row',async () => {
   const first = inFlight(w)
   expect(await tick(w.db, w.root, stub(CARRIED))).toEqual([])
   expect((await first).map((f) => f.plan)).toEqual([ID])
-  expect(w.db.prepare('SELECT count(*) AS n FROM runs WHERE step = 2').get()).toEqual({ n: 1 })
+  expect(runRows(w.db).filter((r) => r.step === 2)).toHaveLength(1)
   expect(plan(w.db, ID).step).toBe(3)
   expect(held(w.db)).toEqual([])
 })
@@ -43,8 +46,8 @@ test('take loses to a live holder, wins past the ceiling',async () => {
   expect(take(w.db, ID, now)).toBeNull()
   expect(holder(w.db, ID, now)).toMatchObject({ pid: process.pid, taken_at: now.toISOString() })
 
-  w.db.prepare('UPDATE leases SET taken_at = ? WHERE plan = ?')
-    .run(new Date(now.getTime() - 4 * 3600_000).toISOString(), ID)
+  clear(w.db, ID)
+  take(w.db, ID, new Date(now.getTime() - 4 * 3600_000))
   expect(held(w.db, now)).toEqual([])
   expect(take(w.db, ID, now)).toMatchObject({ stole: process.pid })
 })
@@ -52,8 +55,7 @@ test('take loses to a live holder, wins past the ceiling',async () => {
 test('a dead holder\'s lease is taken; the receipt names its pid',async () => {
   const w = await built()
   const dead = spawnSync('/usr/bin/true').pid
-  w.db.prepare('INSERT INTO leases (plan, pid, taken_at) VALUES (?, ?, ?)')
-    .run(ID, dead, new Date().toISOString())
+  take(w.db, ID, new Date(), dead)
   expect(held(w.db)).toEqual([])
 
   const fired = await tick(w.db, w.root, stub(CARRIED))
@@ -64,7 +66,7 @@ test('a dead holder\'s lease is taken; the receipt names its pid',async () => {
 
 test('a slow seat holds one slot; the width holds across ticks',async () => {
   const w = await built()
-  w.db.prepare('UPDATE pipes SET max_concurrent = 2 WHERE id = 1').run()
+  width(w.db, 1, 2)
   const building = inFlight(w, 1500)
   internalPlan(w.db, w.root, SECOND, 'a second internal plan', 35)
   internalPlan(w.db, w.root, THIRD, 'a third internal plan', 36)
@@ -94,7 +96,7 @@ test('a dry tick takes no lease and names each holder\'s pid',async () => {
   expect(would.would).toEqual([])
   expect(would.held).toEqual([{ plan: ID, pid: process.pid, taken_at: now.toISOString() }])
   expect(dryLines(would)).toContain(`  plan ${String(ID)}\tleased by pid ${String(process.pid)}\t`)
-  expect(w.db.prepare('SELECT count(*) AS n FROM leases').get()).toEqual({ n: 1 })
+  expect(held(w.db, now)).toHaveLength(1)
 })
 
 test('the plist\'s tick.sh returns before its tick finishes', async () => {

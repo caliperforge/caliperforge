@@ -9,6 +9,8 @@ const PART = /^(\d+)[a-z]\b/
 
 const AFTER = /^After: (#\d+(?:, #\d+)*)$/m
 
+const WAVE = /^wave:(\d+)$/
+
 export const Listed = z.array(z.object({
   number: z.int(),
   title: z.string(),
@@ -34,14 +36,19 @@ export function afterOf(body: string): number[] {
   return hit === undefined ? [] : hit.split(', ').map((n) => Number(n.slice(1)))
 }
 
+export function waveOf(labels: Listing['labels']): number | undefined {
+  const hit = labels.map((l) => WAVE.exec(l.name)?.[1]).find((n) => n !== undefined)
+  return hit === undefined ? undefined : Number(hit)
+}
+
 /** Only a `whole` listing, one shorter than the list limit, drops the rows of issues missing from it. */
 export function recordListing(db: Db, repo: string, listed: Listing[], whole: boolean): void {
   const put = db.prepare(`INSERT INTO tickets (repo, number, title, lane, priority, after, parent, opened_at, closed_at, kind,
-    state_reason, diagnosis_wrong)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    state_reason, diagnosis_wrong, wave)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT (repo, number) DO UPDATE SET title = excluded.title, lane = excluded.lane, priority = excluded.priority,
     after = excluded.after, parent = excluded.parent, opened_at = excluded.opened_at, closed_at = excluded.closed_at,
-    kind = excluded.kind, state_reason = excluded.state_reason, diagnosis_wrong = excluded.diagnosis_wrong`)
+    kind = excluded.kind, state_reason = excluded.state_reason, diagnosis_wrong = excluded.diagnosis_wrong, wave = excluded.wave`)
   const drop = db.prepare('DELETE FROM tickets WHERE repo = ? AND number = ?')
   const kept: number[] = []
   for (const i of listed) {
@@ -55,7 +62,7 @@ export function recordListing(db: Db, repo: string, listed: Listing[], whole: bo
     const afters = afterOf(i.body)
     put.run(repo, i.number, i.title, lane, priority(i.labels), afters.length === 0 ? null : JSON.stringify(afters), partOf(i.title),
       i.createdAt, i.closedAt, kind,
-      i.stateReason === '' ? null : i.stateReason, wrong)
+      i.stateReason === '' ? null : i.stateReason, wrong, waveOf(i.labels) ?? null)
     kept.push(i.number)
   }
   if (whole) {
@@ -66,7 +73,7 @@ export function recordListing(db: Db, repo: string, listed: Listing[], whole: bo
 
 export interface Ticket {
   repo: string; number: number; title: string; lane: string; priority: number | null; after: string | null
-  parent: number | null; opened_at: string | null; closed_at: string | null; kind: 'fix' | 'build' | null
+  parent: number | null; opened_at: string | null; closed_at: string | null; kind: 'fix' | 'build' | null; wave: number | null
 }
 
 export function allTickets(db: Db): Ticket[] {

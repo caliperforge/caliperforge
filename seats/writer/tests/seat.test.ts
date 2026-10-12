@@ -28,7 +28,7 @@ test('D6: the items fence, each status, no "Read nothing else"', () => {
 
 test('sources D6: the lead, tagless body and sources refs', () => {
   const prompt = seat(root, 'writer').prompt
-  for (const part of ['comms.story_dir', '`learned`', '`learnings`', '`story`', 'no `[landed:N]`', '`landed:N`', '`refusal:N`']) expect(prompt).toContain(part)
+  for (const part of ['comms.story_dir', '`learned`', '`learnings`', '`story`', 'no `[landed:N]`', '`landed:N`', '`refusal:N`', 'learnings:<date>']) expect(prompt).toContain(part)
 })
 
 test('D5: the citations, the fence and each kind of post', () => {
@@ -67,6 +67,10 @@ test('modes D2: ship examples go to site and name no plan', () => {
 test('catchup D2 D3: examples parse, a draft mode throws', () => {
   for (const example of examples('catchup')) expect(drafted(/```\n([\s\S]*?)```/.exec(example)?.[1] ?? '')).not.toBeNull()
   expect(() => seat(root, 'writer', 'draft' as Run['mode'])).toThrow()
+})
+
+test('catchup D5: each example parses with a date', () => {
+  for (const example of examples('catchup')) expect(drafted(/```\n([\s\S]*?)```/.exec(example)?.[1] ?? '')?.date).toMatch(/^\d{4}-\d{2}-\d{2}$/)
 })
 
 test('modes D3: weekly examples are first person, for substack', () => {

@@ -77,6 +77,10 @@ function greptile(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire,
   const at = `${FORK}/${repoName(repo)}@${sha.slice(0, 12)}`
   const row = graded(db, plan.id, sha)
   if (row === null) {
+    const fork = `${FORK}/${repoName(repo)}`
+    if (wire.greptile?.(fork) === false) {
+      return { outcome: 'refuse', spans: ['greptile.installed'], to: plan.step, note: `Greptile is not installed on ${fork}` }
+    }
     return asked(root, plan.id, sha, repo, wire)
       ?? holding(root, plan.id, sha, ['greptile.missing'], `${at} has no Greptile score yet`, GRADING, 'greptile.waits')
       ?? `; Greptile gave no score in ${String(GRADING)} ticks`

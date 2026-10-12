@@ -4,7 +4,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { parse as yaml } from 'yaml'
 import { z } from 'zod'
-import { closeIssue, commentIssue, fileIssue, gh, issueComments, forward, openPr, rehearse, review, unrehearse, type IssueComment, type Read } from '../cli/gh.ts'
+import { closeIssue, commentIssue, fileIssue, gh, installed, issueComments, forward, openPr, rehearse, review, unrehearse, type IssueComment, type Read } from '../cli/gh.ts'
 import { CARD } from '../cli/queue.ts'
 import { alerter } from '../cli/watch.ts'
 import { judge, MISSING, PENDING, shell, type Board, type Gh } from '../rails/ci-green/index.ts'
@@ -47,6 +47,7 @@ export interface Wire {
   rehearse?: (fork: string, branch: string) => void
   unrehearse?: (fork: string, branch: string) => void
   review: (fork: string, branch: string) => void
+  greptile?: (fork: string) => boolean
   file: (repo: string, title: string, body: string, labels: string[]) => string
   comment: (repo: string, no: number, body: string) => void
   thread?: (repo: string, no: number) => IssueComment[]
@@ -68,6 +69,7 @@ export const WIRE: Wire = {
   rehearse,
   unrehearse,
   review,
+  greptile: installed,
   install: () => { refresh(npm, alerter()) },
   card: [theirs()],
   intake: picked(),

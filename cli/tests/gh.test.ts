@@ -93,3 +93,11 @@ test('D4 selected but unreadable is assumed installed', () => {
   }
   expect(installed(FORK, read)).toBe(true)
 })
+
+test('D4 selected listing failing for another reason throws', () => {
+  const read: Read = (args) => {
+    if (String(args[1]).startsWith('user/')) throw new Error('HTTP 502')
+    return { installations: [{ id: 7, app_slug: 'greptile-apps', repository_selection: 'selected' }] }
+  }
+  expect(() => installed(FORK, read)).toThrow('HTTP 502')
+})

@@ -167,7 +167,10 @@ export function installed(fork: string, read: Read = gh): boolean {
   if (app.repository_selection === 'all') return true
   // Listing a selected installation's repositories needs the read:user scope; without it, assume installed and let the window run.
   let listed: unknown
-  try { listed = read(['api', `user/installations/${String(app.id)}/repositories?per_page=${String(WINDOW)}`]) } catch { return true }
+  try { listed = read(['api', `user/installations/${String(app.id)}/repositories?per_page=${String(WINDOW)}`]) } catch (e) {
+    if (String(e).includes('HTTP 403')) return true
+    throw e
+  }
   return Repositories.parse(listed).repositories.some((r) => r.full_name === fork)
 }
 

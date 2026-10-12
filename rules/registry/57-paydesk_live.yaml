@@ -1,0 +1,5 @@
+- name: paydesk_live
+  table: events
+  column: at
+  where: kind = 'paydesk_live' AND outcome = 'pass'
+  gap: 8d

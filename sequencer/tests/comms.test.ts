@@ -797,6 +797,50 @@ test.each(['learnings:2026-10-03', 'nope/missing.ts:1', PAST, '../x.ts:1', 'land
     expect(facts(w.root, plan(w.db, 1))).toMatchObject({ outcome: 'refuse', spans: [`fence.json:${ref}`] })
   })
 
+const caughtUp = async (): Promise<World> => {
+  const w = catchup()
+  await draft(w.db, w.root, plan(w.db, 1), mapOf('comms').at(1), seated(CATCHUP.join('\n')))
+  return w
+}
+
+const kept = (date: string): unknown => ({ date, numbers: '[]', items: JSON.stringify([{ title: date }]), sources: '[]' })
+
+const noted = (date: string, learning: string, refs: string[]): unknown => ({ date, numbers: '[]', sources: JSON.stringify(refs),
+  items: JSON.stringify([{ title: date }, { title: learning, what: '', lesson: '', fix: '', status: 'noted' }]) })
+
+test('catchupDesk D1 D2: desk proofs one row per dated post', async () => {
+  const w = await caughtUp()
+  expect(desk(w.db, w.root, plan(w.db, 1))).toEqual({ outcome: 'pass', spans: [], note: '2 catchup post(s) in proof' })
+  const bodies = CATCHUP.map((text) => drafted(text)?.post.split('\n').slice(1).join('\n').trim())
+  expect(posts(w.db)).toMatchObject([
+    { id: 3_000_001, kind: 'catchup', dest: 'site', status: 'proof', title: 'The day a refusal named the wrong file', body: bodies[0], work_date: '2026-09-26' },
+    { id: 4_000_001, kind: 'catchup', dest: 'site', status: 'proof', title: 'Two learnings from a quiet day', body: bodies[1], work_date: '2026-09-27' },
+  ])
+  expect(learned(w)).toEqual([kept('2026-09-25'),
+    noted('2026-09-26', 'a refusal that names the wrong file costs a round', ['learnings:2026-09-26', 'rails/diff.ts:19']),
+    noted('2026-09-27', 'a quiet day still carries its lessons', ['seats/typescript_specialist/prompt.md:9', 'learnings:2026-09-27']), kept('2026-10-03')])
+})
+
+test('catchupTwice D3: a second desk adds no row and no learning', async () => {
+  const w = await caughtUp()
+  desk(w.db, w.root, plan(w.db, 1))
+  const before = learned(w)
+  expect(desk(w.db, w.root, plan(w.db, 1))).toEqual({ outcome: 'pass', spans: [], note: '0 catchup post(s) in proof' })
+  expect(posts(w.db)).toHaveLength(2)
+  expect(learned(w)).toEqual(before)
+})
+
+test.each([
+  { why: 'no # line', strip: (p: Record<string, unknown>) => ({ ...p, post: String(p.post).replace(/^# /, '') }) },
+  { why: 'no date', strip: (p: Record<string, unknown>) => ({ ...p, date: undefined }) },
+])('catchupDesk D4: a post with $why refuses on posts.json', async ({ strip }) => {
+  const w = await caughtUp()
+  const [first = {}, ...rest] = JSON.parse(get(w.root, 1, 'posts.json')) as Record<string, unknown>[]
+  put(w.root, 1, 'posts.json', JSON.stringify([strip(first), ...rest]))
+  expect(desk(w.db, w.root, plan(w.db, 1))).toMatchObject({ outcome: 'refuse', spans: ['posts.json'] })
+  expect(posts(w.db)).toEqual([])
+})
+
 test('weeklyFacts D3: untagged passes, links and logins refuse', () => {
   const w = comms()
   put(w.root, 1, 'packet.json', JSON.stringify({ learnings: [], story: [] }))

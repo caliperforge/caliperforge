@@ -46,6 +46,7 @@ export interface Wire {
   forward?: (fork: string, base: string) => void
   rehearse?: (fork: string, branch: string) => void
   unrehearse?: (fork: string, branch: string) => void
+  at?: (dir: string, ref: string) => string
   review: (fork: string, branch: string) => void
   file: (repo: string, title: string, body: string, labels: string[]) => string
   comment: (repo: string, no: number, body: string) => void
@@ -67,6 +68,7 @@ export const WIRE: Wire = {
   forward,
   rehearse,
   unrehearse,
+  at: (dir, ref) => git(dir, ['ls-remote', 'origin', ref]).split('\t')[0] ?? '',
   review,
   install: () => { refresh(npm, alerter()) },
   card: [theirs()],
@@ -104,7 +106,8 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
   if (internal(plan) && (assembly(db, plan) !== null || !workflows(srcDir(root, plan.id)))) return checked(db, root, plan, repo)
   const holder = waitsFor(db, plan)
   if (holder !== null) return { outcome: 'pass', held: true, spans: ['fork.slot'], note: `waits for plan ${String(holder)}'s fork CI` }
-  const { fork, head, ci, tip, base: onto } = sent(root, plan, repo, wire)
+  const { fork, head, ci, tip, base: onto, rejected } = sent(root, plan, repo, wire)
+  if (rejected !== null) return { outcome: 'refuse', spans: ['fork.sent'], to: 6, note: rejected }
   const off = onto === null ? null : unfolded(head.dir, onto, messageOf(root, plan.id, profile(root, repo)))
   if (off !== null) return { outcome: 'refuse', spans: ['fold'], to: 2, note: off }
   if (!internal(plan)) { wire.rehearse?.(fork, ci); took(db, plan) }
@@ -152,12 +155,13 @@ function stalled(spans: string[], board: Board[], at: string, fork: string, tip:
 /** Step 3's pass opens the rehearsal: a review bot reads only an open pull request. */
 export function reviewable(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire = WIRE): void {
   if (internal(plan)) return
-  const { fork, ci } = sent(root, plan, repo, wire)
+  const { fork, ci, rejected } = sent(root, plan, repo, wire)
+  if (rejected !== null) return
   wire.rehearse?.(fork, ci)
   took(db, plan)
 }
 
-export function sent(root: string, plan: PlanRow, repo: string, wire: Wire): { fork: string; head: Head; ci: string; tip: string; base: string | null } {
+export function sent(root: string, plan: PlanRow, repo: string, wire: Wire): { fork: string; head: Head; ci: string; tip: string; base: string | null; rejected: string | null } {
   const outside = !internal(plan)
   const fork = `${FORK}/${repoName(repo)}`
   const dir = srcDir(root, plan.id)
@@ -169,8 +173,10 @@ export function sent(root: string, plan: PlanRow, repo: string, wire: Wire): { f
   const tip = outside ? tipOf(root, plan.id, head, ci, repo) : head.sha
   if (outside) based(root, plan.id, fork, wire)
   wire.send(head.dir, outside ? `${tip}:refs/heads/${ci}` : head.branch)
-  if (outside) moved(root, plan.id, fork, ci, wire)
-  return { fork, head, ci, tip, base }
+  const at = wire.at?.(head.dir, `refs/heads/${ci}`) ?? tip
+  const rejected = at === tip ? null : `${fork} rejected refs/heads/${ci}: it is at ${at === '' ? 'no commit' : at.slice(0, 12)}, not the pushed ${tip.slice(0, 12)}`
+  if (outside && rejected === null) moved(root, plan.id, fork, ci, wire)
+  return { fork, head, ci, tip, base, rejected }
 }
 
 /** A head re-cut from main after its branch was pushed takes the pushed head as a second parent and keeps its own tree. */

@@ -39,7 +39,7 @@ A page-by-page inventory follows in the first build ticket, against caliperforge
 
 ## Design note
 
-The site reads like a lab notebook: claims in prose, evidence in monospace, one colour for what was checked.
+The site reads like a lab notebook: claims in prose, evidence in monospace, one colour for links and evidence.
 
 **Type.** Three system stacks, no web font, so every page loads with nothing fetched.
 

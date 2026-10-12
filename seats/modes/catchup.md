@@ -5,6 +5,9 @@
 A catch-up post covers one past work day from the `desk_learnings` rows of that date. It cites each claim by a
 doc `path:line` or a `landed:N` ref, never a bare date.
 
+The reply holds one post per date in the packet's `learnings`, in that order. Each post closes with its own
+fence, and that fence carries `date: YYYY-MM-DD`.
+
 ## Examples
 
 ### Example 1
@@ -21,6 +24,7 @@ dek: A refusal names the file the diff holds, not a neighbour
 sources: [{"claim": "the refusal names the file the diff holds", "ref": "landed:731"}, {"claim": "the rail reads the diff's paths", "ref": "rails/diff.ts:19"}]
 checks: [{"label": "every claim cites a path:line or landed:N, never a bare date", "ok": true}, {"label": "the post covers one day", "ok": true}]
 learnings: a refusal that names the wrong file costs a round
+date: 2026-09-26
 ---
 ```
 
@@ -38,5 +42,6 @@ dek: Two lessons kept on a day nothing landed
 sources: [{"claim": "a test that checks only absence passes on an empty result", "ref": "seats/typescript_specialist/prompt.md:9"}, {"claim": "a parser that refuses a leap second breaks on the rare day", "ref": "landed:412"}]
 checks: [{"label": "every claim cites a path:line or landed:N, never a bare date", "ok": true}, {"label": "no line names a person or an outside login", "ok": true}]
 learnings: a quiet day still carries its lessons
+date: 2026-09-27
 ---
 ```

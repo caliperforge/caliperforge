@@ -3,7 +3,8 @@
 - catchup: a post for one theme over a run of past days, dated to that run.
 
 A catch-up post covers a run of past work days from the `desk_learnings` rows of those dates. It cites each claim by a
-`learnings:<date>` the packet holds or a doc `<path>:<line>` in the root, and by nothing else.
+`learnings:<date>` or a `landed:N` the packet holds (N being a `landed` entry's `plan`), or a doc `<path>:<line>` in
+the root, and by nothing else.
 
 Group the dates in the packet's `learnings` by theme, about one post per theme or fortnight. Each post covers a
 run of dates in order, and every packet date sits in exactly one post. Each post closes with its own fence, and

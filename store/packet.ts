@@ -17,9 +17,15 @@ export function packetOf(db: Db, plan: number) {
       WHERE title GLOB 'Drift: *' AND date(opened_at, ?) = ? ORDER BY opened_at, number`).all(...on),
     decisions: db.prepare(`SELECT e.plan, p.title, e.actor, e.kind, e.message AS why, datetime(e.at, ?) AS at FROM events e
       LEFT JOIN plans p ON p.id = e.plan WHERE e.actor IN ('director', 'coo_lite') AND date(e.at, ?) = ? ORDER BY e.id`).all(...on),
-    landed: db.prepare(`SELECT p.id AS plan, p.origin, a.subject_digest AS digest, p.title, datetime(a.approved_at, ?) AS at FROM plans p
-      JOIN approvals a ON a.subject_kind = 'plan' AND a.subject_id = p.id AND a.who = 'gates'
-      WHERE p.origin IS NOT NULL AND a.subject_digest = p.head_digest AND date(a.approved_at, ?) = ? ORDER BY p.id`).all(...on),
+    landed: landedIn(db, day, day),
     refusals: ofDay(db, day, minutes),
   }
+}
+
+/** Each plan with an origin whose gates approval of its head falls on a local date from `from` to `to`. */
+export function landedIn(db: Db, from: string, to: string): unknown[] {
+  const shift = `${String(zone(db))} minutes`
+  return db.prepare(`SELECT p.id AS plan, p.origin, a.subject_digest AS digest, p.title, datetime(a.approved_at, ?) AS at FROM plans p
+    JOIN approvals a ON a.subject_kind = 'plan' AND a.subject_id = p.id AND a.who = 'gates'
+    WHERE p.origin IS NOT NULL AND a.subject_digest = p.head_digest AND date(a.approved_at, ?) BETWEEN ? AND ? ORDER BY p.id`).all(shift, shift, from, to)
 }

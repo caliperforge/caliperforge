@@ -788,7 +788,7 @@ const catchup = (dates = ['2026-10-03', '2026-09-27', '2026-09-25', '2026-09-26'
 
 test('catchup D1 D2 D4: a post per date, reviewed as posts.json', async () => {
   const w = catchup()
-  expect(JSON.parse(get(w.root, 1, 'packet.json'))).toEqual({ learnings: ['2026-09-26', '2026-09-27'].map((d) => ({ date: d, items: [{ title: d }] })) })
+  expect(JSON.parse(get(w.root, 1, 'packet.json'))).toEqual({ learnings: ['2026-09-26', '2026-09-27'].map((d) => ({ date: d, items: [{ title: d }] })), landed: [] })
   const prompts: string[] = []
   const seats = seated(CATCHUP.join('\n'))
   const caught: Provider = { ...seats, fire: (packet) => {
@@ -856,6 +856,25 @@ test.each(['learnings:2026-10-03', 'nope/missing.ts:1', PAST, '../x.ts:1', 'land
     put(w.root, 1, 'posts.json', JSON.stringify([{ ...drafted(CATCHUP[0] ?? ''), sources: [{ claim: 'x', ref }] }]))
     expect(facts(w.root, plan(w.db, 1))).toMatchObject({ outcome: 'refuse', spans: [`fence.json:${ref}`] })
   })
+
+test('catchupLanded D1-D4: landed:N holds only inside the range', () => {
+  const w = posting('catchup 2026-09-26 2026-10-02')
+  const [ats, d] = [['2026-09-30 12:00:00', '2026-10-03 03:00:00', '2026-10-03 12:00:00'], 'd'.repeat(64)]
+  w.db.exec(`INSERT INTO plans (id, pipe_id, template, state, queued_at, step, retries, title, lane, seat, origin, head_digest) VALUES ${ats.map((at, i) =>
+    `(${String(i + 2)}, 1, 'pr_path', 'done', '${at}', 0, 0, 'job', 'machine', 'typescript_specialist', 'https://github.com/r/issues/${String(i + 2)}', '${d}')`).join(', ')};
+    INSERT INTO approvals (subject_kind, subject_id, subject_digest, who, decision, approved_at) VALUES ${ats.map((at, i) =>
+    `('plan', ${String(i + 2)}, '${d}', 'gates', 'approved', '${at}')`).join(', ')}`)
+  gather(w.db, w.root, plan(w.db, 1))
+  expect((JSON.parse(get(w.root, 1, 'packet.json')) as { landed: { plan: number }[] }).landed.map((l) => l.plan)).toEqual([2, 3])
+  const cites = (ref: string): ReturnType<typeof facts> => {
+    put(w.root, 1, 'posts.json', JSON.stringify([{ ...drafted(CATCHUP[0] ?? ''), sources: [{ claim: 'x', ref }] }]))
+    return facts(w.root, plan(w.db, 1))
+  }
+  expect(cites('landed:3')).toMatchObject({ outcome: 'pass', spans: [] })
+  expect(cites('landed:4')).toMatchObject({ outcome: 'refuse', spans: ['fence.json:landed:4'] })
+  writeFileSync(join(w.root, 'landed'), 'x\n'.repeat(4))
+  expect(cites('landed:4')).toMatchObject({ outcome: 'refuse', spans: ['fence.json:landed:4'] })
+})
 
 const caughtUp = async (): Promise<World> => {
   const w = catchup()

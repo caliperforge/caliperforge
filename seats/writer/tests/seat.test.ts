@@ -69,6 +69,10 @@ test('catchup D2 D3: examples parse, a draft mode throws', () => {
   expect(() => seat(root, 'writer', 'draft' as Run['mode'])).toThrow()
 })
 
+test('catchup D5: each example parses with a date', () => {
+  for (const example of examples('catchup')) expect(drafted(/```\n([\s\S]*?)```/.exec(example)?.[1] ?? '')?.date).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+})
+
 test('modes D3: weekly examples are first person, for substack', () => {
   expect(modeFile('weekly')).toContain('comms/voice-notes.md')
   for (const example of examples('weekly')) for (const part of [/\bI\b/, /## Script/, /dest: substack/]) expect(example).toMatch(part)

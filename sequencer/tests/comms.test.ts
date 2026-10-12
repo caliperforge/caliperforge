@@ -741,6 +741,43 @@ test.each([
   expect(newestMode(w.db)).toBe('weekly')
 })
 
+const CATCHUP = [...readFileSync(join(import.meta.dirname, '../../seats/modes/catchup.md'), 'utf8').matchAll(/```\n([\s\S]*?)```/g)].map((m) => m[1] ?? '')
+
+const catchup = (): World => {
+  const w = posting('catchup 2026-09-26 2026-10-02')
+  w.db.exec(`INSERT INTO desk_learnings (date, numbers, items, sources) VALUES ${['2026-10-03', '2026-09-27', '2026-09-25', '2026-09-26']
+    .map((d) => `('${d}', '[]', '[{"title":"${d}"}]', '[]')`).join(', ')}`)
+  gather(w.db, w.root, plan(w.db, 1))
+  return w
+}
+
+test('catchup D1 D2 D4: a post per date, reviewed as posts.json', async () => {
+  const w = catchup()
+  expect(JSON.parse(get(w.root, 1, 'packet.json'))).toEqual({ learnings: ['2026-09-26', '2026-09-27'].map((d) => ({ date: d, items: [{ title: d }] })) })
+  const prompts: string[] = []
+  const seats = seated(CATCHUP.join('\n'))
+  const caught: Provider = { ...seats, fire: (packet) => {
+    prompts.push(packet.prompt)
+    return seats.fire(packet)
+  } }
+  expect(await draft(w.db, w.root, plan(w.db, 1), mapOf('comms').at(1), caught)).toMatchObject({ outcome: 'pass' })
+  expect(newestMode(w.db)).toBe('catchup')
+  expect(JSON.parse(get(w.root, 1, 'posts.json'))).toEqual(CATCHUP.map((post) => drafted(post)))
+  expect(await review(w.db, w.root, plan(w.db, 1), mapOf('comms').at(3), caught)).toMatchObject({ outcome: 'pass' })
+  expect(prompts[1]).toContain(`# posts.json\n\n${get(w.root, 1, 'posts.json')}`)
+})
+
+test.each([
+  { why: 'a missing date', reply: CATCHUP[0] ?? '' },
+  { why: 'a post with no date:', reply: CATCHUP.join('\n').replace('date: 2026-09-27\n', '') },
+  { why: 'a trailing post with no fence', reply: `${CATCHUP.join('\n')}\n# A third day\n\nNo fence.\n` },
+])('catchupFence D3: $why refuses', async ({ reply }) => {
+  const w = catchup()
+  expect(await draft(w.db, w.root, plan(w.db, 1), mapOf('comms').at(1), seated(reply)))
+    .toMatchObject({ outcome: 'refuse', spans: ['writer.fence'] })
+  expect(maybe(w.root, 1, 'posts.json')).toBeNull()
+})
+
 test('weeklyFacts D3: untagged passes, links and logins refuse', () => {
   const w = comms()
   put(w.root, 1, 'packet.json', JSON.stringify({ learnings: [], story: [] }))

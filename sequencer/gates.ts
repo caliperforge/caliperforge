@@ -108,12 +108,12 @@ const PREFIX: Record<OutsideLanguage, string> = { rust: 'rs-', python: 'py-', ru
 const JUSTFILE = 'Justfile'
 
 /** What step 3 runs on an outside plan: install, then the gates upstream runs, in the language's own folder, then its workflows' regenerate-and-diff steps at the root. */
-export function gates(src: string, outside: Outside): Gate[] {
-  return [...own(src, outside), ...regenerated(src)]
+export function gates(src: string, outside: Outside, excused: string[] = []): Gate[] {
+  return [...own(src, outside, excused), ...regenerated(src)]
 }
 
-function own(src: string, outside: Outside): Gate[] {
-  if (outside.language === 'rust') return rust(src, outside.files)
+function own(src: string, outside: Outside, excused: string[]): Gate[] {
+  if (outside.language === 'rust') return rust(src, outside.files, excused)
   const recipe = RECIPES[outside.language]
   const near = home(src, first(outside), (name) => name === JUSTFILE || recipe.markers.test(name))
   const found = recipes(join(src, near, JUSTFILE))
@@ -166,16 +166,17 @@ export function recipes(path: string): Set<string> | null {
  * is what keeps its mainnet-fetching tests off a runner. A feature named for a service their CI starts
  * (surfpool's `postgres`) is left off, as this host runs no such service.
  */
-function rust(src: string, files: string[]): Gate[] {
+function rust(src: string, files: string[], excused: string[]): Gate[] {
   const own = files.filter((f) => f.endsWith('.rs'))
   const root = workspace(src, own[0] ?? files[0] ?? '')
   const crates = unique(own.map((f) => crate(src, f)).filter((c): c is Crate => c !== null))
   const wanted = ciFeatures(src)
   const features = crates.flatMap((c) => wanted.filter((f) => c.features.has(f)).map((f) => `${c.name}/${f}`))
+  const through = excused.some((span) => crates.some((c) => c.name === /^-p (\S+)/.exec(span)?.[1]))
   return [
     { script: 'format', bin: 'cargo', args: formatLine(src), dir: root },
     { script: 'test', bin: 'cargo', args: ['test', ...crates.flatMap((c) => ['-p', c.name]),
-      ...(features.length === 0 ? [] : ['--features', features.join(',')])], dir: root },
+      ...(features.length === 0 ? [] : ['--features', features.join(',')]), ...(through ? ['--no-fail-fast'] : [])], dir: root },
   ]
 }
 

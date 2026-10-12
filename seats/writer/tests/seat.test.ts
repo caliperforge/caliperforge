@@ -3,6 +3,8 @@ import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { bare } from '../../../providers/kind.ts'
 import { Seat, WRITERS, rules, seat } from '../../../runner/rules.ts'
+import type { Run } from '../../../store/events.ts'
+import { drafted } from '../../../templates/comms.ts'
 
 const root = join(import.meta.dirname, '../../..')
 const modeFile = (mode: string): string => readFileSync(join(root, 'seats/modes', `${mode}.md`), 'utf8')
@@ -47,7 +49,7 @@ test('weekly D4: the CEO\'s voice and dest: substack', () => {
   for (const part of ['## Weekly', 'CEO\'s voice', 'dest: substack']) expect(prompt).toContain(part)
 })
 
-test.each(['log', 'ship', 'weekly'] as const)('modes D1–D3: %s joins the prompt with 2–3 examples', (mode) => {
+test.each(['log', 'ship', 'weekly', 'catchup'] as const)('modes D1–D3: %s joins the prompt with 2–3 examples', (mode) => {
   const prompt = seat(root, 'writer', mode).prompt
   expect(prompt).toBe(`${seat(root, 'writer').prompt}\n${modeFile(mode)}`)
   expect(modeFile(mode).split('\n')[0]).toBe(`# ${mode.charAt(0).toUpperCase()}${mode.slice(1)}`)
@@ -60,6 +62,11 @@ test('modes D2: ship examples go to site and name no plan', () => {
     expect(example).toContain('dest: site')
     expect(example.split('\n---\n')[0]).not.toMatch(/\d|\bplan\b|\bstep\b|refusal/i)
   }
+})
+
+test('catchup D2 D3: examples parse, a draft mode throws', () => {
+  for (const example of examples('catchup')) expect(drafted(/```\n([\s\S]*?)```/.exec(example)?.[1] ?? '')).not.toBeNull()
+  expect(() => seat(root, 'writer', 'draft' as Run['mode'])).toThrow()
 })
 
 test('modes D3: weekly examples are first person, for substack', () => {

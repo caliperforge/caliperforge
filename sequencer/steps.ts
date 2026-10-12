@@ -27,7 +27,7 @@ import { unlanded } from './unlanded.ts'
 
 interface StepMap {
   steps: Step[]
-  at(step: number, language?: string | null): Step
+  at(step: number, language?: string | null, seat?: string | null): Step
   last(step: number): boolean
 }
 

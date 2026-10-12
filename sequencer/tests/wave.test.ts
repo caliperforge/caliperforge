@@ -5,11 +5,11 @@ import { chromium } from 'playwright-core'
 import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import { fill } from '../../cli/digests.ts'
-import type { Read } from '../../cli/gh.ts'
+import type { Read, Run } from '../../cli/gh.ts'
 import { all } from '../../cli/inbox.ts'
 import type { Provider } from '../../providers/kind.ts'
 import { load } from '../../runner/rules.ts'
-import { logged } from '../../store/events.ts'
+import { logged, ofKind } from '../../store/events.ts'
 import type { Db } from '../../store/index.ts'
 import { addPipe, allPlans } from '../../store/plans.ts'
 import { lastLogged } from '../../store/wave.ts'
@@ -33,9 +33,11 @@ const shape = (r: Fixture) => ({ number: r.number, title: `issue ${String(r.numb
   url: `https://github.com/${REPO}/issues/${String(r.number)}`, labels: [{ name: 'lane:atelier' }, { name: `wave:${String(r.wave)}` }],
   createdAt: '2026-09-20T09:00:00Z', closedAt: r.closedAt ?? null, stateReason: null })
 
-function canned(open: Fixture[], closed: Fixture[] = [], log: string[] = []): Read {
+function canned(open: Fixture[], closed: Fixture[] = [], log: string[] = [], design = true, first: number[] = []): Read {
   return (args) => {
     log.push(args.join(' '))
+    if (args[1] === `repos/${REPO}/contents?ref=main`) return [{ path: design ? 'DESIGN.md' : 'index.html' }]
+    if (args.includes('seat:design_lead')) return first.map((number) => ({ number }))
     if (args[1] === 'list') return (args[5] === 'closed' ? closed : open).map(shape)
     if (args[0] === 'api') return { sub_issues_summary: { total: 0 } }
     const hit = open.map(shape).find((r) => String(r.number) === args[2])
@@ -56,6 +58,15 @@ const passed = (db: Db, outcome: 'pass' | 'refuse' | 'needs_ceo', at = '2026-10-
 }
 
 const tmp = (): string => mkdtempSync(join(tmpdir(), 'cf-wave-'))
+
+const FILED = `https://github.com/${REPO}/issues/30`
+
+function filer(calls: string[][]): Run {
+  return (args) => {
+    calls.push(args)
+    return `${FILED}\n`
+  }
+}
 
 function stub(fires: string[], text = '---\noutcome: pass\n---\n'): Provider {
   return {
@@ -121,13 +132,45 @@ test('D3: a passed wave 1 releases wave:2; wave:1 never waits', () => {
 test('D4: no fire on an off pipe, an open ticket or a newer event', async () => {
   const fires: string[] = []
   const log: string[] = []
-  expect(await closing(piped(0), tmp(), stub(fires), canned([], WAVE_ONE, log), NOW, web())).toEqual([])
+  const calls: string[][] = []
+  expect(await closing(piped(0), tmp(), stub(fires), canned([], WAVE_ONE, log, false), NOW, web(), filer(calls))).toEqual([])
   expect(log).toEqual([])
+  expect(calls).toEqual([])
   expect(await closing(piped(), tmp(), stub(fires), canned([{ number: 11, wave: 1 }], WAVE_ONE), NOW, web())).toEqual([])
   const db = piped()
   passed(db, 'refuse')
   expect(await closing(db, tmp(), stub(fires), canned([], WAVE_ONE), NOW, web())).toEqual([])
   expect(fires).toEqual([])
+})
+
+test('first pass D1: no DESIGN.md and no issue files one', async () => {
+  const calls: string[][] = []
+  expect(await closing(piped(), tmp(), stub([]), canned([], [], [], false), NOW, tmp(), filer(calls))).toEqual([`first pass: ${FILED}`])
+  const created = calls.filter((c) => c[0] === 'issue' && c[1] === 'create')
+  expect(created).toHaveLength(1)
+  expect(created[0]?.join(' ')).toContain('--label lane:atelier --label seat:design_lead')
+})
+
+test('first pass D2: DESIGN.md on main files nothing', async () => {
+  const calls: string[][] = []
+  expect(await closing(piped(), tmp(), stub([]), canned([]), NOW, tmp(), filer(calls))).toEqual([])
+  expect(calls).toEqual([])
+})
+
+test('first pass D3: an open or closed first pass files nothing', async () => {
+  const calls: string[][] = []
+  expect(await closing(piped(), tmp(), stub([]), canned([], [], [], false, [7]), NOW, tmp(), filer(calls))).toEqual([])
+  expect(calls).toEqual([])
+})
+
+test('first pass D5: a failed issue create is one wave line', async () => {
+  const db = piped()
+  const exec: Run = (args) => {
+    if (args[0] === 'issue') throw new Error('gh: HTTP 502')
+    return ''
+  }
+  expect(await closing(db, tmp(), stub([]), canned([], [], [], false), NOW, tmp(), exec)).toEqual(['wave: gh: HTTP 502'])
+  expect(ofKind(db, 'swallowed')).toMatchObject([{ actor: 'wave', message: 'wave: gh: HTTP 502' }])
 })
 
 browsed('D4: a wave:1 close after the last pass fires again', async () => {

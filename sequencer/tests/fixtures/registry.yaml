@@ -73,6 +73,11 @@
   column: at
   where: seat = 'text_review'
   gap: 2d
+- name: writer_catchup
+  table: runs
+  column: at
+  where: seat = 'writer' AND mode = 'catchup'
+  when: SELECT 1 FROM plans WHERE template = 'comms' AND title GLOB 'catchup *'
 - name: writer_log
   table: runs
   column: at

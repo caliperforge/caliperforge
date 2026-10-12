@@ -13,20 +13,13 @@ import { pipesOn } from '../store/capture.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { LANE, wall } from '../store/lanes.ts'
-import { FIELDS, Listed, type Listing } from '../store/tickets.ts'
+import { FIELDS, Listed, waveOf, type Listing } from '../store/tickets.ts'
 import { pending } from '../store/transcript.ts'
 import { lastLogged } from '../store/wave.ts'
 import { design } from './design.ts'
 import { firstLine } from './unpolled.ts'
 
-const WAVE = /^wave:(\d+)$/
-
 const INBOX = { pass: 'wave', refuse: 'refused', needs_ceo: 'blocked' } as const
-
-function waveOf(labels: Listing['labels']): number | undefined {
-  const hit = labels.map((l) => WAVE.exec(l.name)?.[1]).find((n) => n !== undefined)
-  return hit === undefined ? undefined : Number(hit)
-}
 
 export function waits(db: Db, repo: string, labels: Listing['labels']): boolean {
   const n = waveOf(labels)

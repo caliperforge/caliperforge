@@ -138,8 +138,12 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
   freed(db, plan.id)
   forkGreen(db, plan.id, passed)
   if (verdict.outcome === 'pass') put(root, plan.id, GREEN, `${ci} ${tip}\n`)
-  const failed = passed ? null : red(fork, verdict.spans, wire.runs)
-  return failed === null ? null : { outcome: 'refuse', spans: failed.spans, message: failed.log, to: 2, note: `their CI is red on ${at}; back to the builder with the failed log` }
+  return passed ? null : refused(at, verdict, red(fork, verdict.spans, wire.runs))
+}
+
+function refused(at: string, verdict: Verdict, failed: ReturnType<typeof red>): Outcome {
+  if (failed === null) return { outcome: 'refuse', spans: verdict.spans, message: verdict.message, note: `ci-green refused ${at}: ${verdict.message}` }
+  return { outcome: 'refuse', spans: failed.spans, message: failed.log, to: 2, note: `their CI is red on ${at}; back to the builder with the failed log` }
 }
 
 /** Step 3's pass opens the rehearsal: a review bot reads only an open pull request. */

@@ -15,7 +15,7 @@ VALUES
   ('rules/registry/10-typescript_review.yaml', 'card', 'rules/registry/10-typescript_review.yaml', 'dcf63250338d9f701d3c1b44da0d34c7d7fe9be65256df2ce7d414e506fa7922', '2026-10-04'),
   ('rules/registry/11-brief_writer.yaml', 'card', 'rules/registry/11-brief_writer.yaml', '35990c92b827768465b12194a7bda4a5b7a8e14d73c383840c8c8a71556c3d15', '2026-10-04'),
   ('rules/registry/12-text_review.yaml', 'card', 'rules/registry/12-text_review.yaml', '8a3b3fc3d609a0e6deca3e6411e5f2242aa28dc7b560f1e2ea5c06b2c834342e', '2026-10-04'),
-  ('rules/registry/12-writer_catchup.yaml', 'card', 'rules/registry/12-writer_catchup.yaml', 'd5b57f0e5943337aec30d232e64efaf7b8c788375295229aa1401a99a67be5ec', '2026-10-11'),
+  ('rules/registry/12-writer_catchup.yaml', 'card', 'rules/registry/12-writer_catchup.yaml', '0874da2c14e5efbe2e938ab57552695b724b46618e7e452c4f2ba637f3217929', '2026-10-11'),
   ('rules/registry/12-writer_log.yaml', 'card', 'rules/registry/12-writer_log.yaml', '3995e86189488b802406786ef138d26447810c793bc979c656c6020f0407291e', '2026-10-04'),
   ('rules/registry/12-writer_ship.yaml', 'card', 'rules/registry/12-writer_ship.yaml', 'cf574f2183a698dda0469641dd5f60f980c6b7487e05148fb7815566328afbae', '2026-10-04'),
   ('rules/registry/12-writer_weekly.yaml', 'card', 'rules/registry/12-writer_weekly.yaml', 'd99f0270d1a6f05a50ed029ae69badc441ec3cf35ae428506d8163feda62f41d', '2026-10-04'),

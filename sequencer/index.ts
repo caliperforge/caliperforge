@@ -40,7 +40,7 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
     due(db, registry, now, read)
     stuck(db, root, registry, now)
     sunday(db, root, now)
-    await paydesk(db, root, now)
+    if (registry.some((e) => e.name === 'paydesk_live')) await paydesk(db, root, now)
   }
   if (labels !== undefined) (lines ?? []).push(...intake(db, root, labels), ...refill(db, root, labels, now))
   reap(root, terminal(db))

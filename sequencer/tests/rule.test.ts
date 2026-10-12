@@ -10,6 +10,7 @@ import { planById } from '../../store/plans.ts'
 import type { Wire } from '../push.ts'
 import { woke } from '../director.ts'
 import { fenced, opened, owned } from '../rule.ts'
+import { fenceFor } from '../route.ts'
 import { git, maybe, put, srcDir } from '../workspace.ts'
 
 const repo = join(import.meta.dirname, '../..')
@@ -234,6 +235,45 @@ test('D2 a path in neither folder is refused', () => {
   put(home, 7, 'rulings.md', 'see `src/gone.ts`\n')
   expect(opened(db, home, 7)).toEqual(['src/gone.ts'])
   expect(eventsOf(db, 7, 'files')).toEqual([{ actor: 'ruling', outcome: 'refuse', message: 'not in the checkout: src/gone.ts' }])
+})
+
+function made() {
+  const { db, home } = seeded(3)
+  mkdirSync(join(srcDir(home, 7), 'src'))
+  writeFileSync(join(srcDir(home, 7), 'src/x.ts'), 'export {}\n')
+  return { db, home }
+}
+
+const DIRECTOR = (path: string) => ISSUE.replace('## Standing', `## Answer from the director (2026-10-08)\n\nadd \`${path}\`.\n\n## Standing`)
+
+test('D1 a director answer in issue.md adds its path', () => {
+  const { db, home } = made()
+  put(home, 7, 'issue.md', DIRECTOR('src/x.ts'))
+  expect(opened(db, home, 7)).toEqual([])
+  expect(filesOf(db, 7)).toEqual([{ path: 'src/x.ts', is_new: true }])
+  expect(eventsOf(db, 7, 'files')).toEqual([{ actor: 'ruling', outcome: 'pass', message: 'add src/x.ts: named in issue.md' }])
+})
+
+test('D2 an issue.md ruling on a missing path is refused', () => {
+  const { db, home } = seeded(3)
+  put(home, 7, 'issue.md', DIRECTOR('src/gone.ts'))
+  expect(opened(db, home, 7)).toEqual(['src/gone.ts'])
+  expect(eventsOf(db, 7, 'files')).toEqual([{ actor: 'ruling', outcome: 'refuse', message: 'not in the checkout: src/gone.ts' }])
+})
+
+test('D3 non-ruling and older ruling sections open nothing', () => {
+  const { db, home } = made()
+  put(home, 7, 'issue.md', ['# hello', '## Files\n\n- `src/x.ts`', '## Ruling (COO, 2026-10-07)\n\nedit `src/x.ts`.',
+    '## Ruling (COO, 2026-10-08)\n\nedit `index.ts`.', '## Out of scope\n\n- `src/x.ts`\n'].join('\n\n'))
+  expect(opened(db, home, 7)).toEqual([])
+  expect(filesOf(db, 7)).toEqual([{ path: 'index.ts', is_new: true }])
+})
+
+test('D4 a director rule widens the fence to its path', async () => {
+  const { db, home } = made()
+  const said = '---\nmove: rule\nwhy: the ruling names it\nanswer: the builder edits `src/x.ts`\n---\n'
+  await woke(db, home, stub('', said), now, () => undefined, { ...wire, comment: () => undefined })
+  expect(fenceFor(db, 7, ['brief:files'])).toContain('src/x.ts')
 })
 
 async function aliased(answer: (alias: string) => string, setup: (s: { db: Db; home: string }) => void = () => undefined) {

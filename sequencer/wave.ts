@@ -13,20 +13,13 @@ import { pipesOn } from '../store/capture.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { LANE, wall } from '../store/lanes.ts'
-import { FIELDS, Listed, type Listing } from '../store/tickets.ts'
+import { FIELDS, Listed, waveOf, type Listing } from '../store/tickets.ts'
 import { pending } from '../store/transcript.ts'
 import { lastLogged } from '../store/wave.ts'
 import { design } from './design.ts'
 import { firstLine } from './unpolled.ts'
 
-const WAVE = /^wave:(\d+)$/
-
 const INBOX = { pass: 'wave', refuse: 'refused', needs_ceo: 'blocked' } as const
-
-function waveOf(labels: Listing['labels']): number | undefined {
-  const hit = labels.map((l) => WAVE.exec(l.name)?.[1]).find((n) => n !== undefined)
-  return hit === undefined ? undefined : Number(hit)
-}
 
 export function waits(db: Db, repo: string, labels: Listing['labels']): boolean {
   const n = waveOf(labels)
@@ -49,11 +42,8 @@ export async function closing(db: Db, root: string, provider: Provider, read: Re
 
 /** The lowest wave whose tickets are all closed and that has had no pass since the last of them closed. */
 function closed(db: Db, read: Read): number | undefined {
-  const list = (state: string): Listing[] => Listed.parse(read(['issue', 'list', '--repo', LANE.atelier.home, '--state', state,
-    '--limit', String(WINDOW), '--json', FIELDS]))
-  const lists = [list('open'), list('closed')]
-  if (lists.some((l) => l.length >= WINDOW)) return undefined
-  const tickets = lists.flat()
+  const tickets = listed(read)
+  if (tickets === undefined) return undefined
   const waves = [...new Set(tickets.map((i) => waveOf(i.labels)).filter((n) => n !== undefined))].sort((a, b) => a - b)
   return waves.find((n) => {
     const closes = tickets.filter((i) => waveOf(i.labels) === n).map((i) => i.closedAt)
@@ -63,7 +53,18 @@ function closed(db: Db, read: Read): number | undefined {
   })
 }
 
+function listed(read: Read): Listing[] | undefined {
+  const list = (state: string): Listing[] => Listed.parse(read(['issue', 'list', '--repo', LANE.atelier.home, '--state', state,
+    '--limit', String(WINDOW), '--json', FIELDS]))
+  const lists = [list('open'), list('closed')]
+  return lists.some((l) => l.length >= WINDOW) ? undefined : lists.flat()
+}
+
 const Contents = z.array(z.object({ path: z.string() }))
+
+const File = z.object({ content: z.string() })
+
+const HEADING = /^#{1,6} (.+)$/
 
 const Numbers = z.array(z.object({ number: z.int() }))
 
@@ -75,11 +76,35 @@ const BODY = ['**What:** write `DESIGN.md` with a section auditing every page ag
 
 function first(read: Read, exec: Run): string[] {
   const home = LANE.atelier.home
-  if (Contents.parse(read(['api', `repos/${home}/contents?ref=main`])).some((e) => e.path === 'DESIGN.md')) return []
+  if (Contents.parse(read(['api', `repos/${home}/contents?ref=main`])).some((e) => e.path === 'DESIGN.md')) return drafts(read, exec)
   if (Numbers.parse(read(['issue', 'list', '--repo', home, '--label', 'seat:design_lead', '--state', 'all', '--json', 'number'])).length > 0) return []
   exec(['label', 'create', 'seat:design_lead', '--repo', home, '--force'])
   const url = exec(['issue', 'create', '--repo', home, '--title', TITLE, '--body-file', '-', '--label', 'lane:atelier', '--label', 'seat:design_lead'], BODY)
   return [`first pass: ${url.trim()}`]
+}
+
+function drafts(read: Read, exec: Run): string[] {
+  const home = LANE.atelier.home
+  if (Numbers.parse(read(['issue', 'list', '--repo', home, '--label', 'seat:design_lead', '--state', 'closed', '--json', 'number'])).length === 0) return []
+  const tickets = listed(read)
+  if (tickets === undefined || tickets.some((i) => waveOf(i.labels) !== undefined)) return []
+  const paths = Contents.parse(read(['api', `repos/${home}/contents/design/tickets?ref=main`])).map((e) => e.path).filter((p) => p.endsWith('.md')).sort()
+  const sections = text(read, 'DESIGN.md').split('\n').flatMap((l) => HEADING.exec(l)?.[1]?.trim() ?? [])
+  const found = paths.map((path) => ({ path, lines: text(read, path).split('\n') }))
+  const cites = (lines: string[]): boolean => lines.some((l) => l.includes('DESIGN.md') && sections.some((s) => l.includes(s)))
+  if (found.some((d) => cites(d.lines))) exec(['label', 'create', 'wave:1', '--repo', home, '--force'])
+  return found.map(({ path, lines }) => {
+    if (!cites(lines)) return `wave 1: ${path} cites no DESIGN.md section`
+    const [head = '', ...rest] = lines
+    const url = exec(['issue', 'create', '--repo', home, '--title', head.replace(/^# /, ''), '--body-file', '-', '--label', 'lane:atelier',
+      '--label', 'wave:1'], rest.join('\n').trim())
+    return `wave 1: ${url.trim()}`
+  })
+}
+
+function text(read: Read, path: string): string {
+  const file = File.parse(read(['api', `repos/${LANE.atelier.home}/contents/${path}?ref=main`]))
+  return Buffer.from(file.content.replace(/\n/g, ''), 'base64').toString('utf8')
 }
 
 async function pass(db: Db, root: string, provider: Provider, now: Date, web: string, n: number): Promise<string> {

@@ -69,6 +69,12 @@ test('760b D1 atelier-web names its seat, lane, rails and checks', () => {
     commands: { node: ['--check'], npm: ['test'] } })
 })
 
+test('1133 D1 caliperforge/pay excuses surfpool_tests alone', () => {
+  expect(profile(REPO, 'caliperforge/pay')).toEqual({ checks: { rust: ['format', 'test'] },
+    commands: { excused: ['-p pay-core --test surfpool_tests'] },
+    notes: ['rust/ ships no Justfile: `cargo fmt --all -- --check` at the rust/ workspace, then `cargo test -p <crate>` for the crates touched.'] })
+})
+
 test('1122 D1 excused parses as a list; a non-list is refused', () => {
   expect(profile(root({ 'widget.yml': 'commands: { excused: [-p x] }\n' }), 'acme/widget')?.commands).toEqual({ excused: ['-p x'] })
   const dir = root({ 'widget.yml': 'commands: { excused: -p x }\n' })

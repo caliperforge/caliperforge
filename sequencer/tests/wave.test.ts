@@ -33,12 +33,18 @@ const shape = (r: Fixture) => ({ number: r.number, title: `issue ${String(r.numb
   url: `https://github.com/${REPO}/issues/${String(r.number)}`, labels: [{ name: 'lane:atelier' }, { name: `wave:${String(r.wave)}` }],
   createdAt: '2026-09-20T09:00:00Z', closedAt: r.closedAt ?? null, stateReason: null })
 
-function canned(open: Fixture[], closed: Fixture[] = [], log: string[] = [], design = true, first: number[] = []): Read {
+function canned(open: Fixture[], closed: Fixture[] = [], log: string[] = [], design = true, first: number[] = [],
+  shut: number[] = [], files: Record<string, string> = {}): Read {
   return (args) => {
     log.push(args.join(' '))
     if (args[1] === `repos/${REPO}/contents?ref=main`) return [{ path: design ? 'DESIGN.md' : 'index.html' }]
-    if (args.includes('seat:design_lead')) return first.map((number) => ({ number }))
+    if (args.includes('seat:design_lead')) return (args.includes('closed') ? shut : first).map((number) => ({ number }))
     if (args[1] === 'list') return (args[5] === 'closed' ? closed : open).map(shape)
+    if (args[1] === `repos/${REPO}/contents/design/tickets?ref=main`) {
+      return Object.keys(files).filter((path) => path.startsWith('design/tickets/')).map((path) => ({ path }))
+    }
+    const file = Object.entries(files).find(([path]) => args[1] === `repos/${REPO}/contents/${path}?ref=main`)?.[1]
+    if (file !== undefined) return { content: Buffer.from(file).toString('base64').replace(/.{60}/g, '$&\n') }
     if (args[0] === 'api') return { sub_issues_summary: { total: 0 } }
     const hit = open.map(shape).find((r) => String(r.number) === args[2])
     if (args.at(-1) === 'state,comments') return { state: 'OPEN', comments: [] }
@@ -61,9 +67,10 @@ const tmp = (): string => mkdtempSync(join(tmpdir(), 'cf-wave-'))
 
 const FILED = `https://github.com/${REPO}/issues/30`
 
-function filer(calls: string[][]): Run {
-  return (args) => {
+function filer(calls: string[][], bodies: string[] = []): Run {
+  return (args, input) => {
     calls.push(args)
+    if (input !== undefined) bodies.push(input)
     return `${FILED}\n`
   }
 }
@@ -171,6 +178,51 @@ test('first pass D5: a failed issue create is one wave line', async () => {
   }
   expect(await closing(db, tmp(), stub([]), canned([], [], [], false), NOW, tmp(), exec)).toEqual(['wave: gh: HTTP 502'])
   expect(ofKind(db, 'swallowed')).toMatchObject([{ actor: 'wave', message: 'wave: gh: HTTP 502' }])
+})
+
+const DRAFTS = {
+  'DESIGN.md': '# Atelier\n\n## Plans page\n\n## Status pill\n',
+  'design/tickets/01-plans.md': '# Plans list\n\n**What:** the plans list, per DESIGN.md Plans page\n',
+  'design/tickets/02-pill.md': '# One status pill\n\n**What:** DESIGN.md § Status pill on every page\n',
+}
+
+const LOOSE = { 'design/tickets/03-loose.md': '# Loose\n\n**What:** match DESIGN.md\n' }
+
+const wave1 = (title: string): string[] => ['issue', 'create', '--repo', REPO, '--title', title, '--body-file', '-',
+  '--label', 'lane:atelier', '--label', 'wave:1']
+
+test('wave 1 D1: each citing draft files a wave:1 ticket', async () => {
+  const calls: string[][] = []
+  const bodies: string[] = []
+  const read = canned([], [], [], true, [7], [7], DRAFTS)
+  expect(await closing(piped(), tmp(), stub([]), read, NOW, tmp(), filer(calls, bodies))).toEqual([`wave 1: ${FILED}`, `wave 1: ${FILED}`])
+  expect(calls).toEqual([['label', 'create', 'wave:1', '--repo', REPO, '--force'], wave1('Plans list'), wave1('One status pill')])
+  expect(bodies).toEqual(['**What:** the plans list, per DESIGN.md Plans page', '**What:** DESIGN.md § Status pill on every page'])
+})
+
+test('wave 1 D2: a wave-labelled ticket files nothing again', async () => {
+  const calls: string[][] = []
+  const read = canned([{ number: 30, wave: 1 }], [], [], true, [7], [7], DRAFTS)
+  expect(await closing(piped(), tmp(), stub([]), read, NOW, tmp(), filer(calls))).toEqual([])
+  expect(calls).toEqual([])
+})
+
+test('wave 1 D3: a draft citing no section is reported, not filed', async () => {
+  const calls: string[][] = []
+  const read = canned([], [], [], true, [7], [7], { ...DRAFTS, ...LOOSE })
+  expect(await closing(piped(), tmp(), stub([]), read, NOW, tmp(), filer(calls))).toEqual([`wave 1: ${FILED}`, `wave 1: ${FILED}`,
+    'wave 1: design/tickets/03-loose.md cites no DESIGN.md section'])
+  expect(calls.filter((c) => c[1] === 'create' && c[0] === 'issue').map((c) => c[5])).toEqual(['Plans list', 'One status pill'])
+})
+
+test('wave 1 D4: an open or missing first pass files nothing', async () => {
+  for (const first of [[7], []]) {
+    const calls: string[][] = []
+    const log: string[] = []
+    expect(await closing(piped(), tmp(), stub([]), canned([], [], log, true, first, [], DRAFTS), NOW, tmp(), filer(calls))).toEqual([])
+    expect(calls).toEqual([])
+    expect(log.filter((l) => l.includes('design/tickets'))).toEqual([])
+  }
 })
 
 browsed('D4: a wave:1 close after the last pass fires again', async () => {

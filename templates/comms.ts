@@ -113,6 +113,12 @@ export async function grow(db: Db, root: string, plan: PlanRow, step: Step, prov
 
 const halted = (step: Step, fired: Fired): Outcome => ({ outcome: 'refuse', spans: [fired.stop_reason ?? 'seat.exit'], note: `${step.runs} ${fired.ended}` })
 
+function ruling(root: string, id: number): string {
+  const text = [maybe(root, id, 'issue.md') ?? maybe(root, id, 'ask.md'), maybe(root, id, 'rulings.md')]
+    .map((t) => t?.trim() ?? '').filter((t) => t !== '').join('\n\n')
+  return text === '' ? '' : `\n\n# Rulings\n\n${text}`
+}
+
 const MODES: Record<string, Run['mode']> = { daily: 'log', ship: 'ship', weekly: 'weekly', catchup: 'catchup' }
 
 const POST = /[\s\S]*?\n---\n(?:\w+:.*\n)+---[ \t]*(?=\n|$)/g
@@ -135,11 +141,9 @@ export async function draft(db: Db, root: string, plan: PlanRow, step: Step, pro
   const title = titled(db, plan, 'daily') ?? titled(db, plan, 'ship') ?? titled(db, plan, 'weekly') ?? titled(db, plan, 'catchup')
   if (title === null) return { outcome: 'pass', spans: [], note: 'not a post plan' }
   if (maybe(root, plan.id, 'refusal.md')?.startsWith('step 3 ') === true) move(root, plan.id, 'refusal.md', 'refusal.prev.md')
-  const ruling = [maybe(root, plan.id, 'issue.md') ?? maybe(root, plan.id, 'ask.md'), maybe(root, plan.id, 'rulings.md')]
-    .map((text) => text?.trim() ?? '').filter((text) => text !== '').join('\n\n')
   const [refusal, prev] = [maybe(root, plan.id, 'refusal.md'), maybe(root, plan.id, 'refusal.prev.md')]
   const refused = refusal === null ? prev : prev?.startsWith('step 3 ') === true ? `${refusal}\n\n${prev}` : refusal
-  const input = `# packet.json\n\n${get(root, plan.id, 'packet.json')}${ruling === '' ? '' : `\n\n# Rulings\n\n${ruling}`}${
+  const input = `# packet.json\n\n${get(root, plan.id, 'packet.json')}${ruling(root, plan.id)}${
     returned(db, plan.id)?.replace(/^/, '\n\n# Returned from the desk\n\n') ?? ''}${
     refused?.replace(/^/, '\n\n# Refused — answer what this names, keep every item it does not name\n\n') ?? ''}`
   const fired = await ran(db, root, plan, { ...step, mode: MODES[title.slice(0, title.indexOf(' '))] }, provider, input, false)
@@ -158,7 +162,7 @@ export async function draft(db: Db, root: string, plan: PlanRow, step: Step, pro
 export async function review(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
   const [name, post] = subject(root, plan.id)
   if (post === null) return { outcome: 'pass', spans: [], note: 'skipped: no draft' }
-  const fired = await ran(db, root, plan, step, provider, `# ${name}\n\n${post}\n\n# packet.json\n\n${get(root, plan.id, 'packet.json')}`, false)
+  const fired = await ran(db, root, plan, step, provider, `# ${name}\n\n${post}\n\n# packet.json\n\n${get(root, plan.id, 'packet.json')}${ruling(root, plan.id)}`, false)
   if (fired.ended !== 'completed') return halted(step, fired)
   const judged = read(fired.text, post)
   if (judged === null) return { outcome: 'refuse', spans: ['text_review.fence'], note: `${step.runs} reply has no valid verdict fence` }

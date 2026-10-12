@@ -663,6 +663,37 @@ test('rulingsBlank D4: blank rulings.md, no heading; prev kept out', async () =>
   expect(prompt).not.toContain('item c is unsourced')
 })
 
+const reviewed = async (w: World): Promise<string> => {
+  const prompts: string[] = []
+  const reviewer = seated('')
+  put(w.root, 1, 'draft.md', drafted(fixture('reply.md'))?.post ?? '')
+  await review(w.db, w.root, plan(w.db, 1), mapOf('comms').at(3), { ...reviewer, fire: (packet) => {
+    prompts.push(packet.prompt)
+    return reviewer.fire(packet)
+  } })
+  return prompts[0] ?? ''
+}
+
+test('rulingsReview D1 D5: text_review sees # Rulings, none blank', async () => {
+  const w = posting('ship post acme/widget#7')
+  put(w.root, 1, 'rulings.md', 'leave out Ludo\n')
+  const prompt = await reviewed(w)
+  expect(prompt).toContain('\n\n# Rulings\n\n# hello\n\n- **D1** add `hello()` in `src/hello.ts`\n\nleave out Ludo')
+  expect(prompt.indexOf('# packet.json')).toBeLessThan(prompt.indexOf('\n\n# Rulings\n\n'))
+  drop(w.root, 1, 'ask.md')
+  put(w.root, 1, 'rulings.md', '  \n')
+  expect(await reviewed(w)).not.toContain('\n\n# Rulings\n\n')
+})
+
+test('ruledReview D2: a draft line naming Ludo goes back to step 1', async () => {
+  const w = posting('ship post acme/widget#7')
+  put(w.root, 1, 'rulings.md', 'leave out Ludo')
+  put(w.root, 1, 'draft.md', '# The week\n\nLudo shipped too.\n')
+  expect(await review(w.db, w.root, plan(w.db, 1), mapOf('comms').at(3), seated('', verdict('ruled.reply.md'))))
+    .toMatchObject({ outcome: 'refuse', spans: ['draft.md:3'], to: 1 })
+  expect(maybe(w.root, 1, 'review.md')).toBeNull()
+})
+
 test.each(['growth 2026-09-28', 'scorecard 2026-09-28'])('D5: a %s plan passes steps 1 and 3 with no run and no draft', async (title) => {
   const w = posting(title, 1)
   for (let n = 0; n < 3; n += 1) await tick(w.db, w.root, never)

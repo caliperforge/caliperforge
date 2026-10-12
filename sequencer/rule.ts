@@ -1,5 +1,6 @@
 import { statSync } from 'node:fs'
-import { join } from 'node:path'
+import { isAbsolute, join, relative } from 'node:path'
+import { real } from '../runner/index.ts'
 import { logged } from '../store/events.ts'
 import { edit, filesOf } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
@@ -26,7 +27,8 @@ export function opened(db: Db, root: string, plan: number): string[] {
 export function rule(db: Db, root: string, plan: PlanRow, who: string, text: string): 'ask.md' | 'issue.md' | null {
   const other = [...text.matchAll(/\.cf\/work\/(\d+)/g)].some((m) => Number(m[1]) !== plan.id)
   if (other || /(?:^|[^.])\.\.\//.test(text)) return null
-  if ([...text.matchAll(PATH)].some((m) => !(m[1] ?? '').startsWith(`${root}/`))) return null
+  const inside = (p: string) => p.startsWith(`${root}/`) || (isAbsolute(p) && !relative(real(planDir(root, plan.id)), real(p)).startsWith('..'))
+  if ([...text.matchAll(PATH)].some((m) => !inside(m[1] ?? ''))) return null
   const section = `## Answer from the ${who} (${new Date().toISOString().slice(0, 10)})\n\n${text.trim()}\n`
   if (!builderRan(db, plan.id)) {
     put(root, plan.id, 'ask.md', `${maybe(root, plan.id, 'ask.md') ?? ''}\n${section}`)

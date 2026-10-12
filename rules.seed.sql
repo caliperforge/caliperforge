@@ -15,7 +15,7 @@ VALUES
   ('rules/registry/10-typescript_review.yaml', 'card', 'rules/registry/10-typescript_review.yaml', 'dcf63250338d9f701d3c1b44da0d34c7d7fe9be65256df2ce7d414e506fa7922', '2026-10-04'),
   ('rules/registry/11-brief_writer.yaml', 'card', 'rules/registry/11-brief_writer.yaml', '35990c92b827768465b12194a7bda4a5b7a8e14d73c383840c8c8a71556c3d15', '2026-10-04'),
   ('rules/registry/12-text_review.yaml', 'card', 'rules/registry/12-text_review.yaml', '8a3b3fc3d609a0e6deca3e6411e5f2242aa28dc7b560f1e2ea5c06b2c834342e', '2026-10-04'),
-  ('rules/registry/12-writer_catchup.yaml', 'card', 'rules/registry/12-writer_catchup.yaml', 'd5b57f0e5943337aec30d232e64efaf7b8c788375295229aa1401a99a67be5ec', '2026-10-11'),
+  ('rules/registry/12-writer_catchup.yaml', 'card', 'rules/registry/12-writer_catchup.yaml', '0874da2c14e5efbe2e938ab57552695b724b46618e7e452c4f2ba637f3217929', '2026-10-11'),
   ('rules/registry/12-writer_log.yaml', 'card', 'rules/registry/12-writer_log.yaml', '3995e86189488b802406786ef138d26447810c793bc979c656c6020f0407291e', '2026-10-04'),
   ('rules/registry/12-writer_ship.yaml', 'card', 'rules/registry/12-writer_ship.yaml', 'cf574f2183a698dda0469641dd5f60f980c6b7487e05148fb7815566328afbae', '2026-10-04'),
   ('rules/registry/12-writer_weekly.yaml', 'card', 'rules/registry/12-writer_weekly.yaml', 'd99f0270d1a6f05a50ed029ae69badc441ec3cf35ae428506d8163feda62f41d', '2026-10-04'),
@@ -91,7 +91,7 @@ VALUES
   ('solana_specialist', 'card', 'rules/roster/solana_specialist.yaml', '2a34e6b44fea66209a40f35501499dc3fbd578c447c4581fe4364e4abb3bfacc', '2026-09-27'),
   ('solidity_specialist', 'card', 'rules/roster/solidity_specialist.yaml', 'b36bcd10b20231bf3bba75ed76e0c3b911967a4866bfbfcb7315fd3a19fa65bd', '2026-09-27'),
   ('swift_specialist', 'card', 'rules/roster/swift_specialist.yaml', 'e82952d468c6fc4e19ae0a8d1e32a0f6d8867fa635c7d9c0b666dc029d1dc6a3', '2026-09-23'),
-  ('text_review', 'card', 'rules/roster/text_review.yaml', 'd5a7700cf729dfdc687ee60244089fdf2e2338feda61bc5b298e012b5ac83bd1', '2026-09-27'),
+  ('text_review', 'card', 'rules/roster/text_review.yaml', '1fdabb7364e8a38ff71a59296d2d893746bc8b2cd3d79c969fc3e13dcb64c611', '2026-09-27'),
   ('typescript_specialist', 'card', 'rules/roster/typescript_specialist.yaml', '5e1713dcdef54b155423d1004e0b41ca5cef7d53b3207fc0e785f9d2578800ad', '2026-09-17'),
   ('web_specialist', 'card', 'rules/roster/web_specialist.yaml', 'cce2eb79d2c0adb44750c2efd83df3d3528ef6f93c2e33b6bba5c29d0f42a0dc', '2026-10-04'),
   ('writer', 'card', 'rules/roster/writer.yaml', 'a23f7a20a03d2355756b3b5954ba1960f2e4ed8f7dbee43bfe70e66777507191', '2026-09-27');

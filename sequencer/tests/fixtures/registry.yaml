@@ -321,3 +321,8 @@
   where: kind = 'daily' AND published_at IS NOT NULL
   gap: 30h
   while: EXISTS (SELECT 1 FROM pipes WHERE name = 'comms' AND enabled = 1)
+- name: paydesk_live
+  table: events
+  column: at
+  where: kind = 'paydesk_live' AND outcome = 'pass'
+  gap: 8d

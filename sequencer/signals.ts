@@ -2,7 +2,8 @@ import type { Desk } from '../cli/gh.ts'
 import { all, notify, record as keep, type Event } from '../cli/inbox.ts'
 import { commsLane, fileComms } from '../store/comms.ts'
 import { weeklyIn } from '../store/desk.ts'
-import { logged } from '../store/events.ts'
+import { type Diffed, pass } from '../paydesk/live.ts'
+import { logged, pointers } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { hhmm, zone } from '../store/lanes.ts'
 import { internal, needsCeo, pipeNamed, planById, type PlanRow, rewind } from '../store/plans.ts'
@@ -130,6 +131,22 @@ export function weekly(db: Db, now: Date): void {
   const day = local.toISOString().slice(0, 10)
   file(db, `${kind} ${day}`, null, now, 'weekly clock', day)
   if (dow === 4 && hhmm(db, now) >= '07:00') file(db, `weekly ${shift(day, -3)}`, null, now, 'weekly clock', shift(day, -3))
+}
+
+/** The pay-skills live pass, run once per local date on Monday from 05:00; a crash is logged and not retried that date. */
+export async function paydesk(db: Db, root: string, now: Date,
+  run: (root: string, date: string) => Promise<Diffed> = pass): Promise<void> {
+  const local = new Date(now.getTime() + zone(db) * 60000)
+  const day = local.toISOString().slice(0, 10)
+  if (local.getUTCDay() !== 1 || hhmm(db, now) < '05:00' || pointers(db, 'paydesk_live').includes(day)) return
+  const event = { plan: null, kind: 'paydesk_live', actor: 'paydesk', pointer: day, run: null }
+  try {
+    const { failing, passing, gone } = await run(root, day)
+    logged(db, { ...event, outcome: 'pass',
+      message: `${String(failing.length)} newly failing, ${String(passing.length)} newly passing, ${String(gone.length)} gone` })
+  } catch (error) {
+    logged(db, { ...event, outcome: 'refuse', message: error instanceof Error ? error.message : String(error) })
+  }
 }
 
 /** From Friday 18:00 local, a Monday-to-Sunday week with no weekly post on the desk raises one card and one inbox event. */

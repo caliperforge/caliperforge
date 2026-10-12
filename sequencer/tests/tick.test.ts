@@ -28,6 +28,7 @@ import { benchPacket } from '../../runner/packet.ts'
 import type { Packet, Provider } from '../../providers/kind.ts'
 import type { Gh } from '../../rails/ci-green/index.ts'
 import type { Fired } from '../kind.ts'
+import { hold, unhold } from '../hold.ts'
 import { forkCi, type Wire } from '../push.ts'
 import { started } from '../signals.ts'
 import { closed } from '../unpolled.ts'
@@ -882,6 +883,19 @@ test('a gating run still going past 45 ticks goes to the COO', async () => {
   expect(out?.note).toMatch(/CI/)
   expect(ciGreen(w)).toEqual([])
   expect(plan(w.db, 1)).toMatchObject({ step: 6, retries: 0 })
+})
+
+test('an unparked plan starts its CI window at tick 1', async () => {
+  const w = await atCi()
+  const wire = watched([], w.root, 1, runsOn(w.root, 1, 'in_progress', ''))
+  const lap = async (): Promise<Fired | undefined> => (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
+  await lap()
+  put(w.root, 1, 'ci.waits', `${head(srcDir(w.root, 1), ['rev-parse', 'HEAD'])} 45`)
+  hold(w.db, w.root, 1, 'x', new Date(), null, new Date('2099-01-01T00:00:00Z'))
+  unhold(w.db, w.root, 1, 'coo')
+  const out = await lap()
+  expect(out).toMatchObject({ step: 6, outcome: 'pass' })
+  expect(out?.note).toMatch(/tick 1 of 45/)
 })
 
 const atCi = async (): Promise<World> => {

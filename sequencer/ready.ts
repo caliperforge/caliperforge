@@ -15,7 +15,7 @@ import { graded, greptiled } from '../store/signals.ts'
 import type { Step } from '../templates/pr-path.ts'
 import { writable } from './brief.ts'
 import type { Outcome } from './kind.ts'
-import { forkCi, headOf, holding, rehearsalBranch, title, WIRE, type Wire } from './push.ts'
+import { forkCi, GRADES, headOf, holding, rehearsalBranch, title, WIRE, type Wire } from './push.ts'
 import { cloned, diffOf, FORK, get, headSha, maybe, put, repoName, srcDir } from './workspace.ts'
 import { homeOf } from './home.ts'
 import { learned } from './learn.ts'
@@ -78,7 +78,7 @@ function greptile(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire,
   const row = graded(db, plan.id, sha)
   if (row === null) {
     return asked(root, plan.id, sha, repo, wire)
-      ?? holding(root, plan.id, sha, ['greptile.missing'], `${at} has no Greptile score yet`, GRADING, 'greptile.waits')
+      ?? holding(root, plan.id, sha, ['greptile.missing'], `${at} has no Greptile score yet`, GRADING, GRADES)
       ?? `; Greptile gave no score in ${String(GRADING)} ticks`
   }
   const score = row.score ?? 0

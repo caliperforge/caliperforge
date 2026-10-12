@@ -473,6 +473,14 @@ test('D3 a refused part of a split plan sends the hold to the COO', () => {
   expect(returns(db)).toEqual([])
 })
 
+test('unhold drops the ready step\'s wait counts', () => {
+  const { db, home } = seeded()
+  for (const key of ['ci.waits', 'ci.waits.rerun', 'greptile.waits']) put(home, 7, key, `${'a'.repeat(40)} 45`)
+  hold(db, home, 7, 'x', new Date(), null, LATER)
+  unhold(db, home, 7, 'coo')
+  expect(['ci.waits', 'ci.waits.rerun', 'greptile.waits'].map((key) => maybe(home, 7, key))).toEqual([null, null, null])
+})
+
 test('unhold past step 1 keeps the checkout', () => {
   const { db, home } = seeded()
   writeFileSync(join(srcDir(home, 7), 'built.ts'), 'x\n')

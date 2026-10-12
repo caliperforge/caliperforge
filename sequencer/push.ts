@@ -90,6 +90,10 @@ const WAITS = 'ci.waits'
 
 const RERUNS = 'ci.waits.rerun'
 
+export const GRADES = 'greptile.waits'
+
+export const COUNTS = [WAITS, RERUNS, GRADES]
+
 const REHEARSED = 'ci.next'
 
 /**

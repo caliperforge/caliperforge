@@ -1,0 +1,7 @@
+checks:
+  rust: [format, test]
+# surfpool_tests spawn the surfpool CLI, which this host does not install.
+commands:
+  excused: ['-p pay-core --test surfpool_tests']
+notes:
+  - "rust/ ships no Justfile: `cargo fmt --all -- --check` at the rust/ workspace, then `cargo test -p <crate>` for the crates touched."

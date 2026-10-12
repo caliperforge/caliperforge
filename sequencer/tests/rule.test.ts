@@ -1,11 +1,11 @@
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { expect, test } from 'vitest'
 import type { Provider } from '../../providers/kind.ts'
 import { eventsOf } from '../../store/events.ts'
-import { filesOf, recorded, strays } from '../../store/files.ts'
-import { migrate, open } from '../../store/index.ts'
+import { edit, filesOf, recorded, strays } from '../../store/files.ts'
+import { migrate, open, type Db } from '../../store/index.ts'
 import { planById } from '../../store/plans.ts'
 import type { Wire } from '../push.ts'
 import { woke } from '../director.ts'
@@ -234,6 +234,36 @@ test('D2 a path in neither folder is refused', () => {
   put(home, 7, 'rulings.md', 'see `src/gone.ts`\n')
   expect(opened(db, home, 7)).toEqual(['src/gone.ts'])
   expect(eventsOf(db, 7, 'files')).toEqual([{ actor: 'ruling', outcome: 'refuse', message: 'not in the checkout: src/gone.ts' }])
+})
+
+async function aliased(answer: (alias: string) => string, setup: (s: { db: Db; home: string }) => void = () => undefined) {
+  const { db, home } = seeded(3)
+  const alias = join(mkdtempSync(join(tmpdir(), 'cf-alias-')), 'root')
+  symlinkSync(home, alias)
+  setup({ db, home })
+  const said = `---\nmove: rule\nwhy: the ruling names it\nanswer: ${answer(alias)}\n---\n`
+  await woke(db, home, stub('', said), now, () => undefined, { ...wire, comment: () => undefined })
+  return { events: eventsOf(db, 7, 'director'), issue: maybe(home, 7, 'issue.md') }
+}
+
+test('D1 a plan_files path through the other root applies', async () => {
+  const got = await aliased((a) => `write ${a}/.cf/work/7/src/paydesk/tests/fixtures/check.stderr`,
+    ({ db }) => { edit(db, 7, 'add', 'paydesk/tests/fixtures/check.stderr', 'ruling', 'x') })
+  expect(got.issue).toContain('/.cf/work/7/src/paydesk/tests/fixtures/check.stderr\n\n## Standing\n')
+  expect(got.events).toEqual([{ actor: 'director', outcome: 'pass', message: 'rule: the ruling names it' }])
+})
+
+test('D2 a repo read at base.sha through the other root applies', async () => {
+  const got = await aliased((a) => `read caliperforge/pay@${'a'.repeat(40)}:paydesk/scan.ts at ${a}/.cf/work/7/base.sha`)
+  expect(got.issue).toContain(`caliperforge/pay@${'a'.repeat(40)}:paydesk/scan.ts`)
+  expect(got.events).toEqual([{ actor: 'director', outcome: 'pass', message: 'rule: the ruling names it' }])
+})
+
+test('D3 a symlink out of the plan folder is refused', async () => {
+  const got = await aliased((a) => `write ${a}/.cf/work/7/src/out/x.ts`,
+    ({ home }) => { symlinkSync(mkdtempSync(join(tmpdir(), 'cf-out-')), join(srcDir(home, 7), 'out')) })
+  expect(got.issue).toBe(ISSUE)
+  expect(got.events.map((e) => e.message.split(',')[0])).toEqual(['rule did not apply'])
 })
 
 test('D5 a director return opens the path rulings.md names', async () => {

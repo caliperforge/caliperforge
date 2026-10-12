@@ -20,9 +20,12 @@ export function caught(db: Db, plan: PlanRow, text: string): Outcome {
     return { outcome: 'refuse', spans: ['posts.json'], note: 'posts.json holds a post with no from/to, no # title line or no body' }
   }
   const today = new Date().toISOString().slice(0, 10)
+  // Guatemala keeps UTC-6 all year (no DST), so 12:00 UTC is 06:00 there.
+  const start = Date.parse(`${plan.queued_at.slice(0, 10)}T12:00:00Z`)
   const added = db.transaction(() => posts.filter(({ title, body, dek, sources, checks, from, to, learnings = '' }, i) => {
+    const release = new Date(start + (i + 1) * 86_400_000).toISOString().replace('T', ' ').slice(0, 19)
     if (!proofed(db, { id: CATCHUP + i * 1_000_000 + plan.id, kind: 'catchup', dest: 'site', title, dek, body, sources: JSON.stringify(sources),
-      checks: JSON.stringify(checks), work_date: `${from}–${to}`, written_date: today })) return false
+      checks: JSON.stringify(checks), work_date: `${from}–${to}`, written_date: today, release })) return false
     noted(db, from, noting(learnings), sources.map((s) => s.ref))
     return true
   }).length)()

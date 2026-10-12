@@ -49,7 +49,8 @@ export function push(db: Db, now: Date): number {
 
 export function ripe(db: Db, now: Date): void {
   const dir = siteDir(db)
-  const rows = aged(db, new Date(now.getTime() - 86_400_000).toISOString().replace('T', ' ').slice(0, 19))
+  const stamp = (at: Date): string => at.toISOString().replace('T', ' ').slice(0, 19)
+  const rows = aged(db, stamp(new Date(now.getTime() - 86_400_000)), stamp(now))
   if (dir === null || rows.length === 0 || awaiting(db)) return
   try {
     for (const row of rows.filter((r) => r.url === null)) place(db, dir, row)

@@ -64,7 +64,7 @@ VALUES
   ('rules/registry/55-capture_swallowed_once.yaml', 'card', 'rules/registry/55-capture_swallowed_once.yaml', 'e69b94e18f0b9c182252aea14c2595d032ced88ddb2818c446f4788f43ce092f', '2026-10-10'),
   ('rules/registry/56-design_lead.yaml', 'card', 'rules/registry/56-design_lead.yaml', '8b32d08c48df0c064a0021ec80aee40d48c95fefe224a4d025c971e756f1ae61', '2026-10-11'),
   ('rules/registry/57-daily_live.yaml', 'card', 'rules/registry/57-daily_live.yaml', '32d3fff1b77e87e49191fafd6a197ec546197f40763a5159f589556b57456f3f', '2026-10-11'),
-  ('rules/registry/57-paydesk_live.yaml', 'card', 'rules/registry/57-paydesk_live.yaml', '0000000000000000000000000000000000000000000000000000000000000000', '2026-10-12'),
+  ('rules/registry/57-paydesk_live.yaml', 'card', 'rules/registry/57-paydesk_live.yaml', '24b8cd147418b6f613a05e2eaf38de1ba5b85f6bb949809011f095a7feff44d5', '2026-10-12'),
   ('rules/staffing.yaml', 'card', 'rules/staffing.yaml', '5505b1016244ee8d5a5c03cdcf8cbb178011c063ed004dce7ee0ec90a295f87a', '2026-10-05'),
   ('completion-audit', 'rail', 'rules/rails.yaml', 'b46b445806d399b61887a5259eb0a6893444efcbe5acf2e6dd534507bc0882f3', '2026-09-17'),
   ('secret-scan', 'rail', 'rules/rails.yaml', 'b46b445806d399b61887a5259eb0a6893444efcbe5acf2e6dd534507bc0882f3', '2026-09-17'),

@@ -1,8 +1,9 @@
 import { readdirSync, rmSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, relative } from 'node:path'
+import { z } from 'zod'
 import { walk } from '../checks/tree.ts'
-import { WINDOW, type Read } from '../cli/gh.ts'
+import { run, WINDOW, type Read, type Run } from '../cli/gh.ts'
 import { notify, record, type Event } from '../cli/inbox.ts'
 import type { Provider } from '../providers/kind.ts'
 import { read as verdict } from '../reviews/verdict.ts'
@@ -33,11 +34,12 @@ export function waits(db: Db, repo: string, labels: Listing['labels']): boolean 
 }
 
 export async function closing(db: Db, root: string, provider: Provider, read: Read, now: Date,
-  web = join(homedir(), 'atelier_web')): Promise<string[]> {
+  web = join(homedir(), 'atelier_web'), exec: Run = run): Promise<string[]> {
   if (!pipesOn(db).has(LANE.atelier.pipe)) return []
   try {
+    const filed = first(read, exec)
     const n = closed(db, read)
-    return n === undefined ? [] : [await pass(db, root, provider, now, web, n)]
+    return n === undefined ? filed : [...filed, await pass(db, root, provider, now, web, n)]
   } catch (error) {
     const line = `wave: ${firstLine(error)}`
     logged(db, { plan: null, kind: 'swallowed', actor: 'wave', outcome: 'pass', message: line, pointer: null, run: null })
@@ -59,6 +61,25 @@ function closed(db: Db, read: Read): number | undefined {
     const last = lastLogged(db, 'wave', `wave ${String(n)}`)
     return shut.length === closes.length && (last === undefined || Date.parse(last.at) < Math.max(...shut.map((c) => Date.parse(c))))
   })
+}
+
+const Contents = z.array(z.object({ path: z.string() }))
+
+const Numbers = z.array(z.object({ number: z.int() }))
+
+const TITLE = 'Design lead\'s first pass: DESIGN.md, the audit, wave 1'
+
+const BODY = ['**What:** write `DESIGN.md` with a section auditing every page against the rev-2 canvas, and draft the wave 1 tickets under `design/tickets/`, one file per ticket',
+  '**Why:** main has no `DESIGN.md`, and the design lead fires only when a wave closes',
+  '**When it ends:** `DESIGN.md` and its audit are on main, with one file per wave 1 ticket under `design/tickets/`', ''].join('\n')
+
+function first(read: Read, exec: Run): string[] {
+  const home = LANE.atelier.home
+  if (Contents.parse(read(['api', `repos/${home}/contents?ref=main`])).some((e) => e.path === 'DESIGN.md')) return []
+  if (Numbers.parse(read(['issue', 'list', '--repo', home, '--label', 'seat:design_lead', '--state', 'all', '--json', 'number'])).length > 0) return []
+  exec(['label', 'create', 'seat:design_lead', '--repo', home, '--force'])
+  const url = exec(['issue', 'create', '--repo', home, '--title', TITLE, '--body-file', '-', '--label', 'lane:atelier', '--label', 'seat:design_lead'], BODY)
+  return [`first pass: ${url.trim()}`]
 }
 
 async function pass(db: Db, root: string, provider: Provider, now: Date, web: string, n: number): Promise<string> {

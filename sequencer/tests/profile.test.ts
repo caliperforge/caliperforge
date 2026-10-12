@@ -76,6 +76,25 @@ test.each(CASES)('D4 D5 $repo $language gates are pinned and follow its profile 
   expect(found.map((g) => g.script)).toEqual(profile(REPO, `solana-foundation/${c.repo}`)?.checks?.[c.language])
 })
 
+const PAY = nested({
+  'rust/Cargo.toml': '[workspace]\n',
+  'rust/crates/core/Cargo.toml': '[package]\nname = "pay-core"\n',
+  'rust/crates/cli/Cargo.toml': '[package]\nname = "pay"\n',
+})
+
+test.each([
+  { file: 'rust/crates/core/src/lib.rs', test: ['test', '-p', 'pay-core', '--no-fail-fast'] },
+  { file: 'rust/crates/cli/src/main.rs', test: ['test', '-p', 'pay'] },
+])('1133 D2 D3 caliperforge/pay gates for $file', (c) => {
+  const pay = profile(REPO, 'caliperforge/pay')
+  const found = gates(PAY, { language: 'rust', files: [c.file] }, pay?.commands?.excused)
+  expect(found).toEqual([
+    { script: 'format', bin: 'cargo', args: ['fmt', '--all', '--', '--check'], dir: 'rust' },
+    { script: 'test', bin: 'cargo', args: c.test, dir: 'rust' },
+  ])
+  expect(found.map((g) => g.script)).toEqual(pay?.checks?.rust)
+})
+
 const BRIEFS = [
   {
     issue: '# feat(python): carry a memo (#35)\n\n**What:** Add a memo field to the payment request.\n**Why:** #35 asks for it.\n',

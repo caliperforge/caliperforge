@@ -198,9 +198,6 @@
   "tests/findings.test.ts": {
     "prepare": 1
   },
-  "tests/growth.test.ts": {
-    "prepare": 6
-  },
   "tests/handback.test.ts": {
     "prepare": 2
   },
@@ -219,17 +216,11 @@
   "tests/lead.test.ts": {
     "prepare": 1
   },
-  "tests/leases.test.ts": {
-    "prepare": 6
-  },
   "tests/life.test.ts": {
     "prepare": 5
   },
   "tests/park.test.ts": {
     "prepare": 1
-  },
-  "tests/pipes.test.ts": {
-    "prepare": 6
   },
   "tests/profile.test.ts": {
     "prepare": 1
@@ -243,14 +234,8 @@
   "tests/resume.test.ts": {
     "prepare": 1
   },
-  "tests/route.test.ts": {
-    "prepare": 6
-  },
   "tests/rule.test.ts": {
     "prepare": 3
-  },
-  "tests/scorecard.test.ts": {
-    "prepare": 6
   },
   "tests/seat-checks.test.ts": {
     "prepare": 6

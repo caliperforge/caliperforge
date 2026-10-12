@@ -2,7 +2,10 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import type { Packet } from '../../providers/kind.ts'
-import { eventsOf } from '../../store/events.ts'
+import { posts } from '../../store/desk.ts'
+import { eventsOf, kindsOf, runRows } from '../../store/events.ts'
+import { amend } from '../../store/lanes.ts'
+import { briefed } from '../../store/plans.ts'
 import { pack } from '../../templates/comms.ts'
 import { tick } from '../index.ts'
 import { get, maybe, put } from '../workspace.ts'
@@ -18,12 +21,11 @@ const words = (n: number): string => Array.from({ length: n }, () => 'word').joi
 
 const growing = (title: string, step = 7): World => {
   const w = world()
-  w.db.prepare("UPDATE plans SET template = 'comms', step = ?, title = ? WHERE id = 1").run(step, title)
+  amend(w.db, 1, { template: 'comms', step })
+  briefed(w.db, 1, { title, what: null, why: null, ends: null })
   put(w.root, 1, 'packet.json', PACKET)
   return w
 }
-
-const posts = (w: World): unknown[] => w.db.prepare('SELECT * FROM desk_posts').all()
 
 test.each(['growth 2026-09-28', 'weekly 2026-10-05'])('D1 D2: %s at step 7 fires growth_lead once', async (title) => {
   const w = growing(title)
@@ -31,7 +33,7 @@ test.each(['growth 2026-09-28', 'weekly 2026-10-05'])('D1 D2: %s at step 7 fires
   await tick(w.db, w.root, stub('', 0, REPLY, (p) => seen.push(p)))
   expect(seen).toHaveLength(1)
   expect(seen[0]?.prompt).toContain(`# packet.json\n\n${PACKET}`)
-  expect(w.db.prepare('SELECT plan, step, seat FROM runs').all()).toEqual([{ plan: 1, step: 7, seat: 'growth_lead' }])
+  expect(runRows(w.db)).toMatchObject([{ plan: 1, step: 7, seat: 'growth_lead' }])
   expect(maybe(w.root, 1, 'base.sha')).toBeNull()
   expect(get(w.root, 1, 'growth.md')).toBe(REPLY)
 })
@@ -43,7 +45,7 @@ test.each([
   const w = growing(title, 8)
   put(w.root, 1, 'growth.md', REPLY)
   expect(pack(w.db, w.root, plan(w.db, 1))).toMatchObject({ outcome: 'pass' })
-  expect(w.db.prepare('SELECT id, kind, dest, status, title, dek, body, sources, checks, work_date FROM desk_posts').all()).toEqual([{
+  expect(posts(w.db)).toMatchObject([{
     id, kind: 'growth', dest: 'pack', status: 'proof', title: 'What a refusal teaches the machine', dek: '',
     body: JSON.stringify({ notes: NOTES, replies: fenced('replies'), partners: fenced('partners') }),
     sources: '[]', checks: '[]', work_date: day,
@@ -62,7 +64,7 @@ test.each([
   const w = growing(title, 8)
   put(w.root, 1, 'growth.md', reply)
   expect(pack(w.db, w.root, plan(w.db, 1))).toMatchObject({ outcome: 'refuse', spans: ['growth.md'] })
-  expect(posts(w)).toEqual([])
+  expect(posts(w.db)).toEqual([])
 })
 
 test('D4 D5: a ship post passes grow and pack: no run, no desk row', async () => {
@@ -70,9 +72,8 @@ test('D4 D5: a ship post passes grow and pack: no run, no desk row', async () =>
   const never = stub('', 0, REPLY, () => { throw new Error('no seat fires on a ship post') })
   for (let n = 0; n < 4 && plan(w.db, 1).state !== 'done'; n += 1) await tick(w.db, w.root, never)
   expect(plan(w.db, 1).state).toBe('done')
-  expect(w.db.prepare('SELECT kind, outcome FROM events WHERE plan = 1 ORDER BY id').all())
-    .toEqual([{ kind: 'grow', outcome: 'pass' }, { kind: 'pack', outcome: 'pass' }, { kind: 'score', outcome: 'pass' }])
+  expect(kindsOf(w.db, 1)).toEqual([{ kind: 'grow', outcome: 'pass' }, { kind: 'pack', outcome: 'pass' }, { kind: 'score', outcome: 'pass' }])
   expect(eventsOf(w.db, 1, 'grow')).toEqual([{ actor: 'growth_lead', outcome: 'pass', message: 'skipped: not a growth or weekly plan' }])
-  expect(w.db.prepare('SELECT count(*) AS n FROM runs').get()).toEqual({ n: 0 })
-  expect(posts(w)).toEqual([])
+  expect(runRows(w.db)).toEqual([])
+  expect(posts(w.db)).toEqual([])
 })

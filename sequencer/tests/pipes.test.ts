@@ -5,8 +5,9 @@ import { expect, test } from 'vitest'
 import { dryLines } from '../../cli/brief.ts'
 import { fresh } from '../../checks/sqlite.ts'
 import type { Db } from '../../store/index.ts'
-import { dial, hhmm, zone } from '../../store/lanes.ts'
-import { openPipes } from '../../store/plans.ts'
+import { runRows } from '../../store/events.ts'
+import { dial, hhmm, pipes, settingKeys, zone } from '../../store/lanes.ts'
+import { allPlans, openPipes, pipeNamed, putPlan } from '../../store/plans.ts'
 import { last, receipt } from '../../store/ticks.ts'
 import { dry, tick } from '../index.ts'
 import { CARRIED, stub } from './world.ts'
@@ -20,18 +21,16 @@ const AT = '2026-09-18T13:00:00.000Z'
 
 /** A `pr_path` plan the store will take needs a target or an origin; ours is filed from one of our own issues. */
 function queued(db: Db, id: number, pipe: string, template: 'comms' | 'research' | 'pr_path'): void {
-  const row = db.prepare('SELECT id FROM pipes WHERE name = ?').get(pipe) as { id: number }
   const origin = template === 'pr_path' ? `https://github.com/caliperforge/caliperforge/issues/${String(id)}` : null
   const ours = origin === null ? null : 'machine'
-  db.prepare(`INSERT INTO plans (id, pipe_id, template, state, queued_at, step, retries, origin, lane, seat)
-    VALUES (?, ?, ?, 'queued', ?, 0, 0, ?, ?, ?)`)
-    .run(id, row.id, template, AT, origin, ours, ours === null ? null : 'typescript_specialist')
+  putPlan(db, { id, pipe_id: Number(pipeNamed(db, pipe)?.id), target_id: null, template, state: 'queued', queued_at: AT, step: 0, retries: 0,
+    origin, lane: ours, seat: ours === null ? null : 'typescript_specialist' })
 }
 
 test('the store ships three lanes, one each, 07:00 to 22:00',() => {
   const db = fresh(schema)
-  expect(db.prepare('SELECT name, enabled, window_start, window_end, max_concurrent FROM pipes ORDER BY id').all())
-    .toEqual([
+  expect(pipes(db))
+    .toMatchObject([
       { name: 'pr-path', enabled: 1, window_start: '07:00', window_end: '22:00', max_concurrent: 1 },
       { name: 'comms', enabled: 1, window_start: '07:00', window_end: '22:00', max_concurrent: 1 },
       { name: 'research', enabled: 1, window_start: '07:00', window_end: '22:00', max_concurrent: 1 },
@@ -42,7 +41,7 @@ test('the store ships three lanes, one each, 07:00 to 22:00',() => {
 test('one zone row, Guatemala, and every window reads it',() => {
   const db = fresh(schema)
   expect(zone(db)).toBe(-360)
-  expect(db.prepare("SELECT count(*) AS n FROM settings WHERE key LIKE 'tick.zone%'").get()).toEqual({ n: 1 })
+  expect(settingKeys(db, 'tick.zone*')).toHaveLength(1)
   expect(hhmm(db, OPENS)).toBe('07:00')
   expect(hhmm(db, new Date('2026-09-19T03:59:00.000Z'))).toBe('21:59')
   expect(openPipes(db, hhmm(db, new Date('2026-09-18T12:59:00.000Z')))).toEqual([])
@@ -75,8 +74,8 @@ test('a queued research plan steps and stops no other lane',async () => {
   expect(would.quiet).toEqual([{ pipe: 'pr-path', live: 0, ready: 0 }, { pipe: 'comms', live: 0, ready: 0 }])
   expect(dryLines(would)).toContain('  research\tplan 2\tstep 0\tresearch\twould fire\n')
   expect(await tick(db, root, stub(CARRIED), OPENS)).toMatchObject([{ pipe: 'research', plan: 2, step: 0, name: 'question' }])
-  expect(db.prepare("SELECT count(*) AS n FROM plans WHERE state <> 'queued'").get()).toEqual({ n: 1 })
-  expect(db.prepare('SELECT count(*) AS n FROM runs').get()).toEqual({ n: 0 })
+  expect(allPlans(db).filter((p) => p.state !== 'queued')).toHaveLength(1)
+  expect(runRows(db)).toEqual([])
 })
 
 test('the cap goes to steppable lanes; a missed one says so',() => {

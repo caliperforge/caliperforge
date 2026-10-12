@@ -54,6 +54,15 @@ test('D3 NOT_PLANNED, empty reason as NULL, diagnosis:wrong as 1', () => {
   ])
 })
 
+test('D1 wave from a wave:N label, NULL without one', () => {
+  const db = schema()
+  recordListing(db, ATELIER, [issue(ATELIER, 7, ['lane:atelier', 'wave:2']), issue(ATELIER, 8, ['lane:atelier'])], false)
+  expect(db.prepare('SELECT number, wave FROM tickets ORDER BY number').all()).toEqual([
+    { number: 7, wave: 2 },
+    { number: 8, wave: null },
+  ])
+})
+
 test('fills opened_at, closed_at and kind, idempotently', () => {
   const db = schema()
   expect(backfillTickets(db, canned(LISTINGS))).toBe(4)

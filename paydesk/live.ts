@@ -1,4 +1,6 @@
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { lookup } from 'node:dns/promises'
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { git } from '../sequencer/workspace.ts'
 import { overall } from './card.ts'
@@ -6,6 +8,7 @@ import { scan, type Net, type Scanned } from './scan.ts'
 
 const REPO = 'https://github.com/solana-foundation/pay-skills.git'
 const PASS = /^live-(\d{4}-\d{2}-\d{2})\.jsonl$/
+const NET: Net = { fetch, resolve: (host) => lookup(host) }
 
 export interface Diffed { failing: string[]; passing: string[]; gone: string[] }
 
@@ -42,4 +45,13 @@ export async function live(dir: string, date: string, dirs: string[], net: Net):
     '',
   ].join('\n'))
   return diff
+}
+
+export async function pass(root: string, date: string, net: Net = NET): Promise<Diffed> {
+  const tmp = mkdtempSync(join(tmpdir(), 'pay-skills-'))
+  try {
+    return await live(join(root, '.cf/paydesk'), date, providers(tmp), net)
+  } finally {
+    rmSync(tmp, { recursive: true, force: true })
+  }
 }

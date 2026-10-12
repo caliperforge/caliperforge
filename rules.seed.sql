@@ -29,7 +29,6 @@ VALUES
   ('rules/registry/20-lua_specialist.yaml', 'card', 'rules/registry/20-lua_specialist.yaml', '5eb8a7d038b754fde0c60a05c95d8b7a121b26f93ddbb8a392642828c6a48aca', '2026-10-04'),
   ('rules/registry/21-rust_specialist.yaml', 'card', 'rules/registry/21-rust_specialist.yaml', '317ee698a3cd9298f9660830cd98b907c37994a4b86e96764a3f20a7a36e3f06', '2026-10-04'),
   ('rules/registry/22-gardener.yaml', 'card', 'rules/registry/22-gardener.yaml', '5cf9364803a3b8c01bb86b73c1f8b559ebba2dc976ba43cfb972a33d4e911443', '2026-10-04'),
-  ('rules/registry/23-ratchet.yaml', 'card', 'rules/registry/23-ratchet.yaml', 'bdddec1387f5d3170f08400c6a1739b447b9fce3afdd4118b49edefdbe243db4', '2026-10-06'),
   ('rules/registry/24-accounts.yaml', 'card', 'rules/registry/24-accounts.yaml', '2f161bdc31bb2742e4228745f3ee84d34673bf19d54088cb5d0da7ae9460fa0d', '2026-10-06'),
   ('rules/registry/25-records.yaml', 'card', 'rules/registry/25-records.yaml', '4e805b48d48a9c07e6926640b1b6aec52b4ed32dfbc67a3dd4bb827ae659f63f', '2026-10-06'),
   ('rules/registry/26-dispositions.yaml', 'card', 'rules/registry/26-dispositions.yaml', '419ec098837238da47223cbb7f45cca4a9e595e52e2e2dc4fad3f5d40c193488', '2026-10-06'),

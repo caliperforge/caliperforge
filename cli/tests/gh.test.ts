@@ -85,3 +85,11 @@ test('D4 selected with the fork is installed', () => {
   expect(installed(FORK, apps('selected', ['caliperforge/other', FORK], calls))).toBe(true)
   expect(calls[1]).toEqual(['api', 'user/installations/7/repositories?per_page=100'])
 })
+
+test('D4 selected but unreadable is assumed installed', () => {
+  const read: Read = (args) => {
+    if (String(args[1]).startsWith('user/')) throw new Error('HTTP 403')
+    return { installations: [{ id: 7, app_slug: 'greptile-apps', repository_selection: 'selected' }] }
+  }
+  expect(installed(FORK, read)).toBe(true)
+})

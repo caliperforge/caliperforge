@@ -165,8 +165,10 @@ export function installed(fork: string, read: Read = gh): boolean {
     .installations.find((i) => i.app_slug === 'greptile-apps')
   if (app === undefined) return false
   if (app.repository_selection === 'all') return true
-  return Repositories.parse(read(['api', `user/installations/${String(app.id)}/repositories?per_page=${String(WINDOW)}`]))
-    .repositories.some((r) => r.full_name === fork)
+  // Listing a selected installation's repositories needs the read:user scope; without it, assume installed and let the window run.
+  let listed: unknown
+  try { listed = read(['api', `user/installations/${String(app.id)}/repositories?per_page=${String(WINDOW)}`]) } catch { return true }
+  return Repositories.parse(listed).repositories.some((r) => r.full_name === fork)
 }
 
 export function rehearsal(fork: string, branch: string, read: Read = gh): number | null {

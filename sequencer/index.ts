@@ -11,7 +11,7 @@ import { answer } from './finding.ts'
 import type { Fired } from './kind.ts'
 import { reprice } from './priority.ts'
 import { rescored } from './ready.ts'
-import { daily, started, weekly } from './signals.ts'
+import { daily, paydesk, started, weekly } from './signals.ts'
 import { type Wire } from './push.ts'
 import { due, type Entry, stuck } from './drift.ts'
 import { sunday } from '../cli/science.ts'
@@ -40,6 +40,7 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
     due(db, registry, now, read)
     stuck(db, root, registry, now)
     sunday(db, root, now)
+    if (registry.some((e) => e.name === 'paydesk_live')) await paydesk(db, root, now)
   }
   if (labels !== undefined) (lines ?? []).push(...intake(db, root, labels), ...refill(db, root, labels, now))
   reap(root, terminal(db))

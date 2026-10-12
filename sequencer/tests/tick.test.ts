@@ -21,7 +21,7 @@ import { blocked, kernel } from '../steps.ts'
 import { checkout, diffOf, doneIds, get, gitDiff, maybe, narrowing, put, snapshot, srcDir } from '../workspace.ts'
 import { GREEN } from '../base.ts'
 import { record } from '../../store/files.ts'
-import { allEvents, eventsOf, newestMode, runRows } from '../../store/events.ts'
+import { allEvents, eventsOf, kindsOf, newestMode, runRows } from '../../store/events.ts'
 import { overrule, verdictRows } from '../../store/verdict.ts'
 import { record as signal } from '../../store/signals.ts'
 import { benchPacket } from '../../runner/packet.ts'
@@ -917,6 +917,26 @@ test('a CI run judged without a hold leaves no now row', async () => {
   const w = await atCi()
   expect(forkCi(w.db, w.root, plan(w.db, 1), 'acme/widget', watched([], w.root, 1))).toBeNull()
   expect(now(w)).toEqual([])
+})
+
+test('a ref the fork rejected refuses step 6 unsent', async () => {
+  const w = await atCi()
+  const pushed = tip(w.root, 1)
+  const sends = (): number => kindsOf(w.db, 1).filter((e) => e.kind === 'fork.sent').length
+  const before = sends()
+  const log: string[] = []
+  const out = forkCi(w.db, w.root, plan(w.db, 1), 'acme/widget', { ...watched(log, w.root, 1), at: () => 'f'.repeat(40) })
+  expect(out).toMatchObject({ outcome: 'refuse', spans: ['fork.sent'], to: 6 })
+  expect(out?.note).toContain('rejected refs/heads/')
+  expect(out?.note).toContain(pushed.slice(0, 12))
+  expect(sends()).toBe(before)
+  expect(maybe(w.root, 1, 'ci.waits')).toBeNull()
+  expect(log.filter((l) => l.startsWith('rehearse'))).toEqual([])
+})
+
+test('a ref the fork holds at the pushed tip is judged', async () => {
+  const w = await atCi()
+  expect(forkCi(w.db, w.root, plan(w.db, 1), 'acme/widget', { ...watched([], w.root, 1), at: () => tip(w.root, 1) })).toBeNull()
 })
 
 interface Listed { status: string; conclusion: string }

@@ -16,7 +16,7 @@ import { drop, get, maybe, move, put } from '../sequencer/workspace.ts'
 import { edited, learningsIn, noted, packsIn, proofed, returned, scorecardOf, substackIn } from '../store/desk.ts'
 import type { Run } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
-import { packetOf } from '../store/packet.ts'
+import { landedIn, packetOf } from '../store/packet.ts'
 import { planTitle, type PlanRow } from '../store/plans.ts'
 import { caught } from './catchup.ts'
 import { Fence, HEAD, noting, Stored } from './fence.ts'
@@ -41,7 +41,7 @@ export function gather(db: Db, root: string, plan: PlanRow): Outcome {
   const [, from = '', to = ''] = titled(db, plan, 'catchup')?.split(' ') ?? []
   if (from !== '') {
     const learnings = learningsIn(db, from, to)
-    put(root, plan.id, 'packet.json', JSON.stringify({ learnings }))
+    put(root, plan.id, 'packet.json', JSON.stringify({ learnings, landed: landedIn(db, from, to) }))
     return { outcome: 'pass', spans: [], note: `${String(learnings.length)} date(s)` }
   }
   const packet = packetOf(db, plan.id)
@@ -51,9 +51,10 @@ export function gather(db: Db, root: string, plan: PlanRow): Outcome {
 
 export function facts(root: string, plan: PlanRow): Outcome {
   const posts = JSON.parse(maybe(root, plan.id, 'posts.json') ?? 'null') as { sources: { ref: string }[] }[] | null
-  const dates = posts === null ? [] : (JSON.parse(get(root, plan.id, 'packet.json')) as { learnings: { date: string }[] }).learnings.map((l) => l.date)
-  const unheld = posts?.flatMap((p) => p.sources.flatMap((s) => (held(root, dates, s.ref) ? [] : [`fence.json:${s.ref}`])))
-  if (unheld !== undefined) return { outcome: unheld.length === 0 ? 'pass' : 'refuse', spans: unheld, note: `${String(unheld.length)} catchup ref(s) not a held learnings:<date> or a path:line in the root` }
+  const packet = posts === null ? null : JSON.parse(get(root, plan.id, 'packet.json')) as { learnings: { date: string }[]; landed: { plan: number }[] }
+  const [dates, plans] = [packet?.learnings.map((l) => l.date) ?? [], packet?.landed.map((l) => l.plan) ?? []]
+  const unheld = posts?.flatMap((p) => p.sources.flatMap((s) => (held(root, dates, plans, s.ref) ? [] : [`fence.json:${s.ref}`])))
+  if (unheld !== undefined) return { outcome: unheld.length === 0 ? 'pass' : 'refuse', spans: unheld, note: `${String(unheld.length)} catchup ref(s) not a held learnings:<date>, a held landed:N or a path:line in the root` }
   const draft = maybe(root, plan.id, 'draft.md')
   if (draft === null) return { outcome: 'pass', spans: [], note: 'no draft' }
   const { landed, refusals = [] } = JSON.parse(get(root, plan.id, 'packet.json')) as { landed?: Landed[]; refusals?: { id: number }[] }

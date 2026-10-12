@@ -95,4 +95,4 @@ VALUES
   ('text_review', 'card', 'rules/roster/text_review.yaml', '1fdabb7364e8a38ff71a59296d2d893746bc8b2cd3d79c969fc3e13dcb64c611', '2026-09-27'),
   ('typescript_specialist', 'card', 'rules/roster/typescript_specialist.yaml', '5e1713dcdef54b155423d1004e0b41ca5cef7d53b3207fc0e785f9d2578800ad', '2026-09-17'),
   ('web_specialist', 'card', 'rules/roster/web_specialist.yaml', 'cce2eb79d2c0adb44750c2efd83df3d3528ef6f93c2e33b6bba5c29d0f42a0dc', '2026-10-04'),
-  ('writer', 'card', 'rules/roster/writer.yaml', 'a23f7a20a03d2355756b3b5954ba1960f2e4ed8f7dbee43bfe70e66777507191', '2026-09-27');
+  ('writer', 'card', 'rules/roster/writer.yaml', '3296261439073faf44d291efe74b0f2964e936137b65edd64fda7126eb156008', '2026-09-27');

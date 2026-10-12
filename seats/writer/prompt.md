@@ -30,7 +30,7 @@ what the day taught, the one a later post should build on.
 ---
 dest: <site, substack or note>
 dek: <one plain line under the title, at most 160 characters, no markdown>
-sources: <JSON list of {"claim": ..., "ref": ...}, each ref a landed:N or refusal:N the packet holds, or a weekly one's https:// URL or <name>.md:<line>; a catchup one's only a learnings:<date> the packet holds or a <path>:<line> in the root>
+sources: <JSON list of {"claim": ..., "ref": ...}, each ref a landed:N or refusal:N the packet holds, or a weekly one's https:// URL or <name>.md:<line>; a catchup one's only a learnings:<date> or landed:N the packet holds, or a <path>:<line> in the root>
 checks: <JSON list of {"label": ..., "ok": true or false}, one per fact you checked>
 learnings: <one line>
 ---

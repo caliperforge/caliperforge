@@ -117,9 +117,10 @@ export function returned(db: Db, id: number): string | null {
 }
 
 export function putPost(db: Db, p: Pick<Post, 'id' | 'kind' | 'dest' | 'status' | 'title' | 'dek' | 'body' | 'edited_title' | 'sources'
-  | 'checks' | 'work_date' | 'written_date'>): void {
-  db.prepare(`INSERT INTO desk_posts (id, kind, dest, status, title, dek, body, edited_title, sources, checks, work_date, written_date)
-    VALUES (@id, @kind, @dest, @status, @title, @dek, @body, @edited_title, @sources, @checks, @work_date, @written_date)`).run(p)
+  | 'checks' | 'work_date' | 'written_date'> & Partial<Pick<Post, 'edited_body' | 'proof_at'>>): void {
+  db.prepare(`INSERT INTO desk_posts (id, kind, dest, status, title, dek, body, edited_title, edited_body, sources, checks, work_date, written_date, proof_at)
+    VALUES (@id, @kind, @dest, @status, @title, @dek, @body, @edited_title, @edited_body, @sources, @checks, @work_date, @written_date, @proof_at)`)
+    .run({ edited_body: null, proof_at: null, ...p })
 }
 
 /** False when the plan already has its post. */

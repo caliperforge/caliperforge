@@ -3,6 +3,10 @@ import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { all } from '../../cli/inbox.ts'
 import type { Provider } from '../../providers/kind.ts'
+import { posts, putPost, type Post } from '../../store/desk.ts'
+import { eventsOf } from '../../store/events.ts'
+import { amend } from '../../store/lanes.ts'
+import { addPipe, briefed, plansOf } from '../../store/plans.ts'
 import { SCORECARD_COLUMNS, score } from '../../templates/comms.ts'
 import { tick } from '../index.ts'
 import { mapOf } from '../steps.ts'
@@ -12,7 +16,8 @@ const { subscribers, open_rate: openRate, sources } = SCORECARD_COLUMNS
 
 const scoring = (): World => {
   const w = world()
-  w.db.prepare("UPDATE plans SET template = 'comms', step = 9, title = 'scorecard 2026-10-05' WHERE id = 1").run()
+  amend(w.db, 1, { template: 'comms', step: 9 })
+  briefed(w.db, 1, { title: 'scorecard 2026-10-05', what: null, why: null, ends: null })
   return w
 }
 
@@ -25,14 +30,12 @@ const csv = (rows: string[][]): string => rows.map((r) => `${r.join(',')}\n`).jo
 
 const scored = (w: World): ReturnType<typeof score> => score(w.db, w.root, plan(w.db, 1), mapOf('comms').at(9))
 
-const post = (w: World, id: number, kind: string, dest: string, body: string, day: string, edited: string | null = null): void => {
-  w.db.prepare(`INSERT INTO desk_posts (id, kind, dest, status, title, dek, body, edited_body, sources, checks, work_date, written_date, proof_at)
-    VALUES (?, ?, ?, 'proof', 't', '', ?, ?, '[]', '[]', ?, ?, ?)`).run(id, kind, dest, body, edited, day, day, `${day} 09:00:00`)
+const post = (w: World, id: number, kind: string, dest: Post['dest'], body: string, day: string, edited: string | null = null): void => {
+  putPost(w.db, { id, kind, dest, status: 'proof', title: 't', dek: '', body, edited_title: null, edited_body: edited, sources: '[]',
+    checks: '[]', work_date: day, written_date: day, proof_at: `${day} 09:00:00` })
 }
 
-const cards = (w: World): { id: number; title: string; dek: string; body: string; work_date: string }[] =>
-  w.db.prepare("SELECT id, title, dek, body, work_date FROM desk_posts WHERE kind = 'scorecard' AND id = 1").all() as
-    { id: number; title: string; dek: string; body: string; work_date: string }[]
+const cards = (w: World): Post[] => posts(w.db).filter((p) => p.kind === 'scorecard' && p.id === 1)
 
 const notes = (n: number): string => JSON.stringify({ notes: Array.from({ length: n }, () => 'a note') })
 
@@ -86,11 +89,10 @@ const never: Provider = { name: 'claude-agent-sdk', fire: () => { throw new Erro
 
 test('D7: two Monday ticks file one plan, by the weekly clock', async () => {
   const w = world()
-  w.db.prepare("UPDATE plans SET state = 'done' WHERE id = 1").run()
-  w.db.prepare(`INSERT INTO pipes (name, enabled, window_start, window_end, max_concurrent)
-    VALUES ('comms', 1, '07:00', '20:00', 1)`).run()
+  amend(w.db, 1, { state: 'done' })
+  addPipe(w.db, { name: 'comms', enabled: 1, window_start: '07:00', window_end: '20:00', max_concurrent: 1 })
   await tick(w.db, w.root, never, new Date('2026-10-06T03:00Z'))
   await tick(w.db, w.root, never, new Date('2026-10-06T03:30Z'))
-  expect(w.db.prepare(`SELECT p.title, p.state, e.actor FROM plans p JOIN events e ON e.plan = p.id AND e.kind = 'filed'
-    WHERE p.title LIKE 'scorecard %'`).all()).toEqual([{ title: 'scorecard 2026-10-05', state: 'queued', actor: 'weekly clock' }])
+  expect(plansOf(w.db, 'comms').filter((p) => p.title?.startsWith('scorecard '))
+    .map((p) => ({ title: p.title, state: p.state, actor: eventsOf(w.db, p.id, 'filed')[0]?.actor }))).toEqual([{ title: 'scorecard 2026-10-05', state: 'queued', actor: 'weekly clock' }])
 })

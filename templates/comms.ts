@@ -18,6 +18,9 @@ import type { Run } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { packetOf } from '../store/packet.ts'
 import { planTitle, type PlanRow } from '../store/plans.ts'
+import { caught } from './catchup.ts'
+import { Fence, HEAD, noting, Stored } from './fence.ts'
+import { held } from './held.ts'
 import { ROOT, type Step } from './pr-path.ts'
 
 const SEATED = new Set(['draft', 'text_review', 'grow'])
@@ -47,6 +50,10 @@ export function gather(db: Db, root: string, plan: PlanRow): Outcome {
 }
 
 export function facts(root: string, plan: PlanRow): Outcome {
+  const posts = JSON.parse(maybe(root, plan.id, 'posts.json') ?? 'null') as { sources: { ref: string }[] }[] | null
+  const dates = posts === null ? [] : (JSON.parse(get(root, plan.id, 'packet.json')) as { learnings: { date: string }[] }).learnings.map((l) => l.date)
+  const unheld = posts?.flatMap((p) => p.sources.flatMap((s) => (held(root, dates, s.ref) ? [] : [`fence.json:${s.ref}`])))
+  if (unheld !== undefined) return { outcome: unheld.length === 0 ? 'pass' : 'refuse', spans: unheld, note: `${String(unheld.length)} catchup ref(s) not a held learnings:<date> or a path:line in the root` }
   const draft = maybe(root, plan.id, 'draft.md')
   if (draft === null) return { outcome: 'pass', spans: [], note: 'no draft' }
   const { landed, refusals = [] } = JSON.parse(get(root, plan.id, 'packet.json')) as { landed?: Landed[]; refusals?: { id: number }[] }
@@ -60,17 +67,6 @@ export function facts(root: string, plan: PlanRow): Outcome {
   return { outcome: 'refuse', spans, note: `${String(spans.length)} span(s) cite a ref the packet lacks, or carry an inline tag, an unclaimed number, an issue or an outside login` }
 }
 
-const REF = /^(https:\/\/\S+|[\w-][\w./-]*:[1-9]\d*)$/
-
-const Fence = z.object({
-  learnings: z.string().trim().min(1),
-  dest: z.enum(['site', 'substack', 'note']),
-  dek: z.string().trim().min(1).max(160).regex(/^[^`*_#[\]<>~]*$/),
-  sources: z.array(z.object({ claim: z.string().trim().min(1), ref: z.string().regex(REF) })),
-  checks: z.array(z.object({ label: z.string().trim().min(1), ok: z.boolean() })),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-})
-
 export function drafted(reply: string): (z.infer<typeof Fence> & { post: string }) | null {
   const fence = CLOSING.exec(reply)
   if (fence === null) return null
@@ -78,14 +74,14 @@ export function drafted(reply: string): (z.infer<typeof Fence> & { post: string 
   return got.success ? { ...got.data, post: reply.slice(0, fence.index).trim() } : null
 }
 
-const Stored = Fence.extend({ learnings: z.string().optional() })
-
 export function desk(db: Db, root: string, plan: PlanRow): Outcome {
+  const posts = maybe(root, plan.id, 'posts.json')
+  if (posts !== null) return caught(db, plan, posts)
   const draft = maybe(root, plan.id, 'draft.md')
   if (draft === null) return merged(db, root, plan)
   const fence = Stored.safeParse(JSON.parse(maybe(root, plan.id, 'fence.json') ?? 'null'))
   if (!fence.success) return { outcome: 'refuse', spans: ['fence.json'], note: 'fence.json is missing or lacks a post field' }
-  const post = /^# (.+)\n([\s\S]*)$/.exec(draft)
+  const post = HEAD.exec(draft)
   const body = post?.[2]?.trim() ?? ''
   if (post === null || body === '') return { outcome: 'refuse', spans: ['draft.md'], note: 'draft.md has no # title line or no body' }
   const title = planTitle(db, plan.id)
@@ -95,8 +91,7 @@ export function desk(db: Db, root: string, plan: PlanRow): Outcome {
   db.transaction(() => {
     if (!proofed(db, { id: plan.id, kind: title.replace(/ .*/, ''), dest, title: (post[1] ?? '').trim(), dek, body, sources: JSON.stringify(sources),
       checks: JSON.stringify(checks), work_date: work, written_date: new Date().toISOString().slice(0, 10) })) return
-    noted(db, work, learnings.split('\n').map((l) => l.trim()).filter((l) => l !== '')
-      .map((line) => ({ title: line, what: '', lesson: '', fix: '', status: 'noted' })), sources.map((s) => s.ref))
+    noted(db, work, noting(learnings), sources.map((s) => s.ref))
   })()
   return { outcome: 'pass', spans: [], note: `desk_posts ${String(plan.id)} in proof for ${work}` }
 }

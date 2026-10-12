@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { logged } from './events.ts'
 import type { Db } from './index.ts'
 import { held } from './leases.ts'
-import { clock, openPipes, planById, type PlanRow } from './plans.ts'
+import { clock, openPipes, PipeRow, planById, type PlanRow } from './plans.ts'
 
 const LANE_LABEL = /^lane:([a-z]+)$/
 
@@ -182,6 +182,14 @@ export function width(db: Db, pipe: number, n: number): void {
 
 export function hours(db: Db, pipe: number, start: string, end: string): void {
   db.prepare('UPDATE pipes SET window_start = ?, window_end = ? WHERE id = ?').run(start, end, pipe)
+}
+
+export function pipes(db: Db): PipeRow[] {
+  return db.prepare('SELECT * FROM pipes ORDER BY id').all().map((r) => PipeRow.parse(r))
+}
+
+export function settingKeys(db: Db, glob: string): string[] {
+  return db.prepare('SELECT key FROM settings WHERE key GLOB ?').pluck().all(glob) as string[]
 }
 
 export function amend(db: Db, plan: number, fields: Partial<Pick<PlanRow, 'pipe_id' | 'step' | 'state' | 'retries' | 'head_digest' | 'priority' | 'template'>>): void {

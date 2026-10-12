@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { forward, rehearse, type Read, type Run } from '../gh.ts'
+import { forward, installed, rehearse, type Read, type Run } from '../gh.ts'
 
 const FORK = 'caliperforge/widget'
 const BRANCH = 'widget-12-a1-next'
@@ -55,4 +55,33 @@ test('D3 no rehearsal opens one and moves nothing', () => {
   const calls: string[][] = []
   rehearse(FORK, BRANCH, read('ahead', []), recorder(calls))
   expect(calls).toEqual([CREATE])
+})
+
+function apps(selection: string, repos: string[], calls: string[][]): Read {
+  return (args) => {
+    calls.push(args)
+    return args[1]?.startsWith('orgs/') === true
+      ? { installations: [{ id: 7, app_slug: 'greptile-apps', repository_selection: selection }] }
+      : { repositories: repos.map((name) => ({ full_name: name })) }
+  }
+}
+
+test('D4 no greptile-apps installation is not installed', () => {
+  expect(installed(FORK, () => ({ installations: [{ id: 3, app_slug: 'renovate', repository_selection: 'all' }] }))).toBe(false)
+})
+
+test('D4 all is installed after one read', () => {
+  const calls: string[][] = []
+  expect(installed(FORK, apps('all', [], calls))).toBe(true)
+  expect(calls).toEqual([['api', 'orgs/caliperforge/installations?per_page=100']])
+})
+
+test('D4 selected without the fork is not installed', () => {
+  expect(installed(FORK, apps('selected', ['caliperforge/other'], []))).toBe(false)
+})
+
+test('D4 selected with the fork is installed', () => {
+  const calls: string[][] = []
+  expect(installed(FORK, apps('selected', ['caliperforge/other', FORK], calls))).toBe(true)
+  expect(calls[1]).toEqual(['api', 'user/installations/7/repositories?per_page=100'])
 })

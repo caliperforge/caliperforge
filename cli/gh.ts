@@ -154,6 +154,21 @@ export function review(fork: string, branch: string): void {
   execFileSync('gh', ['pr', 'comment', String(no), '--repo', fork, '--body', '@greptileai'], { encoding: 'utf8' })
 }
 
+const Installations = z.object({
+  installations: z.array(z.object({ id: z.int(), app_slug: z.string(), repository_selection: z.enum(['all', 'selected']) })),
+})
+
+const Repositories = z.object({ repositories: z.array(z.object({ full_name: z.string() })) })
+
+export function installed(fork: string, read: Read = gh): boolean {
+  const app = Installations.parse(read(['api', `orgs/${fork.slice(0, fork.indexOf('/'))}/installations?per_page=${String(WINDOW)}`]))
+    .installations.find((i) => i.app_slug === 'greptile-apps')
+  if (app === undefined) return false
+  if (app.repository_selection === 'all') return true
+  return Repositories.parse(read(['api', `user/installations/${String(app.id)}/repositories?per_page=${String(WINDOW)}`]))
+    .repositories.some((r) => r.full_name === fork)
+}
+
 export function rehearsal(fork: string, branch: string, read: Read = gh): number | null {
   const open = z.array(z.object({ number: z.int() })).parse(read(['pr', 'list', '--repo', fork, '--head', branch,
     '--state', 'open', '--json', 'number']))

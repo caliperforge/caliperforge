@@ -1066,10 +1066,10 @@ test('a runless head goes to the ceo before Greptile', async () => {
 })
 
 /** An outside plan at ready, green on the fork, whose every rehearsal `grade` scores for Greptile or leaves unscored. */
-const atReady = async (grade: (w: World) => void, log: string[] = []): Promise<[World, () => Promise<Fired | undefined>]> => {
+const atReady = async (grade: (w: World) => void, log: string[] = [], over: Partial<Wire> = {}): Promise<[World, () => Promise<Fired | undefined>]> => {
   const w = world()
   approve(w.db, w.target)
-  const wire = { ...watched(log, w.root, 1), rehearse: () => { grade(w) } }
+  const wire = { ...watched(log, w.root, 1), rehearse: () => { grade(w) }, ...over }
   const lap = async (): Promise<Fired | undefined> => (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
   for (let at = 0; at < 6; at += 1) await lap()
   expect(plan(w.db, 1).step).toBe(6)
@@ -1090,6 +1090,16 @@ test('D1 no Greptile score holds ready to tick 45; 46 goes on', async () => {
   expect(plan(w.db, 1).step).toBe(6)
   expect((await lap())?.note).toMatch(/Greptile gave no score in 45 ticks$/)
   expect(plan(w.db, 1).step).toBe(7)
+})
+
+test('D1 a fork without Greptile refuses ready and asks nothing', async () => {
+  const log: string[] = []
+  const [w, lap] = await atReady(() => undefined, log, { greptile: () => false })
+  expect(await lap()).toMatchObject({ step: 6, outcome: 'refuse', spans: ['greptile.installed'],
+    note: 'Greptile is not installed on caliperforge/widget' })
+  expect(log.filter((l) => l.startsWith('review '))).toEqual([])
+  expect(maybe(w.root, 1, 'greptile.asked')).toBeNull()
+  expect(plan(w.db, 1).step).toBe(6)
 })
 
 test('D2 a 3/5 at the head goes to the builder; at another, none', async () => {

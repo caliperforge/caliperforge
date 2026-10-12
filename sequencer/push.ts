@@ -4,7 +4,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { parse as yaml } from 'yaml'
 import { z } from 'zod'
-import { closeIssue, commentIssue, fileIssue, gh, issueComments, forward, openPr, rehearse, review, unrehearse, type IssueComment, type Read } from '../cli/gh.ts'
+import { closeIssue, commentIssue, fileIssue, gh, installed, issueComments, forward, openPr, rehearse, review, unrehearse, type IssueComment, type Read } from '../cli/gh.ts'
 import { CARD } from '../cli/queue.ts'
 import { alerter } from '../cli/watch.ts'
 import { judge, MISSING, PENDING, shell, type Board, type Gh } from '../rails/ci-green/index.ts'
@@ -48,6 +48,7 @@ export interface Wire {
   unrehearse?: (fork: string, branch: string) => void
   at?: (dir: string, ref: string) => string
   review: (fork: string, branch: string) => void
+  greptile?: (fork: string) => boolean
   file: (repo: string, title: string, body: string, labels: string[]) => string
   comment: (repo: string, no: number, body: string) => void
   thread?: (repo: string, no: number) => IssueComment[]
@@ -69,7 +70,7 @@ export const WIRE: Wire = {
   rehearse,
   unrehearse,
   at: (dir, ref) => git(dir, ['ls-remote', 'origin', ref]).split('\t')[0] ?? '',
-  review,
+  review, greptile: installed,
   install: () => { refresh(npm, alerter()) },
   card: [theirs()],
   intake: picked(),

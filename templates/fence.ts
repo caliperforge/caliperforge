@@ -9,7 +9,8 @@ export const Fence = z.object({
   dek: z.string().trim().min(1).max(160).regex(/^[^`*_#[\]<>~]*$/),
   sources: z.array(z.object({ claim: z.string().trim().min(1), ref: z.string().regex(REF) })),
   checks: z.array(z.object({ label: z.string().trim().min(1), ok: z.boolean() })),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 })
 
 export const Stored = Fence.extend({ learnings: z.string().optional() })

@@ -69,8 +69,11 @@ test('catchup D2 D3: examples parse, a draft mode throws', () => {
   expect(() => seat(root, 'writer', 'draft' as Run['mode'])).toThrow()
 })
 
-test('catchup D5: each example parses with a date', () => {
-  for (const example of examples('catchup')) expect(drafted(/```\n([\s\S]*?)```/.exec(example)?.[1] ?? '')?.date).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+test('catchup D5: each example parses with a from and a to', () => {
+  for (const example of examples('catchup')) {
+    const got = drafted(/```\n([\s\S]*?)```/.exec(example)?.[1] ?? '')
+    for (const date of [got?.from, got?.to]) expect(date).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+  }
 })
 
 test('modes D3: weekly examples are first person, for substack', () => {

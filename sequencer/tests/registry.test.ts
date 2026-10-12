@@ -5,9 +5,11 @@ import { parse } from 'yaml'
 import { expect, test } from 'vitest'
 import { registered } from '../../runner/rules.ts'
 import { addRun } from '../../store/brief.ts'
+import { proofed } from '../../store/desk.ts'
 import { addSetting } from '../../store/drift.ts'
 import { logged } from '../../store/events.ts'
 import { addRule, type Db } from '../../store/index.ts'
+import { briefed, planById, putPlan } from '../../store/plans.ts'
 import { drift, Entry, mechanisms } from '../drift.ts'
 import { db, NOW, REGISTRY } from './drifting.ts'
 
@@ -86,4 +88,16 @@ test('fixerRunSilent', () => {
     input_tokens: 0, cache_write_tokens: null, cache_write_1h_tokens: null, cache_read_tokens: 0, output_tokens: 0, seconds: 1, exit: 0,
     at: '2026-10-02 10:00:00', transcript_path: 'x.transcript.jsonl', cost_usd: null })
   expect(drift(d, FIXER, NOW)).toEqual([{ name: 'fixer', state: 'silent', detail: "no row in events WHERE actor = 'fixer'" }])
+})
+
+test('catchupRangeClearsSilent D4', () => {
+  const d = db()
+  const catchup = REGISTRY.filter((e) => e.name === 'writer_catchup')
+  putPlan(d, { id: 2, pipe_id: planById(d, 1).pipe_id, target_id: null, template: 'comms', state: 'queued', queued_at: '2026-10-01', step: 0, retries: 0 })
+  briefed(d, 2, { title: 'catchup 2026-09-26 2026-10-02', what: null, why: null, ends: null })
+  const post = { kind: 'catchup', dest: 'site', title: 't', dek: 'd', body: 'b', sources: '[]', checks: '[]', written_date: '2026-10-02' } as const
+  proofed(d, { ...post, id: 3_000_002, work_date: '2026-09-26' })
+  expect(drift(d, catchup, NOW)).toMatchObject([{ name: 'writer_catchup', state: 'silent' }])
+  proofed(d, { ...post, id: 4_000_002, work_date: '2026-09-27–2026-10-02' })
+  expect(drift(d, catchup, NOW)).toEqual([])
 })

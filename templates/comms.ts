@@ -70,7 +70,7 @@ export function facts(root: string, plan: PlanRow): Outcome {
 export function drafted(reply: string): (z.infer<typeof Fence> & { post: string }) | null {
   const fence = CLOSING.exec(reply)
   if (fence === null) return null
-  const got = Fence.safeParse(prose(fence[1] ?? '', ['learnings', 'dek', 'date']))
+  const got = Fence.safeParse(prose(fence[1] ?? '', ['learnings', 'dek', 'from', 'to']))
   return got.success ? { ...got.data, post: reply.slice(0, fence.index).trim() } : null
 }
 
@@ -120,10 +120,12 @@ const POST = /[\s\S]*?\n---\n(?:\w+:.*\n)+---[ \t]*(?=\n|$)/g
 function dated(root: string, plan: PlanRow, step: Step, text: string): Outcome {
   const parts = text.match(POST) ?? []
   const posts = parts.map(drafted)
-  const { learnings } = JSON.parse(get(root, plan.id, 'packet.json')) as { learnings: { date: string }[] }
-  if (text.slice(parts.join('').length).trim() !== '' || posts.some((p) => p?.date === undefined)
-    || posts.map((p) => p?.date).join() !== learnings.map((l) => l.date).join()) {
-    return { outcome: 'refuse', spans: ['writer.fence'], note: `${step.runs} reply needs one post per packet date, each closing with a dated fence` }
+  const dates = (JSON.parse(get(root, plan.id, 'packet.json')) as { learnings: { date: string }[] }).learnings.map((l) => l.date)
+  const inside = (p: (typeof posts)[number], d: string): boolean => p?.from !== undefined && p.to !== undefined && p.from <= d && d <= p.to
+  if (text.slice(parts.join('').length).trim() !== '' || dates.some((d) => !posts.some((p) => inside(p, d)))
+    || posts.some((p, i) => p?.from === undefined || p.to === undefined || p.from > p.to || (posts[i + 1]?.from ?? '~') <= p.to
+      || !dates.some((d) => inside(p, d)))) {
+    return { outcome: 'refuse', spans: ['writer.fence'], note: `${step.runs} reply needs posts whose from–to ranges cover each packet date once, in order, each closing with a from/to fence` }
   }
   put(root, plan.id, 'posts.json', JSON.stringify(posts))
   return { outcome: 'pass', spans: [], note: `${step.runs}: posts.json written` }

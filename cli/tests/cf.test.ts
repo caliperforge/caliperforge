@@ -25,7 +25,7 @@ test.each([
   ['plan', ['add']],
   ['session', ['close']],
   ['desk', ['list', 'show', 'edit', 'approve', 'return']],
-  ['site', ['push']],
+  ['site', ['push', 'dir']],
   ['gh', ['refile']],
   ['pipe', ['on', 'off', 'width']],
 ])('cf %s --help keeps its subcommand order', (name, subcommands) => {

@@ -1,5 +1,6 @@
 ---
 title: Example API
+summary: Pays per call
 service_url: https://api.example.com
 pr: 7
 openapi:

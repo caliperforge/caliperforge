@@ -105,6 +105,15 @@ test('refuses on the parse error when the fence yields no rows', () => {
   }
 })
 
+test('refuses a done: map or string list as a shape error', () => {
+  for (const name of ['handback-map.md', 'handback-strings.md']) {
+    const verdict = audit(fixture(name), ['D1', 'D2'])
+    expect(verdict.outcome).toBe('refuse')
+    expect(verdict.spans).toEqual(['step-2.handback.md'])
+    expect(verdict.message).toBe('the done: rows are not in the standard shape (a list of id / status / pointer rows)')
+  }
+})
+
 test('an unparsable previous handback carries and refuses nothing', () => {
   expect(audit(fixture('handback-carried.md'), ['D1', 'D2'], fixture('handback-unparsed.md'), '').outcome).toBe('pass')
 })

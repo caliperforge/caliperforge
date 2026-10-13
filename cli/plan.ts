@@ -8,6 +8,7 @@ import { lanePipe, planOfOrigin, queueOrigin, seen } from '../store/origins.ts'
 import { pipeNamed, type Holder } from '../store/plans.ts'
 import { profile } from '../store/profile.ts'
 import { rulingId } from '../store/rulings.ts'
+import { unasked } from '../templates/research.ts'
 import { gh, type Read } from './gh.ts'
 import type { Origin } from './queue.ts'
 
@@ -85,6 +86,8 @@ export function add(db: Db, root: string, ref: string, by: Holder | 'intake' | '
   if (repo !== LANE[lane].home && profile(root, repo)?.lane !== lane) {
     return refusal(db, ref, 'plan.lane_home', `is on ${repo}; the ${lane} lane builds in ${LANE[lane].home}`)
   }
+  const missing = LANE[lane].template === 'research' ? unasked(row.body) : []
+  if (missing.length > 0) return refusal(db, ref, 'plan.research_lines', `has no ${missing.join(' or ')} line`)
   if (row.body.includes(COMMS)) return desk(db, root, ref, row, by)
   const seat = seatOf(row.labels) ?? LANE[lane].seat
   const plan = file(db, by, pipe ?? LANE[lane].pipe, lane, seat, row.url, priority)

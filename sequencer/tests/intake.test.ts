@@ -512,7 +512,7 @@ test('D6: a mend read that throws keeps the plan queued', () => {
 
 const ASKED = '**Question:** what is the cap?\n**Would be wrong if:** a page names another cap\n**Done when:** a quote names it'
 
-function researched(body = 'the ask'): PlanRow {
+function researched(body: string): PlanRow {
   const db = piped()
   intake(db, root, canned([{ number: 500, labels: ['lane:research'], body }]))
   const [plan] = allPlans(db)
@@ -527,9 +527,8 @@ test('D2: a research ticket queues on research; question passes', () => {
   expect(maybe(root, plan.id, 'question.json')).not.toBeNull()
 })
 
-test('D3: a research ticket without the lines refuses at step 0', () => {
-  const plan = researched()
-  expect(question(root, plan)).toEqual({ outcome: 'refuse', spans: ['ask.md'],
-    note: 'ask.md has no **Question:** or **Would be wrong if:** or **Done when:** line' })
-  expect(maybe(root, plan.id, 'question.json')).toBeNull()
+test('D3: a research ticket without the lines queues no plan', () => {
+  const db = piped()
+  intake(db, root, canned([{ number: 500, labels: ['lane:research'], body: 'the ask' }]))
+  expect(allPlans(db)).toEqual([])
 })

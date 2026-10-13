@@ -144,6 +144,18 @@ test('D5 an unmoved diff after a new ruling stops at step 3', async () => {
   expect(holdOf(w.db, 1)?.held_why).toMatch(/^completion-audit: rulings.md/)
 })
 
+test('D1 a new ruling with a new hand-back runs the rails', async () => {
+  const w = await atBuild()
+  await tick(w.db, w.root, stub(UNPOINTED))
+  expect((await tick(w.db, w.root, stub(UNPOINTED)))[0]).toMatchObject({ step: 3, outcome: 'refuse' })
+  put(w.root, 1, 'rulings.md', 'use bye()\n')
+  await tick(w.db, w.root, answers([CARRIED]))
+  const lap = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1)))[0]
+  expect(lap?.note).not.toMatch(/rulings.md changed/)
+  expect(plan(w.db, 1).state).not.toBe('blocked_on_ceo')
+  expect(holdOf(w.db, 1)?.held_why ?? '').not.toMatch(/rulings.md/)
+})
+
 test('D3 a hand-back whose fence parses fires the builder once', async () => {
   for (const text of [CARRIED, UNPOINTED]) {
     const w = await atBuild()

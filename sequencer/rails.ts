@@ -69,7 +69,7 @@ export function unbuilt(root: string, plan: number): boolean {
 }
 
 function completed(db: Db, root: string, plan: number, handback: string, diff: string): Outcome | null {
-  const stop = undone(handback, judged(root, plan, diff))
+  const stop = undone(handback, judged(root, plan, diff, handback))
   if (stop.outcome !== 'pass') {
     record(db, plan, stop, 0)
     return { outcome: 'needs_ceo', spans: stop.spans, note: `completion-audit: ${stop.message}` }
@@ -81,13 +81,13 @@ function completed(db: Db, root: string, plan: number, handback: string, diff: s
   return first.outcome === 'pass' ? null : unfinishedFirst(root, plan, named('completion-audit', first))
 }
 
-/** `step-3.judged` holds the last lap's diff and rulings.md digests: the diff standing still under a new ruling is unmoved. */
-function judged(root: string, plan: number, diff: string): boolean {
+/** `step-3.judged` holds the last lap's diff, rulings.md, handback and issue.md digests: the diff standing still under a new ruling is unmoved. */
+function judged(root: string, plan: number, diff: string, handback: string): boolean {
   const rulings = maybe(root, plan, 'rulings.md')
-  const now = [digestOf(diff), rulings === null ? '' : digestOf(rulings)]
+  const now = [digestOf(diff), rulings === null ? '' : digestOf(rulings), digestOf(handback), digestOf(get(root, plan, 'issue.md'))]
   const last = maybe(root, plan, 'step-3.judged')?.split('\n')
   put(root, plan, 'step-3.judged', now.join('\n'))
-  return last !== undefined && last[0] === now[0] && last[1] !== now[1]
+  return last !== undefined && last[0] === now[0] && last[2] === now[2] && last[3] === now[3] && last[1] !== now[1]
 }
 
 /** Only findings on paths the diff touches are the job's: the rest is main's debt. A held step comes round again, so it warns once not held. */

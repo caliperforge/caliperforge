@@ -1,0 +1,6 @@
+- name: daily_live
+  table: desk_posts
+  column: published_at
+  where: kind = 'daily' AND published_at IS NOT NULL
+  gap: 30h
+  while: EXISTS (SELECT 1 FROM pipes WHERE name = 'comms' AND enabled = 1)

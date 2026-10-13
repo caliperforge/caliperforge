@@ -23,7 +23,7 @@ export function refuse(cwd: string, writePaths: string[], path: string, ours = f
 }
 
 /** A path not yet on disk resolves through its nearest existing parent, so a new file named through a symlinked `.cf` stays inside the checkout. */
-function real(path: string): string {
+export function real(path: string): string {
   if (existsSync(path)) return realpathSync(path)
   const parent = dirname(path)
   return parent === path ? path : join(real(parent), basename(path))

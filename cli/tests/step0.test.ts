@@ -8,6 +8,8 @@ import { CARRIED, plan, stub, world } from '../../sequencer/tests/world.ts'
 import { eventsOf } from '../../store/events.ts'
 import { take } from '../../store/leases.ts'
 import { rewind, waiting } from '../../store/plans.ts'
+import { addRuling, rulingsOf } from '../../store/rulings.ts'
+import { accountRows, targetRow } from '../../store/targets.ts'
 import type { Issue, Read } from '../gh.ts'
 import { foreign, implemented, WINDOW } from '../gh.ts'
 import { measure } from '../measure.ts'
@@ -125,7 +127,7 @@ it('keeps an account with our open PR off the p50 cold axis', () => {
   const db = fresh(join(root, 'schema'))
   const row = measure(db, 'solana-foundation/pay-kit', '2026-09-17', payKit(true))
   expect(row).toMatchObject({ maintainers: 2, last_outsider_merge: '2026-09-11', open_pr_age_p50_days: 46, open_loop: true, pulse: 'warm' })
-  expect(db.prepare('SELECT open_loop, pulse FROM accounts WHERE repo = ?').get(row.repo)).toEqual({ open_loop: 1, pulse: 'warm' })
+  expect(accountRows(db).find((a) => a.repo === row.repo)).toMatchObject({ open_loop: 1, pulse: 'warm' })
 })
 
 it('still calls the row cold on p50 with no open loop of ours', () => {
@@ -142,7 +144,7 @@ it('21-day outsider-merge axis stays cold under our open loop', () => {
 
 it('step-0 trip ruling carries kernel issue 23 and the map line', () => {
   const db = fresh(join(root, 'schema'))
-  expect(db.prepare("SELECT subject, origin_kind, origin_ref, issue_no FROM rulings WHERE origin_ref = 'buildmap-rev6-step0-must-not-trip' ORDER BY subject").all())
+  expect(rulingsOf(db, 'buildmap-rev6-step0-must-not-trip'))
     .toEqual([
       { subject: 'queue.cold_pulse', origin_kind: 'ruling', origin_ref: 'buildmap-rev6-step0-must-not-trip', issue_no: 23 },
       { subject: 'queue.implemented', origin_kind: 'ruling', origin_ref: 'buildmap-rev6-step0-must-not-trip', issue_no: 23 },
@@ -178,8 +180,7 @@ function ours(open: number, created: number[] = [], sent: string[][] = []): Read
 }
 
 function rule(w: ReturnType<typeof world>, value: string): void {
-  w.db.prepare(`INSERT INTO rulings (subject, value, origin_kind, origin_ref, who, date, issue_no)
-    VALUES ('claim.acme/widget#12', ?, 'ruling', 'test', 'ceo', '2026-09-27', 12)`).run(value)
+  addRuling(w.db, { subject: 'claim.acme/widget#12', value, origin_kind: 'ruling', origin_ref: 'test', who: 'ceo', date: '2026-09-27', issue_no: 12 })
 }
 
 const PASS = { outcome: 'pass', note: 'acme/widget#12 warm' }
@@ -188,8 +189,8 @@ it('holds a claim_first target at step 0 on target_parked, ready', () => {
   const w = intake('{ claim_first: true }')
   expect(stepZero(w.db, w.root, plan(w.db, 1), ours(0))).toMatchObject({ outcome: 'refuse', held: true,
     note: 'target_parked: claim_first: no ruling claim.acme/widget#12 = confirmed' })
-  expect(w.db.prepare('SELECT wait_reason FROM plans WHERE id = 1').pluck().get()).toBe('target_parked')
-  expect(w.db.prepare('SELECT state FROM targets WHERE id = 1').pluck().get()).toBe('ready')
+  expect(plan(w.db, 1).wait_reason).toBe('target_parked')
+  expect(targetRow(w.db, 1).state).toBe('ready')
 })
 
 it('any other ruling holds it; a confirmed one lets step 0 pass', () => {

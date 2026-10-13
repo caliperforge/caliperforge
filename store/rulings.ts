@@ -13,3 +13,23 @@ export function rulingId(db: Db, subject: string): number | null {
 export function rulingSubject(db: Db, id: number): string | undefined {
   return db.prepare('SELECT subject FROM rulings WHERE id = ?').pluck().get(id) as string | undefined
 }
+
+interface Ruling {
+  subject: string
+  value: string
+  origin_kind: string
+  origin_ref: string
+  who: string
+  date: string
+  issue_no: number
+}
+
+export function addRuling(db: Db, row: Ruling): void {
+  db.prepare(`INSERT INTO rulings (subject, value, origin_kind, origin_ref, who, date, issue_no)
+    VALUES (@subject, @value, @origin_kind, @origin_ref, @who, @date, @issue_no)`).run(row)
+}
+
+export function rulingsOf(db: Db, ref: string): Pick<Ruling, 'subject' | 'origin_kind' | 'origin_ref' | 'issue_no'>[] {
+  return db.prepare('SELECT subject, origin_kind, origin_ref, issue_no FROM rulings WHERE origin_ref = ? ORDER BY subject')
+    .all(ref) as Pick<Ruling, 'subject' | 'origin_kind' | 'origin_ref' | 'issue_no'>[]
+}

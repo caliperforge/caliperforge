@@ -4,6 +4,7 @@ import type { Db } from '../store/index.ts'
 import { returnToLane, retried, rewound } from '../store/holds.ts'
 import { clearWaitsOn, holdOn } from '../store/plans.ts'
 import { WHY } from '../store/refusals.ts'
+import { COUNTS } from './push.ts'
 import { afresh, drop, maybe, planDir, put } from './workspace.ts'
 
 /**
@@ -43,6 +44,7 @@ function next(db: Db, root: string, plan: number, actor: string, to?: number): n
 export function unhold(db: Db, root: string, plan: number, actor: string, to?: number): number {
   const step = next(db, root, plan, actor, to)
   clearWaitsOn(db, plan)
+  for (const key of COUNTS) drop(root, plan, key)
   drop(root, plan, NOTE)
   if (step <= 1) fresh(root, plan)
   afresh(root, plan, step)

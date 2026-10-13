@@ -13,11 +13,6 @@
   # launchd's PATH (the plist) has no ~/.cargo/bin; without it every cargo call from a seat or step 3 is ENOENT (#204)
   PATH="$HOME/.cargo/bin:$PATH"
   export PATH
-  # One Rust build folder for every job: a fresh clone reuses the compiled dependencies instead of
-  # building all of them again (a surfpool job left 8.5 GB and minutes of every core behind). Cargo locks
-  # the folder, so two Rust builds take turns rather than fight for the cores.
-  CARGO_TARGET_DIR="$HOME/.cf-cache/cargo-target"
-  export CARGO_TARGET_DIR
   cd "$(dirname "$0")/.." || exit 1
   # Never FETCH_HEAD: this worktree shares its repo with every job's git, and on 09-25 a whole-remote fetch
   # landed between these two lines, so FETCH_HEAD's first line was a 09-22 branch. The tick checked it out,

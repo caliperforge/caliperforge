@@ -74,9 +74,9 @@
   where: seat = 'text_review'
   gap: 2d
 - name: writer_catchup
-  table: runs
-  column: at
-  where: seat = 'writer' AND mode = 'catchup'
+  table: desk_posts
+  column: proof_at
+  where: kind = 'catchup' AND work_date GLOB '????-??-??–????-??-??'
   when: SELECT 1 FROM plans WHERE template = 'comms' AND title GLOB 'catchup *'
 - name: writer_log
   table: runs
@@ -149,11 +149,6 @@
     WHERE pipe_id = p.id AND state IN ('queued', 'running')))
     AND (SELECT count(*) FROM gardens g JOIN tickets t ON g.url = 'https://github.com/' || t.repo || '/issues/' || t.number
     WHERE t.closed_at IS NULL) < 2
-- name: ratchet
-  table: events
-  column: at
-  where: kind = 'ratchet'
-  gap: 7d
 - name: accounts
   table: accounts
   column: measured_at
@@ -320,3 +315,14 @@
   gap: 14d
   while: EXISTS (SELECT 1 FROM tickets WHERE repo = 'caliperforge/atelier-web' AND wave IS NOT NULL AND closed_at IS NULL)
   when: SELECT 1 FROM runs WHERE seat = 'design_lead'
+- name: daily_live
+  table: desk_posts
+  column: published_at
+  where: kind = 'daily' AND published_at IS NOT NULL
+  gap: 30h
+  while: EXISTS (SELECT 1 FROM pipes WHERE name = 'comms' AND enabled = 1)
+- name: paydesk_live
+  table: events
+  column: at
+  where: kind = 'paydesk_live' AND outcome = 'pass'
+  gap: 8d

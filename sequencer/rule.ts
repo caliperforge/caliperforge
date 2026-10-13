@@ -1,5 +1,6 @@
 import { statSync } from 'node:fs'
-import { join } from 'node:path'
+import { isAbsolute, join, relative } from 'node:path'
+import { real } from '../runner/index.ts'
 import { logged } from '../store/events.ts'
 import { edit, filesOf } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
@@ -12,21 +13,32 @@ const PATH = /(?:^|[\s`'"(])(~?\/[\w.-][^\s`'"()]+)/g
 
 const OUTSIDE = /^ {2}- (\S+):1 authority\.outside_files$/gm
 
+const RULED = /^## (?:Ruling|Answer from the director)/
+
 export function opened(db: Db, root: string, plan: number): string[] {
-  const tokens = [...new Set(cited(maybe(root, plan, 'rulings.md') ?? ''))]
+  const from = new Map<string, string>()
+  for (const [name, text] of [['rulings.md', maybe(root, plan, 'rulings.md') ?? ''], ['issue.md', ruled(maybe(root, plan, 'issue.md') ?? '')]] as const) {
+    for (const t of cited(text)) if (!from.has(t)) from.set(t, name)
+  }
+  const tokens = [...from.keys()]
   const listed = new Set(filesOf(db, plan).map((f) => f.path))
   const file = (dir: string, t: string) => statSync(join(dir, t), { throwIfNoEntry: false })?.isFile() === true
   const here = tokens.filter((t) => !t.includes('..') && file(srcDir(root, plan), t))
-  for (const t of here.filter((h) => !listed.has(h))) edit(db, plan, 'add', t, 'ruling', 'named in rulings.md')
+  for (const t of here.filter((h) => !listed.has(h))) edit(db, plan, 'add', t, 'ruling', `named in ${from.get(t) ?? ''}`)
   const missed = tokens.filter((t) => !here.includes(t) && (t.includes('..') || t.includes('/') || !file(planDir(root, plan), t)))
   if (missed.length > 0) logged(db, { plan, kind: 'files', actor: 'ruling', outcome: 'refuse', message: `not in the checkout: ${missed.join(', ')}`, pointer: null, run: null })
   return missed
 }
 
+function ruled(issue: string): string {
+  return issue.split(/^(?=## )/m).findLast((s) => RULED.test(s)) ?? ''
+}
+
 export function rule(db: Db, root: string, plan: PlanRow, who: string, text: string): 'ask.md' | 'issue.md' | null {
   const other = [...text.matchAll(/\.cf\/work\/(\d+)/g)].some((m) => Number(m[1]) !== plan.id)
   if (other || /(?:^|[^.])\.\.\//.test(text)) return null
-  if ([...text.matchAll(PATH)].some((m) => !(m[1] ?? '').startsWith(`${root}/`))) return null
+  const inside = (p: string) => p.startsWith(`${root}/`) || (isAbsolute(p) && !relative(real(planDir(root, plan.id)), real(p)).startsWith('..'))
+  if ([...text.matchAll(PATH)].some((m) => !inside(m[1] ?? ''))) return null
   const section = `## Answer from the ${who} (${new Date().toISOString().slice(0, 10)})\n\n${text.trim()}\n`
   if (!builderRan(db, plan.id)) {
     put(root, plan.id, 'ask.md', `${maybe(root, plan.id, 'ask.md') ?? ''}\n${section}`)

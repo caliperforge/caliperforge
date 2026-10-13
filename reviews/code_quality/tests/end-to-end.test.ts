@@ -7,8 +7,10 @@ import type { Provider } from '../../../providers/kind.ts'
 import { audit, record } from '../../../rails/completion-audit/index.ts'
 import { fire } from '../../../runner/index.ts'
 import { load } from '../../../runner/rules.ts'
-import { settle } from '../../../store/dispositions.ts'
+import { dispositionsOf, settle } from '../../../store/dispositions.ts'
+import { runRows } from '../../../store/events.ts'
 import type { Db } from '../../../store/index.ts'
+import { verdictRows } from '../../../store/verdict.ts'
 import { judge, loadReviews } from '../../bench.ts'
 
 const root = join(import.meta.dirname, '../../..')
@@ -63,11 +65,11 @@ function bench(): { db: Db; repo: string } {
 
 async function built(db: Db, repo: string): Promise<number> {
   const run = await fire(db, root, 'typescript_specialist', repo, fixture('issue.md'), replies(HANDBACK))
-  const plan = db.prepare('SELECT plan FROM runs WHERE id = ?').get(run.id) as { plan: number }
+  const plan = runRows(db).find((r) => r.id === run.id)?.plan ?? 0
   const rail = audit(run.text, ['D1'])
   expect(rail.outcome).toBe('pass')
-  record(db, plan.plan, rail, 0.01)
-  return plan.plan
+  record(db, plan, rail, 0.01)
+  return plan
 }
 
 test('seeded defect: build, rail, refuse, fix, re-gate, fixed',async () => {
@@ -86,10 +88,9 @@ test('seeded defect: build, rail, refuse, fix, re-gate, fixed',async () => {
   const regate = await judge(db, root, 'code_quality', plan, { ...packet, diff: fixture('clean.diff') }, replies(fixture('clean.reply.md')), TRANSCRIPT)
   expect(regate.outcome.outcome).toBe('pass')
 
-  const id = settle(db, { verdict_id: refused.verdict, defect_class: 'correctness', evidence }, before, after, regate.outcome.outcome)
-  expect(db.prepare('SELECT kind, owner, defect_class FROM dispositions WHERE id = ?').get(id ?? 0))
-    .toEqual({ kind: 'fixed', owner: 'review', defect_class: 'correctness' })
-  expect(db.prepare('SELECT gate, outcome, origin_kind, origin_ref FROM verdicts WHERE plan = ? ORDER BY id').all(plan)).toEqual([
+  settle(db, { verdict_id: refused.verdict, defect_class: 'correctness', evidence }, before, after, regate.outcome.outcome)
+  expect(dispositionsOf(db)).toMatchObject([{ kind: 'fixed', owner: 'review', defect_class: 'correctness' }])
+  expect(verdictRows(db, plan)).toMatchObject([
     { gate: 'pre_review', outcome: 'pass', origin_kind: null, origin_ref: null },
     { gate: 'review', outcome: 'refuse', origin_kind: 'ruling', origin_ref: 'reviewers.verdict' },
     { gate: 'review', outcome: 'pass', origin_kind: null, origin_ref: null },
@@ -102,6 +103,6 @@ test('clean run: no refusal anywhere and nothing to settle', async () => {
   const plan = await built(db, repo)
   const clean = await judge(db, root, 'code_quality', plan, { repo, issue: fixture('issue.md'), diff: fixture('clean.diff') }, replies(fixture('clean.reply.md')), TRANSCRIPT)
   expect(clean.outcome.outcome).toBe('pass')
-  expect(db.prepare("SELECT count(*) AS n FROM verdicts WHERE plan = ? AND outcome <> 'pass'").get(plan)).toEqual({ n: 0 })
-  expect(db.prepare('SELECT count(*) AS n FROM dispositions').get()).toEqual({ n: 0 })
+  expect(verdictRows(db, plan).filter((v) => v.outcome !== 'pass')).toEqual([])
+  expect(dispositionsOf(db)).toEqual([])
 })

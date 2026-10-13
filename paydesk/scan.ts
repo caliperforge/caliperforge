@@ -43,7 +43,7 @@ const Front = z.object({
 
 const message = (e: unknown): string => (e instanceof Error ? e.message : String(e))
 
-export async function scan(dirs: string[], out: string, cards: string | undefined, net: Net): Promise<Scanned[]> {
+export async function scan(dirs: string[], out: string | undefined, cards: string | undefined, net: Net): Promise<Scanned[]> {
   const listed = dirs.filter((dir) => existsSync(join(dir, 'PAY.md')))
   const results: Scanned[] = []
   let next = 0
@@ -55,7 +55,7 @@ export async function scan(dirs: string[], out: string, cards: string | undefine
     }
   }
   await Promise.all(Array.from({ length: WORKERS }, work))
-  writeFileSync(out, JSON.stringify(results, null, 2))
+  if (out !== undefined) writeFileSync(out, JSON.stringify(results, null, 2))
   if (cards !== undefined) {
     mkdirSync(cards, { recursive: true })
     for (const s of results) if (!('crash' in s)) writeFileSync(join(cards, `${s.fqn.replace('/', '__')}.md`), card(s))

@@ -663,6 +663,37 @@ test('rulingsBlank D4: blank rulings.md, no heading; prev kept out', async () =>
   expect(prompt).not.toContain('item c is unsourced')
 })
 
+const reviewed = async (w: World): Promise<string> => {
+  const prompts: string[] = []
+  const reviewer = seated('')
+  put(w.root, 1, 'draft.md', drafted(fixture('reply.md'))?.post ?? '')
+  await review(w.db, w.root, plan(w.db, 1), mapOf('comms').at(3), { ...reviewer, fire: (packet) => {
+    prompts.push(packet.prompt)
+    return reviewer.fire(packet)
+  } })
+  return prompts[0] ?? ''
+}
+
+test('rulingsReview D1 D5: text_review sees # Rulings, none blank', async () => {
+  const w = posting('ship post acme/widget#7')
+  put(w.root, 1, 'rulings.md', 'leave out Ludo\n')
+  const prompt = await reviewed(w)
+  expect(prompt).toContain('\n\n# Rulings\n\n# hello\n\n- **D1** add `hello()` in `src/hello.ts`\n\nleave out Ludo')
+  expect(prompt.indexOf('# packet.json')).toBeLessThan(prompt.indexOf('\n\n# Rulings\n\n'))
+  drop(w.root, 1, 'ask.md')
+  put(w.root, 1, 'rulings.md', '  \n')
+  expect(await reviewed(w)).not.toContain('\n\n# Rulings\n\n')
+})
+
+test('ruledReview D2: a draft line naming Ludo goes back to step 1', async () => {
+  const w = posting('ship post acme/widget#7')
+  put(w.root, 1, 'rulings.md', 'leave out Ludo')
+  put(w.root, 1, 'draft.md', '# The week\n\nLudo shipped too.\n')
+  expect(await review(w.db, w.root, plan(w.db, 1), mapOf('comms').at(3), seated('', verdict('ruled.reply.md'))))
+    .toMatchObject({ outcome: 'refuse', spans: ['draft.md:3'], to: 1 })
+  expect(maybe(w.root, 1, 'review.md')).toBeNull()
+})
+
 test.each(['growth 2026-09-28', 'scorecard 2026-09-28'])('D5: a %s plan passes steps 1 and 3 with no run and no draft', async (title) => {
   const w = posting(title, 1)
   for (let n = 0; n < 3; n += 1) await tick(w.db, w.root, never)
@@ -747,9 +778,9 @@ test.each([
 
 const CATCHUP = [...readFileSync(join(import.meta.dirname, '../../seats/modes/catchup.md'), 'utf8').matchAll(/```\n([\s\S]*?)```/g)].map((m) => m[1] ?? '')
 
-const catchup = (): World => {
+const catchup = (dates = ['2026-10-03', '2026-09-27', '2026-09-25', '2026-09-26']): World => {
   const w = posting('catchup 2026-09-26 2026-10-02')
-  w.db.exec(`INSERT INTO desk_learnings (date, numbers, items, sources) VALUES ${['2026-10-03', '2026-09-27', '2026-09-25', '2026-09-26']
+  w.db.exec(`INSERT INTO desk_learnings (date, numbers, items, sources) VALUES ${dates
     .map((d) => `('${d}', '[]', '[{"title":"${d}"}]', '[]')`).join(', ')}`)
   gather(w.db, w.root, plan(w.db, 1))
   return w
@@ -757,7 +788,7 @@ const catchup = (): World => {
 
 test('catchup D1 D2 D4: a post per date, reviewed as posts.json', async () => {
   const w = catchup()
-  expect(JSON.parse(get(w.root, 1, 'packet.json'))).toEqual({ learnings: ['2026-09-26', '2026-09-27'].map((d) => ({ date: d, items: [{ title: d }] })) })
+  expect(JSON.parse(get(w.root, 1, 'packet.json'))).toEqual({ learnings: ['2026-09-26', '2026-09-27'].map((d) => ({ date: d, items: [{ title: d }] })), landed: [] })
   const prompts: string[] = []
   const seats = seated(CATCHUP.join('\n'))
   const caught: Provider = { ...seats, fire: (packet) => {
@@ -773,10 +804,39 @@ test('catchup D1 D2 D4: a post per date, reviewed as posts.json', async () => {
 
 test.each([
   { why: 'a missing date', reply: CATCHUP[0] ?? '' },
-  { why: 'a post with no date:', reply: CATCHUP.join('\n').replace('date: 2026-09-27\n', '') },
+  { why: 'a post with no from:', reply: CATCHUP.join('\n').replace('from: 2026-09-27\n', '') },
+  { why: 'a post with no to:', reply: CATCHUP.join('\n').replace('to: 2026-10-02\n', '') },
   { why: 'a trailing post with no fence', reply: `${CATCHUP.join('\n')}\n# A third day\n\nNo fence.\n` },
 ])('catchupFence D3: $why refuses', async ({ reply }) => {
   const w = catchup()
+  expect(await draft(w.db, w.root, plan(w.db, 1), mapOf('comms').at(1), seated(reply)))
+    .toMatchObject({ outcome: 'refuse', spans: ['writer.fence'] })
+  expect(maybe(w.root, 1, 'posts.json')).toBeNull()
+})
+
+const SIX = ['2026-09-26', '2026-09-27', '2026-09-28', '2026-09-30', '2026-10-01', '2026-10-02']
+
+const THREE: [string, string][] = [['2026-09-26', '2026-09-27'], ['2026-09-28', '2026-09-30'], ['2026-10-01', '2026-10-02']]
+
+const ranged = (ranges: [string, string][]): string => ranges.map(([from, to]) =>
+  (CATCHUP[0] ?? '').replace('from: 2026-09-26\nto: 2026-09-26', `from: ${from}\nto: ${to}`)).join('\n')
+
+test('catchupThemes D1: 3 ranges over 6 dates pass', async () => {
+  const w = catchup(SIX)
+  expect(await draft(w.db, w.root, plan(w.db, 1), mapOf('comms').at(1), seated(ranged(THREE)))).toMatchObject({ outcome: 'pass' })
+  expect((JSON.parse(get(w.root, 1, 'posts.json')) as { from: string; to: string }[]).map(({ from, to }) => [from, to])).toEqual(THREE)
+})
+
+test.each([
+  { why: 'a gap', reply: ranged([['2026-09-26', '2026-09-27'], ['2026-09-29', '2026-09-30'], ['2026-10-01', '2026-10-02']]) },
+  { why: 'an overlap', reply: ranged([['2026-09-26', '2026-09-28'], ['2026-09-28', '2026-09-30'], ['2026-10-01', '2026-10-02']]) },
+  { why: 'posts out of order', reply: ranged([['2026-09-28', '2026-09-30'], ['2026-09-26', '2026-09-27'], ['2026-10-01', '2026-10-02']]) },
+  { why: 'no from:', reply: ranged(THREE).replace('from: 2026-09-28\n', '') },
+  { why: 'no to:', reply: ranged(THREE).replace('to: 2026-09-30\n', '') },
+  { why: 'from after to', reply: ranged([['2026-09-26', '2026-09-27'], ['2026-09-28', '2026-09-30'], ['2026-10-02', '2026-10-01']]) },
+  { why: 'a post with no packet date', reply: ranged([['2026-09-26', '2026-09-28'], ['2026-09-29', '2026-09-29'], ['2026-09-30', '2026-10-02']]) },
+])('catchupThemes D2: $why refuses', async ({ reply }) => {
+  const w = catchup(SIX)
   expect(await draft(w.db, w.root, plan(w.db, 1), mapOf('comms').at(1), seated(reply)))
     .toMatchObject({ outcome: 'refuse', spans: ['writer.fence'] })
   expect(maybe(w.root, 1, 'posts.json')).toBeNull()
@@ -797,6 +857,25 @@ test.each(['learnings:2026-10-03', 'nope/missing.ts:1', PAST, '../x.ts:1', 'land
     expect(facts(w.root, plan(w.db, 1))).toMatchObject({ outcome: 'refuse', spans: [`fence.json:${ref}`] })
   })
 
+test('catchupLanded D1-D4: landed:N holds only inside the range', () => {
+  const w = posting('catchup 2026-09-26 2026-10-02')
+  const [ats, d] = [['2026-09-30 12:00:00', '2026-10-03 03:00:00', '2026-10-03 12:00:00'], 'd'.repeat(64)]
+  w.db.exec(`INSERT INTO plans (id, pipe_id, template, state, queued_at, step, retries, title, lane, seat, origin, head_digest) VALUES ${ats.map((at, i) =>
+    `(${String(i + 2)}, 1, 'pr_path', 'done', '${at}', 0, 0, 'job', 'machine', 'typescript_specialist', 'https://github.com/r/issues/${String(i + 2)}', '${d}')`).join(', ')};
+    INSERT INTO approvals (subject_kind, subject_id, subject_digest, who, decision, approved_at) VALUES ${ats.map((at, i) =>
+    `('plan', ${String(i + 2)}, '${d}', 'gates', 'approved', '${at}')`).join(', ')}`)
+  gather(w.db, w.root, plan(w.db, 1))
+  expect((JSON.parse(get(w.root, 1, 'packet.json')) as { landed: { plan: number }[] }).landed.map((l) => l.plan)).toEqual([2, 3])
+  const cites = (ref: string): ReturnType<typeof facts> => {
+    put(w.root, 1, 'posts.json', JSON.stringify([{ ...drafted(CATCHUP[0] ?? ''), sources: [{ claim: 'x', ref }] }]))
+    return facts(w.root, plan(w.db, 1))
+  }
+  expect(cites('landed:3')).toMatchObject({ outcome: 'pass', spans: [] })
+  expect(cites('landed:4')).toMatchObject({ outcome: 'refuse', spans: ['fence.json:landed:4'] })
+  writeFileSync(join(w.root, 'landed'), 'x\n'.repeat(4))
+  expect(cites('landed:4')).toMatchObject({ outcome: 'refuse', spans: ['fence.json:landed:4'] })
+})
+
 const caughtUp = async (): Promise<World> => {
   const w = catchup()
   await draft(w.db, w.root, plan(w.db, 1), mapOf('comms').at(1), seated(CATCHUP.join('\n')))
@@ -812,10 +891,18 @@ test('catchupDesk D1 D2: desk proofs one row per dated post', async () => {
   const w = await caughtUp()
   expect(desk(w.db, w.root, plan(w.db, 1))).toEqual({ outcome: 'pass', spans: [], note: '2 catchup post(s) in proof' })
   const bodies = CATCHUP.map((text) => drafted(text)?.post.split('\n').slice(1).join('\n').trim())
+  const start = new Date(plan(w.db, 1).queued_at.slice(0, 10))
+  const released = (k: number): string => `${new Date(start.getTime() + k * 86_400_000).toISOString().slice(0, 10)} 12:00:00`
   expect(posts(w.db)).toMatchObject([
-    { id: 3_000_001, kind: 'catchup', dest: 'site', status: 'proof', title: 'The day a refusal named the wrong file', body: bodies[0], work_date: '2026-09-26' },
-    { id: 4_000_001, kind: 'catchup', dest: 'site', status: 'proof', title: 'Two learnings from a quiet day', body: bodies[1], work_date: '2026-09-27' },
+    { id: 3_000_001, kind: 'catchup', dest: 'site', status: 'proof', title: 'The day a refusal named the wrong file', body: bodies[0], work_date: '2026-09-26–2026-09-26',
+      release: released(1) },
+    { id: 4_000_001, kind: 'catchup', dest: 'site', status: 'proof', title: 'Two learnings from a quiet day', body: bodies[1],
+      work_date: '2026-09-27–2026-10-02', release: released(2) },
   ])
+  const dir = sited()
+  const name = render(dir, postOf(w.db, 4_000_001))
+  expect(readFileSync(join(dir, `blog/${name}.html`), 'utf8'))
+    .toContain(`Work completed 2026-09-27–2026-10-02 · written up ${new Date().toISOString().slice(0, 10)}.`)
   expect(learned(w)).toEqual([kept('2026-09-25'),
     noted('2026-09-26', 'a refusal that names the wrong file costs a round', ['learnings:2026-09-26', 'rails/diff.ts:19']),
     noted('2026-09-27', 'a quiet day still carries its lessons', ['seats/typescript_specialist/prompt.md:9', 'learnings:2026-09-27']), kept('2026-10-03')])
@@ -832,7 +919,7 @@ test('catchupTwice D3: a second desk adds no row and no learning', async () => {
 
 test.each([
   { why: 'no # line', strip: (p: Record<string, unknown>) => ({ ...p, post: String(p.post).replace(/^# /, '') }) },
-  { why: 'no date', strip: (p: Record<string, unknown>) => ({ ...p, date: undefined }) },
+  { why: 'no from/to', strip: (p: Record<string, unknown>) => ({ ...p, from: undefined, to: undefined }) },
 ])('catchupDesk D4: a post with $why refuses on posts.json', async ({ strip }) => {
   const w = await caughtUp()
   const [first = {}, ...rest] = JSON.parse(get(w.root, 1, 'posts.json')) as Record<string, unknown>[]
@@ -980,12 +1067,14 @@ const DAY_URL = 'https://caliperforge.com/blog/06_the-day.html'
 
 const later = (hours: number): Date => new Date(Date.now() + hours * 3_600_000)
 
-const aging = (dir: string): World => {
+const aging = (dir: string, post: Parameters<typeof proofed>[1] = DAILY): World => {
   const w = clocked(null)
   set(w.db, 'comms.site_dir', dir, 'ceo', '2026-10-04')
-  proofed(w.db, DAILY)
+  proofed(w.db, post)
   return w
 }
+
+const [RELEASED, AHEAD] = ['2026-01-01 12:00:00', '2999-01-01 12:00:00']
 
 test('ripe D1: tick publishes a daily 25 hours in proof', async () => {
   const dir = sited()
@@ -1046,6 +1135,31 @@ test('ripe D5: a failed push keeps the daily in proof, logged', async () => {
   await tick(w.db, w.root, never, later(25))
   expect(postOf(w.db, 1)).toMatchObject({ status: 'proof', url: DAY_URL, published_at: null })
   expect(ofKind(w.db, 'site_push')).toMatchObject([{ plan: null, actor: 'tick', outcome: 'refuse' }])
+})
+
+test.each([
+  { why: 'a catchup past its release', post: { ...DAILY, kind: 'catchup', release: RELEASED } },
+  { why: 'a daily before its release', post: { ...DAILY, release: AHEAD } },
+])('ripe D2 D5: $why airs at 25h', async ({ post }) => {
+  const dir = sited()
+  const w = aging(dir, post)
+  const now = later(25)
+  await tick(w.db, w.root, never, now)
+  expect(postOf(w.db, 1)).toMatchObject({ status: 'published', url: DAY_URL, published_at: now.toISOString() })
+})
+
+test.each([
+  { why: 'past release at 23h', release: RELEASED, hours: 23 },
+  { why: 'before release at 25h', release: AHEAD, hours: 25 },
+  { why: 'with no release at 25h', release: null, hours: 25 },
+])('ripe D3 D4: a catchup $why stays in proof', async ({ release, hours }) => {
+  const dir = sited()
+  const w = aging(dir, { ...DAILY, kind: 'catchup', release })
+  const before = postOf(w.db, 1)
+  await tick(w.db, w.root, never, later(hours))
+  expect(postOf(w.db, 1)).toEqual(before)
+  expect(readdirSync(join(dir, 'blog')).sort()).toEqual([POST05.slice('blog/'.length), 'index.html'])
+  expect(git(dir, ['rev-list', '--count', 'HEAD']).trim()).toBe('1')
 })
 
 const PLACED = 'https://caliperforge.com/blog/06_week.html'

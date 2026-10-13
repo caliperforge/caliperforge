@@ -131,3 +131,18 @@ test('tick.sh puts an executable .cf/bin/cf first on PATH', async () => {
   for (let at = 0; at < 40 && !existsSync(found); at += 1) await sleep(100)
   expect(readFileSync(found, 'utf8')).toBe(`${dir}/.cf/bin/cf\n`)
 })
+
+test('tick.sh leaves CARGO_TARGET_DIR unset for each job', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cf-tick-'))
+  const found = join(dir, 'found')
+  for (const sub of ['launchd', 'cli']) mkdirSync(join(dir, sub))
+  cpSync(join(repo, 'launchd/tick.sh'), join(dir, 'launchd/tick.sh'))
+  writeFileSync(join(dir, 'cli/cf.ts'), `require('node:fs').writeFileSync(${JSON.stringify(found)}, `
+    + `process.env.CARGO_TARGET_DIR ?? 'unset')\n`)
+
+  const env = { ...process.env }
+  delete env.CARGO_TARGET_DIR
+  execFileSync('/bin/sh', [join(dir, 'launchd/tick.sh')], { env })
+  for (let at = 0; at < 40 && !existsSync(found); at += 1) await sleep(100)
+  expect(readFileSync(found, 'utf8')).toBe('unset')
+})

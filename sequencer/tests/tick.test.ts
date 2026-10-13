@@ -21,13 +21,14 @@ import { blocked, kernel } from '../steps.ts'
 import { checkout, diffOf, doneIds, get, gitDiff, maybe, narrowing, put, snapshot, srcDir } from '../workspace.ts'
 import { GREEN } from '../base.ts'
 import { record } from '../../store/files.ts'
-import { allEvents, eventsOf, newestMode, runRows } from '../../store/events.ts'
+import { allEvents, eventsOf, kindsOf, newestMode, runRows } from '../../store/events.ts'
 import { overrule, verdictRows } from '../../store/verdict.ts'
 import { record as signal } from '../../store/signals.ts'
 import { benchPacket } from '../../runner/packet.ts'
 import type { Packet, Provider } from '../../providers/kind.ts'
 import type { Gh } from '../../rails/ci-green/index.ts'
 import type { Fired } from '../kind.ts'
+import { hold, unhold } from '../hold.ts'
 import { forkCi, type Wire } from '../push.ts'
 import { started } from '../signals.ts'
 import { closed } from '../unpolled.ts'
@@ -884,6 +885,19 @@ test('a gating run still going past 45 ticks goes to the COO', async () => {
   expect(plan(w.db, 1)).toMatchObject({ step: 6, retries: 0 })
 })
 
+test('an unparked plan starts its CI window at tick 1', async () => {
+  const w = await atCi()
+  const wire = watched([], w.root, 1, runsOn(w.root, 1, 'in_progress', ''))
+  const lap = async (): Promise<Fired | undefined> => (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
+  await lap()
+  put(w.root, 1, 'ci.waits', `${head(srcDir(w.root, 1), ['rev-parse', 'HEAD'])} 45`)
+  hold(w.db, w.root, 1, 'x', new Date(), null, new Date('2099-01-01T00:00:00Z'))
+  unhold(w.db, w.root, 1, 'coo')
+  const out = await lap()
+  expect(out).toMatchObject({ step: 6, outcome: 'pass' })
+  expect(out?.note).toMatch(/tick 1 of 45/)
+})
+
 const atCi = async (): Promise<World> => {
   const w = world()
   approve(w.db, w.target)
@@ -903,6 +917,26 @@ test('a CI run judged without a hold leaves no now row', async () => {
   const w = await atCi()
   expect(forkCi(w.db, w.root, plan(w.db, 1), 'acme/widget', watched([], w.root, 1))).toBeNull()
   expect(now(w)).toEqual([])
+})
+
+test('a ref the fork rejected refuses step 6 unsent', async () => {
+  const w = await atCi()
+  const pushed = tip(w.root, 1)
+  const sends = (): number => kindsOf(w.db, 1).filter((e) => e.kind === 'fork.sent').length
+  const before = sends()
+  const log: string[] = []
+  const out = forkCi(w.db, w.root, plan(w.db, 1), 'acme/widget', { ...watched(log, w.root, 1), at: () => 'f'.repeat(40) })
+  expect(out).toMatchObject({ outcome: 'refuse', spans: ['fork.sent'], to: 6 })
+  expect(out?.note).toContain('rejected refs/heads/')
+  expect(out?.note).toContain(pushed.slice(0, 12))
+  expect(sends()).toBe(before)
+  expect(maybe(w.root, 1, 'ci.waits')).toBeNull()
+  expect(log.filter((l) => l.startsWith('rehearse'))).toEqual([])
+})
+
+test('a ref the fork holds at the pushed tip is judged', async () => {
+  const w = await atCi()
+  expect(forkCi(w.db, w.root, plan(w.db, 1), 'acme/widget', { ...watched([], w.root, 1), at: () => tip(w.root, 1) })).toBeNull()
 })
 
 interface Listed { status: string; conclusion: string }
@@ -1032,10 +1066,10 @@ test('a runless head goes to the ceo before Greptile', async () => {
 })
 
 /** An outside plan at ready, green on the fork, whose every rehearsal `grade` scores for Greptile or leaves unscored. */
-const atReady = async (grade: (w: World) => void, log: string[] = []): Promise<[World, () => Promise<Fired | undefined>]> => {
+const atReady = async (grade: (w: World) => void, log: string[] = [], over: Partial<Wire> = {}): Promise<[World, () => Promise<Fired | undefined>]> => {
   const w = world()
   approve(w.db, w.target)
-  const wire = { ...watched(log, w.root, 1), rehearse: () => { grade(w) } }
+  const wire = { ...watched(log, w.root, 1), rehearse: () => { grade(w) }, ...over }
   const lap = async (): Promise<Fired | undefined> => (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
   for (let at = 0; at < 6; at += 1) await lap()
   expect(plan(w.db, 1).step).toBe(6)
@@ -1056,6 +1090,16 @@ test('D1 no Greptile score holds ready to tick 45; 46 goes on', async () => {
   expect(plan(w.db, 1).step).toBe(6)
   expect((await lap())?.note).toMatch(/Greptile gave no score in 45 ticks$/)
   expect(plan(w.db, 1).step).toBe(7)
+})
+
+test('D1 a fork without Greptile refuses ready and asks nothing', async () => {
+  const log: string[] = []
+  const [w, lap] = await atReady(() => undefined, log, { greptile: () => false })
+  expect(await lap()).toMatchObject({ step: 6, outcome: 'refuse', spans: ['greptile.installed'],
+    note: 'Greptile is not installed on caliperforge/widget' })
+  expect(log.filter((l) => l.startsWith('review '))).toEqual([])
+  expect(maybe(w.root, 1, 'greptile.asked')).toBeNull()
+  expect(plan(w.db, 1).step).toBe(6)
 })
 
 test('D2 a 3/5 at the head goes to the builder; at another, none', async () => {

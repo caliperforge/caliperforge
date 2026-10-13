@@ -12,6 +12,7 @@ import { get, hhmm, set, zone } from '../store/lanes.ts'
 import { holder } from '../store/leases.ts'
 import { needsCeo, openPipes, planById } from '../store/plans.ts'
 import { repos } from '../store/record.ts'
+import { HELD } from './settle.ts'
 import { cloned, conflicted, drop, maybe, planDir, put, snapshot } from './workspace.ts'
 
 const IDENT = /^[a-z_]+$/
@@ -83,7 +84,7 @@ export function stuck(db: Db, root: string, registry: Entry[], now: Date): numbe
   if (gap === undefined) return []
   const window = days(gap) * 86_400_000
   return stalled(db, openPipes(db, hhmm(db, now)).map((p) => p.id)).flatMap(({ id, step, wait_reason, waits_on, last }) => {
-    if (holder(db, id, now) !== null) return []
+    if (holder(db, id, now) !== null || last?.endsWith(HELD) === true) return []
     const tree = treeOf(join(planDir(root, id), 'src'))
     const saved = maybe(root, id, 'stuck.json')
     const was = saved === null ? null : JSON.parse(saved) as Spell

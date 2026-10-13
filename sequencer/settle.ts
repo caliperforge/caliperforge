@@ -1,6 +1,6 @@
 import type { Read } from '../cli/gh.ts'
 import { vetted } from '../cli/queue.ts'
-import type { Provider } from '../providers/kind.ts'
+import { API_ERROR, type Provider } from '../providers/kind.ts'
 import { digestOf } from '../store/approvals.ts'
 import { hold } from '../store/holds.ts'
 import { kindsOf, logged, newestRun, runSince } from '../store/events.ts'
@@ -158,6 +158,7 @@ function treeOf(db: Db, root: string, plan: PlanRow): { repo: string; branch: st
 async function made(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider, wire?: Wire, read?: Read): Promise<Outcome> {
   try {
     const out = await fire(db, root, plan, step, provider, wire, read)
+    if (out.outcome === 'refuse' && out.spans[0] === API_ERROR) return offline(step)
     if (out.command !== undefined) return executed(db, root, plan, out.command)
     return out.parts === undefined ? out : parted(db, root, plan, out.parts, wire)
   } catch (error) {
@@ -167,13 +168,16 @@ async function made(db: Db, root: string, plan: PlanRow, step: Step, provider: P
 
 /** A throw that says the host lost its network is not the job's fault: it holds the job on its step, uncounted, and the next tick tries again. */
 const OFFLINE = /Could not resolve host|getaddrinfo|ENOTFOUND|EAI_AGAIN|ENETUNREACH|ETIMEDOUT|Network is unreachable|Failed to connect to|Connection timed out/
+export const HELD = 'the network is down; the next tick tries again'
 
 export function thrown(step: Step, message: string): Outcome {
-  if (OFFLINE.test(message)) {
-    return { outcome: 'pass', held: true, spans: ['offline'], note: `step ${String(step.step)} ${step.name}: the network is down; the next tick tries again` }
-  }
+  if (OFFLINE.test(message)) return offline(step)
   return { outcome: 'refuse', spans: [`threw: ${message.split('\n')[0] ?? ''}`],
     note: `step ${String(step.step)} ${step.name} threw`, message, to: step.step }
+}
+
+function offline(step: Step): Outcome {
+  return { outcome: 'pass', held: true, spans: ['offline'], note: `step ${String(step.step)} ${step.name}: ${HELD}` }
 }
 
 function fire(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider, wire?: Wire, read?: Read): Promise<Outcome> {

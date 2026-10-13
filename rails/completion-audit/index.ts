@@ -84,9 +84,8 @@ function also(forward: string[]): string {
 }
 
 export function carried(handback: string): Map<string, z.infer<typeof Envelope>['done'][number]> | string {
-  const fence = /^---\r?\n([\s\S]*?)\r?\n---\s*$/m.exec(handback)
-  if (fence === null) return new Map()
-  const body = fence[1] ?? ''
+  const body = fenceOf(handback)
+  if (body === null) return new Map()
   const whole = yaml(body)
   const envelope = Envelope.safeParse(whole)
   const rows = envelope.success ? envelope : Envelope.safeParse(yaml(doneOnly(body)))
@@ -101,6 +100,15 @@ function misshapen(whole: unknown): boolean {
   const done = typeof whole === 'object' && whole !== null && 'done' in whole ? whole.done : null
   if (done === undefined || done === null) return false
   return !Array.isArray(done) || done.some((item: unknown) => typeof item !== 'object' || item === null)
+}
+
+/** The seat prompts close the handback with the fence, so a `---` rule in the prose above it is not the fence. */
+function fenceOf(handback: string): string | null {
+  const lines = handback.split(/\r?\n/)
+  const rules = lines.flatMap((line, i) => (/^---\s*$/.test(line) ? [i] : []))
+  const [open, close] = rules.slice(-2)
+  if (open === undefined || close === undefined) return null
+  return lines.slice(open + 1, close).join('\n')
 }
 
 /** An unquoted `: ` in a `summary:` line breaks the whole fence, so the audit reads the `done:` rows on their own. */

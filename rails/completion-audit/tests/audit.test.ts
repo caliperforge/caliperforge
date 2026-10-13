@@ -60,6 +60,17 @@ test('reads the rows past a summary YAML cannot parse', () => {
   expect(audit(fixture('handback-colon.md'), ['D1', 'D2']).outcome).toBe('pass')
 })
 
+test('D1 passes a handback with --- rules above its fence', () => {
+  expect(audit(fixture('handback-ruled.md'), ['D1', 'D2']).outcome).toBe('pass')
+})
+
+test('D2 reads only the closing fence', () => {
+  const row = (id: string): string => `  - id: ${id}\n    status: done\n    pointer: a.ts:1\n`
+  const verdict = audit(`---\ndone:\n${row('D1')}${row('D2')}---\n\n---\ndone:\n${row('D1')}---\n`, ['D1', 'D2'])
+  expect(verdict.outcome).toBe('refuse')
+  expect(verdict.spans).toEqual(['D2'])
+})
+
 test('writes a verdicts row the store accepts', () => {
   const db = fresh(join(root, 'schema'))
   load(db, root)

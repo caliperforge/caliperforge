@@ -532,6 +532,7 @@ test('D2: a research ticket queues on research; question passes', () => {
 
 test('D3: a research ticket without the lines queues no plan', () => {
   const db = piped()
-  intake(db, root, canned([{ number: 500, labels: ['lane:research'], body: 'the ask' }]))
+  expect(intake(db, root, canned([{ number: 500, labels: ['lane:research'], body: 'the ask' }]))).toEqual([])
   expect(allPlans(db)).toEqual([])
+  expect(maybe(root, 1, 'ask.md')).toBeNull()
 })

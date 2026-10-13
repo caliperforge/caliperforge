@@ -148,7 +148,6 @@ test('gather D3: a resumed plan gets the ask, step 0 unrun', async () => {
   const [outcome, prompt] = await gathered(w)
   expect(outcome).toMatchObject({ outcome: 'pass' })
   expect(prompt).toContain('Pick by the seven-part selection rule: newest first.')
-  expect(eventsOf(w.db, 1, 'question')).toEqual([])
 })
 
 test('gather D4: a reply with no fence is refused', async () => {

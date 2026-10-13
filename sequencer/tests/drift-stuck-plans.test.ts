@@ -2,9 +2,11 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
+import { logged, ofKind } from '../../store/events.ts'
 import type { Db } from '../../store/index.ts'
 import { take } from '../../store/leases.ts'
 import { drift, stuck } from '../drift.ts'
+import { HELD } from '../settle.ts'
 import { conflicted, git, maybe } from '../workspace.ts'
 import { COO, db, event, NOW } from './drifting.ts'
 
@@ -90,6 +92,14 @@ test('stuckOverlap', () => {
   expect(d.prepare('SELECT state FROM plans WHERE id = 1').get()).toEqual({ state: 'running' })
   expect(maybe(root, 1, 'refusal.md')).toBeNull()
   expect(d.prepare("SELECT count(*) AS n FROM events WHERE kind = 'stuck'").get()).toEqual({ n: 0 })
+})
+
+test('stuckOffline', () => {
+  const { d, root } = stalling()
+  logged(d, { plan: 1, kind: 'gather', actor: 'researcher', outcome: 'pass', message: `step 1 gather: ${HELD}`, pointer: null, run: null })
+  for (const minutes of [0, 30, 61, 120]) expect(stuck(d, root, STUCK, at(minutes))).toEqual([])
+  expect(d.prepare('SELECT state FROM plans WHERE id = 1').get()).toEqual({ state: 'running' })
+  expect(ofKind(d, 'stuck')).toEqual([])
 })
 
 test('stuckClosed', () => {

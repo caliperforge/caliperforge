@@ -24,6 +24,17 @@ test('D1-D2 a fixed seen finding waits for newer evidence', () => {
   expect(due(d, REACH, day('11'), unread)).toEqual([2])
 })
 
+test('D1 a fixed seen finding is not refiled on the same detail', () => {
+  const d = db()
+  failed(d, '2026-10-05 10:00:00')
+  const detail = 'newest events.at is 2026-10-05 10:00:00, within 7d; expected none'
+  addFinding(d, { name: 'director_fix_reach', state: 'seen', detail }, day('03'))
+  closeFinding(d, 1, 'fixed', 'reach widened', null, day('04'))
+  expect(due(d, REACH, day('08'), unread)).toEqual([])
+  expect(findings(d)).toHaveLength(1)
+  expect(drift(d, REFILE, day('08'))).toEqual([])
+})
+
 test('D3 a covered finding waits while its plan is open', () => {
   const d = db()
   expect(due(d, DESK, day('03'), unread)).toEqual([1])

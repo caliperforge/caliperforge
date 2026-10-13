@@ -106,7 +106,7 @@ export function stuck(db: Db, root: string, registry: Entry[], now: Date): numbe
 
 export function recorded(db: Db, drifted: Drifted[], now: Date): number[] {
   return drifted.flatMap(({ name, state, detail, newest: last }) => {
-    const id = answered(db, name, last) ? null : addFinding(db, { name, state, detail }, now)
+    const id = answered(db, name, detail, last) ? null : addFinding(db, { name, state, detail }, now)
     return id === null ? [] : [id]
   })
 }

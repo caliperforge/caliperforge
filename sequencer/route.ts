@@ -86,10 +86,18 @@ export function majority(paths: string[], repo = ''): string | null {
   return known.find((k) => tally.get(k.language) === top)?.language ?? null
 }
 
+/** The manifest entry `owner/name:path` that admits `path` on that repo only. */
+const SCOPED = /^([^/:]+\/[^/:]+):(.+)$/
+
 /** The paths a seat may write: its manifest's, or the brief's files, a listed test admitting its test folder, where the manifest says so or the plan is an outside one. */
-export function fenceFor(db: Db, plan: number, writePaths: string[]): string[] {
-  const brief = writePaths.includes(BRIEF_FILES) || (writePaths.length > 0 && planById(db, plan).target_id !== null)
-  if (!brief) return writePaths
+export function fenceFor(db: Db, plan: number, manifest: string[]): string[] {
+  const home = manifest.some((p) => SCOPED.test(p)) ? homeOf(planById(db, plan)) : null
+  const writePaths = manifest.flatMap((p) => {
+    const hit = SCOPED.exec(p)
+    if (hit === null) return [p]
+    return hit[1] === home ? [String(hit[2])] : []
+  })
+  if (!writePaths.includes(BRIEF_FILES) && (writePaths.length === 0 || planById(db, plan).target_id === null)) return writePaths
   const paths = filesOf(db, plan).map((f) => f.path)
   return [...new Set([...paths, ...paths.flatMap((p) => /^(?:[^/]*\/)*?(?:[Tt]ests?|spec|__tests__)(?=\/)/.exec(p)?.[0] ?? [])])]
 }

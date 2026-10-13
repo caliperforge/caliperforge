@@ -4,10 +4,26 @@ import type { Cell } from './science.ts'
 
 const INPUT = 'input_tokens - coalesce(cache_write_tokens, 0)'
 
+const GATE_AT = `CASE gate ${['pre_review', 'review', 'senior_review', 'blind_review', 'ready'].map((g, i) => `WHEN '${g}' THEN ${String(i)}`).join(' ')} END`
+
+const gated = (stage: string, gate: string): string =>
+  `SELECT '${stage}', count(*), coalesce(sum(outcome = 'refuse'), 0), 'verdicts' FROM verdicts WHERE gate = '${gate}'`
+
+const STAGES = [
+  "SELECT 'brief' AS stage, count(*) AS count, NULL AS refused, 'runs' AS unit FROM runs WHERE seat = 'brief_writer'",
+  "SELECT 'build', count(*), NULL, 'runs' FROM runs WHERE seat GLOB '*_specialist'",
+  gated('rails', 'pre_review'), gated('code review', 'review'), gated('senior review', 'senior_review'), gated('ready', 'ready'),
+  "SELECT 'CEO approvals', count(*), NULL, 'approvals' FROM approvals WHERE who = 'ceo' AND decision = 'approved'",
+  "SELECT 'pushed', count(*), NULL, 'deliverables' FROM deliverables WHERE state = 'pushed'",
+]
+
 export const METRICS = {
   daily_activity: `WITH RECURSIVE days(day) AS (SELECT date(min(at)) FROM runs UNION ALL SELECT date(day, '+1 day') FROM days WHERE day < :today) SELECT day, count(runs.id) AS runs, coalesce(sum(${INPUT}), 0) AS input_tokens, coalesce(sum(cache_read_tokens), 0) AS cache_read_tokens, coalesce(sum(cache_write_tokens), 0) AS cache_write_tokens, coalesce(sum(output_tokens), 0) AS output_tokens, coalesce(sum(input_tokens + cache_read_tokens + output_tokens), 0) AS total_tokens FROM days LEFT JOIN runs ON date(at) = day WHERE day IS NOT NULL GROUP BY day ORDER BY day`,
   token_mix: `SELECT 'input' AS type, coalesce(sum(${INPUT}), 0) AS tokens FROM runs UNION ALL SELECT 'cache_read', coalesce(sum(cache_read_tokens), 0) FROM runs UNION ALL SELECT 'cache_write', coalesce(sum(cache_write_tokens), 0) FROM runs UNION ALL SELECT 'output', coalesce(sum(output_tokens), 0) FROM runs`,
   runs_by_seat: 'SELECT seat, count(*) AS runs FROM runs GROUP BY seat ORDER BY runs DESC, seat',
+  gate_verdicts: `SELECT gate, outcome, count(*) AS count FROM verdicts WHERE ${GATE_AT} IS NOT NULL GROUP BY gate, outcome ORDER BY ${GATE_AT}, outcome`,
+  plan_outcomes: 'SELECT template, state, count(*) AS count FROM plans GROUP BY template, state ORDER BY template, state',
+  pipeline_counts: `SELECT stage, count, refused, unit FROM (${STAGES.map((s, i) => `SELECT ${String(i)} AS at, * FROM (${s})`).join(' UNION ALL ')}) ORDER BY at`,
 } as const
 
 export function reader(path: string): Db {

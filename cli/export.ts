@@ -14,6 +14,14 @@ const PROSE: Record<keyof typeof METRICS, { title: string; unit: string; definit
     caveat: 'A run that recorded no cache writes counts them as input.' },
   runs_by_seat: { title: 'Runs by seat', unit: 'runs', definition: 'Every agent run, counted by the seat that ran it, highest first.',
     caveat: 'A retried or reworked step counts as another run.' },
+  gate_verdicts: { title: 'Gate verdicts', unit: 'verdicts',
+    definition: 'Every verdict at pre_review (the rails), review, senior_review, blind_review and ready, counted by outcome, in the order a job meets the gates.',
+    caveat: 'A job that is refused and rebuilt is gated again, so these count verdicts, not jobs.' },
+  plan_outcomes: { title: 'Plan outcomes', unit: 'plans', definition: 'Every plan, counted by its template and the state it is in now.',
+    caveat: 'A plan still queued or running counts in that state until it ends.' },
+  pipeline_counts: { title: 'Pipeline counts', unit: 'per stage, as its unit column says',
+    definition: 'Each stage a job passes, in order: brief writer runs, specialist build runs, verdicts at the rails, code review, senior review and ready with the refusals among them, CEO approvals, and deliverables pushed.',
+    caveat: 'Rails, reviews and ready count verdicts, not jobs: a job that is refused and rebuilt is gated again.' },
 }
 
 export function exported(path: string, dir: string, now: Date): string[] {

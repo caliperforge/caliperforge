@@ -4,14 +4,18 @@ import { join } from 'node:path'
 import { beforeEach, expect, test } from 'vitest'
 import { addRun } from '../../store/brief.ts'
 import { migrate, open, type Db } from '../../store/index.ts'
-import { reader } from '../../store/metrics.ts'
+import { metric, reader } from '../../store/metrics.ts'
 import { exported } from '../export.ts'
 
 const schema = join(import.meta.dirname, '../../schema')
 
 const now = new Date('2026-10-04T12:00:00Z')
 
-const NAMES = ['daily_activity.json', 'runs_by_seat.json', 'token_mix.json']
+const ORDER = ['daily_activity', 'token_mix', 'runs_by_seat', 'gate_verdicts', 'plan_outcomes', 'pipeline_counts']
+
+const NAMES = ORDER.map((n) => `${n}.json`).sort()
+
+const D = "printf('%064d', 0)"
 
 const RUNS = [
   { seat: 'typescript_specialist', at: '2026-10-01T09:00:00.000Z', input_tokens: 100, cache_write_tokens: 40, cache_read_tokens: 10, output_tokens: 5 },
@@ -45,13 +49,38 @@ function seeded(): string {
   return path
 }
 
-const json = (name: string): { columns: string[]; rows: (string | number)[][] } & Record<string, unknown> =>
+function staged(): string {
+  const path = seeded()
+  store.exec(`INSERT INTO rules (id, kind, path, content_hash, loaded_at) VALUES ('brief_writer', 'roster', 'seats/brief_writer', ${D}, '2026-09-25');
+    INSERT INTO plans (id, pipe_id, template, state, queued_at) VALUES
+    (2, 1, 'research', 'running', '2026-10-02'), (3, 1, 'research', 'running', '2026-10-03'), (4, 1, 'research', 'halted', '2026-10-03');
+    INSERT INTO verdicts (gate, kind, subject_digest, plan, step, outcome, origin_kind, origin_ref, tokens, seconds) VALUES
+    ('premise', 'review', ${D}, 1, 0, 'pass', NULL, NULL, 0, 0), ('target', 'review', ${D}, 1, 0, 'refuse', 'ruling', 't', 0, 0),
+    ('pre_review', 'review', ${D}, 1, 3, 'pass', NULL, NULL, 0, 0), ('pre_review', 'review', ${D}, 1, 3, 'refuse', 'rail', 'tight', 0, 0),
+    ('pre_review', 'review', ${D}, 1, 3, 'pass', NULL, NULL, 0, 0), ('review', 'review', ${D}, 1, 4, 'refuse', 'ruling', 'r', 0, 0),
+    ('review', 'review', ${D}, 1, 4, 'pass', NULL, NULL, 0, 0), ('blind_review', 'review', ${D}, 1, 5, 'pass', NULL, NULL, 0, 0),
+    ('ready', 'review', ${D}, 1, 6, 'needs_ceo', NULL, NULL, 0, 0);
+    INSERT INTO approvals (id, subject_kind, subject_id, subject_digest, who, decision, reason, approved_at) VALUES
+    (1, 'deliverable', 1, ${D}, 'ceo', 'approved', NULL, '2026-10-03'), (2, 'deliverable', 2, ${D}, 'ceo', 'refused', 'too_wide', '2026-10-03'),
+    (3, 'plan', 1, ${D}, 'gates', 'approved', NULL, '2026-10-03');
+    INSERT INTO deliverables (plan_id, step, seat, diff_digest, state, tests_pass, byte_identical_elsewhere, fork_ci_green, bot_clean,
+      target_warm, approval_id, evidence) VALUES
+    (1, 2, 'typescript_specialist', ${D}, 'pushed', 1, 1, 1, 1, 1, 1, 'pr1'), (1, 2, 'typescript_specialist', ${D}, 'gated', 0, 0, 0, 0, 0, NULL, 'pr2')`)
+  addRun(store, { seat: 'brief_writer', at: '2026-10-04T10:00:00.000Z', input_tokens: 10, cache_write_tokens: 0, cache_read_tokens: 0,
+    output_tokens: 1, plan: 1, step: 1, rule_hash: '0'.repeat(64), provider: 'claude-agent-sdk', model: 'm', effort: 'high',
+    cache_write_1h_tokens: null, seconds: 1, exit: 0, transcript_path: 'b.transcript.jsonl', cost_usd: 0.25 })
+  return path
+}
+
+const json = (name: string): { columns: string[]; rows: (string | number | null)[][] } & Record<string, unknown> =>
   JSON.parse(readFileSync(join(site, 'data', `${name}.json`), 'utf8')) as never
 
-test('D1 writes the three files with the seven keys', () => {
-  expect(exported(seeded(), site, now)).toEqual(['daily_activity', 'token_mix', 'runs_by_seat'].map((n) => join(site, 'data', `${n}.json`)))
+const direct = (sql: string): string[] => metric(store, sql, '').rows.map((r) => JSON.stringify(r)).sort()
+
+test('D1 writes the six files with the seven keys', () => {
+  expect(exported(seeded(), site, now)).toEqual(ORDER.map((n) => join(site, 'data', `${n}.json`)))
   expect(readdirSync(join(site, 'data')).sort()).toEqual(NAMES)
-  for (const name of ['daily_activity', 'token_mix', 'runs_by_seat']) {
+  for (const name of ORDER) {
     expect(Object.keys(json(name))).toEqual(['metric', 'title', 'unit', 'columns', 'rows', 'definition', 'caveat'])
   }
 })
@@ -80,7 +109,7 @@ test('D4 runs_by_seat is sorted by runs, highest first', () => {
 
 test('D5 no key or column names a cost', () => {
   exported(seeded(), site, now)
-  for (const name of ['daily_activity', 'token_mix', 'runs_by_seat']) {
+  for (const name of ORDER) {
     const file = json(name)
     expect([...Object.keys(file), ...file.columns].filter((k) => /cost|usd|price|dollar/i.test(k))).toEqual([])
   }
@@ -99,4 +128,46 @@ test('D7 a failing query leaves the old files and no .tmp', () => {
   expect(() => exported(empty, site, now)).toThrow(/no such table: runs/)
   expect(readdirSync(join(site, 'data')).sort()).toEqual(NAMES)
   for (const name of NAMES) expect(readFileSync(join(site, 'data', name), 'utf8')).toBe(`old ${name}`)
+})
+
+test('D2 gate_verdicts counts the five gates in pipeline order', () => {
+  exported(staged(), site, now)
+  expect(json('gate_verdicts').columns).toEqual(['gate', 'outcome', 'count'])
+  expect(json('gate_verdicts').rows).toEqual([['pre_review', 'pass', 2], ['pre_review', 'refuse', 1], ['review', 'pass', 1],
+    ['review', 'refuse', 1], ['blind_review', 'pass', 1], ['ready', 'needs_ceo', 1]])
+  expect(json('gate_verdicts').rows.map((r) => JSON.stringify(r)).sort()).toEqual(direct(`SELECT gate, outcome, count(*) FROM verdicts
+    WHERE gate NOT IN ('premise', 'target') GROUP BY gate, outcome`))
+})
+
+test('D3 plan_outcomes counts plans by template and state', () => {
+  exported(staged(), site, now)
+  expect(json('plan_outcomes').rows).toEqual([['pr_path', 'done', 1], ['research', 'halted', 1], ['research', 'running', 2]])
+  expect(json('plan_outcomes').rows.map((r) => JSON.stringify(r)).sort())
+    .toEqual(direct('SELECT template, state, count(*) FROM plans GROUP BY template, state'))
+})
+
+test('D4 pipeline_counts stages come in order with their unit', () => {
+  exported(staged(), site, now)
+  expect(json('pipeline_counts').columns).toEqual(['stage', 'count', 'refused', 'unit'])
+  expect(json('pipeline_counts').rows.map((r) => r[0]))
+    .toEqual(['brief', 'build', 'rails', 'code review', 'senior review', 'ready', 'CEO approvals', 'pushed'])
+  const v = ['verdicts', false]
+  expect(json('pipeline_counts').rows.map((r) => [r[3], r[2] === null]))
+    .toEqual([['runs', true], ['runs', true], v, v, v, v, ['approvals', true], ['deliverables', true]])
+})
+
+test('D5 each pipeline count equals its direct query', () => {
+  exported(staged(), site, now)
+  const counts = json('pipeline_counts').rows.map((r) => r[1])
+  const one = (from: string): unknown => metric(store, `SELECT count(*) FROM ${from}`, '').rows[0]?.[0]
+  expect(counts).toEqual(["runs WHERE seat = 'brief_writer'", "runs WHERE seat GLOB '*_specialist'",
+    ...['pre_review', 'review', 'senior_review', 'ready'].map((g) => `verdicts WHERE gate = '${g}'`),
+    "approvals WHERE who = 'ceo' AND decision = 'approved'", "deliverables WHERE state = 'pushed'"].map(one))
+  expect(counts).toEqual([1, 3, 3, 2, 0, 1, 1, 1])
+})
+
+test('D7 refusals are counted and an empty gate gives zeros', () => {
+  exported(staged(), site, now)
+  expect(json('pipeline_counts').rows.slice(2, 6)).toEqual([['rails', 3, 1, 'verdicts'], ['code review', 2, 1, 'verdicts'],
+    ['senior review', 0, 0, 'verdicts'], ['ready', 1, 0, 'verdicts']])
 })

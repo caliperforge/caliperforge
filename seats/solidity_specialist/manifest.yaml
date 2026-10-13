@@ -10,6 +10,10 @@ tools:
   - Bash(forge:*)
   - Bash(cast:*)
   - Bash(python3:*)
+  - Bash(medusa:*)
+  - Bash(echidna:*)
+  - Bash(slither:*)
+  - Bash(slither-mutate:*)
 write_paths:
   - sample
   - test

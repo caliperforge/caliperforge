@@ -14,7 +14,10 @@ test('the manifest declares seat, model, effort, tools and paths', () => {
     seat: SEAT,
     model: 'claude-opus-5-5',
     effort: 'high',
-    tools: ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash(forge:*)', 'Bash(cast:*)', 'Bash(python3:*)'],
+    tools: [
+      'Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash(forge:*)', 'Bash(cast:*)', 'Bash(python3:*)',
+      'Bash(medusa:*)', 'Bash(echidna:*)', 'Bash(slither:*)', 'Bash(slither-mutate:*)',
+    ],
     write_paths: ['sample', 'test', 'index'],
   })
 })
@@ -64,16 +67,21 @@ test('write_paths admit sample, test and index, and nothing else', () => {
 const ran = (p: Packet, command: string, background?: boolean) =>
   gate(p, { hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: background === undefined ? { command } : { command, run_in_background: background } } as never)
 
-test('only forge, cast and python3 run, in the foreground', () => {
+test('forge cast python3 medusa echidna slither slither-mutate run', () => {
   const { manifest, prompt } = seat(root, SEAT)
   const p = packet(manifest, prompt, '', '', root, join(root, 'x.transcript.jsonl'))
-  for (const command of ['forge build', 'forge test', 'cast call', 'python3 sample/run.py']) {
+  for (const command of [
+    'forge build', 'forge test', 'cast call', 'python3 sample/run.py',
+    'medusa fuzz', 'echidna test/Invariant.t.sol', 'slither .', 'slither-mutate .',
+  ]) {
     expect(ran(p, command)).toEqual({ continue: true })
   }
-  for (const command of ['curl x', 'forge test && cast send x', 'npm install', 'cast call $RPC']) {
+  for (const command of ['curl x', 'forge test && cast send x', 'npm install', 'cast call $RPC', 'slither . && curl x']) {
     expect(ran(p, command)).toMatchObject({ hookSpecificOutput: { permissionDecision: 'deny' } })
   }
-  const denied = ran(p, 'forge test', true)
-  expect(denied).toMatchObject({ continue: true, hookSpecificOutput: { permissionDecision: 'deny' } })
-  expect(denied.stopReason).toBeUndefined()
+  for (const command of ['forge test', 'medusa fuzz']) {
+    const denied = ran(p, command, true)
+    expect(denied).toMatchObject({ continue: true, hookSpecificOutput: { permissionDecision: 'deny' } })
+    expect(denied.stopReason).toBeUndefined()
+  }
 })

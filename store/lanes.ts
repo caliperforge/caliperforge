@@ -184,6 +184,10 @@ export function hours(db: Db, pipe: number, start: string, end: string): void {
   db.prepare('UPDATE pipes SET window_start = ?, window_end = ? WHERE id = ?').run(start, end, pipe)
 }
 
+export function enable(db: Db, pipe: number, on: boolean): void {
+  db.prepare('UPDATE pipes SET enabled = ? WHERE id = ?').run(Number(on), pipe)
+}
+
 export function pipes(db: Db): PipeRow[] {
   return db.prepare('SELECT * FROM pipes ORDER BY id').all().map((r) => PipeRow.parse(r))
 }

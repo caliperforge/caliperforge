@@ -237,9 +237,6 @@
   "tests/rule.test.ts": {
     "prepare": 3
   },
-  "tests/seat-checks.test.ts": {
-    "prepare": 6
-  },
   "tests/shared.test.ts": {
     "prepare": 3
   },

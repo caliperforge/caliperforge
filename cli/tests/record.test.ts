@@ -3,8 +3,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
-import type { Db } from '../../store/index.ts'
-import { repos } from '../../store/record.ts'
+import { gates } from '../../store/approvals.ts'
+import { pushedRow } from '../../store/deliverables.ts'
+import { addRule, type Db } from '../../store/index.ts'
+import { recordsOf, repos } from '../../store/record.ts'
+import { setEvidence } from '../../store/targets.ts'
 import { adopt } from '../adopt.ts'
 import type { Pr } from '../gh.ts'
 import { fill, render, still } from '../record.ts'
@@ -59,15 +62,11 @@ function adopted(db: Db, dir: string, repo: string, no: number): number {
 
 /** A v2 plan: its target names the issue, and its pushed deliverable names the pull request. */
 function pushed(db: Db, dir: string, no: number): number {
-  const plan = adopted(db, dir, REPO, no)
-  db.prepare('UPDATE targets SET evidence = ? WHERE issue_no = ?').run(`https://github.com/${REPO}/issues/${String(no)}`, no)
-  db.prepare(`INSERT OR IGNORE INTO rules (id, kind, path, content_hash, loaded_at)
-    VALUES ('typescript_specialist', 'roster', 'seats/typescript_specialist', ?, '2026-09-25')`).run('0'.repeat(64))
-  const approval = db.prepare(`INSERT INTO approvals (subject_kind, subject_id, subject_digest, who, decision, approved_at)
-    VALUES ('plan', ?, ?, 'gates', 'approved', '2026-09-25T00:00:00.000Z') RETURNING id`).get(plan, 'd'.repeat(64)) as { id: number }
-  db.prepare(`INSERT INTO deliverables (plan_id, step, seat, diff_digest, state, tests_pass, byte_identical_elsewhere,
-    fork_ci_green, bot_clean, target_warm, approval_id, evidence)
-    VALUES (?, 7, 'typescript_specialist', ?, 'pushed', 1, 1, 1, 1, 1, ?, ?)`).run(plan, 'd'.repeat(64), approval.id, url(REPO, no))
+  const { plan, target } = adopt(db, dir, `${REPO}#${String(no)}`, TODAY, canned)
+  setEvidence(db, target, `https://github.com/${REPO}/issues/${String(no)}`)
+  addRule(db, { id: 'typescript_specialist', kind: 'roster', path: 'seats/typescript_specialist', content_hash: '0'.repeat(64), loaded_at: '2026-09-25' })
+  const approval = gates(db, plan, 'd'.repeat(64))
+  pushedRow(db, { plan, step: 7, seat: 'typescript_specialist', diff_digest: 'd'.repeat(64), evidence: url(REPO, no) }, approval)
   return plan
 }
 
@@ -90,7 +89,7 @@ test('adopted #282, pushed #290 get rows by pr; other repos none', () => {
   expect(render(REPO, rows, still(db, REPO))).toBe(`${REPO}\topen 2\n`
     + `#282\tOPEN\tplan ${String(first)}\t-\t${url(REPO, 282)}\n`
     + `#290\tOPEN\tplan ${String(second)}\t-\t${url(REPO, 290)}\n`)
-  expect(db.prepare('SELECT count(*) AS n FROM records WHERE repo = ?').get(OTHER)).toEqual({ n: 0 })
+  expect(recordsOf(db, OTHER)).toEqual([])
 })
 
 test('last word: newest not by author or bot; empty review: state', () => {

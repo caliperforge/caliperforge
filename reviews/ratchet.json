@@ -3,9 +3,6 @@
     "lines": 153,
     "prepare": 3
   },
-  "code_quality/tests/end-to-end.test.ts": {
-    "prepare": 5
-  },
   "package.ts": {
     "lines": 70
   },

@@ -5,6 +5,8 @@ import { dirname, join, relative } from 'node:path'
 import { expect, test, vi } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import { migrate, open, type Db } from '../../store/index.ts'
+import { enable, pipes } from '../../store/lanes.ts'
+import { addPlan, pipeNamed } from '../../store/plans.ts'
 import { receipt } from '../../store/ticks.ts'
 import { unread } from '../inbox.ts'
 import { CRASHED, down, liveness, livenessLine, watch } from '../watch.ts'
@@ -20,8 +22,7 @@ const NOW = new Date('2026-09-25T14:00:00.000Z')
 
 function world(open = true): Db {
   const db = fresh(schema)
-  db.prepare('UPDATE pipes SET enabled = ?').run(Number(open))
-  db.prepare("UPDATE settings SET value = '-360' WHERE key = 'tick.zone_offset_minutes'").run()
+  for (const p of pipes(db)) enable(db, p.id, open)
   return db
 }
 
@@ -188,16 +189,18 @@ test('a lane off with jobs alerts once, not again until back on', () => {
   const db = world()
   const root = mkdtempSync(join(tmpdir(), 'cf-lanes-'))
   tickAt(db, 0)
-  db.prepare(`INSERT INTO plans (id, pipe_id, template, state, queued_at, step, lane, seat, origin)
-    SELECT 1, id, 'pr_path', 'running', '2026-09-25', 2, 'machine', 'typescript_specialist', 'https://github.com/caliperforge/caliperforge/issues/1' FROM pipes WHERE name = 'pr-path'`).run()
-  db.prepare("UPDATE pipes SET enabled = 0 WHERE name = 'pr-path'").run()
+  const pr = pipeNamed(db, 'pr-path')
+  if (pr === null) throw new Error('no pr-path pipe')
+  addPlan(db, { pipe_id: pr.id, target_id: null, template: 'pr_path', state: 'running', queued_at: '2026-09-25', step: 2,
+    lane: 'machine', seat: 'typescript_specialist', origin: 'https://github.com/caliperforge/caliperforge/issues/1' })
+  enable(db, pr.id, false)
   const posted: string[] = []
   const post = (title: string, body: string): void => void posted.push(`${title}: ${body}`)
   watch(db, root, NOW, post)
   watch(db, root, NOW, post)
   expect(posted).toHaveLength(1)
   expect(posted[0]).toContain('pr-path (1 job waiting)')
-  db.prepare("UPDATE pipes SET enabled = 1 WHERE name = 'pr-path'").run()
+  enable(db, pr.id, true)
   watch(db, root, NOW, post)
   expect(existsSync(join(root, '.cf/watch.lanes'))).toBe(false)
 })

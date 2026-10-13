@@ -90,15 +90,6 @@
   "tests/proposal.test.ts": {
     "prepare": 3
   },
-  "tests/record.test.ts": {
-    "prepare": 5
-  },
-  "tests/step0.test.ts": {
-    "prepare": 5
-  },
-  "tests/watch.test.ts": {
-    "prepare": 5
-  },
   "watch-main.ts": {
     "lines": 8
   },

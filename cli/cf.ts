@@ -26,6 +26,7 @@ import { registerInbox, registerLanes, registerSession, type Cli } from './cf-la
 import { registerPlans, registerRetry } from './cf-plans.ts'
 import { registerAdopt, registerApprovals, registerTargets } from './cf-targets.ts'
 import { registerDesk } from './desk.ts'
+import { registerExport } from './export.ts'
 import { registerLook } from './look.ts'
 import { registerPaydesk } from './paydesk.ts'
 import { registerRefile } from './refile.ts'
@@ -62,6 +63,7 @@ registerLook(cf, cli)
 registerSite(cf, cli)
 registerRefile(cf, cli)
 registerPaydesk(cf, cli)
+registerExport(cf, cli)
 
 cf.command('health').action(() => {
   out(health(db(), root, new Date().toISOString().slice(0, 10)))

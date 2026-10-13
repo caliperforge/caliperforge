@@ -69,6 +69,10 @@ test('760b D1 atelier-web names its seat, lane, rails and checks', () => {
     commands: { node: ['--check'], npm: ['test'] } })
 })
 
+test('1157a D8 fuzz-bench names its seat and lane', () => {
+  expect(profile(REPO, 'caliperforge/fuzz-bench')).toEqual({ builder: 'solidity_specialist', lane: 'bench' })
+})
+
 test('1133 D1 caliperforge/pay excuses surfpool_tests alone', () => {
   expect(profile(REPO, 'caliperforge/pay')).toEqual({ checks: { rust: ['format', 'test'] },
     commands: { excused: ['-p pay-core --test surfpool_tests'] },

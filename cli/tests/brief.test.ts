@@ -104,11 +104,11 @@ test('each actor counts its own events and seat runs over 24 h', () => {
   ])
 })
 
-test('hand PRs merged in window: 3 home repos, searched a day back', () => {
+test('hand PRs merged in window: 4 home repos, searched a day back', () => {
   const seen: string[][] = []
-  expect(hands(NOW, (args) => { seen.push(args); return merged })).toBe(6)
+  expect(hands(NOW, (args) => { seen.push(args); return merged })).toBe(8)
   expect(seen.map((a) => a[a.indexOf('--repo') + 1]))
-    .toEqual(['caliperforge/caliperforge', 'caliperforge/atelier-web', 'caliperforge/v4-hook-index'])
+    .toEqual(['caliperforge/caliperforge', 'caliperforge/atelier-web', 'caliperforge/v4-hook-index', 'caliperforge/fuzz-bench'])
   for (const a of seen) expect(a).toContain('merged:>=2026-09-19')
 })
 
@@ -124,7 +124,7 @@ test('D6 the fixture day renders the expected section exactly', () => {
     '  director\t1 intervention(s)\tcoo_lite 1\t2 run(s)\t$1.50\theld 0 missed 0 open 1\n' +
     '  orchestrator\t1 intervention(s)\treturn 1\t0 run(s)\t$0.00\theld 0 missed 0 open 1\n' +
     '  fixer\t0 intervention(s)\t-\t2 run(s)\t$0.25\theld 0 missed 0 open 0\n' +
-    '  hand PRs merged\t6\n')
+    '  hand PRs merged\t8\n')
 })
 
 const IN = '2026-09-20 11:00:00'

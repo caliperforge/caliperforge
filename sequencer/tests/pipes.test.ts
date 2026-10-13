@@ -35,6 +35,7 @@ test('the store ships three lanes, one each, 07:00 to 22:00',() => {
       { name: 'comms', enabled: 1, window_start: '07:00', window_end: '22:00', max_concurrent: 1 },
       { name: 'research', enabled: 1, window_start: '07:00', window_end: '22:00', max_concurrent: 1 },
       { name: 'uniswap', enabled: 0, window_start: '07:00', window_end: '22:00', max_concurrent: 1 },
+      { name: 'bench', enabled: 1, window_start: '00:00', window_end: '23:59', max_concurrent: 2 },
     ])
 })
 
@@ -44,9 +45,9 @@ test('one zone row, Guatemala, and every window reads it',() => {
   expect(settingKeys(db, 'tick.zone*')).toHaveLength(1)
   expect(hhmm(db, OPENS)).toBe('07:00')
   expect(hhmm(db, new Date('2026-09-19T03:59:00.000Z'))).toBe('21:59')
-  expect(openPipes(db, hhmm(db, new Date('2026-09-18T12:59:00.000Z')))).toEqual([])
-  expect(openPipes(db, hhmm(db, OPENS)).map((p) => p.name)).toEqual(['pr-path', 'comms', 'research'])
-  expect(openPipes(db, hhmm(db, new Date('2026-09-19T04:01:00.000Z')))).toEqual([])
+  expect(openPipes(db, hhmm(db, new Date('2026-09-18T12:59:00.000Z'))).map((p) => p.name)).toEqual(['bench'])
+  expect(openPipes(db, hhmm(db, OPENS)).map((p) => p.name)).toEqual(['pr-path', 'comms', 'research', 'bench'])
+  expect(openPipes(db, hhmm(db, new Date('2026-09-19T04:01:00.000Z'))).map((p) => p.name)).toEqual(['bench'])
 })
 
 test('a lane with no template reads as on, nothing queued',async () => {
@@ -55,13 +56,13 @@ test('a lane with no template reads as on, nothing queued',async () => {
   const root = mkdtempSync(join(tmpdir(), 'cf-pipes-'))
   expect(await tick(db, root, stub(CARRIED), OPENS)).toEqual([])
   const would = dry(db, OPENS)
-  expect(would).toMatchObject({ hhmm: '07:00', zone: -360, cap: 3, pipes: 3, would: [] })
+  expect(would).toMatchObject({ hhmm: '07:00', zone: -360, cap: 3, pipes: 4, would: [] })
   expect(would.quiet).toEqual([
     { pipe: 'pr-path', live: 0, ready: 0 }, { pipe: 'comms', live: 0, ready: 0 },
-    { pipe: 'research', live: 0, ready: 0 },
+    { pipe: 'research', live: 0, ready: 0 }, { pipe: 'bench', live: 0, ready: 0 },
   ])
-  expect(dryLines(would)).toBe('tick --dry\t07:00 utc-06:00\tcap 3\t3 pipe(s) open\n'
-    + '  pr-path\ton, nothing queued\n  comms\ton, nothing queued\n  research\ton, nothing queued\n')
+  expect(dryLines(would)).toBe('tick --dry\t07:00 utc-06:00\tcap 3\t4 pipe(s) open\n'
+    + '  pr-path\ton, nothing queued\n  comms\ton, nothing queued\n  research\ton, nothing queued\n  bench\ton, nothing queued\n')
 })
 
 test('a queued research plan steps and stops no other lane',async () => {
@@ -71,7 +72,8 @@ test('a queued research plan steps and stops no other lane',async () => {
   const root = mkdtempSync(join(tmpdir(), 'cf-pipes-'))
   const would = dry(db, OPENS)
   expect(would.would).toEqual([{ pipe: 'research', plan: 2, step: 0, template: 'research' }])
-  expect(would.quiet).toEqual([{ pipe: 'pr-path', live: 0, ready: 0 }, { pipe: 'comms', live: 0, ready: 0 }])
+  expect(would.quiet).toEqual([{ pipe: 'pr-path', live: 0, ready: 0 }, { pipe: 'comms', live: 0, ready: 0 },
+    { pipe: 'bench', live: 0, ready: 0 }])
   expect(dryLines(would)).toContain('  research\tplan 2\tstep 0\tresearch\twould fire\n')
   expect(await tick(db, root, stub(CARRIED), OPENS)).toMatchObject([{ pipe: 'research', plan: 2, step: 0, name: 'question' }])
   expect(allPlans(db).filter((p) => p.state !== 'queued')).toHaveLength(1)
@@ -85,10 +87,11 @@ test('the cap goes to steppable lanes; a missed one says so',() => {
   queued(db, 2, 'research', 'pr_path')
   const would = dry(db, OPENS)
   expect(would.cap).toBe(1)
-  expect(would.pipes).toBe(3)
+  expect(would.pipes).toBe(4)
   expect(would.would).toEqual([{ pipe: 'comms', plan: 1, step: 0, template: 'pr_path' }])
   expect(would.quiet).toEqual([
     { pipe: 'pr-path', live: 0, ready: 0 }, { pipe: 'research', live: 1, ready: 1 },
+    { pipe: 'bench', live: 0, ready: 0 },
   ])
   expect(dryLines(would)).toContain('  research\ton, 1 ready, cap spent on a lower lane\n')
 })

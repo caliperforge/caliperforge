@@ -8,7 +8,7 @@ const LANE_LABEL = /^lane:([a-z]+)$/
 
 const PRIORITY_LABEL = /^P([0-9])$/
 
-export const LANES = ['machine', 'atelier', 'comms', 'research', 'uniswap'] as const
+export const LANES = ['machine', 'atelier', 'comms', 'research', 'uniswap', 'bench'] as const
 
 export type Lane = typeof LANES[number]
 
@@ -16,7 +16,7 @@ type Template = 'pr_path' | 'research' | 'comms'
 
 /**
  * Each lane in one place: the template it files on, the seat that template falls to when no `seat:`
- * label names one, the repo its jobs build and land in, and the pipe they queue on. A lane's pipe starts off.
+ * label names one, the repo its jobs build and land in, and the pipe they queue on.
  */
 export const LANE: Record<Lane, { template: Template; seat: string; home: string; pipe: string }> = {
   machine: { template: 'pr_path', seat: 'typescript_specialist', home: 'caliperforge/caliperforge', pipe: 'internal' },
@@ -24,6 +24,7 @@ export const LANE: Record<Lane, { template: Template; seat: string; home: string
   comms: { template: 'comms', seat: 'typescript_specialist', home: 'caliperforge/caliperforge', pipe: 'internal' },
   research: { template: 'research', seat: 'typescript_specialist', home: 'caliperforge/caliperforge', pipe: 'research' },
   uniswap: { template: 'pr_path', seat: 'python_specialist', home: 'caliperforge/v4-hook-index', pipe: 'uniswap' },
+  bench: { template: 'pr_path', seat: 'solidity_specialist', home: 'caliperforge/fuzz-bench', pipe: 'bench' },
 }
 
 export function laneOf(labels: { name: string }[]): Lane | null {

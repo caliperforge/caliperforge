@@ -11,7 +11,7 @@ import { pushedRow } from '../../store/deliverables.ts'
 import { ofKind, pointers } from '../../store/events.ts'
 import { addRule, type Db } from '../../store/index.ts'
 import { addPart, allParts } from '../../store/parts.ts'
-import { addPipe, addPlan, allPlans, laneOff, pipeNamed, type PlanRow } from '../../store/plans.ts'
+import { addPipe, addPlan, allPlans, dropPipes, laneOff, pipeNamed, type PlanRow } from '../../store/plans.ts'
 import { allTickets, recordListing } from '../../store/tickets.ts'
 import { question } from '../../templates/research.ts'
 import { intake } from '../capture.ts'
@@ -54,6 +54,7 @@ function canned(rows: Fixture[], log: string[] = [], closed: Fixture[] = []): Re
 
 function piped(enabled = 1): Db {
   const db = fresh(schema)
+  dropPipes(db, ['bench'])
   addPipe(db, { name: 'internal', enabled, window_start: '00:00', window_end: '23:59', max_concurrent: 1 })
   return db
 }
@@ -121,7 +122,9 @@ test('D4: an issue a part of a split names is not adopted', () => {
 })
 
 test('D4: a lane with its pipe off or missing is left unlisted', () => {
-  for (const db of [piped(0), fresh(schema)]) {
+  const bare = fresh(schema)
+  dropPipes(bare, ['bench'])
+  for (const db of [piped(0), bare]) {
     laneOff(db, Number(pipeNamed(db, 'research')?.id))
     const log: string[] = []
     intake(db, root, canned(TWO, log))

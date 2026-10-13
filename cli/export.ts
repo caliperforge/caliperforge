@@ -22,6 +22,9 @@ const PROSE: Record<keyof typeof METRICS, { title: string; unit: string; definit
   pipeline_counts: { title: 'Pipeline counts', unit: 'per stage, as its unit column says',
     definition: 'Each stage a job passes, in order: brief writer runs, specialist build runs, verdicts at the rails, code review, senior review and ready with the refusals among them, CEO approvals, and deliverables pushed.',
     caveat: 'Rails, reviews and ready count verdicts, not jobs: a job that is refused and rebuilt is gated again.' },
+  tokens_per_landed_job: { title: 'Tokens per landed job', unit: 'tokens per job, by week queued',
+    definition: "Every plan in the done state with at least one run, grouped by the week it was queued, each week labelled by its Monday. A job's tokens are the sum over all its runs, rework included; fresh is input_tokens + output_tokens, and total is fresh plus cache_read_tokens.",
+    caveat: 'Cohorts are by the week a job was queued, and count landed jobs only.' },
 }
 
 export function exported(path: string, dir: string, now: Date): string[] {

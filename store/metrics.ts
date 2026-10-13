@@ -24,6 +24,7 @@ export const METRICS = {
   gate_verdicts: `SELECT gate, outcome, count(*) AS count FROM verdicts WHERE ${GATE_AT} IS NOT NULL GROUP BY gate, outcome ORDER BY ${GATE_AT}, outcome`,
   plan_outcomes: 'SELECT template, state, count(*) AS count FROM plans GROUP BY template, state ORDER BY template, state',
   pipeline_counts: `SELECT stage, count, refused, unit FROM (${STAGES.map((s, i) => `SELECT ${String(i)} AS at, * FROM (${s})`).join(' UNION ALL ')}) ORDER BY at`,
+  tokens_per_landed_job: "SELECT week, count(*) AS jobs, round(avg(total), 1) AS mean_total_tokens, round(avg(fresh), 1) AS mean_fresh_tokens, round(avg(cache_read), 1) AS mean_cache_read_tokens, round(avg(runs), 1) AS mean_runs FROM (SELECT date(plans.queued_at, 'weekday 0', '-6 days') AS week, sum(input_tokens + cache_read_tokens + output_tokens) AS total, sum(input_tokens + output_tokens) AS fresh, sum(cache_read_tokens) AS cache_read, count(*) AS runs FROM plans JOIN runs ON runs.plan = plans.id WHERE plans.state = 'done' GROUP BY plans.id) GROUP BY week ORDER BY week",
 } as const
 
 export function reader(path: string): Db {

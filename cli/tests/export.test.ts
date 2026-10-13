@@ -11,7 +11,7 @@ const schema = join(import.meta.dirname, '../../schema')
 
 const now = new Date('2026-10-04T12:00:00Z')
 
-const ORDER = ['daily_activity', 'token_mix', 'runs_by_seat', 'gate_verdicts', 'plan_outcomes', 'pipeline_counts']
+const ORDER = ['daily_activity', 'token_mix', 'runs_by_seat', 'gate_verdicts', 'plan_outcomes', 'pipeline_counts', 'tokens_per_landed_job']
 
 const NAMES = ORDER.map((n) => `${n}.json`).sort()
 
@@ -72,12 +72,24 @@ function staged(): string {
   return path
 }
 
-const json = (name: string): { columns: string[]; rows: (string | number | null)[][] } & Record<string, unknown> =>
+function landed(): string {
+  const path = seeded()
+  store.exec(`INSERT INTO plans (id, pipe_id, template, state, queued_at) VALUES
+    (5, 1, 'research', 'done', '2026-10-02'), (6, 1, 'research', 'done', '2026-10-06'), (7, 1, 'research', 'refused', '2026-10-02')`)
+  for (const [plan, input_tokens, cache_read_tokens, output_tokens] of [[5, 100, 20, 10], [6, 40, 0, 2], [7, 1000, 500, 100]] as const) {
+    addRun(store, { seat: 'typescript_specialist', at: '2026-10-06T09:00:00.000Z', input_tokens, cache_write_tokens: 0, cache_read_tokens,
+      output_tokens, plan, step: 2, rule_hash: '0'.repeat(64), provider: 'claude-agent-sdk', model: 'm', effort: 'high',
+      cache_write_1h_tokens: null, seconds: 1, exit: 0, transcript_path: `${String(plan)}.transcript.jsonl`, cost_usd: 0.25 })
+  }
+  return path
+}
+
+const json =(name: string): { columns: string[]; rows: (string | number | null)[][] } & Record<string, unknown> =>
   JSON.parse(readFileSync(join(site, 'data', `${name}.json`), 'utf8')) as never
 
 const direct = (sql: string): string[] => metric(store, sql, '').rows.map((r) => JSON.stringify(r)).sort()
 
-test('D1 writes the six files with the seven keys', () => {
+test('D1 writes the seven files with the seven keys', () => {
   expect(exported(seeded(), site, now)).toEqual(ORDER.map((n) => join(site, 'data', `${n}.json`)))
   expect(readdirSync(join(site, 'data')).sort()).toEqual(NAMES)
   for (const name of ORDER) {
@@ -170,4 +182,11 @@ test('D7 refusals are counted and an empty gate gives zeros', () => {
   exported(staged(), site, now)
   expect(json('pipeline_counts').rows.slice(2, 6)).toEqual([['rails', 3, 1, 'verdicts'], ['code review', 2, 1, 'verdicts'],
     ['senior review', 0, 0, 'verdicts'], ['ready', 1, 0, 'verdicts']])
+})
+
+test('D1 tokens per landed job: one cohort per Monday week', () => {
+  exported(landed(), site, now)
+  expect(json('tokens_per_landed_job').columns)
+    .toEqual(['week', 'jobs', 'mean_total_tokens', 'mean_fresh_tokens', 'mean_cache_read_tokens', 'mean_runs'])
+  expect(json('tokens_per_landed_job').rows).toEqual([['2026-09-28', 2, 299, 268, 31, 2.5], ['2026-10-05', 1, 42, 42, 0, 1]])
 })

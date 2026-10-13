@@ -11,7 +11,7 @@ import { check, gather, question, record } from '../../templates/research.ts'
 import { tick } from '../index.ts'
 import type { Wire } from '../push.ts'
 import { mapOf } from '../steps.ts'
-import { maybe, put } from '../workspace.ts'
+import { drop, maybe, put } from '../workspace.ts'
 import { PASS, plan, stub, watched, world, type World } from './world.ts'
 
 const ASK = '# The cap\n\n**Question:** what is the cap?\n**Would be wrong if:** a page names another cap\n**Done when:** a quote names it\n'
@@ -113,6 +113,49 @@ test('D3: an unquoted source is refused at gather', async () => {
   question(w.root, plan(w.db, 1))
   expect(await gather(w.db, w.root, plan(w.db, 1), mapOf('research').at(1), seats(source(''))))
     .toMatchObject({ outcome: 'refuse', spans: ['researcher.unquoted'] })
+  expect(maybe(w.root, 1, 'answer.md')).toBeNull()
+})
+
+const RULE = '## What\n\nPick by the seven-part selection rule: newest first.\n'
+
+const gathered = async (w: World, reply = FOUND): Promise<[Awaited<ReturnType<typeof gather>>, string]> => {
+  let prompt = ''
+  const outcome = await gather(w.db, w.root, plan(w.db, 1), mapOf('research').at(1), stub('', 0, reply, (packet) => { prompt = packet.prompt }))
+  return [outcome, prompt]
+}
+
+test('gather D1: the prompt holds the whole ask and question.json', async () => {
+  const w = researching(`${ASK}\n${RULE}`)
+  question(w.root, plan(w.db, 1))
+  const [, prompt] = await gathered(w)
+  expect(prompt).toContain('Pick by the seven-part selection rule: newest first.')
+  expect(prompt).toContain(maybe(w.root, 1, 'question.json'))
+})
+
+test('gather D2: with no ask.md the prompt holds issue.md', async () => {
+  const w = researching()
+  question(w.root, plan(w.db, 1))
+  drop(w.root, 1, 'ask.md')
+  put(w.root, 1, 'issue.md', `${ASK}\n${RULE}`)
+  const [, prompt] = await gathered(w)
+  expect(prompt).toContain('Pick by the seven-part selection rule: newest first.')
+})
+
+test('gather D3: a resumed plan gets the ask, step 0 unrun', async () => {
+  const w = researching()
+  question(w.root, plan(w.db, 1))
+  put(w.root, 1, 'ask.md', `${ASK}\n${RULE}`)
+  const [outcome, prompt] = await gathered(w)
+  expect(outcome).toMatchObject({ outcome: 'pass' })
+  expect(prompt).toContain('Pick by the seven-part selection rule: newest first.')
+  expect(eventsOf(w.db, 1, 'question')).toEqual([])
+})
+
+test('gather D4: a reply with no fence is refused', async () => {
+  const w = researching()
+  question(w.root, plan(w.db, 1))
+  const [outcome] = await gathered(w, 'The cap is 3.')
+  expect(outcome).toMatchObject({ outcome: 'refuse', spans: ['researcher.fence'] })
   expect(maybe(w.root, 1, 'answer.md')).toBeNull()
 })
 

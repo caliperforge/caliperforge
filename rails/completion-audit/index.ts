@@ -27,7 +27,7 @@ const Envelope = z.object({
 export function audit(handback: string, expected: string[], prev = '', diff = ''): Verdict {
   const rows = carried(handback)
   const subject = createHash('sha256').update(handback).digest('hex')
-  if (typeof rows === 'string') return refuse(subject, ['step-2.handback.md'], `the handback fence is not YAML: ${rows}`)
+  if (typeof rows === 'string') return refuse(subject, ['step-2.handback.md'], rows)
   const absent = expected.filter((id) => (rows.get(id)?.pointer ?? '').trim() === '')
   const stands = untouched(prev, diff)
   const forward = absent.filter(stands)
@@ -90,8 +90,17 @@ export function carried(handback: string): Map<string, z.infer<typeof Envelope>[
   const whole = yaml(body)
   const envelope = Envelope.safeParse(whole)
   const rows = envelope.success ? envelope : Envelope.safeParse(yaml(doneOnly(body)))
-  if (!rows.success) return whole instanceof Error ? whole.message : new Map()
+  if (!rows.success) {
+    if (whole instanceof Error) return `the handback fence is not YAML: ${whole.message}`
+    return misshapen(whole) ? 'the done: rows are not in the standard shape (a list of id / status / pointer rows)' : new Map()
+  }
   return new Map(rows.data.done.map((row) => [row.id, row]))
+}
+
+function misshapen(whole: unknown): boolean {
+  const done = typeof whole === 'object' && whole !== null && 'done' in whole ? whole.done : null
+  if (done === undefined || done === null) return false
+  return !Array.isArray(done) || done.some((item: unknown) => typeof item !== 'object' || item === null)
 }
 
 /** An unquoted `: ` in a `summary:` line breaks the whole fence, so the audit reads the `done:` rows on their own. */

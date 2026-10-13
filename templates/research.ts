@@ -74,8 +74,10 @@ export const steps: Step[] = ['question', 'gather', 'check', 'review', 'record']
 
 const LINES = [['question', '**Question:**'], ['wrong_if', '**Would be wrong if:**'], ['done_when', '**Done when:**']] as const
 
+const askOf = (root: string, plan: PlanRow): string => maybe(root, plan.id, 'ask.md') ?? maybe(root, plan.id, 'issue.md') ?? ''
+
 export function question(root: string, plan: PlanRow): Outcome {
-  const lines = (maybe(root, plan.id, 'ask.md') ?? maybe(root, plan.id, 'issue.md') ?? '').split('\n')
+  const lines = askOf(root, plan).split('\n')
   const said = LINES.map(([key, label]) => [key, label, lines.find((l) => l.startsWith(label))?.slice(label.length).trim() ?? ''] as const)
   const missing = said.filter(([, , rest]) => rest === '').map(([, label]) => label)
   if (missing.length > 0) return { outcome: 'refuse', spans: ['ask.md'], note: `ask.md has no ${missing.join(' or ')} line` }
@@ -84,7 +86,7 @@ export function question(root: string, plan: PlanRow): Outcome {
 }
 
 export async function gather(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
-  const fired = await ran(db, root, plan, step, provider, `# question.json\n\n${get(root, plan.id, 'question.json')}`, false)
+  const fired = await ran(db, root, plan, step, provider, `# Ask\n\n${askOf(root, plan)}\n\n# question.json\n\n${get(root, plan.id, 'question.json')}`, false)
   if (fired.ended !== 'completed') return { outcome: 'refuse', spans: [fired.stop_reason ?? 'seat.exit'], note: `${step.runs} ${fired.ended}` }
   const sources = sourced(root, plan, fired.text)
   if (sources.outcome === 'refuse') return sources

@@ -45,7 +45,7 @@ export const FIXES = 2
 /** One fix may spend this much; the job's own run wall is higher and is for building, not repairing. */
 const FIX_WALL = 400_000
 
-const STORE_CHARS = 24_000
+const STORE_CHARS = 40_000
 const TEXT_CHARS = 8_000
 
 const Fix = z.object({

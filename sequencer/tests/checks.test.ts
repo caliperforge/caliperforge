@@ -331,14 +331,46 @@ const EULER = profile(REPO, 'caliperforge/fuzz-bench')?.finish ?? {}
 
 test('1181b D1 D2 finish runs in order and stops at the first red', () => {
   const src = tree(FOUNDRY)
+  const entries = { a: ['node', '-e', 'x'], b: ['node', 'b'] }
   const green = recorder()
-  expect(finish(src, { ...EULER, b: ['node', 'b'] }, green.run)).toBeNull()
-  expect(green.seen).toEqual(['test --root targets/euler-earn', 'b'])
+  expect(finish(src, entries, green.run)).toBeNull()
+  expect(green.seen).toEqual(['-e x', 'b'])
 
-  const red = recorder('test --root targets/euler-earn')
-  expect(finish(src, { ...EULER, b: ['node', 'b'] }, red.run))
-    .toEqual({ script: 'finish', command: 'forge test --root targets/euler-earn', code: '2', output: 'boom', tests: [], retried: false })
-  expect(red.seen).toEqual(['test --root targets/euler-earn'])
+  const red = recorder('-e x')
+  expect(finish(src, entries, red.run))
+    .toEqual({ script: 'finish', command: 'node -e x', code: '2', output: 'boom', tests: [], retried: false })
+  expect(red.seen).toEqual(['-e x'])
+})
+
+const PAIR = 'bench/run_pair.py targets/euler-earn-m01.yml suites/euler-m01'
+
+test('1225 D2 finish skips an entry whose script is missing', () => {
+  const none = recorder()
+  expect(finish(tree(FOUNDRY), EULER, none.run)).toBeNull()
+  expect(none.seen).toEqual([])
+})
+
+test('1225 D3 finish runs run_pair.py once it is there', () => {
+  const src = tree(FOUNDRY)
+  mkdirSync(join(src, 'bench'))
+  writeFileSync(join(src, 'bench', 'run_pair.py'), '')
+  const green = recorder()
+  expect(finish(src, EULER, green.run)).toBeNull()
+  expect(green.seen).toEqual([PAIR])
+  expect(finish(src, EULER, recorder(PAIR).run))
+    .toEqual({ script: 'finish', command: `python3 ${PAIR}`, code: '2', output: 'boom', tests: [], retried: false })
+})
+
+test('1225 D5 pytest runs the changed .py files that exist', () => {
+  const src = tree(FOUNDRY)
+  for (const dir of ['bench', 'tests']) mkdirSync(join(src, dir))
+  for (const path of ['bench/run_pair.py', 'tests/test_run_pair.py']) writeFileSync(join(src, path), '')
+  const touched = ['bench/run_pair.py', 'tests/test_run_pair.py', 'README.md', 'gone.py']
+  const pytest = '-m pytest bench/run_pair.py tests/test_run_pair.py'
+  const green = binned()
+  expect(checks(src, BENCH, green.run, [], null, touched)).toBeNull()
+  expect(green.seen).toEqual(['build', 'test', pytest])
+  expect(checks(src, BENCH, binned(`python3 ${pytest}`).run, [], null, touched)).toMatchObject({ script: 'pytest', command: `python3 ${pytest}` })
 })
 
 test('1181b D6 no finish entries run nothing', () => {

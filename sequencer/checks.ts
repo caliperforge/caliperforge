@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process'
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { isAbsolute, join } from 'node:path'
 import type { Profile } from '../store/profile.ts'
 import { exitedOutside } from './exited.ts'
 import { gates, type Gate, type Outside, type OutsideLanguage } from './gates.ts'
@@ -73,7 +73,7 @@ export function checks(src: string, given: Commands, run: Run = npm, narrow: str
   if (parsed !== null) return parsed
   const bin = mode(src)
   if (bin === 'xcodebuild') excluded(src)
-  for (const [script, args, program = bin] of commands(src, given, narrow)) {
+  for (const [script, args, program = bin] of commands(src, given, narrow, touched)) {
     const first = run(args, src, program)
     if (first.ok) continue
     const retried = loadOnly(first.output) || (bin === 'xcodebuild' && exitedOutside(src, first.output, touched))
@@ -114,7 +114,13 @@ function gated(src: string, list: Gate[], run: Run, excused: string[] = []): Fai
 }
 
 export function finish(src: string, entries: Record<string, string[]>, run: Run): Failure | null {
-  return gated(src, Object.values(entries).map(([bin = '', ...args]) => ({ script: 'finish', bin, args, dir: '' })), run)
+  return gated(src, Object.values(entries).filter((argv) => !missing(src, argv))
+    .map(([bin = '', ...args]) => ({ script: 'finish', bin, args, dir: '' })), run)
+}
+
+export function missing(src: string, argv: string[]): boolean {
+  const path = argv[1] ?? ''
+  return path.includes('/') && !isAbsolute(path) && !existsSync(join(src, path))
 }
 
 function settled(gate: Gate, ran: Ran, excused: string[]): Ran {
@@ -193,19 +199,22 @@ function alone(output: string, script: string, args: string[]): string[] {
 /** A test script that is vitest takes `related`; anything else is run whole, narrow list or not. */
 const VITEST = /(^|\s)vitest(\s|$)/
 
-function commands(src: string, given: Commands, narrow: string[]): [string, string[], string?][] {
+function commands(src: string, given: Commands, narrow: string[], touched: string[]): [string, string[], string?][] {
   if (project(src) !== null) return given.xcodebuild === undefined ? [] : [['test', given.xcodebuild]]
   if (mode(src) === 'gradle') return [['check', GRADLE]]
   const scripts = read(src)
-  if (scripts === null) {
-    return [...(given.forge ?? []).map((s): [string, string[], string] => [s, [s], 'forge']),
-      ...(given.python3 === undefined ? [] : [['pytest', given.python3, 'python3'] as [string, string[], string]])]
-  }
+  if (scripts === null) return tools(src, given, touched)
   const named = (given.npm ?? []).filter((s) => scripts[s] !== undefined)
   return [
     ...(bare(src) ? [['ci', ['ci']] as [string, string[]]] : []),
     ...named.map((s): [string, string[]] => [s, related(scripts[s] ?? '', s, narrow) ?? ['run', s]]),
   ]
+}
+
+export function tools(src: string, given: Commands, touched: string[]): [string, string[], string][] {
+  const py = touched.filter((path) => path.endsWith('.py') && existsSync(join(src, path)))
+  return [...(given.forge ?? []).map((s): [string, string[], string] => [s, [s], 'forge']),
+    ...(given.python3 === undefined ? [] : [['pytest', [...given.python3, ...py], 'python3'] as [string, string[], string]])]
 }
 
 function related(script: string, name: string, narrow: string[]): string[] | null {

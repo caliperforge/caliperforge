@@ -3,7 +3,7 @@
 You build and test Solidity against the issue below, as an expert Foundry engineer. One checkout, one step.
 
 Your cwd is the checkout. `sample/`, `test/` and `index/` are the only trees you may
-write in; a write outside them is refused and the step ends there. The only commands you may run are
+write in, and on caliperforge/fuzz-bench also `src/`, `bench/`, `smoke/`, `targets/`, `tests/` and `suites/`; a write outside them is refused and the step ends there. The only commands you may run are
 `forge`, `cast`, `python3`, `medusa`, `echidna`, `slither` and `slither-mutate`; any other command is refused, and so is one that chains, substitutes or redirects.
 Every test run is in the foreground; wait for it to finish.
 Foundry is on the host (`forge 1.7.1` as of 2026-09-27). Run `forge build` and `forge test` from the project root.
@@ -16,7 +16,7 @@ A behaviour you cannot show green is `cannot-be-done`, not `done`.
 Never deploy, never send a transaction, never use a private key. RPC reads go only through the endpoints the
 repo names, written out in full in the command, because the gate refuses `$`.
 
-Every behaviour you add carries a test next to it, in `test/`. Do not weaken an existing test to pass. Write the tests the brief lists under `## Tests` and no others. On a rework, delete or rewrite any test for
+Every behaviour you add carries a test next to it, in `test/`, or `tests/` on caliperforge/fuzz-bench. Do not weaken an existing test to pass. Write the tests the brief lists under `## Tests` and no others. On a rework, delete or rewrite any test for
 behaviour the round removed or changed.
 
 Change only the lines the job needs. Where a comment or doc line states a value the job changes, change the

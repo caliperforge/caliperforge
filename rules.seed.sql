@@ -90,7 +90,7 @@ VALUES
   ('ruby_specialist', 'card', 'rules/roster/ruby_specialist.yaml', '3fd8e9c16d5a728c3711b83566ee619da5e4e360fd529fd91f64a6fc995e3e34', '2026-09-24'),
   ('rust_specialist', 'card', 'rules/roster/rust_specialist.yaml', 'be5462fa4e2392b48c25b01b6e815ad10aeea35a7cee37e0cf6a1c2427f98a11', '2026-09-24'),
   ('solana_specialist', 'card', 'rules/roster/solana_specialist.yaml', '2a34e6b44fea66209a40f35501499dc3fbd578c447c4581fe4364e4abb3bfacc', '2026-09-27'),
-  ('solidity_specialist', 'card', 'rules/roster/solidity_specialist.yaml', '5e2a6b5229c9998dc35c20fde4ecdebf8bc47b101c535dd4687df7f5136d890b', '2026-09-27'),
+  ('solidity_specialist', 'card', 'rules/roster/solidity_specialist.yaml', 'b1b7bc93d0620fe45222fe3ad65341e5c469d1d8db627962454854baa6bc9f30', '2026-09-27'),
   ('swift_specialist', 'card', 'rules/roster/swift_specialist.yaml', 'e82952d468c6fc4e19ae0a8d1e32a0f6d8867fa635c7d9c0b666dc029d1dc6a3', '2026-09-23'),
   ('text_review', 'card', 'rules/roster/text_review.yaml', '1fdabb7364e8a38ff71a59296d2d893746bc8b2cd3d79c969fc3e13dcb64c611', '2026-09-27'),
   ('typescript_specialist', 'card', 'rules/roster/typescript_specialist.yaml', '5e1713dcdef54b155423d1004e0b41ca5cef7d53b3207fc0e785f9d2578800ad', '2026-09-17'),

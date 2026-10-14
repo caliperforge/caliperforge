@@ -1,7 +1,30 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { ROSTER, SEED } from '../cli/digests.ts'
+import { filesOf } from '../store/files.ts'
+import type { Db } from '../store/index.ts'
+import { planById } from '../store/plans.ts'
 import { section, TEST } from './brief.ts'
+import { homeOf } from './home.ts'
+
+/** The manifest entry that says a seat's fence is the file list the brief settled, not a directory. */
+export const BRIEF_FILES = 'brief:files'
+
+/** The manifest entry `owner/name:path` that admits `path` on that repo only. */
+const SCOPED = /^([^/:]+\/[^/:]+):(.+)$/
+
+/** The paths a seat may write: its manifest's, or the brief's files, a listed test admitting its test folder, where the manifest says so or the plan is an outside one. */
+export function fenceFor(db: Db, plan: number, manifest: string[]): string[] {
+  const home = manifest.some((p) => SCOPED.test(p)) ? homeOf(planById(db, plan)) : null
+  const writePaths = manifest.flatMap((p) => {
+    const hit = SCOPED.exec(p)
+    if (hit === null) return [p]
+    return hit[1] === home ? [String(hit[2])] : []
+  })
+  if (!writePaths.includes(BRIEF_FILES) && (writePaths.length === 0 || planById(db, plan).target_id === null)) return writePaths
+  const paths = filesOf(db, plan).map((f) => f.path)
+  return [...new Set([...paths, ...paths.flatMap((p) => /^(?:[^/]*\/)*?(?:[Tt]ests?|spec|__tests__)(?=\/)/.exec(p)?.[0] ?? [])])]
+}
 
 /** A row a builder owns a path outside the list with: `- <path> — <why>`. */
 const OWNED = /^\s*[-*]\s*`?([A-Za-z0-9_./-]+\.[A-Za-z0-9]+)`?\s+(?:—|–|--?)\s+\S/

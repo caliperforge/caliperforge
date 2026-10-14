@@ -56,6 +56,8 @@ export function sourced(root: string, plan: PlanRow, reply: string): Outcome {
 
 const flat = (s: string): string => s.replace(/\s+/g, ' ').trim()
 
+const RULER = /^(?=.*\|)(?=.*-)[ |:-]+$/
+
 const page = (url: string): Promise<{ ok: boolean; text: string }> => fetch(url).then(
   async (res) => res.ok ? { ok: true, text: flat(await res.text()) } : { ok: false, text: String(res.status) },
   (error: unknown) => ({ ok: false, text: error instanceof Error ? error.message : String(error) }))
@@ -63,8 +65,11 @@ const page = (url: string): Promise<{ ok: boolean; text: string }> => fetch(url)
 export async function check(root: string, plan: PlanRow): Promise<Outcome> {
   const sources = JSON.parse(get(root, plan.id, 'sources.json')) as { url: string; quote: string }[]
   if (sources.length === 0) return { outcome: 'pass', spans: [], note: 'no sources: nothing found' }
-  const claims = get(root, plan.id, 'answer.md').replace(/\n## Still unknown$[\s\S]*/m, '').split('\n').filter((l) => l.trim() !== '' && !l.startsWith('#'))
-    .flatMap((l) => l.split(/(?<=[.!?]|\[source:\d+\])\s+(?!\[source:)/)).map((sentence) => {
+  const ask = flat(askOf(root, plan))
+  const lines = get(root, plan.id, 'answer.md').replace(/\n## Still unknown$[\s\S]*/m, '').split('\n')
+  const claims = lines.filter((l, i) => l.trim() !== '' && !l.startsWith('#') && !RULER.test(l) && !RULER.test(lines[i + 1] ?? ''))
+    .flatMap((l) => l.replace(/^\s*(?:[-*+]|\d+[.)])\s+/, '').split(/(?<=[.!?]|\[source:\d+\])\s+(?!\[source:)/))
+    .filter((sentence) => !ask.includes(flat(sentence))).map((sentence) => {
       const cited = [...sentence.matchAll(/\[source:(\d+)\]/g)].map((m) => sources[Number(m[1]) - 1])
       return { sentence, cited: cited.length > 0 && cited.every((s) => s !== undefined) ? cited : null }
     })

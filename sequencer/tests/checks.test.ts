@@ -693,11 +693,21 @@ test('#204 bare go runs gofmt, vet and test; gofmt output fails', () => {
   expect(calls).toEqual([`gofmt -s -l . @${join(src, 'go')}`])
 })
 
-test('1208 D3 a red pytest with no pyproject fails step 3', () => {
+/** A shell recording the tool each `uv run --no-project` gate names, red on `red`. */
+function tool(red: string): { run: Run; seen: string[] } {
+  const seen: string[] = []
+  return { seen, run: (args) => { const name = args[8] ?? ''; seen.push(name); return name === red ? { ok: false, code: '1', output: 'boom' } : { ok: true, output: '' } } }
+}
+
+test('1181a D3 a red pytest is test; a red ruff stops there', () => {
   const src = nested({ 'smoke/check_leak.py': '', 'tests/test_smoke_leak.py': '' })
-  const { run } = heard({ ok: false, code: '1', output: 'FAILED tests/test_smoke_leak.py::test_leak' })
-  expect(checks(src, {}, run, [], { language: 'python', files: ['smoke/check_leak.py', 'tests/test_smoke_leak.py'] }))
-    .toMatchObject({ script: 'test', command: 'uv run --no-project --with pytest python -m pytest tests/test_smoke_leak.py', code: '1' })
+  const python: Outside = { language: 'python', files: ['smoke/check_leak.py', 'tests/test_smoke_leak.py'] }
+  const pytest = tool('python')
+  expect(checks(src, {}, pytest.run, [], python)).toMatchObject({ script: 'test', code: '1' })
+  expect(pytest.seen).toEqual(['ruff', 'pyright', 'python'])
+  const ruff = tool('ruff')
+  expect(checks(src, {}, ruff.run, [], python)).toMatchObject({ script: 'lint' })
+  expect(ruff.seen).toEqual(['ruff'])
 })
 
 test('#204 a recipe the Justfile does not define is not run', () => {

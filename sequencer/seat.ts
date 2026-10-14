@@ -459,7 +459,7 @@ function referenced(src: string, issue: string): Pick<Bench, 'reference'> {
 }
 
 /**
- * Step 3 already ran the checkout's own checks on this diff, or on a stranger's repo its language's gates;
+ * Step 3 already ran the checkout's own checks on this diff, or its language's gates;
  * the reviewer is told so rather than reasoning its way to it. Read off the rail's row, never re-run, and
  * only while the diff is the one it judged.
  */

@@ -8,7 +8,7 @@ import { languageOfSeat } from '../templates/pr-path.ts'
 export { BRIEF_FILES, fenceFor } from './fence.ts'
 
 /**
- * Which builder a plan gets; a part of an outside plan goes by its own files, as the outside plan does. The kernel's own repo is TypeScript; another repo of ours is what its tree is written in, and an empty one goes by its `BY_REPO` language, then the plan's seat unless `bySeat` is false, as for the gates. On a stranger's repo the brief's files decide: all
+ * Which builder a plan gets; a part of an outside plan goes by its own files, as the outside plan does. The kernel's own repo is TypeScript; another repo of ours is what its tree is written in, and an empty one goes by its `BY_REPO` language, then the plan's seat, or its files' language when `bySeat` is false, as for the gates. On a stranger's repo the brief's files decide: all
  * under `kotlin/` is the Kotlin seat; otherwise the files' language,
  * and the outside seat only when no file is in a language with a seat of its own.
  */

@@ -67,13 +67,15 @@ test('D3 no pass on this diff, or mode none, lists no gate', () => {
 
 const LEAK = '--- a/tests/test_smoke_leak.py\n+++ b/tests/test_smoke_leak.py\n@@ -1,1 +1,1 @@\n+x\n'
 
-test('1208 D5 a fuzz-bench plan lists its pytest gate', () => {
+test('1181a D4 a green fuzz-bench plan lists its python gates', () => {
   const { db, plan } = target(['smoke/check_leak.py', 'tests/test_smoke_leak.py'], 'pass', LEAK)
   const src = mkdtempSync(join(tmpdir(), 'cf-note-'))
   mkdirSync(join(src, 'tests'))
   writeFileSync(join(src, 'tests', 'test_smoke_leak.py'), '')
-  const bench = { ...plan, target_id: null, origin: 'https://github.com/caliperforge/fuzz-bench/issues/1' }
-  expect(checked(db, bench, src, LEAK)).toEqual({ checks: '- python | . | uv run --no-project --with pytest python -m pytest tests/test_smoke_leak.py | pass' })
+  const bench: PlanRow = { ...plan, target_id: null, lane: 'bench', seat: 'solidity_specialist', origin: 'https://github.com/caliperforge/fuzz-bench/issues/1' }
+  const env = 'uv run --no-project --with ruff --with pyright --with pytest'
+  expect(checked(db, bench, src, LEAK)).toEqual({ checks: ['ruff check', 'pyright', 'python -m pytest']
+    .map((c) => `- python | . | ${env} ${c} tests/test_smoke_leak.py | pass`).join('\n') })
 })
 
 test('D6 no seat language and no gate, no section', () => {

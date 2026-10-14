@@ -30,7 +30,7 @@ export function real(path: string): string {
 }
 
 /** A stranger's npm scripts never run on this host (sequencer/rails.ts); their fork CI is their check. */
-const OURS_ONLY = ['Bash(npm ', 'Bash(cf ']
+const OURS_ONLY = ['Bash(npm ', 'Bash(cf look gh:']
 
 export function packet(manifest: Seat, prompt: string, spec: string, issue: string, cwd: string,
   transcript: string, ours = false, fence: string[] = manifest.write_paths): Packet {

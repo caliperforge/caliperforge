@@ -268,3 +268,21 @@ test('check D3/D4: a data row and an ask near-copy are unsourced', async () => {
   expect(await checked('| Rule | Seen |\n|---|---|\n| 1 | yes |\n1. Severity High or Low.', SOURCES, `${ASK}\n${RULES}`))
     .toMatchObject({ outcome: 'refuse', spans: ['research.unsourced'], note: 'no source for "| 1 | yes |", "Severity High or Low."' })
 })
+
+test('label D1: label sentences are not claims', async () => {
+  expect(await checked('How I applied it:\n\n**Rows that may need your decision:**\n\nThe cap is 3 [source:1].'))
+    .toMatchObject({ outcome: 'pass', note: '1 sentence(s) checked against 1 url(s)' })
+})
+
+const METHOD = 'The cap is 3 [source:1].\n\n## Method\n\nI went through the sources newest first.'
+
+test('label D2: a Method body passes, the next section is checked', async () => {
+  expect(await checked(`${METHOD}${SECTIONS}`)).toMatchObject({ outcome: 'pass' })
+  expect(await checked(`${METHOD}\n\n## Would be wrong if\n\nIt never moves.`))
+    .toMatchObject({ outcome: 'refuse', spans: ['research.unsourced'], note: 'no source for "It never moves."' })
+})
+
+test('label D3: a label with text after its colon is a claim', async () => {
+  expect(await checked('The cap is 3 [source:1].\n\n**Row 6:** the report gives no fix commit.'))
+    .toMatchObject({ outcome: 'refuse', spans: ['research.unsourced'], note: 'no source for "**Row 6:** the report gives no fix commit."' })
+})

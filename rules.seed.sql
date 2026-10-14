@@ -4,7 +4,6 @@ VALUES
   ('rules/tight.md', 'card', 'rules/tight.md', '9c885ed2e62d432d95211fec25387da43261cd643e4eb56f73b00b9689a6e479', '2026-09-17'),
   ('rules/registry/00-director.yaml', 'card', 'rules/registry/00-director.yaml', '388f9a5c6b2b1d0337cceb1eaec7782c55e31108a0707f0a8387be8123da9bf1', '2026-10-04'),
   ('rules/registry/01-fixer.yaml', 'card', 'rules/registry/01-fixer.yaml', 'cd23ed850c09af6e8128eaa2b0b897d6a7779a94bfdcf2173f7b6dca4ed6f00a', '2026-10-04'),
-  ('rules/registry/02-fix_mode.yaml', 'card', 'rules/registry/02-fix_mode.yaml', 'c1e040b05b79fd9034efee36f5aee3850ba2d89ed4c0c8ad898ba1e0a99fce23', '2026-10-04'),
   ('rules/registry/03-swift_review.yaml', 'card', 'rules/registry/03-swift_review.yaml', '5959b5eff87a8f82ced15099019aff41206a61474c115d4df642bf47b2b94861', '2026-10-04'),
   ('rules/registry/04-kotlin_review.yaml', 'card', 'rules/registry/04-kotlin_review.yaml', '43a8418fdaf884c9173d5f9b2b2b03c3ec6ca4464469d84e61b4a4844b82fd26', '2026-10-04'),
   ('rules/registry/05-python_review.yaml', 'card', 'rules/registry/05-python_review.yaml', 'dc8c6bd9c9f3ab7bcf9ad3e1e8f350d59a3a56ba945b02a2aaec18ba7cd92f57', '2026-10-04'),

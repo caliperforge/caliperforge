@@ -19,7 +19,9 @@ import { originRef, type PlanRow } from '../store/plans.ts'
 import { byRun, pending } from '../store/transcript.ts'
 import { DEFAULT_BUILDER, type Step } from './pr-path.ts'
 
-const FENCE = /(?:^|\n)---\n(sources:.*\n(?:[ \t-].*\n)*)---\s*$/
+const FENCE = /(?:^|\n)(?:```\w*\n)?---[ \t]*\n(sources:[\s\S]*?)\n---[ \t]*(?:\n```[ \t]*)?\s*$/
+
+const KEYS = ['fetched_at', 'quote', 'claim']
 
 const Sources = z.object({
   sources: z.array(z.object({
@@ -30,10 +32,22 @@ const Sources = z.object({
   })),
 })
 
+function fenced(reply: string): { data: z.infer<typeof Sources> } | { why: string } {
+  const body = FENCE.exec(reply)?.[1]
+  if (body === undefined) return { why: 'the reply does not close with `---`, `sources:`, its entries, `---`' }
+  const parsed = prose(body, KEYS)
+  if (parsed === null) {
+    const lines = body.split('\n')
+    const i = lines.findIndex((line, n) => prose([...lines.slice(0, n), line].join('\n'), KEYS) === null)
+    return { why: `line ${String(i + 1)}: ${lines[i] ?? ''}` }
+  }
+  const got = Sources.safeParse(parsed)
+  return got.success ? { data: got.data } : { why: got.error.issues.map((i) => `${i.path.join('.')} ${i.message}`).join('; ') }
+}
+
 export function sourced(root: string, plan: PlanRow, reply: string): Outcome {
-  const fence = FENCE.exec(reply)
-  const got = Sources.safeParse(fence === null ? null : prose(fence[1] ?? '', ['fetched_at', 'quote', 'claim']))
-  if (!got.success) return { outcome: 'refuse', spans: ['researcher.fence'], note: 'researcher reply has no valid sources fence' }
+  const got = fenced(reply)
+  if ('why' in got) return { outcome: 'refuse', spans: ['researcher.fence'], note: `researcher reply has no valid sources fence: ${got.why}` }
   const unquoted = got.data.sources.filter((s) => (s.quote ?? '').trim() === '').map((s) => s.url)
   if (unquoted.length > 0) return { outcome: 'refuse', spans: ['researcher.unquoted'], note: `no quote for ${unquoted.join(', ')}` }
   put(root, plan.id, 'sources.json', JSON.stringify(got.data.sources))
@@ -81,17 +95,25 @@ const LINES = [['question', '**Question:**'], ['wrong_if', '**Would be wrong if:
 
 const askOf = (root: string, plan: PlanRow): string => maybe(root, plan.id, 'ask.md') ?? maybe(root, plan.id, 'issue.md') ?? ''
 
+const said = (ask: string) => {
+  const lines = ask.split('\n')
+  return LINES.map(([key, label]) => [key, label, lines.find((l) => l.startsWith(label))?.slice(label.length).trim() ?? ''] as const)
+}
+
+export const unasked = (ask: string): string[] => said(ask).filter(([, , rest]) => rest === '').map(([, label]) => label)
+
 export function question(root: string, plan: PlanRow): Outcome {
-  const lines = askOf(root, plan).split('\n')
-  const said = LINES.map(([key, label]) => [key, label, lines.find((l) => l.startsWith(label))?.slice(label.length).trim() ?? ''] as const)
-  const missing = said.filter(([, , rest]) => rest === '').map(([, label]) => label)
+  const ask = askOf(root, plan)
+  const missing = unasked(ask)
   if (missing.length > 0) return { outcome: 'refuse', spans: ['ask.md'], note: `ask.md has no ${missing.join(' or ')} line` }
-  put(root, plan.id, 'question.json', JSON.stringify(Object.fromEntries(said.map(([key, , rest]) => [key, rest]))))
+  put(root, plan.id, 'question.json', JSON.stringify(Object.fromEntries(said(ask).map(([key, , rest]) => [key, rest]))))
   return { outcome: 'pass', spans: [], note: 'question.json written' }
 }
 
 export async function gather(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
-  const fired = await ran(db, root, plan, step, provider, `# Ask\n\n${askOf(root, plan)}\n\n# question.json\n\n${get(root, plan.id, 'question.json')}`, false)
+  const input = `# Ask\n\n${askOf(root, plan)}\n\n# question.json\n\n${get(root, plan.id, 'question.json')}${
+    maybe(root, plan.id, 'refusal.md')?.replace(/^/, '\n\n# Refused — fix what this names\n\n') ?? ''}`
+  const fired = await ran(db, root, plan, step, provider, input, false)
   if (fired.ended !== 'completed') return { outcome: 'refuse', spans: [fired.stop_reason ?? 'seat.exit'], note: `${step.runs} ${fired.ended}` }
   const sources = sourced(root, plan, fired.text)
   if (sources.outcome === 'refuse') return sources

@@ -56,3 +56,27 @@ test('D5: a quote holding ": " is stored exactly as written', () => {
   sourced(dir, plan, fenced(`sources:\n${entry(B, ` ${B.quote}`)}`))
   expect(written(dir)).toEqual([B])
 })
+
+const refused = (dir: string, reply: string, note: string): void => {
+  expect(sourced(dir, plan, reply)).toMatchObject({ outcome: 'refuse', spans: ['researcher.fence'], note: expect.stringContaining(note) as unknown })
+  expect(maybe(dir, 1, 'sources.json')).toBeNull()
+}
+
+test('fence D1: blank lines in the fence pass, in order', () => {
+  const dir = root()
+  expect(sourced(dir, plan, fenced(`sources:\n${entry(A, ' |\n      The cap\n\n      is 3.')}\n${entry(B, ` ${B.quote}`)}`)))
+    .toMatchObject({ outcome: 'pass' })
+  expect(written(dir)).toEqual([{ ...A, quote: 'The cap\n\nis 3.\n' }, B])
+})
+
+test('fence D3: a broken line is named by number and text', () => {
+  refused(root(), fenced(`sources:\n${entry(A, ` ${A.quote}\n      Note: the limit is 5.`)}`), 'line 5:       Note: the limit is 5.')
+})
+
+test('fence D4: an entry with no claim names sources.1.claim', () => {
+  refused(root(), fenced(`sources:\n${entry(A, ` ${A.quote}`)}  - url: ${B.url}\n    fetched_at: ${B.fetched_at}\n`), 'sources.1.claim')
+})
+
+test('fence D5: prose after the fence is refused', () => {
+  refused(root(), `${fenced(`sources:\n${entry(A, ` ${A.quote}`)}`)}\nHope that helps.`, 'does not close with')
+})

@@ -56,13 +56,13 @@ test('D2 outside reviewer told its language gates ran', () => {
   expect(checked(db, plan, paykit(), DIFF)).toEqual({ checks: RUBY })
 })
 
-test('D3 no pass on this diff, or mode none, lists no gate', () => {
+test('D3 no pass on this diff lists no gate; mode none gates', () => {
   const red = target(['ruby/lib/pay_kit/config.rb'], 'refuse')
   expect(checked(red.db, red.plan, paykit(), DIFF)).toEqual({ checks: UNGATED })
   const { db, plan } = target(['ruby/lib/pay_kit/config.rb'], 'pass', `${DIFF}+y\n`)
   expect(checked(db, plan, paykit(), DIFF)).toEqual({ checks: UNGATED })
   const ours = target(['ruby/lib/pay_kit/config.rb'])
-  expect(checked(ours.db, { ...ours.plan, origin: 'https://github.com/acme/kit/issues/1' }, paykit(), DIFF)).toEqual({ checks: UNGATED })
+  expect(checked(ours.db, { ...ours.plan, origin: 'https://github.com/acme/kit/issues/1' }, paykit(), DIFF)).toEqual({ checks: RUBY })
 })
 
 const LEAK = '--- a/tests/test_smoke_leak.py\n+++ b/tests/test_smoke_leak.py\n@@ -1,1 +1,1 @@\n+x\n'

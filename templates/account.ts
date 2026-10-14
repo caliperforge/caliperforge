@@ -1,13 +1,14 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { basename, join } from 'node:path'
 import { z } from 'zod'
 import type { Provider } from '../providers/kind.ts'
 import type { Outcome } from '../sequencer/kind.ts'
 import { prose } from '../sequencer/prose.ts'
 import { ran } from '../sequencer/seat.ts'
 import { get, maybe, put } from '../sequencer/workspace.ts'
-import { ours, targeted } from '../store/account.ts'
+import { ours, readyOn, targeted } from '../store/account.ts'
 import type { Db } from '../store/index.ts'
+import { zone } from '../store/lanes.ts'
 import type { PlanRow } from '../store/plans.ts'
 import { addTarget, newestAccount, type Target } from '../store/targets.ts'
 import { DEFAULT_BUILDER, type Step } from './pr-path.ts'
@@ -45,14 +46,18 @@ function section(lines: string[], heading: string): { from: number; body: string
   return { from: at + 1, body: lines.slice(at + 1, next === -1 ? lines.length : next) }
 }
 
+function repos(text: string): string[] {
+  return (section(text.split('\n'), REPOS)?.body ?? []).map((l) => l.replace(/^- /, '')).filter((l) => REPO.test(l))
+}
+
 export function reading(db: Db, root: string, plan: PlanRow): Outcome {
   const found = account(root, plan)
   if ('outcome' in found) return found
-  const repos = (section(found.text.split('\n'), REPOS)?.body ?? []).map((l) => l.replace(/^- /, '')).filter((l) => REPO.test(l))
-  const rows = repos.map((repo) => ours(db, repo))
+  const names = repos(found.text)
+  const rows = names.map((repo) => ours(db, repo))
   const listed = (key: 'plans' | 'prs' | 'targets'): string => rows.flatMap((r) => r[key].map((x) => JSON.stringify(x))).join('\n') || 'none'
   put(root, plan.id, 'reading.md', `${found.text.trimEnd()}\n\n# Our plans\n\n${listed('plans')}\n\n# Our pull requests\n\n${listed('prs')}\n\n# Our targets\n\n${listed('targets')}\n`)
-  return { outcome: 'pass', spans: [], note: `reading.md written from ${found.path} and ${String(repos.length)} repo(s)` }
+  return { outcome: 'pass', spans: [], note: `reading.md written from ${found.path} and ${String(names.length)} repo(s)` }
 }
 
 export async function brief(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
@@ -94,15 +99,19 @@ export function ideas(db: Db, root: string, plan: PlanRow): Outcome {
   return { outcome: 'pass', spans: [], note: `${String(rows.length)} target(s) written ready, ${String(stored)} already in targets, ${String(got.data.length - stored - rows.length)} repeated` }
 }
 
-export function log(root: string, plan: PlanRow): Outcome {
+export function log(db: Db, root: string, plan: PlanRow): Outcome {
   const found = account(root, plan)
   if ('outcome' in found) return found
+  const dir = join('accounts', 'briefs', basename(found.path, '.md'))
+  const written = join(dir, `${new Date(Date.now() + zone(db) * 60000).toISOString().slice(0, 10)}.md`)
+  mkdirSync(join(root, dir), { recursive: true })
+  writeFileSync(join(root, written), `**Ready targets:** ${String(readyOn(db, repos(found.text)))}\n\n${get(root, plan.id, 'answer.md')}\n`)
   const lines = found.text.split('\n')
   const at = section(lines, LOG)
   if (at === null) return { outcome: 'refuse', spans: [found.path], note: `${found.path} has no ${LOG} section` }
   const rows = [...new Set(get(root, plan.id, 'answer.md').split('\n').filter((l) => DATED.test(l) && !at.body.includes(l)))]
-  if (rows.length === 0) return { outcome: 'pass', spans: [], note: `no new ${LOG} rows` }
+  if (rows.length === 0) return { outcome: 'pass', spans: [], note: `${written} written; no new ${LOG} rows` }
   lines.splice(at.from + at.body.findLastIndex((l) => l.trim() !== '') + 1, 0, ...rows)
   writeFileSync(join(root, found.path), lines.join('\n'))
-  return { outcome: 'pass', spans: [], note: `${String(rows.length)} row(s) added to ${found.path} ${LOG}` }
+  return { outcome: 'pass', spans: [], note: `${written} written; ${String(rows.length)} row(s) added to ${found.path} ${LOG}` }
 }

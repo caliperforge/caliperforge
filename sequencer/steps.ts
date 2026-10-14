@@ -123,7 +123,7 @@ export function kernel(db: Db, root: string, plan: PlanRow, wire?: Wire, read?: 
   if (step.name === 'question' || step.name === 'record') return step.name === 'question' ? question(root, plan) : record(db, root, plan, wire)
   if (step.name === 'read') return reading(db, root, plan)
   if (step.name === 'ideas') return ideas(db, root, plan)
-  if (step.name === 'log') return log(root, plan)
+  if (step.name === 'log') return log(db, root, plan)
   return { outcome: 'pass', spans: [], note: step.name }
 }
 

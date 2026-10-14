@@ -10,8 +10,8 @@ import { fire, packet, planRow, refuse } from '../index.ts'
 import { digest, expected, listed, load, rules, seat } from '../rules.ts'
 
 const root = join(import.meta.dirname, '../..')
-const SEATS = ['brief_writer', 'design_lead', 'director', 'fixer', 'go_specialist', 'growth_lead', 'kotlin_specialist', 'lua_specialist',
-  'outside_specialist', 'php_specialist', 'python_specialist', 'researcher', 'ruby_specialist', 'rust_specialist',
+const SEATS = ['brief_writer', 'design_lead', 'director', 'fixer', 'fizz_generator', 'go_specialist', 'growth_lead', 'kotlin_specialist',
+  'lua_specialist', 'outside_specialist', 'php_specialist', 'python_specialist', 'researcher', 'ruby_specialist', 'rust_specialist',
   'solana_specialist', 'solidity_specialist', 'swift_specialist', 'text_review', 'typescript_specialist', 'web_specialist', 'writer']
 const cwd = '/tmp/cf-seat'
 const TRANSCRIPT = '/tmp/cf-seat/run.transcript.jsonl'

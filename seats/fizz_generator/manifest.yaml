@@ -1,0 +1,14 @@
+seat: fizz_generator
+model: claude-opus-5-5
+effort: high
+tools:
+  - Read
+  - Glob
+  - Grep
+  - Write
+  - Edit
+  - Bash(forge build:*)
+  - Bash(forge test:*)
+  - Bash(medusa fuzz:*)
+write_paths:
+  - test/fizz

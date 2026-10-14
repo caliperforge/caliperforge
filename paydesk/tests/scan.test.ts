@@ -1,14 +1,22 @@
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { beforeAll, expect, test } from 'vitest'
+import { beforeAll, expect, test, vi } from 'vitest'
 import type { ListingScan } from '../card.ts'
 import { scan, type Scanned } from '../scan.ts'
 
 const X402 = { accepts: [{ scheme: 'exact', network: 'solana', amount: '10000', asset: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', payTo: 'payee' }] }
+const RPC = 'https://api.mainnet-beta.solana.com'
 const calls: { url: string; init: RequestInit }[] = []
+let held: unknown[] | null = [{ pubkey: 'ata', account: {} }]
+const chain = (body: string): Response => {
+  if (held === null) return new Response('slow down', { status: 429 })
+  const value = body.includes('getAccountInfo') ? { owner: '11111111111111111111111111111111' } : held
+  return Response.json({ jsonrpc: '2.0', id: 1, result: { context: { slot: 1 }, value } })
+}
 const fake = (url: string, init: RequestInit): Promise<Response> => {
   calls.push({ url, init })
+  if (url === RPC) return Promise.resolve(chain(init.body as string))
   return Promise.resolve(init.body === '{"symbol":"SOL"}'
     ? new Response('bad', { status: 400 })
     : new Response(JSON.stringify(X402), { status: 402, headers: { 'content-type': 'application/json' } }))
@@ -16,12 +24,14 @@ const fake = (url: string, init: RequestInit): Promise<Response> => {
 const tmp = mkdtempSync(join(tmpdir(), 'paydesk-'))
 let results: Scanned[] = []
 let listing: ListingScan
+const net = { fetch: fake as typeof fetch, resolve: () => Promise.resolve() }
+const rescan = async (): Promise<ListingScan> => (await scan([join(import.meta.dirname, 'fixtures', 'listing')], undefined, undefined, net))[0] as ListingScan
 
 beforeAll(async () => {
   mkdirSync(join(tmp, 'org', 'broken'), { recursive: true })
   writeFileSync(join(tmp, 'org', 'broken', 'PAY.md'), '---\ntitle: Broken\nservice_url: https://b.example.com\nopenapi:\n  path: missing.json\n---\n')
   const dirs = [join(tmp, 'org', 'broken'), join(import.meta.dirname, 'fixtures', 'listing')]
-  results = await scan(dirs, join(tmp, 'out.json'), join(tmp, 'cards'), { fetch: fake as typeof fetch, resolve: () => Promise.resolve() })
+  results = await scan(dirs, join(tmp, 'out.json'), join(tmp, 'cards'), net)
   listing = results[1] as ListingScan
 })
 
@@ -57,4 +67,25 @@ test('D5 out holds the array and cards one card per listing', () => {
   expect(listing).toMatchObject({ fqn: 'fixtures/listing', pr: 7 })
   expect(readdirSync(join(tmp, 'cards'))).toEqual(['fixtures__listing.md'])
   expect(readFileSync(join(tmp, 'cards', 'fixtures__listing.md'), 'utf8').split('\n')[0]).toBe('## fixtures/listing: Example API (#7)')
+})
+
+test('D4 both endpoints share one getAccountInfo call', () => {
+  expect(calls.filter((c) => c.url === RPC && (c.init.body as string).includes('getAccountInfo'))).toHaveLength(1)
+})
+
+test('D2 no token account for the mint warns on both endpoints', async () => {
+  held = []
+  for (const endpoint of (await rescan()).endpoints) {
+    expect(endpoint).toMatchObject({ verdict: 'warn', issues: expect.arrayContaining(['recipient has no USDC token account']) as unknown })
+  }
+})
+
+test('D5 an RPC 429 keeps both ok and writes one stderr line', async () => {
+  held = null
+  const write = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+  const { endpoints } = await rescan()
+  expect(endpoints).toEqual(listing.endpoints)
+  expect(endpoints.map((e) => e.verdict)).toEqual(['ok', 'ok'])
+  expect(write).toHaveBeenCalledTimes(1)
+  write.mockRestore()
 })

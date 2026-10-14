@@ -13,3 +13,8 @@ it('1157a D1 the bench lane builds fuzz-bench on its own pipe', () => {
   expect(LANE.bench).toEqual({ template: 'pr_path', seat: 'solidity_specialist', home: `${FORK}/fuzz-bench`, pipe: 'bench' })
   expect(laneOf([{ name: 'lane:bench' }])).toBe('bench')
 })
+
+it('1156a D1 the site lane builds site on its own pipe', () => {
+  expect(LANE.site).toEqual({ template: 'pr_path', seat: 'web_specialist', home: `${FORK}/site`, pipe: 'site' })
+  expect(laneOf([{ name: 'lane:site' }])).toBe('site')
+})

@@ -73,6 +73,10 @@ test('D4 a check row and the same scan issue give one item', () => {
   expect(fix?.items).toHaveLength(1)
 })
 
+test('D5 an unfetched row gives no fix', () => {
+  expect(merge([], [{ pr: 77, unfetched: 'HTTP 404' }])).toStrictEqual([])
+})
+
 test('D5 a PR with only warn items passes', () => {
   const fixes = merge([], [listing(13, 'acme/meh', [endpoint('warn', ['asks for $0'], '/x')])])
   expect(fixes.map(render)).toStrictEqual(['## #13: passes\n\n### To improve\n- `acme/meh` GET /x: asks for $0\n'])

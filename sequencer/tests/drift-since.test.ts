@@ -13,14 +13,16 @@ function queued(at: string): Db {
   return d
 }
 
-test('D1 a plan queued before the gap is not silent', () => {
-  expect(drift(queued('2026-09-25'), PYTHON, NOW)).toEqual([])
+test('D5 an open plan queued before the gap is silent', () => {
+  expect(drift(queued('2026-09-25'), PYTHON, NOW)).toEqual([
+    { name: 'python_review', state: 'silent', detail: "no row in runs WHERE staffed = 'python_specialist' AND mode = 'review'" },
+  ])
 })
 
-test('D2 a plan queued inside the gap is silent', () => {
-  expect(drift(queued('2026-10-02'), PYTHON, NOW)).toEqual([
-    { name: 'python_review', state: 'silent', detail: "no row in runs WHERE seat = 'python_specialist' AND mode = 'review'" },
-  ])
+test('D5 a done plan with no run inside the gap is quiet', () => {
+  const d = queued('2026-09-25')
+  d.exec("UPDATE plans SET state = 'done' WHERE id = 1")
+  expect(drift(d, PYTHON, NOW)).toEqual([])
 })
 
 test('D3 with no gap the while window is 7d', () => {

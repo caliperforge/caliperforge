@@ -960,7 +960,8 @@ test('weeklyDesk D4: a weekly plan lands a substack post', async () => {
 
 const POST05 = 'blog/05_jito-tippayment-and-ai-invariant-suggester-live.html'
 
-const SITE = { [POST05]: '<html><head><title>x</title></head><body><h1>x</h1><article>x</article></body></html>', 'blog/index.html': '<ul>\n</ul>' }
+const SITE = { [POST05]: '<html><head><title>x</title><meta name="description" content="x"></head><body><h1>x</h1><article>x</article></body></html>',
+  'blog/index.html': '<main>\n<article class="cf-blog-card">\n<h2><a href="05_x.html">Old</a></h2>\n</article>\n</main>' }
 
 const SEED = { id: 2, kind: 'ship', dest: 'site', status: 'approved', title: 'A <post> & more', dek: 'd', body: '## Why\n\nOne <b> line.\n\nTwo.',
   edited_title: null, sources: '[]', checks: '[]', work_date: '2026-10-01', written_date: '2026-10-02' } satisfies Parameters<typeof putPost>[1]
@@ -993,10 +994,12 @@ test('publish D1 D2 D3 D6: a site row is written and committed', () => {
   putPost(w.db, SEED)
   expect(published(w, dir)).toEqual({ outcome: 'pass', spans: [], note: `1 post(s) written to ${dir}` })
   const [name, title] = ['06_a-post-more', 'A &lt;post&gt; &amp; more']
-  expect(readFileSync(join(dir, `blog/${name}.html`), 'utf8')).toBe(`<html><head><title>${title}</title></head><body>\n<h1>${title}</h1>
+  expect(readFileSync(join(dir, `blog/${name}.html`), 'utf8')).toBe(`<html><head><title>${title}</title><meta name="description" content="d"></head><body>
+<h1>${title}</h1>
 <p class="dateline">Work completed 2026-10-01 · written up 2026-10-02.</p>\n<h2>Why</h2>\n<p>One &lt;b&gt; line.</p>\n<p>Two.</p>
 </article></body></html>`)
-  expect(readFileSync(join(dir, 'blog/index.html'), 'utf8')).toBe(`<ul>\n<li><a href="${name}.html">${title}</a> · 2026-10-02</li>\n</ul>`)
+  expect(readFileSync(join(dir, 'blog/index.html'), 'utf8')).toBe(`<main>\n<article class="cf-blog-card">\n<h2><a href="${name}.html">${title}</a></h2>
+<p class="dateline">2026-10-02</p>\n<p>d</p>\n</article>\n<article class="cf-blog-card">\n<h2><a href="05_x.html">Old</a></h2>\n</article>\n</main>`)
   expect(postOf(w.db, 2)).toMatchObject({ status: 'approved', url: `https://caliperforge.com/blog/${name}.html`, published_at: null })
   expect([git(dir, ['log', '-1', '--format=%s']).trim(), ahead(dir)]).toEqual([`post: ${name}`, '1'])
   expect(all(w.root)).toMatchObject([{ kind: 'signoff', plan: 1, step: 5, name: 'publish', note: 'site post ready: run `cf site push`' }])

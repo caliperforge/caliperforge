@@ -1,6 +1,10 @@
 import { expect, test } from 'vitest'
+import { runAt } from '../../store/events.ts'
 import { building, record, sharing } from '../../store/files.ts'
-import { builderRan } from '../../store/plans.ts'
+import { addRule } from '../../store/index.ts'
+import { amend } from '../../store/lanes.ts'
+import { builderRan, putPlan } from '../../store/plans.ts'
+import { record as signal } from '../../store/signals.ts'
 import { narrow } from '../rails.ts'
 import { unanswered } from '../ready.ts'
 import { plan, world } from './world.ts'
@@ -11,25 +15,17 @@ const PATH = 'src/hello.ts'
 test('#284: a fixer or orchestrator run is never read as a build', () => {
   const { db } = world()
   for (const seat of ['fixer', 'orchestrator']) {
-    db.prepare(`INSERT OR IGNORE INTO rules (id, kind, path, content_hash, loaded_at)
-      VALUES (?, 'card', 'rules/roster.yaml', ?, '2026-09-22T00:00:00.000Z')`).run(seat, HASH)
+    addRule(db, { id: seat, kind: 'card', path: 'rules/roster.yaml', content_hash: HASH, loaded_at: '2026-09-22T00:00:00.000Z' })
   }
-  db.prepare("INSERT INTO plans (id, pipe_id, target_id, template, state, queued_at, step, retries) VALUES (2, 1, 1, 'pr_path', 'queued', ?, 2, 0)")
-    .run(new Date().toISOString())
-  db.prepare('UPDATE plans SET step = 2 WHERE id = 1').run()
+  putPlan(db, { id: 2, pipe_id: 1, target_id: 1, template: 'pr_path', state: 'queued', queued_at: new Date().toISOString(), step: 2, retries: 0 })
+  amend(db, 1, { step: 2 })
   for (const id of [1, 2]) record(db, id, [{ path: PATH, is_new: false }])
-  db.prepare(`INSERT INTO signals (repo, pr, kind, author, at, external_id, score, plan)
-    VALUES ('acme/widget', 7, 'bot_review', 'greptile[bot]', ?, 'low', 1, 1)`).run(new Date().toISOString())
+  signal(db, { repo: 'acme/widget', pr: 7, kind: 'bot_review', author: 'greptile[bot]', at: new Date().toISOString(), external_id: 'low', score: 1, plan: 1 })
   const reads = (): unknown[] =>
     [builderRan(db, 1), narrow(db, plan(db, 1)), unanswered(db, 1), sharing(db, 1), building(db, 2, [PATH])]
   const before = reads()
   for (const id of [1, 2]) {
-    for (const seat of ['fixer', 'orchestrator']) {
-      db.prepare(`INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort,
-        input_tokens, cache_read_tokens, output_tokens, seconds, exit, at, transcript_path)
-        VALUES (?, 2, ?, ?, 'claude-agent-sdk', 'm', 'high', 0, 0, 0, 0, 0, '2999-01-01 00:00:00', 'x.transcript.jsonl')`)
-        .run(id, seat, HASH)
-    }
+    for (const seat of ['fixer', 'orchestrator']) runAt(db, id, 2, seat, '2999-01-01 00:00:00')
   }
   expect(reads()).toEqual(before)
 })

@@ -1,8 +1,10 @@
 import { expect, test } from 'vitest'
 import type { Provider } from '../../providers/kind.ts'
 import { returnToLane, retried } from '../../store/holds.ts'
+import { set } from '../../store/lanes.ts'
 import { clear, refused } from '../../store/refusals.ts'
 import { retry } from '../../store/plans.ts'
+import { backdate, setInputTokens, spentLately } from '../../store/runs.ts'
 import { unhold } from '../hold.ts'
 import { tick } from '../index.ts'
 import { approve, CARRIED, plan, stub, world, type World } from './world.ts'
@@ -14,7 +16,7 @@ test('a job past its token ceiling stops; a retry counts afresh', async () => {
   // The director's wake on the stopped plan is not one of the job's own model runs.
   const provider = stub(CARRIED, 0, undefined, (p) => { if (!p.transcript.includes('director')) fired += 1 })
   while (fired === 0) await tick(w.db, w.root, provider)
-  w.db.prepare('UPDATE runs SET input_tokens = 7000000').run()
+  setInputTokens(w.db, 7000000)
   const before = fired
   await tick(w.db, w.root, provider)
   expect(fired).toBe(before)
@@ -31,16 +33,16 @@ test('a job past its token ceiling stops; a retry counts afresh', async () => {
 async function stopped(): Promise<{ w: World; provider: (exit?: number) => Provider; seen: { fired: number } }> {
   const w = world()
   approve(w.db, w.target)
-  w.db.prepare("UPDATE settings SET value = '1500000' WHERE key = 'plan.token_ceiling'").run()
+  set(w.db, 'plan.token_ceiling', '1500000', 'pr', new Date().toISOString())
   const seen = { fired: 0 }
   const provider = (exit = 0): Provider =>
     stub(CARRIED, exit, undefined, (p) => { if (!p.transcript.includes('director')) seen.fired += 1 })
   while (seen.fired === 0) await tick(w.db, w.root, provider())
-  w.db.prepare('UPDATE runs SET input_tokens = 1500000').run()
+  setInputTokens(w.db, 1500000)
   await tick(w.db, w.root, provider())
   expect(seen.fired).toBe(1)
   expect(plan(w.db, 1).state).toBe('blocked_on_ceo')
-  w.db.prepare("UPDATE runs SET at = datetime('now', '-2 minutes')").run()
+  backdate(w.db)
   return { w, provider, seen }
 }
 
@@ -50,8 +52,7 @@ test('a return by coo starts the token count again', async () => {
   await tick(w.db, w.root, provider(1))
   expect(seen.fired).toBe(2)
 
-  w.db.prepare(`UPDATE runs SET input_tokens = 1500000, at = datetime('now', '+1 minute')
-    WHERE julianday(at) > julianday('now', '-1 minute')`).run()
+  spentLately(w.db, 1500000)
   await tick(w.db, w.root, provider())
   expect(seen.fired).toBe(2)
   expect(plan(w.db, 1).state).toBe('blocked_on_ceo')

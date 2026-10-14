@@ -5,8 +5,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { merge, render, rows, type Fix } from '../paydesk/fixlist.ts'
 import { live, providers } from '../paydesk/live.ts'
-import { prs } from '../paydesk/prs.ts'
-import { scan, type Net, type Scanned } from '../paydesk/scan.ts'
+import { prs, type Row } from '../paydesk/prs.ts'
+import { scan, type Net } from '../paydesk/scan.ts'
 import type { Cli } from './cf-lanes.ts'
 
 export function registerPaydesk(cf: Command, { root, out }: Cli): void {
@@ -48,7 +48,7 @@ function fixlist(scanFile: string, checks: string, dir: string): Fix[] {
     const n = /^(\d+)\.stderr$/.exec(name)?.[1]
     return n === undefined ? [] : rows(readFileSync(join(checks, name), 'utf8'), Number(n), join(checks, n))
   })
-  const fixes = merge(checked, JSON.parse(readFileSync(scanFile, 'utf8')) as Scanned[])
+  const fixes = merge(checked, JSON.parse(readFileSync(scanFile, 'utf8')) as Row[])
   mkdirSync(dir, { recursive: true })
   for (const fix of fixes) {
     writeFileSync(join(dir, `${String(fix.pr)}.md`), render(fix))

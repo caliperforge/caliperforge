@@ -170,12 +170,12 @@ function after(db: Db, root: string, plan: PlanRow): Outcome | null {
   return null
 }
 
-/** Why `After: #n` still holds, and the plan to wait on when one is open; null once #n has landed. */
+/** Why `After: #n` still holds, and the plan to wait on when one is open; null once #n has landed, or is done on a template that never pushes. */
 function unmet(db: Db, repo: string, n: number): { on: number | null; issue: string; why: string } | null {
-  const pred = db.prepare(`SELECT p.id, p.state, t.closed_at FROM plans p LEFT JOIN tickets t ON t.repo = ? AND t.number = ?
+  const pred = db.prepare(`SELECT p.id, p.state, p.template, t.closed_at FROM plans p LEFT JOIN tickets t ON t.repo = ? AND t.number = ?
     WHERE p.origin = ? ORDER BY p.id DESC LIMIT 1`).get(repo, n, `https://github.com/${repo}/issues/${String(n)}`) as
-    { id: number; state: PlanRow['state']; closed_at: string | null } | undefined
-  if (pred?.state === 'done' && landed(db, pred.id)) return null
+    { id: number; state: PlanRow['state']; template: PlanRow['template']; closed_at: string | null } | undefined
+  if (pred?.state === 'done' && (landed(db, pred.id) || !mapOf(pred.template).steps.some((s) => s.name === 'push'))) return null
   const part = pred?.state === 'done' ? unlanded(db, pred.id) : null
   const on = part === null ? pred : { ...part, closed_at: pred?.closed_at ?? null }
   const issue = part === null ? `#${String(n)}` : `#${String(originIssue(part))}`

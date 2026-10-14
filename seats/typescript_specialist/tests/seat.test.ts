@@ -85,7 +85,7 @@ test('D1: What to check opens the prompt with TypeScript checks', () => {
 
 test('D4: the seat resolves a ref and runs no other look', () => {
   const { manifest, prompt } = seat(root, 'typescript_specialist')
-  const p = packet(manifest, prompt, '', '', root, join(root, 'x.transcript.jsonl'))
+  const p = packet(manifest, prompt, '', '', root, join(root, 'x.transcript.jsonl'), true)
   const ran = (command: string) =>
     gate(p, { hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command } } as never)
   expect(ran('cf look gh pashov/skills ref main')).toEqual({ continue: true })

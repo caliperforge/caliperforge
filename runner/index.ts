@@ -30,7 +30,7 @@ export function real(path: string): string {
 }
 
 /** A stranger's npm scripts never run on this host (sequencer/rails.ts); their fork CI is their check. */
-const OURS_ONLY = 'Bash(npm '
+const OURS_ONLY = ['Bash(npm ', 'Bash(cf ']
 
 export function packet(manifest: Seat, prompt: string, spec: string, issue: string, cwd: string,
   transcript: string, ours = false, fence: string[] = manifest.write_paths): Packet {
@@ -40,7 +40,7 @@ export function packet(manifest: Seat, prompt: string, spec: string, issue: stri
     transcript,
     model: manifest.model,
     effort: manifest.effort,
-    tools: ours ? manifest.tools : manifest.tools.filter((t) => !t.startsWith(OURS_ONLY)),
+    tools: ours ? manifest.tools : manifest.tools.filter((t) => !OURS_ONLY.some((o) => t.startsWith(o))),
     refuse: (path) => refuse(cwd, fence, path, ours),
   }
 }

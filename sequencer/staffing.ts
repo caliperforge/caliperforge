@@ -4,7 +4,7 @@ import { parse } from 'yaml'
 import { z } from 'zod'
 
 const Row = z.object({
-  template: z.enum(['pr_path', 'comms']),
+  template: z.enum(['pr_path', 'comms', 'bench']),
   step: z.number().int().min(0),
   key: z.string().optional(),
   seat: z.string(),

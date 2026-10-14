@@ -1,34 +1,81 @@
+import { execFileSync } from 'node:child_process'
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, posix } from 'node:path'
 import { parseDocument, stringify } from 'yaml'
 import { z } from 'zod'
-import { gh, type Read, WINDOW } from '../cli/gh.ts'
+import type { Read } from '../cli/gh.ts'
 import { type Net, scan, type Scanned } from './scan.ts'
 
 const REPO = 'solana-foundation/pay-skills'
+const PAGE = 100
 
-const Open = z.array(z.object({ number: z.int(), headRefOid: z.string(), files: z.array(z.object({ path: z.string() })) }))
+const Open = z.array(z.object({ number: z.int(), headRefOid: z.string() }))
+const Files = z.array(z.object({ filename: z.string() }))
 const Tree = z.object({ tree: z.array(z.object({ path: z.string(), type: z.string(), sha: z.string() })) })
 const Blob = z.object({ content: z.string() })
 const Doc = z.record(z.string(), z.unknown())
 const Spec = z.object({ openapi: z.object({ path: z.string() }) })
 
-export async function prs(root: string, out: string, cards: string | undefined, net: Net, read: Read = gh):
-  Promise<{ prs: number; listings: Scanned[]; skipped: number[] }> {
+export interface Unfetched { pr: number; unfetched: string }
+export type Row = Scanned | Unfetched
+
+const buffered: Read = (args) => JSON.parse(execFileSync('gh', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })) as unknown
+
+export async function prs(root: string, out: string, cards: string | undefined, net: Net, raw: Read = buffered):
+  Promise<{ prs: number; listings: Scanned[]; unfetched: Unfetched[]; skipped: number[] }> {
+  const read = retried(raw)
   const base = join(root, '.cf', 'paydesk', 'prs')
   rmSync(base, { recursive: true, force: true })
-  const open = Open.parse(read(['pr', 'list', '--repo', REPO, '--state', 'open', '--limit', String(WINDOW), '--json', 'number,headRefOid,files']))
+  const open = Open.parse(read(['pr', 'list', '--repo', REPO, '--state', 'open', '--limit', '1000', '--json', 'number,headRefOid']))
   const folders: string[] = []
+  const unfetched: Unfetched[] = []
   const skipped: number[] = []
   for (const pr of open) {
-    const blobs = new Map(Tree.parse(read(['api', `repos/${REPO}/git/trees/${pr.headRefOid}?recursive=1`])).tree
-      .filter((e) => e.type === 'blob').map((e) => [e.path, e.sha]))
-    const dirs = [...blobs.keys()].filter((p) => posix.basename(p) === 'PAY.md').map((p) => posix.dirname(p))
-      .filter((d) => pr.files.some((f) => f.path.startsWith(`${d}/`)))
+    const got = await Promise.resolve().then(() => listed(pr.number, pr.headRefOid, read))
+      .catch((e: unknown): Unfetched => ({ pr: pr.number, unfetched: e instanceof Error ? e.message : String(e) }))
+    if ('unfetched' in got) {
+      unfetched.push(got)
+      continue
+    }
+    const dirs = [...got.blobs.keys()].filter((p) => posix.basename(p) === 'PAY.md').map((p) => posix.dirname(p))
+      .filter((d) => got.files.some((f) => f.startsWith(`${d}/`)))
     if (dirs.length === 0) skipped.push(pr.number)
-    for (const d of dirs) folders.push(fetched(join(base, String(pr.number)), pr.number, d, blobs, read))
+    for (const d of dirs) folders.push(fetched(join(base, String(pr.number)), pr.number, d, got.blobs, read))
   }
-  return { prs: open.length, listings: await scan(folders, out, cards, net), skipped }
+  const listings = await scan(folders, undefined, cards, net)
+  writeFileSync(out, JSON.stringify([...listings, ...unfetched], null, 2))
+  if (cards !== undefined) {
+    for (const u of unfetched) writeFileSync(join(cards, `pr-${String(u.pr)}.md`), `## #${String(u.pr)}: files not fetched\n\n${u.unfetched}\n`)
+  }
+  return { prs: open.length, listings, unfetched, skipped }
+}
+
+function retried(read: Read): Read {
+  return (args) => {
+    try {
+      return read(args)
+    } catch (e) {
+      if (!/HTTP 5\d\d/.test(String(e))) throw e
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1000)
+      return read(args)
+    }
+  }
+}
+
+function listed(pr: number, head: string, read: Read): { files: string[]; blobs: Map<string, string> } {
+  const files = changed(pr, read)
+  const blobs = new Map(Tree.parse(read(['api', `repos/${REPO}/git/trees/${head}?recursive=1`])).tree
+    .filter((e) => e.type === 'blob').map((e) => [e.path, e.sha]))
+  return { files, blobs }
+}
+
+function changed(pr: number, read: Read): string[] {
+  const files: string[] = []
+  for (let p = 1; ; p++) {
+    const page = Files.parse(read(['api', `repos/${REPO}/pulls/${String(pr)}/files?per_page=${String(PAGE)}&page=${String(p)}`]))
+    files.push(...page.map((f) => f.filename))
+    if (page.length < PAGE) return files
+  }
 }
 
 function fetched(into: string, pr: number, dir: string, blobs: Map<string, string>, read: Read): string {

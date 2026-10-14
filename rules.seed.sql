@@ -97,5 +97,5 @@ VALUES
   ('swift_specialist', 'card', 'rules/roster/swift_specialist.yaml', 'e82952d468c6fc4e19ae0a8d1e32a0f6d8867fa635c7d9c0b666dc029d1dc6a3', '2026-09-23'),
   ('text_review', 'card', 'rules/roster/text_review.yaml', '1fdabb7364e8a38ff71a59296d2d893746bc8b2cd3d79c969fc3e13dcb64c611', '2026-09-27'),
   ('typescript_specialist', 'card', 'rules/roster/typescript_specialist.yaml', '13099aba8dbc98e3f6877c691685a035451f0b6492072711b9eab524a0fec252', '2026-09-17'),
-  ('web_specialist', 'card', 'rules/roster/web_specialist.yaml', 'cce2eb79d2c0adb44750c2efd83df3d3528ef6f93c2e33b6bba5c29d0f42a0dc', '2026-10-04'),
+  ('web_specialist', 'card', 'rules/roster/web_specialist.yaml', '98043cc10380f84790c4c973b1724af9b929404759dfcded2dab893798359425', '2026-10-04'),
   ('writer', 'card', 'rules/roster/writer.yaml', '3296261439073faf44d291efe74b0f2964e936137b65edd64fda7126eb156008', '2026-09-27');

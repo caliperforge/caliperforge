@@ -2,7 +2,7 @@ import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import type { Db } from '../../store/index.ts'
-import { dial, enable } from '../../store/lanes.ts'
+import { dial } from '../../store/lanes.ts'
 import { allPlans, pipeNamed, planById, putPlan, type PlanRow } from '../../store/plans.ts'
 import { dry } from '../index.ts'
 import { route } from '../next.ts'
@@ -29,9 +29,8 @@ test('the bench map lists checkout, generate, score', () => {
   expect(mapOf('bench').steps.map((s) => s.name)).toEqual(['checkout', 'generate', 'score'])
 })
 
-test('an enabled bench pipe routes its plan to step 0', () => {
+test('the bench pipe routes its plan to step 0', () => {
   const db = fresh(schema)
-  enable(db, Number(pipeNamed(db, 'bench')?.id), true)
   dial(db, 3, AT)
   queued(db, 'bench')
   expect(dry(db, OPENS).would).toContainEqual({ pipe: 'bench', plan: 1, step: 0, template: 'bench' })

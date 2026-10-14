@@ -38,6 +38,7 @@ export const Profile = z.strictObject({
     python3: z.array(z.string()).optional(),
     excused: z.array(z.string()).optional(),
   }).optional(),
+  finish: z.record(z.string(), z.array(z.string()).min(1)).optional(),
   greptile_files: z.array(z.string()).optional(),
 })
 

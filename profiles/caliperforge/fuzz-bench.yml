@@ -9,3 +9,5 @@ commands:
   python3:
     - -m
     - pytest
+finish:
+  euler-earn: [forge, test, --root, targets/euler-earn]

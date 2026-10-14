@@ -13,7 +13,7 @@ import { addRule, type Db } from '../../store/index.ts'
 import { dropPlan, pipeOf } from '../../store/plans.ts'
 import { profile } from '../../store/profile.ts'
 import { verdictRows } from '../../store/verdict.ts'
-import { checks, excluded, mode, npm, type Ran, type Run } from '../checks.ts'
+import { checks, excluded, finish, mode, npm, type Ran, type Run } from '../checks.ts'
 import { ciFeatures, formatLine, type Outside, recipes } from '../gates.ts'
 import { tick } from '../index.ts'
 import { capped, faulted, narrow } from '../rails.ts'
@@ -326,6 +326,46 @@ test('1157b D2 a red forge test or pytest refuses naming it', () => {
     expect(checked(failed, '').message.startsWith(red)).toBe(true)
   }
 })
+
+const EULER = profile(REPO, 'caliperforge/fuzz-bench')?.finish ?? {}
+
+test('1181b D1 D2 finish runs in order and stops at the first red', () => {
+  const src = tree(FOUNDRY)
+  const green = recorder()
+  expect(finish(src, { ...EULER, b: ['node', 'b'] }, green.run)).toBeNull()
+  expect(green.seen).toEqual(['test --root targets/euler-earn', 'b'])
+
+  const red = recorder('test --root targets/euler-earn')
+  expect(finish(src, { ...EULER, b: ['node', 'b'] }, red.run))
+    .toEqual({ script: 'finish', command: 'forge test --root targets/euler-earn', code: '2', output: 'boom', tests: [], retried: false })
+  expect(red.seen).toEqual(['test --root targets/euler-earn'])
+})
+
+test('1181b D6 no finish entries run nothing', () => {
+  const none = recorder()
+  expect(finish(tree(FOUNDRY), {}, none.run)).toBeNull()
+  expect(none.seen).toEqual([])
+})
+
+/** Our own plan at step 3 with `argv` as its profile's one finish entry. */
+async function finished(argv: string): Promise<{ w: World; fired: Awaited<ReturnType<typeof tick>>[number] | undefined }> {
+  const w = mine(GREEN)
+  appendFileSync(join(w.root, 'profiles', 'caliperforge', 'caliperforge.yml'), `finish: { x: ${argv} }\n`)
+  for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  return { w, fired: (await tick(w.db, w.root, stub(CARRIED)))[0] }
+}
+
+test('1181b D2 a red finish entry refuses at step 3', async () => {
+  const { w, fired } = await finished("[node, -e, 'process.exit(4)']")
+  expect(fired).toMatchObject({ plan: ID, step: 3, outcome: 'refuse', spans: ['checks:finish'], note: 'node -e process.exit(4) exit 4' })
+  expect(plan(w.db, ID).step).toBe(2)
+  expect(last(w.db, ID)).toMatchObject({ outcome: 'refuse', rail_id: 'checks' })
+}, SLOW)
+
+test('1181b D1 a green finish entry reaches step 4', async () => {
+  const { w } = await finished("[node, -e, 'process.exit(0)']")
+  expect(plan(w.db, ID).step).toBe(4)
+}, SLOW)
 
 test('npm ci runs for a lock without node_modules, and can refuse', () => {
   const files = { 'package.json': pkg({ test: 'vitest run' }), 'package-lock.json': '{}' }

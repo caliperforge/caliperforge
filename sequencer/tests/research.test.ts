@@ -158,6 +158,22 @@ test('gather D4: a reply with no fence is refused', async () => {
   expect(maybe(w.root, 1, 'answer.md')).toBeNull()
 })
 
+test('gather D2: a ``` wrapped fence passes, answer.md unwrapped', async () => {
+  const w = researching()
+  question(w.root, plan(w.db, 1))
+  const [outcome] = await gathered(w, `${FOUND.replace('\n---\nsources:', '\n```yaml\n---\nsources:')}\`\`\`\n`)
+  expect(outcome).toMatchObject({ outcome: 'pass' })
+  expect(maybe(w.root, 1, 'answer.md')).toBe(`The cap is 3 [source:1].${SECTIONS}`)
+})
+
+test('gather D6: the prompt carries refusal.md when present', async () => {
+  const w = researching()
+  question(w.root, plan(w.db, 1))
+  expect((await gathered(w))[1]).not.toContain('# Refused')
+  put(w.root, 1, 'refusal.md', 'step 1 gather refused: line 5')
+  expect((await gathered(w))[1]).toContain('# Refused — fix what this names\n\nstep 1 gather refused: line 5')
+})
+
 test('D4: a senior_review refuse sends the plan back to gather', async () => {
   const w = researching()
   for (let n = 0; n < 4; n += 1) await tick(w.db, w.root, seats(FOUND, REFUSE))

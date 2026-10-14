@@ -18,7 +18,7 @@ it('D6 0101 keeps plans rows, views, triggers and indexes', () => {
     VALUES (1, 'pr_path', 'blocked_on_ceo', '2026-10-01', 3, 'uniswap', 'python_specialist',
       'https://github.com/caliperforge/v4-hook-index/issues/1', 't', 'ceo', 'why', '2026-10-20')`).run()
   const before = db.prepare('SELECT * FROM plans').all()
-  expect(migrate(db, join(root, 'schema'))).toEqual(['0101_bench_lane.sql', '0102_bench_scorecard.sql'])
+  expect(migrate(db, join(root, 'schema'))).toEqual(['0101_bench_lane.sql', '0102_bench_scorecard.sql', '0103_bench_template.sql'])
   expect(db.prepare('SELECT * FROM plans').all()).toEqual(before)
   expect(() => db.prepare('SELECT * FROM outcomes').all()).not.toThrow()
   expect(() => db.prepare('SELECT * FROM queue_order').all()).not.toThrow()

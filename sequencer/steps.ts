@@ -8,6 +8,7 @@ import type { Db } from '../store/index.ts'
 import { partsOf } from '../store/parts.ts'
 import { holder, waitsFor } from '../store/slot.ts'
 import { builderRan, held, internal, needsCeo, originIssue, originRef, waiting, type PlanRow, type Wait } from '../store/plans.ts'
+import { steps as bench } from '../templates/bench.ts'
 import { capture, desk, facts, gather, pack, score, steps as comms } from '../templates/comms.ts'
 import { at, last, steps, type Step } from '../templates/pr-path.ts'
 import { question, record, steps as research } from '../templates/research.ts'
@@ -48,6 +49,7 @@ const MAPS: Record<PlanRow['template'], StepMap> = {
   /** templates/comms.ts and templates/research.ts import back into this module through sequencer/seat.ts, so their steps may not exist yet when this one loads. */
   get comms() { return listed('comms', comms) },
   get research() { return listed('research', research) },
+  bench: listed('bench', bench),
 }
 
 export function mapOf(template: PlanRow['template']): StepMap {

@@ -4,6 +4,7 @@ import { query, type HookInput, type SDKMessage, type SDKRateLimitInfo, type SDK
 import type { Reading } from '../../store/lanes.ts'
 import { credential } from '../credential.ts'
 import { bare, type Fired, type Packet, type Provider } from '../kind.ts'
+import { ghWrite } from './gh.ts'
 
 const WRITES = new Set(['Write', 'Edit', 'NotebookEdit'])
 
@@ -199,17 +200,6 @@ function ranOutside(tools: string[], args: unknown): string | null {
   const patterns = tools.flatMap((tool) => RULE.exec(tool)?.[1] ?? [])
   if (!CHAINED.test(command) && patterns.some((pattern) => admits(pattern, command))) return null
   return `ruling:seat.tools refuses the command ${JSON.stringify(command)}`
-}
-
-function ghWrite(command: string): boolean {
-  const tokens = command.split(/\s+/)
-  if (tokens[0] !== 'gh') return false
-  if (tokens[1] !== 'api') return true
-  return tokens.slice(2).some((token, i, rest) => {
-    if (token === '-X' || token === '--method') return rest[i + 1] !== 'GET'
-    const method = /^(?:-X|--method=)(.+)$/.exec(token)?.[1]
-    return (method !== undefined && method !== 'GET') || /^(?:-f|-F|--(?:field|raw-field|input)(?:=|$))/.test(token)
-  })
 }
 
 function admits(pattern: string, command: string): boolean {

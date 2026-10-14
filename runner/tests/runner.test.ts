@@ -106,8 +106,11 @@ test('D2 D3 the gate admits a gh api read and denies its writes', () => {
   const p = held(['Read', 'Bash(gh api:*)'])
   expect(gate(p, bash('gh api repos/a/b/releases'))).toEqual({ continue: true })
   expect(gate(p, bash('gh api -X GET repos/a/b/pulls --paginate'))).toEqual({ continue: true })
+  expect(gate(p, bash('gh api -iXGET \'repos/a/b/pulls?state=all\''))).toEqual({ continue: true })
   for (const command of ['gh api -X POST repos/a/b/issues', 'gh api -XPOST repos/a/b/issues', 'gh api --method=PATCH repos/a/b',
-    'gh api repos/a/b/issues -f title=x', 'gh api repos/a/b -F n=1', 'gh api repos/a/b --raw-field=x=y', 'gh api repos/a/b --input body.json']) {
+    'gh api repos/a/b/issues -f title=x', 'gh api repos/a/b -F n=1', 'gh api repos/a/b --raw-field=x=y', 'gh api repos/a/b --input body.json',
+    'gh api repos/a/b/issues \'-f\' title=x', 'gh api repos/a/b/issues "-XPOST"', 'gh api -iXPOST repos/a/b/issues', 'gh api -iF n=1 repos/a/b/issues',
+    'gh api repos/a/b/issues {-f,title=x}', 'gh api repos/a/b/issues \\-f title=x']) {
     expect(gate(p, bash(command))).toMatchObject(denied)
   }
 })

@@ -99,6 +99,16 @@ test('1181b D4 a red-rail bench plan lists no finish row', () => {
   expect(checked(db, REPO, plan, src, LEAK)).toEqual({ checks: '- none\n\nNo gate ran for:\n- tests/test_smoke_leak.py' })
 })
 
+const SCRIPT = '--- a/main.ts\n+++ b/main.ts\n@@ -1,1 +1,1 @@\n+x\n'
+
+test('1156b D7 a green site plan lists its tsc gate', () => {
+  const { db, plan } = target(['main.ts'], 'pass', SCRIPT)
+  const src = mkdtempSync(join(tmpdir(), 'cf-note-'))
+  writeFileSync(join(src, 'tsconfig.json'), '{}')
+  const site: PlanRow = { ...plan, target_id: null, lane: 'site', seat: 'web_specialist', origin: 'https://github.com/caliperforge/site/issues/1' }
+  expect(checked(db, REPO, site, src, SCRIPT)).toEqual({ checks: '- typescript | . | npm exec --no -- tsc --noEmit | pass' })
+})
+
 test('D6 no seat language and no gate, no section', () => {
   const { db, plan } = target(['docs/paykit-interface.md'])
   expect(checked(db, REPO, plan, paykit(), '--- a/docs/paykit-interface.md\n+++ b/docs/paykit-interface.md\n@@ -1,1 +1,1 @@\n+x\n')).toEqual({})

@@ -20,19 +20,23 @@ export function assess(probe: Probe, declaredUsd: number | null, serviceHost: st
   if ('error' in probe) return { verdict: 'unreachable', issues: [probe.error], ...none }
   if (probe.status !== 402) return { verdict: 'no_402', issues: [`HTTP ${String(probe.status)}`], ...none }
   const { offers } = probe.offers
-  const usable = offers.filter((o) => o.network === SOLANA && STABLES.includes(o.coin))
-  if (usable.length === 0) return { verdict: 'fail', issues: [unusable(offers)], ...none }
-  const prices = priced(usable)
+  const paid = usable(offers)
+  if (paid.length === 0) return { verdict: 'fail', issues: [unusable(offers)], ...none }
+  const prices = priced(paid)
   const quotedUsd = prices.length === 0 ? null : Math.min(...prices)
-  const issues = issuesOf(probe, usable, declaredUsd, quotedUsd, serviceHost)
+  const issues = issuesOf(probe, paid, declaredUsd, quotedUsd, serviceHost)
   return {
     verdict: issues.every((i) => i === UNDECLARED || i === HEADER_ONLY) ? 'ok' : 'warn',
     issues,
-    protocols: distinct(usable.map((o) => o.proto)),
+    protocols: distinct(paid.map((o) => o.proto)),
     quotedUsd,
     declaredUsd,
-    coins: distinct(usable.map((o) => o.coin)),
+    coins: distinct(paid.map((o) => o.coin)),
   }
+}
+
+export function usable(offers: Offer[]): Offer[] {
+  return offers.filter((o) => o.network === SOLANA && STABLES.includes(o.coin))
 }
 
 function unusable(offers: Offer[]): string {

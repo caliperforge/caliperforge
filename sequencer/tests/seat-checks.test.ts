@@ -74,8 +74,8 @@ test('1181a D4 a green fuzz-bench plan lists its python gates', () => {
   writeFileSync(join(src, 'tests', 'test_smoke_leak.py'), '')
   const bench: PlanRow = { ...plan, target_id: null, lane: 'bench', seat: 'solidity_specialist', origin: 'https://github.com/caliperforge/fuzz-bench/issues/1' }
   const env = 'uv run --no-project --with ruff --with pyright --with pytest'
-  expect(checked(db, bench, src, LEAK)).toEqual({ checks: ['ruff check', 'pyright', 'python -m pytest']
-    .map((c) => `- python | . | ${env} ${c} tests/test_smoke_leak.py | pass`).join('\n') })
+  expect(checked(db, bench, src, LEAK)).toEqual({ checks: ['ruff check tests/test_smoke_leak.py', 'pyright tests/test_smoke_leak.py', 'python -m pytest']
+    .map((c) => `- python | . | ${env} ${c} | pass`).join('\n') })
 })
 
 test('D6 no seat language and no gate, no section', () => {

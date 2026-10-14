@@ -132,15 +132,14 @@ function own(src: string, outside: Outside, excused: string[]): Gate[] {
 /** One throwaway environment for all three, so pyright resolves `import pytest`. */
 const ENV = ['run', '--no-project', '--with', 'ruff', '--with', 'pyright', '--with', 'pytest']
 
-/** `python -m pytest`, unlike `pytest`, puts the root on `sys.path`, so a listed test imports the tree from there. */
+/** `python -m pytest`, unlike `pytest`, puts the root on `sys.path`, so the whole suite imports the tree from there. */
 function loose(src: string, files: string[]): Gate[] {
   const py = files.filter((f) => f.endsWith('.py') && existsSync(join(src, f)))
   if (py.length === 0) return []
-  const tests = py.filter((f) => f.startsWith('tests/'))
   return [
     { script: 'lint', bin: 'uv', args: [...ENV, 'ruff', 'check', ...py], dir: '' },
     { script: 'typecheck', bin: 'uv', args: [...ENV, 'pyright', ...py], dir: '' },
-    ...(tests.length === 0 ? [] : [{ script: 'test', bin: 'uv', args: [...ENV, 'python', '-m', 'pytest', ...tests], dir: '' }]),
+    { script: 'test', bin: 'uv', args: [...ENV, 'python', '-m', 'pytest'], dir: '' },
   ]
 }
 

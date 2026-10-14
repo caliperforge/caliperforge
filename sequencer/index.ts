@@ -22,7 +22,7 @@ import { logged } from '../store/events.ts'
 import { slack } from '../cli/flow.ts'
 import { ceilinged, stepped } from './settle.ts'
 import { closing } from './wave.ts'
-import { ripe } from './site.ts'
+import { ripe, sitedata } from './site.ts'
 
 /**
  * `read`, `wire` and `labels` are the network a tick touches on its own account; each is injected so a test can drive a lap
@@ -41,6 +41,7 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
     stuck(db, root, registry, now)
     sunday(db, root, now)
     if (registry.some((e) => e.name === 'paydesk_live')) await paydesk(db, root, now)
+    if (registry.some((e) => e.name === 'site_data')) sitedata(db, root, now)
   }
   if (labels !== undefined) (lines ?? []).push(...intake(db, root, labels), ...refill(db, root, labels, now))
   reap(root, terminal(db))

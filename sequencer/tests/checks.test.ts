@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { expect, test } from 'vitest'
 import { unread } from '../../cli/inbox.ts'
+import { checked } from '../../rails/checks/index.ts'
 import { addRun } from '../../store/brief.ts'
 import { decisions } from '../../store/decisions.ts'
 import { runRows } from '../../store/events.ts'
@@ -288,6 +289,42 @@ test('a checkout with no package.json runs no command', () => {
   const none = recorder()
   expect(checks(tree({ 'readme.md': '# no scripts here\n' }), OWN, none.run)).toBeNull()
   expect(none.seen).toEqual([])
+})
+
+const BENCH = profile(REPO, 'caliperforge/fuzz-bench')?.commands ?? {}
+
+const FOUNDRY = { 'foundry.toml': '[profile.default]\n' }
+
+/** A shell recording each program, its args and where it ran, exiting non-zero for the `program args` that `red` names. */
+function binned(red?: string): { run: Run; bins: string[]; seen: string[]; cwds: string[] } {
+  const bins: string[] = []
+  const seen: string[] = []
+  const cwds: string[] = []
+  const run: Run = (...[args, cwd, bin = 'npm']) => {
+    bins.push(bin)
+    seen.push(args.join(' '))
+    cwds.push(cwd)
+    return `${bin} ${args.join(' ')}` === red ? { ok: false, code: '1', output: 'boom' } : { ok: true, output: '' }
+  }
+  return { run, bins, seen, cwds }
+}
+
+test('1157b D1 fuzz-bench runs forge build, test, then pytest', () => {
+  const src = tree(FOUNDRY)
+  const green = binned()
+  expect(checks(src, BENCH, green.run)).toBeNull()
+  expect([green.bins, green.seen]).toEqual([['forge', 'forge', 'python3'], ['build', 'test', '-m pytest']])
+  expect(new Set(green.cwds)).toEqual(new Set([src]))
+})
+
+test('1157b D2 a red forge test or pytest refuses naming it', () => {
+  for (const [red, script, seen] of [['forge test', 'test', ['build', 'test']], ['python3 -m pytest', 'pytest', ['build', 'test', '-m pytest']]] as const) {
+    const shell = binned(red)
+    const failed = checks(tree(FOUNDRY), BENCH, shell.run)
+    expect(failed).toMatchObject({ script, command: red, code: '1' })
+    expect(shell.seen).toEqual(seen)
+    expect(checked(failed, '').message.startsWith(red)).toBe(true)
+  }
 })
 
 test('npm ci runs for a lock without node_modules, and can refuse', () => {

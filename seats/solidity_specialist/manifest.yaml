@@ -18,3 +18,9 @@ write_paths:
   - sample
   - test
   - index
+  - caliperforge/fuzz-bench:src
+  - caliperforge/fuzz-bench:bench
+  - caliperforge/fuzz-bench:smoke
+  - caliperforge/fuzz-bench:targets
+  - caliperforge/fuzz-bench:tests
+  - caliperforge/fuzz-bench:suites

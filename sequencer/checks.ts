@@ -73,12 +73,12 @@ export function checks(src: string, given: Commands, run: Run = npm, narrow: str
   if (parsed !== null) return parsed
   const bin = mode(src)
   if (bin === 'xcodebuild') excluded(src)
-  for (const [script, args] of commands(src, given, narrow)) {
-    const first = run(args, src, bin)
+  for (const [script, args, program = bin] of commands(src, given, narrow)) {
+    const first = run(args, src, program)
     if (first.ok) continue
     const retried = loadOnly(first.output) || (bin === 'xcodebuild' && exitedOutside(src, first.output, touched))
-    const last = retried ? run(alone(first.output, read(src)?.[script] ?? '', args), src, bin) : first
-    if (!last.ok) return { script, command: `${bin} ${args.join(' ')}`, code: last.code, output: tail(last.output), tests: entries(src, last.output), retried,
+    const last = retried ? run(alone(first.output, read(src)?.[script] ?? '', args), src, program) : first
+    if (!last.ok) return { script, command: `${program} ${args.join(' ')}`, code: last.code, output: tail(last.output), tests: entries(src, last.output), retried,
       ...faultOf(bin, last.output), ...cappedOf(bin, last) }
   }
   return null
@@ -189,11 +189,14 @@ function alone(output: string, script: string, args: string[]): string[] {
 /** A test script that is vitest takes `related`; anything else is run whole, narrow list or not. */
 const VITEST = /(^|\s)vitest(\s|$)/
 
-function commands(src: string, given: Commands, narrow: string[]): [string, string[]][] {
+function commands(src: string, given: Commands, narrow: string[]): [string, string[], string?][] {
   if (project(src) !== null) return given.xcodebuild === undefined ? [] : [['test', given.xcodebuild]]
   if (mode(src) === 'gradle') return [['check', GRADLE]]
   const scripts = read(src)
-  if (scripts === null) return []
+  if (scripts === null) {
+    return [...(given.forge ?? []).map((s): [string, string[], string] => [s, [s], 'forge']),
+      ...(given.python3 === undefined ? [] : [['pytest', given.python3, 'python3'] as [string, string[], string]])]
+  }
   const named = (given.npm ?? []).filter((s) => scripts[s] !== undefined)
   return [
     ...(bare(src) ? [['ci', ['ci']] as [string, string[]]] : []),

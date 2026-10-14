@@ -1,12 +1,11 @@
 import { filesOf } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
-import { internal, planById, type PlanRow } from '../store/plans.ts'
+import { internal, type PlanRow } from '../store/plans.ts'
 import { FORK, languageOf } from './workspace.ts'
 import { homeOf, kernelPlan } from './home.ts'
 import { languageOfSeat } from '../templates/pr-path.ts'
 
-/** The manifest entry that says a seat's fence is the file list the brief settled, not a directory. */
-export const BRIEF_FILES = 'brief:files'
+export { BRIEF_FILES, fenceFor } from './fence.ts'
 
 /**
  * Which builder a plan gets; a part of an outside plan goes by its own files, as the outside plan does. The kernel's own repo is TypeScript; another repo of ours is what its tree is written in, and an empty one goes by its `BY_REPO` language, then the plan's seat unless `bySeat` is false, as for the gates. On a stranger's repo the brief's files decide: all
@@ -84,12 +83,4 @@ export function majority(paths: string[], repo = ''): string | null {
   for (const { language } of counted) tally.set(language, (tally.get(language) ?? 0) + 1)
   const top = Math.max(0, ...tally.values())
   return known.find((k) => tally.get(k.language) === top)?.language ?? null
-}
-
-/** The paths a seat may write: its manifest's, or the brief's files, a listed test admitting its test folder, where the manifest says so or the plan is an outside one. */
-export function fenceFor(db: Db, plan: number, writePaths: string[]): string[] {
-  const brief = writePaths.includes(BRIEF_FILES) || (writePaths.length > 0 && planById(db, plan).target_id !== null)
-  if (!brief) return writePaths
-  const paths = filesOf(db, plan).map((f) => f.path)
-  return [...new Set([...paths, ...paths.flatMap((p) => /^(?:[^/]*\/)*?(?:[Tt]ests?|spec|__tests__)(?=\/)/.exec(p)?.[0] ?? [])])]
 }

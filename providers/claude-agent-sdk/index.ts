@@ -195,9 +195,21 @@ function ranOutside(tools: string[], args: unknown): string | null {
   if (given.run_in_background === true) return 'ruling:seat.tools refuses run_in_background: run it in the foreground and wait for it'
   const said = given.command
   const command = typeof said === 'string' ? said.trim() : ''
+  if (ghWrite(command)) return `ruling:seat.tools refuses ${JSON.stringify(command)}: gh runs only as a gh api GET read`
   const patterns = tools.flatMap((tool) => RULE.exec(tool)?.[1] ?? [])
   if (!CHAINED.test(command) && patterns.some((pattern) => admits(pattern, command))) return null
   return `ruling:seat.tools refuses the command ${JSON.stringify(command)}`
+}
+
+function ghWrite(command: string): boolean {
+  const tokens = command.split(/\s+/)
+  if (tokens[0] !== 'gh') return false
+  if (tokens[1] !== 'api') return true
+  return tokens.slice(2).some((token, i, rest) => {
+    if (token === '-X' || token === '--method') return rest[i + 1] !== 'GET'
+    const method = /^(?:-X|--method=)(.+)$/.exec(token)?.[1]
+    return (method !== undefined && method !== 'GET') || /^(?:-f|-F|--(?:field|raw-field|input)(?:=|$))/.test(token)
+  })
 }
 
 function admits(pattern: string, command: string): boolean {

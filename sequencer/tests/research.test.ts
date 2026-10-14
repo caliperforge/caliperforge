@@ -54,8 +54,8 @@ afterEach(() => { vi.unstubAllGlobals() })
 
 const SOURCES = JSON.stringify([{ url: 'https://a.example/doc', fetched_at: '2026-10-04T10:00:00Z', quote: 'The cap is 3.', claim: 'The cap is 3' }])
 
-const checked = (answer: string, sources = SOURCES): ReturnType<typeof check> => {
-  const w = researching()
+const checked = (answer: string, sources = SOURCES, ask = ASK): ReturnType<typeof check> => {
+  const w = researching(ask)
   put(w.root, 1, 'sources.json', sources)
   put(w.root, 1, 'answer.md', answer)
   return check(w.root, plan(w.db, 1))
@@ -232,4 +232,23 @@ test('record D5: a plan with no origin closes nothing', () => {
 
 test('check D6: an unsourced Still unknown sentence passes', async () => {
   expect(await checked(ANSWER)).toMatchObject({ outcome: 'pass' })
+})
+
+const RULES = '1. Severity High or Medium.\n2. Newest first.\n'
+
+test('check D1: a table header and separator are not claims', async () => {
+  expect(await checked('| Cap | Value |\n| :--- | ---: |\n\nThe cap is 3 [source:1].'))
+    .toMatchObject({ outcome: 'pass', note: '1 sentence(s) checked against 1 url(s)' })
+})
+
+test('check D2: rule lines quoted from the ask are not claims', async () => {
+  expect(await checked(`${RULES}\nThe cap is 3 [source:1].`, SOURCES, `${ASK}\n${RULES}`))
+    .toMatchObject({ outcome: 'pass', note: '1 sentence(s) checked against 1 url(s)' })
+  expect(await checked(`${RULES}\nIt never moves.`, SOURCES, `${ASK}\n${RULES}`))
+    .toMatchObject({ outcome: 'refuse', spans: ['research.unsourced'], note: 'no source for "It never moves."' })
+})
+
+test('check D3/D4: a data row and an ask near-copy are unsourced', async () => {
+  expect(await checked('| Rule | Seen |\n|---|---|\n| 1 | yes |\n1. Severity High or Low.', SOURCES, `${ASK}\n${RULES}`))
+    .toMatchObject({ outcome: 'refuse', spans: ['research.unsourced'], note: 'no source for "| 1 | yes |", "Severity High or Low."' })
 })

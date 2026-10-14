@@ -13,6 +13,8 @@
   # launchd's PATH (the plist) has no ~/.cargo/bin; without it every cargo call from a seat or step 3 is ENOENT (#204)
   PATH="$HOME/.cargo/bin:$PATH"
   export PATH
+  # foundryup installs forge, cast and anvil in ~/.foundry/bin, which launchd's PATH lacks: step 3's forge build is ENOENT without it
+  PATH="$HOME/.foundry/bin:$PATH"
   cd "$(dirname "$0")/.." || exit 1
   # Never FETCH_HEAD: this worktree shares its repo with every job's git, and on 09-25 a whole-remote fetch
   # landed between these two lines, so FETCH_HEAD's first line was a 09-22 branch. The tick checked it out,

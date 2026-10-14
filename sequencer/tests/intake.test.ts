@@ -11,7 +11,7 @@ import { pushedRow } from '../../store/deliverables.ts'
 import { ofKind, pointers } from '../../store/events.ts'
 import { addRule, type Db } from '../../store/index.ts'
 import { addPart, allParts } from '../../store/parts.ts'
-import { addPipe, addPlan, allPlans, laneOff, pipeNamed, type PlanRow } from '../../store/plans.ts'
+import { addPipe, addPlan, allPlans, dropPipes, laneOff, pipeNamed, type PlanRow } from '../../store/plans.ts'
 import { allTickets, recordListing } from '../../store/tickets.ts'
 import { question } from '../../templates/research.ts'
 import { intake } from '../capture.ts'
@@ -54,6 +54,7 @@ function canned(rows: Fixture[], log: string[] = [], closed: Fixture[] = []): Re
 
 function piped(enabled = 1): Db {
   const db = fresh(schema)
+  dropPipes(db, ['bench'])
   addPipe(db, { name: 'internal', enabled, window_start: '00:00', window_end: '23:59', max_concurrent: 1 })
   return db
 }
@@ -121,7 +122,9 @@ test('D4: an issue a part of a split names is not adopted', () => {
 })
 
 test('D4: a lane with its pipe off or missing is left unlisted', () => {
-  for (const db of [piped(0), fresh(schema)]) {
+  const bare = fresh(schema)
+  dropPipes(bare, ['bench'])
+  for (const db of [piped(0), bare]) {
     laneOff(db, Number(pipeNamed(db, 'research')?.id))
     const log: string[] = []
     intake(db, root, canned(TWO, log))
@@ -512,7 +515,7 @@ test('D6: a mend read that throws keeps the plan queued', () => {
 
 const ASKED = '**Question:** what is the cap?\n**Would be wrong if:** a page names another cap\n**Done when:** a quote names it'
 
-function researched(body = 'the ask'): PlanRow {
+function researched(body: string): PlanRow {
   const db = piped()
   intake(db, root, canned([{ number: 500, labels: ['lane:research'], body }]))
   const [plan] = allPlans(db)
@@ -527,9 +530,9 @@ test('D2: a research ticket queues on research; question passes', () => {
   expect(maybe(root, plan.id, 'question.json')).not.toBeNull()
 })
 
-test('D3: a research ticket without the lines refuses at step 0', () => {
-  const plan = researched()
-  expect(question(root, plan)).toEqual({ outcome: 'refuse', spans: ['ask.md'],
-    note: 'ask.md has no **Question:** or **Would be wrong if:** or **Done when:** line' })
-  expect(maybe(root, plan.id, 'question.json')).toBeNull()
+test('D3: a research ticket without the lines queues no plan', () => {
+  const db = piped()
+  expect(intake(db, root, canned([{ number: 500, labels: ['lane:research'], body: 'the ask' }]))).toEqual([])
+  expect(allPlans(db)).toEqual([])
+  expect(maybe(root, 1, 'ask.md')).toBeNull()
 })

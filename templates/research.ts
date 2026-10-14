@@ -90,12 +90,18 @@ const LINES = [['question', '**Question:**'], ['wrong_if', '**Would be wrong if:
 
 const askOf = (root: string, plan: PlanRow): string => maybe(root, plan.id, 'ask.md') ?? maybe(root, plan.id, 'issue.md') ?? ''
 
+const said = (ask: string) => {
+  const lines = ask.split('\n')
+  return LINES.map(([key, label]) => [key, label, lines.find((l) => l.startsWith(label))?.slice(label.length).trim() ?? ''] as const)
+}
+
+export const unasked = (ask: string): string[] => said(ask).filter(([, , rest]) => rest === '').map(([, label]) => label)
+
 export function question(root: string, plan: PlanRow): Outcome {
-  const lines = askOf(root, plan).split('\n')
-  const said = LINES.map(([key, label]) => [key, label, lines.find((l) => l.startsWith(label))?.slice(label.length).trim() ?? ''] as const)
-  const missing = said.filter(([, , rest]) => rest === '').map(([, label]) => label)
+  const ask = askOf(root, plan)
+  const missing = unasked(ask)
   if (missing.length > 0) return { outcome: 'refuse', spans: ['ask.md'], note: `ask.md has no ${missing.join(' or ')} line` }
-  put(root, plan.id, 'question.json', JSON.stringify(Object.fromEntries(said.map(([key, , rest]) => [key, rest]))))
+  put(root, plan.id, 'question.json', JSON.stringify(Object.fromEntries(said(ask).map(([key, , rest]) => [key, rest]))))
   return { outcome: 'pass', spans: [], note: 'question.json written' }
 }
 

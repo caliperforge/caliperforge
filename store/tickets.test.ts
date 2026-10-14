@@ -40,7 +40,7 @@ const schema = (): Db => fresh(join(import.meta.dirname, '..', 'schema'))
 test('lists open and closed issues per repo to the history limit', () => {
   const log: string[] = []
   backfillTickets(schema(), canned(LISTINGS, log))
-  expect(log).toEqual([SELF, ATELIER, 'caliperforge/v4-hook-index'].flatMap((repo) => ['open', 'closed'].map((state) =>
+  expect(log).toEqual([SELF, ATELIER, 'caliperforge/v4-hook-index', 'caliperforge/fuzz-bench'].flatMap((repo) => ['open', 'closed'].map((state) =>
     `issue list --repo ${repo} --state ${state} --limit 5000 --json number,title,body,url,labels,createdAt,closedAt,stateReason`)))
 })
 

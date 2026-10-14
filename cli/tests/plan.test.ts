@@ -60,16 +60,28 @@ test('a labelled issue files one queued row: lane, seat, origin', () => {
     template: 'pr_path', state: 'queued', priority: 1 }])
 })
 
+const ASKED = '**Question:** what is the cap?\n**Would be wrong if:** a page names another cap\n**Done when:** a quote names it'
+
 test('seat label beats lane template; lanes file on own templates', () => {
   const db = piped()
   const rows = [
     { ...ISSUE, number: 30, url: `${URL.slice(0, -2)}30`, labels: ['lane:comms', 'seat:kotlin_specialist'] },
-    { ...ISSUE, number: 31, url: `${URL.slice(0, -2)}31`, labels: ['lane:research'] },
+    { ...ISSUE, number: 31, url: `${URL.slice(0, -2)}31`, labels: ['lane:research'], body: ASKED },
   ]
   expect(add(db, root, 'caliperforge/caliperforge#30', 'ceo', 'internal', canned(rows)))
     .toMatchObject({ lane: 'comms', seat: 'kotlin_specialist' })
   expect(add(db, root, 'caliperforge/caliperforge#31', 'ceo', 'internal', canned(rows))).toMatchObject({ lane: 'research' })
   expect(allPlans(db).map((p) => p.template)).toEqual(['comms', 'research'])
+})
+
+test('D1 a research issue without the lines files nothing', () => {
+  const db = piped()
+  const filed = add(db, root, 'caliperforge/caliperforge#25', 'ceo', 'internal',
+    canned([{ ...ISSUE, labels: ['lane:research'], body: '**Question:** what is the cap?' }]))
+  expect(filed).toMatchObject({ state: 'refused', plan: null, origin: { origin_kind: 'ruling', origin_ref: 'plan.research_lines' },
+    why: 'caliperforge/caliperforge#25 has no **Would be wrong if:** or **Done when:** line' })
+  expect(allPlans(db)).toEqual([])
+  expect(allEvents(db)).toEqual([])
 })
 
 test('no lane label refuses with a ruling naming each label to add', () => {

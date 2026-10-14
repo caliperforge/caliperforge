@@ -11,11 +11,6 @@
   column: at
   where: actor = 'fixer'
   gap: 2d
-- name: fix_mode
-  table: runs
-  column: at
-  where: mode = 'fix'
-  gap: 7d
 - name: swift_review
   table: runs
   column: at

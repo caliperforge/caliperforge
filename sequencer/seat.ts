@@ -459,7 +459,7 @@ function referenced(src: string, issue: string): Pick<Bench, 'reference'> {
 }
 
 /**
- * Step 3 already ran the checkout's own checks on this diff, or on a stranger's repo its language's gates;
+ * Step 3 already ran the checkout's own checks on this diff, or its language's gates;
  * the reviewer is told so rather than reasoning its way to it. Read off the rail's row, never re-run, and
  * only while the diff is the one it judged.
  */
@@ -474,14 +474,13 @@ function gated(db: Db, plan: PlanRow, src: string, diff: string): Gated[] {
   const row = db.prepare(`SELECT outcome, subject_digest FROM verdicts WHERE plan = ? AND kind = 'rail' AND rail_id = 'checks'
     ORDER BY id DESC LIMIT 1`).get(plan.id) as { outcome: string; subject_digest: string } | undefined
   if (row?.outcome !== 'pass' || row.subject_digest !== createHash('sha256').update(diff).digest('hex')) return []
-  if (!internal(plan) || (plan.target_id === null && LANGUAGE[mode(src)] === undefined)) {
+  const language = internal(plan) ? LANGUAGE[mode(src)] : undefined
+  if (language === undefined) {
     const outside = outsideLanguage(languageFor(db, plan, src, false))
     if (outside === null) return []
     return gates(src, { language: outside, files: filesOf(db, plan.id).map((f) => f.path) })
       .map((g) => ({ language: outside, dir: g.dir, command: [g.bin, ...g.args].join(' ') }))
   }
-  const language = LANGUAGE[mode(src)]
-  if (language === undefined) return []
   const scope = narrow(db, plan).length > 0 ? 'the tests this plan\'s files reach' : 'the whole suite'
   return [{ language, dir: '', command: `every script the checkout names (${mode(src)}, ${scope})` }]
 }

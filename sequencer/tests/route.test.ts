@@ -120,6 +120,17 @@ test('1208 D4 ungated repo of ours goes by its files', () => {
   expect(languageFor(w.db, w.hooks, mkdtempSync(join(tmpdir(), 'cf-route-')), false)).toBe('python')
 })
 
+test('1181a D1 a fuzz-bench plan gates python, builds by its seat', () => {
+  const w = world()
+  putPlan(w.db, { id: 5, pipe_id: 1, target_id: null, template: 'pr_path', state: 'running', queued_at: '2026-09-21', step: 0, retries: 0,
+    lane: 'bench', seat: 'solidity_specialist', origin: 'https://github.com/caliperforge/fuzz-bench/issues/1' })
+  record(w.db, 5, listed(['bench/run_pair.py', 'tests/test_run_pair.py']))
+  const bench = planById(w.db, 5)
+  const src = mkdtempSync(join(tmpdir(), 'cf-route-'))
+  expect(languageFor(w.db, bench, src, false)).toBe('python')
+  expect(languageFor(w.db, bench, src)).toBe(languageOfSeat('solidity_specialist'))
+})
+
 test('our repo with a language goes by tree, not the plan\'s seat', () => {
   const w = world()
   const dir = mkdtempSync(join(tmpdir(), 'cf-route-'))

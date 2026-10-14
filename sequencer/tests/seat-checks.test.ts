@@ -56,24 +56,26 @@ test('D2 outside reviewer told its language gates ran', () => {
   expect(checked(db, plan, paykit(), DIFF)).toEqual({ checks: RUBY })
 })
 
-test('D3 no pass on this diff, or mode none, lists no gate', () => {
+test('D3 no pass on this diff lists no gate; mode none gates', () => {
   const red = target(['ruby/lib/pay_kit/config.rb'], 'refuse')
   expect(checked(red.db, red.plan, paykit(), DIFF)).toEqual({ checks: UNGATED })
   const { db, plan } = target(['ruby/lib/pay_kit/config.rb'], 'pass', `${DIFF}+y\n`)
   expect(checked(db, plan, paykit(), DIFF)).toEqual({ checks: UNGATED })
   const ours = target(['ruby/lib/pay_kit/config.rb'])
-  expect(checked(ours.db, { ...ours.plan, origin: 'https://github.com/acme/kit/issues/1' }, paykit(), DIFF)).toEqual({ checks: UNGATED })
+  expect(checked(ours.db, { ...ours.plan, origin: 'https://github.com/acme/kit/issues/1' }, paykit(), DIFF)).toEqual({ checks: RUBY })
 })
 
 const LEAK = '--- a/tests/test_smoke_leak.py\n+++ b/tests/test_smoke_leak.py\n@@ -1,1 +1,1 @@\n+x\n'
 
-test('1208 D5 a fuzz-bench plan lists its pytest gate', () => {
+test('1181a D4 a green fuzz-bench plan lists its python gates', () => {
   const { db, plan } = target(['smoke/check_leak.py', 'tests/test_smoke_leak.py'], 'pass', LEAK)
   const src = mkdtempSync(join(tmpdir(), 'cf-note-'))
   mkdirSync(join(src, 'tests'))
   writeFileSync(join(src, 'tests', 'test_smoke_leak.py'), '')
-  const bench = { ...plan, target_id: null, origin: 'https://github.com/caliperforge/fuzz-bench/issues/1' }
-  expect(checked(db, bench, src, LEAK)).toEqual({ checks: '- python | . | uv run --no-project --with pytest python -m pytest tests/test_smoke_leak.py | pass' })
+  const bench: PlanRow = { ...plan, target_id: null, lane: 'bench', seat: 'solidity_specialist', origin: 'https://github.com/caliperforge/fuzz-bench/issues/1' }
+  const env = 'uv run --no-project --with ruff --with pyright --with pytest'
+  expect(checked(db, bench, src, LEAK)).toEqual({ checks: ['ruff check tests/test_smoke_leak.py', 'pyright tests/test_smoke_leak.py', 'python -m pytest']
+    .map((c) => `- python | . | ${env} ${c} | pass`).join('\n') })
 })
 
 test('D6 no seat language and no gate, no section', () => {

@@ -113,6 +113,10 @@ function gated(src: string, list: Gate[], run: Run, excused: string[] = []): Fai
   return null
 }
 
+export function finish(src: string, entries: Record<string, string[]>, run: Run): Failure | null {
+  return gated(src, Object.values(entries).map(([bin = '', ...args]) => ({ script: 'finish', bin, args, dir: '' })), run)
+}
+
 function settled(gate: Gate, ran: Ran, excused: string[]): Ran {
   if (gate.quiet === true && ran.ok && ran.output.trim() !== '') return { ok: false, code: '1', output: ran.output }
   const spans = ran.ok ? [] : [...ran.output.matchAll(/`(-p [^`]+)`/g)].map((m) => m[1] ?? '')

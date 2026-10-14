@@ -19,7 +19,8 @@ command is refused, and so is one that chains, substitutes or redirects.
 Every command runs in the foreground; wait for it to finish, and answer only after it has.
 
 Raw, from the root: `uv run --directory <folder> pytest`, `uv run --directory <folder> ruff check`, `uv run
---directory <folder> pyright`. Do
+--directory <folder> pyright`. Where no folder holds a `pyproject.toml`, run the changed tests from the root
+as `uv run --no-project --with pytest python -m pytest <the test files>`. Do
 not run `ruff format` over their files: their CI does not check it and their tree is not formatted by it, so
 it would rewrite lines the job never touched.
 

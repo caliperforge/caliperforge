@@ -28,6 +28,7 @@ function seeded(mode: string) {
   migrate(db, join(repo, 'schema'))
   db.exec(readFileSync(join(repo, 'runner/tests/fixtures/waiting.sql'), 'utf8'))
   db.exec("UPDATE plans SET state = 'blocked_on_ceo', wait_reason = NULL WHERE id = 7")
+  db.exec("UPDATE refusals SET at = '2026-09-25 16:00:00' WHERE plan = 7")
   addSetting(db, { key: 'director.apply', value: '1', who: 'ceo', origin_kind: 'ruling', origin_ref: 't', set_at: '2026-09-25' })
   addSetting(db, { key: 'fixer.mode', value: mode, who: 'ceo', origin_kind: 'ruling', origin_ref: 't', set_at: '2026-09-25' })
   const home = mkdtempSync(join(tmpdir(), 'cf-fx-'))
@@ -37,7 +38,7 @@ function seeded(mode: string) {
   put(home, 7, 'step-4.verdict.md', '---\noutcome: refuse\nspans:\n  - x\n---\n')
   put(home, 7, 'base.sha', `${'a'.repeat(40)}\n`)
   writeFileSync(join(srcDir(home, 7), 'index.ts'), 'export {}\n')
-  git(srcDir(home, 7), ['init', '-q'])
+  git(srcDir(home, 7), ['init', '-q', '-b', 'main'])
   git(srcDir(home, 7), ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '--allow-empty', '-m', 'built'])
   return { db, home }
 }

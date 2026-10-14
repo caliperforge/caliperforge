@@ -58,6 +58,20 @@ const flat = (s: string): string => s.replace(/\s+/g, ' ').trim()
 
 const RULER = /^(?=.*\|)(?=.*-)[ |:-]+$/
 
+const ROW = /^\s*\|/
+
+const LINK = /https?:\/\/[^\s|)\]>]+/g
+
+const SKIPPED = /^(#{1,6})[ \t]+(?:Method|Not found|Still unknown|How I applied it):?[ \t]*$[\s\S]*?(?=^(?!\1#)#{1,6}[ \t]|(?![\s\S]))/gim
+
+const bare = (s: string): string => flat(s.replace(/[*_`"“”>]/g, ''))
+
+const cited = <S extends { url: string }>(claim: string, sources: S[]): S[] | null => {
+  const links: string[] = ROW.test(claim) ? claim.match(LINK) ?? [] : []
+  const all = [...[...claim.matchAll(/\[source:(\d+)\]/g)].map((m) => sources[Number(m[1]) - 1]), ...sources.filter((s) => links.includes(s.url))]
+  return all.length > 0 && all.every((s) => s !== undefined) ? all : null
+}
+
 const page = (url: string): Promise<{ ok: boolean; text: string }> => fetch(url).then(
   async (res) => res.ok ? { ok: true, text: flat(await res.text()) } : { ok: false, text: String(res.status) },
   (error: unknown) => ({ ok: false, text: error instanceof Error ? error.message : String(error) }))
@@ -65,15 +79,12 @@ const page = (url: string): Promise<{ ok: boolean; text: string }> => fetch(url)
 export async function check(root: string, plan: PlanRow): Promise<Outcome> {
   const sources = JSON.parse(get(root, plan.id, 'sources.json')) as { url: string; quote: string }[]
   if (sources.length === 0) return { outcome: 'pass', spans: [], note: 'no sources: nothing found' }
-  const ask = flat(askOf(root, plan))
-  const lines = get(root, plan.id, 'answer.md').replace(/\n## Still unknown$[\s\S]*/m, '')
-    .replace(/^## Method$[\s\S]*?(?=^## |(?![\s\S]))/m, '').split('\n')
+  const ask = bare(askOf(root, plan))
+  const lines = get(root, plan.id, 'answer.md').replace(SKIPPED, '').split('\n')
   const claims = lines.filter((l, i) => l.trim() !== '' && !l.startsWith('#') && !RULER.test(l) && !RULER.test(lines[i + 1] ?? ''))
-    .flatMap((l) => l.replace(/^\s*(?:[-*+]|\d+[.)])\s+/, '').split(/(?<=[.!?]|\[source:\d+\])\s+(?!\[source:)/))
-    .filter((sentence) => !ask.includes(flat(sentence)) && !/:(?:\*\*)?\s*$/.test(sentence)).map((sentence) => {
-      const cited = [...sentence.matchAll(/\[source:(\d+)\]/g)].map((m) => sources[Number(m[1]) - 1])
-      return { sentence, cited: cited.length > 0 && cited.every((s) => s !== undefined) ? cited : null }
-    })
+    .flatMap((l) => ROW.test(l) ? [l] : l.replace(/^\s*(?:[-*+]|\d+[.)])\s+/, '').split(/(?<=[.!?]|\[source:\d+\])\s+(?!\[source:)/))
+    .filter((sentence) => !ask.includes(bare(sentence)) && !/:(?:\*\*)?\s*$/.test(sentence))
+    .map((sentence) => ({ sentence, cited: cited(sentence, sources) }))
   const unsourced = claims.filter((c) => c.cited === null).map((c) => `"${c.sentence}"`)
   if (unsourced.length > 0) return { outcome: 'refuse', spans: ['research.unsourced'], note: `no source for ${unsourced.join(', ')}` }
   const cites = claims.flatMap((c) => (c.cited ?? []).map((s) => ({ claim: c.sentence, url: s.url, quote: flat(s.quote) })))

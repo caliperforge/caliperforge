@@ -132,6 +132,33 @@ test('D4 with no Justfile a package.json build script is not run', () => {
   ])
 })
 
+const LEAK = ['smoke/check_leak.py', 'tests/test_smoke_leak.py']
+
+const py = (files: Record<string, string>, listed = LEAK): ReturnType<typeof gates> => gates(nested(files), { language: 'python', files: listed })
+
+const ENV = ['run', '--no-project', '--with', 'ruff', '--with', 'pyright', '--with', 'pytest']
+
+test('1181a D2 no project runs ruff, pyright, pytest on files', () => {
+  expect(py({ 'smoke/check_leak.py': '', 'tests/test_smoke_leak.py': '' }, [...LEAK, 'smoke/gone.py', 'README.md'])).toEqual([
+    { script: 'lint', bin: 'uv', args: [...ENV, 'ruff', 'check', ...LEAK], dir: '' },
+    { script: 'typecheck', bin: 'uv', args: [...ENV, 'pyright', ...LEAK], dir: '' },
+    { script: 'test', bin: 'uv', args: [...ENV, 'python', '-m', 'pytest'], dir: '' },
+  ])
+})
+
+test('1181a D5 no listed test runs pytest; pyproject keeps its own', () => {
+  expect(py({ 'smoke/check_leak.py': '' })).toEqual([
+    { script: 'lint', bin: 'uv', args: [...ENV, 'ruff', 'check', 'smoke/check_leak.py'], dir: '' },
+    { script: 'typecheck', bin: 'uv', args: [...ENV, 'pyright', 'smoke/check_leak.py'], dir: '' },
+    { script: 'test', bin: 'uv', args: [...ENV, 'python', '-m', 'pytest'], dir: '' },
+  ])
+  expect(py({ 'pyproject.toml': '', 'smoke/check_leak.py': '', 'tests/test_smoke_leak.py': '' })).toEqual([
+    { script: 'install', bin: 'uv', args: ['sync', '--all-extras'], dir: '' },
+    { script: 'lint', bin: 'uv', args: ['run', '--no-sync', 'ruff', 'check'], dir: '' },
+    { script: 'test', bin: 'uv', args: ['run', '--no-sync', 'pytest'], dir: '' },
+  ])
+})
+
 test('D6 no lockfile: no install gate, npm runs the scripts', () => {
   expect(ts(nested({ 'ts/package.json': PACKAGE }))).toEqual([
     { script: 'lint', bin: 'npm', args: ['run', 'lint'], dir: 'ts' },

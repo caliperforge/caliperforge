@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { expect, test } from 'vitest'
 import { unread } from '../../cli/inbox.ts'
+import { checked } from '../../rails/checks/index.ts'
 import { addRun } from '../../store/brief.ts'
 import { decisions } from '../../store/decisions.ts'
 import { runRows } from '../../store/events.ts'
@@ -12,7 +13,7 @@ import { addRule, type Db } from '../../store/index.ts'
 import { dropPlan, pipeOf } from '../../store/plans.ts'
 import { profile } from '../../store/profile.ts'
 import { verdictRows } from '../../store/verdict.ts'
-import { checks, excluded, mode, npm, type Ran, type Run } from '../checks.ts'
+import { checks, excluded, finish, mode, npm, type Ran, type Run } from '../checks.ts'
 import { ciFeatures, formatLine, type Outside, recipes } from '../gates.ts'
 import { tick } from '../index.ts'
 import { capped, faulted, narrow } from '../rails.ts'
@@ -289,6 +290,82 @@ test('a checkout with no package.json runs no command', () => {
   expect(checks(tree({ 'readme.md': '# no scripts here\n' }), OWN, none.run)).toBeNull()
   expect(none.seen).toEqual([])
 })
+
+const BENCH = profile(REPO, 'caliperforge/fuzz-bench')?.commands ?? {}
+
+const FOUNDRY = { 'foundry.toml': '[profile.default]\n' }
+
+/** A shell recording each program, its args and where it ran, exiting non-zero for the `program args` that `red` names. */
+function binned(red?: string): { run: Run; bins: string[]; seen: string[]; cwds: string[] } {
+  const bins: string[] = []
+  const seen: string[] = []
+  const cwds: string[] = []
+  const run: Run = (...[args, cwd, bin = 'npm']) => {
+    bins.push(bin)
+    seen.push(args.join(' '))
+    cwds.push(cwd)
+    return `${bin} ${args.join(' ')}` === red ? { ok: false, code: '1', output: 'boom' } : { ok: true, output: '' }
+  }
+  return { run, bins, seen, cwds }
+}
+
+test('1157b D1 fuzz-bench runs forge build, test, then pytest', () => {
+  const src = tree(FOUNDRY)
+  const green = binned()
+  expect(checks(src, BENCH, green.run)).toBeNull()
+  expect([green.bins, green.seen]).toEqual([['forge', 'forge', 'python3'], ['build', 'test', '-m pytest']])
+  expect(new Set(green.cwds)).toEqual(new Set([src]))
+})
+
+test('1157b D2 a red forge test or pytest refuses naming it', () => {
+  for (const [red, script, seen] of [['forge test', 'test', ['build', 'test']], ['python3 -m pytest', 'pytest', ['build', 'test', '-m pytest']]] as const) {
+    const shell = binned(red)
+    const failed = checks(tree(FOUNDRY), BENCH, shell.run)
+    expect(failed).toMatchObject({ script, command: red, code: '1' })
+    expect(shell.seen).toEqual(seen)
+    expect(checked(failed, '').message.startsWith(red)).toBe(true)
+  }
+})
+
+const EULER = profile(REPO, 'caliperforge/fuzz-bench')?.finish ?? {}
+
+test('1181b D1 D2 finish runs in order and stops at the first red', () => {
+  const src = tree(FOUNDRY)
+  const green = recorder()
+  expect(finish(src, { ...EULER, b: ['node', 'b'] }, green.run)).toBeNull()
+  expect(green.seen).toEqual(['test --root targets/euler-earn', 'b'])
+
+  const red = recorder('test --root targets/euler-earn')
+  expect(finish(src, { ...EULER, b: ['node', 'b'] }, red.run))
+    .toEqual({ script: 'finish', command: 'forge test --root targets/euler-earn', code: '2', output: 'boom', tests: [], retried: false })
+  expect(red.seen).toEqual(['test --root targets/euler-earn'])
+})
+
+test('1181b D6 no finish entries run nothing', () => {
+  const none = recorder()
+  expect(finish(tree(FOUNDRY), {}, none.run)).toBeNull()
+  expect(none.seen).toEqual([])
+})
+
+/** Our own plan at step 3 with `argv` as its profile's one finish entry. */
+async function finished(argv: string): Promise<{ w: World; fired: Awaited<ReturnType<typeof tick>>[number] | undefined }> {
+  const w = mine(GREEN)
+  appendFileSync(join(w.root, 'profiles', 'caliperforge', 'caliperforge.yml'), `finish: { x: ${argv} }\n`)
+  for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  return { w, fired: (await tick(w.db, w.root, stub(CARRIED)))[0] }
+}
+
+test('1181b D2 a red finish entry refuses at step 3', async () => {
+  const { w, fired } = await finished("[node, -e, 'process.exit(4)']")
+  expect(fired).toMatchObject({ plan: ID, step: 3, outcome: 'refuse', spans: ['checks:finish'], note: 'node -e process.exit(4) exit 4' })
+  expect(plan(w.db, ID).step).toBe(2)
+  expect(last(w.db, ID)).toMatchObject({ outcome: 'refuse', rail_id: 'checks' })
+}, SLOW)
+
+test('1181b D1 a green finish entry reaches step 4', async () => {
+  const { w } = await finished("[node, -e, 'process.exit(0)']")
+  expect(plan(w.db, ID).step).toBe(4)
+}, SLOW)
 
 test('npm ci runs for a lock without node_modules, and can refuse', () => {
   const files = { 'package.json': pkg({ test: 'vitest run' }), 'package-lock.json': '{}' }
@@ -654,6 +731,23 @@ test('#204 bare go runs gofmt, vet and test; gofmt output fails', () => {
   expect(checks(src, {}, run, [], { language: 'go', files: ['go/config.go'] }))
     .toMatchObject({ script: 'format', command: 'gofmt -s -l . (in go/)', code: '1', output: 'config.go\n' })
   expect(calls).toEqual([`gofmt -s -l . @${join(src, 'go')}`])
+})
+
+/** A shell recording the tool each `uv run --no-project` gate names, red on `red`. */
+function tool(red: string): { run: Run; seen: string[] } {
+  const seen: string[] = []
+  return { seen, run: (args) => { const name = args[8] ?? ''; seen.push(name); return name === red ? { ok: false, code: '1', output: 'boom' } : { ok: true, output: '' } } }
+}
+
+test('1181a D3 a red pytest is test; a red ruff stops there', () => {
+  const src = nested({ 'smoke/check_leak.py': '', 'tests/test_smoke_leak.py': '' })
+  const python: Outside = { language: 'python', files: ['smoke/check_leak.py', 'tests/test_smoke_leak.py'] }
+  const pytest = tool('python')
+  expect(checks(src, {}, pytest.run, [], python)).toMatchObject({ script: 'test', code: '1' })
+  expect(pytest.seen).toEqual(['ruff', 'pyright', 'python'])
+  const ruff = tool('ruff')
+  expect(checks(src, {}, ruff.run, [], python)).toMatchObject({ script: 'lint' })
+  expect(ruff.seen).toEqual(['ruff'])
 })
 
 test('#204 a recipe the Justfile does not define is not run', () => {

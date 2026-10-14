@@ -54,8 +54,8 @@ afterEach(() => { vi.unstubAllGlobals() })
 
 const SOURCES = JSON.stringify([{ url: 'https://a.example/doc', fetched_at: '2026-10-04T10:00:00Z', quote: 'The cap is 3.', claim: 'The cap is 3' }])
 
-const checked = (answer: string, sources = SOURCES): ReturnType<typeof check> => {
-  const w = researching()
+const checked = (answer: string, sources = SOURCES, ask = ASK): ReturnType<typeof check> => {
+  const w = researching(ask)
   put(w.root, 1, 'sources.json', sources)
   put(w.root, 1, 'answer.md', answer)
   return check(w.root, plan(w.db, 1))
@@ -158,6 +158,22 @@ test('gather D4: a reply with no fence is refused', async () => {
   expect(maybe(w.root, 1, 'answer.md')).toBeNull()
 })
 
+test('gather D2: a ``` wrapped fence passes, answer.md unwrapped', async () => {
+  const w = researching()
+  question(w.root, plan(w.db, 1))
+  const [outcome] = await gathered(w, `${FOUND.replace('\n---\nsources:', '\n```yaml\n---\nsources:')}\`\`\`\n`)
+  expect(outcome).toMatchObject({ outcome: 'pass' })
+  expect(maybe(w.root, 1, 'answer.md')).toBe(`The cap is 3 [source:1].${SECTIONS}`)
+})
+
+test('gather D6: the prompt carries refusal.md when present', async () => {
+  const w = researching()
+  question(w.root, plan(w.db, 1))
+  expect((await gathered(w))[1]).not.toContain('# Refused')
+  put(w.root, 1, 'refusal.md', 'step 1 gather refused: line 5')
+  expect((await gathered(w))[1]).toContain('# Refused — fix what this names\n\nstep 1 gather refused: line 5')
+})
+
 test('D4: a senior_review refuse sends the plan back to gather', async () => {
   const w = researching()
   for (let n = 0; n < 4; n += 1) await tick(w.db, w.root, seats(FOUND, REFUSE))
@@ -232,4 +248,108 @@ test('record D5: a plan with no origin closes nothing', () => {
 
 test('check D6: an unsourced Still unknown sentence passes', async () => {
   expect(await checked(ANSWER)).toMatchObject({ outcome: 'pass' })
+})
+
+const RULES = '1. Severity High or Medium.\n2. Newest first.\n'
+
+test('check D1: a table header and separator are not claims', async () => {
+  expect(await checked('| Cap | Value |\n| :--- | ---: |\n\nThe cap is 3 [source:1].'))
+    .toMatchObject({ outcome: 'pass', note: '1 sentence(s) checked against 1 url(s)' })
+})
+
+test('check D2: rule lines quoted from the ask are not claims', async () => {
+  expect(await checked(`${RULES}\n3. The cap is 3 [source:1].`, SOURCES, `${ASK}\n${RULES}`))
+    .toMatchObject({ outcome: 'pass', note: '1 sentence(s) checked against 1 url(s)' })
+  expect(await checked(`${RULES}\nIt never moves.`, SOURCES, `${ASK}\n${RULES}`))
+    .toMatchObject({ outcome: 'refuse', spans: ['research.unsourced'], note: 'no source for "It never moves."' })
+})
+
+test('check D3/D4: a data row and an ask near-copy are unsourced', async () => {
+  expect(await checked('| Rule | Seen |\n|---|---|\n| 1 | yes |\n1. Severity High or Low.', SOURCES, `${ASK}\n${RULES}`))
+    .toMatchObject({ outcome: 'refuse', spans: ['research.unsourced'], note: 'no source for "| 1 | yes |", "Severity High or Low."' })
+})
+
+test('label D1: label sentences are not claims', async () => {
+  expect(await checked('How I applied it:\n\n**Rows that may need your decision:**\n\nThe cap is 3 [source:1].'))
+    .toMatchObject({ outcome: 'pass', note: '1 sentence(s) checked against 1 url(s)' })
+})
+
+const METHOD = 'The cap is 3 [source:1].\n\n## Method\n\nI went through the sources newest first.'
+
+test('label D2: a Method body passes, the next section is checked', async () => {
+  expect(await checked(`${METHOD}${SECTIONS}`)).toMatchObject({ outcome: 'pass' })
+  expect(await checked(`${METHOD}\n\n## Would be wrong if\n\nIt never moves.`))
+    .toMatchObject({ outcome: 'refuse', spans: ['research.unsourced'], note: 'no source for "It never moves."' })
+})
+
+test('label D3: a label with text after its colon is a claim', async () => {
+  expect(await checked('The cap is 3 [source:1].\n\n**Row 6:** the report gives no fix commit.'))
+    .toMatchObject({ outcome: 'refuse', spans: ['research.unsourced'], note: 'no source for "**Row 6:** the report gives no fix commit."' })
+})
+
+test('label D4: a lone bold line is a claim, a sub-heading is not', async () => {
+  expect(await checked('**Pashov Audit Group**\n\nThe cap is 3 [source:1].'))
+    .toMatchObject({ outcome: 'refuse', spans: ['research.unsourced'], note: 'no source for "**Pashov Audit Group**"' })
+  expect(await checked('### Pashov Audit Group\n\nThe cap is 3 [source:1].'))
+    .toMatchObject({ outcome: 'pass', note: '1 sentence(s) checked against 1 url(s)' })
+  expect(await checked('**Pashov Audit Group:**\n\nThe cap is 3 [source:1].'))
+    .toMatchObject({ outcome: 'pass', note: '1 sentence(s) checked against 1 url(s)' })
+})
+
+const TABLE = readFileSync(join(import.meta.dirname, 'fixtures/research-table-answer.md'), 'utf8')
+
+const FIXES = '# Fix commits\n\n**Question:** which commit fixed each advisory?\n**Would be wrong if:** a fix was reverted\n**Done when:** each advisory names its fix\n'
+
+const LISTED = [...[...Array(8).keys()].map((i) => ({ url: `https://github.com/example/lib/commit/${String(i + 1).repeat(7)}`, quote: `Fixes advisory ${String(i + 1)}.` })),
+  { url: 'https://a.example/reverts', quote: 'No fix was reverted.' }]
+
+const PAGE = LISTED.map((s) => s.quote).join('\n')
+
+test('table D1: an 1186-shaped answer passes', async () => {
+  fetched.mockImplementation(() => Promise.resolve(new Response(PAGE)))
+  expect(await checked(TABLE, JSON.stringify(LISTED), FIXES)).toEqual({ outcome: 'pass', spans: [], note: '9 sentence(s) checked against 9 url(s)' })
+})
+
+test('table D2: an uncited line outside the table is refused', async () => {
+  expect(await checked(TABLE.replace('\n\n## How', '\n\nEvery fix landed within a week.\n\n## How'), JSON.stringify(LISTED), FIXES))
+    .toEqual({ outcome: 'refuse', spans: ['research.unsourced'], note: 'no source for "Every fix landed within a week."' })
+})
+
+test('table D3: a row linking an unlisted url is unsourced', async () => {
+  expect(await checked('| Cap | Where |\n|---|---|\n| 3 | [doc](https://b.example/doc) |'))
+    .toMatchObject({ outcome: 'refuse', spans: ['research.unsourced'], note: 'no source for "| 3 | [doc](https://b.example/doc) |"' })
+})
+
+test('table D4: a row cited by its link is fetched', async () => {
+  fetched.mockResolvedValue(new Response('The cap is 4.'))
+  expect(await checked('| Cap | Where |\n|---|---|\n| 3 | https://a.example/doc |')).toMatchObject({ outcome: 'refuse',
+    spans: ['research.quote_missing'], note: 'quote not on the page for "| 3 | https://a.example/doc |" (https://a.example/doc)' })
+})
+
+test('table D5: a Not found body passes, the next is checked', async () => {
+  const found = 'The cap is 3 [source:1].\n\n### Not found\n\nNo page names a floor.'
+  expect(await checked(found)).toMatchObject({ outcome: 'pass' })
+  expect(await checked(`${found}\n\n## Why\n\nIt never moves.`))
+    .toMatchObject({ outcome: 'refuse', spans: ['research.unsourced'], note: 'no source for "It never moves."' })
+})
+
+test('table D6: the ask quoted in markup is not a claim', async () => {
+  expect(await checked('> "what is the cap?"\n\nThe cap is 3 [source:1].'))
+    .toMatchObject({ outcome: 'pass', note: '1 sentence(s) checked against 1 url(s)' })
+})
+
+const PROMPTED = '**23 Sep:** The cap is 3 [source:1].\n\n## Not found\n\nNo page names a floor.\n\n## Would be wrong if\n\n### Not found\n\n' +
+  'No source says whether another cap exists.\n\n## Still unknown\n\nWhen the cap last moved.'
+
+test('prompt D3: an answer laid out as the prompt says is recorded', async () => {
+  expect(await checked(PROMPTED)).toMatchObject({ outcome: 'pass', note: '1 sentence(s) checked against 1 url(s)' })
+  const { w, wire } = reviewed(PROMPTED)
+  expect(record(w.db, w.root, plan(w.db, 1), wire)).toMatchObject({ outcome: 'pass' })
+  expect(readFileSync(join(findings(w), named), 'utf8'))
+    .toContain('## Would be wrong if\n\na page names another cap\n\n### Not found\n\nNo source says whether another cap exists.\n\n## Sources')
+})
+
+test.each(['**23 Sep:** solidity-auditor v4 was merged and released.', 'Next cohort date: not found.'])('prompt D4: %s is unsourced', async (line) => {
+  expect(await checked(PROMPTED.replace('\n\n## Not found', `\n\n${line}\n\n## Not found`)))
+    .toEqual({ outcome: 'refuse', spans: ['research.unsourced'], note: `no source for "${line}"` })
 })

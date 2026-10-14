@@ -69,8 +69,21 @@ test('760b D1 atelier-web names its seat, lane, rails and checks', () => {
     commands: { node: ['--check'], npm: ['test'] } })
 })
 
-test('1157a D8 fuzz-bench names its seat and lane', () => {
-  expect(profile(REPO, 'caliperforge/fuzz-bench')).toEqual({ builder: 'solidity_specialist', lane: 'bench' })
+test('1157b D3 fuzz-bench runs forge and pytest locally', () => {
+  expect(profile(REPO, 'caliperforge/fuzz-bench')).toEqual({ builder: 'solidity_specialist', lane: 'bench',
+    rails: { digests: false, ratchet: false, fence: false, tight_code: false, checks: 'local' },
+    commands: { forge: ['build', 'test'], python3: ['-m', 'pytest'] },
+    finish: { 'euler-earn': ['forge', 'test', '--root', 'targets/euler-earn'] } })
+})
+
+test('1181b D5 a finish entry with an empty argv is refused', () => {
+  const dir = root({ 'widget.yml': 'finish: { x: [] }\n' })
+  expect(() => profile(dir, 'acme/widget')).toThrow(join(dir, 'profiles/acme/widget.yml'))
+})
+
+test('1157b D4 a non-list forge is refused', () => {
+  const dir = root({ 'widget.yml': 'commands: { forge: build }\n' })
+  expect(() => profile(dir, 'acme/widget')).toThrow(join(dir, 'profiles/acme/widget.yml'))
 })
 
 test('1133 D1 caliperforge/pay excuses surfpool_tests alone', () => {

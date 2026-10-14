@@ -19,7 +19,9 @@ import { originRef, type PlanRow } from '../store/plans.ts'
 import { byRun, pending } from '../store/transcript.ts'
 import { DEFAULT_BUILDER, type Step } from './pr-path.ts'
 
-const FENCE = /(?:^|\n)---\n(sources:.*\n(?:[ \t-].*\n)*)---\s*$/
+const FENCE = /(?:^|\n)(?:```\w*\n)?---[ \t]*\n(sources:[\s\S]*?)\n---[ \t]*(?:\n```[ \t]*)?\s*$/
+
+const KEYS = ['fetched_at', 'quote', 'claim']
 
 const Sources = z.object({
   sources: z.array(z.object({
@@ -30,10 +32,22 @@ const Sources = z.object({
   })),
 })
 
+function fenced(reply: string): { data: z.infer<typeof Sources> } | { why: string } {
+  const body = FENCE.exec(reply)?.[1]
+  if (body === undefined) return { why: 'the reply does not close with `---`, `sources:`, its entries, `---`' }
+  const parsed = prose(body, KEYS)
+  if (parsed === null) {
+    const lines = body.split('\n')
+    const i = lines.findIndex((line, n) => prose([...lines.slice(0, n), line].join('\n'), KEYS) === null)
+    return { why: `line ${String(i + 1)}: ${lines[i] ?? ''}` }
+  }
+  const got = Sources.safeParse(parsed)
+  return got.success ? { data: got.data } : { why: got.error.issues.map((i) => `${i.path.join('.')} ${i.message}`).join('; ') }
+}
+
 export function sourced(root: string, plan: PlanRow, reply: string): Outcome {
-  const fence = FENCE.exec(reply)
-  const got = Sources.safeParse(fence === null ? null : prose(fence[1] ?? '', ['fetched_at', 'quote', 'claim']))
-  if (!got.success) return { outcome: 'refuse', spans: ['researcher.fence'], note: 'researcher reply has no valid sources fence' }
+  const got = fenced(reply)
+  if ('why' in got) return { outcome: 'refuse', spans: ['researcher.fence'], note: `researcher reply has no valid sources fence: ${got.why}` }
   const unquoted = got.data.sources.filter((s) => (s.quote ?? '').trim() === '').map((s) => s.url)
   if (unquoted.length > 0) return { outcome: 'refuse', spans: ['researcher.unquoted'], note: `no quote for ${unquoted.join(', ')}` }
   put(root, plan.id, 'sources.json', JSON.stringify(got.data.sources))
@@ -42,6 +56,22 @@ export function sourced(root: string, plan: PlanRow, reply: string): Outcome {
 
 const flat = (s: string): string => s.replace(/\s+/g, ' ').trim()
 
+const RULER = /^(?=.*\|)(?=.*-)[ |:-]+$/
+
+const ROW = /^\s*\|/
+
+const LINK = /https?:\/\/[^\s|)\]>]+/g
+
+const SKIPPED = /^(#{1,6})[ \t]+(?:Method|Not found|Still unknown|How I applied it):?[ \t]*$[\s\S]*?(?=^(?!\1#)#{1,6}[ \t]|(?![\s\S]))/gim
+
+const bare = (s: string): string => flat(s.replace(/[*_`"“”>]/g, ''))
+
+const cited = <S extends { url: string }>(claim: string, sources: S[]): S[] | null => {
+  const links: string[] = ROW.test(claim) ? claim.match(LINK) ?? [] : []
+  const all = [...[...claim.matchAll(/\[source:(\d+)\]/g)].map((m) => sources[Number(m[1]) - 1]), ...sources.filter((s) => links.includes(s.url))]
+  return all.length > 0 && all.every((s) => s !== undefined) ? all : null
+}
+
 const page = (url: string): Promise<{ ok: boolean; text: string }> => fetch(url).then(
   async (res) => res.ok ? { ok: true, text: flat(await res.text()) } : { ok: false, text: String(res.status) },
   (error: unknown) => ({ ok: false, text: error instanceof Error ? error.message : String(error) }))
@@ -49,11 +79,12 @@ const page = (url: string): Promise<{ ok: boolean; text: string }> => fetch(url)
 export async function check(root: string, plan: PlanRow): Promise<Outcome> {
   const sources = JSON.parse(get(root, plan.id, 'sources.json')) as { url: string; quote: string }[]
   if (sources.length === 0) return { outcome: 'pass', spans: [], note: 'no sources: nothing found' }
-  const claims = get(root, plan.id, 'answer.md').replace(/\n## Still unknown$[\s\S]*/m, '').split('\n').filter((l) => l.trim() !== '' && !l.startsWith('#'))
-    .flatMap((l) => l.split(/(?<=[.!?]|\[source:\d+\])\s+(?!\[source:)/)).map((sentence) => {
-      const cited = [...sentence.matchAll(/\[source:(\d+)\]/g)].map((m) => sources[Number(m[1]) - 1])
-      return { sentence, cited: cited.length > 0 && cited.every((s) => s !== undefined) ? cited : null }
-    })
+  const ask = bare(askOf(root, plan))
+  const lines = get(root, plan.id, 'answer.md').replace(SKIPPED, '').split('\n')
+  const claims = lines.filter((l, i) => l.trim() !== '' && !l.startsWith('#') && !RULER.test(l) && !RULER.test(lines[i + 1] ?? ''))
+    .flatMap((l) => ROW.test(l) ? [l] : l.replace(/^\s*(?:[-*+]|\d+[.)])\s+/, '').split(/(?<=[.!?]|\[source:\d+\])\s+(?!\[source:)/))
+    .filter((sentence) => !ask.includes(bare(sentence)) && !/:(?:\*\*)?\s*$/.test(sentence))
+    .map((sentence) => ({ sentence, cited: cited(sentence, sources) }))
   const unsourced = claims.filter((c) => c.cited === null).map((c) => `"${c.sentence}"`)
   if (unsourced.length > 0) return { outcome: 'refuse', spans: ['research.unsourced'], note: `no source for ${unsourced.join(', ')}` }
   const cites = claims.flatMap((c) => (c.cited ?? []).map((s) => ({ claim: c.sentence, url: s.url, quote: flat(s.quote) })))
@@ -92,7 +123,9 @@ export function question(root: string, plan: PlanRow): Outcome {
 }
 
 export async function gather(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
-  const fired = await ran(db, root, plan, step, provider, `# Ask\n\n${askOf(root, plan)}\n\n# question.json\n\n${get(root, plan.id, 'question.json')}`, false)
+  const input = `# Ask\n\n${askOf(root, plan)}\n\n# question.json\n\n${get(root, plan.id, 'question.json')}${
+    maybe(root, plan.id, 'refusal.md')?.replace(/^/, '\n\n# Refused — fix what this names\n\n') ?? ''}`
+  const fired = await ran(db, root, plan, step, provider, input, false)
   if (fired.ended !== 'completed') return { outcome: 'refuse', spans: [fired.stop_reason ?? 'seat.exit'], note: `${step.runs} ${fired.ended}` }
   const sources = sourced(root, plan, fired.text)
   if (sources.outcome === 'refuse') return sources

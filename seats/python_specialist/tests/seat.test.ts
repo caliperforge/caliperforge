@@ -8,7 +8,13 @@ languageSeat({
   seat: 'python_specialist',
   language: 'python',
   commands: ['Bash(uv run:*)', 'Bash(uv sync:*)', 'Bash(just:*)'],
-  allowed: ['just --justfile python/Justfile test', 'uv run --directory python pytest', 'uv run --directory python ruff check', 'uv sync --directory python --extra dev'],
+  allowed: [
+    'uv run --no-project --with pytest python -m pytest tests/test_smoke_leak.py',
+    'just --justfile python/Justfile test',
+    'uv run --directory python pytest',
+    'uv run --directory python ruff check',
+    'uv sync --directory python --extra dev',
+  ],
   listed: 'python/src/solana_pay_kit/config.py',
   beside: 'ruby/lib/pay_kit/config.rb',
   mode: 'build',
@@ -18,6 +24,15 @@ test('the prompt says every command runs in the foreground', () => {
   expect(seat(join(import.meta.dirname, '../../..'), 'python_specialist').prompt).toContain(
     'Every command runs in the foreground; wait for it to finish, and answer only after it has.',
   )
+})
+
+test('D1: the prompt names pytest for a tree with no project', () => {
+  const prompt = seat(join(import.meta.dirname, '../../..'), 'python_specialist').prompt.replace(/\s+/g, ' ')
+  const at = prompt.indexOf(
+    'run the changed tests from the root as `uv run --no-project --with pytest python -m pytest <the test files>`.',
+  )
+  expect(at).toBeGreaterThan(prompt.indexOf('`uv run --directory <folder> pyright`.'))
+  expect(at).toBeLessThan(prompt.indexOf('Do not run `ruff format`'))
 })
 
 test('the prompt names no pay-kit or Solana rule', () => {

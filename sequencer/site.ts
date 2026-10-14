@@ -18,20 +18,25 @@ const TEMPLATE = '05_jito-tippayment-and-ai-invariant-suggester-live.html'
 const escaped = (text: string): string =>
   text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;')
 
-export function render(siteDir: string, post: { title: string; body: string; work_date: string; written_date: string }): string {
+export function render(siteDir: string, post: { title: string; dek: string; body: string; work_date: string; written_date: string }): string {
   const blog = join(siteDir, 'blog')
   const page = readFileSync(join(blog, TEMPLATE), 'utf8')
   const index = readFileSync(join(blog, 'index.html'), 'utf8')
   const end = ['</article>', '</main>', '</body>'].map((tag) => page.indexOf(tag)).find((at) => at !== -1)
   if (end === undefined) throw new Error(`${TEMPLATE} has no </article>, </main> or </body>`)
+  const at = index.indexOf('<article class="cf-blog-card"')
+  if (at === -1) throw new Error('blog/index.html has no cf-blog-card')
   const title = escaped(post.title)
+  const dek = escaped(post.dek)
   const n = Math.max(0, ...readdirSync(blog).flatMap((f) => /^(\d{2})_/.exec(f)?.[1] ?? []).map(Number)) + 1
   const name = `${String(n).padStart(2, '0')}_${post.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}`
   const body = post.body.split(/\n\s*\n/).map((block) => block.trim()).filter((block) => block !== '')
     .map((block) => (block.startsWith('## ') ? `<h2>${escaped(block.slice(3))}</h2>` : `<p>${escaped(block)}</p>`))
-  writeFileSync(join(blog, `${name}.html`), [page.slice(0, page.indexOf('<h1')).replace(/<title>[\s\S]*?<\/title>/, () => `<title>${title}</title>`),
+  writeFileSync(join(blog, `${name}.html`), [page.slice(0, page.indexOf('<h1')).replace(/<title>[\s\S]*?<\/title>/, () => `<title>${title}</title>`)
+    .replace(/<meta name="description" content="[^"]*">/, () => `<meta name="description" content="${dek}">`),
     `<h1>${title}</h1>`, `<p class="dateline">Work completed ${post.work_date} · written up ${post.written_date}.</p>`, ...body, page.slice(end)].join('\n'))
-  writeFileSync(join(blog, 'index.html'), index.replace('<ul>', () => `<ul>\n<li><a href="${name}.html">${title}</a> · ${post.written_date}</li>`))
+  const card = `<article class="cf-blog-card">\n<h2><a href="${name}.html">${title}</a></h2>\n<p class="dateline">${post.written_date}</p>\n<p>${dek}</p>\n</article>\n`
+  writeFileSync(join(blog, 'index.html'), index.slice(0, at) + card + index.slice(at))
   return name
 }
 
@@ -62,7 +67,7 @@ export function ripe(db: Db, now: Date): void {
 }
 
 function place(db: Db, dir: string, row: Post): void {
-  const name = render(dir, { ...row, title: row.edited_title ?? row.title, body: row.edited_body ?? row.body })
+  const name = render(dir, { ...row, title: row.edited_title ?? row.title, dek: row.edited_dek ?? row.dek, body: row.edited_body ?? row.body })
   commit(dir, name)
   placed(db, row.id, `https://caliperforge.com/blog/${name}.html`)
 }

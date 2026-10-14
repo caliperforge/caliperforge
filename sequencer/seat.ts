@@ -378,7 +378,7 @@ async function fireReview(db: Db, root: string, plan: PlanRow, step: Step, provi
     ...(internal(plan) && maybe(root, plan.id, 'step-2.handback.md') !== null ? { handback: get(root, plan.id, 'step-2.handback.md') } : {}),
     ...outside(db, root, plan, src),
     ...(manifest.gate === 'senior_review' ? referenced(src, issue) : {}),
-    ...checked(db, plan, src, diffOf(root, plan.id)),
+    ...checked(db, root, plan, src, diffOf(root, plan.id)),
     ...(manifest.reads_verdict ? { verdict: priorVerdict(root, plan.id) } : {}),
     ...(manifest.gate === 'review' ? senior(db, step.seat, plan.id) : {}),
     ...(manifest.gate === 'senior_review' && cloned(src) ? greptile(db, plan.id, headSha(src)) : {}),
@@ -459,29 +459,30 @@ function referenced(src: string, issue: string): Pick<Bench, 'reference'> {
 }
 
 /**
- * Step 3 already ran the checkout's own checks on this diff, or on a stranger's repo its language's gates;
+ * Step 3 already ran the checkout's own checks on this diff, or its language's gates;
  * the reviewer is told so rather than reasoning its way to it. Read off the rail's row, never re-run, and
  * only while the diff is the one it judged.
  */
-export function checked(db: Db, plan: PlanRow, src: string, diff: string): { checks?: string } {
-  const checks = coverage(gated(db, plan, src, diff), diff)
+export function checked(db: Db, root: string, plan: PlanRow, src: string, diff: string): { checks?: string } {
+  const ran = gated(db, plan, src, diff)
+  const finish = Object.values(profile(root, repoOf(db, plan) ?? '')?.finish ?? {}).map((argv) => ({ language: 'finish', dir: '', command: argv.join(' ') }))
+  const checks = coverage(ran === null ? [] : [...ran, ...finish], diff)
   return checks === undefined ? {} : { checks }
 }
 
 const LANGUAGE: Partial<Record<Mode, string>> = { npm: 'typescript', xcodebuild: 'swift', gradle: 'kotlin' }
 
-function gated(db: Db, plan: PlanRow, src: string, diff: string): Gated[] {
+function gated(db: Db, plan: PlanRow, src: string, diff: string): Gated[] | null {
   const row = db.prepare(`SELECT outcome, subject_digest FROM verdicts WHERE plan = ? AND kind = 'rail' AND rail_id = 'checks'
     ORDER BY id DESC LIMIT 1`).get(plan.id) as { outcome: string; subject_digest: string } | undefined
-  if (row?.outcome !== 'pass' || row.subject_digest !== createHash('sha256').update(diff).digest('hex')) return []
-  if (!internal(plan)) {
-    const outside = outsideLanguage(languageFor(db, plan, src))
+  if (row?.outcome !== 'pass' || row.subject_digest !== createHash('sha256').update(diff).digest('hex')) return null
+  const language = internal(plan) ? LANGUAGE[mode(src)] : undefined
+  if (language === undefined) {
+    const outside = outsideLanguage(languageFor(db, plan, src, false))
     if (outside === null) return []
     return gates(src, { language: outside, files: filesOf(db, plan.id).map((f) => f.path) })
       .map((g) => ({ language: outside, dir: g.dir, command: [g.bin, ...g.args].join(' ') }))
   }
-  const language = LANGUAGE[mode(src)]
-  if (language === undefined) return []
   const scope = narrow(db, plan).length > 0 ? 'the tests this plan\'s files reach' : 'the whole suite'
   return [{ language, dir: '', command: `every script the checkout names (${mode(src)}, ${scope})` }]
 }

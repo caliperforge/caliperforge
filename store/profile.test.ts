@@ -73,7 +73,7 @@ test('1157b D3 fuzz-bench runs forge and pytest locally', () => {
   expect(profile(REPO, 'caliperforge/fuzz-bench')).toEqual({ builder: 'solidity_specialist', lane: 'bench',
     rails: { digests: false, ratchet: false, fence: false, tight_code: false, checks: 'local' },
     commands: { forge: ['build', 'test'], python3: ['-m', 'pytest'] },
-    finish: { 'euler-earn': ['forge', 'test', '--root', 'targets/euler-earn'] } })
+    finish: { 'euler-earn': ['python3', 'bench/run_pair.py', 'targets/euler-earn-m01.yml', 'suites/euler-m01'] } })
 })
 
 test('1181b D5 a finish entry with an empty argv is refused', () => {

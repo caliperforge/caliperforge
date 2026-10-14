@@ -471,6 +471,8 @@ export function checked(db: Db, root: string, plan: PlanRow, src: string, diff: 
 
 const LANGUAGE: Partial<Record<Mode, string>> = { npm: 'typescript', xcodebuild: 'swift', gradle: 'kotlin' }
 
+const TOOL: Record<string, string> = { forge: 'solidity', npm: 'typescript' }
+
 function gated(db: Db, root: string, plan: PlanRow, src: string, diff: string): Gated[] | null {
   const row = lastChecks(db, plan.id)
   if (row?.outcome !== 'pass' || row.subject_digest !== createHash('sha256').update(diff).digest('hex')) return null
@@ -478,7 +480,7 @@ function gated(db: Db, root: string, plan: PlanRow, src: string, diff: string): 
   if (language === undefined) {
     const outside = outsideLanguage(languageFor(db, plan, src, false))
     const listed = internal(plan) ? tools(src, profile(root, repoOf(db, plan) ?? '')?.commands ?? {}, parse(diff).map((f) => f.path)) : []
-    if (outside === null || listed.length > 0) return listed.map(([, args, bin]) => ({ language: bin === 'forge' ? 'solidity' : 'python', dir: '', command: [bin, ...args].join(' ') }))
+    if (outside === null || listed.length > 0) return listed.map(([, args, bin]) => ({ language: TOOL[bin] ?? 'python', dir: '', command: [bin, ...args].join(' ') }))
     return gates(src, { language: outside, files: filesOf(db, plan.id).map((f) => f.path) })
       .map((g) => ({ language: outside, dir: g.dir, command: [g.bin, ...g.args].join(' ') }))
   }

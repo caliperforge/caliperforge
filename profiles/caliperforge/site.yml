@@ -1,0 +1,12 @@
+builder: web_specialist
+lane: site
+rails:
+  digests: false
+  ratchet: false
+  fence: false
+  tight_code: true
+  checks: local
+commands:
+  tsc:
+    - --noEmit
+  json: true

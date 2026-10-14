@@ -327,6 +327,39 @@ test('1157b D2 a red forge test or pytest refuses naming it', () => {
   }
 })
 
+const SITE = profile(REPO, 'caliperforge/site')?.commands ?? {}
+
+const PAGE = { 'index.html': '<h1>hi</h1>\n', 'stats.json': '{"n": 1}\n' }
+
+const TYPED = { ...PAGE, 'tsconfig.json': '{}\n' }
+
+const TOUCHED = Object.keys(TYPED)
+
+test('1156b D2 a site with tsconfig.json runs tsc alone', () => {
+  const green = binned()
+  expect(checks(tree(TYPED), SITE, green.run, [], null, TOUCHED)).toBeNull()
+  expect([green.bins, green.seen]).toEqual([['npm'], ['exec --no -- tsc --noEmit']])
+})
+
+test('1156b D3 a malformed touched JSON refuses before any run', () => {
+  const shell = binned()
+  const failed = checks(tree({ ...TYPED, 'stats.json': '{"n": }\n' }), SITE, shell.run, [], null, TOUCHED)
+  expect(failed).toMatchObject({ script: 'json', command: 'JSON.parse stats.json', code: '1' })
+  expect(shell.seen).toEqual([])
+  expect(checked(failed, '').message).toBe('JSON.parse stats.json exit 1')
+})
+
+test('1156b D4 a site without tsconfig.json runs no command', () => {
+  const none = binned()
+  expect(checks(tree(PAGE), SITE, none.run, [], null, TOUCHED)).toBeNull()
+  expect(none.seen).toEqual([])
+})
+
+test('1156b D5 untouched or deleted bad JSON does not refuse', () => {
+  const src = tree({ ...TYPED, 'stats.json': '{' })
+  expect(checks(src, SITE, binned().run, [], null, ['index.html', 'gone.json'])).toBeNull()
+})
+
 const EULER = profile(REPO, 'caliperforge/fuzz-bench')?.finish ?? {}
 
 test('1181b D1 D2 finish runs in order and stops at the first red', () => {

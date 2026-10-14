@@ -1,0 +1,2 @@
+# cf pipe on site / cf pipe off site switches the site lane: pipes.enabled on the 'site' row
+- name: site_pipe

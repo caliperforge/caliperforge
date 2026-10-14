@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { beforeEach, expect, test } from 'vitest'
@@ -6,7 +6,7 @@ import { addRun } from '../../store/brief.ts'
 import { logged } from '../../store/events.ts'
 import { migrate, open, type Db } from '../../store/index.ts'
 import { metric, reader } from '../../store/metrics.ts'
-import { exported } from '../export.ts'
+import { exported, leaked } from '../export.ts'
 
 const schema = join(import.meta.dirname, '../../schema')
 
@@ -211,4 +211,23 @@ test('D1 tokens per landed job: one cohort per Monday week', () => {
   expect(json('tokens_per_landed_job').columns)
     .toEqual(['week', 'jobs', 'mean_total_tokens', 'mean_fresh_tokens', 'mean_cache_read_tokens', 'mean_runs'])
   expect(json('tokens_per_landed_job').rows).toEqual([['2026-09-28', 2, 299, 268, 31, 2.5], ['2026-10-05', 1, 42, 42, 0, 1]])
+})
+
+test('D1 leaked returns the whole matching key', () => {
+  expect(leaked({ cost_usd: 1 })).toBe('cost_usd')
+})
+
+test('D2 leaked finds a match nested in arrays of arrays', () => {
+  expect(leaked({ rows: [['fixer', 1], ['login_bot', 2]] })).toBe('login_bot')
+  expect(leaked({ rows: [[1, null]], title: 'Token mix' })).toBeUndefined()
+})
+
+test('D3 a cost_usd seat throws before any file is written', () => {
+  const path = seeded()
+  store.exec(`INSERT INTO rules (id, kind, path, content_hash, loaded_at) VALUES ('cost_usd', 'roster', 'seats/cost_usd', ${D}, '2026-09-25')`)
+  addRun(store, { seat: 'cost_usd', at: '2026-10-04T10:00:00.000Z', input_tokens: 10, cache_write_tokens: 0, cache_read_tokens: 0,
+    output_tokens: 1, plan: 1, step: 2, rule_hash: '0'.repeat(64), provider: 'claude-agent-sdk', model: 'm', effort: 'high',
+    cache_write_1h_tokens: null, seconds: 1, exit: 0, transcript_path: 'c.transcript.jsonl', cost_usd: 0.25 })
+  expect(() => exported(path, site, now)).toThrow(/runs_by_seat\.json: cost_usd/)
+  expect(existsSync(join(site, 'data'))).toBe(false)
 })

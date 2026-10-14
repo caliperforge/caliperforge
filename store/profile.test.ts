@@ -76,6 +76,12 @@ test('1157b D3 fuzz-bench runs forge and pytest locally', () => {
     finish: { 'euler-earn': ['python3', 'bench/run_pair.py', 'targets/euler-earn-m01.yml', 'suites/euler-m01'] } })
 })
 
+test('1156b D1 site names its seat, lane, rails and checks', () => {
+  expect(profile(REPO, 'caliperforge/site')).toEqual({ builder: 'web_specialist', lane: 'site',
+    rails: { digests: false, ratchet: false, fence: false, tight_code: true, checks: 'local' },
+    commands: { tsc: ['--noEmit'], json: true } })
+})
+
 test('1181b D5 a finish entry with an empty argv is refused', () => {
   const dir = root({ 'widget.yml': 'finish: { x: [] }\n' })
   expect(() => profile(dir, 'acme/widget')).toThrow(join(dir, 'profiles/acme/widget.yml'))
@@ -84,6 +90,13 @@ test('1181b D5 a finish entry with an empty argv is refused', () => {
 test('1157b D4 a non-list forge is refused', () => {
   const dir = root({ 'widget.yml': 'commands: { forge: build }\n' })
   expect(() => profile(dir, 'acme/widget')).toThrow(join(dir, 'profiles/acme/widget.yml'))
+})
+
+test('1156b D6 a non-boolean json or non-list tsc is refused', () => {
+  for (const commands of ['{ json: sure }', '{ tsc: --noEmit }']) {
+    const dir = root({ 'widget.yml': `commands: ${commands}\n` })
+    expect(() => profile(dir, 'acme/widget')).toThrow(join(dir, 'profiles/acme/widget.yml'))
+  }
 })
 
 test('1133 D1 caliperforge/pay excuses surfpool_tests alone', () => {

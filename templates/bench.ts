@@ -1,21 +1,39 @@
 import { spawnSync } from 'node:child_process'
-import { rmSync } from 'node:fs'
+import { existsSync, readdirSync, rmSync } from 'node:fs'
 import { basename, join } from 'node:path'
+import type { Provider } from '../providers/kind.ts'
+import { packet } from '../runner/index.ts'
+import { load, seat } from '../runner/rules.ts'
 import type { Outcome } from '../sequencer/kind.ts'
+import { staffed } from '../sequencer/staffing.ts'
 import { git, gitBase, maybe, planDir, put, remote, srcDir } from '../sequencer/workspace.ts'
+import { runLogged } from '../store/events.ts'
+import type { Db } from '../store/index.ts'
+import { observed } from '../store/lanes.ts'
 import type { PlanRow } from '../store/plans.ts'
+import { byRun, pending } from '../store/transcript.ts'
 import { DEFAULT_BUILDER, type Step } from './pr-path.ts'
 
 export const steps: Step[] = ['checkout', 'generate', 'score'].map((name, step) =>
-  ({ step, name, seat: DEFAULT_BUILDER, fires: 'kernel', runs: name, gate: false, writes_verdict: false, verdict_gate: null }))
+  ({ step, name, seat: DEFAULT_BUILDER, fires: name === 'generate' ? 'seat' : 'kernel', runs: name, gate: false, writes_verdict: false, verdict_gate: null }))
 
 const NEEDED = ['repo', 'fix', 'pre_fix']
+
+export const CEILING = 400_000
+
+const SUITE = 'test/fizz'
+
+const ASK = `Generate the fuzz suite for the project in the working folder in automatic mode, asking nothing: SUITE_DIR is ${SUITE} and META_DIR is ${SUITE}/fizz_data.`
+
+function fields(text: string): Record<string, string | undefined> {
+  return Object.fromEntries(text.split('\n')
+    .map((line) => /^(\w+):\s*(.*)$/.exec(line)).filter((m) => m !== null).map((m) => [m[1] ?? '', m[2]?.trim()] as const))
+}
 
 export function scratch(root: string, plan: PlanRow): Outcome {
   const text = maybe(root, plan.id, 'target.yml')
   if (text === null) return { outcome: 'refuse', spans: ['target.yml'], note: 'target.yml is missing' }
-  const target: Record<string, string | undefined> = Object.fromEntries(text.split('\n')
-    .map((line) => /^(\w+):\s*(.*)$/.exec(line)).filter((m) => m !== null).map((m) => [m[1] ?? '', m[2]?.trim()] as const))
+  const target = fields(text)
   const missing = NEEDED.filter((key) => (target[key] ?? '') === '')
   if (missing.length > 0) return { outcome: 'refuse', spans: ['target.yml'], note: `target.yml has no ${missing.join(', ')}` }
   const { repo = '', fix = '', pre_fix: preFix = '' } = target
@@ -35,6 +53,30 @@ export function scratch(root: string, plan: PlanRow): Outcome {
   }
   put(root, plan.id, 'checkout.json', JSON.stringify({ repo, fix, pre_fix: sha }))
   return { outcome: 'pass', spans: [], note: `checkout.json written at ${sha.slice(0, 12)}` }
+}
+
+export async function generate(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
+  const generator = fields(maybe(root, plan.id, 'target.yml') ?? '').generator ?? ''
+  if (generator === '') return { outcome: 'refuse', spans: ['target.yml'], note: 'target.yml has no generator' }
+  const name = staffed(root, 'bench', step.step, generator)?.seat
+  if (name === undefined) return { outcome: 'needs_ceo', spans: ['staffing'], note: `no bench generator "${generator}" in rules/staffing.yaml` }
+  load(db, root)
+  const { manifest, prompt, hash } = seat(root, name)
+  const dir = srcDir(root, plan.id)
+  const built = packet(manifest, prompt, '', ASK, dir, pending(planDir(root, plan.id), `step-${String(step.step)}`))
+  const fired = await provider.fire({ ...built, wall: CEILING })
+  const run = runLogged(db, { plan: plan.id, step: step.step, seat: name, rule_hash: hash, provider: provider.name, model: manifest.model,
+    effort: manifest.effort, exit: fired.exit, fired, staffed: name })
+  byRun(db, run, fired.transcript_path)
+  observed(db, fired.limits)
+  const tokens = fired.usage.input + fired.usage.output
+  if (fired.ended !== 'completed' && tokens < CEILING) return { outcome: 'refuse', spans: [fired.stop_reason ?? 'seat.exit'], note: `${name} ${fired.ended}` }
+  const suite = join(dir, SUITE)
+  if (!existsSync(suite) || !readdirSync(suite, { recursive: true, withFileTypes: true }).some((e) => e.isFile())) {
+    return { outcome: 'refuse', spans: ['bench.no_suite'], note: `${name} wrote no suite under ${SUITE}` }
+  }
+  put(root, plan.id, 'generate.json', JSON.stringify({ suite: SUITE, tokens }))
+  return { outcome: 'pass', spans: [], note: `generate.json written: ${name} ${fired.ended}, ${String(tokens)} tokens` }
 }
 
 /** `pre_fix` may be a rev expression, and only a full sha can be fetched unadvertised. */

@@ -25,6 +25,9 @@ const PROSE: Record<keyof typeof METRICS, { title: string; unit: string; definit
   tokens_per_landed_job: { title: 'Tokens per landed job', unit: 'tokens per job, by week queued',
     definition: "Every plan in the done state with at least one run, grouped by the week it was queued, each week labelled by its Monday. A job's tokens are the sum over all its runs, rework included; fresh is input_tokens + output_tokens, and total is fresh plus cache_read_tokens.",
     caveat: 'Cohorts are by the week a job was queued, and count landed jobs only.' },
+  ceo_touches: { title: 'Human touches', unit: 'CEO actions per UTC day',
+    definition: "Every event the CEO logged, by the UTC day it was recorded, from the first CEO event's day to today, counted by kind. A kind outside the eight listed counts as other.",
+    caveat: 'A day with no CEO events is a row of zeros, and today is a partial day. It counts actions, not time spent.' },
 }
 
 export function exported(path: string, dir: string, now: Date): string[] {

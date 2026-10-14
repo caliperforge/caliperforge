@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { existsSync, readdirSync, rmSync } from 'node:fs'
+import { cpSync, existsSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import type { Provider } from '../providers/kind.ts'
 import { packet } from '../runner/index.ts'
@@ -7,6 +7,7 @@ import { load, seat } from '../runner/rules.ts'
 import type { Outcome } from '../sequencer/kind.ts'
 import { staffed } from '../sequencer/staffing.ts'
 import { git, gitBase, maybe, planDir, put, remote, srcDir } from '../sequencer/workspace.ts'
+import { record } from '../store/bench.ts'
 import { runLogged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { observed } from '../store/lanes.ts'
@@ -75,8 +76,40 @@ export async function generate(db: Db, root: string, plan: PlanRow, step: Step, 
   if (!existsSync(suite) || !readdirSync(suite, { recursive: true, withFileTypes: true }).some((e) => e.isFile())) {
     return { outcome: 'refuse', spans: ['bench.no_suite'], note: `${name} wrote no suite under ${SUITE}` }
   }
-  put(root, plan.id, 'generate.json', JSON.stringify({ suite: SUITE, tokens }))
+  put(root, plan.id, 'generate.json', JSON.stringify({ suite: SUITE, tokens, seconds: fired.seconds }))
   return { outcome: 'pass', spans: [], note: `generate.json written: ${name} ${fired.ended}, ${String(tokens)} tokens` }
+}
+
+export function scored(db: Db, root: string, plan: PlanRow): Outcome {
+  const keys = fields(maybe(root, plan.id, 'target.yml') ?? '')
+  const missing = ['target', 'generator'].filter((key) => (keys[key] ?? '') === '')
+  if (missing.length > 0) return { outcome: 'refuse', spans: ['target.yml'], note: `target.yml has no ${missing.join(', ')}` }
+  const { target = '', generator = '' } = keys
+  const made = maybe(root, plan.id, 'generate.json')
+  if (made === null) return { outcome: 'refuse', spans: ['generate.json'], note: 'generate.json is missing' }
+  const { suite, tokens, seconds } = JSON.parse(made) as { suite: string; tokens: number; seconds: number }
+  const bench = join(planDir(root, plan.id), 'fuzz-bench')
+  rmSync(bench, { recursive: true, force: true })
+  git(planDir(root, plan.id), ['clone', '-q', remote(gitBase(root), 'caliperforge/fuzz-bench'), bench])
+  const sha = git(bench, ['rev-parse', 'HEAD']).trim()
+  const suites = `suites/${generator}/${target}`
+  cpSync(join(srcDir(root, plan.id), suite), join(bench, suites), { recursive: true })
+  for (const script of ['run_pair', 'null_check']) {
+    const ran = spawnSync('python3', [`bench/${script}.py`, `targets/${target}.yml`, suites], { cwd: bench, encoding: 'utf8' })
+    if (ran.error !== undefined || ran.status !== 0) {
+      return { outcome: 'refuse', spans: [`bench.${script}`], note: ran.error?.message ?? ran.stderr.trim().split('\n').at(-1) ?? '' }
+    }
+  }
+  const pairs = rows(join(bench, 'results', target, `${target}.jsonl`))
+  const score = { catches: pairs.filter((r) => r.verdict === 'catch').length, false_positives: pairs.filter((r) => r.verdict === 'fp_candidate').length,
+    untested: rows(join(bench, 'results', target, `${target}.nullcheck.jsonl`)).filter((r) => r.untested === true).length, tokens, seconds }
+  record(db, { plan: plan.id, target, generator, ...score })
+  put(root, plan.id, 'score.json', JSON.stringify({ fuzz_bench: sha, ...score }))
+  return { outcome: 'pass', spans: [], note: `score.json written at fuzz-bench ${sha.slice(0, 12)}` }
+}
+
+function rows(path: string): { verdict?: string; untested?: boolean }[] {
+  return readFileSync(path, 'utf8').split('\n').filter((line) => line.trim() !== '').map((line) => JSON.parse(line) as { verdict?: string; untested?: boolean })
 }
 
 /** `pre_fix` may be a rev expression, and only a full sha can be fetched unadvertised. */

@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { cpSync, existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import type { HookInput } from '@anthropic-ai/claude-agent-sdk'
@@ -8,11 +8,12 @@ import { fresh } from '../../checks/sqlite.ts'
 import { gate, walled } from '../../providers/claude-agent-sdk/index.ts'
 import type { Fired, Packet, Provider } from '../../providers/kind.ts'
 import { seat } from '../../runner/rules.ts'
+import { scores } from '../../store/bench.ts'
 import { runRows } from '../../store/events.ts'
 import type { Db } from '../../store/index.ts'
 import { dial } from '../../store/lanes.ts'
 import { allPlans, pipeNamed, planById, putPlan, type PlanRow } from '../../store/plans.ts'
-import { CEILING, generate, scratch } from '../../templates/bench.ts'
+import { CEILING, generate, scored, scratch } from '../../templates/bench.ts'
 import { dry, tick } from '../index.ts'
 import { route } from '../next.ts'
 import { kernel, mapOf } from '../steps.ts'
@@ -25,8 +26,8 @@ const OPENS = new Date('2026-09-18T13:00:00.000Z')
 
 const AT = '2026-09-18T13:00:00.000Z'
 
-function queued(db: Db, template: PlanRow['template']): void {
-  putPlan(db, { id: 1, pipe_id: Number(pipeNamed(db, 'bench')?.id), target_id: null, template, state: 'queued', queued_at: AT, step: 0, retries: 0 })
+function queued(db: Db, template: PlanRow['template'], step = 0): void {
+  putPlan(db, { id: 1, pipe_id: Number(pipeNamed(db, 'bench')?.id), target_id: null, template, state: 'queued', queued_at: AT, step, retries: 0 })
 }
 
 test('a bench plan is stored and parsed', () => {
@@ -188,7 +189,7 @@ test('D2 the generate packet denies curl and admits forge build', async () => {
 test('D3 a run stopped at the ceiling with a suite passes', async () => {
   const { root, db, outcome } = await generated(stub(CEILING + 5, 'stopped', true, 'ruling:run.token_wall'))
   expect(outcome).toMatchObject({ outcome: 'pass' })
-  expect(JSON.parse(get(root, 1, 'generate.json'))).toEqual({ suite: 'test/fizz', tokens: CEILING + 5 })
+  expect(JSON.parse(get(root, 1, 'generate.json'))).toEqual({ suite: 'test/fizz', tokens: CEILING + 5, seconds: 1 })
   expect(runRows(db)).toMatchObject([{ seat: 'fizz_generator', staffed: 'fizz_generator' }])
 })
 
@@ -208,4 +209,66 @@ test('D5 a stop under the ceiling is refused on its reason', async () => {
 test('D6 no generator is refused, an unstaffed one needs the ceo', async () => {
   expect((await generated(stub(0, 'completed', false), {})).outcome).toMatchObject({ outcome: 'refuse', spans: ['target.yml'] })
   expect((await generated(stub(0, 'completed', false), { generator: 'nobody' })).outcome).toMatchObject({ outcome: 'needs_ceo', spans: ['staffing'] })
+})
+
+const PAIRS = [{ property: 'p1', verdict: 'catch' }, { property: 'p2', verdict: 'catch' }, { property: 'p3', verdict: 'fp_candidate' },
+  { property: 'p4', verdict: 'silent' }]
+
+const KILLS = [{ property: 'p1', kills: 3, untested: false }, { property: 'p4', kills: 0, untested: true }]
+
+/** A stub fuzz-bench script that writes `rows` to `results/<suite>/<suite><suffix>`. */
+function writes(suffix: string, rows: object[]): string {
+  const body = JSON.stringify(rows.map((r) => JSON.stringify(r)).join('\n'))
+  return `import os, sys\nname = os.path.basename(sys.argv[2])\nos.makedirs(f'results/{name}', exist_ok=True)\nopen(f'results/{name}/{name}${suffix}', 'w').write(${body})\n`
+}
+
+/** A bench plan at score with its suite written, and `remotes/caliperforge/fuzz-bench` whose run_pair.py is `pair`. */
+function scoring(pair = writes('.jsonl', PAIRS), keys: Record<string, string> = { target: 'euler-earn-m01', generator: 'fizz' }) {
+  const root = mkdtempSync(join(tmpdir(), 'cf-bench-'))
+  const dir = join(root, 'remotes/caliperforge/fuzz-bench')
+  mkdirSync(dir, { recursive: true })
+  git(dir, ['init', '-q'])
+  commit(dir, 'bench/null_check.py', writes('.nullcheck.jsonl', KILLS), 'null check')
+  const sha = commit(dir, 'bench/run_pair.py', pair, 'run pair')
+  mkdirSync(join(root, '.cf'))
+  writeFileSync(join(root, '.cf/git-base'), join(root, 'remotes'))
+  mkdirSync(join(srcDir(root, 1), 'test/fizz'), { recursive: true })
+  writeFileSync(join(srcDir(root, 1), 'test/fizz/FizzTest.sol'), 'contract FizzTest {}\n')
+  target(root, keys)
+  put(root, 1, 'generate.json', JSON.stringify({ suite: 'test/fizz', tokens: 1234, seconds: 56.5 }))
+  const db = fresh(schema)
+  queued(db, 'bench', 2)
+  return { root, db, sha }
+}
+
+const SCORE = { catches: 2, false_positives: 1, untested: 1, tokens: 1234, seconds: 56.5 }
+
+test('score D1 kernel scores the suite at the fuzz-bench HEAD', () => {
+  const { root, db, sha } = scoring()
+  expect(kernel(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  expect(scores(db)).toEqual([{ plan: 1, target: 'euler-earn-m01', generator: 'fizz', ...SCORE }])
+  expect(existsSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/FizzTest.sol'))).toBe(true)
+  expect(existsSync(join(srcDir(root, 1), 'test/fizz/FizzTest.sol'))).toBe(true)
+  expect(JSON.parse(get(root, 1, 'score.json'))).toEqual({ fuzz_bench: sha, ...SCORE })
+})
+
+test('score D2 a failing run_pair.py is refused and not recorded', () => {
+  const { root, db } = scoring('import sys\nsys.stderr.write("forge build failed")\nsys.exit(1)\n')
+  expect(scored(db, root, planById(db, 1))).toEqual({ outcome: 'refuse', spans: ['bench.run_pair'], note: 'forge build failed' })
+  expect(scores(db)).toEqual([])
+})
+
+test('score D3 no target or no generate.json is refused uncloned', () => {
+  const { root, db } = scoring(undefined, { generator: 'fizz' })
+  expect(scored(db, root, planById(db, 1))).toEqual({ outcome: 'refuse', spans: ['target.yml'], note: 'target.yml has no target' })
+  target(root, { target: 'euler-earn-m01', generator: 'fizz' })
+  rmSync(join(planDir(root, 1), 'generate.json'))
+  expect(scored(db, root, planById(db, 1))).toEqual({ outcome: 'refuse', spans: ['generate.json'], note: 'generate.json is missing' })
+  expect(existsSync(join(planDir(root, 1), 'fuzz-bench'))).toBe(false)
+})
+
+test('score D5 a comms plan still reaches the comms scorer', () => {
+  const db = fresh(schema)
+  queued(db, 'comms', mapOf('comms').steps.length - 1)
+  expect(kernel(db, mkdtempSync(join(tmpdir(), 'cf-bench-')), planById(db, 1))).toEqual({ outcome: 'pass', spans: [], note: 'not a scorecard plan' })
 })

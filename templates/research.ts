@@ -66,10 +66,11 @@ export async function check(root: string, plan: PlanRow): Promise<Outcome> {
   const sources = JSON.parse(get(root, plan.id, 'sources.json')) as { url: string; quote: string }[]
   if (sources.length === 0) return { outcome: 'pass', spans: [], note: 'no sources: nothing found' }
   const ask = flat(askOf(root, plan))
-  const lines = get(root, plan.id, 'answer.md').replace(/\n## Still unknown$[\s\S]*/m, '').split('\n')
+  const lines = get(root, plan.id, 'answer.md').replace(/\n## Still unknown$[\s\S]*/m, '')
+    .replace(/^## Method$[\s\S]*?(?=^## |(?![\s\S]))/m, '').split('\n')
   const claims = lines.filter((l, i) => l.trim() !== '' && !l.startsWith('#') && !RULER.test(l) && !RULER.test(lines[i + 1] ?? ''))
     .flatMap((l) => l.replace(/^\s*(?:[-*+]|\d+[.)])\s+/, '').split(/(?<=[.!?]|\[source:\d+\])\s+(?!\[source:)/))
-    .filter((sentence) => !ask.includes(flat(sentence))).map((sentence) => {
+    .filter((sentence) => !ask.includes(flat(sentence)) && !/:(?:\*\*)?\s*$/.test(sentence)).map((sentence) => {
       const cited = [...sentence.matchAll(/\[source:(\d+)\]/g)].map((m) => sources[Number(m[1]) - 1])
       return { sentence, cited: cited.length > 0 && cited.every((s) => s !== undefined) ? cited : null }
     })

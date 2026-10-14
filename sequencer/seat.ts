@@ -9,6 +9,7 @@ import { load, seat, tight, type Seat } from '../runner/rules.ts'
 import { judge, loadReviews } from '../reviews/bench.ts'
 import { coverage, type Gated } from '../reviews/package.ts'
 import type { Finding, Judged, Note } from '../reviews/verdict.ts'
+import { lastChecks } from '../store/checks.ts'
 import { regated } from '../store/dispositions.ts'
 import { logged, runLogged, type Run } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
@@ -17,6 +18,8 @@ import { due, keep } from '../store/language-notes.ts'
 import { profile } from '../store/profile.ts'
 import { observed, wall } from '../store/lanes.ts'
 import { briefed, builderRan, internal, type PlanRow } from '../store/plans.ts'
+import { botBody, judgedTree } from '../store/ready.ts'
+import { lastTranscript } from '../store/runs.ts'
 import { byRun, opened, pending, unfinished } from '../store/transcript.ts'
 import type { Step } from '../templates/pr-path.ts'
 import { parse } from '../rails/diff.ts'
@@ -70,9 +73,7 @@ export async function fireSeat(db: Db, root: string, plan: PlanRow, step: Step, 
 }
 
 function marked(db: Db, root: string, plan: number): void {
-  const run = db.prepare('SELECT transcript_path FROM runs WHERE plan = ? AND step = 2 ORDER BY id DESC LIMIT 1')
-    .get(plan) as { transcript_path: string | null } | undefined
-  const command = unfinished(run?.transcript_path ?? '')
+  const command = unfinished(lastTranscript(db, plan, 2))
   if (command === null) drop(root, plan, 'step-2.unfinished.md')
   else put(root, plan, 'step-2.unfinished.md', command)
 }
@@ -221,9 +222,7 @@ function lastQuestion(db: Db, root: string, plan: number): string {
   const sha = maybe(root, plan, 'question.sha')?.trim()
   const src = srcDir(root, plan)
   if (question === null || sha === undefined || !holds(src, sha)) return ''
-  const run = db.prepare('SELECT transcript_path FROM runs WHERE plan = ? AND step = 1 ORDER BY id DESC LIMIT 1')
-    .get(plan) as { transcript_path: string | null } | undefined
-  const paths = [...new Set(opened(run?.transcript_path ?? '').map((path) => relative(src, path)))]
+  const paths = [...new Set(opened(lastTranscript(db, plan, 1)).map((path) => relative(src, path)))]
     .filter((path) => path !== '' && !path.startsWith('..'))
   if (paths.length === 0) return ''
   const incoming = new Set(merging(src, sha, MAIN).incoming)
@@ -473,8 +472,7 @@ export function checked(db: Db, root: string, plan: PlanRow, src: string, diff: 
 const LANGUAGE: Partial<Record<Mode, string>> = { npm: 'typescript', xcodebuild: 'swift', gradle: 'kotlin' }
 
 function gated(db: Db, root: string, plan: PlanRow, src: string, diff: string): Gated[] | null {
-  const row = db.prepare(`SELECT outcome, subject_digest FROM verdicts WHERE plan = ? AND kind = 'rail' AND rail_id = 'checks'
-    ORDER BY id DESC LIMIT 1`).get(plan.id) as { outcome: string; subject_digest: string } | undefined
+  const row = lastChecks(db, plan.id)
   if (row?.outcome !== 'pass' || row.subject_digest !== createHash('sha256').update(diff).digest('hex')) return null
   const language = internal(plan) ? LANGUAGE[mode(src)] : undefined
   if (language === undefined) {
@@ -494,9 +492,8 @@ function senior(db: Db, seat: string, plan: number): Pick<Bench, 'language'> {
 }
 
 function greptile(db: Db, plan: number, head: string): Pick<Bench, 'bot'> {
-  const row = db.prepare(`SELECT body FROM signals WHERE plan = ? AND kind = 'bot_review' AND head = ? AND body IS NOT NULL
-    ORDER BY id DESC LIMIT 1`).get(plan, head) as { body: string } | undefined
-  return row === undefined ? {} : { bot: row.body }
+  const bot = botBody(db, plan, head)
+  return bot === null ? {} : { bot }
 }
 
 /** From a reviewer's second round on: the verdict it wrote last round, the refusal that sent the build back, and what the tree did since the one it judged. */
@@ -505,7 +502,7 @@ function rounds(db: Db, root: string, plan: number, step: number): Pick<Bench, '
   if (last === null) return {}
   const refusal = maybe(root, plan, 'refusal.md')
   const prior = { prior: last, ...(refusal === null ? {} : { refusal }) }
-  const tree = judged(db, plan, step)
+  const tree = judgedTree(db, plan, step)
   const src = srcDir(root, plan)
   if (tree === null || !holds(src, tree)) return prior
   // Before enclosed(): diffSince's `add -A --intent-to-add` is what puts new files in enclosed()'s diff.
@@ -514,14 +511,6 @@ function rounds(db: Db, root: string, plan: number, step: number): Pick<Bench, '
   const { mode, why } = classify(maybe(root, plan, `step-${String(step)}.passed.diff`), plain, paths.changed)
   put(root, plan, `step-${String(step)}.mode`, `${mode}: ${why}\n`)
   return mode === 'full' ? prior : { ...prior, since: enclosed(src, tree) ?? plain, narrowing: paths }
-}
-
-/** The tree the reviewer last passed, else the one its last verdict judged, off the row `judge()` wrote it on. */
-function judged(db: Db, plan: number, step: number): string | null {
-  const row = db.prepare(`SELECT tree FROM verdicts WHERE plan = ? AND step = ? AND kind = 'review' AND gate <> 'blind_review'
-    ORDER BY outcome = 'pass' AND tree IS NOT NULL DESC, id DESC LIMIT 1`)
-    .get(plan, step) as { tree: string | null } | undefined
-  return row?.tree ?? null
 }
 
 function transcriptOf(root: string, plan: number, step: number): string {

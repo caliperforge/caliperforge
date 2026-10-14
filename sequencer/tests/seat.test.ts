@@ -124,7 +124,7 @@ test('D4 the blind_review manifest parses', () => {
 test('D5 each moded seat has its review-mode registry entry', () => {
   const entries = mechanisms(join(import.meta.dirname, '../..'))
   for (const name of REVIEWING) {
-    const where = `seat = '${name}' AND mode = 'review'`
-    expect(entries.filter((e) => e.table === 'runs' && e.column === 'at' && e.where === where && e.gap === '7d')).toHaveLength(1)
+    const where = [`seat = '${name}' AND mode = 'review'`, `staffed = '${name}' AND mode = 'review'`]
+    expect(entries.filter((e) => e.table === 'runs' && e.column === 'at' && where.includes(e.where ?? '') && e.gap === '7d')).toHaveLength(1)
   }
 })

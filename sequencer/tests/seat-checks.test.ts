@@ -12,6 +12,8 @@ import { addAccount, addTarget } from '../../store/targets.ts'
 import type { Verdict } from '../../store/verdict.ts'
 import { checked } from '../seat.ts'
 
+const REPO = join(import.meta.dirname, '../..')
+
 const DIFF = '--- a/ruby/lib/pay_kit/config.rb\n+++ b/ruby/lib/pay_kit/config.rb\n@@ -1,1 +1,1 @@\n+x\n'
 
 function target(paths: string[], outcome: Verdict['outcome'] = 'pass', diff = DIFF): { db: Db; plan: PlanRow } {
@@ -43,42 +45,52 @@ const UNGATED = '- none\n\nNo gate ran for:\n- ruby/lib/pay_kit/config.rb'
 
 test('D1 a path no gate ran under is listed after the gates', () => {
   const { db, plan } = target(['ruby/lib/pay_kit/config.rb', 'kotlin/src/Runner.kt'], 'pass', DIFF + KOTLIN)
-  expect(checked(db, plan, paykit(), DIFF + KOTLIN)).toEqual({ checks: `${RUBY}\n\nNo gate ran for:\n- kotlin/src/Runner.kt` })
+  expect(checked(db, REPO, plan, paykit(), DIFF + KOTLIN)).toEqual({ checks: `${RUBY}\n\nNo gate ran for:\n- kotlin/src/Runner.kt` })
   const npm = paykit()
   writeFileSync(join(npm, 'package.json'), '{}')
-  expect(checked(db, { ...plan, origin: 'https://github.com/acme/kit/issues/1' }, npm, DIFF + KOTLIN)).toEqual({
+  expect(checked(db, REPO, { ...plan, origin: 'https://github.com/acme/kit/issues/1' }, npm, DIFF + KOTLIN)).toEqual({
     checks: '- typescript | . | every script the checkout names (npm, the whole suite) | pass\n\nNo gate ran for:\n- ruby/lib/pay_kit/config.rb\n- kotlin/src/Runner.kt',
   })
 })
 
 test('D2 outside reviewer told its language gates ran', () => {
   const { db, plan } = target(['ruby/lib/pay_kit/config.rb'])
-  expect(checked(db, plan, paykit(), DIFF)).toEqual({ checks: RUBY })
+  expect(checked(db, REPO, plan, paykit(), DIFF)).toEqual({ checks: RUBY })
 })
 
 test('D3 no pass on this diff lists no gate; mode none gates', () => {
   const red = target(['ruby/lib/pay_kit/config.rb'], 'refuse')
-  expect(checked(red.db, red.plan, paykit(), DIFF)).toEqual({ checks: UNGATED })
+  expect(checked(red.db, REPO, red.plan, paykit(), DIFF)).toEqual({ checks: UNGATED })
   const { db, plan } = target(['ruby/lib/pay_kit/config.rb'], 'pass', `${DIFF}+y\n`)
-  expect(checked(db, plan, paykit(), DIFF)).toEqual({ checks: UNGATED })
+  expect(checked(db, REPO, plan, paykit(), DIFF)).toEqual({ checks: UNGATED })
   const ours = target(['ruby/lib/pay_kit/config.rb'])
-  expect(checked(ours.db, { ...ours.plan, origin: 'https://github.com/acme/kit/issues/1' }, paykit(), DIFF)).toEqual({ checks: RUBY })
+  expect(checked(ours.db, REPO, { ...ours.plan, origin: 'https://github.com/acme/kit/issues/1' }, paykit(), DIFF)).toEqual({ checks: RUBY })
 })
 
 const LEAK = '--- a/tests/test_smoke_leak.py\n+++ b/tests/test_smoke_leak.py\n@@ -1,1 +1,1 @@\n+x\n'
 
-test('1181a D4 a green fuzz-bench plan lists its python gates', () => {
-  const { db, plan } = target(['smoke/check_leak.py', 'tests/test_smoke_leak.py'], 'pass', LEAK)
+/** A fuzz-bench plan whose last `checks` row is `outcome` on the LEAK diff, and its checkout. */
+function bench(outcome: Verdict['outcome']): { db: Db; plan: PlanRow; src: string } {
+  const { db, plan } = target(['smoke/check_leak.py', 'tests/test_smoke_leak.py'], outcome, LEAK)
   const src = mkdtempSync(join(tmpdir(), 'cf-note-'))
   mkdirSync(join(src, 'tests'))
   writeFileSync(join(src, 'tests', 'test_smoke_leak.py'), '')
-  const bench: PlanRow = { ...plan, target_id: null, lane: 'bench', seat: 'solidity_specialist', origin: 'https://github.com/caliperforge/fuzz-bench/issues/1' }
+  return { db, src, plan: { ...plan, target_id: null, lane: 'bench', seat: 'solidity_specialist', origin: 'https://github.com/caliperforge/fuzz-bench/issues/1' } }
+}
+
+test('1181a D4 a green fuzz-bench plan lists its python gates', () => {
+  const { db, plan, src } = bench('pass')
   const env = 'uv run --no-project --with ruff --with pyright --with pytest'
-  expect(checked(db, bench, src, LEAK)).toEqual({ checks: ['ruff check tests/test_smoke_leak.py', 'pyright tests/test_smoke_leak.py', 'python -m pytest']
-    .map((c) => `- python | . | ${env} ${c} | pass`).join('\n') })
+  expect(checked(db, REPO, plan, src, LEAK)).toEqual({ checks: [...['ruff check tests/test_smoke_leak.py', 'pyright tests/test_smoke_leak.py', 'python -m pytest']
+    .map((c) => `- python | . | ${env} ${c} | pass`), '- finish | . | forge test --root targets/euler-earn | pass'].join('\n') })
+})
+
+test('1181b D4 a red-rail bench plan lists no finish row', () => {
+  const { db, plan, src } = bench('refuse')
+  expect(checked(db, REPO, plan, src, LEAK)).toEqual({ checks: '- none\n\nNo gate ran for:\n- tests/test_smoke_leak.py' })
 })
 
 test('D6 no seat language and no gate, no section', () => {
   const { db, plan } = target(['docs/paykit-interface.md'])
-  expect(checked(db, plan, paykit(), '--- a/docs/paykit-interface.md\n+++ b/docs/paykit-interface.md\n@@ -1,1 +1,1 @@\n+x\n')).toEqual({})
+  expect(checked(db, REPO, plan, paykit(), '--- a/docs/paykit-interface.md\n+++ b/docs/paykit-interface.md\n@@ -1,1 +1,1 @@\n+x\n')).toEqual({})
 })

@@ -31,7 +31,7 @@ export function scratch(root: string, plan: PlanRow): Outcome {
   }
   for (const needle of [target.finding ?? '', basename(target.report ?? '')].filter((n) => n !== '')) {
     const where = seen(dir, needle)
-    if (where !== null) return { outcome: 'refuse', spans: ['bench.seen'], note: `"${needle}" is in ${where}` }
+    if (where !== null) return { outcome: 'refuse', spans: ['bench.seen'], note: `"${needle}" ${where}` }
   }
   put(root, plan.id, 'checkout.json', JSON.stringify({ repo, fix, pre_fix: sha }))
   return { outcome: 'pass', spans: [], note: `checkout.json written at ${sha.slice(0, 12)}` }
@@ -51,8 +51,9 @@ function resolved(plan: string, url: string, rev: string): string {
 
 function seen(dir: string, needle: string): string | null {
   const path = git(dir, ['ls-files', '-z']).split('\0').find((p) => p.includes(needle))
-  if (path !== undefined) return `the path ${path}`
-  const file = spawnSync('git', ['grep', '-lzF', '-e', needle], { cwd: dir, encoding: 'utf8' }).stdout.split('\0')[0] ?? ''
-  if (file !== '') return `the file ${file}`
-  return git(dir, ['log', '--format=%B']).includes(needle) ? 'a commit message' : null
+  if (path !== undefined) return `is in the path ${path}`
+  const grep = spawnSync('git', ['grep', '-lzF', '-e', needle], { cwd: dir, encoding: 'utf8' })
+  if (grep.status === 0) return `is in the file ${grep.stdout.split('\0')[0] ?? ''}`
+  if (grep.status !== 1) return `could not be looked for: git grep exited ${String(grep.status)} ${grep.stderr.trim()}`
+  return git(dir, ['log', '--format=%B']).includes(needle) ? 'is in a commit message' : null
 }

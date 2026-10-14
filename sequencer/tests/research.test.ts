@@ -287,6 +287,15 @@ test('label D3: a label with text after its colon is a claim', async () => {
     .toMatchObject({ outcome: 'refuse', spans: ['research.unsourced'], note: 'no source for "**Row 6:** the report gives no fix commit."' })
 })
 
+test('label D4: a lone bold line is a claim, a sub-heading is not', async () => {
+  expect(await checked('**Pashov Audit Group**\n\nThe cap is 3 [source:1].'))
+    .toMatchObject({ outcome: 'refuse', spans: ['research.unsourced'], note: 'no source for "**Pashov Audit Group**"' })
+  expect(await checked('### Pashov Audit Group\n\nThe cap is 3 [source:1].'))
+    .toMatchObject({ outcome: 'pass', note: '1 sentence(s) checked against 1 url(s)' })
+  expect(await checked('**Pashov Audit Group:**\n\nThe cap is 3 [source:1].'))
+    .toMatchObject({ outcome: 'pass', note: '1 sentence(s) checked against 1 url(s)' })
+})
+
 const TABLE = readFileSync(join(import.meta.dirname, 'fixtures/research-table-answer.md'), 'utf8')
 
 const FIXES = '# Fix commits\n\n**Question:** which commit fixed each advisory?\n**Would be wrong if:** a fix was reverted\n**Done when:** each advisory names its fix\n'

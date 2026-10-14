@@ -34,6 +34,8 @@ export const Profile = z.strictObject({
     node: z.array(z.string()).optional(),
     npm: z.array(z.string()).optional(),
     xcodebuild: z.array(z.string()).optional(),
+    forge: z.array(z.string()).optional(),
+    python3: z.array(z.string()).optional(),
     excused: z.array(z.string()).optional(),
   }).optional(),
   greptile_files: z.array(z.string()).optional(),

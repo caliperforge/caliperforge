@@ -20,7 +20,7 @@
     "prepare": 1
   },
   "checks.ts": {
-    "lines": 307,
+    "lines": 312,
     "silent-catch": 2
   },
   "ci.ts": {

@@ -258,7 +258,7 @@ test('check D1: a table header and separator are not claims', async () => {
 })
 
 test('check D2: rule lines quoted from the ask are not claims', async () => {
-  expect(await checked(`${RULES}\nThe cap is 3 [source:1].`, SOURCES, `${ASK}\n${RULES}`))
+  expect(await checked(`${RULES}\n3. The cap is 3 [source:1].`, SOURCES, `${ASK}\n${RULES}`))
     .toMatchObject({ outcome: 'pass', note: '1 sentence(s) checked against 1 url(s)' })
   expect(await checked(`${RULES}\nIt never moves.`, SOURCES, `${ASK}\n${RULES}`))
     .toMatchObject({ outcome: 'refuse', spans: ['research.unsourced'], note: 'no source for "It never moves."' })

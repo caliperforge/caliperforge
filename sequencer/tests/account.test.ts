@@ -86,6 +86,14 @@ test('D5: an idea on a repo with no account writes nothing', () => {
   expect(targetRows(w.db)).toHaveLength(1)
 })
 
+test('D5: an idea listed twice lands once', () => {
+  const w = accounted()
+  put(w.root, 2, 'ideas.json', JSON.stringify([idea('acme/widget', 14), idea('acme/widget', 14)]))
+  expect(ideas(w.db, w.root, planById(w.db, 2))).toMatchObject({ outcome: 'pass',
+    note: '1 target(s) written ready, 0 already in targets, 1 repeated' })
+  expect(targetRows(w.db).slice(1)).toMatchObject([{ repo: 'acme/widget', issue_no: 14, state: 'ready' }])
+})
+
 test('D6: log adds new dated rows at the end of ## Log, once', () => {
   const w = accounted()
   const path = join(w.root, FILE)

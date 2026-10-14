@@ -53,7 +53,8 @@ export function ideas(db: Db, root: string, plan: PlanRow): Outcome {
   const got = Ideas.safeParse(JSON.parse(get(root, plan.id, 'ideas.json')))
   if (!got.success) return { outcome: 'refuse', spans: ['ideas.json'], note: got.error.issues.map((i) => `${i.path.join('.')} ${i.message}`).join('; ') }
   const day = new Date().toISOString().slice(0, 10)
-  const fresh = got.data.filter((i) => !targeted(db, i.repo, i.issue))
+  const stored = got.data.filter((i) => targeted(db, i.repo, i.issue)).length
+  const fresh = got.data.filter((i, n) => !targeted(db, i.repo, i.issue) && got.data.findIndex((j) => j.repo === i.repo && j.issue === i.issue) === n)
   const rows = fresh.flatMap((i): Target[] => {
     const known = newestAccount(db, i.repo) as { id: number } | undefined
     return known === undefined ? [] : [{ account_id: known.id, repo: i.repo, issue_no: i.issue, named_merger: '', state: 'ready',
@@ -62,7 +63,7 @@ export function ideas(db: Db, root: string, plan: PlanRow): Outcome {
   const unknown = [...new Set(fresh.filter((i) => !rows.some((r) => r.repo === i.repo)).map((i) => i.repo))]
   if (unknown.length > 0) return { outcome: 'refuse', spans: ['accounts'], note: `no accounts row for ${unknown.join(', ')}` }
   db.transaction(() => { for (const r of rows) addTarget(db, r) })()
-  return { outcome: 'pass', spans: [], note: `${String(rows.length)} target(s) written ready, ${String(got.data.length - rows.length)} already in targets` }
+  return { outcome: 'pass', spans: [], note: `${String(rows.length)} target(s) written ready, ${String(stored)} already in targets, ${String(got.data.length - stored - rows.length)} repeated` }
 }
 
 export function log(root: string, plan: PlanRow): Outcome {

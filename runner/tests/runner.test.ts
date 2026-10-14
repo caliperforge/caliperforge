@@ -5,9 +5,9 @@ import type { HookInput, SDKResultMessage } from '@anthropic-ai/claude-agent-sdk
 import { expect, test } from 'vitest'
 import { fresh, rejects } from '../../checks/sqlite.ts'
 import { fired, gate } from '../../providers/claude-agent-sdk/index.ts'
-import { CAPPED, type Provider } from '../../providers/kind.ts'
+import { CAPPED, type Packet, type Provider } from '../../providers/kind.ts'
 import { fire, packet, planRow, refuse } from '../index.ts'
-import { digest, expected, listed, load, rules, seat } from '../rules.ts'
+import { digest, expected, listed, load, rules, Seat, seat } from '../rules.ts'
 
 const root = join(import.meta.dirname, '../..')
 const SEATS = ['brief_writer', 'design_lead', 'director', 'fixer', 'fizz_generator', 'go_specialist', 'growth_lead', 'kotlin_specialist',
@@ -88,6 +88,37 @@ test('a background run is denied and the seat stays in the session', () => {
   expect(denied.stopReason).toBeUndefined()
   expect(gate(ours, bash('npm run tight', false))).toEqual({ continue: true })
   expect(gate(ours, bash('npm run tight'))).toEqual({ continue: true })
+})
+
+const held = (tools: string[]): Packet => ({ prompt: 'p', cwd, transcript: TRANSCRIPT, model: 'm', effort: 'high', tools, refuse: () => null })
+const denied = { continue: true, hookSpecificOutput: { permissionDecision: 'deny' } }
+
+test('D1 a read-only seat may hold gh api, not gh', () => {
+  const card = (tools: string[]) => ({ seat: 'account_lead', model: 'm', effort: 'low', tools, write_paths: [] })
+  const gh = ['Read', 'Bash(cf look:*)', 'Bash(gh api:*)']
+  expect(Seat.parse(card(gh)).tools).toEqual(gh)
+  for (const tools of [['Read', 'Bash(gh:*)'], ['Read', 'Bash(gh pr:*)'], ['Read', 'Bash']]) {
+    expect(() => Seat.parse(card(tools))).toThrow(/save Bash\(cf look:\*\)/)
+  }
+})
+
+test('D2 D3 the gate admits a gh api read and denies its writes', () => {
+  const p = held(['Read', 'Bash(gh api:*)'])
+  expect(gate(p, bash('gh api repos/a/b/releases'))).toEqual({ continue: true })
+  expect(gate(p, bash('gh api -X GET repos/a/b/pulls --paginate'))).toEqual({ continue: true })
+  expect(gate(p, bash('gh api -iXGET \'repos/a/b/pulls?state=all\''))).toEqual({ continue: true })
+  for (const command of ['gh api -X POST repos/a/b/issues', 'gh api -XPOST repos/a/b/issues', 'gh api --method=PATCH repos/a/b',
+    'gh api repos/a/b/issues -f title=x', 'gh api repos/a/b -F n=1', 'gh api repos/a/b --raw-field=x=y', 'gh api repos/a/b --input body.json',
+    'gh api repos/a/b/issues \'-f\' title=x', 'gh api repos/a/b/issues "-XPOST"', 'gh api -iXPOST repos/a/b/issues', 'gh api -iF n=1 repos/a/b/issues',
+    'gh api repos/a/b/issues {-f,title=x}', 'gh api repos/a/b/issues \\-f title=x']) {
+    expect(gate(p, bash(command))).toMatchObject(denied)
+  }
+})
+
+test('D4 gh outside gh api is denied whatever pattern is held', () => {
+  for (const tools of [['Bash(gh api:*)'], ['Bash(gh:*)']]) {
+    for (const command of ['gh pr comment 1', 'gh issue create']) expect(gate(held(tools), bash(command))).toMatchObject(denied)
+  }
 })
 
 test('the kotlin seat keeps gradle on a stranger\'s tree', () => {

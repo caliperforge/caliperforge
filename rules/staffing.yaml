@@ -116,3 +116,4 @@
 - { template: comms, step: 7, seat: growth_lead }
 - { template: comms, step: 8, seat: typescript_specialist }
 - { template: comms, step: 9, seat: typescript_specialist }
+- { template: bench, step: 1, key: fizz, seat: fizz_generator }

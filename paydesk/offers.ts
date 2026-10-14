@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-export interface Offer { proto: 'x402' | 'mpp'; scheme: string | null; network: string; coin: string; usd: number | null; payTo: string | null }
+export interface Offer { proto: 'x402' | 'mpp'; scheme: string | null; network: string; coin: string; asset: string; usd: number | null; payTo: string | null }
 export interface Offers { offers: Offer[]; x402Source: 'header' | 'body' | null; x402Version: number | null; resourceUrl: string | null }
 interface Response { status: number; headers: Record<string, string | string[]>; body: string }
 
@@ -88,6 +88,7 @@ function accepted(accept: z.infer<typeof Accept>): Offer {
     scheme: accept.scheme ?? null,
     network: NETWORKS[accept.network] ?? accept.network,
     coin: coinOf(accept.asset),
+    asset: accept.asset,
     usd: usd(accept.amount ?? accept.maxAmountRequired, 6),
     payTo: accept.payTo ?? null,
   }
@@ -107,6 +108,7 @@ function challenge(segment: string): Offer[] {
     scheme: params.intent ?? null,
     network: params.method === 'solana' ? solana(request.methodDetails?.network) : `mpp:${params.method}`,
     coin: coinOf(request.currency),
+    asset: request.currency,
     usd: usd(request.amount, request.methodDetails?.decimals ?? 6),
     payTo: request.recipient ?? null,
   }]

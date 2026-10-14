@@ -30,13 +30,25 @@ const PROSE: Record<keyof typeof METRICS, { title: string; unit: string; definit
     caveat: 'A day with no CEO events is a row of zeros, and today is a partial day. It counts actions, not time spent.' },
 }
 
+const LEAK = /cost|usd|price|dollar|funder|email|login/i
+
+export function leaked(value: unknown): string | undefined {
+  if (typeof value === 'string') return LEAK.test(value) ? value : undefined
+  if (typeof value !== 'object' || value === null) return undefined
+  const parts = Array.isArray(value) ? (value as unknown[]) : Object.entries(value as Record<string, unknown>).flat()
+  return parts.map(leaked).find((hit) => hit !== undefined)
+}
+
 export function exported(path: string, dir: string, now: Date): string[] {
   const db = reader(path)
   try {
     const today = now.toISOString().slice(0, 10)
     const files = (Object.keys(METRICS) as (keyof typeof METRICS)[]).map((name) => {
       const { title, unit, definition, caveat } = PROSE[name]
-      const body = JSON.stringify({ metric: name, title, unit, ...metric(db, METRICS[name], today), definition, caveat }, null, 2)
+      const data = { metric: name, title, unit, ...metric(db, METRICS[name], today), definition, caveat }
+      const leak = leaked(data)
+      if (leak !== undefined) throw new Error(`${name}.json: ${leak}`)
+      const body = JSON.stringify(data, null, 2)
       return { path: join(dir, 'data', `${name}.json`), body }
     })
     mkdirSync(join(dir, 'data'), { recursive: true })

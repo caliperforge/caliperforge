@@ -132,6 +132,25 @@ test('D4 with no Justfile a package.json build script is not run', () => {
   ])
 })
 
+const LEAK = ['smoke/check_leak.py', 'tests/test_smoke_leak.py']
+
+const py = (files: Record<string, string>): ReturnType<typeof gates> => gates(nested(files), { language: 'python', files: LEAK })
+
+test('1208 D1 no pyproject or Justfile runs pytest on listed tests', () => {
+  expect(py({ 'smoke/check_leak.py': '', 'tests/test_smoke_leak.py': '' })).toEqual([
+    { script: 'test', bin: 'uv', args: ['run', '--no-project', '--with', 'pytest', 'python', '-m', 'pytest', 'tests/test_smoke_leak.py'], dir: '' },
+  ])
+})
+
+test('1208 D2 no listed test, no gate; a pyproject keeps its own', () => {
+  expect(py({ 'smoke/check_leak.py': '' })).toEqual([])
+  expect(py({ 'pyproject.toml': '', 'smoke/check_leak.py': '', 'tests/test_smoke_leak.py': '' })).toEqual([
+    { script: 'install', bin: 'uv', args: ['sync', '--all-extras'], dir: '' },
+    { script: 'lint', bin: 'uv', args: ['run', '--no-sync', 'ruff', 'check'], dir: '' },
+    { script: 'test', bin: 'uv', args: ['run', '--no-sync', 'pytest'], dir: '' },
+  ])
+})
+
 test('D6 no lockfile: no install gate, npm runs the scripts', () => {
   expect(ts(nested({ 'ts/package.json': PACKAGE }))).toEqual([
     { script: 'lint', bin: 'npm', args: ['run', 'lint'], dir: 'ts' },

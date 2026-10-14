@@ -474,8 +474,8 @@ function gated(db: Db, plan: PlanRow, src: string, diff: string): Gated[] {
   const row = db.prepare(`SELECT outcome, subject_digest FROM verdicts WHERE plan = ? AND kind = 'rail' AND rail_id = 'checks'
     ORDER BY id DESC LIMIT 1`).get(plan.id) as { outcome: string; subject_digest: string } | undefined
   if (row?.outcome !== 'pass' || row.subject_digest !== createHash('sha256').update(diff).digest('hex')) return []
-  if (!internal(plan)) {
-    const outside = outsideLanguage(languageFor(db, plan, src))
+  if (!internal(plan) || (plan.target_id === null && LANGUAGE[mode(src)] === undefined)) {
+    const outside = outsideLanguage(languageFor(db, plan, src, false))
     if (outside === null) return []
     return gates(src, { language: outside, files: filesOf(db, plan.id).map((f) => f.path) })
       .map((g) => ({ language: outside, dir: g.dir, command: [g.bin, ...g.args].join(' ') }))

@@ -13,7 +13,7 @@ const x402 = {
   accepts: [{ scheme: 'exact', network: 'base', amount: '10000', asset: USDC_BASE, payTo: '0xpay' }],
 }
 
-const baseOffer = { proto: 'x402', scheme: 'exact', network: 'eip155:8453', coin: 'USDC', usd: 0.01, payTo: '0xpay' }
+const baseOffer = { proto: 'x402', scheme: 'exact', network: 'eip155:8453', coin: 'USDC', asset: USDC_BASE, usd: 0.01, payTo: '0xpay' }
 
 const solanaCharge = `Payment id="a1", realm="api", method="solana", intent="charge", request="${encode({
   amount: '2500000000',
@@ -56,6 +56,7 @@ test('D4 solana charge prices at its own decimals on mainnet', () => {
     scheme: 'charge',
     network: 'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp',
     coin: 'USDC',
+    asset: USDC_SOLANA,
     usd: 2.5,
     payTo: 'Recipient1',
   }])
@@ -69,6 +70,7 @@ test('D5 a tempo challenge maps to mpp:tempo', () => {
     scheme: 'charge',
     network: 'mpp:tempo',
     coin: '0x20c00000',
+    asset: '0x20c0000000000000000000000000000000000000',
     usd: 1,
     payTo: '0xr',
   }])
@@ -81,6 +83,7 @@ test('D6 returns offers for both x402 and mpp', () => {
     body: '',
   })
   expect(res.offers.map((o) => o.proto)).toEqual(['x402', 'mpp'])
+  expect(res.offers.map((o) => o.asset)).toEqual([USDC_BASE, USDC_SOLANA])
   expect(res.x402Source).toBe('header')
 })
 

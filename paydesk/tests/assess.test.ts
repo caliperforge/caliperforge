@@ -6,7 +6,7 @@ const SOLANA = 'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp'
 const DEVNET = 'solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1'
 const HOST = 'api.example.com'
 
-const offer: Offer = { proto: 'x402', scheme: 'exact', network: SOLANA, coin: 'USDC', usd: 0.01, payTo: 'Pay1' }
+const offer: Offer = { proto: 'x402', scheme: 'exact', network: SOLANA, coin: 'USDC', asset: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', usd: 0.01, payTo: 'Pay1' }
 const clean: Offers = { offers: [offer], x402Source: 'body', x402Version: 2, resourceUrl: 'https://api.example.com/paid' }
 
 const probe = (more: Partial<Offers> = {}, bodyIsJson = true) =>

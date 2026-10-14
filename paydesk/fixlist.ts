@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { stripVTControlCharacters } from 'node:util'
 import { parse } from 'yaml'
-import type { Scanned } from './scan.ts'
+import type { Row as Scanned } from './prs.ts'
 
 export interface Row { pr: number; listing: string; method?: string; path?: string; msg: string; range?: [number, number]; length?: number }
 export interface Item { listing: string; where: string; what: string; blocking: boolean }
@@ -42,6 +42,7 @@ export function merge(checked: Row[], scanned: Scanned[]): Fix[] {
     fix(r.pr).items.push({ listing: fqnOf(r.listing), where: r.method === undefined ? 'PAY.md' : `${r.method} ${r.path ?? ''}`, what, blocking: true })
   }
   for (const s of scanned) {
+    if ('unfetched' in s) continue
     if ('crash' in s) {
       const prs = new Set(checked.filter((r) => fqnOf(r.listing) === s.fqn).map((r) => r.pr))
       for (const pr of prs) fix(pr).items.push({ listing: s.fqn, where: 'PAY.md', what: `scan crashed: ${s.crash}`, blocking: true })

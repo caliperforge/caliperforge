@@ -39,6 +39,7 @@ HTML is semantic. CSS never clips and never scrolls sideways: content wraps, and
 box. Colours come from theme tokens for light and dark. No build step and no framework unless the repo already
 has one. Labels are plain words kept in the repo's words file, never store terms written into a screen.
 `node --check` passes on every changed `.js`.
+On caliperforge/site, a public repository, nothing you write names a cost, a price, a funder, a person or a pay-catalog finding.
 
 ## What to check
 

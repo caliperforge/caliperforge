@@ -4,6 +4,7 @@ import { query, type HookInput, type SDKMessage, type SDKRateLimitInfo, type SDK
 import type { Reading } from '../../store/lanes.ts'
 import { credential } from '../credential.ts'
 import { bare, type Fired, type Packet, type Provider } from '../kind.ts'
+import { ghWrite } from './gh.ts'
 
 const WRITES = new Set(['Write', 'Edit', 'NotebookEdit'])
 
@@ -195,6 +196,7 @@ function ranOutside(tools: string[], args: unknown): string | null {
   if (given.run_in_background === true) return 'ruling:seat.tools refuses run_in_background: run it in the foreground and wait for it'
   const said = given.command
   const command = typeof said === 'string' ? said.trim() : ''
+  if (ghWrite(command)) return `ruling:seat.tools refuses ${JSON.stringify(command)}: gh runs only as a gh api GET read`
   const patterns = tools.flatMap((tool) => RULE.exec(tool)?.[1] ?? [])
   if (!CHAINED.test(command) && patterns.some((pattern) => admits(pattern, command))) return null
   return `ruling:seat.tools refuses the command ${JSON.stringify(command)}`

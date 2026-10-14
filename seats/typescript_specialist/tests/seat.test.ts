@@ -1,6 +1,8 @@
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
+import { gate } from '../../../providers/claude-agent-sdk/index.ts'
 import { packs } from '../../../reviews/packs.ts'
+import { packet } from '../../../runner/index.ts'
 import { Seat, rules, seat } from '../../../runner/rules.ts'
 
 const root = join(import.meta.dirname, '../../..')
@@ -79,6 +81,20 @@ test('D1: What to check opens the prompt with TypeScript checks', () => {
   expect(prompt.startsWith('# typescript_specialist\n\n## What to check\n')).toBe(true)
   const checks = prompt.slice(0, prompt.indexOf('## Profile'))
   for (const word of ['caller', 'import', 'Date.parse', 'second = 60', 'description', 'result: {}']) expect(checks).toContain(word)
+})
+
+test('D4: the seat resolves a ref and runs no other look', () => {
+  const { manifest, prompt } = seat(root, 'typescript_specialist')
+  const p = packet(manifest, prompt, '', '', root, join(root, 'x.transcript.jsonl'), true)
+  const ran = (command: string) =>
+    gate(p, { hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: { command } } as never)
+  expect(ran('cf look gh pashov/skills ref main')).toEqual({ continue: true })
+  for (const command of ['git ls-remote https://github.com/pashov/skills', 'cf look store "SELECT 1"', 'cf look plan 1 ask.md', 'cf look gh a/b ref main && curl x']) {
+    expect(ran(command)).toMatchObject({
+      continue: true,
+      hookSpecificOutput: { permissionDecision: 'deny', permissionDecisionReason: `ruling:seat.tools refuses the command ${JSON.stringify(command)}` },
+    })
+  }
 })
 
 test('D2: review mode reads What to check before the profile', () => {

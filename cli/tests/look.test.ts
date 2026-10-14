@@ -8,7 +8,7 @@ import { ofKind } from '../../store/events.ts'
 import { migrate, open, type Db } from '../../store/index.ts'
 import { select } from '../../store/look.ts'
 import type { Read } from '../gh.ts'
-import { looked, planFile, thread } from '../look.ts'
+import { looked, planFile, ref, thread } from '../look.ts'
 
 /** A migrated file database with its writer left open, as a live tick holds one. */
 function file(): { dir: string; path: string; handle: Db } {
@@ -63,6 +63,36 @@ test('D4 thread reads an issue, a PR and refuses a commit', () => {
   expect(pr).toContain('## bob\na review')
   expect(pr).toContain('src/x.ts:3 tighten')
   expect(() => thread('acme/widget', 'commit', 3, read)).toThrow('issue or pr')
+})
+
+const SHA = 'a'.repeat(40)
+
+test('D1 ref resolves a branch through the commits API', () => {
+  const asked: string[][] = []
+  expect(ref('pashov/skills', 'main', (args) => (asked.push(args), { sha: SHA }))).toBe(SHA)
+  expect(asked).toEqual([['api', 'repos/pashov/skills/commits/main']])
+})
+
+test.each([
+  ['https://github.com/pashov/skills', 'main'],
+  ['pashov/skills/../x', 'main'],
+  ['pashov/skills', '../../user'],
+])('D2 ref refuses %s %s', (repo, branch) => {
+  const asked: string[][] = []
+  expect(() => ref(repo, branch, (args) => (asked.push(args), { sha: SHA }))).toThrow()
+  expect(asked).toEqual([])
+})
+
+test('D3 thread reads an issue and a PR as before', () => {
+  const asked: string[][] = []
+  const recorded: Read = (args) => (asked.push(args), read(args))
+  thread('acme/widget', 'issue', 1, recorded)
+  thread('acme/widget', 'pr', 2, recorded)
+  expect(asked.slice(0, 2)).toEqual([
+    ['issue', 'view', '1', '--repo', 'acme/widget', '--json', 'title,body,comments'],
+    ['pr', 'view', '2', '--repo', 'acme/widget', '--json', 'title,body,comments,reviews'],
+  ])
+  expect(() => thread('acme/widget', 'commit', 3, recorded)).toThrow('issue or pr')
 })
 
 test('D5 looked names the plan the command ran from', () => {

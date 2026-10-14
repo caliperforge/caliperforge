@@ -1,4 +1,5 @@
 import { FORK } from '../sequencer/workspace.ts'
+import { newest } from './deliverables.ts'
 import type { Db } from './index.ts'
 import { BUILT, type PlanRow } from './plans.ts'
 
@@ -62,4 +63,38 @@ export function proven(db: Db, plan: PlanRow): boolean {
   return db.prepare(`SELECT 1 FROM deliverables WHERE plan_id = ? AND tests_pass = 1
     AND byte_identical_elsewhere = 1 AND bot_clean = 1 AND target_warm = 1`)
     .get(plan.id) !== undefined
+}
+
+/** The pull request this plan already opened, if it did: the row step 8 stamped carries its url, else the target `cf adopt` wrote. */
+export function opened(db: Db, plan: number): string | null {
+  const row = db.prepare(`SELECT COALESCE(
+    (SELECT evidence FROM deliverables WHERE plan_id = ? AND state = 'pushed' AND evidence GLOB 'https://*/pull/*' ORDER BY id DESC LIMIT 1),
+    (SELECT t.evidence FROM plans p JOIN targets t ON t.id = p.target_id WHERE p.id = ? AND t.evidence GLOB 'https://*/pull/*')
+  ) AS evidence`).get(plan, plan) as { evidence: string | null }
+  return row.evidence
+}
+
+export function markPushed(db: Db, plan: number, approval: number, url: string): void {
+  db.prepare(`UPDATE deliverables SET state = 'pushed', approval_id = ?, evidence = ?
+    WHERE id = ?`).run(approval, url, newest(db, plan)?.id ?? null)
+}
+
+/** The stranger's repository the pull request is opened on and the issue it closes. */
+export function pushTarget(db: Db, plan: PlanRow): { repo: string; issue_no: number; named_merger: string } | null {
+  return (db.prepare('SELECT repo, issue_no, named_merger FROM targets WHERE id = ?').get(plan.target_id) ?? null) as
+    { repo: string; issue_no: number; named_merger: string } | null
+}
+
+export function botBody(db: Db, plan: number, head: string): string | null {
+  const row = db.prepare(`SELECT body FROM signals WHERE plan = ? AND kind = 'bot_review' AND head = ? AND body IS NOT NULL
+    ORDER BY id DESC LIMIT 1`).get(plan, head) as { body: string } | undefined
+  return row?.body ?? null
+}
+
+/** The tree the reviewer last passed, else the one its last verdict judged, off the row `judge()` wrote it on. */
+export function judgedTree(db: Db, plan: number, step: number): string | null {
+  const row = db.prepare(`SELECT tree FROM verdicts WHERE plan = ? AND step = ? AND kind = 'review' AND gate <> 'blind_review'
+    ORDER BY outcome = 'pass' AND tree IS NOT NULL DESC, id DESC LIMIT 1`)
+    .get(plan, step) as { tree: string | null } | undefined
+  return row?.tree ?? null
 }

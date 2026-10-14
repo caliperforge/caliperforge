@@ -1,7 +1,10 @@
 import { expect, test } from 'vitest'
 import type { Gh } from '../../rails/ci-green/index.ts'
-import { pointers } from '../../store/events.ts'
-import { rewind } from '../../store/plans.ts'
+import { addSetting } from '../../store/drift.ts'
+import { ofKind, pointers } from '../../store/events.ts'
+import { current } from '../../store/now.ts'
+import { dropPlan, rewind } from '../../store/plans.ts'
+import { passed } from '../../store/ready.ts'
 import { tick } from '../index.ts'
 import { SHOWS } from '../ci.ts'
 import type { Wire } from '../push.ts'
@@ -23,12 +26,11 @@ const LOG = [
 
 function mine(where: string | null = 'ci'): World {
   const w = world()
-  w.db.prepare('DELETE FROM plans WHERE id = 1').run()
+  dropPlan(w.db, 1)
   ours(w.root)
   internalPlan(w.db, w.root, ID)
   if (where !== null) {
-    w.db.prepare(`INSERT INTO settings (key, value, who, origin_kind, origin_ref, set_at)
-      VALUES ('checks.where', ?, 'ceo', 'ruling', 'ceo-2026-09-26', '2026-09-26')`).run(where)
+    addSetting(w.db, { key: 'checks.where', value: where, who: 'ceo', origin_kind: 'ruling', origin_ref: 'ceo-2026-09-26', set_at: '2026-09-26' })
   }
   return w
 }
@@ -50,7 +52,7 @@ test('green at the head passes step 3 without the laptop suite', async () => {
   expect(fired).toMatchObject({ step: 3, outcome: 'pass' })
   expect(fired?.note).toContain('checks ran on GitHub CI at caliperforge/caliperforge@')
   expect(sent).toEqual(['send src +p2-let-an-internal-plan-run'])
-  expect(w.db.prepare("SELECT outcome FROM verdicts WHERE plan = ? AND rail_id = 'checks'").get(ID)).toEqual({ outcome: 'pass' })
+  expect(passed(w.db, ID, 'rail_id', 'checks')).toBe(true)
   expect(plan(w.db, ID).step).toBe(4)
 })
 
@@ -60,7 +62,7 @@ test('no run yet holds step 3, then the run passes it', async () => {
   await toRails(w, wire)
   expect(await rails(w, wire)).toMatchObject({ step: 3, outcome: 'pass' })
   expect(plan(w.db, ID).step).toBe(3)
-  expect(w.db.prepare('SELECT doing FROM now WHERE plan = ?').get(ID)).toEqual({ doing: 'waiting on CI' })
+  expect(current(w.db).find((n) => n.plan === ID)).toMatchObject({ doing: 'waiting on CI' })
   expect((await rails(w, wire))?.note).toContain('GitHub CI')
   expect(plan(w.db, ID).step).toBe(4)
 })
@@ -92,8 +94,7 @@ test('a push that fails runs the suite on the laptop', async () => {
   const wire: Wire = { ...watched([], w.root, ID), send: () => { throw new Error('offline') } }
   await toRails(w, wire)
   expect((await rails(w, wire))?.note).toBe(LOCAL)
-  expect(w.db.prepare("SELECT plan, actor, message FROM events WHERE kind = 'swallowed'").all())
-    .toEqual([{ plan: ID, actor: 'ciChecks', message: 'offline' }])
+  expect(ofKind(w.db, 'swallowed')).toMatchObject([{ plan: ID, actor: 'ciChecks', message: 'offline' }])
 })
 
 test('D5 a deleted branch is gone and never sent or listed again', async () => {

@@ -112,7 +112,6 @@
   },
   "push.ts": {
     "lines": 622,
-    "prepare": 5,
     "silent-catch": 5
   },
   "rails.ts": {
@@ -138,7 +137,6 @@
   },
   "seat.ts": {
     "lines": 515,
-    "prepare": 5,
     "silent-catch": 1
   },
   "settle.ts": {
@@ -177,20 +175,11 @@
   "tests/batch.test.ts": {
     "prepare": 1
   },
-  "tests/built.test.ts": {
-    "prepare": 5
-  },
   "tests/card.test.ts": {
     "prepare": 1
   },
-  "tests/ceiling.test.ts": {
-    "prepare": 5
-  },
   "tests/chain.test.ts": {
     "prepare": 1
-  },
-  "tests/ci.test.ts": {
-    "prepare": 5
   },
   "tests/fence.test.ts": {
     "prepare": 3

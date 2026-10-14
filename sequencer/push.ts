@@ -16,9 +16,10 @@ import type { Db } from '../store/index.ts'
 import { busy } from '../store/now.ts'
 import { internal, originIssue, originRef, type PlanRow } from '../store/plans.ts'
 import { profile, type Profile } from '../store/profile.ts'
+import { markPushed, opened, passed as passing, pushTarget } from '../store/ready.ts'
 import { freed, took, waitsFor } from '../store/slot.ts'
 import { GREEN, onBase } from './base.ts'
-import { CHECKS, waiting, type Check, type Row, type Target } from './card.ts'
+import { CHECKS, waiting, type Check, type Row } from './card.ts'
 import { npm } from './checks.ts'
 import { bind, prMessage, signedAt } from './folded.ts'
 import { red } from './failures.ts'
@@ -260,9 +261,7 @@ function triggered(text: string): boolean {
  * outside plan never comes here; its fork CI is the only test their code gets.
  */
 function checked(db: Db, root: string, plan: PlanRow, repo: string): null {
-  const step3 = db.prepare("SELECT outcome FROM verdicts WHERE plan = ? AND gate = 'pre_review' ORDER BY id DESC LIMIT 1")
-    .get(plan.id) as { outcome: string } | undefined
-  const passed = step3?.outcome === 'pass'
+  const passed = passing(db, plan.id, 'gate', 'pre_review')
   const sha = headOf(root, plan.id).sha
   const asm = assembly(db, plan)
   const why = asm === null ? `${repo} runs no workflows` : `fork CI runs once on ${asm.branch}, at the parent's step 6`
@@ -363,7 +362,7 @@ export function land(db: Db, root: string, plan: PlanRow, approval: number, wire
     return refuse('base:stale', `${onto} moved under plan ${String(plan.id)} between fetch and push; cut it again from ${onto}`)
   }
   wire.close(homeOf(plan), issue, sha)
-  pushed(db, plan.id, approval, `https://github.com/${asm?.fork ?? homeOf(plan)}/commit/${sha}`)
+  markPushed(db, plan.id, approval, `https://github.com/${asm?.fork ?? homeOf(plan)}/commit/${sha}`)
   if (plan.lane === 'atelier') wire.install?.()
   return { outcome: 'pass', spans: [], note: `landed ${head.branch} on ${onto} as ${sha.slice(0, 12)}` }
 }
@@ -399,7 +398,7 @@ function onMain(db: Db, plan: PlanRow): Outcome {
 
 export function push(db: Db, root: string, plan: PlanRow, wire: Wire = WIRE): Outcome {
   if (internal(plan)) return onMain(db, plan)
-  const target = subject(db, plan)
+  const target = pushTarget(db, plan)
   if (target === null) return refuse('targets', `plan ${String(plan.id)} has no target row`)
   if (!cloned(srcDir(root, plan.id))) return refuse('checkout', `plan ${String(plan.id)} has no checkout to send`)
   const head = headOf(root, plan.id)
@@ -421,43 +420,22 @@ export function push(db: Db, root: string, plan: PlanRow, wire: Wire = WIRE): Ou
   wire.send(head.dir, head.branch)
   retire(`${FORK}/${repoName(target.repo)}`, rehearsed(root, plan.id, head.branch), wire)
   if (open !== null) {
-    pushed(db, plan.id, approval, open)
+    markPushed(db, plan.id, approval, open)
     return { outcome: 'pass', spans: [], note: `pushed ${head.branch} onto ${open}` }
   }
   const body = maybe(root, plan.id, 'pr.md') === null
     ? put(root, plan.id, 'pr.md', text)
     : join(planDir(root, plan.id), 'pr.md')
   const url = wire.open(target.repo, `caliperforge:${head.branch}`, title(root, plan.id), body)
-  pushed(db, plan.id, approval, url)
+  markPushed(db, plan.id, approval, url)
   return { outcome: 'pass', spans: [], note: `pushed ${head.branch} as ${url}` }
 }
 
-/** The pull request this plan already opened, if it did: the row step 8 stamped carries its url, else the target `cf adopt` wrote. */
-export function opened(db: Db, plan: number): string | null {
-  const row = db.prepare(`SELECT COALESCE(
-    (SELECT evidence FROM deliverables WHERE plan_id = ? AND state = 'pushed' AND evidence GLOB 'https://*/pull/*' ORDER BY id DESC LIMIT 1),
-    (SELECT t.evidence FROM plans p JOIN targets t ON t.id = p.target_id WHERE p.id = ? AND t.evidence GLOB 'https://*/pull/*')
-  ) AS evidence`).get(plan, plan) as { evidence: string | null }
-  return row.evidence
-}
+export { opened }
 
 /** The ready gate already consumed fork CI and the counterparty bot; push reads its rows, never reruns them. */
 function unproven(db: Db, plan: number): string | null {
-  for (const [name, sql] of GATES) {
-    const row = db.prepare(sql).get(plan) as { outcome: string } | undefined
-    if (row?.outcome !== 'pass') return name
-  }
-  return null
-}
-
-const GATES: [string, string][] = [
-  ['ci-green', "SELECT outcome FROM verdicts WHERE plan = ? AND rail_id = 'ci-green' ORDER BY id DESC LIMIT 1"],
-  ['ready', "SELECT outcome FROM verdicts WHERE plan = ? AND gate = 'ready' AND rail_id = 'ready' ORDER BY id DESC LIMIT 1"],
-]
-
-function pushed(db: Db, plan: number, approval: number, url: string): void {
-  db.prepare(`UPDATE deliverables SET state = 'pushed', approval_id = ?, evidence = ?
-    WHERE id = ?`).run(approval, url, newest(db, plan)?.id ?? null)
+  return ['ci-green', 'ready'].find((rail) => !passing(db, plan, 'rail_id', rail)) ?? null
 }
 
 /** The digest on the card must name bytes that are in the branch, so the plan's work lands before it is shown. */
@@ -639,12 +617,6 @@ function signing(dir: string): string[] {
 
 function refuse(span: string, note: string): Outcome {
   return { outcome: 'refuse', spans: [span], note }
-}
-
-/** The stranger's repository the pull request is opened on and the issue it closes. */
-function subject(db: Db, plan: PlanRow): Target | null {
-  return (db.prepare('SELECT repo, issue_no, named_merger FROM targets WHERE id = ?').get(plan.target_id) ?? null) as
-    Target | null
 }
 
 function git(cwd: string, args: string[]): string {

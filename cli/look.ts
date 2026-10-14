@@ -26,6 +26,13 @@ export function thread(repo: string, kind: string, no: number, read: Read = gh):
   return [t.title, t.body, ...[...t.comments, ...t.reviews].map((c) => `## ${c.author.login}\n${c.body}`), ...lines].join('\n\n')
 }
 
+export function ref(repo: string, branch: string, read: Read = gh): string {
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) throw new Error('cf look gh ref takes <owner>/<name>')
+  const segments = branch.split('/')
+  if (segments.includes('..')) throw new Error('cf look gh ref takes a branch without ..')
+  return z.object({ sha: z.string() }).parse(read(['api', `repos/${repo}/commits/${segments.map(encodeURIComponent).join('/')}`])).sha
+}
+
 export function looked(db: Db, root: string, cwd: string, target: string): void {
   const first = relative(join(root, '.cf/work'), cwd).split(sep)[0] ?? ''
   logged(db, { plan: /^\d+$/.test(first) ? Number(first) : null, kind: 'look', actor: 'coo_lite', outcome: 'pass',
@@ -48,7 +55,7 @@ export function registerLook(cf: Command, { root, db, out }: Cli): void {
   })
 
   look.command('gh').argument('<repo>').argument('<kind>').argument('<n>').action((repo: string, kind: string, n: string) => {
-    out(`${thread(repo, kind, Number(n))}\n`)
+    out(`${kind === 'ref' ? ref(repo, n) : thread(repo, kind, Number(n))}\n`)
     looked(db(), root, process.cwd(), `gh ${repo} ${kind} ${n}`)
   })
 }

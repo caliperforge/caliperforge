@@ -1,13 +1,17 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { z } from 'zod'
+import type { Provider } from '../providers/kind.ts'
 import type { Outcome } from '../sequencer/kind.ts'
+import { prose } from '../sequencer/prose.ts'
+import { ran } from '../sequencer/seat.ts'
 import { get, maybe, put } from '../sequencer/workspace.ts'
 import { ours, targeted } from '../store/account.ts'
 import type { Db } from '../store/index.ts'
 import type { PlanRow } from '../store/plans.ts'
 import { addTarget, newestAccount, type Target } from '../store/targets.ts'
 import { DEFAULT_BUILDER, type Step } from './pr-path.ts'
+import { FENCE, sourced } from './research.ts'
 
 const row = (name: string, step: number): Step =>
   ({ step, name, seat: DEFAULT_BUILDER, fires: 'kernel', runs: name, gate: false, writes_verdict: false, verdict_gate: null })
@@ -22,6 +26,8 @@ const REPO = /^[\w.-]+\/[\w.-]+$/
 const DATED = /^- \d{4}-\d{2}-\d{2} /
 
 const Ideas = z.array(z.object({ repo: z.string().regex(REPO), issue: z.int().positive(), why: z.string(), size: z.string() }))
+
+const IDEAS = /(?:^|\n)(?:```\w*\n)?---[ \t]*\n(ideas:[\s\S]*?)\n---[ \t]*(?:\n```[ \t]*)?/
 
 function account(root: string, plan: PlanRow): { path: string; text: string } | Outcome {
   const ask = maybe(root, plan.id, 'ask.md') ?? maybe(root, plan.id, 'issue.md') ?? ''
@@ -47,6 +53,28 @@ export function reading(db: Db, root: string, plan: PlanRow): Outcome {
   const listed = (key: 'plans' | 'prs' | 'targets'): string => rows.flatMap((r) => r[key].map((x) => JSON.stringify(x))).join('\n') || 'none'
   put(root, plan.id, 'reading.md', `${found.text.trimEnd()}\n\n# Our plans\n\n${listed('plans')}\n\n# Our pull requests\n\n${listed('prs')}\n\n# Our targets\n\n${listed('targets')}\n`)
   return { outcome: 'pass', spans: [], note: `reading.md written from ${found.path} and ${String(repos.length)} repo(s)` }
+}
+
+export async function brief(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
+  const input = `# Account\n\n${get(root, plan.id, 'reading.md')}${
+    maybe(root, plan.id, 'refusal.md')?.replace(/^/, '\n\n# Refused — fix what this names\n\n') ?? ''}`
+  const fired = await ran(db, root, plan, step, provider, input, false)
+  if (fired.ended !== 'completed') return { outcome: 'refuse', spans: [fired.stop_reason ?? 'seat.exit'], note: `${step.runs} ${fired.ended}` }
+  const sources = sourced(root, plan, fired.text)
+  if (sources.outcome === 'refuse') return sources
+  const got = Ideas.safeParse((prose(IDEAS.exec(fired.text)?.[1] ?? '', ['why', 'size']) as { ideas?: unknown } | null)?.ideas)
+  if (!got.success) {
+    return { outcome: 'refuse', spans: ['account_lead.ideas'],
+      note: `${step.runs} reply has no valid ideas fence: ${got.error.issues.map((i) => `${i.path.join('.')} ${i.message}`).join('; ')}` }
+  }
+  const body = fired.text.replace(IDEAS, '').replace(FENCE, '').trim()
+  const draft = section(body.split('\n'), '## Draft')
+  if (draft !== null && !draft.body.some((l) => /\[source:\d+\]/.test(l))) {
+    return { outcome: 'refuse', spans: ['account_lead.draft'], note: '## Draft cites no source: a check-in with no result' }
+  }
+  put(root, plan.id, 'ideas.json', JSON.stringify(got.data))
+  put(root, plan.id, 'answer.md', body)
+  return { outcome: 'pass', spans: [], note: `${step.runs}: answer.md written, ${sources.note}` }
 }
 
 export function ideas(db: Db, root: string, plan: PlanRow): Outcome {

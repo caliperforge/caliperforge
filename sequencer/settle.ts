@@ -9,6 +9,7 @@ import type { Taken } from '../store/leases.ts'
 import { busy } from '../store/now.ts'
 import { advance, back, end, finish, internal, needsCeo, rewind, type PipeRow, type PlanRow, waiting } from '../store/plans.ts'
 import { blipped, peer, refused, sinceSent } from '../store/refusals.ts'
+import { brief } from '../templates/account.ts'
 import { generate } from '../templates/bench.ts'
 import { draft, grow, review } from '../templates/comms.ts'
 import { builder, type Step } from '../templates/pr-path.ts'
@@ -203,6 +204,7 @@ const SEATS: Partial<Record<PlanRow['template'], Record<string, typeof grow>>> =
   comms: { draft, text_review: review, grow },
   research: { gather, review: answered },
   bench: { generate },
+  account: { brief },
 }
 
 function seated(plan: PlanRow, step: Step): typeof grow {

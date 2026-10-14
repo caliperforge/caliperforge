@@ -47,11 +47,11 @@ function listed(name: string, list: Step[]): StepMap {
 
 const MAPS: Record<PlanRow['template'], StepMap> = {
   pr_path: { steps, at, last },
-  /** templates/comms.ts and templates/research.ts import back into this module through sequencer/seat.ts, so their steps may not exist yet when this one loads. */
+  /** templates/comms.ts, templates/research.ts and templates/account.ts import back into this module through sequencer/seat.ts, so their steps may not exist yet when this one loads. */
   get comms() { return listed('comms', comms) },
   get research() { return listed('research', research) },
   bench: listed('bench', bench),
-  account: listed('account', account),
+  get account() { return listed('account', account) },
 }
 
 export function mapOf(template: PlanRow['template']): StepMap {

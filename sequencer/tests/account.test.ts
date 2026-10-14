@@ -1,15 +1,17 @@
 import { cpSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { expect, test } from 'vitest'
+import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import { built } from '../../store/deliverables.ts'
+import { kindsOf } from '../../store/events.ts'
 import { addRule } from '../../store/index.ts'
-import { allPlans, planById, putPlan, type PlanRow } from '../../store/plans.ts'
+import { allPlans, dropPlan, planById, putPlan, type PlanRow } from '../../store/plans.ts'
 import { addAccount, putTarget, targetRows } from '../../store/targets.ts'
-import { ideas, log, reading } from '../../templates/account.ts'
+import { brief, ideas, log, reading } from '../../templates/account.ts'
+import { tick } from '../index.ts'
 import { route } from '../next.ts'
 import { mapOf } from '../steps.ts'
 import { maybe, put } from '../workspace.ts'
-import { world, type World } from './world.ts'
+import { stub, world, type World } from './world.ts'
 
 const DAY = '2026-10-14'
 
@@ -19,6 +21,7 @@ const FILE = 'accounts/evm-security.md'
 
 const accounted = (ask = '# Weekly\n\n**Account:** evm-security\n'): World => {
   const w = world()
+  dropPlan(w.db, 1)
   putPlan(w.db, { id: 2, pipe_id: 1, target_id: null, template: 'account', state: 'queued', queued_at: AT, step: 0, retries: 0 })
   put(w.root, 2, 'ask.md', ask)
   cpSync(join(import.meta.dirname, '../../accounts'), join(w.root, 'accounts'), { recursive: true })
@@ -35,11 +38,77 @@ test('D1: an account plan is stored and parsed', () => {
   }).toThrow(/CHECK constraint failed/)
 })
 
-test('D2: the account map, while route still says no_step_map', () => {
+test('D2: the account map, and route fires its read step', () => {
   const w = accounted()
   expect(mapOf('account').steps.map((s) => s.name)).toEqual(['read', 'brief', 'check', 'ideas', 'log'])
   expect(mapOf('account').at(1)).toMatchObject({ seat: 'account_lead', fires: 'seat', runs: 'account_lead' })
-  expect(route(w.db, planById(w.db, 2), new Date())).toEqual({ wait: 'no_step_map', on: null })
+  expect(route(w.db, planById(w.db, 2), new Date())).toEqual({ fire: mapOf('account').at(0) })
+})
+
+const IDEA = '---\nideas:\n  - repo: acme/widget\n    issue: 14\n    why: it fits\n    size: small\n---\n\n'
+
+const SOURCES = '---\nsources:\n  - url: https://a.example/doc\n    fetched_at: 2026-10-04T10:00:00Z\n    quote: Acme shipped.\n    claim: Acme shipped\n---\n'
+
+const BRIEF = ['## Their world', '## Our work', '## Who brings us things', '## Openings', '## Ideas']
+  .map((h) => `${h}\n\nAcme shipped [source:1].\n\n`).join('')
+
+const reply = (draft = '', fences = `${IDEA}${SOURCES}`): string => `${BRIEF}${draft}${fences}`
+
+const briefed = (w: World, text: string, seen?: (prompt: string) => void): ReturnType<typeof brief> =>
+  brief(w.db, w.root, planById(w.db, 2), mapOf('account').at(1), stub('', 0, text, (p) => seen?.(p.prompt)))
+
+beforeEach(() => { vi.stubGlobal('fetch', vi.fn<typeof fetch>(() => Promise.resolve(new Response('Acme shipped.')))) })
+
+afterEach(() => { vi.unstubAllGlobals() })
+
+test('D1: ticks drive an account plan from read to done', async () => {
+  const w = accounted()
+  for (let n = 0; n < 6 && planById(w.db, 2).state !== 'done'; n += 1) await tick(w.db, w.root, stub('', 0, reply()))
+  expect(planById(w.db, 2).state).toBe('done')
+  expect(kindsOf(w.db, 2)).toEqual(['read', 'brief', 'check', 'ideas', 'log'].map((kind) => ({ kind, outcome: 'pass' })))
+  const answer = maybe(w.root, 2, 'answer.md') ?? ''
+  for (const h of BRIEF.match(/^## .+$/gm) ?? []) expect(answer).toContain(h)
+  expect(answer).not.toContain('---')
+  expect(maybe(w.root, 2, 'sources.json')).not.toBeNull()
+  expect(targetRows(w.db).slice(1)).toMatchObject([{ repo: 'acme/widget', issue_no: 14, state: 'ready' }])
+})
+
+test('D3: a draft with no source is refused, nothing written', async () => {
+  const w = accounted()
+  put(w.root, 2, 'reading.md', '# A\n')
+  expect(await briefed(w, reply('## Draft\n\nHi, just checking in.\n\n')))
+    .toMatchObject({ outcome: 'refuse', spans: ['account_lead.draft'], note: '## Draft cites no source: a check-in with no result' })
+  expect(maybe(w.root, 2, 'answer.md')).toBeNull()
+  expect(maybe(w.root, 2, 'ideas.json')).toBeNull()
+})
+
+test('D4: a missing or bad fence is refused', async () => {
+  const w = accounted()
+  put(w.root, 2, 'reading.md', '# A\n')
+  expect(await briefed(w, reply('', SOURCES))).toMatchObject({ outcome: 'refuse', spans: ['account_lead.ideas'] })
+  expect(await briefed(w, reply('', `${IDEA.replace('    issue: 14\n', '')}${SOURCES}`)))
+    .toMatchObject({ outcome: 'refuse', spans: ['account_lead.ideas'] })
+  expect(await briefed(w, reply('', IDEA))).toMatchObject({ outcome: 'refuse', spans: ['researcher.fence'] })
+})
+
+test('D5: a draft that cites a source passes', async () => {
+  const w = accounted()
+  put(w.root, 2, 'reading.md', '# A\n')
+  expect(await briefed(w, reply('## Draft\n\nAcme shipped [source:1].\n\n'))).toMatchObject({ outcome: 'pass' })
+  expect(maybe(w.root, 2, 'answer.md')).toContain('## Draft')
+  expect(JSON.parse(maybe(w.root, 2, 'ideas.json') ?? '')).toEqual([{ repo: 'acme/widget', issue: 14, why: 'it fits', size: 'small' }])
+})
+
+test('D6: the prompt holds reading.md, and refusal.md if any', async () => {
+  const w = accounted()
+  put(w.root, 2, 'reading.md', '# Reading mark\n')
+  let prompt = ''
+  await briefed(w, reply(), (p) => { prompt = p })
+  expect(prompt).toContain('# Account\n\n# Reading mark')
+  expect(prompt).not.toContain('# Refused — fix what this names')
+  put(w.root, 2, 'refusal.md', 'Refusal mark')
+  await briefed(w, reply(), (p) => { prompt = p })
+  expect(prompt).toContain('# Refused — fix what this names\n\nRefusal mark')
 })
 
 test('D3: reading.md holds the file and our rows on its repos', () => {

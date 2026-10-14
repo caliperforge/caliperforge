@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { beforeEach, expect, test } from 'vitest'
 import { addRun } from '../../store/brief.ts'
+import { logged } from '../../store/events.ts'
 import { migrate, open, type Db } from '../../store/index.ts'
 import { metric, reader } from '../../store/metrics.ts'
 import { exported } from '../export.ts'
@@ -11,7 +12,7 @@ const schema = join(import.meta.dirname, '../../schema')
 
 const now = new Date('2026-10-04T12:00:00Z')
 
-const ORDER = ['daily_activity', 'token_mix', 'runs_by_seat', 'gate_verdicts', 'plan_outcomes', 'pipeline_counts', 'tokens_per_landed_job']
+const ORDER = ['daily_activity', 'token_mix', 'runs_by_seat', 'gate_verdicts', 'plan_outcomes', 'pipeline_counts', 'tokens_per_landed_job', 'ceo_touches']
 
 const NAMES = ORDER.map((n) => `${n}.json`).sort()
 
@@ -84,12 +85,22 @@ function landed(): string {
   return path
 }
 
+function touched(): string {
+  const path = seeded()
+  for (const [kind, actor, at] of [['signoff', 'ceo', '2026-10-01T09:00:00Z'], ['retry', 'ceo', '2026-10-01T10:00:00Z'],
+    ['release', 'ceo', '2026-10-01T23:59:00Z'], ['card', 'ceo', '2026-10-03T00:00:00Z'], ['desk_approve', 'ceo', '2026-10-03T12:00:00Z'],
+    ['signoff', 'coo', '2026-10-02T09:00:00Z'], ['signoff', 'director', '2026-10-01T09:00:00Z']] as const) {
+    logged(store, { plan: null, kind, actor, outcome: 'pass', message: `secret ${kind} by ${actor}`, pointer: null, run: null }, at)
+  }
+  return path
+}
+
 const json =(name: string): { columns: string[]; rows: (string | number | null)[][] } & Record<string, unknown> =>
   JSON.parse(readFileSync(join(site, 'data', `${name}.json`), 'utf8')) as never
 
 const direct = (sql: string): string[] => metric(store, sql, '').rows.map((r) => JSON.stringify(r)).sort()
 
-test('D1 writes the seven files with the seven keys', () => {
+test('D1 writes the eight files with the seven keys', () => {
   expect(exported(seeded(), site, now)).toEqual(ORDER.map((n) => join(site, 'data', `${n}.json`)))
   expect(readdirSync(join(site, 'data')).sort()).toEqual(NAMES)
   for (const name of ORDER) {
@@ -182,6 +193,17 @@ test('D7 refusals are counted and an empty gate gives zeros', () => {
   exported(staged(), site, now)
   expect(json('pipeline_counts').rows.slice(2, 6)).toEqual([['rails', 3, 1, 'verdicts'], ['code review', 2, 1, 'verdicts'],
     ['senior review', 0, 0, 'verdicts'], ['ready', 1, 0, 'verdicts']])
+})
+
+test('D2 ceo_touches counts CEO events per UTC day by kind', () => {
+  exported(touched(), site, now)
+  const file = json('ceo_touches')
+  expect([file.title, file.unit]).toEqual(['Human touches', 'CEO actions per UTC day'])
+  expect(file.columns).toEqual(['day', 'touches', 'signoff', 'return', 'priority', 'retry', 'card', 'filed', 'pipe', 'desk_approve', 'other'])
+  expect(file.rows).toEqual([['2026-10-01', 3, 1, 0, 0, 1, 0, 0, 0, 0, 1], ['2026-10-02', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    ['2026-10-03', 2, 0, 0, 0, 0, 1, 0, 0, 1, 0], ['2026-10-04', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]])
+  for (const r of file.rows) expect(r.slice(2).reduce((n: number, c) => n + Number(c), 0)).toBe(r[1])
+  expect(readFileSync(join(site, 'data', 'ceo_touches.json'), 'utf8')).not.toMatch(/secret/)
 })
 
 test('D1 tokens per landed job: one cohort per Monday week', () => {

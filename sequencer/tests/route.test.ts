@@ -177,6 +177,18 @@ test('1033 D1 D2 a listed test admits its test folder only', () => {
   expect(fenceFor(w.db, 1, [BRIEF_FILES])).toEqual(['tests/unit/tests/test_a.py', 'tests'])
 })
 
+test('1157d D3 a scoped entry holds on its own repo only', () => {
+  const w = world()
+  const scoped = ['test', 'caliperforge/v4-hook-index:bench', 'caliperforge/fuzz-bench:src']
+  expect(fenceFor(w.db, 3, scoped)).toEqual(['test', 'bench'])
+  expect(fenceFor(w.db, 2, scoped)).toEqual(['test'])
+  expect(fenceFor(w.db, 99, [])).toEqual([])
+  record(w.db, 3, listed(['bench/run.py']))
+  expect(fenceFor(w.db, 3, [BRIEF_FILES, 'caliperforge/fuzz-bench:src'])).toEqual(['bench/run.py'])
+  record(w.db, 1, listed(['Package.swift']))
+  expect(fenceFor(w.db, 1, scoped)).toEqual(['Package.swift'])
+})
+
 const SWIFT = ['Atelier', 'AtelierTests', 'Atelier.xcodeproj', 'swift']
 
 test('D1 an outside plan fences kotlin and swift to the brief', () => {

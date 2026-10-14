@@ -12,6 +12,7 @@ import type { Fired } from './kind.ts'
 import { reprice } from './priority.ts'
 import { rescored } from './ready.ts'
 import { daily, paydesk, started, weekly } from './signals.ts'
+import { accounts } from './accounts.ts'
 import { type Wire } from './push.ts'
 import { due, type Entry, stuck } from './drift.ts'
 import { sunday } from '../cli/science.ts'
@@ -35,6 +36,7 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
   for (const signal of capture(db, read, root, labels)) started(db, signal, root, wire)
   daily(db, now)
   weekly(db, now)
+  accounts(db, root, now)
   ripe(db, now)
   if (registry !== undefined) {
     due(db, registry, now, read)
@@ -48,8 +50,7 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
   reprice(db, labels)
   rescored(db, root)
   const out: Fired[] = []
-  const lanes = openPipes(db, hhmm(db, now))
-    .map((pipe) => ({ pipe, routed: live(db, pipe).map((plan) => ({ plan, route: route(db, plan, now) })) }))
+  const lanes = openPipes(db, hhmm(db, now)).map((pipe) => ({ pipe, routed: live(db, pipe).map((plan) => ({ plan, route: route(db, plan, now) })) }))
   waiting(db, lanes.flatMap((l) => l.routed.map(({ plan, route: r }) =>
     'fire' in r ? { plan: plan.id, why: null } : { plan: plan.id, why: r.wait, on: r.on })))
   park(db, root, lanes.flatMap((l) => l.routed), now)

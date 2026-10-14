@@ -66,6 +66,7 @@ VALUES
   ('rules/registry/57-paydesk_live.yaml', 'card', 'rules/registry/57-paydesk_live.yaml', '24b8cd147418b6f613a05e2eaf38de1ba5b85f6bb949809011f095a7feff44d5', '2026-10-12'),
   ('rules/registry/58-site_data.yaml', 'card', 'rules/registry/58-site_data.yaml', '85aa464fbfaac1614776f03f9289d2494edc667d862ce562773df0deb6ca6a7c', '2026-10-14'),
   ('rules/registry/58-site_pipe.yaml', 'card', 'rules/registry/58-site_pipe.yaml', '3f52e414c5d41296cbe229112dfc2db343fb0f8867803c70e6ed2d9105cf6e13', '2026-10-14'),
+  ('rules/registry/59-account_plans.yaml', 'card', 'rules/registry/59-account_plans.yaml', '56d667b79b489881be47dac3837df6c32d1b5d9ba772e997740acf38c233bb34', '2026-10-14'),
   ('rules/staffing.yaml', 'card', 'rules/staffing.yaml', '661c5398f520b22c922fd69c4be8d969b0cdf74a8d6c5e538ac79a5a820441c5', '2026-10-05'),
   ('completion-audit', 'rail', 'rules/rails.yaml', 'b46b445806d399b61887a5259eb0a6893444efcbe5acf2e6dd534507bc0882f3', '2026-09-17'),
   ('secret-scan', 'rail', 'rules/rails.yaml', 'b46b445806d399b61887a5259eb0a6893444efcbe5acf2e6dd534507bc0882f3', '2026-09-17'),

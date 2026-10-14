@@ -20,14 +20,14 @@ function listing(number: number, body: string, closedAt: string | null = null) {
     labels: [{ name: 'lane:machine' }], createdAt: '2026-09-27', closedAt, stateReason: null }
 }
 
-function seeded(first: { state: PlanRow['state']; closedAt?: string } | null) {
+function seeded(first: { state: PlanRow['state']; closedAt?: string; template?: PlanRow['template'] } | null) {
   const db = open(':memory:')
   migrate(db, join(repo, 'schema'))
   db.exec("INSERT INTO pipes (id, name, enabled, window_start, window_end, max_concurrent) VALUES (9, 'after', 1, '00:00', '23:59', 2)")
   recordListing(db, home, [listing(1, 'first', first?.closedAt ?? null), listing(2, 'second\n\nAfter: #1\n')], false)
-  const plan = (no: number, state: PlanRow['state']) => addPlan(db, { pipe_id: 9, target_id: null, template: 'pr_path', state,
+  const plan = (no: number, state: PlanRow['state'], template: PlanRow['template'] = 'pr_path') => addPlan(db, { pipe_id: 9, target_id: null, template, state,
     queued_at: '2026-09-28', lane: 'machine', seat: 'typescript_specialist', origin: `https://github.com/${home}/issues/${String(no)}`, step: 0 })
-  const one = first === null ? null : plan(1, first.state)
+  const one = first === null ? null : plan(1, first.state, first.template)
   const two = plan(2, 'running')
   return { db, root: mkdtempSync(join(tmpdir(), 'cf-after-')), one, two }
 }
@@ -82,6 +82,21 @@ test('D3 an After closed unlanded or planless holds for the COO', () => {
   expect(measure(none.db, none.root, plan(none.db, none.two)).held).toBe(true)
   expect(row(none.db, none.two)).toEqual({ state: 'blocked_on_ceo', step: 0, waits_on: null, held_by: 'coo', held_why: '#1 has no plan' })
   expect(maybe(none.root, none.two, 'parked.md')).toBeNull()
+})
+
+test('D1 an After done research plan passes measure unheld', () => {
+  const { db, root, two } = seeded({ state: 'done', template: 'research' })
+  const measured = measure(db, root, plan(db, two))
+  expect(measured.outcome).toBe('pass')
+  expect(measured.held).toBeUndefined()
+  expect(row(db, two)).toMatchObject({ waits_on: null, held_by: null })
+})
+
+test('D3 an After refused research plan holds for the COO', () => {
+  const { db, root, one, two } = seeded({ state: 'refused', template: 'research' })
+  expect(measure(db, root, plan(db, two)).held).toBe(true)
+  expect(row(db, two)).toEqual({ state: 'blocked_on_ceo', step: 0, waits_on: null, held_by: 'coo',
+    held_why: `#1's plan ${String(one)} ended refused` })
 })
 
 test('D4 an After refused leaves its reason with the COO', () => {

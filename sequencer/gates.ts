@@ -120,7 +120,7 @@ function own(src: string, outside: Outside, excused: string[]): Gate[] {
   const prefix = PREFIX[outside.language]
   const theirs = ![...(found ?? [])].some((n) => n.startsWith(prefix)) && [...(found ?? [])].some((n) => Object.values(PREFIX).some((p) => n.startsWith(p)))
   const { dir, defined } = theirs ? { dir: home(src, first(outside), (name) => recipe.markers.test(name)), defined: null } : { dir: near, defined: found }
-  if (outside.language === 'python' && defined === null && !existsSync(join(src, dir, 'pyproject.toml'))) return pytests(src, outside.files)
+  if (outside.language === 'python' && defined === null && !existsSync(join(src, dir, 'pyproject.toml'))) return loose(src, outside.files)
   const node = outside.language === 'typescript' ? nodeGates(src, dir, home(src, join(dir, 'package.json'), lockfile), recipe.recipes) : null
   const install = node?.install ?? (recipe.install === null ? [] : [{ ...recipe.install, dir }])
   if (defined === null) return [...install, ...(node?.raw ?? recipe.raw.map((r) => ({ ...r, dir })))]
@@ -129,10 +129,18 @@ function own(src: string, outside: Outside, excused: string[]): Gate[] {
   return [...(defined.has('install') ? [just('install')] : install), ...(build === undefined ? [] : [just(build)]), ...recipe.recipes.map((r) => (defined.has(prefix + r) ? prefix + r : r)).filter((r) => defined.has(r)).map(just)]
 }
 
-/** `python -m pytest`, unlike `pytest`, puts the root on `sys.path`, so a listed test imports the tree from there. */
-function pytests(src: string, files: string[]): Gate[] {
-  const tests = files.filter((f) => /^tests\/.*\.py$/.test(f) && existsSync(join(src, f)))
-  return tests.length === 0 ? [] : [{ script: 'test', bin: 'uv', args: ['run', '--no-project', '--with', 'pytest', 'python', '-m', 'pytest', ...tests], dir: '' }]
+/** One throwaway environment for all three, so pyright resolves `import pytest`. */
+const ENV = ['run', '--no-project', '--with', 'ruff', '--with', 'pyright', '--with', 'pytest']
+
+/** `python -m pytest`, unlike `pytest`, puts the root on `sys.path`, so the whole suite imports the tree from there. */
+function loose(src: string, files: string[]): Gate[] {
+  const py = files.filter((f) => f.endsWith('.py') && existsSync(join(src, f)))
+  if (py.length === 0) return []
+  return [
+    { script: 'lint', bin: 'uv', args: [...ENV, 'ruff', 'check', ...py], dir: '' },
+    { script: 'typecheck', bin: 'uv', args: [...ENV, 'pyright', ...py], dir: '' },
+    { script: 'test', bin: 'uv', args: [...ENV, 'python', '-m', 'pytest'], dir: '' },
+  ]
 }
 
 function first(outside: Outside): string {

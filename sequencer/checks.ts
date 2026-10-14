@@ -5,6 +5,7 @@ import { isAbsolute, join } from 'node:path'
 import type { Profile } from '../store/profile.ts'
 import { exitedOutside } from './exited.ts'
 import { gates, type Gate, type Outside, type OutsideLanguage } from './gates.ts'
+import { malformed } from './malformed.ts'
 import { Package } from './node.ts'
 
 export type Commands = NonNullable<Profile['commands']>
@@ -71,6 +72,8 @@ export function checks(src: string, given: Commands, run: Run = npm, narrow: str
   if (outside !== null) return gated(src, gates(src, outside, given.excused), run, given.excused ?? [])
   const parsed = given.node === undefined ? null : gated(src, syntax(src, given.node, touched), run)
   if (parsed !== null) return parsed
+  const unparsed = given.json === true ? malformed(src, touched) : null
+  if (unparsed !== null) return unparsed
   const bin = mode(src)
   if (bin === 'xcodebuild') excluded(src)
   for (const [script, args, program = bin] of commands(src, given, narrow, touched)) {
@@ -208,12 +211,16 @@ function commands(src: string, given: Commands, narrow: string[], touched: strin
   return [
     ...(bare(src) ? [['ci', ['ci']] as [string, string[]]] : []),
     ...named.map((s): [string, string[]] => [s, related(scripts[s] ?? '', s, narrow) ?? ['run', s]]),
+    ...tools(src, given, touched),
   ]
 }
 
 export function tools(src: string, given: Commands, touched: string[]): [string, string[], string][] {
   const py = touched.filter((path) => path.endsWith('.py') && existsSync(join(src, path)))
-  return [...(given.forge ?? []).map((s): [string, string[], string] => [s, [s], 'forge']),
+  const tsc = given.tsc !== undefined && existsSync(join(src, 'tsconfig.json'))
+    ? [['typecheck', ['exec', '--no', '--', 'tsc', ...given.tsc], 'npm'] as [string, string[], string]] : []
+  return [...tsc,
+    ...(given.forge ?? []).map((s): [string, string[], string] => [s, [s], 'forge']),
     ...(given.python3 === undefined ? [] : [['pytest', [...given.python3, ...py], 'python3'] as [string, string[], string]])]
 }
 

@@ -14,6 +14,7 @@ export interface Gated {
   language: string
   dir: string
   command: string
+  outcome?: 'skipped'
 }
 
 export function coverage(gates: Gated[], diff: string): string | undefined {
@@ -21,7 +22,7 @@ export function coverage(gates: Gated[], diff: string): string | undefined {
   const unchecked = parse(diff).filter((f) => !f.deleted).map((f) => f.path)
     .filter((path) => { const language = languageOfPath(path); return language !== null && !ran.has(language) })
   if (gates.length === 0 && unchecked.length === 0) return undefined
-  const lines = gates.length === 0 ? '- none' : gates.map((g) => `- ${g.language} | ${g.dir === '' ? '.' : g.dir} | ${g.command} | pass`).join('\n')
+  const lines = gates.length === 0 ? '- none' : gates.map((g) => `- ${g.language} | ${g.dir === '' ? '.' : g.dir} | ${g.command} | ${g.outcome ?? 'pass'}`).join('\n')
   return unchecked.length === 0 ? lines : `${lines}\n\nNo gate ran for:\n${unchecked.map((path) => `- ${path}`).join('\n')}`
 }
 

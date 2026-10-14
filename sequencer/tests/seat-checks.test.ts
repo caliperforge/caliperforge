@@ -78,11 +78,20 @@ function bench(outcome: Verdict['outcome']): { db: Db; plan: PlanRow; src: strin
   return { db, src, plan: { ...plan, target_id: null, lane: 'bench', seat: 'solidity_specialist', origin: 'https://github.com/caliperforge/fuzz-bench/issues/1' } }
 }
 
+const FORGE = '- solidity | . | forge build | pass\n- solidity | . | forge test | pass\n- python | . | python3 -m pytest tests/test_smoke_leak.py | pass'
+
+const PAIR = '- finish | . | python3 bench/run_pair.py targets/euler-earn-m01.yml suites/euler-m01'
+
 test('1181a D4 a green fuzz-bench plan lists its python gates', () => {
   const { db, plan, src } = bench('pass')
-  const env = 'uv run --no-project --with ruff --with pyright --with pytest'
-  expect(checked(db, REPO, plan, src, LEAK)).toEqual({ checks: [...['ruff check tests/test_smoke_leak.py', 'pyright tests/test_smoke_leak.py', 'python -m pytest']
-    .map((c) => `- python | . | ${env} ${c} | pass`), '- finish | . | forge test --root targets/euler-earn | pass'].join('\n') })
+  expect(checked(db, REPO, plan, src, LEAK)).toEqual({ checks: `${FORGE}\n${PAIR} | skipped` })
+})
+
+test('1225 D7 the finish row passes once run_pair.py is there', () => {
+  const { db, plan, src } = bench('pass')
+  mkdirSync(join(src, 'bench'))
+  writeFileSync(join(src, 'bench', 'run_pair.py'), '')
+  expect(checked(db, REPO, plan, src, LEAK)).toEqual({ checks: `${FORGE}\n${PAIR} | pass` })
 })
 
 test('1181b D4 a red-rail bench plan lists no finish row', () => {

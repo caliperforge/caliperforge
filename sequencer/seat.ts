@@ -27,7 +27,7 @@ import { handout, long, touched, type Handed } from './handout.ts'
 import { capped, enclosed, handover, type Handover } from './handover.ts'
 import { symbolMap } from './symbols.ts'
 import { targetOf } from './steps.ts'
-import { install, mode, type Mode } from './checks.ts'
+import { install, missing, mode, tools, type Mode } from './checks.ts'
 import { narrow } from './rails.ts'
 import { classify } from './delta.ts'
 import { commanded } from './command.ts'
@@ -464,22 +464,23 @@ function referenced(src: string, issue: string): Pick<Bench, 'reference'> {
  * only while the diff is the one it judged.
  */
 export function checked(db: Db, root: string, plan: PlanRow, src: string, diff: string): { checks?: string } {
-  const ran = gated(db, plan, src, diff)
-  const finish = Object.values(profile(root, repoOf(db, plan) ?? '')?.finish ?? {}).map((argv) => ({ language: 'finish', dir: '', command: argv.join(' ') }))
+  const ran = gated(db, root, plan, src, diff)
+  const finish = Object.values(profile(root, repoOf(db, plan) ?? '')?.finish ?? {}).map((argv) => ({ language: 'finish', dir: '', command: argv.join(' '), ...(missing(src, argv) ? { outcome: 'skipped' as const } : {}) }))
   const checks = coverage(ran === null ? [] : [...ran, ...finish], diff)
   return checks === undefined ? {} : { checks }
 }
 
 const LANGUAGE: Partial<Record<Mode, string>> = { npm: 'typescript', xcodebuild: 'swift', gradle: 'kotlin' }
 
-function gated(db: Db, plan: PlanRow, src: string, diff: string): Gated[] | null {
+function gated(db: Db, root: string, plan: PlanRow, src: string, diff: string): Gated[] | null {
   const row = db.prepare(`SELECT outcome, subject_digest FROM verdicts WHERE plan = ? AND kind = 'rail' AND rail_id = 'checks'
     ORDER BY id DESC LIMIT 1`).get(plan.id) as { outcome: string; subject_digest: string } | undefined
   if (row?.outcome !== 'pass' || row.subject_digest !== createHash('sha256').update(diff).digest('hex')) return null
   const language = internal(plan) ? LANGUAGE[mode(src)] : undefined
   if (language === undefined) {
     const outside = outsideLanguage(languageFor(db, plan, src, false))
-    if (outside === null) return []
+    const listed = internal(plan) ? tools(src, profile(root, repoOf(db, plan) ?? '')?.commands ?? {}, parse(diff).map((f) => f.path)) : []
+    if (outside === null || listed.length > 0) return listed.map(([, args, bin]) => ({ language: bin === 'forge' ? 'solidity' : 'python', dir: '', command: [bin, ...args].join(' ') }))
     return gates(src, { language: outside, files: filesOf(db, plan.id).map((f) => f.path) })
       .map((g) => ({ language: outside, dir: g.dir, command: [g.bin, ...g.args].join(' ') }))
   }

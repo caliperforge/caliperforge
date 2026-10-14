@@ -693,6 +693,13 @@ test('#204 bare go runs gofmt, vet and test; gofmt output fails', () => {
   expect(calls).toEqual([`gofmt -s -l . @${join(src, 'go')}`])
 })
 
+test('1208 D3 a red pytest with no pyproject fails step 3', () => {
+  const src = nested({ 'smoke/check_leak.py': '', 'tests/test_smoke_leak.py': '' })
+  const { run } = heard({ ok: false, code: '1', output: 'FAILED tests/test_smoke_leak.py::test_leak' })
+  expect(checks(src, {}, run, [], { language: 'python', files: ['smoke/check_leak.py', 'tests/test_smoke_leak.py'] }))
+    .toMatchObject({ script: 'test', command: 'uv run --no-project --with pytest python -m pytest tests/test_smoke_leak.py', code: '1' })
+})
+
 test('#204 a recipe the Justfile does not define is not run', () => {
   const src = nested({ 'lua/Justfile': 'test:\n    luajit tests/run.lua\n', 'lua/pay-kit-dev-1.rockspec': '', 'lua/pay_kit/a.lua': '' })
   const { run, calls } = heard()

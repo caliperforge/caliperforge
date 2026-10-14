@@ -13,13 +13,13 @@ export { BRIEF_FILES, fenceFor } from './fence.ts'
  * and the outside seat only when no file is in a language with a seat of its own.
  */
 export function languageFor(db: Db, plan: PlanRow, src: string, bySeat = true): string | null {
+  const paths = filesOf(db, plan.id).map((f) => f.path)
   if (internal(plan) && plan.target_id === null) {
     if (kernelPlan(plan)) return null
     const home = homeOf(plan)
-    const own = home in BY_REPO ? majority(filesOf(db, plan.id).map((f) => f.path), home) ?? BY_REPO[home]?.[1] ?? null : null
-    return languageOf(src) ?? own ?? (bySeat ? languageOfSeat(plan.seat) : null)
+    const own = home in BY_REPO ? majority(paths, home) ?? BY_REPO[home]?.[1] ?? null : null
+    return languageOf(src) ?? own ?? (bySeat ? languageOfSeat(plan.seat) : majority(paths))
   }
-  const paths = filesOf(db, plan.id).map((f) => f.path)
   if (paths.length === 0) return languageOf(src)
   if (paths.every((p) => p.startsWith('kotlin/'))) return 'kotlin'
   return majority(paths) ?? OUTSIDE

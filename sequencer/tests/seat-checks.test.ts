@@ -65,6 +65,17 @@ test('D3 no pass on this diff, or mode none, lists no gate', () => {
   expect(checked(ours.db, { ...ours.plan, origin: 'https://github.com/acme/kit/issues/1' }, paykit(), DIFF)).toEqual({ checks: UNGATED })
 })
 
+const LEAK = '--- a/tests/test_smoke_leak.py\n+++ b/tests/test_smoke_leak.py\n@@ -1,1 +1,1 @@\n+x\n'
+
+test('1208 D5 a fuzz-bench plan lists its pytest gate', () => {
+  const { db, plan } = target(['smoke/check_leak.py', 'tests/test_smoke_leak.py'], 'pass', LEAK)
+  const src = mkdtempSync(join(tmpdir(), 'cf-note-'))
+  mkdirSync(join(src, 'tests'))
+  writeFileSync(join(src, 'tests', 'test_smoke_leak.py'), '')
+  const bench = { ...plan, target_id: null, origin: 'https://github.com/caliperforge/fuzz-bench/issues/1' }
+  expect(checked(db, bench, src, LEAK)).toEqual({ checks: '- python | . | uv run --no-project --with pytest python -m pytest tests/test_smoke_leak.py | pass' })
+})
+
 test('D6 no seat language and no gate, no section', () => {
   const { db, plan } = target(['docs/paykit-interface.md'])
   expect(checked(db, plan, paykit(), '--- a/docs/paykit-interface.md\n+++ b/docs/paykit-interface.md\n@@ -1,1 +1,1 @@\n+x\n')).toEqual({})

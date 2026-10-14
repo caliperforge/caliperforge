@@ -114,6 +114,12 @@ test('an empty repo of ours goes to the plan\'s seat', () => {
   expect(languageFor(w.db, w.hooks, empty, false)).toBeNull()
 })
 
+test('1208 D4 ungated repo of ours goes by its files', () => {
+  const w = world()
+  record(w.db, 3, listed(['smoke/check_leak.py', 'tests/test_smoke_leak.py']))
+  expect(languageFor(w.db, w.hooks, mkdtempSync(join(tmpdir(), 'cf-route-')), false)).toBe('python')
+})
+
 test('our repo with a language goes by tree, not the plan\'s seat', () => {
   const w = world()
   const dir = mkdtempSync(join(tmpdir(), 'cf-route-'))

@@ -26,6 +26,7 @@ export interface Packet {
 
 /** `stop_reason` is the SDK's `terminal_reason` verbatim, so the refire keys on the SDK's own spelling. */
 export const CAPPED: Extract<TerminalReason, 'max_turns'> = 'max_turns'
+export const API_ERROR = 'api_error'
 
 /** `Bash(gradle:*)` is still Bash: a tool's permission pattern does not change which tool it is. */
 export function bare(tool: string): string {

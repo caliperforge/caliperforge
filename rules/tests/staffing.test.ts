@@ -20,6 +20,10 @@ test('every comms step is staffed by its seat with no mode', () => {
   for (const s of comms) expect(staffed(root, 'comms', s.step, null)).toEqual({ seat: s.seat })
 })
 
+test('D8 the fizz bench generator is fizz_generator', () => {
+  expect(staffed(root, 'bench', 1, 'fizz')).toEqual({ seat: 'fizz_generator' })
+})
+
 test('an unknown key is staffed by nobody', () => {
   expect(staffed(root, 'pr_path', 2, 'cobol')).toBeNull()
 })

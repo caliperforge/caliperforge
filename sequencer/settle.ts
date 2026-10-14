@@ -9,6 +9,7 @@ import type { Taken } from '../store/leases.ts'
 import { busy } from '../store/now.ts'
 import { advance, back, end, finish, internal, needsCeo, rewind, type PipeRow, type PlanRow, waiting } from '../store/plans.ts'
 import { blipped, peer, refused, sinceSent } from '../store/refusals.ts'
+import { generate } from '../templates/bench.ts'
 import { draft, grow, review } from '../templates/comms.ts'
 import { builder, type Step } from '../templates/pr-path.ts'
 import { answered, check, gather } from '../templates/research.ts'
@@ -119,7 +120,7 @@ function stillCapped(db: Db, plan: number): boolean {
 function workspace(db: Db, root: string, plan: PlanRow): { language: string | null; failed: Outcome | null } {
   const { fires, name } = mapOf(plan.template).at(plan.step)
   const bare = name === 'rails' && unbuilt(root, plan.id)
-  const tree = plan.template !== 'comms' && (fires === 'brief' || fires === 'seat' || fires === 'review' || bare) ? treeOf(db, root, plan) : null
+  const tree = !['comms', 'bench'].includes(plan.template) && (fires === 'brief' || fires === 'seat' || fires === 'review' || bare) ? treeOf(db, root, plan) : null
   if (tree === null) return { language: null, failed: null }
   try {
     if (bare) rebranched(root, plan.id)
@@ -201,6 +202,7 @@ function fire(db: Db, root: string, plan: PlanRow, step: Step, provider: Provide
 const SEATS: Partial<Record<PlanRow['template'], Record<string, typeof grow>>> = {
   comms: { draft, text_review: review, grow },
   research: { gather, review: answered },
+  bench: { generate },
 }
 
 function seated(plan: PlanRow, step: Step): typeof grow {

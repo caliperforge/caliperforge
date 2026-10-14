@@ -1,2 +1,11 @@
 builder: solidity_specialist
 lane: bench
+rails:
+  checks: local
+commands:
+  forge:
+    - build
+    - test
+  python3:
+    - -m
+    - pytest

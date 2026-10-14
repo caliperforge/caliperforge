@@ -20,7 +20,17 @@ test('D1 identifiers notes naming a .sh and a .sql file differ', () => {
   expect(fingerprintOf(at(3), said('scripts/vendor_machine_schema.sh'))).not.toBe(fingerprintOf(at(3), said('schema/0049_target_take.sql')))
 })
 
-test('other spans still match on the span alone', () => {
+const fence = (why: string) => ({ outcome: 'refuse' as const, spans: ['researcher.fence'], note: `researcher reply has no valid sources fence: ${why}` })
+
+test('D1 fence refusals differ by the fault they name', () => {
+  expect(fingerprintOf(at(1), fence('the reply does not close with `---`'))).not.toBe(fingerprintOf(at(1), fence('line 5: claim')))
+})
+
+test('D2 one fence fault twice fingerprints the same', () => {
+  expect(fingerprintOf(at(1), fence('line 5: claim'))).toBe(fingerprintOf(at(1), fence('line 5: claim')))
+})
+
+test('D3 other spans still match on the span alone', () => {
   expect(fingerprintOf(at(6), base('behind main'))).toBe(fingerprintOf(at(6), base('behind main again')))
 })
 

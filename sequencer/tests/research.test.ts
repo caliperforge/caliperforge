@@ -7,6 +7,7 @@ import { posts } from '../../store/desk.ts'
 import { eventsOf, kindsOf, runRows } from '../../store/events.ts'
 import { get, set } from '../../store/lanes.ts'
 import { dropPlan, putPlan } from '../../store/plans.ts'
+import { WHY } from '../../store/refusals.ts'
 import { check, gather, question, record } from '../../templates/research.ts'
 import { tick } from '../index.ts'
 import type { Wire } from '../push.ts'
@@ -156,6 +157,18 @@ test('gather D4: a reply with no fence is refused', async () => {
   const [outcome] = await gathered(w, 'The cap is 3.')
   expect(outcome).toMatchObject({ outcome: 'refuse', spans: ['researcher.fence'] })
   expect(maybe(w.root, 1, 'answer.md')).toBeNull()
+})
+
+test('D4: two fence faults go round, one twice stops', async () => {
+  const w = researching()
+  await tick(w.db, w.root, seats(FOUND))
+  await tick(w.db, w.root, seats('The cap is 3.'))
+  const unclaimed = FOUND.replace('    claim: The cap is 3\n', '')
+  await tick(w.db, w.root, seats(unclaimed))
+  expect(maybe(w.root, 1, 'refusal.md')).not.toContain('# Stopped')
+  expect(plan(w.db, 1).state).not.toBe('blocked_on_ceo')
+  await tick(w.db, w.root, seats(unclaimed))
+  expect(maybe(w.root, 1, 'refusal.md')).toContain(`# Stopped\n\n${WHY.repeat}.`)
 })
 
 test('gather D2: a ``` wrapped fence passes, answer.md unwrapped', async () => {

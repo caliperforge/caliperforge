@@ -24,7 +24,7 @@ export const PlanRow = z.object({
   id: z.int(),
   pipe_id: z.int(),
   target_id: z.int().nullable(),
-  template: z.enum(['pr_path', 'research', 'comms']),
+  template: z.enum(['pr_path', 'research', 'comms', 'bench']),
   state: z.enum(['queued', 'running', 'blocked_on_ceo', 'halted', 'done', 'refused']),
   queued_at: z.string(),
   step: z.int(),

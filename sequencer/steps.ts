@@ -8,6 +8,7 @@ import type { Db } from '../store/index.ts'
 import { partsOf } from '../store/parts.ts'
 import { holder, waitsFor } from '../store/slot.ts'
 import { builderRan, held, internal, needsCeo, originIssue, originRef, waiting, type PlanRow, type Wait } from '../store/plans.ts'
+import { ideas, log, reading, steps as account } from '../templates/account.ts'
 import { scored, scratch, steps as bench } from '../templates/bench.ts'
 import { capture, desk, facts, gather, pack, score, steps as comms } from '../templates/comms.ts'
 import { at, last, steps, type Step } from '../templates/pr-path.ts'
@@ -50,6 +51,7 @@ const MAPS: Record<PlanRow['template'], StepMap> = {
   get comms() { return listed('comms', comms) },
   get research() { return listed('research', research) },
   bench: listed('bench', bench),
+  account: listed('account', account),
 }
 
 export function mapOf(template: PlanRow['template']): StepMap {
@@ -119,6 +121,9 @@ export function kernel(db: Db, root: string, plan: PlanRow, wire?: Wire, read?: 
   if (step.name === 'pack') return pack(db, root, plan)
   if (step.name === 'score') return plan.template === 'bench' ? scored(db, root, plan) : score(db, root, plan, step)
   if (step.name === 'question' || step.name === 'record') return step.name === 'question' ? question(root, plan) : record(db, root, plan, wire)
+  if (step.name === 'read') return reading(db, root, plan)
+  if (step.name === 'ideas') return ideas(db, root, plan)
+  if (step.name === 'log') return log(root, plan)
   return { outcome: 'pass', spans: [], note: step.name }
 }
 

@@ -283,7 +283,7 @@ export function recorded(db: Db, plan: number, step: number, name: string, hash:
 }
 
 function staffedOn(db: Db, root: string, plan: PlanRow, step: number): string | undefined {
-  if (plan.template === 'research' || plan.template === 'bench') return undefined
+  if (plan.template !== 'pr_path' && plan.template !== 'comms') return undefined
   return staffed(root, plan.template, step, plan.template === 'pr_path' ? languageFor(db, plan, srcDir(root, plan.id)) : null)?.seat
 }
 

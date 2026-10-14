@@ -54,7 +54,7 @@ function canned(rows: Fixture[], log: string[] = [], closed: Fixture[] = []): Re
 
 function piped(enabled = 1): Db {
   const db = fresh(schema)
-  dropPipes(db, ['bench'])
+  dropPipes(db, ['bench', 'site'])
   addPipe(db, { name: 'internal', enabled, window_start: '00:00', window_end: '23:59', max_concurrent: 1 })
   return db
 }
@@ -123,7 +123,7 @@ test('D4: an issue a part of a split names is not adopted', () => {
 
 test('D4: a lane with its pipe off or missing is left unlisted', () => {
   const bare = fresh(schema)
-  dropPipes(bare, ['bench'])
+  dropPipes(bare, ['bench', 'site'])
   for (const db of [piped(0), bare]) {
     laneOff(db, Number(pipeNamed(db, 'research')?.id))
     const log: string[] = []

@@ -208,13 +208,13 @@ export function world(pulse: 'warm' | 'cold' = 'warm', day = new Date().toISOStr
 }
 
 /**
- * The store ships four lanes on, over a window with a wall clock in it. A sequencer test is one
+ * The store ships five lanes on, over a window with a wall clock in it. A sequencer test is one
  * lane wide and runs at whatever hour the suite runs at, so the world opens the pr-path pipe all
- * day and drops the three lanes it does not drive; a test that wants a second names it itself.
+ * day and drops the four lanes it does not drive; a test that wants a second names it itself.
  */
 function onePipe(db: Db): void {
   hours(db, 1, '00:00', '23:59')
-  dropPipes(db, ['comms', 'research', 'bench'])
+  dropPipes(db, ['comms', 'research', 'bench', 'site'])
 }
 
 /** Reads of the first ten briefs (`store/holds.ts`): spent in a world that is not driving them. */

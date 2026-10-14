@@ -8,7 +8,7 @@ import type { Db } from '../store/index.ts'
 import { partsOf } from '../store/parts.ts'
 import { holder, waitsFor } from '../store/slot.ts'
 import { builderRan, held, internal, needsCeo, originIssue, originRef, waiting, type PlanRow, type Wait } from '../store/plans.ts'
-import { steps as bench } from '../templates/bench.ts'
+import { scratch, steps as bench } from '../templates/bench.ts'
 import { capture, desk, facts, gather, pack, score, steps as comms } from '../templates/comms.ts'
 import { at, last, steps, type Step } from '../templates/pr-path.ts'
 import { question, record, steps as research } from '../templates/research.ts'
@@ -107,6 +107,7 @@ export function kernel(db: Db, root: string, plan: PlanRow, wire?: Wire, read?: 
   const step = mapOf(plan.template).at(plan.step)
   if (step.name === 'rails') return freshBase(db, root, plan) ?? strayed(db, root, plan) ?? railed(db, root, plan, wire)
   if (step.name === 'measure') return measure(db, root, plan, read)
+  if (step.name === 'checkout') return scratch(root, plan)
   if (step.name === 'ready') return readyGate(db, root, plan, wire)
   if (step.name === 'batch') return batch(db, root, plan, wire)
   if (step.name === 'push') return push(db, root, plan, wire)

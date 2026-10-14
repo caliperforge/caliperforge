@@ -125,12 +125,12 @@ export function titleOf(root: string, plan: number): string | null {
   return body === null ? null : (/^#\s+(.*)$/m.exec(body)?.[1]?.trim() ?? null)
 }
 
-function gitBase(root: string): string {
+export function gitBase(root: string): string {
   const path = join(root, '.cf/git-base')
   return existsSync(path) ? readFileSync(path, 'utf8').trim() : 'https://github.com'
 }
 
-function remote(base: string, slug: string): string {
+export function remote(base: string, slug: string): string {
   return base.includes('://') ? `${base}/${slug}.git` : join(base, slug)
 }
 

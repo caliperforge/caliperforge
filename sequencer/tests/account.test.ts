@@ -1,9 +1,10 @@
-import { cpSync, readFileSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import { built } from '../../store/deliverables.ts'
 import { kindsOf } from '../../store/events.ts'
 import { addRule } from '../../store/index.ts'
+import { set } from '../../store/lanes.ts'
 import { allPlans, dropPlan, planById, putPlan, type PlanRow } from '../../store/plans.ts'
 import { addAccount, putTarget, targetRows } from '../../store/targets.ts'
 import { brief, ideas, log, reading } from '../../templates/account.ts'
@@ -29,6 +30,15 @@ const accounted = (ask = '# Weekly\n\n**Account:** evm-security\n'): World => {
 }
 
 const idea = (repo: string, issue: number): object => ({ repo, issue, why: 'it fits', size: 'small' })
+
+const skills = (w: World): void => {
+  addAccount(w.db, { id: 2, repo: 'pashov/skills', measured_at: DAY, maintainers: 1, doors: 1, last_outsider_merge: DAY,
+    open_pr_age_p50_days: 1, cross_repo_activity: 1, pulse: 'warm', evidence: 'https://github.com/pashov/skills' })
+}
+
+const BRIEFS = 'accounts/briefs/evm-security'
+
+const today = (offset = 0): string => new Date(Date.now() + offset * 60000).toISOString().slice(0, 10)
 
 test('D1: an account plan is stored and parsed', () => {
   const w = accounted()
@@ -63,6 +73,11 @@ afterEach(() => { vi.unstubAllGlobals() })
 
 test('D1: ticks drive an account plan from read to done', async () => {
   const w = accounted()
+  skills(w)
+  for (const [id, state] of [[5, 'ready'], [6, 'parked']] as const) {
+    putTarget(w.db, { id, account_id: 2, repo: 'pashov/skills', issue_no: id, named_merger: '', state, evidence_measured_at: DAY,
+      evidence: `https://github.com/pashov/skills/issues/${String(id)}` })
+  }
   for (let n = 0; n < 6 && planById(w.db, 2).state !== 'done'; n += 1) await tick(w.db, w.root, stub('', 0, reply()))
   expect(planById(w.db, 2).state).toBe('done')
   expect(kindsOf(w.db, 2)).toEqual(['read', 'brief', 'check', 'ideas', 'log'].map((kind) => ({ kind, outcome: 'pass' })))
@@ -70,7 +85,34 @@ test('D1: ticks drive an account plan from read to done', async () => {
   for (const h of BRIEF.match(/^## .+$/gm) ?? []) expect(answer).toContain(h)
   expect(answer).not.toContain('---')
   expect(maybe(w.root, 2, 'sources.json')).not.toBeNull()
-  expect(targetRows(w.db).slice(1)).toMatchObject([{ repo: 'acme/widget', issue_no: 14, state: 'ready' }])
+  expect(targetRows(w.db).slice(3)).toMatchObject([{ repo: 'acme/widget', issue_no: 14, state: 'ready' }])
+  const written = readFileSync(join(w.root, BRIEFS, `${today()}.md`), 'utf8')
+  expect(written.split('\n')[0]).toBe('**Ready targets:** 1')
+  for (const h of BRIEF.match(/^## .+$/gm) ?? []) expect(written).toContain(h)
+})
+
+test('D3: a second log on one day overwrites the brief', () => {
+  const w = accounted()
+  put(w.root, 2, 'answer.md', '## Their world\n\nfirst\n')
+  log(w.db, w.root, planById(w.db, 2))
+  put(w.root, 2, 'answer.md', '## Their world\n\nsecond\n')
+  expect(log(w.db, w.root, planById(w.db, 2))).toMatchObject({ outcome: 'pass', note: `${BRIEFS}/${today()}.md written; no new ## Log rows` })
+  expect(readdirSync(join(w.root, BRIEFS))).toEqual([`${today()}.md`])
+  expect(readFileSync(join(w.root, BRIEFS, `${today()}.md`), 'utf8')).toBe('**Ready targets:** 0\n\n## Their world\n\nsecond\n\n')
+})
+
+test('D4: the brief is named for the local day', () => {
+  const w = accounted()
+  set(w.db, 'tick.zone_offset_minutes', '-360', 'ceo', DAY)
+  put(w.root, 2, 'answer.md', '## Their world\n')
+  log(w.db, w.root, planById(w.db, 2))
+  expect(readdirSync(join(w.root, BRIEFS))).toEqual([`${today(-360)}.md`])
+})
+
+test('D5: log with no Account line writes no brief', () => {
+  const w = accounted('# Weekly\n')
+  expect(log(w.db, w.root, planById(w.db, 2))).toMatchObject({ outcome: 'refuse', spans: ['ask.md'] })
+  expect(existsSync(join(w.root, 'accounts/briefs'))).toBe(false)
 })
 
 test('D3: a draft with no source is refused, nothing written', async () => {
@@ -113,8 +155,7 @@ test('D6: the prompt holds reading.md, and refusal.md if any', async () => {
 
 test('D3: reading.md holds the file and our rows on its repos', () => {
   const w = accounted()
-  addAccount(w.db, { id: 2, repo: 'pashov/skills', measured_at: DAY, maintainers: 1, doors: 1, last_outsider_merge: DAY,
-    open_pr_age_p50_days: 1, cross_repo_activity: 1, pulse: 'warm', evidence: 'https://github.com/pashov/skills' })
+  skills(w)
   putTarget(w.db, { id: 2, account_id: 2, repo: 'pashov/skills', issue_no: 5, named_merger: '', state: 'ready', evidence_measured_at: DAY,
     evidence: 'https://github.com/pashov/skills/issues/5' })
   putPlan(w.db, { id: 3, pipe_id: 1, target_id: null, template: 'pr_path', state: 'done', queued_at: AT, step: 0, retries: 0,
@@ -168,10 +209,10 @@ test('D6: log adds new dated rows at the end of ## Log, once', () => {
   const path = join(w.root, FILE)
   writeFileSync(path, '# A\n\n## Log\n\n- 2026-10-01 old\n\n## Rules\n\n- one\n')
   put(w.root, 2, 'answer.md', '## Their world\n\nnot a row\n- 2026-10-01 old\n- 2026-10-14 new\n- undated row\n')
-  expect(log(w.root, planById(w.db, 2))).toMatchObject({ outcome: 'pass' })
+  expect(log(w.db, w.root, planById(w.db, 2))).toMatchObject({ outcome: 'pass' })
   const once = '# A\n\n## Log\n\n- 2026-10-01 old\n- 2026-10-14 new\n\n## Rules\n\n- one\n'
   expect(readFileSync(path, 'utf8')).toBe(once)
-  expect(log(w.root, planById(w.db, 2))).toMatchObject({ outcome: 'pass' })
+  expect(log(w.db, w.root, planById(w.db, 2))).toMatchObject({ outcome: 'pass' })
   expect(readFileSync(path, 'utf8')).toBe(once)
 })
 
@@ -179,5 +220,5 @@ test('D6: an account file with no ## Log is refused', () => {
   const w = accounted()
   writeFileSync(join(w.root, FILE), '# A\n')
   put(w.root, 2, 'answer.md', '- 2026-10-14 new\n')
-  expect(log(w.root, planById(w.db, 2))).toMatchObject({ outcome: 'refuse', spans: [FILE] })
+  expect(log(w.db, w.root, planById(w.db, 2))).toMatchObject({ outcome: 'refuse', spans: [FILE] })
 })

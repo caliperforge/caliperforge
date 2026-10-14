@@ -12,3 +12,8 @@ export function ours(db: Db, repo: string): Record<'plans' | 'prs' | 'targets', 
 export function targeted(db: Db, repo: string, issue: number): boolean {
   return db.prepare('SELECT 1 FROM targets WHERE repo = ? AND issue_no = ?').get(repo, issue) !== undefined
 }
+
+export function readyOn(db: Db, repos: string[]): number {
+  return (db.prepare("SELECT count(*) AS n FROM targets WHERE state = 'ready' AND repo IN (SELECT value FROM json_each(?))")
+    .get(JSON.stringify(repos)) as { n: number }).n
+}

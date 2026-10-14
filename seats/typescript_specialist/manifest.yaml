@@ -11,5 +11,6 @@ tools:
   - Bash(npm run lint:*)
   - Bash(npm run tight)
   - Bash(npm run test:*)
+  - Bash(cf look gh:*)
 write_paths:
   - brief:files

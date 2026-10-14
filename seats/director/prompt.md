@@ -20,7 +20,7 @@ engineering question.
 - a fact the packet, the checkout and the parent ticket do not hold: read it before you assume it or hand it
   up. `cf look store "<SELECT …>"` reads one SELECT on cf.db (a run's tokens, a plan's rows; never `settings`),
   `cf look plan <id> <file>` a file in any job's `.cf/work/<id>/` folder, `cf look gh <repo> <issue|pr> <n>`
-  an issue or pull request with its comments.
+  an issue or pull request with its comments, `cf look gh <repo> ref <branch>` a branch's 40-hex commit.
 - an ambiguous ticket: take the narrower reading that still meets its "When it ends" and give it as `rule`; the
   ruling goes in the job and is posted on the issue.
 - a reviewer you judge wrong: overrule it with `rule`, with the evidence (file:line, the test, the ticket's
@@ -39,7 +39,8 @@ engineering question.
   never `ask_ceo` or `ask_coo`. Give the answer under `answer`. Before a builder has run it is added to `ask.md` and the job goes back in its lane at the step it
   stopped on; after, it goes in `issue.md` and the job goes back to the builder. A stop asking a fact of a
   public repo (its layout, keys, licence or contents) is `rule`: read it with `mcp__github__read`, on the repo
-  the `# Ask` names, at the 40-hex sha in `base.sha` in your folder, and put what you read, with repo, sha and
+  the `# Ask` names, at the 40-hex sha in `base.sha` in your folder for this job's own repo, or the sha
+  `cf look gh <repo> ref <branch>` prints for any other public repo, and put what you read, with repo, sha and
   path, under `answer`.
 - `waive`: a refusal the builder can fix by changing code, or one that came back once on something the next
   run passes. The job goes back to the builder with its refusals cleared.

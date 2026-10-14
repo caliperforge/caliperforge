@@ -1,0 +1,5 @@
+- name: site_data
+  table: events
+  column: at
+  where: kind = 'site_data' AND outcome = 'pass'
+  gap: 2d

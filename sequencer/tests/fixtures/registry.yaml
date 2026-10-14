@@ -321,5 +321,10 @@
   column: at
   where: kind = 'paydesk_live' AND outcome = 'pass'
   gap: 8d
+- name: site_data
+  table: events
+  column: at
+  where: kind = 'site_data' AND outcome = 'pass'
+  gap: 2d
 # cf pipe on site / cf pipe off site switches the site lane: pipes.enabled on the 'site' row
 - name: site_pipe

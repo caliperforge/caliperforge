@@ -337,3 +337,19 @@ test('table D6: the ask quoted in markup is not a claim', async () => {
   expect(await checked('> "what is the cap?"\n\nThe cap is 3 [source:1].'))
     .toMatchObject({ outcome: 'pass', note: '1 sentence(s) checked against 1 url(s)' })
 })
+
+const PROMPTED = '**23 Sep:** The cap is 3 [source:1].\n\n## Not found\n\nNo page names a floor.\n\n## Would be wrong if\n\n### Not found\n\n' +
+  'No source says whether another cap exists.\n\n## Still unknown\n\nWhen the cap last moved.'
+
+test('prompt D3: an answer laid out as the prompt says is recorded', async () => {
+  expect(await checked(PROMPTED)).toMatchObject({ outcome: 'pass', note: '1 sentence(s) checked against 1 url(s)' })
+  const { w, wire } = reviewed(PROMPTED)
+  expect(record(w.db, w.root, plan(w.db, 1), wire)).toMatchObject({ outcome: 'pass' })
+  expect(readFileSync(join(findings(w), named), 'utf8'))
+    .toContain('## Would be wrong if\n\na page names another cap\n\n### Not found\n\nNo source says whether another cap exists.\n\n## Sources')
+})
+
+test.each(['**23 Sep:** solidity-auditor v4 was merged and released.', 'Next cohort date: not found.'])('prompt D4: %s is unsourced', async (line) => {
+  expect(await checked(PROMPTED.replace('\n\n## Not found', `\n\n${line}\n\n## Not found`)))
+    .toEqual({ outcome: 'refuse', spans: ['research.unsourced'], note: `no source for "${line}"` })
+})

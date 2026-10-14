@@ -1,11 +1,12 @@
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { join, relative } from 'node:path'
+import { exported } from '../cli/export.ts'
 import { record, ticketOf } from '../cli/inbox.ts'
 import { aged, aired, awaiting, paste, pending, placed, type Post, published } from '../store/desk.ts'
-import { logged } from '../store/events.ts'
+import { logged, pointers } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
-import { get } from '../store/lanes.ts'
+import { get, hhmm, zone } from '../store/lanes.ts'
 import type { PlanRow } from '../store/plans.ts'
 import { titled } from '../templates/comms.ts'
 import type { Step } from '../templates/pr-path.ts'
@@ -75,6 +76,30 @@ function place(db: Db, dir: string, row: Post): void {
 function siteDir(db: Db): string | null {
   const value = get(db, 'comms.site_dir')
   return value === '' ? null : value.replace(/^~(?=\/|$)/, homedir())
+}
+
+/** The site's `data/*.json`, exported, committed and pushed once per local date from 05:15; a refusal is logged and not retried that date. */
+export function sitedata(db: Db, root: string, now: Date): void {
+  const day = new Date(now.getTime() + zone(db) * 60000).toISOString().slice(0, 10)
+  if (hhmm(db, now) < '05:15' || pointers(db, 'site_data').includes(day)) return
+  const event = { plan: null, kind: 'site_data', actor: 'tick', pointer: day, run: null }
+  const dir = siteDir(db)
+  if (dir === null) {
+    logged(db, { ...event, outcome: 'refuse', message: 'comms.site_dir is unset' })
+    return
+  }
+  try {
+    const files = exported(join(root, 'cf.db'), dir, now).map((p) => relative(dir, p))
+    git(dir, ['add', '--', ...files])
+    const changed = git(dir, ['diff', '--cached', '--name-only', '--', ...files]).split('\n').filter((l) => l !== '')
+    if (changed.length > 0) {
+      git(dir, ['commit', '-m', `data: ${day}`, '--', ...changed])
+      git(dir, ['push'])
+    }
+    logged(db, { ...event, outcome: 'pass', message: `${String(changed.length)} files` })
+  } catch (error) {
+    logged(db, { ...event, outcome: 'refuse', message: firstLine(error) })
+  }
 }
 
 export function publish(db: Db, root: string, plan: PlanRow, step: Step): Outcome {

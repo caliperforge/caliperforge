@@ -58,8 +58,7 @@
     "silent-catch": 1
   },
   "record.ts": {
-    "lines": 62,
-    "prepare": 4
+    "lines": 34
   },
   "scan.ts": {
     "lines": 77,

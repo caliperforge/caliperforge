@@ -33,4 +33,4 @@ export function world(): World {
   return { db, ready, queued, plan }
 }
 
-export const rows = (db: Db): Row[] => recordsOf(db, REPO) as Row[]
+export const rows = (db: Db): Row[] => recordsOf(db, REPO)

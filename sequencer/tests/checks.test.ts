@@ -12,11 +12,13 @@ import { filesOf, listed, record } from '../../store/files.ts'
 import { addRule, type Db } from '../../store/index.ts'
 import { dropPlan, pipeOf } from '../../store/plans.ts'
 import { profile } from '../../store/profile.ts'
+import { refusalRows, WHY } from '../../store/refusals.ts'
 import { verdictRows } from '../../store/verdict.ts'
-import { checks, excluded, finish, mode, npm, type Ran, type Run } from '../checks.ts'
+import { checks, excluded, finish, mode, network, npm, type Ran, type Run } from '../checks.ts'
 import { ciFeatures, formatLine, type Outside, recipes } from '../gates.ts'
 import { tick } from '../index.ts'
-import { capped, faulted, narrow } from '../rails.ts'
+import { capped, faulted, narrow, offline } from '../rails.ts'
+import { streak } from '../refusal.ts'
 import { get, put, srcDir } from '../workspace.ts'
 import { ATELIER, BROKEN, GREEN, GREETED, NAPPING, ORPHANED, pkg, RED, TIMEOUT } from './bases.ts'
 import { approve, built as edited, CARRIED, internalPlan, ours, plan, stub, watched, world, type World } from './world.ts'
@@ -429,6 +431,44 @@ test('1181b D2 a red finish entry refuses at step 3', async () => {
 
 test('1181b D1 a green finish entry reaches step 4', async () => {
   const { w } = await finished("[node, -e, 'process.exit(0)']")
+  expect(plan(w.db, ID).step).toBe(4)
+}, SLOW)
+
+const RPC = 'error: RPC failed; HTTP 400 curl 22'
+
+const OFFLINE = [RPC, "fatal: expected 'packfile'", 'fatal: unable to access: Could not resolve host: github.com', 'read: Connection reset by peer',
+  'Failed to connect to github.com port 443', 'curl 56 Recv failure', 'ssh: connect to host github.com port 22: Operation timed out']
+
+test('1271 D1 network() names the failed line, or null', () => {
+  for (const line of OFFLINE) expect(network(`Cloning into 'x'...\n  ${line}\n`)).toBe(line)
+  for (const output of [ASSERTED, '']) expect(network(output)).toBeNull()
+})
+
+test('1271 D2 a network failure blips, staying on step 3', async () => {
+  const { w, fired } = await finished(`[node, -e, 'process.stderr.write("${RPC}"); process.exit(128)']`)
+  expect(fired).toMatchObject({ plan: ID, step: 3, outcome: 'refuse', spans: ['checks:network'] })
+  expect(fired?.note.endsWith(`exit 128: the host's network failed: ${RPC}`)).toBe(true)
+  expect(plan(w.db, ID)).toMatchObject({ step: 3, state: 'running' })
+  expect(refusalRows(w.db, ID)).toEqual([])
+  expect(streak(w.db, ID)).toBeNull()
+  expect(verdictRows(w.db, ID).filter((v) => v.rail_id === 'checks')).toEqual([])
+
+  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  expect(plan(w.db, ID).state).toBe('blocked_on_ceo')
+  expect(get(w.root, ID, 'refusal.md')).toContain('RPC failed; HTTP 400')
+  expect(get(w.root, ID, 'refusal.md')).toContain(WHY.blips)
+}, SLOW)
+
+test('1271 D4 a check naming a red test is never a blip', () => {
+  const failure = { script: 'test', command: 'npm run test', code: '128', retried: false }
+  expect(offline({ ...failure, output: `${CALL}Could not resolve host: github.com\n`, tests: ['a.test.ts:3 a call'] })).toBeNull()
+  expect(offline({ ...failure, output: ASSERTED, tests: [] })).toBeNull()
+  expect(offline({ ...failure, output: `${RPC}\n`, tests: [] }))
+    .toMatchObject({ outcome: 'refuse', blip: true, spans: ['checks:network'], note: `npm run test exit 128: the host's network failed: ${RPC}` })
+})
+
+test('1271 D5 a passing check printing a network line moves on', async () => {
+  const { w } = await finished("[node, -e, 'process.stdout.write(\"Could not resolve host\")']")
   expect(plan(w.db, ID).step).toBe(4)
 }, SLOW)
 

@@ -2,7 +2,7 @@ import { expect, test } from 'vitest'
 import { allEvents, eventsOf, kindsOf, logged, newestRun, pointers } from '../../store/events.ts'
 import { returnToLane } from '../../store/holds.ts'
 import { retry } from '../../store/plans.ts'
-import { builds, clear, fingerprint, refused, sinceSent } from '../../store/refusals.ts'
+import { blipped, builds, clear, fingerprint, refused, sinceSent } from '../../store/refusals.ts'
 import { tick } from '../index.ts'
 import { reasons, streak } from '../refusal.ts'
 import { maybe } from '../workspace.ts'
@@ -114,6 +114,15 @@ test('D3 identifiers, tight, identifiers make no streak', () => {
   const w = world()
   for (const rail of ['identifiers', 'tight', 'identifiers']) refuse(w, 3, 'src/hello.ts:1', `${rail}: hello`)
   expect(streak(w.db, 1)).toEqual({ source: 'identifiers', n: 1 })
+})
+
+test('1271 D2 D4 a network blip leaves the checks streak', () => {
+  const w = world()
+  for (let n = 0; n < 2; n += 1) refuse(w, 3, 'checks:test', 'npm run test exit 1')
+  blipped(w.db, 1, 3)
+  expect(streak(w.db, 1)).toEqual({ source: 'checks', n: 2 })
+  refuse(w, 3, 'checks:test', 'npm run test exit 1')
+  expect(streak(w.db, 1)).toEqual({ source: 'checks', n: 3 })
 })
 
 test('D4 reasons group by source then span, cleared included', () => {

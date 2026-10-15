@@ -1,9 +1,9 @@
-import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { cpSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { expect, test } from 'vitest'
+import { expect, test, vi } from 'vitest'
 import type { ListingScan } from '../card.ts'
-import { diffed, live } from '../live.ts'
+import { diffed, live, recheck } from '../live.ts'
 import type { Net, Scanned } from '../scan.ts'
 
 const X402 = { accepts: [{ scheme: 'exact', network: 'solana', amount: '10000', asset: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', payTo: 'payee' }] }
@@ -22,6 +22,15 @@ const scanned = (fqn: string, verdict: 'pass' | 'fix needed' | 'reject' | 'crash
 const seed = (dir: string, date: string, rows: Scanned[]): void => {
   writeFileSync(join(dir, `live-${date}.jsonl`), rows.map((r) => `${JSON.stringify(r)}\n`).join(''))
 }
+const catalog = (): string[] => {
+  const root = mkdtempSync(join(tmpdir(), 'paydesk-catalog-'))
+  return ['a', 'b', 'c'].map((name) => {
+    const dir = join(root, 'org', name)
+    cpSync(listing, dir, { recursive: true })
+    return dir
+  })
+}
+const outFile = (): string => join(mkdtempSync(join(tmpdir(), 'paydesk-recheck-')), 'recheck.json')
 
 test('D1-D3 diffed lists newly failing, newly passing and gone', () => {
   const last = [scanned('o/fixed', 'pass'), scanned('o/rejected', 'reject'), scanned('o/crashed', 'crash'), scanned('o/same', 'pass'), scanned('o/dropped', 'reject')]
@@ -50,4 +59,24 @@ test('D6 with no earlier pass the md says so and nothing is gone', async () => {
     '# pay-skills live 2026-10-12 against no earlier pass', '',
     '## Newly failing', '- none', '## Newly passing', '- fixtures/listing', '## Gone', '- none', '',
   ].join('\n'))
+})
+
+test('D1 recheck scans only the named listings in catalog order', async () => {
+  const rows = await recheck(catalog(), ['org/c', 'org/a'], outFile(), net)
+  expect(rows.map((r) => r.fqn)).toEqual(['org/a', 'org/c'])
+})
+
+test('D2 an unknown fqn goes to stderr and the run continues', async () => {
+  const write = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+  const rows = await recheck(catalog(), ['org/a', 'org/nope'], outFile(), net)
+  expect(write).toHaveBeenCalledWith('not in the catalog: org/nope\n')
+  write.mockRestore()
+  expect(rows.map((r) => r.fqn)).toEqual(['org/a'])
+})
+
+test('D3-D4 recheck writes only out, as scan rows', async () => {
+  const out = outFile()
+  const rows = await recheck(catalog(), ['org/b'], out, net)
+  expect(JSON.parse(readFileSync(out, 'utf8'))).toEqual(rows)
+  expect(readdirSync(join(out, '..'))).toEqual(['recheck.json'])
 })

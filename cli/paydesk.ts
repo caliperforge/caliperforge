@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSyn
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { merge, render, rows, type Fix } from '../paydesk/fixlist.ts'
-import { live, providers } from '../paydesk/live.ts'
+import { live, providers, recheck, verdict } from '../paydesk/live.ts'
 import { note } from '../paydesk/note.ts'
 import { prs, type Row } from '../paydesk/prs.ts'
 import { scan, type Net } from '../paydesk/scan.ts'
@@ -36,6 +36,8 @@ export function registerPaydesk(cf: Command, { root, out }: Cli): void {
       rmSync(tmp, { recursive: true, force: true })
     }
   })
+  paydesk.command('recheck').argument('<fqn...>').requiredOption('--out <file>')
+    .action(async (fqns: string[], options: { out: string }) => { out(await rechecked(fqns, options.out, net)) })
   paydesk.command('fixlist').argument('<scan>').argument('<checks>').requiredOption('--out <dir>')
     .action((scanFile: string, checks: string, options: { out: string }) => {
       const fixes = fixlist(scanFile, checks, options.out)
@@ -46,6 +48,15 @@ export function registerPaydesk(cf: Command, { root, out }: Cli): void {
     .action((scanFile: string, options: { out: string; from: string }) => {
       out(`${String(notes(scanFile, options.out, options.from))} notes -> ${options.out}\n`)
     })
+}
+
+async function rechecked(fqns: string[], file: string, net: Net): Promise<string> {
+  const tmp = mkdtempSync(join(tmpdir(), 'pay-skills-'))
+  try {
+    return (await recheck(providers(tmp), fqns, file, net)).map((s) => `${s.fqn} ${verdict(s)}\n`).join('')
+  } finally {
+    rmSync(tmp, { recursive: true, force: true })
+  }
 }
 
 function notes(scanFile: string, dir: string, from: string): number {

@@ -14,3 +14,11 @@ test('D6 design is silent only once atelier-web is past step 4', () => {
   running(2, 5)
   expect(drift(d, design, NOW)).toEqual([{ name: 'design', state: 'silent', detail: "no row in runs WHERE seat = 'design'" }])
 })
+
+test('D2 a design_lead plan past step 4 leaves design quiet', () => {
+  const design = REGISTRY.filter((e) => e.name === 'design')
+  const d = db()
+  addPlan(d, { pipe_id: 1, target_id: null, template: 'pr_path', state: 'running', queued_at: '2026-10-01', lane: 'atelier',
+    seat: 'design_lead', origin: 'https://github.com/caliperforge/atelier-web/issues/1', step: 5 })
+  expect(drift(d, design, NOW)).toEqual([])
+})

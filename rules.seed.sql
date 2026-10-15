@@ -20,7 +20,7 @@ VALUES
   ('rules/registry/12-writer_weekly.yaml', 'card', 'rules/registry/12-writer_weekly.yaml', 'd99f0270d1a6f05a50ed029ae69badc441ec3cf35ae428506d8163feda62f41d', '2026-10-04'),
   ('rules/registry/13-growth_lead.yaml', 'card', 'rules/registry/13-growth_lead.yaml', '98df571ff57eade5331349b1eb566c04867cf727ac047d390f3ef9dfb2a9a34b', '2026-10-04'),
   ('rules/registry/14-web_specialist.yaml', 'card', 'rules/registry/14-web_specialist.yaml', '01d3bd111786bd34680cee256a90965a461f897db7dc8ec99a7041ea63aab779', '2026-10-04'),
-  ('rules/registry/15-design.yaml', 'card', 'rules/registry/15-design.yaml', '2f3c9774afd39322e017bbb4cdcc82576408759988e5ed2e76410dbdff3f2363', '2026-10-04'),
+  ('rules/registry/15-design.yaml', 'card', 'rules/registry/15-design.yaml', 'd882f3e2afa9b38276c1076c142abe4ec8a58d85a8f43e022bb0a1dbf5854498', '2026-10-04'),
   ('rules/registry/16-go_specialist.yaml', 'card', 'rules/registry/16-go_specialist.yaml', '32fc8ef01b468557067bf1257f3891070111dac4e54ccb421cb40ac68a8c47e0', '2026-10-04'),
   ('rules/registry/17-php_specialist.yaml', 'card', 'rules/registry/17-php_specialist.yaml', '210a675d79bf824f5297286fcd926021b2c6e9686bb00532c8c6fc9aa238f49e', '2026-10-04'),
   ('rules/registry/18-ruby_specialist.yaml', 'card', 'rules/registry/18-ruby_specialist.yaml', '03851af938777759dce6d5f89047e4e8e908c684556574ace7876e260255efa7', '2026-10-04'),

@@ -105,7 +105,7 @@
   table: runs
   column: at
   where: seat = 'design'
-  while: EXISTS (SELECT 1 FROM plans WHERE origin GLOB 'https://github.com/caliperforge/atelier-web/*' AND step > 4)
+  while: EXISTS (SELECT 1 FROM plans WHERE origin GLOB 'https://github.com/caliperforge/atelier-web/*' AND step > 4 AND seat <> 'design_lead')
 - name: go_specialist
   table: runs
   column: at

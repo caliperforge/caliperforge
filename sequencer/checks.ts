@@ -39,7 +39,7 @@ export interface Failure {
 export type Ran = { ok: true; output: string } | { ok: false; code: string; output: string; capped?: true }
 
 /** `bin` is the program; left out it is `npm`, which is every checkout but an Xcode or a Kotlin one. */
-export type Run = (args: string[], cwd: string, bin?: string) => Ran
+export type Run = (args: string[], cwd: string, bin?: string, cap?: number) => Ran
 
 export type Note = (doing: string, detail: string) => void
 
@@ -116,9 +116,13 @@ function gated(src: string, list: Gate[], run: Run, excused: string[] = []): Fai
   return null
 }
 
-export function finish(src: string, entries: Record<string, string[]>, run: Run): Failure | null {
-  return gated(src, Object.values(entries).filter((argv) => !missing(src, argv))
-    .map(([bin = '', ...args]) => ({ script: 'finish', bin, args, dir: '' })), run)
+export function finish(src: string, entries: Record<string, string[]>, run: Run, minutes?: number): Failure | null {
+  for (const [bin = '', ...args] of Object.values(entries).filter((argv) => !missing(src, argv))) {
+    const ran = run(args, src, bin, minutes === undefined ? undefined : minutes * 60_000)
+    if (!ran.ok) return { script: 'finish', command: `${bin} ${args.join(' ')}`, code: ran.code, output: tail(ran.output), tests: [], retried: false,
+      ...(ran.capped === true ? { capped: true as const } : {}) }
+  }
+  return null
 }
 
 export function missing(src: string, argv: string[]): boolean {
@@ -261,12 +265,12 @@ function tail(output: string): string {
  * A command the cap killed leaves no status, and that is the failure it is recorded as. A program that never
  * started has no output at all, so the spawn error is what the builder reads.
  */
-export function npm(args: string[], cwd: string, bin = 'npm', note?: Note): Ran {
+export function npm(args: string[], cwd: string, bin = 'npm', cap = LONG.includes(bin) ? XCODE_CAP : CAP, note?: Note): Ran {
   const command = `${bin} ${args.join(' ')}`
   const held = slot(undefined, undefined, undefined, () => note?.('waiting for a check slot', command))
   note?.('checks', command)
   try {
-    const done = spawnSync(bin, args, { cwd, encoding: 'utf8', timeout: LONG.includes(bin) ? XCODE_CAP : CAP, maxBuffer: MAX,
+    const done = spawnSync(bin, args, { cwd, encoding: 'utf8', timeout: cap, maxBuffer: MAX,
       env: unslotted() })
     if (done.error !== undefined && typeof done.stdout !== 'string') return { ok: false, code: '127', output: `${bin}: ${done.error.message}` }
     const output = `${done.stdout}${done.stderr}`

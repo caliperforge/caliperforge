@@ -73,7 +73,14 @@ test('1157b D3 fuzz-bench runs forge and pytest locally', () => {
   expect(profile(REPO, 'caliperforge/fuzz-bench')).toEqual({ builder: 'solidity_specialist', lane: 'bench',
     rails: { digests: false, ratchet: false, fence: false, tight_code: false, checks: 'local' },
     commands: { forge: ['build', 'test'], python3: ['-m', 'pytest'] },
-    finish: { 'euler-earn': ['python3', 'bench/run_pair.py', 'targets/euler-earn-m01.yml', 'suites/euler-m01'] } })
+    finish: { 'euler-earn': ['python3', 'bench/run_pair.py', 'targets/euler-earn-m01.yml', 'suites/euler-m01'] }, finish_minutes: 60 })
+})
+
+test('1279 D5 a zero or non-integer finish_minutes is refused', () => {
+  for (const minutes of ['0', 'ten']) {
+    const dir = root({ 'widget.yml': `finish_minutes: ${minutes}\n` })
+    expect(() => profile(dir, 'acme/widget')).toThrow(join(dir, 'profiles/acme/widget.yml'))
+  }
 })
 
 test('1156b D1 site names its seat, lane, rails and checks', () => {

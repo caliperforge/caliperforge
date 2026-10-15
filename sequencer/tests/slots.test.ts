@@ -43,7 +43,7 @@ test('a waiting check records the wait once, then the command', async () => {
   vi.stubEnv('CF_CHECK_SLOTS', '1')
   vi.stubEnv('CF_CHECK_SLOTS_DIR', dir)
   try {
-    npm(['-e', ''], tmpdir(), 'node', (doing, detail) => void seen.push([doing, detail]))
+    npm(['-e', ''], tmpdir(), 'node', undefined, (doing, detail) => void seen.push([doing, detail]))
   } finally {
     vi.unstubAllEnvs()
     holder.kill()
@@ -55,7 +55,7 @@ test('a check that never waited records only the command', () => {
   const seen: string[][] = []
   vi.stubEnv('CF_CHECK_SLOTS', undefined)
   try {
-    npm(['-e', ''], tmpdir(), 'node', (doing, detail) => void seen.push([doing, detail]))
+    npm(['-e', ''], tmpdir(), 'node', undefined, (doing, detail) => void seen.push([doing, detail]))
   } finally {
     vi.unstubAllEnvs()
   }

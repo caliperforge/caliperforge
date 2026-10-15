@@ -638,7 +638,30 @@ test('#700 D2 a cap-killed run naming a red test is refused',() => {
 test('#700 D3 a capped failure is a blip on checks:cap', () => {
   const outcome = capped({ script: 'test', command: 'npm run test', code: '143', output: '', tests: [], retried: false, capped: true })
   expect(outcome).toMatchObject({ outcome: 'refuse', blip: true, spans: ['checks:cap'] })
-  expect(outcome.note).toContain('exit 143')
+  expect(outcome.note).toContain('timed out')
+  expect(outcome.note).not.toContain('exit')
+})
+
+test('1279 D1 npm given a cap kills a longer run as capped', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cf-cap-'))
+  expect(npm(['-e', 'setTimeout(() => {}, 5000)'], dir, 'node', 200)).toMatchObject({ ok: false, capped: true })
+})
+
+test('1279 D2 finish passes minutes to run as ms', () => {
+  const caps: (number | undefined)[] = []
+  const run: Run = (...given) => {
+    caps.push(given[3])
+    return { ok: true, output: '' }
+  }
+  const entries = { a: ['node', '-e', 'x'] }
+  finish(tree(FOUNDRY), entries, run, 10)
+  finish(tree(FOUNDRY), entries, run)
+  expect(caps).toEqual([600000, undefined])
+})
+
+test('1279 D3 a finish entry the cap killed is capped', () => {
+  const killed = finish(tree(FOUNDRY), { a: ['node', '-e', 'x'] }, replies({ ok: false, code: '1', output: '', capped: true }).run)
+  expect(killed).toEqual({ script: 'finish', command: 'node -e x', code: '1', output: '', tests: [], retried: false, capped: true })
 })
 
 test('#700 D4 a non-zero run the cap did not kill is not capped', () => {

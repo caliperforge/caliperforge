@@ -160,6 +160,12 @@ function loadOnly(output: string): boolean {
   return named.length > 0 && named.every((block) => LOAD.test(block))
 }
 
+const NETWORK = /RPC failed; HTTP [45]\d\d|fatal: expected 'packfile'|Could not resolve host|Connection reset by peer|Failed to connect to|\bcurl (?:22|56)\b|Operation timed out/
+
+export function network(output: string): string | null {
+  return output.split('\n').map((line) => line.trim()).find((line) => NETWORK.test(line)) ?? null
+}
+
 export function failures(output: string): string[] {
   const blocks: string[][] = []
   for (const line of output.split('\n')) {

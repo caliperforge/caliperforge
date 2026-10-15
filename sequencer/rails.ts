@@ -22,7 +22,7 @@ import { busy } from '../store/now.ts'
 import { BUILT, laneOff, type PlanRow } from '../store/plans.ts'
 import { profile, type Profile } from '../store/profile.ts'
 import { builder } from '../templates/pr-path.ts'
-import { checks, finish, mode, npm, type Commands, type Failure, type Run } from './checks.ts'
+import { checks, finish, mode, network, npm, type Commands, type Failure, type Run } from './checks.ts'
 import { ciChecks } from './ci.ts'
 import { outsideLanguage } from './gates.ts'
 import type { Outcome } from './kind.ts'
@@ -127,6 +127,8 @@ function suite(db: Db, root: string, plan: PlanRow, on: Rails, commands: Command
         parse(diff).map((f) => f.path)) ?? finish(srcDir(root, plan.id), finishes, noted(db, plan.id))
       if (failed?.fault !== undefined) return faulted(db, root, plan, failed.fault)
       if (failed?.capped === true) return capped(failed)
+      const blip = failed === null ? null : offline(failed)
+      if (blip !== null) return blip
       recordRail(db, join(root, 'rails', 'checks'), plan.id, checked(failed, diff), 0)
       if (failed !== null) return broke(db, root, plan, failed)
     } finally {
@@ -148,6 +150,12 @@ export function faulted(db: Db, root: string, plan: PlanRow, fault: string): Out
 /** A run the cap killed before any test went red is the gate's blip: it stays on step 3 until `BLIPS` in a row. */
 export function capped(failed: Failure): Outcome {
   return { outcome: 'refuse', blip: true, spans: ['checks:cap'], note: `${failed.command} exit ${failed.code}: killed at the cap with no test red`, message: failed.output }
+}
+
+/** A check that names no red test but a failed network line is the host's blip, as `capped()` is. */
+export function offline(failed: Failure): Outcome | null {
+  const line = failed.tests.length === 0 ? network(failed.output) : null
+  return line === null ? null : { outcome: 'refuse', blip: true, spans: ['checks:network'], note: `${failed.command} exit ${failed.code}: the host's network failed: ${line}`, message: failed.output }
 }
 
 /**

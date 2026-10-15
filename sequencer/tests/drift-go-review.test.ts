@@ -14,22 +14,33 @@ function seats(): Db {
   return d
 }
 
-function run(d: Db, seat: string, staffed: string | null, at: string): void {
+function run(d: Db, seat: string, staffed: string | null, at: string, mode = 'review'): void {
   d.exec(`INSERT INTO runs (plan, step, seat, staffed, rule_hash, provider, model, effort,
     input_tokens, cache_read_tokens, output_tokens, seconds, exit, at, mode, transcript_path)
-    VALUES (1, 5, '${seat}', ${staffed === null ? 'NULL' : `'${staffed}'`}, '${'0'.repeat(64)}', 'claude-agent-sdk', 'm', 'high', 0, 0, 0, 0, 0, '${at}', 'review', 'x.transcript.jsonl')`)
+    VALUES (1, 5, '${seat}', ${staffed === null ? 'NULL' : `'${staffed}'`}, '${'0'.repeat(64)}', 'claude-agent-sdk', 'm', 'high', 0, 0, 0, 0, 0, '${at}', '${mode}', 'x.transcript.jsonl')`)
 }
 
 test('silentNeedsWork', () => {
-  const d = db()
+  const d = seats()
   expect(drift(d, go, NOW)).toEqual([])
   work(d, 5, 'main.go')
+  expect(drift(d, go, NOW)).toEqual([])
+  run(d, 'go_specialist', null, '2026-10-02 10:00:00')
   expect(drift(d, go, NOW)).toEqual(SILENT)
+})
+
+test('D2 an old go review with a fix run in the gap is quiet', () => {
+  const d = seats()
+  work(d, 5, 'main.go')
+  run(d, 'code_quality', 'go_specialist', '2026-09-20 10:00:00')
+  run(d, 'code_quality', null, '2026-10-02 10:00:00', 'fix')
+  expect(drift(d, go, NOW)).toEqual([])
 })
 
 test('D2 a staffed review past 7d is stale, a recent one quiet', () => {
   const stale = seats()
   work(stale, 5, 'main.go')
+  run(stale, 'go_specialist', null, '2026-10-02 10:00:00')
   run(stale, 'code_quality', 'go_specialist', '2026-09-25 10:00:00')
   expect(drift(stale, go, NOW)).toEqual([{
     name: 'go_review', state: 'stale', detail: 'newest runs.at is 2026-09-25 10:00:00, older than 7d', newest: '2026-09-25 10:00:00',

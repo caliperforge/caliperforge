@@ -39,19 +39,19 @@
   table: runs
   column: at
   where: staffed = 'rust_specialist' AND mode = 'review'
-  while: EXISTS (SELECT 1 FROM plans p JOIN plan_files f ON f.plan = p.id WHERE p.step > 4 AND f.stray = 0 AND f.path GLOB '*.rs' AND (p.state NOT IN ('done', 'refused', 'halted') OR EXISTS (SELECT 1 FROM runs r WHERE r.plan = p.id AND julianday(r.at) >= julianday($since))))
+  while: EXISTS (SELECT 1 FROM plan_files f JOIN runs r ON r.plan = f.plan WHERE f.stray = 0 AND f.path GLOB '*.rs' AND r.mode = 'review' AND julianday(r.at) >= julianday($since))
   gap: 7d
 - name: go_review
   table: runs
   column: at
   where: staffed = 'go_specialist' AND mode = 'review'
-  while: EXISTS (SELECT 1 FROM plans p JOIN plan_files f ON f.plan = p.id WHERE p.step > 4 AND f.stray = 0 AND f.path GLOB '*.go' AND (p.state NOT IN ('done', 'refused', 'halted') OR EXISTS (SELECT 1 FROM runs r WHERE r.plan = p.id AND julianday(r.at) >= julianday($since))))
+  while: EXISTS (SELECT 1 FROM plan_files f JOIN runs r ON r.plan = f.plan WHERE f.stray = 0 AND f.path GLOB '*.go' AND r.mode = 'review' AND julianday(r.at) >= julianday($since))
   gap: 7d
 - name: php_review
   table: runs
   column: at
   where: staffed = 'php_specialist' AND mode = 'review'
-  while: EXISTS (SELECT 1 FROM plans p JOIN plan_files f ON f.plan = p.id WHERE p.step > 4 AND f.stray = 0 AND f.path GLOB '*.php' AND (p.state NOT IN ('done', 'refused', 'halted') OR EXISTS (SELECT 1 FROM runs r WHERE r.plan = p.id AND julianday(r.at) >= julianday($since))))
+  while: EXISTS (SELECT 1 FROM plan_files f JOIN runs r ON r.plan = f.plan WHERE f.stray = 0 AND f.path GLOB '*.php' AND r.mode = 'review' AND julianday(r.at) >= julianday($since))
   gap: 7d
 - name: typescript_review
   table: runs

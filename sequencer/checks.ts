@@ -32,7 +32,7 @@ export interface Failure {
   retried: boolean
   /** The xcodebuild log line saying this Mac, not the job, cannot run tests. */
   fault?: string
-  /** The cap killed an npm run before it named a red test. */
+  /** The cap killed an npm run before it named a red test, or killed a finish entry. */
   capped?: true
 }
 

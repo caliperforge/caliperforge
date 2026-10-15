@@ -1,0 +1,39 @@
+[
+  { "pr": 1, "fqn": "acme/payto", "title": "Payto", "serviceUrl": "https://payto.test/", "host": "payto.test", "dns": true, "freehost": null, "flagwords": [], "nOps": 1, "nScanned": 1, "endpoints": [
+    { "verdict": "warn", "issues": ["recipient has no USDC token account"], "protocols": ["x402"], "quotedUsd": 0.01, "declaredUsd": 0.01, "coins": ["USDC"], "method": "POST", "path": "/v1/items/{id}" }
+  ] },
+  { "pr": 2, "fqn": "acme/wallet", "title": "Wallet", "serviceUrl": "https://wallet.test", "host": "wallet.test", "dns": true, "freehost": null, "flagwords": [], "nOps": 1, "nScanned": 1, "endpoints": [
+    { "verdict": "warn", "issues": ["payTo is a token account, not a wallet"], "protocols": ["x402"], "quotedUsd": 0.01, "declaredUsd": 0.01, "coins": ["USDC"], "method": "GET", "path": "/a" }
+  ] },
+  { "pr": 3, "fqn": "acme/price", "title": "Price", "serviceUrl": "https://price.test", "host": "price.test", "dns": true, "freehost": null, "flagwords": [], "nOps": 1, "nScanned": 1, "endpoints": [
+    { "verdict": "warn", "issues": ["price listed $0.01 vs asked $0.05"], "protocols": ["x402"], "quotedUsd": 0.05, "declaredUsd": 0.01, "coins": ["USDC"], "method": "GET", "path": "/p" }
+  ] },
+  { "pr": 4, "fqn": "acme/gone", "title": "Gone", "serviceUrl": "https://gone.test", "host": "gone.test", "dns": true, "freehost": null, "flagwords": [], "nOps": 1, "nScanned": 1, "endpoints": [
+    { "verdict": "no_402", "issues": ["HTTP 404"], "protocols": [], "quotedUsd": null, "declaredUsd": null, "coins": [], "method": "GET", "path": "/g" }
+  ] },
+  { "pr": 5, "fqn": "acme/down", "title": "Down", "serviceUrl": "https://down.test", "host": "down.test", "dns": true, "freehost": null, "flagwords": [], "nOps": 1, "nScanned": 1, "endpoints": [
+    { "verdict": "unreachable", "issues": ["fetch failed"], "protocols": [], "quotedUsd": null, "declaredUsd": null, "coins": [], "method": "GET", "path": "/d" }
+  ] },
+  { "pr": 6, "fqn": "acme/ok", "title": "Ok", "serviceUrl": "https://ok.test", "host": "ok.test", "dns": true, "freehost": null, "flagwords": [], "nOps": 1, "nScanned": 1, "endpoints": [
+    { "verdict": "ok", "issues": [], "protocols": ["x402"], "quotedUsd": 0.01, "declaredUsd": 0.01, "coins": ["USDC"], "method": "GET", "path": "/o" }
+  ] },
+  { "pr": 7, "fqn": "acme/meh", "title": "Meh", "serviceUrl": "https://meh.test", "host": "meh.test", "dns": true, "freehost": null, "flagwords": [], "nOps": 2, "nScanned": 2, "endpoints": [
+    { "verdict": "warn", "issues": ["asks for $0", "also advertises devnet"], "protocols": ["x402"], "quotedUsd": 0, "declaredUsd": 0, "coins": ["USDC"], "method": "GET", "path": "/m" },
+    { "verdict": "fail", "issues": ["devnet only"], "protocols": [], "quotedUsd": null, "declaredUsd": null, "coins": [], "method": "GET", "path": "/n" }
+  ] },
+  { "pr": 8, "fqn": "acme/two", "title": "Two", "serviceUrl": "https://two.test", "host": "two.test", "dns": true, "freehost": null, "flagwords": [], "nOps": 2, "nScanned": 2, "endpoints": [
+    { "verdict": "no_402", "issues": ["HTTP 500"], "protocols": [], "quotedUsd": null, "declaredUsd": null, "coins": [], "method": "GET", "path": "/one" },
+    { "verdict": "warn", "issues": ["payTo is a token account, not a wallet", "price listed $0.01 vs asked $0.05"], "protocols": ["x402"], "quotedUsd": 0.05, "declaredUsd": 0.01, "coins": ["USDC"], "method": "POST", "path": "/two" }
+  ] },
+  { "pr": 9, "fqn": "acme/many", "title": "Many", "serviceUrl": "https://many.test", "host": "many.test", "dns": true, "freehost": null, "flagwords": [], "nOps": 7, "nScanned": 7, "endpoints": [
+    { "verdict": "no_402", "issues": ["HTTP 404"], "protocols": [], "quotedUsd": null, "declaredUsd": null, "coins": [], "method": "GET", "path": "/e1" },
+    { "verdict": "no_402", "issues": ["HTTP 404"], "protocols": [], "quotedUsd": null, "declaredUsd": null, "coins": [], "method": "GET", "path": "/e2" },
+    { "verdict": "no_402", "issues": ["HTTP 404"], "protocols": [], "quotedUsd": null, "declaredUsd": null, "coins": [], "method": "GET", "path": "/e3" },
+    { "verdict": "no_402", "issues": ["HTTP 404"], "protocols": [], "quotedUsd": null, "declaredUsd": null, "coins": [], "method": "GET", "path": "/e4" },
+    { "verdict": "no_402", "issues": ["HTTP 404"], "protocols": [], "quotedUsd": null, "declaredUsd": null, "coins": [], "method": "GET", "path": "/e5" },
+    { "verdict": "no_402", "issues": ["HTTP 404"], "protocols": [], "quotedUsd": null, "declaredUsd": null, "coins": [], "method": "GET", "path": "/e6" },
+    { "verdict": "no_402", "issues": ["HTTP 404"], "protocols": [], "quotedUsd": null, "declaredUsd": null, "coins": [], "method": "GET", "path": "/e7" }
+  ] },
+  { "fqn": "acme/broken", "crash": "no PAY.md" },
+  { "pr": 10, "unfetched": "HTTP 404" }
+]

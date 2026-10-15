@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { merge, render, rows, type Fix } from '../paydesk/fixlist.ts'
 import { live, providers } from '../paydesk/live.ts'
+import { note } from '../paydesk/note.ts'
 import { prs, type Row } from '../paydesk/prs.ts'
 import { scan, type Net } from '../paydesk/scan.ts'
 import type { Cli } from './cf-lanes.ts'
@@ -41,6 +42,25 @@ export function registerPaydesk(cf: Command, { root, out }: Cli): void {
       const blocking = fixes.filter((f) => f.items.some((i) => i.blocking)).length
       out(`${String(fixes.length)} PRs, ${String(blocking)} blocking -> ${options.out}\n`)
     })
+  paydesk.command('notes').argument('<scan>').requiredOption('--out <dir>').requiredOption('--from <name>')
+    .action((scanFile: string, options: { out: string; from: string }) => {
+      out(`${String(notes(scanFile, options.out, options.from))} notes -> ${options.out}\n`)
+    })
+}
+
+function notes(scanFile: string, dir: string, from: string): number {
+  const text = readFileSync(scanFile, 'utf8')
+  const scanned = (text.startsWith('[') ? JSON.parse(text) : text.split('\n').filter((l) => l.trim() !== '').map((l): unknown => JSON.parse(l))) as Row[]
+  mkdirSync(dir, { recursive: true })
+  let written = 0
+  for (const row of scanned) {
+    if ('crash' in row || 'unfetched' in row) continue
+    const said = note(row, from)
+    if (said === null) continue
+    writeFileSync(join(dir, `${row.fqn.replace('/', '__')}.md`), said)
+    written++
+  }
+  return written
 }
 
 function fixlist(scanFile: string, checks: string, dir: string): Fix[] {

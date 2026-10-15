@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { git } from '../sequencer/workspace.ts'
 import { overall } from './card.ts'
-import { scan, type Net, type Scanned } from './scan.ts'
+import { fqnOf, scan, type Net, type Scanned } from './scan.ts'
 
 const REPO = 'https://github.com/solana-foundation/pay-skills.git'
 const PASS = /^live-(\d{4}-\d{2}-\d{2})\.jsonl$/
@@ -12,7 +12,7 @@ const NET: Net = { fetch, resolve: (host) => lookup(host) }
 
 export interface Diffed { failing: string[]; passing: string[]; gone: string[] }
 
-const verdict = (s: Scanned): string => ('crash' in s ? 'crash' : overall(s))
+export const verdict = (s: Scanned): string => ('crash' in s ? 'crash' : overall(s))
 const passes = (s: Scanned): boolean => verdict(s) === 'pass'
 
 export function providers(into: string): string[] {
@@ -45,6 +45,12 @@ export async function live(dir: string, date: string, dirs: string[], net: Net):
     '',
   ].join('\n'))
   return diff
+}
+
+export async function recheck(dirs: string[], fqns: string[], out: string, net: Net): Promise<Scanned[]> {
+  const kept = dirs.filter((d) => fqns.includes(fqnOf(d)))
+  for (const f of fqns) if (!kept.some((d) => fqnOf(d) === f)) process.stderr.write(`not in the catalog: ${f}\n`)
+  return scan(kept, out, undefined, net)
 }
 
 export async function pass(root: string, date: string, net: Net = NET): Promise<Diffed> {

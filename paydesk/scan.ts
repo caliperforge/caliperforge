@@ -66,7 +66,7 @@ export async function scan(dirs: string[], out: string | undefined, cards: strin
   return results
 }
 
-function fqnOf(dir: string): string {
+export function fqnOf(dir: string): string {
   const abs = resolve(dir)
   return `${basename(dirname(abs))}/${basename(abs)}`
 }

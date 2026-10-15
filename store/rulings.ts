@@ -22,11 +22,12 @@ interface Ruling {
   who: string
   date: string
   issue_no: number
+  supersedes: number | null
 }
 
 export function addRuling(db: Db, row: Ruling): void {
-  db.prepare(`INSERT INTO rulings (subject, value, origin_kind, origin_ref, who, date, issue_no)
-    VALUES (@subject, @value, @origin_kind, @origin_ref, @who, @date, @issue_no)`).run(row)
+  db.prepare(`INSERT INTO rulings (subject, value, origin_kind, origin_ref, who, date, issue_no, supersedes)
+    VALUES (@subject, @value, @origin_kind, @origin_ref, @who, @date, @issue_no, @supersedes)`).run(row)
 }
 
 export function rulingsOf(db: Db, ref: string): Pick<Ruling, 'subject' | 'origin_kind' | 'origin_ref' | 'issue_no'>[] {

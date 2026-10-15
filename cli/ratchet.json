@@ -3,8 +3,7 @@
     "lines": 100
   },
   "batch.ts": {
-    "lines": 159,
-    "prepare": 4
+    "lines": 139
   },
   "brief.ts": {
     "lines": 183

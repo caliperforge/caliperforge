@@ -180,7 +180,7 @@ function ours(open: number, created: number[] = [], sent: string[][] = []): Read
 }
 
 function rule(w: ReturnType<typeof world>, value: string): void {
-  addRuling(w.db, { subject: 'claim.acme/widget#12', value, origin_kind: 'ruling', origin_ref: 'test', who: 'ceo', date: '2026-09-27', issue_no: 12 })
+  addRuling(w.db, { subject: 'claim.acme/widget#12', value, origin_kind: 'ruling', origin_ref: 'test', who: 'ceo', date: '2026-09-27', issue_no: 12, supersedes: null })
 }
 
 const PASS = { outcome: 'pass', note: 'acme/widget#12 warm' }

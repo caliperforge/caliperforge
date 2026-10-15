@@ -58,6 +58,23 @@ export function passed(db: Db, plan: number, column: 'gate' | 'rail_id', value: 
   return row?.outcome === 'pass'
 }
 
+export interface Landed { plan: number; origin: string; digest: string }
+
+/** An internal plan lands on the gates alone and is never a card to sign; the batch lists it as landed and asks nothing. */
+export function landed(db: Db): Landed[] {
+  return db.prepare(`SELECT p.id AS plan, p.origin, a.subject_digest AS digest FROM plans p
+    JOIN approvals a ON a.subject_kind = 'plan' AND a.subject_id = p.id AND a.who = 'gates'
+    WHERE p.origin IS NOT NULL AND a.subject_digest = p.head_digest ORDER BY p.id`).all() as Landed[]
+}
+
+export interface Ready { id: number; repo: string; issue_no: number }
+
+export function readyPlans(db: Db): Ready[] {
+  return db.prepare(`SELECT p.id, t.repo, t.issue_no FROM plans p JOIN targets t ON t.id = p.target_id
+    WHERE p.step = 7 AND p.state IN ('queued', 'running', 'blocked_on_ceo') ORDER BY p.queued_at, p.id`)
+    .all() as Ready[]
+}
+
 /** The four the gates left at senior. The fifth, fork CI, is the ready step's own first act. */
 export function proven(db: Db, plan: PlanRow): boolean {
   return db.prepare(`SELECT 1 FROM deliverables WHERE plan_id = ? AND tests_pass = 1

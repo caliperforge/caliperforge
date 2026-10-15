@@ -72,9 +72,6 @@
   "staffing.ts": {
     "lines": 19
   },
-  "tests/adopt.test.ts": {
-    "prepare": 4
-  },
   "tests/cf.test.ts": {
     "silent-catch": 1
   },

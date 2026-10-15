@@ -2,7 +2,12 @@ import { execFileSync } from 'node:child_process'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
+import { runRows } from '../../store/events.ts'
+import { amend } from '../../store/lanes.ts'
 import { last as lastMerge } from '../../store/merges.ts'
+import { dropPlan } from '../../store/plans.ts'
+import { passed } from '../../store/ready.ts'
+import { verdictRows } from '../../store/verdict.ts'
 import { tick } from '../index.ts'
 import type { Wire } from '../push.ts'
 import { srcDir } from '../workspace.ts'
@@ -14,7 +19,7 @@ const git = (cwd: string, args: string[]): string => execFileSync('git', args, {
 
 function mine(): World {
   const w = world()
-  w.db.prepare('DELETE FROM plans WHERE id = 1').run()
+  dropPlan(w.db, 1)
   ours(w.root)
   internalPlan(w.db, w.root, ID)
   return w
@@ -33,10 +38,10 @@ async function atBatch(w: World, wire: Wire, extra?: [string, string]): Promise<
 }
 
 const reviews = (w: World): number =>
-  (w.db.prepare('SELECT count(*) AS n FROM runs WHERE plan = ? AND step IN (4, 5)').get(ID) as { n: number }).n
+  runRows(w.db).filter((r) => r.plan === ID && (r.step === 4 || r.step === 5)).length
 
 const keptRows = (w: World): unknown[] =>
-  w.db.prepare('SELECT gate, tokens FROM verdicts WHERE plan = ? AND kept_by IS NOT NULL ORDER BY id').all(ID)
+  verdictRows(w.db, ID).filter((r) => r.kept_by !== null).map(({ gate, tokens }) => ({ gate, tokens }))
 
 test('D1 a disjoint clean merge keeps both verdicts', async () => {
   const w = mine()
@@ -53,8 +58,7 @@ test('D1 a disjoint clean merge keeps both verdicts', async () => {
   expect(plan(w.db, ID).step).toBe(8)
   expect(reviews(w)).toBe(before)
   expect(keptRows(w)).toEqual([{ gate: 'review', tokens: 0 }, { gate: 'senior_review', tokens: 0 }])
-  expect(w.db.prepare("SELECT outcome FROM verdicts WHERE plan = ? AND gate = 'pre_review' ORDER BY id DESC LIMIT 1").get(ID))
-    .toEqual({ outcome: 'pass' })
+  expect(passed(w.db, ID, 'gate', 'pre_review')).toBe(true)
 })
 
 test('D2 an overlapping merge repeats the reviews', async () => {
@@ -80,7 +84,7 @@ test('a verdict is kept once per merge', async () => {
   await ticks(w, wire, 3)
   expect(keptRows(w)).toHaveLength(1)
 
-  w.db.prepare("UPDATE plans SET step = 4, state = 'running' WHERE id = ?").run(ID)
+  amend(w.db, ID, { step: 4, state: 'running' })
   const before = reviews(w)
   await ticks(w, wire, 1)
   expect(reviews(w)).toBe(before + 1)

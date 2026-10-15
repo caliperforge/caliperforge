@@ -5,6 +5,10 @@ import { approve as approveCard } from '../../cli/batch.ts'
 import type { Pr } from '../../cli/gh.ts'
 import { approve } from '../../cli/queue.ts'
 import type { Packet } from '../../providers/kind.ts'
+import { eventsAfter, newestEvent } from '../../store/events.ts'
+import { dropPlan } from '../../store/plans.ts'
+import { others } from '../../store/signals.ts'
+import { planEvents } from '../../store/trail.ts'
 import { capture } from '../capture.ts'
 import { approve as approvePublish } from '../card.ts'
 import { tick } from '../index.ts'
@@ -38,7 +42,7 @@ async function ticks(w: World, id: number, until: () => boolean): Promise<void> 
 
 async function pushed(): Promise<{ w: World; id: number }> {
   const w = world()
-  w.db.prepare('DELETE FROM plans WHERE id = 1').run()
+  dropPlan(w.db, 1)
   const id = Number(approve(w.db, w.root, w.target, 'pr-path', 'ceo', null).plan)
   await ticks(w, id, () => plan(w.db, id).step === 6)
   const upstream = join(w.root, 'remotes/acme/widget')
@@ -58,7 +62,7 @@ const WALK = ['filed', 'ruling', 'build', 'rails', 'review', 'main merged', 'pus
 test('D4 a job\'s life, filed to landed, reads from events alone',async () => {
   const { w, id } = await pushed()
   capture(w.db, () => pr({ mergedAt: '2026-09-26T09:00:00Z', mergedBy: { login: 'maintainer' } }))
-  const rows = w.db.prepare('SELECT kind, message FROM events WHERE plan = ? ORDER BY id').all(id) as { kind: string; message: string }[]
+  const rows = planEvents(w.db, id)
   const stage = (r: { kind: string; message: string }): string =>
     r.kind === 'ready' && r.message.startsWith('main moved; merged it') ? 'main merged' : r.kind
   const found: number[] = []
@@ -79,12 +83,10 @@ test('D1 D2 D3 each stored signal logs one event, once',async () => {
       { id: 'r2', author: { login: 'greptile-apps[bot]' }, body: 'score 3/5', submittedAt: '2026-09-26T11:30:00Z' },
     ],
   })
-  const before = (w.db.prepare('SELECT max(id) AS id FROM events').get() as { id: number }).id
-  const since = (): unknown => w.db.prepare('SELECT plan, kind, actor, outcome, message, pointer, run FROM events WHERE id > ? ORDER BY id')
-    .all(before)
+  const before = newestEvent(w.db)
+  const since = (): unknown => eventsAfter(w.db, before)
   capture(w.db, () => view)
-  const stored = w.db.prepare('SELECT id, kind, author FROM signals WHERE author != ? ORDER BY id').all(SEEDED) as
-    { id: number; kind: string; author: string }[]
+  const stored = others(w.db, SEEDED)
   expect(stored.map((s) => [s.kind, s.author])).toEqual([['comment', 'maintainer'], ['bot_review', 'greptile-apps[bot]']])
   expect(since()).toEqual(stored.map((s) => ({ plan: id, kind: s.kind, actor: s.author, outcome: 'pass', message: 'acme/widget#7',
     pointer: `signals:${String(s.id)}`, run: null })))

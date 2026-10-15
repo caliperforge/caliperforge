@@ -3,8 +3,7 @@
     "lines": 100
   },
   "batch.ts": {
-    "lines": 159,
-    "prepare": 4
+    "lines": 139
   },
   "brief.ts": {
     "lines": 183
@@ -70,9 +69,6 @@
   },
   "staffing.ts": {
     "lines": 19
-  },
-  "tests/adopt.test.ts": {
-    "prepare": 4
   },
   "tests/cf.test.ts": {
     "silent-catch": 1

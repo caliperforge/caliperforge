@@ -193,9 +193,6 @@
   "tests/handout.test.ts": {
     "prepare": 1
   },
-  "tests/kept.test.ts": {
-    "prepare": 5
-  },
   "tests/lanes.test.ts": {
     "prepare": 2
   },
@@ -204,9 +201,6 @@
   },
   "tests/lead.test.ts": {
     "prepare": 1
-  },
-  "tests/life.test.ts": {
-    "prepare": 5
   },
   "tests/park.test.ts": {
     "prepare": 1

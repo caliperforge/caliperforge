@@ -7,11 +7,14 @@ import { capture } from '../../sequencer/capture.ts'
 import { opened } from '../../sequencer/push.ts'
 import { started, words } from '../../sequencer/signals.ts'
 import { drop, get, maybe, PR_BRANCH } from '../../sequencer/workspace.ts'
-import { decide } from '../../store/approvals.ts'
-import { pushedRow } from '../../store/deliverables.ts'
-import { SignalRow } from '../../store/signals.ts'
+import { approvalsOf, decide } from '../../store/approvals.ts'
+import { deliverablesOf, pushedRow } from '../../store/deliverables.ts'
+import { ofKind } from '../../store/events.ts'
+import { SignalRow, since } from '../../store/signals.ts'
 import { addRule, type Db } from '../../store/index.ts'
-import { addAccount, addTarget, targetRow } from '../../store/targets.ts'
+import { amend } from '../../store/lanes.ts'
+import { planById, planRows } from '../../store/plans.ts'
+import { accountRows, addAccount, addTarget, targetRow, targetRows } from '../../store/targets.ts'
 import { adopt, render } from '../adopt.ts'
 import type { Pr, Read } from '../gh.ts'
 
@@ -63,10 +66,6 @@ const view = (over: Partial<Pr> = {}): Pr => ({
 const comment = (id: string, author: string, at: string): Pr['comments'][number] =>
   ({ id, author: { login: author }, body: 'said before the row existed', createdAt: at })
 
-function rows(db: Db, sql: string): Record<string, unknown>[] {
-  return db.prepare(sql).all() as Record<string, unknown>[]
-}
-
 function root(): string {
   return mkdtempSync(join(tmpdir(), 'cf-adopt-'))
 }
@@ -74,7 +73,7 @@ function root(): string {
 /** The plan as the live board carries it: adopted at a known minute, which is what a signal's age is read against. */
 function adopted(db: Db, dir: string): number {
   const row = adopt(db, dir, `${REPO}#282`, TODAY, canned())
-  db.prepare('UPDATE plans SET queued_at = ? WHERE id = ?').run(ADOPTED, row.plan)
+  amend(db, row.plan, { queued_at: ADOPTED })
   return row.plan
 }
 
@@ -83,11 +82,11 @@ test('cf adopt files one pushed plan with target and account rows', () => {
   const log: string[] = []
   const row = adopt(db, root(), `${REPO}#282`, TODAY, canned(log))
   expect(row).toMatchObject({ repo: REPO, pr: 282, url: URL, fresh: true })
-  expect(rows(db, 'SELECT repo, measured_at FROM accounts')).toEqual([{ repo: REPO, measured_at: TODAY }])
-  expect(rows(db, 'SELECT repo, issue_no, state, evidence FROM targets'))
-    .toEqual([{ repo: REPO, issue_no: 282, state: 'queued', evidence: URL }])
-  expect(rows(db, 'SELECT id, template, state, step, target_id FROM plans'))
-    .toEqual([{ id: row.plan, template: 'pr_path', state: 'done', step: 8, target_id: row.target }])
+  expect(accountRows(db)).toMatchObject([{ repo: REPO, measured_at: TODAY }])
+  expect(targetRows(db))
+    .toMatchObject([{ repo: REPO, issue_no: 282, state: 'queued', evidence: URL }])
+  expect(planRows(db))
+    .toMatchObject([{ id: row.plan, template: 'pr_path', state: 'done', step: 8, target_id: row.target }])
   expect(log[0]).toBe('pr view 282 --repo solana-foundation/pay-kit --json number,url,state,title,body,closingIssuesReferences,headRefName,headRepositoryOwner')
 })
 
@@ -116,7 +115,9 @@ test('D4 a PR off another fork is refused and nothing written', () => {
   const db = fresh(schema)
   const dir = root()
   expect(() => adopt(db, dir, `${REPO}#282`, TODAY, canned([], 270, 'outsider'))).toThrow('outsider')
-  for (const table of ['accounts', 'targets', 'plans']) expect(rows(db, `SELECT id FROM ${table}`)).toEqual([])
+  expect(accountRows(db)).toEqual([])
+  expect(targetRows(db)).toEqual([])
+  expect(planRows(db)).toEqual([])
   expect(maybe(dir, 1, PR_BRANCH)).toBeNull()
 })
 
@@ -132,9 +133,9 @@ test('D4 re-adopting leaves the named merger alone', () => {
 
 test('nothing pushed: no deliverable, proof or approval on the row', () => {
   const db = fresh(schema)
-  adopt(db, root(), `${REPO}#282`, TODAY, canned())
-  expect(rows(db, 'SELECT id FROM deliverables')).toEqual([])
-  expect(rows(db, 'SELECT id FROM approvals')).toEqual([])
+  const { plan } = adopt(db, root(), `${REPO}#282`, TODAY, canned())
+  expect(deliverablesOf(db, plan)).toEqual([])
+  for (const kind of ['target', 'plan', 'proposal', 'deliverable', 'override', 'publish'] as const) expect(approvalsOf(db, kind)).toEqual([])
 })
 
 test('adopted plan packet: the PR body, then the issue it closes', () => {
@@ -160,10 +161,10 @@ test('adopting a PR twice is one row; the second call returns it', () => {
   expect(again.plan).toBe(first.plan)
   expect(again.target).toBe(first.target)
   expect(again.fresh).toBe(false)
-  expect(rows(db, 'SELECT count(*) AS n FROM plans')).toEqual([{ n: 1 }])
-  expect(rows(db, 'SELECT count(*) AS n FROM targets')).toEqual([{ n: 1 }])
-  expect(rows(db, "SELECT plan, actor, message FROM events WHERE kind = 'filed'"))
-    .toEqual([{ plan: first.plan, actor: 'cf adopt', message: URL }])
+  expect(planRows(db)).toHaveLength(1)
+  expect(targetRows(db)).toHaveLength(1)
+  expect(ofKind(db, 'filed'))
+    .toMatchObject([{ plan: first.plan, actor: 'cf adopt', message: URL }])
   expect(render(again)).toContain('already watched')
 })
 
@@ -172,7 +173,7 @@ test('capture reads an adopted PR like any pushed one, no replay', () => {
   const plan = adopted(db, root())
   expect(capture(db, () => view()).map((s) => [s.kind, s.author, s.plan]))
     .toEqual([['comment', 'ludo', plan], ['ci_red', 'ci', plan]])
-  expect(rows(db, 'SELECT repo, pr, kind, author FROM signals ORDER BY id')).toEqual([
+  expect(since(db, plan)).toMatchObject([
     { repo: REPO, pr: 282, kind: 'comment', author: 'ludo' },
     { repo: REPO, pr: 282, kind: 'ci_red', author: 'ci' },
   ])
@@ -186,7 +187,7 @@ test('adopted PR maintainer comment goes back to the brief', () => {
   const packet = get(dir, plan, 'issue.md')
   const note = SignalRow.parse(capture(db, () => view())[0])
   expect(started(db, note, dir)).toMatchObject({ template: 'pr_path', plan, step: 1 })
-  expect(db.prepare('SELECT step, state FROM plans WHERE id = ?').get(plan)).toEqual({ step: 1, state: 'running' })
+  expect(planById(db, plan)).toMatchObject({ step: 1, state: 'running' })
   expect(words(note)).toContain('one nit here')
   expect(get(dir, plan, 'ask.md')).toBe(`${packet.trimEnd()}\n\n${words(note)}`)
 })
@@ -201,15 +202,15 @@ test('the inherited thread is recorded and starts nothing', () => {
   }))
   expect(history.map((s) => s.kind)).toEqual(['comment', 'review'])
   expect(history.map((s) => started(db, s))).toEqual([null, null])
-  expect(db.prepare('SELECT step, state FROM plans WHERE id = ?').get(plan)).toEqual({ step: 8, state: 'done' })
+  expect(planById(db, plan)).toMatchObject({ step: 8, state: 'done' })
 })
 
 test('approved PR: records what lands, acts only on the merge', () => {
   const db = fresh(schema)
   const plan = adopted(db, root())
   expect(capture(db, () => view({ reviewDecision: 'APPROVED' }))).toEqual([])
-  expect(rows(db, 'SELECT kind, plan FROM signals ORDER BY id'))
-    .toEqual([{ kind: 'comment', plan }, { kind: 'ci_red', plan }])
+  expect(since(db, plan))
+    .toMatchObject([{ kind: 'comment', plan }, { kind: 'ci_red', plan }])
   const merged = capture(db, () => view({ reviewDecision: 'APPROVED', mergedAt: '2026-09-18T11:00:00Z', mergedBy: { login: 'ludo' } }))
   expect(merged.map((s) => s.kind)).toEqual(['merge'])
   expect(started(db, SignalRow.parse(merged[0]))).toMatchObject({ template: 'comms', step: 0 })

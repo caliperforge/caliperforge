@@ -44,6 +44,14 @@ export function newestRun(db: Db): number {
   return (db.prepare('SELECT coalesce(max(id), 0) AS id FROM runs').get() as { id: number }).id
 }
 
+export function newestEvent(db: Db): number {
+  return (db.prepare('SELECT coalesce(max(id), 0) AS id FROM events').get() as { id: number }).id
+}
+
+export function eventsAfter(db: Db, id: number): Event[] {
+  return db.prepare('SELECT plan, kind, actor, outcome, message, pointer, run FROM events WHERE id > ? ORDER BY id').all(id) as Event[]
+}
+
 export function newestMode(db: Db): Run['mode'] | null {
   return (db.prepare('SELECT mode FROM runs ORDER BY id DESC LIMIT 1').get() as { mode: Run['mode'] | null }).mode
 }

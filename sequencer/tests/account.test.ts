@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import { built } from '../../store/deliverables.ts'
 import { kindsOf } from '../../store/events.ts'
 import { addRule } from '../../store/index.ts'
-import { set } from '../../store/lanes.ts'
+import { set, zone } from '../../store/lanes.ts'
 import { allPlans, dropPlan, planById, putPlan, type PlanRow } from '../../store/plans.ts'
 import { addAccount, putTarget, targetRows } from '../../store/targets.ts'
 import { brief, ideas, log, reading } from '../../templates/account.ts'
@@ -86,7 +86,7 @@ test('D1: ticks drive an account plan from read to done', async () => {
   expect(answer).not.toContain('---')
   expect(maybe(w.root, 2, 'sources.json')).not.toBeNull()
   expect(targetRows(w.db).slice(3)).toMatchObject([{ repo: 'acme/widget', issue_no: 14, state: 'ready' }])
-  const written = readFileSync(join(w.root, BRIEFS, `${today()}.md`), 'utf8')
+  const written = readFileSync(join(w.root, BRIEFS, `${today(zone(w.db))}.md`), 'utf8')
   expect(written.split('\n')[0]).toBe('**Ready targets:** 1')
   for (const h of BRIEF.match(/^## .+$/gm) ?? []) expect(written).toContain(h)
 })
@@ -96,9 +96,9 @@ test('D3: a second log on one day overwrites the brief', () => {
   put(w.root, 2, 'answer.md', '## Their world\n\nfirst\n')
   log(w.db, w.root, planById(w.db, 2))
   put(w.root, 2, 'answer.md', '## Their world\n\nsecond\n')
-  expect(log(w.db, w.root, planById(w.db, 2))).toMatchObject({ outcome: 'pass', note: `${BRIEFS}/${today()}.md written; no new ## Log rows` })
-  expect(readdirSync(join(w.root, BRIEFS))).toEqual([`${today()}.md`])
-  expect(readFileSync(join(w.root, BRIEFS, `${today()}.md`), 'utf8')).toBe('**Ready targets:** 0\n\n## Their world\n\nsecond\n\n')
+  expect(log(w.db, w.root, planById(w.db, 2))).toMatchObject({ outcome: 'pass', note: `${BRIEFS}/${today(zone(w.db))}.md written; no new ## Log rows` })
+  expect(readdirSync(join(w.root, BRIEFS))).toEqual([`${today(zone(w.db))}.md`])
+  expect(readFileSync(join(w.root, BRIEFS, `${today(zone(w.db))}.md`), 'utf8')).toBe('**Ready targets:** 0\n\n## Their world\n\nsecond\n\n')
 })
 
 test('D4: the brief is named for the local day', () => {

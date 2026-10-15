@@ -7,6 +7,10 @@ import type { Db } from '../store/index.ts'
 import type { Holder } from '../store/plans.ts'
 import { profile } from '../store/profile.ts'
 import { bytes, byId, open as openProposals, stamp, strike, type ProposalRow } from '../store/proposals.ts'
+import { passed, readyPlans, type Landed, type Ready } from '../store/ready.ts'
+import { addRuling } from '../store/rulings.ts'
+
+export { landed, type Landed } from '../store/ready.ts'
 
 interface Mark { name: string; ok: boolean }
 
@@ -24,15 +28,6 @@ const GATES = ['pre_review', 'review', 'senior_review', 'ready'] as const
 
 export function batch(db: Db, root: string): Card[] {
   return [...planCards(db, root), ...proposalCards(db)]
-}
-
-export interface Landed { plan: number; origin: string; digest: string }
-
-/** An internal plan lands on the gates alone and is never a card to sign; the batch lists it as landed and asks nothing. */
-export function landed(db: Db): Landed[] {
-  return db.prepare(`SELECT p.id AS plan, p.origin, a.subject_digest AS digest FROM plans p
-    JOIN approvals a ON a.subject_kind = 'plan' AND a.subject_id = p.id AND a.who = 'gates'
-    WHERE p.origin IS NOT NULL AND a.subject_digest = p.head_digest ORDER BY p.id`).all() as Landed[]
 }
 
 export function renderLanded(row: Landed): string {
@@ -61,9 +56,8 @@ function settle(db: Db, id: number): void {
 
 function ruling(db: Db, p: ProposalRow): void {
   if (p.match_issue_no === null) throw new Error(`proposal ${String(p.id)} names no issue; file it before approving`)
-  db.prepare(`INSERT INTO rulings (subject, value, origin_kind, origin_ref, who, date, issue_no, supersedes)
-    VALUES (?, ?, 'ruling', ?, 'ceo', ?, ?, ?)`)
-    .run(p.subject, p.value, p.evidence, new Date().toISOString().slice(0, 10), p.match_issue_no, p.match_ruling_id)
+  addRuling(db, { subject: p.subject, value: p.value, origin_kind: 'ruling', origin_ref: p.evidence, who: 'ceo',
+    date: new Date().toISOString().slice(0, 10), issue_no: p.match_issue_no, supersedes: p.match_ruling_id })
 }
 
 export function refuse(db: Db, root: string, kind: 'plan' | 'proposal', id: number, reason: string, by: Holder): string {
@@ -118,22 +112,8 @@ function card(db: Db, root: string, p: Ready): Card {
   }
 }
 
-interface Ready { id: number; repo: string; issue_no: number }
-
-function readyPlans(db: Db): Ready[] {
-  return db.prepare(`SELECT p.id, t.repo, t.issue_no FROM plans p JOIN targets t ON t.id = p.target_id
-    WHERE p.step = 7 AND p.state IN ('queued', 'running', 'blocked_on_ceo') ORDER BY p.queued_at, p.id`)
-    .all() as Ready[]
-}
-
 function marks(db: Db, plan: number): Mark[] {
-  return GATES.map((gate) => ({ name: gate, ok: passed(db, plan, gate) }))
-}
-
-function passed(db: Db, plan: number, gate: string): boolean {
-  const row = db.prepare('SELECT outcome FROM verdicts WHERE plan = ? AND gate = ? ORDER BY id DESC LIMIT 1')
-    .get(plan, gate) as { outcome: string } | undefined
-  return row?.outcome === 'pass'
+  return GATES.map((gate) => ({ name: gate, ok: passed(db, plan, 'gate', gate) }))
 }
 
 function stat(diff: string): string {

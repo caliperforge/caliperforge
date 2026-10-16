@@ -170,7 +170,7 @@ function commsOn(db: Db): boolean {
   return pipeNamed(db, 'comms')?.enabled === 1
 }
 
-function file(db: Db, title: string, target: number | null, at: Date, actor: string, message: string): number | null {
+export function file(db: Db, title: string, target: number | null, at: Date, actor: string, message: string): number | null {
   const plan = fileComms(db, title, target, at.toISOString())
   if (plan === null) return null
   logged(db, { plan, kind: 'filed', actor, outcome: 'pass', message, pointer: null, run: null })

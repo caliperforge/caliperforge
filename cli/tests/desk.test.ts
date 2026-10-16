@@ -8,9 +8,9 @@ import { put } from '../../sequencer/workspace.ts'
 import { amend, approved, learnings, log, postOf, posts, putPost, sentBack } from '../../store/desk.ts'
 import { eventsOf, kindsOf } from '../../store/events.ts'
 import { take } from '../../store/leases.ts'
-import { briefed, dropPlan, end, putPlan } from '../../store/plans.ts'
+import { briefed, dropPlan, end, plansOf, putPlan } from '../../store/plans.ts'
 import { capture, draft } from '../../templates/comms.ts'
-import { giveBack, learn } from '../desk.ts'
+import { catchup, giveBack, learn } from '../desk.ts'
 
 const comms = (status: 'proof' | 'approved' | 'published' = 'proof'): World => {
   const w = world()
@@ -111,6 +111,47 @@ test('D3 cf learn --status done is refused', () => {
   const run = (): string => execFileSync(process.execPath, [join(import.meta.dirname, '../cf.ts'), 'learn', 'x', '--status', 'done'],
     { encoding: 'utf8', stdio: 'pipe' })
   expect(run).toThrow('--status takes fixed, open, ruled or noted, not done')
+})
+
+const CF = join(import.meta.dirname, '../cf.ts')
+
+test('catchup D1 files one queued comms plan by coo', () => {
+  const w = world()
+  const id = catchup(w.db, '2026-08-01', '2026-10-11', 'coo', AT)
+  expect(plansOf(w.db, 'comms')).toEqual([{ id, title: 'catchup 2026-08-01 2026-10-11', state: 'queued' }])
+  expect(eventsOf(w.db, id, 'filed')).toEqual([{ actor: 'coo', outcome: 'pass', message: 'cf desk catchup' }])
+})
+
+test('catchup D2 the same or an overlapping range is refused', () => {
+  const w = world()
+  catchup(w.db, '2026-08-01', '2026-10-11', 'coo', AT)
+  const was = plansOf(w.db, 'comms')
+  expect(() => catchup(w.db, '2026-08-01', '2026-10-11', 'coo', AT)).toThrow('overlaps plan')
+  expect(() => catchup(w.db, '2026-10-01', '2026-10-20', 'coo', AT)).toThrow('overlaps plan')
+  expect(plansOf(w.db, 'comms')).toEqual(was)
+})
+
+test('catchup D3 a reversed range is refused', () => {
+  const w = world()
+  expect(() => catchup(w.db, '2026-10-11', '2026-08-01', 'coo', AT)).toThrow('is after')
+  expect(plansOf(w.db, 'comms')).toEqual([])
+})
+
+test('catchup D4 cf desk catchup --by director is refused', () => {
+  const run = (): string => execFileSync(process.execPath, [CF, 'desk', 'catchup', '2026-08-01', '2026-10-11',
+    '--by', 'director'], { encoding: 'utf8', stdio: 'pipe' })
+  expect(run).toThrow('--by takes ceo or coo, not director')
+})
+
+test('catchup D5 cf desk --help lists catchup', () => {
+  expect(execFileSync(process.execPath, [CF, 'desk', '--help'], { encoding: 'utf8', stdio: 'pipe' })).toContain('catchup')
+})
+
+test('catchup D6 a refused plan holds only its own title', () => {
+  const w = world()
+  end(w.db, catchup(w.db, '2026-08-01', '2026-10-11', 'coo', AT), 'refused')
+  expect(() => catchup(w.db, '2026-08-01', '2026-10-11', 'coo', AT)).toThrow('is already filed')
+  expect(catchup(w.db, '2026-10-01', '2026-10-20', 'ceo', AT)).toBeGreaterThan(0)
 })
 
 test('D6 an edit lands in comms/voice-notes.md on capture', () => {

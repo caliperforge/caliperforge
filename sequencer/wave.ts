@@ -23,12 +23,12 @@ const INBOX = { pass: 'wave', refuse: 'refused', needs_ceo: 'blocked' } as const
 
 export function waits(db: Db, repo: string, labels: Listing['labels']): boolean {
   const n = waveOf(labels)
-  return repo === LANE.atelier.home && n !== undefined && n > 1 && lastLogged(db, 'wave', `wave ${String(n - 1)}`)?.outcome !== 'pass'
+  return repo === LANE.loupe.home && n !== undefined && n > 1 && lastLogged(db, 'wave', `wave ${String(n - 1)}`)?.outcome !== 'pass'
 }
 
 export async function closing(db: Db, root: string, provider: Provider, read: Read, now: Date,
   web = join(homedir(), 'atelier_web'), exec: Run = run): Promise<string[]> {
-  if (!pipesOn(db).has(LANE.atelier.pipe)) return []
+  if (!pipesOn(db).has(LANE.loupe.pipe)) return []
   try {
     const filed = first(read, exec)
     const n = closed(db, read)
@@ -54,7 +54,7 @@ function closed(db: Db, read: Read): number | undefined {
 }
 
 function listed(read: Read): Listing[] | undefined {
-  const list = (state: string): Listing[] => Listed.parse(read(['issue', 'list', '--repo', LANE.atelier.home, '--state', state,
+  const list = (state: string): Listing[] => Listed.parse(read(['issue', 'list', '--repo', LANE.loupe.home, '--state', state,
     '--limit', String(WINDOW), '--json', FIELDS]))
   const lists = [list('open'), list('closed')]
   return lists.some((l) => l.length >= WINDOW) ? undefined : lists.flat()
@@ -75,16 +75,17 @@ const BODY = ['**What:** write `DESIGN.md` with a section auditing every page ag
   '**When it ends:** `DESIGN.md` and its audit are on main, with one file per wave 1 ticket under `design/tickets/`', ''].join('\n')
 
 function first(read: Read, exec: Run): string[] {
-  const home = LANE.atelier.home
+  const home = LANE.loupe.home
   if (Contents.parse(read(['api', `repos/${home}/contents?ref=main`])).some((e) => e.path === 'DESIGN.md')) return drafts(read, exec)
   if (Numbers.parse(read(['issue', 'list', '--repo', home, '--label', 'seat:design_lead', '--state', 'all', '--json', 'number'])).length > 0) return []
   exec(['label', 'create', 'seat:design_lead', '--repo', home, '--force'])
-  const url = exec(['issue', 'create', '--repo', home, '--title', TITLE, '--body-file', '-', '--label', 'lane:atelier', '--label', 'seat:design_lead'], BODY)
+  exec(['label', 'create', 'lane:loupe', '--repo', home, '--force'])
+  const url = exec(['issue', 'create', '--repo', home, '--title', TITLE, '--body-file', '-', '--label', 'lane:loupe', '--label', 'seat:design_lead'], BODY)
   return [`first pass: ${url.trim()}`]
 }
 
 function drafts(read: Read, exec: Run): string[] {
-  const home = LANE.atelier.home
+  const home = LANE.loupe.home
   if (Numbers.parse(read(['issue', 'list', '--repo', home, '--label', 'seat:design_lead', '--state', 'closed', '--json', 'number'])).length === 0) return []
   const tickets = listed(read)
   if (tickets === undefined || tickets.some((i) => waveOf(i.labels) !== undefined)) return []
@@ -92,18 +93,21 @@ function drafts(read: Read, exec: Run): string[] {
   const sections = text(read, 'DESIGN.md').split('\n').flatMap((l) => HEADING.exec(l)?.[1]?.trim() ?? [])
   const found = paths.map((path) => ({ path, lines: text(read, path).split('\n') }))
   const cites = (lines: string[]): boolean => lines.some((l) => l.includes('DESIGN.md') && sections.some((s) => l.includes(s)))
-  if (found.some((d) => cites(d.lines))) exec(['label', 'create', 'wave:1', '--repo', home, '--force'])
+  if (found.some((d) => cites(d.lines))) {
+    exec(['label', 'create', 'wave:1', '--repo', home, '--force'])
+    exec(['label', 'create', 'lane:loupe', '--repo', home, '--force'])
+  }
   return found.map(({ path, lines }) => {
     if (!cites(lines)) return `wave 1: ${path} cites no DESIGN.md section`
     const [head = '', ...rest] = lines
-    const url = exec(['issue', 'create', '--repo', home, '--title', head.replace(/^# /, ''), '--body-file', '-', '--label', 'lane:atelier',
+    const url = exec(['issue', 'create', '--repo', home, '--title', head.replace(/^# /, ''), '--body-file', '-', '--label', 'lane:loupe',
       '--label', 'wave:1'], rest.join('\n').trim())
     return `wave 1: ${url.trim()}`
   })
 }
 
 function text(read: Read, path: string): string {
-  const file = File.parse(read(['api', `repos/${LANE.atelier.home}/contents/${path}?ref=main`]))
+  const file = File.parse(read(['api', `repos/${LANE.loupe.home}/contents/${path}?ref=main`]))
   return Buffer.from(file.content.replace(/\n/g, ''), 'base64').toString('utf8')
 }
 
@@ -130,7 +134,7 @@ async function pass(db: Db, root: string, provider: Provider, now: Date, web: st
 }
 
 function ask(n: number, screenshots: string[], spans: string[]): string {
-  return `Every \`wave:${String(n)}\` ticket on ${LANE.atelier.home} is closed. Judge the whole app in these screenshots against \`DESIGN.md\`: does every page show the same job, status, number, person or time the same way? Write no file.
+  return `Every \`wave:${String(n)}\` ticket on ${LANE.loupe.home} is closed. Judge the whole app in these screenshots against \`DESIGN.md\`: does every page show the same job, status, number, person or time the same way? Write no file.
 
 # Screenshots
 

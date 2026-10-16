@@ -193,9 +193,10 @@ export function closeIssue(repo: string, no: number, sha: string, comment = `lan
 }
 
 /** A part of a split ticket, filed on our repo under this host's `gh` credential; the url is the part's name from here on. */
-export function fileIssue(repo: string, title: string, body: string, labels: string[]): string {
-  return execFileSync('gh', ['issue', 'create', '--repo', repo, '--title', title, '--body-file', '-',
-    ...labels.flatMap((l) => ['--label', l])], { encoding: 'utf8', input: body }).trim()
+export function fileIssue(repo: string, title: string, body: string, labels: string[], exec: Run = run): string {
+  for (const l of labels) exec(['label', 'create', l, '--repo', repo, '--force'])
+  return exec(['issue', 'create', '--repo', repo, '--title', title, '--body-file', '-',
+    ...labels.flatMap((l) => ['--label', l])], body).trim()
 }
 
 export function commentIssue(repo: string, no: number, body: string): void {

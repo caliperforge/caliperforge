@@ -3,7 +3,7 @@ import type { Packet } from '../../providers/kind.ts'
 import { refusalRows } from '../../store/refusals.ts'
 import { at } from '../../templates/pr-path.ts'
 import { tick } from '../index.ts'
-import { thrown } from '../settle.ts'
+import { HELD, thrown } from '../settle.ts'
 import { approve, CARRIED, plan, stub, watched, world } from './world.ts'
 
 const FETCH = "Command failed: git fetch --no-tags origin +main:refs/remotes/origin/main\nfatal: unable to access 'https://github.com/caliperforge/caliperforge.git/': Could not resolve host: github.com"
@@ -11,6 +11,12 @@ const FETCH = "Command failed: git fetch --no-tags origin +main:refs/remotes/ori
 test('offline throw holds the step', () => {
   expect(thrown(at(3), FETCH)).toMatchObject({ outcome: 'pass', held: true, spans: ['offline'] })
   expect(thrown(at(2), 'getaddrinfo ENOTFOUND api.anthropic.com')).toMatchObject({ held: true })
+})
+
+test('a locked store holds the step', () => {
+  const out = thrown(at(4), 'database is locked')
+  expect(out).toMatchObject({ outcome: 'pass', held: true, spans: ['locked'] })
+  expect(out.note.endsWith(HELD)).toBe(true)
 })
 
 test('an api_error stop holds the step', async () => {

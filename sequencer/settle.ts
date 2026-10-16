@@ -160,7 +160,7 @@ function treeOf(db: Db, root: string, plan: PlanRow): { repo: string; branch: st
 async function made(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider, wire?: Wire, read?: Read): Promise<Outcome> {
   try {
     const out = await fire(db, root, plan, step, provider, wire, read)
-    if (out.outcome === 'refuse' && out.spans[0] === API_ERROR) return offline(step)
+    if (out.outcome === 'refuse' && out.spans[0] === API_ERROR) return held(step, 'offline', 'the network is down')
     if (out.command !== undefined) return executed(db, root, plan, out.command)
     return out.parts === undefined ? out : parted(db, root, plan, out.parts, wire)
   } catch (error) {
@@ -168,18 +168,20 @@ async function made(db: Db, root: string, plan: PlanRow, step: Step, provider: P
   }
 }
 
-/** A throw that says the host lost its network is not the job's fault: it holds the job on its step, uncounted, and the next tick tries again. */
+/** A throw that says the host lost its network or the store is locked is not the job's fault: it holds the job on its step, uncounted, and the next tick tries again. */
 const OFFLINE = /Could not resolve host|getaddrinfo|ENOTFOUND|EAI_AGAIN|ENETUNREACH|ETIMEDOUT|Network is unreachable|Failed to connect to|Connection timed out/
-export const HELD = 'the network is down; the next tick tries again'
+const LOCKED = 'database is locked'
+export const HELD = 'the next tick tries again'
 
 export function thrown(step: Step, message: string): Outcome {
-  if (OFFLINE.test(message)) return offline(step)
+  if (OFFLINE.test(message)) return held(step, 'offline', 'the network is down')
+  if (message.includes(LOCKED)) return held(step, 'locked', 'the store is locked')
   return { outcome: 'refuse', spans: [`threw: ${message.split('\n')[0] ?? ''}`],
     note: `step ${String(step.step)} ${step.name} threw`, message, to: step.step }
 }
 
-function offline(step: Step): Outcome {
-  return { outcome: 'pass', held: true, spans: ['offline'], note: `step ${String(step.step)} ${step.name}: ${HELD}` }
+function held(step: Step, span: string, why: string): Outcome {
+  return { outcome: 'pass', held: true, spans: [span], note: `step ${String(step.step)} ${step.name}: ${why}; ${HELD}` }
 }
 
 function fire(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider, wire?: Wire, read?: Read): Promise<Outcome> {

@@ -11,7 +11,7 @@ test('D1 D4 a design_lead plan builds as design_lead in its fence', async () => 
   const w = world()
   dropPlan(w.db, 1)
   putPlan(w.db, { id: 1, pipe_id: 1, target_id: null, template: 'pr_path', state: 'running', queued_at: '2026-10-11T00:00:00.000Z',
-    step: 2, retries: 0, lane: 'atelier', seat: 'design_lead', origin: 'https://github.com/caliperforge/atelier-web/issues/1' })
+    step: 2, retries: 0, lane: 'loupe', seat: 'design_lead', origin: 'https://github.com/caliperforge/atelier-web/issues/1' })
   put(w.root, 1, 'issue.md', '# a design system\n\n- D1 write DESIGN.md\n- D2 file a ticket\n')
   const step = at(2, 'web', 'design_lead')
   expect(step).toMatchObject({ seat: 'design_lead', runs: 'design_lead' })

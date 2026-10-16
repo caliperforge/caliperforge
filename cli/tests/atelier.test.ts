@@ -27,22 +27,22 @@ function db(): Db {
 const planOf = (d: Db, id: number | null): PlanRow => PlanRow.parse(d.prepare('SELECT * FROM plans WHERE id = ?').get(id))
 const pipeOf = (d: Db, name: string): PipeRow => d.prepare('SELECT * FROM pipes WHERE name = ?').get(name) as PipeRow
 
-test('atelier issue files on the atelier lane, pipe and web seat', () => {
+test.each(['lane:loupe', 'lane:atelier'])('%s files on the loupe lane, pipe and web seat', (label) => {
   const d = db()
   const root = mkdtempSync(join(tmpdir(), 'cf-atelier-'))
-  const filed = add(d, root, 'caliperforge/atelier-web#3', 'ceo', undefined, canned(ATELIER, ['lane:atelier']))
-  expect(filed).toMatchObject({ state: 'queued', lane: 'atelier', seat: 'web_specialist' })
+  const filed = add(d, root, 'caliperforge/atelier-web#3', 'ceo', undefined, canned(ATELIER, [label]))
+  expect(filed).toMatchObject({ state: 'queued', lane: 'loupe', seat: 'web_specialist' })
   const plan = planOf(d, filed.plan)
   expect(homeOf(plan)).toBe('caliperforge/atelier-web')
   expect(kernelPlan(plan)).toBe(false)
-  expect(pipeOf(d, 'atelier')).toMatchObject({ enabled: 0, max_concurrent: 1 })
+  expect(pipeOf(d, 'loupe')).toMatchObject({ enabled: 0, max_concurrent: 1 })
   expect(d.prepare('SELECT p.name FROM plans JOIN pipes p ON p.id = plans.pipe_id WHERE plans.id = ?').get(filed.plan))
-    .toEqual({ name: 'atelier' })
+    .toEqual({ name: 'loupe' })
 })
 
 test('an empty atelier-web checkout builds with the web seat', () => {
   const d = db()
-  const filed = add(d, mkdtempSync(join(tmpdir(), 'cf-atelier-')), 'caliperforge/atelier-web#3', 'ceo', undefined, canned(ATELIER, ['lane:atelier']))
+  const filed = add(d, mkdtempSync(join(tmpdir(), 'cf-atelier-')), 'caliperforge/atelier-web#3', 'ceo', undefined, canned(ATELIER, ['lane:loupe']))
   expect(builder(languageFor(d, planOf(d, filed.plan), mkdtempSync(join(tmpdir(), 'cf-src-'))))).toBe('web_specialist')
 })
 
@@ -56,15 +56,15 @@ test('a machine plan still builds here with the typescript seat', () => {
 
 test('an issue off its lane\'s home repo is refused', () => {
   const d = db()
-  const filed = add(d, mkdtempSync(join(tmpdir(), 'cf-atelier-')), 'caliperforge/caliperforge#25', 'ceo', undefined, canned(OURS, ['lane:atelier']))
+  const filed = add(d, mkdtempSync(join(tmpdir(), 'cf-atelier-')), 'caliperforge/caliperforge#25', 'ceo', undefined, canned(OURS, ['lane:loupe']))
   expect(filed.state).toBe('refused')
-  expect(filed.why).toContain('the atelier lane builds in caliperforge/atelier-web')
+  expect(filed.why).toContain('the loupe lane builds in caliperforge/atelier-web')
 })
 
-test('with the lane off an atelier plan is not picked', () => {
+test('with the lane off a loupe plan is not picked', () => {
   const d = db()
-  add(d, mkdtempSync(join(tmpdir(), 'cf-atelier-')), 'caliperforge/atelier-web#3', 'ceo', undefined, canned(ATELIER, ['lane:atelier']))
-  expect(openPipes(d, '12:00').map((p) => p.name)).not.toContain('atelier')
-  d.prepare("UPDATE pipes SET enabled = 1 WHERE name = 'atelier'").run()
-  expect(openPipes(d, '12:00').map((p) => p.name)).toContain('atelier')
+  add(d, mkdtempSync(join(tmpdir(), 'cf-atelier-')), 'caliperforge/atelier-web#3', 'ceo', undefined, canned(ATELIER, ['lane:loupe']))
+  expect(openPipes(d, '12:00').map((p) => p.name)).not.toContain('loupe')
+  d.prepare("UPDATE pipes SET enabled = 1 WHERE name = 'loupe'").run()
+  expect(openPipes(d, '12:00').map((p) => p.name)).toContain('loupe')
 })

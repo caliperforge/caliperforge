@@ -109,16 +109,28 @@ test('D5 no saved message commits under the branch name',async () => {
   expect(bodies(srcDir(w.root, ID), `${MAIN}..HEAD`)).toEqual([BRANCH])
 })
 
-test('an atelier plan installs once, after send and close',async () => {
+test('a loupe plan installs once, after send and close',async () => {
   const w = mine()
   const sent: string[] = []
   const wire = watched(sent, w.root, ID)
   await atBatch(w, wire)
-  relane(w.db, ID, 'atelier')
+  relane(w.db, ID, 'loupe')
 
   await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
   const sha = git(srcDir(w.root, ID), ['rev-parse', 'main'])
   expect(sent).toEqual([FORKED, 'send src main', `close caliperforge/caliperforge#34 ${sha.slice(0, 7)}`, 'install'])
+})
+
+test('a machine plan does not install',async () => {
+  const w = mine()
+  const sent: string[] = []
+  const wire = watched(sent, w.root, ID)
+  await atBatch(w, wire)
+  relane(w.db, ID, 'machine')
+
+  await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  const sha = git(srcDir(w.root, ID), ['rev-parse', 'main'])
+  expect(sent).toEqual([FORKED, 'send src main', `close caliperforge/caliperforge#34 ${sha.slice(0, 7)}`])
 })
 
 test('no workflows: lands on step 3\'s checks, no fork run',async () => {
@@ -206,7 +218,7 @@ test('main moving mid-tick refuses the land, no merge commit',async () => {
   const src = srcDir(w.root, ID)
   const head = git(src, ['rev-parse', BRANCH])
   moveMain(w.root, 'racing.ts')
-  relane(w.db, ID, 'atelier')
+  relane(w.db, ID, 'loupe')
 
   const refused = land(w.db, w.root, plan(w.db, ID), 1, wire)
   expect(refused).toMatchObject({ outcome: 'refuse', spans: ['base:stale'] })

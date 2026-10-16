@@ -8,7 +8,7 @@ import { db, NOW, REGISTRY } from './drifting.ts'
 const design = REGISTRY.filter((e) => e.name === 'design')
 
 const atelier = (d: Db, issue: number, step: number, state: PlanRow['state'] = 'running'): number => addPlan(d, { pipe_id: 1, target_id: null,
-  template: 'pr_path', state, queued_at: '2026-10-01', lane: 'atelier', seat: 'web_specialist',
+  template: 'pr_path', state, queued_at: '2026-10-01', lane: 'loupe', seat: 'web_specialist',
   origin: `https://github.com/caliperforge/atelier-web/issues/${String(issue)}`, step })
 
 test('D6 design is silent only once atelier-web is past step 4', () => {
@@ -22,7 +22,7 @@ test('D6 design is silent only once atelier-web is past step 4', () => {
 
 test('D2 a design_lead plan past step 4 leaves design quiet', () => {
   const d = db()
-  addPlan(d, { pipe_id: 1, target_id: null, template: 'pr_path', state: 'running', queued_at: '2026-10-01', lane: 'atelier',
+  addPlan(d, { pipe_id: 1, target_id: null, template: 'pr_path', state: 'running', queued_at: '2026-10-01', lane: 'loupe',
     seat: 'design_lead', origin: 'https://github.com/caliperforge/atelier-web/issues/1', step: 5 })
   expect(drift(d, design, NOW)).toEqual([])
 })

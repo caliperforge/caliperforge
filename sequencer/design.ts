@@ -13,7 +13,7 @@ import type { PlanRow } from '../store/plans.ts'
 import { pending } from '../store/transcript.ts'
 import type { Verdict } from '../store/verdict.ts'
 import type { Outcome } from './kind.ts'
-import { diffOf, get, planDir, rulings, srcDir } from './workspace.ts'
+import { cloned, diffOf, get, git, maybe, planDir, rulings, srcDir } from './workspace.ts'
 
 interface Shot {
   screen: string
@@ -65,7 +65,7 @@ export async function looked(db: Db, root: string, plan: PlanRow, provider: Prov
   const out = planDir(root, plan.id)
   const dir = join(out, 'design')
   rmSync(dir, { recursive: true, force: true })
-  const capture = await design(src, out, pages)
+  const capture = await design(src, out, pages, await onMain(root, plan.id, src, pages))
   const system = join(src, 'DESIGN.md')
   const input = {
     repo: src,
@@ -82,7 +82,21 @@ export async function looked(db: Db, root: string, plan: PlanRow, provider: Prov
   return { outcome: 'pass', spans: [], note: 'design pass' }
 }
 
-export async function design(src: string, out: string, pages: string[]): Promise<Verdict> {
+async function onMain(root: string, plan: number, src: string, pages: string[]): Promise<string[]> {
+  const base = maybe(root, plan, 'base.sha')
+  if (base === null || !cloned(src)) return []
+  const main = join(planDir(root, plan), 'main')
+  rmSync(main, { recursive: true, force: true })
+  git(src, ['worktree', 'prune'])
+  git(src, ['worktree', 'add', '--detach', main, base.trim()])
+  try {
+    return (await design(main, join(main, '..', 'main-shots'), pages)).spans
+  } finally {
+    git(src, ['worktree', 'remove', '--force', main])
+  }
+}
+
+export async function design(src: string, out: string, pages: string[], known: string[] = []): Promise<Verdict> {
   const web = existsSync(join(src, 'public', 'index.html')) ? join(src, 'public') : src
   const paths = web === src ? pages : pages.map((page) => page.replace(/^public\//, ''))
   const server = await serve(web)
@@ -97,7 +111,7 @@ export async function design(src: string, out: string, pages: string[]): Promise
     for (const shot of shots) {
       const taken = await shoot(browser, base, out, shot)
       pngs.push(taken.png)
-      spans.push(...taken.spans)
+      spans.push(...taken.spans.filter((span) => !known.includes(span)))
     }
     return verdict(pngs, spans)
   } finally {

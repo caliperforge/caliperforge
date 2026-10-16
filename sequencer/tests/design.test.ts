@@ -11,7 +11,7 @@ import { at } from '../../templates/pr-path.ts'
 import { design, screens } from '../design.ts'
 import type { Outcome } from '../kind.ts'
 import { fireLanded } from '../seat.ts'
-import { planDir, put, srcDir } from '../workspace.ts'
+import { git, planDir, put, srcDir } from '../workspace.ts'
 import { CARRIED, plan, stub, world, type World } from './world.ts'
 
 // headless launches chromium-headless-shell, whose path executablePath() does not report
@@ -151,6 +151,40 @@ browsed('D2 no DESIGN.md in the checkout, no section', async () => {
   const prompt = await designed()
   expect(prompt).toContain('# Screenshots')
   expect(prompt).not.toContain('\n# DESIGN.md in the checkout\n')
+})
+
+const WIDE = '<table style="width:1200px"><tr><td>wide</td></tr></table>'
+
+const based = async (before: string, after: string): Promise<{ w: World; outcome: Outcome }> => {
+  const w = world()
+  load(w.db, w.root)
+  const src = srcDir(w.root, 1)
+  git(src, ['init', '-q'])
+  writeFileSync(join(src, 'index.html'), page(before))
+  git(src, ['add', '-A'])
+  git(src, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'base'])
+  put(w.root, 1, 'base.sha', git(src, ['rev-parse', 'HEAD']))
+  writeFileSync(join(src, 'index.html'), page(after))
+  put(w.root, 1, 'issue.md', '# a screen\n\n- D1 add a screen\n')
+  const row = { ...plan(w.db, 1), origin: 'https://github.com/caliperforge/atelier-web/issues/1' }
+  return { w, outcome: await fireLanded(w.db, w.root, row, at(4, 'web'), stub(CARRIED, 0)) }
+}
+
+browsed('D1 an overflow already on base passes the capture', async () => {
+  const { outcome } = await based(`<h1>Plans</h1>${WIDE}`, `<h1>Plans now</h1>${WIDE}`)
+  expect(outcome).toMatchObject({ outcome: 'pass', note: 'design pass' })
+})
+
+browsed('D2 an overflow the change adds still refuses', async () => {
+  const { outcome } = await based('<h1>Plans</h1>', `<h1>Plans</h1>${WIDE}`)
+  expect(outcome.outcome).toBe('refuse')
+  expect(outcome.spans).toContain('index.html design.overflow 400 light')
+})
+
+browsed('D4 the base capture leaves no shots and no worktree', async () => {
+  const { w } = await based(`<h1>Plans</h1>${WIDE}`, `<h1>Plans now</h1>${WIDE}`)
+  expect(readdirSync(join(planDir(w.root, 1), 'design'))).toHaveLength(4)
+  expect(git(srcDir(w.root, 1), ['worktree', 'list']).trim().split('\n')).toHaveLength(1)
 })
 
 test('D5 a web diff with no screen passes uncaptured', async () => {

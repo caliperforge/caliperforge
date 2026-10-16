@@ -335,7 +335,9 @@ test('D1-D3 an ask naming a format file lists its readers', async () => {
   expect(prompt).toContain('\n# Shared formats\n')
   const formats = prompt.slice(prompt.indexOf('\n# Shared formats\n')).split('\n\n# ')[0] ?? ''
   for (const reader of SHARED.flatMap((f) => f.readers)) expect(formats).toContain(`\`${reader}\``)
-  expect(await fired(mine())).not.toContain('# Shared formats')
+  const plain = await fired(mine())
+  expect(plain).toContain(TEMPLATE)
+  expect(plain).not.toContain('# Shared formats')
 })
 
 test('the packet opens on the checkout map; no MAP.md is written', async () => {

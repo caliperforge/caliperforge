@@ -46,10 +46,12 @@ export function rules(root: string): Rule[] {
   const rails = digest(join(root, 'rules/rails.yaml'))
   const tight = digest(join(root, 'rules/tight.md'))
   const staffing = digest(join(root, 'rules/staffing.yaml'))
+  const classes = digest(join(root, 'rules/repo-classes.yaml'))
   return [
     { id: 'rules/rails.yaml', kind: 'rail', path: 'rules/rails.yaml', content_hash: rails },
     { id: 'rules/tight.md', kind: 'card', path: 'rules/tight.md', content_hash: tight },
     ...registered(root).map((path) => ({ id: path, kind: 'card' as const, path, content_hash: digest(join(root, path)) })),
+    { id: 'rules/repo-classes.yaml', kind: 'card', path: 'rules/repo-classes.yaml', content_hash: classes },
     { id: 'rules/staffing.yaml', kind: 'card', path: 'rules/staffing.yaml', content_hash: staffing },
     ...manifest(root).rails.map((id) => ({ id, kind: 'rail' as const, path: 'rules/rails.yaml', content_hash: rails })),
     ...written(root).seats.map((id) => ({ id, kind: 'card' as const, path: rosterOf(id), content_hash: digest(join(root, rosterOf(id))) })),

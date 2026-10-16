@@ -1,12 +1,16 @@
 import type { Command } from 'commander'
-import { mkdirSync, renameSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { parse } from 'yaml'
+import { z } from 'zod'
+import { FORK, OPERATOR } from '../sequencer/workspace.ts'
 import { metric, METRICS, reader } from '../store/metrics.ts'
 import type { Cli } from './cf-lanes.ts'
+import { gh, type Read } from './gh.ts'
 
 const SPLIT = 'input is input_tokens less cache_write_tokens, since input_tokens counts cache writes; cache_read, cache_write and output are their own columns; total is input_tokens + cache_read_tokens + output_tokens, the sum of the four.'
 
-const PROSE: Record<keyof typeof METRICS, { title: string; unit: string; definition: string; caveat: string }> = {
+const PROSE: Record<keyof typeof METRICS | 'outside_prs', { title: string; unit: string; definition: string; caveat: string }> = {
   daily_activity: { title: 'Daily activity', unit: 'runs and tokens per UTC day',
     definition: `Every agent run, by the UTC day it was recorded, from the first run's day to today. ${SPLIT}`,
     caveat: 'A day with no runs is a row of zeros, and today is a partial day.' },
@@ -28,6 +32,9 @@ const PROSE: Record<keyof typeof METRICS, { title: string; unit: string; definit
   ceo_touches: { title: 'Human touches', unit: 'CEO actions per UTC day',
     definition: "Every event the CEO logged, by the UTC day it was recorded, from the first CEO event's day to today, counted by kind. A kind outside the eight listed counts as other.",
     caveat: 'A day with no CEO events is a row of zeros, and today is a partial day. It counts actions, not time spent.' },
+  outside_prs: { title: 'Outside pull requests', unit: 'pull requests',
+    definition: 'Every pull request we opened outside caliperforge, from GitHub search, one row each: its state (merged, closed, approved when open with an approving review, else open), the class of its repository, and the month it was opened.',
+    caveat: 'Search reaches at most 1000 pull requests, and a repository missing from the hand-kept class map counts as other.' },
 }
 
 const LEAK = /cost|usd|price|dollar|funder|email|login/i
@@ -39,18 +46,53 @@ export function leaked(value: unknown): string | undefined {
   return parts.map(leaked).find((hit) => hit !== undefined)
 }
 
-export function exported(path: string, dir: string, now: Date): string[] {
+const Page = z.object({ items: z.array(z.object({
+  html_url: z.string(),
+  repository_url: z.string(),
+  state: z.enum(['open', 'closed']),
+  created_at: z.string(),
+  pull_request: z.object({ merged_at: z.string().nullable() }),
+})) })
+
+type Item = z.infer<typeof Page>['items'][number]
+
+function searched(q: string, read: Read): Item[] {
+  const items: Item[] = []
+  for (let n = 1; n <= 10; n++) {
+    const page = Page.parse(read(['api', `search/issues?q=${encodeURIComponent(q)}&per_page=100&page=${String(n)}`])).items
+    items.push(...page)
+    if (page.length < 100) break
+  }
+  return items
+}
+
+function outside(read: Read): { columns: string[]; rows: [string, string, string][] } {
+  const q = `is:pr author:${OPERATOR} -org:${FORK}`
+  const approved = new Set(searched(`${q} is:open review:approved`, read).map((i) => i.html_url))
+  const classes = z.record(z.string(), z.string()).parse(parse(readFileSync(join(import.meta.dirname, '../rules/repo-classes.yaml'), 'utf8')))
+  const rows = searched(q, read).map((i): [string, string, string] => [
+    i.pull_request.merged_at !== null ? 'merged' : i.state === 'closed' ? 'closed' : approved.has(i.html_url) ? 'approved' : 'open',
+    classes[i.repository_url.replace('https://api.github.com/repos/', '')] ?? 'other',
+    i.created_at.slice(0, 7),
+  ])
+  rows.sort((a, b) => a[2].localeCompare(b[2]) || a[1].localeCompare(b[1]) || a[0].localeCompare(b[0]))
+  return { columns: ['state', 'class', 'month'], rows }
+}
+
+function file(dir: string, name: keyof typeof PROSE, table: { columns: string[]; rows: unknown[][] }): { path: string; body: string } {
+  const { title, unit, definition, caveat } = PROSE[name]
+  const data = { metric: name, title, unit, ...table, definition, caveat }
+  const leak = leaked(data)
+  if (leak !== undefined) throw new Error(`${name}.json: ${leak}`)
+  return { path: join(dir, 'data', `${name}.json`), body: JSON.stringify(data, null, 2) }
+}
+
+export function exported(path: string, dir: string, now: Date, read: Read = gh): string[] {
   const db = reader(path)
   try {
     const today = now.toISOString().slice(0, 10)
-    const files = (Object.keys(METRICS) as (keyof typeof METRICS)[]).map((name) => {
-      const { title, unit, definition, caveat } = PROSE[name]
-      const data = { metric: name, title, unit, ...metric(db, METRICS[name], today), definition, caveat }
-      const leak = leaked(data)
-      if (leak !== undefined) throw new Error(`${name}.json: ${leak}`)
-      const body = JSON.stringify(data, null, 2)
-      return { path: join(dir, 'data', `${name}.json`), body }
-    })
+    const files = (Object.keys(METRICS) as (keyof typeof METRICS)[]).map((name) => file(dir, name, metric(db, METRICS[name], today)))
+    files.push(file(dir, 'outside_prs', outside(read)))
     mkdirSync(join(dir, 'data'), { recursive: true })
     for (const f of files) writeFileSync(`${f.path}.tmp`, f.body)
     for (const f of files) renameSync(`${f.path}.tmp`, f.path)

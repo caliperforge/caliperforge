@@ -98,6 +98,27 @@ test('D3 undone passes a carried handback', () => {
   expect(undone(fixture('handback-carried.md'), false).outcome).toBe('pass')
 })
 
+const WRONG = '---\ndone:\n  - id: D1\n    status: brief-wrong\n'
+
+test('D1 audit refuses brief-wrong with no why', () => {
+  for (const fence of [`${WRONG}---\n`, `${WRONG}    why: ' '\n---\n`]) {
+    const verdict = audit(fence, ['D1'])
+    expect(verdict.spans).toEqual(['step-2.handback.md'])
+    expect(verdict.message).toBe('D1 is brief-wrong with no why: line')
+  }
+})
+
+test('D2 undone refuses brief-wrong carrying its why', () => {
+  const verdict = undone(`${WRONG}    why: the ask names a file that is not there\n---\n`, false)
+  expect(verdict.outcome).toBe('refuse')
+  expect(verdict.spans).toEqual(['D1'])
+  expect(verdict.message).toBe('brief-wrong: the ask names a file that is not there')
+})
+
+test('D3 undone passes brief-wrong with no why', () => {
+  expect(undone(`${WRONG}---\n`, false).outcome).toBe('pass')
+})
+
 test('refuses, not throws, on a fence that is not a done envelope', () => {
   const fences = ['---\nstatus: partial\ndone: []\n---\n', '---\ndone:\n  - status: done\n---\n']
   for (const fence of fences) {

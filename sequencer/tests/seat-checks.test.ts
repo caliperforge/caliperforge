@@ -78,7 +78,7 @@ function bench(outcome: Verdict['outcome']): { db: Db; plan: PlanRow; src: strin
   return { db, src, plan: { ...plan, target_id: null, lane: 'bench', seat: 'solidity_specialist', origin: 'https://github.com/caliperforge/fuzz-bench/issues/1' } }
 }
 
-const FORGE = '- solidity | . | forge build | pass\n- solidity | . | forge test | pass\n- python | . | python3 -m pytest tests/test_smoke_leak.py | pass'
+const FORGE = '- solidity | . | forge build | pass\n- solidity | . | forge test | pass\n- python | . | python3 -m pytest -m not live tests/test_smoke_leak.py | pass'
 
 const PAIR = '- finish | . | python3 bench/run_pair.py targets/euler-earn-m01.yml suites/euler-m01'
 

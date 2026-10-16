@@ -31,7 +31,7 @@ function world(): { db: Db; target: PlanRow; ours: PlanRow; hooks: PlanRow; web:
   putPlan(db, { ...running, id: 1, target_id: 1 })
   putPlan(db, { ...running, id: 2, lane: 'machine', seat: 'typescript_specialist', origin: 'https://github.com/caliperforge/caliperforge/issues/1' })
   putPlan(db, { ...running, id: 3, lane: 'uniswap', seat: 'python_specialist', origin: 'https://github.com/caliperforge/v4-hook-index/issues/1' })
-  putPlan(db, { ...running, id: 4, lane: 'atelier', seat: 'swift_specialist', origin: 'https://github.com/caliperforge/atelier-web/issues/1' })
+  putPlan(db, { ...running, id: 4, lane: 'loupe', seat: 'swift_specialist', origin: 'https://github.com/caliperforge/atelier-web/issues/1' })
   const row = (id: number): PlanRow => planById(db, id)
   return { db, target: row(1), ours: row(2), hooks: row(3), web: row(4) }
 }

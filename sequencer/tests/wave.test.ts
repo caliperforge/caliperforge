@@ -30,7 +30,7 @@ const missing = await chromium.launch({ headless: true }).then(
 interface Fixture { number: number; wave: number; closedAt?: string }
 
 const shape = (r: Fixture) => ({ number: r.number, title: `issue ${String(r.number)}`, body: 'the ask',
-  url: `https://github.com/${REPO}/issues/${String(r.number)}`, labels: [{ name: 'lane:atelier' }, { name: `wave:${String(r.wave)}` }],
+  url: `https://github.com/${REPO}/issues/${String(r.number)}`, labels: [{ name: 'lane:loupe' }, { name: `wave:${String(r.wave)}` }],
   createdAt: '2026-09-20T09:00:00Z', closedAt: r.closedAt ?? null, stateReason: null })
 
 function canned(open: Fixture[], closed: Fixture[] = [], log: string[] = [], design = true, first: number[] = [],
@@ -53,9 +53,9 @@ function canned(open: Fixture[], closed: Fixture[] = [], log: string[] = [], des
   }
 }
 
-function piped(enabled = 1): Db {
+function piped(enabled = 1, name = 'loupe'): Db {
   const db = fresh(schema)
-  addPipe(db, { name: 'atelier', enabled, window_start: '00:00', window_end: '23:59', max_concurrent: 1 })
+  addPipe(db, { name, enabled, window_start: '00:00', window_end: '23:59', max_concurrent: 1 })
   return db
 }
 
@@ -150,12 +150,20 @@ test('D4: no fire on an off pipe, an open ticket or a newer event', async () => 
   expect(fires).toEqual([])
 })
 
+test('D4: a pipe still named atelier fires nothing', async () => {
+  const log: string[] = []
+  const calls: string[][] = []
+  expect(await closing(piped(1, 'atelier'), tmp(), stub([]), canned([], WAVE_ONE, log, false), NOW, web(), filer(calls))).toEqual([])
+  expect(log).toEqual([])
+  expect(calls).toEqual([])
+})
+
 test('first pass D1: no DESIGN.md and no issue files one', async () => {
   const calls: string[][] = []
   expect(await closing(piped(), tmp(), stub([]), canned([], [], [], false), NOW, tmp(), filer(calls))).toEqual([`first pass: ${FILED}`])
-  const created = calls.filter((c) => c[0] === 'issue' && c[1] === 'create')
-  expect(created).toHaveLength(1)
-  expect(created[0]?.join(' ')).toContain('--label lane:atelier --label seat:design_lead')
+  expect(calls.slice(0, 2)).toEqual(['seat:design_lead', 'lane:loupe'].map((l) => ['label', 'create', l, '--repo', REPO, '--force']))
+  expect(calls.slice(2).map((c) => c.join(' '))).toEqual([expect.stringContaining('issue create') as string])
+  expect(calls[2]?.join(' ')).toContain('--label lane:loupe --label seat:design_lead')
 })
 
 test('first pass D2: DESIGN.md on main files nothing', async () => {
@@ -189,14 +197,15 @@ const DRAFTS = {
 const LOOSE = { 'design/tickets/03-loose.md': '# Loose\n\n**What:** match DESIGN.md\n' }
 
 const wave1 = (title: string): string[] => ['issue', 'create', '--repo', REPO, '--title', title, '--body-file', '-',
-  '--label', 'lane:atelier', '--label', 'wave:1']
+  '--label', 'lane:loupe', '--label', 'wave:1']
 
 test('wave 1 D1: each citing draft files a wave:1 ticket', async () => {
   const calls: string[][] = []
   const bodies: string[] = []
   const read = canned([], [], [], true, [7], [7], DRAFTS)
   expect(await closing(piped(), tmp(), stub([]), read, NOW, tmp(), filer(calls, bodies))).toEqual([`wave 1: ${FILED}`, `wave 1: ${FILED}`])
-  expect(calls).toEqual([['label', 'create', 'wave:1', '--repo', REPO, '--force'], wave1('Plans list'), wave1('One status pill')])
+  expect(calls).toEqual([['label', 'create', 'wave:1', '--repo', REPO, '--force'], ['label', 'create', 'lane:loupe', '--repo', REPO, '--force'],
+    wave1('Plans list'), wave1('One status pill')])
   expect(bodies).toEqual(['**What:** the plans list, per DESIGN.md Plans page', '**What:** DESIGN.md § Status pill on every page'])
 })
 

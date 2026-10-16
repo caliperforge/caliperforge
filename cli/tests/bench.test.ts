@@ -60,7 +60,6 @@ test('D7 brief counts the bench pipe at 03:00', () => {
 const AT = '2026-09-18T13:00:00.000Z'
 const YML = 'repo: euler-xyz/euler-earn\nfix: abc123\n'
 
-/** A root staffed from this repo, whose fuzz-bench holds euler-earn-m01 and smoke-01. */
 function benchRoot(): string {
   const dir = root()
   for (const sub of ['rules', 'seats']) cpSync(join(import.meta.dirname, '../..', sub), join(dir, sub), { recursive: true })

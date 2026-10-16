@@ -67,8 +67,7 @@ function project(src: string): string | null {
  * paths -- every test the import graph says they can reach -- instead of the whole suite. The first pass
  * through step 3 passes none, so every job still runs the suite whole once, against the tree it built on.
  */
-export function checks(src: string, given: Commands, run: Run = npm, narrow: string[] = [], outside: Outside | null = null,
-  touched: string[] = []): Failure | null {
+export function checks(src: string, given: Commands, run: Run = npm, narrow: string[] = [], outside: Outside | null = null, touched: string[] = [], minutes?: number): Failure | null {
   if (outside !== null) return gated(src, gates(src, outside, given.excused), run, given.excused ?? [])
   const parsed = given.node === undefined ? null : gated(src, syntax(src, given.node, touched), run)
   if (parsed !== null) return parsed
@@ -77,10 +76,11 @@ export function checks(src: string, given: Commands, run: Run = npm, narrow: str
   const bin = mode(src)
   if (bin === 'xcodebuild') excluded(src)
   for (const [script, args, program = bin] of commands(src, given, narrow, touched)) {
-    const first = run(args, src, program)
+    const cap = program === 'python3' && minutes !== undefined ? minutes * 60_000 : undefined
+    const first = run(args, src, program, cap)
     if (first.ok) continue
     const retried = loadOnly(first.output) || (bin === 'xcodebuild' && exitedOutside(src, first.output, touched))
-    const last = retried ? run(alone(first.output, read(src)?.[script] ?? '', args), src, program) : first
+    const last = retried ? run(alone(first.output, read(src)?.[script] ?? '', args), src, program, cap) : first
     if (!last.ok) return { script, command: `${program} ${args.join(' ')}`, code: last.code, output: tail(last.output), tests: entries(src, last.output), retried,
       ...faultOf(bin, last.output), ...cappedOf(bin, last) }
   }

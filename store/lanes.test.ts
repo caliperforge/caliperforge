@@ -1,11 +1,11 @@
 import { expect, it } from 'vitest'
 import { FORK, SELF } from '../sequencer/workspace.ts'
 import { DEFAULT_BUILDER } from '../templates/pr-path.ts'
-import { LANE, laneOf } from './lanes.ts'
+import { LANE, LANES, laneOf } from './lanes.ts'
 
 it('D3 LANE literals match the constants they replaced', () => {
   expect(LANE.machine).toMatchObject({ seat: DEFAULT_BUILDER, home: SELF })
-  expect(LANE.atelier.home).toBe(`${FORK}/atelier-web`)
+  expect(LANE.loupe.home).toBe(`${FORK}/atelier-web`)
   expect(LANE.uniswap.home).toBe(`${FORK}/v4-hook-index`)
 })
 
@@ -22,5 +22,10 @@ it('1156a D1 the site lane builds site on its own pipe', () => {
 it('1247a D4 D5 the loupe lane builds atelier-web on its pipe', () => {
   expect(LANE.loupe).toEqual({ template: 'pr_path', seat: 'web_specialist', home: `${FORK}/atelier-web`, pipe: 'loupe' })
   expect(laneOf([{ name: 'lane:loupe' }])).toBe('loupe')
-  expect(laneOf([{ name: 'lane:atelier' }])).toBe('atelier')
+  expect(laneOf([{ name: 'lane:atelier' }])).toBe('loupe')
+})
+
+it('1247c D1 atelier is no longer a lane', () => {
+  expect(Object.keys(LANE)).not.toContain('atelier')
+  expect(LANES).not.toContain('atelier')
 })

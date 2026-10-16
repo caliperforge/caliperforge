@@ -17,6 +17,6 @@ it('D6 0100 keeps desk posts, adds release as NULL', () => {
   db.prepare(`INSERT INTO desk_posts (id, kind, dest, status, title, dek, body, sources, checks, work_date, written_date, proof_at)
     VALUES (1, 'catchup', 'site', 'proof', 't', 'd', 'b', '[]', '[]', '2026-10-01', '2026-10-02', '2026-10-02 10:00:00')`).run()
   const before = db.prepare('SELECT * FROM desk_posts').all() as object[]
-  expect(migrate(db, join(root, 'schema'))).toEqual(['0100_desk_release.sql', '0101_bench_lane.sql', '0102_bench_scorecard.sql', '0103_bench_template.sql', '0104_site_lane.sql', '0105_account_template.sql', '0106_review_mode_backfill.sql', '0107_loupe_lane.sql', '0108_atelier_to_loupe.sql'])
+  expect(migrate(db, join(root, 'schema'))).toEqual(['0100_desk_release.sql', '0101_bench_lane.sql', '0102_bench_scorecard.sql', '0103_bench_template.sql', '0104_site_lane.sql', '0105_account_template.sql', '0106_review_mode_backfill.sql', '0107_loupe_lane.sql', '0108_atelier_to_loupe.sql', '0109_retire_atelier_lane.sql'])
   expect(db.prepare('SELECT * FROM desk_posts').all()).toEqual(before.map((p) => ({ ...p, release: null })))
 })

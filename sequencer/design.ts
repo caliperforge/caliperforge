@@ -83,13 +83,15 @@ export async function looked(db: Db, root: string, plan: PlanRow, provider: Prov
 }
 
 export async function design(src: string, out: string, pages: string[]): Promise<Verdict> {
-  const server = await serve(src)
+  const web = existsSync(join(src, 'public', 'index.html')) ? join(src, 'public') : src
+  const paths = web === src ? pages : pages.map((page) => page.replace(/^public\//, ''))
+  const server = await serve(web)
   let browser: Browser | undefined
   try {
     browser = await chromium.launch({ headless: true })
     const base = `http://127.0.0.1:${String((server.address() as AddressInfo).port)}`
     mkdirSync(join(out, 'design'), { recursive: true })
-    const shots = pages.flatMap((screen) => WIDTHS.flatMap((width) => SCHEMES.map((scheme) => ({ screen, width, scheme }))))
+    const shots = paths.flatMap((screen) => WIDTHS.flatMap((width) => SCHEMES.map((scheme) => ({ screen, width, scheme }))))
     const pngs: Buffer[] = []
     const spans: string[] = []
     for (const shot of shots) {

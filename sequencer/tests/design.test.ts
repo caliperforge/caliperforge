@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { chromium } from 'playwright-core'
@@ -59,6 +59,31 @@ browsed('D4 console.error and clipped text refuse', async () => {
   expect(logged.verdict.spans).toContain('index.html design.console 1440 dark boom')
   const cut = await run('<p style="width:80px;overflow:hidden;white-space:nowrap">a label far too long to fit</p>')
   expect(cut.verdict.spans).toContain('index.html design.clipped 400 light a label far too long to fit')
+})
+
+const publicRun = async (href: string, pages: string[]): Promise<{ verdict: Verdict; out: string }> => {
+  const src = mkdtempSync(join(tmpdir(), 'design-src-'))
+  const out = mkdtempSync(join(tmpdir(), 'design-out-'))
+  mkdirSync(join(src, 'public'))
+  writeFileSync(join(src, 'public', 'index.html'), page(`<link rel="stylesheet" href="${href}"><h1>Plans</h1>`))
+  writeFileSync(join(src, 'public', 'style.css'), 'h1 { color: #1a1a1a }')
+  return { verdict: await design(src, out, pages), out }
+}
+
+browsed('D1 public/ is the web root, so /style.css loads', async () => {
+  const { verdict, out } = await publicRun('/style.css', ['public/index.html'])
+  expect(verdict).toMatchObject({ outcome: 'pass', spans: [] })
+  expect(readdirSync(join(out, 'design'))).toHaveLength(4)
+})
+
+browsed('D2 the css-only index.html is public/index.html', async () => {
+  const { verdict } = await publicRun('/style.css', ['index.html'])
+  expect(verdict).toMatchObject({ outcome: 'pass', spans: [] })
+})
+
+browsed('D3 a missing asset under public/ still refuses', async () => {
+  const { verdict } = await publicRun('/missing.css', ['public/index.html'])
+  expect(verdict.spans).toContain('index.html design.console 1440 light Failed to load resource: the server responded with a status of 404 (Not Found)')
 })
 
 const file = (from: string, to: string): string => [`--- ${from}`, `+++ ${to}`, '@@ -1 +1 @@', '-a', '+b'].join('\n')

@@ -30,7 +30,7 @@ const fifth = (w: World, id: number): unknown => runTokens(w.db, id)
 test('D1 an outside plan runs blind_review before senior, unsent', async () => {
   const sent: string[] = []
   const w = await outside(stub(CARRIED), sent)
-  expect(fifth(w, 1)).toEqual([{ seat: 'blind_review', mode: 'review' }, { seat: 'senior_review', mode: null }])
+  expect(fifth(w, 1)).toEqual([{ seat: 'blind_review', mode: 'review' }, { seat: 'senior_review', mode: 'review' }])
   expect(sent.filter((l) => /^(send|open) /.test(l) && !l.endsWith('-next'))).toEqual([])
 })
 
@@ -42,7 +42,7 @@ test('D2 an internal plan at step 5 runs no blind_review', async () => {
   for (let step = 0; step < 2; step += 1) await tick(w.db, w.root, stub(CARRIED))
   built(w.root, MINE, 'export const two = 2')
   for (let step = 0; step < 4; step += 1) await tick(w.db, w.root, stub(CARRIED, 0, PASS))
-  expect(fifth(w, MINE)).toEqual([{ seat: 'senior_review', mode: null }])
+  expect(fifth(w, MINE)).toEqual([{ seat: 'senior_review', mode: 'review' }])
 })
 
 test('D3 a blind refuse leaves step 5 to senior', async () => {

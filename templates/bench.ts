@@ -3,11 +3,11 @@ import { cpSync, existsSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, join } from 'node:path'
 import type { Provider } from '../providers/kind.ts'
-import { packet } from '../runner/index.ts'
+import { packet, real } from '../runner/index.ts'
 import { load, seat } from '../runner/rules.ts'
 import type { Outcome } from '../sequencer/kind.ts'
 import { staffed } from '../sequencer/staffing.ts'
-import { git, gitBase, maybe, planDir, put, remote, srcDir } from '../sequencer/workspace.ts'
+import { cloned, git, gitBase, maybe, planDir, put, remote, srcDir } from '../sequencer/workspace.ts'
 import { record } from '../store/bench.ts'
 import { runLogged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
@@ -33,6 +33,15 @@ function ask(skill: string | undefined): string {
 function fields(text: string): Record<string, string | undefined> {
   return Object.fromEntries(text.split('\n')
     .map((line) => /^(\w+):\s*(.*)$/.exec(line)).filter((m) => m !== null).map((m) => [m[1] ?? '', m[2]?.trim()] as const))
+}
+
+function checkedOut(root: string, id: number, dir: string): string | null {
+  const made = maybe(root, id, 'checkout.json')
+  if (made === null) return 'checkout.json is missing'
+  if (!cloned(dir)) return 'src/ is not a clone'
+  const { pre_fix: preFix } = JSON.parse(made) as { pre_fix: string }
+  const head = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: dir, encoding: 'utf8' }).stdout.trim()
+  return head === preFix ? null : `src/ is at ${head.slice(0, 12)}, not pre_fix ${preFix.slice(0, 12)}`
 }
 
 export function scratch(root: string, plan: PlanRow): Outcome {
@@ -65,10 +74,12 @@ export async function generate(db: Db, root: string, plan: PlanRow, step: Step, 
   if (generator === '') return { outcome: 'refuse', spans: ['target.yml'], note: 'target.yml has no generator' }
   const name = staffed(root, 'bench', step.step, generator)?.seat
   if (name === undefined) return { outcome: 'needs_ceo', spans: ['staffing'], note: `no bench generator "${generator}" in rules/staffing.yaml` }
+  const dir = real(srcDir(root, plan.id))
+  const unchecked = checkedOut(root, plan.id, dir)
+  if (unchecked !== null) return { outcome: 'refuse', spans: ['bench.no_checkout'], note: unchecked, to: 0 }
   load(db, root)
   const { manifest, prompt, hash } = seat(root, name)
-  const dir = srcDir(root, plan.id)
-  const reads = manifest.reads?.map((path) => path.startsWith('~/') ? join(homedir(), path.slice(2)) : path)
+  const reads = manifest.reads?.map((path) => real(path.startsWith('~/') ? join(homedir(), path.slice(2)) : path))
   const built = packet(manifest, prompt, '', ask(reads?.[0]), dir, pending(planDir(root, plan.id), `step-${String(step.step)}`))
   const fired = await provider.fire({ ...built, wall: CEILING, ...(reads === undefined ? {} : { reads }) })
   const run = runLogged(db, { plan: plan.id, step: step.step, seat: name, rule_hash: hash, provider: provider.name, model: manifest.model,

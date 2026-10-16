@@ -134,8 +134,8 @@ function staffedIn(root: string): void {
   for (const dir of ['rules', 'seats']) cpSync(join(REPO, dir), join(root, dir), { recursive: true })
 }
 
-/** A generator that spends `tokens`, ends `ended` and, when `wrote`, leaves a suite under test/fizz. */
-function stub(tokens: number, ended: Fired['ended'], wrote: boolean, stop: string | null = null): { provider: Provider; packets: Packet[] } {
+/** A generator that spends `tokens`, ends `ended` and, when `wrote`, leaves a suite under test/fizz, and when `xray`, x-ray/x-ray.md. */
+function stub(tokens: number, ended: Fired['ended'], wrote: boolean, stop: string | null = null, xray = false): { provider: Provider; packets: Packet[] } {
   const packets: Packet[] = []
   return { packets, provider: { name: 'claude-agent-sdk', fire: (packet) => {
     packets.push(packet)
@@ -143,6 +143,10 @@ function stub(tokens: number, ended: Fired['ended'], wrote: boolean, stop: strin
     if (wrote) {
       mkdirSync(join(packet.cwd, 'test/fizz'), { recursive: true })
       writeFileSync(join(packet.cwd, 'test/fizz/FizzTest.sol'), 'contract FizzTest {}\n')
+    }
+    if (xray) {
+      mkdirSync(join(packet.cwd, 'x-ray'), { recursive: true })
+      writeFileSync(join(packet.cwd, 'x-ray/x-ray.md'), '# x-ray\n')
     }
     return Promise.resolve({ text: '', transcript_path: packet.transcript, usage: { input: tokens - 1000, cache: 0, output: 1000 }, seconds: 1,
       ended, exit: ended === 'completed' ? 0 : 1, stop_reason: stop, denials: 0 })
@@ -268,8 +272,13 @@ test('D5 tick on an empty src/ sends the plan back to step 0', async () => {
 test('D3 a run stopped at the ceiling with a suite passes', async () => {
   const { root, db, outcome } = await generated(stub(CEILING + 5, 'stopped', true, 'ruling:run.token_wall'))
   expect(outcome).toMatchObject({ outcome: 'pass' })
-  expect(JSON.parse(get(root, 1, 'generate.json'))).toEqual({ suite: 'test/fizz', tokens: CEILING + 5, seconds: 1 })
+  expect(JSON.parse(get(root, 1, 'generate.json'))).toEqual({ suite: 'test/fizz', tokens: CEILING + 5, seconds: 1, x_ray: 0 })
   expect(runRows(db)).toMatchObject([{ seat: 'fizz_generator', staffed: 'fizz_generator' }])
+})
+
+test('D2 generate.json has x_ray 1 when x-ray.md was written', async () => {
+  const { root } = await generated(stub(1000, 'completed', true, null, true))
+  expect(JSON.parse(get(root, 1, 'generate.json'))).toEqual({ suite: 'test/fizz', tokens: 1000, seconds: 1, x_ray: 1 })
 })
 
 test('D4 a completed run with no suite is refused', async () => {
@@ -326,10 +335,10 @@ const SCORE = { catches: 2, false_positives: 1, untested: 1, tokens: 1234, secon
 test('score D1 kernel scores the suite at the fuzz-bench HEAD', () => {
   const { root, db, sha } = scoring()
   expect(kernel(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
-  expect(scores(db)).toEqual([{ plan: 1, target: 'euler-earn-m01', generator: 'fizz', ...SCORE }])
+  expect(scores(db)).toEqual([{ plan: 1, target: 'euler-earn-m01', generator: 'fizz', ...SCORE, x_ray: null }])
   expect(existsSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/FizzTest.sol'))).toBe(true)
   expect(existsSync(join(srcDir(root, 1), 'test/fizz/FizzTest.sol'))).toBe(true)
-  expect(JSON.parse(get(root, 1, 'score.json'))).toEqual({ fuzz_bench: sha, ...SCORE })
+  expect(JSON.parse(get(root, 1, 'score.json'))).toEqual({ fuzz_bench: sha, ...SCORE, x_ray: null })
 })
 
 test('score D2 a failing run_pair.py is refused and not recorded', () => {
@@ -357,7 +366,17 @@ test('D3 house_generator generates and is scored under its name', async () => {
   expect(fired.packets[0]?.prompt).not.toContain('SKILL_PATH')
   expect(runRows(db)).toMatchObject([{ seat: 'house_generator', staffed: 'house_generator' }])
   expect(kernel(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
-  expect(scores(db)).toEqual([{ plan: 1, target: 'euler-earn-m01', generator: 'house_generator', ...SCORE, tokens: 1234, seconds: 1 }])
+  expect(scores(db)).toEqual([{ plan: 1, target: 'euler-earn-m01', generator: 'house_generator', ...SCORE, tokens: 1234, seconds: 1, x_ray: 0 }])
+})
+
+test('D3 a run that wrote x-ray.md is scored with x_ray 1', async () => {
+  const { root, db, sha } = scoring(undefined, { target: 'euler-earn-m01', generator: 'house_generator' })
+  staffedIn(root)
+  expect(await generate(db, root, planById(db, 1), mapOf('bench').at(1), stub(1234, 'completed', true, null, true).provider))
+    .toMatchObject({ outcome: 'pass' })
+  expect(kernel(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  expect(scores(db)).toMatchObject([{ plan: 1, x_ray: 1 }])
+  expect(JSON.parse(get(root, 1, 'score.json'))).toEqual({ fuzz_bench: sha, ...SCORE, seconds: 1, x_ray: 1 })
 })
 
 test('score D5 a comms plan still reaches the comms scorer', () => {

@@ -13,7 +13,7 @@ function db(): Db {
   return db
 }
 
-const fizz = { target: 'euler-earn-m01', generator: 'fizz', catches: 3, false_positives: 1, untested: 2, tokens: 4200, seconds: 61.5 }
+const fizz = { target: 'euler-earn-m01', generator: 'fizz', catches: 3, false_positives: 1, untested: 2, tokens: 4200, seconds: 61.5, x_ray: 1 as const }
 
 it('D1 record for fizz reads back as the one row', () => {
   const d = db()
@@ -33,15 +33,16 @@ it('D2 refuses a second row per plan and an unknown plan', () => {
 it('D3 refuses negative counts and empty names', () => {
   const d = db()
   const plan = planRow(d)
-  for (const bad of [{ catches: -1 }, { false_positives: -1 }, { untested: -1 }, { tokens: -1 }, { seconds: -0.5 }, { target: '' }, { generator: '' }]) {
+  for (const bad of [{ catches: -1 }, { false_positives: -1 }, { untested: -1 }, { tokens: -1 }, { seconds: -0.5 }, { target: '' }, { generator: '' },
+    { x_ray: 2 as 1 }]) {
     expect(() => record(d, { plan, ...fizz, ...bad })).toThrow(/CHECK/)
   }
 })
 
-it('D4 migrates once to 109 with one bench_scorecard table', () => {
+it('D4 migrates once to 110 with one bench_scorecard table', () => {
   const d = open(':memory:')
-  expect(migrate(d, join(root, 'schema')).at(-1)).toBe('0109_retire_atelier_lane.sql')
+  expect(migrate(d, join(root, 'schema')).at(-1)).toBe('0110_bench_x_ray.sql')
   expect(migrate(d, join(root, 'schema'))).toEqual([])
   expect(d.prepare("SELECT count(*) AS n FROM sqlite_master WHERE type = 'table' AND name = 'bench_scorecard'").get()).toEqual({ n: 1 })
-  expect(d.pragma('user_version', { simple: true })).toBe(109)
+  expect(d.pragma('user_version', { simple: true })).toBe(110)
 })

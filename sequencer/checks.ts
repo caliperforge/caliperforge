@@ -6,7 +6,7 @@ import type { Profile } from '../store/profile.ts'
 import { exitedOutside } from './exited.ts'
 import { gates, type Gate, type Outside, type OutsideLanguage } from './gates.ts'
 import { malformed } from './malformed.ts'
-import { Package } from './node.ts'
+import { nodeTests, Package } from './node.ts'
 
 export type Commands = NonNullable<Profile['commands']>
 
@@ -229,9 +229,9 @@ export function tools(src: string, given: Commands, touched: string[]): [string,
   const py = touched.filter((path) => path.endsWith('.py') && existsSync(join(src, path)))
   const tsc = given.tsc !== undefined && existsSync(join(src, 'tsconfig.json'))
     ? [['typecheck', ['exec', '--no', '--', 'tsc', ...given.tsc], 'npm'] as [string, string[], string]] : []
-  return [...tsc,
-    ...(given.forge ?? []).map((s): [string, string[], string] => [s, [s], 'forge']),
-    ...(given.python3 === undefined ? [] : [['pytest', [...given.python3, ...py], 'python3'] as [string, string[], string]])]
+  return [...tsc, ...(given.forge ?? []).map((s): [string, string[], string] => [s, [s], 'forge']),
+    ...(given.python3 === undefined ? [] : [['pytest', [...given.python3, ...py], 'python3'] as [string, string[], string]]),
+    ...(given.node_test === true ? nodeTests(src) : [])]
 }
 
 function related(script: string, name: string, narrow: string[]): string[] | null {

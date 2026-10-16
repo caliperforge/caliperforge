@@ -156,6 +156,13 @@ function checkedOut(root: string): void {
   put(root, 1, 'checkout.json', JSON.stringify({ pre_fix: commit(dir, 'src/Vault.sol', 'contract Vault {}\n', 'vault') }))
 }
 
+/** An empty src/ inside a repo whose HEAD checkout.json names as pre_fix, so only `cloned` tells them apart. */
+function emptied(root: string): void {
+  git(root, ['init', '-q'])
+  put(root, 1, 'checkout.json', JSON.stringify({ pre_fix: commit(root, 'README.md', '', 'root') }))
+  srcDir(root, 1)
+}
+
 async function generated(fired: ReturnType<typeof stub>, keys: Record<string, string> = { generator: 'fizz' },
   ready: (root: string) => void = checkedOut, root = mkdtempSync(join(tmpdir(), 'cf-bench-'))) {
   staffedIn(root)
@@ -233,7 +240,7 @@ test('D1 D2 a root reached through a symlink gets real paths', async () => {
 test('D3 D4 generate refuses a src/ not at pre_fix, unfired', async () => {
   const moved = (root: string) => { checkedOut(root); commit(srcDir(root, 1), 'src/Moved.sol', '', 'moved') }
   const unwritten = (root: string) => { checkedOut(root); rmSync(join(planDir(root, 1), 'checkout.json')) }
-  for (const ready of [() => undefined, moved, unwritten]) {
+  for (const ready of [emptied, moved, unwritten]) {
     const fired = stub(CEILING, 'stopped', true)
     const { db, outcome } = await generated(fired, undefined, ready)
     expect(outcome).toMatchObject({ outcome: 'refuse', spans: ['bench.no_checkout'], to: 0 })
@@ -245,6 +252,7 @@ test('D3 D4 generate refuses a src/ not at pre_fix, unfired', async () => {
 test('D5 tick on an empty src/ sends the plan back to step 0', async () => {
   const root = mkdtempSync(join(tmpdir(), 'cf-bench-'))
   staffedIn(root)
+  emptied(root)
   target(root, { generator: 'fizz' })
   const db = fresh(schema)
   dial(db, 3, AT)

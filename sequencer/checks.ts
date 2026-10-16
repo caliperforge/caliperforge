@@ -32,7 +32,7 @@ export interface Failure {
   retried: boolean
   /** The xcodebuild log line saying this Mac, not the job, cannot run tests. */
   fault?: string
-  /** The cap killed an npm run before it named a red test, or killed a finish entry. */
+  /** The cap killed a run other than xcodebuild's before it named a red test, or killed a finish entry. */
   capped?: true
 }
 
@@ -98,7 +98,7 @@ function faultOf(bin: Mode, output: string): { fault?: string } {
 }
 
 function cappedOf(bin: Mode, ran: Extract<Ran, { ok: false }>): { capped?: true } {
-  return bin === 'npm' && ran.capped === true && failures(ran.output).length === 0 ? { capped: true } : {}
+  return bin !== 'xcodebuild' && ran.capped === true && failures(ran.output).length === 0 ? { capped: true } : {}
 }
 
 /**

@@ -709,6 +709,30 @@ test('#700 D4 a non-zero run the cap did not kill is not capped', () => {
   expect(checks(tree(ONE), OWN, replies({ ok: false, code: '143', output: '' }).run)).not.toHaveProperty('capped')
 })
 
+const PYTEST = { ok: false, code: '1', output: 'tests/test_heldout_targets.py ........' } as const
+
+function pytest(ran: Ran): Run {
+  return (...[, , bin]) => bin === 'python3' ? ran : { ok: true, output: '' }
+}
+
+test('1381 D1 a fuzz-bench pytest the cap killed is capped', () => {
+  const failed = checks(tree(FOUNDRY), BENCH, pytest({ ...PYTEST, capped: true }))
+  expect(failed).toMatchObject({ script: 'pytest', capped: true })
+  expect(failed && capped(failed)).toMatchObject({ spans: ['checks:cap'], blip: true })
+})
+
+test('1381 D2 a fuzz-bench pytest at exit 1 is not capped', () => {
+  const failed = checks(tree(FOUNDRY), BENCH, pytest(PYTEST))
+  expect(failed).toMatchObject({ script: 'pytest', code: '1' })
+  expect(failed).not.toHaveProperty('capped')
+})
+
+test('1381 D3 an xcodebuild run the cap killed is not capped', () => {
+  const failed = checks(xcode(), APP, replies({ ok: false, code: '1', output: 'building', capped: true }).run)
+  expect(failed).toMatchObject({ code: '1' })
+  expect(failed).not.toHaveProperty('capped')
+})
+
 /** Our own profile's yml ends in its `commands:` block, so atelier's xcodebuild line lands under it. */
 function xcoded(w: World): void {
   appendFileSync(join(w.root, 'profiles', 'caliperforge', 'caliperforge.yml'), `  xcodebuild: ${JSON.stringify(APP.xcodebuild)}\n`)

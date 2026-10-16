@@ -1,5 +1,6 @@
 import { CHECK, find } from '../cli/find.ts'
 import type { Read } from '../cli/gh.ts'
+import { moved } from '../cli/house.ts'
 import { CARD, waits } from '../cli/queue.ts'
 import { parse } from '../rails/diff.ts'
 import { building, filesOf, recorded, sharing, strays as recordStrays } from '../store/files.ts'
@@ -209,6 +210,8 @@ export function measure(db: Db, root: string, plan: PlanRow, read?: Read): Outco
     const quiet = eventsOf(db, plan.id, 'measure').at(-1)?.message === note ? { quiet: true as const } : {}
     return { outcome: 'refuse', held: true, spans: [span], note, ...quiet }
   }
+  const house = read === undefined ? null : moved(root, row.repo, read)
+  if (house !== null) return { outcome: 'refuse', spans: [`house/${row.repo}.md`], note: house }
   const park = read === undefined ? null : checked(root, plan, row, read)
   if (park === null) return { outcome: 'pass', spans: [], note: `${row.repo}#${String(row.issue_no)} ${row.pulse}` }
   setTargetState(db, plan.target_id, 'parked')

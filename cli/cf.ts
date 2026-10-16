@@ -22,6 +22,7 @@ import { openPipes, overlapWaits } from '../store/plans.ts'
 import { receipt, slots } from '../store/ticks.ts'
 import { dryLines, tickNote } from './brief.ts'
 import { reported, slack } from './flow.ts'
+import { registerBench } from './bench.ts'
 import { registerInbox, registerLanes, registerSession, type Cli } from './cf-lanes.ts'
 import { registerPlans, registerRetry } from './cf-plans.ts'
 import { registerAdopt, registerApprovals, registerTargets } from './cf-targets.ts'
@@ -64,6 +65,7 @@ registerSite(cf, cli)
 registerRefile(cf, cli)
 registerPaydesk(cf, cli)
 registerExport(cf, cli)
+registerBench(cf, cli)
 
 cf.command('health').action(() => {
   out(health(db(), root, new Date().toISOString().slice(0, 10)))

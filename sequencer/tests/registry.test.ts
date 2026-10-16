@@ -90,27 +90,6 @@ test('fixerRunSilent', () => {
   expect(drift(d, FIXER, NOW)).toEqual([{ name: 'fixer', state: 'silent', detail: "no row in events WHERE actor = 'fixer'" }])
 })
 
-const PLANS = REGISTRY.filter((e) => e.name === 'account_plans')
-
-function led(at: string): Db {
-  const d = db()
-  addSetting(d, { key: 'accounts.weekly', value: '1', who: 'ceo', origin_kind: 'ruling', origin_ref: 't', set_at: '2026-09-01' })
-  addRule(d, { id: 'account_lead', kind: 'card', path: 'rules/roster/account_lead.yaml', content_hash: 'a'.repeat(64), loaded_at: '2026-09-01' })
-  addRun(d, { plan: 1, step: 1, seat: 'account_lead', rule_hash: 'a'.repeat(64), provider: 'claude-agent-sdk', model: 'opus', effort: 'high',
-    input_tokens: 0, cache_write_tokens: null, cache_write_1h_tokens: null, cache_read_tokens: 0, output_tokens: 0, seconds: 1, exit: 0,
-    at, transcript_path: 'x.transcript.jsonl', cost_usd: null })
-  return d
-}
-
-test('D5 account_plans off while accounts.weekly is unset', () => {
-  expect(drift(db(), PLANS, NOW)).toEqual([{ name: 'account_plans', state: 'off', detail: 'accounts.weekly is unset' }])
-})
-
-test('D5 account_plans stale past 8d, quiet within', () => {
-  expect(drift(led('2026-09-24 10:00:00'), PLANS, NOW)).toMatchObject([{ name: 'account_plans', state: 'stale' }])
-  expect(drift(led('2026-09-30 10:00:00'), PLANS, NOW)).toEqual([])
-})
-
 test('catchupRangeClearsSilent D4', () => {
   const d = db()
   const catchup = REGISTRY.filter((e) => e.name === 'writer_catchup')

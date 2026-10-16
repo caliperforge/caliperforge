@@ -371,7 +371,7 @@ const elsewhere = () => {
   return at
 }
 
-test.each([{ name: '~/.ssh/config', path: () => '~/.ssh/config' }, { name: 'another checkout', path: elsewhere }])('D3: a rule naming $name is held by the coo', async ({ path }) => {
+test.each([{ name: '~/.ssh/config', path: () => '~/.ssh/config' }, { name: 'another checkout', path: elsewhere }, { name: '/..', path: () => '/..' }])('D3: a rule naming $name is held by the coo', async ({ path }) => {
   const { db, home } = seeded('1')
   await run(db, home, ruling(path()))
   expect(maybe(home, 7, 'issue.md')).toBe(ISSUE)

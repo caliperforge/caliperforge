@@ -5,6 +5,7 @@ import type { Packet } from '../../providers/kind.ts'
 import { benchPacket, reviewManifest } from '../../runner/packet.ts'
 import { seat } from '../../runner/rules.ts'
 import { newestMode, runRows } from '../../store/events.ts'
+import { runTokens } from '../../store/runs.ts'
 import { at } from '../../templates/pr-path.ts'
 import { mechanisms } from '../drift.ts'
 import { blind, fireLanded, ran } from '../seat.ts'
@@ -86,11 +87,26 @@ test.each(['swift', 'kotlin'])('D2 D3 outside %s step 4 fires its seat in review
 
 test('D4 an internal plan keeps code_quality at step 4', async () => {
   const r = await reviewed('swift', 'https://github.com/caliperforge/cf/issues/1')
-  expect(r).toMatchObject({ seat: 'code_quality', mode: null })
+  expect(r).toMatchObject({ seat: 'code_quality', mode: 'review' })
 })
 
 test('D3 an outside typescript plan keeps code_quality at step 4', async () => {
-  expect(await reviewed('typescript')).toMatchObject({ seat: 'code_quality', mode: null })
+  expect(await reviewed('typescript')).toMatchObject({ seat: 'code_quality', mode: 'review' })
+})
+
+test('D2 internal python steps 4 and 5 log mode review, staffed', async () => {
+  const w = world()
+  checkout(w.root, 1, 'acme/widget', 'widget-12-a1')
+  built(w.root, 1, 'export const two = 2')
+  writeFileSync(join(srcDir(w.root, 1), 'pyproject.toml'), '[project]\nname = "widget"\n')
+  put(w.root, 1, 'issue.md', '# hello\n\n- D1 add `hello()` in `src/hello.ts`\n')
+  const row = { ...plan(w.db, 1), origin: 'https://github.com/caliperforge/cf/issues/1' }
+  for (const step of [4, 5]) await fireLanded(w.db, w.root, row, at(step, 'python'), stub(CARRIED))
+  const modes = runTokens(w.db, 1).map((r) => r.mode)
+  expect(runRows(w.db).map(({ seat, staffed }, i) => ({ seat, staffed, mode: modes[i] }))).toEqual([
+    { seat: 'code_quality', staffed: 'python_specialist', mode: 'review' },
+    { seat: 'senior_review', staffed: 'python_specialist', mode: 'review' },
+  ])
 })
 
 function blinded(): { root: string; bench: ReturnType<typeof blind> } {

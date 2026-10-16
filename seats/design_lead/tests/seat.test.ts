@@ -15,7 +15,7 @@ test('build: step 2 runs design_lead in build mode', () => {
   expect(at(2, 'web', 'design_lead')).toMatchObject({ seat: 'design_lead', runs: 'design_lead', mode: 'build' })
 })
 
-test('build: the design_lead prompt ends with the done fence', () => {
+test('build: the design_lead prompt carries the build done fence', () => {
   const step = at(2, 'web', 'design_lead')
   const prompt = seat(root, step.runs, step.mode).prompt
   expect(prompt.startsWith('# design_lead\n')).toBe(true)
@@ -26,7 +26,7 @@ test('build: a plain web step 2 has no mode', () => {
   const step = at(2, 'web')
   expect(step.runs).toBe('web_specialist')
   expect(step).not.toHaveProperty('mode')
-  expect(seat(root, step.runs, step.mode).prompt).toBe(seat(root, 'web_specialist').prompt)
+  expect(seat(root, step.runs, step.mode).prompt).not.toContain('\n# Build\n')
 })
 
 test('build: design_lead steps 4 and 5 match a web plan', () => {

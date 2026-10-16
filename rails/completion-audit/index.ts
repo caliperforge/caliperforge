@@ -19,8 +19,9 @@ const Manifest = z.object({
 const Envelope = z.object({
   done: z.array(z.object({
     id: z.string(),
-    status: z.enum(['done', 'cannot-be-done', 'they-said-dont']),
+    status: z.enum(['done', 'cannot-be-done', 'they-said-dont', 'brief-wrong']),
     pointer: z.string().nullish(),
+    why: z.string().nullish(),
   })).min(1),
 })
 
@@ -40,6 +41,9 @@ export function undone(handback: string, unmoved: boolean): Verdict {
   const subject = createHash('sha256').update(handback).digest('hex')
   const line = /^[-*>_ ]*Not done.*$/m.exec(handback)?.[0]
   if (line !== undefined) return refuse(subject, ['step-2.handback.md'], line.trim())
+  const rows = carried(handback)
+  const wrong = typeof rows === 'string' ? undefined : [...rows.values()].find((row) => row.status === 'brief-wrong')
+  if (wrong !== undefined) return refuse(subject, [wrong.id], `brief-wrong: ${(wrong.why ?? '').trim()}`)
   if (unmoved) return refuse(subject, ['rulings.md'], 'rulings.md changed since the last step-3 lap and the diff did not')
   return { outcome: 'pass', defect_class: null, origin_kind: null, origin_ref: null, subject_digest: subject, spans: [], message: 'no case handed back not done' }
 }
@@ -93,7 +97,8 @@ export function carried(handback: string): Map<string, z.infer<typeof Envelope>[
     if (whole instanceof Error) return `the handback fence is not YAML: ${whole.message}`
     return misshapen(whole) ? 'the done: rows are not in the standard shape (a list of id / status / pointer rows)' : new Map()
   }
-  return new Map(rows.data.done.map((row) => [row.id, row]))
+  const blank = rows.data.done.find((row) => row.status === 'brief-wrong' && (row.why ?? '').trim() === '')
+  return blank === undefined ? new Map(rows.data.done.map((row) => [row.id, row])) : `${blank.id} is brief-wrong with no why: line`
 }
 
 function misshapen(whole: unknown): boolean {

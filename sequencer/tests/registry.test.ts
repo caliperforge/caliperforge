@@ -90,6 +90,18 @@ test('fixerRunSilent', () => {
   expect(drift(d, FIXER, NOW)).toEqual([{ name: 'fixer', state: 'silent', detail: "no row in events WHERE actor = 'fixer'" }])
 })
 
+test('designOnMainSeen D5', () => {
+  const onMain = REGISTRY.filter((e) => e.name === 'design_on_main')
+  const d = db()
+  const review = (message: string): void => {
+    logged(d, { plan: 1, kind: 'review', actor: 'design', outcome: 'pass', message, pointer: null, run: null }, '2026-10-02 10:00:00')
+  }
+  review('design pass')
+  expect(drift(d, onMain, NOW)).toEqual([])
+  review('design pass; already on main: x')
+  expect(drift(d, onMain, NOW)).toMatchObject([{ name: 'design_on_main', state: 'seen', newest: '2026-10-02 10:00:00' }])
+})
+
 test('catchupRangeClearsSilent D4', () => {
   const d = db()
   const catchup = REGISTRY.filter((e) => e.name === 'writer_catchup')

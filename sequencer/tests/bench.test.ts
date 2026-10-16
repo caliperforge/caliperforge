@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import type { HookInput } from '@anthropic-ai/claude-agent-sdk'
@@ -7,6 +7,7 @@ import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import { gate, readOutside, walled } from '../../providers/claude-agent-sdk/index.ts'
 import type { Fired, Packet, Provider } from '../../providers/kind.ts'
+import { real } from '../../runner/index.ts'
 import { seat } from '../../runner/rules.ts'
 import { scores } from '../../store/bench.ts'
 import { runRows } from '../../store/events.ts'
@@ -148,10 +149,24 @@ function stub(tokens: number, ended: Fired['ended'], wrote: boolean, stop: strin
   } } }
 }
 
-async function generated(fired: ReturnType<typeof stub>, keys: Record<string, string> = { generator: 'fizz' }) {
-  const root = mkdtempSync(join(tmpdir(), 'cf-bench-'))
+/** src/ cloned at one commit, and the checkout.json naming it as pre_fix. */
+function checkedOut(root: string): void {
+  const dir = srcDir(root, 1)
+  git(dir, ['init', '-q'])
+  put(root, 1, 'checkout.json', JSON.stringify({ pre_fix: commit(dir, 'src/Vault.sol', 'contract Vault {}\n', 'vault') }))
+}
+
+/** An empty src/ inside a repo whose HEAD checkout.json names as pre_fix, so only `cloned` tells them apart. */
+function emptied(root: string): void {
+  git(root, ['init', '-q'])
+  put(root, 1, 'checkout.json', JSON.stringify({ pre_fix: commit(root, 'README.md', '', 'root') }))
+  srcDir(root, 1)
+}
+
+async function generated(fired: ReturnType<typeof stub>, keys: Record<string, string> = { generator: 'fizz' },
+  ready: (root: string) => void = checkedOut, root = mkdtempSync(join(tmpdir(), 'cf-bench-'))) {
   staffedIn(root)
-  mkdirSync(srcDir(root, 1), { recursive: true })
+  ready(root)
   target(root, keys)
   const db = fresh(schema)
   queued(db, 'bench')
@@ -171,7 +186,7 @@ test('D1 D7 tick fires fizz_generator in the scratch tree', async () => {
   await tick(db, root, fired.provider, OPENS)
   expect(planById(db, 1).step).toBe(1)
   await tick(db, root, fired.provider, OPENS)
-  expect(fired.packets).toMatchObject([{ cwd: srcDir(root, 1), wall: CEILING, tools: seat(root, 'fizz_generator').manifest.tools }])
+  expect(fired.packets).toMatchObject([{ cwd: realpathSync(srcDir(root, 1)), wall: CEILING, tools: seat(root, 'fizz_generator').manifest.tools }])
   expect(git(srcDir(root, 1), ['rev-parse', 'HEAD']).trim()).toBe(c1)
   expect(planById(db, 1).step).toBe(2)
   for (const said of [c2, c2.slice(0, 12), FINDING]) expect(fired.packets[0]?.prompt).not.toContain(said)
@@ -202,10 +217,51 @@ test('D4 D5 fizz reads its skill folder and names SKILL_PATH', async () => {
   await generated(fired)
   const [packet] = fired.packets
   if (packet === undefined) throw new Error('the generator was not fired')
-  expect(packet.reads).toEqual([SKILL])
+  expect(packet.reads).toEqual([real(SKILL)])
   expect(readOutside(packet.cwd, 'Read', { file_path: join(SKILL, 'references/template-map.md') }, packet.reads)).toBeNull()
   expect(readOutside(packet.cwd, 'Read', { file_path: join(homedir(), '.claude/skills/x-ray/SKILL.md') }, packet.reads)).toContain('run.outside_checkout')
-  expect(packet.prompt).toContain(`SKILL_PATH is ${SKILL}.`)
+  expect(packet.prompt).toContain(`SKILL_PATH is ${real(SKILL)}.`)
+})
+
+test('D1 D2 a root reached through a symlink gets real paths', async () => {
+  const elsewhere = mkdtempSync(join(tmpdir(), 'cf-bench-'))
+  mkdirSync(join(elsewhere, '.cf'))
+  const root = mkdtempSync(join(tmpdir(), 'cf-bench-'))
+  symlinkSync(join(elsewhere, '.cf'), join(root, '.cf'))
+  const fired = stub(CEILING, 'stopped', true)
+  await generated(fired, undefined, checkedOut, root)
+  const [packet] = fired.packets
+  if (packet === undefined) throw new Error('the generator was not fired')
+  expect(packet.cwd).toBe(join(realpathSync(elsewhere), '.cf/work/1/src'))
+  expect(packet.reads).toEqual([real(SKILL)])
+  for (const dir of [srcDir(root, 1), packet.cwd]) {
+    expect(readOutside(packet.cwd, 'Read', { file_path: join(dir, 'src/Vault.sol') }, packet.reads)).toBeNull()
+  }
+})
+
+test('D3 D4 generate refuses a src/ not at pre_fix, unfired', async () => {
+  const moved = (root: string) => { checkedOut(root); commit(srcDir(root, 1), 'src/Moved.sol', '', 'moved') }
+  const unwritten = (root: string) => { checkedOut(root); rmSync(join(planDir(root, 1), 'checkout.json')) }
+  for (const ready of [emptied, moved, unwritten]) {
+    const fired = stub(CEILING, 'stopped', true)
+    const { db, outcome } = await generated(fired, undefined, ready)
+    expect(outcome).toMatchObject({ outcome: 'refuse', spans: ['bench.no_checkout'], to: 0 })
+    expect(fired.packets).toEqual([])
+    expect(runRows(db)).toEqual([])
+  }
+})
+
+test('D5 tick on an empty src/ sends the plan back to step 0', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'cf-bench-'))
+  staffedIn(root)
+  emptied(root)
+  target(root, { generator: 'fizz' })
+  const db = fresh(schema)
+  dial(db, 3, AT)
+  queued(db, 'bench', 1)
+  await tick(db, root, stub(CEILING, 'stopped', true).provider, OPENS)
+  expect(planById(db, 1).step).toBe(0)
+  expect(planById(db, 1).state).not.toBe('blocked_on_ceo')
 })
 
 test('D3 a run stopped at the ceiling with a suite passes', async () => {
@@ -256,6 +312,7 @@ function scoring(pair = writes('.jsonl', PAIRS), keys: Record<string, string> = 
   writeFileSync(join(root, '.cf/git-base'), join(root, 'remotes'))
   mkdirSync(join(srcDir(root, 1), 'test/fizz'), { recursive: true })
   writeFileSync(join(srcDir(root, 1), 'test/fizz/FizzTest.sol'), 'contract FizzTest {}\n')
+  checkedOut(root)
   target(root, keys)
   put(root, 1, 'generate.json', JSON.stringify({ suite: 'test/fizz', tokens: 1234, seconds: 56.5 }))
   const db = fresh(schema)

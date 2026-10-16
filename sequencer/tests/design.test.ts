@@ -155,7 +155,7 @@ browsed('D2 no DESIGN.md in the checkout, no section', async () => {
 
 const WIDE = '<table style="width:1200px"><tr><td>wide</td></tr></table>'
 
-const based = async (before: string, after: string): Promise<{ w: World; outcome: Outcome }> => {
+const based = async (before: string, after: string, seen?: (packet: Packet) => void): Promise<{ w: World; outcome: Outcome }> => {
   const w = world()
   load(w.db, w.root)
   const src = srcDir(w.root, 1)
@@ -167,18 +167,36 @@ const based = async (before: string, after: string): Promise<{ w: World; outcome
   writeFileSync(join(src, 'index.html'), page(after))
   put(w.root, 1, 'issue.md', '# a screen\n\n- D1 add a screen\n')
   const row = { ...plan(w.db, 1), origin: 'https://github.com/caliperforge/atelier-web/issues/1' }
-  return { w, outcome: await fireLanded(w.db, w.root, row, at(4, 'web'), stub(CARRIED, 0)) }
+  return { w, outcome: await fireLanded(w.db, w.root, row, at(4, 'web'), stub(CARRIED, 0, undefined, seen)) }
 }
 
 browsed('D1 an overflow already on base passes the capture', async () => {
   const { outcome } = await based(`<h1>Plans</h1>${WIDE}`, `<h1>Plans now</h1>${WIDE}`)
-  expect(outcome).toMatchObject({ outcome: 'pass', note: 'design pass' })
+  expect(outcome.outcome).toBe('pass')
+  expect(outcome.note).toMatch(/^design pass; already on main: index\.html design\.overflow 400 light; /)
 })
 
 browsed('D2 an overflow the change adds still refuses', async () => {
   const { outcome } = await based('<h1>Plans</h1>', `<h1>Plans</h1>${WIDE}`)
   expect(outcome.outcome).toBe('refuse')
   expect(outcome.spans).toContain('index.html design.overflow 400 light')
+  expect(outcome.note).not.toContain('already on main')
+})
+
+browsed('D3 an added Other refuses on catchall, not base overflow', async () => {
+  const { outcome } = await based(`<h1>Plans</h1>${WIDE}`, `<h1>Plans</h1>${WIDE}<fieldset><legend>Other</legend></fieldset>`)
+  expect(outcome.outcome).toBe('refuse')
+  expect(outcome.spans).toContain('index.html design.catchall 1440 light Other')
+  expect(outcome.spans.filter((span) => span.includes('design.overflow'))).toEqual([])
+  expect(outcome.note).toContain('already on main: index.html design.overflow 400 light')
+})
+
+browsed('D4 the packet marks a base span already on main', async () => {
+  const sent: Packet[] = []
+  await based(`<h1>Plans</h1>${WIDE}`, `<h1>Plans now</h1>${WIDE}`, (p) => sent.push(p))
+  const prompt = sent.find((p) => p.reads !== undefined)?.prompt
+  expect(prompt).toContain('# Defects the capture found')
+  expect(prompt).toContain('index.html design.overflow 400 light (already on main)')
 })
 
 browsed('D4 the base capture leaves no shots and no worktree', async () => {

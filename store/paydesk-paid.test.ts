@@ -1,12 +1,12 @@
 import { execFileSync } from 'node:child_process'
-import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import type { EndpointVerdict } from '../paydesk/assess.ts'
 import type { ListingScan } from '../paydesk/card.ts'
 import type { Row } from '../paydesk/prs.ts'
-import { parsed, recent, type Spend } from './paydesk-paid.ts'
+import { paid, parsed, recent, type Spend } from './paydesk-paid.ts'
 
 const CF = join(import.meta.dirname, '../cli/cf.ts')
 const TX = '5VERv8NMvzbJMEkV8xnrLkEaWRtSz9CosKDYjCJjBRnbJLgp8uirBgmQpjKhoR4tjF3ZpRzrFmBV6UjKdiSZkQUW'
@@ -57,6 +57,13 @@ const SPENT = RUN.ledger.slice(3).map((l) => JSON.parse(l) as Spend)
 test('D1 the run stops before a call that passes the cap', () => {
   expect(RUN.said).toBe(`3 paid, 5 skipped, $0.02 spent, stopped at cap -> ${join(RUN.tmp, 'out.jsonl')}\n`)
   expect(RUN.argv.map((a) => a.at(-1))).not.toContain('https://after.test/cheap')
+})
+
+test('D1 a cap that is not a number stops before any call', () => {
+  const ledger = join(mkdtempSync(join(tmpdir(), 'paydesk-nan-')), 'ledger.jsonl')
+  expect(paid(SCAN, { cap: Number('$25'), ledger, account: undefined, bin: join(RUN.tmp, 'pay'), now: new Date() }))
+    .toStrictEqual({ rows: [], spent: 0, skipped: 2, capped: true })
+  expect(existsSync(ledger)).toBe(false)
 })
 
 test('D2 one ledger row per call and none for the rest', () => {

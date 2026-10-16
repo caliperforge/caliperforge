@@ -53,7 +53,7 @@ export function paid(scanned: Row[], options: Options): { rows: ListingScan[]; s
       skipped++
       continue
     }
-    if (spent + micro(priceOf(endpoint)) > micro(options.cap)) return { rows, spent: spent / 1e6, skipped, capped: true }
+    if (!(spent + micro(priceOf(endpoint)) <= micro(options.cap))) return { rows, spent: spent / 1e6, skipped, capped: true }
     const { spend, scan } = call(row, endpoint, options)
     appendFileSync(options.ledger, `${JSON.stringify(spend)}\n`)
     spent += micro(spend.usdc)

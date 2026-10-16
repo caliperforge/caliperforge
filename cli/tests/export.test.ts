@@ -1,18 +1,38 @@
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { beforeEach, expect, test } from 'vitest'
+import { beforeEach, expect, test, vi } from 'vitest'
+import { parse } from 'yaml'
 import { addRun } from '../../store/brief.ts'
 import { logged } from '../../store/events.ts'
 import { migrate, open, type Db } from '../../store/index.ts'
 import { metric, reader } from '../../store/metrics.ts'
 import { exported, leaked } from '../export.ts'
 
+const PRS = vi.hoisted(() => {
+  const pr = (n: number, repo: string, state: string, at: string, merged: string | null = null): object => ({
+    html_url: `https://github.com/${repo}/pull/${String(n)}`, repository_url: `https://api.github.com/repos/${repo}`, state,
+    created_at: at, user: { login: 'octo-cat' }, title: `widen the parser ${String(n)}`, pull_request: { merged_at: merged } })
+  return [pr(1, 'solana-foundation/pay-kit', 'closed', '2026-08-03T09:00:00Z', '2026-08-05T09:00:00Z'),
+    pr(2, 'solana-foundation/pay-kit', 'open', '2026-09-01T09:00:00Z'), pr(3, 'acme/widgets', 'open', '2026-09-02T09:00:00Z'),
+    pr(4, 'acme/widgets', 'closed', '2026-10-01T09:00:00Z')]
+})
+
+vi.mock('../gh.ts', async (importOriginal) => ({
+  ...await importOriginal<object>(),
+  gh: (args: string[]) => ({ items: args[1]?.includes('review%3Aapproved') === true ? [PRS[1]] : PRS }),
+}))
+
+vi.mock('yaml', async (importOriginal) => {
+  const yaml = await importOriginal<{ parse: (text: string) => unknown }>()
+  return { ...yaml, parse: vi.fn(yaml.parse) }
+})
+
 const schema = join(import.meta.dirname, '../../schema')
 
 const now = new Date('2026-10-04T12:00:00Z')
 
-const ORDER = ['daily_activity', 'token_mix', 'runs_by_seat', 'gate_verdicts', 'plan_outcomes', 'pipeline_counts', 'tokens_per_landed_job', 'ceo_touches']
+const ORDER = ['daily_activity', 'token_mix', 'runs_by_seat', 'gate_verdicts', 'plan_outcomes', 'pipeline_counts', 'tokens_per_landed_job', 'ceo_touches', 'outside_prs']
 
 const NAMES = ORDER.map((n) => `${n}.json`).sort()
 
@@ -100,7 +120,7 @@ const json =(name: string): { columns: string[]; rows: (string | number | null)[
 
 const direct = (sql: string): string[] => metric(store, sql, '').rows.map((r) => JSON.stringify(r)).sort()
 
-test('D1 writes the eight files with the seven keys', () => {
+test('D1 writes the nine files with the seven keys', () => {
   expect(exported(seeded(), site, now)).toEqual(ORDER.map((n) => join(site, 'data', `${n}.json`)))
   expect(readdirSync(join(site, 'data')).sort()).toEqual(NAMES)
   for (const name of ORDER) {
@@ -229,5 +249,37 @@ test('D3 a cost_usd seat throws before any file is written', () => {
     output_tokens: 1, plan: 1, step: 2, rule_hash: '0'.repeat(64), provider: 'claude-agent-sdk', model: 'm', effort: 'high',
     cache_write_1h_tokens: null, seconds: 1, exit: 0, transcript_path: 'c.transcript.jsonl', cost_usd: 0.25 })
   expect(() => exported(path, site, now)).toThrow(/runs_by_seat\.json: cost_usd/)
+  expect(existsSync(join(site, 'data'))).toBe(false)
+})
+
+test('D2 outside_prs has one row per PR with its state and month', () => {
+  exported(seeded(), site, now)
+  expect(json('outside_prs').columns).toEqual(['state', 'class', 'month'])
+  expect(json('outside_prs').rows.map((r) => [r[0], r[2]])).toEqual([['merged', '2026-08'], ['open', '2026-09'], ['approved', '2026-09'],
+    ['closed', '2026-10']])
+})
+
+test('D3 a mapped repo gets its class and an unmapped one other', () => {
+  exported(seeded(), site, now)
+  expect(json('outside_prs').rows.map((r) => r[1])).toEqual(['payments SDK', 'other', 'payments SDK', 'other'])
+})
+
+test('D4 outside_prs holds no repo, owner, login or title', () => {
+  exported(seeded(), site, now)
+  expect(readFileSync(join(site, 'data', 'outside_prs.json'), 'utf8')).not.toMatch(/pay-kit|solana-foundation|acme|widgets|octo-cat|parser/)
+})
+
+test('D5 a throwing read leaves the old files and no .tmp', () => {
+  const path = seeded()
+  mkdirSync(join(site, 'data'))
+  for (const name of NAMES) writeFileSync(join(site, 'data', name), `old ${name}`)
+  expect(() => exported(path, site, now, () => { throw new Error('gh: offline') })).toThrow(/gh: offline/)
+  expect(readdirSync(join(site, 'data')).sort()).toEqual(NAMES)
+  for (const name of NAMES) expect(readFileSync(join(site, 'data', name), 'utf8')).toBe(`old ${name}`)
+})
+
+test('D6 a leaking class throws before any file is written', () => {
+  vi.mocked(parse).mockReturnValueOnce({ 'solana-foundation/pay-kit': 'cost tools' })
+  expect(() => exported(seeded(), site, now)).toThrow(/outside_prs\.json: cost tools/)
   expect(existsSync(join(site, 'data'))).toBe(false)
 })

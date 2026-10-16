@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { z } from 'zod'
 import type { Gate } from './gates.ts'
@@ -25,4 +25,10 @@ export function nodeGates(src: string, dir: string, at: string, scripts: string[
     install: lock === undefined ? [] : [{ ...lock, dir: at }],
     raw: scripts.filter((s) => defined[s] !== undefined).map((s) => ({ script: s, bin, args: ['run', s], dir })),
   }
+}
+
+export function nodeTests(src: string): [string, string[], string][] {
+  const dir = join(src, 'tests')
+  const files = existsSync(dir) ? readdirSync(dir).filter((name) => name.endsWith('.test.js')).sort().map((name) => `tests/${name}`) : []
+  return files.length === 0 ? [] : [['test', ['--test', ...files], 'node']]
 }

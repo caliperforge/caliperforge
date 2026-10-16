@@ -86,7 +86,7 @@ test('1279 D5 a zero or non-integer finish_minutes is refused', () => {
 test('1156b D1 site names its seat, lane, rails and checks', () => {
   expect(profile(REPO, 'caliperforge/site')).toEqual({ builder: 'web_specialist', lane: 'site',
     rails: { digests: false, ratchet: false, fence: false, tight_code: true, checks: 'local' },
-    commands: { tsc: ['--noEmit'], json: true } })
+    commands: { tsc: ['--noEmit'], json: true, node_test: true } })
 })
 
 test('1181b D5 a finish entry with an empty argv is refused', () => {

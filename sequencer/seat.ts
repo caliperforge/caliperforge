@@ -471,7 +471,7 @@ export function checked(db: Db, root: string, plan: PlanRow, src: string, diff: 
 
 const LANGUAGE: Partial<Record<Mode, string>> = { npm: 'typescript', xcodebuild: 'swift', gradle: 'kotlin' }
 
-const TOOL: Record<string, string> = { forge: 'solidity', npm: 'typescript' }
+const TOOL: Record<string, string> = { forge: 'solidity', node: 'web', npm: 'typescript' }
 
 function gated(db: Db, root: string, plan: PlanRow, src: string, diff: string): Gated[] | null {
   const row = lastChecks(db, plan.id)

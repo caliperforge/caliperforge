@@ -362,6 +362,47 @@ test('1156b D5 untouched or deleted bad JSON does not refuse', () => {
   expect(checks(src, SITE, binned().run, [], null, ['index.html', 'gone.json'])).toBeNull()
 })
 
+/** A tree of `files` with each of `tests` written empty under its `tests/` folder. */
+function tested(files: Record<string, string>, tests: string[]): string {
+  const src = tree(files)
+  mkdirSync(join(src, 'tests'))
+  for (const name of tests) writeFileSync(join(src, 'tests', name), '')
+  return src
+}
+
+const NODE_TEST = 'node --test tests/charts.test.js'
+
+test('1333 D1 a site runs node --test after tsc', () => {
+  const src = tested(TYPED, ['charts.test.js', 'helpers.js'])
+  const green = binned()
+  expect(checks(src, SITE, green.run)).toBeNull()
+  expect([green.bins, green.seen]).toEqual([['npm', 'node'], ['exec --no -- tsc --noEmit', '--test tests/charts.test.js']])
+  expect(new Set(green.cwds)).toEqual(new Set([src]))
+})
+
+test('1333 D2 a red node --test refuses as checks:test', () => {
+  const failed = checks(tested(PAGE, ['charts.test.js']), SITE, binned(NODE_TEST).run, [], null, TOUCHED)
+  expect(failed).toEqual({ script: 'test', command: NODE_TEST, code: '1', output: 'boom', tests: [], retried: false })
+  expect(checked(failed, '').message).toBe(`${NODE_TEST} exit 1`)
+})
+
+test('1333 D3 a site with no .test.js under tests/ runs none', () => {
+  for (const src of [tree(PAGE), tested(PAGE, ['helpers.js'])]) {
+    const none = binned()
+    expect(checks(src, SITE, none.run, [], null, TOUCHED)).toBeNull()
+    expect(none.seen).toEqual([])
+  }
+})
+
+test('1333 D4 a profile without node_test runs no node --test', () => {
+  for (const repo of ['caliperforge', 'atelier-web', 'fuzz-bench']) {
+    const shell = binned()
+    const given = profile(REPO, `caliperforge/${repo}`)?.commands ?? {}
+    checks(tested(FOUNDRY, ['x.test.js']), given, shell.run, [], null, ['tests/x.test.js'])
+    expect(shell.seen.filter((args) => args.startsWith('--test'))).toEqual([])
+  }
+})
+
 const EULER = profile(REPO, 'caliperforge/fuzz-bench')?.finish ?? {}
 
 test('1181b D1 D2 finish runs in order and stops at the first red', () => {

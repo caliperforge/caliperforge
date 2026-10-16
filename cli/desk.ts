@@ -1,10 +1,12 @@
 import type { Command } from 'commander'
 import { readFileSync } from 'node:fs'
+import { file } from '../sequencer/signals.ts'
+import { commsLane } from '../store/comms.ts'
 import { amend, approved, log, opened, postOf, sentBack, STATUSES, type Item } from '../store/desk.ts'
 import type { Db } from '../store/index.ts'
 import { zone } from '../store/lanes.ts'
 import { holder } from '../store/leases.ts'
-import { holderOf, HOLDERS, requeue, type Holder } from '../store/plans.ts'
+import { holderOf, HOLDERS, plansOf, requeue, type Holder } from '../store/plans.ts'
 import { steps } from '../templates/comms.ts'
 import type { Cli } from './cf-lanes.ts'
 
@@ -23,6 +25,23 @@ export function giveBack(db: Db, id: number, note: string, by: Holder): void {
 export function learn(db: Db, item: Item, now: Date): number {
   const day = new Date(now.getTime() + zone(db) * 60000).toISOString().slice(0, 10)
   return log(db, day, [{ ...item, source: 'coo' }])
+}
+
+const LIVE = ['queued', 'running', 'blocked_on_ceo', 'done']
+
+export function catchup(db: Db, from: string, to: string, by: Holder, now: Date): number {
+  const range = `${from} ${to}`
+  if (![from, to].every((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))) throw new Error(`catchup takes dates as YYYY-MM-DD, not ${range}`)
+  if (from > to) throw new Error(`catchup ${range}: ${from} is after ${to}`)
+  for (const p of plansOf(db, 'comms')) {
+    if (!LIVE.includes(p.state) || p.title?.startsWith('catchup ') !== true) continue
+    const [, a = '', b = ''] = p.title.split(' ')
+    if (from <= b && a <= to) throw new Error(`catchup ${range} overlaps plan ${String(p.id)} ${p.title}`)
+  }
+  commsLane(db)
+  const plan = file(db, `catchup ${range}`, null, now, by, 'cf desk catchup')
+  if (plan === null) throw new Error(`catchup ${range} is already filed`)
+  return plan
 }
 
 function statusOf(status: string): Item['status'] {
@@ -67,7 +86,16 @@ export function registerDesk(cf: Command, { db, out }: Cli): void {
       out(`desk post ${id} returned; plan ${id} queued at step ${String(DRAFT)}\n`)
     })
 
+  registerCatchup(desk, { db, out })
   registerLearn(cf, { db, out })
+}
+
+function registerCatchup(desk: Command, { db, out }: Pick<Cli, 'db' | 'out'>): void {
+  desk.command('catchup').argument('<from>').argument('<to>').requiredOption(...BY)
+    .action((from: string, to: string, options: { by: string }) => {
+      const by = holderOf(options.by)
+      out(`${String(catchup(db(), from, to, by, new Date()))}\n`)
+    })
 }
 
 function registerLearn(cf: Command, { db, out }: Pick<Cli, 'db' | 'out'>): void {

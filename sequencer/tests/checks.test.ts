@@ -315,12 +315,12 @@ test('1157b D1 fuzz-bench runs forge build, test, then pytest', () => {
   const src = tree(FOUNDRY)
   const green = binned()
   expect(checks(src, BENCH, green.run)).toBeNull()
-  expect([green.bins, green.seen]).toEqual([['forge', 'forge', 'python3'], ['build', 'test', '-m pytest']])
+  expect([green.bins, green.seen]).toEqual([['forge', 'forge', 'python3'], ['build', 'test', '-m pytest -m not live']])
   expect(new Set(green.cwds)).toEqual(new Set([src]))
 })
 
 test('1157b D2 a red forge test or pytest refuses naming it', () => {
-  for (const [red, script, seen] of [['forge test', 'test', ['build', 'test']], ['python3 -m pytest', 'pytest', ['build', 'test', '-m pytest']]] as const) {
+  for (const [red, script, seen] of [['forge test', 'test', ['build', 'test']], ['python3 -m pytest -m not live', 'pytest', ['build', 'test', '-m pytest -m not live']]] as const) {
     const shell = binned(red)
     const failed = checks(tree(FOUNDRY), BENCH, shell.run)
     expect(failed).toMatchObject({ script, command: red, code: '1' })
@@ -442,11 +442,27 @@ test('1225 D5 pytest runs the changed .py files that exist', () => {
   for (const dir of ['bench', 'tests']) mkdirSync(join(src, dir))
   for (const path of ['bench/run_pair.py', 'tests/test_run_pair.py']) writeFileSync(join(src, path), '')
   const touched = ['bench/run_pair.py', 'tests/test_run_pair.py', 'README.md', 'gone.py']
-  const pytest = '-m pytest bench/run_pair.py tests/test_run_pair.py'
+  const pytest = '-m pytest -m not live bench/run_pair.py tests/test_run_pair.py'
   const green = binned()
   expect(checks(src, BENCH, green.run, [], null, touched)).toBeNull()
   expect(green.seen).toEqual(['build', 'test', pytest])
   expect(checks(src, BENCH, binned(`python3 ${pytest}`).run, [], null, touched)).toMatchObject({ script: 'pytest', command: `python3 ${pytest}` })
+})
+
+test('1402 D2 pytest deselects live tests before the touched paths', () => {
+  const src = tree(FOUNDRY)
+  mkdirSync(join(src, 'tests'))
+  const touched = ['tests/test_a.py', 'tests/test_b.py']
+  for (const path of touched) writeFileSync(join(src, path), '')
+  const argv: string[][] = []
+  const run: Run = (...[args, , bin]) => {
+    if (bin === 'python3') argv.push(args)
+    return { ok: true, output: '' }
+  }
+  expect(checks(src, BENCH, run, [], null, touched)).toBeNull()
+  expect(argv).toEqual([['-m', 'pytest', '-m', 'not live', ...touched]])
+  const [python3 = []] = argv
+  expect(python3.indexOf('not live')).toBeLessThan(python3.indexOf('tests/test_a.py'))
 })
 
 test('1181b D6 no finish entries run nothing', () => {

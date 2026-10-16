@@ -9,6 +9,8 @@ commands:
   python3:
     - -m
     - pytest
+    - -m
+    - 'not live'
 finish:
   euler-earn: [python3, bench/run_pair.py, targets/euler-earn-m01.yml, suites/euler-m01]
 finish_minutes: 60

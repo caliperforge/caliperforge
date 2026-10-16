@@ -109,6 +109,17 @@ test('1156b D7 a green site plan lists its tsc gate', () => {
   expect(checked(db, REPO, site, src, SCRIPT)).toEqual({ checks: '- typescript | . | npm exec --no -- tsc --noEmit | pass' })
 })
 
+const CHARTS = '--- a/charts.js\n+++ b/charts.js\n@@ -1,1 +1,1 @@\n+x\n'
+
+test('1333 D5 a green site plan lists its node --test gate', () => {
+  const { db, plan } = target(['charts.js'], 'pass', CHARTS)
+  const src = mkdtempSync(join(tmpdir(), 'cf-note-'))
+  mkdirSync(join(src, 'tests'))
+  writeFileSync(join(src, 'tests', 'charts.test.js'), '')
+  const site: PlanRow = { ...plan, target_id: null, lane: 'site', seat: 'web_specialist', origin: 'https://github.com/caliperforge/site/issues/1' }
+  expect(checked(db, REPO, site, src, CHARTS)).toEqual({ checks: '- web | . | node --test tests/charts.test.js | pass' })
+})
+
 test('D6 no seat language and no gate, no section', () => {
   const { db, plan } = target(['docs/paykit-interface.md'])
   expect(checked(db, REPO, plan, paykit(), '--- a/docs/paykit-interface.md\n+++ b/docs/paykit-interface.md\n@@ -1,1 +1,1 @@\n+x\n')).toEqual({})

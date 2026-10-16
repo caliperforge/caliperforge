@@ -10,3 +10,4 @@ commands:
   tsc:
     - --noEmit
   json: true
+  node_test: true

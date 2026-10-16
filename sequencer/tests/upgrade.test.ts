@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
+import { newest, pushedRow } from '../../store/deliverables.ts'
 import type { Db } from '../../store/index.ts'
 import { last, receipt, type Receipt } from '../../store/ticks.ts'
 import { tick } from '../index.ts'
@@ -68,6 +69,16 @@ test('landing one of ours moves the live tree to it, migrated', async () => {
   expect(git(live, ['rev-parse', 'HEAD'])).toBe(sha)
   expect(version(w.db)).toBe(18)
   expect(behind(w.db, live)).toBeNull()
+})
+
+test('a lower-id landing the tree lacks is behind', async () => {
+  const { w, live, sha } = await lands('CREATE TABLE live (id INTEGER PRIMARY KEY);\n')
+  const row = newest(w.db, ID)
+  if (row?.approval_id == null) throw new Error('no approved landing')
+  pushedRow(w.db, { plan: row.plan_id, step: row.step, seat: row.seat, diff_digest: row.diff_digest,
+    evidence: `https://github.com/${SELF}/commit/${git(live, ['rev-parse', 'HEAD'])}` }, row.approval_id)
+
+  expect(behind(w.db, live)).toBe(sha)
 })
 
 test('a live tree with its own commit is refused: nothing moves', () => {

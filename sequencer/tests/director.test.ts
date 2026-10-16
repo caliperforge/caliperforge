@@ -1,6 +1,6 @@
-import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { basename, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { expect, test } from 'vitest'
 import { heldBy } from '../../cli/brief.ts'
 import { all } from '../../cli/inbox.ts'
@@ -348,6 +348,32 @@ test.each(['/etc/x', '../x'])('D5: a rule naming %s writes nothing and is held b
   const { db, home } = seeded('1')
   await run(db, home, `---\nmove: rule\nwhy: the path settles it\nanswer: read ${path}\n---\n`)
   expect(maybe(home, 7, 'ask.md')).toBe('the ask\n')
+  expect(maybe(home, 7, 'issue.md')).toBe(ISSUE)
+  expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'coo' })
+})
+
+const ruling = (path: string) => `---\nmove: rule\nwhy: the path settles it\nanswer: read ${path}\n---\n`
+
+test.each([['/blog/index.html', (h: string) => srcDir(h, 7)], ['/sequencer/site.ts', (h: string) => h]])('D1 D2: a rule naming %s in the repo applies', async (path, dir) => {
+  const { db, home } = seeded('1')
+  const at = join(dir(home), path)
+  mkdirSync(dirname(at), { recursive: true })
+  writeFileSync(at, '')
+  await run(db, home, ruling(path))
+  expect(told(db)).toEqual([{ actor: 'director', outcome: 'pass', message: 'rule: the path settles it' }])
+  expect(maybe(home, 7, 'issue.md')).toContain(`read ${path}`)
+  expect(plan7(db)?.held_by).not.toBe('coo')
+})
+
+const elsewhere = () => {
+  const at = join(mkdtempSync(join(tmpdir(), 'cf-other-')), 'site.ts')
+  writeFileSync(at, '')
+  return at
+}
+
+test.each([{ name: '~/.ssh/config', path: () => '~/.ssh/config' }, { name: 'another checkout', path: elsewhere }])('D3: a rule naming $name is held by the coo', async ({ path }) => {
+  const { db, home } = seeded('1')
+  await run(db, home, ruling(path()))
   expect(maybe(home, 7, 'issue.md')).toBe(ISSUE)
   expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'coo' })
 })

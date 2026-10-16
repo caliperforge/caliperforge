@@ -2,6 +2,7 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test, vi } from 'vitest'
+import { credential } from '../../credential.ts'
 import type { Packet } from '../../kind.ts'
 
 const sent: { prompt: string; options: Record<string, unknown> }[] = []
@@ -41,9 +42,9 @@ test('D5 fire returns the result session_id as session', async () => {
 
 test('D5 packet env is merged over the credential env', async () => {
   await claudeAgentSdk.fire({ ...packet('/tmp/a/src', '1'), env: { X: '1' } })
-  expect(sent.at(-1)?.options.env).toMatchObject({ X: '1' })
+  expect(sent.at(-1)?.options.env).toEqual({ ...credential().env, X: '1' })
   await claudeAgentSdk.fire(packet('/tmp/a/src', '1'))
-  expect(sent.at(-1)?.options.env).not.toHaveProperty('X')
+  expect(sent.at(-1)?.options.env).toEqual(credential().env)
 })
 
 test('different folders and plans get one system prompt', async () => {

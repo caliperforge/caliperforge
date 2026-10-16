@@ -2,6 +2,7 @@ INSERT INTO rules (id, kind, path, content_hash, loaded_at)
 VALUES
   ('rules/rails.yaml', 'rail', 'rules/rails.yaml', 'b46b445806d399b61887a5259eb0a6893444efcbe5acf2e6dd534507bc0882f3', '2026-09-17'),
   ('rules/tight.md', 'card', 'rules/tight.md', '9c885ed2e62d432d95211fec25387da43261cd643e4eb56f73b00b9689a6e479', '2026-09-17'),
+  ('rules/senior.md', 'card', 'rules/senior.md', '6d25266fef90808af93e1ee93c8cfc2200f41bf3634aba43286fc02f73296026', '2026-10-16'),
   ('rules/registry/00-director.yaml', 'card', 'rules/registry/00-director.yaml', '388f9a5c6b2b1d0337cceb1eaec7782c55e31108a0707f0a8387be8123da9bf1', '2026-10-04'),
   ('rules/registry/01-fixer.yaml', 'card', 'rules/registry/01-fixer.yaml', 'cd23ed850c09af6e8128eaa2b0b897d6a7779a94bfdcf2173f7b6dca4ed6f00a', '2026-10-04'),
   ('rules/registry/03-swift_review.yaml', 'card', 'rules/registry/03-swift_review.yaml', 'd113b6410d3930340787367bdc330d437a0f00a4a79c5545520223a7a8e38db0', '2026-10-04'),

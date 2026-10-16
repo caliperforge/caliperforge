@@ -5,6 +5,7 @@ const SAID: [RegExp, string][] = [
   [/^recipient has no (\S+) token account$/, 'the payTo named in the 402 has no $1 token account, so a payment cannot land; creating the associated token account for that address fixes it for every buyer.'],
   [/^payTo is a token account, not a wallet$/, 'the 402 names a token account as payTo; it should name the owner wallet.'],
   [/^price listed \$(\S+) vs asked \$(\S+)$/, 'the 402 asks $$$2 but the listing declares $$$1; one of them is wrong.'],
+  [/^paid call got no data \((.+)\)$/, 'a paid call got no data back ($1), so a buyer pays and receives nothing.'],
 ]
 
 export function note(scan: ListingScan, from: string): string | null {

@@ -65,21 +65,28 @@ export async function looked(db: Db, root: string, plan: PlanRow, provider: Prov
   const out = planDir(root, plan.id)
   const dir = join(out, 'design')
   rmSync(dir, { recursive: true, force: true })
-  const capture = await design(src, out, pages, await onMain(root, plan.id, src, pages))
+  const main = await onMain(root, plan.id, src, pages)
+  const capture = await design(src, out, pages)
+  const fresh = capture.spans.filter((span) => !main.includes(span))
+  const already = capture.spans.filter((span) => main.includes(span))
   const system = join(src, 'DESIGN.md')
   const input = {
     repo: src,
     issue: get(root, plan.id, 'issue.md') + rulings(root, plan.id),
     diff,
     screenshots: readdirSync(dir).map((n) => join(dir, n)),
-    ...(capture.spans.length > 0 ? { defects: capture.spans.join('\n') } : {}),
+    ...(capture.spans.length > 0 ? { defects: [...fresh, ...already.map((span) => `${span} (already on main)`)].join('\n') } : {}),
     ...(existsSync(system) ? { system: readFileSync(system, 'utf8') } : {}),
   }
   const { outcome } = await judge(db, root, 'design', plan.id, input, provider, pending(out, 'step-4-design'))
-  const spans = [...capture.spans, ...outcome.spans]
-  if (outcome.outcome === 'needs_ceo') return { outcome: 'needs_ceo', spans: outcome.spans, note: 'design needs_ceo', message: outcome.message }
-  if (spans.length > 0) return { outcome: 'refuse', spans, note: 'design refuse', message: [capture.message, outcome.message].join('\n\n') }
-  return { outcome: 'pass', spans: [], note: 'design pass' }
+  const spans = [...fresh, ...outcome.spans]
+  const onBase = already.length > 0 ? `; already on main: ${already.join('; ')}` : ''
+  if (outcome.outcome === 'needs_ceo') return { outcome: 'needs_ceo', spans: outcome.spans, note: `design needs_ceo${onBase}`, message: outcome.message }
+  if (spans.length > 0) {
+    const message = [`${String(fresh.length)} span(s) show a hard design defect`, outcome.message].join('\n\n')
+    return { outcome: 'refuse', spans, note: `design refuse${onBase}`, message }
+  }
+  return { outcome: 'pass', spans: [], note: `design pass${onBase}` }
 }
 
 async function onMain(root: string, plan: number, src: string, pages: string[]): Promise<string[]> {
@@ -96,7 +103,7 @@ async function onMain(root: string, plan: number, src: string, pages: string[]):
   }
 }
 
-export async function design(src: string, out: string, pages: string[], known: string[] = []): Promise<Verdict> {
+export async function design(src: string, out: string, pages: string[]): Promise<Verdict> {
   const web = existsSync(join(src, 'public', 'index.html')) ? join(src, 'public') : src
   const paths = web === src ? pages : pages.map((page) => page.replace(/^public\//, ''))
   const server = await serve(web)
@@ -111,7 +118,7 @@ export async function design(src: string, out: string, pages: string[], known: s
     for (const shot of shots) {
       const taken = await shoot(browser, base, out, shot)
       pngs.push(taken.png)
-      spans.push(...taken.spans.filter((span) => !known.includes(span)))
+      spans.push(...taken.spans)
     }
     return verdict(pngs, spans)
   } finally {

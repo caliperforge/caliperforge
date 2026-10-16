@@ -86,7 +86,7 @@ VALUES
   ('design_lead', 'card', 'rules/roster/design_lead.yaml', 'cd6c8c262f9a50f3bc0c15ebaa4fc33a0cab0809d13d51c9680cb79257ea3c46', '2026-10-11'),
   ('director', 'card', 'rules/roster/director.yaml', 'fea8ea51675361e91f2c0ecb8e61c5912762e82fa00b8b7e7eae98a00b2d061a', '2026-10-04'),
   ('fixer', 'card', 'rules/roster/fixer.yaml', 'e77b7a291c81dfa4ca72c8adcb2d4a1a1840a477d9fdf52d542172425a6ce575', '2026-09-25'),
-  ('fizz_generator', 'card', 'rules/roster/fizz_generator.yaml', 'a6568d0dcae67eda081d82e5a67326e13a526e36b23dcee826d676b3e0396632', '2026-10-14'),
+  ('fizz_generator', 'card', 'rules/roster/fizz_generator.yaml', '536337b3b4c24827d92150ad25bcd91c6da77ec97306dd1af675a22306fa14f8', '2026-10-14'),
   ('go_specialist', 'card', 'rules/roster/go_specialist.yaml', '82e7a06c787e46c9e188ac044522059a2fdbf9ae154942a60e9cd52fe5924707', '2026-09-24'),
   ('growth_lead', 'card', 'rules/roster/growth_lead.yaml', '4b6acad1d46068a2bf3fb879ebae76daceeaf3feef7aca26aadc5b63aa99f4cb', '2026-09-28'),
   ('house_generator', 'card', 'rules/roster/house_generator.yaml', '0aff8f549bffb21dd7e864789dbdeb8d4041b98a0893f9581fd7d99168380880', '2026-10-16'),

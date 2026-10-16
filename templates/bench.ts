@@ -92,7 +92,8 @@ export async function generate(db: Db, root: string, plan: PlanRow, step: Step, 
   if (!existsSync(suite) || !readdirSync(suite, { recursive: true, withFileTypes: true }).some((e) => e.isFile())) {
     return { outcome: 'refuse', spans: ['bench.no_suite'], note: `${name} wrote no suite under ${SUITE}` }
   }
-  put(root, plan.id, 'generate.json', JSON.stringify({ suite: SUITE, tokens, seconds: fired.seconds }))
+  put(root, plan.id, 'generate.json', JSON.stringify({ suite: SUITE, tokens, seconds: fired.seconds,
+    x_ray: existsSync(join(dir, 'x-ray/x-ray.md')) ? 1 : 0 }))
   return { outcome: 'pass', spans: [], note: `generate.json written: ${name} ${fired.ended}, ${String(tokens)} tokens` }
 }
 
@@ -103,7 +104,7 @@ export function scored(db: Db, root: string, plan: PlanRow): Outcome {
   const { target = '', generator = '' } = keys
   const made = maybe(root, plan.id, 'generate.json')
   if (made === null) return { outcome: 'refuse', spans: ['generate.json'], note: 'generate.json is missing' }
-  const { suite, tokens, seconds } = JSON.parse(made) as { suite: string; tokens: number; seconds: number }
+  const { suite, tokens, seconds, x_ray } = JSON.parse(made) as { suite: string; tokens: number; seconds: number; x_ray?: 0 | 1 }
   const bench = join(planDir(root, plan.id), 'fuzz-bench')
   rmSync(bench, { recursive: true, force: true })
   git(planDir(root, plan.id), ['clone', '-q', remote(gitBase(root), 'caliperforge/fuzz-bench'), bench])
@@ -118,7 +119,8 @@ export function scored(db: Db, root: string, plan: PlanRow): Outcome {
   }
   const pairs = rows(join(bench, 'results', target, `${target}.jsonl`))
   const score = { catches: pairs.filter((r) => r.verdict === 'catch').length, false_positives: pairs.filter((r) => r.verdict === 'fp_candidate').length,
-    untested: rows(join(bench, 'results', target, `${target}.nullcheck.jsonl`)).filter((r) => r.untested === true).length, tokens, seconds }
+    untested: rows(join(bench, 'results', target, `${target}.nullcheck.jsonl`)).filter((r) => r.untested === true).length, tokens, seconds,
+    x_ray: x_ray ?? null }
   record(db, { plan: plan.id, target, generator, ...score })
   put(root, plan.id, 'score.json', JSON.stringify({ fuzz_bench: sha, ...score }))
   return { outcome: 'pass', spans: [], note: `score.json written at fuzz-bench ${sha.slice(0, 12)}` }

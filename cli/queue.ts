@@ -14,6 +14,7 @@ import { profile } from '../store/profile.ts'
 import { latest, rulingId } from '../store/rulings.ts'
 import { newestAccount, scannedTarget, setEvidence, setTake, setTargetState, targetRow, upsertTarget } from '../store/targets.ts'
 import { claimed, gh, implemented, issue as readIssue, lastMerger, WINDOW, type Issue, type Read } from './gh.ts'
+import { SOURCES } from './house.ts'
 import { measure } from './measure.ts'
 
 const Account = z.object({ id: z.int(), measured_at: z.string(), pulse: z.enum(['warm', 'cold']) })
@@ -97,7 +98,7 @@ export function askOf(row: Pick<Issue, 'title' | 'body'>, card: string | undefin
 function house(at: { root: string; repo: string } | undefined): string {
   if (at === undefined) return ''
   const path = join(at.root, 'house', `${at.repo}.md`)
-  return existsSync(path) ? `## House rules for ${at.repo}\n\n${readFileSync(path, 'utf8').trimEnd()}\n\n` : ''
+  return existsSync(path) ? `## House rules for ${at.repo}\n\n${readFileSync(path, 'utf8').replace(SOURCES, '').trimEnd()}\n\n` : ''
 }
 
 export function unhoused(ask: string): string {

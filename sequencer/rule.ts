@@ -1,5 +1,6 @@
-import { statSync } from 'node:fs'
-import { isAbsolute, join, relative } from 'node:path'
+import { existsSync, statSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { join, relative } from 'node:path'
 import { real } from '../runner/index.ts'
 import { logged } from '../store/events.ts'
 import { edit, filesOf } from '../store/files.ts'
@@ -37,7 +38,9 @@ function ruled(issue: string): string {
 export function rule(db: Db, root: string, plan: PlanRow, who: string, text: string): 'ask.md' | 'issue.md' | null {
   const other = [...text.matchAll(/\.cf\/work\/(\d+)/g)].some((m) => Number(m[1]) !== plan.id)
   if (other || /(?:^|[^.])\.\.\//.test(text)) return null
-  const inside = (p: string) => p.startsWith(`${root}/`) || (isAbsolute(p) && !relative(real(planDir(root, plan.id)), real(p)).startsWith('..'))
+  const named = (p: string) => !p.startsWith('~') && [srcDir(root, plan.id), root].some((d) => !relative(d, join(d, p)).startsWith('..') && existsSync(join(d, p)))
+  const under = (p: string) => p.startsWith(`${root}/`) || !relative(real(planDir(root, plan.id)), real(p)).startsWith('..')
+  const inside = (p: string) => under(p.replace(/^~(?=\/)/, homedir())) || named(p)
   if ([...text.matchAll(PATH)].some((m) => !inside(m[1] ?? ''))) return null
   const section = `## Answer from the ${who} (${new Date().toISOString().slice(0, 10)})\n\n${text.trim()}\n`
   if (!builderRan(db, plan.id)) {

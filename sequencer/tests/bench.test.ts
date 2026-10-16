@@ -194,17 +194,20 @@ test('D1 D7 tick fires fizz_generator in the scratch tree', async () => {
 
 const SKILL = join(homedir(), '.claude/skills/fizz')
 
-test('D2 D3 generate admits fizz Step 1-2, denies curl and cd', async () => {
+test('D2 D3 generate admits fizz Step 1-2 and cd cwd, denies curl', async () => {
   const fired = stub(CEILING, 'stopped', true)
   await generated(fired)
   const [packet] = fired.packets
   if (packet === undefined) throw new Error('the generator was not fired')
   const cwd = packet.cwd
   for (const command of ['pwd', 'forge --version', 'medusa --version', 'echidna --version', `bash ${SKILL}/scripts/ensure_foundry.sh ${cwd}`,
-    `node ${SKILL}/scripts/extract_abis.js ${cwd} --meta-dir test/fizz/fizz_data`, 'FOUNDRY_PROFILE=fuzz forge build']) {
+    `node ${SKILL}/scripts/extract_abis.js ${cwd} --meta-dir test/fizz/fizz_data`, 'FOUNDRY_PROFILE=fuzz forge build',
+    `cd ${cwd} && forge build`, `cd "${cwd}" && forge build`, `cd ${cwd} && FOUNDRY_PROFILE=fuzz forge test --match-contract FoundryTester -vvv`]) {
     expect(gate(packet, bash(command))).toEqual({ continue: true })
   }
-  for (const command of ['curl https://example.com', `cd ${cwd} && forge build`]) {
+  for (const command of ['curl https://example.com', 'cd /tmp && forge build', `cd ${cwd}/.. && forge build`, `cd ${cwd} && curl https://example.com`,
+    `cd ${cwd} && forge build | tail -5`, `cd ${cwd} && forge build && curl x`, 'cd "$(curl x)/.." && forge build', 'cd "`curl x`/.." && forge build',
+    'cd $(curl${IFS}x)/.. && forge build', 'cd ~/.. && forge build']) {
     expect(gate(packet, bash(command)).hookSpecificOutput).toMatchObject({ permissionDecision: 'deny' })
     expect(JSON.stringify(gate(packet, bash(command)))).toContain('ruling:seat.tools')
   }

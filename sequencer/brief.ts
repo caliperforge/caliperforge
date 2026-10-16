@@ -85,7 +85,7 @@ interface Format {
 }
 
 /** A format written in more than one file: moving it is one job, and every file that reads it is named. */
-const SHARED: Format[] = [{
+export const SHARED: Format[] = [{
   what: 'the handback format',
   files: ['rails/completion-audit/index.ts', 'seats/typescript_specialist/prompt.md', 'seats/kotlin_specialist/prompt.md',
     'seats/swift_specialist/prompt.md', 'seats/outside_specialist/prompt.md', 'seats/rust_specialist/prompt.md',
@@ -270,6 +270,15 @@ function shared(brief: string, src: string): Refused | null {
     if (other !== undefined) return { span: other, reason: `${format.what} and ${other} are two jobs in one brief` }
   }
   return null
+}
+
+/** Each shared format whose defining file the ask names, with the readers `shared()` refuses a brief for leaving out. */
+export function formats(ask: string): string {
+  const named = SHARED.filter((f) => f.files.some((p) => ask.includes(p)))
+  if (named.length === 0) return ''
+  const ticked = (paths: string[]): string => paths.map((p) => `\`${p}\``).join(', ')
+  const rows = named.map((f) => `- ${f.what} — defined in ${ticked(f.files)}; read by ${ticked(f.readers)}`).join('\n')
+  return `\n\n# Shared formats\n\nA brief changing a defining file names every reader under \`## Files\` or \`## Who else reads what this changes\`.\n\n${rows}`
 }
 
 /** The 1-based line a file's last fenced block opens on; 0 when it holds no such block. */

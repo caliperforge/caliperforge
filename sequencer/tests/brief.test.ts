@@ -11,7 +11,7 @@ import { holdOf, release, retried, returnToLane } from '../../store/holds.ts'
 import { get, priority } from '../../store/lanes.ts'
 import { advance, briefed, dropPlan, end, needsCeo, requeue, retry, titles } from '../../store/plans.ts'
 import { WHY } from '../../store/refusals.ts'
-import { estimate, files, pointed, references, shape, split, TEMPLATE, unclear, writable, type Refused } from '../brief.ts'
+import { estimate, files, pointed, references, shape, SHARED, split, TEMPLATE, unclear, writable, type Refused } from '../brief.ts'
 import { tick } from '../index.ts'
 import { unhold } from '../hold.ts'
 import { blocked } from '../steps.ts'
@@ -320,6 +320,24 @@ test('D3 the packet lists long files after the template', async () => {
   expect(prompt).toContain('\n# Files over 300 lines\n')
   expect(prompt).toContain('- long.ts — 301 lines')
   expect(prompt.indexOf('\n# Files over 300 lines\n')).toBeGreaterThan(prompt.indexOf(TEMPLATE))
+})
+
+test('D1-D3 an ask naming a format file lists its readers', async () => {
+  const fired = async (w: World): Promise<string> => {
+    const packets: Packet[] = []
+    await tick(w.db, w.root, stub(CARRIED))
+    await tick(w.db, w.root, stub(CARRIED, 0, undefined, (p) => packets.push(p)))
+    return packets[0]?.prompt ?? ''
+  }
+  const w = mine()
+  put(w.root, ID, 'ask.md', '# let an internal plan run\n\nMove the summary row in `seats/modes/build.md`.\n')
+  const prompt = await fired(w)
+  expect(prompt).toContain('\n# Shared formats\n')
+  const formats = prompt.slice(prompt.indexOf('\n# Shared formats\n')).split('\n\n# ')[0] ?? ''
+  for (const reader of SHARED.flatMap((f) => f.readers)) expect(formats).toContain(`\`${reader}\``)
+  const plain = await fired(mine())
+  expect(plain).toContain(TEMPLATE)
+  expect(plain).not.toContain('# Shared formats')
 })
 
 test('the packet opens on the checkout map; no MAP.md is written', async () => {

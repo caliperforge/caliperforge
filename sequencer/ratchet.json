@@ -252,9 +252,9 @@
     "lines": 21
   },
   "upgrade.ts": {
-    "lines": 70,
+    "lines": 66,
     "prepare": 1,
-    "silent-catch": 3
+    "silent-catch": 2
   },
   "upstream.ts": {
     "lines": 60,

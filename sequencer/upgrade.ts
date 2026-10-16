@@ -6,23 +6,19 @@ import { SELF } from './workspace.ts'
 
 const COMMIT = `https://github.com/${SELF}/commit/`
 
-/** `land()` writes this url; a target's push writes a pull request one, and no landing of ours is in it. */
-function landed(db: Db): string | null {
-  const row = db.prepare(`SELECT evidence FROM deliverables WHERE state = 'pushed' AND evidence LIKE ?
-    ORDER BY id DESC LIMIT 1`).get(`${COMMIT}%`) as { evidence: string } | undefined
-  return row === undefined ? null : row.evidence.slice(COMMIT.length)
+/** Every sha `land()` wrote in this url, newest first; a target's push writes a pull request one, and no landing of ours is in it. */
+function landed(db: Db): string[] {
+  const rows = db.prepare(`SELECT evidence FROM deliverables WHERE state = 'pushed' AND evidence LIKE ?
+    ORDER BY id DESC`).all(`${COMMIT}%`) as { evidence: string }[]
+  return rows.map((row) => row.evidence.slice(COMMIT.length))
 }
 
 /** The landed sha the live tree at `root` has not got, off its own refs: no fetch, no network. */
 export function behind(db: Db, root: string): string | null {
-  const sha = landed(db)
-  if (sha === null) return null
-  try {
-    git(root, ['merge-base', '--is-ancestor', sha, 'HEAD'])
-    return null
-  } catch {
-    return sha
-  }
+  const shas = landed(db)
+  if (shas.length === 0) return null
+  const held = new Set(git(root, ['rev-list', 'HEAD']).split('\n'))
+  return shas.find((sha) => !held.has(sha)) ?? null
 }
 
 /** `--ff-only` refuses before it touches a ref, so a tree carrying a commit of its own runs no schema file either. */

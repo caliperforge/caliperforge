@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { beforeEach, expect, test } from 'vitest'
+import { beforeEach, expect, test, vi } from 'vitest'
 import { addRun } from '../../store/brief.ts'
 import { ofKind, pointers } from '../../store/events.ts'
 import { migrate, open, type Db } from '../../store/index.ts'
@@ -9,11 +9,13 @@ import { set } from '../../store/lanes.ts'
 import { sitedata } from '../site.ts'
 import { git } from '../workspace.ts'
 
+vi.mock('../../cli/gh.ts', async (importOriginal) => ({ ...await importOriginal<object>(), gh: () => ({ items: [] }) }))
+
 const schema = join(import.meta.dirname, '../../schema')
 
 const FIRST = new Date('2026-10-14T11:20:00Z')
 
-const DATA = ['ceo_touches', 'daily_activity', 'gate_verdicts', 'pipeline_counts', 'plan_outcomes', 'runs_by_seat', 'token_mix',
+const DATA = ['ceo_touches', 'daily_activity', 'gate_verdicts', 'outside_prs', 'pipeline_counts', 'plan_outcomes', 'runs_by_seat', 'token_mix',
   'tokens_per_landed_job'].map((n) => `data/${n}.json`)
 
 const RUN = { at: '2026-10-13T09:00:00.000Z', input_tokens: 10, cache_write_tokens: 0, cache_read_tokens: 0, output_tokens: 1, plan: 1,
@@ -60,7 +62,7 @@ test('D1 the first lap from 05:15 commits and pushes the data', () => {
   expect(git(clone, ['log', '-1', '--format=%s']).trim()).toBe('data: 2026-10-14')
   expect(named()).toEqual(DATA)
   expect(head(origin)).toBe(head(clone))
-  expect(ofKind(db, 'site_data')).toEqual([{ plan: null, kind: 'site_data', actor: 'tick', outcome: 'pass', message: '8 files' }])
+  expect(ofKind(db, 'site_data')).toEqual([{ plan: null, kind: 'site_data', actor: 'tick', outcome: 'pass', message: '9 files' }])
   expect(pointers(db, 'site_data')).toEqual(['2026-10-14'])
 })
 

@@ -31,7 +31,7 @@ export const PlanRow = z.object({
   retries: z.int(),
   head_digest: z.string().nullable(),
   priority: z.int(),
-  lane: z.enum(['machine', 'atelier', 'comms', 'research', 'uniswap', 'bench', 'site']).nullable(),
+  lane: z.enum(['machine', 'atelier', 'comms', 'research', 'uniswap', 'bench', 'site', 'loupe']).nullable(),
   seat: z.string().nullable(),
   origin: z.string().nullable(),
   wait_reason: z.enum(WAIT).nullable(),

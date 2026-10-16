@@ -7,7 +7,9 @@ import { eventsOf } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { partsOf } from '../store/parts.ts'
 import { holder, waitsFor } from '../store/slot.ts'
-import { builderRan, held, internal, needsCeo, originIssue, originRef, waiting, type PlanRow, type Wait } from '../store/plans.ts'
+import { builderRan, held, internal, needsCeo, newestOfOrigin, originIssue, originRef, waiting, type PlanRow, type Wait } from '../store/plans.ts'
+import { setTargetState, targetRef } from '../store/targets.ts'
+import { afters } from '../store/tickets.ts'
 import { ideas, log, reading, steps as account } from '../templates/account.ts'
 import { scored, scratch, steps as bench } from '../templates/bench.ts'
 import { capture, desk, facts, gather, pack, score, steps as comms } from '../templates/comms.ts'
@@ -160,10 +162,8 @@ export function heldOn(db: Db, plan: PlanRow): number | null {
 function after(db: Db, root: string, plan: PlanRow): Outcome | null {
   const ref = originRef(plan)
   if (ref === null) return null
-  const ns = db.prepare('SELECT a.value FROM tickets t, json_each(t.after) a WHERE t.repo = ? AND t.number = ? ORDER BY a.key')
-    .all(ref.repo, ref.no) as { value: number }[]
-  for (const { value } of ns) {
-    const gate = unmet(db, ref.repo, value)
+  for (const row of afters(db, ref.repo, ref.no)) {
+    const gate = unmet(db, ref.repo, row)
     if (gate === null) continue
     if (gate.on !== null) hold(db, root, plan.id, gate.why, new Date(), gate.on)
     else {
@@ -176,10 +176,9 @@ function after(db: Db, root: string, plan: PlanRow): Outcome | null {
 }
 
 /** Why `After: #n` still holds, and the plan to wait on when one is open; null once #n has landed, or is done on a template that never pushes. */
-function unmet(db: Db, repo: string, n: number): { on: number | null; issue: string; why: string } | null {
-  const pred = db.prepare(`SELECT p.id, p.state, p.template, t.closed_at FROM plans p LEFT JOIN tickets t ON t.repo = ? AND t.number = ?
-    WHERE p.origin = ? ORDER BY p.id DESC LIMIT 1`).get(repo, n, `https://github.com/${repo}/issues/${String(n)}`) as
-    { id: number; state: PlanRow['state']; template: PlanRow['template']; closed_at: string | null } | undefined
+function unmet(db: Db, repo: string, { n, closed_at }: { n: number; closed_at: string | null }): { on: number | null; issue: string; why: string } | null {
+  const found = newestOfOrigin(db, `https://github.com/${repo}/issues/${String(n)}`)
+  const pred = found === undefined ? undefined : { ...found, closed_at }
   if (pred?.state === 'done' && (landed(db, pred.id) || !mapOf(pred.template).steps.some((s) => s.name === 'push'))) return null
   const part = pred?.state === 'done' ? unlanded(db, pred.id) : null
   const on = part === null ? pred : { ...part, closed_at: pred?.closed_at ?? null }
@@ -212,7 +211,7 @@ export function measure(db: Db, root: string, plan: PlanRow, read?: Read): Outco
   }
   const park = read === undefined ? null : checked(root, plan, row, read)
   if (park === null) return { outcome: 'pass', spans: [], note: `${row.repo}#${String(row.issue_no)} ${row.pulse}` }
-  db.prepare("UPDATE targets SET state = 'parked' WHERE id = ?").run(plan.target_id)
+  setTargetState(db, plan.target_id, 'parked')
   return { outcome: 'refuse', held: true, spans: [span], note: park }
 }
 
@@ -226,6 +225,5 @@ function checked(root: string, plan: PlanRow, row: Target, read: Read): string |
 
 /** The repository and issue a plan's checkout is made from, if it has one. */
 export function targetOf(db: Db, plan: PlanRow): { repo: string; issue_no: number; part: string } | null {
-  const row = db.prepare('SELECT repo, issue_no, part FROM targets WHERE id = ?').get(plan.target_id)
-  return (row ?? null) as { repo: string; issue_no: number; part: string } | null
+  return targetRef(db, plan.target_id)
 }

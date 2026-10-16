@@ -1,9 +1,10 @@
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
-import { filesOf, record as recordFiles, sharing } from '../../store/files.ts'
+import { filesOf, record as recordFiles, recorded, sharing } from '../../store/files.ts'
 import { returnToLane } from '../../store/holds.ts'
-import { advance, allPlans, overlapWaits } from '../../store/plans.ts'
+import { width } from '../../store/lanes.ts'
+import { advance, allPlans, dropPlan, end, overlapWaits } from '../../store/plans.ts'
 import { tick } from '../index.ts'
 import { srcDir } from '../workspace.ts'
 import { built, CARRIED, internalPlan, ours, plan, stub, world, type World } from './world.ts'
@@ -14,11 +15,11 @@ const SECOND = 3
 /** Two of our own plans, both built: the first on `src/hello.ts`, the second listed on its own file. */
 async function builtPair(): Promise<World> {
   const w = world()
-  w.db.prepare('DELETE FROM plans WHERE id = 1').run()
+  dropPlan(w.db, 1)
   ours(w.root)
   internalPlan(w.db, w.root, ID)
   internalPlan(w.db, w.root, SECOND, 'let a second internal plan run', 35)
-  w.db.prepare('UPDATE pipes SET max_concurrent = 2 WHERE id = 1').run()
+  width(w.db, 1, 2)
   for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
   recordFiles(w.db, SECOND, [{ path: 'src/p3.ts', is_new: true }])
   await tick(w.db, w.root, stub(CARRIED))
@@ -27,14 +28,11 @@ async function builtPair(): Promise<World> {
   return w
 }
 
-const paths = (w: World, id: number): string[] =>
-  (w.db.prepare('SELECT path FROM plan_files WHERE plan = ? ORDER BY position').all(id) as { path: string }[]).map((r) => r.path)
-
 test('D1 a stray path joins the recorded set', async () => {
   const w = await builtPair()
   writeFileSync(join(srcDir(w.root, SECOND), 'src/stray.ts'), 'export const stray = 1\n')
   await tick(w.db, w.root, stub(CARRIED))
-  expect(paths(w, SECOND)).toEqual(['src/p3.ts', 'src/stray.ts'])
+  expect(recorded(w.db, SECOND)).toEqual(['src/p3.ts', 'src/stray.ts'])
   expect(filesOf(w.db, SECOND).map((f) => f.path)).toEqual(['src/p3.ts'])
 })
 
@@ -61,7 +59,7 @@ test('a held job goes on when the older one settles', async () => {
   const w = await builtPair()
   built(w.root, SECOND, 'export const also = true')
   await tick(w.db, w.root, stub(CARRIED))
-  w.db.prepare("UPDATE plans SET state = 'done' WHERE id = ?").run(ID)
+  end(w.db, ID, 'done')
   const second = (await tick(w.db, w.root, stub(CARRIED))).find((f) => f.plan === SECOND)
   expect(second?.note).not.toContain('is building')
 })

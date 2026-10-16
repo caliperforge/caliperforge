@@ -163,14 +163,10 @@
     "lines": 26
   },
   "steps.ts": {
-    "lines": 213,
-    "prepare": 4
+    "lines": 213
   },
   "symbols.ts": {
     "lines": 43
-  },
-  "tests/after.test.ts": {
-    "prepare": 4
   },
   "tests/batch.test.ts": {
     "prepare": 1
@@ -228,9 +224,6 @@
   },
   "tests/spawns.test.ts": {
     "prepare": 1
-  },
-  "tests/strays.test.ts": {
-    "prepare": 4
   },
   "tests/theirs.test.ts": {
     "prepare": 3

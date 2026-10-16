@@ -5,7 +5,7 @@ import { expect, test } from 'vitest'
 import { gates } from '../../store/approvals.ts'
 import { pushedRow } from '../../store/deliverables.ts'
 import { addRule, migrate, open } from '../../store/index.ts'
-import { addPlan, PlanRow } from '../../store/plans.ts'
+import { addPlan, end, planById, planRows, PlanRow } from '../../store/plans.ts'
 import { recordListing } from '../../store/tickets.ts'
 import { released } from '../fixer.ts'
 import { maybe } from '../workspace.ts'
@@ -33,8 +33,11 @@ function seeded(first: { state: PlanRow['state']; closedAt?: string; template?: 
 }
 
 type Db = ReturnType<typeof open>
-const row = (db: Db, id: number) => db.prepare('SELECT state, step, waits_on, held_by, held_why FROM plans WHERE id = ?').get(id)
-const plan = (db: Db, id: number) => PlanRow.parse(db.prepare('SELECT * FROM plans WHERE id = ?').get(id))
+const row = (db: Db, id: number) => {
+  const r = planRows(db).find((p) => p.id === id)
+  return { state: r?.state, step: r?.step, waits_on: r?.waits_on, held_by: r?.held_by, held_why: r?.held_why }
+}
+const plan = planById
 const pushed = (db: Db, id: number) => {
   addRule(db, { id: 'typescript_specialist', kind: 'roster', path: 'seats/typescript_specialist', content_hash: '0'.repeat(64), loaded_at: '2026-09-28' })
   pushedRow(db, { plan: id, step: 6, seat: 'typescript_specialist', diff_digest: 'd'.repeat(64),
@@ -51,7 +54,7 @@ test('D1 an After issue in flight waits on its plan at step 0', () => {
 test('D2 back to its lane once After lands, then passes measure', () => {
   const { db, root, one, two } = seeded({ state: 'running' })
   measure(db, root, plan(db, two))
-  db.prepare("UPDATE plans SET state = 'done' WHERE id = ?").run(one)
+  end(db, one ?? 0, 'done')
   pushed(db, one ?? 0)
   released(db, root, now, () => undefined)
   expect(row(db, two)).toMatchObject({ state: 'queued', step: 0, waits_on: null })
@@ -102,7 +105,7 @@ test('D3 an After refused research plan holds for the COO', () => {
 test('D4 an After refused leaves its reason with the COO', () => {
   const { db, root, one, two } = seeded({ state: 'running' })
   measure(db, root, plan(db, two))
-  db.prepare("UPDATE plans SET state = 'refused' WHERE id = ?").run(one)
+  end(db, one ?? 0, 'refused')
   released(db, root, now, () => undefined)
   expect(row(db, two)).toEqual({ state: 'blocked_on_ceo', step: 0, waits_on: null, held_by: 'coo',
     held_why: `plan ${String(one)}, which this job waits on, ended refused` })

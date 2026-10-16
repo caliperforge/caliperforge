@@ -90,6 +90,10 @@ export function targetRow(db: Db, id: number): Target {
   return row
 }
 
-export function setTargetState(db: Db, id: number, state: Target['state']): void {
+export function setTargetState(db: Db, id: number | null, state: Target['state']): void {
   db.prepare('UPDATE targets SET state = ? WHERE id = ?').run(state, id)
+}
+
+export function targetRef(db: Db, id: number | null): { repo: string; issue_no: number; part: string } | null {
+  return (db.prepare('SELECT repo, issue_no, part FROM targets WHERE id = ?').get(id) ?? null) as { repo: string; issue_no: number; part: string } | null
 }

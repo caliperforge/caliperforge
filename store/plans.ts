@@ -152,6 +152,10 @@ export function planById(db: Db, id: number): PlanRow {
   return PlanRow.parse(row)
 }
 
+export function newestOfOrigin(db: Db, origin: string): Pick<PlanRow, 'id' | 'state' | 'template'> | undefined {
+  return db.prepare('SELECT id, state, template FROM plans WHERE origin = ? ORDER BY id DESC LIMIT 1').get(origin) as Pick<PlanRow, 'id' | 'state' | 'template'> | undefined
+}
+
 /** The pipe's name when this call switched it off; null when it was already off. */
 export function laneOff(db: Db, pipe: number): string | null {
   const row = db.prepare('UPDATE pipes SET enabled = 0 WHERE id = ? AND enabled = 1 RETURNING name').get(pipe) as { name: string } | undefined

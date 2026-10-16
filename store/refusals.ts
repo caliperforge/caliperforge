@@ -114,6 +114,12 @@ export function refusalRows(db: Db, plan: number): { step: number; span: string 
     .all(plan) as { step: number; span: string | null; note: string | null }[]
 }
 
+/** The refusals still counting toward the plan's rounds, oldest first. */
+export function openRefusals(db: Db, plan: number): { step: number; fingerprint: string; at: string }[] {
+  return db.prepare('SELECT step, fingerprint, at FROM refusals WHERE plan = ? AND cleared = 0 AND blip = 0 ORDER BY id')
+    .all(plan) as { step: number; fingerprint: string; at: string }[]
+}
+
 /** The diff of the plan's newest refusal at `step`, cleared or not: a ruling clears refusals, and the diff is unchanged by it. */
 export function diffAt(db: Db, plan: number, step: number): string | null {
   const row = db.prepare('SELECT diff FROM refusals WHERE plan = ? AND step = ? AND blip = 0 ORDER BY id DESC LIMIT 1')

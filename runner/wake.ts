@@ -4,7 +4,10 @@ import { maybe } from '../sequencer/workspace.ts'
 import type { Db } from '../store/index.ts'
 import { count, hhmm, lanes, wall, windows } from '../store/lanes.ts'
 import { last } from '../store/merges.ts'
-import { BUILT, live, PipeRow, planById, PlanRow } from '../store/plans.ts'
+import { live, pipeOf, planById, PlanRow, planRows } from '../store/plans.ts'
+import { openRefusals } from '../store/refusals.ts'
+import { builtRuns } from '../store/runs.ts'
+import { verdictRows } from '../store/verdict.ts'
 
 export const CAP = 15_000
 
@@ -19,7 +22,7 @@ type Section = [string, string | null]
 const CARD = ['id', 'state', 'template', 'lane', 'seat', 'priority', 'origin', 'wait_reason', 'waits_on']
 
 export function wake(db: Db, root: string, plan: number, now = new Date()): { text: string } | { refusal: Refusal } {
-  const row = Row.parse({ ...planById(db, plan), waits_on: db.prepare('SELECT waits_on FROM plans WHERE id = ?').pluck().get(plan) })
+  const row = Row.parse({ ...planById(db, plan), waits_on: planRows(db).find((r) => r.id === plan)?.waits_on ?? null })
   const all = sections(db, root, row, now)
   const missing = all.find(([, body]) => body === null)
   if (missing !== undefined) return refused(missing[0])
@@ -33,7 +36,7 @@ function sections(db: Db, root: string, row: Row, now: Date): Section[] {
     ['step', fields(row, ['step', 'retries'])],
     ['verdict', verdict(db, root, row.id, row.state === 'blocked_on_ceo')],
     ['stop', stopped(root, row)],
-    ['refusals', rows(db, 'SELECT step, fingerprint, at FROM refusals WHERE plan = ? AND cleared = 0 AND blip = 0 ORDER BY id', row.id).join('\n') || 'none'],
+    ['refusals', openRefusals(db, row.id).map((r) => line(r.step, r.fingerprint, r.at)).join('\n') || 'none'],
     ['runs', runs(db, row.id)],
     ['queue', queue(db, row)],
     ['lanes', fields(lanes(db, hhmm(db, now), now))],
@@ -59,23 +62,22 @@ function stopped(root: string, row: Row): string {
 }
 
 function verdict(db: Db, root: string, plan: number, blocked: boolean): string | null {
-  const v = db.prepare(`SELECT gate, step, kind, outcome, origin_kind, origin_ref FROM verdicts
-    WHERE plan = ? ORDER BY id DESC LIMIT 1`).get(plan) as { step: number; kind: string } & Record<string, Cell> | undefined
+  const v = verdictRows(db, plan).at(-1)
   if (v === undefined) return blocked ? 'none' : null
-  const head = line(...Object.values(v))
+  const head = line(v.gate, v.step, v.kind, v.outcome, v.origin_kind, v.origin_ref)
   if (v.kind !== 'review') return head
   const fence = /^---\n[\s\S]*?\n---/.exec(maybe(root, plan, `step-${String(v.step)}.verdict.md`) ?? '')?.[0]
   return fence === undefined ? null : `${head}\n\n${fence}`
 }
 
 function runs(db: Db, plan: number): string | null {
-  const recent = rows(db, `SELECT step, seat, input_tokens + output_tokens FROM runs WHERE plan = ? AND ${BUILT} ORDER BY id DESC LIMIT 2`, plan)
+  const recent = builtRuns(db, plan).map((r) => line(r.step, r.seat, r.tokens))
   if (recent.length === 0) return null
   return [...recent, line('run.token_wall', wall(db)), line('plan.token_ceiling', count(db, 'plan.token_ceiling'))].join('\n')
 }
 
 function queue(db: Db, row: Row): string | null {
-  const first = live(db, PipeRow.parse(db.prepare('SELECT * FROM pipes WHERE id = ?').get(row.pipe_id))).at(0)
+  const first = live(db, pipeOf(db, row.pipe_id)).at(0)
   return first === undefined ? 'none' : line(first.id, first.step, first.priority, first.wait_reason)
 }
 
@@ -84,10 +86,6 @@ function base(db: Db, root: string, plan: number): string | null {
   if (sha === null) return null
   const merge = last(db, plan)
   return `${sha.trim()}\n${merge === null ? 'no merge from main yet' : line(merge.main, merge.overlap, merge.clean)}`
-}
-
-function rows(db: Db, sql: string, plan: number): string[] {
-  return (db.prepare(sql).raw().all(plan) as Cell[][]).map((r) => line(...r))
 }
 
 function line(...cells: Cell[]): string {

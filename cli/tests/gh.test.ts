@@ -12,11 +12,11 @@ function read(status: string, open: number[]): Read {
   return (args) => args[0] === 'api' ? { status } : open.map((number) => ({ number }))
 }
 
-function recorder(calls: string[][], fails = false): Run {
+function recorder(calls: string[][], fails = false, out = ''): Run {
   return (args) => {
     calls.push(args)
     if (fails) throw new Error('422 not a fast forward')
-    return ''
+    return out
   }
 }
 
@@ -55,6 +55,23 @@ test('D3 no rehearsal opens one and moves nothing', () => {
   const calls: string[][] = []
   rehearse(FORK, BRANCH, read('ahead', []), recorder(calls))
   expect(calls).toEqual([CREATE])
+})
+
+test('fileIssue creates each label before the issue', () => {
+  const calls: string[][] = []
+  const url = fileIssue(FORK, 'T', 'B', ['lane:loupe', 'P1'], recorder(calls, false, 'https://x/issues/9\n'))
+  expect(url).toBe('https://x/issues/9')
+  expect(calls).toEqual([
+    ['label', 'create', 'lane:loupe', '--repo', FORK, '--force'],
+    ['label', 'create', 'P1', '--repo', FORK, '--force'],
+    ['issue', 'create', '--repo', FORK, '--title', 'T', '--body-file', '-', '--label', 'lane:loupe', '--label', 'P1'],
+  ])
+})
+
+test('fileIssue files nothing when a label create fails', () => {
+  const calls: string[][] = []
+  expect(() => fileIssue(FORK, 'T', 'B', ['lane:loupe'], recorder(calls, true))).toThrow('422')
+  expect(calls).toEqual([['label', 'create', 'lane:loupe', '--repo', FORK, '--force']])
 })
 
 function apps(selection: string, repos: string[], calls: string[][]): Read {

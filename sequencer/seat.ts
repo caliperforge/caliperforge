@@ -12,7 +12,7 @@ import type { Finding, Judged, Note } from '../reviews/verdict.ts'
 import { lastChecks } from '../store/checks.ts'
 import { regated } from '../store/dispositions.ts'
 import { logged, runLogged, type Run } from '../store/events.ts'
-import type { Db } from '../store/index.ts'
+import { type Db, LOCKED } from '../store/index.ts'
 import { filesOf } from '../store/files.ts'
 import { due, keep } from '../store/language-notes.ts'
 import { profile } from '../store/profile.ts'
@@ -397,6 +397,7 @@ async function fireReview(db: Db, root: string, plan: PlanRow, step: Step, provi
     }
   } catch (error) {
     const note = error instanceof Error ? error.message : String(error)
+    if (note.includes(LOCKED)) throw error
     return { outcome: { outcome: 'refuse', spans: ['reviewers.verdict_fence'], note: `${step.runs} ${note}` }, notes: [] }
   }
 }

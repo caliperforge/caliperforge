@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { RuleRow } from './rows.ts'
 
 export type Db = Database.Database
+export const LOCKED = 'database is locked'
 
 interface Obj {
   type: string

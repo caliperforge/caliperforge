@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { wide } from '../sequencer/brief.ts'
 import { put } from '../sequencer/workspace.ts'
 import { commsLane, commsPlan, fileComms } from '../store/comms.ts'
 import { logged } from '../store/events.ts'
@@ -19,6 +20,8 @@ const REF = /^([^/\s]+\/[^/\s#]+)#(\d+)$/
 const SEAT_LABEL = /^seat:([a-z][a-z0-9_]*)$/
 
 const COMMS = '**Files:** comms desk rows only; no code'
+
+const LISTED = /^\*\*Files:\*\*[ \t]*\r?\n((?:[ \t]*[-*][ \t].*(?:\r?\n|$))*)/m
 
 const POST = /\b(?:(?:weekly|daily) \d{4}-\d{2}-\d{2}|ship post [^\s/#]+\/[^\s#]+#\d+)/
 
@@ -89,6 +92,8 @@ export function add(db: Db, root: string, ref: string, by: Holder | 'intake' | '
   const missing = LANE[lane].template === 'research' ? unasked(row.body) : []
   if (missing.length > 0) return refusal(db, ref, 'plan.research_lines', `has no ${missing.join(' or ')} line`)
   if (row.body.includes(COMMS)) return desk(db, root, ref, row, by)
+  const n = wide(`## Files\n${(LISTED.exec(row.body)?.[1] ?? '').replace(/\r/g, '')}`)
+  if (n !== null) return refusal(db, ref, 'plan.wide', `split first: ${String(n)} files`)
   const seat = seatOf(row.labels) ?? LANE[lane].seat
   const plan = file(db, by, pipe ?? LANE[lane].pipe, lane, seat, row.url, priority)
   put(root, plan, 'ask.md', `# ${row.title}\n\n${row.body}\n`)

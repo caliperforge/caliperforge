@@ -134,6 +134,15 @@ test('D4 a Not done hand-back stops for the director at step 3', async () => {
   expect(refusedOf(w.db, 1)[0]?.message).toBe(NOT_DONE)
 })
 
+const BRIEF_WRONG = CARRIED.replaceAll('status: done\n    pointer: src/hello.ts:1', 'status: brief-wrong\n    why: the ask names a file that is not there')
+
+test('D4 a brief-wrong hand-back stops for the director', async () => {
+  const w = await atBuild()
+  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(BRIEF_WRONG))
+  expect(plan(w.db, 1)).toMatchObject({ state: 'blocked_on_ceo', step: 3 })
+  expect(holdOf(w.db, 1)?.held_why).toMatch(/^completion-audit: brief-wrong: /)
+})
+
 test('D5 an unmoved diff after a new ruling stops at step 3', async () => {
   const w = await atBuild()
   await tick(w.db, w.root, stub(UNPOINTED))

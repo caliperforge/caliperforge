@@ -89,7 +89,7 @@ test('no lane label refuses with a ruling naming each label to add', () => {
   const filed = add(db, root, 'caliperforge/caliperforge#25', 'ceo', 'internal', canned([{ ...ISSUE, labels: ['bug'] }]))
   expect(filed.state).toBe('refused')
   expect(filed.plan).toBeNull()
-  expect(filed.why).toContain('lane:machine, lane:atelier, lane:comms, lane:research')
+  expect(filed.why).toContain('lane:machine, lane:loupe, lane:comms, lane:research')
   expect(filed.origin).toEqual({ origin_kind: 'ruling', origin_ref: 'plan.lane_label' })
   expect(rulingSubject(db, Number(filed.ruling))).toBe('plan.lane_label')
   expect(allPlans(db)).toHaveLength(0)
@@ -239,7 +239,7 @@ test('D5 unfiled no longer lists a filed marked ticket', () => {
 test('reference and lane, seat, priority labels are read exactly', () => {
   expect(parse('caliperforge/caliperforge#25')).toEqual({ repo: 'caliperforge/caliperforge', no: 25 })
   expect(() => parse('caliperforge#25')).toThrow('is not an <owner/repo>#<n> issue reference')
-  expect(laneOf([{ name: 'lane:atelier' }])).toBe('atelier')
+  expect(laneOf([{ name: 'lane:atelier' }])).toBe('loupe')
   expect(laneOf([{ name: 'lane:kitchen' }, { name: 'lanes' }])).toBeNull()
   expect(seatOf([{ name: 'seat:kotlin_specialist' }])).toBe('kotlin_specialist')
   expect(seatOf([{ name: 'bug' }])).toBeNull()

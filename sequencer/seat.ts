@@ -23,7 +23,7 @@ import { lastTranscript } from '../store/runs.ts'
 import { byRun, opened, pending, unfinished } from '../store/transcript.ts'
 import type { Step } from '../templates/pr-path.ts'
 import { parse } from '../rails/diff.ts'
-import { estimate, human, pointed, references, section, shape, split, TEMPLATE, unclear, wide, WIDE, type Part } from './brief.ts'
+import { estimate, formats, human, pointed, references, section, shape, split, TEMPLATE, unclear, wide, WIDE, type Part } from './brief.ts'
 import { repoOf } from './ready.ts'
 import { limitOf } from './size.ts'
 import { handout, long, touched, type Handed } from './handout.ts'
@@ -142,7 +142,7 @@ export async function fireBrief(db: Db, root: string, plan: PlanRow, step: Step,
   const src = srcDir(root, plan.id)
   const standing = maybe(root, plan.id, 'issue.md')
   if (standing !== null && shape(standing, ask, src, !internal(plan)) === null) return stands()
-  const fired = await ran(db, root, plan, step, provider, again(db, root, plan.id, ask) + store(root, plan) + seams(root, plan.seat) + long(src) + wideAsk(ask), false)
+  const fired = await ran(db, root, plan, step, provider, again(db, root, plan.id, ask) + store(root, plan) + seams(root, plan.seat) + formats(ask) + long(src) + wideAsk(ask), false)
   drop(root, plan.id, 'brief.refused.md')
   if (fired.ended !== 'completed') return exited(step, fired)
   const line = commanded(fired.text)

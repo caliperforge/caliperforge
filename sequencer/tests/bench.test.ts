@@ -1,11 +1,11 @@
 import { spawnSync } from 'node:child_process'
 import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import type { HookInput } from '@anthropic-ai/claude-agent-sdk'
 import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
-import { gate, walled } from '../../providers/claude-agent-sdk/index.ts'
+import { gate, readOutside, walled } from '../../providers/claude-agent-sdk/index.ts'
 import type { Fired, Packet, Provider } from '../../providers/kind.ts'
 import { seat } from '../../runner/rules.ts'
 import { scores } from '../../store/bench.ts'
@@ -177,13 +177,33 @@ test('D1 D7 tick fires fizz_generator in the scratch tree', async () => {
   for (const said of [c2, c2.slice(0, 12), FINDING]) expect(fired.packets[0]?.prompt).not.toContain(said)
 })
 
-test('D2 the generate packet denies curl and admits forge build', async () => {
+const SKILL = join(homedir(), '.claude/skills/fizz')
+
+test('D2 D3 generate admits fizz Step 1-2, denies curl and cd', async () => {
   const fired = stub(CEILING, 'stopped', true)
   await generated(fired)
   const [packet] = fired.packets
   if (packet === undefined) throw new Error('the generator was not fired')
-  expect(gate(packet, bash('curl https://example.com')).hookSpecificOutput).toMatchObject({ permissionDecision: 'deny' })
-  expect(gate(packet, bash('forge build'))).toEqual({ continue: true })
+  const cwd = packet.cwd
+  for (const command of ['pwd', 'forge --version', 'medusa --version', 'echidna --version', `bash ${SKILL}/scripts/ensure_foundry.sh ${cwd}`,
+    `node ${SKILL}/scripts/extract_abis.js ${cwd} --meta-dir test/fizz/fizz_data`, 'FOUNDRY_PROFILE=fuzz forge build']) {
+    expect(gate(packet, bash(command))).toEqual({ continue: true })
+  }
+  for (const command of ['curl https://example.com', `cd ${cwd} && forge build`]) {
+    expect(gate(packet, bash(command)).hookSpecificOutput).toMatchObject({ permissionDecision: 'deny' })
+    expect(JSON.stringify(gate(packet, bash(command)))).toContain('ruling:seat.tools')
+  }
+})
+
+test('D4 D5 fizz reads its skill folder and names SKILL_PATH', async () => {
+  const fired = stub(CEILING, 'stopped', true)
+  await generated(fired)
+  const [packet] = fired.packets
+  if (packet === undefined) throw new Error('the generator was not fired')
+  expect(packet.reads).toEqual([SKILL])
+  expect(readOutside(packet.cwd, 'Read', { file_path: join(SKILL, 'references/template-map.md') }, packet.reads)).toBeNull()
+  expect(readOutside(packet.cwd, 'Read', { file_path: join(homedir(), '.claude/skills/x-ray/SKILL.md') }, packet.reads)).toContain('run.outside_checkout')
+  expect(packet.prompt).toContain(`SKILL_PATH is ${SKILL}.`)
 })
 
 test('D3 a run stopped at the ceiling with a suite passes', async () => {
@@ -273,6 +293,8 @@ test('D3 house_generator generates and is scored under its name', async () => {
   const fired = stub(1234, 'completed', true)
   expect(await generate(db, root, planById(db, 1), mapOf('bench').at(1), fired.provider)).toMatchObject({ outcome: 'pass' })
   expect(fired.packets).toMatchObject([{ tools: seat(root, 'house_generator').manifest.tools }])
+  expect(fired.packets[0]?.reads).toBeUndefined()
+  expect(fired.packets[0]?.prompt).not.toContain('SKILL_PATH')
   expect(runRows(db)).toMatchObject([{ seat: 'house_generator', staffed: 'house_generator' }])
   expect(kernel(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
   expect(scores(db)).toEqual([{ plan: 1, target: 'euler-earn-m01', generator: 'house_generator', ...SCORE, tokens: 1234, seconds: 1 }])

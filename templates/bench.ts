@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process'
 import { cpSync, existsSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { basename, join } from 'node:path'
 import type { Provider } from '../providers/kind.ts'
 import { packet } from '../runner/index.ts'
@@ -24,7 +25,10 @@ export const CEILING = 400_000
 
 const SUITE = 'test/fizz'
 
-const ASK = `Generate the fuzz suite for the project in the working folder in automatic mode, asking nothing: SUITE_DIR is ${SUITE} and META_DIR is ${SUITE}/fizz_data.`
+function ask(skill: string | undefined): string {
+  const said = `Generate the fuzz suite for the project in the working folder in automatic mode, asking nothing: SUITE_DIR is ${SUITE} and META_DIR is ${SUITE}/fizz_data.`
+  return skill === undefined ? said : `${said}\nSKILL_PATH is ${skill}. PROJECT_ROOT is the working folder: run each command from there, without cd.`
+}
 
 function fields(text: string): Record<string, string | undefined> {
   return Object.fromEntries(text.split('\n')
@@ -64,8 +68,9 @@ export async function generate(db: Db, root: string, plan: PlanRow, step: Step, 
   load(db, root)
   const { manifest, prompt, hash } = seat(root, name)
   const dir = srcDir(root, plan.id)
-  const built = packet(manifest, prompt, '', ASK, dir, pending(planDir(root, plan.id), `step-${String(step.step)}`))
-  const fired = await provider.fire({ ...built, wall: CEILING })
+  const reads = manifest.reads?.map((path) => path.startsWith('~/') ? join(homedir(), path.slice(2)) : path)
+  const built = packet(manifest, prompt, '', ask(reads?.[0]), dir, pending(planDir(root, plan.id), `step-${String(step.step)}`))
+  const fired = await provider.fire({ ...built, wall: CEILING, ...(reads === undefined ? {} : { reads }) })
   const run = runLogged(db, { plan: plan.id, step: step.step, seat: name, rule_hash: hash, provider: provider.name, model: manifest.model,
     effort: manifest.effort, exit: fired.exit, fired, staffed: name })
   byRun(db, run, fired.transcript_path)

@@ -54,6 +54,14 @@ test('spilled tool result reads', () => {
   expect(readOutside('/Users/m/cf_v2/.cf/work/68/src', 'Read', { file_path: spill })).toBeNull()
 })
 
+test('D3 own tmp task output reads, other tmp files do not', () => {
+  const cwd = '/Users/m/cf_v2/.cf/work/9/src'
+  expect(readOutside(cwd, 'Read', { file_path: '/tmp/claude-501/-Users-m-cf-v2--cf-work-9-src/tasks/b1x2.output' })).toBeNull()
+  expect(readOutside(cwd, 'Read', { file_path: '/private/tmp/claude/-x/tasks/b1.output' })).toBeNull()
+  expect(readOutside(cwd, 'Read', { file_path: '/tmp/x-ray-attempts.md' })).toContain('run.outside_checkout')
+  expect(readOutside(cwd, 'Read', { file_path: '/tmp/claude-501/-x/notes.txt' })).toContain('run.outside_checkout')
+})
+
 test('an idle builder trips, a writer or a reviewer does not', () => {
   expect(idle(['Read', 'Write'], false, IDLE_TURNS)).toContain('run.idle')
   expect(idle(['Read', 'Write'], false, IDLE_TURNS - 1)).toBeNull()

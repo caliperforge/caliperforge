@@ -141,7 +141,7 @@ function openTranscript(packet: Packet): (message: unknown) => void {
 export function gate(packet: Packet, input: HookInput): SyncHookJSONOutput {
   if (input.hook_event_name !== 'PreToolUse') return { continue: true }
   if (input.tool_name === 'Bash') {
-    const refused = ranOutside(packet.tools, input.tool_input)
+    const refused = ranOutside(packet.tools, packet.cwd, input.tool_input)
     return refused === null ? { continue: true } : deny(refused)
   }
   const away = readOutside(packet.cwd, input.tool_name, input.tool_input, packet.reads)
@@ -157,7 +157,7 @@ export function readOutside(cwd: string, tool: string, args: unknown, reads: str
   const path = typeof given.file_path === 'string' ? given.file_path : typeof given.path === 'string' ? given.path : null
   if (path === null) return null
   const target = real(resolve(cwd, path))
-  if (SPILLED.test(target)) return null
+  if (SPILLED.test(target) || TASKS.test(target)) return null
   const rel = relative(real(resolve(cwd)), target)
   if (rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))) return null
   if (reads.some((dir) => within(real(resolve(dir)), target))) return null
@@ -171,6 +171,9 @@ function within(dir: string, target: string): boolean {
 
 /** Where the harness spills a tool result too long to hand back inline; the seat reads its own output there. */
 const SPILLED = /\/\.claude\/projects\/[^/]+\/[^/]+\/tool-results\//
+
+/** Where the harness writes a backgrounded command's output, under `/tmp` or macOS's `/private/tmp`. */
+const TASKS = /\/tmp\/claude[^/]*\/[^/]+\/tasks\/[^/]+\.output$/
 
 /**
  * The tick runs from a worktree whose `.cf` is a symlink, so a seat's cwd and the paths it reads can name
@@ -191,15 +194,26 @@ function wroteOutside(packet: Packet, tool: string, args: unknown): string | nul
   return refusal === null ? null : `${refusal.origin_kind}:${refusal.origin_ref} refuses a write to ${refusal.path}`
 }
 
-function ranOutside(tools: string[], args: unknown): string | null {
+function ranOutside(tools: string[], cwd: string, args: unknown): string | null {
   const given = args as { command?: unknown; run_in_background?: unknown }
   if (given.run_in_background === true) return 'ruling:seat.tools refuses run_in_background: run it in the foreground and wait for it'
   const said = given.command
   const command = typeof said === 'string' ? said.trim() : ''
-  if (ghWrite(command)) return `ruling:seat.tools refuses ${JSON.stringify(command)}: gh runs only as a gh api GET read`
+  const rest = unmoved(cwd, command)
+  if (ghWrite(rest)) return `ruling:seat.tools refuses ${JSON.stringify(command)}: gh runs only as a gh api GET read`
   const patterns = tools.flatMap((tool) => RULE.exec(tool)?.[1] ?? [])
-  if (!CHAINED.test(command) && patterns.some((pattern) => admits(pattern, command))) return null
+  if (!CHAINED.test(rest) && patterns.some((pattern) => admits(pattern, rest))) return null
   return `ruling:seat.tools refuses the command ${JSON.stringify(command)}`
+}
+
+/** `cd <cwd> && ` moves nowhere, so what follows it is judged alone. */
+const CD = /^cd\s+(?:"([^"]+)"|([^\s"]+))\s+&&\s+/
+
+function unmoved(cwd: string, command: string): string {
+  const cd = CD.exec(command)
+  if (cd === null) return command
+  const dir = cd[1] ?? cd[2] ?? ''
+  return real(resolve(cwd, dir)) === real(resolve(cwd)) ? command.slice(cd[0].length) : command
 }
 
 function admits(pattern: string, command: string): boolean {

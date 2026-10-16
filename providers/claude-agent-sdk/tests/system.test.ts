@@ -39,6 +39,13 @@ test('D5 fire returns the result session_id as session', async () => {
   expect((await claudeAgentSdk.fire(packet('/tmp/a/src', '1'))).session).toBe('abc')
 })
 
+test('D5 packet env is merged over the credential env', async () => {
+  await claudeAgentSdk.fire({ ...packet('/tmp/a/src', '1'), env: { X: '1' } })
+  expect(sent.at(-1)?.options.env).toMatchObject({ X: '1' })
+  await claudeAgentSdk.fire(packet('/tmp/a/src', '1'))
+  expect(sent.at(-1)?.options.env).not.toHaveProperty('X')
+})
+
 test('different folders and plans get one system prompt', async () => {
   await claudeAgentSdk.fire(packet('/tmp/a/src', '1'))
   await claudeAgentSdk.fire(packet('/tmp/b/src', '2'))

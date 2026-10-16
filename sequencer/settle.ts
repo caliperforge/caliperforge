@@ -4,7 +4,7 @@ import { API_ERROR, type Provider } from '../providers/kind.ts'
 import { digestOf } from '../store/approvals.ts'
 import { hold } from '../store/holds.ts'
 import { kindsOf, logged, newestRun, runSince } from '../store/events.ts'
-import type { Db } from '../store/index.ts'
+import { type Db, LOCKED } from '../store/index.ts'
 import type { Taken } from '../store/leases.ts'
 import { busy } from '../store/now.ts'
 import { advance, back, end, finish, internal, needsCeo, rewind, type PipeRow, type PlanRow, waiting } from '../store/plans.ts'
@@ -170,7 +170,6 @@ async function made(db: Db, root: string, plan: PlanRow, step: Step, provider: P
 
 /** A throw that says the host lost its network or the store is locked is not the job's fault: it holds the job on its step, uncounted, and the next tick tries again. */
 const OFFLINE = /Could not resolve host|getaddrinfo|ENOTFOUND|EAI_AGAIN|ENETUNREACH|ETIMEDOUT|Network is unreachable|Failed to connect to|Connection timed out/
-const LOCKED = 'database is locked'
 export const HELD = 'the next tick tries again'
 
 export function thrown(step: Step, message: string): Outcome {

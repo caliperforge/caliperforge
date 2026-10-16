@@ -328,12 +328,6 @@
   gap: 2d
 # cf pipe on site / cf pipe off site switches the site lane: pipes.enabled on the 'site' row
 - name: site_pipe
-- name: account_plans
-  switch: { key: accounts.weekly, value: '1' }
-  table: runs
-  column: at
-  where: seat = 'account_lead'
-  gap: 8d
 - name: lane_back_on
   table: events
   column: at

@@ -1,0 +1,5 @@
+- AI policy (astropy-project policies/ai-policy.md): disclose AI use for substantive parts; agents are not contributors; the human of record answers every review comment himself.
+- New-contributor vetting bot: PRs from accounts not on astropy/.github contributor-allowlist.txt are auto-closed until the author comments why the change matters and introduces himself in astropy Slack #new-contributor-requests. Two merged PRs put the account on the allowlist.
+- One fix per PR. Clean commit history. No reformatting of untouched lines (bsipocz, pyvo #625).
+- Every behaviour change gets a CHANGES.rst entry under the unreleased version, ending [#<PR>].
+- Tests: uv run --no-project --with-editable . --with pytest --with pytest-astropy --with pytest-timeout --with requests-mock pytest -q <paths>

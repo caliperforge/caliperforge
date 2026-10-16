@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { z } from 'zod'
 import { targetDigest } from '../sequencer/approve.ts'
 import type { Check } from '../sequencer/card.ts'
@@ -81,15 +83,23 @@ export function add(db: Db, root: string, repo: string, url: string, pipe: strin
     evidence_measured_at: pulse.measured_at.slice(0, 10), evidence: url, ineligible_ruling_id: ruling(db, origin, state) })
   if (why !== null) return { target, plan: null, state, why, origin }
   const plan = planFor(db, pipe, target, url, 'cf queue add')
-  put(root, plan, 'ask.md', askOf(row, scope.card))
+  put(root, plan, 'ask.md', askOf(row, scope.card, root, repo))
   if (scope.pr !== undefined) put(root, plan, 'pr.md', scope.pr)
   return { target, plan, state, why: `${repo}#${String(no)}${part === '' ? '' : ` ${part}`} queued`, origin }
 }
 
-export function askOf(row: Pick<Issue, 'title' | 'body'>, card: string | undefined): string {
+export function askOf(row: Pick<Issue, 'title' | 'body'>, card: string | undefined, root: string, repo: string): string {
   const theirs = `# ${row.title}\n\n${row.body}\n`
-  if (card === undefined) return theirs
-  return `${card.trimEnd()}\n\n${CARD}\n\n${theirs.replace(/^#/gm, '###')}`
+  const rules = house(root, repo)
+  const lead = rules === null ? '' : `${rules}\n\n`
+  if (card === undefined) return `${lead}${theirs}`
+  return `${card.trimEnd()}\n\n${lead}${CARD}\n\n${theirs.replace(/^#/gm, '###')}`
+}
+
+function house(root: string, repo: string): string | null {
+  const [owner = '', name = ''] = repo.split('/')
+  const path = join(root, 'house', owner, `${name}.md`)
+  return existsSync(path) ? `## House rules for ${repo}\n\n${readFileSync(path, 'utf8').trimEnd()}` : null
 }
 
 export const CARD = '## Their issue, for context only; the scope is the card above'
@@ -150,7 +160,7 @@ export function approve(db: Db, root: string, id: number, pipe: string, by: Hold
   const row = unplanned ? readIssue(t.repo, t.issue_no) : null
   const digest = targetDigest(t)
   const plan = row === null ? null : planFor(db, pipe, id, t.evidence, by)
-  if (plan !== null && row !== null) put(root, plan, 'ask.md', askOf(row, undefined))
+  if (plan !== null && row !== null) put(root, plan, 'ask.md', askOf(row, undefined, root, t.repo))
   if (plan !== null && check !== null) {
     checkout(root, plan, t.repo, branchOf(t.repo, t.issue_no, 1, t.part))
     const says = vetted(db, root, plan, id, check)

@@ -1,0 +1,5 @@
+- Announce first: comment on the issue before the branch is pushed (fink-broker CONTRIBUTING).
+- Large contributions without comments or tests are rejected; keep each PR to the files the issue needs.
+- Route tests are plain scripts with doctest Examples, run as python apps/routes/v1/<survey>/<route>/test.py <APIURL>; CI runs them against https://api.lsst.fink-portal.org.
+- Copy the Apache-2.0 header of the existing files, with the current year.
+- Tests: uv run --no-project --with requests --with pandas --with numpy --with pyarrow python <test.py> https://api.lsst.fink-portal.org

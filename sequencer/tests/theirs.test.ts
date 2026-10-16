@@ -1,7 +1,7 @@
-import { writeFileSync } from 'node:fs'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test, vi } from 'vitest'
-import { approve } from '../../cli/queue.ts'
+import { approve, askOf } from '../../cli/queue.ts'
 import { addTarget, targetRow } from '../../store/targets.ts'
 import { waiting } from '../card.ts'
 import { tick } from '../index.ts'
@@ -95,6 +95,18 @@ test('intake D1 the ask names only files the tree holds, no ..', () => {
   const w = world()
   checkout(w.root, 1, 'acme/widget', 'widget-12-a1')
   put(w.root, 1, 'ask.md', '# hello\n\nFix src/hello.ts. Not src/gone.ts or ../src/hello.ts\n')
+  expect(named(w.root, 1)).toEqual(['src/hello.ts'])
+})
+
+test('house D4 a file only the house rules name is not ours', () => {
+  const w = world()
+  checkout(w.root, 1, 'acme/widget', 'widget-12-a1')
+  mkdirSync(join(w.root, 'house', 'acme'), { recursive: true })
+  writeFileSync(join(w.root, 'house', 'acme', 'widget.md'), '- Log each change in src/hello.ts\n')
+  const at = { root: w.root, repo: 'acme/widget' }
+  put(w.root, 1, 'ask.md', askOf({ title: 'hello', body: 'Say hey.' }, '# fix: hey\n', at))
+  expect(named(w.root, 1)).toEqual([])
+  put(w.root, 1, 'ask.md', askOf({ title: 'hello', body: 'Say hey.' }, '# fix: hey in src/hello.ts\n', at))
   expect(named(w.root, 1)).toEqual(['src/hello.ts'])
 })
 

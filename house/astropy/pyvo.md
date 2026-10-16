@@ -1,0 +1,5 @@
+- Disclose AI use for substantive parts; the human of record answers every review comment himself (source: https://github.com/astropy/astropy-project/blob/main/policies/ai-policy.md, checked 2026-10-16)
+- PRs from accounts not on the vetting allowlist are auto-closed until the author comments why the change matters and introduces himself in astropy Slack #new-contributor-requests; two merged PRs add the account to the allowlist (source: https://github.com/astropy/astropy/pull/20628, checked 2026-10-16)
+- One fix per PR, clean commit history, no reformatting of untouched lines (source: https://github.com/astropy/pyvo/issues/625, checked 2026-10-16)
+- Every behaviour change gets a CHANGES.rst entry under the unreleased version, ending [#<PR>] (source: https://github.com/astropy/pyvo/blob/main/CHANGES.rst, checked 2026-10-16)
+- Ask on the issue before a PR into code another contributor is actively reworking (source: https://github.com/astropy/pyvo/pull/784, checked 2026-10-16)

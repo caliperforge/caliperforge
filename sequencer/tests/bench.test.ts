@@ -267,6 +267,17 @@ test('score D3 no target or no generate.json is refused uncloned', () => {
   expect(existsSync(join(planDir(root, 1), 'fuzz-bench'))).toBe(false)
 })
 
+test('D3 house_generator generates and is scored under its name', async () => {
+  const { root, db } = scoring(undefined, { target: 'euler-earn-m01', generator: 'house_generator' })
+  staffedIn(root)
+  const fired = stub(1234, 'completed', true)
+  expect(await generate(db, root, planById(db, 1), mapOf('bench').at(1), fired.provider)).toMatchObject({ outcome: 'pass' })
+  expect(fired.packets).toMatchObject([{ tools: seat(root, 'house_generator').manifest.tools }])
+  expect(runRows(db)).toMatchObject([{ seat: 'house_generator', staffed: 'house_generator' }])
+  expect(kernel(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  expect(scores(db)).toEqual([{ plan: 1, target: 'euler-earn-m01', generator: 'house_generator', ...SCORE, tokens: 1234, seconds: 1 }])
+})
+
 test('score D5 a comms plan still reaches the comms scorer', () => {
   const db = fresh(schema)
   queued(db, 'comms', mapOf('comms').steps.length - 1)

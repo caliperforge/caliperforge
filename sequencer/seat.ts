@@ -230,9 +230,9 @@ function lastQuestion(db: Db, root: string, plan: number): string {
   return `\n# Your last question\n\n${question}\n# Files you opened last time\n\n${rows.join('\n')}\n`
 }
 
-/** Atelier reads cf.db, so its brief writer may read the machine's schema and CLI, read-only. */
+/** Loupe reads cf.db, so its brief writer may read the machine's schema and CLI, read-only. */
 export function machineReads(root: string, plan: PlanRow, seat: string): string[] {
-  return plan.lane === 'atelier' && seat === 'brief_writer' ? [join(root, 'schema'), join(root, 'cli')] : []
+  return plan.lane === 'loupe' && seat === 'brief_writer' ? [join(root, 'schema'), join(root, 'cli')] : []
 }
 
 /** Dashboard jobs run side by side, so each section keeps to its own files. */

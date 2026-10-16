@@ -7,6 +7,7 @@ import { addRun } from '../../store/brief.ts'
 import { logged } from '../../store/events.ts'
 import { migrate, open, type Db } from '../../store/index.ts'
 import { metric, reader } from '../../store/metrics.ts'
+import { refusalAt } from '../../store/refusals.ts'
 import { exported, leaked } from '../export.ts'
 
 const PRS = vi.hoisted(() => {
@@ -32,7 +33,7 @@ const schema = join(import.meta.dirname, '../../schema')
 
 const now = new Date('2026-10-04T12:00:00Z')
 
-const ORDER = ['daily_activity', 'token_mix', 'runs_by_seat', 'gate_verdicts', 'plan_outcomes', 'pipeline_counts', 'tokens_per_landed_job', 'ceo_touches', 'outside_prs']
+const ORDER = ['daily_activity', 'token_mix', 'runs_by_seat', 'gate_verdicts', 'plan_outcomes', 'pipeline_counts', 'tokens_per_landed_job', 'ceo_touches', 'loop_counts', 'outside_prs']
 
 const NAMES = ORDER.map((n) => `${n}.json`).sort()
 
@@ -115,12 +116,35 @@ function touched(): string {
   return path
 }
 
+function looped(): string {
+  const path = seeded()
+  store.exec(`INSERT INTO plans (id, pipe_id, template, state, queued_at) VALUES (5, 1, 'research', 'done', '2026-09-21'),
+    (7, 1, 'research', 'refused', '2026-09-30');
+    INSERT INTO plans (id, pipe_id, template, state, queued_at, lane, seat, origin, title) VALUES (8, 1, 'pr_path', 'done', '2026-10-03',
+    'machine', 'typescript_specialist', 'https://github.com/o/r/issues/9', 'Repeat stop at step 2: refusal 000000000000');
+    INSERT INTO language_notes (plan, seat, file, line, old, new, why, at) VALUES (1, 'typescript_specialist', 'a.ts', 1, 'x', 'y', 'z',
+    '2026-09-30 10:00:00');
+    INSERT INTO drift_findings (name, state, detail, found_at, outcome, why, closed_at) VALUES
+    ('a', 'off', 'd', '2026-10-01', 'fixed', 'w', '2026-10-03T09:00:00Z'), ('b', 'off', 'd', '2026-10-01', 'covered', 'w', '2026-10-03T09:00:00Z')`)
+  for (const [plan, at] of [[5, '2026-09-22T09:00:00.000Z'], [7, '2026-10-01T09:00:00.000Z']] as const) {
+    addRun(store, { seat: 'typescript_specialist', at, input_tokens: 1, cache_write_tokens: 0, cache_read_tokens: 0, output_tokens: 1, plan,
+      step: 2, rule_hash: '0'.repeat(64), provider: 'claude-agent-sdk', model: 'm', effort: 'high', cache_write_1h_tokens: null, seconds: 1,
+      exit: 0, transcript_path: `${String(plan)}.transcript.jsonl`, cost_usd: 0.25 })
+  }
+  for (const [plan, blip] of [[1, 0], [1, 0], [5, 1], [7, 0]] as const) refusalAt(store, plan, blip, '2026-10-01 09:00:00')
+  for (const [kind, actor, message, issue, at] of [['director', 'director', 'file: the same stop on 3 plans', 9, '2026-10-02T09:00:00Z'],
+    ['ticket', 'fixer', 'the lockfile drifted', 10, '2026-09-23T10:00:00Z'], ['director', 'director', 'rule: tighten the brief', 11, '2026-10-01T09:00:00Z']] as const) {
+    logged(store, { plan: null, kind, actor, outcome: 'pass', message, pointer: `https://github.com/o/r/issues/${String(issue)}`, run: null }, at)
+  }
+  return path
+}
+
 const json =(name: string): { columns: string[]; rows: (string | number | null)[][] } & Record<string, unknown> =>
   JSON.parse(readFileSync(join(site, 'data', `${name}.json`), 'utf8')) as never
 
 const direct = (sql: string): string[] => metric(store, sql, '').rows.map((r) => JSON.stringify(r)).sort()
 
-test('D1 writes the nine files with the seven keys', () => {
+test('D1 writes the ten files with the seven keys', () => {
   expect(exported(seeded(), site, now)).toEqual(ORDER.map((n) => join(site, 'data', `${n}.json`)))
   expect(readdirSync(join(site, 'data')).sort()).toEqual(NAMES)
   for (const name of ORDER) {
@@ -231,6 +255,19 @@ test('D1 tokens per landed job: one cohort per Monday week', () => {
   expect(json('tokens_per_landed_job').columns)
     .toEqual(['week', 'jobs', 'mean_total_tokens', 'mean_fresh_tokens', 'mean_cache_read_tokens', 'mean_runs'])
   expect(json('tokens_per_landed_job').rows).toEqual([['2026-09-28', 2, 299, 268, 31, 2.5], ['2026-10-05', 1, 42, 42, 0, 1]])
+})
+
+test('D2 loop_counts: weekly, all and last 7 days, blips left out', () => {
+  exported(looped(), site, new Date('2026-10-20T12:00:00Z'))
+  expect(json('loop_counts').columns).toEqual(['period', 'landed', 'refusals', 'refusals_per_landed', 'first_pass', 'first_pass_share',
+    'rebuilt_landed', 'fix_tickets', 'fix_tickets_landed', 'language_notes', 'drift_fixed'])
+  expect(json('loop_counts').rows).toEqual([['2026-09-21', 1, 0, 0, 1, 1, 0, 1, 0, 0, 0], ['2026-09-28', 1, 2, 2, 0, 0, 1, 1, 1, 1, 1],
+    ['all', 2, 2, 1, 1, 0.5, 1, 2, 1, 1, 1], ['last_7_days', 0, 0, null, 0, null, 0, 0, 0, 0, 0]])
+})
+
+test('D6 loop_counts holds no URL, title or message', () => {
+  exported(looped(), site, now)
+  expect(readFileSync(join(site, 'data', 'loop_counts.json'), 'utf8')).not.toMatch(/github|issues\/|Repeat stop|same stop|lockfile|tighten|specialist/)
 })
 
 test('D1 leaked returns the whole matching key', () => {

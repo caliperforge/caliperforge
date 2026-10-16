@@ -15,7 +15,7 @@ const schema = join(import.meta.dirname, '../../schema')
 
 const FIRST = new Date('2026-10-14T11:20:00Z')
 
-const DATA = ['ceo_touches', 'daily_activity', 'gate_verdicts', 'outside_prs', 'pipeline_counts', 'plan_outcomes', 'runs_by_seat', 'token_mix',
+const DATA = ['ceo_touches', 'daily_activity', 'gate_verdicts', 'loop_counts', 'outside_prs', 'pipeline_counts', 'plan_outcomes', 'runs_by_seat', 'token_mix',
   'tokens_per_landed_job'].map((n) => `data/${n}.json`)
 
 const RUN = { at: '2026-10-13T09:00:00.000Z', input_tokens: 10, cache_write_tokens: 0, cache_read_tokens: 0, output_tokens: 1, plan: 1,
@@ -62,7 +62,7 @@ test('D1 the first lap from 05:15 commits and pushes the data', () => {
   expect(git(clone, ['log', '-1', '--format=%s']).trim()).toBe('data: 2026-10-14')
   expect(named()).toEqual(DATA)
   expect(head(origin)).toBe(head(clone))
-  expect(ofKind(db, 'site_data')).toEqual([{ plan: null, kind: 'site_data', actor: 'tick', outcome: 'pass', message: '9 files' }])
+  expect(ofKind(db, 'site_data')).toEqual([{ plan: null, kind: 'site_data', actor: 'tick', outcome: 'pass', message: '10 files' }])
   expect(pointers(db, 'site_data')).toEqual(['2026-10-14'])
 })
 

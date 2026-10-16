@@ -1,0 +1,3 @@
+- Announce first: comment on the issue before the branch is pushed (source: https://github.com/astrolabsoftware/fink-broker/blob/master/CONTRIBUTING.md, checked 2026-10-16)
+- Large contributions without comments or tests are rejected; keep each PR to the files the issue needs (source: https://github.com/astrolabsoftware/fink-broker/blob/master/CONTRIBUTING.md, checked 2026-10-16)
+- Route tests are plain scripts with doctest Examples, run as python apps/routes/v1/<survey>/<route>/test.py <APIURL> against https://api.lsst.fink-portal.org (source: https://github.com/astrolabsoftware/fink-object-api/blob/main/run_tests.sh, checked 2026-10-16)

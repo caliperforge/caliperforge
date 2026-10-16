@@ -14,7 +14,10 @@ tools:
   - Bash(echidna:*)
   - Bash(node:*)
   - Bash(bash:*)
+  - Bash(rm -f /tmp/x-ray-attempts.md)
 reads:
   - ~/.claude/skills/fizz
+  - ~/.claude/skills/x-ray
 write_paths:
   - test/fizz
+  - x-ray

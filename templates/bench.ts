@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process'
 import { cpSync, existsSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { basename, join } from 'node:path'
+import { basename, join, resolve } from 'node:path'
 import type { Provider } from '../providers/kind.ts'
 import { packet, real } from '../runner/index.ts'
 import { load, seat } from '../runner/rules.ts'
@@ -29,10 +29,13 @@ const META = 'fizz_data'
 
 const TIMEOUTS = { BASH_DEFAULT_TIMEOUT_MS: '1800000', BASH_MAX_TIMEOUT_MS: '1800000' }
 
-function ask(skill: string | undefined): string {
+const ATTEMPTS = '/tmp/x-ray-attempts.md'
+
+function ask(skill: string | undefined, xray: string | undefined): string {
   const said = `Generate the fuzz suite for the project in the working folder in automatic mode, asking nothing: SUITE_DIR is ${SUITE} and META_DIR is ${SUITE}/${META}. `
     + 'Run forge in the foreground, never in the background, and do not end the turn while waiting on a build.'
-  return skill === undefined ? said : `${said}\nSKILL_PATH is ${skill}. PROJECT_ROOT is the working folder: run each command from there, without cd.`
+  const skilled = skill === undefined ? said : `${said}\nSKILL_PATH is ${skill}. PROJECT_ROOT is the working folder: run each command from there, without cd.`
+  return xray === undefined ? skilled : `${skilled}\nx-ray is installed at ${xray}: at Attempt 2, skip the git clone and run ${xray}/SKILL.md inline against PROJECT_ROOT.`
 }
 
 function fields(text: string): Record<string, string | undefined> {
@@ -84,9 +87,11 @@ export async function generate(db: Db, root: string, plan: PlanRow, step: Step, 
   if (unchecked !== null) return { outcome: 'refuse', spans: ['bench.no_checkout'], note: unchecked, to: 0 }
   load(db, root)
   const { manifest, prompt, hash } = seat(root, name)
-  const reads = manifest.reads?.map((path) => real(path.startsWith('~/') ? join(homedir(), path.slice(2)) : path))
-  const built = packet(manifest, prompt, '', ask(reads?.[0]), dir, pending(planDir(root, plan.id), `step-${String(step.step)}`))
-  const fired = await provider.fire({ ...built, wall: CEILING, env: TIMEOUTS, ...(reads === undefined ? {} : { reads }) })
+  const granted = manifest.reads?.map((path) => real(path.startsWith('~/') ? join(homedir(), path.slice(2)) : path)) ?? []
+  const built = packet(manifest, prompt, '', ask(granted[0], granted.find((path) => basename(path) === 'x-ray')), dir,
+    pending(planDir(root, plan.id), `step-${String(step.step)}`))
+  const fired = await provider.fire({ ...built, refuse: (path) => real(resolve(dir, path)) === real(ATTEMPTS) ? null : built.refuse(path), wall: CEILING,
+    env: TIMEOUTS, reads: [...granted, real(ATTEMPTS)] })
   const run = runLogged(db, { plan: plan.id, step: step.step, seat: name, rule_hash: hash, provider: provider.name, model: manifest.model,
     effort: manifest.effort, exit: fired.exit, fired, staffed: name })
   byRun(db, run, fired.transcript_path)

@@ -198,6 +198,10 @@ test('D1 D7 tick fires fizz_generator in the scratch tree', async () => {
 
 const SKILL = join(homedir(), '.claude/skills/fizz')
 
+const XRAY = join(homedir(), '.claude/skills/x-ray')
+
+const ATTEMPTS = '/tmp/x-ray-attempts.md'
+
 test('D2 D3 generate admits fizz Step 1-2 and cd cwd, denies curl', async () => {
   const fired = stub(CEILING, 'stopped', true)
   await generated(fired)
@@ -206,26 +210,35 @@ test('D2 D3 generate admits fizz Step 1-2 and cd cwd, denies curl', async () => 
   const cwd = packet.cwd
   for (const command of ['pwd', 'forge --version', 'medusa --version', 'echidna --version', `bash ${SKILL}/scripts/ensure_foundry.sh ${cwd}`,
     `node ${SKILL}/scripts/extract_abis.js ${cwd} --meta-dir test/fizz/fizz_data`, 'FOUNDRY_PROFILE=fuzz forge build',
-    `cd ${cwd} && forge build`, `cd "${cwd}" && forge build`, `cd ${cwd} && FOUNDRY_PROFILE=fuzz forge test --match-contract FoundryTester -vvv`]) {
+    `cd ${cwd} && forge build`, `cd "${cwd}" && forge build`, `cd ${cwd} && FOUNDRY_PROFILE=fuzz forge test --match-contract FoundryTester -vvv`,
+    `rm -f ${ATTEMPTS}`]) {
     expect(gate(packet, bash(command))).toEqual({ continue: true })
   }
   for (const command of ['curl https://example.com', 'cd /tmp && forge build', `cd ${cwd}/.. && forge build`, `cd ${cwd} && curl https://example.com`,
     `cd ${cwd} && forge build | tail -5`, `cd ${cwd} && forge build && curl x`, 'cd "$(curl x)/.." && forge build', 'cd "`curl x`/.." && forge build',
-    'cd $(curl${IFS}x)/.. && forge build', 'cd ~/.. && forge build']) {
+    'cd $(curl${IFS}x)/.. && forge build', 'cd ~/.. && forge build', `rm -rf ${ATTEMPTS}`, 'rm -f /tmp/other.md', `rm -f ${ATTEMPTS}; curl x`,
+    'git clone --depth 1 https://github.com/pashov/skills.git /tmp/pashov-skills-xray-install']) {
     expect(gate(packet, bash(command)).hookSpecificOutput).toMatchObject({ permissionDecision: 'deny' })
     expect(JSON.stringify(gate(packet, bash(command)))).toContain('ruling:seat.tools')
   }
 })
 
-test('D4 D5 fizz reads its skill folder and names SKILL_PATH', async () => {
+test('D2 D4 D5 fizz reads fizz, x-ray and the attempts file', async () => {
   const fired = stub(CEILING, 'stopped', true)
   await generated(fired)
   const [packet] = fired.packets
   if (packet === undefined) throw new Error('the generator was not fired')
-  expect(packet.reads).toEqual([real(SKILL)])
-  expect(readOutside(packet.cwd, 'Read', { file_path: join(SKILL, 'references/template-map.md') }, packet.reads)).toBeNull()
-  expect(readOutside(packet.cwd, 'Read', { file_path: join(homedir(), '.claude/skills/x-ray/SKILL.md') }, packet.reads)).toContain('run.outside_checkout')
+  expect(packet.reads).toEqual([real(SKILL), real(XRAY), real(ATTEMPTS)])
+  for (const path of [join(SKILL, 'references/template-map.md'), join(XRAY, 'SKILL.md'), ATTEMPTS]) {
+    expect(readOutside(packet.cwd, 'Read', { file_path: path }, packet.reads)).toBeNull()
+  }
+  for (const path of [join(homedir(), '.claude/skills/other/SKILL.md'), '/tmp/other.md']) {
+    expect(readOutside(packet.cwd, 'Read', { file_path: path }, packet.reads)).toContain('run.outside_checkout')
+  }
+  for (const path of [ATTEMPTS, join(packet.cwd, 'x-ray/x-ray.md')]) expect(packet.refuse(path)).toBeNull()
+  for (const path of ['/tmp/other.md', join(packet.cwd, 'README.md')]) expect(packet.refuse(path)).toMatchObject({ origin_ref: 'seat.write_paths' })
   expect(packet.prompt).toContain(`SKILL_PATH is ${real(SKILL)}.`)
+  expect(packet.prompt).toContain(`${real(XRAY)}/SKILL.md`)
   expect(packet.env).toEqual({ BASH_DEFAULT_TIMEOUT_MS: '1800000', BASH_MAX_TIMEOUT_MS: '1800000' })
   expect(packet.prompt).toContain('Run forge in the foreground, never in the background, and do not end the turn while waiting on a build.')
 })
@@ -240,7 +253,7 @@ test('D1 D2 a root reached through a symlink gets real paths', async () => {
   const [packet] = fired.packets
   if (packet === undefined) throw new Error('the generator was not fired')
   expect(packet.cwd).toBe(join(realpathSync(elsewhere), '.cf/work/1/src'))
-  expect(packet.reads).toEqual([real(SKILL)])
+  expect(packet.reads).toEqual([real(SKILL), real(XRAY), real(ATTEMPTS)])
   for (const dir of [srcDir(root, 1), packet.cwd]) {
     expect(readOutside(packet.cwd, 'Read', { file_path: join(dir, 'src/Vault.sol') }, packet.reads)).toBeNull()
   }
@@ -383,7 +396,7 @@ test('D3 house_generator generates and is scored under its name', async () => {
   const fired = stub(1234, 'completed', true)
   expect(await generate(db, root, planById(db, 1), mapOf('bench').at(1), fired.provider)).toMatchObject({ outcome: 'pass' })
   expect(fired.packets).toMatchObject([{ tools: seat(root, 'house_generator').manifest.tools }])
-  expect(fired.packets[0]?.reads).toBeUndefined()
+  expect(fired.packets[0]?.reads).toEqual([real(ATTEMPTS)])
   expect(fired.packets[0]?.prompt).not.toContain('SKILL_PATH')
   expect(runRows(db)).toMatchObject([{ seat: 'house_generator', staffed: 'house_generator' }])
   expect(kernel(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })

@@ -44,9 +44,10 @@ test('#274 a granted folder reads, nothing beside it does', () => {
 })
 
 test('D4 a granted skill folder reads, a sibling skill does not', () => {
-  const reads = ['/Users/m/.claude/skills/fizz']
+  const reads = ['/Users/m/.claude/skills/fizz', '/Users/m/.claude/skills/x-ray']
   expect(readOutside('/Users/m/cf_v2/.cf/work/9/src', 'Read', { file_path: '/Users/m/.claude/skills/fizz/references/template-map.md' }, reads)).toBeNull()
-  expect(readOutside('/Users/m/cf_v2/.cf/work/9/src', 'Read', { file_path: '/Users/m/.claude/skills/x-ray/SKILL.md' }, reads)).toContain('run.outside_checkout')
+  expect(readOutside('/Users/m/cf_v2/.cf/work/9/src', 'Read', { file_path: '/Users/m/.claude/skills/x-ray/SKILL.md' }, reads)).toBeNull()
+  expect(readOutside('/Users/m/cf_v2/.cf/work/9/src', 'Read', { file_path: '/Users/m/.claude/skills/other/SKILL.md' }, reads)).toContain('run.outside_checkout')
 })
 
 test('spilled tool result reads', () => {
@@ -60,6 +61,13 @@ test('D3 own tmp task output reads, other tmp files do not', () => {
   expect(readOutside(cwd, 'Read', { file_path: '/private/tmp/claude/-x/tasks/b1.output' })).toBeNull()
   expect(readOutside(cwd, 'Read', { file_path: '/tmp/x-ray-attempts.md' })).toContain('run.outside_checkout')
   expect(readOutside(cwd, 'Read', { file_path: '/tmp/claude-501/-x/notes.txt' })).toContain('run.outside_checkout')
+})
+
+test('D2 a granted attempts file reads, other tmp files do not', () => {
+  const cwd = '/Users/m/cf_v2/.cf/work/9/src'
+  const reads = ['/tmp/x-ray-attempts.md']
+  expect(readOutside(cwd, 'Read', { file_path: '/tmp/x-ray-attempts.md' }, reads)).toBeNull()
+  expect(readOutside(cwd, 'Read', { file_path: '/tmp/claude-501/-x/notes.txt' }, reads)).toContain('run.outside_checkout')
 })
 
 test('an idle builder trips, a writer or a reviewer does not', () => {

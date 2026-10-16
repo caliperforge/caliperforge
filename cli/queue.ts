@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { z } from 'zod'
 import { targetDigest } from '../sequencer/approve.ts'
 import type { Check } from '../sequencer/card.ts'
@@ -81,15 +83,27 @@ export function add(db: Db, root: string, repo: string, url: string, pipe: strin
     evidence_measured_at: pulse.measured_at.slice(0, 10), evidence: url, ineligible_ruling_id: ruling(db, origin, state) })
   if (why !== null) return { target, plan: null, state, why, origin }
   const plan = planFor(db, pipe, target, url, 'cf queue add')
-  put(root, plan, 'ask.md', askOf(row, scope.card))
+  put(root, plan, 'ask.md', askOf(row, scope.card, { root, repo }))
   if (scope.pr !== undefined) put(root, plan, 'pr.md', scope.pr)
   return { target, plan, state, why: `${repo}#${String(no)}${part === '' ? '' : ` ${part}`} queued`, origin }
 }
 
-export function askOf(row: Pick<Issue, 'title' | 'body'>, card: string | undefined): string {
+export function askOf(row: Pick<Issue, 'title' | 'body'>, card: string | undefined, at?: { root: string; repo: string }): string {
   const theirs = `# ${row.title}\n\n${row.body}\n`
   if (card === undefined) return theirs
-  return `${card.trimEnd()}\n\n${CARD}\n\n${theirs.replace(/^#/gm, '###')}`
+  return `${card.trimEnd()}\n\n${house(at)}${CARD}\n\n${theirs.replace(/^#/gm, '###')}`
+}
+
+function house(at: { root: string; repo: string } | undefined): string {
+  if (at === undefined) return ''
+  const path = join(at.root, 'house', `${at.repo}.md`)
+  return existsSync(path) ? `## House rules for ${at.repo}\n\n${readFileSync(path, 'utf8').trimEnd()}\n\n` : ''
+}
+
+export function unhoused(ask: string): string {
+  const from = ask.search(/^## House rules for /m)
+  const to = ask.indexOf(CARD)
+  return from === -1 || to < from ? ask : `${ask.slice(0, from)}${ask.slice(to)}`
 }
 
 export const CARD = '## Their issue, for context only; the scope is the card above'

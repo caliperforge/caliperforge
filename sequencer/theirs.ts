@@ -2,6 +2,7 @@ import { statSync } from 'node:fs'
 import { join } from 'node:path'
 import { z } from 'zod'
 import { gh, mentions, ours, WINDOW, type Read } from '../cli/gh.ts'
+import { unhoused } from '../cli/queue.ts'
 import { parse } from '../rails/diff.ts'
 import type { Check, Target } from './card.ts'
 import { diffOf, git, MAIN, maybe, srcDir } from './workspace.ts'
@@ -44,7 +45,7 @@ function diffed(root: string, plan: number): string[] {
 /** The ask's tokens that are files in the checkout; before a build that tree is upstream main. */
 export function named(root: string, plan: number): string[] {
   const dir = srcDir(root, plan)
-  const tokens = (maybe(root, plan, 'ask.md') ?? '').match(/[\w./-]+/g) ?? []
+  const tokens = unhoused(maybe(root, plan, 'ask.md') ?? '').match(/[\w./-]+/g) ?? []
   return [...new Set(tokens.map((t) => t.replace(/\.+$/, '')))]
     .filter((t) => !t.includes('..') && statSync(join(dir, t), { throwIfNoEntry: false })?.isFile() === true)
 }

@@ -1,6 +1,0 @@
-- name: account_plans
-  switch: { key: accounts.weekly, value: '1' }
-  table: runs
-  column: at
-  where: seat = 'account_lead'
-  gap: 8d

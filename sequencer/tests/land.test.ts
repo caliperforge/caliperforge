@@ -121,12 +121,12 @@ test('a loupe plan installs once, after send and close',async () => {
   expect(sent).toEqual([FORKED, 'send src main', `close caliperforge/caliperforge#34 ${sha.slice(0, 7)}`, 'install'])
 })
 
-test('an atelier plan does not install',async () => {
+test('a machine plan does not install',async () => {
   const w = mine()
   const sent: string[] = []
   const wire = watched(sent, w.root, ID)
   await atBatch(w, wire)
-  relane(w.db, ID, 'atelier')
+  relane(w.db, ID, 'machine')
 
   await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
   const sha = git(srcDir(w.root, ID), ['rev-parse', 'main'])

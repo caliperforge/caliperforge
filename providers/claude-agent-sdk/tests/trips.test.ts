@@ -43,6 +43,12 @@ test('#274 a granted folder reads, nothing beside it does', () => {
   expect(readOutside(cwd, 'Read', { file_path: '/Users/m/cf_v2/schema-old/x.sql' }, reads)).toContain('run.outside_checkout')
 })
 
+test('D4 a granted skill folder reads, a sibling skill does not', () => {
+  const reads = ['/Users/m/.claude/skills/fizz']
+  expect(readOutside('/Users/m/cf_v2/.cf/work/9/src', 'Read', { file_path: '/Users/m/.claude/skills/fizz/references/template-map.md' }, reads)).toBeNull()
+  expect(readOutside('/Users/m/cf_v2/.cf/work/9/src', 'Read', { file_path: '/Users/m/.claude/skills/x-ray/SKILL.md' }, reads)).toContain('run.outside_checkout')
+})
+
 test('spilled tool result reads', () => {
   const spill = '/Users/m/.claude/projects/-Users-m-cf-v2--cf-work-68-src/44737eb4/tool-results/bvvskcyql.txt'
   expect(readOutside('/Users/m/cf_v2/.cf/work/68/src', 'Read', { file_path: spill })).toBeNull()

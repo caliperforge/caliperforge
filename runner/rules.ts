@@ -27,6 +27,7 @@ export const Seat = z.object({
   model: z.string(),
   effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']),
   tools: z.array(z.string()).min(1),
+  reads: z.array(z.string()).optional(),
   write_paths: z.array(z.string()),
 }).refine((s) => s.write_paths.length > 0 || !s.tools.some((t) => t !== LOOK && t !== GH && WRITERS.has(bare(t))), {
   message: `a seat with no write_paths may hold none of ${[...WRITERS].join(', ')}, save ${LOOK} and ${GH}`,

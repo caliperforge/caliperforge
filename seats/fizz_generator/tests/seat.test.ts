@@ -10,8 +10,9 @@ const root = join(import.meta.dirname, '../../..')
 const TODAY = '2026-10-14'
 const SHA = '92b0ea6786e6c210bc9a839e4813d50876c1c550'
 const SKILL = 'fa706e94e9ec3456528985548f46461d44442d9223e26b2a0dbbb8b5f522172a'
-const TOOLS = ['Read', 'Glob', 'Grep', 'Write', 'Edit', 'Bash(forge build:*)', 'Bash(forge test:*)', 'Bash(medusa fuzz:*)']
-const COMMANDS = new Set(['Bash(forge build:*)', 'Bash(forge test:*)', 'Bash(medusa fuzz:*)'])
+const COMMANDS = new Set(['Bash(pwd)', 'Bash(forge:*)', 'Bash(FOUNDRY_PROFILE=fuzz forge:*)', 'Bash(medusa:*)', 'Bash(echidna:*)', 'Bash(node:*)',
+  'Bash(bash:*)'])
+const TOOLS = ['Read', 'Glob', 'Grep', 'Write', 'Edit', ...COMMANDS]
 
 function copied(): string {
   const tree = mkdtempSync(join(tmpdir(), 'cf-fizz-generator-'))
@@ -26,18 +27,18 @@ function limited(tools: string[]): void {
 
 test('D1: the manifest loads past its digests', () => {
   expect(seat(root, 'fizz_generator').manifest).toEqual({
-    seat: 'fizz_generator', model: 'claude-opus-5-5', effort: 'high', tools: TOOLS, write_paths: ['test/fizz'],
+    seat: 'fizz_generator', model: 'claude-opus-5-5', effort: 'high', tools: TOOLS, reads: ['~/.claude/skills/fizz'], write_paths: ['test/fizz'],
   })
 })
 
-test('D2: Bash is limited to forge build, forge test, medusa fuzz', () => {
+test('D2: Bash is limited to pwd and the fizz tool commands', () => {
   const tools = seat(root, 'fizz_generator').manifest.tools
   expect(tools).toEqual(TOOLS)
   limited(tools)
 })
 
-test('D6: bare Bash or a wider pattern fails the D2 limit', () => {
-  for (const extra of ['Bash', 'Bash(forge:*)']) expect(() => { limited([...TOOLS, extra]) }).toThrow()
+test('D6: bare Bash or another command fails the D2 limit', () => {
+  for (const extra of ['Bash', 'Bash(curl:*)']) expect(() => { limited([...TOOLS, extra]) }).toThrow()
 })
 
 test('D3: line 1 is the pinned sha and SKILL.md follows verbatim', () => {

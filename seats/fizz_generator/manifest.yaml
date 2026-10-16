@@ -7,8 +7,14 @@ tools:
   - Grep
   - Write
   - Edit
-  - Bash(forge build:*)
-  - Bash(forge test:*)
-  - Bash(medusa fuzz:*)
+  - Bash(pwd)
+  - Bash(forge:*)
+  - Bash(FOUNDRY_PROFILE=fuzz forge:*)
+  - Bash(medusa:*)
+  - Bash(echidna:*)
+  - Bash(node:*)
+  - Bash(bash:*)
+reads:
+  - ~/.claude/skills/fizz
 write_paths:
   - test/fizz

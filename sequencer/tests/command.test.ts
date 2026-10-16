@@ -15,7 +15,7 @@ const FENCE = (line: string): string => `---\noutcome: command\nrun: ${line}\n--
 const REFILE = `cf gh refile ${SELF}#7 caliperforge/atelier`
 
 async function commanding(line: string): Promise<World> {
-  gh.mockReset().mockReturnValue({ title: 'the old title' })
+  gh.mockReset().mockReturnValue({ title: 'the old title', body: 'the old body' })
   const w = world()
   dropPlan(w.db, 1)
   ours(w.root)

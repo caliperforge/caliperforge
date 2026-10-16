@@ -67,6 +67,7 @@ VALUES
   ('rules/registry/58-site_data.yaml', 'card', 'rules/registry/58-site_data.yaml', '85aa464fbfaac1614776f03f9289d2494edc667d862ce562773df0deb6ca6a7c', '2026-10-14'),
   ('rules/registry/58-site_pipe.yaml', 'card', 'rules/registry/58-site_pipe.yaml', '3f52e414c5d41296cbe229112dfc2db343fb0f8867803c70e6ed2d9105cf6e13', '2026-10-14'),
   ('rules/registry/60-lane_back_on.yaml', 'card', 'rules/registry/60-lane_back_on.yaml', 'e66057b5db69fef0ef02a6ef62f3d6bc3d92466a3013e7b71fb8829e97416457', '2026-10-16'),
+  ('rules/registry/61-house_generator.yaml', 'card', 'rules/registry/61-house_generator.yaml', 'f0f205cb02cc5ff52f5148b6dde254e6cfccd8dff6809c9ddc387e0bf338f0ba', '2026-10-16'),
   ('rules/repo-classes.yaml', 'card', 'rules/repo-classes.yaml', '0ab38b3779b38a5b57c3eaae4ace5e650618dfb4fecbd80b4477958b115ee550', '2026-10-16'),
   ('rules/staffing.yaml', 'card', 'rules/staffing.yaml', 'aa91207f2660fe1f31421d100b3118981715abc9ed8e1381a6d2962c464d0d36', '2026-10-05'),
   ('completion-audit', 'rail', 'rules/rails.yaml', 'b46b445806d399b61887a5259eb0a6893444efcbe5acf2e6dd534507bc0882f3', '2026-09-17'),

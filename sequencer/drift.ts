@@ -1,10 +1,8 @@
-import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { parse } from 'yaml'
 import { z } from 'zod'
 import type { Pr } from '../cli/gh.ts'
 import { fill } from '../cli/record.ts'
-import { registered } from '../runner/rules.ts'
 import { addFinding, answered, closeFinding, holds, newest, setting, stalled, unclosed, worked } from '../store/drift.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
@@ -12,6 +10,7 @@ import { get, hhmm, set, zone } from '../store/lanes.ts'
 import { holder } from '../store/leases.ts'
 import { needsCeo, openPipes, planById } from '../store/plans.ts'
 import { repos } from '../store/record.ts'
+import { registry } from './registry.ts'
 import { HELD } from './settle.ts'
 import { cloned, conflicted, drop, maybe, planDir, put, snapshot } from './workspace.ts'
 
@@ -31,8 +30,8 @@ export const Entry = z.object({
 
 export type Entry = z.infer<typeof Entry>
 
-export function mechanisms(root: string): Entry[] {
-  return registered(root).flatMap((path) => Entry.array().parse(parse(readFileSync(join(root, path), 'utf8'))))
+export function mechanisms(root: string, at?: string): Entry[] {
+  return registry(root, at).flatMap((text) => Entry.array().parse(parse(text)))
 }
 
 export interface Drifted { name: string; state: 'off' | 'silent' | 'stale' | 'seen'; detail: string; newest?: string | number | null }

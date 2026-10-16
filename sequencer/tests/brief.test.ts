@@ -4,7 +4,7 @@ import { join, relative } from 'node:path'
 import { expect, test } from 'vitest'
 import { walk } from '../../checks/tree.ts'
 import { MAP } from '../../cli/map.ts'
-import type { Packet } from '../../providers/kind.ts'
+import type { Packet, Provider } from '../../providers/kind.ts'
 import { ofKind, runRows } from '../../store/events.ts'
 import { recorded } from '../../store/files.ts'
 import { holdOf, release, retried, returnToLane } from '../../store/holds.ts'
@@ -12,13 +12,14 @@ import { get, priority } from '../../store/lanes.ts'
 import { advance, briefed, dropPlan, end, needsCeo, requeue, retry, titles } from '../../store/plans.ts'
 import { WHY } from '../../store/refusals.ts'
 import { estimate, files, pointed, references, shape, SHARED, split, TEMPLATE, unclear, writable, type Refused } from '../brief.ts'
+import { trimmed } from '../trim.ts'
 import { tick } from '../index.ts'
 import { unhold } from '../hold.ts'
 import { blocked } from '../steps.ts'
 import { WHOLE } from '../handout.ts'
 import { afresh, drop, maybe, move, put, srcDir, titleOf } from '../workspace.ts'
 import { git } from './bases.ts'
-import { approve, CARRIED, internalPlan, moveMain, ours, plan, reads, stub, world, type World } from './world.ts'
+import { approve, briefFor, CARRIED, internalPlan, moveMain, ours, plan, reads, stub, world, type World } from './world.ts'
 
 const repo = join(import.meta.dirname, '../..')
 
@@ -400,6 +401,59 @@ test('a brief saved after a shape refusal leaves no refusal', async () => {
   expect((await tick(w.db, w.root, stub(CARRIED, 0, undefined, (p) => packets.push(p))))[0])
     .toMatchObject({ step: 2, outcome: 'pass' })
   expect(packets[0]?.prompt).not.toContain('# Refused')
+})
+
+/** The brief the stub writes on this plan's checkout. */
+const plain = (w: World): string => briefFor('\n# Issue\n# let an internal plan run', srcDir(w.root, ID))
+
+const longer = (text: string): string =>
+  text.replace('- everything the ask does not name', ['- everything the ask does not name', ...Array.from({ length: 61 }, () => '- a line')].join('\n'))
+
+/** A world whose first brief, `reply` of the stub's made 61 lines longer, was refused on its length; ticked to the fire after. */
+async function overran(reply = (b: string): string => b): Promise<World> {
+  const w = mine()
+  await tick(w.db, w.root, stub(CARRIED))
+  const writer: Provider = { ...stub(CARRIED), fire: (p) => stub(CARRIED, 0, undefined, undefined, longer(reply(briefFor(p.prompt, p.cwd)))).fire(p) }
+  const fired = (await tick(w.db, w.root, writer))[0]
+  expect(fired).toMatchObject({ step: 1, outcome: 'refuse', spans: ['100 lines'] })
+  await tick(w.db, w.root, stub(CARRIED))
+  return w
+}
+
+test('D1: a length-only refusal refires as a bare trim', async () => {
+  const w = await overran()
+  const packets: Packet[] = []
+  await tick(w.db, w.root, stub(CARRIED, 0, undefined, (p) => packets.push(p)))
+
+  const prompt = packets[0]?.prompt ?? ''
+  expect(prompt).toContain(`# Issue\n\n${longer(plain(w)).trimEnd()}\n\n# Trim it\n`)
+  expect(prompt).toContain('This brief is 109 lines and the ceiling is 100: cut at least 9 lines.')
+  for (const absent of ['# The files', '# MAP.md', TEMPLATE, '\n# Files over 300 lines\n']) expect(prompt).not.toContain(absent)
+  expect(packets[0]?.tools).toEqual([])
+  expect(packets[0]?.servers).toBeUndefined()
+})
+
+test('D2: a trim that drops a D row or a section is refused', async () => {
+  const w = await overran()
+  const fired = (await tick(w.db, w.root, stub(CARRIED, 0, undefined, undefined, plain(w).replace('- D2 a call with no name is refused\n', ''))))[0]
+  expect(fired).toMatchObject({ step: 1, outcome: 'refuse', spans: ['D2'] })
+  expect(maybe(w.root, ID, 'issue.md')).toBeNull()
+  expect(trimmed(longer(plain(w)), plain(w).replace('## Out of scope\n\n- everything the ask does not name\n\n', '')))
+    .toEqual({ span: '## Out of scope', reason: 'the trim dropped ## Out of scope' })
+})
+
+test('D3: a long brief with another fault reruns in full', async () => {
+  const w = await overran((b) => b.replace('## Files\n\n- src/hello.ts\n', '## Files\n\n- src/hello.ts\n- src/nowhere.ts\n'))
+  const packets: Packet[] = []
+  await tick(w.db, w.root, stub(CARRIED, 0, undefined, (p) => packets.push(p)))
+  expect(packets[0]?.prompt).toContain(TEMPLATE)
+  expect(packets[0]?.prompt).toMatch(/^# MAP\.md/)
+})
+
+test('D4: a trim that keeps every row is saved as the brief', async () => {
+  const w = await overran()
+  expect((await tick(w.db, w.root, stub(CARRIED)))[0]).toMatchObject({ step: 1, outcome: 'pass', note: 'brief_writer: brief written' })
+  expect(briefOf(w)).toBe(plain(w))
 })
 
 test('an unclear reply holds for the COO and spends no retry', async () => {

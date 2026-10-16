@@ -24,6 +24,7 @@ import { byRun, opened, pending, unfinished } from '../store/transcript.ts'
 import { languageOfSeat, type Step } from '../templates/pr-path.ts'
 import { parse } from '../rails/diff.ts'
 import { estimate, formats, human, pointed, references, section, shape, split, TEMPLATE, unclear, wide, WIDE, type Part } from './brief.ts'
+import { overlong, trim, trimmed } from './trim.ts'
 import { repoOf } from './ready.ts'
 import { limitOf } from './size.ts'
 import { handout, long, touched, type Handed } from './handout.ts'
@@ -142,14 +143,14 @@ export async function fireBrief(db: Db, root: string, plan: PlanRow, step: Step,
   const src = srcDir(root, plan.id)
   const standing = maybe(root, plan.id, 'issue.md')
   if (standing !== null && shape(standing, ask, src, !internal(plan)) === null) return stands()
-  const fired = await ran(db, root, plan, step, provider, again(db, root, plan.id, ask) + store(root, plan) + seams(root, plan.seat) + formats(ask) + long(src) + wideAsk(ask), false)
+  const { fired, cut } = await written(db, root, plan, step, provider, ask, src)
   drop(root, plan.id, 'brief.refused.md')
   if (fired.ended !== 'completed') return exited(step, fired)
   const line = commanded(fired.text)
   if (line !== null) return { outcome: 'pass', spans: [], note: `${step.runs}: ${line}`, command: line }
   const question = unclear(fired.text)
   if (question !== null) return asking(root, plan.id, step, question)
-  const refused = shape(fired.text, ask, src, !internal(plan))
+  const refused = (cut === null ? null : trimmed(cut, fired.text)) ?? shape(fired.text, ask, src, !internal(plan))
   const reply = refused === null ? languages(plan, fired.text) ?? fired.text : fired.text
   const parts = split(reply)
   if (parts !== null) {
@@ -168,6 +169,12 @@ export async function fireBrief(db: Db, root: string, plan: PlanRow, step: Step,
   drop(root, plan.id, 'refusal.md')
   drop(root, plan.id, 'question.sha')
   return { outcome: 'pass', spans: [], note: `${step.runs}: brief written` }
+}
+
+async function written(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider, ask: string, src: string): Promise<{ fired: Fired; cut: string | null }> {
+  const last = maybe(root, plan.id, 'brief.refused.md')
+  const lines = last === null || maybe(root, plan.id, 'refusal.md') === null || oversized(db, plan, last) !== null ? null : overlong(last, ask, src, !internal(plan))
+  return { fired: await ran(db, root, plan, step, provider, last === null || lines === null ? again(db, root, plan.id, ask) + store(root, plan) + seams(root, plan.seat) + formats(ask) + long(src) + wideAsk(ask) : trim(last, lines), false, lines === null), cut: lines === null ? null : last }
 }
 
 function oversized(db: Db, plan: PlanRow, brief: string): string | null {
@@ -256,7 +263,7 @@ function askOf(root: string, plan: number): string {
 }
 
 export async function ran(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider,
-  issue: string, ours: boolean): Promise<Fired> {
+  issue: string, ours: boolean, checkout = true): Promise<Fired> {
   load(db, root)
   const { manifest, prompt, hash } = seat(root, step.runs, step.mode)
   const src = srcDir(root, plan.id)
@@ -264,13 +271,13 @@ export async function ran(db: Db, root: string, plan: PlanRow, step: Step, provi
   const built = packet(manifest, prompt + noteSection(db, root, plan, step), spec, issue, src,
     transcriptOf(root, plan.id, step.step), ours, fenceFor(db, plan.id, manifest.write_paths))
   const staffing = staffedOn(db, root, plan, step.step)
-  const fired = await provider.fire({
+  const fired = await provider.fire(checkout ? {
     ...built,
     ...(step.runs === 'brief_writer' ? { tools: [...built.tools, READ], servers: { [SERVER]: server(db, plan.id) } } : {}),
     prompt: `${map(src)}\n\n${built.prompt}`,
     wall: wall(db),
     reads: machineReads(root, plan, step.runs),
-  })
+  } : { ...built, tools: [], wall: wall(db) })
   recorded(db, plan.id, step.step, step.runs, hash, provider.name, manifest, fired, step.mode, staffing)
   observed(db, fired.limits)
   return fired

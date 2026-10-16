@@ -33,6 +33,31 @@ test('an api_error stop holds the step', async () => {
   expect(refusalRows(w.db, 1)).toEqual([])
 })
 
+async function reviewThrows(message: string): Promise<{ w: ReturnType<typeof world>; fired: unknown }> {
+  const w = world()
+  approve(w.db, w.target)
+  const wire = watched([], w.root, 1)
+  for (let at = 0; at < 4; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  const inner = stub(CARRIED)
+  const throwing = { ...inner, fire: async (packet: Packet) => {
+    if (!packet.tools.includes('Write')) throw new Error(message)
+    return inner.fire(packet)
+  } }
+  return { w, fired: (await tick(w.db, w.root, throwing))[0] }
+}
+
+test('a locked store during review holds step 4', async () => {
+  const { w, fired } = await reviewThrows('database is locked')
+  expect(fired).toMatchObject({ step: 4, held: true, spans: ['locked'] })
+  expect(plan(w.db, 1)).toMatchObject({ step: 4, state: 'running' })
+  expect(refusalRows(w.db, 1)).toEqual([])
+})
+
+test('any other review throw still refuses', async () => {
+  const { fired } = await reviewThrows('boom')
+  expect(fired).toMatchObject({ step: 4, outcome: 'refuse', spans: ['reviewers.verdict_fence'] })
+})
+
 test('other throws still refuse', () => {
   expect(thrown(at(6), 'plan 123 has no checkout at /x/src')).toMatchObject({ outcome: 'refuse', spans: ['threw: plan 123 has no checkout at /x/src'] })
 })

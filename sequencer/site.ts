@@ -34,7 +34,8 @@ export function render(siteDir: string, post: { title: string; dek: string; body
   const body = post.body.split(/\n\s*\n/).map((block) => block.trim()).filter((block) => block !== '')
     .map((block) => (block.startsWith('## ') ? `<h2>${escaped(block.slice(3))}</h2>` : `<p>${escaped(block)}</p>`))
   writeFileSync(join(blog, `${name}.html`), [page.slice(0, page.indexOf('<h1')).replace(/<title>[\s\S]*?<\/title>/, () => `<title>${title}</title>`)
-    .replace(/<meta name="description" content="[^"]*">/, () => `<meta name="description" content="${dek}">`),
+    .replace(/<meta name="description" content="[^"]*">/, () => `<meta name="description" content="${dek}">`)
+    .replace(/<link[^>]*href="\/caliper\.css"[^>]*>/, (link) => `${link}\n<link rel="stylesheet" href="/site.css">`),
     `<h1>${title}</h1>`, `<p class="dateline">Work completed ${post.work_date} · written up ${post.written_date}.</p>`, ...body, page.slice(end)].join('\n'))
   const card = `<article class="cf-blog-card">\n<h2><a href="${name}.html">${title}</a></h2>\n<p class="dateline">${post.written_date}</p>\n<p>${dek}</p>\n</article>\n`
   writeFileSync(join(blog, 'index.html'), index.slice(0, at) + card + index.slice(at))

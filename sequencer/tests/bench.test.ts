@@ -206,7 +206,8 @@ test('D2 D3 generate admits fizz Step 1-2 and cd cwd, denies curl', async () => 
     expect(gate(packet, bash(command))).toEqual({ continue: true })
   }
   for (const command of ['curl https://example.com', 'cd /tmp && forge build', `cd ${cwd}/.. && forge build`, `cd ${cwd} && curl https://example.com`,
-    `cd ${cwd} && forge build | tail -5`, `cd ${cwd} && forge build && curl x`]) {
+    `cd ${cwd} && forge build | tail -5`, `cd ${cwd} && forge build && curl x`, 'cd "$(curl x)/.." && forge build', 'cd "`curl x`/.." && forge build',
+    'cd $(curl${IFS}x)/.. && forge build', 'cd ~/.. && forge build']) {
     expect(gate(packet, bash(command)).hookSpecificOutput).toMatchObject({ permissionDecision: 'deny' })
     expect(JSON.stringify(gate(packet, bash(command)))).toContain('ruling:seat.tools')
   }

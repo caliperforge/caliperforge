@@ -206,8 +206,8 @@ function ranOutside(tools: string[], cwd: string, args: unknown): string | null 
   return `ruling:seat.tools refuses the command ${JSON.stringify(command)}`
 }
 
-/** `cd <cwd> && ` moves nowhere, so what follows it is judged alone. */
-const CD = /^cd\s+(?:"([^"]+)"|([^\s"]+))\s+&&\s+/
+/** `cd <cwd> && ` moves nowhere, so what follows it is judged alone; a folder bash would expand is never stripped. */
+const CD = /^cd\s+(?:"([\w./ -]+)"|([\w./-]+))\s+&&\s+/
 
 function unmoved(cwd: string, command: string): string {
   const cd = CD.exec(command)

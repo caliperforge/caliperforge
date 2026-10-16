@@ -5,7 +5,7 @@ import { map } from '../cli/map.ts'
 import type { Fired, Provider } from '../providers/kind.ts'
 import { packet, refuse } from '../runner/index.ts'
 import { reviewManifest, SYMBOLS_LEAD, type Bench } from '../runner/packet.ts'
-import { load, seat, tight, type Seat } from '../runner/rules.ts'
+import { load, seat, senior as discipline, tight, type Seat } from '../runner/rules.ts'
 import { judge, loadReviews } from '../reviews/bench.ts'
 import { coverage, type Gated } from '../reviews/package.ts'
 import type { Finding, Judged, Note } from '../reviews/verdict.ts'
@@ -21,7 +21,7 @@ import { briefed, builderRan, internal, type PlanRow } from '../store/plans.ts'
 import { botBody, judgedTree } from '../store/ready.ts'
 import { lastTranscript } from '../store/runs.ts'
 import { byRun, opened, pending, unfinished } from '../store/transcript.ts'
-import type { Step } from '../templates/pr-path.ts'
+import { languageOfSeat, type Step } from '../templates/pr-path.ts'
 import { parse } from '../rails/diff.ts'
 import { estimate, human, pointed, references, section, shape, split, TEMPLATE, unclear, wide, WIDE, type Part } from './brief.ts'
 import { repoOf } from './ready.ts'
@@ -260,7 +260,8 @@ export async function ran(db: Db, root: string, plan: PlanRow, step: Step, provi
   load(db, root)
   const { manifest, prompt, hash } = seat(root, step.runs, step.mode)
   const src = srcDir(root, plan.id)
-  const built = packet(manifest, prompt + noteSection(db, root, plan, step), tight(root), issue, src,
+  const spec = languageOfSeat(step.runs) === null ? tight(root) : `${tight(root)}\n\n${discipline(root)}`
+  const built = packet(manifest, prompt + noteSection(db, root, plan, step), spec, issue, src,
     transcriptOf(root, plan.id, step.step), ours, fenceFor(db, plan.id, manifest.write_paths))
   const staffing = staffedOn(db, root, plan, step.step)
   const fired = await provider.fire({

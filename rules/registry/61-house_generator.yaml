@@ -1,0 +1,5 @@
+- name: house_generator
+  table: runs
+  column: at
+  where: seat = 'house_generator'
+  when: SELECT 1 FROM bench_scorecard WHERE generator = 'house_generator'

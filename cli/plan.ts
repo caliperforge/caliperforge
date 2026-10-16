@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { wideTicket } from '../sequencer/brief.ts'
 import { put } from '../sequencer/workspace.ts'
 import { commsLane, commsPlan, fileComms } from '../store/comms.ts'
 import { logged } from '../store/events.ts'
@@ -89,6 +90,8 @@ export function add(db: Db, root: string, ref: string, by: Holder | 'intake' | '
   const missing = LANE[lane].template === 'research' ? unasked(row.body) : []
   if (missing.length > 0) return refusal(db, ref, 'plan.research_lines', `has no ${missing.join(' or ')} line`)
   if (row.body.includes(COMMS)) return desk(db, root, ref, row, by)
+  const n = wideTicket(row.body)
+  if (n !== null) return refusal(db, ref, 'plan.wide', `split first: ${String(n)} files`)
   const seat = seatOf(row.labels) ?? LANE[lane].seat
   const plan = file(db, by, pipe ?? LANE[lane].pipe, lane, seat, row.url, priority)
   put(root, plan, 'ask.md', `# ${row.title}\n\n${row.body}\n`)

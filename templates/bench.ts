@@ -25,8 +25,13 @@ export const CEILING = 400_000
 
 const SUITE = 'test/fizz'
 
+const META = 'fizz_data'
+
+const TIMEOUTS = { BASH_DEFAULT_TIMEOUT_MS: '1800000', BASH_MAX_TIMEOUT_MS: '1800000' }
+
 function ask(skill: string | undefined): string {
-  const said = `Generate the fuzz suite for the project in the working folder in automatic mode, asking nothing: SUITE_DIR is ${SUITE} and META_DIR is ${SUITE}/fizz_data.`
+  const said = `Generate the fuzz suite for the project in the working folder in automatic mode, asking nothing: SUITE_DIR is ${SUITE} and META_DIR is ${SUITE}/${META}. `
+    + 'Run forge in the foreground, never in the background, and do not end the turn while waiting on a build.'
   return skill === undefined ? said : `${said}\nSKILL_PATH is ${skill}. PROJECT_ROOT is the working folder: run each command from there, without cd.`
 }
 
@@ -81,7 +86,7 @@ export async function generate(db: Db, root: string, plan: PlanRow, step: Step, 
   const { manifest, prompt, hash } = seat(root, name)
   const reads = manifest.reads?.map((path) => real(path.startsWith('~/') ? join(homedir(), path.slice(2)) : path))
   const built = packet(manifest, prompt, '', ask(reads?.[0]), dir, pending(planDir(root, plan.id), `step-${String(step.step)}`))
-  const fired = await provider.fire({ ...built, wall: CEILING, ...(reads === undefined ? {} : { reads }) })
+  const fired = await provider.fire({ ...built, wall: CEILING, env: TIMEOUTS, ...(reads === undefined ? {} : { reads }) })
   const run = runLogged(db, { plan: plan.id, step: step.step, seat: name, rule_hash: hash, provider: provider.name, model: manifest.model,
     effort: manifest.effort, exit: fired.exit, fired, staffed: name })
   byRun(db, run, fired.transcript_path)
@@ -89,8 +94,8 @@ export async function generate(db: Db, root: string, plan: PlanRow, step: Step, 
   const tokens = fired.usage.input + fired.usage.output
   if (fired.ended !== 'completed' && tokens < CEILING) return { outcome: 'refuse', spans: [fired.stop_reason ?? 'seat.exit'], note: `${name} ${fired.ended}` }
   const suite = join(dir, SUITE)
-  if (!existsSync(suite) || !readdirSync(suite, { recursive: true, withFileTypes: true }).some((e) => e.isFile())) {
-    return { outcome: 'refuse', spans: ['bench.no_suite'], note: `${name} wrote no suite under ${SUITE}` }
+  if (!existsSync(suite) || !readdirSync(suite, { recursive: true, encoding: 'utf8' }).some((p) => p.endsWith('.sol') && !p.startsWith(`${META}/`))) {
+    return { outcome: 'refuse', spans: ['bench.no_suite'], note: `${name} wrote no .sol under ${SUITE} outside ${META}` }
   }
   put(root, plan.id, 'generate.json', JSON.stringify({ suite: SUITE, tokens, seconds: fired.seconds,
     x_ray: existsSync(join(dir, 'x-ray/x-ray.md')) ? 1 : 0 }))
@@ -118,6 +123,7 @@ export function scored(db: Db, root: string, plan: PlanRow): Outcome {
     }
   }
   const pairs = rows(join(bench, 'results', target, `${target}.jsonl`))
+  if (pairs.length === 0) return { outcome: 'refuse', spans: ['bench.empty_results'], note: `results/${target}/${target}.jsonl has no rows` }
   const score = { catches: pairs.filter((r) => r.verdict === 'catch').length, false_positives: pairs.filter((r) => r.verdict === 'fp_candidate').length,
     untested: rows(join(bench, 'results', target, `${target}.nullcheck.jsonl`)).filter((r) => r.untested === true).length, tokens, seconds,
     x_ray: x_ray ?? null }

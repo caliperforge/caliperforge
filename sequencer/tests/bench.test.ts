@@ -134,15 +134,15 @@ function staffedIn(root: string): void {
   for (const dir of ['rules', 'seats']) cpSync(join(REPO, dir), join(root, dir), { recursive: true })
 }
 
-/** A generator that spends `tokens`, ends `ended` and, when `wrote`, leaves a suite under test/fizz, and when `xray`, x-ray/x-ray.md. */
-function stub(tokens: number, ended: Fired['ended'], wrote: boolean, stop: string | null = null, xray = false): { provider: Provider; packets: Packet[] } {
+/** A generator that spends `tokens`, ends `ended` and writes `wrote`, or test/fizz/FizzTest.sol when `wrote` is true, and when `xray`, x-ray/x-ray.md. */
+function stub(tokens: number, ended: Fired['ended'], wrote: boolean | string[], stop: string | null = null, xray = false): { provider: Provider; packets: Packet[] } {
   const packets: Packet[] = []
   return { packets, provider: { name: 'claude-agent-sdk', fire: (packet) => {
     packets.push(packet)
     expect(walled(packet.wall, CEILING)).not.toBeNull()
-    if (wrote) {
-      mkdirSync(join(packet.cwd, 'test/fizz'), { recursive: true })
-      writeFileSync(join(packet.cwd, 'test/fizz/FizzTest.sol'), 'contract FizzTest {}\n')
+    for (const path of wrote === true ? ['test/fizz/FizzTest.sol'] : wrote === false ? [] : wrote) {
+      mkdirSync(dirname(join(packet.cwd, path)), { recursive: true })
+      writeFileSync(join(packet.cwd, path), 'contract FizzTest {}\n')
     }
     if (xray) {
       mkdirSync(join(packet.cwd, 'x-ray'), { recursive: true })
@@ -226,6 +226,8 @@ test('D4 D5 fizz reads its skill folder and names SKILL_PATH', async () => {
   expect(readOutside(packet.cwd, 'Read', { file_path: join(SKILL, 'references/template-map.md') }, packet.reads)).toBeNull()
   expect(readOutside(packet.cwd, 'Read', { file_path: join(homedir(), '.claude/skills/x-ray/SKILL.md') }, packet.reads)).toContain('run.outside_checkout')
   expect(packet.prompt).toContain(`SKILL_PATH is ${real(SKILL)}.`)
+  expect(packet.env).toEqual({ BASH_DEFAULT_TIMEOUT_MS: '1800000', BASH_MAX_TIMEOUT_MS: '1800000' })
+  expect(packet.prompt).toContain('Run forge in the foreground, never in the background, and do not end the turn while waiting on a build.')
 })
 
 test('D1 D2 a root reached through a symlink gets real paths', async () => {
@@ -283,6 +285,18 @@ test('D2 generate.json has x_ray 1 when x-ray.md was written', async () => {
 
 test('D4 a completed run with no suite is refused', async () => {
   const { root, outcome } = await generated(stub(1000, 'completed', false))
+  expect(outcome).toMatchObject({ outcome: 'refuse', spans: ['bench.no_suite'] })
+  expect(maybe(root, 1, 'generate.json')).toBeNull()
+})
+
+test('D1 a suite of only fizz_data notes is refused', async () => {
+  const { root, outcome } = await generated(stub(1000, 'completed', ['test/fizz/fizz_data/protocol-understanding.md', 'test/fizz/fizz_data/x-ray-attempts.md']))
+  expect(outcome).toMatchObject({ outcome: 'refuse', spans: ['bench.no_suite'] })
+  expect(maybe(root, 1, 'generate.json')).toBeNull()
+})
+
+test('D2 a .sol only under fizz_data is refused', async () => {
+  const { root, outcome } = await generated(stub(1000, 'completed', ['test/fizz/fizz_data/FizzTest.sol']))
   expect(outcome).toMatchObject({ outcome: 'refuse', spans: ['bench.no_suite'] })
   expect(maybe(root, 1, 'generate.json')).toBeNull()
 })
@@ -345,6 +359,13 @@ test('score D2 a failing run_pair.py is refused and not recorded', () => {
   const { root, db } = scoring('import sys\nsys.stderr.write("forge build failed")\nsys.exit(1)\n')
   expect(scored(db, root, planById(db, 1))).toEqual({ outcome: 'refuse', spans: ['bench.run_pair'], note: 'forge build failed' })
   expect(scores(db)).toEqual([])
+})
+
+test('D3 an empty results file is refused and not recorded', () => {
+  const { root, db } = scoring(writes('.jsonl', []))
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'refuse', spans: ['bench.empty_results'] })
+  expect(scores(db)).toEqual([])
+  expect(maybe(root, 1, 'score.json')).toBeNull()
 })
 
 test('score D3 no target or no generate.json is refused uncloned', () => {

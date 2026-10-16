@@ -21,6 +21,8 @@ export interface Packet {
   refuse: (path: string) => Refusal | null
   /** Folders outside the checkout this run may read, never write. */
   reads?: string[]
+  /** Variables this run's process gets on top of the credential's. */
+  env?: Record<string, string>
   servers?: Record<string, McpSdkServerConfigWithInstance>
 }
 

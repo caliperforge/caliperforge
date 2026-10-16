@@ -32,7 +32,7 @@ async function fire(packet: Packet): Promise<Fired> {
     prompt: `${packet.prompt}\n\n# Working folder\n\n${packet.cwd}`,
     options: {
       cwd: packet.cwd,
-      env: credential().env,
+      env: { ...credential().env, ...packet.env },
       model: packet.model,
       effort: packet.effort,
       tools: offered(packet.tools),

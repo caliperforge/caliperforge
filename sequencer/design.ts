@@ -124,9 +124,11 @@ async function shoot(browser: Browser, base: string, out: string, shot: Shot): P
   const context = await browser.newContext({ viewport: { width: shot.width, height: 900 }, colorScheme: shot.scheme })
   try {
     const page = await context.newPage()
-    const logged: string[] = []
-    page.on('console', (msg) => { if (msg.type() === 'error') logged.push(msg.text()) })
-    page.on('pageerror', (e) => logged.push(e.message))
+    const logged: { text: string; url: string }[] = []
+    const failed = new Set<string>()
+    page.on('response', (r) => { if (r.status() >= 400 && ['fetch', 'xhr'].includes(r.request().resourceType())) failed.add(r.url()) })
+    page.on('console', (msg) => { if (msg.type() === 'error') logged.push({ text: msg.text(), url: msg.location().url }) })
+    page.on('pageerror', (e) => logged.push({ text: e.message, url: '' }))
     await page.goto(`${base}/${shot.screen}`, { waitUntil: 'load' })
     const path = join(out, 'design', `${shot.screen.replaceAll('/', '_')}.${String(shot.width)}.${shot.scheme}.png`)
     const png = await page.screenshot({ path, fullPage: true })
@@ -136,7 +138,7 @@ async function shoot(browser: Browser, base: string, out: string, shot: Shot): P
       ...(found.overflow ? [at('design.overflow')] : []),
       ...found.clipped.map((text) => at('design.clipped', text)),
       ...found.catchall.map((text) => at('design.catchall', text)),
-      ...logged.map((text) => at('design.console', text)),
+      ...logged.filter((e) => !failed.has(e.url)).map((e) => at('design.console', e.text)),
     ]
     return { png, spans }
   } finally {

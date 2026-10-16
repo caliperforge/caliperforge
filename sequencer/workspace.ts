@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, existsSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
+import { run, type Run } from '../cli/gh.ts'
 import type { Narrowing } from '../runner/packet.ts'
 import { BUILT, excluded } from './checks.ts'
 
@@ -215,16 +216,18 @@ export function liveTree(root: string, cwd: string): boolean {
  * `core.hooksPath` is set here and not at step 8, so every push out of a plan checkout meets the pre-push hook, not just the kernel's.
  * The build-output exclude is written here too: a builder runs xcodebuild at step 2, before the rails do.
  */
-export function checkout(root: string, plan: number, repo: string, branch: string, from = 'main'): Checkout {
+export function checkout(root: string, plan: number, repo: string, branch: string, from = 'main', exec: Run = run): Checkout {
   const dir = srcDir(root, plan)
   const done = maybe(root, plan, 'base.sha')
   if (done === null && readdirSync(dir).length > 0) renameSync(dir, `${dir}.stale-${String(Date.now())}`)
   if (done !== null && cloned(dir)) { fetchMain(dir); excluded(dir); unstage(dir); return { dir, branch, base: done.trim() } }
   const base = gitBase(root)
+  const fork = remote(base, `${FORK}/${repoName(repo)}`)
+  if (!found(planDir(root, plan), fork)) exec(['repo', 'fork', repo, '--org', FORK, '--clone=false'])
   git(planDir(root, plan), ['clone', '--no-local', '--origin', 'origin',
     '-c', `remote.upstream.url=${remote(base, repo)}`,
     '-c', 'remote.upstream.fetch=+refs/heads/*:refs/remotes/upstream/*',
-    remote(base, `${FORK}/${repoName(repo)}`), dir])
+    fork, dir])
   git(dir, ['config', 'core.hooksPath', join(root, 'hooks')])
   if (from !== 'main') git(dir, ['config', 'cf.base', from])
   excluded(dir)
@@ -240,6 +243,17 @@ export function checkout(root: string, plan: number, repo: string, branch: strin
   git(dir, ['checkout', '-B', branch, head])
   put(root, plan, 'base.sha', `${head}\n`)
   return { dir, branch, base: head }
+}
+
+/** `Repository not found` is GitHub's 404; `does not appear to be a git repository` is a missing path under a local `.cf/git-base`. */
+function found(cwd: string, url: string): boolean {
+  try {
+    git(cwd, ['ls-remote', url, 'HEAD'])
+    return true
+  } catch (error) {
+    if (error instanceof Error && /Repository not found|does not appear to be a git repository/.test(error.message)) return false
+    throw error
+  }
 }
 
 /** The exclude file skips only untracked paths, so a file in a `BUILT` folder an earlier diff staged leaves the index here. */

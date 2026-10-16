@@ -24,6 +24,7 @@ import { slack } from '../cli/flow.ts'
 import { ceilinged, stepped } from './settle.ts'
 import { closing } from './wave.ts'
 import { ripe, sitedata } from './site.ts'
+import { relane } from './relane.ts'
 
 /**
  * `read`, `wire` and `labels` are the network a tick touches on its own account; each is injected so a test can drive a lap
@@ -38,13 +39,8 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
   weekly(db, now)
   accounts(db, root, now)
   ripe(db, now)
-  if (registry !== undefined) {
-    due(db, registry, now, read)
-    stuck(db, root, registry, now)
-    sunday(db, root, now)
-    if (registry.some((e) => e.name === 'paydesk_live')) await paydesk(db, root, now)
-    if (registry.some((e) => e.name === 'site_data')) sitedata(db, root, now)
-  }
+  relane(db)
+  if (registry !== undefined) await watched(db, root, registry, now, read)
   if (labels !== undefined) (lines ?? []).push(...intake(db, root, labels), ...refill(db, root, labels, now))
   reap(root, terminal(db))
   reprice(db, labels)
@@ -69,6 +65,14 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
   await answer(db, root, provider, now, wire)
   if (labels !== undefined) (lines ?? []).push(...await closing(db, root, provider, labels, now))
   return out
+}
+
+async function watched(db: Db, root: string, registry: Entry[], now: Date, read: (repo: string, no: number) => Pr): Promise<void> {
+  due(db, registry, now, read)
+  stuck(db, root, registry, now)
+  sunday(db, root, now)
+  if (registry.some((e) => e.name === 'paydesk_live')) await paydesk(db, root, now)
+  if (registry.some((e) => e.name === 'site_data')) sitedata(db, root, now)
 }
 
 /** Parks a running job waiting on another job's files where its lane has a queued job to start, as `cf park --on` does. */

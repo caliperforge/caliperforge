@@ -46,3 +46,11 @@ test('D2 a repo with no house file gets no section', () => {
 test('D3 with no card the ask is their issue, house file or not', () => {
   expect(askOf(THEIRS, undefined, { root: root(), repo: 'acme/widget' })).toBe(`# ${THEIRS.title}\n\n${THEIRS.body}\n`)
 })
+
+test('D4 the sources block never reaches the ask', () => {
+  const dir = root()
+  writeFileSync(join(dir, 'house', 'acme', 'widget.md'), `sources:\n- acme/widget CONTRIBUTING.md ${'a'.repeat(40)}\n\n${RULES}`)
+  const ask = askOf(THEIRS, CARD, { root: dir, repo: 'acme/widget' })
+  expect(ask).toContain(`## House rules for acme/widget\n\n${RULES.trimEnd()}\n\n${THEIR_ISSUE}`)
+  expect(ask).not.toContain('sources:')
+})

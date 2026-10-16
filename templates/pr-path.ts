@@ -66,6 +66,6 @@ export function at(step: number, language: string | null = null, label: string |
   const { seat, mode } = staff(step, language)
   const seated: Step = { ...found, seat, ...(mode === undefined ? {} : { mode }) }
   if (found.verdict_gate === 'review' && language === 'web') return { ...seated, design: true }
-  if (found.fires === 'seat' && label === DESIGN_LEAD) return { ...seated, seat: label, runs: label }
+  if (found.fires === 'seat' && label === DESIGN_LEAD) return { ...seated, seat: label, runs: label, mode: 'build' }
   return found.fires === 'seat' ? { ...seated, runs: seat } : seated
 }

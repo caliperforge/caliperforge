@@ -5,9 +5,35 @@ import { expect, test } from 'vitest'
 import { check } from '../../../cli/digests.ts'
 import { refuse } from '../../../runner/index.ts'
 import { Seat, rules, seat } from '../../../runner/rules.ts'
+import { at } from '../../../templates/pr-path.ts'
 
 const root = join(import.meta.dirname, '../../..')
 const TODAY = '2026-10-11'
+const FENCE = '---\nsummary: <the change in one line>\ndone:\n  - id: D1\n    status: done\n    pointer: '
+
+test('build: step 2 runs design_lead in build mode', () => {
+  expect(at(2, 'web', 'design_lead')).toMatchObject({ seat: 'design_lead', runs: 'design_lead', mode: 'build' })
+})
+
+test('build: the design_lead prompt carries the build done fence', () => {
+  const step = at(2, 'web', 'design_lead')
+  const prompt = seat(root, step.runs, step.mode).prompt
+  expect(prompt.startsWith('# design_lead\n')).toBe(true)
+  expect(prompt).toContain(FENCE)
+})
+
+test('build: a plain web step 2 has no mode', () => {
+  const step = at(2, 'web')
+  expect(step.runs).toBe('web_specialist')
+  expect(step).not.toHaveProperty('mode')
+  expect(seat(root, step.runs, step.mode).prompt).not.toContain('\n# Build\n')
+})
+
+test('build: design_lead steps 4 and 5 match a web plan', () => {
+  for (const step of [4, 5]) expect(at(step, 'web', 'design_lead')).toEqual(at(step, 'web'))
+  expect(at(4, 'web', 'design_lead')).toMatchObject({ design: true })
+  expect(at(4, 'web', 'design_lead')).not.toHaveProperty('mode')
+})
 
 test('D1: the manifest writes DESIGN.md and design/tickets', () => {
   expect(seat(root, 'design_lead').manifest).toEqual({

@@ -727,6 +727,22 @@ test('1381 D2 a fuzz-bench pytest at exit 1 is not capped', () => {
   expect(failed).not.toHaveProperty('capped')
 })
 
+test('1394 D1 D2 pytest alone runs under the minutes cap', () => {
+  const caps: (number | undefined)[] = []
+  const run: Run = (...given) => {
+    caps.push(given[3])
+    return { ok: true, output: '' }
+  }
+  checks(tree(FOUNDRY), BENCH, run, [], null, [], 60)
+  checks(tree(FOUNDRY), BENCH, run)
+  expect(caps).toEqual([undefined, undefined, 3600000, undefined, undefined, undefined])
+})
+
+test('1394 D4 a pytest capped under minutes is still capped', () => {
+  const failed = checks(tree(FOUNDRY), BENCH, pytest({ ...PYTEST, capped: true }), [], null, [], 60)
+  expect(failed).toMatchObject({ script: 'pytest', capped: true })
+})
+
 test('1381 D3 an xcodebuild run the cap killed is not capped', () => {
   const failed = checks(xcode(), APP, replies({ ok: false, code: '1', output: 'building', capped: true }).run)
   expect(failed).toMatchObject({ code: '1' })

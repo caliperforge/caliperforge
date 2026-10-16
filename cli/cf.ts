@@ -135,7 +135,7 @@ async function ticked(options: { dry?: boolean }, now: Date): Promise<void> {
   process.env.CF_CHECK_SLOTS ??= String(CHECK_SLOTS)
   const lines: string[] = []
   const fired = await tick(handle, root, claudeAgentSdk, now, undefined, undefined, CHAIN_MINUTES, gh, EACH, apart, lines,
-    mechanisms(root))
+    mechanisms(root, 'HEAD'))
   const id = receipt(handle, upgraded(handle, root, { at: now.toISOString(), hhmm: hhmm(handle, now), dry: false,
     pipes: openPipes(handle, hhmm(handle, now)).length, fired: fired.length,
     exit: fired.some((f) => f.outcome === 'refuse') ? 1 : 0, note: tickNote(fired, overlapWaits(handle), lines) }))

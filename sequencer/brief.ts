@@ -115,6 +115,8 @@ const PATH = /^\s*[-*]\s*`?([A-Za-z0-9_./+-]*\.[A-Za-z0-9]+)(?::\d+)?`?/
 
 const ROW = /^\s*[-*]\s*\**D\d+\**/gm
 
+const LISTED = /^\*\*Files:\*\*[ \t]*\r?\n((?:[ \t]*[-*][ \t].*(?:\r?\n|$))*)/m
+
 const Unclear = z.object({ outcome: z.literal('unclear'), question: z.string().min(1) })
 
 const Part = z.object({ title: z.string().min(1), what: z.string().min(1), why: z.string().min(1), ends: z.string().min(1),
@@ -165,6 +167,11 @@ function fenceOf(reply: string): string | null {
 export function wide(brief: string): number | null {
   const count = files(brief).filter((f) => !TEST.test(f.path)).length
   return count > WIDE ? count : null
+}
+
+/** {@link wide}, read off the bullet list under a ticket's `**Files:**` line. */
+export function wideTicket(body: string): number | null {
+  return wide(`## Files\n${(LISTED.exec(body)?.[1] ?? '').replace(/\r/g, '')}`)
 }
 
 /** The lines the brief's `Estimate:` under `## Approach` says the change adds and removes besides tests and generated files. */

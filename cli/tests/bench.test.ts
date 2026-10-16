@@ -1,11 +1,14 @@
-import { mkdtempSync } from 'node:fs'
+import { cpSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { fresh, rejects } from '../../checks/sqlite.ts'
 import { homeOf } from '../../sequencer/home.ts'
+import { dry } from '../../sequencer/index.ts'
+import { get, git } from '../../sequencer/workspace.ts'
 import { dial, lanes } from '../../store/lanes.ts'
-import { openPipes, pipeNamed, planById } from '../../store/plans.ts'
+import { allPlans, openPipes, pipeNamed, planById } from '../../store/plans.ts'
+import { fileBench } from '../bench.ts'
 import { laneLine } from '../brief.ts'
 import type { Read } from '../gh.ts'
 import { add } from '../plan.ts'
@@ -52,4 +55,54 @@ test('D7 brief counts the bench pipe at 03:00', () => {
   const d = fresh(schema)
   dial(d, 1, '2026-10-13')
   expect(laneLine(lanes(d, '03:00'))).toMatch(/^lanes 0\/2 live\/open/)
+})
+
+const AT = '2026-09-18T13:00:00.000Z'
+const YML = 'repo: euler-xyz/euler-earn\nfix: abc123\n'
+
+function benchRoot(): string {
+  const dir = root()
+  for (const sub of ['rules', 'seats']) cpSync(join(import.meta.dirname, '../..', sub), join(dir, sub), { recursive: true })
+  const bench = join(dir, 'remotes/caliperforge/fuzz-bench')
+  mkdirSync(join(bench, 'targets'), { recursive: true })
+  writeFileSync(join(bench, 'targets/euler-earn-m01.yml'), YML)
+  writeFileSync(join(bench, 'targets/smoke-01.yml'), 'repo: org/smoke\n')
+  git(bench, ['init', '-q'])
+  git(bench, ['add', '-A'])
+  git(bench, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'targets'])
+  mkdirSync(join(dir, '.cf'))
+  writeFileSync(join(dir, '.cf/git-base'), join(dir, 'remotes'))
+  return dir
+}
+
+test('file D1 one target queues a bench plan dry lists at step 0', () => {
+  const dir = benchRoot()
+  const d = fresh(schema)
+  dial(d, 3, AT)
+  const ids = fileBench(d, dir, 'euler-earn-m01', false, 'fizz_generator', AT)
+  expect(ids).toHaveLength(1)
+  const id = Number(ids[0])
+  expect(planById(d, id)).toMatchObject({ template: 'bench', state: 'queued', step: 0, pipe_id: pipeNamed(d, 'bench')?.id })
+  expect(dry(d, new Date(AT)).would).toContainEqual({ pipe: 'bench', plan: id, step: 0, template: 'bench' })
+  expect(get(dir, id, 'target.yml')).toBe(`${YML}target: euler-earn-m01\ngenerator: fizz\n`)
+})
+
+test('file D2 --all files one plan per target yml', () => {
+  const dir = benchRoot()
+  const ids = fileBench(fresh(schema), dir, undefined, true, 'fizz_generator', AT)
+  expect(ids.map((id) => get(dir, id, 'target.yml'))).toEqual([`${YML}target: euler-earn-m01\ngenerator: fizz\n`,
+    'repo: org/smoke\ntarget: smoke-01\ngenerator: fizz\n'])
+})
+
+test('file D3 an unknown target is refused and files nothing', () => {
+  const d = fresh(schema)
+  expect(() => fileBench(d, benchRoot(), 'nope', false, 'fizz_generator', AT)).toThrow('fuzz-bench has no targets/nope.yml')
+  expect(allPlans(d)).toEqual([])
+})
+
+test('file D4 a seat that generates no bench is refused', () => {
+  const d = fresh(schema)
+  expect(() => fileBench(d, benchRoot(), 'euler-earn-m01', false, 'solidity_specialist', AT))
+    .toThrow('solidity_specialist is not a bench generator in rules/staffing.yaml')
+  expect(allPlans(d)).toEqual([])
 })

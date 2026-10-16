@@ -24,6 +24,11 @@ test('D8 the fizz bench generator is fizz_generator', () => {
   expect(staffed(root, 'bench', 1, 'fizz')).toEqual({ seat: 'fizz_generator' })
 })
 
+test('D2 the house_generator bench generator is its own seat', () => {
+  expect(staffed(root, 'bench', 1, 'house_generator')).toEqual({ seat: 'house_generator' })
+  expect(staffed(root, 'bench', 1, 'fizz')).toEqual({ seat: 'fizz_generator' })
+})
+
 test('an unknown key is staffed by nobody', () => {
   expect(staffed(root, 'pr_path', 2, 'cobol')).toBeNull()
 })

@@ -347,3 +347,9 @@
   column: at
   where: seat = 'house_generator'
   when: SELECT 1 FROM bench_scorecard WHERE generator = 'house_generator'
+- name: design_on_main
+  table: events
+  column: at
+  where: "kind = 'review' AND message LIKE '%already on main:%'"
+  gap: 7d
+  expected: 0

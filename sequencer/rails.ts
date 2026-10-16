@@ -124,7 +124,7 @@ function suite(db: Db, root: string, plan: PlanRow, on: Rails, commands: Command
       const diff = diffOf(root, plan.id)
       const failed = checks(srcDir(root, plan.id), commands, noted(db, plan.id), outside === null ? narrow(db, plan) : [],
         outside === null ? null : { language: outside, files: filesOf(db, plan.id).map((f) => f.path) },
-        parse(diff).map((f) => f.path)) ?? finish(srcDir(root, plan.id), finishes.entries, noted(db, plan.id), finishes.minutes)
+        parse(diff).map((f) => f.path), finishes.minutes) ?? finish(srcDir(root, plan.id), finishes.entries, noted(db, plan.id), finishes.minutes)
       if (failed?.fault !== undefined) return faulted(db, root, plan, failed.fault)
       if (failed?.capped === true) return capped(failed)
       const blip = failed === null ? null : offline(failed)

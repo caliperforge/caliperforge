@@ -8,7 +8,7 @@ import { WHOLE } from './handout.ts'
 import { kept } from './verbatim.ts'
 import { git } from './workspace.ts'
 
-const CEILING = 100
+export const CEILING = 100
 
 const HUMANS = ['Michael Moffett', 'Moffett', 'Sam Hartley']
 
@@ -113,7 +113,7 @@ const GROUNDS: [RegExp, string][] = [
 
 const PATH = /^\s*[-*]\s*`?([A-Za-z0-9_./+-]*\.[A-Za-z0-9]+)(?::\d+)?`?/
 
-const ROW = /^\s*[-*]\s*\**D\d+\**/gm
+export const ROW = /^\s*[-*]\s*\**D\d+\**/gm
 
 const LISTED = /^\*\*Files:\*\*[ \t]*\r?\n((?:[ \t]*[-*][ \t].*(?:\r?\n|$))*)/m
 
@@ -181,11 +181,11 @@ export function estimate(brief: string): number | null {
 }
 
 /** The span of the brief a builder cannot work from, with the ground it is turned back on; null is a brief that stands. */
-export function shape(brief: string, ask: string, src: string, outside = false): Refused | null {
+export function shape(brief: string, ask: string, src: string, outside = false, ceiling = CEILING): Refused | null {
   const title = titleOf(brief)
   if (title === null || (title !== titleOf(ask) && !(outside && CONVENTIONAL.test(title)))) return { span: '# <title>', reason: "the title is not the ask's" }
   const checks: ((b: string) => Refused | null)[] =
-    [order, empty, carried, cases, caps, folders, forbidden, (b) => shared(b, src), (b) => paths(b, src), (b) => ranged(b, src), (b) => kept(b, ask)]
+    [order, empty, carried, cases, (b) => caps(b, ceiling), folders, forbidden, (b) => shared(b, src), (b) => paths(b, src), (b) => ranged(b, src), (b) => kept(b, ask)]
   for (const check of checks) {
     const refused = check(brief)
     if (refused !== null) return refused
@@ -223,9 +223,9 @@ function cases(brief: string): Refused | null {
     : null
 }
 
-function caps(brief: string): Refused | null {
+function caps(brief: string, ceiling = CEILING): Refused | null {
   const lines = brief.trimEnd().split('\n').length
-  return lines > CEILING ? { span: `${String(CEILING)} lines`, reason: `the brief is ${String(lines)} lines` } : null
+  return lines > ceiling ? { span: `${String(ceiling)} lines`, reason: `the brief is ${String(lines)} lines` } : null
 }
 
 /** A row that names no file is a folder or a sentence; dropped silently, it leaves the builder fenced out of what it must write. */

@@ -46,11 +46,13 @@ interface Rule {
 export function rules(root: string): Rule[] {
   const rails = digest(join(root, 'rules/rails.yaml'))
   const tight = digest(join(root, 'rules/tight.md'))
+  const senior = digest(join(root, 'rules/senior.md'))
   const staffing = digest(join(root, 'rules/staffing.yaml'))
   const classes = digest(join(root, 'rules/repo-classes.yaml'))
   return [
     { id: 'rules/rails.yaml', kind: 'rail', path: 'rules/rails.yaml', content_hash: rails },
     { id: 'rules/tight.md', kind: 'card', path: 'rules/tight.md', content_hash: tight },
+    { id: 'rules/senior.md', kind: 'card', path: 'rules/senior.md', content_hash: senior },
     ...registered(root).map((path) => ({ id: path, kind: 'card' as const, path, content_hash: digest(join(root, path)) })),
     { id: 'rules/repo-classes.yaml', kind: 'card', path: 'rules/repo-classes.yaml', content_hash: classes },
     { id: 'rules/staffing.yaml', kind: 'card', path: 'rules/staffing.yaml', content_hash: staffing },
@@ -94,6 +96,10 @@ export function seat(root: string, name: string, mode?: Run['mode']): { manifest
 
 export function tight(root: string): string {
   return readFileSync(join(root, 'rules/tight.md'), 'utf8')
+}
+
+export function senior(root: string): string {
+  return readFileSync(join(root, 'rules/senior.md'), 'utf8')
 }
 
 export function listed(root: string): z.infer<typeof Roster> {

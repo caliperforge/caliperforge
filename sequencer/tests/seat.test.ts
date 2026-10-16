@@ -31,7 +31,24 @@ test.each(['swift', 'kotlin', 'python', 'ruby', 'rust', 'go', 'php', 'lua', 'typ
     expect(mode).toBe('build')
   })
 
-const REVIEWING = [...new Set(staffing(join(import.meta.dirname, '../..')).flatMap((r) => r.mode === 'review' ? [r.seat] : []))]
+test.each(['swift', 'kotlin', 'python', 'ruby', 'rust', 'go', 'php', 'lua', 'typescript', 'outside'])(
+  'D3 a step-2 %s build holds Tight, Senior, then its prompt', async (language) => {
+    const { prompt, root } = await fired(2, language)
+    const where = (path: string): number => prompt.indexOf(readFileSync(join(root, path), 'utf8'))
+    expect(where('rules/tight.md')).toBeGreaterThanOrEqual(0)
+    expect(where('rules/tight.md')).toBeLessThan(where('rules/senior.md'))
+    expect(where('rules/senior.md')).toBeLessThan(where(`seats/${language}_specialist/prompt.md`))
+  })
+
+test('D4 brief_writer and step-4 review packets hold no Senior', async () => {
+  const brief = await fired(1)
+  const review = await reviewed('swift')
+  const senior = readFileSync(join(brief.root, 'rules/senior.md'), 'utf8')
+  expect(brief.prompt).not.toContain(senior)
+  expect(review.prompt).not.toContain(senior)
+})
+
+const REVIEWING =[...new Set(staffing(join(import.meta.dirname, '../..')).flatMap((r) => r.mode === 'review' ? [r.seat] : []))]
 
 test.each(REVIEWING)('D1 D4 %s leaves build framing to build.md', (name) => {
   const own = readFileSync(join(import.meta.dirname, '../../seats', name, 'prompt.md'), 'utf8')

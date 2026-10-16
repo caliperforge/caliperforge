@@ -13,14 +13,10 @@
   "tests/language-seat.ts": {
     "prepare": 3
   },
-  "tests/runner.test.ts": {
-    "prepare": 4
-  },
   "tests/wake.test.ts": {
     "prepare": 2
   },
   "wake.ts": {
-    "lines": 103,
-    "prepare": 4
+    "lines": 101
   }
 }

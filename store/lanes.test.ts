@@ -18,3 +18,9 @@ it('1156a D1 the site lane builds site on its own pipe', () => {
   expect(LANE.site).toEqual({ template: 'pr_path', seat: 'web_specialist', home: `${FORK}/site`, pipe: 'site' })
   expect(laneOf([{ name: 'lane:site' }])).toBe('site')
 })
+
+it('1247a D4 D5 the loupe lane builds atelier-web on its pipe', () => {
+  expect(LANE.loupe).toEqual({ template: 'pr_path', seat: 'web_specialist', home: `${FORK}/atelier-web`, pipe: 'loupe' })
+  expect(laneOf([{ name: 'lane:loupe' }])).toBe('loupe')
+  expect(laneOf([{ name: 'lane:atelier' }])).toBe('atelier')
+})

@@ -363,7 +363,7 @@ export function land(db: Db, root: string, plan: PlanRow, approval: number, wire
   }
   wire.close(homeOf(plan), issue, sha)
   markPushed(db, plan.id, approval, `https://github.com/${asm?.fork ?? homeOf(plan)}/commit/${sha}`)
-  if (plan.lane === 'atelier') wire.install?.()
+  if (plan.lane === 'loupe') wire.install?.()
   return { outcome: 'pass', spans: [], note: `landed ${head.branch} on ${onto} as ${sha.slice(0, 12)}` }
 }
 

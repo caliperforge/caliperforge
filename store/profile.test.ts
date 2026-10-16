@@ -64,7 +64,7 @@ test('#498a D1 our two repos name their builder and rails', () => {
 })
 
 test('760b D1 atelier-web names its seat, lane, rails and checks', () => {
-  expect(profile(REPO, 'caliperforge/atelier-web')).toEqual({ builder: 'web_specialist', lane: 'atelier',
+  expect(profile(REPO, 'caliperforge/atelier-web')).toEqual({ builder: 'web_specialist', lane: 'loupe',
     rails: { digests: false, ratchet: false, fence: false, tight_code: true, checks: 'local' },
     commands: { node: ['--check'], npm: ['test'] } })
 })

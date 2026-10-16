@@ -16,7 +16,7 @@ function ran(d: Db, seat: string, staffed?: string): Db {
 }
 
 function planned(d: Db, state: PlanRow['state'], queued_at: string): Db {
-  addPlan(d, { pipe_id: 1, target_id: null, template: 'pr_path', state, queued_at, lane: 'atelier',
+  addPlan(d, { pipe_id: 1, target_id: null, template: 'pr_path', state, queued_at, lane: 'loupe',
     seat: 'web_specialist', origin: 'https://github.com/caliperforge/atelier-web/issues/1', step: 0 })
   return d
 }

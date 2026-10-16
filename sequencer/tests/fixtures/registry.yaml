@@ -342,3 +342,8 @@
     JOIN deliverables d ON d.plan_id = f.id AND d.state = 'pushed'
     WHERE pi.enabled = 0 AND NOT EXISTS (SELECT 1 FROM events o WHERE o.kind = 'pipe' AND o.id > s.id
     AND o.actor IN ('tick', 'ceo', 'coo') AND o.message GLOB pi.name || ' *'))
+- name: house_generator
+  table: runs
+  column: at
+  where: seat = 'house_generator'
+  when: SELECT 1 FROM bench_scorecard WHERE generator = 'house_generator'

@@ -42,6 +42,10 @@
   "now.ts": {
     "lines": 31
   },
+  "paydesk-paid.ts": {
+    "lines": 82,
+    "silent-catch": 1
+  },
   "plans.ts": {
     "lines": 304
   },

@@ -17,9 +17,9 @@ export function refile(db: Db, from: string, to: string, read: Read = gh, exec: 
   const plan = allPlans(db).find((p) => originRef(p)?.repo === repo && originRef(p)?.no === no)
   if (plan === undefined) throw new Error(`no plan's origin is ${repo}#${String(no)}`)
   const block = ofKind(db, 'director', 'coo_lite').filter((e) => e.plan === plan.id).at(-1)
-  if (block === undefined) throw new Error(`plan ${String(plan.id)} has no coo_lite event`)
-  const { title } = z.object({ title: z.string() }).parse(read(['issue', 'view', String(no), '--repo', repo, '--json', 'title']))
-  const url = exec(['issue', 'create', '--repo', to, '--title', title, '--body-file', '-'], block.message).trim()
+  const { title, body } = z.object({ title: z.string(), body: z.string() })
+    .parse(read(['issue', 'view', String(no), '--repo', repo, '--json', 'title,body']))
+  const url = exec(['issue', 'create', '--repo', to, '--title', title, '--body-file', '-'], block?.message ?? body).trim()
   exec(['issue', 'close', String(no), '--repo', repo, '--comment', `Moved to ${url}`])
   return url
 }

@@ -1,5 +1,5 @@
 builder: web_specialist
-lane: atelier
+lane: loupe
 rails:
   digests: false
   ratchet: false

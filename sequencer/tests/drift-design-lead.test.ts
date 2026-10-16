@@ -24,7 +24,7 @@ function ran(d: Db): void {
 
 test('D2 an open wave ticket and an old run go stale', () => {
   const d = db()
-  recordListing(d, ATELIER, [ticket(1, ['lane:atelier', 'wave:1'])], false)
+  recordListing(d, ATELIER, [ticket(1, ['lane:loupe', 'wave:1'])], false)
   ran(d)
   expect(drift(d, LEAD, NOW)).toEqual([{ name: 'design_lead', state: 'stale', detail: 'newest runs.at is 2026-09-15 10:00:00, older than 14d',
     newest: '2026-09-15 10:00:00' }])
@@ -32,8 +32,8 @@ test('D2 an open wave ticket and an old run go stale', () => {
 
 test('D3 no open wave ticket reports nothing', () => {
   const d = db()
-  recordListing(d, ATELIER, [ticket(1, ['lane:atelier', 'wave:1'], '2026-09-20T09:00:00Z'), ticket(2, ['lane:atelier'])], false)
-  addPlan(d, { pipe_id: 1, target_id: null, template: 'pr_path', state: 'running', queued_at: '2026-10-01', lane: 'atelier',
+  recordListing(d, ATELIER, [ticket(1, ['lane:loupe', 'wave:1'], '2026-09-20T09:00:00Z'), ticket(2, ['lane:loupe'])], false)
+  addPlan(d, { pipe_id: 1, target_id: null, template: 'pr_path', state: 'running', queued_at: '2026-10-01', lane: 'loupe',
     seat: 'web_specialist', origin: `https://github.com/${ATELIER}/issues/2`, step: 3 })
   ran(d)
   expect(drift(d, LEAD, NOW)).toEqual([])
@@ -41,6 +41,6 @@ test('D3 no open wave ticket reports nothing', () => {
 
 test('D4 an open wave ticket waits for the first run', () => {
   const d = db()
-  recordListing(d, ATELIER, [ticket(1, ['lane:atelier', 'wave:1'])], false)
+  recordListing(d, ATELIER, [ticket(1, ['lane:loupe', 'wave:1'])], false)
   expect(drift(d, LEAD, NOW)).toEqual([])
 })

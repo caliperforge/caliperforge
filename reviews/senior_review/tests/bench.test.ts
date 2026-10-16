@@ -14,6 +14,7 @@ import { eventsOf, runRows } from '../../../store/events.ts'
 import { record } from '../../../store/files.ts'
 import { due, keep } from '../../../store/language-notes.ts'
 import { rewind } from '../../../store/plans.ts'
+import { runTokens } from '../../../store/runs.ts'
 import { verdictRows } from '../../../store/verdict.ts'
 import { judge, loadReviews, specHash } from '../../bench.ts'
 import { type Judged, read } from '../../verdict.ts'
@@ -66,14 +67,15 @@ test('a reviewer run writes its cost, NULL when none is reported',async () => {
   expect(await cost(replies(fixture('code_quality', 'clean.reply.md')))).toBe(null)
 })
 
-test('D5 a reviewer run writes its staffed seat, NULL without one',async () => {
+test('D1 D4 a staffed reviewer run logs mode review, NULL without',async () => {
   const { db, plan } = bench(root)
   const staffed = async (seat?: string): Promise<unknown> => {
     const out = await judge(db, root, 'code_quality', plan, seeded(), replies(fixture('code_quality', 'clean.reply.md')), TRANSCRIPT, undefined, seat)
-    return runRows(db).find((r) => r.id === out.run)?.staffed
+    const row = runRows(db).find((r) => r.id === out.run)
+    return { seat: row?.seat, staffed: row?.staffed, mode: runTokens(db, plan).find((r) => r.id === out.run)?.mode }
   }
-  expect(await staffed('typescript_specialist')).toBe('typescript_specialist')
-  expect(await staffed()).toBeNull()
+  expect(await staffed('python_specialist')).toEqual({ seat: 'code_quality', staffed: 'python_specialist', mode: 'review' })
+  expect(await staffed()).toEqual({ seat: 'code_quality', staffed: null, mode: null })
 })
 
 const TREE = 'c'.repeat(40)

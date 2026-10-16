@@ -27,10 +27,10 @@ function db(): Db {
 const planOf = (d: Db, id: number | null): PlanRow => PlanRow.parse(d.prepare('SELECT * FROM plans WHERE id = ?').get(id))
 const pipeOf = (d: Db, name: string): PipeRow => d.prepare('SELECT * FROM pipes WHERE name = ?').get(name) as PipeRow
 
-test('loupe issue files on the loupe lane, pipe and web seat', () => {
+test.each(['lane:loupe', 'lane:atelier'])('%s files on the loupe lane, pipe and web seat', (label) => {
   const d = db()
   const root = mkdtempSync(join(tmpdir(), 'cf-atelier-'))
-  const filed = add(d, root, 'caliperforge/atelier-web#3', 'ceo', undefined, canned(ATELIER, ['lane:loupe']))
+  const filed = add(d, root, 'caliperforge/atelier-web#3', 'ceo', undefined, canned(ATELIER, [label]))
   expect(filed).toMatchObject({ state: 'queued', lane: 'loupe', seat: 'web_specialist' })
   const plan = planOf(d, filed.plan)
   expect(homeOf(plan)).toBe('caliperforge/atelier-web')

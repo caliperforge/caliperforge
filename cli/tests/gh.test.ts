@@ -118,3 +118,42 @@ test('D4 selected listing failing for another reason throws', () => {
   }
   expect(() => installed(FORK, read)).toThrow('HTTP 502')
 })
+
+const ISSUE = ['issue', 'create', '--repo', FORK, '--title', 'Part 1', '--body-file', '-']
+const label = (l: string): string[] => ['label', 'create', l, '--repo', FORK, '--force']
+
+type Call = [string[], string | undefined]
+
+function filer(calls: Call[], failing?: string): Run {
+  return (args, input) => {
+    calls.push([args, input])
+    if (args[0] === failing) throw new Error('HTTP 403')
+    return args[0] === 'issue' ? 'https://github.com/o/r/issues/7\n' : ''
+  }
+}
+
+test('D1 fileIssue creates each label, then files', () => {
+  const calls: Call[] = []
+  fileIssue(FORK, 'Part 1', 'the body', ['lane:loupe', 'P1'], filer(calls))
+  expect(calls).toEqual([
+    [label('lane:loupe'), undefined],
+    [label('P1'), undefined],
+    [[...ISSUE, '--label', 'lane:loupe', '--label', 'P1'], 'the body'],
+  ])
+})
+
+test('D2 a failed label create files no issue', () => {
+  const calls: Call[] = []
+  expect(() => fileIssue(FORK, 'Part 1', 'b', ['lane:loupe'], filer(calls, 'label'))).toThrow('HTTP 403')
+  expect(calls).toEqual([[label('lane:loupe'), undefined]])
+})
+
+test('D3 fileIssue returns the trimmed url', () => {
+  expect(fileIssue(FORK, 'Part 1', 'b', ['P1'], filer([]))).toBe('https://github.com/o/r/issues/7')
+})
+
+test('D4 no labels files with no --label', () => {
+  const calls: Call[] = []
+  fileIssue(FORK, 'Part 1', 'b', [], filer(calls))
+  expect(calls).toEqual([[ISSUE, 'b']])
+})

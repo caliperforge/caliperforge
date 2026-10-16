@@ -8,7 +8,7 @@ const LANE_LABEL = /^lane:([a-z]+)$/
 
 const PRIORITY_LABEL = /^P([0-9])$/
 
-export const LANES = ['machine', 'atelier', 'comms', 'research', 'uniswap', 'bench', 'site', 'loupe'] as const
+export const LANES = ['machine', 'loupe', 'comms', 'research', 'uniswap', 'bench', 'site'] as const
 
 export type Lane = typeof LANES[number]
 
@@ -20,7 +20,6 @@ type Template = 'pr_path' | 'research' | 'comms'
  */
 export const LANE: Record<Lane, { template: Template; seat: string; home: string; pipe: string }> = {
   machine: { template: 'pr_path', seat: 'typescript_specialist', home: 'caliperforge/caliperforge', pipe: 'internal' },
-  atelier: { template: 'pr_path', seat: 'web_specialist', home: 'caliperforge/atelier-web', pipe: 'atelier' },
   comms: { template: 'comms', seat: 'typescript_specialist', home: 'caliperforge/caliperforge', pipe: 'internal' },
   research: { template: 'research', seat: 'typescript_specialist', home: 'caliperforge/caliperforge', pipe: 'research' },
   uniswap: { template: 'pr_path', seat: 'python_specialist', home: 'caliperforge/v4-hook-index', pipe: 'uniswap' },
@@ -31,7 +30,9 @@ export const LANE: Record<Lane, { template: Template; seat: string; home: string
 
 export function laneOf(labels: { name: string }[]): Lane | null {
   const named = labels.map((l) => LANE_LABEL.exec(l.name)?.[1]).find((n) => n !== undefined)
-  return LANES.find((l) => l === named) ?? null
+  // `lane:atelier` reads as loupe until the open atelier-web issues are relabelled.
+  const lane = named === 'atelier' ? 'loupe' : named
+  return LANES.find((l) => l === lane) ?? null
 }
 
 /** The priority the issue's one `P0`-`P9` label names: `null` for none, and refused for more than one. */

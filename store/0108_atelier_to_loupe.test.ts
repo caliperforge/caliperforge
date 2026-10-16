@@ -37,7 +37,7 @@ it('D1 the atelier pipe is renamed loupe and keeps its id', () => {
   const db = at0107(['atelier'])
   plan(db, 'atelier', 'atelier', web(1))
   const before = pipes(db)
-  expect(migrate(db, join(root, 'schema'))).toEqual(['0108_atelier_to_loupe.sql'])
+  expect(migrate(db, join(root, 'schema'))).toEqual(['0108_atelier_to_loupe.sql', '0109_retire_atelier_lane.sql'])
   expect(pipes(db)).toEqual(before.map((p) => (p.name === 'atelier' ? { ...p, name: 'loupe' } : p)))
   expect(plans(db)).toEqual([{ pipe_id: id(db, 'loupe'), lane: 'loupe' }])
 })

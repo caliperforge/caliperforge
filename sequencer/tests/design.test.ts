@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs'
+import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { chromium } from 'playwright-core'
 import { expect, test } from 'vitest'
 import type { Packet } from '../../providers/kind.ts'
@@ -8,7 +9,7 @@ import { load } from '../../runner/rules.ts'
 import { runRows } from '../../store/events.ts'
 import { verdictRows, type Verdict } from '../../store/verdict.ts'
 import { at } from '../../templates/pr-path.ts'
-import { design, screens } from '../design.ts'
+import { design, screens, serve } from '../design.ts'
 import type { Outcome } from '../kind.ts'
 import { fireLanded } from '../seat.ts'
 import { git, planDir, put, srcDir } from '../workspace.ts'
@@ -89,6 +90,53 @@ browsed('D3 a missing asset under public/ still refuses', async () => {
 browsed('D1 a 404 on a fetch under public/ passes', async () => {
   const { verdict } = await publicRun('/style.css', ['public/index.html'], "<script>fetch('/api/missing')</script>")
   expect(verdict).toMatchObject({ outcome: 'pass', spans: [] })
+})
+
+const fetched = async (web: string, repo: string, path: string): Promise<{ status: number; type: string | null; body: string }> => {
+  const server = await serve(web, repo)
+  try {
+    const res = await fetch(`http://127.0.0.1:${String((server.address() as AddressInfo).port)}${path}`)
+    return { status: res.status, type: res.headers.get('content-type'), body: await res.text() }
+  } finally {
+    server.closeAllConnections()
+    await new Promise((done) => server.close(done))
+  }
+}
+
+const checkout = (fixtures: Record<string, string>): string => {
+  const repo = mkdtempSync(join(tmpdir(), 'design-repo-'))
+  mkdirSync(join(repo, 'public'))
+  writeFileSync(join(repo, 'public', 'style.css'), 'h1 { color: #1a1a1a }')
+  for (const [path, body] of Object.entries(fixtures)) {
+    mkdirSync(dirname(join(repo, path)), { recursive: true })
+    writeFileSync(join(repo, path), body)
+  }
+  return repo
+}
+
+test('D1 /api/now answers with the design/api/now.json fixture', async () => {
+  const repo = checkout({ 'design/api/now.json': '{"plans":[]}' })
+  expect(await fetched(repo, repo, '/api/now')).toEqual({ status: 200, type: 'application/json', body: '{"plans":[]}' })
+})
+
+test('D2 /api/now without a fixture is a 404', async () => {
+  const repo = checkout({})
+  expect((await fetched(repo, repo, '/api/now')).status).toBe(404)
+})
+
+test('D3 a static file under public/ still serves', async () => {
+  const repo = checkout({})
+  expect(await fetched(join(repo, 'public'), repo, '/style.css')).toMatchObject({ status: 200, type: 'text/css' })
+})
+
+test('D4 /api/..%2fx is refused though design/x.json exists', async () => {
+  const repo = checkout({ 'design/x.json': '{}' })
+  expect((await fetched(repo, repo, '/api/..%2fx')).status).toBe(404)
+})
+
+test('D5 a public/ web root reads fixtures from the repo root', async () => {
+  const repo = checkout({ 'design/api/now.json': '{"at":"repo"}' })
+  expect(await fetched(join(repo, 'public'), repo, '/api/now')).toMatchObject({ status: 200, body: '{"at":"repo"}' })
 })
 
 const file = (from: string, to: string): string => [`--- ${from}`, `+++ ${to}`, '@@ -1 +1 @@', '-a', '+b'].join('\n')

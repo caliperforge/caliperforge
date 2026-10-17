@@ -184,6 +184,39 @@ test('D4 a target/ file HEAD holds stays in the index', () => {
   expect(head(dir, ['ls-files', '--', APP])).toBe(APP)
 })
 
+const uved = (): { dir: string; base: string; root: string } => {
+  const w = world()
+  const { dir, base } = checkout(w.root, 1, 'acme/widget', 'widget-12-a1')
+  writeFileSync(join(dir, 'pyproject.toml'), '[project]\nname = "widget"\n')
+  writeFileSync(join(dir, 'uv.lock'), 'version = 1\n')
+  return { dir, base, root: w.root }
+}
+
+test('D2 an untracked uv.lock is not in the diff', () => {
+  const { dir, base } = uved()
+  const diff = gitDiff(dir, base)
+  expect(diff).toContain('pyproject.toml')
+  expect(diff).not.toContain('uv.lock')
+})
+
+test('D3 a reused checkout drops an intent-to-add uv.lock', () => {
+  const { dir, base, root } = uved()
+  head(dir, ['add', '-f', '--intent-to-add', 'uv.lock'])
+  checkout(root, 1, 'acme/widget', 'widget-12-a1')
+  expect(head(dir, ['ls-files', '--', 'uv.lock'])).toBe('')
+  expect(gitDiff(dir, base)).not.toContain('uv.lock')
+})
+
+test('D4 a uv.lock HEAD holds stays in the index and the diff', () => {
+  const { dir, root } = uved()
+  head(dir, ['add', '-f', 'uv.lock'])
+  head(dir, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'tracked lock'])
+  checkout(root, 1, 'acme/widget', 'widget-12-a1')
+  expect(head(dir, ['ls-files', '--', 'uv.lock'])).toBe('uv.lock')
+  writeFileSync(join(dir, 'uv.lock'), 'version = 2\n')
+  expect(gitDiff(dir, head(dir, ['rev-parse', 'HEAD']))).toContain('+version = 2')
+})
+
 test('a kotlin/ brief builds on the kotlin seat, diffed at base', async () => {
   const w = world('warm', undefined, KOTLIN)
   approve(w.db, w.target)

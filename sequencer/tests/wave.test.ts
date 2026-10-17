@@ -9,12 +9,14 @@ import type { Read, Run } from '../../cli/gh.ts'
 import { all } from '../../cli/inbox.ts'
 import type { Provider } from '../../providers/kind.ts'
 import { load } from '../../runner/rules.ts'
-import { logged, ofKind } from '../../store/events.ts'
+import { allEvents, logged, ofKind } from '../../store/events.ts'
 import type { Db } from '../../store/index.ts'
 import { addPipe, allPlans } from '../../store/plans.ts'
 import { lastLogged } from '../../store/wave.ts'
 import { intake } from '../capture.ts'
+import { drift } from '../drift.ts'
 import { closing } from '../wave.ts'
+import { REGISTRY } from './drifting.ts'
 
 const repo = join(import.meta.dirname, '../..')
 const schema = join(repo, 'schema')
@@ -59,7 +61,7 @@ function piped(enabled = 1, name = 'loupe'): Db {
   return db
 }
 
-const passed = (db: Db, outcome: 'pass' | 'refuse' | 'needs_ceo', at = '2026-10-02T09:00:00.000Z'): void => {
+const passed = (db: Db, outcome: 'pass' | 'refuse' | 'escalate', at = '2026-10-02T09:00:00.000Z'): void => {
   logged(db, { plan: null, kind: 'wave', actor: 'design_lead', outcome, message: '', pointer: 'wave 1', run: null }, at)
 }
 
@@ -117,9 +119,9 @@ test('D1: a wave:2 ticket waits with no wave 1 event', () => {
   expect(allPlans(db)).toEqual([])
 })
 
-test('D2: a refused or needs_ceo wave 1 holds wave:2', () => {
+test('D2: a refused or escalated wave 1 holds wave:2', () => {
   const db = piped()
-  for (const outcome of ['refuse', 'needs_ceo'] as const) {
+  for (const outcome of ['refuse', 'escalate'] as const) {
     passed(db, outcome)
     intake(db, tmp(), canned([{ number: 20, wave: 2 }]))
     expect(allPlans(db)).toEqual([])
@@ -271,9 +273,13 @@ browsed('D6: a fence refuse in the asked shape refuses', async () => {
   expect(all(home)[0]?.note).toContain('index.html: the status pill differs from plans.html')
 })
 
-browsed('D7: a reply with no fence is needs_ceo and blocked', async () => {
-  const { db, home } = seeded()
-  await closing(db, home, stub([], 'looks fine'), canned([], WAVE_ONE), NOW, web())
-  expect(lastLogged(db, 'wave', 'wave 1')?.outcome).toBe('needs_ceo')
-  expect(all(home)).toMatchObject([{ kind: 'blocked', ticket: 'wave 1' }])
-})
+for (const [name, reply] of [['no fence', 'looks fine'], ['needs_ceo fence', '---\noutcome: needs_ceo\n---\n']] as const) {
+  browsed(`D7: a reply with ${name} escalates and is blocked`, async () => {
+    const { db, home } = seeded()
+    await closing(db, home, stub([], reply), canned([], WAVE_ONE), NOW, web())
+    expect(lastLogged(db, 'wave', 'wave 1')?.outcome).toBe('escalate')
+    expect(allEvents(db).filter((e) => e.outcome === 'needs_ceo')).toEqual([])
+    expect(drift(db, REGISTRY.filter((e) => e.name === 'needs_ceo_actor'), NOW)).toEqual([])
+    expect(all(home)).toMatchObject([{ kind: 'blocked', ticket: 'wave 1' }])
+  })
+}

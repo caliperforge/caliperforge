@@ -1413,6 +1413,31 @@ test('a deletion outside the fence refuses the build, naming it', async () => {
   expect(existsSync(join(srcDir(w.root, 1), 'src/hello.ts'))).toBe(true)
 })
 
+test('a uv.lock a seat run wrote stays out of the diff', async () => {
+  const w = world()
+  approve(w.db, w.target)
+  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  writeFileSync(join(srcDir(w.root, 1), 'uv.lock'), 'version = 1\n')
+
+  const fired = (await tick(w.db, w.root, stub(CARRIED)))[0]
+
+  expect(fired).toMatchObject({ step: 2, outcome: 'pass' })
+  expect(diffOf(w.root, 1)).not.toContain('uv.lock')
+})
+
+test('a file the build made is deleted outside the fence', async () => {
+  const w = world()
+  approve(w.db, w.target)
+  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  const src = srcDir(w.root, 1)
+  writeFileSync(join(src, 'src/made.ts'), 'export const made = 1\n')
+
+  const fired = (await tick(w.db, w.root, stub(dropping(['src/made.ts']))))[0]
+
+  expect(fired).toMatchObject({ step: 2, outcome: 'pass' })
+  expect(existsSync(join(src, 'src/made.ts'))).toBe(false)
+})
+
 test('deleting a path not in the tree refuses, not a no-op', async () => {
   const w = world()
   dropPlan(w.db, 1)

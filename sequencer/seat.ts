@@ -101,7 +101,7 @@ async function fenced(db: Db, root: string, plan: PlanRow, step: Step, provider:
  * The build names paths under `## Deleted` and the kernel removes them, before the rails read the
  * tree; `git add -A` at the commit stages the removal, so the deletion is in the diff the reviewers
  * judge. The fence that bars a write bars a delete -- the same `refuse()` the seat's own tools run
- * through -- and a path that is not there refuses rather than passing as a silent no-op.
+ * through -- save a file the build itself made, removed even outside the fence -- and a path that is not there refuses rather than passing as a silent no-op.
  */
 function dropped(db: Db, root: string, plan: PlanRow, step: Step, handback: string): Outcome | null {
   const { paths, unread } = deletions(handback)
@@ -109,12 +109,12 @@ function dropped(db: Db, root: string, plan: PlanRow, step: Step, handback: stri
   if (paths.length === 0) return null
   const src = srcDir(root, plan.id)
   const fence = fenceFor(db, plan.id, seat(root, step.runs).manifest.write_paths)
-  const barred = paths.filter((path) => refuse(src, fence, path, kernelPlan(plan)) !== null)
+  const base = maybe(root, plan.id, 'base.sha')?.trim()
+  const made = (path: string): boolean => base !== undefined && existsSync(join(src, path)) && !holds(src, `${base}:${path}`)
+  const barred = paths.filter((path) => refuse(src, fence, path, kernelPlan(plan)) !== null && !made(path))
   const absent = paths.filter((path) => !barred.includes(path) && !existsSync(join(src, path)))
-  if (barred.length > 0 || absent.length > 0) {
-    const why = [...barred.map((p) => `${p} is outside the fence`), ...absent.map((p) => `${p} is not in the tree`)]
-    return { outcome: 'refuse', spans: [...barred, ...absent], note: `${step.runs}: ${why.join('; ')}` }
-  }
+  const why = [...barred.map((p) => `${p} is outside the fence`), ...absent.map((p) => `${p} is not in the tree`)]
+  if (why.length > 0) return { outcome: 'refuse', spans: [...barred, ...absent], note: `${step.runs}: ${why.join('; ')}` }
   for (const path of paths) rmSync(join(src, path))
   return null
 }

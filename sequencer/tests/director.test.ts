@@ -394,9 +394,12 @@ test('D2: a rule quoting `../issue.md` applies', async () => {
   expect(maybe(home, 7, 'issue.md')).toContain('the seat must refuse `../issue.md`')
 })
 
-test('D3: a ../ path climbing out of the repo is held by the coo', async () => {
+test.each([
+  { name: 'a ../ path', path: (h: string) => relative(srcDir(h, 7), elsewhere()) },
+  { name: 'a mid-token ../', path: () => 'sequencer/../../../../../../etc/x' },
+])('D3: $name climbing out of the repo is held by the coo', async ({ path }) => {
   const { db, home } = seeded('1')
-  await run(db, home, ruling(relative(srcDir(home, 7), elsewhere())))
+  await run(db, home, ruling(path(home)))
   expect(maybe(home, 7, 'issue.md')).toBe(ISSUE)
   expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'coo' })
 })

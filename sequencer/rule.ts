@@ -38,7 +38,7 @@ function ruled(issue: string): string {
 
 export function rule(db: Db, root: string, plan: PlanRow, who: string, text: string): 'ask.md' | 'issue.md' | null {
   const other = [...text.matchAll(/\.cf\/work\/(\d+)/g)].some((m) => Number(m[1]) !== plan.id)
-  if (other) return null
+  if (other || /[^\s`'"(.]\.\.\//.test(text)) return null
   const named = (p: string) => !p.startsWith('~') && [srcDir(root, plan.id), root].some((d) => !relative(d, join(d, p)).startsWith('..') && existsSync(join(d, p)))
   const under = (p: string) => p.startsWith(`${root}/`) || !relative(real(planDir(root, plan.id)), real(p)).startsWith('..')
   const climbs = (p: string) => [srcDir(root, plan.id), root].some((b) => [b, ...subdirs(b).map((s) => join(b, s))]

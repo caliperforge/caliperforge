@@ -35,6 +35,24 @@ export function bare(tool: string): string {
   return tool.split('(')[0] ?? tool
 }
 
+/** The `Bash(<pattern>)` entries of a tool list. A seat that names none may run no command. */
+const RULE = /^Bash\((.+)\)$/
+
+/** Chaining, substitution and redirection reach a second command the pattern never admitted. */
+const CHAINED = /[;&|`$<>\n()]/
+
+/** Whether a seat holding `tools` may run `command`. */
+export function admitted(tools: string[], command: string): boolean {
+  const patterns = tools.flatMap((tool) => RULE.exec(tool)?.[1] ?? [])
+  return !CHAINED.test(command) && patterns.some((pattern) => admits(pattern, command))
+}
+
+function admits(pattern: string, command: string): boolean {
+  if (!pattern.endsWith(':*')) return command === pattern
+  const prefix = pattern.slice(0, -2)
+  return command === prefix || command.startsWith(`${prefix} `)
+}
+
 type Ended = 'completed' | 'stopped'
 
 export interface Fired {

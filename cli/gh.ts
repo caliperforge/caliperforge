@@ -124,11 +124,14 @@ export function prNumber(url: string): number {
   return Number(hit[1])
 }
 
-/** The fork's `main` holds the head's base before the head is pushed onto it. */
+const trunk = (fork: string, read: Read): string => z.object({ default_branch: z.string() }).parse(read(['api', `repos/${fork}`])).default_branch
+
+/** The fork's default branch holds the head's base before the head is pushed onto it. */
 export function forward(fork: string, base: string, read: Read = gh, exec: Run = run): void {
-  const { status } = z.object({ status: z.string() }).parse(read(['api', `repos/${fork}/compare/main...${base}`]))
-  if (status === 'diverged') throw new Error(`${fork} main has diverged from ${base}`)
-  if (status === 'ahead') exec(['api', '-X', 'PATCH', `repos/${fork}/git/refs/heads/main`, '-f', `sha=${base}`])
+  const branch = trunk(fork, read)
+  const { status } = z.object({ status: z.string() }).parse(read(['api', `repos/${fork}/compare/${branch}...${base}`]))
+  if (status === 'diverged') throw new Error(`${fork} ${branch} has diverged from ${base}`)
+  if (status === 'ahead') exec(['api', '-X', 'PATCH', `repos/${fork}/git/refs/heads/${branch}`, '-f', `sha=${base}`])
 }
 
 /**
@@ -138,7 +141,7 @@ export function forward(fork: string, base: string, read: Read = gh, exec: Run =
  */
 export function rehearse(fork: string, branch: string, read: Read = gh, exec: Run = run): void {
   if (rehearsal(fork, branch, read) !== null) return
-  exec(['pr', 'create', '--repo', fork, '--base', 'main', '--head', branch,
+  exec(['pr', 'create', '--repo', fork, '--base', trunk(fork, read), '--head', branch,
     '--title', 'CI rehearsal only (do not merge)', '--body', 'Fork CI only. Do not merge.'])
 }
 

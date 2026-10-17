@@ -1,7 +1,6 @@
 {
   "bench.ts": {
-    "lines": 162,
-    "prepare": 1
+    "lines": 158
   },
   "package.ts": {
     "lines": 70

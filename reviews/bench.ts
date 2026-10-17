@@ -12,6 +12,7 @@ import { planById } from '../store/plans.ts'
 import { builtAs } from '../store/runs.ts'
 import { targetRow } from '../store/targets.ts'
 import { byRun } from '../store/transcript.ts'
+import { addReview } from '../store/verdict.ts'
 import { subdirs } from '../checks/tree.ts'
 import { inContext } from './package.ts'
 import { packs } from './packs.ts'
@@ -153,10 +154,5 @@ function digest(input: unknown): string {
 export function record(db: Db, root: string, name: string, plan: number, v: Verdict,
   tokens: number, seconds: number, tree: string | null): number {
   const manifest = reviewManifest(root, name)
-  const row = db.prepare(`INSERT INTO verdicts
-    (gate, kind, subject_digest, plan, step, outcome, rail_id, origin_kind, origin_ref, tokens, seconds, tree, message)
-    VALUES (?, 'review', ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)`)
-    .run(manifest.gate, v.subject_digest, plan, manifest.step, v.outcome, v.origin_kind, v.origin_ref, tokens, seconds, tree,
-      v.message)
-  return Number(row.lastInsertRowid)
+  return addReview(db, manifest.gate, manifest.step, plan, v, tokens, seconds, tree)
 }

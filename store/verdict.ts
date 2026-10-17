@@ -36,3 +36,12 @@ export function overrule(db: Db, plan: number, step: number, ref: string, tree: 
     SELECT gate, kind, subject_digest, plan, step, 'refuse', 'ruling', ?, 0, 0, ? FROM verdicts
     WHERE plan = ? AND step = ? AND kind = 'review'`).run(ref, tree, plan, step)
 }
+
+export function addReview(db: Db, gate: string, step: number, plan: number, v: Verdict,
+  tokens: number, seconds: number, tree: string | null): number {
+  const row = db.prepare(`INSERT INTO verdicts
+    (gate, kind, subject_digest, plan, step, outcome, rail_id, origin_kind, origin_ref, tokens, seconds, tree, message)
+    VALUES (?, 'review', ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)`)
+    .run(gate, v.subject_digest, plan, step, v.outcome, v.origin_kind, v.origin_ref, tokens, seconds, tree, v.message)
+  return Number(row.lastInsertRowid)
+}

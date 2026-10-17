@@ -219,7 +219,7 @@ function commands(src: string, given: Commands, narrow: string[], touched: strin
   if (scripts === null) return tools(src, given, touched)
   const named = (given.npm ?? []).filter((s) => scripts[s] !== undefined)
   return [
-    ...(bare(src) ? [['ci', ['ci']] as [string, string[]]] : []),
+    ...(bare(src) && (named.length > 0 || given.tsc !== undefined) ? [['ci', ['ci']] as [string, string[]]] : []),
     ...named.map((s): [string, string[]] => [s, related(scripts[s] ?? '', s, narrow) ?? ['run', s]]),
     ...tools(src, given, touched),
   ]

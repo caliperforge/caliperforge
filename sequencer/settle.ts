@@ -7,8 +7,9 @@ import { kindsOf, logged, newestRun, runSince } from '../store/events.ts'
 import { type Db, LOCKED } from '../store/index.ts'
 import type { Taken } from '../store/leases.ts'
 import { busy } from '../store/now.ts'
-import { advance, back, end, finish, internal, needsCeo, rewind, type PipeRow, type PlanRow, waiting } from '../store/plans.ts'
+import { advance, back, end, finish, internal, laneOff, needsCeo, rewind, type PipeRow, type PlanRow, waiting } from '../store/plans.ts'
 import { blipped, peer, refused, sinceSent } from '../store/refusals.ts'
+import { newestVerdict, reviewSince } from '../store/reviewed.ts'
 import { brief } from '../templates/account.ts'
 import { generate } from '../templates/bench.ts'
 import { draft, grow, review } from '../templates/comms.ts'
@@ -68,17 +69,9 @@ function seatless(plan: PlanRow, step: Step, language: string | null): Outcome |
   return { outcome: 'needs_ceo', spans: ['staffing'], note: `no ${String(language)} ${String(step.mode)} seat` }
 }
 
-function newestVerdict(db: Db): number {
-  return (db.prepare('SELECT coalesce(max(id), 0) AS id FROM verdicts').get() as { id: number }).id
-}
-
 function pointer(db: Db, plan: number, step: Step, after: number): string {
   if (step.fires === 'brief') return `plans:${String(plan)}`
-  const own = step.fires === 'review'
-    ? (db.prepare(`SELECT max(id) AS id FROM verdicts
-        WHERE plan = ? AND step = ? AND kind = 'review' AND id > ?`)
-      .get(plan, step.step, after) as { id: number | null }).id
-    : null
+  const own = step.fires === 'review' ? reviewSince(db, plan, step.step, after) : null
   return own === null ? `step-${String(step.step)}` : `verdicts:${String(own)}`
 }
 
@@ -250,7 +243,7 @@ function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcom
   const cap = streaked(db, root, plan, step)
   if (why !== 'again') stopped(root, plan.id, why)
   if (why === 'shared' && !outcome.spans.every((s) => CI_ONLY.test(s))) {
-    db.prepare('UPDATE pipes SET enabled = 0 WHERE id = ?').run(plan.pipe_id)
+    laneOff(db, plan.pipe_id)
     outcome.note += `; lane off: plans ${String(plan.id)} and ${String(peer(db, r))} refused on ${outcome.spans.join(', ')}`
     logged(db, { plan: plan.id, kind: 'pipe', actor: 'settle', outcome: 'escalate', message: outcome.note, pointer: null, run: null })
   }

@@ -1413,6 +1413,50 @@ test('a deletion outside the fence refuses the build, naming it', async () => {
   expect(existsSync(join(srcDir(w.root, 1), 'src/hello.ts'))).toBe(true)
 })
 
+test('D1 deleting ../issue.md refuses and the issue stays', async () => {
+  const w = world()
+  dropPlan(w.db, 1)
+  ours(w.root)
+  internalPlan(w.db, w.root, MINE)
+  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
+
+  const fired = (await tick(w.db, w.root, stub(dropping(['../issue.md']))))[0]
+
+  expect(fired).toMatchObject({ step: 2, outcome: 'refuse', spans: ['../issue.md'] })
+  expect(maybe(w.root, MINE, 'issue.md')).not.toBeNull()
+})
+
+test('D2 deleting a file under .git refuses and it stays', async () => {
+  const w = world()
+  dropPlan(w.db, 1)
+  ours(w.root)
+  internalPlan(w.db, w.root, MINE)
+  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  const src = srcDir(w.root, MINE)
+  mkdirSync(join(src, '.git/objects/pack'), { recursive: true })
+  writeFileSync(join(src, '.git/objects/pack/x.pack'), 'pack\n')
+
+  const fired = (await tick(w.db, w.root, stub(dropping(['.git/objects/pack/x.pack']))))[0]
+
+  expect(fired).toMatchObject({ step: 2, outcome: 'refuse', spans: ['.git/objects/pack/x.pack'] })
+  expect(fired?.note).toContain('is under .git')
+  expect(existsSync(join(src, '.git/objects/pack/x.pack'))).toBe(true)
+})
+
+test('D4 deleting a file on base refuses and it stays', async () => {
+  const w = world()
+  dropPlan(w.db, 1)
+  ours(w.root)
+  internalPlan(w.db, w.root, MINE)
+  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
+
+  const fired = (await tick(w.db, w.root, stub(dropping(['src/hello.ts']))))[0]
+
+  expect(fired).toMatchObject({ step: 2, outcome: 'refuse', spans: ['src/hello.ts'] })
+  expect(fired?.note).toContain('is on base')
+  expect(existsSync(join(srcDir(w.root, MINE), 'src/hello.ts'))).toBe(true)
+})
+
 test('deleting a path not in the tree refuses, not a no-op', async () => {
   const w = world()
   dropPlan(w.db, 1)

@@ -125,7 +125,8 @@ async function pass(db: Db, root: string, provider: Provider, now: Date, web: st
   const spans = [...shot.spans, ...(judged?.spans ?? [])]
   const outcome = judged === null ? 'needs_ceo' : spans.length > 0 ? 'refuse' : judged.outcome
   const said = `wave ${String(n)} ${outcome}${judged === null ? ': no verdict' : spans.length > 0 ? `: ${spans.join('; ')}` : ''}`
-  logged(db, { plan: null, kind: 'wave', actor: 'design_lead', outcome, message: said, pointer: `wave ${String(n)}`, run: null }, now.toISOString())
+  logged(db, { plan: null, kind: 'wave', actor: 'design_lead', outcome: outcome === 'needs_ceo' ? 'escalate' : outcome, message: said,
+    pointer: `wave ${String(n)}`, run: null }, now.toISOString())
   const event: Event = { at: now.toISOString(), plan: 0, ticket: `wave ${String(n)}`, kind: INBOX[outcome], step: 0, name: 'design_lead',
     note: `${said}. ${dir}: ${pngs.join(', ')}` }
   record(root, [event])

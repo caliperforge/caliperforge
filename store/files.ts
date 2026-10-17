@@ -1,6 +1,7 @@
 import { SEED } from '../cli/digests.ts'
 import { logged } from './events.ts'
 import type { Db } from './index.ts'
+import { held } from './leases.ts'
 import { BUILT, type Holder } from './plans.ts'
 
 export interface PlanFile {
@@ -60,21 +61,37 @@ export function record(db: Db, plan: number, list: PlanFile[]): void {
 /** The repo a plan's paths are relative to: its target's, or ours. */
 const REPO = "COALESCE((SELECT t.repo FROM targets t WHERE t.id = %s.target_id), '')"
 
-/**
- * The job this plan must wait for: one in the same repo, not settled, past its brief, whose file
- * list shares a path with this one's -- and either building already or ahead of it in queue order
- * (priority, then age), so two unbuilt plans never wait on each other and a P0 never waits on an unbuilt P1. A plan waiting on a person or stopped holds nothing up.
- */
-export function sharing(db: Db, plan: number): { plan: number; path: string } | null {
-  return (db.prepare(`SELECT o.id AS plan, f.path FROM plans me
+/** Another job `o` in the same repo, not settled and past its brief, listing a path of plan `me` other than the seed and `.cf/`. */
+const SHARED = `FROM plans me
     JOIN plan_files mine ON mine.plan = me.id
     JOIN plan_files f ON f.path = mine.path AND f.plan <> me.id
     JOIN plans o ON o.id = f.plan
     WHERE me.id = ? AND o.state IN ('queued', 'running') AND o.step >= 2 AND mine.path NOT LIKE '.cf/%' AND mine.path <> ?
-      AND ${REPO.replace('%s', 'o')} = ${REPO.replace('%s', 'me')}
+      AND ${REPO.replace('%s', 'o')} = ${REPO.replace('%s', 'me')}`
+
+/**
+ * The job this plan must wait for: one in the same repo, not settled, past its brief, whose file
+ * list shares a path with this one's -- and either building already or ahead of it in queue order
+ * (priority, then age), so two unbuilt plans never wait on each other and a P0 never waits on an unbuilt P1. A plan waiting on a person or stopped holds nothing up.
+ * A built lower-priority plan holds a plan back only while a tick holds its lease.
+ */
+export function sharing(db: Db, plan: number): { plan: number; path: string } | null {
+  const leased = held(db).map((l) => l.plan)
+  return (db.prepare(`SELECT o.id AS plan, f.path ${SHARED}
       AND (o.priority < me.priority OR (o.priority = me.priority AND o.id < me.id)
-        OR EXISTS (SELECT 1 FROM runs r WHERE r.plan = o.id AND r.step >= 2 AND r.${BUILT}))
-    ORDER BY o.priority, o.id LIMIT 1`).get(plan, SEED) ?? null) as { plan: number; path: string } | null
+        OR (EXISTS (SELECT 1 FROM runs r WHERE r.plan = o.id AND r.step >= 2 AND r.${BUILT})
+          AND (o.priority <= me.priority OR o.id IN (SELECT value FROM json_each(?)))))
+    ORDER BY o.priority, o.id LIMIT 1`).get(plan, SEED, JSON.stringify(leased)) ?? null) as { plan: number; path: string } | null
+}
+
+/** The higher-priority job sharing a path that this built plan stands aside for when its step ends. */
+export function ahead(db: Db, plan: number): number | null {
+  const row = db.prepare(`SELECT o.id AS plan ${SHARED}
+      AND me.state IN ('queued', 'running') AND o.priority < me.priority
+      AND COALESCE(o.wait_reason, '') <> 'ceo_batch'
+      AND EXISTS (SELECT 1 FROM runs r WHERE r.plan = me.id AND r.step >= 2 AND r.${BUILT})
+    ORDER BY o.priority, o.id LIMIT 1`).get(plan, SEED) as { plan: number } | undefined
+  return row?.plan ?? null
 }
 
 /** Every path the plan holds, strays included. */

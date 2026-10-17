@@ -20,7 +20,8 @@ import { picks } from '../next.ts'
 import { blocked, kernel } from '../steps.ts'
 import { checkout, diffOf, doneIds, get, gitDiff, maybe, narrowing, put, snapshot, srcDir } from '../workspace.ts'
 import { GREEN } from '../base.ts'
-import { record } from '../../store/files.ts'
+import { record, sharing } from '../../store/files.ts'
+import { drop, take } from '../../store/leases.ts'
 import { allEvents, eventsOf, kindsOf, newestMode, runRows } from '../../store/events.ts'
 import { overrule, verdictRows } from '../../store/verdict.ts'
 import { record as signal } from '../../store/signals.ts'
@@ -1526,6 +1527,29 @@ test('D1 D2 D3 the tick parks a file wait for a queued plan', async () => {
   expect(parked(w.db)).toEqual([])
   expect(plan(w.db, HELD).state).not.toBe('blocked_on_ceo')
   expect(existsSync(join(w.root, `.cf/work/${String(HELD)}/parked.md`))).toBe(false)
+})
+
+test('D1 D3 D4 a P0 takes a built P1\'s files between its steps', async () => {
+  const w = world()
+  dropPlan(w.db, 1)
+  ours(w.root)
+  internalPlan(w.db, w.root, MINE)
+  internalPlan(w.db, w.root, HELD, 'let a second internal plan run', 35)
+  width(w.db, 1, 2)
+  for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  expect(overlapWaits(w.db)).toMatchObject([{ plan: HELD, on: MINE }])
+  amend(w.db, HELD, { priority: 0 })
+  expect(sharing(w.db, HELD)).toBeNull()
+  take(w.db, MINE)
+  expect(sharing(w.db, HELD)).toMatchObject({ plan: MINE })
+  internalPlan(w.db, w.root, 4, 'let plan 4 run', 36)
+  await tick(w.db, w.root, stub(CARRIED))
+  expect(parked(w.db)).toEqual([])
+  drop(w.db, MINE)
+  const fired = await tick(w.db, w.root, stub(CARRIED))
+  expect(fired[0]).toMatchObject({ plan: HELD, step: 2, name: 'build' })
+  expect(parked(w.db).map((p) => [p.id, p.held_why?.startsWith(`until plan ${String(HELD)} lands`)])).toEqual([[MINE, true]])
+  expect(eventsOf(w.db, MINE, 'park')).toEqual([{ actor: 'tick', outcome: 'pass', message: `waits on plan ${String(HELD)}'s files` }])
 })
 
 test('D3 a plan held on one in another pipe keeps its slot', async () => {

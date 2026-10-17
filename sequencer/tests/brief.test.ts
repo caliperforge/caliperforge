@@ -229,6 +229,7 @@ test('the missing part is the span; one D row is its own section', () => {
 test('D1 D2 an outside brief may carry a conventional title', () => {
   const drifts = ask.replace('# A seat that briefs before any build', '# PayKit interface drifts')
   const feat = brief.replace('# A seat that briefs before any build', '# feat(php): Config::fromEnv reads prefixed variables')
+    .replace('\n## Cases', '\n## Reproduced\n\n- command: `npm run test -- sequencer/tests/brief.test.ts`\n- expect: fails\n\n## Cases')
   expect(shape(feat, drifts, repo, true)).toBeNull()
   expect(shape(feat, drifts, repo)).toMatchObject({ span: '# <title>' })
   expect(shape(brief.replace('# A seat', '# Some seat'), ask, repo, true)).toMatchObject({ span: '# <title>' })
@@ -427,7 +428,7 @@ test('D1: a length-only refusal refires as a bare trim', async () => {
 
   const prompt = packets[0]?.prompt ?? ''
   expect(prompt).toContain(`# Issue\n\n${longer(plain(w)).trimEnd()}\n\n# Trim it\n`)
-  expect(prompt).toContain('This brief is 109 lines and the ceiling is 100: cut at least 9 lines.')
+  expect(prompt).toContain('This brief is 114 lines and the ceiling is 100: cut at least 14 lines.')
   for (const absent of ['# The files', '# MAP.md', TEMPLATE, '\n# Files over 300 lines\n']) expect(prompt).not.toContain(absent)
   expect(packets[0]?.tools).toEqual([])
   expect(packets[0]?.servers).toBeUndefined()

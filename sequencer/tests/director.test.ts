@@ -1,6 +1,6 @@
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { basename, dirname, join } from 'node:path'
+import { basename, dirname, join, relative } from 'node:path'
 import { expect, test } from 'vitest'
 import { heldBy } from '../../cli/brief.ts'
 import { all } from '../../cli/inbox.ts'
@@ -374,6 +374,29 @@ const elsewhere = () => {
 test.each([{ name: '~/.ssh/config', path: () => '~/.ssh/config' }, { name: 'another checkout', path: elsewhere }, { name: '/..', path: () => '/..' }])('D3: a rule naming $name is held by the coo', async ({ path }) => {
   const { db, home } = seeded('1')
   await run(db, home, ruling(path()))
+  expect(maybe(home, 7, 'issue.md')).toBe(ISSUE)
+  expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'coo' })
+})
+
+test('D1: a rule naming ../runner/index.ts in the repo applies', async () => {
+  const { db, home } = seeded('1')
+  for (const dir of ['runner', 'sequencer']) mkdirSync(join(home, dir))
+  writeFileSync(join(home, 'runner/index.ts'), '')
+  await run(db, home, ruling('../runner/index.ts'))
+  expect(told(db)).toEqual([{ actor: 'director', outcome: 'pass', message: 'rule: the path settles it' }])
+  expect(maybe(home, 7, 'issue.md')).toContain('read ../runner/index.ts')
+})
+
+test('D2: a rule quoting `../issue.md` applies', async () => {
+  const { db, home } = seeded('1')
+  await run(db, home, '---\nmove: rule\nwhy: the path settles it\nanswer: the seat must refuse `../issue.md`\n---\n')
+  expect(told(db)).toEqual([{ actor: 'director', outcome: 'pass', message: 'rule: the path settles it' }])
+  expect(maybe(home, 7, 'issue.md')).toContain('the seat must refuse `../issue.md`')
+})
+
+test('D3: a ../ path climbing out of the repo is held by the coo', async () => {
+  const { db, home } = seeded('1')
+  await run(db, home, ruling(relative(srcDir(home, 7), elsewhere())))
   expect(maybe(home, 7, 'issue.md')).toBe(ISSUE)
   expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'coo' })
 })

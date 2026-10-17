@@ -1,6 +1,6 @@
-import { existsSync, rmSync } from 'node:fs'
+import { existsSync, realpathSync, rmSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
-import { real, refuse } from '../runner/index.ts'
+import { refuse } from '../runner/index.ts'
 import { seat } from '../runner/rules.ts'
 import type { Db } from '../store/index.ts'
 import type { PlanRow } from '../store/plans.ts'
@@ -21,8 +21,8 @@ export function dropped(db: Db, root: string, plan: PlanRow, step: Step, handbac
   if (unread.length > 0) return { outcome: 'refuse', spans: unread, note: `${step.runs}: ${unread.map((r) => `${r} names no path`).join('; ')}` }
   if (paths.length === 0) return null
   const src = srcDir(root, plan.id)
-  const top = real(src)
-  const rel = (path: string): string => relative(top, real(resolve(top, path)))
+  const top = realpathSync.native(src)
+  const rel = (path: string): string => relative(top, realpathSync.native(resolve(top, path)))
   const base = maybe(root, plan.id, 'base.sha')?.trim()
   const fence = fenceFor(db, plan.id, seat(root, step.runs).manifest.write_paths)
   const barred = paths.filter((path) => refuse(src, fence, path, kernelPlan(plan)) !== null)

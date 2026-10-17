@@ -1443,6 +1443,22 @@ test('D2 deleting a file under .git refuses and it stays', async () => {
   expect(existsSync(join(src, '.git/objects/pack/x.pack'))).toBe(true)
 })
 
+test('deleting .GIT in another case refuses and it stays', async () => {
+  const w = world()
+  dropPlan(w.db, 1)
+  ours(w.root)
+  internalPlan(w.db, w.root, MINE)
+  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  const src = srcDir(w.root, MINE)
+  mkdirSync(join(src, '.git/objects/pack'), { recursive: true })
+  writeFileSync(join(src, '.git/objects/pack/x.pack'), 'pack\n')
+
+  const fired = (await tick(w.db, w.root, stub(dropping(['.GIT/objects/pack/x.pack']))))[0]
+
+  expect(fired).toMatchObject({ step: 2, outcome: 'refuse', spans: ['.GIT/objects/pack/x.pack'] })
+  expect(existsSync(join(src, '.git/objects/pack/x.pack'))).toBe(true)
+})
+
 test('D4 deleting a file on base refuses and it stays', async () => {
   const w = world()
   dropPlan(w.db, 1)

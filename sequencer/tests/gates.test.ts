@@ -139,7 +139,7 @@ const py = (files: Record<string, string>, listed = LEAK): ReturnType<typeof gat
 const ENV = ['run', '--no-project', '--with', 'ruff', '--with', 'pyright', '--with', 'pytest']
 
 test('1181a D2 no project runs ruff, pyright, pytest on files', () => {
-  expect(py({ 'smoke/check_leak.py': '', 'tests/test_smoke_leak.py': '' }, [...LEAK, 'smoke/gone.py', 'README.md'])).toEqual([
+  expect(py({ 'pyrightconfig.json': '', 'smoke/check_leak.py': '', 'tests/test_smoke_leak.py': '' }, [...LEAK, 'smoke/gone.py', 'README.md'])).toEqual([
     { script: 'lint', bin: 'uv', args: [...ENV, 'ruff', 'check', ...LEAK], dir: '' },
     { script: 'typecheck', bin: 'uv', args: [...ENV, 'pyright', ...LEAK], dir: '' },
     { script: 'test', bin: 'uv', args: [...ENV, 'python', '-m', 'pytest'], dir: '' },
@@ -147,7 +147,7 @@ test('1181a D2 no project runs ruff, pyright, pytest on files', () => {
 })
 
 test('1181a D5 no listed test runs pytest; pyproject keeps its own', () => {
-  expect(py({ 'smoke/check_leak.py': '' })).toEqual([
+  expect(py({ 'pyrightconfig.json': '', 'smoke/check_leak.py': '' })).toEqual([
     { script: 'lint', bin: 'uv', args: [...ENV, 'ruff', 'check', 'smoke/check_leak.py'], dir: '' },
     { script: 'typecheck', bin: 'uv', args: [...ENV, 'pyright', 'smoke/check_leak.py'], dir: '' },
     { script: 'test', bin: 'uv', args: [...ENV, 'python', '-m', 'pytest'], dir: '' },
@@ -157,6 +157,25 @@ test('1181a D5 no listed test runs pytest; pyproject keeps its own', () => {
     { script: 'lint', bin: 'uv', args: ['run', '--no-sync', 'ruff', 'check'], dir: '' },
     { script: 'test', bin: 'uv', args: ['run', '--no-sync', 'pytest'], dir: '' },
   ])
+})
+
+test('1435 D1 D4 requirements install, no config no typecheck', () => {
+  const env = [...ENV, '--with-requirements', 'requirements.txt']
+  expect(py({ 'requirements.txt': 'numpy\n', 'smoke/check_leak.py': '' })).toEqual([
+    { script: 'lint', bin: 'uv', args: [...env, 'ruff', 'check', 'smoke/check_leak.py'], dir: '' },
+    { script: 'test', bin: 'uv', args: [...env, 'python', '-m', 'pytest'], dir: '' },
+  ])
+  expect(py({ 'requirements-dev.txt': '', 'requirements.txt': '', 'smoke/check_leak.py': '' }).map((g) => g.args.slice(8, 12)))
+    .toEqual([0, 1].map(() => ['--with-requirements', 'requirements.txt', '--with-requirements', 'requirements-dev.txt']))
+})
+
+test('1435 D3 D5 mypy config gives mypy; bare setup.cfg gives none', () => {
+  const typecheck = (files: Record<string, string>): string[] | undefined =>
+    py({ ...files, 'smoke/check_leak.py': '' }).find((g) => g.script === 'typecheck')?.args
+  expect(typecheck({ 'mypy.ini': '' })).toEqual([...ENV, '--with', 'mypy', 'mypy', 'smoke/check_leak.py'])
+  expect(typecheck({ '.mypy.ini': '' })).toEqual([...ENV, '--with', 'mypy', 'mypy', 'smoke/check_leak.py'])
+  expect(typecheck({ 'setup.cfg': '[metadata]\nname = x\n\n[mypy]\nstrict = True\n' })).toEqual([...ENV, '--with', 'mypy', 'mypy', 'smoke/check_leak.py'])
+  expect(typecheck({ 'setup.cfg': '[metadata]\nname = x\n\n[mypy-numpy.*]\nignore_missing_imports = True\n' })).toBeUndefined()
 })
 
 test('D6 no lockfile: no install gate, npm runs the scripts', () => {

@@ -965,7 +965,7 @@ function tool(red: string): { run: Run; seen: string[] } {
 }
 
 test('1181a D3 a red pytest is test; a red ruff stops there', () => {
-  const src = nested({ 'smoke/check_leak.py': '', 'tests/test_smoke_leak.py': '' })
+  const src = nested({ 'pyrightconfig.json': '', 'smoke/check_leak.py': '', 'tests/test_smoke_leak.py': '' })
   const python: Outside = { language: 'python', files: ['smoke/check_leak.py', 'tests/test_smoke_leak.py'] }
   const pytest = tool('python')
   expect(checks(src, {}, pytest.run, [], python)).toMatchObject({ script: 'test', code: '1' })

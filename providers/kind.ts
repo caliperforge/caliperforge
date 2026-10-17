@@ -41,7 +41,6 @@ const RULE = /^Bash\((.+)\)$/
 /** Chaining, substitution and redirection reach a second command the pattern never admitted. */
 const CHAINED = /[;&|`$<>\n()]/
 
-/** Whether a seat holding `tools` may run `command`. */
 export function admitted(tools: string[], command: string): boolean {
   const patterns = tools.flatMap((tool) => RULE.exec(tool)?.[1] ?? [])
   return !CHAINED.test(command) && patterns.some((pattern) => admits(pattern, command))

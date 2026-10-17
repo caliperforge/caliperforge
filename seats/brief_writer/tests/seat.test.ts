@@ -95,6 +95,12 @@ test('the prompt states the brief check\'s path and length rules', () => {
   ]) expect(prompt).toContain(rule)
 })
 
+test('an outside brief carries ## Reproduced, ours does not', () => {
+  const prompt = seat(root, 'brief_writer').prompt.replace(/\s+/g, ' ')
+  expect(prompt).toContain('On someone else\'s repository the brief also carries `## Reproduced`, after `## Settled facts`')
+  expect(prompt).toContain('one off that list, or chained, is refused. A caliperforge/* brief carries no `## Reproduced`.')
+})
+
 test('the prompt carries a word-for-word block under Approach', () => {
   expect(seat(root, 'brief_writer').prompt.replace(/\s+/g, ' ')).toContain(
     'When the ask calls a fenced block word for word, byte for byte or verbatim, carry that block under `## Approach` exactly as the ask writes it, fence lines included.',

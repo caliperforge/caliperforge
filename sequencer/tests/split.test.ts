@@ -492,7 +492,9 @@ test('D5: an internal mixed brief is not split by language', async () => {
 
 function wideBrief(paths: string[], title = 'let an internal plan run', approach = 'x', tests = 'src/a.ts'): string {
   return [`# ${title}`, '', '**What:** a.', '**Why:** b.', '**When it ends:** c.', '',
-    '## Approach', '', approach, '', '## Settled facts', '', '- none: every name the change uses is in this checkout', '', '## Cases', '', '- D1 one', '- D2 a call with no name is refused', '',
+    '## Approach', '', approach, '', '## Settled facts', '', '- none: every name the change uses is in this checkout', '',
+    '## Reproduced', '', `- command: \`${paths.some((p) => p.startsWith('kotlin/')) ? './gradlew test' : 'npm run test'}\``, '- expect: fails', '',
+    '## Cases', '', '- D1 one', '- D2 a call with no name is refused', '',
     '## Must not break', '', '- y', '', '## Files', '', ...paths.map((p) => `- ${p}`), '',
     '## Files to read', '', '- src/hello.ts — what it exports today', '',
     '## Who else reads what this changes', '', '- nobody else', '', '## Tests', '', `- ${tests} — the case`, '',

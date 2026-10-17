@@ -120,6 +120,8 @@ const LISTED = /^\*\*Files:\*\*[ \t]*\r?\n((?:[ \t]*[-*][ \t].*(?:\r?\n|$))*)/m
 
 const Unclear = z.object({ outcome: z.literal('unclear'), question: z.string().min(1) })
 
+const Claimed = z.object({ outcome: z.literal('claimed'), evidence: z.string().min(1) })
+
 const Part = z.object({ title: z.string().min(1), what: z.string().min(1), why: z.string().min(1), ends: z.string().min(1),
   after: z.string().optional() })
 
@@ -147,6 +149,14 @@ export function unclear(reply: string): string | null {
   if (fence === null) return titleOf(reply) === null && reply.trim() !== '' ? reply.trim() : null
   const parsed = Unclear.safeParse(yamlOf(fence))
   return parsed.success ? parsed.data.question : null
+}
+
+/** The evidence a seat's closing fence cites when an open pull request or a maintainer's comment already covers the ask. */
+export function claimed(reply: string): string | null {
+  const fence = fenceOf(reply)
+  if (fence === null) return null
+  const parsed = Claimed.safeParse(yamlOf(fence))
+  return parsed.success ? parsed.data.evidence : null
 }
 
 /** The fence a seat ends with when the ask is more than one job: the parts, in the order they must land. */
@@ -414,7 +424,7 @@ export function human(brief: string): Record<'title' | 'what' | 'why' | 'ends', 
  * ends the value. A value that runs onto a second line does not survive the quoting, and is read as plain YAML.
  */
 function yamlOf(text: string): unknown {
-  const quoted = text.replace(/^(\s*(?:- )?(?:title|what|why|ends|question|outcome):[ \t]+)(?!["'|>])(.+)$/gm,
+  const quoted = text.replace(/^(\s*(?:- )?(?:title|what|why|ends|question|evidence|outcome):[ \t]+)(?!["'|>])(.+)$/gm,
     (...m: string[]) => `${m[1] ?? ''}${JSON.stringify((m[2] ?? '').trim())}`)
   for (const each of [quoted, text]) {
     try {

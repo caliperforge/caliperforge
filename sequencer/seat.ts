@@ -23,7 +23,7 @@ import { lastTranscript } from '../store/runs.ts'
 import { byRun, opened, pending, unfinished } from '../store/transcript.ts'
 import { languageOfSeat, type Step } from '../templates/pr-path.ts'
 import { parse } from '../rails/diff.ts'
-import { estimate, formats, human, pointed, references, section, shape, split, TEMPLATE, wide, WIDE, type Part } from './brief.ts'
+import { claimed, estimate, formats, human, pointed, references, section, shape, split, TEMPLATE, wide, WIDE, type Part } from './brief.ts'
 import { overlong, trim, trimmed } from './trim.ts'
 import { repoOf } from './ready.ts'
 import { limitOf } from './size.ts'
@@ -148,8 +148,8 @@ export async function fireBrief(db: Db, root: string, plan: PlanRow, step: Step,
   const { fired, cut } = await written(db, root, plan, step, provider, ask, src)
   drop(root, plan.id, 'brief.refused.md')
   if (fired.ended !== 'completed') return exited(step, fired)
-  const line = commanded(fired.text)
-  if (line !== null) return { outcome: 'pass', spans: [], note: `${step.runs}: ${line}`, command: line }
+  const stop = instead(step.runs, fired.text)
+  if (stop !== null) return stop
   const brief = answered(root, plan, step, fired.text, src)
   if (typeof brief !== 'string') return brief
   const refused = (cut === null ? null : trimmed(cut, fired.text)) ?? shape(fired.text, ask, src, !internal(plan))
@@ -171,6 +171,14 @@ export async function fireBrief(db: Db, root: string, plan: PlanRow, step: Step,
   drop(root, plan.id, 'refusal.md')
   drop(root, plan.id, 'question.sha')
   return { outcome: 'pass', spans: [], note: `${step.runs}: brief written` }
+}
+
+/** What the brief seat's reply ends in place of a brief: an allow-listed command to run, or a claimed ask held with its evidence. */
+function instead(runs: string, reply: string): Outcome | null {
+  const line = commanded(reply)
+  if (line !== null) return { outcome: 'pass', spans: [], note: `${runs}: ${line}`, command: line }
+  const evidence = claimed(reply)
+  return evidence === null ? null : { outcome: 'needs_ceo', spans: [], note: `${runs}: claimed: ${evidence}` }
 }
 
 async function written(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider, ask: string, src: string): Promise<{ fired: Fired; cut: string | null }> {

@@ -14,12 +14,15 @@ import { holdOf } from '../../store/holds.ts'
 import { migrate, open } from '../../store/index.ts'
 import { drop, take } from '../../store/leases.ts'
 import { addPart } from '../../store/parts.ts'
-import { held, planById, planRows, terminal, type Holder } from '../../store/plans.ts'
+import type { Packet } from '../../providers/kind.ts'
+import { held, planById, planRows, putPlan, terminal, type Holder } from '../../store/plans.ts'
 import { clearedOf, WHY } from '../../store/refusals.ts'
 import { lapsed } from '../../store/until.ts'
 import { released } from '../fixer.ts'
-import { hold, isHeld, unhold } from '../hold.ts'
+import { ended, hold, isHeld, later, pending, unhold } from '../hold.ts'
+import { tick } from '../index.ts'
 import { maybe, put, srcDir } from '../workspace.ts'
+import { approve, CARRIED, stub, watched, world } from './world.ts'
 
 const repo = join(import.meta.dirname, '../..')
 
@@ -487,4 +490,60 @@ test('unhold past step 1 keeps the checkout', () => {
   hold(db, home, 7, 'x', new Date(), null, LATER)
   unhold(db, home, 7, 'ceo')
   expect(existsSync(join(home, '.cf/work/7/src/built.ts'))).toBe(true)
+})
+
+test('D1 D2 a park mid-step holds the plan when the step ends', async () => {
+  const w = world()
+  approve(w.db, w.target)
+  putPlan(w.db, { id: 2, pipe_id: w.pipe.id, target_id: null, template: 'pr_path', state: 'blocked_on_ceo',
+    queued_at: '2026-10-16T00:00:00.000Z', step: 0, retries: 0, lane: 'machine', seat: 'typescript_specialist',
+    origin: 'https://github.com/caliperforge/caliperforge/issues/140' })
+  const printed: string[] = []
+  const states: string[] = []
+  const cf = new Command()
+  registerPlans(cf, { root: w.root, db: () => w.db, out: (line: string) => { printed.push(line) } })
+  const hook = (packet: Packet): void => {
+    if (!packet.tools.includes('Write')) return
+    writeFileSync(join(packet.cwd, 'src/hello.ts'), 'export const hello = (): string => "hey"\n')
+    cf.parse(['park', '1', '--on', '2', '--by', 'coo'], { from: 'user' })
+    states.push(planById(w.db, 1).state)
+  }
+  const fired = await tick(w.db, w.root, stub(CARRIED, 0, undefined, hook), undefined, undefined, watched([], w.root, 1), 5)
+  expect(fired.map((f) => f.step)).toEqual([0, 1, 2])
+  expect(states).toEqual(['running'])
+  expect(printed).toEqual(['plan 1 held on plan 2 when step 2 ends\n'])
+  expect(eventsOf(w.db, 1, 'park')).toEqual([{ actor: 'coo', outcome: 'pass', message: 'held by a person' }])
+  expect(planRows(w.db).find((p) => p.id === 1)).toMatchObject({ state: 'blocked_on_ceo', waits_on: 2 })
+  expect(isHeld(w.root, 1)).toBe(true)
+  expect(maybe(w.root, 1, 'park.pending.json')).toBeNull()
+})
+
+test('D3 a pending park on a plan the step closed is dropped', () => {
+  const { db, home } = seeded()
+  later(home, 7, 'x', null, LATER)
+  db.exec("UPDATE plans SET state = 'done' WHERE id = 7")
+  ended(db, home, 7, NOW)
+  expect(row(db)).toEqual({ state: 'done', step: 4, waits_on: null })
+  expect(pending(home, 7)).toBe(false)
+  expect(isHeld(home, 7)).toBe(false)
+})
+
+test('D4 a leased park with no release writes nothing', () => {
+  const { db, home } = seeded()
+  db.exec("INSERT INTO plans (id, pipe_id, template, state, queued_at, lane, seat, origin) VALUES (8, 9, 'pr_path', 'done', '2026-09-24', 'machine', 'typescript_specialist', 'https://github.com/caliperforge/caliperforge/issues/140')")
+  take(db, 7)
+  const before = plan7(db)
+  expect(() => { ran(db, home, ['park', '7', '--by', 'coo']) }).toThrow('needs a time or a plan that releases it')
+  expect(() => { ran(db, home, ['park', '7', '--by', 'coo', '--on', '8']) }).toThrow('is not open, so nothing would release')
+  expect(pending(home, 7)).toBe(false)
+  expect(plan7(db)).toEqual(before)
+  expect(logged(db)).toEqual([])
+})
+
+test('D5 cf hold on a leased plan still refuses', () => {
+  const { db, home } = seeded()
+  take(db, 7)
+  expect(() => { ran(db, home, ['hold', '7', '--by', 'coo', '--as', 'coo', '--why', 'x', '--until', '2026-10-04T22:00:00Z']) })
+    .toThrow('mid-step in a live tick')
+  expect(isHeld(home, 7)).toBe(false)
 })

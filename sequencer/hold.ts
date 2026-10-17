@@ -2,7 +2,7 @@ import { rmSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Db } from '../store/index.ts'
 import { returnToLane, retried, rewound } from '../store/holds.ts'
-import { clearWaitsOn, holdOn } from '../store/plans.ts'
+import { clearWaitsOn, holdOn, planById } from '../store/plans.ts'
 import { WHY } from '../store/refusals.ts'
 import { COUNTS } from './push.ts'
 import { afresh, drop, maybe, planDir, put } from './workspace.ts'
@@ -19,6 +19,27 @@ export function hold(db: Db, root: string, plan: number, why: string, now: Date,
   if (on === null && until === null) throw new Error(`plan ${String(plan)} needs a time or a plan that releases it`)
   holdOn(db, plan, why, on, until?.toISOString() ?? null)
   put(root, plan, NOTE, `# Held ${now.toISOString()}\n\n${why}\n${on === null ? '' : `\nwaits on plan ${String(on)}\n`}`)
+}
+
+/** A park asked for while a tick holds the plan's lease: the tick applies it when the step ends. */
+const PENDING = 'park.pending.json'
+
+export function later(root: string, plan: number, why: string, on: number | null, until: Date | null): void {
+  if (on === null && until === null) throw new Error(`plan ${String(plan)} needs a time or a plan that releases it`)
+  put(root, plan, PENDING, JSON.stringify({ why, on, until: until?.toISOString() ?? null }))
+}
+
+export function pending(root: string, plan: number): boolean {
+  return maybe(root, plan, PENDING) !== null
+}
+
+/** `holdOn` sets `blocked_on_ceo` whatever the state, so a step that already settled the plan keeps what it left. */
+export function ended(db: Db, root: string, plan: number, now: Date): void {
+  const park = maybe(root, plan, PENDING)
+  if (park === null) return
+  const { why, on, until } = JSON.parse(park) as { why: string; on: number | null; until: string | null }
+  if (['running', 'queued'].includes(planById(db, plan).state)) hold(db, root, plan, why, now, on, until === null ? null : new Date(until))
+  drop(root, plan, PENDING)
 }
 
 export function isHeld(root: string, plan: number): boolean {

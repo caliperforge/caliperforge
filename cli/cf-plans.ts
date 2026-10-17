@@ -1,7 +1,7 @@
 import type { Command } from 'commander'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { hold, unhold } from '../sequencer/hold.ts'
+import { hold, later, unhold } from '../sequencer/hold.ts'
 import { opened } from '../sequencer/rule.ts'
 import { afresh, cloned, fetchMain, git, MAIN, planDir, reap } from '../sequencer/workspace.ts'
 import { blocked, parked, WAITING } from '../sequencer/steps.ts'
@@ -155,20 +155,24 @@ function fenced(why: string): string {
   return ceo.block.slice(0, ceo.block.indexOf('\n'))
 }
 
+interface Parking { on?: string; until?: string; why: string; by: string }
+
+function parking(handle: Db, root: string, id: string, options: Parking): string {
+  const actor = holderOf(options.by)
+  const n = Number(id)
+  const { on, at } = releasing(handle, id, options)
+  const step = holder(handle, n) === null ? null : planById(handle, n).step
+  if (step === null) hold(handle, root, n, options.why, new Date(), on, at)
+  else later(root, n, options.why, on, at)
+  logged(handle, { plan: n, kind: 'park', actor, outcome: 'pass', message: options.why, pointer: null, run: null })
+  return `plan ${id} held${on === null ? '' : ` on plan ${String(on)}`}${step === null ? '' : ` when step ${String(step)} ends`}\n`
+}
+
 function parks(cf: Command, { root, db, out }: Cli): void {
   cf.command('park').argument('<plan>', 'a plan to hold where it stands, checkout kept')
     .option(...ON).option(...UNTIL)
     .option('--why <text>', 'why it is held', 'held by a person').requiredOption(...BY)
-    .action((id: string, options: { on?: string; until?: string; why: string; by: string }) => {
-      const actor = holderOf(options.by)
-      const handle = db()
-      const n = Number(id)
-      if (holder(handle, n) !== null) throw new Error(`plan ${id} is mid-step in a live tick; park it once the tick lets go`)
-      const { on, at } = releasing(handle, id, options)
-      hold(handle, root, n, options.why, new Date(), on, at)
-      logged(handle, { plan: n, kind: 'park', actor, outcome: 'pass', message: options.why, pointer: null, run: null })
-      out(`plan ${id} held${on === null ? '' : ` on plan ${String(on)}`}\n`)
-    })
+    .action((id: string, options: Parking) => { out(parking(db(), root, id, options)) })
 
   cf.command('hold').argument('<plan>', 'a plan to hold where it stands, checkout kept')
     .requiredOption('--by <holder>', `who it waits on: ${HOLDERS.join(' or ')}`)

@@ -18,7 +18,7 @@ import { due, type Entry, stuck } from './drift.ts'
 import { sunday } from '../cli/science.ts'
 import { offered, route, working, type Route } from './next.ts'
 import { reap } from './workspace.ts'
-import { hold } from './hold.ts'
+import { ended, hold, pending } from './hold.ts'
 import { logged } from '../store/events.ts'
 import { slack } from '../cli/flow.ts'
 import { ceilinged, stepped } from './settle.ts'
@@ -236,11 +236,12 @@ async function one(db: Db, root: string, pipe: PipeRow, first: Leg, lease: Taken
       const lap = await stepped(db, root, pipe, plan, lease, provider, wire, read)
       out.push(lap.fired)
       waited = lap.wait
-      const more = chain > 0 && Date.now() < until && out.length < STEPS && !lap.wait && !moved()
+      const more = chain > 0 && Date.now() < until && out.length < STEPS && !lap.wait && !moved() && !pending(root, first.plan.id)
       leg = more ? onward(db, first.plan.id, lease) : null
     }
     return out
   } finally {
+    ended(db, root, first.plan.id, new Date())
     unlease(db, first.plan.id)
     if (waited) keepWait(db, first.plan.id)
     else idle(db, first.plan.id)

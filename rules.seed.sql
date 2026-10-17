@@ -41,7 +41,7 @@ VALUES
   ('rules/registry/34-director_look.yaml', 'card', 'rules/registry/34-director_look.yaml', 'fbc0b9608a43e08f95843fbd445a8d0d5d00eb34c5c8f8f0e310cc901629b308', '2026-10-04'),
   ('rules/registry/35-typescript_specialist.yaml', 'card', 'rules/registry/35-typescript_specialist.yaml', 'd2af5779d023cadb5cfaeb6152ff4d0338aff18d1d1ea7277d743bf4be2740e8', '2026-10-04'),
   ('rules/registry/36-daily_learnings.yaml', 'card', 'rules/registry/36-daily_learnings.yaml', '276e911d3afacc26623cda9127a97c03bfd016859da31ba0d633b68be76c5cf8', '2026-10-04'),
-  ('rules/registry/37-review_examples.yaml', 'card', 'rules/registry/37-review_examples.yaml', '562d0cc7192ae5f929afa25c3f8e9ece639e8b49ae2e70ad2e05298090af7fe6', '2026-10-04'),
+  ('rules/registry/37-review_examples.yaml', 'card', 'rules/registry/37-review_examples.yaml', '31822f86a6fb5b56ac80868033f75b9a3290546580a0c81ba57980cd2859c53f', '2026-10-04'),
   ('rules/registry/38-director_fix_reach.yaml', 'card', 'rules/registry/38-director_fix_reach.yaml', 'e4deebaecc7a56c2a1c248b9726e06beda4de1561c972e8457c325e7d8d5bab9', '2026-10-04'),
   ('rules/registry/39-tick_deps.yaml', 'card', 'rules/registry/39-tick_deps.yaml', 'ed72d7bdf055e192ab3e946c3f193a88beb8b6d4f84a2ec2f6091799d5c5176e', '2026-10-04'),
   ('rules/registry/40-watch.yaml', 'card', 'rules/registry/40-watch.yaml', 'e6383a2ba8c5217a3eca39de0da96ab4409327d4bdc93c2e006724dfd131645b', '2026-10-04'),

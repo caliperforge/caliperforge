@@ -202,6 +202,7 @@
   column: at
   where: kind = 'examples.learned'
   gap: 7d
+  while: EXISTS (SELECT 1 FROM events a WHERE a.kind = 'greptile.accepted' AND NOT EXISTS (SELECT 1 FROM events l WHERE l.kind = 'examples.learned' AND julianday(l.at) >= julianday(a.at)))
 - name: director_fix_reach
   table: events
   column: at

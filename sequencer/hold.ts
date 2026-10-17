@@ -2,7 +2,7 @@ import { rmSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Db } from '../store/index.ts'
 import { returnToLane, retried, rewound } from '../store/holds.ts'
-import { clearWaitsOn, holdOn, planById } from '../store/plans.ts'
+import { clearWaitsOn, holdOn, terminal } from '../store/plans.ts'
 import { WHY } from '../store/refusals.ts'
 import { COUNTS } from './push.ts'
 import { afresh, drop, maybe, planDir, put } from './workspace.ts'
@@ -33,12 +33,12 @@ export function pending(root: string, plan: number): boolean {
   return maybe(root, plan, PENDING) !== null
 }
 
-/** `holdOn` sets `blocked_on_ceo` whatever the state, so a step that already settled the plan keeps what it left. */
+/** `holdOn` sets `blocked_on_ceo` whatever the state, so only a step that closed the plan keeps what it left. */
 export function ended(db: Db, root: string, plan: number, now: Date): void {
   const park = maybe(root, plan, PENDING)
   if (park === null) return
   const { why, on, until } = JSON.parse(park) as { why: string; on: number | null; until: string | null }
-  if (['running', 'queued'].includes(planById(db, plan).state)) hold(db, root, plan, why, now, on, until === null ? null : new Date(until))
+  if (!terminal(db).includes(plan)) hold(db, root, plan, why, now, on, until === null ? null : new Date(until))
   drop(root, plan, PENDING)
 }
 

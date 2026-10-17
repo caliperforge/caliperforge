@@ -12,9 +12,9 @@ import { allEvents, eventsOf, kindsOf, ofKind } from '../../store/events.ts'
 import { filesOf, recorded } from '../../store/files.ts'
 import { holdOf } from '../../store/holds.ts'
 import { migrate, open } from '../../store/index.ts'
-import { drop, take } from '../../store/leases.ts'
+import { drop, held as leases, take } from '../../store/leases.ts'
 import { addPart } from '../../store/parts.ts'
-import type { Packet } from '../../providers/kind.ts'
+import { CAPPED, type Packet, type Provider } from '../../providers/kind.ts'
 import { held, planById, planRows, putPlan, terminal, type Holder } from '../../store/plans.ts'
 import { clearedOf, WHY } from '../../store/refusals.ts'
 import { lapsed } from '../../store/until.ts'
@@ -22,7 +22,7 @@ import { released } from '../fixer.ts'
 import { ended, hold, isHeld, later, pending, unhold } from '../hold.ts'
 import { tick } from '../index.ts'
 import { maybe, put, srcDir } from '../workspace.ts'
-import { approve, CARRIED, stub, watched, world } from './world.ts'
+import { approve, CARRIED, REFUSE, stub, watched, world } from './world.ts'
 
 const repo = join(import.meta.dirname, '../..')
 
@@ -518,14 +518,82 @@ test('D1 D2 a park mid-step holds the plan when the step ends', async () => {
   expect(maybe(w.root, 1, 'park.pending.json')).toBeNull()
 })
 
-test('D3 a pending park on a plan the step closed is dropped', () => {
+test.each(['done', 'refused', 'halted'])('D3 a pending park on a %s plan is dropped', (state) => {
   const { db, home } = seeded()
   later(home, 7, 'x', null, LATER)
-  db.exec("UPDATE plans SET state = 'done' WHERE id = 7")
+  db.exec(`UPDATE plans SET state = '${state}' WHERE id = 7`)
   ended(db, home, 7, NOW)
-  expect(row(db)).toEqual({ state: 'done', step: 4, waits_on: null })
+  expect(row(db)).toEqual({ state, step: 4, waits_on: null })
   expect(pending(home, 7)).toBe(false)
   expect(isHeld(home, 7)).toBe(false)
+})
+
+test('D1 a pending park on a stopped plan is applied', () => {
+  const { db, home } = seeded()
+  later(home, 7, 'x', null, LATER)
+  db.exec("UPDATE plans SET state = 'blocked_on_ceo' WHERE id = 7")
+  ended(db, home, 7, NOW)
+  expect(row(db)).toEqual({ state: 'blocked_on_ceo', step: 4, waits_on: null })
+  expect(isHeld(home, 7)).toBe(true)
+  expect(pending(home, 7)).toBe(false)
+})
+
+test('D3 a plan leased with a pending park fires nothing', async () => {
+  const w = world()
+  approve(w.db, w.target)
+  later(w.root, 1, 'x', null, LATER)
+  const fired = await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1), 5)
+  expect(fired).toEqual([])
+  expect(planById(w.db, 1).state).toBe('blocked_on_ceo')
+  expect(isHeld(w.root, 1)).toBe(true)
+  expect(leases(w.db)).toEqual([])
+})
+
+function parking(when: (packet: Packet) => boolean) {
+  const w = world()
+  approve(w.db, w.target)
+  putPlan(w.db, { id: 2, pipe_id: w.pipe.id, target_id: null, template: 'pr_path', state: 'blocked_on_ceo',
+    queued_at: '2026-10-16T00:00:00.000Z', step: 0, retries: 0, lane: 'machine', seat: 'typescript_specialist',
+    origin: 'https://github.com/caliperforge/caliperforge/issues/140' })
+  const cf = new Command()
+  registerPlans(cf, { root: w.root, db: () => w.db, out: () => undefined })
+  const hook = (packet: Packet): void => {
+    if (packet.tools.includes('Write')) writeFileSync(join(packet.cwd, 'src/hello.ts'), 'export const hello = (): string => "hey"\n')
+    if (when(packet) && !pending(w.root, 1) && !isHeld(w.root, 1)) cf.parse(['park', '1', '--on', '2', '--by', 'coo'], { from: 'user' })
+  }
+  const parked = () => {
+    expect(planRows(w.db).find((p) => p.id === 1)).toMatchObject({ state: 'blocked_on_ceo', waits_on: 2 })
+    expect(isHeld(w.root, 1)).toBe(true)
+    expect(pending(w.root, 1)).toBe(false)
+  }
+  return { w, hook, parked }
+}
+
+test('D4 a park during a review that refuses back holds the plan', async () => {
+  let built = false
+  const { w, hook, parked } = parking((packet) => {
+    if (packet.tools.includes('Write')) built = true
+    return built && !packet.tools.includes('Write')
+  })
+  const fired = await tick(w.db, w.root, stub(CARRIED, 0, REFUSE, hook), undefined, undefined, watched([], w.root, 1), 5)
+  expect(fired.map((f) => f.step)).toEqual([0, 1, 2, 3, 4])
+  parked()
+})
+
+test('D5 a park during a capped build holds the plan', async () => {
+  const { w, hook, parked } = parking((packet) => packet.tools.includes('Write'))
+  const inner = stub(CARRIED, 0, undefined, hook)
+  const provider: Provider = {
+    name: 'claude-agent-sdk',
+    fire: async (p) => {
+      const fired = await inner.fire(p)
+      return p.tools.includes('Write') ? { ...fired, ended: 'stopped', exit: 1, stop_reason: CAPPED } : fired
+    },
+  }
+  const fired = await tick(w.db, w.root, provider, undefined, undefined, watched([], w.root, 1), 5)
+  expect(fired.map((f) => f.step)).toEqual([0, 1, 2])
+  expect(fired.at(-1)).toMatchObject({ step: 2, outcome: 'refuse' })
+  parked()
 })
 
 test('D4 a leased park with no release writes nothing', () => {

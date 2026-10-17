@@ -226,7 +226,7 @@ async function one(db: Db, root: string, pipe: PipeRow, first: Leg, lease: Taken
   const out: Fired[] = []
   let waited = false
   try {
-    let leg: Leg | null = first
+    let leg: Leg | null = pending(root, first.plan.id) ? null : first
     while (leg !== null) {
       const { plan, route: r } = leg
       if ('over' in r) {

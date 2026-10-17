@@ -4,6 +4,7 @@ import { tick } from '../index.ts'
 import { assembly } from '../home.ts'
 import { following, languages, parted, released } from '../split.ts'
 import { refilled } from '../refill.ts'
+import { unran } from '../reproduced.ts'
 import { languageFor } from '../route.ts'
 import type { Wire } from '../push.ts'
 import { maybe, put, srcDir } from '../workspace.ts'
@@ -440,8 +441,11 @@ test('D3: an outside brief of five files at the limit is the issue', async () =>
   const brief = wideBrief(SIX.slice(0, 5), 'hello', 'Estimate: 250 lines')
   const { w, fired } = await outside(brief, 250)
   expect(fired).toMatchObject({ step: 1, outcome: 'pass' })
-  expect(maybe(w.root, 1, 'issue.md')).toBe(brief)
+  expect(maybe(w.root, 1, 'issue.md')).toMatch(RAN)
+  expect(unran(maybe(w.root, 1, 'issue.md') ?? '')).toBe(brief)
 })
+
+const RAN = /- expect: fails\n- base: `[0-9a-f]{40}`\n- exit: [1-9]\d*\n> /
 
 const SPANNING = wideBrief(['kotlin/Main.kt (new)', '.github/workflows/k.yml (new)'], 'hello', 'x', 'harness/test/x.test.ts (new)')
 
@@ -477,7 +481,8 @@ test('D4: an outside brief in one language is not split', async () => {
   const brief = wideBrief(['kotlin/Main.kt (new)', '.github/workflows/k.yml (new)', 'docs/k.md (new)'], 'hello', 'x', 'kotlin/test/MainTest.kt (new)')
   const log: string[] = []
   await briefed(out, 1, brief, log)
-  expect(maybe(out.root, 1, 'issue.md')).toBe(brief)
+  expect(maybe(out.root, 1, 'issue.md')).toMatch(RAN)
+  expect(unran(maybe(out.root, 1, 'issue.md') ?? '')).toBe(brief)
   expect(log).toEqual([])
 })
 

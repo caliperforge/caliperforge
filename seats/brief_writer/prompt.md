@@ -82,6 +82,17 @@ question: <the one question whose answer unblocks the brief>
 ---
 ```
 
+Before drafting a brief for someone else's repository, read their issue with `cf look gh <owner/name> issue <n>`,
+and every pull request it names with `cf look gh <owner/name> pr <n>`. When an open pull request or a
+maintainer's comment already covers the ask, write no brief and close with this fence and nothing after it:
+
+```
+---
+outcome: claimed
+evidence: <the pull request or comment that covers the ask, its URL, and the line of it that says so>
+---
+```
+
 An ask that is more than one job — you would name more than five files besides tests, or two changes
 that could each land and be reviewed alone — is not briefed at all. Before you draft, count the files the
 change touches besides tests, every file that builds or implements a changed type included; past five,

@@ -8,7 +8,7 @@
     "silent-catch": 1
   },
   "brief.ts": {
-    "lines": 400,
+    "lines": 437,
     "silent-catch": 1
   },
   "capture.ts": {
@@ -136,7 +136,7 @@
     "lines": 98
   },
   "seat.ts": {
-    "lines": 515
+    "lines": 547
   },
   "settle.ts": {
     "lines": 298,

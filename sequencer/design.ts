@@ -3,8 +3,9 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:f
 import { readFile } from 'node:fs/promises'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { extname, join, resolve, sep } from 'node:path'
+import { basename, extname, join, relative, resolve, sep } from 'node:path'
 import { chromium, type Browser } from 'playwright-core'
+import { walk } from '../checks/tree.ts'
 import type { Provider } from '../providers/kind.ts'
 import { parse } from '../rails/diff.ts'
 import { judge } from '../reviews/bench.ts'
@@ -51,22 +52,31 @@ const DEFECTS = `(() => {
   }
 })()`
 
-export function screens(diff: string): string[] {
+export function screens(diff: string, src: string): string[] {
   const files = parse(diff)
-  if (files.length > 0 && files.every((f) => SOURCE.test(f.path))) return ['index.html']
+  if (files.length > 0 && files.every((f) => SOURCE.test(f.path))) {
+    const names = files.map((f) => basename(f.path))
+    const loading = walk(src, (n) => n.endsWith('.html')).filter((p) => {
+      const text = readFileSync(p, 'utf8')
+      return names.some((name) => text.includes(name))
+    })
+    return loading.length > 0 ? loading.map((p) => relative(src, p)) : ['index.html']
+  }
   return files.filter((f) => !f.deleted && f.path.endsWith('.html')).map((f) => f.path)
 }
 
 export async function looked(db: Db, root: string, plan: PlanRow, provider: Provider): Promise<Outcome> {
   const diff = diffOf(root, plan.id)
-  const pages = screens(diff)
-  if (pages.length === 0) return { outcome: 'pass', spans: [], note: 'design: the diff changes no screen' }
   const src = srcDir(root, plan.id)
+  const pages = screens(diff, src)
+  if (pages.length === 0) return { outcome: 'pass', spans: [], note: 'design: the diff changes no screen' }
   const out = planDir(root, plan.id)
   const dir = join(out, 'design')
   rmSync(dir, { recursive: true, force: true })
   const main = await onMain(root, plan.id, src, pages)
   const capture = await design(src, out, pages)
+  const screenshots = readdirSync(dir).map((n) => join(dir, n))
+  if (screenshots.length === 0) return { outcome: 'refuse', spans: capture.spans, note: 'design: no screen served' }
   const fresh = capture.spans.filter((span) => !main.includes(span))
   const already = capture.spans.filter((span) => main.includes(span))
   const system = join(src, 'DESIGN.md')
@@ -74,7 +84,7 @@ export async function looked(db: Db, root: string, plan: PlanRow, provider: Prov
     repo: src,
     issue: get(root, plan.id, 'issue.md') + rulings(root, plan.id),
     diff,
-    screenshots: readdirSync(dir).map((n) => join(dir, n)),
+    screenshots,
     ...(capture.spans.length > 0 ? { defects: [...fresh, ...already.map((span) => `${span} (already on main)`)].join('\n') } : {}),
     ...(existsSync(system) ? { system: readFileSync(system, 'utf8') } : {}),
   }
@@ -106,15 +116,17 @@ async function onMain(root: string, plan: number, src: string, pages: string[]):
 export async function design(src: string, out: string, pages: string[]): Promise<Verdict> {
   const web = existsSync(join(src, 'public', 'index.html')) ? join(src, 'public') : src
   const paths = web === src ? pages : pages.map((page) => page.replace(/^public\//, ''))
+  const served = paths.filter((path) => existsSync(join(web, path)))
+  const unserved = paths.filter((path) => !served.includes(path)).map((path) => `${path} design.unserved`)
   const server = await serve(web, src)
   let browser: Browser | undefined
   try {
     browser = await chromium.launch({ headless: true })
     const base = `http://127.0.0.1:${String((server.address() as AddressInfo).port)}`
     mkdirSync(join(out, 'design'), { recursive: true })
-    const shots = paths.flatMap((screen) => WIDTHS.flatMap((width) => SCHEMES.map((scheme) => ({ screen, width, scheme }))))
+    const shots = served.flatMap((screen) => WIDTHS.flatMap((width) => SCHEMES.map((scheme) => ({ screen, width, scheme }))))
     const pngs: Buffer[] = []
-    const spans: string[] = []
+    const spans = [...unserved]
     for (const shot of shots) {
       const taken = await shoot(browser, base, out, shot)
       pngs.push(taken.png)

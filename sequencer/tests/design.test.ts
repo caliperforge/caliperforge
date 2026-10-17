@@ -142,8 +142,25 @@ test('D5 a public/ web root reads fixtures from the repo root', async () => {
 const file = (from: string, to: string): string => [`--- ${from}`, `+++ ${to}`, '@@ -1 +1 @@', '-a', '+b'].join('\n')
 
 test('D5 screens skips deleted html; css alone means index.html', () => {
-  expect(screens([file('a/old.html', '/dev/null'), file('a/app/plans.html', 'b/app/plans.html')].join('\n'))).toEqual(['app/plans.html'])
-  expect(screens(file('a/style.css', 'b/style.css'))).toEqual(['index.html'])
+  const src = checkout({ 'about.html': page('<h1>About</h1>') })
+  expect(screens([file('a/old.html', '/dev/null'), file('a/app/plans.html', 'b/app/plans.html')].join('\n'), src)).toEqual(['app/plans.html'])
+  expect(screens(file('a/style.css', 'b/style.css'), src)).toEqual(['index.html'])
+})
+
+test('D1 a js-only diff screens the page that loads the script', () => {
+  const src = checkout({
+    'sirvoy-helper/rooms.html': page('<script src="el-rooms.js"></script>'),
+    'about.html': page('<h1>About</h1>'),
+  })
+  expect(screens(file('a/sirvoy-helper/el-rooms.js', 'b/sirvoy-helper/el-rooms.js'), src)).toEqual(['sirvoy-helper/rooms.html'])
+})
+
+browsed('D3 a missing page is unserved and leaves no shot', async () => {
+  const src = mkdtempSync(join(tmpdir(), 'design-src-'))
+  const out = mkdtempSync(join(tmpdir(), 'design-out-'))
+  const verdict = await design(src, out, ['missing.html'])
+  expect(verdict).toMatchObject({ outcome: 'refuse', spans: ['missing.html design.unserved'] })
+  expect(readdirSync(join(out, 'design'))).toHaveLength(0)
 })
 
 const stepped = async (name: string, body: string, language: string, seen?: (packet: Packet) => void,
@@ -183,6 +200,12 @@ test('D4 a typescript step 4 runs no design review', async () => {
   expect(outcome.outcome).toBe('pass')
   expect(seats).not.toContain('design')
   expect(existsSync(join(planDir(w.root, 1), 'design'))).toBe(false)
+})
+
+browsed('D4 an unserved screen refuses before the design review', async () => {
+  const { outcome, seats } = await stepped('style.css', 'h1 { color: #1a1a1a }', 'web')
+  expect(outcome).toEqual({ outcome: 'refuse', spans: ['index.html design.unserved'], note: 'design: no screen served' })
+  expect(seats).not.toContain('design')
 })
 
 const designed = async (system?: string): Promise<string | undefined> => {

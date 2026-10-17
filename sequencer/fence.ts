@@ -13,7 +13,7 @@ export const BRIEF_FILES = 'brief:files'
 /** The manifest entry `owner/name:path` that admits `path` on that repo only. */
 const SCOPED = /^([^/:]+\/[^/:]+):(.+)$/
 
-/** The paths a seat may write: its manifest's, or the brief's files, a listed test admitting its test folder, where the manifest says so or the plan is an outside one. */
+/** The paths a seat may write: its manifest's, or the brief's files, a listed test admitting its test folder and a listed `pyproject.toml` the `uv.lock` beside it, where the manifest says so or the plan is an outside one. */
 export function fenceFor(db: Db, plan: number, manifest: string[]): string[] {
   const home = manifest.some((p) => SCOPED.test(p)) ? homeOf(planById(db, plan)) : null
   const writePaths = manifest.flatMap((p) => {
@@ -23,7 +23,8 @@ export function fenceFor(db: Db, plan: number, manifest: string[]): string[] {
   })
   if (!writePaths.includes(BRIEF_FILES) && (writePaths.length === 0 || planById(db, plan).target_id === null)) return writePaths
   const paths = filesOf(db, plan).map((f) => f.path)
-  return [...new Set([...paths, ...paths.flatMap((p) => /^(?:[^/]*\/)*?(?:[Tt]ests?|spec|__tests__)(?=\/)/.exec(p)?.[0] ?? [])])]
+  const locks = paths.filter((p) => /(?:^|\/)pyproject\.toml$/.test(p)).map((p) => join(dirname(p), 'uv.lock'))
+  return [...new Set([...paths, ...paths.flatMap((p) => /^(?:[^/]*\/)*?(?:[Tt]ests?|spec|__tests__)(?=\/)/.exec(p)?.[0] ?? []), ...locks])]
 }
 
 /** A row a builder owns a path outside the list with: `- <path> — <why>`. */

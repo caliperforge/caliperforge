@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { expect, test } from 'vitest'
+import { afterEach, expect, test, vi } from 'vitest'
 import { approve as approveCard, batch, refuse as refuseCard } from '../../cli/batch.ts'
 import type { Pr } from '../../cli/gh.ts'
 import { close, settled } from '../../cli/session.ts'
@@ -26,6 +26,8 @@ import { unread } from '../../cli/inbox.ts'
 import { get, maybe, put, srcDir } from '../workspace.ts'
 import { tick } from '../index.ts'
 import { approve, CARRIED, internalPlan, plan, PR as URL, SEEDED, stub, tip, watched, world, type World } from './world.ts'
+
+afterEach(() => { vi.unstubAllEnvs() })
 
 const TRANSCRIPT = [
   'RULING push.digest = approval_matches_head_and_the_hook',
@@ -305,6 +307,7 @@ test('D1 D2 D3 pre-pr rounds move -next; push sends the branch', async () => {
 
 /** The checkout signs through `gpg`, and HEAD is amended to a head no tip carries yet. */
 function signer(w: World, gpg: string): (args: string[]) => string {
+  vi.stubEnv('GIT_CONFIG_COUNT', '0')
   const src = srcDir(w.root, 1)
   const git = (args: string[]): string => execFileSync('git', args, { cwd: src, encoding: 'utf8' }).trim()
   const program = join(w.root, 'gpg.sh')

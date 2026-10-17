@@ -1,18 +1,21 @@
 import { expect, test } from 'vitest'
 import type { Db } from '../../store/index.ts'
+import { planRows } from '../../store/plans.ts'
+import { dropRecord } from '../../store/record.ts'
+import { targetRows } from '../../store/targets.ts'
 import { askFor, cites } from '../proposal.ts'
 import { MERGED, OPEN, REPO, rows, world } from './proposal-world.ts'
 
-const count = (db: Db, table: string): number => (db.prepare(`SELECT count(*) AS n FROM ${table}`).get() as { n: number }).n
+const snapshot = (db: Db): unknown[] => [planRows(db), targetRows(db), rows(db)]
 
 test('ready target with merged row: scan line, record, no write', () => {
   const { db, ready, plan } = world()
-  const before = ['plans', 'targets', 'records'].map((t) => count(db, t))
+  const before = snapshot(db)
   const p = String(plan)
   expect(askFor(db, ready)).toBe('# Target\n\n' +
     `${REPO}#1\tmerger maintainer\topened 2026-09-01\tactive 2026-09-20\tno open pr\t3 lines\thttps://github.com/acme/widget/issues/1\n\n` +
     `# Record\n\n${REPO}\topen 1\n#3\tMERGED\tplan ${p}\t-\t${MERGED}\n#4\tOPEN\tplan ${p}\t-\t${OPEN}\n`)
-  expect(['plans', 'targets', 'records'].map((t) => count(db, t))).toEqual(before)
+  expect(snapshot(db)).toEqual(before)
 })
 
 test('D2: a queued target and a missing id are not ready', () => {
@@ -23,9 +26,9 @@ test('D2: a queued target and a missing id are not ready', () => {
 
 test('repo with only open rows or none has no merged PR on record', () => {
   const { db, ready } = world()
-  db.prepare('DELETE FROM records WHERE pr = 3').run()
+  dropRecord(db, REPO, 3)
   expect(() => askFor(db, ready)).toThrow(`${REPO} has no merged pull request on record`)
-  db.prepare('DELETE FROM records').run()
+  dropRecord(db, REPO, 4)
   expect(() => askFor(db, ready)).toThrow(`${REPO} has no merged pull request on record`)
 })
 

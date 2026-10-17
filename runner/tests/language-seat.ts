@@ -9,6 +9,8 @@ import { Seat, rules, seat } from '../rules.ts'
 import { record } from '../../store/files.ts'
 import { BRIEF_FILES, fenceFor } from '../../sequencer/route.ts'
 import type { Run } from '../../store/events.ts'
+import { addPlan } from '../../store/plans.ts'
+import { addAccount, addTarget } from '../../store/targets.ts'
 import { builder } from '../../templates/pr-path.ts'
 
 const root = join(import.meta.dirname, '../..')
@@ -94,14 +96,14 @@ function enforced(s: LanguageSeat): void {
 
   test('the fence is the brief\'s files; authority refuses the rest', () => {
     const db = fresh(join(root, 'schema'))
-    db.prepare(`INSERT INTO accounts (id, repo, measured_at, maintainers, doors, last_outsider_merge,
-      open_pr_age_p50_days, cross_repo_activity, pulse, evidence)
-      VALUES (1, 'acme/kit', '2026-09-24', 2, 1, '2026-09-24', 3, 4, 'warm', 'https://github.com/acme/kit')`).run()
-    db.prepare(`INSERT INTO targets (id, account_id, repo, issue_no, named_merger, state, evidence_measured_at, evidence)
-      VALUES (1, 1, 'acme/kit', 1, 'ludo', 'ready', '2026-09-24', 'https://github.com/acme/kit/issues/1')`).run()
-    db.prepare(`INSERT INTO plans (id, pipe_id, target_id, template, state, queued_at) VALUES (1, 1, 1, 'pr_path', 'running', '2026-09-24')`).run()
-    record(db, 1, [{ path: s.listed, is_new: false }])
-    const fence = fenceFor(db, 1, seat(root, s.seat).manifest.write_paths)
+    addAccount(db, { id: 1, repo: 'acme/kit', measured_at: '2026-09-24', maintainers: 2, doors: 1, last_outsider_merge: '2026-09-24',
+      open_pr_age_p50_days: 3, cross_repo_activity: 4, pulse: 'warm', evidence: 'https://github.com/acme/kit' })
+    const target = addTarget(db, { account_id: 1, repo: 'acme/kit', issue_no: 1, named_merger: 'ludo', state: 'ready',
+      evidence_measured_at: '2026-09-24', evidence: 'https://github.com/acme/kit/issues/1' })
+    const plan = addPlan(db, { pipe_id: 1, target_id: target, template: 'pr_path', state: 'running', queued_at: '2026-09-24',
+      step: 0, lane: null, seat: null, origin: null })
+    record(db, plan, [{ path: s.listed, is_new: false }])
+    const fence = fenceFor(db, plan, seat(root, s.seat).manifest.write_paths)
     expect(fence).toEqual([s.listed])
     expect(authority(root, s.seat, hunk(s.listed), false, fence)).toMatchObject({ outcome: 'pass' })
     expect(authority(root, s.seat, hunk(s.beside), false, fence))

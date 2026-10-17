@@ -5,10 +5,10 @@ import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { expect, test } from 'vitest'
 import { dryLines, tickNote } from '../../cli/brief.ts'
-import { runRows } from '../../store/events.ts'
+import { eventsOf, runRows } from '../../store/events.ts'
 import { width } from '../../store/lanes.ts'
 import { clear, held, holder, take } from '../../store/leases.ts'
-import { dropPlan } from '../../store/plans.ts'
+import { advance, dropPlan, waiting } from '../../store/plans.ts'
 import { last, receipt } from '../../store/ticks.ts'
 import { dry, tick } from '../index.ts'
 import { CARRIED, inFlight, internalPlan, ours, plan, stub, world, type World } from './world.ts'
@@ -62,6 +62,29 @@ test('a dead holder\'s lease is taken; the receipt names its pid',async () => {
   expect(fired.map((f) => f.plan)).toEqual([ID])
   expect(tickNote(fired)).toContain(`took over pid ${String(dead)}`)
   expect(held(w.db)).toEqual([])
+})
+
+/** A built plan left running and tagged `leased`, as a tick that died mid-step leaves it. */
+async function stranded(): Promise<World> {
+  const w = await built()
+  advance(w.db, plan(w.db, ID), 2)
+  waiting(w.db, [{ plan: ID, why: 'leased' }])
+  return w
+}
+
+test('D1 running+leased with no lease is re-queued and fired', async () => {
+  const w = await stranded()
+  expect((await tick(w.db, w.root, stub(CARRIED))).map((f) => f.plan)).toEqual([ID])
+  expect(eventsOf(w.db, ID, 'requeue')).toEqual([{ actor: 'tick', outcome: 'pass', message: 'running with no lease' }])
+  expect(held(w.db)).toEqual([])
+})
+
+test('D2 running+leased under a live lease stays running', async () => {
+  const w = await stranded()
+  take(w.db, ID)
+  expect(await tick(w.db, w.root, stub(CARRIED))).toEqual([])
+  expect(plan(w.db, ID).state).toBe('running')
+  expect(eventsOf(w.db, ID, 'requeue')).toEqual([])
 })
 
 test('a slow seat holds one slot; the width holds across ticks',async () => {

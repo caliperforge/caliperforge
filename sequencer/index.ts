@@ -5,6 +5,7 @@ import { clear as unlease, drop, handOver, held, take, type Lease, type Taken } 
 import { cap, hhmm, zone } from '../store/lanes.ts'
 import { idle, keepWait } from '../store/now.ts'
 import { type PlanRow, live, openPipes, planById, terminal, type PipeRow, waiting } from '../store/plans.ts'
+import { unleased } from '../store/unleased.ts'
 import { capture, intake, refill } from './capture.ts'
 import { woke } from './director.ts'
 import { answer } from './finding.ts'
@@ -47,6 +48,7 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
   reprice(db, labels)
   rescored(db, root)
   const out: Fired[] = []
+  unleased(db, held(db, now).map((l) => l.plan))
   const lanes = openPipes(db, hhmm(db, now)).map((pipe) => ({ pipe, routed: live(db, pipe).map((plan) => ({ plan, route: route(db, plan, now) })) }))
   waiting(db, lanes.flatMap((l) => l.routed.map(({ plan, route: r }) =>
     'fire' in r ? { plan: plan.id, why: null } : { plan: plan.id, why: r.wait, on: r.on })))

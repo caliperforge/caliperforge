@@ -1,7 +1,6 @@
 {
   "index.ts": {
-    "lines": 73,
-    "prepare": 3
+    "lines": 72
   },
   "packet.ts": {
     "lines": 161
@@ -9,9 +8,6 @@
   "rules.ts": {
     "lines": 109,
     "prepare": 1
-  },
-  "tests/language-seat.ts": {
-    "prepare": 3
   },
   "tests/wake.test.ts": {
     "prepare": 2

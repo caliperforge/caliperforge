@@ -1,6 +1,9 @@
 import { expect, test } from 'vitest'
 import { internalPlan, world, type World } from '../sequencer/tests/world.ts'
-import { record, sharing } from './files.ts'
+import { runAt } from './events.ts'
+import { ahead, record, sharing } from './files.ts'
+import { addRule } from './index.ts'
+import { waiting } from './plans.ts'
 
 const OLD = 2
 const YOUNG = 3
@@ -27,4 +30,21 @@ test('younger P0 goes first', () => {
   const w = unbuilt(1, 0)
   expect(sharing(w.db, YOUNG)).toBeNull()
   expect(sharing(w.db, OLD)).toEqual({ plan: YOUNG, path: 'src/a.ts' })
+})
+
+/** `unbuilt`, with the older plan's build run. */
+function built(old: number, young: number): World {
+  const w = unbuilt(old, young)
+  addRule(w.db, { id: 'builder', kind: 'card', path: 'rules/roster.yaml', content_hash: '0'.repeat(64), loaded_at: '2026-09-18T00:00:00.000Z' })
+  runAt(w.db, OLD, 2, 'builder', '2026-09-18 00:00:00')
+  return w
+}
+
+test('D2 a built P1 stands aside for a P0 on its files', () => {
+  expect(ahead(built(1, 0).db, OLD)).toBe(YOUNG)
+  expect(ahead(unbuilt(1, 0).db, OLD)).toBeNull()
+  expect(ahead(built(1, 1).db, OLD)).toBeNull()
+  const w = built(1, 0)
+  waiting(w.db, [{ plan: YOUNG, why: 'ceo_batch' }])
+  expect(ahead(w.db, OLD)).toBeNull()
 })

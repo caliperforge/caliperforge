@@ -20,6 +20,7 @@ import { offered, route, working, type Route } from './next.ts'
 import { reap } from './workspace.ts'
 import { ended, hold, pending } from './hold.ts'
 import { logged } from '../store/events.ts'
+import { ahead } from '../store/files.ts'
 import { slack } from '../cli/flow.ts'
 import { ceilinged, stepped } from './settle.ts'
 import { closing } from './wave.ts'
@@ -75,16 +76,23 @@ async function watched(db: Db, root: string, registry: Entry[], now: Date, read:
   if (registry.some((e) => e.name === 'site_data')) sitedata(db, root, now)
 }
 
-/** Parks a running job waiting on another job's files where its lane has a queued job to start, as `cf park --on` does. */
+/**
+ * Parks a running job waiting on another job's files where its lane has a queued job to start, as `cf park --on` does.
+ * A job waiting on a lower-priority holder keeps its slot: that holder stands aside when its step ends.
+ */
 function park(db: Db, root: string, legs: Leg[], now: Date): void {
   const startable = new Set(slack(db, now).filter((s) => s.startable > 0).map((s) => s.pipe.id))
   for (const { plan, route: r } of legs) {
     if (plan.state !== 'running' || !('wait' in r) || r.wait !== 'file_overlap' || r.on === null) continue
-    if (!startable.has(plan.pipe_id)) continue
-    const why = `waits on plan ${String(r.on)}'s files`
-    hold(db, root, plan.id, why, now, r.on)
-    logged(db, { plan: plan.id, kind: 'park', actor: 'tick', outcome: 'pass', message: why, pointer: null, run: null })
+    if (!startable.has(plan.pipe_id) || planById(db, r.on).priority > plan.priority) continue
+    parkOn(db, root, plan.id, r.on, now)
   }
+}
+
+function parkOn(db: Db, root: string, plan: number, on: number, now: Date): void {
+  const why = `waits on plan ${String(on)}'s files`
+  hold(db, root, plan, why, now, on)
+  logged(db, { plan, kind: 'park', actor: 'tick', outcome: 'pass', message: why, pointer: null, run: null })
 }
 
 /**
@@ -236,6 +244,11 @@ async function one(db: Db, root: string, pipe: PipeRow, first: Leg, lease: Taken
       const lap = await stepped(db, root, pipe, plan, lease, provider, wire, read)
       out.push(lap.fired)
       waited = lap.wait
+      const on = ahead(db, first.plan.id)
+      if (on !== null) {
+        parkOn(db, root, first.plan.id, on, new Date())
+        break
+      }
       const more = chain > 0 && Date.now() < until && out.length < STEPS && !lap.wait && !moved() && !pending(root, first.plan.id)
       leg = more ? onward(db, first.plan.id, lease) : null
     }

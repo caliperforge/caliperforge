@@ -6,9 +6,10 @@ import { CAPPED, type Packet, type Provider } from '../providers/kind.ts'
 import { assembled, benchPacket, reviewManifest, type Bench, type Review } from '../runner/packet.ts'
 import { seat } from '../runner/rules.ts'
 import { runLogged } from '../store/events.ts'
-import type { Db } from '../store/index.ts'
+import { upsertRule, type Db } from '../store/index.ts'
 import { observed, wall } from '../store/lanes.ts'
 import { planById } from '../store/plans.ts'
+import { builtAs } from '../store/runs.ts'
 import { targetRow } from '../store/targets.ts'
 import { byRun } from '../store/transcript.ts'
 import { subdirs } from '../checks/tree.ts'
@@ -18,9 +19,8 @@ import { read, type Judged, type Verdict } from './verdict.ts'
 
 export function loadReviews(db: Db, root: string): string[] {
   const names = subdirs(join(root, 'reviews')).filter((n) => existsSync(join(root, 'reviews', n, 'manifest.yaml')))
-  const put = db.prepare('INSERT OR REPLACE INTO rules (id, kind, path, content_hash, loaded_at) VALUES (?, ?, ?, ?, ?)')
   const at = new Date().toISOString()
-  for (const name of names) put.run(name, 'card', `reviews/${name}/spec.md`, specHash(root, name), at)
+  for (const name of names) upsertRule(db, { id: name, kind: 'card', path: `reviews/${name}/spec.md`, content_hash: specHash(root, name), loaded_at: at })
   return names
 }
 
@@ -113,8 +113,7 @@ function narrowed(v: Judged, bench: Bench): Judged {
 
 function builderRan(db: Db, plan: number, seat: string, step: number): boolean {
   if (step !== 4 && step !== 5) return false
-  return db.prepare('SELECT 1 FROM runs WHERE plan = ? AND seat = ? AND (step = 2 OR (? = 5 AND step = 4))')
-    .get(plan, seat, step) !== undefined
+  return builtAs(db, plan, seat, step)
 }
 
 function barred(span: string, input: unknown): Judged {

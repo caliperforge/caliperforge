@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { parse } from 'yaml'
 import { z } from 'zod'
+import { loose } from './loose.ts'
 import { lockfile, nodeGates } from './node.ts'
 
 /** A language whose builder holds its own shell and brief-files fence on a stranger's repo. */
@@ -127,20 +128,6 @@ function own(src: string, outside: Outside, excused: string[]): Gate[] {
   const just = (script: string): Gate => ({ script, bin: 'just', args: ['--justfile', JUSTFILE, script], dir })
   const build = recipe.build?.find((r) => defined.has(r))
   return [...(defined.has('install') ? [just('install')] : install), ...(build === undefined ? [] : [just(build)]), ...recipe.recipes.map((r) => (defined.has(prefix + r) ? prefix + r : r)).filter((r) => defined.has(r)).map(just)]
-}
-
-/** One throwaway environment for all three, so pyright resolves `import pytest`. */
-const ENV = ['run', '--no-project', '--with', 'ruff', '--with', 'pyright', '--with', 'pytest']
-
-/** `python -m pytest`, unlike `pytest`, puts the root on `sys.path`, so the whole suite imports the tree from there. */
-function loose(src: string, files: string[]): Gate[] {
-  const py = files.filter((f) => f.endsWith('.py') && existsSync(join(src, f)))
-  if (py.length === 0) return []
-  return [
-    { script: 'lint', bin: 'uv', args: [...ENV, 'ruff', 'check', ...py], dir: '' },
-    { script: 'typecheck', bin: 'uv', args: [...ENV, 'pyright', ...py], dir: '' },
-    { script: 'test', bin: 'uv', args: [...ENV, 'python', '-m', 'pytest'], dir: '' },
-  ]
 }
 
 function first(outside: Outside): string {

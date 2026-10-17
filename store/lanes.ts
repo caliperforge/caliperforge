@@ -8,7 +8,7 @@ const LANE_LABEL = /^lane:([a-z]+)$/
 
 const PRIORITY_LABEL = /^P([0-9])$/
 
-export const LANES = ['machine', 'loupe', 'comms', 'research', 'uniswap', 'bench', 'site'] as const
+export const LANES = ['machine', 'loupe', 'comms', 'research', 'uniswap', 'bench', 'site', 'rubin', 'bio'] as const
 
 export type Lane = typeof LANES[number]
 
@@ -26,6 +26,8 @@ export const LANE: Record<Lane, { template: Template; seat: string; home: string
   bench: { template: 'pr_path', seat: 'solidity_specialist', home: 'caliperforge/fuzz-bench', pipe: 'bench' },
   site: { template: 'pr_path', seat: 'web_specialist', home: 'caliperforge/site', pipe: 'site' },
   loupe: { template: 'pr_path', seat: 'web_specialist', home: 'caliperforge/atelier-web', pipe: 'loupe' },
+  rubin: { template: 'pr_path', seat: 'python_specialist', home: 'caliperforge/vo-conformance', pipe: 'rubin' },
+  bio: { template: 'pr_path', seat: 'python_specialist', home: 'caliperforge/vcf-conformance', pipe: 'bio' },
 }
 
 export function laneOf(labels: { name: string }[]): Lane | null {

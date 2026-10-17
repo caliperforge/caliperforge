@@ -54,7 +54,7 @@ function canned(rows: Fixture[], log: string[] = [], closed: Fixture[] = []): Re
 
 function piped(enabled = 1): Db {
   const db = fresh(schema)
-  dropPipes(db, ['bench', 'site'])
+  dropPipes(db, ['bench', 'site', 'rubin', 'bio'])
   addPipe(db, { name: 'internal', enabled, window_start: '00:00', window_end: '23:59', max_concurrent: 1 })
   return db
 }
@@ -123,13 +123,21 @@ test('D4: an issue a part of a split names is not adopted', () => {
 
 test('D4: a lane with its pipe off or missing is left unlisted', () => {
   const bare = fresh(schema)
-  dropPipes(bare, ['bench', 'site'])
+  dropPipes(bare, ['bench', 'site', 'rubin', 'bio'])
   for (const db of [piped(0), bare]) {
     laneOff(db, Number(pipeNamed(db, 'research')?.id))
     const log: string[] = []
     intake(db, root, canned(TWO, log))
     expect(log).toEqual([])
     expect(allPlans(db).length).toBe(0)
+  }
+})
+
+test('1437 D5: a fresh schema lists the rubin and bio homes', () => {
+  const log: string[] = []
+  intake(fresh(schema), root, canned([], log))
+  for (const repo of ['caliperforge/vo-conformance', 'caliperforge/vcf-conformance']) {
+    expect(log.some((l) => l.startsWith(`issue list --repo ${repo} `))).toBe(true)
   }
 })
 

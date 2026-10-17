@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { expect, it } from 'vitest'
-import { addRule, dump, migrate, open, rules } from './index.ts'
+import { addRule, dump, migrate, open, rules, upsertRule } from './index.ts'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -41,6 +41,14 @@ it('D2 D4 a write commits while another connection holds a read', () => {
   addRule(writer, { id: 'r', kind: 'rail', path: 'rules/rails.yaml', content_hash: 'a'.repeat(64), loaded_at: '2026-09-28' })
   expect(rules(writer).map((r) => r.id)).toEqual(['r'])
   reader.exec('COMMIT')
+})
+
+it('D2 upsertRule replaces the row an id already holds', () => {
+  const db = open(':memory:')
+  migrate(db, join(root, 'schema'))
+  upsertRule(db, { id: 'r', kind: 'card', path: 'reviews/r/spec.md', content_hash: 'a'.repeat(64), loaded_at: '2026-10-01' })
+  upsertRule(db, { id: 'r', kind: 'card', path: 'reviews/r/spec.md', content_hash: 'b'.repeat(64), loaded_at: '2026-10-02' })
+  expect(rules(db).map((r) => [r.id, r.content_hash, r.loaded_at])).toEqual([['r', 'b'.repeat(64), '2026-10-02']])
 })
 
 it('a failed schema leaves the version and a half-written table', () => {

@@ -93,6 +93,10 @@ function ours(dir: string, files: Tree, ci: boolean): void {
 }
 
 export default function setup(project: TestProject): () => void {
+  Object.assign(process.env, {
+    GIT_CONFIG_COUNT: '2', GIT_CONFIG_KEY_0: 'commit.gpgsign', GIT_CONFIG_VALUE_0: 'false',
+    GIT_CONFIG_KEY_1: 'tag.gpgsign', GIT_CONFIG_VALUE_1: 'false',
+  })
   const dir = mkdtempSync(join(tmpdir(), 'cf-bases-'))
   for (const files of WORLDS) remotes(join(dir, key('world', files, false)), files)
   for (const [files, ci] of OURS) ours(join(dir, key('ours', files, ci)), files, ci)

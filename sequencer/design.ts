@@ -106,7 +106,7 @@ async function onMain(root: string, plan: number, src: string, pages: string[]):
 export async function design(src: string, out: string, pages: string[]): Promise<Verdict> {
   const web = existsSync(join(src, 'public', 'index.html')) ? join(src, 'public') : src
   const paths = web === src ? pages : pages.map((page) => page.replace(/^public\//, ''))
-  const server = await serve(web)
+  const server = await serve(web, src)
   let browser: Browser | undefined
   try {
     browser = await chromium.launch({ headless: true })
@@ -128,11 +128,21 @@ export async function design(src: string, out: string, pages: string[]): Promise
   }
 }
 
-function serve(src: string): Promise<Server> {
-  const root = resolve(src)
+export function serve(web: string, repo: string): Promise<Server> {
+  const root = resolve(web)
+  const api = resolve(repo, 'design', 'api')
   const server = createServer((req, res) => {
     void Promise.resolve(req.url ?? '/').then(async (url) => {
-      const path = resolve(root, `.${decodeURIComponent(new URL(url, 'http://127.0.0.1').pathname)}`)
+      const pathname = decodeURIComponent(new URL(url, 'http://127.0.0.1').pathname)
+      if (pathname.startsWith('/api/')) {
+        const fixture = resolve(api, `.${pathname.slice('/api'.length)}.json`)
+        if (!fixture.startsWith(api + sep)) throw new Error(`${url} resolves outside ${api}`)
+        if (existsSync(fixture)) {
+          res.writeHead(200, { 'content-type': 'application/json' }).end(await readFile(fixture))
+          return
+        }
+      }
+      const path = resolve(root, `.${pathname}`)
       if (!path.startsWith(root + sep)) throw new Error(`${url} resolves outside ${root}`)
       const body = await readFile(path)
       res.writeHead(200, { 'content-type': TYPES[extname(path)] ?? 'application/octet-stream' }).end(body)

@@ -4,6 +4,7 @@ import type { Packet, Provider, Refusal } from '../providers/kind.ts'
 import { runLogged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { observed, wall } from '../store/lanes.ts'
+import { addPipe, addPlan, pipeNamed } from '../store/plans.ts'
 import { load, seat, tight, type Seat } from './rules.ts'
 
 /** The tick's own state inside a plan checkout. A seat writes the repository, never the machine's notes about it. */
@@ -65,9 +66,7 @@ export async function fire(
 }
 
 export function planRow(db: Db): number {
-  db.prepare("INSERT OR IGNORE INTO pipes (name, enabled, window_start, window_end, max_concurrent) VALUES ('p3-slice', 0, '00:00', '23:59', 1)").run()
-  const pipe = db.prepare("SELECT id FROM pipes WHERE name = 'p3-slice'").get() as { id: number }
-  const row = db.prepare("INSERT INTO plans (pipe_id, template, state, queued_at) VALUES (?, 'research', 'running', ?)")
-    .run(pipe.id, new Date().toISOString())
-  return Number(row.lastInsertRowid)
+  if (pipeNamed(db, 'p3-slice') === null) addPipe(db, { name: 'p3-slice', enabled: 0, window_start: '00:00', window_end: '23:59', max_concurrent: 1 })
+  return addPlan(db, { pipe_id: Number(pipeNamed(db, 'p3-slice')?.id), target_id: null, template: 'research', state: 'running',
+    queued_at: new Date().toISOString(), step: 0, lane: null, seat: null, origin: null })
 }

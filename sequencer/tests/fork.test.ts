@@ -42,6 +42,7 @@ test('D2 a master-only target is cut from its master', () => {
 
   const out = checkout(w.root, 1, 'acme/widget', BRANCH, 'main', exec)
   expect(out.base).toBe(execFileSync('git', ['rev-parse', 'master'], { cwd: upstream, encoding: 'utf8' }).trim())
+  expect(maybe(w.root, 1, 'base.sha')).toBe(`${out.base}\n`)
 })
 
 test('D3 an unreachable fork throws offline and forks nothing', () => {
@@ -52,16 +53,6 @@ test('D3 an unreachable fork throws offline and forks nothing', () => {
 
   expect(() => checkout(w.root, 1, 'acme/widget', BRANCH, 'main', exec)).toThrow(/Failed to connect to/)
   expect(calls).toEqual([])
-})
-
-test('D1 a target on master is cut from master', () => {
-  const w = world()
-  const upstream = join(w.root, 'remotes/acme/widget')
-  for (const dir of [upstream, join(w.root, 'remotes/caliperforge/widget')]) git(dir, ['branch', '-m', 'main', 'master'])
-  const master = execFileSync('git', ['rev-parse', 'master'], { cwd: upstream, encoding: 'utf8' }).trim()
-
-  expect(checkout(w.root, 1, 'acme/widget', BRANCH, 'main', () => '').base).toBe(master)
-  expect(maybe(w.root, 1, 'base.sha')).toBe(`${master}\n`)
 })
 
 test('D3 empty remotes throw and write no base', () => {

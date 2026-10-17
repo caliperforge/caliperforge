@@ -33,6 +33,16 @@ test('D2 an existing fork makes no gh call', () => {
   expect(cloned(checkout(w.root, 1, 'acme/widget', BRANCH, 'main', exec).dir)).toBe(true)
 })
 
+test('D2 a master-only target is cut from its master', () => {
+  const w = world()
+  const upstream = join(w.root, 'remotes/acme/widget')
+  for (const repo of [upstream, join(w.root, 'remotes/caliperforge/widget')]) execFileSync('git', ['branch', '-m', 'main', 'master'], { cwd: repo })
+  const exec = (): string => { throw new Error('forked') }
+
+  const out = checkout(w.root, 1, 'acme/widget', BRANCH, 'main', exec)
+  expect(out.base).toBe(execFileSync('git', ['rev-parse', 'master'], { cwd: upstream, encoding: 'utf8' }).trim())
+})
+
 test('D3 an unreachable fork throws offline and forks nothing', () => {
   const w = world()
   writeFileSync(join(w.root, '.cf/git-base'), 'http://127.0.0.1:9')

@@ -23,7 +23,7 @@ import { lastTranscript } from '../store/runs.ts'
 import { byRun, opened, pending, unfinished } from '../store/transcript.ts'
 import { languageOfSeat, type Step } from '../templates/pr-path.ts'
 import { parse } from '../rails/diff.ts'
-import { estimate, formats, human, pointed, references, section, shape, split, TEMPLATE, unclear, wide, WIDE, type Part } from './brief.ts'
+import { estimate, formats, human, pointed, references, section, shape, split, TEMPLATE, wide, WIDE, type Part } from './brief.ts'
 import { overlong, trim, trimmed } from './trim.ts'
 import { repoOf } from './ready.ts'
 import { limitOf } from './size.ts'
@@ -35,6 +35,8 @@ import { install, missing, mode, tools, type Mode } from './checks.ts'
 import { narrow } from './rails.ts'
 import { classify } from './delta.ts'
 import { commanded } from './command.ts'
+import { unran } from './reproduced.ts'
+import { answered } from './answered.ts'
 import { looked } from './design.ts'
 import { dropped } from './dropped.ts'
 import { asked, blinded, findings } from './findings.ts'
@@ -120,14 +122,14 @@ export async function fireBrief(db: Db, root: string, plan: PlanRow, step: Step,
   const ask = askOf(root, plan.id)
   const src = srcDir(root, plan.id)
   const standing = maybe(root, plan.id, 'issue.md')
-  if (standing !== null && shape(standing, ask, src, !internal(plan)) === null) return stands()
+  if (standing !== null && shape(unran(standing), ask, src, !internal(plan)) === null) return stands()
   const { fired, cut } = await written(db, root, plan, step, provider, ask, src)
   drop(root, plan.id, 'brief.refused.md')
   if (fired.ended !== 'completed') return exited(step, fired)
   const line = commanded(fired.text)
   if (line !== null) return { outcome: 'pass', spans: [], note: `${step.runs}: ${line}`, command: line }
-  const question = unclear(fired.text)
-  if (question !== null) return asking(root, plan.id, step, question)
+  const brief = answered(root, plan, step, fired.text, src)
+  if (typeof brief !== 'string') return brief
   const refused = (cut === null ? null : trimmed(cut, fired.text)) ?? shape(fired.text, ask, src, !internal(plan))
   const reply = refused === null ? languages(plan, fired.text) ?? fired.text : fired.text
   const parts = split(reply)
@@ -140,7 +142,7 @@ export async function fireBrief(db: Db, root: string, plan: PlanRow, step: Step,
   if (refused !== null) return { outcome: 'refuse', spans: [refused.span], note: `${step.runs}: ${refused.reason}` }
   if (over !== null) return { outcome: 'refuse', spans: ['brief.wide'], note: `${step.runs}: ${over}, so answer with the split fence` }
   briefed(db, plan.id, human(fired.text))
-  put(root, plan.id, 'issue.md', fired.text)
+  put(root, plan.id, 'issue.md', brief)
   put(root, plan.id, 'ask.briefed.md', ask)
   const message = commitMessage(root, plan)
   if (message !== null) put(root, plan.id, COMMIT, message)
@@ -182,14 +184,6 @@ function splitting(step: Step, parts: Part[]): Outcome {
 
 function stands(): Outcome {
   return { outcome: 'pass', spans: [], note: 'the brief stands' }
-}
-
-function asking(root: string, plan: number, step: Step, question: string): Outcome {
-  if (maybe(root, plan, 'refusal.md') !== null) move(root, plan, 'refusal.md', 'refusal.prev.md')
-  put(root, plan, 'question.md', `${question}\n`)
-  const base = maybe(root, plan, 'base.sha')
-  if (base !== null) put(root, plan, 'question.sha', base)
-  return { outcome: 'needs_ceo', spans: [], note: `${step.runs}: ${question}` }
 }
 
 function again(db: Db, root: string, plan: number, ask: string): string {

@@ -154,7 +154,7 @@ test('1181a D5 no listed test runs pytest; pyproject keeps its own', () => {
   ])
   expect(py({ 'pyproject.toml': '', 'smoke/check_leak.py': '', 'tests/test_smoke_leak.py': '' })).toEqual([
     { script: 'install', bin: 'uv', args: ['sync', '--all-extras'], dir: '' },
-    { script: 'lint', bin: 'uv', args: ['run', '--no-sync', 'ruff', 'check'], dir: '' },
+    { script: 'lint', bin: 'uv', args: ['tool', 'run', 'ruff', 'check'], dir: '' },
     { script: 'test', bin: 'uv', args: ['run', '--no-sync', 'pytest'], dir: '' },
   ])
 })

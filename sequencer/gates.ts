@@ -53,7 +53,7 @@ const RECIPES: Record<Exclude<OutsideLanguage, 'rust'>, Recipe> = {
     markers: /^pyproject\.toml$/,
     install: { script: 'install', bin: 'uv', args: ['sync', '--all-extras'] },
     recipes: ['lint', 'typecheck', 'test'],
-    raw: [{ script: 'lint', bin: 'uv', args: ['run', '--no-sync', 'ruff', 'check'] }, { script: 'test', bin: 'uv', args: ['run', '--no-sync', 'pytest'] }],
+    raw: [{ script: 'lint', bin: 'uv', args: ['tool', 'run', 'ruff', 'check'] }, { script: 'test', bin: 'uv', args: ['run', '--no-sync', 'pytest'] }],
   },
   ruby: {
     markers: /^Gemfile$/,

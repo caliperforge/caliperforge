@@ -246,3 +246,29 @@ test('D4 authority refuses an unlisted kotlin/ path', () => {
   expect(authority(root, 'kotlin_specialist', hunk('kotlin/Other.kt'), false, fenceFor(w.db, 1, ['kotlin'])))
     .toMatchObject({ outcome: 'refuse', spans: ['kotlin/Other.kt:1 authority.write_paths'] })
 })
+
+const hunk = (path: string) => `--- a/${path}\n+++ b/${path}\n@@ -1,1 +1,1 @@\n+x\n`
+const root = join(import.meta.dirname, '../..')
+
+test('1451 D1 a listed pyproject.toml admits its uv.lock', () => {
+  const w = world()
+  record(w.db, 1, listed(['pyproject.toml', 'python/pyproject.toml']))
+  expect(fenceFor(w.db, 1, [BRIEF_FILES])).toEqual(['pyproject.toml', 'python/pyproject.toml', 'uv.lock', 'python/uv.lock'])
+})
+
+test('1451 D2 authority passes a pyproject.toml and its uv.lock', () => {
+  const w = world()
+  record(w.db, 1, listed(['pyproject.toml']))
+  expect(authority(root, 'python_specialist', hunk('pyproject.toml') + hunk('uv.lock'), false, fenceFor(w.db, 1, [BRIEF_FILES])))
+    .toMatchObject({ outcome: 'pass', spans: [] })
+})
+
+test('1451 D3 a uv.lock with no pyproject.toml beside is refused', () => {
+  const w = world()
+  record(w.db, 1, listed(['src/pkg/config.py']))
+  expect(authority(root, 'python_specialist', hunk('uv.lock'), false, fenceFor(w.db, 1, [BRIEF_FILES])))
+    .toMatchObject({ outcome: 'refuse', spans: ['uv.lock:1 authority.write_paths'] })
+  record(w.db, 1, listed(['pyproject.toml']))
+  expect(authority(root, 'python_specialist', hunk('python/uv.lock'), false, fenceFor(w.db, 1, [BRIEF_FILES])))
+    .toMatchObject({ outcome: 'refuse', spans: ['python/uv.lock:1 authority.write_paths'] })
+})

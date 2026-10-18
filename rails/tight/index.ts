@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync, readFileSync } from 'node:fs'
+import { readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { manifest } from '../../checks/manifest.ts'
 import { parse, type FileDiff } from '../diff.ts'
@@ -89,7 +89,7 @@ export function sources(dir: string, diff: string): Record<string, string> {
   const out: Record<string, string> = {}
   for (const file of parse(diff)) {
     const path = join(dir, file.path)
-    if (file.deleted || !file.path.endsWith('.ts') || !existsSync(path)) continue
+    if (file.deleted || !file.path.endsWith('.ts') || statSync(path, { throwIfNoEntry: false })?.isFile() !== true) continue
     out[file.path] = readFileSync(path, 'utf8')
   }
   return out

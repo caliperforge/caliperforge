@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync, readFileSync } from 'node:fs'
+import { readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { subdirs, walk } from '../../checks/tree.ts'
 import { parse } from '../diff.ts'
@@ -58,8 +58,9 @@ function deleted(gone: Set<string>, id: string): boolean {
 }
 
 function resolves(path: string, at: string | undefined): boolean {
-  if (!existsSync(path)) return false
-  if (at === undefined) return true
+  const stat = statSync(path, { throwIfNoEntry: false })
+  if (stat === undefined) return false
+  if (at === undefined || !stat.isFile()) return true
   return readFileSync(path, 'utf8').split('\n').length >= Number(at)
 }
 

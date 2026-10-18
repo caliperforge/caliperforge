@@ -1,11 +1,12 @@
-import { readFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { fresh } from '../../../checks/sqlite.ts'
 import { planRow } from '../../../runner/index.ts'
 import { load } from '../../../runner/rules.ts'
 import { record, type Verdict } from '../../record.ts'
-import { tight, type Subject } from '../index.ts'
+import { sources, tight, type Subject } from '../index.ts'
 
 const root = join(import.meta.dirname, '../../..')
 
@@ -234,4 +235,13 @@ test('judges an unused import moved verbatim', () => {
 test('a prose span is named for the text it read', () => {
   const verdict = tight(root, { ...subject('red'), prose: 'handback' })
   expect(verdict.spans.filter((s) => !s.startsWith('src/'))).toEqual(['handback:1 tight.preamble', 'handback:3 tight.hedge', 'handback:3 tight.summary'])
+})
+
+test('sources skips a changed .ts path that is a folder', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cf-tight-'))
+  mkdirSync(join(dir, 'lib', 'mod.ts'), { recursive: true })
+  const gitlink = 'diff --git a/lib/mod.ts b/lib/mod.ts\nnew file mode 160000\nindex 0000000..1714bee\n--- /dev/null\n+++ b/lib/mod.ts\n@@ -0,0 +1 @@\n+Subproject commit 1714bee72e286e73f76e320d110e0eaf5c4e649d\n'
+  expect(sources(dir, gitlink)).toEqual({})
+  writeFileSync(join(dir, 'lib', 'x.ts'), 'export const x = 1\n')
+  expect(sources(dir, gitlink + added('lib/x.ts', 'export const x = 1'))).toEqual({ 'lib/x.ts': 'export const x = 1\n' })
 })

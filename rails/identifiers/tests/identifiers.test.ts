@@ -72,6 +72,15 @@ test('refuses a path neither on disk nor deleted', () => {
   expect(verdict.message).toContain('Atelier/Y.swift')
 })
 
+test('passes a folder named with or without a line', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cf-ids-'))
+  mkdirSync(join(dir, 'lib', 'forge-std'), { recursive: true })
+  expect(identifiers(dir, 'pinned `lib/forge-std:1` and `lib/forge-std`').outcome).toBe('pass')
+  const verdict = identifiers(dir, 'see `lib/Gone.sol:3`')
+  expect(verdict.outcome).toBe('refuse')
+  expect(verdict.message).toContain('lib/Gone.sol:3')
+})
+
 function swift(): string {
   const dir = mkdtempSync(join(tmpdir(), 'cf-ids-'))
   mkdirSync(join(dir, 'swift'))

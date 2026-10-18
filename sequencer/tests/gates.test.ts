@@ -2,7 +2,8 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { expect, test } from 'vitest'
-import { gates, outsideLanguage } from '../gates.ts'
+import { gated } from '../checks.ts'
+import { gates, outsideLanguage, sushi } from '../gates.ts'
 
 function fixture(marker: string): string {
   const dir = mkdtempSync(join(tmpdir(), 'cf-gates-'))
@@ -176,6 +177,30 @@ test('1435 D3 D5 mypy config gives mypy; bare setup.cfg gives none', () => {
   expect(typecheck({ '.mypy.ini': '' })).toEqual([...ENV, '--with', 'mypy', 'mypy', 'smoke/check_leak.py'])
   expect(typecheck({ 'setup.cfg': '[metadata]\nname = x\n\n[mypy]\nstrict = True\n' })).toEqual([...ENV, '--with', 'mypy', 'mypy', 'smoke/check_leak.py'])
   expect(typecheck({ 'setup.cfg': '[metadata]\nname = x\n\n[mypy-numpy.*]\nignore_missing_imports = True\n' })).toBeUndefined()
+})
+
+const SUSHI = { script: 'sushi', bin: 'npx', args: ['--yes', '--package', 'fsh-sushi@3.12.0', 'sushi', '.'], dir: '' }
+
+test('1342b D1 a root sushi-config.yaml gets the pinned sushi gate', () => {
+  expect(sushi(nested({ 'sushi-config.yaml': '', 'input/fsh/a.fsh': '' }))).toEqual([SUSHI])
+  expect(sushi(nested({ 'input/fsh/a.fsh': '' }))).toEqual([])
+  expect(sushi(nested({ 'guide/sushi-config.yaml': '' }))).toEqual([])
+})
+
+test('1342b D2 a red sushi run refuses as sushi', () => {
+  const src = nested({ 'sushi-config.yaml': '' })
+  expect(gated(src, sushi(src), () => ({ ok: false, code: '1', output: 'error Unknown parent' }))).toEqual({
+    script: 'sushi', command: 'npx --yes --package fsh-sushi@3.12.0 sushi .', code: '1', output: 'error Unknown parent', tests: [], retried: false,
+  })
+})
+
+test('1342b D3 sushi runs after go gates, before regenerate', () => {
+  const go = (files: Record<string, string>): ReturnType<typeof gates> => gates(nested({ 'go.mod': 'module x\n', 'main.go': '', ...files }), { language: 'go', files: ['main.go'] })
+  const own = go({})
+  expect(own.map((g) => g.script)).toEqual(['format', 'lint', 'test'])
+  const workflow = { '.github/workflows/gen.yml': 'jobs:\n  gen:\n    steps:\n      - run: |\n          go generate ./...\n          git diff --exit-code\n' }
+  expect(go(workflow).slice(3).map((g) => g.script)).toEqual(['stage', 'generate', 'diff'])
+  expect(go({ ...workflow, 'sushi-config.yaml': '' })).toEqual([...own, SUSHI, ...go(workflow).slice(3)])
 })
 
 test('D6 no lockfile: no install gate, npm runs the scripts', () => {

@@ -22,9 +22,9 @@ import { busy } from '../store/now.ts'
 import { BUILT, laneOff, type PlanRow } from '../store/plans.ts'
 import { profile, type Profile } from '../store/profile.ts'
 import { builder } from '../templates/pr-path.ts'
-import { checks, finish, mode, network, npm, type Commands, type Failure, type Run } from './checks.ts'
+import { checks, finish, gated, mode, network, npm, type Commands, type Failure, type Run } from './checks.ts'
 import { ciChecks } from './ci.ts'
-import { outsideLanguage } from './gates.ts'
+import { outsideLanguage, sushi } from './gates.ts'
 import type { Outcome } from './kind.ts'
 import { lock, unlock } from './lock.ts'
 import { seat } from '../runner/rules.ts'
@@ -110,6 +110,7 @@ function suite(db: Db, root: string, plan: PlanRow, on: Rails, commands: Command
   // language's gates: its builder already ran them at step 2, and a red fork CI after the reviews costs more.
   const local = on?.checks !== undefined
   const outside = local ? null : outsideLanguage(languageFor(db, plan, srcDir(root, plan.id), false))
+  const guide = local || outside !== null ? [] : sushi(srcDir(root, plan.id))
   const ci = on?.checks === 'ci' ? ciChecks(db, root, plan, wire) : null
   if (ci !== null && 'wait' in ci) return ci.wait
   if (ci !== null) {
@@ -117,14 +118,14 @@ function suite(db: Db, root: string, plan: PlanRow, on: Rails, commands: Command
     if (ci.failed !== null) return broke(db, root, plan, ci.failed)
     return { outcome: 'pass', spans: [], note: `pre-review: six rails pass; checks ran on GitHub CI at ${ci.at}` }
   }
-  if (local || outside !== null) {
+  if (local || outside !== null || guide.length > 0) {
     const holder = lock(root, plan.id)
     if (holder !== null) return { outcome: 'pass', held: true, spans: ['checks'], note: `checks wait: plan ${String(holder.plan)} is running its tests` }
     try {
       const diff = diffOf(root, plan.id)
-      const failed = checks(srcDir(root, plan.id), commands, noted(db, plan.id), outside === null ? narrow(db, plan) : [],
+      const failed = (guide.length > 0 ? gated(srcDir(root, plan.id), guide, noted(db, plan.id)) : checks(srcDir(root, plan.id), commands, noted(db, plan.id), outside === null ? narrow(db, plan) : [],
         outside === null ? null : { language: outside, files: filesOf(db, plan.id).map((f) => f.path) },
-        parse(diff).map((f) => f.path), finishes.minutes) ?? finish(srcDir(root, plan.id), finishes.entries, noted(db, plan.id), finishes.minutes)
+        parse(diff).map((f) => f.path), finishes.minutes)) ?? finish(srcDir(root, plan.id), finishes.entries, noted(db, plan.id), finishes.minutes)
       if (failed?.fault !== undefined) return faulted(db, root, plan, failed.fault)
       if (failed?.capped === true) return capped(failed)
       const blip = failed === null ? null : offline(failed)
@@ -135,7 +136,7 @@ function suite(db: Db, root: string, plan: PlanRow, on: Rails, commands: Command
       unlock(root, plan.id)
     }
   }
-  const ran = local ? mode(srcDir(root, plan.id)) : outside ?? 'none'
+  const ran = local ? mode(srcDir(root, plan.id)) : outside ?? (guide.length > 0 ? 'sushi' : 'none')
   return { outcome: 'pass', spans: [], note: `pre-review: six rails pass; checks ran ${ran}` }
 }
 

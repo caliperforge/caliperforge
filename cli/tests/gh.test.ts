@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { fileIssue, forward, installed, rehearse, type Read, type Run } from '../gh.ts'
+import { fileIssue, forward, installed, openPr, rehearse, type Read, type Run } from '../gh.ts'
 
 const FORK = 'caliperforge/widget'
 const BRANCH = 'widget-12-a1-next'
@@ -70,6 +70,21 @@ test('D1 a master fork compares and moves master', () => {
   forward(FORK, BASE, reads(asked, read('ahead', [], 'master')), recorder(calls))
   expect(asked).toEqual([['api', `repos/${FORK}`], ['api', `repos/${FORK}/compare/master...${BASE}`]])
   expect(calls).toEqual([['api', '-X', 'PATCH', `repos/${FORK}/git/refs/heads/master`, '-f', `sha=${BASE}`]])
+})
+
+test('D1 openPr opens against the repo default branch', () => {
+  const asked: string[][] = []
+  const calls: string[][] = []
+  const url = openPr(FORK, BRANCH, 'title', 'pr.md', reads(asked, read('ahead', [], 'master')), recorder(calls, false, 'https://x/pull/3\n'))
+  expect(url).toBe('https://x/pull/3')
+  expect(asked).toEqual([['api', `repos/${FORK}`]])
+  expect(calls).toEqual([['pr', 'create', '--repo', FORK, '--base', 'master', '--head', BRANCH, '--title', 'title', '--body-file', 'pr.md']])
+})
+
+test('D3 openPr with no default branch opens nothing', () => {
+  const calls: string[][] = []
+  expect(() => openPr(FORK, BRANCH, 'title', 'pr.md', () => ({}), recorder(calls))).toThrow()
+  expect(calls).toEqual([])
 })
 
 test('D2 a master fork rehearses against master', () => {

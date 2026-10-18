@@ -184,9 +184,9 @@ export function rehearsal(fork: string, branch: string, read: Read = gh): number
 }
 
 /** Opened under this host's `gh` credential; the machine holds no account of its own. */
-export function openPr(repo: string, head: string, title: string, bodyFile: string): string {
-  return execFileSync('gh', ['pr', 'create', '--repo', repo, '--base', 'main', '--head', head,
-    '--title', title, '--body-file', bodyFile], { encoding: 'utf8' }).trim()
+export function openPr(repo: string, head: string, title: string, bodyFile: string, read: Read = gh, exec: Run = run): string {
+  return exec(['pr', 'create', '--repo', repo, '--base', trunk(repo, read), '--head', head,
+    '--title', title, '--body-file', bodyFile]).trim()
 }
 
 /** An internal plan is closed by the commit that landed it on `main`, not by a pull request. */

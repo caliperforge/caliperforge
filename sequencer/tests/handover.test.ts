@@ -69,6 +69,19 @@ test('map', () => {
     'rust/src/\n    lib.rs  2 lines — pay-kit core\n  * verify.rs  44 lines — Verifies a payment challenge.')
 })
 
+test('D2 D3 map leaves out a gitlink', () => {
+  const r = repo({ 'lib/Note.sol': '// Holds a note.\ncontract Note {}\n' })
+  const nested = join(r.dir, 'lib/forge-std')
+  mkdirSync(nested)
+  writeFileSync(join(nested, 'Test.sol'), 'contract Test {}\n')
+  const git = (...args: string[]): string => execFileSync('git', args, { cwd: nested, encoding: 'utf8' })
+  git('init', '-q', '-b', 'main')
+  git('add', '-A')
+  git('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'std')
+  r.run('add', 'lib/forge-std')
+  expect(handover(r.dir, r.base).map).toBe('lib/\n    Note.sol  2 lines — Holds a note.')
+})
+
 test('cap', () => {
   const big = [...Array(2000).keys()].map((i) => `line ${String(i)}`).join('\n')
   const r = repo({ 'data.txt': `${big}\n` })

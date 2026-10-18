@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { readFileSync, statSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
 /** Past this many lines the handover is the repository again, and the reviewer is better served by the diff alone. */
@@ -67,7 +67,7 @@ function around(src: string, base: string): string {
   const dirs = [...new Set([...changed].map((p) => dirname(p)))].slice(0, DIRS)
   const tracked = git(src, ['ls-files']).split('\n').filter((p) => p !== '')
   return dirs.map((dir) => {
-    const here = tracked.filter((p) => dirname(p) === dir)
+    const here = tracked.filter((p) => dirname(p) === dir && statSync(join(src, p), { throwIfNoEntry: false })?.isFile() === true)
     const rows = here.slice(0, PER_DIR).map((p) => row(src, p, changed.has(p)))
     const more = here.length > PER_DIR ? [`  … ${String(here.length - PER_DIR)} more`] : []
     return [`${dir === '.' ? '(root)' : dir}/`, ...rows, ...more].join('\n')

@@ -151,8 +151,17 @@ test('D1 a js-only diff screens the page that loads the script', () => {
   const src = checkout({
     'sirvoy-helper/rooms.html': page('<script src="el-rooms.js"></script>'),
     'about.html': page('<h1>About</h1>'),
+    'notes.html': page('<p>el-rooms.js</p>'),
   })
   expect(screens(file('a/sirvoy-helper/el-rooms.js', 'b/sirvoy-helper/el-rooms.js'), src)).toEqual(['sirvoy-helper/rooms.html'])
+})
+
+test('D2 a page loading its own app.js is not screened', () => {
+  const src = checkout({
+    'public/index.html': page('<script src="/app.js"></script>'),
+    'public/preview/x/index.html': page('<script src="app.js"></script>'),
+  })
+  expect(screens(file('a/public/app.js', 'b/public/app.js'), src)).toEqual(['public/index.html'])
 })
 
 browsed('D3 a missing page is unserved and leaves no shot', async () => {

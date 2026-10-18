@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:f
 import { readFile } from 'node:fs/promises'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { basename, extname, join, relative, resolve, sep } from 'node:path'
+import { dirname, extname, join, relative, resolve, sep } from 'node:path'
 import { chromium, type Browser } from 'playwright-core'
 import { walk } from '../checks/tree.ts'
 import type { Provider } from '../providers/kind.ts'
@@ -31,6 +31,7 @@ interface Found {
 const WIDTHS = [1440, 400]
 const SCHEMES = ['light', 'dark'] as const
 const SOURCE = /\.(?:css|js|mjs)$/
+const LOADS = /\b(?:src|href)=["']([^"'?#]*)/g
 const TYPES: Record<string, string> = {
   '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.mjs': 'text/javascript',
   '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json',
@@ -52,14 +53,16 @@ const DEFECTS = `(() => {
   }
 })()`
 
+const webOf = (src: string): string => existsSync(join(src, 'public', 'index.html')) ? join(src, 'public') : src
+
 export function screens(diff: string, src: string): string[] {
   const files = parse(diff)
   if (files.length > 0 && files.every((f) => SOURCE.test(f.path))) {
-    const names = files.map((f) => basename(f.path))
-    const loading = walk(src, (n) => n.endsWith('.html')).filter((p) => {
-      const text = readFileSync(p, 'utf8')
-      return names.some((name) => text.includes(name))
-    })
+    const changed = new Set(files.map((f) => resolve(src, f.path)))
+    const web = webOf(src)
+    const loading = walk(src, (n) => n.endsWith('.html')).filter((p) =>
+      [...readFileSync(p, 'utf8').matchAll(LOADS)].some(([, value = '']) =>
+        changed.has(value.startsWith('/') ? resolve(web, `.${value}`) : resolve(dirname(p), value))))
     return loading.length > 0 ? loading.map((p) => relative(src, p)) : ['index.html']
   }
   return files.filter((f) => !f.deleted && f.path.endsWith('.html')).map((f) => f.path)
@@ -114,7 +117,7 @@ async function onMain(root: string, plan: number, src: string, pages: string[]):
 }
 
 export async function design(src: string, out: string, pages: string[]): Promise<Verdict> {
-  const web = existsSync(join(src, 'public', 'index.html')) ? join(src, 'public') : src
+  const web = webOf(src)
   const paths = web === src ? pages : pages.map((page) => page.replace(/^public\//, ''))
   const served = paths.filter((path) => existsSync(join(web, path)))
   const unserved = paths.filter((path) => !served.includes(path)).map((path) => `${path} design.unserved`)

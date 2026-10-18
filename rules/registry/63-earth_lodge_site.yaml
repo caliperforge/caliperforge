@@ -1,0 +1,6 @@
+- name: earth_lodge_site
+  table: runs
+  column: at
+  where: staffed = 'web_specialist' AND plan IN (SELECT id FROM plans WHERE origin GLOB 'https://github.com/caliperforge/earth-lodge-site/*')
+  gap: 2d
+  while: EXISTS (SELECT 1 FROM plans WHERE origin GLOB 'https://github.com/caliperforge/earth-lodge-site/*' AND state IN ('queued', 'running', 'blocked_on_ceo') AND queued_at >= $since)

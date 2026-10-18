@@ -89,6 +89,12 @@ test('1156b D1 site names its seat, lane, rails and checks', () => {
     commands: { tsc: ['--noEmit'], json: true, node_test: true } })
 })
 
+test('1456 D1 earth-lodge-site names its seat, lane and checks', () => {
+  expect(profile(REPO, 'caliperforge/earth-lodge-site')).toEqual({ builder: 'web_specialist', lane: 'site',
+    rails: { digests: false, ratchet: false, fence: false, tight_code: true, checks: 'local' },
+    commands: { node: ['--check'], node_test: true } })
+})
+
 test('1181b D5 a finish entry with an empty argv is refused', () => {
   const dir = root({ 'widget.yml': 'finish: { x: [] }\n' })
   expect(() => profile(dir, 'acme/widget')).toThrow(join(dir, 'profiles/acme/widget.yml'))

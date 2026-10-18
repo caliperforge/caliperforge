@@ -2,7 +2,8 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { expect, test } from 'vitest'
-import { gates, outsideLanguage } from '../gates.ts'
+import { gated } from '../checks.ts'
+import { gates, outsideLanguage, sushi } from '../gates.ts'
 
 function fixture(marker: string): string {
   const dir = mkdtempSync(join(tmpdir(), 'cf-gates-'))
@@ -139,7 +140,7 @@ const py = (files: Record<string, string>, listed = LEAK): ReturnType<typeof gat
 const ENV = ['run', '--no-project', '--with', 'ruff', '--with', 'pyright', '--with', 'pytest']
 
 test('1181a D2 no project runs ruff, pyright, pytest on files', () => {
-  expect(py({ 'smoke/check_leak.py': '', 'tests/test_smoke_leak.py': '' }, [...LEAK, 'smoke/gone.py', 'README.md'])).toEqual([
+  expect(py({ 'pyrightconfig.json': '', 'smoke/check_leak.py': '', 'tests/test_smoke_leak.py': '' }, [...LEAK, 'smoke/gone.py', 'README.md'])).toEqual([
     { script: 'lint', bin: 'uv', args: [...ENV, 'ruff', 'check', ...LEAK], dir: '' },
     { script: 'typecheck', bin: 'uv', args: [...ENV, 'pyright', ...LEAK], dir: '' },
     { script: 'test', bin: 'uv', args: [...ENV, 'python', '-m', 'pytest'], dir: '' },
@@ -147,16 +148,59 @@ test('1181a D2 no project runs ruff, pyright, pytest on files', () => {
 })
 
 test('1181a D5 no listed test runs pytest; pyproject keeps its own', () => {
-  expect(py({ 'smoke/check_leak.py': '' })).toEqual([
+  expect(py({ 'pyrightconfig.json': '', 'smoke/check_leak.py': '' })).toEqual([
     { script: 'lint', bin: 'uv', args: [...ENV, 'ruff', 'check', 'smoke/check_leak.py'], dir: '' },
     { script: 'typecheck', bin: 'uv', args: [...ENV, 'pyright', 'smoke/check_leak.py'], dir: '' },
     { script: 'test', bin: 'uv', args: [...ENV, 'python', '-m', 'pytest'], dir: '' },
   ])
   expect(py({ 'pyproject.toml': '', 'smoke/check_leak.py': '', 'tests/test_smoke_leak.py': '' })).toEqual([
     { script: 'install', bin: 'uv', args: ['sync', '--all-extras'], dir: '' },
-    { script: 'lint', bin: 'uv', args: ['run', '--no-sync', 'ruff', 'check'], dir: '' },
+    { script: 'lint', bin: 'uv', args: ['tool', 'run', 'ruff', 'check'], dir: '' },
     { script: 'test', bin: 'uv', args: ['run', '--no-sync', 'pytest'], dir: '' },
   ])
+})
+
+test('1435 D1 D4 requirements install, no config no typecheck', () => {
+  const env = [...ENV, '--with-requirements', 'requirements.txt']
+  expect(py({ 'requirements.txt': 'numpy\n', 'smoke/check_leak.py': '' })).toEqual([
+    { script: 'lint', bin: 'uv', args: [...env, 'ruff', 'check', 'smoke/check_leak.py'], dir: '' },
+    { script: 'test', bin: 'uv', args: [...env, 'python', '-m', 'pytest'], dir: '' },
+  ])
+  expect(py({ 'requirements-dev.txt': '', 'requirements.txt': '', 'smoke/check_leak.py': '' }).map((g) => g.args.slice(8, 12)))
+    .toEqual([0, 1].map(() => ['--with-requirements', 'requirements.txt', '--with-requirements', 'requirements-dev.txt']))
+})
+
+test('1435 D3 D5 mypy config gives mypy; bare setup.cfg gives none', () => {
+  const typecheck = (files: Record<string, string>): string[] | undefined =>
+    py({ ...files, 'smoke/check_leak.py': '' }).find((g) => g.script === 'typecheck')?.args
+  expect(typecheck({ 'mypy.ini': '' })).toEqual([...ENV, '--with', 'mypy', 'mypy', 'smoke/check_leak.py'])
+  expect(typecheck({ '.mypy.ini': '' })).toEqual([...ENV, '--with', 'mypy', 'mypy', 'smoke/check_leak.py'])
+  expect(typecheck({ 'setup.cfg': '[metadata]\nname = x\n\n[mypy]\nstrict = True\n' })).toEqual([...ENV, '--with', 'mypy', 'mypy', 'smoke/check_leak.py'])
+  expect(typecheck({ 'setup.cfg': '[metadata]\nname = x\n\n[mypy-numpy.*]\nignore_missing_imports = True\n' })).toBeUndefined()
+})
+
+const SUSHI = { script: 'sushi', bin: 'npx', args: ['--yes', '--package', 'fsh-sushi@3.12.0', 'sushi', '.'], dir: '' }
+
+test('1342b D1 a root sushi-config.yaml gets the pinned sushi gate', () => {
+  expect(sushi(nested({ 'sushi-config.yaml': '', 'input/fsh/a.fsh': '' }))).toEqual([SUSHI])
+  expect(sushi(nested({ 'input/fsh/a.fsh': '' }))).toEqual([])
+  expect(sushi(nested({ 'guide/sushi-config.yaml': '' }))).toEqual([])
+})
+
+test('1342b D2 a red sushi run refuses as sushi', () => {
+  const src = nested({ 'sushi-config.yaml': '' })
+  expect(gated(src, sushi(src), () => ({ ok: false, code: '1', output: 'error Unknown parent' }))).toEqual({
+    script: 'sushi', command: 'npx --yes --package fsh-sushi@3.12.0 sushi .', code: '1', output: 'error Unknown parent', tests: [], retried: false,
+  })
+})
+
+test('1342b D3 sushi runs after go gates, before regenerate', () => {
+  const go = (files: Record<string, string>): ReturnType<typeof gates> => gates(nested({ 'go.mod': 'module x\n', 'main.go': '', ...files }), { language: 'go', files: ['main.go'] })
+  const own = go({})
+  expect(own.map((g) => g.script)).toEqual(['format', 'lint', 'test'])
+  const workflow = { '.github/workflows/gen.yml': 'jobs:\n  gen:\n    steps:\n      - run: |\n          go generate ./...\n          git diff --exit-code\n' }
+  expect(go(workflow).slice(3).map((g) => g.script)).toEqual(['stage', 'generate', 'diff'])
+  expect(go({ ...workflow, 'sushi-config.yaml': '' })).toEqual([...own, SUSHI, ...go(workflow).slice(3)])
 })
 
 test('D6 no lockfile: no install gate, npm runs the scripts', () => {

@@ -5,6 +5,7 @@ import { z } from 'zod'
 import type { PlanFile } from '../store/files.ts'
 import { CONVENTIONAL } from './conventions.ts'
 import { WHOLE } from './handout.ts'
+import { reproduced } from './reproduced.ts'
 import { kept } from './verbatim.ts'
 import { git } from './workspace.ts'
 
@@ -119,6 +120,8 @@ const LISTED = /^\*\*Files:\*\*[ \t]*\r?\n((?:[ \t]*[-*][ \t].*(?:\r?\n|$))*)/m
 
 const Unclear = z.object({ outcome: z.literal('unclear'), question: z.string().min(1) })
 
+const Claimed = z.object({ outcome: z.literal('claimed'), evidence: z.string().min(1) })
+
 const Part = z.object({ title: z.string().min(1), what: z.string().min(1), why: z.string().min(1), ends: z.string().min(1),
   after: z.string().optional() })
 
@@ -146,6 +149,14 @@ export function unclear(reply: string): string | null {
   if (fence === null) return titleOf(reply) === null && reply.trim() !== '' ? reply.trim() : null
   const parsed = Unclear.safeParse(yamlOf(fence))
   return parsed.success ? parsed.data.question : null
+}
+
+/** The evidence a seat's closing fence cites when an open pull request or a maintainer's comment already covers the ask. */
+export function claimed(reply: string): string | null {
+  const fence = fenceOf(reply)
+  if (fence === null) return null
+  const parsed = Claimed.safeParse(yamlOf(fence))
+  return parsed.success ? parsed.data.evidence : null
 }
 
 /** The fence a seat ends with when the ask is more than one job: the parts, in the order they must land. */
@@ -185,7 +196,8 @@ export function shape(brief: string, ask: string, src: string, outside = false, 
   const title = titleOf(brief)
   if (title === null || (title !== titleOf(ask) && !(outside && CONVENTIONAL.test(title)))) return { span: '# <title>', reason: "the title is not the ask's" }
   const checks: ((b: string) => Refused | null)[] =
-    [order, empty, carried, cases, (b) => caps(b, ceiling), folders, forbidden, (b) => shared(b, src), (b) => paths(b, src), (b) => ranged(b, src), (b) => kept(b, ask)]
+    [order, empty, carried, cases, (b) => caps(b, ceiling), folders, forbidden, (b) => shared(b, src), (b) => paths(b, src), (b) => ranged(b, src), (b) => kept(b, ask),
+      ...(outside ? [(b: string) => reproduced(section(b, '## Reproduced'), files(b).map((f) => f.path))] : [])]
   for (const check of checks) {
     const refused = check(brief)
     if (refused !== null) return refused
@@ -412,7 +424,7 @@ export function human(brief: string): Record<'title' | 'what' | 'why' | 'ends', 
  * ends the value. A value that runs onto a second line does not survive the quoting, and is read as plain YAML.
  */
 function yamlOf(text: string): unknown {
-  const quoted = text.replace(/^(\s*(?:- )?(?:title|what|why|ends|question|outcome):[ \t]+)(?!["'|>])(.+)$/gm,
+  const quoted = text.replace(/^(\s*(?:- )?(?:title|what|why|ends|question|evidence|outcome):[ \t]+)(?!["'|>])(.+)$/gm,
     (...m: string[]) => `${m[1] ?? ''}${JSON.stringify((m[2] ?? '').trim())}`)
   for (const each of [quoted, text]) {
     try {

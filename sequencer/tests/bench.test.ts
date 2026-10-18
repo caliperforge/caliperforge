@@ -13,8 +13,9 @@ import { scores } from '../../store/bench.ts'
 import { runRows } from '../../store/events.ts'
 import type { Db } from '../../store/index.ts'
 import { dial } from '../../store/lanes.ts'
-import { allPlans, pipeNamed, planById, putPlan, type PlanRow } from '../../store/plans.ts'
+import { allPlans, holdOn, pipeNamed, planById, putPlan, waiting, type PlanRow } from '../../store/plans.ts'
 import { CEILING, generate, scored, scratch } from '../../templates/bench.ts'
+import { unhold } from '../hold.ts'
 import { dry, tick } from '../index.ts'
 import { route } from '../next.ts'
 import { kernel, mapOf } from '../steps.ts'
@@ -282,6 +283,21 @@ test('D5 tick on an empty src/ sends the plan back to step 0', async () => {
   await tick(db, root, stub(CEILING, 'stopped', true).provider, OPENS)
   expect(planById(db, 1).step).toBe(0)
   expect(planById(db, 1).state).not.toBe('blocked_on_ceo')
+})
+
+test('D3 cf return --to 1 on a NULL-lane bench plan fires it', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'cf-bench-'))
+  staffedIn(root)
+  emptied(root)
+  target(root, { generator: 'fizz' })
+  const db = fresh(schema)
+  dial(db, 3, AT)
+  queued(db, 'bench', 2)
+  holdOn(db, 1, 'held', null)
+  waiting(db, [{ plan: 1, why: 'leased' }])
+  unhold(db, root, 1, 'coo', 1)
+  expect(await tick(db, root, stub(CEILING, 'stopped', true).provider, OPENS)).toMatchObject([{ plan: 1, step: 1 }])
+  expect(planById(db, 1).lane).toBeNull()
 })
 
 test('D3 a run stopped at the ceiling with a suite passes', async () => {

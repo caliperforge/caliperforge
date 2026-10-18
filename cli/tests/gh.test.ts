@@ -8,8 +8,15 @@ const PATCH = ['api', '-X', 'PATCH', `repos/${FORK}/git/refs/heads/main`, '-f', 
 const CREATE = ['pr', 'create', '--repo', FORK, '--base', 'main', '--head', BRANCH,
   '--title', 'CI rehearsal only (do not merge)', '--body', 'Fork CI only. Do not merge.']
 
-function read(status: string, open: number[]): Read {
-  return (args) => args[0] === 'api' ? { status } : open.map((number) => ({ number }))
+function read(status: string, open: number[], branch = 'main'): Read {
+  return (args) => args[0] === 'api' ? { status, default_branch: branch } : open.map((number) => ({ number }))
+}
+
+function reads(calls: string[][], inner: Read): Read {
+  return (args) => {
+    calls.push(args)
+    return inner(args)
+  }
 }
 
 function recorder(calls: string[][], fails = false, out = ''): Run {
@@ -55,6 +62,35 @@ test('D3 no rehearsal opens one and moves nothing', () => {
   const calls: string[][] = []
   rehearse(FORK, BRANCH, read('ahead', []), recorder(calls))
   expect(calls).toEqual([CREATE])
+})
+
+test('D1 a master fork compares and moves master', () => {
+  const asked: string[][] = []
+  const calls: string[][] = []
+  forward(FORK, BASE, reads(asked, read('ahead', [], 'master')), recorder(calls))
+  expect(asked).toEqual([['api', `repos/${FORK}`], ['api', `repos/${FORK}/compare/master...${BASE}`]])
+  expect(calls).toEqual([['api', '-X', 'PATCH', `repos/${FORK}/git/refs/heads/master`, '-f', `sha=${BASE}`]])
+})
+
+test('D2 a master fork rehearses against master', () => {
+  const calls: string[][] = []
+  rehearse(FORK, BRANCH, read('ahead', [], 'master'), recorder(calls))
+  expect(calls).toEqual([CREATE.map((a) => a === 'main' ? 'master' : a)])
+})
+
+test('D4 a repository with no default branch throws first', () => {
+  const asked: string[][] = []
+  const calls: string[][] = []
+  expect(() => { forward(FORK, BASE, reads(asked, () => ({})), recorder(calls)) }).toThrow()
+  expect(asked).toEqual([['api', `repos/${FORK}`]])
+  expect(calls).toEqual([])
+})
+
+test('D4 a diverged master fork names master', () => {
+  const calls: string[][] = []
+  expect(() => { forward(FORK, BASE, read('diverged', [], 'master'), recorder(calls)) })
+    .toThrow(`${FORK} master has diverged from ${BASE}`)
+  expect(calls).toEqual([])
 })
 
 test('fileIssue creates each label before the issue', () => {

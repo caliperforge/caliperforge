@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { parse } from 'yaml'
 import { z } from 'zod'
+import { loose } from './loose.ts'
 import { lockfile, nodeGates } from './node.ts'
 
 /** A language whose builder holds its own shell and brief-files fence on a stranger's repo. */
@@ -52,7 +53,7 @@ const RECIPES: Record<Exclude<OutsideLanguage, 'rust'>, Recipe> = {
     markers: /^pyproject\.toml$/,
     install: { script: 'install', bin: 'uv', args: ['sync', '--all-extras'] },
     recipes: ['lint', 'typecheck', 'test'],
-    raw: [{ script: 'lint', bin: 'uv', args: ['run', '--no-sync', 'ruff', 'check'] }, { script: 'test', bin: 'uv', args: ['run', '--no-sync', 'pytest'] }],
+    raw: [{ script: 'lint', bin: 'uv', args: ['tool', 'run', 'ruff', 'check'] }, { script: 'test', bin: 'uv', args: ['run', '--no-sync', 'pytest'] }],
   },
   ruby: {
     markers: /^Gemfile$/,
@@ -107,9 +108,15 @@ const PREFIX: Record<OutsideLanguage, string> = { rust: 'rs-', python: 'py-', ru
 
 const JUSTFILE = 'Justfile'
 
-/** What step 3 runs on an outside plan: install, then the gates upstream runs, in the language's own folder, then its workflows' regenerate-and-diff steps at the root. */
+/** What step 3 runs on an outside plan: install, then the gates upstream runs, in the language's own folder, then SUSHI and its workflows' regenerate-and-diff steps at the root. */
 export function gates(src: string, outside: Outside, excused: string[] = []): Gate[] {
-  return [...own(src, outside, excused), ...regenerated(src)]
+  return [...own(src, outside, excused), ...sushi(src), ...regenerated(src)]
+}
+
+const SUSHI = 'fsh-sushi@3.12.0'
+
+export function sushi(src: string): Gate[] {
+  return existsSync(join(src, 'sushi-config.yaml')) ? [{ script: 'sushi', bin: 'npx', args: ['--yes', '--package', SUSHI, 'sushi', '.'], dir: '' }] : []
 }
 
 function own(src: string, outside: Outside, excused: string[]): Gate[] {
@@ -127,20 +134,6 @@ function own(src: string, outside: Outside, excused: string[]): Gate[] {
   const just = (script: string): Gate => ({ script, bin: 'just', args: ['--justfile', JUSTFILE, script], dir })
   const build = recipe.build?.find((r) => defined.has(r))
   return [...(defined.has('install') ? [just('install')] : install), ...(build === undefined ? [] : [just(build)]), ...recipe.recipes.map((r) => (defined.has(prefix + r) ? prefix + r : r)).filter((r) => defined.has(r)).map(just)]
-}
-
-/** One throwaway environment for all three, so pyright resolves `import pytest`. */
-const ENV = ['run', '--no-project', '--with', 'ruff', '--with', 'pyright', '--with', 'pytest']
-
-/** `python -m pytest`, unlike `pytest`, puts the root on `sys.path`, so the whole suite imports the tree from there. */
-function loose(src: string, files: string[]): Gate[] {
-  const py = files.filter((f) => f.endsWith('.py') && existsSync(join(src, f)))
-  if (py.length === 0) return []
-  return [
-    { script: 'lint', bin: 'uv', args: [...ENV, 'ruff', 'check', ...py], dir: '' },
-    { script: 'typecheck', bin: 'uv', args: [...ENV, 'pyright', ...py], dir: '' },
-    { script: 'test', bin: 'uv', args: [...ENV, 'python', '-m', 'pytest'], dir: '' },
-  ]
 }
 
 function first(outside: Outside): string {

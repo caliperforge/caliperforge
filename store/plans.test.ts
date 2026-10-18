@@ -7,6 +7,7 @@ import { migrate, open, type Db } from './index.ts'
 import { priority } from './lanes.ts'
 import { addPlan, briefed, clearWaitsOn, end, finish, holdOn, live, overlapWaits, pipeNamed, planById, requeue, resume, waiting,
   type PipeRow } from './plans.ts'
+import { unleased } from './unleased.ts'
 
 const root = join(import.meta.dirname, '..')
 
@@ -82,6 +83,17 @@ test('live and queue_order put the five plans in the same order', () => {
 test('each row names the rule that puts it ahead of the next', () => {
   expect(order(queue().db).map((r) => [r.rule, r.key])).toEqual(
     [[1, 'started'], [3, 'queued_at'], [4, 'id'], [2, 'priority'], [null, null]])
+})
+
+test('D4 unleased re-queues only a running leased plan unheld', () => {
+  const db = bench()
+  for (const id of [2, 3, 4]) add(db, id, 'running', T1)
+  waiting(db, [{ plan: PLAN, why: 'leased' }, { plan: 2, why: 'leased' }, { plan: 3, why: 'leased' }, { plan: 4, why: 'over_cap' }])
+  expect(unleased(db, [3])).toEqual([2])
+  expect(db.prepare('SELECT id, state, wait_reason FROM plans ORDER BY id').all()).toEqual([
+    { id: PLAN, state: 'queued', wait_reason: 'leased' }, { id: 2, state: 'queued', wait_reason: null },
+    { id: 3, state: 'running', wait_reason: 'leased' }, { id: 4, state: 'running', wait_reason: 'over_cap' }])
+  expect(eventsOf(db, 2, 'requeue')).toEqual([{ actor: 'tick', outcome: 'pass', message: 'running with no lease' }])
 })
 
 test('a plan waiting on files shows file_overlap', () => {

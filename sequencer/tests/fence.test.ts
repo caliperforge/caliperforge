@@ -3,6 +3,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { runRows } from '../../store/events.ts'
+import { amend } from '../../store/lanes.ts'
+import { dropPlan } from '../../store/plans.ts'
 import { refusalsOf } from '../../store/refusals.ts'
 import { cooLite } from '../director.ts'
 import { broken, deletions, renumbered, strays } from '../fence.ts'
@@ -19,7 +21,7 @@ const RETURN = '---\nmove: return\nwhy: the builder reverts it\n---\n'
 
 function mine(): World {
   const w = world()
-  w.db.prepare('DELETE FROM plans WHERE id = 1').run()
+  dropPlan(w.db, 1)
   ours(w.root)
   internalPlan(w.db, w.root, ID)
   return w
@@ -82,7 +84,7 @@ test('D1 an unowned stray stops for the director', async () => {
   const w = mine()
   const rails = await strayed(w, CARRIED, undefined, RULE)
   expect(rails).toMatchObject({ plan: ID, step: 3, name: 'rails', outcome: 'refuse', spans: ['cli/extra.ts:1 authority.outside_files'] })
-  expect(w.db.prepare('SELECT 1 FROM runs WHERE plan = ? AND step > 3').all(ID)).toEqual([])
+  expect(runRows(w.db).filter((r) => r.plan === ID && r.step > 3)).toEqual([])
   expect(plan(w.db, ID)).toMatchObject({ state: 'blocked_on_ceo', step: 3 })
   expect(runRows(w.db).filter((r) => r.plan === ID && r.seat === 'director')).toHaveLength(1)
   for (const part of ['cli/extra.ts', '- `cli/extra.ts` — ']) expect(get(w.root, ID, 'refusal.md')).toContain(part)
@@ -122,7 +124,7 @@ test('D5 no profiles: the write fence refuses an unowned stray', async () => {
 
 test('D6 a plan with a target reads its repo\'s profile, not ours', async () => {
   const w = mine()
-  const rails = await strayed(w, CARRIED, () => w.db.prepare('UPDATE plans SET target_id = 1 WHERE id = ?').run(ID))
+  const rails = await strayed(w, CARRIED, () => { amend(w.db, ID, { target_id: 1 }) })
   expect(rails).toMatchObject({ plan: ID, step: 3, name: 'rails', outcome: 'refuse', spans: ['cli/extra.ts:1 authority.write_paths'] })
 })
 

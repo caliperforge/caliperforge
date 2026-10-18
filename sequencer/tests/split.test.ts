@@ -4,6 +4,7 @@ import { tick } from '../index.ts'
 import { assembly } from '../home.ts'
 import { following, languages, parted, released } from '../split.ts'
 import { refilled } from '../refill.ts'
+import { unran } from '../reproduced.ts'
 import { languageFor } from '../route.ts'
 import type { Wire } from '../push.ts'
 import { maybe, put, srcDir } from '../workspace.ts'
@@ -440,8 +441,11 @@ test('D3: an outside brief of five files at the limit is the issue', async () =>
   const brief = wideBrief(SIX.slice(0, 5), 'hello', 'Estimate: 250 lines')
   const { w, fired } = await outside(brief, 250)
   expect(fired).toMatchObject({ step: 1, outcome: 'pass' })
-  expect(maybe(w.root, 1, 'issue.md')).toBe(brief)
+  expect(maybe(w.root, 1, 'issue.md')).toMatch(RAN)
+  expect(unran(maybe(w.root, 1, 'issue.md') ?? '')).toBe(brief)
 })
+
+const RAN = /- expect: fails\n- base: `[0-9a-f]{40}`\n- exit: [1-9]\d*\n> /
 
 const SPANNING = wideBrief(['kotlin/Main.kt (new)', '.github/workflows/k.yml (new)'], 'hello', 'x', 'harness/test/x.test.ts (new)')
 
@@ -477,7 +481,8 @@ test('D4: an outside brief in one language is not split', async () => {
   const brief = wideBrief(['kotlin/Main.kt (new)', '.github/workflows/k.yml (new)', 'docs/k.md (new)'], 'hello', 'x', 'kotlin/test/MainTest.kt (new)')
   const log: string[] = []
   await briefed(out, 1, brief, log)
-  expect(maybe(out.root, 1, 'issue.md')).toBe(brief)
+  expect(maybe(out.root, 1, 'issue.md')).toMatch(RAN)
+  expect(unran(maybe(out.root, 1, 'issue.md') ?? '')).toBe(brief)
   expect(log).toEqual([])
 })
 
@@ -492,7 +497,9 @@ test('D5: an internal mixed brief is not split by language', async () => {
 
 function wideBrief(paths: string[], title = 'let an internal plan run', approach = 'x', tests = 'src/a.ts'): string {
   return [`# ${title}`, '', '**What:** a.', '**Why:** b.', '**When it ends:** c.', '',
-    '## Approach', '', approach, '', '## Settled facts', '', '- none: every name the change uses is in this checkout', '', '## Cases', '', '- D1 one', '- D2 a call with no name is refused', '',
+    '## Approach', '', approach, '', '## Settled facts', '', '- none: every name the change uses is in this checkout', '',
+    '## Reproduced', '', `- command: \`${paths.some((p) => p.startsWith('kotlin/')) ? './gradlew test' : 'npm run test'}\``, '- expect: fails', '',
+    '## Cases', '', '- D1 one', '- D2 a call with no name is refused', '',
     '## Must not break', '', '- y', '', '## Files', '', ...paths.map((p) => `- ${p}`), '',
     '## Files to read', '', '- src/hello.ts — what it exports today', '',
     '## Who else reads what this changes', '', '- nobody else', '', '## Tests', '', `- ${tests} — the case`, '',

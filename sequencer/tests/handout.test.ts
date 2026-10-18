@@ -9,7 +9,7 @@ import { tick } from '../index.ts'
 import { PlanRow } from '../../store/plans.ts'
 import { rule } from '../rule.ts'
 import { stopped } from '../seat.ts'
-import { put, ruled } from '../workspace.ts'
+import { maybe, put, ruled } from '../workspace.ts'
 import { HANDOUT } from './bases.ts'
 import { approve, CARRIED, PASS, stub, watched, world, type World } from './world.ts'
 
@@ -17,6 +17,7 @@ const BRIEF = ['# hello', '',
   '**What:** add `hello()`.', '**Why:** the ask asks for it.', '**When it ends:** it is exported.', '',
   '## Approach', '', 'Write it in `src/hello.ts`.', '',
   '## Settled facts', '', '- none: every name the change uses is in this checkout', '',
+  '## Reproduced', '', '- command: `npm run test`', '- expect: fails', '',
   '## Cases', '', '- D1 add `hello()` in `src/hello.ts`', '- D2 a call with no name is refused', '',
   '## Must not break', '', '- the exports already in the file', '',
   '## Files', '', '- `src/hello.ts`, `src/bye.ts:1`', '',
@@ -152,7 +153,8 @@ test('D1 rulings.md reaches the builder right after the brief', async () => {
   put(w.root, 1, 'rulings.md', 'use bye()\n')
   const packets: Packet[] = []
   for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, builds(packets))
-  expect(packets[0]?.prompt).toContain(`${BRIEF}\n\n# Rulings\n\nuse bye()`)
+  expect(maybe(w.root, 1, 'issue.md')).toMatch(/- expect: fails\n- base: `[0-9a-f]{40}`\n- exit: [1-9]\d*\n/)
+  expect(packets[0]?.prompt).toContain(`${maybe(w.root, 1, 'issue.md') ?? ''}\n\n# Rulings\n\nuse bye()`)
 })
 
 /** Every packet of a plan walked through senior review, with `rulings` as its `rulings.md` when given. */

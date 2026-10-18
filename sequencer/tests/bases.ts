@@ -51,7 +51,7 @@ export const SCHEDULED = {
   '.github/workflows/weekly.yml': "on:\n  schedule:\n    - cron: '0 6 * * 1'\n  workflow_dispatch:\n",
 }
 
-export const WORLDS: Tree[] = [TYPESCRIPT, KOTLIN, HANDOUT, RED]
+export const WORLDS: [Tree, boolean][] = [[TYPESCRIPT, true], [TYPESCRIPT, false], [KOTLIN, true], [HANDOUT, true], [RED, true]]
 export const OURS: [Tree, boolean][] = [[TYPESCRIPT, true], [TYPESCRIPT, false], [RED, true], [GREEN, true], [NAPPING, true], [OOPS, true],
   [BROKEN, true], [ORPHANED, true], [ATELIER, true], [SCHEDULED, false], [GREETED, true]]
 
@@ -64,7 +64,8 @@ export function git(cwd: string, args: string[]): void {
   execFileSync('git', args, { cwd, stdio: 'ignore' })
 }
 
-function remotes(base: string, files: Tree): void {
+function remotes(base: string, files: Tree, ci: boolean): void {
+  if (ci) files = { ...files, [WORKFLOW]: 'on: push\n' }
   const upstream = join(base, 'acme/widget')
   mkdirSync(upstream, { recursive: true })
   git(upstream, ['init', '-q', '-b', 'main'])
@@ -98,7 +99,7 @@ export default function setup(project: TestProject): () => void {
     GIT_CONFIG_KEY_1: 'tag.gpgsign', GIT_CONFIG_VALUE_1: 'false',
   })
   const dir = mkdtempSync(join(tmpdir(), 'cf-bases-'))
-  for (const files of WORLDS) remotes(join(dir, key('world', files, false)), files)
+  for (const [files, ci] of WORLDS) remotes(join(dir, key('world', files, ci)), files, ci)
   for (const [files, ci] of OURS) ours(join(dir, key('ours', files, ci)), files, ci)
   project.provide('bases', dir)
   return () => { rmSync(dir, { recursive: true, force: true }) }

@@ -54,6 +54,13 @@ their threads, into `## Must not break`: the reviewers see the brief, not the ca
 heading is a conventional-commit title for this part in their repo's style
 (e.g. `feat(php): Config::fromEnv reads prefixed variables`): it becomes the pull request's title and is never their issue's title.
 
+On someone else's repository the brief also carries `## Reproduced`, after `## Settled facts`: one row
+`` - command: `<command>` `` that shows the behaviour the ask names on this checkout, and one row
+`- expect: fails` for a bug or `- expect: shows` for a feature request. The command is one the builder for
+the language of the brief's files may run by its `Bash(...)` list (`uv run`, `cargo test`, `go test`,
+`bundle exec`, `./gradlew`, `npm run test`); one off that list, or chained, is refused. A caliperforge/* brief
+carries no `## Reproduced`.
+
 When the ask mirrors, ports or matches another implementation, list that implementation's input rules
 under `## Must not break`: the values it accepts, what it does with an empty input, its bounds and the
 errors it raises, each with its file:line.
@@ -72,6 +79,17 @@ and nothing after it:
 ---
 outcome: unclear
 question: <the one question whose answer unblocks the brief>
+---
+```
+
+Before drafting a brief for someone else's repository, read their issue with `cf look gh <owner/name> issue <n>`,
+and every pull request it names with `cf look gh <owner/name> pr <n>`. When an open pull request or a
+maintainer's comment already covers the ask, write no brief and close with this fence and nothing after it:
+
+```
+---
+outcome: claimed
+evidence: <the pull request or comment that covers the ask, its URL, and the line of it that says so>
 ---
 ```
 

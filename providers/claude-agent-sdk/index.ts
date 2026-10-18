@@ -3,7 +3,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:pat
 import { query, type HookInput, type SDKMessage, type SDKRateLimitInfo, type SDKResultMessage, type SyncHookJSONOutput } from '@anthropic-ai/claude-agent-sdk'
 import type { Reading } from '../../store/lanes.ts'
 import { credential } from '../credential.ts'
-import { bare, type Fired, type Packet, type Provider } from '../kind.ts'
+import { admitted, bare, type Fired, type Packet, type Provider } from '../kind.ts'
 import { ghWrite } from './gh.ts'
 
 const WRITES = new Set(['Write', 'Edit', 'NotebookEdit'])
@@ -12,12 +12,6 @@ const READS = new Set(['Read', 'Glob', 'Grep'])
 
 /** A builder that has taken this many model turns and written nothing is reading, not building. */
 export const IDLE_TURNS = 20
-
-/** The `Bash(<pattern>)` entries of a tool list. A seat that names none may run no command. */
-const RULE = /^Bash\((.+)\)$/
-
-/** Chaining, substitution and redirection reach a second command the pattern never admitted. */
-const CHAINED = /[;&|`$<>\n()]/
 
 export const claudeAgentSdk: Provider = { name: 'claude-agent-sdk', fire }
 
@@ -201,8 +195,7 @@ function ranOutside(tools: string[], cwd: string, args: unknown): string | null 
   const command = typeof said === 'string' ? said.trim() : ''
   const rest = unmoved(cwd, command)
   if (ghWrite(rest)) return `ruling:seat.tools refuses ${JSON.stringify(command)}: gh runs only as a gh api GET read`
-  const patterns = tools.flatMap((tool) => RULE.exec(tool)?.[1] ?? [])
-  if (!CHAINED.test(rest) && patterns.some((pattern) => admits(pattern, rest))) return null
+  if (admitted(tools, rest)) return null
   return `ruling:seat.tools refuses the command ${JSON.stringify(command)}`
 }
 
@@ -214,12 +207,6 @@ function unmoved(cwd: string, command: string): string {
   if (cd === null) return command
   const dir = cd[1] ?? cd[2] ?? ''
   return real(resolve(cwd, dir)) === real(resolve(cwd)) ? command.slice(cd[0].length) : command
-}
-
-function admits(pattern: string, command: string): boolean {
-  if (!pattern.endsWith(':*')) return command === pattern
-  const prefix = pattern.slice(0, -2)
-  return command === prefix || command.startsWith(`${prefix} `)
 }
 
 function deny(reason: string): SyncHookJSONOutput {

@@ -797,6 +797,7 @@ test('step 3 rehearses before review; step 6 opens no second', async () => {
   const branches: string[] = []
   const runs = runsOn(w.root, 1)
   const wire = { ...watched(sent, w.root, 1, (args) => { branches.push(String(args[args.indexOf('--branch') + 1])); return runs(args) }),
+    merged: (args: string[]) => args[0] === 'api' ? { default_branch: 'main' } : [],
     forward: (fork: string, base: string) => void sent.push(`forward ${fork} ${base}`) }
   for (let at = 0; at < 4; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
   expect(plan(w.db, 1).step).toBe(4)

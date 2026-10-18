@@ -124,7 +124,7 @@ export function prNumber(url: string): number {
   return Number(hit[1])
 }
 
-const trunk = (fork: string, read: Read): string => z.object({ default_branch: z.string() }).parse(read(['api', `repos/${fork}`])).default_branch
+export const trunk = (fork: string, read: Read): string => z.object({ default_branch: z.string() }).parse(read(['api', `repos/${fork}`])).default_branch
 
 /** The fork's default branch holds the head's base before the head is pushed onto it. */
 export function forward(fork: string, base: string, read: Read = gh, exec: Run = run): void {

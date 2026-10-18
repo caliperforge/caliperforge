@@ -115,6 +115,19 @@ export function gates(src: string, outside: Outside, excused: string[] = []): Ga
 
 const SUSHI = 'fsh-sushi@3.12.0'
 
+/** pytest's exit when it collects no tests, as on a repo whose own runner script names its test files. */
+const UNCOLLECTED = '5'
+
+const RUNNERS = ['run_tests.sh']
+
+/** A loose python env names `pytest` on every gate's `--with`, so only the `test` gate is read. */
+export function waived(src: string, gate: Gate, code: string, said?: (line: string) => void): boolean {
+  const runner = gate.script === 'test' && gate.args.includes('pytest') && code === UNCOLLECTED
+    ? RUNNERS.find((r) => existsSync(join(src, gate.dir, r)) || existsSync(join(src, r))) : undefined
+  if (runner !== undefined) said?.(`pytest collected no tests (exit ${UNCOLLECTED}); ${runner} runs this repo's tests`)
+  return runner !== undefined
+}
+
 export function sushi(src: string): Gate[] {
   return existsSync(join(src, 'sushi-config.yaml')) ? [{ script: 'sushi', bin: 'npx', args: ['--yes', '--package', SUSHI, 'sushi', '.'], dir: '' }] : []
 }

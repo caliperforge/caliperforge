@@ -10,6 +10,7 @@ import { width } from '../../store/lanes.ts'
 import { clear, held, holder, take } from '../../store/leases.ts'
 import { advance, dropPlan, waiting } from '../../store/plans.ts'
 import { last, receipt } from '../../store/ticks.ts'
+import { unleased } from '../../store/unleased.ts'
 import { dry, tick } from '../index.ts'
 import { CARRIED, inFlight, internalPlan, ours, plan, stub, world, type World } from './world.ts'
 
@@ -85,6 +86,16 @@ test('D2 running+leased under a live lease stays running', async () => {
   expect(await tick(w.db, w.root, stub(CARRIED))).toEqual([])
   expect(plan(w.db, ID).state).toBe('running')
   expect(eventsOf(w.db, ID, 'requeue')).toEqual([])
+})
+
+test('a job that ends clears the leased tag a racer wrote', async () => {
+  const w = await built()
+  const building = inFlight(w, 1500)
+  expect(await tick(w.db, w.root, stub(CARRIED))).toEqual([])
+  expect(plan(w.db, ID).wait_reason).toBe('leased')
+  await building
+  expect(plan(w.db, ID)).toMatchObject({ state: 'running', wait_reason: null })
+  expect(unleased(w.db, [])).toEqual([])
 })
 
 test('a slow seat holds one slot; the width holds across ticks',async () => {

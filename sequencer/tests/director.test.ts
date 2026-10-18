@@ -404,6 +404,22 @@ test.each([
   expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'coo' })
 })
 
+test('D3: ..//.ssh/id_rsa from root is held by the coo', async () => {
+  const { db, home } = seeded('1')
+  await run(db, home, ruling('..//.ssh/id_rsa'))
+  expect(maybe(home, 7, 'issue.md')).toBe(ISSUE)
+  expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'coo' })
+})
+
+test('D1: a ..// path inside the checkout applies', async () => {
+  const { db, home } = seeded('1')
+  for (const dir of ['blog', 'sequencer']) mkdirSync(join(srcDir(home, 7), dir), { recursive: true })
+  writeFileSync(join(srcDir(home, 7), 'blog/index.html'), '')
+  await run(db, home, ruling('..//blog/index.html'))
+  expect(told(db)).toEqual([{ actor: 'director', outcome: 'pass', message: 'rule: the path settles it' }])
+  expect(maybe(home, 7, 'issue.md')).toContain('read ..//blog/index.html')
+})
+
 test('failedMoveToCoo', async () => {
   const { db, home } = seeded('1')
   await run(db, home, '---\nmove: rule\nwhy: the path settles it\nanswer: read /etc/x\n---\n')

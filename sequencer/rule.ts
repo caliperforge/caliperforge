@@ -44,7 +44,7 @@ export function rule(db: Db, root: string, plan: PlanRow, who: string, text: str
   const climbs = (p: string) => [srcDir(root, plan.id), root].some((b) => [b, ...subdirs(b).map((s) => join(b, s))]
     .some((d) => existsSync(join(d, p)) && (under(join(d, p)) || !relative(b, join(d, p)).startsWith('..'))))
   const inside = (p: string) => p.startsWith('..') ? climbs(p) : under(p.replace(/^~(?=\/)/, homedir())) || named(p)
-  if ([...text.matchAll(PATH)].some((m) => !inside(m[1] ?? ''))) return null
+  if ([...text.replace(/\/{2,}/g, '/').matchAll(PATH)].some((m) => !inside(m[1] ?? ''))) return null
   const section = `## Answer from the ${who} (${new Date().toISOString().slice(0, 10)})\n\n${text.trim()}\n`
   if (!builderRan(db, plan.id)) {
     put(root, plan.id, 'ask.md', `${maybe(root, plan.id, 'ask.md') ?? ''}\n${section}`)

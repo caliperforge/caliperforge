@@ -123,6 +123,32 @@ test('D4 gh outside gh api is denied whatever pattern is held', () => {
   }
 })
 
+const SUBMODULE = ['Read', 'Bash(git submodule add:*)']
+const fenced = (paths: string[], tools = SUBMODULE): Packet => ({ ...held(tools), refuse: (path) => refuse(cwd, paths, path) })
+const refusal = (command: string) => ({ continue: true, hookSpecificOutput: { permissionDecision: 'deny',
+  permissionDecisionReason: `ruling:seat.tools refuses the command ${JSON.stringify(command)}` } })
+const shapes = ['git submodule add https://github.com/foundry-rs/forge-std lib/forge-std', 'git -C lib/v4-core checkout 3f1c9a2']
+
+test('1353a D1 D2 the gate admits a submodule add and its pin', () => {
+  const p = fenced(['.gitmodules', 'lib'])
+  for (const command of [...shapes, 'git submodule add https://github.com/foundry-rs/forge-std.git lib/forge-std',
+    `git -C lib/v4-core checkout ${'a'.repeat(40)}`]) expect(gate(p, bash(command))).toEqual({ continue: true })
+})
+
+test('1353a D3 every other git is refused and the seat stays', () => {
+  for (const p of [fenced(['.gitmodules', 'lib'], ['Read']), fenced(['lib']), held([])]) {
+    for (const command of shapes) expect(gate(p, bash(command))).toMatchObject(refusal(command))
+  }
+  const p = fenced(['.gitmodules', 'lib'])
+  const add = 'git submodule add https://github.com/foundry-rs/forge-std lib/forge-std'
+  for (const command of ['git submodule add http://github.com/foundry-rs/forge-std lib/forge-std',
+    'git submodule add ssh://github.com/foundry-rs/forge-std lib/forge-std', 'git submodule add https://gitlab.com/foundry-rs/forge-std lib/forge-std',
+    'git submodule add https://github.com/foundry-rs/forge-std src/forge-std', 'git submodule add https://github.com/foundry-rs/forge-std lib/..',
+    'git submodule add --force https://github.com/foundry-rs/forge-std lib/forge-std', `${add} --depth 1`,
+    'git checkout 3f1c9a2', 'git -C lib/v4-core checkout 3f1c9a', 'git -C lib/v4-core checkout main',
+    `${add} && rm -rf .`, `${add}; git push`, 'git status', 'git push']) expect(gate(p, bash(command))).toMatchObject(refusal(command))
+})
+
 test('the kotlin seat keeps gradle on a stranger\'s tree', () => {
   const p = packet(seat(root, 'kotlin_specialist').manifest, 'p', 't', 'i', cwd, TRANSCRIPT)
   expect(p.tools).toContain('Bash(gradle:*)')

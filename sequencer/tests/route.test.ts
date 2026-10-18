@@ -272,3 +272,24 @@ test('1451 D3 a uv.lock with no pyproject.toml beside is refused', () => {
   expect(authority(root, 'python_specialist', hunk('python/uv.lock'), false, fenceFor(w.db, 1, [BRIEF_FILES])))
     .toMatchObject({ outcome: 'refuse', spans: ['python/uv.lock:1 authority.write_paths'] })
 })
+
+test('1353a D4 a root .gitmodules admits lib', () => {
+  const w = world()
+  record(w.db, 1, listed(['.gitmodules', 'src/X.sol']))
+  expect(fenceFor(w.db, 1, [BRIEF_FILES])).toEqual(['.gitmodules', 'src/X.sol', 'lib'])
+  record(w.db, 1, listed(['python/.gitmodules']))
+  expect(fenceFor(w.db, 1, [BRIEF_FILES])).toEqual(['python/.gitmodules'])
+  record(w.db, 1, listed(['src/X.sol']))
+  expect(fenceFor(w.db, 1, [BRIEF_FILES])).toEqual(['src/X.sol'])
+})
+
+test('1353a D5 authority passes a gitlink only under .gitmodules', () => {
+  const w = world()
+  const gitlink = `--- /dev/null\n+++ b/lib/forge-std\n@@ -0,0 +1 @@\n+Subproject commit ${'a'.repeat(40)}\n`
+  const diff = hunk('.gitmodules') + gitlink
+  record(w.db, 1, listed(['.gitmodules']))
+  expect(authority(root, 'solidity_specialist', diff, false, fenceFor(w.db, 1, [BRIEF_FILES]))).toMatchObject({ outcome: 'pass', spans: [] })
+  record(w.db, 1, listed(['src/X.sol']))
+  expect(authority(root, 'solidity_specialist', diff, false, fenceFor(w.db, 1, [BRIEF_FILES])))
+    .toMatchObject({ outcome: 'refuse', spans: ['.gitmodules:1 authority.write_paths', 'lib/forge-std:1 authority.write_paths'] })
+})

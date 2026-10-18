@@ -7,9 +7,10 @@ import { packet, real } from '../runner/index.ts'
 import { load, seat } from '../runner/rules.ts'
 import type { Outcome } from '../sequencer/kind.ts'
 import { staffed } from '../sequencer/staffing.ts'
+import { firstLine } from '../sequencer/unpolled.ts'
 import { cloned, git, gitBase, maybe, planDir, put, remote, srcDir } from '../sequencer/workspace.ts'
 import { record } from '../store/bench.ts'
-import { runLogged } from '../store/events.ts'
+import { logged, runLogged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { observed } from '../store/lanes.ts'
 import type { PlanRow } from '../store/plans.ts'
@@ -43,13 +44,30 @@ function fields(text: string): Record<string, string | undefined> {
     .map((line) => /^(\w+):\s*(.*)$/.exec(line)).filter((m) => m !== null).map((m) => [m[1] ?? '', m[2]?.trim()] as const))
 }
 
-function checkedOut(root: string, id: number, dir: string): string | null {
+function checkedOut(db: Db, root: string, id: number, dir: string): string | null {
   const made = maybe(root, id, 'checkout.json')
   if (made === null) return 'checkout.json is missing'
-  if (!cloned(dir)) return 'src/ is not a clone'
-  const { pre_fix: preFix } = JSON.parse(made) as { pre_fix: string }
+  const { repo, pre_fix: preFix } = JSON.parse(made) as { repo?: string; pre_fix: string }
+  if (!cloned(dir)) {
+    if (repo === undefined) return 'src/ is not a clone'
+    try {
+      clone(root, id, remote(gitBase(root), repo), preFix)
+    } catch (error) {
+      logged(db, { plan: id, kind: 'swallowed', actor: 'generate', outcome: 'pass', message: firstLine(error), pointer: null, run: null })
+      return `src/ could not be cloned again at ${preFix.slice(0, 12)}`
+    }
+  }
   const head = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: dir, encoding: 'utf8' }).stdout.trim()
   return head === preFix ? null : `src/ is at ${head.slice(0, 12)}, not pre_fix ${preFix.slice(0, 12)}`
+}
+
+function clone(root: string, id: number, url: string, sha: string): string {
+  rmSync(srcDir(root, id), { recursive: true, force: true })
+  const dir = srcDir(root, id)
+  git(dir, ['init', '-q'])
+  git(dir, ['fetch', '-q', '--depth', '1', url, sha])
+  git(dir, ['checkout', '-q', 'FETCH_HEAD'])
+  return dir
 }
 
 export function scratch(root: string, plan: PlanRow): Outcome {
@@ -61,11 +79,7 @@ export function scratch(root: string, plan: PlanRow): Outcome {
   const { repo = '', fix = '', pre_fix: preFix = '' } = target
   const url = remote(gitBase(root), repo)
   const sha = resolved(planDir(root, plan.id), url, preFix)
-  rmSync(srcDir(root, plan.id), { recursive: true, force: true })
-  const dir = srcDir(root, plan.id)
-  git(dir, ['init', '-q'])
-  git(dir, ['fetch', '-q', '--depth', '1', url, sha])
-  git(dir, ['checkout', '-q', 'FETCH_HEAD'])
+  const dir = clone(root, plan.id, url, sha)
   if (spawnSync('git', ['cat-file', '-e', `${fix}^{commit}`], { cwd: dir }).status === 0) {
     return { outcome: 'refuse', spans: ['bench.fix_reachable'], note: `fix ${fix} is in the scratch tree at ${sha.slice(0, 12)}` }
   }
@@ -83,7 +97,7 @@ export async function generate(db: Db, root: string, plan: PlanRow, step: Step, 
   const name = staffed(root, 'bench', step.step, generator)?.seat
   if (name === undefined) return { outcome: 'needs_ceo', spans: ['staffing'], note: `no bench generator "${generator}" in rules/staffing.yaml` }
   const dir = real(srcDir(root, plan.id))
-  const unchecked = checkedOut(root, plan.id, dir)
+  const unchecked = checkedOut(db, root, plan.id, dir)
   if (unchecked !== null) return { outcome: 'refuse', spans: ['bench.no_checkout'], note: unchecked, to: 0 }
   load(db, root)
   const { manifest, prompt, hash } = seat(root, name)
@@ -121,7 +135,7 @@ export function scored(db: Db, root: string, plan: PlanRow): Outcome {
   const sha = git(bench, ['rev-parse', 'HEAD']).trim()
   const suites = `suites/${generator}/${target}`
   cpSync(join(srcDir(root, plan.id), suite), join(bench, suites), { recursive: true })
-  for (const script of ['run_pair', 'null_check']) {
+  for (const script of ['run_pair', 'null_check'].filter((s) => s === 'run_pair' || existsSync(join(bench, `bench/${s}.py`)))) {
     const ran = spawnSync('python3', [`bench/${script}.py`, `targets/${target}.yml`, suites], { cwd: bench, encoding: 'utf8' })
     if (ran.error !== undefined || ran.status !== 0) {
       return { outcome: 'refuse', spans: [`bench.${script}`], note: ran.error?.message ?? ran.stderr.trim().split('\n').at(-1) ?? '' }
@@ -129,9 +143,9 @@ export function scored(db: Db, root: string, plan: PlanRow): Outcome {
   }
   const pairs = rows(join(bench, 'results', target, `${target}.jsonl`))
   if (pairs.length === 0) return { outcome: 'refuse', spans: ['bench.empty_results'], note: `results/${target}/${target}.jsonl has no rows` }
+  const kills = join(bench, 'results', target, `${target}.nullcheck.jsonl`)
   const score = { catches: pairs.filter((r) => r.verdict === 'catch').length, false_positives: pairs.filter((r) => r.verdict === 'fp_candidate').length,
-    untested: rows(join(bench, 'results', target, `${target}.nullcheck.jsonl`)).filter((r) => r.untested === true).length, tokens, seconds,
-    x_ray: x_ray ?? null }
+    untested: existsSync(kills) ? rows(kills).filter((r) => r.untested === true).length : null, tokens, seconds, x_ray: x_ray ?? null }
   record(db, { plan: plan.id, target, generator, ...score })
   put(root, plan.id, 'score.json', JSON.stringify({ fuzz_bench: sha, ...score }))
   return { outcome: 'pass', spans: [], note: `score.json written at fuzz-bench ${sha.slice(0, 12)}` }

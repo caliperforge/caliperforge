@@ -21,3 +21,7 @@ reads:
 write_paths:
   - test/fizz
   - x-ray
+  - medusa.json
+  - PROPERTIES.md
+  - echidna.yaml
+  - foundry.toml

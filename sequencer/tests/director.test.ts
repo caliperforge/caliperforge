@@ -1,6 +1,6 @@
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { basename, dirname, join } from 'node:path'
+import { basename, dirname, join, relative } from 'node:path'
 import { expect, test } from 'vitest'
 import { heldBy } from '../../cli/brief.ts'
 import { all } from '../../cli/inbox.ts'
@@ -376,6 +376,48 @@ test.each([{ name: '~/.ssh/config', path: () => '~/.ssh/config' }, { name: 'anot
   await run(db, home, ruling(path()))
   expect(maybe(home, 7, 'issue.md')).toBe(ISSUE)
   expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'coo' })
+})
+
+test('D1: a rule naming ../runner/index.ts in the repo applies', async () => {
+  const { db, home } = seeded('1')
+  for (const dir of ['runner', 'sequencer']) mkdirSync(join(home, dir))
+  writeFileSync(join(home, 'runner/index.ts'), '')
+  await run(db, home, ruling('../runner/index.ts'))
+  expect(told(db)).toEqual([{ actor: 'director', outcome: 'pass', message: 'rule: the path settles it' }])
+  expect(maybe(home, 7, 'issue.md')).toContain('read ../runner/index.ts')
+})
+
+test('D2: a rule quoting `../issue.md` applies', async () => {
+  const { db, home } = seeded('1')
+  await run(db, home, '---\nmove: rule\nwhy: the path settles it\nanswer: the seat must refuse `../issue.md`\n---\n')
+  expect(told(db)).toEqual([{ actor: 'director', outcome: 'pass', message: 'rule: the path settles it' }])
+  expect(maybe(home, 7, 'issue.md')).toContain('the seat must refuse `../issue.md`')
+})
+
+test.each([
+  { name: 'a ../ path', path: (h: string) => relative(srcDir(h, 7), elsewhere()) },
+  { name: 'a mid-token ../', path: () => 'sequencer/../../../../../../etc/x' },
+])('D3: $name climbing out of the repo is held by the coo', async ({ path }) => {
+  const { db, home } = seeded('1')
+  await run(db, home, ruling(path(home)))
+  expect(maybe(home, 7, 'issue.md')).toBe(ISSUE)
+  expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'coo' })
+})
+
+test('D3: ..//.ssh/id_rsa from root is held by the coo', async () => {
+  const { db, home } = seeded('1')
+  await run(db, home, ruling('..//.ssh/id_rsa'))
+  expect(maybe(home, 7, 'issue.md')).toBe(ISSUE)
+  expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'coo' })
+})
+
+test('D1: a ..// path inside the checkout applies', async () => {
+  const { db, home } = seeded('1')
+  for (const dir of ['blog', 'sequencer']) mkdirSync(join(srcDir(home, 7), dir), { recursive: true })
+  writeFileSync(join(srcDir(home, 7), 'blog/index.html'), '')
+  await run(db, home, ruling('..//blog/index.html'))
+  expect(told(db)).toEqual([{ actor: 'director', outcome: 'pass', message: 'rule: the path settles it' }])
+  expect(maybe(home, 7, 'issue.md')).toContain('read ..//blog/index.html')
 })
 
 test('failedMoveToCoo', async () => {
@@ -895,6 +937,31 @@ test.each(['rule', 'waive', 'split', 'park'])('D3: %s on a cap stop leaves plan 
   TWIN[move]?.(twin.db, twin.home)
   expect(plan7(live.db)).toEqual(plan7(twin.db))
   expect(told(live.db)).toEqual([{ actor: 'director', outcome: 'pass', message: expect.stringMatching(new RegExp(`^${move}: `)) as string }])
+})
+
+const DESIGNED = 'step 4 review refused by code_quality\n\ndesign: no screen served\n\nspans:\n  (none named)\n'
+
+test('D1 D2: waive on a design stop writes one waiver line', async () => {
+  const { db, home } = seeded('1')
+  for (let i = 0; i < 2; i++) {
+    db.exec("UPDATE plans SET state = 'blocked_on_ceo', wait_reason = NULL WHERE id = 7")
+    put(home, 7, 'refusal.md', DESIGNED)
+    await run(db, home, REPLY.waive ?? '')
+  }
+  expect(maybe(home, 7, 'rulings.md')).toBe('\ndesign waived: the builder can fix the name\n')
+  expect(told(db).map((t) => t.message)).toEqual(['waive: the builder can fix the name', 'waive: the builder can fix the name'])
+})
+
+test('D3: waive on a rails stop or a queued plan writes nothing', async () => {
+  const rails = seeded('1')
+  await run(rails.db, rails.home, REPLY.waive ?? '')
+  expect(maybe(rails.home, 7, 'rulings.md')).toBeNull()
+  const { db, home } = seeded('1')
+  put(home, 7, 'refusal.md', DESIGNED)
+  requeue(db, 7, row(db).step)
+  await run(db, home, REPLY.waive ?? '')
+  expect(told(db).map((t) => t.outcome)).toEqual(['needs_coo'])
+  expect(maybe(home, 7, 'rulings.md')).toBeNull()
 })
 
 test('D4: park holds plan 7 until its time', async () => {

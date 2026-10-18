@@ -4,7 +4,7 @@ import { join, relative } from 'node:path'
 import { exported } from '../cli/export.ts'
 import { record, ticketOf } from '../cli/inbox.ts'
 import { aged, aired, awaiting, paste, pending, placed, type Post, published } from '../store/desk.ts'
-import { logged, pointers } from '../store/events.ts'
+import { lastSince, logged, pointers } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { get, hhmm, zone } from '../store/lanes.ts'
 import type { PlanRow } from '../store/plans.ts'
@@ -12,7 +12,7 @@ import { titled } from '../templates/comms.ts'
 import type { Step } from '../templates/pr-path.ts'
 import type { Outcome } from './kind.ts'
 import { firstLine } from './unpolled.ts'
-import { git } from './workspace.ts'
+import { abortMerge, git, unmerged } from './workspace.ts'
 
 const TEMPLATE = '05_jito-tippayment-and-ai-invariant-suggester-live.html'
 
@@ -35,7 +35,7 @@ export function render(siteDir: string, post: { title: string; dek: string; body
     .map((block) => (block.startsWith('## ') ? `<h2>${escaped(block.slice(3))}</h2>` : `<p>${escaped(block)}</p>`))
   writeFileSync(join(blog, `${name}.html`), [page.slice(0, page.indexOf('<h1')).replace(/<title>[\s\S]*?<\/title>/, () => `<title>${title}</title>`)
     .replace(/<meta name="description" content="[^"]*">/, () => `<meta name="description" content="${dek}">`)
-    .replace(/<link[^>]*href="\/caliper\.css"[^>]*>/, (link) => `${link}\n<link rel="stylesheet" href="/site.css">`),
+    .replace(/<link[^>]*href="\/caliper\.css"[^>]*>/, (link) => (page.includes('href="/site.css"') ? link : `${link}\n<link rel="stylesheet" href="/site.css">`)),
     `<h1>${title}</h1>`, `<p class="dateline">Work completed ${post.work_date} · written up ${post.written_date}.</p>`, ...body, page.slice(end)].join('\n'))
   const card = `<article class="cf-blog-card">\n<h2><a href="${name}.html">${title}</a></h2>\n<p class="dateline">${post.written_date}</p>\n<p>${dek}</p>\n</article>\n`
   writeFileSync(join(blog, 'index.html'), index.slice(0, at) + card + index.slice(at))
@@ -50,8 +50,10 @@ export function commit(siteDir: string, name: string): void {
 export function push(db: Db, now: Date): number {
   const dir = siteDir(db)
   if (dir === null) throw new Error('comms.site_dir is unset')
-  git(dir, ['push'])
-  return published(db, now.toISOString())
+  send(dir)
+  const count = published(db, now.toISOString())
+  logged(db, { plan: null, kind: 'site_push', actor: 'ceo', outcome: 'pass', message: `${String(count)} post(s)`, pointer: null, run: null }, now.toISOString())
+  return count
 }
 
 export function ripe(db: Db, now: Date): void {
@@ -61,11 +63,32 @@ export function ripe(db: Db, now: Date): void {
   if (dir === null || rows.length === 0 || awaiting(db)) return
   try {
     for (const row of rows.filter((r) => r.url === null)) place(db, dir, row)
-    git(dir, ['push'])
+    send(dir)
     aired(db, rows.map((r) => r.id), now.toISOString())
+    logged(db, { plan: null, kind: 'site_push', actor: 'tick', outcome: 'pass', message: `${String(rows.length)} post(s)`, pointer: null, run: null },
+      now.toISOString())
   } catch (error) {
-    logged(db, { plan: null, kind: 'site_push', actor: 'tick', outcome: 'refuse', message: firstLine(error), pointer: null, run: null })
+    const [outcome, message] = [error instanceof Conflict ? 'needs_coo' as const : 'refuse' as const, firstLine(error)]
+    const last = lastSince(db, 'site_push', new Date(now.getTime() - 86_400_000).toISOString())
+    if (last?.outcome !== outcome || last.message !== message) {
+      logged(db, { plan: null, kind: 'site_push', actor: 'tick', outcome, message, pointer: null, run: null }, now.toISOString())
+    }
   }
+}
+
+class Conflict extends Error {}
+
+function send(dir: string): void {
+  git(dir, ['fetch', 'origin'])
+  try {
+    git(dir, ['merge', '--no-edit', 'origin/main'])
+  } catch (error) {
+    const files = unmerged(dir)
+    abortMerge(dir)
+    if (files.length > 0) throw new Conflict(`origin/main conflicts on ${files.join(', ')}`)
+    throw error
+  }
+  git(dir, ['push'])
 }
 
 function place(db: Db, dir: string, row: Post): void {
@@ -95,11 +118,11 @@ export function sitedata(db: Db, root: string, now: Date): void {
     const changed = git(dir, ['diff', '--cached', '--name-only', '--', ...files]).split('\n').filter((l) => l !== '')
     if (changed.length > 0) {
       git(dir, ['commit', '-m', `data: ${day}`, '--', ...changed])
-      git(dir, ['push'])
+      send(dir)
     }
     logged(db, { ...event, outcome: 'pass', message: `${String(changed.length)} files` })
   } catch (error) {
-    logged(db, { ...event, outcome: 'refuse', message: firstLine(error) })
+    logged(db, { ...event, outcome: error instanceof Conflict ? 'needs_coo' : 'refuse', message: firstLine(error) })
   }
 }
 

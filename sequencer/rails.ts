@@ -118,6 +118,7 @@ function suite(db: Db, root: string, plan: PlanRow, on: Rails, commands: Command
     if (ci.failed !== null) return broke(db, root, plan, ci.failed)
     return { outcome: 'pass', spans: [], note: `pre-review: six rails pass; checks ran on GitHub CI at ${ci.at}` }
   }
+  const heard: string[] = []
   if (local || outside !== null || guide.length > 0) {
     const holder = lock(root, plan.id)
     if (holder !== null) return { outcome: 'pass', held: true, spans: ['checks'], note: `checks wait: plan ${String(holder.plan)} is running its tests` }
@@ -125,7 +126,7 @@ function suite(db: Db, root: string, plan: PlanRow, on: Rails, commands: Command
       const diff = diffOf(root, plan.id)
       const failed = (guide.length > 0 ? gated(srcDir(root, plan.id), guide, noted(db, plan.id)) : checks(srcDir(root, plan.id), commands, noted(db, plan.id), outside === null ? narrow(db, plan) : [],
         outside === null ? null : { language: outside, files: filesOf(db, plan.id).map((f) => f.path) },
-        parse(diff).map((f) => f.path), finishes.minutes)) ?? finish(srcDir(root, plan.id), finishes.entries, noted(db, plan.id), finishes.minutes)
+        parse(diff).map((f) => f.path), finishes.minutes, (line) => { heard.push(line) })) ?? finish(srcDir(root, plan.id), finishes.entries, noted(db, plan.id), finishes.minutes)
       if (failed?.fault !== undefined) return faulted(db, root, plan, failed.fault)
       if (failed?.capped === true) return capped(failed)
       const blip = failed === null ? null : offline(failed)
@@ -137,7 +138,7 @@ function suite(db: Db, root: string, plan: PlanRow, on: Rails, commands: Command
     }
   }
   const ran = local ? mode(srcDir(root, plan.id)) : outside ?? (guide.length > 0 ? 'sushi' : 'none')
-  return { outcome: 'pass', spans: [], note: `pre-review: six rails pass; checks ran ${ran}` }
+  return { outcome: 'pass', spans: [], note: `pre-review: six rails pass; checks ran ${ran}${heard.map((line) => `; ${line}`).join('')}` }
 }
 
 /** A Mac that cannot run tests holds the job with its retries and switches its lane off, with one inbox line. */

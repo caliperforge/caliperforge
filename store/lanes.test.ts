@@ -5,10 +5,12 @@ import { expect, it } from 'vitest'
 import { fresh, rejects } from '../checks/sqlite.ts'
 import type { Read } from '../cli/gh.ts'
 import { add } from '../cli/plan.ts'
+import { intake } from '../sequencer/capture.ts'
 import { FORK, SELF } from '../sequencer/workspace.ts'
 import { DEFAULT_BUILDER } from '../templates/pr-path.ts'
+import { homes } from './homes.ts'
 import { LANE, LANES, laneOf } from './lanes.ts'
-import { pipeNamed, planById } from './plans.ts'
+import { allPlans, pipeNamed, planById } from './plans.ts'
 
 const schema = join(import.meta.dirname, '../schema')
 
@@ -19,8 +21,25 @@ const issue = (repo: string): string => `https://github.com/${FORK}/${repo}/issu
 const row = (lane: string, repo: string): string => `INSERT INTO plans (pipe_id, template, state, queued_at, lane, seat, origin)
   VALUES ((SELECT id FROM pipes WHERE name = 'bench'), 'pr_path', 'queued', '2026-10-17', '${lane}', 'python_specialist', '${issue(repo)}')`
 
-const canned = (lane: string, repo: string): Read => () =>
+const asked = (lane: string, repo: string) =>
   ({ number: 1, title: 'Conform', body: 'the ask', url: issue(repo), labels: [{ name: `lane:${lane}` }] })
+
+const canned = (lane: string, repo: string): Read => () => asked(lane, repo)
+
+const RUBIN = ['vo-conformance', 'rubin-alert-monitor']
+
+const nameOf = (repo: unknown): string => String(repo).split('/').at(-1) ?? ''
+
+function listing(log: string[]): Read {
+  return (args) => {
+    if (args[0] === 'api') return {}
+    if (args[1] === 'view') return asked('rubin', nameOf(args[4]))
+    if (args[5] === 'closed') return []
+    log.push(String(args[3]))
+    const open = { ...asked('rubin', nameOf(args[3])), createdAt: '2026-10-17T09:00:00Z', closedAt: null, stateReason: null }
+    return RUBIN.includes(nameOf(args[3])) ? [open] : []
+  }
+}
 
 it('D3 LANE literals match the constants they replaced', () => {
   expect(LANE.machine).toMatchObject({ seat: DEFAULT_BUILDER, home: SELF })
@@ -77,4 +96,34 @@ it('1437 D4 a rubin or bio issue queues on its pipe', () => {
     expect(filed).toMatchObject({ state: 'queued', lane, seat: 'python_specialist' })
     expect(planById(db, Number(filed.plan)).pipe_id).toBe(pipeNamed(db, lane)?.id)
   }
+})
+
+it('1486 D1 rubin has two homes and every other lane one', () => {
+  expect(homes('rubin')).toEqual(RUBIN.map((r) => `${FORK}/${r}`))
+  for (const l of LANES.filter((n) => n !== 'rubin')) expect(homes(l)).toEqual([LANE[l].home])
+})
+
+it('1486 D2 a lane:rubin issue from either home queues on rubin', () => {
+  for (const repo of RUBIN) {
+    const db = fresh(schema)
+    const filed = add(db, mkdtempSync(join(tmpdir(), 'cf-rubin-')), `${FORK}/${repo}#1`, 'ceo', undefined, canned('rubin', repo))
+    expect(filed).toMatchObject({ state: 'queued', lane: 'rubin', seat: 'python_specialist' })
+    expect(planById(db, Number(filed.plan)).pipe_id).toBe(pipeNamed(db, 'rubin')?.id)
+  }
+})
+
+it('1486 D3 intake lists both rubin homes onto the rubin pipe', () => {
+  const db = fresh(schema)
+  const log: string[] = []
+  intake(db, mkdtempSync(join(tmpdir(), 'cf-rubin-')), listing(log))
+  expect(log).toEqual(expect.arrayContaining(RUBIN.map((r) => `${FORK}/${r}`)))
+  expect(allPlans(db).map((p) => ({ origin: p.origin, lane: p.lane, pipe: p.pipe_id }))).toEqual(
+    RUBIN.map((r) => ({ origin: issue(r), lane: 'rubin', pipe: pipeNamed(db, 'rubin')?.id })))
+})
+
+it('1486 D4 a lane:rubin issue elsewhere names both homes', () => {
+  const filed = add(fresh(schema), mkdtempSync(join(tmpdir(), 'cf-rubin-')), `${FORK}/vcf-conformance#1`, 'ceo', undefined,
+    canned('rubin', 'vcf-conformance'))
+  expect(filed).toMatchObject({ state: 'refused', origin: { origin_ref: 'plan.lane_home' } })
+  expect(filed.why).toContain(`the rubin lane builds in ${FORK}/vo-conformance or ${FORK}/rubin-alert-monitor`)
 })

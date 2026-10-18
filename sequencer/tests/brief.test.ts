@@ -218,6 +218,13 @@ test('D3: build.md above its fence is no format change', () => {
   expect(on(prompt(['- seats/modes/build.md:5', '- store/plans.ts:249-253'], ['- nothing else']))).toBeNull()
 })
 
+test('D1-D3: a prompt with no fence changes no format', () => {
+  const python = 'seats/python_specialist'
+  expect(on(prompt([`- ${python}/prompt.md:17-18`, `- ${python}/manifest.yaml`], ['- nothing else']))).toBeNull()
+  expect(on(prompt([`- ${python}/prompt.md`, '- store/plans.ts:249-253'], ['- nothing else']))).toBeNull()
+  expect(on(prompt(['- seats/go_specialist/prompt.md'], ['- nothing else']))).toMatchObject({ span: 'sequencer/rails.ts' })
+})
+
 test('the completion audit is a format change, line or not', () => {
   const unaffected = ['- nothing else']
   expect(on(handback([], unaffected))).toMatchObject({ span: 'sequencer/rails.ts' })

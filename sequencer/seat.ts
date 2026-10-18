@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto'
-import { existsSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { map } from '../cli/map.ts'
 import type { Fired, Provider } from '../providers/kind.ts'
-import { packet, refuse } from '../runner/index.ts'
+import { packet } from '../runner/index.ts'
 import { reviewManifest, SYMBOLS_LEAD, type Bench } from '../runner/packet.ts'
 import { load, seat, senior as discipline, tight, type Seat } from '../runner/rules.ts'
 import { judge, loadReviews } from '../reviews/bench.ts'
@@ -38,7 +38,7 @@ import { commanded } from './command.ts'
 import { unran } from './reproduced.ts'
 import { answered } from './answered.ts'
 import { looked } from './design.ts'
-import { deletions } from './fence.ts'
+import { dropped } from './dropped.ts'
 import { asked, blinded, findings } from './findings.ts'
 import { fenceFor, languageFor } from './route.ts'
 import { languages } from './split.ts'
@@ -97,28 +97,6 @@ async function fenced(db: Db, root: string, plan: PlanRow, step: Step, provider:
   const kept = `${text.replace(FENCE, '').trimEnd()}\n\n${fence}`
   put(root, plan.id, 'step-2.handback.md', kept)
   return kept
-}
-
-/**
- * The build names paths under `## Deleted` and the kernel removes them, before the rails read the
- * tree; `git add -A` at the commit stages the removal, so the deletion is in the diff the reviewers
- * judge. The fence that bars a write bars a delete -- the same `refuse()` the seat's own tools run
- * through -- and a path that is not there refuses rather than passing as a silent no-op.
- */
-function dropped(db: Db, root: string, plan: PlanRow, step: Step, handback: string): Outcome | null {
-  const { paths, unread } = deletions(handback)
-  if (unread.length > 0) return { outcome: 'refuse', spans: unread, note: `${step.runs}: ${unread.map((r) => `${r} names no path`).join('; ')}` }
-  if (paths.length === 0) return null
-  const src = srcDir(root, plan.id)
-  const fence = fenceFor(db, plan.id, seat(root, step.runs).manifest.write_paths)
-  const barred = paths.filter((path) => refuse(src, fence, path, kernelPlan(plan)) !== null)
-  const absent = paths.filter((path) => !barred.includes(path) && !existsSync(join(src, path)))
-  if (barred.length > 0 || absent.length > 0) {
-    const why = [...barred.map((p) => `${p} is outside the fence`), ...absent.map((p) => `${p} is not in the tree`)]
-    return { outcome: 'refuse', spans: [...barred, ...absent], note: `${step.runs}: ${why.join('; ')}` }
-  }
-  for (const path of paths) rmSync(join(src, path))
-  return null
 }
 
 function empty(root: string, plan: PlanRow, step: Step, handback: string): Outcome | null {

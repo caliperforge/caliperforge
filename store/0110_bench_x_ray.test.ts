@@ -19,7 +19,7 @@ it('D1 0110 reads an 0109 row as NULL and refuses x_ray 2', () => {
   const plan = planRow(db)
   db.prepare(`INSERT INTO bench_scorecard (plan, target, generator, catches, false_positives, untested, tokens, seconds)
     VALUES (?, 'a', 'fizz', 1, 0, 0, 10, 1.5)`).run(plan)
-  expect(migrate(db, join(root, 'schema'))).toEqual(['0110_bench_x_ray.sql', '0111_science_lanes.sql'])
+  expect(migrate(db, join(root, 'schema'))).toEqual(['0110_bench_x_ray.sql', '0111_science_lanes.sql', '0112_bench_untested_nullable.sql'])
   expect(scores(db)).toEqual([{ plan, target: 'a', generator: 'fizz', catches: 1, false_positives: 0, untested: 0, tokens: 10, seconds: 1.5, x_ray: null }])
   expect(() => record(db, { plan: planRow(db), target: 'a', generator: 'fizz', catches: 0, false_positives: 0, untested: 0, tokens: 0, seconds: 0,
     x_ray: 2 as 1 })).toThrow(/CHECK/)

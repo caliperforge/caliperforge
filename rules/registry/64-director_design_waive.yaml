@@ -1,0 +1,6 @@
+- name: director_design_waive
+  table: events
+  column: at
+  where: "kind = 'review' AND outcome = 'refuse' AND message GLOB 'design*' AND EXISTS (SELECT 1 FROM events w WHERE w.plan = events.plan AND w.kind = 'director' AND w.outcome = 'pass' AND w.message GLOB 'waive:*' AND w.id < events.id)"
+  gap: 7d
+  expected: 0

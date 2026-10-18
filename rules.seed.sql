@@ -72,6 +72,7 @@ VALUES
   ('rules/registry/62-design_on_main.yaml', 'card', 'rules/registry/62-design_on_main.yaml', '70c5b6cd3c7a15ff1a87a2d0cb7fb2d5a5a76b9eb78bd1b6d0dffc61a298c005', '2026-10-16'),
   ('rules/registry/63-earth_lodge_site.yaml', 'card', 'rules/registry/63-earth_lodge_site.yaml', 'f3f290255ef61ebf0a0403d370d5429df4a619d8107d5796cc4abb88951686e4', '2026-10-17'),
   ('rules/registry/63-site_push.yaml', 'card', 'rules/registry/63-site_push.yaml', '0a79a5642997781eec93b9baf345db30f9a3b2febfc24f62b8c9c7b5777012cc', '2026-10-18'),
+  ('rules/registry/64-director_design_waive.yaml', 'card', 'rules/registry/64-director_design_waive.yaml', 'b2629898820d0fe3399e60361ac2bc513f68ea59ffd3e33de9d0480689dd870d', '2026-10-18'),
   ('rules/registry/64-gpg_lock_hold.yaml', 'card', 'rules/registry/64-gpg_lock_hold.yaml', '0cbeabe3ed2f736000a326417e918a1c38b2c2b4fb6ee96727edd5322bbf66ad', '2026-10-18'),
   ('rules/repo-classes.yaml', 'card', 'rules/repo-classes.yaml', '0ab38b3779b38a5b57c3eaae4ace5e650618dfb4fecbd80b4477958b115ee550', '2026-10-16'),
   ('rules/staffing.yaml', 'card', 'rules/staffing.yaml', 'aa91207f2660fe1f31421d100b3118981715abc9ed8e1381a6d2962c464d0d36', '2026-10-05'),

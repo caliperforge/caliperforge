@@ -117,7 +117,8 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
   const off = onto === null ? null : unfolded(head.dir, onto, messageOf(root, plan.id, profile(root, repo)))
   if (off !== null) return { outcome: 'refuse', spans: ['fold'], to: 2, note: off }
   if (!internal(plan)) { wire.rehearse?.(fork, ci); took(db, plan) }
-  const on = { fork, branch: ci, sha: tip }
+  if (!workflows(head.dir)) { freed(db, plan.id); return checked(db, root, plan, repo) }
+  const on ={ fork, branch: ci, sha: tip }
   const { verdict, board } = judge(on, { body: '', commits: commits(head.dir), issue_ref: profile(root, repo)?.issue_ref }, touched(root, plan.id), wire.runs)
   put(root, plan.id, BOARD, `${JSON.stringify(board)}\n`)
   const at = `${fork}@${head.sha.slice(0, 12)}`
@@ -257,8 +258,8 @@ function triggered(text: string): boolean {
 
 /**
  * Our own repo with no workflows, or a part whose fork CI runs once at its parent's step 6, has no CI to wait on, so step 3's checks, run on this
- * host at this head, stand as it. Nothing is pushed: the branch lands on `main` from the checkout. An
- * outside plan never comes here; its fork CI is the only test their code gets.
+ * host at this head, stand as it. Our own branch lands on `main` from the checkout. An outside repo with no
+ * workflows comes here too, after its branch is sent.
  */
 function checked(db: Db, root: string, plan: PlanRow, repo: string): null {
   const passed = passing(db, plan.id, 'gate', 'pre_review')

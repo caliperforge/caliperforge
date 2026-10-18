@@ -12,7 +12,7 @@ import { approve as approvePublish } from '../card.ts'
 import { tick } from '../index.ts'
 import { ruled, signoffs, verdict } from '../signoff.ts'
 import { drop, OPERATOR, put, SELF, SIGNOFF, srcDir } from '../workspace.ts'
-import { approve, CARRIED, plan, scored, stub, watched, world, type World } from './world.ts'
+import { approve, CARRIED, plan, scored, stub, TYPESCRIPT, watched, world, type World } from './world.ts'
 
 /** Their pull request as the tick reads it, offline: open and quiet. */
 const quiet = (): Pr => ({
@@ -20,8 +20,8 @@ const quiet = (): Pr => ({
   reviewDecision: null, comments: [], reviews: [], statusCheckRollup: [],
 })
 
-async function atBatch(): Promise<World> {
-  const w = world()
+async function atBatch(ci = true): Promise<World> {
+  const w = world('warm', undefined, TYPESCRIPT, ci)
   approve(w.db, w.target)
   for (let at = 0; at < 7; at += 1) {
     if (at === 2) writeFileSync(join(srcDir(w.root, 1), 'src/hello.ts'), 'export const hello = (): string => "hey"\n')
@@ -277,6 +277,16 @@ test('a workflow also red on base says so, with its job and step', async () => {
   const desk = fake()
   signoffs(w.db, w.root, desk)
   expect(desk.cards.get(100)?.body).toContain('- Their CI on our fork: Validate red on the base too (validate: Install)')
+})
+
+test('D3 a repo with no CI says what checked it instead', async () => {
+  const w = await atBatch(false)
+  const desk = fake()
+  signoffs(w.db, w.root, desk)
+  const body = desk.cards.get(100)?.body ?? ''
+  expect(body).toContain('\n- this repo has no CI; checked with: none\n')
+  expect(body).not.toContain('Their CI')
+  expect(body).toContain('\nWaiting on you. The four gates passed.\n')
 })
 
 test('a ruling adds a D row and Must not break line, or a section', () => {

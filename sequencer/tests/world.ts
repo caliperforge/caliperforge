@@ -138,9 +138,9 @@ export { KOTLIN, TYPESCRIPT } from './bases.ts'
  * own repo and our fork of it. `.cf/git-base` aims the sequencer at them, so it
  * clones, fetches upstream and branches for real, off the network.
  */
-function remotes(root: string, files: Record<string, string>): void {
+function remotes(root: string, files: Record<string, string>, ci: boolean): void {
   const base = join(root, 'remotes')
-  copy('world', files, false, base)
+  copy('world', files, ci, base)
   mkdirSync(join(root, '.cf'), { recursive: true })
   writeFileSync(join(root, '.cf/git-base'), base)
 }
@@ -190,10 +190,10 @@ export function internalPlan(db: Db, root: string, id: number, title = 'let an i
 const opened = new Map<string, Db>()
 
 export function world(pulse: 'warm' | 'cold' = 'warm', day = new Date().toISOString().slice(0, 10),
-  files: Record<string, string> = TYPESCRIPT): World {
+  files: Record<string, string> = TYPESCRIPT, ci = true): World {
   const root = mkdtempSync(join(tmpdir(), 'cf-seq-'))
   for (const dir of ['rules', 'seats', 'reviews', 'rails', 'profiles']) cpSync(join(repo, dir), join(root, dir), { recursive: true })
-  remotes(root, files)
+  remotes(root, files, ci)
   const db = fresh(join(repo, 'schema'))
   opened.set(root, db)
   const merge = pulse === 'warm' ? day : '2000-01-01'

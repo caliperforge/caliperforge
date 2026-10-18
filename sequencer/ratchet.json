@@ -39,6 +39,9 @@
   "drift.ts": {
     "lines": 150
   },
+  "dropped.ts": {
+    "lines": 40
+  },
   "failures.ts": {
     "lines": 55,
     "silent-catch": 2
@@ -136,7 +139,7 @@
     "lines": 98
   },
   "seat.ts": {
-    "lines": 547
+    "lines": 525
   },
   "settle.ts": {
     "lines": 298,

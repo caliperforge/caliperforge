@@ -118,7 +118,7 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
   if (off !== null) return { outcome: 'refuse', spans: ['fold'], to: 2, note: off }
   if (!internal(plan)) { wire.rehearse?.(fork, ci); took(db, plan) }
   if (!workflows(head.dir)) { freed(db, plan.id); return checked(db, root, plan, repo) }
-  const on ={ fork, branch: ci, sha: tip }
+  const on = { fork, branch: ci, sha: tip }
   const { verdict, board } = judge(on, { body: '', commits: commits(head.dir), issue_ref: profile(root, repo)?.issue_ref }, touched(root, plan.id), wire.runs)
   put(root, plan.id, BOARD, `${JSON.stringify(board)}\n`)
   const at = `${fork}@${head.sha.slice(0, 12)}`

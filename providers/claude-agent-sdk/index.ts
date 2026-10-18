@@ -135,7 +135,7 @@ function openTranscript(packet: Packet): (message: unknown) => void {
 export function gate(packet: Packet, input: HookInput): SyncHookJSONOutput {
   if (input.hook_event_name !== 'PreToolUse') return { continue: true }
   if (input.tool_name === 'Bash') {
-    const refused = ranOutside(packet.tools, packet.cwd, input.tool_input)
+    const refused = ranOutside(packet, input.tool_input)
     return refused === null ? { continue: true } : deny(refused)
   }
   const away = readOutside(packet.cwd, input.tool_name, input.tool_input, packet.reads)
@@ -188,19 +188,28 @@ function wroteOutside(packet: Packet, tool: string, args: unknown): string | nul
   return refusal === null ? null : `${refusal.origin_kind}:${refusal.origin_ref} refuses a write to ${refusal.path}`
 }
 
-function ranOutside(tools: string[], cwd: string, args: unknown): string | null {
+function ranOutside(packet: Packet, args: unknown): string | null {
   const given = args as { command?: unknown; run_in_background?: unknown }
   if (given.run_in_background === true) return 'ruling:seat.tools refuses run_in_background: run it in the foreground and wait for it'
   const said = given.command
   const command = typeof said === 'string' ? said.trim() : ''
-  const rest = unmoved(cwd, command)
+  const rest = unmoved(packet.cwd, command)
   if (ghWrite(rest)) return `ruling:seat.tools refuses ${JSON.stringify(command)}: gh runs only as a gh api GET read`
-  if (admitted(tools, rest)) return null
-  return `ruling:seat.tools refuses the command ${JSON.stringify(command)}`
+  const refused = `ruling:seat.tools refuses the command ${JSON.stringify(command)}`
+  if (packet.tools.includes('Bash(git submodule add:*)') && /^git(?:\s|$)/.test(rest)) {
+    const dir = (SUBMODULE.exec(rest) ?? PINNED.exec(rest))?.[1]
+    return dir !== undefined && packet.refuse('.gitmodules') === null && packet.refuse(`lib/${dir}`) === null ? null : refused
+  }
+  if (admitted(packet.tools, rest)) return null
+  return refused
 }
 
 /** `cd <cwd> && ` moves nowhere, so what follows it is judged alone; a folder bash would expand is never stripped. */
 const CD = /^cd\s+(?:"([\w./ -]+)"|([\w./-]+))\s+&&\s+/
+
+/** The only git a seat holding `Bash(git submodule add:*)` runs: a github https submodule under `lib/`, and its pin. */
+const SUBMODULE = /^git submodule add https:\/\/github\.com\/[\w-]+\/[\w.-]+ lib\/([\w-][\w.-]*)$/
+const PINNED = /^git -C lib\/([\w-][\w.-]*) checkout [0-9a-f]{7,40}$/
 
 function unmoved(cwd: string, command: string): string {
   const cd = CD.exec(command)

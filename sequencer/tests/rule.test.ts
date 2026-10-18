@@ -239,6 +239,15 @@ test('D2 a path in neither folder is refused', () => {
   expect(eventsOf(db, 7, 'files')).toEqual([{ actor: 'ruling', outcome: 'refuse', message: 'not in the checkout: src/gone.ts' }])
 })
 
+test('D1 D2 a web path is refused, not added', () => {
+  const { db, home } = seeded(3)
+  writeFileSync(join(srcDir(home, 7), 'x.css'), '\n')
+  put(home, 7, 'rulings.md', 'see `/x.css`\n')
+  expect(opened(db, home, 7)).toEqual(['/x.css'])
+  expect(filesOf(db, 7)).toEqual([])
+  expect(eventsOf(db, 7, 'files')).toEqual([{ actor: 'ruling', outcome: 'refuse', message: 'not in the checkout: /x.css' }])
+})
+
 function made() {
   const { db, home } = seeded(3)
   mkdirSync(join(srcDir(home, 7), 'src'))

@@ -10,7 +10,7 @@ import type { Fired, Packet, Provider } from '../../providers/kind.ts'
 import { real } from '../../runner/index.ts'
 import { seat } from '../../runner/rules.ts'
 import { scores } from '../../store/bench.ts'
-import { runRows } from '../../store/events.ts'
+import { eventsOf, runRows } from '../../store/events.ts'
 import type { Db } from '../../store/index.ts'
 import { dial } from '../../store/lanes.ts'
 import { allPlans, holdOn, pipeNamed, planById, putPlan, waiting, type PlanRow } from '../../store/plans.ts'
@@ -168,6 +168,14 @@ function emptied(root: string): void {
   srcDir(root, 1)
 }
 
+/** An empty src/ and a checkout.json naming `repo` at `preFix`, as `reap` leaves a bench plan. */
+function reaped(preFix: string, fix = ''): (root: string) => void {
+  return (root) => {
+    put(root, 1, 'checkout.json', JSON.stringify({ repo: 'org/fixture', fix, pre_fix: preFix }))
+    srcDir(root, 1)
+  }
+}
+
 async function generated(fired: ReturnType<typeof stub>, keys: Record<string, string> = { generator: 'fizz' },
   ready: (root: string) => void = checkedOut, root = mkdtempSync(join(tmpdir(), 'cf-bench-'))) {
   staffedIn(root)
@@ -236,8 +244,12 @@ test('D2 D4 D5 fizz reads fizz, x-ray and the attempts file', async () => {
   for (const path of [join(homedir(), '.claude/skills/other/SKILL.md'), '/tmp/other.md']) {
     expect(readOutside(packet.cwd, 'Read', { file_path: path }, packet.reads)).toContain('run.outside_checkout')
   }
-  for (const path of [ATTEMPTS, join(packet.cwd, 'x-ray/x-ray.md')]) expect(packet.refuse(path)).toBeNull()
-  for (const path of ['/tmp/other.md', join(packet.cwd, 'README.md')]) expect(packet.refuse(path)).toMatchObject({ origin_ref: 'seat.write_paths' })
+  for (const path of [ATTEMPTS, join(packet.cwd, 'x-ray/x-ray.md'), ...['medusa.json', 'PROPERTIES.md', 'echidna.yaml', 'foundry.toml'].map((f) => join(packet.cwd, f))]) {
+    expect(packet.refuse(path)).toBeNull()
+  }
+  for (const path of ['/tmp/other.md', ...['README.md', 'src/medusa.json', 'src/PROPERTIES.md'].map((f) => join(packet.cwd, f))]) {
+    expect(packet.refuse(path)).toMatchObject({ origin_ref: 'seat.write_paths' })
+  }
   expect(packet.prompt).toContain(`SKILL_PATH is ${real(SKILL)}.`)
   expect(packet.prompt).toContain(`${real(XRAY)}/SKILL.md`)
   expect(packet.env).toEqual({ BASH_DEFAULT_TIMEOUT_MS: '1800000', BASH_MAX_TIMEOUT_MS: '1800000' })
@@ -263,13 +275,25 @@ test('D1 D2 a root reached through a symlink gets real paths', async () => {
 test('D3 D4 generate refuses a src/ not at pre_fix, unfired', async () => {
   const moved = (root: string) => { checkedOut(root); commit(srcDir(root, 1), 'src/Moved.sol', '', 'moved') }
   const unwritten = (root: string) => { checkedOut(root); rmSync(join(planDir(root, 1), 'checkout.json')) }
-  for (const ready of [emptied, moved, unwritten]) {
+  const unknown = 'f'.repeat(40)
+  const unfetched = reaped(unknown)
+  for (const [ready, note] of [[emptied, 'src/ is not a clone'], [moved, expect.stringMatching(/^src\/ is at \w{12}, not pre_fix \w{12}$/) as string],
+    [unwritten, 'checkout.json is missing'], [unfetched, `src/ could not be cloned again at ${unknown.slice(0, 12)}`]] as const) {
     const fired = stub(CEILING, 'stopped', true)
-    const { db, outcome } = await generated(fired, undefined, ready)
-    expect(outcome).toMatchObject({ outcome: 'refuse', spans: ['bench.no_checkout'], to: 0 })
+    const { db, outcome } = await generated(fired, undefined, ready, fixture().root)
+    expect(outcome).toMatchObject({ outcome: 'refuse', spans: ['bench.no_checkout'], note, to: 0 })
     expect(fired.packets).toEqual([])
     expect(runRows(db)).toEqual([])
+    expect(eventsOf(db, 1, 'swallowed').map((e) => e.actor)).toEqual(ready === unfetched ? ['generate'] : [])
   }
+})
+
+test('D1 generate clones an emptied src/ again at pre_fix', async () => {
+  const { root, c1, c2 } = fixture()
+  const fired = stub(CEILING, 'stopped', true)
+  expect((await generated(fired, undefined, reaped(c1, c2), root)).outcome).toMatchObject({ outcome: 'pass' })
+  expect(fired.packets).toMatchObject([{ cwd: realpathSync(srcDir(root, 1)) }])
+  expect(git(srcDir(root, 1), ['rev-parse', 'HEAD']).trim()).toBe(c1)
 })
 
 test('D5 tick on an empty src/ sends the plan back to step 0', async () => {
@@ -388,6 +412,17 @@ test('score D2 a failing run_pair.py is refused and not recorded', () => {
   const { root, db } = scoring('import sys\nsys.stderr.write("forge build failed")\nsys.exit(1)\n')
   expect(scored(db, root, planById(db, 1))).toEqual({ outcome: 'refuse', spans: ['bench.run_pair'], note: 'forge build failed' })
   expect(scores(db)).toEqual([])
+})
+
+test('D1 D2 no null_check.py is scored with untested null', () => {
+  const { root, db } = scoring()
+  const dir = join(root, 'remotes/caliperforge/fuzz-bench')
+  git(dir, ['rm', '-q', 'bench/null_check.py'])
+  git(dir, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'no null check'])
+  const sha = git(dir, ['rev-parse', 'HEAD']).trim()
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  expect(scores(db)).toEqual([{ plan: 1, target: 'euler-earn-m01', generator: 'fizz', ...SCORE, untested: null, x_ray: null }])
+  expect(JSON.parse(get(root, 1, 'score.json'))).toEqual({ fuzz_bench: sha, ...SCORE, untested: null, x_ray: null })
 })
 
 test('D3 an empty results file is refused and not recorded', () => {

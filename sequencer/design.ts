@@ -14,7 +14,7 @@ import type { PlanRow } from '../store/plans.ts'
 import { pending } from '../store/transcript.ts'
 import type { Verdict } from '../store/verdict.ts'
 import type { Outcome } from './kind.ts'
-import { cloned, diffOf, get, git, maybe, planDir, rulings, srcDir } from './workspace.ts'
+import { cloned, diffOf, get, git, maybe, planDir, put, rulings, srcDir } from './workspace.ts'
 
 interface Shot {
   screen: string
@@ -71,6 +71,11 @@ export function screens(diff: string, src: string): string[] {
 function waived(root: string, plan: number): string | null {
   const ruled = (maybe(root, plan, 'issue.md') ?? '').split(/^(?=## )/m).filter((s) => /^## (?:Ruling|Answer)/.test(s))
   return /^design waived: *(\S.*)$/m.exec([maybe(root, plan, 'rulings.md') ?? '', ...ruled].join('\n'))?.[1] ?? null
+}
+
+export function waive(root: string, plan: number, why: string): void {
+  if (waived(root, plan) !== null) return
+  put(root, plan, 'rulings.md', `${maybe(root, plan, 'rulings.md') ?? ''}\ndesign waived: ${why.split('\n')[0] ?? ''}\n`)
 }
 
 export async function looked(db: Db, root: string, plan: PlanRow, provider: Provider): Promise<Outcome> {

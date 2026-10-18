@@ -28,7 +28,7 @@ function limited(tools: string[]): void {
 test('D1: the manifest loads past its digests', () => {
   expect(seat(root, 'fizz_generator').manifest).toEqual({
     seat: 'fizz_generator', model: 'claude-opus-5-5', effort: 'high', tools: TOOLS, reads: ['~/.claude/skills/fizz', '~/.claude/skills/x-ray'],
-    write_paths: ['test/fizz', 'x-ray'],
+    write_paths: ['test/fizz', 'x-ray', 'medusa.json', 'PROPERTIES.md', 'echidna.yaml', 'foundry.toml'],
   })
 })
 

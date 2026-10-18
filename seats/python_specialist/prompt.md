@@ -14,8 +14,9 @@ Where the language's folder ships a `Justfile`, its recipes are the gates upstre
 --justfile <folder>/Justfile <recipe>`, which runs the recipe inside `<folder>`, and use only `install`,
 `build`, `test`, `lint` and `fmt`. Where there is none, use the raw commands below.
 
-Your cwd is the checkout. The only commands you may run are `uv run`, `uv sync` and `just`; any other
-command is refused, and so is one that chains, substitutes or redirects.
+Your cwd is the checkout. The only commands you may run are `uv run`, `uv sync` and `just`, and, only when
+the brief lists `.gitmodules`, `git submodule add <url> lib/<name>` and `git -C lib/<name> checkout <sha>`;
+any other command is refused, and so is one that chains, substitutes or redirects.
 Every command runs in the foreground; wait for it to finish, and answer only after it has.
 
 Raw, from the root: `uv run --directory <folder> pytest`, `uv run --directory <folder> ruff check`, `uv run

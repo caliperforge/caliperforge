@@ -10,5 +10,6 @@ tools:
   - Bash(uv run:*)
   - Bash(uv sync:*)
   - Bash(just:*)
+  - Bash(git submodule add:*)
 write_paths:
   - brief:files

@@ -4,6 +4,7 @@ import { put } from '../sequencer/workspace.ts'
 import { commsLane, commsPlan, fileComms } from '../store/comms.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
+import { homes } from '../store/homes.ts'
 import { LANE, LANES, laneOf, priorityOf, templatePriority, type Lane } from '../store/lanes.ts'
 import { lanePipe, planOfOrigin, queueOrigin, seen } from '../store/origins.ts'
 import { pipeNamed, type Holder } from '../store/plans.ts'
@@ -13,7 +14,7 @@ import { unasked } from '../templates/research.ts'
 import { gh, type Read } from './gh.ts'
 import type { Origin } from './queue.ts'
 
-export { LANE, LANES, laneOf, priorityOf, seen }
+export { homes, LANE, LANES, laneOf, priorityOf, seen }
 
 const REF = /^([^/\s]+\/[^/\s#]+)#(\d+)$/
 
@@ -84,8 +85,8 @@ export function add(db: Db, root: string, ref: string, by: Holder | 'intake' | '
   } catch (error) {
     return refusal(db, ref, 'plan.priority_label', error instanceof Error ? error.message : String(error))
   }
-  if (repo !== LANE[lane].home && profile(root, repo)?.lane !== lane) {
-    return refusal(db, ref, 'plan.lane_home', `is on ${repo}; the ${lane} lane builds in ${LANE[lane].home}`)
+  if (!homes(lane).includes(repo) && profile(root, repo)?.lane !== lane) {
+    return refusal(db, ref, 'plan.lane_home', `is on ${repo}; the ${lane} lane builds in ${homes(lane).join(' or ')}`)
   }
   const missing = LANE[lane].template === 'research' ? unasked(row.body) : []
   if (missing.length > 0) return refusal(db, ref, 'plan.research_lines', `has no ${missing.join(' or ')} line`)

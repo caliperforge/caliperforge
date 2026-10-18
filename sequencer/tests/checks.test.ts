@@ -999,6 +999,32 @@ test('1181a D3 a red pytest is test; a red ruff stops there', () => {
   expect(ruff.seen).toEqual(['ruff'])
 })
 
+/** A shell where only the `test` gate fails, at `code`. */
+function collected(code: string): Run {
+  return (args) => (['pytest', 'test'].includes(args.at(-1) ?? '') ? { ok: false, code, output: 'no tests ran' } : { ok: true, output: '' })
+}
+
+const LOOSE: Outside = { language: 'python', files: ['test.py'] }
+
+test('1481 D1 pytest exit 5 passes beside run_tests.sh', () => {
+  const lines: string[] = []
+  expect(checks(nested({ 'test.py': '', 'run_tests.sh': '' }), {}, collected('5'), [], LOOSE, [], undefined, (line) => { lines.push(line) })).toBeNull()
+  expect(lines).toEqual(["pytest collected no tests (exit 5); run_tests.sh runs this repo's tests"])
+})
+
+test('1481 D2 pytest exit 5 with no runner script fails', () => {
+  expect(checks(nested({ 'test.py': '' }), {}, collected('5'), [], LOOSE)).toMatchObject({ script: 'test', code: '5' })
+})
+
+test('1481 D3 pytest exit 1 beside run_tests.sh fails', () => {
+  expect(checks(nested({ 'test.py': '', 'run_tests.sh': '' }), {}, collected('1'), [], LOOSE)).toMatchObject({ script: 'test', code: '1' })
+})
+
+test('1481 D4 a Justfile test exit 5 beside run_tests.sh fails', () => {
+  const src = nested({ 'run_tests.sh': '', 'ruby/Justfile': JUST, 'ruby/Gemfile': '', 'ruby/run_tests.sh': '', 'ruby/lib/a.rb': '' })
+  expect(checks(src, {}, collected('5'), [], { language: 'ruby', files: ['ruby/lib/a.rb'] })).toMatchObject({ script: 'test', code: '5' })
+})
+
 test('#204 a recipe the Justfile does not define is not run', () => {
   const src = nested({ 'lua/Justfile': 'test:\n    luajit tests/run.lua\n', 'lua/pay-kit-dev-1.rockspec': '', 'lua/pay_kit/a.lua': '' })
   const { run, calls } = heard()

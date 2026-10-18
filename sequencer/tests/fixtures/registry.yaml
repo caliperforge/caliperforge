@@ -360,6 +360,12 @@
   where: staffed = 'web_specialist' AND plan IN (SELECT id FROM plans WHERE origin GLOB 'https://github.com/caliperforge/earth-lodge-site/*')
   gap: 2d
   while: EXISTS (SELECT 1 FROM plans WHERE origin GLOB 'https://github.com/caliperforge/earth-lodge-site/*' AND state IN ('queued', 'running', 'blocked_on_ceo') AND queued_at >= $since)
+- name: site_push
+  table: events
+  column: at
+  where: "kind = 'site_push' AND outcome = 'refuse' AND julianday(events.at) < julianday('now', '-1 hour') AND NOT EXISTS (SELECT 1 FROM events p WHERE p.kind = 'site_push' AND p.outcome = 'pass' AND p.id > events.id)"
+  gap: 7d
+  expected: 0
 - name: gpg_lock_hold
   table: events
   column: at

@@ -273,7 +273,8 @@ function shared(brief: string, src: string): Refused | null {
   const rows = reached(brief)
   const moving = changing.filter((p) => {
     const lines = rows.filter((r) => r.path === p).map((r) => r.line)
-    return !p.endsWith('.md') || lines.length === 0 || lines.some((l) => l >= lastFence(join(src, p)))
+    const fence = lastFence(join(src, p))
+    return !p.endsWith('.md') || (fence > 0 && (lines.length === 0 || lines.some((l) => l >= fence)))
   })
   for (const format of SHARED.filter((f) => f.files.some((p) => moving.includes(p)))) {
     const unlisted = format.readers.find((r) => !listed.includes(r))

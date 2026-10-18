@@ -1,11 +1,11 @@
-import { copyFileSync } from 'node:fs'
+import { copyFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import type { Provider } from '../../providers/kind.ts'
 import { holdOf } from '../../store/holds.ts'
 import { refusedOf } from '../../store/record.ts'
 import { tick } from '../index.ts'
-import { diffOf, get, maybe, put } from '../workspace.ts'
+import { diffOf, get, maybe, put, srcDir } from '../workspace.ts'
 import { approve, built, CARRIED, plan, stub, watched, world, type World } from './world.ts'
 
 const UNPOINTED = 'built\n\n---\ndone:\n  - id: D1\n    status: done\n    pointer:\n---\n'
@@ -118,10 +118,13 @@ test('D3 a fenceless hand-back that changed a file passes step 2', async () => {
   expect(fired).toMatchObject({ step: 2, outcome: 'pass' })
 })
 
-test('D5 a fenceless hand-back with ## Deleted passes step 2', async () => {
+test('a fenceless hand-back deleting a base file refuses at step 2', async () => {
   const w = await atBuild()
   const text = 'built\n\n## Deleted\n\n- src/hello.ts\n'
-  expect((await tick(w.db, w.root, answers([text, text])))[0]).toMatchObject({ step: 2, outcome: 'pass' })
+  const fired = (await tick(w.db, w.root, answers([text, text])))[0]
+  expect(fired).toMatchObject({ step: 2, outcome: 'refuse', spans: ['src/hello.ts'] })
+  expect(fired?.note).toContain('is on base')
+  expect(existsSync(join(srcDir(w.root, 1), 'src/hello.ts'))).toBe(true)
 })
 
 const NOT_DONE = 'Not done: this round only allowed changes to kotlin-ci.yml:23'

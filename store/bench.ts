@@ -1,6 +1,6 @@
 import type { Db } from './index.ts'
 
-export interface Score { plan: number; target: string; generator: string; catches: number; false_positives: number; untested: number; tokens: number; seconds: number; x_ray: 0 | 1 | null }
+export interface Score { plan: number; target: string; generator: string; catches: number; false_positives: number; untested: number | null; tokens: number; seconds: number; x_ray: 0 | 1 | null }
 
 export function record(db: Db, s: Score): number {
   return Number(db.prepare(`INSERT INTO bench_scorecard (plan, target, generator, catches, false_positives, untested, tokens, seconds, x_ray)

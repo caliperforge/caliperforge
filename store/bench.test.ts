@@ -39,10 +39,10 @@ it('D3 refuses negative counts and empty names', () => {
   }
 })
 
-it('D4 migrates once to 111 with one bench_scorecard table', () => {
+it('D4 migrates once to 112 with one bench_scorecard table', () => {
   const d = open(':memory:')
-  expect(migrate(d, join(root, 'schema')).at(-1)).toBe('0111_science_lanes.sql')
+  expect(migrate(d, join(root, 'schema')).at(-1)).toBe('0112_bench_untested_nullable.sql')
   expect(migrate(d, join(root, 'schema'))).toEqual([])
   expect(d.prepare("SELECT count(*) AS n FROM sqlite_master WHERE type = 'table' AND name = 'bench_scorecard'").get()).toEqual({ n: 1 })
-  expect(d.pragma('user_version', { simple: true })).toBe(111)
+  expect(d.pragma('user_version', { simple: true })).toBe(112)
 })

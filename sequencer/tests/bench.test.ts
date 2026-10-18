@@ -414,6 +414,17 @@ test('score D2 a failing run_pair.py is refused and not recorded', () => {
   expect(scores(db)).toEqual([])
 })
 
+test('D1 D2 no null_check.py is scored with untested null', () => {
+  const { root, db } = scoring()
+  const dir = join(root, 'remotes/caliperforge/fuzz-bench')
+  git(dir, ['rm', '-q', 'bench/null_check.py'])
+  git(dir, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'no null check'])
+  const sha = git(dir, ['rev-parse', 'HEAD']).trim()
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  expect(scores(db)).toEqual([{ plan: 1, target: 'euler-earn-m01', generator: 'fizz', ...SCORE, untested: null, x_ray: null }])
+  expect(JSON.parse(get(root, 1, 'score.json'))).toEqual({ fuzz_bench: sha, ...SCORE, untested: null, x_ray: null })
+})
+
 test('D3 an empty results file is refused and not recorded', () => {
   const { root, db } = scoring(writes('.jsonl', []))
   expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'refuse', spans: ['bench.empty_results'] })

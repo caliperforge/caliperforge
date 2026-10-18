@@ -85,6 +85,11 @@ export function targetSigned(db: Db, target: number, digest: string): boolean {
   return true
 }
 
+export function planSigned(db: Db, plan: number, digest: string): boolean {
+  return db.prepare("SELECT 1 FROM approvals WHERE subject_kind = 'plan' AND subject_id = ? AND subject_digest = ? AND decision = 'approved'")
+    .get(plan, digest) !== undefined
+}
+
 export function approvalsOf(db: Db, kind: SubjectKind): { decision: string; reason: string | null }[] {
   return db.prepare('SELECT decision, reason FROM approvals WHERE subject_kind = ? ORDER BY id')
     .all(kind) as { decision: string; reason: string | null }[]

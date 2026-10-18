@@ -2,6 +2,8 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test, vi } from 'vitest'
 import { approve, askOf } from '../../cli/queue.ts'
+import { approvalsOf } from '../../store/approvals.ts'
+import { allPlans } from '../../store/plans.ts'
 import { addTarget, targetRow } from '../../store/targets.ts'
 import { waiting } from '../card.ts'
 import { tick } from '../index.ts'
@@ -118,10 +120,9 @@ test('intake D2 a target an upstream branch works on is refused', () => {
   const id = addTarget(w.db, { ...targetRow(w.db, 1), issue_no: 13, state: 'ready', evidence: 'https://github.com/acme/widget/issues/13' })
   expect(() => approve(w.db, w.root, id, 'pr-path', 'ceo', picked(canned([]))))
     .toThrow(`target ${String(id)} refused: branch ${TREE} touches src/hello.ts`)
-  expect(w.db.prepare('SELECT state, evidence FROM targets WHERE id = ?').get(id)).toEqual({ state: 'refused', evidence: TREE })
-  expect(w.db.prepare("SELECT decision, reason FROM approvals WHERE subject_kind = 'target' AND subject_id = ?").all(id))
-    .toEqual([{ decision: 'refused', reason: 'their.work' }])
-  expect(w.db.prepare('SELECT state FROM plans WHERE target_id = ?').all(id)).toEqual([{ state: 'refused' }])
+  expect(targetRow(w.db, id)).toMatchObject({ state: 'refused', evidence: TREE })
+  expect(approvalsOf(w.db, 'target')).toEqual([{ decision: 'refused', reason: 'their.work' }])
+  expect(allPlans(w.db).filter((p) => p.target_id === id).map((p) => p.state)).toEqual(['refused'])
 })
 
 test('intake D4 a step-1 flag blocks before any model runs', async () => {

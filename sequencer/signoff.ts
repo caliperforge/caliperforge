@@ -4,13 +4,15 @@ import { parse } from '../rails/diff.ts'
 import { approve, batch, refuse, type Card } from '../cli/batch.ts'
 import type { Answer, Desk, Seen } from '../cli/gh.ts'
 import { notify, record, type Event, type Kind } from '../cli/inbox.ts'
+import { planSigned } from '../store/approvals.ts'
 import { decision } from '../store/ask.ts'
 import { logged, ofKind } from '../store/events.ts'
 import { ciFacts, diffFacts, facts, greptileFacts, ruleFacts, testFacts, type Fact } from '../store/facts.ts'
 import type { Db } from '../store/index.ts'
-import { needsCeo, planById, resume, rewind } from '../store/plans.ts'
+import { allPlans, needsCeo, planById, resume, rewind } from '../store/plans.ts'
 import { clear } from '../store/refusals.ts'
 import { asks, graded } from '../store/signals.ts'
+import { targetRef } from '../store/targets.ts'
 import type { Board } from '../rails/ci-green/index.ts'
 import { carried as rows } from '../rails/completion-audit/index.ts'
 import { BOARD, headOf, opened, rehearsalBranch, title } from './push.ts'
@@ -122,8 +124,7 @@ function opening(db: Db, root: string, card: Card, desk: Desk, now: Date): Signe
 function withdraw(db: Db, root: string, id: number, desk: Desk): Signed | null {
   const kept = keptOf(root, id)
   if (kept === null) return null
-  const signed = db.prepare(`SELECT 1 FROM approvals WHERE subject_kind = 'plan' AND subject_id = ? AND subject_digest = ?
-    AND decision = 'approved'`).get(id, kept.digest) !== undefined
+  const signed = planSigned(db, id, kept.digest)
   if (!kept.shut) {
     desk.close(kept.no, signed ? 'Signed at the terminal; this card is done.'
       : 'Withdrawn: the job went back for another round before an answer. A new card comes with it.')
@@ -135,9 +136,8 @@ function withdraw(db: Db, root: string, id: number, desk: Desk): Signed | null {
 interface Subject { repo: string; issue_no: number; part: string }
 
 function subjectOf(db: Db, plan: number): Subject {
-  const row = db.prepare('SELECT t.repo, t.issue_no, t.part FROM plans p JOIN targets t ON t.id = p.target_id WHERE p.id = ?')
-    .get(plan) as Subject | undefined
-  if (row === undefined) throw new Error(`plan ${String(plan)} has no target row`)
+  const row = targetRef(db, planById(db, plan).target_id)
+  if (row === null) throw new Error(`plan ${String(plan)} has no target row`)
   return row
 }
 
@@ -351,8 +351,7 @@ function tell(root: string, card: Card, kind: Kind, note: string, now: Date): vo
 }
 
 function carded(db: Db, root: string): number[] {
-  return (db.prepare('SELECT id FROM plans WHERE origin IS NULL AND target_id IS NOT NULL ORDER BY id').all() as { id: number }[])
-    .map((r) => r.id).filter((id) => maybe(root, id, FILE) !== null)
+  return allPlans(db).filter((p) => p.origin === null && p.target_id !== null && maybe(root, p.id, FILE) !== null).map((p) => p.id)
 }
 
 function keptOf(root: string, plan: number): Kept | null {

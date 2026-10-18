@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
+import { approve as approveBatch } from '../../cli/batch.ts'
 import { desk as ghDesk, type Answer, type Desk, type Issue, type Pr, type Seen } from '../../cli/gh.ts'
 import { unread } from '../../cli/inbox.ts'
 import { approvalsOf, signersOf } from '../../store/approvals.ts'
@@ -242,6 +243,16 @@ test('a new head swaps the card; a job sent back closes its card', async () => {
   rewind(w.db, 1, 4)
   expect(signoffs(w.db, w.root, desk)).toEqual([{ plan: 1, card: 101, did: 'withdrawn' }])
   expect(desk.cards.get(101)?.closing).toMatch(/^Withdrawn/)
+})
+
+test('D4 a card signed at the terminal closes as signed', async () => {
+  const w = await atBatch()
+  const desk = fake()
+  signoffs(w.db, w.root, desk)
+  approveBatch(w.db, w.root, 'plan', 1, 'ceo')
+  await tick(w.db, w.root, stub(CARRIED), undefined, quiet, watched([], w.root, 1))
+  expect(signoffs(w.db, w.root, desk)).toEqual([{ plan: 1, card: 100, did: 'withdrawn' }])
+  expect(desk.cards.get(100)?.closing).toMatch(/^Signed at the terminal/)
 })
 
 test('only a label the gh credential owner set is an answer', () => {

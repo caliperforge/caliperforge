@@ -24,6 +24,8 @@ const NEEDED = ['repo', 'fix', 'pre_fix']
 
 export const CEILING = 400_000
 
+const SETUP = 60
+
 const SUITE = 'test/fizz'
 
 const META = 'fizz_data'
@@ -105,7 +107,7 @@ export async function generate(db: Db, root: string, plan: PlanRow, step: Step, 
   const built = packet(manifest, prompt, '', ask(granted[0], granted.find((path) => basename(path) === 'x-ray')), dir,
     pending(planDir(root, plan.id), `step-${String(step.step)}`))
   const fired = await provider.fire({ ...built, refuse: (path) => real(resolve(dir, path)) === real(ATTEMPTS) ? null : built.refuse(path), wall: CEILING,
-    env: TIMEOUTS, reads: [...granted, real(ATTEMPTS)] })
+    env: TIMEOUTS, reads: [...granted, real(ATTEMPTS)], ...(name === 'fizz_generator' ? { idle: SETUP } : {}) })
   const run = runLogged(db, { plan: plan.id, step: step.step, seat: name, rule_hash: hash, provider: provider.name, model: manifest.model,
     effort: manifest.effort, exit: fired.exit, fired, staffed: name })
   byRun(db, run, fired.transcript_path)

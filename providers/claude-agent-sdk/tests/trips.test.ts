@@ -76,3 +76,10 @@ test('an idle builder trips, a writer or a reviewer does not', () => {
   expect(idle(['Read', 'Edit'], true, IDLE_TURNS + 10)).toBeNull()
   expect(idle(['Read', 'Glob', 'Grep'], false, IDLE_TURNS + 10)).toBeNull()
 })
+
+test('D1 D2 D4 a run trips at its own idle limit', () => {
+  expect(idle(['Read', 'Write'], false, 59, 60)).toBeNull()
+  expect(idle(['Read', 'Write'], false, 60, 60)).toContain('run.idle')
+  expect(idle(['Read', 'Write'], false, IDLE_TURNS)).toContain('run.idle')
+  expect(idle(['Read', 'Glob', 'Grep'], false, 600, 60)).toBeNull()
+})

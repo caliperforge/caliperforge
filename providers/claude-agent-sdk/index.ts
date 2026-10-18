@@ -35,7 +35,7 @@ async function fire(packet: Packet): Promise<Fired> {
       settingSources: [], systemPrompt: { type: 'preset', preset: 'claude_code', excludeDynamicSections: true },
       permissionMode: 'default',
       hooks: { PreToolUse: [{ hooks: [(input) => {
-        const over = walled(packet.wall, total(spent)) ?? idle(packet.tools, pace.wrote, pace.turns.size)
+        const over = walled(packet.wall, total(spent)) ?? idle(packet.tools, pace.wrote, pace.turns.size, packet.idle)
         const decision = over === null ? gate(packet, input) : stop(over)
         if (decision.continue && writing(input)) pace.wrote = true
         if (decision.stopReason !== undefined) refused.push(decision.stopReason)
@@ -66,9 +66,9 @@ export function walled(wall: number | undefined, spent: number): string | null {
   return `ruling:run.token_wall stopped the run at ${million(spent)} tokens, past the ${million(wall)} wall`
 }
 
-/** A builder that has spent `IDLE_TURNS` turns without one write stops, before the wall would catch it. Seats without Write never trip. */
-export function idle(tools: string[], wrote: boolean, turns: number): string | null {
-  if (wrote || turns < IDLE_TURNS || !tools.some((t) => WRITES.has(bare(t)))) return null
+/** A builder that has spent `limit` turns without one write stops, before the wall would catch it. Seats without Write never trip. */
+export function idle(tools: string[], wrote: boolean, turns: number, limit = IDLE_TURNS): string | null {
+  if (wrote || turns < limit || !tools.some((t) => WRITES.has(bare(t)))) return null
   return `ruling:run.idle stopped the run after ${String(turns)} turns with nothing written`
 }
 

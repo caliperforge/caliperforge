@@ -254,6 +254,7 @@ test('D2 D4 D5 fizz reads fizz, x-ray and the attempts file', async () => {
   expect(packet.prompt).toContain(`${real(XRAY)}/SKILL.md`)
   expect(packet.env).toEqual({ BASH_DEFAULT_TIMEOUT_MS: '1800000', BASH_MAX_TIMEOUT_MS: '1800000' })
   expect(packet.prompt).toContain('Run forge in the foreground, never in the background, and do not end the turn while waiting on a build.')
+  expect(packet.idle).toBe(60)
 })
 
 test('D1 D2 a root reached through a symlink gets real paths', async () => {
@@ -449,6 +450,7 @@ test('D3 house_generator generates and is scored under its name', async () => {
   expect(fired.packets).toMatchObject([{ tools: seat(root, 'house_generator').manifest.tools }])
   expect(fired.packets[0]?.reads).toEqual([real(ATTEMPTS)])
   expect(fired.packets[0]?.prompt).not.toContain('SKILL_PATH')
+  expect(fired.packets[0]?.idle).toBeUndefined()
   expect(runRows(db)).toMatchObject([{ seat: 'house_generator', staffed: 'house_generator' }])
   expect(kernel(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
   expect(scores(db)).toEqual([{ plan: 1, target: 'euler-earn-m01', generator: 'house_generator', ...SCORE, tokens: 1234, seconds: 1, x_ray: 0 }])

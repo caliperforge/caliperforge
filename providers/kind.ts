@@ -18,6 +18,8 @@ export interface Packet {
   steps?: number
   /** What this one run may spend before it stops, cache reads left out. A packet without one is unwalled. */
   wall?: number
+  /** The turns this run may take with nothing written. A packet without one gets `IDLE_TURNS`. */
+  idle?: number
   refuse: (path: string) => Refusal | null
   /** Folders outside the checkout this run may read, never write. */
   reads?: string[]

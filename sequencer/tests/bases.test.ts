@@ -14,8 +14,8 @@ function gitless(run: () => void): void {
 
 test('D1 world and ours trees copy from base with no git on PATH', () => {
   gitless(() => {
-    for (const files of WORLDS) {
-      const { root } = world('warm', undefined, files)
+    for (const [files, ci] of WORLDS) {
+      const { root } = world('warm', undefined, files, ci)
       for (const repo of ['acme/widget', 'caliperforge/widget']) expect(existsSync(join(root, 'remotes', repo, '.git/HEAD'))).toBe(true)
     }
     for (const [files, ci] of OURS) {

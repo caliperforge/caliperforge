@@ -33,7 +33,7 @@ import { hold, unhold } from '../hold.ts'
 import { forkCi, type Wire } from '../push.ts'
 import { started } from '../signals.ts'
 import { closed } from '../unpolled.ts'
-import { approve, builds, built, CARRIED, dropping, internalPlan, KOTLIN, ours, owning, PASS, plan, PR, REFUSE, rerunning, RUN, runsAfter, runsOn, scored, stub, tip, watched, WORDS, world, type World } from './world.ts'
+import { approve, builds, built, CARRIED, dropping, internalPlan, KOTLIN, ours, owning, PASS, plan, PR, REFUSE, rerunning, RUN, runsAfter, runsOn, scored, stub, tip, TYPESCRIPT, watched, WORDS, world, type World } from './world.ts'
 
 const head = (cwd: string, args: string[]): string => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim()
 
@@ -182,6 +182,39 @@ test('D4 a target/ file HEAD holds stays in the index', () => {
   head(dir, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'tracked app'])
   checkout(root, 1, 'acme/widget', 'widget-12-a1')
   expect(head(dir, ['ls-files', '--', APP])).toBe(APP)
+})
+
+const uved = (): { dir: string; base: string; root: string } => {
+  const w = world()
+  const { dir, base } = checkout(w.root, 1, 'acme/widget', 'widget-12-a1')
+  writeFileSync(join(dir, 'pyproject.toml'), '[project]\nname = "widget"\n')
+  writeFileSync(join(dir, 'uv.lock'), 'version = 1\n')
+  return { dir, base, root: w.root }
+}
+
+test('D2 an untracked uv.lock is not in the diff', () => {
+  const { dir, base } = uved()
+  const diff = gitDiff(dir, base)
+  expect(diff).toContain('pyproject.toml')
+  expect(diff).not.toContain('uv.lock')
+})
+
+test('D3 a reused checkout drops an intent-to-add uv.lock', () => {
+  const { dir, base, root } = uved()
+  head(dir, ['add', '-f', '--intent-to-add', 'uv.lock'])
+  checkout(root, 1, 'acme/widget', 'widget-12-a1')
+  expect(head(dir, ['ls-files', '--', 'uv.lock'])).toBe('')
+  expect(gitDiff(dir, base)).not.toContain('uv.lock')
+})
+
+test('D4 a uv.lock HEAD holds stays in the index and the diff', () => {
+  const { dir, root } = uved()
+  head(dir, ['add', '-f', 'uv.lock'])
+  head(dir, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'tracked lock'])
+  checkout(root, 1, 'acme/widget', 'widget-12-a1')
+  expect(head(dir, ['ls-files', '--', 'uv.lock'])).toBe('uv.lock')
+  writeFileSync(join(dir, 'uv.lock'), 'version = 2\n')
+  expect(gitDiff(dir, head(dir, ['rev-parse', 'HEAD']))).toContain('+version = 2')
 })
 
 test('a kotlin/ brief builds on the kotlin seat, diffed at base', async () => {
@@ -1045,6 +1078,26 @@ test('a head runless after the window goes to the ceo', async () => {
   expect(out?.note).toMatch(/ran no workflow at [0-9a-f]{12} in 10 ticks$/)
   expect(ciGreen(w)).toEqual([])
   expect(plan(w.db, 1)).toMatchObject({ step: 6, retries: 0 })
+})
+
+test('D1 an outside repo with no workflows passes on step 3', async () => {
+  const w = world('warm', undefined, TYPESCRIPT, false)
+  approve(w.db, w.target)
+  const sent: string[] = []
+  const wire = watched(sent, w.root, 1, (args) => {
+    if (args.includes('main')) return '[]'
+    throw new Error('no workflows: github is never asked for runs at the head')
+  })
+  for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  expect(plan(w.db, 1).step).toBe(6)
+
+  const out = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
+  expect(out).toMatchObject({ step: 6, name: 'ready', outcome: 'pass' })
+  expect(plan(w.db, 1).step).toBe(7)
+  expect(ciGreen(w)).toEqual([{ outcome: 'pass' }])
+  expect(get(w.root, 1, 'ci.json')).toBe('[]\n')
+  expect(kindsOf(w.db, 1).map((e) => e.kind).filter((k) => k.startsWith('fork.')).slice(-2)).toEqual(['fork.sent', 'fork.judged'])
+  expect(sent.filter((l) => l.startsWith('send '))).not.toEqual([])
 })
 
 test('a runless head goes to the ceo before Greptile', async () => {

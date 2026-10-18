@@ -34,11 +34,16 @@ export function handOver(db: Db, plan: number, from: number, to: number = proces
 
 /** Frees a plan only while this process still holds it: a lease handed on is the other process's to free. */
 export function drop(db: Db, plan: number, pid: number = process.pid): void {
-  db.prepare('DELETE FROM leases WHERE plan = ? AND pid = ?').run(plan, pid)
+  if (db.prepare('DELETE FROM leases WHERE plan = ? AND pid = ?').run(plan, pid).changes > 0) untag(db, plan)
 }
 
 export function clear(db: Db, plan: number): void {
-  db.prepare('DELETE FROM leases WHERE plan = ?').run(plan)
+  if (db.prepare('DELETE FROM leases WHERE plan = ?').run(plan).changes > 0) untag(db, plan)
+}
+
+/** Only a holder that died leaves `leased` on a plan, the tag `unleased` re-queues on. */
+function untag(db: Db, plan: number): void {
+  db.prepare("UPDATE plans SET wait_reason = NULL WHERE id = ? AND wait_reason = 'leased'").run(plan)
 }
 
 /** The leases a live tick still stands behind; the rest hold nothing. */

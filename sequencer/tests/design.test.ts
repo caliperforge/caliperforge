@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs'
+import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { chromium } from 'playwright-core'
 import { expect, test } from 'vitest'
 import type { Packet } from '../../providers/kind.ts'
@@ -8,7 +9,7 @@ import { load } from '../../runner/rules.ts'
 import { runRows } from '../../store/events.ts'
 import { verdictRows, type Verdict } from '../../store/verdict.ts'
 import { at } from '../../templates/pr-path.ts'
-import { design, screens } from '../design.ts'
+import { design, screens, serve } from '../design.ts'
 import type { Outcome } from '../kind.ts'
 import { fireLanded } from '../seat.ts'
 import { git, planDir, put, srcDir } from '../workspace.ts'
@@ -91,20 +92,94 @@ browsed('D1 a 404 on a fetch under public/ passes', async () => {
   expect(verdict).toMatchObject({ outcome: 'pass', spans: [] })
 })
 
+const fetched = async (web: string, repo: string, path: string): Promise<{ status: number; type: string | null; body: string }> => {
+  const server = await serve(web, repo)
+  try {
+    const res = await fetch(`http://127.0.0.1:${String((server.address() as AddressInfo).port)}${path}`)
+    return { status: res.status, type: res.headers.get('content-type'), body: await res.text() }
+  } finally {
+    server.closeAllConnections()
+    await new Promise((done) => server.close(done))
+  }
+}
+
+const checkout = (fixtures: Record<string, string>): string => {
+  const repo = mkdtempSync(join(tmpdir(), 'design-repo-'))
+  mkdirSync(join(repo, 'public'))
+  writeFileSync(join(repo, 'public', 'style.css'), 'h1 { color: #1a1a1a }')
+  for (const [path, body] of Object.entries(fixtures)) {
+    mkdirSync(dirname(join(repo, path)), { recursive: true })
+    writeFileSync(join(repo, path), body)
+  }
+  return repo
+}
+
+test('D1 /api/now answers with the design/api/now.json fixture', async () => {
+  const repo = checkout({ 'design/api/now.json': '{"plans":[]}' })
+  expect(await fetched(repo, repo, '/api/now')).toEqual({ status: 200, type: 'application/json', body: '{"plans":[]}' })
+})
+
+test('D2 /api/now without a fixture is a 404', async () => {
+  const repo = checkout({})
+  expect((await fetched(repo, repo, '/api/now')).status).toBe(404)
+})
+
+test('D3 a static file under public/ still serves', async () => {
+  const repo = checkout({})
+  expect(await fetched(join(repo, 'public'), repo, '/style.css')).toMatchObject({ status: 200, type: 'text/css' })
+})
+
+test('D4 /api/..%2fx is refused though design/x.json exists', async () => {
+  const repo = checkout({ 'design/x.json': '{}' })
+  expect((await fetched(repo, repo, '/api/..%2fx')).status).toBe(404)
+})
+
+test('D5 a public/ web root reads fixtures from the repo root', async () => {
+  const repo = checkout({ 'design/api/now.json': '{"at":"repo"}' })
+  expect(await fetched(join(repo, 'public'), repo, '/api/now')).toMatchObject({ status: 200, body: '{"at":"repo"}' })
+})
+
 const file = (from: string, to: string): string => [`--- ${from}`, `+++ ${to}`, '@@ -1 +1 @@', '-a', '+b'].join('\n')
 
 test('D5 screens skips deleted html; css alone means index.html', () => {
-  expect(screens([file('a/old.html', '/dev/null'), file('a/app/plans.html', 'b/app/plans.html')].join('\n'))).toEqual(['app/plans.html'])
-  expect(screens(file('a/style.css', 'b/style.css'))).toEqual(['index.html'])
+  const src = checkout({ 'about.html': page('<h1>About</h1>') })
+  expect(screens([file('a/old.html', '/dev/null'), file('a/app/plans.html', 'b/app/plans.html')].join('\n'), src)).toEqual(['app/plans.html'])
+  expect(screens(file('a/style.css', 'b/style.css'), src)).toEqual(['index.html'])
+})
+
+test('D1 a js-only diff screens the page that loads the script', () => {
+  const src = checkout({
+    'sirvoy-helper/rooms.html': page('<script src="el-rooms.js"></script>'),
+    'about.html': page('<h1>About</h1>'),
+    'notes.html': page('<p>el-rooms.js</p>'),
+  })
+  expect(screens(file('a/sirvoy-helper/el-rooms.js', 'b/sirvoy-helper/el-rooms.js'), src)).toEqual(['sirvoy-helper/rooms.html'])
+})
+
+test('D2 a page loading its own app.js is not screened', () => {
+  const src = checkout({
+    'public/index.html': page('<script src="/app.js"></script>'),
+    'public/preview/x/index.html': page('<script src="app.js"></script>'),
+  })
+  expect(screens(file('a/public/app.js', 'b/public/app.js'), src)).toEqual(['public/index.html'])
+})
+
+browsed('D3 a missing page is unserved and leaves no shot', async () => {
+  const src = mkdtempSync(join(tmpdir(), 'design-src-'))
+  const out = mkdtempSync(join(tmpdir(), 'design-out-'))
+  const verdict = await design(src, out, ['missing.html'])
+  expect(verdict).toMatchObject({ outcome: 'refuse', spans: ['missing.html design.unserved'] })
+  expect(readdirSync(join(out, 'design'))).toHaveLength(0)
 })
 
 const stepped = async (name: string, body: string, language: string, seen?: (packet: Packet) => void,
-  system?: string): Promise<{ w: World; outcome: Outcome; seats: string[] }> => {
+  system?: string, ruled: { rulings?: string; issue?: string } = {}): Promise<{ w: World; outcome: Outcome; seats: string[] }> => {
   const w = world()
   load(w.db, w.root)
   writeFileSync(join(srcDir(w.root, 1), name), body)
   if (system !== undefined) writeFileSync(join(srcDir(w.root, 1), 'DESIGN.md'), system)
-  put(w.root, 1, 'issue.md', '# a screen\n\n- D1 add a screen\n')
+  put(w.root, 1, 'issue.md', ruled.issue ?? '# a screen\n\n- D1 add a screen\n')
+  if (ruled.rulings !== undefined) put(w.root, 1, 'rulings.md', ruled.rulings)
   const row = { ...plan(w.db, 1), origin: 'https://github.com/caliperforge/atelier-web/issues/1' }
   const outcome = await fireLanded(w.db, w.root, row, at(4, language), stub(CARRIED, 0, undefined, seen))
   return { w, outcome, seats: runRows(w.db).map((r) => r.seat) }
@@ -130,11 +205,40 @@ browsed('D3 an Other label refuses though the design review passes', async () =>
   expect(outcome.spans).toContain('index.html design.catchall 1440 light Other')
 })
 
+const OTHER = page('<fieldset><legend>Other</legend></fieldset>')
+const WAIVER = 'design waived: build changes no screen'
+
+test('D1 a rulings.md waiver passes with no design run', async () => {
+  const { w, outcome, seats } = await stepped('index.html', OTHER, 'web', undefined, undefined, { rulings: `${WAIVER}\n` })
+  expect(outcome).toEqual({ outcome: 'pass', spans: [], note: WAIVER })
+  expect(seats).not.toContain('design')
+  expect(existsSync(join(planDir(w.root, 1), 'design'))).toBe(false)
+})
+
+test('D2 a waiver in an issue.md Answer section passes', async () => {
+  const issue = `# a screen\n\n- D1 add a screen\n\n## Answer from the coo (2026-10-17)\n\n${WAIVER}\n`
+  const { outcome } = await stepped('index.html', OTHER, 'web', undefined, undefined, { issue })
+  expect(outcome).toEqual({ outcome: 'pass', spans: [], note: WAIVER })
+})
+
+browsed('D4 a waiver in the issue.md body still refuses', async () => {
+  const issue = `# a screen\n\n${WAIVER}\n\n- D1 add a screen\n`
+  const { outcome } = await stepped('index.html', OTHER, 'web', undefined, undefined, { issue })
+  expect(outcome).toMatchObject({ outcome: 'refuse', note: 'design refuse' })
+  expect(outcome.spans).toContain('index.html design.catchall 1440 light Other')
+})
+
 test('D4 a typescript step 4 runs no design review', async () => {
   const { w, outcome, seats } = await stepped('index.html', page('<h1>Plans</h1>'), 'typescript')
   expect(outcome.outcome).toBe('pass')
   expect(seats).not.toContain('design')
   expect(existsSync(join(planDir(w.root, 1), 'design'))).toBe(false)
+})
+
+browsed('D4 an unserved screen refuses before the design review', async () => {
+  const { outcome, seats } = await stepped('style.css', 'h1 { color: #1a1a1a }', 'web')
+  expect(outcome).toEqual({ outcome: 'refuse', spans: ['index.html design.unserved'], note: 'design: no screen served' })
+  expect(seats).not.toContain('design')
 })
 
 const designed = async (system?: string): Promise<string | undefined> => {

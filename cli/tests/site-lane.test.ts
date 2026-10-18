@@ -1,4 +1,4 @@
-import { mkdtempSync } from 'node:fs'
+import { cpSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
@@ -14,8 +14,8 @@ const schema = join(import.meta.dirname, '../../schema')
 const SITE = 'https://github.com/caliperforge/site/issues/1'
 const OURS = 'https://github.com/caliperforge/caliperforge/issues/25'
 
-const canned = (url: string): Read => () =>
-  ({ number: Number(url.split('/').at(-1)), title: 'Rebuild the site', body: 'the ask', url, labels: [{ name: 'lane:site' }] })
+const canned = (url: string, lane = 'site'): Read => () =>
+  ({ number: Number(url.split('/').at(-1)), title: 'Rebuild the site', body: 'the ask', url, labels: [{ name: `lane:${lane}` }] })
 
 const root = (): string => mkdtempSync(join(tmpdir(), 'cf-site-'))
 
@@ -46,6 +46,30 @@ test('D5 a site issue off caliperforge/site is refused', () => {
   const filed = add(fresh(schema), root(), 'caliperforge/caliperforge#25', 'ceo', undefined, canned(OURS))
   expect(filed.state).toBe('refused')
   expect(filed.why).toContain('the site lane builds in caliperforge/site')
+})
+
+const LODGE = 'https://github.com/caliperforge/earth-lodge-site/issues/1'
+
+function lodged(): string {
+  const dir = root()
+  const path = 'profiles/caliperforge/earth-lodge-site.yml'
+  cpSync(join(import.meta.dirname, '../..', path), join(dir, path))
+  return dir
+}
+
+test('1456 D2 earth-lodge-site files on the site lane', () => {
+  const d = fresh(schema)
+  const filed = add(d, lodged(), 'caliperforge/earth-lodge-site#1', 'ceo', undefined, canned(LODGE))
+  expect(filed).toMatchObject({ state: 'queued', lane: 'site', seat: 'web_specialist' })
+  const plan = planById(d, Number(filed.plan))
+  expect(plan.pipe_id).toBe(pipeNamed(d, 'site')?.id)
+  expect(homeOf(plan)).toBe('caliperforge/earth-lodge-site')
+})
+
+test('1456 D3 a loupe issue on earth-lodge-site is refused', () => {
+  const filed = add(fresh(schema), lodged(), 'caliperforge/earth-lodge-site#1', 'ceo', undefined, canned(LODGE, 'loupe'))
+  expect(filed.state).toBe('refused')
+  expect(filed.why).toContain('the loupe lane builds in caliperforge/atelier-web')
 })
 
 test('D6 brief counts the bench and site pipes at 03:00', () => {

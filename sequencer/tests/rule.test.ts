@@ -3,9 +3,11 @@ import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { expect, test } from 'vitest'
 import type { Provider } from '../../providers/kind.ts'
+import { appliedOf } from '../../store/decisions.ts'
 import { eventsOf } from '../../store/events.ts'
 import { edit, filesOf, recorded, strays } from '../../store/files.ts'
 import { migrate, open, type Db } from '../../store/index.ts'
+import { amend } from '../../store/lanes.ts'
 import { planById } from '../../store/plans.ts'
 import type { Wire } from '../push.ts'
 import { woke } from '../director.ts'
@@ -22,7 +24,7 @@ function seeded(step: number) {
   const db = open(':memory:')
   migrate(db, join(repo, 'schema'))
   db.exec(readFileSync(join(repo, 'runner/tests/fixtures/waiting.sql'), 'utf8'))
-  db.prepare("UPDATE plans SET state = 'blocked_on_ceo', wait_reason = NULL, step = ? WHERE id = 7").run(step)
+  amend(db, 7, { state: 'blocked_on_ceo', wait_reason: null, step })
   if (step === 1) db.exec('UPDATE runs SET step = 1 WHERE plan = 7')
   db.exec(`INSERT INTO settings (key, value, who, origin_kind, origin_ref, set_at) VALUES
     ('director.apply', '1', 'ceo', 'ruling', 't', '2026-09-28'), ('fixer.mode', 'live', 'ceo', 'ruling', 't', '2026-09-28')`)
@@ -57,9 +59,9 @@ async function fixed(step: number, fix: string) {
   const { db, home } = seeded(step)
   const posted: string[] = []
   await woke(db, home, stub(fix), now, (t) => void posted.push(t), wire)
-  const state = db.prepare('SELECT state, step FROM plans WHERE id = 7').get()
-  const applied = db.prepare('SELECT applied FROM decisions').all()
-  return { state, applied, posted, ask: maybe(home, 7, 'ask.md'), issue: maybe(home, 7, 'issue.md') }
+  const row = planById(db, 7)
+  const applied = appliedOf(db, 7).map((applied) => ({ applied }))
+  return { state: { state: row.state, step: row.step }, applied, posted, ask: maybe(home, 7, 'ask.md'), issue: maybe(home, 7, 'issue.md') }
 }
 
 test('D1 before a build the answer goes on ask.md, back to step 1', async () => {

@@ -11,7 +11,7 @@ import { holdOf, release, retried, returnToLane } from '../../store/holds.ts'
 import { get, priority } from '../../store/lanes.ts'
 import { advance, briefed, dropPlan, end, needsCeo, requeue, retry, titles } from '../../store/plans.ts'
 import { WHY } from '../../store/refusals.ts'
-import { estimate, files, pointed, references, shape, SHARED, split, TEMPLATE, unclear, writable, type Refused } from '../brief.ts'
+import { claimed, estimate, files, pointed, references, shape, SHARED, split, TEMPLATE, unclear, writable, type Refused } from '../brief.ts'
 import { trimmed } from '../trim.ts'
 import { tick } from '../index.ts'
 import { unhold } from '../hold.ts'
@@ -65,6 +65,10 @@ const titled = (name: string): string => fixture(name).replace('# A seat that br
 
 /** The reply a seat that cannot brief the ask ends with, in place of a brief. */
 const asks = (question: string): string => `---\noutcome: unclear\nquestion: ${question}\n---\n`
+
+const claims = (evidence: string): string => `---\noutcome: claimed\nevidence: ${evidence}\n---\n`
+
+const COVERED = 'PR #9 covers it: https://github.com/acme/widget/pull/9'
 
 function mine(): World {
   const w = world()
@@ -229,6 +233,7 @@ test('the missing part is the span; one D row is its own section', () => {
 test('D1 D2 an outside brief may carry a conventional title', () => {
   const drifts = ask.replace('# A seat that briefs before any build', '# PayKit interface drifts')
   const feat = brief.replace('# A seat that briefs before any build', '# feat(php): Config::fromEnv reads prefixed variables')
+    .replace('\n## Cases', '\n## Reproduced\n\n- command: `npm run test -- sequencer/tests/brief.test.ts`\n- expect: fails\n\n## Cases')
   expect(shape(feat, drifts, repo, true)).toBeNull()
   expect(shape(feat, drifts, repo)).toMatchObject({ span: '# <title>' })
   expect(shape(brief.replace('# A seat', '# Some seat'), ask, repo, true)).toMatchObject({ span: '# <title>' })
@@ -258,6 +263,22 @@ test('bare prose is the question itself; a titled brief is not', () => {
   expect(unclear('')).toBeNull()
 })
 
+test('D1: a claimed fence, bare or wrapped, gives its evidence', () => {
+  expect(claimed(claims('PR #9'))).toBe('PR #9')
+  expect(claimed(`Covered.\n\n\`\`\`yaml\n${claims('PR #9')}\`\`\`\n`)).toBe('PR #9')
+  expect(claimed(claims(COVERED))).toBe(COVERED)
+})
+
+test('D2: no evidence, a brief or another fence is no claim', () => {
+  expect(claimed(brief)).toBeNull()
+  expect(claimed(fixture('unclear.md'))).toBeNull()
+  expect(claimed(asks('which?'))).toBeNull()
+  expect(claimed('---\noutcome: command\nrun: cf gh refile a/b#1 a/c\n---\n')).toBeNull()
+  expect(claimed('---\noutcome: claimed\n---\n')).toBeNull()
+  expect(unclear(claims(COVERED))).toBeNull()
+  expect(split(claims(COVERED))).toBeNull()
+})
+
 test('a fence wrapped in a code block still splits', () => {
   const parts = '---\noutcome: split\nparts:\n  - title: a\n    what: w\n    why: y\n    ends: e\n  - title: b\n    what: w\n    why: y\n    ends: e\n---'
   expect(split(`Two jobs.\n\n\`\`\`yaml\n${parts}\n\`\`\`\n`)?.map((p) => p.title)).toEqual(['a', 'b'])
@@ -273,7 +294,7 @@ test('step 1 fires the seat once, saves the brief, goes to build', async () => {
   const fired = (await tick(w.db, w.root, stub(CARRIED, 0, undefined, (p) => packets.push(p))))[0]
 
   expect(fired).toMatchObject({ step: 1, name: 'ruling', outcome: 'pass' })
-  expect(packets.map((p) => p.tools)).toEqual([['Read', 'Glob', 'Grep', 'mcp__github__read']])
+  expect(packets.map((p) => p.tools)).toEqual([['Read', 'Glob', 'Grep', 'Bash(cf look:*)', 'mcp__github__read']])
   expect(Object.keys(packets[0]?.servers ?? {})).toEqual(['github'])
   expect(packets[0]?.refuse('src/hello.ts')).toMatchObject({ origin_ref: 'seat.write_paths' })
   expect(shape(briefOf(w), askOf(w), srcDir(w.root, ID))).toBeNull()
@@ -427,7 +448,7 @@ test('D1: a length-only refusal refires as a bare trim', async () => {
 
   const prompt = packets[0]?.prompt ?? ''
   expect(prompt).toContain(`# Issue\n\n${longer(plain(w)).trimEnd()}\n\n# Trim it\n`)
-  expect(prompt).toContain('This brief is 109 lines and the ceiling is 100: cut at least 9 lines.')
+  expect(prompt).toContain('This brief is 114 lines and the ceiling is 100: cut at least 14 lines.')
   for (const absent of ['# The files', '# MAP.md', TEMPLATE, '\n# Files over 300 lines\n']) expect(prompt).not.toContain(absent)
   expect(packets[0]?.tools).toEqual([])
   expect(packets[0]?.servers).toBeUndefined()
@@ -468,6 +489,19 @@ test('an unclear reply holds for the COO and spends no retry', async () => {
   expect(plan(w.db, ID)).toMatchObject({ step: 1, retries: 0 })
   expect(holdOf(w.db, ID))
     .toEqual({ held_by: 'coo', held_why: `brief_writer: ${question}` })
+})
+
+test('D3: a claimed reply holds step 1 with its evidence', async () => {
+  const w = world()
+  await tick(w.db, w.root, stub(CARRIED))
+  approve(w.db, w.target)
+  const fired = (await tick(w.db, w.root, stub(CARRIED, 0, undefined, undefined, claims(COVERED))))[0]
+
+  expect(fired).toMatchObject({ step: 1, outcome: 'needs_ceo', state: 'blocked_on_ceo', note: `brief_writer: claimed: ${COVERED}` })
+  expect(maybe(w.root, 1, 'issue.md')).toBeNull()
+  expect(maybe(w.root, 1, 'question.md')).toBeNull()
+  expect(plan(w.db, 1)).toMatchObject({ step: 1, retries: 0 })
+  expect(holdOf(w.db, 1)).toMatchObject({ held_why: `brief_writer: claimed: ${COVERED}` })
 })
 
 test('D1: a question after a shape refusal sets the refusal aside', async () => {

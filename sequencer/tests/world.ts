@@ -49,6 +49,7 @@ const BRIEF = (file: string): string => ['',
   '**What:** add `hello()`.', '**Why:** the ask asks for it.', '**When it ends:** it is exported.', '',
   '## Approach', '', `Write it in \`${file}\`.`, '',
   '## Settled facts', '', '- none: every name the change uses is in this checkout', '',
+  '## Reproduced', '', `- command: \`${file.startsWith('kotlin/') ? './gradlew test' : `npm run test -- ${file}`}\``, '- expect: fails', '',
   '## Cases', '', `- D1 add \`hello()\` in \`${file}\``, '- D2 a call with no name is refused', '',
   '## Must not break', '', '- the exports already in the file', '',
   '## Files', '', `- ${file}`, '',
@@ -137,9 +138,9 @@ export { KOTLIN, TYPESCRIPT } from './bases.ts'
  * own repo and our fork of it. `.cf/git-base` aims the sequencer at them, so it
  * clones, fetches upstream and branches for real, off the network.
  */
-function remotes(root: string, files: Record<string, string>): void {
+function remotes(root: string, files: Record<string, string>, ci: boolean): void {
   const base = join(root, 'remotes')
-  copy('world', files, false, base)
+  copy('world', files, ci, base)
   mkdirSync(join(root, '.cf'), { recursive: true })
   writeFileSync(join(root, '.cf/git-base'), base)
 }
@@ -189,10 +190,10 @@ export function internalPlan(db: Db, root: string, id: number, title = 'let an i
 const opened = new Map<string, Db>()
 
 export function world(pulse: 'warm' | 'cold' = 'warm', day = new Date().toISOString().slice(0, 10),
-  files: Record<string, string> = TYPESCRIPT): World {
+  files: Record<string, string> = TYPESCRIPT, ci = true): World {
   const root = mkdtempSync(join(tmpdir(), 'cf-seq-'))
   for (const dir of ['rules', 'seats', 'reviews', 'rails', 'profiles']) cpSync(join(repo, dir), join(root, dir), { recursive: true })
-  remotes(root, files)
+  remotes(root, files, ci)
   const db = fresh(join(repo, 'schema'))
   opened.set(root, db)
   const merge = pulse === 'warm' ? day : '2000-01-01'
@@ -208,13 +209,13 @@ export function world(pulse: 'warm' | 'cold' = 'warm', day = new Date().toISOStr
 }
 
 /**
- * The store ships five lanes on, over a window with a wall clock in it. A sequencer test is one
+ * The store ships seven lanes on, over a window with a wall clock in it. A sequencer test is one
  * lane wide and runs at whatever hour the suite runs at, so the world opens the pr-path pipe all
- * day and drops the four lanes it does not drive; a test that wants a second names it itself.
+ * day and drops the six lanes it does not drive; a test that wants a second names it itself.
  */
 function onePipe(db: Db): void {
   hours(db, 1, '00:00', '23:59')
-  dropPipes(db, ['comms', 'research', 'bench', 'site'])
+  dropPipes(db, ['comms', 'research', 'bench', 'site', 'rubin', 'bio'])
 }
 
 /** Reads of the first ten briefs (`store/holds.ts`): spent in a world that is not driving them. */

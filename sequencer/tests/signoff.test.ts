@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
+import { approve as approveBatch } from '../../cli/batch.ts'
 import { desk as ghDesk, type Answer, type Desk, type Issue, type Pr, type Seen } from '../../cli/gh.ts'
 import { unread } from '../../cli/inbox.ts'
 import { approvalsOf, signersOf } from '../../store/approvals.ts'
@@ -12,7 +13,7 @@ import { approve as approvePublish } from '../card.ts'
 import { tick } from '../index.ts'
 import { ruled, signoffs, verdict } from '../signoff.ts'
 import { drop, OPERATOR, put, SELF, SIGNOFF, srcDir } from '../workspace.ts'
-import { approve, CARRIED, plan, scored, stub, watched, world, type World } from './world.ts'
+import { approve, CARRIED, plan, scored, stub, TYPESCRIPT, watched, world, type World } from './world.ts'
 
 /** Their pull request as the tick reads it, offline: open and quiet. */
 const quiet = (): Pr => ({
@@ -20,8 +21,8 @@ const quiet = (): Pr => ({
   reviewDecision: null, comments: [], reviews: [], statusCheckRollup: [],
 })
 
-async function atBatch(): Promise<World> {
-  const w = world()
+async function atBatch(ci = true): Promise<World> {
+  const w = world('warm', undefined, TYPESCRIPT, ci)
   approve(w.db, w.target)
   for (let at = 0; at < 7; at += 1) {
     if (at === 2) writeFileSync(join(srcDir(w.root, 1), 'src/hello.ts'), 'export const hello = (): string => "hey"\n')
@@ -244,6 +245,16 @@ test('a new head swaps the card; a job sent back closes its card', async () => {
   expect(desk.cards.get(101)?.closing).toMatch(/^Withdrawn/)
 })
 
+test('D4 a card signed at the terminal closes as signed', async () => {
+  const w = await atBatch()
+  const desk = fake()
+  signoffs(w.db, w.root, desk)
+  approveBatch(w.db, w.root, 'plan', 1, 'ceo')
+  await tick(w.db, w.root, stub(CARRIED), undefined, quiet, watched([], w.root, 1))
+  expect(signoffs(w.db, w.root, desk)).toEqual([{ plan: 1, card: 100, did: 'withdrawn' }])
+  expect(desk.cards.get(100)?.closing).toMatch(/^Signed at the terminal/)
+})
+
 test('only a label the gh credential owner set is an answer', () => {
   const read = (args: string[]): unknown => args[0] === 'issue'
     ? { state: 'OPEN', labels: [{ name: 'go' }, { name: 'talk' }],
@@ -277,6 +288,16 @@ test('a workflow also red on base says so, with its job and step', async () => {
   const desk = fake()
   signoffs(w.db, w.root, desk)
   expect(desk.cards.get(100)?.body).toContain('- Their CI on our fork: Validate red on the base too (validate: Install)')
+})
+
+test('D3 a repo with no CI says what checked it instead', async () => {
+  const w = await atBatch(false)
+  const desk = fake()
+  signoffs(w.db, w.root, desk)
+  const body = desk.cards.get(100)?.body ?? ''
+  expect(body).toContain('\n- this repo has no CI; checked with: none\n')
+  expect(body).not.toContain('Their CI')
+  expect(body).toContain('\nWaiting on you. The four gates passed.\n')
 })
 
 test('a ruling adds a D row and Must not break line, or a section', () => {

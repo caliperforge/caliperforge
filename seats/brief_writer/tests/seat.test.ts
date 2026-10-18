@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import type { Packet } from '../../../providers/kind.ts'
+import { packet } from '../../../runner/index.ts'
 import { Seat, rules, seat } from '../../../runner/rules.ts'
 import { dropPlan } from '../../../store/plans.ts'
 import { section, shape } from '../../../sequencer/brief.ts'
@@ -15,10 +16,12 @@ const servicesOnly = (brief: string): boolean => {
   return rows.length > 0 && rows.every((row) => /^- AtelierTests\/\w+(Service|Model)Tests\.swift /.test(row))
 }
 
-const card = { seat: 'brief_writer', model: 'claude-opus-5-5', effort: 'high', tools: ['Read', 'Glob', 'Grep'], write_paths: [] }
+const card = { seat: 'brief_writer', model: 'claude-opus-5-5', effort: 'high', tools: ['Read', 'Glob', 'Grep', 'Bash(cf look:*)'], write_paths: [] }
 
-test('the manifest holds Read, Glob and Grep, and no write path', () => {
-  expect(Seat.parse(seat(root, 'brief_writer').manifest)).toEqual(card)
+test('D4: the manifest holds cf look, and no write path', () => {
+  const manifest = Seat.parse(seat(root, 'brief_writer').manifest)
+  expect(manifest).toEqual(card)
+  expect(packet(manifest, '', '', '', root, '', false).tools).toContain('Bash(cf look:*)')
 })
 
 test('a seat with no write path but a writing tool does not load', () => {
@@ -31,9 +34,10 @@ test('the roster carries the seat and it loads as a rules row', () => {
   expect(rules(root).find((r) => r.id === 'brief_writer')).toMatchObject({ kind: 'card', path: 'rules/roster/brief_writer.yaml' })
 })
 
-test('the prompt names each shape part and both fences', () => {
+test('D5: the prompt names each shape part, fence and cf look gh', () => {
   const prompt = seat(root, 'brief_writer').prompt
-  for (const part of ['## Approach', '## Settled facts', '## Cases', '## Must not break', '## Files', '## Out of scope', 'outcome: unclear', 'outcome: split']) {
+  for (const part of ['## Approach', '## Settled facts', '## Cases', '## Must not break', '## Files', '## Out of scope', 'outcome: unclear', 'outcome: split',
+    'outcome: claimed', 'cf look gh']) {
     expect(prompt).toContain(part)
   }
 })
@@ -93,6 +97,12 @@ test('the prompt states the brief check\'s path and length rules', () => {
     'A `## Files` row on a file over 300 lines names the block it changes as `path:start-end`.',
     '`# Files over 300 lines`, after the template, lists every file in the checkout that rule applies to, with its length: check each `## Files` row against it before you answer.',
   ]) expect(prompt).toContain(rule)
+})
+
+test('an outside brief carries ## Reproduced, ours does not', () => {
+  const prompt = seat(root, 'brief_writer').prompt.replace(/\s+/g, ' ')
+  expect(prompt).toContain('On someone else\'s repository the brief also carries `## Reproduced`, after `## Settled facts`')
+  expect(prompt).toContain('one off that list, or chained, is refused. A caliperforge/* brief carries no `## Reproduced`.')
 })
 
 test('the prompt carries a word-for-word block under Approach', () => {

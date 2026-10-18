@@ -1,6 +1,7 @@
 import { existsSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, relative } from 'node:path'
+import { subdirs } from '../checks/tree.ts'
 import { real } from '../runner/index.ts'
 import { logged } from '../store/events.ts'
 import { edit, filesOf } from '../store/files.ts'
@@ -10,7 +11,7 @@ import { cited } from './cited.ts'
 import { unruled } from './unruled.ts'
 import { get, headSha, maybe, planDir, put, srcDir } from './workspace.ts'
 
-const PATH = /(?:^|[\s`'"(])(~?\/[\w.-][^\s`'"()]+)/g
+const PATH = /(?:^|[\s`'"(])((?:~|\.\.)?\/[\w.-][^\s`'"()]*)/g
 
 const OUTSIDE = /^ {2}- (\S+):1 authority\.outside_files$/gm
 
@@ -37,11 +38,13 @@ function ruled(issue: string): string {
 
 export function rule(db: Db, root: string, plan: PlanRow, who: string, text: string): 'ask.md' | 'issue.md' | null {
   const other = [...text.matchAll(/\.cf\/work\/(\d+)/g)].some((m) => Number(m[1]) !== plan.id)
-  if (other || /(?:^|[^.])\.\.\//.test(text)) return null
+  if (other || /[^\s`'"(.]\.\.\//.test(text)) return null
   const named = (p: string) => !p.startsWith('~') && [srcDir(root, plan.id), root].some((d) => !relative(d, join(d, p)).startsWith('..') && existsSync(join(d, p)))
   const under = (p: string) => p.startsWith(`${root}/`) || !relative(real(planDir(root, plan.id)), real(p)).startsWith('..')
-  const inside = (p: string) => under(p.replace(/^~(?=\/)/, homedir())) || named(p)
-  if ([...text.matchAll(PATH)].some((m) => !inside(m[1] ?? ''))) return null
+  const climbs = (p: string) => [srcDir(root, plan.id), root].some((b) => [b, ...subdirs(b).map((s) => join(b, s))]
+    .some((d) => existsSync(join(d, p)) && (under(join(d, p)) || !relative(b, join(d, p)).startsWith('..'))))
+  const inside = (p: string) => p.startsWith('..') ? climbs(p) : under(p.replace(/^~(?=\/)/, homedir())) || named(p)
+  if ([...text.replace(/\/{2,}/g, '/').matchAll(PATH)].some((m) => !inside(m[1] ?? ''))) return null
   const section = `## Answer from the ${who} (${new Date().toISOString().slice(0, 10)})\n\n${text.trim()}\n`
   if (!builderRan(db, plan.id)) {
     put(root, plan.id, 'ask.md', `${maybe(root, plan.id, 'ask.md') ?? ''}\n${section}`)

@@ -8,7 +8,7 @@ const LANE_LABEL = /^lane:([a-z]+)$/
 
 const PRIORITY_LABEL = /^P([0-9])$/
 
-export const LANES = ['machine', 'loupe', 'comms', 'research', 'uniswap', 'bench', 'site'] as const
+export const LANES = ['machine', 'loupe', 'comms', 'research', 'uniswap', 'bench', 'site', 'rubin', 'bio'] as const
 
 export type Lane = typeof LANES[number]
 
@@ -26,6 +26,8 @@ export const LANE: Record<Lane, { template: Template; seat: string; home: string
   bench: { template: 'pr_path', seat: 'solidity_specialist', home: 'caliperforge/fuzz-bench', pipe: 'bench' },
   site: { template: 'pr_path', seat: 'web_specialist', home: 'caliperforge/site', pipe: 'site' },
   loupe: { template: 'pr_path', seat: 'web_specialist', home: 'caliperforge/atelier-web', pipe: 'loupe' },
+  rubin: { template: 'pr_path', seat: 'python_specialist', home: 'caliperforge/vo-conformance', pipe: 'rubin' },
+  bio: { template: 'pr_path', seat: 'python_specialist', home: 'caliperforge/vcf-conformance', pipe: 'bio' },
 }
 
 export function laneOf(labels: { name: string }[]): Lane | null {
@@ -214,7 +216,7 @@ export function settingKeys(db: Db, glob: string): string[] {
   return db.prepare('SELECT key FROM settings WHERE key GLOB ?').pluck().all(glob) as string[]
 }
 
-export function amend(db: Db, plan: number, fields: Partial<Pick<PlanRow, 'pipe_id' | 'step' | 'state' | 'retries' | 'head_digest' | 'priority' | 'template' | 'queued_at'>>): void {
+export function amend(db: Db, plan: number, fields: Partial<Pick<PlanRow, 'pipe_id' | 'step' | 'state' | 'retries' | 'head_digest' | 'priority' | 'template' | 'queued_at' | 'wait_reason' | 'target_id'>>): void {
   const cols = Object.keys(fields).map((k) => `${k} = @${k}`).join(', ')
   db.prepare(`UPDATE plans SET ${cols} WHERE id = @id`).run({ ...fields, id: plan })
 }

@@ -7,7 +7,7 @@ import { languageSeat } from '../../../runner/tests/language-seat.ts'
 languageSeat({
   seat: 'python_specialist',
   language: 'python',
-  commands: ['Bash(uv run:*)', 'Bash(uv sync:*)', 'Bash(just:*)'],
+  commands: ['Bash(uv run:*)', 'Bash(uv sync:*)', 'Bash(just:*)', 'Bash(git submodule add:*)'],
   allowed: [
     'uv run --no-project --with pytest python -m pytest tests/test_smoke_leak.py',
     'just --justfile python/Justfile test',
@@ -33,6 +33,16 @@ test('D1: the prompt names pytest for a tree with no project', () => {
   )
   expect(at).toBeGreaterThan(prompt.indexOf('`uv run --directory <folder> pyright`.'))
   expect(at).toBeLessThan(prompt.indexOf('Do not run `ruff format`'))
+})
+
+test('D2: the prompt names the submodule commands', () => {
+  const prompt = seat(join(import.meta.dirname, '../../..'), 'python_specialist').prompt.replace(/\s+/g, ' ')
+  for (const words of [
+    'git submodule add <url> lib/<name>',
+    'git -C lib/<name> checkout <sha>',
+    'only when the brief lists `.gitmodules`',
+  ])
+    expect(prompt).toContain(words)
 })
 
 test('the prompt names no pay-kit or Solana rule', () => {

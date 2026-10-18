@@ -58,6 +58,14 @@ test('any other review throw still refuses', async () => {
   expect(fired).toMatchObject({ step: 4, outcome: 'refuse', spans: ['reviewers.verdict_fence'] })
 })
 
+const GPG = 'Command failed: git commit -S\ngpg: Note: database_open 134217901 waiting for lock (held by 98937) ...\ngpg: keydb_search failed: Operation timed out\ngpg: signing failed: Operation timed out'
+
+test('a gpg key database lock asks a person', () => {
+  const out = thrown(at(6), GPG)
+  expect(out).toMatchObject({ outcome: 'needs_ceo', spans: ['gpg'], message: GPG })
+  expect(out.note).toMatch(/^step 6 ready: gpg waited on a key database lock held by pid 98937 \((running|gone)\); likely ~\/\.gnupg\/public-keys\.d\/pubring\.db\.lock$/)
+})
+
 test('other throws still refuse', () => {
   expect(thrown(at(6), 'plan 123 has no checkout at /x/src')).toMatchObject({ outcome: 'refuse', spans: ['threw: plan 123 has no checkout at /x/src'] })
 })

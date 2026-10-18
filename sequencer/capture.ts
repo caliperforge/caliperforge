@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { pr as readPr, prNumber, rehearsal, WINDOW, type Pr, type Read } from '../cli/gh.ts'
-import { add, LANE, LANES, laneOf, seen, unfiled } from '../cli/plan.ts'
+import { add, homes, LANE, LANES, laneOf, seen, unfiled } from '../cli/plan.ts'
 import { pipesOn, pulls, pushedLive, rehearsing, unpushed } from '../store/capture.ts'
 import { attribute } from '../store/dispositions.ts'
 import { logged, loggedSince } from '../store/events.ts'
@@ -58,7 +58,7 @@ function reachable(db: Db, row: Pushed, read: (repo: string, no: number) => Pr):
 export function intake(db: Db, root: string, read: Read): string[] {
   const lines: string[] = []
   const on = pipesOn(db)
-  for (const repo of new Set(LANES.filter((l) => on.has(LANE[l].pipe)).map((l) => LANE[l].home))) {
+  for (const repo of new Set(LANES.filter((l) => on.has(LANE[l].pipe)).flatMap(homes))) {
     try {
       listed(db, root, repo, read, lines)
     } catch (error) {

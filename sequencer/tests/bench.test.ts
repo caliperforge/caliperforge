@@ -10,11 +10,12 @@ import type { Fired, Packet, Provider } from '../../providers/kind.ts'
 import { real } from '../../runner/index.ts'
 import { seat } from '../../runner/rules.ts'
 import { scores } from '../../store/bench.ts'
-import { eventsOf, runRows } from '../../store/events.ts'
+import { eventsOf, logged, runRows } from '../../store/events.ts'
 import type { Db } from '../../store/index.ts'
 import { dial } from '../../store/lanes.ts'
 import { allPlans, holdOn, pipeNamed, planById, putPlan, waiting, type PlanRow } from '../../store/plans.ts'
 import { CEILING, generate, scored, scratch } from '../../templates/bench.ts'
+import { drift, mechanisms } from '../drift.ts'
 import { unhold } from '../hold.ts'
 import { dry, tick } from '../index.ts'
 import { route } from '../next.ts'
@@ -135,15 +136,18 @@ function staffedIn(root: string): void {
   for (const dir of ['rules', 'seats']) cpSync(join(REPO, dir), join(root, dir), { recursive: true })
 }
 
-/** A generator that spends `tokens`, ends `ended` and writes `wrote`, or test/fizz/FizzTest.sol when `wrote` is true, and when `xray`, x-ray/x-ray.md. */
-function stub(tokens: number, ended: Fired['ended'], wrote: boolean | string[], stop: string | null = null, xray = false): { provider: Provider; packets: Packet[] } {
+const BODY = 'contract FizzTest {\n  function invariant_holds() public {}\n}\n'
+
+/** A generator that spends `tokens`, ends `ended` and writes `body` to `wrote`, or test/fizz/FizzTest.sol when `wrote` is true, and when `xray`, x-ray/x-ray.md. */
+function stub(tokens: number, ended: Fired['ended'], wrote: boolean | string[], stop: string | null = null, xray = false,
+  body = BODY): { provider: Provider; packets: Packet[] } {
   const packets: Packet[] = []
   return { packets, provider: { name: 'claude-agent-sdk', fire: (packet) => {
     packets.push(packet)
     expect(walled(packet.wall, CEILING)).not.toBeNull()
     for (const path of wrote === true ? ['test/fizz/FizzTest.sol'] : wrote === false ? [] : wrote) {
       mkdirSync(dirname(join(packet.cwd, path)), { recursive: true })
-      writeFileSync(join(packet.cwd, path), 'contract FizzTest {}\n')
+      writeFileSync(join(packet.cwd, path), body)
     }
     if (xray) {
       mkdirSync(join(packet.cwd, 'x-ray'), { recursive: true })
@@ -353,6 +357,26 @@ test('D2 a .sol only under fizz_data is refused', async () => {
   const { root, outcome } = await generated(stub(1000, 'completed', ['test/fizz/fizz_data/FizzTest.sol']))
   expect(outcome).toMatchObject({ outcome: 'refuse', spans: ['bench.no_suite'] })
   expect(maybe(root, 1, 'generate.json')).toBeNull()
+})
+
+test('D1 a bare-template suite is refused', async () => {
+  const { root, outcome } = await generated(stub(1000, 'completed', ['test/fizz/Properties.sol'], null, false,
+    'contract Properties {\n  function setUp() public {}\n}\n'))
+  expect(outcome).toMatchObject({ outcome: 'refuse', spans: ['bench.no_properties'], note: expect.stringContaining('test/fizz/Properties.sol') as string })
+  expect(maybe(root, 1, 'generate.json')).toBeNull()
+})
+
+test('D2 a suite with one invariant_ function passes', async () => {
+  const { outcome } = await generated(stub(1000, 'completed', ['test/fizz/Properties.sol']))
+  expect(outcome).toMatchObject({ outcome: 'pass', note: expect.stringMatching(/, 1 properties$/) as string })
+})
+
+test('D4 a generate pass with 0 properties is seen', () => {
+  const db = fresh(schema)
+  logged(db, { plan: null, kind: 'generate', actor: 'generate', outcome: 'pass',
+    message: 'generate.json written: fizz_generator completed, 1000 tokens, 0 properties', pointer: null, run: null }, AT)
+  expect(drift(db, mechanisms(REPO).filter((e) => e.name === 'bench_no_properties'), OPENS))
+    .toMatchObject([{ name: 'bench_no_properties', state: 'seen' }])
 })
 
 test('D5 a stop under the ceiling is refused on its reason', async () => {

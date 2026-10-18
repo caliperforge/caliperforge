@@ -1,0 +1,6 @@
+- name: bench_no_properties
+  table: events
+  column: at
+  where: "kind = 'generate' AND outcome = 'pass' AND message LIKE '%, 0 properties'"
+  gap: 7d
+  expected: 0

@@ -30,6 +30,8 @@ const SUITE = 'test/fizz'
 
 const META = 'fizz_data'
 
+const PROPERTY = /\bfunction\s+(?:invariant|property|echidna)_\w*\s*\(/g
+
 const TIMEOUTS = { BASH_DEFAULT_TIMEOUT_MS: '1800000', BASH_MAX_TIMEOUT_MS: '1800000' }
 
 const ATTEMPTS = '/tmp/x-ray-attempts.md'
@@ -115,12 +117,16 @@ export async function generate(db: Db, root: string, plan: PlanRow, step: Step, 
   const tokens = fired.usage.input + fired.usage.output
   if (fired.ended !== 'completed' && tokens < CEILING) return { outcome: 'refuse', spans: [fired.stop_reason ?? 'seat.exit'], note: `${name} ${fired.ended}` }
   const suite = join(dir, SUITE)
-  if (!existsSync(suite) || !readdirSync(suite, { recursive: true, encoding: 'utf8' }).some((p) => p.endsWith('.sol') && !p.startsWith(`${META}/`))) {
-    return { outcome: 'refuse', spans: ['bench.no_suite'], note: `${name} wrote no .sol under ${SUITE} outside ${META}` }
+  const sols = existsSync(suite) ? readdirSync(suite, { recursive: true, encoding: 'utf8' }).filter((p) => p.endsWith('.sol') && !p.startsWith(`${META}/`)) : []
+  if (sols.length === 0) return { outcome: 'refuse', spans: ['bench.no_suite'], note: `${name} wrote no .sol under ${SUITE} outside ${META}` }
+  const properties = sols.reduce((n, p) => n + (readFileSync(join(suite, p), 'utf8').match(PROPERTY)?.length ?? 0), 0)
+  if (properties === 0) {
+    return { outcome: 'refuse', spans: ['bench.no_properties'],
+      note: `${name} wrote no invariant_, property_ or echidna_ function in ${sols.map((p) => `${SUITE}/${p}`).join(', ')}` }
   }
   put(root, plan.id, 'generate.json', JSON.stringify({ suite: SUITE, tokens, seconds: fired.seconds,
     x_ray: existsSync(join(dir, 'x-ray/x-ray.md')) ? 1 : 0 }))
-  return { outcome: 'pass', spans: [], note: `generate.json written: ${name} ${fired.ended}, ${String(tokens)} tokens` }
+  return { outcome: 'pass', spans: [], note: `generate.json written: ${name} ${fired.ended}, ${String(tokens)} tokens, ${String(properties)} properties` }
 }
 
 export function scored(db: Db, root: string, plan: PlanRow): Outcome {

@@ -1,4 +1,4 @@
-import { existsSync, lstatSync, readFileSync } from 'node:fs'
+import { lstatSync, readFileSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { walk } from '../checks/tree.ts'
 import { parse } from '../rails/diff.ts'
@@ -56,7 +56,7 @@ function group(files: Handed[]): [string, number[]][] {
 
 function held(src: string, path: string, at: number[]): string[] {
   const full = join(src, path)
-  if (!existsSync(full)) return []
+  if (statSync(full, { throwIfNoEntry: false })?.isFile() !== true) return []
   const lines = readFileSync(full, 'utf8').split('\n')
   if (lines.length <= WHOLE) return [block(path, lines, 1, lines.length)]
   if (at.length === 0) return [`## ${path}\n\n${String(lines.length)} lines and no line named: open the part you need.`]

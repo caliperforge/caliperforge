@@ -82,6 +82,14 @@ test('a file the checkout does not hold is handed nothing', () => {
   expect(handout(tree({}), [{ path: 'gone.ts', line: null }])).toBe('')
 })
 
+test('D1 D3 a folder such as a gitlink is handed nothing', () => {
+  const src = tree({ 'a.ts': 'export const a = 1\n' })
+  mkdirSync(join(src, 'lib/forge-std'), { recursive: true })
+  expect(handout(src, [{ path: 'lib/forge-std', line: null }])).toBe('')
+  expect(handout(src, [{ path: 'lib/forge-std', line: null }, { path: 'a.ts', line: null }]))
+    .toBe('# The files\n\nThe files this build needs, as your checkout holds them now.\n\n## a.ts\n\n````\nexport const a = 1\n\n````')
+})
+
 test('D1 D2 long lists text files past WHOLE lines, else nothing', () => {
   const lines = (n: number): string => Array<string>(n).fill('x').join('\n')
   const src = tree({ 'over.ts': lines(WHOLE + 1), 'at.ts': lines(WHOLE), 'bin.dat': `\0${lines(WHOLE + 1)}` })

@@ -939,6 +939,31 @@ test.each(['rule', 'waive', 'split', 'park'])('D3: %s on a cap stop leaves plan 
   expect(told(live.db)).toEqual([{ actor: 'director', outcome: 'pass', message: expect.stringMatching(new RegExp(`^${move}: `)) as string }])
 })
 
+const DESIGNED = 'step 4 review refused by code_quality\n\ndesign: no screen served\n\nspans:\n  (none named)\n'
+
+test('D1 D2: waive on a design stop writes one waiver line', async () => {
+  const { db, home } = seeded('1')
+  for (let i = 0; i < 2; i++) {
+    db.exec("UPDATE plans SET state = 'blocked_on_ceo', wait_reason = NULL WHERE id = 7")
+    put(home, 7, 'refusal.md', DESIGNED)
+    await run(db, home, REPLY.waive ?? '')
+  }
+  expect(maybe(home, 7, 'rulings.md')).toBe('\ndesign waived: the builder can fix the name\n')
+  expect(told(db).map((t) => t.message)).toEqual(['waive: the builder can fix the name', 'waive: the builder can fix the name'])
+})
+
+test('D3: waive on a rails stop or a queued plan writes nothing', async () => {
+  const rails = seeded('1')
+  await run(rails.db, rails.home, REPLY.waive ?? '')
+  expect(maybe(rails.home, 7, 'rulings.md')).toBeNull()
+  const { db, home } = seeded('1')
+  put(home, 7, 'refusal.md', DESIGNED)
+  requeue(db, 7, row(db).step)
+  await run(db, home, REPLY.waive ?? '')
+  expect(told(db).map((t) => t.outcome)).toEqual(['needs_coo'])
+  expect(maybe(home, 7, 'rulings.md')).toBeNull()
+})
+
 test('D4: park holds plan 7 until its time', async () => {
   const { db, home } = capStop()
   await run(db, home, REPLY.park ?? '')

@@ -19,6 +19,7 @@ import { clear, sentOnce } from '../store/refusals.ts'
 import { kin, runs, stopped, waking, type Stop } from '../store/stops.ts'
 import { pending } from '../store/transcript.ts'
 import { split, type Part } from './brief.ts'
+import { waive } from './design.ts'
 import { hold, isHeld, unhold } from './hold.ts'
 import { found } from './findings.ts'
 import { fixed, stop } from './fixed.ts'
@@ -48,6 +49,7 @@ const Said = z.object({
   .refine((m) => m.move !== 'park' || m.until !== undefined, { path: ['until'] })
 
 const CAPPED = ['rule', 'waive', 'split', 'park']
+const DESIGN = /^step 4 review refused by \S+\n\ndesign[: ]/
 
 type Move = z.infer<typeof Said> | { move: 'split'; why: string; parts: Part[] }
 
@@ -254,6 +256,13 @@ const UNAPPLIED: Record<Exclude<Move['move'], 'ask_ceo' | 'ask_coo'>, string> = 
   park: 'the plan was not held',
 }
 
+function waiving(db: Db, root: string, plan: PlanRow, why: string): boolean {
+  if (plan.state !== 'blocked_on_ceo') return false
+  if (DESIGN.test(maybe(root, plan.id, 'refusal.md') ?? '')) waive(root, plan.id, why)
+  afresh(root, plan.id, retried(db, plan.id, 'director'))
+  return true
+}
+
 /** Each move is the call its `cf` command makes; false leaves the stop with a person. */
 function apply(db: Db, root: string, plan: PlanRow, m: Move, wire: Wire, now: Date): boolean | string {
   switch (m.move) {
@@ -268,9 +277,7 @@ function apply(db: Db, root: string, plan: PlanRow, m: Move, wire: Wire, now: Da
       return true
     }
     case 'waive':
-      if (plan.state !== 'blocked_on_ceo') return false
-      afresh(root, plan.id, retried(db, plan.id, 'director'))
-      return true
+      return waiving(db, root, plan, m.why)
     case 'split':
       if (parted(db, root, plan, m.parts, wire).split !== true) return false
       end(db, plan.id, 'done')

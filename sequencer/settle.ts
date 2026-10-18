@@ -25,6 +25,7 @@ import { fireBrief, fireLanded, fireSeat } from './seat.ts'
 import { proved } from './ready.ts'
 import { kernel, mapOf, targetOf } from './steps.ts'
 import { kept } from './merge.ts'
+import { keyLock } from './keyring.ts'
 import { languageFor } from './route.ts'
 import { unbuilt } from './rails.ts'
 import { branchOf, checkout, cloned, diffOf, drop, git, internalBranch, maybe, PR_BRANCH, put, ruled, srcDir, titleOf } from './workspace.ts'
@@ -166,6 +167,8 @@ const OFFLINE = /Could not resolve host|getaddrinfo|ENOTFOUND|EAI_AGAIN|ENETUNRE
 export const HELD = 'the next tick tries again'
 
 export function thrown(step: Step, message: string): Outcome {
+  const lock = keyLock(message)
+  if (lock !== null) return { outcome: 'needs_ceo', spans: ['gpg'], note: `step ${String(step.step)} ${step.name}: ${lock}`, message }
   if (OFFLINE.test(message)) return held(step, 'offline', 'the network is down')
   if (message.includes(LOCKED)) return held(step, 'locked', 'the store is locked')
   return { outcome: 'refuse', spans: [`threw: ${message.split('\n')[0] ?? ''}`],

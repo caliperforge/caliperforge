@@ -71,6 +71,7 @@ VALUES
   ('rules/registry/61-house_generator.yaml', 'card', 'rules/registry/61-house_generator.yaml', 'f0f205cb02cc5ff52f5148b6dde254e6cfccd8dff6809c9ddc387e0bf338f0ba', '2026-10-16'),
   ('rules/registry/62-design_on_main.yaml', 'card', 'rules/registry/62-design_on_main.yaml', '70c5b6cd3c7a15ff1a87a2d0cb7fb2d5a5a76b9eb78bd1b6d0dffc61a298c005', '2026-10-16'),
   ('rules/registry/63-earth_lodge_site.yaml', 'card', 'rules/registry/63-earth_lodge_site.yaml', 'f3f290255ef61ebf0a0403d370d5429df4a619d8107d5796cc4abb88951686e4', '2026-10-17'),
+  ('rules/registry/64-gpg_lock_hold.yaml', 'card', 'rules/registry/64-gpg_lock_hold.yaml', '0cbeabe3ed2f736000a326417e918a1c38b2c2b4fb6ee96727edd5322bbf66ad', '2026-10-18'),
   ('rules/repo-classes.yaml', 'card', 'rules/repo-classes.yaml', '0ab38b3779b38a5b57c3eaae4ace5e650618dfb4fecbd80b4477958b115ee550', '2026-10-16'),
   ('rules/staffing.yaml', 'card', 'rules/staffing.yaml', 'aa91207f2660fe1f31421d100b3118981715abc9ed8e1381a6d2962c464d0d36', '2026-10-05'),
   ('completion-audit', 'rail', 'rules/rails.yaml', 'b46b445806d399b61887a5259eb0a6893444efcbe5acf2e6dd534507bc0882f3', '2026-09-17'),

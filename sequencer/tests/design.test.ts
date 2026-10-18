@@ -9,7 +9,7 @@ import { load } from '../../runner/rules.ts'
 import { runRows } from '../../store/events.ts'
 import { verdictRows, type Verdict } from '../../store/verdict.ts'
 import { at } from '../../templates/pr-path.ts'
-import { design, screens, serve } from '../design.ts'
+import { design, screens, serve, waive } from '../design.ts'
 import type { Outcome } from '../kind.ts'
 import { fireLanded } from '../seat.ts'
 import { git, planDir, put, srcDir } from '../workspace.ts'
@@ -173,13 +173,14 @@ browsed('D3 a missing page is unserved and leaves no shot', async () => {
 })
 
 const stepped = async (name: string, body: string, language: string, seen?: (packet: Packet) => void,
-  system?: string, ruled: { rulings?: string; issue?: string } = {}): Promise<{ w: World; outcome: Outcome; seats: string[] }> => {
+  system?: string, ruled: { rulings?: string; issue?: string; waive?: string } = {}): Promise<{ w: World; outcome: Outcome; seats: string[] }> => {
   const w = world()
   load(w.db, w.root)
   writeFileSync(join(srcDir(w.root, 1), name), body)
   if (system !== undefined) writeFileSync(join(srcDir(w.root, 1), 'DESIGN.md'), system)
   put(w.root, 1, 'issue.md', ruled.issue ?? '# a screen\n\n- D1 add a screen\n')
   if (ruled.rulings !== undefined) put(w.root, 1, 'rulings.md', ruled.rulings)
+  if (ruled.waive !== undefined) waive(w.root, 1, ruled.waive)
   const row = { ...plan(w.db, 1), origin: 'https://github.com/caliperforge/atelier-web/issues/1' }
   const outcome = await fireLanded(w.db, w.root, row, at(4, language), stub(CARRIED, 0, undefined, seen))
   return { w, outcome, seats: runRows(w.db).map((r) => r.seat) }
@@ -219,6 +220,12 @@ test('D2 a waiver in an issue.md Answer section passes', async () => {
   const issue = `# a screen\n\n- D1 add a screen\n\n## Answer from the coo (2026-10-17)\n\n${WAIVER}\n`
   const { outcome } = await stepped('index.html', OTHER, 'web', undefined, undefined, { issue })
   expect(outcome).toEqual({ outcome: 'pass', spans: [], note: WAIVER })
+})
+
+test('D4 a director waive passes with no design run', async () => {
+  const { outcome, seats } = await stepped('index.html', OTHER, 'web', undefined, undefined, { waive: 'build changes no screen' })
+  expect(outcome).toEqual({ outcome: 'pass', spans: [], note: WAIVER })
+  expect(seats).not.toContain('design')
 })
 
 browsed('D4 a waiver in the issue.md body still refuses', async () => {

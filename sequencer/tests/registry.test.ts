@@ -102,6 +102,21 @@ test('designOnMainSeen D5', () => {
   expect(drift(d, onMain, NOW)).toMatchObject([{ name: 'design_on_main', state: 'seen', newest: '2026-10-02 10:00:00' }])
 })
 
+test('sitePushSeen D5', () => {
+  const sitePush = REGISTRY.filter((e) => e.name === 'site_push')
+  const push = (d: Db, outcome: 'pass' | 'refuse', at: string | null): void => {
+    logged(d, { plan: null, kind: 'site_push', actor: 'tick', outcome, message: 'm', pointer: null, run: null }, at)
+  }
+  const d = db()
+  push(d, 'refuse', '2026-10-02 10:00:00')
+  expect(drift(d, sitePush, NOW)).toMatchObject([{ name: 'site_push', state: 'seen', newest: '2026-10-02 10:00:00' }])
+  push(d, 'pass', '2026-10-02 11:00:00')
+  expect(drift(d, sitePush, NOW)).toEqual([])
+  const now = db()
+  push(now, 'refuse', null)
+  expect(drift(now, sitePush, new Date())).toEqual([])
+})
+
 test('catchupRangeClearsSilent D4', () => {
   const d = db()
   const catchup = REGISTRY.filter((e) => e.name === 'writer_catchup')

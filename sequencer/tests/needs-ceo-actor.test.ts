@@ -4,6 +4,7 @@ import { putPlan } from '../../store/plans.ts'
 import { addTarget } from '../../store/targets.ts'
 import { drift } from '../drift.ts'
 import { tick } from '../index.ts'
+import { put } from '../workspace.ts'
 import { REGISTRY } from './drifting.ts'
 import { approve, CARRIED, stub, watched, WORDS, world } from './world.ts'
 
@@ -18,6 +19,7 @@ test('only the coo writes needs_ceo across the three stops', async () => {
   addTarget(w.db, { account_id: 1, repo: 'acme/widget', issue_no: 13, named_merger: 'maintainer', state: 'parked',
     evidence_measured_at: day, evidence: 'https://github.com/acme/widget/issues/13' })
   putPlan(w.db, { id: 2, pipe_id: 1, target_id: 2, template: 'pr_path', state: 'running', queued_at: `${day}T00:00:00.000Z`, step: 2, retries: 0 })
+  put(w.root, 2, 'issue.md', '# t\n')
   const t = Date.now()
   const later = new Date(t + 61 * 60_000)
   for (const now of [new Date(t), new Date(t + 30 * 60_000), later]) {

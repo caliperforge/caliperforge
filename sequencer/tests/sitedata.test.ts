@@ -66,6 +66,20 @@ test('D1 the first lap from 05:15 commits and pushes the data', () => {
   expect(pointers(db, 'site_data')).toEqual(['2026-10-14'])
 })
 
+test('D2 a moved origin is merged under the data commit', () => {
+  const other = join(root, 'other')
+  git(root, ['clone', origin, other])
+  for (const pair of [['user.name', 'cf test'], ['user.email', 'test@example.invalid'], ['commit.gpgsign', 'false']]) git(other, ['config', ...pair])
+  writeFileSync(join(other, 'CNAME'), 'caliperforge.com\n')
+  git(other, ['add', 'CNAME'])
+  git(other, ['commit', '-m', 'theirs'])
+  git(other, ['push'])
+  sitedata(db, root, FIRST)
+  expect(git(clone, ['log', '-1', '--format=%P']).trim().split(' ')).toHaveLength(2)
+  expect(git(clone, ['log', '-1', '--format=%s', 'HEAD^1']).trim()).toBe('data: 2026-10-14')
+  expect(head(origin)).toBe(head(clone))
+})
+
 test('D2 a second lap the same date does nothing', () => {
   sitedata(db, root, FIRST)
   const before = head(clone)

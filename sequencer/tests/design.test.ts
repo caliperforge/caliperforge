@@ -164,12 +164,13 @@ browsed('D3 a missing page is unserved and leaves no shot', async () => {
 })
 
 const stepped = async (name: string, body: string, language: string, seen?: (packet: Packet) => void,
-  system?: string): Promise<{ w: World; outcome: Outcome; seats: string[] }> => {
+  system?: string, ruled: { rulings?: string; issue?: string } = {}): Promise<{ w: World; outcome: Outcome; seats: string[] }> => {
   const w = world()
   load(w.db, w.root)
   writeFileSync(join(srcDir(w.root, 1), name), body)
   if (system !== undefined) writeFileSync(join(srcDir(w.root, 1), 'DESIGN.md'), system)
-  put(w.root, 1, 'issue.md', '# a screen\n\n- D1 add a screen\n')
+  put(w.root, 1, 'issue.md', ruled.issue ?? '# a screen\n\n- D1 add a screen\n')
+  if (ruled.rulings !== undefined) put(w.root, 1, 'rulings.md', ruled.rulings)
   const row = { ...plan(w.db, 1), origin: 'https://github.com/caliperforge/atelier-web/issues/1' }
   const outcome = await fireLanded(w.db, w.root, row, at(4, language), stub(CARRIED, 0, undefined, seen))
   return { w, outcome, seats: runRows(w.db).map((r) => r.seat) }
@@ -191,6 +192,29 @@ browsed('D2 web step 4 leaves screenshots, a design run and verdict', async () =
 
 browsed('D3 an Other label refuses though the design review passes', async () => {
   const { outcome } = await stepped('index.html', page('<fieldset><legend>Other</legend></fieldset>'), 'web')
+  expect(outcome).toMatchObject({ outcome: 'refuse', note: 'design refuse' })
+  expect(outcome.spans).toContain('index.html design.catchall 1440 light Other')
+})
+
+const OTHER = page('<fieldset><legend>Other</legend></fieldset>')
+const WAIVER = 'design waived: build changes no screen'
+
+test('D1 a rulings.md waiver passes with no design run', async () => {
+  const { w, outcome, seats } = await stepped('index.html', OTHER, 'web', undefined, undefined, { rulings: `${WAIVER}\n` })
+  expect(outcome).toEqual({ outcome: 'pass', spans: [], note: WAIVER })
+  expect(seats).not.toContain('design')
+  expect(existsSync(join(planDir(w.root, 1), 'design'))).toBe(false)
+})
+
+test('D2 a waiver in an issue.md Answer section passes', async () => {
+  const issue = `# a screen\n\n- D1 add a screen\n\n## Answer from the coo (2026-10-17)\n\n${WAIVER}\n`
+  const { outcome } = await stepped('index.html', OTHER, 'web', undefined, undefined, { issue })
+  expect(outcome).toEqual({ outcome: 'pass', spans: [], note: WAIVER })
+})
+
+browsed('D4 a waiver in the issue.md body still refuses', async () => {
+  const issue = `# a screen\n\n${WAIVER}\n\n- D1 add a screen\n`
+  const { outcome } = await stepped('index.html', OTHER, 'web', undefined, undefined, { issue })
   expect(outcome).toMatchObject({ outcome: 'refuse', note: 'design refuse' })
   expect(outcome.spans).toContain('index.html design.catchall 1440 light Other')
 })

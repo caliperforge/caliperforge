@@ -65,7 +65,14 @@ export function screens(diff: string, src: string): string[] {
   return files.filter((f) => !f.deleted && f.path.endsWith('.html')).map((f) => f.path)
 }
 
+function waived(root: string, plan: number): string | null {
+  const ruled = (maybe(root, plan, 'issue.md') ?? '').split(/^(?=## )/m).filter((s) => /^## (?:Ruling|Answer)/.test(s))
+  return /^design waived: *(\S.*)$/m.exec([maybe(root, plan, 'rulings.md') ?? '', ...ruled].join('\n'))?.[1] ?? null
+}
+
 export async function looked(db: Db, root: string, plan: PlanRow, provider: Provider): Promise<Outcome> {
+  const reason = waived(root, plan.id)
+  if (reason !== null) return { outcome: 'pass', spans: [], note: `design waived: ${reason}` }
   const diff = diffOf(root, plan.id)
   const src = srcDir(root, plan.id)
   const pages = screens(diff, src)

@@ -15,7 +15,8 @@ import type { Board } from '../rails/ci-green/index.ts'
 import { carried as rows } from '../rails/completion-audit/index.ts'
 import { BOARD, headOf, opened, rehearsalBranch, title } from './push.ts'
 import { GRADING } from './ready.ts'
-import { diffOf, drop, FORK, get, maybe, put, repoName } from './workspace.ts'
+import { checked } from './seat.ts'
+import { diffOf, drop, FORK, get, maybe, put, repoName, srcDir } from './workspace.ts'
 
 /**
  * An outside job is signed off without a terminal. A plan waiting at step 7 gets one
@@ -170,7 +171,7 @@ function bodyFor(db: Db, root: string, card: Card, desk: Desk): string {
     `- Change: ${card.change.trim().split('\t').join(', ')}; ${files}[the commit on our fork](https://github.com/${fork}/commit/${head.sha})`,
     `- Gates: ${card.marks.map((m) => `${m.name} ${m.ok ? 'pass' : 'NOT PASSED'}`).join(', ')}`,
     ...modes(root, card.id),
-    ...(ci === null ? [] : [`- Their CI on our fork: ${ciLine(ci)}`]),
+    ci === null ? `- this repo has no CI; checked with: ${ranAt(db, root, card.id)}` : `- Their CI on our fork: ${ciLine(ci)}`,
     `- Greptile on our fork: ${greptileLine(db, card.id, head.sha)}`,
     open === null
       ? `- Goes out as: a new pull request titled ${code(title(root, card.id))}`
@@ -284,9 +285,15 @@ function state(r: Board): string {
   return r.conclusion === 'success' ? 'green' : r.conclusion === 'failure' ? 'red' : r.conclusion
 }
 
+function ranAt(db: Db, root: string, plan: number): string {
+  const ran = checked(db, root, planById(db, plan), srcDir(root, plan), diffOf(root, plan)).checks?.split('\n\n')[0] ?? '- none'
+  return ran === '- none' ? 'none' : ran.split('\n').map((l) => l.replace(/^- /, '')).join('; ')
+}
+
 function boardOf(root: string, plan: number): Board[] | null {
   const saved = maybe(root, plan, BOARD)
-  return saved === null ? null : JSON.parse(saved) as Board[]
+  const board = saved === null ? [] : JSON.parse(saved) as Board[]
+  return board.length === 0 ? null : board
 }
 
 function lastMessage(dir: string): string {

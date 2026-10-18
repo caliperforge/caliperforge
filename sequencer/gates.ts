@@ -108,9 +108,15 @@ const PREFIX: Record<OutsideLanguage, string> = { rust: 'rs-', python: 'py-', ru
 
 const JUSTFILE = 'Justfile'
 
-/** What step 3 runs on an outside plan: install, then the gates upstream runs, in the language's own folder, then its workflows' regenerate-and-diff steps at the root. */
+/** What step 3 runs on an outside plan: install, then the gates upstream runs, in the language's own folder, then SUSHI and its workflows' regenerate-and-diff steps at the root. */
 export function gates(src: string, outside: Outside, excused: string[] = []): Gate[] {
-  return [...own(src, outside, excused), ...regenerated(src)]
+  return [...own(src, outside, excused), ...sushi(src), ...regenerated(src)]
+}
+
+const SUSHI = 'fsh-sushi@3.12.0'
+
+export function sushi(src: string): Gate[] {
+  return existsSync(join(src, 'sushi-config.yaml')) ? [{ script: 'sushi', bin: 'npx', args: ['--yes', '--package', SUSHI, 'sushi', '.'], dir: '' }] : []
 }
 
 function own(src: string, outside: Outside, excused: string[]): Gate[] {

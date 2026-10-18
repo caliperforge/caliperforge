@@ -105,7 +105,7 @@ function cappedOf(bin: Mode, ran: Extract<Ran, { ok: false }>): { capped?: true 
  * A stranger's repo in a language with its own seat runs that language's gates in the language's own folder.
  * A gate marked `quiet` fails on any output, as `gofmt -l` exits zero and prints the files it would change.
  */
-function gated(src: string, list: Gate[], run: Run, excused: string[] = []): Failure | null {
+export function gated(src: string, list: Gate[], run: Run, excused: string[] = []): Failure | null {
   for (const gate of list) {
     const cwd = join(src, gate.dir)
     const where = gate.dir === '' ? '' : ` (in ${gate.dir}/)`

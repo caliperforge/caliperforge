@@ -236,8 +236,10 @@ test('D2 D4 D5 fizz reads fizz, x-ray and the attempts file', async () => {
   for (const path of [join(homedir(), '.claude/skills/other/SKILL.md'), '/tmp/other.md']) {
     expect(readOutside(packet.cwd, 'Read', { file_path: path }, packet.reads)).toContain('run.outside_checkout')
   }
-  for (const path of [ATTEMPTS, join(packet.cwd, 'x-ray/x-ray.md')]) expect(packet.refuse(path)).toBeNull()
-  for (const path of ['/tmp/other.md', join(packet.cwd, 'README.md')]) expect(packet.refuse(path)).toMatchObject({ origin_ref: 'seat.write_paths' })
+  for (const path of [ATTEMPTS, join(packet.cwd, 'x-ray/x-ray.md'), join(packet.cwd, 'medusa.json')]) expect(packet.refuse(path)).toBeNull()
+  for (const path of ['/tmp/other.md', join(packet.cwd, 'README.md'), join(packet.cwd, 'src/medusa.json')]) {
+    expect(packet.refuse(path)).toMatchObject({ origin_ref: 'seat.write_paths' })
+  }
   expect(packet.prompt).toContain(`SKILL_PATH is ${real(SKILL)}.`)
   expect(packet.prompt).toContain(`${real(XRAY)}/SKILL.md`)
   expect(packet.env).toEqual({ BASH_DEFAULT_TIMEOUT_MS: '1800000', BASH_MAX_TIMEOUT_MS: '1800000' })

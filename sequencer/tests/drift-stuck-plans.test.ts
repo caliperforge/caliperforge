@@ -7,7 +7,7 @@ import type { Db } from '../../store/index.ts'
 import { take } from '../../store/leases.ts'
 import { drift, stuck } from '../drift.ts'
 import { HELD } from '../settle.ts'
-import { conflicted, git, maybe } from '../workspace.ts'
+import { conflicted, drop, git, maybe, put } from '../workspace.ts'
 import { COO, db, event, NOW } from './drifting.ts'
 
 const STUCK = [{ name: 'stuck_plans', gap: '1h' }]
@@ -17,8 +17,33 @@ function stalling(): { d: Db; root: string } {
   const d = db()
   d.exec(`UPDATE plans SET state = 'running', step = 3, wait_reason = 'lane_over_cap';
     UPDATE pipes SET window_start = '00:00', window_end = '23:59'`)
-  return { d, root: mkdtempSync(join(tmpdir(), 'stuck-')) }
+  const root = mkdtempSync(join(tmpdir(), 'stuck-'))
+  put(root, 1, 'issue.md', '# t\n')
+  return { d, root }
 }
+
+test('stuckNoIssueRewinds', () => {
+  const { d, root } = stalling()
+  drop(root, 1, 'issue.md')
+  d.exec('UPDATE plans SET step = 6, retries = 1')
+  expect(stuck(d, root, STUCK, at(0))).toEqual([])
+  expect(d.prepare('SELECT step, retries, state FROM plans WHERE id = 1').get()).toEqual({ step: 1, retries: 0, state: 'running' })
+  expect(d.prepare("SELECT actor, outcome, message FROM events WHERE kind = 'stuck'").all())
+    .toEqual([{ actor: 'drift', outcome: 'pass', message: 'step 6 has no issue.md to work from; back to the brief' }])
+  expect(maybe(root, 1, 'stuck.json')).toBeNull()
+})
+
+test('stuckNoIssueRefused', () => {
+  for (const plan of ['step = 1', "template = 'comms'", 'lease']) {
+    const { d, root } = stalling()
+    drop(root, 1, 'issue.md')
+    if (plan === 'lease') take(d, 1, at(0))
+    else d.exec(`UPDATE plans SET ${plan}`)
+    expect(stuck(d, root, STUCK, at(0))).toEqual([])
+    expect(d.prepare('SELECT step FROM plans WHERE id = 1').get()).toEqual({ step: plan === 'step = 1' ? 1 : 3 })
+    expect(ofKind(d, 'stuck')).toEqual([])
+  }
+})
 
 test('stuckOnce', () => {
   const { d, root } = stalling()

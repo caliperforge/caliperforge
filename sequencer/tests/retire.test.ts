@@ -50,8 +50,9 @@ test('a first send or the same -next again retires nothing', () => {
   expect(log).toEqual([])
 })
 
-function forwarded(log: string[], at: string, statuses: string[]): ReturnType<typeof watched> {
-  return { ...watched(log, at, 1, runs(log, 'main', statuses)),
+function forwarded(log: string[], at: string, branch: string, statuses: string[]): ReturnType<typeof watched> {
+  return { ...watched(log, at, 1, runs(log, branch, statuses)),
+    merged: () => ({ default_branch: branch }),
     forward: (fork: string, base: string) => void log.push(`forward ${fork} ${base}`) }
 }
 
@@ -59,14 +60,47 @@ test('D4 a move cancels the fork’s running main runs', () => {
   const log: string[] = []
   const at = root()
   put(at, 1, 'base.sha', 'a1\n')
-  based(at, 1, FORK, forwarded(log, at, ['in_progress']))
+  based(at, 1, FORK, forwarded(log, at, 'main', ['in_progress']))
   expect(log).toEqual([`forward ${FORK} a1`, `run cancel 1 --repo ${FORK}`])
+})
+
+test('D1 a master-default fork cancels its runs on master', () => {
+  const log: string[] = []
+  const branches: string[] = []
+  const at = root()
+  put(at, 1, 'base.sha', 'a1\n')
+  const wire = forwarded(log, at, 'master', ['queued', 'completed'])
+  based(at, 1, FORK, { ...wire, runs: (args) => {
+    if (args[1] === 'list') branches.push(args[args.indexOf('--branch') + 1] ?? '')
+    return wire.runs(args)
+  } })
+  expect(branches).toEqual(['master'])
+  expect(log).toEqual([`forward ${FORK} a1`, `run cancel 1 --repo ${FORK}`])
+})
+
+test('D3 a wire with no forward makes no call', () => {
+  const log: string[] = []
+  const at = root()
+  const calls: string[][] = []
+  const record = (args: string[]): string => { calls.push(args); return '[]' }
+  based(at, 1, FORK, { ...watched(log, at, 1, record), merged: record })
+  expect(calls).toEqual([])
+  expect(log).toEqual([])
+})
+
+test('D4 a fork read with no default_branch throws', () => {
+  const log: string[] = []
+  const at = root()
+  put(at, 1, 'base.sha', 'a1\n')
+  const wire = { ...forwarded(log, at, 'main', ['in_progress']), merged: () => ({}) }
+  expect(() => { based(at, 1, FORK, wire) }).toThrow()
+  expect(log).toEqual([`forward ${FORK} a1`])
 })
 
 test('D4 a rewritten base.sha reaches the next move', () => {
   const log: string[] = []
   const at = root()
-  const wire = forwarded(log, at, [])
+  const wire = forwarded(log, at, 'main', [])
   put(at, 1, 'base.sha', 'a1\n')
   based(at, 1, FORK, wire)
   put(at, 1, 'base.sha', 'b2\n')

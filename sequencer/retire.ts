@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { trunk } from '../cli/gh.ts'
 import type { Gh } from '../rails/ci-green/index.ts'
 import type { Wire } from './push.ts'
 import { get, maybe, put } from './workspace.ts'
@@ -33,8 +34,9 @@ export function moved(root: string, plan: number, fork: string, ci: string, wire
   put(root, plan, SENT, ci)
 }
 
-/** The move of the fork's `main` to `base.sha`, before the head goes out, starts the fork's `main` workflows. */
+/** The move of the fork's default branch to `base.sha`, before the head goes out, starts the fork's default branch workflows. */
 export function based(root: string, plan: number, fork: string, wire: Wire): void {
-  wire.forward?.(fork, get(root, plan, 'base.sha').trim())
-  cancel(fork, 'main', wire.runs)
+  if (wire.forward === undefined) return
+  wire.forward(fork, get(root, plan, 'base.sha').trim())
+  cancel(fork, trunk(fork, wire.merged), wire.runs)
 }

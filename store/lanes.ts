@@ -216,7 +216,7 @@ export function settingKeys(db: Db, glob: string): string[] {
   return db.prepare('SELECT key FROM settings WHERE key GLOB ?').pluck().all(glob) as string[]
 }
 
-export function amend(db: Db, plan: number, fields: Partial<Pick<PlanRow, 'pipe_id' | 'step' | 'state' | 'retries' | 'head_digest' | 'priority' | 'template' | 'queued_at'>>): void {
+export function amend(db: Db, plan: number, fields: Partial<Pick<PlanRow, 'pipe_id' | 'step' | 'state' | 'retries' | 'head_digest' | 'priority' | 'template' | 'queued_at' | 'wait_reason' | 'target_id'>>): void {
   const cols = Object.keys(fields).map((k) => `${k} = @${k}`).join(', ')
   db.prepare(`UPDATE plans SET ${cols} WHERE id = @id`).run({ ...fields, id: plan })
 }

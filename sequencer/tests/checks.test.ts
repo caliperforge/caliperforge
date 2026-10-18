@@ -403,6 +403,30 @@ test('1333 D4 a profile without node_test runs no node --test', () => {
   }
 })
 
+const LODGE = profile(REPO, 'caliperforge/earth-lodge-site')?.commands ?? {}
+
+const ASTRO = { 'package.json': pkg({ verify: 'astro build && wrangler pages functions build', build: 'astro build' }),
+  'package-lock.json': '{}', 'app.js': '' }
+
+test('1456 D4 earth-lodge-site runs node --check and --test only', () => {
+  const green = binned()
+  expect(checks(tested(ASTRO, ['booking.test.js', 'helpers.js']), LODGE, green.run, [], null, ['app.js'])).toBeNull()
+  expect([green.bins, green.seen]).toEqual([['node', 'node'], ['--check app.js', '--test tests/booking.test.js']])
+})
+
+test('1456 D5 a red node --check or --test names its script', () => {
+  for (const [red, script] of [['node --check app.js', 'node'], ['node --test tests/booking.test.js', 'test']]) {
+    const failed = checks(tested(ASTRO, ['booking.test.js', 'helpers.js']), LODGE, binned(red).run, [], null, ['app.js'])
+    expect(failed).toMatchObject({ script, command: red, code: '1' })
+  }
+})
+
+test('1456 D6 a site with tsc and a bare lock runs ci, then tsc', () => {
+  const green = binned()
+  expect(checks(tree({ ...TYPED, 'package.json': pkg({}), 'package-lock.json': '{}' }), SITE, green.run, [], null, TOUCHED)).toBeNull()
+  expect([green.bins, green.seen]).toEqual([['npm', 'npm'], ['ci', 'exec --no -- tsc --noEmit']])
+})
+
 const EULER = profile(REPO, 'caliperforge/fuzz-bench')?.finish ?? {}
 
 test('1181b D1 D2 finish runs in order and stops at the first red', () => {

@@ -33,7 +33,7 @@ import { hold, unhold } from '../hold.ts'
 import { forkCi, type Wire } from '../push.ts'
 import { started } from '../signals.ts'
 import { closed } from '../unpolled.ts'
-import { approve, builds, built, CARRIED, dropping, internalPlan, KOTLIN, ours, owning, PASS, plan, PR, REFUSE, rerunning, RUN, runsAfter, runsOn, scored, stub, tip, watched, WORDS, world, type World } from './world.ts'
+import { approve, builds, built, CARRIED, dropping, internalPlan, KOTLIN, ours, owning, PASS, plan, PR, REFUSE, rerunning, RUN, runsAfter, runsOn, scored, stub, tip, TYPESCRIPT, watched, WORDS, world, type World } from './world.ts'
 
 const head = (cwd: string, args: string[]): string => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim()
 
@@ -1078,6 +1078,26 @@ test('a head runless after the window goes to the ceo', async () => {
   expect(out?.note).toMatch(/ran no workflow at [0-9a-f]{12} in 10 ticks$/)
   expect(ciGreen(w)).toEqual([])
   expect(plan(w.db, 1)).toMatchObject({ step: 6, retries: 0 })
+})
+
+test('D1 an outside repo with no workflows passes on step 3', async () => {
+  const w = world('warm', undefined, TYPESCRIPT, false)
+  approve(w.db, w.target)
+  const sent: string[] = []
+  const wire = watched(sent, w.root, 1, (args) => {
+    if (args.includes('main')) return '[]'
+    throw new Error('no workflows: github is never asked for runs at the head')
+  })
+  for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  expect(plan(w.db, 1).step).toBe(6)
+
+  const out = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
+  expect(out).toMatchObject({ step: 6, name: 'ready', outcome: 'pass' })
+  expect(plan(w.db, 1).step).toBe(7)
+  expect(ciGreen(w)).toEqual([{ outcome: 'pass' }])
+  expect(get(w.root, 1, 'ci.json')).toBe('[]\n')
+  expect(kindsOf(w.db, 1).map((e) => e.kind).filter((k) => k.startsWith('fork.')).slice(-2)).toEqual(['fork.sent', 'fork.judged'])
+  expect(sent.filter((l) => l.startsWith('send '))).not.toEqual([])
 })
 
 test('a runless head goes to the ceo before Greptile', async () => {

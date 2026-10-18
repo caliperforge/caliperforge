@@ -1,5 +1,7 @@
 import { expect, test } from 'vitest'
 import { ofKind } from '../../store/events.ts'
+import { amend } from '../../store/lanes.ts'
+import { dropPlan, pipeOf } from '../../store/plans.ts'
 import { fingerprint, refused } from '../../store/refusals.ts'
 import { at } from '../../templates/pr-path.ts'
 import { tick } from '../index.ts'
@@ -36,16 +38,16 @@ test('D3 other spans still match on the span alone', () => {
 
 test('D2 a shared refusal stops its lane and names plans and span', async () => {
   const w = world()
-  w.db.prepare('DELETE FROM plans WHERE id = 1').run()
+  dropPlan(w.db, 1)
   ours(w.root)
   internalPlan(w.db, w.root, 2)
   internalPlan(w.db, w.root, 3, 'an earlier plan', 35)
-  w.db.prepare("UPDATE plans SET state = 'done' WHERE id = 3").run()
+  amend(w.db, 3, { state: 'done' })
   refused(w.db, { plan: 3, step: 4, fingerprint: fingerprint(4, ['src/hello.ts:1']), diff: null })
   for (let step = 0; step < 4; step += 1) await tick(w.db, w.root, stub(CARRIED))
   const fired = (await tick(w.db, w.root, stub(CARRIED, 0, REFUSE)))[0]
   expect(fired?.note).toContain('lane off: plans 2 and 3 refused on src/hello.ts:1')
-  expect(w.db.prepare('SELECT enabled FROM pipes WHERE id = 1').get()).toEqual({ enabled: 0 })
+  expect(pipeOf(w.db, 1).enabled).toBe(0)
   expect(ofKind(w.db, 'pipe').map((e) => [e.actor, e.outcome])).toEqual([['settle', 'escalate']])
 })
 

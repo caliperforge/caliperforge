@@ -8,7 +8,7 @@ import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { get, hhmm, set, zone } from '../store/lanes.ts'
 import { holder } from '../store/leases.ts'
-import { needsCeo, openPipes, planById } from '../store/plans.ts'
+import { needsCeo, openPipes, planById, rewind } from '../store/plans.ts'
 import { repos } from '../store/record.ts'
 import { registry } from './registry.ts'
 import { HELD } from './settle.ts'
@@ -84,6 +84,13 @@ export function stuck(db: Db, root: string, registry: Entry[], now: Date): numbe
   const window = days(gap) * 86_400_000
   return stalled(db, openPipes(db, hhmm(db, now)).map((p) => p.id)).flatMap(({ id, step, wait_reason, waits_on, last }) => {
     if (holder(db, id, now) !== null || last?.endsWith(HELD) === true) return []
+    if (planById(db, id).template === 'pr_path' && step > 1 && maybe(root, id, 'issue.md') === null) {
+      rewind(db, id, 1)
+      drop(root, id, 'stuck.json')
+      const note = `step ${String(step)} has no issue.md to work from; back to the brief`
+      logged(db, { plan: id, kind: 'stuck', actor: 'drift', outcome: 'pass', message: note, pointer: `step-${String(step)}`, run: null })
+      return []
+    }
     const tree = treeOf(join(planDir(root, id), 'src'))
     const saved = maybe(root, id, 'stuck.json')
     const was = saved === null ? null : JSON.parse(saved) as Spell

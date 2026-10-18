@@ -37,7 +37,7 @@
     "lines": 331
   },
   "drift.ts": {
-    "lines": 114
+    "lines": 150
   },
   "dropped.ts": {
     "lines": 40
@@ -77,7 +77,7 @@
     "prepare": 2
   },
   "index.ts": {
-    "lines": 240
+    "lines": 242
   },
   "install.ts": {
     "lines": 21
@@ -149,8 +149,7 @@
     "lines": 148
   },
   "signoff.ts": {
-    "lines": 346,
-    "prepare": 3
+    "lines": 346
   },
   "size.ts": {
     "lines": 50,
@@ -177,9 +176,6 @@
   },
   "tests/chain.test.ts": {
     "prepare": 1
-  },
-  "tests/fence.test.ts": {
-    "prepare": 3
   },
   "tests/findings.test.ts": {
     "prepare": 1
@@ -214,20 +210,11 @@
   "tests/resume.test.ts": {
     "prepare": 1
   },
-  "tests/rule.test.ts": {
-    "prepare": 3
-  },
-  "tests/shared.test.ts": {
-    "prepare": 3
-  },
   "tests/size.test.ts": {
     "prepare": 1
   },
   "tests/spawns.test.ts": {
     "prepare": 1
-  },
-  "tests/theirs.test.ts": {
-    "prepare": 3
   },
   "tests/tick.test.ts": {
     "prepare": 1

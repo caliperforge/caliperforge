@@ -1,0 +1,5 @@
+- Every content PR adds one line to input/pagecontent/changes.md under the unreleased version, worded like the lines already there (source: CEO ruling on plan 1438, hl7-eu/laboratory#151, checked 2026-10-16)
+- Commit and PR titles are plain sentences with no conventional-commit prefix, no fix(...) or feat: (source: CEO ruling on plan 1438, hl7-eu/laboratory#151, checked 2026-10-16)
+- The PR body is one short prose paragraph followed by Fixes #<issue>, with no Test Plan section (source: CEO ruling on plan 1438, hl7-eu/laboratory#151, checked 2026-10-16)
+- The repo has no GitHub CI; the check is a SUSHI build on master and on the branch, their error and warning counts compared (source: CEO ruling on plan 1438, hl7-eu/laboratory#151, checked 2026-10-16)
+- Fork-only files such as greptile.json never go upstream (source: CEO ruling on plan 1438, hl7-eu/laboratory#151, checked 2026-10-16)

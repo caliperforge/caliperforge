@@ -54,3 +54,12 @@ test('D4 the sources block never reaches the ask', () => {
   expect(ask).toContain(`## House rules for acme/widget\n\n${RULES.trimEnd()}\n\n${THEIR_ISSUE}`)
   expect(ask).not.toContain('sources:')
 })
+
+test('hl7-eu/laboratory rules reach its ask before their issue', () => {
+  const ask = askOf(THEIRS, CARD, { root: join(import.meta.dirname, '../..'), repo: 'hl7-eu/laboratory' })
+  const from = ask.indexOf('## House rules for hl7-eu/laboratory')
+  expect(from).toBeGreaterThan(ask.indexOf(CARD.trimEnd()))
+  const rules = ask.slice(from, ask.indexOf(THEIR_ISSUE))
+  for (const rule of ['input/pagecontent/changes.md', 'conventional-commit', 'Fixes #', 'SUSHI', 'greptile.json'])
+    expect(rules).toContain(rule)
+})

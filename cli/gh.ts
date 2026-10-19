@@ -145,6 +145,11 @@ export function rehearse(fork: string, branch: string, read: Read = gh, exec: Ru
     '--title', 'CI rehearsal only (do not merge)', '--body', 'Fork CI only. Do not merge.'])
 }
 
+/** GitHub registers a new fork's workflows only once someone enables them in its Actions tab, and no API turns them on. */
+export function actions(fork: string, read: Read = gh): boolean {
+  return z.object({ total_count: z.int() }).parse(read(['api', `repos/${fork}/actions/workflows`])).total_count > 0
+}
+
 /** Closed with no comment and the branch kept: the branch is the head the real pull request opens from. */
 export function unrehearse(fork: string, branch: string): void {
   const no = rehearsal(fork, branch)

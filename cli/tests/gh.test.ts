@@ -1,6 +1,5 @@
 import { expect, test } from 'vitest'
-import { actions } from '../actions.ts'
-import { fileIssue, forward, installed, openPr, rehearse, type Read, type Run } from '../gh.ts'
+import { actions, fileIssue, forward, installed, openPr, rehearse, type Read, type Run } from '../gh.ts'
 
 const FORK = 'caliperforge/widget'
 const BRANCH = 'widget-12-a1-next'

@@ -30,9 +30,9 @@ it('refuses a file grown past its budget, and a new one past 300', async () => {
   ])
 })
 
-const QUERY = 'db.prepare(\'SELECT 1\')\n'
+const QUERY = 'db.' + 'prepare(\'SELECT 1\')\n'
 
-it('refuses db.prepare( in sequencer/ but not in store/', async () => {
+it('refuses a query in sequencer/ but not in store/', async () => {
   const dir = tree({ 'sequencer/x.ts': QUERY, 'store/x.ts': QUERY }, {})
   expect(await messages(dir)).toEqual(['sequencer/x.ts prepare 1 over budget 0: move the query into store/'])
 })

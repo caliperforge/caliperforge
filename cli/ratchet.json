@@ -68,9 +68,6 @@
   "tests/cf.test.ts": {
     "silent-catch": 1
   },
-  "tests/inbox.test.ts": {
-    "prepare": 2
-  },
   "tests/measure.test.ts": {
     "prepare": 2
   },

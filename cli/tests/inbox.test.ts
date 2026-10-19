@@ -5,6 +5,8 @@ import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import type { Fired } from '../../sequencer/kind.ts'
 import type { Db } from '../../store/index.ts'
+import { set } from '../../store/lanes.ts'
+import { putPlan } from '../../store/plans.ts'
 import { ack, crashed, events, line, notify, plain, record, unread, type Event } from '../inbox.ts'
 
 const schema = join(import.meta.dirname, '../../schema')
@@ -13,9 +15,8 @@ const AT = '2026-09-21T14:05:00.000Z'
 
 function world(): Db {
   const db = fresh(schema)
-  db.prepare(`INSERT INTO plans (id, pipe_id, template, state, queued_at, lane, seat, origin)
-    VALUES (7, 1, 'pr_path', 'running', '2026-09-21T00:00:00.000Z', 'machine', 'typescript_specialist',
-      'https://github.com/caliperforge/caliperforge/issues/49')`).run()
+  putPlan(db, { id: 7, pipe_id: 1, target_id: null, template: 'pr_path', state: 'running', queued_at: '2026-09-21T00:00:00.000Z',
+    step: 0, retries: 0, lane: 'machine', seat: 'typescript_specialist', origin: 'https://github.com/caliperforge/caliperforge/issues/49' })
   return db
 }
 
@@ -52,7 +53,7 @@ test('unread is everything after the last ack', () => {
 
 test('a line reads in the store\'s local time', () => {
   const db = world()
-  db.prepare("UPDATE settings SET value = '-360' WHERE key = 'tick.zone_offset_minutes'").run()
+  set(db, 'tick.zone_offset_minutes', '-360', 'ceo', AT)
   expect(events(db, LAP.slice(1, 2), AT).map((e) => line(db, e))[0]).toMatch(/^08:05 {2}landed {3}#49 \(plan 7\) at step 7 batch: landed/)
 })
 

@@ -21,9 +21,6 @@
   "origin-on-refuse.ts": {
     "lines": 61
   },
-  "ratchet.test.ts": {
-    "prepare": 2
-  },
   "ratchet.ts": {
     "lines": 108,
     "prepare": 1

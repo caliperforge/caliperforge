@@ -217,6 +217,39 @@ test('D4 a uv.lock HEAD holds stays in the index and the diff', () => {
   expect(gitDiff(dir, head(dir, ['rev-parse', 'HEAD']))).toContain('+version = 2')
 })
 
+const forged = (): { dir: string; base: string; root: string } => {
+  const w = world()
+  const { dir, base } = checkout(w.root, 1, 'acme/widget', 'widget-12-a1')
+  writeFileSync(join(dir, 'foundry.toml'), '[profile.default]\nsrc = "src"\n')
+  writeFileSync(join(dir, 'foundry.lock'), '{}\n')
+  return { dir, base, root: w.root }
+}
+
+test('D1 an untracked foundry.lock is not in the diff', () => {
+  const { dir, base } = forged()
+  const diff = gitDiff(dir, base)
+  expect(diff).toContain('foundry.toml')
+  expect(diff).not.toContain('foundry.lock')
+})
+
+test('D2 a reused checkout drops an intent-to-add foundry.lock', () => {
+  const { dir, base, root } = forged()
+  head(dir, ['add', '-f', '--intent-to-add', 'foundry.lock'])
+  checkout(root, 1, 'acme/widget', 'widget-12-a1')
+  expect(head(dir, ['ls-files', '--', 'foundry.lock'])).toBe('')
+  expect(gitDiff(dir, base)).not.toContain('foundry.lock')
+})
+
+test('D3 a foundry.lock HEAD holds stays in the index and diff', () => {
+  const { dir, root } = forged()
+  head(dir, ['add', '-f', 'foundry.lock'])
+  head(dir, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'tracked lock'])
+  checkout(root, 1, 'acme/widget', 'widget-12-a1')
+  expect(head(dir, ['ls-files', '--', 'foundry.lock'])).toBe('foundry.lock')
+  writeFileSync(join(dir, 'foundry.lock'), '{"lib/forge-std": {}}\n')
+  expect(gitDiff(dir, head(dir, ['rev-parse', 'HEAD']))).toContain('+{"lib/forge-std": {}}')
+})
+
 test('a kotlin/ brief builds on the kotlin seat, diffed at base', async () => {
   const w = world('warm', undefined, KOTLIN)
   approve(w.db, w.target)

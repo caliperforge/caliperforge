@@ -396,10 +396,11 @@ const PAIRS = [{ property: 'p1', verdict: 'catch' }, { property: 'p2', verdict: 
 
 const KILLS = [{ property: 'p1', kills: 3, untested: false }, { property: 'p4', kills: 0, untested: true }]
 
-/** A stub fuzz-bench script that writes `rows` to `results/<suite>/<suite><suffix>`. */
-function writes(suffix: string, rows: object[]): string {
+/** A stub fuzz-bench script that writes `rows` to `results/<suite>/<suite><suffix>`, making the folder first when `makes`. */
+function writes(suffix: string, rows: object[], makes = true): string {
   const body = JSON.stringify(rows.map((r) => JSON.stringify(r)).join('\n'))
-  return `import os, sys\nname = os.path.basename(sys.argv[2])\nos.makedirs(f'results/{name}', exist_ok=True)\nopen(f'results/{name}/{name}${suffix}', 'w').write(${body})\n`
+  const made = makes ? `os.makedirs(f'results/{name}', exist_ok=True)\n` : ''
+  return `import os, sys\nname = os.path.basename(sys.argv[2])\n${made}open(f'results/{name}/{name}${suffix}', 'w').write(${body})\n`
 }
 
 /** A bench plan at score with its suite written, and `remotes/caliperforge/fuzz-bench` whose run_pair.py is `pair`. */
@@ -433,6 +434,13 @@ test('score D1 kernel scores the suite at the fuzz-bench HEAD', () => {
   expect(JSON.parse(get(root, 1, 'score.json'))).toEqual({ fuzz_bench: sha, ...SCORE, x_ray: null })
 })
 
+test('D1 scripts that make no results folder are scored', () => {
+  const { root, db } = scoring(writes('.jsonl', PAIRS, false))
+  commit(join(root, 'remotes/caliperforge/fuzz-bench'), 'bench/null_check.py', writes('.nullcheck.jsonl', KILLS, false), 'no makedirs')
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  expect(scores(db)).toEqual([{ plan: 1, target: 'euler-earn-m01', generator: 'fizz', ...SCORE, x_ray: null }])
+})
+
 test('score D2 a failing run_pair.py is refused and not recorded', () => {
   const { root, db } = scoring('import sys\nsys.stderr.write("forge build failed")\nsys.exit(1)\n')
   expect(scored(db, root, planById(db, 1))).toEqual({ outcome: 'refuse', spans: ['bench.run_pair'], note: 'forge build failed' })
@@ -460,7 +468,7 @@ test('D3 an empty results file is refused and not recorded', () => {
 test('D1 no results from run_pair.py is refused before null_check', () => {
   const { root, db } = scoring('import sys\n')
   expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'refuse', spans: ['bench.no_results'] })
-  expect(existsSync(join(planDir(root, 1), 'fuzz-bench/results'))).toBe(false)
+  expect(existsSync(join(planDir(root, 1), 'fuzz-bench/results/euler-earn-m01/euler-earn-m01.nullcheck.jsonl'))).toBe(false)
   expect(scores(db)).toEqual([])
   expect(maybe(root, 1, 'score.json')).toBeNull()
 })

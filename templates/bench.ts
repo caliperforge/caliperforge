@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { cpSync, existsSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, join, resolve } from 'node:path'
 import type { Provider } from '../providers/kind.ts'
@@ -143,6 +143,7 @@ export function scored(db: Db, root: string, plan: PlanRow): Outcome {
   const sha = git(bench, ['rev-parse', 'HEAD']).trim()
   const suites = `suites/${generator}/${target}`
   cpSync(join(srcDir(root, plan.id), suite), join(bench, suites), { recursive: true })
+  mkdirSync(join(bench, 'results', target), { recursive: true })
   const written = join(bench, 'results', target, `${target}.jsonl`)
   for (const script of ['run_pair', 'null_check'].filter((s) => s === 'run_pair' || existsSync(join(bench, `bench/${s}.py`)))) {
     const ran = spawnSync('python3', [`bench/${script}.py`, `targets/${target}.yml`, suites], { cwd: bench, encoding: 'utf8' })

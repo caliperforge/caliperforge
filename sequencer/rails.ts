@@ -110,7 +110,8 @@ function suite(db: Db, root: string, plan: PlanRow, on: Rails, commands: Command
   // language's gates: its builder already ran them at step 2, and a red fork CI after the reviews costs more.
   const local = on?.checks !== undefined
   const outside = local ? null : outsideLanguage(languageFor(db, plan, srcDir(root, plan.id), false))
-  const guide = local || outside !== null ? [] : sushi(srcDir(root, plan.id))
+  const base = maybe(root, plan.id, 'base.sha')?.trim()
+  const guide = local || outside !== null ? [] : sushi(srcDir(root, plan.id), base)
   const ci = on?.checks === 'ci' ? ciChecks(db, root, plan, wire) : null
   if (ci !== null && 'wait' in ci) return ci.wait
   if (ci !== null) {
@@ -124,8 +125,8 @@ function suite(db: Db, root: string, plan: PlanRow, on: Rails, commands: Command
     if (holder !== null) return { outcome: 'pass', held: true, spans: ['checks'], note: `checks wait: plan ${String(holder.plan)} is running its tests` }
     try {
       const diff = diffOf(root, plan.id)
-      const failed = (guide.length > 0 ? gated(srcDir(root, plan.id), guide, noted(db, plan.id)) : checks(srcDir(root, plan.id), commands, noted(db, plan.id), outside === null ? narrow(db, plan) : [],
-        outside === null ? null : { language: outside, files: filesOf(db, plan.id).map((f) => f.path) },
+      const failed = (guide.length > 0 ? gated(srcDir(root, plan.id), guide, noted(db, plan.id), [], (line) => { heard.push(line) }) : checks(srcDir(root, plan.id), commands, noted(db, plan.id), outside === null ? narrow(db, plan) : [],
+        outside === null ? null : { language: outside, files: filesOf(db, plan.id).map((f) => f.path), ...(base === undefined ? {} : { base }) },
         parse(diff).map((f) => f.path), finishes.minutes, (line) => { heard.push(line) })) ?? finish(srcDir(root, plan.id), finishes.entries, noted(db, plan.id), finishes.minutes)
       if (failed?.fault !== undefined) return faulted(db, root, plan, failed.fault)
       if (failed?.capped === true) return capped(failed)

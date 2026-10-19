@@ -1,8 +1,9 @@
+import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { expect, test } from 'vitest'
-import { gated } from '../checks.ts'
+import { gated, type Run } from '../checks.ts'
 import { gates, outsideLanguage, sushi } from '../gates.ts'
 
 function fixture(marker: string): string {
@@ -192,6 +193,73 @@ test('1342b D2 a red sushi run refuses as sushi', () => {
   expect(gated(src, sushi(src), () => ({ ok: false, code: '1', output: 'error Unknown parent' }))).toEqual({
     script: 'sushi', command: 'npx --yes --package fsh-sushi@3.12.0 sushi .', code: '1', output: 'error Unknown parent', tests: [], retried: false,
   })
+})
+
+type Problem = [message: string, file: string, line: number]
+
+function based(): { src: string; base: string; git: (args: string[]) => string } {
+  const src = nested({ 'sushi-config.yaml': '' })
+  const git = (args: string[]): string => execFileSync('git', args, { cwd: src, encoding: 'utf8' }).trim()
+  git(['init', '-q'])
+  git(['add', '-A'])
+  git(['-c', 'user.email=t@t', '-c', 'user.name=t', '-c', 'commit.gpgsign=false', 'commit', '-qm', 'base'])
+  return { src, base: git(['rev-parse', 'HEAD']), git }
+}
+
+const printed = (cwd: string, problems: Problem[]): string =>
+  ['info  Running SUSHI', ...problems.map(([message, file, line]) => `${message}\n  File: ${join(cwd, file)}\n  Line: ${String(line)}`)].join('\n')
+
+/** The head answers in `src`; the base, red unless `green`, anywhere else. */
+function answering(src: string, head: Problem[], base: Problem[], green = false): { run: Run; cwds: string[] } {
+  const cwds: string[] = []
+  const run: Run = (...[, cwd]) => {
+    cwds.push(cwd)
+    if (cwd !== src && green) return { ok: true, output: printed(cwd, base) }
+    return { ok: false, code: '20', output: printed(cwd, cwd === src ? head : base) }
+  }
+  return { run, cwds }
+}
+
+const PARENT: Problem = ['error Unknown parent', 'input/fsh/a.fsh', 12]
+
+const DEPRECATED: Problem = ['warn  Deprecated code', 'input/fsh/b.fsh', 3]
+
+const worktrees = (git: (args: string[]) => string): number => git(['worktree', 'list', '--porcelain']).split('\n').filter((l) => l.startsWith('worktree ')).length
+
+test('1519 D1 D6 problems already at base, at moved lines, pass', () => {
+  const { src, base, git } = based()
+  const { run } = answering(src, [PARENT, DEPRECATED], [['error Unknown parent', 'input/fsh/a.fsh', 4], ['warn  Deprecated code', 'input/fsh/b.fsh', 1]])
+  const heard: string[] = []
+  expect(gated(src, sushi(src, base), run, [], (line) => { heard.push(line) })).toBeNull()
+  expect(heard).toEqual([`sushi: 2 errors and warnings, each already at ${base.slice(0, 12)}`])
+  expect(worktrees(git)).toBe(1)
+})
+
+test('1519 D2 one new error refuses with only that message', () => {
+  const { src, base } = based()
+  const { run } = answering(src, [PARENT, ['error Missing slice', 'input/fsh/c.fsh', 7]], [PARENT])
+  expect(gated(src, sushi(src, base), run)).toMatchObject({ script: 'sushi', code: '20', output: 'error Missing slice\n  File: input/fsh/c.fsh' })
+})
+
+test('1519 D3 a message twice at the head, once at base, refuses', () => {
+  const { src, base } = based()
+  const { run } = answering(src, [PARENT, PARENT], [PARENT])
+  expect(gated(src, sushi(src, base), run)?.output).toBe('error Unknown parent\n  File: input/fsh/a.fsh')
+})
+
+test('1519 D4 no base runs sushi once and refuses on its output', () => {
+  const src = nested({ 'sushi-config.yaml': '' })
+  const { run, cwds } = answering(src, [PARENT], [])
+  expect(gated(src, sushi(src), run)?.output).toBe(printed(src, [PARENT]))
+  expect(cwds).toEqual([src])
+})
+
+test('1519 D6 a green base run leaves no worktree behind', () => {
+  const { src, base, git } = based()
+  const { run, cwds } = answering(src, [PARENT], [], true)
+  expect(gated(src, sushi(src, base), run)?.output).toBe('error Unknown parent\n  File: input/fsh/a.fsh')
+  expect(cwds).toHaveLength(2)
+  expect(worktrees(git)).toBe(1)
 })
 
 test('1342b D3 sushi runs after go gates, before regenerate', () => {

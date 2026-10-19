@@ -5,6 +5,7 @@ import { isAbsolute, join } from 'node:path'
 import type { Profile } from '../store/profile.ts'
 import { exitedOutside } from './exited.ts'
 import { gates, type Gate, type Outside, type OutsideLanguage, waived } from './gates.ts'
+import { fresh } from './inherited.ts'
 import { malformed } from './malformed.ts'
 import { nodeTests, Package } from './node.ts'
 
@@ -107,11 +108,10 @@ function cappedOf(bin: Mode, ran: Extract<Ran, { ok: false }>): { capped?: true 
  */
 export function gated(src: string, list: Gate[], run: Run, excused: string[] = [], said?: (line: string) => void): Failure | null {
   for (const gate of list) {
-    const cwd = join(src, gate.dir)
-    const where = gate.dir === '' ? '' : ` (in ${gate.dir}/)`
-    const first = settled(gate, run(gate.args, cwd, gate.bin), excused)
+    const first = settled(gate, run(gate.args, join(src, gate.dir), gate.bin), excused)
     if (first.ok || waived(src, gate, first.code, said)) continue
-    return { script: gate.script, command: `${gate.bin} ${gate.args.join(' ')}${where}`, code: first.code, output: tail(first.output), tests: [], retried: false }
+    const left = fresh(src, gate, first.output, run, said)
+    if (left?.length !== 0) return { script: gate.script, command: `${gate.bin} ${gate.args.join(' ')}${gate.dir === '' ? '' : ` (in ${gate.dir}/)`}`, code: first.code, output: left === null ? tail(first.output) : left.join('\n'), tests: [], retried: false }
   }
   return null
 }

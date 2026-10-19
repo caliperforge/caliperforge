@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process'
 import { existsSync, realpathSync, rmSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
 import { refuse } from '../runner/index.ts'
@@ -14,7 +15,7 @@ import { cloned, holds, maybe, srcDir } from './workspace.ts'
 /**
  * The build names paths under `## Deleted` and the kernel removes them, before the rails read the
  * tree. A build removes only what it made: a path inside the fence -- the same `refuse()` the seat's
- * own tools run through -- that is in the tree, not under `.git`, and not on the base commit.
+ * own tools run through -- or one git ignores, that is in the tree, not under `.git`, and not on the base commit.
  */
 export function dropped(db: Db, root: string, plan: PlanRow, step: Step, handback: string): Outcome | null {
   const { paths, unread } = deletions(handback)
@@ -25,7 +26,7 @@ export function dropped(db: Db, root: string, plan: PlanRow, step: Step, handbac
   const rel = (path: string): string => relative(top, realpathSync.native(resolve(top, path)))
   const base = maybe(root, plan.id, 'base.sha')?.trim()
   const fence = fenceFor(db, plan.id, seat(root, step.runs).manifest.write_paths)
-  const barred = paths.filter((path) => refuse(src, fence, path, kernelPlan(plan)) !== null)
+  const barred = paths.filter((path) => refuse(src, fence, path, kernelPlan(plan)) !== null && !ignored(src, path, rel))
   const absent = paths.filter((path) => !barred.includes(path) && !existsSync(join(src, path)))
   const rest = paths.filter((path) => !barred.includes(path) && !absent.includes(path))
   const git = rest.filter((path) => rel(path) === '.git' || rel(path).startsWith('.git/'))
@@ -37,4 +38,10 @@ export function dropped(db: Db, root: string, plan: PlanRow, step: Step, handbac
   }
   for (const path of paths) rmSync(join(top, rel(path)))
   return null
+}
+
+/** `check-ignore` exits nonzero for a path git does not ignore, a tracked one, and one outside the checkout. */
+function ignored(src: string, path: string, rel: (path: string) => string): boolean {
+  if (!cloned(src) || !existsSync(join(src, path))) return false
+  return spawnSync('git', ['check-ignore', '-q', '--', rel(path)], { cwd: src }).status === 0
 }

@@ -1500,6 +1500,31 @@ test('a deletion outside the fence refuses the build, naming it', async () => {
   expect(existsSync(join(srcDir(w.root, 1), 'src/hello.ts'))).toBe(true)
 })
 
+test('D1 deleting an ignored uv.lock outside the fence removes it', async () => {
+  const w = world()
+  approve(w.db, w.target)
+  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  writeFileSync(join(srcDir(w.root, 1), 'uv.lock'), 'version = 1\n')
+
+  const fired = (await tick(w.db, w.root, stub(dropping(['uv.lock']))))[0]
+
+  expect(fired).toMatchObject({ step: 2, outcome: 'pass' })
+  expect(existsSync(join(srcDir(w.root, 1), 'uv.lock'))).toBe(false)
+})
+
+test('D2 deleting an unignored file outside the fence refuses', async () => {
+  const w = world()
+  approve(w.db, w.target)
+  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  writeFileSync(join(srcDir(w.root, 1), 'src/elsewhere.ts'), 'export const elsewhere = 1\n')
+
+  const fired = (await tick(w.db, w.root, stub(dropping(['src/elsewhere.ts']))))[0]
+
+  expect(fired).toMatchObject({ step: 2, outcome: 'refuse', spans: ['src/elsewhere.ts'] })
+  expect(fired?.note).toContain('outside the fence')
+  expect(existsSync(join(srcDir(w.root, 1), 'src/elsewhere.ts'))).toBe(true)
+})
+
 test('D1 deleting ../issue.md refuses and the issue stays', async () => {
   const w = world()
   dropPlan(w.db, 1)

@@ -4,7 +4,7 @@ import { z } from 'zod'
 import type { Pr } from '../cli/gh.ts'
 import { fill } from '../cli/record.ts'
 import { addFinding, answered, closeFinding, holds, newest, setting, stalled, unclosed, worked } from '../store/drift.ts'
-import { logged } from '../store/events.ts'
+import { logged, returns } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { get, hhmm, set, zone } from '../store/lanes.ts'
 import { holder } from '../store/leases.ts'
@@ -101,11 +101,15 @@ export function stuck(db: Db, root: string, registry: Entry[], now: Date): numbe
       put(root, id, 'stuck.json', JSON.stringify({ step, tree, since, seen: now.toISOString() }))
       return []
     }
-    const note = `step ${String(step)} and its tree unchanged for ${String(Math.floor(spent / 60_000))} min while the tick ran; ` +
+    const pointer = `step-${String(step)} ${tree}`
+    const back = returns(db, id, pointer)
+    const circled = back.length < 2 ? ''
+      : `the director returned step ${String(step)} on tree ${tree} ${String(back.length)} times; last reason: ${back.at(-1)?.split('\n')[0] ?? ''}; `
+    const note = `${circled}step ${String(step)} and its tree unchanged for ${String(Math.floor(spent / 60_000))} min while the tick ran; ` +
       `waits: ${wait_reason ?? 'none'}${waits_on === null ? '' : ` on plan ${String(waits_on)}`}; last: ${last ?? 'none'}`
     put(root, id, 'refusal.md', `${maybe(root, id, 'refusal.md') ?? ''}\n# Stopped\n\n${note}.\n`)
     needsCeo(db, planById(db, id), note)
-    logged(db, { plan: id, kind: 'stuck', actor: 'drift', outcome: 'escalate', message: note, pointer: `step-${String(step)}`, run: null })
+    logged(db, { plan: id, kind: 'stuck', actor: 'drift', outcome: circled === '' ? 'escalate' : 'needs_coo', message: note, pointer, run: null })
     drop(root, id, 'stuck.json')
     return [id]
   })

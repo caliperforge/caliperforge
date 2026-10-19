@@ -1,0 +1,7 @@
+- name: director_repeat_return
+  switch: { key: director.apply, value: '1' }
+  table: events
+  column: at
+  where: "kind = 'stuck' AND outcome = 'needs_coo'"
+  gap: 7d
+  expected: 0

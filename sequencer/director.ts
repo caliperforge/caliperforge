@@ -212,6 +212,11 @@ function capStop(db: Db, plan: number): boolean {
   return kindsOf(db, plan).filter((e) => e.kind === 'build_cap' || e.kind === 'director').at(-1)?.kind === 'build_cap'
 }
 
+function circling(db: Db, plan: number): boolean {
+  const last = kindsOf(db, plan).filter((e) => ['stuck', 'director', 'return', 'retry'].includes(e.kind)).at(-1)
+  return last?.kind === 'stuck' && last.outcome === 'needs_coo'
+}
+
 function sections(text: string | null): string[] {
   return (text ?? '').split(/^(?=## )/m).filter((s) => /^## (?:Ruling|Answer)/.test(s)).map((s) => s.trim())
 }
@@ -323,6 +328,7 @@ export async function woke(db: Db, root: string, provider: Provider, now: Date, 
     const reason = woken(plan)
     const head = `step ${String(plan.step)} ${reason === 'blocked_on_ceo' ? `blocked ${stop(root, plan.id)}` : reason}`
     if (isHeld(root, plan.id)) continue
+    if (circling(db, plan.id)) continue
     if (maybe(root, plan.id, 'orchestrator.md')?.split('\n')[0] === head) continue
     if (take(db, plan.id, now) === null) continue
     try {

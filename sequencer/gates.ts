@@ -18,6 +18,7 @@ export interface Outside {
   language: OutsideLanguage
   /** The brief's files, repo-relative: the first one in the language finds the folder its gates run in. */
   files: string[]
+  base?: string
 }
 
 export interface Gate {
@@ -27,6 +28,8 @@ export interface Gate {
   /** Repo-relative folder the gate runs in; '' is the checkout's root. */
   dir: string
   quiet?: boolean
+  /** The sha a red run is re-run at: only what that run did not print refuses. */
+  base?: string
 }
 
 interface Raw {
@@ -110,7 +113,7 @@ const JUSTFILE = 'Justfile'
 
 /** What step 3 runs on an outside plan: install, then the gates upstream runs, in the language's own folder, then SUSHI and its workflows' regenerate-and-diff steps at the root. */
 export function gates(src: string, outside: Outside, excused: string[] = []): Gate[] {
-  return [...own(src, outside, excused), ...sushi(src), ...regenerated(src)]
+  return [...own(src, outside, excused), ...sushi(src, outside.base), ...regenerated(src)]
 }
 
 const SUSHI = 'fsh-sushi@3.12.0'
@@ -128,8 +131,9 @@ export function waived(src: string, gate: Gate, code: string, said?: (line: stri
   return runner !== undefined
 }
 
-export function sushi(src: string): Gate[] {
-  return existsSync(join(src, 'sushi-config.yaml')) ? [{ script: 'sushi', bin: 'npx', args: ['--yes', '--package', SUSHI, 'sushi', '.'], dir: '' }] : []
+export function sushi(src: string, base?: string): Gate[] {
+  return existsSync(join(src, 'sushi-config.yaml'))
+    ? [{ script: 'sushi', bin: 'npx', args: ['--yes', '--package', SUSHI, 'sushi', '.'], dir: '', ...(base === undefined ? {} : { base }) }] : []
 }
 
 function own(src: string, outside: Outside, excused: string[]): Gate[] {

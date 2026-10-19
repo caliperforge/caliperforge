@@ -1,10 +1,10 @@
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { chromium } from 'playwright-core'
 import { expect, test } from 'vitest'
-import type { Packet } from '../../providers/kind.ts'
+import type { Packet, Provider } from '../../providers/kind.ts'
 import { load } from '../../runner/rules.ts'
 import { runRows } from '../../store/events.ts'
 import { verdictRows, type Verdict } from '../../store/verdict.ts'
@@ -266,7 +266,8 @@ browsed('D2 no DESIGN.md in the checkout, no section', async () => {
 
 const WIDE = '<table style="width:1200px"><tr><td>wide</td></tr></table>'
 
-const based = async (before: string, after: string, seen?: (packet: Packet) => void): Promise<{ w: World; outcome: Outcome }> => {
+const based = async (before: string, after: string, seen?: (packet: Packet) => void,
+  provider: Provider = stub(CARRIED, 0, undefined, seen)): Promise<{ w: World; outcome: Outcome }> => {
   const w = world()
   load(w.db, w.root)
   const src = srcDir(w.root, 1)
@@ -278,7 +279,7 @@ const based = async (before: string, after: string, seen?: (packet: Packet) => v
   writeFileSync(join(src, 'index.html'), page(after))
   put(w.root, 1, 'issue.md', '# a screen\n\n- D1 add a screen\n')
   const row = { ...plan(w.db, 1), origin: 'https://github.com/caliperforge/atelier-web/issues/1' }
-  return { w, outcome: await fireLanded(w.db, w.root, row, at(4, 'web'), stub(CARRIED, 0, undefined, seen)) }
+  return { w, outcome: await fireLanded(w.db, w.root, row, at(4, 'web'), provider) }
 }
 
 browsed('D1 an overflow already on base passes the capture', async () => {
@@ -308,6 +309,35 @@ browsed('D4 the packet marks a base span already on main', async () => {
   const prompt = sent.find((p) => p.reads !== undefined)?.prompt
   expect(prompt).toContain('# Defects the capture found')
   expect(prompt).toContain('index.html design.overflow 400 light (already on main)')
+})
+
+const REGION = readFileSync(join(import.meta.dirname, '../../reviews/design/fixtures/region.reply.md'), 'utf8')
+const refusing: Provider = {
+  name: 'claude-agent-sdk',
+  fire: (packet) => (packet.reads === undefined ? stub(CARRIED) : stub(CARRIED, 0, REGION)).fire(packet),
+}
+const MAIN = '<script>console.error("boom")</script><p style="width:80px;overflow:hidden;white-space:nowrap">a label far too long to fit</p>'
+
+browsed('D1 a reviewer refusal with only main spans passes', async () => {
+  const { outcome } = await based(`<h1>Plans</h1>${MAIN}`, `<h1>Plans now</h1>${MAIN}`, undefined, refusing)
+  expect(outcome).toMatchObject({ outcome: 'pass', spans: [] })
+  expect(outcome.note).toMatch(/^design pass; already on main: /)
+  expect(outcome.note).toContain('index.html design.console 1440 dark boom')
+  expect(outcome.note).toContain('index.html design.clipped 400 light a label far too long to fit')
+})
+
+browsed('D2 a new span beside main spans refuses, new first', async () => {
+  const { outcome } = await based(`<h1>Plans</h1>${MAIN}`, `<h1>Plans</h1>${MAIN}<fieldset><legend>Other</legend></fieldset>`, undefined, refusing)
+  expect(outcome.outcome).toBe('refuse')
+  expect(outcome.spans).toContain('index.html design.catchall 1440 light Other')
+  expect(outcome.note).toMatch(/^design refuse; new: index\.html design\.catchall /)
+  expect(outcome.note).toMatch(/; already on main: .*index\.html design\.console 1440 dark boom/)
+})
+
+browsed('D3 a reviewer refusal with no main span still refuses', async () => {
+  const { outcome } = await based('<h1>Plans</h1>', '<h1>Plans now</h1>', undefined, refusing)
+  expect(outcome).toMatchObject({ outcome: 'refuse', note: 'design refuse' })
+  expect(outcome.spans).toContain('index.html.1440.light.png:96,180-420,260')
 })
 
 browsed('D4 the base capture leaves no shots and no worktree', async () => {

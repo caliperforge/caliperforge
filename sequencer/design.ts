@@ -104,12 +104,12 @@ export async function looked(db: Db, root: string, plan: PlanRow, provider: Prov
     ...(existsSync(system) ? { system: readFileSync(system, 'utf8') } : {}),
   }
   const { outcome } = await judge(db, root, 'design', plan.id, input, provider, pending(out, 'step-4-design'))
-  const spans = [...fresh, ...outcome.spans]
+  const spans = fresh.length === 0 && already.length > 0 ? [] : [...fresh, ...outcome.spans]
   const onBase = already.length > 0 ? `; already on main: ${already.join('; ')}` : ''
   if (outcome.outcome === 'needs_ceo') return { outcome: 'needs_ceo', spans: outcome.spans, note: `design needs_ceo${onBase}`, message: outcome.message }
   if (spans.length > 0) {
     const message = [`${String(fresh.length)} span(s) show a hard design defect`, outcome.message].join('\n\n')
-    return { outcome: 'refuse', spans, note: `design refuse${onBase}`, message }
+    return { outcome: 'refuse', spans, note: already.length > 0 ? `design refuse; new: ${fresh.join('; ')}${onBase}` : 'design refuse', message }
   }
   return { outcome: 'pass', spans: [], note: `design pass${onBase}` }
 }

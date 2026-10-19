@@ -131,3 +131,9 @@ export function handUps(db: Db, now: Date): HandUps {
 export function kindsOf(db: Db, plan: number): Pick<Event, 'kind' | 'outcome'>[] {
   return db.prepare('SELECT kind, outcome FROM events WHERE plan = ? ORDER BY id').all(plan) as Pick<Event, 'kind' | 'outcome'>[]
 }
+
+export function returns(db: Db, plan: number, pointer: string): string[] {
+  const said = db.prepare(`SELECT (SELECT d.message FROM events d WHERE d.plan = s.plan AND d.kind = 'director' AND d.id > s.id ORDER BY d.id LIMIT 1)
+    FROM events s WHERE s.plan = ? AND s.kind = 'stuck' AND s.outcome = 'escalate' AND s.pointer = ? ORDER BY s.id`).pluck().all(plan, pointer) as (string | null)[]
+  return said.flatMap((m) => m?.startsWith('return: ') === true ? [m.slice('return: '.length)] : [])
+}

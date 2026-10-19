@@ -2,13 +2,15 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
-import { logged, ofKind } from '../../store/events.ts'
+import type { Provider } from '../../providers/kind.ts'
+import { eventsOf, logged, ofKind } from '../../store/events.ts'
 import type { Db } from '../../store/index.ts'
 import { take } from '../../store/leases.ts'
+import { woke } from '../director.ts'
 import { drift, stuck } from '../drift.ts'
 import { HELD } from '../settle.ts'
-import { conflicted, drop, git, maybe, put } from '../workspace.ts'
-import { COO, db, event, NOW } from './drifting.ts'
+import { conflicted, drop, git, maybe, put, snapshot } from '../workspace.ts'
+import { COO, db, event, NOW, REGISTRY } from './drifting.ts'
 
 const STUCK = [{ name: 'stuck_plans', gap: '1h' }]
 const at = (minutes: number): Date => new Date(NOW.getTime() + minutes * 60_000)
@@ -133,6 +135,59 @@ test('stuckClosed', () => {
     d.exec(`UPDATE pipes SET ${pipe}`)
     for (const minutes of [0, 30, 61, 120]) expect(stuck(d, root, STUCK, at(minutes))).toEqual([])
   }
+})
+
+const WHY = 'threw once on a GitHub TLS handshake timeout, passes on the next run'
+
+function returnedTwice(): { d: Db; root: string; src: string } {
+  const { d, root } = stalling()
+  const src = join(root, '.cf/work/1/src')
+  mkdirSync(src, { recursive: true })
+  git(src, ['init', '-q'])
+  writeFileSync(join(src, 'a'), 'a')
+  for (const start of [0, 100]) {
+    for (const minutes of [0, 30]) expect(stuck(d, root, STUCK, at(start + minutes))).toEqual([])
+    expect(stuck(d, root, STUCK, at(start + 61))).toEqual([1])
+    logged(d, { plan: 1, kind: 'director', actor: 'director', outcome: 'pass', message: `return: ${WHY}`, pointer: null, run: null })
+    d.exec("UPDATE plans SET state = 'running'")
+  }
+  return { d, root, src }
+}
+
+const stuckEvents = (d: Db) => d.prepare("SELECT outcome FROM events WHERE kind = 'stuck'").pluck().all()
+
+test('stuckReturnedTwiceHoldsForCoo', async () => {
+  const { d, root, src } = returnedTwice()
+  for (const minutes of [200, 230]) expect(stuck(d, root, STUCK, at(minutes))).toEqual([])
+  expect(stuck(d, root, STUCK, at(261))).toEqual([1])
+  const tree = snapshot(src)
+  expect(d.prepare('SELECT state, held_by, held_why FROM plans WHERE id = 1').get()).toEqual({ state: 'blocked_on_ceo', held_by: 'coo',
+    held_why: `the director returned step 3 on tree ${tree} 2 times; last reason: ${WHY}; ` +
+      `step 3 and its tree unchanged for 61 min while the tick ran; waits: lane_over_cap; last: return: ${WHY}` })
+  expect(stuckEvents(d)).toEqual(['escalate', 'escalate', 'needs_coo'])
+  const provider: Provider = { name: 'claude-agent-sdk', fire: () => { throw new Error('fired') } }
+  await woke(d, root, provider, at(300), () => undefined)
+  expect(eventsOf(d, 1, 'director')).toHaveLength(2)
+})
+
+test('stuckNewTreeEscalates', () => {
+  const { d, root, src } = returnedTwice()
+  writeFileSync(join(src, 'b'), 'b')
+  for (const minutes of [200, 230]) expect(stuck(d, root, STUCK, at(minutes))).toEqual([])
+  expect(stuck(d, root, STUCK, at(261))).toEqual([1])
+  expect(d.prepare('SELECT held_why FROM plans WHERE id = 1').pluck().get())
+    .toBe(`step 3 and its tree unchanged for 61 min while the tick ran; waits: lane_over_cap; last: return: ${WHY}`)
+  expect(stuckEvents(d)).toEqual(['escalate', 'escalate', 'escalate'])
+})
+
+test('directorRepeatReturnSeen', () => {
+  const d = db()
+  const entry = REGISTRY.filter((e) => e.name === 'director_repeat_return')
+  expect(drift(d, entry, NOW)).toEqual([])
+  logged(d, { plan: 1, kind: 'stuck', actor: 'drift', outcome: 'needs_coo', message: 'm', pointer: null, run: null }, '2026-10-03 09:00:00')
+  expect(drift(d, entry, NOW)).toMatchObject([{ name: 'director_repeat_return', state: 'seen' }])
+  d.exec("UPDATE settings SET value = '0' WHERE key = 'director.apply'")
+  expect(drift(d, entry, NOW)).toMatchObject([{ name: 'director_repeat_return', state: 'off' }])
 })
 
 test('stuckOff', () => {

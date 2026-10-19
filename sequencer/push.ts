@@ -4,10 +4,10 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { parse as yaml } from 'yaml'
 import { z } from 'zod'
-import { actions, closeIssue, commentIssue, fileIssue, gh, installed, issueComments, forward, openPr, rehearse, review, unrehearse, type IssueComment, type Read } from '../cli/gh.ts'
+import { actions, closeIssue, commentIssue, dispatch, fileIssue, gh, installed, issueComments, forward, openPr, rehearse, review, unrehearse, type IssueComment, type Read } from '../cli/gh.ts'
 import { CARD } from '../cli/queue.ts'
 import { alerter } from '../cli/watch.ts'
-import { judge, MISSING, PENDING, shell, type Board, type Gh } from '../rails/ci-green/index.ts'
+import { judge, MISSING, PENDING, shell, type Board, type Gh, type Head as At } from '../rails/ci-green/index.ts'
 import { parse } from '../rails/diff.ts'
 import { record, type Verdict } from '../rails/record.ts'
 import { headDigest, signedHead } from '../store/approvals.ts'
@@ -35,6 +35,7 @@ import { clean, subjectOf } from './shape.ts'
 import { size } from './size.ts'
 import { prosed } from './tells.ts'
 import { picked, theirs } from './theirs.ts'
+import { dispatchable, fired, started, unrun, UNRUN } from './triggers.ts'
 
 interface Head { dir: string; branch: string; sha: string }
 
@@ -51,6 +52,7 @@ export interface Wire {
   review: (fork: string, branch: string) => void
   greptile?: (fork: string) => boolean
   actions?: (fork: string) => boolean
+  dispatch?: (fork: string, file: string, branch: string) => void
   file: (repo: string, title: string, body: string, labels: string[]) => string
   comment: (repo: string, no: number, body: string) => void
   thread?: (repo: string, no: number) => IssueComment[]
@@ -72,7 +74,7 @@ export const WIRE: Wire = {
   rehearse,
   unrehearse,
   at: (dir, ref) => git(dir, ['ls-remote', 'origin', ref]).split('\t')[0] ?? '',
-  review, greptile: installed, actions,
+  review, greptile: installed, actions, dispatch,
   install: () => { refresh(npm, alerter()) },
   card: [theirs()],
   intake: picked(),
@@ -121,9 +123,9 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
   if (off !== null) return { outcome: 'refuse', spans: ['fold'], to: 2, note: off }
   if (!internal(plan)) { wire.rehearse?.(fork, ci); took(db, plan) }
   if (!workflows(head.dir)) { freed(db, plan.id); return checked(db, root, plan, repo) }
-  const dark = disabled(db, root, plan.id, head.sha, fork, wire)
-  if (dark !== null) return dark
   const on = { fork, branch: ci, sha: tip }
+  const early = unfired(db, root, plan, repo, head, on, wire)
+  if (early !== null) return early.stop
   const { verdict, board } = judge(on, { body: '', commits: commits(head.dir), issue_ref: profile(root, repo)?.issue_ref }, touched(root, plan.id), wire.runs)
   put(root, plan.id, BOARD, `${JSON.stringify(board)}\n`)
   const at = `${fork}@${head.sha.slice(0, 12)}`
@@ -150,6 +152,14 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
   forkGreen(db, plan.id, passed)
   if (verdict.outcome === 'pass') put(root, plan.id, GREEN, `${ci} ${tip}\n`)
   return passed ? null : refused(at, verdict, red(fork, verdict.spans, wire.runs))
+}
+
+function unfired(db: Db, root: string, plan: PlanRow, repo: string, head: Head, on: At, wire: Wire): { stop: Outcome | null } | null {
+  const manual = fired(head.dir, on.branch, [...touched(root, plan.id), 'greptile.json']) ? null : dispatchable(head.dir)
+  if (manual?.length === 0) { freed(db, plan.id); unrun(db, root, plan.id, head.sha); return { stop: checked(db, root, plan, repo, UNRUN) } }
+  const dark = disabled(db, root, plan.id, head.sha, on.fork, wire)
+  if (dark === null && manual !== null) started(root, plan.id, manual, on.sha, (file) => { wire.dispatch?.(on.fork, file, on.branch) })
+  return dark === null ? null : { stop: dark }
 }
 
 /** Only an "on" is kept against the head, so a fork still off is asked again after `cf return`. */
@@ -276,13 +286,13 @@ function triggered(text: string): boolean {
 /**
  * Our own repo with no workflows, or a part whose fork CI runs once at its parent's step 6, has no CI to wait on, so step 3's checks, run on this
  * host at this head, stand as it. Our own branch lands on `main` from the checkout. An outside repo with no
- * workflows comes here too, after its branch is sent.
+ * workflows, or none that runs on its branch, comes here too, after its branch is sent.
  */
-function checked(db: Db, root: string, plan: PlanRow, repo: string): null {
+function checked(db: Db, root: string, plan: PlanRow, repo: string, because?: string): null {
   const passed = passing(db, plan.id, 'gate', 'pre_review')
   const sha = headOf(root, plan.id).sha
   const asm = assembly(db, plan)
-  const why = asm === null ? `${repo} runs no workflows` : `fork CI runs once on ${asm.branch}, at the parent's step 6`
+  const why = because ?? (asm === null ? `${repo} runs no workflows` : `fork CI runs once on ${asm.branch}, at the parent's step 6`)
   const verdict: Verdict = {
     outcome: passed ? 'pass' : 'refuse',
     defect_class: null,

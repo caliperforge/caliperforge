@@ -51,7 +51,11 @@ export const SCHEDULED = {
   '.github/workflows/weekly.yml': "on:\n  schedule:\n    - cron: '0 6 * * 1'\n  workflow_dispatch:\n",
 }
 
-export const WORLDS: [Tree, boolean][] = [[TYPESCRIPT, true], [TYPESCRIPT, false], [KOTLIN, true], [HANDOUT, true], [RED, true]]
+export const MANUAL = { ...TYPESCRIPT, [WORKFLOW]: 'on:\n  push:\n    branches: [main]\n  workflow_dispatch:\n' }
+export const TEX = { ...TYPESCRIPT, [WORKFLOW]: "on:\n  pull_request:\n    paths: ['**.tex']\n" }
+
+export const WORLDS: [Tree, boolean][] = [[TYPESCRIPT, true], [TYPESCRIPT, false], [KOTLIN, true], [HANDOUT, true], [RED, true],
+  [MANUAL, false], [TEX, false], [SCHEDULED, false]]
 export const OURS: [Tree, boolean][] = [[TYPESCRIPT, true], [TYPESCRIPT, false], [RED, true], [GREEN, true], [NAPPING, true], [OOPS, true],
   [BROKEN, true], [ORPHANED, true], [ATELIER, true], [SCHEDULED, false], [GREETED, true]]
 

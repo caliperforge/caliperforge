@@ -18,6 +18,7 @@ import { carried as rows } from '../rails/completion-audit/index.ts'
 import { BOARD, headOf, opened, rehearsalBranch, title } from './push.ts'
 import { GRADING } from './ready.ts'
 import { checked } from './seat.ts'
+import { UNRUN } from './triggers.ts'
 import { diffOf, drop, FORK, get, maybe, put, repoName, srcDir } from './workspace.ts'
 
 /**
@@ -171,7 +172,7 @@ function bodyFor(db: Db, root: string, card: Card, desk: Desk): string {
     `- Change: ${card.change.trim().split('\t').join(', ')}; ${files}[the commit on our fork](https://github.com/${fork}/commit/${head.sha})`,
     `- Gates: ${card.marks.map((m) => `${m.name} ${m.ok ? 'pass' : 'NOT PASSED'}`).join(', ')}`,
     ...modes(root, card.id),
-    ci === null ? `- this repo has no CI; checked with: ${ranAt(db, root, card.id)}` : `- Their CI on our fork: ${ciLine(ci)}`,
+    ci === null ? `- ${maybe(root, card.id, 'ci.unrun') === head.sha ? UNRUN : 'this repo has no CI'}; checked with: ${ranAt(db, root, card.id)}` : `- Their CI on our fork: ${ciLine(ci)}`,
     `- Greptile on our fork: ${greptileLine(db, card.id, head.sha)}`,
     open === null
       ? `- Goes out as: a new pull request titled ${code(title(root, card.id))}`

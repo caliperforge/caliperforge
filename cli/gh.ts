@@ -150,6 +150,11 @@ export function actions(fork: string, read: Read = gh): boolean {
   return z.object({ total_count: z.int() }).parse(read(['api', `repos/${fork}/actions/workflows`])).total_count > 0
 }
 
+/** Answers 204 with an empty body, which `gh` cannot parse as JSON. */
+export function dispatch(fork: string, file: string, branch: string, exec: Run = run): void {
+  exec(['api', '-X', 'POST', `repos/${fork}/actions/workflows/${file}/dispatches`, '-f', `ref=${branch}`])
+}
+
 /** Closed with no comment and the branch kept: the branch is the head the real pull request opens from. */
 export function unrehearse(fork: string, branch: string): void {
   const no = rehearsal(fork, branch)

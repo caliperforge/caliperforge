@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { actions, fileIssue, forward, installed, openPr, rehearse, type Read, type Run } from '../gh.ts'
+import { actions, dispatch, fileIssue, forward, installed, openPr, rehearse, type Read, type Run } from '../gh.ts'
 
 const FORK = 'caliperforge/widget'
 const BRANCH = 'widget-12-a1-next'
@@ -177,6 +177,12 @@ test('D5 actions reads the fork\'s registered workflows', () => {
   expect(actions(FORK, count(2))).toBe(true)
   expect(calls).toEqual([['api', `repos/${FORK}/actions/workflows`], ['api', `repos/${FORK}/actions/workflows`]])
   expect(() => actions(FORK, () => ({ workflows: [] }))).toThrow()
+})
+
+test('D7 dispatch posts the workflow on the branch', () => {
+  const calls: string[][] = []
+  dispatch(FORK, 'ci.yml', BRANCH, recorder(calls))
+  expect(calls).toEqual([['api', '-X', 'POST', `repos/${FORK}/actions/workflows/ci.yml/dispatches`, '-f', `ref=${BRANCH}`]])
 })
 
 const ISSUE = ['issue', 'create', '--repo', FORK, '--title', 'Part 1', '--body-file', '-']

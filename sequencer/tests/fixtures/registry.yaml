@@ -390,3 +390,9 @@
   where: "outcome = 'escalate' AND message LIKE '%has Actions off for its workflows%'"
   gap: 7d
   expected: 0
+- name: fork_unrun
+  table: events
+  column: at
+  where: "kind = 'ci.unrun'"
+  gap: 7d
+  expected: 0

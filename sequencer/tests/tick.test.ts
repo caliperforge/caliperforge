@@ -2,7 +2,8 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { expect, test } from 'vitest'
+import { expect, test, vi } from 'vitest'
+import { record as railed } from '../../rails/record.ts'
 import { day, halted, open as openPlans, runsOf, verdictsOf } from '../../cli/brief.ts'
 import { measure, type Read } from '../../cli/measure.ts'
 import { account, parse, refuseTarget } from '../../cli/queue.ts'
@@ -23,17 +24,24 @@ import { GREEN } from '../base.ts'
 import { record, sharing } from '../../store/files.ts'
 import { drop, take } from '../../store/leases.ts'
 import { allEvents, eventsOf, kindsOf, newestMode, runRows } from '../../store/events.ts'
-import { overrule, verdictRows } from '../../store/verdict.ts'
+import { addReview, overrule, verdictRows } from '../../store/verdict.ts'
 import { record as signal } from '../../store/signals.ts'
 import { benchPacket } from '../../runner/packet.ts'
 import type { Packet, Provider } from '../../providers/kind.ts'
 import type { Gh } from '../../rails/ci-green/index.ts'
 import type { Fired } from '../kind.ts'
 import { hold, unhold } from '../hold.ts'
-import { forkCi, type Wire } from '../push.ts'
+import { forkCi, rehearsalBranch, type Wire } from '../push.ts'
+import { UNRUN } from '../triggers.ts'
+import { MANUAL, SCHEDULED, TEX } from './bases.ts'
 import { started } from '../signals.ts'
 import { closed } from '../unpolled.ts'
 import { approve, builds, built, CARRIED, dropping, internalPlan, KOTLIN, ours, owning, PASS, plan, PR, REFUSE, rerunning, RUN, runsAfter, runsOn, scored, stub, tip, TYPESCRIPT, watched, WORDS, world, type World } from './world.ts'
+
+vi.mock(import('../../rails/record.ts'), async (importOriginal) => {
+  const real = await importOriginal()
+  return { ...real, record: vi.fn(real.record) }
+})
 
 const head = (cwd: string, args: string[]): string => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim()
 
@@ -966,12 +974,16 @@ test('an unparked plan starts its CI window at tick 1', async () => {
   expect(out?.note).toMatch(/tick 1 of 45/)
 })
 
-const atCi = async (): Promise<World> => {
-  const w = world()
+const atCi = async (files = TYPESCRIPT, ci = true): Promise<World> => {
+  const w = world('warm', undefined, files, ci)
   approve(w.db, w.target)
   for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
   return w
 }
+
+const dispatching = (sent: string[]): NonNullable<Wire['dispatch']> => (fork, file, branch) => void sent.push(`${fork} ${file} ${branch}`)
+
+const ciVerdict = (): unknown => vi.mocked(railed).mock.calls.findLast(([, dir]) => dir.endsWith('rails/ci-green'))?.[3]
 
 const OFF = 'caliperforge/widget has Actions off for its workflows: enable them at https://github.com/caliperforge/widget/actions, then cf return 1'
 
@@ -989,7 +1001,8 @@ test('D1 D4 a fork with Actions off stops on tick 1, asked again', async () => {
 test.each([true, false])('D2 D3 Actions on (asked: %s) holds as today', async (ask) => {
   const w = await atCi()
   let asked = 0
-  const plain = watched([], w.root, 1, () => '[]')
+  const sent: string[] = []
+  const plain = { ...watched([], w.root, 1, () => '[]'), dispatch: dispatching(sent) }
   const wire = ask ? { ...plain, actions: () => { asked += 1; return true } } : plain
   for (const at of [1, 2]) {
     const out = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
@@ -997,6 +1010,60 @@ test.each([true, false])('D2 D3 Actions on (asked: %s) holds as today', async (a
     expect(out?.note).toMatch(new RegExp(`has no run yet, tick ${String(at)} of 10$`))
   }
   expect(asked).toBe(ask ? 1 : 0)
+  expect(sent).toEqual([])
+})
+
+test('D2 a push-to-main tree is dispatched once, then judged', async () => {
+  const w = await atCi(MANUAL, false)
+  const sent: string[] = []
+  const wire = { ...watched([], w.root, 1, () => '[]'), dispatch: dispatching(sent) }
+  for (const at of [1, 2]) {
+    const out = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
+    expect(out).toMatchObject({ step: 6, outcome: 'pass', state: 'running' })
+    expect(out?.note).toMatch(new RegExp(`has no run yet, tick ${String(at)} of 10$`))
+  }
+  const once = [`caliperforge/widget ci.yml ${rehearsalBranch(w.root, 1)}`]
+  expect(sent).toEqual(once)
+  const green = { ...wire, runs: runsOn(w.root, 1) }
+  expect((await tick(w.db, w.root, stub(CARRIED), undefined, undefined, green))[0]).toMatchObject({ step: 6, outcome: 'pass' })
+  expect(plan(w.db, 1).step).toBe(7)
+  expect(ciGreen(w)).toEqual([{ outcome: 'pass' }])
+  expect(sent).toEqual(once)
+})
+
+test('D3 a tree no fork workflow runs on passes on tick 1', async () => {
+  const w = await atCi(TEX, false)
+  let asked = 0
+  const sent: string[] = []
+  const wire = { ...watched([], w.root, 1, () => '[]'), actions: () => { asked += 1; return true }, dispatch: dispatching(sent) }
+  expect((await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]).toMatchObject({ step: 6, outcome: 'pass' })
+  expect(plan(w.db, 1).step).toBe(7)
+  expect([asked, sent]).toEqual([0, []])
+  expect(ciGreen(w)).toEqual([{ outcome: 'pass' }])
+  expect(ciVerdict()).toMatchObject({ message: expect.stringMatching(new RegExp(`^${UNRUN}; step 3's checks at`)) as unknown })
+  expect(maybe(w.root, 1, 'ci.json')).toBe('[]\n')
+  expect(maybe(w.root, 1, 'ci.unrun')).toBe(head(srcDir(w.root, 1), ['rev-parse', 'HEAD']))
+  expect(eventsOf(w.db, 1, 'ci.unrun')).toEqual([{ actor: 'tick', outcome: 'pass', message: UNRUN }])
+})
+
+test('D6 a scheduled-only tree runs no workflows, undispatched', async () => {
+  const w = await atCi(SCHEDULED, false)
+  const sent: string[] = []
+  const wire = { ...watched([], w.root, 1, () => '[]'), dispatch: dispatching(sent) }
+  expect((await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]).toMatchObject({ step: 6, outcome: 'pass' })
+  expect(ciVerdict()).toMatchObject({ message: expect.stringMatching(/^acme\/widget runs no workflows; /) as unknown })
+  expect(sent).toEqual([])
+  expect(maybe(w.root, 1, 'ci.unrun')).toBeNull()
+  expect(eventsOf(w.db, 1, 'ci.unrun')).toEqual([])
+})
+
+test('D6 an unrun plan short of pre_review is refused', async () => {
+  const w = await atCi(TEX, false)
+  addReview(w.db, 'pre_review', 3, 1, { outcome: 'refuse', subject_digest: 'a'.repeat(64), spans: [], origin_kind: 'rail',
+    origin_ref: 'tight', message: 'red', defect_class: null }, 0, 0, null)
+  expect(forkCi(w.db, w.root, plan(w.db, 1), 'acme/widget', watched([], w.root, 1, () => '[]'))).toBeNull()
+  expect(ciGreen(w)).toEqual([{ outcome: 'refuse' }])
+  expect(ciVerdict()).toMatchObject({ outcome: 'refuse', spans: ['ci.local'] })
 })
 
 const now = (w: World): unknown[] => current(w.db).filter((r) => r.plan === 1).map(({ doing, detail }) => ({ doing, detail }))

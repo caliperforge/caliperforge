@@ -457,6 +457,14 @@ test('D3 an empty results file is refused and not recorded', () => {
   expect(maybe(root, 1, 'score.json')).toBeNull()
 })
 
+test('D1 no results from run_pair.py is refused before null_check', () => {
+  const { root, db } = scoring('import sys\n')
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'refuse', spans: ['bench.no_results'] })
+  expect(existsSync(join(planDir(root, 1), 'fuzz-bench/results'))).toBe(false)
+  expect(scores(db)).toEqual([])
+  expect(maybe(root, 1, 'score.json')).toBeNull()
+})
+
 test('score D3 no target or no generate.json is refused uncloned', () => {
   const { root, db } = scoring(undefined, { generator: 'fizz' })
   expect(scored(db, root, planById(db, 1))).toEqual({ outcome: 'refuse', spans: ['target.yml'], note: 'target.yml has no target' })

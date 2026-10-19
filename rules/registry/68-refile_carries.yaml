@@ -1,0 +1,6 @@
+- name: refile_carries
+  switch: { key: director.apply, value: '1' }
+  table: events
+  column: at
+  where: "outcome = 'pass' AND message LIKE 'cf gh refile %'"
+  gap: 14d

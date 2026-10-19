@@ -4,6 +4,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { parse as yaml } from 'yaml'
 import { z } from 'zod'
+import { actions } from '../cli/actions.ts'
 import { closeIssue, commentIssue, fileIssue, gh, installed, issueComments, forward, openPr, rehearse, review, unrehearse, type IssueComment, type Read } from '../cli/gh.ts'
 import { CARD } from '../cli/queue.ts'
 import { alerter } from '../cli/watch.ts'
@@ -50,6 +51,7 @@ export interface Wire {
   at?: (dir: string, ref: string) => string
   review: (fork: string, branch: string) => void
   greptile?: (fork: string) => boolean
+  actions?: (fork: string) => boolean
   file: (repo: string, title: string, body: string, labels: string[]) => string
   comment: (repo: string, no: number, body: string) => void
   thread?: (repo: string, no: number) => IssueComment[]
@@ -71,7 +73,7 @@ export const WIRE: Wire = {
   rehearse,
   unrehearse,
   at: (dir, ref) => git(dir, ['ls-remote', 'origin', ref]).split('\t')[0] ?? '',
-  review, greptile: installed,
+  review, greptile: installed, actions,
   install: () => { refresh(npm, alerter()) },
   card: [theirs()],
   intake: picked(),
@@ -100,6 +102,8 @@ export const COUNTS = [WAITS, RERUNS, GRADES]
 
 const REHEARSED = 'ci.next'
 
+const ACTIONS = 'ci.actions'
+
 /**
  * Step 6 before the gate: the branch goes to our fork -- no pull request, and the rail reads the
  * branch's own commit messages for an upstream number -- and `rails/ci-green` judges the runs at
@@ -118,6 +122,8 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
   if (off !== null) return { outcome: 'refuse', spans: ['fold'], to: 2, note: off }
   if (!internal(plan)) { wire.rehearse?.(fork, ci); took(db, plan) }
   if (!workflows(head.dir)) { freed(db, plan.id); return checked(db, root, plan, repo) }
+  const dark = disabled(db, root, plan.id, head.sha, fork, wire)
+  if (dark !== null) return dark
   const on = { fork, branch: ci, sha: tip }
   const { verdict, board } = judge(on, { body: '', commits: commits(head.dir), issue_ref: profile(root, repo)?.issue_ref }, touched(root, plan.id), wire.runs)
   put(root, plan.id, BOARD, `${JSON.stringify(board)}\n`)
@@ -145,6 +151,18 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
   forkGreen(db, plan.id, passed)
   if (verdict.outcome === 'pass') put(root, plan.id, GREEN, `${ci} ${tip}\n`)
   return passed ? null : refused(at, verdict, red(fork, verdict.spans, wire.runs))
+}
+
+/** Only an "on" is kept against the head, so a fork still off is asked again after `cf return`. */
+function disabled(db: Db, root: string, plan: number, sha: string, fork: string, wire: Wire): Outcome | null {
+  if (maybe(root, plan, ACTIONS) === sha) return null
+  if (wire.actions?.(fork) ?? true) {
+    put(root, plan, ACTIONS, sha)
+    return null
+  }
+  freed(db, plan)
+  return { outcome: 'needs_ceo', spans: ['fork.actions'],
+    note: `${fork} has Actions off for its workflows: enable them at https://github.com/${fork}/actions, then cf return ${String(plan)}` }
 }
 
 function refused(at: string, verdict: Verdict, failed: ReturnType<typeof red>): Outcome {

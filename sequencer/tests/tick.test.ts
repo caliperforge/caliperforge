@@ -973,6 +973,32 @@ const atCi = async (): Promise<World> => {
   return w
 }
 
+const OFF = 'caliperforge/widget has Actions off for its workflows: enable them at https://github.com/caliperforge/widget/actions, then cf return 1'
+
+test('D1 D4 a fork with Actions off stops on tick 1, asked again', async () => {
+  const w = await atCi()
+  const wire = { ...watched([], w.root, 1, () => '[]'), actions: () => false }
+  const lap = async (): Promise<Fired | undefined> => (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
+  expect(await lap()).toMatchObject({ step: 6, outcome: 'needs_ceo', state: 'blocked_on_ceo', spans: ['fork.actions'], note: OFF })
+  expect(ciGreen(w)).toEqual([])
+  expect(kindsOf(w.db, 1).filter((e) => e.kind.startsWith('fork.')).at(-1)?.kind).toBe('fork.judged')
+  unhold(w.db, w.root, 1, 'ceo')
+  expect(await lap()).toMatchObject({ step: 6, outcome: 'needs_ceo', note: OFF })
+})
+
+test.each([true, false])('D2 D3 Actions on (asked: %s) holds as today', async (ask) => {
+  const w = await atCi()
+  let asked = 0
+  const plain = watched([], w.root, 1, () => '[]')
+  const wire = ask ? { ...plain, actions: () => { asked += 1; return true } } : plain
+  for (const at of [1, 2]) {
+    const out = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
+    expect(out).toMatchObject({ step: 6, outcome: 'pass', state: 'running' })
+    expect(out?.note).toMatch(new RegExp(`has no run yet, tick ${String(at)} of 10$`))
+  }
+  expect(asked).toBe(ask ? 1 : 0)
+})
+
 const now = (w: World): unknown[] => current(w.db).filter((r) => r.plan === 1).map(({ doing, detail }) => ({ doing, detail }))
 
 test('a CI hold leaves a waiting on CI row in now', async () => {

@@ -1,4 +1,5 @@
 import { expect, test } from 'vitest'
+import { actions } from '../actions.ts'
 import { fileIssue, forward, installed, openPr, rehearse, type Read, type Run } from '../gh.ts'
 
 const FORK = 'caliperforge/widget'
@@ -168,6 +169,15 @@ test('D4 selected listing failing for another reason throws', () => {
     return { installations: [{ id: 7, app_slug: 'greptile-apps', repository_selection: 'selected' }] }
   }
   expect(() => installed(FORK, read)).toThrow('HTTP 502')
+})
+
+test('D5 actions reads the fork\'s registered workflows', () => {
+  const calls: string[][] = []
+  const count = (n: number): Read => (args) => { calls.push(args); return { total_count: n } }
+  expect(actions(FORK, count(0))).toBe(false)
+  expect(actions(FORK, count(2))).toBe(true)
+  expect(calls).toEqual([['api', `repos/${FORK}/actions/workflows`], ['api', `repos/${FORK}/actions/workflows`]])
+  expect(() => actions(FORK, () => ({ workflows: [] }))).toThrow()
 })
 
 const ISSUE = ['issue', 'create', '--repo', FORK, '--title', 'Part 1', '--body-file', '-']

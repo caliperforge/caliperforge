@@ -384,3 +384,9 @@
   where: "kind = 'generate' AND outcome = 'pass' AND message LIKE '%, 0 properties'"
   gap: 7d
   expected: 0
+- name: fork_actions_off
+  table: events
+  column: at
+  where: "outcome = 'escalate' AND message LIKE '%has Actions off for its workflows%'"
+  gap: 7d
+  expected: 0

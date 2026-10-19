@@ -34,7 +34,7 @@ test('fresh', () => {
     'ratchet_refuse', 'intake', 'stuck_plans', 'science_pull', 'director_look', 'typescript_specialist',
     'daily_learnings', 'review_examples', 'director_fix_reach', 'tick_deps', 'watch', 'director_widen', 'target_parked_once', 'director_ceiling',
     'close_landed', 'handback_not_done', 'ruling_files', 'needs_ceo_actor', 'build_cap', 'ready_proof_stuck', 'card_facts',
-    'director_findings', 'director_rule_dropped', 'rule_to_build', 'blind_review', 'drift_recovered', 'drift_refile', 'capture_swallowed_once', 'design_lead', 'daily_live', 'paydesk_live', 'site_data', 'site_pipe', 'lane_back_on', 'house_generator', 'design_on_main', 'earth_lodge_site', 'site_push', 'director_design_waive', 'gpg_lock_hold', 'bench_no_properties'])
+    'director_findings', 'director_rule_dropped', 'rule_to_build', 'blind_review', 'drift_recovered', 'drift_refile', 'capture_swallowed_once', 'design_lead', 'daily_live', 'paydesk_live', 'site_data', 'site_pipe', 'lane_back_on', 'house_generator', 'design_on_main', 'earth_lodge_site', 'site_push', 'director_design_waive', 'gpg_lock_hold', 'bench_no_properties', 'fork_actions_off'])
   expect(drift(d, REGISTRY, NOW).map((r) => r.name)).not.toContain('build_cap')
   expect(drift(d, REGISTRY, NOW).map((r) => r.name)).not.toContain('site_pipe')
   expect(drift(d, REGISTRY, NOW).map((r) => r.name)).not.toContain('director_widen')
@@ -81,6 +81,15 @@ test('D5 a builder hand-off with no step-2 build is seen', () => {
   addRule(d, { id: 'typescript_specialist', kind: 'card', path: 'rules/roster.yaml', content_hash: '0'.repeat(64), loaded_at: '2026-09-22' })
   runAt(d, 1, 2, 'typescript_specialist', '2026-10-02 12:00:00')
   expect(drift(d, REGISTRY, NOW).map((r) => r.name)).not.toContain('rule_to_build')
+})
+
+test('D6 a fork with Actions off is seen', () => {
+  const d = db()
+  const off = REGISTRY.filter((e) => e.name === 'fork_actions_off')
+  expect(drift(d, off, NOW)).toEqual([])
+  logged(d, { plan: 1, kind: 'ready', actor: 'tick', outcome: 'escalate', pointer: null, run: null,
+    message: 'caliperforge/widget has Actions off for its workflows: enable them at x, then cf return 1' }, '2026-10-02 10:00:00')
+  expect(drift(d, off, NOW).map((r) => r.state)).toEqual(['seen'])
 })
 
 test('D2 a second swallowed before a back is seen', () => {

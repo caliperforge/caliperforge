@@ -42,15 +42,11 @@
     "lines": 46
   },
   "measure.ts": {
-    "lines": 118,
-    "prepare": 2
+    "lines": 90
   },
   "plan.ts": {
     "lines": 117,
     "silent-catch": 1
-  },
-  "proposal.ts": {
-    "prepare": 2
   },
   "queue.ts": {
     "lines": 189,
@@ -60,8 +56,7 @@
     "lines": 34
   },
   "scan.ts": {
-    "lines": 77,
-    "prepare": 2
+    "lines": 57
   },
   "session.ts": {
     "lines": 63,

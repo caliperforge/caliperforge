@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import type { Db } from '../store/index.ts'
+import { loopOpen, putPulse, type Pulse } from '../store/targets.ts'
 import { gh, ours, WINDOW, type Read } from './gh.ts'
 
 const Merged = z.array(z.object({
@@ -18,44 +19,15 @@ const Elsewhere = z.array(z.object({ repository: z.object({ nameWithOwner: z.str
 /** Ruled at rev 4: no outsider merge in 21 days, or an open-PR median over 21 days, is a cold account. */
 const COLD_DAYS = 21
 
-/** Plan states a plan can still leave; a target under one of them is a loop of ours that is still open. */
-const LIVE = "('queued', 'running', 'blocked_on_ceo')"
-
 /** `gh search` is rate-limited at 30 a minute, so that is the window `elsewhere()` reads and the number of reads it makes. */
 const SEARCHES = 30
 
-interface Pulse {
-  repo: string
-  measured_at: string
-  maintainers: number
-  doors: number
-  last_outsider_merge: string | null
-  open_pr_age_p50_days: number
-  cross_repo_activity: number
-  open_loop: boolean
-  pulse: 'warm' | 'cold'
-  evidence: string
-}
-
 export type { Read }
 
-const UPSERT = `INSERT INTO accounts (repo, measured_at, maintainers, doors, last_outsider_merge,
-  open_pr_age_p50_days, cross_repo_activity, open_loop, pulse, evidence) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  ON CONFLICT (repo, measured_at) DO UPDATE SET maintainers = excluded.maintainers, doors = excluded.doors,
-    last_outsider_merge = excluded.last_outsider_merge, open_pr_age_p50_days = excluded.open_pr_age_p50_days,
-    cross_repo_activity = excluded.cross_repo_activity, open_loop = excluded.open_loop,
-    pulse = excluded.pulse, evidence = excluded.evidence`
-
 export function measure(db: Db, repo: string, today: string, read: Read = gh): Pulse {
-  const row = pulseOf(repo, today, read, planOpen(db, repo))
-  db.prepare(UPSERT).run(row.repo, row.measured_at, row.maintainers, row.doors, row.last_outsider_merge,
-    row.open_pr_age_p50_days, row.cross_repo_activity, row.open_loop ? 1 : 0, row.pulse, row.evidence)
+  const row = pulseOf(repo, today, read, loopOpen(db, repo))
+  putPulse(db, row)
   return row
-}
-
-function planOpen(db: Db, repo: string): boolean {
-  return db.prepare(`SELECT 1 FROM plans JOIN targets ON targets.id = plans.target_id
-    WHERE targets.repo = ? AND plans.state IN ${LIVE} LIMIT 1`).get(repo) !== undefined
 }
 
 export function render(row: Pulse): string {

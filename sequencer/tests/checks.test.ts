@@ -778,6 +778,16 @@ test('1394 D1 D2 pytest alone runs under the minutes cap', () => {
   expect(caps).toEqual([undefined, undefined, 3600000, undefined, undefined, undefined])
 })
 
+test('1524 D1 npm run test alone runs under the long cap', () => {
+  const caps: (number | undefined)[] = []
+  const run: Run = (...given) => {
+    caps.push(given[3])
+    return { ok: true, output: '' }
+  }
+  checks(tree(THREE), OWN, run)
+  expect(caps).toEqual([undefined, undefined, 1500000])
+})
+
 test('1394 D4 a pytest capped under minutes is still capped', () => {
   const failed = checks(tree(FOUNDRY), BENCH, pytest({ ...PYTEST, capped: true }), [], null, [], 60)
   expect(failed).toMatchObject({ script: 'pytest', capped: true })

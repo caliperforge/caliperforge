@@ -3,8 +3,8 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { hostValue } from '../providers/credential.ts'
 import type { Db } from '../store/index.ts'
-import { hhmm, zone } from '../store/lanes.ts'
-import { clock, inWindow, openPipes, PipeRow } from '../store/plans.ts'
+import { hhmm, pipes, zone } from '../store/lanes.ts'
+import { clock, inWindow, live, openPipes } from '../store/plans.ts'
 import { real, receipt, type Receipt } from '../store/ticks.ts'
 import { crashed } from './inbox.ts'
 
@@ -32,8 +32,7 @@ interface Liveness {
 
 export function liveness(db: Db, now: Date): Liveness {
   const open = openPipes(db, hhmm(db, now)).length > 0
-  const row = db.prepare('SELECT at, note FROM ticks WHERE dry = 0 ORDER BY at DESC LIMIT 1').get() as
-    { at: string; note: string } | undefined
+  const row = real(db, 1)[0]
   if (row === undefined) return { at: null, minutes: null, crash: null, stale: open }
   const minutes = Math.floor((now.getTime() - Date.parse(row.at)) / 60000)
   const crash = row.note.startsWith(CRASHED) ? row.note.slice(CRASHED.length) : null
@@ -52,10 +51,9 @@ export type Post = (title: string, body: string) => void
 /** A lane the shared-failure rule switched off keeps ticking with nothing to fire: alive, and stalled. */
 export function stalledLanes(db: Db, now: Date): string[] {
   const at = hhmm(db, now)
-  const rows = db.prepare(`SELECT p.*, count(pl.id) AS jobs FROM pipes p JOIN plans pl ON pl.pipe_id = p.id
-    WHERE p.enabled = 0 AND pl.state IN ('queued', 'running') GROUP BY p.id ORDER BY p.id`).all() as (Record<string, unknown> & { jobs: number })[]
-  return rows.filter((r) => inWindow(PipeRow.parse({ ...r, jobs: undefined }), at))
-    .map((r) => `${String(r.name)} (${String(r.jobs)} job${r.jobs === 1 ? '' : 's'} waiting)`)
+  return pipes(db).filter((p) => p.enabled === 0 && inWindow(p, at))
+    .map((p) => ({ name: p.name, jobs: live(db, p).length })).filter((r) => r.jobs > 0)
+    .map((r) => `${r.name} (${String(r.jobs)} job${r.jobs === 1 ? '' : 's'} waiting)`)
 }
 
 /** One alert when the machine goes down and one when it comes back; every run in between is silent. */

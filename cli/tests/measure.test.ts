@@ -1,6 +1,7 @@
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
+import { accountRows, newestAccount } from '../../store/targets.ts'
 import { measure, render, type Read } from '../measure.ts'
 
 const schema = join(import.meta.dirname, '../../schema')
@@ -33,8 +34,7 @@ test('outsider merged in window by a door: warm, row passes CHECK', () => {
   }))
   expect(row).toMatchObject({ pulse: 'warm', maintainers: 1, doors: 1, last_outsider_merge: '2026-09-10',
     open_pr_age_p50_days: 1, cross_repo_activity: 1 })
-  expect(db.prepare('SELECT pulse, measured_at FROM accounts WHERE repo = ?').get('acme/widget'))
-    .toEqual({ pulse: 'warm', measured_at: TODAY })
+  expect(newestAccount(db, 'acme/widget')).toMatchObject({ pulse: 'warm', measured_at: TODAY })
   expect(render(row).endsWith('https://github.com/acme/widget/pulse\n')).toBe(true)
 })
 
@@ -61,6 +61,5 @@ test('same-day re-measure rewrites its row; elsewhere() caps at 30', () => {
   measure(db, 'acme/widget', TODAY, canned({ merged: many }, log))
   expect(log).toHaveLength(30)
   measure(db, 'acme/widget', TODAY, canned({ merged: [merge('outsider', 'maintainer', '2026-09-16T00:00:00Z')] }))
-  expect(db.prepare('SELECT count(*) AS n, max(maintainers) AS m FROM accounts WHERE repo = ?').get('acme/widget'))
-    .toEqual({ n: 1, m: 1 })
+  expect(accountRows(db).filter((r) => r.repo === 'acme/widget')).toMatchObject([{ maintainers: 1 }])
 })

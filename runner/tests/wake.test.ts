@@ -4,7 +4,8 @@ import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { reviewerNotBuilder } from '../../checks/reviewer-not-builder.ts'
 import { drop, put, srcDir } from '../../sequencer/workspace.ts'
-import { migrate, open } from '../../store/index.ts'
+import { addRun } from '../../store/brief.ts'
+import { addRule, migrate, open } from '../../store/index.ts'
 import { overBudget } from '../../store/refusals.ts'
 import { CAP, wake } from '../wake.ts'
 
@@ -62,13 +63,11 @@ test('fixer and orchestrator runs leave ceiling and packet alone', () => {
   const { db, home } = seeded()
   const before = [wake(db, home, 7), overBudget(db, 7)]
   for (const seat of ['fixer', 'orchestrator']) {
-    db.prepare(`INSERT OR IGNORE INTO rules (id, kind, path, content_hash, loaded_at)
-      VALUES (?, 'card', 'rules/roster.yaml', ?, '2026-09-22T00:00:00.000Z')`).run(seat, '0'.repeat(64))
+    addRule(db, { id: seat, kind: 'card', path: 'rules/roster.yaml', content_hash: '0'.repeat(64), loaded_at: '2026-09-22T00:00:00.000Z' })
     for (const step of [4, 5]) {
-      db.prepare(`INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort,
-        input_tokens, cache_read_tokens, output_tokens, seconds, exit, transcript_path)
-        VALUES (7, ?, ?, ?, 'claude-agent-sdk', 'm', 'high', 7000000, 0, 0, 0, 0, 'x.transcript.jsonl')`)
-        .run(step, seat, '0'.repeat(64))
+      addRun(db, { plan: 7, step, seat, rule_hash: '0'.repeat(64), provider: 'claude-agent-sdk', model: 'm', effort: 'high',
+        input_tokens: 7000000, cache_write_tokens: null, cache_write_1h_tokens: null, cache_read_tokens: 0, output_tokens: 0,
+        seconds: 0, exit: 0, at: new Date().toISOString(), transcript_path: 'x.transcript.jsonl', cost_usd: null })
     }
   }
   expect([wake(db, home, 7), overBudget(db, 7)]).toEqual(before)

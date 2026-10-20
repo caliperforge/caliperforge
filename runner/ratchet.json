@@ -9,9 +9,6 @@
     "lines": 109,
     "prepare": 1
   },
-  "tests/wake.test.ts": {
-    "prepare": 2
-  },
   "wake.ts": {
     "lines": 101
   }

@@ -3,6 +3,7 @@ import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import { branchOf } from '../../sequencer/workspace.ts'
 import type { Db } from '../../store/index.ts'
+import { addAccount, putTarget } from '../../store/targets.ts'
 import { add } from '../queue.ts'
 
 const schema = join(import.meta.dirname, '../../schema')
@@ -11,15 +12,14 @@ const URL = `https://github.com/${REPO}/issues/166`
 
 function world(): Db {
   const db = fresh(schema)
-  db.prepare(`INSERT INTO accounts (id, repo, measured_at, maintainers, doors, last_outsider_merge,
-    open_pr_age_p50_days, cross_repo_activity, pulse, evidence)
-    VALUES (1, ?, '2026-09-23', 2, 1, '2026-09-23', 3, 4, 'warm', 'https://github.com/solana-foundation/pay-kit')`).run(REPO)
+  addAccount(db, { id: 1, repo: REPO, measured_at: '2026-09-23', maintainers: 2, doors: 1, last_outsider_merge: '2026-09-23',
+    open_pr_age_p50_days: 3, cross_repo_activity: 4, pulse: 'warm', evidence: 'https://github.com/solana-foundation/pay-kit' })
   return db
 }
 
 const target = (db: Db, part: string): void => {
-  db.prepare(`INSERT INTO targets (account_id, repo, issue_no, part, named_merger, state, evidence_measured_at, evidence)
-    VALUES (1, ?, 166, ?, 'lgalabru', 'ready', '2026-09-23', ?)`).run(REPO, part, URL)
+  putTarget(db, { account_id: 1, repo: REPO, issue_no: 166, part, named_merger: 'lgalabru', state: 'ready',
+    evidence_measured_at: '2026-09-23', evidence: URL })
 }
 
 test('parts share an issue', () => {

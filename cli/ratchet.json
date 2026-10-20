@@ -68,18 +68,11 @@
   "tests/cf.test.ts": {
     "silent-catch": 1
   },
-  "tests/measure.test.ts": {
-    "prepare": 2
-  },
-  "tests/part.test.ts": {
-    "prepare": 2
-  },
   "watch-main.ts": {
     "lines": 8
   },
   "watch.ts": {
     "lines": 128,
-    "prepare": 2,
     "silent-catch": 2
   }
 }

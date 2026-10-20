@@ -73,8 +73,7 @@
     "prepare": 1
   },
   "home.ts": {
-    "lines": 15,
-    "prepare": 2
+    "lines": 15
   },
   "index.ts": {
     "lines": 242

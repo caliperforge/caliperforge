@@ -1,5 +1,7 @@
 import type { Db } from '../store/index.ts'
+import { partOf, partsOf } from '../store/parts.ts'
 import { internal, originRef, type PlanRow } from '../store/plans.ts'
+import { targetRef } from '../store/targets.ts'
 import { FORK, repoName, SELF } from './workspace.ts'
 
 /**
@@ -17,13 +19,13 @@ export function kernelPlan(plan: PlanRow): boolean {
 
 /** The branch on our fork a part of an outside plan is cut from and lands on, or null for any other plan. */
 export function assembly(db: Db, plan: PlanRow): { branch: string; fork: string } | null {
-  const row = db.prepare('SELECT p.parent, t.repo FROM parts p JOIN targets t ON t.id = ? WHERE p.plan = ?')
-    .get(plan.target_id, plan.id) as { parent: number; repo: string } | undefined
-  return row === undefined ? null : { branch: `asm/${String(row.parent)}`, fork: `${FORK}/${repoName(row.repo)}` }
+  const part = partOf(db, plan.id)
+  const target = targetRef(db, plan.target_id)
+  return part === undefined || target === null ? null : { branch: `asm/${String(part.parent)}`, fork: `${FORK}/${repoName(target.repo)}` }
 }
 
 /** The branch an outside plan split into parts is checked, reviewed and sent upstream from, or null for any other plan. */
 export function assembling(db: Db, plan: PlanRow): string | null {
   if (internal(plan)) return null
-  return db.prepare('SELECT 1 FROM parts WHERE parent = ?').get(plan.id) === undefined ? null : `asm/${String(plan.id)}`
+  return partsOf(db, plan.id).length === 0 ? null : `asm/${String(plan.id)}`
 }

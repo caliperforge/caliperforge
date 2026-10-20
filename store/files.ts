@@ -25,26 +25,26 @@ export function strays(db: Db, plan: number, paths: string[]): void {
 }
 
 /** A path the build already wrote is a stray row: it is listed by clearing the flag, never by a second row. */
-export function listed(db: Db, plan: number, path: string): void {
+export function listed(db: Db, plan: number, path: string, isNew = true): void {
   const held = db.prepare('SELECT 1 FROM plan_files WHERE plan = ? AND path = ?').get(plan, path)
   if (held !== undefined) {
     db.prepare('UPDATE plan_files SET stray = 0 WHERE plan = ? AND path = ?').run(plan, path)
     return
   }
   const next = db.prepare('SELECT coalesce(max(position), -1) + 1 AS n FROM plan_files WHERE plan = ?').get(plan) as { n: number }
-  db.prepare('INSERT INTO plan_files (plan, path, is_new, position, stray) VALUES (?, ?, 1, ?, 0)').run(plan, path, next.n)
+  db.prepare('INSERT INTO plan_files (plan, path, is_new, position, stray) VALUES (?, ?, ?, ?, 0)').run(plan, path, isNew ? 1 : 0, next.n)
 }
 
 export const VERBS = ['set', 'add', 'drop'] as const
 
-export function edit(db: Db, plan: number, verb: typeof VERBS[number], path: string, actor: Holder | 'ruling', why: string | null): void {
+export function edit(db: Db, plan: number, verb: typeof VERBS[number], path: string, actor: Holder | 'ruling', why: string | null, isNew = true): void {
   db.transaction(() => {
     if (db.prepare('SELECT 1 FROM plans WHERE id = ?').get(plan) === undefined) throw new Error(`no plan ${String(plan)}`)
     if (verb === 'drop' && db.prepare('DELETE FROM plan_files WHERE plan = ? AND path = ? AND stray = 0').run(plan, path).changes === 0) {
       throw new Error(`plan ${String(plan)} does not list ${path}`)
     }
     if (verb === 'set') db.prepare('DELETE FROM plan_files WHERE plan = ? AND path <> ? AND stray = 0').run(plan, path)
-    if (verb !== 'drop') listed(db, plan, path)
+    if (verb !== 'drop') listed(db, plan, path, isNew)
     const message = `${verb} ${path}${why === null ? '' : `: ${why}`}`
     logged(db, { plan, kind: 'files', actor, outcome: 'pass', message, pointer: null, run: null })
   })()

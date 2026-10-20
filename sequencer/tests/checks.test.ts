@@ -522,7 +522,7 @@ const OFFLINE = [RPC, "fatal: expected 'packfile'", 'fatal: unable to access: Co
 
 test('1271 D1 network() names the failed line, or null', () => {
   for (const line of OFFLINE) expect(network(`Cloning into 'x'...\n  ${line}\n`)).toBe(line)
-  for (const output of [ASSERTED, '']) expect(network(output)).toBeNull()
+  for (const output of [ASSERTED, '', 'syntax error: unexpected EOF']) expect(network(output)).toBeNull()
 })
 
 test('1271 D2 a network failure blips, staying on step 3', async () => {

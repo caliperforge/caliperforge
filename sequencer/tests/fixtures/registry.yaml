@@ -409,3 +409,9 @@
   column: at
   where: "outcome = 'pass' AND message LIKE 'cf gh refile %'"
   gap: 14d
+- name: offline_hold
+  table: events
+  column: at
+  where: "message LIKE '%: the network is down; the next tick tries again'"
+  gap: 7d
+  expected: 0

@@ -44,6 +44,10 @@ test('D3 a readable endpoint not ok needs a fix', () => {
   expect(text).toContain('| GET | /paid | warn | x402, mpp | $0.01 | - | asks for $0; no declared price |')
 })
 
+test('an endpoint left unchecked needs a fix, not a reject', () => {
+  expect(overall({ endpoints: [{ ...ok, verdict: 'unchecked' as const, issues: ['recipient unchecked: HTTP 429'] }] })).toBe('**fix needed**')
+})
+
 test('D4 free hosts match by suffix, ngrok anywhere', () => {
   expect(listingFlags('x.up.railway.app', '').freehost).toBe('railway.app')
   expect(listingFlags('abc.ngrok-free.app', '').freehost).toBe('ngrok')

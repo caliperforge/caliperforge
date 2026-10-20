@@ -27,7 +27,7 @@ export async function prs(root: string, out: string, cards: string | undefined, 
   const base = join(root, '.cf', 'paydesk', 'prs')
   rmSync(base, { recursive: true, force: true })
   const open = Open.parse(read(['pr', 'list', '--repo', REPO, '--state', 'open', '--limit', '1000', '--json', 'number,headRefOid']))
-  const folders: string[] = []
+  const folders: { dir: string; pr: number }[] = []
   const unfetched: Unfetched[] = []
   const skipped: number[] = []
   for (const pr of open) {
@@ -40,9 +40,10 @@ export async function prs(root: string, out: string, cards: string | undefined, 
     const dirs = [...got.blobs.keys()].filter((p) => posix.basename(p) === 'PAY.md').map((p) => posix.dirname(p))
       .filter((d) => got.files.some((f) => f.startsWith(`${d}/`)))
     if (dirs.length === 0) skipped.push(pr.number)
-    for (const d of dirs) folders.push(fetched(join(base, String(pr.number)), pr.number, d, got.blobs, read))
+    for (const d of dirs) folders.push({ dir: fetched(join(base, String(pr.number)), pr.number, d, got.blobs, read), pr: pr.number })
   }
-  const listings = await scan(folders, undefined, cards, net)
+  const scanned = await scan(folders.map((f) => f.dir), undefined, cards, net)
+  const listings = scanned.map((s, i) => ('invalid_listing' in s ? { ...s, pr: folders[i]?.pr ?? s.pr } : s))
   writeFileSync(out, JSON.stringify([...listings, ...unfetched], null, 2))
   if (cards !== undefined) {
     for (const u of unfetched) writeFileSync(join(cards, `pr-${String(u.pr)}.md`), `## #${String(u.pr)}: files not fetched\n\n${u.unfetched}\n`)

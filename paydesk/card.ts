@@ -32,7 +32,7 @@ export function card(scan: ListingScan): string {
 }
 
 export function overall({ dns, endpoints }: ListingScan): string {
-  const readable = endpoints.some((e) => e.verdict === 'ok' || e.verdict === 'warn' || (e.verdict === 'fail' && !(e.issues.length === 1 && e.issues[0] === UNREADABLE)))
+  const readable = endpoints.some((e) => ['ok', 'warn', 'unchecked'].includes(e.verdict) || (e.verdict === 'fail' && !(e.issues.length === 1 && e.issues[0] === UNREADABLE)))
   if (!dns || !readable) return 'reject'
   return endpoints.every((e) => e.verdict === 'ok') ? 'pass' : 'fix needed'
 }

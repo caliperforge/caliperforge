@@ -9,6 +9,8 @@ const base64 = (name: string): string => readFileSync(join(import.meta.dirname, 
 const BLOBS: Record<string, string> = {
   pay: base64('PAY.md'), spec: base64('openapi.json'), bad: Buffer.from('---\ntitle: [unclosed\n---\n').toString('base64'),
   empty: Buffer.from('{"openapi":"3.0.0","paths":{}}').toString('base64'),
+  shaped: Buffer.from('---\ntitle: Shaped\nservice_url: https://s.example.com\nopenapi: x.json\n---\n').toString('base64'),
+  garbled: Buffer.from('{"a":1} x').toString('base64'),
 }
 const TREE = [
   { path: 'docs/x.md', type: 'blob', sha: 'doc' },
@@ -18,6 +20,9 @@ const TREE = [
   { path: 'providers/acme/broken/PAY.md', type: 'blob', sha: 'bad' },
   { path: 'providers/acme/lite/PAY.md', type: 'blob', sha: 'pay' },
   { path: 'providers/acme/lite/openapi.json', type: 'blob', sha: 'empty' },
+  { path: 'providers/acme/shaped/PAY.md', type: 'blob', sha: 'shaped' },
+  { path: 'providers/acme/garbled/PAY.md', type: 'blob', sha: 'pay' },
+  { path: 'providers/acme/garbled/openapi.json', type: 'blob', sha: 'garbled' },
 ]
 interface Pr { number: number; headRefOid: string; files: string[] }
 const WEATHER: Pr = { number: 11, headRefOid: 'aaa', files: ['providers/acme/weather/openapi.json'] }
@@ -66,14 +71,26 @@ test('D3 every read is pr list or a bare api GET', () => {
   expect(calls.every(([verb, sub, ...rest]) => (verb === 'pr' && sub === 'list') || (verb === 'api' && rest.length === 0))).toBe(true)
 })
 
-test('D5 invalid PAY.md YAML crashes only its listing', async () => {
+test('D5 invalid PAY.md YAML is an invalid listing', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'paydesk-prs-'))
   const broken = { number: 13, headRefOid: 'ccc', files: ['providers/acme/broken/PAY.md'] }
   const both = await prs(dir, join(dir, 'out.json'), undefined, net, reader([WEATHER, broken], []))
   expect(both.listings).toEqual([
     expect.objectContaining({ fqn: 'acme/weather', pr: 11 }),
-    { fqn: 'acme/broken', crash: expect.any(String) as string },
+    { fqn: 'acme/broken', pr: 13, field: 'PAY.md', invalid_listing: expect.any(String) as string },
   ])
+})
+
+test('D3 a bad front or spec is invalid with its PR number', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'paydesk-prs-'))
+  const shaped = { number: 14, headRefOid: 'eee', files: ['providers/acme/shaped/PAY.md'] }
+  const garbled = { number: 15, headRefOid: 'fff', files: ['providers/acme/garbled/openapi.json'] }
+  const got = await prs(dir, join(dir, 'out.json'), undefined, net, reader([shaped, garbled], []))
+  expect(got.listings).toEqual([
+    { fqn: 'acme/shaped', pr: 14, field: 'openapi', invalid_listing: expect.any(String) as string },
+    { fqn: 'acme/garbled', pr: 15, field: 'openapi.path', invalid_listing: expect.any(String) as string },
+  ])
+  expect(JSON.parse(readFileSync(join(dir, 'out.json'), 'utf8'))).toEqual(got.listings)
 })
 
 test('D4 prs --help lists --out and --cards', () => {

@@ -90,6 +90,16 @@ test('check: an unmarked sentence is unsourced, unfetched', async () => {
   expect(fetched).not.toHaveBeenCalled()
 })
 
+test('check D1: a code span holding ... is one sentence', async () => {
+  expect(await checked('Build it with `pnpm install` then `pnpm --filter @ultrafuzz/cli... build` [source:1].'))
+    .toEqual({ outcome: 'pass', spans: [], note: '1 sentence(s) checked against 1 url(s)' })
+})
+
+test('check D2: a split outside a code span still falls', async () => {
+  expect(await checked('Run `a. b` now [source:1]. It never moves.'))
+    .toEqual({ outcome: 'refuse', spans: ['research.unsourced'], note: 'no source for "It never moves."' })
+})
+
 test('check: a 404 is a dead source', async () => {
   fetched.mockResolvedValue(new Response('', { status: 404 }))
   expect(await checked('The cap is 3 [source:1].'))

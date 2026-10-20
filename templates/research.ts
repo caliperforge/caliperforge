@@ -82,7 +82,7 @@ export async function check(root: string, plan: PlanRow): Promise<Outcome> {
   const ask = bare(askOf(root, plan))
   const lines = get(root, plan.id, 'answer.md').replace(SKIPPED, '').split('\n')
   const claims = lines.filter((l, i) => l.trim() !== '' && !l.startsWith('#') && !RULER.test(l) && !RULER.test(lines[i + 1] ?? ''))
-    .flatMap((l) => ROW.test(l) ? [l] : l.replace(/^\s*(?:[-*+]|\d+[.)])\s+/, '').split(/(?<=[.!?]|\[source:\d+\])\s+(?!\[source:)/))
+    .flatMap((l) => ROW.test(l) ? [l] : l.replace(/^\s*(?:[-*+]|\d+[.)])\s+/, '').split(/(?<=^(?:[^`]*`[^`]*`)*[^`]*(?:[.!?]|\[source:\d+\]))\s+(?!\[source:)/))
     .filter((sentence) => !ask.includes(bare(sentence)) && !/:(?:\*\*)?\s*$/.test(sentence))
     .map((sentence) => ({ sentence, cited: cited(sentence, sources) }))
   const unsourced = claims.filter((c) => c.cited === null).map((c) => `"${c.sentence}"`)

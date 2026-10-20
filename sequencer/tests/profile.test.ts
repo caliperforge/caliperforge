@@ -7,6 +7,7 @@ import { seat } from '../../runner/rules.ts'
 import { profile } from '../../store/profile.ts'
 import { at } from '../../templates/pr-path.ts'
 import { gates, type OutsideLanguage } from '../gates.ts'
+import { prTitle } from '../pr.ts'
 import { messageOf, prBody } from '../push.ts'
 import { ran } from '../seat.ts'
 import { checkout, put, srcDir } from '../workspace.ts'
@@ -99,14 +100,12 @@ const BRIEFS = [
   {
     issue: '# feat(python): carry a memo (#35)\n\n**What:** Add a memo field to the payment request.\n**Why:** #35 asks for it.\n',
     message: 'feat(python): carry a memo ()\n\nAdd a memo field to the payment request.\n\nasks for it.',
-    body: ['Addresses #12.', '', '## Summary', '', '- Add a memo field to the payment request.', '- #35 asks for it.', '',
-      '## Test Plan', '', '- `src/hello.test.ts`', '- CI green on our fork at this head.', ''].join('\n'),
+    body: '#35 asks for it.\n\nAdd a memo field to the payment request.\n\nTested in `src/hello.test.ts`.\n\nAddresses #12.\n',
   },
   {
     issue: '# fix(rpc): surfnet_getAccount returns the owner\n\n**What:** Return the account owner.\n**Why:** Callers read it.\n',
     message: 'fix(rpc): surfnet_getAccount returns the owner\n\nReturn the account owner.\n\nCallers read it.',
-    body: ['Addresses #12.', '', '## Summary', '', '- Return the account owner.', '- Callers read it.', '',
-      '## Test Plan', '', '- `src/hello.test.ts`', '- CI green on our fork at this head.', ''].join('\n'),
+    body: 'Callers read it.\n\nReturn the account owner.\n\nTested in `src/hello.test.ts`.\n\nAddresses #12.\n',
   },
 ]
 
@@ -135,7 +134,34 @@ test('D4 go-sdk: subject, Fixes, trailer and disclosure',() => {
   const root = memo()
   const rules = profile(MCP, 'modelcontextprotocol/go-sdk')
   expect(messageOf(root, 1, rules)).toBe('mcp: add a memo\n\nCarry a memo.\n\nFixes #35.\n\nCo-Authored-By: Claude')
-  expect(prBody(35, root, 1, rules)).toMatch(/- CI green on our fork at this head\.\n\nThis change was written with AI assistance\.\n$/)
+  expect(prBody(35, root, 1, rules)).toMatch(/\n\nAddresses #35\.\n\nThis change was written with AI assistance\.\n$/)
+})
+
+const run = (status: string, conclusion: string): string => JSON.stringify([{ workflow: 'CI', status, conclusion, gates: true }])
+
+test.each([
+  { name: 'no ci.json', board: null, unrun: false },
+  { name: 'an empty board with ci.unrun', board: '[]\n', unrun: true },
+  { name: 'a failed run', board: run('completed', 'failure'), unrun: false },
+  { name: 'an unfinished run', board: run('in_progress', ''), unrun: false },
+])('D1 D3 no CI sentence under $name', (c) => {
+  const root = memo()
+  if (c.board !== null) put(root, 1, 'ci.json', c.board)
+  if (c.unrun) put(root, 1, 'ci.unrun', 'abc')
+  const body = prBody(35, root, 1)
+  expect(body).not.toContain('CI')
+  expect(body).not.toMatch(/^## /m)
+  expect(body).toBe('Fixes #35.\n\nCarry a memo.\n\nAddresses #35.\n')
+})
+
+test('D2 a green ci.json ends the check paragraph with CI', () => {
+  const root = memo()
+  put(root, 1, 'ci.json', run('completed', 'success'))
+  expect(prBody(35, root, 1)).toBe('Fixes #35.\n\nCarry a memo.\n\nCI is green on our fork at this head.\n\nAddresses #35.\n')
+})
+
+test('D4 prTitle drops feat(mcp): on a plain history', () => {
+  expect(prTitle(memo(), 1)).toBe('Add a memo')
 })
 
 test.each([{ ai_trailer: false, trailer: 'Co-Authored-By: Claude' }, { ai_trailer: true }, null])(

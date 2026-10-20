@@ -3,7 +3,7 @@ import { appendFileSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
-import { conform } from '../conventions.ts'
+import { conform, shaped } from '../conventions.ts'
 import { MAIN } from '../workspace.ts'
 
 type Commit = string | [message: string, file: string]
@@ -56,6 +56,11 @@ test('D4 a changelog repo flags only branches that skip it', () => {
   expect(row.ok).toBe(false)
   expect(row.says).toContain('changelog')
   expect(conform(repo(recent, [['add hello', 'CHANGELOG.md']])).ok).toBe(true)
+})
+
+test('1539 D4 shaped reads most of the last subjects', () => {
+  expect(shaped(repo(['feat: a', 'fix: b', 'c'], []))).toBe(true)
+  expect(shaped(repo(['a', 'b', 'fix: c'], []))).toBe(false)
 })
 
 test('D5 a repo with no conventions passes a plain commit', () => {

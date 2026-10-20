@@ -11,7 +11,8 @@ import { payee } from './payee.ts'
 import { declaredUsd, pathMatches, type Pricing } from './price.ts'
 
 export interface Net { fetch: typeof fetch; resolve: (host: string) => Promise<unknown> }
-export type Scanned = ListingScan | { fqn: string; crash: string }
+interface Invalid { fqn: string; pr: number; invalid_listing: string; field: string }
+export type Scanned = ListingScan | Invalid | { fqn: string; crash: string }
 
 type Op = Operation & { operationId?: string } & Record<string, unknown>
 type OpenApi = Spec & { paths?: Record<string, Partial<Record<(typeof METHODS)[number], Op>>> }
@@ -61,7 +62,7 @@ export async function scan(dirs: string[], out: string | undefined, cards: strin
   if (out !== undefined) writeFileSync(out, JSON.stringify(results, null, 2))
   if (cards !== undefined) {
     mkdirSync(cards, { recursive: true })
-    for (const s of results) if (!('crash' in s)) writeFileSync(join(cards, `${s.fqn.replace('/', '__')}.md`), card(s))
+    for (const s of results) if ('endpoints' in s) writeFileSync(join(cards, `${s.fqn.replace('/', '__')}.md`), card(s))
   }
   return results
 }
@@ -71,16 +72,25 @@ export function fqnOf(dir: string): string {
   return `${basename(dirname(abs))}/${basename(abs)}`
 }
 
-function front(dir: string): z.infer<typeof Front> {
-  const path = join(dir, 'PAY.md')
-  const found = Front.safeParse(parse(readFileSync(path, 'utf8').split(/^---$/m)[1] ?? ''))
-  if (!found.success) throw new Error(`${path}: ${found.error.message}`)
-  return found.data
+async function parsed(dir: string): Promise<{ pay: z.infer<typeof Front>; spec: OpenApi } | Invalid> {
+  const invalid = (field: string, why: string): Invalid => ({ fqn: fqnOf(dir), pr: 0, invalid_listing: why, field })
+  const failed = (field: string) => (e: unknown): Invalid => invalid(field, message(e))
+  const front = await Promise.resolve().then(() => ({ yaml: parse(readFileSync(join(dir, 'PAY.md'), 'utf8').split(/^---$/m)[1] ?? '') as unknown }))
+    .catch(failed('PAY.md'))
+  if ('invalid_listing' in front) return front
+  const found = Front.safeParse(front.yaml)
+  if (!found.success) {
+    const [{ path, message: why } = { path: [], message: found.error.message }] = found.error.issues
+    return invalid(path.length === 0 ? 'PAY.md' : path.join('.'), why)
+  }
+  return Promise.resolve().then(() => ({ pay: found.data, spec: JSON.parse(readFileSync(resolve(dir, found.data.openapi.path), 'utf8')) as OpenApi }))
+    .catch(failed('openapi.path'))
 }
 
-async function listing(dir: string, net: Net, owes: Owes): Promise<ListingScan> {
-  const pay = front(dir)
-  const spec = JSON.parse(readFileSync(resolve(dir, pay.openapi.path), 'utf8')) as OpenApi
+async function listing(dir: string, net: Net, owes: Owes): Promise<ListingScan | Invalid> {
+  const read = await parsed(dir)
+  if ('invalid_listing' in read) return read
+  const { pay, spec } = read
   const host = new URL(pay.service_url).hostname
   const dns = await net.resolve(host).then(() => true, () => false)
   const ops = Object.entries(spec.paths ?? {}).flatMap(([path, item]) =>

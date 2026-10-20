@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSyn
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { merge, render, rows, type Fix } from '../paydesk/fixlist.ts'
-import { live, providers, recheck, verdict } from '../paydesk/live.ts'
+import { live, providers, recheck, tally, verdict } from '../paydesk/live.ts'
 import { note } from '../paydesk/note.ts'
 import { prs, type Row } from '../paydesk/prs.ts'
 import { scan, type Net } from '../paydesk/scan.ts'
@@ -18,13 +18,13 @@ export function registerPaydesk(cf: Command, { root, out }: Cli): void {
     .action(async (dirs: string[], options: { out: string; cards?: string }) => {
       const results = await scan(dirs, options.out, options.cards, net)
       const crashed = results.filter((r) => 'crash' in r).length
-      out(`${String(results.length)} listings, ${String(crashed)} crashed -> ${options.out}\n`)
+      out(`${String(results.length)} listings, ${String(crashed)} crashed -> ${options.out}\n${tally(results)}`)
     })
   paydesk.command('prs').requiredOption('--out <file>').option('--cards <dir>')
     .action(async (options: { out: string; cards?: string }) => {
       const ran = await prs(root, options.out, options.cards, net)
       const crashed = ran.listings.filter((r) => 'crash' in r).length
-      out(`${String(ran.prs)} PRs, ${String(ran.listings.length)} listings, ${String(crashed)} crashed, ${String(ran.skipped.length)} skipped -> ${options.out}\n`)
+      out(`${String(ran.prs)} PRs, ${String(ran.listings.length)} listings, ${String(crashed)} crashed, ${String(ran.skipped.length)} skipped -> ${options.out}\n${tally(ran.listings)}`)
     })
   paydesk.command('live').action(async () => {
     const tmp = mkdtempSync(join(tmpdir(), 'pay-skills-'))
@@ -81,7 +81,7 @@ function notes(scanFile: string, dir: string, from: string): number {
   mkdirSync(dir, { recursive: true })
   let written = 0
   for (const row of scanned(scanFile)) {
-    if ('crash' in row || 'unfetched' in row) continue
+    if (!('endpoints' in row)) continue
     const said = note(row, from)
     if (said === null) continue
     writeFileSync(join(dir, `${row.fqn.replace('/', '__')}.md`), said)

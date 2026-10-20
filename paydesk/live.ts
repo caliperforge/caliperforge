@@ -12,8 +12,18 @@ const NET: Net = { fetch, resolve: (host) => lookup(host) }
 
 export interface Diffed { failing: string[]; passing: string[]; gone: string[] }
 
-export const verdict = (s: Scanned): string => ('crash' in s ? 'crash' : overall(s))
+export const VERDICTS = ['ok', 'warn', 'fail', 'no_402', 'unreachable', 'unchecked', 'invalid_listing', 'crash']
+
+export function verdict(s: Scanned): string {
+  if ('crash' in s) return 'crash'
+  return 'invalid_listing' in s ? 'invalid_listing' : overall(s)
+}
 const passes = (s: Scanned): boolean => verdict(s) === 'pass'
+
+export function tally(rows: Scanned[]): string {
+  const seen = rows.flatMap((s) => ('endpoints' in s ? s.endpoints.map((e) => e.verdict) : [verdict(s)]))
+  return ['| verdict | count |', '|---|---|', ...VERDICTS.map((v) => `| ${v} | ${String(seen.filter((s) => s === v).length)} |`), ''].join('\n')
+}
 
 export function providers(into: string): string[] {
   git(into, ['clone', '--depth', '1', '--branch', 'main', REPO, '.'])

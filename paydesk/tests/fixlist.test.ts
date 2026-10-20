@@ -83,6 +83,12 @@ test('D7 an unchecked endpoint neither passes nor blocks', () => {
   expect(fixes.map(render)).toStrictEqual(['## #14: passes\n\n### To improve\n- `acme/rpc` GET /x: recipient unchecked: HTTP 429\n'])
 })
 
+test('D4 an invalid listing is one blocking item', () => {
+  const fixes = merge([], [{ fqn: 'acme/bad', pr: 15, field: 'openapi', invalid_listing: 'expected object' }])
+  expect(fixes).toStrictEqual([{ pr: 15, passes: [], items: [{ listing: 'acme/bad', where: 'openapi', what: 'expected object', blocking: true }] }])
+  expect(fixes.map(render)[0]?.split('\n')[0]).toBe('## #15: 1 blocking')
+})
+
 test('D5 a PR with only warn items passes', () => {
   const fixes = merge([], [listing(13, 'acme/meh', [endpoint('warn', ['asks for $0'], '/x')])])
   expect(fixes.map(render)).toStrictEqual(['## #13: passes\n\n### To improve\n- `acme/meh` GET /x: asks for $0\n'])

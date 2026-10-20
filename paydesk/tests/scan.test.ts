@@ -31,7 +31,12 @@ const rescan = async (): Promise<ListingScan> => (await scan([join(import.meta.d
 beforeAll(async () => {
   mkdirSync(join(tmp, 'org', 'broken'), { recursive: true })
   writeFileSync(join(tmp, 'org', 'broken', 'PAY.md'), '---\ntitle: Broken\nservice_url: https://b.example.com\nopenapi:\n  path: missing.json\n---\n')
-  const dirs = [join(tmp, 'org', 'broken'), join(import.meta.dirname, 'fixtures', 'listing')]
+  mkdirSync(join(tmp, 'org', 'shaped'), { recursive: true })
+  writeFileSync(join(tmp, 'org', 'shaped', 'PAY.md'), '---\ntitle: Shaped\nservice_url: https://s.example.com\nopenapi: x.json\n---\n')
+  mkdirSync(join(tmp, 'org', 'garbled'), { recursive: true })
+  writeFileSync(join(tmp, 'org', 'garbled', 'PAY.md'), '---\ntitle: Garbled\nservice_url: https://g.example.com\nopenapi:\n  path: openapi.json\n---\n')
+  writeFileSync(join(tmp, 'org', 'garbled', 'openapi.json'), '{"a":1} x')
+  const dirs = [join(tmp, 'org', 'broken'), join(import.meta.dirname, 'fixtures', 'listing'), join(tmp, 'org', 'shaped'), join(tmp, 'org', 'garbled')]
   results = await scan(dirs, join(tmp, 'out.json'), join(tmp, 'cards'), net)
   listing = results[1] as ListingScan
 })
@@ -58,9 +63,17 @@ test('D3 an SMS send is counted but never requested', () => {
   expect(listing).toMatchObject({ nOps: 3, nScanned: 2, dns: true })
 })
 
-test('D4 a missing spec crashes one listing, not the scan', () => {
-  expect(results[0]).toMatchObject({ fqn: 'org/broken', crash: expect.stringContaining('missing.json') as unknown })
+test('D4 a missing spec is an invalid listing, not a crash', () => {
+  expect(results[0]).toEqual({ fqn: 'org/broken', pr: 0, field: 'openapi.path', invalid_listing: expect.stringContaining('missing.json') as unknown })
   expect(listing.fqn).toBe('fixtures/listing')
+})
+
+test('D1 D2 a bad front or spec names its field, unfetched', () => {
+  expect(results.slice(2)).toEqual([
+    { fqn: 'org/shaped', pr: 0, field: 'openapi', invalid_listing: expect.any(String) as unknown },
+    { fqn: 'org/garbled', pr: 0, field: 'openapi.path', invalid_listing: expect.stringContaining('JSON') as unknown },
+  ])
+  expect(calls.filter((c) => /[sg]\.example\.com/.test(c.url))).toEqual([])
 })
 
 test('D5 out holds the array and cards one card per listing', () => {

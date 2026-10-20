@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test, vi } from 'vitest'
 import type { ListingScan } from '../card.ts'
-import { diffed, live, recheck } from '../live.ts'
+import { diffed, live, recheck, tally, verdict } from '../live.ts'
 import type { Net, Scanned } from '../scan.ts'
 
 const X402 = { accepts: [{ scheme: 'exact', network: 'solana', amount: '10000', asset: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', payTo: 'SysvarRent111111111111111111111111111111111' }] }
@@ -38,6 +38,17 @@ test('D1-D3 diffed lists newly failing, newly passing and gone', () => {
   const last = [scanned('o/fixed', 'pass'), scanned('o/rejected', 'reject'), scanned('o/crashed', 'crash'), scanned('o/same', 'pass'), scanned('o/dropped', 'reject')]
   const now = [scanned('o/fixed', 'fix needed'), scanned('o/rejected', 'pass'), scanned('o/new-bad', 'crash'), scanned('o/crashed', 'pass'), scanned('o/same', 'pass'), scanned('o/new-good', 'pass')]
   expect(diffed(last, now)).toEqual({ failing: ['o/fixed', 'o/new-bad'], passing: ['o/rejected', 'o/crashed', 'o/new-good'], gone: ['o/dropped'] })
+})
+
+test('D5 an invalid row is invalid_listing and tally counts all', () => {
+  const invalid: Scanned = { fqn: 'o/bad', pr: 3, field: 'openapi', invalid_listing: 'expected object' }
+  const one = scanned('o/two', 'pass') as ListingScan
+  const two = { ...one, endpoints: one.endpoints.flatMap((e) => [e, { ...e, verdict: 'warn' as const }]) }
+  expect(verdict(invalid)).toBe('invalid_listing')
+  expect(tally([two, invalid, scanned('o/boom', 'crash')])).toBe([
+    '| verdict | count |', '|---|---|', '| ok | 1 |', '| warn | 1 |', '| fail | 0 |', '| no_402 | 0 |',
+    '| unreachable | 0 |', '| unchecked | 0 |', '| invalid_listing | 1 |', '| crash | 1 |', '',
+  ].join('\n'))
 })
 
 test('D4 live writes jsonl, cards and md against the last pass', async () => {

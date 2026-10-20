@@ -48,10 +48,14 @@ export function merge(checked: Row[], scanned: Scanned[]): Fix[] {
       for (const pr of prs) fix(pr).items.push({ listing: s.fqn, where: 'PAY.md', what: `scan crashed: ${s.crash}`, blocking: true })
       continue
     }
+    if ('invalid_listing' in s) {
+      fix(s.pr).items.push({ listing: s.fqn, where: s.field, what: s.invalid_listing, blocking: true })
+      continue
+    }
     const { items, passes } = fix(s.pr)
     for (const e of s.endpoints) {
       if (e.verdict === 'ok') passes.push(`${s.fqn} ${e.method} ${e.path}`)
-      else items.push(...e.issues.map((what) => ({ listing: s.fqn, where: `${e.method} ${e.path}`, what, blocking: e.verdict !== 'warn' })))
+      else items.push(...e.issues.map((what) => ({ listing: s.fqn, where: `${e.method} ${e.path}`, what, blocking: e.verdict !== 'warn' && e.verdict !== 'unchecked' })))
     }
   }
   return [...fixes.values()].sort((a, b) => a.pr - b.pr).map((f) => ({ ...f, items: ordered(f.items) }))

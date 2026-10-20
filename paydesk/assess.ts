@@ -3,7 +3,7 @@ import type { Offer, Offers } from './offers.ts'
 export type Probe = { error: string } | { status: number; offers: Offers; bodyIsJson: boolean }
 type Answered = Exclude<Probe, { error: string }>
 
-export interface EndpointVerdict { verdict: 'unreachable' | 'no_402' | 'fail' | 'warn' | 'ok'; issues: string[]; protocols: string[]; quotedUsd: number | null; declaredUsd: number | null; coins: string[] }
+export interface EndpointVerdict { verdict: 'unreachable' | 'no_402' | 'fail' | 'warn' | 'ok' | 'unchecked'; issues: string[]; protocols: string[]; quotedUsd: number | null; declaredUsd: number | null; coins: string[] }
 
 const SOLANA = 'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp'
 const DEVNET = 'solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1'

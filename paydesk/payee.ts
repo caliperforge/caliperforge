@@ -4,11 +4,11 @@ import type { Offer } from './offers.ts'
 const PROGRAMS = ['TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA', 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb']
 const Account = z.object({ owner: z.string() }).nullable()
 const Held = z.array(z.unknown())
+const BASE58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
 
-export function payee(fetch: typeof globalThis.fetch): (usable: Offer[]) => Promise<string[]> {
+export function payee(fetch: typeof globalThis.fetch): (usable: Offer[]) => Promise<{ verdict: 'fail' | 'warn'; issues: string[] }> {
   const url = process.env.CF_SOLANA_RPC ?? 'https://api.mainnet-beta.solana.com'
   const seen = new Map<string, Promise<string | null>>()
-  let told = false
   const call = <T>(method: string, params: unknown[], value: z.ZodType<T>): Promise<T> => rpc(fetch, url, method, params, value)
   const check = (payTo: string, asset: string, coin: string): Promise<string | null> =>
     call('getAccountInfo', [payTo, { encoding: 'jsonParsed' }], Account)
@@ -16,12 +16,10 @@ export function payee(fetch: typeof globalThis.fetch): (usable: Offer[]) => Prom
         ? 'payTo is a token account, not a wallet'
         : call('getTokenAccountsByOwner', [payTo, { mint: asset }, { encoding: 'jsonParsed' }], Held)
           .then((held) => (held.length === 0 ? `recipient has no ${coin} token account` : null))))
-      .catch((e: unknown) => {
-        if (!told) process.stderr.write(`paydesk: Solana RPC failed, recipients left unchecked: ${e instanceof Error ? e.message : String(e)}\n`)
-        told = true
-        return null
-      })
   return async (usable) => {
+    const wrong = usable.flatMap(({ payTo, asset }) => (payTo === null ? [] : Object.entries({ payTo, asset })))
+      .filter(([, s]) => !key(s)).map(([field]) => `${field} is not a Solana address`)
+    if (wrong.length > 0) return { verdict: 'fail', issues: [...new Set(wrong)] }
     const issues = await Promise.all(usable.flatMap(({ payTo, asset, coin }) => {
       if (payTo === null) return []
       const key = `${payTo} ${asset}`
@@ -29,8 +27,15 @@ export function payee(fetch: typeof globalThis.fetch): (usable: Offer[]) => Prom
       seen.set(key, pending)
       return [pending]
     }))
-    return [...new Set(issues.filter((i) => i !== null))]
+    return { verdict: 'warn', issues: [...new Set(issues.filter((i) => i !== null))] }
   }
+}
+
+function key(s: string): boolean {
+  if (!/^[1-9A-HJ-NP-Za-km-z]*$/.test(s)) return false
+  const rest = s.replace(/^1+/, '')
+  const n = Array.from(rest).reduce((acc, c) => acc * 58n + BigInt(BASE58.indexOf(c)), 0n)
+  return s.length - rest.length + (n === 0n ? 0 : Math.ceil(n.toString(16).length / 2)) === 32
 }
 
 async function rpc<T>(fetch: typeof globalThis.fetch, url: string, method: string, params: unknown[], value: z.ZodType<T>): Promise<T> {

@@ -1,11 +1,12 @@
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { beforeAll, expect, test, vi } from 'vitest'
+import { beforeAll, expect, test } from 'vitest'
 import type { ListingScan } from '../card.ts'
 import { scan, type Scanned } from '../scan.ts'
 
-const X402 = { accepts: [{ scheme: 'exact', network: 'solana', amount: '10000', asset: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', payTo: 'payee' }] }
+let payTo = 'SysvarRent111111111111111111111111111111111'
+const x402 = () => ({ accepts: [{ scheme: 'exact', network: 'solana', amount: '10000', asset: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', payTo }] })
 const RPC = 'https://api.mainnet-beta.solana.com'
 const calls: { url: string; init: RequestInit }[] = []
 let held: unknown[] | null = [{ pubkey: 'ata', account: {} }]
@@ -19,7 +20,7 @@ const fake = (url: string, init: RequestInit): Promise<Response> => {
   if (url === RPC) return Promise.resolve(chain(init.body as string))
   return Promise.resolve(init.body === '{"symbol":"SOL"}'
     ? new Response('bad', { status: 400 })
-    : new Response(JSON.stringify(X402), { status: 402, headers: { 'content-type': 'application/json' } }))
+    : new Response(JSON.stringify(x402()), { status: 402, headers: { 'content-type': 'application/json' } }))
 }
 const tmp = mkdtempSync(join(tmpdir(), 'paydesk-'))
 let results: Scanned[] = []
@@ -30,7 +31,12 @@ const rescan = async (): Promise<ListingScan> => (await scan([join(import.meta.d
 beforeAll(async () => {
   mkdirSync(join(tmp, 'org', 'broken'), { recursive: true })
   writeFileSync(join(tmp, 'org', 'broken', 'PAY.md'), '---\ntitle: Broken\nservice_url: https://b.example.com\nopenapi:\n  path: missing.json\n---\n')
-  const dirs = [join(tmp, 'org', 'broken'), join(import.meta.dirname, 'fixtures', 'listing')]
+  mkdirSync(join(tmp, 'org', 'shaped'), { recursive: true })
+  writeFileSync(join(tmp, 'org', 'shaped', 'PAY.md'), '---\ntitle: Shaped\nservice_url: https://s.example.com\nopenapi: x.json\n---\n')
+  mkdirSync(join(tmp, 'org', 'garbled'), { recursive: true })
+  writeFileSync(join(tmp, 'org', 'garbled', 'PAY.md'), '---\ntitle: Garbled\nservice_url: https://g.example.com\nopenapi:\n  path: openapi.json\n---\n')
+  writeFileSync(join(tmp, 'org', 'garbled', 'openapi.json'), '{"a":1} x')
+  const dirs = [join(tmp, 'org', 'broken'), join(import.meta.dirname, 'fixtures', 'listing'), join(tmp, 'org', 'shaped'), join(tmp, 'org', 'garbled')]
   results = await scan(dirs, join(tmp, 'out.json'), join(tmp, 'cards'), net)
   listing = results[1] as ListingScan
 })
@@ -57,9 +63,17 @@ test('D3 an SMS send is counted but never requested', () => {
   expect(listing).toMatchObject({ nOps: 3, nScanned: 2, dns: true })
 })
 
-test('D4 a missing spec crashes one listing, not the scan', () => {
-  expect(results[0]).toMatchObject({ fqn: 'org/broken', crash: expect.stringContaining('missing.json') as unknown })
+test('D4 a missing spec is an invalid listing, not a crash', () => {
+  expect(results[0]).toEqual({ fqn: 'org/broken', pr: 0, field: 'openapi.path', invalid_listing: expect.stringContaining('missing.json') as unknown })
   expect(listing.fqn).toBe('fixtures/listing')
+})
+
+test('D1 D2 a bad front or spec names its field, unfetched', () => {
+  expect(results.slice(2)).toEqual([
+    { fqn: 'org/shaped', pr: 0, field: 'openapi', invalid_listing: expect.any(String) as unknown },
+    { fqn: 'org/garbled', pr: 0, field: 'openapi.path', invalid_listing: expect.stringContaining('JSON') as unknown },
+  ])
+  expect(calls.filter((c) => /[sg]\.example\.com/.test(c.url))).toEqual([])
 })
 
 test('D5 out holds the array and cards one card per listing', () => {
@@ -80,12 +94,17 @@ test('D2 no token account for the mint warns on both endpoints', async () => {
   }
 })
 
-test('D5 an RPC 429 keeps both ok and writes one stderr line', async () => {
+test('D5 an RPC 429 leaves both endpoints unchecked', async () => {
   held = null
-  const write = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
   const { endpoints } = await rescan()
-  expect(endpoints).toEqual(listing.endpoints)
-  expect(endpoints.map((e) => e.verdict)).toEqual(['ok', 'ok'])
-  expect(write).toHaveBeenCalledTimes(1)
-  write.mockRestore()
+  expect(endpoints).toEqual(listing.endpoints.map((e) => ({ ...e, verdict: 'unchecked', issues: [...e.issues, 'recipient unchecked: HTTP 429'] })))
+})
+
+test('D6 an EVM payTo fails with no RPC call', async () => {
+  payTo = `0x${'ab'.repeat(20)}`
+  const before = calls.length
+  for (const endpoint of (await rescan()).endpoints) {
+    expect(endpoint).toMatchObject({ verdict: 'fail', issues: expect.arrayContaining(['payTo is not a Solana address']) as unknown })
+  }
+  expect(calls.slice(before).filter((c) => c.url === RPC)).toEqual([])
 })

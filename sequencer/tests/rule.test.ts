@@ -209,7 +209,7 @@ test('D2 a line saying no builder touches it opens none', () => {
   const { db, home } = cited()
   put(home, 7, 'rulings.md', [...ROUND_6, ...ROUND_9].join('\n'))
   expect(opened(db, home, 7)).toEqual([])
-  expect(filesOf(db, 7)).toEqual([{ path: 'typescript/pnpm-lock.yaml', is_new: true }])
+  expect(filesOf(db, 7)).toEqual([{ path: 'typescript/pnpm-lock.yaml', is_new: false }])
 })
 
 test('D3 D4 the newest ruling adds its path, an older one not', () => {
@@ -218,7 +218,7 @@ test('D3 D4 the newest ruling adds its path, an older one not', () => {
   writeFileSync(join(srcDir(home, 7), 'src/x.ts'), 'export {}\n')
   put(home, 7, 'rulings.md', '**Ruling (COO, 2026-10-07):** the builder edits `index.ts`.\n**Ruling (COO, 2026-10-08):** add `src/x.ts`.\n')
   expect(opened(db, home, 7)).toEqual([])
-  expect(filesOf(db, 7)).toEqual([{ path: 'src/x.ts', is_new: true }])
+  expect(filesOf(db, 7)).toEqual([{ path: 'src/x.ts', is_new: false }])
 })
 
 test('D1 D3 plan files and placeholders are not refused', () => {
@@ -228,7 +228,7 @@ test('D1 D3 plan files and placeholders are not refused', () => {
   writeFileSync(join(srcDir(home, 7), 'src/x.ts'), 'export {}\n')
   put(home, 7, 'rulings.md', 'see `step-2.handback.md:9`, `store/<file>` and `src/x.ts`\n')
   expect(opened(db, home, 7)).toEqual([])
-  expect(filesOf(db, 7)).toEqual([{ path: 'src/x.ts', is_new: true }])
+  expect(filesOf(db, 7)).toEqual([{ path: 'src/x.ts', is_new: false }])
   expect(eventsOf(db, 7, 'files')).toEqual([{ actor: 'ruling', outcome: 'pass', message: 'add src/x.ts: named in rulings.md' }])
 })
 
@@ -261,7 +261,7 @@ test('D1 a director answer in issue.md adds its path', () => {
   const { db, home } = made()
   put(home, 7, 'issue.md', DIRECTOR('src/x.ts'))
   expect(opened(db, home, 7)).toEqual([])
-  expect(filesOf(db, 7)).toEqual([{ path: 'src/x.ts', is_new: true }])
+  expect(filesOf(db, 7)).toEqual([{ path: 'src/x.ts', is_new: false }])
   expect(eventsOf(db, 7, 'files')).toEqual([{ actor: 'ruling', outcome: 'pass', message: 'add src/x.ts: named in issue.md' }])
 })
 
@@ -277,7 +277,7 @@ test('D3 non-ruling and older ruling sections open nothing', () => {
   put(home, 7, 'issue.md', ['# hello', '## Files\n\n- `src/x.ts`', '## Ruling (COO, 2026-10-07)\n\nedit `src/x.ts`.',
     '## Ruling (COO, 2026-10-08)\n\nedit `index.ts`.', '## Out of scope\n\n- `src/x.ts`\n'].join('\n\n'))
   expect(opened(db, home, 7)).toEqual([])
-  expect(filesOf(db, 7)).toEqual([{ path: 'index.ts', is_new: true }])
+  expect(filesOf(db, 7)).toEqual([{ path: 'index.ts', is_new: false }])
 })
 
 test('D4 a director rule widens the fence to its path', async () => {
@@ -321,6 +321,6 @@ test('D5 a director return opens the path rulings.md names', async () => {
   const { db, home } = seeded(3)
   put(home, 7, 'rulings.md', 'the builder edits `index.ts`\n')
   await woke(db, home, stub('', '---\nmove: return\nwhy: the ruling names the file\n---\n'), now, () => undefined, wire)
-  expect(filesOf(db, 7)).toEqual([{ path: 'index.ts', is_new: true }])
+  expect(filesOf(db, 7)).toEqual([{ path: 'index.ts', is_new: false }])
   expect(eventsOf(db, 7, 'files')).toEqual([{ actor: 'ruling', outcome: 'pass', message: 'add index.ts: named in rulings.md' }])
 })

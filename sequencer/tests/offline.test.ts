@@ -69,3 +69,18 @@ test('a gpg key database lock asks a person', () => {
 test('other throws still refuse', () => {
   expect(thrown(at(6), 'plan 123 has no checkout at /x/src')).toMatchObject({ outcome: 'refuse', spans: ['threw: plan 123 has no checkout at /x/src'] })
 })
+
+test.each([
+  'Post "https://api.github.com/graphql": net/http: TLS handshake timeout',
+  'Post "https://api.github.com/graphql": unexpected EOF',
+  'dial tcp 140.82.112.6:443: i/o timeout',
+  "fatal: unable to access 'https://github.com/x/y.git/': SSL connection timeout",
+  'gh: Client Closed Request (HTTP 499)',
+  'error: RPC failed; curl 92 HTTP/2 stream 5 was not closed cleanly: CANCEL (err 8)',
+])('1532 D1 network throw %# holds as offline', (message) => {
+  expect(thrown(at(6), message)).toMatchObject({ outcome: 'pass', held: true, spans: ['offline'] })
+})
+
+test('1532 D2 a 404 throw still refuses', () => {
+  expect(thrown(at(6), 'gh: Not Found (HTTP 404)')).toMatchObject({ outcome: 'refuse', spans: ['threw: gh: Not Found (HTTP 404)'] })
+})

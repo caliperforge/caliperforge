@@ -31,6 +31,7 @@ import { unbuilt } from './rails.ts'
 import { branchOf, checkout, cloned, diffOf, drop, git, internalBranch, maybe, PR_BRANCH, put, ruled, srcDir, titleOf } from './workspace.ts'
 import { assembling, assembly, homeOf } from './home.ts'
 import { BUILDS, capped, fingerprintOf, refusalText, stopped, streak, STREAK } from './refusal.ts'
+import { NETWORK } from './checks.ts'
 
 /** CI that failed, waited or never showed is GitHub's state, not a fault on main: it never switches a lane off. */
 export const CI_ONLY = /^(?:checks:CI|.* ci\.(?:red|pending|missing))$/
@@ -122,7 +123,7 @@ function workspace(db: Db, root: string, plan: PlanRow): { language: string | nu
     checkout(root, plan.id, tree.repo, tree.branch, tree.from)
   } catch (error) {
     const note = error instanceof Error ? error.message : String(error)
-    if (OFFLINE.test(note)) return { language: null, failed: thrown(mapOf(plan.template).at(plan.step), note) }
+    if (NETWORK.test(note)) return { language: null, failed: thrown(mapOf(plan.template).at(plan.step), note) }
     return { language: null, failed: { outcome: 'refuse', spans: [tree.repo], note: `checkout: ${note}`, blip: true } }
   }
   return { language: languageFor(db, plan, srcDir(root, plan.id)), failed: null }
@@ -163,13 +164,12 @@ async function made(db: Db, root: string, plan: PlanRow, step: Step, provider: P
 }
 
 /** A throw that says the host lost its network or the store is locked is not the job's fault: it holds the job on its step, uncounted, and the next tick tries again. */
-const OFFLINE = /Could not resolve host|getaddrinfo|ENOTFOUND|EAI_AGAIN|ENETUNREACH|ETIMEDOUT|Network is unreachable|Failed to connect to|Connection timed out/
 export const HELD = 'the next tick tries again'
 
 export function thrown(step: Step, message: string): Outcome {
   const lock = keyLock(message)
   if (lock !== null) return { outcome: 'needs_ceo', spans: ['gpg'], note: `step ${String(step.step)} ${step.name}: ${lock}`, message }
-  if (OFFLINE.test(message)) return held(step, 'offline', 'the network is down')
+  if (NETWORK.test(message)) return held(step, 'offline', 'the network is down')
   if (message.includes(LOCKED)) return held(step, 'locked', 'the store is locked')
   return { outcome: 'refuse', spans: [`threw: ${message.split('\n')[0] ?? ''}`],
     note: `step ${String(step.step)} ${step.name} threw`, message, to: step.step }

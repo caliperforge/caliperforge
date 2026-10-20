@@ -160,13 +160,13 @@ test('D1 D2 D3 cf return opens the paths rulings.md names', () => {
   registerPlans(cf, { root: home, db: () => db, out: (line: string) => { printed.push(line) } })
   cf.parse(['return', '7', '--by', 'ceo'], { from: 'user' })
   expect(printed).toEqual(['plan 7 queued at step 3\n', `  not in the checkout: ${elided}\n`])
-  expect(filesOf(db, 7)).toEqual([{ path, is_new: true }])
+  expect(filesOf(db, 7)).toEqual([{ path, is_new: false }])
   const pass = { actor: 'ruling', outcome: 'pass', message: `add ${path}: named in rulings.md` }
   const refuse = { actor: 'ruling', outcome: 'refuse', message: `not in the checkout: ${elided}` }
   expect(eventsOf(db, 7, 'files')).toEqual([pass, refuse])
   db.exec("UPDATE plans SET state = 'blocked_on_ceo' WHERE id = 7")
   cf.parse(['return', '7', '--by', 'ceo'], { from: 'user' })
-  expect(filesOf(db, 7)).toEqual([{ path, is_new: true }])
+  expect(filesOf(db, 7)).toEqual([{ path, is_new: false }])
   expect(eventsOf(db, 7, 'files')).toEqual([pass, refuse, refuse])
 })
 
@@ -225,6 +225,19 @@ test('cf files prints the edit it made', () => {
   const { printed, run } = driven()
   run('files', '7', 'add', 'a.ts', '--by', 'coo')
   expect(printed).toEqual(['plan 7 add a.ts\n'])
+})
+
+test('D4 cf files lists a path in src/ as existing', () => {
+  const { db, home } = seeded()
+  writeFileSync(join(srcDir(home, 7), 'a.ts'), 'x\n')
+  const run = (...args: string[]) => { ran(db, home, ['files', '7', ...args, '--by', 'coo']) }
+  run('add', 'a.ts')
+  run('add', 'b.ts')
+  expect(filesOf(db, 7)).toEqual([{ path: 'a.ts', is_new: false }, { path: 'b.ts', is_new: true }])
+  run('set', 'c.ts')
+  expect(filesOf(db, 7)).toEqual([{ path: 'c.ts', is_new: true }])
+  run('set', 'a.ts')
+  expect(filesOf(db, 7)).toEqual([{ path: 'a.ts', is_new: false }])
 })
 
 function ran(db: ReturnType<typeof open>, home: string, args: string[]): void {

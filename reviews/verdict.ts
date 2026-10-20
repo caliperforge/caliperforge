@@ -44,7 +44,7 @@ const Fence = z.object({
   notes: z.array(Noted).nullish(),
 }).refine((f) => f.outcome !== 'refuse' || ((f.spans ?? []).length > 0 && f.class != null))
 
-const FENCE = /^(?:```\w*\r?\n)?---\r?\n([\s\S]*?)\r?\n---(?:\r?\n```)?\s*$/m
+export const FENCE = /^(?:```\w*\r?\n)?---\r?\n([\s\S]*?)\r?\n---(?:\r?\n```)?\s*$/m
 const LOOSE = /(?<=^[ \t]*(?:- )?\w+: )(["']).*?\1[ \t]+[^\s#].*$/gm
 
 /** A verdict as the reviewer wrote it: the row, its findings, and the new fact it names for each span it re-opens. */

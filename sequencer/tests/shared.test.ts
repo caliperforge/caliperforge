@@ -36,6 +36,29 @@ test('D3 other spans still match on the span alone', () => {
   expect(fingerprintOf(at(6), base('behind main'))).toBe(fingerprintOf(at(6), base('behind main again')))
 })
 
+const research = (span: string, note: string) => ({ outcome: 'refuse' as const, spans: [span], note })
+
+test('D1 unsourced refusals differ by the sentence named', () => {
+  const a = fingerprintOf(at(2), research('research.unsourced', 'no source for line 3: Rust is fast'))
+  expect(a).not.toBe(fingerprintOf(at(2), research('research.unsourced', 'no source for line 7: Go is old')))
+})
+
+test('D2 one unsourced note twice is again then repeat', () => {
+  const w = world()
+  const unsourced = research('research.unsourced', 'no source for line 3: Rust is fast')
+  const print = fingerprintOf(at(2), unsourced)
+  expect(print).toBe(fingerprintOf(at(2), unsourced))
+  expect(refused(w.db, { plan: 1, step: 2, fingerprint: print, diff: null })).toBe('again')
+  expect(refused(w.db, { plan: 1, step: 2, fingerprint: print, diff: null })).toBe('repeat')
+})
+
+test('D3 research URL and quote faults differ by what they name', () => {
+  for (const [span, say] of [['research.quote_missing', 'quote not on the page for '], ['research.dead_source', 'dead source: '],
+    ['researcher.unquoted', 'no quote for ']] as const) {
+    expect(fingerprintOf(at(2), research(span, `${say}https://a.example`))).not.toBe(fingerprintOf(at(2), research(span, `${say}https://b.example`)))
+  }
+})
+
 test('D2 a shared refusal stops its lane and names plans and span', async () => {
   const w = world()
   dropPlan(w.db, 1)

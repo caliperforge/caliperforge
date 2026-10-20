@@ -48,12 +48,12 @@ export function capped(db: Db, root: string, plan: number, why: string): string 
 
 /**
  * A failed check or CI run is known by what failed, not by the one span every such failure shares. So is a
- * `text:N` span, a line of this job's own brief or handback, and the researcher's fence, by the fault its note names:
+ * `text:N` span, a line of this job's own brief or handback, and the researcher's fence and research checks, by the fault its note names:
  * two jobs refused at the same `text:N` for different names are two faults, not one on main.
  */
 export function fingerprintOf(step: Step, outcome: Outcome): string {
   const checked = outcome.spans.some((s) => s.startsWith('checks:') || s.startsWith('ci.red'))
-  const own = outcome.spans.some((s) => s.startsWith('text:') || s === 'researcher.fence')
+  const own = outcome.spans.some((s) => s.startsWith('text:') || /^research(?:er)?\./.test(s))
   return fingerprint(step.step, own ? [...outcome.spans, outcome.note] : outcome.spans, checked ? (outcome.message ?? '') : '')
 }
 

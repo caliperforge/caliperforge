@@ -1,5 +1,5 @@
 import type { Command } from 'commander'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { hold, later, unhold } from '../sequencer/hold.ts'
 import { opened } from '../sequencer/rule.ts'
@@ -224,7 +224,7 @@ function closes(cf: Command, { root, db, out }: Cli): void {
       const by = holderOf(options.by)
       const verb = VERBS.find((v) => v === said)
       if (verb === undefined) throw new Error(`<verb> takes ${VERBS.join(', ')}, not ${said}`)
-      edit(db(), Number(id), verb, path, by, options.why ?? null)
+      edit(db(), Number(id), verb, path, by, options.why ?? null, !existsSync(join(planDir(root, Number(id)), 'src', path)))
       out(`plan ${id} ${verb} ${path}\n`)
     })
 

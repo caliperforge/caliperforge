@@ -103,6 +103,7 @@ VALUES
   ('house_generator', 'card', 'rules/roster/house_generator.yaml', '0aff8f549bffb21dd7e864789dbdeb8d4041b98a0893f9581fd7d99168380880', '2026-10-16'),
   ('kotlin_specialist', 'card', 'rules/roster/kotlin_specialist.yaml', '084a2dd166cb89a4557e6ec71dc9182af3743b723299499f0588d0041a28e25e', '2026-09-17'),
   ('lua_specialist', 'card', 'rules/roster/lua_specialist.yaml', 'd0d28b0c6602c3c49703be5ca80f084835b12305591f31cdf0175b0287153bb0', '2026-09-24'),
+  ('measurer', 'card', 'rules/roster/measurer.yaml', '7d95323e7de6f3831fb4ea2a42c6c5f9abff619cb588f66cc01f8c034dee9acb', '2026-10-20'),
   ('outside_specialist', 'card', 'rules/roster/outside_specialist.yaml', 'dd1d8955289708786b23ae3b9e246e68285a36d10644e7500cbb48fd1684ab19', '2026-09-21'),
   ('php_specialist', 'card', 'rules/roster/php_specialist.yaml', '1a20a776d704a471370aeebd04f72490f31873d5e7ccd4b9b7221f6f4710c7b7', '2026-09-24'),
   ('python_specialist', 'card', 'rules/roster/python_specialist.yaml', '493d57fa20f355832a7903d5f42c9527f6daf7768b598cd78abb9f239d9f16c6', '2026-09-24'),

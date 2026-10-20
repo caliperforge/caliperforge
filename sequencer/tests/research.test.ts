@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readdirSync, readFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
@@ -8,11 +8,12 @@ import { eventsOf, kindsOf, runRows } from '../../store/events.ts'
 import { get, set } from '../../store/lanes.ts'
 import { dropPlan, putPlan } from '../../store/plans.ts'
 import { WHY } from '../../store/refusals.ts'
-import { check, gather, question, record } from '../../templates/research.ts'
+import { check, gather, question, record, sourced } from '../../templates/research.ts'
 import { tick } from '../index.ts'
 import type { Wire } from '../push.ts'
 import { mapOf } from '../steps.ts'
-import { drop, maybe, put } from '../workspace.ts'
+import { drop, headSha, maybe, put, srcDir } from '../workspace.ts'
+import { git } from './bases.ts'
 import { PASS, plan, stub, watched, world, type World } from './world.ts'
 
 const ASK = '# The cap\n\n**Question:** what is the cap?\n**Would be wrong if:** a page names another cap\n**Done when:** a quote names it\n'
@@ -375,4 +376,109 @@ test('prompt D3: an answer laid out as the prompt says is recorded', async () =>
 test.each(['**23 Sep:** solidity-auditor v4 was merged and released.', 'Next cohort date: not found.'])('prompt D4: %s is unsourced', async (line) => {
   expect(await checked(PROMPTED.replace('\n\n## Not found', `\n\n${line}\n\n## Not found`)))
     .toEqual({ outcome: 'refuse', spans: ['research.unsourced'], note: `no source for "${line}"` })
+})
+
+const MEASURE = `${ASK}**Measure:** time the cold start\n`
+
+const RUN = 'uv run bench.py'
+
+const TRANSCRIPT = [
+  { type: 'assistant', message: { content: [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: RUN } }] } },
+  { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 't1', content: [{ type: 'text', text: 'cold start:\n  41 ms' }] }] } },
+].map((line) => `${JSON.stringify(line)}\n`).join('')
+
+const entry = (commit: string, quote = 'cold start: 41 ms'): string =>
+  `  - run:\n      command: ${RUN}\n      commit: ${commit}\n      quote: ${quote}\n      claim: Cold start is 41 ms\n`
+
+const LINKED = '  - url: https://a.example/doc\n    fetched_at: 2026-10-04T10:00:00Z\n    quote: The cap is 3.\n    claim: The cap is 3\n'
+
+const fence = (...entries: string[]): string => `Cold start is 41 ms [source:1].${SECTIONS}\n\n---\nsources:\n${entries.join('')}---\n`
+
+/** The measurer answers `reply` and leaves TRANSCRIPT behind; every other seat answers PASS. */
+const measuring = (reply: string, seen: (prompt: string) => void): Provider => ({
+  name: 'claude-agent-sdk',
+  fire: async (packet) => {
+    seen(packet.prompt)
+    const measurer = packet.prompt.includes('# measurer\n')
+    const fired = await stub('', 0, measurer ? reply : PASS).fire(packet)
+    if (measurer) writeFileSync(packet.transcript, TRANSCRIPT)
+    return fired
+  },
+})
+
+const headed = (w: World): string => {
+  const src = srcDir(w.root, 1)
+  git(src, ['init', '-q'])
+  git(src, ['-c', 'user.email=t@t', '-c', 'user.name=t', '-c', 'commit.gpgsign=false', 'commit', '-q', '--allow-empty', '-m', 'base'])
+  return headSha(src)
+}
+
+test('measure D1: a Measure line fires measurer with HEAD', async () => {
+  const w = researching(MEASURE)
+  const head = headed(w)
+  question(w.root, plan(w.db, 1))
+  let prompt = ''
+  expect(await gather(w.db, w.root, plan(w.db, 1), mapOf('research').at(1), measuring(fence(entry(head)), (p) => { prompt = p })))
+    .toMatchObject({ outcome: 'pass', note: expect.stringContaining('measurer: answer.md written') as unknown })
+  expect(prompt).toContain(`# HEAD\n\n${head}`)
+  expect(ran(w)).toEqual(['measurer'])
+  expect(JSON.parse(maybe(w.root, 1, 'runs.json') ?? '')).toEqual([{ command: RUN, output: 'cold start:\n  41 ms' }])
+})
+
+test('measure D1: an ask with no Measure line fires researcher', async () => {
+  const w = researching()
+  question(w.root, plan(w.db, 1))
+  const [outcome, prompt] = await gathered(w)
+  expect(outcome).toMatchObject({ outcome: 'pass' })
+  expect(prompt).not.toContain('# HEAD')
+  expect(ran(w)).toEqual(['researcher'])
+  expect(maybe(w.root, 1, 'runs.json')).toBeNull()
+})
+
+const cite = (commit: string, quote = 'cold start: 41 ms', command = RUN): object => ({ run: { command, commit, quote, claim: 'Cold start is 41 ms' } })
+
+test('measure D2: a fence of run and url entries is written whole', () => {
+  const w = researching()
+  expect(sourced(w.root, plan(w.db, 1), fence(entry('abc1234'), LINKED))).toMatchObject({ outcome: 'pass' })
+  expect(JSON.parse(maybe(w.root, 1, 'sources.json') ?? '')).toEqual([cite('abc1234'), ...(JSON.parse(SOURCES) as unknown[])])
+})
+
+test('measure D2: a run with an empty quote is unquoted', () => {
+  const w = researching()
+  expect(sourced(w.root, plan(w.db, 1), fence(entry('abc1234', ''))))
+    .toEqual({ outcome: 'refuse', spans: ['researcher.unquoted'], note: `no quote for ${RUN}` })
+})
+
+const measured = (sources: (head: string) => object[]): ReturnType<typeof check> => {
+  const w = researching(MEASURE)
+  const head = headed(w)
+  put(w.root, 1, 'sources.json', JSON.stringify(sources(head)))
+  put(w.root, 1, 'runs.json', JSON.stringify([{ command: RUN, output: 'cold start:\n  41 ms' }]))
+  put(w.root, 1, 'answer.md', 'Cold start is 41 ms [source:1].')
+  return check(w.root, plan(w.db, 1))
+}
+
+test('measure D3: a run cite at HEAD in runs.json passes unfetched', async () => {
+  expect(await measured((head) => [cite(head)])).toEqual({ outcome: 'pass', spans: [], note: '1 sentence(s) checked against 0 url(s)' })
+  expect(fetched).not.toHaveBeenCalled()
+})
+
+test('measure D4: a run cite off HEAD is run_commit', async () => {
+  expect(await measured(() => [cite('0000000')])).toEqual({ outcome: 'refuse', spans: ['research.run_commit'],
+    note: expect.stringContaining(`for "Cold start is 41 ms [source:1]." (${RUN})`) as unknown })
+})
+
+test.each([[RUN, '42 ms'], [`${RUN} --cold`, 'cold start: 41 ms']])('measure D5: an unrun command or quote is run_missing', async (command, quote) => {
+  expect(await measured((head) => [cite(head, quote, command)])).toEqual({ outcome: 'refuse', spans: ['research.run_missing'],
+    note: `quote not in the run's output for "Cold start is 41 ms [source:1]." (${command})` })
+})
+
+test('measure D6: a run source is listed by command and commit', () => {
+  const { w, wire } = reviewed()
+  put(w.root, 1, 'sources.json', JSON.stringify([cite('abc1234')]))
+  record(w.db, w.root, plan(w.db, 1), wire)
+  const finding = readFileSync(join(findings(w), named), 'utf8')
+  expect(finding).toContain(`## Sources\n\n1. \`${RUN}\` at abc1234: "cold start: 41 ms"\n`)
+  expect(finding).not.toContain('undefined')
+  expect(JSON.parse(posts(w.db)[0]?.sources ?? '')).toEqual([{ claim: 'Cold start is 41 ms', ref: `\`${RUN}\` at abc1234` }])
 })

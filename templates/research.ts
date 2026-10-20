@@ -10,27 +10,45 @@ import type { Outcome } from '../sequencer/kind.ts'
 import { prose } from '../sequencer/prose.ts'
 import { WIRE, type Wire } from '../sequencer/push.ts'
 import { ran } from '../sequencer/seat.ts'
-import { get, maybe, planDir, put, srcDir, titleOf } from '../sequencer/workspace.ts'
+import { get, headSha, maybe, planDir, put, srcDir, titleOf } from '../sequencer/workspace.ts'
 import { runLogged } from '../store/events.ts'
 import { proofed } from '../store/desk.ts'
 import type { Db } from '../store/index.ts'
 import { get as setting, observed, wall } from '../store/lanes.ts'
 import { originRef, type PlanRow } from '../store/plans.ts'
-import { byRun, pending } from '../store/transcript.ts'
+import { lastTranscript } from '../store/runs.ts'
+import { byRun, outputs, pending } from '../store/transcript.ts'
 import { DEFAULT_BUILDER, type Step } from './pr-path.ts'
 
 export const FENCE = /(?:^|\n)(?:```\w*\n)?---[ \t]*\n(sources:[\s\S]*?)\n---[ \t]*(?:\n```[ \t]*)?\s*$/
 
-const KEYS = ['fetched_at', 'quote', 'claim']
+const KEYS = ['fetched_at', 'quote', 'claim', 'command', 'commit']
 
-const Sources = z.object({
-  sources: z.array(z.object({
-    url: z.string().trim().min(1),
-    fetched_at: z.string(),
-    quote: z.string().nullish(),
-    claim: z.string(),
-  })),
+const Url = z.object({
+  url: z.string().trim().min(1),
+  fetched_at: z.string(),
+  quote: z.string().nullish(),
+  claim: z.string(),
 })
+
+const Run = z.object({
+  run: z.object({ command: z.string().trim().min(1), commit: z.string().trim().min(1), quote: z.string().nullish(), claim: z.string() }),
+})
+
+/** Picked by its `run:` key: a union would name a broken entry `Invalid input` instead of the field it lacks. */
+const Entry = z.unknown().transform((entry, ctx) => {
+  const got = (typeof entry === 'object' && entry !== null && 'run' in entry ? Run : Url).safeParse(entry)
+  for (const issue of got.error?.issues ?? []) ctx.addIssue({ ...issue })
+  return got.data ?? z.NEVER
+})
+
+const Sources = z.object({ sources: z.array(Entry) })
+
+type Source = { url: string; fetched_at: string; quote: string; claim: string } | { run: { command: string; commit: string; quote: string; claim: string } }
+
+const plain = (s: Source): { quote: string; claim: string } => 'run' in s ? s.run : s
+
+const named = (s: Source): string => 'run' in s ? `\`${s.run.command}\` at ${s.run.commit}` : s.url
 
 function fenced(reply: string): { data: z.infer<typeof Sources> } | { why: string } {
   const body = FENCE.exec(reply)?.[1]
@@ -48,7 +66,7 @@ function fenced(reply: string): { data: z.infer<typeof Sources> } | { why: strin
 export function sourced(root: string, plan: PlanRow, reply: string): Outcome {
   const got = fenced(reply)
   if ('why' in got) return { outcome: 'refuse', spans: ['researcher.fence'], note: `researcher reply has no valid sources fence: ${got.why}` }
-  const unquoted = got.data.sources.filter((s) => (s.quote ?? '').trim() === '').map((s) => s.url)
+  const unquoted = got.data.sources.filter((s) => (('run' in s ? s.run.quote : s.quote) ?? '').trim() === '').map((s) => 'run' in s ? s.run.command : s.url)
   if (unquoted.length > 0) return { outcome: 'refuse', spans: ['researcher.unquoted'], note: `no quote for ${unquoted.join(', ')}` }
   put(root, plan.id, 'sources.json', JSON.stringify(got.data.sources))
   return { outcome: 'pass', spans: [], note: `sources.json written with ${String(got.data.sources.length)} source(s)` }
@@ -66,9 +84,9 @@ const SKIPPED = /^(#{1,6})[ \t]+(?:Method|Not found|Still unknown|How I applied 
 
 const bare = (s: string): string => flat(s.replace(/[*_`"“”>]/g, ''))
 
-const cited = <S extends { url: string }>(claim: string, sources: S[]): S[] | null => {
+const cited = (claim: string, sources: Source[]): Source[] | null => {
   const links: string[] = ROW.test(claim) ? claim.match(LINK) ?? [] : []
-  const all = [...[...claim.matchAll(/\[source:(\d+)\]/g)].map((m) => sources[Number(m[1]) - 1]), ...sources.filter((s) => links.includes(s.url))]
+  const all = [...[...claim.matchAll(/\[source:(\d+)\]/g)].map((m) => sources[Number(m[1]) - 1]), ...sources.filter((s) => 'url' in s && links.includes(s.url))]
   return all.length > 0 && all.every((s) => s !== undefined) ? all : null
 }
 
@@ -76,8 +94,19 @@ const page = (url: string): Promise<{ ok: boolean; text: string }> => fetch(url)
   async (res) => res.ok ? { ok: true, text: flat(await res.text()) } : { ok: false, text: String(res.status) },
   (error: unknown) => ({ ok: false, text: error instanceof Error ? error.message : String(error) }))
 
+function unmeasured(root: string, plan: PlanRow, runs: { claim: string; command: string; commit: string; quote: string }[]): Outcome | null {
+  if (runs.length === 0) return null
+  const head = headSha(srcDir(root, plan.id))
+  const stale = runs.filter((r) => r.commit !== head).map((r) => `"${r.claim}" (${r.command})`)
+  if (stale.length > 0) return { outcome: 'refuse', spans: ['research.run_commit'], note: `run not at HEAD ${head} for ${stale.join(', ')}` }
+  const given = JSON.parse(maybe(root, plan.id, 'runs.json') ?? '[]') as { command: string; output: string }[]
+  const missing = runs.filter((r) => !given.some((g) => g.command === r.command && flat(g.output).includes(flat(r.quote))))
+    .map((r) => `"${r.claim}" (${r.command})`)
+  return missing.length > 0 ? { outcome: 'refuse', spans: ['research.run_missing'], note: `quote not in the run's output for ${missing.join(', ')}` } : null
+}
+
 export async function check(root: string, plan: PlanRow): Promise<Outcome> {
-  const sources = JSON.parse(get(root, plan.id, 'sources.json')) as { url: string; quote: string }[]
+  const sources = JSON.parse(get(root, plan.id, 'sources.json')) as Source[]
   if (sources.length === 0) return { outcome: 'pass', spans: [], note: 'no sources: nothing found' }
   const ask = bare(askOf(root, plan))
   const lines = get(root, plan.id, 'answer.md').replace(SKIPPED, '').split('\n')
@@ -87,7 +116,9 @@ export async function check(root: string, plan: PlanRow): Promise<Outcome> {
     .map((sentence) => ({ sentence, cited: cited(sentence, sources) }))
   const unsourced = claims.filter((c) => c.cited === null).map((c) => `"${c.sentence}"`)
   if (unsourced.length > 0) return { outcome: 'refuse', spans: ['research.unsourced'], note: `no source for ${unsourced.join(', ')}` }
-  const cites = claims.flatMap((c) => (c.cited ?? []).map((s) => ({ claim: c.sentence, url: s.url, quote: flat(s.quote) })))
+  const measured = unmeasured(root, plan, claims.flatMap((c) => (c.cited ?? []).flatMap((s) => 'run' in s ? [{ ...s.run, claim: c.sentence }] : [])))
+  if (measured !== null) return measured
+  const cites = claims.flatMap((c) => (c.cited ?? []).flatMap((s) => 'url' in s ? [{ claim: c.sentence, url: s.url, quote: flat(s.quote) }] : []))
   const pages = new Map(await Promise.all([...new Set(cites.map((c) => c.url))].map(async (url) => [url, await page(url)] as const)))
   const dead = [...pages].filter(([, p]) => !p.ok).map(([url, p]) => `${url} (${p.text})`)
   if (dead.length > 0) return { outcome: 'refuse', spans: ['research.dead_source'], note: `dead source: ${dead.join(', ')}` }
@@ -123,14 +154,17 @@ export function question(root: string, plan: PlanRow): Outcome {
 }
 
 export async function gather(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
+  const measure = askOf(root, plan).split('\n').some((l) => l.startsWith('**Measure:**'))
+  const seat = measure ? { ...step, seat: 'measurer', runs: 'measurer' } : step
   const input = `# Ask\n\n${askOf(root, plan)}\n\n# question.json\n\n${get(root, plan.id, 'question.json')}${
-    maybe(root, plan.id, 'refusal.md')?.replace(/^/, '\n\n# Refused — fix what this names\n\n') ?? ''}`
-  const fired = await ran(db, root, plan, step, provider, input, false)
-  if (fired.ended !== 'completed') return { outcome: 'refuse', spans: [fired.stop_reason ?? 'seat.exit'], note: `${step.runs} ${fired.ended}` }
+    maybe(root, plan.id, 'refusal.md')?.replace(/^/, '\n\n# Refused — fix what this names\n\n') ?? ''}${measure ? `\n\n# HEAD\n\n${headSha(srcDir(root, plan.id))}` : ''}`
+  const fired = await ran(db, root, plan, seat, provider, input, false)
+  if (fired.ended !== 'completed') return { outcome: 'refuse', spans: [fired.stop_reason ?? 'seat.exit'], note: `${seat.runs} ${fired.ended}` }
   const sources = sourced(root, plan, fired.text)
   if (sources.outcome === 'refuse') return sources
+  if (measure) put(root, plan.id, 'runs.json', JSON.stringify(outputs(lastTranscript(db, plan.id, step.step))))
   put(root, plan.id, 'answer.md', fired.text.replace(FENCE, '').trim())
-  return { outcome: 'pass', spans: [], note: `${step.runs}: answer.md written, ${sources.note}` }
+  return { outcome: 'pass', spans: [], note: `${seat.runs}: answer.md written, ${sources.note}` }
 }
 
 export async function answered(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
@@ -170,15 +204,16 @@ export function record(db: Db, root: string, plan: PlanRow, wire: Wire = WIRE): 
   const day = new Date().toISOString().slice(0, 10)
   const path = join(dir, 'findings', `${day}_${title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}.md`)
   const asked = JSON.parse(get(root, plan.id, 'question.json')) as { question: string; wrong_if: string }
-  const sources = JSON.parse(get(root, plan.id, 'sources.json')) as { url: string; fetched_at: string; quote: string; claim: string }[]
+  const sources = JSON.parse(get(root, plan.id, 'sources.json')) as Source[]
   const part = (from: number, to?: number): string => lines.slice(from, to).join('\n').trim()
   const answer = part(0, wrong)
   const added = db.transaction(() => {
     if (!proofed(db, { id: plan.id, kind: 'note', dest: 'site', title, dek: asked.question, body: answer.split(/\s+/).slice(0, 150).join(' '),
-      sources: JSON.stringify(sources.map((s) => ({ claim: s.claim, ref: s.url }))), checks: '[]', work_date: day, written_date: day })) return false
+      sources: JSON.stringify(sources.map((s) => ({ claim: plain(s).claim, ref: named(s) }))), checks: '[]', work_date: day, written_date: day })) return false
     mkdirSync(join(dir, 'findings'), { recursive: true })
     writeFileSync(path, `${[`# ${title}`, '## Question', asked.question, '## Answer', answer, WRONG, asked.wrong_if, part(wrong + 1, unknown), '## Sources',
-      sources.map((s, i) => `${String(i + 1)}. ${s.url} (${s.fetched_at}): "${s.quote}"`).join('\n'), UNKNOWN, part(unknown + 1)].join('\n\n')}\n`)
+      sources.map((s, i) => `${String(i + 1)}. ${'run' in s ? named(s) :`${s.url} (${s.fetched_at})`}: "${plain(s).quote}"`).join('\n'), UNKNOWN,
+      part(unknown + 1)].join('\n\n')}\n`)
     return true
   })()
   if (!added) return { outcome: 'pass', spans: [], note: 'already recorded' }

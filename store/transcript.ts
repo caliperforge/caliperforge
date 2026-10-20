@@ -32,9 +32,9 @@ const Result = z.object({
 
 const MOVED = /did not complete within its .* timeout and was moved to the background/
 
-/** The command of the last Bash call whose result says it was moved to the background; none when it is missing or a line is not JSON. */
-export function unfinished(path: string): string | null {
-  if (!existsSync(path)) return null
+/** Each Bash call's command and the text its result holds, in order; none when it is missing or a line is not JSON. */
+export function outputs(path: string): { command: string; output: string }[] {
+  if (!existsSync(path)) return []
   try {
     const blocks = readFileSync(path, 'utf8').split('\n').filter((line) => line !== '')
       .flatMap((line) => Message.safeParse(JSON.parse(line)).data?.message.content ?? [])
@@ -44,13 +44,18 @@ export function unfinished(path: string): string | null {
     }))
     return blocks.flatMap((block) => {
       const result = Result.safeParse(block).data
-      if (result === undefined) return []
-      const text = typeof result.content === 'string' ? result.content : result.content.map((part) => part.text ?? '').join('\n')
-      return MOVED.test(text) ? commands.get(result.tool_use_id) ?? [] : []
-    }).at(-1) ?? null
+      const command = result === undefined ? undefined : commands.get(result.tool_use_id)
+      if (result === undefined || command === undefined) return []
+      return [{ command, output: typeof result.content === 'string' ? result.content : result.content.map((part) => part.text ?? '').join('\n') }]
+    })
   } catch {
-    return null
+    return []
   }
+}
+
+/** The command of the last Bash call whose result says it was moved to the background; none when it is missing or a line is not JSON. */
+export function unfinished(path: string): string | null {
+  return outputs(path).filter((run) => MOVED.test(run.output)).at(-1)?.command ?? null
 }
 
 /** The name a provider writes under before the run it belongs to has an id. */

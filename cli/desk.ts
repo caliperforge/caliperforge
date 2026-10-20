@@ -4,6 +4,7 @@ import { resolve } from 'node:path'
 import { z } from 'zod'
 import { claudeAgentSdk } from '../providers/claude-agent-sdk/index.ts'
 import type { Provider } from '../providers/kind.ts'
+import { FENCE } from '../reviews/verdict.ts'
 import { fire } from '../runner/index.ts'
 import { prose } from '../sequencer/prose.ts'
 import { file } from '../sequencer/signals.ts'
@@ -65,8 +66,8 @@ function backed(draft: string, { evidence, quote }: Claim): boolean {
 
 export async function claims(db: Db, root: string, draft: string, provider: Provider): Promise<{ text: string; refused: boolean }> {
   const text = readFileSync(draft, 'utf8')
-  const parts = (await fire(db, root, 'claims_checker', process.cwd(), text, provider)).text.trimEnd().split(/^---$/m)
-  const got = parts.length > 2 && parts.at(-1) === '' ? Claims.safeParse(prose(parts.at(-2) ?? '', ['claim', 'evidence', 'quote'])) : null
+  const found = FENCE.exec((await fire(db, root, 'claims_checker', process.cwd(), text, provider)).text)
+  const got = found === null ? null : Claims.safeParse(prose(found[1] ?? '', ['claim', 'evidence', 'quote']))
   if (got?.success !== true) throw new Error('claims_checker.fence: the reply closes with no parseable claims: fence')
   const rows = got.data.claims.map((c) => ({ ...c, at: `${draft}:${String(c.line)}`, ok: backed(text, c) }))
   const unbacked = rows.filter((r) => !r.ok).map((r) => r.at)

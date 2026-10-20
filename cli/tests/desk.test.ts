@@ -194,7 +194,10 @@ test('claims D2 evidence none is refused naming its line', async () => {
 })
 
 test.each([
-  { label: 'a path the draft lacks', line: 1, edit: () => ({ log: 'logs/other.log' }) },
+  { label: 'a file the draft lacks', line: 1, edit: (dir: string) => {
+    writeFileSync(join(dir, 'other.log'), '')
+    return { log: join(dir, 'other.log') }
+  } },
   { label: 'a folder, not a file', line: 1, edit: (dir: string) => ({ log: dir }) },
   { label: 'a link whose quote the draft lacks', line: 3, edit: () => ({ quote: 'never said' }) },
 ])('claims D3 $label is refused', async ({ line, edit }) => {
@@ -207,6 +210,12 @@ test.each([
 test('claims D4 a reply with no claims fence is refused', async () => {
   const { draft } = drafted()
   await expect(checked(draft, 'no fence')).rejects.toThrow('claims_checker.fence')
+})
+
+test('claims D4 a fence wrapped in backticks still parses', async () => {
+  const { draft, log } = drafted()
+  const wrapped = fenced(log).replace('\n---\n', '\n```\n---\n') + '\n```\n'
+  expect(await checked(draft, wrapped)).toMatchObject({ refused: false })
 })
 
 test('D6 an edit lands in comms/voice-notes.md on capture', () => {

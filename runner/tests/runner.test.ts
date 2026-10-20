@@ -12,7 +12,7 @@ import { fire, packet, planRow, refuse } from '../index.ts'
 import { digest, expected, listed, load, rules, Seat, seat } from '../rules.ts'
 
 const root = join(import.meta.dirname, '../..')
-const SEATS = ['account_lead', 'brief_writer','design_lead', 'director', 'fixer', 'fizz_generator', 'go_specialist', 'growth_lead', 'house_generator', 'kotlin_specialist',
+const SEATS = ['account_lead', 'brief_writer', 'claims_checker','design_lead', 'director', 'fixer', 'fizz_generator', 'go_specialist', 'growth_lead', 'house_generator', 'kotlin_specialist',
   'lua_specialist', 'outside_specialist', 'php_specialist', 'python_specialist', 'researcher', 'ruby_specialist', 'rust_specialist',
   'solana_specialist', 'solidity_specialist', 'swift_specialist', 'text_review', 'typescript_specialist', 'web_specialist', 'writer']
 const cwd = '/tmp/cf-seat'

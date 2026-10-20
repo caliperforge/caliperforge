@@ -24,7 +24,7 @@ test.each([
   ['refuse', ['target', 'plan', 'proposal', 'card']],
   ['plan', ['add']],
   ['session', ['close']],
-  ['desk', ['list', 'show', 'edit', 'approve', 'return', 'catchup']],
+  ['desk', ['list', 'show', 'edit', 'approve', 'return', 'catchup', 'claims']],
   ['site', ['push', 'dir']],
   ['gh', ['refile']],
   ['pipe', ['on', 'off', 'width']],

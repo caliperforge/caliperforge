@@ -15,7 +15,7 @@ const TAIL = 80
 
 const CAP = 10 * 60 * 1000
 
-/** A cold Xcode build of the whole app and its tests runs well past the npm cap; so does a cold cargo build. */
+/** A cold Xcode build of the whole app and its tests runs well past the npm cap; so does a cold cargo build, and so does our whole vitest suite. */
 const XCODE_CAP = 25 * 60 * 1000
 
 const LONG = ['xcodebuild', 'cargo']
@@ -77,7 +77,7 @@ export function checks(src: string, given: Commands, run: Run = npm, narrow: str
   const bin = mode(src)
   if (bin === 'xcodebuild') excluded(src)
   for (const [script, args, program = bin] of commands(src, given, narrow, touched)) {
-    const cap = program === 'python3' && minutes !== undefined ? minutes * 60_000 : undefined
+    const cap = program === 'npm' && script === 'test' ? XCODE_CAP : program === 'python3' && minutes !== undefined ? minutes * 60_000 : undefined
     const first = run(args, src, program, cap)
     if (first.ok) continue
     const retried = loadOnly(first.output) || (bin === 'xcodebuild' && exitedOutside(src, first.output, touched))

@@ -26,7 +26,7 @@ export function opened(db: Db, root: string, plan: number): string[] {
   const listed = new Set(filesOf(db, plan).map((f) => f.path))
   const file = (dir: string, t: string) => statSync(join(dir, t), { throwIfNoEntry: false })?.isFile() === true
   const here = tokens.filter((t) => !t.includes('..') && !t.startsWith('/') && file(srcDir(root, plan), t))
-  for (const t of here.filter((h) => !listed.has(h))) edit(db, plan, 'add', t, 'ruling', `named in ${from.get(t) ?? ''}`)
+  for (const t of here.filter((h) => !listed.has(h))) edit(db, plan, 'add', t, 'ruling', `named in ${from.get(t) ?? ''}`, false)
   const missed = tokens.filter((t) => !here.includes(t) && (t.includes('..') || t.includes('/') || !file(planDir(root, plan), t)))
   if (missed.length > 0) logged(db, { plan, kind: 'files', actor: 'ruling', outcome: 'refuse', message: `not in the checkout: ${missed.join(', ')}`, pointer: null, run: null })
   return missed

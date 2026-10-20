@@ -75,6 +75,20 @@ test('D1 add lists a new path and writes one files event', () => {
   expect(events(db)).toEqual([{ plan: PLAN, kind: 'files', actor: 'coo', outcome: 'pass', message: 'add a.ts' }])
 })
 
+test('D1 add with isNew false lists an existing path', () => {
+  const db = bench()
+  edit(db, PLAN, 'add', 'a.ts', 'coo', null, false)
+  edit(db, PLAN, 'add', 'b.ts', 'coo', null)
+  expect(rows(db)).toEqual([{ path: 'a.ts', is_new: 0 }, { path: 'b.ts', is_new: 1 }])
+})
+
+test('D2 adding a stray clears it and keeps its is_new', () => {
+  const db = bench()
+  strays(db, PLAN, ['s.ts'])
+  edit(db, PLAN, 'add', 's.ts', 'coo', null, true)
+  expect(db.prepare('SELECT path, is_new, stray FROM plan_files WHERE plan = ?').all(PLAN)).toEqual([{ path: 's.ts', is_new: 0, stray: 0 }])
+})
+
 test('D2 drop removes a listed row and ignores an unlisted path', () => {
   const db = bench()
   record(db, PLAN, [{ path: 'a.ts', is_new: false }, { path: 'b.ts', is_new: false }])

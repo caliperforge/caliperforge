@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdtempSync, realpathSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, realpathSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, relative } from 'node:path'
+import { join } from 'node:path'
 import type { Run } from './checks.ts'
 import type { Gate } from './gates.ts'
 import { git } from './workspace.ts'
@@ -35,13 +35,22 @@ export function fresh(src: string, gate: Gate, output: string, run: Run, said?: 
   }
 }
 
-/** Each `error` or `warn` line with its `File:` made relative to `cwd`; the `Line:` is dropped, so an edit above it is not new. */
-function problems(output: string, cwd: string): string[] {
+/** Each `error` or `warn` line with its `File:` keyed on the longest trailing part of `File:` that is a file under `cwd`; the `Line:` is dropped, so an edit above it is not new. */
+export function problems(output: string, cwd: string): string[] {
   const lines = output.split('\n')
   return lines.flatMap((line, at) => {
     const found = PROBLEM.exec(line.trimEnd())
     if (found === null) return []
     const file = FILE.exec(lines[at + 1] ?? '')?.[1]?.trim()
-    return [`${found[1] ?? ''} ${found[2] ?? ''}${file === undefined ? '' : `\n  File: ${relative(cwd, file)}`}`]
+    return [`${found[1] ?? ''} ${found[2] ?? ''}${file === undefined ? '' : `\n  File: ${keyOf(file, cwd)}`}`]
   })
+}
+
+function keyOf(file: string, cwd: string): string {
+  const parts = file.split('/')
+  for (let i = 0; i < parts.length; i++) {
+    const tail = parts.slice(i)
+    if (!tail.includes('..') && statSync(join(cwd, ...tail), { throwIfNoEntry: false })?.isFile() === true) return tail.join('/')
+  }
+  return file
 }

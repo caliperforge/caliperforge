@@ -198,7 +198,7 @@ test('1342b D2 a red sushi run refuses as sushi', () => {
 type Problem = [message: string, file: string, line: number]
 
 function based(): { src: string; base: string; git: (args: string[]) => string } {
-  const src = nested({ 'sushi-config.yaml': '' })
+  const src = nested({ 'sushi-config.yaml': '', 'input/fsh/a.fsh': '', 'input/fsh/b.fsh': '', 'input/fsh/c.fsh': '' })
   const git = (args: string[]): string => execFileSync('git', args, { cwd: src, encoding: 'utf8' }).trim()
   git(['init', '-q'])
   git(['add', '-A'])

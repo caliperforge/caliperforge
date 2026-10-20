@@ -1,5 +1,11 @@
 import type { Command } from 'commander'
-import { readFileSync } from 'node:fs'
+import { readFileSync, statSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { z } from 'zod'
+import { claudeAgentSdk } from '../providers/claude-agent-sdk/index.ts'
+import type { Provider } from '../providers/kind.ts'
+import { fire } from '../runner/index.ts'
+import { prose } from '../sequencer/prose.ts'
 import { file } from '../sequencer/signals.ts'
 import { commsLane } from '../store/comms.ts'
 import { amend, approved, log, opened, postOf, sentBack, STATUSES, type Item } from '../store/desk.ts'
@@ -44,13 +50,37 @@ export function catchup(db: Db, from: string, to: string, by: Holder, now: Date)
   return plan
 }
 
+const Claims = z.object({ claims: z.array(z.object({ line: z.number().int().positive(), claim: z.string().trim().min(1),
+  evidence: z.string().trim().min(1), quote: z.string().nullish() })) })
+type Claim = z.infer<typeof Claims>['claims'][number]
+
+const GITHUB = /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/(commit\/[0-9a-f]{7,40}|actions\/runs\/\d+)$/
+
+function backed(draft: string, { evidence, quote }: Claim): boolean {
+  if (evidence === 'none' || !draft.includes(evidence)) return false
+  if (GITHUB.test(evidence)) return true
+  if (evidence.startsWith('https://')) return quote != null && quote !== '' && draft.includes(quote)
+  return statSync(resolve(evidence), { throwIfNoEntry: false })?.isFile() === true
+}
+
+export async function claims(db: Db, root: string, draft: string, provider: Provider): Promise<{ text: string; refused: boolean }> {
+  const text = readFileSync(draft, 'utf8')
+  const parts = (await fire(db, root, 'claims_checker', process.cwd(), text, provider)).text.trimEnd().split(/^---$/m)
+  const got = parts.length > 2 && parts.at(-1) === '' ? Claims.safeParse(prose(parts.at(-2) ?? '', ['claim', 'evidence', 'quote'])) : null
+  if (got?.success !== true) throw new Error('claims_checker.fence: the reply closes with no parseable claims: fence')
+  const rows = got.data.claims.map((c) => ({ ...c, at: `${draft}:${String(c.line)}`, ok: backed(text, c) }))
+  const unbacked = rows.filter((r) => !r.ok).map((r) => r.at)
+  const last = unbacked.length === 0 ? `pass: ${String(rows.length)} statement(s), each backed` : `refuse: ${unbacked.join(', ')} unbacked`
+  return { text: [...rows.map((r) => `${r.at}\t${r.ok ? r.evidence : 'unbacked'}\t${r.claim}`), last].join('\n') + '\n', refused: unbacked.length > 0 }
+}
+
 function statusOf(status: string): Item['status'] {
   const hit = STATUSES.find((s) => s === status)
   if (hit === undefined) throw new Error(`--status takes fixed, open, ruled or noted, not ${status}`)
   return hit
 }
 
-export function registerDesk(cf: Command, { db, out }: Cli): void {
+export function registerDesk(cf: Command, { root, db, out }: Cli): void {
   const desk = cf.command('desk')
 
   desk.command('list').action(() => {
@@ -87,6 +117,7 @@ export function registerDesk(cf: Command, { db, out }: Cli): void {
     })
 
   registerCatchup(desk, { db, out })
+  registerClaims(desk, { root, db, out })
   registerLearn(cf, { db, out })
 }
 
@@ -96,6 +127,14 @@ function registerCatchup(desk: Command, { db, out }: Pick<Cli, 'db' | 'out'>): v
       const by = holderOf(options.by)
       out(`${String(catchup(db(), from, to, by, new Date()))}\n`)
     })
+}
+
+function registerClaims(desk: Command, { root, db, out }: Cli): void {
+  desk.command('claims').argument('<draft>').action(async (draft: string) => {
+    const { text, refused } = await claims(db(), root, draft, claudeAgentSdk)
+    out(text)
+    process.exitCode = refused ? 1 : 0
+  })
 }
 
 function registerLearn(cf: Command, { db, out }: Pick<Cli, 'db' | 'out'>): void {

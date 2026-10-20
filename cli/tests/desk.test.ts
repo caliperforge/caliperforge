@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { mapOf } from '../../sequencer/steps.ts'
@@ -10,7 +11,7 @@ import { eventsOf, kindsOf } from '../../store/events.ts'
 import { take } from '../../store/leases.ts'
 import { briefed, dropPlan, end, plansOf, putPlan } from '../../store/plans.ts'
 import { capture, draft } from '../../templates/comms.ts'
-import { catchup, giveBack, learn } from '../desk.ts'
+import { catchup, claims, giveBack, learn } from '../desk.ts'
 
 const comms = (status: 'proof' | 'approved' | 'published' = 'proof'): World => {
   const w = world()
@@ -152,6 +153,60 @@ test('catchup D6 a refused plan holds only its own title', () => {
   end(w.db, catchup(w.db, '2026-08-01', '2026-10-11', 'coo', AT), 'refused')
   expect(() => catchup(w.db, '2026-08-01', '2026-10-11', 'coo', AT)).toThrow('is already filed')
   expect(catchup(w.db, '2026-10-01', '2026-10-20', 'ceo', AT)).toBeGreaterThan(0)
+})
+
+const COMMIT = 'https://github.com/astropy/pyvo/commit/abc1234'
+const THREAD = 'https://example.org/thread/9'
+
+const drafted = (): { dir: string; draft: string; log: string } => {
+  const dir = mkdtempSync(join(tmpdir(), 'cf-claims-'))
+  const log = join(dir, 'tap.log')
+  writeFileSync(log, 'job 1 completed\n')
+  const draft = join(dir, 'draft.md')
+  writeFileSync(draft, `We ran async TAP jobs, log at ${log}.\nThe fix is ${COMMIT}.\nThe maintainer wrote "retries are on" at ${THREAD}.\n`)
+  return { dir, draft, log }
+}
+
+const fenced = (log: string, edit: Record<string, string> = {}): string => ['Three statements.', '---', 'claims:',
+  '  - line: 1', '    claim: we ran async TAP jobs', `    evidence: ${edit.log ?? log}`,
+  '  - line: 2', '    claim: the fix landed', `    evidence: ${COMMIT}`,
+  '  - line: 3', '    claim: the maintainer said retries are on', `    evidence: ${THREAD}`, `    quote: ${edit.quote ?? 'retries are on'}`,
+  '---'].join('\n')
+
+const checked = (draft: string, reply: string): ReturnType<typeof claims> => {
+  const w = world()
+  return claims(w.db, w.root, draft, stub('', 0, reply))
+}
+
+test('claims D1 every statement backed passes with its evidence', async () => {
+  const { draft, log } = drafted()
+  expect(await checked(draft, fenced(log))).toEqual({ refused: false, text: [`${draft}:1\t${log}\twe ran async TAP jobs`,
+    `${draft}:2\t${COMMIT}\tthe fix landed`, `${draft}:3\t${THREAD}\tthe maintainer said retries are on`,
+    'pass: 3 statement(s), each backed', ''].join('\n') })
+})
+
+test('claims D2 evidence none is refused naming its line', async () => {
+  const { draft, log } = drafted()
+  const { text, refused } = await checked(draft, fenced(log, { log: 'none' }))
+  expect(refused).toBe(true)
+  expect(text.split('\n')[0]).toBe(`${draft}:1\tunbacked\twe ran async TAP jobs`)
+  expect(text.split('\n').at(-2)).toBe(`refuse: ${draft}:1 unbacked`)
+})
+
+test.each([
+  { label: 'a path the draft lacks', line: 1, edit: () => ({ log: 'logs/other.log' }) },
+  { label: 'a folder, not a file', line: 1, edit: (dir: string) => ({ log: dir }) },
+  { label: 'a link whose quote the draft lacks', line: 3, edit: () => ({ quote: 'never said' }) },
+])('claims D3 $label is refused', async ({ line, edit }) => {
+  const { dir, draft, log } = drafted()
+  const { text, refused } = await checked(draft, fenced(log, edit(dir)))
+  expect(refused).toBe(true)
+  expect(text.split('\n').at(-2)).toBe(`refuse: ${draft}:${String(line)} unbacked`)
+})
+
+test('claims D4 a reply with no claims fence is refused', async () => {
+  const { draft } = drafted()
+  await expect(checked(draft, 'no fence')).rejects.toThrow('claims_checker.fence')
 })
 
 test('D6 an edit lands in comms/voice-notes.md on capture', () => {

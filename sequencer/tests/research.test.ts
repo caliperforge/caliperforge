@@ -435,6 +435,27 @@ test('measure D1: an ask with no Measure line fires researcher', async () => {
   expect(maybe(w.root, 1, 'runs.json')).toBeNull()
 })
 
+const NEEDS_RUN = 'This needs a timed run.\n\n```\n---\noutcome: needs_run\n---\n```\n'
+
+const UNRUN = { outcome: 'refuse', spans: ['ask.md'], note: 'ask needs executed runs: add a **Measure:** line so the measurer gathers it' }
+
+test('needs_run D1: a researcher needs_run reply refuses ask.md', async () => {
+  const w = researching()
+  question(w.root, plan(w.db, 1))
+  expect((await gathered(w, NEEDS_RUN))[0]).toEqual(UNRUN)
+  expect(maybe(w.root, 1, 'answer.md')).toBeNull()
+  expect(maybe(w.root, 1, 'sources.json')).toBeNull()
+})
+
+test('needs_run D2: a measurer needs_run reply refuses its fence', async () => {
+  const w = researching(MEASURE)
+  headed(w)
+  question(w.root, plan(w.db, 1))
+  expect(await gather(w.db, w.root, plan(w.db, 1), mapOf('research').at(1), measuring(NEEDS_RUN, () => undefined)))
+    .toMatchObject({ outcome: 'refuse', spans: ['researcher.fence'] })
+  expect(ran(w)).toEqual(['measurer'])
+})
+
 const cite = (commit: string, quote = 'cold start: 41 ms', command = RUN): object => ({ run: { command, commit, quote, claim: 'Cold start is 41 ms' } })
 
 test('measure D2: a fence of run and url entries is written whole', () => {

@@ -22,6 +22,8 @@ import { DEFAULT_BUILDER, type Step } from './pr-path.ts'
 
 export const FENCE = /(?:^|\n)(?:```\w*\n)?---[ \t]*\n(sources:[\s\S]*?)\n---[ \t]*(?:\n```[ \t]*)?\s*$/
 
+const NEEDS_RUN = /(?:^|\n)(?:```\w*\n)?---[ \t]*\noutcome:[ \t]*needs_run[ \t]*\n---[ \t]*(?:\n```[ \t]*)?\s*$/
+
 const KEYS = ['fetched_at', 'quote', 'claim', 'command', 'commit']
 
 const Url = z.object({
@@ -160,6 +162,9 @@ export async function gather(db: Db, root: string, plan: PlanRow, step: Step, pr
     maybe(root, plan.id, 'refusal.md')?.replace(/^/, '\n\n# Refused — fix what this names\n\n') ?? ''}${measure ? `\n\n# HEAD\n\n${headSha(srcDir(root, plan.id))}` : ''}`
   const fired = await ran(db, root, plan, seat, provider, input, false)
   if (fired.ended !== 'completed') return { outcome: 'refuse', spans: [fired.stop_reason ?? 'seat.exit'], note: `${seat.runs} ${fired.ended}` }
+  if (!measure && NEEDS_RUN.test(fired.text)) {
+    return { outcome: 'refuse', spans: ['ask.md'], note: 'ask needs executed runs: add a **Measure:** line so the measurer gathers it' }
+  }
   const sources = sourced(root, plan, fired.text)
   if (sources.outcome === 'refuse') return sources
   if (measure) put(root, plan.id, 'runs.json', JSON.stringify(outputs(lastTranscript(db, plan.id, step.step))))

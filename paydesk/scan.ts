@@ -102,8 +102,9 @@ async function listing(dir: string, net: Net, owes: Owes): Promise<ListingScan> 
 
 async function owed(assessed: EndpointVerdict, probe: Probe, owes: Owes): Promise<EndpointVerdict> {
   if ('error' in probe || (assessed.verdict !== 'ok' && assessed.verdict !== 'warn')) return assessed
-  const issues = await owes(usable(probe.offers.offers))
-  return issues.length === 0 ? assessed : { ...assessed, verdict: 'warn', issues: [...assessed.issues, ...issues] }
+  const owing = await owes(usable(probe.offers.offers))
+    .catch((e: unknown) => ({ verdict: 'unchecked' as const, issues: [`recipient unchecked: ${message(e)}`] }))
+  return owing.issues.length === 0 ? assessed : { ...assessed, verdict: owing.verdict, issues: [...assessed.issues, ...owing.issues] }
 }
 
 function outbound({ path, op }: Listed): boolean {

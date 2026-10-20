@@ -6,9 +6,11 @@ import type { ListingScan } from '../card.ts'
 import { diffed, live, recheck } from '../live.ts'
 import type { Net, Scanned } from '../scan.ts'
 
-const X402 = { accepts: [{ scheme: 'exact', network: 'solana', amount: '10000', asset: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', payTo: 'payee' }] }
+const X402 = { accepts: [{ scheme: 'exact', network: 'solana', amount: '10000', asset: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', payTo: 'SysvarRent111111111111111111111111111111111' }] }
+const wallet = (body: string): Response => Response.json({ jsonrpc: '2.0', id: 1, result: { context: { slot: 1 },
+  value: body.includes('getAccountInfo') ? { owner: '11111111111111111111111111111111' } : [{ pubkey: 'ata', account: {} }] } })
 const net: Net = {
-  fetch: (...[, init]: Parameters<typeof fetch>) => Promise.resolve(init?.body === '{"symbol":"SOL"}'
+  fetch: (...[url, init]: Parameters<typeof fetch>) => Promise.resolve(url === 'https://api.mainnet-beta.solana.com' ? wallet(init?.body as string) : init?.body === '{"symbol":"SOL"}'
     ? new Response('bad', { status: 400 })
     : new Response(JSON.stringify(X402), { status: 402, headers: { 'content-type': 'application/json' } })),
   resolve: () => Promise.resolve(),

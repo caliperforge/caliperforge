@@ -1,11 +1,12 @@
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { beforeAll, expect, test, vi } from 'vitest'
+import { beforeAll, expect, test } from 'vitest'
 import type { ListingScan } from '../card.ts'
 import { scan, type Scanned } from '../scan.ts'
 
-const X402 = { accepts: [{ scheme: 'exact', network: 'solana', amount: '10000', asset: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', payTo: 'payee' }] }
+let payTo = 'SysvarRent111111111111111111111111111111111'
+const x402 = () => ({ accepts: [{ scheme: 'exact', network: 'solana', amount: '10000', asset: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', payTo }] })
 const RPC = 'https://api.mainnet-beta.solana.com'
 const calls: { url: string; init: RequestInit }[] = []
 let held: unknown[] | null = [{ pubkey: 'ata', account: {} }]
@@ -19,7 +20,7 @@ const fake = (url: string, init: RequestInit): Promise<Response> => {
   if (url === RPC) return Promise.resolve(chain(init.body as string))
   return Promise.resolve(init.body === '{"symbol":"SOL"}'
     ? new Response('bad', { status: 400 })
-    : new Response(JSON.stringify(X402), { status: 402, headers: { 'content-type': 'application/json' } }))
+    : new Response(JSON.stringify(x402()), { status: 402, headers: { 'content-type': 'application/json' } }))
 }
 const tmp = mkdtempSync(join(tmpdir(), 'paydesk-'))
 let results: Scanned[] = []
@@ -80,12 +81,17 @@ test('D2 no token account for the mint warns on both endpoints', async () => {
   }
 })
 
-test('D5 an RPC 429 keeps both ok and writes one stderr line', async () => {
+test('D5 an RPC 429 leaves both endpoints unchecked', async () => {
   held = null
-  const write = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
   const { endpoints } = await rescan()
-  expect(endpoints).toEqual(listing.endpoints)
-  expect(endpoints.map((e) => e.verdict)).toEqual(['ok', 'ok'])
-  expect(write).toHaveBeenCalledTimes(1)
-  write.mockRestore()
+  expect(endpoints).toEqual(listing.endpoints.map((e) => ({ ...e, verdict: 'unchecked', issues: [...e.issues, 'recipient unchecked: HTTP 429'] })))
+})
+
+test('D6 an EVM payTo fails with no RPC call', async () => {
+  payTo = `0x${'ab'.repeat(20)}`
+  const before = calls.length
+  for (const endpoint of (await rescan()).endpoints) {
+    expect(endpoint).toMatchObject({ verdict: 'fail', issues: expect.arrayContaining(['payTo is not a Solana address']) as unknown })
+  }
+  expect(calls.slice(before).filter((c) => c.url === RPC)).toEqual([])
 })

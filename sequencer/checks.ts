@@ -164,7 +164,7 @@ function loadOnly(output: string): boolean {
   return named.length > 0 && named.every((block) => LOAD.test(block))
 }
 
-const NETWORK = /RPC failed; HTTP [45]\d\d|fatal: expected 'packfile'|Could not resolve host|Connection reset by peer|Failed to connect to|\bcurl (?:22|56)\b|Operation timed out/
+export const NETWORK = /RPC failed|fatal: expected 'packfile'|Could not resolve host|getaddrinfo|ENOTFOUND|EAI_AGAIN|ENETUNREACH|ETIMEDOUT|Network is unreachable|Failed to connect to|Connection timed out|Connection reset by peer|\bcurl (?:22|56)\b|Operation timed out|TLS handshake timeout|": unexpected EOF|i\/o timeout|SSL connection timeout|\bHTTP 499\b/
 
 export function network(output: string): string | null {
   return output.split('\n').map((line) => line.trim()).find((line) => NETWORK.test(line)) ?? null

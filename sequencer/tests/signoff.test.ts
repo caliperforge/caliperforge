@@ -100,7 +100,7 @@ test('one card per outside plan, linking nothing on their thread', async () => {
   const card = desk.cards.get(100)
   expect(card?.title).toBe('Sign-off: widget 12, hello')
   expect(card?.body).toContain('titled `hello`')
-  expect(card?.body).toContain('```markdown\nAddresses #12.')
+  expect(card?.body).toContain('```markdown\nthe ask asks for it.\n\nadd `hello()`.\n\nCI is green on our fork at this head.\n\nAddresses #12.\n```')
   expect(card?.body).toContain('https://github.com/caliperforge/widget/commit/')
   expect(card?.body).toContain('pre_review pass, review pass, senior_review pass, ready pass')
   const outside = (card?.body ?? '').replace(/```markdown[\s\S]*?\n```\n/, '').replace(/`[^`]*`/g, '')

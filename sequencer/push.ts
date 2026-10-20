@@ -29,7 +29,8 @@ import { rerun as cancelled } from './rerun.ts'
 import { based, moved, retire } from './retire.ts'
 import type { Outcome } from './kind.ts'
 import { merging } from './merging.ts'
-import { cloned, conflicted, diffOf, fetchMain, FORK, get, MAIN, maybe, planDir, put, repoName, srcDir, titleOf } from './workspace.ts'
+import { prBody, prTitle } from './pr.ts'
+import { cloned, conflicted, diffOf, fetchMain, FORK, MAIN, maybe, planDir, put, repoName, srcDir, titleOf } from './workspace.ts'
 import { assembly, homeOf } from './home.ts'
 import { clean, subjectOf } from './shape.ts'
 import { size } from './size.ts'
@@ -437,12 +438,13 @@ export function push(db: Db, root: string, plan: PlanRow, wire: Wire = WIRE): Ou
   if (cold !== null) return refuse(cold, `${cold} left no passing verdict on plan ${String(plan.id)}`)
   const rules = profile(root, target.repo)
   const text = maybe(root, plan.id, 'pr.md') ?? prBody(target.issue_no, root, plan.id, rules)
+  const named = prTitle(root, plan.id)
   const open = opened(db, plan.id)
   if (open === null && !onFork(head.dir, head.branch)) {
-    squash(root, plan.id, rules, prMessage(title(root, plan.id), text, rules))
+    squash(root, plan.id, rules, prMessage(named, text, rules))
     bind(root, plan.id, headOf(root, plan.id).sha, signed)
   }
-  const checks = [...CHECKS, size(target.repo), prosed(title(root, plan.id), text), titled, merging(target.repo, wire.merged), ...(wire.card ?? [])]
+  const checks = [...CHECKS, size(target.repo), prosed(named, text), titled, merging(target.repo, wire.merged), ...(wire.card ?? [])]
   const card = waiting(db, root, plan.id, signed, target, checks)
   if (card !== null) return card
   wire.send(head.dir, head.branch)
@@ -454,12 +456,12 @@ export function push(db: Db, root: string, plan: PlanRow, wire: Wire = WIRE): Ou
   const body = maybe(root, plan.id, 'pr.md') === null
     ? put(root, plan.id, 'pr.md', text)
     : join(planDir(root, plan.id), 'pr.md')
-  const url = wire.open(target.repo, `caliperforge:${head.branch}`, title(root, plan.id), body)
+  const url = wire.open(target.repo, `caliperforge:${head.branch}`, named, body)
   markPushed(db, plan.id, approval, url)
   return { outcome: 'pass', spans: [], note: `pushed ${head.branch} as ${url}` }
 }
 
-export { opened }
+export { opened, prBody }
 
 /** The ready gate already consumed fork CI and the counterparty bot; push reads its rows, never reruns them. */
 function unproven(db: Db, plan: number): string | null {
@@ -492,27 +494,14 @@ export function title(root: string, plan: number): string {
 function titled(...[, root, plan, target]: Parameters<Check>): Row {
   const lines = (maybe(root, plan, 'ask.md') ?? '').split('\n')
   const theirs = /^#{1,3}\s+(.*)$/m.exec(lines.slice(lines.findIndex((l) => l.includes(CARD)) + 1).join('\n'))?.[1]?.trim()
-  const mine = title(root, plan)
+  const mine = prTitle(root, plan)
   const no = `#${String(target.issue_no)}'s title`
   return mine === theirs ? { check: 'title', ok: false, says: `"${mine}" is ${no}` } : { check: 'title', ok: true, says: `not ${no}` }
 }
 
-const TEST = /(^|\/)(tests?|spec|__tests__)\/|[._](test|spec)\.|Tests?\./
-
-/**
- * Used when the card set no body. Their shape, not ours: it addresses the issue rather than closing
- * it, since one item of a maintainer's list is not the list.
- */
-export function prBody(no: number, root: string, plan: number, rules: Profile | null = null): string {
-  const brief = get(root, plan, 'issue.md')
-  const tests = parse(diffOf(root, plan)).map((f) => f.path).filter((p) => TEST.test(p))
-  return [`Addresses #${String(no)}.`, '', '## Summary', '', ...said(brief).map((l) => `- ${l}`), '', '## Test Plan', '',
-    ...tests.map((t) => `- \`${t}\``), '- CI green on our fork at this head.', ...(rules?.disclosure === undefined ? [] : ['', rules.disclosure]), ''].join('\n')
-}
-
 /** The brief's What and Why lines, the two things a maintainer reads first. */
-function said(brief: string): string[] {
-  return ['**What:**', '**Why:**'].flatMap((key) => {
+export function said(brief: string, keys = ['**What:**', '**Why:**']): string[] {
+  return keys.flatMap((key) => {
     const line = brief.split('\n').find((l) => l.startsWith(key))?.slice(key.length).trim()
     return line === undefined || line === '' ? [] : [line]
   })

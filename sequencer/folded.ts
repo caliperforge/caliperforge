@@ -11,9 +11,9 @@ export function bind(root: string, plan: number, folded: string, signed: string)
   put(root, plan, PR_HEAD, `${folded} ${signed}\n`)
 }
 
-/** The PR title over the first line of the body's Summary, cleaned as `messageOf` cleans. */
+/** The PR title over the first line of the body's Summary, else its first paragraph that is no heading, cleaned as `messageOf` cleans. */
 export function prMessage(title: string, text: string, rules: Profile | null = null): string {
-  const summary = /^## Summary$(?:\n(?!## ).*)*?\n- (.*)$/m.exec(text)?.[1] ?? ''
+  const summary = /^## Summary$(?:\n(?!## ).*)*?\n- (.*)$/m.exec(text)?.[1] ?? text.split(/\n\s*\n/).find((p) => !p.startsWith('#')) ?? ''
   const trailer = rules?.ai_trailer === true ? rules.trailer ?? '' : ''
   return [clean(title, rules), clean(summary, rules), trailer].filter((p) => p !== '').join('\n\n')
 }

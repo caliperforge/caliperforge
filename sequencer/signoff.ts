@@ -15,6 +15,7 @@ import { asks, graded } from '../store/signals.ts'
 import { targetRef } from '../store/targets.ts'
 import type { Board } from '../rails/ci-green/index.ts'
 import { carried as rows } from '../rails/completion-audit/index.ts'
+import { prTitle } from './pr.ts'
 import { BOARD, headOf, opened, rehearsalBranch, title } from './push.ts'
 import { GRADING } from './ready.ts'
 import { checked } from './seat.ts'
@@ -175,7 +176,7 @@ function bodyFor(db: Db, root: string, card: Card, desk: Desk): string {
     ci === null ? `- ${maybe(root, card.id, 'ci.unrun') === head.sha ? UNRUN : 'this repo has no CI'}; checked with: ${ranAt(db, root, card.id)}` : `- Their CI on our fork: ${ciLine(ci)}`,
     `- Greptile on our fork: ${greptileLine(db, card.id, head.sha)}`,
     open === null
-      ? `- Goes out as: a new pull request titled ${code(title(root, card.id))}`
+      ? `- Goes out as: a new pull request titled ${code(prTitle(root, card.id))}`
       : `- Goes out as: a follow-up commit on our open pull request ${code(open)}`,
     '',
     open === null ? '**What the maintainer reads**' : '**The commit message the maintainer reads**',

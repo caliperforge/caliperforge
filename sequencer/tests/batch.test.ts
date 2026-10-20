@@ -65,7 +65,7 @@ test('a card per ready plan and open proposal, with checks', async () => {
   expect(card).toMatchObject({ kind: 'plan', id: 1, title: 'acme/widget#12 widget-12-a1' })
   expect(card?.digest).toBe(headDigest(headOf(w.root, 1).sha))
   expect(card?.change).toBe('  1 file(s)\t+1\t-1')
-  expect(card?.text).toBe('Addresses #12.\n\n## Summary\n\n- add `hello()`.\n- the ask asks for it.\n\n## Test Plan\n\n- CI green on our fork at this head.')
+  expect(card?.text).toBe('the ask asks for it.\n\nadd `hello()`.\n\nCI is green on our fork at this head.\n\nAddresses #12.')
   expect(card?.marks).toEqual([
     { name: 'pre_review', ok: true }, { name: 'review', ok: true },
     { name: 'senior_review', ok: true }, { name: 'ready', ok: true },
@@ -381,7 +381,7 @@ test('D1 the first push sends one commit titled as the pr', async () => {
   const sent = git(['ls-remote', 'origin', 'refs/heads/widget-12-a1']).split('\t')[0] ?? ''
   git(['merge-base', '--is-ancestor', 'refs/remotes/upstream/main', sent])
   const log = git(['log', '--format=%B%x00', `refs/remotes/upstream/main..${sent}`]).split('\0').map((m) => m.trim()).filter((m) => m !== '')
-  expect(log).toEqual(['hello\n\nadd `hello()`.'])
+  expect(log).toEqual(['hello\n\nthe ask asks for it.'])
   expect(git(['rev-parse', `${sent}^{tree}`])).toBe(tree)
 })
 

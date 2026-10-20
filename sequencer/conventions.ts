@@ -19,7 +19,7 @@ export function conform(dir: string): Row {
   const recent = bodies(dir, LAST)
   const ours = bodies(dir, MINE)
   const changelog = touched(dir, LAST) && !touched(dir, MINE) ? ['no commit of ours touches the changelog'] : []
-  const misses = [...subjects(recent, ours), ...signoffs(recent, ours), ...changelog]
+  const misses = [...subjects(dir, ours), ...signoffs(recent, ours), ...changelog]
   if (misses.length > 0) return { check: 'conventions', ok: false, says: misses.join('; ') }
   return { check: 'conventions', ok: true, says: `matches the last ${String(recent.length)} commits` }
 }
@@ -36,10 +36,14 @@ function touched(dir: string, range: string[]): boolean {
   return git(dir, ['log', '--no-merges', '--name-only', '--format=', ...range]).split('\n').some((p) => CHANGELOG.test(basename(p)))
 }
 
-function subjects(recent: string[], ours: string[]): string[] {
-  const shaped = most(recent.map(subjectOf), CONVENTIONAL)
-  const [mine, theirs] = shaped ? ['plain', 'conventional'] : ['conventional', 'plain']
-  return ours.map(subjectOf).filter((s) => CONVENTIONAL.test(s) !== shaped)
+export function shaped(dir: string): boolean {
+  return most(bodies(dir, LAST).map(subjectOf), CONVENTIONAL)
+}
+
+function subjects(dir: string, ours: string[]): string[] {
+  const conventional = shaped(dir)
+  const [mine, theirs] = conventional ? ['plain', 'conventional'] : ['conventional', 'plain']
+  return ours.map(subjectOf).filter((s) => CONVENTIONAL.test(s) !== conventional)
     .map((s) => `subject "${s}" is ${mine}, the repo's are ${theirs}`)
 }
 

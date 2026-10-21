@@ -1,3 +1,4 @@
+import { mkdirSync, mkdtempSync, realpathSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
@@ -43,4 +44,12 @@ test('D5: planOf reads the plan from its checkout, else throws', () => {
   const root = join(tmpdir(), 'cf-root')
   expect(planOf(root, join(root, '.cf/work/1/src'))).toBe(1)
   expect(() => planOf(root, tmpdir())).toThrow("cf research check runs from a plan's checkout")
+})
+
+test('D5: planOf reads the plan through a symlinked .cf', () => {
+  const tree = mkdtempSync(join(tmpdir(), 'cf-tick-'))
+  mkdirSync(join(tree, 'main/.cf/work/1/src'), { recursive: true })
+  mkdirSync(join(tree, 'tick'))
+  symlinkSync(join(tree, 'main/.cf'), join(tree, 'tick/.cf'))
+  expect(planOf(join(tree, 'tick'), realpathSync(join(tree, 'main/.cf/work/1/src')))).toBe(1)
 })

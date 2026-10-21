@@ -8,6 +8,7 @@ import { gates, type Gate, type Outside, type OutsideLanguage, waived } from './
 import { fresh } from './inherited.ts'
 import { malformed } from './malformed.ts'
 import { nodeTests, Package } from './node.ts'
+import { unfinished } from './unfinished.ts'
 
 export type Commands = NonNullable<Profile['commands']>
 
@@ -15,8 +16,10 @@ const TAIL = 80
 
 const CAP = 10 * 60 * 1000
 
-/** A cold Xcode build of the whole app and its tests runs well past the npm cap; so does a cold cargo build, and so does our whole vitest suite. */
+/** A cold Xcode build of the whole app and its tests runs well past the npm cap; so does a cold cargo build. */
 const XCODE_CAP = 25 * 60 * 1000
+
+const SUITE_CAP = 45 * 60 * 1000
 
 const LONG = ['xcodebuild', 'cargo']
 
@@ -35,6 +38,8 @@ export interface Failure {
   fault?: string
   /** The cap killed a run other than xcodebuild's before it named a red test, or killed a finish entry. */
   capped?: true
+  /** On a capped whole vitest suite, the test files it never printed as finished. */
+  unfinished?: string[]
 }
 
 export type Ran = { ok: true; output: string } | { ok: false; code: string; output: string; capped?: true }
@@ -77,13 +82,14 @@ export function checks(src: string, given: Commands, run: Run = npm, narrow: str
   const bin = mode(src)
   if (bin === 'xcodebuild') excluded(src)
   for (const [script, args, program = bin] of commands(src, given, narrow, touched)) {
-    const cap = program === 'npm' && script === 'test' ? XCODE_CAP : program === 'python3' && minutes !== undefined ? minutes * 60_000 : undefined
+    const cap = program === 'npm' && script === 'test' ? SUITE_CAP : program === 'python3' && minutes !== undefined ? minutes * 60_000 : undefined
     const first = run(args, src, program, cap)
     if (first.ok) continue
     const retried = loadOnly(first.output) || (bin === 'xcodebuild' && exitedOutside(src, first.output, touched))
-    const last = retried ? run(alone(first.output, read(src)?.[script] ?? '', args), src, program, cap) : first
+    const again = retried ? alone(first.output, read(src)?.[script] ?? '', args) : args
+    const last = retried ? run(again, src, program, cap) : first
     if (!last.ok) return { script, command: `${program} ${args.join(' ')}`, code: last.code, output: tail(last.output), tests: entries(src, last.output), retried,
-      ...faultOf(bin, last.output), ...cappedOf(bin, last) }
+      ...faultOf(bin, last.output), ...cappedOf(bin, last, src, script, again) }
   }
   return null
 }
@@ -98,8 +104,9 @@ function faultOf(bin: Mode, output: string): { fault?: string } {
   return line === undefined ? {} : { fault: line.trim() }
 }
 
-function cappedOf(bin: Mode, ran: Extract<Ran, { ok: false }>): { capped?: true } {
-  return bin !== 'xcodebuild' && ran.capped === true && failures(ran.output).length === 0 ? { capped: true } : {}
+function cappedOf(bin: Mode, ran: Extract<Ran, { ok: false }>, src: string, script: string, args: string[]): Pick<Failure, 'capped' | 'unfinished'> {
+  if (bin === 'xcodebuild' || ran.capped !== true || failures(ran.output).length > 0) return {}
+  return args[0] === 'run' && VITEST.test(read(src)?.[script] ?? '') ? { capped: true, unfinished: unfinished(src, ran.output) } : { capped: true }
 }
 
 /**

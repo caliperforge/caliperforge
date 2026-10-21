@@ -1,9 +1,10 @@
 import { expect, test } from 'vitest'
+import { addFinding } from '../../store/drift.ts'
 import { logged, runAt } from '../../store/events.ts'
 import { addRule } from '../../store/index.ts'
 import { ratchetRules } from '../../store/lanes.ts'
 import { planById, putPlan } from '../../store/plans.ts'
-import { drift, Entry } from '../drift.ts'
+import { drift, Entry, recovered } from '../drift.ts'
 import { COO, db, event, NOW, REGISTRY } from './drifting.ts'
 
 test('switchOff', () => {
@@ -115,6 +116,25 @@ test('D3 D4 a repeat ci.unrun on one sha is seen', () => {
   expect(drift(d, unrun, NOW)).toEqual([])
   log('a')
   expect(drift(d, unrun, NOW).map((r) => r.state)).toEqual(['seen'])
+})
+
+test('D1 D2 a passing ci.unrun is not seen; a refused one is', () => {
+  const d = db()
+  const unrun = REGISTRY.filter((e) => e.name === 'fork_unrun')
+  const log = (outcome: 'pass' | 'refuse'): number =>
+    logged(d, { plan: 1, kind: 'ci.unrun', actor: 'tick', outcome, message: 'm', pointer: outcome, run: null }, '2026-10-02 10:00:00')
+  log('pass')
+  expect(drift(d, unrun, NOW)).toEqual([])
+  log('refuse')
+  expect(drift(d, unrun, NOW).map((r) => r.state)).toEqual(['seen'])
+})
+
+test('D3 an open fork_unrun finding recovers', () => {
+  const d = db()
+  const unrun = REGISTRY.filter((e) => e.name === 'fork_unrun')
+  const id = addFinding(d, { name: 'fork_unrun', state: 'seen', detail: 'expected none' }, NOW)
+  logged(d, { plan: 1, kind: 'ci.unrun', actor: 'tick', outcome: 'pass', message: 'm', pointer: 'a', run: null }, '2026-10-02 10:00:00')
+  expect(recovered(d, unrun, drift(d, unrun, NOW), NOW)).toEqual([id])
 })
 
 test('D2 a second swallowed before a back is seen', () => {

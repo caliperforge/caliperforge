@@ -268,9 +268,9 @@ test('D1 tokens per landed job: one cohort per Monday week', () => {
 test('D2 loop_counts: weekly, all and last 7 days, blips left out', () => {
   exported(looped(), site, new Date('2026-10-20T12:00:00Z'))
   expect(json('loop_counts').columns).toEqual(['period', 'landed', 'refusals', 'refusals_per_landed', 'first_pass', 'first_pass_share',
-    'rebuilt_landed', 'fix_tickets', 'fix_tickets_landed', 'language_notes', 'drift_fixed'])
-  expect(json('loop_counts').rows).toEqual([['2026-09-21', 1, 0, 0, 1, 1, 0, 1, 0, 0, 0], ['2026-09-28', 1, 2, 2, 0, 0, 1, 1, 1, 1, 1],
-    ['all', 2, 2, 1, 1, 0.5, 1, 2, 1, 1, 1], ['last_7_days', 0, 0, null, 0, null, 0, 0, 0, 0, 0]])
+    'rebuilt_landed', 'fix_tickets', 'fix_tickets_landed', 'language_notes', 'drift_fixed', 'landed_caliperforge', 'landed_outside'])
+  expect(json('loop_counts').rows).toEqual([['2026-09-21', 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 1, 0], ['2026-09-28', 1, 2, 2, 0, 0, 1, 1, 1, 1, 1, 1, 0],
+    ['all', 2, 2, 1, 1, 0.5, 1, 2, 1, 1, 1, 2, 0], ['last_7_days', 0, 0, null, 0, null, 0, 0, 0, 0, 0, 0, 0]])
 })
 
 test('D6 loop_counts holds no URL, title or message', () => {

@@ -44,6 +44,62 @@ test('render D2: a shell already linking /site.css keeps one', () => {
   expect(page.split('/site.css')).toHaveLength(2)
 })
 
+const WEEKLY = { kind: 'weekly', title: 'The week', dek: 'Jobs & fixes on 12 October. The fence held.', body: 'One.', work_date: '2026-10-12',
+  written_date: '2026-10-19' }
+
+function weekly(index: string): string {
+  const site = mkdtempSync(join(tmpdir(), 'cf-site-'))
+  mkdirSync(join(site, 'blog'))
+  mkdirSync(join(site, 'data'))
+  writeFileSync(join(site, 'blog', POST05), '<html><head><title>x</title></head><body><h1>x</h1><article>x</article></body></html>')
+  writeFileSync(join(site, 'blog', 'index.html'), index)
+  writeFileSync(join(site, 'data', 'loop_counts.json'), '[{"day": "2026-10-12", "landed": 3}]')
+  return site
+}
+
+const ARC = (dateline: string): string => `<article class="cf-arc-card">\n<p class="dateline">${dateline}</p>\n` +
+  '<h2><a href="06_the-week.html">The week</a></h2>\n<p class="summary">Jobs &amp; fixes on 12 October. The fence held.</p>\n</article>\n'
+
+test('weekly D1: the arc card goes before the first arc card', () => {
+  const site = weekly('<main>\n<article class="cf-blog-card">x</article>\n<section class="log-arcs">\n<h2>Arcs</h2>\n' +
+    '<article class="cf-arc-card">old</article>\n</section>\n</main>')
+  expect(render(site, WEEKLY)).toBe('06_the-week')
+  expect(readdirSync(join(site, 'blog')).sort()).toEqual([POST05, '06_the-week.html', 'index.html'])
+  expect(readFileSync(join(site, 'blog', 'index.html'), 'utf8')).toBe('<main>\n<article class="cf-blog-card">\n' +
+    '<p class="dateline">12 October 2026</p>\n<h2><a href="06_the-week.html">The week</a></h2>\n' +
+    '<p class="summary">Jobs &amp; fixes on 12 October. The fence held.</p>\n</article>\n<article class="cf-blog-card">x</article>\n' +
+    `<section class="log-arcs">\n<h2>Arcs</h2>\n${ARC('Weekly arc · 12 to 18 October 2026')}<article class="cf-arc-card">old</article>\n</section>\n</main>`)
+})
+
+test('weekly D2: an empty log-arcs takes the card before its close', () => {
+  const site = weekly('<main>\n<article class="cf-blog-card">x</article>\n<section class="log-arcs">\n<h2>Arcs</h2>\n</section>\n</main>')
+  render(site, WEEKLY)
+  expect(readFileSync(join(site, 'blog', 'index.html'), 'utf8'))
+    .toContain(`<section class="log-arcs">\n<h2>Arcs</h2>\n${ARC('Weekly arc · 12 to 18 October 2026')}</section>\n</main>`)
+})
+
+test('weekly D3: no log-arcs section throws and writes nothing', () => {
+  const index = '<main>\n<article class="cf-blog-card">x</article>\n</main>'
+  const site = weekly(index)
+  expect(() => render(site, WEEKLY)).toThrow('blog/index.html has no section.log-arcs')
+  expect(readdirSync(join(site, 'blog')).sort()).toEqual([POST05, 'index.html'])
+  expect(readFileSync(join(site, 'blog', 'index.html'), 'utf8')).toBe(index)
+})
+
+test('weekly D4: a dek number missing from data/ throws', () => {
+  const index = '<main>\n<article class="cf-blog-card">x</article>\n<section class="log-arcs">\n</section>\n</main>'
+  const site = weekly(index)
+  expect(() => render(site, { ...WEEKLY, dek: '7 jobs landed. The fence held.' })).toThrow('weekly summary holds 7, not in data/*.json')
+  expect(readdirSync(join(site, 'blog')).sort()).toEqual([POST05, 'index.html'])
+  expect(readFileSync(join(site, 'blog', 'index.html'), 'utf8')).toBe(index)
+})
+
+test('weekly D5: a week across two months names both months', () => {
+  const site = weekly('<main>\n<article class="cf-blog-card">x</article>\n<section class="log-arcs">\n</section>\n</main>')
+  render(site, { ...WEEKLY, work_date: '2026-09-28' })
+  expect(readFileSync(join(site, 'blog', 'index.html'), 'utf8')).toContain(ARC('Weekly arc · 28 September to 4 October 2026'))
+})
+
 const SITE = { [`blog/${POST05}`]: '<html><head><title>x</title></head><body><h1>x</h1><article>x</article></body></html>',
   'blog/index.html': '<main>\n<article class="cf-blog-card">\n<h2><a href="05_x.html">Old</a></h2>\n</article>\n</main>' }
 

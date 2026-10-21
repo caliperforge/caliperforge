@@ -123,7 +123,7 @@ export function missSection(rows: Miss[]): string {
   return `greptile after both reviewers passed, last 30 d\n${rows.length === 0 ? '  none\n' : lines.join('')}`
 }
 
-interface Caught { plan: number; pr: string; caught: number; found: number }
+interface Caught { plan: number; pr: string; caught: number | null; found: number }
 
 /** Lines move between the tree the blind pass judged and the fork head, so a row keys on its path alone. */
 function named(text: string | null, row: RegExp): Map<string, string> {
@@ -131,8 +131,8 @@ function named(text: string | null, row: RegExp): Map<string, string> {
 }
 
 export function caughtSection(rows: Caught[]): string {
-  const lines = rows.map((r) => `  plan ${String(r.plan)}\t${r.pr}\t${String(r.caught)}/${String(r.found)}` +
-    `\t${r.found === 0 ? '-' : `${String(Math.round(r.caught * 100 / r.found))}%`}\n`)
+  const lines = rows.map((r) => `  plan ${String(r.plan)}\t${r.pr}\t${r.caught === null ? '-' : String(r.caught)}/${String(r.found)}` +
+    `\t${r.caught === null ? 'no blind review' : r.found === 0 ? '-' : `${String(Math.round(r.caught * 100 / r.found))}%`}\n`)
   return `blind review caught of greptile's findings, last 30 d, target 70-90%\n${rows.length === 0 ? '  none\n' : lines.join('')}`
 }
 
@@ -145,9 +145,9 @@ export function caught(db: Db, root: string, now: Date): Caught[] {
     for (const [id, path] of named(maybe(root, s.plan, `findings-${s.head}.md`), /^- (G\d+) ([^\s:]+)/gm)) row.found.set(id, path)
   }
   return [...by.values()].map(({ plan, pr, found }) => {
-    const blind = new Set(verdictRows(db, plan).flatMap((v) => v.gate === 'blind_review' && v.tree !== null
-      ? [...named(maybe(root, plan, `findings-${v.tree}.md`), /^- (B\d+) P[1-3] ([^\s:]+)/gm).values()] : []))
-    return { plan, pr, found: found.size, caught: [...found.values()].filter((p) => blind.has(p)).length }
+    const trees = verdictRows(db, plan).flatMap((v) => v.gate === 'blind_review' && v.tree !== null ? [v.tree] : [])
+    const blind = new Set(trees.flatMap((t) => [...named(maybe(root, plan, `findings-${t}.md`), /^- (B\d+) P[1-3] `?([^\s:`]+)/gm).values()]))
+    return { plan, pr, found: found.size, caught: trees.length === 0 ? null : [...found.values()].filter((p) => blind.has(p)).length }
   })
 }
 

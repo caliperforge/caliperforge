@@ -12,7 +12,7 @@ import { fire, packet, planRow, refuse } from '../index.ts'
 import { digest, expected, listed, load, rules, Seat, seat } from '../rules.ts'
 
 const root = join(import.meta.dirname, '../..')
-const SEATS = ['account_lead', 'brief_writer', 'claims_checker','design_lead', 'director', 'fixer', 'fizz_generator', 'go_specialist', 'growth_lead', 'house_generator', 'kotlin_specialist',
+const SEATS = ['account_lead', 'brief_writer', 'claims_checker','design_lead', 'director', 'fetcher', 'fixer', 'fizz_generator', 'go_specialist', 'growth_lead', 'house_generator', 'kotlin_specialist',
   'lua_specialist', 'measurer', 'outside_specialist', 'php_specialist', 'python_specialist', 'researcher', 'ruby_specialist', 'rust_specialist',
   'solana_specialist', 'solidity_specialist', 'swift_specialist', 'text_review', 'typescript_specialist', 'web_specialist', 'writer']
 const cwd = '/tmp/cf-seat'
@@ -49,6 +49,14 @@ test('ours writes all but .cf/; a stranger\'s keeps write_paths', () => {
   const manifest = seat(root, 'typescript_specialist').manifest
   expect(packet(manifest, 'p', 't', 'i', cwd, TRANSCRIPT, true).refuse('cli/x.ts')).toBeNull()
   expect(packet(manifest, 'p', 't', 'i', cwd, TRANSCRIPT).refuse('cli/x.ts')).not.toBeNull()
+})
+
+test('D3: an absolute fence admits only writes under it', () => {
+  const work = mkdtempSync(join(tmpdir(), 'cf-work-'))
+  const out = join(work, 'rubin-post')
+  const p = packet(seat(root, 'fetcher').manifest, 'p', 't', 'i', cwd, TRANSCRIPT, false, [out])
+  for (const path of [`${out}/data.json`, `${out}/fetch.ts`]) expect(p.refuse(path)).toBeNull()
+  for (const path of ['cli/x.ts', join(work, 'other/x'), '/etc/x']) expect(p.refuse(path)).toMatchObject({ origin_ref: 'seat.write_paths' })
 })
 
 test('the gate stops a refused write and denies an outside read', () => {

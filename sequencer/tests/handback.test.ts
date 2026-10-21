@@ -118,13 +118,13 @@ test('D3 a fenceless hand-back that changed a file passes step 2', async () => {
   expect(fired).toMatchObject({ step: 2, outcome: 'pass' })
 })
 
-test('a fenceless hand-back deleting a base file refuses at step 2', async () => {
+test('D1 a fenceless hand-back deleting a listed file passes', async () => {
   const w = await atBuild()
   const text = 'built\n\n## Deleted\n\n- src/hello.ts\n'
   const fired = (await tick(w.db, w.root, answers([text, text])))[0]
-  expect(fired).toMatchObject({ step: 2, outcome: 'refuse', spans: ['src/hello.ts'] })
-  expect(fired?.note).toContain('is on base')
-  expect(existsSync(join(srcDir(w.root, 1), 'src/hello.ts'))).toBe(true)
+  expect(fired).toMatchObject({ step: 2, outcome: 'pass' })
+  expect(existsSync(join(srcDir(w.root, 1), 'src/hello.ts'))).toBe(false)
+  expect(diffOf(w.root, 1)).toContain('deleted file')
 })
 
 const NOT_DONE = 'Not done: this round only allowed changes to kotlin-ci.yml:23'

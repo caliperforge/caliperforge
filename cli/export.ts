@@ -10,7 +10,7 @@ import { gh, type Read } from './gh.ts'
 
 const SPLIT = 'input is input_tokens less cache_write_tokens, since input_tokens counts cache writes; cache_read, cache_write and output are their own columns; total is input_tokens + cache_read_tokens + output_tokens, the sum of the four.'
 
-const PROSE: Record<keyof typeof METRICS | 'outside_prs', { title: string; unit: string; definition: string; caveat: string }> = {
+const PROSE: Record<keyof typeof METRICS | 'outside_prs' | 'outside_pr_list',{ title: string; unit: string; definition: string; caveat: string }> = {
   daily_activity: { title: 'Daily activity', unit: 'runs and tokens per UTC day',
     definition: `Every agent run, by the UTC day it was recorded, from the first run's day to today. ${SPLIT}`,
     caveat: 'A day with no runs is a row of zeros, and today is a partial day.' },
@@ -38,6 +38,9 @@ const PROSE: Record<keyof typeof METRICS | 'outside_prs', { title: string; unit:
   outside_prs: { title: 'Outside pull requests', unit: 'pull requests',
     definition: 'Every pull request we opened outside caliperforge, from GitHub search, one row each: its state (merged, closed, approved when open with an approving review, else open), the class of its repository, and the month it was opened.',
     caveat: 'Search reaches at most 1000 pull requests, and a repository missing from the hand-kept class map counts as other.' },
+  outside_pr_list: { title: 'Outside pull requests by name', unit: 'pull requests',
+    definition: 'Every pull request we opened outside caliperforge, from GitHub search, one row each: its repository, number, title and link, its state (merged, closed, approved when open with an approving review, else open), the UTC days it was opened and merged, the field of its repository, and the description the repository gives on GitHub.',
+    caveat: 'Search reaches at most 1000 pull requests. Merged is null until a pull request merges, and a repository missing from the hand-kept field map has a null field. Titles and descriptions are as their authors wrote them.' },
 }
 
 const LEAK = /cost|usd|price|dollar|funder|email|login/i
@@ -50,6 +53,8 @@ export function leaked(value: unknown): string | undefined {
 }
 
 const Page = z.object({ items: z.array(z.object({
+  number: z.int(),
+  title: z.string(),
   html_url: z.string(),
   repository_url: z.string(),
   state: z.enum(['open', 'closed']),
@@ -58,6 +63,13 @@ const Page = z.object({ items: z.array(z.object({
 })) })
 
 type Item = z.infer<typeof Page>['items'][number]
+
+const Maps = z.object({
+  classes: z.record(z.string(), z.string()),
+  fields: z.record(z.string(), z.enum(['payments', 'developer tools', 'astronomy', 'genomics'])),
+})
+
+type Listed = [string, number, string, string, string, string, string | null, string | null, string | null]
 
 function searched(q: string, read: Read): Item[] {
   const items: Item[] = []
@@ -69,23 +81,44 @@ function searched(q: string, read: Read): Item[] {
   return items
 }
 
-function outside(read: Read): { columns: string[]; rows: [string, string, string][] } {
-  const q = `is:pr author:${OPERATOR} -org:${FORK}`
-  const approved = new Set(searched(`${q} is:open review:approved`, read).map((i) => i.html_url))
-  const classes = z.record(z.string(), z.string()).parse(parse(readFileSync(join(import.meta.dirname, '../rules/repo-classes.yaml'), 'utf8')))
-  const rows = searched(q, read).map((i): [string, string, string] => [
+const Q = `is:pr author:${OPERATOR} -org:${FORK}`
+
+const repoOf = (i: Item): string => i.repository_url.replace('https://api.github.com/repos/', '')
+
+function outside(read: Read, classes: Record<string, string>): { columns: string[]; rows: [string, string, string][] } {
+  const approved = new Set(searched(`${Q} is:open review:approved`, read).map((i) => i.html_url))
+  const rows = searched(Q, read).map((i): [string, string, string] => [
     i.pull_request.merged_at !== null ? 'merged' : i.state === 'closed' ? 'closed' : approved.has(i.html_url) ? 'approved' : 'open',
-    classes[i.repository_url.replace('https://api.github.com/repos/', '')] ?? 'other',
+    classes[repoOf(i)] ?? 'other',
     i.created_at.slice(0, 7),
   ])
   rows.sort((a, b) => a[2].localeCompare(b[2]) || a[1].localeCompare(b[1]) || a[0].localeCompare(b[0]))
   return { columns: ['state', 'class', 'month'], rows }
 }
 
-function file(dir: string, name: keyof typeof PROSE, table: { columns: string[]; rows: unknown[][] }): { path: string; body: string } {
+function listed(read: Read, fields: Record<string, string>): { columns: string[]; rows: Listed[] } {
+  const described = new Map<string, string | null>()
+  const description = (repo: string): string | null => {
+    if (!described.has(repo)) described.set(repo, z.object({ description: z.string().nullable() }).parse(read(['api', `repos/${repo}`])).description)
+    return described.get(repo) ?? null
+  }
+  const approved = (repo: string, n: number): boolean => z.array(z.object({ state: z.string() }))
+    .parse(read(['api', `repos/${repo}/pulls/${String(n)}/reviews?per_page=100`])).some((r) => r.state === 'APPROVED')
+  const rows = searched(Q, read).map((i): Listed => {
+    const repo = repoOf(i)
+    const state = i.pull_request.merged_at !== null ? 'merged' : i.state === 'closed' ? 'closed' : approved(repo, i.number) ? 'approved' : 'open'
+    return [repo, i.number, i.title, i.html_url, state, i.created_at.slice(0, 10), i.pull_request.merged_at?.slice(0, 10) ?? null,
+      fields[repo] ?? null, description(repo)]
+  })
+  rows.sort((a, b) => a[5].localeCompare(b[5]) || a[0].localeCompare(b[0]) || a[1] - b[1])
+  return { columns: ['repo', 'number', 'title', 'url', 'state', 'opened', 'merged', 'field', 'repo_description'], rows }
+}
+
+function file(dir: string, name: keyof typeof PROSE, table: { columns: string[]; rows: unknown[][] }, verbatim: string[] = []): { path: string; body: string } {
   const { title, unit, definition, caveat } = PROSE[name]
   const data = { metric: name, title, unit, ...table, definition, caveat }
-  const leak = leaked(data)
+  const blank = verbatim.map((column) => table.columns.indexOf(column))
+  const leak = leaked({ ...data, rows: table.rows.map((row) => row.map((cell, i) => blank.includes(i) ? null : cell)) })
   if (leak !== undefined) throw new Error(`${name}.json: ${leak}`)
   return { path: join(dir, 'data', `${name}.json`), body: JSON.stringify(data, null, 2) }
 }
@@ -94,8 +127,10 @@ export function exported(path: string, dir: string, now: Date, read: Read = gh):
   const db = reader(path)
   try {
     const today = now.toISOString().slice(0, 10)
+    const { classes, fields } = Maps.parse(parse(readFileSync(join(import.meta.dirname, '../rules/repo-classes.yaml'), 'utf8')))
     const files = (Object.keys(METRICS) as (keyof typeof METRICS)[]).map((name) => file(dir, name, metric(db, METRICS[name], today)))
-    files.push(file(dir, 'outside_prs', outside(read)))
+    files.push(file(dir, 'outside_prs', outside(read, classes)))
+    files.push(file(dir, 'outside_pr_list', listed(read, fields), ['title', 'repo_description']))
     mkdirSync(join(dir, 'data'), { recursive: true })
     for (const f of files) writeFileSync(`${f.path}.tmp`, f.body)
     for (const f of files) renameSync(`${f.path}.tmp`, f.path)

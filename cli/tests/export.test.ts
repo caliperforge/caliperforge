@@ -9,11 +9,13 @@ import { migrate, open, type Db } from '../../store/index.ts'
 import { metric, reader } from '../../store/metrics.ts'
 import { refusalAt } from '../../store/refusals.ts'
 import { exported, leaked } from '../export.ts'
+import { gh } from '../gh.ts'
 
 const PRS = vi.hoisted(() => {
   const pr = (n: number, repo: string, state: string, at: string, merged: string | null = null): object => ({
-    html_url: `https://github.com/${repo}/pull/${String(n)}`, repository_url: `https://api.github.com/repos/${repo}`, state,
-    created_at: at, user: { login: 'octo-cat' }, title: `widen the parser ${String(n)}`, pull_request: { merged_at: merged } })
+    number: n, html_url: `https://github.com/${repo}/pull/${String(n)}`, repository_url: `https://api.github.com/repos/${repo}`, state,
+    created_at: at, user: { login: 'octo-cat' }, title: n === 3 ? 'Show the price in the parser' : `widen the parser ${String(n)}`,
+    pull_request: { merged_at: merged } })
   return [pr(1, 'solana-foundation/pay-kit', 'closed', '2026-08-03T09:00:00Z', '2026-08-05T09:00:00Z'),
     pr(2, 'solana-foundation/pay-kit', 'open', '2026-09-01T09:00:00Z'), pr(3, 'acme/widgets', 'open', '2026-09-02T09:00:00Z'),
     pr(4, 'acme/widgets', 'closed', '2026-10-01T09:00:00Z')]
@@ -21,7 +23,12 @@ const PRS = vi.hoisted(() => {
 
 vi.mock('../gh.ts', async (importOriginal) => ({
   ...await importOriginal<object>(),
-  gh: (args: string[]) => ({ items: args[1]?.includes('review%3Aapproved') === true ? [PRS[1]] : PRS }),
+  gh: (args: string[]) => {
+    const path = args[1] ?? ''
+    if (path.startsWith('search/')) return { items: path.includes('review%3Aapproved') ? [PRS[1]] : PRS }
+    if (path.includes('/reviews')) return [{ state: path.includes('/pulls/2/') ? 'APPROVED' : 'COMMENTED' }]
+    return { description: path === 'repos/acme/widgets' ? 'Widgets at cost' : 'Payments for agents' }
+  },
 }))
 
 vi.mock('yaml', async (importOriginal) => {
@@ -33,7 +40,8 @@ const schema = join(import.meta.dirname, '../../schema')
 
 const now = new Date('2026-10-04T12:00:00Z')
 
-const ORDER = ['daily_activity', 'token_mix', 'runs_by_seat', 'gate_verdicts', 'plan_outcomes', 'pipeline_counts', 'tokens_per_landed_job', 'ceo_touches', 'loop_counts', 'outside_prs']
+const ORDER = ['daily_activity', 'token_mix', 'runs_by_seat', 'gate_verdicts', 'plan_outcomes', 'pipeline_counts', 'tokens_per_landed_job', 'ceo_touches', 'loop_counts', 'outside_prs',
+  'outside_pr_list']
 
 const NAMES = ORDER.map((n) => `${n}.json`).sort()
 
@@ -144,7 +152,7 @@ const json =(name: string): { columns: string[]; rows: (string | number | null)[
 
 const direct = (sql: string): string[] => metric(store, sql, '').rows.map((r) => JSON.stringify(r)).sort()
 
-test('D1 writes the ten files with the seven keys', () => {
+test('D1 writes the eleven files with the seven keys', () => {
   expect(exported(seeded(), site, now)).toEqual(ORDER.map((n) => join(site, 'data', `${n}.json`)))
   expect(readdirSync(join(site, 'data')).sort()).toEqual(NAMES)
   for (const name of ORDER) {
@@ -316,7 +324,42 @@ test('D5 a throwing read leaves the old files and no .tmp', () => {
 })
 
 test('D6 a leaking class throws before any file is written', () => {
-  vi.mocked(parse).mockReturnValueOnce({ 'solana-foundation/pay-kit': 'cost tools' })
+  vi.mocked(parse).mockReturnValueOnce({ classes: { 'solana-foundation/pay-kit': 'cost tools' }, fields: {} })
   expect(() => exported(seeded(), site, now)).toThrow(/outside_prs\.json: cost tools/)
+  expect(existsSync(join(site, 'data'))).toBe(false)
+})
+
+test('D1 outside_pr_list has the nine columns and four states', () => {
+  const read = vi.fn(gh)
+  exported(seeded(), site, now, read)
+  expect(json('outside_pr_list').columns).toEqual(['repo', 'number', 'title', 'url', 'state', 'opened', 'merged', 'field', 'repo_description'])
+  expect(json('outside_pr_list').rows.map((r) => r.slice(0, 7))).toEqual([
+    ['solana-foundation/pay-kit', 1, 'widen the parser 1', 'https://github.com/solana-foundation/pay-kit/pull/1', 'merged', '2026-08-03', '2026-08-05'],
+    ['solana-foundation/pay-kit', 2, 'widen the parser 2', 'https://github.com/solana-foundation/pay-kit/pull/2', 'approved', '2026-09-01', null],
+    ['acme/widgets', 3, 'Show the price in the parser', 'https://github.com/acme/widgets/pull/3', 'open', '2026-09-02', null],
+    ['acme/widgets', 4, 'widen the parser 4', 'https://github.com/acme/widgets/pull/4', 'closed', '2026-10-01', null]])
+  expect(read.mock.calls.map(([a]) => a[1]).filter((p) => p?.includes('/reviews')))
+    .toEqual(['repos/solana-foundation/pay-kit/pulls/2/reviews?per_page=100', 'repos/acme/widgets/pulls/3/reviews?per_page=100'])
+})
+
+test('D3 field from the map, null unmapped, each repo read once', () => {
+  const read = vi.fn(gh)
+  exported(seeded(), site, now, read)
+  expect(json('outside_pr_list').rows.map((r) => r.slice(7))).toEqual([['payments', 'Payments for agents'],
+    ['payments', 'Payments for agents'], [null, 'Widgets at cost'], [null, 'Widgets at cost']])
+  expect(read.mock.calls.map(([a]) => a[1]).filter((p) => p?.startsWith('repos/') === true && !p.includes('/pulls/')))
+    .toEqual(['repos/solana-foundation/pay-kit', 'repos/acme/widgets'])
+})
+
+test('D4 a title and description that match the leak words export', () => {
+  exported(seeded(), site, now)
+  const text = readFileSync(join(site, 'data', 'outside_pr_list.json'), 'utf8')
+  expect(text).toContain('Show the price in the parser')
+  expect(text).toContain('Widgets at cost')
+})
+
+test('D5 a field outside the four throws before any file', () => {
+  vi.mocked(parse).mockReturnValueOnce({ classes: {}, fields: { 'acme/widgets': 'cooking' } })
+  expect(() => exported(seeded(), site, now)).toThrow(/cooking|payments/)
   expect(existsSync(join(site, 'data'))).toBe(false)
 })

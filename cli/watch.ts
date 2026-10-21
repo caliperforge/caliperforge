@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process'
+import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { hostValue } from '../providers/credential.ts'
@@ -83,6 +83,7 @@ export function down(open: () => Db, root: string, now: Date, error: unknown, po
     watch(handle, root, now, post)
   } catch (failure) {
     crashed(root, now.toISOString(), failure)
+    throw failure
   }
 }
 
@@ -143,9 +144,6 @@ function quote(s: string): string {
 /** A missing permission or a closed Messages must never be what stops a tick. */
 function osascript(script: string): void {
   if (process.platform !== 'darwin' || process.env.VITEST !== undefined) return
-  try {
-    execFileSync('osascript', ['-e', script], { stdio: 'ignore', timeout: 15000 })
-  } catch {
-    return
-  }
+  const { status } = spawnSync('osascript', ['-e', script], { stdio: 'ignore', timeout: 15000 })
+  if (status !== 0) process.stderr.write(`cf: osascript exited ${String(status)}\n`)
 }

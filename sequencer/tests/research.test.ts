@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } fro
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
-import type { Provider } from '../../providers/kind.ts'
+import type { Packet, Provider } from '../../providers/kind.ts'
 import { posts } from '../../store/desk.ts'
 import { eventsOf, kindsOf, runRows } from '../../store/events.ts'
 import { get, set } from '../../store/lanes.ts'
@@ -52,7 +52,10 @@ beforeEach(() => {
   vi.stubGlobal('fetch', fetched)
 })
 
-afterEach(() => { vi.unstubAllGlobals() })
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.unstubAllEnvs()
+})
 
 const SOURCES = JSON.stringify([{ url: 'https://a.example/doc', fetched_at: '2026-10-04T10:00:00Z', quote: 'The cap is 3.', claim: 'The cap is 3' }])
 
@@ -394,12 +397,12 @@ const LINKED = '  - url: https://a.example/doc\n    fetched_at: 2026-10-04T10:00
 
 const fence = (...entries: string[]): string => `Cold start is 41 ms [source:1].${SECTIONS}\n\n---\nsources:\n${entries.join('')}---\n`
 
-/** The measurer answers `reply` and leaves TRANSCRIPT behind; every other seat answers PASS. */
-const measuring = (reply: string, seen: (prompt: string) => void): Provider => ({
+/** The measurer or fetcher answers `reply` and leaves TRANSCRIPT behind; every other seat answers PASS. */
+const measuring = (reply: string, seen: (packet: Packet) => void): Provider => ({
   name: 'claude-agent-sdk',
   fire: async (packet) => {
-    seen(packet.prompt)
-    const measurer = packet.prompt.includes('# measurer\n')
+    seen(packet)
+    const measurer = /# (?:measurer|fetcher)\n/.test(packet.prompt)
     const fired = await stub('', 0, measurer ? reply : PASS).fire(packet)
     if (measurer) writeFileSync(packet.transcript, TRANSCRIPT)
     return fired
@@ -418,7 +421,7 @@ test('measure D1: a Measure line fires measurer with HEAD', async () => {
   const head = headed(w)
   question(w.root, plan(w.db, 1))
   let prompt = ''
-  expect(await gather(w.db, w.root, plan(w.db, 1), mapOf('research').at(1), measuring(fence(entry(head)), (p) => { prompt = p })))
+  expect(await gather(w.db, w.root, plan(w.db, 1), mapOf('research').at(1), measuring(fence(entry(head)), (p) => { prompt = p.prompt })))
     .toMatchObject({ outcome: 'pass', note: expect.stringContaining('measurer: answer.md written') as unknown })
   expect(prompt).toContain(`# HEAD\n\n${head}`)
   expect(ran(w)).toEqual(['measurer'])
@@ -433,6 +436,39 @@ test('measure D1: an ask with no Measure line fires researcher', async () => {
   expect(prompt).not.toContain('# HEAD')
   expect(ran(w)).toEqual(['researcher'])
   expect(maybe(w.root, 1, 'runs.json')).toBeNull()
+})
+
+const home = (): string => {
+  const dir = mkdtempSync(join(tmpdir(), 'cf-home-'))
+  vi.stubEnv('HOME', dir)
+  return dir
+}
+
+test('fetch D1: an Output line fires fetcher into its folder', async () => {
+  const out = join(home(), 'cf_work/rubin-post')
+  const w = researching(`${MEASURE}**Output:** ~/cf_work/rubin-post/\n`)
+  const head = headed(w)
+  question(w.root, plan(w.db, 1))
+  const seen: Packet[] = []
+  let made = false
+  expect(await gather(w.db, w.root, plan(w.db, 1), mapOf('research').at(1), measuring(fence(entry(head)), (p) => { seen.push(p); made = existsSync(out) })))
+    .toMatchObject({ outcome: 'pass', note: expect.stringContaining('fetcher: answer.md written') as unknown })
+  const [packet] = seen
+  expect(made).toBe(true)
+  expect(packet?.prompt).toContain(`# HEAD\n\n${head}\n\n# Output\n\n${out}`)
+  expect(packet?.reads).toEqual([out])
+  expect(packet?.refuse(join(out, 'data.json'))).toBeNull()
+  expect(ran(w)).toEqual(['fetcher'])
+  expect(JSON.parse(maybe(w.root, 1, 'runs.json') ?? '')).toEqual([{ command: RUN, output: 'cold start:\n  41 ms' }])
+})
+
+test.each(['/tmp/x', '~/cf_work/../x', '~/cf_work'])('fetch D2: Output %s is refused at gather', async (named) => {
+  const dir = home()
+  const w = researching(`${ASK}**Output:** ${named}\n`)
+  question(w.root, plan(w.db, 1))
+  expect((await gathered(w))[0]).toEqual({ outcome: 'refuse', spans: ['ask.md'], note: `**Output:** ${named} is not a folder under ~/cf_work/` })
+  expect(ran(w)).toEqual([])
+  expect(readdirSync(dir)).toEqual([])
 })
 
 const NEEDS_RUN = 'This needs a timed run.\n\n```\n---\noutcome: needs_run\n---\n```\n'
@@ -458,7 +494,7 @@ test('needs_run D2: a measurer needs_run reply refuses its fence', async () => {
 
 const NEEDS_BUILD = 'This needs the network.\n\n```\n---\noutcome: needs_build\n---\n```\n'
 
-const UNBUILT = 'ask needs network or writes outside .cf/measure/: file it on a pr_path lane, whose builder writes the script and runs it'
+const UNBUILT = 'ask needs network or writes outside .cf/measure/: add an **Output:** line naming a folder under ~/cf_work/ so the fetcher runs it'
 
 test('needs_build D1: a measurer needs_build asks a person', async () => {
   const w = researching(MEASURE)

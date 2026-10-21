@@ -243,20 +243,20 @@ function askOf(root: string, plan: number): string {
 }
 
 export async function ran(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider,
-  issue: string, ours: boolean, checkout = true): Promise<Fired> {
+  issue: string, ours: boolean, checkout = true, out?: string): Promise<Fired> {
   load(db, root)
   const { manifest, prompt, hash } = seat(root, step.runs, step.mode)
   const src = srcDir(root, plan.id)
   const spec = languageOfSeat(step.runs) === null ? tight(root) : `${tight(root)}\n\n${discipline(root)}`
   const built = packet(manifest, prompt + noteSection(db, root, plan, step), spec, issue, src,
-    transcriptOf(root, plan.id, step.step), ours, fenceFor(db, plan.id, manifest.write_paths))
+    transcriptOf(root, plan.id, step.step), ours, out === undefined ? fenceFor(db, plan.id, manifest.write_paths) : [out])
   const staffing = staffedOn(db, root, plan, step.step)
   const fired = await provider.fire(checkout ? {
     ...built,
     ...(step.runs === 'brief_writer' ? { tools: [...built.tools, READ], servers: { [SERVER]: server(db, plan.id) } } : {}),
     prompt: `${map(src)}\n\n${built.prompt}`,
     wall: wall(db),
-    reads: machineReads(root, plan, step.runs),
+    reads: out === undefined ? machineReads(root, plan, step.runs) : [...machineReads(root, plan, step.runs), out],
   } : { ...built, tools: [], wall: wall(db) })
   recorded(db, plan.id, step.step, step.runs, hash, provider.name, manifest, fired, step.mode, staffing)
   observed(db, fired.limits)

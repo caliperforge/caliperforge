@@ -1,5 +1,5 @@
 import { existsSync, realpathSync } from 'node:fs'
-import { basename, dirname, join, relative, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import type { Packet, Provider, Refusal } from '../providers/kind.ts'
 import { runLogged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
@@ -16,11 +16,18 @@ const CF = '.cf'
  */
 export function refuse(cwd: string, writePaths: string[], path: string, ours = false): Refusal | null {
   const root = real(cwd)
-  const rel = relative(root, real(resolve(root, path)))
+  const target = real(resolve(root, path))
+  if (writePaths.filter(isAbsolute).some((p) => within(real(p), target))) return null
+  const rel = relative(root, target)
   const fenced = ours ? [CF] : writePaths
   const under = fenced.some((p) => rel === p || rel.startsWith(`${p}/`))
   const inside = !rel.startsWith('..') && (ours ? !under : under)
   return inside ? null : { origin_kind: 'ruling', origin_ref: 'seat.write_paths', path: rel }
+}
+
+function within(dir: string, target: string): boolean {
+  const rel = relative(dir, target)
+  return !rel.startsWith('..') && !isAbsolute(rel)
 }
 
 /** A path not yet on disk resolves through its nearest existing parent, so a new file named through a symlinked `.cf` stays inside the checkout. */

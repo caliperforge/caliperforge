@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { isAbsolute, join, relative, resolve } from 'node:path'
 import { z } from 'zod'
 import type { Provider } from '../providers/kind.ts'
 import { loadReviews, specHash } from '../reviews/bench.ts'
@@ -155,19 +155,37 @@ export function question(root: string, plan: PlanRow): Outcome {
   return { outcome: 'pass', spans: [], note: 'question.json written' }
 }
 
+const OUTPUT = '**Output:**'
+
+/** The ask's `**Output:**` folder made absolute, or why it is refused. */
+function output(ask: string): { out?: string } | { why: string } {
+  const named = ask.split('\n').find((l) => l.startsWith(OUTPUT))?.slice(OUTPUT.length).trim()
+  if (named === undefined) return {}
+  const out = resolve(named.startsWith('~/') ? join(homedir(), named.slice(2)) : named)
+  const rel = relative(join(homedir(), 'cf_work'), out)
+  return rel === '' || rel.startsWith('..') || isAbsolute(rel) ? { why: `${OUTPUT} ${named} is not a folder under ~/cf_work/` } : { out }
+}
+
 export async function gather(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
-  const measure = askOf(root, plan).split('\n').some((l) => l.startsWith('**Measure:**'))
-  const seat = measure ? { ...step, seat: 'measurer', runs: 'measurer' } : step
+  const ask = askOf(root, plan)
+  const folder = output(ask)
+  if ('why' in folder) return { outcome: 'refuse', spans: ['ask.md'], note: folder.why }
+  const { out } = folder
+  const measure = out !== undefined || ask.split('\n').some((l) => l.startsWith('**Measure:**'))
+  const runs = out !== undefined ? 'fetcher' : measure ? 'measurer' : null
+  const seat = runs === null ? step : { ...step, seat: runs, runs }
+  if (out !== undefined) mkdirSync(out, { recursive: true })
   const input = `# Ask\n\n${askOf(root, plan)}\n\n# question.json\n\n${get(root, plan.id, 'question.json')}${
-    maybe(root, plan.id, 'refusal.md')?.replace(/^/, '\n\n# Refused — fix what this names\n\n') ?? ''}${measure ? `\n\n# HEAD\n\n${headSha(srcDir(root, plan.id))}` : ''}`
-  const fired = await ran(db, root, plan, seat, provider, input, false)
+    maybe(root, plan.id, 'refusal.md')?.replace(/^/, '\n\n# Refused — fix what this names\n\n') ?? ''}${measure ? `\n\n# HEAD\n\n${headSha(srcDir(root, plan.id))}` : ''}${
+    out === undefined ? '' : `\n\n# Output\n\n${out}`}`
+  const fired = await ran(db, root, plan, seat, provider, input, false, true, out)
   if (fired.ended !== 'completed') return { outcome: 'refuse', spans: [fired.stop_reason ?? 'seat.exit'], note: `${seat.runs} ${fired.ended}` }
   const needs = NEEDS.exec(fired.text)?.[1]
   if (!measure && needs === 'needs_run') {
     return { outcome: 'refuse', spans: ['ask.md'], note: 'ask needs executed runs: add a **Measure:** line so the measurer gathers it' }
   }
   if (measure && needs === 'needs_build') {
-    const note = 'ask needs network or writes outside .cf/measure/: file it on a pr_path lane, whose builder writes the script and runs it'
+    const note = 'ask needs network or writes outside .cf/measure/: add an **Output:** line naming a folder under ~/cf_work/ so the fetcher runs it'
     put(root, plan.id, 'question.md', note)
     return { outcome: 'needs_ceo', spans: ['ask.md'], note }
   }

@@ -7,7 +7,7 @@ import { posts } from '../../store/desk.ts'
 import { eventsOf, kindsOf, runRows } from '../../store/events.ts'
 import { get, set } from '../../store/lanes.ts'
 import { dropPlan, putPlan } from '../../store/plans.ts'
-import { WHY } from '../../store/refusals.ts'
+import { refusalsOf, WHY } from '../../store/refusals.ts'
 import { check, gather, question, record, sourced } from '../../templates/research.ts'
 import { tick } from '../index.ts'
 import type { Wire } from '../push.ts'
@@ -458,17 +458,28 @@ test('needs_run D2: a measurer needs_run reply refuses its fence', async () => {
 
 const NEEDS_BUILD = 'This needs the network.\n\n```\n---\noutcome: needs_build\n---\n```\n'
 
-test('needs_build D1: a measurer needs_build reply refuses ask.md', async () => {
+const UNBUILT = 'ask needs network or writes outside .cf/measure/: file it on a pr_path lane, whose builder writes the script and runs it'
+
+test('needs_build D1: a measurer needs_build asks a person', async () => {
   const w = researching(MEASURE)
   headed(w)
   question(w.root, plan(w.db, 1))
-  expect(await gather(w.db, w.root, plan(w.db, 1), mapOf('research').at(1), measuring(NEEDS_BUILD, () => undefined))).toEqual({
-    outcome: 'refuse', spans: ['ask.md'],
-    note: 'ask needs network or writes outside .cf/measure/: file it on a pr_path lane, whose builder writes the script and runs it',
-  })
+  expect(await gather(w.db, w.root, plan(w.db, 1), mapOf('research').at(1), measuring(NEEDS_BUILD, () => undefined)))
+    .toEqual({ outcome: 'needs_ceo', spans: ['ask.md'], note: UNBUILT })
+  expect(maybe(w.root, 1, 'question.md')).toBe(UNBUILT)
   expect(maybe(w.root, 1, 'answer.md')).toBeNull()
   expect(maybe(w.root, 1, 'sources.json')).toBeNull()
   expect(maybe(w.root, 1, 'runs.json')).toBeNull()
+})
+
+test('needs_build D2: a ticked needs_build blocks with no refusal', async () => {
+  const w = researching(MEASURE)
+  headed(w)
+  for (let n = 0; n < 4 && eventsOf(w.db, 1, 'gather').length === 0; n += 1) await tick(w.db, w.root, measuring(NEEDS_BUILD, () => undefined))
+  expect(plan(w.db, 1)).toMatchObject({ state: 'blocked_on_ceo', step: 1 })
+  expect(eventsOf(w.db, 1, 'gather')).toMatchObject([{ outcome: 'escalate', message: UNBUILT }])
+  expect(refusalsOf(w.db, 1)).toBe(0)
+  expect(ran(w).filter((seat) => seat === 'measurer')).toHaveLength(1)
 })
 
 test('needs_build D2: a researcher needs_build refuses its fence', async () => {

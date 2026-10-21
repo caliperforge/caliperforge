@@ -157,6 +157,30 @@ test('1353a D3 every other git is refused and the seat stays', () => {
     `${add} && rm -rf .`, `${add}; git push`, 'git status', 'git push']) expect(gate(p, bash(command))).toMatchObject(refusal(command))
 })
 
+const CLONE = ['Read', 'Bash(git clone:*)']
+const clone = 'git clone https://github.com/solana-foundation/surfpool .cf/measure/surfpool'
+const measured = [clone, 'git -C .cf/measure/surfpool checkout 2aee380']
+
+test('1433a D1 the gate admits a measure clone and its pin', () => {
+  const p = fenced(['.cf/measure'], CLONE)
+  for (const command of [...measured, 'git clone https://github.com/solana-foundation/surfpool.git .cf/measure/surfpool',
+    `git -C .cf/measure/surfpool checkout ${'a'.repeat(40)}`]) expect(gate(p, bash(command))).toEqual({ continue: true })
+})
+
+test('1433a D2 D3 every other git is refused and the seat stays', () => {
+  for (const p of [fenced(['.cf/measure'], ['Read']), fenced(['src'], CLONE), held([])]) {
+    for (const command of measured) expect(gate(p, bash(command))).toMatchObject(refusal(command))
+  }
+  const p = fenced(['.cf/measure'], CLONE)
+  for (const command of ['git clone http://github.com/solana-foundation/surfpool .cf/measure/surfpool',
+    'git clone ssh://github.com/solana-foundation/surfpool .cf/measure/surfpool', 'git clone https://gitlab.com/solana-foundation/surfpool .cf/measure/surfpool',
+    'git clone https://github.com/solana-foundation/surfpool src/surfpool', 'git clone https://github.com/solana-foundation/surfpool .cf/measure/..',
+    'git clone https://github.com/solana-foundation/surfpool .cf/measure/a/b',
+    'git clone --depth 1 https://github.com/solana-foundation/surfpool .cf/measure/surfpool', `${clone} --depth 1`,
+    `${clone} && rm -rf .`, `${clone}; git push`, 'git -C .cf/measure/surfpool checkout 2aee38', 'git -C .cf/measure/surfpool checkout main',
+    'git checkout 2aee380', 'git status', 'git push']) expect(gate(p, bash(command))).toMatchObject(refusal(command))
+})
+
 test('the kotlin seat keeps gradle on a stranger\'s tree', () => {
   const p = packet(seat(root, 'kotlin_specialist').manifest, 'p', 't', 'i', cwd, TRANSCRIPT)
   expect(p.tools).toContain('Bash(gradle:*)')

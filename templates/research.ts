@@ -25,6 +25,8 @@ export const FENCE = /(?:^|\n)(?:```\w*\n)?---[ \t]*\n(sources:[\s\S]*?)\n---[ \
 
 const NEEDS = /(?:^|\n)(?:```\w*\n)?---[ \t]*\noutcome:[ \t]*(needs_run|needs_build)[ \t]*\n---[ \t]*(?:\n```[ \t]*)?\s*$/
 
+const MOVING = /^https?:\/\/(?:github\.com\/[^/]+\/[^/]+\/(?:blob|commits)|raw\.githubusercontent\.com\/[^/]+\/[^/]+|api\.github\.com\/repos\/[^/]+\/[^/]+\/(?:commits|git\/trees))\/(?:main|master|HEAD)(?:[/?#]|$)/
+
 const KEYS = ['fetched_at', 'quote', 'claim', 'command', 'commit']
 
 const Url = z.object({
@@ -71,6 +73,8 @@ export function sourced(root: string, plan: PlanRow, reply: string): Outcome {
   if ('why' in got) return { outcome: 'refuse', spans: ['researcher.fence'], note: `researcher reply has no valid sources fence: ${got.why}` }
   const unquoted = got.data.sources.filter((s) => (('run' in s ? s.run.quote : s.quote) ?? '').trim() === '').map((s) => 'run' in s ? s.run.command : s.url)
   if (unquoted.length > 0) return { outcome: 'refuse', spans: ['researcher.unquoted'], note: `no quote for ${unquoted.join(', ')}` }
+  const moving = got.data.sources.flatMap((s) => 'url' in s && MOVING.test(s.url) ? [s.url] : [])
+  if (moving.length > 0) return { outcome: 'refuse', spans: ['research.moving_ref'], note: `moving ref in ${moving.join(', ')}` }
   put(root, plan.id, 'sources.json', JSON.stringify(got.data.sources))
   return { outcome: 'pass', spans: [], note: `sources.json written with ${String(got.data.sources.length)} source(s)` }
 }

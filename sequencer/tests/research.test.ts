@@ -636,6 +636,22 @@ test('measure D2: a run with an empty quote is unquoted', () => {
     .toEqual({ outcome: 'refuse', spans: ['researcher.unquoted'], note: `no quote for ${RUN}` })
 })
 
+const MOVED = ['https://github.com/o/r/blob/main/a.md', 'https://github.com/o/r/blob/master/a.md', 'https://raw.githubusercontent.com/o/r/main/a.pdf',
+  'https://api.github.com/repos/o/r/commits/main', 'https://api.github.com/repos/o/r/git/trees/HEAD']
+
+test.each(MOVED)('moving_ref D1: %s is refused', (url) => {
+  const w = researching()
+  expect(sourced(w.root, plan(w.db, 1), fence(LINKED.replace('https://a.example/doc', url))))
+    .toEqual({ outcome: 'refuse', spans: ['research.moving_ref'], note: `moving ref in ${url}` })
+  expect(maybe(w.root, 1, 'sources.json')).toBeNull()
+})
+
+test.each([...MOVED.map((url) => url.replace(/main|master|HEAD/, '2aee380')), `https://github.com/o/r/blob/${'a'.repeat(40)}/a.md`,
+  'https://docs.example/main/a', 'https://a.example/doc'])('moving_ref D2 D3: %s passes', (url) => {
+  const w = researching()
+  expect(sourced(w.root, plan(w.db, 1), fence(LINKED.replace('https://a.example/doc', url)))).toMatchObject({ outcome: 'pass' })
+})
+
 const measured = (sources: (head: string) => object[]): ReturnType<typeof check> => {
   const w = researching(MEASURE)
   const head = headed(w)

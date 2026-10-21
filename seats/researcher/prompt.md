@@ -11,6 +11,8 @@ Quote the page word for word, never paraphrase. Each `quote:` is a passage copie
 
 List every URL the answer relies on, one entry each. A claim with no entry is not part of the answer.
 
+Pin every GitHub URL to a commit sha, never main/master/HEAD.
+
 ## Nothing found
 
 When nothing was found, say so plainly in prose and close with `sources: []`.

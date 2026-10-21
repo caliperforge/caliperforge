@@ -258,6 +258,7 @@ test('D2 D4 D5 fizz reads fizz, x-ray and the attempts file', async () => {
   expect(packet.prompt).toContain(`${real(XRAY)}/SKILL.md`)
   expect(packet.env).toEqual({ BASH_DEFAULT_TIMEOUT_MS: '1800000', BASH_MAX_TIMEOUT_MS: '1800000' })
   expect(packet.prompt).toContain('Run forge in the foreground, never in the background, and do not end the turn while waiting on a build.')
+  expect(packet.prompt).toContain('add properties to test/fizz/Properties.sol one at a time and save the file after each; write property-plan.md')
   expect(packet.idle).toBe(60)
 })
 
@@ -366,6 +367,25 @@ test('D1 a bare-template suite is refused', async () => {
   expect(maybe(root, 1, 'generate.json')).toBeNull()
 })
 
+test('D1 a commented-out property is refused', async () => {
+  const { root, outcome } = await generated(stub(1000, 'completed', ['test/fizz/Properties.sol'], null, false,
+    'contract Properties {\n  // function invariant_x() public {}\n  /* function property_y() public {} */\n}\n'))
+  expect(outcome).toMatchObject({ outcome: 'refuse', spans: ['bench.no_properties'] })
+  expect(maybe(root, 1, 'generate.json')).toBeNull()
+})
+
+test('D1 a property outside Properties.sol is refused', async () => {
+  const empty = (root: string) => {
+    checkedOut(root)
+    mkdirSync(join(srcDir(root, 1), 'test/fizz'), { recursive: true })
+    writeFileSync(join(srcDir(root, 1), 'test/fizz/Properties.sol'), '')
+  }
+  const { root, outcome } = await generated(stub(1000, 'completed', ['test/fizz/FuzzTester.sol'], null, false,
+    'contract FuzzTester {\n  function echidna_x() public {}\n}\n'), undefined, empty)
+  expect(outcome).toMatchObject({ outcome: 'refuse', spans: ['bench.no_properties'], note: expect.stringMatching(/in test\/fizz\/Properties\.sol$/) as string })
+  expect(maybe(root, 1, 'generate.json')).toBeNull()
+})
+
 test('D2 a suite with one invariant_ function passes', async () => {
   const { outcome } = await generated(stub(1000, 'completed', ['test/fizz/Properties.sol']))
   expect(outcome).toMatchObject({ outcome: 'pass', note: expect.stringMatching(/, 1 properties$/) as string })
@@ -414,7 +434,7 @@ function scoring(pair = writes('.jsonl', PAIRS), keys: Record<string, string> = 
   mkdirSync(join(root, '.cf'))
   writeFileSync(join(root, '.cf/git-base'), join(root, 'remotes'))
   mkdirSync(join(srcDir(root, 1), 'test/fizz'), { recursive: true })
-  writeFileSync(join(srcDir(root, 1), 'test/fizz/FizzTest.sol'), 'contract FizzTest {}\n')
+  writeFileSync(join(srcDir(root, 1), 'test/fizz/FizzTest.sol'), BODY)
   checkedOut(root)
   target(root, keys)
   put(root, 1, 'generate.json', JSON.stringify({ suite: 'test/fizz', tokens: 1234, seconds: 56.5 }))
@@ -465,6 +485,15 @@ test('D3 an empty results file is refused and not recorded', () => {
   expect(maybe(root, 1, 'score.json')).toBeNull()
 })
 
+test('D3 a suite with an empty Properties.sol is refused unscored', () => {
+  const { root, db } = scoring()
+  writeFileSync(join(srcDir(root, 1), 'test/fizz/Properties.sol'), 'contract Properties {}\n')
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'refuse', spans: ['bench.no_properties'] })
+  expect(existsSync(join(planDir(root, 1), 'fuzz-bench'))).toBe(false)
+  expect(scores(db)).toEqual([])
+  expect(maybe(root, 1, 'score.json')).toBeNull()
+})
+
 test('D1 no results from run_pair.py is refused before null_check', () => {
   const { root, db } = scoring('import sys\n')
   expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'refuse', spans: ['bench.no_results'] })
@@ -485,11 +514,13 @@ test('score D3 no target or no generate.json is refused uncloned', () => {
 test('D3 house_generator generates and is scored under its name', async () => {
   const { root, db } = scoring(undefined, { target: 'euler-earn-m01', generator: 'house_generator' })
   staffedIn(root)
-  const fired = stub(1234, 'completed', true)
+  rmSync(join(srcDir(root, 1), 'test/fizz/FizzTest.sol'))
+  const fired = stub(1234, 'completed', ['test/fizz/House.sol'], null, false, 'contract House {\n  function property_holds() public {}\n}\n')
   expect(await generate(db, root, planById(db, 1), mapOf('bench').at(1), fired.provider)).toMatchObject({ outcome: 'pass' })
   expect(fired.packets).toMatchObject([{ tools: seat(root, 'house_generator').manifest.tools }])
   expect(fired.packets[0]?.reads).toEqual([real(ATTEMPTS)])
   expect(fired.packets[0]?.prompt).not.toContain('SKILL_PATH')
+  expect(fired.packets[0]?.prompt).not.toContain('Order of work')
   expect(fired.packets[0]?.idle).toBeUndefined()
   expect(runRows(db)).toMatchObject([{ seat: 'house_generator', staffed: 'house_generator' }])
   expect(kernel(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })

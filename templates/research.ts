@@ -16,6 +16,7 @@ import { proofed } from '../store/desk.ts'
 import type { Db } from '../store/index.ts'
 import { get as setting, observed, wall } from '../store/lanes.ts'
 import { originRef, type PlanRow } from '../store/plans.ts'
+import { refusalRows } from '../store/refusals.ts'
 import { lastTranscript } from '../store/runs.ts'
 import { byRun, outputs, pending } from '../store/transcript.ts'
 import { DEFAULT_BUILDER, type Step } from './pr-path.ts'
@@ -85,12 +86,14 @@ export function sourced(root: string, plan: PlanRow, reply: string): Outcome {
   return { outcome: 'pass', spans: [], note: `sources.json written with ${String(got.sources.length)} source(s)` }
 }
 
-function against(root: string, plan: PlanRow, answer: string, sources: Source[]): Promise<Outcome> {
-  return verified(askOf(root, plan), answer, sources, JSON.parse(maybe(root, plan.id, 'runs.json') ?? '[]') as Ran[], () => headSha(srcDir(root, plan.id)))
+function against(root: string, plan: PlanRow, answer: string, sources: Source[], stated?: (answer: string) => void): Promise<Outcome> {
+  return verified(askOf(root, plan), answer, sources, JSON.parse(maybe(root, plan.id, 'runs.json') ?? '[]') as Ran[], () => headSha(srcDir(root, plan.id)), stated)
 }
 
-export function check(root: string, plan: PlanRow): Promise<Outcome> {
-  return against(root, plan, get(root, plan.id, 'answer.md'), JSON.parse(get(root, plan.id, 'sources.json')) as Source[])
+export function check(db: Db, root: string, plan: PlanRow): Promise<Outcome> {
+  const again = refusalRows(db, plan.id)[0]?.span === 'research.quote_missing'
+  return against(root, plan, get(root, plan.id, 'answer.md'), JSON.parse(get(root, plan.id, 'sources.json')) as Source[],
+    again ? (text) => put(root, plan.id, 'answer.md', text) : undefined)
 }
 
 

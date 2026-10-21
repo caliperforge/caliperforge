@@ -260,6 +260,26 @@ test('D3 a foundry.lock HEAD holds stays in the index and diff', () => {
   expect(gitDiff(dir, head(dir, ['rev-parse', 'HEAD']))).toContain('+{"lib/forge-std": {}}')
 })
 
+test('D1 D2 a submodule is in the diff only when its commit moved', () => {
+  const w = world()
+  const { dir } = checkout(w.root, 1, 'acme/widget', 'widget-12-a1')
+  const dep = join(dir, 'lib/dep')
+  const commit = (cwd: string, message: string): string =>
+    head(cwd, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qam', message])
+  head(dir, ['init', '-q', 'lib/dep'])
+  writeFileSync(join(dep, 'a.sol'), 'a\n')
+  head(dep, ['add', 'a.sol'])
+  commit(dep, 'dep')
+  head(dir, ['-c', 'advice.addEmbeddedRepo=false', 'add', 'lib/dep'])
+  commit(dir, 'gitlink')
+  const base = head(dir, ['rev-parse', 'HEAD'])
+  writeFileSync(join(dep, 'a.sol'), 'edited\n')
+  writeFileSync(join(dep, 'b.sol'), 'untracked\n')
+  expect(gitDiff(dir, base)).not.toContain('lib/dep')
+  commit(dep, 'moved')
+  expect(gitDiff(dir, base)).toContain('Subproject commit')
+})
+
 test('a kotlin/ brief builds on the kotlin seat, diffed at base', async () => {
   const w = world('warm', undefined, KOTLIN)
   approve(w.db, w.target)

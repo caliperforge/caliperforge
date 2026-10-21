@@ -37,7 +37,8 @@ export function render(siteDir: string, post: { title: string; dek: string; body
     .replace(/<meta name="description" content="[^"]*">/, () => `<meta name="description" content="${dek}">`)
     .replace(/<link[^>]*href="\/caliper\.css"[^>]*>/, (link) => (page.includes('href="/site.css"') ? link : `${link}\n<link rel="stylesheet" href="/site.css">`)),
     `<h1>${title}</h1>`, `<p class="dateline">Work completed ${post.work_date} · written up ${post.written_date}.</p>`, ...body, page.slice(end)].join('\n'))
-  const card = `<article class="cf-blog-card">\n<h2><a href="${name}.html">${title}</a></h2>\n<p class="dateline">${post.written_date}</p>\n<p>${dek}</p>\n</article>\n`
+  const day = new Date(`${post.work_date}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })
+  const card = `<article class="cf-blog-card">\n<p class="dateline">${day}</p>\n<h2><a href="${name}.html">${title}</a></h2>\n<p class="summary">${dek}</p>\n</article>\n`
   writeFileSync(join(blog, 'index.html'), index.slice(0, at) + card + index.slice(at))
   return name
 }

@@ -7,6 +7,7 @@ import { logged } from '../store/events.ts'
 import { edit, filesOf } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
 import { builderRan, type PlanRow } from '../store/plans.ts'
+import { work } from '../templates/research.ts'
 import { cited } from './cited.ts'
 import { unruled } from './unruled.ts'
 import { get, headSha, maybe, planDir, put, srcDir } from './workspace.ts'
@@ -43,7 +44,8 @@ export function rule(db: Db, root: string, plan: PlanRow, who: string, text: str
   const under = (p: string) => p.startsWith(`${root}/`) || !relative(real(planDir(root, plan.id)), real(p)).startsWith('..')
   const climbs = (p: string) => [srcDir(root, plan.id), root].some((b) => [b, ...subdirs(b).map((s) => join(b, s))]
     .some((d) => existsSync(join(d, p)) && (under(join(d, p)) || !relative(b, join(d, p)).startsWith('..'))))
-  const inside = (p: string) => p.startsWith('..') ? climbs(p) : under(p.replace(/^~(?=\/)/, homedir())) || named(p)
+  const fetched = (p: string) => p.startsWith('~/') && plan.template === 'research' && !builderRan(db, plan.id) && work(p) !== null
+  const inside = (p: string) => p.startsWith('..') ? climbs(p) : under(p.replace(/^~(?=\/)/, homedir())) || named(p) || fetched(p)
   if ([...text.replace(/\/{2,}/g, '/').matchAll(PATH)].some((m) => !inside(m[1] ?? ''))) return null
   const section = `## Answer from the ${who} (${new Date().toISOString().slice(0, 10)})\n\n${text.trim()}\n`
   if (!builderRan(db, plan.id)) {

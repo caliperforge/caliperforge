@@ -191,13 +191,19 @@ export function question(root: string, plan: PlanRow): Outcome {
 
 const OUTPUT = '**Output:**'
 
+/** `named` made absolute when it is a folder strictly under ~/cf_work/. */
+export function work(named: string): string | null {
+  const out = resolve(named.startsWith('~/') ? join(homedir(), named.slice(2)) : named)
+  const rel = relative(join(homedir(), 'cf_work'), out)
+  return rel === '' || rel.startsWith('..') || isAbsolute(rel) ? null : out
+}
+
 /** The ask's `**Output:**` folder made absolute, or why it is refused. */
 function output(ask: string): { out?: string } | { why: string } {
   const named = ask.split('\n').find((l) => l.startsWith(OUTPUT))?.slice(OUTPUT.length).trim()
   if (named === undefined) return {}
-  const out = resolve(named.startsWith('~/') ? join(homedir(), named.slice(2)) : named)
-  const rel = relative(join(homedir(), 'cf_work'), out)
-  return rel === '' || rel.startsWith('..') || isAbsolute(rel) ? { why: `${OUTPUT} ${named} is not a folder under ~/cf_work/` } : { out }
+  const out = work(named)
+  return out === null ? { why: `${OUTPUT} ${named} is not a folder under ~/cf_work/` } : { out }
 }
 
 export async function gather(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {

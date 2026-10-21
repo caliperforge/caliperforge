@@ -32,6 +32,7 @@ import { registerExport } from './export.ts'
 import { registerLook } from './look.ts'
 import { registerPaydesk } from './paydesk.ts'
 import { registerRefile } from './refile.ts'
+import { registerResearch } from './research.ts'
 import { registerRestore } from './restore.ts'
 import { registerSite } from './site.ts'
 import { desk, fileIssue, gh } from './gh.ts'
@@ -69,6 +70,7 @@ registerRestore(cf, cli)
 registerPaydesk(cf, cli)
 registerExport(cf, cli)
 registerBench(cf, cli)
+registerResearch(cf, cli)
 
 cf.command('health').action(() => {
   out(health(db(), root, new Date().toISOString().slice(0, 10)))

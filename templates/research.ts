@@ -1,6 +1,5 @@
-import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { homedir, tmpdir } from 'node:os'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import { z } from 'zod'
 import type { Provider } from '../providers/kind.ts'
@@ -20,6 +19,7 @@ import { originRef, type PlanRow } from '../store/plans.ts'
 import { lastTranscript } from '../store/runs.ts'
 import { byRun, outputs, pending } from '../store/transcript.ts'
 import { DEFAULT_BUILDER, type Step } from './pr-path.ts'
+import { verified, type Ran } from './verified.ts'
 
 export const FENCE = /(?:^|\n)(?:```\w*\n)?---[ \t]*\n(sources:[\s\S]*?)\n---[ \t]*(?:\n```[ \t]*)?\s*$/
 
@@ -49,7 +49,7 @@ const Entry = z.unknown().transform((entry, ctx) => {
 
 const Sources = z.object({ sources: z.array(Entry) })
 
-type Source = { url: string; fetched_at: string; quote: string; claim: string } | { run: { command: string; commit: string; quote: string; claim: string } }
+export type Source ={ url: string; fetched_at: string; quote: string; claim: string } | { run: { command: string; commit: string; quote: string; claim: string } }
 
 const plain = (s: Source): { quote: string; claim: string } => 'run' in s ? s.run : s
 
@@ -68,103 +68,35 @@ function fenced(reply: string): { data: z.infer<typeof Sources> } | { why: strin
   return got.success ? { data: got.data } : { why: got.error.issues.map((i) => `${i.path.join('.')} ${i.message}`).join('; ') }
 }
 
-export function sourced(root: string, plan: PlanRow, reply: string): Outcome {
+function vetted(reply: string): Outcome | { sources: Source[] } {
   const got = fenced(reply)
   if ('why' in got) return { outcome: 'refuse', spans: ['researcher.fence'], note: `researcher reply has no valid sources fence: ${got.why}` }
   const unquoted = got.data.sources.filter((s) => (('run' in s ? s.run.quote : s.quote) ?? '').trim() === '').map((s) => 'run' in s ? s.run.command : s.url)
   if (unquoted.length > 0) return { outcome: 'refuse', spans: ['researcher.unquoted'], note: `no quote for ${unquoted.join(', ')}` }
   const moving = got.data.sources.flatMap((s) => 'url' in s && MOVING.test(s.url) ? [s.url] : [])
   if (moving.length > 0) return { outcome: 'refuse', spans: ['research.moving_ref'], note: `moving ref in ${moving.join(', ')}` }
-  put(root, plan.id, 'sources.json', JSON.stringify(got.data.sources))
-  return { outcome: 'pass', spans: [], note: `sources.json written with ${String(got.data.sources.length)} source(s)` }
+  return { sources: got.data.sources as Source[] }
 }
 
-const flat = (s: string): string => s.replace(/\s+/g, ' ').trim()
-
-const RULER = /^(?=.*\|)(?=.*-)[ |:-]+$/
-
-const ROW = /^\s*\|/
-
-const LINK = /https?:\/\/[^\s|)\]>]+/g
-
-const SKIPPED = /^(#{1,6})[ \t]+(?:Method|Not found|Still unknown|How I applied it):?[ \t]*$[\s\S]*?(?=^(?!\1#)#{1,6}[ \t]|(?![\s\S]))/gim
-
-const bare = (s: string): string => flat(s.replace(/[*_`"“”>]/g, ''))
-
-const cited = (claim: string, sources: Source[]): Source[] | null => {
-  const links: string[] = ROW.test(claim) ? claim.match(LINK) ?? [] : []
-  const all = [...[...claim.matchAll(/\[source:(\d+)\]/g)].map((m) => sources[Number(m[1]) - 1]), ...sources.filter((s) => 'url' in s && links.includes(s.url))]
-  return all.length > 0 && all.every((s) => s !== undefined) ? all : null
+export function sourced(root: string, plan: PlanRow, reply: string): Outcome {
+  const got = vetted(reply)
+  if ('outcome' in got) return got
+  put(root, plan.id, 'sources.json', JSON.stringify(got.sources))
+  return { outcome: 'pass', spans: [], note: `sources.json written with ${String(got.sources.length)} source(s)` }
 }
 
-type Page = { ok: true; text: string } | { ok: false; text: string; span: 'research.dead_source' | 'research.pdf_unread' }
-
-const ENTITY: Record<string, string> = { '&amp;': '&', '&#39;': "'", '&quot;': '"', '&nbsp;': ' ' }
-
-function pdf(bytes: ArrayBuffer): string | null {
-  const dir = mkdtempSync(join(tmpdir(), 'research-'))
-  try {
-    const file = join(dir, 'page.pdf')
-    writeFileSync(file, Buffer.from(bytes))
-    const got = spawnSync('pdftotext', ['-layout', file, '-'], { encoding: 'utf8' })
-    return got.status === 0 ? got.stdout : null
-  } finally {
-    rmSync(dir, { recursive: true, force: true })
-  }
+function against(root: string, plan: PlanRow, answer: string, sources: Source[]): Promise<Outcome> {
+  return verified(askOf(root, plan), answer, sources, JSON.parse(maybe(root, plan.id, 'runs.json') ?? '[]') as Ran[], () => headSha(srcDir(root, plan.id)))
 }
 
-async function seen(url: string, res: Response): Promise<string | null> {
-  const type = res.headers.get('content-type') ?? ''
-  const { pathname, hostname } = new URL(url)
-  if (type.includes('application/pdf') || pathname.endsWith('.pdf')) return pdf(await res.arrayBuffer())
-  const text = await res.text()
-  if (type.includes('text/html')) {
-    return text.replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, '').replace(/<[^>]*>/g, ' ').replace(/&(?:amp|#39|quot|nbsp);/g, (e) => ENTITY[e] ?? e)
-  }
-  return pathname.endsWith('.md') || hostname === 'raw.githubusercontent.com' ? text.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1') : text
+export function check(root: string, plan: PlanRow): Promise<Outcome> {
+  return against(root, plan, get(root, plan.id, 'answer.md'), JSON.parse(get(root, plan.id, 'sources.json')) as Source[])
 }
 
-const page = (url: string): Promise<Page> => fetch(url).then(
-  async (res): Promise<Page> => {
-    if (!res.ok) return { ok: false, text: String(res.status), span: 'research.dead_source' }
-    const text = await seen(url, res)
-    return text === null ? { ok: false, text: url, span: 'research.pdf_unread' } : { ok: true, text: flat(text) }
-  },
-  (error: unknown): Page => ({ ok: false, text: error instanceof Error ? error.message : String(error), span: 'research.dead_source' }))
-
-function unmeasured(root: string, plan: PlanRow, runs: { claim: string; command: string; commit: string; quote: string }[]): Outcome | null {
-  if (runs.length === 0) return null
-  const head = headSha(srcDir(root, plan.id))
-  const stale = runs.filter((r) => r.commit !== head).map((r) => `"${r.claim}" (${r.command})`)
-  if (stale.length > 0) return { outcome: 'refuse', spans: ['research.run_commit'], note: `run not at HEAD ${head} for ${stale.join(', ')}` }
-  const given = JSON.parse(maybe(root, plan.id, 'runs.json') ?? '[]') as { command: string; output: string }[]
-  const missing = runs.filter((r) => !given.some((g) => g.command === r.command && flat(g.output).includes(flat(r.quote))))
-    .map((r) => `"${r.claim}" (${r.command})`)
-  return missing.length > 0 ? { outcome: 'refuse', spans: ['research.run_missing'], note: `quote not in the run's output for ${missing.join(', ')}` } : null
-}
-
-export async function check(root: string, plan: PlanRow): Promise<Outcome> {
-  const sources = JSON.parse(get(root, plan.id, 'sources.json')) as Source[]
-  if (sources.length === 0) return { outcome: 'pass', spans: [], note: 'no sources: nothing found' }
-  const ask = bare(askOf(root, plan))
-  const lines = get(root, plan.id, 'answer.md').replace(SKIPPED, '').split('\n')
-  const claims = lines.filter((l, i) => l.trim() !== '' && !l.startsWith('#') && !RULER.test(l) && !RULER.test(lines[i + 1] ?? ''))
-    .flatMap((l) => ROW.test(l) ? [l] : l.replace(/^\s*(?:[-*+]|\d+[.)])\s+/, '').split(/(?<=^(?:[^`]*`[^`]*`)*[^`]*(?:[.!?]|\[source:\d+\]))\s+(?!\[source:)/))
-    .filter((sentence) => !ask.includes(bare(sentence)) && !/:(?:\*\*)?\s*$/.test(sentence))
-    .map((sentence) => ({ sentence, cited: cited(sentence, sources) }))
-  const unsourced = claims.filter((c) => c.cited === null).map((c) => `"${c.sentence}"`)
-  if (unsourced.length > 0) return { outcome: 'refuse', spans: ['research.unsourced'], note: `no source for ${unsourced.join(', ')}` }
-  const measured = unmeasured(root, plan, claims.flatMap((c) => (c.cited ?? []).flatMap((s) => 'run' in s ? [{ ...s.run, claim: c.sentence }] : [])))
-  if (measured !== null) return measured
-  const cites = claims.flatMap((c) => (c.cited ?? []).flatMap((s) => 'url' in s ? [{ claim: c.sentence, url: s.url, quote: flat(s.quote) }] : []))
-  const pages = new Map(await Promise.all([...new Set(cites.map((c) => c.url))].map(async (url) => [url, await page(url)] as const)))
-  const unread = [...pages].filter(([, p]) => !p.ok && p.span === 'research.pdf_unread').map(([url]) => url)
-  if (unread.length > 0) return { outcome: 'refuse', spans: ['research.pdf_unread'], note: `pdftotext could not read ${unread.join(', ')}` }
-  const dead = [...pages].filter(([, p]) => !p.ok && p.span === 'research.dead_source').map(([url, p]) => `${url} (${p.text})`)
-  if (dead.length > 0) return { outcome: 'refuse', spans: ['research.dead_source'], note: `dead source: ${dead.join(', ')}` }
-  const missing = cites.filter((c) => pages.get(c.url)?.text.includes(c.quote) !== true).map((c) => `"${c.claim}" (${c.url})`)
-  if (missing.length > 0) return { outcome: 'refuse', spans: ['research.quote_missing'], note: `quote not on the page for ${missing.join(', ')}` }
-  return { outcome: 'pass', spans: [], note: `${String(claims.length)} sentence(s) checked against ${String(pages.size)} url(s)` }
+/** Step 2's check on a draft reply, writing nothing. */
+export function drafted(root: string, plan: PlanRow, reply: string): Promise<Outcome> {
+  const got = vetted(reply)
+  return 'outcome' in got ? Promise.resolve(got) : against(root, plan, reply.replace(FENCE, '').trim(), got.sources)
 }
 
 const row = (name: string, step: number): Step =>
@@ -210,6 +142,9 @@ function output(ask: string): { out?: string } | { why: string } {
   return out === null ? { why: `${OUTPUT} ${named} is not a folder under ~/cf_work/` } : { out }
 }
 
+const BEFORE = '\n\n# Before you hand in\n\nWrite the answer and its closing fence to `.cf/draft.md`, run `cf research check .cf/draft.md`, fix what it names, '
+  + 'and hand in that draft only once it prints `pass`.'
+
 export async function gather(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
   const ask = askOf(root, plan)
   const folder = output(ask)
@@ -223,8 +158,9 @@ export async function gather(db: Db, root: string, plan: PlanRow, step: Step, pr
   const input = `# Ask\n\n${askOf(root, plan)}\n\n# question.json\n\n${get(root, plan.id, 'question.json')}${
     maybe(root, plan.id, 'refusal.md')?.replace(/^/, '\n\n# Refused — fix what this names\n\n') ?? ''}${last === null ? '' : `\n\n# Your last answer — repair what the ask and the refusal name, keep the rest\n\n${
     last}\n\n# Its sources, [source:n] counting from 1\n\n${get(root, plan.id, 'sources.json')}`}${measure ? `\n\n# HEAD\n\n${headSha(srcDir(root, plan.id))}` : ''}${
-    out === undefined ? '' : `\n\n# Output\n\n${out}`}`
-  const fired = await ran(db, root, plan, seat, provider, input, false, true, out)
+    out === undefined ? '' : `\n\n# Output\n\n${out}`}${runs === null ? BEFORE : ''}`
+  const fires: Provider = runs === null ? { ...provider, fire: (packet) => provider.fire({ ...packet, idle: Number.POSITIVE_INFINITY }) } : provider
+  const fired = await ran(db, root, plan, seat, fires, input, false, true, out)
   if (fired.ended !== 'completed') return { outcome: 'refuse', spans: [fired.stop_reason ?? 'seat.exit'], note: `${seat.runs} ${fired.ended}` }
   const needs = NEEDS.exec(fired.text)?.[1]
   if (!measure && needs === 'needs_run') {

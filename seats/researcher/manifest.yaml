@@ -7,4 +7,6 @@ tools:
   - Glob
   - WebSearch
   - WebFetch
-write_paths: []
+  - Write
+  - Bash(cf research check:*)
+write_paths: [.cf/draft.md]

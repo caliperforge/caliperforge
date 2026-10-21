@@ -1195,7 +1195,9 @@ test('paste D3: an unplaced weekly or a placed ship row gives none', () => {
 test('publish D4: a placed weekly leaves its paste row', () => {
   const w = comms()
   putPost(w.db, { ...SEED, kind: 'weekly', dest: 'substack' })
-  expect(published(w, sited())).toMatchObject({ outcome: 'pass' })
+  const dir = sited({ ...SITE, 'blog/index.html': SITE['blog/index.html'].replace('</main>', '<section class="log-arcs">\n</section>\n</main>') })
+  mkdirSync(join(dir, 'data'))
+  expect(published(w, dir)).toMatchObject({ outcome: 'pass' })
   const url = 'https://caliperforge.com/blog/06_a-post-more.html'
   expect(postOf(w.db, 2).url).toBe(url)
   expect(posts(w.db).filter((p) => p.kind === 'paste')).toMatchObject([{ id: 1_000_002, body: SEED.body.concat('\n\nhttps://medium.com/p/import ', url) }])

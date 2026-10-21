@@ -3,6 +3,7 @@ import { existsSync, realpathSync, rmSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
 import { refuse } from '../runner/index.ts'
 import { seat } from '../runner/rules.ts'
+import { filesOf } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
 import type { PlanRow } from '../store/plans.ts'
 import type { Step } from '../templates/pr-path.ts'
@@ -14,8 +15,9 @@ import { cloned, holds, maybe, srcDir } from './workspace.ts'
 
 /**
  * The build names paths under `## Deleted` and the kernel removes them, before the rails read the
- * tree. A build removes only what it made: a path inside the fence -- the same `refuse()` the seat's
- * own tools run through -- or one git ignores, that is in the tree, not under `.git`, and not on the base commit.
+ * tree. A build removes only what it made, or a base file its brief lists: a path inside the fence -- the same
+ * `refuse()` the seat's own tools run through -- or one git ignores, that is in the tree, not under `.git`, and
+ * not on the base commit unless `## Files` names it exactly.
  */
 export function dropped(db: Db, root: string, plan: PlanRow, step: Step, handback: string): Outcome | null {
   const { paths, unread } = deletions(handback)
@@ -30,7 +32,8 @@ export function dropped(db: Db, root: string, plan: PlanRow, step: Step, handbac
   const absent = paths.filter((path) => !barred.includes(path) && !existsSync(join(src, path)))
   const rest = paths.filter((path) => !barred.includes(path) && !absent.includes(path))
   const git = rest.filter((path) => rel(path) === '.git' || rel(path).startsWith('.git/'))
-  const based = rest.filter((path) => !git.includes(path) && base !== undefined && cloned(src) && holds(src, `${base}:${rel(path)}`))
+  const listed = filesOf(db, plan.id).map((f) => f.path)
+  const based = rest.filter((path) => !git.includes(path) && !listed.includes(rel(path)) && base !== undefined && cloned(src) && holds(src, `${base}:${rel(path)}`))
   if (barred.length > 0 || absent.length > 0 || git.length > 0 || based.length > 0) {
     const why = [...barred.map((p) => `${p} is outside the fence`), ...absent.map((p) => `${p} is not in the tree`),
       ...git.map((p) => `${p} is under .git`), ...based.map((p) => `${p} is on base`)]

@@ -111,7 +111,7 @@ VALUES
   ('outside_specialist', 'card', 'rules/roster/outside_specialist.yaml', 'dd1d8955289708786b23ae3b9e246e68285a36d10644e7500cbb48fd1684ab19', '2026-09-21'),
   ('php_specialist', 'card', 'rules/roster/php_specialist.yaml', '1a20a776d704a471370aeebd04f72490f31873d5e7ccd4b9b7221f6f4710c7b7', '2026-09-24'),
   ('python_specialist', 'card', 'rules/roster/python_specialist.yaml', '493d57fa20f355832a7903d5f42c9527f6daf7768b598cd78abb9f239d9f16c6', '2026-09-24'),
-  ('researcher', 'card', 'rules/roster/researcher.yaml', 'f44c938663107618bac57bfd0d26dd4b9802c4ac2e32e5ac32c0f5f45410d50d', '2026-10-04'),
+  ('researcher', 'card', 'rules/roster/researcher.yaml', 'ff98ceee04caa65ef13d829606752b8818956a834263e024817a26e1c2322118', '2026-10-04'),
   ('ruby_specialist', 'card', 'rules/roster/ruby_specialist.yaml', '3fd8e9c16d5a728c3711b83566ee619da5e4e360fd529fd91f64a6fc995e3e34', '2026-09-24'),
   ('rust_specialist', 'card', 'rules/roster/rust_specialist.yaml', 'be5462fa4e2392b48c25b01b6e815ad10aeea35a7cee37e0cf6a1c2427f98a11', '2026-09-24'),
   ('solana_specialist', 'card', 'rules/roster/solana_specialist.yaml', '2a34e6b44fea66209a40f35501499dc3fbd578c447c4581fe4364e4abb3bfacc', '2026-09-27'),

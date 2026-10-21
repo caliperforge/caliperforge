@@ -50,7 +50,6 @@ function arc(siteDir: string, index: string, post: { dek: string; work_date: str
   if (s === -1) throw new Error('blog/index.html has no section.log-arcs')
   const open = index.indexOf('>', s) + 1
   const close = index.indexOf('</section>', open)
-  if (close === -1) throw new Error('blog/index.html has no </section> after section.log-arcs')
   const first = index.indexOf('<article class="cf-arc-card"', open)
   const at = first !== -1 && first < close ? first : close
   const data = join(siteDir, 'data')

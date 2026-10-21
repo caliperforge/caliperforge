@@ -24,6 +24,7 @@ import { profile, type Profile } from '../store/profile.ts'
 import { builder } from '../templates/pr-path.ts'
 import { checks, finish, gated, mode, network, npm, type Commands, type Failure, type Run } from './checks.ts'
 import { ciChecks } from './ci.ts'
+import { newest } from './cited.ts'
 import { outsideLanguage, sushi } from './gates.ts'
 import type { Outcome } from './kind.ts'
 import { lock, unlock } from './lock.ts'
@@ -84,12 +85,16 @@ function completed(db: Db, root: string, plan: number, handback: string, diff: s
   return first.outcome === 'pass' ? null : unfinishedFirst(root, plan, named('completion-audit', first))
 }
 
-/** `step-3.judged` holds the last lap's diff, rulings.md, handback and issue.md digests: the diff standing still under a new ruling is unmoved. */
+/**
+ * `step-3.judged` holds the last lap's diff, rulings.md, handback and issue.md digests: the diff standing still under a new ruling is unmoved.
+ * A newest ruling block with a `Diff stands.` line is not a new ruling.
+ */
 function judged(root: string, plan: number, diff: string, handback: string): boolean {
   const rulings = maybe(root, plan, 'rulings.md')
   const now = [digestOf(diff), rulings === null ? '' : digestOf(rulings), digestOf(handback), digestOf(get(root, plan, 'issue.md'))]
   const last = maybe(root, plan, 'step-3.judged')?.split('\n')
   put(root, plan, 'step-3.judged', now.join('\n'))
+  if (/^Diff stands\.$/m.test(newest(rulings ?? ''))) return false
   return last !== undefined && last[0] === now[0] && last[2] === now[2] && last[3] === now[3] && last[1] !== now[1]
 }
 

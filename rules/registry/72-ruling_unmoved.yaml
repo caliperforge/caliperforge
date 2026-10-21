@@ -1,0 +1,5 @@
+- name: ruling_unmoved
+  table: verdicts
+  column: id
+  where: rail_id = 'completion-audit' AND outcome = 'refuse' AND message LIKE 'rulings.md changed since the last step-3 lap%'
+  expected: 0

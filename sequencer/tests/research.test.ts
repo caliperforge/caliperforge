@@ -478,7 +478,7 @@ test('needs_build D2: a researcher needs_build refuses its fence', async () => {
   expect(ran(w)).toEqual(['researcher'])
 })
 
-const cite =(commit: string, quote = 'cold start: 41 ms', command = RUN): object => ({ run: { command, commit, quote, claim: 'Cold start is 41 ms' } })
+const cite = (commit: string, quote = 'cold start: 41 ms', command = RUN): object => ({ run: { command, commit, quote, claim: 'Cold start is 41 ms' } })
 
 test('measure D2: a fence of run and url entries is written whole', () => {
   const w = researching()

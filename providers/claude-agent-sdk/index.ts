@@ -200,6 +200,10 @@ function ranOutside(packet: Packet, args: unknown): string | null {
     const dir = (SUBMODULE.exec(rest) ?? PINNED.exec(rest))?.[1]
     return dir !== undefined && packet.refuse('.gitmodules') === null && packet.refuse(`lib/${dir}`) === null ? null : refused
   }
+  if (packet.tools.includes('Bash(git clone:*)') && /^git(?:\s|$)/.test(rest)) {
+    const dir = (CLONE.exec(rest) ?? MEASURED.exec(rest))?.[1]
+    return dir !== undefined && packet.refuse(`.cf/measure/${dir}`) === null ? null : refused
+  }
   if (admitted(packet.tools, rest)) return null
   return refused
 }
@@ -210,6 +214,10 @@ const CD = /^cd\s+(?:"([\w./ -]+)"|([\w./-]+))\s+&&\s+/
 /** The only git a seat holding `Bash(git submodule add:*)` runs: a github https submodule under `lib/`, and its pin. */
 const SUBMODULE = /^git submodule add https:\/\/github\.com\/[\w-]+\/[\w.-]+ lib\/([\w-][\w.-]*)$/
 const PINNED = /^git -C lib\/([\w-][\w.-]*) checkout [0-9a-f]{7,40}$/
+
+/** The only git a seat holding `Bash(git clone:*)` runs: a github https clone under `.cf/measure/`, and its pin. */
+const CLONE = /^git clone https:\/\/github\.com\/[\w-]+\/[\w.-]+ \.cf\/measure\/([\w-][\w.-]*)$/
+const MEASURED = /^git -C \.cf\/measure\/([\w-][\w.-]*) checkout [0-9a-f]{7,40}$/
 
 function unmoved(cwd: string, command: string): string {
   const cd = CD.exec(command)

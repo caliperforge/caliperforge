@@ -32,6 +32,10 @@ const META = 'fizz_data'
 
 const PROPERTY = /\bfunction\s+(?:invariant|property|echidna)_\w*\s*\(/g
 
+const COMMENT = /\/\*[\s\S]*?\*\/|\/\/.*/g
+
+const PROPERTIES = 'Properties.sol'
+
 const TIMEOUTS = { BASH_DEFAULT_TIMEOUT_MS: '1800000', BASH_MAX_TIMEOUT_MS: '1800000' }
 
 const ATTEMPTS = '/tmp/x-ray-attempts.md'
@@ -39,7 +43,10 @@ const ATTEMPTS = '/tmp/x-ray-attempts.md'
 function ask(skill: string | undefined, xray: string | undefined): string {
   const said = `Generate the fuzz suite for the project in the working folder in automatic mode, asking nothing: SUITE_DIR is ${SUITE} and META_DIR is ${SUITE}/${META}. `
     + 'Run forge in the foreground, never in the background, and do not end the turn while waiting on a build.'
-  const skilled = skill === undefined ? said : `${said}\nSKILL_PATH is ${skill}. PROJECT_ROOT is the working folder: run each command from there, without cd.`
+  const skilled = skill === undefined ? said : `${said}\nSKILL_PATH is ${skill}. PROJECT_ROOT is the working folder: run each command from there, without cd. `
+    + `Order of work over the skill's: once Step 4 writes ${SUITE}/${META}/entry-point-selection.json and Step 5 scaffolds the suite, `
+    + `add properties to ${SUITE}/${PROPERTIES} one at a time and save the file after each; `
+    + 'write property-plan.md or run Medusa (Steps 8 and 9) only after one property compiles with forge build.'
   return xray === undefined ? skilled : `${skilled}\nx-ray is installed at ${xray}: at Attempt 2, skip the git clone and run ${xray}/SKILL.md inline against PROJECT_ROOT.`
 }
 
@@ -116,14 +123,8 @@ export async function generate(db: Db, root: string, plan: PlanRow, step: Step, 
   observed(db, fired.limits)
   const tokens = fired.usage.input + fired.usage.output
   if (fired.ended !== 'completed' && tokens < CEILING) return { outcome: 'refuse', spans: [fired.stop_reason ?? 'seat.exit'], note: `${name} ${fired.ended}` }
-  const suite = join(dir, SUITE)
-  const sols = existsSync(suite) ? readdirSync(suite, { recursive: true, encoding: 'utf8' }).filter((p) => p.endsWith('.sol') && !p.startsWith(`${META}/`)) : []
-  if (sols.length === 0) return { outcome: 'refuse', spans: ['bench.no_suite'], note: `${name} wrote no .sol under ${SUITE} outside ${META}` }
-  const properties = sols.reduce((n, p) => n + (readFileSync(join(suite, p), 'utf8').match(PROPERTY)?.length ?? 0), 0)
-  if (properties === 0) {
-    return { outcome: 'refuse', spans: ['bench.no_properties'],
-      note: `${name} wrote no invariant_, property_ or echidna_ function in ${sols.map((p) => `${SUITE}/${p}`).join(', ')}` }
-  }
+  const properties = unproven(join(dir, SUITE), name)
+  if (typeof properties !== 'number') return properties
   put(root, plan.id, 'generate.json', JSON.stringify({ suite: SUITE, tokens, seconds: fired.seconds,
     x_ray: existsSync(join(dir, 'x-ray/x-ray.md')) ? 1 : 0 }))
   return { outcome: 'pass', spans: [], note: `generate.json written: ${name} ${fired.ended}, ${String(tokens)} tokens, ${String(properties)} properties` }
@@ -137,6 +138,8 @@ export function scored(db: Db, root: string, plan: PlanRow): Outcome {
   const made = maybe(root, plan.id, 'generate.json')
   if (made === null) return { outcome: 'refuse', spans: ['generate.json'], note: 'generate.json is missing' }
   const { suite, tokens, seconds, x_ray } = JSON.parse(made) as { suite: string; tokens: number; seconds: number; x_ray?: 0 | 1 }
+  const proven = unproven(join(srcDir(root, plan.id), suite), generator)
+  if (typeof proven !== 'number') return proven
   const bench = join(planDir(root, plan.id), 'fuzz-bench')
   rmSync(bench, { recursive: true, force: true })
   git(planDir(root, plan.id), ['clone', '-q', remote(gitBase(root), 'caliperforge/fuzz-bench'), bench])
@@ -160,6 +163,16 @@ export function scored(db: Db, root: string, plan: PlanRow): Outcome {
   record(db, { plan: plan.id, target, generator, ...score })
   put(root, plan.id, 'score.json', JSON.stringify({ fuzz_bench: sha, ...score }))
   return { outcome: 'pass', spans: [], note: `score.json written at fuzz-bench ${sha.slice(0, 12)}` }
+}
+
+function unproven(suite: string, name: string): Outcome | number {
+  const sols = existsSync(suite) ? readdirSync(suite, { recursive: true, encoding: 'utf8' }).filter((p) => p.endsWith('.sol') && !p.startsWith(`${META}/`)) : []
+  if (sols.length === 0) return { outcome: 'refuse', spans: ['bench.no_suite'], note: `${name} wrote no .sol under ${SUITE} outside ${META}` }
+  const counted = sols.includes(PROPERTIES) ? [PROPERTIES] : sols
+  const properties = counted.reduce((n, p) => n + (readFileSync(join(suite, p), 'utf8').replace(COMMENT, '').match(PROPERTY)?.length ?? 0), 0)
+  if (properties > 0) return properties
+  return { outcome: 'refuse', spans: ['bench.no_properties'],
+    note: `${name} wrote no invariant_, property_ or echidna_ function in ${counted.map((p) => `${SUITE}/${p}`).join(', ')}` }
 }
 
 function rows(path: string): { verdict?: string; untested?: boolean }[] {

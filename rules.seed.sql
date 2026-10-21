@@ -80,7 +80,7 @@ VALUES
   ('rules/registry/67-fork_unrun.yaml', 'card', 'rules/registry/67-fork_unrun.yaml', '02837ec3670f10133da170a01a7688a4a21649ddc14cc3e83e690f89c75279e7', '2026-10-19'),
   ('rules/registry/68-refile_carries.yaml', 'card', 'rules/registry/68-refile_carries.yaml', 'e6c9e48d0ed14aed118be49f557da3693fb31b403a3fc3c42319929a98a9ef23', '2026-10-19'),
   ('rules/registry/69-offline_hold.yaml', 'card', 'rules/registry/69-offline_hold.yaml', '83c9835f4d069b0a44e2a699ce80ea356f6989acdafebbd6818e4ce5e7fa69e0', '2026-10-20'),
-  ('rules/repo-classes.yaml', 'card', 'rules/repo-classes.yaml', '0ab38b3779b38a5b57c3eaae4ace5e650618dfb4fecbd80b4477958b115ee550', '2026-10-16'),
+  ('rules/repo-classes.yaml', 'card', 'rules/repo-classes.yaml', 'deaf34870d419639a3eda3e17120eb257ee7b8549ed429bf431c1e6f623a29cb', '2026-10-16'),
   ('rules/staffing.yaml', 'card', 'rules/staffing.yaml', 'aa91207f2660fe1f31421d100b3118981715abc9ed8e1381a6d2962c464d0d36', '2026-10-05'),
   ('completion-audit', 'rail', 'rules/rails.yaml', 'b46b445806d399b61887a5259eb0a6893444efcbe5acf2e6dd534507bc0882f3', '2026-09-17'),
   ('secret-scan', 'rail', 'rules/rails.yaml', 'b46b445806d399b61887a5259eb0a6893444efcbe5acf2e6dd534507bc0882f3', '2026-09-17'),

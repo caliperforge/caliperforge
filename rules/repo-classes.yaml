@@ -1,1 +1,4 @@
-solana-foundation/pay-kit: payments SDK
+classes:
+  solana-foundation/pay-kit: payments SDK
+fields:
+  solana-foundation/pay-kit: payments

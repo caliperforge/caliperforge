@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3'
+import { FORK } from '../sequencer/workspace.ts'
 import type { Db } from './index.ts'
 import type { Cell } from './science.ts'
 
@@ -19,7 +20,7 @@ const STAGES = [
 
 const KINDS = ['signoff', 'return', 'priority', 'retry', 'card', 'filed', 'pipe', 'desk_approve']
 
-const LANDED = "SELECT date(max(runs.at)) AS day, (SELECT count(*) FROM refusals WHERE plan = plans.id AND blip = 0) AS refused, sum(runs.step = 2) AS builds FROM plans JOIN runs ON runs.plan = plans.id WHERE plans.state = 'done' GROUP BY plans.id"
+const LANDED = `SELECT date(max(runs.at)) AS day, (SELECT count(*) FROM refusals WHERE plan = plans.id AND blip = 0) AS refused, sum(runs.step = 2) AS builds, coalesce((SELECT substr(repo, 1, instr(repo, '/') - 1) FROM targets WHERE id = plans.target_id), '${FORK}') = '${FORK}' AS ours FROM plans JOIN runs ON runs.plan = plans.id WHERE plans.state = 'done' GROUP BY plans.id`
 
 const FIXES = `SELECT url, min(day) AS day FROM (${[
   "SELECT pointer AS url, date(at) AS day FROM events WHERE kind = 'director' AND message GLOB 'file: *'",
@@ -38,6 +39,8 @@ const LOOP = {
   fix_tickets_landed: "count(*) FROM fixes WHERE EXISTS (SELECT 1 FROM plans WHERE origin = url AND state = 'done') AND day",
   language_notes: 'count(*) FROM language_notes WHERE date(at)',
   drift_fixed: "count(*) FROM drift_findings WHERE outcome = 'fixed' AND date(closed_at)",
+  landed_caliperforge: 'count(*) FROM landed WHERE ours AND day',
+  landed_outside: 'count(*) FROM landed WHERE NOT ours AND day',
 }
 
 const share = (count: string): string => `round(1.0 * ${count} / nullif(landed, 0), 2)`
@@ -51,7 +54,7 @@ export const METRICS = {
   pipeline_counts: `SELECT stage, count, refused, unit FROM (${STAGES.map((s, i) => `SELECT ${String(i)} AS at, * FROM (${s})`).join(' UNION ALL ')}) ORDER BY at`,
   tokens_per_landed_job: "SELECT week, count(*) AS jobs, round(avg(total), 1) AS mean_total_tokens, round(avg(fresh), 1) AS mean_fresh_tokens, round(avg(cache_read), 1) AS mean_cache_read_tokens, round(avg(runs), 1) AS mean_runs FROM (SELECT date(plans.queued_at, 'weekday 0', '-6 days') AS week, sum(input_tokens + cache_read_tokens + output_tokens) AS total, sum(input_tokens + output_tokens) AS fresh, sum(cache_read_tokens) AS cache_read, count(*) AS runs FROM plans JOIN runs ON runs.plan = plans.id WHERE plans.state = 'done' GROUP BY plans.id) GROUP BY week ORDER BY week",
   ceo_touches: `WITH RECURSIVE days(day) AS (SELECT date(min(at)) FROM events WHERE actor = 'ceo' UNION ALL SELECT date(day, '+1 day') FROM days WHERE day < :today) SELECT day, count(events.id) AS touches, ${KINDS.map((k) => `coalesce(sum(kind = '${k}'), 0) AS ${k}`).join(', ')}, coalesce(sum(kind NOT IN (${KINDS.map((k) => `'${k}'`).join(', ')})), 0) AS other FROM days LEFT JOIN events ON date(at) = day AND actor = 'ceo' WHERE day IS NOT NULL GROUP BY day ORDER BY day`,
-  loop_counts: `WITH landed AS (${LANDED}), fixes AS (${FIXES}), periods AS (${PERIODS}) SELECT period, landed, refusals, ${share('refusals')} AS refusals_per_landed, first_pass, ${share('first_pass')} AS first_pass_share, rebuilt_landed, fix_tickets, fix_tickets_landed, language_notes, drift_fixed FROM (SELECT period, n, ${Object.entries(LOOP).map(([column, count]) => `(SELECT ${count} BETWEEN lo AND hi) AS ${column}`).join(', ')} FROM periods) ORDER BY n, period`,
+  loop_counts: `WITH landed AS (${LANDED}), fixes AS (${FIXES}), periods AS (${PERIODS}) SELECT period, landed, refusals, ${share('refusals')} AS refusals_per_landed, first_pass, ${share('first_pass')} AS first_pass_share, rebuilt_landed, fix_tickets, fix_tickets_landed, language_notes, drift_fixed, landed_caliperforge, landed_outside FROM (SELECT period, n, ${Object.entries(LOOP).map(([column, count]) => `(SELECT ${count} BETWEEN lo AND hi) AS ${column}`).join(', ')} FROM periods) ORDER BY n, period`,
 } as const
 
 export function reader(path: string): Db {

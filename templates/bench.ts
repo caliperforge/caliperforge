@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process'
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { basename, join, resolve } from 'node:path'
+import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 import type { Provider } from '../providers/kind.ts'
 import { packet, real } from '../runner/index.ts'
 import { load, seat } from '../runner/rules.ts'
@@ -140,12 +140,15 @@ export function scored(db: Db, root: string, plan: PlanRow): Outcome {
   const { suite, tokens, seconds, x_ray } = JSON.parse(made) as { suite: string; tokens: number; seconds: number; x_ray?: 0 | 1 }
   const proven = unproven(join(srcDir(root, plan.id), suite), generator)
   if (typeof proven !== 'number') return proven
+  const config = medusa(db, plan.id, srcDir(root, plan.id), suite)
+  if (config !== null && typeof config !== 'string') return config
   const bench = join(planDir(root, plan.id), 'fuzz-bench')
   rmSync(bench, { recursive: true, force: true })
   git(planDir(root, plan.id), ['clone', '-q', remote(gitBase(root), 'caliperforge/fuzz-bench'), bench])
   const sha = git(bench, ['rev-parse', 'HEAD']).trim()
   const suites = `suites/${generator}/${target}`
   cpSync(join(srcDir(root, plan.id), suite), join(bench, suites), { recursive: true })
+  if (config !== null) writeFileSync(join(bench, suites, 'medusa.json'), config)
   mkdirSync(join(bench, 'results', target), { recursive: true })
   const written = join(bench, 'results', target, `${target}.jsonl`)
   for (const script of ['run_pair', 'null_check'].filter((s) => s === 'run_pair' || existsSync(join(bench, `bench/${s}.py`)))) {
@@ -177,6 +180,38 @@ function unproven(suite: string, name: string): Outcome | number {
 
 function rows(path: string): { verdict?: string; untested?: boolean }[] {
   return readFileSync(path, 'utf8').split('\n').filter((line) => line.trim() !== '').map((line) => JSON.parse(line) as { verdict?: string; untested?: boolean })
+}
+
+/** run_pair installs the suite at `test/<target>/` and Medusa resolves from the config's folder; fizz wrote these from the project root. */
+const MOVED: [string[], string][] = [[['fuzzing'], 'corpusDirectory'], [['logging'], 'logDirectory'],
+  [['compilation', 'platformConfig'], 'target'], [['compilation', 'platformConfig'], 'exportDirectory']]
+
+function medusa(db: Db, plan: number, src: string, suite: string): Outcome | string | null {
+  const path = join(src, 'medusa.json')
+  if (!existsSync(path)) return null
+  let config: unknown
+  try {
+    config = JSON.parse(readFileSync(path, 'utf8'))
+  } catch (error) {
+    logged(db, { plan, kind: 'swallowed', actor: 'score', outcome: 'pass', message: firstLine(error), pointer: null, run: null })
+    return { outcome: 'refuse', spans: ['bench.medusa_json'], note: firstLine(error) }
+  }
+  for (const [keys, key] of MOVED) {
+    const parent = keys.reduce(field, config)
+    const value = field(parent, key)
+    if (typeof value === 'string' && value !== '' && !isAbsolute(value)) Object.assign(parent as object, { [key]: moved(suite, value) })
+  }
+  return JSON.stringify(config, null, 2)
+}
+
+function moved(suite: string, path: string): string {
+  const inside = relative(suite, path)
+  if (inside.startsWith('..')) return join('../..', path)
+  return inside === '' ? '.' : inside
+}
+
+function field(tree: unknown, key: string): unknown {
+  return typeof tree === 'object' && tree !== null ? (tree as Record<string, unknown>)[key] : undefined
 }
 
 /** `pre_fix` may be a rev expression, and only a full sha can be fetched unadvertised. */

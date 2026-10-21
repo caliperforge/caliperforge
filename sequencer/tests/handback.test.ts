@@ -168,6 +168,40 @@ test('D1 a new ruling with a new hand-back runs the rails', async () => {
   expect(holdOf(w.db, 1)?.held_why ?? '').not.toMatch(/rulings.md/)
 })
 
+const STANDS = '**Ruling (COO, 2026-10-20):** park on #1394; it comes back to step 3 with this tree.\nDiff stands.\n'
+
+/** Refuses one lap, puts `rulings`, then builds again, running `edit` on the root first. */
+async function ruled(rulings: string, edit: (root: string) => void = () => undefined): Promise<World> {
+  const w = await atBuild()
+  await tick(w.db, w.root, stub(UNPOINTED))
+  expect((await tick(w.db, w.root, stub(UNPOINTED)))[0]).toMatchObject({ step: 3, outcome: 'refuse' })
+  put(w.root, 1, 'rulings.md', rulings)
+  await tick(w.db, w.root, answers([UNPOINTED], () => { edit(w.root) }))
+  return w
+}
+
+test('D1 a Diff stands. ruling on the same diff runs the rails', async () => {
+  const w = await ruled(STANDS)
+  const lap = (await tick(w.db, w.root, stub(UNPOINTED)))[0]
+  expect(lap).toMatchObject({ step: 3 })
+  expect(lap?.note).not.toMatch(/rulings.md changed/)
+  expect(holdOf(w.db, 1)?.held_why ?? '').not.toMatch(/^completion-audit: rulings.md/)
+})
+
+test('D3 a new ruling with a moved tree runs the rails', async () => {
+  const w = await ruled('use bye()\n', (root) => { built(root, 1, 'export const more = 1') })
+  const lap = (await tick(w.db, w.root, stub(UNPOINTED)))[0]
+  expect(lap).toMatchObject({ step: 3 })
+  expect(lap?.note).not.toMatch(/rulings.md changed/)
+})
+
+test('D4 an older Diff stands. does not clear a newer ruling', async () => {
+  const w = await ruled(`${STANDS}**Ruling (COO, 2026-10-21):** use bye()\n`)
+  await tick(w.db, w.root, stub(UNPOINTED))
+  expect(plan(w.db, 1)).toMatchObject({ state: 'blocked_on_ceo', step: 3 })
+  expect(holdOf(w.db, 1)?.held_why).toMatch(/^completion-audit: rulings.md/)
+})
+
 test('D3 a hand-back whose fence parses fires the builder once', async () => {
   for (const text of [CARRIED, UNPOINTED]) {
     const w = await atBuild()

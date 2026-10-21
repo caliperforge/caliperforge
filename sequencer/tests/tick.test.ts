@@ -35,7 +35,7 @@ import { forkCi, rehearsalBranch, type Wire } from '../push.ts'
 import { UNRUN } from '../triggers.ts'
 import { drift } from '../drift.ts'
 import { REGISTRY } from './drifting.ts'
-import { MANUAL, SCHEDULED, TEX } from './bases.ts'
+import { GREETED, MANUAL, SCHEDULED, TEX } from './bases.ts'
 import { started } from '../signals.ts'
 import { closed } from '../unpolled.ts'
 import { approve, builds, built, CARRIED, dropping, internalPlan, KOTLIN, ours, owning, PASS, plan, PR, REFUSE, rerunning, RUN, runsAfter, runsOn, scored, stub, tip, TYPESCRIPT, watched, WORDS, world, type World } from './world.ts'
@@ -1684,7 +1684,7 @@ test('deleting .GIT in another case refuses and it stays', async () => {
   expect(existsSync(join(src, '.git/objects/pack/x.pack'))).toBe(true)
 })
 
-test('D4 deleting a file on base refuses and it stays', async () => {
+test('D1 deleting a listed base file passes and shows deleted', async () => {
   const w = world()
   dropPlan(w.db, 1)
   ours(w.root)
@@ -1693,9 +1693,23 @@ test('D4 deleting a file on base refuses and it stays', async () => {
 
   const fired = (await tick(w.db, w.root, stub(dropping(['src/hello.ts']))))[0]
 
-  expect(fired).toMatchObject({ step: 2, outcome: 'refuse', spans: ['src/hello.ts'] })
+  expect(fired).toMatchObject({ step: 2, outcome: 'pass' })
+  expect(existsSync(join(srcDir(w.root, MINE), 'src/hello.ts'))).toBe(false)
+  expect(diffOf(w.root, MINE)).toContain('deleted file')
+})
+
+test('D2 deleting an unlisted base file refuses and it stays', async () => {
+  const w = world()
+  dropPlan(w.db, 1)
+  ours(w.root, GREETED)
+  internalPlan(w.db, w.root, MINE)
+  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
+
+  const fired = (await tick(w.db, w.root, stub(dropping(['src/tests/hello.test.ts']))))[0]
+
+  expect(fired).toMatchObject({ step: 2, outcome: 'refuse', spans: ['src/tests/hello.test.ts'] })
   expect(fired?.note).toContain('is on base')
-  expect(existsSync(join(srcDir(w.root, MINE), 'src/hello.ts'))).toBe(true)
+  expect(existsSync(join(srcDir(w.root, MINE), 'src/tests/hello.test.ts'))).toBe(true)
 })
 
 test('deleting a path not in the tree refuses, not a no-op', async () => {

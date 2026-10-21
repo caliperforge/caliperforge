@@ -167,7 +167,9 @@ export async function gather(db: Db, root: string, plan: PlanRow, step: Step, pr
     return { outcome: 'refuse', spans: ['ask.md'], note: 'ask needs executed runs: add a **Measure:** line so the measurer gathers it' }
   }
   if (measure && needs === 'needs_build') {
-    return { outcome: 'refuse', spans: ['ask.md'], note: 'ask needs network or writes outside .cf/measure/: file it on a pr_path lane, whose builder writes the script and runs it' }
+    const note = 'ask needs network or writes outside .cf/measure/: file it on a pr_path lane, whose builder writes the script and runs it'
+    put(root, plan.id, 'question.md', note)
+    return { outcome: 'needs_ceo', spans: ['ask.md'], note }
   }
   const sources = sourced(root, plan, fired.text)
   if (sources.outcome === 'refuse') return sources

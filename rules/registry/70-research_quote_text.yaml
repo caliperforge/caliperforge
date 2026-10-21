@@ -1,0 +1,7 @@
+- name: research_quote_text
+  switch: { key: science.dir }
+  table: events
+  column: at
+  where: "kind = 'check' AND outcome = 'refuse' AND message LIKE 'quote not on the page%'"
+  gap: 7d
+  expected: 0

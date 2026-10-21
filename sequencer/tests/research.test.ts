@@ -110,6 +110,48 @@ test('check: a 404 is a dead source', async () => {
     .toMatchObject({ outcome: 'refuse', spans: ['research.dead_source'], note: 'dead source: https://a.example/doc (404)' })
 })
 
+const serve = (body: string | Uint8Array<ArrayBuffer>, type?: string): void => {
+  fetched.mockImplementation(() => Promise.resolve(new Response(body, type === undefined ? {} : { headers: { 'content-type': type } })))
+}
+
+const quoted = (url: string, quote: string): string => JSON.stringify([{ url, fetched_at: '2026-10-04T10:00:00Z', quote, claim: 'c' }])
+
+const HTML = '<html><head><style>p { color: red }</style><SCRIPT type="x">var decoy = "The cap is 9."</script></head>'
+  + '<body><p>Explore and contribute to open issues: <a href="x">GitHub Issues</a> &amp; more</p></body></html>'
+
+test('check D1: a quote split by HTML tags passes', async () => {
+  serve(HTML, 'text/html; charset=utf-8')
+  expect(await checked('Issues are open [source:1].', quoted('https://a.example/doc', 'Explore and contribute to open issues: GitHub Issues & more')))
+    .toMatchObject({ outcome: 'pass' })
+})
+
+test('check D5: a quote only in a script is quote_missing', async () => {
+  serve(HTML, 'text/html')
+  expect(await checked('The cap is 9 [source:1].', quoted('https://a.example/doc', 'The cap is 9.')))
+    .toMatchObject({ outcome: 'refuse', spans: ['research.quote_missing'] })
+})
+
+test('check D2: a quote across a markdown link passes', async () => {
+  serve('# R\n\nFile bugs on [GitHub Issues](https://x) please.')
+  expect(await checked('Bugs go to issues [source:1].', quoted('https://raw.githubusercontent.com/o/r/main/README.md', 'File bugs on GitHub Issues please.')))
+    .toMatchObject({ outcome: 'pass' })
+})
+
+const PDF = readFileSync(join(import.meta.dirname, 'fixtures/research-quote.pdf'))
+
+test('check D3: a PDF quote passes via pdftotext', async () => {
+  expect(PDF.toString('latin1')).not.toContain('The cap is 3')
+  serve(new Uint8Array(PDF), 'application/pdf')
+  expect(await checked('The cap is 3 [source:1].')).toMatchObject({ outcome: 'pass' })
+})
+
+test('check D4: an unreadable PDF is pdf_unread', async () => {
+  vi.stubEnv('PATH', '')
+  serve(new Uint8Array(PDF), 'application/pdf')
+  expect(await checked('The cap is 3 [source:1].'))
+    .toEqual({ outcome: 'refuse', spans: ['research.pdf_unread'], note: 'pdftotext could not read https://a.example/doc' })
+})
+
 test('check: no sources passes without fetching', async () => {
   expect(await checked('Nothing found.', '[]')).toMatchObject({ outcome: 'pass', note: 'no sources: nothing found' })
   expect(fetched).not.toHaveBeenCalled()

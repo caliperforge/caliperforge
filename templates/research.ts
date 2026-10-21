@@ -1,5 +1,6 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { homedir } from 'node:os'
+import { spawnSync } from 'node:child_process'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { homedir, tmpdir } from 'node:os'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import { z } from 'zod'
 import type { Provider } from '../providers/kind.ts'
@@ -92,9 +93,40 @@ const cited = (claim: string, sources: Source[]): Source[] | null => {
   return all.length > 0 && all.every((s) => s !== undefined) ? all : null
 }
 
-const page = (url: string): Promise<{ ok: boolean; text: string }> => fetch(url).then(
-  async (res) => res.ok ? { ok: true, text: flat(await res.text()) } : { ok: false, text: String(res.status) },
-  (error: unknown) => ({ ok: false, text: error instanceof Error ? error.message : String(error) }))
+type Page = { ok: true; text: string } | { ok: false; text: string; span: 'research.dead_source' | 'research.pdf_unread' }
+
+const ENTITY: Record<string, string> = { '&amp;': '&', '&#39;': "'", '&quot;': '"', '&nbsp;': ' ' }
+
+function pdf(bytes: ArrayBuffer): string | null {
+  const dir = mkdtempSync(join(tmpdir(), 'research-'))
+  try {
+    const file = join(dir, 'page.pdf')
+    writeFileSync(file, Buffer.from(bytes))
+    const got = spawnSync('pdftotext', ['-layout', file, '-'], { encoding: 'utf8' })
+    return got.status === 0 ? got.stdout : null
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+}
+
+async function seen(url: string, res: Response): Promise<string | null> {
+  const type = res.headers.get('content-type') ?? ''
+  const { pathname, hostname } = new URL(url)
+  if (type.includes('application/pdf') || pathname.endsWith('.pdf')) return pdf(await res.arrayBuffer())
+  const text = await res.text()
+  if (type.includes('text/html')) {
+    return text.replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, '').replace(/<[^>]*>/g, ' ').replace(/&(?:amp|#39|quot|nbsp);/g, (e) => ENTITY[e] ?? e)
+  }
+  return pathname.endsWith('.md') || hostname === 'raw.githubusercontent.com' ? text.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1') : text
+}
+
+const page = (url: string): Promise<Page> => fetch(url).then(
+  async (res): Promise<Page> => {
+    if (!res.ok) return { ok: false, text: String(res.status), span: 'research.dead_source' }
+    const text = await seen(url, res)
+    return text === null ? { ok: false, text: url, span: 'research.pdf_unread' } : { ok: true, text: flat(text) }
+  },
+  (error: unknown): Page => ({ ok: false, text: error instanceof Error ? error.message : String(error), span: 'research.dead_source' }))
 
 function unmeasured(root: string, plan: PlanRow, runs: { claim: string; command: string; commit: string; quote: string }[]): Outcome | null {
   if (runs.length === 0) return null
@@ -122,7 +154,9 @@ export async function check(root: string, plan: PlanRow): Promise<Outcome> {
   if (measured !== null) return measured
   const cites = claims.flatMap((c) => (c.cited ?? []).flatMap((s) => 'url' in s ? [{ claim: c.sentence, url: s.url, quote: flat(s.quote) }] : []))
   const pages = new Map(await Promise.all([...new Set(cites.map((c) => c.url))].map(async (url) => [url, await page(url)] as const)))
-  const dead = [...pages].filter(([, p]) => !p.ok).map(([url, p]) => `${url} (${p.text})`)
+  const unread = [...pages].filter(([, p]) => !p.ok && p.span === 'research.pdf_unread').map(([url]) => url)
+  if (unread.length > 0) return { outcome: 'refuse', spans: ['research.pdf_unread'], note: `pdftotext could not read ${unread.join(', ')}` }
+  const dead = [...pages].filter(([, p]) => !p.ok && p.span === 'research.dead_source').map(([url, p]) => `${url} (${p.text})`)
   if (dead.length > 0) return { outcome: 'refuse', spans: ['research.dead_source'], note: `dead source: ${dead.join(', ')}` }
   const missing = cites.filter((c) => pages.get(c.url)?.text.includes(c.quote) !== true).map((c) => `"${c.claim}" (${c.url})`)
   if (missing.length > 0) return { outcome: 'refuse', spans: ['research.quote_missing'], note: `quote not on the page for ${missing.join(', ')}` }

@@ -136,6 +136,14 @@ test('sitePushSeen D5', () => {
   expect(drift(now, sitePush, new Date())).toEqual([])
 })
 
+test('researchQuoteTextSeen D6', () => {
+  const entry = REGISTRY.filter((e) => e.name === 'research_quote_text')
+  const d = db()
+  expect(drift(d, entry, NOW)).toEqual([])
+  logged(d, { plan: 1, kind: 'check', actor: 'check', outcome: 'refuse', message: 'quote not on the page for x', pointer: null, run: null }, '2026-10-02 10:00:00')
+  expect(drift(d, entry, NOW)).toMatchObject([{ name: 'research_quote_text', state: 'seen', newest: '2026-10-02 10:00:00' }])
+})
+
 test('catchupRangeClearsSilent D4', () => {
   const d = db()
   const catchup = REGISTRY.filter((e) => e.name === 'writer_catchup')

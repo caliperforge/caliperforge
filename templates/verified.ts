@@ -70,7 +70,16 @@ function unmeasured(given: Ran[], at: () => string, runs: { claim: string; comma
   return missing.length > 0 ? { outcome: 'refuse', spans: ['research.run_missing'], note: `quote not in the run's output for ${missing.join(', ')}` } : null
 }
 
-export async function verified(ask: string, answer: string, sources: Source[], runs: Ran[], head: () => string): Promise<Outcome> {
+const MARK = /\s*\[source:\d+\]/
+
+function plainly(answer: string, failing: { claim: string; url: string }[]): string {
+  return [...new Set(failing.map((f) => f.claim))].reduce((text, claim) => {
+    const urls = [...new Set(failing.filter((f) => f.claim === claim && !claim.includes(f.url)).map((f) => ` (${f.url})`))].join('')
+    return text.split(claim).join(claim.replace(/["“”]/g, '').replace(MARK, (mark) => `${urls}${mark}`))
+  }, answer)
+}
+
+export async function verified(ask: string, answer: string, sources: Source[], runs: Ran[], head: () => string, stated?: (answer: string) => void): Promise<Outcome> {
   if (sources.length === 0) return { outcome: 'pass', spans: [], note: 'no sources: nothing found' }
   const asked = bare(ask)
   const lines = answer.replace(SKIPPED, '').split('\n')
@@ -88,7 +97,12 @@ export async function verified(ask: string, answer: string, sources: Source[], r
   if (unread.length > 0) return { outcome: 'refuse', spans: ['research.pdf_unread'], note: `pdftotext could not read ${unread.join(', ')}` }
   const dead = [...pages].filter(([, p]) => !p.ok && p.span === 'research.dead_source').map(([url, p]) => `${url} (${p.text})`)
   if (dead.length > 0) return { outcome: 'refuse', spans: ['research.dead_source'], note: `dead source: ${dead.join(', ')}` }
-  const missing = cites.filter((c) => pages.get(c.url)?.text.includes(c.quote) !== true).map((c) => `"${c.claim}" (${c.url})`)
+  const failing = cites.filter((c) => pages.get(c.url)?.text.includes(c.quote) !== true)
+  const missing = failing.map((c) => `"${c.claim}" (${c.url})`)
+  if (missing.length > 0 && stated !== undefined) {
+    stated(plainly(answer, failing))
+    return { outcome: 'pass', spans: [], note: `quote not on the page again, stated plainly with its URL for ${missing.join(', ')}` }
+  }
   if (missing.length > 0) return { outcome: 'refuse', spans: ['research.quote_missing'], note: `quote not on the page for ${missing.join(', ')}` }
   return { outcome: 'pass', spans: [], note: `${String(claims.length)} sentence(s) checked against ${String(pages.size)} url(s)` }
 }

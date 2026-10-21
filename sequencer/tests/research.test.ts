@@ -7,7 +7,7 @@ import { posts } from '../../store/desk.ts'
 import { eventsOf, kindsOf, runRows } from '../../store/events.ts'
 import { get, set } from '../../store/lanes.ts'
 import { dropPlan, putPlan } from '../../store/plans.ts'
-import { refusalsOf, WHY } from '../../store/refusals.ts'
+import { fingerprint, refusalsOf, refused, WHY } from '../../store/refusals.ts'
 import { check, gather, question, record, sourced } from '../../templates/research.ts'
 import { tick } from '../index.ts'
 import type { Wire } from '../push.ts'
@@ -60,11 +60,10 @@ afterEach(() => {
 
 const SOURCES = JSON.stringify([{ url: 'https://a.example/doc', fetched_at: '2026-10-04T10:00:00Z', quote: 'The cap is 3.', claim: 'The cap is 3' }])
 
-const checked = (answer: string, sources = SOURCES, ask = ASK): ReturnType<typeof check> => {
-  const w = researching(ask)
+const checked = (answer: string, sources = SOURCES, ask = ASK, w = researching(ask)): ReturnType<typeof check> => {
   put(w.root, 1, 'sources.json', sources)
   put(w.root, 1, 'answer.md', answer)
-  return check(w.root, plan(w.db, 1))
+  return check(w.db, w.root, plan(w.db, 1))
 }
 
 test('D1: a full ask walks question to record and is done', async () => {
@@ -93,6 +92,41 @@ test('check: an unmarked sentence is unsourced, unfetched', async () => {
     .toMatchObject({ outcome: 'refuse', spans: ['research.unsourced'], note: 'no source for "It never moves."' })
   expect(await checked('The cap is 3 [source:2].')).toMatchObject({ spans: ['research.unsourced'] })
   expect(fetched).not.toHaveBeenCalled()
+})
+
+const after = (span: string | null): World => {
+  const w = researching()
+  if (span !== null) refused(w.db, { plan: 1, step: 2, fingerprint: fingerprint(2, [span]), diff: null, span })
+  return w
+}
+
+test('stated D1: a second quote_missing states it with its URL', async () => {
+  fetched.mockResolvedValue(new Response('The cap is 4.'))
+  const w = after('research.quote_missing')
+  expect(await checked('The maintainer wrote "the cap is 3" [source:1].', SOURCES, ASK, w)).toEqual({ outcome: 'pass', spans: [],
+    note: 'quote not on the page again, stated plainly with its URL for "The maintainer wrote "the cap is 3" [source:1]." (https://a.example/doc)' })
+  expect(maybe(w.root, 1, 'answer.md')).toBe('The maintainer wrote the cap is 3 (https://a.example/doc) [source:1].')
+})
+
+test('stated D2: a table row loses its quotes, its URL not doubled', async () => {
+  fetched.mockResolvedValue(new Response('The cap is 4.'))
+  const w = after('research.quote_missing')
+  expect(await checked('| Cap | Where |\n|---|---|\n| 3 | "x" https://a.example/doc |', SOURCES, ASK, w)).toMatchObject({ outcome: 'pass' })
+  expect(maybe(w.root, 1, 'answer.md')).toBe('| Cap | Where |\n|---|---|\n| 3 | x https://a.example/doc |')
+})
+
+test.each([null, 'research.unsourced', 'senior_review'])('stated D3: after %s, a missing quote refuses', async (span) => {
+  fetched.mockResolvedValue(new Response('The cap is 4.'))
+  const w = after(span)
+  expect(await checked('The cap is "3" [source:1].', SOURCES, ASK, w)).toMatchObject({ outcome: 'refuse', spans: ['research.quote_missing'] })
+  expect(maybe(w.root, 1, 'answer.md')).toBe('The cap is "3" [source:1].')
+})
+
+test('stated D4: after quote_missing an unsourced line refuses', async () => {
+  const w = after('research.quote_missing')
+  expect(await checked('The cap is "3" [source:1]. It never moves.', SOURCES, ASK, w))
+    .toEqual({ outcome: 'refuse', spans: ['research.unsourced'], note: 'no source for "It never moves."' })
+  expect(maybe(w.root, 1, 'answer.md')).toBe('The cap is "3" [source:1]. It never moves.')
 })
 
 test('check D1: a code span holding ... is one sentence', async () => {
@@ -669,7 +703,7 @@ const measured = (sources: (head: string) => object[]): ReturnType<typeof check>
   put(w.root, 1, 'sources.json', JSON.stringify(sources(head)))
   put(w.root, 1, 'runs.json', JSON.stringify([{ command: RUN, output: 'cold start:\n  41 ms' }]))
   put(w.root, 1, 'answer.md', 'Cold start is 41 ms [source:1].')
-  return check(w.root, plan(w.db, 1))
+  return check(w.db, w.root, plan(w.db, 1))
 }
 
 test('measure D3: a run cite at HEAD in runs.json passes unfetched', async () => {

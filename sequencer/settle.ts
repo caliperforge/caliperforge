@@ -193,7 +193,7 @@ function fire(db: Db, root: string, plan: PlanRow, step: Step, provider: Provide
     const standing = kept(db, root, plan, step)
     return standing === null ? model(db, plan, step, () => fireLanded(db, root, plan, step, provider)) : Promise.resolve(standing)
   }
-  if (step.name === 'check') return check(root, plan)
+  if (step.name === 'check') return check(db, root, plan)
   return Promise.resolve(kernel(db, root, plan, wire, read))
 }
 

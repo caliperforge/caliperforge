@@ -41,7 +41,7 @@ const researching = (ask = ASK): World => {
 /** The researcher answers `reply`; every other seat answers `verdict`. */
 const seats = (reply: string, verdict = PASS): Provider => ({
   name: 'claude-agent-sdk',
-  fire: (packet) => stub('', 0, packet.prompt.includes('# researcher\n') ? reply : verdict).fire(packet),
+  fire: (packet) => stub(reply, 0, packet.prompt.includes('# researcher\n') ? reply : verdict).fire(packet),
 })
 
 const ran = (w: World): string[] => runRows(w.db).map((r) => r.seat)
@@ -178,7 +178,7 @@ const RULE = '## What\n\nPick by the seven-part selection rule: newest first.\n'
 
 const gathered = async (w: World, reply = FOUND): Promise<[Awaited<ReturnType<typeof gather>>, string]> => {
   let prompt = ''
-  const outcome = await gather(w.db, w.root, plan(w.db, 1), mapOf('research').at(1), stub('', 0, reply, (packet) => { prompt = packet.prompt }))
+  const outcome = await gather(w.db, w.root, plan(w.db, 1), mapOf('research').at(1), stub(reply, 0, reply, (packet) => { prompt = packet.prompt }))
   return [outcome, prompt]
 }
 
@@ -259,7 +259,7 @@ test('gather D6: the researcher checks its draft, never idled', async () => {
   const w = researching()
   question(w.root, plan(w.db, 1))
   const seen: Packet[] = []
-  await gather(w.db, w.root, plan(w.db, 1), mapOf('research').at(1), stub('', 0, FOUND, (packet) => { seen.push(packet) }))
+  await gather(w.db, w.root, plan(w.db, 1), mapOf('research').at(1), stub(FOUND, 0, FOUND, (packet) => { seen.push(packet) }))
   expect(seen[0]?.prompt).toContain('cf research check .cf/draft.md')
   expect(seen[0]?.idle).toBe(Number.POSITIVE_INFINITY)
 })

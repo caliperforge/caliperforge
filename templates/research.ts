@@ -49,7 +49,7 @@ const Entry = z.unknown().transform((entry, ctx) => {
 
 const Sources = z.object({ sources: z.array(Entry) })
 
-export type Source ={ url: string; fetched_at: string; quote: string; claim: string } | { run: { command: string; commit: string; quote: string; claim: string } }
+export type Source = { url: string; fetched_at: string; quote: string; claim: string } | { run: { command: string; commit: string; quote: string; claim: string } }
 
 const plain = (s: Source): { quote: string; claim: string } => 'run' in s ? s.run : s
 

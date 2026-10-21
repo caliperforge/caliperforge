@@ -1255,6 +1255,19 @@ test('repeatFilesTicket', async () => {
   }
 })
 
+test('a plan sent round since its refusal files no repeat', async () => {
+  for (const [kind, hours, files] of [['return', 0.5, 0], ['retry', 0.5, 0], ['return', 2, 1]] as const) {
+    const { db, home } = alikeStops('1', three(SAME))
+    logged(db, { plan: 7, kind, actor: 'coo', outcome: 'pass', message: kind, pointer: null, run: null },
+      new Date(now.getTime() - hours * 3_600_000).toISOString())
+    const filed: string[] = []
+    const fired: string[] = []
+    await cooLite(db, home, row(db), wokeStub(REPLY.ask_ceo ?? '', fired), now, () => undefined, filing(filed))
+    expect(filed).toHaveLength(files)
+    expect(fired).toHaveLength(1 - files)
+  }
+})
+
 test('the store takes blocked_on_ceo, refuses an unknown reason',() => {
   const { db } = wokeSeeded()
   const insert = (reason: string) => decided(db, { plan: 7, step: 4, wait_reason: reason as Decision['wait_reason'], verb: 'ask_coo',

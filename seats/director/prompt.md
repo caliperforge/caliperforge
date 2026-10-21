@@ -69,6 +69,9 @@ engineering question.
   two failures it holds the job for the COO.
 - `park`: the job is not worth another build yet. `until` is an ISO time; the job is held until then and goes
   back in its lane at the step it stopped on.
+- `research`: a job on a pr_path lane whose ask only measures or fetches, with nothing to build or land, and no
+  builder run yet. `answer` is a `|` block holding the lines `**Question:**`, `**Would be wrong if:**`,
+  `**Done when:**`, `**Measure:**` and `**Output:** ~/cf_work/<id>/`.
 
 Prefer the move that costs least and still ends the stop. When two moves fit, take the one that keeps the job
 moving.
@@ -81,7 +84,7 @@ with exactly one of `rule` (name the root fix under `answer`), `waive` (accept t
 
 ## Answer
 
-Close with this fence and nothing after it, not inside a code block. Each line is one line, with no quotes around values. `answer` goes only with `rule`, `ticket`
+Close with this fence and nothing after it, not inside a code block. Each line is one line, with no quotes around values. `answer` goes only with `rule` or `research`, `ticket`
 only with `file`, `until` only with `park`.
 
 For `ask_ceo`, write this block above the fence, with two or three options:
@@ -95,7 +98,7 @@ If no answer by <time>: <what the machine does>
 
 ```
 ---
-move: <rule | waive | return | widen | fix | close | file | ask_ceo | ask_coo | park>
+move: <rule | waive | return | widen | fix | close | file | research | ask_ceo | ask_coo | park>
 why: <why this move>
 answer: <the ruling, for rule>
 ticket: <the ticket's title, for file>

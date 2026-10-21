@@ -27,6 +27,7 @@ import { released } from './fixer.ts'
 import { prose } from './prose.ts'
 import { builderWork, outOfReach, WAITING } from './reach.ts'
 import { WIRE, type Wire } from './push.ts'
+import { rerouted } from './reroute.ts'
 import { accepted, edits, fenced, opened, owned, rule } from './rule.ts'
 import { recorded } from './seat.ts'
 import { parted } from './split.ts'
@@ -37,13 +38,13 @@ import { widen } from './widen.ts'
 import { afresh, maybe, planDir, put } from './workspace.ts'
 
 const Said = z.object({
-  move: z.enum(['rule', 'waive', 'close', 'file', 'ask_ceo', 'ask_coo', 'return', 'fix', 'widen', 'park']),
+  move: z.enum(['rule', 'waive', 'close', 'file', 'ask_ceo', 'ask_coo', 'return', 'fix', 'widen', 'park', 'research']),
   why: z.string().trim().min(1),
   answer: z.string().trim().min(1).optional(),
   ticket: z.string().trim().min(1).transform((t) => t.slice(0, 140)).optional(),
   class: z.coerce.number().int().min(1).max(4).optional(),
   until: z.string().trim().min(1).refine((t) => !Number.isNaN(Date.parse(t))).optional(),
-}).strict().refine((m) => m.move !== 'rule' || m.answer !== undefined, { path: ['answer'] })
+}).strict().refine((m) => (m.move !== 'rule' && m.move !== 'research') || m.answer !== undefined, { path: ['answer'] })
   .refine((m) => m.move !== 'file' || m.ticket !== undefined, { path: ['ticket'] })
   .refine((m) => m.move !== 'ask_ceo' || m.class !== undefined, { path: ['class'] })
   .refine((m) => m.move !== 'park' || m.until !== undefined, { path: ['until'] })
@@ -259,6 +260,7 @@ const UNAPPLIED: Record<Exclude<Move['move'], 'ask_ceo' | 'ask_coo'>, string> = 
   fix: 'the fixer did not make the fix',
   widen: 'the pipe is already 8 wide',
   park: 'the plan was not held',
+  research: 'the job is built, not a pr_path job of ours, or its answer lacks a research line',
 }
 
 function waiving(db: Db, root: string, plan: PlanRow, why: string): boolean {
@@ -302,6 +304,8 @@ function apply(db: Db, root: string, plan: PlanRow, m: Move, wire: Wire, now: Da
     case 'park':
       hold(db, root, plan.id, m.why, now, null, new Date(m.until ?? ''))
       return true
+    case 'research':
+      return rerouted(db, root, plan, m.answer ?? '')
     case 'fix':
     case 'ask_ceo':
     case 'ask_coo': return false

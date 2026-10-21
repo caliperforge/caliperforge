@@ -21,9 +21,10 @@ import { cap, width } from '../../store/lanes.ts'
 import { held as holding, take } from '../../store/leases.ts'
 import { busy } from '../../store/now.ts'
 import { addPart } from '../../store/parts.ts'
-import { allPlans, held, needsCeo, pipeOf, planById, planRows, putPlan, requeue, retry } from '../../store/plans.ts'
+import { allPlans, held, needsCeo, pipeNamed, pipeOf, planById, planRows, putPlan, requeue, retry } from '../../store/plans.ts'
 import { clear, fingerprint, overBudget } from '../../store/refusals.ts'
 import { runTokens } from '../../store/runs.ts'
+import { question } from '../../templates/research.ts'
 import { split } from '../brief.ts'
 import { byHand, cooLite, read, woke } from '../director.ts'
 import { mechanisms } from '../drift.ts'
@@ -865,6 +866,45 @@ test('D3: a question the ticket leaves open stays with the coo', async () => {
   expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'coo' })
   expect(heldBy(db, 'coo').map((p) => p.id)).toContain(7)
   expect(maybe(home, 7, 'ask.md')).toBe('the ask\n')
+})
+
+const LINES = `**Question:** how long does a tick take?
+**Would be wrong if:** a tick logs no time
+**Done when:** the time is measured
+**Measure:** time one tick
+**Output:** ~/cf_work/7/`
+const researched = (lines: string) => `---\nmove: research\nwhy: the ask only measures\nanswer: |\n${lines.replace(/^/gm, '  ')}\n---\n`
+const UNBUILT = 'DELETE FROM runs; UPDATE plans SET step = 1 WHERE id = 7'
+
+test('D1 D2: research moves an unbuilt plan to the research lane', async () => {
+  const { db, home } = seeded('1')
+  db.exec(UNBUILT)
+  await run(db, home, researched(LINES))
+  expect(plan7(db)).toMatchObject({ template: 'research', lane: 'research', pipe_id: pipeNamed(db, 'research')?.id, step: 0, waits_on: null })
+  expect(maybe(home, 7, 'ask.md')).toBe(`the ask\n\n## Answer from the director (${new Date().toISOString().slice(0, 10)})\n\n${LINES}\n`)
+  expect([maybe(home, 7, 'refusal.prev.md'), maybe(home, 7, 'refusal.md')]).toEqual(['step 3 rails refused\n', null])
+  expect(question(home, row(db)).outcome).toBe('pass')
+  expect(told(db)).toEqual([{ actor: 'director', outcome: 'pass', message: 'research: the ask only measures' }])
+})
+
+test.each([
+  { name: 'a built plan', sql: 'UPDATE plans SET step = 1 WHERE id = 7', lines: LINES },
+  { name: 'a research plan', sql: `${UNBUILT}; UPDATE plans SET template = 'research' WHERE id = 7`, lines: LINES },
+  { name: 'no Measure line', sql: UNBUILT, lines: LINES.replace(/^\*\*Measure:\*\*.*\n/m, '') },
+  ...['~/cf_work', '~/cf_work/../x', '/tmp/x'].map((out) => ({ name: `Output ${out}`, sql: UNBUILT, lines: LINES.replace('~/cf_work/7/', out) })),
+  { name: 'no Done when line', sql: UNBUILT, lines: LINES.replace(/^\*\*Done when:\*\*.*\n/m, '') },
+])('D3: research on $name is held by the coo', async ({ sql, lines }) => {
+  const { db, home } = seeded('1')
+  db.exec(sql)
+  const { template, lane, step } = row(db)
+  await run(db, home, researched(lines))
+  expect(plan7(db)).toMatchObject({ template, lane, step, state: 'blocked_on_ceo', held_by: 'coo' })
+  expect(maybe(home, 7, 'ask.md')).toBe('the ask\n')
+  expect(told(db).map((t) => t.message)).toEqual([expect.stringMatching(/^research did not apply, /)])
+})
+
+test('D4: research without an answer is not read', () => {
+  expect(read('---\nmove: research\nwhy: the ask only measures\n---\n')).toBeNull()
 })
 
 test.each(FAULTS.slice(0, 4))('D2: an ask_ceo with %s is asked again', async (reason, block) => {

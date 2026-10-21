@@ -36,6 +36,17 @@ colon, as in `**Cold start:**`. A line ending in a colon is a label; one with te
 and `## Still unknown` carry no `[source:n]`: what no entry supports, an inference or a thing looked for and not
 found, goes there or is cut.
 
+## Needs a build
+
+When the ask needs the network, a file written outside `.cf/measure/`, or a script this checkout does not hold,
+answer nothing else and close with this fence instead of `sources:`:
+
+```
+---
+outcome: needs_build
+---
+```
+
 ## Closing fence
 
 `commit:` is the sha under `# HEAD` in the input. Close with this fence and nothing after it:

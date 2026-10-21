@@ -216,6 +216,17 @@ test('gather D4: a reply with no fence is refused', async () => {
   expect(maybe(w.root, 1, 'answer.md')).toBeNull()
 })
 
+test('gather D4: a refused reply keeps the last answer', async () => {
+  const w = researching()
+  question(w.root, plan(w.db, 1))
+  put(w.root, 1, 'answer.md', 'The cap was 2 [source:1].')
+  put(w.root, 1, 'sources.json', SOURCES)
+  expect((await gathered(w, 'The cap is 3.'))[0]).toMatchObject({ outcome: 'refuse', spans: ['researcher.fence'] })
+  expect(maybe(w.root, 1, 'answer.md')).toBe('The cap was 2 [source:1].')
+  expect(maybe(w.root, 1, 'sources.json')).toBe(SOURCES)
+  expect((await gathered(w))[1]).toContain('# Your last answer — repair what the ask and the refusal name, keep the rest\n\nThe cap was 2 [source:1].')
+})
+
 test('D4: two fence faults go round, one twice stops', async () => {
   const w = researching()
   await tick(w.db, w.root, seats(FOUND))
@@ -242,6 +253,20 @@ test('gather D6: the prompt carries refusal.md when present', async () => {
   expect((await gathered(w))[1]).not.toContain('# Refused')
   put(w.root, 1, 'refusal.md', 'step 1 gather refused: line 5')
   expect((await gathered(w))[1]).toContain('# Refused — fix what this names\n\nstep 1 gather refused: line 5')
+})
+
+test('gather D1: the prompt carries the last answer and sources', async () => {
+  const w = researching()
+  question(w.root, plan(w.db, 1))
+  expect((await gathered(w))[1]).not.toContain('# Your last answer')
+  put(w.root, 1, 'answer.md', ANSWER)
+  put(w.root, 1, 'sources.json', SOURCES)
+  expect(maybe(w.root, 1, 'refusal.md')).toBeNull()
+  const last = `# Your last answer — repair what the ask and the refusal name, keep the rest\n\n${ANSWER}\n\n# Its sources, [source:n] counting from 1\n\n${SOURCES}`
+  expect((await gathered(w))[1]).toContain(last)
+  put(w.root, 1, 'refusal.md', 'step 3 review refused')
+  const prompt = (await gathered(w))[1]
+  expect(prompt.indexOf(last)).toBeGreaterThan(prompt.indexOf('# Refused — fix what this names\n\nstep 3 review refused'))
 })
 
 test('D4: a senior_review refuse sends the plan back to gather', async () => {

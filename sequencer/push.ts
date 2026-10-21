@@ -2,8 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { parseDocument } from 'yaml'
-import { z } from 'zod'
+import { isMap, isScalar, isSeq, parseDocument } from 'yaml'
 import { actions, closeIssue, commentIssue, dispatch, fileIssue, gh, installed, issueComments, forward, openPr, rehearse, review, unrehearse, type IssueComment, type Read } from '../cli/gh.ts'
 import { CARD } from '../cli/queue.ts'
 import { alerter } from '../cli/watch.ts'
@@ -265,18 +264,19 @@ export function workflows(dir: string): boolean {
   return existsSync(at) && readdirSync(at).filter((f) => /\.ya?ml$/.test(f)).some((f) => triggered(readFileSync(join(at, f), 'utf8')))
 }
 
-const On = z.object({ on: z.union([z.string(), z.array(z.string()), z.record(z.string(), z.unknown())]) })
-
 const TRIGGERS = ['push', 'pull_request']
 
 /** A file that does not parse, or whose `on` has no known shape, counts as one that runs. */
 function triggered(text: string): boolean {
   const doc = parseDocument(text)
-  const found = On.safeParse(doc.errors.length === 0 ? doc.toJS() : null)
-  if (!found.success) return true
-  const { on } = found.data
-  const events = typeof on === 'string' ? [on] : Array.isArray(on) ? on : Object.keys(on)
-  return events.some((e) => TRIGGERS.includes(e))
+  return (doc.errors.length === 0 ? events(doc.get('on', true)) : null)?.some((e) => TRIGGERS.includes(e)) ?? true
+}
+
+/** Read off the nodes: `toJS` throws on an unresolved alias, too many aliases or a bad merge key, none of them in `errors`. */
+function events(on: unknown): string[] | null {
+  const nodes: unknown[] | null = isScalar(on) ? [on] : isSeq(on) ? on.items : isMap(on) ? on.items.map((p) => p.key) : null
+  const names = nodes?.map((n) => (isScalar(n) ? n.value : null))
+  return names?.every((n): n is string => typeof n === 'string') ? names : null
 }
 
 /**

@@ -422,6 +422,13 @@
   where: "kind = 'check' AND outcome = 'refuse' AND message LIKE 'quote not on the page%'"
   gap: 7d
   expected: 0
+- name: research_moving_ref
+  switch: { key: science.dir }
+  table: refusals
+  column: at
+  where: "span = 'research.moving_ref'"
+  gap: 7d
+  expected: 0
 - name: ruling_unmoved
   table: verdicts
   column: id

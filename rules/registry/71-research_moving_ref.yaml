@@ -1,0 +1,7 @@
+- name: research_moving_ref
+  switch: { key: science.dir }
+  table: refusals
+  column: at
+  where: "span = 'research.moving_ref'"
+  gap: 7d
+  expected: 0

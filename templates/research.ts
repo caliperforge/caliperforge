@@ -93,7 +93,7 @@ export function check(root: string, plan: PlanRow): Promise<Outcome> {
   return against(root, plan, get(root, plan.id, 'answer.md'), JSON.parse(get(root, plan.id, 'sources.json')) as Source[])
 }
 
-/** Step 2's check on a draft reply, writing nothing. */
+
 export function drafted(root: string, plan: PlanRow, reply: string): Promise<Outcome> {
   const got = vetted(reply)
   return 'outcome' in got ? Promise.resolve(got) : against(root, plan, reply.replace(FENCE, '').trim(), got.sources)

@@ -75,7 +75,7 @@ VALUES
   ('rules/registry/64-director_design_waive.yaml', 'card', 'rules/registry/64-director_design_waive.yaml', 'b2629898820d0fe3399e60361ac2bc513f68ea59ffd3e33de9d0480689dd870d', '2026-10-18'),
   ('rules/registry/64-gpg_lock_hold.yaml', 'card', 'rules/registry/64-gpg_lock_hold.yaml', '0cbeabe3ed2f736000a326417e918a1c38b2c2b4fb6ee96727edd5322bbf66ad', '2026-10-18'),
   ('rules/registry/65-bench_no_properties.yaml', 'card', 'rules/registry/65-bench_no_properties.yaml', '3e4564871cccfba0e4f48af5759d21c0ffe449b0aa91c585625fd123dcc2565e', '2026-10-18'),
-  ('rules/registry/66-fork_actions_off.yaml', 'card', 'rules/registry/66-fork_actions_off.yaml', '67fd4a16ca30578ea629362e5f2f3750c0616b430691bbb2822c53770f1bda56', '2026-10-19'),
+  ('rules/registry/66-fork_actions_off.yaml', 'card', 'rules/registry/66-fork_actions_off.yaml', '9097afa159083a39077544de40abd550422c920b11e79d9658b2a9fa7cee28e6', '2026-10-19'),
   ('rules/registry/67-director_repeat_return.yaml', 'card', 'rules/registry/67-director_repeat_return.yaml', 'dce8630ea9e16d25f73aaf76b789e95d02e11731bd907e2bbbe1c0aa1edf4435', '2026-10-19'),
   ('rules/registry/67-fork_unrun.yaml', 'card', 'rules/registry/67-fork_unrun.yaml', '41cf1f8fe8d5eb37b78819b32430679d08f9c4afac7d58ed9ec82b66d79039c6', '2026-10-19'),
   ('rules/registry/68-refile_carries.yaml', 'card', 'rules/registry/68-refile_carries.yaml', 'e6c9e48d0ed14aed118be49f557da3693fb31b403a3fc3c42319929a98a9ef23', '2026-10-19'),

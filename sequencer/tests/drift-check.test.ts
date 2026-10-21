@@ -2,6 +2,7 @@ import { expect, test } from 'vitest'
 import { logged, runAt } from '../../store/events.ts'
 import { addRule } from '../../store/index.ts'
 import { ratchetRules } from '../../store/lanes.ts'
+import { planById, putPlan } from '../../store/plans.ts'
 import { drift, Entry } from '../drift.ts'
 import { COO, db, event, NOW, REGISTRY } from './drifting.ts'
 
@@ -83,13 +84,23 @@ test('D5 a builder hand-off with no step-2 build is seen', () => {
   expect(drift(d, REGISTRY, NOW).map((r) => r.name)).not.toContain('rule_to_build')
 })
 
-test('D6 a fork with Actions off is seen', () => {
-  const d = db()
+test('D1-D6 a fork left with Actions off a day is seen', () => {
   const off = REGISTRY.filter((e) => e.name === 'fork_actions_off')
-  expect(drift(d, off, NOW)).toEqual([])
-  logged(d, { plan: 1, kind: 'ready', actor: 'tick', outcome: 'escalate', pointer: null, run: null,
-    message: 'caliperforge/widget has Actions off for its workflows: enable them at x, then cf return 1' }, '2026-10-02 10:00:00')
-  expect(drift(d, off, NOW).map((r) => r.state)).toEqual(['seen'])
+  const states = (after: [number, string, string] | null, at: string | null = '2026-10-02 10:00:00', now = NOW): string[] => {
+    const d = db()
+    putPlan(d, { id: 2, pipe_id: planById(d, 1).pipe_id, target_id: null, template: 'comms', state: 'queued', queued_at: '2026-10-01', step: 0, retries: 0 })
+    logged(d, { plan: 1, kind: 'ready', actor: 'tick', outcome: 'escalate', pointer: null, run: null,
+      message: 'caliperforge/widget has Actions off for its workflows: enable them at x, then cf return 1' }, at)
+    if (after !== null) logged(d, { plan: after[0], kind: after[1], actor: 'ceo', outcome: 'pass', message: 'm', pointer: null, run: null }, after[2])
+    return drift(d, off, now).map((r) => r.state)
+  }
+  expect(drift(db(), off, NOW)).toEqual([])
+  expect(states([1, 'return', '2026-10-02 12:00:00'])).toEqual([])
+  expect(states([1, 'ready', '2026-10-02 12:00:00'])).toEqual([])
+  expect(states(null)).toEqual(['seen'])
+  expect(states([1, 'return', '2026-10-04 10:00:00'])).toEqual(['seen'])
+  expect(states([2, 'return', '2026-10-02 12:00:00'])).toEqual(['seen'])
+  expect(states(null, null, new Date())).toEqual([])
 })
 
 test('D3 D4 a repeat ci.unrun on one sha is seen', () => {

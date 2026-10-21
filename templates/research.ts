@@ -209,8 +209,10 @@ export async function gather(db: Db, root: string, plan: PlanRow, step: Step, pr
   const runs = out !== undefined ? 'fetcher' : measure ? 'measurer' : null
   const seat = runs === null ? step : { ...step, seat: runs, runs }
   if (out !== undefined) mkdirSync(out, { recursive: true })
+  const last = maybe(root, plan.id, 'answer.md')
   const input = `# Ask\n\n${askOf(root, plan)}\n\n# question.json\n\n${get(root, plan.id, 'question.json')}${
-    maybe(root, plan.id, 'refusal.md')?.replace(/^/, '\n\n# Refused — fix what this names\n\n') ?? ''}${measure ? `\n\n# HEAD\n\n${headSha(srcDir(root, plan.id))}` : ''}${
+    maybe(root, plan.id, 'refusal.md')?.replace(/^/, '\n\n# Refused — fix what this names\n\n') ?? ''}${last === null ? '' : `\n\n# Your last answer — repair what the ask and the refusal name, keep the rest\n\n${
+    last}\n\n# Its sources, [source:n] counting from 1\n\n${get(root, plan.id, 'sources.json')}`}${measure ? `\n\n# HEAD\n\n${headSha(srcDir(root, plan.id))}` : ''}${
     out === undefined ? '' : `\n\n# Output\n\n${out}`}`
   const fired = await ran(db, root, plan, seat, provider, input, false, true, out)
   if (fired.ended !== 'completed') return { outcome: 'refuse', spans: [fired.stop_reason ?? 'seat.exit'], note: `${seat.runs} ${fired.ended}` }

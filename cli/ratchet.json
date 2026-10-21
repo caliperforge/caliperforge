@@ -15,8 +15,7 @@
     "lines": 228
   },
   "cf.ts": {
-    "lines": 179,
-    "silent-catch": 2
+    "lines": 179
   },
   "digests.ts": {
     "lines": 59
@@ -72,7 +71,6 @@
     "lines": 8
   },
   "watch.ts": {
-    "lines": 128,
-    "silent-catch": 2
+    "lines": 128
   }
 }

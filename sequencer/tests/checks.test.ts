@@ -723,6 +723,33 @@ test('#700 D3 a capped failure is a blip on checks:cap', () => {
   expect(outcome.note).not.toContain('exit')
 })
 
+const SUITE = { ...ONE, 'a.test.ts': '', 'b.test.ts': '' }
+
+const PAINTED = { ...KILLED, output: ' \u001b[32m✓\u001b[39m a.test.ts \u001b[2m(1 test)\u001b[22m\n' }
+
+test('1550 D1 a capped whole suite names its unfinished files', () => {
+  expect(checks(tree(SUITE), OWN, replies(PAINTED).run)).toMatchObject({ capped: true, unfinished: ['b.test.ts'] })
+})
+
+test('1550 D2 the capped note lists the unfinished files', () => {
+  const failed = checks(tree(SUITE), OWN, replies(PAINTED).run)
+  expect(failed && capped(failed)).toMatchObject({ blip: true, spans: ['checks:cap'],
+    note: 'npm run test timed out: killed at the cap with no test red; unfinished: b.test.ts' })
+})
+
+test('1550 D3 a capped related run lists no unfinished files', () => {
+  const failed = checks(tree(SUITE), OWN, replies(PAINTED).run, ['a.ts'])
+  expect(failed).toMatchObject({ capped: true })
+  expect(failed).not.toHaveProperty('unfinished')
+  expect(failed && capped(failed).note).toBe('npm exec -- vitest related --run a.ts timed out: killed at the cap with no test red')
+})
+
+test('1550 D6 a capped suite that printed every file adds nothing', () => {
+  const failed = checks(tree(SUITE), OWN, replies({ ...KILLED, output: ' ✓ a.test.ts (1 test)\n ✓ b.test.ts (1 test)\n' }).run)
+  expect(failed).toMatchObject({ capped: true, unfinished: [] })
+  expect(failed && capped(failed).note).toBe('npm run test timed out: killed at the cap with no test red')
+})
+
 test('1279 D1 npm given a cap kills a longer run as capped', () => {
   const dir = mkdtempSync(join(tmpdir(), 'cf-cap-'))
   expect(npm(['-e', 'setTimeout(() => {}, 5000)'], dir, 'node', 200)).toMatchObject({ ok: false, capped: true })
@@ -785,7 +812,7 @@ test('1524 D1 npm run test alone runs under the long cap', () => {
     return { ok: true, output: '' }
   }
   checks(tree(THREE), OWN, run)
-  expect(caps).toEqual([undefined, undefined, 1500000])
+  expect(caps).toEqual([undefined, undefined, 2700000])
 })
 
 test('1394 D4 a pytest capped under minutes is still capped', () => {

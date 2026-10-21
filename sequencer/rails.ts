@@ -152,7 +152,8 @@ export function faulted(db: Db, root: string, plan: PlanRow, fault: string): Out
 
 /** A run the cap killed before any test went red is the gate's blip: it stays on step 3 until `BLIPS` in a row. */
 export function capped(failed: Failure): Outcome {
-  return { outcome: 'refuse', blip: true, spans: ['checks:cap'], note: `${failed.command} timed out: killed at the cap with no test red`, message: failed.output }
+  const left = failed.unfinished ?? []
+  return { outcome: 'refuse', blip: true, spans: ['checks:cap'], note: `${failed.command} timed out: killed at the cap with no test red${left.length === 0 ? '' : `; unfinished: ${left.join(', ')}`}`, message: failed.output }
 }
 
 /** A check that names no red test but a failed network line is the host's blip, as `capped()` is. */

@@ -344,7 +344,8 @@ const ITEM = { what: 'a build was refused', lesson: 'name the test', fix: 'named
 
 const items = (...titles: string[]): Record<string, string>[] => titles.map((title) => ({ title, ...ITEM }))
 
-const listing = (list: Record<string, string>[]): string => `The day.\n\n---\nitems: ${JSON.stringify(list)}\n---\n`
+const listing = (list: Record<string, string>[], head = 'headline: A day of fixes\nsummary: Three builds landed.\n'): string =>
+  `The day.\n\n---\n${head}items: ${JSON.stringify(list)}\n---\n`
 
 /** The text_review seat answers `review`; every other seat answers `writer`. */
 const seated = (writer: string, review = verdict('wording.reply.md')): Provider => ({
@@ -403,6 +404,8 @@ test.each([
   { why: '6 items', reply: listing(items('a', 'b', 'c', 'd', 'e', 'f')) },
   { why: 'a status of done', reply: listing([...items('a', 'b'), { title: 'c', ...ITEM, status: 'done' }]) },
   { why: 'only the ship fence', reply: fixture('reply.md') },
+  { why: 'no headline', reply: listing(items('a', 'b', 'c'), 'summary: Three builds landed.\n') },
+  { why: 'no summary', reply: listing(items('a', 'b', 'c'), 'headline: A day of fixes\n') },
 ])('dailyRefuses D2: a daily reply of $why refuses on writer.fence and writes no items.json', async ({ reply }) => {
   const w = posting('daily 2026-09-27')
   expect(await draft(w.db, w.root, plan(w.db, 1), mapOf('comms').at(1), seated(reply)))
@@ -426,7 +429,8 @@ test('dailyMerges D5: a title already in the day is added once', async () => {
   expect(desk(w.db, w.root, plan(w.db, 1))).toEqual({ outcome: 'pass', spans: [], note: '2 item(s) added to 2026-09-27' })
   expect(learned(w)).toEqual([{ date: '2026-09-27', numbers: '[1]', sources: '["x.ts:1"]',
     items: JSON.stringify([{ title: 'a lesson' }, ...items('b', 'c')]) }])
-  expect(posts(w.db)).toMatchObject([{ id: 1, kind: 'daily', dest: 'site', status: 'proof', work_date: '2026-09-27' }])
+  expect(posts(w.db)).toMatchObject([{ id: 1, kind: 'daily', dest: 'site', status: 'proof', work_date: '2026-09-27',
+    title: 'A day of fixes', dek: 'Three builds landed.' }])
   const [row] = posts(w.db)
   expect(row?.proof_at).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/)
   expect(row?.body).toContain('## b')
@@ -998,8 +1002,8 @@ test('publish D1 D2 D3 D6: a site row is written and committed', () => {
 <h1>${title}</h1>
 <p class="dateline">Work completed 2026-10-01 · written up 2026-10-02.</p>\n<h2>Why</h2>\n<p>One &lt;b&gt; line.</p>\n<p>Two.</p>
 </article></body></html>`)
-  expect(readFileSync(join(dir, 'blog/index.html'), 'utf8')).toBe(`<main>\n<article class="cf-blog-card">\n<h2><a href="${name}.html">${title}</a></h2>
-<p class="dateline">2026-10-02</p>\n<p>d</p>\n</article>\n<article class="cf-blog-card">\n<h2><a href="05_x.html">Old</a></h2>\n</article>\n</main>`)
+  expect(readFileSync(join(dir, 'blog/index.html'), 'utf8')).toBe(`<main>\n<article class="cf-blog-card">\n<p class="dateline">1 October 2026</p>
+<h2><a href="${name}.html">${title}</a></h2>\n<p class="summary">d</p>\n</article>\n<article class="cf-blog-card">\n<h2><a href="05_x.html">Old</a></h2>\n</article>\n</main>`)
   expect(postOf(w.db, 2)).toMatchObject({ status: 'approved', url: `https://caliperforge.com/blog/${name}.html`, published_at: null })
   expect([git(dir, ['log', '-1', '--format=%s']).trim(), ahead(dir)]).toEqual([`post: ${name}`, '1'])
   expect(all(w.root)).toMatchObject([{ kind: 'signoff', plan: 1, step: 5, name: 'publish', note: 'site post ready: run `cf site push`' }])

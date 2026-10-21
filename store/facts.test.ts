@@ -80,12 +80,31 @@ const DIFF = [
 
 const run = (n: number): string => `https://github.com/o/r/actions/runs/${String(n)}`
 
-test('D1 D2 diffFacts counts each line once, blanks nowhere', () => {
+test('D4 diffFacts rows sum to the diff, blanks included', () => {
   expect(diffFacts(DIFF)).toEqual([
     { name: 'files', ok: true, says: '4 files' },
-    { name: 'code', ok: true, says: '+2 -2' },
+    { name: 'code', ok: true, says: '+4 -2' },
     { name: 'tests', ok: true, says: '+1 -2' },
     { name: 'comments', ok: true, says: '+2 -1 (.ts +2 -0, .py +0 -1)' },
+    { name: 'docs', ok: true, says: '+0 -0' },
+  ])
+})
+
+const SHORTHAND = [
+  '--- a/input/fsh/x.fsh', '+++ b/input/fsh/x.fsh', '@@ -1,3 +1,3 @@',
+  '-* subject = Reference(Patient)', '-* subject = Reference(Patient)', '-* subject = Reference(Patient)',
+  '+* subject = Reference(PatientEuLab)', '+* subject = Reference(PatientEuLab)', '+* subject = Reference(PatientEuLab)',
+  '--- a/CHANGELOG.md', '+++ b/CHANGELOG.md', '@@ -1 +1,3 @@', ' # Changes', '+* fixed subject', '+',
+  '--- a/src/a.js', '+++ b/src/a.js', '@@ -1 +1,4 @@', ' x()', '+/**', '+ * doc', '+ */',
+].join('\n')
+
+test('D1 D2 D3 D4 fsh is code, md is docs, a js block comments', () => {
+  expect(diffFacts(SHORTHAND)).toEqual([
+    { name: 'files', ok: true, says: '3 files' },
+    { name: 'code', ok: true, says: '+3 -3' },
+    { name: 'tests', ok: true, says: '+0 -0' },
+    { name: 'comments', ok: true, says: '+3 -0 (.js +3 -0)' },
+    { name: 'docs', ok: true, says: '+2 -0' },
   ])
 })
 

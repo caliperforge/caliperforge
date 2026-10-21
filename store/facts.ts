@@ -18,7 +18,7 @@ import { graded } from './signals.ts'
 
 export interface Fact { name: string; ok: boolean; says: string }
 
-interface Counted { kind: 'code' | 'tests' | 'comments'; ext: string; side: 'added' | 'removed' }
+interface Counted { kind: 'code' | 'tests' | 'comments' | 'docs'; ext: string; side: 'added' | 'removed' }
 
 const REASONS: [string, RegExp][] = [
   ['signing', /\b(?:sign|signed|signatures?|dco|gpg|verified)\b/i],
@@ -65,17 +65,19 @@ export function diffFacts(diff: string): Fact[] {
     { name: 'code', ok: true, says: signed(of('code')) },
     { name: 'tests', ok: true, says: signed(of('tests')) },
     { name: 'comments', ok: true, says: groups.length === 0 ? signed(comments) : `${signed(comments)} (${groups.join(', ')})` },
+    { name: 'docs', ok: true, says: signed(of('docs')) },
   ]
 }
 
 function counted(file: FileDiff): Counted[] {
   return (['added', 'removed'] as const).flatMap((side) => file[side]
-    .filter((l) => l.text.trim() !== '')
     .map((l) => ({ kind: kindOf(file.path, l.text), ext: extname(file.path), side })))
 }
 
 function kindOf(path: string, text: string): Counted['kind'] {
-  if (conventionsOf(path).comment.test(text)) return 'comments'
+  if (/\.md$/i.test(path)) return 'docs'
+  const { source, comment } = conventionsOf(path)
+  if (source.test(path) && comment.test(text)) return 'comments'
   return TEST_FILE.test(path) ? 'tests' : 'code'
 }
 

@@ -9,6 +9,7 @@
 
 A weekly post is in the CEO's voice: first person, as the one operator who runs the machine, for Substack.
 Its closing fence says `dest: substack`; a weekly reply with any other dest, or no `## Script`, is refused.
+Its `dek` is two sentences and is the summary on the site's weekly arc card: a number the site's `data/*.json` lacks makes the publish step refuse it.
 
 Build it from the story interview in the packet's `story`. Write it the way the CEO edits: each line of
 `comms/voice-notes.md` is one edit, `- <date> <id> <field>: cut|shortened|lengthened|reworded (<n> → <m> chars)`.
@@ -36,7 +37,7 @@ Now a weakened test is refused before anyone reviews it, and the refusal shows t
 
 ---
 dest: substack
-dek: A green run told me the work was done; the fence knew better
+dek: A green run told me the work was done. The fence knew better, and refused the test the builder had loosened.
 sources: [{"claim": "the builder loosened a test until it passed", "ref": "fence.md:3"}, {"claim": "the refusal named the test line", "ref": "fence.md:9"}]
 checks: [{"label": "no line names a person, an issue or an outside login", "ok": true}, {"label": "every number is in a source claim", "ok": true}]
 learnings: a weakened test changes the ask, so the fence refuses it before review
@@ -63,7 +64,7 @@ The first essay after that, I barely touched.
 
 ---
 dest: substack
-dek: My edits kept cutting the same lines, so each kind of post got its own rules
+dek: My edits kept cutting the same lines in every draft. So each kind of post got its own rules and worked examples.
 sources: [{"claim": "the drafts read as ledgers", "ref": "writer.md:2"}, {"claim": "the first essay after the change was kept almost whole", "ref": "writer.md:11"}]
 checks: [{"label": "no line names a person, an issue or an outside login", "ok": true}, {"label": "the post quotes no private mail", "ok": true}]
 learnings: the CEO's cuts show where a prompt writes the wrong craft

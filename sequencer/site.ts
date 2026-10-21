@@ -12,6 +12,7 @@ import { titled } from '../templates/comms.ts'
 import type { Step } from '../templates/pr-path.ts'
 import type { Outcome } from './kind.ts'
 import { firstLine } from './unpolled.ts'
+import { shift } from './weekly.ts'
 import { abortMerge, git, unmerged } from './workspace.ts'
 
 const TEMPLATE = '05_jito-tippayment-and-ai-invariant-suggester-live.html'
@@ -19,18 +20,19 @@ const TEMPLATE = '05_jito-tippayment-and-ai-invariant-suggester-live.html'
 const escaped = (text: string): string =>
   text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;')
 
-export function render(siteDir: string, post: { title: string; dek: string; body: string; work_date: string; written_date: string }): string {
+export function render(siteDir: string, post: { title: string; dek: string; body: string; work_date: string; written_date: string; kind?: string }): string {
   const blog = join(siteDir, 'blog')
   const page = readFileSync(join(blog, TEMPLATE), 'utf8')
   const index = readFileSync(join(blog, 'index.html'), 'utf8')
   const end = ['</article>', '</main>', '</body>'].map((tag) => page.indexOf(tag)).find((at) => at !== -1)
   if (end === undefined) throw new Error(`${TEMPLATE} has no </article>, </main> or </body>`)
-  const at = index.indexOf('<article class="cf-blog-card"')
-  if (at === -1) throw new Error('blog/index.html has no cf-blog-card')
+  if (!index.includes('<article class="cf-blog-card"')) throw new Error('blog/index.html has no cf-blog-card')
   const title = escaped(post.title)
   const dek = escaped(post.dek)
   const n = Math.max(0, ...readdirSync(blog).flatMap((f) => /^(\d{2})_/.exec(f)?.[1] ?? []).map(Number)) + 1
   const name = `${String(n).padStart(2, '0')}_${post.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}`
+  const arced = post.kind === 'weekly' ? arc(siteDir, index, post, name, title, dek) : index
+  const at = arced.indexOf('<article class="cf-blog-card"')
   const body = post.body.split(/\n\s*\n/).map((block) => block.trim()).filter((block) => block !== '')
     .map((block) => (block.startsWith('## ') ? `<h2>${escaped(block.slice(3))}</h2>` : `<p>${escaped(block)}</p>`))
   writeFileSync(join(blog, `${name}.html`), [page.slice(0, page.indexOf('<h1')).replace(/<title>[\s\S]*?<\/title>/, () => `<title>${title}</title>`)
@@ -39,8 +41,29 @@ export function render(siteDir: string, post: { title: string; dek: string; body
     `<h1>${title}</h1>`, `<p class="dateline">Work completed ${post.work_date} · written up ${post.written_date}.</p>`, ...body, page.slice(end)].join('\n'))
   const day = new Date(`${post.work_date}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })
   const card = `<article class="cf-blog-card">\n<p class="dateline">${day}</p>\n<h2><a href="${name}.html">${title}</a></h2>\n<p class="summary">${dek}</p>\n</article>\n`
-  writeFileSync(join(blog, 'index.html'), index.slice(0, at) + card + index.slice(at))
+  writeFileSync(join(blog, 'index.html'), arced.slice(0, at) + card + arced.slice(at))
   return name
+}
+
+function arc(siteDir: string, index: string, post: { dek: string; work_date: string }, name: string, title: string, dek: string): string {
+  const s = index.indexOf('<section class="log-arcs"')
+  if (s === -1) throw new Error('blog/index.html has no section.log-arcs')
+  const open = index.indexOf('>', s) + 1
+  const close = index.indexOf('</section>', open)
+  if (close === -1) throw new Error('blog/index.html has no </section> after section.log-arcs')
+  const first = index.indexOf('<article class="cf-arc-card"', open)
+  const at = first !== -1 && first < close ? first : close
+  const data = join(siteDir, 'data')
+  const known = new Set(readdirSync(data).filter((f) => f.endsWith('.json')).flatMap((f) => readFileSync(join(data, f), 'utf8').match(/\d+/g) ?? []))
+  const stray = post.dek.match(/\d+/g)?.find((d) => !known.has(d))
+  if (stray !== undefined) throw new Error(`weekly summary holds ${stray}, not in data/*.json`)
+  const date = (day: string, parts: Intl.DateTimeFormatOptions): string =>
+    new Date(`${day}T00:00:00Z`).toLocaleDateString('en-GB', { ...parts, timeZone: 'UTC' })
+  const sunday = shift(post.work_date, 6)
+  const monday = date(post.work_date, sunday.startsWith(post.work_date.slice(0, 7)) ? { day: 'numeric' } : { day: 'numeric', month: 'long' })
+  const dateline = `Weekly arc · ${monday} to ${date(sunday, { day: 'numeric', month: 'long', year: 'numeric' })}`
+  const card = `<article class="cf-arc-card">\n<p class="dateline">${dateline}</p>\n<h2><a href="${name}.html">${title}</a></h2>\n<p class="summary">${dek}</p>\n</article>\n`
+  return index.slice(0, at) + card + index.slice(at)
 }
 
 export function commit(siteDir: string, name: string): void {

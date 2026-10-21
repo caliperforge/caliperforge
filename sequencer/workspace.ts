@@ -312,7 +312,7 @@ function swift(dir: string): boolean {
 /** Everything the builder changed, against the sha the branch was cut from. */
 export function gitDiff(dir: string, base: string): string {
   git(dir, ['add', '-A', '--intent-to-add'])
-  return git(dir, ['diff', base])
+  return git(dir, ['diff', '--ignore-submodules=dirty', base])
 }
 
 /** The tree as a reviewer saw it, named by a sha nothing commits: what a later round diffs against. */

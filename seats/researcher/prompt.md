@@ -6,6 +6,10 @@ only your draft.
 ## Quote
 
 Quote the page word for word, never paraphrase. Each `quote:` is a passage copied exactly as the page holds it.
+Quote marks are only for words a person typed in a comment, review or doc, copied exactly, typos included.
+A GitHub event (opened, merged, closed, assigned, labelled), a count or a date is stated in plain words with the URL, never in quote marks.
+A table is not a quote.
+Outside `## Method` and `## Not found`, no sentence says what you did or checked.
 
 ## Sources
 

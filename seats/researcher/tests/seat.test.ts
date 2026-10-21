@@ -39,6 +39,9 @@ test('D3: the prompt holds the four rules and the sources fence', () => {
     '## Citing', '[source:n]', '**Pashov Audit Group:**', 'Every sentence carries `[source:n]`', '## Not found', '### Not found',
     'outcome: needs_run', 'needs code run, measured or timed today', 'Pin every GitHub URL to a commit sha, never main/master/HEAD.',
     'cf research check .cf/draft.md',
+    'Quote marks are only for words a person typed in a comment, review or doc, copied exactly, typos included.',
+    '(opened, merged, closed, assigned, labelled)', 'stated in plain words with the URL, never in quote marks',
+    'A table is not a quote.', 'no sentence says what you did or checked',
   ]) expect(prompt).toContain(part)
 })
 

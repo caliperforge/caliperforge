@@ -17,6 +17,11 @@ test('D7: the prompt opens with its name and closes on a run fence', () => {
   for (const part of ['## Citing', '## Quote', '- run:', 'command:', 'commit:', 'quote:', 'claim:', '# HEAD', '.cf/measure/']) expect(prompt).toContain(part)
 })
 
+test('D3: the prompt answers needs_build for network or writes', () => {
+  const prompt = seat(root, 'measurer').prompt
+  for (const part of ['## Needs a build', 'outcome: needs_build', 'network', 'outside `.cf/measure/`']) expect(prompt).toContain(part)
+})
+
 test('D7: the digests hold and measurer is a card row', () => {
   expect(check(root, '2026-10-20')).toEqual([])
   expect(rules(root).find((r) => r.id === 'measurer')).toMatchObject({ kind: 'card', path: 'rules/roster/measurer.yaml' })

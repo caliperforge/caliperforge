@@ -92,6 +92,20 @@ test('D6 a fork with Actions off is seen', () => {
   expect(drift(d, off, NOW).map((r) => r.state)).toEqual(['seen'])
 })
 
+test('D3 D4 a repeat ci.unrun on one sha is seen', () => {
+  const d = db()
+  const unrun = REGISTRY.filter((e) => e.name === 'fork_unrun')
+  const log = (pointer: string | null): number =>
+    logged(d, { plan: 1, kind: 'ci.unrun', actor: 'tick', outcome: 'pass', message: 'm', pointer, run: null }, '2026-10-02 10:00:00')
+  log(null)
+  log(null)
+  log('a')
+  log('b')
+  expect(drift(d, unrun, NOW)).toEqual([])
+  log('a')
+  expect(drift(d, unrun, NOW).map((r) => r.state)).toEqual(['seen'])
+})
+
 test('D2 a second swallowed before a back is seen', () => {
   const d = db()
   const once = REGISTRY.filter((e) => e.name === 'capture_swallowed_once')

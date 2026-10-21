@@ -33,6 +33,8 @@ import type { Fired } from '../kind.ts'
 import { hold, unhold } from '../hold.ts'
 import { forkCi, rehearsalBranch, type Wire } from '../push.ts'
 import { UNRUN } from '../triggers.ts'
+import { drift } from '../drift.ts'
+import { REGISTRY } from './drifting.ts'
 import { MANUAL, SCHEDULED, TEX } from './bases.ts'
 import { started } from '../signals.ts'
 import { closed } from '../unpolled.ts'
@@ -1044,6 +1046,24 @@ test('D3 a tree no fork workflow runs on passes on tick 1', async () => {
   expect(maybe(w.root, 1, 'ci.json')).toBe('[]\n')
   expect(maybe(w.root, 1, 'ci.unrun')).toBe(head(srcDir(w.root, 1), ['rev-parse', 'HEAD']))
   expect(eventsOf(w.db, 1, 'ci.unrun')).toEqual([{ actor: 'tick', outcome: 'pass', message: UNRUN }])
+})
+
+test('D1 D2 ci.unrun is written once per head sha', async () => {
+  const w = await atCi(TEX, false)
+  const dir = srcDir(w.root, 1)
+  const lap = (): unknown => forkCi(w.db, w.root, plan(w.db, 1), 'acme/widget', watched([], w.root, 1, () => '[]'))
+  lap()
+  lap()
+  const first = head(dir, ['rev-parse', 'HEAD'])
+  expect(eventsOf(w.db, 1, 'ci.unrun')).toHaveLength(1)
+  expect(maybe(w.root, 1, 'ci.unrun')).toBe(first)
+  writeFileSync(join(dir, 'next.tex'), 'next\n')
+  head(dir, ['add', 'next.tex'])
+  head(dir, ['commit', '-qm', 'next'])
+  lap()
+  expect(eventsOf(w.db, 1, 'ci.unrun')).toHaveLength(2)
+  expect(maybe(w.root, 1, 'ci.unrun')).not.toBe(first)
+  expect(drift(w.db, REGISTRY.filter((e) => e.name === 'fork_unrun'), new Date())).toEqual([])
 })
 
 test('D6 a scheduled-only tree runs no workflows, undispatched', async () => {

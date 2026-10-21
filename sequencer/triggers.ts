@@ -81,6 +81,7 @@ export function started(root: string, plan: number, files: string[], tip: string
 }
 
 export function unrun(db: Db, root: string, plan: number, sha: string): void {
+  if (maybe(root, plan, 'ci.unrun') === sha) return
   put(root, plan, 'ci.unrun', sha)
-  logged(db, { plan, kind: 'ci.unrun', actor: 'tick', outcome: 'pass', message: UNRUN, pointer: null, run: null })
+  logged(db, { plan, kind: 'ci.unrun', actor: 'tick', outcome: 'pass', message: UNRUN, pointer: sha, run: null })
 }

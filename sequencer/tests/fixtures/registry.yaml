@@ -400,7 +400,7 @@
 - name: fork_unrun
   table: events
   column: at
-  where: "kind = 'ci.unrun'"
+  where: "kind = 'ci.unrun' AND EXISTS (SELECT 1 FROM events u WHERE u.plan = events.plan AND u.kind = 'ci.unrun' AND u.pointer = events.pointer AND u.id < events.id)"
   gap: 7d
   expected: 0
 - name: refile_carries

@@ -33,7 +33,7 @@ test('a workflow whose on is an unresolved alias is waited on', () => {
   expect(workflows(tree({ 'weekly.yml': SCHEDULE, 'alias.yml': 'on: *missing\n' }))).toBe(true)
 })
 
-const HELLO =['src/hello.ts', 'greptile.json']
+const HELLO = ['src/hello.ts', 'greptile.json']
 
 test('D1 no push or pull request filter takes the branch', () => {
   expect(fired(tree({ 'ci.yml': 'on:\n  push:\n    branches: [main]\n' }), 'x-next', HELLO)).toBe(false)

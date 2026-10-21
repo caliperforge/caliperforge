@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { cpSync, existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import type { HookInput } from '@anthropic-ai/claude-agent-sdk'
@@ -451,7 +451,32 @@ test('score D1 kernel scores the suite at the fuzz-bench HEAD', () => {
   expect(scores(db)).toEqual([{ plan: 1, target: 'euler-earn-m01', generator: 'fizz', ...SCORE, x_ray: null }])
   expect(existsSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/FizzTest.sol'))).toBe(true)
   expect(existsSync(join(srcDir(root, 1), 'test/fizz/FizzTest.sol'))).toBe(true)
+  expect(existsSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/medusa.json'))).toBe(false)
   expect(JSON.parse(get(root, 1, 'score.json'))).toEqual({ fuzz_bench: sha, ...SCORE, x_ray: null })
+})
+
+test('D1 D4 a root medusa.json is copied with its paths moved', () => {
+  const { root, db } = scoring(`import os, sys\nos.path.exists(os.path.join(sys.argv[2], 'medusa.json')) or sys.exit('no medusa.json')\n${
+    writes('.jsonl', PAIRS)}`)
+  const config = JSON.stringify({ fuzzing: { corpusDirectory: 'test/fizz/fizz_data/corpus_medusa', targetContracts: ['FuzzTester'] },
+    compilation: { platform: 'crytic-compile', platformConfig: { target: '.' } } })
+  writeFileSync(join(srcDir(root, 1), 'medusa.json'), config)
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  expect(scores(db)).toEqual([{ plan: 1, target: 'euler-earn-m01', generator: 'fizz', ...SCORE, x_ray: null }])
+  expect(JSON.parse(readFileSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/medusa.json'), 'utf8'))).toEqual({
+    fuzzing: { corpusDirectory: 'fizz_data/corpus_medusa', targetContracts: ['FuzzTester'] },
+    compilation: { platform: 'crytic-compile', platformConfig: { target: '../..' } } })
+  expect(readFileSync(join(srcDir(root, 1), 'medusa.json'), 'utf8')).toBe(config)
+  expect(existsSync(join(srcDir(root, 1), 'test/fizz/medusa.json'))).toBe(false)
+})
+
+test('D3 a root medusa.json that does not parse is refused', () => {
+  const { root, db } = scoring()
+  writeFileSync(join(srcDir(root, 1), 'medusa.json'), '{')
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'refuse', spans: ['bench.medusa_json'] })
+  expect(existsSync(join(planDir(root, 1), 'fuzz-bench'))).toBe(false)
+  expect(scores(db)).toEqual([])
+  expect(maybe(root, 1, 'score.json')).toBeNull()
 })
 
 test('D1 scripts that make no results folder are scored', () => {

@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { decision } from './ask.ts'
 import { logged } from './events.ts'
 import type { Db } from './index.ts'
+import { slot } from './parked.ts'
 
 export const PipeRow = z.object({
   id: z.int(),
@@ -228,9 +229,8 @@ export function held(db: Db, plan: number, by: Holder, why: string): void {
   db.prepare('UPDATE plans SET held_by = ?, held_why = ? WHERE id = ?').run(by, why, plan)
 }
 
-const ENTER = `CASE WHEN state = 'running' OR (SELECT count(*) FROM plans o WHERE o.pipe_id = plans.pipe_id
-  AND o.id <> plans.id AND o.state = 'running') < (SELECT max_concurrent FROM pipes WHERE pipes.id = plans.pipe_id)
-  THEN 'running' ELSE 'queued' END`
+const ENTER = `CASE WHEN state = 'running' OR (SELECT count(*) FROM plans o WHERE o.pipe_id = plans.pipe_id AND o.id <> plans.id
+  AND ${slot('o.')}) < (SELECT max_concurrent FROM pipes WHERE pipes.id = plans.pipe_id) THEN 'running' ELSE 'queued' END`
 
 export function advance(db: Db, plan: PlanRow, step: number): void {
   db.prepare(`UPDATE plans SET step = ?, state = ${ENTER} WHERE id = ?`).run(step, plan.id)

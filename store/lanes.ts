@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { logged } from './events.ts'
 import type { Db } from './index.ts'
 import { held } from './leases.ts'
+import { slot } from './parked.ts'
 import { clock, openPipes, PipeRow, planById, type PlanRow } from './plans.ts'
 
 const LANE_LABEL = /^lane:([a-z]+)$/
@@ -154,8 +155,7 @@ export function dial(db: Db, n: number, at: string): void {
 
 export function lanes(db: Db, hhmm: string, now: Date = new Date()): LaneState {
   const wide = cap(db)
-  const running = db.prepare("SELECT id FROM plans WHERE state = 'running'").all() as { id: number }[]
-  const live = new Set([...running.map((p) => p.id), ...held(db, now).map((l) => l.plan)])
+  const live = new Set([...db.prepare(`SELECT id FROM plans WHERE ${slot()}`).pluck().all() as number[], ...held(db, now).map((l) => l.plan)])
   const open = openPipes(db, hhmm).slice(0, wide.cap).reduce((sum, p) => sum + p.max_concurrent, 0)
   return { ...wide, live: live.size, open }
 }

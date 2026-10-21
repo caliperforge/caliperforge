@@ -1,7 +1,8 @@
 import type { Db } from './index.ts'
+import { slot } from './parked.ts'
 
 export function running(db: Db, pipe: number): number {
-  return (db.prepare("SELECT count(*) AS n FROM plans WHERE pipe_id = ? AND state = 'running'").get(pipe) as { n: number }).n
+  return (db.prepare(`SELECT count(*) AS n FROM plans WHERE pipe_id = ? AND ${slot()}`).get(pipe) as { n: number }).n
 }
 
 export function pushed(db: Db, plan: number): boolean {

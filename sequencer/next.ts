@@ -1,6 +1,7 @@
 import type { Db } from '../store/index.ts'
 import { held, type Lease } from '../store/leases.ts'
 import { cap, hhmm } from '../store/lanes.ts'
+import { PARKED } from '../store/parked.ts'
 import { live, openPipes, planById, underCap, type PipeRow, type PlanRow, type Wait } from '../store/plans.ts'
 import { overBudget } from '../store/refusals.ts'
 import type { Step } from '../templates/pr-path.ts'
@@ -18,7 +19,7 @@ interface Offer {
 /** The templates a step map exists for. A lane whose map is unwritten is on with nothing to step. */
 const MAPPED = new Set(['pr_path', 'comms', 'research', 'bench', 'account'])
 
-const ON_CEO = new Set<Wait>(['target_approval', 'ceo_batch'])
+const OFF = new Set<Wait>(PARKED)
 
 export function route(db: Db, plan: PlanRow, now: Date, mine: Lease | null = null): Route {
   if (others(db, now, mine).some((l) => l.plan === plan.id)) return { wait: 'leased', on: null }
@@ -62,7 +63,7 @@ export function working(offers: Offer[], wide: number): Offer[] {
  * The plans this pipe steps this tick, in priority order. A queued plan that is
  * blocked holds no slot; a running one holds the slot it already took, and so does
  * one another tick has leased, which this tick offers to nobody; a running one that
- * waits on an approval, or is held at the rails on a plan in its own pipe, and is not leased gives its slot up.
+ * waits on a person or the outside world, or is held at the rails on a plan in its own pipe, and is not leased gives its slot up.
  */
 export function picks(db: Db, pipe: PipeRow, now: Date = new Date(), mine: Lease | null = null): PlanRow[] {
   const leases = new Set(others(db, now, mine).map((l) => l.plan))
@@ -71,7 +72,7 @@ export function picks(db: Db, pipe: PipeRow, now: Date = new Date(), mine: Lease
     const stop = blocked(db, p)
     const on = p.state === 'running' ? heldOn(db, p) : null
     return leases.has(p.id) || (!mapped.some((o) => o.id === on)
-      && (stop === null || (p.state === 'running' && overlapping(db, p) === null && !ON_CEO.has(stop))))
+      && (stop === null || (p.state === 'running' && overlapping(db, p) === null && !OFF.has(stop))))
   })
   return underCap(pipe, free, leases)
     .filter((p) => !leases.has(p.id) && (p.state !== 'running' || blocked(db, p) === null))

@@ -15,7 +15,7 @@ import { addPipe, openPipes, putPlan, waiting, type PlanRow } from '../../store/
 import { refusalAt } from '../../store/refusals.ts'
 import { recordListing } from '../../store/tickets.ts'
 import { receipt, slots } from '../../store/ticks.ts'
-import { flow, reported } from '../flow.ts'
+import { flow, reported, slack } from '../flow.ts'
 import { all } from '../inbox.ts'
 
 const schema = join(import.meta.dirname, '../../schema')
@@ -158,6 +158,14 @@ test('a part whose After: issue is still open is not listed', () => {
   part(db, 2, 10, 9)
   ticket(db, 9, 'open')
   expect(flow(db, root, now)).toEqual([])
+})
+
+test('slack: a plan on ceo_batch leaves its slot free', () => {
+  const db = piped()
+  width(db, 1, 1)
+  hours(db, 1, '00:00', '23:59')
+  waiting(db, [{ plan: plan(db, 1, 'running'), why: 'ceo_batch' }])
+  expect(slack(db, now).find((s) => s.pipe.id === 1)?.free).toBe(1)
 })
 
 test('393b D6: a negative free count fails its CHECK', () => {

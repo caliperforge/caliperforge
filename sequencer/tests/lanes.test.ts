@@ -1,11 +1,13 @@
 import { expect, test } from 'vitest'
 import type { Packet } from '../../providers/kind.ts'
-import { laneLine } from '../../cli/brief.ts'
+import { laneLine, waitLine } from '../../cli/brief.ts'
+import { waits } from '../../store/brief.ts'
 import { release } from '../../store/holds.ts'
+import { take } from '../../store/leases.ts'
 import type { Read } from '../../cli/gh.ts'
 import { newestRun } from '../../store/events.ts'
 import { amend, cap, dial, forget, lanes, name, priority, record, set, templatePriority, usage, width, windows, type Reading } from '../../store/lanes.ts'
-import { addPipe, addPlan, allPlans, live, pipeNamed, retry, rewind } from '../../store/plans.ts'
+import { addPipe, addPlan, advance, allPlans, live, pipeNamed, retry, rewind } from '../../store/plans.ts'
 import { WHY } from '../../store/refusals.ts'
 import { tick } from '../index.ts'
 import { picks } from '../next.ts'
@@ -80,6 +82,48 @@ test('a running plan keeps its slot; a blocked one takes none',async () => {
   approve(w.db, w.target)
   expect(picks(w.db, { ...w.pipe, max_concurrent: 2 }).map((p) => p.id)).toEqual([1, 2])
   expect(picks(w.db, { ...w.pipe, max_concurrent: 1 }).map((p) => p.id)).toEqual([1, 2])
+})
+
+test('D1: a ceo_batch plan is not live unless leased', () => {
+  const w = world()
+  amend(w.db, 1, { step: 7, state: 'running', wait_reason: 'ceo_batch' })
+  expect(lanes(w.db, '09:00').live).toBe(0)
+  take(w.db, 1)
+  expect(lanes(w.db, '09:00').live).toBe(1)
+  queued(w, 2, 1, 1)
+  amend(w.db, 2, { state: 'running' })
+  expect(lanes(w.db, '09:00').live).toBe(2)
+})
+
+test('D2: a plan at the sign-off frees its slot for a queued one', async () => {
+  const w = world()
+  width(w.db, 1, 1)
+  amend(w.db, 1, { step: 7, state: 'running', wait_reason: 'ceo_batch' })
+  queued(w, 2, 1, 1)
+  expect(picks(w.db, { ...w.pipe, max_concurrent: 1 }).map((p) => p.id)).toEqual([2])
+  expect((await tick(w.db, w.root, stub(CARRIED))).map((f) => f.plan)).toEqual([2])
+  expect(plan(w.db, 2).state).toBe('running')
+  expect(waitLine(waits(w.db))).toContain('ceo_batch 1')
+  expect(lanes(w.db, '09:00').live).toBe(1)
+})
+
+test('D3: a running plan with no wait keeps a stepped plan queued', () => {
+  const w = world()
+  width(w.db, 1, 1)
+  amend(w.db, 1, { state: 'running' })
+  queued(w, 2, 1, 1)
+  advance(w.db, plan(w.db, 2), 1)
+  expect(plan(w.db, 2)).toMatchObject({ step: 1, state: 'queued' })
+})
+
+test('D4: a running plan on ready_proof gives up its slot', () => {
+  const w = world()
+  amend(w.db, 1, { step: 6, state: 'running' })
+  queued(w, 2, 1, 1)
+  const one = { ...w.pipe, max_concurrent: 1 }
+  expect(picks(w.db, one).map((p) => p.id)).toEqual([2])
+  amend(w.db, 1, { step: 0 })
+  expect(picks(w.db, one).map((p) => p.id)).toEqual([1])
 })
 
 test('a plan already under way queues ahead of one not yet started', () => {

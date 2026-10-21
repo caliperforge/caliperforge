@@ -403,7 +403,8 @@ const measuring = (reply: string, seen: (packet: Packet) => void): Provider => (
   fire: async (packet) => {
     seen(packet)
     const measurer = /# (?:measurer|fetcher)\n/.test(packet.prompt)
-    const fired = await stub('', 0, measurer ? reply : PASS).fire(packet)
+    const text = measurer ? reply : PASS
+    const fired = await stub(text, 0, text).fire(packet)
     if (measurer) writeFileSync(packet.transcript, TRANSCRIPT)
     return fired
   },

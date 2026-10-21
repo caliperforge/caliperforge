@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { parse as yaml } from 'yaml'
+import { parseDocument } from 'yaml'
 import { z } from 'zod'
 import { actions, closeIssue, commentIssue, dispatch, fileIssue, gh, installed, issueComments, forward, openPr, rehearse, review, unrehearse, type IssueComment, type Read } from '../cli/gh.ts'
 import { CARD } from '../cli/queue.ts'
@@ -30,7 +30,7 @@ import { based, moved, retire } from './retire.ts'
 import type { Outcome } from './kind.ts'
 import { merging } from './merging.ts'
 import { prBody, prTitle } from './pr.ts'
-import { cloned, conflicted, diffOf, fetchMain, FORK, MAIN, maybe, planDir, put, repoName, srcDir, titleOf } from './workspace.ts'
+import { cloned, conflicted, diffOf, fetchMain, FORK, MAIN, maybe, planDir, put, repoName, srcDir, titleOf, tried } from './workspace.ts'
 import { assembly, homeOf } from './home.ts'
 import { clean, subjectOf } from './shape.ts'
 import { size } from './size.ts'
@@ -271,13 +271,8 @@ const TRIGGERS = ['push', 'pull_request']
 
 /** A file that does not parse, or whose `on` has no known shape, counts as one that runs. */
 function triggered(text: string): boolean {
-  let doc: unknown
-  try {
-    doc = yaml(text)
-  } catch {
-    return true
-  }
-  const found = On.safeParse(doc)
+  const doc = parseDocument(text)
+  const found = On.safeParse(doc.errors.length === 0 ? doc.toJS() : null)
   if (!found.success) return true
   const { on } = found.data
   const events = typeof on === 'string' ? [on] : Array.isArray(on) ? on : Object.keys(on)
@@ -403,9 +398,7 @@ export function land(db: Db, root: string, plan: PlanRow, approval: number, wire
 function merged(dir: string, branch: string): string | null {
   fetchMain(dir)
   git(dir, ['checkout', '-B', 'main', MAIN])
-  try {
-    git(dir, ['merge', '--ff-only', branch])
-  } catch {
+  if (tried(dir, ['merge', '--ff-only', branch]) === null) {
     git(dir, ['checkout', branch])
     return null
   }
@@ -537,12 +530,7 @@ function onFork(dir: string, branch: string): boolean {
 }
 
 function ancestor(dir: string, older: string, newer: string): boolean {
-  try {
-    git(dir, ['merge-base', '--is-ancestor', older, newer])
-    return true
-  } catch {
-    return false
-  }
+  return tried(dir, ['merge-base', '--is-ancestor', older, newer]) !== null
 }
 
 /** The rehearsal branch saved for the plan, else `<branch>-next`. */
@@ -587,12 +575,7 @@ export function follow(root: string, plan: number, message: string): string {
 
 /** Whether we know the head the pull request shows; not knowing it, nothing already committed is folded. */
 function published(dir: string, branch: string, shown: string): boolean {
-  try {
-    git(dir, ['fetch', '--no-tags', 'origin', `+refs/heads/${branch}:${shown}`])
-    return true
-  } catch {
-    return false
-  }
+  return tried(dir, ['fetch', '--no-tags', 'origin', `+refs/heads/${branch}:${shown}`]) !== null
 }
 
 /** A commit as the host's git identity, signed where the host signs; nothing staged is no commit. */
@@ -619,12 +602,7 @@ export function commitMessage(root: string, plan: PlanRow): string | null {
 
 /** The host's own identity where it has one; a bare runner (CI, a test) commits as the machine. */
 function identity(dir: string): string[] {
-  try {
-    git(dir, ['config', 'user.email'])
-    return []
-  } catch {
-    return ['-c', 'user.email=cf@caliperforge.dev', '-c', 'user.name=caliperforge']
-  }
+  return tried(dir, ['config', 'user.email']) === null ? ['-c', 'user.email=cf@caliperforge.dev', '-c', 'user.name=caliperforge'] : []
 }
 
 /** `commit-tree` ignores `commit.gpgsign` and signs only when given `-S` (git-commit-tree(1)). */

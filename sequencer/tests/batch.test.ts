@@ -588,6 +588,12 @@ test('a plan with no checkout is asked about no rehearsal', async () => {
   expect(heads).toEqual(['widget-12-a1-next'])
 })
 
+test('D5 a rehearsal list that throws is logged on its plan', async () => {
+  const w = await pushed()
+  capture(w.db, forked, w.root, () => { throw new Error('HTTP 502\nbody') })
+  expect(ofKind(w.db, 'swallowed')).toEqual([{ plan: 1, kind: 'swallowed', actor: 'rehearsal', outcome: 'pass', message: 'HTTP 502' }])
+})
+
 test('an unreadable pr does not stop the pipes behind it', async () => {
   const w = await pushed()
   expect(capture(w.db, () => { throw new Error('gh: could not resolve host') })).toEqual([])

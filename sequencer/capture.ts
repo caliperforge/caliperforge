@@ -62,8 +62,9 @@ export function intake(db: Db, root: string, read: Read): string[] {
     try {
       listed(db, root, repo, read, lines)
     } catch (error) {
-      lines.push(`${repo}: ${firstLine(error)}`)
-      continue
+      const line = `${repo}: ${firstLine(error)}`
+      logged(db, { plan: null, kind: 'swallowed', actor: 'intake', outcome: 'pass', message: line, pointer: null, run: null })
+      lines.push(line)
     }
   }
   return lines
@@ -113,7 +114,7 @@ function listed(db: Db, root: string, repo: string, read: Read, lines: string[])
   }
   const known = seen(db)
   const split = named(found.map((i) => i.title))
-  for (const i of kept.filter((k) => !known.has(k.url) && !split.has(k.number) && !parent(repo, k.number, read, lines))) {
+  for (const i of kept.filter((k) => !known.has(k.url) && !split.has(k.number) && !parent(db, repo, k.number, read, lines))) {
     if (!claimed(db, root, i) && !held(i.body, open, whole) && !waits(db, repo, i.labels)) add(db, root, `${repo}#${String(i.number)}`, 'intake', undefined, read)
   }
 }
@@ -134,11 +135,13 @@ const Summary = z.object({ sub_issues_summary: z.object({ total: z.int() }).opti
  * An issue with sub-issues is a parent: its parts are the jobs, and building it repeats them. An answer that
  * cannot be read counts as a parent this tick, and the next tick asks again.
  */
-function parent(repo: string, no: number, read: Read, lines: string[]): boolean {
+function parent(db: Db, repo: string, no: number, read: Read, lines: string[]): boolean {
   try {
     return (Summary.parse(read(['api', `repos/${repo}/issues/${String(no)}`])).sub_issues_summary?.total ?? 0) > 0
   } catch (error) {
-    lines.push(`${repo}#${String(no)}: ${firstLine(error)}`)
+    const line = `${repo}#${String(no)}: ${firstLine(error)}`
+    logged(db, { plan: null, kind: 'swallowed', actor: 'intake', outcome: 'pass', message: line, pointer: null, run: null })
+    lines.push(line)
     return true
   }
 }
@@ -250,14 +253,15 @@ function pushed(db: Db, root?: string, list?: Read): Pushed[] {
 
 /** `git rev-parse` in a `srcDir` with no `.git` climbs to the repository around `root` and reads its branch. */
 function rehearsals(db: Db, root: string, list: Read): Pushed[] {
-  return rehearsing(db).filter((p) => cloned(srcDir(root, p.plan))).flatMap((p) => opened(root, p.plan, `${FORK}/${repoName(p.repo)}`, list))
+  return rehearsing(db).filter((p) => cloned(srcDir(root, p.plan))).flatMap((p) => opened(db, root, p.plan, `${FORK}/${repoName(p.repo)}`, list))
 }
 
-function opened(root: string, plan: number, fork: string, list: Read): Pushed[] {
+function opened(db: Db, root: string, plan: number, fork: string, list: Read): Pushed[] {
   try {
     const no = rehearsal(fork, rehearsalBranch(root, plan), list)
     return no === null ? [] : [{ plan, repo: fork, evidence: `https://github.com/${fork}/pull/${String(no)}`, rehearsal: { root, list } }]
-  } catch {
+  } catch (error) {
+    logged(db, { plan, kind: 'swallowed', actor: 'rehearsal', outcome: 'pass', message: firstLine(error), pointer: null, run: null })
     return []
   }
 }

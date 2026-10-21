@@ -146,6 +146,7 @@ test('D4: a read that throws halts no plan and names the repo', () => {
   queue(db, 50)
   expect(intake(db, root, () => { throw new Error('gh is down') })).toEqual([`${REPO}: gh is down`])
   expect(states(db)).toEqual([{ origin: url(50), state: 'queued' }])
+  expect(ofKind(db, 'swallowed')).toEqual([{ plan: null, kind: 'swallowed', actor: 'intake', outcome: 'pass', message: `${REPO}: gh is down` }])
 })
 
 test('a throwing parent read skips and names that issue alone', () => {
@@ -158,6 +159,7 @@ test('a throwing parent read skips and names that issue alone', () => {
   expect(lines).toEqual([`${REPO}#40: HTTP 502`])
   expect(states(db)).toEqual([{ origin: url(41), state: 'queued' }])
   expect(allTickets(db).filter((t) => t.parent === 40)).toEqual([])
+  expect(ofKind(db, 'swallowed')).toEqual([{ plan: null, kind: 'swallowed', actor: 'intake', outcome: 'pass', message: `${REPO}#40: HTTP 502` }])
 })
 
 test('D4: a list exactly WINDOW long halts no plan', () => {

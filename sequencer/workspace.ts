@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { mkdirSync, existsSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
 import { run, type Run } from '../cli/gh.ts'
@@ -152,11 +152,7 @@ export function fetchMain(dir: string): string {
 
 /** The fork branch `checkout` wrote as the clone's `cf.base`; git throws on an unset key. */
 function assembled(dir: string): string | null {
-  try {
-    return git(dir, ['config', 'cf.base']).trim()
-  } catch {
-    return null
-  }
+  return tried(dir, ['config', 'cf.base'])?.trim() ?? null
 }
 
 /** Whether the branch was cut from a `main` that has since moved on without it. */
@@ -185,11 +181,7 @@ export function commitMerge(dir: string, paths: string[]): void {
  * before it touched a file there is no merge to abort and the throw is the proof the tree is already clean.
  */
 export function abortMerge(dir: string): void {
-  try {
-    git(dir, ['merge', '--abort'])
-  } catch {
-    return
-  }
+  tried(dir, ['merge', '--abort'])
 }
 
 export function unmerged(dir: string): string[] {
@@ -271,12 +263,7 @@ function paths(listed: string): string[] {
 
 /** a plan reopened after its checkout was reaped starts from the branch it already pushed, never a fresh cut of main. */
 function pushed(dir: string, branch: string): boolean {
-  try {
-    git(dir, ['rev-parse', '--verify', '--quiet', `refs/remotes/origin/${branch}`])
-    return true
-  } catch {
-    return false
-  }
+  return tried(dir, ['rev-parse', '--verify', '--quiet', `refs/remotes/origin/${branch}`]) !== null
 }
 
 /** `<folded> <signed>`: the one commit the first push sent, and the approved head it was folded from. */
@@ -336,12 +323,7 @@ export function snapshot(dir: string): string {
 
 /** a re-cut checkout no longer holds the tree a reviewer judged before it; asking git for it throws. */
 export function holds(dir: string, sha: string): boolean {
-  try {
-    git(dir, ['cat-file', '-e', sha])
-    return true
-  } catch {
-    return false
-  }
+  return tried(dir, ['cat-file', '-e', sha]) !== null
 }
 
 export function diffSince(dir: string, tree: string): string {
@@ -392,6 +374,12 @@ export function headSha(dir: string): string {
 
 export function git(cwd: string, args: string[]): string {
   return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024 })
+}
+
+export function tried(cwd: string, args: string[]): string | null {
+  const ran = spawnSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
+  if (ran.error !== undefined) throw ran.error
+  return ran.status === 0 ? ran.stdout : null
 }
 
 /** The builder's work, saved across a re-cut. Between the two checkouts it is the only copy of it. */

@@ -12,8 +12,7 @@
     "silent-catch": 1
   },
   "capture.ts": {
-    "lines": 262,
-    "silent-catch": 3
+    "lines": 267
   },
   "card.ts": {
     "lines": 54,
@@ -113,8 +112,7 @@
     "silent-catch": 1
   },
   "push.ts": {
-    "lines": 622,
-    "silent-catch": 5
+    "lines": 619
   },
   "rails.ts": {
     "lines": 235,
@@ -248,7 +246,6 @@
     "silent-catch": 1
   },
   "workspace.ts": {
-    "lines": 434,
-    "silent-catch": 4
+    "lines": 436
   }
 }

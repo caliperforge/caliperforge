@@ -17,7 +17,7 @@ import { cloned, holds, maybe, srcDir } from './workspace.ts'
  * The build names paths under `## Deleted` and the kernel removes them, before the rails read the
  * tree. A build removes only what it made, or a base file its brief lists: a path inside the fence -- the same
  * `refuse()` the seat's own tools run through -- or one git ignores, that is in the tree, not under `.git`, and
- * not on the base commit unless `## Files` names it exactly.
+ * not on the base commit unless the brief lists it exactly.
  */
 export function dropped(db: Db, root: string, plan: PlanRow, step: Step, handback: string): Outcome | null {
   const { paths, unread } = deletions(handback)

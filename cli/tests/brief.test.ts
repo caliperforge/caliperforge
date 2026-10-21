@@ -395,12 +395,27 @@ test('D1 one of two Greptile findings caught prints 50%', () => {
   expect(caughtSection(caught(db, root, now))).toBe(`${CAUGHT}  plan 1\tcaliperforge/widget#3\t1/2\t50%\n`)
 })
 
-test('D2 a plan with no blind tree prints 0%', () => {
+test('D1 a plan with no blind tree prints no blind review', () => {
   const { db, root, now } = blinds()
   plan(db, 2, 'running', null, 1)
   review(db, 2, 'caliperforge/widget', 'greptile-apps', '2026-10-01T09:00:00Z', 2, 2, HEAD)
   put(root, 2, `findings-${HEAD}.md`, '- G3 src/a.ts:1 x\n')
-  expect(caughtSection(caught(db, root, now))).toContain('  plan 2\tcaliperforge/widget#3\t0/1\t0%\n')
+  expect(caughtSection(caught(db, root, now))).toContain('  plan 2\tcaliperforge/widget#3\t-/1\tno blind review\n')
+})
+
+test('D2 a backticked blind row catches its path', () => {
+  const { db, root, now } = blinds()
+  put(root, 1, `findings-${TREE}.md`, '- B1 P3 `src/a.ts:4` — z\n')
+  expect(caughtSection(caught(db, root, now))).toBe(`${CAUGHT}  plan 1\tcaliperforge/widget#3\t1/2\t50%\n`)
+})
+
+test('D3 a blind tree with no findings file prints 0%', () => {
+  const { db, root, now } = blinds()
+  plan(db, 2, 'running', null, 1)
+  review(db, 2, 'caliperforge/widget', 'greptile-apps', '2026-10-01T09:00:00Z', 2, 2, HEAD)
+  put(root, 2, `findings-${HEAD}.md`, '- G3 src/a.ts:1 x\n- G4 src/b.ts:2 y\n')
+  keep(db, 2, 5, 'blind_review', { id: 0, outcome: 'pass', subject_digest: HASH, tree: 'd'.repeat(40) }, null)
+  expect(caughtSection(caught(db, root, now))).toContain('  plan 2\tcaliperforge/widget#3\t0/2\t0%\n')
 })
 
 test('D3 internal, other bot, other repo or stale prints none', () => {

@@ -169,9 +169,10 @@ test('a stall alerts once, and its end alerts once', () => {
   expect(existsSync(join(root, '.cf/watch.alerted'))).toBe(false)
 })
 
-test('a reporter whose store fails records that in the inbox', () => {
+test('a reporter whose store fails records it and rethrows', () => {
   const root = mkdtempSync(join(tmpdir(), 'cf-down-'))
-  down(() => { throw new Error('store gone') }, root, NOW, new Error('tick failed'), () => undefined)
+  expect(() => { down(() => { throw new Error('store gone') }, root, NOW, new Error('tick failed'), () => undefined) })
+    .toThrow('store gone')
   expect(unread(root)).toEqual([expect.objectContaining({ kind: 'crashed', note: 'store gone' })])
 })
 

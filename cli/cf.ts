@@ -16,6 +16,7 @@ import { late } from '../sequencer/signals.ts'
 import { signoffs } from '../sequencer/signoff.ts'
 import { byHand } from '../sequencer/director.ts'
 import { headSha, SIGNOFF } from '../sequencer/workspace.ts'
+import { logged } from '../store/events.ts'
 import { migrate, open as openDb, type Db } from '../store/index.ts'
 import { hhmm } from '../store/lanes.ts'
 import { openPipes, overlapWaits } from '../store/plans.ts'
@@ -172,7 +173,9 @@ function cards(handle: Db, now: Date): void {
     for (const s of signoffs(handle, root, desk(SIGNOFF), now)) out(`signoff\tplan ${String(s.plan)}\tcard ${String(s.card)}\t${s.did}\n`)
     late(handle, root, desk(SIGNOFF), now)
   } catch (error) {
-    process.stderr.write(`cf: sign-off cards: ${error instanceof Error ? error.message : String(error)}\n`)
+    const message = error instanceof Error ? error.message : String(error)
+    process.stderr.write(`cf: sign-off cards: ${message}\n`)
+    logged(handle, { plan: null, kind: 'signoff_unread', actor: 'cf', outcome: 'refuse', message, pointer: null, run: null })
   }
 }
 
@@ -195,6 +198,8 @@ function dryTick(handle: Db, now: Date): void {
 try {
   await cf.parseAsync()
 } catch (error) {
-  process.stderr.write(`cf: ${error instanceof Error ? error.message : String(error)}\n`)
+  const message = error instanceof Error ? error.message : String(error)
+  process.stderr.write(`cf: ${message}\n`)
   process.exitCode = 1
+  logged(db(), { plan: null, kind: 'cli_error', actor: 'cf', outcome: 'refuse', message, pointer: process.argv[2] ?? null, run: null })
 }

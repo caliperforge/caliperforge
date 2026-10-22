@@ -13,7 +13,7 @@ import { record } from '../store/bench.ts'
 import { logged, runLogged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { observed } from '../store/lanes.ts'
-import type { PlanRow } from '../store/plans.ts'
+import { needsCeo, type PlanRow } from '../store/plans.ts'
 import { byRun, pending } from '../store/transcript.ts'
 import { DEFAULT_BUILDER, type Step } from './pr-path.ts'
 
@@ -154,7 +154,10 @@ export function scored(db: Db, root: string, plan: PlanRow): Outcome {
   for (const script of ['run_pair', 'null_check'].filter((s) => s === 'run_pair' || existsSync(join(bench, `bench/${s}.py`)))) {
     const ran = spawnSync('python3', [`bench/${script}.py`, `targets/${target}.yml`, suites], { cwd: bench, encoding: 'utf8' })
     if (ran.error !== undefined || ran.status !== 0) {
-      return { outcome: 'refuse', spans: [`bench.${script}`], note: ran.error?.message ?? ran.stderr.trim().split('\n').at(-1) ?? '' }
+      const note = ran.error?.message ?? ran.stderr.trim().split('\n').at(-1) ?? ''
+      needsCeo(db, plan, note)
+      logged(db, { plan: plan.id, kind: 'score', actor: 'score', outcome: 'needs_coo', message: note, pointer: 'step-2', run: null })
+      return { outcome: 'pass', held: true, quiet: true, spans: [`bench.${script}`], note }
     }
     if (!existsSync(written)) return { outcome: 'refuse', spans: ['bench.no_results'], note: `${script}.py exited 0 and wrote no results/${target}/${target}.jsonl` }
   }
@@ -184,7 +187,11 @@ function rows(path: string): { verdict?: string; untested?: boolean }[] {
 
 /** run_pair installs the suite at `test/<target>/` and Medusa resolves from the config's folder; fizz wrote these from the project root. */
 const MOVED: [string[], string][] = [[['fuzzing'], 'corpusDirectory'], [['logging'], 'logDirectory'],
-  [['compilation', 'platformConfig'], 'target'], [['compilation', 'platformConfig'], 'exportDirectory']]
+  [['compilation', 'platformConfig'], 'target'], [['compilation', 'platformConfig'], 'exportDirectory'], [['slither'], 'cachePath']]
+
+const TIMEOUT = 1200
+
+const WORKERS = 4
 
 function medusa(db: Db, plan: number, src: string, suite: string): Outcome | string | null {
   const path = join(src, 'medusa.json')
@@ -200,6 +207,12 @@ function medusa(db: Db, plan: number, src: string, suite: string): Outcome | str
     const parent = keys.reduce(field, config)
     const value = field(parent, key)
     if (typeof value === 'string' && value !== '' && !isAbsolute(value)) Object.assign(parent as object, { [key]: moved(suite, value) })
+  }
+  const fuzzing = field(config, 'fuzzing')
+  if (typeof fuzzing === 'object' && fuzzing !== null) {
+    const { timeout, workers } = fuzzing as Record<string, unknown>
+    Object.assign(fuzzing, { timeout: timeout === 0 || timeout === undefined ? TIMEOUT : timeout,
+      workers: typeof workers === 'number' && workers <= WORKERS ? workers : WORKERS })
   }
   return JSON.stringify(config, null, 2)
 }

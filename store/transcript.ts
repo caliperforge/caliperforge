@@ -20,7 +20,9 @@ export function opened(path: string): string[] {
   }
 }
 
-const Message = z.object({ type: z.enum(['assistant', 'user']), message: z.object({ content: z.array(z.unknown()) }) })
+const Message = z.object({ type: z.enum(['assistant', 'user']), message: z.object({ content: z.array(z.unknown()) }), tool_use_result: z.unknown().optional() })
+
+const Saved = z.object({ stdout: z.string().optional(), persistedOutputPath: z.string().optional() })
 
 const Bash = z.object({ type: z.literal('tool_use'), id: z.string(), name: z.literal('Bash'), input: z.object({ command: z.string() }) })
 
@@ -32,21 +34,33 @@ const Result = z.object({
 
 const MOVED = /did not complete within its .* timeout and was moved to the background/
 
+const SAVED = /^Output too large .*Full output saved to: (.+)$/m
+
+function full(text: string, saved: z.infer<typeof Saved> | undefined): string {
+  if (!text.startsWith('<persisted-output>')) return text
+  const file = saved?.persistedOutputPath ?? SAVED.exec(text)?.[1]?.trim()
+  if (file !== undefined && existsSync(file)) return readFileSync(file, 'utf8')
+  return saved?.stdout ?? text
+}
+
 /** Each Bash call's command and the text its result holds, in order; none when it is missing or a line is not JSON. */
 export function outputs(path: string): { command: string; output: string }[] {
   if (!existsSync(path)) return []
   try {
-    const blocks = readFileSync(path, 'utf8').split('\n').filter((line) => line !== '')
-      .flatMap((line) => Message.safeParse(JSON.parse(line)).data?.message.content ?? [])
-    const commands = new Map(blocks.flatMap((block) => {
+    const blocks = readFileSync(path, 'utf8').split('\n').filter((line) => line !== '').flatMap((line) => {
+      const message = Message.safeParse(JSON.parse(line)).data
+      const saved = Saved.safeParse(message?.tool_use_result).data
+      return (message?.message.content ?? []).map((block) => ({ block, saved }))
+    })
+    const commands = new Map(blocks.flatMap(({ block }) => {
       const call = Bash.safeParse(block).data
       return call === undefined ? [] : [[call.id, call.input.command] as const]
     }))
-    return blocks.flatMap((block) => {
+    return blocks.flatMap(({ block, saved }) => {
       const result = Result.safeParse(block).data
       const command = result === undefined ? undefined : commands.get(result.tool_use_id)
       if (result === undefined || command === undefined) return []
-      return [{ command, output: typeof result.content === 'string' ? result.content : result.content.map((part) => part.text ?? '').join('\n') }]
+      return [{ command, output: full(typeof result.content === 'string' ? result.content : result.content.map((part) => part.text ?? '').join('\n'), saved) }]
     })
   } catch {
     return []

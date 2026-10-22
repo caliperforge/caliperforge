@@ -32,6 +32,27 @@ export function handOver(db: Db, plan: number, from: number, to: number = proces
     .get(to, plan, from) as Lease | undefined) ?? null
 }
 
+/** Restamps a live holder's lease, so the ceiling counts from its last beat; a dead holder's is left for `take`. */
+export function beat(db: Db, plan: number, now: Date = new Date()): void {
+  const row = rows(db).find((l) => l.plan === plan)
+  if (row === undefined || !alive(row.pid)) return
+  db.prepare('UPDATE leases SET taken_at = ? WHERE plan = ? AND pid = ?').run(now.toISOString(), plan, row.pid)
+}
+
+/** The forking tick beats its lap's lease this often: a lap's synchronous checks block its own loop. */
+export const BEAT = 60_000
+
+/** Beats the plan's lease while `work` runs, then frees it as `drop` does. */
+export async function holding<T>(db: Db, plan: number, work: () => Promise<T>): Promise<T> {
+  const timer = setInterval(() => { beat(db, plan) }, BEAT)
+  try {
+    return await work()
+  } finally {
+    clearInterval(timer)
+    drop(db, plan)
+  }
+}
+
 /** Frees a plan only while this process still holds it: a lease handed on is the other process's to free. */
 export function drop(db: Db, plan: number, pid: number = process.pid): void {
   if (db.prepare('DELETE FROM leases WHERE plan = ? AND pid = ?').run(plan, pid).changes > 0) untag(db, plan)

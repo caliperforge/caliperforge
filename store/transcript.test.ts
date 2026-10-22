@@ -6,7 +6,7 @@ import { fresh } from '../checks/sqlite.ts'
 import { planRow } from '../runner/index.ts'
 import { load } from '../runner/rules.ts'
 import type { Db } from './index.ts'
-import { backfill, unfinished } from './transcript.ts'
+import { backfill, outputs, unfinished } from './transcript.ts'
 
 const root = join(import.meta.dirname, '..')
 const loaded = (): Db => {
@@ -44,6 +44,32 @@ test('D3 null for a missing file, no moved result, no Bash match', () => {
   const unmatched = join(mkdtempSync(join(tmpdir(), 'cf-transcript-')), 'unmatched.transcript.jsonl')
   writeFileSync(unmatched, readFileSync(fixture('unfinished'), 'utf8').replace('"tool_use_id":"toolu_1"', '"tool_use_id":"toolu_2"'))
   expect([unfinished(fixture('absent')), unfinished(fixture('costed')), unfinished(unmatched)]).toEqual([null, null, null])
+})
+
+const PREVIEW = '<persisted-output>\nOutput too large (27.3KB). Full output saved to: /tmp/x\n\nPreview (first 2KB):\nfirst line\n...\n</persisted-output>'
+
+function transcript(content: string, saved?: object): string {
+  const path = join(mkdtempSync(join(tmpdir(), 'cf-transcript-')), 'run.transcript.jsonl')
+  const call = { type: 'assistant', message: { content: [{ type: 'tool_use', id: 'toolu_1', name: 'Bash', input: { command: 'node run.js' } }] } }
+  const result = { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content }] }, tool_use_result: saved }
+  writeFileSync(path, [call, result].map((line) => JSON.stringify(line)).join('\n'))
+  return path
+}
+
+test('a preview gives the full output saved at its path', () => {
+  const saved = join(mkdtempSync(join(tmpdir(), 'cf-persisted-')), 'toolu_1.txt')
+  writeFileSync(saved, `${'x'.repeat(4096)}\nquote past the preview\n`)
+  const output = outputs(transcript(PREVIEW, { stdout: 'first line', persistedOutputPath: saved }))[0]?.output
+  expect(output).toContain('quote past the preview')
+})
+
+test('a preview with no saved path gives its stdout', () => {
+  expect(outputs(fixture('persisted'))).toEqual([{ command: 'node run.js', output: 'first line\nlast line' }])
+})
+
+test('a plain result or a bare preview keeps its own text', () => {
+  expect(outputs(transcript('out\nerr: warn', { stdout: 'out' }))[0]?.output).toBe('out\nerr: warn')
+  expect(outputs(transcript(PREVIEW))[0]?.output).toBe(PREVIEW)
 })
 
 test('a missing, uncosted or cut transcript stays NULL', () => {

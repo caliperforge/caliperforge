@@ -19,7 +19,7 @@ it('D4 0112 keeps an 0111 row and admits untested NULL', () => {
   const plan = planRow(db)
   record(db, { plan, target: 'a', generator: 'fizz', catches: 1, false_positives: 0, untested: 0, tokens: 10, seconds: 1.5, x_ray: 1 })
   const before = db.prepare('SELECT * FROM bench_scorecard').all()
-  expect(migrate(db, join(root, 'schema'))).toEqual(['0112_bench_untested_nullable.sql'])
+  expect(migrate(db, join(root, 'schema'))).toEqual(['0112_bench_untested_nullable.sql', '0113_bench_score_busy.sql'])
   expect(db.prepare('SELECT * FROM bench_scorecard').all()).toEqual(before)
   const next = { plan: planRow(db), target: 'b', generator: 'fizz', catches: 0, false_positives: 0, untested: null, tokens: 0, seconds: 0, x_ray: null }
   record(db, next)

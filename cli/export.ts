@@ -10,7 +10,7 @@ import { gh, type Read } from './gh.ts'
 
 const SPLIT = 'input is input_tokens less cache_write_tokens, since input_tokens counts cache writes; cache_read, cache_write and output are their own columns; total is input_tokens + cache_read_tokens + output_tokens, the sum of the four.'
 
-const PROSE: Record<keyof typeof METRICS | 'outside_prs' | 'outside_pr_list',{ title: string; unit: string; definition: string; caveat: string }> = {
+const PROSE: Record<keyof typeof METRICS | 'outside_prs' | 'outside_pr_list' | 'vo_conformance',{ title: string; unit: string; definition: string; caveat: string }> = {
   daily_activity: { title: 'Daily activity', unit: 'runs and tokens per UTC day',
     definition: `Every agent run, by the UTC day it was recorded, from the first run's day to today. ${SPLIT}`,
     caveat: 'A day with no runs is a row of zeros, and today is a partial day.' },
@@ -41,6 +41,9 @@ const PROSE: Record<keyof typeof METRICS | 'outside_prs' | 'outside_pr_list',{ t
   outside_pr_list: { title: 'Outside pull requests by name', unit: 'pull requests',
     definition: 'Every pull request we opened outside caliperforge, from GitHub search, one row each: its repository, number, title and link, its state (merged, closed, approved when open with an approving review, else open), the UTC days it was opened and merged, the field of its repository, and the description the repository gives on GitHub.',
     caveat: 'Search reaches at most 1000 pull requests. Merged is null until a pull request merges, and a repository missing from the hand-kept field map has a null field. Titles and descriptions are as their authors wrote them.' },
+  vo_conformance: { title: 'VO conformance', unit: 'outcomes per client, service and behaviour per UTC day',
+    definition: 'Every row of caliperforge/vo-conformance results/<day>.jsonl for the 30 UTC days to today, in file order: the day, the client, the service, the behaviour, its outcome (pass, fail or not supported) and its note. behaviours holds the README description of each behaviour in the rows, and run_at the commit time of the newest results file.',
+    caveat: 'A day the daily run committed no results file has no rows. Notes are as the runner wrote them, and null where it wrote none.' },
 }
 
 const LEAK = /cost|usd|price|dollar|funder|email|login/i
@@ -138,6 +141,41 @@ export function exported(path: string, dir: string, now: Date, read: Read = gh):
   } finally {
     db.close()
   }
+}
+
+const VO = 'repos/caliperforge/vo-conformance'
+
+const Row = z.object({ client: z.string(), service: z.string(), behaviour: z.string(), outcome: z.enum(['pass', 'fail', 'not supported']),
+  note: z.string().optional() })
+
+const decoded = (value: unknown): string =>
+  Buffer.from(z.object({ content: z.string(), encoding: z.literal('base64') }).parse(value).content, 'base64').toString('utf8')
+
+export function conformance(dir: string, now: Date, read: Read = gh): string {
+  const today = now.toISOString().slice(0, 10)
+  const first = new Date(now.getTime() - 29 * 86_400_000).toISOString().slice(0, 10)
+  const days = z.array(z.object({ name: z.string() })).parse(read(['api', `${VO}/contents/results`]))
+    .flatMap((f) => /^(\d{4}-\d{2}-\d{2})\.jsonl$/.exec(f.name)?.[1] ?? []).filter((d) => d >= first && d <= today).sort()
+  const newest = days.at(-1)
+  if (newest === undefined) throw new Error(`vo_conformance.json: no results since ${first}`)
+  const parsed = days.flatMap((day) => decoded(read(['api', `${VO}/contents/results/${day}.jsonl`])).split('\n').filter((l) => l.trim() !== '')
+    .map((l) => ({ day, ...Row.parse(JSON.parse(l)) })))
+  const said = new Map([...decoded(read(['api', `${VO}/readme`])).matchAll(/^Behaviour `([^`]+)`: (.+)$/gm)].map((m) => [m[1], m[2]]))
+  const behaviours = Object.fromEntries([...new Set(parsed.map((r) => r.behaviour))].map((b) => {
+    const description = said.get(b)
+    if (description === undefined) throw new Error(`vo_conformance.json: no description for ${b}`)
+    return [b, description]
+  }))
+  const [{ commit }] = z.tuple([z.object({ commit: z.object({ committer: z.object({ date: z.string() }) }) })], z.unknown())
+    .parse(read(['api', `${VO}/commits?path=results/${newest}.jsonl&per_page=1`]))
+  const rows = parsed.map((r) => [r.day, r.client, r.service, r.behaviour, r.outcome, r.note ?? null])
+  const table = { columns: ['day', 'client', 'service', 'behaviour', 'outcome', 'note'], rows, behaviours, run_at: commit.committer.date,
+    source: 'https://github.com/caliperforge/vo-conformance/tree/main/results' }
+  const f = file(dir, 'vo_conformance', table, ['note'])
+  mkdirSync(join(dir, 'data'), { recursive: true })
+  writeFileSync(`${f.path}.tmp`, f.body)
+  renameSync(`${f.path}.tmp`, f.path)
+  return f.path
 }
 
 export function registerExport(cf: Command, { root, db, out }: Cli): void {

@@ -4,6 +4,7 @@ import { join, relative } from 'node:path'
 import { map } from '../cli/map.ts'
 import type { Fired, Provider } from '../providers/kind.ts'
 import { packet } from '../runner/index.ts'
+import { inlined } from '../runner/inlined.ts'
 import { reviewManifest, SYMBOLS_LEAD, type Bench } from '../runner/packet.ts'
 import { load, seat, senior as discipline, tight, type Seat } from '../runner/rules.ts'
 import { judge, loadReviews } from '../reviews/bench.ts'
@@ -296,7 +297,7 @@ function rebuild(db: Db, root: string, plan: PlanRow, prev: string | null): stri
   const diff = diffOf(root, plan.id)
   if (stopped(refusal) && carried(root, plan.id) === null) return resumed(db, src, plan.id, `${issue}${rows}`, diff)
   const again = `${issue}\n\n# Refused — rebuild only these spans\n\n${refusal}${rows}`
-  const since = diff.trim() === '' ? again : `${again}\n\n# ${headed(root, plan.id)}\n\n\`\`\`\`diff\n${diff}\n\`\`\`\``
+  const since = diff.trim() === '' ? again : `${again}\n\n# ${headed(root, plan.id)}\n\n\`\`\`\`diff\n${inlined(diff)}\n\`\`\`\``
   return handed(since, handout(src, touched(diff, refusal)))
 }
 
@@ -317,7 +318,7 @@ function resumed(db: Db, src: string, plan: number, issue: string, diff: string)
   const rest = left.length === 0 ? '' : ` Not written yet: ${left.map((p) => `\`${p}\``).join(', ')}.`
   const head = '# Your last fire stopped before it finished\n\nThe diff below is your work so far and the checkout holds it. '
     + `Keep it: do not re-read or rewrite what it holds. Finish what is left.${rest} Answer every D row the diff does not answer yet.`
-  return handed(`${issue}\n\n${head}\n\n\`\`\`\`diff\n${diff}\n\`\`\`\``, handout(src, listing.filter((f) => !done.has(f.path))))
+  return handed(`${issue}\n\n${head}\n\n\`\`\`\`diff\n${inlined(diff)}\n\`\`\`\``, handout(src, listing.filter((f) => !done.has(f.path))))
 }
 
 /** The rows the last fence claimed: a rebuild's own fence answers every case, not only the ones it touched. */

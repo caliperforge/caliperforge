@@ -79,6 +79,18 @@ test('639 D4 both specs refuse a path no gate ran for', () => {
   }
 })
 
+test('D3 D5 a file over INLINE is summarised in diff and delta', () => {
+  const rows = [...Array(4000).keys()].map((i) => `+row ${String(i)} ${'x'.repeat(20)}`)
+  const big = ['diff --git a/data.json b/data.json', '--- /dev/null', '+++ b/data.json', '@@ -0,0 +1,4000 @@', ...rows].join('\n')
+  const seeded = fixture('seeded.diff').trimEnd()
+  const prompt = built(bench({ diff: `${seeded}\n${big}\n`, prior: 'my last verdict', since: big })).packet.prompt
+  const summary = /^# data\.json not inlined: \d+ bytes, \+4000 -0 lines, sha256 [0-9a-f]{64}; read it in the checkout$/gm
+  expect(prompt.match(summary)).toHaveLength(2)
+  expect(prompt).toContain(`\n\n# Changed since your last verdict\n\n# data.json not inlined:`)
+  expect(prompt).toContain(`${seeded}\n# data.json not inlined:`)
+  expect(rows.filter((row) => prompt.includes(row))).toEqual([])
+})
+
 const BLOB = 'a'.repeat(40)
 
 test('a re-review carries last verdict, delta, then git paths',() => {

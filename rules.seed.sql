@@ -83,6 +83,7 @@ VALUES
   ('rules/registry/70-research_quote_text.yaml', 'card', 'rules/registry/70-research_quote_text.yaml', 'e0e037ed7e0079687b6051c263b9dddb0e1b733f449738cd7dc5740f17ee956b', '2026-10-21'),
   ('rules/registry/71-research_moving_ref.yaml', 'card', 'rules/registry/71-research_moving_ref.yaml', 'f12e2aad0fff343ef2bb66d45081295f12a548169b867c2f44fceda494eb1e36', '2026-10-21'),
   ('rules/registry/72-ruling_unmoved.yaml', 'card', 'rules/registry/72-ruling_unmoved.yaml', '05523275f4f654095ab535c2552abaf9797959230619cae15645d8ee7b586d41', '2026-10-21'),
+  ('rules/registry/75-bench_score_hold.yaml', 'card', 'rules/registry/75-bench_score_hold.yaml', '6746688ad68ad2f2817ec32e6ec4b8fb0b16060d9b7166f28011b4a076850756', '2026-10-22'),
   ('rules/repo-classes.yaml', 'card', 'rules/repo-classes.yaml', 'deaf34870d419639a3eda3e17120eb257ee7b8549ed429bf431c1e6f623a29cb', '2026-10-16'),
   ('rules/staffing.yaml', 'card', 'rules/staffing.yaml', 'aa91207f2660fe1f31421d100b3118981715abc9ed8e1381a6d2962c464d0d36', '2026-10-05'),
   ('completion-audit', 'rail', 'rules/rails.yaml', 'b46b445806d399b61887a5259eb0a6893444efcbe5acf2e6dd534507bc0882f3', '2026-09-17'),

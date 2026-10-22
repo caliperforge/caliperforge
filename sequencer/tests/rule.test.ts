@@ -1,4 +1,4 @@
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { expect, test } from 'vitest'
@@ -314,6 +314,50 @@ test('D3 a symlink out of the plan folder is refused', async () => {
   const got = await aliased((a) => `write ${a}/.cf/work/7/src/out/x.ts`,
     ({ home }) => { symlinkSync(mkdtempSync(join(tmpdir(), 'cf-out-')), join(srcDir(home, 7), 'out')) })
   expect(got.issue).toBe(ISSUE)
+  expect(got.events.map((e) => e.message.split(',')[0])).toEqual(['rule did not apply'])
+})
+
+async function read(path: string, setup: (s: { db: Db; home: string }) => void = () => undefined) {
+  const { db, home } = seeded(1)
+  setup({ db, home })
+  const said = `---\nmove: rule\nwhy: the ruling names it\nanswer: read ${path}\n---\n`
+  await woke(db, home, stub('', said), now, () => undefined, { ...wire, comment: () => undefined })
+  return { events: eventsOf(db, 7, 'director'), ask: maybe(home, 7, 'ask.md') }
+}
+
+const research = ({ db }: { db: Db }) => { db.exec("UPDATE plans SET template = 'research' WHERE id = 7") }
+
+const PASS = [{ actor: 'director', outcome: 'pass', message: 'rule: the ruling names it' }]
+
+test('D1 a file committed at base.sha applies at step 1', async () => {
+  const got = await read('/bench/run_pair.py', ({ home }) => {
+    const src = srcDir(home, 7)
+    mkdirSync(join(src, 'bench'))
+    writeFileSync(join(src, 'bench/run_pair.py'), '\n')
+    git(src, ['add', 'bench/run_pair.py'])
+    git(src, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', 'bench'])
+    put(home, 7, 'base.sha', git(src, ['rev-parse', 'HEAD']))
+    rmSync(join(src, 'bench'), { recursive: true })
+  })
+  expect(got.events).toEqual(PASS)
+  expect(got.ask).toContain('\n\nread /bench/run_pair.py\n')
+})
+
+test('D2 a research plan\'s unwritten sources.json applies', async () => {
+  const got = await read('/sources.json', research)
+  expect(got.events).toEqual(PASS)
+  expect(got.ask).toContain('\n\nread /sources.json\n')
+})
+
+test('D2 a file in the plan folder applies', async () => {
+  const got = await read('/question.md')
+  expect(got.events).toEqual(PASS)
+  expect(got.ask).toContain('\n\nread /question.md\n')
+})
+
+test.each(['/bench/gone.py', '/sources.json'])('D3 D4 %s is refused', async (path) => {
+  const got = await read(path)
+  expect(got.ask).toBe('the ask\n')
   expect(got.events.map((e) => e.message.split(',')[0])).toEqual(['rule did not apply'])
 })
 

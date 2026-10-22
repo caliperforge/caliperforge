@@ -148,9 +148,13 @@ test('researchQuoteTextSeen D6', () => {
 test('directorToFixerSeen D7', () => {
   const entry = REGISTRY.filter((e) => e.name === 'director_to_fixer')
   const at = '2026-10-02 10:00:00'
-  const told = (d: Db): void => {
-    logged(d, { plan: 1, kind: 'director', actor: 'director', outcome: 'needs_coo', message: 'rule did not apply, x', pointer: null, run: null }, at)
+  const told = (d: Db, message = 'rule did not apply, x'): void => {
+    logged(d, { plan: 1, kind: 'director', actor: 'director', outcome: 'needs_coo', message, pointer: null, run: null }, at)
   }
+  const meant = db()
+  told(meant, 'return: refused by the fence, the plan stopped at its build cap')
+  told(meant, 'ask_coo: director answered this plan twice today')
+  expect(drift(meant, entry, NOW)).toEqual([])
   const bare = db()
   told(bare)
   expect(drift(bare, entry, NOW)).toMatchObject([{ name: 'director_to_fixer', state: 'seen', newest: at }])

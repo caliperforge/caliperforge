@@ -780,6 +780,19 @@ test.each([{ name: 'a reply with no fence', reply: 'I would rule on it.' }, { na
   expect(maybe(home, 7, 'issue.md')).toBe(ISSUE)
 })
 
+test('shadow: no readable answer skips the fixer', async () => {
+  const { db, home } = seeded('0')
+  fixLive(db)
+  committed(home)
+  const packets: Packet[] = []
+  const posted: string[] = []
+  await cooLite(db, home, row(db), bySeat(packets, 'I would rule on it.'), now, (t) => void posted.push(t), wire())
+  expect(fixing(packets)).toEqual([])
+  expect(decisions(db, 7)).toEqual([])
+  expect(told(db)).toEqual([{ actor: 'director', outcome: 'needs_coo', message: 'ask_ceo: no readable answer' }])
+  expect(posted).toHaveLength(1)
+})
+
 test('D3: a fixer ask_ceo on a dropped rule holds for the coo', async () => {
   const { db, posted } = await handedUp(DROPPED, '---\ndid: nothing\nthen: ask_ceo\nwhy: a person picks the path\n---\n')
   expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'coo' })

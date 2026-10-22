@@ -326,7 +326,7 @@ function told(db: Db, root: string, plan: PlanRow, now: Date, t: Told, post?: Po
 
 async function handUp(db: Db, root: string, plan: PlanRow, t: Told, said: string, provider: Provider, now: Date, post: Post, wire: Wire,
   stay = (): void => undefined): Promise<string> {
-  const taken = await fixed(db, root, plan, `${t.message}\n\n${said}`, provider, now, post, wire)
+  const taken = applying(db) && await fixed(db, root, plan, `${t.message}\n\n${said}`, provider, now, post, wire)
   if (taken && appliedOf(db, plan.id).at(-1) !== 'escalated') return told(db, root, plan, now, { ...t, outcome: 'pass' })
   if (taken) held(db, plan.id, 'coo', t.message.split('\n')[0] ?? t.message)
   else stay()

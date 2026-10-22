@@ -1,0 +1,2 @@
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_1","name":"Bash","input":{"command":"node run.js"}}]}}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"<persisted-output>\nOutput too large (27.3KB). Full output saved to: /tmp/absent/toolu_1.txt\n\nPreview (first 2KB):\nfirst line\n...\n</persisted-output>"}]},"tool_use_result":{"stdout":"first line\nlast line","stderr":"","interrupted":false}}

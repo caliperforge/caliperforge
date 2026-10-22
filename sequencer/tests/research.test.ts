@@ -404,6 +404,23 @@ test('record D5: a plan with no origin closes nothing', () => {
   expect(log).toEqual([])
 })
 
+test('record D6: a ruling-only issue.md takes the ask.md title', () => {
+  const { w, wire } = reviewed()
+  put(w.root, 1, 'issue.md', RULING)
+  expect(record(w.db, w.root, plan(w.db, 1), wire)).toMatchObject({ outcome: 'pass' })
+  expect(readdirSync(findings(w))).toEqual([named])
+  expect(posts(w.db)[0]?.title).toBe('The cap')
+})
+
+test('record D6: no # in ask.md or a ruling issue.md refuses', () => {
+  const { w, wire } = reviewed()
+  put(w.root, 1, 'ask.md', ASK.replace('# The cap\n', ''))
+  put(w.root, 1, 'issue.md', RULING)
+  expect(record(w.db, w.root, plan(w.db, 1), wire)).toEqual({ outcome: 'refuse', spans: ['ask.md'], note: 'ask.md has no # title' })
+  expect(existsSync(findings(w))).toBe(false)
+  expect(posts(w.db)).toEqual([])
+})
+
 test('check D6: an unsourced Still unknown sentence passes', async () => {
   expect(await checked(ANSWER)).toMatchObject({ outcome: 'pass' })
 })

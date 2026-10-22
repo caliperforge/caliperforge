@@ -34,9 +34,11 @@ const Result = z.object({
 
 const MOVED = /did not complete within its .* timeout and was moved to the background/
 
+const SAVED = /^Output too large .*Full output saved to: (.+)$/m
+
 function full(text: string, saved: z.infer<typeof Saved> | undefined): string {
   if (!text.startsWith('<persisted-output>')) return text
-  const file = saved?.persistedOutputPath
+  const file = saved?.persistedOutputPath ?? SAVED.exec(text)?.[1]?.trim()
   if (file !== undefined && existsSync(file)) return readFileSync(file, 'utf8')
   return saved?.stdout ?? text
 }

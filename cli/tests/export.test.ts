@@ -8,8 +8,8 @@ import { logged } from '../../store/events.ts'
 import { migrate, open, type Db } from '../../store/index.ts'
 import { metric, reader } from '../../store/metrics.ts'
 import { refusalAt } from '../../store/refusals.ts'
-import { exported, leaked } from '../export.ts'
-import { gh } from '../gh.ts'
+import { conformance, exported, leaked } from '../export.ts'
+import { gh, type Read } from '../gh.ts'
 
 const PRS = vi.hoisted(() => {
   const pr = (n: number, repo: string, state: string, at: string, merged: string | null = null): object => ({
@@ -361,5 +361,59 @@ test('D4 a title and description that match the leak words export', () => {
 test('D5 a field outside the four throws before any file', () => {
   vi.mocked(parse).mockReturnValueOnce({ classes: {}, fields: { 'acme/widgets': 'cooking' } })
   expect(() => exported(seeded(), site, now)).toThrow(/cooking|payments/)
+  expect(existsSync(join(site, 'data'))).toBe(false)
+})
+
+const VO_NOW = new Date('2026-10-22T12:00:00Z')
+
+const README = ['# vo-conformance', 'Behaviour `async_jobs`: pyvo and astroquery each submit an async TAP query.',
+  'Behaviour `sync_query`: each client runs a sync TAP query.', 'Behaviour `datalink`: each client follows a DataLink.'].join('\n')
+
+const base64 = (text: string): object => ({ content: Buffer.from(text).toString('base64').replace(/.{60}/g, '$&\n'), encoding: 'base64' })
+
+const vo = (names: string[], readme = README): Read => vi.fn((args: string[]) => {
+  const path = args[1] ?? ''
+  if (path.endsWith('/contents/results')) return names.map((name) => ({ name, path: `results/${name}`, type: 'file' }))
+  if (path.endsWith('/readme')) return base64(readme)
+  if (path.includes('/commits?')) return [{ commit: { committer: { date: `${/results\/([\d-]+)\.jsonl/.exec(path)?.[1] ?? ''}T11:00:07Z` } } }]
+  return base64(`{"client": "astroquery", "service": "CADC", "behaviour": "async_jobs", "outcome": "fail"}
+{"client": "pyvo", "service": "MAST", "behaviour": "sync_query", "outcome": "not supported", "note": "price of a 504"}\n`)
+})
+
+const NAMES_VO = ['2026-09-22.jsonl', '2026-09-23.jsonl', 'README.md', '2026-10-20.jsonl', 'latest.jsonl']
+
+test('D1 conformance writes the ten keys and a null note', () => {
+  expect(conformance(site, VO_NOW, vo(NAMES_VO))).toBe(join(site, 'data', 'vo_conformance.json'))
+  const file = json('vo_conformance')
+  expect(Object.keys(file)).toEqual(['metric', 'title', 'unit', 'columns', 'rows', 'behaviours', 'run_at', 'source', 'definition', 'caveat'])
+  expect(file.columns).toEqual(['day', 'client', 'service', 'behaviour', 'outcome', 'note'])
+  expect(file.rows.slice(0, 2)).toEqual([['2026-09-23', 'astroquery', 'CADC', 'async_jobs', 'fail', null],
+    ['2026-09-23', 'pyvo', 'MAST', 'sync_query', 'not supported', 'price of a 504']])
+  expect(readdirSync(join(site, 'data'))).toEqual(['vo_conformance.json'])
+})
+
+test('D2 old and non-date results files add no rows', () => {
+  const read = vo(NAMES_VO)
+  conformance(site, VO_NOW, read)
+  expect(json('vo_conformance').rows.map((r) => r[0])).toEqual(['2026-09-23', '2026-09-23', '2026-10-20', '2026-10-20'])
+  expect(vi.mocked(read).mock.calls.map(([a]) => a[1]).filter((p) => p?.includes('/contents/results/')))
+    .toEqual(['repos/caliperforge/vo-conformance/contents/results/2026-09-23.jsonl', 'repos/caliperforge/vo-conformance/contents/results/2026-10-20.jsonl'])
+})
+
+test('D3 run_at is the newest file; behaviours those in rows', () => {
+  conformance(site, VO_NOW, vo(NAMES_VO))
+  expect(json('vo_conformance').run_at).toBe('2026-10-20T11:00:07Z')
+  expect(json('vo_conformance').behaviours).toEqual({ async_jobs: 'pyvo and astroquery each submit an async TAP query.',
+    sync_query: 'each client runs a sync TAP query.' })
+})
+
+test('D4 a behaviour with no README line throws', () => {
+  expect(() => conformance(site, VO_NOW, vo(NAMES_VO, README.replace('`sync_query`', '`sync`'))))
+    .toThrow('vo_conformance.json: no description for sync_query')
+  expect(existsSync(join(site, 'data'))).toBe(false)
+})
+
+test('D5 a window with no results file throws and writes none', () => {
+  expect(() => conformance(site, VO_NOW, vo(['2026-09-22.jsonl', 'README.md']))).toThrow('vo_conformance.json: no results since 2026-09-23')
   expect(existsSync(join(site, 'data'))).toBe(false)
 })

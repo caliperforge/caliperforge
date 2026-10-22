@@ -412,7 +412,7 @@
 - name: offline_hold
   table: events
   column: at
-  where: "message LIKE '%: the network is down; the next tick tries again'"
+  where: "message LIKE '%: the network is down; the next tick tries again' AND julianday(events.at) < julianday('now', '-2 hours') AND NOT EXISTS (SELECT 1 FROM events n WHERE n.plan = events.plan AND n.id > events.id)"
   gap: 7d
   expected: 0
 - name: research_quote_text

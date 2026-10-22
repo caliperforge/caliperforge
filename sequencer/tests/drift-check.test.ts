@@ -105,6 +105,22 @@ test('D1-D6 a fork left with Actions off a day is seen', () => {
   expect(states(null, null, new Date())).toEqual([])
 })
 
+test('D1-D4 only a network hold left unresumed 2h is seen', () => {
+  const hold = REGISTRY.filter((e) => e.name === 'offline_hold')
+  const states = (after: [number, string] | null, at: string | null = '2026-10-02 10:00:00', now = NOW): unknown[] => {
+    const d = db()
+    putPlan(d, { id: 2, pipe_id: planById(d, 1).pipe_id, target_id: null, template: 'comms', state: 'queued', queued_at: '2026-10-01', step: 0, retries: 0 })
+    logged(d, { plan: 1, kind: 'step', actor: 'tick', outcome: 'pass', pointer: null, run: null,
+      message: 'step 2 build: the network is down; the next tick tries again' }, at)
+    if (after !== null) logged(d, { plan: after[0], kind: 'step', actor: 'tick', outcome: 'pass', message: 'm', pointer: null, run: null }, after[1])
+    return drift(d, hold, now)
+  }
+  expect(states([1, '2026-10-02 11:00:00'])).toEqual([])
+  expect(states(null)).toMatchObject([{ name: 'offline_hold', state: 'seen', newest: '2026-10-02 10:00:00' }])
+  expect(states(null, null, new Date())).toEqual([])
+  expect(states([2, '2026-10-02 11:00:00'])).toMatchObject([{ name: 'offline_hold', state: 'seen' }])
+})
+
 test('D3 D4 a repeat ci.unrun on one sha is seen', () => {
   const d = db()
   const unrun = REGISTRY.filter((e) => e.name === 'fork_unrun')

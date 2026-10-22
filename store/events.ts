@@ -128,6 +128,13 @@ export function handUps(db: Db, now: Date): HandUps {
     FROM events WHERE kind IN ('director', 'coo_lite') AND julianday(at) >= julianday(?, '-7 day')`).get(now.toISOString()) as HandUps
 }
 
+export interface Fixes { settled: number; up: number }
+
+export function fixes(db: Db, now: Date): Fixes {
+  return db.prepare(`SELECT coalesce(sum(outcome = 'pass'), 0) AS settled, coalesce(sum(outcome = 'needs_coo'), 0) AS up
+    FROM events WHERE kind = 'fixer' AND julianday(at) >= julianday(?, '-7 day')`).get(now.toISOString()) as Fixes
+}
+
 export function kindsOf(db: Db, plan: number): Pick<Event, 'kind' | 'outcome'>[] {
   return db.prepare('SELECT kind, outcome FROM events WHERE plan = ? ORDER BY id').all(plan) as Pick<Event, 'kind' | 'outcome'>[]
 }

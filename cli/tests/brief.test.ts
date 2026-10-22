@@ -9,7 +9,7 @@ import { registerPlans } from '../cf-plans.ts'
 import { actors, actorSection, costs, costSection, fileWaits, greptileLine, hands, heldBy, line, misses, missSection, rulings, section, ticketSection,
   tickets, unpriced, waitLine, waits, caught, caughtSection } from '../brief.ts'
 import { refusalDays, refusalSection } from '../refusals.ts'
-import { directorSection, handUpLine } from '../director.ts'
+import { directorSection, fixerLine, handUpLine } from '../director.ts'
 import { decisionSection, driftSection } from '../drift.ts'
 import { hold } from '../../sequencer/hold.ts'
 import { monthly, reviewed } from '../../sequencer/ready.ts'
@@ -17,7 +17,7 @@ import { put } from '../../sequencer/workspace.ts'
 import { decided, directorDays } from '../../store/decisions.ts'
 import { addFinding, closeFinding, type Finding, overdue, week } from '../../store/drift.ts'
 import { addPrice, addRun } from '../../store/brief.ts'
-import { type Event, handUps, logged, repriced } from '../../store/events.ts'
+import { type Event, fixes, handUps, logged, repriced } from '../../store/events.ts'
 import { record as listFiles } from '../../store/files.ts'
 import { holdOf } from '../../store/holds.ts'
 import { addRule, type Db, spied } from '../../store/index.ts'
@@ -152,6 +152,21 @@ test('D3 events of another kind count in neither number', () => {
   event(db, 'coo_lite', 'stuck', IN, 1, 'needs_ceo')
   event(db, 'coo_lite', 'stuck', IN, 1, 'needs_coo')
   expect(handUps(db, NOW)).toEqual({ decided: 0, up: 0 })
+})
+
+test('D4 fixer line counts fixer events over 7 d only', () => {
+  const db = world()
+  plan(db, 1, 'running', 25)
+  for (let i = 0; i < 3; i++) event(db, 'fixer', 'fixer')
+  event(db, 'fixer', 'fixer', IN, 1, 'needs_coo')
+  event(db, 'fixer', 'fixer', '2026-09-12 12:00:00')
+  event(db, 'director', 'director', IN, 1, 'needs_coo')
+  event(db, 'fixer', 'ticket')
+  expect(fixerLine(fixes(db, NOW))).toBe('fixer: 3 settled, 1 reached coo over 7 d\n')
+})
+
+test('D5 no fixer events prints the zero line', () => {
+  expect(fixerLine(fixes(world(), NOW))).toBe('fixer: 0 settled, 0 reached coo over 7 d\n')
 })
 
 test('directorSection by day', () => {

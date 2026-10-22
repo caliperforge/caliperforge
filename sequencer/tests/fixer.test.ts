@@ -84,7 +84,10 @@ test('live: the fixer fixes an ask_coo stop; nobody is pinged', async () => {
   expect(fixerPacket?.tools).toContain('Edit')
   expect(fixerPacket?.prompt).toContain('# The machine\'s store')
   expect(runs(db)).toEqual(RAN)
+  expect(ofKind(db, 'fixer')).toMatchObject([{ plan: 7, actor: 'fixer', outcome: 'pass', message: 'return: the rails will find the file now' }])
 })
+
+const UP = [{ actor: 'fixer', outcome: 'needs_coo' }]
 
 test('shadow: the fixer only reads, the stop reaches a person', async () => {
   const { db, home } = seeded('shadow')
@@ -96,6 +99,7 @@ test('shadow: the fixer only reads, the stop reaches a person', async () => {
   expect(posted).toHaveLength(1)
   expect(maybe(home, 7, 'fixes.jsonl')).toContain('"mode":"shadow"')
   expect(runs(db)).toEqual([...RAN, ...RAN])
+  expect(ofKind(db, 'fixer')).toEqual([])
 })
 
 const TICKET = '---\ndid: nothing\nthen: ticket\nwhy: the spend wall counts a turn four times\nticket: the run wall counts each streamed block\n---\n'
@@ -160,6 +164,7 @@ test('ask_ceo from the fixer reaches the phone with its reason', async () => {
   expect(posted).toEqual(['CaliperForge · #139 needs you'])
   expect(applied(db)).toEqual([{ applied: 'escalated' }])
   expect(state(db)).toEqual({ state: 'blocked_on_ceo', step: 4 })
+  expect(ofKind(db, 'fixer')).toMatchObject(UP)
 })
 
 test('two live fixes a day, then stops escalate without the fixer', async () => {
@@ -172,6 +177,7 @@ test('two live fixes a day, then stops escalate without the fixer', async () => 
   await woke(db, home, stub(RETURN, packets), now, (t) => void posted.push(t), wire([]))
   expect(packets.some((p) => basename(p.transcript).startsWith('fixer'))).toBe(false)
   expect(posted).toHaveLength(1)
+  expect(ofKind(db, 'fixer')).toEqual([])
 })
 
 test('listing a built stray clears its flag, adding no second row', async () => {
@@ -324,6 +330,7 @@ test.each(['', 'until: next week\n'])('park without a time it parses is unreadab
   await woke(db, home, stub(`---\ndid: nothing\nthen: park\nwhy: builds on a job not yet filed\n${until}---\n`, []),
     now, (t) => void posted.push(t), wire([]))
   expect(maybe(home, 7, 'fixes.jsonl')).toContain('"applied":"unreadable"')
+  expect(ofKind(db, 'fixer')).toMatchObject([...UP, ...UP])
   expect(posted).toHaveLength(1)
   expect(state(db)).toEqual({ state: 'blocked_on_ceo', step: 4 })
   expect(lapsed(db, LATER)).toEqual([])
@@ -381,6 +388,7 @@ test('D4 a stopped seat run is unrepaired and reaches a person', async () => {
   const posted: string[] = []
   await woke(db, home, stub(RETURN, [], 'stopped'), now, (t) => void posted.push(t), wire([]))
   expect(maybe(home, 7, 'fixes.jsonl')).toContain('"applied":"unrepaired"')
+  expect(ofKind(db, 'fixer')).toMatchObject([...UP, ...UP])
   expect(state(db)).toEqual({ state: 'blocked_on_ceo', step: 4 })
   expect(posted).toHaveLength(1)
 })

@@ -187,7 +187,11 @@ function rows(path: string): { verdict?: string; untested?: boolean }[] {
 
 /** run_pair installs the suite at `test/<target>/` and Medusa resolves from the config's folder; fizz wrote these from the project root. */
 const MOVED: [string[], string][] = [[['fuzzing'], 'corpusDirectory'], [['logging'], 'logDirectory'],
-  [['compilation', 'platformConfig'], 'target'], [['compilation', 'platformConfig'], 'exportDirectory']]
+  [['compilation', 'platformConfig'], 'target'], [['compilation', 'platformConfig'], 'exportDirectory'], [['slither'], 'cachePath']]
+
+const TIMEOUT = 1200
+
+const WORKERS = 4
 
 function medusa(db: Db, plan: number, src: string, suite: string): Outcome | string | null {
   const path = join(src, 'medusa.json')
@@ -203,6 +207,12 @@ function medusa(db: Db, plan: number, src: string, suite: string): Outcome | str
     const parent = keys.reduce(field, config)
     const value = field(parent, key)
     if (typeof value === 'string' && value !== '' && !isAbsolute(value)) Object.assign(parent as object, { [key]: moved(suite, value) })
+  }
+  const fuzzing = field(config, 'fuzzing')
+  if (typeof fuzzing === 'object' && fuzzing !== null) {
+    const { timeout, workers } = fuzzing as Record<string, unknown>
+    Object.assign(fuzzing, { timeout: timeout === 0 || timeout === undefined ? TIMEOUT : timeout,
+      workers: typeof workers === 'number' && workers <= WORKERS ? workers : WORKERS })
   }
   return JSON.stringify(config, null, 2)
 }

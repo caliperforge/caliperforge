@@ -39,7 +39,7 @@ function seeded(mode: string) {
   put(home, 7, 'base.sha', `${'a'.repeat(40)}\n`)
   writeFileSync(join(srcDir(home, 7), 'index.ts'), 'export {}\n')
   git(srcDir(home, 7), ['init', '-q', '-b', 'main'])
-  git(srcDir(home, 7), ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '--allow-empty', '-m', 'built'])
+  git(srcDir(home, 7), ['-c', 'user.email=t@t', '-c', 'user.name=t', '-c', 'maintenance.auto=false', 'commit', '-q', '--allow-empty', '-m', 'built'])
   return { db, home }
 }
 

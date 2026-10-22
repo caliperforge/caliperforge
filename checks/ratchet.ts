@@ -68,7 +68,7 @@ function inFile(path: string, text: string): Tally {
   const all: Record<Metric, number> = {
     'citing-comment': comments(text).filter((c) => CITING.test(c)).length,
     lines: test ? 0 : text.trimEnd().split('\n').length,
-    prepare: path.startsWith('store/') ? 0 : text.split('db.prepare(').length - 1,
+    prepare: path.startsWith('store/') ? 0 : text.split('db.' + 'prepare(').length - 1,
     'silent-catch': nodes.filter((n) => ts.isCatchClause(n) && !descendants(n.block).some(handles)).length,
     'test-name': test ? nodes.filter(longName).length : 0,
   }

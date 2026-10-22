@@ -5,7 +5,9 @@ import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import type { Desk } from '../../cli/gh.ts'
 import { all } from '../../cli/inbox.ts'
+import { putPost, type Post } from '../../store/desk.ts'
 import type { Db } from '../../store/index.ts'
+import { set } from '../../store/lanes.ts'
 import { late } from '../signals.ts'
 
 const schema = join(import.meta.dirname, '../../schema')
@@ -14,7 +16,7 @@ const FRIDAY = new Date('2026-10-03T00:01:00.000Z')
 
 function world(): { db: Db; root: string } {
   const db = fresh(schema)
-  db.prepare("UPDATE settings SET value = '-360' WHERE key = 'tick.zone_offset_minutes'").run()
+  set(db, 'tick.zone_offset_minutes', '-360', 'pr', FRIDAY.toISOString())
   return { db, root: mkdtempSync(join(tmpdir(), 'late-')) }
 }
 
@@ -32,9 +34,9 @@ function fake(broken = false): Desk & { titles: string[] } {
   }
 }
 
-function weekly(db: Db, day: string, status: string): void {
-  db.prepare(`INSERT INTO desk_posts (kind, dest, status, title, dek, body, sources, checks, work_date, written_date)
-    VALUES ('weekly', 'site', ?, 'The week', 'What moved', 'Body.', '[]', '[]', ?, ?)`).run(status, day, day)
+function weekly(db: Db, day: string, status: Post['status']): void {
+  putPost(db, { id: 1, kind: 'weekly', dest: 'site', status, title: 'The week', dek: 'What moved', body: 'Body.',
+    edited_title: null, sources: '[]', checks: '[]', work_date: day, written_date: day })
 }
 
 test('Friday 18:01, no weekly post: one card, one event, once',() => {

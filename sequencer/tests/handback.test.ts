@@ -2,8 +2,10 @@ import { copyFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import type { Provider } from '../../providers/kind.ts'
+import { runRows } from '../../store/events.ts'
 import { holdOf } from '../../store/holds.ts'
 import { refusedOf } from '../../store/record.ts'
+import { verdictRows } from '../../store/verdict.ts'
 import { tick } from '../index.ts'
 import { diffOf, get, maybe, put, srcDir } from '../workspace.ts'
 import { approve, built, CARRIED, plan, stub, watched, world, type World } from './world.ts'
@@ -33,7 +35,7 @@ async function atBuild(): Promise<World> {
   return w
 }
 
-const builderRuns = (w: World): unknown => w.db.prepare('SELECT count(*) AS n FROM runs WHERE plan = 1 AND step = 2').get()
+const builderRuns = (w: World): number => runRows(w.db).filter((r) => r.plan === 1 && r.step === 2).length
 
 test('D1 a fenceless hand-back is asked once; the audit passes', async () => {
   const w = await atBuild()
@@ -41,18 +43,17 @@ test('D1 a fenceless hand-back is asked once; the audit passes', async () => {
   const fired = (await tick(w.db, w.root, answers(['built', CARRIED], (n) => { if (n === 1) diffs.push(diffOf(w.root, 1)) })))[0]
   diffs.push(diffOf(w.root, 1))
   expect(fired).toMatchObject({ step: 2, outcome: 'pass' })
-  expect(builderRuns(w)).toEqual({ n: 2 })
+  expect(builderRuns(w)).toBe(2)
   expect(get(w.root, 1, 'step-2.handback.md')).toBe(CARRIED)
   expect(diffs[0]).toBe(diffs[1])
   await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
-  expect(w.db.prepare("SELECT outcome FROM verdicts WHERE plan = 1 AND rail_id = 'completion-audit'").get())
-    .toEqual({ outcome: 'pass' })
+  expect(verdictRows(w.db, 1).find((v) => v.rail_id === 'completion-audit')?.outcome).toBe('pass')
 })
 
 test('D1 unparsable YAML is re-asked; the answer\'s fence is kept', async () => {
   const w = await atBuild()
   await tick(w.db, w.root, answers(['built\n\n---\ndone: [\n---\n', CARRIED]))
-  expect(builderRuns(w)).toEqual({ n: 2 })
+  expect(builderRuns(w)).toBe(2)
   expect(get(w.root, 1, 'step-2.handback.md')).toBe(CARRIED)
 })
 
@@ -206,6 +207,6 @@ test('D3 a hand-back whose fence parses fires the builder once', async () => {
   for (const text of [CARRIED, UNPOINTED]) {
     const w = await atBuild()
     await tick(w.db, w.root, stub(text))
-    expect(builderRuns(w)).toEqual({ n: 1 })
+    expect(builderRuns(w)).toBe(1)
   }
 })

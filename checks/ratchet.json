@@ -22,8 +22,7 @@
     "lines": 61
   },
   "ratchet.ts": {
-    "lines": 108,
-    "prepare": 1
+    "lines": 108
   },
   "reachability.ts": {
     "lines": 27
@@ -32,8 +31,7 @@
     "lines": 24
   },
   "reviewer-not-builder.ts": {
-    "lines": 47,
-    "prepare": 1
+    "lines": 47
   },
   "rule-hashes.ts": {
     "lines": 48

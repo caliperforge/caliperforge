@@ -12,6 +12,7 @@ import { gates } from '../../store/approvals.ts'
 import { pushedRow } from '../../store/deliverables.ts'
 import { record } from '../../store/files.ts'
 import { builder } from '../../templates/pr-path.ts'
+import { question } from '../../templates/research.ts'
 import { ofKind, runLogged, runRows } from '../../store/events.ts'
 import { priority } from '../../store/lanes.ts'
 import { setLimit } from '../../store/limits.ts'
@@ -116,6 +117,7 @@ test('an internal split files parts, first queued, parent unbuilt', async () => 
     origin: 'https://github.com/caliperforge/caliperforge/issues/901' })
   expect(maybe(w.root, first, 'ask.md')).toMatch(/^# 34a: file the parts\n\n\*\*What:\*\* the machine files each part/)
   expect(allParts(w.db).find((p) => p.n === 1)).toMatchObject({ body: expect.stringContaining('After: #901') as unknown })
+  expect(parts[0]?.body).not.toContain('**Question:**')
 })
 
 test('parentCarried', async () => {
@@ -133,6 +135,18 @@ test('parentCut', async () => {
   const body = allParts(w.db).find((p) => p.parent === ID && p.n === 0)?.body ?? ''
   expect(body).toContain(`## Parent ticket\n\n${'a'.repeat(6000)}\ncut, see #34`)
   expect(body).not.toContain('~')
+})
+
+test('D1, D2: a research part asks its own question', () => {
+  const w = mine()
+  put(w.root, ID, 'ask.md', '# t\n\n**Question:** parent q\n**Would be wrong if:** parent w\n**Done when:** parent d\n')
+  parted(w.db, w.root, { ...plan(w.db, ID), template: 'research' }, split(PARTS) ?? [], watched([], w.root, ID))
+  const a = partPlan(w, 0) ?? 0
+  expect(question(w.root, plan(w.db, a))).toMatchObject({ outcome: 'pass' })
+  const json = maybe(w.root, a, 'question.json') ?? ''
+  expect(JSON.parse(json)).toEqual({ question: 'the machine files each part',
+    wrong_if: 'it leaves out what this part asks, or answers what another part of #34 asks', done_when: 'two issues exist' })
+  for (const parent of ['parent q', 'parent w', 'parent d']) expect(json).not.toContain(parent)
 })
 
 test('a parent After: line gates no part', async () => {

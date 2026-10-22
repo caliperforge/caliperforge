@@ -79,7 +79,7 @@ VALUES
   ('rules/registry/67-director_repeat_return.yaml', 'card', 'rules/registry/67-director_repeat_return.yaml', 'dce8630ea9e16d25f73aaf76b789e95d02e11731bd907e2bbbe1c0aa1edf4435', '2026-10-19'),
   ('rules/registry/67-fork_unrun.yaml', 'card', 'rules/registry/67-fork_unrun.yaml', '02837ec3670f10133da170a01a7688a4a21649ddc14cc3e83e690f89c75279e7', '2026-10-19'),
   ('rules/registry/68-refile_carries.yaml', 'card', 'rules/registry/68-refile_carries.yaml', 'e6c9e48d0ed14aed118be49f557da3693fb31b403a3fc3c42319929a98a9ef23', '2026-10-19'),
-  ('rules/registry/69-offline_hold.yaml', 'card', 'rules/registry/69-offline_hold.yaml', '83c9835f4d069b0a44e2a699ce80ea356f6989acdafebbd6818e4ce5e7fa69e0', '2026-10-20'),
+  ('rules/registry/69-offline_hold.yaml', 'card', 'rules/registry/69-offline_hold.yaml', '8c17956ff58ebb74f0f48e784743caf24ff92302b68478994269bafcdce212b3', '2026-10-20'),
   ('rules/registry/70-research_quote_text.yaml', 'card', 'rules/registry/70-research_quote_text.yaml', 'e0e037ed7e0079687b6051c263b9dddb0e1b733f449738cd7dc5740f17ee956b', '2026-10-21'),
   ('rules/registry/71-research_moving_ref.yaml', 'card', 'rules/registry/71-research_moving_ref.yaml', 'f12e2aad0fff343ef2bb66d45081295f12a548169b867c2f44fceda494eb1e36', '2026-10-21'),
   ('rules/registry/72-ruling_unmoved.yaml', 'card', 'rules/registry/72-ruling_unmoved.yaml', '05523275f4f654095ab535c2552abaf9797959230619cae15645d8ee7b586d41', '2026-10-21'),

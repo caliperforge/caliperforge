@@ -19,9 +19,9 @@ import { clear } from '../store/refusals.ts'
 import { openJobs, waitable, waitsEnded } from '../store/stops.ts'
 import { pending } from '../store/transcript.ts'
 import { lapsed } from '../store/until.ts'
-import { work } from '../templates/research.ts'
 import { coder, repaired } from './coder.ts'
 import { hold, unhold } from './hold.ts'
+import { output } from './output.ts'
 import { prose } from './prose.ts'
 import { WIRE, type Wire } from './push.ts'
 import { rule } from './rule.ts'
@@ -129,12 +129,6 @@ async function ask(db: Db, root: string, plan: PlanRow, decision: { why: string 
   })
   recorded(db, plan.id, plan.step, 'fixer', hash, provider.name, manifest, fired)
   return { got: fired.ended === 'completed' ? read(fired.text) : null, tokens: fired.usage.input + fired.usage.output }
-}
-
-/** A research job's `**Output:**` folder: its fetcher writes there, so its fixer may too. */
-function output(root: string, plan: PlanRow): string | null {
-  const named = /^\*\*Output:\*\*(.*)$/m.exec(maybe(root, plan.id, 'ask.md') ?? '')?.[1]?.trim()
-  return plan.template === 'research' && named !== undefined ? work(named) : null
 }
 
 /**

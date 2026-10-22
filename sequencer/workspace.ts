@@ -120,10 +120,10 @@ function slugged(title: string): string {
   return cut === '' ? 'issue' : cut
 }
 
-/** The ticket's title: the first heading of the brief, or of the ask the plan was filed with before there is one. */
+/** The ticket's title: the first heading of the brief, or of the ask the plan was filed with when the brief has none. */
 export function titleOf(root: string, plan: number): string | null {
-  const body = maybe(root, plan, 'issue.md') ?? maybe(root, plan, 'ask.md')
-  return body === null ? null : (/^#\s+(.*)$/m.exec(body)?.[1]?.trim() ?? null)
+  const heading = (name: string): string | null => /^#\s+(.*)$/m.exec(maybe(root, plan, name) ?? '')?.[1]?.trim() ?? null
+  return heading('issue.md') ?? heading('ask.md')
 }
 
 export function gitBase(root: string): string {

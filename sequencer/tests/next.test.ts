@@ -77,6 +77,18 @@ const TABLE: Record<string, Row> = {
     id: 2,
     want: { wait: 'file_overlap', on: 1 },
   },
+  'a bench score while another leased bench plan scores': {
+    state: () => {
+      const w = world()
+      for (const id of [2, 3]) {
+        putPlan(w.db, { id, pipe_id: 1, target_id: null, template: 'bench', state: 'queued', queued_at: '2026-09-18T00:00:00.000Z', step: 2, retries: 0 })
+      }
+      take(w.db, 2, NOW)
+      return w
+    },
+    id: 3,
+    want: { wait: 'bench_score_busy', on: null },
+  },
   'a queued plan behind a running one in a one-wide lane': {
     state: () => {
       const w = another(world(), 2, 1, 0)

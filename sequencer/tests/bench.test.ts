@@ -464,10 +464,29 @@ test('D1 D4 a root medusa.json is copied with its paths moved', () => {
   expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
   expect(scores(db)).toEqual([{ plan: 1, target: 'euler-earn-m01', generator: 'fizz', ...SCORE, x_ray: null }])
   expect(JSON.parse(readFileSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/medusa.json'), 'utf8'))).toEqual({
-    fuzzing: { corpusDirectory: 'fizz_data/corpus_medusa', targetContracts: ['FuzzTester'] },
+    fuzzing: { corpusDirectory: 'fizz_data/corpus_medusa', targetContracts: ['FuzzTester'], timeout: 1200, workers: 4 },
     compilation: { platform: 'crytic-compile', platformConfig: { target: '../..' } } })
   expect(readFileSync(join(srcDir(root, 1), 'medusa.json'), 'utf8')).toBe(config)
   expect(existsSync(join(srcDir(root, 1), 'test/fizz/medusa.json'))).toBe(false)
+})
+
+/** The medusa.json `scored` installs in the suite for a root medusa.json of `config`. */
+function installed(config: string): unknown {
+  const { root, db } = scoring()
+  writeFileSync(join(srcDir(root, 1), 'medusa.json'), config)
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  expect(readFileSync(join(srcDir(root, 1), 'medusa.json'), 'utf8')).toBe(config)
+  return JSON.parse(readFileSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/medusa.json'), 'utf8'))
+}
+
+test('D1 D5 the copy caps timeout, workers and moves slither', () => {
+  expect(installed(JSON.stringify({ fuzzing: { timeout: 0, workers: 10, testLimit: 0 },
+    slither: { useSlither: true, cachePath: 'test/fizz/fizz_data/slither_results.json' } }))).toEqual({
+    fuzzing: { timeout: 1200, workers: 4, testLimit: 0 }, slither: { useSlither: true, cachePath: 'fizz_data/slither_results.json' } })
+})
+
+test('D3 a set timeout and workers at most 4 are kept', () => {
+  expect(installed(JSON.stringify({ fuzzing: { timeout: 600, workers: 2 } }))).toEqual({ fuzzing: { timeout: 600, workers: 2 } })
 })
 
 test('D3 a root medusa.json that does not parse is refused', () => {

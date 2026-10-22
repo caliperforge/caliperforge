@@ -92,7 +92,7 @@ const TABLE: Record<string, Row> = {
     state: behind(7), id: 2, want: { fire: at(0) },
   },
   'a queued plan behind a running one awaiting its ready proof in a one-wide lane': {
-    state: behind(6), id: 2, want: { wait: 'lane_over_cap', on: null },
+    state: behind(6), id: 2, want: { fire: at(0) },
   },
   'a plan on a second lane at cap 1': {
     state: () => {

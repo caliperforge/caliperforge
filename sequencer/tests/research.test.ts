@@ -200,6 +200,16 @@ test('D2: an ask with no wrong-if line is refused at step 0', async () => {
   expect(maybe(w.root, 1, 'question.json')).toBeNull()
 })
 
+const RULING = '\n## Answer from the director (2026-10-22)\n\nCount only the hosted cap.\n'
+
+test('D2: a ruling beside an ask with no wrong-if still refuses', async () => {
+  const w = researching(ASK.replace(/\*\*Would be wrong if:\*\*.*\n/, ''))
+  put(w.root, 1, 'issue.md', RULING)
+  await tick(w.db, w.root, seats(FOUND))
+  expect(eventsOf(w.db, 1, 'question')).toEqual([{ actor: 'question', outcome: 'refuse', message: 'ask.md has no **Would be wrong if:** line' }])
+  expect(plan(w.db, 1).step).toBe(0)
+})
+
 test('D3: an unquoted source is refused at gather', async () => {
   const w = researching()
   question(w.root, plan(w.db, 1))
@@ -231,6 +241,16 @@ test('gather D2: with no ask.md the prompt holds issue.md', async () => {
   put(w.root, 1, 'issue.md', `${ASK}\n${RULE}`)
   const [, prompt] = await gathered(w)
   expect(prompt).toContain('Pick by the seven-part selection rule: newest first.')
+})
+
+test('gather D5: the prompt holds an issue.md ruling after the ask', async () => {
+  const w = researching()
+  question(w.root, plan(w.db, 1))
+  put(w.root, 1, 'issue.md', RULING)
+  const [, prompt] = await gathered(w)
+  const ask = prompt.slice(prompt.indexOf('# Ask'), prompt.indexOf('# question.json'))
+  expect(ask.indexOf('Count only the hosted cap.')).toBeGreaterThan(ask.indexOf('**Question:** what is the cap?'))
+  expect(ask.indexOf('**Question:**')).toBeGreaterThan(-1)
 })
 
 test('gather D3: a resumed plan gets the ask, step 0 unrun', async () => {

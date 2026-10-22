@@ -18,7 +18,7 @@ const OUTSIDE = /^ {2}- (\S+):1 authority\.outside_files$/gm
 
 const BY_HAND = /\bhand[- ]?check|\bby hand\b|\bafter (?:the )?merge\b/i
 
-const RULED =/^## (?:Ruling|Answer from the director)/
+const RULED = /^## (?:Ruling|Answer from the director)/
 
 export function opened(db: Db, root: string, plan: number): string[] {
   const from = new Map<string, string>()

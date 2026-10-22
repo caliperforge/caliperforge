@@ -1,0 +1,6 @@
+- name: bench_score_hold
+  table: events
+  column: at
+  where: "kind = 'score' AND outcome = 'needs_coo'"
+  gap: 14d
+  expected: 0

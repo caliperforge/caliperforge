@@ -11,7 +11,7 @@ import type { Packet, Provider } from '../../providers/kind.ts'
 import { load, Seat } from '../../runner/rules.ts'
 import { gates } from '../../store/approvals.ts'
 import { decision } from '../../store/ask.ts'
-import { decided, decisions, touches, type Decision, type Verb } from '../../store/decisions.ts'
+import { appliedOf, decided, decisions, touches, type Decision, type Verb } from '../../store/decisions.ts'
 import { pushedRow } from '../../store/deliverables.ts'
 import { addFinding, addSetting, findings, setting } from '../../store/drift.ts'
 import { eventsOf, logged, ofKind, pointers, runAt, runRows } from '../../store/events.ts'
@@ -30,6 +30,7 @@ import { byHand, cooLite, read, woke } from '../director.ts'
 import { mechanisms } from '../drift.ts'
 import { answer as decide } from '../finding.ts'
 import { stop } from '../fixed.ts'
+import { FIXES } from '../fixer.ts'
 import { hold, unhold } from '../hold.ts'
 import type { Wire } from '../push.ts'
 import { rule } from '../rule.ts'
@@ -639,9 +640,9 @@ test('record', async () => {
 const WHY = 'rewrite commit.msg to name plan 7 and its ticket. '.repeat(5).trim()
 const FIX = `---\nmove: fix\nwhy: ${WHY}\n---\n`
 
-function bySeat(packets: Packet[], reply = FIX): Provider {
+function bySeat(packets: Packet[], reply = FIX, fixer = '---\ndid: renamed the migration\nthen: return\nwhy: the rails find the file now\n---\n'): Provider {
   const coo = stub(reply)
-  const fix = stub('---\ndid: renamed the migration\nthen: return\nwhy: the rails find the file now\n---\n')
+  const fix = stub(fixer)
   return { ...coo, fire: (p) => { packets.push(p); return (basename(p.transcript).startsWith('fixer') ? fix : coo).fire(p) } }
 }
 
@@ -737,14 +738,14 @@ test('fixOutOfReach', async () => {
   ] as const) {
     const { db, home } = seeded('1')
     fixLive(db)
-    const was = plans(db)
+    committed(home)
     const packets: Packet[] = []
     await cooLite(db, home, row(db), bySeat(packets, `---\nmove: fix\nwhy: ${why}\n---\n`), now, () => undefined, wire())
     expect(packets.map((p) => p.prompt.includes(`# Fence\n\nfix is refused: ${reason}. The fixer writes only issue.md`)))
-      .toEqual([false, true])
-    expect(decisions(db, 7)).toEqual([])
-    expect(plans(db)).toEqual(was)
-    expect(told(db)).toEqual([{ actor: 'director', outcome: 'needs_coo', message: `fix: refused by the fence, ${reason}` }])
+      .toEqual([false, true, false])
+    expect(decisions(db, 7).map((d) => d.verb)).toEqual(['ask_coo'])
+    expect(row(db).state).toBe('queued')
+    expect(told(db)).toEqual([{ actor: 'director', outcome: 'pass', message: `fix: refused by the fence, ${reason}` }])
   }
   const { db, home } = seeded('1')
   fixLive(db)
@@ -753,6 +754,77 @@ test('fixOutOfReach', async () => {
   await cooLite(db, home, row(db), bySeat(packets, '---\nmove: fix\nwhy: rewrite `commit.msg`.\n---\n'), now, () => undefined, wire())
   expect(packets.filter((p) => basename(p.transcript).startsWith('fixer'))).toHaveLength(1)
   expect(decisions(db, 7).map((d) => d.verb)).toEqual(['ask_coo'])
+})
+
+const fixing = (packets: Packet[]) => packets.filter((p) => basename(p.transcript).startsWith('fixer'))
+const DROPPED = ruling('/etc/x')
+
+async function handedUp(reply: string, fixer?: string) {
+  const { db, home } = seeded('1')
+  fixLive(db)
+  committed(home)
+  const packets: Packet[] = []
+  const posted: string[] = []
+  await cooLite(db, home, row(db), bySeat(packets, reply, fixer), now, (t) => void posted.push(t), wire())
+  return { db, home, packets, posted }
+}
+
+test.each([{ name: 'a reply with no fence', reply: 'I would rule on it.' }, { name: 'a guard-dropped rule', reply: DROPPED }])('D1 D2: $name goes to the fixer', async ({ reply }) => {
+  const { db, home, packets, posted } = await handedUp(reply)
+  expect(decisions(db, 7).map((d) => d.verb)).toEqual(['ask_coo'])
+  expect(fixing(packets)).toHaveLength(1)
+  expect(plan7(db)?.state).toBe('queued')
+  expect(plan7(db)?.held_by).not.toBe('coo')
+  expect(told(db).map((t) => t.outcome)).toEqual(['pass'])
+  expect(posted).toEqual([])
+  expect(maybe(home, 7, 'issue.md')).toBe(ISSUE)
+})
+
+test('D3: a fixer ask_ceo on a dropped rule holds for the coo', async () => {
+  const { db, posted } = await handedUp(DROPPED, '---\ndid: nothing\nthen: ask_ceo\nwhy: a person picks the path\n---\n')
+  expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'coo' })
+  expect(appliedOf(db, 7).at(-1)).toBe('escalated')
+  expect(told(db)).toEqual([{ actor: 'director', outcome: 'needs_coo',
+    message: 'rule did not apply, the answer names a path a ruling may not carry (/etc/x): the path settles it' }])
+  expect(posted).toHaveLength(1)
+})
+
+test.each([
+  { name: 'off', set: () => undefined },
+  { name: 'at FIXES', set: (db: Db, home: string) => {
+    fixLive(db)
+    put(home, 7, 'fixes.jsonl', `${JSON.stringify({ at: now.toISOString(), mode: 'live' })}\n`.repeat(FIXES))
+  } },
+])('D4: a fixer $name leaves a dropped rule with a person', async ({ set }) => {
+  const { db, home } = seeded('1')
+  set(db, home)
+  const packets: Packet[] = []
+  const posted: string[] = []
+  await cooLite(db, home, row(db), bySeat(packets, DROPPED), now, (t) => void posted.push(t), wire())
+  expect(fixing(packets)).toEqual([])
+  expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'coo' })
+  expect(told(db).map((t) => t.outcome)).toEqual(['needs_coo'])
+  expect(posted).toHaveLength(1)
+})
+
+test('D5: two refused moves on a cap stop skip the fixer', async () => {
+  const { db, home } = capStop()
+  fixLive(db)
+  committed(home)
+  const packets: Packet[] = []
+  const posted: string[] = []
+  await cooLite(db, home, row(db), bySeat(packets, RETURN), now, (t) => void posted.push(t), wire())
+  expect(fixing(packets)).toEqual([])
+  expect(decisions(db, 7)).toEqual([])
+  expect(posted).toHaveLength(1)
+})
+
+test('D6: a fix the fixer did not make is not handed up again', async () => {
+  const { db, packets, posted } = await handedUp(FIX, '')
+  expect(fixing(packets)).toHaveLength(2)
+  expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'coo' })
+  expect(told(db).map((t) => t.message)).toEqual([expect.stringMatching(/^fix did not apply, /)])
+  expect(posted).toHaveLength(1)
 })
 
 test('returnMove', async () => {

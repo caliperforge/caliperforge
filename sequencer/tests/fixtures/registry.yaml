@@ -434,6 +434,13 @@
   column: id
   where: rail_id = 'completion-audit' AND outcome = 'refuse' AND message LIKE 'rulings.md changed since the last step-3 lap%'
   expected: 0
+- name: director_to_fixer
+  switch: { key: director.apply, value: '1' }
+  table: events
+  column: at
+  where: "kind = 'director' AND outcome = 'needs_coo' AND (message NOT LIKE 'ask_ceo: %' OR message = 'ask_ceo: no readable answer') AND plan NOT IN (SELECT plan FROM decisions WHERE verb = 'ask_coo' AND at >= datetime(events.at, '-1 hour'))"
+  gap: 7d
+  expected: 0
 - name: bench_score_hold
   table: events
   column: at

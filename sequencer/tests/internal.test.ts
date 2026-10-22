@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import type { Packet, Provider } from '../../providers/kind.ts'
@@ -14,10 +14,10 @@ import { width } from '../../store/lanes.ts'
 import { advance, dropPlan } from '../../store/plans.ts'
 import { verdictRows } from '../../store/verdict.ts'
 import { tick } from '../index.ts'
-import { headOf, push } from '../push.ts'
+import { headOf, push, type Wire } from '../push.ts'
 import { blocked } from '../steps.ts'
-import { get, internalBranch, SELF, srcDir } from '../workspace.ts'
-import { approve, CARRIED, internalPlan, landing, ours, owning, plan, runsAll, runsOn, slow, stub, watched, world, type World } from './world.ts'
+import { cloned, get, internalBranch, SELF, srcDir } from '../workspace.ts'
+import { approve, built, CARRIED, internalPlan, landing, ours, owning, plan, runsAll, runsOn, slow, stub, watched, world, type World } from './world.ts'
 
 const ID = 2
 const SECOND = 3
@@ -221,6 +221,37 @@ test('step 6 sends to origin and judges runs at its head',async () => {
   expect(read[0]).toContain('--repo caliperforge/caliperforge --branch p2-let-an-internal-plan-run')
   expect(verdictRows(w.db, ID).find((v) => v.rail_id === 'ci-green')?.outcome).toBe('pass')
   expect(plan(w.db, ID).step).toBe(7)
+})
+
+/** `mine()` built and brought to step 6, its checkout removed after its branch is pushed to origin when `push` is set. */
+async function lostAtReady(push: boolean): Promise<[World, Wire, string]> {
+  const w = mine()
+  const wire = watched([], w.root, ID)
+  const lap = (): Promise<unknown> => tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  for (let at = 0; at < 3; at += 1) await lap()
+  built(w.root, ID, 'export const hey = (): string => "hey"')
+  for (let at = 3; at < 6; at += 1) await lap()
+  expect(plan(w.db, ID).step).toBe(6)
+  const head = headOf(w.root, ID)
+  if (push) git(head.dir, ['push', '-q', 'origin', head.branch])
+  rmSync(head.dir, { recursive: true, force: true })
+  return [w, wire, head.sha]
+}
+
+test('D1 a pushed step-6 plan re-clones its branch and passes', async () => {
+  const [w, wire, sha] = await lostAtReady(true)
+  const fired = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
+  expect(fired).toMatchObject({ plan: ID, step: 6, name: 'ready', outcome: 'pass' })
+  expect(cloned(srcDir(w.root, ID))).toBe(true)
+  expect(git(srcDir(w.root, ID), ['rev-parse', 'HEAD'])).toBe(sha)
+  expect(plan(w.db, ID).step).toBe(7)
+})
+
+test('D3 an unpushed step-6 plan re-cut fresh is unproven', async () => {
+  const [w, wire] = await lostAtReady(false)
+  const fired = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
+  expect(fired).toMatchObject({ plan: ID, step: 6, name: 'ready', spans: ['ready.unproven'] })
+  expect(plan(w.db, ID).step).toBe(3)
 })
 
 test('step 7 signs on the gates and shows a batch read-out',async () => {

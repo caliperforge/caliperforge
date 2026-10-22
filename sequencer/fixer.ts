@@ -21,6 +21,7 @@ import { pending } from '../store/transcript.ts'
 import { lapsed } from '../store/until.ts'
 import { coder, repaired } from './coder.ts'
 import { hold, unhold } from './hold.ts'
+import { output } from './output.ts'
 import { prose } from './prose.ts'
 import { WIRE, type Wire } from './push.ts'
 import { rule } from './rule.ts'
@@ -119,9 +120,12 @@ async function ask(db: Db, root: string, plan: PlanRow, decision: { why: string 
   const { manifest, prompt, hash } = seat(root, 'fixer')
   const dir = planDir(root, plan.id)
   const tools = m === 'live' && to === null ? manifest.tools : manifest.tools.filter((t) => ['Read', 'Glob', 'Grep'].includes(t))
+  const out = output(root, plan)
   const fired = await provider.fire({
-    ...packet({ ...manifest, tools }, prompt, tight(root), issue(db, root, plan, decision, m, to), dir, pending(dir, 'fixer')),
+    ...packet({ ...manifest, tools }, prompt, tight(root), issue(db, root, plan, decision, m, to), dir, pending(dir, 'fixer'),
+      false, out === null ? manifest.write_paths : [...manifest.write_paths, out]),
     wall: Math.min(wall(db), FIX_WALL),
+    ...(out === null ? {} : { reads: [out] }),
   })
   recorded(db, plan.id, plan.step, 'fixer', hash, provider.name, manifest, fired)
   return { got: fired.ended === 'completed' ? read(fired.text) : null, tokens: fired.usage.input + fired.usage.output }
@@ -233,7 +237,7 @@ function issue(db: Db, root: string, plan: PlanRow, decision: { why: string }, m
   const how = m === 'live' ? 'live: make the fix' : 'shadow: read only, change nothing, describe the fix under did'
   return [
     `# Mode\n\n${to === null ? how : `diagnose: read only, change nothing; ${to} makes the fix from your did and why`}`,
-    `# Job\n\nplan ${String(plan.id)}, state ${plan.state}, step ${String(plan.step)}, lane ${plan.lane ?? '-'}, ${plan.origin ?? 'no ticket'}`,
+    `# Job\n\nplan ${String(plan.id)}, ${plan.template}, state ${plan.state}, step ${String(plan.step)}, lane ${plan.lane ?? '-'}, ${plan.origin ?? 'no ticket'}`,
     `# Orchestrator\n\nask_coo: ${decision.why}`,
     `# Stop\n\n${cut(said, TEXT_CHARS)}`,
     `# Brief's file list\n\n${files}`,

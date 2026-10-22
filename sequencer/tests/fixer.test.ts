@@ -1,5 +1,5 @@
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { appendFileSync, cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { homedir, tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { expect, test } from 'vitest'
 import type { Fired, Packet, Provider } from '../../providers/kind.ts'
@@ -404,6 +404,54 @@ test.each([
   await woke(db, home, stub(DONE, []), now, () => undefined, wire([]))
   expect(applied(db)).toEqual([{ applied: want }])
   expect(state(db)).toEqual({ state: ends, step: 4 })
+})
+
+const MEASURED = '---\ndid: added the **Measure:** and **Output:** lines to ask.md\nthen: return\nwhy: gather can run the fetcher now\n---\n'
+
+test('D1 research: the fixer adds the missing ask lines', async () => {
+  const { db, home } = seeded('live')
+  db.exec("UPDATE plans SET template = 'research', step = 1 WHERE id = 7")
+  put(home, 7, 'ask.md', '# rates\n\n**Question:** what is the p50 rate?\n')
+  put(home, 7, 'refusal.md', 'ask needs executed runs: add a **Measure:** line so the measurer gathers it\n')
+  const inner = stub(MEASURED, [])
+  const edits: Provider = { ...inner, fire: (packet) => {
+    if (basename(packet.transcript).startsWith('fixer') && packet.refuse('ask.md') === null) {
+      appendFileSync(join(packet.cwd, 'ask.md'), '**Measure:** run the rate probe\n**Output:** ~/cf_work/rates/\n')
+    }
+    return inner.fire(packet)
+  } }
+  await woke(db, home, edits, now, () => undefined, wire([]))
+  expect(maybe(home, 7, 'ask.md')).toMatch(/\*\*Measure:\*\* .*\n\*\*Output:\*\* ~\/cf_work\/rates\/\n$/)
+  expect(state(db)).toEqual({ state: 'queued', step: 1 })
+  expect(applied(db)).toEqual([{ applied: 'applied' }])
+  expect(maybe(home, 7, 'refusal.prev.md')).toContain('**Measure:**')
+  expect(maybe(home, 7, 'refusal.md')).toBeNull()
+})
+
+const OUT = join(homedir(), 'cf_work/fx-out')
+
+async function outputFixer(template: string): Promise<Packet | undefined> {
+  const { db, home } = seeded('live')
+  db.exec(`UPDATE plans SET template = '${template}' WHERE id = 7`)
+  put(home, 7, 'ask.md', '# x\n\n**Output:** ~/cf_work/fx-out/\n')
+  const packets: Packet[] = []
+  await woke(db, home, stub(RETURN, packets), now, () => undefined, wire([]))
+  return of(packets, 'fixer')
+}
+
+const admits = (p: Packet | undefined, paths: string[]) => paths.map((f) => p?.refuse(f) === null)
+
+test('D2 a research fixer writes its ask and its Output folder', async () => {
+  const p = await outputFixer('research')
+  expect(p?.reads).toEqual([OUT])
+  expect(admits(p, ['ask.md', 'rulings.md', 'question.md', join(OUT, 'a.md')])).toEqual([true, true, true, true])
+  expect(admits(p, ['src/index.ts', join(homedir(), 'cf_work/fx-other/a.md')])).toEqual([false, false])
+})
+
+test('D3 a pr_path fixer refuses an Output folder', async () => {
+  const p = await outputFixer('pr_path')
+  expect(p?.reads).toBeUndefined()
+  expect(admits(p, ['ask.md', join(OUT, 'a.md')])).toEqual([true, false])
 })
 
 test('the packet lists the other open jobs and the store', async () => {

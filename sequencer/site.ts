@@ -1,7 +1,7 @@
-import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { homedir } from 'node:os'
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { homedir, tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
-import { exported } from '../cli/export.ts'
+import { conformance, exported } from '../cli/export.ts'
 import { record, ticketOf } from '../cli/inbox.ts'
 import { aged, aired, awaiting, paste, pending, placed, type Post, published } from '../store/desk.ts'
 import { lastSince, logged, pointers } from '../store/events.ts'
@@ -16,6 +16,8 @@ import { shift } from './weekly.ts'
 import { abortMerge, git, unmerged } from './workspace.ts'
 
 const TEMPLATE = '05_jito-tippayment-and-ai-invariant-suggester-live.html'
+
+const REDESIGN = 'redesign-2026-10'
 
 const escaped = (text: string): string =>
   text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;')
@@ -143,9 +145,27 @@ export function sitedata(db: Db, root: string, now: Date): void {
       git(dir, ['commit', '-m', `data: ${day}`, '--', ...changed])
       send(dir)
     }
-    logged(db, { ...event, outcome: 'pass', message: `${String(changed.length)} files` })
+    logged(db, { ...event, outcome: 'pass', message: `${String(changed.length + redesign(dir, day, now))} files` })
   } catch (error) {
     logged(db, { ...event, outcome: error instanceof Conflict ? 'needs_coo' : 'refuse', message: firstLine(error) })
+  }
+}
+
+function redesign(dir: string, day: string, now: Date): number {
+  git(dir, ['fetch', 'origin', REDESIGN])
+  const tmp = mkdtempSync(join(tmpdir(), 'cf-sitedata-'))
+  const tree = join(tmp, 'tree')
+  try {
+    git(dir, ['worktree', 'add', '--detach', tree, `origin/${REDESIGN}`])
+    const path = relative(tree, conformance(tree, now))
+    git(tree, ['add', '--', path])
+    if (git(tree, ['diff', '--cached', '--name-only', '--', path]).trim() === '') return 0
+    git(tree, ['commit', '-m', `data: ${day}`, '--', path])
+    git(tree, ['push', 'origin', `HEAD:${REDESIGN}`])
+    return 1
+  } finally {
+    if (existsSync(tree)) git(dir, ['worktree', 'remove', '--force', tree])
+    rmSync(tmp, { recursive: true, force: true })
   }
 }
 

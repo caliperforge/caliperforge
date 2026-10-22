@@ -216,10 +216,12 @@ const OLDER = `# a part\n\n**What:** part q\n**Why:** y\n**When it ends:** part 
 
 const OWN = { question: 'part q', wrong_if: 'it leaves out what this part asks, or answers what its parent ticket asks', done_when: 'part d' }
 
+const FILLED = 'question.json written, filled for a part: '
+  + '**Question:** from **What:**, **Would be wrong if:** from the fixed part sentence, **Done when:** from **When it ends:**'
+
 test('part D1: an older part\'s question.json is its own', () => {
   const w = researching(OLDER)
-  expect(question(w.root, plan(w.db, 1))).toEqual({ outcome: 'pass', spans: [], note: 'question.json written, filled for a part: '
-    + '**Question:** from **What:**, **Would be wrong if:** from the fixed part sentence, **Done when:** from **When it ends:**' })
+  expect(question(w.root, plan(w.db, 1))).toEqual({ outcome: 'pass', spans: [], note: FILLED })
   const json = maybe(w.root, 1, 'question.json') ?? ''
   expect(JSON.parse(json)).toEqual(OWN)
   for (const parent of ['parent q', 'parent w', 'parent d']) expect(json).not.toContain(parent)
@@ -228,7 +230,8 @@ test('part D1: an older part\'s question.json is its own', () => {
 test('part D2: gather rewrites a stale parent question.json', async () => {
   const w = researching(OLDER)
   put(w.root, 1, 'question.json', JSON.stringify({ question: 'parent q', wrong_if: 'parent w', done_when: 'parent d' }))
-  const [, prompt] = await gathered(w)
+  const [outcome, prompt] = await gathered(w)
+  expect(outcome.note).toBe(`${FILLED}; researcher: answer.md written, sources.json written with 1 source(s)`)
   expect(JSON.parse(maybe(w.root, 1, 'question.json') ?? '')).toEqual(OWN)
   expect(prompt).toContain(`# question.json\n\n${JSON.stringify(OWN)}`)
 })

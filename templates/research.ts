@@ -113,6 +113,8 @@ const LINES = [['question', '**Question:**', '**What:**'], ['wrong_if', '**Would
 
 const PART_WRONG = 'it leaves out what this part asks, or answers what its parent ticket asks'
 
+const WRITTEN = 'question.json written'
+
 const askOf = (root: string, plan: PlanRow): string =>
   ['ask.md', 'issue.md'].flatMap((name) => maybe(root, plan.id, name) ?? []).join('\n')
 
@@ -135,7 +137,7 @@ export function question(root: string, plan: PlanRow): Outcome {
   if (missing.length > 0) return { outcome: 'refuse', spans: ['ask.md'], note: `ask.md has no ${missing.join(' or ')} line` }
   put(root, plan.id, 'question.json', JSON.stringify(Object.fromEntries(said(ask).map(([key, , rest]) => [key, rest]))))
   const filled = said(ask).flatMap(([, label, , from]) => from === null ? [] : [`${label} from ${from}`])
-  return { outcome: 'pass', spans: [], note: `question.json written${filled.length === 0 ? '' : `, filled for a part: ${filled.join(', ')}`}` }
+  return { outcome: 'pass', spans: [], note: `${WRITTEN}${filled.length === 0 ? '' : `, filled for a part: ${filled.join(', ')}`}` }
 }
 
 const OUTPUT = '**Output:**'
@@ -161,6 +163,11 @@ const BEFORE = '\n\n# Before you hand in\n\nWrite the answer and its closing fen
 export async function gather(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
   const asked = question(root, plan)
   if (asked.outcome === 'refuse') return asked
+  const got = await gathering(db, root, plan, step, provider)
+  return asked.note === WRITTEN ? got : { ...got, note: `${asked.note}; ${got.note}` }
+}
+
+async function gathering(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
   const ask = askOf(root, plan)
   const folder = output(ask)
   if ('why' in folder) return { outcome: 'refuse', spans: ['ask.md'], note: folder.why }

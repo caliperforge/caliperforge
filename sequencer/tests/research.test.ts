@@ -210,6 +210,36 @@ test('D2: a ruling beside an ask with no wrong-if still refuses', async () => {
   expect(plan(w.db, 1).step).toBe(0)
 })
 
+const PARENT = '## Parent ticket\n\n**Question:** parent q\n**Would be wrong if:** parent w\n**Done when:** parent d\n'
+
+const OLDER = `# a part\n\n**What:** part q\n**Why:** y\n**When it ends:** part d\n\n${PARENT}`
+
+const OWN = { question: 'part q', wrong_if: 'it leaves out what this part asks, or answers what its parent ticket asks', done_when: 'part d' }
+
+test('part D1: an older part\'s question.json is its own', () => {
+  const w = researching(OLDER)
+  expect(question(w.root, plan(w.db, 1))).toMatchObject({ outcome: 'pass' })
+  const json = maybe(w.root, 1, 'question.json') ?? ''
+  expect(JSON.parse(json)).toEqual(OWN)
+  for (const parent of ['parent q', 'parent w', 'parent d']) expect(json).not.toContain(parent)
+})
+
+test('part D2: gather rewrites a stale parent question.json', async () => {
+  const w = researching(OLDER)
+  put(w.root, 1, 'question.json', JSON.stringify({ question: 'parent q', wrong_if: 'parent w', done_when: 'parent d' }))
+  const [, prompt] = await gathered(w)
+  expect(JSON.parse(maybe(w.root, 1, 'question.json') ?? '')).toEqual(OWN)
+  expect(prompt).toContain(`# question.json\n\n${JSON.stringify(OWN)}`)
+})
+
+test('part D3: a parent-only Question is refused, unfired', async () => {
+  const w = researching(`# a part\n\n**When it ends:** part d\n\n${PARENT}`)
+  const refusal = { outcome: 'refuse', spans: ['ask.md'], note: 'ask.md has no **Question:** line' }
+  expect(question(w.root, plan(w.db, 1))).toEqual(refusal)
+  expect((await gathered(w))[0]).toEqual(refusal)
+  expect(ran(w)).toEqual([])
+})
+
 test('D3: an unquoted source is refused at gather', async () => {
   const w = researching()
   question(w.root, plan(w.db, 1))

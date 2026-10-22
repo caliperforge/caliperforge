@@ -109,14 +109,20 @@ export const steps: Step[] = ['question', 'gather', 'check', 'review', 'record']
   name === 'gather' ? { ...row(name, i), seat: 'researcher', fires: 'seat', runs: 'researcher' }
   : name === 'review' ? { ...row(name, i), fires: 'seat', runs: 'senior_review' } : row(name, i))
 
-const LINES = [['question', '**Question:**'], ['wrong_if', '**Would be wrong if:**'], ['done_when', '**Done when:**']] as const
+const LINES = [['question', '**Question:**', '**What:**'], ['wrong_if', '**Would be wrong if:**', null], ['done_when', '**Done when:**', '**When it ends:**']] as const
+
+const PART_WRONG = 'it leaves out what this part asks, or answers what its parent ticket asks'
 
 const askOf = (root: string, plan: PlanRow): string =>
   ['ask.md', 'issue.md'].flatMap((name) => maybe(root, plan.id, name) ?? []).join('\n')
 
 const said = (ask: string) => {
   const lines = ask.split('\n')
-  return LINES.map(([key, label]) => [key, label, lines.find((l) => l.startsWith(label))?.slice(label.length).trim() ?? ''] as const)
+  const parent = lines.findIndex((l) => l === '## Parent ticket' || l === '## Parent comments')
+  const own = parent === -1 ? lines : lines.slice(0, parent)
+  const line = (label: string): string => own.find((l) => l.startsWith(label))?.slice(label.length).trim() ?? ''
+  return LINES.map(([key, label, field]) =>
+    [key, label, line(label) || (parent === -1 ? '' : field === null ? PART_WRONG : line(field))] as const)
 }
 
 export const unasked = (ask: string): string[] => said(ask).filter(([, , rest]) => rest === '').map(([, label]) => label)
@@ -150,6 +156,8 @@ const BEFORE = '\n\n# Before you hand in\n\nWrite the answer and its closing fen
   + 'and hand in that draft only once it prints `pass`.'
 
 export async function gather(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
+  const asked = question(root, plan)
+  if (asked.outcome === 'refuse') return asked
   const ask = askOf(root, plan)
   const folder = output(ask)
   if ('why' in folder) return { outcome: 'refuse', spans: ['ask.md'], note: folder.why }

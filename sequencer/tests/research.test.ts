@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
@@ -281,6 +281,36 @@ test('gather D4: a refused reply keeps the last answer', async () => {
   expect((await gathered(w))[1]).toContain('# Your last answer — repair what the ask and the refusal name, keep the rest\n\nThe cap was 2 [source:1].')
 })
 
+const draftOf = (w: World): string => {
+  mkdirSync(join(srcDir(w.root, 1), '.cf'), { recursive: true })
+  return join(srcDir(w.root, 1), '.cf/draft.md')
+}
+
+const drafting = (w: World, reply: string, draft: string): ReturnType<typeof gather> =>
+  gather(w.db, w.root, plan(w.db, 1), mapOf('research').at(1), stub(reply, 0, reply, () => { writeFileSync(draftOf(w), draft) }))
+
+test('draft D1: a fenceless reply hands in the checked draft', async () => {
+  const w = researching()
+  question(w.root, plan(w.db, 1))
+  expect(await drafting(w, 'Draft passes.', FOUND)).toMatchObject({ outcome: 'pass', note: expect.stringContaining('from .cf/draft.md') as unknown })
+  expect(maybe(w.root, 1, 'answer.md')).toBe(`The cap is 3 [source:1].${SECTIONS}`)
+  expect(maybe(w.root, 1, 'sources.json')).toBe(SOURCES)
+})
+
+test('draft D3: a draft from before the fire is not handed in', async () => {
+  const w = researching()
+  question(w.root, plan(w.db, 1))
+  writeFileSync(draftOf(w), FOUND)
+  expect((await gathered(w, 'Draft passes.'))[0]).toMatchObject({ outcome: 'refuse', spans: ['researcher.fence'] })
+  expect(maybe(w.root, 1, 'answer.md')).toBeNull()
+})
+
+test('draft D4: a fenced reply wins over the draft', async () => {
+  const w = researching()
+  question(w.root, plan(w.db, 1))
+  expect((await drafting(w, FOUND, source(''))).note).toBe('researcher: answer.md written, sources.json written with 1 source(s)')
+})
+
 test('D4: two fence faults go round, one twice stops', async () => {
   const w = researching()
   await tick(w.db, w.root, seats(FOUND))
@@ -402,6 +432,23 @@ test('record D5: a plan with no origin closes nothing', () => {
   const { w, log, wire } = reviewed()
   record(w.db, w.root, plan(w.db, 1), wire)
   expect(log).toEqual([])
+})
+
+test('record D6: a ruling-only issue.md takes the ask.md title', () => {
+  const { w, wire } = reviewed()
+  put(w.root, 1, 'issue.md', RULING)
+  expect(record(w.db, w.root, plan(w.db, 1), wire)).toMatchObject({ outcome: 'pass' })
+  expect(readdirSync(findings(w))).toEqual([named])
+  expect(posts(w.db)[0]?.title).toBe('The cap')
+})
+
+test('record D6: no # in ask.md or a ruling issue.md refuses', () => {
+  const { w, wire } = reviewed()
+  put(w.root, 1, 'ask.md', ASK.replace('# The cap\n', ''))
+  put(w.root, 1, 'issue.md', RULING)
+  expect(record(w.db, w.root, plan(w.db, 1), wire)).toEqual({ outcome: 'refuse', spans: ['ask.md'], note: 'ask.md has no # title' })
+  expect(existsSync(findings(w))).toBe(false)
+  expect(posts(w.db)).toEqual([])
 })
 
 test('check D6: an unsourced Still unknown sentence passes', async () => {

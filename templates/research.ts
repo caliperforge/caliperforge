@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import { z } from 'zod'
@@ -164,6 +164,8 @@ export async function gather(db: Db, root: string, plan: PlanRow, step: Step, pr
     last}\n\n# Its sources, [source:n] counting from 1\n\n${get(root, plan.id, 'sources.json')}`}${measure ? `\n\n# HEAD\n\n${headSha(srcDir(root, plan.id))}` : ''}${
     out === undefined ? '' : `\n\n# Output\n\n${out}`}${runs === null ? BEFORE : ''}`
   const fires: Provider = runs === null ? { ...provider, fire: (packet) => provider.fire({ ...packet, idle: Number.POSITIVE_INFINITY }) } : provider
+  const draft = join(srcDir(root, plan.id), '.cf/draft.md')
+  rmSync(draft, { force: true })
   const fired = await ran(db, root, plan, seat, fires, input, false, true, out)
   if (fired.ended !== 'completed') return { outcome: 'refuse', spans: [fired.stop_reason ?? 'seat.exit'], note: `${seat.runs} ${fired.ended}` }
   const needs = NEEDS.exec(fired.text)?.[1]
@@ -175,11 +177,13 @@ export async function gather(db: Db, root: string, plan: PlanRow, step: Step, pr
     put(root, plan.id, 'question.md', note)
     return { outcome: 'needs_ceo', spans: ['ask.md'], note }
   }
-  const sources = sourced(root, plan, fired.text)
+  const fromDraft = !FENCE.test(fired.text) && existsSync(draft)
+  const reply = fromDraft ? readFileSync(draft, 'utf8') : fired.text
+  const sources = sourced(root, plan, reply)
   if (sources.outcome === 'refuse') return sources
   if (measure) put(root, plan.id, 'runs.json', JSON.stringify(outputs(lastTranscript(db, plan.id, step.step))))
-  put(root, plan.id, 'answer.md', fired.text.replace(FENCE, '').trim())
-  return { outcome: 'pass', spans: [], note: `${seat.runs}: answer.md written, ${sources.note}` }
+  put(root, plan.id, 'answer.md', reply.replace(FENCE, '').trim())
+  return { outcome: 'pass', spans: [], note: `${seat.runs}: answer.md written${fromDraft ? ' from .cf/draft.md, the reply had no fence' : ''}, ${sources.note}` }
 }
 
 export async function answered(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {

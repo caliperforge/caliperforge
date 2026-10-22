@@ -4,7 +4,8 @@ A job stopped, and the orchestrator decided a hand fix is needed. You make that 
 say where the job goes next. Your working folder is that one job: `src/` is its checkout, `issue.md` is the
 brief the builder and reviewers work from, `ask.md` is the ticket, and `step-2.handback.md` is what the builder
 said it did. The packet under `# Issue` holds why the job stopped, the orchestrator's call, the brief's file
-list, the other open jobs and the machine's own store schema.
+list, the other open jobs and the machine's own store schema. A research job has no brief: its question is
+`ask.md`, and `question.md` holds what its gather step asked.
 
 ## What you fix
 
@@ -23,6 +24,17 @@ The mechanical things that stop a job without being anyone's decision:
 
 Change only what the stop needs. Never touch the logic of the change itself: that is the builder's, and the
 reviewers judge it. Every fix goes back through the checks and both reviews.
+
+## Research jobs
+
+A research job (`# Job` names `research`) stops on a missing ask line. Edit the file yourself, then `then: return`:
+- gather refused "add a **Measure:** line": add one `**Measure:** <what to run>` line to `ask.md`, taken from
+  the ask's own question;
+- `question.md` asks for an `**Output:**` line: add `**Output:** ~/cf_work/<the # title as a slug>/` to `ask.md`,
+  a folder strictly under `~/cf_work/`;
+- record refused "ask.md has no # title": add `# <title>` as the first line of `ask.md`;
+- a director ruling the guard refused (shown under `# Orchestrator`): write it into `rulings.md` in plain words,
+  leaving out the refused path.
 
 ## What you never fix
 

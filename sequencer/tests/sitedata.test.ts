@@ -9,11 +9,28 @@ import { set } from '../../store/lanes.ts'
 import { sitedata } from '../site.ts'
 import { git } from '../workspace.ts'
 
-vi.mock('../../cli/gh.ts', async (importOriginal) => ({ ...await importOriginal<object>(), gh: () => ({ items: [] }) }))
+const VO = vi.hoisted(() => ({ readme: 'Behaviour `async_jobs`: each client submits an async TAP query.' }))
+
+vi.mock('../../cli/gh.ts', async (importOriginal) => ({
+  ...await importOriginal<object>(),
+  gh: (args: string[]) => {
+    const path = args[1] ?? ''
+    const base64 = (text: string): object => ({ content: Buffer.from(text).toString('base64'), encoding: 'base64' })
+    if (path.endsWith('/contents/results')) return [{ name: '2026-10-13.jsonl', path: 'results/2026-10-13.jsonl', type: 'file' }]
+    if (path.endsWith('/contents/results/2026-10-13.jsonl')) {
+      return base64('{"client": "pyvo", "service": "CADC", "behaviour": "async_jobs", "outcome": "pass"}\n')
+    }
+    if (path.endsWith('/readme')) return base64(VO.readme)
+    if (path.includes('/commits?')) return [{ commit: { committer: { date: '2026-10-13T11:00:07Z' } } }]
+    return { items: [] }
+  },
+}))
 
 const schema = join(import.meta.dirname, '../../schema')
 
 const FIRST = new Date('2026-10-14T11:20:00Z')
+
+const REDESIGN = 'redesign-2026-10'
 
 const DATA = ['ceo_touches', 'daily_activity', 'gate_verdicts', 'loop_counts', 'outside_pr_list', 'outside_prs','pipeline_counts', 'plan_outcomes', 'runs_by_seat', 'token_mix',
   'tokens_per_landed_job'].map((n) => `data/${n}.json`)
@@ -50,10 +67,12 @@ beforeEach(() => {
   git(clone, ['add', 'README.md'])
   git(clone, ['commit', '-m', 'initial'])
   git(clone, ['push', '-u', 'origin', 'HEAD'])
+  git(clone, ['push', 'origin', `HEAD:${REDESIGN}`])
+  VO.readme = 'Behaviour `async_jobs`: each client submits an async TAP query.'
   set(db, 'comms.site_dir', clone, 'ceo', '2026-10-01')
 })
 
-const head = (dir: string): string => git(dir, ['rev-parse', 'HEAD']).trim()
+const head = (dir: string, ref = 'HEAD'): string => git(dir, ['rev-parse', ref]).trim()
 
 const named = (): string[] => git(clone, ['show', '--name-only', '--format=', 'HEAD']).split('\n').filter((l) => l !== '').sort()
 
@@ -62,7 +81,7 @@ test('D1 the first lap from 05:15 commits and pushes the data', () => {
   expect(git(clone, ['log', '-1', '--format=%s']).trim()).toBe('data: 2026-10-14')
   expect(named()).toEqual(DATA)
   expect(head(origin)).toBe(head(clone))
-  expect(ofKind(db, 'site_data')).toEqual([{ plan: null, kind: 'site_data', actor: 'tick', outcome: 'pass', message: '11 files' }])
+  expect(ofKind(db, 'site_data')).toEqual([{ plan: null, kind: 'site_data', actor: 'tick', outcome: 'pass', message: '12 files' }])
   expect(pointers(db, 'site_data')).toEqual(['2026-10-14'])
 })
 
@@ -109,6 +128,32 @@ test('D5 files outside data/ are never staged', () => {
   sitedata(db, root, FIRST)
   expect(named()).toEqual(DATA)
   expect(git(clone, ['status', '--porcelain']).split('\n').filter((l) => l !== '')).toEqual([' M README.md', '?? notes.txt'])
+})
+
+test('D6 the vo file goes to the redesign branch only', () => {
+  sitedata(db, root, FIRST)
+  expect(git(origin, ['show', '--name-only', '--format=%s', REDESIGN]).split('\n').filter((l) => l !== ''))
+    .toEqual(['data: 2026-10-14', 'data/vo_conformance.json'])
+  expect(named()).toEqual(DATA)
+  expect(existsSync(join(clone, 'data/vo_conformance.json'))).toBe(false)
+  expect(git(clone, ['worktree', 'list']).trim().split('\n')).toHaveLength(1)
+})
+
+test('D7 identical results a second date add no commit', () => {
+  sitedata(db, root, FIRST)
+  const before = head(origin, REDESIGN)
+  sitedata(db, root, new Date('2026-10-15T11:20:00Z'))
+  expect(pointers(db, 'site_data')).toEqual(['2026-10-14', '2026-10-15'])
+  expect(head(origin, REDESIGN)).toBe(before)
+})
+
+test('D4 an undescribed behaviour refuses and leaves redesign', () => {
+  VO.readme = 'Behaviour `sync_query`: each client runs a sync TAP query.'
+  const before = head(origin, REDESIGN)
+  sitedata(db, root, FIRST)
+  expect(ofKind(db, 'site_data').map((e) => [e.outcome, e.message])).toEqual([['refuse', 'vo_conformance.json: no description for async_jobs']])
+  expect(head(origin, REDESIGN)).toBe(before)
+  expect(git(clone, ['worktree', 'list']).trim().split('\n')).toHaveLength(1)
 })
 
 test('D6 an unset site_dir is refused once per date', () => {

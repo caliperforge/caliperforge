@@ -116,7 +116,8 @@ function stillCapped(db: Db, plan: number): boolean {
 function workspace(db: Db, root: string, plan: PlanRow): { language: string | null; failed: Outcome | null } {
   const { fires, name } = mapOf(plan.template).at(plan.step)
   const bare = name === 'rails' && unbuilt(root, plan.id)
-  const tree = !['comms', 'bench'].includes(plan.template) && (fires === 'brief' || fires === 'seat' || fires === 'review' || bare) ? treeOf(db, root, plan) : null
+  const lost = name === 'ready' && internal(plan) && !cloned(srcDir(root, plan.id))
+  const tree = !['comms', 'bench'].includes(plan.template) && (fires === 'brief' || fires === 'seat' || fires === 'review' || bare || lost) ? treeOf(db, root, plan) : null
   if (tree === null) return { language: null, failed: null }
   try {
     if (bare) rebranched(root, plan.id)

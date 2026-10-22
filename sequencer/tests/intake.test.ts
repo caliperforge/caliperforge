@@ -96,7 +96,7 @@ test('D3: a delisted queued plan halts; a running one does not', () => {
   queue(db, 50)
   queue(db, 51, 'running')
   queue(db, 52, 'blocked_on_ceo')
-  intake(db, root, canned([{ number: 50, labels: ['bug'] }]))
+  intake(db, root, canned([]))
   expect(states(db)).toEqual([
     { origin: url(50), state: 'halted' },
     { origin: url(51), state: 'running' },
@@ -107,7 +107,7 @@ test('D3: a delisted queued plan halts; a running one does not', () => {
 test('haltSays: a halt logs its reason and flow lists it', () => {
   const db = piped()
   queue(db, 50)
-  intake(db, root, canned([{ number: 50, labels: ['bug'] }]))
+  intake(db, root, canned([]))
   const why = `${url(50)} is closed or has lost its lane label`
   expect(ofKind(db, 'halted')).toEqual([{ plan: 1, kind: 'halted', actor: 'tick', outcome: 'refuse', message: why }])
   expect(flow(db, root, new Date('2026-09-29T12:00:00Z'))).toContain(`plan 1\thalted: ${why}\tcf return 1\n`)
@@ -509,9 +509,9 @@ test('D4: a bare #50 or Fixes #500 is no fix; the plan halts', () => {
   }
 })
 
-test('D5: an open issue off its lane halts; no PR is read', () => {
+test('D1: an open issue off its lane stays queued; no PR is read', () => {
   const log: string[] = []
-  expect(states(mended(canned([{ number: 50, labels: ['bug'] }], log)))).toEqual(HALTED)
+  expect(states(mended(canned([{ number: 50, labels: ['bug'] }], log)))).toEqual([{ origin: url(50), state: 'queued' }])
   expect(log.filter((l) => l.startsWith('pr '))).toEqual([])
 })
 
@@ -521,6 +521,15 @@ test('D6: a mend read that throws keeps the plan queued', () => {
   expect(intake(db, root, mend({ 'pr list': new Error('HTTP 502\nbody') }))).toEqual([`${url(50)}: HTTP 502`])
   expect(states(db)).toEqual([{ origin: url(50), state: 'queued' }])
   expect(ofKind(db, 'swallowed')).toEqual([{ plan: 1, kind: 'swallowed', actor: 'halt', outcome: 'pass', message: 'HTTP 502' }])
+})
+
+test('D2: the open-issue race is logged once, then the plan lists', () => {
+  const db = piped()
+  queue(db, 50)
+  for (let i = 0; i < 2; i++) intake(db, root, canned([{ number: 50, labels: [] }]))
+  expect(ofKind(db, 'swallowed').filter((e) => e.actor === 'halt').length).toBe(1)
+  intake(db, root, canned([{ number: 50, labels: ['lane:machine'] }]))
+  expect(states(db)).toEqual([{ origin: url(50), state: 'queued' }])
 })
 
 const ASKED = '**Question:** what is the cap?\n**Would be wrong if:** a page names another cap\n**Done when:** a quote names it'

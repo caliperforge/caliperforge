@@ -11,14 +11,14 @@ import { dial, hhmm, lanes, priority as setPriority, record, Reading, width, win
 import { refusedPush } from '../store/approvals.ts'
 import { directorDays } from '../store/decisions.ts'
 import { overdue, week } from '../store/drift.ts'
-import { handUps, logged, repriced } from '../store/events.ts'
+import { fixes, handUps, logged, repriced } from '../store/events.ts'
 import { holderOf, HOLDERS, overlapWaits, parked, pipeNamed } from '../store/plans.ts'
 import { backfillTickets } from '../store/tickets.ts'
 import { backfill } from '../store/transcript.ts'
 import { actors, actorSection, byType, type ByType, caught, caughtSection, costs, costSection, day, fileWaits, greptileLine, halted, hands, heldBy, laneLine, misses, missSection, open as openPlans,
   rulings, section, tickets, ticketSection, unpriced, waitLine, waits, windowLine } from './brief.ts'
 import { check, fill } from './digests.ts'
-import { directorSection, handUpLine } from './director.ts'
+import { directorSection, fixerLine, handUpLine } from './director.ts'
 import { decisionSection, driftSection } from './drift.ts'
 import { flow } from './flow.ts'
 import { gh } from './gh.ts'
@@ -222,6 +222,7 @@ function briefs(cf: Command, { root, db, out }: Cli): void {
     out(refusalSection(refusalDays(handle, new Date())))
     const now = new Date()
     out(handUpLine(handUps(handle, now)))
+    out(fixerLine(fixes(handle, now)))
     out(directorSection(directorDays(handle, now), now))
     out(actorSection(actors(handle, now), hands(now, gh)))
     out(ticketSection(tickets(handle)))

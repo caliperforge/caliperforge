@@ -87,20 +87,20 @@ export async function fixer(db: Db, root: string, plan: PlanRow, decision: { id:
   const to = gone(root, plan) ? null : coder(db, root, plan)
   const { got, tokens } = gone(root, plan) ? { got: GONE, tokens: 0 } : await ask(db, root, plan, decision, m, to, provider)
   if (got === null) {
-    log(root, plan.id, { at: now.toISOString(), mode: m, did: 'nothing', then: 'ask_ceo', why: 'no readable answer', tokens, applied: 'unreadable' })
+    log(db, root, plan.id, { at: now.toISOString(), mode: m, did: 'nothing', then: 'ask_ceo', why: 'no readable answer', tokens, applied: 'unreadable' })
     return false
   }
   if (m === 'shadow') {
-    log(root, plan.id, { at: now.toISOString(), mode: m, ...got, tokens, applied: 'shadow' })
+    log(db, root, plan.id, { at: now.toISOString(), mode: m, ...got, tokens, applied: 'shadow' })
     return false
   }
   const stop = `# Diagnosis\n\n${got.did}\n\n${got.why}\n\n# Stop\n\n${cut(maybe(root, plan.id, 'refusal.md') ?? '', TEXT_CHARS)}`
   if (to !== null && !(await repaired(db, root, plan, to, stop, Math.min(wall(db), FIX_WALL), provider))) {
-    log(root, plan.id, { at: now.toISOString(), mode: m, ...got, tokens, applied: 'unrepaired' })
+    log(db, root, plan.id, { at: now.toISOString(), mode: m, ...got, tokens, applied: 'unrepaired' })
     return false
   }
   const applied = apply(db, root, plan, got, wire, now)
-  log(root, plan.id, { at: now.toISOString(), mode: m, ...got, tokens, applied })
+  log(db, root, plan.id, { at: now.toISOString(), mode: m, ...got, tokens, applied })
   const note = `fixer: ${got.did} → ${got.then}. ${got.why}`
   if (applied === 'escalated') {
     record(root, [{ at: now.toISOString(), plan: plan.id, ticket, kind: 'blocked', step: plan.step, name: 'fixer', note }])
@@ -271,8 +271,11 @@ function cut(text: string, n: number): string {
 
 const LOG = 'fixes.jsonl'
 
-function log(root: string, plan: number, l: Logged): void {
+function log(db: Db, root: string, plan: number, l: Logged): void {
   put(root, plan, LOG, `${(maybe(root, plan, LOG) ?? '')}${JSON.stringify(l)}\n`)
+  if (l.mode !== 'live') return
+  const outcome = ['escalated', 'unreadable', 'unrepaired'].includes(l.applied) ? 'needs_coo' : 'pass'
+  event(db, { plan, kind: 'fixer', actor: 'fixer', outcome, message: `${l.applied}: ${l.why}`, pointer: null, run: null })
 }
 
 function logged(root: string, plan: number): Logged[] {

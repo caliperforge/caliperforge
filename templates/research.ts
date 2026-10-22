@@ -177,12 +177,13 @@ export async function gather(db: Db, root: string, plan: PlanRow, step: Step, pr
     put(root, plan.id, 'question.md', note)
     return { outcome: 'needs_ceo', spans: ['ask.md'], note }
   }
-  const reply = FENCE.test(fired.text) || !existsSync(draft) ? fired.text : readFileSync(draft, 'utf8')
+  const fromDraft = !FENCE.test(fired.text) && existsSync(draft)
+  const reply = fromDraft ? readFileSync(draft, 'utf8') : fired.text
   const sources = sourced(root, plan, reply)
   if (sources.outcome === 'refuse') return sources
   if (measure) put(root, plan.id, 'runs.json', JSON.stringify(outputs(lastTranscript(db, plan.id, step.step))))
   put(root, plan.id, 'answer.md', reply.replace(FENCE, '').trim())
-  return { outcome: 'pass', spans: [], note: `${seat.runs}: answer.md written, ${sources.note}` }
+  return { outcome: 'pass', spans: [], note: `${seat.runs}: answer.md written${fromDraft ? ' from .cf/draft.md, the reply had no fence' : ''}, ${sources.note}` }
 }
 
 export async function answered(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {

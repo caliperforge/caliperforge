@@ -292,7 +292,7 @@ const drafting = (w: World, reply: string, draft: string): ReturnType<typeof gat
 test('draft D1: a fenceless reply hands in the checked draft', async () => {
   const w = researching()
   question(w.root, plan(w.db, 1))
-  expect(await drafting(w, 'Draft passes.', FOUND)).toMatchObject({ outcome: 'pass' })
+  expect(await drafting(w, 'Draft passes.', FOUND)).toMatchObject({ outcome: 'pass', note: expect.stringContaining('from .cf/draft.md') as unknown })
   expect(maybe(w.root, 1, 'answer.md')).toBe(`The cap is 3 [source:1].${SECTIONS}`)
   expect(maybe(w.root, 1, 'sources.json')).toBe(SOURCES)
 })
@@ -308,7 +308,7 @@ test('draft D3: a draft from before the fire is not handed in', async () => {
 test('draft D4: a fenced reply wins over the draft', async () => {
   const w = researching()
   question(w.root, plan(w.db, 1))
-  expect(await drafting(w, FOUND, source(''))).toMatchObject({ outcome: 'pass' })
+  expect((await drafting(w, FOUND, source(''))).note).toBe('researcher: answer.md written, sources.json written with 1 source(s)')
 })
 
 test('D4: two fence faults go round, one twice stops', async () => {

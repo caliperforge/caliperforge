@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { WINDOW, type Read } from '../cli/gh.ts'
-import { logged } from '../store/events.ts'
+import { eventsOf, logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { end, originRef, type PlanRow } from '../store/plans.ts'
 import { firstLine } from './unpolled.ts'
@@ -15,10 +15,16 @@ const Merged = z.array(z.object({ url: z.string(), title: z.string(), body: z.st
 
 const Pull = z.object({ url: z.string(), mergedAt: z.string().nullable() })
 
-/** A queued plan whose closed issue a merged pull request fixed by hand is done; a read that throws leaves it queued. */
+/** A queued plan whose closed issue a merged pull request fixed by hand is done; an open issue or a read that throws leaves it queued. */
 export function mended(db: Db, plan: PlanRow, read: Read, lines: string[]): void {
   try {
-    const url = fix(plan, read)
+    const ref = originRef(plan)
+    const issue = ref === null ? null : Thread.parse(read(['issue', 'view', String(ref.no), '--repo', ref.repo, '--json', 'state,comments']))
+    if (issue?.state === 'OPEN') {
+      raced(db, plan, lines)
+      return
+    }
+    const url = ref === null || issue === null ? null : fix(issue, ref, read)
     if (url === null) {
       end(db, plan.id, 'halted', `${plan.origin ?? ''} is closed or has lost its lane label`)
       return
@@ -31,12 +37,14 @@ export function mended(db: Db, plan: PlanRow, read: Read, lines: string[]): void
   }
 }
 
-function fix(plan: PlanRow, read: Read): string | null {
-  const ref = originRef(plan)
-  if (ref === null) return null
-  const { repo, no } = ref
-  const issue = Thread.parse(read(['issue', 'view', String(no), '--repo', repo, '--json', 'state,comments']))
-  if (issue.state === 'OPEN') return null
+function raced(db: Db, plan: PlanRow, lines: string[]): void {
+  const line = `${plan.origin ?? ''} reads open but is not in its lane's list yet; left queued`
+  if (eventsOf(db, plan.id, 'swallowed').some((e) => e.message === line)) return
+  logged(db, { plan: plan.id, kind: 'swallowed', actor: 'halt', outcome: 'pass', message: line, pointer: plan.origin, run: null })
+  lines.push(line)
+}
+
+function fix(issue: z.infer<typeof Thread>, { repo, no }: { repo: string; no: number }, read: Read): string | null {
   const closes = new RegExp(`\\b(close[sd]?|fix(e[sd])?|resolve[sd]?):?\\s+#${String(no)}(?!\\d)`, 'i')
   const merged = Merged.parse(read(['pr', 'list', '--repo', repo, '--state', 'merged', '--search', `#${String(no)}`,
     '--limit', String(WINDOW), '--json', 'number,url,title,body'])).find((p) => closes.test(`${p.title}\n${p.body}`))

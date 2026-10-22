@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
@@ -279,6 +279,36 @@ test('gather D4: a refused reply keeps the last answer', async () => {
   expect(maybe(w.root, 1, 'answer.md')).toBe('The cap was 2 [source:1].')
   expect(maybe(w.root, 1, 'sources.json')).toBe(SOURCES)
   expect((await gathered(w))[1]).toContain('# Your last answer — repair what the ask and the refusal name, keep the rest\n\nThe cap was 2 [source:1].')
+})
+
+const draftOf = (w: World): string => {
+  mkdirSync(join(srcDir(w.root, 1), '.cf'), { recursive: true })
+  return join(srcDir(w.root, 1), '.cf/draft.md')
+}
+
+const drafting = (w: World, reply: string, draft: string): ReturnType<typeof gather> =>
+  gather(w.db, w.root, plan(w.db, 1), mapOf('research').at(1), stub(reply, 0, reply, () => { writeFileSync(draftOf(w), draft) }))
+
+test('draft D1: a fenceless reply hands in the checked draft', async () => {
+  const w = researching()
+  question(w.root, plan(w.db, 1))
+  expect(await drafting(w, 'Draft passes.', FOUND)).toMatchObject({ outcome: 'pass' })
+  expect(maybe(w.root, 1, 'answer.md')).toBe(`The cap is 3 [source:1].${SECTIONS}`)
+  expect(maybe(w.root, 1, 'sources.json')).toBe(SOURCES)
+})
+
+test('draft D3: a draft from before the fire is not handed in', async () => {
+  const w = researching()
+  question(w.root, plan(w.db, 1))
+  writeFileSync(draftOf(w), FOUND)
+  expect((await gathered(w, 'Draft passes.'))[0]).toMatchObject({ outcome: 'refuse', spans: ['researcher.fence'] })
+  expect(maybe(w.root, 1, 'answer.md')).toBeNull()
+})
+
+test('draft D4: a fenced reply wins over the draft', async () => {
+  const w = researching()
+  question(w.root, plan(w.db, 1))
+  expect(await drafting(w, FOUND, source(''))).toMatchObject({ outcome: 'pass' })
 })
 
 test('D4: two fence faults go round, one twice stops', async () => {

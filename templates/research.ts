@@ -121,8 +121,10 @@ const said = (ask: string) => {
   const parent = lines.findIndex((l) => l === '## Parent ticket' || l === '## Parent comments')
   const own = parent === -1 ? lines : lines.slice(0, parent)
   const line = (label: string): string => own.find((l) => l.startsWith(label))?.slice(label.length).trim() ?? ''
-  return LINES.map(([key, label, field]) =>
-    [key, label, line(label) || (parent === -1 ? '' : field === null ? PART_WRONG : line(field))] as const)
+  return LINES.map(([key, label, field]) => {
+    const from = line(label) !== '' || parent === -1 ? null : field ?? 'the fixed part sentence'
+    return [key, label, from === null ? line(label) : field === null ? PART_WRONG : line(field), from] as const
+  })
 }
 
 export const unasked = (ask: string): string[] => said(ask).filter(([, , rest]) => rest === '').map(([, label]) => label)
@@ -132,7 +134,8 @@ export function question(root: string, plan: PlanRow): Outcome {
   const missing = unasked(ask)
   if (missing.length > 0) return { outcome: 'refuse', spans: ['ask.md'], note: `ask.md has no ${missing.join(' or ')} line` }
   put(root, plan.id, 'question.json', JSON.stringify(Object.fromEntries(said(ask).map(([key, , rest]) => [key, rest]))))
-  return { outcome: 'pass', spans: [], note: 'question.json written' }
+  const filled = said(ask).flatMap(([, label, , from]) => from === null ? [] : [`${label} from ${from}`])
+  return { outcome: 'pass', spans: [], note: `question.json written${filled.length === 0 ? '' : `, filled for a part: ${filled.join(', ')}`}` }
 }
 
 const OUTPUT = '**Output:**'

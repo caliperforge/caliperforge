@@ -218,7 +218,8 @@ const OWN = { question: 'part q', wrong_if: 'it leaves out what this part asks, 
 
 test('part D1: an older part\'s question.json is its own', () => {
   const w = researching(OLDER)
-  expect(question(w.root, plan(w.db, 1))).toMatchObject({ outcome: 'pass' })
+  expect(question(w.root, plan(w.db, 1))).toEqual({ outcome: 'pass', spans: [], note: 'question.json written, filled for a part: '
+    + '**Question:** from **What:**, **Would be wrong if:** from the fixed part sentence, **Done when:** from **When it ends:**' })
   const json = maybe(w.root, 1, 'question.json') ?? ''
   expect(JSON.parse(json)).toEqual(OWN)
   for (const parent of ['parent q', 'parent w', 'parent d']) expect(json).not.toContain(parent)

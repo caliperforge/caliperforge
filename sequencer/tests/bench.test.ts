@@ -11,6 +11,7 @@ import { real } from '../../runner/index.ts'
 import { seat } from '../../runner/rules.ts'
 import { scores } from '../../store/bench.ts'
 import { eventsOf, logged, runRows } from '../../store/events.ts'
+import { holdOf } from '../../store/holds.ts'
 import type { Db } from '../../store/index.ts'
 import { dial } from '../../store/lanes.ts'
 import { allPlans, holdOn, pipeNamed, planById, putPlan, waiting, type PlanRow } from '../../store/plans.ts'
@@ -505,10 +506,43 @@ test('D1 scripts that make no results folder are scored', () => {
   expect(scores(db)).toEqual([{ plan: 1, target: 'euler-earn-m01', generator: 'fizz', ...SCORE, x_ray: null }])
 })
 
-test('score D2 a failing run_pair.py is refused and not recorded', () => {
-  const { root, db } = scoring('import sys\nsys.stderr.write("forge build failed")\nsys.exit(1)\n')
-  expect(scored(db, root, planById(db, 1))).toEqual({ outcome: 'refuse', spans: ['bench.run_pair'], note: 'forge build failed' })
+const FAILS = 'import sys\nsys.stderr.write("forge build failed")\nsys.exit(1)\n'
+
+function heldAtScore(db: Db, root: string): void {
+  expect(planById(db, 1)).toMatchObject({ state: 'blocked_on_ceo', step: 2 })
+  expect(holdOf(db, 1)).toEqual({ held_by: 'coo', held_why: 'forge build failed' })
+  expect(maybe(root, 1, 'generate.json')).not.toBeNull()
+  expect(existsSync(join(srcDir(root, 1), 'test/fizz/FizzTest.sol'))).toBe(true)
+  expect(eventsOf(db, 1, 'score')).toMatchObject([{ actor: 'score', outcome: 'needs_coo', message: 'forge build failed' }])
   expect(scores(db)).toEqual([])
+}
+
+test('score D2 a failing run_pair.py holds the plan for the coo', () => {
+  const { root, db } = scoring(FAILS)
+  expect(scored(db, root, planById(db, 1))).toEqual({ outcome: 'pass', held: true, quiet: true, spans: ['bench.run_pair'], note: 'forge build failed' })
+  heldAtScore(db, root)
+})
+
+test('D2 a failing null_check.py holds the plan for the coo', () => {
+  const { root, db } = scoring()
+  commit(join(root, 'remotes/caliperforge/fuzz-bench'), 'bench/null_check.py', FAILS, 'failing null check')
+  expect(scored(db, root, planById(db, 1))).toEqual({ outcome: 'pass', held: true, quiet: true, spans: ['bench.null_check'], note: 'forge build failed' })
+  heldAtScore(db, root)
+})
+
+test('D3 D5 a held score fires no generate, and scores on return', async () => {
+  const { root, db } = scoring(FAILS)
+  staffedIn(root)
+  dial(db, 3, AT)
+  const fired = stub(CEILING, 'stopped', true)
+  await tick(db, root, fired.provider, OPENS)
+  heldAtScore(db, root)
+  expect(runRows(db).filter((r) => r.seat !== 'director')).toEqual([])
+  commit(join(root, 'remotes/caliperforge/fuzz-bench'), 'bench/run_pair.py', writes('.jsonl', PAIRS), 'run pair fixed')
+  unhold(db, root, 1, 'coo')
+  await tick(db, root, fired.provider, OPENS)
+  expect(maybe(root, 1, 'score.json')).not.toBeNull()
+  expect(runRows(db).filter((r) => r.seat !== 'director')).toEqual([])
 })
 
 test('D1 D2 no null_check.py is scored with untested null', () => {

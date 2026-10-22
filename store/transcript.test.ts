@@ -63,6 +63,21 @@ test('a preview gives the full output saved at its path', () => {
   expect(output).toContain('quote past the preview')
 })
 
+test('D1 a preview with no saved path reads the file it names', () => {
+  const named = join(mkdtempSync(join(tmpdir(), 'cf-persisted-')), 'toolu_1.txt')
+  writeFileSync(named, `${'x'.repeat(4096)}\nquote past the preview\n`)
+  const output = outputs(transcript(PREVIEW.replace('/tmp/x', named), { stdout: 'first line' }))[0]?.output
+  expect(output).toContain('quote past the preview')
+})
+
+test('D2 persistedOutputPath wins over the path in the preview', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cf-persisted-'))
+  writeFileSync(join(dir, 'a.txt'), 'from A')
+  writeFileSync(join(dir, 'b.txt'), 'from B')
+  const path = transcript(PREVIEW.replace('/tmp/x', join(dir, 'a.txt')), { persistedOutputPath: join(dir, 'b.txt') })
+  expect(outputs(path)[0]?.output).toBe('from B')
+})
+
 test('a preview with no saved path gives its stdout', () => {
   expect(outputs(fixture('persisted'))).toEqual([{ command: 'node run.js', output: 'first line\nlast line' }])
 })

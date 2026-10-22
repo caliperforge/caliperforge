@@ -111,7 +111,8 @@ export const steps: Step[] = ['question', 'gather', 'check', 'review', 'record']
 
 const LINES = [['question', '**Question:**'], ['wrong_if', '**Would be wrong if:**'], ['done_when', '**Done when:**']] as const
 
-const askOf = (root: string, plan: PlanRow): string => maybe(root, plan.id, 'ask.md') ?? maybe(root, plan.id, 'issue.md') ?? ''
+const askOf = (root: string, plan: PlanRow): string =>
+  ['ask.md', 'issue.md'].flatMap((name) => maybe(root, plan.id, name) ?? []).join('\n')
 
 const said = (ask: string) => {
   const lines = ask.split('\n')

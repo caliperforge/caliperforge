@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import type { Db } from '../store/index.ts'
+import { schema, type Db } from '../store/index.ts'
 import type { Check, Finding } from './kind.ts'
 import { fresh, rejects } from './sqlite.ts'
 
@@ -25,11 +25,8 @@ function findings(root: string): Finding[] {
 }
 
 function missing(db: Db): Finding[] {
-  const present = new Set(
-    (db.prepare("SELECT name FROM sqlite_master WHERE type = 'trigger'").all() as { name: string }[])
-      .map((r) => r.name),
-  )
-  return TRIGGERS.filter((t) => !present.has(t)).map((t) => finding(`trigger ${t} is absent`))
+  const sql = schema(db)
+  return TRIGGERS.filter((t) => !sql.some((s) => s.startsWith(`CREATE TRIGGER ${t} `))).map((t) => finding(`trigger ${t} is absent`))
 }
 
 function probe(db: Db, p: { name: string; sql: string[] }): Finding[] {

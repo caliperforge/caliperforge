@@ -11,6 +11,10 @@ export function addSetting(db: Db, row: Setting): void {
     .run(row)
 }
 
+export function dropSettings(db: Db, glob: string): void {
+  db.prepare('DELETE FROM settings WHERE key GLOB ?').run(glob)
+}
+
 export function holds(db: Db, condition: string, since: string): boolean {
   return (db.prepare(`SELECT (${condition}) AS on_`).get({ since }) as { on_: number }).on_ === 1
 }

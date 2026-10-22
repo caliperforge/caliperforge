@@ -3,6 +3,7 @@ import type { Packet } from '../../providers/kind.ts'
 import { laneLine } from '../../cli/brief.ts'
 import { release } from '../../store/holds.ts'
 import type { Read } from '../../cli/gh.ts'
+import { addSetting, dropSettings } from '../../store/drift.ts'
 import { newestRun } from '../../store/events.ts'
 import { amend, cap, dial, forget, lanes, name, priority, record, set, templatePriority, usage, width, windows, type Reading } from '../../store/lanes.ts'
 import { addPipe, addPlan, allPlans, live, pipeNamed, retry, rewind } from '../../store/plans.ts'
@@ -124,10 +125,9 @@ function full(w: World = world()): World {
 }
 
 function banded(w: World = world()): World {
-  w.db.prepare("DELETE FROM settings WHERE key GLOB 'lanes.band.p*'").run()
-  const band = w.db.prepare("INSERT INTO settings VALUES (?, ?, 'pr', 'ruling', 'lanes-test', ?)")
+  dropSettings(w.db, 'lanes.band.p*')
   for (const [key, value] of Object.entries({ p30: '3', p60: '2', p80: '1', p95: '1', p100: 'spot' })) {
-    band.run(`lanes.band.${key}`, value, TODAY)
+    addSetting(w.db, { key: `lanes.band.${key}`, value, who: 'pr', origin_kind: 'ruling', origin_ref: 'lanes-test', set_at: TODAY })
   }
   return w
 }

@@ -177,17 +177,8 @@
   "tests/findings.test.ts": {
     "prepare": 1
   },
-  "tests/handback.test.ts": {
-    "prepare": 2
-  },
   "tests/handout.test.ts": {
     "prepare": 1
-  },
-  "tests/lanes.test.ts": {
-    "prepare": 2
-  },
-  "tests/late.test.ts": {
-    "prepare": 2
   },
   "tests/lead.test.ts": {
     "prepare": 1

@@ -384,12 +384,6 @@
   where: "kind = 'generate' AND outcome = 'pass' AND message LIKE '%, 0 properties'"
   gap: 7d
   expected: 0
-- name: fork_actions_off
-  table: events
-  column: at
-  where: "outcome = 'escalate' AND message LIKE '%has Actions off for its workflows%' AND julianday(events.at) < julianday('now', '-1 day') AND NOT EXISTS (SELECT 1 FROM events n WHERE n.plan = events.plan AND n.id > events.id AND julianday(n.at) <= julianday(events.at, '+1 day') AND (n.kind = 'return' OR (n.kind = 'ready' AND n.outcome = 'pass')))"
-  gap: 7d
-  expected: 0
 - name: director_repeat_return
   switch: { key: director.apply, value: '1' }
   table: events

@@ -317,6 +317,28 @@ test('D3 a symlink out of the plan folder is refused', async () => {
   expect(got.events.map((e) => e.message.split(',')[0])).toEqual(['rule did not apply'])
 })
 
+const HAND = 'after merge, hand check `~/cf_work/fuzz-bench-runs/fizz-1575/logs` for new crashes'
+const DROPPED = (path: string) => [{ actor: 'director', outcome: 'needs_coo',
+  message: `rule did not apply, the answer names a path a ruling may not carry (${path}): the ruling names it` }]
+
+test('D1 a hand-check citation outside the root applies', async () => {
+  const seen: Db[] = []
+  const got = await aliased(() => HAND, ({ db }) => { seen.push(db) })
+  expect(got.events).toEqual([{ actor: 'director', outcome: 'pass', message: 'rule: the ruling names it' }])
+  expect(got.issue).toContain(`\n\n${HAND}\n\n## Standing\n`)
+  expect(seen.map((db) => filesOf(db, 7))).toEqual([[]])
+})
+
+test.each([
+  { id: 'D2', answer: 'the builder edits `~/notes/x.ts`', path: '~/notes/x.ts' },
+  { id: 'D3', answer: 'edit /Users/x/elsewhere/file.ts', path: '/Users/x/elsewhere/file.ts' },
+  { id: 'D4', answer: `edit \`~/notes/x.ts\`; ${HAND}`, path: '~/notes/x.ts' },
+])('$id a ruling editing an outside path is dropped', async ({ answer, path }) => {
+  const got = await aliased(() => answer)
+  expect(got.issue).toBe(ISSUE)
+  expect(got.events).toEqual(DROPPED(path))
+})
+
 test('D5 a director return opens the path rulings.md names', async () => {
   const { db, home } = seeded(3)
   put(home, 7, 'rulings.md', 'the builder edits `index.ts`\n')

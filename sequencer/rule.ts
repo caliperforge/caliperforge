@@ -16,7 +16,9 @@ const PATH = /(?:^|[\s`'"(])((?:~|\.\.)?\/[\w.-][^\s`'"()]*)/g
 
 const OUTSIDE = /^ {2}- (\S+):1 authority\.outside_files$/gm
 
-const RULED = /^## (?:Ruling|Answer from the director)/
+const BY_HAND = /\bhand[- ]?check|\bby hand\b|\bafter (?:the )?merge\b/i
+
+const RULED =/^## (?:Ruling|Answer from the director)/
 
 export function opened(db: Db, root: string, plan: number): string[] {
   const from = new Map<string, string>()
@@ -37,16 +39,24 @@ function ruled(issue: string): string {
   return issue.split(/^(?=## )/m).findLast((s) => RULED.test(s)) ?? ''
 }
 
-export function rule(db: Db, root: string, plan: PlanRow, who: string, text: string): 'ask.md' | 'issue.md' | null {
-  const other = [...text.matchAll(/\.cf\/work\/(\d+)/g)].some((m) => Number(m[1]) !== plan.id)
-  if (other || /[^\s`'"(.]\.\.\//.test(text)) return null
+export function stray(db: Db, root: string, plan: PlanRow, text: string): string | null {
+  const other = [...text.matchAll(/\.cf\/work\/(\d+)/g)].find((m) => Number(m[1]) !== plan.id)
+  if (other !== undefined) return other[0]
+  const climbed = text.split(/\s+/).find((t) => /[^\s`'"(.]\.\.\//.test(t))
+  if (climbed !== undefined) return climbed
   const named = (p: string) => !p.startsWith('~') && [srcDir(root, plan.id), root].some((d) => !relative(d, join(d, p)).startsWith('..') && existsSync(join(d, p)))
   const under = (p: string) => p.startsWith(`${root}/`) || !relative(real(planDir(root, plan.id)), real(p)).startsWith('..')
   const climbs = (p: string) => [srcDir(root, plan.id), root].some((b) => [b, ...subdirs(b).map((s) => join(b, s))]
     .some((d) => existsSync(join(d, p)) && (under(join(d, p)) || !relative(b, join(d, p)).startsWith('..'))))
   const fetched = (p: string) => p.startsWith('~/') && plan.template === 'research' && !builderRan(db, plan.id) && work(p) !== null
   const inside = (p: string) => p.startsWith('..') ? climbs(p) : under(p.replace(/^~(?=\/)/, homedir())) || named(p) || fetched(p)
-  if ([...text.replace(/\/{2,}/g, '/').matchAll(PATH)].some((m) => !inside(m[1] ?? ''))) return null
+  return text.replace(/\/{2,}/g, '/').split(/(?<=[.;!?])\s+|\n/)
+    .flatMap((s) => [...s.matchAll(PATH)].map((m) => m[1] ?? '').filter((p) => p.startsWith('..') || !BY_HAND.test(s)))
+    .find((p) => !inside(p)) ?? null
+}
+
+export function rule(db: Db, root: string, plan: PlanRow, who: string, text: string): 'ask.md' | 'issue.md' | null {
+  if (stray(db, root, plan, text) !== null) return null
   const section = `## Answer from the ${who} (${new Date().toISOString().slice(0, 10)})\n\n${text.trim()}\n`
   if (!builderRan(db, plan.id)) {
     put(root, plan.id, 'ask.md', `${maybe(root, plan.id, 'ask.md') ?? ''}\n${section}`)

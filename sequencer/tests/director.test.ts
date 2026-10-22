@@ -427,7 +427,7 @@ test('failedMoveToCoo', async () => {
   expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'coo' })
   expect(maybe(home, 7, 'parked.md')).toBeNull()
   expect(told(db)).toEqual([{ actor: 'director', outcome:'needs_coo',
-    message: 'rule did not apply, the answer names a path a ruling may not carry: the path settles it' }])
+    message: 'rule did not apply, the answer names a path a ruling may not carry (/etc/x): the path settles it' }])
 })
 
 test.each([[null], ['0']])('shadow (director.apply %s): only proposes, in the inbox', async (apply) => {

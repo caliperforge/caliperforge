@@ -9,7 +9,7 @@ const root = join(import.meta.dirname, '../../..')
 
 test('D1: no src write path and no src-writing git', () => {
   const { manifest } = seat(root, 'fixer')
-  expect(manifest.write_paths).toEqual(['issue.md', 'ask.md', 'step-2.handback.md', 'base.sha', 'commit.msg'])
+  expect(manifest.write_paths).toEqual(['issue.md', 'ask.md', 'step-2.handback.md', 'base.sha', 'commit.msg', 'rulings.md', 'question.md'])
   expect(manifest.tools).not.toContain('Bash(git -C src mv:*)')
   expect(manifest.tools).not.toContain('Bash(git -C src add:*)')
 })
@@ -27,4 +27,8 @@ test('D3: a code stop is diagnosed, not edited', () => {
   expect(prompt).not.toContain('generated file')
   expect(prompt).toContain('A stop in the code itself')
   expect(prompt).toContain('diagnose it and never edit it')
+})
+
+test('D4: the prompt carries the research job edits', () => {
+  expect(seat(root, 'fixer').prompt).toContain('## Research jobs')
 })

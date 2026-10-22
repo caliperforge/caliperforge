@@ -356,7 +356,7 @@ test('D2 a file in the plan folder applies', async () => {
 })
 
 test.each(['/bench/gone.py', '/sources.json'])('D3 D4 %s is refused', async (path) => {
-  const got = await read(path)
+  const got = await read(path, ({ home }) => { put(home, 7, 'base.sha', git(srcDir(home, 7), ['rev-parse', 'HEAD'])) })
   expect(got.ask).toBe('the ask\n')
   expect(got.events.map((e) => e.message.split(',')[0])).toEqual(['rule did not apply'])
 })

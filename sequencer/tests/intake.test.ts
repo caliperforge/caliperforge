@@ -41,6 +41,7 @@ function canned(rows: Fixture[], log: string[] = [], closed: Fixture[] = []): Re
     const shaped = rows.map(shape)
     if (args[0] === 'pr') return []
     if (args[1] === 'list') return args[5] === 'closed' ? closed.map(shape) : shaped
+    if (args[0] === 'api' && args[1]?.endsWith('/events?per_page=100') === true) return []
     if (args[0] === 'api') {
       const no = Number(args[1]?.split('/').at(-1))
       return { sub_issues_summary: { total: rows.find((r) => r.number === no)?.parts ?? 0 } }

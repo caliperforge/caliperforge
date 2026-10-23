@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { z } from 'zod'
+import { gh, type Read } from '../cli/gh.ts'
 import { record, ticketOf } from '../cli/inbox.ts'
 import type { Post } from '../cli/watch.ts'
 import type { Provider } from '../providers/kind.ts'
@@ -19,6 +20,7 @@ import { clear } from '../store/refusals.ts'
 import { openJobs, waitable, waitsEnded } from '../store/stops.ts'
 import { pending } from '../store/transcript.ts'
 import { lapsed } from '../store/until.ts'
+import { closed } from './closed.ts'
 import { coder, repaired } from './coder.ts'
 import { hold, unhold } from './hold.ts'
 import { output } from './output.ts'
@@ -176,7 +178,7 @@ function overdue(db: Db, root: string, now: Date): void {
 }
 
 /** A job the fixer set waiting goes back to its lane when the other lands, and to a person if it never will. */
-export function released(db: Db, root: string, now: Date, post: Post): void {
+export function released(db: Db, root: string, now: Date, post: Post, read: Read = gh): void {
   overdue(db, root, now)
   for (const r of waitsEnded(db)) {
     const ticket = ticketOf(db, r.id)
@@ -188,8 +190,9 @@ export function released(db: Db, root: string, now: Date, post: Post): void {
       record(root, [{ at, plan: r.id, ticket, kind: 'refused', step: r.step, name: 'fixer', note: `plan ${String(r.on_)} landed, so this job is back in its lane` }])
       continue
     }
-    clearWaitsOn(db, r.id)
     const note = `plan ${String(ended.id)}, which this job waits on, ended ${ended.state}`
+    if (r.theirs !== 'done' && closed(db, root, r, { ticket, at, note }, read)) continue
+    clearWaitsOn(db, r.id)
     held(db, r.id, 'coo', note)
     record(root, [{ at, plan: r.id, ticket, kind: 'blocked', step: r.step, name: 'fixer', note }])
     post(`CaliperForge · ${ticket} needs you`, `plan ${String(r.id)}, step ${String(r.step)}. ${note}`)

@@ -1,14 +1,17 @@
-import { cpSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { fresh, rejects } from '../../checks/sqlite.ts'
 import { homeOf } from '../../sequencer/home.ts'
 import { dry } from '../../sequencer/index.ts'
-import { get, git } from '../../sequencer/workspace.ts'
+import { get, git, planDir, put } from '../../sequencer/workspace.ts'
+import { record } from '../../store/bench.ts'
+import { ofKind } from '../../store/events.ts'
+import type { Db } from '../../store/index.ts'
 import { dial, lanes } from '../../store/lanes.ts'
-import { allPlans, openPipes, pipeNamed, planById } from '../../store/plans.ts'
-import { fileBench } from '../bench.ts'
+import { allPlans, holderOf, openPipes, pipeNamed, planById, putPlan, type PlanRow } from '../../store/plans.ts'
+import { fileBench, rescore } from '../bench.ts'
 import { laneLine } from '../brief.ts'
 import type { Read } from '../gh.ts'
 import { add } from '../plan.ts'
@@ -98,6 +101,57 @@ test('file D3 an unknown target is refused and files nothing', () => {
   const d = fresh(schema)
   expect(() => fileBench(d, benchRoot(), 'nope', false, 'fizz_generator', AT)).toThrow('fuzz-bench has no targets/nope.yml')
   expect(allPlans(d)).toEqual([])
+})
+
+const SCORED = 'fuzz-bench/suites/fizz/euler-earn-m01'
+
+const ROW = { plan: 1, target: 'euler-earn-m01', generator: 'fizz', catches: 0, false_positives: 0, untested: null, tokens: 1, seconds: 1, x_ray: null }
+
+/** A plan with its generate.json, target.yml and scored suite, and a live scorecard row. */
+function rescorable(state: PlanRow['state'] = 'done', template: PlanRow['template'] = 'bench'): { dir: string; d: Db } {
+  const dir = root()
+  const d = fresh(schema)
+  putPlan(d, { id: 1, pipe_id: Number(pipeNamed(d, 'bench')?.id), target_id: null, template, state, queued_at: AT, step: 4, retries: 0 })
+  put(dir, 1, 'target.yml', `${YML}target: euler-earn-m01\ngenerator: fizz\n`)
+  put(dir, 1, 'generate.json', JSON.stringify({ suite: 'test/fizz', tokens: 1, seconds: 1 }))
+  mkdirSync(join(planDir(dir, 1), SCORED), { recursive: true })
+  record(d, ROW)
+  return { dir, d }
+}
+
+function refused(dir: string, d: Db, why: string): void {
+  const before = planById(d, 1)
+  expect(() => rescore(d, dir, 1, 'coo', 'error rows')).toThrow(why)
+  expect(planById(d, 1)).toEqual(before)
+  expect(ofKind(d, 'rescore')).toEqual([])
+  expect(() => record(d, ROW)).toThrow(/UNIQUE/)
+  expect(existsSync(join(planDir(dir, 1), 'src'))).toBe(false)
+}
+
+test('rescore D3 a non-bench plan is refused untouched', () => {
+  const { dir, d } = rescorable('done', 'research')
+  refused(dir, d, 'plan 1 is not a done bench plan')
+})
+
+test('rescore D3 a bench plan not done is refused untouched', () => {
+  const { dir, d } = rescorable('running')
+  refused(dir, d, 'plan 1 is not a done bench plan')
+})
+
+test('rescore D3 no generate.json is refused untouched', () => {
+  const { dir, d } = rescorable()
+  rmSync(join(planDir(dir, 1), 'generate.json'))
+  refused(dir, d, 'plan 1 has no generate.json')
+})
+
+test('rescore D3 no scored suite is refused untouched', () => {
+  const { dir, d } = rescorable()
+  rmSync(join(planDir(dir, 1), SCORED), { recursive: true })
+  refused(dir, d, 'plan 1 has no fuzz-bench/suites/fizz/euler-earn-m01')
+})
+
+test('rescore D3 --by takes ceo or coo only', () => {
+  expect(() => holderOf('director')).toThrow('--by takes ceo or coo, not director')
 })
 
 test('file D4 a seat that generates no bench is refused', () => {

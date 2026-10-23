@@ -6,7 +6,7 @@ export interface Refused { step: number; what: string; outcome: string; message:
 export interface Row {
   repo: string
   pr: number
-  plan: number
+  plan: number | null
   url: string
   state: string
   merged_at: string | null
@@ -14,6 +14,8 @@ export interface Row {
   word_at: string | null
   word: string | null
   read_at: string
+  title: string | null
+  opened_at: string | null
 }
 
 export function parentOf(db: Db, plan: number): number | null {
@@ -53,15 +55,21 @@ export function prsOf(db: Db, repo: string): { plan: number; evidence: string }[
 }
 
 export function putRecord(db: Db, row: Row): void {
-  db.prepare(`INSERT INTO records (repo, pr, plan, url, state, merged_at, word_by, word_at, word, read_at)
-    VALUES (@repo, @pr, @plan, @url, @state, @merged_at, @word_by, @word_at, @word, @read_at)
+  db.prepare(`INSERT INTO records (repo, pr, plan, url, state, merged_at, word_by, word_at, word, read_at, title, opened_at)
+    VALUES (@repo, @pr, @plan, @url, @state, @merged_at, @word_by, @word_at, @word, @read_at, @title, @opened_at)
     ON CONFLICT (repo, pr) DO UPDATE SET plan = excluded.plan, url = excluded.url, state = excluded.state,
       merged_at = excluded.merged_at, word_by = excluded.word_by, word_at = excluded.word_at, word = excluded.word,
-      read_at = excluded.read_at`).run(row)
+      read_at = excluded.read_at, title = coalesce(excluded.title, records.title),
+      opened_at = coalesce(excluded.opened_at, records.opened_at)`).run(row)
 }
 
 export function recordsOf(db: Db, repo: string): Row[] {
   return db.prepare('SELECT * FROM records WHERE repo = ? ORDER BY pr').all(repo) as Row[]
+}
+
+export function openRecords(db: Db, repo: string | null): Row[] {
+  return db.prepare(`SELECT * FROM records WHERE state = 'OPEN' AND merged_at IS NULL AND (? IS NULL OR repo = ?)
+    ORDER BY repo, pr`).all(repo, repo) as Row[]
 }
 
 export function still(db: Db, repo: string): number {

@@ -1,0 +1,5 @@
+- name: mended_by_commit
+  table: events
+  column: at
+  where: "kind = 'close' AND actor = 'tick' AND message LIKE 'fixed by https://github.com/%/commit/%'"
+  when: SELECT 1 FROM events WHERE kind = 'halted' AND message LIKE '% is closed or has lost its lane label' AND julianday(at) >= julianday($since)

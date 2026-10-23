@@ -2,6 +2,6 @@
   switch: { key: science.dir }
   table: refusals
   column: at
-  where: "span = 'research.moving_ref'"
+  where: "span = 'research.moving_ref' AND NOT EXISTS (SELECT 1 FROM events e WHERE e.plan = refusals.plan AND e.kind = 'research.unpinned')"
   gap: 7d
   expected: 0

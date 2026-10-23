@@ -118,6 +118,18 @@ export function pr(repo: string, no: number): Pr {
   return Pr.parse(gh(['pr', 'view', String(no), '--repo', repo, '--json', PR_FIELDS]))
 }
 
+const Outside = z.array(z.object({ repository: z.object({ nameWithOwner: z.string() }), number: z.int(), title: z.string(),
+  createdAt: z.string() }))
+
+export type Outside = z.infer<typeof Outside>[number]
+
+export function outside(read: Read = gh): Outside[] {
+  const found = Outside.parse(read(['search', 'prs', '--author', '@me', '--state', 'open', '--limit', String(WINDOW),
+    '--json', 'repository,number,title,createdAt', '--', `-org:${FORK}`]))
+  if (found.length >= WINDOW) throw new Error(`gh search prs hit its cap of ${String(WINDOW)}; open pull requests past it are unread`)
+  return found
+}
+
 export function prNumber(url: string): number {
   const hit = /\/pull\/(\d+)$/.exec(url)
   if (hit === null) throw new Error(`"${url}" is not a github pull request url`)

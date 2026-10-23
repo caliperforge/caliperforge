@@ -1,11 +1,13 @@
 import type { Command } from 'commander'
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { staffing } from '../sequencer/staffing.ts'
-import { get, git, gitBase, put, remote } from '../sequencer/workspace.ts'
+import { get, git, gitBase, maybe, planDir, put, remote, srcDir } from '../sequencer/workspace.ts'
+import { supersede } from '../store/bench.ts'
+import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
-import { addPlan, pipeNamed } from '../store/plans.ts'
+import { addPlan, holderOf, pipeNamed, planById, rewind, type Holder } from '../store/plans.ts'
 import { copied } from '../templates/bench.ts'
 import type { Cli } from './cf-lanes.ts'
 
@@ -32,12 +34,44 @@ export function fileBench(db: Db, root: string, target: string | undefined, all:
   }
 }
 
+/** The suites folder is the only copy left: the tick reaps `src/` from every done plan. */
+export function rescore(db: Db, root: string, id: number, by: Holder, why: string): number | null {
+  const plan = planById(db, id)
+  if (plan.template !== 'bench' || plan.state !== 'done') throw new Error(`plan ${String(id)} is not a done bench plan`)
+  const made = maybe(root, id, 'generate.json')
+  if (made === null) throw new Error(`plan ${String(id)} has no generate.json`)
+  const yml = get(root, id, 'target.yml')
+  const [target, generator] = ['target', 'generator'].map((key) => [...yml.matchAll(new RegExp(`^${key}: (.+)$`, 'gm'))].at(-1)?.[1])
+  if (target === undefined || generator === undefined) throw new Error(`plan ${String(id)} has no target or generator in target.yml`)
+  const suites = join(planDir(root, id), 'fuzz-bench/suites', generator, target)
+  if (!existsSync(suites)) throw new Error(`plan ${String(id)} has no fuzz-bench/suites/${generator}/${target}`)
+  const old = db.transaction(() => {
+    const was = supersede(db, id)
+    rewind(db, id, 2)
+    logged(db, { plan: id, kind: 'rescore', actor: by, outcome: 'pass', message: why, pointer: was === null ? null : `bench_scorecard ${String(was)}`, run: null })
+    return was
+  })()
+  const suite = join(srcDir(root, id), (JSON.parse(made) as { suite: string }).suite)
+  rmSync(suite, { recursive: true, force: true })
+  cpSync(suites, suite, { recursive: true })
+  return old
+}
+
 export function registerBench(cf: Command, { root, db, out }: Cli): void {
-  cf.command('bench').command('file').argument('[target]').option('--all', 'one plan per targets/*.yml')
+  const bench = cf.command('bench')
+  bench.command('file').argument('[target]').option('--all', 'one plan per targets/*.yml')
     .requiredOption('--generator <seat>', 'a bench generator in rules/staffing.yaml')
     .action((target: string | undefined, options: { all?: boolean; generator: string }) => {
       for (const id of fileBench(db(), root, target, options.all === true, options.generator, new Date().toISOString())) {
         out(`plan ${String(id)}\t${[...get(root, id, 'target.yml').matchAll(/^target: (.*)$/gm)].at(-1)?.[1] ?? ''}\n`)
+      }
+    })
+  bench.command('rescore').argument('<plans...>').requiredOption('--by <who>', 'ceo or coo').requiredOption('--why <text>')
+    .action((plans: string[], options: { by: string; why: string }) => {
+      const by = holderOf(options.by)
+      for (const id of plans.map(Number)) {
+        const old = rescore(db(), root, id, by, options.why)
+        out(`plan ${String(id)} queued at step 2, supersedes scorecard ${old === null ? 'none' : String(old)}\n`)
       }
     })
 }

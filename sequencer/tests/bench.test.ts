@@ -9,19 +9,20 @@ import { gate, readOutside, walled } from '../../providers/claude-agent-sdk/inde
 import type { Fired, Packet, Provider } from '../../providers/kind.ts'
 import { real } from '../../runner/index.ts'
 import { seat } from '../../runner/rules.ts'
-import { scores } from '../../store/bench.ts'
-import { eventsOf, logged, runRows } from '../../store/events.ts'
+import { rescore } from '../../cli/bench.ts'
+import { scores, supersede } from '../../store/bench.ts'
+import { eventsAfter, eventsOf, logged, runRows } from '../../store/events.ts'
 import { holdOf } from '../../store/holds.ts'
 import type { Db } from '../../store/index.ts'
 import { dial } from '../../store/lanes.ts'
-import { allPlans, holdOn, pipeNamed, planById, putPlan, requeue, waiting, type PlanRow } from '../../store/plans.ts'
+import { allPlans, end, holdOn, pipeNamed, planById, putPlan, requeue, waiting, type PlanRow } from '../../store/plans.ts'
 import { CEILING, generate, nullChecked, scored, scratch } from '../../templates/bench.ts'
 import { drift, mechanisms } from '../drift.ts'
 import { unhold } from '../hold.ts'
 import { dry, tick } from '../index.ts'
 import { route } from '../next.ts'
 import { kernel, mapOf } from '../steps.ts'
-import { get, git, maybe, planDir, put, srcDir } from '../workspace.ts'
+import { get, git, maybe, planDir, put, reap, srcDir } from '../workspace.ts'
 
 const schema = join(import.meta.dirname, '../../schema')
 
@@ -609,6 +610,36 @@ test('D1 D2 D3 a balance above 1e24 wei is clamped in the copy', () => {
   expect(done.note).not.toContain('0x21e19e0c9bab2400000')
   expect(JSON.parse(readFileSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/medusa.json'), 'utf8'))).toEqual({
     fuzzing: { timeout: 600, workers: 2, targetContractsBalances: ['0xd3c21bcecceda1000000', '0x21e19e0c9bab2400000', 'lots'] } })
+})
+
+test('rescore D5 a suite medusa.json is clamped, paths kept', () => {
+  const { root, db } = scoring()
+  const balances = ['0xffffffffffffffffffffffffffffffffffffffffffffffff']
+  writeFileSync(join(srcDir(root, 1), 'test/fizz/medusa.json'), JSON.stringify({ fuzzing: { corpusDirectory: 'fizz_data/corpus_medusa',
+    targetContractsBalances: balances }, compilation: { platformConfig: { target: '../..' } } }))
+  expect(scored(db, root, planById(db, 1)).note).toContain(balances[0])
+  expect(JSON.parse(readFileSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/medusa.json'), 'utf8'))).toEqual({
+    fuzzing: { corpusDirectory: 'fizz_data/corpus_medusa', targetContractsBalances: ['0xd3c21bcecceda1000000'], timeout: 1200, workers: 4 },
+    compilation: { platformConfig: { target: '../..' } } })
+})
+
+test('rescore D1 D2 a done plan scores again on its suite', () => {
+  const { root, db } = scoring()
+  expect(kernel(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  end(db, 1, 'done')
+  expect(reap(root, [1])).toEqual([1])
+  expect(rescore(db, root, 1, 'coo', 'error rows')).toBe(1)
+  expect(planById(db, 1)).toMatchObject({ step: 2, retries: 0 })
+  expect(['queued', 'running']).toContain(planById(db, 1).state)
+  expect(existsSync(join(srcDir(root, 1), 'test/fizz/FizzTest.sol'))).toBe(true)
+  expect(supersede(db, 1)).toBeNull()
+  expect(eventsAfter(db, 0).filter((e) => e.kind === 'rescore')).toEqual([{ plan: 1, kind: 'rescore', actor: 'coo', outcome: 'pass',
+    message: 'error rows', pointer: 'bench_scorecard 1', run: null }])
+  expect(kernel(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  const row = { plan: 1, target: 'euler-earn-m01', generator: 'fizz', ...SCORE, x_ray: null }
+  expect(scores(db)).toEqual([row, row])
+  expect(supersede(db, 1)).toBe(2)
+  expect(runRows(db).filter((r) => r.step === 1)).toEqual([])
 })
 
 test('D3 a root medusa.json that does not parse is refused', () => {

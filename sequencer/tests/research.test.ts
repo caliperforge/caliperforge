@@ -210,6 +210,40 @@ test('D2: a ruling beside an ask with no wrong-if still refuses', async () => {
   expect(plan(w.db, 1).step).toBe(0)
 })
 
+const PARENT = '## Parent ticket\n\n**Question:** parent q\n**Would be wrong if:** parent w\n**Done when:** parent d\n'
+
+const OLDER = `# a part\n\n**What:** part q\n**Why:** y\n**When it ends:** part d\n\n${PARENT}`
+
+const OWN = { question: 'part q', wrong_if: 'it leaves out what this part asks, or answers what its parent ticket asks', done_when: 'part d' }
+
+const FILLED = 'question.json written, filled for a part: '
+  + '**Question:** from **What:**, **Would be wrong if:** from the fixed part sentence, **Done when:** from **When it ends:**'
+
+test('part D1: an older part\'s question.json is its own', () => {
+  const w = researching(OLDER)
+  expect(question(w.root, plan(w.db, 1))).toEqual({ outcome: 'pass', spans: [], note: FILLED })
+  const json = maybe(w.root, 1, 'question.json') ?? ''
+  expect(JSON.parse(json)).toEqual(OWN)
+  for (const parent of ['parent q', 'parent w', 'parent d']) expect(json).not.toContain(parent)
+})
+
+test('part D2: gather rewrites a stale parent question.json', async () => {
+  const w = researching(OLDER)
+  put(w.root, 1, 'question.json', JSON.stringify({ question: 'parent q', wrong_if: 'parent w', done_when: 'parent d' }))
+  const [outcome, prompt] = await gathered(w)
+  expect(outcome.note).toBe(`${FILLED}; researcher: answer.md written, sources.json written with 1 source(s)`)
+  expect(JSON.parse(maybe(w.root, 1, 'question.json') ?? '')).toEqual(OWN)
+  expect(prompt).toContain(`# question.json\n\n${JSON.stringify(OWN)}`)
+})
+
+test('part D3: a parent-only Question is refused, unfired', async () => {
+  const w = researching(`# a part\n\n**When it ends:** part d\n\n${PARENT}`)
+  const refusal = { outcome: 'refuse', spans: ['ask.md'], note: 'ask.md has no **Question:** line' }
+  expect(question(w.root, plan(w.db, 1))).toEqual(refusal)
+  expect((await gathered(w))[0]).toEqual(refusal)
+  expect(ran(w)).toEqual([])
+})
+
 test('D3: an unquoted source is refused at gather', async () => {
   const w = researching()
   question(w.root, plan(w.db, 1))
@@ -563,10 +597,12 @@ const MEASURE = `${ASK}**Measure:** time the cold start\n`
 
 const RUN = 'uv run bench.py'
 
-const TRANSCRIPT = [
-  { type: 'assistant', message: { content: [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: RUN } }] } },
-  { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 't1', content: [{ type: 'text', text: 'cold start:\n  41 ms' }] }] } },
+const bashed = (command: string, text: string): string => [
+  { type: 'assistant', message: { content: [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command } }] } },
+  { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 't1', content: [{ type: 'text', text }] }] } },
 ].map((line) => `${JSON.stringify(line)}\n`).join('')
+
+const TRANSCRIPT = bashed(RUN, 'cold start:\n  41 ms')
 
 const entry = (commit: string, quote = 'cold start: 41 ms'): string =>
   `  - run:\n      command: ${RUN}\n      commit: ${commit}\n      quote: ${quote}\n      claim: Cold start is 41 ms\n`
@@ -575,15 +611,15 @@ const LINKED = '  - url: https://a.example/doc\n    fetched_at: 2026-10-04T10:00
 
 const fence = (...entries: string[]): string => `Cold start is 41 ms [source:1].${SECTIONS}\n\n---\nsources:\n${entries.join('')}---\n`
 
-/** The measurer or fetcher answers `reply` and leaves TRANSCRIPT behind; every other seat answers PASS. */
-const measuring = (reply: string, seen: (packet: Packet) => void): Provider => ({
+/** The measurer or fetcher answers `reply` and leaves `transcript` behind; every other seat answers PASS. */
+const measuring = (reply: string, seen: (packet: Packet) => void, transcript = TRANSCRIPT): Provider => ({
   name: 'claude-agent-sdk',
   fire: async (packet) => {
     seen(packet)
     const measurer = /# (?:measurer|fetcher)\n/.test(packet.prompt)
     const text = measurer ? reply : PASS
     const fired = await stub(text, 0, text).fire(packet)
-    if (measurer) writeFileSync(packet.transcript, TRANSCRIPT)
+    if (measurer) writeFileSync(packet.transcript, transcript)
     return fired
   },
 })
@@ -607,6 +643,28 @@ test('measure D1: a Measure line fires measurer with HEAD', async () => {
   expect(idle).toBeUndefined()
   expect(ran(w)).toEqual(['measurer'])
   expect(JSON.parse(maybe(w.root, 1, 'runs.json') ?? '')).toEqual([{ command: RUN, output: 'cold start:\n  41 ms' }])
+})
+
+const UNBASHED = `${JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'Kept the rest.' }] } })}\n`
+
+const regathered = async (...left: string[]): Promise<unknown> => {
+  const w = researching(MEASURE)
+  const head = headed(w)
+  question(w.root, plan(w.db, 1))
+  for (const transcript of left) {
+    expect(await gather(w.db, w.root, plan(w.db, 1), mapOf('research').at(1), measuring(fence(entry(head)), () => undefined, transcript)))
+      .toMatchObject({ outcome: 'pass' })
+  }
+  return JSON.parse(maybe(w.root, 1, 'runs.json') ?? '')
+}
+
+test('runs D1: a repair run with no Bash call keeps earlier runs', async () => {
+  expect(await regathered(TRANSCRIPT, UNBASHED)).toEqual([{ command: RUN, output: 'cold start:\n  41 ms' }])
+})
+
+test('runs D2: runs.json holds every run, oldest first', async () => {
+  expect(await regathered(TRANSCRIPT, bashed('uv run warm.py', 'warm start:\n  9 ms')))
+    .toEqual([{ command: RUN, output: 'cold start:\n  41 ms' }, { command: 'uv run warm.py', output: 'warm start:\n  9 ms' }])
 })
 
 test('measure D1: an ask with no Measure line fires researcher', async () => {

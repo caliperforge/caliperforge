@@ -17,7 +17,7 @@ import type { Db } from '../store/index.ts'
 import { get as setting, observed, wall } from '../store/lanes.ts'
 import { originRef, type PlanRow } from '../store/plans.ts'
 import { refusalRows } from '../store/refusals.ts'
-import { lastTranscript } from '../store/runs.ts'
+import { transcripts } from '../store/runs.ts'
 import { byRun, outputs, pending } from '../store/transcript.ts'
 import { DEFAULT_BUILDER, type Step } from './pr-path.ts'
 import { verified, type Ran } from './verified.ts'
@@ -109,14 +109,24 @@ export const steps: Step[] = ['question', 'gather', 'check', 'review', 'record']
   name === 'gather' ? { ...row(name, i), seat: 'researcher', fires: 'seat', runs: 'researcher' }
   : name === 'review' ? { ...row(name, i), fires: 'seat', runs: 'senior_review' } : row(name, i))
 
-const LINES = [['question', '**Question:**'], ['wrong_if', '**Would be wrong if:**'], ['done_when', '**Done when:**']] as const
+const LINES = [['question', '**Question:**', '**What:**'], ['wrong_if', '**Would be wrong if:**', null], ['done_when', '**Done when:**', '**When it ends:**']] as const
+
+const PART_WRONG = 'it leaves out what this part asks, or answers what its parent ticket asks'
+
+const WRITTEN = 'question.json written'
 
 const askOf = (root: string, plan: PlanRow): string =>
   ['ask.md', 'issue.md'].flatMap((name) => maybe(root, plan.id, name) ?? []).join('\n')
 
 const said = (ask: string) => {
   const lines = ask.split('\n')
-  return LINES.map(([key, label]) => [key, label, lines.find((l) => l.startsWith(label))?.slice(label.length).trim() ?? ''] as const)
+  const parent = lines.findIndex((l) => l === '## Parent ticket' || l === '## Parent comments')
+  const own = parent === -1 ? lines : lines.slice(0, parent)
+  const line = (label: string): string => own.find((l) => l.startsWith(label))?.slice(label.length).trim() ?? ''
+  return LINES.map(([key, label, field]) => {
+    const from = line(label) !== '' || parent === -1 ? null : field ?? 'the fixed part sentence'
+    return [key, label, from === null ? line(label) : field === null ? PART_WRONG : line(field), from] as const
+  })
 }
 
 export const unasked = (ask: string): string[] => said(ask).filter(([, , rest]) => rest === '').map(([, label]) => label)
@@ -126,7 +136,8 @@ export function question(root: string, plan: PlanRow): Outcome {
   const missing = unasked(ask)
   if (missing.length > 0) return { outcome: 'refuse', spans: ['ask.md'], note: `ask.md has no ${missing.join(' or ')} line` }
   put(root, plan.id, 'question.json', JSON.stringify(Object.fromEntries(said(ask).map(([key, , rest]) => [key, rest]))))
-  return { outcome: 'pass', spans: [], note: 'question.json written' }
+  const filled = said(ask).flatMap(([, label, , from]) => from === null ? [] : [`${label} from ${from}`])
+  return { outcome: 'pass', spans: [], note: `${WRITTEN}${filled.length === 0 ? '' : `, filled for a part: ${filled.join(', ')}`}` }
 }
 
 const OUTPUT = '**Output:**'
@@ -150,6 +161,13 @@ const BEFORE = '\n\n# Before you hand in\n\nWrite the answer and its closing fen
   + 'and hand in that draft only once it prints `pass`.'
 
 export async function gather(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
+  const asked = question(root, plan)
+  if (asked.outcome === 'refuse') return asked
+  const got = await gathering(db, root, plan, step, provider)
+  return asked.note === WRITTEN ? got : { ...got, note: `${asked.note}; ${got.note}` }
+}
+
+async function gathering(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
   const ask = askOf(root, plan)
   const folder = output(ask)
   if ('why' in folder) return { outcome: 'refuse', spans: ['ask.md'], note: folder.why }
@@ -181,7 +199,7 @@ export async function gather(db: Db, root: string, plan: PlanRow, step: Step, pr
   const reply = fromDraft ? readFileSync(draft, 'utf8') : fired.text
   const sources = sourced(root, plan, reply)
   if (sources.outcome === 'refuse') return sources
-  if (measure) put(root, plan.id, 'runs.json', JSON.stringify(outputs(lastTranscript(db, plan.id, step.step))))
+  if (measure) put(root, plan.id, 'runs.json', JSON.stringify(transcripts(db, plan.id, step.step).flatMap(outputs)))
   put(root, plan.id, 'answer.md', reply.replace(FENCE, '').trim())
   return { outcome: 'pass', spans: [], note: `${seat.runs}: answer.md written${fromDraft ? ' from .cf/draft.md, the reply had no fence' : ''}, ${sources.note}` }
 }

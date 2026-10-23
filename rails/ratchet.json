@@ -2,21 +2,14 @@
   "authority/index.ts": {
     "lines": 40
   },
-  "authority/tests/authority.test.ts": {
-    "prepare": 1
-  },
   "checks/index.ts": {
     "lines": 28
   },
   "ci-green/index.ts": {
     "lines": 126
   },
-  "ci-green/tests/ci-green.test.ts": {
-    "prepare": 1
-  },
   "completion-audit/index.ts": {
     "lines": 104,
-    "prepare": 1,
     "silent-catch": 1
   },
   "completion-audit/tests/audit.test.ts": {

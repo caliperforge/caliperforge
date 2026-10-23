@@ -4,6 +4,7 @@ import { expect, test } from 'vitest'
 import { fresh } from '../../../checks/sqlite.ts'
 import { planRow } from '../../../runner/index.ts'
 import { load } from '../../../runner/rules.ts'
+import { verdictRows } from '../../../store/verdict.ts'
 import { record } from '../../record.ts'
 import { authority } from '../index.ts'
 
@@ -89,6 +90,5 @@ test('writes a verdicts row the store accepts', () => {
   load(db, root)
   const plan = planRow(db)
   const id = record(db, join(import.meta.dirname, '..'), plan, authority(root, 'typescript_specialist', fixture('red.diff')), 0.01)
-  const row = db.prepare('SELECT gate, kind, outcome, rail_id, origin_kind, origin_ref FROM verdicts WHERE id = ?').get(id)
-  expect(row).toEqual({ gate: 'pre_review', kind: 'rail', outcome: 'refuse', rail_id: 'authority', origin_kind: 'rail', origin_ref: 'authority' })
+  expect(verdictRows(db, plan)).toMatchObject([{ id, gate: 'pre_review', kind: 'rail', outcome: 'refuse', rail_id: 'authority', origin_kind: 'rail', origin_ref: 'authority' }])
 })

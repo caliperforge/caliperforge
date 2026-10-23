@@ -45,3 +45,11 @@ export function addReview(db: Db, gate: string, step: number, plan: number, v: V
     .run(gate, v.subject_digest, plan, step, v.outcome, v.origin_kind, v.origin_ref, tokens, seconds, tree, v.message)
   return Number(row.lastInsertRowid)
 }
+
+export function addRail(db: Db, gate: string, step: number, plan: number, rail: string, v: Verdict, seconds: number): number {
+  const row = db.prepare(`INSERT INTO verdicts
+    (gate, kind, subject_digest, plan, step, outcome, rail_id, origin_kind, origin_ref, message, tokens, seconds)
+    VALUES (?, 'rail', ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`)
+    .run(gate, v.subject_digest, plan, step, v.outcome, rail, v.origin_kind, v.origin_ref, v.message, seconds)
+  return Number(row.lastInsertRowid)
+}

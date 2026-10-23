@@ -472,7 +472,7 @@ test('D4 a refused return --at writes nothing', () => {
   expect(logged(db)).toEqual([])
 })
 
-const NOW =new Date('2026-10-04T22:00:00.000Z')
+const NOW = new Date('2026-10-04T22:00:00.000Z')
 const returns = (db: ReturnType<typeof open>) => eventsOf(db, 7, 'return').map((e) => ({ actor: e.actor }))
 const pushed = (db: ReturnType<typeof open>, plan: number) => {
   pushedRow(db, { plan, step: 6, seat: 'typescript_specialist', diff_digest: 'd'.repeat(64),

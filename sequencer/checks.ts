@@ -246,7 +246,7 @@ function related(script: string, name: string, narrow: string[]): string[] | nul
   return ['exec', '--', 'vitest', 'related', '--run', ...narrow]
 }
 
-function bare(src: string): boolean {
+export function bare(src: string): boolean {
   return existsSync(join(src, 'package-lock.json')) && !existsSync(join(src, 'node_modules'))
 }
 

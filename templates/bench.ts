@@ -5,6 +5,7 @@ import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 import type { Provider } from '../providers/kind.ts'
 import { packet, real } from '../runner/index.ts'
 import { load, seat } from '../runner/rules.ts'
+import { bare, npm } from '../sequencer/checks.ts'
 import type { Outcome } from '../sequencer/kind.ts'
 import { staffed } from '../sequencer/staffing.ts'
 import { firstLine } from '../sequencer/unpolled.ts'
@@ -102,6 +103,14 @@ export function scratch(root: string, plan: PlanRow): Outcome {
   return { outcome: 'pass', spans: [], note: `checkout.json written at ${sha.slice(0, 12)}` }
 }
 
+function deps(dir: string): Outcome | null {
+  if (!bare(dir)) return null
+  const ran = npm(['ci', '--ignore-scripts', '--include=dev'], dir)
+  if (ran.ok) return null
+  const line = ran.output.split('\n').find((l) => /^npm (?:error|ERR!)/.test(l)) ?? ''
+  return { outcome: 'refuse', spans: ['bench.install'], note: `npm ci exited ${ran.code}: ${line}` }
+}
+
 export async function generate(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
   const generator = fields(maybe(root, plan.id, 'target.yml') ?? '').generator ?? ''
   if (generator === '') return { outcome: 'refuse', spans: ['target.yml'], note: 'target.yml has no generator' }
@@ -110,6 +119,8 @@ export async function generate(db: Db, root: string, plan: PlanRow, step: Step, 
   const dir = real(srcDir(root, plan.id))
   const unchecked = checkedOut(db, root, plan.id, dir)
   if (unchecked !== null) return { outcome: 'refuse', spans: ['bench.no_checkout'], note: unchecked, to: 0 }
+  const uninstalled = deps(dir)
+  if (uninstalled !== null) return uninstalled
   load(db, root)
   const { manifest, prompt, hash } = seat(root, name)
   const granted = manifest.reads?.map((path) => real(path.startsWith('~/') ? join(homedir(), path.slice(2)) : path)) ?? []

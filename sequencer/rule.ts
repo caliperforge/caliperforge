@@ -41,8 +41,6 @@ function ruled(issue: string): string {
 }
 
 export function stray(db: Db, root: string, plan: PlanRow, text: string): string | null {
-  const other = [...text.matchAll(/\.cf\/work\/(\d+)/g)].find((m) => Number(m[1]) !== plan.id)
-  if (other !== undefined) return other[0]
   const climbed = text.split(/\s+/).find((t) => /[^\s`'"(.]\.\.\//.test(t))
   if (climbed !== undefined) return climbed
   const output = (p: string) => plan.template === 'research' && ['sources.json', 'answer.md'].includes(relative(planDir(root, plan.id), p))
@@ -53,7 +51,7 @@ export function stray(db: Db, root: string, plan: PlanRow, text: string): string
   const fetched = (p: string) => p.startsWith('~/') && plan.template === 'research' && !builderRan(db, plan.id) && work(p) !== null
   const inside = (p: string) => p.startsWith('..') ? climbs(p) || output(join(srcDir(root, plan.id), p)) : under(p.replace(/^~(?=\/)/, homedir())) || named(p) || output(join(planDir(root, plan.id), p)) || fetched(p)
   return text.replace(/\/{2,}/g, '/').split(/(?<=[.;!?])\s+|\n/)
-    .flatMap((s) => [...s.matchAll(PATH)].map((m) => m[1] ?? '').filter((p) => p.startsWith('..') || !BY_HAND.test(s)))
+    .flatMap((s) => [...s.matchAll(PATH)].map((m) => m[1] ?? '').filter((p) => !/^\/[\w-]+[.,;:!?]?$/.test(p) && (p.startsWith('..') || !BY_HAND.test(s))))
     .find((p) => !inside(p)) ?? null
 }
 

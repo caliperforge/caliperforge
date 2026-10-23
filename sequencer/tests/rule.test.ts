@@ -79,13 +79,13 @@ test('D2 after a build the answer sits above ## Standing; rebuilds', async () =>
   expect(got.state).toMatchObject({ step: 2 })
 })
 
-test('D3 an answer naming .cf/work/ is refused and escalates', async () => {
+test('D3 an answer naming another job folder is written', async () => {
   const got = await fixed(3, answered('see .cf/work/354/ask.md'))
   expect(got.ask).toBe('the ask\n')
-  expect(got.issue).toBe(ISSUE)
-  expect(got.state).toEqual({ state: 'blocked_on_ceo', step: 3 })
-  expect(got.applied).toEqual([{ applied: 'escalated' }])
-  expect(got.posted).toEqual(['CaliperForge · #139 needs you'])
+  expect(got.issue).toContain('\n\nsee .cf/work/354/ask.md\n\n## Standing\n')
+  expect(got.state).toMatchObject({ step: 2 })
+  expect(got.applied).toEqual([{ applied: 'applied' }])
+  expect(got.posted).toEqual([])
 })
 
 test('an absolute path outside the root is refused', async () => {
@@ -381,6 +381,15 @@ test.each([
   const got = await aliased(() => answer)
   expect(got.issue).toBe(ISSUE)
   expect(got.events).toEqual(DROPPED(path))
+})
+
+test.each([
+  'the SODA service takes the cutout at `/sync` (`/async` for jobs)',
+  'nothing on main brings back `.cf/work/1647/src/.git`',
+])('D1 D2 a ruling naming %s applies', async (answer) => {
+  const got = await aliased(() => answer)
+  expect(got.events).toEqual(PASS)
+  expect(got.issue).toContain(`\n\n${answer}\n\n## Standing\n`)
 })
 
 test('D5 a director return opens the path rulings.md names', async () => {

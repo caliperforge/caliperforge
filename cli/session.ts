@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import type { Db } from '../store/index.ts'
 import { propose, type Item } from '../store/proposals.ts'
+import { latest, rulingId } from '../store/rulings.ts'
 import { searchIssue } from './gh.ts'
 
 const ITEM = /^(RULING|WORK|ORDERING|WORLD|MEASUREMENT)\s+([a-z][a-z0-9_.]*)\s*=\s*(\S+)\s*$/
@@ -33,29 +34,15 @@ export function settled(transcript: string): Settled[] {
  */
 export function close(db: Db, path: string, find: FindIssue = search): number[] {
   return settled(readFileSync(path, 'utf8'))
-    .filter((s) => ruled(db, s) === 'new')
+    .filter((s) => latest(db, s.subject)?.value !== s.value)
     .flatMap((s) => propose(db, {
       class: s.class,
       subject: s.subject,
       value: s.value,
-      match_ruling_id: priorRuling(db, s),
+      match_ruling_id: rulingId(db, s.subject),
       match_issue_no: find(s.subject),
       evidence: `${path}:${String(s.line)}`,
     }) ?? [])
-}
-
-function ruled(db: Db, s: Settled): 'new' | 'settled' {
-  const row = prior(db, s.subject)
-  return row?.value === s.value ? 'settled' : 'new'
-}
-
-function priorRuling(db: Db, s: Settled): number | null {
-  return prior(db, s.subject)?.id ?? null
-}
-
-function prior(db: Db, subject: string): { id: number; value: string } | undefined {
-  return db.prepare('SELECT id, value FROM rulings WHERE subject = ? ORDER BY id DESC LIMIT 1')
-    .get(subject) as { id: number; value: string } | undefined
 }
 
 function search(subject: string): number | null {

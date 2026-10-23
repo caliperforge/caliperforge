@@ -42,7 +42,7 @@ export function beat(db: Db, plan: number, now: Date = new Date()): void {
 /** The forking tick beats its lap's lease this often: a lap's synchronous checks block its own loop. */
 export const BEAT = 60_000
 
-/** Beats the plan's lease while `work` runs, then frees it as `drop` does. */
+
 export async function holding<T>(db: Db, plan: number, work: () => Promise<T>): Promise<T> {
   const timer = setInterval(() => { beat(db, plan) }, BEAT)
   try {

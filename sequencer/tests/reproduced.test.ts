@@ -2,9 +2,11 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { holdOf } from '../../store/holds.ts'
-import { advance, dropPlan } from '../../store/plans.ts'
+import { eventsOf } from '../../store/events.ts'
+import { advance, dropPlan, resume } from '../../store/plans.ts'
 import { shape, type Refused } from '../brief.ts'
 import { tick } from '../index.ts'
+import { rule } from '../rule.ts'
 import { maybe } from '../workspace.ts'
 import { git, GREEN, pkg } from './bases.ts'
 import { approve, CARRIED, internalPlan, ours, plan, stub, world, type World } from './world.ts'
@@ -105,6 +107,24 @@ test('run D2 a fails that exits 0 stops step 1 as already fixed', async () => {
   expect(maybe(w.root, w.plan, 'issue.md')).toBeNull()
   expect(holdOf(w.db, w.plan)?.held_why).toContain(`brief_writer: already fixed at ${baseOf(w)}: ${COMMANDED} exited 0 > `)
   expect(holdOf(w.db, w.plan)?.held_why).toContain(' > already works')
+})
+
+test('run D7 a ruling on an already fixed stop escalates again', async () => {
+  const w = moved('already works', 0)
+  await briefing(w)
+  rule(w.db, w.root, plan(w.db, w.plan), 'director', 'the bug is live on main')
+  resume(w.db, w.plan)
+  await tick(w.db, w.root, stub(CARRIED))
+  expect(eventsOf(w.db, w.plan, 'ruling').map((e) => e.outcome)).toEqual(['escalate', 'escalate'])
+  expect(plan(w.db, w.plan).state).toBe('blocked_on_ceo')
+})
+
+test('run D8 an unruled already fixed stop repeats quietly', async () => {
+  const w = moved('already works', 0)
+  await briefing(w)
+  resume(w.db, w.plan)
+  expect((await tick(w.db, w.root, stub(CARRIED)))[0]).toMatchObject({ outcome: 'needs_ceo', state: 'running' })
+  expect(eventsOf(w.db, w.plan, 'ruling').map((e) => e.outcome)).toEqual(['escalate'])
 })
 
 test('run D3 a shows that exits 0 saves the brief', async () => {

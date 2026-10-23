@@ -329,6 +329,11 @@ const research = ({ db }: { db: Db }) => { db.exec("UPDATE plans SET template = 
 
 const PASS = [{ actor: 'director', outcome: 'pass', message: 'rule: the ruling names it' }]
 
+const outputs = (s: { db: Db; home: string }) => {
+  research(s)
+  put(s.home, 7, 'ask.md', 'the ask\n\n**Output:** ~/cf_work/1614/\n')
+}
+
 test('D1 a file committed at base.sha applies at step 1', async () => {
   const got = await read('/bench/run_pair.py', ({ home }) => {
     const src = srcDir(home, 7)
@@ -377,8 +382,10 @@ test.each([
   { id: 'D2', answer: 'the builder edits `~/notes/x.ts`', path: '~/notes/x.ts' },
   { id: 'D3', answer: 'edit /Users/x/elsewhere/file.ts', path: '/Users/x/elsewhere/file.ts' },
   { id: 'D4', answer: `edit \`~/notes/x.ts\`; ${HAND}`, path: '~/notes/x.ts' },
-])('$id a ruling editing an outside path is dropped', async ({ answer, path }) => {
-  const got = await aliased(() => answer)
+  { id: 'D4', answer: 'clear `/tmp`', path: '/tmp' },
+  { id: 'D4', answer: 'write `~/cf_work/1615/x.ts`', path: '~/cf_work/1615/x.ts', setup: outputs },
+])('$id a ruling editing an outside path is dropped', async ({ answer, path, setup }) => {
+  const got = await aliased(() => answer, setup)
   expect(got.issue).toBe(ISSUE)
   expect(got.events).toEqual(DROPPED(path))
 })
@@ -390,6 +397,16 @@ test.each([
   const got = await aliased(() => answer)
   expect(got.events).toEqual(PASS)
   expect(got.issue).toContain(`\n\n${answer}\n\n## Standing\n`)
+})
+
+test.each([
+  { id: 'D1', answer: 'the /sync route returns 200' },
+  { id: 'D2', answer: 'write `~/cf_work/1614/rubin.ts`', setup: outputs },
+  { id: 'D3', answer: 'read .cf/work/7' },
+  { id: 'D3', answer: 'read .cf/work/1654' },
+  { id: 'D3', answer: 'read `.cf/work/1654/`' },
+])('$id $answer applies', async ({ answer, setup }) => {
+  expect((await aliased(() => answer, setup)).events).toEqual(PASS)
 })
 
 test('D5 a director return opens the path rulings.md names', async () => {

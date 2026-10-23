@@ -13,7 +13,7 @@ import { ofKind } from '../../store/events.ts'
 import { SignalRow, since } from '../../store/signals.ts'
 import { addRule, type Db } from '../../store/index.ts'
 import { amend } from '../../store/lanes.ts'
-import { planById, planRows } from '../../store/plans.ts'
+import { planById, planRows, planTitle } from '../../store/plans.ts'
 import { accountRows, addAccount, addTarget, targetRow, targetRows } from '../../store/targets.ts'
 import { adopt, render } from '../adopt.ts'
 import type { Pr, Read } from '../gh.ts'
@@ -88,6 +88,12 @@ test('cf adopt files one pushed plan with target and account rows', () => {
   expect(planRows(db))
     .toMatchObject([{ id: row.plan, template: 'pr_path', state: 'done', step: 8, target_id: row.target }])
   expect(log[0]).toBe('pr view 282 --repo solana-foundation/pay-kit --json number,url,state,title,body,closingIssuesReferences,headRefName,headRepositoryOwner')
+})
+
+test('D2 a fresh adopt titles its plan from the PR title', () => {
+  const db = fresh(schema)
+  const row = adopt(db, root(), `${REPO}#282`, TODAY, canned())
+  expect(planTitle(db, row.plan)).toBe('add the pay button')
 })
 
 test('D1 adopting writes the head branch, again on a re-adopt', () => {

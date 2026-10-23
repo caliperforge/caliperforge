@@ -11,8 +11,9 @@ import { pushedRow } from '../../store/deliverables.ts'
 import { addRule, migrate, open, type Db } from '../../store/index.ts'
 import { hhmm, hours, set, width } from '../../store/lanes.ts'
 import { addPart } from '../../store/parts.ts'
-import { addPipe, openPipes, putPlan, waiting, type PlanRow } from '../../store/plans.ts'
+import { addPipe, briefed, openPipes, putPlan, waiting, type PlanRow } from '../../store/plans.ts'
 import { refusalAt } from '../../store/refusals.ts'
+import { addAccount, addTarget } from '../../store/targets.ts'
 import { recordListing } from '../../store/tickets.ts'
 import { receipt, slots } from '../../store/ticks.ts'
 import { flow, reported, slack } from '../flow.ts'
@@ -95,6 +96,24 @@ test('D4: a halted plan with no event has no reason recorded', () => {
 test('D5: a clean store lists nothing', () => {
   const db = piped()
   plan(db, 1, 'queued')
+  expect(flow(db, root, now)).toEqual([])
+})
+
+test('D3 D4: a plan with no title or origin lists until titled', () => {
+  const db = piped()
+  putPlan(db, { id: 9, pipe_id: 1, target_id: null, template: 'bench', state: 'queued', queued_at: '2026-09-18', step: 0, retries: 0 })
+  expect(flow(db, root, now)).toEqual(["plan 9\tno title, so Loupe shows it untitled\tUPDATE plans SET title = '<title>' WHERE id = 9\n"])
+  briefed(db, 9, { title: 'Bench: score fizz on smoke-01 (catch / miss / false alarm)', what: null, why: null, ends: null })
+  expect(flow(db, root, now)).toEqual([])
+})
+
+test('D4: a target plan at step 0 with no title is not listed', () => {
+  const db = piped()
+  addAccount(db, { id: 1, repo: REPO, measured_at: '2026-09-18', maintainers: 1, doors: 1, last_outsider_merge: null,
+    open_pr_age_p50_days: 0, cross_repo_activity: 0, pulse: 'cold', evidence: 'e' })
+  const target = addTarget(db, { account_id: 1, repo: REPO, issue_no: 9, named_merger: 'm', state: 'queued',
+    evidence_measured_at: '2026-09-18', evidence: 'e' })
+  putPlan(db, { id: 9, pipe_id: 1, target_id: target, template: 'pr_path', state: 'queued', queued_at: '2026-09-18', step: 0, retries: 0 })
   expect(flow(db, root, now)).toEqual([])
 })
 

@@ -3,11 +3,12 @@ import { once } from 'node:events'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { expect, test, vi } from 'vitest'
 import { eventsOf } from '../../store/events.ts'
+import { lapping } from '../../store/index.ts'
 import { width } from '../../store/lanes.ts'
 import { alive, BEAT, clear, held, take, type Taken } from '../../store/leases.ts'
 import { dropPlan } from '../../store/plans.ts'
 import { lap, tick } from '../index.ts'
-import { CARRIED, internalPlan, ours, plan, stub, watched, world } from './world.ts'
+import { CARRIED, PASS, internalPlan, ours, plan, stub, watched, world } from './world.ts'
 
 function two() {
   const w = world()
@@ -58,6 +59,15 @@ test('lap takes the lease from its tick and steps the job', async () => {
   expect(fired.map((f) => f.plan)).toEqual([2])
   expect(plan(w.db, 2).step).toBe(1)
   expect(held(w.db)).toEqual([])
+})
+
+test('D4 lap runs its job under its plan', async () => {
+  const w = two()
+  take(w.db, 2, new Date(), 7)
+  watched([], w.root, 2)
+  const seen: (number | undefined)[] = []
+  await lap(w.db, w.root, stub(CARRIED, 0, PASS, () => seen.push(lapping.getStore())), 2, 7, null, 5)
+  expect(new Set(seen)).toEqual(new Set([2]))
 })
 
 test('lap steps nothing its tick no longer holds', async () => {

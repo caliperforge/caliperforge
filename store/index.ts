@@ -2,6 +2,9 @@ import Database from 'better-sqlite3'
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { RuleRow } from './rows.ts'
+import { timed } from './timed.ts'
+
+export { lapping } from './timed.ts'
 
 export type Db = Database.Database
 export const LOCKED = 'database is locked'
@@ -17,6 +20,9 @@ export function open(path: string): Db {
   db.pragma('busy_timeout = 10000')
   db.pragma('journal_mode = WAL')
   db.pragma('foreign_keys = ON')
+  const begin = db.transaction.bind(db)
+  db.transaction = ((fn: (...args: unknown[]) => unknown) =>
+    begin(timed(fn, new Error().stack?.split('\n')[2] ?? ''))) as Db['transaction']
   return db
 }
 

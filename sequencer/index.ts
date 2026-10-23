@@ -1,6 +1,6 @@
 import { pr as readPr, type Pr, type Read } from '../cli/gh.ts'
 import type { Provider } from '../providers/kind.ts'
-import type { Db } from '../store/index.ts'
+import { type Db, lapping } from '../store/index.ts'
 import { clear as unlease, handOver, held, holding, take, type Lease, type Taken } from '../store/leases.ts'
 import { cap, hhmm, zone } from '../store/lanes.ts'
 import { idle, keepWait } from '../store/now.ts'
@@ -142,7 +142,7 @@ export async function lap(db: Db, root: string, provider: Provider, plan: number
     unlease(db, plan)
     return []
   }
-  return one(db, root, pipe, { plan: row, route: route(db, row, new Date(), taken) }, taken, provider, undefined, chain, read, moved)
+  return lapping.run(plan, () => one(db, root, pipe, { plan: row, route: route(db, row, new Date(), taken) }, taken, provider, undefined, chain, read, moved))
 }
 
 /** A `token_ceiling` plan is leased too: `ceilinged` is its step. */

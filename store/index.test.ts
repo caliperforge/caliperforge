@@ -2,10 +2,14 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { expect, it } from 'vitest'
-import { addRule, dump, migrate, open, rules, upsertRule } from './index.ts'
+import { afterEach, expect, it, vi } from 'vitest'
+import { addRule, dump, lapping, migrate, open, rules, upsertRule } from './index.ts'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+const sleep = (ms: number): void => { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms) }
+const stderr = () => vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+
+afterEach(() => { vi.restoreAllMocks() })
 
 it('applies every migration once and records the version', () => {
   const db = open(':memory:')
@@ -62,4 +66,25 @@ it('a failed schema leaves the version and a half-written table', () => {
   expect(db.pragma('user_version', { simple: true })).toBe(1)
   expect(db.prepare("SELECT name FROM sqlite_master WHERE name IN ('kept', 'half')").all()).toEqual([{ name: 'kept' }])
   expect(db.pragma('foreign_keys', { simple: true })).toBe(1)
+})
+
+it('D1 a transaction held past 1 s logs its caller and plan', () => {
+  const write = stderr()
+  const db = open(':memory:')
+  lapping.run(7, () => { db.transaction(() => { sleep(1100) })() })
+  expect(write.mock.calls).toEqual([[expect.stringMatching(/^cf: transaction held 1\.\d s at store\/index\.test\.ts:74 plan 7\n$/)]])
+})
+
+it('D2 a transaction under 1 s logs nothing', () => {
+  const write = stderr()
+  const db = open(':memory:')
+  expect(lapping.run(7, () => db.transaction(() => 3)())).toBe(3)
+  expect(write).not.toHaveBeenCalled()
+})
+
+it('D3 a slow transaction outside a lap logs plan none', () => {
+  const write = stderr()
+  const db = open(':memory:')
+  db.transaction(() => { sleep(1100) })()
+  expect(write.mock.calls).toEqual([[expect.stringMatching(/^cf: transaction held 1\.\d s at store\/index\.test\.ts:88 plan none\n$/)]])
 })

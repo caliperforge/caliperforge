@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import type { Provider } from '../../providers/kind.ts'
+import { stalled } from '../../store/drift.ts'
 import { eventsOf, logged, ofKind } from '../../store/events.ts'
 import type { Db } from '../../store/index.ts'
 import { take } from '../../store/leases.ts'
@@ -119,6 +120,16 @@ test('stuckOverlap', () => {
   expect(d.prepare('SELECT state FROM plans WHERE id = 1').get()).toEqual({ state: 'running' })
   expect(maybe(root, 1, 'refusal.md')).toBeNull()
   expect(d.prepare("SELECT count(*) AS n FROM events WHERE kind = 'stuck'").get()).toEqual({ n: 0 })
+})
+
+test('stuckScoreBusy', () => {
+  const { d, root } = stalling()
+  d.exec("UPDATE plans SET template = 'bench', state = 'queued', step = 2, wait_reason = 'bench_score_busy' WHERE id = 1")
+  for (const minutes of [0, 30, 61, 90, 120]) expect(stuck(d, root, STUCK, at(minutes))).toEqual([])
+  expect(d.prepare('SELECT state FROM plans WHERE id = 1').get()).toEqual({ state: 'queued' })
+  expect(maybe(root, 1, 'refusal.md')).toBeNull()
+  expect(ofKind(d, 'stuck')).toEqual([])
+  expect(stalled(d, [d.prepare('SELECT min(id) FROM pipes').pluck().get() as number])).toEqual([])
 })
 
 test('stuckOffline', () => {

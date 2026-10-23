@@ -426,7 +426,7 @@
   switch: { key: science.dir }
   table: refusals
   column: at
-  where: "span = 'research.moving_ref'"
+  where: "span = 'research.moving_ref' AND NOT EXISTS (SELECT 1 FROM events e WHERE e.plan = refusals.plan AND e.kind = 'research.unpinned')"
   gap: 7d
   expected: 0
 - name: ruling_unmoved
@@ -441,6 +441,12 @@
   where: "kind = 'director' AND outcome = 'needs_coo' AND (message NOT LIKE 'ask_ceo: %' OR message = 'ask_ceo: no readable answer') AND message NOT LIKE '%: refused by the fence, the plan stopped at its build cap' AND message <> 'ask_coo: director answered this plan twice today' AND plan NOT IN (SELECT plan FROM decisions WHERE verb = 'ask_coo' AND at >= datetime(events.at, '-1 hour'))"
   gap: 7d
   expected: 0
+- name: research_pinned
+  switch: { key: science.dir }
+  table: events
+  column: at
+  where: "kind = 'research.pinned'"
+  gap: 7d
 - name: return_at
   table: events
   column: at

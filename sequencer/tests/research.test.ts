@@ -139,6 +139,23 @@ test('check D2: a split outside a code span still falls', async () => {
     .toEqual({ outcome: 'refuse', spans: ['research.unsourced'], note: 'no source for "It never moves."' })
 })
 
+const QUOTED = 'It looks like some commits lost verified signatures. I\'ll need those repushed to be able to merge.'
+
+test('check D3: a closed straight quote is one sentence', async () => {
+  expect(await checked(`the maintainer wrote "${QUOTED}" [source:1].`))
+    .toEqual({ outcome: 'pass', spans: [], note: '1 sentence(s) checked against 1 url(s)' })
+})
+
+test('check D4: a closed curly quote is one sentence', async () => {
+  expect(await checked(`the maintainer wrote “${QUOTED}” [source:1]. It never moves.`))
+    .toEqual({ outcome: 'refuse', spans: ['research.unsourced'], note: 'no source for "It never moves."' })
+})
+
+test('check D5: an unclosed quote still splits', async () => {
+  expect(await checked('He said "it works [source:1]. It never moves.'))
+    .toEqual({ outcome: 'refuse', spans: ['research.unsourced'], note: 'no source for "It never moves."' })
+})
+
 test('check: a 404 is a dead source', async () => {
   fetched.mockResolvedValue(new Response('', { status: 404 }))
   expect(await checked('The cap is 3 [source:1].'))

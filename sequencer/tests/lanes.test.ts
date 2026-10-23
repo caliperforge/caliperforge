@@ -9,7 +9,7 @@ import { addSetting, dropSettings } from '../../store/drift.ts'
 import { newestRun } from '../../store/events.ts'
 import { amend, cap, dial, forget, lanes, name, priority, record, set, templatePriority, usage, width, windows, type Reading } from '../../store/lanes.ts'
 import { addPipe, addPlan, advance, allPlans, live, pipeNamed, retry, rewind } from '../../store/plans.ts'
-import { WHY } from '../../store/refusals.ts'
+import { refusalRows } from '../../store/refusals.ts'
 import { tick } from '../index.ts'
 import { picks } from '../next.ts'
 import { maybe, put, SELF } from '../workspace.ts'
@@ -219,7 +219,7 @@ test('the cap decides how many pipes worth of plans the tick opens', async () =>
   expect(await tick(w.db, w.root, stub(CARRIED))).toEqual([])
 })
 
-test('a throw refuses one plan, a repeat stops it, others step',async () => {
+test('a throw blocks one plan on the director, others step',async () => {
   const w = world()
   approve(w.db, w.target)
   for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
@@ -229,14 +229,12 @@ test('a throw refuses one plan, a repeat stops it, others step',async () => {
   const wire = { ...watched([], w.root, 1), send: () => { throw new Error(stderr) } }
 
   const first = await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
-  expect(first.find((f) => f.plan === 1)).toMatchObject({ step: 6, outcome: 'refuse', state: 'retried' })
+  expect(first.find((f) => f.plan === 1)).toMatchObject({ step: 6, outcome: 'needs_ceo', state: 'blocked_on_ceo' })
+  expect(first.find((f) => f.plan === 1)?.spans).toContain('machine_fault')
   expect(first.find((f) => f.plan === 2)).toMatchObject({ pipe: 'research' })
   expect(plan(w.db, 1).step).toBe(6)
-  expect(maybe(w.root, 1, 'refusal.md')).toContain(stderr)
-
-  await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
-  expect(plan(w.db, 1).state).toBe('blocked_on_ceo')
-  expect(maybe(w.root, 1, 'refusal.md')).toMatch(new RegExp(`# Stopped\\n\\n${WHY.repeat}\\.\\n$`))
+  expect(maybe(w.root, 1, 'refusal.md')).toBe(null)
+  expect(refusalRows(w.db, 1)).toEqual([])
 })
 
 test('the usage band steps the cap down and back up',() => {

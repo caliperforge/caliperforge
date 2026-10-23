@@ -82,6 +82,7 @@ ${STANDING.join('\n')}
 interface Format {
   what: string
   files: string[]
+  blocks: Record<string, string[]>
   readers: string[]
 }
 
@@ -92,6 +93,7 @@ export const SHARED: Format[] = [{
     'seats/swift_specialist/prompt.md', 'seats/outside_specialist/prompt.md', 'seats/rust_specialist/prompt.md',
     'seats/python_specialist/prompt.md', 'seats/ruby_specialist/prompt.md', 'seats/go_specialist/prompt.md',
     'seats/php_specialist/prompt.md', 'seats/lua_specialist/prompt.md', 'seats/modes/build.md', 'seats/modes/fix.md'],
+  blocks: { 'rails/completion-audit/index.ts': ['Envelope', 'carried', 'fenceOf', 'doneOnly'] },
   readers: ['sequencer/rails.ts', 'rails/tight/prose.ts'],
 }]
 
@@ -272,9 +274,15 @@ function shared(brief: string, src: string): Refused | null {
   const listed = [...changing, ...leads(brief, '## Who else reads what this changes')]
   const rows = reached(brief)
   const moving = changing.filter((p) => {
-    const lines = rows.filter((r) => r.path === p).map((r) => r.line)
-    const fence = lastFence(join(src, p))
-    return !p.endsWith('.md') || (fence > 0 && (lines.length === 0 || lines.some((l) => l >= fence)))
+    const lines = rows.filter((r) => r.path === p)
+    if (p.endsWith('.md')) {
+      const fence = lastFence(join(src, p))
+      return fence > 0 && (lines.length === 0 || lines.some((l) => l.to >= fence))
+    }
+    const names = SHARED.flatMap((f) => f.blocks[p] ?? [])
+    if (names.length === 0 || lines.length === 0) return true
+    const blocks = blocksOf(join(src, p), names)
+    return lines.some((l) => blocks.some(([from, to]) => l.from <= to && l.to >= from))
   })
   for (const format of SHARED.filter((f) => f.files.some((p) => moving.includes(p)))) {
     const unlisted = format.readers.find((r) => !listed.includes(r))
@@ -301,16 +309,28 @@ function lastFence(path: string): number {
   return fences.at(-2) ?? 0
 }
 
-/** A path with the last line a `## Files` row reaches: `a/b.md:4-57`, `a/b.md:7,57` and `a/b.md:7` with a later bare `:57` all reach 57. */
+/** The 1-based first and last line of each named declaration: its head, to the next line opening on `}` or `)`. */
+function blocksOf(path: string, names: string[]): [number, number][] {
+  const lines = readFileSync(path, 'utf8').split('\n')
+  return names.map((name) => {
+    const from = lines.findIndex((l) => new RegExp(String.raw`^(?:export )?(?:function|const) ${name}\b`).test(l))
+    if (from === -1) throw new Error(`${path} declares no ${name}`)
+    return [from + 1, lines.findIndex((l, i) => i > from && /^[})]/.test(l)) + 1]
+  })
+}
+
+/** A path with the first and last line a `## Files` row reaches: `a/b.md:4-57`, `a/b.md:7,57` and `a/b.md:7` with a later bare `:57` all reach 57. */
 const REACHED = /([A-Za-z0-9_.+-]*\/[A-Za-z0-9_./+-]*\.[A-Za-z0-9]+)(?::([\d,-]+))?|:(\d[\d,-]*)/g
 
-function reached(brief: string): { path: string; line: number }[] {
+function reached(brief: string): { path: string; from: number; to: number }[] {
   return section(brief, '## Files').split('\n').filter((l) => /^\s*[-*]/.test(l)).flatMap((l) => {
     let path = ''
     return [...l.matchAll(REACHED)].flatMap((m) => {
       path = m[1] ?? path
       const lines = m[2] ?? m[3]
-      return lines === undefined || path === '' ? [] : [{ path, line: Math.max(...lines.split(/[,-]/).map(Number)) }]
+      if (lines === undefined || path === '') return []
+      const numbers = lines.split(/[,-]/).filter((n) => n !== '').map(Number)
+      return [{ path, from: Math.min(...numbers), to: Math.max(...numbers) }]
     })
   })
 }

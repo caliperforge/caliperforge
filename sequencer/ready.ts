@@ -156,17 +156,15 @@ function green(ci: { outcome: string; subject_digest: string } | undefined): Pro
   }
 }
 
-/** What the step leaves in the store where it proved it: the file list at the brief, the handback at build, the gates at senior, the rail at ready. */
-export function proved(db: Db, root: string, plan: PlanRow, step: Step): void {
-  if (step.fires === 'brief') recordFiles(db, plan.id, writable(get(root, plan.id, 'issue.md')))
-  if (step.name === 'build') built(db, made(db, root, plan, step))
-  if (step.name === 'senior') gated(db, made(db, root, plan, step), proof(db, root, plan))
-  if (step.name === 'ready') {
-    readyRow(db, plan.id)
-    const sha = headOf(root, plan.id).sha
-    stampHead(db, plan.id, headDigest(sha))
-    learned(db, root, plan.id, sha)
-  }
+/** Reads now what the step leaves in the store where it proved it, and returns the function that writes those rows: the file list at the brief, the handback at build, the gates at senior, the rail at ready. */
+export function proved(db: Db, root: string, plan: PlanRow, step: Step): () => void {
+  if (step.fires === 'brief') { const files = writable(get(root, plan.id, 'issue.md')); return () => { recordFiles(db, plan.id, files) } }
+  if (step.name === 'build') { const m = made(db, root, plan, step); return () => { built(db, m) } }
+  if (step.name === 'senior') { const m = made(db, root, plan, step); const p = proof(db, root, plan); return () => { gated(db, m, p) } }
+  if (step.name !== 'ready') return () => undefined
+  const sha = headOf(root, plan.id).sha
+  learned(db, root, plan.id, sha)
+  return () => { readyRow(db, plan.id); stampHead(db, plan.id, headDigest(sha)) }
 }
 
 function made(db: Db, root: string, plan: PlanRow, step: Step): Made {

@@ -7,7 +7,7 @@ import { expect, test } from 'vitest'
 import { dryLines, tickNote } from '../../cli/brief.ts'
 import { eventsOf, runRows } from '../../store/events.ts'
 import { width } from '../../store/lanes.ts'
-import { clear, held, holder, take } from '../../store/leases.ts'
+import { beat, clear, held, holder, take } from '../../store/leases.ts'
 import { advance, dropPlan, waiting } from '../../store/plans.ts'
 import { last, receipt } from '../../store/ticks.ts'
 import { unleased } from '../../store/unleased.ts'
@@ -51,6 +51,21 @@ test('take loses to a live holder, wins past the ceiling',async () => {
   take(w.db, ID, new Date(now.getTime() - 4 * 3600_000))
   expect(held(w.db, now)).toEqual([])
   expect(take(w.db, ID, now)).toMatchObject({ stole: process.pid })
+})
+
+test('a live holder beaten past the ceiling keeps its lease', async () => {
+  const w = await built()
+  take(w.db, ID, new Date(Date.now() - 4 * 3600_000))
+  beat(w.db, ID)
+  expect(take(w.db, ID, new Date(), 7)).toBeNull()
+})
+
+test('a beat leaves a dead holder\'s lease to be taken', async () => {
+  const w = await built()
+  const dead = spawnSync('/usr/bin/true').pid
+  take(w.db, ID, new Date(), dead)
+  beat(w.db, ID)
+  expect(take(w.db, ID)).toMatchObject({ pid: process.pid, stole: dead })
 })
 
 test('a dead holder\'s lease is taken; the receipt names its pid',async () => {

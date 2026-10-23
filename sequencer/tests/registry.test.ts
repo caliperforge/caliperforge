@@ -5,6 +5,7 @@ import { parse } from 'yaml'
 import { expect, test } from 'vitest'
 import { registered } from '../../runner/rules.ts'
 import { addRun } from '../../store/brief.ts'
+import { decided } from '../../store/decisions.ts'
 import { proofed } from '../../store/desk.ts'
 import { addSetting } from '../../store/drift.ts'
 import { logged } from '../../store/events.ts'
@@ -142,6 +143,43 @@ test('researchQuoteTextSeen D6', () => {
   expect(drift(d, entry, NOW)).toEqual([])
   logged(d, { plan: 1, kind: 'check', actor: 'check', outcome: 'refuse', message: 'quote not on the page for x', pointer: null, run: null }, '2026-10-02 10:00:00')
   expect(drift(d, entry, NOW)).toMatchObject([{ name: 'research_quote_text', state: 'seen', newest: '2026-10-02 10:00:00' }])
+})
+
+test('directorToFixerSeen D7', () => {
+  const entry = REGISTRY.filter((e) => e.name === 'director_to_fixer')
+  const at = '2026-10-02 10:00:00'
+  const told = (d: Db, message = 'rule did not apply, x'): void => {
+    logged(d, { plan: 1, kind: 'director', actor: 'director', outcome: 'needs_coo', message, pointer: null, run: null }, at)
+  }
+  const meant = db()
+  told(meant, 'return: refused by the fence, the plan stopped at its build cap')
+  told(meant, 'ask_coo: director answered this plan twice today')
+  expect(drift(meant, entry, NOW)).toEqual([])
+  const bare = db()
+  told(bare)
+  expect(drift(bare, entry, NOW)).toMatchObject([{ name: 'director_to_fixer', state: 'seen', newest: at }])
+  const handed = db()
+  decided(handed, { plan: 1, step: 0, wait_reason: 'blocked_on_ceo', verb: 'ask_coo', why: 'x', evidence: null, tokens: 0 }, '2026-10-02 09:30:00')
+  told(handed)
+  expect(drift(handed, entry, NOW)).toEqual([])
+})
+
+test('directorCloseUnbuiltSeen D4', () => {
+  const entry = REGISTRY.filter((e) => e.name === 'director_close_unbuilt')
+  const d = db()
+  d.exec("UPDATE plans SET origin = 'https://github.com/caliperforge/caliperforge/issues/1' WHERE id = 1")
+  putPlan(d, { id: 2, pipe_id: planById(d, 1).pipe_id, target_id: null, template: 'pr_path', state: 'queued', queued_at: '2026-10-01', step: 4, retries: 0,
+    lane: 'machine', seat: 'typescript_specialist', origin: 'https://github.com/acme/kit/issues/706' })
+  const log = (plan: number, kind: string, outcome: 'needs_coo' | 'refuse', message: string, at: string): void => {
+    logged(d, { plan, kind, actor: 'director', outcome, message, pointer: null, run: null }, at)
+  }
+  log(1, 'director', 'needs_coo', 'close did not apply, x', '2026-10-02 09:00:00')
+  expect(drift(d, entry, NOW)).toEqual([])
+  log(1, 'close', 'refuse', 'the work is on main', '2026-10-02 10:00:00')
+  log(2, 'director', 'needs_coo', 'close did not apply, x', '2026-10-02 11:00:00')
+  expect(drift(d, entry, NOW)).toEqual([])
+  log(1, 'director', 'needs_coo', 'close did not apply, x', '2026-10-02 12:00:00')
+  expect(drift(d, entry, NOW)).toMatchObject([{ name: 'director_close_unbuilt', state: 'seen', newest: '2026-10-02 12:00:00' }])
 })
 
 test('catchupRangeClearsSilent D4', () => {

@@ -10,6 +10,8 @@ import { builderRan, type PlanRow } from '../store/plans.ts'
 import { work } from '../templates/research.ts'
 import { cited } from './cited.ts'
 import { unruled } from './unruled.ts'
+import { committed } from './committed.ts'
+import { output as outputOf } from './output.ts'
 import { get, headSha, maybe, planDir, put, srcDir } from './workspace.ts'
 
 const PATH = /(?:^|[\s`'"(])((?:~|\.\.)?\/[\w.-][^\s`'"()]*)/g
@@ -40,18 +42,21 @@ function ruled(issue: string): string {
 }
 
 export function stray(db: Db, root: string, plan: PlanRow, text: string): string | null {
-  const other = [...text.matchAll(/\.cf\/work\/(\d+)/g)].find((m) => Number(m[1]) !== plan.id)
-  if (other !== undefined) return other[0]
   const climbed = text.split(/\s+/).find((t) => /[^\s`'"(.]\.\.\//.test(t))
   if (climbed !== undefined) return climbed
-  const named = (p: string) => !p.startsWith('~') && [srcDir(root, plan.id), root].some((d) => !relative(d, join(d, p)).startsWith('..') && existsSync(join(d, p)))
+  const output = (p: string) => plan.template === 'research' && ['sources.json', 'answer.md'].includes(relative(planDir(root, plan.id), p))
+  const named = (p: string) => !p.startsWith('~') && ([srcDir(root, plan.id), root, planDir(root, plan.id)].some((d) => !relative(d, join(d, p)).startsWith('..') && existsSync(join(d, p))) || committed(root, plan.id, p))
   const under = (p: string) => p.startsWith(`${root}/`) || !relative(real(planDir(root, plan.id)), real(p)).startsWith('..')
   const climbs = (p: string) => [srcDir(root, plan.id), root].some((b) => [b, ...subdirs(b).map((s) => join(b, s))]
     .some((d) => existsSync(join(d, p)) && (under(join(d, p)) || !relative(b, join(d, p)).startsWith('..'))))
   const fetched = (p: string) => p.startsWith('~/') && plan.template === 'research' && !builderRan(db, plan.id) && work(p) !== null
-  const inside = (p: string) => p.startsWith('..') ? climbs(p) : under(p.replace(/^~(?=\/)/, homedir())) || named(p) || fetched(p)
+  const folder = outputOf(root, plan)
+  const kept = (p: string) => folder !== null && p.startsWith('~/') && !relative(folder, work(p) ?? homedir()).startsWith('..')
+  const inside = (p: string) => p.startsWith('..') ? climbs(p) || output(join(srcDir(root, plan.id), p))
+    : under(p.replace(/^~(?=\/)/, homedir())) || named(p) || output(join(planDir(root, plan.id), p)) || fetched(p) || kept(p)
+  const route = (p: string) => /^\/[\w-]+[.,;:!?]?$/.test(p) && !existsSync(p.replace(/[.,;:!?]$/, ''))
   return text.replace(/\/{2,}/g, '/').split(/(?<=[.;!?])\s+|\n/)
-    .flatMap((s) => [...s.matchAll(PATH)].map((m) => m[1] ?? '').filter((p) => p.startsWith('..') || !BY_HAND.test(s)))
+    .flatMap((s) => [...s.matchAll(PATH)].map((m) => m[1] ?? '').filter((p) => !route(p) && (p.startsWith('..') || !BY_HAND.test(s))))
     .find((p) => !inside(p)) ?? null
 }
 

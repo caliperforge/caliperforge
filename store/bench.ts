@@ -7,6 +7,10 @@ export function record(db: Db, s: Score): number {
     VALUES (@plan, @target, @generator, @catches, @false_positives, @untested, @tokens, @seconds, @x_ray)`).run(s).lastInsertRowid)
 }
 
+export function setUntested(db: Db, plan: number, untested: number): void {
+  db.prepare('UPDATE bench_scorecard SET untested = ? WHERE id = (SELECT max(id) FROM bench_scorecard WHERE plan = ?)').run(untested, plan)
+}
+
 export function scores(db: Db): Score[] {
   return db.prepare(`SELECT plan, target, generator, catches, false_positives, untested, tokens, seconds, x_ray
     FROM bench_scorecard ORDER BY id`).all() as Score[]

@@ -4,6 +4,7 @@ import { expect, test } from 'vitest'
 import { fresh } from '../../../checks/sqlite.ts'
 import { planRow } from '../../../runner/index.ts'
 import { load } from '../../../runner/rules.ts'
+import { verdictRows } from '../../../store/verdict.ts'
 import { record } from '../../record.ts'
 import { ciGreen, type Gh, type Head } from '../index.ts'
 
@@ -91,8 +92,7 @@ test('writes a verdicts row the store accepts', () => {
   const plan = planRow(db)
   const verdict = ciGreen(head, { body: fixture('red.body.md'), commits: [] }, KOTLIN, gh('red.gh.json'))
   const id = record(db, join(import.meta.dirname, '..'), plan, verdict, 0.01)
-  const row = db.prepare('SELECT gate, step, kind, outcome, rail_id, origin_kind, origin_ref FROM verdicts WHERE id = ?').get(id)
-  expect(row).toEqual({ gate: 'ready', step: 6, kind: 'rail', outcome: 'refuse', rail_id: 'ci-green', origin_kind: 'rail', origin_ref: 'ci-green' })
+  expect(verdictRows(db, plan)).toMatchObject([{ id, gate: 'ready', step: 6, kind: 'rail', outcome: 'refuse', rail_id: 'ci-green', origin_kind: 'rail', origin_ref: 'ci-green' }])
 })
 
 test('judges Kotlin CI alone', () => {

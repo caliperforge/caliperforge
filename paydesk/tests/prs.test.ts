@@ -1,9 +1,11 @@
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, readFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, utimesSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { beforeAll, expect, test } from 'vitest'
+import { verdict } from '../live.ts'
 import { prs, type Row } from '../prs.ts'
+import type { Net } from '../scan.ts'
 
 const base64 = (name: string): string => readFileSync(join(import.meta.dirname, 'fixtures', 'listing', name)).toString('base64')
 const BLOBS: Record<string, string> = {
@@ -161,4 +163,67 @@ test('D4 a 404 is not retried', async () => {
   const { got, reads } = await flaky(['HTTP 404: Not Found'])
   expect(reads).toBe(1)
   expect(got.unfetched).toEqual([{ pr: 11, unfetched: 'HTTP 404: Not Found' }])
+})
+
+const X402 = { accepts: [{ scheme: 'exact', network: 'solana', amount: '10000', asset: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', payTo: 'SysvarRent111111111111111111111111111111111' }] }
+const wallet = (body: string): Response => Response.json({ jsonrpc: '2.0', id: 1, result: { context: { slot: 1 },
+  value: body.includes('getAccountInfo') ? { owner: '11111111111111111111111111111111' } : [{ pubkey: 'ata', account: {} }] } })
+const PAID = 'https://api.example.com/paid'
+const paying = (statuses: number[]): { net: Net; urls: string[] } => {
+  const urls: string[] = []
+  let status = 402
+  const fetch = (...[url, init]: Parameters<typeof globalThis.fetch>): Promise<Response> => {
+    urls.push(url as string)
+    if (url === 'https://api.mainnet-beta.solana.com') return Promise.resolve(wallet(init?.body as string))
+    if (url === PAID) status = statuses.shift() ?? status
+    if (status === 404 || init?.body === '{"symbol":"SOL"}') return Promise.resolve(new Response('', { status: status === 404 ? 404 : 400 }))
+    return Promise.resolve(new Response(JSON.stringify(X402), { status: 402, headers: { 'content-type': 'application/json' } }))
+  }
+  return { net: { fetch, resolve: () => Promise.resolve() }, urls }
+}
+const scanFile = async (): Promise<string> => {
+  const at = mkdtempSync(join(tmpdir(), 'paydesk-prs-'))
+  const file = join(at, 'scan.json')
+  await prs(at, file, undefined, paying([402]).net, reader([WEATHER], []))
+  utimesSync(file, new Date('2026-10-22T12:00:00Z'), new Date('2026-10-22T12:00:00Z'))
+  return file
+}
+const rescanned = async (statuses: number[], since?: string): Promise<{ listings: Awaited<ReturnType<typeof prs>>['listings']; paid: number }> => {
+  const at = mkdtempSync(join(tmpdir(), 'paydesk-prs-'))
+  const { net, urls } = paying(statuses)
+  const got = await prs(at, join(at, 'out.json'), undefined, net, reader([WEATHER], []), since)
+  expect(JSON.parse(readFileSync(join(at, 'out.json'), 'utf8'))).toEqual(got.listings)
+  return { listings: got.listings, paid: urls.filter((u) => u === PAID).length }
+}
+
+test('D1 pass, reject, pass keeps the --since row as a blip', async () => {
+  const since = await scanFile()
+  const { listings, paid } = await rescanned([404, 402], since)
+  expect(paid).toBe(2)
+  expect(listings).toEqual([{ ...(JSON.parse(readFileSync(since, 'utf8')) as Row[])[0], note: 'blip: reject' }])
+})
+
+test('D2 pass, reject, reject is flipped since the file date', async () => {
+  const { listings } = await rescanned([404, 404], await scanFile())
+  expect(listings).toEqual([expect.objectContaining({ fqn: 'acme/weather', note: 'flipped since 2026-10-22' })])
+  expect(listings.map(verdict)).toEqual(['reject'])
+})
+
+test('D3 an unchanged row is scanned once and has no note', async () => {
+  const { listings, paid } = await rescanned([402], await scanFile())
+  expect(paid).toBe(1)
+  expect(listings.map(verdict)).toEqual(['pass'])
+  expect(listings.some((s) => 'note' in s)).toBe(false)
+})
+
+test('D4 without --since a reject is scanned once, no note', async () => {
+  const { listings, paid } = await rescanned([404, 402])
+  expect(paid).toBe(1)
+  expect(listings.map(verdict)).toEqual(['reject'])
+  expect(listings.some((s) => 'note' in s)).toBe(false)
+})
+
+test('D5 prs --help lists --since', () => {
+  const help = execFileSync(process.execPath, [join(import.meta.dirname, '../../cli/cf.ts'), 'paydesk', 'prs', '--help'], { encoding: 'utf8' })
+  expect(help).toContain('--since <file>')
 })

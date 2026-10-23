@@ -1,7 +1,7 @@
 import { pr as readPr, type Pr, type Read } from '../cli/gh.ts'
 import type { Provider } from '../providers/kind.ts'
-import type { Db } from '../store/index.ts'
-import { clear as unlease, drop, handOver, held, take, type Lease, type Taken } from '../store/leases.ts'
+import { type Db, lapping } from '../store/index.ts'
+import { clear as unlease, handOver, held, holding, take, type Lease, type Taken } from '../store/leases.ts'
 import { cap, hhmm, zone } from '../store/lanes.ts'
 import { idle, keepWait } from '../store/now.ts'
 import { type PlanRow, live, openPipes, planById, terminal, type PipeRow, waiting } from '../store/plans.ts'
@@ -27,6 +27,7 @@ import { ceilinged, stepped } from './settle.ts'
 import { closing } from './wave.ts'
 import { ripe, sitedata } from './site.ts'
 import { relane } from './relane.ts'
+import { evict } from './evict.ts'
 
 /**
  * `read`, `wire` and `labels` are the network a tick touches on its own account; each is injected so a test can drive a lap
@@ -120,12 +121,8 @@ async function lane(picks: Leg[], now: Date, each: number, run: (m: Leg & { leas
 export type Apart = (plan: number, stole: number | null) => Promise<Fired[]>
 
 /** A job whose process died before it took the lease frees its plan; one that died after leaves a dead pid, which the next tick takes over. */
-async function away(db: Db, leg: Leg & { lease: Taken }, apart: Apart): Promise<Fired[]> {
-  try {
-    return await apart(leg.plan.id, leg.lease.stole)
-  } finally {
-    drop(db, leg.plan.id)
-  }
+function away(db: Db, leg: Leg & { lease: Taken }, apart: Apart): Promise<Fired[]> {
+  return holding(db, leg.plan.id, () => apart(leg.plan.id, leg.lease.stole))
 }
 
 /**
@@ -137,6 +134,7 @@ export async function lap(db: Db, root: string, provider: Provider, plan: number
   chain = 0, read?: Read, moved: () => boolean = () => false): Promise<Fired[]> {
   const lease = handOver(db, plan, from)
   if (lease === null) return []
+  if (stole !== null) evict(db, plan, stole)
   const taken = { ...lease, stole }
   const row = planById(db, plan)
   const pipe = openPipes(db, hhmm(db, new Date())).find((p) => p.id === row.pipe_id)
@@ -144,7 +142,7 @@ export async function lap(db: Db, root: string, provider: Provider, plan: number
     unlease(db, plan)
     return []
   }
-  return one(db, root, pipe, { plan: row, route: route(db, row, new Date(), taken) }, taken, provider, undefined, chain, read, moved)
+  return lapping.run(plan, () => one(db, root, pipe, { plan: row, route: route(db, row, new Date(), taken) }, taken, provider, undefined, chain, read, moved))
 }
 
 /** A `token_ceiling` plan is leased too: `ceilinged` is its step. */

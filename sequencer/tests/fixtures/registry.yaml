@@ -434,3 +434,28 @@
   column: id
   where: rail_id = 'completion-audit' AND outcome = 'refuse' AND message LIKE 'rulings.md changed since the last step-3 lap%'
   expected: 0
+- name: director_to_fixer
+  switch: { key: director.apply, value: '1' }
+  table: events
+  column: at
+  where: "kind = 'director' AND outcome = 'needs_coo' AND (message NOT LIKE 'ask_ceo: %' OR message = 'ask_ceo: no readable answer') AND message NOT LIKE '%: refused by the fence, the plan stopped at its build cap' AND message <> 'ask_coo: director answered this plan twice today' AND plan NOT IN (SELECT plan FROM decisions WHERE verb = 'ask_coo' AND at >= datetime(events.at, '-1 hour'))"
+  gap: 7d
+  expected: 0
+- name: return_at
+  table: events
+  column: at
+  where: "kind = 'return' AND message LIKE '%→%'"
+  gap: 14d
+- name: bench_score_hold
+  table: events
+  column: at
+  where: "kind = 'score' AND outcome = 'needs_coo'"
+  gap: 14d
+  expected: 0
+- name: director_close_unbuilt
+  switch: { key: director.apply, value: '1' }
+  table: events
+  column: at
+  where: "kind = 'director' AND outcome = 'needs_coo' AND message GLOB 'close did not apply, *' AND plan IN (SELECT id FROM plans WHERE origin GLOB 'https://github.com/caliperforge/*') AND julianday(events.at) > (SELECT julianday(min(c.at)) FROM events c WHERE c.kind = 'close' AND c.actor = 'director' AND c.outcome = 'refuse')"
+  gap: 7d
+  expected: 0

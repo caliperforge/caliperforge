@@ -7,12 +7,13 @@ import { building, filesOf, recorded, sharing, strays as recordStrays } from '..
 import { eventsOf } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { partsOf } from '../store/parts.ts'
+import { held as leased } from '../store/leases.ts'
 import { holder, waitsFor } from '../store/slot.ts'
-import { builderRan, held, internal, needsCeo, newestOfOrigin, originIssue, originRef, waiting, type PlanRow, type Wait } from '../store/plans.ts'
+import { allPlans, builderRan, held, internal, needsCeo, newestOfOrigin, originIssue, originRef, waiting, type PlanRow, type Wait } from '../store/plans.ts'
 import { setTargetState, targetRef } from '../store/targets.ts'
 import { afters } from '../store/tickets.ts'
 import { ideas, log, reading, steps as account } from '../templates/account.ts'
-import { scored, scratch, steps as bench } from '../templates/bench.ts'
+import { nullChecked, scored, scratch, steps as bench } from '../templates/bench.ts'
 import { capture, desk, facts, gather, pack, score, steps as comms } from '../templates/comms.ts'
 import { at, last, steps, type Step } from '../templates/pr-path.ts'
 import { question, record, steps as research } from '../templates/research.ts'
@@ -71,6 +72,7 @@ export function blocked(db: Db, plan: PlanRow): Wait | null {
   if (step.name === 'ruling') return internal(plan) || approved(db, plan) || up(db, plan) ? null : 'target_approval'
   if (step.name === 'ready') return proven(db, plan) && waitsFor(db, plan) === null ? null : 'ready_proof'
   if (target(db, plan)?.state === 'parked') return 'target_parked'
+  if (plan.template === 'bench' && step.name === 'score' && scoring(db, plan)) return 'bench_score_busy'
   return overlapping(db, plan) === null ? null : 'file_overlap'
 }
 
@@ -78,6 +80,13 @@ export function blocked(db: Db, plan: PlanRow): Wait | null {
 function up(db: Db, plan: PlanRow): boolean {
   const url = opened(db, plan.id)
   return url !== null && /\/pull\/\d+$/.test(url) && polled(db)({ evidence: url })
+}
+
+/** Another open bench plan at this step is leased by a live tick: scores share the host, so one runs at a time. */
+function scoring(db: Db, plan: PlanRow): boolean {
+  const leases = new Set(leased(db).map((l) => l.plan))
+  return allPlans(db).some((p) => p.id !== plan.id && p.template === 'bench' && p.step === plan.step
+    && (p.state === 'queued' || p.state === 'running') && leases.has(p.id))
 }
 
 /**
@@ -100,6 +109,7 @@ export const WAITING: Record<Wait, string> = {
   lane_over_cap: 'the lane cap was spent on a lower lane',
   no_step_map: 'its template has no step map',
   file_overlap: 'another job is building one of its files',
+  bench_score_busy: 'another bench job is scoring',
 }
 
 /** The parked target by name, which the bare reason cannot carry. */
@@ -123,6 +133,7 @@ export function kernel(db: Db, root: string, plan: PlanRow, wire?: Wire, read?: 
   if (step.name === 'capture') return capture(db, root)
   if (step.name === 'pack') return pack(db, root, plan)
   if (step.name === 'score') return plan.template === 'bench' ? scored(db, root, plan) : score(db, root, plan, step)
+  if (step.name === 'null_check') return nullChecked(db, root, plan)
   if (step.name === 'question' || step.name === 'record') return step.name === 'question' ? question(root, plan) : record(db, root, plan, wire)
   if (step.name === 'read') return reading(db, root, plan)
   if (step.name === 'ideas') return ideas(db, root, plan)

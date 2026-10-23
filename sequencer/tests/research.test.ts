@@ -1,7 +1,8 @@
-import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
+import type { Read } from '../../cli/gh.ts'
 import type { Packet, Provider } from '../../providers/kind.ts'
 import { posts } from '../../store/desk.ts'
 import { eventsOf, kindsOf, runRows } from '../../store/events.ts'
@@ -217,6 +218,50 @@ test('D2: an ask with no wrong-if line is refused at step 0', async () => {
   expect(maybe(w.root, 1, 'question.json')).toBeNull()
 })
 
+const RULING = '\n## Answer from the director (2026-10-22)\n\nCount only the hosted cap.\n'
+
+test('D2: a ruling beside an ask with no wrong-if still refuses', async () => {
+  const w = researching(ASK.replace(/\*\*Would be wrong if:\*\*.*\n/, ''))
+  put(w.root, 1, 'issue.md', RULING)
+  await tick(w.db, w.root, seats(FOUND))
+  expect(eventsOf(w.db, 1, 'question')).toEqual([{ actor: 'question', outcome: 'refuse', message: 'ask.md has no **Would be wrong if:** line' }])
+  expect(plan(w.db, 1).step).toBe(0)
+})
+
+const PARENT = '## Parent ticket\n\n**Question:** parent q\n**Would be wrong if:** parent w\n**Done when:** parent d\n'
+
+const OLDER = `# a part\n\n**What:** part q\n**Why:** y\n**When it ends:** part d\n\n${PARENT}`
+
+const OWN = { question: 'part q', wrong_if: 'it leaves out what this part asks, or answers what its parent ticket asks', done_when: 'part d' }
+
+const FILLED = 'question.json written, filled for a part: '
+  + '**Question:** from **What:**, **Would be wrong if:** from the fixed part sentence, **Done when:** from **When it ends:**'
+
+test('part D1: an older part\'s question.json is its own', () => {
+  const w = researching(OLDER)
+  expect(question(w.root, plan(w.db, 1))).toEqual({ outcome: 'pass', spans: [], note: FILLED })
+  const json = maybe(w.root, 1, 'question.json') ?? ''
+  expect(JSON.parse(json)).toEqual(OWN)
+  for (const parent of ['parent q', 'parent w', 'parent d']) expect(json).not.toContain(parent)
+})
+
+test('part D2: gather rewrites a stale parent question.json', async () => {
+  const w = researching(OLDER)
+  put(w.root, 1, 'question.json', JSON.stringify({ question: 'parent q', wrong_if: 'parent w', done_when: 'parent d' }))
+  const [outcome, prompt] = await gathered(w)
+  expect(outcome.note).toBe(`${FILLED}; researcher: answer.md written, sources.json written with 1 source(s)`)
+  expect(JSON.parse(maybe(w.root, 1, 'question.json') ?? '')).toEqual(OWN)
+  expect(prompt).toContain(`# question.json\n\n${JSON.stringify(OWN)}`)
+})
+
+test('part D3: a parent-only Question is refused, unfired', async () => {
+  const w = researching(`# a part\n\n**When it ends:** part d\n\n${PARENT}`)
+  const refusal = { outcome: 'refuse', spans: ['ask.md'], note: 'ask.md has no **Question:** line' }
+  expect(question(w.root, plan(w.db, 1))).toEqual(refusal)
+  expect((await gathered(w))[0]).toEqual(refusal)
+  expect(ran(w)).toEqual([])
+})
+
 test('D3: an unquoted source is refused at gather', async () => {
   const w = researching()
   question(w.root, plan(w.db, 1))
@@ -250,6 +295,16 @@ test('gather D2: with no ask.md the prompt holds issue.md', async () => {
   expect(prompt).toContain('Pick by the seven-part selection rule: newest first.')
 })
 
+test('gather D5: the prompt holds an issue.md ruling after the ask', async () => {
+  const w = researching()
+  question(w.root, plan(w.db, 1))
+  put(w.root, 1, 'issue.md', RULING)
+  const [, prompt] = await gathered(w)
+  const ask = prompt.slice(prompt.indexOf('# Ask'), prompt.indexOf('# question.json'))
+  expect(ask.indexOf('Count only the hosted cap.')).toBeGreaterThan(ask.indexOf('**Question:** what is the cap?'))
+  expect(ask.indexOf('**Question:**')).toBeGreaterThan(-1)
+})
+
 test('gather D3: a resumed plan gets the ask, step 0 unrun', async () => {
   const w = researching()
   question(w.root, plan(w.db, 1))
@@ -276,6 +331,36 @@ test('gather D4: a refused reply keeps the last answer', async () => {
   expect(maybe(w.root, 1, 'answer.md')).toBe('The cap was 2 [source:1].')
   expect(maybe(w.root, 1, 'sources.json')).toBe(SOURCES)
   expect((await gathered(w))[1]).toContain('# Your last answer — repair what the ask and the refusal name, keep the rest\n\nThe cap was 2 [source:1].')
+})
+
+const draftOf = (w: World): string => {
+  mkdirSync(join(srcDir(w.root, 1), '.cf'), { recursive: true })
+  return join(srcDir(w.root, 1), '.cf/draft.md')
+}
+
+const drafting = (w: World, reply: string, draft: string): ReturnType<typeof gather> =>
+  gather(w.db, w.root, plan(w.db, 1), mapOf('research').at(1), stub(reply, 0, reply, () => { writeFileSync(draftOf(w), draft) }))
+
+test('draft D1: a fenceless reply hands in the checked draft', async () => {
+  const w = researching()
+  question(w.root, plan(w.db, 1))
+  expect(await drafting(w, 'Draft passes.', FOUND)).toMatchObject({ outcome: 'pass', note: expect.stringContaining('from .cf/draft.md') as unknown })
+  expect(maybe(w.root, 1, 'answer.md')).toBe(`The cap is 3 [source:1].${SECTIONS}`)
+  expect(maybe(w.root, 1, 'sources.json')).toBe(SOURCES)
+})
+
+test('draft D3: a draft from before the fire is not handed in', async () => {
+  const w = researching()
+  question(w.root, plan(w.db, 1))
+  writeFileSync(draftOf(w), FOUND)
+  expect((await gathered(w, 'Draft passes.'))[0]).toMatchObject({ outcome: 'refuse', spans: ['researcher.fence'] })
+  expect(maybe(w.root, 1, 'answer.md')).toBeNull()
+})
+
+test('draft D4: a fenced reply wins over the draft', async () => {
+  const w = researching()
+  question(w.root, plan(w.db, 1))
+  expect((await drafting(w, FOUND, source(''))).note).toBe('researcher: answer.md written, sources.json written with 1 source(s)')
 })
 
 test('D4: two fence faults go round, one twice stops', async () => {
@@ -374,6 +459,16 @@ test('record D2: a second run adds no file, row or close', () => {
   expect(log).toHaveLength(1)
 })
 
+test('record D3: a failed write throws, no row, then records', () => {
+  const { w, wire } = reviewed()
+  writeFileSync(findings(w), '')
+  expect(() => record(w.db, w.root, plan(w.db, 1), wire)).toThrow()
+  expect(posts(w.db)).toEqual([])
+  rmSync(findings(w))
+  expect(record(w.db, w.root, plan(w.db, 1), wire)).toMatchObject({ outcome: 'pass' })
+  expect(posts(w.db)).toHaveLength(1)
+})
+
 test.each(['## Would be wrong if', '## Still unknown'])('record D3: no %s section is refused', (heading) => {
   const { w, wire } = reviewed(ANSWER.replace(heading, ''))
   expect(record(w.db, w.root, plan(w.db, 1), wire)).toEqual({ outcome: 'refuse', spans: ['answer.md'], note: `answer.md has no ${heading} section` })
@@ -399,6 +494,30 @@ test('record D5: a plan with no origin closes nothing', () => {
   const { w, log, wire } = reviewed()
   record(w.db, w.root, plan(w.db, 1), wire)
   expect(log).toEqual([])
+})
+
+test('record D6: a ruling-only issue.md takes the ask.md title', () => {
+  const { w, wire } = reviewed()
+  put(w.root, 1, 'issue.md', RULING)
+  expect(record(w.db, w.root, plan(w.db, 1), wire)).toMatchObject({ outcome: 'pass' })
+  expect(readdirSync(findings(w))).toEqual([named])
+  expect(posts(w.db)[0]?.title).toBe('The cap')
+})
+
+test('record D6: no # in ask.md or a ruling issue.md refuses', () => {
+  const { w, wire } = reviewed()
+  put(w.root, 1, 'ask.md', ASK.replace('# The cap\n', ''))
+  put(w.root, 1, 'issue.md', RULING)
+  expect(record(w.db, w.root, plan(w.db, 1), wire)).toEqual({ outcome: 'refuse', spans: ['ask.md'], note: 'ask.md has no # title' })
+  expect(existsSync(findings(w))).toBe(false)
+  expect(posts(w.db)).toEqual([])
+})
+
+test('record D6: a titled issue.md names the finding', () => {
+  const { w, wire } = reviewed()
+  put(w.root, 1, 'issue.md', '# Other\n')
+  record(w.db, w.root, plan(w.db, 1), wire)
+  expect(readdirSync(findings(w))).toEqual([named.replace('the-cap', 'other')])
 })
 
 test('check D6: an unsourced Still unknown sentence passes', async () => {
@@ -513,10 +632,12 @@ const MEASURE = `${ASK}**Measure:** time the cold start\n`
 
 const RUN = 'uv run bench.py'
 
-const TRANSCRIPT = [
-  { type: 'assistant', message: { content: [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: RUN } }] } },
-  { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 't1', content: [{ type: 'text', text: 'cold start:\n  41 ms' }] }] } },
+const bashed = (command: string, text: string): string => [
+  { type: 'assistant', message: { content: [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command } }] } },
+  { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 't1', content: [{ type: 'text', text }] }] } },
 ].map((line) => `${JSON.stringify(line)}\n`).join('')
+
+const TRANSCRIPT = bashed(RUN, 'cold start:\n  41 ms')
 
 const entry = (commit: string, quote = 'cold start: 41 ms'): string =>
   `  - run:\n      command: ${RUN}\n      commit: ${commit}\n      quote: ${quote}\n      claim: Cold start is 41 ms\n`
@@ -525,15 +646,15 @@ const LINKED = '  - url: https://a.example/doc\n    fetched_at: 2026-10-04T10:00
 
 const fence = (...entries: string[]): string => `Cold start is 41 ms [source:1].${SECTIONS}\n\n---\nsources:\n${entries.join('')}---\n`
 
-/** The measurer or fetcher answers `reply` and leaves TRANSCRIPT behind; every other seat answers PASS. */
-const measuring = (reply: string, seen: (packet: Packet) => void): Provider => ({
+/** The measurer or fetcher answers `reply` and leaves `transcript` behind; every other seat answers `others`. */
+const measuring = (reply: string, seen: (packet: Packet) => void, transcript = TRANSCRIPT, others = PASS): Provider => ({
   name: 'claude-agent-sdk',
   fire: async (packet) => {
     seen(packet)
     const measurer = /# (?:measurer|fetcher)\n/.test(packet.prompt)
-    const text = measurer ? reply : PASS
+    const text = measurer ? reply : others
     const fired = await stub(text, 0, text).fire(packet)
-    if (measurer) writeFileSync(packet.transcript, TRANSCRIPT)
+    if (measurer) writeFileSync(packet.transcript, transcript)
     return fired
   },
 })
@@ -557,6 +678,28 @@ test('measure D1: a Measure line fires measurer with HEAD', async () => {
   expect(idle).toBeUndefined()
   expect(ran(w)).toEqual(['measurer'])
   expect(JSON.parse(maybe(w.root, 1, 'runs.json') ?? '')).toEqual([{ command: RUN, output: 'cold start:\n  41 ms' }])
+})
+
+const UNBASHED = `${JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'Kept the rest.' }] } })}\n`
+
+const regathered = async (...left: string[]): Promise<unknown> => {
+  const w = researching(MEASURE)
+  const head = headed(w)
+  question(w.root, plan(w.db, 1))
+  for (const transcript of left) {
+    expect(await gather(w.db, w.root, plan(w.db, 1), mapOf('research').at(1), measuring(fence(entry(head)), () => undefined, transcript)))
+      .toMatchObject({ outcome: 'pass' })
+  }
+  return JSON.parse(maybe(w.root, 1, 'runs.json') ?? '')
+}
+
+test('runs D1: a repair run with no Bash call keeps earlier runs', async () => {
+  expect(await regathered(TRANSCRIPT, UNBASHED)).toEqual([{ command: RUN, output: 'cold start:\n  41 ms' }])
+})
+
+test('runs D2: runs.json holds every run, oldest first', async () => {
+  expect(await regathered(TRANSCRIPT, bashed('uv run warm.py', 'warm start:\n  9 ms')))
+    .toEqual([{ command: RUN, output: 'cold start:\n  41 ms' }, { command: 'uv run warm.py', output: 'warm start:\n  9 ms' }])
 })
 
 test('measure D1: an ask with no Measure line fires researcher', async () => {
@@ -632,14 +775,25 @@ test('ruling D4: a pr_path Output ruling is refused', () => {
 
 const NEEDS_RUN = 'This needs a timed run.\n\n```\n---\noutcome: needs_run\n---\n```\n'
 
-const UNRUN = { outcome: 'refuse', spans: ['ask.md'], note: 'ask needs executed runs: add a **Measure:** line so the measurer gathers it' }
-
-test('needs_run D1: a researcher needs_run reply refuses ask.md', async () => {
+test('needs_run D1: a researcher needs_run hands to the measurer', async () => {
   const w = researching()
+  const head = headed(w)
   question(w.root, plan(w.db, 1))
-  expect((await gathered(w, NEEDS_RUN))[0]).toEqual(UNRUN)
-  expect(maybe(w.root, 1, 'answer.md')).toBeNull()
-  expect(maybe(w.root, 1, 'sources.json')).toBeNull()
+  const prompts: string[] = []
+  expect(await gather(w.db, w.root, plan(w.db, 1), mapOf('research').at(1), measuring(fence(entry(head)), (p) => prompts.push(p.prompt), TRANSCRIPT, NEEDS_RUN)))
+    .toMatchObject({ outcome: 'pass', note: expect.stringContaining('measurer: answer.md written') as unknown })
+  expect(ran(w)).toEqual(['researcher', 'measurer'])
+  expect(prompts[1]).toContain(`# HEAD\n\n${head}`)
+  expect(JSON.parse(maybe(w.root, 1, 'runs.json') ?? '')).toEqual([{ command: RUN, output: 'cold start:\n  41 ms' }])
+})
+
+test('needs_run D2: a handed measurer needs_run refuses its fence', async () => {
+  const w = researching()
+  headed(w)
+  question(w.root, plan(w.db, 1))
+  expect(await gather(w.db, w.root, plan(w.db, 1), mapOf('research').at(1), measuring(NEEDS_RUN, () => undefined, TRANSCRIPT, NEEDS_RUN)))
+    .toMatchObject({ outcome: 'refuse', spans: ['researcher.fence'] })
+  expect(ran(w)).toEqual(['researcher', 'measurer'])
 })
 
 test('needs_run D2: a measurer needs_run reply refuses its fence', async () => {
@@ -667,6 +821,16 @@ test('needs_build D1: a measurer needs_build asks a person', async () => {
   expect(maybe(w.root, 1, 'runs.json')).toBeNull()
 })
 
+test('needs_build D1: a handed measurer needs_build asks a person', async () => {
+  const w = researching()
+  headed(w)
+  question(w.root, plan(w.db, 1))
+  expect(await gather(w.db, w.root, plan(w.db, 1), mapOf('research').at(1), measuring(NEEDS_BUILD, () => undefined, TRANSCRIPT, NEEDS_RUN)))
+    .toEqual({ outcome: 'needs_ceo', spans: ['ask.md'], note: UNBUILT })
+  expect(maybe(w.root, 1, 'question.md')).toBe(UNBUILT)
+  expect(ran(w)).toEqual(['researcher', 'measurer'])
+})
+
 test('needs_build D2: a ticked needs_build blocks with no refusal', async () => {
   const w = researching(MEASURE)
   headed(w)
@@ -688,30 +852,63 @@ const cite = (commit: string, quote = 'cold start: 41 ms', command = RUN): objec
 
 test('measure D2: a fence of run and url entries is written whole', () => {
   const w = researching()
-  expect(sourced(w.root, plan(w.db, 1), fence(entry('abc1234'), LINKED))).toMatchObject({ outcome: 'pass' })
+  expect(sourced(w.db, w.root, plan(w.db, 1), fence(entry('abc1234'), LINKED))).toMatchObject({ outcome: 'pass' })
   expect(JSON.parse(maybe(w.root, 1, 'sources.json') ?? '')).toEqual([cite('abc1234'), ...(JSON.parse(SOURCES) as unknown[])])
 })
 
 test('measure D2: a run with an empty quote is unquoted', () => {
   const w = researching()
-  expect(sourced(w.root, plan(w.db, 1), fence(entry('abc1234', ''))))
+  expect(sourced(w.db, w.root, plan(w.db, 1), fence(entry('abc1234', ''))))
     .toEqual({ outcome: 'refuse', spans: ['researcher.unquoted'], note: `no quote for ${RUN}` })
 })
 
 const MOVED = ['https://github.com/o/r/blob/main/a.md', 'https://github.com/o/r/blob/master/a.md', 'https://raw.githubusercontent.com/o/r/main/a.pdf',
   'https://api.github.com/repos/o/r/commits/main', 'https://api.github.com/repos/o/r/git/trees/HEAD']
 
-test.each(MOVED)('moving_ref D1: %s is refused', (url) => {
+const SHA = '2aee380'.padEnd(40, '0')
+
+const refOf = (url: string): string => url.replace(/^.*\/(main|master|HEAD)\b.*$/, '$1')
+
+test.each(MOVED)('moving_ref D1 D2: %s is pinned at fetched_at', (url) => {
   const w = researching()
-  expect(sourced(w.root, plan(w.db, 1), fence(LINKED.replace('https://a.example/doc', url))))
-    .toEqual({ outcome: 'refuse', spans: ['research.moving_ref'], note: `moving ref in ${url}` })
+  const read = vi.fn<Read>(() => [{ sha: SHA }])
+  const pinned = url.replace(refOf(url), SHA)
+  expect(sourced(w.db, w.root, plan(w.db, 1), fence(LINKED.replace('https://a.example/doc', url)), read)).toMatchObject({ outcome: 'pass' })
+  expect(read.mock.calls).toEqual([[['api', `repos/o/r/commits?sha=${refOf(url)}&until=2026-10-04T10:00:00Z&per_page=1`]]])
+  expect(JSON.parse(maybe(w.root, 1, 'sources.json') ?? '')).toMatchObject([{ url: pinned }])
+  expect(eventsOf(w.db, 1, 'research.pinned')).toEqual([{ actor: 'research', outcome: 'pass', message: `${url} → ${pinned}` }])
+})
+
+const BLOB = 'https://github.com/o/r/blob/main/a.md'
+
+test.each([
+  { why: 'throws', read: (): never => { throw new Error('HTTP 404') }, unpinned: [{ actor: 'research', outcome: 'refuse', message: `${BLOB}: HTTP 404` }] },
+  { why: 'returns []', read: (): unknown => [], unpinned: [] },
+])('moving_ref D3: a lookup that $why is refused', ({ read, unpinned }) => {
+  const w = researching()
+  expect(sourced(w.db, w.root, plan(w.db, 1), fence(LINKED.replace('https://a.example/doc', BLOB)), read))
+    .toEqual({ outcome: 'refuse', spans: ['research.moving_ref'], note: `moving ref in ${BLOB}` })
   expect(maybe(w.root, 1, 'sources.json')).toBeNull()
+  expect(eventsOf(w.db, 1, 'research.pinned')).toEqual([])
+  expect(eventsOf(w.db, 1, 'research.unpinned')).toEqual(unpinned)
+})
+
+test('moving_ref D4: an inline moving link is pinned and fetched', async () => {
+  const w = researching()
+  const pinned = BLOB.replace('main', SHA)
+  const reply = FOUND.replace('https://a.example/doc', BLOB).replace('The cap is 3 [source:1].', `The cap is 3 per ${BLOB} [source:1].`)
+  expect(await gather(w.db, w.root, plan(w.db, 1), mapOf('research').at(1), stub(reply, 0, reply), () => [{ sha: SHA }])).toMatchObject({ outcome: 'pass' })
+  expect(maybe(w.root, 1, 'answer.md')).toBe(`The cap is 3 per ${pinned} [source:1].${SECTIONS}`)
+  expect(await check(w.db, w.root, plan(w.db, 1))).toMatchObject({ outcome: 'pass' })
+  expect(fetched.mock.calls.map(([page]) => page)).toEqual([pinned])
 })
 
 test.each([...MOVED.map((url) => url.replace(/main|master|HEAD/, '2aee380')), `https://github.com/o/r/blob/${'a'.repeat(40)}/a.md`,
-  'https://docs.example/main/a', 'https://a.example/doc'])('moving_ref D2 D3: %s passes', (url) => {
+  'https://docs.example/main/a', 'https://a.example/doc'])('moving_ref D2 D3 D5: %s passes unlooked', (url) => {
   const w = researching()
-  expect(sourced(w.root, plan(w.db, 1), fence(LINKED.replace('https://a.example/doc', url)))).toMatchObject({ outcome: 'pass' })
+  const read = vi.fn<Read>()
+  expect(sourced(w.db, w.root, plan(w.db, 1), fence(LINKED.replace('https://a.example/doc', url)), read)).toMatchObject({ outcome: 'pass' })
+  expect(read).not.toHaveBeenCalled()
 })
 
 const measured = (sources: (head: string) => object[]): ReturnType<typeof check> => {

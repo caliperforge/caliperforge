@@ -1,5 +1,5 @@
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { appendFileSync, cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { homedir, tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { expect, test } from 'vitest'
 import type { Fired, Packet, Provider } from '../../providers/kind.ts'
@@ -39,7 +39,7 @@ function seeded(mode: string) {
   put(home, 7, 'base.sha', `${'a'.repeat(40)}\n`)
   writeFileSync(join(srcDir(home, 7), 'index.ts'), 'export {}\n')
   git(srcDir(home, 7), ['init', '-q', '-b', 'main'])
-  git(srcDir(home, 7), ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '--allow-empty', '-m', 'built'])
+  git(srcDir(home, 7), ['-c', 'user.email=t@t', '-c', 'user.name=t', '-c', 'maintenance.auto=false', 'commit', '-q', '--allow-empty', '-m', 'built'])
   return { db, home }
 }
 
@@ -84,7 +84,10 @@ test('live: the fixer fixes an ask_coo stop; nobody is pinged', async () => {
   expect(fixerPacket?.tools).toContain('Edit')
   expect(fixerPacket?.prompt).toContain('# The machine\'s store')
   expect(runs(db)).toEqual(RAN)
+  expect(ofKind(db, 'fixer')).toMatchObject([{ plan: 7, actor: 'fixer', outcome: 'pass', message: 'return: the rails will find the file now' }])
 })
+
+const UP = [{ actor: 'fixer', outcome: 'needs_coo' }]
 
 test('shadow: the fixer only reads, the stop reaches a person', async () => {
   const { db, home } = seeded('shadow')
@@ -96,6 +99,7 @@ test('shadow: the fixer only reads, the stop reaches a person', async () => {
   expect(posted).toHaveLength(1)
   expect(maybe(home, 7, 'fixes.jsonl')).toContain('"mode":"shadow"')
   expect(runs(db)).toEqual([...RAN, ...RAN])
+  expect(ofKind(db, 'fixer')).toEqual([])
 })
 
 const TICKET = '---\ndid: nothing\nthen: ticket\nwhy: the spend wall counts a turn four times\nticket: the run wall counts each streamed block\n---\n'
@@ -160,6 +164,7 @@ test('ask_ceo from the fixer reaches the phone with its reason', async () => {
   expect(posted).toEqual(['CaliperForge · #139 needs you'])
   expect(applied(db)).toEqual([{ applied: 'escalated' }])
   expect(state(db)).toEqual({ state: 'blocked_on_ceo', step: 4 })
+  expect(ofKind(db, 'fixer')).toMatchObject(UP)
 })
 
 test('two live fixes a day, then stops escalate without the fixer', async () => {
@@ -172,6 +177,7 @@ test('two live fixes a day, then stops escalate without the fixer', async () => 
   await woke(db, home, stub(RETURN, packets), now, (t) => void posted.push(t), wire([]))
   expect(packets.some((p) => basename(p.transcript).startsWith('fixer'))).toBe(false)
   expect(posted).toHaveLength(1)
+  expect(ofKind(db, 'fixer')).toEqual([])
 })
 
 test('listing a built stray clears its flag, adding no second row', async () => {
@@ -324,6 +330,7 @@ test.each(['', 'until: next week\n'])('park without a time it parses is unreadab
   await woke(db, home, stub(`---\ndid: nothing\nthen: park\nwhy: builds on a job not yet filed\n${until}---\n`, []),
     now, (t) => void posted.push(t), wire([]))
   expect(maybe(home, 7, 'fixes.jsonl')).toContain('"applied":"unreadable"')
+  expect(ofKind(db, 'fixer')).toMatchObject([...UP, ...UP])
   expect(posted).toHaveLength(1)
   expect(state(db)).toEqual({ state: 'blocked_on_ceo', step: 4 })
   expect(lapsed(db, LATER)).toEqual([])
@@ -381,6 +388,7 @@ test('D4 a stopped seat run is unrepaired and reaches a person', async () => {
   const posted: string[] = []
   await woke(db, home, stub(RETURN, [], 'stopped'), now, (t) => void posted.push(t), wire([]))
   expect(maybe(home, 7, 'fixes.jsonl')).toContain('"applied":"unrepaired"')
+  expect(ofKind(db, 'fixer')).toMatchObject([...UP, ...UP])
   expect(state(db)).toEqual({ state: 'blocked_on_ceo', step: 4 })
   expect(posted).toHaveLength(1)
 })
@@ -396,6 +404,54 @@ test.each([
   await woke(db, home, stub(DONE, []), now, () => undefined, wire([]))
   expect(applied(db)).toEqual([{ applied: want }])
   expect(state(db)).toEqual({ state: ends, step: 4 })
+})
+
+const MEASURED = '---\ndid: added the **Measure:** and **Output:** lines to ask.md\nthen: return\nwhy: gather can run the fetcher now\n---\n'
+
+test('D1 research: the fixer adds the missing ask lines', async () => {
+  const { db, home } = seeded('live')
+  db.exec("UPDATE plans SET template = 'research', step = 1 WHERE id = 7")
+  put(home, 7, 'ask.md', '# rates\n\n**Question:** what is the p50 rate?\n')
+  put(home, 7, 'refusal.md', 'ask needs executed runs: add a **Measure:** line so the measurer gathers it\n')
+  const inner = stub(MEASURED, [])
+  const edits: Provider = { ...inner, fire: (packet) => {
+    if (basename(packet.transcript).startsWith('fixer') && packet.refuse('ask.md') === null) {
+      appendFileSync(join(packet.cwd, 'ask.md'), '**Measure:** run the rate probe\n**Output:** ~/cf_work/rates/\n')
+    }
+    return inner.fire(packet)
+  } }
+  await woke(db, home, edits, now, () => undefined, wire([]))
+  expect(maybe(home, 7, 'ask.md')).toMatch(/\*\*Measure:\*\* .*\n\*\*Output:\*\* ~\/cf_work\/rates\/\n$/)
+  expect(state(db)).toEqual({ state: 'queued', step: 1 })
+  expect(applied(db)).toEqual([{ applied: 'applied' }])
+  expect(maybe(home, 7, 'refusal.prev.md')).toContain('**Measure:**')
+  expect(maybe(home, 7, 'refusal.md')).toBeNull()
+})
+
+const OUT = join(homedir(), 'cf_work/fx-out')
+
+async function outputFixer(template: string): Promise<Packet | undefined> {
+  const { db, home } = seeded('live')
+  db.exec(`UPDATE plans SET template = '${template}' WHERE id = 7`)
+  put(home, 7, 'ask.md', '# x\n\n**Output:** ~/cf_work/fx-out/\n')
+  const packets: Packet[] = []
+  await woke(db, home, stub(RETURN, packets), now, () => undefined, wire([]))
+  return of(packets, 'fixer')
+}
+
+const admits = (p: Packet | undefined, paths: string[]) => paths.map((f) => p?.refuse(f) === null)
+
+test('D2 a research fixer writes its ask and its Output folder', async () => {
+  const p = await outputFixer('research')
+  expect(p?.reads).toEqual([OUT])
+  expect(admits(p, ['ask.md', 'rulings.md', 'question.md', join(OUT, 'a.md')])).toEqual([true, true, true, true])
+  expect(admits(p, ['src/index.ts', join(homedir(), 'cf_work/fx-other/a.md')])).toEqual([false, false])
+})
+
+test('D3 a pr_path fixer refuses an Output folder', async () => {
+  const p = await outputFixer('pr_path')
+  expect(p?.reads).toBeUndefined()
+  expect(admits(p, ['ask.md', join(OUT, 'a.md')])).toEqual([true, false])
 })
 
 test('the packet lists the other open jobs and the store', async () => {

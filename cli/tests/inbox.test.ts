@@ -7,7 +7,8 @@ import type { Fired } from '../../sequencer/kind.ts'
 import type { Db } from '../../store/index.ts'
 import { set } from '../../store/lanes.ts'
 import { putPlan } from '../../store/plans.ts'
-import { ack, crashed, events, line, notify, plain, record, unread, type Event } from '../inbox.ts'
+import { addAccount, addTarget } from '../../store/targets.ts'
+import { ack, crashed, events, line, notify, plain, record, ticketOf, unread, type Event } from '../inbox.ts'
 
 const schema = join(import.meta.dirname, '../../schema')
 
@@ -29,6 +30,16 @@ const LAP = [
   fired({ step: 4, name: 'review', outcome: 'refuse', state: 'retried', note: 'code_quality refuse' }),
   fired({ step: 2, name: 'build', note: 'typescript_specialist exit 0' }),
 ]
+
+test('D2: a target plan is repo#issue; unknown is plan <id>', () => {
+  const db = world()
+  addAccount(db, { id: 1, repo: 'acme/widget', measured_at: '2026-09-01', maintainers: 1, doors: 1, last_outsider_merge: null,
+    open_pr_age_p50_days: 1, cross_repo_activity: 0, pulse: 'cold', evidence: 'e' })
+  const target = addTarget(db, { account_id: 1, repo: 'acme/widget', issue_no: 12, named_merger: 'm', state: 'queued',
+    evidence_measured_at: '2026-09-01', evidence: 'e' })
+  putPlan(db, { id: 8, pipe_id: 1, target_id: target, template: 'pr_path', state: 'running', queued_at: AT, step: 0, retries: 0 })
+  expect([ticketOf(db, 8), ticketOf(db, 99)]).toEqual(['acme/widget#12', 'plan 99'])
+})
 
 test('a lap is blocked, landed and refused events; a pass is none', () => {
   expect(events(world(), LAP, AT).map((e) => [e.kind, e.ticket])).toEqual([['blocked', '#49'], ['landed', '#49'], ['refused', '#49']])

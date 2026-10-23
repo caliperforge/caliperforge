@@ -11,10 +11,11 @@ import { real } from '../../runner/index.ts'
 import { seat } from '../../runner/rules.ts'
 import { scores } from '../../store/bench.ts'
 import { eventsOf, logged, runRows } from '../../store/events.ts'
+import { holdOf } from '../../store/holds.ts'
 import type { Db } from '../../store/index.ts'
 import { dial } from '../../store/lanes.ts'
-import { allPlans, holdOn, pipeNamed, planById, putPlan, waiting, type PlanRow } from '../../store/plans.ts'
-import { CEILING, generate, scored, scratch } from '../../templates/bench.ts'
+import { allPlans, holdOn, pipeNamed, planById, putPlan, requeue, waiting, type PlanRow } from '../../store/plans.ts'
+import { CEILING, generate, nullChecked, scored, scratch } from '../../templates/bench.ts'
 import { drift, mechanisms } from '../drift.ts'
 import { unhold } from '../hold.ts'
 import { dry, tick } from '../index.ts'
@@ -39,8 +40,8 @@ test('a bench plan is stored and parsed', () => {
   expect(allPlans(db)).toMatchObject([{ id: 1, template: 'bench', state: 'queued', step: 0 }])
 })
 
-test('the bench map lists checkout, generate, score', () => {
-  expect(mapOf('bench').steps.map((s) => s.name)).toEqual(['checkout', 'generate', 'score'])
+test('the bench map lists checkout, generate, score, null_check', () => {
+  expect(mapOf('bench').steps.map((s) => s.name)).toEqual(['checkout', 'generate', 'score', 'null_check'])
 })
 
 test('the bench pipe routes its plan to step 0', () => {
@@ -51,10 +52,10 @@ test('the bench pipe routes its plan to step 0', () => {
   expect(route(db, planById(db, 1), OPENS)).toEqual({ fire: mapOf('bench').at(0) })
 })
 
-test('an unknown template and a step past score are refused', () => {
+test('an unknown template and a step past null_check are refused', () => {
   const db = fresh(schema)
   expect(() => { queued(db, 'nonsense' as PlanRow['template']) }).toThrow(/CHECK constraint failed/)
-  expect(() => mapOf('bench').at(3)).toThrow('bench has no step 3')
+  expect(() => mapOf('bench').at(4)).toThrow('bench has no step 4')
 })
 
 const FINDING = 'convertToShares rounds the share price down'
@@ -109,6 +110,53 @@ test('a fix the scratch tree holds is refused', () => {
   target(root, { repo: 'org/fixture', fix: c1, pre_fix: c1 })
   expect(scratch(root, benched())).toMatchObject({ outcome: 'refuse', spans: ['bench.fix_reachable'] })
   expect(maybe(root, 1, 'checkout.json')).toBeNull()
+})
+
+/** A commit on c1 that only `refs/pull/1/head` reaches, served over file:// so a clone gets only advertised refs. */
+function pulled(root: string, c1: string): string {
+  const dir = join(root, 'remotes/org/fixture')
+  git(dir, ['checkout', '-qb', 'pr', c1])
+  const pr = commit(dir, 'src/pr.ts', 'export const pr = 1\n', 'pr')
+  git(dir, ['update-ref', 'refs/pull/1/head', pr])
+  git(dir, ['checkout', '-q', '-'])
+  git(dir, ['branch', '-qD', 'pr'])
+  writeFileSync(join(root, '.cf/git-base'), `file://${join(root, 'remotes')}`)
+  symlinkSync('fixture', `${dir}.git`)
+  return pr
+}
+
+test('a pre-fix sha only a pull ref reaches is fetched', () => {
+  const { root, c1, c2 } = fixture()
+  const pr = pulled(root, c1)
+  target(root, { repo: 'org/fixture', fix: c2, pre_fix: pr })
+  expect(scratch(root, benched())).toEqual({ outcome: 'pass', spans: [], note: `checkout.json written at ${pr.slice(0, 12)}` })
+  expect(git(srcDir(root, 1), ['rev-parse', 'HEAD']).trim()).toBe(pr)
+})
+
+test('a full-sha pre-fix is fetched without its history', () => {
+  const { root, c1, c2 } = fixture()
+  const dir = join(root, 'remotes/org/fixture')
+  rmSync(join(dir, '.git/objects', c1.slice(0, 2), c1.slice(2)))
+  writeFileSync(join(root, '.cf/git-base'), `file://${join(root, 'remotes')}`)
+  symlinkSync('fixture', `${dir}.git`)
+  target(root, { repo: 'org/fixture', fix: 'f'.repeat(40), pre_fix: c2 })
+  expect(scratch(root, benched())).toEqual({ outcome: 'pass', spans: [], note: `checkout.json written at ${c2.slice(0, 12)}` })
+  expect(git(srcDir(root, 1), ['rev-parse', 'HEAD']).trim()).toBe(c2)
+})
+
+test('a pull-only fix resolves its parent as pre-fix', () => {
+  const { root, c1 } = fixture()
+  const pr = pulled(root, c1)
+  target(root, { repo: 'org/fixture', fix: pr, pre_fix: `${pr}^` })
+  expect(scratch(root, benched())).toEqual({ outcome: 'pass', spans: [], note: `checkout.json written at ${c1.slice(0, 12)}` })
+})
+
+test('a full-sha pre-fix origin does not hold throws', () => {
+  const { root, c2 } = fixture()
+  target(root, { repo: 'org/fixture', fix: c2, pre_fix: 'f'.repeat(40) })
+  expect(() => scratch(root, benched())).toThrow()
+  expect(maybe(root, 1, 'checkout.json')).toBeNull()
+  expect(existsSync(join(planDir(root, 1), 'resolve.git'))).toBe(false)
 })
 
 test('a pre-fix file holding the finding text is refused', () => {
@@ -302,6 +350,38 @@ test('D1 generate clones an emptied src/ again at pre_fix', async () => {
   expect(git(srcDir(root, 1), ['rev-parse', 'HEAD']).trim()).toBe(c1)
 })
 
+/** A checked-out src/ depending on `file:dep`, with a root postinstall, and a lockfile that locks dep only when `synced`. */
+function locked(synced: boolean): (root: string) => void {
+  return (root) => {
+    checkedOut(root)
+    const dir = srcDir(root, 1)
+    const pkg = { name: 'target', version: '1.0.0' }
+    const dep = { 'node_modules/dep': { resolved: 'dep', link: true }, dep: { version: '1.0.0' } }
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ ...pkg, dependencies: { dep: 'file:dep' }, scripts: { postinstall: 'touch ran' } }))
+    writeFileSync(join(dir, 'package-lock.json'), JSON.stringify({ ...pkg, lockfileVersion: 3, requires: true, packages: synced
+      ? { '': { ...pkg, hasInstallScript: true, dependencies: { dep: 'file:dep' } }, ...dep } : { '': { ...pkg, hasInstallScript: true } } }))
+    mkdirSync(join(dir, 'dep'))
+    writeFileSync(join(dir, 'dep/package.json'), JSON.stringify({ name: 'dep', version: '1.0.0' }))
+  }
+}
+
+test('D1 a lockfile src/ is installed, scripts unrun, then fired', async () => {
+  const fired = stub(1000, 'completed', true)
+  const { root, outcome } = await generated(fired, undefined, locked(true))
+  expect(outcome).toMatchObject({ outcome: 'pass' })
+  expect(fired.packets).toHaveLength(1)
+  expect(existsSync(join(srcDir(root, 1), 'node_modules/dep'))).toBe(true)
+  expect(existsSync(join(srcDir(root, 1), 'ran'))).toBe(false)
+})
+
+test('D2 a failed npm ci is refused unfired, with no run row', async () => {
+  const fired = stub(1000, 'completed', true)
+  const { db, outcome } = await generated(fired, undefined, locked(false))
+  expect(outcome).toMatchObject({ outcome: 'refuse', spans: ['bench.install'], note: expect.stringMatching(/^npm ci exited \d+: npm error/) as string })
+  expect(fired.packets).toEqual([])
+  expect(runRows(db)).toEqual([])
+})
+
 test('D5 tick on an empty src/ sends the plan back to step 0', async () => {
   const root = mkdtempSync(join(tmpdir(), 'cf-bench-'))
   staffedIn(root)
@@ -416,6 +496,10 @@ const PAIRS = [{ property: 'p1', verdict: 'catch' }, { property: 'p2', verdict: 
 
 const KILLS = [{ property: 'p1', kills: 3, untested: false }, { property: 'p4', kills: 0, untested: true }]
 
+const UPSTREAM = 'repo: euler-xyz/euler-earn\nfiles:\n  - src/EulerEarn.sol\n\n'
+
+const REFRESHED = 'repo: euler-xyz/euler-earn\nfiles:\n  - src/EulerEarn.sol\ntarget: euler-earn-m01\ngenerator: fizz\n'
+
 /** A stub fuzz-bench script that writes `rows` to `results/<suite>/<suite><suffix>`, making the folder first when `makes`. */
 function writes(suffix: string, rows: object[], makes = true): string {
   const body = JSON.stringify(rows.map((r) => JSON.stringify(r)).join('\n'))
@@ -423,13 +507,16 @@ function writes(suffix: string, rows: object[], makes = true): string {
   return `import os, sys\nname = os.path.basename(sys.argv[2])\n${made}open(f'results/{name}/{name}${suffix}', 'w').write(${body})\n`
 }
 
+const FILES = '[src/vault.sol]'
+
 /** A bench plan at score with its suite written, and `remotes/caliperforge/fuzz-bench` whose run_pair.py is `pair`. */
-function scoring(pair = writes('.jsonl', PAIRS), keys: Record<string, string> = { target: 'euler-earn-m01', generator: 'fizz' }) {
+function scoring(pair = writes('.jsonl', PAIRS), keys: Record<string, string> = { target: 'euler-earn-m01', generator: 'fizz', files: FILES }) {
   const root = mkdtempSync(join(tmpdir(), 'cf-bench-'))
   const dir = join(root, 'remotes/caliperforge/fuzz-bench')
   mkdirSync(dir, { recursive: true })
   git(dir, ['init', '-q'])
   commit(dir, 'bench/null_check.py', writes('.nullcheck.jsonl', KILLS), 'null check')
+  commit(dir, 'targets/euler-earn-m01.yml', UPSTREAM, 'target')
   const sha = commit(dir, 'bench/run_pair.py', pair, 'run pair')
   mkdirSync(join(root, '.cf'))
   writeFileSync(join(root, '.cf/git-base'), join(root, 'remotes'))
@@ -443,16 +530,39 @@ function scoring(pair = writes('.jsonl', PAIRS), keys: Record<string, string> = 
   return { root, db, sha }
 }
 
-const SCORE = { catches: 2, false_positives: 1, untested: 1, tokens: 1234, seconds: 56.5 }
+const SCORE = { catches: 2, false_positives: 1, untested: null, tokens: 1234, seconds: 56.5 }
+
+const NULLCHECK = 'fuzz-bench/results/euler-earn-m01/euler-earn-m01.nullcheck.jsonl'
 
 test('score D1 kernel scores the suite at the fuzz-bench HEAD', () => {
   const { root, db, sha } = scoring()
   expect(kernel(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  expect(existsSync(join(planDir(root, 1), NULLCHECK))).toBe(false)
   expect(scores(db)).toEqual([{ plan: 1, target: 'euler-earn-m01', generator: 'fizz', ...SCORE, x_ray: null }])
   expect(existsSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/FizzTest.sol'))).toBe(true)
   expect(existsSync(join(srcDir(root, 1), 'test/fizz/FizzTest.sol'))).toBe(true)
   expect(existsSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/medusa.json'))).toBe(false)
   expect(JSON.parse(get(root, 1, 'score.json'))).toEqual({ fuzz_bench: sha, ...SCORE, x_ray: null })
+})
+
+test('D1 scored rewrites target.yml from fuzz-bench HEAD', () => {
+  const { root, db } = scoring()
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  expect(get(root, 1, 'target.yml')).toBe(REFRESHED)
+})
+
+test('D3 no upstream targets yml is refused, copy kept', () => {
+  const { root, db } = scoring()
+  const dir = join(root, 'remotes/caliperforge/fuzz-bench')
+  git(dir, ['rm', '-q', 'targets/euler-earn-m01.yml'])
+  git(dir, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'no target'])
+  const before = get(root, 1, 'target.yml')
+  expect(scored(db, root, planById(db, 1)))
+    .toEqual({ outcome: 'refuse', spans: ['target.yml'], note: 'fuzz-bench has no targets/euler-earn-m01.yml' })
+  expect(get(root, 1, 'target.yml')).toBe(before)
+  expect(existsSync(join(planDir(root, 1), 'fuzz-bench/results/euler-earn-m01/euler-earn-m01.jsonl'))).toBe(false)
+  expect(scores(db)).toEqual([])
+  expect(maybe(root, 1, 'score.json')).toBeNull()
 })
 
 test('D1 D4 a root medusa.json is copied with its paths moved', () => {
@@ -464,10 +574,41 @@ test('D1 D4 a root medusa.json is copied with its paths moved', () => {
   expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
   expect(scores(db)).toEqual([{ plan: 1, target: 'euler-earn-m01', generator: 'fizz', ...SCORE, x_ray: null }])
   expect(JSON.parse(readFileSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/medusa.json'), 'utf8'))).toEqual({
-    fuzzing: { corpusDirectory: 'fizz_data/corpus_medusa', targetContracts: ['FuzzTester'] },
+    fuzzing: { corpusDirectory: 'fizz_data/corpus_medusa', targetContracts: ['FuzzTester'], timeout: 1200, workers: 4 },
     compilation: { platform: 'crytic-compile', platformConfig: { target: '../..' } } })
   expect(readFileSync(join(srcDir(root, 1), 'medusa.json'), 'utf8')).toBe(config)
   expect(existsSync(join(srcDir(root, 1), 'test/fizz/medusa.json'))).toBe(false)
+})
+
+/** The medusa.json `scored` installs in the suite for a root medusa.json of `config`. */
+function installed(config: string): unknown {
+  const { root, db } = scoring()
+  writeFileSync(join(srcDir(root, 1), 'medusa.json'), config)
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  expect(readFileSync(join(srcDir(root, 1), 'medusa.json'), 'utf8')).toBe(config)
+  return JSON.parse(readFileSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/medusa.json'), 'utf8'))
+}
+
+test('D1 D5 the copy caps timeout, workers and moves slither', () => {
+  expect(installed(JSON.stringify({ fuzzing: { timeout: 0, workers: 10, testLimit: 0 },
+    slither: { useSlither: true, cachePath: 'test/fizz/fizz_data/slither_results.json' } }))).toEqual({
+    fuzzing: { timeout: 1200, workers: 4, testLimit: 0 }, slither: { useSlither: true, cachePath: 'fizz_data/slither_results.json' } })
+})
+
+test('D3 a set timeout and workers at most 4 are kept', () => {
+  expect(installed(JSON.stringify({ fuzzing: { timeout: 600, workers: 2 } }))).toEqual({ fuzzing: { timeout: 600, workers: 2 } })
+})
+
+test('D1 D2 D3 a balance above 1e24 wei is clamped in the copy', () => {
+  const { root, db } = scoring()
+  const balances = ['0xffffffffffffffffffffffffffffffffffffffffffffffff', '0x21e19e0c9bab2400000', 'lots']
+  writeFileSync(join(srcDir(root, 1), 'medusa.json'), JSON.stringify({ fuzzing: { timeout: 600, workers: 2, targetContractsBalances: balances } }))
+  const done = scored(db, root, planById(db, 1))
+  expect(done).toMatchObject({ outcome: 'pass' })
+  expect(done.note).toContain('0xffffffffffffffffffffffffffffffffffffffffffffffff')
+  expect(done.note).not.toContain('0x21e19e0c9bab2400000')
+  expect(JSON.parse(readFileSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/medusa.json'), 'utf8'))).toEqual({
+    fuzzing: { timeout: 600, workers: 2, targetContractsBalances: ['0xd3c21bcecceda1000000', '0x21e19e0c9bab2400000', 'lots'] } })
 })
 
 test('D3 a root medusa.json that does not parse is refused', () => {
@@ -481,26 +622,93 @@ test('D3 a root medusa.json that does not parse is refused', () => {
 
 test('D1 scripts that make no results folder are scored', () => {
   const { root, db } = scoring(writes('.jsonl', PAIRS, false))
-  commit(join(root, 'remotes/caliperforge/fuzz-bench'), 'bench/null_check.py', writes('.nullcheck.jsonl', KILLS, false), 'no makedirs')
   expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
   expect(scores(db)).toEqual([{ plan: 1, target: 'euler-earn-m01', generator: 'fizz', ...SCORE, x_ray: null }])
 })
 
-test('score D2 a failing run_pair.py is refused and not recorded', () => {
-  const { root, db } = scoring('import sys\nsys.stderr.write("forge build failed")\nsys.exit(1)\n')
-  expect(scored(db, root, planById(db, 1))).toEqual({ outcome: 'refuse', spans: ['bench.run_pair'], note: 'forge build failed' })
+const FAILS = 'import sys\nsys.stderr.write("forge build failed")\nsys.exit(1)\n'
+
+function heldAtScore(db: Db, root: string): void {
+  expect(planById(db, 1)).toMatchObject({ state: 'blocked_on_ceo', step: 2 })
+  expect(holdOf(db, 1)).toEqual({ held_by: 'coo', held_why: 'forge build failed' })
+  expect(maybe(root, 1, 'generate.json')).not.toBeNull()
+  expect(existsSync(join(srcDir(root, 1), 'test/fizz/FizzTest.sol'))).toBe(true)
+  expect(eventsOf(db, 1, 'score')).toMatchObject([{ actor: 'score', outcome: 'needs_coo', message: 'forge build failed' }])
   expect(scores(db)).toEqual([])
+}
+
+test('score D2 a failing run_pair.py holds the plan for the coo', () => {
+  const { root, db } = scoring(FAILS)
+  expect(scored(db, root, planById(db, 1))).toEqual({ outcome: 'pass', held: true, quiet: true, spans: ['bench.run_pair'], note: 'forge build failed' })
+  heldAtScore(db, root)
 })
 
-test('D1 D2 no null_check.py is scored with untested null', () => {
-  const { root, db } = scoring()
-  const dir = join(root, 'remotes/caliperforge/fuzz-bench')
-  git(dir, ['rm', '-q', 'bench/null_check.py'])
-  git(dir, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'no null check'])
-  const sha = git(dir, ['rev-parse', 'HEAD']).trim()
+const KEYS = { target: 'euler-earn-m01', generator: 'fizz' }
+
+const ON = { ...KEYS, null_check: 'true' }
+
+/** A bench plan scored at step 2 and queued at step 3, its fuzz-bench clone's null_check.py `check`, or none when null. */
+function nullChecking(keys: Record<string, string>, check: string | null = writes('.nullcheck.jsonl', KILLS)) {
+  const { root, db, sha } = scoring(undefined, { ...keys, files: FILES })
   expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
-  expect(scores(db)).toEqual([{ plan: 1, target: 'euler-earn-m01', generator: 'fizz', ...SCORE, untested: null, x_ray: null }])
-  expect(JSON.parse(get(root, 1, 'score.json'))).toEqual({ fuzz_bench: sha, ...SCORE, untested: null, x_ray: null })
+  const script = join(planDir(root, 1), 'fuzz-bench/bench/null_check.py')
+  if (check === null) rmSync(script)
+  else writeFileSync(script, check)
+  requeue(db, 1, 3)
+  return { root, db, sha }
+}
+
+test('D2 null_check off passes step 3 and spawns nothing', () => {
+  const { root, db } = nullChecking(KEYS)
+  expect(kernel(db, root, planById(db, 1))).toEqual({ outcome: 'pass', spans: [], note: 'null_check is off in target.yml' })
+  expect(existsSync(join(planDir(root, 1), NULLCHECK))).toBe(false)
+  expect(scores(db)).toEqual([{ plan: 1, ...KEYS, ...SCORE, x_ray: null }])
+})
+
+test('D2 the refreshed copy keeps null_check on for step 3', () => {
+  const { root, db } = nullChecking(ON)
+  expect(get(root, 1, 'target.yml')).toBe(`${REFRESHED}null_check: true\n`)
+  expect(kernel(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass', note: 'null_check.py finished: 1 untested in 2 rows' })
+  expect(scores(db)).toEqual([{ plan: 1, ...KEYS, ...SCORE, untested: 1, x_ray: null }])
+})
+
+test('D3 a null_check.py past the cap is stopped and counted', () => {
+  const { root, db, sha } = nullChecking(ON, `${writes('.nullcheck.jsonl', KILLS)}import time\ntime.sleep(60)\n`)
+  expect(nullChecked(db, root, planById(db, 1), 2000))
+    .toEqual({ outcome: 'pass', spans: [], note: 'null_check.py stopped at the 2000 ms cap: 1 untested in 2 rows' })
+  expect(scores(db)).toEqual([{ plan: 1, ...KEYS, ...SCORE, untested: 1, x_ray: null }])
+  expect(JSON.parse(get(root, 1, 'score.json'))).toEqual({ fuzz_bench: sha, ...SCORE, untested: 1, x_ray: null })
+})
+
+test('D4 a failing null_check.py holds step 3, its row kept', () => {
+  const { root, db } = nullChecking(ON, FAILS)
+  expect(kernel(db, root, planById(db, 1))).toEqual({ outcome: 'pass', held: true, quiet: true, spans: ['bench.null_check'], note: 'forge build failed' })
+  expect(planById(db, 1)).toMatchObject({ state: 'blocked_on_ceo', step: 3 })
+  expect(holdOf(db, 1)).toEqual({ held_by: 'coo', held_why: 'forge build failed' })
+  expect(eventsOf(db, 1, 'score')).toMatchObject([{ actor: 'score', outcome: 'needs_coo', message: 'forge build failed' }])
+  expect(scores(db)).toEqual([{ plan: 1, ...KEYS, ...SCORE, x_ray: null }])
+})
+
+test('D3 D5 a held score fires no generate, and scores on return', async () => {
+  const { root, db } = scoring(FAILS)
+  staffedIn(root)
+  dial(db, 3, AT)
+  const fired = stub(CEILING, 'stopped', true)
+  await tick(db, root, fired.provider, OPENS)
+  heldAtScore(db, root)
+  expect(runRows(db).filter((r) => r.seat !== 'director')).toEqual([])
+  commit(join(root, 'remotes/caliperforge/fuzz-bench'), 'bench/run_pair.py', writes('.jsonl', PAIRS), 'run pair fixed')
+  unhold(db, root, 1, 'coo')
+  await tick(db, root, fired.provider, OPENS)
+  expect(maybe(root, 1, 'score.json')).not.toBeNull()
+  expect(runRows(db).filter((r) => r.seat !== 'director')).toEqual([])
+})
+
+test('D2 no null_check.py passes step 3 with untested null', () => {
+  const { root, db, sha } = nullChecking(ON, null)
+  expect(nullChecked(db, root, planById(db, 1))).toEqual({ outcome: 'pass', spans: [], note: 'fuzz-bench has no bench/null_check.py' })
+  expect(scores(db)).toEqual([{ plan: 1, ...KEYS, ...SCORE, x_ray: null }])
+  expect(JSON.parse(get(root, 1, 'score.json'))).toEqual({ fuzz_bench: sha, ...SCORE, x_ray: null })
 })
 
 test('D3 an empty results file is refused and not recorded', () => {
@@ -528,16 +736,62 @@ test('D1 no results from run_pair.py is refused before null_check', () => {
 })
 
 test('score D3 no target or no generate.json is refused uncloned', () => {
-  const { root, db } = scoring(undefined, { generator: 'fizz' })
+  const { root, db } = scoring(undefined, { generator: 'fizz', files: FILES })
   expect(scored(db, root, planById(db, 1))).toEqual({ outcome: 'refuse', spans: ['target.yml'], note: 'target.yml has no target' })
-  target(root, { target: 'euler-earn-m01', generator: 'fizz' })
+  target(root, { target: 'euler-earn-m01', generator: 'fizz', files: FILES })
   rmSync(join(planDir(root, 1), 'generate.json'))
   expect(scored(db, root, planById(db, 1))).toEqual({ outcome: 'refuse', spans: ['generate.json'], note: 'generate.json is missing' })
   expect(existsSync(join(planDir(root, 1), 'fuzz-bench'))).toBe(false)
 })
 
+/** `remotes/org/fixture`: a pre-fix commit and a fix touching `path`, or nothing when null, named by checkout.json with a short fix. */
+function fixedIn(root: string, path: string | null): void {
+  const dir = join(root, 'remotes/org/fixture')
+  mkdirSync(dir, { recursive: true })
+  git(dir, ['init', '-q'])
+  const preFix = commit(dir, 'README.md', '', 'pre-fix')
+  if (path === null) git(dir, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '--allow-empty', '-m', 'fix'])
+  else commit(dir, path, 'contract Vault {}\n', 'fix')
+  put(root, 1, 'checkout.json', JSON.stringify({ repo: 'org/fixture', fix: git(dir, ['rev-parse', '--short=8', 'HEAD']).trim(), pre_fix: preFix }))
+}
+
+test('score D1 D5 unlisted upstream gets the fix paths', () => {
+  const { root, db } = scoring(undefined, KEYS)
+  commit(join(root, 'remotes/caliperforge/fuzz-bench'), 'targets/euler-earn-m01.yml', 'repo: euler-xyz/euler-earn\n', 'no files')
+  fixedIn(root, 'src/vault.sol')
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  const listed = `repo: euler-xyz/euler-earn\nfiles: ${FILES}\n`
+  expect(readFileSync(join(planDir(root, 1), 'fuzz-bench/targets/euler-earn-m01.yml'), 'utf8')).toBe(listed)
+  expect(get(root, 1, 'target.yml')).toBe(`${listed}target: euler-earn-m01\ngenerator: fizz\n`)
+  expect(scores(db)).toEqual([{ plan: 1, ...KEYS, ...SCORE, x_ray: null }])
+  expect(existsSync(join(planDir(root, 1), 'resolve.git'))).toBe(false)
+})
+
+test('D2 D3 D4 upstream files kept, none derivable refused', () => {
+  const { root, db } = scoring(undefined, KEYS)
+  const upstream = (files: string, on = db) => {
+    commit(join(root, 'remotes/caliperforge/fuzz-bench'), 'targets/euler-earn-m01.yml', `repo: euler-xyz/euler-earn\nfiles: ${files}\n`, 'target')
+    return scored(on, root, planById(on, 1))
+  }
+  const refused = { outcome: 'refuse', spans: ['target.yml'], note: 'target.yml has no files' }
+  for (const files of ['', '[]']) expect(upstream(files)).toEqual(refused)
+  fixedIn(root, null)
+  for (const files of ['', '[]']) expect(upstream(files)).toEqual(refused)
+  expect(existsSync(join(planDir(root, 1), 'resolve.git'))).toBe(false)
+  expect(scores(db)).toEqual([])
+  expect(maybe(root, 1, 'score.json')).toBeNull()
+  for (const files of [FILES, 'src/vault.sol', '\n  - src/vault.sol']) {
+    const again = fresh(schema)
+    queued(again, 'bench', 2)
+    expect(upstream(files, again)).toMatchObject({ outcome: 'pass' })
+    expect(get(root, 1, 'target.yml')).toBe(`repo: euler-xyz/euler-earn\nfiles: ${files}\ntarget: euler-earn-m01\ngenerator: fizz\n`)
+  }
+  target(root, { generator: 'fizz' })
+  expect(scored(db, root, planById(db, 1)).note).toBe('target.yml has no target')
+})
+
 test('D3 house_generator generates and is scored under its name', async () => {
-  const { root, db } = scoring(undefined, { target: 'euler-earn-m01', generator: 'house_generator' })
+  const { root, db } = scoring(undefined, { target: 'euler-earn-m01', generator: 'house_generator', files: FILES })
   staffedIn(root)
   rmSync(join(srcDir(root, 1), 'test/fizz/FizzTest.sol'))
   const fired = stub(1234, 'completed', ['test/fizz/House.sol'], null, false, 'contract House {\n  function property_holds() public {}\n}\n')
@@ -553,7 +807,7 @@ test('D3 house_generator generates and is scored under its name', async () => {
 })
 
 test('D3 a run that wrote x-ray.md is scored with x_ray 1', async () => {
-  const { root, db, sha } = scoring(undefined, { target: 'euler-earn-m01', generator: 'house_generator' })
+  const { root, db, sha } = scoring(undefined, { target: 'euler-earn-m01', generator: 'house_generator', files: FILES })
   staffedIn(root)
   expect(await generate(db, root, planById(db, 1), mapOf('bench').at(1), stub(1234, 'completed', true, null, true).provider))
     .toMatchObject({ outcome: 'pass' })

@@ -166,7 +166,9 @@ function filed(db: Db, plan: PlanRow, prefix: string, parts: Part[], n: number, 
   const title = `${prefix}${letter(n)}: ${part.title}`
   const of = `${letter(n)} of ${String(parts.length)}`
   const id = String(plan.id)
-  const body = [`**What:** ${part.what}`, `**Why:** ${part.why}`, `**When it ends:** ${part.ends}`, '',
+  const asked = plan.template !== 'research' ? [] : [`**Question:** ${part.what}`,
+    `**Would be wrong if:** it leaves out what this part asks, or answers what another part of #${prefix} asks`, `**Done when:** ${part.ends}`]
+  const body = [`**What:** ${part.what}`, `**Why:** ${part.why}`, `**When it ends:** ${part.ends}`, ...asked, '',
     internal(plan) ? `Part ${of} of #${prefix}, split by the brief writer.`
       : `Internal only: part ${of} of plan ${id}, split by the brief writer; it builds against asm/${id} on our fork and opens no pull request upstream.`,
     ...(prior === undefined ? [] : [`After: ${ref(prior)}`]), ...(section === '' ? [] : ['', section]), ''].join('\n')

@@ -2,7 +2,6 @@ import type { Command } from 'commander'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { hold, later, unhold } from '../sequencer/hold.ts'
-import { opened } from '../sequencer/rule.ts'
 import { afresh, cloned, fetchMain, git, MAIN, planDir, reap } from '../sequencer/workspace.ts'
 import { blocked, parked, WAITING } from '../sequencer/steps.ts'
 import { decision } from '../store/ask.ts'
@@ -16,6 +15,7 @@ import { held, holderOf, HOLDERS, originRef, planById, terminal } from '../store
 import { until } from '../store/until.ts'
 import { laneLine, open as openPlans, runsOf, section, verdictsOf } from './brief.ts'
 import type { Cli } from './cf-lanes.ts'
+import { registerReturn } from './cf-return.ts'
 import { add as fileIssue, render as renderUnfiled, unfiled } from './plan.ts'
 import { add, note } from './queue.ts'
 
@@ -124,17 +124,7 @@ function holds(cf: Command, { root, db, out }: Cli): void {
       out(`plan ${id} queued\n`)
     })
 
-  cf.command('return').argument('<plan>', 'a plan blocked on the ceo, held or halted').requiredOption(...BY)
-    .option('--to <step>', 'an earlier step to resume at, retries and signed head cleared')
-    .action((id: string, options: { by: string; to?: string }) => {
-      const to = options.to === undefined ? undefined : Number(options.to)
-      const by = holderOf(options.by)
-      const handle = db()
-      const missed = opened(handle, root, Number(id))
-      const step = unhold(handle, root, Number(id), by, to)
-      out(`plan ${id} queued at step ${String(step)}\n`)
-      if (missed.length > 0) out(`  not in the checkout: ${missed.join(', ')}\n`)
-    })
+  registerReturn(cf.command('return').argument('<plan>', 'a plan blocked on the ceo, held or halted').requiredOption(...BY), { root, db, out })
 }
 
 const ON = ['--on <plan>', 'the plan it waits on; it goes back in its lane when that one lands'] as const
@@ -203,13 +193,14 @@ function parks(cf: Command, { root, db, out }: Cli): void {
 function landing(handle: Db, root: string, plan: number, sha: string): { sha: string; url: string } {
   const ref = originRef(planById(handle, plan))
   if (ref === null) throw new Error(`plan ${String(plan)} names no issue of ours to land`)
-  const dir = join(planDir(root, plan), 'src')
-  if (!cloned(dir)) throw new Error(`plan ${String(plan)} has no checkout to read main in`)
-  fetchMain(dir)
+  const checkout = join(planDir(root, plan), 'src')
+  const [dir, main] = cloned(checkout) ? [checkout, MAIN] : [root, 'refs/remotes/origin/main']
+  if (dir === checkout) fetchMain(dir)
+  else git(root, ['fetch', '-q', '--no-tags', 'origin', `+refs/heads/main:${main}`])
   let full: string
   try {
     full = git(dir, ['rev-parse', '--verify', `${sha}^{commit}`]).trim()
-    git(dir, ['merge-base', '--is-ancestor', full, MAIN])
+    git(dir, ['merge-base', '--is-ancestor', full, main])
   } catch {
     throw new Error(`${sha} is not on main`)
   }

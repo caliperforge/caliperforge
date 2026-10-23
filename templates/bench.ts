@@ -1,23 +1,26 @@
-import { spawnSync } from 'node:child_process'
+import { spawnSync, type SpawnSyncReturns } from 'node:child_process'
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 import type { Provider } from '../providers/kind.ts'
 import { packet, real } from '../runner/index.ts'
 import { load, seat } from '../runner/rules.ts'
+import { bare, npm } from '../sequencer/checks.ts'
 import type { Outcome } from '../sequencer/kind.ts'
 import { staffed } from '../sequencer/staffing.ts'
 import { firstLine } from '../sequencer/unpolled.ts'
-import { cloned, git, gitBase, maybe, planDir, put, remote, srcDir } from '../sequencer/workspace.ts'
-import { record } from '../store/bench.ts'
+import { cloned, get, git, gitBase, maybe, planDir, put, remote, srcDir } from '../sequencer/workspace.ts'
+import { record, setUntested } from '../store/bench.ts'
 import { logged, runLogged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { observed } from '../store/lanes.ts'
-import type { PlanRow } from '../store/plans.ts'
+import { needsCeo, type PlanRow } from '../store/plans.ts'
 import { byRun, pending } from '../store/transcript.ts'
+import { clamp } from './balances.ts'
+import { inBare, listedIn } from './listed.ts'
 import { DEFAULT_BUILDER, type Step } from './pr-path.ts'
 
-export const steps: Step[] = ['checkout', 'generate', 'score'].map((name, step) =>
+export const steps: Step[] = ['checkout', 'generate', 'score', 'null_check'].map((name, step) =>
   ({ step, name, seat: DEFAULT_BUILDER, fires: name === 'generate' ? 'seat' : 'kernel', runs: name, gate: false, writes_verdict: false, verdict_gate: null }))
 
 const NEEDED = ['repo', 'fix', 'pre_fix']
@@ -40,6 +43,8 @@ const TIMEOUTS = { BASH_DEFAULT_TIMEOUT_MS: '1800000', BASH_MAX_TIMEOUT_MS: '180
 
 const ATTEMPTS = '/tmp/x-ray-attempts.md'
 
+const CAP = 60 * 60 * 1000
+
 function ask(skill: string | undefined, xray: string | undefined): string {
   const said = `Generate the fuzz suite for the project in the working folder in automatic mode, asking nothing: SUITE_DIR is ${SUITE} and META_DIR is ${SUITE}/${META}. `
     + 'Run forge in the foreground, never in the background, and do not end the turn while waiting on a build.'
@@ -53,6 +58,10 @@ function ask(skill: string | undefined, xray: string | undefined): string {
 function fields(text: string): Record<string, string | undefined> {
   return Object.fromEntries(text.split('\n')
     .map((line) => /^(\w+):\s*(.*)$/.exec(line)).filter((m) => m !== null).map((m) => [m[1] ?? '', m[2]?.trim()] as const))
+}
+
+export function copied(yml: string, target: string, generator: string): string {
+  return `${yml.trimEnd()}\ntarget: ${target}\ngenerator: ${generator}\n`
 }
 
 function checkedOut(db: Db, root: string, id: number, dir: string): string | null {
@@ -102,6 +111,14 @@ export function scratch(root: string, plan: PlanRow): Outcome {
   return { outcome: 'pass', spans: [], note: `checkout.json written at ${sha.slice(0, 12)}` }
 }
 
+function deps(dir: string): Outcome | null {
+  if (!bare(dir)) return null
+  const ran = npm(['ci', '--ignore-scripts', '--include=dev'], dir)
+  if (ran.ok) return null
+  const line = ran.output.split('\n').find((l) => /^npm (?:error|ERR!)/.test(l)) ?? ''
+  return { outcome: 'refuse', spans: ['bench.install'], note: `npm ci exited ${ran.code}: ${line}` }
+}
+
 export async function generate(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
   const generator = fields(maybe(root, plan.id, 'target.yml') ?? '').generator ?? ''
   if (generator === '') return { outcome: 'refuse', spans: ['target.yml'], note: 'target.yml has no generator' }
@@ -110,6 +127,8 @@ export async function generate(db: Db, root: string, plan: PlanRow, step: Step, 
   const dir = real(srcDir(root, plan.id))
   const unchecked = checkedOut(db, root, plan.id, dir)
   if (unchecked !== null) return { outcome: 'refuse', spans: ['bench.no_checkout'], note: unchecked, to: 0 }
+  const uninstalled = deps(dir)
+  if (uninstalled !== null) return uninstalled
   load(db, root)
   const { manifest, prompt, hash } = seat(root, name)
   const granted = manifest.reads?.map((path) => real(path.startsWith('~/') ? join(homedir(), path.slice(2)) : path)) ?? []
@@ -131,7 +150,8 @@ export async function generate(db: Db, root: string, plan: PlanRow, step: Step, 
 }
 
 export function scored(db: Db, root: string, plan: PlanRow): Outcome {
-  const keys = fields(maybe(root, plan.id, 'target.yml') ?? '')
+  const text = maybe(root, plan.id, 'target.yml') ?? ''
+  const keys = fields(text)
   const missing = ['target', 'generator'].filter((key) => (keys[key] ?? '') === '')
   if (missing.length > 0) return { outcome: 'refuse', spans: ['target.yml'], note: `target.yml has no ${missing.join(', ')}` }
   const { target = '', generator = '' } = keys
@@ -141,31 +161,59 @@ export function scored(db: Db, root: string, plan: PlanRow): Outcome {
   const proven = unproven(join(srcDir(root, plan.id), suite), generator)
   if (typeof proven !== 'number') return proven
   const config = medusa(db, plan.id, srcDir(root, plan.id), suite)
-  if (config !== null && typeof config !== 'string') return config
+  if (config !== null && 'outcome' in config) return config
   const bench = join(planDir(root, plan.id), 'fuzz-bench')
   rmSync(bench, { recursive: true, force: true })
   git(planDir(root, plan.id), ['clone', '-q', remote(gitBase(root), 'caliperforge/fuzz-bench'), bench])
   const sha = git(bench, ['rev-parse', 'HEAD']).trim()
+  const upstream = join(bench, 'targets', `${target}.yml`)
+  if (!existsSync(upstream)) return { outcome: 'refuse', spans: ['target.yml'], note: `fuzz-bench has no targets/${target}.yml` }
+  const yml = listedIn(root, plan.id, upstream)
+  if (yml === null) return { outcome: 'refuse', spans: ['target.yml'], note: 'target.yml has no files' }
+  put(root, plan.id, 'target.yml', `${copied(yml, target, generator)}${
+    keys.null_check === undefined ? '' : `null_check: ${keys.null_check}\n`}`)
   const suites = `suites/${generator}/${target}`
   cpSync(join(srcDir(root, plan.id), suite), join(bench, suites), { recursive: true })
-  if (config !== null) writeFileSync(join(bench, suites, 'medusa.json'), config)
+  if (config !== null) writeFileSync(join(bench, suites, 'medusa.json'), config.config)
   mkdirSync(join(bench, 'results', target), { recursive: true })
   const written = join(bench, 'results', target, `${target}.jsonl`)
-  for (const script of ['run_pair', 'null_check'].filter((s) => s === 'run_pair' || existsSync(join(bench, `bench/${s}.py`)))) {
-    const ran = spawnSync('python3', [`bench/${script}.py`, `targets/${target}.yml`, suites], { cwd: bench, encoding: 'utf8' })
-    if (ran.error !== undefined || ran.status !== 0) {
-      return { outcome: 'refuse', spans: [`bench.${script}`], note: ran.error?.message ?? ran.stderr.trim().split('\n').at(-1) ?? '' }
-    }
-    if (!existsSync(written)) return { outcome: 'refuse', spans: ['bench.no_results'], note: `${script}.py exited 0 and wrote no results/${target}/${target}.jsonl` }
-  }
+  const ran = spawnSync('python3', ['bench/run_pair.py', `targets/${target}.yml`, suites], { cwd: bench, encoding: 'utf8' })
+  if (ran.error !== undefined || ran.status !== 0) return heldForCoo(db, plan, ran, 'run_pair')
+  if (!existsSync(written)) return { outcome: 'refuse', spans: ['bench.no_results'], note: `run_pair.py exited 0 and wrote no results/${target}/${target}.jsonl` }
   const pairs = rows(written)
   if (pairs.length === 0) return { outcome: 'refuse', spans: ['bench.empty_results'], note: `results/${target}/${target}.jsonl has no rows` }
-  const kills = join(bench, 'results', target, `${target}.nullcheck.jsonl`)
   const score = { catches: pairs.filter((r) => r.verdict === 'catch').length, false_positives: pairs.filter((r) => r.verdict === 'fp_candidate').length,
-    untested: existsSync(kills) ? rows(kills).filter((r) => r.untested === true).length : null, tokens, seconds, x_ray: x_ray ?? null }
+    untested: null, tokens, seconds, x_ray: x_ray ?? null }
   record(db, { plan: plan.id, target, generator, ...score })
   put(root, plan.id, 'score.json', JSON.stringify({ fuzz_bench: sha, ...score }))
-  return { outcome: 'pass', spans: [], note: `score.json written at fuzz-bench ${sha.slice(0, 12)}` }
+  return { outcome: 'pass', spans: [], note: `score.json written at fuzz-bench ${sha.slice(0, 12)}${config === null || config.clamped.length === 0
+    ? '' : `; targetContractsBalances ${config.clamped.join(', ')} clamped to 1e24 wei`}` }
+}
+
+export function nullChecked(db: Db, root: string, plan: PlanRow, cap = CAP): Outcome {
+  const { target = '', generator = '', null_check: on } = fields(maybe(root, plan.id, 'target.yml') ?? '')
+  if (on !== 'true') return { outcome: 'pass', spans: [], note: 'null_check is off in target.yml' }
+  const bench = join(planDir(root, plan.id), 'fuzz-bench')
+  if (!existsSync(join(bench, 'bench/null_check.py'))) return { outcome: 'pass', spans: [], note: 'fuzz-bench has no bench/null_check.py' }
+  const ran = spawnSync('python3', ['bench/null_check.py', `targets/${target}.yml`, `suites/${generator}/${target}`],
+    { cwd: bench, encoding: 'utf8', timeout: cap })
+  const capped = (ran.error as NodeJS.ErrnoException | undefined)?.code === 'ETIMEDOUT'
+  if (!capped && (ran.error !== undefined || ran.status !== 0)) return heldForCoo(db, plan, ran, 'null_check')
+  const ended = capped ? `stopped at the ${String(cap)} ms cap` : 'finished'
+  const kills = join(bench, 'results', target, `${target}.nullcheck.jsonl`)
+  if (!existsSync(kills)) return { outcome: 'pass', spans: [], note: `null_check.py ${ended} with no results/${target}/${target}.nullcheck.jsonl` }
+  const counted = rows(kills)
+  const untested = counted.filter((r) => r.untested === true).length
+  setUntested(db, plan.id, untested)
+  put(root, plan.id, 'score.json', JSON.stringify({ ...JSON.parse(get(root, plan.id, 'score.json')) as object, untested }))
+  return { outcome: 'pass', spans: [], note: `null_check.py ${ended}: ${String(untested)} untested in ${String(counted.length)} rows` }
+}
+
+function heldForCoo(db: Db, plan: PlanRow, ran: SpawnSyncReturns<string>, script: string): Outcome {
+  const note = ran.error?.message ?? ran.stderr.trim().split('\n').at(-1) ?? ''
+  needsCeo(db, plan, note)
+  logged(db, { plan: plan.id, kind: 'score', actor: 'score', outcome: 'needs_coo', message: note, pointer: `step-${String(plan.step)}`, run: null })
+  return { outcome: 'pass', held: true, quiet: true, spans: [`bench.${script}`], note }
 }
 
 function unproven(suite: string, name: string): Outcome | number {
@@ -184,9 +232,13 @@ function rows(path: string): { verdict?: string; untested?: boolean }[] {
 
 /** run_pair installs the suite at `test/<target>/` and Medusa resolves from the config's folder; fizz wrote these from the project root. */
 const MOVED: [string[], string][] = [[['fuzzing'], 'corpusDirectory'], [['logging'], 'logDirectory'],
-  [['compilation', 'platformConfig'], 'target'], [['compilation', 'platformConfig'], 'exportDirectory']]
+  [['compilation', 'platformConfig'], 'target'], [['compilation', 'platformConfig'], 'exportDirectory'], [['slither'], 'cachePath']]
 
-function medusa(db: Db, plan: number, src: string, suite: string): Outcome | string | null {
+const TIMEOUT = 1200
+
+const WORKERS = 4
+
+function medusa(db: Db, plan: number, src: string, suite: string): Outcome | { config: string; clamped: string[] } | null {
   const path = join(src, 'medusa.json')
   if (!existsSync(path)) return null
   let config: unknown
@@ -201,7 +253,16 @@ function medusa(db: Db, plan: number, src: string, suite: string): Outcome | str
     const value = field(parent, key)
     if (typeof value === 'string' && value !== '' && !isAbsolute(value)) Object.assign(parent as object, { [key]: moved(suite, value) })
   }
-  return JSON.stringify(config, null, 2)
+  const fuzzing = field(config, 'fuzzing')
+  const balances = field(fuzzing, 'targetContractsBalances')
+  const { entries, clamped } = clamp(Array.isArray(balances) ? balances : [])
+  if (typeof fuzzing === 'object' && fuzzing !== null) {
+    const { timeout, workers } = fuzzing as Record<string, unknown>
+    Object.assign(fuzzing, { timeout: timeout === 0 || timeout === undefined ? TIMEOUT : timeout,
+      workers: typeof workers === 'number' && workers <= WORKERS ? workers : WORKERS })
+    if (Array.isArray(balances)) Object.assign(fuzzing, { targetContractsBalances: entries })
+  }
+  return { config: JSON.stringify(config, null, 2), clamped }
 }
 
 function moved(suite: string, path: string): string {
@@ -214,16 +275,10 @@ function field(tree: unknown, key: string): unknown {
   return typeof tree === 'object' && tree !== null ? (tree as Record<string, unknown>)[key] : undefined
 }
 
-/** `pre_fix` may be a rev expression, and only a full sha can be fetched unadvertised. */
+/** A full sha goes straight to `clone`, which fetches it by itself; a rev expression on a full sha is fetched by that sha. */
 function resolved(plan: string, url: string, rev: string): string {
-  const bare = join(plan, 'resolve.git')
-  rmSync(bare, { recursive: true, force: true })
-  try {
-    git(plan, ['clone', '--bare', '-q', url, bare])
-    return git(bare, ['rev-parse', '--verify', `${rev}^{commit}`]).trim()
-  } finally {
-    rmSync(bare, { recursive: true, force: true })
-  }
+  if (/^[0-9a-f]{40}$/.test(rev)) return rev
+  return inBare(plan, url, [rev], (bare) => git(bare, ['rev-parse', '--verify', `${rev}^{commit}`]).trim())
 }
 
 function seen(dir: string, needle: string): string | null {

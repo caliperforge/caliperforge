@@ -29,7 +29,7 @@ import { keyLock } from './keyring.ts'
 import { languageFor } from './route.ts'
 import { unbuilt } from './rails.ts'
 import { branchOf, checkout, cloned, diffOf, drop, git, internalBranch, maybe, PR_BRANCH, put, ruled, srcDir, titleOf } from './workspace.ts'
-import { assembling, assembly, homeOf } from './home.ts'
+import { assembling, homeOf, onto } from './home.ts'
 import { BUILDS, capped, fingerprintOf, refusalText, stopped, streak, STREAK } from './refusal.ts'
 import { NETWORK } from './checks.ts'
 
@@ -116,7 +116,8 @@ function stillCapped(db: Db, plan: number): boolean {
 function workspace(db: Db, root: string, plan: PlanRow): { language: string | null; failed: Outcome | null } {
   const { fires, name } = mapOf(plan.template).at(plan.step)
   const bare = name === 'rails' && unbuilt(root, plan.id)
-  const tree = !['comms', 'bench'].includes(plan.template) && (fires === 'brief' || fires === 'seat' || fires === 'review' || bare) ? treeOf(db, root, plan) : null
+  const lost = name === 'ready' && internal(plan) && !cloned(srcDir(root, plan.id))
+  const tree = !['comms', 'bench'].includes(plan.template) && (fires === 'brief' || fires === 'seat' || fires === 'review' || bare || lost) ? treeOf(db, root, plan) : null
   if (tree === null) return { language: null, failed: null }
   try {
     if (bare) rebranched(root, plan.id)
@@ -139,13 +140,12 @@ function rebranched(root: string, plan: number): void {
  * Which repository the branch is cut in and what it is called: a stranger's repo and
  * `<repo>-<issue>[-<part>]-a<attempt>` for a target, or `asm/<plan>` once its parts have landed, our own repo and `p<plan>-<slug>` for an issue
  * of ours, the target's repo and `p<plan>-<slug>` for a part of an outside plan. Every way the clone is
- * our fork and the base is that repo's `main`, or our fork's `asm/<parent>` for a part.
+ * our fork and the base is that repo's `main`, or our fork's `asm/<parent>` for a part, or the branch an internal ask's `Base:` line names.
  */
 function treeOf(db: Db, root: string, plan: PlanRow): { repo: string; branch: string; from?: string | undefined } | null {
   if (internal(plan)) {
     const branch = internalBranch(plan.id, titleOf(root, plan.id) ?? `plan ${String(plan.id)}`)
-    const outside = targetOf(db, plan)
-    return outside === null ? { repo: homeOf(plan), branch } : { repo: outside.repo, branch, from: assembly(db, plan)?.branch }
+    return { repo: targetOf(db, plan)?.repo ?? homeOf(plan), branch, from: onto(db, root, plan) }
   }
   const row = targetOf(db, plan)
   return row === null ? null : { repo: row.repo, branch: assembling(db, plan) ?? branchOf(row.repo, row.issue_no, plan.retries + 1, row.part) }
@@ -233,8 +233,9 @@ function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcom
     return 'blocked_on_ceo'
   }
   if (outcome.outcome !== 'refuse') {
+    const write = proved(db, root, plan, step)
     return db.transaction((): string => {
-      proved(db, root, plan, step)
+      write()
       if (mapOf(plan.template).last(step.step)) { finish(db, plan); return 'done' }
       advance(db, plan, step.step + 1)
       return plan.template === 'pr_path' ? hold(db, plan.id, step.step) : 'running'

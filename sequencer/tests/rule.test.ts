@@ -1,4 +1,4 @@
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { expect, test } from 'vitest'
@@ -79,13 +79,13 @@ test('D2 after a build the answer sits above ## Standing; rebuilds', async () =>
   expect(got.state).toMatchObject({ step: 2 })
 })
 
-test('D3 an answer naming .cf/work/ is refused and escalates', async () => {
+test('D2 an answer naming another job folder is written', async () => {
   const got = await fixed(3, answered('see .cf/work/354/ask.md'))
   expect(got.ask).toBe('the ask\n')
-  expect(got.issue).toBe(ISSUE)
-  expect(got.state).toEqual({ state: 'blocked_on_ceo', step: 3 })
-  expect(got.applied).toEqual([{ applied: 'escalated' }])
-  expect(got.posted).toEqual(['CaliperForge · #139 needs you'])
+  expect(got.issue).toContain('\n\nsee .cf/work/354/ask.md\n\n## Standing\n')
+  expect(got.state).toMatchObject({ step: 2 })
+  expect(got.applied).toEqual([{ applied: 'applied' }])
+  expect(got.posted).toEqual([])
 })
 
 test('an absolute path outside the root is refused', async () => {
@@ -317,6 +317,55 @@ test('D3 a symlink out of the plan folder is refused', async () => {
   expect(got.events.map((e) => e.message.split(',')[0])).toEqual(['rule did not apply'])
 })
 
+async function read(path: string, setup: (s: { db: Db; home: string }) => void = () => undefined) {
+  const { db, home } = seeded(1)
+  setup({ db, home })
+  const said = `---\nmove: rule\nwhy: the ruling names it\nanswer: read ${path}\n---\n`
+  await woke(db, home, stub('', said), now, () => undefined, { ...wire, comment: () => undefined })
+  return { events: eventsOf(db, 7, 'director'), ask: maybe(home, 7, 'ask.md') }
+}
+
+const research = ({ db }: { db: Db }) => { db.exec("UPDATE plans SET template = 'research' WHERE id = 7") }
+
+const PASS = [{ actor: 'director', outcome: 'pass', message: 'rule: the ruling names it' }]
+
+const outputs = (s: { db: Db; home: string }) => {
+  research(s)
+  put(s.home, 7, 'ask.md', 'the ask\n\n**Output:** ~/cf_work/1614/\n')
+}
+
+test('D1 a file committed at base.sha applies at step 1', async () => {
+  const got = await read('/bench/run_pair.py', ({ home }) => {
+    const src = srcDir(home, 7)
+    mkdirSync(join(src, 'bench'))
+    writeFileSync(join(src, 'bench/run_pair.py'), '\n')
+    git(src, ['add', 'bench/run_pair.py'])
+    git(src, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', 'bench'])
+    put(home, 7, 'base.sha', git(src, ['rev-parse', 'HEAD']))
+    rmSync(join(src, 'bench'), { recursive: true })
+  })
+  expect(got.events).toEqual(PASS)
+  expect(got.ask).toContain('\n\nread /bench/run_pair.py\n')
+})
+
+test('D2 a research plan\'s unwritten sources.json applies', async () => {
+  const got = await read('/sources.json', research)
+  expect(got.events).toEqual(PASS)
+  expect(got.ask).toContain('\n\nread /sources.json\n')
+})
+
+test('D2 a file in the plan folder applies', async () => {
+  const got = await read('/question.md')
+  expect(got.events).toEqual(PASS)
+  expect(got.ask).toContain('\n\nread /question.md\n')
+})
+
+test.each(['/bench/gone.py', '/sources.json'])('D3 D4 %s is refused', async (path) => {
+  const got = await read(path, ({ home }) => { put(home, 7, 'base.sha', git(srcDir(home, 7), ['rev-parse', 'HEAD'])) })
+  expect(got.ask).toBe('the ask\n')
+  expect(got.events.map((e) => e.message.split(',')[0])).toEqual(['rule did not apply'])
+})
+
 const HAND = 'after merge, hand check `~/cf_work/fuzz-bench-runs/fizz-1575/logs` for new crashes'
 const DROPPED = (path: string) => [{ actor: 'director', outcome: 'needs_coo',
   message: `rule did not apply, the answer names a path a ruling may not carry (${path}): the ruling names it` }]
@@ -333,10 +382,31 @@ test.each([
   { id: 'D2', answer: 'the builder edits `~/notes/x.ts`', path: '~/notes/x.ts' },
   { id: 'D3', answer: 'edit /Users/x/elsewhere/file.ts', path: '/Users/x/elsewhere/file.ts' },
   { id: 'D4', answer: `edit \`~/notes/x.ts\`; ${HAND}`, path: '~/notes/x.ts' },
-])('$id a ruling editing an outside path is dropped', async ({ answer, path }) => {
-  const got = await aliased(() => answer)
+  { id: 'D4', answer: 'clear `/tmp`', path: '/tmp' },
+  { id: 'D4', answer: 'write `~/cf_work/1615/x.ts`', path: '~/cf_work/1615/x.ts', setup: outputs },
+])('$id a ruling editing an outside path is dropped', async ({ answer, path, setup }) => {
+  const got = await aliased(() => answer, setup)
   expect(got.issue).toBe(ISSUE)
   expect(got.events).toEqual(DROPPED(path))
+})
+
+test.each([
+  'the SODA service takes the cutout at `/sync` (`/async` for jobs)',
+  'nothing on main brings back `.cf/work/1647/src/.git`',
+])('D1 D2 a ruling naming %s applies', async (answer) => {
+  const got = await aliased(() => answer)
+  expect(got.events).toEqual(PASS)
+  expect(got.issue).toContain(`\n\n${answer}\n\n## Standing\n`)
+})
+
+test.each([
+  { id: 'D1', answer: 'the /sync route returns 200' },
+  { id: 'D2', answer: 'write `~/cf_work/1614/rubin.ts`', setup: outputs },
+  { id: 'D3', answer: 'read .cf/work/7' },
+  { id: 'D3', answer: 'read .cf/work/1654' },
+  { id: 'D3', answer: 'read `.cf/work/1654/`' },
+])('$id $answer applies', async ({ answer, setup }) => {
+  expect((await aliased(() => answer, setup)).events).toEqual(PASS)
 })
 
 test('D5 a director return opens the path rulings.md names', async () => {

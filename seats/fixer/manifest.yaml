@@ -16,3 +16,5 @@ write_paths:
   - step-2.handback.md
   - base.sha
   - commit.msg
+  - rulings.md
+  - question.md

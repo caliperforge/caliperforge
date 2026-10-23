@@ -19,6 +19,11 @@ export function lastTranscript(db: Db, plan: number, step: number): string {
   return row?.transcript_path ?? ''
 }
 
+export function transcripts(db: Db, plan: number, step: number): string[] {
+  return (db.prepare('SELECT transcript_path FROM runs WHERE plan = ? AND step = ? AND transcript_path IS NOT NULL ORDER BY id')
+    .all(plan, step) as { transcript_path: string }[]).map((row) => row.transcript_path)
+}
+
 /** The plan's two newest builder runs, newest first. */
 export function builtRuns(db: Db, plan: number): { step: number; seat: string; tokens: number }[] {
   return db.prepare(`SELECT step, seat, input_tokens + output_tokens AS tokens FROM runs WHERE plan = ? AND ${BUILT} ORDER BY id DESC LIMIT 2`)

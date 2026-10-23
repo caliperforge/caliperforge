@@ -112,7 +112,7 @@ test('a fix the scratch tree holds is refused', () => {
   expect(maybe(root, 1, 'checkout.json')).toBeNull()
 })
 
-/** A commit on c1 that only `refs/pull/1/head` reaches. */
+/** A commit on c1 that only `refs/pull/1/head` reaches, served over file:// so a clone gets only advertised refs. */
 function pulled(root: string, c1: string): string {
   const dir = join(root, 'remotes/org/fixture')
   git(dir, ['checkout', '-qb', 'pr', c1])
@@ -120,6 +120,8 @@ function pulled(root: string, c1: string): string {
   git(dir, ['update-ref', 'refs/pull/1/head', pr])
   git(dir, ['checkout', '-q', '-'])
   git(dir, ['branch', '-qD', 'pr'])
+  writeFileSync(join(root, '.cf/git-base'), `file://${join(root, 'remotes')}`)
+  symlinkSync('fixture', `${dir}.git`)
   return pr
 }
 

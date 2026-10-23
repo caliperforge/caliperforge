@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
+import type { Read } from '../../cli/gh.ts'
 import type { Packet, Provider } from '../../providers/kind.ts'
 import { posts } from '../../store/desk.ts'
 import { eventsOf, kindsOf, runRows } from '../../store/events.ts'
@@ -834,30 +835,63 @@ const cite = (commit: string, quote = 'cold start: 41 ms', command = RUN): objec
 
 test('measure D2: a fence of run and url entries is written whole', () => {
   const w = researching()
-  expect(sourced(w.root, plan(w.db, 1), fence(entry('abc1234'), LINKED))).toMatchObject({ outcome: 'pass' })
+  expect(sourced(w.db, w.root, plan(w.db, 1), fence(entry('abc1234'), LINKED))).toMatchObject({ outcome: 'pass' })
   expect(JSON.parse(maybe(w.root, 1, 'sources.json') ?? '')).toEqual([cite('abc1234'), ...(JSON.parse(SOURCES) as unknown[])])
 })
 
 test('measure D2: a run with an empty quote is unquoted', () => {
   const w = researching()
-  expect(sourced(w.root, plan(w.db, 1), fence(entry('abc1234', ''))))
+  expect(sourced(w.db, w.root, plan(w.db, 1), fence(entry('abc1234', ''))))
     .toEqual({ outcome: 'refuse', spans: ['researcher.unquoted'], note: `no quote for ${RUN}` })
 })
 
 const MOVED = ['https://github.com/o/r/blob/main/a.md', 'https://github.com/o/r/blob/master/a.md', 'https://raw.githubusercontent.com/o/r/main/a.pdf',
   'https://api.github.com/repos/o/r/commits/main', 'https://api.github.com/repos/o/r/git/trees/HEAD']
 
-test.each(MOVED)('moving_ref D1: %s is refused', (url) => {
+const SHA = '2aee380'.padEnd(40, '0')
+
+const refOf = (url: string): string => url.replace(/^.*\/(main|master|HEAD)\b.*$/, '$1')
+
+test.each(MOVED)('moving_ref D1 D2: %s is pinned at fetched_at', (url) => {
   const w = researching()
-  expect(sourced(w.root, plan(w.db, 1), fence(LINKED.replace('https://a.example/doc', url))))
-    .toEqual({ outcome: 'refuse', spans: ['research.moving_ref'], note: `moving ref in ${url}` })
+  const read = vi.fn<Read>(() => [{ sha: SHA }])
+  const pinned = url.replace(refOf(url), SHA)
+  expect(sourced(w.db, w.root, plan(w.db, 1), fence(LINKED.replace('https://a.example/doc', url)), read)).toMatchObject({ outcome: 'pass' })
+  expect(read.mock.calls).toEqual([[['api', `repos/o/r/commits?sha=${refOf(url)}&until=2026-10-04T10:00:00Z&per_page=1`]]])
+  expect(JSON.parse(maybe(w.root, 1, 'sources.json') ?? '')).toMatchObject([{ url: pinned }])
+  expect(eventsOf(w.db, 1, 'research.pinned')).toEqual([{ actor: 'research', outcome: 'pass', message: `${url} → ${pinned}` }])
+})
+
+const BLOB = 'https://github.com/o/r/blob/main/a.md'
+
+test.each([
+  { why: 'throws', read: (): never => { throw new Error('HTTP 404') }, unpinned: [{ actor: 'research', outcome: 'refuse', message: `${BLOB}: HTTP 404` }] },
+  { why: 'returns []', read: (): unknown => [], unpinned: [] },
+])('moving_ref D3: a lookup that $why is refused', ({ read, unpinned }) => {
+  const w = researching()
+  expect(sourced(w.db, w.root, plan(w.db, 1), fence(LINKED.replace('https://a.example/doc', BLOB)), read))
+    .toEqual({ outcome: 'refuse', spans: ['research.moving_ref'], note: `moving ref in ${BLOB}` })
   expect(maybe(w.root, 1, 'sources.json')).toBeNull()
+  expect(eventsOf(w.db, 1, 'research.pinned')).toEqual([])
+  expect(eventsOf(w.db, 1, 'research.unpinned')).toEqual(unpinned)
+})
+
+test('moving_ref D4: an inline moving link is pinned and fetched', async () => {
+  const w = researching()
+  const pinned = BLOB.replace('main', SHA)
+  const reply = FOUND.replace('https://a.example/doc', BLOB).replace('The cap is 3 [source:1].', `The cap is 3 per ${BLOB} [source:1].`)
+  expect(await gather(w.db, w.root, plan(w.db, 1), mapOf('research').at(1), stub(reply, 0, reply), () => [{ sha: SHA }])).toMatchObject({ outcome: 'pass' })
+  expect(maybe(w.root, 1, 'answer.md')).toBe(`The cap is 3 per ${pinned} [source:1].${SECTIONS}`)
+  expect(await check(w.db, w.root, plan(w.db, 1))).toMatchObject({ outcome: 'pass' })
+  expect(fetched.mock.calls.map(([page]) => page)).toEqual([pinned])
 })
 
 test.each([...MOVED.map((url) => url.replace(/main|master|HEAD/, '2aee380')), `https://github.com/o/r/blob/${'a'.repeat(40)}/a.md`,
-  'https://docs.example/main/a', 'https://a.example/doc'])('moving_ref D2 D3: %s passes', (url) => {
+  'https://docs.example/main/a', 'https://a.example/doc'])('moving_ref D2 D3 D5: %s passes unlooked', (url) => {
   const w = researching()
-  expect(sourced(w.root, plan(w.db, 1), fence(LINKED.replace('https://a.example/doc', url)))).toMatchObject({ outcome: 'pass' })
+  const read = vi.fn<Read>()
+  expect(sourced(w.db, w.root, plan(w.db, 1), fence(LINKED.replace('https://a.example/doc', url)), read)).toMatchObject({ outcome: 'pass' })
+  expect(read).not.toHaveBeenCalled()
 })
 
 const measured = (sources: (head: string) => object[]): ReturnType<typeof check> => {

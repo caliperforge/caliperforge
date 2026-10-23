@@ -65,14 +65,14 @@ export async function brief(db: Db, root: string, plan: PlanRow, step: Step, pro
     maybe(root, plan.id, 'refusal.md')?.replace(/^/, '\n\n# Refused — fix what this names\n\n') ?? ''}`
   const fired = await ran(db, root, plan, step, provider, input, false)
   if (fired.ended !== 'completed') return { outcome: 'refuse', spans: [fired.stop_reason ?? 'seat.exit'], note: `${step.runs} ${fired.ended}` }
-  const sources = sourced(root, plan, fired.text)
+  const sources = sourced(db, root, plan, fired.text)
   if (sources.outcome === 'refuse') return sources
   const got = Ideas.safeParse((prose(IDEAS.exec(fired.text)?.[1] ?? '', ['why', 'size']) as { ideas?: unknown } | null)?.ideas)
   if (!got.success) {
     return { outcome: 'refuse', spans: ['account_lead.ideas'],
       note: `${step.runs} reply has no valid ideas fence: ${got.error.issues.map((i) => `${i.path.join('.')} ${i.message}`).join('; ')}` }
   }
-  const body = fired.text.replace(IDEAS, '').replace(FENCE, '').trim()
+  const body = (sources.reply ?? fired.text).replace(IDEAS, '').replace(FENCE, '').trim()
   const draft = section(body.split('\n'), '## Draft')
   if (draft !== null && !draft.body.some((l) => /\[source:\d+\]/.test(l))) {
     return { outcome: 'refuse', spans: ['account_lead.draft'], note: '## Draft cites no source: a check-in with no result' }

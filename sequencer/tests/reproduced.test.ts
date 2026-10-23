@@ -123,8 +123,16 @@ test('run D8 an unruled already fixed stop repeats quietly', async () => {
   const w = moved('already works', 0)
   await briefing(w)
   resume(w.db, w.plan)
-  expect((await tick(w.db, w.root, stub(CARRIED)))[0]).toMatchObject({ outcome: 'needs_ceo', state: 'running' })
+  expect((await tick(w.db, w.root, stub(CARRIED)))[0]).toMatchObject({ outcome: 'needs_ceo', state: 'blocked_on_ceo' })
   expect(eventsOf(w.db, w.plan, 'ruling').map((e) => e.outcome)).toEqual(['escalate'])
+  expect(holdOf(w.db, w.plan)?.held_why).toContain('brief_writer: already fixed at ')
+  const inner = stub(CARRIED)
+  let briefs = 0
+  await tick(w.db, w.root, { ...inner, fire: async (packet) => {
+    if (packet.prompt.includes('# brief_writer')) briefs++
+    return inner.fire(packet)
+  } })
+  expect(briefs).toBe(0)
 })
 
 test('run D3 a shows that exits 0 saves the brief', async () => {

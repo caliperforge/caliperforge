@@ -145,7 +145,7 @@ export function due(db: Db, registry: Entry[], now: Date, read: (repo: string, n
   const day = new Date(now.getTime() + zone(db) * 60000).toISOString().slice(0, 10)
   if (day <= get(db, 'drift.at')) return []
   set(db, 'drift.at', day, 'pr', now.toISOString())
-  fill(db, null, read, outside(search))
+  fill(db, null, read, outside(search), () => null)
   const drifted = drift(db, registry, now)
   const added = recorded(db, drifted, now)
   recovered(db, registry, drifted, now)

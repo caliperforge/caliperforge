@@ -10,7 +10,7 @@ interface Word { by: string; at: string; text: string }
 interface Asked { repo: string; pr: number }
 
 export function fill(db: Db, repo: string | null, read: (repo: string, no: number) => Pr = readPr, found: Outside[] = [],
-  look: (repo: string, no: number) => Standing = standing): Row[] {
+  look: (repo: string, no: number) => Standing | null = standing): Row[] {
   if (repo !== null && !/^[^/\s]+\/[^/\s]+$/.test(repo)) throw new Error(`"${repo}" is not owner/repo`)
   const hits = found.filter((f) => repo === null || f.repository.nameWithOwner === repo)
   for (const at of asked(db, repo, hits)) {

@@ -167,3 +167,8 @@ export function setTargetState(db: Db, id: number | null, state: Target['state']
 export function targetRef(db: Db, id: number | null): { repo: string; issue_no: number; part: string } | null {
   return (db.prepare('SELECT repo, issue_no, part FROM targets WHERE id = ?').get(id) ?? null) as { repo: string; issue_no: number; part: string } | null
 }
+
+export function planTarget(db: Db, plan: number): { origin: string | null; repo: string | null; issue_no: number | null } | undefined {
+  return db.prepare(`SELECT p.origin, t.repo, t.issue_no FROM plans p LEFT JOIN targets t ON t.id = p.target_id
+    WHERE p.id = ?`).get(plan) as { origin: string | null; repo: string | null; issue_no: number | null } | undefined
+}

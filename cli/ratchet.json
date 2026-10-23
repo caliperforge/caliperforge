@@ -34,7 +34,6 @@
   },
   "inbox.ts": {
     "lines": 141,
-    "prepare": 1,
     "silent-catch": 1
   },
   "map.ts": {
@@ -58,8 +57,7 @@
     "lines": 57
   },
   "session.ts": {
-    "lines": 63,
-    "prepare": 1
+    "lines": 50
   },
   "staffing.ts": {
     "lines": 19

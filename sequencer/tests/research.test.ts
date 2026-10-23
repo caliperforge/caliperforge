@@ -621,13 +621,13 @@ const LINKED = '  - url: https://a.example/doc\n    fetched_at: 2026-10-04T10:00
 
 const fence = (...entries: string[]): string => `Cold start is 41 ms [source:1].${SECTIONS}\n\n---\nsources:\n${entries.join('')}---\n`
 
-/** The measurer or fetcher answers `reply` and leaves `transcript` behind; every other seat answers PASS. */
-const measuring = (reply: string, seen: (packet: Packet) => void, transcript = TRANSCRIPT): Provider => ({
+/** The measurer or fetcher answers `reply` and leaves `transcript` behind; every other seat answers `others`. */
+const measuring = (reply: string, seen: (packet: Packet) => void, transcript = TRANSCRIPT, others = PASS): Provider => ({
   name: 'claude-agent-sdk',
   fire: async (packet) => {
     seen(packet)
     const measurer = /# (?:measurer|fetcher)\n/.test(packet.prompt)
-    const text = measurer ? reply : PASS
+    const text = measurer ? reply : others
     const fired = await stub(text, 0, text).fire(packet)
     if (measurer) writeFileSync(packet.transcript, transcript)
     return fired
@@ -750,14 +750,25 @@ test('ruling D4: a pr_path Output ruling is refused', () => {
 
 const NEEDS_RUN = 'This needs a timed run.\n\n```\n---\noutcome: needs_run\n---\n```\n'
 
-const UNRUN = { outcome: 'refuse', spans: ['ask.md'], note: 'ask needs executed runs: add a **Measure:** line so the measurer gathers it' }
-
-test('needs_run D1: a researcher needs_run reply refuses ask.md', async () => {
+test('needs_run D1: a researcher needs_run hands to the measurer', async () => {
   const w = researching()
+  const head = headed(w)
   question(w.root, plan(w.db, 1))
-  expect((await gathered(w, NEEDS_RUN))[0]).toEqual(UNRUN)
-  expect(maybe(w.root, 1, 'answer.md')).toBeNull()
-  expect(maybe(w.root, 1, 'sources.json')).toBeNull()
+  const prompts: string[] = []
+  expect(await gather(w.db, w.root, plan(w.db, 1), mapOf('research').at(1), measuring(fence(entry(head)), (p) => prompts.push(p.prompt), TRANSCRIPT, NEEDS_RUN)))
+    .toMatchObject({ outcome: 'pass', note: expect.stringContaining('measurer: answer.md written') as unknown })
+  expect(ran(w)).toEqual(['researcher', 'measurer'])
+  expect(prompts[1]).toContain(`# HEAD\n\n${head}`)
+  expect(JSON.parse(maybe(w.root, 1, 'runs.json') ?? '')).toEqual([{ command: RUN, output: 'cold start:\n  41 ms' }])
+})
+
+test('needs_run D2: a handed measurer needs_run refuses its fence', async () => {
+  const w = researching()
+  headed(w)
+  question(w.root, plan(w.db, 1))
+  expect(await gather(w.db, w.root, plan(w.db, 1), mapOf('research').at(1), measuring(NEEDS_RUN, () => undefined, TRANSCRIPT, NEEDS_RUN)))
+    .toMatchObject({ outcome: 'refuse', spans: ['researcher.fence'] })
+  expect(ran(w)).toEqual(['researcher', 'measurer'])
 })
 
 test('needs_run D2: a measurer needs_run reply refuses its fence', async () => {
@@ -783,6 +794,16 @@ test('needs_build D1: a measurer needs_build asks a person', async () => {
   expect(maybe(w.root, 1, 'answer.md')).toBeNull()
   expect(maybe(w.root, 1, 'sources.json')).toBeNull()
   expect(maybe(w.root, 1, 'runs.json')).toBeNull()
+})
+
+test('needs_build D1: a handed measurer needs_build asks a person', async () => {
+  const w = researching()
+  headed(w)
+  question(w.root, plan(w.db, 1))
+  expect(await gather(w.db, w.root, plan(w.db, 1), mapOf('research').at(1), measuring(NEEDS_BUILD, () => undefined, TRANSCRIPT, NEEDS_RUN)))
+    .toEqual({ outcome: 'needs_ceo', spans: ['ask.md'], note: UNBUILT })
+  expect(maybe(w.root, 1, 'question.md')).toBe(UNBUILT)
+  expect(ran(w)).toEqual(['researcher', 'measurer'])
 })
 
 test('needs_build D2: a ticked needs_build blocks with no refusal', async () => {

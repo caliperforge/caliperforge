@@ -599,6 +599,18 @@ test('D3 a set timeout and workers at most 4 are kept', () => {
   expect(installed(JSON.stringify({ fuzzing: { timeout: 600, workers: 2 } }))).toEqual({ fuzzing: { timeout: 600, workers: 2 } })
 })
 
+test('D1 D2 D3 a balance above 1e24 wei is clamped in the copy', () => {
+  const { root, db } = scoring()
+  const balances = ['0xffffffffffffffffffffffffffffffffffffffffffffffff', '0x21e19e0c9bab2400000', 'lots']
+  writeFileSync(join(srcDir(root, 1), 'medusa.json'), JSON.stringify({ fuzzing: { timeout: 600, workers: 2, targetContractsBalances: balances } }))
+  const done = scored(db, root, planById(db, 1))
+  expect(done).toMatchObject({ outcome: 'pass' })
+  expect(done.note).toContain('0xffffffffffffffffffffffffffffffffffffffffffffffff')
+  expect(done.note).not.toContain('0x21e19e0c9bab2400000')
+  expect(JSON.parse(readFileSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/medusa.json'), 'utf8'))).toEqual({
+    fuzzing: { timeout: 600, workers: 2, targetContractsBalances: ['0xd3c21bcecceda1000000', '0x21e19e0c9bab2400000', 'lots'] } })
+})
+
 test('D3 a root medusa.json that does not parse is refused', () => {
   const { root, db } = scoring()
   writeFileSync(join(srcDir(root, 1), 'medusa.json'), '{')

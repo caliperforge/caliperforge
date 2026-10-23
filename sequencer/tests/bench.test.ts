@@ -133,6 +133,17 @@ test('a pre-fix sha only a pull ref reaches is fetched', () => {
   expect(git(srcDir(root, 1), ['rev-parse', 'HEAD']).trim()).toBe(pr)
 })
 
+test('a full-sha pre-fix is fetched without its history', () => {
+  const { root, c1, c2 } = fixture()
+  const dir = join(root, 'remotes/org/fixture')
+  rmSync(join(dir, '.git/objects', c1.slice(0, 2), c1.slice(2)))
+  writeFileSync(join(root, '.cf/git-base'), `file://${join(root, 'remotes')}`)
+  symlinkSync('fixture', `${dir}.git`)
+  target(root, { repo: 'org/fixture', fix: 'f'.repeat(40), pre_fix: c2 })
+  expect(scratch(root, benched())).toEqual({ outcome: 'pass', spans: [], note: `checkout.json written at ${c2.slice(0, 12)}` })
+  expect(git(srcDir(root, 1), ['rev-parse', 'HEAD']).trim()).toBe(c2)
+})
+
 test('a pull-only fix resolves its parent as pre-fix', () => {
   const { root, c1 } = fixture()
   const pr = pulled(root, c1)

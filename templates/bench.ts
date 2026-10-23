@@ -258,8 +258,9 @@ function field(tree: unknown, key: string): unknown {
   return typeof tree === 'object' && tree !== null ? (tree as Record<string, unknown>)[key] : undefined
 }
 
-/** `pre_fix` may be a rev expression, and one on a full sha is fetched by that sha. */
+/** A full sha goes straight to `clone`, which fetches it by itself; a rev expression on a full sha is fetched by that sha. */
 function resolved(plan: string, url: string, rev: string): string {
+  if (/^[0-9a-f]{40}$/.test(rev)) return rev
   const bare = join(plan, 'resolve.git')
   rmSync(bare, { recursive: true, force: true })
   try {

@@ -84,7 +84,7 @@ export async function verified(ask: string, answer: string, sources: Source[], r
   const asked = bare(ask)
   const lines = answer.replace(SKIPPED, '').split('\n')
   const claims = lines.filter((l, i) => l.trim() !== '' && !l.startsWith('#') && !RULER.test(l) && !RULER.test(lines[i + 1] ?? ''))
-    .flatMap((l) => ROW.test(l) ? [l] : l.replace(/^\s*(?:[-*+]|\d+[.)])\s+/, '').split(/(?<=^(?:[^`]*`[^`]*`)*[^`]*(?:[.!?]|\[source:\d+\]))\s+(?!\[source:)/))
+    .flatMap((l) => ROW.test(l) ? [l] : l.replace(/^\s*(?:[-*+]|\d+[.)])\s+/, '').split(/(?<=^(?:[^`"“]|`[^`]*`|"[^"]*"|“[^”]*”|"(?![^"]*")|“(?![^”]*”))*(?:[.!?]|\[source:\d+\]))\s+(?!\[source:)/))
     .filter((sentence) => !asked.includes(bare(sentence)) && !/:(?:\*\*)?\s*$/.test(sentence))
     .map((sentence) => ({ sentence, cited: cited(sentence, sources) }))
   const unsourced = claims.filter((c) => c.cited === null).map((c) => `"${c.sentence}"`)

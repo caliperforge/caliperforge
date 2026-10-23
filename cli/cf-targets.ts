@@ -2,9 +2,10 @@ import type { Command } from 'commander'
 import { adopt, render as renderAdopt } from './adopt.ts'
 import { approve as approveCard, batch, landed, refuse as refuseCard, render, renderLanded } from './batch.ts'
 import type { Cli } from './cf-lanes.ts'
+import { outside } from './gh.ts'
 import { measure, render as renderPulse } from './measure.ts'
 import { approve as approveTarget, refuseTarget } from './queue.ts'
-import { fill as fillRecord, render as renderRecord, still } from './record.ts'
+import { fill as fillRecord, render as renderRecord, renderOpen, still } from './record.ts'
 import { render as renderScan, scan } from './scan.ts'
 import { approve as approvePublish, refuse as refusePublish } from '../sequencer/card.ts'
 import { HOLDERS, holderOf } from '../store/plans.ts'
@@ -16,10 +17,13 @@ export function registerTargets(cf: Command, { db, out }: Cli): void {
     out(renderPulse(measure(db(), repo, new Date().toISOString().slice(0, 10))))
   })
 
-  cf.command('record').argument('<repo>', 'owner/repo whose pull requests of ours to record').action((repo: string) => {
-    const handle = db()
-    out(renderRecord(repo, fillRecord(handle, repo), still(handle, repo)))
-  })
+  cf.command('record').argument('[repo]', 'owner/repo whose pull requests of ours to record; every open one when left off')
+    .action((repo: string | undefined) => {
+      const handle = db()
+      const found = outside()
+      if (repo === undefined) out(renderOpen(fillRecord(handle, null, undefined, found), new Date()))
+      else out(renderRecord(repo, fillRecord(handle, repo, undefined, found), still(handle, repo)))
+    })
 
   cf.command('scan').argument('<repo>', 'owner/repo whose open issues to write as ready targets').action((repo: string) => {
     const handle = db()

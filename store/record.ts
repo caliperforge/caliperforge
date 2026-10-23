@@ -50,7 +50,9 @@ export function prsOf(db: Db, repo: string): { plan: number; evidence: string }[
     ORDER BY plan`).all(repo, repo) as { plan: number; evidence: string }[]
 }
 
-export function putRecord(db: Db, row: Row): void {
+type Standing = 'bot_by' | 'bot_at' | 'findings' | 'mergeable' | 'ball'
+
+export function putRecord(db: Db, row: Omit<Row, Standing> & Partial<Pick<Row, Standing>>): void {
   db.prepare(`INSERT INTO records (repo, pr, plan, url, state, merged_at, word_by, word_at, word, read_at, title, opened_at,
       bot_by, bot_at, findings, mergeable, ball)
     VALUES (@repo, @pr, @plan, @url, @state, @merged_at, @word_by, @word_at, @word, @read_at, @title, @opened_at,
@@ -60,7 +62,7 @@ export function putRecord(db: Db, row: Row): void {
       read_at = excluded.read_at, title = coalesce(excluded.title, records.title),
       opened_at = coalesce(excluded.opened_at, records.opened_at), bot_by = excluded.bot_by, bot_at = excluded.bot_at,
       findings = coalesce(excluded.findings, records.findings), mergeable = coalesce(excluded.mergeable, records.mergeable),
-      ball = coalesce(excluded.ball, records.ball)`).run(row)
+      ball = coalesce(excluded.ball, records.ball)`).run({ bot_by: null, bot_at: null, findings: null, mergeable: null, ball: null, ...row })
 }
 
 export function recordsOf(db: Db, repo: string): Row[] {

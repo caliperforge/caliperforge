@@ -14,8 +14,8 @@ import { eventsOf, logged, runRows } from '../../store/events.ts'
 import { holdOf } from '../../store/holds.ts'
 import type { Db } from '../../store/index.ts'
 import { dial } from '../../store/lanes.ts'
-import { allPlans, holdOn, pipeNamed, planById, putPlan, waiting, type PlanRow } from '../../store/plans.ts'
-import { CEILING, generate, scored, scratch } from '../../templates/bench.ts'
+import { allPlans, holdOn, pipeNamed, planById, putPlan, requeue, waiting, type PlanRow } from '../../store/plans.ts'
+import { CEILING, generate, nullChecked, scored, scratch } from '../../templates/bench.ts'
 import { drift, mechanisms } from '../drift.ts'
 import { unhold } from '../hold.ts'
 import { dry, tick } from '../index.ts'
@@ -40,8 +40,8 @@ test('a bench plan is stored and parsed', () => {
   expect(allPlans(db)).toMatchObject([{ id: 1, template: 'bench', state: 'queued', step: 0 }])
 })
 
-test('the bench map lists checkout, generate, score', () => {
-  expect(mapOf('bench').steps.map((s) => s.name)).toEqual(['checkout', 'generate', 'score'])
+test('the bench map lists checkout, generate, score, null_check', () => {
+  expect(mapOf('bench').steps.map((s) => s.name)).toEqual(['checkout', 'generate', 'score', 'null_check'])
 })
 
 test('the bench pipe routes its plan to step 0', () => {
@@ -52,10 +52,10 @@ test('the bench pipe routes its plan to step 0', () => {
   expect(route(db, planById(db, 1), OPENS)).toEqual({ fire: mapOf('bench').at(0) })
 })
 
-test('an unknown template and a step past score are refused', () => {
+test('an unknown template and a step past null_check are refused', () => {
   const db = fresh(schema)
   expect(() => { queued(db, 'nonsense' as PlanRow['template']) }).toThrow(/CHECK constraint failed/)
-  expect(() => mapOf('bench').at(3)).toThrow('bench has no step 3')
+  expect(() => mapOf('bench').at(4)).toThrow('bench has no step 4')
 })
 
 const FINDING = 'convertToShares rounds the share price down'
@@ -512,11 +512,14 @@ function scoring(pair = writes('.jsonl', PAIRS), keys: Record<string, string> = 
   return { root, db, sha }
 }
 
-const SCORE = { catches: 2, false_positives: 1, untested: 1, tokens: 1234, seconds: 56.5 }
+const SCORE = { catches: 2, false_positives: 1, untested: null, tokens: 1234, seconds: 56.5 }
+
+const NULLCHECK = 'fuzz-bench/results/euler-earn-m01/euler-earn-m01.nullcheck.jsonl'
 
 test('score D1 kernel scores the suite at the fuzz-bench HEAD', () => {
   const { root, db, sha } = scoring()
   expect(kernel(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  expect(existsSync(join(planDir(root, 1), NULLCHECK))).toBe(false)
   expect(scores(db)).toEqual([{ plan: 1, target: 'euler-earn-m01', generator: 'fizz', ...SCORE, x_ray: null }])
   expect(existsSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/FizzTest.sol'))).toBe(true)
   expect(existsSync(join(srcDir(root, 1), 'test/fizz/FizzTest.sol'))).toBe(true)
@@ -569,7 +572,6 @@ test('D3 a root medusa.json that does not parse is refused', () => {
 
 test('D1 scripts that make no results folder are scored', () => {
   const { root, db } = scoring(writes('.jsonl', PAIRS, false))
-  commit(join(root, 'remotes/caliperforge/fuzz-bench'), 'bench/null_check.py', writes('.nullcheck.jsonl', KILLS, false), 'no makedirs')
   expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
   expect(scores(db)).toEqual([{ plan: 1, target: 'euler-earn-m01', generator: 'fizz', ...SCORE, x_ray: null }])
 })
@@ -591,11 +593,43 @@ test('score D2 a failing run_pair.py holds the plan for the coo', () => {
   heldAtScore(db, root)
 })
 
-test('D2 a failing null_check.py holds the plan for the coo', () => {
-  const { root, db } = scoring()
-  commit(join(root, 'remotes/caliperforge/fuzz-bench'), 'bench/null_check.py', FAILS, 'failing null check')
-  expect(scored(db, root, planById(db, 1))).toEqual({ outcome: 'pass', held: true, quiet: true, spans: ['bench.null_check'], note: 'forge build failed' })
-  heldAtScore(db, root)
+const KEYS = { target: 'euler-earn-m01', generator: 'fizz' }
+
+const ON = { ...KEYS, null_check: 'true' }
+
+/** A bench plan scored at step 2 and queued at step 3, its fuzz-bench clone's null_check.py `check`, or none when null. */
+function nullChecking(keys: Record<string, string>, check: string | null = writes('.nullcheck.jsonl', KILLS)) {
+  const { root, db, sha } = scoring(undefined, keys)
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  const script = join(planDir(root, 1), 'fuzz-bench/bench/null_check.py')
+  if (check === null) rmSync(script)
+  else writeFileSync(script, check)
+  requeue(db, 1, 3)
+  return { root, db, sha }
+}
+
+test('D2 null_check off passes step 3 and spawns nothing', () => {
+  const { root, db } = nullChecking(KEYS)
+  expect(kernel(db, root, planById(db, 1))).toEqual({ outcome: 'pass', spans: [], note: 'null_check is off in target.yml' })
+  expect(existsSync(join(planDir(root, 1), NULLCHECK))).toBe(false)
+  expect(scores(db)).toEqual([{ plan: 1, ...KEYS, ...SCORE, x_ray: null }])
+})
+
+test('D3 a null_check.py past the cap is stopped and counted', () => {
+  const { root, db, sha } = nullChecking(ON, `${writes('.nullcheck.jsonl', KILLS)}import time\ntime.sleep(60)\n`)
+  expect(nullChecked(db, root, planById(db, 1), 2000))
+    .toEqual({ outcome: 'pass', spans: [], note: 'null_check.py stopped at the 2000 ms cap: 1 untested in 2 rows' })
+  expect(scores(db)).toEqual([{ plan: 1, ...KEYS, ...SCORE, untested: 1, x_ray: null }])
+  expect(JSON.parse(get(root, 1, 'score.json'))).toEqual({ fuzz_bench: sha, ...SCORE, untested: 1, x_ray: null })
+})
+
+test('D4 a failing null_check.py holds step 3, its row kept', () => {
+  const { root, db } = nullChecking(ON, FAILS)
+  expect(kernel(db, root, planById(db, 1))).toEqual({ outcome: 'pass', held: true, quiet: true, spans: ['bench.null_check'], note: 'forge build failed' })
+  expect(planById(db, 1)).toMatchObject({ state: 'blocked_on_ceo', step: 3 })
+  expect(holdOf(db, 1)).toEqual({ held_by: 'coo', held_why: 'forge build failed' })
+  expect(eventsOf(db, 1, 'score')).toMatchObject([{ actor: 'score', outcome: 'needs_coo', message: 'forge build failed' }])
+  expect(scores(db)).toEqual([{ plan: 1, ...KEYS, ...SCORE, x_ray: null }])
 })
 
 test('D3 D5 a held score fires no generate, and scores on return', async () => {
@@ -613,15 +647,11 @@ test('D3 D5 a held score fires no generate, and scores on return', async () => {
   expect(runRows(db).filter((r) => r.seat !== 'director')).toEqual([])
 })
 
-test('D1 D2 no null_check.py is scored with untested null', () => {
-  const { root, db } = scoring()
-  const dir = join(root, 'remotes/caliperforge/fuzz-bench')
-  git(dir, ['rm', '-q', 'bench/null_check.py'])
-  git(dir, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'no null check'])
-  const sha = git(dir, ['rev-parse', 'HEAD']).trim()
-  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
-  expect(scores(db)).toEqual([{ plan: 1, target: 'euler-earn-m01', generator: 'fizz', ...SCORE, untested: null, x_ray: null }])
-  expect(JSON.parse(get(root, 1, 'score.json'))).toEqual({ fuzz_bench: sha, ...SCORE, untested: null, x_ray: null })
+test('D2 no null_check.py passes step 3 with untested null', () => {
+  const { root, db, sha } = nullChecking(ON, null)
+  expect(nullChecked(db, root, planById(db, 1))).toEqual({ outcome: 'pass', spans: [], note: 'fuzz-bench has no bench/null_check.py' })
+  expect(scores(db)).toEqual([{ plan: 1, ...KEYS, ...SCORE, x_ray: null }])
+  expect(JSON.parse(get(root, 1, 'score.json'))).toEqual({ fuzz_bench: sha, ...SCORE, x_ray: null })
 })
 
 test('D3 an empty results file is refused and not recorded', () => {

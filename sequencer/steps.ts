@@ -13,7 +13,7 @@ import { allPlans, builderRan, held, internal, needsCeo, newestOfOrigin, originI
 import { setTargetState, targetRef } from '../store/targets.ts'
 import { afters } from '../store/tickets.ts'
 import { ideas, log, reading, steps as account } from '../templates/account.ts'
-import { scored, scratch, steps as bench } from '../templates/bench.ts'
+import { nullChecked, scored, scratch, steps as bench } from '../templates/bench.ts'
 import { capture, desk, facts, gather, pack, score, steps as comms } from '../templates/comms.ts'
 import { at, last, steps, type Step } from '../templates/pr-path.ts'
 import { question, record, steps as research } from '../templates/research.ts'
@@ -133,6 +133,7 @@ export function kernel(db: Db, root: string, plan: PlanRow, wire?: Wire, read?: 
   if (step.name === 'capture') return capture(db, root)
   if (step.name === 'pack') return pack(db, root, plan)
   if (step.name === 'score') return plan.template === 'bench' ? scored(db, root, plan) : score(db, root, plan, step)
+  if (step.name === 'null_check') return nullChecked(db, root, plan)
   if (step.name === 'question' || step.name === 'record') return step.name === 'question' ? question(root, plan) : record(db, root, plan, wire)
   if (step.name === 'read') return reading(db, root, plan)
   if (step.name === 'ideas') return ideas(db, root, plan)

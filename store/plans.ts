@@ -51,7 +51,7 @@ export function internal(plan: PlanRow): boolean {
 }
 
 /** The repo and issue number an internal plan's origin url names. */
-export function originRef(plan: PlanRow): { repo: string; no: number } | null {
+export function originRef(plan: Pick<PlanRow, 'origin'>): { repo: string; no: number } | null {
   const hit = plan.origin === null ? null : ISSUE.exec(plan.origin)
   return hit === null ? null : { repo: String(hit[1]), no: Number(hit[2]) }
 }

@@ -106,7 +106,7 @@ test('D4 an After refused leaves its reason with the COO', () => {
   const { db, root, one, two } = seeded({ state: 'running' })
   measure(db, root, plan(db, two))
   end(db, one ?? 0, 'refused')
-  released(db, root, now, () => undefined)
+  released(db, root, now, () => undefined, () => { throw new Error('no gh in this test') })
   expect(row(db, two)).toEqual({ state: 'blocked_on_ceo', step: 0, waits_on: null, held_by: 'coo',
     held_why: `plan ${String(one)}, which this job waits on, ended refused` })
 })

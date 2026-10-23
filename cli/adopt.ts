@@ -56,7 +56,7 @@ export function adopt(db: Db, root: string, ref: string, today: string, read: Re
   const account = accountOf(db, repo, today, read)
   const target = adoptTarget(db, account, repo, row.number, row.url)
   const held = heldPlan(db, target)
-  const plan = held ?? file(db, target, row.url)
+  const plan = held ?? file(db, target, row)
   put(root, plan, 'issue.md', packet(repo, row, read))
   put(root, plan, PR_BRANCH, `${row.headRefName}\n`)
   return { target, plan, repo, pr: row.number, url: row.url, fresh: held === null }
@@ -86,11 +86,11 @@ function latest(db: Db, repo: string): z.infer<typeof Account> | null {
   return row === undefined ? null : Account.parse(row)
 }
 
-function file(db: Db, target: number, url: string): number {
+function file(db: Db, target: number, row: z.infer<typeof View>): number {
   const pipe = pipeNamed(db, 'pr-path')
   if (pipe === null) throw new Error('no pipe "pr-path"; cf pipe on pr-path')
-  const id = adoptedPlan(db, pipe.id, target, PUSHED_STEP, templatePriority(db, 'pr_path'))
-  logged(db, { plan: id, kind: 'filed', actor: 'cf adopt', outcome: 'pass', message: url, pointer: null, run: null })
+  const id = adoptedPlan(db, pipe.id, target, PUSHED_STEP, templatePriority(db, 'pr_path'), row.title)
+  logged(db, { plan: id, kind: 'filed', actor: 'cf adopt', outcome: 'pass', message: row.url, pointer: null, run: null })
   return id
 }
 

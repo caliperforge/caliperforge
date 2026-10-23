@@ -194,20 +194,6 @@ export function enable(db: Db, pipe: number, on: boolean): void {
   db.prepare('UPDATE pipes SET enabled = ? WHERE id = ?').run(Number(on), pipe)
 }
 
-export interface BackOn { pipe: number; name: string; plan: number; origin: string; evidence: string }
-
-export function backOn(db: Db): BackOn[] {
-  return db.prepare(`SELECT pi.id AS pipe, pi.name, min(f.id) AS plan, f.origin, d.evidence FROM pipes pi
-    JOIN events s ON s.id = (SELECT max(e.id) FROM events e JOIN plans p ON p.id = e.plan
-      WHERE e.kind = 'pipe' AND e.actor = 'settle' AND p.pipe_id = pi.id)
-    JOIN events r ON r.kind = 'director' AND r.id > s.id AND r.plan IN (SELECT id FROM plans WHERE pipe_id = pi.id)
-    JOIN plans f ON f.origin = r.pointer AND f.state = 'done'
-    JOIN deliverables d ON d.plan_id = f.id AND d.state = 'pushed'
-    WHERE pi.enabled = 0 AND NOT EXISTS (SELECT 1 FROM events o WHERE o.kind = 'pipe' AND o.id > s.id
-      AND o.actor IN ('tick', 'ceo', 'coo') AND o.message GLOB pi.name || ' *')
-    GROUP BY pi.id`).all() as BackOn[]
-}
-
 export function pipes(db: Db): PipeRow[] {
   return db.prepare('SELECT * FROM pipes ORDER BY id').all().map((r) => PipeRow.parse(r))
 }

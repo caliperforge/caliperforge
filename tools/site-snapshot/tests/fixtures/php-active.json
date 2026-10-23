@@ -1,0 +1,7 @@
+{
+  "8": {
+    "8.1": { "announcement": true, "tags": ["security"], "date": "06 Jun 2024", "version": "8.1.29" },
+    "8.2": { "announcement": true, "tags": [], "date": "04 Jul 2024", "version": "8.2.21" },
+    "8.3": { "announcement": true, "tags": [], "date": "04 Jul 2024", "version": "8.3.9" }
+  }
+}

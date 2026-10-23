@@ -2,7 +2,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { expect, it } from 'vitest'
 import { planRow } from '../runner/index.ts'
-import { record, scores, setUntested, type Score } from './bench.ts'
+import { record, scores, setUntested, supersede, type Score } from './bench.ts'
 import { migrate, open, type Db } from './index.ts'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -48,10 +48,22 @@ it('setUntested sets the one plan row', () => {
   expect(scores(d).map((s) => s.untested)).toEqual([4, null])
 })
 
-it('D4 migrates once to 113 with one bench_scorecard table', () => {
+it('D4 migrates once to 114 with one bench_scorecard table', () => {
   const d = open(':memory:')
-  expect(migrate(d, join(root, 'schema')).at(-1)).toBe('0113_bench_score_busy.sql')
+  expect(migrate(d, join(root, 'schema')).at(-1)).toBe('0114_bench_rescore.sql')
   expect(migrate(d, join(root, 'schema'))).toEqual([])
   expect(d.prepare("SELECT count(*) AS n FROM sqlite_master WHERE type = 'table' AND name = 'bench_scorecard'").get()).toEqual({ n: 1 })
-  expect(d.pragma('user_version', { simple: true })).toBe(113)
+  expect(d.pragma('user_version', { simple: true })).toBe(114)
+})
+
+it('D4 a live row beside a superseded one is kept', () => {
+  const d = db()
+  const plan = planRow(d)
+  expect(supersede(d, plan)).toBeNull()
+  const old = record(d, { plan, ...fizz })
+  expect(supersede(d, plan)).toBe(old)
+  record(d, { plan, ...fizz, catches: 5 })
+  expect(scores(d).map((s) => s.catches)).toEqual([3, 5])
+  expect(() => record(d, { plan, ...fizz })).toThrow(/UNIQUE/)
+  expect(() => d.prepare('UPDATE bench_scorecard SET superseded = 2').run()).toThrow(/CHECK/)
 })

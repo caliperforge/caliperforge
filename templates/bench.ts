@@ -239,7 +239,8 @@ const TIMEOUT = 1200
 const WORKERS = 4
 
 function medusa(db: Db, plan: number, src: string, suite: string): Outcome | { config: string; clamped: string[] } | null {
-  const path = join(src, 'medusa.json')
+  const installed = !existsSync(join(src, 'medusa.json'))
+  const path = join(src, installed ? suite : '', 'medusa.json')
   if (!existsSync(path)) return null
   let config: unknown
   try {
@@ -248,7 +249,7 @@ function medusa(db: Db, plan: number, src: string, suite: string): Outcome | { c
     logged(db, { plan, kind: 'swallowed', actor: 'score', outcome: 'pass', message: firstLine(error), pointer: null, run: null })
     return { outcome: 'refuse', spans: ['bench.medusa_json'], note: firstLine(error) }
   }
-  for (const [keys, key] of MOVED) {
+  for (const [keys, key] of installed ? [] : MOVED) {
     const parent = keys.reduce(field, config)
     const value = field(parent, key)
     if (typeof value === 'string' && value !== '' && !isAbsolute(value)) Object.assign(parent as object, { [key]: moved(suite, value) })

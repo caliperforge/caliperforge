@@ -17,14 +17,13 @@ import { observed } from '../store/lanes.ts'
 import { needsCeo, type PlanRow } from '../store/plans.ts'
 import { byRun, pending } from '../store/transcript.ts'
 import { clamp } from './balances.ts'
+import { inBare, listedIn } from './listed.ts'
 import { DEFAULT_BUILDER, type Step } from './pr-path.ts'
 
 export const steps: Step[] = ['checkout', 'generate', 'score', 'null_check'].map((name, step) =>
   ({ step, name, seat: DEFAULT_BUILDER, fires: name === 'generate' ? 'seat' : 'kernel', runs: name, gate: false, writes_verdict: false, verdict_gate: null }))
 
 const NEEDED = ['repo', 'fix', 'pre_fix']
-
-const LISTED = /^files:[ \t]*(?:[^\s[]|\[[ \t]*[^\s\]]|\n[ \t]+-[ \t]*\S)/m
 
 export const CEILING = 400_000
 
@@ -153,7 +152,7 @@ export async function generate(db: Db, root: string, plan: PlanRow, step: Step, 
 export function scored(db: Db, root: string, plan: PlanRow): Outcome {
   const text = maybe(root, plan.id, 'target.yml') ?? ''
   const keys = fields(text)
-  const missing = ['target', 'generator', 'files'].filter((key) => key === 'files' ? !LISTED.test(text) : (keys[key] ?? '') === '')
+  const missing = ['target', 'generator'].filter((key) => (keys[key] ?? '') === '')
   if (missing.length > 0) return { outcome: 'refuse', spans: ['target.yml'], note: `target.yml has no ${missing.join(', ')}` }
   const { target = '', generator = '' } = keys
   const made = maybe(root, plan.id, 'generate.json')
@@ -169,7 +168,9 @@ export function scored(db: Db, root: string, plan: PlanRow): Outcome {
   const sha = git(bench, ['rev-parse', 'HEAD']).trim()
   const upstream = join(bench, 'targets', `${target}.yml`)
   if (!existsSync(upstream)) return { outcome: 'refuse', spans: ['target.yml'], note: `fuzz-bench has no targets/${target}.yml` }
-  put(root, plan.id, 'target.yml', `${copied(readFileSync(upstream, 'utf8'), target, generator)}${
+  const yml = listedIn(root, plan.id, upstream)
+  if (yml === null) return { outcome: 'refuse', spans: ['target.yml'], note: 'target.yml has no files' }
+  put(root, plan.id, 'target.yml', `${copied(yml, target, generator)}${
     keys.null_check === undefined ? '' : `null_check: ${keys.null_check}\n`}`)
   const suites = `suites/${generator}/${target}`
   cpSync(join(srcDir(root, plan.id), suite), join(bench, suites), { recursive: true })
@@ -277,16 +278,7 @@ function field(tree: unknown, key: string): unknown {
 /** A full sha goes straight to `clone`, which fetches it by itself; a rev expression on a full sha is fetched by that sha. */
 function resolved(plan: string, url: string, rev: string): string {
   if (/^[0-9a-f]{40}$/.test(rev)) return rev
-  const bare = join(plan, 'resolve.git')
-  rmSync(bare, { recursive: true, force: true })
-  try {
-    git(plan, ['clone', '--bare', '-q', url, bare])
-    const sha = /^[0-9a-f]{40}/.exec(rev)?.[0]
-    if (sha !== undefined) git(bare, ['fetch', '-q', url, sha])
-    return git(bare, ['rev-parse', '--verify', `${rev}^{commit}`]).trim()
-  } finally {
-    rmSync(bare, { recursive: true, force: true })
-  }
+  return inBare(plan, url, [rev], (bare) => git(bare, ['rev-parse', '--verify', `${rev}^{commit}`]).trim())
 }
 
 function seen(dir: string, needle: string): string | null {

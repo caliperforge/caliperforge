@@ -2,6 +2,7 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
+import { world } from '../../../sequencer/tests/world.ts'
 import { maybe } from '../../../sequencer/workspace.ts'
 import type { PlanRow } from '../../../store/plans.ts'
 import { sourced } from '../../../templates/research.ts'
@@ -20,7 +21,7 @@ const written = (dir: string): unknown => JSON.parse(maybe(dir, 1, 'sources.json
 
 test('D1: two sources write both to sources.json in order', () => {
   const dir = root()
-  expect(sourced(dir, plan, fenced(`sources:\n${entry(A, ` ${A.quote}`)}${entry(B, ` ${B.quote}`)}`)))
+  expect(sourced(world().db, dir, plan,fenced(`sources:\n${entry(A, ` ${A.quote}`)}${entry(B, ` ${B.quote}`)}`)))
     .toMatchObject({ outcome: 'pass', spans: [] })
   expect(written(dir)).toEqual([A, B])
 })
@@ -31,7 +32,7 @@ test.each([
   { why: 'blank', quote: ' "  "' },
 ])('D2: a $why quote is refused and writes no file', ({ quote }) => {
   const dir = root()
-  expect(sourced(dir, plan, fenced(`sources:\n${entry(A, ` ${A.quote}`)}${entry(B, quote)}`)))
+  expect(sourced(world().db, dir, plan,fenced(`sources:\n${entry(A, ` ${A.quote}`)}${entry(B, quote)}`)))
     .toMatchObject({ outcome: 'refuse', spans: ['researcher.unquoted'] })
   expect(maybe(dir, 1, 'sources.json')).toBeNull()
 })
@@ -41,30 +42,30 @@ test.each([
   { why: 'a fence that is not sources', reply: fenced('items:\n  - title: x\n') },
 ])('D3: a reply with $why is refused and writes no file', ({ reply }) => {
   const dir = root()
-  expect(sourced(dir, plan, reply)).toMatchObject({ outcome: 'refuse', spans: ['researcher.fence'] })
+  expect(sourced(world().db, dir, plan,reply)).toMatchObject({ outcome: 'refuse', spans: ['researcher.fence'] })
   expect(maybe(dir, 1, 'sources.json')).toBeNull()
 })
 
 test('D4: sources: [] passes and writes []', () => {
   const dir = root()
-  expect(sourced(dir, plan, fenced('sources: []\n'))).toMatchObject({ outcome: 'pass' })
+  expect(sourced(world().db, dir, plan,fenced('sources: []\n'))).toMatchObject({ outcome: 'pass' })
   expect(maybe(dir, 1, 'sources.json')).toBe('[]')
 })
 
 test('D5: a quote holding ": " is stored exactly as written', () => {
   const dir = root()
-  sourced(dir, plan, fenced(`sources:\n${entry(B, ` ${B.quote}`)}`))
+  sourced(world().db, dir, plan,fenced(`sources:\n${entry(B, ` ${B.quote}`)}`))
   expect(written(dir)).toEqual([B])
 })
 
 const refused = (dir: string, reply: string, note: string): void => {
-  expect(sourced(dir, plan, reply)).toMatchObject({ outcome: 'refuse', spans: ['researcher.fence'], note: expect.stringContaining(note) as unknown })
+  expect(sourced(world().db, dir, plan,reply)).toMatchObject({ outcome: 'refuse', spans: ['researcher.fence'], note: expect.stringContaining(note) as unknown })
   expect(maybe(dir, 1, 'sources.json')).toBeNull()
 }
 
 test('fence D1: blank lines in the fence pass, in order', () => {
   const dir = root()
-  expect(sourced(dir, plan, fenced(`sources:\n${entry(A, ' |\n      The cap\n\n      is 3.')}\n${entry(B, ` ${B.quote}`)}`)))
+  expect(sourced(world().db, dir, plan,fenced(`sources:\n${entry(A, ' |\n      The cap\n\n      is 3.')}\n${entry(B, ` ${B.quote}`)}`)))
     .toMatchObject({ outcome: 'pass' })
   expect(written(dir)).toEqual([{ ...A, quote: 'The cap\n\nis 3.\n' }, B])
 })

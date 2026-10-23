@@ -126,8 +126,9 @@ The machine files each part as its own issue and queues them one at a time. On s
 the split goes to the COO instead, so answer it only when the ask
 really is more than one job.
 
-An ask whose whole deliverable is one command on the machine's allow-list (today only
-`cf gh refile <owner/name#n> <owner/name>`) is not briefed. Close with this fence and nothing after it:
+An ask whose whole deliverable is one command on the machine's allow-list (today
+`cf gh refile <owner/name#n> <owner/name>`, and `node tools/<tool>/run.ts <http(s) url> --out .cf/<tool>/<host>`
+only when the ask carries that line word for word) is not briefed. Close with this fence and nothing after it:
 
 ```
 ---

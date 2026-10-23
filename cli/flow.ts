@@ -10,7 +10,7 @@ import { hhmm } from '../store/lanes.ts'
 import { internal, openPipes, originRef, type PipeRow, planRows, PlanRow } from '../store/plans.ts'
 import { all, record, ticketOf, type Event } from './inbox.ts'
 
-const Row = PlanRow.extend({ waits_on: z.int().nullable() })
+const Row = PlanRow.extend({ waits_on: z.int().nullable(), title: z.string().nullable() })
 
 type Row = z.infer<typeof Row>
 
@@ -37,7 +37,7 @@ export function findings(db: Db, root: string, now: Date): Finding[] {
   const startable = new Set(slack(db, now).filter((s) => s.startable > 0).map((s) => s.pipe.id))
   return planRows(db).map((r) => Row.parse(r)).flatMap((p) => {
     const note = maybe(root, p.id, 'parked.md')
-    const hit = landed(db, p) ?? stale(db, p, note) ?? halted(db, p) ?? repeated(db, p, note, now) ?? ownerless(p, note) ?? overlapped(p, startable)
+    const hit = landed(db, p) ?? stale(db, p, note) ?? halted(db, p) ?? repeated(db, p, note, now) ?? ownerless(p, note) ?? overlapped(p, startable) ?? untitled(p)
     return hit === null ? [] : [{ plan: p.id, step: p.step, what: hit[0], fix: hit[1] }]
   })
 }
@@ -96,6 +96,11 @@ function overlapped(p: Row, startable: Set<number>): Hit {
   const id = String(p.id)
   return p.waits_on === null ? ["holds a slot waiting on another job's files", `cf park ${id} --until <time>`]
     : [`holds a slot waiting on plan ${String(p.waits_on)}'s files`, `cf park ${id} --on ${String(p.waits_on)}`]
+}
+
+function untitled(p: Row): Hit {
+  if (p.title !== null || p.origin !== null || (p.target_id !== null && p.step <= 1)) return null
+  return ['no title, so Loupe shows it untitled', `set plans.title on plan ${String(p.id)}`]
 }
 
 function parts(db: Db): string[] {

@@ -10,7 +10,7 @@ import { record } from '../../store/bench.ts'
 import { ofKind } from '../../store/events.ts'
 import type { Db } from '../../store/index.ts'
 import { dial, lanes } from '../../store/lanes.ts'
-import { allPlans, holderOf, openPipes, pipeNamed, planById, putPlan, type PlanRow } from '../../store/plans.ts'
+import { allPlans, holderOf, openPipes, pipeNamed, planById, planTitle, putPlan, type PlanRow } from '../../store/plans.ts'
 import { fileBench, rescore } from '../bench.ts'
 import { laneLine } from '../brief.ts'
 import type { Read } from '../gh.ts'
@@ -88,13 +88,17 @@ test('file D1 one target queues a bench plan dry lists at step 0', () => {
   expect(planById(d, id)).toMatchObject({ template: 'bench', state: 'queued', step: 0, pipe_id: pipeNamed(d, 'bench')?.id })
   expect(dry(d, new Date(AT)).would).toContainEqual({ pipe: 'bench', plan: id, step: 0, template: 'bench' })
   expect(get(dir, id, 'target.yml')).toBe(`${YML}target: euler-earn-m01\ngenerator: fizz\n`)
+  expect(planTitle(d, id)).toBe('Bench: score fizz on euler-earn-m01 (catch / miss / false alarm)')
 })
 
 test('file D2 --all files one plan per target yml', () => {
   const dir = benchRoot()
-  const ids = fileBench(fresh(schema), dir, undefined, true, 'fizz_generator', AT)
+  const d = fresh(schema)
+  const ids = fileBench(d, dir, undefined, true, 'fizz_generator', AT)
   expect(ids.map((id) => get(dir, id, 'target.yml'))).toEqual([`${YML}target: euler-earn-m01\ngenerator: fizz\n`,
     'repo: org/smoke\ntarget: smoke-01\ngenerator: fizz\n'])
+  expect(ids.map((id) => planTitle(d, id))).toEqual(['Bench: score fizz on euler-earn-m01 (catch / miss / false alarm)',
+    'Bench: score fizz on smoke-01 (catch / miss / false alarm)'])
 })
 
 test('file D3 an unknown target is refused and files nothing', () => {

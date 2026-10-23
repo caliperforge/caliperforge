@@ -7,7 +7,7 @@ import { get, git, gitBase, maybe, planDir, put, remote, srcDir } from '../seque
 import { supersede } from '../store/bench.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
-import { addPlan, holderOf, pipeNamed, planById, rewind, type Holder } from '../store/plans.ts'
+import { addPlan, briefed, holderOf, pipeNamed, planById, rewind, type Holder } from '../store/plans.ts'
 import { copied } from '../templates/bench.ts'
 import type { Cli } from './cf-lanes.ts'
 
@@ -26,6 +26,7 @@ export function fileBench(db: Db, root: string, target: string | undefined, all:
     if (missing !== undefined) throw new Error(`fuzz-bench has no targets/${missing}.yml`)
     return names.map((name) => {
       const id = addPlan(db, { pipe_id: pipe.id, target_id: null, template: 'bench', state: 'queued', queued_at: at, lane: null, seat: null, origin: null, step: 0 })
+      briefed(db, id, { title: `Bench: score ${key} on ${name} (catch / miss / false alarm)`, what: null, why: null, ends: null })
       put(root, id, 'target.yml', copied(readFileSync(join(targets, `${name}.yml`), 'utf8'), name, key))
       return id
     })

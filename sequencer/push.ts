@@ -29,8 +29,8 @@ import { based, moved, retire } from './retire.ts'
 import type { Outcome } from './kind.ts'
 import { merging } from './merging.ts'
 import { prBody, prTitle } from './pr.ts'
-import { cloned, conflicted, diffOf, fetchMain, FORK, MAIN, maybe, planDir, put, repoName, srcDir, titleOf, tried } from './workspace.ts'
-import { assembly, homeOf } from './home.ts'
+import { assembled, cloned, conflicted, diffOf, fetchMain, FORK, MAIN, maybe, planDir, put, repoName, srcDir, titleOf, tried } from './workspace.ts'
+import { assembly, homeOf, onto } from './home.ts'
 import { clean, subjectOf } from './shape.ts'
 import { size } from './size.ts'
 import { prosed } from './tells.ts'
@@ -374,21 +374,23 @@ export function land(db: Db, root: string, plan: PlanRow, approval: number, wire
   if (!cloned(src)) return refuse('checkout', `plan ${String(plan.id)} has no checkout to land`)
   if (conflicted(src)) return refuse('base:conflict', `plan ${String(plan.id)} has unmerged paths; a conflicted tree is neither committed nor landed`)
   const asm = assembly(db, plan)
-  const onto = asm?.branch ?? 'main'
+  const base = onto(db, root, plan)
+  const cut = assembled(src) ?? 'main'
+  if (cut !== base) return refuse('base:branch', `plan ${String(plan.id)} was cut from ${cut} but its ticket lands on ${base}; cut it again from ${base}`)
   const head = headOf(root, plan.id)
   const sha = merged(head.dir, head.branch)
-  if (sha === null) return refuse('base:stale', `${onto} moved under plan ${String(plan.id)} between ready and land; cut it again from ${onto}`)
+  if (sha === null) return refuse('base:stale', `${base} moved under plan ${String(plan.id)} between ready and land; cut it again from ${base}`)
   try {
-    wire.send(head.dir, asm === null ? 'main' : `main:refs/heads/${asm.branch}`)
+    wire.send(head.dir, base === 'main' ? 'main' : `main:refs/heads/${base}`)
   } catch (error) {
     fetchMain(head.dir)
     if (ancestor(head.dir, MAIN, sha)) throw error
-    return refuse('base:stale', `${onto} moved under plan ${String(plan.id)} between fetch and push; cut it again from ${onto}`)
+    return refuse('base:stale', `${base} moved under plan ${String(plan.id)} between fetch and push; cut it again from ${base}`)
   }
-  wire.close(homeOf(plan), issue, sha)
+  wire.close(homeOf(plan), issue, sha, `landed on ${base} as ${sha}`)
   markPushed(db, plan.id, approval, `https://github.com/${asm?.fork ?? homeOf(plan)}/commit/${sha}`)
   if (plan.lane === 'loupe') wire.install?.()
-  return { outcome: 'pass', spans: [], note: `landed ${head.branch} on ${onto} as ${sha.slice(0, 12)}` }
+  return { outcome: 'pass', spans: [], note: `landed ${head.branch} on ${base} as ${sha.slice(0, 12)}` }
 }
 
 /**
@@ -408,18 +410,18 @@ function merged(dir: string, branch: string): string | null {
 }
 
 /**
- * An internal plan is already on `main`, or a part of an outside plan on its `asm/<parent>`; step 8 has
+ * An internal plan is already on `main`, or a part of an outside plan on its `asm/<parent>`, or a plan on the branch its ask's `Base:` line names; step 8 has
  * no fork branch to send and no pull request to open.
  */
-function onMain(db: Db, plan: PlanRow): Outcome {
-  const onto = assembly(db, plan)?.branch ?? 'main'
+function onMain(db: Db, root: string, plan: PlanRow): Outcome {
+  const base = onto(db, root, plan)
   const row = newest(db, plan.id)
-  if (row?.state !== 'pushed') return refuse('deliverables', `plan ${String(plan.id)} reached push without landing on ${onto}`)
-  return { outcome: 'pass', spans: [], note: `on ${onto} at ${row.evidence}` }
+  if (row?.state !== 'pushed') return refuse('deliverables', `plan ${String(plan.id)} reached push without landing on ${base}`)
+  return { outcome: 'pass', spans: [], note: `on ${base} at ${row.evidence}` }
 }
 
 export function push(db: Db, root: string, plan: PlanRow, wire: Wire = WIRE): Outcome {
-  if (internal(plan)) return onMain(db, plan)
+  if (internal(plan)) return onMain(db, root, plan)
   const target = pushTarget(db, plan)
   if (target === null) return refuse('targets', `plan ${String(plan.id)} has no target row`)
   if (!cloned(srcDir(root, plan.id))) return refuse('checkout', `plan ${String(plan.id)} has no checkout to send`)

@@ -243,7 +243,7 @@ function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcom
     return 'running'
   }
   if (outcome.outcome === 'needs_ceo') {
-    if (repeated(root, plan, step)) { outcome.quiet = true; return plan.state }
+    if (repeated(root, plan, step)) { outcome.quiet = true; if (step.fires !== 'brief') return plan.state }
     needsCeo(db, plan, outcome.note)
     return 'blocked_on_ceo'
   }

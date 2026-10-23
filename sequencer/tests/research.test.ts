@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
@@ -439,6 +439,16 @@ test('record D2: a second run adds no file, row or close', () => {
   expect(readdirSync(findings(w))).toHaveLength(1)
   expect(posts(w.db)).toHaveLength(1)
   expect(log).toHaveLength(1)
+})
+
+test('record D3: a failed write throws, no row, then records', () => {
+  const { w, wire } = reviewed()
+  writeFileSync(findings(w), '')
+  expect(() => record(w.db, w.root, plan(w.db, 1), wire)).toThrow()
+  expect(posts(w.db)).toEqual([])
+  rmSync(findings(w))
+  expect(record(w.db, w.root, plan(w.db, 1), wire)).toMatchObject({ outcome: 'pass' })
+  expect(posts(w.db)).toHaveLength(1)
 })
 
 test.each(['## Would be wrong if', '## Still unknown'])('record D3: no %s section is refused', (heading) => {

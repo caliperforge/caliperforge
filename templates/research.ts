@@ -12,7 +12,7 @@ import { WIRE, type Wire } from '../sequencer/push.ts'
 import { ran } from '../sequencer/seat.ts'
 import { get, headSha, maybe, planDir, put, srcDir, titleOf } from '../sequencer/workspace.ts'
 import { runLogged } from '../store/events.ts'
-import { proofed } from '../store/desk.ts'
+import { posts, proofed } from '../store/desk.ts'
 import type { Db } from '../store/index.ts'
 import { get as setting, observed, wall } from '../store/lanes.ts'
 import { originRef, type PlanRow } from '../store/plans.ts'
@@ -244,16 +244,13 @@ export function record(db: Db, root: string, plan: PlanRow, wire: Wire = WIRE): 
   const sources = JSON.parse(get(root, plan.id, 'sources.json')) as Source[]
   const part = (from: number, to?: number): string => lines.slice(from, to).join('\n').trim()
   const answer = part(0, wrong)
-  const added = db.transaction(() => {
-    if (!proofed(db, { id: plan.id, kind: 'note', dest: 'site', title, dek: asked.question, body: answer.split(/\s+/).slice(0, 150).join(' '),
-      sources: JSON.stringify(sources.map((s) => ({ claim: plain(s).claim, ref: named(s) }))), checks: '[]', work_date: day, written_date: day })) return false
-    mkdirSync(join(dir, 'findings'), { recursive: true })
-    writeFileSync(path, `${[`# ${title}`, '## Question', asked.question, '## Answer', answer, WRONG, asked.wrong_if, part(wrong + 1, unknown), '## Sources',
-      sources.map((s, i) => `${String(i + 1)}. ${'run' in s ? named(s) :`${s.url} (${s.fetched_at})`}: "${plain(s).quote}"`).join('\n'), UNKNOWN,
-      part(unknown + 1)].join('\n\n')}\n`)
-    return true
-  })()
-  if (!added) return { outcome: 'pass', spans: [], note: 'already recorded' }
+  if (posts(db).some((p) => p.id === plan.id)) return { outcome: 'pass', spans: [], note: 'already recorded' }
+  mkdirSync(join(dir, 'findings'), { recursive: true })
+  writeFileSync(path, `${[`# ${title}`, '## Question', asked.question, '## Answer', answer, WRONG, asked.wrong_if, part(wrong + 1, unknown), '## Sources',
+    sources.map((s, i) => `${String(i + 1)}. ${'run' in s ? named(s) :`${s.url} (${s.fetched_at})`}: "${plain(s).quote}"`).join('\n'), UNKNOWN,
+    part(unknown + 1)].join('\n\n')}\n`)
+  proofed(db, { id: plan.id, kind: 'note', dest: 'site', title, dek: asked.question, body: answer.split(/\s+/).slice(0, 150).join(' '),
+    sources: JSON.stringify(sources.map((s) => ({ claim: plain(s).claim, ref: named(s) }))), checks: '[]', work_date: day, written_date: day })
   const ref = originRef(plan)
   if (ref !== null) wire.close(ref.repo, ref.no, '', `Finding: ${path}`)
   return { outcome: 'pass', spans: [], note: `finding at ${path}` }

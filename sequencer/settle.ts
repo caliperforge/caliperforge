@@ -234,8 +234,9 @@ function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcom
     return 'blocked_on_ceo'
   }
   if (outcome.outcome !== 'refuse') {
+    const write = proved(db, root, plan, step)
     return db.transaction((): string => {
-      proved(db, root, plan, step)
+      write()
       if (mapOf(plan.template).last(step.step)) { finish(db, plan); return 'done' }
       advance(db, plan, step.step + 1)
       return plan.template === 'pr_path' ? hold(db, plan.id, step.step) : 'running'

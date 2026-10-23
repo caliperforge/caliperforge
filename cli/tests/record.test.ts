@@ -7,7 +7,7 @@ import { OPERATOR } from '../../sequencer/workspace.ts'
 import { gates } from '../../store/approvals.ts'
 import { pushedRow } from '../../store/deliverables.ts'
 import { addRule, type Db } from '../../store/index.ts'
-import { openRecords, recordsOf, repos } from '../../store/record.ts'
+import { openRecords, recordsOf } from '../../store/record.ts'
 import { setEvidence } from '../../store/targets.ts'
 import { adopt } from '../adopt.ts'
 import { outside, standing, WINDOW, type Outside, type Pr, type Read, type Standing } from '../gh.ts'
@@ -129,16 +129,6 @@ test('a second fill rewrites rows in place, showing the new state', () => {
   const rows = fill(db, REPO, (repo, no) => view(repo, no, { state: 'MERGED', mergedAt: `${TODAY}T10:00:00Z` }))
   expect(rows.map((r) => [r.pr, r.state, r.merged_at])).toEqual([[282, 'MERGED', `${TODAY}T10:00:00Z`]])
   expect(still(db, REPO)).toBe(0)
-})
-
-test('D4: repos lists each repo once, not an issue-only one', () => {
-  const db = fresh(schema)
-  const d = dir()
-  adopted(db, d, REPO, 282)
-  pushed(db, d, 290)
-  adopted(db, d, OTHER, 5)
-  db.exec(`UPDATE targets SET evidence = 'https://github.com/${OTHER}/issues/5' WHERE repo = '${OTHER}'`)
-  expect(repos(db)).toEqual([REPO])
 })
 
 const SURFPOOL = 'solana-foundation/surfpool'

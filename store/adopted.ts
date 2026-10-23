@@ -17,8 +17,8 @@ export function heldPlan(db: Db, target: number): number | null {
   return row?.id ?? null
 }
 
-export function adoptedPlan(db: Db, pipe: number, target: number, step: number, priority: number): number {
-  return Number(db.prepare(`INSERT INTO plans (pipe_id, target_id, template, state, queued_at, step, retries, priority)
-    VALUES (?, ?, 'pr_path', 'done', ?, ?, 0, ?)`)
-    .run(pipe, target, new Date().toISOString(), step, priority).lastInsertRowid)
+export function adoptedPlan(db: Db, pipe: number, target: number, step: number, priority: number, title: string): number {
+  return Number(db.prepare(`INSERT INTO plans (pipe_id, target_id, template, state, queued_at, step, retries, priority, title)
+    VALUES (?, ?, 'pr_path', 'done', ?, ?, 0, ?, ?)`)
+    .run(pipe, target, new Date().toISOString(), step, priority, title).lastInsertRowid)
 }

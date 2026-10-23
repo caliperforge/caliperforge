@@ -43,7 +43,7 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
   accounts(db, root, now)
   ripe(db, now)
   relane(db)
-  if (registry !== undefined) await watched(db, root, registry, now, read)
+  if (registry !== undefined) await watched(db, root, registry, now, read, labels)
   if (labels !== undefined) (lines ?? []).push(...intake(db, root, labels), ...refill(db, root, labels, now))
   reap(root, terminal(db))
   reprice(db, labels)
@@ -71,8 +71,9 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
   return out
 }
 
-async function watched(db: Db, root: string, registry: Entry[], now: Date, read: (repo: string, no: number) => Pr): Promise<void> {
-  due(db, registry, now, read)
+async function watched(db: Db, root: string, registry: Entry[], now: Date, read: (repo: string, no: number) => Pr,
+  labels?: Read): Promise<void> {
+  due(db, registry, now, read, labels)
   stuck(db, root, registry, now)
   sunday(db, root, now)
   if (registry.some((e) => e.name === 'paydesk_live')) await paydesk(db, root, now)

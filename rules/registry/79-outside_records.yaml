@@ -1,0 +1,5 @@
+- name: outside_records
+  table: records
+  column: read_at
+  where: plan IS NULL
+  gap: 1d

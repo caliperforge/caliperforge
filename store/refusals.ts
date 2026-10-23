@@ -108,6 +108,14 @@ export function sinceSent(db: Db, plan: number): number {
     FROM events WHERE plan = ? AND kind IN ('return', 'retry') AND actor IN ('ceo', 'coo'))`).pluck().get(plan, plan) as number
 }
 
+/** The plan's refusals since a ceo or coo last returned or retried it, newest first, cleared or not, blips left out, up to the first not at step 1. */
+export function briefsInRow(db: Db, plan: number): { span: string | null; note: string | null }[] {
+  const rows = db.prepare(`SELECT step, span, note FROM refusals WHERE plan = ? AND blip = 0 AND julianday(at) > ${SENT("'ceo', 'coo'")}
+    ORDER BY id DESC`).all(plan, plan) as { step: number; span: string | null; note: string | null }[]
+  const cut = rows.findIndex((r) => r.step !== 1)
+  return rows.slice(0, cut === -1 ? rows.length : cut).map(({ span, note }) => ({ span, note }))
+}
+
 /** Every refusal the plan had, newest first, cleared or not, blips left out. */
 export function refusalRows(db: Db, plan: number): { step: number; span: string | null; note: string | null }[] {
   return db.prepare('SELECT step, span, note FROM refusals WHERE plan = ? AND blip = 0 ORDER BY id DESC')

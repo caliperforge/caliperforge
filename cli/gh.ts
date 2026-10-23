@@ -30,12 +30,14 @@ const CLAIM = /i'?ll take (this|it)|i'?m working on|working on (this|it)|taking 
 /** One page. Left off, `gh pr list` stops at 30 rows and anything past the cap is never read. */
 export const WINDOW = 100
 
+const MAX_BUFFER = 64 * 1024 * 1024
+
 export type Issue = z.infer<typeof Issue>
 
 export type Read = (args: string[]) => unknown
 
 export function gh(args: string[]): unknown {
-  return JSON.parse(execFileSync('gh', args, { encoding: 'utf8' })) as unknown
+  return JSON.parse(execFileSync('gh', args, { encoding: 'utf8', maxBuffer: MAX_BUFFER })) as unknown
 }
 
 export function issue(repo: string, no: number, read: Read = gh): Issue {
@@ -191,13 +193,13 @@ export function dispatch(fork: string, file: string, branch: string, exec: Run =
 /** Closed with no comment and the branch kept: the branch is the head the real pull request opens from. */
 export function unrehearse(fork: string, branch: string): void {
   const no = rehearsal(fork, branch)
-  if (no !== null) execFileSync('gh', ['pr', 'close', String(no), '--repo', fork], { encoding: 'utf8' })
+  if (no !== null) execFileSync('gh', ['pr', 'close', String(no), '--repo', fork], { encoding: 'utf8', maxBuffer: MAX_BUFFER })
 }
 
 export function review(fork: string, branch: string): void {
   const no = rehearsal(fork, branch)
   if (no === null) throw new Error(`${fork} has no open rehearsal of ${branch} to ask Greptile on`)
-  execFileSync('gh', ['pr', 'comment', String(no), '--repo', fork, '--body', '@greptileai'], { encoding: 'utf8' })
+  execFileSync('gh', ['pr', 'comment', String(no), '--repo', fork, '--body', '@greptileai'], { encoding: 'utf8', maxBuffer: MAX_BUFFER })
 }
 
 const Installations = z.object({
@@ -235,7 +237,7 @@ export function openPr(repo: string, head: string, title: string, bodyFile: stri
 /** An internal plan is closed by the commit that landed it on `main`, not by a pull request. */
 export function closeIssue(repo: string, no: number, sha: string, comment = `landed on main as ${sha}`): void {
   execFileSync('gh', ['issue', 'close', String(no), '--repo', repo, '--comment', comment],
-    { encoding: 'utf8' })
+    { encoding: 'utf8', maxBuffer: MAX_BUFFER })
 }
 
 /** A part of a split ticket, filed on our repo under this host's `gh` credential; the url is the part's name from here on. */
@@ -246,7 +248,7 @@ export function fileIssue(repo: string, title: string, body: string, labels: str
 }
 
 export function commentIssue(repo: string, no: number, body: string): void {
-  execFileSync('gh', ['issue', 'comment', String(no), '--repo', repo, '--body-file', '-'], { encoding: 'utf8', input: body })
+  execFileSync('gh', ['issue', 'comment', String(no), '--repo', repo, '--body-file', '-'], { encoding: 'utf8', maxBuffer: MAX_BUFFER, input: body })
 }
 
 export function searchIssue(repo: string, subject: string): number | null {
@@ -316,7 +318,7 @@ export function said(c: Line): string {
 }
 
 export function run(args: string[], input?: string): string {
-  return execFileSync('gh', args, { encoding: 'utf8', ...(input === undefined ? {} : { input }) })
+  return execFileSync('gh', args, { encoding: 'utf8', maxBuffer: MAX_BUFFER, ...(input === undefined ? {} : { input }) })
 }
 
 /**

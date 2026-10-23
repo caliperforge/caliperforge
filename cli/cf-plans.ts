@@ -193,13 +193,14 @@ function parks(cf: Command, { root, db, out }: Cli): void {
 function landing(handle: Db, root: string, plan: number, sha: string): { sha: string; url: string } {
   const ref = originRef(planById(handle, plan))
   if (ref === null) throw new Error(`plan ${String(plan)} names no issue of ours to land`)
-  const dir = join(planDir(root, plan), 'src')
-  if (!cloned(dir)) throw new Error(`plan ${String(plan)} has no checkout to read main in`)
-  fetchMain(dir)
+  const checkout = join(planDir(root, plan), 'src')
+  const [dir, main] = cloned(checkout) ? [checkout, MAIN] : [root, 'refs/remotes/origin/main']
+  if (dir === checkout) fetchMain(dir)
+  else git(root, ['fetch', '-q', '--no-tags', 'origin', `+refs/heads/main:${main}`])
   let full: string
   try {
     full = git(dir, ['rev-parse', '--verify', `${sha}^{commit}`]).trim()
-    git(dir, ['merge-base', '--is-ancestor', full, MAIN])
+    git(dir, ['merge-base', '--is-ancestor', full, main])
   } catch {
     throw new Error(`${sha} is not on main`)
   }

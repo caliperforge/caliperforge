@@ -452,3 +452,10 @@
   where: "kind = 'score' AND outcome = 'needs_coo'"
   gap: 14d
   expected: 0
+- name: director_close_unbuilt
+  switch: { key: director.apply, value: '1' }
+  table: events
+  column: at
+  where: "kind = 'director' AND outcome = 'needs_coo' AND message GLOB 'close did not apply, *' AND plan IN (SELECT id FROM plans WHERE origin GLOB 'https://github.com/caliperforge/*') AND julianday(events.at) > (SELECT julianday(min(c.at)) FROM events c WHERE c.kind = 'close' AND c.actor = 'director' AND c.outcome = 'refuse')"
+  gap: 7d
+  expected: 0

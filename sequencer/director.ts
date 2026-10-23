@@ -27,6 +27,7 @@ import { released } from './fixer.ts'
 import { prose } from './prose.ts'
 import { builderWork, outOfReach, WAITING } from './reach.ts'
 import { WIRE, type Wire } from './push.ts'
+import { redundant } from './redundant.ts'
 import { rerouted } from './reroute.ts'
 import { accepted, edits, fenced, opened, owned, rule, stray } from './rule.ts'
 import { recorded } from './seat.ts'
@@ -293,7 +294,7 @@ function apply(db: Db, root: string, plan: PlanRow, m: Move, wire: Wire, now: Da
       end(db, plan.id, 'done')
       return true
     case 'close':
-      if (!pushed(db, plan.id)) return false
+      if (!pushed(db, plan.id)) return redundant(db, plan, m.why, wire)
       end(db, plan.id, 'done')
       return true
     case 'file':

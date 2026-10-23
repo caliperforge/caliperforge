@@ -5,7 +5,7 @@ import type { Provider } from '../providers/kind.ts'
 import { packet } from '../runner/index.ts'
 import { load, seat, tight } from '../runner/rules.ts'
 import { decision } from '../store/ask.ts'
-import { decided, decisions } from '../store/decisions.ts'
+import { appliedOf, decided, decisions } from '../store/decisions.ts'
 import { pushed } from '../store/deliverables.ts'
 import { asked, setting } from '../store/drift.ts'
 import { kindsOf, logged } from '../store/events.ts'
@@ -78,23 +78,26 @@ export async function cooLite(db: Db, root: string, plan: PlanRow, provider: Pro
     const again = refused(m, said, n, root, cap)
     if (again !== null) return m?.move === 'fix' && builderWork(root, m.why) && applying(db) && apply(db, root, plan, { move: 'rule', why: m.why, answer: m.why }, wire, now) === true
       ? told(db, root, plan, now, { outcome: 'pass', message: `rule: ${m.why}${planById(db, plan.id).step <= 2 ? " (out of the fixer's reach, so the builder takes it)" : ''}` })
-      : told(db, root, plan, now, { outcome: 'needs_coo', message: again.message }, post)
+      : cap ? told(db, root, plan, now, { outcome: 'needs_coo', message: again.message }, post)
+        : handUp(db, root, plan, { outcome: 'needs_coo', message: again.message }, said, provider, now, post, wire)
   }
-  if (m === null) return told(db, root, plan, now, { outcome: 'needs_coo', message: 'ask_ceo: no readable answer' }, post)
+  if (m === null) return handUp(db, root, plan, { outcome: 'needs_coo', message: 'ask_ceo: no readable answer' }, said, provider, now, post, wire)
   const message = `${m.move}: ${m.why}`
   if (!applying(db)) return told(db, root, plan, now, { outcome: 'needs_coo', message, note: `proposes ${message}` })
   const done = m.move === 'fix' ? await fixed(db, root, plan, m.why, provider, now, post, wire)
     : m.move !== 'ask_ceo' && m.move !== 'ask_coo' && apply(db, root, plan, m, wire, now)
   if (done !== false) return told(db, root, plan, now, { outcome: 'pass', message, pointer: done === true ? null : done })
   if (m.move === 'fix' && tried === undefined) return cooLite(db, root, planById(db, plan.id), provider, now, post, wire, m.why)
-  if (m.move === 'ask_ceo' || m.move === 'ask_coo') {
-    held(db, plan.id, m.move === 'ask_ceo' ? 'ceo' : 'coo', m.why)
+  if (m.move === 'ask_coo') return handUp(db, root, plan, { outcome: 'needs_coo', message }, said, provider, now, post, wire, () => { held(db, plan.id, 'coo', m.why) })
+  if (m.move === 'ask_ceo') {
+    held(db, plan.id, 'ceo', m.why)
     const ceo = decision(said)
-    return told(db, root, plan, now, { outcome: 'needs_coo', message: m.move === 'ask_ceo' && 'block' in ceo ? `${message}\n\n${ceo.block}` : message }, post)
+    return told(db, root, plan, now, { outcome: 'needs_coo', message: 'block' in ceo ? `${message}\n\n${ceo.block}` : message }, post)
   }
   const failed = `${m.move} did not apply, ${UNAPPLIED[m.move]}${m.move === 'rule' ? ` (${stray(db, root, plan, m.answer ?? '') ?? ''})` : ''}: ${m.why}`
-  needsCeo(db, plan)
-  held(db, plan.id, 'coo', failed.split('\n')[0] ?? failed)
+  const stuck = (): void => { needsCeo(db, plan); held(db, plan.id, 'coo', failed.split('\n')[0] ?? failed) }
+  if (m.move !== 'fix') return handUp(db, root, plan, { outcome: 'needs_coo', message: failed }, said, provider, now, post, wire, stuck)
+  stuck()
   return told(db, root, plan, now, { outcome: 'needs_coo', message: failed }, post)
 }
 
@@ -319,6 +322,15 @@ function told(db: Db, root: string, plan: PlanRow, now: Date, t: Told, post?: Po
   record(root, [{ at: now.toISOString(), plan: plan.id, ticket, kind, step: plan.step, name: 'director', note: t.note ?? t.message }])
   post?.(`CaliperForge · ${ticket} needs you`, `plan ${String(plan.id)}, step ${String(plan.step)}. director: ${t.message}`)
   return t.message
+}
+
+async function handUp(db: Db, root: string, plan: PlanRow, t: Told, said: string, provider: Provider, now: Date, post: Post, wire: Wire,
+  stay = (): void => undefined): Promise<string> {
+  const taken = applying(db) && await fixed(db, root, plan, `${t.message}\n\n${said}`, provider, now, post, wire)
+  if (taken && appliedOf(db, plan.id).at(-1) !== 'escalated') return told(db, root, plan, now, { ...t, outcome: 'pass' })
+  if (taken) held(db, plan.id, 'coo', t.message.split('\n')[0] ?? t.message)
+  else stay()
+  return told(db, root, plan, now, t, taken ? undefined : post)
 }
 
 export const WAKE = ['token_ceiling', 'ready_proof', 'target_parked', 'no_step_map'] as const

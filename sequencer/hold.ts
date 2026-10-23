@@ -4,6 +4,7 @@ import type { Db } from '../store/index.ts'
 import { returnToLane, retried, rewound } from '../store/holds.ts'
 import { clearWaitsOn, holdOn, terminal } from '../store/plans.ts'
 import { WHY } from '../store/refusals.ts'
+import { type At, forward } from './forward.ts'
 import { COUNTS } from './push.ts'
 import { afresh, drop, maybe, planDir, put } from './workspace.ts'
 
@@ -62,8 +63,8 @@ function next(db: Db, root: string, plan: number, actor: string, to?: number): n
   return repeatAtCheck(db, root, plan) ? retried(db, plan, actor) : returnToLane(db, plan, actor)
 }
 
-export function unhold(db: Db, root: string, plan: number, actor: string, to?: number): number {
-  const step = next(db, root, plan, actor, to)
+export function unhold(db: Db, root: string, plan: number, actor: string, to?: number, at?: At): number {
+  const step = at === undefined ? next(db, root, plan, actor, to) : forward(db, root, plan, actor, at)
   clearWaitsOn(db, plan)
   for (const key of COUNTS) drop(root, plan, key)
   drop(root, plan, NOTE)

@@ -238,12 +238,14 @@ function field(tree: unknown, key: string): unknown {
   return typeof tree === 'object' && tree !== null ? (tree as Record<string, unknown>)[key] : undefined
 }
 
-/** `pre_fix` may be a rev expression, and only a full sha can be fetched unadvertised. */
+/** `pre_fix` may be a rev expression, and one on a full sha is fetched by that sha. */
 function resolved(plan: string, url: string, rev: string): string {
   const bare = join(plan, 'resolve.git')
   rmSync(bare, { recursive: true, force: true })
   try {
     git(plan, ['clone', '--bare', '-q', url, bare])
+    const sha = /^[0-9a-f]{40}/.exec(rev)?.[0]
+    if (sha !== undefined) git(bare, ['fetch', '-q', url, sha])
     return git(bare, ['rev-parse', '--verify', `${rev}^{commit}`]).trim()
   } finally {
     rmSync(bare, { recursive: true, force: true })

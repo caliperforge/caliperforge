@@ -204,11 +204,12 @@ test('D2 D3 ruled: tail past the copy, whole if moved, else none', () => {
   expect(ruled(root, 1)).toBe('# moved\nruling\n')
 })
 
-test('a stopped build resumes: diff kept, files not re-handed', async () => {
+/** The second build's prompt, after a first build that wrote with `write` and was stopped at the wall. */
+async function resumedAfter(write: (cwd: string) => void): Promise<string> {
   const w = briefed()
   const packets: Packet[] = []
   let fired = 0
-  const inner = builds(packets, (cwd) => { writeFileSync(join(cwd, 'src/hello.ts'), 'export const hello = (): string => "hey"\n') })
+  const inner = builds(packets, write)
   const provider: Provider = {
     ...inner,
     fire: async (packet) => {
@@ -219,13 +220,25 @@ test('a stopped build resumes: diff kept, files not re-handed', async () => {
     },
   }
   for (let at = 0; at < 5 && packets.length < 2; at += 1) await tick(w.db, w.root, provider)
-  const again = packets[1]?.prompt ?? ''
+  return packets[1]?.prompt ?? ''
+}
+
+test('a stopped build resumes: diff kept, files not re-handed', async () => {
+  const again = await resumedAfter((cwd) => { writeFileSync(join(cwd, 'src/hello.ts'), 'export const hello = (): string => "hey"\n') })
   expect(again).toContain('# Your last fire stopped before it finished')
   expect(again).toContain('Not written yet: `src/bye.ts`')
   expect(again).toContain('+++ b/src/hello.ts')
   expect(again).not.toContain('# Refused — rebuild only these spans')
   expect(again).not.toContain('## src/hello.ts\n')
   expect(again).toContain('export const bye')
+})
+
+test('D4 D5 a resume summarises a file over INLINE', async () => {
+  const rows = [...Array(4000).keys()].map((i) => `row ${String(i)} ${'x'.repeat(20)}`)
+  const again = await resumedAfter((cwd) => { writeFileSync(join(cwd, 'src/data.json'), `${rows.join('\n')}\n`) })
+  expect(again).toContain('# Your last fire stopped before it finished')
+  expect(again).toMatch(/^# src\/data\.json not inlined: \d+ bytes, \+400[01] -0 lines, sha256 [0-9a-f]{64}; read it in the checkout$/m)
+  expect(rows.filter((row) => again.includes(`+${row}`))).toEqual([])
 })
 
 test('only a builder exit reads as stopped', () => {

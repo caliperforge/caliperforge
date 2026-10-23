@@ -112,6 +112,42 @@ test('a fix the scratch tree holds is refused', () => {
   expect(maybe(root, 1, 'checkout.json')).toBeNull()
 })
 
+/** A commit on c1 that only `refs/pull/1/head` reaches, served over file:// so a clone gets only advertised refs. */
+function pulled(root: string, c1: string): string {
+  const dir = join(root, 'remotes/org/fixture')
+  git(dir, ['checkout', '-qb', 'pr', c1])
+  const pr = commit(dir, 'src/pr.ts', 'export const pr = 1\n', 'pr')
+  git(dir, ['update-ref', 'refs/pull/1/head', pr])
+  git(dir, ['checkout', '-q', '-'])
+  git(dir, ['branch', '-qD', 'pr'])
+  writeFileSync(join(root, '.cf/git-base'), `file://${join(root, 'remotes')}`)
+  symlinkSync('fixture', `${dir}.git`)
+  return pr
+}
+
+test('a pre-fix sha only a pull ref reaches is fetched', () => {
+  const { root, c1, c2 } = fixture()
+  const pr = pulled(root, c1)
+  target(root, { repo: 'org/fixture', fix: c2, pre_fix: pr })
+  expect(scratch(root, benched())).toEqual({ outcome: 'pass', spans: [], note: `checkout.json written at ${pr.slice(0, 12)}` })
+  expect(git(srcDir(root, 1), ['rev-parse', 'HEAD']).trim()).toBe(pr)
+})
+
+test('a pull-only fix resolves its parent as pre-fix', () => {
+  const { root, c1 } = fixture()
+  const pr = pulled(root, c1)
+  target(root, { repo: 'org/fixture', fix: pr, pre_fix: `${pr}^` })
+  expect(scratch(root, benched())).toEqual({ outcome: 'pass', spans: [], note: `checkout.json written at ${c1.slice(0, 12)}` })
+})
+
+test('a full-sha pre-fix origin does not hold throws', () => {
+  const { root, c2 } = fixture()
+  target(root, { repo: 'org/fixture', fix: c2, pre_fix: 'f'.repeat(40) })
+  expect(() => scratch(root, benched())).toThrow()
+  expect(maybe(root, 1, 'checkout.json')).toBeNull()
+  expect(existsSync(join(planDir(root, 1), 'resolve.git'))).toBe(false)
+})
+
 test('a pre-fix file holding the finding text is refused', () => {
   const { root, c2 } = fixture(`// ${FINDING}\n`)
   target(root, { repo: 'org/fixture', fix: c2, pre_fix: `${c2}^`, finding: FINDING })

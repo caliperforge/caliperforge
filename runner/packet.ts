@@ -4,6 +4,7 @@ import { parse } from 'yaml'
 import { z } from 'zod'
 import { bare, type Packet, type Refusal } from '../providers/kind.ts'
 import { refuse } from './index.ts'
+import { inlined } from './inlined.ts'
 import { tight, WRITERS } from './rules.ts'
 
 const OUTSIDE = /(^|\/)(crypto-contributor|agents|ops|knowledge|plans|escalations)(\/|$)|(^|\/)T-[A-Z][A-Z0-9-]*\.md$/
@@ -131,11 +132,11 @@ export function assembled(root: string, name: string, manifest: Review, bench: B
     ['Greptile on this head', bench.bot],
     ['Your last verdict', bench.prior],
     ['Refusal that sent the build back', bench.refusal],
-    ['Changed since your last verdict', bench.since],
+    ['Changed since your last verdict', bench.since === undefined ? undefined : inlined(bench.since)],
     ['Paths since your last verdict', statement(bench.narrowing)],
   ]
   const tail = sections.map(([head, body]) => (body === undefined ? '' : `\n\n# ${head}\n\n${body}`)).join('')
-  const diff = (bench.since === undefined ? undefined : framed(bench.diff, MAP)) ?? bench.diff
+  const diff = (bench.since === undefined ? undefined : framed(inlined(bench.diff), MAP)) ?? inlined(bench.diff)
   const issue = bench.issue === undefined ? '' : `# Issue\n\n${bench.issue}\n\n`
   return {
     prompt: `${tight(root)}\n\n${lead}\n\n${issue}# Diff\n\n${diff}${tail}`,

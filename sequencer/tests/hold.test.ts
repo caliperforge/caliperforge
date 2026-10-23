@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { Command } from 'commander'
 import { expect, test } from 'vitest'
 import { registerLanes } from '../../cli/cf-lanes.ts'
@@ -401,6 +401,75 @@ test('D5 return --to 1 on a repeat stop logs return, not retry', () => {
   ran(db, home, ['return', '7', '--to', '1', '--by', 'coo'])
   expect(plan7(db)).toMatchObject({ step: 1 })
   expect(logged(db)).toEqual([{ kind: 'return', actor: 'coo', message: 'step 3 → 1' }])
+})
+
+function heldAt(template: string, step: number) {
+  const seed = seeded()
+  seed.db.exec(`UPDATE plans SET template = '${template}', step = ${String(step)} WHERE id = 7`)
+  hold(seed.db, seed.home, 7, 'x', new Date(), null, LATER)
+  return seed
+}
+
+function inputs(home: string, paths: string[]): void {
+  for (const path of paths) {
+    mkdirSync(dirname(join(home, '.cf/work/7', path)), { recursive: true })
+    writeFileSync(join(home, '.cf/work/7', path), 'x\n')
+  }
+}
+
+const BUILT = ['issue.md', 'step-2.handback.md', 'base.sha', 'src/.git']
+
+test('D1 return --at 3 resumes a built plan and logs why', () => {
+  const { db, home } = heldAt('pr_path', 2)
+  inputs(home, [...BUILT, 'src/built.ts'])
+  ran(db, home, ['return', '7', '--at', '3', '--why', 'w', '--by', 'coo'])
+  expect(plan7(db)).toMatchObject({ step: 3 })
+  expect(['queued', 'running']).toContain(plan7(db)?.state)
+  expect(logged(db)).toEqual([{ kind: 'return', actor: 'coo', message: 'step 2 → 3: w' }])
+  expect(isHeld(home, 7)).toBe(false)
+  expect(existsSync(join(home, '.cf/work/7/src/built.ts'))).toBe(true)
+})
+
+test.each([
+  ['bench', ['target.yml', 'generate.json', 'src/test/fizz']],
+  ['research', ['answer.md', 'sources.json']],
+])('D2 return --at 2 on a %s plan keeps its checkout', (template, paths) => {
+  const { db, home } = heldAt(template, 1)
+  inputs(home, [...paths, 'base.sha', 'src/kept.ts'])
+  ran(db, home, ['return', '7', '--at', '2', '--why', 'w', '--by', 'coo'])
+  expect(plan7(db)).toMatchObject({ step: 2 })
+  expect(logged(db)).toEqual([{ kind: 'return', actor: 'coo', message: 'step 1 → 2: w' }])
+  expect(existsSync(join(home, '.cf/work/7/src/kept.ts'))).toBe(true)
+  expect(maybe(home, 7, 'base.sha')).not.toBeNull()
+})
+
+test('D3 return --at with an input missing writes nothing', () => {
+  const { db, home } = heldAt('pr_path', 2)
+  inputs(home, BUILT.filter((path) => path !== 'step-2.handback.md'))
+  const before = plan7(db)
+  expect(() => { ran(db, home, ['return', '7', '--at', '3', '--why', 'w', '--by', 'coo']) })
+    .toThrow('plan 7 has no step-2.handback.md for step 3')
+  expect(plan7(db)).toEqual(before)
+  expect(logged(db)).toEqual([])
+  expect(isHeld(home, 7)).toBe(true)
+})
+
+test('D4 a refused return --at writes nothing', () => {
+  const { db, home } = heldAt('pr_path', 2)
+  inputs(home, BUILT)
+  const before = plan7(db)
+  const at = (...args: string[]) => () => { ran(db, home, ['return', '7', ...args, '--by', 'coo']) }
+  expect(at('--at', '3', '--why', 'w', '--to', '1')).toThrow('--at and --to cannot both be given')
+  expect(at('--at', '3')).toThrow('--at needs --why')
+  for (const step of ['1', '2', '4']) {
+    expect(at('--at', step, '--why', 'w')).toThrow(`--at takes a later step pr_path can resume at: 3, not ${step}`)
+  }
+  expect(plan7(db)).toEqual(before)
+  expect(isHeld(home, 7)).toBe(true)
+  db.exec("UPDATE plans SET state = 'running' WHERE id = 7")
+  expect(at('--at', '3', '--why', 'w')).toThrow('plan 7 is neither blocked on the ceo nor halted')
+  expect(plan7(db)).toMatchObject({ state: 'running', step: 2 })
+  expect(logged(db)).toEqual([])
 })
 
 const NOW = new Date('2026-10-04T22:00:00.000Z')

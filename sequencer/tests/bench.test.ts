@@ -744,24 +744,50 @@ test('score D3 no target or no generate.json is refused uncloned', () => {
   expect(existsSync(join(planDir(root, 1), 'fuzz-bench'))).toBe(false)
 })
 
-test('score D1 a target.yml with no files is refused uncloned', () => {
+/** `remotes/org/fixture`: a pre-fix commit and a fix touching `path`, or nothing when null, named by checkout.json with a short fix. */
+function fixedIn(root: string, path: string | null): void {
+  const dir = join(root, 'remotes/org/fixture')
+  mkdirSync(dir, { recursive: true })
+  git(dir, ['init', '-q'])
+  const preFix = commit(dir, 'README.md', '', 'pre-fix')
+  if (path === null) git(dir, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '--allow-empty', '-m', 'fix'])
+  else commit(dir, path, 'contract Vault {}\n', 'fix')
+  put(root, 1, 'checkout.json', JSON.stringify({ repo: 'org/fixture', fix: git(dir, ['rev-parse', '--short=8', 'HEAD']).trim(), pre_fix: preFix }))
+}
+
+test('score D1 D5 unlisted upstream gets the fix paths', () => {
   const { root, db } = scoring(undefined, KEYS)
-  expect(scored(db, root, planById(db, 1))).toEqual({ outcome: 'refuse', spans: ['target.yml'], note: 'target.yml has no files' })
-  expect(existsSync(join(planDir(root, 1), 'fuzz-bench'))).toBe(false)
-  expect(scores(db)).toEqual([])
-  expect(maybe(root, 1, 'score.json')).toBeNull()
+  commit(join(root, 'remotes/caliperforge/fuzz-bench'), 'targets/euler-earn-m01.yml', 'repo: euler-xyz/euler-earn\n', 'no files')
+  fixedIn(root, 'src/vault.sol')
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  const listed = `repo: euler-xyz/euler-earn\nfiles: ${FILES}\n`
+  expect(readFileSync(join(planDir(root, 1), 'fuzz-bench/targets/euler-earn-m01.yml'), 'utf8')).toBe(listed)
+  expect(get(root, 1, 'target.yml')).toBe(`${listed}target: euler-earn-m01\ngenerator: fizz\n`)
+  expect(scores(db)).toEqual([{ plan: 1, ...KEYS, ...SCORE, x_ray: null }])
+  expect(existsSync(join(planDir(root, 1), 'resolve.git'))).toBe(false)
 })
 
-test('D2 D3 files counts inline or as a block list, not empty', () => {
-  const { root, db } = scoring()
-  rmSync(join(planDir(root, 1), 'generate.json'))
-  const note = (keys: Record<string, string>): string => {
-    target(root, keys)
-    return scored(db, root, planById(db, 1)).note
+test('D2 D3 D4 upstream files kept, none derivable refused', () => {
+  const { root, db } = scoring(undefined, KEYS)
+  const upstream = (files: string, on = db) => {
+    commit(join(root, 'remotes/caliperforge/fuzz-bench'), 'targets/euler-earn-m01.yml', `repo: euler-xyz/euler-earn\nfiles: ${files}\n`, 'target')
+    return scored(on, root, planById(on, 1))
   }
-  for (const files of [FILES, 'src/vault.sol', '\n  - src/vault.sol']) expect(note({ ...KEYS, files })).toBe('generate.json is missing')
-  for (const files of ['', '[]']) expect(note({ ...KEYS, files })).toBe('target.yml has no files')
-  expect(note({ generator: 'fizz' })).toBe('target.yml has no target, files')
+  const refused = { outcome: 'refuse', spans: ['target.yml'], note: 'target.yml has no files' }
+  for (const files of ['', '[]']) expect(upstream(files)).toEqual(refused)
+  fixedIn(root, null)
+  for (const files of ['', '[]']) expect(upstream(files)).toEqual(refused)
+  expect(existsSync(join(planDir(root, 1), 'resolve.git'))).toBe(false)
+  expect(scores(db)).toEqual([])
+  expect(maybe(root, 1, 'score.json')).toBeNull()
+  for (const files of [FILES, 'src/vault.sol', '\n  - src/vault.sol']) {
+    const again = fresh(schema)
+    queued(again, 'bench', 2)
+    expect(upstream(files, again)).toMatchObject({ outcome: 'pass' })
+    expect(get(root, 1, 'target.yml')).toBe(`repo: euler-xyz/euler-earn\nfiles: ${files}\ntarget: euler-earn-m01\ngenerator: fizz\n`)
+  }
+  target(root, { generator: 'fizz' })
+  expect(scored(db, root, planById(db, 1)).note).toBe('target.yml has no target')
 })
 
 test('D3 house_generator generates and is scored under its name', async () => {

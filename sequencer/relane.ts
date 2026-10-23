@@ -1,8 +1,10 @@
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
-import { backOn, enable } from '../store/lanes.ts'
+import { backOn } from '../store/back-on.ts'
+import { enable } from '../store/lanes.ts'
 
-/** Switches back on each lane settle turned off once the fix the director filed for its stop has landed. */
+/** Switches back on each lane settle turned off once a fix for its stop has landed: the one the director
+ * filed, or one whose title names a plan refused alike. */
 export function relane(db: Db): void {
   for (const row of backOn(db)) {
     const sha = (row.evidence.split('/').pop() ?? '').slice(0, 12)

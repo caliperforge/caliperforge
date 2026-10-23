@@ -1,10 +1,11 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test, vi } from 'vitest'
+import { executed } from '../command.ts'
 import { tick } from '../index.ts'
 import { diffOf, maybe, put, SELF } from '../workspace.ts'
 import { logged, ofKind, runRows } from '../../store/events.ts'
-import { dropPlan } from '../../store/plans.ts'
+import { dropPlan, planById } from '../../store/plans.ts'
 import { CARRIED, internalPlan, ours, plan, stub, watched, world, type World } from './world.ts'
 
 const { gh, run } = vi.hoisted(() => ({ gh: vi.fn(), run: vi.fn() }))
@@ -88,14 +89,18 @@ test('D3: a tool line the ask lacks is refused and not run', async () => {
   expect(existsSync(join(w.root, '.cf/echo'))).toBe(false)
 })
 
-test.each([
-  'node tools/echo/run.ts https://example.test --out .cf/other/x',
-  'node tools/echo/run.ts https://example.test --out .cf/echo/../x',
-  'node tools/echo/run.ts ftp://example.test --out .cf/echo/example.test',
-  `${ECHO} --force`,
-])('D4: %s is off the allow-list', async (line) => {
-  const w = await commanding(line, echo(WRITES, `Run \`${line}\`\n`))
-  expect(maybe(w.root, ID, 'refusal.md')).toContain(`${line} is not on the allow-list`)
+test('D4: an --out, url or extra word off the pattern is refused', () => {
+  const w = world()
+  internalPlan(w.db, w.root, ID, 'misfiled', 7)
+  for (const line of [
+    'node tools/echo/run.ts https://example.test --out .cf/other/x',
+    'node tools/echo/run.ts https://example.test --out .cf/echo/../x',
+    'node tools/echo/run.ts ftp://example.test --out .cf/echo/example.test',
+    `${ECHO} --force`,
+  ]) {
+    echo(WRITES, `Run \`${line}\`\n`)(w)
+    expect(executed(w.db, w.root, planById(w.db, ID), line)).toMatchObject({ outcome: 'refuse', note: `${line} is not on the allow-list` })
+  }
   expect(['echo', 'other', 'x'].filter((dir) => existsSync(join(w.root, '.cf', dir)))).toEqual([])
 })
 

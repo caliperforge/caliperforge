@@ -124,5 +124,5 @@ function foreign(text: string, ours: string, ref: Text['issue_ref']): boolean {
 }
 
 export function shell(args: string[]): string {
-  return execFileSync('gh', args, { encoding: 'utf8' })
+  return execFileSync('gh', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
 }

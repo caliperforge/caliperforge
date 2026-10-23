@@ -79,7 +79,7 @@ test('D2 after a build the answer sits above ## Standing; rebuilds', async () =>
   expect(got.state).toMatchObject({ step: 2 })
 })
 
-test('D3 an answer naming another job folder is written', async () => {
+test('D2 an answer naming another job folder is written', async () => {
   const got = await fixed(3, answered('see .cf/work/354/ask.md'))
   expect(got.ask).toBe('the ask\n')
   expect(got.issue).toContain('\n\nsee .cf/work/354/ask.md\n\n## Standing\n')

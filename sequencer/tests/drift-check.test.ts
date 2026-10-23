@@ -37,7 +37,7 @@ test('fresh', () => {
     'ratchet_refuse', 'intake', 'stuck_plans', 'science_pull', 'director_look', 'typescript_specialist',
     'daily_learnings', 'review_examples', 'director_fix_reach', 'tick_deps', 'watch', 'director_widen', 'target_parked_once', 'director_ceiling',
     'close_landed', 'handback_not_done', 'ruling_files', 'needs_ceo_actor', 'build_cap', 'ready_proof_stuck', 'card_facts',
-    'director_findings', 'director_rule_dropped', 'rule_to_build', 'blind_review', 'drift_recovered', 'drift_refile', 'capture_swallowed_once', 'design_lead', 'daily_live', 'paydesk_live', 'site_data', 'site_pipe', 'lane_back_on', 'house_generator', 'design_on_main', 'earth_lodge_site', 'site_push', 'director_design_waive', 'gpg_lock_hold', 'bench_no_properties', 'fork_actions_off', 'director_repeat_return', 'fork_unrun', 'refile_carries', 'offline_hold', 'research_quote_text', 'research_moving_ref', 'ruling_unmoved', 'director_to_fixer', 'return_at', 'bench_score_hold', 'director_close_unbuilt', 'waits_closed_released'])
+    'director_findings', 'director_rule_dropped', 'rule_to_build', 'blind_review', 'drift_recovered', 'drift_refile', 'capture_swallowed_once', 'design_lead', 'daily_live', 'paydesk_live', 'site_data', 'site_pipe', 'lane_back_on', 'house_generator', 'design_on_main', 'earth_lodge_site', 'site_push', 'director_design_waive', 'gpg_lock_hold', 'bench_no_properties', 'fork_actions_off', 'director_repeat_return', 'fork_unrun', 'refile_carries', 'offline_hold', 'research_quote_text', 'research_moving_ref', 'ruling_unmoved', 'director_to_fixer', 'research_pinned', 'return_at', 'bench_score_hold', 'director_close_unbuilt', 'waits_closed_released', 'mended_by_commit'])
   expect(drift(d, REGISTRY, NOW).map((r) => r.name)).not.toContain('build_cap')
   expect(drift(d, REGISTRY, NOW).map((r) => r.name)).not.toContain('site_pipe')
   expect(drift(d, REGISTRY, NOW).map((r) => r.name)).not.toContain('director_widen')
@@ -160,6 +160,23 @@ test('D5 a research.moving_ref refusal is seen', () => {
   expect(drift(d, moving, new Date())).toEqual([])
   refused(d, { plan: 1, step: 1, fingerprint: fingerprint(1, ['research.moving_ref']), diff: null, span: 'research.moving_ref' })
   expect(drift(d, moving, new Date()).map((r) => r.state)).toEqual(['seen'])
+  logged(d, { plan: 1, kind: 'research.unpinned', actor: 'tick', outcome: 'pass', message: 'm', pointer: null, run: null })
+  expect(drift(d, moving, new Date())).toEqual([])
+})
+
+test('D3 D4 research_pinned reads silent, stale and off', () => {
+  const pinned = REGISTRY.filter((e) => e.name === 'research_pinned')
+  const states = (at: string | null): string[] => {
+    const d = db()
+    if (at !== null) logged(d, { plan: 1, kind: 'research.pinned', actor: 'tick', outcome: 'pass', message: 'm', pointer: null, run: null }, at)
+    return drift(d, pinned, NOW).map((r) => r.state)
+  }
+  expect(states(null)).toEqual(['silent'])
+  expect(states('2026-10-02 10:00:00')).toEqual([])
+  expect(states('2026-09-20 10:00:00')).toEqual(['stale'])
+  const d = db()
+  d.exec("DELETE FROM settings WHERE key = 'science.dir'")
+  expect(drift(d, pinned, NOW).map((r) => r.state)).toEqual(['off'])
 })
 
 test('D2 a second swallowed before a back is seen', () => {

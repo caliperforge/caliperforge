@@ -283,7 +283,7 @@ function repeated(root: string, plan: PlanRow, step: Step): boolean {
 function digests(root: string, plan: PlanRow, step: Step): { diff: string | null; ticket: string } {
   return {
     diff: step.step >= 3 ? digestOf(plan.template === 'comms' ? subject(root, plan.id)[1] ?? '' : diffOf(root, plan.id)) : null,
-    ticket: digestOf(`${maybe(root, plan.id, 'issue.md') ?? ''}${ruled(root, plan.id) ?? ''}${maybe(root, plan.id, 'rulings.md') ?? ''}`),
+    ticket: digestOf(`${maybe(root, plan.id, 'issue.md') ?? maybe(root, plan.id, 'ask.md') ?? ''}${ruled(root, plan.id) ?? ''}${maybe(root, plan.id, 'rulings.md') ?? ''}`),
   }
 }
 

@@ -151,7 +151,7 @@ export function fetchMain(dir: string): string {
 }
 
 /** The fork branch `checkout` wrote as the clone's `cf.base`; git throws on an unset key. */
-function assembled(dir: string): string | null {
+export function assembled(dir: string): string | null {
   return tried(dir, ['config', 'cf.base'])?.trim() ?? null
 }
 

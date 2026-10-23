@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { fresh } from '../../../checks/sqlite.ts'
@@ -6,7 +7,7 @@ import { planRow } from '../../../runner/index.ts'
 import { load } from '../../../runner/rules.ts'
 import { verdictRows } from '../../../store/verdict.ts'
 import { record } from '../../record.ts'
-import { ciGreen, type Gh, type Head } from '../index.ts'
+import { ciGreen, type Gh, type Head, shell } from '../index.ts'
 
 const root = join(import.meta.dirname, '../../..')
 const head: Head = { fork: 'caliperforge/caliperforge', branch: 'p4-rails', sha: '9f2c1ab' }
@@ -101,4 +102,21 @@ test('judges Kotlin CI alone', () => {
     { headSha: '9f2c1ab', status: 'completed', conclusion: 'failure', url: 'f', workflowName: 'Fork Live Gate' },
   ])
   expect(ciGreen(head, { body: '', commits: [] }, KOTLIN, () => runs).spans).toEqual([])
+})
+
+function onPath<T>(script: string, body: () => T): T {
+  const bin = mkdtempSync(join(tmpdir(), 'cf-bin-'))
+  writeFileSync(join(bin, 'gh'), `#!/bin/sh\n${script}\n`, { mode: 0o755 })
+  const path = process.env.PATH
+  process.env.PATH = `${bin}:${path ?? ''}`
+  try { return body() } finally { process.env.PATH = path }
+}
+
+test('D3 shell returns a 2 MiB reply', () => {
+  const large = `printf '"'; head -c 2097152 /dev/zero | tr '\\0' a; printf '"'`
+  expect(onPath(large, () => shell(['x']))).toHaveLength(2097154)
+})
+
+test('D4 shell still throws when gh exits 1', () => {
+  expect(() => onPath('exit 1', () => shell(['x']))).toThrow()
 })

@@ -1,5 +1,8 @@
+import { mkdtempSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { expect, test } from 'vitest'
-import { actions, dispatch, fileIssue, forward, installed, openPr, rehearse, type Read, type Run } from '../gh.ts'
+import { actions, dispatch, fileIssue, forward, gh, installed, openPr, rehearse, run, type Read, type Run } from '../gh.ts'
 
 const FORK = 'caliperforge/widget'
 const BRANCH = 'widget-12-a1-next'
@@ -222,4 +225,26 @@ test('D4 no labels files with no --label', () => {
   const calls: Call[] = []
   fileIssue(FORK, 'Part 1', 'b', [], filer(calls))
   expect(calls).toEqual([[ISSUE, 'b']])
+})
+
+const LARGE = `printf '"'; head -c 2097152 /dev/zero | tr '\\0' a; printf '"'`
+
+function onPath<T>(script: string, body: () => T): T {
+  const bin = mkdtempSync(join(tmpdir(), 'cf-bin-'))
+  writeFileSync(join(bin, 'gh'), `#!/bin/sh\n${script}\n`, { mode: 0o755 })
+  const path = process.env.PATH
+  process.env.PATH = `${bin}:${path ?? ''}`
+  try { return body() } finally { process.env.PATH = path }
+}
+
+test('D1 gh parses a 2 MiB reply', () => {
+  expect(onPath(LARGE, () => gh(['x']))).toHaveLength(2097152)
+})
+
+test('D2 run returns a 2 MiB reply untrimmed', () => {
+  expect(onPath(LARGE, () => run(['x']))).toHaveLength(2097154)
+})
+
+test('D4 gh still throws when gh exits 1', () => {
+  expect(() => onPath('exit 1', () => gh(['x']))).toThrow()
 })

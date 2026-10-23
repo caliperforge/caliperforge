@@ -3,7 +3,7 @@ import { addFinding, closeFinding, findings } from '../../store/drift.ts'
 import { logged } from '../../store/events.ts'
 import type { Db } from '../../store/index.ts'
 import { drift, due } from '../drift.ts'
-import { db, REGISTRY, unread } from './drifting.ts'
+import { db, none, REGISTRY, unread } from './drifting.ts'
 
 const REACH = REGISTRY.filter((e) => e.name === 'director_fix_reach')
 const REFILE = REGISTRY.filter((e) => e.name === 'drift_refile')
@@ -17,11 +17,11 @@ function failed(d: Db, at: string): void {
 test('D1-D2 a fixed seen finding waits for newer evidence', () => {
   const d = db()
   failed(d, '2026-10-05 10:00:00')
-  expect(due(d, REACH, day('08'), unread)).toEqual([1])
+  expect(due(d, REACH, day('08'), unread, none)).toEqual([1])
   closeFinding(d, 1, 'fixed', 'reach widened', null, day('09'))
-  expect(due(d, REACH, day('10'), unread)).toEqual([])
+  expect(due(d, REACH, day('10'), unread, none)).toEqual([])
   failed(d, '2026-10-10 12:00:00')
-  expect(due(d, REACH, day('11'), unread)).toEqual([2])
+  expect(due(d, REACH, day('11'), unread, none)).toEqual([2])
 })
 
 test('D1 a fixed seen finding is not refiled on the same detail', () => {
@@ -30,18 +30,18 @@ test('D1 a fixed seen finding is not refiled on the same detail', () => {
   const detail = 'newest events.at is 2026-10-05 10:00:00, within 7d; expected none'
   addFinding(d, { name: 'director_fix_reach', state: 'seen', detail }, day('03'))
   closeFinding(d, 1, 'fixed', 'reach widened', null, day('04'))
-  expect(due(d, REACH, day('08'), unread)).toEqual([])
+  expect(due(d, REACH, day('08'), unread, none)).toEqual([])
   expect(findings(d)).toHaveLength(1)
   expect(drift(d, REFILE, day('08'))).toEqual([])
 })
 
 test('D3 a covered finding waits while its plan is open', () => {
   const d = db()
-  expect(due(d, DESK, day('03'), unread)).toEqual([1])
+  expect(due(d, DESK, day('03'), unread, none)).toEqual([1])
   closeFinding(d, 1, 'covered', 'ticketed', 'https://github.com/a/b/issues/1', day('04'))
-  expect(due(d, DESK, day('05'), unread)).toEqual([])
+  expect(due(d, DESK, day('05'), unread, none)).toEqual([])
   d.exec("UPDATE plans SET state = 'done' WHERE id = 1")
-  expect(due(d, DESK, day('06'), unread)).toEqual([2])
+  expect(due(d, DESK, day('06'), unread, none)).toEqual([2])
 })
 
 test('D5 drift_refile sees a repeat after fixed, not covered', () => {

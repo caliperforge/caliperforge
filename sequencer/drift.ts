@@ -1,7 +1,7 @@
 import { join } from 'node:path'
 import { parse } from 'yaml'
 import { z } from 'zod'
-import type { Pr } from '../cli/gh.ts'
+import { gh, outside, type Pr, type Read } from '../cli/gh.ts'
 import { fill } from '../cli/record.ts'
 import { addFinding, answered, closeFinding, holds, newest, setting, stalled, unclosed, worked } from '../store/drift.ts'
 import { logged, returns } from '../store/events.ts'
@@ -9,7 +9,6 @@ import type { Db } from '../store/index.ts'
 import { get, hhmm, set, zone } from '../store/lanes.ts'
 import { holder } from '../store/leases.ts'
 import { needsCeo, openPipes, planById, rewind } from '../store/plans.ts'
-import { repos } from '../store/record.ts'
 import { registry } from './registry.ts'
 import { HELD } from './settle.ts'
 import { cloned, conflicted, drop, maybe, planDir, put, snapshot } from './workspace.ts'
@@ -141,12 +140,12 @@ function why(db: Db, { switch: wanted, table, column, where }: Entry, state: Dri
   return `recovered: newest ${table}.${column} is ${String(last.newest)}`
 }
 
-export function due(db: Db, registry: Entry[], now: Date, read: (repo: string, no: number) => Pr): number[] {
+export function due(db: Db, registry: Entry[], now: Date, read: (repo: string, no: number) => Pr, search: Read = gh): number[] {
   if (hhmm(db, now) < '05:30') return []
   const day = new Date(now.getTime() + zone(db) * 60000).toISOString().slice(0, 10)
   if (day <= get(db, 'drift.at')) return []
   set(db, 'drift.at', day, 'pr', now.toISOString())
-  for (const repo of repos(db)) fill(db, repo, read)
+  fill(db, null, read, outside(search))
   const drifted = drift(db, registry, now)
   const added = recorded(db, drifted, now)
   recovered(db, registry, drifted, now)

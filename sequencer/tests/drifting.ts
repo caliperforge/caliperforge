@@ -1,6 +1,6 @@
 import { join } from 'node:path'
 import { fresh } from '../../checks/sqlite.ts'
-import type { Pr } from '../../cli/gh.ts'
+import type { Pr, Read } from '../../cli/gh.ts'
 import { listed } from '../../store/files.ts'
 import type { Db } from '../../store/index.ts'
 import { mechanisms } from '../drift.ts'
@@ -42,3 +42,5 @@ export function queue(d: Db, priority: number): void {
 }
 
 export const unread = (): Pr => { throw new Error('read') }
+
+export const none: Read = () => []

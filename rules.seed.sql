@@ -90,6 +90,7 @@ VALUES
   ('rules/registry/76-director_close_unbuilt.yaml', 'card', 'rules/registry/76-director_close_unbuilt.yaml', '000894af8e9f2c56fce595ba32242d728dfd8e4b92cb27620723c52ec80d838a', '2026-10-23'),
   ('rules/registry/77-waits_closed_released.yaml', 'card', 'rules/registry/77-waits_closed_released.yaml', 'f7ef1100b7d7cdd017397719a0aff39879bbc7eda1ebf3bfe49a76ea42918e04', '2026-10-23'),
   ('rules/registry/78-mended_by_commit.yaml', 'card', 'rules/registry/78-mended_by_commit.yaml', '12a9a67239839220feb3cacddfbbe0bd7bb5720d008fff880ac49945bcf97ac8', '2026-10-23'),
+  ('rules/registry/79-outside_records.yaml', 'card', 'rules/registry/79-outside_records.yaml', '39693d035e7c5ef67f77cad18ae07deecbc7928ccaae551ada573cf2c5424752', '2026-10-23'),
   ('rules/repo-classes.yaml', 'card', 'rules/repo-classes.yaml', 'deaf34870d419639a3eda3e17120eb257ee7b8549ed429bf431c1e6f623a29cb', '2026-10-16'),
   ('rules/staffing.yaml', 'card', 'rules/staffing.yaml', 'aa91207f2660fe1f31421d100b3118981715abc9ed8e1381a6d2962c464d0d36', '2026-10-05'),
   ('completion-audit', 'rail', 'rules/rails.yaml', 'b46b445806d399b61887a5259eb0a6893444efcbe5acf2e6dd534507bc0882f3', '2026-09-17'),

@@ -28,15 +28,6 @@ export function spendOf(db: Db, plan: number): Spend {
     coalesce(sum(cost_computed_usd), 0) AS usd FROM runs WHERE plan = ?`).get(plan) as Spend
 }
 
-export function repos(db: Db): string[] {
-  return (db.prepare(`SELECT DISTINCT t.repo
-    FROM deliverables d JOIN plans p ON p.id = d.plan_id JOIN targets t ON t.id = p.target_id
-    WHERE d.state = 'pushed' AND d.evidence GLOB 'https://*/pull/*'
-    UNION
-    SELECT t.repo FROM plans p JOIN targets t ON t.id = p.target_id WHERE t.evidence GLOB 'https://*/pull/*'
-    ORDER BY repo`).all() as { repo: string }[]).map((r) => r.repo)
-}
-
 export function addRecord(db: Db, row: { repo: string; pr: number; plan: number; url: string; state: string; merged_at: string | null;
   read_at: string }): void {
   db.prepare(`INSERT INTO records (repo, pr, plan, url, state, merged_at, read_at)

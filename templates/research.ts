@@ -17,7 +17,7 @@ import type { Db } from '../store/index.ts'
 import { get as setting, observed, wall } from '../store/lanes.ts'
 import { originRef, type PlanRow } from '../store/plans.ts'
 import { refusalRows } from '../store/refusals.ts'
-import { lastTranscript } from '../store/runs.ts'
+import { transcripts } from '../store/runs.ts'
 import { byRun, outputs, pending } from '../store/transcript.ts'
 import { DEFAULT_BUILDER, type Step } from './pr-path.ts'
 import { verified, type Ran } from './verified.ts'
@@ -181,7 +181,7 @@ export async function gather(db: Db, root: string, plan: PlanRow, step: Step, pr
   const reply = fromDraft ? readFileSync(draft, 'utf8') : fired.text
   const sources = sourced(root, plan, reply)
   if (sources.outcome === 'refuse') return sources
-  if (measure) put(root, plan.id, 'runs.json', JSON.stringify(outputs(lastTranscript(db, plan.id, step.step))))
+  if (measure) put(root, plan.id, 'runs.json', JSON.stringify(transcripts(db, plan.id, step.step).flatMap(outputs)))
   put(root, plan.id, 'answer.md', reply.replace(FENCE, '').trim())
   return { outcome: 'pass', spans: [], note: `${seat.runs}: answer.md written${fromDraft ? ' from .cf/draft.md, the reply had no fence' : ''}, ${sources.note}` }
 }

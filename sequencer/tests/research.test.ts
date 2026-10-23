@@ -546,10 +546,12 @@ const MEASURE = `${ASK}**Measure:** time the cold start\n`
 
 const RUN = 'uv run bench.py'
 
-const TRANSCRIPT = [
-  { type: 'assistant', message: { content: [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: RUN } }] } },
-  { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 't1', content: [{ type: 'text', text: 'cold start:\n  41 ms' }] }] } },
+const bashed = (command: string, text: string): string => [
+  { type: 'assistant', message: { content: [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command } }] } },
+  { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 't1', content: [{ type: 'text', text }] }] } },
 ].map((line) => `${JSON.stringify(line)}\n`).join('')
+
+const TRANSCRIPT = bashed(RUN, 'cold start:\n  41 ms')
 
 const entry = (commit: string, quote = 'cold start: 41 ms'): string =>
   `  - run:\n      command: ${RUN}\n      commit: ${commit}\n      quote: ${quote}\n      claim: Cold start is 41 ms\n`
@@ -558,15 +560,15 @@ const LINKED = '  - url: https://a.example/doc\n    fetched_at: 2026-10-04T10:00
 
 const fence = (...entries: string[]): string => `Cold start is 41 ms [source:1].${SECTIONS}\n\n---\nsources:\n${entries.join('')}---\n`
 
-/** The measurer or fetcher answers `reply` and leaves TRANSCRIPT behind; every other seat answers PASS. */
-const measuring = (reply: string, seen: (packet: Packet) => void): Provider => ({
+/** The measurer or fetcher answers `reply` and leaves `transcript` behind; every other seat answers PASS. */
+const measuring = (reply: string, seen: (packet: Packet) => void, transcript = TRANSCRIPT): Provider => ({
   name: 'claude-agent-sdk',
   fire: async (packet) => {
     seen(packet)
     const measurer = /# (?:measurer|fetcher)\n/.test(packet.prompt)
     const text = measurer ? reply : PASS
     const fired = await stub(text, 0, text).fire(packet)
-    if (measurer) writeFileSync(packet.transcript, TRANSCRIPT)
+    if (measurer) writeFileSync(packet.transcript, transcript)
     return fired
   },
 })
@@ -590,6 +592,28 @@ test('measure D1: a Measure line fires measurer with HEAD', async () => {
   expect(idle).toBeUndefined()
   expect(ran(w)).toEqual(['measurer'])
   expect(JSON.parse(maybe(w.root, 1, 'runs.json') ?? '')).toEqual([{ command: RUN, output: 'cold start:\n  41 ms' }])
+})
+
+const UNBASHED = `${JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'Kept the rest.' }] } })}\n`
+
+const regathered = async (...left: string[]): Promise<unknown> => {
+  const w = researching(MEASURE)
+  const head = headed(w)
+  question(w.root, plan(w.db, 1))
+  for (const transcript of left) {
+    expect(await gather(w.db, w.root, plan(w.db, 1), mapOf('research').at(1), measuring(fence(entry(head)), () => undefined, transcript)))
+      .toMatchObject({ outcome: 'pass' })
+  }
+  return JSON.parse(maybe(w.root, 1, 'runs.json') ?? '')
+}
+
+test('runs D1: a repair run with no Bash call keeps earlier runs', async () => {
+  expect(await regathered(TRANSCRIPT, UNBASHED)).toEqual([{ command: RUN, output: 'cold start:\n  41 ms' }])
+})
+
+test('runs D2: runs.json holds every run, oldest first', async () => {
+  expect(await regathered(TRANSCRIPT, bashed('uv run warm.py', 'warm start:\n  9 ms')))
+    .toEqual([{ command: RUN, output: 'cold start:\n  41 ms' }, { command: 'uv run warm.py', output: 'warm start:\n  9 ms' }])
 })
 
 test('measure D1: an ask with no Measure line fires researcher', async () => {

@@ -3,14 +3,15 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
+import { OPERATOR } from '../../sequencer/workspace.ts'
 import { gates } from '../../store/approvals.ts'
 import { pushedRow } from '../../store/deliverables.ts'
 import { addRule, type Db } from '../../store/index.ts'
-import { recordsOf, repos } from '../../store/record.ts'
+import { openRecords, recordsOf, repos } from '../../store/record.ts'
 import { setEvidence } from '../../store/targets.ts'
 import { adopt } from '../adopt.ts'
-import type { Pr } from '../gh.ts'
-import { fill, render, still } from '../record.ts'
+import { outside, WINDOW, type Outside, type Pr } from '../gh.ts'
+import { fill, render, renderOpen, still } from '../record.ts'
 
 const schema = join(import.meta.dirname, '../../schema')
 
@@ -138,6 +139,64 @@ test('D4: repos lists each repo once, not an issue-only one', () => {
   adopted(db, d, OTHER, 5)
   db.exec(`UPDATE targets SET evidence = 'https://github.com/${OTHER}/issues/5' WHERE repo = '${OTHER}'`)
   expect(repos(db)).toEqual([REPO])
+})
+
+const SURFPOOL = 'solana-foundation/surfpool'
+
+const NOW = new Date(`${TODAY}T12:00:00Z`)
+
+const hit = (repo: string, no: number, title = 't'): Outside =>
+  ({ repository: { nameWithOwner: repo }, number: no, title, createdAt: '2026-09-08T00:00:00Z' })
+
+test('D1: a searched PR with no plan is stored with plan NULL', () => {
+  const db = fresh(schema)
+  const rows = fill(db, null, (repo, no) => view(repo, no), [hit(SURFPOOL, 827, 'Add a cheatcode')])
+  expect(rows.map((r) => [r.repo, r.pr, r.plan])).toEqual([[SURFPOOL, 827, null]])
+  expect(renderOpen(rows, NOW)).toBe(`${SURFPOOL}\t#827\tAdd a cheatcode\t10d\t-\n`)
+})
+
+test('D2: a searched PR a plan links keeps that plan', () => {
+  const db = fresh(schema)
+  const plan = adopted(db, dir(), REPO, 282)
+  const rows = fill(db, REPO, (repo, no) => view(repo, no), [hit(REPO, 282)])
+  expect(rows.map((r) => [r.pr, r.plan])).toEqual([[282, plan]])
+})
+
+test('D3: outside searches @me, excluding our own org', () => {
+  const asked: string[][] = []
+  outside((args) => {
+    asked.push(args)
+    return []
+  })
+  const args = asked[0] ?? []
+  expect(args.slice(0, 4)).toEqual(['search', 'prs', '--author', '@me'])
+  expect(args.slice(-2)).toEqual(['--', '-org:caliperforge'])
+  expect(args.join(' ')).not.toContain(OPERATOR)
+})
+
+test('D4: a search at the cap throws and no row is written', () => {
+  const db = fresh(schema)
+  const full = [...Array(WINDOW).keys()].map((i) => hit(SURFPOOL, i + 1))
+  expect(() => fill(db, null, (repo, no) => view(repo, no), outside(() => full))).toThrow('cap of 100')
+  expect(openRecords(db, null)).toEqual([])
+})
+
+test('D5: a stored open PR the search dropped is read till merged', () => {
+  const db = fresh(schema)
+  fill(db, null, (repo, no) => view(repo, no), [hit(SURFPOOL, 827)])
+  const rows = fill(db, null, (repo, no) => view(repo, no, { state: 'MERGED', mergedAt: `${TODAY}T10:00:00Z` }))
+  expect(renderOpen(rows, NOW)).toBe('')
+  expect(recordsOf(db, SURFPOOL).map((r) => [r.state, r.title])).toEqual([['MERGED', 't']])
+})
+
+test('D6: no repo lists open rows across repos; a repo counts them', () => {
+  const db = fresh(schema)
+  const found = [hit(SURFPOOL, 827), hit(OTHER, 5)]
+  const rows = fill(db, null, (repo, no) => view(repo, no), found)
+  expect(rows.map((r) => `${r.repo}#${String(r.pr)}`)).toEqual([`${OTHER}#5`, `${SURFPOOL}#827`])
+  const one = fresh(schema)
+  fill(one, SURFPOOL, (repo, no) => view(repo, no), found)
+  expect([still(one, SURFPOOL), recordsOf(one, OTHER)]).toEqual([1, []])
 })
 
 test('a repo that is not owner/repo is refused before gh is read', () => {

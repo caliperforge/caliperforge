@@ -210,6 +210,40 @@ test('D2: a ruling beside an ask with no wrong-if still refuses', async () => {
   expect(plan(w.db, 1).step).toBe(0)
 })
 
+const PARENT = '## Parent ticket\n\n**Question:** parent q\n**Would be wrong if:** parent w\n**Done when:** parent d\n'
+
+const OLDER = `# a part\n\n**What:** part q\n**Why:** y\n**When it ends:** part d\n\n${PARENT}`
+
+const OWN = { question: 'part q', wrong_if: 'it leaves out what this part asks, or answers what its parent ticket asks', done_when: 'part d' }
+
+const FILLED = 'question.json written, filled for a part: '
+  + '**Question:** from **What:**, **Would be wrong if:** from the fixed part sentence, **Done when:** from **When it ends:**'
+
+test('part D1: an older part\'s question.json is its own', () => {
+  const w = researching(OLDER)
+  expect(question(w.root, plan(w.db, 1))).toEqual({ outcome: 'pass', spans: [], note: FILLED })
+  const json = maybe(w.root, 1, 'question.json') ?? ''
+  expect(JSON.parse(json)).toEqual(OWN)
+  for (const parent of ['parent q', 'parent w', 'parent d']) expect(json).not.toContain(parent)
+})
+
+test('part D2: gather rewrites a stale parent question.json', async () => {
+  const w = researching(OLDER)
+  put(w.root, 1, 'question.json', JSON.stringify({ question: 'parent q', wrong_if: 'parent w', done_when: 'parent d' }))
+  const [outcome, prompt] = await gathered(w)
+  expect(outcome.note).toBe(`${FILLED}; researcher: answer.md written, sources.json written with 1 source(s)`)
+  expect(JSON.parse(maybe(w.root, 1, 'question.json') ?? '')).toEqual(OWN)
+  expect(prompt).toContain(`# question.json\n\n${JSON.stringify(OWN)}`)
+})
+
+test('part D3: a parent-only Question is refused, unfired', async () => {
+  const w = researching(`# a part\n\n**When it ends:** part d\n\n${PARENT}`)
+  const refusal = { outcome: 'refuse', spans: ['ask.md'], note: 'ask.md has no **Question:** line' }
+  expect(question(w.root, plan(w.db, 1))).toEqual(refusal)
+  expect((await gathered(w))[0]).toEqual(refusal)
+  expect(ran(w)).toEqual([])
+})
+
 test('D3: an unquoted source is refused at gather', async () => {
   const w = researching()
   question(w.root, plan(w.db, 1))
@@ -432,6 +466,23 @@ test('record D5: a plan with no origin closes nothing', () => {
   const { w, log, wire } = reviewed()
   record(w.db, w.root, plan(w.db, 1), wire)
   expect(log).toEqual([])
+})
+
+test('record D6: a ruling-only issue.md takes the ask.md title', () => {
+  const { w, wire } = reviewed()
+  put(w.root, 1, 'issue.md', RULING)
+  expect(record(w.db, w.root, plan(w.db, 1), wire)).toMatchObject({ outcome: 'pass' })
+  expect(readdirSync(findings(w))).toEqual([named])
+  expect(posts(w.db)[0]?.title).toBe('The cap')
+})
+
+test('record D6: no # in ask.md or a ruling issue.md refuses', () => {
+  const { w, wire } = reviewed()
+  put(w.root, 1, 'ask.md', ASK.replace('# The cap\n', ''))
+  put(w.root, 1, 'issue.md', RULING)
+  expect(record(w.db, w.root, plan(w.db, 1), wire)).toEqual({ outcome: 'refuse', spans: ['ask.md'], note: 'ask.md has no # title' })
+  expect(existsSync(findings(w))).toBe(false)
+  expect(posts(w.db)).toEqual([])
 })
 
 test('check D6: an unsourced Still unknown sentence passes', async () => {

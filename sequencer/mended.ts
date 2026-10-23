@@ -1,5 +1,6 @@
 import { z } from 'zod'
-import { WINDOW, type Read } from '../cli/gh.ts'
+import { trunk, WINDOW, type Read } from '../cli/gh.ts'
+import { approvedRow, landedRow } from '../store/deliverables.ts'
 import { eventsOf, logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { end, originRef, type PlanRow } from '../store/plans.ts'
@@ -15,7 +16,9 @@ const Merged = z.array(z.object({ url: z.string(), title: z.string(), body: z.st
 
 const Pull = z.object({ url: z.string(), mergedAt: z.string().nullable() })
 
-/** A queued plan whose closed issue a merged pull request fixed by hand is done; an open issue or a read that throws leaves it queued. */
+const Closes = z.array(z.looseObject({ event: z.string(), commit_id: z.string().nullish() }))
+
+/** A queued plan whose closed issue a merged pull request or a commit on main fixed by hand is done; an open issue or a read that throws leaves it queued. */
 export function mended(db: Db, plan: PlanRow, read: Read, lines: string[]): void {
   try {
     const ref = originRef(plan)
@@ -24,12 +27,16 @@ export function mended(db: Db, plan: PlanRow, read: Read, lines: string[]): void
       raced(db, plan, lines)
       return
     }
-    const url = ref === null || issue === null ? null : fix(issue, ref, read)
+    const pulled = ref === null || issue === null ? null : fix(issue, ref, read)
+    const landed = pulled === null && ref !== null ? commit(ref, read) : null
+    const url = pulled ?? landed
     if (url === null) {
       end(db, plan.id, 'halted', `${plan.origin ?? ''} is closed or has lost its lane label`)
       return
     }
     end(db, plan.id, 'done')
+    const approved = landed === null ? null : approvedRow(db, plan.id)
+    if (approved !== null) landedRow(db, approved, url)
     logged(db, { plan: plan.id, kind: 'close', actor: 'tick', outcome: 'pass', message: `fixed by ${url}`, pointer: url, run: null })
   } catch (error) {
     logged(db, { plan: plan.id, kind: 'swallowed', actor: 'halt', outcome: 'pass', message: firstLine(error), pointer: plan.origin, run: null })
@@ -54,4 +61,12 @@ function fix(issue: z.infer<typeof Thread>, { repo, no }: { repo: string; no: nu
   if (named === undefined) return null
   const view = Pull.parse(read(['pr', 'view', named, '--repo', repo, '--json', 'url,mergedAt']))
   return view.mergedAt === null ? null : view.url
+}
+
+function commit({ repo, no }: { repo: string; no: number }, read: Read): string | null {
+  const events = Closes.parse(read(['api', `repos/${repo}/issues/${String(no)}/events?per_page=100`]))
+  const sha = events.findLast((e) => e.event === 'closed')?.commit_id ?? null
+  if (sha === null) return null
+  const { status } = z.object({ status: z.string() }).parse(read(['api', `repos/${repo}/compare/${trunk(repo, read)}...${sha}`]))
+  return status === 'behind' || status === 'identical' ? `https://github.com/${repo}/commit/${sha}` : null
 }

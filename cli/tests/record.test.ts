@@ -10,7 +10,7 @@ import { addRule, type Db } from '../../store/index.ts'
 import { openRecords, recordsOf, repos } from '../../store/record.ts'
 import { setEvidence } from '../../store/targets.ts'
 import { adopt } from '../adopt.ts'
-import { outside, WINDOW, type Outside, type Pr } from '../gh.ts'
+import { outside, standing, WINDOW, type Outside, type Pr, type Read, type Standing } from '../gh.ts'
 import { fill, render, renderOpen, still } from '../record.ts'
 
 const schema = join(import.meta.dirname, '../../schema')
@@ -148,17 +148,66 @@ const NOW = new Date(`${TODAY}T12:00:00Z`)
 const hit = (repo: string, no: number, title = 't'): Outside =>
   ({ repository: { nameWithOwner: repo }, number: no, title, createdAt: '2026-09-08T00:00:00Z' })
 
+const clean = (): Standing => ({ mergeable: 'clean', unresolved: 0, committed: null })
+
+const blocked = (): Standing => ({ mergeable: 'blocked', unresolved: 4, committed: `${TODAY}T09:00:00Z` })
+
+const greptile = review('greptile-apps[bot]', 'Confidence Score: 3/5', 'COMMENTED', '10:00')
+
 test('D1: a searched PR with no plan is stored with plan NULL', () => {
   const db = fresh(schema)
-  const rows = fill(db, null, (repo, no) => view(repo, no), [hit(SURFPOOL, 827, 'Add a cheatcode')])
+  const rows = fill(db, null, (repo, no) => view(repo, no), [hit(SURFPOOL, 827, 'Add a cheatcode')], clean)
   expect(rows.map((r) => [r.repo, r.pr, r.plan])).toEqual([[SURFPOOL, 827, null]])
-  expect(renderOpen(rows, NOW)).toBe(`${SURFPOOL}\t#827\tAdd a cheatcode\t10d\t-\n`)
+  expect(renderOpen(rows, NOW)).toBe(`${SURFPOOL}\t#827\tAdd a cheatcode\t10d\tball them\tclean\t-\t0 unresolved\t-\n`)
+})
+
+test('D1: a bot review after our last commit puts the ball with us', () => {
+  const db = fresh(schema)
+  const rows = fill(db, null, (repo, no) => view(repo, no, { reviews: [greptile] }), [hit(SURFPOOL, 827)], blocked)
+  expect(rows.map((r) => [r.ball, r.findings, r.mergeable, r.bot_by, r.bot_at]))
+    .toEqual([['us', 4, 'blocked', 'greptile-apps[bot]', `${TODAY}T10:00:00Z`]])
+  expect(renderOpen(rows, NOW)).toBe(`${SURFPOOL}\t#827\tt\t10d\tball us\tblocked\tgreptile-apps[bot] ${TODAY}\t4 unresolved\t-\n`)
+})
+
+test('D2: our reply after the review, or no words, is ball them', () => {
+  const db = fresh(schema)
+  const replied = { reviews: [greptile], comments: [comment('caliperforge', 'fixed', '11:00')] }
+  expect(fill(db, null, (repo, no) => view(repo, no, replied), [hit(SURFPOOL, 827)], blocked).map((r) => r.ball)).toEqual(['them'])
+  const quiet = fresh(schema)
+  expect(fill(quiet, null, (repo, no) => view(repo, no), [hit(SURFPOOL, 827)], blocked).map((r) => r.ball)).toEqual(['them'])
+})
+
+test('D3: a fill with no hits never looks and keeps the ball', () => {
+  const db = fresh(schema)
+  fill(db, null, (repo, no) => view(repo, no, { reviews: [greptile] }), [hit(SURFPOOL, 827)], blocked)
+  const rows = fill(db, SURFPOOL, (repo, no) => view(repo, no), [], () => {
+    throw new Error('looked')
+  })
+  expect(rows.map((r) => [r.ball, r.findings, r.mergeable])).toEqual([['us', 4, 'blocked']])
+})
+
+test('D4: standing reads pull then graphql; past the cap throws', () => {
+  const asked: string[][] = []
+  const read = (totalCount: number): Read => (args) => {
+    asked.push(args)
+    return args[1] === 'graphql'
+      ? { data: { repository: { pullRequest: { commits: { nodes: [{ commit: { committedDate: `${TODAY}T09:00:00Z` } }] },
+        reviewThreads: { totalCount, nodes: [{ isResolved: false }, { isResolved: true }] } } } } }
+      : { mergeable_state: 'dirty' }
+  }
+  expect(standing(SURFPOOL, 827, read(2))).toEqual({ mergeable: 'dirty', unresolved: 1, committed: `${TODAY}T09:00:00Z` })
+  expect(asked[0]).toEqual(['api', `repos/${SURFPOOL}/pulls/827`])
+  expect(asked[1]?.slice(0, 8)).toEqual(['api', 'graphql', '-f', 'owner=solana-foundation', '-f', 'name=surfpool', '-F', 'no=827'])
+  const db = fresh(schema)
+  expect(() => fill(db, null, (repo, no) => view(repo, no), [hit(SURFPOOL, 827)], (repo, no) => standing(repo, no, read(WINDOW + 1))))
+    .toThrow('cap of 100')
+  expect(openRecords(db, null)).toEqual([])
 })
 
 test('D2: a searched PR a plan links keeps that plan', () => {
   const db = fresh(schema)
   const plan = adopted(db, dir(), REPO, 282)
-  const rows = fill(db, REPO, (repo, no) => view(repo, no), [hit(REPO, 282)])
+  const rows = fill(db, REPO, (repo, no) => view(repo, no), [hit(REPO, 282)], clean)
   expect(rows.map((r) => [r.pr, r.plan])).toEqual([[282, plan]])
 })
 
@@ -183,7 +232,7 @@ test('D4: a search at the cap throws and no row is written', () => {
 
 test('D5: a stored open PR the search dropped is read till merged', () => {
   const db = fresh(schema)
-  fill(db, null, (repo, no) => view(repo, no), [hit(SURFPOOL, 827)])
+  fill(db, null, (repo, no) => view(repo, no), [hit(SURFPOOL, 827)], clean)
   const rows = fill(db, null, (repo, no) => view(repo, no, { state: 'MERGED', mergedAt: `${TODAY}T10:00:00Z` }))
   expect(renderOpen(rows, NOW)).toBe('')
   expect(recordsOf(db, SURFPOOL).map((r) => [r.state, r.title])).toEqual([['MERGED', 't']])
@@ -192,10 +241,10 @@ test('D5: a stored open PR the search dropped is read till merged', () => {
 test('D6: no repo lists open rows across repos; a repo counts them', () => {
   const db = fresh(schema)
   const found = [hit(SURFPOOL, 827), hit(OTHER, 5)]
-  const rows = fill(db, null, (repo, no) => view(repo, no), found)
+  const rows = fill(db, null, (repo, no) => view(repo, no), found, clean)
   expect(rows.map((r) => `${r.repo}#${String(r.pr)}`)).toEqual([`${OTHER}#5`, `${SURFPOOL}#827`])
   const one = fresh(schema)
-  fill(one, SURFPOOL, (repo, no) => view(repo, no), found)
+  fill(one, SURFPOOL, (repo, no) => view(repo, no), found, clean)
   expect([still(one, SURFPOOL), recordsOf(one, OTHER)]).toEqual([1, []])
 })
 

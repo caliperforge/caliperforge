@@ -16,6 +16,11 @@ export interface Row {
   read_at: string
   title: string | null
   opened_at: string | null
+  bot_by: string | null
+  bot_at: string | null
+  findings: number | null
+  mergeable: string | null
+  ball: 'us' | 'them' | null
 }
 
 export function parentOf(db: Db, plan: number): number | null {
@@ -55,12 +60,16 @@ export function prsOf(db: Db, repo: string): { plan: number; evidence: string }[
 }
 
 export function putRecord(db: Db, row: Row): void {
-  db.prepare(`INSERT INTO records (repo, pr, plan, url, state, merged_at, word_by, word_at, word, read_at, title, opened_at)
-    VALUES (@repo, @pr, @plan, @url, @state, @merged_at, @word_by, @word_at, @word, @read_at, @title, @opened_at)
+  db.prepare(`INSERT INTO records (repo, pr, plan, url, state, merged_at, word_by, word_at, word, read_at, title, opened_at,
+      bot_by, bot_at, findings, mergeable, ball)
+    VALUES (@repo, @pr, @plan, @url, @state, @merged_at, @word_by, @word_at, @word, @read_at, @title, @opened_at,
+      @bot_by, @bot_at, @findings, @mergeable, @ball)
     ON CONFLICT (repo, pr) DO UPDATE SET plan = excluded.plan, url = excluded.url, state = excluded.state,
       merged_at = excluded.merged_at, word_by = excluded.word_by, word_at = excluded.word_at, word = excluded.word,
       read_at = excluded.read_at, title = coalesce(excluded.title, records.title),
-      opened_at = coalesce(excluded.opened_at, records.opened_at)`).run(row)
+      opened_at = coalesce(excluded.opened_at, records.opened_at), bot_by = excluded.bot_by, bot_at = excluded.bot_at,
+      findings = coalesce(excluded.findings, records.findings), mergeable = coalesce(excluded.mergeable, records.mergeable),
+      ball = coalesce(excluded.ball, records.ball)`).run(row)
 }
 
 export function recordsOf(db: Db, repo: string): Row[] {

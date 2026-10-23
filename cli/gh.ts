@@ -130,6 +130,27 @@ export function outside(read: Read = gh): Outside[] {
   return found
 }
 
+export interface Standing { mergeable: string; unresolved: number; committed: string | null }
+
+const QUERY = `query($owner: String!, $name: String!, $no: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $no) {
+  commits(last: 1) { nodes { commit { committedDate } } } reviewThreads(first: ${String(WINDOW)}) { totalCount nodes { isResolved } } } } }`
+
+const Threads = z.object({ data: z.object({ repository: z.object({ pullRequest: z.object({
+  commits: z.object({ nodes: z.array(z.object({ commit: z.object({ committedDate: z.string() }) })) }),
+  reviewThreads: z.object({ totalCount: z.int(), nodes: z.array(z.object({ isResolved: z.boolean() })) }),
+}) }) }) })
+
+export function standing(repo: string, no: number, read: Read = gh): Standing {
+  const { mergeable_state } = z.object({ mergeable_state: z.string() }).parse(read(['api', `repos/${repo}/pulls/${String(no)}`]))
+  const { commits, reviewThreads } = Threads.parse(read(['api', 'graphql', '-f', `owner=${repo.slice(0, repo.indexOf('/'))}`,
+    '-f', `name=${repo.slice(repo.indexOf('/') + 1)}`, '-F', `no=${String(no)}`, '-f', `query=${QUERY}`])).data.repository.pullRequest
+  if (reviewThreads.totalCount > WINDOW) {
+    throw new Error(`${repo}#${String(no)} has review threads past the cap of ${String(WINDOW)}; the rest are unread`)
+  }
+  return { mergeable: mergeable_state, unresolved: reviewThreads.nodes.filter((t) => !t.isResolved).length,
+    committed: commits.nodes[0]?.commit.committedDate ?? null }
+}
+
 export function prNumber(url: string): number {
   const hit = /\/pull\/(\d+)$/.exec(url)
   if (hit === null) throw new Error(`"${url}" is not a github pull request url`)

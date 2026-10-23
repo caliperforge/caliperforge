@@ -9,7 +9,7 @@ import { Entry, drift } from '../../sequencer/drift.ts'
 import { landed } from '../../sequencer/landed.ts'
 import { measure } from '../../sequencer/steps.ts'
 import { internalPlan, ours, plan, world } from '../../sequencer/tests/world.ts'
-import { checkout, git, SELF } from '../../sequencer/workspace.ts'
+import { checkout, git, reap, SELF } from '../../sequencer/workspace.ts'
 import { gates } from '../../store/approvals.ts'
 import { approved, deliverablesOf, gated } from '../../store/deliverables.ts'
 import { eventsOf, logged } from '../../store/events.ts'
@@ -90,6 +90,30 @@ test('D3 a sha not on main or not a commit is refused', () => {
   const { db, dir, run } = setup()
   git(dir, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '--allow-empty', '-qm', 'off main'])
   const off = git(dir, ['rev-parse', 'HEAD']).trim()
+  expect(() => run('--as', 'done', '--landed', off)).toThrow(`${off} is not on main`)
+  expect(() => run('--as', 'done', '--landed', 'nothing')).toThrow('nothing is not on main')
+  unchanged(db)
+})
+
+function reaped() {
+  const made = setup()
+  reap(made.root, [2])
+  git(made.root, ['init', '-q'])
+  git(made.root, ['remote', 'add', 'origin', join(made.root, 'remotes', SELF)])
+  return made
+}
+
+test('D1 a reaped plan lands on the root clone main', () => {
+  const { db, main, run } = reaped()
+  run('--as', 'done', '--landed', main.slice(0, 7))
+  expect(deliverablesOf(db, 2)).toEqual([{ state: 'pushed', evidence: `https://github.com/${SELF}/commit/${main}` }])
+  expect(landed(db, 2)).toBe(true)
+})
+
+test('D2 a reaped plan refuses a sha off the root main', () => {
+  const { db, root, run } = reaped()
+  git(root, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '--allow-empty', '-qm', 'off main'])
+  const off = git(root, ['rev-parse', 'HEAD']).trim()
   expect(() => run('--as', 'done', '--landed', off)).toThrow(`${off} is not on main`)
   expect(() => run('--as', 'done', '--landed', 'nothing')).toThrow('nothing is not on main')
   unchanged(db)

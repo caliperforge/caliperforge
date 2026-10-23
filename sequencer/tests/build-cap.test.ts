@@ -1,7 +1,8 @@
 import { expect, test } from 'vitest'
 import { allEvents, eventsOf, kindsOf, logged, newestRun, pointers } from '../../store/events.ts'
-import { returnToLane } from '../../store/holds.ts'
-import { retry } from '../../store/plans.ts'
+import type { Provider } from '../../providers/kind.ts'
+import { retried, returnToLane } from '../../store/holds.ts'
+import { retry, rewind } from '../../store/plans.ts'
 import { blipped, builds, clear, fingerprint, refused, sinceSent } from '../../store/refusals.ts'
 import { tick } from '../index.ts'
 import { reasons, streak } from '../refusal.ts'
@@ -10,6 +11,54 @@ import { approve, CARRIED, plan, REFUSE, stub, watched, world, type World } from
 
 const refuse = (w: World, step: number, span: string, note: string): void =>
   void refused(w.db, { plan: 1, step, fingerprint: fingerprint(step, [span, note]), diff: null, span, note })
+
+/** A world whose plan sits at step 1 after `rows` refusals, each `[step, note]`, and a provider counting brief_writer fires. */
+function briefed(rows: [number, string][]): { w: World; provider: Provider; fired: () => number } {
+  const w = world()
+  approve(w.db, w.target)
+  for (const [step, note] of rows) refuse(w, step, 'brief', `brief_writer: ${note}`)
+  rewind(w.db, 1, 1)
+  let n = 0
+  const provider = stub(CARRIED, 0, undefined, (p) => { if (p.prompt.includes('# brief_writer') && !p.transcript.includes('director')) n += 1 })
+  return { w, provider, fired: () => n }
+}
+
+const LOOP: [number, string][] = [[1, 'no Files'], [1, 'no Tests'], [1, 'no Cases'], [1, 'no Files'], [1, 'no Approach']]
+
+test('D1 5 step 1 refusals, one repeated, stop the brief', async () => {
+  const { w, provider, fired } = briefed(LOOP)
+  await tick(w.db, w.root, provider)
+  expect(fired()).toBe(0)
+  expect(plan(w.db, 1).state).toBe('blocked_on_ceo')
+  const why = '5 briefs were refused in a row; the next waits for the director'
+  expect(eventsOf(w.db, 1, 'build_cap')).toEqual([{ actor: 'settle', outcome: 'needs_coo', message: why }])
+  expect(maybe(w.root, 1, 'director.md')).toContain('## brief_writer: 5')
+})
+
+test('D2 5 step 1 refusals, each new, let a 6th brief run', async () => {
+  const { w, provider, fired } = briefed(['a', 'b', 'c', 'd', 'e'].map((n) => [1, `no ${n}`]))
+  await tick(w.db, w.root, provider)
+  expect(fired()).toBe(1)
+  expect(eventsOf(w.db, 1, 'build_cap')).toEqual([])
+})
+
+test('D3 a coo return restarts the brief row; a director retry not', async () => {
+  const { w, provider, fired } = briefed(LOOP)
+  await tick(w.db, w.root, provider)
+  retried(w.db, 1, 'director')
+  await tick(w.db, w.root, provider)
+  expect(fired()).toBe(0)
+  expect(plan(w.db, 1).state).toBe('blocked_on_ceo')
+  returnToLane(w.db, 1, 'coo')
+  await tick(w.db, w.root, provider)
+  expect(fired()).toBe(1)
+})
+
+test('D4 a step 2 refusal inside the row ends it', async () => {
+  const { w, provider, fired } = briefed([[1, 'no Files'], [1, 'no Files'], [1, 'no Tests'], [2, 'no fence'], [1, 'no Cases'], [1, 'no Files']])
+  await tick(w.db, w.root, provider)
+  expect(fired()).toBe(1)
+})
 
 test('D1 D2 a plan stops before its 6th build, once per answer', async () => {
   const w = world()

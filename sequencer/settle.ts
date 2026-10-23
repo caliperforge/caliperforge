@@ -30,7 +30,7 @@ import { languageFor } from './route.ts'
 import { unbuilt } from './rails.ts'
 import { branchOf, checkout, cloned, diffOf, drop, git, internalBranch, maybe, PR_BRANCH, put, ruled, srcDir, titleOf } from './workspace.ts'
 import { assembling, homeOf, onto } from './home.ts'
-import { BUILDS, capped, fingerprintOf, refusalText, stopped, streak, STREAK } from './refusal.ts'
+import { BUILDS, capped, fingerprintOf, looped, refusalText, stopped, streak, STREAK } from './refusal.ts'
 import { NETWORK } from './checks.ts'
 
 /** CI that failed, waited or never showed is GitHub's state, not a fault on main: it never switches a lane off. */
@@ -39,7 +39,7 @@ export const CI_ONLY = /^(?:checks:CI|.* ci\.(?:red|pending|missing))$/
 /** `wait` is a step that settled by waiting: a CI still running, or a checkout the network failed. Neither is worth asking again in the same tick. */
 export async function stepped(db: Db, root: string, pipe: PipeRow, plan: PlanRow, lease: Taken,
   provider: Provider, wire?: Wire, read?: Read): Promise<{ fired: Fired; wait: boolean }> {
-  const cap = overBuilt(db, root, pipe, plan, lease)
+  const cap = overBuilt(db, root, pipe, plan, lease) ?? overBriefed(db, root, pipe, plan, lease)
   if (cap !== null) return { fired: cap, wait: false }
   const tree = workspace(db, root, plan)
   const step = mapOf(plan.template).at(plan.step, tree.language, plan.seat)
@@ -101,6 +101,17 @@ function overBuilt(db: Db, root: string, pipe: PipeRow, plan: PlanRow, lease: Ta
   needsCeo(db, plan, note)
   return { pipe: pipe.name, plan: plan.id, step: BUILD, name: 'build', outcome: 'refuse',
     state: 'blocked_on_ceo', spans: ['build_cap'], note, stole: lease.stole }
+}
+
+/** A pr_path plan whose last `BRIEFS` refusals came at step 1, a reason repeating, stops before the next brief, with every reason it was refused in director.md. */
+function overBriefed(db: Db, root: string, pipe: PipeRow, plan: PlanRow, lease: Taken): Fired | null {
+  const n = plan.template === 'pr_path' && plan.step === 1 ? looped(db, plan.id) : null
+  if (n === null) return null
+  const why = `${String(n)} briefs were refused in a row; the next waits for the director`
+  const note = stillCapped(db, plan.id) ? why : capped(db, root, plan.id, why)
+  needsCeo(db, plan, note)
+  return { pipe: pipe.name, plan: plan.id, step: 1, name: 'ruling', outcome: 'refuse',
+    state: 'blocked_on_ceo', spans: ['brief_cap'], note, stole: lease.stole }
 }
 
 function stillCapped(db: Db, plan: number): boolean {

@@ -1,6 +1,6 @@
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
-import { BUILD, fingerprint, refusalRows, WHY, type Why } from '../store/refusals.ts'
+import { briefsInRow, BUILD, fingerprint, refusalRows, WHY, type Why } from '../store/refusals.ts'
 import type { Step } from '../templates/pr-path.ts'
 import type { Outcome } from './kind.ts'
 import { maybe, put } from './workspace.ts'
@@ -10,6 +10,15 @@ export const BUILDS = 5
 
 /** Refusals in a row from one rail or reviewer past the build before the plan waits for the director. */
 export const STREAK = 3
+
+/** Step 1 refusals in a row, since a ceo or coo last returned or retried the plan, before the next brief waits for the director when a reason repeats. */
+export const BRIEFS = 5
+
+/** The length of the plan's row of step 1 refusals once it reaches `BRIEFS` with a note repeated; a row of new notes is converging. */
+export function looped(db: Db, plan: number): number | null {
+  const row = briefsInRow(db, plan)
+  return row.length >= BRIEFS && new Set(row.map((r) => r.note)).size < row.length ? row.length : null
+}
 
 /** The rail or reviewer that refused: `tight: …`, then `greptile:3/5` or `checks:test`, then `code_quality refuse`. */
 function sourceOf(step: number, span: string | null, note: string | null): string {

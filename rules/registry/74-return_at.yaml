@@ -1,0 +1,5 @@
+- name: return_at
+  table: events
+  column: at
+  where: "kind = 'return' AND message LIKE '%→%'"
+  gap: 14d

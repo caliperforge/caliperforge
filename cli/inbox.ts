@@ -5,6 +5,7 @@ import type { Fired } from '../sequencer/kind.ts'
 import type { Db } from '../store/index.ts'
 import { zone } from '../store/lanes.ts'
 import { clock } from '../store/plans.ts'
+import { planTarget } from '../store/targets.ts'
 
 /**
  * What a tick did that a person may have to act on, as one line per event in a file `cf inbox`
@@ -46,8 +47,7 @@ function kindOf(f: Fired): Kind | null {
 }
 
 export function ticketOf(db: Db, plan: number): string {
-  const row = db.prepare(`SELECT p.origin, t.repo, t.issue_no FROM plans p LEFT JOIN targets t ON t.id = p.target_id
-    WHERE p.id = ?`).get(plan) as { origin: string | null; repo: string | null; issue_no: number | null } | undefined
+  const row = planTarget(db, plan)
   if (row?.origin != null) return `#${row.origin.split('/').at(-1) ?? ''}`
   return row?.repo == null ? `plan ${String(plan)}` : `${row.repo}#${String(row.issue_no)}`
 }

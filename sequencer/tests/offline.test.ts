@@ -1,9 +1,11 @@
 import { expect, test } from 'vitest'
 import type { Packet } from '../../providers/kind.ts'
+import { rewind } from '../../store/plans.ts'
 import { refusalRows } from '../../store/refusals.ts'
 import { at } from '../../templates/pr-path.ts'
 import { tick } from '../index.ts'
 import { HELD, thrown } from '../settle.ts'
+import { checkout } from '../workspace.ts'
 import { approve, CARRIED, plan, stub, watched, world } from './world.ts'
 
 const FETCH = "Command failed: git fetch --no-tags origin +main:refs/remotes/origin/main\nfatal: unable to access 'https://github.com/caliperforge/caliperforge.git/': Could not resolve host: github.com"
@@ -66,8 +68,25 @@ test('a gpg key database lock asks a person', () => {
   expect(out.note).toMatch(/^step 6 ready: gpg waited on a key database lock held by pid 98937 \((running|gone)\); likely ~\/\.gnupg\/public-keys\.d\/pubring\.db\.lock$/)
 })
 
+test('1558b D1 a kernel step throw is a machine fault', () => {
+  expect(thrown(at(3), 'spawnSync gh ENOBUFS')).toMatchObject({ outcome: 'needs_ceo',
+    spans: ['machine_fault', 'threw: spawnSync gh ENOBUFS'], note: 'step 3 rails threw: spawnSync gh ENOBUFS' })
+})
+
+test('1558b D2 a rails throw asks the director once', { timeout: 60_000 }, async () => {
+  const w = world()
+  checkout(w.root, 1, 'acme/widget', 'widget-12-a1')
+  approve(w.db, 1)
+  rewind(w.db, 1, 3)
+  const [fired] = await tick(w.db, w.root, stub(CARRIED))
+  expect(plan(w.db, 1)).toMatchObject({ step: 3, state: 'blocked_on_ceo' })
+  expect(fired).toMatchObject({ outcome: 'needs_ceo' })
+  expect(fired?.spans).toContain('machine_fault')
+  expect(refusalRows(w.db, 1)).toEqual([])
+})
+
 test('other throws still refuse', () => {
-  expect(thrown(at(6), 'plan 123 has no checkout at /x/src')).toMatchObject({ outcome: 'refuse', spans: ['threw: plan 123 has no checkout at /x/src'] })
+  expect(thrown(at(2), 'plan 123 has no checkout at /x/src')).toMatchObject({ outcome: 'refuse', spans: ['threw: plan 123 has no checkout at /x/src'] })
 })
 
 test.each([
@@ -82,5 +101,5 @@ test.each([
 })
 
 test('1532 D2 a 404 throw still refuses', () => {
-  expect(thrown(at(6), 'gh: Not Found (HTTP 404)')).toMatchObject({ outcome: 'refuse', spans: ['threw: gh: Not Found (HTTP 404)'] })
+  expect(thrown(at(2), 'gh: Not Found (HTTP 404)')).toMatchObject({ outcome: 'refuse', spans: ['threw: gh: Not Found (HTTP 404)'] })
 })

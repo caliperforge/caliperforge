@@ -163,7 +163,7 @@ async function made(db: Db, root: string, plan: PlanRow, step: Step, provider: P
   }
 }
 
-/** A throw that says the host lost its network or the store is locked is not the job's fault: it holds the job on its step, uncounted, and the next tick tries again. */
+/** A throw that says the host lost its network or the store is locked is not the job's fault: it holds the job on its step, uncounted, and the next tick tries again. A kernel step's throw is the machine's fault: it asks the director the first time and counts no refusal. */
 export const HELD = 'the next tick tries again'
 
 export function thrown(step: Step, message: string): Outcome {
@@ -171,7 +171,11 @@ export function thrown(step: Step, message: string): Outcome {
   if (lock !== null) return { outcome: 'needs_ceo', spans: ['gpg'], note: `step ${String(step.step)} ${step.name}: ${lock}`, message }
   if (NETWORK.test(message)) return held(step, 'offline', 'the network is down')
   if (message.includes(LOCKED)) return held(step, 'locked', 'the store is locked')
-  return { outcome: 'refuse', spans: [`threw: ${message.split('\n')[0] ?? ''}`],
+  const first = message.split('\n')[0] ?? ''
+  if (step.fires === 'kernel') {
+    return { outcome: 'needs_ceo', spans: ['machine_fault', `threw: ${first}`], note: `step ${String(step.step)} ${step.name} threw: ${first}`, message }
+  }
+  return { outcome: 'refuse', spans: [`threw: ${first}`],
     note: `step ${String(step.step)} ${step.name} threw`, message, to: step.step }
 }
 

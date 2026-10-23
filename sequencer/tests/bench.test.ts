@@ -507,8 +507,10 @@ function writes(suffix: string, rows: object[], makes = true): string {
   return `import os, sys\nname = os.path.basename(sys.argv[2])\n${made}open(f'results/{name}/{name}${suffix}', 'w').write(${body})\n`
 }
 
+const FILES = '[src/vault.sol]'
+
 /** A bench plan at score with its suite written, and `remotes/caliperforge/fuzz-bench` whose run_pair.py is `pair`. */
-function scoring(pair = writes('.jsonl', PAIRS), keys: Record<string, string> = { target: 'euler-earn-m01', generator: 'fizz' }) {
+function scoring(pair = writes('.jsonl', PAIRS), keys: Record<string, string> = { target: 'euler-earn-m01', generator: 'fizz', files: FILES }) {
   const root = mkdtempSync(join(tmpdir(), 'cf-bench-'))
   const dir = join(root, 'remotes/caliperforge/fuzz-bench')
   mkdirSync(dir, { recursive: true })
@@ -635,7 +637,7 @@ const ON = { ...KEYS, null_check: 'true' }
 
 /** A bench plan scored at step 2 and queued at step 3, its fuzz-bench clone's null_check.py `check`, or none when null. */
 function nullChecking(keys: Record<string, string>, check: string | null = writes('.nullcheck.jsonl', KILLS)) {
-  const { root, db, sha } = scoring(undefined, keys)
+  const { root, db, sha } = scoring(undefined, { ...keys, files: FILES })
   expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
   const script = join(planDir(root, 1), 'fuzz-bench/bench/null_check.py')
   if (check === null) rmSync(script)
@@ -722,16 +724,36 @@ test('D1 no results from run_pair.py is refused before null_check', () => {
 })
 
 test('score D3 no target or no generate.json is refused uncloned', () => {
-  const { root, db } = scoring(undefined, { generator: 'fizz' })
+  const { root, db } = scoring(undefined, { generator: 'fizz', files: FILES })
   expect(scored(db, root, planById(db, 1))).toEqual({ outcome: 'refuse', spans: ['target.yml'], note: 'target.yml has no target' })
-  target(root, { target: 'euler-earn-m01', generator: 'fizz' })
+  target(root, { target: 'euler-earn-m01', generator: 'fizz', files: FILES })
   rmSync(join(planDir(root, 1), 'generate.json'))
   expect(scored(db, root, planById(db, 1))).toEqual({ outcome: 'refuse', spans: ['generate.json'], note: 'generate.json is missing' })
   expect(existsSync(join(planDir(root, 1), 'fuzz-bench'))).toBe(false)
 })
 
+test('score D1 a target.yml with no files is refused uncloned', () => {
+  const { root, db } = scoring(undefined, KEYS)
+  expect(scored(db, root, planById(db, 1))).toEqual({ outcome: 'refuse', spans: ['target.yml'], note: 'target.yml has no files' })
+  expect(existsSync(join(planDir(root, 1), 'fuzz-bench'))).toBe(false)
+  expect(scores(db)).toEqual([])
+  expect(maybe(root, 1, 'score.json')).toBeNull()
+})
+
+test('D2 D3 files counts inline or as a block list, not empty', () => {
+  const { root, db } = scoring()
+  rmSync(join(planDir(root, 1), 'generate.json'))
+  const note = (keys: Record<string, string>): string => {
+    target(root, keys)
+    return scored(db, root, planById(db, 1)).note
+  }
+  for (const files of [FILES, 'src/vault.sol', '\n  - src/vault.sol']) expect(note({ ...KEYS, files })).toBe('generate.json is missing')
+  for (const files of ['', '[]']) expect(note({ ...KEYS, files })).toBe('target.yml has no files')
+  expect(note({ generator: 'fizz' })).toBe('target.yml has no target, files')
+})
+
 test('D3 house_generator generates and is scored under its name', async () => {
-  const { root, db } = scoring(undefined, { target: 'euler-earn-m01', generator: 'house_generator' })
+  const { root, db } = scoring(undefined, { target: 'euler-earn-m01', generator: 'house_generator', files: FILES })
   staffedIn(root)
   rmSync(join(srcDir(root, 1), 'test/fizz/FizzTest.sol'))
   const fired = stub(1234, 'completed', ['test/fizz/House.sol'], null, false, 'contract House {\n  function property_holds() public {}\n}\n')
@@ -747,7 +769,7 @@ test('D3 house_generator generates and is scored under its name', async () => {
 })
 
 test('D3 a run that wrote x-ray.md is scored with x_ray 1', async () => {
-  const { root, db, sha } = scoring(undefined, { target: 'euler-earn-m01', generator: 'house_generator' })
+  const { root, db, sha } = scoring(undefined, { target: 'euler-earn-m01', generator: 'house_generator', files: FILES })
   staffedIn(root)
   expect(await generate(db, root, planById(db, 1), mapOf('bench').at(1), stub(1234, 'completed', true, null, true).provider))
     .toMatchObject({ outcome: 'pass' })

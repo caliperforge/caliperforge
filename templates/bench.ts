@@ -23,6 +23,8 @@ export const steps: Step[] = ['checkout', 'generate', 'score', 'null_check'].map
 
 const NEEDED = ['repo', 'fix', 'pre_fix']
 
+const LISTED = /^files:[ \t]*(?:[^\s[]|\[[ \t]*[^\s\]]|\n[ \t]+-[ \t]*\S)/m
+
 export const CEILING = 400_000
 
 const SETUP = 60
@@ -148,8 +150,9 @@ export async function generate(db: Db, root: string, plan: PlanRow, step: Step, 
 }
 
 export function scored(db: Db, root: string, plan: PlanRow): Outcome {
-  const keys = fields(maybe(root, plan.id, 'target.yml') ?? '')
-  const missing = ['target', 'generator'].filter((key) => (keys[key] ?? '') === '')
+  const text = maybe(root, plan.id, 'target.yml') ?? ''
+  const keys = fields(text)
+  const missing = ['target', 'generator', 'files'].filter((key) => key === 'files' ? !LISTED.test(text) : (keys[key] ?? '') === '')
   if (missing.length > 0) return { outcome: 'refuse', spans: ['target.yml'], note: `target.yml has no ${missing.join(', ')}` }
   const { target = '', generator = '' } = keys
   const made = maybe(root, plan.id, 'generate.json')

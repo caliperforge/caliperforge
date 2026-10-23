@@ -1,0 +1,6 @@
+- name: waits_closed_released
+  table: events
+  column: at
+  where: "kind = 'waits_closed' AND outcome = 'needs_coo' AND pointer IN (SELECT 'https://github.com/' || repo || '/issues/' || number FROM tickets WHERE state_reason = 'COMPLETED')"
+  gap: 7d
+  expected: 0

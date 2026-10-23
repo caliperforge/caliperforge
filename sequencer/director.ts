@@ -340,7 +340,7 @@ type Woken = (typeof WAKE)[number] | 'blocked_on_ceo'
 
 /** The lease keeps two overlapping ticks off one stop. */
 export async function woke(db: Db, root: string, provider: Provider, now: Date, post: Post = alerter(), wire: Wire = WIRE): Promise<void> {
-  released(db, root, now, post)
+  released(db, root, now, post, wire.merged)
   for (const plan of waking(db, WAKE)) {
     const reason = woken(plan)
     const head = `step ${String(plan.step)} ${reason === 'blocked_on_ceo' ? `blocked ${stop(root, plan.id)}` : reason}`

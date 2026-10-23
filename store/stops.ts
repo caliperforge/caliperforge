@@ -30,10 +30,10 @@ export function waitable(db: Db, on: number, plan: number): boolean {
     .get(on, plan) !== undefined
 }
 
-export function waitsEnded(db: Db): { id: number; step: number; on_: number; theirs: string }[] {
-  return db.prepare(`SELECT p.id, p.step, p.waits_on AS on_, w.state AS theirs FROM plans p JOIN plans w ON w.id = p.waits_on
+export function waitsEnded(db: Db): { id: number; step: number; on_: number; theirs: string; origin: string | null }[] {
+  return db.prepare(`SELECT p.id, p.step, p.waits_on AS on_, w.state AS theirs, w.origin AS origin FROM plans p JOIN plans w ON w.id = p.waits_on
     WHERE p.state = 'blocked_on_ceo' AND w.state IN ('done', 'refused', 'halted') ORDER BY p.id`).all() as
-    { id: number; step: number; on_: number; theirs: string }[]
+    { id: number; step: number; on_: number; theirs: string; origin: string | null }[]
 }
 
 export function openJobs(db: Db, plan: number): { id: number; state: string; step: number; lane: string | null; origin: string | null }[] {

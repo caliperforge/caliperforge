@@ -167,12 +167,12 @@ export async function gather(db: Db, root: string, plan: PlanRow, step: Step, pr
   return asked.note === WRITTEN ? got : { ...got, note: `${asked.note}; ${got.note}` }
 }
 
-async function gathering(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
+async function gathering(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider, measured = false): Promise<Outcome> {
   const ask = askOf(root, plan)
   const folder = output(ask)
   if ('why' in folder) return { outcome: 'refuse', spans: ['ask.md'], note: folder.why }
   const { out } = folder
-  const measure = out !== undefined || ask.split('\n').some((l) => l.startsWith('**Measure:**'))
+  const measure = measured || out !== undefined || ask.split('\n').some((l) => l.startsWith('**Measure:**'))
   const runs = out !== undefined ? 'fetcher' : measure ? 'measurer' : null
   const seat = runs === null ? step : { ...step, seat: runs, runs }
   if (out !== undefined) mkdirSync(out, { recursive: true })
@@ -187,9 +187,7 @@ async function gathering(db: Db, root: string, plan: PlanRow, step: Step, provid
   const fired = await ran(db, root, plan, seat, fires, input, false, true, out)
   if (fired.ended !== 'completed') return { outcome: 'refuse', spans: [fired.stop_reason ?? 'seat.exit'], note: `${seat.runs} ${fired.ended}` }
   const needs = NEEDS.exec(fired.text)?.[1]
-  if (!measure && needs === 'needs_run') {
-    return { outcome: 'refuse', spans: ['ask.md'], note: 'ask needs executed runs: add a **Measure:** line so the measurer gathers it' }
-  }
+  if (!measure && needs === 'needs_run') return gathering(db, root, plan, step, provider, true)
   if (measure && needs === 'needs_build') {
     const note = 'ask needs network or writes outside .cf/measure/: add an **Output:** line naming a folder under ~/cf_work/ so the fetcher runs it'
     put(root, plan.id, 'question.md', note)

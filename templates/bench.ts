@@ -5,6 +5,7 @@ import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 import type { Provider } from '../providers/kind.ts'
 import { packet, real } from '../runner/index.ts'
 import { load, seat } from '../runner/rules.ts'
+import { bare, npm } from '../sequencer/checks.ts'
 import type { Outcome } from '../sequencer/kind.ts'
 import { staffed } from '../sequencer/staffing.ts'
 import { firstLine } from '../sequencer/unpolled.ts'
@@ -104,6 +105,14 @@ export function scratch(root: string, plan: PlanRow): Outcome {
   return { outcome: 'pass', spans: [], note: `checkout.json written at ${sha.slice(0, 12)}` }
 }
 
+function deps(dir: string): Outcome | null {
+  if (!bare(dir)) return null
+  const ran = npm(['ci', '--ignore-scripts', '--include=dev'], dir)
+  if (ran.ok) return null
+  const line = ran.output.split('\n').find((l) => /^npm (?:error|ERR!)/.test(l)) ?? ''
+  return { outcome: 'refuse', spans: ['bench.install'], note: `npm ci exited ${ran.code}: ${line}` }
+}
+
 export async function generate(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
   const generator = fields(maybe(root, plan.id, 'target.yml') ?? '').generator ?? ''
   if (generator === '') return { outcome: 'refuse', spans: ['target.yml'], note: 'target.yml has no generator' }
@@ -112,6 +121,8 @@ export async function generate(db: Db, root: string, plan: PlanRow, step: Step, 
   const dir = real(srcDir(root, plan.id))
   const unchecked = checkedOut(db, root, plan.id, dir)
   if (unchecked !== null) return { outcome: 'refuse', spans: ['bench.no_checkout'], note: unchecked, to: 0 }
+  const uninstalled = deps(dir)
+  if (uninstalled !== null) return uninstalled
   load(db, root)
   const { manifest, prompt, hash } = seat(root, name)
   const granted = manifest.reads?.map((path) => real(path.startsWith('~/') ? join(homedir(), path.slice(2)) : path)) ?? []
@@ -247,12 +258,14 @@ function field(tree: unknown, key: string): unknown {
   return typeof tree === 'object' && tree !== null ? (tree as Record<string, unknown>)[key] : undefined
 }
 
-/** `pre_fix` may be a rev expression, and only a full sha can be fetched unadvertised. */
+/** `pre_fix` may be a rev expression, and one on a full sha is fetched by that sha. */
 function resolved(plan: string, url: string, rev: string): string {
   const bare = join(plan, 'resolve.git')
   rmSync(bare, { recursive: true, force: true })
   try {
     git(plan, ['clone', '--bare', '-q', url, bare])
+    const sha = /^[0-9a-f]{40}/.exec(rev)?.[0]
+    if (sha !== undefined) git(bare, ['fetch', '-q', url, sha])
     return git(bare, ['rev-parse', '--verify', `${rev}^{commit}`]).trim()
   } finally {
     rmSync(bare, { recursive: true, force: true })

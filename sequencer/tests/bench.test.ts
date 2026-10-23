@@ -112,6 +112,42 @@ test('a fix the scratch tree holds is refused', () => {
   expect(maybe(root, 1, 'checkout.json')).toBeNull()
 })
 
+/** A commit on c1 that only `refs/pull/1/head` reaches, served over file:// so a clone gets only advertised refs. */
+function pulled(root: string, c1: string): string {
+  const dir = join(root, 'remotes/org/fixture')
+  git(dir, ['checkout', '-qb', 'pr', c1])
+  const pr = commit(dir, 'src/pr.ts', 'export const pr = 1\n', 'pr')
+  git(dir, ['update-ref', 'refs/pull/1/head', pr])
+  git(dir, ['checkout', '-q', '-'])
+  git(dir, ['branch', '-qD', 'pr'])
+  writeFileSync(join(root, '.cf/git-base'), `file://${join(root, 'remotes')}`)
+  symlinkSync('fixture', `${dir}.git`)
+  return pr
+}
+
+test('a pre-fix sha only a pull ref reaches is fetched', () => {
+  const { root, c1, c2 } = fixture()
+  const pr = pulled(root, c1)
+  target(root, { repo: 'org/fixture', fix: c2, pre_fix: pr })
+  expect(scratch(root, benched())).toEqual({ outcome: 'pass', spans: [], note: `checkout.json written at ${pr.slice(0, 12)}` })
+  expect(git(srcDir(root, 1), ['rev-parse', 'HEAD']).trim()).toBe(pr)
+})
+
+test('a pull-only fix resolves its parent as pre-fix', () => {
+  const { root, c1 } = fixture()
+  const pr = pulled(root, c1)
+  target(root, { repo: 'org/fixture', fix: pr, pre_fix: `${pr}^` })
+  expect(scratch(root, benched())).toEqual({ outcome: 'pass', spans: [], note: `checkout.json written at ${c1.slice(0, 12)}` })
+})
+
+test('a full-sha pre-fix origin does not hold throws', () => {
+  const { root, c2 } = fixture()
+  target(root, { repo: 'org/fixture', fix: c2, pre_fix: 'f'.repeat(40) })
+  expect(() => scratch(root, benched())).toThrow()
+  expect(maybe(root, 1, 'checkout.json')).toBeNull()
+  expect(existsSync(join(planDir(root, 1), 'resolve.git'))).toBe(false)
+})
+
 test('a pre-fix file holding the finding text is refused', () => {
   const { root, c2 } = fixture(`// ${FINDING}\n`)
   target(root, { repo: 'org/fixture', fix: c2, pre_fix: `${c2}^`, finding: FINDING })
@@ -301,6 +337,38 @@ test('D1 generate clones an emptied src/ again at pre_fix', async () => {
   expect((await generated(fired, undefined, reaped(c1, c2), root)).outcome).toMatchObject({ outcome: 'pass' })
   expect(fired.packets).toMatchObject([{ cwd: realpathSync(srcDir(root, 1)) }])
   expect(git(srcDir(root, 1), ['rev-parse', 'HEAD']).trim()).toBe(c1)
+})
+
+/** A checked-out src/ depending on `file:dep`, with a root postinstall, and a lockfile that locks dep only when `synced`. */
+function locked(synced: boolean): (root: string) => void {
+  return (root) => {
+    checkedOut(root)
+    const dir = srcDir(root, 1)
+    const pkg = { name: 'target', version: '1.0.0' }
+    const dep = { 'node_modules/dep': { resolved: 'dep', link: true }, dep: { version: '1.0.0' } }
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ ...pkg, dependencies: { dep: 'file:dep' }, scripts: { postinstall: 'touch ran' } }))
+    writeFileSync(join(dir, 'package-lock.json'), JSON.stringify({ ...pkg, lockfileVersion: 3, requires: true, packages: synced
+      ? { '': { ...pkg, hasInstallScript: true, dependencies: { dep: 'file:dep' } }, ...dep } : { '': { ...pkg, hasInstallScript: true } } }))
+    mkdirSync(join(dir, 'dep'))
+    writeFileSync(join(dir, 'dep/package.json'), JSON.stringify({ name: 'dep', version: '1.0.0' }))
+  }
+}
+
+test('D1 a lockfile src/ is installed, scripts unrun, then fired', async () => {
+  const fired = stub(1000, 'completed', true)
+  const { root, outcome } = await generated(fired, undefined, locked(true))
+  expect(outcome).toMatchObject({ outcome: 'pass' })
+  expect(fired.packets).toHaveLength(1)
+  expect(existsSync(join(srcDir(root, 1), 'node_modules/dep'))).toBe(true)
+  expect(existsSync(join(srcDir(root, 1), 'ran'))).toBe(false)
+})
+
+test('D2 a failed npm ci is refused unfired, with no run row', async () => {
+  const fired = stub(1000, 'completed', true)
+  const { db, outcome } = await generated(fired, undefined, locked(false))
+  expect(outcome).toMatchObject({ outcome: 'refuse', spans: ['bench.install'], note: expect.stringMatching(/^npm ci exited \d+: npm error/) as string })
+  expect(fired.packets).toEqual([])
+  expect(runRows(db)).toEqual([])
 })
 
 test('D5 tick on an empty src/ sends the plan back to step 0', async () => {

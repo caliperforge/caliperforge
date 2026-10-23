@@ -303,6 +303,38 @@ test('D1 generate clones an emptied src/ again at pre_fix', async () => {
   expect(git(srcDir(root, 1), ['rev-parse', 'HEAD']).trim()).toBe(c1)
 })
 
+/** A checked-out src/ depending on `file:dep`, with a root postinstall, and a lockfile that locks dep only when `synced`. */
+function locked(synced: boolean): (root: string) => void {
+  return (root) => {
+    checkedOut(root)
+    const dir = srcDir(root, 1)
+    const pkg = { name: 'target', version: '1.0.0' }
+    const dep = { 'node_modules/dep': { resolved: 'dep', link: true }, dep: { version: '1.0.0' } }
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ ...pkg, dependencies: { dep: 'file:dep' }, scripts: { postinstall: 'touch ran' } }))
+    writeFileSync(join(dir, 'package-lock.json'), JSON.stringify({ ...pkg, lockfileVersion: 3, requires: true, packages: synced
+      ? { '': { ...pkg, hasInstallScript: true, dependencies: { dep: 'file:dep' } }, ...dep } : { '': { ...pkg, hasInstallScript: true } } }))
+    mkdirSync(join(dir, 'dep'))
+    writeFileSync(join(dir, 'dep/package.json'), JSON.stringify({ name: 'dep', version: '1.0.0' }))
+  }
+}
+
+test('D1 a lockfile src/ is installed, scripts unrun, then fired', async () => {
+  const fired = stub(1000, 'completed', true)
+  const { root, outcome } = await generated(fired, undefined, locked(true))
+  expect(outcome).toMatchObject({ outcome: 'pass' })
+  expect(fired.packets).toHaveLength(1)
+  expect(existsSync(join(srcDir(root, 1), 'node_modules/dep'))).toBe(true)
+  expect(existsSync(join(srcDir(root, 1), 'ran'))).toBe(false)
+})
+
+test('D2 a failed npm ci is refused unfired, with no run row', async () => {
+  const fired = stub(1000, 'completed', true)
+  const { db, outcome } = await generated(fired, undefined, locked(false))
+  expect(outcome).toMatchObject({ outcome: 'refuse', spans: ['bench.install'], note: expect.stringMatching(/^npm ci exited \d+: npm error/) as string })
+  expect(fired.packets).toEqual([])
+  expect(runRows(db)).toEqual([])
+})
+
 test('D5 tick on an empty src/ sends the plan back to step 0', async () => {
   const root = mkdtempSync(join(tmpdir(), 'cf-bench-'))
   staffedIn(root)

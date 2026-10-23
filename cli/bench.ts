@@ -6,6 +6,7 @@ import { staffing } from '../sequencer/staffing.ts'
 import { get, git, gitBase, put, remote } from '../sequencer/workspace.ts'
 import type { Db } from '../store/index.ts'
 import { addPlan, pipeNamed } from '../store/plans.ts'
+import { copied } from '../templates/bench.ts'
 import type { Cli } from './cf-lanes.ts'
 
 export function fileBench(db: Db, root: string, target: string | undefined, all: boolean, seat: string, at: string): number[] {
@@ -23,7 +24,7 @@ export function fileBench(db: Db, root: string, target: string | undefined, all:
     if (missing !== undefined) throw new Error(`fuzz-bench has no targets/${missing}.yml`)
     return names.map((name) => {
       const id = addPlan(db, { pipe_id: pipe.id, target_id: null, template: 'bench', state: 'queued', queued_at: at, lane: null, seat: null, origin: null, step: 0 })
-      put(root, id, 'target.yml', `${readFileSync(join(targets, `${name}.yml`), 'utf8').trimEnd()}\ntarget: ${name}\ngenerator: ${key}\n`)
+      put(root, id, 'target.yml', copied(readFileSync(join(targets, `${name}.yml`), 'utf8'), name, key))
       return id
     })
   } finally {

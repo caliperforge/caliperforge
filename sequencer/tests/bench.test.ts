@@ -496,6 +496,10 @@ const PAIRS = [{ property: 'p1', verdict: 'catch' }, { property: 'p2', verdict: 
 
 const KILLS = [{ property: 'p1', kills: 3, untested: false }, { property: 'p4', kills: 0, untested: true }]
 
+const UPSTREAM = 'repo: euler-xyz/euler-earn\nfiles:\n  - src/EulerEarn.sol\n\n'
+
+const REFRESHED = 'repo: euler-xyz/euler-earn\nfiles:\n  - src/EulerEarn.sol\ntarget: euler-earn-m01\ngenerator: fizz\n'
+
 /** A stub fuzz-bench script that writes `rows` to `results/<suite>/<suite><suffix>`, making the folder first when `makes`. */
 function writes(suffix: string, rows: object[], makes = true): string {
   const body = JSON.stringify(rows.map((r) => JSON.stringify(r)).join('\n'))
@@ -512,6 +516,7 @@ function scoring(pair = writes('.jsonl', PAIRS), keys: Record<string, string> = 
   mkdirSync(dir, { recursive: true })
   git(dir, ['init', '-q'])
   commit(dir, 'bench/null_check.py', writes('.nullcheck.jsonl', KILLS), 'null check')
+  commit(dir, 'targets/euler-earn-m01.yml', UPSTREAM, 'target')
   const sha = commit(dir, 'bench/run_pair.py', pair, 'run pair')
   mkdirSync(join(root, '.cf'))
   writeFileSync(join(root, '.cf/git-base'), join(root, 'remotes'))
@@ -538,6 +543,26 @@ test('score D1 kernel scores the suite at the fuzz-bench HEAD', () => {
   expect(existsSync(join(srcDir(root, 1), 'test/fizz/FizzTest.sol'))).toBe(true)
   expect(existsSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/medusa.json'))).toBe(false)
   expect(JSON.parse(get(root, 1, 'score.json'))).toEqual({ fuzz_bench: sha, ...SCORE, x_ray: null })
+})
+
+test('D1 scored rewrites target.yml from fuzz-bench HEAD', () => {
+  const { root, db } = scoring()
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  expect(get(root, 1, 'target.yml')).toBe(REFRESHED)
+})
+
+test('D3 no upstream targets yml is refused, copy kept', () => {
+  const { root, db } = scoring()
+  const dir = join(root, 'remotes/caliperforge/fuzz-bench')
+  git(dir, ['rm', '-q', 'targets/euler-earn-m01.yml'])
+  git(dir, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'no target'])
+  const before = get(root, 1, 'target.yml')
+  expect(scored(db, root, planById(db, 1)))
+    .toEqual({ outcome: 'refuse', spans: ['target.yml'], note: 'fuzz-bench has no targets/euler-earn-m01.yml' })
+  expect(get(root, 1, 'target.yml')).toBe(before)
+  expect(existsSync(join(planDir(root, 1), 'fuzz-bench/results/euler-earn-m01/euler-earn-m01.jsonl'))).toBe(false)
+  expect(scores(db)).toEqual([])
+  expect(maybe(root, 1, 'score.json')).toBeNull()
 })
 
 test('D1 D4 a root medusa.json is copied with its paths moved', () => {
@@ -626,6 +651,13 @@ test('D2 null_check off passes step 3 and spawns nothing', () => {
   expect(kernel(db, root, planById(db, 1))).toEqual({ outcome: 'pass', spans: [], note: 'null_check is off in target.yml' })
   expect(existsSync(join(planDir(root, 1), NULLCHECK))).toBe(false)
   expect(scores(db)).toEqual([{ plan: 1, ...KEYS, ...SCORE, x_ray: null }])
+})
+
+test('D2 the refreshed copy keeps null_check on for step 3', () => {
+  const { root, db } = nullChecking(ON)
+  expect(get(root, 1, 'target.yml')).toBe(`${REFRESHED}null_check: true\n`)
+  expect(kernel(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass', note: 'null_check.py finished: 1 untested in 2 rows' })
+  expect(scores(db)).toEqual([{ plan: 1, ...KEYS, ...SCORE, untested: 1, x_ray: null }])
 })
 
 test('D3 a null_check.py past the cap is stopped and counted', () => {

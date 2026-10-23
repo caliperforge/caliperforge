@@ -60,6 +60,10 @@ function fields(text: string): Record<string, string | undefined> {
     .map((line) => /^(\w+):\s*(.*)$/.exec(line)).filter((m) => m !== null).map((m) => [m[1] ?? '', m[2]?.trim()] as const))
 }
 
+export function copied(yml: string, target: string, generator: string): string {
+  return `${yml.trimEnd()}\ntarget: ${target}\ngenerator: ${generator}\n`
+}
+
 function checkedOut(db: Db, root: string, id: number, dir: string): string | null {
   const made = maybe(root, id, 'checkout.json')
   if (made === null) return 'checkout.json is missing'
@@ -162,6 +166,10 @@ export function scored(db: Db, root: string, plan: PlanRow): Outcome {
   rmSync(bench, { recursive: true, force: true })
   git(planDir(root, plan.id), ['clone', '-q', remote(gitBase(root), 'caliperforge/fuzz-bench'), bench])
   const sha = git(bench, ['rev-parse', 'HEAD']).trim()
+  const upstream = join(bench, 'targets', `${target}.yml`)
+  if (!existsSync(upstream)) return { outcome: 'refuse', spans: ['target.yml'], note: `fuzz-bench has no targets/${target}.yml` }
+  put(root, plan.id, 'target.yml', `${copied(readFileSync(upstream, 'utf8'), target, generator)}${
+    keys.null_check === undefined ? '' : `null_check: ${keys.null_check}\n`}`)
   const suites = `suites/${generator}/${target}`
   cpSync(join(srcDir(root, plan.id), suite), join(bench, suites), { recursive: true })
   if (config !== null) writeFileSync(join(bench, suites, 'medusa.json'), config)

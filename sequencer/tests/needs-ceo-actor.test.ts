@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest'
 import { allEvents, logged } from '../../store/events.ts'
+import { set } from '../../store/lanes.ts'
 import { putPlan } from '../../store/plans.ts'
 import { addTarget } from '../../store/targets.ts'
 import { drift } from '../drift.ts'
@@ -21,6 +22,7 @@ test('only the coo writes needs_ceo across the three stops', async () => {
   putPlan(w.db, { id: 2, pipe_id: 1, target_id: 2, template: 'pr_path', state: 'running', queued_at: `${day}T00:00:00.000Z`, step: 2, retries: 0 })
   put(w.root, 2, 'issue.md', '# t\n')
   const t = Date.now()
+  set(w.db, 'drift.at', '9999-12-31', 'pr', new Date(t).toISOString())
   const later = new Date(t + 61 * 60_000)
   for (const now of [new Date(t), new Date(t + 30 * 60_000), later]) {
     await tick(w.db, w.root, stub(CARRIED), now, undefined, undefined, 0, undefined, Infinity, undefined, undefined, [{ name: 'stuck_plans', gap: '1h' }])

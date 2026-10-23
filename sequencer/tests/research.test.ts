@@ -495,6 +495,13 @@ test('record D6: no # in ask.md or a ruling issue.md refuses', () => {
   expect(posts(w.db)).toEqual([])
 })
 
+test('record D6: a titled issue.md names the finding', () => {
+  const { w, wire } = reviewed()
+  put(w.root, 1, 'issue.md', '# Other\n')
+  record(w.db, w.root, plan(w.db, 1), wire)
+  expect(readdirSync(findings(w))).toEqual([named.replace('the-cap', 'other')])
+})
+
 test('check D6: an unsourced Still unknown sentence passes', async () => {
   expect(await checked(ANSWER)).toMatchObject({ outcome: 'pass' })
 })

@@ -1,10 +1,11 @@
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join, posix } from 'node:path'
 import { parseDocument, stringify } from 'yaml'
 import { z } from 'zod'
 import type { Read } from '../cli/gh.ts'
-import { type Net, scan, type Scanned } from './scan.ts'
+import { verdict } from './live.ts'
+import { fqnOf, type Net, scan, type Scanned } from './scan.ts'
 
 const REPO = 'solana-foundation/pay-skills'
 const PAGE = 100
@@ -18,11 +19,12 @@ const Spec = z.object({ openapi: z.object({ path: z.string() }) })
 
 export interface Unfetched { pr: number; unfetched: string }
 export type Row = Scanned | Unfetched
+type Noted = Scanned & { note?: string }
 
 const buffered: Read = (args) => JSON.parse(execFileSync('gh', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })) as unknown
 
-export async function prs(root: string, out: string, cards: string | undefined, net: Net, raw: Read = buffered):
-  Promise<{ prs: number; listings: Scanned[]; unfetched: Unfetched[]; skipped: number[] }> {
+export async function prs(root: string, out: string, cards: string | undefined, net: Net, raw: Read = buffered, since?: string):
+  Promise<{ prs: number; listings: Noted[]; unfetched: Unfetched[]; skipped: number[] }> {
   const read = retried(raw)
   const base = join(root, '.cf', 'paydesk', 'prs')
   rmSync(base, { recursive: true, force: true })
@@ -44,11 +46,25 @@ export async function prs(root: string, out: string, cards: string | undefined, 
   }
   const scanned = await scan(folders.map((f) => f.dir), undefined, cards, net)
   const listings = scanned.map((s, i) => ('invalid_listing' in s ? { ...s, pr: folders[i]?.pr ?? s.pr } : s))
-  writeFileSync(out, JSON.stringify([...listings, ...unfetched], null, 2))
+  const noted = since === undefined ? listings : await rechecked(since, listings, folders.map((f) => f.dir), cards, net)
+  writeFileSync(out, JSON.stringify([...noted, ...unfetched], null, 2))
   if (cards !== undefined) {
     for (const u of unfetched) writeFileSync(join(cards, `pr-${String(u.pr)}.md`), `## #${String(u.pr)}: files not fetched\n\n${u.unfetched}\n`)
   }
-  return { prs: open.length, listings, unfetched, skipped }
+  return { prs: open.length, listings: noted, unfetched, skipped }
+}
+
+async function rechecked(since: string, listings: Scanned[], dirs: string[], cards: string | undefined, net: Net): Promise<Noted[]> {
+  const passed = new Map((JSON.parse(readFileSync(since, 'utf8')) as Row[]).flatMap((r) => ('fqn' in r && verdict(r) === 'pass' ? [[r.fqn, r] as const] : [])))
+  const date = statSync(since).mtime.toISOString().slice(0, 10)
+  const flipped = new Set(listings.filter((s) => passed.has(s.fqn) && ['reject', 'crash'].includes(verdict(s))).map((s) => s.fqn))
+  const again = new Map((await scan(dirs.filter((d) => flipped.has(fqnOf(d))), undefined, cards, net)).map((s) => [s.fqn, s]))
+  return listings.map((s) => {
+    const was = passed.get(s.fqn)
+    const second = again.get(s.fqn)
+    if (was === undefined || second === undefined) return s
+    return verdict(second) === 'pass' ? { ...was, note: `blip: ${verdict(s)}` } : { ...second, note: `flipped since ${date}` }
+  })
 }
 
 function retried(read: Read): Read {

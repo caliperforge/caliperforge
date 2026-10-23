@@ -100,7 +100,7 @@ function overlapped(p: Row, startable: Set<number>): Hit {
 
 function untitled(p: Row): Hit {
   if (p.title !== null || p.origin !== null || (p.target_id !== null && p.step <= 1)) return null
-  return ['no title, so Loupe shows it untitled', `UPDATE plans SET title = '<title>' WHERE id = ${String(p.id)}`]
+  return ['no title, so Loupe shows it untitled', `set plans.title on plan ${String(p.id)}`]
 }
 
 function parts(db: Db): string[] {

@@ -102,7 +102,7 @@ test('D5: a clean store lists nothing', () => {
 test('D3 D4: a plan with no title or origin lists until titled', () => {
   const db = piped()
   putPlan(db, { id: 9, pipe_id: 1, target_id: null, template: 'bench', state: 'queued', queued_at: '2026-09-18', step: 0, retries: 0 })
-  expect(flow(db, root, now)).toEqual(["plan 9\tno title, so Loupe shows it untitled\tUPDATE plans SET title = '<title>' WHERE id = 9\n"])
+  expect(flow(db, root, now)).toEqual(['plan 9\tno title, so Loupe shows it untitled\tset plans.title on plan 9\n'])
   briefed(db, 9, { title: 'Bench: score fizz on smoke-01 (catch / miss / false alarm)', what: null, why: null, ends: null })
   expect(flow(db, root, now)).toEqual([])
 })

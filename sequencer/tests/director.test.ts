@@ -462,12 +462,44 @@ test.each([
   expect(posted).toHaveLength(1)
 })
 
-test('close with no pushed deliverable is held by the coo', async () => {
+const closing = (closes: string[][]): Wire =>
+  ({ ...wire(), close: (repo, no, sha, comment) => { closes.push([`${repo}#${String(no)}`, sha, comment ?? '']) } })
+
+const closeEvents = (db: Db) => ofKind(db, 'close').map(({ actor, outcome, message }) => ({ actor, outcome, message }))
+
+test('D1: an unpushed close of our own plan refuses it', async () => {
   const { db, home } = seeded('1')
   db.exec('DELETE FROM deliverables')
-  await run(db, home, REPLY.close ?? '')
+  const closes: string[][] = []
+  await cooLite(db, home, row(db), stub(REPLY.close ?? ''), now, () => undefined, closing(closes))
+  expect(row(db).state).toBe('refused')
+  expect(closeEvents(db)).toEqual([{ actor: 'director', outcome: 'refuse', message: 'the work is on main' }])
+  expect(closes).toEqual([['caliperforge/caliperforge#139', '', expect.stringContaining('the work is on main')]])
+  expect(told(db)).toEqual([{ actor: 'director', outcome: 'pass', message: 'close: the work is on main' }])
+})
+
+test.each([
+  { name: 'acme/kit', set: (db: Db) => db.exec("UPDATE plans SET origin = 'https://github.com/acme/kit/issues/706' WHERE id = 7") },
+  { name: 'a null origin', set: (db: Db) => targeted(db) },
+])('D2: an unpushed close from $name is held by the coo', async ({ set }) => {
+  const { db, home } = seeded('1')
+  set(db)
+  db.exec('DELETE FROM deliverables')
+  const closes: string[][] = []
+  await cooLite(db, home, row(db), stub(REPLY.close ?? ''), now, () => undefined, closing(closes))
   expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'coo' })
   expect(told(db).map((t) => t.message)).toEqual([expect.stringMatching(/^close did not apply, /)])
+  expect(closeEvents(db)).toEqual([])
+  expect(closes).toEqual([])
+})
+
+test('D3: a pushed close ends done with no issue close', async () => {
+  const { db, home } = seeded('1')
+  const closes: string[][] = []
+  await cooLite(db, home, row(db), stub(REPLY.close ?? ''), now, () => undefined, closing(closes))
+  expect(row(db).state).toBe('done')
+  expect(closeEvents(db)).toEqual([])
+  expect(closes).toEqual([])
 })
 
 const targeted = (db: Db) => db.exec(`INSERT INTO accounts (id, repo, measured_at, maintainers, doors, last_outsider_merge, open_pr_age_p50_days,

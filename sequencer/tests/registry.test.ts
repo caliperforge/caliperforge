@@ -164,6 +164,24 @@ test('directorToFixerSeen D7', () => {
   expect(drift(handed, entry, NOW)).toEqual([])
 })
 
+test('directorCloseUnbuiltSeen D4', () => {
+  const entry = REGISTRY.filter((e) => e.name === 'director_close_unbuilt')
+  const d = db()
+  d.exec("UPDATE plans SET origin = 'https://github.com/caliperforge/caliperforge/issues/1' WHERE id = 1")
+  putPlan(d, { id: 2, pipe_id: planById(d, 1).pipe_id, target_id: null, template: 'pr_path', state: 'queued', queued_at: '2026-10-01', step: 4, retries: 0,
+    lane: 'machine', seat: 'typescript_specialist', origin: 'https://github.com/acme/kit/issues/706' })
+  const log = (plan: number, kind: string, outcome: 'needs_coo' | 'refuse', message: string, at: string): void => {
+    logged(d, { plan, kind, actor: 'director', outcome, message, pointer: null, run: null }, at)
+  }
+  log(1, 'director', 'needs_coo', 'close did not apply, x', '2026-10-02 09:00:00')
+  expect(drift(d, entry, NOW)).toEqual([])
+  log(1, 'close', 'refuse', 'the work is on main', '2026-10-02 10:00:00')
+  log(2, 'director', 'needs_coo', 'close did not apply, x', '2026-10-02 11:00:00')
+  expect(drift(d, entry, NOW)).toEqual([])
+  log(1, 'director', 'needs_coo', 'close did not apply, x', '2026-10-02 12:00:00')
+  expect(drift(d, entry, NOW)).toMatchObject([{ name: 'director_close_unbuilt', state: 'seen', newest: '2026-10-02 12:00:00' }])
+})
+
 test('catchupRangeClearsSilent D4', () => {
   const d = db()
   const catchup = REGISTRY.filter((e) => e.name === 'writer_catchup')

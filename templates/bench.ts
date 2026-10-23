@@ -16,6 +16,7 @@ import type { Db } from '../store/index.ts'
 import { observed } from '../store/lanes.ts'
 import { needsCeo, type PlanRow } from '../store/plans.ts'
 import { byRun, pending } from '../store/transcript.ts'
+import { clamp } from './balances.ts'
 import { DEFAULT_BUILDER, type Step } from './pr-path.ts'
 
 export const steps: Step[] = ['checkout', 'generate', 'score', 'null_check'].map((name, step) =>
@@ -161,7 +162,7 @@ export function scored(db: Db, root: string, plan: PlanRow): Outcome {
   const proven = unproven(join(srcDir(root, plan.id), suite), generator)
   if (typeof proven !== 'number') return proven
   const config = medusa(db, plan.id, srcDir(root, plan.id), suite)
-  if (config !== null && typeof config !== 'string') return config
+  if (config !== null && 'outcome' in config) return config
   const bench = join(planDir(root, plan.id), 'fuzz-bench')
   rmSync(bench, { recursive: true, force: true })
   git(planDir(root, plan.id), ['clone', '-q', remote(gitBase(root), 'caliperforge/fuzz-bench'), bench])
@@ -172,7 +173,7 @@ export function scored(db: Db, root: string, plan: PlanRow): Outcome {
     keys.null_check === undefined ? '' : `null_check: ${keys.null_check}\n`}`)
   const suites = `suites/${generator}/${target}`
   cpSync(join(srcDir(root, plan.id), suite), join(bench, suites), { recursive: true })
-  if (config !== null) writeFileSync(join(bench, suites, 'medusa.json'), config)
+  if (config !== null) writeFileSync(join(bench, suites, 'medusa.json'), config.config)
   mkdirSync(join(bench, 'results', target), { recursive: true })
   const written = join(bench, 'results', target, `${target}.jsonl`)
   const ran = spawnSync('python3', ['bench/run_pair.py', `targets/${target}.yml`, suites], { cwd: bench, encoding: 'utf8' })
@@ -184,7 +185,8 @@ export function scored(db: Db, root: string, plan: PlanRow): Outcome {
     untested: null, tokens, seconds, x_ray: x_ray ?? null }
   record(db, { plan: plan.id, target, generator, ...score })
   put(root, plan.id, 'score.json', JSON.stringify({ fuzz_bench: sha, ...score }))
-  return { outcome: 'pass', spans: [], note: `score.json written at fuzz-bench ${sha.slice(0, 12)}` }
+  return { outcome: 'pass', spans: [], note: `score.json written at fuzz-bench ${sha.slice(0, 12)}${config === null || config.clamped.length === 0
+    ? '' : `; targetContractsBalances ${config.clamped.join(', ')} clamped to 1e24 wei`}` }
 }
 
 export function nullChecked(db: Db, root: string, plan: PlanRow, cap = CAP): Outcome {
@@ -235,7 +237,7 @@ const TIMEOUT = 1200
 
 const WORKERS = 4
 
-function medusa(db: Db, plan: number, src: string, suite: string): Outcome | string | null {
+function medusa(db: Db, plan: number, src: string, suite: string): Outcome | { config: string; clamped: string[] } | null {
   const path = join(src, 'medusa.json')
   if (!existsSync(path)) return null
   let config: unknown
@@ -251,12 +253,15 @@ function medusa(db: Db, plan: number, src: string, suite: string): Outcome | str
     if (typeof value === 'string' && value !== '' && !isAbsolute(value)) Object.assign(parent as object, { [key]: moved(suite, value) })
   }
   const fuzzing = field(config, 'fuzzing')
+  const balances = field(fuzzing, 'targetContractsBalances')
+  const { entries, clamped } = clamp(Array.isArray(balances) ? balances : [])
   if (typeof fuzzing === 'object' && fuzzing !== null) {
     const { timeout, workers } = fuzzing as Record<string, unknown>
     Object.assign(fuzzing, { timeout: timeout === 0 || timeout === undefined ? TIMEOUT : timeout,
       workers: typeof workers === 'number' && workers <= WORKERS ? workers : WORKERS })
+    if (Array.isArray(balances)) Object.assign(fuzzing, { targetContractsBalances: entries })
   }
-  return JSON.stringify(config, null, 2)
+  return { config: JSON.stringify(config, null, 2), clamped }
 }
 
 function moved(suite: string, path: string): string {

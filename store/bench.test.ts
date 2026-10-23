@@ -2,7 +2,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { expect, it } from 'vitest'
 import { planRow } from '../runner/index.ts'
-import { record, scores, type Score } from './bench.ts'
+import { record, scores, setUntested, type Score } from './bench.ts'
 import { migrate, open, type Db } from './index.ts'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -37,6 +37,15 @@ it('D3 refuses negative counts and empty names', () => {
     { x_ray: 2 as 1 }]) {
     expect(() => record(d, { plan, ...fizz, ...bad })).toThrow(/CHECK/)
   }
+})
+
+it('setUntested sets the one plan row', () => {
+  const d = db()
+  const [one, two] = [planRow(d), planRow(d)]
+  record(d, { plan: one, ...fizz, untested: null })
+  record(d, { plan: two, ...fizz, untested: null })
+  setUntested(d, one, 4)
+  expect(scores(d).map((s) => s.untested)).toEqual([4, null])
 })
 
 it('D4 migrates once to 113 with one bench_scorecard table', () => {

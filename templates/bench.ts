@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process'
+import { spawnSync, type SpawnSyncReturns } from 'node:child_process'
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, isAbsolute, join, relative, resolve } from 'node:path'
@@ -8,8 +8,8 @@ import { load, seat } from '../runner/rules.ts'
 import type { Outcome } from '../sequencer/kind.ts'
 import { staffed } from '../sequencer/staffing.ts'
 import { firstLine } from '../sequencer/unpolled.ts'
-import { cloned, git, gitBase, maybe, planDir, put, remote, srcDir } from '../sequencer/workspace.ts'
-import { record } from '../store/bench.ts'
+import { cloned, get, git, gitBase, maybe, planDir, put, remote, srcDir } from '../sequencer/workspace.ts'
+import { record, setUntested } from '../store/bench.ts'
 import { logged, runLogged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { observed } from '../store/lanes.ts'
@@ -17,7 +17,7 @@ import { needsCeo, type PlanRow } from '../store/plans.ts'
 import { byRun, pending } from '../store/transcript.ts'
 import { DEFAULT_BUILDER, type Step } from './pr-path.ts'
 
-export const steps: Step[] = ['checkout', 'generate', 'score'].map((name, step) =>
+export const steps: Step[] = ['checkout', 'generate', 'score', 'null_check'].map((name, step) =>
   ({ step, name, seat: DEFAULT_BUILDER, fires: name === 'generate' ? 'seat' : 'kernel', runs: name, gate: false, writes_verdict: false, verdict_gate: null }))
 
 const NEEDED = ['repo', 'fix', 'pre_fix']
@@ -39,6 +39,8 @@ const PROPERTIES = 'Properties.sol'
 const TIMEOUTS = { BASH_DEFAULT_TIMEOUT_MS: '1800000', BASH_MAX_TIMEOUT_MS: '1800000' }
 
 const ATTEMPTS = '/tmp/x-ray-attempts.md'
+
+const CAP = 60 * 60 * 1000
 
 function ask(skill: string | undefined, xray: string | undefined): string {
   const said = `Generate the fuzz suite for the project in the working folder in automatic mode, asking nothing: SUITE_DIR is ${SUITE} and META_DIR is ${SUITE}/${META}. `
@@ -151,24 +153,42 @@ export function scored(db: Db, root: string, plan: PlanRow): Outcome {
   if (config !== null) writeFileSync(join(bench, suites, 'medusa.json'), config)
   mkdirSync(join(bench, 'results', target), { recursive: true })
   const written = join(bench, 'results', target, `${target}.jsonl`)
-  for (const script of ['run_pair', 'null_check'].filter((s) => s === 'run_pair' || existsSync(join(bench, `bench/${s}.py`)))) {
-    const ran = spawnSync('python3', [`bench/${script}.py`, `targets/${target}.yml`, suites], { cwd: bench, encoding: 'utf8' })
-    if (ran.error !== undefined || ran.status !== 0) {
-      const note = ran.error?.message ?? ran.stderr.trim().split('\n').at(-1) ?? ''
-      needsCeo(db, plan, note)
-      logged(db, { plan: plan.id, kind: 'score', actor: 'score', outcome: 'needs_coo', message: note, pointer: 'step-2', run: null })
-      return { outcome: 'pass', held: true, quiet: true, spans: [`bench.${script}`], note }
-    }
-    if (!existsSync(written)) return { outcome: 'refuse', spans: ['bench.no_results'], note: `${script}.py exited 0 and wrote no results/${target}/${target}.jsonl` }
-  }
+  const ran = spawnSync('python3', ['bench/run_pair.py', `targets/${target}.yml`, suites], { cwd: bench, encoding: 'utf8' })
+  if (ran.error !== undefined || ran.status !== 0) return heldForCoo(db, plan, ran, 'run_pair')
+  if (!existsSync(written)) return { outcome: 'refuse', spans: ['bench.no_results'], note: `run_pair.py exited 0 and wrote no results/${target}/${target}.jsonl` }
   const pairs = rows(written)
   if (pairs.length === 0) return { outcome: 'refuse', spans: ['bench.empty_results'], note: `results/${target}/${target}.jsonl has no rows` }
-  const kills = join(bench, 'results', target, `${target}.nullcheck.jsonl`)
   const score = { catches: pairs.filter((r) => r.verdict === 'catch').length, false_positives: pairs.filter((r) => r.verdict === 'fp_candidate').length,
-    untested: existsSync(kills) ? rows(kills).filter((r) => r.untested === true).length : null, tokens, seconds, x_ray: x_ray ?? null }
+    untested: null, tokens, seconds, x_ray: x_ray ?? null }
   record(db, { plan: plan.id, target, generator, ...score })
   put(root, plan.id, 'score.json', JSON.stringify({ fuzz_bench: sha, ...score }))
   return { outcome: 'pass', spans: [], note: `score.json written at fuzz-bench ${sha.slice(0, 12)}` }
+}
+
+export function nullChecked(db: Db, root: string, plan: PlanRow, cap = CAP): Outcome {
+  const { target = '', generator = '', null_check: on } = fields(maybe(root, plan.id, 'target.yml') ?? '')
+  if (on !== 'true') return { outcome: 'pass', spans: [], note: 'null_check is off in target.yml' }
+  const bench = join(planDir(root, plan.id), 'fuzz-bench')
+  if (!existsSync(join(bench, 'bench/null_check.py'))) return { outcome: 'pass', spans: [], note: 'fuzz-bench has no bench/null_check.py' }
+  const ran = spawnSync('python3', ['bench/null_check.py', `targets/${target}.yml`, `suites/${generator}/${target}`],
+    { cwd: bench, encoding: 'utf8', timeout: cap })
+  const capped = (ran.error as NodeJS.ErrnoException | undefined)?.code === 'ETIMEDOUT'
+  if (!capped && (ran.error !== undefined || ran.status !== 0)) return heldForCoo(db, plan, ran, 'null_check')
+  const ended = capped ? `stopped at the ${String(cap)} ms cap` : 'finished'
+  const kills = join(bench, 'results', target, `${target}.nullcheck.jsonl`)
+  if (!existsSync(kills)) return { outcome: 'pass', spans: [], note: `null_check.py ${ended} with no results/${target}/${target}.nullcheck.jsonl` }
+  const counted = rows(kills)
+  const untested = counted.filter((r) => r.untested === true).length
+  setUntested(db, plan.id, untested)
+  put(root, plan.id, 'score.json', JSON.stringify({ ...JSON.parse(get(root, plan.id, 'score.json')) as object, untested }))
+  return { outcome: 'pass', spans: [], note: `null_check.py ${ended}: ${String(untested)} untested in ${String(counted.length)} rows` }
+}
+
+function heldForCoo(db: Db, plan: PlanRow, ran: SpawnSyncReturns<string>, script: string): Outcome {
+  const note = ran.error?.message ?? ran.stderr.trim().split('\n').at(-1) ?? ''
+  needsCeo(db, plan, note)
+  logged(db, { plan: plan.id, kind: 'score', actor: 'score', outcome: 'needs_coo', message: note, pointer: `step-${String(plan.step)}`, run: null })
+  return { outcome: 'pass', held: true, quiet: true, spans: [`bench.${script}`], note }
 }
 
 function unproven(suite: string, name: string): Outcome | number {

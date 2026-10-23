@@ -144,6 +144,12 @@ test('the handback format beside an unrelated path is two jobs', () => {
   expect(on(handback([...readers, '- sequencer/tests/brief.test.ts:116-129'], ['- nothing else']))).toBeNull()
 })
 
+test('D1 D2: the audit moves the format only in its blocks', () => {
+  const at = (lines: string): string => swap(brief, '## Files', [`- rails/completion-audit/index.ts${lines}`, '- store/verdict.ts'])
+  expect(on(at(':62-70'))).toBeNull()
+  for (const lines of ['', ':90-102', ':60-95']) expect(on(at(lines))).toMatchObject({ span: 'sequencer/rails.ts' })
+})
+
 test('D1-D3: a Files row on a file over 300 lines names its range', () => {
   const dir = mkdtempSync(join(tmpdir(), 'ranged-'))
   mkdirSync(join(dir, 'a'))
@@ -228,7 +234,7 @@ test('D1-D3: a prompt with no fence changes no format', () => {
 test('the completion audit is a format change, line or not', () => {
   const unaffected = ['- nothing else']
   expect(on(handback([], unaffected))).toMatchObject({ span: 'sequencer/rails.ts' })
-  expect(on(handback([], unaffected).replace('- rails/completion-audit/index.ts', '- rails/completion-audit/index.ts:12')))
+  expect(on(handback([], unaffected).replace('- rails/completion-audit/index.ts', '- rails/completion-audit/index.ts:95')))
     .toMatchObject({ span: 'sequencer/rails.ts' })
 })
 

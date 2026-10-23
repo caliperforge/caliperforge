@@ -23,20 +23,20 @@ afterEach(() => {
 
 test('D2: a paraphrased quote is quote_missing, nothing written', async () => {
   const w = world()
-  expect(await drafted(w.root, plan(w.db, 1), draft('The limit is three.'))).toMatchObject({ outcome: 'refuse', spans: ['research.quote_missing'] })
+  expect(await drafted(w.db, w.root,plan(w.db, 1), draft('The limit is three.'))).toMatchObject({ outcome: 'refuse', spans: ['research.quote_missing'] })
   expect(maybe(w.root, 1, 'sources.json')).toBeNull()
   expect(maybe(w.root, 1, 'answer.md')).toBeNull()
 })
 
 test('D3: a draft with no sources fence is refused unfetched', async () => {
   const w = world()
-  expect(await drafted(w.root, plan(w.db, 1), 'The cap is 3 [source:1].')).toMatchObject({ outcome: 'refuse', spans: ['researcher.fence'] })
+  expect(await drafted(w.db, w.root,plan(w.db, 1), 'The cap is 3 [source:1].')).toMatchObject({ outcome: 'refuse', spans: ['researcher.fence'] })
   expect(fetched).not.toHaveBeenCalled()
 })
 
 test('D4: a quote on the page passes', async () => {
   const w = world()
-  expect(await drafted(w.root, plan(w.db, 1), draft('The cap is 3.')))
+  expect(await drafted(w.db, w.root,plan(w.db, 1), draft('The cap is 3.')))
     .toEqual({ outcome: 'pass', spans: [], note: '1 sentence(s) checked against 1 url(s)' })
 })
 

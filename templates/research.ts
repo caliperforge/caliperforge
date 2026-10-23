@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { homedir } from 'node:os'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import { z } from 'zod'
+import { gh, type Read } from '../cli/gh.ts'
 import type { Provider } from '../providers/kind.ts'
 import { loadReviews, specHash } from '../reviews/bench.ts'
 import { read } from '../reviews/verdict.ts'
@@ -11,7 +12,7 @@ import { prose } from '../sequencer/prose.ts'
 import { WIRE, type Wire } from '../sequencer/push.ts'
 import { ran } from '../sequencer/seat.ts'
 import { get, headSha, maybe, planDir, put, srcDir, titleOf } from '../sequencer/workspace.ts'
-import { runLogged } from '../store/events.ts'
+import { logged, runLogged } from '../store/events.ts'
 import { posts, proofed } from '../store/desk.ts'
 import type { Db } from '../store/index.ts'
 import { get as setting, observed, wall } from '../store/lanes.ts'
@@ -26,7 +27,11 @@ export const FENCE = /(?:^|\n)(?:```\w*\n)?---[ \t]*\n(sources:[\s\S]*?)\n---[ \
 
 const NEEDS = /(?:^|\n)(?:```\w*\n)?---[ \t]*\noutcome:[ \t]*(needs_run|needs_build)[ \t]*\n---[ \t]*(?:\n```[ \t]*)?\s*$/
 
-const MOVING = /^https?:\/\/(?:github\.com\/[^/]+\/[^/]+\/(?:blob|commits)|raw\.githubusercontent\.com\/[^/]+\/[^/]+|api\.github\.com\/repos\/[^/]+\/[^/]+\/(?:commits|git\/trees))\/(?:main|master|HEAD)(?:[/?#]|$)/
+const MOVING = /^(https?:\/\/(?:github\.com\/[^/]+\/[^/]+\/(?:blob|commits)|raw\.githubusercontent\.com\/[^/]+\/[^/]+|api\.github\.com\/repos\/[^/]+\/[^/]+\/(?:commits|git\/trees))\/)(main|master|HEAD)(?=[/?#]|$)/
+
+const REPO = /^https?:\/\/[^/]+\/(?:repos\/)?([^/]+\/[^/]+)/
+
+const Commits = z.array(z.object({ sha: z.string() }))
 
 const KEYS = ['fetched_at', 'quote', 'claim', 'command', 'commit']
 
@@ -69,21 +74,39 @@ function fenced(reply: string): { data: z.infer<typeof Sources> } | { why: strin
   return got.success ? { data: got.data } : { why: got.error.issues.map((i) => `${i.path.join('.')} ${i.message}`).join('; ') }
 }
 
-function vetted(reply: string): Outcome | { sources: Source[] } {
+function pin(db: Db, plan: PlanRow, { url, fetched_at }: { url: string; fetched_at: string }, ref: string, read: Read): string | null {
+  try {
+    const [commit] = Commits.parse(read(['api', `repos/${REPO.exec(url)?.[1] ?? ''}/commits?sha=${ref}&until=${fetched_at}&per_page=1`]))
+    return commit === undefined ? null : url.replace(MOVING, `$1${commit.sha}`)
+  } catch (error) {
+    const why = error instanceof Error ? error.message : String(error)
+    logged(db, { plan: plan.id, kind: 'research.unpinned', actor: 'research', outcome: 'refuse', message: `${url}: ${why}`, pointer: null, run: null })
+    return null
+  }
+}
+
+function vetted(db: Db, plan: PlanRow, reply: string, read: Read): Outcome | { sources: Source[]; reply: string } {
   const got = fenced(reply)
   if ('why' in got) return { outcome: 'refuse', spans: ['researcher.fence'], note: `researcher reply has no valid sources fence: ${got.why}` }
   const unquoted = got.data.sources.filter((s) => (('run' in s ? s.run.quote : s.quote) ?? '').trim() === '').map((s) => 'run' in s ? s.run.command : s.url)
   if (unquoted.length > 0) return { outcome: 'refuse', spans: ['researcher.unquoted'], note: `no quote for ${unquoted.join(', ')}` }
-  const moving = got.data.sources.flatMap((s) => 'url' in s && MOVING.test(s.url) ? [s.url] : [])
-  if (moving.length > 0) return { outcome: 'refuse', spans: ['research.moving_ref'], note: `moving ref in ${moving.join(', ')}` }
-  return { sources: got.data.sources as Source[] }
+  const looked = got.data.sources.flatMap((s) => 'url' in s ? [s] : []).flatMap((s) => {
+    const ref = MOVING.exec(s.url)?.[2]
+    return ref === undefined ? [] : [{ old: s.url, pinned: pin(db, plan, s, ref, read) }]
+  })
+  const failed = looked.filter((l) => l.pinned === null).map((l) => l.old)
+  if (failed.length > 0) return { outcome: 'refuse', spans: ['research.moving_ref'], note: `moving ref in ${failed.join(', ')}` }
+  const pins = new Map(looked.flatMap((l) => l.pinned === null ? [] : [[l.old, l.pinned] as const]))
+  for (const [old, pinned] of pins) logged(db, { plan: plan.id, kind: 'research.pinned', actor: 'research', outcome: 'pass', message: `${old} → ${pinned}`, pointer: null, run: null })
+  return { sources: got.data.sources.map((s) => 'url' in s ? { ...s, url: pins.get(s.url) ?? s.url } : s) as Source[],
+    reply: [...pins].reduce((text, [old, pinned]) => text.split(old).join(pinned), reply) }
 }
 
-export function sourced(root: string, plan: PlanRow, reply: string): Outcome {
-  const got = vetted(reply)
+export function sourced(db: Db, root: string, plan: PlanRow, reply: string, read: Read = gh): Outcome & { reply?: string } {
+  const got = vetted(db, plan, reply, read)
   if ('outcome' in got) return got
   put(root, plan.id, 'sources.json', JSON.stringify(got.sources))
-  return { outcome: 'pass', spans: [], note: `sources.json written with ${String(got.sources.length)} source(s)` }
+  return { outcome: 'pass', spans: [], note: `sources.json written with ${String(got.sources.length)} source(s)`, reply: got.reply }
 }
 
 function against(root: string, plan: PlanRow, answer: string, sources: Source[], stated?: (answer: string) => void): Promise<Outcome> {
@@ -97,9 +120,9 @@ export function check(db: Db, root: string, plan: PlanRow): Promise<Outcome> {
 }
 
 
-export function drafted(root: string, plan: PlanRow, reply: string): Promise<Outcome> {
-  const got = vetted(reply)
-  return 'outcome' in got ? Promise.resolve(got) : against(root, plan, reply.replace(FENCE, '').trim(), got.sources)
+export function drafted(db: Db, root: string, plan: PlanRow, reply: string, read: Read = gh): Promise<Outcome> {
+  const got = vetted(db, plan, reply, read)
+  return 'outcome' in got ? Promise.resolve(got) : against(root, plan, got.reply.replace(FENCE, '').trim(), got.sources)
 }
 
 const row = (name: string, step: number): Step =>
@@ -160,14 +183,14 @@ function output(ask: string): { out?: string } | { why: string } {
 const BEFORE = '\n\n# Before you hand in\n\nWrite the answer and its closing fence to `.cf/draft.md`, run `cf research check .cf/draft.md`, fix what it names, '
   + 'and hand in that draft only once it prints `pass`.'
 
-export async function gather(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
+export async function gather(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider, read: Read = gh): Promise<Outcome> {
   const asked = question(root, plan)
   if (asked.outcome === 'refuse') return asked
-  const got = await gathering(db, root, plan, step, provider)
+  const got = await gathering(db, root, plan, step, provider, read)
   return asked.note === WRITTEN ? got : { ...got, note: `${asked.note}; ${got.note}` }
 }
 
-async function gathering(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider, measured = false): Promise<Outcome> {
+async function gathering(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider, read: Read, measured = false): Promise<Outcome> {
   const ask = askOf(root, plan)
   const folder = output(ask)
   if ('why' in folder) return { outcome: 'refuse', spans: ['ask.md'], note: folder.why }
@@ -187,7 +210,7 @@ async function gathering(db: Db, root: string, plan: PlanRow, step: Step, provid
   const fired = await ran(db, root, plan, seat, fires, input, false, true, out)
   if (fired.ended !== 'completed') return { outcome: 'refuse', spans: [fired.stop_reason ?? 'seat.exit'], note: `${seat.runs} ${fired.ended}` }
   const needs = NEEDS.exec(fired.text)?.[1]
-  if (!measure && needs === 'needs_run') return gathering(db, root, plan, step, provider, true)
+  if (!measure && needs === 'needs_run') return gathering(db, root, plan, step, provider, read, true)
   if (measure && needs === 'needs_build') {
     const note = 'ask needs network or writes outside .cf/measure/: add an **Output:** line naming a folder under ~/cf_work/ so the fetcher runs it'
     put(root, plan.id, 'question.md', note)
@@ -195,10 +218,10 @@ async function gathering(db: Db, root: string, plan: PlanRow, step: Step, provid
   }
   const fromDraft = !FENCE.test(fired.text) && existsSync(draft)
   const reply = fromDraft ? readFileSync(draft, 'utf8') : fired.text
-  const sources = sourced(root, plan, reply)
+  const sources = sourced(db, root, plan, reply, read)
   if (sources.outcome === 'refuse') return sources
   if (measure) put(root, plan.id, 'runs.json', JSON.stringify(transcripts(db, plan.id, step.step).flatMap(outputs)))
-  put(root, plan.id, 'answer.md', reply.replace(FENCE, '').trim())
+  put(root, plan.id, 'answer.md', (sources.reply ?? reply).replace(FENCE, '').trim())
   return { outcome: 'pass', spans: [], note: `${seat.runs}: answer.md written${fromDraft ? ' from .cf/draft.md, the reply had no fence' : ''}, ${sources.note}` }
 }
 

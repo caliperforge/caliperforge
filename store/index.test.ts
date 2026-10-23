@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, expect, it, vi } from 'vitest'
-import { addRule, dump, lapping, migrate, open, rules, upsertRule } from './index.ts'
+import { LOCKED, addRule, dump, lapping, migrate, open, rules, upsertRule } from './index.ts'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const sleep = (ms: number): void => { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms) }
@@ -87,4 +87,41 @@ it('D3 a slow transaction outside a lap logs plan none', () => {
   const db = open(':memory:')
   db.transaction(() => { sleep(1100) })()
   expect(write.mock.calls).toEqual([[expect.stringMatching(/^cf: transaction held 1\.\d s at store\/index\.test\.ts:88 plan none\n$/)]])
+})
+
+const locked = () => {
+  const path = join(mkdtempSync(join(tmpdir(), 'cf-busy-')), 'cf.db')
+  const db = open(path)
+  db.pragma('busy_timeout = 50')
+  db.exec('CREATE TABLE t (n INTEGER)')
+  const holder = open(path)
+  holder.exec('BEGIN IMMEDIATE')
+  return { db, holder }
+}
+
+it('D1 D2 a busy BEGIN retries and commits once the lock goes', () => {
+  const { db, holder } = locked()
+  const write = vi.spyOn(process.stderr, 'write').mockImplementation(() => { holder.exec('COMMIT'); return true })
+  expect(db.transaction(() => db.prepare('INSERT INTO t VALUES (1)').run().changes)()).toBe(1)
+  expect(db.prepare('SELECT n FROM t').all()).toEqual([{ n: 1 }])
+  expect(write.mock.calls).toEqual([[expect.stringMatching(/^cf: store busy at store\/index\.test\.ts:105 plan none, retry 1 in 100 ms\n$/)]])
+  expect(String(write.mock.calls[0]?.[0])).not.toContain('database is locked')
+})
+
+it('D3 a lock never released throws after 4 retries', () => {
+  const { db } = locked()
+  const write = stderr()
+  let runs = 0
+  expect(() => { db.transaction(() => { runs++ })() }).toThrow(/database is locked/)
+  expect(runs).toBe(0)
+  expect(write).toHaveBeenCalledTimes(4)
+})
+
+it('D4 a LOCKED throw from the body is not retried', () => {
+  const write = stderr()
+  const db = open(':memory:')
+  let runs = 0
+  expect(() => db.transaction(() => { runs++; throw new Error(LOCKED) })()).toThrow(LOCKED)
+  expect(runs).toBe(1)
+  expect(write).not.toHaveBeenCalled()
 })

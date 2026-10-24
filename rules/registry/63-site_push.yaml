@@ -1,6 +1,6 @@
 - name: site_push
   table: events
   column: at
-  where: "kind = 'site_push' AND outcome = 'refuse' AND julianday(events.at) < julianday('now', '-1 hour') AND NOT EXISTS (SELECT 1 FROM events p WHERE p.kind = 'site_push' AND p.outcome = 'pass' AND p.id > events.id)"
+  where: "kind = 'site_push' AND outcome IN ('refuse', 'needs_coo') AND julianday(events.at) < julianday('now', '-1 hour') AND NOT EXISTS (SELECT 1 FROM events p WHERE p.kind = 'site_push' AND p.outcome = 'pass' AND p.id > events.id)"
   gap: 7d
   expected: 0

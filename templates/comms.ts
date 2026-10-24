@@ -140,7 +140,10 @@ function dated(root: string, plan: PlanRow, step: Step, text: string): Outcome {
 
 export async function draft(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
   const title = titled(db, plan, 'daily') ?? titled(db, plan, 'ship') ?? titled(db, plan, 'weekly') ?? titled(db, plan, 'catchup')
-  if (title === null) return { outcome: 'pass', spans: [], note: 'not a post plan' }
+  if (title === null && (titled(db, plan, 'growth') ?? titled(db, plan, 'scorecard')) !== null) return { outcome: 'pass', spans: [], note: 'not a post plan' }
+  if (title === null) {
+    return { outcome: 'refuse', spans: ['plans'], note: `not a post plan: "${planTitle(db, plan.id) ?? 'no title'}" starts with none of ${Object.keys(MODES).join(', ')}` }
+  }
   if (maybe(root, plan.id, 'refusal.md')?.startsWith('step 3 ') === true) move(root, plan.id, 'refusal.md', 'refusal.prev.md')
   const [refusal, prev] = [maybe(root, plan.id, 'refusal.md'), maybe(root, plan.id, 'refusal.prev.md')]
   const refused = refusal === null ? prev : prev?.startsWith('step 3 ') === true ? `${refusal}\n\n${prev}` : refusal

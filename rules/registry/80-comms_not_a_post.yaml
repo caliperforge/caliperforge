@@ -1,0 +1,6 @@
+- name: comms_not_a_post
+  table: events
+  column: at
+  where: "kind = 'draft' AND outcome = 'refuse' AND message LIKE 'not a post plan:%'"
+  gap: 7d
+  expected: 0

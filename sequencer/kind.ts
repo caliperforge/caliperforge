@@ -13,7 +13,7 @@ import type { Part } from './brief.ts'
  * row of its kind, so the tick writes none.
  */
 export interface Outcome {
-  outcome: Verdict['outcome']
+  outcome: Verdict['outcome'] | 'needs_coo'
   spans: string[]
   note: string
   message?: string
@@ -35,7 +35,7 @@ export interface Fired {
   plan: number
   step: number
   name: string
-  outcome: Verdict['outcome']
+  outcome: Verdict['outcome'] | 'needs_coo'
   state: string
   spans: string[]
   note: string

@@ -59,7 +59,9 @@ On someone else's repository the brief also carries `## Reproduced`, after `## S
 `- expect: fails` for a bug or `- expect: shows` for a feature request. The command is one the builder for
 the language of the brief's files may run by its `Bash(...)` list (`uv run`, `cargo test`, `go test`,
 `bundle exec`, `./gradlew`, `npm run test`); one off that list, or chained, is refused. A caliperforge/* brief
-carries no `## Reproduced`.
+carries no `## Reproduced`. The command runs on a clean base checkout without the brief's new tests, so a
+`fails` row must fail there; when only a test the brief adds can show the bug, write `- expect: shows` with
+a command whose output shows it and cite the evidence under `## Settled facts`.
 
 When the ask mirrors, ports or matches another implementation, list that implementation's input rules
 under `## Must not break`: the values it accepts, what it does with an empty input, its bounds and the

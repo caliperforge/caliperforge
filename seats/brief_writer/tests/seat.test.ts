@@ -103,6 +103,7 @@ test('an outside brief carries ## Reproduced, ours does not', () => {
   const prompt = seat(root, 'brief_writer').prompt.replace(/\s+/g, ' ')
   expect(prompt).toContain('On someone else\'s repository the brief also carries `## Reproduced`, after `## Settled facts`')
   expect(prompt).toContain('one off that list, or chained, is refused. A caliperforge/* brief carries no `## Reproduced`.')
+  expect(prompt).toContain('A caliperforge/* brief carries no `## Reproduced`. The command runs on a clean base checkout without the brief\'s new tests, so a `fails` row must fail there; when only a test the brief adds can show the bug, write `- expect: shows` with a command whose output shows it and cite the evidence under `## Settled facts`.')
 })
 
 test('the prompt carries a word-for-word block under Approach', () => {

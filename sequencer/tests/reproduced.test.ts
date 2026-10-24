@@ -103,7 +103,7 @@ test('run D1 issue.md carries the base, the exit and the output', async () => {
 test('run D2 a fails that exits 0 stops step 1 as already fixed', async () => {
   const w = moved('already works', 0)
   const { fired } = await briefing(w)
-  expect(fired).toMatchObject({ step: 1, outcome: 'needs_ceo', spans: ['already fixed'] })
+  expect(fired).toMatchObject({ step: 1, outcome: 'needs_coo', spans: ['already fixed'] })
   expect(maybe(w.root, w.plan, 'issue.md')).toBeNull()
   expect(holdOf(w.db, w.plan)?.held_why).toContain(`brief_writer: already fixed at ${baseOf(w)}: ${COMMANDED} exited 0 > `)
   expect(holdOf(w.db, w.plan)?.held_why).toContain(' > already works')
@@ -115,7 +115,7 @@ test('run D7 a ruling on an already fixed stop escalates again', async () => {
   rule(w.db, w.root, plan(w.db, w.plan), 'director', 'the bug is live on main')
   resume(w.db, w.plan)
   await tick(w.db, w.root, stub(CARRIED))
-  expect(eventsOf(w.db, w.plan, 'ruling').map((e) => e.outcome)).toEqual(['escalate', 'escalate'])
+  expect(eventsOf(w.db, w.plan, 'ruling').map((e) => e.outcome)).toEqual(['needs_coo', 'needs_coo'])
   expect(plan(w.db, w.plan).state).toBe('blocked_on_ceo')
 })
 
@@ -123,8 +123,9 @@ test('run D8 an unruled already fixed stop repeats quietly', async () => {
   const w = moved('already works', 0)
   await briefing(w)
   resume(w.db, w.plan)
-  expect((await tick(w.db, w.root, stub(CARRIED)))[0]).toMatchObject({ outcome: 'needs_ceo', state: 'blocked_on_ceo' })
-  expect(eventsOf(w.db, w.plan, 'ruling').map((e) => e.outcome)).toEqual(['escalate'])
+  expect((await tick(w.db, w.root, stub(CARRIED)))[0]).toMatchObject({ outcome: 'needs_coo', state: 'blocked_on_ceo' })
+  expect(eventsOf(w.db, w.plan, 'ruling').map((e) => e.outcome)).toEqual(['needs_coo'])
+  expect(holdOf(w.db, w.plan)?.held_by).toBe('coo')
   expect(holdOf(w.db, w.plan)?.held_why).toContain('brief_writer: already fixed at ')
   const inner = stub(CARRIED)
   let briefs = 0

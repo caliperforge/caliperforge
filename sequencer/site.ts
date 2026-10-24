@@ -75,6 +75,7 @@ export function commit(siteDir: string, name: string): void {
 export function push(db: Db, now: Date): number {
   const dir = siteDir(db)
   if (dir === null) throw new Error('comms.site_dir is unset')
+  served(dir)
   send(dir)
   const count = published(db, now.toISOString())
   logged(db, { plan: null, kind: 'site_push', actor: 'ceo', outcome: 'pass', message: `${String(count)} post(s)`, pointer: null, run: null }, now.toISOString())
@@ -87,13 +88,14 @@ export function ripe(db: Db, now: Date): void {
   const rows = aged(db, stamp(new Date(now.getTime() - 86_400_000)), stamp(now))
   if (dir === null || rows.length === 0 || awaiting(db)) return
   try {
+    served(dir)
     for (const row of rows.filter((r) => r.url === null)) place(db, dir, row)
     send(dir)
     aired(db, rows.map((r) => r.id), now.toISOString())
     logged(db, { plan: null, kind: 'site_push', actor: 'tick', outcome: 'pass', message: `${String(rows.length)} post(s)`, pointer: null, run: null },
       now.toISOString())
   } catch (error) {
-    const [outcome, message] = [error instanceof Conflict ? 'needs_coo' as const : 'refuse' as const, firstLine(error)]
+    const [outcome, message] = [error instanceof Conflict ? 'needs_coo' as const : 'refuse' as const, said(error)]
     const last = lastSince(db, 'site_push', new Date(now.getTime() - 86_400_000).toISOString())
     if (last?.outcome !== outcome || last.message !== message) {
       logged(db, { plan: null, kind: 'site_push', actor: 'tick', outcome, message, pointer: null, run: null }, now.toISOString())
@@ -103,14 +105,26 @@ export function ripe(db: Db, now: Date): void {
 
 class Conflict extends Error {}
 
+function served(dir: string): void {
+  const branch = git(dir, ['rev-parse', '--abbrev-ref', 'HEAD']).trim()
+  if (branch !== 'main') throw new Conflict(`site checkout is on ${branch}, not main`)
+}
+
+function said(error: unknown): string {
+  const stderr = error instanceof Error && 'stderr' in error ? error.stderr : undefined
+  const lines = typeof stderr === 'string' ? stderr.split('\n').map((l) => l.trim()) : []
+  return lines.find((l) => l !== '' && !l.startsWith('To ')) ?? firstLine(error)
+}
+
 function send(dir: string): void {
-  git(dir, ['fetch', 'origin'])
+  git(dir, ['fetch'])
+  const upstream = git(dir, ['rev-parse', '--abbrev-ref', '@{upstream}']).trim()
   try {
-    git(dir, ['merge', '--no-edit', 'origin/main'])
+    git(dir, ['merge', '--no-edit', upstream])
   } catch (error) {
     const files = unmerged(dir)
     abortMerge(dir)
-    if (files.length > 0) throw new Conflict(`origin/main conflicts on ${files.join(', ')}`)
+    if (files.length > 0) throw new Conflict(`${upstream} conflicts on ${files.join(', ')}`)
     throw error
   }
   git(dir, ['push'])
@@ -138,6 +152,7 @@ export function sitedata(db: Db, root: string, now: Date): void {
     return
   }
   try {
+    served(dir)
     const files = exported(join(root, 'cf.db'), dir, now).map((p) => relative(dir, p))
     git(dir, ['add', '--', ...files])
     const changed = git(dir, ['diff', '--cached', '--name-only', '--', ...files]).split('\n').filter((l) => l !== '')
@@ -147,7 +162,7 @@ export function sitedata(db: Db, root: string, now: Date): void {
     }
     logged(db, { ...event, outcome: 'pass', message: `${String(changed.length + redesign(dir, day, now))} files` })
   } catch (error) {
-    logged(db, { ...event, outcome: error instanceof Conflict ? 'needs_coo' : 'refuse', message: firstLine(error) })
+    logged(db, { ...event, outcome: error instanceof Conflict ? 'needs_coo' : 'refuse', message: said(error) })
   }
 }
 

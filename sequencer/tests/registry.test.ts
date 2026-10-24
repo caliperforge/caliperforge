@@ -137,6 +137,12 @@ test('sitePushSeen D5', () => {
   expect(drift(now, sitePush, new Date())).toEqual([])
 })
 
+test('sitePushSeen D4: a needs_coo push is seen', () => {
+  const d = db()
+  logged(d, { plan: null, kind: 'site_push', actor: 'tick', outcome: 'needs_coo', message: 'm', pointer: null, run: null }, '2026-10-02 10:00:00')
+  expect(drift(d, REGISTRY.filter((e) => e.name === 'site_push'), NOW)).toMatchObject([{ name: 'site_push', state: 'seen' }])
+})
+
 test('researchQuoteTextSeen D6', () => {
   const entry = REGISTRY.filter((e) => e.name === 'research_quote_text')
   const d = db()

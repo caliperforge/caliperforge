@@ -186,6 +186,69 @@ test('a src with no base.sha is moved aside and cloned fresh', () => {
   expect(existsSync(join(planDir(w.root, 1), aside[0] ?? '', 'leftover.txt'))).toBe(true)
 })
 
+/** A commit on a fork branch the plan's clone never fetched, pushed from a second clone. */
+function elsewhere(root: string, files: Record<string, string>): string {
+  const other = join(root, 'other')
+  git(root, ['clone', '-q', join(root, 'remotes', 'caliperforge/widget'), other])
+  for (const [path, body] of Object.entries(files)) writeFileSync(join(other, path), body)
+  git(other, ['add', '-A'])
+  git(other, ['commit', '-qm', 'redesign'])
+  git(other, ['push', '-q', 'origin', 'HEAD:redesign'])
+  return git(other, ['rev-parse', 'HEAD']).trim()
+}
+
+test('D1 a base.sha HEAD lacks re-checks the branch out there', () => {
+  const w = world()
+  checkout(w.root, 1, 'acme/widget', BRANCH)
+  const sha = elsewhere(w.root, { 'redesign.ts': 'export const redesign = 1\n' })
+  put(w.root, 1, 'base.sha', `${sha}\n`)
+
+  const again = checkout(w.root, 1, 'acme/widget', BRANCH)
+  expect(git(again.dir, ['rev-parse', 'HEAD']).trim()).toBe(sha)
+  expect(git(again.dir, ['rev-parse', '--abbrev-ref', 'HEAD']).trim()).toBe(BRANCH)
+  expect(again.base).toBe(sha)
+  expect(diffOf(w.root, 1)).not.toContain('redesign.ts')
+})
+
+test('D2 a base.sha HEAD already holds leaves HEAD where it was', () => {
+  const w = world()
+  const first = checkout(w.root, 1, 'acme/widget', BRANCH)
+  writeFileSync(join(first.dir, 'added.ts'), 'export const added = 1\n')
+  git(first.dir, ['add', '-A'])
+  git(first.dir, ['commit', '-qm', 'round one'])
+  const head = git(first.dir, ['rev-parse', 'HEAD']).trim()
+
+  checkout(w.root, 1, 'acme/widget', BRANCH)
+  expect(git(first.dir, ['rev-parse', 'HEAD']).trim()).toBe(head)
+  expect(diffOf(w.root, 1)).toContain('added.ts')
+})
+
+test('D3 an untracked file survives the move to a new base', () => {
+  const w = world()
+  const first = checkout(w.root, 1, 'acme/widget', BRANCH)
+  writeFileSync(join(first.dir, 'added.ts'), 'export const added = 1\n')
+  put(w.root, 1, 'base.sha', `${elsewhere(w.root, { 'redesign.ts': 'export const redesign = 1\n' })}\n`)
+
+  checkout(w.root, 1, 'acme/widget', BRANCH)
+  expect(diffOf(w.root, 1)).toContain('added.ts')
+  expect(diffOf(w.root, 1)).not.toContain('redesign.ts')
+})
+
+test('D4 a tracked edit the new base overwrites throws', () => {
+  const w = world()
+  const first = checkout(w.root, 1, 'acme/widget', BRANCH)
+  const tracked = git(first.dir, ['ls-files']).split('\n')[0] ?? ''
+  const head = git(first.dir, ['rev-parse', 'HEAD']).trim()
+  writeFileSync(join(first.dir, tracked), 'builder edit\n')
+  const sha = elsewhere(w.root, { [tracked]: 'redesign edit\n' })
+  put(w.root, 1, 'base.sha', `${sha}\n`)
+
+  expect(() => checkout(w.root, 1, 'acme/widget', BRANCH)).toThrow()
+  expect(git(first.dir, ['rev-parse', 'HEAD']).trim()).toBe(head)
+  expect(git(first.dir, ['diff', '--name-only']).trim()).toBe(tracked)
+  expect(maybe(w.root, 1, 'base.sha')).toBe(`${sha}\n`)
+})
+
 test('a src with a base.sha is reused with its untracked files', () => {
   const w = world()
   const first = checkout(w.root, 1, 'acme/widget', BRANCH)

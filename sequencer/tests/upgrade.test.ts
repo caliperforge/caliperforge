@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import { newest, pushedRow } from '../../store/deliverables.ts'
+import { allEvents } from '../../store/events.ts'
 import type { Db } from '../../store/index.ts'
 import { last, receipt, type Receipt } from '../../store/ticks.ts'
 import { tick } from '../index.ts'
@@ -92,6 +93,7 @@ test('a live tree with its own commit is refused: nothing moves', () => {
   expect(git(live, ['rev-parse', 'HEAD'])).toBe(head)
   expect(git(live, ['rev-parse', 'main'])).toBe(head)
   expect(version(db)).toBe(0)
+  expect(allEvents(db).filter((e) => e.kind === 'swallowed')).toMatchObject([{ plan: null, actor: 'upgrade' }])
 })
 
 test('a detached tick tree moves to the landing, migrated, clean', async () => {
@@ -121,6 +123,9 @@ test('a throwing schema file puts the sqlite error in the receipt', async () => 
   expect(row?.note).toContain(`${LAP.note}; migrate to ${git(live, ['rev-parse', 'HEAD']).slice(0, 12)}: `)
   expect(row?.note).toContain('table plans already exists')
   expect(version(w.db)).toBe(0)
+  const swallowed = allEvents(w.db).filter((e) => e.kind === 'swallowed')
+  expect(swallowed).toMatchObject([{ plan: null, actor: 'upgrade' }])
+  expect(swallowed[0]?.message).toContain('table plans already exists')
 })
 
 test('no landing of ours leaves the live tree and receipt alone', () => {

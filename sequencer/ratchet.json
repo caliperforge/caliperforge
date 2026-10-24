@@ -19,8 +19,7 @@
     "prepare": 1
   },
   "checks.ts": {
-    "lines": 349,
-    "silent-catch": 2
+    "lines": 341
   },
   "ci.ts": {
     "lines": 92,
@@ -138,8 +137,7 @@
     "lines": 525
   },
   "settle.ts": {
-    "lines": 298,
-    "silent-catch": 2
+    "lines": 298
   },
   "signals.ts": {
     "lines": 148
@@ -227,8 +225,7 @@
   },
   "upgrade.ts": {
     "lines": 66,
-    "prepare": 1,
-    "silent-catch": 2
+    "prepare": 1
   },
   "upstream.ts": {
     "lines": 60,

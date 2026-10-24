@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { existsSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test, vi } from 'vitest'
@@ -19,6 +19,16 @@ test('a dead holder is cleared', () => {
   const dir = mkdtempSync(join(tmpdir(), 'cf-slot-'))
   writeFileSync(join(dir, 'slot-0'), '999999')
   expect(slot(dir, 1, 10)).toBe(join(dir, 'slot-0'))
+})
+
+test('1567a D1 an unwritable slot dir throws', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cf-slot-'))
+  chmodSync(dir, 0o500)
+  try {
+    expect(() => slot(dir, 1, 10)).toThrow(/EACCES/)
+  } finally {
+    chmodSync(dir, 0o700)
+  }
 })
 
 test('a live holder is waited on', async () => {

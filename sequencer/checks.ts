@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process'
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { isAbsolute, join } from 'node:path'
+import { alive } from '../store/leases.ts'
 import type { Profile } from '../store/profile.ts'
 import { exitedOutside } from './exited.ts'
 import { gates, type Gate, type Outside, type OutsideLanguage, waived } from './gates.ts'
@@ -327,7 +328,8 @@ function claim(path: string): boolean {
   try {
     writeFileSync(path, String(process.pid), { flag: 'wx' })
     return true
-  } catch {
+  } catch (error) {
+    if ((error as { code?: string }).code !== 'EEXIST') throw error
     const holder = existsSync(path) ? Number(readFileSync(path, 'utf8')) : 0
     if (holder > 0 && !alive(holder)) rmSync(path, { force: true })
     return false
@@ -336,14 +338,4 @@ function claim(path: string): boolean {
 
 export function free(path: string): void {
   if (existsSync(path) && readFileSync(path, 'utf8') === String(process.pid)) rmSync(path, { force: true })
-}
-
-function alive(pid: number): boolean {
-  if (!Number.isInteger(pid) || pid <= 0) return false
-  try {
-    process.kill(pid, 0)
-    return true
-  } catch (error) {
-    return (error as { code?: string }).code === 'EPERM'
-  }
 }

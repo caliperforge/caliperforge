@@ -74,6 +74,13 @@ export function openRecords(db: Db, repo: string | null): Row[] {
     ORDER BY repo, pr`).all(repo, repo) as Row[]
 }
 
+export interface Tally { open: number; us: number; oldest: string | null }
+
+export function tally(db: Db): Tally {
+  return db.prepare(`SELECT count(*) AS open, coalesce(sum(ball = 'us'), 0) AS us, min(coalesce(word_at, opened_at)) AS oldest
+    FROM records WHERE state = 'OPEN' AND merged_at IS NULL`).get() as Tally
+}
+
 export function still(db: Db, repo: string): number {
   return (db.prepare("SELECT count(*) AS n FROM records WHERE repo = ? AND state = 'OPEN' AND merged_at IS NULL")
     .get(repo) as { n: number }).n

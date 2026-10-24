@@ -13,6 +13,7 @@ import { directorDays } from '../store/decisions.ts'
 import { overdue, week } from '../store/drift.ts'
 import { fixes, handUps, logged, repriced } from '../store/events.ts'
 import { holderOf, HOLDERS, overlapWaits, parked, pipeNamed } from '../store/plans.ts'
+import { tally } from '../store/record.ts'
 import { backfillTickets } from '../store/tickets.ts'
 import { backfill } from '../store/transcript.ts'
 import { actors, actorSection, byType, type ByType, caught, caughtSection, costs, costSection, day, fileWaits, greptileLine, halted, hands, heldBy, laneLine, misses, missSection, open as openPlans,
@@ -24,6 +25,7 @@ import { flow } from './flow.ts'
 import { gh } from './gh.ts'
 import { write as writeMap } from './map.ts'
 import { ack, line, unread } from './inbox.ts'
+import { outsideSection } from './outside.ts'
 import { refusalDays, refusalSection } from './refusals.ts'
 import { close } from './session.ts'
 import { staffingSection, unstaffed } from './staffing.ts'
@@ -212,6 +214,7 @@ function briefs(cf: Command, { root, db, out }: Cli): void {
     out(greptileLine(reviewed(handle, new Date())))
     out(missSection(misses(handle, root, new Date())))
     out(caughtSection(caught(handle, root, new Date())))
+    out(outsideSection(tally(handle), new Date()))
     out(section('open plans', openPlans(handle)))
     out(section('halted', halted(handle)))
     out(section('waiting on the CEO', heldBy(handle, 'ceo')))

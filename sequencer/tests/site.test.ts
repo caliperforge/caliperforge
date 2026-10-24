@@ -172,3 +172,41 @@ test('ripe D4: a failing push is logged once per spell', () => {
   ripe(db, new Date(start.getTime() + 25 * 3_600_000))
   expect(ofKind(db, 'site_push').map((e) => e.outcome)).toEqual(['refuse', 'refuse'])
 })
+
+test('push D1: a checkout merges its own upstream, then pushes', () => {
+  const { db, dir, other } = sited()
+  git(dir, ['remote', 'rename', 'origin', 'site'])
+  moved(other, 'README.md', 'site\n')
+  ripe(db, later(25))
+  expect(git(dir, ['ls-remote', 'site', 'main']).split('\t')[0]).toBe(head(dir))
+  expect(git(dir, ['log', '-1', '--format=%P']).trim().split(' ')).toHaveLength(2)
+  expect(ofKind(db, 'site_push')).toMatchObject([{ outcome: 'pass' }])
+})
+
+test("push D2: a refused push logs git's reason", () => {
+  const { db, dir, other } = sited()
+  const elsewhere = mkdtempSync(join(tmpdir(), 'cf-elsewhere-'))
+  git(elsewhere, ['init', '--bare', '-b', 'main'])
+  writeFileSync(join(other, 'README.md'), 'elsewhere\n')
+  git(other, ['add', 'README.md'])
+  git(other, ['commit', '-m', 'elsewhere'])
+  git(other, ['push', elsewhere, 'HEAD:main'])
+  git(dir, ['config', 'remote.origin.pushurl', elsewhere])
+  ripe(db, later(25))
+  const events = ofKind(db, 'site_push')
+  expect(events).toMatchObject([{ outcome: 'refuse' }])
+  expect(events[0]?.message).toContain('[rejected]')
+  expect(events[0]?.message).not.toContain('Command failed')
+})
+
+test('push D3: a checkout off main asks the coo once', () => {
+  const { db, dir } = sited()
+  git(dir, ['checkout', '-b', 'redesign-2026-10'])
+  const [pushed, at] = [remote(dir), head(dir)]
+  const start = later(25)
+  ripe(db, start)
+  ripe(db, new Date(start.getTime() + 60_000))
+  expect(ofKind(db, 'site_push')).toMatchObject([{ outcome: 'needs_coo', message: 'site checkout is on redesign-2026-10, not main' }])
+  expect([remote(dir), head(dir)]).toEqual([pushed, at])
+  expect(postOf(db, 1)).toMatchObject({ status: 'proof', url: null })
+})

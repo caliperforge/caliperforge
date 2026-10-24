@@ -212,7 +212,7 @@ export function checkout(root: string, plan: number, repo: string, branch: strin
   const dir = srcDir(root, plan)
   const done = maybe(root, plan, 'base.sha')
   if (done === null && readdirSync(dir).length > 0) renameSync(dir, `${dir}.stale-${String(Date.now())}`)
-  if (done !== null && cloned(dir)) { fetchMain(dir); excluded(dir); unstage(dir); return { dir, branch, base: done.trim() } }
+  if (done !== null && cloned(dir)) { fetchMain(dir); standOn(dir, branch, done.trim()); excluded(dir); unstage(dir); return { dir, branch, base: done.trim() } }
   const base = gitBase(root)
   const fork = remote(base, `${FORK}/${repoName(repo)}`)
   if (!found(planDir(root, plan), fork)) exec(['repo', 'fork', repo, '--org', FORK, '--clone=false'])
@@ -255,6 +255,13 @@ function unstage(dir: string): void {
   const kept = new Set(paths(git(dir, ['ls-tree', '-r', '-z', '--name-only', 'HEAD', '--', ...built])))
   const dropped = built.filter((path) => !kept.has(path))
   if (dropped.length > 0) git(dir, ['rm', '--cached', '-q', '--', ...dropped])
+}
+
+/** A `base.sha` moved to a commit HEAD does not contain re-checks the branch out there; it may sit on a branch the clone never fetched. */
+function standOn(dir: string, branch: string, base: string): void {
+  if (tried(dir, ['merge-base', '--is-ancestor', base, 'HEAD']) !== null) return
+  if (!holds(dir, base)) git(dir, ['fetch', '--no-tags', '--all'])
+  git(dir, ['checkout', '-B', branch, base])
 }
 
 function paths(listed: string): string[] {

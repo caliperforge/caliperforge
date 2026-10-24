@@ -136,6 +136,7 @@ function workspace(db: Db, root: string, plan: PlanRow): { language: string | nu
     const { recut } = checkout(root, plan.id, tree.repo, tree.branch, tree.from)
     const from = tree.from ?? 'main'
     if (recut !== null) logged(db, { plan: plan.id, kind: 'base_recut', actor: 'workspace', outcome: 'pass', message: `cut again from ${from}: the clone was cut from ${recut}`, pointer: from, run: null })
+    if (recut !== null && plan.step > BUILD) return { language: null, failed: { outcome: 'pass', spans: ['base:recut'], note: `cut again from ${from}; back to the build to re-apply its diff`, rewind: BUILD } }
   } catch (error) {
     const note = error instanceof Error ? error.message : String(error)
     logged(db, { plan: plan.id, kind: 'swallowed', actor: 'workspace', outcome: 'pass', message: firstLine(error), pointer: tree.repo, run: null })

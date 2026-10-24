@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { eventsOf } from '../../store/events.ts'
-import { dropPlan, rewind } from '../../store/plans.ts'
+import { dropPlan, planById, rewind } from '../../store/plans.ts'
 import { tick } from '../index.ts'
 import { CARRY, checkout, get, git, maybe, put, SELF, srcDir } from '../workspace.ts'
 import { OURS, WORLDS } from './bases.ts'
@@ -87,4 +87,18 @@ test('D3 a tick that cuts the clone again logs base_recut', async () => {
   await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
   expect(eventsOf(w.db, ID, 'base_recut')).toEqual([
     { actor: 'workspace', outcome: 'pass', message: 'cut again from redesign: the clone was cut from main' }])
+})
+
+test('D3 a recut at review sends the plan back to the build', async () => {
+  const { w } = redesign()
+  const wire = watched([], w.root, ID)
+  for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  built(w.root, ID, EDIT)
+  put(w.root, ID, 'ask.md', `${get(w.root, ID, 'ask.md')}\nBase: redesign\n`)
+  rewind(w.db, ID, 4)
+  await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
+  expect(planById(w.db, ID)).toMatchObject({ step: 2, state: 'running' })
+  expect(get(w.root, ID, CARRY)).toContain(`+${EDIT}`)
+  expect(eventsOf(w.db, ID, 'review').map((e) => e.message)).toEqual([
+    'cut again from redesign; back to the build to re-apply its diff'])
 })

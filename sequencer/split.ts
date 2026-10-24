@@ -16,6 +16,7 @@ import { homeOf } from './home.ts'
 import { approved } from './approve.ts'
 import { words } from './signals.ts'
 import { landed } from './landed.ts'
+import { firstLine } from './unpolled.ts'
 
 const LETTERS = 'abcdefghijklmnopqrstuvwxyz'
 const CUT = 6000
@@ -53,6 +54,7 @@ export function parted(db: Db, root: string, plan: PlanRow, parts: Part[], wire:
     }
     return { outcome: 'pass', spans: [], split: true, note: `split into ${urls.map(ref).join(', ')}; ${started.map(on).join(', ')} queued` }
   } catch (error) {
+    logged(db, { plan: plan.id, kind: 'swallowed', actor: 'split', outcome: 'pass', message: firstLine(error), pointer: null, run: null })
     const note = error instanceof Error ? error.message : String(error)
     return { outcome: 'refuse', spans: ['gh'], blip: true, note: `split: ${note}` }
   }
@@ -100,7 +102,7 @@ export function following(db: Db, root: string, plan: PlanRow, sha: string, wire
   if (!rest.every((p) => landed(db, p.plan))) return null
   const issue = originIssue(parent)
   if (issue === null) return assemble(db, root, parent)
-  const closed = close(parent, issue, sha, wire)
+  const closed = close(db, parent, issue, sha, wire)
   const up = following(db, root, parent, sha, wire)
   return up === null ? closed : `${closed}; ${up}`
 }
@@ -123,11 +125,12 @@ function assemble(db: Db, root: string, parent: PlanRow): string {
   return `the last part landed; plan ${String(parent.id)} assembles ${branch} at senior`
 }
 
-function close(plan: PlanRow, issue: number, sha: string, wire: Wire): string {
+function close(db: Db, plan: PlanRow, issue: number, sha: string, wire: Wire): string {
   try {
     wire.close(homeOf(plan), issue, sha)
     return `the last part landed; #${String(issue)} closed`
   } catch (error) {
+    logged(db, { plan: plan.id, kind: 'swallowed', actor: 'split', outcome: 'pass', message: firstLine(error), pointer: null, run: null })
     return `the last part landed; closing #${String(issue)} failed: ${error instanceof Error ? error.message : String(error)}`
   }
 }

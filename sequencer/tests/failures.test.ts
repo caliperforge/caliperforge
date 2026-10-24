@@ -1,6 +1,8 @@
 import { expect, test } from 'vitest'
 import type { Gh } from '../../rails/ci-green/index.ts'
+import { ofKind } from '../../store/events.ts'
 import { failing, red } from '../failures.ts'
+import { world } from './world.ts'
 
 const FORK = 'caliperforge/pay-kit'
 
@@ -11,7 +13,8 @@ const gh: Gh = (args) => args.includes('--log-failed')
   : JSON.stringify({ workflowName: 'Ruby' })
 
 test('a red run names its workflow and its log without timestamps', () => {
-  const found = red(FORK, [`${RUN} ci.red`, 'commit:1 upstream.number'], gh)
+  const { db, plan } = world()
+  const found = red(db, plan, FORK, [`${RUN} ci.red`, 'commit:1 upstream.number'], gh)
   expect(found?.spans).toEqual(['ci.red Ruby'])
   expect(found?.log).toContain('Failure: test_default [config_test.rb:187]')
   expect(found?.log).not.toMatch(/2026-09-21T/)
@@ -22,12 +25,15 @@ test('a failed log names each failing job and step once', () => {
 })
 
 test('no red run is no failure to hand back', () => {
-  expect(red(FORK, [`${RUN} ci.pending`], gh)).toBeNull()
+  const { db, plan } = world()
+  expect(red(db, plan, FORK, [`${RUN} ci.pending`], gh)).toBeNull()
 })
 
 test('an unreadable log still sends the builder its run', () => {
+  const { db, plan } = world()
   const broken: Gh = () => { throw new Error('gh: not found') }
-  expect(red(FORK, [`${RUN} ci.red`], broken)).toMatchObject({ spans: ['ci.red run 77'] })
+  expect(red(db, plan, FORK, [`${RUN} ci.red`], broken)).toMatchObject({ spans: ['ci.red run 77'] })
+  expect(ofKind(db, 'swallowed').map((e) => [e.plan, e.actor, e.message])).toEqual([[plan, 'red', 'gh: not found'], [plan, 'red', 'gh: not found']])
 })
 
 const emptyLog = (jobs: () => string): Gh => (args) => {
@@ -40,20 +46,24 @@ const emptyLog = (jobs: () => string): Gh => (args) => {
 test('an empty failed log falls back to the failed job and its log', () => {
   const steps = [{ name: 'setup', number: 1, conclusion: 'success' }, { name: 'run', number: 2, conclusion: 'failure' }]
   const jobs = [{ databaseId: 9, name: 'Ruby tests', conclusion: 'failure', steps }]
-  const found = red(FORK, [`${RUN} ci.red`], emptyLog(() => JSON.stringify({ conclusion: 'failure', jobs })))
+  const { db, plan } = world()
+  const found = red(db, plan, FORK, [`${RUN} ci.red`], emptyLog(() => JSON.stringify({ conclusion: 'failure', jobs })))
   expect(found?.log).toContain('Ruby tests: run\nline 20\n')
   expect(found?.log).toMatch(/line 79$/)
   expect(found?.log).not.toMatch(/2026-/)
 })
 
 test('an empty failed log and no failed job: how the run ended', () => {
-  const found = red(FORK, [`${RUN} ci.red`], emptyLog(() => JSON.stringify({ conclusion: 'startup_failure', jobs: [] })))
+  const { db, plan } = world()
+  const found = red(db, plan, FORK, [`${RUN} ci.red`], emptyLog(() => JSON.stringify({ conclusion: 'startup_failure', jobs: [] })))
   expect(found?.log).toMatch(/## Ruby\n\n\S/)
   expect(found?.log).toContain('run 77 ended startup_failure with no failed job')
 })
 
 test('an empty failed log whose jobs cannot be read says so', () => {
-  const found = red(FORK, [`${RUN} ci.red`], emptyLog(() => { throw new Error('gh: 502') }))
+  const { db, plan } = world()
+  const found = red(db, plan, FORK, [`${RUN} ci.red`], emptyLog(() => { throw new Error('gh: 502') }))
   expect(found?.spans).toEqual(['ci.red Ruby'])
   expect(found?.log).toContain('(the failed log could not be read)')
+  expect(ofKind(db, 'swallowed').map((e) => [e.plan, e.actor, e.message])).toEqual([[plan, 'red', 'gh: 502']])
 })

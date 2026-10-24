@@ -1,4 +1,7 @@
 import type { Gh } from '../rails/ci-green/index.ts'
+import { logged } from '../store/events.ts'
+import type { Db } from '../store/index.ts'
+import { firstLine } from './unpolled.ts'
 
 const RED = /\/actions\/runs\/(\d+) ci\.red$/
 
@@ -15,10 +18,10 @@ interface Red {
  * What their CI says failed, in the words the builder needs -- each red run's workflow and
  * the tail of its failed steps' log. Timestamps go, so the same failure reads the same twice.
  */
-export function red(fork: string, spans: string[], gh: Gh): Red | null {
+export function red(db: Db, plan: number, fork: string, spans: string[], gh: Gh): Red | null {
   const ids = spans.flatMap((s) => RED.exec(s)?.[1] ?? [])
   if (ids.length === 0) return null
-  const runs = ids.map((id) => ({ name: nameOf(fork, id, gh), log: logOf(fork, id, gh) }))
+  const runs = ids.map((id) => ({ name: nameOf(db, plan, fork, id, gh), log: logOf(db, plan, fork, id, gh) }))
   return {
     spans: runs.map((r) => `ci.red ${r.name}`),
     log: runs.map((r) => `## ${r.name}\n\n${r.log}`).join('\n\n'),
@@ -37,20 +40,22 @@ export function failing(fork: string, id: string, gh: Gh): Failed[] {
   return [...seen.values()]
 }
 
-function nameOf(fork: string, id: string, gh: Gh): string {
+function nameOf(db: Db, plan: number, fork: string, id: string, gh: Gh): string {
   try {
     const run = JSON.parse(gh(['run', 'view', id, '--repo', fork, '--json', 'workflowName'])) as { workflowName?: unknown }
     return typeof run.workflowName === 'string' ? run.workflowName : `run ${id}`
-  } catch {
+  } catch (error) {
+    logged(db, { plan, kind: 'swallowed', actor: 'red', outcome: 'pass', message: firstLine(error), pointer: null, run: null })
     return `run ${id}`
   }
 }
 
-function logOf(fork: string, id: string, gh: Gh): string {
+function logOf(db: Db, plan: number, fork: string, id: string, gh: Gh): string {
   try {
     const failed = gh(['run', 'view', id, '--repo', fork, '--log-failed'])
     return failed.trim() ? tail(failed) : jobsOf(fork, id, gh)
-  } catch {
+  } catch (error) {
+    logged(db, { plan, kind: 'swallowed', actor: 'red', outcome: 'pass', message: firstLine(error), pointer: null, run: null })
     return '(the failed log could not be read)'
   }
 }

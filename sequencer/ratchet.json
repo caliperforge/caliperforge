@@ -42,8 +42,7 @@
     "lines": 40
   },
   "failures.ts": {
-    "lines": 55,
-    "silent-catch": 2
+    "lines": 55
   },
   "fence.ts": {
     "lines": 74
@@ -153,8 +152,7 @@
     "prepare": 1
   },
   "split.ts": {
-    "lines": 229,
-    "silent-catch": 2
+    "lines": 229
   },
   "staffing.ts": {
     "lines": 26

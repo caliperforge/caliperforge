@@ -151,7 +151,7 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
   freed(db, plan.id)
   forkGreen(db, plan.id, passed)
   if (verdict.outcome === 'pass') put(root, plan.id, GREEN, `${ci} ${tip}\n`)
-  return passed ? null : refused(at, verdict, red(fork, verdict.spans, wire.runs))
+  return passed ? null : refused(at, verdict, red(db, plan.id, fork, verdict.spans, wire.runs))
 }
 
 function unfired(db: Db, root: string, plan: PlanRow, repo: string, head: Head, on: At, wire: Wire): { stop: Outcome | null } | null {

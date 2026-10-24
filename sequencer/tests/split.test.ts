@@ -184,6 +184,7 @@ test('D3: a thread read that throws files no part', () => {
   const wire = { ...watched(log, w.root, ID), thread: () => { throw new Error('gh down') } }
   expect(parted(w.db, w.root, plan(w.db, ID), split(PARTS) ?? [], wire)).toMatchObject({ outcome: 'refuse', spans: ['gh'], blip: true })
   expect(log.filter((l) => l.startsWith('file '))).toEqual([])
+  expect(ofKind(w.db, 'swallowed').map((e) => [e.plan, e.actor, e.message])).toEqual([[ID, 'split', 'gh down']])
 })
 
 test('D4: an After: line in a parent comment gates no part', async () => {
@@ -260,6 +261,17 @@ test('a part landing queues the next; the last closes the parent', async () => {
   expect(following(w.db, w.root, plan(w.db, b), 'b'.repeat(40), watched(log, w.root, b))).toBe('the last part landed; #34 closed')
   expect(log.at(-1)).toBe('close caliperforge/caliperforge#34 bbbbbbb')
   expect(following(w.db, w.root, plan(w.db, ID), 'c'.repeat(40), watched(log, w.root, ID))).toBeNull()
+})
+
+test('D3: a close that throws is said and logged on the parent', async () => {
+  const w = mine()
+  await briefed(w, ID, PARTS, [])
+  landing(w, 0, [])
+  const b = partPlan(w, 1) ?? 0
+  pushed(w, b)
+  const wire = { ...watched([], w.root, b), close: () => { throw new Error('gh down') } }
+  expect(following(w.db, w.root, plan(w.db, b), 'b'.repeat(40), wire)).toBe('the last part landed; closing #34 failed: gh down')
+  expect(ofKind(w.db, 'swallowed').map((e) => [e.plan, e.actor, e.message])).toEqual([[ID, 'split', 'gh down']])
 })
 
 test('D1, D2: a re-split part closes and its grandparent goes on', async () => {

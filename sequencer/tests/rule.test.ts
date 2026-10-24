@@ -1,5 +1,5 @@
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { expect, test } from 'vitest'
 import type { Provider } from '../../providers/kind.ts'
@@ -329,9 +329,9 @@ const research = ({ db }: { db: Db }) => { db.exec("UPDATE plans SET template = 
 
 const PASS = [{ actor: 'director', outcome: 'pass', message: 'rule: the ruling names it' }]
 
-const outputs = (s: { db: Db; home: string }) => {
+const outputs = (folder: string) => (s: { db: Db; home: string }) => {
   research(s)
-  put(s.home, 7, 'ask.md', 'the ask\n\n**Output:** ~/cf_work/1614/\n')
+  put(s.home, 7, 'ask.md', `the ask\n\n**Output:** ~/cf_work/${folder}/\n`)
 }
 
 test('D1 a file committed at base.sha applies at step 1', async () => {
@@ -383,7 +383,9 @@ test.each([
   { id: 'D3', answer: 'edit /Users/x/elsewhere/file.ts', path: '/Users/x/elsewhere/file.ts' },
   { id: 'D4', answer: `edit \`~/notes/x.ts\`; ${HAND}`, path: '~/notes/x.ts' },
   { id: 'D4', answer: 'clear `/tmp`', path: '/tmp' },
-  { id: 'D4', answer: 'write `~/cf_work/1615/x.ts`', path: '~/cf_work/1615/x.ts', setup: outputs },
+  { id: 'D4', answer: 'write `~/cf_work/1615/x.ts`', path: '~/cf_work/1615/x.ts', setup: outputs('1614') },
+  { id: 'D4', answer: `write \`${homedir()}/cf_work/1615/x.ts\``, path: `${homedir()}/cf_work/1615/x.ts`, setup: outputs('1614') },
+  { id: 'D5', answer: 'clear `/tmp/`', path: '/tmp/' },
 ])('$id a ruling editing an outside path is dropped', async ({ answer, path, setup }) => {
   const got = await aliased(() => answer, setup)
   expect(got.issue).toBe(ISSUE)
@@ -401,10 +403,13 @@ test.each([
 
 test.each([
   { id: 'D1', answer: 'the /sync route returns 200' },
-  { id: 'D2', answer: 'write `~/cf_work/1614/rubin.ts`', setup: outputs },
+  { id: 'D2', answer: 'write `~/cf_work/1614/rubin.ts`', setup: outputs('1614') },
   { id: 'D3', answer: 'read .cf/work/7' },
   { id: 'D3', answer: 'read .cf/work/1654' },
   { id: 'D3', answer: 'read `.cf/work/1654/`' },
+  { id: 'D1', answer: 'read `~/cf_work/1716/`', setup: outputs('1716') },
+  { id: 'D2', answer: `read \`${homedir()}/cf_work/surfpool-data-scan/inventory.ts\``, setup: outputs('surfpool-data-scan') },
+  { id: 'D3', answer: 'the docs live under `/sdks/`' },
 ])('$id $answer applies', async ({ answer, setup }) => {
   expect((await aliased(() => answer, setup)).events).toEqual(PASS)
 })

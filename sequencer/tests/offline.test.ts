@@ -1,11 +1,14 @@
+import { writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import type { Packet } from '../../providers/kind.ts'
+import { eventsOf } from '../../store/events.ts'
 import { rewind } from '../../store/plans.ts'
 import { refusalRows } from '../../store/refusals.ts'
 import { at } from '../../templates/pr-path.ts'
 import { tick } from '../index.ts'
 import { HELD, thrown } from '../settle.ts'
-import { checkout } from '../workspace.ts'
+import { checkout, planDir } from '../workspace.ts'
 import { approve, CARRIED, plan, stub, watched, world } from './world.ts'
 
 const FETCH = "Command failed: git fetch --no-tags origin +main:refs/remotes/origin/main\nfatal: unable to access 'https://github.com/caliperforge/caliperforge.git/': Could not resolve host: github.com"
@@ -58,6 +61,28 @@ test('a locked store during review holds step 4', async () => {
 test('any other review throw still refuses', async () => {
   const { fired } = await reviewThrows('boom')
   expect(fired).toMatchObject({ step: 4, outcome: 'refuse', spans: ['reviewers.verdict_fence'] })
+})
+
+test('1567a D4 a thrown step logs swallowed, a lock does not', async () => {
+  const w = world()
+  approve(w.db, w.target)
+  await tick(w.db, w.root, stub(CARRIED))
+  const [fired] = await tick(w.db, w.root, { ...stub(CARRIED), fire: () => Promise.reject(new Error('boom')) })
+  expect(fired).toMatchObject({ step: 1, outcome: 'refuse', spans: ['threw: boom'] })
+  expect(eventsOf(w.db, 1, 'swallowed')).toEqual([{ actor: 'made', outcome: 'pass', message: 'boom' }])
+  expect(eventsOf((await reviewThrows('database is locked')).w.db, 1, 'swallowed')).toEqual([])
+})
+
+test('1567a D3 a failed checkout logs swallowed', async () => {
+  const w = world()
+  approve(w.db, w.target)
+  await tick(w.db, w.root, stub(CARRIED))
+  writeFileSync(join(planDir(w.root, 1), 'src'), '')
+  const [fired] = await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
+  expect(fired).toMatchObject({ step: 1, outcome: 'refuse', state: 'running', spans: ['acme/widget'] })
+  const swallowed = eventsOf(w.db, 1, 'swallowed')
+  expect(swallowed.map((e) => e.actor)).toEqual(['workspace'])
+  expect(swallowed[0]?.message).toContain('EEXIST')
 })
 
 const GPG = 'Command failed: git commit -S\ngpg: Note: database_open 134217901 waiting for lock (held by 98937) ...\ngpg: keydb_search failed: Operation timed out\ngpg: signing failed: Operation timed out'

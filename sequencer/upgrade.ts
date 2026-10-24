@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import { join } from 'node:path'
+import { logged } from '../store/events.ts'
 import { migrate, type Db } from '../store/index.ts'
 import type { Receipt } from '../store/ticks.ts'
 import { SELF } from './workspace.ts'
@@ -28,11 +29,13 @@ export function upgrade(db: Db, root: string, sha: string): string | null {
     if (branch === 'HEAD') forward(root)
     else git(root, ['pull', '--ff-only'])
   } catch (error) {
+    logged(db, { plan: null, kind: 'swallowed', actor: 'upgrade', outcome: 'pass', message: said(error), pointer: sha, run: null })
     return `${branch} cannot fast-forward to ${sha.slice(0, 12)}: ${said(error)}`
   }
   try {
     migrate(db, join(root, 'schema'))
   } catch (error) {
+    logged(db, { plan: null, kind: 'swallowed', actor: 'upgrade', outcome: 'pass', message: said(error), pointer: sha, run: null })
     return `migrate to ${sha.slice(0, 12)}: ${said(error)}`
   }
   return null

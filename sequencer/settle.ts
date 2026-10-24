@@ -32,6 +32,7 @@ import { branchOf, checkout, cloned, diffOf, drop, git, internalBranch, maybe, P
 import { assembling, homeOf, onto } from './home.ts'
 import { BUILDS, capped, fingerprintOf, looped, refusalText, stopped, streak, STREAK } from './refusal.ts'
 import { NETWORK } from './checks.ts'
+import { firstLine } from './unpolled.ts'
 
 /** CI that failed, waited or never showed is GitHub's state, not a fault on main: it never switches a lane off. */
 export const CI_ONLY = /^(?:checks:CI|.* ci\.(?:red|pending|missing))$/
@@ -135,6 +136,7 @@ function workspace(db: Db, root: string, plan: PlanRow): { language: string | nu
     checkout(root, plan.id, tree.repo, tree.branch, tree.from)
   } catch (error) {
     const note = error instanceof Error ? error.message : String(error)
+    logged(db, { plan: plan.id, kind: 'swallowed', actor: 'workspace', outcome: 'pass', message: firstLine(error), pointer: tree.repo, run: null })
     if (NETWORK.test(note)) return { language: null, failed: thrown(mapOf(plan.template).at(plan.step), note) }
     return { language: null, failed: { outcome: 'refuse', spans: [tree.repo], note: `checkout: ${note}`, blip: true } }
   }
@@ -170,7 +172,11 @@ async function made(db: Db, root: string, plan: PlanRow, step: Step, provider: P
     if (out.command !== undefined) return executed(db, root, plan, out.command)
     return out.parts === undefined ? out : parted(db, root, plan, out.parts, wire)
   } catch (error) {
-    return thrown(step, error instanceof Error ? error.message : String(error))
+    const message = error instanceof Error ? error.message : String(error)
+    if (!message.includes(LOCKED)) {
+      logged(db, { plan: plan.id, kind: 'swallowed', actor: 'made', outcome: 'pass', message: firstLine(error), pointer: `step-${String(step.step)}`, run: null })
+    }
+    return thrown(step, message)
   }
 }
 

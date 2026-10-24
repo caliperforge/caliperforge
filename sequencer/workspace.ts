@@ -100,6 +100,7 @@ export interface Checkout {
   dir: string
   branch: string
   base: string
+  recut: string | null
 }
 
 export function repoName(repo: string): string {
@@ -209,10 +210,11 @@ export function liveTree(root: string, cwd: string): boolean {
  * The build-output exclude is written here too: a builder runs xcodebuild at step 2, before the rails do.
  */
 export function checkout(root: string, plan: number, repo: string, branch: string, from = 'main', exec: Run = run): Checkout {
+  const recut = rebased(root, plan, from)
   const dir = srcDir(root, plan)
   const done = maybe(root, plan, 'base.sha')
   if (done === null && readdirSync(dir).length > 0) renameSync(dir, `${dir}.stale-${String(Date.now())}`)
-  if (done !== null && cloned(dir)) { fetchMain(dir); standOn(dir, branch, done.trim()); excluded(dir); unstage(dir); return { dir, branch, base: done.trim() } }
+  if (done !== null && cloned(dir)) { fetchMain(dir); standOn(dir, branch, done.trim()); excluded(dir); unstage(dir); return { dir, branch, base: done.trim(), recut } }
   const base = gitBase(root)
   const fork = remote(base, `${FORK}/${repoName(repo)}`)
   if (!found(planDir(root, plan), fork)) exec(['repo', 'fork', repo, '--org', FORK, '--clone=false'])
@@ -230,11 +232,21 @@ export function checkout(root: string, plan: number, repo: string, branch: strin
     git(dir, ['checkout', '-B', restored, start])
     const forked = git(dir, ['merge-base', 'HEAD', MAIN]).trim()
     put(root, plan, 'base.sha', `${forked}\n`)
-    return { dir, branch: restored, base: forked }
+    return { dir, branch: restored, base: forked, recut }
   }
   git(dir, ['checkout', '-B', branch, head])
   put(root, plan, 'base.sha', `${head}\n`)
-  return { dir, branch, base: head }
+  return { dir, branch, base: head, recut }
+}
+
+/** A clone cut from another branch than the one the plan is now cut from is cut again, its diff carried: the base the old clone was cut from, or null. */
+function rebased(root: string, plan: number, from: string): string | null {
+  const src = join(planDir(root, plan), 'src')
+  if (maybe(root, plan, 'base.sha') === null || !cloned(src)) return null
+  const was = assembled(src) ?? 'main'
+  if (was === from) return null
+  recut(root, plan)
+  return was
 }
 
 /** `Repository not found` is GitHub's 404; `does not appear to be a git repository` is a missing path under a local `.cf/git-base`. */

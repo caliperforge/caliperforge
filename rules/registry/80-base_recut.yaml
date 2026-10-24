@@ -1,0 +1,6 @@
+- name: base_recut
+  table: events
+  column: at
+  where: "kind = 'base_recut'"
+  gap: 7d
+  expected: 0

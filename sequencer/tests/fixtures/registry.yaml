@@ -481,6 +481,12 @@
   column: read_at
   where: plan IS NULL
   gap: 1d
+- name: base_recut
+  table: events
+  column: at
+  where: "kind = 'base_recut'"
+  gap: 7d
+  expected: 0
 - name: comms_not_a_post
   table: events
   column: at

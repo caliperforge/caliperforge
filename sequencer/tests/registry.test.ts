@@ -103,6 +103,14 @@ test('designOnMainSeen D5', () => {
   expect(drift(d, onMain, NOW)).toMatchObject([{ name: 'design_on_main', state: 'seen', newest: '2026-10-02 10:00:00' }])
 })
 
+test('baseRecutSeen D4', () => {
+  const entry = REGISTRY.filter((e) => e.name === 'base_recut')
+  const d = db()
+  expect(drift(d, entry, NOW)).toEqual([])
+  logged(d, { plan: 1, kind: 'base_recut', actor: 'workspace', outcome: 'pass', message: 'm', pointer: null, run: null }, '2026-10-02 10:00:00')
+  expect(drift(d, entry, NOW)).toMatchObject([{ name: 'base_recut', state: 'seen', newest: '2026-10-02 10:00:00' }])
+})
+
 test('directorDesignWaiveSeen D5', () => {
   const entry = REGISTRY.filter((e) => e.name === 'director_design_waive')
   const d = db()

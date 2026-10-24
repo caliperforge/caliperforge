@@ -133,7 +133,9 @@ function workspace(db: Db, root: string, plan: PlanRow): { language: string | nu
   if (tree === null) return { language: null, failed: null }
   try {
     if (bare) rebranched(root, plan.id)
-    checkout(root, plan.id, tree.repo, tree.branch, tree.from)
+    const { recut } = checkout(root, plan.id, tree.repo, tree.branch, tree.from)
+    const from = tree.from ?? 'main'
+    if (recut !== null) logged(db, { plan: plan.id, kind: 'base_recut', actor: 'workspace', outcome: 'pass', message: `cut again from ${from}: the clone was cut from ${recut}`, pointer: from, run: null })
   } catch (error) {
     const note = error instanceof Error ? error.message : String(error)
     logged(db, { plan: plan.id, kind: 'swallowed', actor: 'workspace', outcome: 'pass', message: firstLine(error), pointer: tree.repo, run: null })

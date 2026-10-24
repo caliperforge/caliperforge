@@ -9,7 +9,7 @@ import type { Outcome } from './kind.ts'
 import { headOf } from './push.ts'
 import { mapOf } from './steps.ts'
 import { abortMerge, behindMain, cloned, commitMerge, conflicted, diffOf, diffSince, fetchMain, get, holds, maybe, merging, mergeMain, narrowing,
-  put, recut, srcDir, theirs, unmerged } from './workspace.ts'
+  put, recut, restand, srcDir, theirs, unmerged } from './workspace.ts'
 
 /**
  * Step 3's base, one tick before the ready and batch gates: a merge returns no outcome,
@@ -24,6 +24,7 @@ export function freshBase(db: Db, root: string, plan: PlanRow): Outcome | null {
   const src = srcDir(root, plan.id)
   if (!cloned(src)) return null
   if (conflicted(src)) abortMerge(src)
+  restand(root, plan.id)
   const main = fetchMain(src)
   if (!behindMain(src, main)) return null
   const paths = takeMain(db, root, plan, src, main, mapOf(plan.template).at(plan.step).step)

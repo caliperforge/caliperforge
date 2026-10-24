@@ -2,8 +2,9 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
+import { freshBase } from '../merge.ts'
 import { checkout, cloned, diffOf, drop, maybe, planDir, PR_BRANCH, PR_HEAD, put, recut, srcDir } from '../workspace.ts'
-import { world } from './world.ts'
+import { plan, world } from './world.ts'
 
 const BRANCH = 'widget-12-a1'
 
@@ -247,6 +248,44 @@ test('D4 a tracked edit the new base overwrites throws', () => {
   expect(git(first.dir, ['rev-parse', 'HEAD']).trim()).toBe(head)
   expect(git(first.dir, ['diff', '--name-only']).trim()).toBe(tracked)
   expect(maybe(w.root, 1, 'base.sha')).toBe(`${sha}\n`)
+})
+
+test('D1 freshBase stands a moved base.sha before the rails', () => {
+  const w = world()
+  const { dir } = checkout(w.root, 1, 'acme/widget', BRANCH)
+  const sha = elsewhere(w.root, { 'redesign.ts': 'export const redesign = 1\n' })
+  put(w.root, 1, 'base.sha', `${sha}\n`)
+
+  freshBase(w.db, w.root, plan(w.db, 1))
+  expect(git(dir, ['rev-parse', 'HEAD']).trim()).toBe(sha)
+  expect(git(dir, ['rev-parse', '--abbrev-ref', 'HEAD']).trim()).toBe(BRANCH)
+  expect(diffOf(w.root, 1)).not.toContain('redesign.ts')
+})
+
+test('D2 freshBase leaves a HEAD holding base.sha in place', () => {
+  const w = world()
+  const { dir } = checkout(w.root, 1, 'acme/widget', BRANCH)
+  writeFileSync(join(dir, 'added.ts'), 'export const added = 1\n')
+  git(dir, ['add', '-A'])
+  git(dir, ['commit', '-qm', 'round one'])
+  const head = git(dir, ['rev-parse', 'HEAD']).trim()
+
+  freshBase(w.db, w.root, plan(w.db, 1))
+  expect(git(dir, ['rev-parse', 'HEAD']).trim()).toBe(head)
+  expect(diffOf(w.root, 1)).toContain('added.ts')
+})
+
+test('D3 freshBase throws when the base overwrites an edit', () => {
+  const w = world()
+  const { dir } = checkout(w.root, 1, 'acme/widget', BRANCH)
+  const tracked = git(dir, ['ls-files']).split('\n')[0] ?? ''
+  const head = git(dir, ['rev-parse', 'HEAD']).trim()
+  writeFileSync(join(dir, tracked), 'builder edit\n')
+  put(w.root, 1, 'base.sha', `${elsewhere(w.root, { [tracked]: 'redesign edit\n' })}\n`)
+
+  expect(() => freshBase(w.db, w.root, plan(w.db, 1))).toThrow()
+  expect(git(dir, ['rev-parse', 'HEAD']).trim()).toBe(head)
+  expect(git(dir, ['diff', '--name-only']).trim()).toBe(tracked)
 })
 
 test('a src with a base.sha is reused with its untracked files', () => {

@@ -264,6 +264,12 @@ function standOn(dir: string, branch: string, base: string): void {
   git(dir, ['checkout', '-B', branch, base])
 }
 
+export function restand(root: string, plan: number): void {
+  const base = maybe(root, plan, 'base.sha')
+  const dir = srcDir(root, plan)
+  if (base !== null && cloned(dir)) standOn(dir, git(dir, ['rev-parse', '--abbrev-ref', 'HEAD']).trim(), base.trim())
+}
+
 function paths(listed: string): string[] {
   return listed.split('\0').filter((path) => path !== '')
 }

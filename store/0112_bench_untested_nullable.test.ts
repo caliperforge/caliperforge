@@ -17,11 +17,13 @@ it('D4 0112 keeps an 0111 row and admits untested NULL', () => {
   const db = open(':memory:')
   migrate(db, old)
   const plan = planRow(db)
-  record(db, { plan, target: 'a', generator: 'fizz', catches: 1, false_positives: 0, untested: 0, tokens: 10, seconds: 1.5, x_ray: 1 })
+  db.prepare(`INSERT INTO bench_scorecard (plan, target, generator, catches, false_positives, untested, tokens, seconds, x_ray)
+    VALUES (?, 'a', 'fizz', 1, 0, 0, 10, 1.5, 1)`).run(plan)
   const before = db.prepare('SELECT * FROM bench_scorecard').all()
-  expect(migrate(db, join(root, 'schema'))).toEqual(['0112_bench_untested_nullable.sql', '0113_bench_score_busy.sql', '0114_bench_rescore.sql', '0115_records_outside.sql', '0116_records_ball.sql'])
-  expect(db.prepare('SELECT * FROM bench_scorecard').all()).toEqual(before.map((row) => ({ ...(row as object), superseded: 0 })))
-  const next = { plan: planRow(db), target: 'b', generator: 'fizz', catches: 0, false_positives: 0, untested: null, tokens: 0, seconds: 0, x_ray: null }
+  expect(migrate(db, join(root, 'schema'))).toEqual(['0112_bench_untested_nullable.sql', '0113_bench_score_busy.sql', '0114_bench_rescore.sql', '0115_records_outside.sql', '0116_records_ball.sql', '0117_bench_calls.sql'])
+  expect(db.prepare('SELECT * FROM bench_scorecard').all()).toEqual(before.map((row) => ({ ...(row as object), superseded: 0, pre_fix_calls: null, fix_calls: null })))
+  const next = { plan: planRow(db), target: 'b', generator: 'fizz', catches: 0, false_positives: 0, untested: null, tokens: 0, seconds: 0, x_ray: null,
+    pre_fix_calls: null, fix_calls: null }
   record(db, next)
   expect(scores(db).at(-1)).toEqual(next)
   for (const bad of [{ untested: -1 }, { x_ray: 2 as 1 }]) {

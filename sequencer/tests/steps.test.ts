@@ -6,13 +6,19 @@ import { gates } from '../../store/approvals.ts'
 import { pushedRow } from '../../store/deliverables.ts'
 import { addRule, migrate, open } from '../../store/index.ts'
 import { addPart } from '../../store/parts.ts'
-import { addPipe, addPlan, end, planById, planRows, type PlanRow } from '../../store/plans.ts'
+import type { Provider } from '../../providers/kind.ts'
+import { eventsOf, runRows } from '../../store/events.ts'
+import { addPipe, addPlan, briefed, dropPlan, end, planById, planRows, putPlan, requeue, type PlanRow } from '../../store/plans.ts'
 import { afterOf, allTickets, recordListing } from '../../store/tickets.ts'
-import { steps as comms } from '../../templates/comms.ts'
+import { steps as comms, draft } from '../../templates/comms.ts'
 import { at, steps } from '../../templates/pr-path.ts'
+import { drift } from '../drift.ts'
 import { released } from '../fixer.ts'
+import { tick } from '../index.ts'
 import { mapOf, measure } from '../steps.ts'
-import { maybe } from '../workspace.ts'
+import { maybe, put } from '../workspace.ts'
+import { REGISTRY } from './drifting.ts'
+import { plan as planOf, stub, world, type World } from './world.ts'
 
 const home = 'caliperforge/caliperforge'
 const url = (no: number) => `https://github.com/${home}/issues/${String(no)}`
@@ -131,6 +137,44 @@ test('D5: a step no map has throws; research has five', () => {
   expect(() => mapOf('comms').at(10)).toThrow('comms has no step 10')
   expect(() => mapOf('research').at(5)).toThrow('research has no step 5')
   expect(mapOf('research').steps.map((s) => s.name)).toEqual(['question', 'gather', 'check', 'review', 'record'])
+})
+
+const POST = 'Post: AI finds bugs faster than people fix them'
+const NOTE = `not a post plan: "${POST}" starts with none of daily, ship, weekly, catchup`
+const never: Provider = { name: 'claude-agent-sdk', fire: () => { throw new Error('no seat fires') } }
+
+const posting = (title: string): World => {
+  const w = world()
+  const { queued_at } = planOf(w.db, 1)
+  dropPlan(w.db, 1)
+  putPlan(w.db, { id: 1, pipe_id: 1, target_id: 1, template: 'comms', state: 'queued', queued_at, step: 0, retries: 0 })
+  briefed(w.db, 1, { title, what: null, why: null, ends: null })
+  requeue(w.db, 1, 1)
+  put(w.root, 1, 'packet.json', JSON.stringify({ landed: [], refusals: [] }))
+  return w
+}
+
+test('D1 a Post: title refuses at draft, naming the prefixes', async () => {
+  const w = posting(POST)
+  expect(await draft(w.db, w.root, planOf(w.db, 1), mapOf('comms').at(1), never)).toEqual({ outcome: 'refuse', spans: ['plans'], note: NOTE })
+})
+
+test('D2 D5 a Post: plan stops for the COO, not done', async () => {
+  const w = posting(POST)
+  expect(drift(w.db, REGISTRY.filter((e) => e.name === 'comms_not_a_post'), new Date())).toEqual([])
+  const coo: Provider = { name: 'claude-agent-sdk', fire: (p) => p.prompt.includes('# writer') ? never.fire(p) : stub('').fire(p) }
+  for (let n = 0; n < 2; n += 1) await tick(w.db, w.root, coo)
+  expect(eventsOf(w.db, 1, 'draft').map((e) => e.outcome)).toEqual(['refuse', 'refuse'])
+  expect(planRows(w.db).find((r) => r.id === 1)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'coo', held_why: NOTE })
+  expect(runRows(w.db).map((r) => r.seat)).not.toContain('writer')
+  expect(drift(w.db, REGISTRY.filter((e) => e.name === 'comms_not_a_post'), new Date())).toMatchObject([{ state: 'seen' }])
+})
+
+test('D3 a daily plan still fires the writer', async () => {
+  const w = posting('daily 2026-10-23')
+  const got = await draft(w.db, w.root, planOf(w.db, 1), mapOf('comms').at(1), stub('no fence'))
+  expect(got.note).not.toMatch(/^not a post plan/)
+  expect(runRows(w.db).map((r) => r.seat)).toEqual(['writer'])
 })
 
 test('a pr_path plan steps as templates/pr-path.ts does', () => {

@@ -254,6 +254,10 @@ function medusa(db: Db, plan: number, src: string, suite: string): Outcome | { c
     const value = field(parent, key)
     if (typeof value === 'string' && value !== '' && !isAbsolute(value)) Object.assign(parent as object, { [key]: moved(suite, value) })
   }
+  const platform = field(field(config, 'compilation'), 'platformConfig')
+  const args = field(platform, 'args') ?? []
+  if (existsSync(join(src, 'foundry.toml')) && typeof platform === 'object' && platform !== null && Array.isArray(args)
+    && !args.includes('--compile-force-framework')) Object.assign(platform, { args: [...(args as unknown[]), '--compile-force-framework', 'foundry'] })
   const fuzzing = field(config, 'fuzzing')
   const balances = field(fuzzing, 'targetContractsBalances')
   const { entries, clamped } = clamp(Array.isArray(balances) ? balances : [])

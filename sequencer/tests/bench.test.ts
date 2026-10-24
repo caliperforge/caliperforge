@@ -581,9 +581,10 @@ test('D1 D4 a root medusa.json is copied with its paths moved', () => {
   expect(existsSync(join(srcDir(root, 1), 'test/fizz/medusa.json'))).toBe(false)
 })
 
-/** The medusa.json `scored` installs in the suite for a root medusa.json of `config`. */
-function installed(config: string): unknown {
+/** The medusa.json `scored` installs in the suite for a root medusa.json of `config`, with empty `files` in the checkout. */
+function installed(config: string, ...files: string[]): unknown {
   const { root, db } = scoring()
+  for (const file of files) writeFileSync(join(srcDir(root, 1), file), '')
   writeFileSync(join(srcDir(root, 1), 'medusa.json'), config)
   expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
   expect(readFileSync(join(srcDir(root, 1), 'medusa.json'), 'utf8')).toBe(config)
@@ -594,6 +595,26 @@ test('D1 D5 the copy caps timeout, workers and moves slither', () => {
   expect(installed(JSON.stringify({ fuzzing: { timeout: 0, workers: 10, testLimit: 0 },
     slither: { useSlither: true, cachePath: 'test/fizz/fizz_data/slither_results.json' } }))).toEqual({
     fuzzing: { timeout: 1200, workers: 4, testLimit: 0 }, slither: { useSlither: true, cachePath: 'fizz_data/slither_results.json' } })
+})
+
+/** A root medusa.json for crytic-compile with platformConfig `args`. */
+function compiled(args: string[]): string {
+  return JSON.stringify({ compilation: { platform: 'crytic-compile', platformConfig: { target: '.', args } } })
+}
+
+test('D1 a foundry.toml forces the foundry framework', () => {
+  expect(installed(compiled(['--foundry-compile-all']), 'foundry.toml', 'hardhat.config.ts')).toEqual({ compilation: { platform: 'crytic-compile',
+    platformConfig: { target: '../..', args: ['--foundry-compile-all', '--compile-force-framework', 'foundry'] } } })
+})
+
+test('D2 no foundry.toml keeps the args as written', () => {
+  expect(installed(compiled(['--foundry-compile-all']))).toEqual({ compilation: { platform: 'crytic-compile',
+    platformConfig: { target: '../..', args: ['--foundry-compile-all'] } } })
+})
+
+test('D3 a forced framework already in args is kept', () => {
+  expect(installed(compiled(['--compile-force-framework', 'hardhat']), 'foundry.toml')).toEqual({ compilation: { platform: 'crytic-compile',
+    platformConfig: { target: '../..', args: ['--compile-force-framework', 'hardhat'] } } })
 })
 
 test('D3 a set timeout and workers at most 4 are kept', () => {

@@ -10,7 +10,7 @@ export function answered(root: string, plan: PlanRow, step: Step, text: string, 
   const question = unclear(text)
   if (question !== null) return asking(root, plan.id, step, question)
   const run = internal(plan) ? null : rerun(text, src, get(root, plan.id, 'base.sha').trim())
-  if (run?.fixed != null) return { outcome: 'needs_ceo', spans: ['already fixed'], note: `${step.runs}: ${run.fixed}` }
+  if (run?.fixed != null) return { outcome: 'needs_coo', spans: ['already fixed'], note: `${step.runs}: ${run.fixed}` }
   return run?.brief ?? text
 }
 

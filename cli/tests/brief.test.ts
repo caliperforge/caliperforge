@@ -8,6 +8,7 @@ import { registerLanes } from '../cf-lanes.ts'
 import { registerPlans } from '../cf-plans.ts'
 import { actors, actorSection, costs, costSection, fileWaits, greptileLine, hands, heldBy, line, misses, missSection, rulings, section, ticketSection,
   tickets, unpriced, waitLine, waits, caught, caughtSection } from '../brief.ts'
+import { outsideSection } from '../outside.ts'
 import { refusalDays, refusalSection } from '../refusals.ts'
 import { directorSection, fixerLine, handUpLine } from '../director.ts'
 import { decisionSection, driftSection } from '../drift.ts'
@@ -23,6 +24,7 @@ import { holdOf } from '../../store/holds.ts'
 import { addRule, type Db, spied } from '../../store/index.ts'
 import { keep } from '../../store/merges.ts'
 import { held, holdOn, needsCeo, parked, planById, type PlanRow, putPlan, waiting } from '../../store/plans.ts'
+import { putRecord, tally } from '../../store/record.ts'
 import { record } from '../../store/signals.ts'
 import { addAccount, addTarget } from '../../store/targets.ts'
 
@@ -451,6 +453,21 @@ test('D4 a G id repeated on a second head counts once', () => {
   review(db, 2, 'caliperforge/widget', 'greptile-apps', '2026-10-02T09:00:00Z', 1, 2, next)
   put(root, 1, `findings-${next}.md`, '- G2 src/b.ts:7 y\n')
   expect(caughtSection(caught(db, root, now))).toBe(`${CAUGHT}  plan 1\tcaliperforge/widget#3\t1/2\t50%\n`)
+})
+
+test('D1 D2 D3 open PRs count ball us and the oldest quiet', () => {
+  const db = world()
+  const row = { repo: 'acme/widget', plan: null, merged_at: null, word_by: null, word: null, read_at: '2026-10-22T09:00:00Z',
+    title: null, opened_at: '2026-10-20T09:00:00Z' }
+  putRecord(db, { ...row, pr: 1, url: 'u1', state: 'OPEN', word_at: '2026-10-01T09:00:00Z', ball: 'us' })
+  putRecord(db, { ...row, pr: 2, url: 'u2', state: 'OPEN', word_at: null, opened_at: '2026-09-27T09:00:00Z', ball: 'them' })
+  putRecord(db, { ...row, pr: 3, url: 'u3', state: 'MERGED', merged_at: '2026-10-02T09:00:00Z', word_at: '2026-09-01T09:00:00Z', ball: 'us' })
+  expect(outsideSection(tally(db), new Date('2026-10-22T12:00:00.000Z')))
+    .toBe('outside PRs open (2)\n  ball us 1\toldest 25 d since a human word\n')
+})
+
+test('D4 no open outside PR prints none', () => {
+  expect(outsideSection(tally(world()), new Date('2026-10-22T12:00:00.000Z'))).toBe('outside PRs open (0)\n  none\n')
 })
 
 test('cf brief names only plans whose ask.md drifted from brief', () => {

@@ -10,11 +10,13 @@ import { actors, actorSection, costs, costSection, fileWaits, greptileLine, hand
   tickets, unpriced, waitLine, waits, caught, caughtSection } from '../brief.ts'
 import { outsideSection } from '../outside.ts'
 import { refusalDays, refusalSection } from '../refusals.ts'
+import { benchSection, FLOOR } from '../underpowered.ts'
 import { directorSection, fixerLine, handUpLine } from '../director.ts'
 import { decisionSection, driftSection } from '../drift.ts'
 import { hold } from '../../sequencer/hold.ts'
 import { monthly, reviewed } from '../../sequencer/ready.ts'
 import { put } from '../../sequencer/workspace.ts'
+import { record as addScore, underpowered } from '../../store/bench.ts'
 import { decided, directorDays } from '../../store/decisions.ts'
 import { addFinding, closeFinding, type Finding, overdue, week } from '../../store/drift.ts'
 import { addPrice, addRun } from '../../store/brief.ts'
@@ -453,6 +455,19 @@ test('D4 a G id repeated on a second head counts once', () => {
   review(db, 2, 'caliperforge/widget', 'greptile-apps', '2026-10-02T09:00:00Z', 1, 2, next)
   put(root, 1, `findings-${next}.md`, '- G2 src/b.ts:7 y\n')
   expect(caughtSection(caught(db, root, now))).toBe(`${CAUGHT}  plan 1\tcaliperforge/widget#3\t1/2\t50%\n`)
+})
+
+const BENCH = 'bench underpowered, under 250000 calls a side'
+
+test('D5 a 69467-call score is underpowered, 505660 is not', () => {
+  const db = world()
+  expect(benchSection(underpowered(db, FLOOR))).toBe(`${BENCH} (0)\n  none\n`)
+  const score = { target: 'euler-earn-m01', generator: 'fizz', catches: 0, false_positives: 1, untested: null, tokens: 1, seconds: 1, x_ray: null }
+  plan(db, 1, 'done', null)
+  plan(db, 2, 'done', null)
+  addScore(db, { plan: 1, ...score, target: 'yuzu-m01', pre_fix_calls: 69467, fix_calls: 69467 })
+  addScore(db, { plan: 2, ...score, pre_fix_calls: 505660, fix_calls: 505660 })
+  expect(benchSection(underpowered(db, FLOOR))).toBe(`${BENCH} (1)\n  plan 1\tyuzu-m01\tfizz\tpre_fix 69467\tfix 69467\n`)
 })
 
 test('D1 D2 D3 open PRs count ball us and the oldest quiet', () => {

@@ -183,7 +183,7 @@ export function scored(db: Db, root: string, plan: PlanRow): Outcome {
   const pairs = rows(written)
   if (pairs.length === 0) return { outcome: 'refuse', spans: ['bench.empty_results'], note: `results/${target}/${target}.jsonl has no rows` }
   const score = { catches: pairs.filter((r) => r.verdict === 'catch').length, false_positives: pairs.filter((r) => r.verdict === 'fp_candidate').length,
-    untested: null, tokens, seconds, x_ray: x_ray ?? null }
+    untested: null, tokens, seconds, x_ray: x_ray ?? null, pre_fix_calls: pairs[0]?.calls?.pre_fix ?? null, fix_calls: pairs[0]?.calls?.fix ?? null }
   record(db, { plan: plan.id, target, generator, ...score })
   put(root, plan.id, 'score.json', JSON.stringify({ fuzz_bench: sha, ...score }))
   return { outcome: 'pass', spans: [], note: `score.json written at fuzz-bench ${sha.slice(0, 12)}${config === null || config.clamped.length === 0
@@ -226,8 +226,10 @@ function unproven(suite: string, name: string): Outcome | number {
     note: `${name} wrote no invariant_, property_ or echidna_ function in ${counted.map((p) => `${SUITE}/${p}`).join(', ')}` }
 }
 
-function rows(path: string): { verdict?: string; untested?: boolean }[] {
-  return readFileSync(path, 'utf8').split('\n').filter((line) => line.trim() !== '').map((line) => JSON.parse(line) as { verdict?: string; untested?: boolean })
+interface Row { verdict?: string; untested?: boolean; calls?: { pre_fix?: number | null; fix?: number | null } }
+
+function rows(path: string): Row[] {
+  return readFileSync(path, 'utf8').split('\n').filter((line) => line.trim() !== '').map((line) => JSON.parse(line) as Row)
 }
 
 /** run_pair installs the suite at `test/<target>/` and Medusa resolves from the config's folder; fizz wrote these from the project root. */

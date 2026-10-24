@@ -531,7 +531,7 @@ function scoring(pair = writes('.jsonl', PAIRS), keys: Record<string, string> = 
   return { root, db, sha }
 }
 
-const SCORE = { catches: 2, false_positives: 1, untested: null, tokens: 1234, seconds: 56.5 }
+const SCORE = { catches: 2, false_positives: 1, untested: null, tokens: 1234, seconds: 56.5, pre_fix_calls: null, fix_calls: null }
 
 const NULLCHECK = 'fuzz-bench/results/euler-earn-m01/euler-earn-m01.nullcheck.jsonl'
 
@@ -676,6 +676,20 @@ test('D1 scripts that make no results folder are scored', () => {
   const { root, db } = scoring(writes('.jsonl', PAIRS, false))
   expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
   expect(scores(db)).toEqual([{ plan: 1, target: 'euler-earn-m01', generator: 'fizz', ...SCORE, x_ray: null }])
+})
+
+test('calls D3 rows with 505660 calls a side record both', () => {
+  const { root, db } = scoring(writes('.jsonl', PAIRS.map((r) => ({ ...r, calls: { pre_fix: 505660, fix: 505660 } }))))
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  expect(scores(db)).toMatchObject([{ catches: 2, false_positives: 1, pre_fix_calls: 505660, fix_calls: 505660 }])
+  expect(JSON.parse(get(root, 1, 'score.json'))).toMatchObject({ pre_fix_calls: 505660, fix_calls: 505660 })
+})
+
+test('calls D4 null sides record NULL and still score', () => {
+  const { root, db } = scoring(writes('.jsonl', PAIRS.map((r) => ({ ...r, calls: { pre_fix: null, fix: null } }))))
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  expect(scores(db)).toEqual([{ plan: 1, target: 'euler-earn-m01', generator: 'fizz', ...SCORE, x_ray: null }])
+  expect(JSON.parse(get(root, 1, 'score.json'))).toMatchObject({ pre_fix_calls: null, fix_calls: null })
 })
 
 const FAILS = 'import sys\nsys.stderr.write("forge build failed")\nsys.exit(1)\n'

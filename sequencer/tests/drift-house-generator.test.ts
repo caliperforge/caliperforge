@@ -8,7 +8,8 @@ import { db, NOW, REGISTRY } from './drifting.ts'
 const HOUSE = REGISTRY.filter((e) => e.name === 'house_generator')
 
 function scored(d: Db, generator: string): void {
-  record(d, { plan: 1, target: 'a/b', generator, catches: 1, false_positives: 0, untested: 0, tokens: 0, seconds: 1, x_ray: null })
+  record(d, { plan: 1, target: 'a/b', generator, catches: 1, false_positives: 0, untested: 0, tokens: 0, seconds: 1, x_ray: null,
+    pre_fix_calls: null, fix_calls: null })
 }
 
 test('D2 a house scorecard row with no run is silent', () => {

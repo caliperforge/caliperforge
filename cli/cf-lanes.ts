@@ -9,6 +9,7 @@ import { liveTree } from '../sequencer/workspace.ts'
 import { dump, migrate, open as openDb, type Db } from '../store/index.ts'
 import { dial, hhmm, lanes, priority as setPriority, record, Reading, width, windows } from '../store/lanes.ts'
 import { refusedPush } from '../store/approvals.ts'
+import { underpowered } from '../store/bench.ts'
 import { directorDays } from '../store/decisions.ts'
 import { overdue, week } from '../store/drift.ts'
 import { fixes, handUps, logged, repriced } from '../store/events.ts'
@@ -29,6 +30,7 @@ import { outsideSection } from './outside.ts'
 import { refusalDays, refusalSection } from './refusals.ts'
 import { close } from './session.ts'
 import { staffingSection, unstaffed } from './staffing.ts'
+import { benchSection, FLOOR } from './underpowered.ts'
 import { liveness, livenessLine, stalledLanes } from './watch.ts'
 
 export interface Cli { root: string; db: () => Db; out: (text: string) => void }
@@ -214,6 +216,7 @@ function briefs(cf: Command, { root, db, out }: Cli): void {
     out(greptileLine(reviewed(handle, new Date())))
     out(missSection(misses(handle, root, new Date())))
     out(caughtSection(caught(handle, root, new Date())))
+    out(benchSection(underpowered(handle, FLOOR)))
     out(outsideSection(tally(handle), new Date()))
     out(section('open plans', openPlans(handle)))
     out(section('halted', halted(handle)))

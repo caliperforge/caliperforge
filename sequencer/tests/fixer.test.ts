@@ -475,7 +475,7 @@ test('D1 research: the fixer adds the missing ask lines', async () => {
 
 const EDIT = 'export const edited = true'
 
-/** A clone cut from `main` (two commits) of a repo whose `redesign` branch adds `redesign.ts`, with an uncommitted edit. */
+
 function branched() {
   const s = seeded('live')
   const base = mkdtempSync(join(tmpdir(), 'cf-fx-base-'))

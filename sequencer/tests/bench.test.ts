@@ -543,6 +543,7 @@ test('score D1 kernel scores the suite at the fuzz-bench HEAD', () => {
   expect(existsSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/FizzTest.sol'))).toBe(true)
   expect(existsSync(join(srcDir(root, 1), 'test/fizz/FizzTest.sol'))).toBe(true)
   expect(existsSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/medusa.json'))).toBe(false)
+  expect(existsSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/root'))).toBe(false)
   expect(JSON.parse(get(root, 1, 'score.json'))).toEqual({ fuzz_bench: sha, ...SCORE, x_ray: null })
 })
 
@@ -615,6 +616,43 @@ test('D2 no foundry.toml keeps the args as written', () => {
 test('D3 a forced framework already in args is kept', () => {
   expect(installed(compiled(['--compile-force-framework', 'hardhat']), 'foundry.toml')).toEqual({ compilation: { platform: 'crytic-compile',
     platformConfig: { target: '../..', args: ['--compile-force-framework', 'hardhat'] } } })
+})
+
+const TOML = '[profile.default]\nsrc = "src"\n'
+
+const FORGE = 'contract Test {}\n'
+
+/** The `root/` folder `scored` leaves in the suite once `ready` has shaped the scored src/. */
+function rootOf(ready: (src: string) => void): { src: string; carried: string } {
+  const { root, db } = scoring()
+  ready(srcDir(root, 1))
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  return { src: srcDir(root, 1), carried: join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/root') }
+}
+
+function forged(src: string): void {
+  writeFileSync(join(src, 'hardhat.config.ts'), '')
+  writeFileSync(join(src, 'foundry.toml'), TOML)
+  mkdirSync(join(src, 'lib/forge-std/src'), { recursive: true })
+  writeFileSync(join(src, 'lib/forge-std/src/Test.sol'), FORGE)
+}
+
+test('D1 an untracked foundry.toml and forge-std reach root', () => {
+  const { src, carried } = rootOf(forged)
+  expect(readFileSync(join(carried, 'foundry.toml'), 'utf8')).toBe(TOML)
+  expect(readFileSync(join(carried, 'lib/forge-std/src/Test.sol'), 'utf8')).toBe(FORGE)
+  expect(readFileSync(join(src, 'foundry.toml'), 'utf8')).toBe(TOML)
+  expect(readFileSync(join(src, 'lib/forge-std/src/Test.sol'), 'utf8')).toBe(FORGE)
+})
+
+test('D2 a tracked foundry.toml is not carried', () => {
+  expect(existsSync(rootOf((src) => { commit(src, 'foundry.toml', TOML, 'foundry') }).carried)).toBe(false)
+})
+
+test('D4 an untracked foundry.toml alone is carried alone', () => {
+  const { carried } = rootOf((src) => { writeFileSync(join(src, 'foundry.toml'), TOML) })
+  expect(readFileSync(join(carried, 'foundry.toml'), 'utf8')).toBe(TOML)
+  expect(existsSync(join(carried, 'lib'))).toBe(false)
 })
 
 test('D3 a set timeout and workers at most 4 are kept', () => {

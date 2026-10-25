@@ -11,7 +11,7 @@ import { holdOf, release, retried, returnToLane } from '../../store/holds.ts'
 import { get, priority } from '../../store/lanes.ts'
 import { advance, briefed, dropPlan, end, needsCeo, requeue, retry, titles } from '../../store/plans.ts'
 import { WHY } from '../../store/refusals.ts'
-import { claimed, estimate, files, pointed, references, shape, SHARED, split, TEMPLATE, unclear, writable, type Refused } from '../brief.ts'
+import { claimed, estimate, files, pointed, references, shape, SHARED, split, STANDING, TEMPLATE, unclear, writable, type Refused } from '../brief.ts'
 import { trimmed } from '../trim.ts'
 import { tick } from '../index.ts'
 import { unhold } from '../hold.ts'
@@ -80,6 +80,26 @@ function mine(): World {
 
 test('a brief on the template with every section filled passes', () => {
   expect(on(brief)).toBeNull()
+})
+
+test('a closing fence after the standing lines passes', () => {
+  expect(on(`${brief.trimEnd()}\n\`\`\`\n`)).toBeNull()
+})
+
+test('a --- and a sign-off after the standing lines pass', () => {
+  expect(on(`${brief.trimEnd()}\n\n---\nsigned off by the brief writer\n`)).toBeNull()
+})
+
+const UNCARRIED = { span: '## Standing', reason: '## Standing does not carry the standing lines unchanged' }
+
+test('a changed, reordered or missing standing line: refused', () => {
+  expect(on(swap(brief, '## Standing', STANDING.map((l) => l.replace('forced push', 'forced pushes'))))).toEqual(UNCARRIED)
+  expect(on(swap(brief, '## Standing', [...STANDING].reverse()))).toEqual(UNCARRIED)
+  expect(on(swap(brief, '## Standing', STANDING.slice(1)))).toEqual(UNCARRIED)
+})
+
+test('a fence before the standing lines: refused', () => {
+  expect(on(swap(brief, '## Standing', ['```', ...STANDING]))).toEqual(UNCARRIED)
 })
 
 test('empty section, off-tree path, present `(new)` path: refused', () => {

@@ -88,7 +88,6 @@ VALUES
   ('rules/registry/75-bench_score_hold.yaml', 'card', 'rules/registry/75-bench_score_hold.yaml', '6746688ad68ad2f2817ec32e6ec4b8fb0b16060d9b7166f28011b4a076850756', '2026-10-22'),
   ('rules/registry/76-director_close_unbuilt.yaml', 'card', 'rules/registry/76-director_close_unbuilt.yaml', '000894af8e9f2c56fce595ba32242d728dfd8e4b92cb27620723c52ec80d838a', '2026-10-23'),
   ('rules/registry/77-waits_closed_released.yaml', 'card', 'rules/registry/77-waits_closed_released.yaml', 'f7ef1100b7d7cdd017397719a0aff39879bbc7eda1ebf3bfe49a76ea42918e04', '2026-10-23'),
-  ('rules/registry/78-mended_by_commit.yaml', 'card', 'rules/registry/78-mended_by_commit.yaml', '12a9a67239839220feb3cacddfbbe0bd7bb5720d008fff880ac49945bcf97ac8', '2026-10-23'),
   ('rules/registry/79-outside_records.yaml', 'card', 'rules/registry/79-outside_records.yaml', '39693d035e7c5ef67f77cad18ae07deecbc7928ccaae551ada573cf2c5424752', '2026-10-23'),
   ('rules/registry/80-base_recut.yaml', 'card', 'rules/registry/80-base_recut.yaml', 'c6014c6a08e2f94837c9c48bcdc7475b04c27bf9f0252fed9b1394bf7f16989c', '2026-10-24'),
   ('rules/registry/80-comms_not_a_post.yaml', 'card', 'rules/registry/80-comms_not_a_post.yaml', '36ba1118c68675b787e54d589142b0cd3fe7c3c33fe7f8346966c9befae64bc6', '2026-10-24'),

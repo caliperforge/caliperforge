@@ -37,7 +37,7 @@ test('fresh', () => {
     'ratchet_refuse', 'intake', 'stuck_plans', 'science_pull', 'director_look', 'typescript_specialist',
     'daily_learnings', 'review_examples', 'director_fix_reach', 'tick_deps', 'watch', 'director_widen', 'target_parked_once', 'director_ceiling',
     'close_landed', 'handback_not_done', 'ruling_files', 'needs_ceo_actor', 'build_cap', 'ready_proof_stuck', 'card_facts',
-    'director_findings', 'director_rule_dropped', 'rule_to_build', 'blind_review', 'drift_recovered', 'drift_refile', 'capture_swallowed_once', 'design_lead', 'daily_live', 'paydesk_live', 'site_data', 'site_pipe', 'lane_back_on', 'house_generator', 'design_on_main', 'earth_lodge_site', 'site_push', 'director_design_waive', 'gpg_lock_hold', 'bench_no_properties', 'fork_actions_off', 'director_repeat_return', 'fork_unrun', 'refile_carries', 'offline_hold', 'research_quote_text', 'research_moving_ref', 'ruling_unmoved', 'director_to_fixer', 'return_at', 'bench_score_hold', 'director_close_unbuilt', 'waits_closed_released', 'mended_by_commit', 'outside_records', 'base_recut', 'comms_not_a_post'])
+    'director_findings', 'director_rule_dropped', 'rule_to_build', 'blind_review', 'drift_recovered', 'drift_refile', 'capture_swallowed_once', 'design_lead', 'daily_live', 'paydesk_live', 'site_data', 'site_pipe', 'lane_back_on', 'house_generator', 'design_on_main', 'earth_lodge_site', 'site_push', 'director_design_waive', 'gpg_lock_hold', 'bench_no_properties', 'fork_actions_off', 'director_repeat_return', 'fork_unrun', 'refile_carries', 'offline_hold', 'research_quote_text', 'research_moving_ref', 'ruling_unmoved', 'director_to_fixer', 'return_at', 'bench_score_hold', 'director_close_unbuilt', 'waits_closed_released','outside_records', 'base_recut', 'comms_not_a_post'])
   expect(drift(d, REGISTRY, NOW).map((r) => r.name)).not.toContain('build_cap')
   expect(drift(d, REGISTRY, NOW).map((r) => r.name)).not.toContain('site_pipe')
   expect(drift(d, REGISTRY, NOW).map((r) => r.name)).not.toContain('director_widen')
@@ -172,6 +172,13 @@ test('D1-D3 a line is quiet until its gap since added', () => {
   const d = db()
   event(d, '2026-10-01 10:00:00')
   expect(drift(d, line, new Date('2026-10-25T10:00:00Z')).map((r) => r.state)).toEqual(['stale'])
+})
+
+test('D1 a hand-closed halt gives no mended_by_commit finding', () => {
+  const d = db()
+  logged(d, { plan: 1, kind: 'halted', actor: 'tick', outcome: 'refuse', pointer: null, run: null,
+    message: 'https://github.com/a/b/issues/1 is closed or has lost its lane label' }, '2026-10-02 10:00:00')
+  expect(drift(d, REGISTRY, NOW).map((r) => r.name)).not.toContain('mended_by_commit')
 })
 
 test('D2 a second swallowed before a back is seen', () => {

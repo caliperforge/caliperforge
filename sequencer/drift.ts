@@ -9,7 +9,7 @@ import type { Db } from '../store/index.ts'
 import { get, hhmm, set, zone } from '../store/lanes.ts'
 import { holder } from '../store/leases.ts'
 import { needsCeo, openPipes, planById, rewind } from '../store/plans.ts'
-import { registry } from './registry.ts'
+import { added, registry } from './registry.ts'
 import { HELD } from './settle.ts'
 import { cloned, conflicted, drop, maybe, planDir, put, snapshot } from './workspace.ts'
 
@@ -27,10 +27,11 @@ export const Entry = z.object({
   expected: z.literal(0).optional(),
 })
 
-export type Entry = z.infer<typeof Entry>
+export type Entry = z.infer<typeof Entry> & { added?: string | undefined }
 
 export function mechanisms(root: string, at?: string): Entry[] {
-  return registry(root, at).flatMap((text) => Entry.array().parse(parse(text)))
+  const seed = added(root, at)
+  return registry(root, at).flatMap(({ path, text }) => Entry.array().parse(parse(text)).map((entry) => ({ ...entry, added: seed.get(path) })))
 }
 
 export interface Drifted { name: string; state: 'off' | 'silent' | 'stale' | 'seen'; detail: string; newest?: string | number | null }
@@ -60,6 +61,7 @@ function quiet(db: Db, entry: Entry, now: Date): Drifted | null {
     return last.days !== null && gap !== undefined && last.days <= days(gap)
       ? { name, state: 'seen', detail: `newest ${table}.${column} is ${String(last.newest)}, within ${gap}; expected none`, newest: last.newest } : null
   }
+  if (last.newest === null && entry.added !== undefined && entry.added > since) return null
   if (last.newest === null) return when === undefined || worked(db, when, since) ? { name, state: 'silent', detail: `no row in ${from}` } : null
   if (gap === undefined || last.days === null) return null
   return last.days > days(gap) ? { name, state: 'stale', detail: `newest ${table}.${column} is ${String(last.newest)}, older than ${gap}`, newest: last.newest } : null

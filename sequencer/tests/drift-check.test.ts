@@ -179,6 +179,16 @@ test('D3 D4 research_pinned reads silent, stale and off', () => {
   expect(drift(d, pinned, NOW).map((r) => r.state)).toEqual(['off'])
 })
 
+test('D1-D3 research_pinned is quiet until its gap since added', () => {
+  const pinned = REGISTRY.filter((e) => e.name === 'research_pinned').map((e) => ({ ...e, added: '2026-10-23' }))
+  expect(drift(db(), pinned, new Date('2026-10-29T10:00:00Z'))).toEqual([])
+  expect(drift(db(), pinned, new Date('2026-10-30T10:00:00Z')))
+    .toEqual([{ name: 'research_pinned', state: 'silent', detail: "no row in events WHERE kind = 'research.pinned'" }])
+  const d = db()
+  logged(d, { plan: 1, kind: 'research.pinned', actor: 'tick', outcome: 'pass', message: 'm', pointer: null, run: null }, '2026-10-01 10:00:00')
+  expect(drift(d, pinned, new Date('2026-10-25T10:00:00Z')).map((r) => r.state)).toEqual(['stale'])
+})
+
 test('D2 a second swallowed before a back is seen', () => {
   const d = db()
   const once = REGISTRY.filter((e) => e.name === 'capture_swallowed_once')

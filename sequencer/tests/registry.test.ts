@@ -12,6 +12,7 @@ import { logged } from '../../store/events.ts'
 import { addRule, type Db } from '../../store/index.ts'
 import { briefed, planById, putPlan } from '../../store/plans.ts'
 import { drift, Entry, mechanisms } from '../drift.ts'
+import { git } from '../workspace.ts'
 import { db, NOW, REGISTRY } from './drifting.ts'
 
 const FIXER = REGISTRY.filter((e) => e.name === 'fixer')
@@ -35,7 +36,20 @@ function root(files: Record<string, string>): string {
 
 test('checkoutMatchesFixture', () => {
   const fixture = readFileSync(join(import.meta.dirname, 'fixtures/registry.yaml'), 'utf8')
-  expect(mechanisms(join(import.meta.dirname, '../..'))).toEqual(Entry.array().parse(parse(fixture)))
+  expect(REGISTRY).toEqual(Entry.array().parse(parse(fixture)))
+})
+
+test('D4 a line carries its seed day as added', () => {
+  const dir = root({ 'rules/registry/00-b.yaml': '- name: b\n' })
+  for (const args of [['init'], ['config', 'user.name', 'cf'], ['config', 'user.email', 'cf@example.com'], ['config', 'commit.gpgsign', 'false'],
+    ['add', '.'], ['commit', '-m', 'bare']]) git(dir, args)
+  expect(mechanisms(dir)).toStrictEqual([{ name: 'b', added: undefined }])
+  expect(mechanisms(dir, 'HEAD')).toStrictEqual([{ name: 'b', added: undefined }])
+  writeFileSync(join(dir, 'rules.seed.sql'), "  ('rules/registry/00-b.yaml', 'card', 'rules/registry/00-b.yaml', 'h', '2026-10-23'),\n")
+  git(dir, ['add', '.'])
+  git(dir, ['commit', '-m', 'seed'])
+  expect(mechanisms(dir)).toEqual([{ name: 'b', added: '2026-10-23' }])
+  expect(mechanisms(dir, 'HEAD')).toEqual([{ name: 'b', added: '2026-10-23' }])
 })
 
 test('checkoutJoinsToFixture', () => {

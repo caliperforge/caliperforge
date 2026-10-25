@@ -47,13 +47,13 @@ function filled(root: string): Body[] {
 /** A seat file's own hash is its row's, so the seed is rendered from the files a fill writes, not the ones on disk. */
 function seeded(root: string, seats: Body[], today: string): string {
   const hashes = new Map(seats.map(({ path, body }) => [path, createHash('sha256').update(body).digest('hex')]))
-  const at = dated(root)
+  const at = dated(readFileSync(join(root, SEED), 'utf8'))
   const values = rules(root).map((row) =>
     `  ('${row.id}', '${row.kind}', '${row.path}', '${hashes.get(row.path) ?? row.content_hash}', '${at.get(row.id) ?? today}')`)
   return `INSERT INTO rules (id, kind, path, content_hash, loaded_at)\nVALUES\n${values.join(',\n')};\n`
 }
 
-function dated(root: string): Map<string, string> {
-  const rows = readFileSync(join(root, SEED), 'utf8').matchAll(ROW)
+export function dated(text: string): Map<string, string> {
+  const rows = text.matchAll(ROW)
   return new Map([...rows].map((m): [string, string] => [m[1] ?? '', m[2] ?? '']))
 }

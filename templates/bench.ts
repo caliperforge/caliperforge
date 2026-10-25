@@ -16,7 +16,7 @@ import type { Db } from '../store/index.ts'
 import { observed } from '../store/lanes.ts'
 import { needsCeo, type PlanRow } from '../store/plans.ts'
 import { byRun, pending } from '../store/transcript.ts'
-import { clamp } from './balances.ts'
+import { clamp, quieted } from './balances.ts'
 import { inBare, listedIn } from './listed.ts'
 import { DEFAULT_BUILDER, type Step } from './pr-path.ts'
 import { recloned, rooted } from './rooted.ts'
@@ -271,7 +271,7 @@ function medusa(db: Db, plan: number, src: string, suite: string): Outcome | { c
       workers: typeof workers === 'number' && workers <= WORKERS ? workers : WORKERS })
     if (Array.isArray(balances)) Object.assign(fuzzing, { targetContractsBalances: entries })
   }
-  return { config: JSON.stringify(config, null, 2), clamped }
+  return { config: JSON.stringify(quieted(config), null, 2), clamped }
 }
 
 function moved(suite: string, path: string): string {

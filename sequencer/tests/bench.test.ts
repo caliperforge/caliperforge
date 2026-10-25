@@ -576,8 +576,8 @@ test('D1 D4 a root medusa.json is copied with its paths moved', () => {
   expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
   expect(scores(db)).toEqual([{ plan: 1, target: 'euler-earn-m01', generator: 'fizz', ...SCORE, x_ray: null }])
   expect(JSON.parse(readFileSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/medusa.json'), 'utf8'))).toEqual({
-    fuzzing: { corpusDirectory: 'fizz_data/corpus_medusa', targetContracts: ['FuzzTester'], timeout: 1200, workers: 4 },
-    compilation: { platform: 'crytic-compile', platformConfig: { target: '../..' } } })
+    fuzzing: { corpusDirectory: 'fizz_data/corpus_medusa', targetContracts: ['FuzzTester'], timeout: 1200, workers: 4, testing: { shrinkLimit: 500 } },
+    compilation: { platform: 'crytic-compile', platformConfig: { target: '../..' } }, slither: { useSlither: false } })
   expect(readFileSync(join(srcDir(root, 1), 'medusa.json'), 'utf8')).toBe(config)
   expect(existsSync(join(srcDir(root, 1), 'test/fizz/medusa.json'))).toBe(false)
 })
@@ -592,10 +592,11 @@ function installed(config: string, ...files: string[]): unknown {
   return JSON.parse(readFileSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/medusa.json'), 'utf8'))
 }
 
-test('D1 D5 the copy caps timeout, workers and moves slither', () => {
-  expect(installed(JSON.stringify({ fuzzing: { timeout: 0, workers: 10, testLimit: 0 },
+test('D1 D2 the copy turns slither off and caps shrinking', () => {
+  expect(installed(JSON.stringify({ fuzzing: { timeout: 0, workers: 10, testLimit: 0, testing: { shrinkLimit: 5000, stopOnFailedTest: false } },
     slither: { useSlither: true, cachePath: 'test/fizz/fizz_data/slither_results.json' } }))).toEqual({
-    fuzzing: { timeout: 1200, workers: 4, testLimit: 0 }, slither: { useSlither: true, cachePath: 'fizz_data/slither_results.json' } })
+    fuzzing: { timeout: 1200, workers: 4, testLimit: 0, testing: { shrinkLimit: 500, stopOnFailedTest: false } },
+    slither: { useSlither: false, cachePath: 'fizz_data/slither_results.json' } })
 })
 
 /** A root medusa.json for crytic-compile with platformConfig `args`. */
@@ -605,17 +606,17 @@ function compiled(args: string[]): string {
 
 test('D1 a foundry.toml forces the foundry framework', () => {
   expect(installed(compiled(['--foundry-compile-all']), 'foundry.toml', 'hardhat.config.ts')).toEqual({ compilation: { platform: 'crytic-compile',
-    platformConfig: { target: '../..', args: ['--foundry-compile-all', '--compile-force-framework', 'foundry'] } } })
+    platformConfig: { target: '../..', args: ['--foundry-compile-all', '--compile-force-framework', 'foundry'] } }, slither: { useSlither: false } })
 })
 
 test('D2 no foundry.toml keeps the args as written', () => {
   expect(installed(compiled(['--foundry-compile-all']))).toEqual({ compilation: { platform: 'crytic-compile',
-    platformConfig: { target: '../..', args: ['--foundry-compile-all'] } } })
+    platformConfig: { target: '../..', args: ['--foundry-compile-all'] } }, slither: { useSlither: false } })
 })
 
 test('D3 a forced framework already in args is kept', () => {
   expect(installed(compiled(['--compile-force-framework', 'hardhat']), 'foundry.toml')).toEqual({ compilation: { platform: 'crytic-compile',
-    platformConfig: { target: '../..', args: ['--compile-force-framework', 'hardhat'] } } })
+    platformConfig: { target: '../..', args: ['--compile-force-framework', 'hardhat'] } }, slither: { useSlither: false } })
 })
 
 const TOML = '[profile.default]\nsrc = "src"\n'
@@ -705,7 +706,8 @@ test('D4 a tracked foundry.toml or no property writes no root', async () => {
 })
 
 test('D3 a set timeout and workers at most 4 are kept', () => {
-  expect(installed(JSON.stringify({ fuzzing: { timeout: 600, workers: 2 } }))).toEqual({ fuzzing: { timeout: 600, workers: 2 } })
+  expect(installed(JSON.stringify({ fuzzing: { timeout: 600, workers: 2 } }))).toEqual({
+    fuzzing: { timeout: 600, workers: 2, testing: { shrinkLimit: 500 } }, slither: { useSlither: false } })
 })
 
 test('D1 D2 D3 a balance above 1e24 wei is clamped in the copy', () => {
@@ -717,7 +719,8 @@ test('D1 D2 D3 a balance above 1e24 wei is clamped in the copy', () => {
   expect(done.note).toContain('0xffffffffffffffffffffffffffffffffffffffffffffffff')
   expect(done.note).not.toContain('0x21e19e0c9bab2400000')
   expect(JSON.parse(readFileSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/medusa.json'), 'utf8'))).toEqual({
-    fuzzing: { timeout: 600, workers: 2, targetContractsBalances: ['0xd3c21bcecceda1000000', '0x21e19e0c9bab2400000', 'lots'] } })
+    fuzzing: { timeout: 600, workers: 2, targetContractsBalances: ['0xd3c21bcecceda1000000', '0x21e19e0c9bab2400000', 'lots'],
+      testing: { shrinkLimit: 500 } }, slither: { useSlither: false } })
 })
 
 test('rescore D5 a suite medusa.json is clamped, paths kept', () => {
@@ -727,8 +730,8 @@ test('rescore D5 a suite medusa.json is clamped, paths kept', () => {
     targetContractsBalances: balances }, compilation: { platformConfig: { target: '../..' } } }))
   expect(scored(db, root, planById(db, 1)).note).toContain(balances[0])
   expect(JSON.parse(readFileSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/medusa.json'), 'utf8'))).toEqual({
-    fuzzing: { corpusDirectory: 'fizz_data/corpus_medusa', targetContractsBalances: ['0xd3c21bcecceda1000000'], timeout: 1200, workers: 4 },
-    compilation: { platformConfig: { target: '../..' } } })
+    fuzzing: { corpusDirectory: 'fizz_data/corpus_medusa', targetContractsBalances: ['0xd3c21bcecceda1000000'], timeout: 1200, workers: 4,
+      testing: { shrinkLimit: 500 } }, compilation: { platformConfig: { target: '../..' } }, slither: { useSlither: false } })
 })
 
 test('rescore D1 D2 a done plan scores again on its suite', () => {

@@ -225,8 +225,9 @@ function empty(brief: string): Refused | null {
 }
 
 function carried(brief: string): Refused | null {
-  const lines = section(brief, '## Standing').split('\n').map((l) => l.trim()).filter((l) => l !== '')
-  return lines.join('\n') === STANDING.join('\n')
+  const lines = section(brief, '## Standing').split('\n').map((l) => l.trim())
+  const end = lines.findIndex((l) => l.startsWith('```') || l === '---')
+  return lines.slice(0, end < 0 ? undefined : end).filter((l) => l !== '').join('\n') === STANDING.join('\n')
     ? null
     : { span: '## Standing', reason: '## Standing does not carry the standing lines unchanged' }
 }

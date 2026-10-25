@@ -1,6 +1,0 @@
-- name: research_pinned
-  switch: { key: science.dir }
-  table: events
-  column: at
-  where: "kind = 'research.pinned'"
-  gap: 7d

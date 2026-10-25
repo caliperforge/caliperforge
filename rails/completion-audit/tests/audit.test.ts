@@ -4,6 +4,8 @@ import { expect, test } from 'vitest'
 import { fresh } from '../../../checks/sqlite.ts'
 import { planRow } from '../../../runner/index.ts'
 import { load } from '../../../runner/rules.ts'
+import { verdictMessage } from '../../../store/trail.ts'
+import { verdictRows } from '../../../store/verdict.ts'
 import { audit, carried, record, undone } from '../index.ts'
 
 const root = join(import.meta.dirname, '../../..')
@@ -76,9 +78,9 @@ test('writes a verdicts row the store accepts', () => {
   load(db, root)
   const plan = planRow(db)
   const id = record(db, plan, audit(fixture('handback-unpointed.md'), ['D1', 'D2']), 0.01)
-  const row = db.prepare('SELECT gate, kind, outcome, rail_id, origin_kind, origin_ref, message, tokens FROM verdicts WHERE id = ?').get(id)
-  expect(row).toEqual({ gate: 'pre_review', kind: 'rail', outcome: 'refuse', rail_id: 'completion-audit', origin_kind: 'rail', origin_ref: 'completion-audit',
-    message: 'D2 expected by the ticket, absent from the handback or carried with no pointer', tokens: 0 })
+  expect(verdictRows(db, plan)).toMatchObject([{ id, gate: 'pre_review', kind: 'rail', outcome: 'refuse', rail_id: 'completion-audit',
+    origin_kind: 'rail', origin_ref: 'completion-audit', tokens: 0 }])
+  expect(verdictMessage(db, id)).toBe('D2 expected by the ticket, absent from the handback or carried with no pointer')
 })
 
 test('D1 undone refuses a handback with a Not done line', () => {

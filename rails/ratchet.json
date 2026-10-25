@@ -12,33 +12,20 @@
     "lines": 104,
     "silent-catch": 1
   },
-  "completion-audit/tests/audit.test.ts": {
-    "prepare": 1
-  },
   "diff.ts": {
     "lines": 63
   },
   "identifiers/index.ts": {
     "lines": 70
   },
-  "identifiers/tests/identifiers.test.ts": {
-    "prepare": 1
-  },
   "ready/index.ts": {
     "lines": 53
   },
-  "ready/tests/ready.test.ts": {
-    "prepare": 1
-  },
   "record.ts": {
-    "lines": 25,
-    "prepare": 1
+    "lines": 20
   },
   "secret-scan/index.ts": {
     "lines": 38
-  },
-  "secret-scan/tests/scan.test.ts": {
-    "prepare": 1
   },
   "test-weakened/index.ts": {
     "lines": 70

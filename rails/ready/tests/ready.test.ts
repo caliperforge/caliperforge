@@ -7,6 +7,7 @@ import { load } from '../../../runner/rules.ts'
 import { record, type Verdict } from '../../record.ts'
 import { ready, type Proof } from '../index.ts'
 import type { Db } from '../../../store/index.ts'
+import { verdictRows } from '../../../store/verdict.ts'
 
 const root = join(import.meta.dirname, '../../..')
 
@@ -83,6 +84,5 @@ test('writes the ready verdict that lets a plan reach batch', () => {
   const db = seeded()
   const plan = planRow(db)
   const id = record(db, join(import.meta.dirname, '..'), plan, ready(proof('green.proof.json', 'pass')), 0.01)
-  const row = db.prepare('SELECT gate, step, kind, outcome, rail_id, origin_kind FROM verdicts WHERE id = ?').get(id)
-  expect(row).toEqual({ gate: 'ready', step: 6, kind: 'rail', outcome: 'pass', rail_id: 'ready', origin_kind: null })
+  expect(verdictRows(db, plan)).toMatchObject([{ id, gate: 'ready', step: 6, kind: 'rail', outcome: 'pass', rail_id: 'ready', origin_kind: null }])
 })

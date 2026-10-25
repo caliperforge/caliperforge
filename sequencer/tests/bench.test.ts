@@ -187,9 +187,9 @@ function staffedIn(root: string): void {
 
 const BODY = 'contract FizzTest {\n  function invariant_holds() public {}\n}\n'
 
-/** A generator that spends `tokens`, ends `ended` and writes `body` to `wrote`, or test/fizz/FizzTest.sol when `wrote` is true, and when `xray`, x-ray/x-ray.md. */
+/** A generator that spends `tokens`, ends `ended` and writes `body` to `wrote`, or test/fizz/FizzTest.sol when `wrote` is true, when `xray`, x-ray/x-ray.md, and a transcript spawning `agents` sub-agents. */
 function stub(tokens: number, ended: Fired['ended'], wrote: boolean | string[], stop: string | null = null, xray = false,
-  body = BODY): { provider: Provider; packets: Packet[] } {
+  body = BODY, agents = 0): { provider: Provider; packets: Packet[] } {
   const packets: Packet[] = []
   return { packets, provider: { name: 'claude-agent-sdk', fire: (packet) => {
     packets.push(packet)
@@ -202,6 +202,8 @@ function stub(tokens: number, ended: Fired['ended'], wrote: boolean | string[], 
       mkdirSync(join(packet.cwd, 'x-ray'), { recursive: true })
       writeFileSync(join(packet.cwd, 'x-ray/x-ray.md'), '# x-ray\n')
     }
+    const spawn = { type: 'tool_use', id: 'toolu_1', name: 'Agent', input: { description: 'd', prompt: 'p', subagent_type: 'general-purpose' } }
+    if (agents > 0) writeFileSync(packet.transcript, `${JSON.stringify({ type: 'assistant', message: { content: Array(agents).fill(spawn) } })}\n`)
     return Promise.resolve({ text: '', transcript_path: packet.transcript, usage: { input: tokens - 1000, cache: 0, output: 1000 }, seconds: 1,
       ended, exit: ended === 'completed' ? 0 : 1, stop_reason: stop, denials: 0 })
   } } }
@@ -414,13 +416,19 @@ test('D3 cf return --to 1 on a NULL-lane bench plan fires it', async () => {
 test('D3 a run stopped at the ceiling with a suite passes', async () => {
   const { root, db, outcome } = await generated(stub(CEILING + 5, 'stopped', true, 'ruling:run.token_wall'))
   expect(outcome).toMatchObject({ outcome: 'pass' })
-  expect(JSON.parse(get(root, 1, 'generate.json'))).toEqual({ suite: 'test/fizz', tokens: CEILING + 5, seconds: 1, x_ray: 0 })
+  expect(JSON.parse(get(root, 1, 'generate.json'))).toEqual({ suite: 'test/fizz', tokens: CEILING + 5, seconds: 1, x_ray: 0, agents: 0 })
   expect(runRows(db)).toMatchObject([{ seat: 'fizz_generator', staffed: 'fizz_generator' }])
 })
 
 test('D2 generate.json has x_ray 1 when x-ray.md was written', async () => {
   const { root } = await generated(stub(1000, 'completed', true, null, true))
-  expect(JSON.parse(get(root, 1, 'generate.json'))).toEqual({ suite: 'test/fizz', tokens: 1000, seconds: 1, x_ray: 1 })
+  expect(JSON.parse(get(root, 1, 'generate.json'))).toEqual({ suite: 'test/fizz', tokens: 1000, seconds: 1, x_ray: 1, agents: 0 })
+})
+
+test('D4 generate.json counts the sub-agents the run spawned', async () => {
+  const { root, db } = await generated(stub(1000, 'completed', true, null, false, BODY, 8))
+  expect(JSON.parse(get(root, 1, 'generate.json'))).toMatchObject({ agents: 8 })
+  expect(runRows(db)).toMatchObject([{ transcript_path: join(planDir(root, 1), 'run-1.transcript.jsonl') }])
 })
 
 test('D4 a completed run with no suite is refused', async () => {

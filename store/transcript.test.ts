@@ -6,7 +6,7 @@ import { fresh } from '../checks/sqlite.ts'
 import { planRow } from '../runner/index.ts'
 import { load } from '../runner/rules.ts'
 import type { Db } from './index.ts'
-import { backfill, outputs, unfinished } from './transcript.ts'
+import { backfill, outputs, spawned, unfinished } from './transcript.ts'
 
 const root = join(import.meta.dirname, '..')
 const loaded = (): Db => {
@@ -85,6 +85,26 @@ test('a preview with no saved path gives its stdout', () => {
 test('a plain result or a bare preview keeps its own text', () => {
   expect(outputs(transcript('out\nerr: warn', { stdout: 'out' }))[0]?.output).toBe('out\nerr: warn')
   expect(outputs(transcript(PREVIEW))[0]?.output).toBe(PREVIEW)
+})
+
+const spawn = { type: 'tool_use', id: 'toolu_a', name: 'Agent', input: { description: 'd', prompt: 'p', subagent_type: 'general-purpose' } }
+
+function lines(...turns: unknown[][]): string {
+  const path = join(mkdtempSync(join(tmpdir(), 'cf-transcript-')), 'run.transcript.jsonl')
+  writeFileSync(path, turns.map((content) => JSON.stringify({ type: 'assistant', message: { content } })).join('\n'))
+  return path
+}
+
+test('D2 spawned counts Agent blocks, not Read or Bash', () => {
+  const read = { type: 'tool_use', id: 'toolu_r', name: 'Read', input: { file_path: 'a' } }
+  const bash = { type: 'tool_use', id: 'toolu_b', name: 'Bash', input: { command: 'pwd' } }
+  expect(spawned(lines(Array(5).fill(spawn), [read, spawn, bash], [spawn, spawn]))).toBe(8)
+})
+
+test('D3 spawned is 0 for a missing or non-JSON transcript', () => {
+  const broken = lines([spawn])
+  writeFileSync(broken, `${readFileSync(broken, 'utf8')}\nnot json`)
+  expect([spawned(fixture('absent')), spawned(broken)]).toEqual([0, 0])
 })
 
 test('a missing, uncosted or cut transcript stays NULL', () => {

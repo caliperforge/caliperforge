@@ -1,7 +1,7 @@
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { McpSdkServerConfigWithInstance } from '@anthropic-ai/claude-agent-sdk'
+import type { McpSdkServerConfigWithInstance, SDKResultMessage } from '@anthropic-ai/claude-agent-sdk'
 import { expect, test, vi } from 'vitest'
 import type { Packet } from '../../kind.ts'
 
@@ -17,7 +17,7 @@ vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
   },
 }))
 
-const { claudeAgentSdk } = await import('../index.ts')
+const { claudeAgentSdk, fired } = await import('../index.ts')
 
 function packet(tools: string[]): Packet {
   return {
@@ -59,4 +59,16 @@ test('Bash is offered once, bare; patterns stay on allowedTools', async () => {
   await claudeAgentSdk.fire(packet(tools))
   expect(sent.at(-1)?.tools).toEqual(['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash'])
   expect(sent.at(-1)?.allowedTools).toEqual(tools)
+})
+
+test('D5 Agent is offered and allowed', async () => {
+  await claudeAgentSdk.fire(packet(['Read', 'Edit', 'Agent', 'Bash(forge:*)']))
+  expect(sent.at(-1)?.tools).toEqual(['Read', 'Edit', 'Agent', 'Bash'])
+  expect(sent.at(-1)?.allowedTools).toEqual(['Read', 'Edit', 'Agent', 'Bash(forge:*)'])
+})
+
+test('D6 fired sums every model in modelUsage', () => {
+  const used = (n: number) => ({ inputTokens: n, cacheCreationInputTokens: 10, cacheReadInputTokens: 5, outputTokens: n * 2 })
+  const result = { ...RESULT, modelUsage: { 'claude-opus-5-5': used(100), 'claude-sonnet-5': used(40) } } as unknown as SDKResultMessage
+  expect(fired(result, Date.now(), []).usage).toMatchObject({ input: 160, cache: 10, write: 20, output: 280 })
 })

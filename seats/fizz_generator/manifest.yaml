@@ -7,6 +7,7 @@ tools:
   - Grep
   - Write
   - Edit
+  - Agent
   - Bash(pwd)
   - Bash(forge:*)
   - Bash(FOUNDRY_PROFILE=fuzz forge:*)

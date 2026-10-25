@@ -7,17 +7,26 @@ const Turn = z.object({ type: z.literal('assistant'), message: z.object({ conten
 
 const Read = z.object({ type: z.literal('tool_use'), name: z.literal('Read'), input: z.object({ file_path: z.string() }) })
 
-/** The `file_path` of each Read call in a transcript, in order; none when it is missing or a line is not JSON. */
-export function opened(path: string): string[] {
+const Spawn = z.object({ type: z.literal('tool_use'), name: z.literal('Agent') })
+
+/** The content blocks of each assistant turn, in order; none when the transcript is missing or a line is not JSON. */
+function blocks(path: string): unknown[] {
   if (!existsSync(path)) return []
   try {
-    return readFileSync(path, 'utf8').split('\n').filter((line) => line !== '').flatMap((line) => {
-      const turn = Turn.safeParse(JSON.parse(line))
-      return turn.success ? turn.data.message.content.flatMap((block) => Read.safeParse(block).data?.input.file_path ?? []) : []
-    })
+    return readFileSync(path, 'utf8').split('\n').filter((line) => line !== '').flatMap((line) => Turn.safeParse(JSON.parse(line)).data?.message.content ?? [])
   } catch {
     return []
   }
+}
+
+/** The `file_path` of each Read call in a transcript, in order. */
+export function opened(path: string): string[] {
+  return blocks(path).flatMap((block) => Read.safeParse(block).data?.input.file_path ?? [])
+}
+
+/** How many sub-agents a transcript's turns spawned. */
+export function spawned(path: string): number {
+  return blocks(path).filter((block) => Spawn.safeParse(block).success).length
 }
 
 const Message = z.object({ type: z.enum(['assistant', 'user']), message: z.object({ content: z.array(z.unknown()) }), tool_use_result: z.unknown().optional() })

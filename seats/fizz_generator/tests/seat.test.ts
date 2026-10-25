@@ -12,7 +12,7 @@ const SHA = '92b0ea6786e6c210bc9a839e4813d50876c1c550'
 const SKILL = 'fa706e94e9ec3456528985548f46461d44442d9223e26b2a0dbbb8b5f522172a'
 const COMMANDS = new Set(['Bash(pwd)', 'Bash(forge:*)', 'Bash(FOUNDRY_PROFILE=fuzz forge:*)', 'Bash(medusa:*)', 'Bash(echidna:*)', 'Bash(node:*)',
   'Bash(bash:*)', 'Bash(rm -f /tmp/x-ray-attempts.md)'])
-const TOOLS = ['Read', 'Glob', 'Grep', 'Write', 'Edit', ...COMMANDS]
+const TOOLS = ['Read', 'Glob', 'Grep', 'Write', 'Edit', 'Agent', ...COMMANDS]
 
 function copied(): string {
   const tree = mkdtempSync(join(tmpdir(), 'cf-fizz-generator-'))

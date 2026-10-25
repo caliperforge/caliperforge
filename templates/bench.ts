@@ -15,7 +15,7 @@ import { logged, runLogged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { observed } from '../store/lanes.ts'
 import { needsCeo, type PlanRow } from '../store/plans.ts'
-import { byRun, pending } from '../store/transcript.ts'
+import { byRun, pending, spawned } from '../store/transcript.ts'
 import { clamp, quieted } from './balances.ts'
 import { inBare, listedIn } from './listed.ts'
 import { DEFAULT_BUILDER, type Step } from './pr-path.ts'
@@ -139,7 +139,7 @@ export async function generate(db: Db, root: string, plan: PlanRow, step: Step, 
     env: TIMEOUTS, reads: [...granted, real(ATTEMPTS)], ...(name === 'fizz_generator' ? { idle: SETUP } : {}) })
   const run = runLogged(db, { plan: plan.id, step: step.step, seat: name, rule_hash: hash, provider: provider.name, model: manifest.model,
     effort: manifest.effort, exit: fired.exit, fired, staffed: name })
-  byRun(db, run, fired.transcript_path)
+  const transcript = byRun(db, run, fired.transcript_path)
   observed(db, fired.limits)
   const tokens = fired.usage.input + fired.usage.output
   if (fired.ended !== 'completed' && tokens < CEILING) return { outcome: 'refuse', spans: [fired.stop_reason ?? 'seat.exit'], note: `${name} ${fired.ended}` }
@@ -147,7 +147,7 @@ export async function generate(db: Db, root: string, plan: PlanRow, step: Step, 
   if (typeof properties !== 'number') return properties
   if (target !== '') rooted(dir, join(planDir(root, plan.id), 'fuzz-bench/suites', generator, target))
   put(root, plan.id, 'generate.json', JSON.stringify({ suite: SUITE, tokens, seconds: fired.seconds,
-    x_ray: existsSync(join(dir, 'x-ray/x-ray.md')) ? 1 : 0 }))
+    x_ray: existsSync(join(dir, 'x-ray/x-ray.md')) ? 1 : 0, agents: spawned(transcript) }))
   return { outcome: 'pass', spans: [], note: `generate.json written: ${name} ${fired.ended}, ${String(tokens)} tokens, ${String(properties)} properties` }
 }
 

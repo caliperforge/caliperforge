@@ -1,5 +1,5 @@
 import { spawnSync, type SpawnSyncReturns } from 'node:child_process'
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 import type { Provider } from '../providers/kind.ts'
@@ -19,6 +19,7 @@ import { byRun, pending } from '../store/transcript.ts'
 import { clamp } from './balances.ts'
 import { inBare, listedIn } from './listed.ts'
 import { DEFAULT_BUILDER, type Step } from './pr-path.ts'
+import { rooted } from './rooted.ts'
 
 export const steps: Step[] = ['checkout', 'generate', 'score', 'null_check'].map((name, step) =>
   ({ step, name, seat: DEFAULT_BUILDER, fires: name === 'generate' ? 'seat' : 'kernel', runs: name, gate: false, writes_verdict: false, verdict_gate: null }))
@@ -173,7 +174,7 @@ export function scored(db: Db, root: string, plan: PlanRow): Outcome {
   put(root, plan.id, 'target.yml', `${copied(yml, target, generator)}${
     keys.null_check === undefined ? '' : `null_check: ${keys.null_check}\n`}`)
   const suites = `suites/${generator}/${target}`
-  cpSync(join(srcDir(root, plan.id), suite), join(bench, suites), { recursive: true })
+  rooted(srcDir(root, plan.id), suite, join(bench, suites))
   if (config !== null) writeFileSync(join(bench, suites, 'medusa.json'), config.config)
   mkdirSync(join(bench, 'results', target), { recursive: true })
   const written = join(bench, 'results', target, `${target}.jsonl`)

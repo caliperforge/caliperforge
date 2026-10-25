@@ -619,6 +619,16 @@ test('D3 a forced framework already in args is kept', () => {
     platformConfig: { target: '../..', args: ['--compile-force-framework', 'hardhat'] } }, slither: { useSlither: false } })
 })
 
+test('D1 D2 D3 --foundry-ignore-compile is --foundry-compile-all', () => {
+  const forced = installed(compiled(['--foundry-ignore-compile']), 'foundry.toml')
+  const kept = installed(compiled(['--foundry-ignore-compile']))
+  expect(forced).toEqual({ compilation: { platform: 'crytic-compile', platformConfig: { target: '../..',
+    args: ['--foundry-compile-all', '--compile-force-framework', 'foundry'] } }, slither: { useSlither: false } })
+  expect(kept).toEqual({ compilation: { platform: 'crytic-compile',
+    platformConfig: { target: '../..', args: ['--foundry-compile-all'] } }, slither: { useSlither: false } })
+  for (const copy of [forced, kept]) expect(JSON.stringify(copy)).not.toContain('--foundry-ignore-compile')
+})
+
 const TOML = '[profile.default]\nsrc = "src"\n'
 
 const FORGE = 'contract Test {}\n'

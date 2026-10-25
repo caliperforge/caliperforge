@@ -17,6 +17,8 @@ The mechanical things that stop a job without being anyone's decision:
   every fact it relies on, then `then: return`);
 - a `base.sha` that lags a merge from main made in `src`, so the checks judge files the job never touched
   (write the merged main commit to `base.sha`);
+- a job that must be cut from another branch: a `base.sha` the checkout's HEAD does not contain is refused, since
+  a cut moves only through a `Base: <branch>` line in `ask.md`, so add that line, then `then: return`;
 - a job whose work is already on main and whose ticket is closed (`then: done`);
 - a job that builds on another open job which has not landed yet: answer in `ask.md` that it builds on that
   job, then `then: wait` with `waits_on:` that job's plan number from `# Open jobs`. The machine puts it back

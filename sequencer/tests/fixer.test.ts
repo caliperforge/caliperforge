@@ -1,4 +1,4 @@
-import { appendFileSync, cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { appendFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { expect, test } from 'vitest'
@@ -17,7 +17,7 @@ import type { Wire } from '../push.ts'
 import { allPlans, end, planById, planRows, putPlan, terminal, type PlanRow } from '../../store/plans.ts'
 import { lapsed } from '../../store/until.ts'
 import { woke } from '../director.ts'
-import { git, maybe, put, srcDir } from '../workspace.ts'
+import { CARRY, checkout, drop, get, git, maybe, put, SELF, srcDir } from '../workspace.ts'
 
 const repo = join(import.meta.dirname, '../..')
 const now = new Date('2026-09-25T17:00:00.000Z')
@@ -471,6 +471,75 @@ test('D1 research: the fixer adds the missing ask lines', async () => {
   expect(applied(db)).toEqual([{ applied: 'applied' }])
   expect(maybe(home, 7, 'refusal.prev.md')).toContain('**Measure:**')
   expect(maybe(home, 7, 'refusal.md')).toBeNull()
+})
+
+const EDIT = 'export const edited = true'
+
+/** A clone cut from `main` (two commits) of a repo whose `redesign` branch adds `redesign.ts`, with an uncommitted edit. */
+function branched() {
+  const s = seeded('live')
+  const base = mkdtempSync(join(tmpdir(), 'cf-fx-base-'))
+  const remote = join(base, SELF)
+  mkdirSync(remote, { recursive: true })
+  const commit = (file: string, body: string) => {
+    writeFileSync(join(remote, file), body)
+    git(remote, ['add', '-A'])
+    git(remote, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', file])
+    return git(remote, ['rev-parse', 'HEAD']).trim()
+  }
+  git(remote, ['init', '-q', '-b', 'main'])
+  const first = commit('index.ts', 'export {}\n')
+  commit('index.ts', 'export const main = 1\n')
+  git(remote, ['checkout', '-q', '-b', 'redesign'])
+  const tip = commit('redesign.ts', 'export const redesign = 1\n')
+  git(remote, ['checkout', '-q', 'main'])
+  writeFileSync(join(s.home, '.cf/git-base'), base)
+  rmSync(srcDir(s.home, 7), { recursive: true })
+  drop(s.home, 7, 'base.sha')
+  const { base: cut } = checkout(s.home, 7, SELF, 'p7-fix')
+  appendFileSync(join(srcDir(s.home, 7), 'index.ts'), `${EDIT}\n`)
+  return { ...s, first, tip, cut }
+}
+
+const CUT_TO = '---\ndid: set the cut\nthen: return\nwhy: the checks judge the right base now\n---\n'
+
+function edits(write: (cwd: string) => void): Provider {
+  const inner = stub(CUT_TO, [])
+  return { ...inner, fire: (packet) => {
+    if (basename(packet.transcript).startsWith('fixer')) write(packet.cwd)
+    return inner.fire(packet)
+  } }
+}
+
+test('D1 a base.sha HEAD contains is applied', async () => {
+  const { db, home, first } = branched()
+  await woke(db, home, edits((cwd) => { writeFileSync(join(cwd, 'base.sha'), `${first}\n`) }), now, () => undefined, wire([]))
+  expect(state(db)).toEqual({ state: 'queued', step: 4 })
+  expect(get(home, 7, 'base.sha').trim()).toBe(first)
+  expect(applied(db)).toEqual([{ applied: 'applied' }])
+})
+
+test('D2 a base.sha HEAD does not contain is refused and put back', async () => {
+  const { db, home, tip, cut } = branched()
+  const posted: string[] = []
+  await woke(db, home, edits((cwd) => { writeFileSync(join(cwd, 'base.sha'), `${tip}\n`) }), now, (t) => void posted.push(t), wire([]))
+  expect(get(home, 7, 'base.sha').trim()).toBe(cut)
+  expect(state(db)).toEqual({ state: 'blocked_on_ceo', step: 4 })
+  expect(maybe(home, 7, 'fixes.jsonl')).toContain('"applied":"refused"')
+  expect(ofKind(db, 'fixer')[0]).toMatchObject({ outcome: 'needs_coo', message: 'refused: a cut moves only through a Base: line in ask.md' })
+  expect(applied(db)).not.toContainEqual({ applied: 'applied' })
+  expect(posted).toHaveLength(1)
+})
+
+test('D3 a Base: line recuts and carries only the plan diff', async () => {
+  const { db, home, cut } = branched()
+  await woke(db, home, edits((cwd) => { appendFileSync(join(cwd, 'ask.md'), 'Base: redesign\n') }), now, () => undefined, wire([]))
+  expect(applied(db)).toEqual([{ applied: 'applied' }])
+  expect(maybe(home, 7, 'fixes.jsonl')).toContain('"applied":"return"')
+  expect(get(home, 7, 'base.sha').trim()).toBe(cut)
+  expect(checkout(home, 7, SELF, 'p7-fix', 'redesign').recut).toBe('main')
+  expect(get(home, 7, CARRY)).toContain(`+${EDIT}`)
+  expect(get(home, 7, CARRY)).not.toContain('redesign.ts')
 })
 
 const OUT = join(homedir(), 'cf_work/fx-out')

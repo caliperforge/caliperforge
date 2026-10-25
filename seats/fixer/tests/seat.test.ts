@@ -32,3 +32,9 @@ test('D3: a code stop is diagnosed, not edited', () => {
 test('D4: the prompt carries the research job edits', () => {
   expect(seat(root, 'fixer').prompt).toContain('## Research jobs')
 })
+
+test('D4: a cut moves only through a Base: line', () => {
+  const { prompt } = seat(root, 'fixer')
+  expect(prompt).toContain("a `base.sha` the checkout's HEAD does not contain is refused")
+  expect(prompt).toContain('a cut moves only through a `Base: <branch>` line in `ask.md`')
+})

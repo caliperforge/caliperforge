@@ -23,6 +23,7 @@ import { lapsed } from '../store/until.ts'
 import { closed } from './closed.ts'
 import { coder, repaired } from './coder.ts'
 import { hold, unhold } from './hold.ts'
+import { CUT, moved } from './moved.ts'
 import { output } from './output.ts'
 import { prose } from './prose.ts'
 import { WIRE, type Wire } from './push.ts'
@@ -88,6 +89,7 @@ export async function fixer(db: Db, root: string, plan: PlanRow, decision: { id:
   if (m === 'off') return false
   if (m === 'live' && fixesToday(root, plan.id, now) >= FIXES) return false
   const to = gone(root, plan) ? null : coder(db, root, plan)
+  const was = maybe(root, plan.id, 'base.sha')
   const { got, tokens } = gone(root, plan) ? { got: GONE, tokens: 0 } : await ask(db, root, plan, decision, m, to, provider)
   if (got === null) {
     log(db, root, plan.id, { at: now.toISOString(), mode: m, did: 'nothing', then: 'ask_ceo', why: 'no readable answer', tokens, applied: 'unreadable' })
@@ -95,6 +97,10 @@ export async function fixer(db: Db, root: string, plan: PlanRow, decision: { id:
   }
   if (m === 'shadow') {
     log(db, root, plan.id, { at: now.toISOString(), mode: m, ...got, tokens, applied: 'shadow' })
+    return false
+  }
+  if (moved(root, plan.id, was)) {
+    log(db, root, plan.id, { at: now.toISOString(), mode: m, ...got, why: CUT, tokens, applied: 'refused' })
     return false
   }
   const stop = `# Diagnosis\n\n${got.did}\n\n${got.why}\n\n# Stop\n\n${cut(maybe(root, plan.id, 'refusal.md') ?? '', TEXT_CHARS)}`
@@ -281,7 +287,7 @@ const LOG = 'fixes.jsonl'
 function log(db: Db, root: string, plan: number, l: Logged): void {
   put(root, plan, LOG, `${(maybe(root, plan, LOG) ?? '')}${JSON.stringify(l)}\n`)
   if (l.mode !== 'live') return
-  const outcome = ['escalated', 'unreadable', 'unrepaired'].includes(l.applied) ? 'needs_coo' : 'pass'
+  const outcome = ['escalated', 'unreadable', 'unrepaired', 'refused'].includes(l.applied) ? 'needs_coo' : 'pass'
   event(db, { plan, kind: 'fixer', actor: 'fixer', outcome, message: `${l.applied}: ${l.why}`, pointer: null, run: null })
 }
 

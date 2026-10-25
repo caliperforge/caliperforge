@@ -1,5 +1,5 @@
 import { spawnSync, type SpawnSyncReturns } from 'node:child_process'
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 import type { Provider } from '../providers/kind.ts'
@@ -19,7 +19,7 @@ import { byRun, pending } from '../store/transcript.ts'
 import { clamp } from './balances.ts'
 import { inBare, listedIn } from './listed.ts'
 import { DEFAULT_BUILDER, type Step } from './pr-path.ts'
-import { rooted } from './rooted.ts'
+import { recloned, rooted } from './rooted.ts'
 
 export const steps: Step[] = ['checkout', 'generate', 'score', 'null_check'].map((name, step) =>
   ({ step, name, seat: DEFAULT_BUILDER, fires: name === 'generate' ? 'seat' : 'kernel', runs: name, gate: false, writes_verdict: false, verdict_gate: null }))
@@ -121,7 +121,7 @@ function deps(dir: string): Outcome | null {
 }
 
 export async function generate(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
-  const generator = fields(maybe(root, plan.id, 'target.yml') ?? '').generator ?? ''
+  const { generator = '', target = '' } = fields(maybe(root, plan.id, 'target.yml') ?? '')
   if (generator === '') return { outcome: 'refuse', spans: ['target.yml'], note: 'target.yml has no generator' }
   const name = staffed(root, 'bench', step.step, generator)?.seat
   if (name === undefined) return { outcome: 'needs_ceo', spans: ['staffing'], note: `no bench generator "${generator}" in rules/staffing.yaml` }
@@ -145,6 +145,7 @@ export async function generate(db: Db, root: string, plan: PlanRow, step: Step, 
   if (fired.ended !== 'completed' && tokens < CEILING) return { outcome: 'refuse', spans: [fired.stop_reason ?? 'seat.exit'], note: `${name} ${fired.ended}` }
   const properties = unproven(join(dir, SUITE), name)
   if (typeof properties !== 'number') return properties
+  if (target !== '') rooted(dir, join(planDir(root, plan.id), 'fuzz-bench/suites', generator, target))
   put(root, plan.id, 'generate.json', JSON.stringify({ suite: SUITE, tokens, seconds: fired.seconds,
     x_ray: existsSync(join(dir, 'x-ray/x-ray.md')) ? 1 : 0 }))
   return { outcome: 'pass', spans: [], note: `generate.json written: ${name} ${fired.ended}, ${String(tokens)} tokens, ${String(properties)} properties` }
@@ -164,8 +165,8 @@ export function scored(db: Db, root: string, plan: PlanRow): Outcome {
   const config = medusa(db, plan.id, srcDir(root, plan.id), suite)
   if (config !== null && 'outcome' in config) return config
   const bench = join(planDir(root, plan.id), 'fuzz-bench')
-  rmSync(bench, { recursive: true, force: true })
-  git(planDir(root, plan.id), ['clone', '-q', remote(gitBase(root), 'caliperforge/fuzz-bench'), bench])
+  const suites = `suites/${generator}/${target}`
+  recloned(bench, suites, remote(gitBase(root), 'caliperforge/fuzz-bench'))
   const sha = git(bench, ['rev-parse', 'HEAD']).trim()
   const upstream = join(bench, 'targets', `${target}.yml`)
   if (!existsSync(upstream)) return { outcome: 'refuse', spans: ['target.yml'], note: `fuzz-bench has no targets/${target}.yml` }
@@ -173,8 +174,8 @@ export function scored(db: Db, root: string, plan: PlanRow): Outcome {
   if (yml === null) return { outcome: 'refuse', spans: ['target.yml'], note: 'target.yml has no files' }
   put(root, plan.id, 'target.yml', `${copied(yml, target, generator)}${
     keys.null_check === undefined ? '' : `null_check: ${keys.null_check}\n`}`)
-  const suites = `suites/${generator}/${target}`
-  rooted(srcDir(root, plan.id), suite, join(bench, suites))
+  cpSync(join(srcDir(root, plan.id), suite), join(bench, suites), { recursive: true })
+  rooted(srcDir(root, plan.id), join(bench, suites))
   if (config !== null) writeFileSync(join(bench, suites, 'medusa.json'), config.config)
   mkdirSync(join(bench, 'results', target), { recursive: true })
   const written = join(bench, 'results', target, `${target}.jsonl`)

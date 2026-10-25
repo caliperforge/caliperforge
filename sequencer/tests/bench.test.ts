@@ -655,6 +655,55 @@ test('D4 an untracked foundry.toml alone is carried alone', () => {
   expect(existsSync(join(carried, 'lib'))).toBe(false)
 })
 
+const FORGED = ['test/fizz/FizzTest.sol', 'foundry.toml', 'lib/forge-std/src/Test.sol']
+
+const CARRIED = 'fuzz-bench/suites/fizz/euler-earn-m01/root'
+
+/** A Hardhat-only checkout at score whose generate pass `fired` ran, with foundry.toml committed when `tracked`, scored by `pair`. */
+async function hardhat(fired: ReturnType<typeof stub>, pair?: string, tracked = false) {
+  const { root } = scoring(pair)
+  return generated(fired, { target: 'euler-earn-m01', generator: 'fizz', files: FILES }, (at) => {
+    if (tracked) commit(srcDir(at, 1), 'foundry.toml', TOML, 'foundry')
+    put(at, 1, 'checkout.json', JSON.stringify({ pre_fix: commit(srcDir(at, 1), 'hardhat.config.ts', '', 'hardhat') }))
+  }, root)
+}
+
+test('D1 generate writes foundry.toml and forge-std to root', async () => {
+  const { root, outcome } = await hardhat(stub(1000, 'completed', FORGED))
+  expect(outcome).toMatchObject({ outcome: 'pass' })
+  expect(readFileSync(join(planDir(root, 1), CARRIED, 'foundry.toml'), 'utf8')).toBe(BODY)
+  expect(readFileSync(join(planDir(root, 1), CARRIED, 'lib/forge-std/src/Test.sol'), 'utf8')).toBe(BODY)
+})
+
+test('D2 scored keeps the generate root without src foundry.toml', async () => {
+  const { root, db } = await hardhat(stub(1000, 'completed', FORGED))
+  rmSync(join(srcDir(root, 1), 'foundry.toml'))
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  expect(readFileSync(join(planDir(root, 1), CARRIED, 'foundry.toml'), 'utf8')).toBe(BODY)
+})
+
+test('D3 a rescore after reap still finds root/foundry.toml', async () => {
+  const pair = `import os, sys\nos.path.exists(os.path.join(sys.argv[2], 'root/foundry.toml')) or sys.exit('forge build failed')\n${
+    writes('.jsonl', PAIRS)}`
+  const { root, db } = await hardhat(stub(1000, 'completed', FORGED), pair)
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  end(db, 1, 'done')
+  expect(reap(root, [1])).toEqual([1])
+  expect(rescore(db, root, 1, 'coo', 'forge build failed')).toBe(1)
+  expect(kernel(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  expect(scores(db)).toHaveLength(2)
+  expect(readFileSync(join(planDir(root, 1), CARRIED, 'foundry.toml'), 'utf8')).toBe(BODY)
+})
+
+test('D4 a tracked foundry.toml or no property writes no root', async () => {
+  const tracked = await hardhat(stub(1000, 'completed', true), undefined, true)
+  expect(tracked.outcome).toMatchObject({ outcome: 'pass' })
+  expect(existsSync(join(planDir(tracked.root, 1), CARRIED))).toBe(false)
+  const unproven = await hardhat(stub(1000, 'completed', FORGED, null, false, 'contract FizzTest {}\n'))
+  expect(unproven.outcome).toMatchObject({ outcome: 'refuse', spans: ['bench.no_properties'] })
+  expect(existsSync(join(planDir(unproven.root, 1), CARRIED))).toBe(false)
+})
+
 test('D3 a set timeout and workers at most 4 are kept', () => {
   expect(installed(JSON.stringify({ fuzzing: { timeout: 600, workers: 2 } }))).toEqual({ fuzzing: { timeout: 600, workers: 2 } })
 })

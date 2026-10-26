@@ -214,6 +214,20 @@ test('a round on an open pr pushes its branch, opening no other', async () => {
   expect(sent.slice(2)).toEqual(['send src widget-12-a1', 'unrehearse caliperforge/widget widget-12-a1-next'])
 })
 
+test.each([{ is: 'a changed', md: 'Also covers the defaults table.\n' }, { is: 'an unchanged', md: null }])('D1 $is pr.md describes the open pr', { timeout: 90_000 }, async ({ md }) => {
+  const w = await pushed()
+  const before = get(w.root, 1, 'pr.md')
+  const described: [string, number, string][] = []
+  const wire: Wire = { ...watched([], w.root, 1), describe: (...args) => void described.push(args) }
+  rewind(w.db, 1, 4)
+  for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, () => pr(), wire)
+  if (md !== null) put(w.root, 1, 'pr.md', md)
+  approveCard(w.db, w.root, 'plan', 1, 'ceo')
+  advance(w.db, plan(w.db, 1), 8)
+  expect(published(w, wire)).toMatchObject({ outcome: 'pass' })
+  expect(described).toEqual([['acme/widget', 7, md ?? before]])
+})
+
 test('D1 D2 an open pr round conflicting with main goes back', { timeout: 90_000 }, async () => {
   const w = await pushed()
   const sent: string[] = []

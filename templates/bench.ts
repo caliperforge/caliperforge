@@ -230,7 +230,7 @@ function rows(path: string): Row[] {
 const MOVED: [string[], string][] = [[['fuzzing'], 'corpusDirectory'], [['logging'], 'logDirectory'],
   [['compilation', 'platformConfig'], 'target'], [['compilation', 'platformConfig'], 'exportDirectory'], [['slither'], 'cachePath']]
 
-const TIMEOUT = 1200
+const TIMEOUT = 3600
 
 const WORKERS = 4
 

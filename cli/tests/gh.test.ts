@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
-import { actions, dispatch, fileIssue, forward, gh, installed, openPr, rehearse, run, type Read, type Run } from '../gh.ts'
+import { actions, describePr, dispatch, fileIssue, forward, gh, installed, openPr, rehearse, run, type Read, type Run } from '../gh.ts'
 
 const FORK = 'caliperforge/widget'
 const BRANCH = 'widget-12-a1-next'
@@ -53,6 +53,27 @@ test('D2 a failed PATCH propagates', () => {
   const calls: string[][] = []
   expect(() => { forward(FORK, BASE, read('ahead', []), recorder(calls, true)) }).toThrow('422')
   expect(calls).toEqual([PATCH])
+})
+
+const PULL = 'repos/acme/widget/pulls/7'
+const live = (body: string | null): Read => () => ({ body })
+
+test('D1 a changed description sends one PATCH', () => {
+  const got: string[][] = []
+  const calls: string[][] = []
+  describePr('acme/widget', 7, 'new text\n', reads(got, live('old text')), recorder(calls))
+  expect(got).toEqual([['api', PULL]])
+  expect(calls).toEqual([['api', '-X', 'PATCH', PULL, '-f', 'body=new text\n']])
+})
+
+test.each([['same', 'same\n'], [null, ''], [null, '\n']])('D2 live %j against %j sends no PATCH', (body, md) => {
+  const calls: string[][] = []
+  describePr('acme/widget', 7, md, live(body), recorder(calls))
+  expect(calls).toEqual([])
+})
+
+test('D4 a failed description PATCH propagates', () => {
+  expect(() => { describePr('acme/widget', 7, 'new', live('old'), recorder([], true)) }).toThrow('422')
 })
 
 test('D3 an open rehearsal opens nothing and moves nothing', () => {

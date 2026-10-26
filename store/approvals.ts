@@ -90,6 +90,11 @@ export function planSigned(db: Db, plan: number, digest: string): boolean {
     .get(plan, digest) !== undefined
 }
 
+export function decisionsOf(db: Db, kind: SubjectKind, id: number, digest: string): string[] {
+  return db.prepare('SELECT decision FROM approvals WHERE subject_kind = ? AND subject_id = ? AND subject_digest = ?')
+    .pluck().all(kind, id, digest) as string[]
+}
+
 export function approvalsOf(db: Db, kind: SubjectKind): { decision: string; reason: string | null }[] {
   return db.prepare('SELECT decision, reason FROM approvals WHERE subject_kind = ? ORDER BY id')
     .all(kind) as { decision: string; reason: string | null }[]

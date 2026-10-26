@@ -1,7 +1,6 @@
 {
   "approve.ts": {
-    "lines": 61,
-    "prepare": 1
+    "lines": 60
   },
   "base.ts": {
     "lines": 64,
@@ -15,8 +14,7 @@
     "lines": 267
   },
   "card.ts": {
-    "lines": 54,
-    "prepare": 1
+    "lines": 53
   },
   "checks.ts": {
     "lines": 341

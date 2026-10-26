@@ -234,6 +234,12 @@ export function openPr(repo: string, head: string, title: string, bodyFile: stri
     '--title', title, '--body-file', bodyFile]).trim()
 }
 
+export function describePr(repo: string, no: number, body: string, read: Read = gh, exec: Run = run): void {
+  const path = `repos/${repo}/pulls/${String(no)}`
+  const live = z.object({ body: z.string().nullable() }).parse(read(['api', path])).body ?? ''
+  if (live.trim() !== body.trim()) exec(['api', '-X', 'PATCH', path, '-f', `body=${body}`])
+}
+
 /** An internal plan is closed by the commit that landed it on `main`, not by a pull request. */
 export function closeIssue(repo: string, no: number, sha: string, comment = `landed on main as ${sha}`): void {
   execFileSync('gh', ['issue', 'close', String(no), '--repo', repo, '--comment', comment],

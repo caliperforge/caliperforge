@@ -80,7 +80,7 @@ test('D5 an adopted PR round fast-forwards its own branch', { timeout: 90_000 },
   const wire: Wire = { ...log, send: (dir, ref) => {
     log.send(dir, ref)
     git(dir, ['push', '-q', 'origin', ref])
-  } }
+  }, describe: (repo) => void sent.push(`describe ${repo}`) }
   for (let at = 0; at < 12 && plan(w.db, row.plan).step < 7; at += 1) {
     if (plan(w.db, row.plan).step === 2) writeFileSync(join(srcDir(w.root, row.plan), 'src/hello.ts'), 'export const hello = (): string => "hey"\n')
     await tick(w.db, w.root, stub(CARRIED), undefined, pr, wire)
@@ -92,7 +92,7 @@ test('D5 an adopted PR round fast-forwards its own branch', { timeout: 90_000 },
   push(w.db, w.root, plan(w.db, row.plan), wire)
   approvePublish(w.db, w.root, row.plan, 'ceo')
   expect(push(w.db, w.root, plan(w.db, row.plan), wire)).toMatchObject({ outcome: 'pass', note: `pushed ${BRANCH} onto ${PR}` })
-  expect(sent.filter((l) => l.startsWith('open '))).toEqual([])
+  expect(sent.filter((l) => l.startsWith('open ') || l.startsWith('describe '))).toEqual([])
   expect(sent.filter((l) => l === `send src ${BRANCH}`)).toHaveLength(1)
   const tip = git(fork, ['rev-parse', BRANCH])
   expect(tip).not.toBe(old)

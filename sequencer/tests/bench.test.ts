@@ -250,7 +250,7 @@ test('D1 D7 tick fires fizz_generator in the scratch tree', async () => {
   const db = fresh(schema)
   dial(db, 3, AT)
   queued(db, 'bench')
-  const fired = stub(CEILING, 'stopped', true)
+  const fired = stub(1000, 'completed', true)
   await tick(db, root, fired.provider, OPENS)
   expect(planById(db, 1).step).toBe(1)
   await tick(db, root, fired.provider, OPENS)
@@ -268,7 +268,7 @@ const XRAY = join(homedir(), '.claude/skills/x-ray')
 const ATTEMPTS = '/tmp/x-ray-attempts.md'
 
 test('D2 D3 generate admits fizz Step 1-2 and cd cwd, denies curl', async () => {
-  const fired = stub(CEILING, 'stopped', true)
+  const fired = stub(1000, 'completed', true)
   await generated(fired)
   const [packet] = fired.packets
   if (packet === undefined) throw new Error('the generator was not fired')
@@ -290,10 +290,12 @@ test('D2 D3 generate admits fizz Step 1-2 and cd cwd, denies curl', async () => 
 })
 
 test('D2 D4 D5 fizz reads fizz, x-ray and the attempts file', async () => {
-  const fired = stub(CEILING, 'stopped', true)
-  await generated(fired)
+  const fired = stub(1000, 'completed', true)
+  const { root } = await generated(fired)
   const [packet] = fired.packets
   if (packet === undefined) throw new Error('the generator was not fired')
+  const tmp = real(join(planDir(root, 1), 'scratch'))
+  expect(existsSync(tmp)).toBe(true)
   expect(packet.reads).toEqual([real(SKILL), real(XRAY), real(ATTEMPTS)])
   for (const path of [join(SKILL, 'references/template-map.md'), join(XRAY, 'SKILL.md'), ATTEMPTS]) {
     expect(readOutside(packet.cwd, 'Read', { file_path: path }, packet.reads)).toBeNull()
@@ -301,16 +303,18 @@ test('D2 D4 D5 fizz reads fizz, x-ray and the attempts file', async () => {
   for (const path of [join(homedir(), '.claude/skills/other/SKILL.md'), '/tmp/other.md']) {
     expect(readOutside(packet.cwd, 'Read', { file_path: path }, packet.reads)).toContain('run.outside_checkout')
   }
-  for (const path of [ATTEMPTS, join(packet.cwd, 'x-ray/x-ray.md'), ...['medusa.json', 'PROPERTIES.md', 'echidna.yaml', 'foundry.toml'].map((f) => join(packet.cwd, f))]) {
+  for (const path of [ATTEMPTS, join(tmp, 'fizz_list_fns.js'), join(packet.cwd, 'x-ray/x-ray.md'),
+    ...['medusa.json', 'PROPERTIES.md', 'echidna.yaml', 'foundry.toml'].map((f) => join(packet.cwd, f))]) {
     expect(packet.refuse(path)).toBeNull()
   }
-  for (const path of ['/tmp/other.md', ...['README.md', 'src/medusa.json', 'src/PROPERTIES.md'].map((f) => join(packet.cwd, f))]) {
+  for (const path of ['/tmp/other.md', '/tmp/fizz_inspect_1806.py', ...['README.md', 'src/medusa.json', 'src/PROPERTIES.md'].map((f) => join(packet.cwd, f))]) {
     expect(packet.refuse(path)).toMatchObject({ origin_ref: 'seat.write_paths' })
   }
   expect(packet.prompt).toContain(`SKILL_PATH is ${real(SKILL)}.`)
   expect(packet.prompt).toContain(`${real(XRAY)}/SKILL.md`)
   expect(packet.prompt).toContain('Run x-ray\'s scripts as bash <script> and python3 <script> from PROJECT_ROOT, with no pipe, redirection or $.')
-  expect(packet.env).toEqual({ BASH_DEFAULT_TIMEOUT_MS: '1800000', BASH_MAX_TIMEOUT_MS: '1800000' })
+  expect(packet.env).toEqual({ BASH_DEFAULT_TIMEOUT_MS: '1800000', BASH_MAX_TIMEOUT_MS: '1800000', TMPDIR: tmp })
+  expect(packet.prompt).toContain(`Write throwaway scripts and notes under $TMPDIR, never /tmp. $TMPDIR is ${tmp}.`)
   expect(packet.prompt).toContain('Run forge in the foreground, never in the background, and do not end the turn while waiting on a build.')
   expect(packet.prompt).toContain('add properties to test/fizz/Properties.sol one at a time and save the file after each; write property-plan.md')
   expect(packet.idle).toBe(60)
@@ -321,7 +325,7 @@ test('D1 D2 a root reached through a symlink gets real paths', async () => {
   mkdirSync(join(elsewhere, '.cf'))
   const root = mkdtempSync(join(tmpdir(), 'cf-bench-'))
   symlinkSync(join(elsewhere, '.cf'), join(root, '.cf'))
-  const fired = stub(CEILING, 'stopped', true)
+  const fired = stub(1000, 'completed', true)
   await generated(fired, undefined, checkedOut, root)
   const [packet] = fired.packets
   if (packet === undefined) throw new Error('the generator was not fired')
@@ -339,7 +343,7 @@ test('D3 D4 generate refuses a src/ not at pre_fix, unfired', async () => {
   const unfetched = reaped(unknown)
   for (const [ready, note] of [[emptied, 'src/ is not a clone'], [moved, expect.stringMatching(/^src\/ is at \w{12}, not pre_fix \w{12}$/) as string],
     [unwritten, 'checkout.json is missing'], [unfetched, `src/ could not be cloned again at ${unknown.slice(0, 12)}`]] as const) {
-    const fired = stub(CEILING, 'stopped', true)
+    const fired = stub(1000, 'completed', true)
     const { db, outcome } = await generated(fired, undefined, ready, fixture().root)
     expect(outcome).toMatchObject({ outcome: 'refuse', spans: ['bench.no_checkout'], note, to: 0 })
     expect(fired.packets).toEqual([])
@@ -350,7 +354,7 @@ test('D3 D4 generate refuses a src/ not at pre_fix, unfired', async () => {
 
 test('D1 generate clones an emptied src/ again at pre_fix', async () => {
   const { root, c1, c2 } = fixture()
-  const fired = stub(CEILING, 'stopped', true)
+  const fired = stub(1000, 'completed', true)
   expect((await generated(fired, undefined, reaped(c1, c2), root)).outcome).toMatchObject({ outcome: 'pass' })
   expect(fired.packets).toMatchObject([{ cwd: realpathSync(srcDir(root, 1)) }])
   expect(git(srcDir(root, 1), ['rev-parse', 'HEAD']).trim()).toBe(c1)
@@ -453,7 +457,7 @@ test('D5 tick on an empty src/ sends the plan back to step 0', async () => {
   const db = fresh(schema)
   dial(db, 3, AT)
   queued(db, 'bench', 1)
-  await tick(db, root, stub(CEILING, 'stopped', true).provider, OPENS)
+  await tick(db, root, stub(1000, 'completed', true).provider, OPENS)
   expect(planById(db, 1).step).toBe(0)
   expect(planById(db, 1).state).not.toBe('blocked_on_ceo')
 })
@@ -469,15 +473,17 @@ test('D3 cf return --to 1 on a NULL-lane bench plan fires it', async () => {
   holdOn(db, 1, 'held', null)
   waiting(db, [{ plan: 1, why: 'leased' }])
   unhold(db, root, 1, 'coo', 1)
-  expect(await tick(db, root, stub(CEILING, 'stopped', true).provider, OPENS)).toMatchObject([{ plan: 1, step: 1 }])
+  expect(await tick(db, root, stub(1000, 'completed', true).provider, OPENS)).toMatchObject([{ plan: 1, step: 1 }])
   expect(planById(db, 1).lane).toBeNull()
 })
 
-test('D3 a run stopped at the ceiling with a suite passes', async () => {
-  const { root, db, outcome } = await generated(stub(CEILING + 5, 'stopped', true, 'ruling:run.token_wall'))
-  expect(outcome).toMatchObject({ outcome: 'pass' })
-  expect(JSON.parse(get(root, 1, 'generate.json'))).toEqual({ suite: 'test/fizz', tokens: CEILING + 5, seconds: 1, x_ray: 0, agents: 0 })
-  expect(runRows(db)).toMatchObject([{ seat: 'fizz_generator', staffed: 'fizz_generator' }])
+test('D3 a run at the ceiling is refused', async () => {
+  for (const [fired, tokens] of [[stub(CEILING + 5, 'stopped', true, 'ruling:run.token_wall'), CEILING + 5], [stub(CEILING, 'completed', true), CEILING]] as const) {
+    const { root, db, outcome } = await generated(fired)
+    expect(outcome).toMatchObject({ outcome: 'refuse', spans: ['bench.ceiling'], note: expect.stringContaining(String(tokens)) as string })
+    expect(maybe(root, 1, 'generate.json')).toBe(null)
+    expect(runRows(db)).toMatchObject([{ seat: 'fizz_generator', staffed: 'fizz_generator' }])
+  }
 })
 
 test('D2 generate.json has x_ray 1 when x-ray.md was written', async () => {
@@ -493,7 +499,7 @@ test('D4 generate.json counts the sub-agents the run spawned', async () => {
 
 test('D4 a completed run with no suite is refused', async () => {
   const { root, outcome } = await generated(stub(1000, 'completed', false))
-  expect(outcome).toMatchObject({ outcome: 'refuse', spans: ['bench.no_suite'] })
+  expect(outcome).toMatchObject({ outcome: 'refuse', spans: ['bench.no_suite'], note: 'fizz_generator (completed, 1000 tokens) wrote no .sol under test/fizz outside fizz_data' })
   expect(maybe(root, 1, 'generate.json')).toBeNull()
 })
 
@@ -927,7 +933,7 @@ test('D3 D5 a held score fires no generate, and scores on return', async () => {
   const { root, db } = scoring(FAILS)
   staffedIn(root)
   dial(db, 3, AT)
-  const fired = stub(CEILING, 'stopped', true)
+  const fired = stub(1000, 'completed', true)
   await tick(db, root, fired.provider, OPENS)
   heldAtScore(db, root)
   expect(runRows(db).filter((r) => r.seat !== 'director')).toEqual([])

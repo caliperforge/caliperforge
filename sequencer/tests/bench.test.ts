@@ -426,6 +426,22 @@ test('D2 a failed yarn install is refused unfired, no run row', async () => {
   expect(runRows(db)).toEqual([])
 })
 
+test('D1 a failed yarn git step keeps its block in the note', async () => {
+  const gitted = (root: string) => {
+    locked(false)(root)
+    rmSync(join(srcDir(root, 1), 'package-lock.json'))
+    writeFileSync(join(srcDir(root, 1), 'yarn.lock'), YARN)
+    writeFileSync(join(srcDir(root, 1), 'package.json'), JSON.stringify({ name: 'target', version: '1.0.0',
+      dependencies: { dep: `git+file://${mkdtempSync(join(tmpdir(), 'cf-dep-'))}` } }))
+  }
+  const fired = stub(1000, 'completed', true)
+  const { db, outcome } = await generated(fired, undefined, gitted)
+  expect(outcome).toMatchObject({ outcome: 'refuse', spans: ['bench.install'],
+    note: expect.stringMatching(/^npx yarn@1 exited \d+: error .*\nExit code: .*\nCommand: git\nArguments: /) as string })
+  expect(fired.packets).toEqual([])
+  expect(runRows(db)).toEqual([])
+})
+
 const PNPM = "lockfileVersion: '9.0'\n"
 
 test('D2 a failed pnpm install is refused unfired, no run row', async () => {

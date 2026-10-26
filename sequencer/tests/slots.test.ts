@@ -86,3 +86,8 @@ test('a check never hands its slots to the tests it runs', () => {
     else process.env.CF_CHECK_SLOTS_DIR = was.dir
   }
 })
+
+test('a check runs with the env it is given', () => {
+  const ran = npm(['-e', 'process.stdout.write(process.env.CF_X ?? "unset")'], tmpdir(), 'node', undefined, undefined, { CF_X: 'set' })
+  expect(ran.output).toBe('set')
+})

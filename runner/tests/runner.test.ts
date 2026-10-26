@@ -100,6 +100,17 @@ test('a background run is denied and the seat stays in the session', () => {
   expect(gate(ours, bash('npm run tight'))).toEqual({ continue: true })
 })
 
+test('a background Agent is denied and the seat goes on', () => {
+  const ours = packet(seat(root, 'typescript_specialist').manifest, 'p', 't', 'i', cwd, TRANSCRIPT, true)
+  const agent = (input: Record<string, unknown>): HookInput =>
+    ({ hook_event_name: 'PreToolUse', tool_name: 'Agent', tool_input: { description: 'd', prompt: 'p', ...input }, tool_use_id: 't', session_id: 's', transcript_path: '', cwd })
+  const denied = gate(ours, agent({ run_in_background: true }))
+  expect(denied).toMatchObject({ continue: true, hookSpecificOutput: { permissionDecision: 'deny', permissionDecisionReason: 'ruling:seat.tools refuses run_in_background: run it in the foreground and wait for it' } })
+  expect(denied.stopReason).toBeUndefined()
+  expect(gate(ours, agent({}))).toEqual({ continue: true })
+  expect(gate(ours, agent({ run_in_background: false }))).toEqual({ continue: true })
+})
+
 const held = (tools: string[]): Packet => ({ prompt: 'p', cwd, transcript: TRANSCRIPT, model: 'm', effort: 'high', tools, refuse: () => null })
 const denied = { continue: true, hookSpecificOutput: { permissionDecision: 'deny' } }
 

@@ -142,8 +142,9 @@ export async function generate(db: Db, root: string, plan: PlanRow, step: Step, 
   const transcript = byRun(db, run, fired.transcript_path)
   observed(db, fired.limits)
   const tokens = fired.usage.input + fired.usage.output
-  if (fired.ended !== 'completed' && tokens < CEILING) return { outcome: 'refuse', spans: [fired.stop_reason ?? 'seat.exit'], note: `${name} ${fired.ended}` }
-  const properties = unproven(join(dir, SUITE), name)
+  if (tokens >= CEILING) return { outcome: 'refuse', spans: ['bench.ceiling'], note: `${name} hit the ${String(CEILING)}-token ceiling at ${String(tokens)} tokens` }
+  if (fired.ended !== 'completed') return { outcome: 'refuse', spans: [fired.stop_reason ?? 'seat.exit'], note: `${name} ${fired.ended}` }
+  const properties = unproven(join(dir, SUITE), `${name} (${fired.ended}, ${String(tokens)} tokens)`)
   if (typeof properties !== 'number') return properties
   if (target !== '') rooted(dir, join(planDir(root, plan.id), 'fuzz-bench/suites', generator, target))
   put(root, plan.id, 'generate.json', JSON.stringify({ suite: SUITE, tokens, seconds: fired.seconds,

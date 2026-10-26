@@ -254,7 +254,7 @@ test('D1 D7 tick fires fizz_generator in the scratch tree', async () => {
   await tick(db, root, fired.provider, OPENS)
   expect(planById(db, 1).step).toBe(1)
   await tick(db, root, fired.provider, OPENS)
-  expect(fired.packets).toMatchObject([{ cwd: realpathSync(srcDir(root, 1)), wall: 2_000_000, tools: seat(root, 'fizz_generator').manifest.tools }])
+  expect(fired.packets).toMatchObject([{ cwd: realpathSync(srcDir(root, 1)), wall: 6_000_000, tools: seat(root, 'fizz_generator').manifest.tools }])
   expect(walled(fired.packets[0]?.wall, 400_001)).toBeNull()
   expect(git(srcDir(root, 1), ['rev-parse', 'HEAD']).trim()).toBe(c1)
   expect(planById(db, 1).step).toBe(2)

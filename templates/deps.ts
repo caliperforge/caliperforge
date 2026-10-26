@@ -4,7 +4,8 @@ import { npm } from '../sequencer/checks.ts'
 import type { Outcome } from '../sequencer/kind.ts'
 
 const LOCKS: [string, string, [string, ...string[]]][] = [['package-lock.json', 'npm', ['ci', '--ignore-scripts', '--include=dev']],
-  ['yarn.lock', 'yarn', ['install', '--frozen-lockfile', '--ignore-scripts']]]
+  ['yarn.lock', 'yarn', ['install', '--frozen-lockfile', '--ignore-scripts']],
+  ['pnpm-lock.yaml', 'pnpm', ['install', '--frozen-lockfile', '--ignore-scripts']]]
 
 export function deps(dir: string): Outcome | null {
   const lock = existsSync(join(dir, 'node_modules')) ? undefined : LOCKS.find(([file]) => existsSync(join(dir, file)))

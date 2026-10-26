@@ -10,7 +10,7 @@ import { actors, actorSection, costs, costSection, fileWaits, greptileLine, hand
   tickets, unpriced, waitLine, waits, caught, caughtSection } from '../brief.ts'
 import { outsideSection } from '../outside.ts'
 import { refusalDays, refusalSection } from '../refusals.ts'
-import { benchSection, FLOOR } from '../underpowered.ts'
+import { benchSection } from '../underpowered.ts'
 import { directorSection, fixerLine, handUpLine } from '../director.ts'
 import { decisionSection, driftSection } from '../drift.ts'
 import { hold } from '../../sequencer/hold.ts'
@@ -457,17 +457,17 @@ test('D4 a G id repeated on a second head counts once', () => {
   expect(caughtSection(caught(db, root, now))).toBe(`${CAUGHT}  plan 1\tcaliperforge/widget#3\t1/2\t50%\n`)
 })
 
-const BENCH = 'bench underpowered, under 250000 calls a side'
+const BENCH = 'bench not_powered'
 
-test('D5 a 69467-call score is underpowered, 505660 is not', () => {
+test('D6 a not_powered score is listed with its reason', () => {
   const db = world()
-  expect(benchSection(underpowered(db, FLOOR))).toBe(`${BENCH} (0)\n  none\n`)
+  expect(benchSection(underpowered(db))).toBe(`${BENCH} (0)\n  none\n`)
   const score = { target: 'euler-earn-m01', generator: 'fizz', catches: 0, false_positives: 1, untested: null, tokens: 1, seconds: 1, x_ray: null }
   plan(db, 1, 'done', null)
   plan(db, 2, 'done', null)
-  addScore(db, { plan: 1, ...score, target: 'yuzu-m01', pre_fix_calls: 69467, fix_calls: 69467 })
-  addScore(db, { plan: 2, ...score, pre_fix_calls: 505660, fix_calls: 505660 })
-  expect(benchSection(underpowered(db, FLOOR))).toBe(`${BENCH} (1)\n  plan 1\tyuzu-m01\tfizz\tpre_fix 69467\tfix 69467\n`)
+  addScore(db, { plan: 1, ...score, target: 'yuzu-m01', pre_fix_calls: 69467, fix_calls: 69467, not_powered: 'pre_fix_calls' })
+  addScore(db, { plan: 2, ...score, pre_fix_calls: 505660, fix_calls: 505660, not_powered: null })
+  expect(benchSection(underpowered(db))).toBe(`${BENCH} (1)\n  plan 1\tyuzu-m01\tfizz\tpre_fix_calls\tpre_fix 69467\tfix 69467\n`)
 })
 
 test('D1 D2 D3 open PRs count ball us and the oldest quiet', () => {

@@ -110,7 +110,7 @@ test('file D3 an unknown target is refused and files nothing', () => {
 const SCORED = 'fuzz-bench/suites/fizz/euler-earn-m01'
 
 const ROW = { plan: 1, target: 'euler-earn-m01', generator: 'fizz', catches: 0, false_positives: 0, untested: null, tokens: 1, seconds: 1, x_ray: null,
-  pre_fix_calls: null, fix_calls: null }
+  pre_fix_calls: null, fix_calls: null, not_powered: null }
 
 /** A plan with its generate.json, target.yml and scored suite, and a live scorecard row. */
 function rescorable(state: PlanRow['state'] = 'done', template: PlanRow['template'] = 'bench'): { dir: string; d: Db } {

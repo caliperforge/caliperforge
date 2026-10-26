@@ -542,7 +542,8 @@ function scoring(pair = writes('.jsonl', PAIRS), keys: Record<string, string> = 
   return { root, db, sha }
 }
 
-const SCORE = { catches: 2, false_positives: 1, untested: null, tokens: 1234, seconds: 56.5, pre_fix_calls: null, fix_calls: null }
+const SCORE = { catches: 2, false_positives: 1, untested: null, tokens: 1234, seconds: 56.5, pre_fix_calls: null, fix_calls: null,
+  not_powered: 'reduced_generate' }
 
 const NULLCHECK = 'fuzz-bench/results/euler-earn-m01/euler-earn-m01.nullcheck.jsonl'
 
@@ -801,6 +802,41 @@ test('calls D4 null sides record NULL and still score', () => {
   expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
   expect(scores(db)).toEqual([{ plan: 1, target: 'euler-earn-m01', generator: 'fizz', ...SCORE, x_ray: null }])
   expect(JSON.parse(get(root, 1, 'score.json'))).toMatchObject({ pre_fix_calls: null, fix_calls: null })
+})
+
+/** `scoring` with generate.json at `tokens` spawning `agents`, and run_pair rows at `pre_fix` and `fix` calls a side. */
+function sided(agents: number | undefined, pre_fix: number | null, fix: number | null, tokens = 1234) {
+  const made = scoring(writes('.jsonl', PAIRS.map((r) => ({ ...r, calls: { pre_fix, fix } }))))
+  put(made.root, 1, 'generate.json', JSON.stringify({ suite: 'test/fizz', tokens, seconds: 56.5, agents }))
+  return made
+}
+
+/** The not_powered `scored` records for `sided(...args)`, after checking score.json carries the same. */
+function reason(...args: Parameters<typeof sided>): string | null | undefined {
+  const { root, db } = sided(...args)
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  expect(JSON.parse(get(root, 1, 'score.json'))).toMatchObject({ not_powered: scores(db)[0]?.not_powered })
+  return scores(db)[0]?.not_powered
+}
+
+test('D3 agents 0 or absent is reduced_generate at 505660', () => {
+  expect(reason(0, 505660, 505660)).toBe('reduced_generate')
+  expect(reason(undefined, 505660, 505660)).toBe('reduced_generate')
+  expect(reason(8, 505660, 505660)).toBeNull()
+})
+
+test('D4 a side under the floor or unread names that side', () => {
+  expect(reason(8, 69467, 69467)).toBe('pre_fix_calls')
+  expect(reason(8, 505660, null)).toBe('fix_calls')
+})
+
+test('D5 generate at the wall records one wall row, no pair', () => {
+  const { root, db } = sided(8, 505660, 505660, CEILING)
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  expect(existsSync(join(planDir(root, 1), 'fuzz-bench/results/euler-earn-m01/euler-earn-m01.jsonl'))).toBe(false)
+  expect(scores(db)).toEqual([{ plan: 1, target: 'euler-earn-m01', generator: 'fizz', catches: 0, false_positives: 0, untested: null, tokens: CEILING,
+    seconds: 56.5, x_ray: null, pre_fix_calls: null, fix_calls: null, not_powered: 'wall' }])
+  expect(JSON.parse(get(root, 1, 'score.json'))).toMatchObject({ not_powered: 'wall' })
 })
 
 const FAILS = 'import sys\nsys.stderr.write("forge build failed")\nsys.exit(1)\n'

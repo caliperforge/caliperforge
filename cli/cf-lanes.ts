@@ -30,7 +30,7 @@ import { outsideSection } from './outside.ts'
 import { refusalDays, refusalSection } from './refusals.ts'
 import { close } from './session.ts'
 import { staffingSection, unstaffed } from './staffing.ts'
-import { benchSection, FLOOR } from './underpowered.ts'
+import { benchSection } from './underpowered.ts'
 import { liveness, livenessLine, stalledLanes } from './watch.ts'
 
 export interface Cli { root: string; db: () => Db; out: (text: string) => void }
@@ -216,7 +216,7 @@ function briefs(cf: Command, { root, db, out }: Cli): void {
     out(greptileLine(reviewed(handle, new Date())))
     out(missSection(misses(handle, root, new Date())))
     out(caughtSection(caught(handle, root, new Date())))
-    out(benchSection(underpowered(handle, FLOOR)))
+    out(benchSection(underpowered(handle)))
     out(outsideSection(tally(handle), new Date()))
     out(section('open plans', openPlans(handle)))
     out(section('halted', halted(handle)))

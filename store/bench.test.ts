@@ -16,7 +16,18 @@ function db(): Db {
 }
 
 const fizz = { target: 'euler-earn-m01', generator: 'fizz', catches: 3, false_positives: 1, untested: 2, tokens: 4200, seconds: 61.5, x_ray: 1 as const,
-  pre_fix_calls: 505660, fix_calls: 505660 }
+  pre_fix_calls: 505660, fix_calls: 505660, not_powered: null }
+
+/** A database migrated through every schema file before `version`. */
+function before(version: string): Db {
+  const old = mkdtempSync(join(tmpdir(), `cf-${version}-`))
+  for (const file of readdirSync(join(root, 'schema')).filter((f) => f.endsWith('.sql') && f < version)) {
+    copyFileSync(join(root, 'schema', file), join(old, file))
+  }
+  const d = open(':memory:')
+  migrate(d, old)
+  return d
+}
 
 it('D1 record for fizz reads back as the one row', () => {
   const d = db()
@@ -51,25 +62,34 @@ it('setUntested sets the one plan row', () => {
   expect(scores(d).map((s) => s.untested)).toEqual([4, null])
 })
 
-it('D4 migrates once to 117 with one bench_scorecard table', () => {
+it('D1 D4 migrates once to 118 with one bench_scorecard table', () => {
   const d = open(':memory:')
-  expect(migrate(d, join(root, 'schema')).at(-1)).toBe('0117_bench_calls.sql')
+  expect(migrate(d, join(root, 'schema')).at(-1)).toBe('0118_bench_not_powered.sql')
   expect(migrate(d, join(root, 'schema'))).toEqual([])
   expect(d.prepare("SELECT count(*) AS n FROM sqlite_master WHERE type = 'table' AND name = 'bench_scorecard'").get()).toEqual({ n: 1 })
-  expect(d.pragma('user_version', { simple: true })).toBe(117)
+  expect(d.pragma('user_version', { simple: true })).toBe(118)
+})
+
+it('D1 refuses a not_powered outside the four reasons', () => {
+  const d = db()
+  expect(() => record(d, { plan: planRow(d), ...fizz, not_powered: 'short' as 'wall' })).toThrow(/CHECK/)
+})
+
+it('D2 0118 reads an 0117 row by its calls a side', () => {
+  const d = before('0118')
+  const insert = d.prepare(`INSERT INTO bench_scorecard (plan, target, generator, catches, false_positives, untested, tokens, seconds, x_ray,
+    pre_fix_calls, fix_calls) VALUES (?, 'a', 'fizz', 1, 0, 0, 10, 1.5, 1, ?, ?)`)
+  for (const [pre, fix] of [[69467, 69467], [505660, 505660], [505660, 1000]]) insert.run(planRow(d), pre, fix)
+  expect(migrate(d, join(root, 'schema'))).toEqual(['0118_bench_not_powered.sql'])
+  expect(scores(d).map((s) => s.not_powered)).toEqual(['pre_fix_calls', null, 'fix_calls'])
 })
 
 it('D1 0117 reads an 0116 row as NULL calls, refuses -1', () => {
-  const old = mkdtempSync(join(tmpdir(), 'cf-0116-'))
-  for (const file of readdirSync(join(root, 'schema')).filter((f) => f.endsWith('.sql') && f < '0117')) {
-    copyFileSync(join(root, 'schema', file), join(old, file))
-  }
-  const d = open(':memory:')
-  migrate(d, old)
+  const d = before('0117')
   const plan = planRow(d)
   d.prepare(`INSERT INTO bench_scorecard (plan, target, generator, catches, false_positives, untested, tokens, seconds, x_ray)
     VALUES (?, 'a', 'fizz', 1, 0, 0, 10, 1.5, 1)`).run(plan)
-  expect(migrate(d, join(root, 'schema'))).toEqual(['0117_bench_calls.sql'])
+  expect(migrate(d, join(root, 'schema'))).toEqual(['0117_bench_calls.sql', '0118_bench_not_powered.sql'])
   expect(scores(d)).toMatchObject([{ plan, pre_fix_calls: null, fix_calls: null }])
   for (const bad of [{ pre_fix_calls: -1 }, { fix_calls: -1 }]) {
     expect(() => record(d, { plan: planRow(d), ...fizz, ...bad })).toThrow(/CHECK/)
@@ -83,16 +103,15 @@ it('D2 calls of 69467 a side read back through scores', () => {
   expect(scores(d)).toEqual([score])
 })
 
-it('D6 underpowered lists a side under the floor, live rows only', () => {
+it('D6 underpowered lists live rows with a reason only', () => {
   const d = db()
-  const [low, high, half, unread, old] = [planRow(d), planRow(d), planRow(d), planRow(d), planRow(d)]
-  record(d, { plan: low, ...fizz, pre_fix_calls: 69467, fix_calls: 69467 })
+  const [low, high, walled, old] = [planRow(d), planRow(d), planRow(d), planRow(d)]
+  record(d, { plan: low, ...fizz, pre_fix_calls: 69467, fix_calls: 69467, not_powered: 'pre_fix_calls' })
   record(d, { plan: high, ...fizz })
-  record(d, { plan: half, ...fizz, fix_calls: 1000 })
-  record(d, { plan: unread, ...fizz, pre_fix_calls: null, fix_calls: null })
-  record(d, { plan: old, ...fizz, pre_fix_calls: 1000 })
+  record(d, { plan: walled, ...fizz, pre_fix_calls: null, fix_calls: null, not_powered: 'wall' })
+  record(d, { plan: old, ...fizz, fix_calls: 1000, not_powered: 'fix_calls' })
   supersede(d, old)
-  expect(underpowered(d, 250_000).map((s) => s.plan)).toEqual([low, half])
+  expect(underpowered(d).map((s) => [s.plan, s.not_powered])).toEqual([[low, 'pre_fix_calls'], [walled, 'wall']])
 })
 
 it('D4 a live row beside a superseded one is kept', () => {

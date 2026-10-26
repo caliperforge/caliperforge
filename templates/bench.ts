@@ -10,7 +10,7 @@ import type { Outcome } from '../sequencer/kind.ts'
 import { staffed } from '../sequencer/staffing.ts'
 import { firstLine } from '../sequencer/unpolled.ts'
 import { cloned, get, git, gitBase, maybe, planDir, put, remote, srcDir } from '../sequencer/workspace.ts'
-import { record, setUntested } from '../store/bench.ts'
+import { setUntested } from '../store/bench.ts'
 import { logged, runLogged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { observed } from '../store/lanes.ts'
@@ -18,6 +18,7 @@ import { needsCeo, type PlanRow } from '../store/plans.ts'
 import { byRun, pending, spawned } from '../store/transcript.ts'
 import { clamp, quieted } from './balances.ts'
 import { inBare, listedIn } from './listed.ts'
+import { kept, powered, walled } from './powered.ts'
 import { DEFAULT_BUILDER, type Step } from './pr-path.ts'
 import { recloned, rooted } from './rooted.ts'
 
@@ -159,8 +160,8 @@ export function scored(db: Db, root: string, plan: PlanRow): Outcome {
   const { target = '', generator = '' } = keys
   const made = maybe(root, plan.id, 'generate.json')
   if (made === null) return { outcome: 'refuse', spans: ['generate.json'], note: 'generate.json is missing' }
-  const { suite, tokens, seconds, x_ray } = JSON.parse(made) as { suite: string; tokens: number; seconds: number; x_ray?: 0 | 1 }
-  const proven = unproven(join(srcDir(root, plan.id), suite), generator)
+  const { suite, tokens, seconds, x_ray, agents } = JSON.parse(made) as { suite: string; tokens: number; seconds: number; x_ray?: 0 | 1; agents?: number }
+  const proven = tokens >= CEILING ? walled(db, root, plan.id, { target, generator }, { tokens, seconds, x_ray: x_ray ?? null }) : unproven(join(srcDir(root, plan.id), suite), generator)
   if (typeof proven !== 'number') return proven
   const config = medusa(db, plan.id, srcDir(root, plan.id), suite)
   if (config !== null && 'outcome' in config) return config
@@ -185,9 +186,8 @@ export function scored(db: Db, root: string, plan: PlanRow): Outcome {
   const pairs = rows(written)
   if (pairs.length === 0) return { outcome: 'refuse', spans: ['bench.empty_results'], note: `results/${target}/${target}.jsonl has no rows` }
   const score = { catches: pairs.filter((r) => r.verdict === 'catch').length, false_positives: pairs.filter((r) => r.verdict === 'fp_candidate').length,
-    untested: null, tokens, seconds, x_ray: x_ray ?? null, pre_fix_calls: pairs[0]?.calls?.pre_fix ?? null, fix_calls: pairs[0]?.calls?.fix ?? null }
-  record(db, { plan: plan.id, target, generator, ...score })
-  put(root, plan.id, 'score.json', JSON.stringify({ fuzz_bench: sha, ...score }))
+    untested: null, tokens, seconds, x_ray: x_ray ?? null, pre_fix_calls: pairs[0]?.calls?.pre_fix ?? null, fix_calls: pairs[0]?.calls?.fix ?? null, not_powered: powered(agents, pairs[0]?.calls) }
+  kept(db, root, plan.id, { target, generator }, score, sha)
   return { outcome: 'pass', spans: [], note: `score.json written at fuzz-bench ${sha.slice(0, 12)}${config === null || config.clamped.length === 0
     ? '' : `; targetContractsBalances ${config.clamped.join(', ')} clamped to 1e24 wei`}` }
 }

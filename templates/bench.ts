@@ -5,7 +5,6 @@ import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 import type { Provider } from '../providers/kind.ts'
 import { packet, real } from '../runner/index.ts'
 import { load, seat } from '../runner/rules.ts'
-import { bare, npm } from '../sequencer/checks.ts'
 import type { Outcome } from '../sequencer/kind.ts'
 import { staffed } from '../sequencer/staffing.ts'
 import { firstLine } from '../sequencer/unpolled.ts'
@@ -17,6 +16,7 @@ import { observed } from '../store/lanes.ts'
 import { needsCeo, type PlanRow } from '../store/plans.ts'
 import { byRun, pending, spawned } from '../store/transcript.ts'
 import { clamp, quieted } from './balances.ts'
+import { deps } from './deps.ts'
 import { inBare, listedIn } from './listed.ts'
 import { kept, powered, walled } from './powered.ts'
 import { DEFAULT_BUILDER, type Step } from './pr-path.ts'
@@ -47,9 +47,10 @@ const ATTEMPTS = '/tmp/x-ray-attempts.md'
 
 const CAP = 60 * 60 * 1000
 
-function ask(skill: string | undefined, xray: string | undefined): string {
+function ask(skill: string | undefined, xray: string | undefined, tmp: string): string {
   const said = `Generate the fuzz suite for the project in the working folder in automatic mode, asking nothing: SUITE_DIR is ${SUITE} and META_DIR is ${SUITE}/${META}. `
-    + 'Run forge in the foreground, never in the background, and do not end the turn while waiting on a build.'
+    + 'Run forge in the foreground, never in the background, and do not end the turn while waiting on a build. '
+    + `Write throwaway scripts and notes under $TMPDIR, never /tmp. $TMPDIR is ${tmp}.`
   const skilled = skill === undefined ? said : `${said}\nSKILL_PATH is ${skill}. PROJECT_ROOT is the working folder: run each command from there, without cd. `
     + `Order of work over the skill's: once Step 4 writes ${SUITE}/${META}/entry-point-selection.json and Step 5 scaffolds the suite, `
     + `add properties to ${SUITE}/${PROPERTIES} one at a time and save the file after each; `
@@ -113,14 +114,6 @@ export function scratch(root: string, plan: PlanRow): Outcome {
   return { outcome: 'pass', spans: [], note: `checkout.json written at ${sha.slice(0, 12)}` }
 }
 
-function deps(dir: string): Outcome | null {
-  if (!bare(dir)) return null
-  const ran = npm(['ci', '--ignore-scripts', '--include=dev'], dir)
-  if (ran.ok) return null
-  const line = ran.output.split('\n').find((l) => /^npm (?:error|ERR!)/.test(l)) ?? ''
-  return { outcome: 'refuse', spans: ['bench.install'], note: `npm ci exited ${ran.code}: ${line}` }
-}
-
 export async function generate(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
   const { generator = '', target = '' } = fields(maybe(root, plan.id, 'target.yml') ?? '')
   if (generator === '') return { outcome: 'refuse', spans: ['target.yml'], note: 'target.yml has no generator' }
@@ -134,17 +127,20 @@ export async function generate(db: Db, root: string, plan: PlanRow, step: Step, 
   load(db, root)
   const { manifest, prompt, hash } = seat(root, name)
   const granted = manifest.reads?.map((path) => real(path.startsWith('~/') ? join(homedir(), path.slice(2)) : path)) ?? []
-  const built = packet(manifest, prompt, '', ask(granted[0], granted.find((path) => basename(path) === 'x-ray')), dir,
-    pending(planDir(root, plan.id), `step-${String(step.step)}`))
+  mkdirSync(join(planDir(root, plan.id), 'scratch'), { recursive: true })
+  const tmp = real(join(planDir(root, plan.id), 'scratch'))
+  const built = packet(manifest, prompt, '', ask(granted[0], granted.find((path) => basename(path) === 'x-ray'), tmp), dir,
+    pending(planDir(root, plan.id), `step-${String(step.step)}`), false, [...manifest.write_paths, tmp])
   const fired = await provider.fire({ ...built, refuse: (path) => real(resolve(dir, path)) === real(ATTEMPTS) ? null : built.refuse(path), wall: CEILING,
-    env: TIMEOUTS, reads: [...granted, real(ATTEMPTS)], ...(name === 'fizz_generator' ? { idle: SETUP } : {}) })
+    env: { ...TIMEOUTS, TMPDIR: tmp }, reads: [...granted, real(ATTEMPTS)], ...(name === 'fizz_generator' ? { idle: SETUP } : {}) })
   const run = runLogged(db, { plan: plan.id, step: step.step, seat: name, rule_hash: hash, provider: provider.name, model: manifest.model,
     effort: manifest.effort, exit: fired.exit, fired, staffed: name })
   const transcript = byRun(db, run, fired.transcript_path)
   observed(db, fired.limits)
   const tokens = fired.usage.input + fired.usage.output
-  if (fired.ended !== 'completed' && tokens < CEILING) return { outcome: 'refuse', spans: [fired.stop_reason ?? 'seat.exit'], note: `${name} ${fired.ended}` }
-  const properties = unproven(join(dir, SUITE), name)
+  if (tokens >= CEILING) return { outcome: 'refuse', spans: ['bench.ceiling'], note: `${name} hit the ${String(CEILING)}-token ceiling at ${String(tokens)} tokens` }
+  if (fired.ended !== 'completed') return { outcome: 'refuse', spans: [fired.stop_reason ?? 'seat.exit'], note: `${name} ${fired.ended}` }
+  const properties = unproven(join(dir, SUITE), `${name} (${fired.ended}, ${String(tokens)} tokens)`)
   if (typeof properties !== 'number') return properties
   if (target !== '') rooted(dir, join(planDir(root, plan.id), 'fuzz-bench/suites', generator, target))
   put(root, plan.id, 'generate.json', JSON.stringify({ suite: SUITE, tokens, seconds: fired.seconds,
@@ -238,7 +234,7 @@ function rows(path: string): Row[] {
 const MOVED: [string[], string][] = [[['fuzzing'], 'corpusDirectory'], [['logging'], 'logDirectory'],
   [['compilation', 'platformConfig'], 'target'], [['compilation', 'platformConfig'], 'exportDirectory'], [['slither'], 'cachePath']]
 
-const TIMEOUT = 1200
+const TIMEOUT = 3600
 
 const WORKERS = 4
 

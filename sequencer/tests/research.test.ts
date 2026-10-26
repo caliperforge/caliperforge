@@ -421,6 +421,17 @@ test('D4: a senior_review refuse sends the plan back to gather', async () => {
   expect(plan(w.db, 1).step).toBe(1)
 })
 
+test('review D1/D2: the review packet names the closing sections', async () => {
+  const w = researching()
+  const prompts: string[] = []
+  const provider = seats(FOUND)
+  const seen: Provider = { ...provider, fire: (packet) => { prompts.push(packet.prompt); return provider.fire(packet) } }
+  for (let n = 0; n < 6 && plan(w.db, 1).state !== 'done'; n += 1) await tick(w.db, w.root, seen)
+  const review = (prompts.find((p) => p.includes('You judge a research answer')) ?? '').replace(/\s+/g, ' ')
+  expect(review).toContain('`answer.md` always ends with `## Would be wrong if` and then `## Still unknown`, whatever `done_when` lists.')
+  expect(review).toContain('Sentences under `### Not found`, `## Not found`, `## Method` and `## Still unknown` carry no `[source:n]`.')
+})
+
 const ANSWER = `The cap is 3 [source:1].${SECTIONS}`
 
 const ORIGIN = 'https://github.com/caliperforge/cf/issues/7'

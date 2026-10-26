@@ -767,6 +767,8 @@ test('fixOutOfReach', async () => {
   for (const [why, reason] of [
     ['run gh issue create for the gap', 'the fixer has no git and no GitHub'],
     ['run UPDATE plans SET step = 2 in cf.db', outside('cf.db')],
+    ['rewrite issue.md from ../other/brief.md', outside('../other/brief.md')],
+    ['rewrite issue.md and `.cf/work/7/refusal.md`', outside('.cf/work/7/refusal.md')],
   ] as const) {
     const { db, home } = seeded('1')
     fixLive(db)
@@ -779,13 +781,16 @@ test('fixOutOfReach', async () => {
     expect(row(db).state).toBe('queued')
     expect(told(db)).toEqual([{ actor: 'director', outcome: 'pass', message: `fix: refused by the fence, ${reason}` }])
   }
-  const { db, home } = seeded('1')
-  fixLive(db)
-  committed(home)
-  const packets: Packet[] = []
-  await cooLite(db, home, row(db), bySeat(packets, '---\nmove: fix\nwhy: rewrite `commit.msg`.\n---\n'), now, () => undefined, wire())
-  expect(packets.filter((p) => basename(p.transcript).startsWith('fixer'))).toHaveLength(1)
-  expect(decisions(db, 7).map((d) => d.verb)).toEqual(['ask_coo'])
+  for (const why of ['rewrite `commit.msg`.',
+    '"rewrite issue.md\'s ## Files to list `crates/mcp/src/surfpool/set_token_account.rs`, and commit.msg."']) {
+    const { db, home } = seeded('1')
+    fixLive(db)
+    committed(home)
+    const packets: Packet[] = []
+    await cooLite(db, home, row(db), bySeat(packets, `---\nmove: fix\nwhy: ${why}\n---\n`), now, () => undefined, wire())
+    expect(fixing(packets)).toHaveLength(1)
+    expect(decisions(db, 7).map((d) => d.verb)).toEqual(['ask_coo'])
+  }
 })
 
 const fixing = (packets: Packet[]) => packets.filter((p) => basename(p.transcript).startsWith('fixer'))

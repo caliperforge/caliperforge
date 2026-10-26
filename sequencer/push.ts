@@ -208,7 +208,7 @@ export function sent(root: string, plan: PlanRow, repo: string, wire: Wire): { f
   const head = outside ? headOf(root, plan.id) : onward(headOf(root, plan.id))
   const tip = outside ? tipOf(root, plan.id, head, ci, repo) : head.sha
   if (outside) based(root, plan.id, fork, wire)
-  wire.send(head.dir, outside ? `${tip}:refs/heads/${ci}` : head.branch)
+  if (wire.at?.(head.dir, `refs/heads/${ci}`) !== tip) wire.send(head.dir, outside ? `${tip}:refs/heads/${ci}` : head.branch)
   const at = wire.at?.(head.dir, `refs/heads/${ci}`) ?? tip
   const rejected = at === tip ? null : `${fork} rejected refs/heads/${ci}: it is at ${at === '' ? 'no commit' : at.slice(0, 12)}, not the pushed ${tip.slice(0, 12)}`
   if (outside && rejected === null) moved(root, plan.id, fork, ci, wire)
@@ -566,7 +566,7 @@ export function follow(root: string, plan: number, message: string): string {
   const tip = git(dir, ['rev-parse', shown]).trim()
   const count = Number(git(dir, ['rev-list', '--count', `${tip}..HEAD`]).trim())
   const staged = git(dir, ['diff', '--cached', '--name-only']).trim() !== ''
-  const same = count === 0 || (count === 1 && git(dir, ['log', '-1', '--format=%B']).trim() === message)
+  const same = count === 0 || (git(dir, ['rev-parse', 'HEAD^']).trim() === tip && git(dir, ['log', '-1', '--format=%B']).trim() === message)
   if (!staged && same && ancestor(dir, tip, 'HEAD')) return tip
   const base = git(dir, ['merge-base', 'HEAD', MAIN]).trim()
   if (!ancestor(dir, base, tip)) {

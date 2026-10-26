@@ -30,9 +30,6 @@
   "test-weakened/index.ts": {
     "lines": 70
   },
-  "test-weakened/tests/weakened.test.ts": {
-    "prepare": 1
-  },
   "tight/braces.ts": {
     "lines": 141
   },
@@ -47,7 +44,6 @@
     "lines": 174
   },
   "tight/tests/tight.test.ts": {
-    "citing-comment": 1,
-    "prepare": 1
+    "citing-comment": 1
   }
 }

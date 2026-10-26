@@ -291,9 +291,11 @@ test('D2 D3 generate admits fizz Step 1-2 and cd cwd, denies curl', async () => 
 
 test('D2 D4 D5 fizz reads fizz, x-ray and the attempts file', async () => {
   const fired = stub(1000, 'completed', true)
-  await generated(fired)
+  const { root } = await generated(fired)
   const [packet] = fired.packets
   if (packet === undefined) throw new Error('the generator was not fired')
+  const tmp = real(join(planDir(root, 1), 'scratch'))
+  expect(existsSync(tmp)).toBe(true)
   expect(packet.reads).toEqual([real(SKILL), real(XRAY), real(ATTEMPTS)])
   for (const path of [join(SKILL, 'references/template-map.md'), join(XRAY, 'SKILL.md'), ATTEMPTS]) {
     expect(readOutside(packet.cwd, 'Read', { file_path: path }, packet.reads)).toBeNull()
@@ -301,16 +303,18 @@ test('D2 D4 D5 fizz reads fizz, x-ray and the attempts file', async () => {
   for (const path of [join(homedir(), '.claude/skills/other/SKILL.md'), '/tmp/other.md']) {
     expect(readOutside(packet.cwd, 'Read', { file_path: path }, packet.reads)).toContain('run.outside_checkout')
   }
-  for (const path of [ATTEMPTS, join(packet.cwd, 'x-ray/x-ray.md'), ...['medusa.json', 'PROPERTIES.md', 'echidna.yaml', 'foundry.toml'].map((f) => join(packet.cwd, f))]) {
+  for (const path of [ATTEMPTS, join(tmp, 'fizz_list_fns.js'), join(packet.cwd, 'x-ray/x-ray.md'),
+    ...['medusa.json', 'PROPERTIES.md', 'echidna.yaml', 'foundry.toml'].map((f) => join(packet.cwd, f))]) {
     expect(packet.refuse(path)).toBeNull()
   }
-  for (const path of ['/tmp/other.md', ...['README.md', 'src/medusa.json', 'src/PROPERTIES.md'].map((f) => join(packet.cwd, f))]) {
+  for (const path of ['/tmp/other.md', '/tmp/fizz_inspect_1806.py', ...['README.md', 'src/medusa.json', 'src/PROPERTIES.md'].map((f) => join(packet.cwd, f))]) {
     expect(packet.refuse(path)).toMatchObject({ origin_ref: 'seat.write_paths' })
   }
   expect(packet.prompt).toContain(`SKILL_PATH is ${real(SKILL)}.`)
   expect(packet.prompt).toContain(`${real(XRAY)}/SKILL.md`)
   expect(packet.prompt).toContain('Run x-ray\'s scripts as bash <script> and python3 <script> from PROJECT_ROOT, with no pipe, redirection or $.')
-  expect(packet.env).toEqual({ BASH_DEFAULT_TIMEOUT_MS: '1800000', BASH_MAX_TIMEOUT_MS: '1800000' })
+  expect(packet.env).toEqual({ BASH_DEFAULT_TIMEOUT_MS: '1800000', BASH_MAX_TIMEOUT_MS: '1800000', TMPDIR: tmp })
+  expect(packet.prompt).toContain(`Write throwaway scripts and notes under $TMPDIR, never /tmp. $TMPDIR is ${tmp}.`)
   expect(packet.prompt).toContain('Run forge in the foreground, never in the background, and do not end the turn while waiting on a build.')
   expect(packet.prompt).toContain('add properties to test/fizz/Properties.sol one at a time and save the file after each; write property-plan.md')
   expect(packet.idle).toBe(60)

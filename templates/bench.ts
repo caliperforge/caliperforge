@@ -46,9 +46,10 @@ const ATTEMPTS = '/tmp/x-ray-attempts.md'
 
 const CAP = 60 * 60 * 1000
 
-function ask(skill: string | undefined, xray: string | undefined): string {
+function ask(skill: string | undefined, xray: string | undefined, tmp: string): string {
   const said = `Generate the fuzz suite for the project in the working folder in automatic mode, asking nothing: SUITE_DIR is ${SUITE} and META_DIR is ${SUITE}/${META}. `
-    + 'Run forge in the foreground, never in the background, and do not end the turn while waiting on a build.'
+    + 'Run forge in the foreground, never in the background, and do not end the turn while waiting on a build. '
+    + `Write throwaway scripts and notes under $TMPDIR, never /tmp. $TMPDIR is ${tmp}.`
   const skilled = skill === undefined ? said : `${said}\nSKILL_PATH is ${skill}. PROJECT_ROOT is the working folder: run each command from there, without cd. `
     + `Order of work over the skill's: once Step 4 writes ${SUITE}/${META}/entry-point-selection.json and Step 5 scaffolds the suite, `
     + `add properties to ${SUITE}/${PROPERTIES} one at a time and save the file after each; `
@@ -125,10 +126,12 @@ export async function generate(db: Db, root: string, plan: PlanRow, step: Step, 
   load(db, root)
   const { manifest, prompt, hash } = seat(root, name)
   const granted = manifest.reads?.map((path) => real(path.startsWith('~/') ? join(homedir(), path.slice(2)) : path)) ?? []
-  const built = packet(manifest, prompt, '', ask(granted[0], granted.find((path) => basename(path) === 'x-ray')), dir,
-    pending(planDir(root, plan.id), `step-${String(step.step)}`))
+  mkdirSync(join(planDir(root, plan.id), 'scratch'), { recursive: true })
+  const tmp = real(join(planDir(root, plan.id), 'scratch'))
+  const built = packet(manifest, prompt, '', ask(granted[0], granted.find((path) => basename(path) === 'x-ray'), tmp), dir,
+    pending(planDir(root, plan.id), `step-${String(step.step)}`), false, [...manifest.write_paths, tmp])
   const fired = await provider.fire({ ...built, refuse: (path) => real(resolve(dir, path)) === real(ATTEMPTS) ? null : built.refuse(path), wall: CEILING,
-    env: TIMEOUTS, reads: [...granted, real(ATTEMPTS)], ...(name === 'fizz_generator' ? { idle: SETUP } : {}) })
+    env: { ...TIMEOUTS, TMPDIR: tmp }, reads: [...granted, real(ATTEMPTS)], ...(name === 'fizz_generator' ? { idle: SETUP } : {}) })
   const run = runLogged(db, { plan: plan.id, step: step.step, seat: name, rule_hash: hash, provider: provider.name, model: manifest.model,
     effort: manifest.effort, exit: fired.exit, fired, staffed: name })
   const transcript = byRun(db, run, fired.transcript_path)

@@ -458,7 +458,7 @@ test('D3 a run at the ceiling is refused', async () => {
   for (const [fired, tokens] of [[stub(CEILING + 5, 'stopped', true, 'ruling:run.token_wall'), CEILING + 5], [stub(CEILING, 'completed', true), CEILING]] as const) {
     const { root, db, outcome } = await generated(fired)
     expect(outcome).toMatchObject({ outcome: 'refuse', spans: ['bench.ceiling'], note: expect.stringContaining(String(tokens)) as string })
-    expect(maybe(root, 1, 'generate.json')).toBeNull()
+    expect(maybe(root, 1, 'generate.json')).toBe(null)
     expect(runRows(db)).toMatchObject([{ seat: 'fizz_generator', staffed: 'fizz_generator' }])
   }
 })

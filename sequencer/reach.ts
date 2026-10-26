@@ -7,9 +7,14 @@ const BARRED: [RegExp, string][] = [
   [/\b(?:INSERT INTO|UPDATE \w+ SET|DELETE FROM)\b|\bcf\.db\b|\bthe store\b/, 'the fixer writes no store row'],
 ]
 
+/** A fix that rewrites the brief names checkout paths as the brief's text. */
+const BRIEF = /\bissue\.md\b/
+
 function reach(why: string, paths: string[]): string | null {
+  const brief = BRIEF.test(why)
   const path = why.split(/\s+/).map((t) => t.replace(/^[`'"([{]+|[`'")\]}.,;:]+$/g, ''))
-    .find((t) => (t.includes('/') || /\.[a-z]{2,5}$/i.test(t)) && !paths.includes(t))
+    .find((t) => (t.includes('/') || /\.[a-z]{2,5}$/i.test(t)) && !paths.includes(t)
+      && !(brief && !/^[~/]|^\.cf\/|(?:^|\/)\.\.(?:\/|$)/.test(t)))
   if (path !== undefined) return `\`${path}\` is outside the fixer's write_paths`
   return BARRED.find(([barred]) => barred.test(why))?.[1] ?? null
 }

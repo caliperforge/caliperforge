@@ -110,6 +110,22 @@ test('1558b D2 a rails throw asks the director once', { timeout: 60_000 }, async
   expect(refusalRows(w.db, 1)).toEqual([])
 })
 
+const GH = 'Command failed: gh pr list --repo acme/widget --state open --limit 100 --json number\nHTTP 502: Bad Gateway'
+
+test('1822 D1 a kernel step gh throw is a blip', () => {
+  const out = thrown(at(6), GH)
+  expect(out).toMatchObject({ outcome: 'refuse', blip: true })
+  expect(out.spans[0]).toMatch(/^threw: Command failed: gh pr list/)
+  expect(out.note.endsWith(HELD)).toBe(true)
+})
+
+test('1822 D4 a seat gh throw and ENOBUFS are unchanged', () => {
+  const seat = thrown(at(2), GH)
+  expect(seat).toMatchObject({ outcome: 'refuse', to: 2 })
+  expect(seat.blip).toBeUndefined()
+  expect(thrown(at(6), 'spawnSync gh ENOBUFS')).toMatchObject({ outcome: 'needs_ceo', spans: ['machine_fault', 'threw: spawnSync gh ENOBUFS'] })
+})
+
 test('other throws still refuse', () => {
   expect(thrown(at(2), 'plan 123 has no checkout at /x/src')).toMatchObject({ outcome: 'refuse', spans: ['threw: plan 123 has no checkout at /x/src'] })
 })

@@ -142,6 +142,7 @@ function openTranscript(packet: Packet): (message: unknown) => void {
 /** A write outside the fence is denied and the seat goes on, until the `FENCED`th in a run stops it. A command outside the seat's list is refused and the seat goes on with its other tools. */
 export function gate(packet: Packet, input: HookInput, fenced = 0): SyncHookJSONOutput {
   if (input.hook_event_name !== 'PreToolUse') return { continue: true }
+  if ((input.tool_input as { run_in_background?: unknown }).run_in_background === true) return deny('ruling:seat.tools refuses run_in_background: run it in the foreground and wait for it')
   if (input.tool_name === 'Bash') {
     const refused = ranOutside(packet, input.tool_input)
     return refused === null ? { continue: true } : deny(refused)
@@ -198,8 +199,7 @@ function wroteOutside(packet: Packet, tool: string, args: unknown): string | nul
 }
 
 function ranOutside(packet: Packet, args: unknown): string | null {
-  const given = args as { command?: unknown; run_in_background?: unknown }
-  if (given.run_in_background === true) return 'ruling:seat.tools refuses run_in_background: run it in the foreground and wait for it'
+  const given = args as { command?: unknown }
   const said = given.command
   const command = typeof said === 'string' ? said.trim() : ''
   const rest = unmoved(packet.cwd, command)

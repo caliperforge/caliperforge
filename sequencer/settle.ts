@@ -183,7 +183,7 @@ async function made(db: Db, root: string, plan: PlanRow, step: Step, provider: P
   }
 }
 
-/** A throw that says the host lost its network or the store is locked is not the job's fault: it holds the job on its step, uncounted, and the next tick tries again. A kernel step's throw is the machine's fault: it asks the director the first time and counts no refusal. */
+/** A throw that says the host lost its network or the store is locked is not the job's fault: it holds the job on its step, uncounted, and the next tick tries again. A kernel step whose `gh` command failed waits for the next tick, up to `BLIPS` in a row, and then asks the director. Any other kernel step's throw is the machine's fault: it asks the director the first time and counts no refusal. */
 export const HELD = 'the next tick tries again'
 
 export function thrown(step: Step, message: string): Outcome {
@@ -192,6 +192,7 @@ export function thrown(step: Step, message: string): Outcome {
   if (NETWORK.test(message)) return held(step, 'offline', 'the network is down')
   if (message.includes(LOCKED)) return held(step, 'locked', 'the store is locked')
   const first = message.split('\n')[0] ?? ''
+  if (step.fires === 'kernel' && message.startsWith('Command failed: gh ')) return { outcome: 'refuse', blip: true, spans: [`threw: ${first}`], note: `step ${String(step.step)} ${step.name} threw: ${first}; ${HELD}`, message }
   if (step.fires === 'kernel') {
     return { outcome: 'needs_ceo', spans: ['machine_fault', `threw: ${first}`], note: `step ${String(step.step)} ${step.name} threw: ${first}`, message }
   }

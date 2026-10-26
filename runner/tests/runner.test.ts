@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import type { HookInput, SDKResultMessage } from '@anthropic-ai/claude-agent-sdk'
 import { expect, test } from 'vitest'
 import { fresh, rejects } from '../../checks/sqlite.ts'
-import { fired, gate } from '../../providers/claude-agent-sdk/index.ts'
+import { FENCED, fired, gate } from '../../providers/claude-agent-sdk/index.ts'
 import { CAPPED, type Packet, type Provider } from '../../providers/kind.ts'
 import { rules as ruleRows } from '../../store/index.ts'
 import { runOf } from '../../store/runs.ts'
@@ -59,7 +59,7 @@ test('D3: an absolute fence admits only writes under it', () => {
   for (const path of ['cli/x.ts', join(work, 'other/x'), '/etc/x']) expect(p.refuse(path)).toMatchObject({ origin_ref: 'seat.write_paths' })
 })
 
-test('the gate stops a refused write and denies an outside read', () => {
+test('the gate denies a refused write and stops the FENCEDth', () => {
   const p = packet(seat(root, 'typescript_specialist').manifest, 'prompt', 'tight', 'issue', cwd, TRANSCRIPT, false, ['src'])
   const pre = (tool: string, file: string): HookInput =>
     ({ hook_event_name: 'PreToolUse', tool_name: tool, tool_input: { file_path: file }, tool_use_id: 't', session_id: 's', transcript_path: '', cwd })
@@ -69,9 +69,15 @@ test('the gate stops a refused write and denies an outside read', () => {
     continue: true,
     hookSpecificOutput: { permissionDecision: 'deny', permissionDecisionReason: expect.stringContaining('run.outside_checkout') as string },
   })
-  expect(gate(p, pre('Write', 'package.json'))).toMatchObject({
-    continue: false,
+  const fenced = gate(p, pre('Write', 'package.json'))
+  expect(fenced).toMatchObject({
+    continue: true,
     hookSpecificOutput: { permissionDecision: 'deny', permissionDecisionReason: 'ruling:seat.write_paths refuses a write to package.json' },
+  })
+  expect(fenced.stopReason).toBeUndefined()
+  expect(gate(p, pre('Write', 'package.json'), FENCED - 1)).toMatchObject({
+    continue: false,
+    stopReason: 'ruling:seat.write_paths refuses a write to package.json',
   })
 })
 

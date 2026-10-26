@@ -26,7 +26,7 @@ export const steps: Step[] = ['checkout', 'generate', 'score', 'null_check'].map
 
 const NEEDED = ['repo', 'fix', 'pre_fix']
 
-export const CEILING = 2_000_000
+export const CEILING = 6_000_000
 
 const SETUP = 60
 

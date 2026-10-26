@@ -388,6 +388,44 @@ test('D2 a failed npm ci is refused unfired, with no run row', async () => {
   expect(runRows(db)).toEqual([])
 })
 
+const YARN = '# yarn lockfile v1\n\n'
+
+/** `locked`'s src/ with a yarn.lock in place of package-lock.json, locking dep only when `synced`. */
+function yarned(synced: boolean): (root: string) => void {
+  return (root) => {
+    locked(synced)(root)
+    rmSync(join(srcDir(root, 1), 'package-lock.json'))
+    writeFileSync(join(srcDir(root, 1), 'yarn.lock'), `${YARN}${synced ? '"dep@file:dep":\n  version "1.0.0"\n' : ''}`)
+  }
+}
+
+test('D1 a yarn.lock src/ is yarn installed, scripts unrun, fired', async () => {
+  const fired = stub(1000, 'completed', true)
+  const { root, outcome } = await generated(fired, undefined, yarned(true))
+  expect(outcome).toMatchObject({ outcome: 'pass' })
+  expect(fired.packets).toHaveLength(1)
+  expect(existsSync(join(srcDir(root, 1), 'node_modules/dep'))).toBe(true)
+  expect(existsSync(join(srcDir(root, 1), 'ran'))).toBe(false)
+})
+
+test('D2 a failed yarn install is refused unfired, no run row', async () => {
+  const fired = stub(1000, 'completed', true)
+  const { db, outcome } = await generated(fired, undefined, yarned(false))
+  expect(outcome).toMatchObject({ outcome: 'refuse', spans: ['bench.install'], note: expect.stringMatching(/^yarn install exited \d+/) as string })
+  expect(fired.packets).toEqual([])
+  expect(runRows(db)).toEqual([])
+})
+
+test('D3 with both lockfiles npm ci installs and yarn does not', async () => {
+  const both = (synced: boolean) => (root: string) => { locked(synced)(root); writeFileSync(join(srcDir(root, 1), 'yarn.lock'), YARN) }
+  const fired = stub(1000, 'completed', true)
+  const { root, outcome } = await generated(fired, undefined, both(true))
+  expect(outcome).toMatchObject({ outcome: 'pass' })
+  expect(existsSync(join(srcDir(root, 1), 'node_modules/dep'))).toBe(true)
+  const failed = await generated(stub(1000, 'completed', true), undefined, both(false))
+  expect(failed.outcome).toMatchObject({ outcome: 'refuse', note: expect.stringMatching(/^npm ci exited/) as string })
+})
+
 test('D5 tick on an empty src/ sends the plan back to step 0', async () => {
   const root = mkdtempSync(join(tmpdir(), 'cf-bench-'))
   staffedIn(root)

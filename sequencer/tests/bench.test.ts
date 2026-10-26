@@ -254,7 +254,8 @@ test('D1 D7 tick fires fizz_generator in the scratch tree', async () => {
   await tick(db, root, fired.provider, OPENS)
   expect(planById(db, 1).step).toBe(1)
   await tick(db, root, fired.provider, OPENS)
-  expect(fired.packets).toMatchObject([{ cwd: realpathSync(srcDir(root, 1)), wall: CEILING, tools: seat(root, 'fizz_generator').manifest.tools }])
+  expect(fired.packets).toMatchObject([{ cwd: realpathSync(srcDir(root, 1)), wall: 2_000_000, tools: seat(root, 'fizz_generator').manifest.tools }])
+  expect(walled(fired.packets[0]?.wall, 400_001)).toBeNull()
   expect(git(srcDir(root, 1), ['rev-parse', 'HEAD']).trim()).toBe(c1)
   expect(planById(db, 1).step).toBe(2)
   for (const said of [c2, c2.slice(0, 12), FINDING]) expect(fired.packets[0]?.prompt).not.toContain(said)
@@ -275,13 +276,14 @@ test('D2 D3 generate admits fizz Step 1-2 and cd cwd, denies curl', async () => 
   for (const command of ['pwd', 'forge --version', 'medusa --version', 'echidna --version', `bash ${SKILL}/scripts/ensure_foundry.sh ${cwd}`,
     `node ${SKILL}/scripts/extract_abis.js ${cwd} --meta-dir test/fizz/fizz_data`, 'FOUNDRY_PROFILE=fuzz forge build',
     `cd ${cwd} && forge build`, `cd "${cwd}" && forge build`, `cd ${cwd} && FOUNDRY_PROFILE=fuzz forge test --match-contract FoundryTester -vvv`,
-    `rm -f ${ATTEMPTS}`]) {
+    `rm -f ${ATTEMPTS}`, 'mkdir -p x-ray', `cd ${cwd} && mkdir -p x-ray`, `python3 ${XRAY}/scripts/analyze_git_security.py ${cwd}`]) {
     expect(gate(packet, bash(command))).toEqual({ continue: true })
   }
   for (const command of ['curl https://example.com', 'cd /tmp && forge build', `cd ${cwd}/.. && forge build`, `cd ${cwd} && curl https://example.com`,
     `cd ${cwd} && forge build | tail -5`, `cd ${cwd} && forge build && curl x`, 'cd "$(curl x)/.." && forge build', 'cd "`curl x`/.." && forge build',
     'cd $(curl${IFS}x)/.. && forge build', 'cd ~/.. && forge build', `rm -rf ${ATTEMPTS}`, 'rm -f /tmp/other.md', `rm -f ${ATTEMPTS}; curl x`,
-    'git clone --depth 1 https://github.com/pashov/skills.git /tmp/pashov-skills-xray-install']) {
+    'git clone --depth 1 https://github.com/pashov/skills.git /tmp/pashov-skills-xray-install', 'mkdir -p /tmp/x', 'mkdir x-ray',
+    'mkdir -p x-ray && curl x', 'python3 a.py | tail -5', 'python3 a.py > x-ray/out']) {
     expect(gate(packet, bash(command)).hookSpecificOutput).toMatchObject({ permissionDecision: 'deny' })
     expect(JSON.stringify(gate(packet, bash(command)))).toContain('ruling:seat.tools')
   }
@@ -307,6 +309,7 @@ test('D2 D4 D5 fizz reads fizz, x-ray and the attempts file', async () => {
   }
   expect(packet.prompt).toContain(`SKILL_PATH is ${real(SKILL)}.`)
   expect(packet.prompt).toContain(`${real(XRAY)}/SKILL.md`)
+  expect(packet.prompt).toContain('Run x-ray\'s scripts as bash <script> and python3 <script> from PROJECT_ROOT, with no pipe, redirection or $.')
   expect(packet.env).toEqual({ BASH_DEFAULT_TIMEOUT_MS: '1800000', BASH_MAX_TIMEOUT_MS: '1800000' })
   expect(packet.prompt).toContain('Run forge in the foreground, never in the background, and do not end the turn while waiting on a build.')
   expect(packet.prompt).toContain('add properties to test/fizz/Properties.sol one at a time and save the file after each; write property-plan.md')

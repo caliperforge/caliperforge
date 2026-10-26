@@ -26,7 +26,7 @@ export const steps: Step[] = ['checkout', 'generate', 'score', 'null_check'].map
 
 const NEEDED = ['repo', 'fix', 'pre_fix']
 
-export const CEILING = 400_000
+export const CEILING = 2_000_000
 
 const SETUP = 60
 
@@ -53,7 +53,7 @@ function ask(skill: string | undefined, xray: string | undefined): string {
     + `Order of work over the skill's: once Step 4 writes ${SUITE}/${META}/entry-point-selection.json and Step 5 scaffolds the suite, `
     + `add properties to ${SUITE}/${PROPERTIES} one at a time and save the file after each; `
     + 'write property-plan.md or run Medusa (Steps 8 and 9) only after one property compiles with forge build.'
-  return xray === undefined ? skilled : `${skilled}\nx-ray is installed at ${xray}: at Attempt 2, skip the git clone and run ${xray}/SKILL.md inline against PROJECT_ROOT.`
+  return xray === undefined ? skilled : `${skilled}\nx-ray is installed at ${xray}: at Attempt 2, skip the git clone and run ${xray}/SKILL.md inline against PROJECT_ROOT. Run x-ray's scripts as bash <script> and python3 <script> from PROJECT_ROOT, with no pipe, redirection or $.`
 }
 
 function fields(text: string): Record<string, string | undefined> {

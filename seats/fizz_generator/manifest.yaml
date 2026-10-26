@@ -16,6 +16,8 @@ tools:
   - Bash(node:*)
   - Bash(bash:*)
   - Bash(rm -f /tmp/x-ray-attempts.md)
+  - Bash(mkdir -p x-ray)
+  - Bash(python3:*)
 reads:
   - ~/.claude/skills/fizz
   - ~/.claude/skills/x-ray

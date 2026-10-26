@@ -1,4 +1,4 @@
-import { decide, digestOf } from '../store/approvals.ts'
+import { decide, decisionsOf, digestOf } from '../store/approvals.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { busy } from '../store/now.ts'
@@ -23,8 +23,7 @@ export function waiting(db: Db, root: string, plan: number, sha: string, target:
     .map((line) => `${line}\n`).join('')
   put(root, plan, CARD, text)
   const digest = digestOf(text)
-  const decisions = (db.prepare("SELECT decision FROM approvals WHERE subject_kind = 'publish' AND subject_id = ? AND subject_digest = ?")
-    .all(plan, digest) as { decision: string }[]).map((row) => row.decision)
+  const decisions = decisionsOf(db, 'publish', plan, digest)
   if (decisions.includes('approved')) return null
   const flags = rows.filter((r) => !r.ok).length
   const note = `card ${digest.slice(0, 12)} with ${String(flags)} flag(s): cf approve card ${String(plan)} or cf refuse card ${String(plan)} <reason>`

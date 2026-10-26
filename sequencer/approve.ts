@@ -3,6 +3,7 @@ import { gates, signedLatest, targetSigned } from '../store/approvals.ts'
 import { newest, approved as settle } from '../store/deliverables.ts'
 import type { Db } from '../store/index.ts'
 import { internal, type PlanRow } from '../store/plans.ts'
+import { targetRow } from '../store/targets.ts'
 import type { Outcome } from './kind.ts'
 import { baseMoved } from './merge.ts'
 import { land, type Wire } from './push.ts'
@@ -45,10 +46,8 @@ export function targetDigest(t: { repo: string; issue_no: number; evidence_measu
  * rule forces a re-measure, and a re-measured target must be approved again.
  */
 export function approved(db: Db, plan: PlanRow): boolean {
-  const t = db.prepare('SELECT repo, issue_no, evidence_measured_at FROM targets WHERE id = ?').get(plan.target_id) as
-    { repo: string; issue_no: number; evidence_measured_at: string } | undefined
-  if (t === undefined || plan.target_id === null) return false
-  return targetSigned(db, plan.target_id, targetDigest(t))
+  if (plan.target_id === null) return false
+  return targetSigned(db, plan.target_id, targetDigest(targetRow(db, plan.target_id)))
 }
 
 /**

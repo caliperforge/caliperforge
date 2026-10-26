@@ -416,8 +416,27 @@ test('D2 a failed yarn install is refused unfired, no run row', async () => {
   expect(runRows(db)).toEqual([])
 })
 
+const PNPM = "lockfileVersion: '9.0'\n"
+
+test('D2 a failed pnpm install is refused unfired, no run row', async () => {
+  const pnpmed = (root: string) => {
+    locked(false)(root)
+    rmSync(join(srcDir(root, 1), 'package-lock.json'))
+    writeFileSync(join(srcDir(root, 1), 'pnpm-lock.yaml'), PNPM)
+  }
+  const fired = stub(1000, 'completed', true)
+  const { db, outcome } = await generated(fired, undefined, pnpmed)
+  expect(outcome).toMatchObject({ outcome: 'refuse', spans: ['bench.install'], note: expect.stringMatching(/^pnpm install exited \d+/) as string })
+  expect(fired.packets).toEqual([])
+  expect(runRows(db)).toEqual([])
+})
+
 test('D3 with both lockfiles npm ci installs and yarn does not', async () => {
-  const both = (synced: boolean) => (root: string) => { locked(synced)(root); writeFileSync(join(srcDir(root, 1), 'yarn.lock'), YARN) }
+  const both = (synced: boolean) => (root: string) => {
+    locked(synced)(root)
+    writeFileSync(join(srcDir(root, 1), 'yarn.lock'), YARN)
+    writeFileSync(join(srcDir(root, 1), 'pnpm-lock.yaml'), PNPM)
+  }
   const fired = stub(1000, 'completed', true)
   const { root, outcome } = await generated(fired, undefined, both(true))
   expect(outcome).toMatchObject({ outcome: 'pass' })

@@ -5,7 +5,6 @@ import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 import type { Provider } from '../providers/kind.ts'
 import { packet, real } from '../runner/index.ts'
 import { load, seat } from '../runner/rules.ts'
-import { bare, npm } from '../sequencer/checks.ts'
 import type { Outcome } from '../sequencer/kind.ts'
 import { staffed } from '../sequencer/staffing.ts'
 import { firstLine } from '../sequencer/unpolled.ts'
@@ -17,6 +16,7 @@ import { observed } from '../store/lanes.ts'
 import { needsCeo, type PlanRow } from '../store/plans.ts'
 import { byRun, pending, spawned } from '../store/transcript.ts'
 import { clamp, quieted } from './balances.ts'
+import { deps } from './deps.ts'
 import { inBare, listedIn } from './listed.ts'
 import { DEFAULT_BUILDER, type Step } from './pr-path.ts'
 import { recloned, rooted } from './rooted.ts'
@@ -110,14 +110,6 @@ export function scratch(root: string, plan: PlanRow): Outcome {
   }
   put(root, plan.id, 'checkout.json', JSON.stringify({ repo, fix, pre_fix: sha }))
   return { outcome: 'pass', spans: [], note: `checkout.json written at ${sha.slice(0, 12)}` }
-}
-
-function deps(dir: string): Outcome | null {
-  if (!bare(dir)) return null
-  const ran = npm(['ci', '--ignore-scripts', '--include=dev'], dir)
-  if (ran.ok) return null
-  const line = ran.output.split('\n').find((l) => /^npm (?:error|ERR!)/.test(l)) ?? ''
-  return { outcome: 'refuse', spans: ['bench.install'], note: `npm ci exited ${ran.code}: ${line}` }
 }
 
 export async function generate(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {

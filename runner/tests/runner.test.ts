@@ -214,6 +214,8 @@ test('the rules loader hashes roster, rails and Tight into rules', () => {
   expect(loaded.map((r) => r.id)).toContain('typescript_specialist')
   expect(new Set(rules(root).map((r) => r.path))).toEqual(new Set(['rules/rails.yaml', ...SEATS.map((s) => `rules/roster/${s}.yaml`), 'rules/tight.md', 'rules/senior.md', ...registered(root), 'rules/repo-classes.yaml', 'rules/staffing.yaml']))
   expect(ruleRows(db).length).toBe(loaded.length)
+  load(db, root)
+  expect(ruleRows(db).length).toBe(loaded.length)
 })
 
 test('seat() refuses one off the roster or with a drifted prompt', () => {

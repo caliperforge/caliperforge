@@ -6,8 +6,7 @@
     "lines": 161
   },
   "rules.ts": {
-    "lines": 109,
-    "prepare": 1
+    "lines": 109
   },
   "wake.ts": {
     "lines": 101

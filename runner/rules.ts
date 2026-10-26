@@ -6,7 +6,7 @@ import { z } from 'zod'
 import { manifest } from '../checks/manifest.ts'
 import { bare } from '../providers/kind.ts'
 import type { Run } from '../store/events.ts'
-import type { Db } from '../store/index.ts'
+import { upsertRule, type Db } from '../store/index.ts'
 
 const Roster = z.object({
   seats: z.array(z.string()).min(1),
@@ -72,9 +72,8 @@ export function registered(root: string): string[] {
 
 export function load(db: Db, root: string): Rule[] {
   const rows = rules(root)
-  const put = db.prepare('INSERT OR REPLACE INTO rules (id, kind, path, content_hash, loaded_at) VALUES (?, ?, ?, ?, ?)')
   const at = new Date().toISOString()
-  for (const rule of rows) put.run(rule.id, rule.kind, rule.path, rule.content_hash, at)
+  for (const rule of rows) upsertRule(db, { ...rule, loaded_at: at })
   return rows
 }
 

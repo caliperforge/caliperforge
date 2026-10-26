@@ -13,6 +13,9 @@ const READS = new Set(['Read', 'Glob', 'Grep'])
 /** A builder that has taken this many model turns and written nothing is reading, not building. */
 export const IDLE_TURNS = 20
 
+/** A run stops at its `FENCED`th write outside the fence; every one before it is denied and the seat goes on. */
+export const FENCED = 5
+
 export const claudeAgentSdk: Provider = { name: 'claude-agent-sdk', fire }
 
 async function fire(packet: Packet): Promise<Fired> {
@@ -20,7 +23,7 @@ async function fire(packet: Packet): Promise<Fired> {
   const refused: string[] = []
   const limits: Reading[] = []
   const spent = new Map<string, number>()
-  const pace = { turns: new Set<string>(), wrote: false }
+  const pace = { turns: new Set<string>(), wrote: false, fenced: 0 }
   const transcript = openTranscript(packet)
   const run = query({
     prompt: `${packet.prompt}\n\n# Working folder\n\n${packet.cwd}`,
@@ -36,8 +39,8 @@ async function fire(packet: Packet): Promise<Fired> {
       permissionMode: 'default',
       hooks: { PreToolUse: [{ hooks: [(input) => {
         const over = walled(packet.wall, total(spent)) ?? idle(packet.tools, pace.wrote, pace.turns.size, packet.idle)
-        const decision = over === null ? gate(packet, input) : stop(over)
-        if (decision.continue && writing(input)) pace.wrote = true
+        const decision = over === null ? gate(packet, input, pace.fenced) : stop(over)
+        if (over === null && writing(input)) tally(pace, decision)
         if (decision.stopReason !== undefined) refused.push(decision.stopReason)
         return Promise.resolve(decision)
       }] }] },
@@ -74,6 +77,11 @@ export function idle(tools: string[], wrote: boolean, turns: number, limit = IDL
 
 function writing(input: HookInput): boolean {
   return input.hook_event_name === 'PreToolUse' && WRITES.has(input.tool_name)
+}
+
+function tally(pace: { wrote: boolean; fenced: number }, decision: SyncHookJSONOutput): void {
+  if (decision.hookSpecificOutput === undefined) pace.wrote = true
+  else pace.fenced += 1
 }
 
 /**
@@ -131,8 +139,8 @@ function openTranscript(packet: Packet): (message: unknown) => void {
   return (message) => { appendFileSync(packet.transcript, `${JSON.stringify(message)}\n`) }
 }
 
-/** A write outside the fence ends the step. A command outside the seat's list is refused and the seat goes on with its other tools. */
-export function gate(packet: Packet, input: HookInput): SyncHookJSONOutput {
+/** A write outside the fence is denied and the seat goes on, until the `FENCED`th in a run stops it. A command outside the seat's list is refused and the seat goes on with its other tools. */
+export function gate(packet: Packet, input: HookInput, fenced = 0): SyncHookJSONOutput {
   if (input.hook_event_name !== 'PreToolUse') return { continue: true }
   if (input.tool_name === 'Bash') {
     const refused = ranOutside(packet, input.tool_input)
@@ -141,7 +149,8 @@ export function gate(packet: Packet, input: HookInput): SyncHookJSONOutput {
   const away = readOutside(packet.cwd, input.tool_name, input.tool_input, packet.reads)
   if (away !== null) return deny(away)
   const denied = wroteOutside(packet, input.tool_name, input.tool_input)
-  return denied === null ? { continue: true } : stop(denied)
+  if (denied === null) return { continue: true }
+  return fenced + 1 < FENCED ? deny(denied) : stop(denied)
 }
 
 /** A read outside the checkout is refused and the seat goes on: what it needs from a dependency is in the brief's Settled facts. */

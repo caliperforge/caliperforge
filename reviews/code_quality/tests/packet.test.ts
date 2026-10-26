@@ -131,7 +131,7 @@ test('the provider gate denies a reviewer write, allows a read',() => {
     ({ hook_event_name: 'PreToolUse', tool_name: tool, tool_input: { file_path: file }, tool_use_id: 't', session_id: 's', transcript_path: '', cwd: repo })
   expect(gate(packet as never, pre('Read', 'src/stats.ts'))).toEqual({ continue: true })
   expect(gate(packet as never, pre('Write', 'src/stats.ts'))).toMatchObject({
-    continue: false,
+    continue: true,
     hookSpecificOutput: { permissionDecision: 'deny', permissionDecisionReason: 'ruling:seat.write_paths refuses a write to src/stats.ts' },
   })
 })

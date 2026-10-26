@@ -273,13 +273,13 @@ function tail(output: string): string {
  * A command the cap killed leaves no status, and that is the failure it is recorded as. A program that never
  * started has no output at all, so the spawn error is what the builder reads.
  */
-export function npm(args: string[], cwd: string, bin = 'npm', cap = LONG.includes(bin) ? XCODE_CAP : CAP, note?: Note): Ran {
+export function npm(args: string[], cwd: string, bin = 'npm', cap = LONG.includes(bin) ? XCODE_CAP : CAP, note?: Note, env?: NodeJS.ProcessEnv): Ran {
   const command = `${bin} ${args.join(' ')}`
   const held = slot(undefined, undefined, undefined, () => note?.('waiting for a check slot', command))
   note?.('checks', command)
   try {
     const done = spawnSync(bin, args, { cwd, encoding: 'utf8', timeout: cap, maxBuffer: MAX,
-      env: unslotted() })
+      env: { ...unslotted(), ...env } })
     if (done.error !== undefined && typeof done.stdout !== 'string') return { ok: false, code: '127', output: `${bin}: ${done.error.message}` }
     const output = `${done.stdout}${done.stderr}`
     const capped = (done.error as NodeJS.ErrnoException | undefined)?.code === 'ETIMEDOUT' ? { capped: true as const } : {}

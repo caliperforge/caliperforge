@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { isMap, isScalar, isSeq, parseDocument } from 'yaml'
-import { actions, closeIssue, commentIssue, dispatch, fileIssue, gh, installed, issueComments, forward, openPr, rehearse, review, unrehearse, type IssueComment, type Read } from '../cli/gh.ts'
+import { actions, closeIssue, commentIssue, describePr, dispatch, fileIssue, gh, installed, issueComments, forward, openPr, prNumber, rehearse, review, unrehearse, type IssueComment, type Read } from '../cli/gh.ts'
 import { CARD } from '../cli/queue.ts'
 import { alerter } from '../cli/watch.ts'
 import { judge, MISSING, PENDING, shell, type Board, type Gh, type Head as At } from '../rails/ci-green/index.ts'
@@ -43,6 +43,7 @@ interface Head { dir: string; branch: string; sha: string }
 export interface Wire {
   send: (dir: string, branch: string) => void
   open: (repo: string, head: string, title: string, bodyFile: string) => string
+  describe?: (repo: string, no: number, body: string) => void
   close: (repo: string, no: number, sha: string, comment?: string) => void
   runs: Gh
   forward?: (fork: string, base: string) => void
@@ -65,6 +66,7 @@ export interface Wire {
 export const WIRE: Wire = {
   send: (dir, branch) => void git(dir, ['push', '--set-upstream', 'origin', branch]),
   open: openPr,
+  describe: describePr,
   close: closeIssue,
   file: fileIssue,
   comment: commentIssue,
@@ -206,7 +208,7 @@ export function sent(root: string, plan: PlanRow, repo: string, wire: Wire): { f
   const head = outside ? headOf(root, plan.id) : onward(headOf(root, plan.id))
   const tip = outside ? tipOf(root, plan.id, head, ci, repo) : head.sha
   if (outside) based(root, plan.id, fork, wire)
-  wire.send(head.dir, outside ? `${tip}:refs/heads/${ci}` : head.branch)
+  if (wire.at?.(head.dir, `refs/heads/${ci}`) !== tip) wire.send(head.dir, outside ? `${tip}:refs/heads/${ci}` : head.branch)
   const at = wire.at?.(head.dir, `refs/heads/${ci}`) ?? tip
   const rejected = at === tip ? null : `${fork} rejected refs/heads/${ci}: it is at ${at === '' ? 'no commit' : at.slice(0, 12)}, not the pushed ${tip.slice(0, 12)}`
   if (outside && rejected === null) moved(root, plan.id, fork, ci, wire)
@@ -445,6 +447,8 @@ export function push(db: Db, root: string, plan: PlanRow, wire: Wire = WIRE): Ou
   wire.send(head.dir, head.branch)
   retire(`${FORK}/${repoName(target.repo)}`, rehearsed(root, plan.id, head.branch), wire)
   if (open !== null) {
+    const md = maybe(root, plan.id, 'pr.md')
+    if (md !== null) wire.describe?.(target.repo, prNumber(open), md)
     markPushed(db, plan.id, approval, open)
     return { outcome: 'pass', spans: [], note: `pushed ${head.branch} onto ${open}` }
   }
@@ -562,7 +566,7 @@ export function follow(root: string, plan: number, message: string): string {
   const tip = git(dir, ['rev-parse', shown]).trim()
   const count = Number(git(dir, ['rev-list', '--count', `${tip}..HEAD`]).trim())
   const staged = git(dir, ['diff', '--cached', '--name-only']).trim() !== ''
-  const same = count === 0 || (count === 1 && git(dir, ['log', '-1', '--format=%B']).trim() === message)
+  const same = count === 0 || (git(dir, ['rev-parse', 'HEAD^']).trim() === tip && git(dir, ['log', '-1', '--format=%B']).trim() === message)
   if (!staged && same && ancestor(dir, tip, 'HEAD')) return tip
   const base = git(dir, ['merge-base', 'HEAD', MAIN]).trim()
   if (!ancestor(dir, base, tip)) {

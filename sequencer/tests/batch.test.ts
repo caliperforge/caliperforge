@@ -23,9 +23,9 @@ import { COMMIT, forkCi, headOf, messageOf, prBody, push, sent as next, type Wir
 import { started, words } from '../signals.ts'
 import { unanswered } from '../ready.ts'
 import { unread } from '../../cli/inbox.ts'
-import { get, maybe, put, srcDir } from '../workspace.ts'
+import { fetchMain, get, maybe, mergeMain, put, srcDir } from '../workspace.ts'
 import { tick } from '../index.ts'
-import { approve, CARRIED, internalPlan, plan, PR as URL, SEEDED, stub, tip, watched, world, type World } from './world.ts'
+import { approve, CARRIED, internalPlan, plan, PR as URL, runsOn, SEEDED, stub, tip, watched, world, type World } from './world.ts'
 
 afterEach(() => { vi.unstubAllEnvs() })
 
@@ -468,6 +468,39 @@ test('D1 a moved main is the parent of a one-commit head', { timeout: 90_000 }, 
   next(w.root, plan(w.db, 1), 'acme/widget', wire)
   expect([git(['rev-parse', 'HEAD']), git(['ls-remote', 'origin', 'refs/heads/widget-12-a1-next'])]).toEqual([head, shown])
   expect(refs.filter((r) => r.startsWith('+') || r.includes('--force'))).toEqual([])
+})
+
+test('D1 D2 D3 held ticks at one tree keep the head and send once', { timeout: 90_000 }, async () => {
+  const w = await pushed()
+  const src = srcDir(w.root, 1)
+  const upstream = join(w.root, 'remotes/acme/widget')
+  const git = (args: string[], cwd = src): string => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim()
+  git(['push', '-q', 'origin', 'widget-12-a1'])
+  writeFileSync(join(upstream, 'moved.ts'), 'export const moved = 1\n')
+  git(['add', '-A'], upstream)
+  git(['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'main moves on'], upstream)
+  fetchMain(src)
+  mergeMain(src)
+  const refs: string[] = []
+  const wire = { ...watched([], w.root, 1, runsOn(w.root, 1, 'in_progress', '')),
+    send: (dir: string, ref: string) => { refs.push(ref); execFileSync('git', ['push', '-q', 'origin', ref], { cwd: dir }) },
+    at: (dir: string, ref: string) => execFileSync('git', ['ls-remote', 'origin', ref], { cwd: dir, encoding: 'utf8' }).split('\t')[0] ?? '' }
+  const held = (minute: number): Outcome | null => {
+    const at = `2026-10-26T10:0${String(minute)}:00Z`
+    vi.stubEnv('GIT_AUTHOR_DATE', at)
+    vi.stubEnv('GIT_COMMITTER_DATE', at)
+    return forkCi(w.db, w.root, plan(w.db, 1), 'acme/widget', wire)
+  }
+  const shown = (): string[] => [git(['rev-parse', 'HEAD']), wire.at(src, 'refs/heads/widget-12-a1-next')]
+  expect(held(1)).toMatchObject({ outcome: 'pass', held: true })
+  const first = shown()
+  for (const minute of [2, 3, 4, 5]) expect(held(minute)).toMatchObject({ outcome: 'pass', held: true })
+  expect(refs.filter((r) => r.endsWith(':refs/heads/widget-12-a1-next'))).toHaveLength(1)
+  expect(shown()).toEqual(first)
+  writeFileSync(join(src, 'src/hello.ts'), 'export const hello = (): string => "later"\n')
+  held(6)
+  expect(refs.filter((r) => r.endsWith(':refs/heads/widget-12-a1-next'))).toHaveLength(2)
+  expect(git(['rev-parse', 'HEAD^'])).toBe(wire.at(src, 'refs/heads/widget-12-a1'))
 })
 
 test('merged-code finding is an escape on the step that owns it', async () => {

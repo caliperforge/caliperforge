@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import type { HookInput } from '@anthropic-ai/claude-agent-sdk'
@@ -410,20 +410,35 @@ test('D1 a yarn.lock src/ is yarn installed, scripts unrun, fired', async () => 
     yarned(true)(root)
     before = readFileSync(join(srcDir(root, 1), 'package.json'), 'utf8')
   }
-  const { root, outcome } = await generated(fired, undefined, kept)
-  expect(outcome).toMatchObject({ outcome: 'pass' })
-  expect(fired.packets).toHaveLength(1)
-  expect(existsSync(join(srcDir(root, 1), 'node_modules/dep'))).toBe(true)
-  expect(existsSync(join(srcDir(root, 1), 'ran'))).toBe(false)
-  expect(readFileSync(join(srcDir(root, 1), 'package.json'), 'utf8')).toBe(before)
+  const shared = mkdtempSync(join(tmpdir(), 'cf-shared-'))
+  const host = process.env.YARN_CACHE_FOLDER
+  const caches = yarnCaches()
+  process.env.YARN_CACHE_FOLDER = shared
+  try {
+    const { root, outcome } = await generated(fired, undefined, kept)
+    expect(outcome).toMatchObject({ outcome: 'pass' })
+    expect(fired.packets).toHaveLength(1)
+    expect(existsSync(join(srcDir(root, 1), 'node_modules/dep'))).toBe(true)
+    expect(existsSync(join(srcDir(root, 1), 'ran'))).toBe(false)
+    expect(readFileSync(join(srcDir(root, 1), 'package.json'), 'utf8')).toBe(before)
+  } finally {
+    if (host === undefined) delete process.env.YARN_CACHE_FOLDER
+    else process.env.YARN_CACHE_FOLDER = host
+  }
+  expect(readdirSync(shared)).toEqual([])
+  expect(yarnCaches()).toBe(caches)
 })
+
+const yarnCaches = () => readdirSync(tmpdir()).filter((f) => f.startsWith('cf-yarn-')).length
 
 test('D2 a failed yarn install is refused unfired, no run row', async () => {
   const fired = stub(1000, 'completed', true)
+  const caches = yarnCaches()
   const { db, outcome } = await generated(fired, undefined, yarned(false))
   expect(outcome).toMatchObject({ outcome: 'refuse', spans: ['bench.install'], note: expect.stringMatching(/^npx yarn@1 exited \d+/) as string })
   expect(fired.packets).toEqual([])
   expect(runRows(db)).toEqual([])
+  expect(yarnCaches()).toBe(caches)
 })
 
 test('D1 a failed yarn git step keeps its block in the note', async () => {

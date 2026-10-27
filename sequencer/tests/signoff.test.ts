@@ -1,5 +1,6 @@
-import { readFileSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { dirname, join } from 'node:path'
 import { expect, test } from 'vitest'
 import { approve as approveBatch } from '../../cli/batch.ts'
 import { desk as ghDesk, type Answer, type Desk, type Issue, type Pr, type Seen } from '../../cli/gh.ts'
@@ -13,7 +14,7 @@ import { approve as approvePublish } from '../card.ts'
 import { tick } from '../index.ts'
 import { ruled, signoffs, verdict } from '../signoff.ts'
 import { UNRUN } from '../triggers.ts'
-import { drop, OPERATOR, put, SELF, SIGNOFF, srcDir } from '../workspace.ts'
+import { drop, git, OPERATOR, put, SELF, SIGNOFF, srcDir } from '../workspace.ts'
 import { TEX } from './bases.ts'
 import { approve, CARRIED, plan, scored, stub, TYPESCRIPT, watched, world, type World } from './world.ts'
 
@@ -22,6 +23,9 @@ const quiet = (): Pr => ({
   number: 7, url: 'https://github.com/acme/widget/pull/7', state: 'OPEN', mergedAt: null, mergedBy: null,
   reviewDecision: null, comments: [], reviews: [], statusCheckRollup: [],
 })
+
+/** Their tracker with no open pull request and no sibling naming the issue. */
+const none = (): unknown => []
 
 async function atBatch(ci = true, files = TYPESCRIPT): Promise<World> {
   const w = world('warm', undefined, files, ci)
@@ -67,12 +71,47 @@ function fake(pr: number | null = null, lines: string[] = [], assignees = [OPERA
 test('D1 the card opens with the fact sheet and its verdict', async () => {
   const w = await atBatch()
   const desk = fake()
-  signoffs(w.db, w.root, desk)
+  signoffs(w.db, w.root, desk, none)
   const body = desk.cards.get(100)?.body ?? ''
   expect(body.startsWith('**Fact sheet**\n\n- Diff: files: ')).toBe(true)
   expect(body.indexOf('\n- Verdict: ')).toBeGreaterThan(-1)
   expect(body.indexOf('\n- Verdict: ')).toBeLessThan(body.indexOf('**widget 12**'))
   expect(eventsOf(w.db, 1, 'card_facts')).toEqual([{ actor: 'signoff', outcome: 'pass', message: 'with fact sheet' }])
+})
+
+/** A maintainer branch off upstream main, cut in a worktree so our checkout's head and digest stay put. */
+function theirBranch(w: World, name: string, file: string, message: string): void {
+  const tree = join(mkdtempSync(join(tmpdir(), 'cf-theirs-')), name)
+  git(srcDir(w.root, 1), ['worktree', 'add', '-q', '--detach', tree, 'refs/remotes/upstream/main'])
+  mkdirSync(dirname(join(tree, file)), { recursive: true })
+  writeFileSync(join(tree, file), 'export const hello = (): string => "yo"\n')
+  git(tree, ['add', '-f', file])
+  git(tree, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', message])
+  git(tree, ['push', '-q', 'upstream', `HEAD:refs/heads/${name}`])
+}
+
+test('D2 a maintainer branch on our code leads the card', async () => {
+  const w = await atBatch()
+  theirBranch(w, 'fix-hello', 'src/hello.ts', 'yo')
+  const desk = fake()
+  signoffs(w.db, w.root, desk, none)
+  const body = desk.cards.get(100)?.body ?? ''
+  const tree = 'https://github.com/acme/widget/tree/fix-hello'
+  expect(body.split('\n')[0]).toBe(`**Fact sheet**: a maintainer branch works on this code: \`${tree}\` (\`src/hello.ts\`)`)
+  expect(body).toContain(`\n- Their work: other functions: \`branch ${tree} touches src/hello.ts\` (open)\n`)
+  expect(eventsOf(w.db, 1, 'card_facts')).toEqual([{ actor: 'signoff', outcome: 'pass', message: 'with fact sheet' }])
+  expect(body.replace(/```markdown[\s\S]*?\n```\n/, '').replace(/`[^`]*`/g, '')).not.toMatch(/#\d|acme\/widget|github\.com\/acme/)
+})
+
+test('D4 a named branch on generated code is listed, not first', async () => {
+  const w = await atBatch()
+  theirBranch(w, 'table', 'generated/table.ts', 'regenerate for #12')
+  const desk = fake()
+  signoffs(w.db, w.root, desk, none)
+  const body = desk.cards.get(100)?.body ?? ''
+  const says = 'branch https://github.com/acme/widget/tree/table names #12'
+  expect(body.startsWith('**Fact sheet**\n\n- Diff: files: ')).toBe(true)
+  expect(body).toContain(`\n- Their work: named: \`${says}\` (open)\n`)
 })
 
 test('D2 the verdict is taste only when every fact is ok', () => {
@@ -86,7 +125,7 @@ test('D3 an open fact is named and its line ends open', async () => {
   expect(verdict([{ name: 'files', ok: true, says: '1 files' }, open])).toBe('Open: assigned: `assigned to nobody`')
   const w = await atBatch()
   const desk = fake(null, [], [])
-  signoffs(w.db, w.root, desk)
+  signoffs(w.db, w.root, desk, none)
   const body = desk.cards.get(100)?.body ?? ''
   expect(body).toMatch(/assigned: `assigned to nobody` \(open\)(;|\n)/)
   expect(body.split('\n').find((l) => l.startsWith('- Verdict: '))).not.toContain('taste only')
@@ -95,8 +134,8 @@ test('D3 an open fact is named and its line ends open', async () => {
 test('one card per outside plan, linking nothing on their thread', async () => {
   const w = await atBatch()
   const desk = fake()
-  expect(signoffs(w.db, w.root, desk)).toEqual([{ plan: 1, card: 100, did: 'opened' }])
-  expect(signoffs(w.db, w.root, desk)).toEqual([])
+  expect(signoffs(w.db, w.root, desk, none)).toEqual([{ plan: 1, card: 100, did: 'opened' }])
+  expect(signoffs(w.db, w.root, desk, none)).toEqual([])
   const card = desk.cards.get(100)
   expect(card?.title).toBe('Sign-off: widget 12, hello')
   expect(card?.body).toContain('titled `hello`')
@@ -111,7 +150,7 @@ test('one card per outside plan, linking nothing on their thread', async () => {
 test('a rehearsal PR card links its files view, not their thread', async () => {
   const w = await atBatch()
   const desk = fake(5)
-  signoffs(w.db, w.root, desk)
+  signoffs(w.db, w.root, desk, none)
   const body = desk.cards.get(100)?.body ?? ''
   const files = body.indexOf('https://github.com/caliperforge/widget/pull/5/files')
   expect(files).toBeGreaterThan(-1)
@@ -122,10 +161,10 @@ test('a rehearsal PR card links its files view, not their thread', async () => {
 test('go signs the head shown, closes the card, next tick sends it', async () => {
   const w = await atBatch()
   const desk = fake()
-  signoffs(w.db, w.root, desk)
+  signoffs(w.db, w.root, desk, none)
   const card = desk.cards.get(100)
   if (card !== undefined) card.answer = 'go'
-  expect(signoffs(w.db, w.root, desk)).toEqual([{ plan: 1, card: 100, did: 'go' }])
+  expect(signoffs(w.db, w.root, desk, none)).toEqual([{ plan: 1, card: 100, did: 'go' }])
   expect(signersOf(w.db, 'plan')[0])
     .toEqual({ who: 'ceo', decision: 'approved', subject_digest: plan(w.db, 1).head_digest })
   expect(eventsOf(w.db, 1, 'signoff')).toMatchObject([{ actor: 'ceo', outcome: 'pass' }])
@@ -136,7 +175,7 @@ test('go signs the head shown, closes the card, next tick sends it', async () =>
   approvePublish(w.db, w.root, 1, 'ceo')
   await tick(w.db, w.root, stub(CARRIED), undefined, quiet, watched(sent, w.root, 1))
   expect(sent).toContain('open acme/widget caliperforge:widget-12-a1')
-  expect(signoffs(w.db, w.root, desk)).toEqual([])
+  expect(signoffs(w.db, w.root, desk, none)).toEqual([])
 })
 
 test('go on a card whose lane is full leaves the plan queued', async () => {
@@ -145,20 +184,20 @@ test('go on a card whose lane is full leaves the plan queued', async () => {
   amend(w.db, 1, { state: 'blocked_on_ceo' })
   putPlan(w.db, { id: 2, pipe_id: 1, target_id: 1, template: 'pr_path', state: 'running', queued_at: '2000-01-01T00:00:00.000Z', step: 2, retries: 0 })
   const desk = fake()
-  signoffs(w.db, w.root, desk)
+  signoffs(w.db, w.root, desk, none)
   const card = desk.cards.get(100)
   if (card !== undefined) card.answer = 'go'
-  expect(signoffs(w.db, w.root, desk)).toEqual([{ plan: 1, card: 100, did: 'go' }])
+  expect(signoffs(w.db, w.root, desk, none)).toEqual([{ plan: 1, card: 100, did: 'go' }])
   expect(plan(w.db, 1)).toMatchObject({ step: 7, state: 'queued' })
 })
 
 test('no with words sends it back to the builder with them', async () => {
   const w = await atBatch()
   const desk = fake()
-  signoffs(w.db, w.root, desk)
+  signoffs(w.db, w.root, desk, none)
   const card = desk.cards.get(100)
   if (card !== undefined) { card.answer = 'no'; card.words = 'Call it expiry, not expires.' }
-  expect(signoffs(w.db, w.root, desk)).toEqual([{ plan: 1, card: 100, did: 'no' }])
+  expect(signoffs(w.db, w.root, desk, none)).toEqual([{ plan: 1, card: 100, did: 'no' }])
   expect(plan(w.db, 1)).toMatchObject({ step: 2, state: 'running', head_digest: null })
   expect(readFileSync(join(w.root, '.cf/work/1/refusal.md'), 'utf8')).toContain('Call it expiry, not expires.')
   const brief = readFileSync(join(w.root, '.cf/work/1/issue.md'), 'utf8')
@@ -172,10 +211,10 @@ test('no with words sends it back to the builder with them', async () => {
 test('D1 no with only a line comment carries it to the builder', async () => {
   const w = await atBatch()
   const desk = fake(5, ['src/hello.ts:1 Name it greet.'])
-  signoffs(w.db, w.root, desk)
+  signoffs(w.db, w.root, desk, none)
   const card = desk.cards.get(100)
   if (card !== undefined) card.answer = 'no'
-  expect(signoffs(w.db, w.root, desk)).toEqual([{ plan: 1, card: 100, did: 'no' }])
+  expect(signoffs(w.db, w.root, desk, none)).toEqual([{ plan: 1, card: 100, did: 'no' }])
   expect(plan(w.db, 1)).toMatchObject({ step: 2, state: 'running' })
   expect(readFileSync(join(w.root, '.cf/work/1/refusal.md'), 'utf8')).toContain('src/hello.ts:1 Name it greet.')
   expect(approvalsOf(w.db, 'plan')[0]?.reason).toBe('signoff.no')
@@ -194,10 +233,10 @@ test('D2 only the owner\'s comments return, at their original line', () => {
 test('D3 no with words and a line comment sends both, words first', async () => {
   const w = await atBatch()
   const desk = fake(5, ['src/hello.ts:1 Name it greet.'])
-  signoffs(w.db, w.root, desk)
+  signoffs(w.db, w.root, desk, none)
   const card = desk.cards.get(100)
   if (card !== undefined) { card.answer = 'no'; card.words = 'Call it expiry.' }
-  signoffs(w.db, w.root, desk)
+  signoffs(w.db, w.root, desk, none)
   expect(readFileSync(join(w.root, '.cf/work/1/refusal.md'), 'utf8')).toContain('Call it expiry.\n\nsrc/hello.ts:1 Name it greet.')
   expect(readFileSync(join(w.root, '.cf/work/1/issue.md'), 'utf8')).toContain('Call it expiry. src/hello.ts:1 Name it greet.')
 })
@@ -205,7 +244,7 @@ test('D3 no with words and a line comment sends both, words first', async () => 
 test('D4 the card says a line comment plus no reaches the builder', async () => {
   const w = await atBatch()
   const desk = fake()
-  signoffs(w.db, w.root, desk)
+  signoffs(w.db, w.root, desk, none)
   expect(desk.cards.get(100)?.body)
     .toContain('`no` refuses it: comment on the card or on a line of the diff first and the builder reworks against your words.')
 })
@@ -213,47 +252,47 @@ test('D4 the card says a line comment plus no reaches the builder', async () => 
 test('no alone waits for the coo', async () => {
   const bare = await atBatch()
   const quiet = fake()
-  signoffs(bare.db, bare.root, quiet)
+  signoffs(bare.db, bare.root, quiet, none)
   const other = quiet.cards.get(100)
   if (other !== undefined) other.answer = 'no'
-  signoffs(bare.db, bare.root, quiet)
+  signoffs(bare.db, bare.root, quiet, none)
   expect(plan(bare.db, 1)).toMatchObject({ step: 7, state: 'blocked_on_ceo' })
-  expect(signoffs(bare.db, bare.root, quiet)).toEqual([])
+  expect(signoffs(bare.db, bare.root, quiet, none)).toEqual([])
   expect(unread(bare.root).map((e) => e.kind)).toEqual(['signoff', 'asked'])
 })
 
 test('talk hands it to the coo and leaves the card open', async () => {
   const w = await atBatch()
   const desk = fake()
-  signoffs(w.db, w.root, desk)
+  signoffs(w.db, w.root, desk, none)
   const card = desk.cards.get(100)
   if (card !== undefined) card.answer = 'talk'
-  expect(signoffs(w.db, w.root, desk)).toEqual([{ plan: 1, card: 100, did: 'talk' }])
+  expect(signoffs(w.db, w.root, desk, none)).toEqual([{ plan: 1, card: 100, did: 'talk' }])
   expect(desk.log).toEqual(['open 100', 'unlabel 100 talk'])
   expect(card).toMatchObject({ open: true })
   expect(unread(w.root).at(-1)).toMatchObject({ kind: 'asked' })
-  expect(signoffs(w.db, w.root, desk)).toEqual([])
+  expect(signoffs(w.db, w.root, desk, none)).toEqual([])
 })
 
 test('a new head swaps the card; a job sent back closes its card', async () => {
   const w = await atBatch()
   const desk = fake()
-  signoffs(w.db, w.root, desk)
+  signoffs(w.db, w.root, desk, none)
   put(w.root, 1, 'signoff', `100 ${'f'.repeat(64)} https://github.com/${SIGNOFF}/issues/100\n`)
-  expect(signoffs(w.db, w.root, desk)).toEqual([{ plan: 1, card: 100, did: 'superseded' }, { plan: 1, card: 101, did: 'opened' }])
+  expect(signoffs(w.db, w.root, desk, none)).toEqual([{ plan: 1, card: 100, did: 'superseded' }, { plan: 1, card: 101, did: 'opened' }])
   expect(desk.cards.get(100)?.closing).toMatch(/^Superseded/)
   rewind(w.db, 1, 4)
-  expect(signoffs(w.db, w.root, desk)).toEqual([{ plan: 1, card: 101, did: 'withdrawn' }])
+  expect(signoffs(w.db, w.root, desk, none)).toEqual([{ plan: 1, card: 101, did: 'withdrawn' }])
   expect(desk.cards.get(101)?.closing).toMatch(/^Withdrawn/)
 })
 
 test('D4 a card signed at the terminal closes as signed', async () => {
   const w = await atBatch()
   const desk = fake()
-  signoffs(w.db, w.root, desk)
+  signoffs(w.db, w.root, desk, none)
   approveBatch(w.db, w.root, 'plan', 1, 'ceo')
   await tick(w.db, w.root, stub(CARRIED), undefined, quiet, watched([], w.root, 1))
-  expect(signoffs(w.db, w.root, desk)).toEqual([{ plan: 1, card: 100, did: 'withdrawn' }])
+  expect(signoffs(w.db, w.root, desk, none)).toEqual([{ plan: 1, card: 100, did: 'withdrawn' }])
   expect(desk.cards.get(100)?.closing).toMatch(/^Signed at the terminal/)
 })
 
@@ -276,7 +315,7 @@ test('the card names every workflow and says green only of what is', async () =>
     { workflow: 'Python', status: 'completed', conclusion: 'failure', gates: false },
   ]))
   const desk = fake()
-  signoffs(w.db, w.root, desk)
+  signoffs(w.db, w.root, desk, none)
   const body = desk.cards.get(100)?.body ?? ''
   expect(body).toContain('but 1 of their workflows is not green')
   expect(body).toContain('- Their CI on our fork: Ruby green; also ran, not judged on: Python red')
@@ -288,14 +327,14 @@ test('a workflow also red on base says so, with its job and step', async () => {
     { workflow: 'Validate', status: 'completed', conclusion: 'failure', gates: true, base: ['validate: Install'] },
   ]))
   const desk = fake()
-  signoffs(w.db, w.root, desk)
+  signoffs(w.db, w.root, desk, none)
   expect(desk.cards.get(100)?.body).toContain('- Their CI on our fork: Validate red on the base too (validate: Install)')
 })
 
 test('D3 a repo with no CI says what checked it instead', async () => {
   const w = await atBatch(false)
   const desk = fake()
-  signoffs(w.db, w.root, desk)
+  signoffs(w.db, w.root, desk, none)
   const body = desk.cards.get(100)?.body ?? ''
   expect(body).toContain('\n- this repo has no CI; checked with: none\n')
   expect(body).not.toContain('Their CI')
@@ -305,7 +344,7 @@ test('D3 a repo with no CI says what checked it instead', async () => {
 test('D4 a branch no fork workflow runs says local checks stand', async () => {
   const w = await atBatch(false, TEX)
   const desk = fake()
-  signoffs(w.db, w.root, desk)
+  signoffs(w.db, w.root, desk, none)
   const body = desk.cards.get(100)?.body ?? ''
   expect(body).toContain(`\n- ${UNRUN}; checked with: `)
   expect(body).not.toContain('this repo has no CI')
@@ -325,7 +364,7 @@ test('the card names a changed file the prewritten PR text omits', async () => {
     const w = await atBatch()
     put(w.root, 1, 'pr.md', pr)
     const desk = fake()
-    signoffs(w.db, w.root, desk)
+    signoffs(w.db, w.root, desk, none)
     return desk.cards.get(100)?.body ?? ''
   }
   expect(await bodyWith('Says hey.\n')).toContain('**Not in the PR text:** `src/hello.ts`')
@@ -335,14 +374,14 @@ test('the card names a changed file the prewritten PR text omits', async () => {
 test('D6 the card names each rework round\'s review mode, else none', async () => {
   const w = await atBatch()
   const plain = fake()
-  signoffs(w.db, w.root, plain)
+  signoffs(w.db, w.root, plain, none)
   expect(plain.cards.get(100)?.body).not.toContain('Review mode:')
 
   put(w.root, 1, 'step-4.mode', 'full: src/parse.ts is not in the passed diff\n')
   put(w.root, 1, 'step-5.mode', 'skipped: 1 delta lines, comments and docs only\n')
   drop(w.root, 1, 'signoff')
   const desk = fake()
-  signoffs(w.db, w.root, desk)
+  signoffs(w.db, w.root, desk, none)
   expect(desk.cards.get(100)?.body).toContain('- Gates: pre_review pass, review pass, senior_review pass, ready pass\n'
     + '- Review mode: review full: src/parse.ts is not in the passed diff; senior_review skipped: 1 delta lines, comments and docs only\n')
 })
@@ -351,13 +390,13 @@ test('D4 the card shows Greptile\'s score at this head, or none', async () => {
   const w = await atBatch()
   dropSignals(w.db)
   const unscored = fake()
-  signoffs(w.db, w.root, unscored)
+  signoffs(w.db, w.root, unscored, none)
   expect(unscored.cards.get(100)?.body).toContain('- Greptile on our fork: no score at this head; ready went on after 45 ticks without one\n')
 
   scored(w.root, 1, 4, 'Confidence Score: 4/5')
   drop(w.root, 1, 'signoff')
   const desk = fake()
-  signoffs(w.db, w.root, desk)
+  signoffs(w.db, w.root, desk, none)
   expect(desk.cards.get(100)?.body).toContain('- Greptile on our fork: 4/5 at this head\n')
 })
 
@@ -372,7 +411,7 @@ async function bodyAfter(...asks: [Event['outcome'], string][]): Promise<string>
     logged(w.db, { plan: 1, kind: 'director', actor: 'director', outcome, message: `ask_ceo: why\n\n${block}`, pointer: null, run: null })
   }
   const desk = fake()
-  signoffs(w.db, w.root, desk)
+  signoffs(w.db, w.root, desk, none)
   return desk.cards.get(100)?.body ?? ''
 }
 
@@ -405,7 +444,7 @@ function cardWith(w: World, handback: string): string {
   put(w.root, 1, 'step-2.handback.md', handback)
   drop(w.root, 1, 'signoff')
   const desk = fake()
-  signoffs(w.db, w.root, desk)
+  signoffs(w.db, w.root, desk, none)
   return desk.cards.get(100)?.body ?? ''
 }
 

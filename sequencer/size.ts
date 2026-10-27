@@ -10,13 +10,17 @@ const GENERATED = /(^|\/)generated\/|(^|\/)(Cargo\.lock|package-lock\.json|pnpm-
 
 const FN = /^\s*(?:export\s+)?(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?(?:fn|func|def|function)\b/
 
+export function coded(path: string): boolean {
+  return !TEST.test(path) && !TEST_FILE.test(path) && !GENERATED.test(path)
+}
+
 const linesOf = (file: FileDiff): number => file.added.length + file.removed.length
 
 const sum = (files: FileDiff[]): number => files.reduce((n, f) => n + linesOf(f), 0)
 
 export function sized(diff: string, limit: number): Row {
   const files = parse(diff)
-  const code = files.filter((f) => !TEST.test(f.path) && !TEST_FILE.test(f.path) && !GENERATED.test(f.path))
+  const code = files.filter((f) => coded(f.path))
   const head = `${String(sum(code))} code lines (${String(sum(files))} in all)`
   if (sum(code) <= limit) return { check: 'size', ok: true, says: `${head}, limit ${String(limit)}` }
   return { check: 'size', ok: false, says: `${head}, over ${String(limit)}: ${cut(code, limit)}` }

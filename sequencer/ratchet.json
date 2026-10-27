@@ -141,7 +141,7 @@
     "lines": 148
   },
   "signoff.ts": {
-    "lines": 346
+    "lines": 384
   },
   "size.ts": {
     "lines": 50,
@@ -211,7 +211,7 @@
     "prepare": 1
   },
   "theirs.ts": {
-    "lines": 105,
+    "lines": 152,
     "silent-catch": 1
   },
   "ticket.ts": {

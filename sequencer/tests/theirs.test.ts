@@ -8,7 +8,7 @@ import { addTarget, targetRow } from '../../store/targets.ts'
 import { waiting } from '../card.ts'
 import { tick } from '../index.ts'
 import type { Fired } from '../kind.ts'
-import { named, picked, theirs } from '../theirs.ts'
+import { named, picked, theirs, work } from '../theirs.ts'
 import { checkout, get, git, put, srcDir } from '../workspace.ts'
 import { approve as approveTarget, CARRIED, stub, watched, world, type World } from './world.ts'
 
@@ -23,10 +23,15 @@ const TREE = 'https://github.com/acme/widget/tree/fix-hello'
 const URL = 'https://github.com/acme/widget/pull/40'
 const PASS = { check: 'their work', ok: true, says: 'nothing of theirs touches our files or names #12' }
 
-const pr = (over: object): object => ({ url: URL, title: 't', body: '', isDraft: false, author: { login: 'maintainer' },
+const pr = (over: object): object => ({ number: 40, url: URL, title: 't', body: '', isDraft: false, author: { login: 'maintainer' },
   headRepositoryOwner: { login: 'maintainer' }, files: [], ...over })
 
-const canned = (prs: object[], found: object[] = []) => (args: string[]): unknown => args[0] === 'search' ? found : prs
+const canned = (prs: object[], found: object[] = []) => (args: string[]): unknown =>
+  args[0] === 'search' ? found : args[0] === 'api' ? [] : prs
+
+const LONG = 'export function hello(): string {\n  const a = 1\n  const b = 2\n  const c = 3\n  const d = 4\n  return "hi"\n}\n'
+
+const commit = (dir: string, args: string[]): string => git(dir, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', ...args])
 
 function ours(): World {
   const w = world()
@@ -91,6 +96,35 @@ test('D7 an upstream head the refspec does not write is never read', () => {
   git(dir, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qam', 'hello'])
   git(dir, ['push', '-q', 'upstream', 'HEAD:refs/heads/fix-hello'])
   expect(theirs(canned([]))(w.db, w.root, 1, TARGET)).toEqual(PASS)
+})
+
+test('work D1 a branch on our function, past its context, is same', () => {
+  const w = ours()
+  const dir = srcDir(w.root, 1)
+  git(git(dir, ['remote', 'get-url', 'upstream']).trim(), ['config', 'receive.denyCurrentBranch', 'updateInstead'])
+  writeFileSync(join(dir, 'src/hello.ts'), LONG)
+  commit(dir, ['-am', 'long'])
+  git(dir, ['push', '-q', 'upstream', 'HEAD:refs/heads/main'])
+  put(w.root, 1, 'base.sha', git(dir, ['rev-parse', 'HEAD']))
+  writeFileSync(join(dir, 'src/hello.ts'), LONG.replace('"hi"', '"hey"'))
+  commit(dir, ['-am', 'hello'])
+  git(dir, ['push', '-q', 'upstream', 'HEAD:refs/heads/fix-hello'])
+  expect(work(canned([]), w.root, 1, TARGET))
+    .toEqual([{ url: TREE, says: `branch ${TREE} touches src/hello.ts`, files: ['src/hello.ts'], same: true, code: true }])
+})
+
+test('work D4 a branch only on generated code is not code', () => {
+  const w = ours()
+  const dir = srcDir(w.root, 1)
+  mkdirSync(join(dir, 'generated'))
+  writeFileSync(join(dir, 'generated/table.ts'), 'export const table = []\n')
+  git(dir, ['add', '-f', 'generated/table.ts'])
+  commit(dir, ['-m', 'table'])
+  git(dir, ['push', '-q', 'upstream', 'HEAD:refs/heads/table'])
+  commit(dir, ['-am', 'hello'])
+  git(dir, ['push', '-q', 'upstream', 'HEAD:refs/heads/fix-hello'])
+  const hits = work(canned([]), w.root, 1, TARGET, () => ['generated/table.ts', 'src/hello.ts'])
+  expect(hits.map((h) => [h.url, h.code])).toEqual([[TREE, true], ['https://github.com/acme/widget/tree/table', false]])
 })
 
 test('intake D1 the ask names only files the tree holds, no ..', () => {

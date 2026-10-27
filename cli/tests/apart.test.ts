@@ -19,8 +19,10 @@ function script(body: string): string {
 test('a signal to the tick group leaves its laps running', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'cf-apart-'))
   const lap = join(dir, 'lap.mjs')
-  writeFileSync(lap, `import { writeFileSync } from 'node:fs'
-writeFileSync(${JSON.stringify(dir)} + '/' + process.argv[3], String(process.pid))
+  writeFileSync(lap, `import { renameSync, writeFileSync } from 'node:fs'
+const path = ${JSON.stringify(dir)} + '/' + process.argv[3]
+writeFileSync(path + '.tmp', String(process.pid))
+renameSync(path + '.tmp', path)
 setInterval(() => {}, 1000)
 `)
   const ticker = join(dir, 'tick.mjs')
@@ -30,16 +32,17 @@ each(1, null).catch(() => {})
 each(2, null).catch(() => {})
 `)
   const tick = spawn(process.execPath, [ticker], { detached: true, stdio: 'ignore' })
-  const pids: number[] = []
+  const files = ['1', '2'].map((p) => join(dir, p))
+  const pids = (): number[] => files.filter((f) => existsSync(f)).map((f) => Number(readFileSync(f, 'utf8')))
   try {
-    for (let at = 0; at < 200 && !['1', '2'].every((p) => existsSync(join(dir, p))); at += 1) await sleep(50)
-    pids.push(...['1', '2'].map((p) => Number(readFileSync(join(dir, p), 'utf8'))))
+    for (let at = 0; at < 200 && pids().length < 2; at += 1) await sleep(50)
     const exited = once(tick, 'exit')
     process.kill(-Number(tick.pid), 'SIGTERM')
     await exited
-    expect(pids.map(alive)).toEqual([true, true])
+    expect(pids().map(alive)).toEqual([true, true])
   } finally {
-    for (const pid of pids) if (alive(pid)) process.kill(pid, 'SIGKILL')
+    if (tick.exitCode === null && tick.signalCode === null) process.kill(-Number(tick.pid), 'SIGKILL')
+    for (const pid of pids()) if (alive(pid)) process.kill(pid, 'SIGKILL')
   }
 })
 

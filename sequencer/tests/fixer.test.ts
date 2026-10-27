@@ -511,6 +511,29 @@ function edits(write: (cwd: string) => void): Provider {
   } }
 }
 
+const LISTED = '# x\n\n## Files\n\n- a.ts\n- sequencer/ratchet.json\n'
+
+function strayed() {
+  const s = seeded('live')
+  put(s.home, 7, 'issue.md', '# x\n\n## Files\n\n- a.ts\n')
+  record(s.db, 7, [{ path: 'a.ts', is_new: false }])
+  strays(s.db, 7, ['sequencer/ratchet.json'])
+  return s
+}
+
+test('D1 a row the fix adds to issue.md lists its stray', async () => {
+  const { db, home } = strayed()
+  await woke(db, home, edits((cwd) => { writeFileSync(join(cwd, 'issue.md'), LISTED) }), now, () => undefined, wire([]))
+  expect(recorded(db, 7)).toEqual(['a.ts', 'sequencer/ratchet.json'])
+  expect(filesOf(db, 7).map((f) => f.path)).toEqual(['a.ts', 'sequencer/ratchet.json'])
+})
+
+test('D3 a row the fix adds to ask.md lists nothing', async () => {
+  const { db, home } = strayed()
+  await woke(db, home, edits((cwd) => { appendFileSync(join(cwd, 'ask.md'), LISTED) }), now, () => undefined, wire([]))
+  expect(filesOf(db, 7).map((f) => f.path)).toEqual(['a.ts'])
+})
+
 test('D1 a base.sha HEAD contains is applied', async () => {
   const { db, home, first } = branched()
   await woke(db, home, edits((cwd) => { writeFileSync(join(cwd, 'base.sha'), `${first}\n`) }), now, () => undefined, wire([]))

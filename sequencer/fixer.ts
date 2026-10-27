@@ -11,7 +11,7 @@ import { mark } from '../store/decisions.ts'
 import { pushed } from '../store/deliverables.ts'
 import { setting } from '../store/drift.ts'
 import { logged as event } from '../store/events.ts'
-import { listed, recorded as paths } from '../store/files.ts'
+import { filesOf, listed, recorded as paths, type PlanFile } from '../store/files.ts'
 import { schema, type Db } from '../store/index.ts'
 import { returnToLane } from '../store/holds.ts'
 import { wall } from '../store/lanes.ts'
@@ -20,6 +20,7 @@ import { clear } from '../store/refusals.ts'
 import { openJobs, waitable, waitsEnded } from '../store/stops.ts'
 import { pending } from '../store/transcript.ts'
 import { lapsed } from '../store/until.ts'
+import { files as fileList } from './brief.ts'
 import { closed } from './closed.ts'
 import { coder, repaired } from './coder.ts'
 import { hold, unhold } from './hold.ts'
@@ -90,6 +91,7 @@ export async function fixer(db: Db, root: string, plan: PlanRow, decision: { id:
   if (m === 'live' && fixesToday(root, plan.id, now) >= FIXES) return false
   const to = gone(root, plan) ? null : coder(db, root, plan)
   const was = maybe(root, plan.id, 'base.sha')
+  const brief = maybe(root, plan.id, 'issue.md')
   const { got, tokens } = gone(root, plan) ? { got: GONE, tokens: 0 } : await ask(db, root, plan, decision, m, to, provider)
   if (got === null) {
     log(db, root, plan.id, { at: now.toISOString(), mode: m, did: 'nothing', then: 'ask_ceo', why: 'no readable answer', tokens, applied: 'unreadable' })
@@ -108,7 +110,7 @@ export async function fixer(db: Db, root: string, plan: PlanRow, decision: { id:
     log(db, root, plan.id, { at: now.toISOString(), mode: m, ...got, tokens, applied: 'unrepaired' })
     return false
   }
-  const applied = apply(db, root, plan, got, wire, now)
+  const applied = apply(db, root, plan, got, wire, now, brief)
   log(db, root, plan.id, { at: now.toISOString(), mode: m, ...got, tokens, applied })
   const note = `fixer: ${got.did} → ${got.then}. ${got.why}`
   if (applied === 'escalated') {
@@ -205,8 +207,15 @@ export function released(db: Db, root: string, now: Date, post: Post, read: Read
   }
 }
 
-function apply(db: Db, root: string, plan: PlanRow, f: Fix, wire: Wire, now: Date): string {
+/** Rows the fix added to issue.md's file list that neither the brief before it nor the plan's list held. */
+function added(db: Db, root: string, plan: number, brief: string | null): PlanFile[] {
+  const had = new Set([...fileList(brief ?? ''), ...filesOf(db, plan)].map((f) => f.path))
+  return fileList(maybe(root, plan, 'issue.md') ?? '').filter((f) => !had.has(f.path))
+}
+
+function apply(db: Db, root: string, plan: PlanRow, f: Fix, wire: Wire, now: Date, brief: string | null): string {
   for (const path of f.add_files ?? []) listed(db, plan.id, path)
+  for (const file of added(db, root, plan.id, brief)) listed(db, plan.id, file.path, file.is_new)
   if (plan.state !== 'blocked_on_ceo' && plan.state !== 'halted') return 'escalated'
   const to = f.answer === undefined ? undefined : rule(db, root, plan, 'fixer', f.answer)
   if (to === null) return 'escalated'

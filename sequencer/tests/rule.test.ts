@@ -1,6 +1,6 @@
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
-import { basename, dirname, join } from 'node:path'
+import { basename, dirname, join, relative } from 'node:path'
 import { expect, test } from 'vitest'
 import type { Provider } from '../../providers/kind.ts'
 import { appliedOf } from '../../store/decisions.ts'
@@ -79,13 +79,11 @@ test('D2 after a build the answer sits above ## Standing; rebuilds', async () =>
   expect(got.state).toMatchObject({ step: 2 })
 })
 
-test('D2 an answer naming another job folder is written', async () => {
+test('D2 an answer naming another job folder is refused', async () => {
   const got = await fixed(3, answered('see .cf/work/354/ask.md'))
   expect(got.ask).toBe('the ask\n')
-  expect(got.issue).toContain('\n\nsee .cf/work/354/ask.md\n\n## Standing\n')
-  expect(got.state).toMatchObject({ step: 2 })
-  expect(got.applied).toEqual([{ applied: 'applied' }])
-  expect(got.posted).toEqual([])
+  expect(got.issue).toBe(ISSUE)
+  expect(got.applied).toEqual([{ applied: 'escalated' }])
 })
 
 test('an absolute path outside the root is refused', async () => {
@@ -101,7 +99,7 @@ test('D1 quoted code starting with / is written', async () => {
 })
 
 test('D2 an absolute path elsewhere is refused', async () => {
-  const got = await fixed(1, answered('see /Users/x/elsewhere/file.ts'))
+  const got = await fixed(1, answered(`see ${homedir()}/notes/x.ts`))
   expect(got.ask).toBe('the ask\n')
   expect(got.issue).toBe(ISSUE)
   expect(got.applied).toEqual([{ applied: 'escalated' }])
@@ -130,9 +128,9 @@ test('its own plan folder is written', async () => {
   expect(got.applied).toEqual([{ applied: 'applied' }])
 })
 
-test('a parent path is refused', async () => {
+test('a parent path is written', async () => {
   const got = await fixed(1, answered('see ../other/repo'))
-  expect(got.applied).toEqual([{ applied: 'escalated' }])
+  expect(got.applied).toEqual([{ applied: 'applied' }])
 })
 
 const SPANS = 'step 3 rails refused by rails\n\nauthority: 3 span(s)\n\nspans:\n  - cli/extra.ts:1 authority.outside_files\n'
@@ -310,11 +308,11 @@ test('D2 a repo read at base.sha through the other root applies', async () => {
   expect(got.events).toEqual([{ actor: 'director', outcome: 'pass', message: 'rule: the ruling names it' }])
 })
 
-test('D3 a symlink out of the plan folder is refused', async () => {
+test('D4 a symlink out of the plan folder into tmpdir applies', async () => {
   const got = await aliased((a) => `write ${a}/.cf/work/7/src/out/x.ts`,
     ({ home }) => { symlinkSync(mkdtempSync(join(tmpdir(), 'cf-out-')), join(srcDir(home, 7), 'out')) })
-  expect(got.issue).toBe(ISSUE)
-  expect(got.events.map((e) => e.message.split(',')[0])).toEqual(['rule did not apply'])
+  expect(got.issue).toContain('/.cf/work/7/src/out/x.ts\n\n## Standing\n')
+  expect(got.events).toEqual([{ actor: 'director', outcome: 'pass', message: 'rule: the ruling names it' }])
 })
 
 async function read(path: string, setup: (s: { db: Db; home: string }) => void = () => undefined) {
@@ -367,10 +365,10 @@ test('D2 a file in the plan folder applies', async () => {
   expect(got.ask).toContain('\n\nread /question.md\n')
 })
 
-test.each(['/bench/gone.py', '/sources.json'])('D3 D4 %s is refused', async (path) => {
+test.each(['/bench/gone.py', '/sources.json'])('D4 %s applies', async (path) => {
   const got = await read(path, ({ home }) => { put(home, 7, 'base.sha', git(srcDir(home, 7), ['rev-parse', 'HEAD'])) })
-  expect(got.ask).toBe('the ask\n')
-  expect(got.events.map((e) => e.message.split(',')[0])).toEqual(['rule did not apply'])
+  expect(got.events).toEqual(PASS)
+  expect(got.ask).toContain(`\n\nread ${path}\n`)
 })
 
 const HAND = 'after merge, hand check `~/cf_work/fuzz-bench-runs/fizz-1575/logs` for new crashes'
@@ -387,24 +385,32 @@ test('D1 a hand-check citation outside the root applies', async () => {
 
 test.each([
   { id: 'D2', answer: 'the builder edits `~/notes/x.ts`', path: '~/notes/x.ts' },
-  { id: 'D3', answer: 'edit /Users/x/elsewhere/file.ts', path: '/Users/x/elsewhere/file.ts' },
   { id: 'D4', answer: `edit \`~/notes/x.ts\`; ${HAND}`, path: '~/notes/x.ts' },
-  { id: 'D4', answer: 'clear `/tmp`', path: '/tmp' },
-  { id: 'D4', answer: 'write `~/cf_work/1615/x.ts`', path: '~/cf_work/1615/x.ts', setup: outputs('1614') },
-  { id: 'D4', answer: `write \`${homedir()}/cf_work/1615/x.ts\``, path: `${homedir()}/cf_work/1615/x.ts`, setup: outputs('1614') },
-  { id: 'D5', answer: 'clear `/tmp/`', path: '/tmp/' },
-  { id: 'D3', answer: 'write `~/cf_work/fink-1411a/out/x.ts`', path: '~/cf_work/fink-1411a/out/x.ts',
-    setup: ({ home }: { home: string }) => { put(home, 7, 'ask.md', INPUT) } },
-])('$id a ruling editing an outside path is dropped', async ({ answer, path, setup }) => {
-  const got = await aliased(() => answer, setup)
+  { id: 'D2', answer: 'nothing on main brings back `.cf/work/1647/src/.git`', path: '.cf/work/1647/src/.git' },
+  { id: 'D3', answer: 'read `~/.ssh/config`', path: '~/.ssh/config' },
+  { id: 'D3', answer: `read ${homedir()}/notes/x.ts`, path: `${homedir()}/notes/x.ts` },
+  { id: 'D3', answer: 'read `~/cf_work/../x`', path: '~/cf_work/../x' },
+])('$id a ruling editing an outside path is dropped', async ({ answer, path }) => {
+  const got = await aliased(() => answer)
   expect(got.issue).toBe(ISSUE)
   expect(got.events).toEqual(DROPPED(path))
 })
 
+const climb = (home: string) => relative(srcDir(home, 7), join(homedir(), 'notes/x.ts'))
+
+test.each([
+  { id: 'D2', answer: (h: string) => `write ${h}/.cf/work/354/ask.md`, path: () => '.cf/work/354/ask.md' },
+  { id: 'D3', answer: (h: string) => `read ${climb(h)}`, path: climb },
+])('$id a path named from the root is dropped', async ({ answer, path }) => {
+  let root = ''
+  const got = await aliased(() => answer(root), ({ home }) => { root = home })
+  expect(got.issue).toBe(ISSUE)
+  expect(got.events).toEqual(DROPPED(path(root)))
+})
+
 test.each([
   'the SODA service takes the cutout at `/sync` (`/async` for jobs)',
-  'nothing on main brings back `.cf/work/1647/src/.git`',
-])('D1 D2 a ruling naming %s applies', async (answer) => {
+])('D1 a ruling naming %s applies', async (answer) => {
   const got = await aliased(() => answer)
   expect(got.events).toEqual(PASS)
   expect(got.issue).toContain(`\n\n${answer}\n\n## Standing\n`)
@@ -420,6 +426,19 @@ test.each([
   { id: 'D2', answer: `read \`${homedir()}/cf_work/surfpool-data-scan/inventory.ts\``, setup: outputs('surfpool-data-scan') },
   { id: 'D3', answer: 'the docs live under `/sdks/`' },
   { id: 'D1', answer: 'read `~/cf_work/fink-1411a/out/.`', setup: inputs },
+  { id: 'D1', answer: 'read `~/cf_work/1802/`' },
+  { id: 'D1', answer: `read \`${homedir()}/cf_work/surfpool-data-scan/inventory.ts\`` },
+  { id: 'D4', answer: 'clear `/tmp`' },
+  { id: 'D4', answer: 'clear `/tmp/`' },
+  { id: 'D4', answer: 'read /etc/x' },
+  { id: 'D4', answer: 'read /..' },
+  { id: 'D4', answer: 'read ../x' },
+  { id: 'D4', answer: 'edit /Users/x/elsewhere/file.ts' },
+  { id: 'D4', answer: `read ${mkdtempSync(join(tmpdir(), 'cf-other-'))}/site.ts` },
+  { id: 'D4', answer: 'clear `~/cf_work`' },
+  { id: 'D4', answer: 'write `~/cf_work/1615/x.ts`', setup: outputs('1614') },
+  { id: 'D4', answer: `write \`${homedir()}/cf_work/1615/x.ts\``, setup: outputs('1614') },
+  { id: 'D4', answer: 'write `~/cf_work/fink-1411a/out/x.ts`', setup: ({ home }: { home: string }) => { put(home, 7, 'ask.md', INPUT) } },
 ])('$id $answer applies', async ({ answer, setup }) => {
   expect((await aliased(() => answer, setup)).events).toEqual(PASS)
 })

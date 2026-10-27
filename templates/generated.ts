@@ -7,7 +7,7 @@ import { price } from '../store/brief.ts'
 import type { Db } from '../store/index.ts'
 import { spawned } from '../store/transcript.ts'
 
-const BENCH_COST_WALL_USD = 25
+const BENCH_COST_WALL_USD = 40
 
 export function costWall(db: Db, provider: string, model: string): CostWall | Outcome {
   const prices = price(db, provider, model)
@@ -20,7 +20,7 @@ export function costWalled(stop: string | null): string | null {
 }
 
 export function written(root: string, plan: number, dir: string, transcript: string,
-  made: { suite: string; tokens: number; seconds: number; wall?: string }, note: string): Outcome {
+  made: { suite: string; tokens: number; seconds: number; wall?: string; properties?: number }, note: string): Outcome {
   put(root, plan, 'generate.json', JSON.stringify({ ...made, x_ray: existsSync(join(dir, 'x-ray/x-ray.md')) ? 1 : 0, agents: spawned(transcript) }))
   return { outcome: 'pass', spans: [], note: `generate.json written: ${note}` }
 }

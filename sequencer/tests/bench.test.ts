@@ -598,12 +598,12 @@ test('D5 a stop under the ceiling is refused on its reason', async () => {
   expect(maybe(root, 1, 'generate.json')).toBeNull()
 })
 
-const COST_WALLED = 'ruling:run.cost_wall stopped the run at $25.10, past the $25 wall'
+const COST_WALLED = 'ruling:run.cost_wall stopped the run at $40.10, past the $40 wall'
 
-test('1617b D1 the generate packet carries the $25 cost wall', async () => {
+test('1617b D1 the generate packet carries the $40 cost wall', async () => {
   const fired = stub(1000, 'completed', true)
   await generated(fired)
-  expect(fired.packets).toMatchObject([{ cost_wall: { usd: 25, input: 4, cache_write: 5, cache_write_1h: 8, cache_read: 0.2, output: 20 } }])
+  expect(fired.packets).toMatchObject([{ cost_wall: { usd: 40, input: 4, cache_write: 5, cache_write_1h: 8, cache_read: 0.2, output: 20 } }])
 })
 
 test('1617b D2 a cost-walled generate passes with its wall', async () => {

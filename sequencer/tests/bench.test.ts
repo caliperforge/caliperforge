@@ -635,6 +635,21 @@ test('1617b D3 a cost-walled generate scores wall, no pair', () => {
     seconds: 56.5, x_ray: null, pre_fix_calls: null, fix_calls: null, not_powered: 'wall' }])
 })
 
+const REPEAT_READ = 'ruling:run.repeat_read stopped the run after 61 reads of /tmp/x.ts'
+
+test('1839 D4 a repeat-read generate passes with its wall', async () => {
+  const { root, outcome } = await generated(stub(1000, 'stopped', false, REPEAT_READ))
+  expect(outcome).toEqual({ outcome: 'pass', spans: [], note: `generate.json written: ${REPEAT_READ}` })
+  expect(JSON.parse(get(root, 1, 'generate.json'))).toMatchObject({ wall: REPEAT_READ })
+})
+
+test('1839 D5 a repeat-read generate scores wall', () => {
+  const { root, db } = sided(8, 505660, 505660)
+  put(root, 1, 'generate.json', JSON.stringify({ suite: 'test/fizz', tokens: 1234, seconds: 56.5, agents: 8, wall: REPEAT_READ }))
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass', note: expect.stringContaining('run.repeat_read') as string })
+  expect(scores(db)).toMatchObject([{ plan: 1, not_powered: 'wall' }])
+})
+
 test('1617b D4 an unpriced model is refused unfired', async () => {
   const root = mkdtempSync(join(tmpdir(), 'cf-bench-'))
   staffedIn(root)

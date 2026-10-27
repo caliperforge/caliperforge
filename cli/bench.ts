@@ -1,14 +1,16 @@
 import type { Command } from 'commander'
 import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { staffing } from '../sequencer/staffing.ts'
 import { get, git, gitBase, maybe, planDir, put, remote, srcDir } from '../sequencer/workspace.ts'
 import { supersede } from '../store/bench.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { addPlan, briefed, holderOf, pipeNamed, planById, rewind, type Holder } from '../store/plans.ts'
+import { lastTranscript } from '../store/runs.ts'
 import { copied } from '../templates/bench.ts'
+import { profiled } from '../templates/profile.ts'
 import type { Cli } from './cf-lanes.ts'
 
 export function fileBench(db: Db, root: string, target: string | undefined, all: boolean, seat: string, at: string): number[] {
@@ -58,6 +60,14 @@ export function rescore(db: Db, root: string, id: number, by: Holder, why: strin
   return old
 }
 
+export function profile(db: Db, root: string, id: number): string {
+  if (planById(db, id).template !== 'bench') throw new Error(`plan ${String(id)} is not a bench plan`)
+  const ran = lastTranscript(db, id, 1)
+  const path = join(planDir(root, id), basename(ran))
+  if (ran === '' || !existsSync(path)) throw new Error(`plan ${String(id)} has no generate transcript`)
+  return profiled(path)
+}
+
 export function registerBench(cf: Command, { root, db, out }: Cli): void {
   const bench = cf.command('bench')
   bench.command('file').argument('[target]').option('--all', 'one plan per targets/*.yml')
@@ -75,4 +85,6 @@ export function registerBench(cf: Command, { root, db, out }: Cli): void {
         out(`plan ${String(id)} queued at step 2, supersedes scorecard ${old === null ? 'none' : String(old)}\n`)
       }
     })
+  bench.command('profile').argument('<plan>')
+    .action((plan: string) => { out(profile(db(), root, Number(plan))) })
 }

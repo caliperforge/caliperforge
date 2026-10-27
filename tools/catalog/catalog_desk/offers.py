@@ -166,4 +166,4 @@ def _coin(asset: str) -> str:
 
 
 def _usd(amount: object, decimals: int) -> float | None:
-    return int(amount) / 10**decimals if isinstance(amount, str) and DIGITS.fullmatch(amount) else None
+    return float(f"{amount}e{-decimals}") if isinstance(amount, str) and DIGITS.fullmatch(amount) else None

@@ -1,7 +1,10 @@
 import base64
 import json
+import math
 import re
 from pathlib import Path
+
+import pytest
 
 from catalog_desk.net import Recorded, Response
 from catalog_desk.offers import SOLANA, Offer, Offers, offers_of
@@ -81,6 +84,16 @@ def test_d6_returns_offers_for_both_x402_and_mpp():
 def test_d7_garbage_header_and_non_json_body_give_no_offers():
     res = Response(402, {"payment-required": "%%not base64%%"}, "<html>")
     assert offers_of(res) == Offers([], None, None, None)
+
+
+@pytest.mark.parametrize(
+    ("amount", "decimals", "usd"),
+    [("1" * 400, 6, math.inf), ("1" * 5000, 6, math.inf), ("1", -400, math.inf), ("1", 10**9, 0.0)],
+)
+def test_an_out_of_range_price_saturates_as_number_does(amount: str, decimals: int, usd: float):
+    request = encode({"amount": amount, "currency": USDC_SOLANA, "methodDetails": {"decimals": decimals}})
+    res = Response(402, {"www-authenticate": f'Payment method="solana", request="{request}"'}, "")
+    assert [offer.usd for offer in offers_of(res).offers] == [usd]
 
 
 def test_header_only_offer_ignores_the_json_body():

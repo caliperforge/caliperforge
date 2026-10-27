@@ -16,7 +16,7 @@ export function costWall(db: Db, provider: string, model: string): CostWall | Ou
 }
 
 export function costWalled(stop: string | null): string | null {
-  return stop?.startsWith('ruling:run.cost_wall') === true ? stop : null
+  return stop !== null && ['ruling:run.cost_wall', 'ruling:run.repeat_read'].some((wall) => stop.startsWith(wall)) ? stop : null
 }
 
 export function written(root: string, plan: number, dir: string, transcript: string,

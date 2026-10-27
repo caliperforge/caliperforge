@@ -17,7 +17,7 @@ const TURNS = 4
 
 const PER_TURN = 2_000_000
 
-const spend = { read: false }
+const spend = { read: false, turns: TURNS }
 
 const turn = (n: number): unknown => ({
   type: 'assistant',
@@ -38,7 +38,7 @@ vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
     if (hook === undefined) throw new Error('no PreToolUse hook')
     return {
       async *[Symbol.asyncIterator]() {
-        for (let at = 0; at < TURNS; at += 1) {
+        for (let at = 0; at < spend.turns; at += 1) {
           yield turn(PER_TURN)
           const decision = await hook(CALL)
           decisions.push(decision)
@@ -50,7 +50,7 @@ vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
   },
 }))
 
-const { claudeAgentSdk, costWalled, priced, walled } = await import('../index.ts')
+const { claudeAgentSdk, costWalled, priced, repeated, walled } = await import('../index.ts')
 
 const priceOf = (cache_read: number): CostWall => ({ usd: 25, input: 0, cache_write: 0, cache_write_1h: 0, cache_read, output: 0 })
 
@@ -127,6 +127,27 @@ test('a cost wall stops at spent-or-past, an absent one never', () => {
   expect(costWalled(undefined, 1000)).toBeNull()
   expect(costWalled(priceOf(1), 24.99)).toBeNull()
   expect(costWalled(priceOf(1), 25)).toContain('past the $25 wall')
+})
+
+test('D1 the 61st Read of one path stops the run', async () => {
+  decisions.length = 0
+  spend.turns = 70
+  const fired = await claudeAgentSdk.fire(packet())
+  spend.turns = TURNS
+
+  const why = 'ruling:run.repeat_read stopped the run after 61 reads of /tmp/x.ts'
+  expect(decisions.map((d) => d.continue)).toEqual([...Array<boolean>(60).fill(true), false])
+  expect(decisions.at(-1)?.stopReason).toBe(why)
+  expect(fired.stop_reason).toBe(why)
+})
+
+test('D2 60 reads of one path, or 200 paths once, run on', () => {
+  expect(repeated(['Read'], new Map([['/a', 60]]))).toBeNull()
+  expect(repeated(['Read'], new Map([...Array(200).keys()].map((i) => [`/p${String(i)}`, 1])))).toBeNull()
+})
+
+test('D3 a seat without Read never trips repeated', () => {
+  expect(repeated(['Glob', 'Grep'], new Map([['/a', 61]]))).toBeNull()
 })
 
 test('priced charges each token class at its own price', () => {

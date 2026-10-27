@@ -11,7 +11,6 @@ import { work } from '../templates/research.ts'
 import { cited } from './cited.ts'
 import { unruled } from './unruled.ts'
 import { committed } from './committed.ts'
-import { output as outputOf } from './output.ts'
 import { get, headSha, maybe, planDir, put, srcDir } from './workspace.ts'
 
 const PATH = /(?:^|[\s`'"(])((?:~|\.\.)?\/[\w.-][^\s`'"()]*)/g
@@ -50,8 +49,8 @@ export function stray(db: Db, root: string, plan: PlanRow, text: string): string
   const climbs = (p: string) => [srcDir(root, plan.id), root].some((b) => [b, ...subdirs(b).map((s) => join(b, s))]
     .some((d) => existsSync(join(d, p)) && (under(join(d, p)) || !relative(b, join(d, p)).startsWith('..'))))
   const fetched = (p: string) => p.startsWith('~/') && plan.template === 'research' && !builderRan(db, plan.id) && work(p) !== null
-  const folder = outputOf(root, plan)
-  const kept = (p: string) => folder !== null && !relative(folder, work(p) ?? homedir()).startsWith('..')
+  const folders = plan.template === 'research' ? [...(maybe(root, plan.id, 'ask.md') ?? '').matchAll(PATH)].flatMap((m) => work(m[1] ?? '') ?? []) : []
+  const kept = (p: string) => folders.some((f) => !relative(f, work(p) ?? homedir()).startsWith('..'))
   const inside = (p: string) => p.startsWith('..') ? climbs(p) || output(join(srcDir(root, plan.id), p))
     : under(p.replace(/^~(?=\/)/, homedir())) || named(p) || output(join(planDir(root, plan.id), p)) || fetched(p) || kept(p)
   const route = (p: string) => /^\/[\w-]+\/?[.,;:!?]?$/.test(p) && !existsSync(p.replace(/[/.,;:!?]+$/, ''))

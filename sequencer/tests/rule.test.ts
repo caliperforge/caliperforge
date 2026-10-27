@@ -334,6 +334,13 @@ const outputs = (folder: string) => (s: { db: Db; home: string }) => {
   put(s.home, 7, 'ask.md', `the ask\n\n**Output:** ~/cf_work/${folder}/\n`)
 }
 
+const INPUT = 'the ask\n\nusing only the files in ~/cf_work/fink-1411a/\n'
+
+const inputs = (s: { db: Db; home: string }) => {
+  research(s)
+  put(s.home, 7, 'ask.md', INPUT)
+}
+
 test('D1 a file committed at base.sha applies at step 1', async () => {
   const got = await read('/bench/run_pair.py', ({ home }) => {
     const src = srcDir(home, 7)
@@ -386,6 +393,8 @@ test.each([
   { id: 'D4', answer: 'write `~/cf_work/1615/x.ts`', path: '~/cf_work/1615/x.ts', setup: outputs('1614') },
   { id: 'D4', answer: `write \`${homedir()}/cf_work/1615/x.ts\``, path: `${homedir()}/cf_work/1615/x.ts`, setup: outputs('1614') },
   { id: 'D5', answer: 'clear `/tmp/`', path: '/tmp/' },
+  { id: 'D3', answer: 'write `~/cf_work/fink-1411a/out/x.ts`', path: '~/cf_work/fink-1411a/out/x.ts',
+    setup: ({ home }: { home: string }) => { put(home, 7, 'ask.md', INPUT) } },
 ])('$id a ruling editing an outside path is dropped', async ({ answer, path, setup }) => {
   const got = await aliased(() => answer, setup)
   expect(got.issue).toBe(ISSUE)
@@ -410,6 +419,7 @@ test.each([
   { id: 'D1', answer: 'read `~/cf_work/1716/`', setup: outputs('1716') },
   { id: 'D2', answer: `read \`${homedir()}/cf_work/surfpool-data-scan/inventory.ts\``, setup: outputs('surfpool-data-scan') },
   { id: 'D3', answer: 'the docs live under `/sdks/`' },
+  { id: 'D1', answer: 'read `~/cf_work/fink-1411a/out/.`', setup: inputs },
 ])('$id $answer applies', async ({ answer, setup }) => {
   expect((await aliased(() => answer, setup)).events).toEqual(PASS)
 })

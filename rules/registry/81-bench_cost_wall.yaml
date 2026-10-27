@@ -1,0 +1,6 @@
+- name: bench_cost_wall
+  table: events
+  column: at
+  where: "kind = 'generate' AND message LIKE '%run.cost_wall%'"
+  gap: 7d
+  expected: 0

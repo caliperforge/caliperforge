@@ -598,6 +598,49 @@ test('D5 a stop under the ceiling is refused on its reason', async () => {
   expect(maybe(root, 1, 'generate.json')).toBeNull()
 })
 
+const COST_WALLED = 'ruling:run.cost_wall stopped the run at $25.10, past the $25 wall'
+
+test('1617b D1 the generate packet carries the $25 cost wall', async () => {
+  const fired = stub(1000, 'completed', true)
+  await generated(fired)
+  expect(fired.packets).toMatchObject([{ cost_wall: { usd: 25, input: 4, cache_write: 5, cache_write_1h: 8, cache_read: 0.2, output: 20 } }])
+})
+
+test('1617b D2 a cost-walled generate passes with its wall', async () => {
+  const { root, outcome } = await generated(stub(1000, 'stopped', false, COST_WALLED))
+  expect(outcome).toEqual({ outcome: 'pass', spans: [], note: `generate.json written: ${COST_WALLED}` })
+  expect(JSON.parse(get(root, 1, 'generate.json'))).toEqual({ suite: 'test/fizz', tokens: 1000, seconds: 1, wall: COST_WALLED, x_ray: 0, agents: 0 })
+})
+
+test('1617b D3 a cost-walled generate scores wall, no pair', () => {
+  const { root, db } = sided(8, 505660, 505660)
+  put(root, 1, 'generate.json', JSON.stringify({ suite: 'test/fizz', tokens: 1234, seconds: 56.5, agents: 8, wall: COST_WALLED }))
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass', note: expect.stringContaining('run.cost_wall') as string })
+  expect(existsSync(join(planDir(root, 1), 'fuzz-bench/results/euler-earn-m01/euler-earn-m01.jsonl'))).toBe(false)
+  expect(scores(db)).toEqual([{ plan: 1, target: 'euler-earn-m01', generator: 'fizz', catches: 0, false_positives: 0, untested: null, tokens: 1234,
+    seconds: 56.5, x_ray: null, pre_fix_calls: null, fix_calls: null, not_powered: 'wall' }])
+})
+
+test('1617b D4 an unpriced model is refused unfired', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'cf-bench-'))
+  staffedIn(root)
+  checkedOut(root)
+  target(root, { generator: 'fizz' })
+  const db = fresh(schema)
+  db.exec('DELETE FROM prices')
+  queued(db, 'bench')
+  const fired = stub(1000, 'completed', true)
+  expect(await generate(db, root, planById(db, 1), mapOf('bench').at(1), fired.provider)).toMatchObject({ outcome: 'refuse', spans: ['bench.unpriced'] })
+  expect(fired.packets).toEqual([])
+  expect(runRows(db)).toEqual([])
+})
+
+test('1617b D5 a cost-walled generate event is seen', () => {
+  const db = fresh(schema)
+  logged(db, { plan: null, kind: 'generate', actor: 'generate', outcome: 'pass', message: `generate.json written: ${COST_WALLED}`, pointer: null, run: null }, AT)
+  expect(drift(db, mechanisms(REPO).filter((e) => e.name === 'bench_cost_wall'), OPENS)).toMatchObject([{ name: 'bench_cost_wall', state: 'seen' }])
+})
+
 test('D6 no generator is refused, an unstaffed one needs the ceo', async () => {
   expect((await generated(stub(0, 'completed', false), {})).outcome).toMatchObject({ outcome: 'refuse', spans: ['target.yml'] })
   expect((await generated(stub(0, 'completed', false), { generator: 'nobody' })).outcome).toMatchObject({ outcome: 'needs_ceo', spans: ['staffing'] })

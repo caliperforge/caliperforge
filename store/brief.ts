@@ -191,6 +191,13 @@ export function addPrice(db: Db, row: Price): void {
     VALUES (@provider, @model, @input, @cache_read, @cache_write, @cache_write_1h, @output, @effective_from, @source_url)`).run(row)
 }
 
+type Prices = Pick<Price, 'input' | 'cache_write' | 'cache_write_1h' | 'cache_read' | 'output'>
+
+export function price(db: Db, provider: string, model: string): Prices | undefined {
+  return db.prepare(`SELECT input, cache_write, cache_write_1h, cache_read, output FROM prices WHERE provider = ? AND model = ?
+    ORDER BY julianday(effective_from) DESC LIMIT 1`).get(provider, model) as Prices | undefined
+}
+
 export function unpriced(db: Db): Model[] {
   return db.prepare(`SELECT DISTINCT provider, model FROM runs r WHERE ${LAST_DAY}
     AND NOT EXISTS (SELECT 1 FROM prices p WHERE p.provider = r.provider AND p.model = r.model

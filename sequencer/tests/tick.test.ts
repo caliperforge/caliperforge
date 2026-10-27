@@ -1732,6 +1732,33 @@ test('D2 deleting an unlisted base file refuses and it stays', async () => {
   expect(existsSync(join(srcDir(w.root, MINE), 'src/tests/hello.test.ts'))).toBe(true)
 })
 
+test('#1836 re-deleting a listed base file already gone passes', async () => {
+  const w = world()
+  dropPlan(w.db, 1)
+  ours(w.root)
+  internalPlan(w.db, w.root, MINE)
+  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  rmSync(join(srcDir(w.root, MINE), 'src/hello.ts'))
+
+  const fired = (await tick(w.db, w.root, stub(dropping(['src/hello.ts']))))[0]
+
+  expect(fired).toMatchObject({ step: 2, outcome: 'pass' })
+  expect(diffOf(w.root, MINE)).toContain('deleted file')
+})
+
+test('#1836 an unlisted base file already gone still refuses', async () => {
+  const w = world()
+  dropPlan(w.db, 1)
+  ours(w.root, GREETED)
+  internalPlan(w.db, w.root, MINE)
+  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  rmSync(join(srcDir(w.root, MINE), 'src/tests/hello.test.ts'))
+
+  const fired = (await tick(w.db, w.root, stub(dropping(['src/tests/hello.test.ts']))))[0]
+
+  expect(fired).toMatchObject({ step: 2, outcome: 'refuse', spans: ['src/tests/hello.test.ts'] })
+})
+
 test('deleting a path not in the tree refuses, not a no-op', async () => {
   const w = world()
   dropPlan(w.db, 1)

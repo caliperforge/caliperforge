@@ -1,0 +1,6 @@
+- name: bench_degraded
+  table: events
+  column: at
+  where: "kind = 'score' AND outcome = 'pass' AND plan IN (SELECT plan FROM bench_scorecard WHERE superseded = 0 AND not_powered IN ('reduced_generate', 'few_properties'))"
+  gap: 7d
+  expected: 0

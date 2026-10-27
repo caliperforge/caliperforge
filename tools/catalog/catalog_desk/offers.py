@@ -118,10 +118,11 @@ def _valid_accept(value: object) -> TypeGuard[dict[str, Any]]:
 
 def _accepted(accept: dict[str, Any]) -> Offer:
     amount = accept.get("amount")
+    network: str = accept["network"]
     return Offer(
         "x402",
         accept.get("scheme"),
-        NETWORKS.get(accept["network"], accept["network"]),
+        NETWORKS.get(network, network),
         _coin(accept["asset"]),
         accept["asset"],
         _usd(accept.get("maxAmountRequired") if amount is None else amount, 6),

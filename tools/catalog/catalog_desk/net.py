@@ -73,7 +73,7 @@ class Live:
 
 
 def _response(status: int, headers: Message, raw: bytes) -> Response:
-    named: dict[str, str | list[str]] = {key.lower(): headers.get_all(key) or [] for key in headers.keys()}
+    named: dict[str, str | list[str]] = {key.lower(): headers.get_all(key) or [] for key in headers}
     return Response(status, named, raw.decode("utf-8", errors="replace"))
 
 

@@ -35,6 +35,15 @@ async function atPush(): Promise<World> {
   return w
 }
 
+function upstream(w: World, name: string): string {
+  const dir = join(w.root, 'remotes/acme/widget')
+  writeFileSync(join(dir, name), 'export const theirs = 1\n')
+  const git = (args: string[]): string => execFileSync('git', args, { cwd: dir, encoding: 'utf8' }).trim()
+  git(['add', '-A'])
+  git(['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', `main moves on ${name}`])
+  return git(['rev-parse', '--short', 'HEAD'])
+}
+
 const rows = (w: World, kind: string): unknown[] =>
   w.db.prepare('SELECT * FROM approvals WHERE subject_kind = ? ORDER BY id').all(kind)
 
@@ -150,6 +159,49 @@ test('D7 with no step-7 row push refuses and writes no card', async () => {
   const w = await atBatch()
   expect(push(w.db, w.root, plan(w.db, 1), watched([], w.root, 1))).toMatchObject({ outcome: 'refuse', spans: ['approvals'] })
   expect(maybe(w.root, 1, 'maintainer.md')).toBeNull()
+})
+
+test('1630b D1 the held push saves the signed head and main', async () => {
+  const w = await atPush()
+  const signed = headOf(w.root, 1).sha
+  push(w.db, w.root, plan(w.db, 1), watched([], w.root, 1))
+  const main = execFileSync('git', ['rev-parse', 'main'], { cwd: join(w.root, 'remotes/acme/widget'), encoding: 'utf8' }).trim()
+  expect(get(w.root, 1, 'theirs.main')).toBe(`${signed} ${main}\n`)
+})
+
+test('1630b D2 main moving on our file after the card refuses', async () => {
+  const w = await atPush()
+  const sent: string[] = []
+  const wire = watched(sent, w.root, 1)
+  push(w.db, w.root, plan(w.db, 1), wire)
+  approve(w.db, w.root, 1, 'ceo')
+  const theirs = upstream(w, 'src/hello.ts')
+  const refused = push(w.db, w.root, plan(w.db, 1), wire)
+  expect(refused).toMatchObject({ outcome: 'refuse', spans: ['their_work'] })
+  expect(refused.note).toContain(theirs)
+  expect(sent).toEqual([])
+})
+
+test('1630b D3 main moving on another file still sends', async () => {
+  const w = await atPush()
+  const wire = watched([], w.root, 1)
+  push(w.db, w.root, plan(w.db, 1), wire)
+  approve(w.db, w.root, 1, 'ceo')
+  upstream(w, 'src/other.ts')
+  expect(push(w.db, w.root, plan(w.db, 1), wire)).toMatchObject({ outcome: 'pass', note: `pushed widget-12-a1 as ${PR}` })
+})
+
+test('1630b D4 with no card main is read from the merge-base', async () => {
+  const w = await atPush()
+  upstream(w, 'src/hello.ts')
+  expect(push(w.db, w.root, plan(w.db, 1), watched([], w.root, 1))).toMatchObject({ outcome: 'refuse', spans: ['their_work'] })
+  expect(maybe(w.root, 1, 'maintainer.md')).toBeNull()
+})
+
+test('1630b D5 no step-7 row refuses before theirs.main', async () => {
+  const w = await atBatch()
+  expect(push(w.db, w.root, plan(w.db, 1), watched([], w.root, 1))).toMatchObject({ spans: ['approvals'] })
+  expect(maybe(w.root, 1, 'theirs.main')).toBeNull()
 })
 
 test('D8 an internal plan writes no card and waits on none', () => {

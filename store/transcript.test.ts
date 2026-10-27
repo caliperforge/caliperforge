@@ -107,6 +107,12 @@ test('D3 spawned is 0 for a missing or non-JSON transcript', () => {
   expect([spawned(fixture('absent')), spawned(broken)]).toEqual([0, 0])
 })
 
+test('a directory path throws EISDIR rather than reading empty', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cf-transcript-'))
+  expect(() => spawned(dir)).toThrow(/EISDIR/)
+  expect(() => outputs(dir)).toThrow(/EISDIR/)
+})
+
 test('a missing, uncosted or cut transcript stays NULL', () => {
   const db = loaded()
   const missing = run(db, fixture('absent'), null)

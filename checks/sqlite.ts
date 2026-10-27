@@ -15,7 +15,8 @@ export function rejects(db: Db, sql: string): boolean {
   try {
     db.exec(sql)
     return false
-  } catch {
+  } catch (error) {
+    if (!(error instanceof Database.SqliteError)) throw error
     return true
   }
 }

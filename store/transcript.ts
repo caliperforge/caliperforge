@@ -14,7 +14,8 @@ function blocks(path: string): unknown[] {
   if (!existsSync(path)) return []
   try {
     return readFileSync(path, 'utf8').split('\n').filter((line) => line !== '').flatMap((line) => Turn.safeParse(JSON.parse(line)).data?.message.content ?? [])
-  } catch {
+  } catch (error) {
+    if (!(error instanceof SyntaxError)) throw error
     return []
   }
 }
@@ -71,7 +72,8 @@ export function outputs(path: string): { command: string; output: string }[] {
       if (result === undefined || command === undefined) return []
       return [{ command, output: full(typeof result.content === 'string' ? result.content : result.content.map((part) => part.text ?? '').join('\n'), saved) }]
     })
-  } catch {
+  } catch (error) {
+    if (!(error instanceof SyntaxError)) throw error
     return []
   }
 }

@@ -83,7 +83,8 @@ export function add(db: Db, root: string, ref: string, by: Holder | 'intake' | '
   try {
     priority = priorityOf(row.labels)
   } catch (error) {
-    return refusal(db, ref, 'plan.priority_label', error instanceof Error ? error.message : String(error))
+    if (!(error instanceof Error)) throw error
+    return refusal(db, ref, 'plan.priority_label', error.message)
   }
   if (!homes(lane).includes(repo) && profile(root, repo)?.lane !== lane) {
     return refusal(db, ref, 'plan.lane_home', `is on ${repo}; the ${lane} lane builds in ${homes(lane).join(' or ')}`)

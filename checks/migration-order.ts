@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Check, Finding } from './kind.ts'
@@ -32,12 +32,7 @@ function number(name: string): number {
 }
 
 function resolves(cwd: string, ref: string): boolean {
-  try {
-    git(cwd, ['rev-parse', '--verify', '--quiet', ref])
-    return true
-  } catch {
-    return false
-  }
+  return spawnSync('git', ['rev-parse', '--verify', '--quiet', ref], { cwd, stdio: 'ignore' }).status === 0
 }
 
 function git(cwd: string, args: string[]): string {

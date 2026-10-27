@@ -15,8 +15,7 @@
     "lines": 18
   },
   "migration-order.ts": {
-    "lines": 45,
-    "silent-catch": 1
+    "lines": 40
   },
   "origin-on-refuse.ts": {
     "lines": 61
@@ -40,8 +39,7 @@
     "lines": 9
   },
   "sqlite.ts": {
-    "lines": 21,
-    "silent-catch": 1
+    "lines": 21
   },
   "template-validity.ts": {
     "lines": 53

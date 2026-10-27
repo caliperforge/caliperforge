@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process'
+import { spawnSync } from 'node:child_process'
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import type { Fired } from '../sequencer/kind.ts'
@@ -134,9 +134,5 @@ function short(ticket: string): string {
 function desktop(title: string, body: string): void {
   if (process.platform !== 'darwin' || process.env.VITEST !== undefined) return
   const quote = (s: string): string => JSON.stringify(s.replace(/\s+/g, ' ').slice(0, 180))
-  try {
-    execFileSync('osascript', ['-e', `display notification ${quote(body)} with title ${quote(title)}`], { stdio: 'ignore' })
-  } catch {
-    return
-  }
+  spawnSync('osascript', ['-e', `display notification ${quote(body)} with title ${quote(title)}`], { stdio: 'ignore' })
 }

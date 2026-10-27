@@ -33,8 +33,7 @@
     "lines": 359
   },
   "inbox.ts": {
-    "lines": 141,
-    "silent-catch": 1
+    "lines": 138
   },
   "map.ts": {
     "lines": 46
@@ -43,8 +42,7 @@
     "lines": 90
   },
   "plan.ts": {
-    "lines": 117,
-    "silent-catch": 1
+    "lines": 117
   },
   "queue.ts": {
     "lines": 189,

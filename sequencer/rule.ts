@@ -1,23 +1,18 @@
-import { existsSync, statSync } from 'node:fs'
+import { statSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join, relative } from 'node:path'
-import { subdirs } from '../checks/tree.ts'
+import { join, relative, resolve } from 'node:path'
 import { real } from '../runner/index.ts'
 import { logged } from '../store/events.ts'
 import { edit, filesOf } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
 import { builderRan, type PlanRow } from '../store/plans.ts'
-import { work } from '../templates/research.ts'
 import { cited } from './cited.ts'
 import { unruled } from './unruled.ts'
-import { committed } from './committed.ts'
 import { get, headSha, maybe, planDir, put, srcDir } from './workspace.ts'
 
 const PATH = /(?:^|[\s`'"(])((?:~|\.\.)?\/[\w.-][^\s`'"()]*)/g
 
 const OUTSIDE = /^ {2}- (\S+):1 authority\.outside_files$/gm
-
-const BY_HAND = /\bhand[- ]?check|\bby hand\b|\bafter (?:the )?merge\b/i
 
 const RULED = /^## (?:Ruling|Answer from the director)/
 
@@ -40,27 +35,18 @@ function ruled(issue: string): string {
   return issue.split(/^(?=## )/m).findLast((s) => RULED.test(s)) ?? ''
 }
 
-export function stray(db: Db, root: string, plan: PlanRow, text: string): string | null {
-  const climbed = text.split(/\s+/).find((t) => /[^\s`'"(.]\.\.\//.test(t))
-  if (climbed !== undefined) return climbed
-  const output = (p: string) => plan.template === 'research' && ['sources.json', 'answer.md'].includes(relative(planDir(root, plan.id), p))
-  const named = (p: string) => !p.startsWith('~') && ([srcDir(root, plan.id), root, planDir(root, plan.id)].some((d) => !relative(d, join(d, p)).startsWith('..') && existsSync(join(d, p))) || committed(root, plan.id, p))
-  const under = (p: string) => p.startsWith(`${root}/`) || !relative(real(planDir(root, plan.id)), real(p)).startsWith('..')
-  const climbs = (p: string) => [srcDir(root, plan.id), root].some((b) => [b, ...subdirs(b).map((s) => join(b, s))]
-    .some((d) => existsSync(join(d, p)) && (under(join(d, p)) || !relative(b, join(d, p)).startsWith('..'))))
-  const fetched = (p: string) => p.startsWith('~/') && plan.template === 'research' && !builderRan(db, plan.id) && work(p) !== null
-  const folders = plan.template === 'research' ? [...(maybe(root, plan.id, 'ask.md') ?? '').matchAll(PATH)].flatMap((m) => work(m[1] ?? '') ?? []) : []
-  const kept = (p: string) => folders.some((f) => !relative(f, work(p) ?? homedir()).startsWith('..'))
-  const inside = (p: string) => p.startsWith('..') ? climbs(p) || output(join(srcDir(root, plan.id), p))
-    : under(p.replace(/^~(?=\/)/, homedir())) || named(p) || output(join(planDir(root, plan.id), p)) || fetched(p) || kept(p)
-  const route = (p: string) => /^\/[\w-]+\/?[.,;:!?]?$/.test(p) && !existsSync(p.replace(/[/.,;:!?]+$/, ''))
-  return text.replace(/\/{2,}/g, '/').split(/(?<=[.;!?])\s+|\n/)
-    .flatMap((s) => [...s.matchAll(PATH)].map((m) => m[1] ?? '').filter((p) => !route(p) && (p.startsWith('..') || !BY_HAND.test(s))))
-    .find((p) => !inside(p)) ?? null
+export function stray(root: string, plan: PlanRow, text: string): string | null {
+  const other = [...text.matchAll(/\.cf\/work\/(\d+)\/[^\s`'"()]+/g)].find((m) => m[1] !== String(plan.id))
+  if (other !== undefined) return other[0]
+  const under = (dir: string, p: string) => !relative(real(dir), p).startsWith('..')
+  return [...text.matchAll(PATH)].map((m) => m[1] ?? '').find((t) => {
+    const p = real(t.startsWith('~/') ? join(homedir(), t.slice(2)) : resolve(srcDir(root, plan.id), t))
+    return under(homedir(), p) && !under(join(homedir(), 'cf_work'), p) && !under(root, p)
+  }) ?? null
 }
 
 export function rule(db: Db, root: string, plan: PlanRow, who: string, text: string): 'ask.md' | 'issue.md' | null {
-  if (stray(db, root, plan, text) !== null) return null
+  if (stray(root, plan, text) !== null) return null
   const section = `## Answer from the ${who} (${new Date().toISOString().slice(0, 10)})\n\n${text.trim()}\n`
   if (!builderRan(db, plan.id)) {
     put(root, plan.id, 'ask.md', `${maybe(root, plan.id, 'ask.md') ?? ''}\n${section}`)

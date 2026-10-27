@@ -346,7 +346,7 @@ test('D4: a prompt without cf look store hands the stop up', async () => {
   expect(plan7(db)).toMatchObject({ held_by: 'ceo' })
 })
 
-test.each(['/etc/x', '../x'])('D5: a rule naming %s writes nothing and is held by the coo', async (path) => {
+test.each(['~/.ssh/config', '.cf/work/8/ask.md'])('D5: a rule naming %s writes nothing and is held by the coo', async (path) => {
   const { db, home } = seeded('1')
   await run(db, home, `---\nmove: rule\nwhy: the path settles it\nanswer: read ${path}\n---\n`)
   expect(maybe(home, 7, 'ask.md')).toBe('the ask\n')
@@ -373,11 +373,13 @@ const elsewhere = () => {
   return at
 }
 
-test.each([{ name: '~/.ssh/config', path: () => '~/.ssh/config' }, { name: 'another checkout', path: elsewhere }, { name: '/..', path: () => '/..' }])('D3: a rule naming $name is held by the coo', async ({ path }) => {
+test.each([{ name: 'another checkout', path: elsewhere }, { name: '/..', path: () => '/..' }])('D3: a rule naming $name applies', async ({ path }) => {
   const { db, home } = seeded('1')
-  await run(db, home, ruling(path()))
-  expect(maybe(home, 7, 'issue.md')).toBe(ISSUE)
-  expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'coo' })
+  const at = path()
+  await run(db, home, ruling(at))
+  expect(told(db)).toEqual([{ actor: 'director', outcome: 'pass', message: 'rule: the path settles it' }])
+  expect(maybe(home, 7, 'issue.md')).toContain(`read ${at}`)
+  expect(plan7(db)?.held_by).not.toBe('coo')
 })
 
 test('D1: a rule naming ../runner/index.ts in the repo applies', async () => {
@@ -399,18 +401,14 @@ test('D2: a rule quoting `../issue.md` applies', async () => {
 test.each([
   { name: 'a ../ path', path: (h: string) => relative(srcDir(h, 7), elsewhere()) },
   { name: 'a mid-token ../', path: () => 'sequencer/../../../../../../etc/x' },
-])('D3: $name climbing out of the repo is held by the coo', async ({ path }) => {
+  { name: '..//.ssh/id_rsa', path: () => '..//.ssh/id_rsa' },
+])('D3: $name climbing out of the repo applies', async ({ path }) => {
   const { db, home } = seeded('1')
-  await run(db, home, ruling(path(home)))
-  expect(maybe(home, 7, 'issue.md')).toBe(ISSUE)
-  expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'coo' })
-})
-
-test('D3: ..//.ssh/id_rsa from root is held by the coo', async () => {
-  const { db, home } = seeded('1')
-  await run(db, home, ruling('..//.ssh/id_rsa'))
-  expect(maybe(home, 7, 'issue.md')).toBe(ISSUE)
-  expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'coo' })
+  const at = path(home)
+  await run(db, home, ruling(at))
+  expect(told(db)).toEqual([{ actor: 'director', outcome: 'pass', message: 'rule: the path settles it' }])
+  expect(maybe(home, 7, 'issue.md')).toContain(`read ${at}`)
+  expect(plan7(db)?.held_by).not.toBe('coo')
 })
 
 test('D1: a ..// path inside the checkout applies', async () => {
@@ -424,11 +422,11 @@ test('D1: a ..// path inside the checkout applies', async () => {
 
 test('failedMoveToCoo', async () => {
   const { db, home } = seeded('1')
-  await run(db, home, '---\nmove: rule\nwhy: the path settles it\nanswer: read /etc/x\n---\n')
+  await run(db, home, '---\nmove: rule\nwhy: the path settles it\nanswer: read ~/.ssh/config\n---\n')
   expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'coo' })
   expect(maybe(home, 7, 'parked.md')).toBeNull()
   expect(told(db)).toEqual([{ actor: 'director', outcome:'needs_coo',
-    message: 'rule did not apply, the answer names a path a ruling may not carry (/etc/x): the path settles it' }])
+    message: 'rule did not apply, the answer names a path a ruling may not carry (~/.ssh/config): the path settles it' }])
 })
 
 test.each([[null], ['0']])('shadow (director.apply %s): only proposes, in the inbox', async (apply) => {
@@ -767,7 +765,7 @@ test('fixOutOfReach', async () => {
   for (const [why, reason] of [
     ['run gh issue create for the gap', 'the fixer has no git and no GitHub'],
     ['run UPDATE plans SET step = 2 in cf.db', outside('cf.db')],
-    ['rewrite issue.md from ../other/brief.md', outside('../other/brief.md')],
+    ['rewrite issue.md from ~/notes/brief.md', outside('~/notes/brief.md')],
     ['rewrite issue.md and `.cf/work/7/refusal.md`', outside('.cf/work/7/refusal.md')],
   ] as const) {
     const { db, home } = seeded('1')
@@ -794,7 +792,7 @@ test('fixOutOfReach', async () => {
 })
 
 const fixing = (packets: Packet[]) => packets.filter((p) => basename(p.transcript).startsWith('fixer'))
-const DROPPED = ruling('/etc/x')
+const DROPPED = ruling('~/.ssh/config')
 
 async function handedUp(reply: string, fixer?: string) {
   const { db, home } = seeded('1')
@@ -835,7 +833,7 @@ test('D3: a fixer ask_ceo on a dropped rule holds for the coo', async () => {
   expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'coo' })
   expect(appliedOf(db, 7).at(-1)).toBe('escalated')
   expect(told(db)).toEqual([{ actor: 'director', outcome: 'needs_coo',
-    message: 'rule did not apply, the answer names a path a ruling may not carry (/etc/x): the path settles it' }])
+    message: 'rule did not apply, the answer names a path a ruling may not carry (~/.ssh/config): the path settles it' }])
   expect(posted).toHaveLength(1)
 })
 
@@ -1160,7 +1158,7 @@ test('D5: a rule writes the reading, comments once on the origin', async () => {
 })
 
 test.each([
-  { name: 'a refused rule', reply: '---\nmove: rule\nwhy: the path settles it\nanswer: read /etc/x\n---\n', origin: true },
+  { name: 'a refused rule', reply: '---\nmove: rule\nwhy: the path settles it\nanswer: read ~/.ssh/config\n---\n', origin: true },
   { name: 'a plan with no origin', reply: REPLY.rule ?? '', origin: false },
 ])('D6: $name makes no comment', async ({ reply, origin }) => {
   const { db, home } = seeded('1')

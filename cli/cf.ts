@@ -174,7 +174,7 @@ cf.command('coo-lite').description('fire one coo_lite run on the oldest stopped 
 /** A tracker that cannot be read this time leaves every card where it stands; the next tick reads it again. */
 function cards(handle: Db, now: Date): void {
   try {
-    for (const s of signoffs(handle, root, desk(SIGNOFF), now)) out(`signoff\tplan ${String(s.plan)}\tcard ${String(s.card)}\t${s.did}\n`)
+    for (const s of signoffs(handle, root, desk(SIGNOFF), gh, now)) out(`signoff\tplan ${String(s.plan)}\tcard ${String(s.card)}\t${s.did}\n`)
     late(handle, root, desk(SIGNOFF), now)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)

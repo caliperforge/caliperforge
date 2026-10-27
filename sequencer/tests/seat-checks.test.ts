@@ -120,6 +120,23 @@ test('1333 D5 a green site plan lists its node --test gate', () => {
   expect(checked(db, REPO, site, src, CHARTS)).toEqual({ checks: '- web | . | node --test tests/charts.test.js | pass' })
 })
 
+const PY = '--- a/tools/x/a.py\n+++ b/tools/x/a.py\n@@ -1,1 +1,1 @@\n+x\n'
+
+const UV = ['sync --all-extras', 'tool run ruff check', 'run --with pyright pyright', 'run --no-sync pytest'].map((c) => `- python | tools/x | uv ${c} | pass`)
+
+test('1854 D4 a green kernel plan lists its python subproject', () => {
+  const { db, plan } = target(['tools/x/a.py'], 'pass', PY)
+  const src = mkdtempSync(join(tmpdir(), 'cf-note-'))
+  mkdirSync(join(src, 'tools', 'x'), { recursive: true })
+  writeFileSync(join(src, 'package.json'), '{}')
+  writeFileSync(join(src, 'tools', 'x', 'pyproject.toml'), '')
+  writeFileSync(join(src, 'tools', 'x', 'a.py'), '')
+  const kernel = { ...plan, target_id: null, origin: 'https://github.com/caliperforge/caliperforge/issues/1' }
+  expect(checked(db, REPO, kernel, src, PY)).toEqual({
+    checks: ['- typescript | . | every script the checkout names (npm, the whole suite) | pass', ...UV].join('\n'),
+  })
+})
+
 test('D6 no seat language and no gate, no section', () => {
   const { db, plan } = target(['docs/paykit-interface.md'])
   expect(checked(db, REPO, plan, paykit(), '--- a/docs/paykit-interface.md\n+++ b/docs/paykit-interface.md\n@@ -1,1 +1,1 @@\n+x\n')).toEqual({})

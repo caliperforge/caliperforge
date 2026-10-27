@@ -7,7 +7,7 @@ import { price } from '../store/brief.ts'
 import type { Db } from '../store/index.ts'
 import { spawned } from '../store/transcript.ts'
 
-const BENCH_COST_WALL_USD = 25
+const BENCH_COST_WALL_USD = 40
 
 export function costWall(db: Db, provider: string, model: string): CostWall | Outcome {
   const prices = price(db, provider, model)

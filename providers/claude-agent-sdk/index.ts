@@ -3,7 +3,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:pat
 import { query, type HookInput, type SDKMessage, type SDKRateLimitInfo, type SDKResultMessage, type SyncHookJSONOutput } from '@anthropic-ai/claude-agent-sdk'
 import type { Reading } from '../../store/lanes.ts'
 import { credential } from '../credential.ts'
-import { admitted, bare, type Fired, type Packet, type Provider } from '../kind.ts'
+import { admitted, bare, type CostWall, type Fired, type Packet, type Provider } from '../kind.ts'
 import { ghWrite } from './gh.ts'
 
 const WRITES = new Set(['Write', 'Edit', 'NotebookEdit'])
@@ -23,6 +23,7 @@ async function fire(packet: Packet): Promise<Fired> {
   const refused: string[] = []
   const limits: Reading[] = []
   const spent = new Map<string, number>()
+  const cost = new Map<string, number>()
   const pace = { turns: new Set<string>(), wrote: false, fenced: 0 }
   const transcript = openTranscript(packet)
   const run = query({
@@ -38,7 +39,8 @@ async function fire(packet: Packet): Promise<Fired> {
       settingSources: [], systemPrompt: { type: 'preset', preset: 'claude_code', excludeDynamicSections: true },
       permissionMode: 'default',
       hooks: { PreToolUse: [{ hooks: [(input) => {
-        const over = walled(packet.wall, total(spent)) ?? idle(packet.tools, pace.wrote, pace.turns.size, packet.idle)
+        const over = walled(packet.wall, total(spent)) ?? costWalled(packet.cost_wall, total(cost))
+          ?? idle(packet.tools, pace.wrote, pace.turns.size, packet.idle)
         const decision = over === null ? gate(packet, input, pace.fenced) : stop(over)
         if (over === null && writing(input)) tally(pace, decision)
         if (decision.stopReason !== undefined) refused.push(decision.stopReason)
@@ -48,11 +50,7 @@ async function fire(packet: Packet): Promise<Fired> {
   })
   for await (const message of run) {
     transcript(message)
-    if (message.type === 'assistant') {
-      const id = (message.message as { id?: string }).id ?? `turn-${String(pace.turns.size)}`
-      pace.turns.add(id)
-      spent.set(id, Math.max(spent.get(id) ?? 0, turn(message)))
-    }
+    if (message.type === 'assistant') charge(message, pace.turns, { spent, cost }, packet.cost_wall)
     if (message.type === 'rate_limit_event') limits.push(...readings(message.rate_limit_info, new Date().toISOString()))
     if (message.type === 'result') return { ...fired(message, started, refused), limits, transcript_path: packet.transcript }
   }
@@ -67,6 +65,11 @@ async function fire(packet: Packet): Promise<Fired> {
 export function walled(wall: number | undefined, spent: number): string | null {
   if (wall === undefined || spent < wall) return null
   return `ruling:run.token_wall stopped the run at ${million(spent)} tokens, past the ${million(wall)} wall`
+}
+
+export function costWalled(wall: CostWall | undefined, usd: number): string | null {
+  if (wall === undefined || usd < wall.usd) return null
+  return `ruling:run.cost_wall stopped the run at $${usd.toFixed(2)}, past the $${String(wall.usd)} wall`
 }
 
 /** A builder that has spent `limit` turns without one write stops, before the wall would catch it. Seats without Write never trip. */
@@ -85,7 +88,7 @@ function tally(pace: { wrote: boolean; fenced: number }, decision: SyncHookJSONO
 }
 
 /**
- * What a turn adds against the wall; cache reads are recorded, never capped. The SDK sends one assistant message
+ * What a turn adds against the wall; cache reads are recorded, capped only by the cost wall. The SDK sends one assistant message
  * per content block, each carrying the whole turn's usage under the same message id, so one turn is one id,
  * counted once, at its largest.
  */
@@ -95,9 +98,24 @@ function total(spent: Map<string, number>): number {
   return sum
 }
 
+function charge(message: SDKMessage & { type: 'assistant' }, turns: Set<string>, meters: Record<'spent' | 'cost', Map<string, number>>, wall: CostWall | undefined): void {
+  const id = (message.message as { id?: string }).id ?? `turn-${String(turns.size)}`
+  turns.add(id)
+  meters.spent.set(id, Math.max(meters.spent.get(id) ?? 0, turn(message)))
+  if (wall !== undefined) meters.cost.set(id, Math.max(meters.cost.get(id) ?? 0, priced(message, wall)))
+}
+
 function turn(message: SDKMessage & { type: 'assistant' }): number {
   const used = message.message.usage
   return used.input_tokens + (used.cache_creation_input_tokens ?? 0) + used.output_tokens
+}
+
+export function priced(message: SDKMessage & { type: 'assistant' }, wall: CostWall): number {
+  const used = message.message.usage
+  const hour = used.cache_creation?.ephemeral_1h_input_tokens ?? 0
+  const written = (used.cache_creation_input_tokens ?? 0) - hour
+  return (used.input_tokens * wall.input + written * wall.cache_write + hour * wall.cache_write_1h
+    + (used.cache_read_input_tokens ?? 0) * wall.cache_read + used.output_tokens * wall.output) / 1e6
 }
 
 function million(n: number): string {

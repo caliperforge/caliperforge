@@ -29,17 +29,19 @@ export function dropped(db: Db, root: string, plan: PlanRow, step: Step, handbac
   const base = maybe(root, plan.id, 'base.sha')?.trim()
   const fence = fenceFor(db, plan.id, seat(root, step.runs).manifest.write_paths)
   const barred = paths.filter((path) => refuse(src, fence, path, kernelPlan(plan)) !== null && !ignored(src, path, rel))
-  const absent = paths.filter((path) => !barred.includes(path) && !existsSync(join(src, path)))
-  const rest = paths.filter((path) => !barred.includes(path) && !absent.includes(path))
-  const git = rest.filter((path) => rel(path) === '.git' || rel(path).startsWith('.git/'))
   const listed = filesOf(db, plan.id).map((f) => f.path)
+  const lexical = (path: string): string => relative(top, resolve(top, path))
+  const gone = (path: string): boolean => listed.includes(lexical(path)) && base !== undefined && cloned(src) && holds(src, `${base}:${lexical(path)}`)
+  const absent = paths.filter((path) => !barred.includes(path) && !existsSync(join(src, path)) && !gone(path))
+  const rest = paths.filter((path) => !barred.includes(path) && existsSync(join(src, path)))
+  const git = rest.filter((path) => rel(path) === '.git' || rel(path).startsWith('.git/'))
   const based = rest.filter((path) => !git.includes(path) && !listed.includes(rel(path)) && base !== undefined && cloned(src) && holds(src, `${base}:${rel(path)}`))
   if (barred.length > 0 || absent.length > 0 || git.length > 0 || based.length > 0) {
     const why = [...barred.map((p) => `${p} is outside the fence`), ...absent.map((p) => `${p} is not in the tree`),
       ...git.map((p) => `${p} is under .git`), ...based.map((p) => `${p} is on base`)]
     return { outcome: 'refuse', spans: [...barred, ...absent, ...git, ...based], note: `${step.runs}: ${why.join('; ')}` }
   }
-  for (const path of paths) rmSync(join(top, rel(path)))
+  for (const path of rest) rmSync(join(top, rel(path)))
   return null
 }
 

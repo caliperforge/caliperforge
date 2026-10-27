@@ -95,7 +95,7 @@ export async function cooLite(db: Db, root: string, plan: PlanRow, provider: Pro
     const ceo = decision(said)
     return told(db, root, plan, now, { outcome: 'needs_coo', message: 'block' in ceo ? `${message}\n\n${ceo.block}` : message }, post)
   }
-  const failed = `${m.move} did not apply, ${UNAPPLIED[m.move]}${m.move === 'rule' ? ` (${stray(db, root, plan, m.answer ?? '') ?? ''})` : ''}: ${m.why}`
+  const failed = `${m.move} did not apply, ${UNAPPLIED[m.move]}${m.move === 'rule' ? ` (${stray(root, plan, m.answer ?? '') ?? ''})` : ''}: ${m.why}`
   const stuck = (): void => { needsCeo(db, plan); held(db, plan.id, 'coo', failed.split('\n')[0] ?? failed) }
   if (m.move !== 'fix') return handUp(db, root, plan, { outcome: 'needs_coo', message: failed }, said, provider, now, post, wire, stuck)
   stuck()

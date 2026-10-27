@@ -771,17 +771,17 @@ test('ruling D1/D2: an Output ruling reruns gather on fetcher', async () => {
   expect(ran(w)).toEqual(['fetcher'])
 })
 
-test.each(['~/cf_work', '~/cf_work/../x', '~/.ssh/config'])('ruling D3: Output %s is refused', (named) => {
+test.each(['~/cf_work/../x', '~/.ssh/config'])('ruling D3: Output %s is refused', (named) => {
   home()
   const w = researching()
   expect(rule(w.db, w.root, plan(w.db, 1), 'director', `**Output:** ${named}`)).toBeNull()
   expect(maybe(w.root, 1, 'ask.md')).toBe(ASK)
 })
 
-test('ruling D4: a pr_path Output ruling is refused', () => {
+test('ruling D4: a pr_path Output ruling applies', () => {
   home()
   const w = world()
-  expect(rule(w.db, w.root, plan(w.db, 1), 'director', '**Output:** ~/cf_work/x/')).toBeNull()
+  expect(rule(w.db, w.root, plan(w.db, 1), 'director', '**Output:** ~/cf_work/x/')).toBe('ask.md')
 })
 
 const NEEDS_RUN = 'This needs a timed run.\n\n```\n---\noutcome: needs_run\n---\n```\n'

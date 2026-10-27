@@ -14,9 +14,10 @@ import { logged, runLogged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { observed } from '../store/lanes.ts'
 import { needsCeo, type PlanRow } from '../store/plans.ts'
-import { byRun, pending, spawned } from '../store/transcript.ts'
+import { byRun, pending } from '../store/transcript.ts'
 import { clamp, quieted } from './balances.ts'
 import { deps } from './deps.ts'
+import { costWall, costWalled, written } from './generated.ts'
 import { inBare, listedIn } from './listed.ts'
 import { kept, powered, walled } from './powered.ts'
 import { DEFAULT_BUILDER, type Step } from './pr-path.ts'
@@ -126,26 +127,28 @@ export async function generate(db: Db, root: string, plan: PlanRow, step: Step, 
   if (uninstalled !== null) return uninstalled
   load(db, root)
   const { manifest, prompt, hash } = seat(root, name)
+  const walls = costWall(db, provider.name, manifest.model)
+  if ('outcome' in walls) return walls
   const granted = manifest.reads?.map((path) => real(path.startsWith('~/') ? join(homedir(), path.slice(2)) : path)) ?? []
   mkdirSync(join(planDir(root, plan.id), 'scratch'), { recursive: true })
   const tmp = real(join(planDir(root, plan.id), 'scratch'))
   const built = packet(manifest, prompt, '', ask(granted[0], granted.find((path) => basename(path) === 'x-ray'), tmp), dir,
     pending(planDir(root, plan.id), `step-${String(step.step)}`), false, [...manifest.write_paths, tmp])
   const fired = await provider.fire({ ...built, refuse: (path) => real(resolve(dir, path)) === real(ATTEMPTS) ? null : built.refuse(path), wall: CEILING,
-    env: { ...TIMEOUTS, TMPDIR: tmp }, reads: [...granted, real(ATTEMPTS)], ...(name === 'fizz_generator' ? { idle: SETUP } : {}) })
+    cost_wall: walls, env: { ...TIMEOUTS, TMPDIR: tmp }, reads: [...granted, real(ATTEMPTS)], ...(name === 'fizz_generator' ? { idle: SETUP } : {}) })
   const run = runLogged(db, { plan: plan.id, step: step.step, seat: name, rule_hash: hash, provider: provider.name, model: manifest.model,
     effort: manifest.effort, exit: fired.exit, fired, staffed: name })
   const transcript = byRun(db, run, fired.transcript_path)
   observed(db, fired.limits)
   const tokens = fired.usage.input + fired.usage.output
   if (tokens >= CEILING) return { outcome: 'refuse', spans: ['bench.ceiling'], note: `${name} hit the ${String(CEILING)}-token ceiling at ${String(tokens)} tokens` }
+  const wall = costWalled(fired.stop_reason)
+  if (wall !== null) return written(root, plan.id, dir, transcript, { suite: SUITE, tokens, seconds: fired.seconds, wall }, wall)
   if (fired.ended !== 'completed') return { outcome: 'refuse', spans: [fired.stop_reason ?? 'seat.exit'], note: `${name} ${fired.ended}` }
   const properties = unproven(join(dir, SUITE), `${name} (${fired.ended}, ${String(tokens)} tokens)`)
   if (typeof properties !== 'number') return properties
   if (target !== '') rooted(dir, join(planDir(root, plan.id), 'fuzz-bench/suites', generator, target))
-  put(root, plan.id, 'generate.json', JSON.stringify({ suite: SUITE, tokens, seconds: fired.seconds,
-    x_ray: existsSync(join(dir, 'x-ray/x-ray.md')) ? 1 : 0, agents: spawned(transcript) }))
-  return { outcome: 'pass', spans: [], note: `generate.json written: ${name} ${fired.ended}, ${String(tokens)} tokens, ${String(properties)} properties` }
+  return written(root, plan.id, dir, transcript, { suite: SUITE, tokens, seconds: fired.seconds }, `${name} ${fired.ended}, ${String(tokens)} tokens, ${String(properties)} properties`)
 }
 
 export function scored(db: Db, root: string, plan: PlanRow): Outcome {
@@ -156,8 +159,9 @@ export function scored(db: Db, root: string, plan: PlanRow): Outcome {
   const { target = '', generator = '' } = keys
   const made = maybe(root, plan.id, 'generate.json')
   if (made === null) return { outcome: 'refuse', spans: ['generate.json'], note: 'generate.json is missing' }
-  const { suite, tokens, seconds, x_ray, agents } = JSON.parse(made) as { suite: string; tokens: number; seconds: number; x_ray?: 0 | 1; agents?: number }
-  const proven = tokens >= CEILING ? walled(db, root, plan.id, { target, generator }, { tokens, seconds, x_ray: x_ray ?? null }) : unproven(join(srcDir(root, plan.id), suite), generator)
+  const { suite, tokens, seconds, x_ray, agents, wall } = JSON.parse(made) as { suite: string; tokens: number; seconds: number; x_ray?: 0 | 1; agents?: number; wall?: string }
+  const stop = wall?.replace(/^ruling:/, '') ?? (tokens >= CEILING ? `the token wall after ${String(tokens)} tokens` : null)
+  const proven = stop !== null ? walled(db, root, plan.id, { target, generator }, { tokens, seconds, x_ray: x_ray ?? null }, stop) : unproven(join(srcDir(root, plan.id), suite), generator)
   if (typeof proven !== 'number') return proven
   const config = medusa(db, plan.id, srcDir(root, plan.id), suite)
   if (config !== null && 'outcome' in config) return config

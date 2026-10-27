@@ -482,3 +482,9 @@
   where: "kind = 'draft' AND outcome = 'refuse' AND message LIKE 'not a post plan:%'"
   gap: 7d
   expected: 0
+- name: bench_cost_wall
+  table: events
+  column: at
+  where: "kind = 'generate' AND message LIKE '%run.cost_wall%'"
+  gap: 7d
+  expected: 0

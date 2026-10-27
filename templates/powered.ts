@@ -12,9 +12,9 @@ export function powered(agents = 0, { pre_fix = null, fix = null }: { pre_fix?: 
   return fix === null || fix < FLOOR ? 'fix_calls' : null
 }
 
-export function walled(db: Db, root: string, plan: number, keys: Keys, made: Pick<Score, 'tokens' | 'seconds' | 'x_ray'>): Outcome {
+export function walled(db: Db, root: string, plan: number, keys: Keys, made: Pick<Score, 'tokens' | 'seconds' | 'x_ray'>, wall: string): Outcome {
   kept(db, root, plan, keys, { catches: 0, false_positives: 0, untested: null, ...made, pre_fix_calls: null, fix_calls: null, not_powered: 'wall' })
-  return { outcome: 'pass', spans: [], note: `score.json written unscored: generate stopped at the token wall after ${String(made.tokens)} tokens` }
+  return { outcome: 'pass', spans: [], note: `score.json written unscored: generate stopped at ${wall}` }
 }
 
 /** `fuzz_bench` is left out of score.json when `sha` is undefined, as JSON.stringify drops it. */

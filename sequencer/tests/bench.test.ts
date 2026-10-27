@@ -10,7 +10,7 @@ import type { Fired, Packet, Provider } from '../../providers/kind.ts'
 import { real } from '../../runner/index.ts'
 import { seat } from '../../runner/rules.ts'
 import { rescore } from '../../cli/bench.ts'
-import { scores, supersede } from '../../store/bench.ts'
+import { record, scores, supersede, type Score } from '../../store/bench.ts'
 import { eventsAfter, eventsOf, logged, runRows } from '../../store/events.ts'
 import { holdOf } from '../../store/holds.ts'
 import type { Db } from '../../store/index.ts'
@@ -525,7 +525,7 @@ test('D3 a run at the ceiling is refused', async () => {
 
 test('D2 generate.json has x_ray 1 when x-ray.md was written', async () => {
   const { root } = await generated(stub(1000, 'completed', true, null, true))
-  expect(JSON.parse(get(root, 1, 'generate.json'))).toEqual({ suite: 'test/fizz', tokens: 1000, seconds: 1, x_ray: 1, agents: 0 })
+  expect(JSON.parse(get(root, 1, 'generate.json'))).toEqual({ suite: 'test/fizz', tokens: 1000, seconds: 1, x_ray: 1, agents: 0, properties: 1 })
 })
 
 test('D4 generate.json counts the sub-agents the run spawned', async () => {
@@ -591,6 +591,20 @@ test('D4 a generate pass with 0 properties is seen', () => {
     .toMatchObject([{ name: 'bench_no_properties', state: 'seen' }])
 })
 
+test('D6 a score pass on a live degraded row is seen', () => {
+  const degraded = (not_powered: Score['not_powered'], superseded = false) => {
+    const db = fresh(schema)
+    queued(db, 'bench', 2)
+    record(db, { plan: 1, ...KEYS, ...SCORE, x_ray: null, not_powered })
+    if (superseded) supersede(db, 1)
+    logged(db, { plan: 1, kind: 'score', actor: 'score', outcome: 'pass', message: 'score.json written', pointer: null, run: null }, AT)
+    return drift(db, mechanisms(REPO).filter((e) => e.name === 'bench_degraded'), OPENS)
+  }
+  for (const reason of ['few_properties', 'reduced_generate'] as const) expect(degraded(reason)).toMatchObject([{ name: 'bench_degraded', state: 'seen' }])
+  expect(degraded('pre_fix_calls')).toEqual([])
+  expect(degraded('few_properties', true)).toEqual([])
+})
+
 test('D5 a stop under the ceiling is refused on its reason', async () => {
   const why = 'ruling:seat.write_paths refuses a write to src/vault.sol'
   const { root, outcome } = await generated(stub(1000, 'stopped', true, why))
@@ -598,12 +612,12 @@ test('D5 a stop under the ceiling is refused on its reason', async () => {
   expect(maybe(root, 1, 'generate.json')).toBeNull()
 })
 
-const COST_WALLED = 'ruling:run.cost_wall stopped the run at $25.10, past the $25 wall'
+const COST_WALLED = 'ruling:run.cost_wall stopped the run at $40.10, past the $40 wall'
 
-test('1617b D1 the generate packet carries the $25 cost wall', async () => {
+test('1617b D1 the generate packet carries the $40 cost wall', async () => {
   const fired = stub(1000, 'completed', true)
   await generated(fired)
-  expect(fired.packets).toMatchObject([{ cost_wall: { usd: 25, input: 4, cache_write: 5, cache_write_1h: 8, cache_read: 0.2, output: 20 } }])
+  expect(fired.packets).toMatchObject([{ cost_wall: { usd: 40, input: 4, cache_write: 5, cache_write_1h: 8, cache_read: 0.2, output: 20 } }])
 })
 
 test('1617b D2 a cost-walled generate passes with its wall', async () => {
@@ -947,10 +961,10 @@ test('calls D4 null sides record NULL and still score', () => {
   expect(JSON.parse(get(root, 1, 'score.json'))).toMatchObject({ pre_fix_calls: null, fix_calls: null })
 })
 
-/** `scoring` with generate.json at `tokens` spawning `agents`, and run_pair rows at `pre_fix` and `fix` calls a side. */
-function sided(agents: number | undefined, pre_fix: number | null, fix: number | null, tokens = 1234) {
+/** `scoring` with generate.json at `tokens` spawning `agents` and writing `properties`, and run_pair rows at `pre_fix` and `fix` calls a side. */
+function sided(agents: number | undefined, pre_fix: number | null, fix: number | null, tokens = 1234, properties = 3) {
   const made = scoring(writes('.jsonl', PAIRS.map((r) => ({ ...r, calls: { pre_fix, fix } }))))
-  put(made.root, 1, 'generate.json', JSON.stringify({ suite: 'test/fizz', tokens, seconds: 56.5, agents }))
+  put(made.root, 1, 'generate.json', JSON.stringify({ suite: 'test/fizz', tokens, seconds: 56.5, agents, properties }))
   return made
 }
 
@@ -966,6 +980,24 @@ test('D3 agents 0 or absent is reduced_generate at 505660', () => {
   expect(reason(0, 505660, 505660)).toBe('reduced_generate')
   expect(reason(undefined, 505660, 505660)).toBe('reduced_generate')
   expect(reason(8, 505660, 505660)).toBeNull()
+})
+
+test('D2 5 agents is reduced_generate, over few_properties', () => {
+  expect(reason(5, 505660, 505660)).toBe('reduced_generate')
+  expect(reason(5, 505660, 505660, 1234, 1)).toBe('reduced_generate')
+})
+
+test('D3 8 agents and 1 property is few_properties', () => {
+  expect(reason(8, 505660, 505660, 1234, 1)).toBe('few_properties')
+  expect(reason(8, 69467, 69467, 1234, 1)).toBe('few_properties')
+  expect(reason(8, 505660, 505660, 1234, 3)).toBeNull()
+})
+
+test('D4 generate.json without properties counts the suite', () => {
+  const { root, db } = sided(8, 505660, 505660)
+  put(root, 1, 'generate.json', JSON.stringify({ suite: 'test/fizz', tokens: 1234, seconds: 56.5, agents: 8 }))
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  expect(scores(db)[0]?.not_powered).toBe('few_properties')
 })
 
 test('D4 a side under the floor or unread names that side', () => {

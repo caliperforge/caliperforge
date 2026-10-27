@@ -46,7 +46,7 @@ it('D3 0109 keeps every plans row and moves atelier onto loupe', () => {
   plan(db, 'loupe', 'loupe', web(1))
   plan(db, 'atelier', 'atelier', web(2))
   const before = all(db)
-  expect(migrate(db, join(root, 'schema'))).toEqual(['0109_retire_atelier_lane.sql', '0110_bench_x_ray.sql', '0111_science_lanes.sql', '0112_bench_untested_nullable.sql', '0113_bench_score_busy.sql', '0114_bench_rescore.sql', '0115_records_outside.sql', '0116_records_ball.sql', '0117_bench_calls.sql', '0118_bench_not_powered.sql'])
+  expect(migrate(db, join(root, 'schema'))).toEqual(['0109_retire_atelier_lane.sql', '0110_bench_x_ray.sql', '0111_science_lanes.sql', '0112_bench_untested_nullable.sql', '0113_bench_score_busy.sql', '0114_bench_rescore.sql', '0115_records_outside.sql', '0116_records_ball.sql', '0117_bench_calls.sql', '0118_bench_not_powered.sql', '0119_bench_few_properties.sql'])
   expect(all(db)).toEqual([before[0], { ...before[1], pipe_id: id(db, 'loupe'), lane: 'loupe' }])
   expect(db.prepare("SELECT type, name FROM sqlite_master WHERE tbl_name = 'plans' AND type IN ('index', 'trigger') ORDER BY name").all())
     .toEqual([

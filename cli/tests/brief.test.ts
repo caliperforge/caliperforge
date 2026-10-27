@@ -470,6 +470,14 @@ test('D6 a not_powered score is listed with its reason', () => {
   expect(benchSection(underpowered(db))).toBe(`${BENCH} (1)\n  plan 1\tyuzu-m01\tfizz\tpre_fix_calls\tpre_fix 69467\tfix 69467\n`)
 })
 
+test('D7 a few_properties score is listed', () => {
+  const db = world()
+  plan(db, 1, 'done', null)
+  addScore(db, { plan: 1, target: 'euler-earn-m01', generator: 'fizz', catches: 0, false_positives: 0, untested: null, tokens: 1, seconds: 1, x_ray: null,
+    pre_fix_calls: 505660, fix_calls: 505660, not_powered: 'few_properties' })
+  expect(benchSection(underpowered(db))).toBe(`${BENCH} (1)\n  plan 1\teuler-earn-m01\tfizz\tfew_properties\tpre_fix 505660\tfix 505660\n`)
+})
+
 test('D1 D2 D3 open PRs count ball us and the oldest quiet', () => {
   const db = world()
   const row = { repo: 'acme/widget', plan: null, merged_at: null, word_by: null, word: null, read_at: '2026-10-22T09:00:00Z',

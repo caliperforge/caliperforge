@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import type { Gate } from './gates.ts'
 
 /** One throwaway environment for all three, so pyright resolves `import pytest`. */
@@ -18,6 +18,26 @@ export function loose(src: string, files: string[]): Gate[] {
     ...(checker === null ? [] : [{ script: 'typecheck', bin: 'uv', args: [...env, ...checker, ...py], dir: '' }]),
     { script: 'test', bin: 'uv', args: [...env, 'python', '-m', 'pytest'], dir: '' },
   ]
+}
+
+const PROJECT = [
+  { script: 'install', bin: 'uv', args: ['sync', '--all-extras'] },
+  { script: 'lint', bin: 'uv', args: ['tool', 'run', 'ruff', 'check'] },
+  { script: 'typecheck', bin: 'uv', args: ['run', '--with', 'pyright', 'pyright'] },
+  { script: 'test', bin: 'uv', args: ['run', '--no-sync', 'pytest'] },
+]
+
+/** Our own repo's gates in each folder short of the root whose `pyproject.toml` is nearest a touched `.py`. */
+export function subprojects(src: string, touched: string[]): Gate[] {
+  const dirs = new Set(touched.filter((f) => f.endsWith('.py') && existsSync(join(src, f))).flatMap((f) => project(src, f) ?? []))
+  return [...dirs].flatMap((dir) => PROJECT.map((g) => ({ ...g, dir })))
+}
+
+function project(src: string, file: string): string | null {
+  for (let dir = dirname(file); dir !== '.'; dir = dirname(dir)) {
+    if (existsSync(join(src, dir, 'pyproject.toml'))) return dir
+  }
+  return null
 }
 
 function typed(src: string): string[] | null {

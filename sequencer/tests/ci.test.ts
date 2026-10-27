@@ -1,3 +1,5 @@
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import type { Gh } from '../../rails/ci-green/index.ts'
 import { addSetting } from '../../store/drift.ts'
@@ -6,8 +8,9 @@ import { current } from '../../store/now.ts'
 import { dropPlan, rewind } from '../../store/plans.ts'
 import { passed } from '../../store/ready.ts'
 import { tick } from '../index.ts'
-import { SHOWS } from '../ci.ts'
+import { ciChecks, SHOWS } from '../ci.ts'
 import type { Wire } from '../push.ts'
+import { srcDir } from '../workspace.ts'
 import { CARRIED, internalPlan, ours, plan, runsAfter, runsOn, stub, watched, world, type World } from './world.ts'
 
 const ID = 2
@@ -107,6 +110,19 @@ test('D5 a deleted branch is gone and never sent or listed again', async () => {
   rewind(w.db, ID, 3)
   expect((await rails(w, wire))?.note).toBe(LOCAL)
   expect(sent).toEqual(['send src +p2-let-an-internal-plan-run', 'run list'])
+})
+
+test('1854 D5 a python subproject diff stays on the laptop', async () => {
+  const w = mine()
+  const sent: string[] = []
+  const wire = watched(sent, w.root, ID)
+  await toRails(w, wire)
+  const src = srcDir(w.root, ID)
+  mkdirSync(join(src, 'tools', 'x'), { recursive: true })
+  writeFileSync(join(src, 'tools', 'x', 'pyproject.toml'), '')
+  writeFileSync(join(src, 'tools', 'x', 'a.py'), 'x = 1\n')
+  expect(ciChecks(w.db, w.root, plan(w.db, ID), wire)).toBeNull()
+  expect(sent).toEqual([])
 })
 
 test('no switch: the laptop runs the suite and nothing is sent', async () => {

@@ -329,6 +329,33 @@ test('1157b D2 a red forge test or pytest refuses naming it', () => {
   }
 })
 
+const SUBPROJECT = { ...ONE, 'tools/x/pyproject.toml': '[project]\nname = "x"\n', 'tools/x/a.py': '' }
+
+const UV = ['sync --all-extras', 'tool run ruff check', 'run --with pyright pyright', 'run --no-sync pytest']
+
+test('1854 D1 a pyproject folder runs its uv gates before npm', () => {
+  const src = nested(SUBPROJECT)
+  const green = binned()
+  expect(checks(src, OWN, green.run, [], null, ['tools/x/a.py'])).toBeNull()
+  expect([green.bins, green.seen]).toEqual([['uv', 'uv', 'uv', 'uv', 'npm'], [...UV, 'run test']])
+  expect(green.cwds).toEqual([...UV.map(() => join(src, 'tools/x')), src])
+})
+
+test('1854 D2 a red pyright refuses before any npm script', () => {
+  const shell = binned('uv run --with pyright pyright')
+  expect(checks(nested(SUBPROJECT), OWN, shell.run, [], null, ['tools/x/a.py']))
+    .toMatchObject({ script: 'typecheck', command: 'uv run --with pyright pyright (in tools/x/)', code: '1' })
+  expect(shell.bins).toEqual(['uv', 'uv', 'uv'])
+})
+
+test('1854 D3 no uv gate without a subproject or the file', () => {
+  for (const files of [{ 'tools/x/a.py': '' }, { 'pyproject.toml': '', 'tools/x/a.py': '' }, { 'tools/x/pyproject.toml': '' }]) {
+    const shell = binned()
+    expect(checks(nested({ ...ONE, ...files }), OWN, shell.run, [], null, ['tools/x/a.py'])).toBeNull()
+    expect(shell.bins).toEqual(['npm'])
+  }
+})
+
 const SITE = profile(REPO, 'caliperforge/site')?.commands ?? {}
 
 const PAGE = { 'index.html': '<h1>hi</h1>\n', 'stats.json': '{"n": 1}\n' }

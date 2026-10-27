@@ -20,7 +20,7 @@ export function costWalled(stop: string | null): string | null {
 }
 
 export function written(root: string, plan: number, dir: string, transcript: string,
-  made: { suite: string; tokens: number; seconds: number; wall?: string }, note: string): Outcome {
+  made: { suite: string; tokens: number; seconds: number; wall?: string; properties?: number }, note: string): Outcome {
   put(root, plan, 'generate.json', JSON.stringify({ ...made, x_ray: existsSync(join(dir, 'x-ray/x-ray.md')) ? 1 : 0, agents: spawned(transcript) }))
   return { outcome: 'pass', spans: [], note: `generate.json written: ${note}` }
 }

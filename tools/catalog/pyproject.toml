@@ -1,0 +1,15 @@
+[project]
+name = "catalog-desk"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = ["pyyaml>=6"]
+
+[project.scripts]
+catalog-desk = "catalog_desk:main"
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff", "pyright"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

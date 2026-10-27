@@ -145,6 +145,7 @@ export function assembled(root: string, name: string, manifest: Review, bench: B
     model: manifest.model,
     effort: manifest.effort,
     tools: manifest.tools,
+    seat: name,
     steps: stepsFor(bench.diff),
     refuse: (path) => refuse(bench.repo, manifest.write_paths, path),
     ...(bench.screenshots === undefined ? {} : { reads: [...new Set(bench.screenshots.map((path) => dirname(path)))] }),

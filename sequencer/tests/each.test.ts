@@ -1,13 +1,18 @@
 import { spawn, spawnSync } from 'node:child_process'
 import { once } from 'node:events'
+import { readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { expect, test, vi } from 'vitest'
-import { eventsOf } from '../../store/events.ts'
+import { eventsOf, runRows } from '../../store/events.ts'
 import { lapping } from '../../store/index.ts'
 import { width } from '../../store/lanes.ts'
 import { alive, BEAT, clear, held, take, type Taken } from '../../store/leases.ts'
 import { dropPlan } from '../../store/plans.ts'
+import { load } from '../../runner/rules.ts'
+import { runOf } from '../../store/runs.ts'
 import { lap, tick } from '../index.ts'
+import { planDir } from '../workspace.ts'
 import { CARRIED, PASS, internalPlan, ours, plan, stub, watched, world } from './world.ts'
 
 function two() {
@@ -156,6 +161,78 @@ test('D5 a steal from a dead pid says so on stderr', async () => {
   } finally {
     said.mockRestore()
   }
+})
+
+const TURN = (id: string, [input, write, hour, read, output]: number[]) => JSON.stringify({ type: 'assistant', message: { id, content: [],
+  usage: { input_tokens: input, cache_creation_input_tokens: write, cache_creation: { ephemeral_1h_input_tokens: hour }, cache_read_input_tokens: read, output_tokens: output } } })
+
+const OLD = [TURN('a', [100, 1000, 400, 5000, 50]), TURN('a', [100, 1000, 400, 5000, 50]), TURN('b', [10, 0, 0, 6000, 20]),
+  '{"type":"assistant","message":{"id":"c","usage":{"input_tokens":999'].join('\n')
+
+/** The first job at step 1 with a lap's pending transcript beside it, and the packet that lap noted when `noted`. */
+async function midStep(noted: boolean) {
+  const w = two()
+  take(w.db, 2, new Date(), 7)
+  watched([], w.root, 2)
+  await lap(w.db, w.root, stub(CARRIED), 2, 7, null)
+  load(w.db, w.root)
+  const dir = planDir(w.root, 2)
+  writeFileSync(join(dir, 'step-1.pending.transcript.jsonl'), OLD)
+  const note = join(dir, 'step-1.pending.packet.json')
+  rmSync(note, { force: true })
+  if (noted) {
+    writeFileSync(note, JSON.stringify({ seat: 'brief_writer', model: 'claude-opus-5', effort: 'high' }))
+    const then = new Date(Date.now() - 60_000)
+    utimesSync(note, then, then)
+  }
+  return { w, dir, note }
+}
+
+async function diedMidStep(noted: boolean) {
+  const at = await midStep(noted)
+  const dead = spawnSync('/usr/bin/true').pid
+  take(at.w.db, 2, new Date(), dead)
+  take(at.w.db, 2, new Date(), 7)
+  vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+  try {
+    await lap(at.w.db, at.w.root, stub(CARRIED), 2, 7, dead)
+  } finally {
+    vi.restoreAllMocks()
+  }
+  return { ...at, gone: join(at.dir, `step-1.dead-${String(dead)}.transcript.jsonl`) }
+}
+
+test('D1 D2 D3 D6 a dead lap\'s transcript is kept and charged', async () => {
+  const { w, note, gone } = await diedMidStep(true)
+  expect(readFileSync(gone, 'utf8')).toBe(OLD)
+  const rows = runRows(w.db).filter((r) => r.plan === 2 && r.step === 1)
+  expect(rows.map((r) => r.transcript_path)).toEqual([gone, expect.stringMatching(/\/run-\d+\.transcript\.jsonl$/)])
+  expect(runOf(w.db, rows[0]?.id ?? 0)).toMatchObject({ seat: 'brief_writer', model: 'claude-opus-5', effort: 'high', exit: 1,
+    input_tokens: 1110, cache_read_tokens: 11000, output_tokens: 70, cache_write_tokens: 1000, cache_write_1h_tokens: 400 })
+  expect(runOf(w.db, rows[0]?.id ?? 0).cost_computed_usd).toBeCloseTo(0.01555, 8)
+  expect(runOf(w.db, rows[0]?.id ?? 0).seconds).toBeGreaterThanOrEqual(59)
+  expect(JSON.parse(readFileSync(note, 'utf8'))).toEqual({ seat: 'brief_writer', model: 'claude-opus-5-5', effort: 'high' })
+})
+
+test('D4 a dead lap\'s transcript with no packet is kept uncharged', async () => {
+  const { w, gone } = await diedMidStep(false)
+  expect(readFileSync(gone, 'utf8')).toBe(OLD)
+  expect(runRows(w.db).filter((r) => r.transcript_path === gone)).toEqual([])
+})
+
+test('D5 a steal from a live pid keeps the pending transcript', async () => {
+  const { w, dir } = await midStep(true)
+  writeFileSync(join(dir, 'step-3.pending.transcript.jsonl'), OLD)
+  const other = spawn('sleep', ['30'])
+  try {
+    take(w.db, 2, new Date(), 7)
+    await lap(w.db, w.root, stub(CARRIED), 2, 7, Number(other.pid))
+  } finally {
+    other.kill()
+  }
+  expect(readFileSync(join(dir, 'step-3.pending.transcript.jsonl'), 'utf8')).toBe(OLD)
+  expect(readdirSync(dir).filter((f) => f.includes('.dead-'))).toEqual([])
+  expect(runRows(w.db).filter((r) => r.transcript_path.includes('.dead-'))).toEqual([])
 })
 
 test('a job that only waited leaves the lane its job for this tick', async () => {

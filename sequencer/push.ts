@@ -433,6 +433,8 @@ export function push(db: Db, root: string, plan: PlanRow, wire: Wire = WIRE): Ou
   if (approval === null) return refuse('approvals', `no ceo approval row for ${head.branch} at ${head.sha.slice(0, 12)}`)
   const cold = unproven(db, plan.id)
   if (cold !== null) return refuse(cold, `${cold} left no passing verdict on plan ${String(plan.id)}`)
+  const late = overlap(root, plan.id, head.dir, signed)
+  if (late !== null) return refuse('their_work', late)
   const rules = profile(root, target.repo)
   const text = maybe(root, plan.id, 'pr.md') ?? prBody(target.issue_no, root, plan.id, rules)
   const named = prTitle(root, plan.id)
@@ -465,6 +467,25 @@ export { opened, prBody }
 /** The ready gate already consumed fork CI and the counterparty bot; push reads its rows, never reruns them. */
 function unproven(db: Db, plan: number): string | null {
   return ['ci-green', 'ready'].find((rail) => !passing(db, plan, 'rail_id', rail)) ?? null
+}
+
+/** Read into `FETCH_HEAD`: moving `MAIN` would change an approved card's conventions row. `^HEAD` leaves out main commits the branch merged. */
+function overlap(root: string, plan: number, dir: string, signed: string): string | null {
+  git(dir, ['fetch', '--no-tags', 'upstream', 'HEAD'])
+  const main = git(dir, ['rev-parse', 'FETCH_HEAD']).trim()
+  const from = carded(root, plan, signed)
+  const files = touched(root, plan)
+  const late = files.length === 0 ? ''
+    : git(dir, ['log', '--format=%h %s', main, `^${from ?? git(dir, ['merge-base', 'HEAD', MAIN]).trim()}`, '^HEAD', '--', ...files]).trim()
+  if (late !== '') return `upstream main moved on our files since the card: ${late.split('\n').join('; ')}`
+  if (from === null) put(root, plan, THEIRS, `${signed} ${main}\n`)
+  return null
+}
+
+/** The upstream main sha saved when this signed head's card was first filed. */
+function carded(root: string, plan: number, signed: string): string | null {
+  const [at, main] = (maybe(root, plan, THEIRS) ?? '').trim().split(' ')
+  return at === signed && main !== undefined ? main : null
 }
 
 /** The digest on the card must name bytes that are in the branch, so the plan's work lands before it is shown. */
@@ -599,6 +620,9 @@ export function messageOf(root: string, plan: number, rules: Profile | null = nu
 }
 
 export const COMMIT = 'commit.msg'
+
+/** `<signed> <main sha>`: the signed head a card was filed for, and upstream main at that moment. */
+const THEIRS = 'theirs.main'
 
 /** `Closes` stays owner-qualified: ci-green refuses a bare number (`rails/ci-green/index.ts:123`). */
 export function commitMessage(root: string, plan: PlanRow): string | null {

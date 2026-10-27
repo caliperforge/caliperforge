@@ -6,8 +6,13 @@ import { record, type Score } from '../store/bench.ts'
 
 type Keys = Pick<Score, 'target' | 'generator'>
 
-export function powered(agents = 0, { pre_fix = null, fix = null }: { pre_fix?: number | null; fix?: number | null } = {}): Score['not_powered'] {
-  if (agents === 0) return 'reduced_generate'
+const AGENTS = 8
+
+const PROPERTIES = 3
+
+export function powered(properties: number, agents = 0, { pre_fix = null, fix = null }: { pre_fix?: number | null; fix?: number | null } = {}): Score['not_powered'] {
+  if (agents < AGENTS) return 'reduced_generate'
+  if (properties < PROPERTIES) return 'few_properties'
   if (pre_fix === null || pre_fix < FLOOR) return 'pre_fix_calls'
   return fix === null || fix < FLOOR ? 'fix_calls' : null
 }

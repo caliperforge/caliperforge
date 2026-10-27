@@ -19,7 +19,7 @@ it('D1 0110 reads an 0109 row as NULL and refuses x_ray 2', () => {
   const plan = planRow(db)
   db.prepare(`INSERT INTO bench_scorecard (plan, target, generator, catches, false_positives, untested, tokens, seconds)
     VALUES (?, 'a', 'fizz', 1, 0, 0, 10, 1.5)`).run(plan)
-  expect(migrate(db, join(root, 'schema'))).toEqual(['0110_bench_x_ray.sql', '0111_science_lanes.sql', '0112_bench_untested_nullable.sql', '0113_bench_score_busy.sql', '0114_bench_rescore.sql', '0115_records_outside.sql', '0116_records_ball.sql', '0117_bench_calls.sql', '0118_bench_not_powered.sql'])
+  expect(migrate(db, join(root, 'schema'))).toEqual(['0110_bench_x_ray.sql', '0111_science_lanes.sql', '0112_bench_untested_nullable.sql', '0113_bench_score_busy.sql', '0114_bench_rescore.sql', '0115_records_outside.sql', '0116_records_ball.sql', '0117_bench_calls.sql', '0118_bench_not_powered.sql', '0119_bench_few_properties.sql'])
   expect(scores(db)).toEqual([{ plan, target: 'a', generator: 'fizz', catches: 1, false_positives: 0, untested: 0, tokens: 10, seconds: 1.5, x_ray: null,
     pre_fix_calls: null, fix_calls: null, not_powered: 'pre_fix_calls' }])
   expect(() => record(db, { plan: planRow(db), target: 'a', generator: 'fizz', catches: 0, false_positives: 0, untested: 0, tokens: 0, seconds: 0,

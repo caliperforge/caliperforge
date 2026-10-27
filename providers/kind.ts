@@ -7,6 +7,9 @@ export interface Refusal {
   path: string
 }
 
+/** `usd` is the run's cost ceiling; every price is dollars per million tokens, named like the `prices` columns. */
+export interface CostWall { usd: number; input: number; cache_write: number; cache_write_1h: number; cache_read: number; output: number }
+
 export interface Packet {
   prompt: string
   cwd: string
@@ -18,6 +21,8 @@ export interface Packet {
   steps?: number
   /** What this one run may spend before it stops, cache reads left out. A packet without one is unwalled. */
   wall?: number
+  /** What this one run may cost before it stops, every token priced, cache reads included. A packet without one is unpriced. */
+  cost_wall?: CostWall
   /** The turns this run may take with nothing written. A packet without one gets `IDLE_TURNS`. */
   idle?: number
   refuse: (path: string) => Refusal | null

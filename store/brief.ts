@@ -191,7 +191,7 @@ export function addPrice(db: Db, row: Price): void {
     VALUES (@provider, @model, @input, @cache_read, @cache_write, @cache_write_1h, @output, @effective_from, @source_url)`).run(row)
 }
 
-type Prices =Pick<Price, 'input' | 'cache_write' | 'cache_write_1h' | 'cache_read' | 'output'>
+type Prices = Pick<Price, 'input' | 'cache_write' | 'cache_write_1h' | 'cache_read' | 'output'>
 
 export function price(db: Db, provider: string, model: string): Prices | undefined {
   return db.prepare(`SELECT input, cache_write, cache_write_1h, cache_read, output FROM prices WHERE provider = ? AND model = ?

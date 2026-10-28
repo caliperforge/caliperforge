@@ -2,6 +2,8 @@ import { CHECK } from '../cli/find.ts'
 import { CARD } from '../cli/queue.ts'
 import { parse } from '../rails/diff.ts'
 import type { Db } from '../store/index.ts'
+import { planById } from '../store/plans.ts'
+import { targetRef } from '../store/targets.ts'
 import type { Row } from './card.ts'
 import { diffOf, maybe } from './workspace.ts'
 
@@ -11,9 +13,7 @@ const NAME = /[\w./-]+/g
 
 /** A function declaration, so `CHECKS = [lead]` holds across the import cycle through `cli/queue.ts`. */
 export function lead(db: Db, root: string, plan: number): Row {
-  const row = db.prepare('SELECT t.part FROM plans p JOIN targets t ON t.id = p.target_id WHERE p.id = ?').get(plan) as
-    { part: string } | undefined
-  const part = row?.part ?? ''
+  const part = targetRef(db, planById(db, plan).target_id)?.part ?? ''
   const leads = leadsOf(maybe(root, plan, 'ask.md') ?? '')
   const n = String(leads.length)
   if (part === '') {

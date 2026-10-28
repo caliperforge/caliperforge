@@ -20,8 +20,7 @@
     "lines": 341
   },
   "ci.ts": {
-    "lines": 92,
-    "prepare": 1
+    "lines": 92
   },
   "delta.ts": {
     "lines": 27
@@ -64,8 +63,7 @@
     "lines": 104
   },
   "hold.ts": {
-    "lines": 57,
-    "prepare": 1
+    "lines": 57
   },
   "home.ts": {
     "lines": 15
@@ -80,8 +78,7 @@
     "lines": 39
   },
   "lead.ts": {
-    "lines": 51,
-    "prepare": 1
+    "lines": 51
   },
   "lock.ts": {
     "lines": 57,
@@ -98,8 +95,7 @@
     "lines": 74
   },
   "priority.ts": {
-    "lines": 33,
-    "prepare": 1,
+    "lines": 32,
     "silent-catch": 1
   },
   "prose.ts": {

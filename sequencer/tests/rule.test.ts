@@ -19,6 +19,7 @@ const repo = join(import.meta.dirname, '../..')
 const now = new Date('2026-09-28T17:00:00.000Z')
 const FIX = '---\nmove: fix\nwhy: the builder asked which helper to call\n---\n'
 const ISSUE = '# hello\n\n**What:** add it.\n**Why:** asked.\n\n## Out of scope\n\n- the rest\n\n## Standing\n\n- no forced push\n'
+const CARRIES = 'instruction: follow the ruling\nresume at: step 2'
 
 function seeded(step: number) {
   const db = open(':memory:')
@@ -280,7 +281,7 @@ test('D3 non-ruling and older ruling sections open nothing', () => {
 
 test('D4 a director rule widens the fence to its path', async () => {
   const { db, home } = made()
-  const said = '---\nmove: rule\nwhy: the ruling names it\nanswer: the builder edits `src/x.ts`\n---\n'
+  const said = `---\nmove: rule\nwhy: the ruling names it\nanswer: the builder edits \`src/x.ts\`\n${CARRIES}\n---\n`
   await woke(db, home, stub('', said), now, () => undefined, { ...wire, comment: () => undefined })
   expect(fenceFor(db, 7, ['brief:files'])).toContain('src/x.ts')
 })
@@ -290,7 +291,7 @@ async function aliased(answer: (alias: string) => string, setup: (s: { db: Db; h
   const alias = join(mkdtempSync(join(tmpdir(), 'cf-alias-')), 'root')
   symlinkSync(home, alias)
   setup({ db, home })
-  const said = `---\nmove: rule\nwhy: the ruling names it\nanswer: ${answer(alias)}\n---\n`
+  const said = `---\nmove: rule\nwhy: the ruling names it\nanswer: ${answer(alias)}\n${CARRIES}\n---\n`
   await woke(db, home, stub('', said), now, () => undefined, { ...wire, comment: () => undefined })
   return { events: eventsOf(db, 7, 'director'), issue: maybe(home, 7, 'issue.md') }
 }
@@ -298,7 +299,7 @@ async function aliased(answer: (alias: string) => string, setup: (s: { db: Db; h
 test('D1 a plan_files path through the other root applies', async () => {
   const got = await aliased((a) => `write ${a}/.cf/work/7/src/paydesk/tests/fixtures/check.stderr`,
     ({ db }) => { edit(db, 7, 'add', 'paydesk/tests/fixtures/check.stderr', 'ruling', 'x') })
-  expect(got.issue).toContain('/.cf/work/7/src/paydesk/tests/fixtures/check.stderr\n\n## Standing\n')
+  expect(got.issue).toContain(`/.cf/work/7/src/paydesk/tests/fixtures/check.stderr\n\n${CARRIES}\n\n## Standing\n`)
   expect(got.events).toEqual([{ actor: 'director', outcome: 'pass', message: 'rule: the ruling names it' }])
 })
 
@@ -311,14 +312,14 @@ test('D2 a repo read at base.sha through the other root applies', async () => {
 test('D4 a symlink out of the plan folder into tmpdir applies', async () => {
   const got = await aliased((a) => `write ${a}/.cf/work/7/src/out/x.ts`,
     ({ home }) => { symlinkSync(mkdtempSync(join(tmpdir(), 'cf-out-')), join(srcDir(home, 7), 'out')) })
-  expect(got.issue).toContain('/.cf/work/7/src/out/x.ts\n\n## Standing\n')
+  expect(got.issue).toContain(`/.cf/work/7/src/out/x.ts\n\n${CARRIES}\n\n## Standing\n`)
   expect(got.events).toEqual([{ actor: 'director', outcome: 'pass', message: 'rule: the ruling names it' }])
 })
 
 async function read(path: string, setup: (s: { db: Db; home: string }) => void = () => undefined) {
   const { db, home } = seeded(1)
   setup({ db, home })
-  const said = `---\nmove: rule\nwhy: the ruling names it\nanswer: read ${path}\n---\n`
+  const said = `---\nmove: rule\nwhy: the ruling names it\nanswer: read ${path}\n${CARRIES}\n---\n`
   await woke(db, home, stub('', said), now, () => undefined, { ...wire, comment: () => undefined })
   return { events: eventsOf(db, 7, 'director'), ask: maybe(home, 7, 'ask.md') }
 }
@@ -379,7 +380,7 @@ test('D1 a hand-check citation outside the root applies', async () => {
   const seen: Db[] = []
   const got = await aliased(() => HAND, ({ db }) => { seen.push(db) })
   expect(got.events).toEqual([{ actor: 'director', outcome: 'pass', message: 'rule: the ruling names it' }])
-  expect(got.issue).toContain(`\n\n${HAND}\n\n## Standing\n`)
+  expect(got.issue).toContain(`\n\n${HAND}\n\n${CARRIES}\n\n## Standing\n`)
   expect(seen.map((db) => filesOf(db, 7))).toEqual([[]])
 })
 
@@ -393,7 +394,7 @@ test('D1 a ruling citing an outside folder edits in the root', async () => {
     writeFileSync(join(srcDir(home, 7), 'seats/fizz_generator/prompt.md'), '\n')
   })
   expect(got.events).toEqual(PASS)
-  expect(got.issue).toContain(`\n\n${FIZZ}\n\n## Standing\n`)
+  expect(got.issue).toContain(`\n\n${FIZZ}\n\n${CARRIES}\n\n## Standing\n`)
   const prompt = { path: 'seats/fizz_generator/prompt.md', is_new: false }
   expect(seen.map((db) => [filesOf(db, 7), fenceFor(db, 7, ['brief:files'])])).toEqual([[[prompt], [prompt.path]]])
 })
@@ -412,7 +413,7 @@ test.each([
   const seen: Db[] = []
   const got = await aliased(() => answer(root), ({ db, home }) => { root = home; seen.push(db) })
   expect(got.events).toEqual(PASS)
-  expect(got.issue).toContain(`\n\n${answer(root)}\n\n## Standing\n`)
+  expect(got.issue).toContain(`\n\n${answer(root)}\n\n${CARRIES}\n\n## Standing\n`)
   expect(seen.map((db) => [filesOf(db, 7), fenceFor(db, 7, ['brief:files'])])).toEqual([[[], []]])
 })
 
@@ -431,7 +432,7 @@ test.each([
 ])('D1 a ruling naming %s applies', async (answer) => {
   const got = await aliased(() => answer)
   expect(got.events).toEqual(PASS)
-  expect(got.issue).toContain(`\n\n${answer}\n\n## Standing\n`)
+  expect(got.issue).toContain(`\n\n${answer}\n\n${CARRIES}\n\n## Standing\n`)
 })
 
 test.each([

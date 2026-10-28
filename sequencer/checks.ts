@@ -7,7 +7,7 @@ import type { Profile } from '../store/profile.ts'
 import { exitedOutside } from './exited.ts'
 import { gates, type Gate, type Outside, type OutsideLanguage, waived } from './gates.ts'
 import { fresh } from './inherited.ts'
-import { subprojects } from './loose.ts'
+import { contained, subprojects } from './loose.ts'
 import { malformed } from './malformed.ts'
 import { nodeTests, Package } from './node.ts'
 import { unfinished } from './unfinished.ts'
@@ -228,7 +228,7 @@ function commands(src: string, given: Commands, narrow: string[], touched: strin
   if (mode(src) === 'gradle') return [['check', GRADLE]]
   const scripts = read(src)
   if (scripts === null) return tools(src, given, touched)
-  const named = (given.npm ?? []).filter((s) => scripts[s] !== undefined)
+  const named = (given.npm ?? []).filter((s) => scripts[s] !== undefined && (s !== 'test' || !contained(src, touched)))
   return [
     ...(bare(src) && (named.length > 0 || given.tsc !== undefined) ? [['ci', ['ci']] as [string, string[]]] : []),
     ...named.map((s): [string, string[]] => [s, related(scripts[s] ?? '', s, narrow) ?? ['run', s]]),

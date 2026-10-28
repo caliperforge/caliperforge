@@ -23,9 +23,9 @@ function listing(number: number, body: string, closedAt: string | null = null) {
 function seeded(first: { state: PlanRow['state']; closedAt?: string; template?: PlanRow['template'] } | null) {
   const db = open(':memory:')
   migrate(db, join(repo, 'schema'))
-  db.exec("INSERT INTO pipes (id, name, enabled, window_start, window_end, max_concurrent) VALUES (9, 'after', 1, '00:00', '23:59', 2)")
+  db.exec("INSERT INTO pipes (id, name, enabled, window_start, window_end, max_concurrent) VALUES (99, 'after', 1, '00:00', '23:59', 2)")
   recordListing(db, home, [listing(1, 'first', first?.closedAt ?? null), listing(2, 'second\n\nAfter: #1\n')], false)
-  const plan = (no: number, state: PlanRow['state'], template: PlanRow['template'] = 'pr_path') => addPlan(db, { pipe_id: 9, target_id: null, template, state,
+  const plan = (no: number, state: PlanRow['state'], template: PlanRow['template'] = 'pr_path') => addPlan(db, { pipe_id: 99, target_id: null, template, state,
     queued_at: '2026-09-28', lane: 'machine', seat: 'typescript_specialist', origin: `https://github.com/${home}/issues/${String(no)}`, step: 0 })
   const one = first === null ? null : plan(1, first.state, first.template)
   const two = plan(2, 'running')

@@ -134,6 +134,42 @@ test('a block the ask does not call word for word is not demanded', () => {
   expect(shape(fixture('brief.md'), ask.replace('word for word', 'as below'), root)).toBeNull()
 })
 
+const ruled = fixture('ruled-ask.md')
+const blocks = ruled.split(/^(?=## )/m).slice(1).map((s) => s.split('\n').filter((l) => /^[a-z ]+: /.test(l)).join('\n'))
+const ruling = (copy: string, heading = '## Rulings'): string =>
+  fixture('brief.md').replace('\n## Settled facts', `\n${heading}\n\n${copy}\n\n## Settled facts`)
+
+test('D1: shape passes both ruling blocks under Rulings', () => {
+  expect(blocks).toHaveLength(2)
+  expect(shape(ruling(blocks.join('\n\n')), ruled, root)).toBeNull()
+})
+
+test('D2: a dropped ruling block is refused at its instruction', () => {
+  expect(shape(ruling(blocks[0] ?? ''), ruled, root)).toEqual({
+    span: 'instruction: refuse a reply that fails the shape check',
+    reason: 'this ruling is not under ## Rulings word for word; copy each ruling block there unchanged',
+  })
+})
+
+test('D3: a changed byte or a block outside Rulings is refused', () => {
+  expect(shape(ruling(blocks.join('\n\n').replace('step 1', 'step 2')), ruled, root)?.span).toBe('instruction: save the reply as issue.md and write nothing else')
+  expect(shape(fixture('brief.md').replace('\n## Settled facts', `\n${blocks.join('\n\n')}\n\n## Settled facts`), ruled, root)?.span)
+    .toBe('instruction: save the reply as issue.md and write nothing else')
+})
+
+test('D4: no ruling, a fixer answer or a bare answer passes', () => {
+  const answer = (heading: string): string => `${fixture('brief.md').split('\n## ')[0] ?? ''}\n\n${heading}\n\nresearch it first\n`
+  expect(shape(carrying(block), ask, root)).toBeNull()
+  expect(shape(fixture('brief.md'), ruled.replaceAll('## Answer from the director', '## Answer from the fixer'), root)).toBeNull()
+  expect(shape(fixture('brief.md'), answer('## Answer from the director (2026-10-28)'), root)).toBeNull()
+})
+
+test('D5: the prompt copies each ruling block under Rulings', () => {
+  expect(seat(root, 'brief_writer').prompt.replace(/\s+/g, ' ')).toContain(
+    'When the ask carries a ruling (a `## Answer from the director` or `## Ruling` section), copy its block -- the `applies to`, `instruction`, `files`, `resume at` and `verify` lines -- under `## Rulings`, after `## Approach`, exactly as the ask writes it, one block per ruling.',
+  )
+})
+
 test('D2: an Atelier brief tests services, not the tree', () => {
   expect(seat(root, 'brief_writer').prompt.replace(/\s+/g, ' ')).toContain(
     '`## Tests` for an Atelier ticket names service and model tests, and names an accessibility-tree test only for a control.',

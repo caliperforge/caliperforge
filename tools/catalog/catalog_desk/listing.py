@@ -47,6 +47,9 @@ def read(dir: Path) -> Listing | Invalid:
         return invalid
     if "openapi" not in front:
         return Listing(front, {}, dir.resolve().name)
+    if not isinstance(front["openapi"].get("path"), str):
+        inline = _content(front["openapi"]["content"])
+        return inline if isinstance(inline, Invalid) else Listing(front, inline, dir.resolve().name)
     try:
         spec = json.loads((dir / front["openapi"]["path"]).read_text(encoding="utf-8"))
     except (OSError, ValueError) as e:
@@ -62,13 +65,25 @@ def _fields(front: dict[str, Any]) -> Invalid | None:
     if not isinstance(pr, int) or isinstance(pr, bool):
         return Invalid("pr", "not an integer")
     openapi = front.get("openapi")
-    if isinstance(openapi, dict) and isinstance(openapi.get("url"), str) and "path" not in openapi:
+    inline = isinstance(openapi, dict) and isinstance(openapi.get("content"), str)
+    if isinstance(openapi, dict) and isinstance(openapi.get("url"), str) and "path" not in openapi and not inline:
         return Invalid("openapi.path", URL_ONLY)
     if "openapi" not in front and _endpoints(front.get("endpoints")):
         return None
-    if not isinstance(openapi, dict) or not isinstance(openapi.get("path"), str):
+    if not isinstance(openapi, dict) or not (isinstance(openapi.get("path"), str) or inline):
         return Invalid("openapi.path", "missing")
     return None
+
+
+def _content(text: str) -> dict[str, Any] | Invalid:
+    try:
+        spec = json.loads(text)
+    except ValueError:
+        try:
+            spec = yaml.safe_load(text)
+        except yaml.YAMLError as e:
+            return Invalid("openapi.content", str(e))
+    return spec if isinstance(spec, dict) else Invalid("openapi.content", "not a mapping")
 
 
 def _endpoints(value: object) -> bool:

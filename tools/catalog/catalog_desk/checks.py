@@ -13,6 +13,7 @@ from catalog_desk.offers import NETWORKS, SOLANA, Offer, Offers, _values, offers
 
 CAP = 60
 SUMMARY = (24, 63)
+DESCRIPTION = (32, 255)
 METHODS = ("get", "post", "put", "patch", "delete")
 OUTBOUND = {"send", "sms", "email", "mail", "tweet", "post", "publish", "message", "notify", "call", "transfer", "withdraw"}
 WORDS = re.compile(r"[^A-Za-z]+|(?<=[a-z])(?=[A-Z])")
@@ -27,6 +28,7 @@ BASE58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 @dataclass(frozen=True)
 class _Answered:
     op: dict[str, Any]
+    pricing: dict[str, Any]
     res: Response
     offers: Offers
 
@@ -34,51 +36,72 @@ class _Answered:
 def next_fix(listing: Listing | Invalid, net: Net, before: Listing | None = None) -> Fix | None:
     if isinstance(listing, Invalid):
         return Fix("format", f"{listing.field}: {listing.why}", listing.field, f"a valid {listing.field}", False)
-    pricing = _fields(_fields(next(iter(_list(listing.front.get("endpoints"))), None)).get("pricing"))
     # _offer fills answered before the phases after it start reading it.
     answered: list[_Answered] = []
     fixes = chain(
-        _format(listing.front, listing.spec),
-        _declared_less(listing.spec, before),
-        _offer(listing.front["service_url"], listing.spec, net, answered),
+        _format(listing),
+        _declared_less(listing, before),
+        _offer(listing, net, answered),
         _network(answered),
-        _price(answered, pricing),
+        _price(answered),
         _payee(answered, net),
     )
     return next(fixes, None)
 
 
-def _format(front: dict[str, Any], spec: dict[str, Any]) -> Iterator[Fix]:
+def _targets(listing: Listing) -> list[tuple[str, str, str, dict[str, Any], dict[str, Any]]]:
+    url = listing.front["service_url"]
+    endpoints = _list(listing.front.get("endpoints"))
+    if "openapi" in listing.front:
+        pricing = _fields(_fields(next(iter(endpoints), None)).get("pricing"))
+        return [(method, path, url.rstrip("/") + BRACED.sub("test", path), op, pricing) for method, path, op in _ops(listing.spec)]
+    return [(e["method"].upper(), e["path"], f"{url}/{e['path'].removeprefix('/')}", {}, _fields(e.get("pricing"))) for e in endpoints]
+
+
+def _format(listing: Listing) -> Iterator[Fix]:
+    front = listing.front
+    name = front.get("name")
+    if name != listing.dir:
+        current = name if isinstance(name, str) else ""
+        yield Fix("format", f"name={current} but parent directory is {listing.dir}", current, listing.dir, False)
     for fault in faults(front):
         low, high = fault.range
         text = front.get(fault.field)
         current = text if isinstance(text, str) else ""
         yield Fix("format", f"{fault.field} is {fault.length} characters", current, f"a {fault.field} of {low}-{high} characters", False)
+    low, high = DESCRIPTION
+    for entry in [] if "openapi" in front else front["endpoints"]:
+        text = entry.get("description")
+        current = text if isinstance(text, str) else ""
+        if not low <= len(current) <= high:
+            rule = f"{entry['method'].upper()} {entry['path']} description is {len(current)} characters"
+            yield Fix("format", rule, current, f"an endpoint description of {low}-{high} characters", False)
     low, high = SUMMARY
-    for method, path, op in _ops(spec):
+    for method, path, op in _ops(listing.spec):
         summary = op.get("summary")
         if isinstance(summary, str) and not low <= len(summary) <= high:
             rule = f"{method} {path} summary is {len(summary)} characters"
             yield Fix("format", rule, summary, f"an operation summary of {low}-{high} characters", False)
 
 
-def _declared_less(spec: dict[str, Any], before: Listing | None) -> Iterator[Fix]:
-    listed = {(method, path) for method, path, _ in _ops(spec)}
-    for method, path, _ in [] if before is None else _ops(before.spec):
+def _declared_less(listing: Listing, before: Listing | None) -> Iterator[Fix]:
+    listed = {(method, path) for method, path, *_ in _targets(listing)}
+    for method, path, *_ in [] if before is None else _targets(before):
         if (method, path) not in listed:
             endpoint = f"{method} {path}"
             yield Fix("declared_less", "a fix may not drop an endpoint the listing declared", endpoint, f"restore {endpoint}", False)
 
 
-def _offer(url: str, spec: dict[str, Any], net: Net, answered: list[_Answered]) -> Iterator[Fix]:
+def _offer(listing: Listing, net: Net, answered: list[_Answered]) -> Iterator[Fix]:
+    url = listing.front["service_url"]
     host = urlsplit(url).hostname or ""
     if not net.resolve(host):
         yield Fix("offer", "dead domain", url, "a service_url whose host resolves", False)
         return
-    for method, path, op in _ops(spec)[:CAP]:
+    for method, path, target, op, pricing in _targets(listing)[:CAP]:
         if method != "GET" and _outbound(path, op):
             continue
-        answer = _probe(net, url.rstrip("/") + BRACED.sub("test", path), method, path, op)
+        answer = _probe(net, target, method, path, op, pricing)
         if isinstance(answer, Fix):
             yield answer
             return
@@ -86,7 +109,7 @@ def _offer(url: str, spec: dict[str, Any], net: Net, answered: list[_Answered]) 
         answered.append(answer)
 
 
-def _probe(net: Net, url: str, method: str, path: str, op: dict[str, Any]) -> Fix | _Answered:
+def _probe(net: Net, url: str, method: str, path: str, op: dict[str, Any], pricing: dict[str, Any]) -> Fix | _Answered:
     endpoint = f"{method} {path}"
     try:
         res = net.fetch(url, method, None if method == "GET" else {})
@@ -97,7 +120,7 @@ def _probe(net: Net, url: str, method: str, path: str, op: dict[str, Any]) -> Fi
     offers = offers_of(res)
     if not offers.offers:
         return Fix("offer", "402 without a readable offer", endpoint, "an x402 or MPP offer in the 402", False)
-    return _Answered(op, res, offers)
+    return _Answered(op, pricing, res, offers)
 
 
 def _shown(answer: _Answered, host: str) -> Iterator[Fix]:
@@ -124,7 +147,7 @@ def _network(answered: list[_Answered]) -> Iterator[Fix]:
             yield Fix("network", "MPP offered on Tempo, not Solana", "mpp:tempo", "an MPP offer on Solana mainnet", True)
 
 
-def _price(answered: list[_Answered], pricing: dict[str, Any]) -> Iterator[Fix]:
+def _price(answered: list[_Answered]) -> Iterator[Fix]:
     for answer in answered:
         paid = _usable(answer.offers.offers)
         exact = sorted({o.usd for o in paid if o.usd is not None and o.scheme in ("exact", "charge")})
@@ -133,7 +156,7 @@ def _price(answered: list[_Answered], pricing: dict[str, Any]) -> Iterator[Fix]:
             yield Fix("price", f"inconsistent prices across offers [{prices}]", prices, "one price across offers", False)
         if any(o.usd == 0 for o in paid):
             yield Fix("price", "asks for $0", "$0", "a price above $0", False)
-        declared = _declared_usd(answer.op, pricing)
+        declared = _declared_usd(answer.op, answer.pricing)
         quoted = min((o.usd for o in paid if o.usd is not None), default=None)
         if declared is None or quoted is None or not _apart(declared, quoted):
             continue

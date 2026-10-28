@@ -16,6 +16,7 @@ STRINGS = (("service_url", True), ("title", True), ("description", False), ("use
 class Listing:
     front: dict[str, Any]
     spec: dict[str, Any]
+    dir: str
 
 
 @dataclass(frozen=True)
@@ -44,11 +45,13 @@ def read(dir: Path) -> Listing | Invalid:
     invalid = _fields(front)
     if invalid is not None:
         return invalid
+    if "openapi" not in front:
+        return Listing(front, {}, dir.resolve().name)
     try:
         spec = json.loads((dir / front["openapi"]["path"]).read_text(encoding="utf-8"))
     except (OSError, ValueError) as e:
         return Invalid("openapi.path", str(e))
-    return Listing(front, spec)
+    return Listing(front, spec, dir.resolve().name)
 
 
 def _fields(front: dict[str, Any]) -> Invalid | None:
@@ -61,9 +64,16 @@ def _fields(front: dict[str, Any]) -> Invalid | None:
     openapi = front.get("openapi")
     if isinstance(openapi, dict) and isinstance(openapi.get("url"), str) and "path" not in openapi:
         return Invalid("openapi.path", URL_ONLY)
+    if "openapi" not in front and _endpoints(front.get("endpoints")):
+        return None
     if not isinstance(openapi, dict) or not isinstance(openapi.get("path"), str):
         return Invalid("openapi.path", "missing")
     return None
+
+
+def _endpoints(value: object) -> bool:
+    entries = value if isinstance(value, list) else []
+    return bool(entries) and all(isinstance(e, dict) and isinstance(e.get("method"), str) and isinstance(e.get("path"), str) for e in entries)
 
 
 def faults(front: dict[str, Any]) -> list[Fault]:

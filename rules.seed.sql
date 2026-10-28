@@ -94,6 +94,7 @@ VALUES
   ('rules/registry/81-bench_cost_wall.yaml', 'card', 'rules/registry/81-bench_cost_wall.yaml', '30a85325f3e9812adff04ee02050276cf6bd62be0292a80ff7a4950ddcefe4cb', '2026-10-27'),
   ('rules/registry/82-bench_degraded.yaml', 'card', 'rules/registry/82-bench_degraded.yaml', '927d20f7ffbb582f498f37c33ee18aa54c68cc4566fc2460a9510b6174495106', '2026-10-27'),
   ('rules/registry/83-fork_ready_ci.yaml', 'card', 'rules/registry/83-fork_ready_ci.yaml', '17d2367c89876f7cfc9c5d74466799605119529fdadf44a3dca64a6cd6da48eb', '2026-10-28'),
+  ('rules/registry/84-waive_resumes_stop.yaml', 'card', 'rules/registry/84-waive_resumes_stop.yaml', '1fa3c7210b0bbec6f3184c2660655f98fee6622be403ec9242c8926af894eb4e', '2026-10-28'),
   ('rules/repo-classes.yaml', 'card', 'rules/repo-classes.yaml', 'deaf34870d419639a3eda3e17120eb257ee7b8549ed429bf431c1e6f623a29cb', '2026-10-16'),
   ('rules/staffing.yaml', 'card', 'rules/staffing.yaml', 'aa91207f2660fe1f31421d100b3118981715abc9ed8e1381a6d2962c464d0d36', '2026-10-05'),
   ('completion-audit', 'rail', 'rules/rails.yaml', 'b46b445806d399b61887a5259eb0a6893444efcbe5acf2e6dd534507bc0882f3', '2026-09-17'),

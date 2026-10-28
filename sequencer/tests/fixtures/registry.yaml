@@ -499,3 +499,10 @@
   column: at
   where: "kind = 'ready' AND outcome = 'pass' AND message GLOB '*; caliperforge/* ran no workflow at * stand as its CI'"
   gap: 14d
+- name: waive_resumes_stop
+  switch: { key: director.apply, value: '1' }
+  table: events
+  column: at
+  where: "kind = 'director' AND outcome = 'pass' AND message GLOB 'waive:*' AND EXISTS (SELECT 1 FROM runs WHERE runs.plan = events.plan AND runs.step = 2 AND runs.seat NOT IN ('fixer', 'orchestrator', 'coo_lite', 'director') AND julianday(runs.at) BETWEEN julianday(events.at) AND julianday(events.at, '+1 day')) AND EXISTS (SELECT 1 FROM verdicts v5 JOIN verdicts v4 ON v4.plan = v5.plan AND v4.tree = v5.tree WHERE v5.plan = events.plan AND v5.step = 5 AND v5.kind = 'review' AND v5.outcome = 'pass' AND v4.step = 4 AND v4.kind = 'review' AND v4.outcome = 'pass')"
+  gap: 7d
+  expected: 0

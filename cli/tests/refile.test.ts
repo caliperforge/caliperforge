@@ -2,7 +2,7 @@ import { expect, test, vi } from 'vitest'
 import { released } from '../../sequencer/fixer.ts'
 import { hold } from '../../sequencer/hold.ts'
 import { internalPlan, world } from '../../sequencer/tests/world.ts'
-import { SELF } from '../../sequencer/workspace.ts'
+import { get, SELF } from '../../sequencer/workspace.ts'
 import { logged } from '../../store/events.ts'
 import type { Db } from '../../store/index.ts'
 import { end, planRows, waiting } from '../../store/plans.ts'
@@ -12,7 +12,9 @@ import { refile } from '../refile.ts'
 const TO = 'caliperforge/atelier'
 const BENCH = 'caliperforge/fuzz-bench'
 const URL = `https://github.com/${TO}/issues/5`
-const read: Read = () => ({ title: 'the old title', body: 'the old body', labels: [] })
+const ISSUE = { title: 'the old title', body: 'the old body', labels: [] }
+const viewing = (issue: unknown, hasIssuesEnabled = true): Read => (args) => args[0] === 'repo' ? { hasIssuesEnabled } : issue
+const read = viewing(ISSUE)
 
 function said(db: Db, plan: number, message: string): void {
   logged(db, { plan, kind: 'director', actor: 'coo_lite', outcome: 'needs_ceo', message, pointer: null, run: null })
@@ -25,7 +27,7 @@ test('D1 refile opens the newest block on to, closes the old', () => {
   said(w.db, 2, 'newer block')
   const calls: [string[], string | undefined][] = []
   const exec: Run = (args, input) => { calls.push([args, input]); return `${URL}\n` }
-  expect(refile(w.db, `${SELF}#7`, TO, read, exec)).toBe(URL)
+  expect(refile(w.db, w.root, `${SELF}#7`, TO, read, exec)).toBe(URL)
   expect(calls).toEqual([
     [['issue', 'create', '--repo', TO, '--title', 'the old title', '--body-file', '-'], 'the old body\n\n## Why it moved\n\nnewer block'],
     [['issue', 'close', '7', '--repo', SELF, '--comment', `Moved to ${URL}`], undefined],
@@ -37,7 +39,7 @@ test('D2 refile with no coo_lite event moves the source body', () => {
   internalPlan(w.db, w.root, 2, 'misfiled', 7)
   const calls: [string[], string | undefined][] = []
   const exec: Run = (args, input) => { calls.push([args, input]); return `${URL}\n` }
-  expect(refile(w.db, `${SELF}#7`, TO, read, exec)).toBe(URL)
+  expect(refile(w.db, w.root, `${SELF}#7`, TO, read, exec)).toBe(URL)
   expect(calls).toEqual([
     [['issue', 'create', '--repo', TO, '--title', 'the old title', '--body-file', '-'], 'the old body'],
     [['issue', 'close', '7', '--repo', SELF, '--comment', `Moved to ${URL}`], undefined],
@@ -47,11 +49,11 @@ test('D2 refile with no coo_lite event moves the source body', () => {
 test('D2 refile carries the lane mapped to to, and the P label', () => {
   const w = world()
   internalPlan(w.db, w.root, 2, 'misfiled', 7)
-  const labelled: Read = () => ({ title: 'the old title', body: 'the old body',
+  const labelled = viewing({ title: 'the old title', body: 'the old body',
     labels: [{ name: 'lane:machine' }, { name: 'P1' }, { name: 'seat:x' }] })
   const filed = (to: string): string[][] => {
     const calls: string[][] = []
-    refile(w.db, `${SELF}#7`, to, labelled, (args) => { calls.push(args); return `${URL}\n` })
+    refile(w.db, w.root, `${SELF}#7`, to, labelled, (args) => { calls.push(args); return `${URL}\n` })
     return calls
   }
   expect(filed(BENCH)).toEqual([
@@ -74,7 +76,7 @@ test('D3 refile holds a waiting plan on the new url', () => {
   hold(w.db, w.root, 4, 'after 3', now, 3)
   internalPlan(w.db, w.root, 5, 'overlaps 2', 10)
   waiting(w.db, [{ plan: 5, why: 'file_overlap', on: 2 }])
-  refile(w.db, `${SELF}#7`, TO, read, () => `${URL}\n`)
+  refile(w.db, w.root, `${SELF}#7`, TO, read, () => `${URL}\n`)
   end(w.db, 2, 'done')
   released(w.db, w.root, now, vi.fn())
   const rows = planRows(w.db)
@@ -91,7 +93,7 @@ test.each([
   const w = world()
   internalPlan(w.db, w.root, 2, 'misfiled', 7)
   const exec = vi.fn<Run>()
-  expect(() => refile(w.db, `${SELF}#7`, TO, () => reply, exec)).toThrow()
+  expect(() => refile(w.db, w.root, `${SELF}#7`, TO, viewing(reply), exec)).toThrow()
   expect(exec).not.toHaveBeenCalled()
 })
 
@@ -105,7 +107,38 @@ test.each([
   said(w.db, 2, 'block')
   const looked = vi.fn<Read>()
   const exec = vi.fn<Run>()
-  expect(() => refile(w.db, from, to, looked, exec)).toThrow(refusal)
+  expect(() => refile(w.db, w.root, from, to, looked, exec)).toThrow(refusal)
   expect(looked).not.toHaveBeenCalled()
   expect(exec).not.toHaveBeenCalled()
+})
+
+test('D1 an issues-off repo of ours gets a Fork: line, no issue', () => {
+  const w = world()
+  internalPlan(w.db, w.root, 2, 'misfiled', 7)
+  const ask = get(w.root, 2, 'ask.md')
+  const looked = vi.fn<Read>(viewing(ISSUE, false))
+  const exec = vi.fn<Run>()
+  expect(refile(w.db, w.root, `${SELF}#7`, TO, looked, exec)).toBe(`Fork: ${TO}`)
+  expect(looked.mock.calls).toEqual([[['repo', 'view', TO, '--json', 'hasIssuesEnabled']]])
+  expect(exec).not.toHaveBeenCalled()
+  expect(get(w.root, 2, 'ask.md')).toBe(`${ask}\nFork: ${TO}\n`)
+})
+
+test('D2 an issues-off repo outside ours throws untouched', () => {
+  const w = world()
+  internalPlan(w.db, w.root, 2, 'misfiled', 7)
+  const ask = get(w.root, 2, 'ask.md')
+  const exec = vi.fn<Run>()
+  expect(() => refile(w.db, w.root, `${SELF}#7`, 'acme/widget', viewing(ISSUE, false), exec))
+    .toThrow('acme/widget has issues disabled and is not ours to build in')
+  expect(exec).not.toHaveBeenCalled()
+  expect(get(w.root, 2, 'ask.md')).toBe(ask)
+})
+
+test('D3 a second refile to the same fork adds no second line', () => {
+  const w = world()
+  internalPlan(w.db, w.root, 2, 'misfiled', 7)
+  refile(w.db, w.root, `${SELF}#7`, TO, viewing(ISSUE, false), vi.fn<Run>())
+  refile(w.db, w.root, `${SELF}#7`, TO, viewing(ISSUE, false), vi.fn<Run>())
+  expect(get(w.root, 2, 'ask.md').split('\n').filter((l) => l === `Fork: ${TO}`)).toHaveLength(1)
 })

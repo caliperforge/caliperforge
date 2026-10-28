@@ -9,7 +9,7 @@ import { appliedOf, decided, decisions } from '../store/decisions.ts'
 import { pushed } from '../store/deliverables.ts'
 import { asked, setting } from '../store/drift.ts'
 import { kindsOf, logged } from '../store/events.ts'
-import { retried, returnToLane } from '../store/holds.ts'
+import { resumed, retried, returnToLane } from '../store/holds.ts'
 import type { Db } from '../store/index.ts'
 import { wall } from '../store/lanes.ts'
 import { clear as unlease, take } from '../store/leases.ts'
@@ -36,7 +36,7 @@ import { repeated, ticketed } from './ticket.ts'
 import { history, parentAsk } from './record.ts'
 import { READ, SERVER, server } from './upstream.ts'
 import { widen } from './widen.ts'
-import { afresh, maybe, planDir, put } from './workspace.ts'
+import { afresh, cloned, maybe, move, planDir, put, snapshot, srcDir } from './workspace.ts'
 
 const Said = z.object({
   move: z.enum(['rule', 'waive', 'close', 'file', 'ask_ceo', 'ask_coo', 'return', 'fix', 'widen', 'park', 'research']),
@@ -269,8 +269,14 @@ const UNAPPLIED: Record<Exclude<Move['move'], 'ask_ceo' | 'ask_coo'>, string> = 
 
 function waiving(db: Db, root: string, plan: PlanRow, why: string): boolean {
   if (plan.state !== 'blocked_on_ceo') return false
-  if (DESIGN.test(maybe(root, plan.id, 'refusal.md') ?? '')) waive(root, plan.id, why)
-  afresh(root, plan.id, retried(db, plan.id, 'director'))
+  const refusal = maybe(root, plan.id, 'refusal.md') ?? ''
+  if (DESIGN.test(refusal)) waive(root, plan.id, why)
+  const from = /^step (\d+) /.exec(refusal)?.[1]
+  const src = srcDir(root, plan.id)
+  const tree = cloned(src) ? snapshot(src) : undefined
+  if (from !== undefined && tree !== undefined && resumed(db, plan.id, Number(from), tree, 'director')) {
+    move(root, plan.id, 'refusal.md', 'refusal.prev.md')
+  } else afresh(root, plan.id, retried(db, plan.id, 'director'))
   return true
 }
 

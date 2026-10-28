@@ -1,4 +1,5 @@
 ---
+name: no-usdc
 title: No USDC
 summary: Pays per call in USDC on Solana
 description: A listing whose 402 names a payee wallet that holds no USDC token account to receive the payment.

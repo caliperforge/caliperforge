@@ -61,6 +61,14 @@ test('D5: a build cap stop names its four moves', () => {
     'Answer with exactly one of `rule` (name the root fix under `answer`), `waive` (accept the findings and send it round), `split` or `park`.')
 })
 
+test('D5: the fence carries the rule and waive block', () => {
+  const prompt = seat(root, 'director').prompt
+  for (const line of ['applies to: <plan, step, for rule and waive>', 'instruction: <one imperative sentence, for rule and waive>',
+    "files: <paths in this job's tree, or none>", 'resume at: <the step, for rule and waive>',
+    'verify: <the test or command that shows it is done>']) expect(prompt).toContain(`\n${line}\n`)
+  expect(prompt.replace(/\n/g, ' ')).toContain('`applies to`, `instruction`, `files`, `resume at` and `verify` go with `rule` and `waive`')
+})
+
 test('D4: a brief writer question the ticket answers is rule', () => {
   expect(seat(root, 'director').prompt.replace(/\n {2}/g, ' ')).toContain(
     "A brief writer's question (a stop at step 1) that `ask.md` or `issue.md` answers is `rule`")

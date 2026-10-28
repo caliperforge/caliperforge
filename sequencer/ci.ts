@@ -47,7 +47,7 @@ type Ci = { wait: Outcome } | { failed: Failure | null; at: string }
  * ran past `RUNS`, or the diff touches a Python subproject, whose gates CI does not run.
  */
 export function ciChecks(db: Db, root: string, plan: PlanRow, wire: Wire = WIRE): Ci | null {
-  if (setting(db, WHERE) !== 'ci' ||!kernelPlan(plan) || !workflows(srcDir(root, plan.id))) return null
+  if (setting(db, WHERE) !== 'ci' || !kernelPlan(plan) || !workflows(srcDir(root, plan.id))) return null
   if (subprojects(srcDir(root, plan.id), parse(diffOf(root, plan.id)).map((f) => f.path)).length > 0) return null
   let pointer = ''
   try {

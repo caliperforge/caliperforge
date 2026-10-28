@@ -129,13 +129,13 @@ export async function generate(db: Db, root: string, plan: PlanRow, step: Step, 
   const { manifest, prompt, hash } = seat(root, name)
   const walls = costWall(db, provider.name, manifest.model)
   if ('outcome' in walls) return walls
-  const granted = manifest.reads?.map((path) => real(path.startsWith('~/') ? join(homedir(), path.slice(2)) : path)) ?? []
+  const granted = manifest.reads?.map((path) => real(path.startsWith('~/') ? join(homedir(), path.slice(2)) : resolve(root, path))) ?? []
   mkdirSync(join(planDir(root, plan.id), 'scratch'), { recursive: true })
   const tmp = real(join(planDir(root, plan.id), 'scratch'))
   const built = packet(manifest, prompt, '', ask(granted[0], granted.find((path) => basename(path) === 'x-ray'), tmp), dir,
     pending(planDir(root, plan.id), `step-${String(step.step)}`), false, [...manifest.write_paths, tmp])
   const fired = await provider.fire({ ...built, refuse: (path) => real(resolve(dir, path)) === real(ATTEMPTS) ? null : built.refuse(path), wall: CEILING,
-    cost_wall: walls, env: { ...TIMEOUTS, TMPDIR: tmp }, reads: [...granted, real(ATTEMPTS)], ...(name === 'fizz_generator' ? { idle: SETUP } : {}) })
+    cost_wall: walls, env: { ...TIMEOUTS, TMPDIR: tmp }, reads: [...granted, real(ATTEMPTS)], ...(['fizz_generator', 'fizz_lean_generator'].includes(name) ? { idle: SETUP } : {}) })
   const run = runLogged(db, { plan: plan.id, step: step.step, seat: name, rule_hash: hash, provider: provider.name, model: manifest.model,
     effort: manifest.effort, exit: fired.exit, fired, staffed: name })
   const transcript = byRun(db, run, fired.transcript_path)

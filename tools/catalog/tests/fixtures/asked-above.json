@@ -1,0 +1,13 @@
+{
+  "fetch": {
+    "GET https://api.example.com/paid": {
+      "status": 402,
+      "headers": {
+        "payment-required": "eyJ4NDAyVmVyc2lvbiI6MiwiYWNjZXB0cyI6W3sic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoic29sYW5hIiwiYW1vdW50IjoiMTAwMDAiLCJhc3NldCI6IkVQakZXZGQ1QXVmcVNTcWVNMnFOMXh6eWJhcEM4RzR3RUdHa1p3eVREdDF2In1dfQ=="
+      },
+      "body": ""
+    }
+  },
+  "hosts": ["api.example.com"],
+  "rpc": {}
+}

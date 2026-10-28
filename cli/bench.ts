@@ -38,7 +38,7 @@ export function fileBench(db: Db, root: string, target: string | undefined, all:
 }
 
 /** The suites folder is the only copy left: the tick reaps `src/` from every done plan. */
-export function rescore(db: Db, root: string, id: number, by: Holder, why: string): number | null {
+function scoredSuite(db: Db, root: string, id: number): { made: string; yml: string; target: string; generator: string; suites: string } {
   const plan = planById(db, id)
   if (plan.template !== 'bench' || plan.state !== 'done') throw new Error(`plan ${String(id)} is not a done bench plan`)
   const made = maybe(root, id, 'generate.json')
@@ -48,6 +48,11 @@ export function rescore(db: Db, root: string, id: number, by: Holder, why: strin
   if (target === undefined || generator === undefined) throw new Error(`plan ${String(id)} has no target or generator in target.yml`)
   const suites = join(planDir(root, id), 'fuzz-bench/suites', generator, target)
   if (!existsSync(suites)) throw new Error(`plan ${String(id)} has no fuzz-bench/suites/${generator}/${target}`)
+  return { made, yml, target, generator, suites }
+}
+
+export function rescore(db: Db, root: string, id: number, by: Holder, why: string): number | null {
+  const { made, suites } = scoredSuite(db, root, id)
   const old = db.transaction(() => {
     const was = supersede(db, id)
     rewind(db, id, 2)
@@ -58,6 +63,28 @@ export function rescore(db: Db, root: string, id: number, by: Holder, why: strin
   rmSync(suite, { recursive: true, force: true })
   cpSync(suites, suite, { recursive: true })
   return old
+}
+
+export function refuzz(db: Db, root: string, source: number, hours: number, seeds: number, by: Holder, why: string, at: string): number {
+  for (const [flag, n] of [['--hours', hours], ['--seeds', seeds]] as const) {
+    if (!Number.isInteger(n) || n < 1) throw new Error(`${flag} takes a positive whole number, not ${String(n)}`)
+  }
+  const { made, yml, target, generator, suites } = scoredSuite(db, root, source)
+  const generated = JSON.parse(made) as { suite: string; wall?: string }
+  if (generated.wall !== undefined) throw new Error(`plan ${String(source)} stopped at a wall: ${generated.wall}`)
+  if (!existsSync(join(suites, 'medusa.json'))) throw new Error(`plan ${String(source)} has no medusa.json in fuzz-bench/suites/${generator}/${target}`)
+  const pipe = pipeNamed(db, 'refuzz')
+  if (pipe === null) throw new Error('no pipe "refuzz"')
+  const id = db.transaction(() => {
+    const filed = addPlan(db, { pipe_id: pipe.id, target_id: null, template: 'bench', state: 'queued', queued_at: at, lane: null, seat: null, origin: null, step: 2 })
+    briefed(db, filed, { title: `Bench: refuzz plan ${String(source)} (${generator} on ${target}), ${String(hours)} h × ${String(seeds)} seeds`, what: null, why: null, ends: null })
+    logged(db, { plan: filed, kind: 'refuzz', actor: by, outcome: 'pass', message: why, pointer: `plan ${String(source)}`, run: null })
+    return filed
+  })()
+  put(root, id, 'target.yml', `${yml.trimEnd()}\nrefuzz: ${String(source)}\nhours: ${String(hours)}\nseeds: ${String(seeds)}\n`)
+  put(root, id, 'generate.json', JSON.stringify({ ...generated, tokens: 0, seconds: 0 }))
+  cpSync(suites, join(srcDir(root, id), generated.suite), { recursive: true })
+  return id
 }
 
 export function profile(db: Db, root: string, id: number): string {
@@ -84,6 +111,12 @@ export function registerBench(cf: Command, { root, db, out }: Cli): void {
         const old = rescore(db(), root, id, by, options.why)
         out(`plan ${String(id)} queued at step 2, supersedes scorecard ${old === null ? 'none' : String(old)}\n`)
       }
+    })
+  bench.command('refuzz').argument('<plan>').requiredOption('--hours <n>').requiredOption('--seeds <k>')
+    .requiredOption('--by <who>', 'ceo or coo').requiredOption('--why <text>')
+    .action((plan: string, options: { hours: string; seeds: string; by: string; why: string }) => {
+      const id = refuzz(db(), root, Number(plan), Number(options.hours), Number(options.seeds), holderOf(options.by), options.why, new Date().toISOString())
+      out(`plan ${String(id)} queued at step 2 on the refuzz pipe\n`)
     })
   bench.command('profile').argument('<plan>')
     .action((plan: string) => { out(profile(db(), root, Number(plan))) })

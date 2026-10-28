@@ -124,7 +124,7 @@ const PY = '--- a/tools/x/a.py\n+++ b/tools/x/a.py\n@@ -1,1 +1,1 @@\n+x\n'
 
 const UV = ['sync --all-extras', 'tool run ruff check', 'run --with pyright pyright', 'run --no-sync pytest'].map((c) => `- python | tools/x | uv ${c} | pass`)
 
-test('1854 D4 a green kernel plan lists its python subproject', () => {
+test('1898 D5 a python-only kernel plan lists no npm tests', () => {
   const { db, plan } = target(['tools/x/a.py'], 'pass', PY)
   const src = mkdtempSync(join(tmpdir(), 'cf-note-'))
   mkdirSync(join(src, 'tools', 'x'), { recursive: true })
@@ -133,7 +133,7 @@ test('1854 D4 a green kernel plan lists its python subproject', () => {
   writeFileSync(join(src, 'tools', 'x', 'a.py'), '')
   const kernel = { ...plan, target_id: null, origin: 'https://github.com/caliperforge/caliperforge/issues/1' }
   expect(checked(db, REPO, kernel, src, PY)).toEqual({
-    checks: ['- typescript | . | every script the checkout names (npm, the whole suite) | pass', ...UV].join('\n'),
+    checks: ['- typescript | . | every script the checkout names (npm, no tests: the diff sits in its python subprojects) | pass', ...UV].join('\n'),
   })
 })
 

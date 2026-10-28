@@ -73,7 +73,7 @@ test('D3 a held plan names holder and why; unhold clears both', () => {
 
 test('D4 a plan hold keeps a why line; no plan keeps held_why', () => {
   const { db, home } = seeded()
-  db.exec("INSERT INTO plans (id, pipe_id, template, state, queued_at, lane, seat, origin) VALUES (8, 9, 'pr_path', 'queued', '2026-09-24', 'machine', 'typescript_specialist', 'https://github.com/caliperforge/caliperforge/issues/140')")
+  db.exec("INSERT INTO plans (id, pipe_id, template, state, queued_at, lane, seat, origin) VALUES (8, 99, 'pr_path', 'queued', '2026-09-24', 'machine', 'typescript_specialist', 'https://github.com/caliperforge/caliperforge/issues/140')")
   hold(db, home, 7, 'after #140\nit edits the same file', new Date(), 8)
   expect(holding(db)).toEqual({ held_by: 'coo', held_why: 'after #140' })
   held(db, 7, 'ceo', 'set before')
@@ -346,14 +346,14 @@ test('D3 cf park --until holds the plan until that time', () => {
 
 test('D4 cf hold --on waits on an open plan, refuses a closed one', () => {
   const { db, home } = seeded()
-  db.exec("INSERT INTO plans (id, pipe_id, template, state, queued_at, lane, seat, origin) VALUES (8, 9, 'pr_path', 'queued', '2026-09-24', 'machine', 'typescript_specialist', 'https://github.com/caliperforge/caliperforge/issues/140')")
+  db.exec("INSERT INTO plans (id, pipe_id, template, state, queued_at, lane, seat, origin) VALUES (8, 99, 'pr_path', 'queued', '2026-09-24', 'machine', 'typescript_specialist', 'https://github.com/caliperforge/caliperforge/issues/140')")
   ran(db, home, ['hold', '7', '--by', 'ceo', '--as', 'coo', '--why', BLOCK, '--on', '8'])
   expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', waits_on: 8, held_until: null, held_by: 'ceo', held_why: DECIDE })
   expect(logged(db)).toEqual([{ kind: 'hold', actor: 'coo', message: BLOCK }])
   ran(db, home, ['hold', '7', '--by', 'ceo', '--as', 'coo', '--why', BLOCK, '--on', '8', '--until', '2026-10-04T22:00:00Z'])
   expect(plan7(db)).toMatchObject({ waits_on: 8, held_until: '2026-10-04T22:00:00.000Z' })
   const shut = seeded()
-  shut.db.exec("INSERT INTO plans (id, pipe_id, template, state, queued_at, lane, seat, origin) VALUES (8, 9, 'pr_path', 'done', '2026-09-24', 'machine', 'typescript_specialist', 'https://github.com/caliperforge/caliperforge/issues/140')")
+  shut.db.exec("INSERT INTO plans (id, pipe_id, template, state, queued_at, lane, seat, origin) VALUES (8, 99, 'pr_path', 'done', '2026-09-24', 'machine', 'typescript_specialist', 'https://github.com/caliperforge/caliperforge/issues/140')")
   const before = plan7(shut.db)
   expect(() => { ran(shut.db, shut.home, ['hold', '7', '--by', 'ceo', '--as', 'coo', '--why', BLOCK, '--on', '8']) })
     .toThrow('plan 8 is not open, so nothing would release plan 7')
@@ -498,7 +498,7 @@ test('holdUntil D2 D3 past time releases once, future time holds', () => {
 
 test('holdOnPlan D4 a hold on plan 8 is released when 8 lands', () => {
   const { db, home } = seeded()
-  db.exec("INSERT INTO plans (id, pipe_id, template, state, queued_at, lane, seat, origin) VALUES (8, 9, 'pr_path', 'queued', '2026-09-24', 'machine', 'typescript_specialist', 'https://github.com/caliperforge/caliperforge/issues/140')")
+  db.exec("INSERT INTO plans (id, pipe_id, template, state, queued_at, lane, seat, origin) VALUES (8, 99, 'pr_path', 'queued', '2026-09-24', 'machine', 'typescript_specialist', 'https://github.com/caliperforge/caliperforge/issues/140')")
   hold(db, home, 7, 'after #140', NOW, 8)
   db.exec("UPDATE plans SET state = 'done' WHERE id = 8")
   pushed(db, 8)
@@ -508,7 +508,7 @@ test('holdOnPlan D4 a hold on plan 8 is released when 8 lands', () => {
 
 test('D2 D3 a hold on a done plan waits for its push', () => {
   const { db, home } = seeded()
-  db.exec("INSERT INTO plans (id, pipe_id, template, state, queued_at, lane, seat, origin) VALUES (8, 9, 'pr_path', 'queued', '2026-09-24', 'machine', 'typescript_specialist', 'https://github.com/caliperforge/caliperforge/issues/140')")
+  db.exec("INSERT INTO plans (id, pipe_id, template, state, queued_at, lane, seat, origin) VALUES (8, 99, 'pr_path', 'queued', '2026-09-24', 'machine', 'typescript_specialist', 'https://github.com/caliperforge/caliperforge/issues/140')")
   hold(db, home, 7, 'after #140', NOW, 8)
   db.exec("UPDATE plans SET state = 'done' WHERE id = 8")
   released(db, home, NOW, () => undefined)
@@ -523,7 +523,7 @@ test('D2 D3 a hold on a done plan waits for its push', () => {
 function waitsOnSplit() {
   const seed = seeded()
   for (const id of [8, 9, 10]) {
-    seed.db.exec(`INSERT INTO plans (id, pipe_id, template, state, queued_at, lane, seat, origin) VALUES (${String(id)}, 9, 'pr_path', 'queued', '2026-09-24', 'machine', 'typescript_specialist', 'https://github.com/caliperforge/caliperforge/issues/14${String(id)}')`)
+    seed.db.exec(`INSERT INTO plans (id, pipe_id, template, state, queued_at, lane, seat, origin) VALUES (${String(id)}, 99, 'pr_path', 'queued', '2026-09-24', 'machine', 'typescript_specialist', 'https://github.com/caliperforge/caliperforge/issues/14${String(id)}')`)
   }
   hold(seed.db, seed.home, 7, 'after #148', NOW, 8)
   seed.db.exec("UPDATE plans SET state = 'done' WHERE id = 8")
@@ -680,7 +680,7 @@ test('D5 a park during a capped build holds the plan', async () => {
 
 test('D4 a leased park with no release writes nothing', () => {
   const { db, home } = seeded()
-  db.exec("INSERT INTO plans (id, pipe_id, template, state, queued_at, lane, seat, origin) VALUES (8, 9, 'pr_path', 'done', '2026-09-24', 'machine', 'typescript_specialist', 'https://github.com/caliperforge/caliperforge/issues/140')")
+  db.exec("INSERT INTO plans (id, pipe_id, template, state, queued_at, lane, seat, origin) VALUES (8, 99, 'pr_path', 'done', '2026-09-24', 'machine', 'typescript_specialist', 'https://github.com/caliperforge/caliperforge/issues/140')")
   take(db, 7)
   const before = plan7(db)
   expect(() => { ran(db, home, ['park', '7', '--by', 'coo']) }).toThrow('needs a time or a plan that releases it')

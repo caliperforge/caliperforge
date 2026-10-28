@@ -33,6 +33,12 @@ export function subprojects(src: string, touched: string[]): Gate[] {
   return [...dirs].flatMap((dir) => PROJECT.map((g) => ({ ...g, dir })))
 }
 
+/** Every touched path, Markdown outside `rules/` and `schema/` aside, sits in a folder `subprojects()` gates. */
+export function contained(src: string, touched: string[]): boolean {
+  const dirs = subprojects(src, touched).map((g) => g.dir)
+  return dirs.length > 0 && touched.every((f) => dirs.some((d) => f.startsWith(`${d}/`)) || (f.endsWith('.md') && !/^(rules|schema)\//.test(f)))
+}
+
 function project(src: string, file: string): string | null {
   for (let dir = dirname(file); dir !== '.'; dir = dirname(dir)) {
     if (existsSync(join(src, dir, 'pyproject.toml'))) return dir

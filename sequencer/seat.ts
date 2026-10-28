@@ -45,7 +45,7 @@ import { fenceFor, languageFor } from './route.ts'
 import { languages } from './split.ts'
 import { staffed } from './staffing.ts'
 import { gates, outsideLanguage } from './gates.ts'
-import { subprojects } from './loose.ts'
+import { contained, subprojects } from './loose.ts'
 import type { Outcome } from './kind.ts'
 import { landed } from './notes.ts'
 import { COMMIT, commitMessage } from './push.ts'
@@ -118,7 +118,8 @@ export async function fireBrief(db: Db, root: string, plan: PlanRow, step: Step,
   if (ticket === null && maybe(root, plan.id, 'ask.md') === null) {
     return { outcome: 'needs_ceo', spans: ['ask.md'], note: `plan ${String(plan.id)} has no ask.md or issue.md: write the ask to ask.md, then cf retry ${String(plan.id)}` }
   }
-  if (ticket !== null && builderRan(db, plan.id)) return stands()
+  const held = byHand(step.runs, ticket)
+  if (held !== null || (ticket !== null && builderRan(db, plan.id))) return held ?? stands()
   const saved = split(maybe(root, plan.id, 'split.md') ?? '')
   if (saved !== null) return splitting(step, saved)
   const ask = askOf(root, plan.id)
@@ -150,7 +151,7 @@ export async function fireBrief(db: Db, root: string, plan: PlanRow, step: Step,
   if (message !== null) put(root, plan.id, COMMIT, message)
   drop(root, plan.id, 'refusal.md')
   drop(root, plan.id, 'question.sha')
-  return { outcome: 'pass', spans: [], note: `${step.runs}: brief written` }
+  return byHand(step.runs, fired.text) ?? { outcome: 'pass', spans: [], note: `${step.runs}: brief written` }
 }
 
 /** What the brief seat's reply ends in place of a brief: an allow-listed command to run, or a claimed ask held with its evidence. */
@@ -159,6 +160,11 @@ function instead(runs: string, reply: string): Outcome | null {
   if (line !== null) return { outcome: 'pass', spans: [], note: `${runs}: ${line}`, command: line }
   const evidence = claimed(reply)
   return evidence === null ? null : { outcome: 'needs_ceo', spans: [], note: `${runs}: claimed: ${evidence}` }
+}
+
+function byHand(runs: string, brief: string | null): Outcome | null {
+  if (brief === null || estimate(brief) !== 0) return null
+  return { outcome: 'needs_ceo', spans: ['hand-run'], note: `${runs}: hand-run brief: it estimates 0 lines, so a person runs it; held until hand-run briefs have their own route` }
 }
 
 async function written(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider, ask: string, src: string): Promise<{ fired: Fired; cut: string | null }> {
@@ -475,8 +481,10 @@ function gated(db: Db, root: string, plan: PlanRow, src: string, diff: string): 
     return gates(src, { language: outside, files: filesOf(db, plan.id).map((f) => f.path) })
       .map((g) => ({ language: outside, dir: g.dir, command: [g.bin, ...g.args].join(' ') }))
   }
-  const scope = narrow(db, plan).length > 0 ? 'the tests this plan\'s files reach' : 'the whole suite'
-  const python = subprojects(src, parse(diff).map((f) => f.path)).map((g) => ({ language: 'python', dir: g.dir, command: [g.bin, ...g.args].join(' ') }))
+  const paths = parse(diff).map((f) => f.path)
+  const scope = contained(src, paths) ? 'no tests: the diff sits in its python subprojects'
+    : narrow(db, plan).length > 0 ? 'the tests this plan\'s files reach' : 'the whole suite'
+  const python = subprojects(src, paths).map((g) => ({ language: 'python', dir: g.dir, command: [g.bin, ...g.args].join(' ') }))
   return [{ language, dir: '', command: `every script the checkout names (${mode(src)}, ${scope})` }, ...python]
 }
 

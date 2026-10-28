@@ -241,7 +241,7 @@ test('D3: the packet carries sibling plans\' rulings, not others', async () => {
   const { db, home } = seeded('1')
   const at = (n: number) => `https://github.com/caliperforge/caliperforge/issues/${String(n)}`
   for (const [id, n] of [[8, 140], [9, 141]] as const) {
-    putPlan(db, { id, pipe_id: 9, target_id: null, template: 'pr_path', state: 'queued', queued_at: '2026-09-24', step: 2, retries: 0,
+    putPlan(db, { id, pipe_id: 99, target_id: null, template: 'pr_path', state: 'queued', queued_at: '2026-09-24', step: 2, retries: 0,
       lane: 'machine', seat: 'typescript_specialist', origin: at(n) })
   }
   db.exec(`INSERT INTO tickets (repo, number, title, lane, parent) VALUES
@@ -520,7 +520,7 @@ const ago = (minutes: number) => new Date(clock.getTime() - minutes * 60_000).to
 
 function stopped(db: Db, id: number, minutes: number, verb: Verb = 'ask_coo') {
   if (!allPlans(db).some((p) => p.id === id)) {
-    putPlan(db, { id, pipe_id: 9, target_id: null, template: 'pr_path', state: 'running', queued_at: '2026-09-24', step: 4, retries: 0,
+    putPlan(db, { id, pipe_id: 99, target_id: null, template: 'pr_path', state: 'running', queued_at: '2026-09-24', step: 4, retries: 0,
       lane: 'machine', seat: 'typescript_specialist', origin: `https://github.com/caliperforge/caliperforge/issues/${String(id + 900)}` })
     needsCeo(db, planById(db, id))
   }
@@ -1373,22 +1373,22 @@ test('widenMove', async () => {
   const { db, home } = seeded('1')
   const was = widths(db)
   await run(db, home, WIDEN)
-  expect(pipeOf(db, 9).max_concurrent).toBe(2)
+  expect(pipeOf(db, 99).max_concurrent).toBe(2)
   expect(widened(db)).toEqual([{ plan: 7, step: 4, wait_reason: 'blocked_on_ceo', verb: 'widen', why: 'the wake pipe is full',
     evidence: 'wake width 1 → 2', tokens: 0 }])
   expect(row(db).state).toBe('queued')
   expect(told(db)).toEqual([{ actor: 'director', outcome: 'pass', message: 'widen: the wake pipe is full' }])
   expect(widths(db)).toEqual(was)
   const full = seeded('1')
-  width(full.db, 9, 8)
+  width(full.db, 99, 8)
   await run(full.db, full.home, WIDEN)
-  expect(pipeOf(full.db, 9).max_concurrent).toBe(8)
+  expect(pipeOf(full.db, 99).max_concurrent).toBe(8)
   expect(widened(full.db)).toEqual([])
   expect(plan7(full.db)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'coo' })
   expect(told(full.db).map((t) => t.message)).toEqual([expect.stringMatching(/^widen did not apply, the pipe is already 8 wide/)])
   const shadow = seeded(null)
   await run(shadow.db, shadow.home, WIDEN)
-  expect(pipeOf(shadow.db, 9).max_concurrent).toBe(1)
+  expect(pipeOf(shadow.db, 99).max_concurrent).toBe(1)
   expect(widened(shadow.db)).toEqual([])
 })
 
@@ -1398,7 +1398,7 @@ const three = (print: string): [number, string, number][] => [[8, print, 3], [10
 function alikeStops(apply: string | null, prints: readonly (readonly [number, string, number])[]) {
   const seed = seeded(apply)
   for (const id of [8, 10]) {
-    putPlan(seed.db, { id, pipe_id: 9, target_id: null, template: 'pr_path', state: 'blocked_on_ceo', queued_at: '2026-09-24', step: 4,
+    putPlan(seed.db, { id, pipe_id: 99, target_id: null, template: 'pr_path', state: 'blocked_on_ceo', queued_at: '2026-09-24', step: 4,
       retries: 0, lane: 'machine', seat: 'typescript_specialist', origin: `https://github.com/caliperforge/caliperforge/issues/${String(id + 140)}` })
   }
   for (const [plan, print, hours] of prints) {

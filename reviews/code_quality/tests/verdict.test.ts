@@ -71,5 +71,5 @@ test('D5 a spans-only refuse names findings under a lead only', async () => {
   await expect(judge(db, root, 'code_quality', plan, seeded, replies(SPANS), TRANSCRIPT, LEAD))
     .rejects.toThrow('reviewers.verdict_fence: refuse has no findings')
   const unled = await judge(db, root, 'code_quality', plan, seeded, replies(SPANS), TRANSCRIPT)
-  expect(unled.outcome).toMatchObject({ outcome: 'refuse', spans: ['src/stats.ts:2'] })
+  expect(unled.outcome).toMatchObject({ outcome: 'refuse', spans: ['src/stats.ts:2'], origin_kind: 'ruling', origin_ref: 'reviewers.verdict' })
 })

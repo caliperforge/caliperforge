@@ -23,7 +23,7 @@ export function walled(db: Db, root: string, plan: number, keys: Keys, made: Pic
 }
 
 /** `fuzz_bench` is left out of score.json when `sha` is undefined, as JSON.stringify drops it. */
-export function kept(db: Db, root: string, plan: number, keys: Keys, score: Omit<Score, 'plan' | 'target' | 'generator'>, sha?: string): void {
+export function kept(db: Db, root: string, plan: number, keys: Keys, score: Omit<Score, 'plan' | 'target' | 'generator'>, sha?: string, noted: object = {}): void {
   record(db, { plan, ...keys, ...score })
-  put(root, plan, 'score.json', JSON.stringify({ fuzz_bench: sha, ...score }))
+  put(root, plan, 'score.json', JSON.stringify({ fuzz_bench: sha, ...score, ...noted }))
 }

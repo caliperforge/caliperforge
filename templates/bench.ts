@@ -1,5 +1,5 @@
 import { spawnSync, type SpawnSyncReturns } from 'node:child_process'
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 import type { Provider } from '../providers/kind.ts'
@@ -21,7 +21,7 @@ import { costWall, costWalled, written } from './generated.ts'
 import { inBare, listedIn } from './listed.ts'
 import { kept, powered, walled } from './powered.ts'
 import { DEFAULT_BUILDER, type Step } from './pr-path.ts'
-import { recloned, rooted, scrapped } from './rooted.ts'
+import { placed, recloned, rooted, scrapped } from './rooted.ts'
 
 export const steps: Step[] = ['checkout', 'generate', 'score', 'null_check'].map((name, step) =>
   ({ step, name, seat: DEFAULT_BUILDER, fires: name === 'generate' ? 'seat' : 'kernel', runs: name, gate: false, writes_verdict: false, verdict_gate: null }))
@@ -177,7 +177,7 @@ export function scored(db: Db, root: string, plan: PlanRow): Outcome {
     keys.null_check === undefined ? '' : `null_check: ${keys.null_check}\n`}`)
   cpSync(join(srcDir(root, plan.id), suite), join(bench, suites), { recursive: true })
   rooted(srcDir(root, plan.id), join(bench, suites))
-  if (config !== null) writeFileSync(join(bench, suites, 'medusa.json'), config.config)
+  const dropped = config === null ? null : placed(config.config, srcDir(root, plan.id), join(bench, suites))
   mkdirSync(join(bench, 'results', target), { recursive: true })
   const written = join(bench, 'results', target, `${target}.jsonl`)
   const ran = spawnSync('python3', ['bench/run_pair.py', `targets/${target}.yml`, suites], { cwd: bench, encoding: 'utf8' })
@@ -187,7 +187,7 @@ export function scored(db: Db, root: string, plan: PlanRow): Outcome {
   if (pairs.length === 0) return { outcome: 'refuse', spans: ['bench.empty_results'], note: `results/${target}/${target}.jsonl has no rows` }
   const score = { catches: pairs.filter((r) => r.verdict === 'catch').length, false_positives: pairs.filter((r) => r.verdict === 'fp_candidate').length,
     untested: null, tokens, seconds, x_ray: x_ray ?? null, pre_fix_calls: pairs[0]?.calls?.pre_fix ?? null, fix_calls: pairs[0]?.calls?.fix ?? null, not_powered: powered(properties ?? proven, agents, pairs[0]?.calls) }
-  kept(db, root, plan.id, { target, generator }, score, sha)
+  kept(db, root, plan.id, { target, generator }, score, sha, dropped === null ? {} : { foundry_out_dropped: dropped })
   return { outcome: 'pass', spans: [], note: `score.json written at fuzz-bench ${sha.slice(0, 12)}${config === null || config.clamped.length === 0
     ? '' : `; targetContractsBalances ${config.clamped.join(', ')} clamped to 1e24 wei`}` }
 }
@@ -242,7 +242,7 @@ const TIMEOUT = 3600
 
 const WORKERS = 4
 
-function medusa(db: Db, plan: number, src: string, suite: string): Outcome | { config: string; clamped: string[] } | null {
+function medusa(db: Db, plan: number, src: string, suite: string): Outcome | { config: unknown; clamped: string[] } | null {
   const installed = !existsSync(join(src, 'medusa.json'))
   const path = join(src, installed ? suite : '', 'medusa.json')
   if (!existsSync(path)) return null
@@ -271,7 +271,7 @@ function medusa(db: Db, plan: number, src: string, suite: string): Outcome | { c
       workers: typeof workers === 'number' && workers <= WORKERS ? workers : WORKERS })
     if (Array.isArray(balances)) Object.assign(fuzzing, { targetContractsBalances: entries })
   }
-  return { config: JSON.stringify(quieted(config), null, 2), clamped }
+  return { config: quieted(config), clamped }
 }
 
 function moved(suite: string, path: string): string {

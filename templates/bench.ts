@@ -21,7 +21,7 @@ import { costWall, costWalled, written } from './generated.ts'
 import { inBare, listedIn } from './listed.ts'
 import { kept, powered, walled } from './powered.ts'
 import { DEFAULT_BUILDER, type Step } from './pr-path.ts'
-import { recloned, rooted } from './rooted.ts'
+import { recloned, rooted, scrapped } from './rooted.ts'
 
 export const steps: Step[] = ['checkout', 'generate', 'score', 'null_check'].map((name, step) =>
   ({ step, name, seat: DEFAULT_BUILDER, fires: name === 'generate' ? 'seat' : 'kernel', runs: name, gate: false, writes_verdict: false, verdict_gate: null }))
@@ -120,7 +120,7 @@ export async function generate(db: Db, root: string, plan: PlanRow, step: Step, 
   if (generator === '') return { outcome: 'refuse', spans: ['target.yml'], note: 'target.yml has no generator' }
   const name = staffed(root, 'bench', step.step, generator)?.seat
   if (name === undefined) return { outcome: 'needs_ceo', spans: ['staffing'], note: `no bench generator "${generator}" in rules/staffing.yaml` }
-  const dir = real(srcDir(root, plan.id))
+  const dir = real(scrapped(root, plan.id, step.step))
   const unchecked = checkedOut(db, root, plan.id, dir)
   if (unchecked !== null) return { outcome: 'refuse', spans: ['bench.no_checkout'], note: unchecked, to: 0 }
   const uninstalled = deps(dir)

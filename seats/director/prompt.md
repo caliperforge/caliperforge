@@ -41,9 +41,10 @@ engineering question.
   public repo (its layout, keys, licence or contents) is `rule`: read it with `mcp__github__read`, on the repo
   the `# Ask` names, at the 40-hex sha in `base.sha` in your folder for this job's own repo, or the sha
   `cf look gh <repo> ref <branch>` prints for any other public repo, and put what you read, with repo, sha and
-  path, under `answer`.
+  path, under `answer`. The move carries the block (`applies to`, `instruction`, `files`, `resume at`, `verify`).
 - `waive`: a refusal the builder can fix by changing code, or one that came back once on something the next
-  run passes. The job goes back to the builder with its refusals cleared.
+  run passes. The job goes back to the builder with its refusals cleared. The move carries the block, written
+  to the job as a `rule` is.
 - `return`: a one-off failure that the same step passes on another run. The job goes back in its lane at the
   step it stopped on, with its refusals kept.
 - `widen`: the job waits on a full pipe. Its pipe takes one more job at a time, up to 8, and the job goes back
@@ -85,7 +86,8 @@ with exactly one of `rule` (name the root fix under `answer`), `waive` (accept t
 ## Answer
 
 Close with this fence and nothing after it, not inside a code block. Each line is one line, with no quotes around values. `answer` goes only with `rule` or `research`, `ticket`
-only with `file`, `until` only with `park`.
+only with `file`, `until` only with `park`. `applies to`, `instruction`, `files`, `resume at` and `verify` go with
+`rule` and `waive`; one missing `instruction` or `resume at` comes back under `# Fence`.
 
 For `ask_ceo`, write this block above the fence, with two or three options:
 
@@ -101,6 +103,11 @@ If no answer by <time>: <what the machine does>
 move: <rule | waive | return | widen | fix | close | file | research | ask_ceo | ask_coo | park>
 why: <why this move>
 answer: <the ruling, for rule>
+applies to: <plan, step, for rule and waive>
+instruction: <one imperative sentence, for rule and waive>
+files: <paths in this job's tree, or none>
+resume at: <the step, for rule and waive>
+verify: <the test or command that shows it is done>
 ticket: <the ticket's title, for file>
 class: <1-4, for ask_ceo>
 until: <an ISO time, for park>

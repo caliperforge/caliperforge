@@ -31,6 +31,6 @@ it('D5 0106 marks staffed review runs review, leaves the rest', () => {
     [4, 'typescript_specialist', null, 'typescript_specialist'],
   ]) run.run(plan, step, seat, '0'.repeat(64), mode, staffed)
   const before = db.prepare('SELECT * FROM runs ORDER BY id').all() as Record<string, unknown>[]
-  expect(migrate(db, join(root, 'schema'))).toEqual(['0106_review_mode_backfill.sql', '0107_loupe_lane.sql', '0108_atelier_to_loupe.sql', '0109_retire_atelier_lane.sql', '0110_bench_x_ray.sql', '0111_science_lanes.sql', '0112_bench_untested_nullable.sql', '0113_bench_score_busy.sql', '0114_bench_rescore.sql', '0115_records_outside.sql', '0116_records_ball.sql', '0117_bench_calls.sql', '0118_bench_not_powered.sql', '0119_bench_few_properties.sql', '0120_bench_compile_failed.sql'])
+  expect(migrate(db, join(root, 'schema'))).toEqual(['0106_review_mode_backfill.sql', '0107_loupe_lane.sql', '0108_atelier_to_loupe.sql', '0109_retire_atelier_lane.sql', '0110_bench_x_ray.sql', '0111_science_lanes.sql', '0112_bench_untested_nullable.sql', '0113_bench_score_busy.sql', '0114_bench_rescore.sql', '0115_records_outside.sql', '0116_records_ball.sql', '0117_bench_calls.sql', '0118_bench_not_powered.sql', '0119_bench_few_properties.sql', '0120_bench_compile_failed.sql', '0121_refuzz_pipe.sql'])
   expect(db.prepare('SELECT * FROM runs ORDER BY id').all()).toEqual(before.map((r, i) => (i < 2 ? { ...r, mode: 'review' } : r)))
 })

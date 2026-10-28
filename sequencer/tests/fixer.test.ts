@@ -207,7 +207,7 @@ test('a throwing fixer: the tick goes on, a person gets the stop', async () => {
 const WAIT = '---\ndid: answered in ask.md that it builds on plan 8\nthen: wait\nwhy: plan 8 has not landed\nwaits_on: 8\n---\n'
 
 function second(db: ReturnType<typeof open>, state: PlanRow['state'] = 'running') {
-  putPlan(db, { id: 8, pipe_id: 9, target_id: null, template: 'pr_path', state, queued_at: '2026-09-24', step: 2, retries: 0,
+  putPlan(db, { id: 8, pipe_id: 99, target_id: null, template: 'pr_path', state, queued_at: '2026-09-24', step: 2, retries: 0,
     lane: 'machine', seat: 'typescript_specialist', origin: 'https://github.com/caliperforge/caliperforge/issues/140' })
   amend(db, 8, { priority: 1 })
 }

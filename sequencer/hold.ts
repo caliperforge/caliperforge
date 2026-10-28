@@ -2,7 +2,7 @@ import { rmSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Db } from '../store/index.ts'
 import { returnToLane, retried, rewound } from '../store/holds.ts'
-import { clearWaitsOn, holdOn, terminal } from '../store/plans.ts'
+import { clearWaitsOn, holdOn, planById, terminal } from '../store/plans.ts'
 import { WHY } from '../store/refusals.ts'
 import { type At, forward } from './forward.ts'
 import { COUNTS } from './push.ts'
@@ -50,10 +50,9 @@ export function isHeld(root: string, plan: number): boolean {
 const REPEAT = `# Stopped\n\n${WHY.repeat}.\n`
 
 function repeatAtCheck(db: Db, root: string, plan: number): boolean {
-  const row = db.prepare('SELECT step, template, state FROM plans WHERE id = ?').get(plan) as
-    { step: number; template: string; state: string } | undefined
+  const row = planById(db, plan)
   const refusal = maybe(root, plan, 'refusal.md')
-  if (row?.step !== 3 || refusal === null) return false
+  if (row.step !== 3 || refusal === null) return false
   if (row.template !== 'comms') return !isHeld(root, plan) && refusal.endsWith(REPEAT)
   return row.state === 'blocked_on_ceo' && refusal.startsWith('step 3 ')
 }

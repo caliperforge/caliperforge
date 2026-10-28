@@ -2,7 +2,7 @@ import type { Read } from '../cli/gh.ts'
 import { issue, priorityOf } from '../cli/plan.ts'
 import type { Db } from '../store/index.ts'
 import { priority, templatePriority } from '../store/lanes.ts'
-import { originRef, PlanRow } from '../store/plans.ts'
+import { allPlans, originRef, type PlanRow } from '../store/plans.ts'
 
 /**
  * The `P<n>` label on the issue is the plan's priority, re-read every tick: relabel the ticket and
@@ -28,6 +28,5 @@ function priced(db: Db, plan: PlanRow, read: Read): number | null {
 }
 
 function internal(db: Db): PlanRow[] {
-  return db.prepare("SELECT * FROM plans WHERE origin IS NOT NULL AND state IN ('queued', 'running')")
-    .all().map((r) => PlanRow.parse(r))
+  return allPlans(db).filter((p) => p.origin !== null && (p.state === 'queued' || p.state === 'running'))
 }

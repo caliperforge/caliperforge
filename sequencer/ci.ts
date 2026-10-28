@@ -1,5 +1,6 @@
 import { judge, MISSING, type Gh } from '../rails/ci-green/index.ts'
 import { parse } from '../rails/diff.ts'
+import { setting } from '../store/drift.ts'
 import { logged, pointers } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { busy } from '../store/now.ts'
@@ -46,7 +47,7 @@ type Ci = { wait: Outcome } | { failed: Failure | null; at: string }
  * ran past `RUNS`, or the diff touches a Python subproject, whose gates CI does not run.
  */
 export function ciChecks(db: Db, root: string, plan: PlanRow, wire: Wire = WIRE): Ci | null {
-  if (!on(db) || !kernelPlan(plan) || !workflows(srcDir(root, plan.id))) return null
+  if (setting(db, WHERE) !== 'ci' ||!kernelPlan(plan) || !workflows(srcDir(root, plan.id))) return null
   if (subprojects(srcDir(root, plan.id), parse(diffOf(root, plan.id)).map((f) => f.path)).length > 0) return null
   let pointer = ''
   try {
@@ -73,11 +74,6 @@ export function ciChecks(db: Db, root: string, plan: PlanRow, wire: Wire = WIRE)
     }
     return null
   }
-}
-
-function on(db: Db): boolean {
-  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(WHERE) as { value: string } | undefined
-  return row?.value === 'ci'
 }
 
 /** The first red run's failed step, read as the laptop's own failure: the script it ran and the tests it named. */

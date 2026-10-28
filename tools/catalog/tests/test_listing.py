@@ -3,9 +3,12 @@ from pathlib import Path
 import pytest
 import yaml
 
+from catalog_desk import main
 from catalog_desk.listing import RANGES, URL_ONLY, Fault, Invalid, Listing, faults, read
+from catalog_desk.net import Recorded
 
 FORMAT_FAIL = Path(__file__).parent / "fixtures" / "format-fail"
+ENDPOINTS_ONLY = Path(__file__).parent / "fixtures" / "endpoints-only"
 GOOD = {
     "service_url": "https://api.example.com",
     "title": "Example",
@@ -47,6 +50,19 @@ def test_endpoints_only_reads_with_an_empty_spec(tmp_path: Path):
     _write(tmp_path, {**{k: v for k, v in GOOD.items() if k != "openapi"}, "endpoints": endpoints})
     listing = read(tmp_path)
     assert isinstance(listing, Listing) and listing.spec == {} and listing.dir == tmp_path.name
+
+
+def test_a_relative_listing_dir_is_its_folder_name(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.chdir(ENDPOINTS_ONLY)
+    listing = read(Path("PAY.md").parent)
+    assert isinstance(listing, Listing) and listing.dir == "endpoints-only"
+
+
+def test_next_on_a_relative_path_passes_the_name_check(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]):
+    net = Recorded.load(ENDPOINTS_ONLY.parent / "endpoints-only.json")
+    monkeypatch.chdir(ENDPOINTS_ONLY)
+    assert main(["next", "PAY.md"], net) == 0
+    assert "check: format" not in capsys.readouterr().out
 
 
 @pytest.mark.parametrize("endpoints", [None, [], [{"method": "GET"}], [{"method": 1, "path": "/x"}], ["GET /x"]])

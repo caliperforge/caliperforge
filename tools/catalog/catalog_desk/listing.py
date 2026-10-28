@@ -46,12 +46,12 @@ def read(dir: Path) -> Listing | Invalid:
     if invalid is not None:
         return invalid
     if "openapi" not in front:
-        return Listing(front, {}, dir.name)
+        return Listing(front, {}, dir.resolve().name)
     try:
         spec = json.loads((dir / front["openapi"]["path"]).read_text(encoding="utf-8"))
     except (OSError, ValueError) as e:
         return Invalid("openapi.path", str(e))
-    return Listing(front, spec, dir.name)
+    return Listing(front, spec, dir.resolve().name)
 
 
 def _fields(front: dict[str, Any]) -> Invalid | None:

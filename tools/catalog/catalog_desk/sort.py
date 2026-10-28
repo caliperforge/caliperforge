@@ -16,30 +16,44 @@ NOT_SOLANA = "no Solana mainnet offer"
 
 
 def sort(checkout: Path, net: Net) -> list[dict[str, object]]:
-    refs = _lines(checkout, "for-each-ref", "--format=%(refname)", "refs/pull")
-    heads = sorted((int(m[1]), ref) for ref in refs if (m := PULL.fullmatch(ref)))
-    seen: dict[str, int] = {}
+    heads = _heads(checkout)
+    newest: dict[str, dict[str, int]] = {}
+    for pr, _, author, dirs in heads:
+        for d in dirs:
+            newest.setdefault(d, {})[author] = pr
     rows: list[dict[str, object]] = []
-    for pr, ref in heads:
-        changed = _lines(checkout, "diff", "--name-only", f"HEAD...{ref}")
-        listed = [p.removesuffix("/PAY.md") for p in _lines(checkout, "ls-tree", "-r", "--name-only", ref) if p.endswith("/PAY.md")]
-        dirs = [d for d in listed if any(f.startswith(f"{d}/") for f in changed)]
+    for pr, ref, author, dirs in heads:
         if not dirs:
             rows.append({"pr": pr, "listing": None, **_close("malformed", "changes no PAY.md listing")})
         for d in dirs:
-            rows.append({"pr": pr, "listing": d, **_verdict(_unpacked(checkout, ref, d), net, seen, pr)})
+            mine, oldest = newest[d][author], min(newest[d].values())
+            if mine != pr:
+                verdict = _close("superseded", f"by #{mine}")
+            elif oldest != pr:
+                verdict = _close("duplicate", f"of #{oldest}")
+            else:
+                verdict = _verdict(_unpacked(checkout, ref, d), net)
+            rows.append({"pr": pr, "listing": d, **verdict})
     return rows
 
 
-def _verdict(listing: Listing | Invalid, net: Net, seen: dict[str, int], pr: int) -> dict[str, object]:
+def _heads(checkout: Path) -> list[tuple[int, str, str, list[str]]]:
+    refs = _lines(checkout, "for-each-ref", "--format=%(refname)", "refs/pull")
+    heads = []
+    for pr, ref in sorted((int(m[1]), ref) for ref in refs if (m := PULL.fullmatch(ref))):
+        changed = _lines(checkout, "diff", "--name-only", f"HEAD...{ref}")
+        listed = [p.removesuffix("/PAY.md") for p in _lines(checkout, "ls-tree", "-r", "--name-only", ref) if p.endswith("/PAY.md")]
+        dirs = [d for d in listed if any(f.startswith(f"{d}/") for f in changed)]
+        heads.append((pr, ref, _lines(checkout, "log", "-1", "--format=%an", ref)[0], dirs))
+    return heads
+
+
+def _verdict(listing: Listing | Invalid, net: Net) -> dict[str, object]:
     if isinstance(listing, Invalid):
         if listing.why == URL_ONLY:
             return {"verdict": "fix", "brief": render(next_fix(listing, net))}
         return _close("malformed", f"{listing.field}: {listing.why}")
     url = listing.front["service_url"]
-    first = seen.setdefault(url.rstrip("/"), pr)
-    if first != pr:
-        return _close("duplicate", f"#{first}")
     if not net.resolve(urlsplit(url).hostname or ""):
         return _close("dead domain", url)
     fix = next_fix(listing, net)

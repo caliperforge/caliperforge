@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -7,8 +8,10 @@ from catalog_desk import main
 from catalog_desk.listing import RANGES, URL_ONLY, Fault, Invalid, Listing, faults, read
 from catalog_desk.net import Recorded
 
+FIXTURES = Path(__file__).parent / "fixtures"
 FORMAT_FAIL = Path(__file__).parent / "fixtures" / "format-fail"
 ENDPOINTS_ONLY = Path(__file__).parent / "fixtures" / "endpoints-only"
+SPEC = {"openapi": "3.0.0", "paths": {"/paid": {"get": {"summary": "Pays a fee"}}}}
 GOOD = {
     "service_url": "https://api.example.com",
     "title": "Example",
@@ -39,10 +42,51 @@ def test_d2_absent_or_non_string_measures_0_in_code_points():
     assert faults({}) == [Fault(field, span, 0) for field, span in RANGES.items()]
 
 
-@pytest.mark.parametrize(("openapi", "why"), [({"url": "https://api.example.com/openapi.json"}, URL_ONLY), ({}, "missing")])
-def test_d3_d4_url_only_openapi_is_its_own_invalid(tmp_path: Path, openapi: dict[str, str], why: str):
+@pytest.mark.parametrize(
+    ("openapi", "why"), [({"url": "https://api.example.com/openapi.json"}, URL_ONLY), ({}, "missing"), ({"content": 5}, "missing")]
+)
+def test_d3_d4_url_only_openapi_is_its_own_invalid(tmp_path: Path, openapi: dict[str, object], why: str):
     _write(tmp_path, {**GOOD, "openapi": openapi})
     assert read(tmp_path) == Invalid("openapi.path", why)
+
+
+def test_inline_json_content_is_the_spec():
+    listing = read(FIXTURES / "inline-content")
+    assert isinstance(listing, Listing)
+    assert listing.spec == json.loads((FORMAT_FAIL / "openapi.json").read_text(encoding="utf-8"))
+
+
+def test_inline_yaml_content_is_the_spec(tmp_path: Path):
+    _write(tmp_path, {**GOOD, "openapi": {"content": yaml.safe_dump(SPEC)}})
+    listing = read(tmp_path)
+    assert isinstance(listing, Listing) and listing.spec == SPEC
+
+
+def test_path_wins_over_content(tmp_path: Path):
+    _write(tmp_path, {**GOOD, "openapi": {"path": "openapi.json", "content": json.dumps({"paths": {}})}})
+    (tmp_path / "openapi.json").write_text(json.dumps(SPEC), encoding="utf-8")
+    listing = read(tmp_path)
+    assert isinstance(listing, Listing) and listing.spec == SPEC
+
+
+def test_url_with_content_reads_the_content(tmp_path: Path):
+    _write(tmp_path, {**GOOD, "openapi": {"url": "https://api.example.com/openapi.json", "content": json.dumps(SPEC)}})
+    listing = read(tmp_path)
+    assert isinstance(listing, Listing) and listing.spec == SPEC
+
+
+def test_content_neither_json_nor_yaml_names_openapi_content(tmp_path: Path):
+    broken = '{"openapi": "3.0.0", "paths": {'
+    _write(tmp_path, {**GOOD, "openapi": {"content": broken}})
+    with pytest.raises(yaml.YAMLError) as e:
+        yaml.safe_load(broken)
+    assert read(tmp_path) == Invalid("openapi.content", str(e.value))
+
+
+@pytest.mark.parametrize("content", ["just text", "[1]", "5"])
+def test_content_that_is_not_a_mapping_names_openapi_content(tmp_path: Path, content: str):
+    _write(tmp_path, {**GOOD, "openapi": {"content": content}})
+    assert read(tmp_path) == Invalid("openapi.content", "not a mapping")
 
 
 def test_endpoints_only_reads_with_an_empty_spec(tmp_path: Path):

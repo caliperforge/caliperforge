@@ -33,7 +33,7 @@ def sort(checkout: Path, net: Net) -> list[dict[str, object]]:
 
 def _verdict(listing: Listing | Invalid, net: Net, seen: dict[str, int], pr: int) -> dict[str, object]:
     if isinstance(listing, Invalid):
-        if listing.why == URL_ONLY:
+        if listing.why == URL_ONLY or listing.field == "openapi.content":
             return {"verdict": "fix", "brief": render(next_fix(listing, net))}
         return _close("malformed", f"{listing.field}: {listing.why}")
     url = listing.front["service_url"]

@@ -78,8 +78,8 @@ export function read(reply: string, subject: string): Judged | null {
   if (fence.data.outcome !== 'refuse') {
     return { outcome: fence.data.outcome, defect_class: null, spans: [], findings: [], subject_digest, origin_kind: null, origin_ref: null, message: prose, reopen: {}, notes: [] }
   }
-  const blocks = (fence.data.findings ?? []).map((b) => ({ span: `${b.file}:${String(b.line)}`, kind: 'real' as const, fix: null }))
-  const findings = [...fence.data.spans ?? [], ...blocks]
+  const blocks = fence.data.findings ?? []
+  const findings = [...fence.data.spans ?? [], ...blocks.map((b) => ({ span: `${b.file}:${String(b.line)}`, kind: 'real' as const, fix: null }))]
   return {
     outcome: 'refuse',
     defect_class: fence.data.class ?? null,
@@ -88,7 +88,7 @@ export function read(reply: string, subject: string): Judged | null {
     subject_digest,
     origin_kind: 'ruling',
     origin_ref: 'reviewers.verdict',
-    message: prose,
+    message: [prose, blocks.map((b) => `- ${b.id} ${b.file}:${String(b.line)} ${b.rule}: ${b.required_change}; verify: ${b.verify}`).join('\n')].filter((s) => s !== '').join('\n\n'),
     reopen: fence.data.reopen ?? {},
     notes: [],
   }

@@ -38,7 +38,8 @@ test('the store holds brief title, lines and the review\'s prose', async () => {
   expect(planRows(w.db).find((p) => p.id === 1))
     .toMatchObject({ title: 'hello', what: 'add `hello()`.', why: 'the ask asks for it.', ends: 'it is exported.' })
   const review = planEvents(w.db, 1).find((r) => r.kind === 'review')
-  expect(verdictMessage(w.db, Number(String(review?.pointer).split(':')[1]))).toBe(WORDS)
+  expect(verdictMessage(w.db, Number(String(review?.pointer).split(':')[1])))
+    .toBe(`${WORDS}\n\n- F1 src/hello.ts:1 tight: hello() takes a name; verify: npm run test -- src/hello.test.ts`)
 })
 
 test('a job past the ceiling leaves one refuse row with no run', async () => {

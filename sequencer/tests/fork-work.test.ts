@@ -4,6 +4,7 @@ import { basename, join } from 'node:path'
 import { expect, test } from 'vitest'
 import { dropPlan } from '../../store/plans.ts'
 import { tick } from '../index.ts'
+import type { Fired } from '../kind.ts'
 import type { Wire } from '../push.ts'
 import { get, planDir, put, SELF, srcDir } from '../workspace.ts'
 import { built, CARRIED, internalPlan, ours, plan, stub, watched, world, type World } from './world.ts'
@@ -75,6 +76,20 @@ test('D1 D3 a Fork: ask clones pay and lands on its main', async () => {
 
   const pushed = (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
   expect(pushed).toMatchObject({ step: 8, outcome: 'pass', note: `on main at https://github.com/${PAY}/commit/${sha}` })
+})
+
+test('D1 a Fork: checkout with no rules/ skips the digests', async () => {
+  const { w, pay } = forked(['Fork: caliperforge/pay'])
+  git(pay, ['rm', '-rq', 'rules', 'rules.seed.sql'])
+  git(pay, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'no rules'])
+  const wire = pushing([], w)
+
+  await laps(w, 3, wire)
+  built(w.root, ID, 'export const landed = true')
+  const fired: Fired[] = []
+  for (let at = 0; at < 4; at += 1) fired.push(...await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))
+  expect(plan(w.db, ID).step).toBe(7)
+  expect(fired.filter((r) => r.step === 3 && r.spans.includes('rules/roster'))).toEqual([])
 })
 
 test('D2 Fork: with Base: cuts from and lands on pay redesign', async () => {

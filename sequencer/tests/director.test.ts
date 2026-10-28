@@ -760,6 +760,18 @@ test.each([
   expect(row(db).step).toBe(step)
 })
 
+test('D1 D2: an out-of-reach fix at step 1 goes back refused', async () => {
+  const { db, home } = seeded('1')
+  fixLive(db)
+  committed(home)
+  db.exec('UPDATE plans SET step = 1 WHERE id = 7; UPDATE runs SET step = 1 WHERE plan = 7')
+  const packets: Packet[] = []
+  await cooLite(db, home, row(db), bySeat(packets, '---\nmove: fix\nwhy: edit src/sequencer/x.ts to drop the guard\n---\n'), now, () => undefined, wire())
+  expect(maybe(home, 7, 'ask.md') ?? '').not.toContain('## Answer from the director')
+  expect(told(db).filter((t) => t.message.includes('builder takes it'))).toEqual([])
+  expect(packets[1]?.prompt).toContain('# Fence\n\nfix is refused:')
+})
+
 test('D2: a fix reading ~/notes goes to the builder', async () => {
   const { db, home } = seeded('1')
   fixLive(db)

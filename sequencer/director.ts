@@ -14,7 +14,7 @@ import type { Db } from '../store/index.ts'
 import { wall } from '../store/lanes.ts'
 import { clear as unlease, take } from '../store/leases.ts'
 import { busy, current, idle } from '../store/now.ts'
-import { end, held, needsCeo, originRef, planById, PlanRow, retry } from '../store/plans.ts'
+import { builderRan, end, held, needsCeo, originRef, planById, PlanRow, retry } from '../store/plans.ts'
 import { clear, sentOnce } from '../store/refusals.ts'
 import { kin, runs, stopped, waking, type Stop } from '../store/stops.ts'
 import { pending } from '../store/transcript.ts'
@@ -77,7 +77,7 @@ export async function cooLite(db: Db, root: string, plan: PlanRow, provider: Pro
   if (first !== null) {
     ({ m, said } = await ask(db, root, plan, provider, tried, first.fence))
     const again = refused(m, said, n, root, cap)
-    if (again !== null) return m?.move === 'fix' && builderWork(root, m.why) && applying(db) && apply(db, root, plan, { move: 'rule', why: m.why, answer: m.why }, wire, now) === true
+    if (again !== null) return m?.move === 'fix' && builderRan(db, plan.id) && builderWork(root, m.why) && applying(db) && apply(db, root, plan, { move: 'rule', why: m.why, answer: m.why }, wire, now) === true
       ? told(db, root, plan, now, { outcome: 'pass', message: `rule: ${m.why}${planById(db, plan.id).step <= 2 ? " (out of the fixer's reach, so the builder takes it)" : ''}` })
       : cap ? told(db, root, plan, now, { outcome: 'needs_coo', message: again.message }, post)
         : handUp(db, root, plan, { outcome: 'needs_coo', message: again.message }, said, provider, now, post, wire)

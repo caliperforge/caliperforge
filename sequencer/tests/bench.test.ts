@@ -1371,6 +1371,83 @@ test('D3 a run that wrote x-ray.md is scored with x_ray 1', async () => {
   expect(JSON.parse(get(root, 1, 'score.json'))).toEqual({ fuzz_bench: sha, ...SCORE, seconds: 1, x_ray: 1 })
 })
 
+const REFUZZ = { ...KEYS, files: FILES, refuzz: '7', hours: '4', seeds: '2' }
+
+/** A stub run_pair that writes `silent` for p1 to p3 on an empty corpus and `catch` on a grown one, then grows it. */
+const CORPUS = `import json, os, sys
+name = os.path.basename(sys.argv[2])
+corpus = json.load(open(os.path.join(sys.argv[2], 'medusa.json')))['fuzzing']['corpusDirectory']
+os.makedirs(corpus, exist_ok=True)
+verdict = 'catch' if os.listdir(corpus) else 'silent'
+os.makedirs(f'results/{name}', exist_ok=True)
+open(f'results/{name}/{name}.jsonl', 'w').write('\\n'.join(json.dumps({'property': p, 'verdict': verdict, 'calls': {'pre_fix': 10, 'fix': 20}}) for p in ['p1', 'p2', 'p3']))
+open(os.path.join(corpus, str(len(os.listdir(corpus)))), 'w').write('x')
+`
+
+test('refuzz D4 the medusa.json runs hours long on one corpus', () => {
+  const { root, db } = scoring(undefined, REFUZZ)
+  writeFileSync(join(srcDir(root, 1), 'medusa.json'), JSON.stringify({ fuzzing: { timeout: 600, workers: 10, testLimit: 500000 } }))
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  expect(JSON.parse(readFileSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/medusa.json'), 'utf8'))).toEqual({
+    fuzzing: { timeout: 14400, workers: 4, testLimit: 0, corpusDirectory: join(planDir(root, 7), 'corpus'), testing: { shrinkLimit: 500 } },
+    slither: { useSlither: false } })
+  expect(get(root, 1, 'target.yml')).toBe(`${REFRESHED}refuzz: 7\nhours: 4\nseeds: 2\n`)
+})
+
+test('refuzz D4 a medusa.json with no fuzzing still gets them', () => {
+  const { root, db } = scoring(undefined, REFUZZ)
+  writeFileSync(join(srcDir(root, 1), 'medusa.json'), '{}')
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  expect(JSON.parse(readFileSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/medusa.json'), 'utf8'))).toEqual({
+    fuzzing: { timeout: 14400, workers: 4, testLimit: 0, corpusDirectory: join(planDir(root, 7), 'corpus'), testing: { shrinkLimit: 500 } },
+    slither: { useSlither: false } })
+})
+
+test('refuzz D5 D6 each seed scores on the corpus the last grew', () => {
+  const { root, db, sha } = scoring(CORPUS, REFUZZ)
+  writeFileSync(join(srcDir(root, 1), 'medusa.json'), JSON.stringify({ fuzzing: { workers: 2 } }))
+  put(root, 1, 'generate.json', JSON.stringify({ suite: 'test/fizz', tokens: 0, seconds: 0, agents: 8, properties: 3 }))
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  expect(readdirSync(join(planDir(root, 1), 'fuzz-bench/results/euler-earn-m01')).sort()).toEqual(['euler-earn-m01.seed-1.jsonl', 'euler-earn-m01.seed-2.jsonl'])
+  const score = { catches: 3, false_positives: 0, untested: null, tokens: 0, seconds: 0, x_ray: null, pre_fix_calls: 20, fix_calls: 40, not_powered: null }
+  expect(scores(db)).toEqual([{ plan: 1, ...KEYS, ...score }])
+  const calls = { pre_fix: 10, fix: 20 }
+  expect(JSON.parse(get(root, 1, 'score.json'))).toEqual({ fuzz_bench: sha, ...score, mode: 'refuzz', source: 7,
+    seeds: [{ seed: 1, catch: 0, fp_candidate: 0, silent: 3, calls }, { seed: 2, catch: 3, fp_candidate: 0, silent: 0, calls }],
+    union: { catch: 3, fp_candidate: 0, silent: 0 } })
+  expect(runRows(db)).toEqual([])
+})
+
+test('refuzz D5 union: fp_candidate, then catch, then silent', () => {
+  const { root, db } = scoring(writes('.jsonl', PAIRS), REFUZZ)
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  expect(JSON.parse(get(root, 1, 'score.json'))).toMatchObject({ catches: 2, false_positives: 1, union: { catch: 2, fp_candidate: 1, silent: 1 } })
+})
+
+test('refuzz D6 short calls pass; all error is compile_failed', () => {
+  expect(powered(3, 8, { pre_fix: 1, fix: 1 }, false, true)).toBeNull()
+  expect(powered(3, 8, {}, false, true)).toBeNull()
+  expect(powered(3, 8, {}, true, true)).toBe('compile_failed')
+  const { root, db } = scoring(writes('.jsonl', ERRORS), REFUZZ)
+  put(root, 1, 'generate.json', JSON.stringify({ suite: 'test/fizz', tokens: 0, seconds: 0, agents: 8, properties: 3 }))
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  expect(scores(db)).toMatchObject([{ not_powered: 'compile_failed' }])
+})
+
+test('refuzz D6 error rows with no property are compile_failed', () => {
+  const { root, db } = scoring(writes('.jsonl', [{ verdict: 'error', build_log_tail: 'Error: one' }, { verdict: 'error' }]), REFUZZ)
+  put(root, 1, 'generate.json', JSON.stringify({ suite: 'test/fizz', tokens: 0, seconds: 0, agents: 8, properties: 3 }))
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  expect(scores(db)).toMatchObject([{ not_powered: 'compile_failed' }])
+  expect(JSON.parse(get(root, 1, 'score.json'))).toMatchObject({ build_error: 'Error: one', union: { catch: 0, fp_candidate: 0, silent: 0 } })
+})
+
+test('refuzz D7 null_check on hours 4 is capped at 4 × cap', () => {
+  const { root, db } = nullChecking({ ...ON, hours: '4' }, `import time\ntime.sleep(1)\n${writes('.nullcheck.jsonl', KILLS)}`)
+  expect(nullChecked(db, root, planById(db, 1), 500))
+    .toEqual({ outcome: 'pass', spans: [], note: 'null_check.py finished: 1 untested in 2 rows' })
+})
+
 test('score D5 a comms plan still reaches the comms scorer', () => {
   const db = fresh(schema)
   queued(db, 'comms', mapOf('comms').steps.length - 1)

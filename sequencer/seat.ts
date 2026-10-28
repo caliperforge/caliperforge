@@ -118,7 +118,8 @@ export async function fireBrief(db: Db, root: string, plan: PlanRow, step: Step,
   if (ticket === null && maybe(root, plan.id, 'ask.md') === null) {
     return { outcome: 'needs_ceo', spans: ['ask.md'], note: `plan ${String(plan.id)} has no ask.md or issue.md: write the ask to ask.md, then cf retry ${String(plan.id)}` }
   }
-  if (ticket !== null && builderRan(db, plan.id)) return stands()
+  const held = byHand(step.runs, ticket)
+  if (held !== null || (ticket !== null && builderRan(db, plan.id))) return held ?? stands()
   const saved = split(maybe(root, plan.id, 'split.md') ?? '')
   if (saved !== null) return splitting(step, saved)
   const ask = askOf(root, plan.id)
@@ -150,7 +151,7 @@ export async function fireBrief(db: Db, root: string, plan: PlanRow, step: Step,
   if (message !== null) put(root, plan.id, COMMIT, message)
   drop(root, plan.id, 'refusal.md')
   drop(root, plan.id, 'question.sha')
-  return { outcome: 'pass', spans: [], note: `${step.runs}: brief written` }
+  return byHand(step.runs, fired.text) ?? { outcome: 'pass', spans: [], note: `${step.runs}: brief written` }
 }
 
 /** What the brief seat's reply ends in place of a brief: an allow-listed command to run, or a claimed ask held with its evidence. */
@@ -159,6 +160,11 @@ function instead(runs: string, reply: string): Outcome | null {
   if (line !== null) return { outcome: 'pass', spans: [], note: `${runs}: ${line}`, command: line }
   const evidence = claimed(reply)
   return evidence === null ? null : { outcome: 'needs_ceo', spans: [], note: `${runs}: claimed: ${evidence}` }
+}
+
+function byHand(runs: string, brief: string | null): Outcome | null {
+  if (brief === null || estimate(brief) !== 0) return null
+  return { outcome: 'needs_ceo', spans: ['hand-run'], note: `${runs}: hand-run brief: it estimates 0 lines, so a person runs it; held until hand-run briefs have their own route` }
 }
 
 async function written(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider, ask: string, src: string): Promise<{ fired: Fired; cut: string | null }> {

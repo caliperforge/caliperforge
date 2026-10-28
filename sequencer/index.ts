@@ -27,7 +27,7 @@ import { ceilinged, stepped } from './settle.ts'
 import { closing } from './wave.ts'
 import { ripe, sitedata } from './site.ts'
 import { relane } from './relane.ts'
-import { evict } from './evict.ts'
+import { evict, noting } from './evict.ts'
 
 /**
  * `read`, `wire` and `labels` are the network a tick touches on its own account; each is injected so a test can drive a lap
@@ -135,7 +135,7 @@ export async function lap(db: Db, root: string, provider: Provider, plan: number
   chain = 0, read?: Read, moved: () => boolean = () => false): Promise<Fired[]> {
   const lease = handOver(db, plan, from)
   if (lease === null) return []
-  if (stole !== null) evict(db, plan, stole)
+  if (stole !== null) evict(db, root, plan, stole)
   const taken = { ...lease, stole }
   const row = planById(db, plan)
   const pipe = openPipes(db, hhmm(db, new Date())).find((p) => p.id === row.pipe_id)
@@ -143,7 +143,7 @@ export async function lap(db: Db, root: string, provider: Provider, plan: number
     unlease(db, plan)
     return []
   }
-  return lapping.run(plan, () => one(db, root, pipe, { plan: row, route: route(db, row, new Date(), taken) }, taken, provider, undefined, chain, read, moved))
+  return lapping.run(plan, () => one(db, root, pipe, { plan: row, route: route(db, row, new Date(), taken) }, taken, noting(provider), undefined, chain, read, moved))
 }
 
 /** A `token_ceiling` plan is leased too: `ceilinged` is its step. */

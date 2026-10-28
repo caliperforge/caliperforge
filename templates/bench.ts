@@ -253,6 +253,7 @@ function medusa(db: Db, plan: number, src: string, suite: string, refuzz: { hour
   const args = field(platform, 'args') ?? []
   if (Array.isArray(args)) args.forEach((arg: unknown, at) => { if (arg === '--foundry-ignore-compile') args[at] = '--foundry-compile-all' })
   if (existsSync(join(src, 'foundry.toml')) && typeof platform === 'object' && platform !== null && Array.isArray(args) && !args.includes('--compile-force-framework')) Object.assign(platform, { args: [...(args as unknown[]), '--compile-force-framework', 'foundry'] })
+  if (refuzz !== null && field(config, 'fuzzing') === undefined) Object.assign(config as object, { fuzzing: {} })
   const fuzzing = field(config, 'fuzzing')
   const balances = field(fuzzing, 'targetContractsBalances')
   const { entries, clamped } = clamp(Array.isArray(balances) ? balances : [])

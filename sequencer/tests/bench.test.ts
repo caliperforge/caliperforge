@@ -1394,6 +1394,15 @@ test('refuzz D4 the medusa.json runs hours long on one corpus', () => {
   expect(get(root, 1, 'target.yml')).toBe(`${REFRESHED}refuzz: 7\nhours: 4\nseeds: 2\n`)
 })
 
+test('refuzz D4 a medusa.json with no fuzzing still gets them', () => {
+  const { root, db } = scoring(undefined, REFUZZ)
+  writeFileSync(join(srcDir(root, 1), 'medusa.json'), '{}')
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  expect(JSON.parse(readFileSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/medusa.json'), 'utf8'))).toEqual({
+    fuzzing: { timeout: 14400, workers: 4, testLimit: 0, corpusDirectory: join(planDir(root, 7), 'corpus'), testing: { shrinkLimit: 500 } },
+    slither: { useSlither: false } })
+})
+
 test('refuzz D5 D6 each seed scores on the corpus the last grew', () => {
   const { root, db, sha } = scoring(CORPUS, REFUZZ)
   writeFileSync(join(srcDir(root, 1), 'medusa.json'), JSON.stringify({ fuzzing: { workers: 2 } }))
@@ -1423,6 +1432,14 @@ test('refuzz D6 short calls pass; all error is compile_failed', () => {
   put(root, 1, 'generate.json', JSON.stringify({ suite: 'test/fizz', tokens: 0, seconds: 0, agents: 8, properties: 3 }))
   expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
   expect(scores(db)).toMatchObject([{ not_powered: 'compile_failed' }])
+})
+
+test('refuzz D6 error rows with no property are compile_failed', () => {
+  const { root, db } = scoring(writes('.jsonl', [{ verdict: 'error', build_log_tail: 'Error: one' }, { verdict: 'error' }]), REFUZZ)
+  put(root, 1, 'generate.json', JSON.stringify({ suite: 'test/fizz', tokens: 0, seconds: 0, agents: 8, properties: 3 }))
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  expect(scores(db)).toMatchObject([{ not_powered: 'compile_failed' }])
+  expect(JSON.parse(get(root, 1, 'score.json'))).toMatchObject({ build_error: 'Error: one', union: { catch: 0, fp_candidate: 0, silent: 0 } })
 })
 
 test('refuzz D7 null_check on hours 4 is capped at 4 × cap', () => {

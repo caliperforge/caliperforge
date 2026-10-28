@@ -30,7 +30,6 @@ export function paired(db: Db, plan: PlanRow, bench: string, target: string, sui
     if (!existsSync(written)) return { outcome: 'refuse', spans: ['bench.no_results'], note: `run_pair.py exited 0 and wrote no results/${target}/${target}.jsonl` }
     const pairs = rows(written)
     if (pairs.length === 0) return { outcome: 'refuse', spans: ['bench.empty_results'], note: `results/${target}/${target}.jsonl has no rows` }
-    if (seeds !== null && pairs.some((r) => r.property === undefined)) return { outcome: 'refuse', spans: ['bench.no_property'], note: `results/${target}/${target}.jsonl has a row with no property` }
     if (seeds !== null) renameSync(written, join(bench, 'results', target, `${target}.seed-${String(seed)}.jsonl`))
     runs.push(pairs)
   }

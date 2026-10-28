@@ -37,7 +37,7 @@ import { rule } from '../rule.ts'
 import { capped } from '../refusal.ts'
 import { parted } from '../split.ts'
 import { unruled } from '../unruled.ts'
-import { afresh, drop, git, headSha, maybe, planDir, put, srcDir } from '../workspace.ts'
+import { afresh, drop, git, headSha, maybe, planDir, put, snapshot, srcDir } from '../workspace.ts'
 
 const repo = join(import.meta.dirname, '../..')
 const now = new Date('2026-09-27T09:00:00.000Z')
@@ -1143,6 +1143,43 @@ test('D3: waive on a rails stop or a queued plan writes nothing', async () => {
   await run(db, home, REPLY.waive ?? '')
   expect(told(db).map((t) => t.outcome)).toEqual(['needs_coo'])
   expect(maybe(home, 7, 'rulings.md')).toBeNull()
+})
+
+function staleStop(step5: 'pass' | 'refuse') {
+  const { db, home } = seeded('1')
+  db.exec('UPDATE plans SET step = 6 WHERE id = 7')
+  put(home, 7, 'refusal.md', 'step 3 rails refused by pre_review\n')
+  committed(home)
+  const tree = snapshot(srcDir(home, 7))
+  for (const [step, gate, outcome] of [[4, 'review', 'pass'], [5, 'senior_review', step5]] as const) {
+    db.exec(`INSERT INTO verdicts (gate, kind, subject_digest, plan, step, outcome, origin_kind, origin_ref, tokens, seconds, tree)
+      VALUES ('${gate}', 'review', '${'d'.repeat(64)}', 7, ${String(step)}, '${outcome}', 'ruling', 'reviewers.verdict', 0, 0, '${tree}')`)
+  }
+  return { db, home }
+}
+
+const builds = (db: Db) => runRows(db).filter((r) => r.plan === 7 && r.step === 2).length
+
+test('D1: waive on a stale refusal resumes step 6', async () => {
+  const { db, home } = staleStop('pass')
+  const was = builds(db)
+  await run(db, home, REPLY.waive ?? '')
+  expect(row(db)).toMatchObject({ step: 6, state: 'queued' })
+  expect(maybe(home, 7, 'refusal.md')).toBeNull()
+  expect(maybe(home, 7, 'refusal.prev.md')).toBe('step 3 rails refused by pre_review\n')
+  expect(builds(db)).toBe(was)
+  expect(told(db)).toEqual([{ actor: 'director', outcome: 'pass', message: 'waive: the builder can fix the name' }])
+})
+
+test('D2 D3: a refused step 5 or a moved tree goes to build', async () => {
+  const refused = staleStop('refuse')
+  const moved = staleStop('pass')
+  writeFileSync(join(srcDir(moved.home, 7), 'late.ts'), 'export {}\n')
+  for (const { db, home } of [refused, moved]) {
+    await run(db, home, REPLY.waive ?? '')
+    expect(row(db).step).toBe(2)
+    expect(ofKind(db, 'retry').map((e) => e.message)).toEqual(['step 2'])
+  }
 })
 
 test('D4: park holds plan 7 until its time', async () => {

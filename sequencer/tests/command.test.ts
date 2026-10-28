@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test, vi } from 'vitest'
 import { executed } from '../command.ts'
+import { forkOf } from '../home.ts'
 import { tick } from '../index.ts'
 import { diffOf, maybe, put, SELF } from '../workspace.ts'
 import { logged, ofKind, runRows } from '../../store/events.ts'
@@ -25,8 +26,12 @@ writeFileSync(out + '/report.txt', url)
 console.log('wrote ' + out)
 `
 
+function viewing(hasIssuesEnabled: boolean): (args: string[]) => unknown {
+  return (args) => args[0] === 'repo' ? { hasIssuesEnabled } : { title: 'the old title', body: 'the old body', labels: [] }
+}
+
 async function commanding(line: string, setup?: (w: World) => void): Promise<World> {
-  gh.mockReset().mockReturnValue({ title: 'the old title', body: 'the old body', labels: [] })
+  gh.mockReset().mockImplementation(viewing(true))
   const w = world()
   dropPlan(w.db, 1)
   ours(w.root)
@@ -54,6 +59,15 @@ test('D2: a refile that throws blocks the plan on the CEO', async () => {
   expect(plan(w.db, ID)).toMatchObject({ state: 'blocked_on_ceo' })
   expect(maybe(w.root, ID, 'command.md')).toBe(`${REFILE}\n\ngh exited 1\n`)
   expect(ofKind(w.db, 'command').map((e) => e.outcome)).toEqual(['escalate'])
+})
+
+test('D4: a refile to an issues-off fork runs on at step 1', async () => {
+  run.mockReset()
+  const w = await commanding(REFILE, () => gh.mockImplementation(viewing(false)))
+  expect(plan(w.db, ID)).toMatchObject({ state: 'running', step: 1 })
+  expect(forkOf(w.root, plan(w.db, ID))).toBe('caliperforge/atelier')
+  expect(maybe(w.root, ID, 'command.md')).toBe(`${REFILE}\n\nFork: caliperforge/atelier\n`)
+  expect(run).not.toHaveBeenCalled()
 })
 
 test('D3: a command off the allow-list is refused with no gh call', async () => {

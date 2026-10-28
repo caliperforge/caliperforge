@@ -63,6 +63,15 @@ export function retried(db: Db, id: number, actor: string): number {
   })()
 }
 
+export function resumed(db: Db, id: number, from: number, tree: string, actor: string): boolean {
+  const plan = planById(db, id)
+  const { n } = db.prepare(`SELECT count(*) AS n FROM verdicts v WHERE plan = ? AND step > ? AND step < ? AND outcome = 'pass' AND tree = ? AND id =
+    (SELECT max(id) FROM verdicts w WHERE w.plan = v.plan AND w.step = v.step AND w.kind = 'review' AND w.gate <> 'blind_review')`).get(id, from, plan.step, tree) as { n: number }
+  if (n === 0 || n !== plan.step - from - 1) return false
+  db.transaction(() => { clear(db, id); returnToLane(db, id, actor) })()
+  return true
+}
+
 export function closed(db: Db, id: number, state: 'refused' | 'done', actor: Holder, why: string,
   landed: { sha: string; url: string } | null = null): void {
   const row = db.prepare('SELECT state FROM plans WHERE id = ?').get(id) as { state: string } | undefined

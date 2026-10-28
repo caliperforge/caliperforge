@@ -5,6 +5,7 @@ import { refile } from '../cli/refile.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import type { PlanRow } from '../store/plans.ts'
+import { forkOf } from './home.ts'
 import type { Outcome } from './kind.ts'
 import { maybe, put } from './workspace.ts'
 
@@ -29,7 +30,10 @@ export function executed(db: Db, root: string, plan: PlanRow, line: string): Out
   try {
     const output = command()
     put(root, plan.id, 'command.md', `${line}\n\n${output}\n`)
-    return { outcome: 'pass', spans: [], ran: true, note: `${line}: ${output}` }
+    const note = `${line}: ${output}`
+    const fork = forkOf(root, plan)
+    if (fork !== null && output === `Fork: ${fork}`) return { outcome: 'pass', spans: [], rewind: 1, note }
+    return { outcome: 'pass', spans: [], ran: true, note }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     put(root, plan.id, 'command.md', `${line}\n\n${message}\n`)
@@ -40,7 +44,7 @@ export function executed(db: Db, root: string, plan: PlanRow, line: string): Out
 
 function allowed(db: Db, root: string, line: string): (() => string) | null {
   const refiled = REFILE.exec(line)
-  if (refiled !== null) return () => refile(db, String(refiled[1]), String(refiled[2]))
+  if (refiled !== null) return () => refile(db, root, String(refiled[1]), String(refiled[2]))
   const tool = TOOL.exec(line)
   if (tool === null) return null
   return () => execFileSync('node', [`tools/${String(tool[1])}/run.ts`, String(tool[2]), '--out', String(tool[3])],

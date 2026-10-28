@@ -1,4 +1,5 @@
 ---
+name: devnet
 title: Devnet
 summary: Pays per call in USDC on Solana devnet
 description: A listing whose 402 offers USDC on Solana devnet alone, over both x402 and MPP, and nothing on mainnet.

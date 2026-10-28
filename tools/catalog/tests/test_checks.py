@@ -2,6 +2,8 @@ import json
 import shutil
 from pathlib import Path
 
+import pytest
+
 from catalog_desk.brief import STOP, render
 from catalog_desk.checks import HEADER_ONLY, next_fix
 from catalog_desk.listing import Listing, read
@@ -59,6 +61,30 @@ def test_d4_dropping_get_paid_is_declared_less_though_all_else_passes(tmp_path: 
     fix = next_fix(read(dropped), net, before)
     assert fix is not None
     assert (fix.check, fix.current, fix.replacement) == ("declared_less", "GET /paid", "restore GET /paid")
+
+
+@pytest.mark.parametrize(("name", "rule"), [("name: devnet\n", "name=devnet but parent directory is renamed"), ("", "name= but parent directory is renamed")])
+def test_a_name_unlike_its_directory_is_a_format_fix(tmp_path: Path, name: str, rule: str):
+    renamed = Path(shutil.copytree(FIXTURES / "devnet", tmp_path / "renamed"))
+    pay = renamed / "PAY.md"
+    pay.write_text(pay.read_text(encoding="utf-8").replace("name: devnet\n", name), encoding="utf-8")
+    fix = next_fix(read(renamed), _net("devnet"))
+    assert fix is not None and (fix.check, fix.rule) == ("format", rule)
+
+
+def test_a_short_endpoint_description_is_a_format_fix(tmp_path: Path):
+    pay = _copy("endpoints-only", tmp_path) / "PAY.md"
+    pay.write_text(pay.read_text(encoding="utf-8").replace("Lists the invoices issued to the paying account.", "x" * 10), encoding="utf-8")
+    brief = render(next_fix(read(pay.parent), Recorded({}, set(), {}))).splitlines()
+    assert brief[:2] == ["check: format", "rule: GET /v1/invoices description is 10 characters"]
+
+
+def test_endpoints_only_pricing_is_read_per_endpoint():
+    asked = _net("asked-above").fetches["GET https://api.example.com/paid"]
+    urls = ("https://endpoints.example.com/api/v1/invoices", "https://endpoints.example.com/api/v1/receipts")
+    net = Recorded({f"GET {url}": asked for url in urls}, {"endpoints.example.com"}, {})
+    fix = next_fix(read(FIXTURES / "endpoints-only"), net)
+    assert fix is not None and (fix.check, fix.rule) == ("price", "price listed $0.001 vs asked $0.01")
 
 
 def test_d5_devnet_stops_at_network_and_header_only_fails_offer():

@@ -5,7 +5,7 @@ import type { Db } from '../store/index.ts'
 import { busy } from '../store/now.ts'
 import type { PlanRow } from '../store/plans.ts'
 import { entries, type Failure } from './checks.ts'
-import { homeOf, kernelPlan } from './home.ts'
+import { forkOf, homeOf, kernelPlan } from './home.ts'
 import type { Outcome } from './kind.ts'
 import { subprojects } from './loose.ts'
 import { carries, headOf, holding, unfinished, WIRE, workflows, type Wire } from './push.ts'
@@ -50,7 +50,7 @@ export function ciChecks(db: Db, root: string, plan: PlanRow, wire: Wire = WIRE)
   if (subprojects(srcDir(root, plan.id), parse(diffOf(root, plan.id)).map((f) => f.path)).length > 0) return null
   let pointer = ''
   try {
-    const fork = homeOf(plan)
+    const fork = forkOf(root, plan) ?? homeOf(plan)
     const head = headOf(root, plan.id)
     pointer = `${fork}:${head.branch}`
     if (pointers(db, 'gone').includes(pointer)) return null

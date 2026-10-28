@@ -28,8 +28,9 @@ import { kept } from './merge.ts'
 import { keyLock } from './keyring.ts'
 import { languageFor } from './route.ts'
 import { unbuilt } from './rails.ts'
-import { branchOf, checkout, cloned, diffOf, drop, git, internalBranch, maybe, PR_BRANCH, put, ruled, srcDir, titleOf } from './workspace.ts'
-import { assembling, homeOf, onto } from './home.ts'
+import { branchOf, checkout, cloned, diffOf, internalBranch, maybe, put, ruled, srcDir, titleOf } from './workspace.ts'
+import { assembling, forkOf, homeOf, onto } from './home.ts'
+import { rebranched, rehomed } from './rehomed.ts'
 import { BUILDS, capped, fingerprintOf, looped, refusalText, stopped, streak, STREAK } from './refusal.ts'
 import { NETWORK } from './checks.ts'
 import { firstLine } from './unpolled.ts'
@@ -133,6 +134,7 @@ function workspace(db: Db, root: string, plan: PlanRow): { language: string | nu
   if (tree === null) return { language: null, failed: null }
   try {
     if (bare) rebranched(root, plan.id)
+    rehomed(root, plan.id, tree.repo)
     const { recut } = checkout(root, plan.id, tree.repo, tree.branch, tree.from)
     const from = tree.from ?? 'main'
     if (recut !== null) logged(db, { plan: plan.id, kind: 'base_recut', actor: 'workspace', outcome: 'pass', message: `cut again from ${from}: the clone was cut from ${recut}`, pointer: from, run: null })
@@ -146,12 +148,6 @@ function workspace(db: Db, root: string, plan: PlanRow): { language: string | nu
   return { language: languageFor(db, plan, srcDir(root, plan.id)), failed: null }
 }
 
-/** A clone on any branch but `pr.branch` loses its `base.sha`, so `checkout` moves it aside and clones the fork again. */
-function rebranched(root: string, plan: number): void {
-  const src = srcDir(root, plan)
-  if (cloned(src) && git(src, ['rev-parse', '--abbrev-ref', 'HEAD']).trim() !== maybe(root, plan, PR_BRANCH)?.trim()) drop(root, plan, 'base.sha')
-}
-
 /**
  * Which repository the branch is cut in and what it is called: a stranger's repo and
  * `<repo>-<issue>[-<part>]-a<attempt>` for a target, or `asm/<plan>` once its parts have landed, our own repo and `p<plan>-<slug>` for an issue
@@ -161,7 +157,7 @@ function rebranched(root: string, plan: number): void {
 function treeOf(db: Db, root: string, plan: PlanRow): { repo: string; branch: string; from?: string | undefined } | null {
   if (internal(plan)) {
     const branch = internalBranch(plan.id, titleOf(root, plan.id) ?? `plan ${String(plan.id)}`)
-    return { repo: targetOf(db, plan)?.repo ?? homeOf(plan), branch, from: onto(db, root, plan) }
+    return { repo: targetOf(db, plan)?.repo ?? forkOf(root, plan) ?? homeOf(plan), branch, from: onto(db, root, plan) }
   }
   const row = targetOf(db, plan)
   return row === null ? null : { repo: row.repo, branch: assembling(db, plan) ?? branchOf(row.repo, row.issue_no, plan.retries + 1, row.part) }

@@ -29,6 +29,10 @@ export function onto(db: Db, root: string, plan: PlanRow): string {
   return assembly(db, plan)?.branch ?? /^Base: ([\w./-]+)$/m.exec(maybe(root, plan.id, 'ask.md') ?? '')?.[1] ?? 'main'
 }
 
+/** The repo of ours an internal ask's `Fork:` line has it cloned, built and landed in, or null. */
+export function forkOf(root: string, plan: PlanRow): string | null {
+  return new RegExp(`^Fork: (${FORK}/[\\w.-]+)$`, 'm').exec(maybe(root, plan.id, 'ask.md') ?? '')?.[1] ?? null
+}
 /** The branch an outside plan split into parts is checked, reviewed and sent upstream from, or null for any other plan. */
 export function assembling(db: Db, plan: PlanRow): string | null {
   if (internal(plan)) return null

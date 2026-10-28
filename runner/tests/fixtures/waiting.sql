@@ -1,10 +1,10 @@
-INSERT INTO pipes (id, name, enabled, window_start, window_end, max_concurrent) VALUES (9, 'wake', 1, '00:00', '23:59', 1);
+INSERT INTO pipes (id, name, enabled, window_start, window_end, max_concurrent) VALUES (99, 'wake', 1, '00:00', '23:59', 1);
 
 INSERT INTO rules (id, kind, path, content_hash, loaded_at)
   VALUES ('typescript_specialist', 'roster', 'seats/typescript_specialist', printf('%064d', 0), '2026-09-24');
 
 INSERT INTO plans (id, pipe_id, template, state, queued_at, step, retries, priority, lane, seat, origin, wait_reason)
-  VALUES (7, 9, 'pr_path', 'running', '2026-09-24', 4, 0, 1, 'machine', 'typescript_specialist',
+  VALUES (7, 99, 'pr_path', 'running', '2026-09-24', 4, 0, 1, 'machine', 'typescript_specialist',
     'https://github.com/caliperforge/caliperforge/issues/139', 'token_ceiling');
 
 INSERT INTO runs (plan, step, seat, rule_hash, provider, model, effort, input_tokens, cache_read_tokens, output_tokens, seconds, exit, transcript_path) VALUES

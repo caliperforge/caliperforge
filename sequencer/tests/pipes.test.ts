@@ -39,6 +39,7 @@ test('the store ships three lanes, one each, 07:00 to 22:00',() => {
       { name: 'site', enabled: 1, window_start: '00:00', window_end: '23:59', max_concurrent: 1 },
       { name: 'rubin', enabled: 1, window_start: '00:00', window_end: '23:59', max_concurrent: 2 },
       { name: 'bio', enabled: 1, window_start: '00:00', window_end: '23:59', max_concurrent: 2 },
+      { name: 'refuzz', enabled: 1, window_start: '22:00', window_end: '06:00', max_concurrent: 1 },
     ])
 })
 
@@ -50,7 +51,7 @@ test('one zone row, Guatemala, and every window reads it',() => {
   expect(hhmm(db, new Date('2026-09-19T03:59:00.000Z'))).toBe('21:59')
   expect(openPipes(db, hhmm(db, new Date('2026-09-18T12:59:00.000Z'))).map((p) => p.name)).toEqual(['bench', 'site', 'rubin', 'bio'])
   expect(openPipes(db, hhmm(db, OPENS)).map((p) => p.name)).toEqual(['pr-path', 'comms', 'research', 'bench', 'site', 'rubin', 'bio'])
-  expect(openPipes(db, hhmm(db, new Date('2026-09-19T04:01:00.000Z'))).map((p) => p.name)).toEqual(['bench', 'site', 'rubin', 'bio'])
+  expect(openPipes(db, hhmm(db, new Date('2026-09-19T04:01:00.000Z'))).map((p) => p.name)).toEqual(['bench', 'site', 'rubin', 'bio', 'refuzz'])
 })
 
 test('a lane with no template reads as on, nothing queued',async () => {

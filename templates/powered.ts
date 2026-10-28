@@ -10,10 +10,11 @@ const AGENTS = 8
 
 const PROPERTIES = 3
 
-export function powered(properties: number, agents = 0, { pre_fix = null, fix = null }: { pre_fix?: number | null; fix?: number | null } = {}, failed = false): Score['not_powered'] {
+export function powered(properties: number, agents = 0, { pre_fix = null, fix = null }: { pre_fix?: number | null; fix?: number | null } = {}, failed = false, refuzz = false): Score['not_powered'] {
   if (failed) return 'compile_failed'
   if (agents < AGENTS) return 'reduced_generate'
   if (properties < PROPERTIES) return 'few_properties'
+  if (refuzz) return null
   if (pre_fix === null || pre_fix < FLOOR) return 'pre_fix_calls'
   return fix === null || fix < FLOOR ? 'fix_calls' : null
 }

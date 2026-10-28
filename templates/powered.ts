@@ -10,11 +10,17 @@ const AGENTS = 8
 
 const PROPERTIES = 3
 
-export function powered(properties: number, agents = 0, { pre_fix = null, fix = null }: { pre_fix?: number | null; fix?: number | null } = {}): Score['not_powered'] {
+export function powered(properties: number, agents = 0, { pre_fix = null, fix = null }: { pre_fix?: number | null; fix?: number | null } = {}, failed = false): Score['not_powered'] {
+  if (failed) return 'compile_failed'
   if (agents < AGENTS) return 'reduced_generate'
   if (properties < PROPERTIES) return 'few_properties'
   if (pre_fix === null || pre_fix < FLOOR) return 'pre_fix_calls'
   return fix === null || fix < FLOOR ? 'fix_calls' : null
+}
+
+export function buildError(rows: { build_log_tail?: unknown }[]): string | null {
+  const lines = rows.flatMap((r) => (typeof r.build_log_tail === 'string' ? r.build_log_tail.split('\n') : []))
+  return lines.find((line) => /error/i.test(line))?.trim() ?? null
 }
 
 export function walled(db: Db, root: string, plan: number, keys: Keys, made: Pick<Score, 'tokens' | 'seconds' | 'x_ray'>, wall: string): Outcome {

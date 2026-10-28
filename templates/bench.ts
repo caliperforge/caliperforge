@@ -19,7 +19,7 @@ import { clamp, quieted } from './balances.ts'
 import { deps } from './deps.ts'
 import { costWall, costWalled, written } from './generated.ts'
 import { inBare, listedIn } from './listed.ts'
-import { kept, powered, walled } from './powered.ts'
+import { buildError, kept, powered, walled } from './powered.ts'
 import { DEFAULT_BUILDER, type Step } from './pr-path.ts'
 import { placed, recloned, rooted, scrapped } from './rooted.ts'
 
@@ -186,8 +186,8 @@ export function scored(db: Db, root: string, plan: PlanRow): Outcome {
   const pairs = rows(written)
   if (pairs.length === 0) return { outcome: 'refuse', spans: ['bench.empty_results'], note: `results/${target}/${target}.jsonl has no rows` }
   const score = { catches: pairs.filter((r) => r.verdict === 'catch').length, false_positives: pairs.filter((r) => r.verdict === 'fp_candidate').length,
-    untested: null, tokens, seconds, x_ray: x_ray ?? null, pre_fix_calls: pairs[0]?.calls?.pre_fix ?? null, fix_calls: pairs[0]?.calls?.fix ?? null, not_powered: powered(properties ?? proven, agents, pairs[0]?.calls) }
-  kept(db, root, plan.id, { target, generator }, score, sha, dropped === null ? {} : { foundry_out_dropped: dropped })
+    untested: null, tokens, seconds, x_ray: x_ray ?? null, pre_fix_calls: pairs[0]?.calls?.pre_fix ?? null, fix_calls: pairs[0]?.calls?.fix ?? null, not_powered: powered(properties ?? proven, agents, pairs[0]?.calls, pairs.every((r) => r.verdict === 'error')) }
+  kept(db, root, plan.id, { target, generator }, score, sha, { ...(dropped === null ? {} : { foundry_out_dropped: dropped }), ...(score.not_powered === 'compile_failed' ? { build_error: buildError(pairs) } : {}) })
   return { outcome: 'pass', spans: [], note: `score.json written at fuzz-bench ${sha.slice(0, 12)}${config === null || config.clamped.length === 0
     ? '' : `; targetContractsBalances ${config.clamped.join(', ')} clamped to 1e24 wei`}` }
 }
@@ -228,7 +228,7 @@ function unproven(suite: string, name: string): Outcome | number {
     note: `${name} wrote no invariant_, property_ or echidna_ function in ${counted.map((p) => `${SUITE}/${p}`).join(', ')}` }
 }
 
-interface Row { verdict?: string; untested?: boolean; calls?: { pre_fix?: number | null; fix?: number | null } }
+interface Row { verdict?: string; untested?: boolean; calls?: { pre_fix?: number | null; fix?: number | null }; build_log_tail?: unknown }
 
 function rows(path: string): Row[] {
   return readFileSync(path, 'utf8').split('\n').filter((line) => line.trim() !== '').map((line) => JSON.parse(line) as Row)

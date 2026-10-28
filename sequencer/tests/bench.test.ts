@@ -17,6 +17,7 @@ import type { Db } from '../../store/index.ts'
 import { dial } from '../../store/lanes.ts'
 import { allPlans, end, holdOn, pipeNamed, planById, putPlan, requeue, waiting, type PlanRow } from '../../store/plans.ts'
 import { CEILING, generate, nullChecked, scored, scratch } from '../../templates/bench.ts'
+import { powered } from '../../templates/powered.ts'
 import { drift, mechanisms } from '../drift.ts'
 import { evict } from '../evict.ts'
 import { unhold } from '../hold.ts'
@@ -1136,6 +1137,39 @@ test('D4 generate.json without properties counts the suite', () => {
 test('D4 a side under the floor or unread names that side', () => {
   expect(reason(8, 69467, 69467)).toBe('pre_fix_calls')
   expect(reason(8, 505660, null)).toBe('fix_calls')
+})
+
+const ERRORS = [{ property: 'p1', verdict: 'error', build_log_tail: 'Compiling 3 files\nError (7576): Undeclared identifier.\n  --> src/A.sol' },
+  { property: 'p2', verdict: 'error', build_log_tail: 'Error: second' }]
+
+/** The bench_scorecard row and score.json `scored` writes for run_pair rows `pairs`. */
+function scoredRows(pairs: object[]) {
+  const { root, db } = scoring(writes('.jsonl', pairs))
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  return { row: scores(db)[0], json: JSON.parse(get(root, 1, 'score.json')) as Record<string, unknown> }
+}
+
+test('1645b D1 all error rows record compile_failed and the error', () => {
+  const { row, json } = scoredRows(ERRORS)
+  expect(row).toMatchObject({ catches: 0, false_positives: 0, not_powered: 'compile_failed' })
+  expect(json).toMatchObject({ not_powered: 'compile_failed', build_error: 'Error (7576): Undeclared identifier.' })
+})
+
+test('1645b D2 failed is compile_failed before every other reason', () => {
+  expect(powered(3, 8, { pre_fix: 505660, fix: 505660 }, true)).toBe('compile_failed')
+  expect(powered(1, 0, {}, true)).toBe('compile_failed')
+})
+
+test('1645b D3 one row not error scores as today, no build_error', () => {
+  const { row, json } = scoredRows([...PAIRS, ERRORS[0] ?? {}])
+  expect(row).toMatchObject({ catches: 2, false_positives: 1, not_powered: 'reduced_generate' })
+  expect(json).not.toHaveProperty('build_error')
+})
+
+test('1645b D6 all error with no error line records a null error', () => {
+  const { row, json } = scoredRows([{ verdict: 'error', build_log_tail: 'Compiling 3 files' }, { verdict: 'error', build_log_tail: 7 }, { verdict: 'error' }])
+  expect(row?.not_powered).toBe('compile_failed')
+  expect(json).toMatchObject({ not_powered: 'compile_failed', build_error: null })
 })
 
 test('D5 generate at the wall records one wall row, no pair', () => {

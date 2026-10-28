@@ -62,12 +62,38 @@ it('setUntested sets the one plan row', () => {
   expect(scores(d).map((s) => s.untested)).toEqual([4, null])
 })
 
-it('D1 D4 migrates once to 119 with one bench_scorecard table', () => {
+it('D1 D4 migrates once to 120 with one bench_scorecard table', () => {
   const d = open(':memory:')
-  expect(migrate(d, join(root, 'schema')).at(-1)).toBe('0119_bench_few_properties.sql')
+  expect(migrate(d, join(root, 'schema')).at(-1)).toBe('0120_bench_compile_failed.sql')
   expect(migrate(d, join(root, 'schema'))).toEqual([])
   expect(d.prepare("SELECT count(*) AS n FROM sqlite_master WHERE type = 'table' AND name = 'bench_scorecard'").get()).toEqual({ n: 1 })
-  expect(d.pragma('user_version', { simple: true })).toBe(119)
+  expect(d.pragma('user_version', { simple: true })).toBe(120)
+})
+
+it('1645b D4 accepts compile_failed, refuses short', () => {
+  const d = db()
+  const score: Score = { plan: planRow(d), ...fizz, not_powered: 'compile_failed' }
+  record(d, score)
+  expect(scores(d)).toEqual([score])
+  expect(() => record(d, { plan: planRow(d), ...fizz, not_powered: 'short' as 'wall' })).toThrow(/CHECK/)
+})
+
+it('1645b D5 0120 keeps every 0119 row, live or superseded', () => {
+  const d = before('0120')
+  const [one, two] = [planRow(d), planRow(d)]
+  const reasons = [null, 'wall', 'reduced_generate', 'few_properties', 'pre_fix_calls', 'fix_calls']
+  const old: Score[] = reasons.map((why) => ({ plan: one, ...fizz, not_powered: why as Score['not_powered'] }))
+  for (const score of old) {
+    record(d, score)
+    supersede(d, one)
+  }
+  const live: Score = { plan: two, ...fizz, not_powered: 'few_properties' }
+  record(d, live)
+  expect(migrate(d, join(root, 'schema'))).toEqual(['0120_bench_compile_failed.sql'])
+  expect(scores(d)).toEqual([...old, live])
+  expect(underpowered(d)).toEqual([live])
+  expect(() => record(d, { plan: two, ...fizz })).toThrow(/UNIQUE/)
+  expect(supersede(d, two)).toBe(old.length + 1)
 })
 
 it('D5 accepts the five reasons, refuses short', () => {
@@ -87,7 +113,7 @@ it('D5 0119 keeps every 0118 row, live or superseded', () => {
   }
   const live: Score = { plan: two, ...fizz, not_powered: 'fix_calls' }
   record(d, live)
-  expect(migrate(d, join(root, 'schema'))).toEqual(['0119_bench_few_properties.sql'])
+  expect(migrate(d, join(root, 'schema'))).toEqual(['0119_bench_few_properties.sql', '0120_bench_compile_failed.sql'])
   expect(scores(d)).toEqual([...old, live])
   expect(underpowered(d)).toEqual([live])
   expect(() => record(d, { plan: two, ...fizz })).toThrow(/UNIQUE/)
@@ -99,7 +125,7 @@ it('D2 0118 reads an 0117 row by its calls a side', () => {
   const insert = d.prepare(`INSERT INTO bench_scorecard (plan, target, generator, catches, false_positives, untested, tokens, seconds, x_ray,
     pre_fix_calls, fix_calls) VALUES (?, 'a', 'fizz', 1, 0, 0, 10, 1.5, 1, ?, ?)`)
   for (const [pre, fix] of [[69467, 69467], [505660, 505660], [505660, 1000]]) insert.run(planRow(d), pre, fix)
-  expect(migrate(d, join(root, 'schema'))).toEqual(['0118_bench_not_powered.sql', '0119_bench_few_properties.sql'])
+  expect(migrate(d, join(root, 'schema'))).toEqual(['0118_bench_not_powered.sql', '0119_bench_few_properties.sql', '0120_bench_compile_failed.sql'])
   expect(scores(d).map((s) => s.not_powered)).toEqual(['pre_fix_calls', null, 'fix_calls'])
 })
 
@@ -108,7 +134,8 @@ it('D1 0117 reads an 0116 row as NULL calls, refuses -1', () => {
   const plan = planRow(d)
   d.prepare(`INSERT INTO bench_scorecard (plan, target, generator, catches, false_positives, untested, tokens, seconds, x_ray)
     VALUES (?, 'a', 'fizz', 1, 0, 0, 10, 1.5, 1)`).run(plan)
-  expect(migrate(d, join(root, 'schema'))).toEqual(['0117_bench_calls.sql', '0118_bench_not_powered.sql', '0119_bench_few_properties.sql'])
+  expect(migrate(d, join(root, 'schema'))).toEqual(['0117_bench_calls.sql', '0118_bench_not_powered.sql', '0119_bench_few_properties.sql',
+    '0120_bench_compile_failed.sql'])
   expect(scores(d)).toMatchObject([{ plan, pre_fix_calls: null, fix_calls: null }])
   for (const bad of [{ pre_fix_calls: -1 }, { fix_calls: -1 }]) {
     expect(() => record(d, { plan: planRow(d), ...fizz, ...bad })).toThrow(/CHECK/)

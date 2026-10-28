@@ -136,7 +136,7 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
   const hold = waiting === null ? null : holding(root, plan.id, head.sha, verdict.spans, `${at} ${waiting}`, window)
   if (hold !== null) return onCi(db, plan.id, hold)
   const stop = stalled(verdict.spans, board, at, fork, tip)
-  if (stop !== null) { freed(db, plan.id); return stop }
+  if (stop !== null) { freed(db, plan.id); return carries(stop.spans, MISSING) && forkOf(root, plan) !== null ? checked(db, root, plan, repo, stop.note) : stop }
   const again = waiting === null && verdict.outcome === 'refuse' ? cancelled(root, plan.id, on, verdict.spans, wire.runs) : null
   if (again !== null) {
     const rerunning = holding(root, plan.id, head.sha, verdict.spans, `${at} ${again}`, APPEARS, RERUNS)

@@ -2,7 +2,9 @@ import { execFileSync } from 'node:child_process'
 import { cpSync, readdirSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { expect, test } from 'vitest'
+import { eventsOf } from '../../store/events.ts'
 import { dropPlan } from '../../store/plans.ts'
+import { lastCi } from '../../store/ready.ts'
 import { tick } from '../index.ts'
 import type { Fired } from '../kind.ts'
 import type { Wire } from '../push.ts'
@@ -90,6 +92,29 @@ test('D1 a Fork: checkout with no rules/ skips the digests', async () => {
   for (let at = 0; at < 4; at += 1) fired.push(...await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))
   expect(plan(w.db, ID).step).toBe(7)
   expect(fired.filter((r) => r.step === 3 && r.spans.includes('rules/roster'))).toEqual([])
+})
+
+test('D1 D2 D3 a runless Fork: head stands on step 3 at step 6', async () => {
+  const { w } = forked(['Fork: caliperforge/pay'])
+  const listed: string[] = []
+  const wire = { ...pushing([], w), runs: (args: string[]) => { listed.push(args.join(' ')); return '[]' } }
+  await laps(w, 3, wire)
+  built(w.root, ID, 'export const landed = true')
+  const fired: Fired[] = []
+  for (let at = 0; at < 20 && plan(w.db, ID).step < 7; at += 1) fired.push(...await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))
+
+  const ready = fired.filter((r) => r.step === 6)
+  expect(ready.slice(0, 10).map((r) => / tick (\d+) of 10$/.exec(r.note)?.[1])).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'])
+  expect(ready[10]).toMatchObject({ outcome: 'pass' })
+  expect(plan(w.db, ID).step).toBe(7)
+  expect(listed.length).toBeGreaterThan(0)
+  expect(listed.every((l) => l.includes(`--repo ${PAY} `) && !l.includes(`--repo ${SELF}`))).toBe(true)
+  expect(lastCi(w.db, ID)?.outcome).toBe('pass')
+  expect(lastCi(w.db, ID)?.message).toMatch(/^caliperforge\/pay ran no workflow at \w{12} in 10 ticks; .* stand as its CI$/)
+  const event = eventsOf(w.db, ID, 'ready').at(-1)
+  expect(event?.outcome).toBe('pass')
+  expect(event?.message).toContain(`; ${PAY} ran no workflow at`)
+  expect(event?.message).toContain('stand as its CI')
 })
 
 test('D2 Fork: with Base: cuts from and lands on pay redesign', async () => {

@@ -16,7 +16,7 @@ import { addReview } from '../store/verdict.ts'
 import { subdirs } from '../checks/tree.ts'
 import { inContext } from './package.ts'
 import { packs } from './packs.ts'
-import { read, type Judged, type Verdict } from './verdict.ts'
+import { read, unfilled, type Judged, type Verdict } from './verdict.ts'
 
 export function loadReviews(db: Db, root: string): string[] {
   const names = subdirs(join(root, 'reviews')).filter((n) => existsSync(join(root, 'reviews', n, 'manifest.yaml')))
@@ -62,7 +62,7 @@ export async function judge(
     ? await ran(db, root, name, plan, manifest, provider, { ...packet, tools: [] }, lead, staffed)
     : null
   const last = refired ?? first
-  if (last.outcome === null) throw new Error('reviewers.verdict_fence')
+  if (last.outcome === null) throw new Error(last.reason === null ? 'reviewers.verdict_fence' : `reviewers.verdict_fence: ${last.reason}`)
   const tokens = first.tokens + (refired?.tokens ?? 0)
   const seconds = first.seconds + (refired?.seconds ?? 0)
   const stands = narrowed(last.outcome, built.bench)
@@ -72,6 +72,7 @@ export async function judge(
 interface Ran {
   run: number
   outcome: Judged | null
+  reason: string | null
   capped: boolean
   tokens: number
   seconds: number
@@ -80,7 +81,8 @@ interface Ran {
 async function ran(db: Db, root: string, name: string, plan: number, manifest: Review, provider: Provider,
   packet: Packet, lead?: { as: string; hash: string }, staffed?: string): Promise<Ran> {
   const fired = await provider.fire({ ...packet, wall: wall(db) })
-  const outcome = read(fired.text, packet.prompt)
+  const reason = lead === undefined ? null : unfilled(fired.text)
+  const outcome = reason === null ? read(fired.text, packet.prompt) : null
   const run = runLogged(db, { plan, step: manifest.step, seat: lead?.as ?? name, rule_hash: lead?.hash ?? specHash(root, name),
     provider: provider.name, model: manifest.model, effort: manifest.effort, exit: outcome === null ? 1 : fired.exit, fired,
     mode: lead !== undefined || manifest.gate === 'blind_review' || staffed !== undefined ? 'review' : undefined, staffed })
@@ -89,6 +91,7 @@ async function ran(db: Db, root: string, name: string, plan: number, manifest: R
   return {
     run,
     outcome,
+    reason,
     capped: fired.stop_reason === CAPPED,
     tokens: fired.usage.input + fired.usage.cache + fired.usage.output,
     seconds: fired.seconds,

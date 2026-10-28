@@ -38,6 +38,9 @@ import { READ, SERVER, server } from './upstream.ts'
 import { widen } from './widen.ts'
 import { afresh, cloned, maybe, move, planDir, put, snapshot, srcDir } from './workspace.ts'
 
+const FIELDS = ['applies to', 'instruction', 'files', 'resume at', 'verify'] as const
+const field = z.string().trim().min(1).optional()
+
 const Said = z.object({
   move: z.enum(['rule', 'waive', 'close', 'file', 'ask_ceo', 'ask_coo', 'return', 'fix', 'widen', 'park', 'research']),
   why: z.string().trim().min(1),
@@ -45,6 +48,7 @@ const Said = z.object({
   ticket: z.string().trim().min(1).transform((t) => t.slice(0, 140)).optional(),
   class: z.coerce.number().int().min(1).max(4).optional(),
   until: z.string().trim().min(1).refine((t) => !Number.isNaN(Date.parse(t))).optional(),
+  'applies to': field, instruction: field, files: field, 'resume at': field, verify: field,
 }).strict().refine((m) => (m.move !== 'rule' && m.move !== 'research') || m.answer !== undefined, { path: ['answer'] })
   .refine((m) => m.move !== 'file' || m.ticket !== undefined, { path: ['ticket'] })
   .refine((m) => m.move !== 'ask_ceo' || m.class !== undefined, { path: ['class'] })
@@ -95,7 +99,7 @@ export async function cooLite(db: Db, root: string, plan: PlanRow, provider: Pro
     const ceo = decision(said)
     return told(db, root, plan, now, { outcome: 'needs_coo', message: 'block' in ceo ? `${message}\n\n${ceo.block}` : message }, post)
   }
-  const failed = `${m.move} did not apply, ${UNAPPLIED[m.move]}${m.move === 'rule' ? ` (${stray(plan, m.answer ?? '') ?? ''})` : ''}: ${m.why}`
+  const failed = `${m.move} did not apply, ${UNAPPLIED[m.move]}${m.move === 'rule' ? ` (${stray(plan, written(m)) ?? ''})` : ''}: ${m.why}`
   const stuck = (): void => { needsCeo(db, plan); held(db, plan.id, 'coo', failed.split('\n')[0] ?? failed) }
   if (m.move !== 'fix') return handUp(db, root, plan, { outcome: 'needs_coo', message: failed }, said, provider, now, post, wire, stuck)
   stuck()
@@ -115,6 +119,12 @@ function refused(m: Move | null, said: string, n: number, root: string, cap: boo
   if (cap && m !== null && !CAPPED.includes(m.move)) {
     return { fence: `${m.move} is refused: the plan stopped at its build cap. Choose rule, waive, split or park.`,
       message: `${m.move}: refused by the fence, the plan stopped at its build cap` }
+  }
+  const lacks = m?.move !== 'rule' && m?.move !== 'waive' ? null
+    : m.instruction === undefined ? 'instruction' : m['resume at'] === undefined ? 'resume at' : null
+  if (m !== null && lacks !== null) {
+    return { fence: `${m.move} is refused: no ${lacks}. Write instruction (one imperative sentence) and resume at (the step), or choose another move.`,
+      message: `${m.move}: refused by the fence, no ${lacks}` }
   }
   if (m?.move === 'fix') return outOfReach(root, m.why)
   if (m?.move === 'ask_coo' && n < 2) {
@@ -247,16 +257,16 @@ export function read(text: string): Move | null {
   if (parts !== null) return { move: 'split', why: `${String(parts.length)} jobs, not one`, parts }
   const fence = /^---\n([\s\S]*?)\n---$/m.exec(text)?.[1]
   if (fence === undefined) return null
-  const got = Said.safeParse(prose(fence, ['why', 'answer', 'ticket']))
+  const got = Said.safeParse(prose(fence, ['why', 'answer', 'ticket', ...FIELDS]))
   if (got.success) return got.data
-  const lined = Said.safeParse(Object.fromEntries([...fence.matchAll(/^(move|why|answer|ticket|class|until):[ \t]*(.+)$/gm)]
+  const lined = Said.safeParse(Object.fromEntries([...fence.matchAll(/^(move|why|answer|ticket|class|until|applies to|instruction|files|resume at|verify):[ \t]*(.+)$/gm)]
     .map((m) => [m[1], (m[2] ?? '').trim()])))
   return lined.success ? lined.data : null
 }
 
 const UNAPPLIED: Record<Exclude<Move['move'], 'ask_ceo' | 'ask_coo'>, string> = {
   rule: 'the answer names a path a ruling may not carry',
-  waive: 'the plan is not blocked_on_ceo',
+  waive: 'the plan is not blocked_on_ceo, or its ruling names another job\'s folder',
   split: 'the parts were not filed',
   close: 'no deliverable is pushed',
   file: 'the ticket was not filed',
@@ -267,10 +277,15 @@ const UNAPPLIED: Record<Exclude<Move['move'], 'ask_ceo' | 'ask_coo'>, string> = 
   research: 'the job is built, not a pr_path job of ours, or its answer lacks a research line',
 }
 
-function waiving(db: Db, root: string, plan: PlanRow, why: string): boolean {
-  if (plan.state !== 'blocked_on_ceo') return false
+function written(m: z.infer<typeof Said>): string {
+  const lines = FIELDS.flatMap((k) => m[k] === undefined ? [] : [`${k}: ${m[k]}`]).join('\n')
+  return [m.answer ?? '', lines].filter((s) => s !== '').join('\n\n')
+}
+
+function waiving(db: Db, root: string, plan: PlanRow, m: z.infer<typeof Said>): boolean {
+  if (plan.state !== 'blocked_on_ceo' || rule(db, root, plan, 'director', written(m)) === null) return false
   const refusal = maybe(root, plan.id, 'refusal.md') ?? ''
-  if (DESIGN.test(refusal)) waive(root, plan.id, why)
+  if (DESIGN.test(refusal)) waive(root, plan.id, m.why)
   const from = /^step (\d+) /.exec(refusal)?.[1]
   const src = srcDir(root, plan.id)
   const tree = cloned(src) ? snapshot(src) : undefined
@@ -284,7 +299,7 @@ function waiving(db: Db, root: string, plan: PlanRow, why: string): boolean {
 function apply(db: Db, root: string, plan: PlanRow, m: Move, wire: Wire, now: Date): boolean | string {
   switch (m.move) {
     case 'rule': {
-      const to = rule(db, root, plan, 'director', m.answer ?? '')
+      const to = rule(db, root, plan, 'director', written(m))
       if (to === null) return false
       opened(db, root, plan.id)
       if (to === 'ask.md') unhold(db, root, plan.id, 'director')
@@ -294,7 +309,7 @@ function apply(db: Db, root: string, plan: PlanRow, m: Move, wire: Wire, now: Da
       return true
     }
     case 'waive':
-      return waiving(db, root, plan, m.why)
+      return waiving(db, root, plan, m)
     case 'split':
       if (parted(db, root, plan, m.parts, wire).split !== true) return false
       end(db, plan.id, 'done')

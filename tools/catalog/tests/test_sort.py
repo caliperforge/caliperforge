@@ -121,6 +121,21 @@ def test_a_url_only_head_is_a_fix_and_openapi_empty_or_absent_closes(tmp_path: P
     ]
 
 
+def test_a_broken_inline_head_is_a_fix_and_neither_still_closes(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+    repo = _repo(tmp_path)
+    pay = (FIXTURES / "broken-inline-content" / "PAY.md").read_text(encoding="utf-8")
+    _head(repo, 11, {"PAY.md": pay}, "skills/inline")
+    _head(repo, 12, {"PAY.md": pay.split("openapi:")[0] + "---\n"}, "skills/neither")
+    net = Recorded({}, set(), {})
+    brief = render(next_fix(read(FIXTURES / "broken-inline-content"), net))
+    assert "rule: openapi.content: " in brief
+    assert _rows(repo, net, capsys) == [
+        {"pr": 11, "listing": "skills/inline", "verdict": "fix", "brief": brief},
+        {"pr": 12, "listing": "skills/neither", "verdict": "close", "cause": "malformed", "reason": "openapi.path: missing"},
+        {"pass": 0, "fix": 1, "close": 1},
+    ]
+
+
 def test_a_head_changing_no_listing_is_one_malformed_row(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
     repo = _repo(tmp_path)
     _head(repo, 7, {"README.md": "notes\n"}, ".")

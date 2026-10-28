@@ -72,9 +72,11 @@ const FAULTS = [
   ['no If no answer by line', BLOCK.replace(/\nIf no answer.*$/, '')],
 ] as const
 
+const CARRIES = 'instruction: build on main\nresume at: step 2'
+
 const REPLY: Record<string, string> = {
-  rule: '---\nmove: rule\nwhy: the ticket settles it\nanswer: build on main, not on plan 8\n---\n',
-  waive: '---\nmove: waive\nwhy: the builder can fix the name\n---\n',
+  rule: `---\nmove: rule\nwhy: the ticket settles it\nanswer: build on main, not on plan 8\n${CARRIES}\n---\n`,
+  waive: `---\nmove: waive\nwhy: the builder can fix the name\n${CARRIES}\n---\n`,
   split: SPLIT,
   close: '---\nmove: close\nwhy: the work is on main\n---\n',
   file: '---\nmove: file\nwhy: the tick counts a turn twice\nticket: the tick counts a turn twice\n---\n',
@@ -172,7 +174,7 @@ test.each([['file', 'https://github.com/caliperforge/caliperforge/issues/900'], 
   expect(pointers(db, 'director')).toEqual([pointer])
 })
 
-const answer = () => `## Answer from the director (${new Date().toISOString().slice(0, 10)})\n\nbuild on main, not on plan 8\n`
+const answer = () => `## Answer from the director (${new Date().toISOString().slice(0, 10)})\n\nbuild on main, not on plan 8\n\n${CARRIES}\n`
 
 test('D1: a built plan\'s rule goes in issue.md and back to step 2', async () => {
   const { db, home } = seeded('1')
@@ -181,6 +183,35 @@ test('D1: a built plan\'s rule goes in issue.md and back to step 2', async () =>
   expect(maybe(home, 7, 'ask.md')).toBe('the ask\n')
   expect(row(db).step).toBe(2)
 })
+
+const BLOCKED = { 'applies to': 'plan 7, step 2', instruction: 'build on main', files: '`index.ts`', 'resume at': 'step 2', verify: 'npm run test' }
+const carried = (tail = '') =>
+  `---\nmove: rule\nwhy: the ticket settles it\nanswer: build on main\n${Object.entries(BLOCKED).map(([k, v]) => `${k}: ${v}`).join('\n')}\n${tail}---\n`
+
+test.each(Object.entries(BLOCKED))('D1 D2: a rule carries %s into issue.md', async (key, value) => {
+  for (const said of [carried(), carried('[\n')]) expect(read(said)).toMatchObject({ [key]: value })
+  const { db, home } = seeded('1')
+  await run(db, home, carried())
+  expect(maybe(home, 7, 'issue.md')).toContain(`\n${key}: ${value}\n`)
+})
+
+test('D3: a waive writes its block into issue.md', async () => {
+  const { db, home } = seeded('1')
+  await run(db, home, REPLY.waive ?? '')
+  expect(maybe(home, 7, 'issue.md')).toBe(
+    `# Issue\n\nthe brief\n\n## Answer from the director (${new Date().toISOString().slice(0, 10)})\n\n${CARRIES}\n\n## Standing\n\n- no forced push\n`)
+})
+
+test.each(['rule', 'waive'].flatMap((move) => ['instruction', 'resume at'].map((field) => [move, field])))(
+  'D4: a %s without %s is fenced, files kept', async (move, field) => {
+    const { db, home } = seeded('1')
+    const reply = (REPLY[move] ?? '').replace(new RegExp(`^${field}: .*\n`, 'm'), '')
+    const prompts: string[] = []
+    await cooLite(db, home, row(db), inTurn([reply, reply], prompts), now, () => undefined, wire())
+    expect(prompts[1]).toContain(`# Fence\n\n${move} is refused: no ${field}`)
+    expect(told(db)).toEqual([{ actor: 'director', outcome: 'needs_coo', message: `${move}: refused by the fence, no ${field}` }])
+    expect([maybe(home, 7, 'ask.md'), maybe(home, 7, 'issue.md')]).toEqual(['the ask\n', ISSUE])
+  })
 
 test('D2: an unbuilt plan\'s rule goes in ask.md, back to its lane', async () => {
   const live = seeded('1')
@@ -214,7 +245,7 @@ function greptileStop() {
 test('D1 D2: a rule on a Greptile stop accepts its open ids', async () => {
   const { db, home, sha } = greptileStop()
   put(home, 7, 'rulings.md', '# Rulings\n')
-  await run(db, home, '---\nmove: rule\nwhy: the SDK settles it\nanswer: the SDK   refuses it upstream\n---\n')
+  await run(db, home, `---\nmove: rule\nwhy: the SDK settles it\nanswer: the SDK   refuses it upstream\n${CARRIES}\n---\n`)
   expect(maybe(home, 7, 'rulings.md')).toBe(
     `# Rulings\n\naccepted:\n  head: ${sha.slice(0, 12)}\n  ids: G11, G12\n  reason: the SDK refuses it upstream\n`)
   expect(unruled(home, 7, sha).open).toEqual([])
@@ -241,7 +272,7 @@ test('D3: the packet carries sibling plans\' rulings, not others', async () => {
   const { db, home } = seeded('1')
   const at = (n: number) => `https://github.com/caliperforge/caliperforge/issues/${String(n)}`
   for (const [id, n] of [[8, 140], [9, 141]] as const) {
-    putPlan(db, { id, pipe_id: 9, target_id: null, template: 'pr_path', state: 'queued', queued_at: '2026-09-24', step: 2, retries: 0,
+    putPlan(db, { id, pipe_id: 99, target_id: null, template: 'pr_path', state: 'queued', queued_at: '2026-09-24', step: 2, retries: 0,
       lane: 'machine', seat: 'typescript_specialist', origin: at(n) })
   }
   db.exec(`INSERT INTO tickets (repo, number, title, lane, parent) VALUES
@@ -296,7 +327,7 @@ test('an upstream-key stop gets the pinned read tool and its keys', async () => 
   const { db, home } = seeded('1')
   put(home, 7, 'refusal.md', 'which keys does upstream config.toml take?\n')
   const keys = `github.com/o/r@${'a'.repeat(40)} config.toml: name, port`
-  const reply = stub(`---\nmove: rule\nwhy: the pinned read settles it\nanswer: ${keys}\n---\n`)
+  const reply = stub(`---\nmove: rule\nwhy: the pinned read settles it\nanswer: ${keys}\n${CARRIES}\n---\n`)
   const packets: Parameters<Provider['fire']>[0][] = []
   const seen: Provider = { ...reply, fire: (p) => { packets.push(p); return reply.fire(p) } }
   await cooLite(db, home, row(db), seen, now, () => undefined, wire())
@@ -306,12 +337,12 @@ test('an upstream-key stop gets the pinned read tool and its keys', async () => 
   expect(packets[0]?.prompt).toContain('mcp__github__read')
   expect(told(db)).toEqual([{ actor: 'director', outcome:'pass', message: 'rule: the pinned read settles it' }])
   const day = new Date().toISOString().slice(0, 10)
-  expect(maybe(home, 7, 'issue.md')).toBe(`# Issue\n\nthe brief\n\n## Answer from the director (${day})\n\n${keys}\n\n## Standing\n\n- no forced push\n`)
+  expect(maybe(home, 7, 'issue.md')).toBe(`# Issue\n\nthe brief\n\n## Answer from the director (${day})\n\n${keys}\n\n${CARRIES}\n\n## Standing\n\n- no forced push\n`)
   expect(row(db).step).toBe(2)
 })
 
 const LOOK = 'store SELECT input_tokens FROM runs WHERE plan = 7 AND step = 2'
-const TOKENS = '---\nmove: rule\nwhy: cf look store read the run\nanswer: plan 7 step 2 took 1000 input tokens\n---\n'
+const TOKENS = `---\nmove: rule\nwhy: cf look store read the run\nanswer: plan 7 step 2 took 1000 input tokens\n${CARRIES}\n---\n`
 
 function looker(db: Db, home: string): Provider {
   return { ...stub(''), fire: (p) => {
@@ -348,13 +379,13 @@ test('D4: a prompt without cf look store hands the stop up', async () => {
 
 test('D5: a rule naming .cf/work/8/ask.md is held by the coo', async () => {
   const { db, home } = seeded('1')
-  await run(db, home, '---\nmove: rule\nwhy: the path settles it\nanswer: read .cf/work/8/ask.md\n---\n')
+  await run(db, home, ruling('.cf/work/8/ask.md'))
   expect(maybe(home, 7, 'ask.md')).toBe('the ask\n')
   expect(maybe(home, 7, 'issue.md')).toBe(ISSUE)
   expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'coo' })
 })
 
-const ruling = (path: string) => `---\nmove: rule\nwhy: the path settles it\nanswer: read ${path}\n---\n`
+const ruling = (path: string) => `---\nmove: rule\nwhy: the path settles it\nanswer: read ${path}\n${CARRIES}\n---\n`
 
 test.each([['/blog/index.html', (h: string) => srcDir(h, 7)], ['/sequencer/site.ts', (h: string) => h]])('D1 D2: a rule naming %s in the repo applies', async (path, dir) => {
   const { db, home } = seeded('1')
@@ -393,7 +424,7 @@ test('D1: a rule naming ../runner/index.ts in the repo applies', async () => {
 
 test('D2: a rule quoting `../issue.md` applies', async () => {
   const { db, home } = seeded('1')
-  await run(db, home, '---\nmove: rule\nwhy: the path settles it\nanswer: the seat must refuse `../issue.md`\n---\n')
+  await run(db, home, `---\nmove: rule\nwhy: the path settles it\nanswer: the seat must refuse \`../issue.md\`\n${CARRIES}\n---\n`)
   expect(told(db)).toEqual([{ actor: 'director', outcome: 'pass', message: 'rule: the path settles it' }])
   expect(maybe(home, 7, 'issue.md')).toContain('the seat must refuse `../issue.md`')
 })
@@ -422,7 +453,7 @@ test('D1: a ..// path inside the checkout applies', async () => {
 
 test('failedMoveToCoo', async () => {
   const { db, home } = seeded('1')
-  await run(db, home, '---\nmove: rule\nwhy: the path settles it\nanswer: read .cf/work/8/ask.md\n---\n')
+  await run(db, home, ruling('.cf/work/8/ask.md'))
   expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'coo' })
   expect(maybe(home, 7, 'parked.md')).toBeNull()
   expect(told(db)).toEqual([{ actor: 'director', outcome:'needs_coo',
@@ -520,7 +551,7 @@ const ago = (minutes: number) => new Date(clock.getTime() - minutes * 60_000).to
 
 function stopped(db: Db, id: number, minutes: number, verb: Verb = 'ask_coo') {
   if (!allPlans(db).some((p) => p.id === id)) {
-    putPlan(db, { id, pipe_id: 9, target_id: null, template: 'pr_path', state: 'running', queued_at: '2026-09-24', step: 4, retries: 0,
+    putPlan(db, { id, pipe_id: 99, target_id: null, template: 'pr_path', state: 'running', queued_at: '2026-09-24', step: 4, retries: 0,
       lane: 'machine', seat: 'typescript_specialist', origin: `https://github.com/caliperforge/caliperforge/issues/${String(id + 900)}` })
     needsCeo(db, planById(db, id))
   }
@@ -736,7 +767,7 @@ function outsideStop() {
 
 test('D1: a rule naming a builder edit goes back to step 2', async () => {
   const { db, home } = outsideStop()
-  await run(db, home, `---\nmove: rule\nwhy: the ask needs it\nanswer: ${HANDBACK}\n---\n`)
+  await run(db, home, `---\nmove: rule\nwhy: the ask needs it\nanswer: ${HANDBACK}\n${CARRIES}\n---\n`)
   expect(maybe(home, 7, 'issue.md')).toContain(`## Outside the files\n\n- \`cli/extra.ts\` — ${HANDBACK}\n`)
   expect(row(db).step).toBe(2)
   expect(ofKind(db, 'return')).toEqual([])
@@ -744,7 +775,7 @@ test('D1: a rule naming a builder edit goes back to step 2', async () => {
 
 test('D2: a rule naming only the outside path returns to step 3', async () => {
   const { db, home } = outsideStop()
-  await run(db, home, `---\nmove: rule\nwhy: the ask needs it\nanswer: ${EXTRA}\n---\n`)
+  await run(db, home, `---\nmove: rule\nwhy: the ask needs it\nanswer: ${EXTRA}\n${CARRIES}\n---\n`)
   expect(row(db).step).toBe(3)
   expect(ofKind(db, 'return').map((e) => e.message)).toEqual(['step 3'])
 })
@@ -988,13 +1019,13 @@ function asked(ask: string) {
 
 const reader: Provider = { ...stub(''), fire: (p) =>
   stub(p.prompt.includes(`# Stop\n\n${QUESTION}`) && p.prompt.includes(`# Ask\n\nthe ask\n\n${LINE}`)
-    ? `---\nmove: rule\nwhy: ask.md answers it\nanswer: ${LINE}\n---\n` : ASK_COO).fire(p) }
+    ? `---\nmove: rule\nwhy: ask.md answers it\nanswer: ${LINE}\n${CARRIES}\n---\n` : ASK_COO).fire(p) }
 
 test('D2: a question ask.md answers is ruled, back at step 1', async () => {
   const { db, home } = asked(`the ask\n\n${LINE}\n`)
   await cooLite(db, home, row(db), reader, now, () => undefined, wire())
   const day = new Date().toISOString().slice(0, 10)
-  expect(maybe(home, 7, 'ask.md')).toBe(`the ask\n\n${LINE}\n\n## Answer from the director (${day})\n\n${LINE}\n`)
+  expect(maybe(home, 7, 'ask.md')).toBe(`the ask\n\n${LINE}\n\n## Answer from the director (${day})\n\n${LINE}\n\n${CARRIES}\n`)
   expect(row(db)).toMatchObject({ state: 'queued', step: 1 })
   expect(heldBy(db, 'coo').map((p) => p.id)).not.toContain(7)
 })
@@ -1216,7 +1247,7 @@ test('D5: a rule writes the reading, comments once on the origin', async () => {
 })
 
 test.each([
-  { name: 'a refused rule', reply: '---\nmove: rule\nwhy: the path settles it\nanswer: read .cf/work/8/ask.md\n---\n', origin: true },
+  { name: 'a refused rule', reply: ruling('.cf/work/8/ask.md'), origin: true },
   { name: 'a plan with no origin', reply: REPLY.rule ?? '', origin: false },
 ])('D6: $name makes no comment', async ({ reply, origin }) => {
   const { db, home } = seeded('1')
@@ -1410,22 +1441,22 @@ test('widenMove', async () => {
   const { db, home } = seeded('1')
   const was = widths(db)
   await run(db, home, WIDEN)
-  expect(pipeOf(db, 9).max_concurrent).toBe(2)
+  expect(pipeOf(db, 99).max_concurrent).toBe(2)
   expect(widened(db)).toEqual([{ plan: 7, step: 4, wait_reason: 'blocked_on_ceo', verb: 'widen', why: 'the wake pipe is full',
     evidence: 'wake width 1 → 2', tokens: 0 }])
   expect(row(db).state).toBe('queued')
   expect(told(db)).toEqual([{ actor: 'director', outcome: 'pass', message: 'widen: the wake pipe is full' }])
   expect(widths(db)).toEqual(was)
   const full = seeded('1')
-  width(full.db, 9, 8)
+  width(full.db, 99, 8)
   await run(full.db, full.home, WIDEN)
-  expect(pipeOf(full.db, 9).max_concurrent).toBe(8)
+  expect(pipeOf(full.db, 99).max_concurrent).toBe(8)
   expect(widened(full.db)).toEqual([])
   expect(plan7(full.db)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'coo' })
   expect(told(full.db).map((t) => t.message)).toEqual([expect.stringMatching(/^widen did not apply, the pipe is already 8 wide/)])
   const shadow = seeded(null)
   await run(shadow.db, shadow.home, WIDEN)
-  expect(pipeOf(shadow.db, 9).max_concurrent).toBe(1)
+  expect(pipeOf(shadow.db, 99).max_concurrent).toBe(1)
   expect(widened(shadow.db)).toEqual([])
 })
 
@@ -1435,7 +1466,7 @@ const three = (print: string): [number, string, number][] => [[8, print, 3], [10
 function alikeStops(apply: string | null, prints: readonly (readonly [number, string, number])[]) {
   const seed = seeded(apply)
   for (const id of [8, 10]) {
-    putPlan(seed.db, { id, pipe_id: 9, target_id: null, template: 'pr_path', state: 'blocked_on_ceo', queued_at: '2026-09-24', step: 4,
+    putPlan(seed.db, { id, pipe_id: 99, target_id: null, template: 'pr_path', state: 'blocked_on_ceo', queued_at: '2026-09-24', step: 4,
       retries: 0, lane: 'machine', seat: 'typescript_specialist', origin: `https://github.com/caliperforge/caliperforge/issues/${String(id + 140)}` })
   }
   for (const [plan, print, hours] of prints) {

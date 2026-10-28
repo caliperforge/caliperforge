@@ -43,7 +43,8 @@ export const owning = (paths: string[]): string =>
 export const dropping = (paths: string[]): string =>
   CARRIED.replace('built\n\n', `built\n\n## Deleted\n\n${paths.map((p) => `- ${p}`).join('\n')}\n\n`)
 export const WORDS = '`hello()` takes no name, so the call the issue names as D2 cannot be refused at all.'
-export const REFUSE = `${WORDS}\n\n---\noutcome: refuse\nclass: correctness\nspans:\n  - src/hello.ts:1\n---\n`
+export const REFUSE = `${WORDS}\n\n---\noutcome: refuse\nclass: correctness\nfindings:\n  - id: F1\n    file: src/hello.ts\n    line: 1\n`
+  + '    rule: tight\n    required_change: hello() takes a name\n    verify: npm run test -- src/hello.test.ts\n---\n'
 
 const BRIEF = (file: string): string => ['',
   '**What:** add `hello()`.', '**Why:** the ask asks for it.', '**When it ends:** it is exported.', '',

@@ -16,7 +16,7 @@ const ID = 2
 const LISTED = ['sequencer/fence.ts', 'sequencer/rails.ts']
 const OWNED = '## Outside the files\n\n- `cli/extra.ts` — the command the ask names lives there\n'
 const OWNS = CARRIED.replace('built\n\n', `built\n\n${OWNED}\n`)
-const RULE = '---\nmove: rule\nwhy: the ask needs it\nanswer: the command the ask names lives in cli/extra.ts\n---\n'
+const RULE = '---\nmove: rule\nwhy: the ask needs it\nanswer: the command the ask names lives in cli/extra.ts\ninstruction: keep cli/extra.ts\nresume at: step 3\n---\n'
 const RETURN = '---\nmove: return\nwhy: the builder reverts it\n---\n'
 
 function mine(): World {

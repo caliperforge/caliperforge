@@ -36,13 +36,26 @@ const Noted = z.object({ file: z.string(), line: z.number().int().positive(), ol
 
 type Written = z.infer<typeof Noted>
 
+const Block = z.object({
+  id: z.string().regex(/^F\d+$/),
+  file: z.string().min(1),
+  line: z.number().int().positive(),
+  rule: z.string().min(1),
+  required_change: z.string().min(1),
+  verify: z.string().min(1),
+})
+
 const Fence = z.object({
   outcome: z.enum(['pass', 'refuse', 'needs_ceo']),
   class: z.union([z.literal('claim.unverified'), z.string().regex(/^[a-z_]+$/)]).nullish(),
   spans: z.array(Span).nullish(),
+  findings: z.array(Block).nullish(),
   reopen: z.record(z.string(), z.string()).nullish(),
   notes: z.array(Noted).nullish(),
-}).refine((f) => f.outcome !== 'refuse' || ((f.spans ?? []).length > 0 && f.class != null))
+}).refine((f) => f.outcome !== 'refuse' || ((f.spans ?? []).length + (f.findings ?? []).length > 0 && f.class != null))
+
+const Asked = z.object({ outcome: z.string(), findings: z.array(z.unknown()).nullish() })
+const Id = z.object({ id: Block.shape.id })
 
 export const FENCE = /^(?:```\w*\r?\n)?---\r?\n([\s\S]*?)\r?\n---(?:\r?\n```)?\s*$/m
 const LOOSE = /(?<=^[ \t]*(?:- )?\w+: )(["']).*?\1[ \t]+[^\s#].*$/gm
@@ -65,7 +78,8 @@ export function read(reply: string, subject: string): Judged | null {
   if (fence.data.outcome !== 'refuse') {
     return { outcome: fence.data.outcome, defect_class: null, spans: [], findings: [], subject_digest, origin_kind: null, origin_ref: null, message: prose, reopen: {}, notes: [] }
   }
-  const findings = fence.data.spans ?? []
+  const blocks = (fence.data.findings ?? []).map((b) => ({ span: `${b.file}:${String(b.line)}`, kind: 'real' as const, fix: null }))
+  const findings = [...fence.data.spans ?? [], ...blocks]
   return {
     outcome: 'refuse',
     defect_class: fence.data.class ?? null,
@@ -78,6 +92,22 @@ export function read(reply: string, subject: string): Judged | null {
     reopen: fence.data.reopen ?? {},
     notes: [],
   }
+}
+
+/** The first finding block a refuse leaves out or leaves a field empty in, or null when none does. */
+export function unfilled(reply: string): string | null {
+  const found = FENCE.exec(reply)
+  const fence = Asked.safeParse(found === null ? null : yaml(found[1] ?? ''))
+  if (!fence.success || fence.data.outcome !== 'refuse') return null
+  const blocks = fence.data.findings ?? []
+  if (blocks.length === 0) return 'refuse has no findings'
+  for (const [i, block] of blocks.entries()) {
+    const whole = Block.safeParse(block)
+    if (whole.success) continue
+    const id = Id.safeParse(block)
+    return `${id.success ? id.data.id : `finding ${String(i + 1)}`} has no ${String(whole.error.issues[0]?.path[0] ?? 'fields')}`
+  }
+  return null
 }
 
 function known(n: Written): n is Note {

@@ -1,4 +1,4 @@
-import { spawnSync, type SpawnSyncReturns } from 'node:child_process'
+import { spawnSync } from 'node:child_process'
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, isAbsolute, join, relative, resolve } from 'node:path'
@@ -13,12 +13,13 @@ import { setUntested } from '../store/bench.ts'
 import { logged, runLogged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { observed } from '../store/lanes.ts'
-import { needsCeo, type PlanRow } from '../store/plans.ts'
+import type { PlanRow } from '../store/plans.ts'
 import { byRun, pending } from '../store/transcript.ts'
 import { clamp, quieted } from './balances.ts'
 import { deps } from './deps.ts'
 import { costWall, costWalled, written } from './generated.ts'
 import { inBare, listedIn } from './listed.ts'
+import { heldForCoo, paired, rows, seedsOf } from './paired.ts'
 import { buildError, kept, powered, walled } from './powered.ts'
 import { DEFAULT_BUILDER, type Step } from './pr-path.ts'
 import { placed, recloned, rooted, scrapped } from './rooted.ts'
@@ -47,6 +48,8 @@ const TIMEOUTS = { BASH_DEFAULT_TIMEOUT_MS: '1800000', BASH_MAX_TIMEOUT_MS: '180
 const ATTEMPTS = '/tmp/x-ray-attempts.md'
 
 const CAP = 60 * 60 * 1000
+
+const CARRIED = ['null_check', 'refuzz', 'hours', 'seeds']
 
 function ask(skill: string | undefined, xray: string | undefined, tmp: string): string {
   const said = `Generate the fuzz suite for the project in the working folder in automatic mode, asking nothing: SUITE_DIR is ${SUITE} and META_DIR is ${SUITE}/${META}. `
@@ -129,13 +132,13 @@ export async function generate(db: Db, root: string, plan: PlanRow, step: Step, 
   const { manifest, prompt, hash } = seat(root, name)
   const walls = costWall(db, provider.name, manifest.model)
   if ('outcome' in walls) return walls
-  const granted = manifest.reads?.map((path) => real(path.startsWith('~/') ? join(homedir(), path.slice(2)) : path)) ?? []
+  const granted = manifest.reads?.map((path) => real(path.startsWith('~/') ? join(homedir(), path.slice(2)) : resolve(root, path))) ?? []
   mkdirSync(join(planDir(root, plan.id), 'scratch'), { recursive: true })
   const tmp = real(join(planDir(root, plan.id), 'scratch'))
   const built = packet(manifest, prompt, '', ask(granted[0], granted.find((path) => basename(path) === 'x-ray'), tmp), dir,
     pending(planDir(root, plan.id), `step-${String(step.step)}`), false, [...manifest.write_paths, tmp])
   const fired = await provider.fire({ ...built, refuse: (path) => real(resolve(dir, path)) === real(ATTEMPTS) ? null : built.refuse(path), wall: CEILING,
-    cost_wall: walls, env: { ...TIMEOUTS, TMPDIR: tmp }, reads: [...granted, real(ATTEMPTS)], ...(name === 'fizz_generator' ? { idle: SETUP } : {}) })
+    cost_wall: walls, env: { ...TIMEOUTS, TMPDIR: tmp }, reads: [...granted, real(ATTEMPTS)], ...(['fizz_generator', 'fizz_lean_generator'].includes(name) ? { idle: SETUP } : {}) })
   const run = runLogged(db, { plan: plan.id, step: step.step, seat: name, rule_hash: hash, provider: provider.name, model: manifest.model,
     effort: manifest.effort, exit: fired.exit, fired, staffed: name })
   const transcript = byRun(db, run, fired.transcript_path)
@@ -163,7 +166,7 @@ export function scored(db: Db, root: string, plan: PlanRow): Outcome {
   const stop = wall?.replace(/^ruling:/, '') ?? (tokens >= CEILING ? `the token wall after ${String(tokens)} tokens` : null)
   const proven = stop !== null ? walled(db, root, plan.id, { target, generator }, { tokens, seconds, x_ray: x_ray ?? null }, stop) : unproven(join(srcDir(root, plan.id), suite), generator)
   if (typeof proven !== 'number') return proven
-  const config = medusa(db, plan.id, srcDir(root, plan.id), suite)
+  const config = medusa(db, plan.id, srcDir(root, plan.id), suite, keys.refuzz === undefined ? null : { hours: Number(keys.hours), corpus: join(planDir(root, Number(keys.refuzz)), 'corpus') })
   if (config !== null && 'outcome' in config) return config
   const bench = join(planDir(root, plan.id), 'fuzz-bench')
   const suites = `suites/${generator}/${target}`
@@ -174,34 +177,35 @@ export function scored(db: Db, root: string, plan: PlanRow): Outcome {
   const yml = listedIn(root, plan.id, upstream)
   if (yml === null) return { outcome: 'refuse', spans: ['target.yml'], note: 'target.yml has no files' }
   put(root, plan.id, 'target.yml', `${copied(yml, target, generator)}${
-    keys.null_check === undefined ? '' : `null_check: ${keys.null_check}\n`}`)
+    CARRIED.filter((key) => keys[key] !== undefined).map((key) => `${key}: ${keys[key] ?? ''}\n`).join('')}`)
   cpSync(join(srcDir(root, plan.id), suite), join(bench, suites), { recursive: true })
   rooted(srcDir(root, plan.id), join(bench, suites))
   const dropped = config === null ? null : placed(config.config, srcDir(root, plan.id), join(bench, suites))
   mkdirSync(join(bench, 'results', target), { recursive: true })
-  const written = join(bench, 'results', target, `${target}.jsonl`)
-  const ran = spawnSync('python3', ['bench/run_pair.py', `targets/${target}.yml`, suites], { cwd: bench, encoding: 'utf8' })
-  if (ran.error !== undefined || ran.status !== 0) return heldForCoo(db, plan, ran, 'run_pair')
-  if (!existsSync(written)) return { outcome: 'refuse', spans: ['bench.no_results'], note: `run_pair.py exited 0 and wrote no results/${target}/${target}.jsonl` }
-  const pairs = rows(written)
-  if (pairs.length === 0) return { outcome: 'refuse', spans: ['bench.empty_results'], note: `results/${target}/${target}.jsonl has no rows` }
-  const score = { catches: pairs.filter((r) => r.verdict === 'catch').length, false_positives: pairs.filter((r) => r.verdict === 'fp_candidate').length,
-    untested: null, tokens, seconds, x_ray: x_ray ?? null, pre_fix_calls: pairs[0]?.calls?.pre_fix ?? null, fix_calls: pairs[0]?.calls?.fix ?? null, not_powered: powered(properties ?? proven, agents, pairs[0]?.calls, pairs.every((r) => r.verdict === 'error')) }
-  kept(db, root, plan.id, { target, generator }, score, sha, { ...(dropped === null ? {} : { foundry_out_dropped: dropped }), ...(score.not_powered === 'compile_failed' ? { build_error: buildError(pairs) } : {}) })
+  const runs = paired(db, plan, bench, target, suites, keys.refuzz === undefined ? null : Number(keys.seeds))
+  if (!Array.isArray(runs)) return runs
+  const pairs = runs.flat()
+  const seeded = keys.refuzz === undefined ? null : seedsOf(runs)
+  const calls = seeded?.calls ?? pairs[0]?.calls
+  const score = { catches: seeded?.union.catch ?? pairs.filter((r) => r.verdict === 'catch').length, false_positives: seeded?.union.fp_candidate ?? pairs.filter((r) => r.verdict === 'fp_candidate').length,
+    untested: null, tokens, seconds, x_ray: x_ray ?? null, pre_fix_calls: calls?.pre_fix ?? null, fix_calls: calls?.fix ?? null, not_powered: powered(properties ?? proven, agents, calls, pairs.every((r) => r.verdict === 'error'), seeded !== null) }
+  kept(db, root, plan.id, { target, generator }, score, sha, { ...(dropped === null ? {} : { foundry_out_dropped: dropped }), ...(score.not_powered === 'compile_failed' ? { build_error: buildError(pairs) } : {}),
+    ...(seeded === null ? {} : { mode: 'refuzz', source: Number(keys.refuzz), seeds: seeded.seeds, union: seeded.union }) })
   return { outcome: 'pass', spans: [], note: `score.json written at fuzz-bench ${sha.slice(0, 12)}${config === null || config.clamped.length === 0
     ? '' : `; targetContractsBalances ${config.clamped.join(', ')} clamped to 1e24 wei`}` }
 }
 
 export function nullChecked(db: Db, root: string, plan: PlanRow, cap = CAP): Outcome {
-  const { target = '', generator = '', null_check: on } = fields(maybe(root, plan.id, 'target.yml') ?? '')
+  const { target = '', generator = '', null_check: on, hours } = fields(maybe(root, plan.id, 'target.yml') ?? '')
   if (on !== 'true') return { outcome: 'pass', spans: [], note: 'null_check is off in target.yml' }
   const bench = join(planDir(root, plan.id), 'fuzz-bench')
   if (!existsSync(join(bench, 'bench/null_check.py'))) return { outcome: 'pass', spans: [], note: 'fuzz-bench has no bench/null_check.py' }
+  const limit = cap * Number(hours ?? 1)
   const ran = spawnSync('python3', ['bench/null_check.py', `targets/${target}.yml`, `suites/${generator}/${target}`],
-    { cwd: bench, encoding: 'utf8', timeout: cap })
+    { cwd: bench, encoding: 'utf8', timeout: limit })
   const capped = (ran.error as NodeJS.ErrnoException | undefined)?.code === 'ETIMEDOUT'
   if (!capped && (ran.error !== undefined || ran.status !== 0)) return heldForCoo(db, plan, ran, 'null_check')
-  const ended = capped ? `stopped at the ${String(cap)} ms cap` : 'finished'
+  const ended = capped ? `stopped at the ${String(limit)} ms cap` : 'finished'
   const kills = join(bench, 'results', target, `${target}.nullcheck.jsonl`)
   if (!existsSync(kills)) return { outcome: 'pass', spans: [], note: `null_check.py ${ended} with no results/${target}/${target}.nullcheck.jsonl` }
   const counted = rows(kills)
@@ -209,13 +213,6 @@ export function nullChecked(db: Db, root: string, plan: PlanRow, cap = CAP): Out
   setUntested(db, plan.id, untested)
   put(root, plan.id, 'score.json', JSON.stringify({ ...JSON.parse(get(root, plan.id, 'score.json')) as object, untested }))
   return { outcome: 'pass', spans: [], note: `null_check.py ${ended}: ${String(untested)} untested in ${String(counted.length)} rows` }
-}
-
-function heldForCoo(db: Db, plan: PlanRow, ran: SpawnSyncReturns<string>, script: string): Outcome {
-  const note = ran.error?.message ?? ran.stderr.trim().split('\n').at(-1) ?? ''
-  needsCeo(db, plan, note)
-  logged(db, { plan: plan.id, kind: 'score', actor: 'score', outcome: 'needs_coo', message: note, pointer: `step-${String(plan.step)}`, run: null })
-  return { outcome: 'pass', held: true, quiet: true, spans: [`bench.${script}`], note }
 }
 
 function unproven(suite: string, name: string): Outcome | number {
@@ -228,12 +225,6 @@ function unproven(suite: string, name: string): Outcome | number {
     note: `${name} wrote no invariant_, property_ or echidna_ function in ${counted.map((p) => `${SUITE}/${p}`).join(', ')}` }
 }
 
-interface Row { verdict?: string; untested?: boolean; calls?: { pre_fix?: number | null; fix?: number | null }; build_log_tail?: unknown }
-
-function rows(path: string): Row[] {
-  return readFileSync(path, 'utf8').split('\n').filter((line) => line.trim() !== '').map((line) => JSON.parse(line) as Row)
-}
-
 /** run_pair installs the suite at `test/<target>/` and Medusa resolves from the config's folder; fizz wrote these from the project root. */
 const MOVED: [string[], string][] = [[['fuzzing'], 'corpusDirectory'], [['logging'], 'logDirectory'],
   [['compilation', 'platformConfig'], 'target'], [['compilation', 'platformConfig'], 'exportDirectory'], [['slither'], 'cachePath']]
@@ -242,7 +233,7 @@ const TIMEOUT = 3600
 
 const WORKERS = 4
 
-function medusa(db: Db, plan: number, src: string, suite: string): Outcome | { config: unknown; clamped: string[] } | null {
+function medusa(db: Db, plan: number, src: string, suite: string, refuzz: { hours: number; corpus: string } | null): Outcome | { config: unknown; clamped: string[] } | null {
   const installed = !existsSync(join(src, 'medusa.json'))
   const path = join(src, installed ? suite : '', 'medusa.json')
   if (!existsSync(path)) return null
@@ -262,6 +253,7 @@ function medusa(db: Db, plan: number, src: string, suite: string): Outcome | { c
   const args = field(platform, 'args') ?? []
   if (Array.isArray(args)) args.forEach((arg: unknown, at) => { if (arg === '--foundry-ignore-compile') args[at] = '--foundry-compile-all' })
   if (existsSync(join(src, 'foundry.toml')) && typeof platform === 'object' && platform !== null && Array.isArray(args) && !args.includes('--compile-force-framework')) Object.assign(platform, { args: [...(args as unknown[]), '--compile-force-framework', 'foundry'] })
+  if (refuzz !== null && field(config, 'fuzzing') === undefined) Object.assign(config as object, { fuzzing: {} })
   const fuzzing = field(config, 'fuzzing')
   const balances = field(fuzzing, 'targetContractsBalances')
   const { entries, clamped } = clamp(Array.isArray(balances) ? balances : [])
@@ -270,6 +262,7 @@ function medusa(db: Db, plan: number, src: string, suite: string): Outcome | { c
     Object.assign(fuzzing, { timeout: timeout === 0 || timeout === undefined ? TIMEOUT : timeout,
       workers: typeof workers === 'number' && workers <= WORKERS ? workers : WORKERS })
     if (Array.isArray(balances)) Object.assign(fuzzing, { targetContractsBalances: entries })
+    if (refuzz !== null) Object.assign(fuzzing, { timeout: refuzz.hours * 3600, testLimit: 0, corpusDirectory: refuzz.corpus })
   }
   return { config: quieted(config), clamped }
 }

@@ -494,3 +494,8 @@
   where: "kind = 'score' AND outcome = 'pass' AND plan IN (SELECT plan FROM bench_scorecard WHERE superseded = 0 AND not_powered IN ('reduced_generate', 'few_properties'))"
   gap: 7d
   expected: 0
+- name: fork_ready_ci
+  table: events
+  column: at
+  where: "kind = 'ready' AND outcome = 'pass' AND message GLOB '*; caliperforge/* ran no workflow at * stand as its CI'"
+  gap: 14d

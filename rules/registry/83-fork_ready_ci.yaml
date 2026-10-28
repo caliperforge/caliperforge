@@ -1,0 +1,5 @@
+- name: fork_ready_ci
+  table: events
+  column: at
+  where: "kind = 'ready' AND outcome = 'pass' AND message GLOB '*; caliperforge/* ran no workflow at * stand as its CI'"
+  gap: 14d

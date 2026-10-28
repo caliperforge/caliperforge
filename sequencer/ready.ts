@@ -17,7 +17,7 @@ import { writable } from './brief.ts'
 import type { Outcome } from './kind.ts'
 import { forkCi, GRADES, headOf, holding, rehearsalBranch, title, WIRE, type Wire } from './push.ts'
 import { cloned, diffOf, FORK, get, headSha, maybe, put, repoName, srcDir } from './workspace.ts'
-import { homeOf } from './home.ts'
+import { forkOf, homeOf } from './home.ts'
 import { learned } from './learn.ts'
 import { baseMoved } from './merge.ts'
 import { stacked } from './stacked.ts'
@@ -57,7 +57,8 @@ export function readyGate(db: Db, root: string, plan: PlanRow, wire?: Wire): Out
   }
   const stack = stacked(root, plan, repo, (wire ?? WIRE).merged)
   if (stack !== null) return stack
-  const waiting = forkCi(db, root, plan, repo, wire)
+  const fork = forkOf(root, plan)
+  const waiting = forkCi(db, root, plan, fork ?? repo, wire)
   if (waiting !== null) return waiting
   const bot = internal(plan) ? '' : greptile(db, root, plan, repo, wire ?? WIRE, row.diff_digest)
   if (typeof bot !== 'string') return bot
@@ -65,7 +66,7 @@ export function readyGate(db: Db, root: string, plan: PlanRow, wire?: Wire): Out
   botClean(db, plan.id, fresh)
   const verdict = readyRail(proofOf(db, root, plan, repo, { ...row, bot_clean: Number(fresh) }))
   recordRail(db, join(root, 'rails/ready'), plan.id, verdict, 0)
-  return { outcome: verdict.outcome, spans: verdict.spans, note: `ready: ${verdict.message}${bot}` }
+  return { outcome: verdict.outcome, spans: verdict.spans, note: `ready: ${verdict.message}${bot}${fork === null ? '' : `; ${lastCi(db, plan.id)?.message ?? ''}`}` }
 }
 
 /** Ticks an outside head waits for Greptile's score before ready goes on without one. */

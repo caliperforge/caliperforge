@@ -968,7 +968,7 @@ test('D2 an out dir the carried foundry.toml sets is kept', () => {
   expect(score).not.toHaveProperty('foundry_out_dropped')
 })
 
-const FORGED =['test/fizz/FizzTest.sol', 'foundry.toml', 'lib/forge-std/src/Test.sol']
+const FORGED = ['test/fizz/FizzTest.sol', 'foundry.toml', 'lib/forge-std/src/Test.sol']
 
 const CARRIED = 'fuzz-bench/suites/fizz/euler-earn-m01/root'
 

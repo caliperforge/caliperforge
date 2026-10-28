@@ -177,7 +177,8 @@ def _account(value: object) -> bool:
 
 
 def _ops(spec: dict[str, Any]) -> list[tuple[str, str, dict[str, Any]]]:
-    return [(m.upper(), path, item[m]) for path, item in spec.get("paths", {}).items() for m in METHODS if m in item]
+    items = ((path, _fields(item)) for path, item in _fields(_fields(spec).get("paths")).items())
+    return [(m.upper(), path, _fields(item[m])) for path, item in items for m in METHODS if m in item]
 
 
 def _outbound(path: str, op: dict[str, Any]) -> bool:

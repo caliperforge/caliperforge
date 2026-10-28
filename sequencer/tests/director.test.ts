@@ -346,9 +346,9 @@ test('D4: a prompt without cf look store hands the stop up', async () => {
   expect(plan7(db)).toMatchObject({ held_by: 'ceo' })
 })
 
-test.each(['~/.ssh/config', '.cf/work/8/ask.md'])('D5: a rule naming %s writes nothing and is held by the coo', async (path) => {
+test('D5: a rule naming .cf/work/8/ask.md is held by the coo', async () => {
   const { db, home } = seeded('1')
-  await run(db, home, `---\nmove: rule\nwhy: the path settles it\nanswer: read ${path}\n---\n`)
+  await run(db, home, '---\nmove: rule\nwhy: the path settles it\nanswer: read .cf/work/8/ask.md\n---\n')
   expect(maybe(home, 7, 'ask.md')).toBe('the ask\n')
   expect(maybe(home, 7, 'issue.md')).toBe(ISSUE)
   expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'coo' })
@@ -422,11 +422,11 @@ test('D1: a ..// path inside the checkout applies', async () => {
 
 test('failedMoveToCoo', async () => {
   const { db, home } = seeded('1')
-  await run(db, home, '---\nmove: rule\nwhy: the path settles it\nanswer: read ~/.ssh/config\n---\n')
+  await run(db, home, '---\nmove: rule\nwhy: the path settles it\nanswer: read .cf/work/8/ask.md\n---\n')
   expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'coo' })
   expect(maybe(home, 7, 'parked.md')).toBeNull()
   expect(told(db)).toEqual([{ actor: 'director', outcome:'needs_coo',
-    message: 'rule did not apply, the answer names a path a ruling may not carry (~/.ssh/config): the path settles it' }])
+    message: 'rule did not apply, the answer names a path a ruling may not carry (.cf/work/8/ask.md): the path settles it' }])
 })
 
 test.each([[null], ['0']])('shadow (director.apply %s): only proposes, in the inbox', async (apply) => {
@@ -760,12 +760,21 @@ test.each([
   expect(row(db).step).toBe(step)
 })
 
+test('D2: a fix reading ~/notes goes to the builder', async () => {
+  const { db, home } = seeded('1')
+  fixLive(db)
+  committed(home)
+  const why = 'rewrite issue.md from ~/notes/brief.md'
+  await cooLite(db, home, row(db), bySeat([], `---\nmove: fix\nwhy: ${why}\n---\n`), now, () => undefined, wire())
+  expect(told(db)).toEqual([{ actor: 'director', outcome: 'pass', message: `rule: ${why} (out of the fixer's reach, so the builder takes it)` }])
+  expect(maybe(home, 7, 'issue.md')).toContain(why)
+})
+
 test('fixOutOfReach', async () => {
   const outside = (path: string) => `\`${path}\` is outside the fixer's write_paths`
   for (const [why, reason] of [
     ['run gh issue create for the gap', 'the fixer has no git and no GitHub'],
     ['run UPDATE plans SET step = 2 in cf.db', outside('cf.db')],
-    ['rewrite issue.md from ~/notes/brief.md', outside('~/notes/brief.md')],
     ['rewrite issue.md and `.cf/work/7/refusal.md`', outside('.cf/work/7/refusal.md')],
   ] as const) {
     const { db, home } = seeded('1')
@@ -792,7 +801,7 @@ test('fixOutOfReach', async () => {
 })
 
 const fixing = (packets: Packet[]) => packets.filter((p) => basename(p.transcript).startsWith('fixer'))
-const DROPPED = ruling('~/.ssh/config')
+const DROPPED = ruling('.cf/work/8/ask.md')
 
 async function handedUp(reply: string, fixer?: string) {
   const { db, home } = seeded('1')
@@ -833,7 +842,7 @@ test('D3: a fixer ask_ceo on a dropped rule holds for the coo', async () => {
   expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'coo' })
   expect(appliedOf(db, 7).at(-1)).toBe('escalated')
   expect(told(db)).toEqual([{ actor: 'director', outcome: 'needs_coo',
-    message: 'rule did not apply, the answer names a path a ruling may not carry (~/.ssh/config): the path settles it' }])
+    message: 'rule did not apply, the answer names a path a ruling may not carry (.cf/work/8/ask.md): the path settles it' }])
   expect(posted).toHaveLength(1)
 })
 
@@ -1158,7 +1167,7 @@ test('D5: a rule writes the reading, comments once on the origin', async () => {
 })
 
 test.each([
-  { name: 'a refused rule', reply: '---\nmove: rule\nwhy: the path settles it\nanswer: read ~/.ssh/config\n---\n', origin: true },
+  { name: 'a refused rule', reply: '---\nmove: rule\nwhy: the path settles it\nanswer: read .cf/work/8/ask.md\n---\n', origin: true },
   { name: 'a plan with no origin', reply: REPLY.rule ?? '', origin: false },
 ])('D6: $name makes no comment', async ({ reply, origin }) => {
   const { db, home } = seeded('1')

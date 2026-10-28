@@ -12,6 +12,7 @@ from catalog_desk.net import Net, Response
 from catalog_desk.offers import NETWORKS, SOLANA, Offer, Offers, _values, offers_of
 
 CAP = 60
+SUMMARY = (24, 63)
 METHODS = ("get", "post", "put", "patch", "delete")
 OUTBOUND = {"send", "sms", "email", "mail", "tweet", "post", "publish", "message", "notify", "call", "transfer", "withdraw"}
 WORDS = re.compile(r"[^A-Za-z]+|(?<=[a-z])(?=[A-Z])")
@@ -37,7 +38,7 @@ def next_fix(listing: Listing | Invalid, net: Net, before: Listing | None = None
     # _offer fills answered before the phases after it start reading it.
     answered: list[_Answered] = []
     fixes = chain(
-        _format(listing.front),
+        _format(listing.front, listing.spec),
         _declared_less(listing.spec, before),
         _offer(listing.front["service_url"], listing.spec, net, answered),
         _network(answered),
@@ -47,12 +48,18 @@ def next_fix(listing: Listing | Invalid, net: Net, before: Listing | None = None
     return next(fixes, None)
 
 
-def _format(front: dict[str, Any]) -> Iterator[Fix]:
+def _format(front: dict[str, Any], spec: dict[str, Any]) -> Iterator[Fix]:
     for fault in faults(front):
         low, high = fault.range
         text = front.get(fault.field)
         current = text if isinstance(text, str) else ""
         yield Fix("format", f"{fault.field} is {fault.length} characters", current, f"a {fault.field} of {low}-{high} characters", False)
+    low, high = SUMMARY
+    for method, path, op in _ops(spec):
+        summary = op.get("summary")
+        if isinstance(summary, str) and not low <= len(summary) <= high:
+            rule = f"{method} {path} summary is {len(summary)} characters"
+            yield Fix("format", rule, summary, f"an operation summary of {low}-{high} characters", False)
 
 
 def _declared_less(spec: dict[str, Any], before: Listing | None) -> Iterator[Fix]:

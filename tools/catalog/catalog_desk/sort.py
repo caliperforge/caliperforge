@@ -8,7 +8,7 @@ from urllib.parse import urlsplit
 
 from catalog_desk.brief import render
 from catalog_desk.checks import next_fix
-from catalog_desk.listing import Invalid, Listing, read
+from catalog_desk.listing import URL_ONLY, Invalid, Listing, read
 from catalog_desk.net import Net
 
 PULL = re.compile(r"refs/pull/(\d+)/head")
@@ -33,6 +33,8 @@ def sort(checkout: Path, net: Net) -> list[dict[str, object]]:
 
 def _verdict(listing: Listing | Invalid, net: Net, seen: dict[str, int], pr: int) -> dict[str, object]:
     if isinstance(listing, Invalid):
+        if listing.why == URL_ONLY:
+            return {"verdict": "fix", "brief": render(next_fix(listing, net))}
         return _close("malformed", f"{listing.field}: {listing.why}")
     url = listing.front["service_url"]
     first = seen.setdefault(url.rstrip("/"), pr)

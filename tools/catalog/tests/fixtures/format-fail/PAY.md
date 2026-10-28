@@ -1,6 +1,5 @@
 ---
 title: Format fail
-summary: Pays per call
 description: A listing whose summary is too short while its other fields are in range.
 use_case: Shows the summary length fault on its own.
 service_url: https://api.example.com

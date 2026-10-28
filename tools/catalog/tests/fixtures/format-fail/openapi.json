@@ -1,5 +1,5 @@
 {
   "openapi": "3.0.0",
   "info": { "title": "Format fail", "version": "1" },
-  "paths": { "/paid": { "get": { "responses": { "402": { "description": "Payment required" } } } } }
+  "paths": { "/paid": { "get": { "summary": "Pays a fee", "responses": { "402": { "description": "Payment required" } } } } }
 }

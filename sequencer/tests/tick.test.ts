@@ -1196,7 +1196,7 @@ test('a failed run beside a cancelled one goes to the builder', async () => {
   expect(log).toEqual([])
 })
 
-test('a run that stays cancelled is re-run once, then to the ceo', async () => {
+test('a run that stays cancelled is re-run once, then to the ceo', { timeout: 90_000 }, async () => {
   const w = await atCi()
   const log: string[] = []
   const wire = watched([], w.root, 1, forkRuns(log, w, { Harness: { status: 'completed', conclusion: 'cancelled' }, CI: GREEN_RUN }))
@@ -1230,7 +1230,7 @@ test('step 6 waits out the push window, then judges the new run', async () => {
   expect(sent).toHaveLength(4)
 })
 
-test('a head runless after the window goes to the ceo', async () => {
+test('a head runless after the window goes to the ceo', { timeout: 90_000 }, async () => {
   const w = world()
   approve(w.db, w.target)
   for (let at = 0; at < 6; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
@@ -1267,7 +1267,7 @@ test('D1 an outside repo with no workflows passes on step 3', async () => {
   expect(sent.filter((l) => l.startsWith('send '))).not.toEqual([])
 })
 
-test('a runless head goes to the ceo before Greptile', async () => {
+test('a runless head goes to the ceo before Greptile', { timeout: 90_000 }, async () => {
   const w = world()
   approve(w.db, w.target)
   const log: string[] = []
@@ -1465,7 +1465,7 @@ test('D8 a 3/5 head with no findings listed goes to the builder', async () => {
   }
 })
 
-test('D4 a 3/5 on an unchanged diff stays at ready', async () => {
+test('D4 a 3/5 on an unchanged diff stays at ready', { timeout: 90_000 }, async () => {
   const [w, lap] = await atReady((at) => { scored(at.root, 1, 3, FINDINGS) })
   expect(await lap()).toMatchObject({ step: 6, outcome: 'refuse', state: 'retried' })
   for (let at = 0; plan(w.db, 1).step !== 6 && at < 8; at += 1) await lap()

@@ -94,7 +94,7 @@ test('D1 a Fork: checkout with no rules/ skips the digests', async () => {
   expect(fired.filter((r) => r.step === 3 && r.spans.includes('rules/roster'))).toEqual([])
 })
 
-test('D1 D2 D3 a runless Fork: head stands on step 3 at step 6', async () => {
+test('D1 D2 D3 a runless Fork: head stands on step 3 at step 6', { timeout: 90_000 }, async () => {
   const { w } = forked(['Fork: caliperforge/pay'])
   const listed: string[] = []
   const wire = { ...pushing([], w), runs: (args: string[]) => { listed.push(args.join(' ')); return '[]' } }

@@ -939,7 +939,36 @@ test('D4 an untracked foundry.toml alone is carried alone', () => {
   expect(existsSync(join(carried, 'lib'))).toBe(false)
 })
 
-const FORGED = ['test/fizz/FizzTest.sol', 'foundry.toml', 'lib/forge-std/src/Test.sol']
+const FUZZ = `${TOML}[profile.fuzz]\nout = "out-fuzz"\n`
+
+/** The installed args and score.json for a root medusa.json passing `--foundry-out-directory out-fuzz`, once `ready` has shaped src/. */
+function outFuzz(ready: (src: string) => void, pair?: string): { args: unknown; score: unknown } {
+  const { root, db } = scoring(pair)
+  ready(srcDir(root, 1))
+  writeFileSync(join(srcDir(root, 1), 'medusa.json'), compiled(['--foundry-out-directory', 'out-fuzz']))
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  const config = JSON.parse(readFileSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/medusa.json'), 'utf8')) as
+    { compilation: { platformConfig: { args: unknown } } }
+  return { args: config.compilation.platformConfig.args, score: JSON.parse(get(root, 1, 'score.json')) }
+}
+
+test('D1 an out dir HEAD foundry.toml lacks is dropped', () => {
+  const { args, score } = outFuzz((src) => {
+    commit(src, 'foundry.toml', TOML, 'foundry')
+    writeFileSync(join(src, 'foundry.toml'), FUZZ)
+  }, `import os, sys\n'--foundry-out-directory' in open(os.path.join(sys.argv[2], 'medusa.json')).read() and sys.exit('out-fuzz/build-info is not a directory')\n${
+    writes('.jsonl', PAIRS)}`)
+  expect(args).toEqual(['--compile-force-framework', 'foundry'])
+  expect(score).toMatchObject({ foundry_out_dropped: 'out-fuzz' })
+})
+
+test('D2 an out dir the carried foundry.toml sets is kept', () => {
+  const { args, score } = outFuzz((src) => { writeFileSync(join(src, 'foundry.toml'), FUZZ) })
+  expect(args).toEqual(['--foundry-out-directory', 'out-fuzz', '--compile-force-framework', 'foundry'])
+  expect(score).not.toHaveProperty('foundry_out_dropped')
+})
+
+const FORGED =['test/fizz/FizzTest.sol', 'foundry.toml', 'lib/forge-std/src/Test.sol']
 
 const CARRIED = 'fuzz-bench/suites/fizz/euler-earn-m01/root'
 

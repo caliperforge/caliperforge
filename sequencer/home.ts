@@ -33,6 +33,7 @@ export function onto(db: Db, root: string, plan: PlanRow): string {
 export function forkOf(root: string, plan: PlanRow): string | null {
   return new RegExp(`^Fork: (${FORK}/[\\w.-]+)$`, 'm').exec(maybe(root, plan.id, 'ask.md') ?? '')?.[1] ?? null
 }
+
 /** The branch an outside plan split into parts is checked, reviewed and sent upstream from, or null for any other plan. */
 export function assembling(db: Db, plan: PlanRow): string | null {
   if (internal(plan)) return null

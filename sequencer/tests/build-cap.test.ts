@@ -139,7 +139,7 @@ test('D2 D4 a third code_quality refusal in a row stops the plan', async () => {
       clear(w.db, 1)
       for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
     }
-    const review = REFUSE.replace('src/hello.ts:1', `src/hello.ts:${String(line)}`)
+    const review = REFUSE.replace('line: 1', `line: ${String(line)}`)
     states.push((await tick(w.db, w.root, stub(CARRIED, 0, review)))[0]?.state)
   }
   expect(states).toEqual(['retried', 'retried', 'blocked_on_ceo'])

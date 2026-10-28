@@ -1,19 +1,21 @@
-import { file, LANE } from '../cli/plan.ts'
+import { file, LANE, laneOf } from '../cli/plan.ts'
 import type { Db } from '../store/index.ts'
+import type { Lane } from '../store/lanes.ts'
 import type { PlanRow } from '../store/plans.ts'
 import { alike } from '../store/refusals.ts'
 import { hold } from './hold.ts'
 import type { Wire } from './push.ts'
-import { maybe, put, SELF, titleOf } from './workspace.ts'
+import { maybe, put, titleOf } from './workspace.ts'
 
 const ALIKE = 3
 
-/** Files a machine ticket for a stopped job, queues it at P0 and holds the job on it; an open plan with the same title stands in. */
+/** Files a ticket in the lane its title's `lane:` token names, else machine, for a stopped job, queues it at P0 and holds the job on it; an open plan with the same title stands in. */
 export function ticketed(db: Db, root: string, plan: PlanRow, title: string, body: string, why: string, wire: Wire,
   now: Date): string {
-  const open = db.prepare(`SELECT id, origin FROM plans WHERE lane = 'machine' AND origin IS NOT NULL AND id <> ?
-    AND state IN ('queued', 'running', 'blocked_on_ceo') ORDER BY id`).all(plan.id) as { id: number; origin: string }[]
-  const { id, origin } = open.find((r) => titleOf(root, r.id) === title) ?? queued(db, root, plan, title, body, wire)
+  const lane = laneOf(title.split(/[\s,()]+/).map((name) => ({ name }))) ?? 'machine'
+  const open = db.prepare(`SELECT id, origin FROM plans WHERE lane = ? AND origin IS NOT NULL AND id <> ?
+    AND state IN ('queued', 'running', 'blocked_on_ceo') ORDER BY id`).all(lane, plan.id) as { id: number; origin: string }[]
+  const { id, origin } = open.find((r) => titleOf(root, r.id) === title) ?? queued(db, root, plan, lane, title, body, wire)
   hold(db, root, plan.id, `${origin}\n\n${why}`, now, id)
   return origin
 }
@@ -29,11 +31,12 @@ export function repeated(db: Db, root: string, plan: PlanRow, wire: Wire, now: D
   return { url: ticketed(db, root, plan, title, body, why, wire, now), why }
 }
 
-function queued(db: Db, root: string, plan: PlanRow, title: string, body: string, wire: Wire): { id: number; origin: string } {
+function queued(db: Db, root: string, plan: PlanRow, lane: Lane, title: string, body: string,
+  wire: Wire): { id: number; origin: string } {
   const stop = maybe(root, plan.id, 'refusal.md') ?? maybe(root, plan.id, 'question.md') ?? 'none'
   const full = `${body}\n\n## Stop at step ${String(plan.step)}\n\n${stop.slice(0, 8000)}`
-  const origin = wire.file(SELF, title, full, ['lane:machine', 'P0', 'fix'])
-  const id = file(db, 'coo', LANE.machine.pipe, 'machine', LANE.machine.seat, origin, 0)
+  const origin = wire.file(LANE[lane].home, title, full, [`lane:${lane}`, 'P0', 'fix'])
+  const id = file(db, 'coo', LANE[lane].pipe, lane, LANE[lane].seat, origin, 0)
   put(root, id, 'ask.md', `# ${title}\n\n${full}\n`)
   return { id, origin }
 }

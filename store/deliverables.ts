@@ -107,6 +107,13 @@ export function newest(db: Db, plan: number): DeliverableRow | null {
   return row === undefined ? null : DeliverableRow.parse(row)
 }
 
+/** The diff senior last passed, off the row its pass wrote. */
+export function passedDiff(db: Db, plan: number): string | null {
+  const row = db.prepare("SELECT diff_digest FROM deliverables WHERE plan_id = ? AND step = 5 ORDER BY id DESC LIMIT 1")
+    .get(plan) as { diff_digest: string } | undefined
+  return row?.diff_digest ?? null
+}
+
 function latest(db: Db, plan: number): number {
   const id = newest(db, plan)?.id
   if (id === undefined) throw new Error(`plan ${String(plan)} has no deliverable row`)

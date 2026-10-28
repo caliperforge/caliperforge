@@ -8,7 +8,7 @@ import pytest
 from catalog_desk import main
 from catalog_desk.brief import render
 from catalog_desk.checks import next_fix
-from catalog_desk.listing import read
+from catalog_desk.listing import URL_ONLY, Invalid, read
 from catalog_desk.net import Recorded, Response
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -80,6 +80,21 @@ def test_sort_writes_one_verdict_per_head_then_the_counts(tmp_path: Path, capsys
         {"pr": 5, "listing": "skills/broken", "verdict": "close", "cause": "malformed", "reason": "PAY.md: no --- front matter"},
         {"pr": 6, "listing": "skills/base", "verdict": "close", "cause": "not Solana", "reason": "eip155:8453"},
         {"pass": 1, "fix": 1, "close": 4},
+    ]
+
+
+def test_a_url_only_head_is_a_fix_and_openapi_empty_closes(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+    repo = _repo(tmp_path)
+    pay = (FIXTURES / "no-usdc" / "PAY.md").read_text(encoding="utf-8")
+    _head(repo, 8, {"PAY.md": pay.replace("path: openapi.json", "url: https://api.example.com/openapi.json")}, "skills/remote")
+    _head(repo, 9, {"PAY.md": pay.replace("openapi:\n  path: openapi.json", "openapi: {}")}, "skills/empty")
+    net = Recorded({}, set(), {})
+    brief = render(next_fix(Invalid("openapi.path", URL_ONLY), net))
+    assert "rule: openapi.path: url only" in brief
+    assert _rows(repo, net, capsys) == [
+        {"pr": 8, "listing": "skills/remote", "verdict": "fix", "brief": brief},
+        {"pr": 9, "listing": "skills/empty", "verdict": "close", "cause": "malformed", "reason": "openapi.path: missing"},
+        {"pass": 0, "fix": 1, "close": 1},
     ]
 
 

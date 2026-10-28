@@ -6,7 +6,8 @@ from typing import Any
 
 import yaml
 
-RANGES = {"summary": (24, 63), "description": (64, 255), "use_case": (32, 255)}
+RANGES = {"description": (64, 255), "use_case": (32, 255)}
+URL_ONLY = "url only: commit the document beside PAY.md and reference it with openapi: { path: ... }"
 FENCE = re.compile(r"^---$", re.MULTILINE)
 STRINGS = (("service_url", True), ("title", True), ("description", False), ("use_case", False))
 
@@ -58,6 +59,8 @@ def _fields(front: dict[str, Any]) -> Invalid | None:
     if not isinstance(pr, int) or isinstance(pr, bool):
         return Invalid("pr", "not an integer")
     openapi = front.get("openapi")
+    if isinstance(openapi, dict) and isinstance(openapi.get("url"), str) and "path" not in openapi:
+        return Invalid("openapi.path", URL_ONLY)
     if not isinstance(openapi, dict) or not isinstance(openapi.get("path"), str):
         return Invalid("openapi.path", "missing")
     return None

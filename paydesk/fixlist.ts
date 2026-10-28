@@ -9,7 +9,7 @@ export interface Item { listing: string; where: string; what: string; blocking: 
 export interface Fix { pr: number; items: Item[]; passes: string[] }
 
 const LINE = /^- (\S+): (?:([A-Z]+) (\S+): )?(.*)$/
-const RANGES: Record<string, [number, number]> = { summary: [24, 63], description: [64, 255], use_case: [32, 255] }
+const RANGES: Record<string, [number, number]> = { description: [64, 255], use_case: [32, 255] }
 
 export function rows(stderr: string, pr: number, root: string): Row[] {
   return stripVTControlCharacters(stderr).split('\n').flatMap((line) => {

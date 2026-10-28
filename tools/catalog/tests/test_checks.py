@@ -25,11 +25,11 @@ def _set_paths(dir: Path, paths: dict[str, object]) -> None:
 
 def test_d1_format_fail_then_offer_once_the_summary_fits(tmp_path: Path):
     net = Recorded({}, set(), {})
-    fix = next_fix(read(FIXTURES / "format-fail"), net)
-    assert fix is not None and (fix.check, fix.current) == ("format", "Pays per call")
-    pay = _copy("format-fail", tmp_path) / "PAY.md"
-    pay.write_text(pay.read_text(encoding="utf-8").replace("Pays per call", "x" * 24), encoding="utf-8")
-    fix = next_fix(read(pay.parent), net)
+    brief = render(next_fix(read(FIXTURES / "format-fail"), net)).splitlines()
+    assert brief[:3] == ["check: format", "rule: GET /paid summary is 10 characters", "current: Pays a fee"]
+    spec = _copy("format-fail", tmp_path) / "openapi.json"
+    spec.write_text(spec.read_text(encoding="utf-8").replace("Pays a fee", "x" * 24), encoding="utf-8")
+    fix = next_fix(read(spec.parent), net)
     assert fix is not None and (fix.check, fix.rule) == ("offer", "dead domain")
 
 

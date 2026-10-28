@@ -3,7 +3,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, 
 import { homedir, tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import type { HookInput } from '@anthropic-ai/claude-agent-sdk'
-import { expect, test } from 'vitest'
+import { expect, test, vi } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import { gate, readOutside, walled } from '../../providers/claude-agent-sdk/index.ts'
 import type { Fired, Packet, Provider } from '../../providers/kind.ts'
@@ -18,6 +18,7 @@ import { dial } from '../../store/lanes.ts'
 import { allPlans, end, holdOn, pipeNamed, planById, putPlan, requeue, waiting, type PlanRow } from '../../store/plans.ts'
 import { CEILING, generate, nullChecked, scored, scratch } from '../../templates/bench.ts'
 import { drift, mechanisms } from '../drift.ts'
+import { evict } from '../evict.ts'
 import { unhold } from '../hold.ts'
 import { dry, tick } from '../index.ts'
 import { route } from '../next.ts'
@@ -358,6 +359,94 @@ test('D1 generate clones an emptied src/ again at pre_fix', async () => {
   expect((await generated(fired, undefined, reaped(c1, c2), root)).outcome).toMatchObject({ outcome: 'pass' })
   expect(fired.packets).toMatchObject([{ cwd: realpathSync(srcDir(root, 1)) }])
   expect(git(srcDir(root, 1), ['rev-parse', 'HEAD']).trim()).toBe(c1)
+})
+
+const HALF = 'contract FizzTest {\n'
+
+/** A generate on `root` that wrote half a suite and died mid-run, its transcript buried by `evict` under the dead pid returned. */
+function died(root: string, ready: (root: string) => void = () => undefined): number {
+  const provider: Provider = { name: 'claude-agent-sdk', fire: (packet) => {
+    mkdirSync(join(packet.cwd, 'test/fizz'), { recursive: true })
+    writeFileSync(join(packet.cwd, 'test/fizz/FizzTest.sol'), HALF)
+    writeFileSync(packet.transcript, '')
+    return new Promise<never>(() => undefined)
+  } }
+  void generated({ provider, packets: [] }, undefined, ready, root)
+  const db = fresh(schema)
+  queued(db, 'bench')
+  const dead = spawnSync('/usr/bin/true').pid
+  vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+  try {
+    evict(db, root, 1, dead)
+  } finally {
+    vi.restoreAllMocks()
+  }
+  return dead
+}
+
+/** `stub`'s generator, noting at each fire whether its working folder already holds test/fizz. */
+function looking(seen: boolean[]): ReturnType<typeof stub> {
+  const fired = stub(1000, 'completed', true)
+  return { ...fired, provider: { ...fired.provider, fire: (packet) => {
+    seen.push(existsSync(join(packet.cwd, 'test/fizz')))
+    return fired.provider.fire(packet)
+  } } }
+}
+
+const deadSuite = (root: string, pid: number) => readFileSync(join(planDir(root, 1), `src.dead-${String(pid)}/test/fizz/FizzTest.sol`), 'utf8')
+
+test('D1 D2 a dead lap\'s requeue fires on a fresh pre_fix clone', async () => {
+  const { root, c1, c2 } = fixture()
+  const dead = died(root, reaped(c1, c2))
+  const seen: boolean[] = []
+  expect((await generated(looking(seen), undefined, () => undefined, root)).outcome).toMatchObject({ outcome: 'pass' })
+  expect(seen).toEqual([false])
+  expect(git(srcDir(root, 1), ['rev-parse', 'HEAD']).trim()).toBe(c1)
+  expect(deadSuite(root, dead)).toBe(HALF)
+})
+
+/** `checkedOut` with half a suite in src/ and `names` in the plan folder, a folder where the name ends in `/`. */
+function left(...names: string[]): (root: string) => void {
+  return (root) => {
+    checkedOut(root)
+    mkdirSync(join(srcDir(root, 1), 'test/fizz'), { recursive: true })
+    writeFileSync(join(srcDir(root, 1), 'test/fizz/FizzTest.sol'), HALF)
+    for (const name of names) {
+      if (name.endsWith('/')) mkdirSync(join(planDir(root, 1), name))
+      else put(root, 1, name, '')
+    }
+  }
+}
+
+test('D3 D4 another step\'s or a kept dead lap leaves src/ alone', async () => {
+  for (const ready of [left('step-2.dead-5.transcript.jsonl'), left('step-1.dead-5.transcript.jsonl', 'src.dead-5/')]) {
+    const seen: boolean[] = []
+    const { root, outcome } = await generated(looking(seen), undefined, ready)
+    expect(outcome).toMatchObject({ outcome: 'pass' })
+    expect(seen).toEqual([true])
+    expect(existsSync(join(planDir(root, 1), 'src.dead-5/test'))).toBe(false)
+  }
+})
+
+test('D4 a second dead lap moves src/ to its own pid', async () => {
+  const { root, c1, c2 } = fixture()
+  const first = died(root, reaped(c1, c2))
+  const second = died(root)
+  const seen: boolean[] = []
+  expect((await generated(looking(seen), undefined, () => undefined, root)).outcome).toMatchObject({ outcome: 'pass' })
+  expect(seen).toEqual([false])
+  expect([deadSuite(root, first), deadSuite(root, second)]).toEqual([HALF, HALF])
+})
+
+test('D5 a dead lap\'s unfetchable pre_fix is refused, suite kept', async () => {
+  const { root, c1, c2 } = fixture()
+  const dead = died(root, reaped(c1, c2))
+  const fired = stub(1000, 'completed', true)
+  const { db, outcome } = await generated(fired, undefined, reaped('f'.repeat(40)), root)
+  expect(outcome).toMatchObject({ outcome: 'refuse', spans: ['bench.no_checkout'], to: 0 })
+  expect(fired.packets).toEqual([])
+  expect(runRows(db)).toEqual([])
+  expect(deadSuite(root, dead)).toBe(HALF)
 })
 
 /** A checked-out src/ depending on `file:dep`, with a root postinstall, and a lockfile that locks dep only when `synced`. */

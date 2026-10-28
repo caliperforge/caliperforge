@@ -107,6 +107,22 @@ test('our own plans stay with the typescript seat', () => {
   expect(builder(languageFor(w.db, w.ours, monorepo()))).toBe('typescript_specialist')
 })
 
+test('1849 a kernel plan on python files only builds on python', () => {
+  const w = world()
+  const src = monorepo()
+  expect(builder(languageFor(w.db, w.ours, src))).toBe('typescript_specialist')
+  record(w.db, 2, listed(['rules/roster.yaml', 'README.md']))
+  expect(builder(languageFor(w.db, w.ours, src))).toBe('typescript_specialist')
+  const catalog = ['tools/catalog/catalog_desk/offers.py', 'tools/catalog/pyproject.toml', 'tools/catalog/tests/test_offers.py', 'tools/catalog/README.md']
+  record(w.db, 2, listed(catalog))
+  const language = languageFor(w.db, w.ours, src)
+  expect(language).toBe('python')
+  expect([builder(language), at(2, language).runs, at(4, language).seat]).toEqual(['python_specialist', 'python_specialist', 'python_specialist'])
+  record(w.db, 2, listed([...catalog, 'paydesk/offers.ts']))
+  expect(languageFor(w.db, w.ours, src)).toBeNull()
+  expect(builder(languageFor(w.db, w.ours, src))).toBe('typescript_specialist')
+})
+
 test('an empty repo of ours goes to the plan\'s seat', () => {
   const w = world()
   const empty = mkdtempSync(join(tmpdir(), 'cf-route-'))

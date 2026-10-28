@@ -45,6 +45,7 @@ import { fenceFor, languageFor } from './route.ts'
 import { languages } from './split.ts'
 import { staffed } from './staffing.ts'
 import { gates, outsideLanguage } from './gates.ts'
+import { subprojects } from './loose.ts'
 import type { Outcome } from './kind.ts'
 import { landed } from './notes.ts'
 import { COMMIT, commitMessage } from './push.ts'
@@ -475,7 +476,8 @@ function gated(db: Db, root: string, plan: PlanRow, src: string, diff: string): 
       .map((g) => ({ language: outside, dir: g.dir, command: [g.bin, ...g.args].join(' ') }))
   }
   const scope = narrow(db, plan).length > 0 ? 'the tests this plan\'s files reach' : 'the whole suite'
-  return [{ language, dir: '', command: `every script the checkout names (${mode(src)}, ${scope})` }]
+  const python = subprojects(src, parse(diff).map((f) => f.path)).map((g) => ({ language: 'python', dir: g.dir, command: [g.bin, ...g.args].join(' ') }))
+  return [{ language, dir: '', command: `every script the checkout names (${mode(src)}, ${scope})` }, ...python]
 }
 
 function senior(db: Db, seat: string, plan: number): Pick<Bench, 'language'> {

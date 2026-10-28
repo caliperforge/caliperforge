@@ -1,0 +1,11 @@
+{
+  "fetch": {
+    "GET https://endpoints.example.com/api/v1/invoices": {
+      "status": 401,
+      "headers": {},
+      "body": ""
+    }
+  },
+  "hosts": ["endpoints.example.com"],
+  "rpc": {}
+}

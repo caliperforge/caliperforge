@@ -20,8 +20,7 @@
     "lines": 341
   },
   "ci.ts": {
-    "lines": 92,
-    "prepare": 1
+    "lines": 92
   },
   "delta.ts": {
     "lines": 27
@@ -64,8 +63,7 @@
     "lines": 104
   },
   "hold.ts": {
-    "lines": 57,
-    "prepare": 1
+    "lines": 57
   },
   "home.ts": {
     "lines": 15
@@ -80,8 +78,7 @@
     "lines": 39
   },
   "lead.ts": {
-    "lines": 51,
-    "prepare": 1
+    "lines": 51
   },
   "lock.ts": {
     "lines": 57,
@@ -91,16 +88,14 @@
     "lines": 49
   },
   "merge.ts": {
-    "lines": 137,
-    "prepare": 1,
+    "lines": 132,
     "silent-catch": 1
   },
   "next.ts": {
     "lines": 74
   },
   "priority.ts": {
-    "lines": 33,
-    "prepare": 1,
+    "lines": 32,
     "silent-catch": 1
   },
   "prose.ts": {
@@ -129,7 +124,7 @@
     "lines": 65
   },
   "rule.ts": {
-    "lines": 116
+    "lines": 106
   },
   "seat.ts": {
     "lines": 525
@@ -141,7 +136,7 @@
     "lines": 148
   },
   "signoff.ts": {
-    "lines": 346
+    "lines": 384
   },
   "size.ts": {
     "lines": 50,
@@ -211,7 +206,7 @@
     "prepare": 1
   },
   "theirs.ts": {
-    "lines": 105,
+    "lines": 152,
     "silent-catch": 1
   },
   "ticket.ts": {

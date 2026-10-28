@@ -17,6 +17,8 @@ export interface Packet {
   model: string
   effort: 'low' | 'medium' | 'high' | 'xhigh' | 'max'
   tools: string[]
+  /** The seat or review this run fires, its `rules` id. A packet without one names no seat. */
+  seat?: string
   /** The run's turn ceiling; a packet without one runs unbounded. */
   steps?: number
   /** What this one run may spend before it stops, cache reads left out. A packet without one is unwalled. */

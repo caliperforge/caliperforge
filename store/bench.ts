@@ -1,7 +1,7 @@
 import type { Db } from './index.ts'
 
 export interface Score { plan: number; target: string; generator: string; catches: number; false_positives: number; untested: number | null; tokens: number; seconds: number; x_ray: 0 | 1 | null
-  pre_fix_calls: number | null; fix_calls: number | null; not_powered: 'wall' | 'reduced_generate' | 'few_properties' | 'pre_fix_calls' | 'fix_calls' | null }
+  pre_fix_calls: number | null; fix_calls: number | null; not_powered: 'wall' | 'reduced_generate' | 'few_properties' | 'pre_fix_calls' | 'fix_calls' | 'compile_failed' | null }
 
 const COLUMNS = 'plan, target, generator, catches, false_positives, untested, tokens, seconds, x_ray, pre_fix_calls, fix_calls, not_powered'
 

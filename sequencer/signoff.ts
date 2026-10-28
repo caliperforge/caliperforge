@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { basename } from 'node:path'
 import { parse } from '../rails/diff.ts'
 import { approve, batch, refuse, type Card } from '../cli/batch.ts'
-import type { Answer, Desk, Seen } from '../cli/gh.ts'
+import type { Answer, Desk, Read, Seen } from '../cli/gh.ts'
 import { notify, record, type Event, type Kind } from '../cli/inbox.ts'
 import { planSigned } from '../store/approvals.ts'
 import { decision } from '../store/ask.ts'
@@ -10,6 +10,7 @@ import { logged, ofKind } from '../store/events.ts'
 import { ciFacts, diffFacts, facts, greptileFacts, ruleFacts, testFacts, type Fact } from '../store/facts.ts'
 import type { Db } from '../store/index.ts'
 import { allPlans, needsCeo, planById, resume, rewind } from '../store/plans.ts'
+import { pushTarget } from '../store/ready.ts'
 import { clear } from '../store/refusals.ts'
 import { asks, graded } from '../store/signals.ts'
 import { targetRef } from '../store/targets.ts'
@@ -19,6 +20,7 @@ import { prTitle } from './pr.ts'
 import { BOARD, headOf, opened, rehearsalBranch, title } from './push.ts'
 import { GRADING } from './ready.ts'
 import { checked } from './seat.ts'
+import { work, type Hit } from './theirs.ts'
 import { UNRUN } from './triggers.ts'
 import { diffOf, drop, FORK, get, maybe, put, repoName, srcDir } from './workspace.ts'
 
@@ -41,11 +43,11 @@ const BUILD = 2
 
 interface Kept { no: number; digest: string; url: string; shut: boolean }
 
-export function signoffs(db: Db, root: string, desk: Desk, now: Date = new Date()): Signed[] {
+export function signoffs(db: Db, root: string, desk: Desk, read: Read, now: Date = new Date()): Signed[] {
   const cards = batch(db, root).filter((c) => c.kind === 'plan' && waiting(db, c))
   const live = new Set(cards.map((c) => c.id))
   const gone = carded(db, root).filter((id) => !live.has(id)).map((id) => withdraw(db, root, id, desk))
-  return [...gone.filter((s) => s !== null), ...cards.flatMap((c) => one(db, root, c, desk, now))]
+  return [...gone.filter((s) => s !== null), ...cards.flatMap((c) => one(db, root, c, desk, read, now))]
 }
 
 /** An outside plan whose checkout still holds the head the ready gate proved: the only head a label can sign. */
@@ -54,13 +56,13 @@ function waiting(db: Db, card: Card): boolean {
   return plan.origin === null && plan.target_id !== null && plan.head_digest === card.digest
 }
 
-function one(db: Db, root: string, card: Card, desk: Desk, now: Date): Signed[] {
+function one(db: Db, root: string, card: Card, desk: Desk, read: Read, now: Date): Signed[] {
   const kept = keptOf(root, card.id)
   if (kept !== null && kept.digest !== card.digest) {
     if (!kept.shut) desk.close(kept.no, 'Superseded: a new round changed the head. The next card replaces this one.')
-    return [{ plan: card.id, card: kept.no, did: 'superseded' }, opening(db, root, card, desk, now)]
+    return [{ plan: card.id, card: kept.no, did: 'superseded' }, opening(db, root, card, desk, read, now)]
   }
-  if (kept === null) return [opening(db, root, card, desk, now)]
+  if (kept === null) return [opening(db, root, card, desk, read, now)]
   if (kept.shut) return []
   const seen = desk.seen(kept.no)
   if (seen.answer !== null) return [answered(db, root, card, kept, { ...seen, answer: seen.answer }, desk, now)]
@@ -111,8 +113,8 @@ function rehearsalOf(db: Db, root: string, plan: number, desk: Desk): { fork: st
   return { fork, no: desk.rehearsal(fork, rehearsalBranch(root, plan)) }
 }
 
-function opening(db: Db, root: string, card: Card, desk: Desk, now: Date): Signed {
-  const body = bodyFor(db, root, card, desk)
+function opening(db: Db, root: string, card: Card, desk: Desk, read: Read, now: Date): Signed {
+  const body = bodyFor(db, root, card, desk, read)
   const made = desk.open(titleFor(db, root, card.id), body)
   const sheeted = body.startsWith('**Fact sheet**')
   logged(db, { plan: card.id, kind: 'card_facts', actor: 'signoff', outcome: sheeted ? 'pass' : 'refuse',
@@ -154,7 +156,7 @@ function titleFor(db: Db, root: string, plan: number): string {
  * commit on our fork, and the words the maintainer will read, fenced so no mention or reference in
  * them pings anyone or links anything before that person says go.
  */
-function bodyFor(db: Db, root: string, card: Card, desk: Desk): string {
+function bodyFor(db: Db, root: string, card: Card, desk: Desk, read: Read): string {
   const s = subjectOf(db, card.id)
   const head = headOf(root, card.id)
   const open = opened(db, card.id)
@@ -164,7 +166,7 @@ function bodyFor(db: Db, root: string, card: Card, desk: Desk): string {
   const text = open === null ? card.text : lastMessage(head.dir)
   const fence = '`'.repeat(Math.max(3, longest(text) + 1))
   return [
-    ...sheet(db, root, card, desk, head.sha, ci),
+    ...sheet(db, root, card, desk, head.sha, ci, hitsOf(db, root, card.id, read)),
     `**${repoName(s.repo)} ${String(s.issue_no)}**: ${title(root, card.id)}`,
     '',
     headline(card.marks.every((m) => m.ok), ci),
@@ -195,12 +197,13 @@ function bodyFor(db: Db, root: string, card: Card, desk: Desk): string {
   ].join('\n')
 }
 
-function sheet(db: Db, root: string, card: Card, desk: Desk, sha: string, ci: Board[] | null): string[] {
+function sheet(db: Db, root: string, card: Card, desk: Desk, sha: string, ci: Board[] | null, hits: Hit[]): string[] {
   const s = subjectOf(db, card.id)
   const diff = diffOf(root, card.id)
   const rules = ruleFacts(root, card.id, s.repo, desk.issue(s.repo, s.issue_no), card.text)
   const groups: [string, Fact[]][] = [
     ['Diff', diffFacts(diff)],
+    ['Their work', theirFacts(hits)],
     ['Tests', testFacts(db, card.id, diff, ci)],
     ...(ci === null ? [] : [['Their CI', ciFacts(ci)] satisfies [string, Fact[]]]),
     ['Greptile', greptileFacts(db, root, card.id, sha)],
@@ -209,7 +212,20 @@ function sheet(db: Db, root: string, card: Card, desk: Desk, sha: string, ci: Bo
     ['Pace', rules.filter((f) => f.name === 'pace')],
   ]
   const lines = groups.map(([name, all]) => `- ${name}: ${all.map((f) => `${f.name}: ${code(f.says)}${f.ok ? '' : ' (open)'}`).join('; ')}`)
-  return ['**Fact sheet**', '', ...lines, `- Verdict: ${verdict(groups.flatMap(([, all]) => all))}`, '']
+  const coding = hits.filter((h) => h.code).map((h) => `${code(h.url)} (${h.files.map((f) => code(f)).join(', ')})`)
+  const first = coding.length === 0 ? '**Fact sheet**' : `**Fact sheet**: a maintainer branch works on this code: ${coding.join('; ')}`
+  return [first, '', ...lines, `- Verdict: ${verdict(groups.flatMap(([, all]) => all))}`, '']
+}
+
+function hitsOf(db: Db, root: string, plan: number, read: Read): Hit[] {
+  const target = pushTarget(db, planById(db, plan))
+  if (target === null) throw new Error(`plan ${String(plan)} has no target row`)
+  return work(read, root, plan, target)
+}
+
+function theirFacts(hits: Hit[]): Fact[] {
+  if (hits.length === 0) return [{ name: 'none', ok: true, says: 'no open upstream pull request or recent branch touches our files' }]
+  return hits.map((h) => ({ name: h.files.length === 0 ? 'named' : h.same ? 'same functions' : 'other functions', ok: false, says: h.says }))
 }
 
 export function verdict(all: Fact[]): string {

@@ -747,7 +747,7 @@ test('fetch D1: an Output line fires fetcher into its folder', async () => {
   expect(JSON.parse(maybe(w.root, 1, 'runs.json') ?? '')).toEqual([{ command: RUN, output: 'cold start:\n  41 ms' }])
 })
 
-test.each(['/tmp/x', '~/cf_work/../x', '~/cf_work'])('fetch D2: Output %s is refused at gather', async (named) => {
+test.each(['/tmp/x', '~/cf_work/../x', '~/cf_work', '~/.ssh/config'])('fetch D2: Output %s is refused at gather', async (named) => {
   const dir = home()
   const w = researching(`${ASK}**Output:** ${named}\n`)
   question(w.root, plan(w.db, 1))
@@ -771,11 +771,11 @@ test('ruling D1/D2: an Output ruling reruns gather on fetcher', async () => {
   expect(ran(w)).toEqual(['fetcher'])
 })
 
-test.each(['~/cf_work/../x', '~/.ssh/config'])('ruling D3: Output %s is refused', (named) => {
+test.each(['~/cf_work/../x', '~/.ssh/config'])('ruling D3: Output %s is written', (named) => {
   home()
   const w = researching()
-  expect(rule(w.db, w.root, plan(w.db, 1), 'director', `**Output:** ${named}`)).toBeNull()
-  expect(maybe(w.root, 1, 'ask.md')).toBe(ASK)
+  expect(rule(w.db, w.root, plan(w.db, 1), 'director', `**Output:** ${named}`)).toBe('ask.md')
+  expect(maybe(w.root, 1, 'ask.md')).toContain(`\n**Output:** ${named}\n`)
 })
 
 test('ruling D4: a pr_path Output ruling applies', () => {

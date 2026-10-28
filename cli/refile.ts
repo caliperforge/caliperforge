@@ -1,5 +1,6 @@
 import type { Command } from 'commander'
 import { z } from 'zod'
+import { FORK, maybe, put } from '../sequencer/workspace.ts'
 import { ofKind } from '../store/events.ts'
 import { homes } from '../store/homes.ts'
 import type { Db } from '../store/index.ts'
@@ -18,13 +19,23 @@ function carried(labels: { name: string }[], to: string): string[] {
   return [...(lane === null ? [] : [`lane:${lane}`]), ...labels.map((l) => l.name).filter((n) => PRIORITY.test(n))]
 }
 
-export function refile(db: Db, from: string, to: string, read: Read = gh, exec: Run = run): string {
+function forked(root: string, plan: number, to: string): string {
+  if (!to.startsWith(`${FORK}/`)) throw new Error(`${to} has issues disabled and is not ours to build in`)
+  const line = `Fork: ${to}`
+  const ask = maybe(root, plan, 'ask.md') ?? ''
+  if (!ask.split('\n').includes(line)) put(root, plan, 'ask.md', `${ask}\n${line}\n`)
+  return line
+}
+
+export function refile(db: Db, root: string, from: string, to: string, read: Read = gh, exec: Run = run): string {
   const hit = FROM.exec(from)
   if (hit === null || !TO.test(to)) throw new Error(`cf gh refile takes <owner/name#n> <owner/name>, not ${from} ${to}`)
   const repo = String(hit[1])
   const no = Number(hit[2])
   const plan = allPlans(db).find((p) => originRef(p)?.repo === repo && originRef(p)?.no === no)
   if (plan === undefined) throw new Error(`no plan's origin is ${repo}#${String(no)}`)
+  const { hasIssuesEnabled } = z.object({ hasIssuesEnabled: z.boolean() }).parse(read(['repo', 'view', to, '--json', 'hasIssuesEnabled']))
+  if (!hasIssuesEnabled) return forked(root, plan.id, to)
   const block = ofKind(db, 'director', 'coo_lite').filter((e) => e.plan === plan.id).at(-1)
   const { title, body, labels } = z.object({ title: z.string(), body: z.string(), labels: z.array(z.object({ name: z.string() })) })
     .parse(read(['issue', 'view', String(no), '--repo', repo, '--json', 'title,body,labels']))
@@ -38,7 +49,7 @@ export function refile(db: Db, from: string, to: string, read: Read = gh, exec: 
   return url
 }
 
-export function registerRefile(cf: Command, { db, out }: Cli): void {
+export function registerRefile(cf: Command, { db, root, out }: Cli): void {
   cf.command('gh').command('refile').argument('<from>').argument('<to>')
-    .action((from: string, to: string) => { out(`${refile(db(), from, to)}\n`) })
+    .action((from: string, to: string) => { out(`${refile(db(), root, from, to)}\n`) })
 }

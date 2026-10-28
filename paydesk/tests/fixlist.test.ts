@@ -11,14 +11,16 @@ const STDERR = [
   '\u001b[1mpay catalog check\u001b[0m',
   '- acme/ok: \u001b[32mPASS\u001b[0m',
   '- fixtures/listing: \u001b[31mGET /paid: 402 without a readable offer\u001b[0m',
-  '- fixtures/listing: \u001b[33msummary length must be 24-63 characters\u001b[0m',
+  '- fixtures/listing: \u001b[33mdescription length must be 64-255 characters\u001b[0m',
+  '- fixtures/listing: summary length must be 24-63 characters',
   '- fixtures/listing: title is missing',
 ].join('\n')
 
-test('D1-D4 stderr becomes fix rows with ranges on lengths', () => {
+test('D1-D5 stderr rows: description sized, summary not', () => {
   expect(rows(STDERR, 12, import.meta.dirname)).toStrictEqual([
     { pr: 12, listing: 'fixtures/listing', method: 'GET', path: '/paid', msg: '402 without a readable offer' },
-    { pr: 12, listing: 'fixtures/listing', msg: 'summary length must be 24-63 characters', range: [24, 63], length: 13 },
+    { pr: 12, listing: 'fixtures/listing', msg: 'description length must be 64-255 characters', range: [64, 255], length: 16 },
+    { pr: 12, listing: 'fixtures/listing', msg: 'summary length must be 24-63 characters' },
     { pr: 12, listing: 'fixtures/listing', msg: 'title is missing' },
   ])
 })

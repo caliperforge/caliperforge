@@ -1,0 +1,5 @@
+{
+  "openapi": "3.0.0",
+  "info": { "title": "Asked above", "version": "1" },
+  "paths": { "/paid": { "get": { "x-price-usd": 0.001, "responses": { "402": { "description": "Payment required" } } } } }
+}

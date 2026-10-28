@@ -49,6 +49,7 @@ export function packet(manifest: Seat, prompt: string, spec: string, issue: stri
     model: manifest.model,
     effort: manifest.effort,
     tools: ours ? manifest.tools : manifest.tools.filter((t) => !OURS_ONLY.some((o) => t.startsWith(o))),
+    seat: manifest.seat,
     refuse: (path) => refuse(cwd, fence, path, ours),
   }
 }

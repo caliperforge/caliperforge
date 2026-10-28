@@ -1,6 +1,7 @@
 import { recount } from '../checks/ratchet.ts'
 import type { Db } from '../store/index.ts'
 import { digestOf } from '../store/approvals.ts'
+import { passedDiff } from '../store/deliverables.ts'
 import { keep, last as lastMerge, lastReview, record as recordMerge } from '../store/merges.ts'
 import type { PlanRow } from '../store/plans.ts'
 import type { Step } from '../templates/pr-path.ts'
@@ -97,13 +98,6 @@ function merged(db: Db, root: string, plan: PlanRow, step: Step): Outcome | null
   if (passedDiff(db, plan.id) !== digestOf(diffOf(root, plan.id))) return null
   keep(db, plan.id, step.step, gate, given, merge.id)
   return { outcome: 'pass', spans: [], note: `${step.runs} kept: main brought in ${String(merge.incoming.length)} file(s), none of the job's` }
-}
-
-/** The diff senior last passed, off the row its pass wrote. */
-function passedDiff(db: Db, plan: number): string | null {
-  const row = db.prepare("SELECT diff_digest FROM deliverables WHERE plan_id = ? AND step = 5 ORDER BY id DESC LIMIT 1")
-    .get(plan) as { diff_digest: string } | undefined
-  return row?.diff_digest ?? null
 }
 
 /**

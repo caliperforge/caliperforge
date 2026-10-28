@@ -26,6 +26,7 @@ import { checks, finish, gated, mode, network, npm, type Commands, type Failure,
 import { ciChecks } from './ci.ts'
 import { newest } from './cited.ts'
 import { outsideLanguage, sushi } from './gates.ts'
+import { forkOf } from './home.ts'
 import type { Outcome } from './kind.ts'
 import { lock, unlock } from './lock.ts'
 import { seat } from '../runner/rules.ts'
@@ -51,7 +52,7 @@ export function preReview(db: Db, root: string, plan: PlanRow, wire?: Wire): Out
   const on = read?.rails
   const commands = read?.commands ?? {}
   const finishes = { entries: read?.finish ?? {}, minutes: read?.finish_minutes }
-  const refusal = on?.digests === true ? unfilled(srcDir(root, plan.id)) : null
+  const refusal = on?.digests === true && forkOf(root, plan) === null ? unfilled(srcDir(root, plan.id)) : null
   if (refusal !== null) return refusal
   const bare = unbuilt(root, plan.id)
   const handback = bare ? '' : get(root, plan.id, 'step-2.handback.md')

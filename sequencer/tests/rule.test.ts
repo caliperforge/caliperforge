@@ -86,10 +86,10 @@ test('D2 an answer naming another job folder is refused', async () => {
   expect(got.applied).toEqual([{ applied: 'escalated' }])
 })
 
-test('an absolute path outside the root is refused', async () => {
+test('D2 an absolute path outside the root is written', async () => {
   const got = await fixed(1, answered('the key is in ~/secrets and (/etc/hosts)'))
-  expect(got.ask).toBe('the ask\n')
-  expect(got.applied).toEqual([{ applied: 'escalated' }])
+  expect(got.ask).toContain('\n\nthe key is in ~/secrets and (/etc/hosts)\n')
+  expect(got.applied).toEqual([{ applied: 'applied' }])
 })
 
 test('D1 quoted code starting with / is written', async () => {
@@ -98,11 +98,11 @@ test('D1 quoted code starting with / is written', async () => {
   expect(got.applied).toEqual([{ applied: 'applied' }])
 })
 
-test('D2 an absolute path elsewhere is refused', async () => {
+test('D2 an absolute path elsewhere is written', async () => {
   const got = await fixed(1, answered(`see ${homedir()}/notes/x.ts`))
-  expect(got.ask).toBe('the ask\n')
+  expect(got.ask).toContain(`\n\nsee ${homedir()}/notes/x.ts\n`)
   expect(got.issue).toBe(ISSUE)
-  expect(got.applied).toEqual([{ applied: 'escalated' }])
+  expect(got.applied).toEqual([{ applied: 'applied' }])
 })
 
 test('an answer holding only a URL is written', async () => {
@@ -383,29 +383,47 @@ test('D1 a hand-check citation outside the root applies', async () => {
   expect(seen.map((db) => filesOf(db, 7))).toEqual([[]])
 })
 
-test.each([
-  { id: 'D2', answer: 'the builder edits `~/notes/x.ts`', path: '~/notes/x.ts' },
-  { id: 'D4', answer: `edit \`~/notes/x.ts\`; ${HAND}`, path: '~/notes/x.ts' },
-  { id: 'D2', answer: 'nothing on main brings back `.cf/work/1647/src/.git`', path: '.cf/work/1647/src/.git' },
-  { id: 'D3', answer: 'read `~/.ssh/config`', path: '~/.ssh/config' },
-  { id: 'D3', answer: `read ${homedir()}/notes/x.ts`, path: `${homedir()}/notes/x.ts` },
-  { id: 'D3', answer: 'read `~/cf_work/../x`', path: '~/cf_work/../x' },
-])('$id a ruling editing an outside path is dropped', async ({ answer, path }) => {
-  const got = await aliased(() => answer)
-  expect(got.issue).toBe(ISSUE)
-  expect(got.events).toEqual(DROPPED(path))
+const FIZZ = 'context in `~/.claude/skills/fizz`; edit `seats/fizz_generator/prompt.md`'
+
+test('D1 a ruling citing an outside folder edits in the root', async () => {
+  const seen: Db[] = []
+  const got = await aliased(() => FIZZ, ({ db, home }) => {
+    seen.push(db)
+    mkdirSync(join(srcDir(home, 7), 'seats/fizz_generator'), { recursive: true })
+    writeFileSync(join(srcDir(home, 7), 'seats/fizz_generator/prompt.md'), '\n')
+  })
+  expect(got.events).toEqual(PASS)
+  expect(got.issue).toContain(`\n\n${FIZZ}\n\n## Standing\n`)
+  const prompt = { path: 'seats/fizz_generator/prompt.md', is_new: false }
+  expect(seen.map((db) => [filesOf(db, 7), fenceFor(db, 7, ['brief:files'])])).toEqual([[[prompt], [prompt.path]]])
 })
 
 const climb = (home: string) => relative(srcDir(home, 7), join(homedir(), 'notes/x.ts'))
 
 test.each([
-  { id: 'D2', answer: (h: string) => `write ${h}/.cf/work/354/ask.md`, path: () => '.cf/work/354/ask.md' },
-  { id: 'D3', answer: (h: string) => `read ${climb(h)}`, path: climb },
-])('$id a path named from the root is dropped', async ({ answer, path }) => {
+  { name: '~/notes', answer: () => 'the builder edits `~/notes/x.ts`' },
+  { name: 'a hand check', answer: () => `edit \`~/notes/x.ts\`; ${HAND}` },
+  { name: '~/.ssh', answer: () => 'read `~/.ssh/config`' },
+  { name: 'the homedir', answer: () => `read ${homedir()}/notes/x.ts` },
+  { name: '~/cf_work/..', answer: () => 'read `~/cf_work/../x`' },
+  { name: 'a climb', answer: (h: string) => `read ${climb(h)}` },
+])('D2 a ruling naming $name applies, nothing fenced', async ({ answer }) => {
+  let root = ''
+  const seen: Db[] = []
+  const got = await aliased(() => answer(root), ({ db, home }) => { root = home; seen.push(db) })
+  expect(got.events).toEqual(PASS)
+  expect(got.issue).toContain(`\n\n${answer(root)}\n\n## Standing\n`)
+  expect(seen.map((db) => [filesOf(db, 7), fenceFor(db, 7, ['brief:files'])])).toEqual([[[], []]])
+})
+
+test.each([
+  { answer: () => 'nothing on main brings back `.cf/work/1647/src/.git`', path: '.cf/work/1647/src/.git' },
+  { answer: (h: string) => `write ${h}/.cf/work/354/ask.md`, path: '.cf/work/354/ask.md' },
+])('D3 a ruling naming $path is dropped', async ({ answer, path }) => {
   let root = ''
   const got = await aliased(() => answer(root), ({ home }) => { root = home })
   expect(got.issue).toBe(ISSUE)
-  expect(got.events).toEqual(DROPPED(path(root)))
+  expect(got.events).toEqual(DROPPED(path))
 })
 
 test.each([

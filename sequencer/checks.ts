@@ -7,6 +7,7 @@ import type { Profile } from '../store/profile.ts'
 import { exitedOutside } from './exited.ts'
 import { gates, type Gate, type Outside, type OutsideLanguage, waived } from './gates.ts'
 import { fresh } from './inherited.ts'
+import { subprojects } from './loose.ts'
 import { malformed } from './malformed.ts'
 import { nodeTests, Package } from './node.ts'
 import { unfinished } from './unfinished.ts'
@@ -80,6 +81,8 @@ export function checks(src: string, given: Commands, run: Run = npm, narrow: str
   if (parsed !== null) return parsed
   const unparsed = given.json === true ? malformed(src, touched) : null
   if (unparsed !== null) return unparsed
+  const python = gated(src, subprojects(src, touched), run, [], said)
+  if (python !== null) return python
   const bin = mode(src)
   if (bin === 'xcodebuild') excluded(src)
   for (const [script, args, program = bin] of commands(src, given, narrow, touched)) {

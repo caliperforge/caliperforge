@@ -16,6 +16,9 @@ export const IDLE_TURNS = 20
 /** A run stops at its `FENCED`th write outside the fence; every one before it is denied and the seat goes on. */
 export const FENCED = 5
 
+/** A run that reads one file more than this many times is looping on it, not reading it. */
+export const REPEAT_READS = 60
+
 export const claudeAgentSdk: Provider = { name: 'claude-agent-sdk', fire }
 
 async function fire(packet: Packet): Promise<Fired> {
@@ -24,7 +27,7 @@ async function fire(packet: Packet): Promise<Fired> {
   const limits: Reading[] = []
   const spent = new Map<string, number>()
   const cost = new Map<string, number>()
-  const pace = { turns: new Set<string>(), wrote: false, fenced: 0 }
+  const pace = { turns: new Set<string>(), wrote: false, fenced: 0, reads: new Map<string, number>() }
   const transcript = openTranscript(packet)
   const run = query({
     prompt: `${packet.prompt}\n\n# Working folder\n\n${packet.cwd}`,
@@ -39,8 +42,9 @@ async function fire(packet: Packet): Promise<Fired> {
       settingSources: [], systemPrompt: { type: 'preset', preset: 'claude_code', excludeDynamicSections: true },
       permissionMode: 'default',
       hooks: { PreToolUse: [{ hooks: [(input) => {
+        count(pace.reads, input)
         const over = walled(packet.wall, total(spent)) ?? costWalled(packet.cost_wall, total(cost))
-          ?? idle(packet.tools, pace.wrote, pace.turns.size, packet.idle)
+          ?? idle(packet.tools, pace.wrote, pace.turns.size, packet.idle) ?? repeated(packet.tools, pace.reads)
         const decision = over === null ? gate(packet, input, pace.fenced) : stop(over)
         if (over === null && writing(input)) tally(pace, decision)
         if (decision.stopReason !== undefined) refused.push(decision.stopReason)
@@ -76,6 +80,18 @@ export function costWalled(wall: CostWall | undefined, usd: number): string | nu
 export function idle(tools: string[], wrote: boolean, turns: number, limit = IDLE_TURNS): string | null {
   if (wrote || turns < limit || !tools.some((t) => WRITES.has(bare(t)))) return null
   return `ruling:run.idle stopped the run after ${String(turns)} turns with nothing written`
+}
+
+export function repeated(tools: string[], reads: Map<string, number>, limit = REPEAT_READS): string | null {
+  if (!tools.some((t) => bare(t) === 'Read')) return null
+  for (const [path, n] of reads) if (n > limit) return `ruling:run.repeat_read stopped the run after ${String(n)} reads of ${path}`
+  return null
+}
+
+function count(reads: Map<string, number>, input: HookInput): void {
+  if (input.hook_event_name !== 'PreToolUse' || input.tool_name !== 'Read') return
+  const path = (input.tool_input as { file_path?: unknown }).file_path
+  if (typeof path === 'string') reads.set(path, (reads.get(path) ?? 0) + 1)
 }
 
 function writing(input: HookInput): boolean {

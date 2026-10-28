@@ -1,14 +1,17 @@
 import { judge, MISSING, type Gh } from '../rails/ci-green/index.ts'
+import { parse } from '../rails/diff.ts'
+import { setting } from '../store/drift.ts'
 import { logged, pointers } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { busy } from '../store/now.ts'
 import type { PlanRow } from '../store/plans.ts'
 import { entries, type Failure } from './checks.ts'
-import { homeOf, kernelPlan } from './home.ts'
+import { forkOf, homeOf, kernelPlan } from './home.ts'
 import type { Outcome } from './kind.ts'
+import { subprojects } from './loose.ts'
 import { carries, headOf, holding, unfinished, WIRE, workflows, type Wire } from './push.ts'
 import { firstLine, gone } from './unpolled.ts'
-import { srcDir } from './workspace.ts'
+import { diffOf, srcDir } from './workspace.ts'
 
 /** The settings row that moves step 3's suite off this laptop: `ci`, or anything else for the laptop. */
 export const WHERE = 'checks.where'
@@ -40,14 +43,15 @@ type Ci = { wait: Outcome } | { failed: Failure | null; at: string }
  * Our own repo's suite runs on GitHub at the branch head instead of on the laptop. The head is committed and
  * force-sent to the job's own branch, which carries no pull request and is re-cut from main when main moves
  * under it, and the runs at that sha are the checks. Null hands the checks back to the laptop: the switch is
- * off, the repo runs no workflow, the push or the listing failed, no run showed within `SHOWS` ticks, or one
- * ran past `RUNS`.
+ * off, the repo runs no workflow, the push or the listing failed, no run showed within `SHOWS` ticks, one
+ * ran past `RUNS`, or the diff touches a Python subproject, whose gates CI does not run.
  */
 export function ciChecks(db: Db, root: string, plan: PlanRow, wire: Wire = WIRE): Ci | null {
-  if (!on(db) || !kernelPlan(plan) || !workflows(srcDir(root, plan.id))) return null
+  if (setting(db, WHERE) !== 'ci' || !kernelPlan(plan) || !workflows(srcDir(root, plan.id))) return null
+  if (subprojects(srcDir(root, plan.id), parse(diffOf(root, plan.id)).map((f) => f.path)).length > 0) return null
   let pointer = ''
   try {
-    const fork = homeOf(plan)
+    const fork = forkOf(root, plan) ?? homeOf(plan)
     const head = headOf(root, plan.id)
     pointer = `${fork}:${head.branch}`
     if (pointers(db, 'gone').includes(pointer)) return null
@@ -70,11 +74,6 @@ export function ciChecks(db: Db, root: string, plan: PlanRow, wire: Wire = WIRE)
     }
     return null
   }
-}
-
-function on(db: Db): boolean {
-  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(WHERE) as { value: string } | undefined
-  return row?.value === 'ci'
 }
 
 /** The first red run's failed step, read as the laptop's own failure: the script it ran and the tests it named. */

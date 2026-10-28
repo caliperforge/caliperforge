@@ -3,7 +3,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, 
 import { homedir, tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import type { HookInput } from '@anthropic-ai/claude-agent-sdk'
-import { expect, test } from 'vitest'
+import { expect, test, vi } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import { gate, readOutside, walled } from '../../providers/claude-agent-sdk/index.ts'
 import type { Fired, Packet, Provider } from '../../providers/kind.ts'
@@ -17,7 +17,9 @@ import type { Db } from '../../store/index.ts'
 import { dial } from '../../store/lanes.ts'
 import { allPlans, end, holdOn, pipeNamed, planById, putPlan, requeue, waiting, type PlanRow } from '../../store/plans.ts'
 import { CEILING, generate, nullChecked, scored, scratch } from '../../templates/bench.ts'
+import { powered } from '../../templates/powered.ts'
 import { drift, mechanisms } from '../drift.ts'
+import { evict } from '../evict.ts'
 import { unhold } from '../hold.ts'
 import { dry, tick } from '../index.ts'
 import { route } from '../next.ts'
@@ -360,6 +362,94 @@ test('D1 generate clones an emptied src/ again at pre_fix', async () => {
   expect(git(srcDir(root, 1), ['rev-parse', 'HEAD']).trim()).toBe(c1)
 })
 
+const HALF = 'contract FizzTest {\n'
+
+/** A generate on `root` that wrote half a suite and died mid-run, its transcript buried by `evict` under the dead pid returned. */
+function died(root: string, ready: (root: string) => void = () => undefined): number {
+  const provider: Provider = { name: 'claude-agent-sdk', fire: (packet) => {
+    mkdirSync(join(packet.cwd, 'test/fizz'), { recursive: true })
+    writeFileSync(join(packet.cwd, 'test/fizz/FizzTest.sol'), HALF)
+    writeFileSync(packet.transcript, '')
+    return new Promise<never>(() => undefined)
+  } }
+  void generated({ provider, packets: [] }, undefined, ready, root)
+  const db = fresh(schema)
+  queued(db, 'bench')
+  const dead = spawnSync('/usr/bin/true').pid
+  vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+  try {
+    evict(db, root, 1, dead)
+  } finally {
+    vi.restoreAllMocks()
+  }
+  return dead
+}
+
+/** `stub`'s generator, noting at each fire whether its working folder already holds test/fizz. */
+function looking(seen: boolean[]): ReturnType<typeof stub> {
+  const fired = stub(1000, 'completed', true)
+  return { ...fired, provider: { ...fired.provider, fire: (packet) => {
+    seen.push(existsSync(join(packet.cwd, 'test/fizz')))
+    return fired.provider.fire(packet)
+  } } }
+}
+
+const deadSuite = (root: string, pid: number) => readFileSync(join(planDir(root, 1), `src.dead-${String(pid)}/test/fizz/FizzTest.sol`), 'utf8')
+
+test('D1 D2 a dead lap\'s requeue fires on a fresh pre_fix clone', async () => {
+  const { root, c1, c2 } = fixture()
+  const dead = died(root, reaped(c1, c2))
+  const seen: boolean[] = []
+  expect((await generated(looking(seen), undefined, () => undefined, root)).outcome).toMatchObject({ outcome: 'pass' })
+  expect(seen).toEqual([false])
+  expect(git(srcDir(root, 1), ['rev-parse', 'HEAD']).trim()).toBe(c1)
+  expect(deadSuite(root, dead)).toBe(HALF)
+})
+
+/** `checkedOut` with half a suite in src/ and `names` in the plan folder, a folder where the name ends in `/`. */
+function left(...names: string[]): (root: string) => void {
+  return (root) => {
+    checkedOut(root)
+    mkdirSync(join(srcDir(root, 1), 'test/fizz'), { recursive: true })
+    writeFileSync(join(srcDir(root, 1), 'test/fizz/FizzTest.sol'), HALF)
+    for (const name of names) {
+      if (name.endsWith('/')) mkdirSync(join(planDir(root, 1), name))
+      else put(root, 1, name, '')
+    }
+  }
+}
+
+test('D3 D4 another step\'s or a kept dead lap leaves src/ alone', async () => {
+  for (const ready of [left('step-2.dead-5.transcript.jsonl'), left('step-1.dead-5.transcript.jsonl', 'src.dead-5/')]) {
+    const seen: boolean[] = []
+    const { root, outcome } = await generated(looking(seen), undefined, ready)
+    expect(outcome).toMatchObject({ outcome: 'pass' })
+    expect(seen).toEqual([true])
+    expect(existsSync(join(planDir(root, 1), 'src.dead-5/test'))).toBe(false)
+  }
+})
+
+test('D4 a second dead lap moves src/ to its own pid', async () => {
+  const { root, c1, c2 } = fixture()
+  const first = died(root, reaped(c1, c2))
+  const second = died(root)
+  const seen: boolean[] = []
+  expect((await generated(looking(seen), undefined, () => undefined, root)).outcome).toMatchObject({ outcome: 'pass' })
+  expect(seen).toEqual([false])
+  expect([deadSuite(root, first), deadSuite(root, second)]).toEqual([HALF, HALF])
+})
+
+test('D5 a dead lap\'s unfetchable pre_fix is refused, suite kept', async () => {
+  const { root, c1, c2 } = fixture()
+  const dead = died(root, reaped(c1, c2))
+  const fired = stub(1000, 'completed', true)
+  const { db, outcome } = await generated(fired, undefined, reaped('f'.repeat(40)), root)
+  expect(outcome).toMatchObject({ outcome: 'refuse', spans: ['bench.no_checkout'], to: 0 })
+  expect(fired.packets).toEqual([])
+  expect(runRows(db)).toEqual([])
+  expect(deadSuite(root, dead)).toBe(HALF)
+})
+
 /** A checked-out src/ depending on `file:dep`, with a root postinstall, and a lockfile that locks dep only when `synced`. */
 function locked(synced: boolean): (root: string) => void {
   return (root) => {
@@ -635,6 +725,21 @@ test('1617b D3 a cost-walled generate scores wall, no pair', () => {
     seconds: 56.5, x_ray: null, pre_fix_calls: null, fix_calls: null, not_powered: 'wall' }])
 })
 
+const REPEAT_READ = 'ruling:run.repeat_read stopped the run after 61 reads of /tmp/x.ts'
+
+test('1839 D4 a repeat-read generate passes with its wall', async () => {
+  const { root, outcome } = await generated(stub(1000, 'stopped', false, REPEAT_READ))
+  expect(outcome).toEqual({ outcome: 'pass', spans: [], note: `generate.json written: ${REPEAT_READ}` })
+  expect(JSON.parse(get(root, 1, 'generate.json'))).toMatchObject({ wall: REPEAT_READ })
+})
+
+test('1839 D5 a repeat-read generate scores wall', () => {
+  const { root, db } = sided(8, 505660, 505660)
+  put(root, 1, 'generate.json', JSON.stringify({ suite: 'test/fizz', tokens: 1234, seconds: 56.5, agents: 8, wall: REPEAT_READ }))
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass', note: expect.stringContaining('run.repeat_read') as string })
+  expect(scores(db)).toMatchObject([{ plan: 1, not_powered: 'wall' }])
+})
+
 test('1617b D4 an unpriced model is refused unfired', async () => {
   const root = mkdtempSync(join(tmpdir(), 'cf-bench-'))
   staffedIn(root)
@@ -835,6 +940,35 @@ test('D4 an untracked foundry.toml alone is carried alone', () => {
   expect(existsSync(join(carried, 'lib'))).toBe(false)
 })
 
+const FUZZ = `${TOML}[profile.fuzz]\nout = "out-fuzz"\n`
+
+/** The installed args and score.json for a root medusa.json passing `--foundry-out-directory out-fuzz`, once `ready` has shaped src/. */
+function outFuzz(ready: (src: string) => void, pair?: string): { args: unknown; score: unknown } {
+  const { root, db } = scoring(pair)
+  ready(srcDir(root, 1))
+  writeFileSync(join(srcDir(root, 1), 'medusa.json'), compiled(['--foundry-out-directory', 'out-fuzz']))
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  const config = JSON.parse(readFileSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/medusa.json'), 'utf8')) as
+    { compilation: { platformConfig: { args: unknown } } }
+  return { args: config.compilation.platformConfig.args, score: JSON.parse(get(root, 1, 'score.json')) }
+}
+
+test('D1 an out dir HEAD foundry.toml lacks is dropped', () => {
+  const { args, score } = outFuzz((src) => {
+    commit(src, 'foundry.toml', TOML, 'foundry')
+    writeFileSync(join(src, 'foundry.toml'), FUZZ)
+  }, `import os, sys\n'--foundry-out-directory' in open(os.path.join(sys.argv[2], 'medusa.json')).read() and sys.exit('out-fuzz/build-info is not a directory')\n${
+    writes('.jsonl', PAIRS)}`)
+  expect(args).toEqual(['--compile-force-framework', 'foundry'])
+  expect(score).toMatchObject({ foundry_out_dropped: 'out-fuzz' })
+})
+
+test('D2 an out dir the carried foundry.toml sets is kept', () => {
+  const { args, score } = outFuzz((src) => { writeFileSync(join(src, 'foundry.toml'), FUZZ) })
+  expect(args).toEqual(['--foundry-out-directory', 'out-fuzz', '--compile-force-framework', 'foundry'])
+  expect(score).not.toHaveProperty('foundry_out_dropped')
+})
+
 const FORGED = ['test/fizz/FizzTest.sol', 'foundry.toml', 'lib/forge-std/src/Test.sol']
 
 const CARRIED = 'fuzz-bench/suites/fizz/euler-earn-m01/root'
@@ -1003,6 +1137,39 @@ test('D4 generate.json without properties counts the suite', () => {
 test('D4 a side under the floor or unread names that side', () => {
   expect(reason(8, 69467, 69467)).toBe('pre_fix_calls')
   expect(reason(8, 505660, null)).toBe('fix_calls')
+})
+
+const ERRORS = [{ property: 'p1', verdict: 'error', build_log_tail: 'Compiling 3 files\nError (7576): Undeclared identifier.\n  --> src/A.sol' },
+  { property: 'p2', verdict: 'error', build_log_tail: 'Error: second' }]
+
+/** The bench_scorecard row and score.json `scored` writes for run_pair rows `pairs`. */
+function scoredRows(pairs: object[]) {
+  const { root, db } = scoring(writes('.jsonl', pairs))
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  return { row: scores(db)[0], json: JSON.parse(get(root, 1, 'score.json')) as Record<string, unknown> }
+}
+
+test('1645b D1 all error rows record compile_failed and the error', () => {
+  const { row, json } = scoredRows(ERRORS)
+  expect(row).toMatchObject({ catches: 0, false_positives: 0, not_powered: 'compile_failed' })
+  expect(json).toMatchObject({ not_powered: 'compile_failed', build_error: 'Error (7576): Undeclared identifier.' })
+})
+
+test('1645b D2 failed is compile_failed before every other reason', () => {
+  expect(powered(3, 8, { pre_fix: 505660, fix: 505660 }, true)).toBe('compile_failed')
+  expect(powered(1, 0, {}, true)).toBe('compile_failed')
+})
+
+test('1645b D3 one row not error scores as today, no build_error', () => {
+  const { row, json } = scoredRows([...PAIRS, ERRORS[0] ?? {}])
+  expect(row).toMatchObject({ catches: 2, false_positives: 1, not_powered: 'reduced_generate' })
+  expect(json).not.toHaveProperty('build_error')
+})
+
+test('1645b D6 all error with no error line records a null error', () => {
+  const { row, json } = scoredRows([{ verdict: 'error', build_log_tail: 'Compiling 3 files' }, { verdict: 'error', build_log_tail: 7 }, { verdict: 'error' }])
+  expect(row?.not_powered).toBe('compile_failed')
+  expect(json).toMatchObject({ not_powered: 'compile_failed', build_error: null })
 })
 
 test('D5 generate at the wall records one wall row, no pair', () => {

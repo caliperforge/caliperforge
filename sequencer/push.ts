@@ -30,7 +30,7 @@ import type { Outcome } from './kind.ts'
 import { merging } from './merging.ts'
 import { prBody, prTitle } from './pr.ts'
 import { assembled, cloned, conflicted, diffOf, fetchMain, FORK, MAIN, maybe, planDir, put, repoName, srcDir, titleOf, tried } from './workspace.ts'
-import { assembly, homeOf, onto } from './home.ts'
+import { assembly, forkOf, homeOf, onto } from './home.ts'
 import { clean, subjectOf } from './shape.ts'
 import { size } from './size.ts'
 import { prosed } from './tells.ts'
@@ -136,7 +136,7 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
   const hold = waiting === null ? null : holding(root, plan.id, head.sha, verdict.spans, `${at} ${waiting}`, window)
   if (hold !== null) return onCi(db, plan.id, hold)
   const stop = stalled(verdict.spans, board, at, fork, tip)
-  if (stop !== null) { freed(db, plan.id); return stop }
+  if (stop !== null) { freed(db, plan.id); return carries(stop.spans, MISSING) && forkOf(root, plan) !== null ? checked(db, root, plan, repo, stop.note) : stop }
   const again = waiting === null && verdict.outcome === 'refuse' ? cancelled(root, plan.id, on, verdict.spans, wire.runs) : null
   if (again !== null) {
     const rerunning = holding(root, plan.id, head.sha, verdict.spans, `${at} ${again}`, APPEARS, RERUNS)
@@ -390,7 +390,7 @@ export function land(db: Db, root: string, plan: PlanRow, approval: number, wire
     return refuse('base:stale', `${base} moved under plan ${String(plan.id)} between fetch and push; cut it again from ${base}`)
   }
   wire.close(homeOf(plan), issue, sha, `landed on ${base} as ${sha}`)
-  markPushed(db, plan.id, approval, `https://github.com/${asm?.fork ?? homeOf(plan)}/commit/${sha}`)
+  markPushed(db, plan.id, approval, `https://github.com/${asm?.fork ?? forkOf(root, plan) ?? homeOf(plan)}/commit/${sha}`)
   if (plan.lane === 'loupe') wire.install?.()
   return { outcome: 'pass', spans: [], note: `landed ${head.branch} on ${base} as ${sha.slice(0, 12)}` }
 }

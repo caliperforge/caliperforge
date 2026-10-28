@@ -210,6 +210,20 @@ test('directorCloseUnbuiltSeen D4', () => {
   expect(drift(d, entry, NOW)).toMatchObject([{ name: 'director_close_unbuilt', state: 'seen', newest: '2026-10-02 12:00:00' }])
 })
 
+test('forkReadyCiStale D5', () => {
+  const entry = REGISTRY.filter((e) => e.name === 'fork_ready_ci')
+  const d = db()
+  const ready = (message: string, at: string): void => {
+    logged(d, { plan: 1, kind: 'ready', actor: 'ready', outcome: 'pass', message, pointer: null, run: null }, at)
+  }
+  const fork = "ready: ok; caliperforge/pay ran no workflow at abc in 10 ticks; step 3's checks at abc stand as its CI"
+  ready(fork, '2026-09-13 10:00:00')
+  ready('ready: ok', '2026-10-02 10:00:00')
+  expect(drift(d, entry, NOW)).toMatchObject([{ name: 'fork_ready_ci', state: 'stale', newest: '2026-09-13 10:00:00' }])
+  ready(fork, '2026-10-02 10:00:00')
+  expect(drift(d, entry, NOW)).toEqual([])
+})
+
 test('catchupRangeClearsSilent D4', () => {
   const d = db()
   const catchup = REGISTRY.filter((e) => e.name === 'writer_catchup')

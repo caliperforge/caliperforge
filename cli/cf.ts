@@ -5,11 +5,9 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { claudeAgentSdk } from '../providers/claude-agent-sdk/index.ts'
 import { credential } from '../providers/credential.ts'
-import { spawn } from 'node:child_process'
 import { mechanisms } from '../sequencer/drift.ts'
-import { CHAIN_MINUTES, dry, EACH, lap, tick, type Apart } from '../sequencer/index.ts'
+import { CHAIN_MINUTES, dry, EACH, lap, tick } from '../sequencer/index.ts'
 import { garden } from '../sequencer/garden.ts'
-import type { Fired } from '../sequencer/kind.ts'
 import { CHECK_SLOTS } from '../sequencer/checks.ts'
 import { behind, upgraded } from '../sequencer/upgrade.ts'
 import { late } from '../sequencer/signals.ts'
@@ -23,6 +21,7 @@ import { openPipes, overlapWaits } from '../store/plans.ts'
 import { receipt, slots } from '../store/ticks.ts'
 import { dryLines, tickNote } from './brief.ts'
 import { reported, slack } from './flow.ts'
+import { apart, FIRED } from './apart.ts'
 import { registerBench } from './bench.ts'
 import { registerInbox, registerLanes, registerSession, type Cli } from './cf-lanes.ts'
 import { registerPlans, registerRetry } from './cf-plans.ts'
@@ -91,9 +90,6 @@ cf.command('tick').option('--dry', 'read what a tick would do, fire nothing, cal
     })
   })
 
-/** The last line `cf lap` writes: what the job fired, for the tick that forked it. */
-const FIRED = 'cf-lap-fired\t'
-
 cf.command('lap').argument('<plan>', 'a plan the tick leased').requiredOption('--from <pid>', 'the tick holding the lease')
   .option('--stole <pid>', 'the dead tick the lease was taken over from')
   .description('run one leased job in this process, for the tick that forked it (#311)')
@@ -104,21 +100,6 @@ cf.command('lap').argument('<plan>', 'a plan the tick leased').requiredOption('-
       options.stole === undefined ? null : Number(options.stole), CHAIN_MINUTES, gh, () => headSha(root) !== at)
     out(`\n${FIRED}${JSON.stringify(fired)}\n`)
   })
-
-/** Each leased job runs in a child process, so one job's synchronous checks never freeze another's agent. */
-const apart: Apart = (plan, stole) => new Promise((done, failed) => {
-  const args = [...process.execArgv, fileURLToPath(import.meta.url), 'lap', String(plan), '--from', String(process.pid),
-    ...(stole === null ? [] : ['--stole', String(stole)])]
-  const child = spawn(process.execPath, args, { cwd: process.cwd(), env: process.env, stdio: ['ignore', 'pipe', 'inherit'] })
-  let said = ''
-  child.stdout.setEncoding('utf8').on('data', (chunk: string) => { said += chunk })
-  child.on('error', failed)
-  child.on('close', (code) => {
-    const last = said.split('\n').findLast((l) => l.startsWith(FIRED))
-    if (code === 0 && last !== undefined) done(JSON.parse(last.slice(FIRED.length)) as Fired[])
-    else failed(new Error(`cf lap ${String(plan)} exited ${String(code)}`))
-  })
-})
 
 cf.command('watch').description('alert once when no real tick has landed inside an open window, and once when one lands again')
   .action(() => {
@@ -141,7 +122,7 @@ async function ticked(options: { dry?: boolean }, now: Date): Promise<void> {
   process.stderr.write(`auth ${auth.kind} from ${auth.from}\n`)
   process.env.CF_CHECK_SLOTS ??= String(CHECK_SLOTS)
   const lines: string[] = []
-  const fired = await tick(handle, root, claudeAgentSdk, now, undefined, undefined, CHAIN_MINUTES, gh, EACH, apart, lines,
+  const fired = await tick(handle, root, claudeAgentSdk, now, undefined, undefined, CHAIN_MINUTES, gh, EACH, apart(fileURLToPath(import.meta.url)), lines,
     mechanisms(root, 'HEAD'))
   const id = receipt(handle, upgraded(handle, root, { at: now.toISOString(), hhmm: hhmm(handle, now), dry: false,
     pipes: openPipes(handle, hhmm(handle, now)).length, fired: fired.length,
@@ -174,7 +155,7 @@ cf.command('coo-lite').description('fire one coo_lite run on the oldest stopped 
 /** A tracker that cannot be read this time leaves every card where it stands; the next tick reads it again. */
 function cards(handle: Db, now: Date): void {
   try {
-    for (const s of signoffs(handle, root, desk(SIGNOFF), now)) out(`signoff\tplan ${String(s.plan)}\tcard ${String(s.card)}\t${s.did}\n`)
+    for (const s of signoffs(handle, root, desk(SIGNOFF), gh, now)) out(`signoff\tplan ${String(s.plan)}\tcard ${String(s.card)}\t${s.did}\n`)
     late(handle, root, desk(SIGNOFF), now)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)

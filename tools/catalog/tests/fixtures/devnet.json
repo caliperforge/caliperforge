@@ -1,0 +1,13 @@
+{
+  "fetch": {
+    "GET https://devnet.example.com/paid": {
+      "status": 402,
+      "headers": {
+        "WWW-Authenticate": "Payment id=\"d1\", realm=\"api\", method=\"solana\", intent=\"charge\", request=\"eyJhbW91bnQiOiIxMDAwMCIsImN1cnJlbmN5IjoiNHpNTUM5c3J0NVJpNVgxNEdBZ1hoYUhpaTNHblBBRUVSWVBKZ1pKRG5jRFUiLCJtZXRob2REZXRhaWxzIjp7Im5ldHdvcmsiOiJkZXZuZXQifX0=\""
+      },
+      "body": "{\"x402Version\":1,\"accepts\":[{\"scheme\":\"exact\",\"network\":\"solana-devnet\",\"maxAmountRequired\":\"10000\",\"asset\":\"4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU\"}]}"
+    }
+  },
+  "hosts": ["devnet.example.com"],
+  "rpc": {}
+}

@@ -17,9 +17,9 @@ export function target(db: Db, plan: PlanRow): Target | null {
   return (row ?? null) as Target | null
 }
 
-export function lastCi(db: Db, plan: number): { outcome: string; subject_digest: string } | undefined {
-  return db.prepare("SELECT outcome, subject_digest FROM verdicts WHERE plan = ? AND rail_id = 'ci-green' ORDER BY id DESC LIMIT 1")
-    .get(plan) as { outcome: string; subject_digest: string } | undefined
+export function lastCi(db: Db, plan: number): { outcome: string; subject_digest: string; message: string } | undefined {
+  return db.prepare("SELECT outcome, subject_digest, message FROM verdicts WHERE plan = ? AND rail_id = 'ci-green' ORDER BY id DESC LIMIT 1")
+    .get(plan) as { outcome: string; subject_digest: string; message: string } | undefined
 }
 
 export function targetRepo(db: Db, id: number): string | null {

@@ -1,7 +1,5 @@
 import { statSync } from 'node:fs'
-import { homedir } from 'node:os'
-import { join, relative, resolve } from 'node:path'
-import { real } from '../runner/index.ts'
+import { join } from 'node:path'
 import { logged } from '../store/events.ts'
 import { edit, filesOf } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
@@ -9,8 +7,6 @@ import { builderRan, type PlanRow } from '../store/plans.ts'
 import { cited } from './cited.ts'
 import { unruled } from './unruled.ts'
 import { get, headSha, maybe, planDir, put, srcDir } from './workspace.ts'
-
-const PATH = /(?:^|[\s`'"(])((?:~|\.\.)?\/[\w.-][^\s`'"()]*)/g
 
 const OUTSIDE = /^ {2}- (\S+):1 authority\.outside_files$/gm
 
@@ -35,18 +31,12 @@ function ruled(issue: string): string {
   return issue.split(/^(?=## )/m).findLast((s) => RULED.test(s)) ?? ''
 }
 
-export function stray(root: string, plan: PlanRow, text: string): string | null {
-  const other = [...text.matchAll(/\.cf\/work\/(\d+)\/[^\s`'"()]+/g)].find((m) => m[1] !== String(plan.id))
-  if (other !== undefined) return other[0]
-  const under = (dir: string, p: string) => !relative(real(dir), p).startsWith('..')
-  return [...text.matchAll(PATH)].map((m) => m[1] ?? '').find((t) => {
-    const p = real(t.startsWith('~/') ? join(homedir(), t.slice(2)) : resolve(srcDir(root, plan.id), t))
-    return under(homedir(), p) && !under(join(homedir(), 'cf_work'), p) && !under(root, p)
-  }) ?? null
+export function stray(plan: PlanRow, text: string): string | null {
+  return [...text.matchAll(/\.cf\/work\/(\d+)\/[^\s`'"()]+/g)].find((m) => m[1] !== String(plan.id))?.[0] ?? null
 }
 
 export function rule(db: Db, root: string, plan: PlanRow, who: string, text: string): 'ask.md' | 'issue.md' | null {
-  if (stray(root, plan, text) !== null) return null
+  if (stray(plan, text) !== null) return null
   const section = `## Answer from the ${who} (${new Date().toISOString().slice(0, 10)})\n\n${text.trim()}\n`
   if (!builderRan(db, plan.id)) {
     put(root, plan.id, 'ask.md', `${maybe(root, plan.id, 'ask.md') ?? ''}\n${section}`)

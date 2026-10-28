@@ -537,6 +537,48 @@ test('D3: a claimed reply holds step 1 with its evidence', async () => {
   expect(holdOf(w.db, 1)).toMatchObject({ held_why: `brief_writer: claimed: ${COVERED}` })
 })
 
+const HAND_RUN = 'brief_writer: hand-run brief: it estimates 0 lines, so a person runs it; held until hand-run briefs have their own route'
+
+const estimated = (brief: string, lines: number): string => brief.replace('## Approach\n\n', `## Approach\n\nEstimate: ${String(lines)} lines\n`)
+
+/** A brief writer replying with the stub's brief for the checkout it is fired in, estimating `lines`. */
+const estimating = (lines: number): Provider =>
+  ({ ...stub(CARRIED), fire: (p) => stub(CARRIED, 0, undefined, undefined, estimated(briefFor(p.prompt, p.cwd), lines)).fire(p) })
+
+const builds = (w: World): number => runRows(w.db).filter((r) => r.step === 2).length
+
+test('D1 D2: a 0-line brief is saved and held at step 1', async () => {
+  const w = mine()
+  await tick(w.db, w.root, stub(CARRIED))
+  const fired = (await tick(w.db, w.root, estimating(0)))[0]
+
+  expect(fired).toMatchObject({ step: 1, outcome: 'needs_ceo', state: 'blocked_on_ceo', note: HAND_RUN })
+  expect(briefOf(w)).toBe(estimated(plain(w), 0))
+  expect(plan(w.db, ID)).toMatchObject({ step: 1, retries: 0 })
+  expect(holdOf(w.db, ID)).toMatchObject({ held_why: HAND_RUN })
+  await tick(w.db, w.root, stub(CARRIED))
+  expect(plan(w.db, ID).step).toBe(1)
+  expect(builds(w)).toBe(0)
+})
+
+test('D3: a standing 0-line brief holds a built plan at step 1', async () => {
+  const w = mine()
+  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  await tick(w.db, w.root, stub(CARRIED, 1))
+  advance(w.db, plan(w.db, ID), 1)
+  put(w.root, ID, 'issue.md', estimated(plain(w), 0))
+
+  expect((await tick(w.db, w.root, stub(CARRIED)))[0]).toMatchObject({ step: 1, outcome: 'needs_ceo', note: HAND_RUN })
+  expect(plan(w.db, ID).step).toBe(1)
+  expect(builds(w)).toBe(1)
+})
+
+test('D4: a brief estimating 3 lines is written as before', async () => {
+  const w = mine()
+  await tick(w.db, w.root, stub(CARRIED))
+  expect((await tick(w.db, w.root, estimating(3)))[0]).toMatchObject({ step: 1, outcome: 'pass', note: 'brief_writer: brief written' })
+})
+
 test('D1: a question after a shape refusal sets the refusal aside', async () => {
   const w = await turnedBack()
   const question = 'which greeting?'

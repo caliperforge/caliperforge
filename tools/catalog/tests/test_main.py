@@ -1,9 +1,22 @@
+from pathlib import Path
+
 import pytest
 
 from catalog_desk import main
+from catalog_desk.net import Recorded
+
+FIXTURES = Path(__file__).parent / "fixtures"
 
 
 def test_no_command_exits_2():
     with pytest.raises(SystemExit) as exited:
         main([])
     assert exited.value.code == 2
+
+
+@pytest.mark.parametrize("name", ["format-fail", "header-only", "devnet", "asked-above", "no-usdc"])
+def test_d6_next_prints_exactly_one_brief(name: str, capsys: pytest.CaptureFixture[str]):
+    recorded = FIXTURES / f"{name}.json"
+    net = Recorded.load(recorded) if recorded.exists() else Recorded({}, set(), {})
+    assert main(["next", str(FIXTURES / name / "PAY.md")], net) == 0
+    assert capsys.readouterr().out.count("check: ") == 1

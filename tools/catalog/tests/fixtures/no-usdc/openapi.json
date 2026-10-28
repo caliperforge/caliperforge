@@ -1,0 +1,5 @@
+{
+  "openapi": "3.0.0",
+  "info": { "title": "No USDC", "version": "1" },
+  "paths": { "/paid": { "get": { "x-price-usd": 0.01, "responses": { "402": { "description": "Payment required" } } } } }
+}

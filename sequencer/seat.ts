@@ -45,7 +45,7 @@ import { fenceFor, languageFor } from './route.ts'
 import { languages } from './split.ts'
 import { staffed } from './staffing.ts'
 import { gates, outsideLanguage } from './gates.ts'
-import { subprojects } from './loose.ts'
+import { contained, subprojects } from './loose.ts'
 import type { Outcome } from './kind.ts'
 import { landed } from './notes.ts'
 import { COMMIT, commitMessage } from './push.ts'
@@ -481,8 +481,10 @@ function gated(db: Db, root: string, plan: PlanRow, src: string, diff: string): 
     return gates(src, { language: outside, files: filesOf(db, plan.id).map((f) => f.path) })
       .map((g) => ({ language: outside, dir: g.dir, command: [g.bin, ...g.args].join(' ') }))
   }
-  const scope = narrow(db, plan).length > 0 ? 'the tests this plan\'s files reach' : 'the whole suite'
-  const python = subprojects(src, parse(diff).map((f) => f.path)).map((g) => ({ language: 'python', dir: g.dir, command: [g.bin, ...g.args].join(' ') }))
+  const paths = parse(diff).map((f) => f.path)
+  const scope = contained(src, paths) ? 'no tests: the diff sits in its python subprojects'
+    : narrow(db, plan).length > 0 ? 'the tests this plan\'s files reach' : 'the whole suite'
+  const python = subprojects(src, paths).map((g) => ({ language: 'python', dir: g.dir, command: [g.bin, ...g.args].join(' ') }))
   return [{ language, dir: '', command: `every script the checkout names (${mode(src)}, ${scope})` }, ...python]
 }
 

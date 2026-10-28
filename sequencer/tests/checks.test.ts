@@ -333,12 +333,42 @@ const SUBPROJECT = { ...ONE, 'tools/x/pyproject.toml': '[project]\nname = "x"\n'
 
 const UV = ['sync --all-extras', 'tool run ruff check', 'run --with pyright pyright', 'run --no-sync pytest']
 
-test('1854 D1 a pyproject folder runs its uv gates before npm', () => {
-  const src = nested(SUBPROJECT)
+const PYTHON = { ...SUBPROJECT, ...THREE, 'tools/x/README.md': '# x\n' }
+
+const INSIDE = ['tools/x/a.py', 'tools/x/README.md']
+
+test('1898 D1 a subproject diff runs uv gates then npm, no test', () => {
+  const src = nested(PYTHON)
   const green = binned()
-  expect(checks(src, OWN, green.run, [], null, ['tools/x/a.py'])).toBeNull()
-  expect([green.bins, green.seen]).toEqual([['uv', 'uv', 'uv', 'uv', 'npm'], [...UV, 'run test']])
-  expect(green.cwds).toEqual([...UV.map(() => join(src, 'tools/x')), src])
+  expect(checks(src, OWN, green.run, [], null, INSIDE)).toBeNull()
+  expect([green.bins, green.seen]).toEqual([['uv', 'uv', 'uv', 'uv', 'npm', 'npm'], [...UV, 'run typecheck', 'run lint']])
+  expect(green.cwds).toEqual([...UV.map(() => join(src, 'tools/x')), src, src])
+})
+
+test('1898 D2 a .ts touched too runs test, narrowed or whole', () => {
+  const touched = [...INSIDE, 'sequencer/checks.ts']
+  const whole = binned()
+  expect(checks(nested(PYTHON), OWN, whole.run, [], null, touched)).toBeNull()
+  expect(whole.seen).toEqual([...UV, 'run typecheck', 'run lint', 'run test'])
+  const some = binned()
+  expect(checks(nested(PYTHON), OWN, some.run, ['sequencer/checks.ts'], null, touched)).toBeNull()
+  expect(some.seen.at(-1)).toBe('exec -- vitest related --run sequencer/checks.ts')
+})
+
+test('1898 D3 a path outside the subproject brings test back', () => {
+  for (const outside of ['tools/y/f.json', 'package.json', 'package-lock.json', 'rules/x.md', 'schema/0001_x.sql']) {
+    const shell = binned()
+    expect(checks(nested(PYTHON), OWN, shell.run, [], null, [...INSIDE, outside])).toBeNull()
+    expect(shell.seen.at(-1)).toBe('run test')
+  }
+})
+
+test('1898 D4 no touched paths or a loose .py runs test', () => {
+  for (const [files, touched] of [[PYTHON, []], [{ ...THREE, 'tools/x/a.py': '' }, ['tools/x/a.py']]] as const) {
+    const shell = binned()
+    expect(checks(nested(files), OWN, shell.run, [], null, [...touched])).toBeNull()
+    expect(shell.seen).toEqual(['run typecheck', 'run lint', 'run test'])
+  }
 })
 
 test('1854 D2 a red pyright refuses before any npm script', () => {

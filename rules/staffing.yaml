@@ -117,4 +117,5 @@
 - { template: comms, step: 8, seat: typescript_specialist }
 - { template: comms, step: 9, seat: typescript_specialist }
 - { template: bench, step: 1, key: fizz, seat: fizz_generator }
+- { template: bench, step: 1, key: fizz_lean, seat: fizz_lean_generator }
 - { template: bench, step: 1, key: house_generator, seat: house_generator }

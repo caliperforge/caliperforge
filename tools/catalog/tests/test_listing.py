@@ -42,6 +42,20 @@ def test_d3_d4_url_only_openapi_is_its_own_invalid(tmp_path: Path, openapi: dict
     assert read(tmp_path) == Invalid("openapi.path", why)
 
 
+def test_endpoints_only_reads_with_an_empty_spec(tmp_path: Path):
+    endpoints = [{"method": "GET", "path": "/v1/invoices"}]
+    _write(tmp_path, {**{k: v for k, v in GOOD.items() if k != "openapi"}, "endpoints": endpoints})
+    listing = read(tmp_path)
+    assert isinstance(listing, Listing) and listing.spec == {} and listing.dir == tmp_path.name
+
+
+@pytest.mark.parametrize("endpoints", [None, [], [{"method": "GET"}], [{"method": 1, "path": "/x"}], ["GET /x"]])
+def test_neither_openapi_nor_endpoints_is_missing(tmp_path: Path, endpoints: object):
+    front = {k: v for k, v in GOOD.items() if k != "openapi"}
+    _write(tmp_path, front if endpoints is None else {**front, "endpoints": endpoints})
+    assert read(tmp_path) == Invalid("openapi.path", "missing")
+
+
 def test_d2_the_first_failing_field_wins(tmp_path: Path):
     keys = list(BAD)
     for i, field in enumerate(FIELDS):

@@ -19,8 +19,9 @@ export function costWalled(stop: string | null): string | null {
   return stop !== null && ['ruling:run.cost_wall', 'ruling:run.repeat_read'].some((wall) => stop.startsWith(wall)) ? stop : null
 }
 
-export function written(root: string, plan: number, dir: string, transcript: string,
+export function written(root: string, plan: number, dir: string, transcripts: string[],
   made: { suite: string; tokens: number; seconds: number; wall?: string; properties?: number }, note: string): Outcome {
-  put(root, plan, 'generate.json', JSON.stringify({ ...made, x_ray: existsSync(join(dir, 'x-ray/x-ray.md')) ? 1 : 0, agents: spawned(transcript) }))
+  put(root, plan, 'generate.json', JSON.stringify({ ...made, x_ray: existsSync(join(dir, 'x-ray/x-ray.md')) ? 1 : 0,
+    agents: transcripts.reduce((n, transcript) => n + spawned(transcript), 0) }))
   return { outcome: 'pass', spans: [], note: `generate.json written: ${note}` }
 }

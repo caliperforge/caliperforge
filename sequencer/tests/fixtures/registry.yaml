@@ -506,3 +506,9 @@
   where: "kind = 'director' AND outcome = 'pass' AND message GLOB 'waive:*' AND EXISTS (SELECT 1 FROM runs WHERE runs.plan = events.plan AND runs.step = 2 AND runs.seat NOT IN ('fixer', 'orchestrator', 'coo_lite', 'director') AND julianday(runs.at) BETWEEN julianday(events.at) AND julianday(events.at, '+1 day')) AND EXISTS (SELECT 1 FROM verdicts v5 JOIN verdicts v4 ON v4.plan = v5.plan AND v4.tree = v5.tree WHERE v5.plan = events.plan AND v5.step = 5 AND v5.kind = 'review' AND v5.outcome = 'pass' AND v4.step = 4 AND v4.kind = 'review' AND v4.outcome = 'pass')"
   gap: 7d
   expected: 0
+- name: brief_title_set
+  table: refusals
+  column: at
+  where: "step = 1 AND note LIKE '%the title is not the ask%' AND plan IN (SELECT id FROM plans WHERE origin IS NOT NULL)"
+  gap: 7d
+  expected: 0

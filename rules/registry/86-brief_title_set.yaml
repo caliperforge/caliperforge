@@ -1,0 +1,6 @@
+- name: brief_title_set
+  table: refusals
+  column: at
+  where: "step = 1 AND note LIKE '%the title is not the ask%' AND plan IN (SELECT id FROM plans WHERE origin IS NOT NULL)"
+  gap: 7d
+  expected: 0

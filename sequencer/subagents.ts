@@ -67,7 +67,7 @@ export function sessionDir(projects: string, session: string | null): string | n
 }
 
 export function render(run: Generated, rows: Row[]): string {
-  const id = `run ${String(run.id)}`
+  const id = `run ${String(run.id)}${run.phase === null ? '' : ` ${run.phase}`}`
   const total = (key: typeof KEYS[number]): number => rows.reduce((n, row) => n + row[key], 0)
   const logged = { input: run.input_tokens - run.cache_write_tokens, write: run.cache_write_tokens, read: run.cache_read_tokens, output: run.output_tokens }
   const gap = KEYS.reduce((n, key) => n + logged[key] - total(key), 0)

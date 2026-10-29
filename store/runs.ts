@@ -9,6 +9,16 @@ export function runTokens(db: Db, plan: number): RunTokens[] {
     FROM runs WHERE plan = ? ORDER BY id`).all(plan) as RunTokens[]
 }
 
+export interface Generated {
+  id: number; transcript_path: string; session: string | null
+  input_tokens: number; cache_write_tokens: number; cache_read_tokens: number; output_tokens: number
+}
+
+export function generated(db: Db, plan: number): Generated[] {
+  return db.prepare(`SELECT id, transcript_path, session, input_tokens, coalesce(cache_write_tokens, 0) AS cache_write_tokens, cache_read_tokens, output_tokens
+    FROM runs WHERE plan = ? AND seat IN ('fizz_generator', 'fizz_lean_generator') ORDER BY id`).all(plan) as Generated[]
+}
+
 export function setInputTokens(db: Db, tokens: number): void {
   db.prepare('UPDATE runs SET input_tokens = ?').run(tokens)
 }

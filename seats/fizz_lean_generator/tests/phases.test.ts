@@ -14,6 +14,11 @@ const PHASES: [string, string, string | null][] = [
   ['invariants', '## Step 9: Generate Invariants', '## Step 10: Run Campaigns'],
   ['campaigns', '## Step 10: Run Campaigns', null],
 ]
+const READ = '- Before the first step, read the handoff named by `Start from` and only the files its `## Reads` lists. {MODE}, {AGENT_MODEL} and {FUZZ_BUILD_CMD} are the values {PROJECT_ROOT}/{META_DIR}/context.md records.'
+const CLAMPED = '- In Step 7, for each state-changing entry point a property or a Step 3 candidate invariant targets, write a <contract>_<function>_clamped handler beside the raw one that bounds each argument to values the call accepts.'
+const READS = ', with {PROJECT_ROOT}/{META_DIR}/context.md and each file the next phase needs under `## Reads`'
+const written = (name: string): string =>
+  `- Before you end, write {META_DIR}/handoff/${name}.md, the path the issue names, from its \`# Handoff: ${name}\` block${name === 'campaigns' ? '' : READS}.`
 
 function at(heading: string): number {
   const i = fizz.indexOf(`\n${heading}`)
@@ -36,8 +41,12 @@ function own(file: string, block: string): void {
 function handover(name: string, file: string, block: string): void {
   const [head, tail] = file.split(block)
   expect(tail).toBe('')
-  expect(head).toMatch(new RegExp(`^# Fizz lean: ${name} \\(Steps [\\d.]+-[\\d.]+\\)\\n\\n## Handover\\n[^#]*$`))
+  expect(head).toMatch(new RegExp(`^# Fizz lean: ${name} \\(Steps [\\d.]+-[\\d.]+\\)\\n\\n## Handover\\n(?:(?!#).*\\n)*$`))
   for (const named of ['{META_DIR}/context.md', '{META_DIR}/reports/', '300 words', '~/.claude/skills/fizz']) expect(head).toContain(named)
+  expect(head).toContain(written(name))
+  if (name !== 'context') expect(head).toContain(READ)
+  if (name === 'scaffold') expect(head).toContain(CLAMPED)
+  expect(head).not.toMatch(/\bread\b[^\n]*\{META_DIR\}\/reports\//)
 }
 
 test.each(PHASES)('D1-D3: %s.md is a handover then its steps verbatim', (name, start, end) => {
@@ -53,6 +62,13 @@ test('D4: an edited Step 6 or an appended Step 8 fails', () => {
   expect(edited).not.toBe(file)
   expect(() => { verbatim(edited, block) }).toThrow()
   expect(() => { own(`${file}${STEP_8}\n`, block) }).toThrow()
+})
+
+test('D2-D3: a reports read or a dropped clamped line fails', () => {
+  const [file, block] = [phase('scaffold'), range(STEP_5, STEP_8)]
+  const reports = `${READ}\n- Before the first step, read every report under {PROJECT_ROOT}/{META_DIR}/reports/.`
+  expect(() => { handover('scaffold', file.replace(READ, reports), block) }).toThrow()
+  expect(() => { handover('scaffold', file.replace(`${CLAMPED}\n`, ''), block) }).toThrow()
 })
 
 test('D5: the lean skill holds no copied fizz folders', () => {

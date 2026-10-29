@@ -3,9 +3,10 @@
 ## Handover
 
 - You are a fresh agent for the steps below and no others.
-- Before the first step, read {PROJECT_ROOT}/{META_DIR}/context.md and every report under {PROJECT_ROOT}/{META_DIR}/reports/. {MODE}, {AGENT_MODEL} and {FUZZ_BUILD_CMD} are the values it records.
+- Before the first step, read the handoff named by `Start from` and only the files its `## Reads` lists. {MODE}, {AGENT_MODEL} and {FUZZ_BUILD_CMD} are the values {PROJECT_ROOT}/{META_DIR}/context.md records.
 - {SKILL_PATH} in the steps below, and every ./references/, ./agents/, ./scripts/ and ./templates/ link, is ~/.claude/skills/fizz: read it, never write it.
 - Every sub-agent you spawn writes its full output to {PROJECT_ROOT}/{META_DIR}/reports/invariants-<agent>.md, <agent> being the stem of the agent file it was spawned from, and returns a summary of at most 300 words. Where a step passes one agent's output to another, pass that report's path.
+- Before you end, write {META_DIR}/handoff/invariants.md, the path the issue names, from its `# Handoff: invariants` block, with {PROJECT_ROOT}/{META_DIR}/context.md and each file the next phase needs under `## Reads`.
 - Before you end, write your own report to {PROJECT_ROOT}/{META_DIR}/reports/invariants-phase.md and return a summary of at most 300 words.
 
 ## Step 9: Generate Invariants (5 Parallel Discovery Agents + Synthesizer + 2 Implementers)

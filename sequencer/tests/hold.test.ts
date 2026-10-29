@@ -287,7 +287,7 @@ test('D2 return, unpark, retry, release, priority log the actor', () => {
   expect(each(blocked, ['unpark', '7'])).toEqual([{ kind: 'return', actor: 'coo', message: 'step 4' }])
   expect(each(blocked, ['retry', '7'])).toMatchObject([{ kind: 'retry', actor: 'coo' }])
   expect(each(`step = 2, ${blocked}`, ['release', '7'])).toEqual([{ kind: 'release', actor: 'coo', message: 'step 2' }])
-  expect(each('priority = 1', ['priority', '7', '3', '--why', 'w'])).toEqual([{ kind: 'priority', actor: 'coo', message: 'P1 → P3: w' }])
+  expect(each("priority = 1, template = 'research', origin = NULL, lane = NULL", ['priority', '7', '3', '--why', 'w'])).toEqual([{ kind: 'priority', actor: 'coo', message: 'P1 → P3: w' }])
 })
 
 test('D2 unpark on a repeat step-3 stop logs the actor\'s retry', () => {

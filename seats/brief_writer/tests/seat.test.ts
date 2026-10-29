@@ -136,8 +136,7 @@ test('a block the ask does not call word for word is not demanded', () => {
 
 const ruled = fixture('ruled-ask.md')
 const blocks = ruled.split(/^(?=## )/m).slice(1).map((s) => s.split('\n').filter((l) => /^[a-z ]+: /.test(l)).join('\n'))
-const ruling = (copy: string, heading = '## Rulings'): string =>
-  fixture('brief.md').replace('\n## Settled facts', `\n${heading}\n\n${copy}\n\n## Settled facts`)
+const ruling = (copy: string): string => carrying(`## Rulings\n\n${copy}`)
 
 test('D1: shape passes both ruling blocks under Rulings', () => {
   expect(blocks).toHaveLength(2)
@@ -153,8 +152,7 @@ test('D2: a dropped ruling block is refused at its instruction', () => {
 
 test('D3: a changed byte or a block outside Rulings is refused', () => {
   expect(shape(ruling(blocks.join('\n\n').replace('step 1', 'step 2')), ruled, root)?.span).toBe('instruction: save the reply as issue.md and write nothing else')
-  expect(shape(fixture('brief.md').replace('\n## Settled facts', `\n${blocks.join('\n\n')}\n\n## Settled facts`), ruled, root)?.span)
-    .toBe('instruction: save the reply as issue.md and write nothing else')
+  expect(shape(carrying(blocks.join('\n\n')), ruled, root)?.span).toBe('instruction: save the reply as issue.md and write nothing else')
 })
 
 test('D4: no ruling, a fixer answer or a bare answer passes', () => {

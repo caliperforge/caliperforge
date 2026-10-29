@@ -1,14 +1,15 @@
 import type { Command } from 'commander'
 import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { staffing } from '../sequencer/staffing.ts'
+import { render, sessionDir, split } from '../sequencer/subagents.ts'
 import { get, git, gitBase, maybe, planDir, put, remote, srcDir } from '../sequencer/workspace.ts'
 import { supersede } from '../store/bench.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { addPlan, briefed, holderOf, pipeNamed, planById, rewind, type Holder } from '../store/plans.ts'
-import { lastTranscript } from '../store/runs.ts'
+import { generated, lastTranscript } from '../store/runs.ts'
 import { copied } from '../templates/bench.ts'
 import { profiled } from '../templates/profile.ts'
 import type { Cli } from './cf-lanes.ts'
@@ -95,6 +96,12 @@ export function profile(db: Db, root: string, id: number): string {
   return profiled(path)
 }
 
+export function tokens(db: Db, root: string, plan: number, projects: string): string {
+  const runs = generated(db, plan)
+  if (runs.length === 0) throw new Error(`plan ${String(plan)} has no fizz generate run`)
+  return runs.map((run) => render(run, split(join(planDir(root, plan), basename(run.transcript_path)), sessionDir(projects, run.session)))).join('')
+}
+
 export function registerBench(cf: Command, { root, db, out }: Cli): void {
   const bench = cf.command('bench')
   bench.command('file').argument('[target]').option('--all', 'one plan per targets/*.yml')
@@ -120,4 +127,6 @@ export function registerBench(cf: Command, { root, db, out }: Cli): void {
     })
   bench.command('profile').argument('<plan>')
     .action((plan: string) => { out(profile(db(), root, Number(plan))) })
+  bench.command('tokens').argument('<plan>')
+    .action((plan: string) => { out(tokens(db(), root, Number(plan), join(homedir(), '.claude/projects'))) })
 }

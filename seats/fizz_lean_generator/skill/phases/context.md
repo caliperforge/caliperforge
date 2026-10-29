@@ -6,6 +6,7 @@
 - {SKILL_PATH} in the steps below, and every ./references/, ./agents/, ./scripts/ and ./templates/ link, is ~/.claude/skills/fizz: read it, never write it.
 - Every sub-agent you spawn writes its full output to {PROJECT_ROOT}/{META_DIR}/reports/context-<agent>.md, <agent> being the stem of the agent file it was spawned from, and returns a summary of at most 300 words. Where a step passes one agent's output to another, pass that report's path.
 - Write {PROJECT_ROOT}/{META_DIR}/context.md: PROJECT_ROOT, SUITE_DIR, META_DIR, the resolved {MODE} and {AGENT_MODEL}, the Step 3 summary, and the Step 4 selection summary.
+- Before you end, write {META_DIR}/handoff/context.md, the path the issue names, from its `# Handoff: context` block, with {PROJECT_ROOT}/{META_DIR}/context.md and each file the next phase needs under `## Reads`.
 - Before you end, write your own report to {PROJECT_ROOT}/{META_DIR}/reports/context-phase.md and return a summary of at most 300 words.
 
 ## Step 0: Print Banner

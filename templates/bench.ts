@@ -3,23 +3,22 @@ import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from
 import { homedir } from 'node:os'
 import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 import type { Provider } from '../providers/kind.ts'
-import { packet, real } from '../runner/index.ts'
+import { real } from '../runner/index.ts'
 import { load, seat } from '../runner/rules.ts'
 import type { Outcome } from '../sequencer/kind.ts'
 import { staffed } from '../sequencer/staffing.ts'
 import { firstLine } from '../sequencer/unpolled.ts'
 import { cloned, get, git, gitBase, maybe, planDir, put, remote, srcDir } from '../sequencer/workspace.ts'
 import { setUntested } from '../store/bench.ts'
-import { logged, runLogged } from '../store/events.ts'
+import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
-import { observed } from '../store/lanes.ts'
 import type { PlanRow } from '../store/plans.ts'
-import { byRun, pending } from '../store/transcript.ts'
 import { clamp, quieted } from './balances.ts'
 import { deps } from './deps.ts'
-import { costWall, costWalled, written } from './generated.ts'
+import { costWall, written } from './generated.ts'
 import { inBare, listedIn } from './listed.ts'
 import { heldForCoo, paired, rows, seedsOf } from './paired.ts'
+import { firing, phased, START } from './phases.ts'
 import { buildError, kept, powered, walled } from './powered.ts'
 import { DEFAULT_BUILDER, type Step } from './pr-path.ts'
 import { placed, recloned, rooted, scrapped } from './rooted.ts'
@@ -31,8 +30,6 @@ const NEEDED = ['repo', 'fix', 'pre_fix']
 
 export const CEILING = 6_000_000
 
-const SETUP = 60
-
 const SUITE = 'test/fizz'
 
 const META = 'fizz_data'
@@ -42,10 +39,6 @@ const PROPERTY = /\bfunction\s+(?:invariant|property|echidna)_\w*\s*\(/g
 const COMMENT = /\/\*[\s\S]*?\*\/|\/\/.*/g
 
 const PROPERTIES = 'Properties.sol'
-
-const TIMEOUTS = { BASH_DEFAULT_TIMEOUT_MS: '1800000', BASH_MAX_TIMEOUT_MS: '1800000' }
-
-const ATTEMPTS = '/tmp/x-ray-attempts.md'
 
 const CAP = 60 * 60 * 1000
 
@@ -135,23 +128,16 @@ export async function generate(db: Db, root: string, plan: PlanRow, step: Step, 
   const granted = manifest.reads?.map((path) => real(path.startsWith('~/') ? join(homedir(), path.slice(2)) : resolve(root, path))) ?? []
   mkdirSync(join(planDir(root, plan.id), 'scratch'), { recursive: true })
   const tmp = real(join(planDir(root, plan.id), 'scratch'))
-  const built = packet(manifest, prompt, '', ask(granted[0], granted.find((path) => basename(path) === 'x-ray'), tmp), dir,
-    pending(planDir(root, plan.id), `step-${String(step.step)}`), false, [...manifest.write_paths, tmp])
-  const fired = await provider.fire({ ...built, refuse: (path) => real(resolve(dir, path)) === real(ATTEMPTS) ? null : built.refuse(path), wall: CEILING,
-    cost_wall: walls, env: { ...TIMEOUTS, TMPDIR: tmp }, reads: [...granted, real(ATTEMPTS)], ...(['fizz_generator', 'fizz_lean_generator'].includes(name) ? { idle: SETUP } : {}) })
-  const run = runLogged(db, { plan: plan.id, step: step.step, seat: name, rule_hash: hash, provider: provider.name, model: manifest.model,
-    effort: manifest.effort, exit: fired.exit, fired, staffed: name })
-  const transcript = byRun(db, run, fired.transcript_path)
-  observed(db, fired.limits)
-  const tokens = fired.usage.input + fired.usage.output
-  if (tokens >= CEILING) return { outcome: 'refuse', spans: ['bench.ceiling'], note: `${name} hit the ${String(CEILING)}-token ceiling at ${String(tokens)} tokens` }
-  const wall = costWalled(fired.stop_reason)
-  if (wall !== null) return written(root, plan.id, dir, transcript, { suite: SUITE, tokens, seconds: fired.seconds, wall }, wall)
-  if (fired.ended !== 'completed') return { outcome: 'refuse', spans: [fired.stop_reason ?? 'seat.exit'], note: `${name} ${fired.ended}` }
-  const properties = unproven(join(dir, SUITE), `${name} (${fired.ended}, ${String(tokens)} tokens)`)
+  const issue = ask(granted[0], granted.find((path) => basename(path) === 'x-ray'), tmp)
+  const fire = firing({ db, root, plan, step, provider, name, dir, tmp, granted, walls, ceiling: CEILING }, manifest, hash)
+  const sum = name === 'fizz_lean_generator' ? await phased(fire, granted[0] ?? '', join(dir, SUITE, META, 'handoff'), issue) : await fire(prompt, issue, START)
+  if ('outcome' in sum) return sum
+  const { tokens, seconds, transcripts, wall } = sum
+  if (wall !== null) return written(root, plan.id, dir, transcripts, { suite: SUITE, tokens, seconds, wall }, wall)
+  const properties = unproven(join(dir, SUITE), `${name} (completed, ${String(tokens)} tokens)`)
   if (typeof properties !== 'number') return properties
   if (target !== '') rooted(dir, join(planDir(root, plan.id), 'fuzz-bench/suites', generator, target))
-  return written(root, plan.id, dir, transcript, { suite: SUITE, tokens, seconds: fired.seconds, properties }, `${name} ${fired.ended}, ${String(tokens)} tokens, ${String(properties)} properties`)
+  return written(root, plan.id, dir, transcripts, { suite: SUITE, tokens, seconds, properties }, `${name} completed, ${String(tokens)} tokens, ${String(properties)} properties`)
 }
 
 export function scored(db: Db, root: string, plan: PlanRow): Outcome {

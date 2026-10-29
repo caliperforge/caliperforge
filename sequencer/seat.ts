@@ -24,7 +24,7 @@ import { lastTranscript } from '../store/runs.ts'
 import { byRun, opened, pending, unfinished } from '../store/transcript.ts'
 import { languageOfSeat, type Step } from '../templates/pr-path.ts'
 import { parse } from '../rails/diff.ts'
-import { claimed, estimate, formats, human, pointed, references, section, shape, split, TEMPLATE, wide, WIDE, type Part } from './brief.ts'
+import { claimed, estimate, formats, human, pointed, references, retitled, section, shape, split, TEMPLATE, wide, WIDE, type Part } from './brief.ts'
 import { overlong, trim, trimmed } from './trim.ts'
 import { repoOf } from './ready.ts'
 import { limitOf } from './size.ts'
@@ -124,34 +124,34 @@ export async function fireBrief(db: Db, root: string, plan: PlanRow, step: Step,
   if (saved !== null) return splitting(step, saved)
   const ask = askOf(root, plan.id)
   const src = srcDir(root, plan.id)
-  const standing = maybe(root, plan.id, 'issue.md')
-  if (standing !== null && shape(unran(standing), ask, src, !internal(plan)) === null) return stands()
+  if (ticket !== null && shape(unran(ticket), ask, src, !internal(plan)) === null) return stands()
   const { fired, cut } = await written(db, root, plan, step, provider, ask, src)
   drop(root, plan.id, 'brief.refused.md')
   if (fired.ended !== 'completed') return exited(step, fired)
   const stop = instead(step.runs, fired.text)
   if (stop !== null) return stop
-  const brief = answered(root, plan, step, fired.text, src)
+  const text = retitled(fired.text, ask, !internal(plan))
+  const brief = answered(root, plan, step, text, src)
   if (typeof brief !== 'string') return brief
-  const refused = (cut === null ? null : trimmed(cut, fired.text)) ?? shape(fired.text, ask, src, !internal(plan))
-  const reply = refused === null ? languages(plan, fired.text) ?? fired.text : fired.text
+  const refused = (cut === null ? null : trimmed(cut, text)) ?? shape(text, ask, src, !internal(plan))
+  const reply = refused === null ? languages(plan, text) ?? text : text
   const parts = split(reply)
   if (parts !== null) {
     put(root, plan.id, 'split.md', reply)
     return splitting(step, parts)
   }
-  const over = refused === null ? oversized(db, plan, fired.text) : null
-  if (refused !== null || over !== null) put(root, plan.id, 'brief.refused.md', fired.text)
+  const over = refused === null ? oversized(db, plan, text) : null
+  if (refused !== null || over !== null) put(root, plan.id, 'brief.refused.md', text)
   if (refused !== null) return { outcome: 'refuse', spans: [refused.span], note: `${step.runs}: ${refused.reason}` }
   if (over !== null) return { outcome: 'refuse', spans: ['brief.wide'], note: `${step.runs}: ${over}, so answer with the split fence` }
-  briefed(db, plan.id, human(fired.text))
+  briefed(db, plan.id, human(text))
   put(root, plan.id, 'issue.md', brief)
   put(root, plan.id, 'ask.briefed.md', ask)
   const message = commitMessage(root, plan)
   if (message !== null) put(root, plan.id, COMMIT, message)
   drop(root, plan.id, 'refusal.md')
   drop(root, plan.id, 'question.sha')
-  return byHand(step.runs, fired.text) ?? { outcome: 'pass', spans: [], note: `${step.runs}: brief written` }
+  return byHand(step.runs, text) ?? { outcome: 'pass', spans: [], note: `${step.runs}: brief written` }
 }
 
 /** What the brief seat's reply ends in place of a brief: an allow-listed command to run, or a claimed ask held with its evidence. */

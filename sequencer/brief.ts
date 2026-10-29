@@ -207,6 +207,12 @@ export function shape(brief: string, ask: string, src: string, outside = false, 
   return null
 }
 
+/** An internal brief under the ask's title; an outside brief, or an ask with no title, leaves it unchanged. */
+export function retitled(brief: string, ask: string, outside: boolean): string {
+  const title = titleOf(ask)
+  return outside || title === null ? brief : brief.replace(/^#\s+(.*)$/m, () => `# ${title}`)
+}
+
 function order(brief: string): Refused | null {
   const lines = brief.split('\n').map((l) => l.trim())
   let at = 0

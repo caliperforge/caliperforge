@@ -22,7 +22,7 @@ import { held as holding, take } from '../../store/leases.ts'
 import { busy } from '../../store/now.ts'
 import { addPart } from '../../store/parts.ts'
 import { allPlans, held, needsCeo, pipeNamed, pipeOf, planById, planRows, putPlan, requeue, retry } from '../../store/plans.ts'
-import { clear, fingerprint, overBudget } from '../../store/refusals.ts'
+import { alike, clear, fingerprint, overBudget } from '../../store/refusals.ts'
 import { runTokens } from '../../store/runs.ts'
 import { question } from '../../templates/research.ts'
 import { split } from '../brief.ts'
@@ -1537,15 +1537,15 @@ test('a plan sent round since its refusal files no repeat', async () => {
 })
 
 test('a refusal its step settled again after is no stop', async () => {
-  for (const plans of [[7], [8, 10]]) {
+  for (const [stops, found] of [[[[7, 1]], null], [[[8, 3], [10, 2]], { step: 4, fingerprint: SAME, plans: [7] }]] as const) {
     const { db, home } = alikeStops('1', three(SAME))
-    for (const plan of plans) {
-      const hours = three(SAME).find(([p]) => p === plan)?.[2] ?? 0
+    for (const [plan, hours] of stops) {
       for (const [outcome, late] of [['refuse', 0], ['escalate', 0.5]] as const) {
         logged(db, { plan, kind: 'ruling', actor: 'brief_writer', outcome, message: outcome, pointer: null, run: null },
           new Date(now.getTime() - (hours - late) * 3_600_000).toISOString())
       }
     }
+    expect(alike(db, 7, now)).toEqual(found)
     const filed: string[] = []
     const fired: string[] = []
     await cooLite(db, home, row(db), wokeStub(REPLY.ask_ceo ?? '', fired), now, () => undefined, filing(filed))

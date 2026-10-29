@@ -38,6 +38,7 @@ import { classify } from './delta.ts'
 import { commanded } from './command.ts'
 import { unran } from './reproduced.ts'
 import { answered } from './answered.ts'
+import { inputs } from './output.ts'
 import { looked } from './design.ts'
 import { dropped } from './dropped.ts'
 import { asked, blinded, findings, left, owed } from './findings.ts'
@@ -264,7 +265,7 @@ export async function ran(db: Db, root: string, plan: PlanRow, step: Step, provi
     ...(step.runs === 'brief_writer' ? { tools: [...built.tools, READ], servers: { [SERVER]: server(db, plan.id) } } : {}),
     prompt: `${map(src)}\n\n${built.prompt}`,
     wall: wall(db),
-    reads: out === undefined ? machineReads(root, plan, step.runs) : [...machineReads(root, plan, step.runs), out],
+    reads: [...new Set([...machineReads(root, plan, step.runs), ...inputs(root, plan.id), ...(out === undefined ? [] : [out])])],
   } : { ...built, tools: [], wall: wall(db) })
   recorded(db, plan.id, step.step, step.runs, hash, provider.name, manifest, fired, step.mode, staffing)
   observed(db, fired.limits)

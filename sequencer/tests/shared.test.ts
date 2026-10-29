@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest'
 import { ofKind } from '../../store/events.ts'
-import { amend } from '../../store/lanes.ts'
-import { dropPlan, pipeOf } from '../../store/plans.ts'
+import { amend, lanes } from '../../store/lanes.ts'
+import { dropPlan, pipeOf, planRows } from '../../store/plans.ts'
 import { fingerprint, refused } from '../../store/refusals.ts'
 import { at } from '../../templates/pr-path.ts'
 import { tick } from '../index.ts'
@@ -72,6 +72,9 @@ test('D2 a shared refusal stops its lane and names plans and span', async () => 
   expect(fired?.note).toContain('lane off: plans 2 and 3 refused on src/hello.ts:1')
   expect(pipeOf(w.db, 1).enabled).toBe(0)
   expect(ofKind(w.db, 'pipe').map((e) => [e.actor, e.outcome])).toEqual([['settle', 'escalate']])
+  expect(planRows(w.db).filter((p) => p.pipe_id === 1 && p.state === 'running')).toEqual([])
+  expect(planRows(w.db).find((p) => p.id === 2)?.held_by).toBe('coo')
+  expect(lanes(w.db, '09:00').live).toBe(0)
 })
 
 test('CI state never switches a lane off', () => {

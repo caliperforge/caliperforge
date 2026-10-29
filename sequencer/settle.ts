@@ -7,6 +7,7 @@ import { kindsOf, logged, newestRun, runSince } from '../store/events.ts'
 import { type Db, LOCKED } from '../store/index.ts'
 import type { Taken } from '../store/leases.ts'
 import { busy } from '../store/now.ts'
+import { laneHeld } from '../store/lane-held.ts'
 import { advance, back, end, finish, internal, laneOff, needsCeo, rewind, type PipeRow, type PlanRow, waiting } from '../store/plans.ts'
 import { blipped, peer, refused, sinceSent } from '../store/refusals.ts'
 import { newestVerdict, reviewSince } from '../store/reviewed.ts'
@@ -267,14 +268,18 @@ function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcom
   const why = refused(db, r)
   const cap = streaked(db, root, plan, step)
   if (why !== 'again') stopped(root, plan.id, why)
-  if (why === 'shared' && !outcome.spans.every((s) => CI_ONLY.test(s))) {
-    laneOff(db, plan.pipe_id)
-    outcome.note += `; lane off: plans ${String(plan.id)} and ${String(peer(db, r))} refused on ${outcome.spans.join(', ')}`
-    logged(db, { plan: plan.id, kind: 'pipe', actor: 'settle', outcome: 'escalate', message: outcome.note, pointer: null, run: null })
-  }
+  if (why === 'shared' && !outcome.spans.every((s) => CI_ONLY.test(s))) breaker(db, plan, peer(db, r), outcome)
   // A rewind costs no retry but is recorded like any refusal, so a second identical one waits for a person.
   if (outcome.rewind !== undefined && why === 'again' && cap === null) { rewind(db, plan.id, outcome.rewind); return 'running' }
   return back(db, plan, outcome.to ?? backTo(step), cap !== null || why !== 'again' || fenced(outcome), cap ?? outcome.note)
+}
+
+function breaker(db: Db, plan: PlanRow, other: number | undefined, outcome: Outcome): void {
+  const off = `lane off: plans ${String(plan.id)} and ${String(other)} refused on ${outcome.spans.join(', ')}`
+  laneOff(db, plan.pipe_id)
+  laneHeld(db, plan.pipe_id, off)
+  outcome.note += `; ${off}`
+  logged(db, { plan: plan.id, kind: 'pipe', actor: 'settle', outcome: 'escalate', message: outcome.note, pointer: null, run: null })
 }
 
 /** True when the step's last escalate saw the same diff and ticket; otherwise this one is recorded as the last. */

@@ -58,19 +58,3 @@ Resolve once at the start of the run and reuse it for every spawn below:
 - Otherwise, leave `{AGENT_MODEL}` unresolved; Step 0 asks for it via the selection prompt **after** printing the banner.
 
 Every subsequent spawn instruction below references `{AGENT_MODEL}` — substitute the resolved value when making the actual tool call. Do NOT mix tiers within a single run.
-
-## Conductor
-
-The steps run as five phases, in this order, each from its file under `{SKILL_PATH}`:
-
-1. `phases/context.md`: Steps 0-4.5.
-2. `phases/scaffold.md`: Steps 5-7.
-3. `phases/coverage.md`: Step 8.
-4. `phases/invariants.md`: Step 9. `--no-invariants` skips this phase only.
-5. `phases/campaigns.md`: Steps 10-11.
-
-- Spawn each phase as a fresh agent with the Agent tool, one at a time, each after the one before it returns. Give it only its phase file's path, PROJECT_ROOT, SUITE_DIR and META_DIR, and the invocation's words verbatim: its flags, contract arguments and any order of work it gives. Never pass it this file, another phase file or an earlier summary.
-- Phase agents run on this conversation's model, because they do the parent agent's work. `{AGENT_MODEL}` covers only the sub-agents the steps spawn.
-- Every agent writes its full report to `{META_DIR}/reports/<phase>-<agent>.md` (`fizz_data/reports/<phase>-<agent>.md` under the default META_DIR) and returns a summary of at most 300 words.
-- Read only the summaries the phase agents return, and `fizz_data/context.md` once the context phase returns. Never open a report, a step file or a phase file.
-- When a summary reports a blocker, stop there and report it, as Workflow Rules says. Spawn no later phase.

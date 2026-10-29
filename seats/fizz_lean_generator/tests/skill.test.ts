@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 
@@ -8,7 +8,6 @@ const fizz = readFileSync(join(root, 'seats/fizz_generator/prompt.md'), 'utf8')
 const file = readFileSync(join(skill, 'SKILL.md'), 'utf8')
 const STEP_0 = '## Step 0: Print Banner'
 const TITLE = '\n# Fizz\n\n'
-const PHASES = ['context', 'scaffold', 'coverage', 'invariants', 'campaigns']
 
 function at(heading: string): number {
   const i = fizz.indexOf(`\n${heading}`)
@@ -31,20 +30,16 @@ function stepless(text: string): void {
   expect(copied).toEqual([])
 }
 
-test('D1: the preamble is copied verbatim under fizz_lean', () => {
-  expect(file.startsWith(`---\nname: fizz_lean\n${line(/^description: .*$/m)}\n---\n\n# Fizz lean\n\n${preamble}## Conductor\n`)).toBe(true)
-  expect(file.split(preamble)).toHaveLength(2)
+function copied(text: string): void {
+  expect(text).toBe(`---\nname: fizz_lean\n${line(/^description: .*$/m)}\n---\n\n# Fizz lean\n\n${preamble.trimEnd()}\n`)
+}
+
+test('D1: SKILL.md is the preamble verbatim and nothing after', () => {
+  copied(file)
 })
 
-test('D2: the five phase files are named in order and exist', () => {
-  const named = PHASES.map((name) => file.indexOf(`phases/${name}.md`))
-  expect(named.every((i) => i > -1)).toBe(true)
-  expect(named).toEqual([...named].sort((a, b) => a - b))
-  for (const name of PHASES) expect(existsSync(join(skill, 'phases', `${name}.md`))).toBe(true)
-})
-
-test('D3: reports, context.md and the 300-word cap are named', () => {
-  for (const named of ['fizz_data/reports/<phase>-<agent>.md', 'fizz_data/context.md', '300 words']) expect(file).toContain(named)
+test('D2: a Conductor appended after the preamble fails', () => {
+  expect(() => { copied(`${file}\n## Conductor\n`) }).toThrow()
 })
 
 test('D4: no step heading or step line, and a Step 6 line fails', () => {

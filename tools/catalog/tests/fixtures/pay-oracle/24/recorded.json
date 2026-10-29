@@ -1,0 +1,73 @@
+{
+ "fetch": {
+  "GET https://api.algovoi.co.uk/compliance/attestation": {
+   "status": 200,
+   "headers": {
+    "date": [
+     "Wed, 28 Oct 2026 20:19:20 GMT"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "transfer-encoding": [
+     "chunked"
+    ],
+    "connection": [
+     "close"
+    ],
+    "server": [
+     "cloudflare"
+    ],
+    "nel": [
+     "{\"report_to\":\"cf-nel\",\"success_fraction\":0.0,\"max_age\":604800}"
+    ],
+    "vary": [
+     "Accept-Encoding",
+     "Origin"
+    ],
+    "cache-control": [
+     "public, max-age=300"
+    ],
+    "x-trace-id": [
+     "18b4387a-5272-484c-81e4-fabbc3273077"
+    ],
+    "strict-transport-security": [
+     "max-age=31536000; preload"
+    ],
+    "permissions-policy": [
+     "camera=(), microphone=(), geolocation=(), payment=()"
+    ],
+    "x-content-type-options": [
+     "nosniff"
+    ],
+    "x-frame-options": [
+     "DENY"
+    ],
+    "referrer-policy": [
+     "strict-origin-when-cross-origin"
+    ],
+    "report-to": [
+     "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=Yo1SUNP1jQ1Y%2Fpht35RVkSqPZ7sfceyp4a2mg7GSlD6gAOuwjLdRLhYU%2FvqicSYNPNzj8ejFw7sKrB5fma%2B9OQPOX2iAj6B35F0KTVtJnVMe%2Fnnr64EgNd4Ppm9%2B5KBpPkWwzA%3D%3D\"}]}"
+    ],
+    "cf-cache-status": [
+     "DYNAMIC"
+    ],
+    "server-timing": [
+     "cfCacheStatus;desc=\"DYNAMIC\"",
+     "cfEdge;dur=35,cfOrigin;dur=434"
+    ],
+    "cf-ray": [
+     "a51ca2838dfa8dba-MIA"
+    ],
+    "alt-svc": [
+     "h3=\":443\"; ma=86400"
+    ]
+   },
+   "body": "{\"operator\":{\"name\":\"AlgoVoi\",\"principal\":\"Christopher Hopley\",\"url\":\"https://algovoi.co.uk\",\"compliance_hub\":\"https://algovoi.co.uk/AlgoVoi/compliance.html\",\"docs\":\"https://docs.algovoi.co.uk/compliance\",\"incident_protocol\":\"https://docs.algovoi.co.uk/incident-protocol\"},\"frameworks\":{\"uk_mlrs_2017\":{\"name\":\"UK Money Laundering Regulations 2017\",\"status\":\"voluntary_alignment\",\"active\":true,\"ref\":\"https://www.legislation.gov.uk/uksi/2017/692/contents\"},\"samla_2018_s20_tipping_off\":{\"name\":\"SAMLA 2018 s.20 \u2014 tipping-off offence compliance\",\"status\":\"compliant\",\"active\":true,\"ref\":\"https://www.legislation.gov.uk/ukpga/2018/13/section/20\"},\"uk_gdpr_dpa_2018\":{\"name\":\"UK GDPR / Data Protection Act 2018\",\"status\":\"aligned\",\"active\":true,\"ref\":\"https://www.legislation.gov.uk/ukpga/2018/12\"},\"fca_mlr_sch6a\":{\"name\":\"FCA MLR Schedule 6A registration\",\"status\":\"out_of_scope_per_ps19_22_self_assessment\",\"active\":false,\"note\":\"Formal external legal opinion in preparation\",\"ref\":\"https://www.fca.org.uk/publication/policy/ps19-22.pdf\"},\"hmt_cryptoasset_travel_rule\":{\"name\":\"HMT Cryptoasset Travel Rule\",\"status\":\"not_in_scope_under_current_architecture\",\"active\":false},\"fsma_2023_si_regime\":{\"name\":\"FSMA 2023 Statutory Instrument regime\",\"status\":\"monitoring\",\"active\":false,\"note\":\"Estimated SI in 2027\"},\"hmrc_carf\":{\"name\":\"HMRC CARF (Crypto-Asset Reporting Framework)\",\"status\":\"assessment_in_progress\",\"active\":false},\"ico_data_controller\":{\"name\":\"ICO data-controller registration\",\"status\":\"in_preparation\",\"active\":false},\"cyber_essentials\":{\"name\":\"Cyber Essentials\",\"status\":\"planned_q3_2026\",\"active\":false},\"soc2_type_i\":{\"name\":\"SOC 2 Type I\",\"status\":\"targeted_q2_2027\",\"active\":false},\"soc2_type_ii\":{\"name\":\"SOC 2 Type II\",\"status\":\"targeted_q4_2027\",\"active\":false}},\"active_screening\":{\"sanctions_sources\":[\"OFSI\",\"OFAC_SDN\",\"EU_CONSOLIDATED\"],\"sanctions_enabled\":false,\"sanctions_block_on_hit\":true,\"sanctions_refresh_interval_secs\":86400,\"url_threat_feeds\":[\"Tor exit nodes\",\"SpamHaus DROP/EDROP\",\"URLhaus\",\"ThreatFox\",\"OpenPhish\",\"PhishTank\",\"MaxMind GeoLite2\"],\"url_feed_refresh_interval_mins\":60,\"url_enforcement_points\":[\"signup_ip\",\"checkout_redirect_url\",\"webhook_destination\",\"webhook_delivery_dns_rebinding_guard\"]},\"audit_chain\":{\"in_db_chain\":{\"algorithm\":\"SHA-256\",\"scheme\":\"Per-row canonical-JSON content hash + prev_hash forward link. Chain starts at first INSERT after migrations 095/096/104 ran. Pre-migration rows are explicitly out-of-chain (chain_position NULL).\",\"covers_tables\":[\"audit_log\",\"screening_hits\",\"compliance_events\",\"negotiation_trace_events\"],\"chain_heads\":{\"audit_log\":{\"last_chain_position\":17},\"screening_hits\":{\"last_chain_position\":null},\"compliance_events\":{\"last_chain_position\":null},\"negotiation_trace_events\":{\"last_chain_position\":null}},\"chain_starts\":{\"compliance_events\":{\"started_at\":\"2026-05-06 05:20:50.13614+00\",\"genesis_id\":0,\"last_verified_at\":null,\"last_verified_pos\":null,\"last_verified_ok\":null},\"negotiation_trace_events\":{\"started_at\":\"2026-05-08 09:13:21.887409+00\",\"genesis_id\":0,\"last_verified_at\":null,\"last_verified_pos\":null,\"last_verified_ok\":null},\"screening_hits\":{\"started_at\":\"2026-05-06 05:20:50.13614+00\",\"genesis_id\":0,\"last_verified_at\":null,\"last_verified_pos\":null,\"last_verified_ok\":null}}},\"off_vm_shipment\":{\"status\":\"active\",\"intended_target\":\"S3-compatible storage with Object Lock COMPLIANCE retention\",\"intended_retention_years\":7,\"rationale\":\"FCA / UK MLRs Reg 40(3) prudent 7-year retention\",\"shipped_chains\":{\"audit_log\":{\"last_shipped_position\":17,\"object_lock_until\":\"2033-05-04 18:07:00.095217+00\",\"last_shipped_at\":\"2026-07-30 23:12:38.436718+00\"},\"payment_ledger\":{\"last_shipped_position\":147,\"object_lock_until\":null,\"last_shipped_at\":\"2026-08-15 18:38:22.768011+00\"}},\"last_shipment_at\":\"2026-08-15 18:38:22.768011+00\"},\"selective_disclosure_bundles\":{\"available_for_chains\":[\"audit_log\",\"screening_hits\",\"compliance_events\",\"negotiation_trace_events\"],\"format\":\"JSON envelope: per-row canonical fields + content_hash + prev_hash for selected rows; hash-only chain entries for unselected rows in the window (no event content disclosed); chain_anchor with current_head; off_vm_anchor referencing the Object-Locked manifest; verification_instructions string.\",\"verification\":{\"row_hash\":\"SHA-256 over RFC 8785 canonical JSON of canonical-fields payload\",\"continuity\":\"Walk rows \u222a bridging_rows ordered by chain_position; prev_hash chains forward\",\"anchor\":\"Cross-check chain_anchor.current_head against off-VM Object-Locked manifest\",\"signature\":\"HMAC-SHA256 over RFC 8785 canonical JSON of bundle minus bundle_signature, when key is published\"},\"signing_key_id\":null,\"request_protocol\":\"External auditors receive bundles out-of-band from AlgoVoi's compliance officer in response to a documented disclosure request. Direct admin endpoints are not publicly advertised.\"},\"head\":{\"current\":17,\"by_table\":{\"audit_log\":17,\"screening_hits\":null,\"compliance_events\":null,\"negotiation_trace_events\":null},\"scheme\":\"Monotonic per-row chain_position; verify non-decreasing across pulls.\"}},\"evidence_provider\":{\"identity_reference\":\"did:web:api.algovoi.co.uk\",\"did_document\":\"https://api.algovoi.co.uk/.well-known/did.json\",\"anchor\":{\"in_db_chain_head\":17,\"off_vm\":{\"status\":\"active\",\"manifest_ref\":\"audit_chain.off_vm_shipment\"}},\"verification\":\"Resolve identity_reference to did:web key material; cross-check anchor.in_db_chain_head monotonicity and anchor.off_vm against the Object-Locked manifest. Same substrate as audit_chain.selective_disclosure_bundles.verification.\"},\"kyb_classes\":{\"test_sandbox\":\"simplified_cdd_required_all_payments\",\"live_trial\":\"testnet_only_until_kyc_approval\",\"live_approved\":\"unrestricted\",\"live_other\":\"blocked_403\"},\"risk_tiers\":{\"low\":{\"max_price_multiplier\":2.0},\"medium\":{\"max_price_multiplier\":1.0},\"high\":{\"max_price_multiplier\":0.5},\"restricted\":{\"action\":\"block_all_payments\"}},\"version\":1,\"as_of\":\"2026-10-28T20:19:20.656307+00:00\",\"tipping_off_policy\":\"This endpoint and /compliance/screen never disclose which sanctions list a recipient address matched. SAMLA 2018 s.20 makes such disclosure a criminal offence. Generic verdict + reasons only.\"}"
+  }
+ },
+ "hosts": [
+  "api.algovoi.co.uk"
+ ],
+ "rpc": {}
+}

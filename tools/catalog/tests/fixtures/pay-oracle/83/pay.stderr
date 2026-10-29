@@ -1,0 +1,5 @@
+[1m[31m│[39m[0m [1m2 validation errors[0m
+[1m[31m│[39m[0m [2m- providers/deepsearch/korean-stock-intelligence: description too long (277 chars, max 255)[0m
+[1m[31m│[39m[0m [2m    got: "Real-time Korean stock market intelligence via x402. Returns company fundamental..."[0m
+[1m[31m│[39m[0m [2m- providers/deepsearch/korean-stock-intelligence: use_case too long (269 chars, max 255)[0m
+[1m[31m│[39m[0m [2m    got: "Use for Korean stock research, investment due diligence, portfolio monitoring, a..."[0m

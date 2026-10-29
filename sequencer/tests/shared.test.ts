@@ -95,8 +95,11 @@ test('D7 another sha with a green main since leaves the lane on', async () => {
   amend(w.db, 3, { state: 'done' })
   for (let step = 0; step < 4; step += 1) await tick(w.db, w.root, stub(CARRIED))
   refused(w.db, { plan: 3, step: 4, fingerprint: fingerprint(4, ['src/hello.ts:1']), diff: null, base: 'f'.repeat(40) })
-  const green = watched([], w.root, 2, () => JSON.stringify([{ conclusion: 'success', createdAt: new Date().toISOString() }]))
+  const asked: string[][] = []
+  const green = watched([], w.root, 2, (args) => { asked.push(args); return JSON.stringify([{ conclusion: 'success', createdAt: new Date().toISOString() }]) })
   const fired = (await tick(w.db, w.root, stub(CARRIED, 0, REFUSE), undefined, undefined, green))[0]
+  expect(fired).toMatchObject({ plan: 2, step: 4, outcome: 'refuse' })
+  expect(asked.filter((a) => a.includes('--branch') && a.includes('main'))).toHaveLength(1)
   expect(fired?.note).not.toContain('lane off')
   expect(pipeOf(w.db, 1).enabled).toBe(1)
 })

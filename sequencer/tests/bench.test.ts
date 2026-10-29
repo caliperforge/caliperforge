@@ -31,6 +31,9 @@ const schema = join(import.meta.dirname, '../../schema')
 /** 07:00 in Guatemala, when every lane's window opens. */
 const OPENS = new Date('2026-09-18T13:00:00.000Z')
 
+/** 23:00 in Guatemala, inside the refuzz pipe's window, when a bench plan may score. */
+const NIGHT = new Date('2026-09-19T05:00:00.000Z')
+
 const AT = '2026-09-18T13:00:00.000Z'
 
 function queued(db: Db, template: PlanRow['template'], step = 0): void {
@@ -1249,12 +1252,12 @@ test('D3 D5 a held score fires no generate, and scores on return', async () => {
   staffedIn(root)
   dial(db, 3, AT)
   const fired = stub(1000, 'completed', true)
-  await tick(db, root, fired.provider, OPENS)
+  await tick(db, root, fired.provider, NIGHT)
   heldAtScore(db, root)
   expect(runRows(db).filter((r) => r.seat !== 'director')).toEqual([])
   commit(join(root, 'remotes/caliperforge/fuzz-bench'), 'bench/run_pair.py', writes('.jsonl', PAIRS), 'run pair fixed')
   unhold(db, root, 1, 'coo')
-  await tick(db, root, fired.provider, OPENS)
+  await tick(db, root, fired.provider, NIGHT)
   expect(maybe(root, 1, 'score.json')).not.toBeNull()
   expect(runRows(db).filter((r) => r.seat !== 'director')).toEqual([])
 })

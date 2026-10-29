@@ -1,0 +1,6 @@
+- name: bench_night
+  table: events
+  column: at
+  where: "kind = 'bench.fired' AND strftime('%H:%M', at, 'localtime') >= '06:00' AND strftime('%H:%M', at, 'localtime') < '22:00'"
+  gap: 7d
+  expected: 0

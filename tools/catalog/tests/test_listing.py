@@ -105,7 +105,7 @@ def test_a_relative_listing_dir_is_its_folder_name(monkeypatch: pytest.MonkeyPat
 def test_next_on_a_relative_path_passes_the_name_check(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]):
     net = Recorded.load(ENDPOINTS_ONLY.parent / "endpoints-only.json")
     monkeypatch.chdir(ENDPOINTS_ONLY)
-    assert main(["next", "PAY.md"], net) == 0
+    assert main(["next", "PAY.md", "--pr", "1"], net) == 0
     assert "check: format" not in capsys.readouterr().out
 
 

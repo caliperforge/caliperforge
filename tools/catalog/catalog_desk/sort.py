@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from catalog_desk.brief import render
+from catalog_desk.brief import brief_id, render
 from catalog_desk.checks import next_fix
 from catalog_desk.listing import URL_ONLY, Invalid, Listing, read
 from catalog_desk.net import Net
@@ -32,7 +32,7 @@ def sort(checkout: Path, net: Net) -> list[dict[str, object]]:
             elif oldest != pr:
                 verdict = _close("duplicate", f"of #{oldest}")
             else:
-                verdict = _verdict(_unpacked(checkout, ref, d), net)
+                verdict = _verdict(_unpacked(checkout, ref, d), net, pr, d)
             rows.append({"pr": pr, "listing": d, **verdict})
     return rows
 
@@ -48,20 +48,20 @@ def _heads(checkout: Path) -> list[tuple[int, str, str, list[str]]]:
     return heads
 
 
-def _verdict(listing: Listing | Invalid, net: Net) -> dict[str, object]:
+def _verdict(listing: Listing | Invalid, net: Net, pr: int, d: str) -> dict[str, object]:
     if isinstance(listing, Invalid):
-        if listing.why == URL_ONLY or listing.field == "openapi.content":
-            return {"verdict": "fix", "brief": render(next_fix(listing, net))}
-        return _close("malformed", f"{listing.field}: {listing.why}")
-    url = listing.front["service_url"]
-    if not net.resolve(urlsplit(url).hostname or ""):
-        return _close("dead domain", url)
+        if listing.why != URL_ONLY and listing.field != "openapi.content":
+            return _close("malformed", f"{listing.field}: {listing.why}")
+    else:
+        url = listing.front["service_url"]
+        if not net.resolve(urlsplit(url).hostname or ""):
+            return _close("dead domain", url)
     fix = next_fix(listing, net)
     if fix is None:
         return {"verdict": "pass"}
     if fix.check == "network" and fix.rule.startswith(NOT_SOLANA):
         return _close("not Solana", fix.current)
-    return {"verdict": "fix", "brief": render(fix)}
+    return {"verdict": "fix", "id": brief_id(fix, pr, d), "brief": render(fix, pr, d)}
 
 
 def _close(cause: str, reason: str) -> dict[str, object]:

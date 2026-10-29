@@ -71,11 +71,12 @@ def test_sort_writes_one_verdict_per_head_then_the_counts(tmp_path: Path, capsys
     offer = {"x402Version": 1, "accepts": [{"scheme": "exact", "network": "base", "maxAmountRequired": "10000", "asset": USDC_ON_BASE}]}
     fetches = {**asked.fetches, **devnet.fetches, "GET https://base.example.com/paid": Response(402, {}, json.dumps(offer))}
     net = Recorded(fetches, asked.hosts | devnet.hosts | {"base.example.com"}, {})
-    brief = render(next_fix(read(FIXTURES / "devnet"), net))
+    brief = render(next_fix(read(FIXTURES / "devnet"), net), 2, "skills/devnet")
+    assert brief.splitlines()[0] == "brief: ps-0002-devnet-04"
     assert "rule: devnet only" in brief.splitlines()
     assert _rows(repo, net, capsys) == [
         {"pr": 1, "listing": "skills/paid", "verdict": "pass"},
-        {"pr": 2, "listing": "skills/devnet", "verdict": "fix", "brief": brief},
+        {"pr": 2, "listing": "skills/devnet", "verdict": "fix", "id": "ps-0002-devnet-04", "brief": brief},
         {"pr": 3, "listing": "skills/dead", "verdict": "close", "cause": "dead domain", "reason": "https://dead.example.com"},
         {"pr": 4, "listing": "skills/paid", "verdict": "close", "cause": "duplicate", "reason": "of #1"},
         {"pr": 5, "listing": "skills/broken", "verdict": "close", "cause": "malformed", "reason": "PAY.md: no --- front matter"},
@@ -111,10 +112,11 @@ def test_a_url_only_head_is_a_fix_and_openapi_empty_or_absent_closes(tmp_path: P
     _head(repo, 9, {"PAY.md": pay.replace("openapi:\n  path: openapi.json", "openapi: {}")}, "skills/empty")
     _head(repo, 10, {"PAY.md": pay.replace("openapi:\n  path: openapi.json\n", "")}, "skills/neither")
     net = Recorded({}, set(), {})
-    brief = render(next_fix(Invalid("openapi.path", URL_ONLY), net))
+    brief = render(next_fix(Invalid("openapi.path", URL_ONLY), net), 8, "skills/remote")
+    assert brief.splitlines()[0] == "brief: ps-0008-remote-01"
     assert "rule: openapi.path: url only" in brief
     assert _rows(repo, net, capsys) == [
-        {"pr": 8, "listing": "skills/remote", "verdict": "fix", "brief": brief},
+        {"pr": 8, "listing": "skills/remote", "verdict": "fix", "id": "ps-0008-remote-01", "brief": brief},
         {"pr": 9, "listing": "skills/empty", "verdict": "close", "cause": "malformed", "reason": "openapi.path: missing"},
         {"pr": 10, "listing": "skills/neither", "verdict": "close", "cause": "malformed", "reason": "openapi.path: missing"},
         {"pass": 0, "fix": 1, "close": 2},
@@ -127,10 +129,11 @@ def test_a_broken_inline_head_is_a_fix_and_neither_still_closes(tmp_path: Path, 
     _head(repo, 11, {"PAY.md": pay}, "skills/inline")
     _head(repo, 12, {"PAY.md": pay.split("openapi:")[0] + "---\n"}, "skills/neither")
     net = Recorded({}, set(), {})
-    brief = render(next_fix(read(FIXTURES / "broken-inline-content"), net))
+    brief = render(next_fix(read(FIXTURES / "broken-inline-content"), net), 11, "skills/inline")
+    assert brief.splitlines()[0] == "brief: ps-0011-inline-01"
     assert "rule: openapi.content: " in brief
     assert _rows(repo, net, capsys) == [
-        {"pr": 11, "listing": "skills/inline", "verdict": "fix", "brief": brief},
+        {"pr": 11, "listing": "skills/inline", "verdict": "fix", "id": "ps-0011-inline-01", "brief": brief},
         {"pr": 12, "listing": "skills/neither", "verdict": "close", "cause": "malformed", "reason": "openapi.path: missing"},
         {"pass": 0, "fix": 1, "close": 1},
     ]

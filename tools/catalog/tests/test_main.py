@@ -18,18 +18,18 @@ def test_no_command_exits_2():
 def test_d6_next_prints_exactly_one_brief(name: str, capsys: pytest.CaptureFixture[str]):
     recorded = FIXTURES / f"{name}.json"
     net = Recorded.load(recorded) if recorded.exists() else Recorded({}, set(), {})
-    assert main(["next", str(FIXTURES / name / "PAY.md")], net) == 0
+    assert main(["next", str(FIXTURES / name / "PAY.md"), "--pr", "1"], net) == 0
     assert capsys.readouterr().out.count("check: ") == 1
 
 
 def test_next_probes_an_endpoints_only_listing(capsys: pytest.CaptureFixture[str]):
     net = Recorded.load(FIXTURES / "endpoints-only.json")
-    assert main(["next", str(FIXTURES / "endpoints-only" / "PAY.md")], net) == 0
+    assert main(["next", str(FIXTURES / "endpoints-only" / "PAY.md"), "--pr", "1"], net) == 0
     out = capsys.readouterr().out
-    assert out.splitlines()[:3] == ["check: offer", "rule: HTTP 401", "current: GET /v1/invoices"]
+    assert out.splitlines()[2:5] == ["check: offer", "rule: HTTP 401", "current: GET /v1/invoices"]
     assert "openapi.path" not in out
 
 
 def test_next_reads_the_summary_of_inline_content(capsys: pytest.CaptureFixture[str]):
-    assert main(["next", str(FIXTURES / "inline-content" / "PAY.md")], Recorded({}, set(), {})) == 0
-    assert capsys.readouterr().out.splitlines()[:2] == ["check: format", "rule: GET /paid summary is 10 characters"]
+    assert main(["next", str(FIXTURES / "inline-content" / "PAY.md"), "--pr", "1"], Recorded({}, set(), {})) == 0
+    assert capsys.readouterr().out.splitlines()[2:4] == ["check: format", "rule: GET /paid summary is 10 characters"]

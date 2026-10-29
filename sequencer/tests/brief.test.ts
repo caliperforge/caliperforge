@@ -10,8 +10,8 @@ import { recorded } from '../../store/files.ts'
 import { holdOf, release, retried, returnToLane } from '../../store/holds.ts'
 import { get, priority } from '../../store/lanes.ts'
 import { advance, briefed, dropPlan, end, needsCeo, requeue, retry, titles } from '../../store/plans.ts'
-import { WHY } from '../../store/refusals.ts'
-import { claimed, estimate, files, pointed, references, shape, SHARED, split, STANDING, TEMPLATE, unclear, writable, type Refused } from '../brief.ts'
+import { refusalRows, WHY } from '../../store/refusals.ts'
+import { claimed, estimate, files, pointed, references, retitled, shape, SHARED, split, STANDING, TEMPLATE, unclear, writable, type Refused } from '../brief.ts'
 import { trimmed } from '../trim.ts'
 import { tick } from '../index.ts'
 import { unhold } from '../hold.ts'
@@ -270,6 +270,7 @@ test('D1 D2 an outside brief may carry a conventional title', () => {
   expect(shape(feat, drifts, repo, true)).toBeNull()
   expect(shape(feat, drifts, repo)).toMatchObject({ span: '# <title>' })
   expect(shape(brief.replace('# A seat', '# Some seat'), ask, repo, true)).toMatchObject({ span: '# <title>' })
+  expect(retitled(feat, drifts, true)).toBe(feat)
 })
 
 test('a wrong title, dropped line or misordered part is refused', () => {
@@ -473,6 +474,28 @@ async function overran(reply = (b: string): string => b): Promise<World> {
   await tick(w.db, w.root, stub(CARRIED))
   return w
 }
+
+/** A world whose step 1 reply was the stub's brief, edited by `edit`, under another title. */
+async function misnamed(edit = (b: string): string => b): Promise<{ w: World; fired: unknown }> {
+  const w = mine()
+  await tick(w.db, w.root, stub(CARRIED))
+  const writer: Provider = { ...stub(CARRIED), fire: (p) =>
+    stub(CARRIED, 0, undefined, undefined, edit(briefFor(p.prompt, p.cwd).replace('# let an internal plan run', '# Some other title'))).fire(p) }
+  return { w, fired: (await tick(w.db, w.root, writer))[0] }
+}
+
+test('D1: an internal brief with only a wrong title is retitled', async () => {
+  const { w, fired } = await misnamed()
+  expect(fired).toMatchObject({ step: 1, outcome: 'pass' })
+  expect(briefOf(w)).toBe(plain(w))
+  expect(refusalRows(w.db, ID)).toEqual([])
+})
+
+test('D2: a wrong title with another fault is refused on that', async () => {
+  const { w, fired } = await misnamed((b) => b.replace('- D2 a call with no name is refused\n', ''))
+  expect(fired).toMatchObject({ step: 1, outcome: 'refuse', spans: ['## Cases'] })
+  expect(maybe(w.root, ID, 'issue.md')).toBeNull()
+})
 
 test('D1: a length-only refusal refires as a bare trim', async () => {
   const w = await overran()

@@ -2,6 +2,7 @@ import { expect, test } from 'vitest'
 import { gates } from '../../store/approvals.ts'
 import { pushedRow } from '../../store/deliverables.ts'
 import { ofKind } from '../../store/events.ts'
+import { record } from '../../store/files.ts'
 import { amend, lanes } from '../../store/lanes.ts'
 import { dropPlan, pipeOf, planRows } from '../../store/plans.ts'
 import { fingerprint, refused } from '../../store/refusals.ts'
@@ -70,12 +71,16 @@ test('D2 a shared refusal stops its lane and names plans and span', async () => 
   amend(w.db, 3, { state: 'done' })
   refused(w.db, { plan: 3, step: 4, fingerprint: fingerprint(4, ['src/hello.ts:1']), diff: null })
   for (let step = 0; step < 4; step += 1) await tick(w.db, w.root, stub(CARRIED))
-  const fired = (await tick(w.db, w.root, stub(CARRIED, 0, REFUSE)))[0]
-  expect(fired?.note).toContain('lane off: plans 2 and 3 refused on src/hello.ts:1')
+  internalPlan(w.db, w.root, 4, 'a later plan', 36)
+  amend(w.db, 4, { state: 'running', step: 2 })
+  record(w.db, 4, [{ path: 'src/hello.ts', is_new: false }])
+  const fired = await tick(w.db, w.root, stub(CARRIED, 0, REFUSE))
+  expect(fired.map((f) => f.plan)).toEqual([2])
+  expect(fired[0]?.note).toContain('lane off: plans 2 and 3 refused on src/hello.ts:1')
   expect(pipeOf(w.db, 1).enabled).toBe(0)
   expect(ofKind(w.db, 'pipe').map((e) => [e.actor, e.outcome])).toEqual([['settle', 'escalate']])
-  expect(planRows(w.db).filter((p) => p.pipe_id === 1 && p.state === 'running')).toEqual([])
-  expect(planRows(w.db).find((p) => p.id === 2)?.held_by).toBe('coo')
+  expect(planRows(w.db).find((p) => p.id === 4)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'coo',
+    held_why: expect.stringMatching(/^lane off: plans 2 and 3 refused on src\/hello\.ts:1/) as unknown })
   expect(lanes(w.db, '09:00').live).toBe(0)
 })
 

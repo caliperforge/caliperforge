@@ -1,0 +1,26 @@
+[1m[33m│[39m[0m [1m5 validation warnings[0m
+[1m[33m│[39m[0m [2m- providers/algovoi/agent-trust-bench: GET /discovery/resources: operation summary should start with an action verb[0m
+[1m[33m│[39m[0m [2m    got: "Bazaar-format resource catalog"[0m
+[1m[33m│[39m[0m [2m    start with a concrete verb such as `Search`, `Create`, `Fetch`, or `Generate`[0m
+[1m[33m│[39m[0m [2m- providers/algovoi/agent-trust-bench: GET /freebie: operation summary should start with an action verb[0m
+[1m[33m│[39m[0m [2m    got: "Always-free control endpoint (no payment required)"[0m
+[1m[33m│[39m[0m [2m    start with a concrete verb such as `Search`, `Create`, `Fetch`, or `Generate`[0m
+[1m[33m│[39m[0m [2m- providers/algovoi/agent-trust-bench: GET /freebie: operation summary contains marketing language `free`[0m
+[1m[33m│[39m[0m [2m    got: "Always-free control endpoint (no payment required)"[0m
+[1m[33m│[39m[0m [2m    describe the paid action plainly without superlatives or cost claims[0m
+[1m[33m│[39m[0m [2m- providers/algovoi/agent-trust-bench: GET /stats.json: operation summary should start with an action verb[0m
+[1m[33m│[39m[0m [2m    got: "Aggregate bench statistics (JSON)"[0m
+[1m[33m│[39m[0m [2m    start with a concrete verb such as `Search`, `Create`, `Fetch`, or `Generate`[0m
+[1m[33m│[39m[0m [2m- providers/algovoi/agent-trust-bench: GET /{profile_id}: operation summary should start with an action verb[0m
+[1m[33m│[39m[0m [2m    got: "Request a bench profile (returns 402 challenge or 200 content)"[0m
+[1m[33m│[39m[0m [2m    start with a concrete verb such as `Search`, `Create`, `Fetch`, or `Generate`[0m
+[1m[31m│[39m[0m [1m3 validation errors[0m
+[1m[31m│[39m[0m [2m- providers/algovoi/agent-trust-bench: GET /.well-known/x402.json: operation summary too short (23 chars, min 24)[0m
+[1m[31m│[39m[0m [2m    got: "x402 discovery manifest"[0m
+[1m[31m│[39m[0m [2m    write a concrete sentence, verb-first, naming the domain object — this becomes the `reason:` line on the user's biometric payment prompt[0m
+[1m[31m│[39m[0m [2m- providers/algovoi/agent-trust-bench: GET /health: operation summary too short (12 chars, min 24)[0m
+[1m[31m│[39m[0m [2m    got: "Health check"[0m
+[1m[31m│[39m[0m [2m    write a concrete sentence, verb-first, naming the domain object — this becomes the `reason:` line on the user's biometric payment prompt[0m
+[1m[31m│[39m[0m [2m- providers/algovoi/agent-trust-bench: GET /openapi.json: operation summary too short (19 chars, min 24)[0m
+[1m[31m│[39m[0m [2m    got: "This OpenAPI schema"[0m
+[1m[31m│[39m[0m [2m    write a concrete sentence, verb-first, naming the domain object — this becomes the `reason:` line on the user's biometric payment prompt[0m

@@ -1,0 +1,4 @@
+{
+ "verdict": "fix",
+ "brief": "check: offer\nrule: HTTP 401\ncurrent: POST /api/x402/invoice\nreplacement: POST /api/x402/invoice answering 402 with an offer"
+}

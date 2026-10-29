@@ -2,20 +2,23 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
+import { fresh } from '../../checks/sqlite.ts'
 import { gates } from '../../store/approvals.ts'
 import { pushedRow } from '../../store/deliverables.ts'
 import { addRule, migrate, open } from '../../store/index.ts'
+import { dial, hours } from '../../store/lanes.ts'
 import { addPart } from '../../store/parts.ts'
 import type { Provider } from '../../providers/kind.ts'
-import { eventsOf, runRows } from '../../store/events.ts'
-import { addPipe, addPlan, briefed, dropPlan, end, planById, planRows, putPlan, requeue, type PlanRow } from '../../store/plans.ts'
+import { eventsOf, logged, runRows } from '../../store/events.ts'
+import { addPipe, addPlan, briefed, dropPipes, dropPlan, end, pipeNamed, planById, planRows, putPlan, requeue, type PlanRow } from '../../store/plans.ts'
 import { afterOf, allTickets, recordListing } from '../../store/tickets.ts'
 import { steps as comms, draft } from '../../templates/comms.ts'
 import { at, steps } from '../../templates/pr-path.ts'
 import { drift } from '../drift.ts'
 import { released } from '../fixer.ts'
 import { tick } from '../index.ts'
-import { mapOf, measure } from '../steps.ts'
+import { route } from '../next.ts'
+import { blocked, mapOf, measure } from '../steps.ts'
 import { maybe, put } from '../workspace.ts'
 import { REGISTRY } from './drifting.ts'
 import { plan as planOf, stub, world, type World } from './world.ts'
@@ -182,4 +185,70 @@ test('a pr_path plan steps as templates/pr-path.ts does', () => {
     for (const lang of [null, 'kotlin']) expect(mapOf('pr_path').at(step, lang)).toEqual(at(step, lang))
   }
   expect(mapOf('pr_path').last(8)).toBe(true)
+})
+
+/** 14:00, 23:00 and 21:30 in Guatemala. */
+const DAY = new Date('2026-09-18T20:00:00.000Z')
+const NIGHT = new Date('2026-09-19T05:00:00.000Z')
+const DUSK = new Date('2026-09-19T03:30:00.000Z')
+
+function benched(step: number, template: PlanRow['template'] = 'bench') {
+  const db = fresh(join(import.meta.dirname, '../../schema'))
+  dial(db, 3, '2026-09-18T13:00:00.000Z')
+  putPlan(db, { id: 1, pipe_id: Number(pipeNamed(db, 'bench')?.id), target_id: null, template, state: 'queued', queued_at: '2026-09-18T13:00:00.000Z', step, retries: 0,
+    ...(template === 'pr_path' ? { lane: 'machine' as const, seat: 'typescript_specialist', origin: url(1) } : {}) })
+  return db
+}
+
+const scratchRoot = () => mkdtempSync(join(tmpdir(), 'cf-night-'))
+
+test('D1 a bench plan at score or null_check waits for night', () => {
+  for (const step of [2, 3]) {
+    const db = benched(step)
+    expect(blocked(db, planById(db, 1), DAY)).toBe('bench_night')
+  }
+})
+
+test('D2 at 23:00 score fires and logs one bench.fired', async () => {
+  const db = benched(2)
+  expect(route(db, planById(db, 1), NIGHT)).toEqual({ fire: mapOf('bench').at(2) })
+  await tick(db, scratchRoot(), stub(''), NIGHT)
+  expect(eventsOf(db, 1, 'bench.fired')).toMatchObject([{ actor: 'score', outcome: 'pass', message: 'score' }])
+})
+
+test('D3 checkout and generate fire at 14:00, logging none', async () => {
+  for (const step of [0, 1]) {
+    const db = benched(step)
+    expect(route(db, planById(db, 1), DAY)).toEqual({ fire: mapOf('bench').at(step) })
+  }
+  const db = benched(1)
+  await tick(db, scratchRoot(), stub(''), DAY)
+  expect(eventsOf(db, 1, 'generate')).toHaveLength(1)
+  expect(eventsOf(db, 1, 'bench.fired')).toEqual([])
+})
+
+test('D4 the refuzz row moves the gate; without it, it is open', () => {
+  const db = benched(2)
+  expect(blocked(db, planById(db, 1), DUSK)).toBe('bench_night')
+  hours(db, Number(pipeNamed(db, 'refuzz')?.id), '21:00', '05:00')
+  expect(route(db, planById(db, 1), DUSK)).toEqual({ fire: mapOf('bench').at(2) })
+  dropPipes(db, ['refuzz'])
+  expect(route(db, planById(db, 1), DAY)).toEqual({ fire: mapOf('bench').at(2) })
+})
+
+test('D5 a pr_path plan on the bench pipe is never bench_night', () => {
+  const db = benched(0, 'pr_path')
+  expect(blocked(db, planById(db, 1), DAY)).toBeNull()
+})
+
+test('D6 bench_night reports a bench.fired at 14:00, not 23:00', () => {
+  const db = benched(2)
+  const night = REGISTRY.filter((e) => e.name === 'bench_night')
+  const local = (hour: number) => new Date(2026, 8, 18, hour).toISOString().replace('T', ' ').slice(0, 19)
+  const fired = { plan: 1, kind: 'bench.fired', actor: 'score', outcome: 'pass' as const, message: 'score', pointer: null, run: null }
+  const now = new Date(2026, 8, 19, 12)
+  logged(db, fired, local(23))
+  expect(drift(db, night, now)).toEqual([])
+  logged(db, fired, local(14))
+  expect(drift(db, night, now)).toMatchObject([{ name: 'bench_night', state: 'seen' }])
 })

@@ -7,9 +7,8 @@ import { building, filesOf, recorded, sharing, strays as recordStrays } from '..
 import { eventsOf } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { partsOf } from '../store/parts.ts'
-import { held as leased } from '../store/leases.ts'
 import { holder, waitsFor } from '../store/slot.ts'
-import { allPlans, builderRan, held, internal, needsCeo, newestOfOrigin, originIssue, originRef, waiting, type PlanRow, type Wait } from '../store/plans.ts'
+import { builderRan, held, internal, needsCeo, newestOfOrigin, originIssue, originRef, waiting, type PlanRow, type Wait } from '../store/plans.ts'
 import { setTargetState, targetRef } from '../store/targets.ts'
 import { afters } from '../store/tickets.ts'
 import { ideas, log, reading, steps as account } from '../templates/account.ts'
@@ -30,6 +29,7 @@ import { hold } from './hold.ts'
 import { publish } from './site.ts'
 import { landed } from './landed.ts'
 import { unlanded } from './unlanded.ts'
+import { benchWait } from './night.ts'
 
 interface StepMap {
   steps: Step[]
@@ -66,27 +66,19 @@ export function mapOf(template: PlanRow['template']): StepMap {
  * What the tick says when it passes a plan over, as a reason the store checks rather than a
  * string a caller formats. `WAITING` carries the words; a target that names itself gets them from `parked`.
  */
-export function blocked(db: Db, plan: PlanRow): Wait | null {
+export function blocked(db: Db, plan: PlanRow, now: Date = new Date()): Wait | null {
   const step = mapOf(plan.template).at(plan.step)
   if (step.fires === 'ceo') return internal(plan) || approvedPlan(db, plan) ? null : 'ceo_batch'
   if (step.name === 'ruling') return internal(plan) || approved(db, plan) || up(db, plan) ? null : 'target_approval'
   if (step.name === 'ready') return proven(db, plan) && waitsFor(db, plan) === null ? null : 'ready_proof'
   if (target(db, plan)?.state === 'parked') return 'target_parked'
-  if (plan.template === 'bench' && step.name === 'score' && scoring(db, plan)) return 'bench_score_busy'
-  return overlapping(db, plan) === null ? null : 'file_overlap'
+  return benchWait(db, plan, step, now) ?? (overlapping(db, plan) === null ? null : 'file_overlap')
 }
 
 /** The pull request step 8 or `cf adopt` stamped is still open: the target was approved when it went up. */
 function up(db: Db, plan: PlanRow): boolean {
   const url = opened(db, plan.id)
   return url !== null && /\/pull\/\d+$/.test(url) && polled(db)({ evidence: url })
-}
-
-/** Another open bench plan at this step is leased by a live tick: scores share the host, so one runs at a time. */
-function scoring(db: Db, plan: PlanRow): boolean {
-  const leases = new Set(leased(db).map((l) => l.plan))
-  return allPlans(db).some((p) => p.id !== plan.id && p.template === 'bench' && p.step === plan.step
-    && (p.state === 'queued' || p.state === 'running') && leases.has(p.id))
 }
 
 /**

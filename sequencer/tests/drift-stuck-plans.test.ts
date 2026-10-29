@@ -132,6 +132,16 @@ test('stuckScoreBusy', () => {
   expect(stalled(d, [d.prepare('SELECT min(id) FROM pipes').pluck().get() as number])).toEqual([])
 })
 
+test('stuckNight', () => {
+  const { d, root } = stalling()
+  d.exec("UPDATE plans SET template = 'bench', state = 'queued', step = 2, wait_reason = 'bench_night' WHERE id = 1")
+  for (const minutes of [0, 30, 61, 90, 120]) expect(stuck(d, root, STUCK, at(minutes))).toEqual([])
+  expect(d.prepare('SELECT state FROM plans WHERE id = 1').get()).toEqual({ state: 'queued' })
+  expect(maybe(root, 1, 'refusal.md')).toBeNull()
+  expect(ofKind(d, 'stuck')).toEqual([])
+  expect(stalled(d, [d.prepare('SELECT min(id) FROM pipes').pluck().get() as number])).toEqual([])
+})
+
 test('stuckOffline', () => {
   const { d, root } = stalling()
   logged(d, { plan: 1, kind: 'gather', actor: 'researcher', outcome: 'pass', message: `step 1 gather: ${HELD}`, pointer: null, run: null })

@@ -11,6 +11,7 @@ import { mapOf } from '../../../sequencer/steps.ts'
 import { git, maybe, put, srcDir } from '../../../sequencer/workspace.ts'
 import { runRows } from '../../../store/events.ts'
 import { pipeNamed, planById, putPlan } from '../../../store/plans.ts'
+import { generated as generatedRuns } from '../../../store/runs.ts'
 import { CEILING, generate } from '../../../templates/bench.ts'
 
 const root = join(import.meta.dirname, '../../..')
@@ -115,6 +116,11 @@ test('D1: lean fires each phase in order, one run each', async () => {
   expect(paths).toHaveLength(5)
   expect(new Set(paths).size).toBe(5)
   for (const path of paths) expect(path).toMatch(/run-\d+\.transcript\.jsonl$/)
+})
+
+test('D1: each lean run records its phase, fizz records none', async () => {
+  expect(generatedRuns((await generated('fizz_lean')).db, 1).map((r) => r.phase)).toEqual(PHASES)
+  expect(generatedRuns((await generated('fizz')).db, 1).map((r) => r.phase)).toEqual([null])
 })
 
 test('D2: the scaffold issue names the context handoff', async () => {

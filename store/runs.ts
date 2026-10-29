@@ -10,12 +10,12 @@ export function runTokens(db: Db, plan: number): RunTokens[] {
 }
 
 export interface Generated {
-  id: number; transcript_path: string; session: string | null
+  id: number; transcript_path: string; session: string | null; phase: string | null
   input_tokens: number; cache_write_tokens: number; cache_read_tokens: number; output_tokens: number
 }
 
 export function generated(db: Db, plan: number): Generated[] {
-  return db.prepare(`SELECT id, transcript_path, session, input_tokens, coalesce(cache_write_tokens, 0) AS cache_write_tokens, cache_read_tokens, output_tokens
+  return db.prepare(`SELECT id, transcript_path, session, phase, input_tokens, coalesce(cache_write_tokens, 0) AS cache_write_tokens, cache_read_tokens, output_tokens
     FROM runs WHERE plan = ? AND seat IN ('fizz_generator', 'fizz_lean_generator') ORDER BY id`).all(plan) as Generated[]
 }
 

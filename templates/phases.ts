@@ -37,7 +37,7 @@ export function firing({ db, root, plan, step, provider, name, dir, tmp, granted
     const fired = await provider.fire({ ...built, refuse: (path) => real(resolve(dir, path)) === real(ATTEMPTS) ? null : built.refuse(path), wall: ceiling - sum.tokens,
       cost_wall: { ...walls, usd: walls.usd - sum.usd }, env: { ...TIMEOUTS, TMPDIR: tmp }, reads: [...granted, real(ATTEMPTS)], ...(['fizz_generator', 'fizz_lean_generator'].includes(name) ? { idle: SETUP } : {}) })
     const run = runLogged(db, { plan: plan.id, step: step.step, seat: name, rule_hash: hash, provider: provider.name, model: manifest.model,
-      effort: manifest.effort, exit: fired.exit, fired, staffed: name })
+      effort: manifest.effort, exit: fired.exit, fired, staffed: name, phase })
     const transcript = byRun(db, run, fired.transcript_path)
     observed(db, fired.limits)
     return added(sum, fired, transcript, phase === undefined ? name : `${name} ${phase}`, ceiling)

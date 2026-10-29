@@ -4,10 +4,11 @@ import { join, resolve } from 'node:path'
 import { claudeAgentSdk } from '../providers/claude-agent-sdk/index.ts'
 import { self } from '../rails/tight/index.ts'
 import { fire } from '../runner/index.ts'
+import { relabel } from '../sequencer/priority.ts'
 import { reviewed } from '../sequencer/ready.ts'
 import { liveTree } from '../sequencer/workspace.ts'
 import { dump, migrate, open as openDb, type Db } from '../store/index.ts'
-import { dial, hhmm, lanes, priority as setPriority, record, Reading, width, windows } from '../store/lanes.ts'
+import { dial, hhmm, lanes, record, Reading, width, windows } from '../store/lanes.ts'
 import { refusedPush } from '../store/approvals.ts'
 import { underpowered } from '../store/bench.ts'
 import { directorDays } from '../store/decisions.ts'
@@ -111,7 +112,7 @@ function fires(cf: Command, { root, db, out }: Cli): void {
     .action((id: string, n: string, options: { by: string; why: string }) => {
       const by = holderOf(options.by)
       const handle = db()
-      setPriority(handle, Number(id), Number(n), { actor: by, why: options.why })
+      relabel(handle, Number(id), Number(n), { actor: by, why: options.why })
       out(`plan ${id} priority P${n}\n`)
     })
 }

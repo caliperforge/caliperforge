@@ -116,8 +116,12 @@ export function set(db: Db, key: string, value: string, who: 'ceo' | 'pr', at: s
   if (done.changes === 0) throw new Error(`no settings row "${key}"; a new key is born in a migration`)
 }
 
-export function priority(db: Db, plan: number, n: number, hand?: { actor: string; why: string }): void {
+export function ranked(n: number): void {
   if (!Number.isInteger(n) || n < 0 || n > 9) throw new Error('cf priority takes P0 to P9')
+}
+
+export function priority(db: Db, plan: number, n: number, hand?: { actor: string; why: string }): void {
+  ranked(n)
   const old = planById(db, plan).priority
   db.prepare('UPDATE plans SET priority = ? WHERE id = ?').run(n, plan)
   if (hand === undefined) return

@@ -44,7 +44,8 @@ def _heads(checkout: Path) -> list[tuple[int, str, str, list[str]]]:
         changed = _lines(checkout, "diff", "--name-only", f"HEAD...{ref}")
         listed = [p.removesuffix("/PAY.md") for p in _lines(checkout, "ls-tree", "-r", "--name-only", ref) if p.endswith("/PAY.md")]
         dirs = [d for d in listed if any(f.startswith(f"{d}/") for f in changed)]
-        heads.append((pr, ref, _lines(checkout, "log", "-1", "--format=%an", ref)[0], dirs))
+        authors = _lines(checkout, "log", "--reverse", "--format=%an", f"HEAD..{ref}")
+        heads.append((pr, ref, authors[0] if authors else "", dirs))
     return heads
 
 

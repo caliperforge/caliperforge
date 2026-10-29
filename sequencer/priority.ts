@@ -1,8 +1,19 @@
-import type { Read } from '../cli/gh.ts'
+import { gh, run, type Read, type Run } from '../cli/gh.ts'
 import { issue, priorityOf } from '../cli/plan.ts'
 import type { Db } from '../store/index.ts'
-import { priority, templatePriority } from '../store/lanes.ts'
-import { allPlans, originRef, type PlanRow } from '../store/plans.ts'
+import { priority, ranked, templatePriority } from '../store/lanes.ts'
+import { allPlans, originRef, planById, type PlanRow } from '../store/plans.ts'
+
+export function relabel(db: Db, id: number, n: number, hand: { actor: string; why: string }, read: Read = gh, exec: Run = run): void {
+  const ref = originRef(planById(db, id))
+  ranked(n)
+  if (ref !== null) {
+    const label = `P${String(n)}`
+    const others = issue(ref.repo, ref.no, read).labels.filter((l) => priorityOf([l]) !== null && l.name !== label)
+    exec(['issue', 'edit', String(ref.no), '--repo', ref.repo, '--add-label', label, ...others.flatMap((l) => ['--remove-label', l.name])])
+  }
+  priority(db, id, n, hand)
+}
 
 /**
  * The `P<n>` label on the issue is the plan's priority, re-read every tick: relabel the ticket and

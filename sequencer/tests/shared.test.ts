@@ -1,4 +1,6 @@
 import { expect, test } from 'vitest'
+import { gates } from '../../store/approvals.ts'
+import { pushedRow } from '../../store/deliverables.ts'
 import { ofKind } from '../../store/events.ts'
 import { amend } from '../../store/lanes.ts'
 import { dropPlan, pipeOf } from '../../store/plans.ts'
@@ -72,6 +74,22 @@ test('D2 a shared refusal stops its lane and names plans and span', async () => 
   expect(fired?.note).toContain('lane off: plans 2 and 3 refused on src/hello.ts:1')
   expect(pipeOf(w.db, 1).enabled).toBe(0)
   expect(ofKind(w.db, 'pipe').map((e) => [e.actor, e.outcome])).toEqual([['settle', 'escalate']])
+})
+
+test('D1 a refusal from a plan that landed leaves the lane on', async () => {
+  const w = world()
+  dropPlan(w.db, 1)
+  ours(w.root)
+  internalPlan(w.db, w.root, 2)
+  internalPlan(w.db, w.root, 3, 'an earlier plan', 35)
+  amend(w.db, 3, { state: 'done' })
+  refused(w.db, { plan: 3, step: 4, fingerprint: fingerprint(4, ['src/hello.ts:1']), diff: null })
+  for (let step = 0; step < 4; step += 1) await tick(w.db, w.root, stub(CARRIED))
+  pushedRow(w.db, { plan: 3, step: 6, seat: 'typescript_specialist', diff_digest: 'd'.repeat(64),
+    evidence: 'https://github.com/caliperforge/caliperforge/pull/1' }, gates(w.db, 3, 'd'.repeat(64)))
+  const fired = (await tick(w.db, w.root, stub(CARRIED, 0, REFUSE)))[0]
+  expect(fired?.note).not.toContain('lane off')
+  expect(pipeOf(w.db, 1).enabled).toBe(1)
 })
 
 test('CI state never switches a lane off', () => {

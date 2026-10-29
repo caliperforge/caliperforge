@@ -9,7 +9,7 @@ import { afresh } from './workspace.ts'
 export function widen(db: Db, root: string, plan: PlanRow, why: string): boolean {
   const pipe = pipeOf(db, plan.pipe_id)
   const n = pipe.max_concurrent
-  if (n >= 8) return false
+  if (n >= 8 || plan.wait_reason === 'lane_over_cap') return false
   afresh(root, plan.id, db.transaction(() => {
     width(db, pipe.id, n + 1)
     decided(db, { plan: plan.id, step: plan.step, wait_reason: 'blocked_on_ceo', verb: 'widen', why: why.slice(0, 200),

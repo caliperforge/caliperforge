@@ -3,7 +3,7 @@ import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { approve as approvePlan } from '../../cli/batch.ts'
-import { decide, digestOf, headDigest } from '../../store/approvals.ts'
+import { decide, digestOf, headDigest, signersOf } from '../../store/approvals.ts'
 import { eventsOf } from '../../store/events.ts'
 import { advance } from '../../store/plans.ts'
 import { approve, refuse, waiting } from '../card.ts'
@@ -43,9 +43,6 @@ function upstream(w: World, name: string): string {
   git(['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', `main moves on ${name}`])
   return git(['rev-parse', '--short', 'HEAD'])
 }
-
-const rows = (w: World, kind: string): unknown[] =>
-  w.db.prepare('SELECT * FROM approvals WHERE subject_kind = ? ORDER BY id').all(kind)
 
 test('D1 outside push: card written, no wire, held on step 8', async () => {
   const w = await atPush()
@@ -91,13 +88,13 @@ test('D2 an approved card sends and opens beside one step-7 row', async () => {
   const w = await atPush()
   const sent: string[] = []
   const wire = watched(sent, w.root, 1)
-  const signed = rows(w, 'plan')
+  const signed = signersOf(w.db, 'plan')
   push(w.db, w.root, plan(w.db, 1), wire)
   approve(w.db, w.root, 1, 'ceo')
   expect(push(w.db, w.root, plan(w.db, 1), wire)).toMatchObject({ outcome: 'pass', spans: [], note: `pushed widget-12-a1 as ${PR}` })
   expect(sent).toEqual(['send src widget-12-a1', 'unrehearse caliperforge/widget widget-12-a1-next', 'open acme/widget caliperforge:widget-12-a1'])
-  expect(rows(w, 'publish')).toMatchObject([{ who: 'ceo', decision: 'approved', subject_digest: digestOf(get(w.root, 1, 'maintainer.md')) }])
-  expect(rows(w, 'plan')).toEqual(signed)
+  expect(signersOf(w.db, 'publish')).toMatchObject([{ who: 'ceo', decision: 'approved', subject_digest: digestOf(get(w.root, 1, 'maintainer.md')) }])
+  expect(signersOf(w.db, 'plan')).toEqual(signed)
   expect(signed).toHaveLength(1)
   expect(eventsOf(w.db, 1, 'card')).toMatchObject([{ actor: 'ceo', outcome: 'pass' }])
 })
@@ -151,7 +148,7 @@ test('D6 approve or refuse with no card throws, writes no row', () => {
   const w = world()
   expect(() => approve(w.db, w.root, 1, 'ceo')).toThrow('plan 1 has no card')
   expect(() => refuse(w.db, w.root, 1, 'not_yet', 'ceo')).toThrow('plan 1 has no card')
-  expect(rows(w, 'publish')).toEqual([])
+  expect(signersOf(w.db, 'publish')).toEqual([])
   expect(eventsOf(w.db, 1, 'card')).toEqual([])
 })
 

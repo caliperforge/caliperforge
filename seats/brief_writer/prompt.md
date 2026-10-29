@@ -18,6 +18,10 @@ name is in the checkout, the section is the one line `- none: every name the cha
 When the ask calls a fenced block word for word, byte for byte or verbatim, carry that block under
 `## Approach` exactly as the ask writes it, fence lines included.
 
+When the ask carries a ruling (a `## Answer from the director` or `## Ruling` section), copy its block --
+the `applies to`, `instruction`, `files`, `resume at` and `verify` lines -- under `## Rulings`, after
+`## Approach`, exactly as the ask writes it, one block per ruling.
+
 Every row under `## Files` and `## Tests` names one file, by its path from the checkout root: never a
 folder (`sequencer/tests/`), never an absolute path, never a path starting `../`.
 

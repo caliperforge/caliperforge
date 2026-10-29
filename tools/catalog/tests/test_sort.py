@@ -105,6 +105,23 @@ def test_sort_closes_by_listing_path_and_keeps_an_authors_newest(tmp_path: Path,
     ]
 
 
+def test_sort_keys_an_author_on_their_first_commit_and_keeps_the_newest_of_three(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+    repo = _repo(tmp_path)
+    for pr in (21, 22, 23):
+        _head(repo, pr, _listing("no-usdc", "skills/trio"), "skills/trio", "gentech")
+    _git(repo, "checkout", "-q", "--detach", "refs/pull/23/head")
+    _commit(repo, "fix", {"README.md": "fix\n"}, "skills/trio", "fixer")
+    _git(repo, "update-ref", "refs/pull/23/head", "HEAD")
+    _git(repo, "checkout", "-q", "main")
+    superseded = {"verdict": "close", "cause": "superseded", "reason": "by #23"}
+    assert _rows(repo, Recorded({}, set(), {}), capsys) == [
+        {"pr": 21, "listing": "skills/trio", **superseded},
+        {"pr": 22, "listing": "skills/trio", **superseded},
+        {"pr": 23, "listing": "skills/trio", "verdict": "close", "cause": "dead domain", "reason": "https://api.example.com"},
+        {"pass": 0, "fix": 0, "close": 3},
+    ]
+
+
 def test_a_url_only_head_is_a_fix_and_openapi_empty_or_absent_closes(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
     repo = _repo(tmp_path)
     pay = (FIXTURES / "no-usdc" / "PAY.md").read_text(encoding="utf-8")

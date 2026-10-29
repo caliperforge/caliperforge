@@ -40,7 +40,7 @@ import { unran } from './reproduced.ts'
 import { answered } from './answered.ts'
 import { looked } from './design.ts'
 import { dropped } from './dropped.ts'
-import { asked, blinded, findings } from './findings.ts'
+import { asked, blinded, findings, left, owed } from './findings.ts'
 import { fenceFor, languageFor } from './route.ts'
 import { languages } from './split.ts'
 import { staffed } from './staffing.ts'
@@ -297,7 +297,7 @@ function exited(step: Step, fired: Fired): Outcome {
 function rebuild(db: Db, root: string, plan: PlanRow, prev: string | null): string {
   const src = srcDir(root, plan.id)
   const ruling = ruled(root, plan.id)
-  const issue = get(root, plan.id, 'issue.md') + rulings(root, plan.id) + (ruling === null ? '' : `\n\n# What the ask holds beyond this brief\n\n${ruling.trim()}`) + findings(db, root, plan.id, src) + asked(db, plan.id)
+  const issue = get(root, plan.id, 'issue.md') + rulings(root, plan.id) + (ruling === null ? '' : `\n\n# What the ask holds beyond this brief\n\n${ruling.trim()}`) + findings(db, root, plan.id, src) + owed(root, plan.id) + asked(db, plan.id)
   const refusal = maybe(root, plan.id, 'refusal.md')
   const rows = lastRows(prev)
   if (refusal === null) return handed(`${issue}${rows}`, handout(src, listed(db, plan.id, issue)))
@@ -385,6 +385,7 @@ async function fireReview(db: Db, root: string, plan: PlanRow, step: Step, provi
       staffedOn(db, root, plan, step.step))
     if (outcome.outcome === 'pass') regated(db, plan.id, step.step, verdict, input.prior, input.tree)
     put(root, plan.id, `step-${String(step.step)}.verdict.md`, verdictText(outcome))
+    left(root, plan.id, outcome)
     if (outcome.outcome === 'pass' && input.tree !== undefined) put(root, plan.id, `step-${String(step.step)}.passed.diff`, input.diff)
     const asked = outcome.outcome === 'needs_ceo' && outcome.message !== '' ? `: ${outcome.message.replace(/\s+/g, ' ')}` : ''
     return {

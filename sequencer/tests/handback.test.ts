@@ -11,6 +11,7 @@ import { diffOf, get, maybe, put, srcDir } from '../workspace.ts'
 import { approve, built, CARRIED, plan, stub, watched, world, type World } from './world.ts'
 
 const UNPOINTED = 'built\n\n---\ndone:\n  - id: D1\n    status: done\n    pointer:\n---\n'
+const REFENCED = `built\n\n${CARRIED.slice(CARRIED.indexOf('---\n'))}`
 
 /** The builder answers its n-th fire with `texts[n]`, running `edit(n)` first; every other seat answers as `stub` does. */
 function answers(texts: string[], edit: (n: number) => void = () => undefined): Provider {
@@ -44,7 +45,7 @@ test('D1 a fenceless hand-back is asked once; the audit passes', async () => {
   diffs.push(diffOf(w.root, 1))
   expect(fired).toMatchObject({ step: 2, outcome: 'pass' })
   expect(builderRuns(w)).toBe(2)
-  expect(get(w.root, 1, 'step-2.handback.md')).toBe(CARRIED)
+  expect(get(w.root, 1, 'step-2.handback.md')).toBe(REFENCED)
   expect(diffs[0]).toBe(diffs[1])
   await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched([], w.root, 1))
   expect(verdictRows(w.db, 1).find((v) => v.rail_id === 'completion-audit')?.outcome).toBe('pass')
@@ -54,7 +55,7 @@ test('D1 unparsable YAML is re-asked; the answer\'s fence is kept', async () => 
   const w = await atBuild()
   await tick(w.db, w.root, answers(['built\n\n---\ndone: [\n---\n', CARRIED]))
   expect(builderRuns(w)).toBe(2)
-  expect(get(w.root, 1, 'step-2.handback.md')).toBe(CARRIED)
+  expect(get(w.root, 1, 'step-2.handback.md')).toBe(REFENCED)
 })
 
 test('D2 a re-ask answer that edits the tree is refused', async () => {

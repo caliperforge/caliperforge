@@ -6,3 +6,7 @@ export function setLimit(db: Db, row: Limit): void {
   db.prepare('INSERT INTO size_limits (repo, lines, origin_kind, origin_ref, set_at) VALUES (@repo, @lines, @origin_kind, @origin_ref, @set_at)')
     .run(row)
 }
+
+export function sizeLimit(db: Db, repo: string): number | undefined {
+  return db.prepare('SELECT lines FROM size_limits WHERE repo = ?').pluck().get(repo) as number | undefined
+}

@@ -7,6 +7,7 @@ import { record as inbox, ticketOf } from '../cli/inbox.ts'
 import { authority } from '../rails/authority/index.ts'
 import { checked } from '../rails/checks/index.ts'
 import { parse } from '../rails/diff.ts'
+import { answers } from '../rails/completion-audit/answers.ts'
 import { audit, record, undone } from '../rails/completion-audit/index.ts'
 import { identifiers } from '../rails/identifiers/index.ts'
 import { record as recordRail, type Verdict } from '../rails/record.ts'
@@ -19,8 +20,9 @@ import type { Db } from '../store/index.ts'
 import { digestOf } from '../store/approvals.ts'
 import { ratchetRules } from '../store/lanes.ts'
 import { busy } from '../store/now.ts'
-import { BUILT, laneOff, type PlanRow } from '../store/plans.ts'
+import { laneOff, type PlanRow } from '../store/plans.ts'
 import { profile, type Profile } from '../store/profile.ts'
+import { rebuilt } from '../store/runs.ts'
 import { builder } from '../templates/pr-path.ts'
 import { checks, finish, gated, mode, network, npm, type Commands, type Failure, type Run } from './checks.ts'
 import { ciChecks } from './ci.ts'
@@ -83,7 +85,12 @@ function completed(db: Db, root: string, plan: number, handback: string, diff: s
   const ids = [...(maybe(root, plan, 'findings.md') ?? '').matchAll(/^- (G\d+) /gm)].map((m) => m[1] ?? '')
   const first = audit(handback, [...doneIds(get(root, plan, 'issue.md')), ...ids], prev, diff)
   record(db, plan, first, 0)
-  return first.outcome === 'pass' ? null : unfinishedFirst(root, plan, named('completion-audit', first))
+  if (first.outcome !== 'pass') return unfinishedFirst(root, plan, named('completion-audit', first))
+  const open = [...(maybe(root, plan, 'findings.open.md') ?? '').matchAll(/^- (F\d+) /gm)].map((m) => m[1] ?? '')
+  if (open.length === 0) return null
+  const owed = answers(handback, open)
+  record(db, plan, owed, 0)
+  return owed.outcome === 'pass' ? null : named('completion-audit', owed)
 }
 
 /**
@@ -175,8 +182,7 @@ export function offline(failed: Failure): Outcome | null {
  * A rebuild with no recorded file list gets the whole suite, which is the safe way to know nothing.
  */
 export function narrow(db: Db, plan: PlanRow): string[] {
-  const built = db.prepare(`SELECT count(*) AS n FROM runs WHERE plan = ? AND step = 2 AND ${BUILT}`).get(plan.id) as { n: number }
-  return built.n > 1 ? filesOf(db, plan.id).map((f) => f.path) : []
+  return rebuilt(db, plan.id) ? filesOf(db, plan.id).map((f) => f.path) : []
 }
 
 function noted(db: Db, plan: number): Run {

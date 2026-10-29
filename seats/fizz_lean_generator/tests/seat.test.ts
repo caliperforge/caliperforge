@@ -1,4 +1,4 @@
-import { appendFileSync, cpSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { appendFileSync, cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
@@ -25,16 +25,36 @@ function copied(): string {
   return tree
 }
 
-function stub(tokens: number): { provider: Provider; packets: Packet[] } {
+const READ = '- x-ray/x-ray.md, Vault.deposit and Vault.redeem — the entry points to call'
+const STAND_INS = '\n## Stand-ins\n\n- MockStrategy | limits: max interest 1e15 per call, only vault mints\n'
+const FILLED: Record<string, string> = {
+  context: `phase: context\nnext: scaffold\nmode: automatic\nagent_model: opus\n\n## Reads\n\n${READ}\n`,
+  scaffold: `phase: scaffold\nnext: coverage\n\n## Reads\n\n${READ}\n${STAND_INS}`,
+  coverage: `phase: coverage\nnext: invariants\nfuzz_build_cmd: forge build\n\n## Reads\n\n${READ}\n`,
+  invariants: `phase: invariants\nnext: campaigns\n\n## Reads\n\n${READ}\n\n## Converted values\n\n- property_redeemConserves | tolerance: 2 wei × 3\n`,
+  campaigns: 'phase: campaigns\nnext: none\nfuzzer: medusa\n',
+}
+const PHASES = Object.keys(FILLED)
+const SPAWN = JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Agent', input: {} }] } })
+const HANDOFFS = 'test/fizz/fizz_data/handoff'
+
+const phaseOf = (packet: Packet | undefined): string | undefined => /^# Fizz lean: (\w+)/m.exec(packet?.prompt ?? '')?.[1]
+
+function stub(tokens: number, filled: Record<string, string>, spawns: Record<string, number>): { provider: Provider; packets: Packet[] } {
   const packets: Packet[] = []
   return { packets, provider: { name: 'claude-agent-sdk', fire: (packet) => {
     packets.push(packet)
+    const phase = phaseOf(packet) ?? ''
+    mkdirSync(join(packet.cwd, HANDOFFS), { recursive: true })
+    writeFileSync(join(packet.cwd, HANDOFFS, `${phase}.md`), filled[phase] ?? '')
+    writeFileSync(packet.transcript, `${SPAWN}\n`.repeat(spawns[phase] ?? 0))
+    if (phase === 'campaigns') writeFileSync(join(packet.cwd, 'test/fizz/Properties.sol'), 'contract P { function property_a() public {} }\n')
     return Promise.resolve({ text: '', transcript_path: packet.transcript, usage: { input: tokens - 1000, cache: 0, output: 1000 }, seconds: 1,
       ended: 'completed', exit: 0, stop_reason: null, denials: 0 })
   } } }
 }
 
-async function generated(generator: string, tokens = 1000) {
+async function generated(generator: string, tokens = 1000, filled = FILLED, spawns: Record<string, number> = {}) {
   const tree = copied()
   const dir = srcDir(tree, 1)
   git(dir, ['init', '-q'])
@@ -45,7 +65,7 @@ async function generated(generator: string, tokens = 1000) {
   put(tree, 1, 'target.yml', `generator: ${generator}`)
   const db = fresh(schema)
   putPlan(db, { id: 1, pipe_id: Number(pipeNamed(db, 'bench')?.id), target_id: null, template: 'bench', state: 'queued', queued_at: AT, step: 1, retries: 0 })
-  const fired = stub(tokens)
+  const fired = stub(tokens, filled, spawns)
   const outcome = await generate(db, tree, planById(db, 1), mapOf('bench').at(1), fired.provider)
   return { tree, db, outcome, packets: fired.packets }
 }
@@ -66,11 +86,11 @@ test('D2: fizz_lean staffs the lean seat and fizz stays fizz', () => {
 test('D3: fizz_lean reads its skill from the tree it runs in', async () => {
   const { tree, db, packets } = await generated('fizz_lean')
   const skill = real(join(tree, 'seats/fizz_lean_generator/skill'))
-  expect(packets).toHaveLength(1)
+  expect(packets).toHaveLength(5)
   expect(packets[0]?.prompt).toContain(`SKILL_PATH is ${skill}.`)
   expect(packets[0]?.reads?.[0]).toBe(skill)
   expect(packets[0]).toMatchObject({ idle: 60, wall: 6_000_000 })
-  expect(runRows(db)).toMatchObject([{ seat: 'fizz_lean_generator', staffed: 'fizz_lean_generator' }])
+  expect(runRows(db)[0]).toMatchObject({ seat: 'fizz_lean_generator', staffed: 'fizz_lean_generator' })
 })
 
 test('D4: fizz still reads its skill from home with idle 60', async () => {
@@ -80,9 +100,44 @@ test('D4: fizz still reads its skill from home with idle 60', async () => {
 })
 
 test('D5: a fizz_lean run at the ceiling is refused', async () => {
-  const { tree, outcome } = await generated('fizz_lean', CEILING)
+  const { tree, outcome, packets } = await generated('fizz_lean', CEILING)
   expect(outcome).toMatchObject({ outcome: 'refuse', spans: ['bench.ceiling'] })
+  expect(packets).toHaveLength(1)
   expect(maybe(tree, 1, 'generate.json')).toBeNull()
+})
+
+test('D1: lean fires each phase in order, one run each', async () => {
+  const { tree, db, outcome, packets } = await generated('fizz_lean')
+  expect(outcome).toMatchObject({ outcome: 'pass' })
+  expect(packets.map(phaseOf)).toEqual(PHASES)
+  PHASES.forEach((phase, at) => { expect(packets[at]?.prompt).toContain(readFileSync(join(tree, `seats/fizz_lean_generator/skill/phases/${phase}.md`), 'utf8')) })
+  const paths = runRows(db).map((row) => row.transcript_path)
+  expect(paths).toHaveLength(5)
+  expect(new Set(paths).size).toBe(5)
+  for (const path of paths) expect(path).toMatch(/run-\d+\.transcript\.jsonl$/)
+})
+
+test('D2: the scaffold issue names the context handoff', async () => {
+  const { packets } = await generated('fizz_lean')
+  expect(packets[1]?.prompt).toContain(`Start from ${join(packets[1]?.cwd ?? '', HANDOFFS, 'context.md')}.`)
+})
+
+test('D3: a refused handoff re-fires once, then is refused', async () => {
+  const { outcome, packets } = await generated('fizz_lean', 1000, { ...FILLED, scaffold: (FILLED.scaffold ?? '').replace(STAND_INS, '') })
+  expect(packets.map(phaseOf)).toEqual(['context', 'scaffold', 'scaffold'])
+  expect(packets[2]?.prompt).toContain('Your handoff was refused:\n- handoff.field: scaffold: ## Stand-ins is missing or has no row')
+  expect(outcome).toMatchObject({ outcome: 'refuse', spans: ['handoff.field'], note: expect.stringContaining('scaffold handoff refused twice') as string })
+})
+
+test('D4: no lean packet carries the conductor prompt', async () => {
+  const { tree, packets } = await generated('fizz_lean')
+  const conductor = readFileSync(join(tree, 'seats/fizz_lean_generator/prompt.md'), 'utf8').trim()
+  for (const packet of packets) expect(packet.prompt).not.toContain(conductor)
+})
+
+test('D6: generate.json agents adds up every phase transcript', async () => {
+  const { tree } = await generated('fizz_lean', 1000, FILLED, { context: 1, scaffold: 2 })
+  expect(JSON.parse(maybe(tree, 1, 'generate.json') ?? '{}')).toMatchObject({ agents: 3, tokens: 5000, seconds: 5, properties: 1 })
 })
 
 test('D6: a drifted fizz_lean_generator prompt is refused', () => {

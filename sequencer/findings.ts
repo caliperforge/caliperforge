@@ -1,4 +1,5 @@
 import { inline, said, type Read } from '../cli/gh.ts'
+import type { Judged } from '../reviews/verdict.ts'
 import type { Db } from '../store/index.ts'
 import { asks, graded, type Signal } from '../store/signals.ts'
 import { verdictRows } from '../store/verdict.ts'
@@ -33,6 +34,19 @@ export function findings(db: Db, root: string, plan: number, src: string): strin
   }
   put(root, plan, 'findings.md', lines)
   return `\n\n# Bot review findings\n\nGreptile scored this head ${String(score)}/5. Answer each finding under its id in your hand-back's done rows, with a pointer.\n\n${lines}`
+}
+
+/** `findings.open.md` is what step 3 reads: a row whose span `narrowed()` dropped is not open. */
+export function left(root: string, plan: number, outcome: Judged): void {
+  if (outcome.outcome === 'needs_ceo') return
+  const rows = outcome.message.split('\n').filter((l) => /^- F\d+ /.test(l) && outcome.spans.includes(l.split(' ')[2] ?? '')).map((l) => `${l}\n`).join('')
+  if (rows === '') drop(root, plan, 'findings.open.md')
+  else put(root, plan, 'findings.open.md', rows)
+}
+
+export function owed(root: string, plan: number): string {
+  const rows = maybe(root, plan, 'findings.open.md')
+  return rows === null ? '' : `\n\n# Review findings\n\nUnder \`## Findings answered\` in your hand-back, above the fence, write one row per id: \`- F1 fixed: <how>\` or \`- F1 disputed: <why>\`.\n\n${rows}`
 }
 
 /** Step 5 has no commit yet, so the blind pass files its rows under the tree it judged. */

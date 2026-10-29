@@ -47,6 +47,13 @@ test('D1 a refuse in whole blocks spans each file:line in order', () => {
   })
 })
 
+test('D1 each block is a row after the prose; spans add none', () => {
+  expect(read(refuse(block() + block(undefined, { id: 'F2', line: '9' })), 's')?.message).toBe('mean() drops the last value\n\n'
+    + '- F1 src/stats.ts:2 tight: mean() divides by the length; verify: npm run test -- src/stats.test.ts\n'
+    + '- F2 src/stats.ts:9 tight: mean() divides by the length; verify: npm run test -- src/stats.test.ts')
+  expect(read(SPANS, 's')?.message).toBe('mean() drops the last value')
+})
+
 test('D2 unfilled passes a pass, a needs_ceo and whole blocks', () => {
   for (const reply of ['---\noutcome: pass\n---\n', '---\noutcome: needs_ceo\n---\n', refuse(block())]) expect(unfilled(reply)).toBeNull()
 })

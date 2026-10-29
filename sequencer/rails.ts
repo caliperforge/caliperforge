@@ -7,6 +7,7 @@ import { record as inbox, ticketOf } from '../cli/inbox.ts'
 import { authority } from '../rails/authority/index.ts'
 import { checked } from '../rails/checks/index.ts'
 import { parse } from '../rails/diff.ts'
+import { answers } from '../rails/completion-audit/answers.ts'
 import { audit, record, undone } from '../rails/completion-audit/index.ts'
 import { identifiers } from '../rails/identifiers/index.ts'
 import { record as recordRail, type Verdict } from '../rails/record.ts'
@@ -83,7 +84,12 @@ function completed(db: Db, root: string, plan: number, handback: string, diff: s
   const ids = [...(maybe(root, plan, 'findings.md') ?? '').matchAll(/^- (G\d+) /gm)].map((m) => m[1] ?? '')
   const first = audit(handback, [...doneIds(get(root, plan, 'issue.md')), ...ids], prev, diff)
   record(db, plan, first, 0)
-  return first.outcome === 'pass' ? null : unfinishedFirst(root, plan, named('completion-audit', first))
+  if (first.outcome !== 'pass') return unfinishedFirst(root, plan, named('completion-audit', first))
+  const open = [...(maybe(root, plan, 'findings.open.md') ?? '').matchAll(/^- (F\d+) /gm)].map((m) => m[1] ?? '')
+  if (open.length === 0) return null
+  const owed = answers(handback, open)
+  record(db, plan, owed, 0)
+  return owed.outcome === 'pass' ? null : named('completion-audit', owed)
 }
 
 /**

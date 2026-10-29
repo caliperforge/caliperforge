@@ -31,7 +31,7 @@ export interface World {
   target: number
 }
 
-export const CARRIED = 'built\n\n---\ndone:\n  - id: D1\n    status: done\n    pointer: src/hello.ts:1\n'
+export const CARRIED = 'built\n\n## Findings answered\n\n- F1 fixed: hello takes a name\n\n---\ndone:\n  - id: D1\n    status: done\n    pointer: src/hello.ts:1\n'
   + '  - id: D2\n    status: done\n    pointer: src/hello.ts:1\n---\n'
 
 export const PASS = '---\noutcome: pass\n---\n'

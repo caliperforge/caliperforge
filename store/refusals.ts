@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { landed } from '../sequencer/landed.ts'
 import type { Db } from './index.ts'
 import { BUILT } from './plans.ts'
 
@@ -69,13 +70,13 @@ export function refused(db: Db, r: Refused): Why {
 const repo = (p: string, t: string): string =>
   `coalesce(${t}.repo, replace(substr(${p}.origin, 1, instr(${p}.origin, '/issues/') - 1), 'https://github.com/', ''))`
 
-/** Another plan in `r.plan`'s pipe and repo refused with the same fingerprint within a day, if one was. */
+/** Another plan in `r.plan`'s pipe and repo, not landed, refused with the same fingerprint within a day, if one was. */
 export function peer(db: Db, r: Refused): number | undefined {
-  const row = db.prepare(`SELECT f.plan FROM refusals f JOIN plans p ON p.id = f.plan LEFT JOIN targets t ON t.id = p.target_id
+  const plans = db.prepare(`SELECT f.plan FROM refusals f JOIN plans p ON p.id = f.plan LEFT JOIN targets t ON t.id = p.target_id
       JOIN plans me ON me.id = ? LEFT JOIN targets mt ON mt.id = me.target_id
     WHERE f.fingerprint = ? AND f.plan <> me.id AND f.cleared = 0 AND f.blip = 0 AND julianday(f.at) > julianday('now', '-1 day')
-      AND p.pipe_id = me.pipe_id AND ${repo('p', 't')} = ${repo('me', 'mt')}`).get(r.plan, r.fingerprint) as { plan: number } | undefined
-  return row?.plan
+      AND p.pipe_id = me.pipe_id AND ${repo('p', 't')} = ${repo('me', 'mt')} ORDER BY f.id`).pluck().all(r.plan, r.fingerprint) as number[]
+  return plans.find((p) => !landed(db, p))
 }
 
 /** The refusals recorded on `day` (local `yyyy-mm-dd`, `minutes` from UTC), blips left out, at local time. */

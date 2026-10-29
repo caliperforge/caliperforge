@@ -1,4 +1,4 @@
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join, relative } from 'node:path'
 import { expect, test } from 'vitest'
@@ -813,12 +813,14 @@ test('D2: a fix reading ~/notes goes to the builder', async () => {
   expect(maybe(home, 7, 'issue.md')).toContain(why)
 })
 
-test('fixOutOfReach', async () => {
+test('fixOutOfReach', { timeout: 90_000 }, async () => {
   const outside = (path: string) => `\`${path}\` is outside the fixer's write_paths`
   for (const [why, reason] of [
     ['run gh issue create for the gap', 'the fixer has no git and no GitHub'],
     ['run UPDATE plans SET step = 2 in cf.db', outside('cf.db')],
     ['rewrite issue.md and `.cf/work/7/refusal.md`', outside('.cf/work/7/refusal.md')],
+    ['rewrite `.cf/work/8/ask.md`', outside('.cf/work/8/ask.md')],
+    ['add `Fork: acme/widget` to ask.md', outside('acme/widget')],
   ] as const) {
     const { db, home } = seeded('1')
     fixLive(db)
@@ -831,13 +833,19 @@ test('fixOutOfReach', async () => {
     expect(row(db).state).toBe('queued')
     expect(told(db)).toEqual([{ actor: 'director', outcome: 'pass', message: `fix: refused by the fence, ${reason}` }])
   }
-  for (const why of ['rewrite `commit.msg`.',
-    '"rewrite issue.md\'s ## Files to list `crates/mcp/src/surfpool/set_token_account.rs`, and commit.msg."']) {
+  for (const why of [() => 'rewrite `commit.msg`.',
+    () => '"rewrite issue.md\'s ## Files to list `crates/mcp/src/surfpool/set_token_account.rs`, and commit.msg."',
+    (home: string) => {
+      const alias = join(mkdtempSync(join(tmpdir(), 'cf-alias-')), 'tick')
+      symlinkSync(home, alias)
+      return `add the Fork line to ${alias}/.cf/work/7/ask.md`
+    },
+    () => 'add the Fork line to `.cf/work/7/ask.md`', () => 'add `Fork: caliperforge/skills` to ask.md']) {
     const { db, home } = seeded('1')
     fixLive(db)
     committed(home)
     const packets: Packet[] = []
-    await cooLite(db, home, row(db), bySeat(packets, `---\nmove: fix\nwhy: ${why}\n---\n`), now, () => undefined, wire())
+    await cooLite(db, home, row(db), bySeat(packets, `---\nmove: fix\nwhy: ${why(home)}\n---\n`), now, () => undefined, wire())
     expect(fixing(packets)).toHaveLength(1)
     expect(decisions(db, 7).map((d) => d.verb)).toEqual(['ask_coo'])
   }

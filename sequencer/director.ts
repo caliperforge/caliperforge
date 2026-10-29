@@ -77,11 +77,11 @@ export async function cooLite(db: Db, root: string, plan: PlanRow, provider: Pro
   let { m, said } = await ask(db, root, plan, provider, tried)
   const n = failures(db, root, plan)
   const cap = capStop(db, plan.id)
-  const first = refused(m, said, n, root, cap)
+  const first = refused(m, said, n, root, plan.id, cap)
   if (first !== null) {
     ({ m, said } = await ask(db, root, plan, provider, tried, first.fence))
-    const again = refused(m, said, n, root, cap)
-    if (again !== null) return m?.move === 'fix' && builderRan(db, plan.id) && builderWork(root, m.why) && applying(db) && apply(db, root, plan, { move: 'rule', why: m.why, answer: m.why }, wire, now) === true
+    const again = refused(m, said, n, root, plan.id, cap)
+    if (again !== null) return m?.move === 'fix' && builderRan(db, plan.id) && builderWork(root, plan.id, m.why) && applying(db) && apply(db, root, plan, { move: 'rule', why: m.why, answer: m.why }, wire, now) === true
       ? told(db, root, plan, now, { outcome: 'pass', message: `rule: ${m.why}${planById(db, plan.id).step <= 2 ? " (out of the fixer's reach, so the builder takes it)" : ''}` })
       : cap ? told(db, root, plan, now, { outcome: 'needs_coo', message: again.message }, post)
         : handUp(db, root, plan, { outcome: 'needs_coo', message: again.message }, said, provider, now, post, wire)
@@ -115,7 +115,7 @@ function twice(db: Db, root: string, plan: PlanRow, now: Date, post: Post): stri
   return told(db, root, plan, now, { outcome: 'needs_coo', message: `ask_ceo: ${why}` }, post)
 }
 
-function refused(m: Move | null, said: string, n: number, root: string, cap: boolean): { fence: string; message: string } | null {
+function refused(m: Move | null, said: string, n: number, root: string, plan: number, cap: boolean): { fence: string; message: string } | null {
   if (cap && m !== null && !CAPPED.includes(m.move)) {
     return { fence: `${m.move} is refused: the plan stopped at its build cap. Choose rule, waive, split or park.`,
       message: `${m.move}: refused by the fence, the plan stopped at its build cap` }
@@ -126,7 +126,7 @@ function refused(m: Move | null, said: string, n: number, root: string, cap: boo
     return { fence: `${m.move} is refused: no ${lacks}. Write instruction (one imperative sentence) and resume at (the step), or choose another move.`,
       message: `${m.move}: refused by the fence, no ${lacks}` }
   }
-  if (m?.move === 'fix') return outOfReach(root, m.why)
+  if (m?.move === 'fix') return outOfReach(root, plan, m.why)
   if (m?.move === 'ask_coo' && n < 2) {
     return { fence: `ask_coo is refused: ${String(n)} failed fixes on this stop, two are needed. Choose another move.`,
       message: `ask_coo: refused by the fence, ${String(n)} failed fixes on this stop` }

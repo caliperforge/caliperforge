@@ -1536,6 +1536,24 @@ test('a plan sent round since its refusal files no repeat', async () => {
   }
 })
 
+test('a refusal its step settled again after is no stop', async () => {
+  for (const plans of [[7], [8, 10]]) {
+    const { db, home } = alikeStops('1', three(SAME))
+    for (const plan of plans) {
+      const hours = three(SAME).find(([p]) => p === plan)?.[2] ?? 0
+      for (const [outcome, late] of [['refuse', 0], ['escalate', 0.5]] as const) {
+        logged(db, { plan, kind: 'ruling', actor: 'brief_writer', outcome, message: outcome, pointer: null, run: null },
+          new Date(now.getTime() - (hours - late) * 3_600_000).toISOString())
+      }
+    }
+    const filed: string[] = []
+    const fired: string[] = []
+    await cooLite(db, home, row(db), wokeStub(REPLY.ask_ceo ?? '', fired), now, () => undefined, filing(filed))
+    expect(filed).toEqual([])
+    expect(fired).toHaveLength(1)
+  }
+})
+
 test('the store takes blocked_on_ceo, refuses an unknown reason',() => {
   const { db } = wokeSeeded()
   const insert = (reason: string) => decided(db, { plan: 7, step: 4, wait_reason: reason as Decision['wait_reason'], verb: 'ask_coo',

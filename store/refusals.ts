@@ -173,17 +173,23 @@ export function sentOnce(db: Db, plan: number): boolean {
   return db.prepare(`SELECT ${SENT("'director'")} > ${SENT("'ceo', 'coo'")}`).pluck().get(plan, plan) === 1
 }
 
-/** The plan's newest refusal within a day of `now` and since it was last sent round, and each plan refused alike in that day, cleared or not. */
+const STOPPED = `NOT EXISTS (SELECT 1 FROM events r JOIN events n ON n.plan = r.plan AND n.kind = r.kind AND n.actor = r.actor
+  AND n.id > r.id WHERE r.id = (SELECT min(id) FROM events WHERE plan = f.plan AND outcome = 'refuse' AND julianday(at) >= julianday(f.at)))`
+
+/**
+ * The plan's newest refusal within a day of `now` and since it was last sent round, and each plan refused alike in that day,
+ * cleared or not. A refusal its plan's step settled again after is one the plan went round, not a stop.
+ */
 export function alike(db: Db, plan: number, now: Date): { step: number; fingerprint: string; plans: number[] } | null {
   const day = "blip = 0 AND julianday(at) > julianday(?, '-1 day')"
   const at = now.toISOString()
-  const row = db.prepare(`SELECT step, fingerprint FROM refusals WHERE plan = ? AND ${day} AND julianday(at) > coalesce((SELECT
-      max(julianday(e.at)) FROM events e WHERE e.plan = ? AND e.kind IN ('return', 'retry')), 0) ORDER BY id DESC LIMIT 1`)
-    .get(plan, at, plan) as { step: number; fingerprint: string } | undefined
-  if (row === undefined || row.fingerprint === fingerprint(row.step, ['base:stale'])) return null
-  const plans = db.prepare(`SELECT DISTINCT plan FROM refusals WHERE step = ? AND fingerprint = ? AND ${day} ORDER BY plan`)
+  const row = db.prepare(`SELECT step, fingerprint, ${STOPPED} AS stopped FROM refusals f WHERE plan = ? AND ${day} AND julianday(at) >
+      coalesce((SELECT max(julianday(e.at)) FROM events e WHERE e.plan = ? AND e.kind IN ('return', 'retry')), 0) ORDER BY id DESC LIMIT 1`)
+    .get(plan, at, plan) as { step: number; fingerprint: string; stopped: number } | undefined
+  if (row === undefined || row.stopped === 0 || row.fingerprint === fingerprint(row.step, ['base:stale'])) return null
+  const plans = db.prepare(`SELECT DISTINCT plan FROM refusals f WHERE step = ? AND fingerprint = ? AND ${day} AND ${STOPPED} ORDER BY plan`)
     .pluck().all(row.step, row.fingerprint, at) as number[]
-  return { ...row, plans }
+  return { step: row.step, fingerprint: row.fingerprint, plans }
 }
 
 /** A person sent the plan round again: its round count starts over, but a refusal it already had still stops it. */

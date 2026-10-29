@@ -6,7 +6,7 @@ import type { PlanFile } from '../store/files.ts'
 import { CONVENTIONAL } from './conventions.ts'
 import { WHOLE } from './handout.ts'
 import { reproduced } from './reproduced.ts'
-import { kept } from './verbatim.ts'
+import { copied, kept } from './verbatim.ts'
 import { git } from './workspace.ts'
 
 export const CEILING = 100
@@ -198,7 +198,7 @@ export function shape(brief: string, ask: string, src: string, outside = false, 
   const title = titleOf(brief)
   if (title === null || (title !== titleOf(ask) && !(outside && CONVENTIONAL.test(title)))) return { span: '# <title>', reason: "the title is not the ask's" }
   const checks: ((b: string) => Refused | null)[] =
-    [order, empty, carried, cases, (b) => caps(b, ceiling), folders, forbidden, (b) => shared(b, src), (b) => paths(b, src), (b) => ranged(b, src), (b) => kept(b, ask),
+    [order, empty, carried, cases, (b) => caps(b, ceiling), folders, forbidden, (b) => shared(b, src), (b) => paths(b, src), (b) => ranged(b, src), (b) => kept(b, ask), (b) => copied(b, ask),
       ...(outside ? [(b: string) => reproduced(section(b, '## Reproduced'), files(b).map((f) => f.path))] : [])]
   for (const check of checks) {
     const refused = check(brief)

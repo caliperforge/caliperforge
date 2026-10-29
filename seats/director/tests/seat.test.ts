@@ -85,6 +85,11 @@ test('D1: three alike stops file one machine ticket', () => {
     'Three jobs refused alike within a day file one machine ticket without you, and later ones wait on it.')
 })
 
+test('D3: widen frees over_cap only', () => {
+  expect(seat(root, 'director').prompt.replace(/\n {2}/g, ' ')).toContain('It frees an `over_cap` wait only: a `lane_over_cap` wait '
+    + 'is the lane cap (`lanes.dial`, the band, the ceiling), which widen cannot free.')
+})
+
 test('D8: orchestrator is refused, unlisted and unseeded', () => {
   expect(() => seat(root, 'orchestrator')).toThrow(/absent from rules\/roster\/orchestrator\.yaml/)
   const ids = rules(root).map((r) => r.id)

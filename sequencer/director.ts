@@ -272,7 +272,7 @@ const UNAPPLIED: Record<Exclude<Move['move'], 'ask_ceo' | 'ask_coo'>, string> = 
   file: 'the ticket was not filed',
   return: 'the plan did not go back to its lane',
   fix: 'the fixer did not make the fix',
-  widen: 'the pipe is already 8 wide',
+  widen: 'the pipe is already 8 wide, or the job waits on lane_over_cap, which only lanes.dial or the band frees',
   park: 'the plan was not held',
   research: 'the job is built, not a pr_path job of ours, or its answer lacks a research line',
 }

@@ -1,0 +1,7 @@
+{
+ "fetch": {},
+ "hosts": [
+  "agent-trust-bench.algovoi.co.uk"
+ ],
+ "rpc": {}
+}

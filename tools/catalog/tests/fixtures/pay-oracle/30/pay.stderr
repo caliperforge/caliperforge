@@ -1,0 +1,2 @@
+[1m[31m│[39m[0m [1mValidation error[0m
+[1m[31m│[39m[0m [2m- providers/agentpay: frontmatter parse error: missing field `name`[0m

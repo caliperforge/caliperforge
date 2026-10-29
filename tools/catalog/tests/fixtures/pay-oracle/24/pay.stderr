@@ -1,0 +1,21 @@
+[1m[33m│[39m[0m [1m2 validation warnings[0m
+[1m[33m│[39m[0m [2m- providers/algovoi/compliance-gate: GET /compliance/attestation: operation summary should start with an action verb[0m
+[1m[33m│[39m[0m [2m    got: "Gateway compliance posture"[0m
+[1m[33m│[39m[0m [2m    start with a concrete verb such as `Search`, `Create`, `Fetch`, or `Generate`[0m
+[1m[33m│[39m[0m [2m- providers/algovoi/compliance-gate: POST /compliance/screen: operation summary should start with an action verb[0m
+[1m[33m│[39m[0m [2m    got: "Pre-payment recipient screen"[0m
+[1m[33m│[39m[0m [2m    start with a concrete verb such as `Search`, `Create`, `Fetch`, or `Generate`[0m
+[4m[1mProbe results[0m[0m
+[1mproviders/algovoi/compliance-gate[0m [31mFAIL[39m
+  [2mGET   [0m compliance/attestation                             [31mFAIL[39m expected 402, got 200 (805ms)
+  [2mPOST  [0m compliance/screen                                  [31mFAIL[39m expected 402, got 200 (681ms)
+
+[4m[1mSolana-compat verdict[0m[0m
+[1m[31mBLOCK[39m[0m  [1mproviders/algovoi/compliance-gate[0m (0/0)
+  [2mFREE[0m  [2mGET[0m compliance/attestation  [2mfree / not gated[0m ([2mfree[0m)
+  [2mFREE[0m  [2mPOST[0m compliance/screen  [2mfree / not gated[0m ([2mfree[0m)
+[1m[31m│[39m[0m [1mPAY.md check failed[0m
+[1m[31m│[39m[0m [2m2 endpoints tested across 1 provider[0m
+[1m[31m│[39m[0m [2m1 provider blocked (zero Solana-compatible gates)[0m
+[1m[31m│[39m[0m [2m2 probe failure(s) — see --verbose[0m
+[1m[31m│[39m[0m [2m2 static validation warnings[0m

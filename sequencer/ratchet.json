@@ -107,7 +107,6 @@
   },
   "rails.ts": {
     "lines": 235,
-    "prepare": 1,
     "silent-catch": 1
   },
   "reach.ts": {
@@ -139,8 +138,7 @@
     "lines": 384
   },
   "size.ts": {
-    "lines": 50,
-    "prepare": 1
+    "lines": 50
   },
   "split.ts": {
     "lines": 229
@@ -153,15 +151,6 @@
   },
   "symbols.ts": {
     "lines": 43
-  },
-  "tests/batch.test.ts": {
-    "prepare": 1
-  },
-  "tests/card.test.ts": {
-    "prepare": 1
-  },
-  "tests/chain.test.ts": {
-    "prepare": 1
   },
   "tests/findings.test.ts": {
     "prepare": 1

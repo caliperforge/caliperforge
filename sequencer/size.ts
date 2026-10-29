@@ -2,6 +2,7 @@ import { parse, type FileDiff } from '../rails/diff.ts'
 import { TEST_FILE } from '../rails/test-weakened/index.ts'
 import type { Db } from '../store/index.ts'
 import { count } from '../store/lanes.ts'
+import { sizeLimit } from '../store/limits.ts'
 import type { Check, Row } from './card.ts'
 import { TEST } from './route.ts'
 import { diffOf } from './workspace.ts'
@@ -49,6 +50,5 @@ export function size(repo: string): Check {
 }
 
 export function limitOf(db: Db, repo: string): number {
-  const row = db.prepare('SELECT lines FROM size_limits WHERE repo = ?').get(repo) as { lines: number } | undefined
-  return row?.lines ?? count(db, 'card.size_limit')
+  return sizeLimit(db, repo) ?? count(db, 'card.size_limit')
 }

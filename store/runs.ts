@@ -30,6 +30,10 @@ export function builtRuns(db: Db, plan: number): { step: number; seat: string; t
     .all(plan) as { step: number; seat: string; tokens: number }[]
 }
 
+export function rebuilt(db: Db, plan: number): boolean {
+  return (db.prepare(`SELECT count(*) AS n FROM runs WHERE plan = ? AND step = 2 AND ${BUILT}`).get(plan) as { n: number }).n > 1
+}
+
 export function builtAs(db: Db, plan: number, seat: string, step: number): boolean {
   return db.prepare('SELECT 1 FROM runs WHERE plan = ? AND seat = ? AND (step = 2 OR (? = 5 AND step = 4))')
     .get(plan, seat, step) !== undefined

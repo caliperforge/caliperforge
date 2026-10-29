@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import type { Packet } from '../../providers/kind.ts'
 import type { Gh } from '../../rails/ci-green/index.ts'
-import { rewind } from '../../store/plans.ts'
+import { laneOff, pipeNamed, rewind } from '../../store/plans.ts'
 import { tick } from '../index.ts'
 import { get, put, srcDir } from '../workspace.ts'
 import { approve, CARRIED, plan, runsAfter, stub, tip, watched, world, type World } from './world.ts'
@@ -45,7 +45,7 @@ test('stops when the lane is switched off', async () => {
   const w = ready()
   const off = (packet: Packet): void => {
     writes(packet)
-    if (packet.tools.includes('Write')) w.db.prepare("UPDATE pipes SET enabled = 0 WHERE name = 'pr-path'").run()
+    if (packet.tools.includes('Write')) laneOff(w.db, Number(pipeNamed(w.db, 'pr-path')?.id))
   }
   const fired = await tick(w.db, w.root, stub(CARRIED, 0, undefined, off), undefined, undefined, watched([], w.root, 1), 5)
   expect(fired.map((f) => f.step)).toEqual([0, 1, 2])

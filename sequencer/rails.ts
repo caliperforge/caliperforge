@@ -20,8 +20,9 @@ import type { Db } from '../store/index.ts'
 import { digestOf } from '../store/approvals.ts'
 import { ratchetRules } from '../store/lanes.ts'
 import { busy } from '../store/now.ts'
-import { BUILT, laneOff, type PlanRow } from '../store/plans.ts'
+import { laneOff, type PlanRow } from '../store/plans.ts'
 import { profile, type Profile } from '../store/profile.ts'
+import { rebuilt } from '../store/runs.ts'
 import { builder } from '../templates/pr-path.ts'
 import { checks, finish, gated, mode, network, npm, type Commands, type Failure, type Run } from './checks.ts'
 import { ciChecks } from './ci.ts'
@@ -181,8 +182,7 @@ export function offline(failed: Failure): Outcome | null {
  * A rebuild with no recorded file list gets the whole suite, which is the safe way to know nothing.
  */
 export function narrow(db: Db, plan: PlanRow): string[] {
-  const built = db.prepare(`SELECT count(*) AS n FROM runs WHERE plan = ? AND step = 2 AND ${BUILT}`).get(plan.id) as { n: number }
-  return built.n > 1 ? filesOf(db, plan.id).map((f) => f.path) : []
+  return rebuilt(db, plan.id) ? filesOf(db, plan.id).map((f) => f.path) : []
 }
 
 function noted(db: Db, plan: number): Run {

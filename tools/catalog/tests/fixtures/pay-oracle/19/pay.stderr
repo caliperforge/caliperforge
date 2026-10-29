@@ -1,0 +1,4 @@
+[1m[31m│[39m[0m [1mValidation error[0m
+[1m[31m│[39m[0m [2m- providers/hyre/agent: openapi.url is not allowed in the public registry[0m
+[1m[31m│[39m[0m [2m    got: `https://mpp.hyreagent.fun/openapi.json?chain=solana`[0m
+[1m[31m│[39m[0m [2m    commit the spec next to PAY.md and use `openapi: { path: openapi.json }` (or `content:` for tiny specs)[0m

@@ -25,6 +25,7 @@ import type { Wire } from './push.ts'
 import { fireBrief, fireLanded, fireSeat } from './seat.ts'
 import { proved } from './ready.ts'
 import { kernel, mapOf, targetOf } from './steps.ts'
+import { fuzzes } from './night.ts'
 import { kept } from './merge.ts'
 import { keyLock } from './keyring.ts'
 import { languageFor } from './route.ts'
@@ -48,6 +49,7 @@ export async function stepped(db: Db, root: string, pipe: PipeRow, plan: PlanRow
   const step = mapOf(plan.template).at(plan.step, tree.language, plan.seat)
   const mark = newestRun(db)
   const verdicts = newestVerdict(db)
+  if (fuzzes(plan, step)) logged(db, { plan: plan.id, kind: 'bench.fired', actor: step.runs, outcome: 'pass', message: step.name, pointer: null, run: null })
   const outcome = tree.failed ?? seatless(plan, step, tree.language) ?? await made(db, root, plan, step, provider, wire, read)
   const state = settle(db, root, plan, step, outcome)
   if (outcome.quiet !== true) {

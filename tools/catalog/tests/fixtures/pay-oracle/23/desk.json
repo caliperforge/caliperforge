@@ -1,0 +1,4 @@
+{
+ "verdict": "fix",
+ "brief": "check: format\nrule: GET /.well-known/x402.json summary is 23 characters\ncurrent: x402 discovery manifest\nreplacement: an operation summary of 24-63 characters"
+}

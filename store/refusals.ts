@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { landed } from '../sequencer/landed.ts'
 import type { Db } from './index.ts'
 import { BUILT } from './plans.ts'
 
@@ -69,13 +70,13 @@ export function refused(db: Db, r: Refused): Why {
 const repo = (p: string, t: string): string =>
   `coalesce(${t}.repo, replace(substr(${p}.origin, 1, instr(${p}.origin, '/issues/') - 1), 'https://github.com/', ''))`
 
-/** Another plan in `r.plan`'s pipe and repo refused with the same fingerprint within a day, if one was. */
+/** Another plan in `r.plan`'s pipe and repo, not landed, refused with the same fingerprint within a day, if one was. */
 export function peer(db: Db, r: Refused): number | undefined {
-  const row = db.prepare(`SELECT f.plan FROM refusals f JOIN plans p ON p.id = f.plan LEFT JOIN targets t ON t.id = p.target_id
+  const plans = db.prepare(`SELECT f.plan FROM refusals f JOIN plans p ON p.id = f.plan LEFT JOIN targets t ON t.id = p.target_id
       JOIN plans me ON me.id = ? LEFT JOIN targets mt ON mt.id = me.target_id
     WHERE f.fingerprint = ? AND f.plan <> me.id AND f.cleared = 0 AND f.blip = 0 AND julianday(f.at) > julianday('now', '-1 day')
-      AND p.pipe_id = me.pipe_id AND ${repo('p', 't')} = ${repo('me', 'mt')}`).get(r.plan, r.fingerprint) as { plan: number } | undefined
-  return row?.plan
+      AND p.pipe_id = me.pipe_id AND ${repo('p', 't')} = ${repo('me', 'mt')} ORDER BY f.id`).pluck().all(r.plan, r.fingerprint) as number[]
+  return plans.find((p) => !landed(db, p))
 }
 
 /** The refusals recorded on `day` (local `yyyy-mm-dd`, `minutes` from UTC), blips left out, at local time. */
@@ -173,17 +174,23 @@ export function sentOnce(db: Db, plan: number): boolean {
   return db.prepare(`SELECT ${SENT("'director'")} > ${SENT("'ceo', 'coo'")}`).pluck().get(plan, plan) === 1
 }
 
-/** The plan's newest refusal within a day of `now` and since it was last sent round, and each plan refused alike in that day, cleared or not. */
+const STOPPED = `NOT EXISTS (SELECT 1 FROM events r JOIN events n ON n.plan = r.plan AND n.kind = r.kind AND n.actor = r.actor
+  AND n.id > r.id WHERE r.id = (SELECT min(id) FROM events WHERE plan = f.plan AND outcome = 'refuse' AND julianday(at) >= julianday(f.at)))`
+
+/**
+ * The plan's newest refusal within a day of `now` and since it was last sent round, and each plan refused alike in that day,
+ * cleared or not. A refusal its plan's step settled again after is one the plan went round, not a stop.
+ */
 export function alike(db: Db, plan: number, now: Date): { step: number; fingerprint: string; plans: number[] } | null {
   const day = "blip = 0 AND julianday(at) > julianday(?, '-1 day')"
   const at = now.toISOString()
-  const row = db.prepare(`SELECT step, fingerprint FROM refusals WHERE plan = ? AND ${day} AND julianday(at) > coalesce((SELECT
-      max(julianday(e.at)) FROM events e WHERE e.plan = ? AND e.kind IN ('return', 'retry')), 0) ORDER BY id DESC LIMIT 1`)
-    .get(plan, at, plan) as { step: number; fingerprint: string } | undefined
-  if (row === undefined || row.fingerprint === fingerprint(row.step, ['base:stale'])) return null
-  const plans = db.prepare(`SELECT DISTINCT plan FROM refusals WHERE step = ? AND fingerprint = ? AND ${day} ORDER BY plan`)
+  const row = db.prepare(`SELECT step, fingerprint, ${STOPPED} AS stopped FROM refusals f WHERE plan = ? AND ${day} AND julianday(at) >
+      coalesce((SELECT max(julianday(e.at)) FROM events e WHERE e.plan = ? AND e.kind IN ('return', 'retry')), 0) ORDER BY id DESC LIMIT 1`)
+    .get(plan, at, plan) as { step: number; fingerprint: string; stopped: number } | undefined
+  if (row === undefined || row.stopped === 0 || row.fingerprint === fingerprint(row.step, ['base:stale'])) return null
+  const plans = db.prepare(`SELECT DISTINCT plan FROM refusals f WHERE step = ? AND fingerprint = ? AND ${day} AND ${STOPPED} ORDER BY plan`)
     .pluck().all(row.step, row.fingerprint, at) as number[]
-  return { ...row, plans }
+  return { step: row.step, fingerprint: row.fingerprint, plans }
 }
 
 /** A person sent the plan round again: its round count starts over, but a refusal it already had still stops it. */

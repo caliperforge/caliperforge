@@ -17,7 +17,7 @@ export type PipeRow = z.infer<typeof PipeRow>
 
 /** Why the tick is not stepping a plan; the store refuses a reason outside the list on the way in. */
 export const WAIT = ['ceo_batch', 'target_approval', 'ready_proof', 'target_parked', 'token_ceiling',
-  'leased', 'over_cap', 'lane_over_cap', 'no_step_map', 'file_overlap', 'bench_score_busy'] as const
+  'leased', 'over_cap', 'lane_over_cap', 'no_step_map', 'file_overlap', 'bench_score_busy', 'bench_night'] as const
 
 export type Wait = typeof WAIT[number]
 

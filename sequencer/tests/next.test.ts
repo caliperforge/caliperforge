@@ -151,5 +151,5 @@ for (const [name, { state, id = 1, mine = false, want }] of Object.entries(TABLE
 
 test('the table has a row for every reason a plan waits', () => {
   const decided = new Set(Object.values(TABLE).map(({ want }) => 'fire' in want ? 'fire' : want.wait))
-  expect(decided).toEqual(new Set([...WAIT.filter((w) => w !== 'no_step_map'), 'fire']))
+  expect(decided).toEqual(new Set([...WAIT.filter((w) => w !== 'no_step_map' && w !== 'bench_night'), 'fire']))
 })

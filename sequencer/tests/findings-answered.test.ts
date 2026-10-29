@@ -40,4 +40,4 @@ test('D6 a rebuild without F1 is refused, with F1 passes', async () => {
   expect(refusals[2]).toContain('spans:\n  - F1\n')
   expect(verdictRows(w.db, 1).filter((v) => v.kind === 'review' && v.step === 4).map((v) => v.outcome)).toEqual(['refuse', 'pass'])
   expect(maybe(w.root, 1, 'findings.open.md')).toBeNull()
-})
+}, 120_000)

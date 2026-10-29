@@ -1,0 +1,4 @@
+{
+ "verdict": "fix",
+ "brief": "check: format\nrule: openapi.path: url only: commit the document beside PAY.md and reference it with openapi: { path: ... }\ncurrent: openapi.path\nreplacement: a valid openapi.path"
+}

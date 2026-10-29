@@ -1,0 +1,7 @@
+{
+ "fetch": {},
+ "hosts": [
+  "api.akca.network"
+ ],
+ "rpc": {}
+}

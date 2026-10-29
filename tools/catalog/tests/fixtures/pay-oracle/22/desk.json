@@ -1,0 +1,4 @@
+{
+ "verdict": "fix",
+ "brief": "check: format\nrule: name=akca-x402 but parent directory is x402\ncurrent: akca-x402\nreplacement: x402"
+}

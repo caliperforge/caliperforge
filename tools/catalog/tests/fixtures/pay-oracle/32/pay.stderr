@@ -1,0 +1,14 @@
+[4m[1mProbe results[0m[0m
+[1mproviders/tetrac/exchange[0m [32mOK[39m
+  [2mGET   [0m api/v1/exchanges                                   [32mOK[39m 402 x402         USDC (2540ms)
+  [2mPOST  [0m api/v1/exchanges                                   [32mOK[39m 402 x402         USDC (618ms)
+  [2mGET   [0m api/v1/exchanges/latency                           [32mOK[39m 402 x402         USDC (658ms)
+
+[4m[1mSolana-compat verdict[0m[0m
+[1m[32mPASS[39m[0m   [1mproviders/tetrac/exchange[0m (3/3)
+  [32mOK[39m  [2mGET[0m api/v1/exchanges  [2mpaid via x402[0m ([2mok[0m)
+  [32mOK[39m  [2mPOST[0m api/v1/exchanges  [2mpaid via x402[0m ([2mok[0m)
+  [32mOK[39m  [2mGET[0m api/v1/exchanges/latency  [2mpaid via x402[0m ([2mok[0m)
+[1m[32m│[39m[0m [1mPAY.md check successful[0m
+[1m[32m│[39m[0m [2m3 endpoints tested across 1 provider[0m
+[1m[32m│[39m[0m [2m3/3 gates compatible with Solana[0m

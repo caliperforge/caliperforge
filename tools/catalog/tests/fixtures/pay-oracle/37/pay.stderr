@@ -1,0 +1,14 @@
+[4m[1mProbe results[0m[0m
+[1mproviders/invoica/payments[0m [31mFAIL[39m
+  [2mPOST  [0m /api/x402/invoice                                  [31mFAIL[39m expected 402, got 401 (932ms)
+  [2mPOST  [0m /api/x402/settle                                   [31mFAIL[39m expected 402, got 401 (840ms)
+  [2mPOST  [0m /api/x402/tax                                      [31mFAIL[39m expected 402, got 401 (799ms)
+
+[4m[1mSolana-compat verdict[0m[0m
+[1m[32mPASS[39m[0m   [1mproviders/invoica/payments[0m (0/0)
+  [2m?[0m  [2mPOST[0m /api/x402/invoice  [2mauth required — payment behind credentials, can't verify[0m ([2mauth_required[0m)
+  [2m?[0m  [2mPOST[0m /api/x402/settle  [2mauth required — payment behind credentials, can't verify[0m ([2mauth_required[0m)
+  [2m?[0m  [2mPOST[0m /api/x402/tax  [2mauth required — payment behind credentials, can't verify[0m ([2mauth_required[0m)
+[1m[32m│[39m[0m [1mPAY.md check successful[0m
+[1m[32m│[39m[0m [2m3 endpoints tested across 1 provider[0m
+[1m[32m│[39m[0m [2m3 probe failure(s) — see --verbose[0m

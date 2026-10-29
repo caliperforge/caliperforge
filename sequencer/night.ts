@@ -21,7 +21,6 @@ function scoring(db: Db, plan: PlanRow): boolean {
     && (p.state === 'queued' || p.state === 'running') && leases.has(p.id))
 }
 
-/** Inside the refuzz pipe's window, or at any hour when there is no refuzz pipe. */
 function night(db: Db, now: Date): boolean {
   const pipe = pipeNamed(db, 'refuzz')
   return pipe === null || inWindow(pipe, hhmm(db, now))

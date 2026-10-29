@@ -7,10 +7,12 @@ import { amend, lanes } from '../../store/lanes.ts'
 import { dropPlan, pipeOf, planRows } from '../../store/plans.ts'
 import { fingerprint, refused } from '../../store/refusals.ts'
 import { at } from '../../templates/pr-path.ts'
+import { greenSince } from '../base.ts'
 import { tick } from '../index.ts'
 import { fingerprintOf } from '../refusal.ts'
 import { CI_ONLY } from '../settle.ts'
-import { CARRIED, internalPlan, ours, REFUSE, stub, world } from './world.ts'
+import { get } from '../workspace.ts'
+import { CARRIED, internalPlan, ours, REFUSE, stub, watched, world } from './world.ts'
 
 const text = (note: string) => ({ outcome: 'refuse' as const, spans: ['text:5 identifier.unresolved'], note })
 const base = (note: string) => ({ outcome: 'refuse' as const, spans: ['base:stale'], note })
@@ -69,8 +71,8 @@ test('D2 a shared refusal stops its lane and names plans and span', async () => 
   internalPlan(w.db, w.root, 2)
   internalPlan(w.db, w.root, 3, 'an earlier plan', 35)
   amend(w.db, 3, { state: 'done' })
-  refused(w.db, { plan: 3, step: 4, fingerprint: fingerprint(4, ['src/hello.ts:1']), diff: null })
   for (let step = 0; step < 4; step += 1) await tick(w.db, w.root, stub(CARRIED))
+  refused(w.db, { plan: 3, step: 4, fingerprint: fingerprint(4, ['src/hello.ts:1']), diff: null, base: get(w.root, 2, 'base.sha').trim() })
   internalPlan(w.db, w.root, 4, 'a later plan', 36)
   amend(w.db, 4, { state: 'running', step: 2 })
   record(w.db, 4, [{ path: 'src/hello.ts', is_new: false }])
@@ -82,6 +84,29 @@ test('D2 a shared refusal stops its lane and names plans and span', async () => 
   expect(planRows(w.db).find((p) => p.id === 4)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'coo',
     held_why: expect.stringMatching(/^lane off: plans 2 and 3 refused on src\/hello\.ts:1/) as unknown })
   expect(lanes(w.db, '09:00').live).toBe(0)
+})
+
+test('D7 another sha with a green main since leaves the lane on', async () => {
+  const w = world()
+  dropPlan(w.db, 1)
+  ours(w.root)
+  internalPlan(w.db, w.root, 2)
+  internalPlan(w.db, w.root, 3, 'an earlier plan', 35)
+  amend(w.db, 3, { state: 'done' })
+  for (let step = 0; step < 4; step += 1) await tick(w.db, w.root, stub(CARRIED))
+  refused(w.db, { plan: 3, step: 4, fingerprint: fingerprint(4, ['src/hello.ts:1']), diff: null, base: 'f'.repeat(40) })
+  const green = watched([], w.root, 2, () => JSON.stringify([{ conclusion: 'success', createdAt: new Date().toISOString() }]))
+  const fired = (await tick(w.db, w.root, stub(CARRIED, 0, REFUSE), undefined, undefined, green))[0]
+  expect(fired?.note).not.toContain('lane off')
+  expect(pipeOf(w.db, 1).enabled).toBe(1)
+})
+
+test('D6 greenSince counts only a main success after since', () => {
+  const on = (conclusion: string, createdAt: string): boolean =>
+    greenSince(() => JSON.stringify([{ conclusion, createdAt }]))('caliperforge/caliperforge', '2026-10-29T12:00:00Z')
+  expect(on('success', '2026-10-29T12:00:01Z')).toBe(true)
+  expect(on('failure', '2026-10-29T12:00:01Z')).toBe(false)
+  expect(on('success', '2026-10-29T11:59:59Z')).toBe(false)
 })
 
 test('D1 a refusal from a plan that landed leaves the lane on', async () => {

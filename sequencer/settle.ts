@@ -8,7 +8,7 @@ import { type Db, LOCKED } from '../store/index.ts'
 import type { Taken } from '../store/leases.ts'
 import { busy } from '../store/now.ts'
 import { advance, back, end, finish, internal, needsCeo, rewind, type PipeRow, type PlanRow, waiting } from '../store/plans.ts'
-import { blipped, peer, refused, sinceSent } from '../store/refusals.ts'
+import { blipped, type Green, peer, refused, sinceSent } from '../store/refusals.ts'
 import { newestVerdict, reviewSince } from '../store/reviewed.ts'
 import { brief } from '../templates/account.ts'
 import { generate } from '../templates/bench.ts'
@@ -21,7 +21,8 @@ import { parted } from './split.ts'
 import { executed } from './command.ts'
 import { subject } from './daily.ts'
 import { refilled } from './refill.ts'
-import type { Wire } from './push.ts'
+import { WIRE, type Wire } from './push.ts'
+import { greenSince } from './base.ts'
 import { fireBrief, fireLanded, fireSeat } from './seat.ts'
 import { proved } from './ready.ts'
 import { kernel, mapOf, targetOf } from './steps.ts'
@@ -51,7 +52,7 @@ export async function stepped(db: Db, root: string, pipe: PipeRow, plan: PlanRow
   const verdicts = newestVerdict(db)
   if (fuzzes(plan, step)) logged(db, { plan: plan.id, kind: 'bench.fired', actor: step.runs, outcome: 'pass', message: step.name, pointer: null, run: null })
   const outcome = tree.failed ?? seatless(plan, step, tree.language) ?? await made(db, root, plan, step, provider, wire, read)
-  const state = settle(db, root, plan, step, outcome)
+  const state = settle(db, root, plan, step, outcome, greenSince((wire ?? WIRE).runs))
   if (outcome.quiet !== true) {
     logged(db, { plan: plan.id, kind: step.name, actor: step.runs, outcome: outcome.outcome === 'needs_ceo' ? 'escalate' : outcome.outcome, message: outcome.note,
       pointer: pointer(db, plan.id, step, verdicts), run: runSince(db, plan.id, step.step, mark) })
@@ -239,7 +240,7 @@ function model(db: Db, plan: PlanRow, step: Step, run: () => Promise<Outcome>): 
   return run()
 }
 
-function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcome): string {
+function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcome, green: Green): string {
   if (outcome.held === true) return 'running'
   if (outcome.blip === true) return blip(db, root, plan, step, outcome)
   if (outcome.split === true || outcome.ran === true) {
@@ -266,11 +267,11 @@ function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcom
     })()
   }
   const r = { plan: plan.id, step: step.step, fingerprint: fingerprintOf(step, outcome), ...digests(root, plan, step), moved: outcome.moved,
-    own: outcome.spans.some((s) => s.startsWith('ratchet:')) || undefined, span: outcome.spans.join(', '), note: outcome.note }
-  const why = refused(db, r)
+    own: outcome.spans.some((s) => s.startsWith('ratchet:')) || undefined, span: outcome.spans.join(', '), note: outcome.note, base: maybe(root, plan.id, 'base.sha')?.trim() ?? null }
+  const why = refused(db, r, green)
   const cap = streaked(db, root, plan, step)
   if (why !== 'again') stopped(root, plan.id, why)
-  if (why === 'shared' && !outcome.spans.every((s) => CI_ONLY.test(s))) breaker(db, plan, peer(db, r), outcome)
+  if (why === 'shared' && !outcome.spans.every((s) => CI_ONLY.test(s))) breaker(db, plan, peer(db, r, green), outcome)
   // A rewind costs no retry but is recorded like any refusal, so a second identical one waits for a person.
   if (outcome.rewind !== undefined && why === 'again' && cap === null) { rewind(db, plan.id, outcome.rewind); return 'running' }
   return back(db, plan, outcome.to ?? backTo(step), cap !== null || why !== 'again' || fenced(outcome), cap ?? outcome.note)

@@ -1,0 +1,1 @@
+ALTER TABLE refusals ADD COLUMN base TEXT;

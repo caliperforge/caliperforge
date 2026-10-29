@@ -28,7 +28,12 @@ export interface Refused {
   ticket?: string | undefined
   span?: string | undefined
   note?: string | undefined
+  /** The main sha the plan was built on. */
+  base?: string | null | undefined
 }
+
+/** Whether `repo`'s main had a green CI run after `since`. */
+export type Green = (repo: string, since: string) => boolean
 
 const ANSI = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'g')
 
@@ -52,16 +57,15 @@ export function fingerprint(step: number, spans: string[], output = ''): string 
  * read as shared either, because main moving is not a fault on main, and nor is a branch cut
  * again because main moved under it: that one goes round until `ROUNDS`, and `base.laps` caps it sooner.
  */
-export function refused(db: Db, r: Refused): Why {
+export function refused(db: Db, r: Refused, green: Green = () => false): Why {
   const prior = db.prepare('SELECT fingerprint, diff FROM refusals WHERE plan = ? AND cleared = 0 AND blip = 0 ORDER BY id')
     .all(r.plan) as { fingerprint: string; diff: string | null }[]
   const had = db.prepare('SELECT 1 FROM refusals WHERE plan = ? AND blip = 0 AND fingerprint = ? AND ticket IS ?')
     .get(r.plan, r.fingerprint, r.ticket ?? null) !== undefined
-  db.prepare('INSERT INTO refusals (plan, step, fingerprint, diff, blip, ticket, span, note) VALUES (?, ?, ?, ?, 0, ?, ?, ?)')
-    .run(r.plan, r.step, r.fingerprint, r.diff, r.ticket ?? null, r.span ?? null, r.note ?? null)
-  const elsewhere = peer(db, r)
+  db.prepare('INSERT INTO refusals (plan, step, fingerprint, diff, blip, ticket, span, note, base) VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?)')
+    .run(r.plan, r.step, r.fingerprint, r.diff, r.ticket ?? null, r.span ?? null, r.note ?? null, r.base ?? null)
   if (r.moved === true) return prior.length + 1 >= ROUNDS ? 'spent' : 'again'
-  if (r.own !== true && elsewhere !== undefined && r.step >= BUILD && r.fingerprint !== fingerprint(r.step, ['base:stale'])) return 'shared'
+  if (r.own !== true && r.step >= BUILD && r.fingerprint !== fingerprint(r.step, ['base:stale']) && peer(db, r, green) !== undefined) return 'shared'
   if (had) return 'repeat'
   if (r.diff !== null && prior.at(-1)?.diff === r.diff) return 'unchanged'
   return prior.length + 1 >= ROUNDS ? 'spent' : 'again'
@@ -70,13 +74,20 @@ export function refused(db: Db, r: Refused): Why {
 const repo = (p: string, t: string): string =>
   `coalesce(${t}.repo, replace(substr(${p}.origin, 1, instr(${p}.origin, '/issues/') - 1), 'https://github.com/', ''))`
 
-/** Another plan in `r.plan`'s pipe and repo, not landed, refused with the same fingerprint within a day, if one was. */
-export function peer(db: Db, r: Refused): number | undefined {
-  const plans = db.prepare(`SELECT f.plan FROM refusals f JOIN plans p ON p.id = f.plan LEFT JOIN targets t ON t.id = p.target_id
+/**
+ * Another plan in `r.plan`'s pipe and repo, not landed, refused with the same fingerprint within a day, if one was:
+ * on the same main sha, or within 2 h with no green main run since.
+ */
+export function peer(db: Db, r: Refused, green: Green): number | undefined {
+  const rows = db.prepare(`SELECT f.plan, f.base, julianday(f.at) > julianday('now', '-2 hours') AS recent,
+      strftime('%Y-%m-%dT%H:%M:%SZ', f.at) AS at, ${repo('me', 'mt')} AS repo
+    FROM refusals f JOIN plans p ON p.id = f.plan LEFT JOIN targets t ON t.id = p.target_id
       JOIN plans me ON me.id = ? LEFT JOIN targets mt ON mt.id = me.target_id
     WHERE f.fingerprint = ? AND f.plan <> me.id AND f.cleared = 0 AND f.blip = 0 AND julianday(f.at) > julianday('now', '-1 day')
-      AND p.pipe_id = me.pipe_id AND ${repo('p', 't')} = ${repo('me', 'mt')} ORDER BY f.id`).pluck().all(r.plan, r.fingerprint) as number[]
-  return plans.find((p) => !landed(db, p))
+      AND p.pipe_id = me.pipe_id AND ${repo('p', 't')} = ${repo('me', 'mt')} ORDER BY f.id`)
+    .all(r.plan, r.fingerprint) as { plan: number; base: string | null; recent: number; at: string; repo: string }[]
+  return rows.find((f) => !landed(db, f.plan)
+    && ((f.base !== null && f.base === r.base) || (f.recent === 1 && !green(f.repo, f.at))))?.plan
 }
 
 /** The refusals recorded on `day` (local `yyyy-mm-dd`, `minutes` from UTC), blips left out, at local time. */

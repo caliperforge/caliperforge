@@ -1,4 +1,5 @@
 import { list, type Board, type Gh, type Head } from '../rails/ci-green/index.ts'
+import type { Green } from '../store/refusals.ts'
 import { failing, type Failed } from './failures.ts'
 import { maybe, put } from './workspace.ts'
 
@@ -61,4 +62,12 @@ function settled(root: string, plan: number, head: Head, runs: Run[], gh: Gh): b
 
 function idOf(run: Run): string {
   return ID.exec(run.url)?.[1] ?? ''
+}
+
+export function greenSince(gh: Gh): Green {
+  return (repo, since) => {
+    const runs = JSON.parse(gh(['run', 'list', '--repo', repo, '--branch', 'main', '--limit', '100', '--json', 'conclusion,createdAt'])) as
+      { conclusion: string; createdAt: string }[]
+    return runs.some((r) => r.conclusion === 'success' && Date.parse(r.createdAt) > Date.parse(since))
+  }
 }

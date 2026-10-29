@@ -3,7 +3,7 @@ import { expect, test } from 'vitest'
 import { load } from '../runner/rules.ts'
 import { logged, runAt } from './events.ts'
 import { migrate, open, type Db } from './index.ts'
-import { blipped, builds, clear, fingerprint, refusalRows, refused, ROUNDS, sinceSent } from './refusals.ts'
+import { blipped, builds, clear, fingerprint, type Green, refusalRows, refused, ROUNDS, sinceSent } from './refusals.ts'
 
 const root = join(import.meta.dirname, '..')
 
@@ -61,6 +61,59 @@ test('D1 the same failure in another repo is not shared', () => {
   another(db, 1, 'https://github.com/caliperforge/atelier/issues/77')
   refused(db, { plan: 2, step: 3, fingerprint: A, diff: D1 })
   expect(refused(db, { plan: PLAN, step: 3, fingerprint: A, diff: D2 })).toBe('again')
+})
+
+const ORIGIN = 'https://github.com/caliperforge/caliperforge/issues/77'
+
+const S1 = '1'.repeat(40)
+
+const S2 = '2'.repeat(40)
+
+function asked(on: boolean, calls: string[][]): Green {
+  return (repo, since) => { calls.push([repo, since]); return on }
+}
+
+const aged = (db: Db): void => void db.prepare("UPDATE refusals SET at = datetime('now', '-3 hours')").run()
+
+test('D1 a refusal stores its base', () => {
+  const db = bench()
+  refused(db, { plan: PLAN, step: 3, fingerprint: A, diff: D1, base: S1 })
+  refused(db, { plan: PLAN, step: 4, fingerprint: B, diff: D2 })
+  expect(db.prepare('SELECT base FROM refusals ORDER BY id').pluck().all()).toEqual([S1, null])
+})
+
+test('D2 the same base is shared however old and however green', () => {
+  const db = bench()
+  another(db, 1, ORIGIN)
+  refused(db, { plan: 2, step: 3, fingerprint: A, diff: D1, base: S1 })
+  aged(db)
+  expect(refused(db, { plan: PLAN, step: 3, fingerprint: A, diff: D2, base: S1 }, () => true)).toBe('shared')
+})
+
+test('D3 another base under 2 h, green main since: not shared', () => {
+  const db = bench()
+  another(db, 1, ORIGIN)
+  refused(db, { plan: 2, step: 3, fingerprint: A, diff: D1, base: S1 })
+  const calls: string[][] = []
+  expect(refused(db, { plan: PLAN, step: 3, fingerprint: A, diff: D2, base: S2 }, asked(true, calls))).toBe('again')
+  expect(calls).toEqual([['caliperforge/caliperforge', expect.stringMatching(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/)]])
+})
+
+test('D4 another base under 2 h, no green main since: shared', () => {
+  const db = bench()
+  another(db, 1, ORIGIN)
+  refused(db, { plan: 2, step: 3, fingerprint: A, diff: D1, base: S1 })
+  expect(refused(db, { plan: PLAN, step: 3, fingerprint: A, diff: D2, base: S2 }, asked(false, []))).toBe('shared')
+})
+
+test('D5 another base over 2 h old is not shared and asks no CI', () => {
+  const db = bench()
+  another(db, 1, ORIGIN)
+  refused(db, { plan: 2, step: 3, fingerprint: A, diff: D1, base: S1 })
+  aged(db)
+  const calls: string[][] = []
+  expect(refused(db, { plan: PLAN, step: 3, fingerprint: A, diff: D2, base: S2 }, asked(false, calls))).toBe('again')
+  expect(calls).toEqual([])
 })
 
 test('D3 the same failure in another pipe is not shared', () => {

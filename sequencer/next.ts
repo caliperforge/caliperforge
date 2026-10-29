@@ -24,7 +24,7 @@ const OFF = new Set<Wait>(PARKED)
 export function route(db: Db, plan: PlanRow, now: Date, mine: Lease | null = null): Route {
   if (others(db, now, mine).some((l) => l.plan === plan.id)) return { wait: 'leased', on: null }
   if (!MAPPED.has(plan.template)) return { wait: 'no_step_map', on: null }
-  const stop = blocked(db, plan)
+  const stop = blocked(db, plan, now)
   if (stop !== null) return { wait: stop, on: stop === 'file_overlap' ? (overlapping(db, plan)?.plan ?? null) : null }
   const on = plan.state === 'running' ? heldOn(db, plan) : null
   if (on !== null && planById(db, on).pipe_id === plan.pipe_id) return { wait: 'file_overlap', on }
@@ -69,11 +69,11 @@ export function picks(db: Db, pipe: PipeRow, now: Date = new Date(), mine: Lease
   const leases = new Set(others(db, now, mine).map((l) => l.plan))
   const mapped = live(db, pipe).filter((p) => MAPPED.has(p.template))
   const free = mapped.filter((p) => {
-    const stop = blocked(db, p)
+    const stop = blocked(db, p, now)
     const on = p.state === 'running' ? heldOn(db, p) : null
     return leases.has(p.id) || (!mapped.some((o) => o.id === on)
       && (stop === null || (p.state === 'running' && overlapping(db, p) === null && !OFF.has(stop))))
   })
   return underCap(pipe, free, leases)
-    .filter((p) => !leases.has(p.id) && (p.state !== 'running' || blocked(db, p) === null))
+    .filter((p) => !leases.has(p.id) && (p.state !== 'running' || blocked(db, p, now) === null))
 }

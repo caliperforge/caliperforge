@@ -1,0 +1,86 @@
+{
+ "fetch": {
+  "GET https://www.tetrac.xyz/api/v1/exchanges": {
+   "status": 402,
+   "headers": {
+    "access-control-allow-headers": [
+     "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization, ttc-auth-token, ttc-public-key, x-x402-payment, x-payment, payment-required, payment-signature"
+    ],
+    "access-control-allow-methods": [
+     "GET, POST, OPTIONS"
+    ],
+    "access-control-allow-origin": [
+     "*"
+    ],
+    "access-control-expose-headers": [
+     "WWW-Authenticate, payment-required"
+    ],
+    "access-control-max-age": [
+     "86400"
+    ],
+    "age": [
+     "0"
+    ],
+    "cache-control": [
+     "public, max-age=0, must-revalidate"
+    ],
+    "content-security-policy": [
+     "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://telegram.org; style-src 'self' 'unsafe-inline'; connect-src 'self' https: wss:; img-src 'self' data: https:; media-src 'self' blob:; font-src 'self' data:; frame-ancestors 'none'; frame-src 'self' https://paragraph.com https://oauth.telegram.org"
+    ],
+    "content-type": [
+     "application/json"
+    ],
+    "date": [
+     "Wed, 28 Oct 2026 20:19:25 GMT"
+    ],
+    "payment-required": [
+     "eyJ4NDAyVmVyc2lvbiI6MiwiYWNjZXB0cyI6W3sic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoic29sYW5hOjVleWt0NFVzRnY4UDhOSmRUUkVwWTF2enFLcVpLdmRwIiwiYW1vdW50IjoiNTAwMDAiLCJhc3NldCI6IkVQakZXZGQ1QXVmcVNTcWVNMnFOMXh6eWJhcEM4RzR3RUdHa1p3eVREdDF2IiwicGF5VG8iOiIydVNadTZqaEY3WlQ3YlJFbVFaZWlKQ0VneW5OMlF3cHFhM0J0YXhoeHhCTSIsIm1heFRpbWVvdXRTZWNvbmRzIjozMDAsInJlc291cmNlIjoiaHR0cHM6Ly93d3cudGV0cmFjLnh5ei9hcGkvdjEvZXhjaGFuZ2VzIiwiZXh0cmEiOnsibmFtZSI6IlVTREMifX1dLCJyZXNvdXJjZSI6eyJ1cmwiOiJodHRwczovL3d3dy50ZXRyYWMueHl6L2FwaS92MS9leGNoYW5nZXMiLCJkZXNjcmlwdGlvbiI6IkFjY2VzcyB0byAvYXBpL3YxL2V4Y2hhbmdlcyBlbmRwb2ludCIsIm1pbWVUeXBlIjoiYXBwbGljYXRpb24vanNvbiJ9fQ=="
+    ],
+    "permissions-policy": [
+     "camera=(self), microphone=(self), geolocation=(self)"
+    ],
+    "referrer-policy": [
+     "strict-origin-when-cross-origin"
+    ],
+    "server": [
+     "Vercel"
+    ],
+    "strict-transport-security": [
+     "max-age=31536000; includeSubDomains"
+    ],
+    "www-authenticate": [
+     "x402 realm=\"https://www.tetrac.xyz/api/v1/exchanges\""
+    ],
+    "x-content-type-options": [
+     "nosniff"
+    ],
+    "x-frame-options": [
+     "DENY"
+    ],
+    "x-matched-path": [
+     "/api/v1/exchanges"
+    ],
+    "x-response-time": [
+     "0ms"
+    ],
+    "x-vercel-cache": [
+     "MISS"
+    ],
+    "x-vercel-id": [
+     "iad1::sin1::b65jf-1793218764867-9a550b470e6d"
+    ],
+    "connection": [
+     "close"
+    ],
+    "transfer-encoding": [
+     "chunked"
+    ]
+   },
+   "body": "{\"success\":false,\"status\":402,\"error\":\"Payment Required - X402 payment header required\",\"code\":402,\"x402Version\":2,\"accepts\":[{\"scheme\":\"exact\",\"network\":\"solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp\",\"amount\":\"50000\",\"asset\":\"EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v\",\"payTo\":\"2uSZu6jhF7ZT7bREmQZeiJCEgynN2Qwpqa3BtaxhxxBM\",\"maxTimeoutSeconds\":300,\"resource\":\"https://www.tetrac.xyz/api/v1/exchanges\",\"extra\":{\"name\":\"USDC\"}}],\"resource\":{\"url\":\"https://www.tetrac.xyz/api/v1/exchanges\",\"description\":\"Access to /api/v1/exchanges endpoint\",\"mimeType\":\"application/json\"},\"paymentRequired\":{\"accepts\":{\"scheme\":\"exact\",\"network\":\"solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp\",\"payTo\":\"2uSZu6jhF7ZT7bREmQZeiJCEgynN2Qwpqa3BtaxhxxBM\",\"price\":{\"amount\":\"50000\",\"asset\":\"EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v\"},\"maxTimeoutSeconds\":300,\"description\":\"Access to /api/v1/exchanges endpoint\",\"mimeType\":\"application/json\"},\"paymentUrl\":\"solana:2uSZu6jhF7ZT7bREmQZeiJCEgynN2Qwpqa3BtaxhxxBM?amount=0.05&spl-token=EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v&reference=BSeqDMjk9iD9AEMygegRft3peT6NWycTgnyaYKzy6ofH&label=Tetrac+API&message=Access+to+%2Fapi%2Fv1%2Fexchanges+endpoint\",\"expiresIn\":300},\"methods\":{\"setHedgeMode\":{\"name\":\"setHedgeMode\",\"path\":\"/api/v1/exchanges\",\"method\":\"POST\",\"description\":\"Set hedge mode for the exchange account\",\"price\":{\"amount\":\"0.05\",\"currency\":\"USDC\"}},\"setLeverage\":{\"name\":\"setLeverage\",\"path\":\"/api/v1/exchanges\",\"method\":\"POST\",\"description\":\"Set leverage for a specific trading pair\",\"price\":{\"amount\":\"0.05\",\"currency\":\"USDC\"}},\"getInfoLeverage\":{\"name\":\"getInfoLeverage\",\"path\":\"/api/v1/exchanges\",\"method\":\"POST\",\"description\":\"Get the leverage tier brackets for a specific trading pair (notional ranges and their max leverage caps)\",\"price\":{\"amount\":\"0.05\",\"currency\":\"USDC\"}},\"getPositions\":{\"name\":\"getPositions\",\"path\":\"/api/v1/exchanges\",\"method\":\"POST\",\"description\":\"Retrieve current open positions\",\"price\":{\"amount\":\"0.05\",\"currency\":\"USDC\"}},\"getBalance\":{\"name\":\"getBalance\",\"path\":\"/api/v1/exchanges\",\"method\":\"POST\",\"description\":\"Get account balance information\",\"price\":{\"amount\":\"0.05\",\"currency\":\"USDC\"}},\"placeLimitOrder\":{\"name\":\"placeLimitOrder\",\"path\":\"/api/v1/exchanges\",\"method\":\"POST\",\"description\":\"Execute a limit order (filled when price reaches specified level)\",\"price\":{\"amount\":\"0.05\",\"currency\":\"USDC\"}},\"placeMarketOrder\":{\"name\":\"placeMarketOrder\",\"path\":\"/api/v1/exchanges\",\"method\":\"POST\",\"description\":\"Execute a market order (filled immediately at current price)\",\"price\":{\"amount\":\"0.05\",\"currency\":\"USDC\"}},\"placeStopOrder\":{\"name\":\"placeStopOrder\",\"path\":\"/api/v1/exchanges\",\"method\":\"POST\",\"description\":\"Place a stop order that triggers at a specified price\",\"price\":{\"amount\":\"0.05\",\"currency\":\"USDC\"}},\"closeAllPositions\":{\"name\":\"closeAllPositions\",\"path\":\"/api/v1/exchanges\",\"method\":\"POST\",\"description\":\"Close all open positions for the account\",\"price\":{\"amount\":\"0.05\",\"currency\":\"USDC\"}},\"createWithdrawal\":{\"name\":\"createWithdrawal\",\"path\":\"/api/v1/exchanges\",\"method\":\"POST\",\"description\":\"Initiate a withdrawal from the exchange\",\"price\":{\"amount\":\"0.05\",\"currency\":\"USDC\"}},\"getDepositAddress\":{\"name\":\"getDepositAddress\",\"path\":\"/api/v1/exchanges\",\"method\":\"POST\",\"description\":\"Get deposit address for a specific asset\",\"price\":{\"amount\":\"0.05\",\"currency\":\"USDC\"}},\"getOrders\":{\"name\":\"getOrders\",\"path\":\"/api/v1/exchanges\",\"method\":\"POST\",\"description\":\"Retrieve open or historical orders\",\"price\":{\"amount\":\"0.05\",\"currency\":\"USDC\"}},\"cancelAllOrders\":{\"name\":\"cancelAllOrders\",\"path\":\"/api/v1/exchanges\",\"method\":\"POST\",\"description\":\"Cancel all open orders for the account\",\"price\":{\"amount\":\"0.05\",\"currency\":\"USDC\"}},\"cancelOrder\":{\"name\":\"cancelOrder\",\"path\":\"/api/v1/exchanges\",\"method\":\"POST\",\"description\":\"Cancel a specific order by ID\",\"price\":{\"amount\":\"0.05\",\"currency\":\"USDC\"}},\"getUserTradeHistory\":{\"name\":\"getUserTradeHistory\",\"path\":\"/api/v1/exchanges\",\"method\":\"POST\",\"description\":\"Retrieve user's historical trade records\",\"price\":{\"amount\":\"0.05\",\"currency\":\"USDC\"}},\"getAccounts\":{\"name\":\"getAccounts\",\"path\":\"/api/v1/exchanges\",\"method\":\"POST\",\"description\":\"List the user's Propr challenge-attempt accounts (onboarding account picker; Propr only)\",\"price\":{\"amount\":\"0.05\",\"currency\":\"USDC\"}},\"getTickers\":{\"name\":\"getTickers\",\"path\":\"/api/v1/exchanges\",\"method\":\"POST\",\"description\":\"Get current ticker information for trading pairs\",\"price\":{\"amount\":\"0.05\",\"currency\":\"USDC\"}},\"getBestBidAsk\":{\"name\":\"getBestBidAsk\",\"path\":\"/api/v1/exchanges\",\"method\":\"POST\",\"description\":\"Get best bid and ask prices for a trading pair\",\"price\":{\"amount\":\"0.05\",\"currency\":\"USDC\"}},\"getKlines\":{\"name\":\"getKlines\",\"path\":\"/api/v1/exchanges\",\"method\":\"POST\",\"description\":\"Get historical candlestick/kline data for a trading pair\",\"price\":{\"amount\":\"0.05\",\"currency\":\"USDC\"}},\"getContractSpecs\":{\"name\":\"getContractSpecs\",\"path\":\"/api/v1/exchanges\",\"method\":\"POST\",\"description\":\"Get per-market contract size, size increment and order minimums (canonical symbols)\",\"price\":{\"amount\":\"0.05\",\"currency\":\"USDC\"}}},\"pricing\":{\"amount\":\"0.05\",\"currency\":\"USDC\",\"network\":\"Solana\",\"per\":\"request\"},\"supportedExchanges\":[\"aden\",\"adrena\",\"aevo\",\"arcus\",\"asterdex\",\"binance\",\"bingx\",\"bitfinex\",\"bitget\",\"bitrue\",\"blofin\",\"bulktrade\",\"bullet\",\"bullish\",\"bybit\",\"coinbase\",\"decibel\",\"deepcoin\",\"doji\",\"dydx\",\"edgex\",\"evedex\",\"extended\",\"gmtrade\",\"grvt\",\"hibachi\",\"hyperliquid\",\"kraken\",\"kucoin\",\"lighter\",\"mexc\",\"okx\",\"ondo\",\"orderly\",\"ostium\",\"pacifica\",\"papertrade\",\"paradex\",\"phemex\",\"phoenix\",\"propr\",\"reya\",\"strike\",\"vanta\",\"variational\",\"veranta\",\"vest\",\"woox\",\"xbtfx\"]}"
+  }
+ },
+ "hosts": [
+  "www.tetrac.xyz"
+ ],
+ "rpc": {}
+}

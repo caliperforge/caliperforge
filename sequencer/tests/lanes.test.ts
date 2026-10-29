@@ -6,12 +6,13 @@ import { release } from '../../store/holds.ts'
 import { take } from '../../store/leases.ts'
 import type { Read } from '../../cli/gh.ts'
 import { addSetting, dropSettings } from '../../store/drift.ts'
-import { newestRun } from '../../store/events.ts'
+import { newestRun, ofKind } from '../../store/events.ts'
 import { amend, cap, dial, forget, lanes, name, priority, record, set, templatePriority, usage, width, windows, type Reading } from '../../store/lanes.ts'
 import { addPipe, addPlan, advance, allPlans, live, pipeNamed, retry, rewind } from '../../store/plans.ts'
 import { refusalRows } from '../../store/refusals.ts'
 import { tick } from '../index.ts'
 import { picks } from '../next.ts'
+import { relabel, reprice } from '../priority.ts'
 import { maybe, put, SELF } from '../workspace.ts'
 import { approve, CARRIED, internalPlan, plan, stub, watched, world, type World } from './world.ts'
 
@@ -322,6 +323,43 @@ test('an unread issue or two P labels keep the priority',async () => {
     expect(fired.map((f) => f.plan)).toEqual([1])
     for (const p of allPlans(w.db)) amend(w.db, p.id, { step: 0, state: 'queued' })
   }
+})
+
+const HAND = { actor: 'ceo', why: 'first' }
+const never = (): never => { throw new Error('called') }
+
+test('D1: relabel moves the P label, then the row reprice reads', () => {
+  const w = world()
+  internalPlan(w.db, w.root, 2, undefined, 34, 2)
+  const calls: string[][] = []
+  relabel(w.db, 2, 0, HAND, labelled('lane:machine', 'P2'), (args) => { calls.push(args); return '' })
+  expect(calls).toEqual([['issue', 'edit', '34', '--repo', SELF, '--add-label', 'P0', '--remove-label', 'P2']])
+  expect(plan(w.db, 2).priority).toBe(0)
+  expect(ofKind(w.db, 'priority').map((e) => e.message)).toEqual(['P2 → P0: first'])
+  reprice(w.db, labelled('lane:machine', 'P0'))
+  expect(plan(w.db, 2).priority).toBe(0)
+})
+
+test('D2: relabel on a plan with no origin calls no gh', () => {
+  const w = world()
+  queued(w, 2, w.pipe.id, 2)
+  relabel(w.db, 2, 0, HAND, never, never)
+  expect(plan(w.db, 2).priority).toBe(0)
+  expect(ofKind(w.db, 'priority').map((e) => e.message)).toEqual(['P2 → P0: first'])
+})
+
+test('D3: relabel refuses an out-of-range n before any gh', () => {
+  const w = world()
+  internalPlan(w.db, w.root, 2, undefined, 34, 2)
+  for (const n of [10, 2.5]) expect(() => { relabel(w.db, 2, n, HAND, never, never) }).toThrow(/cf priority takes P0 to P9/)
+  expect(plan(w.db, 2).priority).toBe(2)
+})
+
+test('D4: a gh failure fails relabel and keeps the row', () => {
+  const w = world()
+  internalPlan(w.db, w.root, 2, undefined, 34, 2)
+  expect(() => { relabel(w.db, 2, 0, HAND, labelled('P2'), never) }).toThrow(/called/)
+  expect(plan(w.db, 2).priority).toBe(2)
 })
 
 test('one window row each: our tokens beside the cap',async () => {

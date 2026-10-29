@@ -7,7 +7,7 @@ import { kindsOf, logged, newestRun, runSince } from '../store/events.ts'
 import { type Db, LOCKED } from '../store/index.ts'
 import type { Taken } from '../store/leases.ts'
 import { busy } from '../store/now.ts'
-import { advance, back, end, finish, internal, laneOff, needsCeo, rewind, type PipeRow, type PlanRow, waiting } from '../store/plans.ts'
+import { advance, back, end, finish, internal, needsCeo, rewind, type PipeRow, type PlanRow, waiting } from '../store/plans.ts'
 import { blipped, peer, refused, sinceSent } from '../store/refusals.ts'
 import { newestVerdict, reviewSince } from '../store/reviewed.ts'
 import { brief } from '../templates/account.ts'
@@ -16,6 +16,7 @@ import { draft, grow, review } from '../templates/comms.ts'
 import { builder, type Step } from '../templates/pr-path.ts'
 import { answered, check, gather } from '../templates/research.ts'
 import type { Fired, Outcome } from './kind.ts'
+import { breaker } from './breaker.ts'
 import { parted } from './split.ts'
 import { executed } from './command.ts'
 import { subject } from './daily.ts'
@@ -24,6 +25,7 @@ import type { Wire } from './push.ts'
 import { fireBrief, fireLanded, fireSeat } from './seat.ts'
 import { proved } from './ready.ts'
 import { kernel, mapOf, targetOf } from './steps.ts'
+import { fuzzes } from './night.ts'
 import { kept } from './merge.ts'
 import { keyLock } from './keyring.ts'
 import { languageFor } from './route.ts'
@@ -47,6 +49,7 @@ export async function stepped(db: Db, root: string, pipe: PipeRow, plan: PlanRow
   const step = mapOf(plan.template).at(plan.step, tree.language, plan.seat)
   const mark = newestRun(db)
   const verdicts = newestVerdict(db)
+  if (fuzzes(plan, step)) logged(db, { plan: plan.id, kind: 'bench.fired', actor: step.runs, outcome: 'pass', message: step.name, pointer: null, run: null })
   const outcome = tree.failed ?? seatless(plan, step, tree.language) ?? await made(db, root, plan, step, provider, wire, read)
   const state = settle(db, root, plan, step, outcome)
   if (outcome.quiet !== true) {
@@ -267,11 +270,7 @@ function settle(db: Db, root: string, plan: PlanRow, step: Step, outcome: Outcom
   const why = refused(db, r)
   const cap = streaked(db, root, plan, step)
   if (why !== 'again') stopped(root, plan.id, why)
-  if (why === 'shared' && !outcome.spans.every((s) => CI_ONLY.test(s))) {
-    laneOff(db, plan.pipe_id)
-    outcome.note += `; lane off: plans ${String(plan.id)} and ${String(peer(db, r))} refused on ${outcome.spans.join(', ')}`
-    logged(db, { plan: plan.id, kind: 'pipe', actor: 'settle', outcome: 'escalate', message: outcome.note, pointer: null, run: null })
-  }
+  if (why === 'shared' && !outcome.spans.every((s) => CI_ONLY.test(s))) breaker(db, plan, peer(db, r), outcome)
   // A rewind costs no retry but is recorded like any refusal, so a second identical one waits for a person.
   if (outcome.rewind !== undefined && why === 'again' && cap === null) { rewind(db, plan.id, outcome.rewind); return 'running' }
   return back(db, plan, outcome.to ?? backTo(step), cap !== null || why !== 'again' || fenced(outcome), cap ?? outcome.note)

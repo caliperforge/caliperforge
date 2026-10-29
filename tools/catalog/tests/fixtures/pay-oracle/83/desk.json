@@ -1,0 +1,4 @@
+{
+ "verdict": "fix",
+ "brief": "check: format\nrule: description is 277 characters\ncurrent: Real-time Korean stock market intelligence via x402. Returns company fundamentals (market cap, PER, PBR, ROE, revenue, operating profit), news-driven issue analysis with sentiment scoring, and investment risk assessment from regulatory filings. Covers all KRX-listed companies.\nreplacement: a description of 64-255 characters"
+}

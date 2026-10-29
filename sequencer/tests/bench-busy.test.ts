@@ -15,6 +15,9 @@ const schema = join(import.meta.dirname, '../../schema')
 /** 07:00 in Guatemala, when every lane's window opens. */
 const OPENS = new Date('2026-09-18T13:00:00.000Z')
 
+/** 23:00 in Guatemala, inside the refuzz pipe's window, when a bench plan may score. */
+const NIGHT = new Date('2026-09-19T05:00:00.000Z')
+
 const AT = '2026-09-18T13:00:00.000Z'
 
 function queued(db: Db, id: number, step: number, template: PlanRow['template'] = 'bench'): void {
@@ -44,25 +47,25 @@ test('D2 the leased plan is not held by its own lease', () => {
 test('D3 plan 2 fires once plan 1 is done, its lease row kept', () => {
   const db = two(2)
   end(db, 1, 'done')
-  expect(route(db, planById(db, 2), OPENS)).toEqual({ fire: mapOf('bench').at(2) })
+  expect(route(db, planById(db, 2), NIGHT)).toEqual({ fire: mapOf('bench').at(2) })
 })
 
 test('D3 plan 2 fires once plan 1 lease is dropped', () => {
   const db = two(2)
   drop(db, 1)
-  expect(route(db, planById(db, 2), OPENS)).toEqual({ fire: mapOf('bench').at(2) })
+  expect(route(db, planById(db, 2), NIGHT)).toEqual({ fire: mapOf('bench').at(2) })
 })
 
 test('D4 a leased bench plan at step 0 or 1 is not busy', () => {
   for (const step of [0, 1]) {
     const db = two(step)
-    expect(route(db, planById(db, 2), OPENS)).toEqual({ fire: mapOf('bench').at(2) })
+    expect(route(db, planById(db, 2), NIGHT)).toEqual({ fire: mapOf('bench').at(2) })
   }
 })
 
 test('D4 a step-2 lease whose pid is dead is not busy', () => {
   const db = two(2, spawnSync('/usr/bin/true').pid)
-  expect(route(db, planById(db, 2), OPENS)).toEqual({ fire: mapOf('bench').at(2) })
+  expect(route(db, planById(db, 2), NIGHT)).toEqual({ fire: mapOf('bench').at(2) })
 })
 
 test('D4 a non-bench plan is never bench_score_busy', () => {

@@ -1,0 +1,4 @@
+{
+ "verdict": "fix",
+ "brief": "check: offer\nrule: x402 offer only in header with JSON body (pay's indexer misses it)\ncurrent: the x402 offer in the header only\nreplacement: the same x402 offer in the JSON body too"
+}

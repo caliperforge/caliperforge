@@ -1,7 +1,10 @@
 import { expect, test } from 'vitest'
+import { gates } from '../../store/approvals.ts'
+import { pushedRow } from '../../store/deliverables.ts'
 import { ofKind } from '../../store/events.ts'
-import { amend } from '../../store/lanes.ts'
-import { dropPlan, pipeOf } from '../../store/plans.ts'
+import { record } from '../../store/files.ts'
+import { amend, lanes } from '../../store/lanes.ts'
+import { dropPlan, pipeOf, planRows } from '../../store/plans.ts'
 import { fingerprint, refused } from '../../store/refusals.ts'
 import { at } from '../../templates/pr-path.ts'
 import { tick } from '../index.ts'
@@ -68,10 +71,33 @@ test('D2 a shared refusal stops its lane and names plans and span', async () => 
   amend(w.db, 3, { state: 'done' })
   refused(w.db, { plan: 3, step: 4, fingerprint: fingerprint(4, ['src/hello.ts:1']), diff: null })
   for (let step = 0; step < 4; step += 1) await tick(w.db, w.root, stub(CARRIED))
-  const fired = (await tick(w.db, w.root, stub(CARRIED, 0, REFUSE)))[0]
-  expect(fired?.note).toContain('lane off: plans 2 and 3 refused on src/hello.ts:1')
+  internalPlan(w.db, w.root, 4, 'a later plan', 36)
+  amend(w.db, 4, { state: 'running', step: 2 })
+  record(w.db, 4, [{ path: 'src/hello.ts', is_new: false }])
+  const fired = await tick(w.db, w.root, stub(CARRIED, 0, REFUSE))
+  expect(fired.map((f) => f.plan)).toEqual([2])
+  expect(fired[0]?.note).toContain('lane off: plans 2 and 3 refused on src/hello.ts:1')
   expect(pipeOf(w.db, 1).enabled).toBe(0)
   expect(ofKind(w.db, 'pipe').map((e) => [e.actor, e.outcome])).toEqual([['settle', 'escalate']])
+  expect(planRows(w.db).find((p) => p.id === 4)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'coo',
+    held_why: expect.stringMatching(/^lane off: plans 2 and 3 refused on src\/hello\.ts:1/) as unknown })
+  expect(lanes(w.db, '09:00').live).toBe(0)
+})
+
+test('D1 a refusal from a plan that landed leaves the lane on', async () => {
+  const w = world()
+  dropPlan(w.db, 1)
+  ours(w.root)
+  internalPlan(w.db, w.root, 2)
+  internalPlan(w.db, w.root, 3, 'an earlier plan', 35)
+  amend(w.db, 3, { state: 'done' })
+  refused(w.db, { plan: 3, step: 4, fingerprint: fingerprint(4, ['src/hello.ts:1']), diff: null })
+  for (let step = 0; step < 4; step += 1) await tick(w.db, w.root, stub(CARRIED))
+  pushedRow(w.db, { plan: 3, step: 6, seat: 'typescript_specialist', diff_digest: 'd'.repeat(64),
+    evidence: 'https://github.com/caliperforge/caliperforge/pull/1' }, gates(w.db, 3, 'd'.repeat(64)))
+  const fired = (await tick(w.db, w.root, stub(CARRIED, 0, REFUSE)))[0]
+  expect(fired?.note).not.toContain('lane off')
+  expect(pipeOf(w.db, 1).enabled).toBe(1)
 })
 
 test('CI state never switches a lane off', () => {

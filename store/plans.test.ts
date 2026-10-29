@@ -4,7 +4,8 @@ import { expect, test } from 'vitest'
 import { walk } from '../checks/tree.ts'
 import { eventsOf } from './events.ts'
 import { migrate, open, type Db } from './index.ts'
-import { priority } from './lanes.ts'
+import { laneHeld } from './lane-held.ts'
+import { lanes, priority } from './lanes.ts'
 import { addPlan, briefed, clearWaitsOn, end, finish, holdOn, live, overlapWaits, pipeNamed, planById, requeue, resume, waiting,
   type PipeRow } from './plans.ts'
 import { unleased } from './unleased.ts'
@@ -119,6 +120,20 @@ test('D3 D4 overlapWaits drops finished plans, keeps queued ones', () => {
   finish(db, planById(db, 2))
   expect(db.prepare('SELECT wait_reason, waits_on FROM plans WHERE id = 2').get()).toEqual({ wait_reason: null, waits_on: null })
   expect(overlapWaits(db)).toEqual([{ plan: 3, on: PLAN, path: 'x.ts' }])
+})
+
+test('D1 D2 D3 laneHeld holds only running plans in its pipe', () => {
+  const db = bench()
+  for (const id of [2, 3, 4]) add(db, id, 'running', T1)
+  add(db, 5, 'running', T1)
+  db.exec('UPDATE plans SET pipe_id = 2 WHERE id = 5')
+  const before = lanes(db, '09:00').live
+  laneHeld(db, 1, 'lane off: plans 2 and 3 refused on x.ts:1\nmore')
+  expect(db.prepare('SELECT id, state, held_by, held_why FROM plans ORDER BY id').all()).toEqual([
+    { id: PLAN, state: 'queued', held_by: null, held_why: null },
+    ...[2, 3, 4].map((id) => ({ id, state: 'blocked_on_ceo', held_by: 'coo', held_why: 'lane off: plans 2 and 3 refused on x.ts:1' })),
+    { id: 5, state: 'running', held_by: null, held_why: null }])
+  expect(lanes(db, '09:00').live).toBe(before - 3)
 })
 
 test('a second started rule is refused', () => {

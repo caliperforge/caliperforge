@@ -64,6 +64,26 @@ test('D4 sessionDir finds the session under any slug, else null', () => {
   expect(sessionDir(projects, null)).toBeNull()
 })
 
+test('D6 tokens heads each lean run with its phase', () => {
+  const { dir, d, projects } = seeded(null, false)
+  addRule(d, { id: 'fizz_lean_generator', kind: 'card', path: 'rules/roster/fizz_lean_generator.yaml', content_hash: 'a'.repeat(64), loaded_at: '2026-10-27' })
+  for (const [at, phase] of ['context', 'scaffold'].entries()) {
+    const n = String(at + 1)
+    copyFileSync(join(FIXTURES, 'main.transcript.jsonl'), join(planDir(dir, 1), `run-${n}.transcript.jsonl`))
+    cpSync(join(FIXTURES, 'subagents'), join(projects, `-x/s${n}/subagents`), { recursive: true })
+    runLogged(d, { plan: 1, step: 1, seat: 'fizz_lean_generator', rule_hash: 'a'.repeat(64), provider: 'claude-agent-sdk', model: 'm', effort: 'low', exit: 0, phase,
+      fired: { usage: { input: 500, cache: 4300, write: 430, output: 28 }, seconds: 0, transcript_path: `/elsewhere/run-${n}.transcript.jsonl`, session: `s${n}` } })
+  }
+  const lines = (head: string, file: string): string[] => [
+    `${head}\t${file}\tinput 30\twrite 300\tread 3000\toutput 12\tturns 2\tmain`,
+    `${head}\tagent-a1.jsonl\tinput 3\twrite 30\tread 300\toutput 4\tturns 1\tread the target`,
+    `${head}\tagent-a2.jsonl\tinput 10\twrite 100\tread 1000\toutput 12\tturns 2\twrite the harness`,
+    `${head}\tsum\tinput 43/70\twrite 430/430\tread 4300/4300\toutput 28/28\tgap 27`,
+  ]
+  expect(tokens(d, dir, 1, projects)).toBe([...lines('run 1 context', 'run-1.transcript.jsonl'), ...lines('run 2 scaffold', 'run-2.transcript.jsonl')]
+    .map((line) => `${line}\n`).join(''))
+})
+
 test('D5 a plan with no fizz generate run is refused', () => {
   for (const seat of ['house_generator', null]) {
     const { dir, d, projects } = seeded(seat)

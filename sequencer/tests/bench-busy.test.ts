@@ -80,6 +80,15 @@ test('D5 plans and decisions store bench_score_busy', () => {
   expect(decisions(db, 2)).toEqual([row])
 })
 
+test('plans and decisions store bench_night', () => {
+  const db = two(2)
+  waiting(db, [{ plan: 2, why: 'bench_night' }])
+  expect(planById(db, 2).wait_reason).toBe('bench_night')
+  const row = { plan: 2, step: 2, wait_reason: 'bench_night' as const, verb: 'next' as const, why: 'fuzzes at night', evidence: null, tokens: 0 }
+  decided(db, row)
+  expect(decisions(db, 2)).toEqual([row])
+})
+
 test('D5 an unknown wait reason is refused by both tables', () => {
   const db = two(2)
   const why = 'bench_score_issue_busy' as Wait

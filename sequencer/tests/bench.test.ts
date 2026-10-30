@@ -318,7 +318,7 @@ test('D2 D4 D5 fizz reads fizz, x-ray and the attempts file', async () => {
   expect(packet.prompt).toContain(`SKILL_PATH is ${real(SKILL)}.`)
   expect(packet.prompt).toContain(`${real(XRAY)}/SKILL.md`)
   expect(packet.prompt).toContain('Run x-ray\'s scripts as bash <script> and python3 <script> from PROJECT_ROOT, with no pipe, redirection or $.')
-  expect(packet.env).toEqual({ BASH_DEFAULT_TIMEOUT_MS: '1800000', BASH_MAX_TIMEOUT_MS: '1800000', TMPDIR: tmp })
+  expect(packet.env).toEqual({ BASH_DEFAULT_TIMEOUT_MS: '1800000', BASH_MAX_TIMEOUT_MS: '1800000', CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1', TMPDIR: tmp })
   expect(packet.prompt).toContain(`Write throwaway scripts and notes under $TMPDIR, never /tmp. $TMPDIR is ${tmp}.`)
   expect(packet.prompt).toContain('Run forge in the foreground, never in the background, and do not end the turn while waiting on a build.')
   expect(packet.prompt).toContain('add properties to test/fizz/Properties.sol one at a time and save the file after each; write property-plan.md')

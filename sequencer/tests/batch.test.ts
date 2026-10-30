@@ -19,7 +19,7 @@ import { approvedPlan } from '../approve.ts'
 import { approve as approvePublish } from '../card.ts'
 import type { Fired, Outcome } from '../kind.ts'
 import { profile } from '../../store/profile.ts'
-import { COMMIT, forkCi, headOf, messageOf, prBody, push, sent as next, type Wire } from '../push.ts'
+import { COMMIT, follow, forkCi, headOf, messageOf, prBody, push, sent as next, type Wire } from '../push.ts'
 import { started, words } from '../signals.ts'
 import { unanswered } from '../ready.ts'
 import { unread } from '../../cli/inbox.ts'
@@ -191,7 +191,8 @@ test('changes requested and a comment both go to the brief', async () => {
   let ask = get(w.root, 1, 'ask.md')
   for (const [id, state, body] of [['r1', 'CHANGES_REQUESTED', 'rename expires to expiry'], ['r2', 'COMMENTED', 'why 120 and not 60?']] as const) {
     const [asked] = said(id, state, body) as [SignalRow]
-    expect(started(w.db, asked, w.root)).toMatchObject({ plan: 1, step: 1 })
+    const none = { data: { repository: { pullRequest: { reviewThreads: { totalCount: 0, nodes: [] } } } } }
+    expect(started(w.db, asked, w.root, { ...watched([], w.root, 1), merged: () => none })).toMatchObject({ plan: 1, step: 1 })
     expect(plan(w.db, 1)).toMatchObject({ step: 1, state: 'running' })
     ask = `${ask.trimEnd()}\n\n${words(asked)}`
     expect(get(w.root, 1, 'ask.md')).toBe(ask)
@@ -319,6 +320,9 @@ test('D1 D2 D3 pre-pr rounds move -next; push sends the branch', async () => {
     'open acme/widget caliperforge:widget-12-a1'])
 })
 
+const SIGNS = String.raw`printf '\n[GNUPG:] SIG_CREATED \n' >&2
+printf -- '-----BEGIN PGP SIGNATURE-----\n\nc2ln\n-----END PGP SIGNATURE-----\n'`
+
 /** The checkout signs through `gpg`, and HEAD is amended to a head no tip carries yet. */
 function signer(w: World, gpg: string): (args: string[]) => string {
   vi.stubEnv('GIT_CONFIG_COUNT', '0')
@@ -336,8 +340,7 @@ function signer(w: World, gpg: string): (args: string[]) => string {
 
 test('D1 a -next tip is signed where the checkout signs', async () => {
   const w = await atBatch()
-  const git = signer(w, String.raw`printf '\n[GNUPG:] SIG_CREATED \n' >&2
-printf -- '-----BEGIN PGP SIGNATURE-----\n\nc2ln\n-----END PGP SIGNATURE-----\n'`)
+  const git = signer(w, SIGNS)
   const { tip: signed } = next(w.root, plan(w.db, 1), 'acme/widget', watched([], w.root, 1))
   expect(get(w.root, 1, 'next.tips')).toContain(`${signed} ${git(['rev-parse', 'HEAD'])}\n`)
   expect(git(['cat-file', 'commit', signed])).toMatch(/^gpgsig /m)
@@ -528,6 +531,33 @@ test('D1 D2 D3 held ticks at one tree keep the head and send once', { timeout: 9
   held(6)
   expect(refs.filter((r) => r.endsWith(':refs/heads/widget-12-a1-next'))).toHaveLength(2)
   expect(git(['rev-parse', 'HEAD^'])).toBe(wire.at(src, 'refs/heads/widget-12-a1'))
+})
+
+test('D1 D2 the fold onto upstream main signs as the checkout does', async () => {
+  const w = await pushed()
+  const src = srcDir(w.root, 1)
+  const upstream = join(w.root, 'remotes/acme/widget')
+  const git = (args: string[], cwd = src): string => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim()
+  git(['push', '-q', 'origin', 'widget-12-a1'])
+  writeFileSync(join(upstream, 'moved.ts'), 'export const moved = 1\n')
+  git(['add', '-A'], upstream)
+  git(['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'main moves on'], upstream)
+  fetchMain(src)
+  mergeMain(src)
+  vi.stubEnv('GIT_CONFIG_COUNT', '0')
+  const program = join(w.root, 'gpg.sh')
+  writeFileSync(program, `#!/bin/sh\ncat >/dev/null\n${SIGNS}\n`, { mode: 0o755 })
+  git(['config', 'gpg.program', program])
+  const merged = git(['rev-parse', 'HEAD'])
+  const fold = (gpgsign: string): string => {
+    git(['reset', '-q', '--hard', merged])
+    git(['config', 'commit.gpgsign', gpgsign])
+    follow(w.root, 1, messageOf(w.root, 1))
+    expect(git(['rev-parse', 'HEAD^2'])).toBe(git(['rev-parse', 'refs/remotes/upstream/main']))
+    return git(['cat-file', 'commit', 'HEAD'])
+  }
+  expect(fold('true')).toMatch(/^gpgsig /m)
+  expect(fold('false')).not.toMatch(/^gpgsig /m)
 })
 
 test('merged-code finding is an escape on the step that owns it', async () => {

@@ -1,4 +1,5 @@
-import { rmSync } from 'node:fs'
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { built as builtRow, newest } from '../../store/deliverables.ts'
 import { refusalsOf } from '../../store/refusals.ts'
@@ -43,6 +44,17 @@ test('D2 an outside plan with no checkout is refused, not cloned', async () => {
   rmSync(srcDir(w.root, 1), { recursive: true, force: true })
   expect(await lap()).toMatchObject({ step: 6, outcome: 'refuse', spans: ['checkout'] })
   expect(cloned(srcDir(w.root, 1))).toBe(false)
+})
+
+test('D4 an unsigned commit on a signed target is refused', async () => {
+  const [w, lap] = await atReady([])
+  built(w.root, 1, 'export const bye = (): string => "bye"')
+  for (let at = 2; at < 6; at += 1) await lap()
+  expect(plan(w.db, 1).step).toBe(6)
+  mkdirSync(join(w.root, 'profiles/acme'), { recursive: true })
+  writeFileSync(join(w.root, 'profiles/acme/widget.yml'), 'signed: true\n')
+  expect(await lap()).toMatchObject({ step: 6, outcome: 'refuse', spans: ['ready.unsigned'] })
+  expect(readyVerdicts(w)).toBe(0)
 })
 
 test('D2 the senior write needs no checkout', async () => {

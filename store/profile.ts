@@ -8,6 +8,7 @@ export const Profile = z.strictObject({
   /** Per language, the `Gate.script` names `gates()` returns for it, in order. */
   checks: z.record(z.string(), z.array(z.string())).optional(),
   commit: z.string().optional(),
+  signed: z.boolean().optional(),
   pr: z.string().optional(),
   intake: z.strictObject({
     claim_first: z.boolean().default(false),

@@ -153,6 +153,27 @@ export function standing(repo: string, no: number, read: Read = gh): Standing {
     committed: commits.nodes[0]?.commit.committedDate ?? null }
 }
 
+const COMMENTS = `query($owner: String!, $name: String!, $no: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $no) {
+  reviewThreads(first: ${String(WINDOW)}) { totalCount nodes { isResolved comments(first: ${String(WINDOW)}) { nodes {
+  databaseId path line originalLine body author { login } pullRequestReview { id } } } } } } } }`
+
+const Comments = z.object({ data: z.object({ repository: z.object({ pullRequest: z.object({
+  reviewThreads: z.object({ totalCount: z.int(), nodes: z.array(z.object({ isResolved: z.boolean(), comments: z.object({
+    nodes: z.array(z.object({ databaseId: z.int(), path: z.string(), line: z.int().nullable(), originalLine: z.int().nullable(),
+      body: z.string(), author: z.object({ login: z.string() }).nullable(), pullRequestReview: z.object({ id: z.string() }).nullable() })),
+  }) })) }),
+}) }) }) })
+
+export interface Unresolved { id: number; path: string; line: number | null; body: string; author: string; review: string | null }
+
+export function unresolved(repo: string, no: number, read: Read = gh): Unresolved[] {
+  const { reviewThreads } = Comments.parse(read(['api', 'graphql', '-f', `owner=${repo.slice(0, repo.indexOf('/'))}`,
+    '-f', `name=${repo.slice(repo.indexOf('/') + 1)}`, '-F', `no=${String(no)}`, '-f', `query=${COMMENTS}`])).data.repository.pullRequest
+  if (reviewThreads.totalCount > WINDOW) throw new Error(`${repo}#${String(no)} has review threads past the cap of ${String(WINDOW)}; the rest are unread`)
+  return reviewThreads.nodes.filter((t) => !t.isResolved).flatMap((t) => t.comments.nodes.map((c) => ({ id: c.databaseId,
+    path: c.path, line: c.line ?? c.originalLine, body: c.body, author: c.author?.login ?? '', review: c.pullRequestReview?.id ?? null })))
+}
+
 export function prNumber(url: string): number {
   const hit = /\/pull\/(\d+)$/.exec(url)
   if (hit === null) throw new Error(`"${url}" is not a github pull request url`)

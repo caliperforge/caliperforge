@@ -1,4 +1,4 @@
-import type { Desk } from '../cli/gh.ts'
+import type { Desk, Read } from '../cli/gh.ts'
 import { all, notify, record as keep, type Event } from '../cli/inbox.ts'
 import { commsLane, fileComms } from '../store/comms.ts'
 import { weeklyIn } from '../store/desk.ts'
@@ -12,6 +12,7 @@ import type { SignalRow } from '../store/signals.ts'
 import { assembling } from './home.ts'
 import { WIRE, type Wire } from './push.ts'
 import { fixed } from './split.ts'
+import { threads } from './threads.ts'
 import { shift } from './weekly.ts'
 import { maybe, put } from './workspace.ts'
 
@@ -51,7 +52,7 @@ export function started(db: Db, signal: SignalRow, root?: string, wire: Wire = W
   const step = signal.kind === 'bot_review' ? REVIEW_STEP : signal.kind === 'ci_red' ? BUILD_STEP : BRIEF_STEP
   rewind(db, signal.plan, step)
   if (step === BUILD_STEP) asked(db, signal, signal.plan, root)
-  if (step === BRIEF_STEP) reasked(db, signal, signal.plan, root)
+  if (step === BRIEF_STEP) reasked(db, signal, signal.plan, root, wire.merged)
   return { signal: signal.id, template: 'pr_path', plan: signal.plan, step }
 }
 
@@ -77,11 +78,10 @@ function asked(db: Db, signal: SignalRow, plan: number, root: string | undefined
 }
 
 /** An adopted plan holds only `issue.md`, so its ask starts from that. */
-function reasked(db: Db, signal: SignalRow, plan: number, root: string | undefined): void {
+function reasked(db: Db, signal: SignalRow, plan: number, root: string | undefined, read: Read): void {
   clear(db, plan)
   if (root === undefined) return
-  const ask = maybe(root, plan, 'ask.md') ?? maybe(root, plan, 'issue.md') ?? ''
-  put(root, plan, 'ask.md', `${ask.trimEnd()}\n\n${words(signal)}`)
+  put(root, plan, 'ask.md', `${(maybe(root, plan, 'ask.md') ?? maybe(root, plan, 'issue.md') ?? '').trimEnd()}\n\n${words(signal)}${threads(db, signal, plan, read)}`)
   inbox(root, signal, plan, BRIEF_STEP, 'brief')
 }
 

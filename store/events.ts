@@ -1,5 +1,6 @@
 import type { Fired, Provider } from '../providers/kind.ts'
 import type { Db } from './index.ts'
+import { models, type Models } from './transcript.ts'
 
 export interface Event {
   plan: number | null
@@ -97,15 +98,50 @@ export function runLogged(db: Db, r: Run): number {
       r.fired.usage.output, r.fired.seconds, r.exit, r.fired.transcript_path, r.fired.usage.cost ?? null, r.fired.usage.write ?? null,
       r.fired.usage.write_1h ?? null, r.fired.session ?? null, r.mode ?? null, r.staffed ?? null, r.phase ?? null)
   const id = Number(row.lastInsertRowid)
-  db.prepare(`${PRICED} AND id = ?`).run(id)
+  price(db, id, models(r.fired.transcript_path))
   return id
 }
 
+function price(db: Db, id: number, usage: Models | null): number | null {
+  if (usage !== null) return byModel(db, id, usage)
+  return (db.prepare(`${PRICED} AND id = ? RETURNING cost_computed_usd`).get(id) as { cost_computed_usd: number | null } | undefined)?.cost_computed_usd ?? null
+}
+
+interface Rates { input: number; cache_write: number; cache_write_1h: number | null; cache_read: number; output: number }
+
+const RATES = `SELECT input, cache_write, cache_write_1h, cache_read, output FROM prices
+  WHERE provider = ? AND model = ? AND julianday(effective_from) <= julianday(?) ORDER BY julianday(effective_from) DESC LIMIT 1`
+
+interface Seat { provider: string; model: string; at: string; cache_write_tokens: number | null; cache_write_1h_tokens: number | null }
+
+/** Each model's tokens at its own rates in force at `runs.at`, or the seat model's; only the seat model's writes are 1-hour writes. */
+function byModel(db: Db, id: number, usage: Models): number | null {
+  const run = db.prepare('SELECT provider, model, at, cache_write_tokens, cache_write_1h_tokens FROM runs WHERE id = ?').get(id) as Seat
+  const rates = (model: string): Rates | undefined => db.prepare(RATES).get(run.provider, model, run.at) as Rates | undefined
+  const seat = rates(run.model)
+  const hours = run.cache_write_1h_tokens
+  let cost: number | null = null
+  if (seat !== undefined && run.cache_write_tokens !== null && hours !== null) {
+    cost = Object.entries(usage).reduce<number | null>((sum, [model, u]) => {
+      const p = rates(model) ?? seat
+      const hour = model === run.model ? Math.min(hours, u.cacheCreationInputTokens) : 0
+      return sum === null || p.cache_write_1h === null ? null : sum + (u.inputTokens * p.input + (u.cacheCreationInputTokens - hour) * p.cache_write
+        + hour * p.cache_write_1h + u.cacheReadInputTokens * p.cache_read + u.outputTokens * p.output) / 1e6
+    }, 0)
+  }
+  db.prepare('UPDATE runs SET cost_computed_usd = ? WHERE id = ?').run(cost, id)
+  return cost
+}
+
 export function repriced(db: Db): { priced: number; missing: number[] } {
-  const filled = db.prepare(`${PRICED} AND cost_computed_usd IS NULL RETURNING cost_computed_usd`)
-    .all() as { cost_computed_usd: number | null }[]
+  const runs = db.prepare('SELECT id, model, transcript_path, cost_computed_usd FROM runs WHERE cache_write_tokens IS NOT NULL ORDER BY id')
+    .all() as { id: number; model: string; transcript_path: string; cost_computed_usd: number | null }[]
+  const filled = runs.flatMap((r) => {
+    const usage = models(r.transcript_path)
+    return r.cost_computed_usd === null || Object.keys(usage ?? {}).some((m) => m !== r.model) ? [price(db, r.id, usage)] : []
+  })
   const missing = db.prepare('SELECT id FROM runs WHERE cache_write_tokens IS NULL ORDER BY id').pluck().all() as number[]
-  return { priced: filled.filter((r) => r.cost_computed_usd !== null).length, missing }
+  return { priced: filled.filter((cost) => cost !== null).length, missing }
 }
 
 export function runAt(db: Db, plan: number, step: number, seat: string, at: string): number {

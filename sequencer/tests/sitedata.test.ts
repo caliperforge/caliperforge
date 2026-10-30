@@ -9,17 +9,15 @@ import { set } from '../../store/lanes.ts'
 import { sitedata } from '../site.ts'
 import { git } from '../workspace.ts'
 
-const VO = vi.hoisted(() => ({ readme: 'Behaviour `async_jobs`: each client submits an async TAP query.' }))
+const VO = vi.hoisted(() => ({ readme: 'Behaviour `async_jobs`: each client submits an async TAP query.', rows: '', listing: [] as object[] }))
 
 vi.mock('../../cli/gh.ts', async (importOriginal) => ({
   ...await importOriginal<object>(),
   gh: (args: string[]) => {
     const path = args[1] ?? ''
     const base64 = (text: string): object => ({ content: Buffer.from(text).toString('base64'), encoding: 'base64' })
-    if (path.endsWith('/contents/results')) return [{ name: '2026-10-13.jsonl', path: 'results/2026-10-13.jsonl', type: 'file' }]
-    if (path.endsWith('/contents/results/2026-10-13.jsonl')) {
-      return base64('{"client": "pyvo", "service": "CADC", "behaviour": "async_jobs", "outcome": "pass"}\n')
-    }
+    if (path.endsWith('/contents/results')) return VO.listing
+    if (path.endsWith('/contents/results/2026-10-13.jsonl')) return base64(VO.rows)
     if (path.endsWith('/readme')) return base64(VO.readme)
     if (path.includes('/commits?')) return [{ commit: { committer: { date: '2026-10-13T11:00:07Z' } } }]
     return { items: [] }
@@ -69,6 +67,8 @@ beforeEach(() => {
   git(clone, ['push', '-u', 'origin', 'HEAD'])
   git(clone, ['push', 'origin', `HEAD:${REDESIGN}`])
   VO.readme = 'Behaviour `async_jobs`: each client submits an async TAP query.'
+  VO.rows = '{"client": "pyvo", "service": "CADC", "behaviour": "async_jobs", "outcome": "pass"}\n'
+  VO.listing = [{ name: '2026-10-13.jsonl', path: 'results/2026-10-13.jsonl', type: 'file' }]
   set(db, 'comms.site_dir', clone, 'ceo', '2026-10-01')
 })
 
@@ -154,6 +154,21 @@ test('D4 an undescribed behaviour refuses and leaves redesign', () => {
   expect(ofKind(db, 'site_data').map((e) => [e.outcome, e.message])).toEqual([['refuse', 'vo_conformance.json: no description for async_jobs']])
   expect(head(origin, REDESIGN)).toBe(before)
   expect(git(clone, ['worktree', 'list']).trim().split('\n')).toHaveLength(1)
+})
+
+test('D4 an outcome outside the four refuses and leaves redesign', () => {
+  VO.rows = VO.rows.replace('"pass"', '"skipped"')
+  const before = head(origin, REDESIGN)
+  sitedata(db, root, FIRST)
+  const logged = ofKind(db, 'site_data').map((e) => [e.outcome, e.message])
+  expect(logged).toEqual([['refuse', expect.stringMatching(/^vo_conformance\.json: outcome "skipped": /)]])
+  expect(head(origin, REDESIGN)).toBe(before)
+})
+
+test('D5 a ZodError logs its path and message, not [', () => {
+  VO.listing = [{}]
+  sitedata(db, root, FIRST)
+  expect(ofKind(db, 'site_data').map((e) => [e.outcome, e.message])).toEqual([['refuse', expect.stringMatching(/^0\.name: /)]])
 })
 
 test('D6 an unset site_dir is refused once per date', () => {

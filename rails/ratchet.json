@@ -9,8 +9,7 @@
     "lines": 126
   },
   "completion-audit/index.ts": {
-    "lines": 104,
-    "silent-catch": 1
+    "lines": 104
   },
   "diff.ts": {
     "lines": 63

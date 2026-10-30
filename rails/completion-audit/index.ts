@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { parse } from 'yaml'
+import { parse, parseDocument } from 'yaml'
 import { z } from 'zod'
 import type { Db } from '../../store/index.ts'
 import { addRail, type Verdict } from '../../store/verdict.ts'
@@ -121,9 +121,6 @@ function doneOnly(body: string): string {
 }
 
 function yaml(text: string): unknown {
-  try {
-    return parse(text)
-  } catch (error) {
-    return error instanceof Error ? error : new Error(String(error))
-  }
+  const doc = parseDocument(text)
+  return doc.errors[0] ?? doc.toJS()
 }

@@ -53,6 +53,9 @@
     "lines": 278,
     "silent-catch": 1
   },
+  "greptile-mirror.ts": {
+    "lines": 87
+  },
   "greptile.ts": {
     "lines": 14
   },
@@ -103,7 +106,7 @@
     "silent-catch": 1
   },
   "push.ts": {
-    "lines": 619
+    "lines": 655
   },
   "rails.ts": {
     "lines": 235,

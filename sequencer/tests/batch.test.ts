@@ -344,6 +344,19 @@ printf -- '-----BEGIN PGP SIGNATURE-----\n\nc2ln\n-----END PGP SIGNATURE-----\n'
   expect(JSON.parse(git(['show', `${signed}:greptile.json`])) as unknown).toEqual(QUIET)
 })
 
+test('D8 a target running Greptile gets its .greptile tip', async () => {
+  const w = await atBatch()
+  const src = srcDir(w.root, 1)
+  const git = (args: string[]): string => execFileSync('git', args, { cwd: src, encoding: 'utf8' }).trim()
+  writeFileSync(join(src, 'src/hello.ts'), 'export const hello = (): string => "mirrored"\n')
+  git(['-c', 'commit.gpgsign=false', '-c', 'user.email=cf@caliperforge.dev', '-c', 'user.name=caliperforge',
+    'commit', '-qa', '--amend', '--no-edit'])
+  const harvest = (args: string[]): unknown => args[0] === 'pr' ? [{ number: 1, statusCheckRollup: [{ name: 'Greptile Review' }] }] : []
+  const { tip: made } = next(w.root, plan(w.db, 1), 'acme/widget', { ...watched([], w.root, 1), harvest })
+  expect(git(['ls-tree', '-r', '--name-only', made, '--', 'greptile.json', '.greptile'])).toBe('.greptile/config.json\n.greptile/rules.md')
+  expect(git(['log', '-1', '--format=%s', made])).toBe('.greptile/rules.md, .greptile/config.json: review on request only')
+})
+
 test('D4 a signature that fails sends no unsigned tip', async () => {
   const w = await atBatch()
   signer(w, 'exit 1')

@@ -23,6 +23,7 @@ import { npm } from './checks.ts'
 import { bind, prMessage, signedAt } from './folded.ts'
 import { red } from './failures.ts'
 import { config } from './greptile.ts'
+import { mirrored } from './greptile-mirror.ts'
 import { refresh } from './install.ts'
 import { rerun as cancelled } from './rerun.ts'
 import { based, moved, retire } from './retire.ts'
@@ -61,6 +62,7 @@ export interface Wire {
   card?: Check[]
   intake?: Check
   merged: Read
+  harvest?: Read
 }
 
 export const WIRE: Wire = {
@@ -81,6 +83,7 @@ export const WIRE: Wire = {
   card: [theirs()],
   intake: picked(),
   merged: gh,
+  harvest: gh,
 }
 
 /**
@@ -206,7 +209,7 @@ export function sent(root: string, plan: PlanRow, repo: string, wire: Wire): { f
   const rules = profile(root, repo)
   const base = !outside ? null : onFork(dir, branch) ? follow(root, plan.id, messageOf(root, plan.id, rules)) : squash(root, plan.id, rules)
   const head = outside ? headOf(root, plan.id) : onward(headOf(root, plan.id))
-  const tip = outside ? tipOf(root, plan.id, head, ci, repo) : head.sha
+  const tip = outside ? tipOf(root, plan.id, head, ci, repo, wire) : head.sha
   if (outside) based(root, plan.id, fork, wire)
   if (wire.at?.(head.dir, `refs/heads/${ci}`) !== tip) wire.send(head.dir, outside ? `${tip}:refs/heads/${ci}` : head.branch)
   const at = wire.at?.(head.dir, `refs/heads/${ci}`) ?? tip
@@ -238,26 +241,29 @@ export function carried(root: string, plan: number, sha: string): string {
 }
 
 /** A head sent again keeps its tip, so its CI is not restarted. */
-function tipOf(root: string, plan: number, head: Head, ci: string, repo: string): string {
+function tipOf(root: string, plan: number, head: Head, ci: string, repo: string, wire: Wire): string {
   const [known, of] = tips(root, plan).at(-1) ?? []
   if (known !== undefined && of === head.sha) return known
-  const tip = quiet(head.dir, ci, config(root, repo))
+  const files = (wire.harvest === undefined ? null : mirrored(root, repo, head.dir, wire.harvest)) ?? { 'greptile.json': config(root, repo) }
+  const tip = quiet(head.dir, ci, files)
   put(root, plan, TIPS, `${maybe(root, plan, TIPS) ?? ''}${tip} ${head.sha}\n`)
   return tip
 }
 
-/** HEAD plus the rehearsal's `greptile.json`, signed as the host is (an unsigned tip turns the target's PR hygiene red). */
-function quiet(dir: string, ci: string, greptile: string): string {
+/** HEAD plus the rehearsal's Greptile `files`, signed as the host is (an unsigned tip turns the target's PR hygiene red). */
+function quiet(dir: string, ci: string, files: Record<string, string>): string {
   const env = { ...process.env, GIT_INDEX_FILE: join(git(dir, ['rev-parse', '--absolute-git-dir']).trim(), 'next.index') }
   const index = (args: string[]): string =>
     execFileSync('git', args, { cwd: dir, encoding: 'utf8', env, stdio: ['ignore', 'pipe', 'pipe'] }).trim()
-  const blob = execFileSync('git', ['hash-object', '-w', '--stdin'], { cwd: dir, encoding: 'utf8', input: greptile }).trim()
   index(['read-tree', 'HEAD'])
-  index(['update-index', '--add', '--cacheinfo', `100644,${blob},greptile.json`])
+  for (const [path, text] of Object.entries(files)) {
+    const blob = execFileSync('git', ['hash-object', '-w', '--stdin'], { cwd: dir, encoding: 'utf8', input: text }).trim()
+    index(['update-index', '--add', '--cacheinfo', `100644,${blob},${path}`])
+  }
   const next = `refs/remotes/origin/${ci}`
   const parents = published(dir, ci, next) && !ancestor(dir, next, 'HEAD') ? ['HEAD', next] : ['HEAD']
   return index([...identity(dir), 'commit-tree', ...signing(dir), index(['write-tree']), ...parents.flatMap((p) => ['-p', p]),
-    '-m', 'greptile.json: review on request only'])
+    '-m', `${Object.keys(files).join(', ')}: review on request only`])
 }
 
 /** A repo GitHub runs no workflow for on a push or pull request: nothing on the fork will ever show a run at the head. */

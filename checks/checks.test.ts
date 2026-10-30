@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { cpSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -28,6 +28,11 @@ it('a job checkout under .cf is not walked as our tree', () => {
   writeFileSync(join(dir, '.cf/work/1/src/theirs.ts'), '// a stranger\n')
   writeFileSync(join(dir, 'ours.ts'), '// ours\n')
   expect(walk(dir, () => true)).toEqual([join(dir, 'ours.ts')])
+})
+
+it('tsconfig keeps every .venv out of the program', () => {
+  const config = JSON.parse(readFileSync(join(root, 'tsconfig.json'), 'utf8')) as { exclude: string[] }
+  expect(config.exclude).toEqual(expect.arrayContaining(['checks/fixtures', '**/.venv']))
 })
 
 it('every check owns at least one fixture', () => {

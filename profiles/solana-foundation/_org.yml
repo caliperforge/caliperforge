@@ -3,6 +3,7 @@ checks:
 commit: >-
   One commit signed as the host's git identity: the brief's title as its subject, its What and Why lines
   as the body, and no upstream issue number anywhere, since the ci-green rail refuses a branch whose commits name one.
+signed: true
 pr: >-
   Plain paragraphs, no headings: the brief's Why line, then its What line, then "Tested in" the test files
   the diff touches, with "CI is green on our fork at this head." only when a fork run finished green, then

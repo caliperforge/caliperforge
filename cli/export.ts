@@ -42,7 +42,7 @@ const PROSE: Record<keyof typeof METRICS | 'outside_prs' | 'outside_pr_list' | '
     definition: 'Every pull request we opened outside caliperforge, from GitHub search, one row each: its repository, number, title and link, its state (merged, closed, approved when open with an approving review, else open), the UTC days it was opened and merged, the field of its repository, and the description the repository gives on GitHub.',
     caveat: 'Search reaches at most 1000 pull requests. Merged is null until a pull request merges, and a repository missing from the hand-kept field map has a null field. Titles and descriptions are as their authors wrote them.' },
   vo_conformance: { title: 'VO conformance', unit: 'outcomes per client, service and behaviour per UTC day',
-    definition: 'Every row of caliperforge/vo-conformance results/<day>.jsonl for the 30 UTC days to today, in file order: the day, the client, the service, the behaviour, its outcome (pass, fail or not supported) and its note. behaviours holds the README description of each behaviour in the rows, and run_at the commit time of the newest results file.',
+    definition: 'Every row of caliperforge/vo-conformance results/<day>.jsonl for the 30 UTC days to today, in file order: the day, the client, the service, the behaviour, its outcome (pass, fail, not supported or service down) and its note. behaviours holds the README description of each behaviour in the rows, and run_at the commit time of the newest results file.',
     caveat: 'A day the daily run committed no results file has no rows. Notes are as the runner wrote them, and null where it wrote none.' },
 }
 
@@ -145,8 +145,16 @@ export function exported(path: string, dir: string, now: Date, read: Read = gh):
 
 const VO = 'repos/caliperforge/vo-conformance'
 
-const Row = z.object({ client: z.string(), service: z.string(), behaviour: z.string(), outcome: z.enum(['pass', 'fail', 'not supported']),
-  note: z.string().optional() })
+const OUTCOMES = ['pass', 'fail', 'not supported', 'service down'] as const
+
+const Row = z.object({ client: z.string(), service: z.string(), behaviour: z.string(), outcome: z.enum(OUTCOMES), note: z.string().optional() })
+
+function row(raw: unknown): z.infer<typeof Row> {
+  const got = Row.safeParse(raw)
+  if (got.success) return got.data
+  const at = (path: PropertyKey[]): unknown => path.reduce<unknown>((v, k) => (v as Record<PropertyKey, unknown>)[k], raw)
+  throw new Error(`vo_conformance.json: ${got.error.issues.map((i) => `${i.path.join('.')} ${JSON.stringify(at(i.path))}: ${i.message}`).join('; ')}`)
+}
 
 const decoded = (value: unknown): string =>
   Buffer.from(z.object({ content: z.string(), encoding: z.literal('base64') }).parse(value).content, 'base64').toString('utf8')
@@ -159,7 +167,7 @@ export function conformance(dir: string, now: Date, read: Read = gh): string {
   const newest = days.at(-1)
   if (newest === undefined) throw new Error(`vo_conformance.json: no results since ${first}`)
   const parsed = days.flatMap((day) => decoded(read(['api', `${VO}/contents/results/${day}.jsonl`])).split('\n').filter((l) => l.trim() !== '')
-    .map((l) => ({ day, ...Row.parse(JSON.parse(l)) })))
+    .map((l) => ({ day, ...row(JSON.parse(l)) })))
   const said = new Map([...decoded(read(['api', `${VO}/readme`])).matchAll(/^Behaviour `([^`]+)`: (.+)$/gm)].map((m) => [m[1], m[2]]))
   const behaviours = Object.fromEntries([...new Set(parsed.map((r) => r.behaviour))].map((b) => {
     const description = said.get(b)

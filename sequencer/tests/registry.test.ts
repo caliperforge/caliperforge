@@ -8,7 +8,7 @@ import { addRun } from '../../store/brief.ts'
 import { decided } from '../../store/decisions.ts'
 import { proofed } from '../../store/desk.ts'
 import { addSetting } from '../../store/drift.ts'
-import { logged } from '../../store/events.ts'
+import { logged, runAt } from '../../store/events.ts'
 import { addRule, type Db } from '../../store/index.ts'
 import { briefed, planById, putPlan } from '../../store/plans.ts'
 import { addReview, type Verdict } from '../../store/verdict.ts'
@@ -145,6 +145,25 @@ test('directorDesignWaiveSeen D5', () => {
   expect(drift(d, entry, NOW)).toMatchObject([{ name: 'director_design_waive', state: 'seen', newest: at }])
 })
 
+test('waiveResumesStop D1-D3', () => {
+  const entry = REGISTRY.filter((e) => e.name === 'waive_resumes_stop')
+  const pass: Verdict = { outcome: 'pass', subject_digest: 'a'.repeat(64), spans: [], origin_kind: null, origin_ref: null, message: 'm', defect_class: null }
+  const waived = (reviewed: string, senior = 'b'): Db => {
+    const d = db()
+    addRule(d, { id: 'typescript_specialist', kind: 'card', path: 'rules/roster.yaml', content_hash: '0'.repeat(64), loaded_at: '2026-09-22' })
+    for (const [step, gate, kind, tree] of [[4, 'review', 'review', 'b'], [5, 'senior_review', 'senior', senior]] as const) {
+      const id = addReview(d, gate, step, 1, pass, 0, 0, tree.repeat(40))
+      logged(d, { plan: 1, kind, actor: kind, outcome: 'pass', message: 'm', pointer: `verdicts:${String(id)}`, run: null }, reviewed)
+    }
+    logged(d, { plan: 1, kind: 'director', actor: 'director', outcome: 'pass', message: 'waive: x', pointer: null, run: null }, '2026-10-02 10:00:00')
+    runAt(d, 1, 2, 'typescript_specialist', '2026-10-02 11:00:00')
+    return d
+  }
+  expect(drift(waived('2026-10-02 09:00:00'), entry, NOW)).toEqual([])
+  expect(drift(waived('2026-10-02 12:00:00'), entry, NOW)).toMatchObject([{ name: 'waive_resumes_stop', state: 'silent' }])
+  expect(drift(waived('2026-10-02 09:00:00', 'c'), entry, NOW)).toMatchObject([{ name: 'waive_resumes_stop', state: 'silent' }])
+})
+
 test('sitePushSeen D5', () => {
   const sitePush = REGISTRY.filter((e) => e.name === 'site_push')
   const push = (d: Db, outcome: 'pass' | 'refuse', at: string | null): void => {
@@ -236,7 +255,10 @@ test('waiveResumesStopStale D2 D3 D4', () => {
       input_tokens: 0, cache_write_tokens: null, cache_write_1h_tokens: null, cache_read_tokens: 0, output_tokens: 0, seconds: 1, exit: 0,
       at: built, transcript_path: 'x.transcript.jsonl', cost_usd: null })
     const pass: Verdict = { outcome: 'pass', subject_digest: 'b'.repeat(64), spans: [], origin_kind: null, origin_ref: null, message: 'm', defect_class: null }
-    for (const step of [4, 5]) addReview(d, 'review', step, 1, pass, 0, 1, 'c'.repeat(40))
+    for (const step of [4, 5]) {
+      const pointer = `verdicts:${String(addReview(d, 'review', step, 1, pass, 0, 1, 'c'.repeat(40)))}`
+      logged(d, { plan: 1, kind: 'review', actor: 'review', outcome: 'pass', message: 'm', pointer, run: null }, '2026-09-01 00:00:00')
+    }
     return d
   }
   expect(drift(waived('2026-10-02 10:00:00', '2026-10-02 10:30:00'), entry, NOW)).toEqual([])

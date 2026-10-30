@@ -21,5 +21,5 @@
     "types": ["node"]
   },
   "include": ["store", "cli", "checks", "providers", "runner", "rails", "reviews", "seats", "sequencer", "templates", "rules", "paydesk", "accounts", "tools", "vitest.config.ts"],
-  "exclude": ["checks/fixtures"]
+  "exclude": ["checks/fixtures", "**/.venv"]
 }

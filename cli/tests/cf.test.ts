@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 
@@ -33,12 +33,9 @@ test.each([
 })
 
 function stderr(args: string[]): string {
-  try {
-    execFileSync(process.execPath, [cf, ...args], { encoding: 'utf8', stdio: 'pipe' })
-  } catch (error) {
-    return (error as { stderr: string }).stderr
-  }
-  throw new Error(`cf ${args.join(' ')} exited 0`)
+  const ran = spawnSync(process.execPath, [cf, ...args], { encoding: 'utf8' })
+  if (ran.status === 0) throw new Error(`cf ${args.join(' ')} exited 0`)
+  return ran.stderr
 }
 
 test.each([

@@ -12,7 +12,7 @@ import { coverage, type Gated } from '../reviews/package.ts'
 import type { Finding, Judged, Note } from '../reviews/verdict.ts'
 import { lastChecks } from '../store/checks.ts'
 import { regated } from '../store/dispositions.ts'
-import { logged, runLogged, type Run } from '../store/events.ts'
+import { logged, runLogged, sentRound, type Run } from '../store/events.ts'
 import { type Db, LOCKED } from '../store/index.ts'
 import { filesOf } from '../store/files.ts'
 import { due, keep } from '../store/language-notes.ts'
@@ -66,7 +66,7 @@ export async function fireSeat(db: Db, root: string, plan: PlanRow, step: Step, 
   const name = `step-${String(step.step)}.handback.md`
   const prev = maybe(root, plan.id, name)
   if (prev !== null) put(root, plan.id, `step-${String(step.step)}.handback.prev.md`, prev)
-  if (step.step === 2 && prev !== null && handedBack(maybe(root, plan.id, 'refusal.md') ?? '') && carried(root, plan.id) === null) {
+  if (step.step === 2 && prev !== null && handedBack(maybe(root, plan.id, 'refusal.md') ?? '') && carried(root, plan.id) === null && !sentRound(db, plan.id)) {
     const fired = await repaired(db, root, plan, step, provider, prev)
     put(root, plan.id, name, fired.text)
     return fired.ended === 'completed' ? { outcome: 'pass', spans: [], note: `${step.runs}: hand-back repaired, no rebuild` } : exited(step, fired)

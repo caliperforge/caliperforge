@@ -5,7 +5,7 @@ import type { Packet, Provider } from '../../providers/kind.ts'
 import { seat } from '../../runner/rules.ts'
 import { digestOf } from '../../store/approvals.ts'
 import { newestMode, runRows } from '../../store/events.ts'
-import { holdOf } from '../../store/holds.ts'
+import { holdOf, retried } from '../../store/holds.ts'
 import { back } from '../../store/plans.ts'
 import { refusedOf } from '../../store/record.ts'
 import { verdictRows } from '../../store/verdict.ts'
@@ -261,6 +261,21 @@ test.each([
 test('D5 a hand-back refusal on a recut checkout fires the builder', async () => {
   const { seen } = await sentBack(IDENTIFIERS, (w) => { recut(w.root, 1) })
   expect(seen.some((p) => p.tools.includes('Write'))).toBe(true)
+})
+
+test('F1 a stop the director sends round fires the builder', async () => {
+  const w = await atBuild()
+  await tick(w.db, w.root, stub(UNPOINTED))
+  await tick(w.db, w.root, stub(UNPOINTED))
+  put(w.root, 1, 'rulings.md', 'use bye()\n')
+  for (let at = 0; at < 2; at += 1) await tick(w.db, w.root, stub(UNPOINTED))
+  expect(plan(w.db, 1)).toMatchObject({ state: 'blocked_on_ceo', step: 3 })
+  expect(handedBack(get(w.root, 1, 'refusal.md'))).toBe(true)
+  retried(w.db, 1, 'director')
+  const seen: Packet[] = []
+  await tick(w.db, w.root, stub(CARRIED, 0, undefined, (p) => seen.push(p)))
+  expect(seen.some((p) => p.tools.includes('Write'))).toBe(true)
+  expect(newestMode(w.db)).not.toBe('handback')
 })
 
 test('D3 a hand-back whose fence parses fires the builder once', async () => {

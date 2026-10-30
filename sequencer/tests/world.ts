@@ -127,7 +127,7 @@ export function builds(edit: () => void, review = PASS, exit = 0): Provider {
 }
 
 function answer(packet: Packet, text: string, review: string, brief?: string): string {
-  if (packet.tools.includes('Write')) return text
+  if (packet.tools.includes('Write') || packet.prompt.includes('# Hand-back repair')) return text
   if (!packet.prompt.includes('# brief_writer')) return review
   return brief ?? briefFor(packet.prompt, packet.cwd)
 }

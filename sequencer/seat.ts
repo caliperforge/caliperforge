@@ -34,6 +34,7 @@ import { symbolMap } from './symbols.ts'
 import { targetOf } from './steps.ts'
 import { install, missing, mode, tools, type Mode } from './checks.ts'
 import { narrow } from './rails.ts'
+import { handedBack } from './handed.ts'
 import { classify } from './delta.ts'
 import { commanded } from './command.ts'
 import { unran } from './reproduced.ts'
@@ -65,6 +66,11 @@ export async function fireSeat(db: Db, root: string, plan: PlanRow, step: Step, 
   const name = `step-${String(step.step)}.handback.md`
   const prev = maybe(root, plan.id, name)
   if (prev !== null) put(root, plan.id, `step-${String(step.step)}.handback.prev.md`, prev)
+  if (step.step === 2 && prev !== null && handedBack(maybe(root, plan.id, 'refusal.md') ?? '') && carried(root, plan.id) === null) {
+    const fired = await repaired(db, root, plan, step, provider, prev)
+    put(root, plan.id, name, fired.text)
+    return fired.ended === 'completed' ? { outcome: 'pass', spans: [], note: `${step.runs}: hand-back repaired, no rebuild` } : exited(step, fired)
+  }
   const issue = handed(rebuild(db, root, plan, prev), symbolSection(db, root, plan))
   const fired = await ran(db, root, plan, step, provider, issue, kernelPlan(plan))
   if (step.step === 2) marked(db, root, plan.id)
@@ -268,6 +274,17 @@ export async function ran(db: Db, root: string, plan: PlanRow, step: Step, provi
     reads: [...new Set([...machineReads(root, plan, step.runs), ...inputs(root, plan.id), ...(out === undefined ? [] : [out])])],
   } : { ...built, tools: [], wall: wall(db) })
   recorded(db, plan.id, step.step, step.runs, hash, provider.name, manifest, fired, step.mode, staffing)
+  observed(db, fired.limits)
+  return fired
+}
+
+/** The turn has no tool to look with, so the diff is the only place it finds a real `path:line`. */
+async function repaired(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider, prev: string): Promise<Fired> {
+  const { manifest, prompt, hash } = seat(root, step.runs, 'handback')
+  const low = { ...manifest, effort: 'low' as const }
+  const issue = `# Refused\n\n${get(root, plan.id, 'refusal.md')}\n\n# Your hand-back\n\n${prev}\n\n# Your diff\n\n\`\`\`\`diff\n${inlined(diffOf(root, plan.id))}\n\`\`\`\``
+  const fired = await provider.fire({ ...packet(low, prompt, tight(root), issue, srcDir(root, plan.id), transcriptOf(root, plan.id, 2), false, [join(planDir(root, plan.id), 'step-2.handback.md')]), tools: [], wall: wall(db) })
+  recorded(db, plan.id, 2, step.runs, hash, provider.name, low, fired, 'handback', staffedOn(db, root, plan, 2))
   observed(db, fired.limits)
   return fired
 }

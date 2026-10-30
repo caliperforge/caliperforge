@@ -1,26 +1,32 @@
 import { copyFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
-import type { Provider } from '../../providers/kind.ts'
-import { runRows } from '../../store/events.ts'
+import type { Packet, Provider } from '../../providers/kind.ts'
+import { seat } from '../../runner/rules.ts'
+import { digestOf } from '../../store/approvals.ts'
+import { newestMode, runRows } from '../../store/events.ts'
 import { holdOf } from '../../store/holds.ts'
+import { back } from '../../store/plans.ts'
 import { refusedOf } from '../../store/record.ts'
 import { verdictRows } from '../../store/verdict.ts'
+import { at } from '../../templates/pr-path.ts'
 import { tick } from '../index.ts'
-import { diffOf, get, maybe, put, srcDir } from '../workspace.ts'
+import { handedBack } from '../handed.ts'
+import { refusalText } from '../refusal.ts'
+import { diffOf, get, maybe, planDir, put, recut, srcDir } from '../workspace.ts'
 import { approve, built, CARRIED, plan, stub, watched, world, type World } from './world.ts'
 
 const UNPOINTED = 'built\n\n---\ndone:\n  - id: D1\n    status: done\n    pointer:\n---\n'
 const REFENCED = `built\n\n${CARRIED.slice(CARRIED.indexOf('---\n'))}`
 
-/** The builder answers its n-th fire with `texts[n]`, running `edit(n)` first; every other seat answers as `stub` does. */
+/** The builder answers its n-th fire, a hand-back repair included, with `texts[n]`, running `edit(n)` first; every other seat answers as `stub` does. */
 function answers(texts: string[], edit: (n: number) => void = () => undefined): Provider {
   const inner = stub(CARRIED)
   let n = 0
   return {
     ...inner,
     fire: async (packet) => {
-      if (!packet.tools.includes('Write')) return inner.fire(packet)
+      if (!packet.tools.includes('Write') && !packet.prompt.includes('# Hand-back repair')) return inner.fire(packet)
       edit(n)
       const text = texts[n] ?? CARRIED
       n += 1
@@ -202,6 +208,59 @@ test('D4 an older Diff stands. does not clear a newer ruling', async () => {
   await tick(w.db, w.root, stub(UNPOINTED))
   expect(plan(w.db, 1)).toMatchObject({ state: 'blocked_on_ceo', step: 3 })
   expect(holdOf(w.db, 1)?.held_why).toMatch(/^completion-audit: rulings.md/)
+})
+
+const refusal = (note: string): string => refusalText(at(3), { outcome: 'refuse', spans: ['text:1 identifier.unresolved'], note })
+const IDENTIFIERS = 'identifiers: 1 identifier(s) name no source in the tree: src/gone.ts:3'
+const AUDIT = 'completion-audit: D2 expected by the ticket, absent from the handback or carried with no pointer'
+const REPAIRED = CARRIED.replace('built', 'repaired')
+
+/** A built plan sent back to step 2 by a refusal with `note`; `seen` holds every packet the next tick fires. */
+async function sentBack(note: string, edit: (w: World) => void = () => undefined): Promise<{ w: World; seen: Packet[]; before: string }> {
+  const w = await atBuild()
+  await tick(w.db, w.root, answers([CARRIED], () => { built(w.root, 1, 'export const more = 1') }))
+  put(w.root, 1, 'refusal.md', refusal(note))
+  back(w.db, plan(w.db, 1), 2, false, note)
+  edit(w)
+  const before = digestOf(diffOf(w.root, 1))
+  const seen: Packet[] = []
+  await tick(w.db, w.root, stub(REPAIRED, 0, undefined, (p) => seen.push(p)))
+  return { w, seen, before }
+}
+
+test('D1 D3 D4 an identifiers refusal repairs the hand-back alone', async () => {
+  const { w, seen, before } = await sentBack(IDENTIFIERS)
+  expect(seen).toHaveLength(1)
+  expect(seen[0]).toMatchObject({ tools: [], effort: 'low', model: seat(w.root, 'typescript_specialist').manifest.model })
+  expect(seen[0]?.refuse('src/hello.ts')).not.toBeNull()
+  expect(seen[0]?.refuse(join(planDir(w.root, 1), 'step-2.handback.md'))).toBeNull()
+  expect(newestMode(w.db)).toBe('handback')
+  expect(get(w.root, 1, 'step-2.handback.md')).toBe(REPAIRED)
+  expect(digestOf(diffOf(w.root, 1))).toBe(before)
+  expect(plan(w.db, 1).step).toBe(3)
+  expect((await tick(w.db, w.root, stub(REPAIRED), undefined, undefined, watched([], w.root, 1)))[0]?.step).toBe(3)
+  expect(get(w.root, 1, 'step-3.judged').split('\n')[0]).toBe(before)
+})
+
+test.each([IDENTIFIERS, AUDIT])('D2 %s is the hand-back\'s alone', (note) => {
+  expect(handedBack(refusal(note))).toBe(true)
+})
+
+test.each([
+  'tight: a comment restates its line',
+  'authority: src/other.ts is outside the files',
+  'npm run test exit 1',
+  'completion-audit: F1 open from the last review refuse, with no fixed: or disputed: row under ## Findings answered',
+  `the builder's test run did not finish: npm test; ${AUDIT}`,
+])('D2 %s fires the builder', async (note) => {
+  expect(handedBack(refusal(note))).toBe(false)
+  const { seen } = await sentBack(note)
+  expect(seen.some((p) => p.tools.includes('Write'))).toBe(true)
+})
+
+test('D5 a hand-back refusal on a recut checkout fires the builder', async () => {
+  const { seen } = await sentBack(IDENTIFIERS, (w) => { recut(w.root, 1) })
+  expect(seen.some((p) => p.tools.includes('Write'))).toBe(true)
 })
 
 test('D3 a hand-back whose fence parses fires the builder once', async () => {

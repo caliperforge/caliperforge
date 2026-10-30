@@ -57,7 +57,7 @@ VALUES
   ('rules/registry/50-card_facts.yaml', 'card', 'rules/registry/50-card_facts.yaml', 'da8a4de881b369d46ce096dddf8b72b96cdc5a8f4e382bf495153695567917b6', '2026-10-08'),
   ('rules/registry/51-director_findings.yaml', 'card', 'rules/registry/51-director_findings.yaml', '25947e6144c58ced6c95b3397d408cb3d23565ca7ea444dcbe3b305d7ac9d620', '2026-10-09'),
   ('rules/registry/51-director_rule_dropped.yaml', 'card', 'rules/registry/51-director_rule_dropped.yaml', '8961ee8ab54b77743087138ef8a1ef31a555a40862ece1b280a836d5b0037e97', '2026-10-09'),
-  ('rules/registry/51-rule_to_build.yaml', 'card', 'rules/registry/51-rule_to_build.yaml', '202634723ad7575e12466dfce147265bab35c94a3c4a7c4563192f503d78176e', '2026-10-09'),
+  ('rules/registry/51-rule_to_build.yaml', 'card', 'rules/registry/51-rule_to_build.yaml', '651cedbb6539a0d32e2aad76fa8f440aec7fa7d8e8fefef90da954a895eca4d6', '2026-10-09'),
   ('rules/registry/52-blind_review.yaml', 'card', 'rules/registry/52-blind_review.yaml', '7dd2323e2ab92b6af9a85c1f3f6a2a4a6e7785133691cf0ef60c6aecca93add8', '2026-10-09'),
   ('rules/registry/53-drift_recovered.yaml', 'card', 'rules/registry/53-drift_recovered.yaml', 'd5bfe15161b8575fdc1cbe224caf296bfe31aa71a19d5e4d01a5828394d5e5b5', '2026-10-10'),
   ('rules/registry/54-drift_refile.yaml', 'card', 'rules/registry/54-drift_refile.yaml', '291029a62e05fd1b2d082c462fe4f17cebae55332b841468252f754b58a9c75c', '2026-10-10'),

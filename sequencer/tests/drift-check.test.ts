@@ -78,6 +78,9 @@ test('D4 a card opened without its sheet is seen', () => {
 
 test('D5 a builder hand-off with no step-2 build is seen', () => {
   const d = db()
+  logged(d, { plan: null, kind: 'director', actor: 'director', outcome: 'pass',
+    message: "rule: x (out of the fixer's reach, so the builder takes it)", pointer: null, run: null }, '2026-10-02 10:00:00')
+  expect(drift(d, REGISTRY, NOW).map((r) => r.name)).not.toContain('rule_to_build')
   logged(d, { plan: 1, kind: 'director', actor: 'director', outcome: 'pass',
     message: "rule: x (out of the fixer's reach, so the builder takes it)", pointer: null, run: null }, '2026-10-02 10:00:00')
   expect(drift(d, REGISTRY, NOW).find((r) => r.name === 'rule_to_build')?.state).toBe('seen')

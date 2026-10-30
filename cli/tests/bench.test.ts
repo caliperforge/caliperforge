@@ -11,6 +11,7 @@ import { ofKind } from '../../store/events.ts'
 import type { Db } from '../../store/index.ts'
 import { dial, lanes } from '../../store/lanes.ts'
 import { allPlans, holderOf, openPipes, pipeNamed, planById, planTitle, putPlan, type PlanRow } from '../../store/plans.ts'
+import { fingerprint, refused as refuse } from '../../store/refusals.ts'
 import { fileBench, refuzz, rescore } from '../bench.ts'
 import { laneLine } from '../brief.ts'
 import type { Read } from '../gh.ts'
@@ -105,6 +106,31 @@ test('file D3 an unknown target is refused and files nothing', () => {
   const d = fresh(schema)
   expect(() => fileBench(d, benchRoot(), 'nope', false, 'fizz_generator', AT)).toThrow('fuzz-bench has no targets/nope.yml')
   expect(allPlans(d)).toEqual([])
+})
+
+function noSuite(): { dir: string; d: Db; plan: number } {
+  const dir = benchRoot()
+  const d = fresh(schema)
+  const plan = Number(fileBench(d, dir, 'smoke-01', false, 'fizz_generator', AT)[0])
+  refuse(d, { plan, step: 1, fingerprint: fingerprint(1, ['bench.no_suite']), diff: null, span: 'bench.no_suite' })
+  return { dir, d, plan }
+}
+
+test('file D1 a bench.no_suite target is refused by name', () => {
+  const { dir, d, plan } = noSuite()
+  expect(() => fileBench(d, dir, 'smoke-01', false, 'fizz_generator', AT)).toThrow(`plan ${String(plan)}`)
+  expect(allPlans(d)).toHaveLength(1)
+})
+
+test('file D2 --all leaves out a bench.no_suite target', () => {
+  const { dir, d } = noSuite()
+  const ids = fileBench(d, dir, undefined, true, 'fizz_generator', AT)
+  expect(ids.map((id) => get(dir, id, 'target.yml'))).toEqual([`${YML}target: euler-earn-m01\ngenerator: fizz\n`])
+})
+
+test('file D3 another generator still files a no_suite target', () => {
+  const { dir, d } = noSuite()
+  expect(fileBench(d, dir, 'smoke-01', false, 'house_generator', AT)).toHaveLength(1)
 })
 
 const SCORED = 'fuzz-bench/suites/fizz/euler-earn-m01'

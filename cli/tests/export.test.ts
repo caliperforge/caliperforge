@@ -371,13 +371,15 @@ const README = ['# vo-conformance', 'Behaviour `async_jobs`: pyvo and astroquery
 
 const base64 = (text: string): object => ({ content: Buffer.from(text).toString('base64').replace(/.{60}/g, '$&\n'), encoding: 'base64' })
 
-const vo = (names: string[], readme = README): Read => vi.fn((args: string[]) => {
+const ROWS = `{"client": "astroquery", "service": "CADC", "behaviour": "async_jobs", "outcome": "fail"}
+{"client": "pyvo", "service": "MAST", "behaviour": "sync_query", "outcome": "not supported", "note": "price of a 504"}\n`
+
+const vo = (names: string[], readme = README, rows = ROWS): Read => vi.fn((args: string[]) => {
   const path = args[1] ?? ''
   if (path.endsWith('/contents/results')) return names.map((name) => ({ name, path: `results/${name}`, type: 'file' }))
   if (path.endsWith('/readme')) return base64(readme)
   if (path.includes('/commits?')) return [{ commit: { committer: { date: `${/results\/([\d-]+)\.jsonl/.exec(path)?.[1] ?? ''}T11:00:07Z` } } }]
-  return base64(`{"client": "astroquery", "service": "CADC", "behaviour": "async_jobs", "outcome": "fail"}
-{"client": "pyvo", "service": "MAST", "behaviour": "sync_query", "outcome": "not supported", "note": "price of a 504"}\n`)
+  return base64(rows)
 })
 
 const NAMES_VO = ['2026-09-22.jsonl', '2026-09-23.jsonl', 'README.md', '2026-10-20.jsonl', 'latest.jsonl']
@@ -415,5 +417,18 @@ test('D4 a behaviour with no README line throws', () => {
 
 test('D5 a window with no results file throws and writes none', () => {
   expect(() => conformance(site, VO_NOW, vo(['2026-09-22.jsonl', 'README.md']))).toThrow('vo_conformance.json: no results since 2026-09-23')
+  expect(existsSync(join(site, 'data'))).toBe(false)
+})
+
+test('D1 a service down row exports; the definition names four', () => {
+  conformance(site, VO_NOW, vo(NAMES_VO, README, ROWS.replace('"fail"', '"service down"')))
+  const file = json('vo_conformance')
+  expect(file.rows[0]).toEqual(['2026-09-23', 'astroquery', 'CADC', 'async_jobs', 'service down', null])
+  expect(file.definition).toContain('its outcome (pass, fail, not supported or service down)')
+})
+
+test('D3 an outcome outside the four throws naming it', () => {
+  expect(() => conformance(site, VO_NOW, vo(NAMES_VO, README, ROWS.replace('"fail"', '"skipped"'))))
+    .toThrow(/^vo_conformance\.json: outcome "skipped": /)
   expect(existsSync(join(site, 'data'))).toBe(false)
 })

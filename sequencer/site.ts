@@ -1,6 +1,7 @@
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
+import { z } from 'zod'
 import { conformance, exported } from '../cli/export.ts'
 import { record, ticketOf } from '../cli/inbox.ts'
 import { aged, aired, awaiting, paste, pending, placed, type Post, published } from '../store/desk.ts'
@@ -111,6 +112,7 @@ function served(dir: string): void {
 }
 
 function said(error: unknown): string {
+  if (error instanceof z.ZodError) return error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ')
   const stderr = error instanceof Error && 'stderr' in error ? error.stderr : undefined
   const lines = typeof stderr === 'string' ? stderr.split('\n').map((l) => l.trim()) : []
   return lines.find((l) => l !== '' && !l.startsWith('To ')) ?? firstLine(error)

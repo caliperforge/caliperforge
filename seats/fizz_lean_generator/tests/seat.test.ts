@@ -28,11 +28,12 @@ function copied(): string {
 
 const READ = '- x-ray/x-ray.md, Vault.deposit and Vault.redeem — the entry points to call'
 const STAND_INS = '\n## Stand-ins\n\n- MockStrategy | limits: max interest 1e15 per call, only vault mints\n'
+const FACTS = ['Signatures', 'Guards', 'Roles', 'Limits'].map((name) => `\n## ${name}\n\n- none\n`).join('')
 const FILLED: Record<string, string> = {
-  context: `phase: context\nnext: scaffold\nmode: automatic\nagent_model: opus\n\n## Reads\n\n${READ}\n`,
-  scaffold: `phase: scaffold\nnext: coverage\n\n## Reads\n\n${READ}\n${STAND_INS}`,
-  coverage: `phase: coverage\nnext: invariants\nfuzz_build_cmd: forge build\n\n## Reads\n\n${READ}\n`,
-  invariants: `phase: invariants\nnext: campaigns\n\n## Reads\n\n${READ}\n\n## Converted values\n\n- property_redeemConserves | tolerance: 2 wei × 3\n`,
+  context: `phase: context\nnext: scaffold\nmode: automatic\nagent_model: opus\n\n## Reads\n\n${READ}\n${FACTS}`,
+  scaffold: `phase: scaffold\nnext: coverage\n\n## Reads\n\n${READ}\n${FACTS}${STAND_INS}`,
+  coverage: `phase: coverage\nnext: invariants\nfuzz_build_cmd: forge build\n\n## Reads\n\n${READ}\n${FACTS}`,
+  invariants: `phase: invariants\nnext: campaigns\n\n## Reads\n\n${READ}\n${FACTS}\n## Converted values\n\n- property_redeemConserves | tolerance: 2 wei × 3\n`,
 }
 const PHASES = Object.keys(FILLED)
 const SPAWN = JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Agent', input: {} }] } })

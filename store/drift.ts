@@ -56,7 +56,7 @@ export function addFinding(db: Db, found: Pick<Finding, 'name' | 'state' | 'deta
 }
 
 export function answered(db: Db, name: string, detail: string, newest: string | number | null | undefined): boolean {
-  return db.prepare(`SELECT 1 FROM drift_findings WHERE name = @name AND closed_at IS NOT NULL AND (julianday(closed_at) > julianday(@newest)
+  return db.prepare(`SELECT 1 FROM drift_findings WHERE name = @name AND closed_at IS NOT NULL AND ((julianday(closed_at) > julianday(@newest) AND why NOT LIKE 'recovered:%')
     OR (outcome = 'covered' AND EXISTS (SELECT 1 FROM plans WHERE state NOT IN ('done', 'refused', 'halted') AND drift_findings.ref LIKE '%/' || plans.id))
     OR (state IN ('seen', 'stale') AND detail = @detail AND outcome <> 'covered'))`)
     .get({ name, detail, newest: newest ?? null }) !== undefined

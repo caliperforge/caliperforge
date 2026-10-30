@@ -40,6 +40,18 @@ test('D3 a seen finding closes once its row passes the gap', () => {
     .toEqual([['fixed', 'recovered: newest events.at is 2026-10-03 10:00:00', '2026-10-05T11:30:00.000Z']])
 })
 
+test('D1 a stale finding refiles after an earlier recovery', () => {
+  const d = db()
+  const stale: Entry[] = [{ name: 'stale', table: 'events', column: 'at', where: "kind = 'stale'", gap: '2d' }]
+  event(d, '2026-09-30 10:00:00', 'stale')
+  expect(due(d, stale, day('03'), unread, none)).toEqual([1])
+  event(d, '2026-10-03 12:00:00', 'stale')
+  due(d, stale, day('04'), unread, none)
+  expect(findings(d)[0]?.why).toBe('recovered: newest events.at is 2026-10-03 12:00:00')
+  expect(due(d, stale, day('06'), unread, none)).toEqual([2])
+  expect(findings(d)[1]).toMatchObject({ state: 'stale', detail: 'newest events.at is 2026-10-03 12:00:00, older than 2d' })
+})
+
 test('D4 an off finding closes once its switch reads right', () => {
   const d = db()
   const apply: Entry[] = [{ name: 'apply', switch: { key: 'probe.mode', value: 'live' } }]

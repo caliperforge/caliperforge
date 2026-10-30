@@ -6,6 +6,7 @@ import { fresh } from '../checks/sqlite.ts'
 import { planRow } from '../runner/index.ts'
 import { load } from '../runner/rules.ts'
 import type { Db } from './index.ts'
+import { models } from './models.ts'
 import { backfill, outputs, spawned, unfinished } from './transcript.ts'
 
 const root = join(import.meta.dirname, '..')
@@ -111,6 +112,22 @@ test('a directory path throws EISDIR rather than reading empty', () => {
   const dir = mkdtempSync(join(tmpdir(), 'cf-transcript-'))
   expect(() => spawned(dir)).toThrow(/EISDIR/)
   expect(() => outputs(dir)).toThrow(/EISDIR/)
+})
+
+test('D2 models reads the result line modelUsage', () => {
+  expect(models(fixture('priced'))).toEqual({
+    'claude-opus-5-5': { inputTokens: 15177, outputTokens: 1234, cacheReadInputTokens: 2139, cacheCreationInputTokens: 20089 },
+    'claude-sonnet-5': { inputTokens: 402, outputTokens: 418656, cacheReadInputTokens: 29640196, cacheCreationInputTokens: 1480800 },
+  })
+})
+
+test('D2 models is null: missing, no result, cut line, {}', () => {
+  const text = readFileSync(fixture('priced'), 'utf8')
+  const cut = join(mkdtempSync(join(tmpdir(), 'cf-transcript-')), 'cut.transcript.jsonl')
+  writeFileSync(cut, text.slice(0, -40))
+  const empty = join(mkdtempSync(join(tmpdir(), 'cf-transcript-')), 'empty.transcript.jsonl')
+  writeFileSync(empty, text.replace(/"modelUsage":.*\}\}\}/, '"modelUsage":{}}'))
+  expect([models(fixture('absent')), models(lines([spawn])), models(cut), models(empty)]).toEqual([null, null, null, null])
 })
 
 test('a missing, uncosted or cut transcript stays NULL', () => {

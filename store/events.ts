@@ -1,5 +1,6 @@
 import type { Fired, Provider } from '../providers/kind.ts'
 import type { Db } from './index.ts'
+import { byModel, models, type Models } from './models.ts'
 
 export interface Event {
   plan: number | null
@@ -97,15 +98,24 @@ export function runLogged(db: Db, r: Run): number {
       r.fired.usage.output, r.fired.seconds, r.exit, r.fired.transcript_path, r.fired.usage.cost ?? null, r.fired.usage.write ?? null,
       r.fired.usage.write_1h ?? null, r.fired.session ?? null, r.mode ?? null, r.staffed ?? null, r.phase ?? null)
   const id = Number(row.lastInsertRowid)
-  db.prepare(`${PRICED} AND id = ?`).run(id)
+  price(db, id, models(r.fired.transcript_path))
   return id
 }
 
+function price(db: Db, id: number, usage: Models | null): number | null {
+  if (usage !== null) return byModel(db, id, usage)
+  return (db.prepare(`${PRICED} AND id = ? RETURNING cost_computed_usd`).get(id) as { cost_computed_usd: number | null } | undefined)?.cost_computed_usd ?? null
+}
+
 export function repriced(db: Db): { priced: number; missing: number[] } {
-  const filled = db.prepare(`${PRICED} AND cost_computed_usd IS NULL RETURNING cost_computed_usd`)
-    .all() as { cost_computed_usd: number | null }[]
+  const runs = db.prepare('SELECT id, model, transcript_path, cost_computed_usd FROM runs WHERE cache_write_tokens IS NOT NULL ORDER BY id')
+    .all() as { id: number; model: string; transcript_path: string; cost_computed_usd: number | null }[]
+  const filled = runs.flatMap((r) => {
+    const usage = models(r.transcript_path)
+    return r.cost_computed_usd === null || Object.keys(usage ?? {}).some((m) => m !== r.model) ? [price(db, r.id, usage)] : []
+  })
   const missing = db.prepare('SELECT id FROM runs WHERE cache_write_tokens IS NULL ORDER BY id').pluck().all() as number[]
-  return { priced: filled.filter((r) => r.cost_computed_usd !== null).length, missing }
+  return { priced: filled.filter((cost) => cost !== null).length, missing }
 }
 
 export function runAt(db: Db, plan: number, step: number, seat: string, at: string): number {

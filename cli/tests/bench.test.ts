@@ -174,7 +174,7 @@ test('refuzz D1 files a step-2 plan on the source suite', () => {
   const id = refuzz(d, dir, 1, 4, 2, 'ceo', 'weak or short?', AT)
   expect(planById(d, id)).toMatchObject({ template: 'bench', state: 'queued', step: 2, pipe_id: pipeNamed(d, 'refuzz')?.id })
   expect(planTitle(d, id)).toBe('Bench: refuzz plan 1 (fizz on euler-earn-m01), 4 h × 2 seeds')
-  expect(get(dir, id, 'target.yml')).toBe(`${YML}target: euler-earn-m01\ngenerator: fizz\nrefuzz: 1\nhours: 4\nseeds: 2\n`)
+  expect(get(dir, id, 'target.yml')).toBe(`${YML}target: euler-earn-m01\ngenerator: fizz\nmode: refuzz\nrefuzz: 1\nhours: 4\nseeds: 2\n`)
   expect(JSON.parse(get(dir, id, 'generate.json'))).toEqual({ suite: 'test/fizz', tokens: 0, seconds: 0 })
   expect(readFileSync(join(srcDir(dir, id), 'test/fizz/medusa.json'), 'utf8')).toBe('{}')
   expect(ofKind(d, 'refuzz')).toEqual([{ plan: id, kind: 'refuzz', actor: 'ceo', outcome: 'pass', message: 'weak or short?' }])

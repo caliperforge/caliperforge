@@ -82,7 +82,7 @@ export function refuzz(db: Db, root: string, source: number, hours: number, seed
     logged(db, { plan: filed, kind: 'refuzz', actor: by, outcome: 'pass', message: why, pointer: `plan ${String(source)}`, run: null })
     return filed
   })()
-  put(root, id, 'target.yml', `${yml.trimEnd()}\nrefuzz: ${String(source)}\nhours: ${String(hours)}\nseeds: ${String(seeds)}\n`)
+  put(root, id, 'target.yml', `${yml.trimEnd()}\nmode: refuzz\nrefuzz: ${String(source)}\nhours: ${String(hours)}\nseeds: ${String(seeds)}\n`)
   put(root, id, 'generate.json', JSON.stringify({ ...generated, tokens: 0, seconds: 0 }))
   cpSync(suites, join(srcDir(root, id), generated.suite), { recursive: true })
   return id

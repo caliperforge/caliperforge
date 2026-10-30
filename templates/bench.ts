@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 import type { Provider } from '../providers/kind.ts'
@@ -160,7 +160,7 @@ export function scored(db: Db, root: string, plan: PlanRow): Outcome {
   const sha = git(bench, ['rev-parse', 'HEAD']).trim()
   const upstream = join(bench, 'targets', `${target}.yml`)
   if (!existsSync(upstream)) return { outcome: 'refuse', spans: ['target.yml'], note: `fuzz-bench has no targets/${target}.yml` }
-  const yml = listedIn(root, plan.id, upstream)
+  const yml = moded(upstream, listedIn(root, plan.id, upstream), keys.refuzz)
   if (yml === null) return { outcome: 'refuse', spans: ['target.yml'], note: 'target.yml has no files' }
   put(root, plan.id, 'target.yml', `${copied(yml, target, generator)}${
     CARRIED.filter((key) => keys[key] !== undefined).map((key) => `${key}: ${keys[key] ?? ''}\n`).join('')}`)
@@ -179,6 +179,14 @@ export function scored(db: Db, root: string, plan: PlanRow): Outcome {
     ...(seeded === null ? {} : { mode: 'refuzz', source: Number(keys.refuzz), seeds: seeded.seeds, union: seeded.union }) })
   return { outcome: 'pass', spans: [], note: `score.json written at fuzz-bench ${sha.slice(0, 12)}${config === null || config.clamped.length === 0
     ? '' : `; targetContractsBalances ${config.clamped.join(', ')} clamped to 1e24 wei`}` }
+}
+
+/** run_pair writes its 250k `testLimit` over the suite's unless the yml it is handed says `mode: refuzz`. */
+function moded(upstream: string, listed: string | null, refuzz: string | undefined): string | null {
+  if (listed === null || refuzz === undefined) return listed
+  const yml = `${listed.trimEnd()}\nmode: refuzz\n`
+  writeFileSync(upstream, yml)
+  return yml
 }
 
 export function nullChecked(db: Db, root: string, plan: PlanRow, cap = CAP): Outcome {

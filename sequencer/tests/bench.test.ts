@@ -828,6 +828,7 @@ test('D1 scored rewrites target.yml from fuzz-bench HEAD', () => {
   const { root, db } = scoring()
   expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
   expect(get(root, 1, 'target.yml')).toBe(REFRESHED)
+  expect(readFileSync(join(planDir(root, 1), 'fuzz-bench/targets/euler-earn-m01.yml'), 'utf8')).not.toMatch(/^mode:/m)
 })
 
 test('D3 no upstream targets yml is refused, copy kept', () => {
@@ -1394,7 +1395,8 @@ test('refuzz D4 the medusa.json runs hours long on one corpus', () => {
   expect(JSON.parse(readFileSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/medusa.json'), 'utf8'))).toEqual({
     fuzzing: { timeout: 14400, workers: 4, testLimit: 0, corpusDirectory: join(planDir(root, 7), 'corpus'), testing: { shrinkLimit: 500 } },
     slither: { useSlither: false } })
-  expect(get(root, 1, 'target.yml')).toBe(`${REFRESHED}refuzz: 7\nhours: 4\nseeds: 2\n`)
+  expect(get(root, 1, 'target.yml')).toBe('repo: euler-xyz/euler-earn\nfiles:\n  - src/EulerEarn.sol\nmode: refuzz\ntarget: euler-earn-m01\ngenerator: fizz\nrefuzz: 7\nhours: 4\nseeds: 2\n')
+  expect(readFileSync(join(planDir(root, 1), 'fuzz-bench/targets/euler-earn-m01.yml'), 'utf8')).toMatch(/mode: refuzz\n$/)
 })
 
 test('refuzz D4 a medusa.json with no fuzzing still gets them', () => {

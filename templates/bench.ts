@@ -17,7 +17,7 @@ import { clamp, quieted } from './balances.ts'
 import { deps } from './deps.ts'
 import { costWall, written } from './generated.ts'
 import { inBare, listedIn } from './listed.ts'
-import { heldForCoo, paired, rows, seedsOf } from './paired.ts'
+import { heldForCoo, profiled, rows, seedsOf } from './paired.ts'
 import { firing, phased, START } from './phases.ts'
 import { buildError, kept, powered, walled } from './powered.ts'
 import { DEFAULT_BUILDER, type Step } from './pr-path.ts'
@@ -141,8 +141,7 @@ export async function generate(db: Db, root: string, plan: PlanRow, step: Step, 
 }
 
 export function scored(db: Db, root: string, plan: PlanRow): Outcome {
-  const text = maybe(root, plan.id, 'target.yml') ?? ''
-  const keys = fields(text)
+  const keys = fields(maybe(root, plan.id, 'target.yml') ?? '')
   const missing = ['target', 'generator'].filter((key) => (keys[key] ?? '') === '')
   if (missing.length > 0) return { outcome: 'refuse', spans: ['target.yml'], note: `target.yml has no ${missing.join(', ')}` }
   const { target = '', generator = '' } = keys
@@ -168,15 +167,16 @@ export function scored(db: Db, root: string, plan: PlanRow): Outcome {
   rooted(srcDir(root, plan.id), join(bench, suites))
   const dropped = config === null ? null : placed(config.config, srcDir(root, plan.id), join(bench, suites))
   mkdirSync(join(bench, 'results', target), { recursive: true })
-  const runs = paired(db, plan, bench, target, suites, keys.refuzz === undefined ? null : Number(keys.seeds))
-  if (!Array.isArray(runs)) return runs
+  const ran = profiled(db, plan, bench, target, suites, srcDir(root, plan.id), keys.refuzz === undefined ? null : Number(keys.seeds))
+  if ('outcome' in ran) return ran
+  const { runs, retried } = ran
   const pairs = runs.flat()
   const seeded = keys.refuzz === undefined ? null : seedsOf(runs)
   const calls = seeded?.calls ?? pairs[0]?.calls
   const score = { catches: seeded?.union.catch ?? pairs.filter((r) => r.verdict === 'catch').length, false_positives: seeded?.union.fp_candidate ?? pairs.filter((r) => r.verdict === 'fp_candidate').length,
     untested: null, tokens, seconds, x_ray: x_ray ?? null, pre_fix_calls: calls?.pre_fix ?? null, fix_calls: calls?.fix ?? null, not_powered: powered(properties ?? proven, agents, calls, pairs.every((r) => r.verdict === 'error'), seeded !== null) }
   kept(db, root, plan.id, { target, generator }, score, sha, { ...(dropped === null ? {} : { foundry_out_dropped: dropped }), ...(score.not_powered === 'compile_failed' ? { build_error: buildError(pairs) } : {}),
-    ...(seeded === null ? {} : { mode: 'refuzz', source: Number(keys.refuzz), seeds: seeded.seeds, union: seeded.union }) })
+    ...(seeded === null ? {} : { mode: 'refuzz', source: Number(keys.refuzz), seeds: seeded.seeds, union: seeded.union }), ...(retried ? { via_ir_retry: true } : {}) })
   return { outcome: 'pass', spans: [], note: `score.json written at fuzz-bench ${sha.slice(0, 12)}${config === null || config.clamped.length === 0
     ? '' : `; targetContractsBalances ${config.clamped.join(', ')} clamped to 1e24 wei`}` }
 }

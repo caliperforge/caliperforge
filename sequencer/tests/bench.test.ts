@@ -1176,6 +1176,54 @@ test('1645b D6 all error with no error line records a null error', () => {
   expect(json).toMatchObject({ not_powered: 'compile_failed', build_error: null })
 })
 
+/** A run_pair that logs the FOUNDRY_VIA_IR and FOUNDRY_OPTIMIZER_RUNS it sees to `runs`, then fails stack-too-deep, or writes PAIRS via IR when `fixed`. */
+function deep(fixed: boolean): string {
+  return `import json, os
+seen = ' '.join(os.environ.get(k, '-') for k in ['FOUNDRY_VIA_IR', 'FOUNDRY_OPTIMIZER_RUNS'])
+open('runs', 'a').write(seen + '\\n')
+rows = ${JSON.stringify(PAIRS)} if ${fixed ? 'True' : 'False'} and seen.startswith('true') else [{'property': 'p1', 'verdict': 'error', 'build_log_tail': 'Compiling\\nError: Variable memPtr_102 is 1 too deep in the stack: ' + seen}]
+os.makedirs('results/euler-earn-m01', exist_ok=True)
+open('results/euler-earn-m01/euler-earn-m01.jsonl', 'w').write('\\n'.join(json.dumps(r) for r in rows))
+`
+}
+
+/** The score row, score.json and the env each run_pair saw for `pair`, with src/foundry.toml `toml` when set. */
+function retried(pair: string, toml?: string) {
+  const { root, db } = scoring(pair)
+  if (toml !== undefined) writeFileSync(join(srcDir(root, 1), 'foundry.toml'), toml)
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  return { row: scores(db)[0], json: JSON.parse(get(root, 1, 'score.json')) as Record<string, unknown>,
+    seen: readFileSync(join(planDir(root, 1), 'fuzz-bench/runs'), 'utf8').trim().split('\n') }
+}
+
+test('D1 a stack-too-deep build reruns once via IR and scores', () => {
+  const { row, json, seen } = retried(deep(true))
+  expect(seen).toEqual(['- -', 'true -'])
+  expect(row).toMatchObject({ catches: 2, false_positives: 1 })
+  expect(json).toMatchObject({ catches: 2, false_positives: 1, via_ir_retry: true })
+  expect(json).not.toHaveProperty('build_error')
+})
+
+test('D2 other compile errors or via IR already set run once', () => {
+  for (const { json, seen } of [retried(`open('runs', 'a').write('-\\n')\n${writes('.jsonl', ERRORS)}`), retried(deep(false), `${TOML}[profile.fuzz]\nvia_ir = true\n`)]) {
+    expect(seen).toHaveLength(1)
+    expect(json).toMatchObject({ not_powered: 'compile_failed' })
+    expect(json).not.toHaveProperty('via_ir_retry')
+  }
+})
+
+test('D3 a rerun still too deep is compile_failed from the rerun', () => {
+  const { row, json, seen } = retried(deep(false))
+  expect(seen).toEqual(['- -', 'true -'])
+  expect(row?.not_powered).toBe('compile_failed')
+  expect(json).toMatchObject({ not_powered: 'compile_failed', build_error: 'Error: Variable memPtr_102 is 1 too deep in the stack: true -', via_ir_retry: true })
+})
+
+test('D4 run_pair sees the [profile.fuzz] keys, none without it', () => {
+  expect(retried(deep(false), `${TOML}[profile.fuzz]\nvia_ir = false\noptimizer_runs = 0\n`).seen[0]).toBe('false 0')
+  expect(retried(deep(false), TOML).seen[0]).toBe('- -')
+})
+
 test('D5 generate at the wall records one wall row, no pair', () => {
   const { root, db } = sided(8, 505660, 505660, CEILING)
   expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })

@@ -65,7 +65,7 @@ async function checked(fire: Fire, at: Phase, sum: Sum, refused: Refused[] = [])
 }
 
 export async function phased(fire: Fire, skill: string, handoffs: string, issue: string): Promise<Sum | Outcome> {
-  const phases = [...readFileSync(join(skill, TEMPLATES), 'utf8').matchAll(/^# Handoff: (.+)$/gm)].map((m) => m[1] ?? '')
+  const phases = [...readFileSync(join(skill, TEMPLATES), 'utf8').matchAll(/^# Handoff: (.+)$/gm)].map((m) => m[1] ?? '').filter((phase) => phase !== 'campaigns')
   let sum = START
   for (const [at, phase] of phases.entries()) {
     const path = join(handoffs, `${phase}.md`)

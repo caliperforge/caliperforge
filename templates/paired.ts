@@ -19,13 +19,35 @@ export function rows(path: string): Row[] {
   return readFileSync(path, 'utf8').split('\n').filter((line) => line.trim() !== '').map((line) => JSON.parse(line) as Row)
 }
 
+const DEEP = /too deep in the stack|stack too deep/i
+
+/** run_pair under the generator's `[profile.fuzz]` as `FOUNDRY_*`, and once more via IR when every row failed stack-too-deep. */
+export function profiled(db: Db, plan: PlanRow, bench: string, target: string, suites: string, src: string, seeds: number | null): Outcome | { runs: Row[][]; retried: boolean } {
+  const carried = join(bench, suites, 'root/foundry.toml')
+  const toml = [carried, join(src, 'foundry.toml')].find((path) => existsSync(path))
+  const env = fuzzEnv(toml === undefined ? '' : readFileSync(toml, 'utf8'))
+  const runs = paired(db, plan, bench, target, suites, seeds, env)
+  if (!Array.isArray(runs)) return runs
+  const pairs = runs.flat()
+  const deep = pairs.every((r) => r.verdict === 'error') && pairs.some((r) => typeof r.build_log_tail === 'string' && DEEP.test(r.build_log_tail))
+  if (!deep || env.FOUNDRY_VIA_IR === 'true') return { runs, retried: false }
+  const again = paired(db, plan, bench, target, suites, seeds, { ...env, FOUNDRY_VIA_IR: 'true' })
+  return Array.isArray(again) ? { runs: again, retried: true } : again
+}
+
+function fuzzEnv(toml: string): Record<string, string> {
+  const section = toml.split(/^(?=[ \t]*\[)/m).find((s) => /^[ \t]*\[profile\.fuzz\]/.test(s)) ?? ''
+  return Object.fromEntries([...section.matchAll(/^[ \t]*(\w+)[ \t]*=[ \t]*([^\s[{].*?)[ \t]*$/gm)]
+    .map((m) => [`FOUNDRY_${(m[1] ?? '').toUpperCase()}`, (m[2] ?? '').replace(/^(["'])(.*)\1$/, '$2')]))
+}
+
 /** run_pair once, or once per seed with that seed's rows moved to `<target>.seed-<k>.jsonl`. */
-export function paired(db: Db, plan: PlanRow, bench: string, target: string, suites: string, seeds: number | null): Outcome | Row[][] {
+function paired(db: Db, plan: PlanRow, bench: string, target: string, suites: string, seeds: number | null, env: Record<string, string>): Outcome | Row[][] {
   const written = join(bench, 'results', target, `${target}.jsonl`)
   const runs: Row[][] = []
   for (let seed = 1; seed <= (seeds ?? 1); seed++) {
-    if (seeds !== null) rmSync(written, { force: true })
-    const ran = spawnSync('python3', ['bench/run_pair.py', `targets/${target}.yml`, suites], { cwd: bench, encoding: 'utf8' })
+    rmSync(written, { force: true })
+    const ran = spawnSync('python3', ['bench/run_pair.py', `targets/${target}.yml`, suites], { cwd: bench, encoding: 'utf8', env: { ...process.env, ...env } })
     if (ran.error !== undefined || ran.status !== 0) return heldForCoo(db, plan, ran, 'run_pair')
     if (!existsSync(written)) return { outcome: 'refuse', spans: ['bench.no_results'], note: `run_pair.py exited 0 and wrote no results/${target}/${target}.jsonl` }
     const pairs = rows(written)

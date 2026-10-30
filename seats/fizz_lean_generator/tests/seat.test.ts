@@ -33,7 +33,6 @@ const FILLED: Record<string, string> = {
   scaffold: `phase: scaffold\nnext: coverage\n\n## Reads\n\n${READ}\n${STAND_INS}`,
   coverage: `phase: coverage\nnext: invariants\nfuzz_build_cmd: forge build\n\n## Reads\n\n${READ}\n`,
   invariants: `phase: invariants\nnext: campaigns\n\n## Reads\n\n${READ}\n\n## Converted values\n\n- property_redeemConserves | tolerance: 2 wei × 3\n`,
-  campaigns: 'phase: campaigns\nnext: none\nfuzzer: medusa\n',
 }
 const PHASES = Object.keys(FILLED)
 const SPAWN = JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Agent', input: {} }] } })
@@ -49,7 +48,7 @@ function stub(tokens: number, filled: Record<string, string>, spawns: Record<str
     mkdirSync(join(packet.cwd, HANDOFFS), { recursive: true })
     writeFileSync(join(packet.cwd, HANDOFFS, `${phase}.md`), filled[phase] ?? '')
     writeFileSync(packet.transcript, `${SPAWN}\n`.repeat(spawns[phase] ?? 0))
-    if (phase === 'campaigns') writeFileSync(join(packet.cwd, 'test/fizz/Properties.sol'), 'contract P { function property_a() public {} }\n')
+    if (phase === 'invariants') writeFileSync(join(packet.cwd, 'test/fizz/Properties.sol'), 'contract P { function property_a() public {} }\n')
     return Promise.resolve({ text: '', transcript_path: packet.transcript, usage: { input: tokens - 1000, cache: 0, output: 1000 }, seconds: 1,
       ended: 'completed', exit: 0, stop_reason: null, denials: 0 })
   } } }
@@ -87,7 +86,7 @@ test('D2: fizz_lean staffs the lean seat and fizz stays fizz', () => {
 test('D3: fizz_lean reads its skill from the tree it runs in', async () => {
   const { tree, db, packets } = await generated('fizz_lean')
   const skill = real(join(tree, 'seats/fizz_lean_generator/skill'))
-  expect(packets).toHaveLength(5)
+  expect(packets).toHaveLength(4)
   expect(packets[0]?.prompt).toContain(`SKILL_PATH is ${skill}.`)
   expect(packets[0]?.reads?.[0]).toBe(skill)
   expect(packets[0]).toMatchObject({ idle: 60, wall: 6_000_000 })
@@ -107,14 +106,14 @@ test('D5: a fizz_lean run at the ceiling is refused', async () => {
   expect(maybe(tree, 1, 'generate.json')).toBeNull()
 })
 
-test('D1: lean fires each phase in order, one run each', async () => {
+test('D1 D5: lean fires each phase but campaigns, one run each', async () => {
   const { tree, db, outcome, packets } = await generated('fizz_lean')
   expect(outcome).toMatchObject({ outcome: 'pass' })
-  expect(packets.map(phaseOf)).toEqual(PHASES)
+  expect(packets.map(phaseOf)).toEqual(['context', 'scaffold', 'coverage', 'invariants'])
   PHASES.forEach((phase, at) => { expect(packets[at]?.prompt).toContain(readFileSync(join(tree, `seats/fizz_lean_generator/skill/phases/${phase}.md`), 'utf8')) })
   const paths = runRows(db).map((row) => row.transcript_path)
-  expect(paths).toHaveLength(5)
-  expect(new Set(paths).size).toBe(5)
+  expect(paths).toHaveLength(4)
+  expect(new Set(paths).size).toBe(4)
   for (const path of paths) expect(path).toMatch(/run-\d+\.transcript\.jsonl$/)
 })
 
@@ -143,7 +142,7 @@ test('D4: no lean packet carries the conductor prompt', async () => {
 
 test('D6: generate.json agents adds up every phase transcript', async () => {
   const { tree } = await generated('fizz_lean', 1000, FILLED, { context: 1, scaffold: 2 })
-  expect(JSON.parse(maybe(tree, 1, 'generate.json') ?? '{}')).toMatchObject({ agents: 3, tokens: 5000, seconds: 5, properties: 1 })
+  expect(JSON.parse(maybe(tree, 1, 'generate.json') ?? '{}')).toMatchObject({ agents: 3, tokens: 4000, seconds: 4, properties: 1 })
 })
 
 test('D6: a drifted fizz_lean_generator prompt is refused', () => {

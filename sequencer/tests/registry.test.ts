@@ -159,9 +159,9 @@ test('waiveResumesStop D1-D3', () => {
     runAt(d, 1, 2, 'typescript_specialist', '2026-10-02 11:00:00')
     return d
   }
-  expect(drift(waived('2026-10-02 09:00:00'), entry, NOW)).toMatchObject([{ name: 'waive_resumes_stop', state: 'seen', newest: '2026-10-02 10:00:00' }])
-  expect(drift(waived('2026-10-02 12:00:00'), entry, NOW)).toEqual([])
-  expect(drift(waived('2026-10-02 09:00:00', 'c'), entry, NOW)).toEqual([])
+  expect(drift(waived('2026-10-02 09:00:00'), entry, NOW)).toEqual([])
+  expect(drift(waived('2026-10-02 12:00:00'), entry, NOW)).toMatchObject([{ name: 'waive_resumes_stop', state: 'silent' }])
+  expect(drift(waived('2026-10-02 09:00:00', 'c'), entry, NOW)).toMatchObject([{ name: 'waive_resumes_stop', state: 'silent' }])
 })
 
 test('sitePushSeen D5', () => {
@@ -255,7 +255,10 @@ test('waiveResumesStopStale D2 D3 D4', () => {
       input_tokens: 0, cache_write_tokens: null, cache_write_1h_tokens: null, cache_read_tokens: 0, output_tokens: 0, seconds: 1, exit: 0,
       at: built, transcript_path: 'x.transcript.jsonl', cost_usd: null })
     const pass: Verdict = { outcome: 'pass', subject_digest: 'b'.repeat(64), spans: [], origin_kind: null, origin_ref: null, message: 'm', defect_class: null }
-    for (const step of [4, 5]) addReview(d, 'review', step, 1, pass, 0, 1, 'c'.repeat(40))
+    for (const step of [4, 5]) {
+      const pointer = `verdicts:${String(addReview(d, 'review', step, 1, pass, 0, 1, 'c'.repeat(40)))}`
+      logged(d, { plan: 1, kind: 'review', actor: 'review', outcome: 'pass', message: 'm', pointer, run: null }, '2026-09-01 00:00:00')
+    }
     return d
   }
   expect(drift(waived('2026-10-02 10:00:00', '2026-10-02 10:30:00'), entry, NOW)).toEqual([])

@@ -76,7 +76,8 @@ function read(file: string): Map<string, string> {
 function body(file: string): string {
   try {
     return (statSync(file).mode & 0o077) === 0 ? readFileSync(file, 'utf8') : ''
-  } catch {
+  } catch (error) {
+    if ((error as { code?: string }).code !== 'ENOENT') throw error
     return ''
   }
 }

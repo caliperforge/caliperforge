@@ -68,7 +68,8 @@ function values(headers: Response['headers'], name: string): string[] {
 function json(text: string): unknown {
   try {
     return JSON.parse(text) as unknown
-  } catch {
+  } catch (error) {
+    if (!(error instanceof SyntaxError)) throw error
     return null
   }
 }

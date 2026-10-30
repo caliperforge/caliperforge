@@ -158,3 +158,13 @@ test('writes a verdicts row the store accepts', () => {
   expect(verdictRows(db, plan)).toMatchObject([{ id, gate: 'pre_review', step: 3, kind: 'rail', outcome: 'refuse', rail_id: 'identifiers',
     origin_kind: 'rail', origin_ref: 'identifiers' }])
 })
+
+test('resolves a path under a dot-directory and refuses a missing one', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cf-ids-'))
+  mkdirSync(join(dir, '.github'))
+  writeFileSync(join(dir, '.github', 'dependabot.yml'), 'version: 2\n')
+  expect(identifiers(dir, 'updated `.github/dependabot.yml`').outcome).toBe('pass')
+  const missing = identifiers(dir, 'updated `.github/gone.yml`')
+  expect(missing.outcome).toBe('refuse')
+  expect(missing.message).toContain('.github/gone.yml')
+})

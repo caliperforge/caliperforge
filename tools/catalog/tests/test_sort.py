@@ -55,8 +55,59 @@ def _listing(name: str, dir: str, url: str | None = None, paths: object = None) 
 
 
 def _rows(repo: Path, net: Recorded, capsys: pytest.CaptureFixture[str]) -> list[dict[str, object]]:
-    assert main(["sort", str(repo)], net) == 0
+    assert main(["sort", "--no-fetch", str(repo)], net) == 0
     return [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+
+
+ORIGIN = "https://github.com/o/pay-skills.git"
+PULLS = "GET https://api.github.com/repos/o/pay-skills/pulls?state=open&per_page=100&page="
+
+
+def _sha(repo: Path, ref: str) -> str:
+    return subprocess.run(["git", "-C", str(repo), "rev-parse", ref], check=True, capture_output=True, text=True).stdout.strip()
+
+
+def _checkout(tmp_path: Path) -> tuple[Path, Path]:
+    upstream = _repo(tmp_path)
+    _head(upstream, 1, _listing("no-usdc", "skills/one"), "skills/one")
+    _head(upstream, 2, _listing("no-usdc", "skills/closed"), "skills/closed")
+    _head(upstream, 3, _listing("no-usdc", "skills/stale"), "skills/stale")
+    checkout = tmp_path / "checkout"
+    _git(tmp_path, "clone", "-q", str(upstream), str(checkout))
+    _git(checkout, "fetch", "-q", "origin", "+refs/pull/2/head:refs/pull/2/head", "+refs/pull/3/head:refs/pull/3/head")
+    _head(upstream, 3, _listing("no-usdc", "skills/three"), "skills/three")
+    _git(checkout, "remote", "set-url", "origin", ORIGIN)
+    _git(checkout, "config", f"url.{upstream}.insteadOf", ORIGIN)
+    return upstream, checkout
+
+
+def test_sort_fetches_the_open_heads_and_drops_stale_and_closed_refs(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+    upstream, checkout = _checkout(tmp_path)
+    pages = {f"{PULLS}1": Response(200, {}, json.dumps([{"number": 1}, {"number": 3}])), f"{PULLS}2": Response(200, {}, "[]")}
+    assert main(["sort", str(checkout)], Recorded(pages, set(), {})) == 0
+    dead = {"verdict": "close", "cause": "dead domain", "reason": "https://api.example.com"}
+    assert [json.loads(line) for line in capsys.readouterr().out.splitlines()] == [
+        {"pr": 1, "listing": "skills/one", **dead},
+        {"pr": 3, "listing": "skills/three", **dead},
+        {"pass": 0, "fix": 0, "close": 2},
+    ]
+    for pr in (1, 3):
+        assert _sha(checkout, f"refs/pull/{pr}/head") == _sha(upstream, f"refs/pull/{pr}/head")
+
+
+def test_sort_no_fetch_calls_no_api_and_leaves_the_refs(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+    _, checkout = _checkout(tmp_path)
+    before = {pr: _sha(checkout, f"refs/pull/{pr}/head") for pr in (2, 3)}
+    _rows(checkout, Recorded({}, set(), {}), capsys)
+    assert {pr: _sha(checkout, f"refs/pull/{pr}/head") for pr in (2, 3)} == before
+
+
+def test_a_refused_pulls_listing_raises_and_keeps_the_refs(tmp_path: Path):
+    _, checkout = _checkout(tmp_path)
+    closed = _sha(checkout, "refs/pull/2/head")
+    with pytest.raises(RuntimeError, match="HTTP 403"):
+        main(["sort", str(checkout)], Recorded({f"{PULLS}1": Response(403, {}, "")}, set(), {}))
+    assert _sha(checkout, "refs/pull/2/head") == closed
 
 
 def test_sort_writes_one_verdict_per_head_then_the_counts(tmp_path: Path, capsys: pytest.CaptureFixture[str]):

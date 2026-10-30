@@ -656,7 +656,7 @@ test('D1 excluded keeps each line once across a missing newline', () => {
   writeFileSync(join(src, '.git', 'info', 'exclude'), '# local')
   excluded(src)
   excluded(src)
-  expect(readFileSync(join(src, '.git', 'info', 'exclude'), 'utf8')).toBe('# local\n.cf-derived/\n__pycache__/\n.gradle/\nbuild/\ntarget/\nuv.lock\nfoundry.lock\n')
+  expect(readFileSync(join(src, '.git', 'info', 'exclude'), 'utf8')).toBe('# local\n.cf-derived/\n__pycache__/\n.gradle/\nbuild/\ntarget/\nuv.lock\nfoundry.lock\n.venv/\n')
 })
 
 test('the caliperforge and atelier profiles run the same commands', () => {

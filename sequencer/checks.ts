@@ -147,7 +147,7 @@ function settled(gate: Gate, ran: Ran, excused: string[]): Ran {
   return spans.length > 0 && spans.every((s) => excused.includes(s)) ? { ok: true, output: ran.output } : ran
 }
 
-export const BUILT = [`${DERIVED}/`, '__pycache__/', '.gradle/', 'build/', 'target/', 'uv.lock', 'foundry.lock']
+export const BUILT = [`${DERIVED}/`, '__pycache__/', '.gradle/', 'build/', 'target/', 'uv.lock', 'foundry.lock', '.venv/']
 
 /** The derived data is build output: never staged, never in the diff the reviewers read. */
 export function excluded(src: string): void {

@@ -1,3 +1,5 @@
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { fresh } from '../checks/sqlite.ts'
@@ -13,13 +15,15 @@ const price = (db: Db, model: string, from: string, input = 5, url = 'https://ex
   db.prepare(`INSERT INTO prices (provider, model, input, cache_read, cache_write, cache_write_1h, output, effective_from, source_url)
     VALUES ('claude-agent-sdk', ?, ?, 0.5, 6.25, ?, 25, ?, ?)`).run(model, input, write1h, from, url)
 
-const setup = (): { db: Db; log: (usage: Fired['usage'], model?: string) => number; computed: (id: number) => unknown; dated: (at: string) => number } => {
+type Log = (usage: Fired['usage'], model?: string, transcript_path?: string) => number
+
+const setup = (): { db: Db; log: Log; computed: (id: number) => unknown; dated: (at: string) => number } => {
   const db = fresh(join(root, 'schema'))
   load(db, root)
   const plan = planRow(db)
   const { hash } = seat(root, 'typescript_specialist')
-  const log = (usage: Fired['usage'], model = 'm'): number => runLogged(db, { plan, step: 4, seat: 'typescript_specialist', rule_hash: hash,
-    provider: 'claude-agent-sdk', model, effort: 'high', exit: 0, fired: { usage, seconds: 1, transcript_path: 'x.transcript.jsonl' } })
+  const log: Log = (usage, model = 'm', transcript_path = 'x.transcript.jsonl') => runLogged(db, { plan, step: 4, seat: 'typescript_specialist', rule_hash: hash,
+    provider: 'claude-agent-sdk', model, effort: 'high', exit: 0, fired: { usage, seconds: 1, transcript_path } })
   const computed = (id: number): unknown =>
     (db.prepare('SELECT cost_computed_usd FROM runs WHERE id = ?').get(id) as { cost_computed_usd: number | null }).cost_computed_usd
   const dated = (at: string): number => {
@@ -98,6 +102,37 @@ test('D4 repriced fills only NULL priced runs, lists no-cache ones', () => {
   expect(computed(unpriced)).toBeNull()
   expect(computed(noWrites)).toBeNull()
   expect(repriced(db)).toEqual({ priced: 0, missing: [noWrites] })
+})
+
+const PRICED = join(import.meta.dirname, 'fixtures', 'priced.transcript.jsonl')
+
+const both = { input: 1516468, write: 1500889, write_1h: 20089, cache: 29642335, output: 419890 }
+
+const renamed = (model: string): string => {
+  const path = join(mkdtempSync(join(tmpdir(), 'cf-priced-')), 'run.transcript.jsonl')
+  writeFileSync(path, readFileSync(PRICED, 'utf8').replace('claude-sonnet-5', model))
+  return path
+}
+
+test('D3 a Sonnet sub-agent prices at Sonnet rates', () => {
+  const { log, computed } = setup()
+  expect(computed(log(both, 'claude-opus-5-5', PRICED))).toBeCloseTo(14.063931, 7)
+})
+
+test('D5 an unpriced key takes the seat row; no seat row is NULL', () => {
+  const { log, computed } = setup()
+  expect(computed(log(both, 'claude-opus-5-5', renamed('claude-haiku-4-5-20251001')))).toBeCloseTo(21.953295, 7)
+  expect(computed(log(both, 'unpriced', PRICED))).toBeNull()
+})
+
+test('D6 repriced overwrites only multi-model priced runs', () => {
+  const { db, log, computed } = setup()
+  const split = log(both, 'claude-opus-5-5', PRICED)
+  const single = log(both, 'claude-opus-5-5', renamed('claude-opus-5-5'))
+  db.prepare('UPDATE runs SET cost_computed_usd = 9').run()
+  expect(repriced(db)).toEqual({ priced: 1, missing: [] })
+  expect(computed(split)).toBeCloseTo(14.063931, 7)
+  expect(computed(single)).toBe(9)
 })
 
 test('D5 a negative price or non-https source_url fails its CHECK', () => {

@@ -4,9 +4,11 @@
 
 - You are a fresh agent for the steps below and no others.
 - Before the first step, read the handoff named by `Start from` and only the files its `## Reads` lists. {MODE}, {AGENT_MODEL} and {FUZZ_BUILD_CMD} are the values {PROJECT_ROOT}/{META_DIR}/context.md records.
+- Work from that handoff's fact sections before opening code: open a source file only at a line range they name, or for a fact they do not hold.
 - In Step 7, for each state-changing entry point a property or a Step 3 candidate invariant targets, write a <contract>_<function>_clamped handler beside the raw one that bounds each argument to values the call accepts.
 - {SKILL_PATH} in the steps below, and every ./references/, ./agents/, ./scripts/ and ./templates/ link, is ~/.claude/skills/fizz: read it, never write it.
 - Every sub-agent you spawn writes its full output to {PROJECT_ROOT}/{META_DIR}/reports/scaffold-<agent>.md, <agent> being the stem of the agent file it was spawned from, and returns a summary of at most 300 words. Where a step passes one agent's output to another, pass that report's path.
+- Fill your handoff's fact sections (## Signatures, ## Guards, ## Roles, ## Limits) with what the next phase needs, each row naming the file and line range you read it at, or - none when there is nothing to carry.
 - Before you end, write {META_DIR}/handoff/scaffold.md, the path the issue names, from its `# Handoff: scaffold` block, with {PROJECT_ROOT}/{META_DIR}/context.md and each file the next phase needs under `## Reads`.
 - Before you end, write your own report to {PROJECT_ROOT}/{META_DIR}/reports/scaffold-phase.md and return a summary of at most 300 words.
 

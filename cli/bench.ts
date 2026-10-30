@@ -8,7 +8,8 @@ import { get, git, gitBase, maybe, planDir, put, remote, srcDir } from '../seque
 import { supersede } from '../store/bench.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
-import { addPlan, briefed, holderOf, pipeNamed, planById, rewind, type Holder } from '../store/plans.ts'
+import { addPlan, briefed, holderOf, pipeNamed, planById, plansOf, rewind, type Holder } from '../store/plans.ts'
+import { refusalRows } from '../store/refusals.ts'
 import { generated, lastTranscript } from '../store/runs.ts'
 import { copied } from '../templates/bench.ts'
 import { profiled } from '../templates/profile.ts'
@@ -27,7 +28,9 @@ export function fileBench(db: Db, root: string, target: string | undefined, all:
     const names = target !== undefined ? [target] : readdirSync(targets).filter((f) => f.endsWith('.yml')).sort().map((f) => f.slice(0, -4))
     const missing = names.find((name) => !existsSync(join(targets, `${name}.yml`)))
     if (missing !== undefined) throw new Error(`fuzz-bench has no targets/${missing}.yml`)
-    return names.map((name) => {
+    const refused = target === undefined ? undefined : noSuite(db, root, target, key)
+    if (refused !== undefined) throw new Error(`${String(target)}: plan ${String(refused)} refused at step 1 with bench.no_suite`)
+    return names.filter((name) => noSuite(db, root, name, key) === undefined).map((name) => {
       const id = addPlan(db, { pipe_id: pipe.id, target_id: null, template: 'bench', state: 'queued', queued_at: at, lane: null, seat: null, origin: null, step: 0 })
       briefed(db, id, { title: `Bench: score ${key} on ${name} (catch / miss / false alarm)`, what: null, why: null, ends: null })
       put(root, id, 'target.yml', copied(readFileSync(join(targets, `${name}.yml`), 'utf8'), name, key))
@@ -38,6 +41,18 @@ export function fileBench(db: Db, root: string, target: string | undefined, all:
   }
 }
 
+const field = (yml: string, key: string): string | undefined => [...yml.matchAll(new RegExp(`^${key}: (.+)$`, 'gm'))].at(-1)?.[1]
+
+function noSuite(db: Db, root: string, name: string, key: string): number | undefined {
+  const plan = plansOf(db, 'bench').reverse().find(({ id }) => {
+    const yml = maybe(root, id, 'target.yml')
+    return yml !== null && field(yml, 'target') === name && field(yml, 'generator') === key
+  })
+  if (plan === undefined) return undefined
+  const last = refusalRows(db, plan.id)[0]
+  return last?.step === 1 && last.span === 'bench.no_suite' ? plan.id : undefined
+}
+
 /** The suites folder is the only copy left: the tick reaps `src/` from every done plan. */
 function scoredSuite(db: Db, root: string, id: number): { made: string; yml: string; target: string; generator: string; suites: string } {
   const plan = planById(db, id)
@@ -45,7 +60,7 @@ function scoredSuite(db: Db, root: string, id: number): { made: string; yml: str
   const made = maybe(root, id, 'generate.json')
   if (made === null) throw new Error(`plan ${String(id)} has no generate.json`)
   const yml = get(root, id, 'target.yml')
-  const [target, generator] = ['target', 'generator'].map((key) => [...yml.matchAll(new RegExp(`^${key}: (.+)$`, 'gm'))].at(-1)?.[1])
+  const [target, generator] = ['target', 'generator'].map((key) => field(yml, key))
   if (target === undefined || generator === undefined) throw new Error(`plan ${String(id)} has no target or generator in target.yml`)
   const suites = join(planDir(root, id), 'fuzz-bench/suites', generator, target)
   if (!existsSync(suites)) throw new Error(`plan ${String(id)} has no fuzz-bench/suites/${generator}/${target}`)

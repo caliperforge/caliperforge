@@ -112,6 +112,24 @@ export function cost(path: string): number | null {
   return null
 }
 
+const Usage = z.object({ inputTokens: z.number(), outputTokens: z.number(), cacheReadInputTokens: z.number(), cacheCreationInputTokens: z.number() })
+
+const Ended = z.object({ type: z.literal('result'), modelUsage: z.record(z.string(), Usage) })
+
+export type Models = Record<string, z.infer<typeof Usage>>
+
+/** The `modelUsage` of a transcript's last result line; none when it is missing, `{}`, or a line is not JSON. */
+export function models(path: string): Models | null {
+  if (!existsSync(path)) return null
+  try {
+    const usage = readFileSync(path, 'utf8').split('\n').filter((line) => line !== '').map((line) => Ended.safeParse(JSON.parse(line)).data?.modelUsage).findLast((u) => u !== undefined)
+    return usage === undefined || Object.keys(usage).length === 0 ? null : usage
+  } catch (error) {
+    if (!(error instanceof SyntaxError)) throw error
+    return null
+  }
+}
+
 export function backfill(db: Db): number {
   const rows = db.prepare('SELECT id, transcript_path FROM runs WHERE cost_usd IS NULL').all() as { id: number; transcript_path: string }[]
   const write = db.prepare('UPDATE runs SET cost_usd = ? WHERE id = ? AND cost_usd IS NULL')

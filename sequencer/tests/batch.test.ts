@@ -191,7 +191,8 @@ test('changes requested and a comment both go to the brief', async () => {
   let ask = get(w.root, 1, 'ask.md')
   for (const [id, state, body] of [['r1', 'CHANGES_REQUESTED', 'rename expires to expiry'], ['r2', 'COMMENTED', 'why 120 and not 60?']] as const) {
     const [asked] = said(id, state, body) as [SignalRow]
-    expect(started(w.db, asked, w.root)).toMatchObject({ plan: 1, step: 1 })
+    const none = { data: { repository: { pullRequest: { reviewThreads: { totalCount: 0, nodes: [] } } } } }
+    expect(started(w.db, asked, w.root, { ...watched([], w.root, 1), merged: () => none })).toMatchObject({ plan: 1, step: 1 })
     expect(plan(w.db, 1)).toMatchObject({ step: 1, state: 'running' })
     ask = `${ask.trimEnd()}\n\n${words(asked)}`
     expect(get(w.root, 1, 'ask.md')).toBe(ask)

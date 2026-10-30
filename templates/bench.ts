@@ -181,7 +181,7 @@ export function scored(db: Db, root: string, plan: PlanRow): Outcome {
     ? '' : `; targetContractsBalances ${config.clamped.join(', ')} clamped to 1e24 wei`}` }
 }
 
-/** run_pair writes its 250k `testLimit` over the suite's unless the yml it is handed says `mode: refuzz`. */
+/** run_pair writes its 250k `testLimit` over the suite's unless the yml it is handed says `mode: refuzz`: https://github.com/caliperforge/fuzz-bench/pull/59 (run_pair.py:296) */
 function moded(upstream: string, listed: string | null, refuzz: string | undefined): string | null {
   if (listed === null || refuzz === undefined) return listed
   const yml = `${listed.trimEnd()}\nmode: refuzz\n`

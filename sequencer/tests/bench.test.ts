@@ -828,7 +828,7 @@ test('D1 scored rewrites target.yml from fuzz-bench HEAD', () => {
   const { root, db } = scoring()
   expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
   expect(get(root, 1, 'target.yml')).toBe(REFRESHED)
-  expect(readFileSync(join(planDir(root, 1), 'fuzz-bench/targets/euler-earn-m01.yml'), 'utf8')).not.toMatch(/^mode:/m)
+  expect(readFileSync(join(planDir(root, 1), 'fuzz-bench/targets/euler-earn-m01.yml'), 'utf8')).toBe(UPSTREAM)
 })
 
 test('D3 no upstream targets yml is refused, copy kept', () => {

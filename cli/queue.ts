@@ -138,7 +138,8 @@ export function paced(repo: string, pace: { prs: number; days: number }, read: R
 function measured(db: Db, repo: string, today: string): z.infer<typeof Account> {
   try {
     return account(db, repo, today)
-  } catch {
+  } catch (error) {
+    logged(db, { plan: null, kind: 'remeasured', actor: 'cf queue add', outcome: 'pass', message: `${repo}: ${(error as Error).message}`, pointer: null, run: null })
     measure(db, repo, today)
     return account(db, repo, today)
   }

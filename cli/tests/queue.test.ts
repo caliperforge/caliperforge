@@ -9,9 +9,12 @@ import { allEvents, pointers } from '../../store/events.ts'
 import type { Db } from '../../store/index.ts'
 import { allPlans } from '../../store/plans.ts'
 import { rulingId } from '../../store/rulings.ts'
-import { addAccount, addTarget, ineligibleRuling, type Target, targetRow, targetRows } from '../../store/targets.ts'
+import { addAccount, addTarget, ineligibleRuling, putPulse, type Target, targetRow, targetRows } from '../../store/targets.ts'
 import { claimed, implemented } from '../gh.ts'
+import { measure } from '../measure.ts'
 import { add, approve, note, refuseTarget } from '../queue.ts'
+
+vi.mock('../measure.ts', async (importOriginal) => ({ ...await importOriginal<object>(), measure: vi.fn() }))
 
 vi.mock('../gh.ts', async (importOriginal) => ({
   ...await importOriginal<object>(),
@@ -41,6 +44,22 @@ test('a ready target files one filed event for its plan', () => {
   const added = queued(db)
   expect(allEvents(db))
     .toEqual([{ plan: added.plan, kind: 'filed', actor: 'cf queue add', outcome: 'pass', message: URL }])
+})
+
+test('D1: an unmeasured repo records the re-measure, then files', () => {
+  const db = fresh(schema)
+  vi.mocked(measure).mockImplementationOnce(() => {
+    const pulse = { repo: REPO, measured_at: TODAY, maintainers: 2, doors: 1, last_outsider_merge: TODAY, open_pr_age_p50_days: 3,
+      cross_repo_activity: 4, open_loop: false, pulse: 'warm' as const, evidence: `https://github.com/${REPO}` }
+    putPulse(db, pulse)
+    return pulse
+  })
+  const added = queued(db)
+  expect(allEvents(db)).toEqual([
+    { plan: null, kind: 'remeasured', actor: 'cf queue add', outcome: 'pass',
+      message: `${REPO}: no accounts row for ${REPO}; measure it before queueing` },
+    { plan: added.plan, kind: 'filed', actor: 'cf queue add', outcome: 'pass', message: URL },
+  ])
 })
 
 test('a refused target writes no event', () => {

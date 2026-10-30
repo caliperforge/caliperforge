@@ -1,8 +1,10 @@
 import io
+import json
 import re
 import subprocess
 import tarfile
 import tempfile
+from itertools import count
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -12,7 +14,26 @@ from catalog_desk.listing import URL_ONLY, Invalid, Listing, read
 from catalog_desk.net import Net
 
 PULL = re.compile(r"refs/pull/(\d+)/head")
+GITHUB = re.compile(r"github\.com[:/]([^/]+/[^/]+?)(?:\.git)?$")
 NOT_SOLANA = "no Solana mainnet offer"
+
+
+def fetch(checkout: Path, net: Net) -> None:
+    url = _lines(checkout, "config", "--get", "remote.origin.url")[0]
+    if not (m := GITHUB.search(url)):
+        raise RuntimeError(f"origin {url} is not on github.com")
+    numbers: list[int] = []
+    for page in count(1):
+        res = net.fetch(f"https://api.github.com/repos/{m[1]}/pulls?state=open&per_page=100&page={page}")
+        if not 200 <= res.status < 300:
+            raise RuntimeError(f"HTTP {res.status}")
+        if not (pulls := json.loads(res.body)):
+            break
+        numbers += [pull["number"] for pull in pulls]
+    for ref in _lines(checkout, "for-each-ref", "--format=%(refname)", "refs/pull"):
+        _git(checkout, "update-ref", "-d", ref)
+    if numbers:
+        _git(checkout, "fetch", "-q", "origin", *[f"+refs/pull/{n}/head:refs/pull/{n}/head" for n in numbers])
 
 
 def sort(checkout: Path, net: Net) -> list[dict[str, object]]:

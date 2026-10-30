@@ -3,8 +3,7 @@
     "lines": 292
   },
   "credential.ts": {
-    "lines": 88,
-    "silent-catch": 1
+    "lines": 89
   },
   "kind.ts": {
     "lines": 53

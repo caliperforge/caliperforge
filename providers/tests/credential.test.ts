@@ -43,6 +43,10 @@ describe('credential', () => {
     expect(credential({}, NOWHERE)).toMatchObject({ auth: { kind: 'none', from: 'the environment' } })
     expect(ENV_FILE.endsWith('/.config/caliperforge/env')).toBe(true)
   })
+
+  it('throws on a path that is there but cannot be read', () => {
+    expect(() => credential({ CF_ENV_FILE: mkdtempSync(join(tmpdir(), 'cf-cred-')) })).toThrow(/EISDIR/)
+  })
 })
 
 describe('credential, choosing between two', () => {

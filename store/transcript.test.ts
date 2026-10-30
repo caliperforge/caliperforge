@@ -6,8 +6,7 @@ import { fresh } from '../checks/sqlite.ts'
 import { planRow } from '../runner/index.ts'
 import { load } from '../runner/rules.ts'
 import type { Db } from './index.ts'
-import { models } from './models.ts'
-import { backfill, outputs, spawned, unfinished } from './transcript.ts'
+import { backfill, models, outputs, spawned, unfinished } from './transcript.ts'
 
 const root = join(import.meta.dirname, '..')
 const loaded = (): Db => {

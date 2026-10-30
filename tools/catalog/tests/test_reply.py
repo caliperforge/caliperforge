@@ -40,7 +40,7 @@ def test_d2_a_fixed_reply_without_a_commit_is_refused(repo: Path, commit: str):
 
 
 def test_d2_reply_prints_the_refusal_and_exits_1(repo: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
-    assert main(["sort", str(repo)], _net()) == 0
+    assert main(["sort", "--no-fetch", str(repo)], _net()) == 0
     (tmp_path / "sorted.jsonl").write_text(capsys.readouterr().out, encoding="utf-8")
     (tmp_path / "reply.txt").write_text(_fixed("ps-0002-devnet-04", ""), encoding="utf-8")
     assert main(["reply", str(repo), str(tmp_path / "sorted.jsonl"), str(tmp_path / "reply.txt")], _net()) == 1
@@ -68,7 +68,7 @@ def test_d4_a_commit_that_reruns_green_is_accepted(repo: Path):
 
 
 def test_d4_a_disputed_reply_is_printed_as_its_record(repo: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
-    assert main(["sort", str(repo)], _net()) == 0
+    assert main(["sort", "--no-fetch", str(repo)], _net()) == 0
     (tmp_path / "sorted.jsonl").write_text(capsys.readouterr().out, encoding="utf-8")
     (tmp_path / "reply.txt").write_text("brief: ps-0002-devnet-04\nstatus: disputed\nreason: devnet is our test tier\n", encoding="utf-8")
     assert main(["reply", str(repo), str(tmp_path / "sorted.jsonl"), str(tmp_path / "reply.txt")], _net()) == 0

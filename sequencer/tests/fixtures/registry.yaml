@@ -277,7 +277,7 @@
 - name: rule_to_build
   table: events
   column: at
-  where: "kind = 'director' AND message LIKE '%builder takes it%' AND NOT EXISTS (SELECT 1 FROM runs WHERE runs.plan = events.plan AND runs.step = 2 AND runs.seat NOT IN ('fixer', 'orchestrator', 'coo_lite', 'director') AND julianday(runs.at) BETWEEN julianday(events.at) AND julianday(events.at, '+1 day'))"
+  where: "kind = 'director' AND plan IS NOT NULL AND message LIKE '%builder takes it%' AND NOT EXISTS (SELECT 1 FROM runs WHERE runs.plan = events.plan AND runs.step = 2 AND runs.seat NOT IN ('fixer', 'orchestrator', 'coo_lite', 'director') AND julianday(runs.at) BETWEEN julianday(events.at) AND julianday(events.at, '+1 day'))"
   gap: 7d
   expected: 0
 - name: blind_review
@@ -505,7 +505,6 @@
   column: at
   where: "kind = 'director' AND outcome = 'pass' AND message GLOB 'waive:*' AND EXISTS (SELECT 1 FROM runs WHERE runs.plan = events.plan AND runs.step = 2 AND runs.seat NOT IN ('fixer', 'orchestrator', 'coo_lite', 'director') AND julianday(runs.at) BETWEEN julianday(events.at) AND julianday(events.at, '+1 day')) AND EXISTS (SELECT 1 FROM verdicts v5 JOIN verdicts v4 ON v4.plan = v5.plan AND v4.tree = v5.tree JOIN events e5 ON e5.plan = v5.plan AND e5.pointer = 'verdicts:' || v5.id JOIN events e4 ON e4.plan = v4.plan AND e4.pointer = 'verdicts:' || v4.id WHERE v5.plan = events.plan AND v5.step = 5 AND v5.kind = 'review' AND v5.outcome = 'pass' AND v4.step = 4 AND v4.kind = 'review' AND v4.outcome = 'pass' AND julianday(e5.at) < julianday(events.at) AND julianday(e4.at) < julianday(events.at))"
   gap: 7d
-  expected: 0
 - name: bench_night
   table: events
   column: at

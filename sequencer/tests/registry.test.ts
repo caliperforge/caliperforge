@@ -244,6 +244,26 @@ test('forkReadyCiStale D5', () => {
   expect(drift(d, entry, NOW)).toEqual([])
 })
 
+test('waiveResumesStopStale D2 D3 D4', () => {
+  const entry = REGISTRY.filter((e) => e.name === 'waive_resumes_stop')
+  const waived = (at: string, built: string | null): Db => {
+    const d = db()
+    logged(d, { plan: 1, kind: 'director', actor: 'director', outcome: 'pass', message: 'waive: x', pointer: null, run: null }, at)
+    if (built === null) return d
+    addRule(d, { id: 'typescript_specialist', kind: 'card', path: 'seats/typescript_specialist.md', content_hash: 'a'.repeat(64), loaded_at: '2026-09-01' })
+    addRun(d, { plan: 1, step: 2, seat: 'typescript_specialist', rule_hash: 'a'.repeat(64), provider: 'claude-agent-sdk', model: 'opus', effort: 'high',
+      input_tokens: 0, cache_write_tokens: null, cache_write_1h_tokens: null, cache_read_tokens: 0, output_tokens: 0, seconds: 1, exit: 0,
+      at: built, transcript_path: 'x.transcript.jsonl', cost_usd: null })
+    const pass: Verdict = { outcome: 'pass', subject_digest: 'b'.repeat(64), spans: [], origin_kind: null, origin_ref: null, message: 'm', defect_class: null }
+    for (const step of [4, 5]) addReview(d, 'review', step, 1, pass, 0, 1, 'c'.repeat(40))
+    return d
+  }
+  expect(drift(waived('2026-10-02 10:00:00', '2026-10-02 10:30:00'), entry, NOW)).toEqual([])
+  expect(drift(waived('2026-09-20 10:00:00', '2026-09-20 10:30:00'), entry, NOW))
+    .toMatchObject([{ name: 'waive_resumes_stop', state: 'stale', newest: '2026-09-20 10:00:00' }])
+  expect(drift(waived('2026-10-02 10:00:00', null), entry, NOW)).toMatchObject([{ name: 'waive_resumes_stop', state: 'silent' }])
+})
+
 test('catchupRangeClearsSilent D4', () => {
   const d = db()
   const catchup = REGISTRY.filter((e) => e.name === 'writer_catchup')

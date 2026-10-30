@@ -141,9 +141,11 @@ test('D4: no lean packet carries the conductor prompt', async () => {
   for (const packet of packets) expect(packet.prompt).not.toContain(conductor)
 })
 
-test('D4: every lean packet is ranged, a fizz packet is not', async () => {
-  for (const packet of (await generated('fizz_lean')).packets) expect(packet.ranged).toBe(true)
-  expect((await generated('fizz')).packets[0]?.ranged).not.toBe(true)
+test('D3: lean packets but context are ranged, fizz is not', async () => {
+  const { packets } = await generated('fizz_lean')
+  expect(packets.find((packet) => phaseOf(packet) === 'context')).not.toHaveProperty('ranged')
+  expect(packets.filter((packet) => packet.ranged === true).map(phaseOf)).toEqual(['scaffold', 'coverage', 'invariants'])
+  expect((await generated('fizz')).packets[0]).not.toHaveProperty('ranged')
 })
 
 test('D6: generate.json agents adds up every phase transcript', async () => {

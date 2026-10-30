@@ -205,12 +205,12 @@ export function readOutside(cwd: string, tool: string, args: unknown, reads: str
 }
 
 function wholeRead(packet: Packet, tool: string, args: unknown): string | null {
-  const given = args as { file_path?: unknown; offset?: unknown; limit?: unknown }
+  const given = args as { file_path?: unknown; limit?: unknown }
   if (packet.ranged !== true || tool !== 'Read' || typeof given.file_path !== 'string') return null
-  if (given.offset !== undefined || given.limit !== undefined) return null
+  if (typeof given.limit === 'number' && given.limit <= RANGE) return null
   const rel = relative(real(resolve(packet.cwd)), real(resolve(packet.cwd, given.file_path)))
   if (!/^(?:src|lib)\/.*\.sol$/.test(rel)) return null
-  return `ruling:run.whole_read refuses a whole read of ${given.file_path}: read the line ranges the handoff's ## Reads names, with offset and limit`
+  return `ruling:run.whole_read refuses a read of ${given.file_path} without a limit of at most ${String(RANGE)} lines: read the line ranges the handoff's ## Signatures, ## Guards and ## Limits name`
 }
 
 function within(dir: string, target: string): boolean {
@@ -223,6 +223,9 @@ const SPILLED = /\/\.claude\/projects\/[^/]+\/[^/]+\/tool-results\//
 
 /** Where the harness writes a backgrounded command's output, under `/tmp` or macOS's `/private/tmp`. */
 const TASKS = /\/tmp\/claude[^/]*\/[^/]+\/tasks\/[^/]+\.output$/
+
+/** The most lines a ranged packet's read of a `src/` or `lib/` `.sol` may take at once. */
+const RANGE = 150
 
 /**
  * The tick runs from a worktree whose `.cf` is a symlink, so a seat's cwd and the paths it reads can name

@@ -27,7 +27,7 @@ export interface Packet {
   cost_wall?: CostWall
   /** The turns this run may take with nothing written. A packet without one gets `IDLE_TURNS`. */
   idle?: number
-  /** Reads of `.sol` under `src/` or `lib/` must carry `offset` or `limit`. A packet without it reads whole files. */
+  /** Reads of `.sol` under `src/` or `lib/` must carry a `limit` of at most 150 lines. A packet without it reads whole files. */
   ranged?: boolean
   refuse: (path: string) => Refusal | null
   /** Folders outside the checkout this run may read, never write. */

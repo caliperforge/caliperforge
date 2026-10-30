@@ -23,8 +23,16 @@ test('D1: a ranged packet denies a whole src or lib .sol read', () => {
   }
 })
 
+test('D1: a limit over 150 or an offset alone is denied', () => {
+  for (const input of [{ file_path: 'src/X.sol', limit: 2000 }, { file_path: 'src/X.sol', offset: 10 }]) {
+    expect(gate(packet(true), read(input))).toMatchObject({
+      hookSpecificOutput: { permissionDecision: 'deny', permissionDecisionReason: expect.stringMatching(/run\.whole_read.*## Signatures, ## Guards and ## Limits/) as string },
+    })
+  }
+})
+
 test('D2: a ranged read, a test .sol and a .ts pass', () => {
-  for (const input of [{ file_path: 'src/X.sol', offset: 10 }, { file_path: 'src/X.sol', limit: 40 }, { file_path: 'test/fizz/P.sol' }, { file_path: 'src/X.ts' }]) {
+  for (const input of [{ file_path: 'src/X.sol', limit: 120 }, { file_path: 'src/X.sol', offset: 300, limit: 150 }, { file_path: 'test/fizz/P.sol' }, { file_path: 'src/X.ts' }]) {
     expect(gate(packet(true), read(input))).toEqual({ continue: true })
   }
 })

@@ -37,7 +37,7 @@ export function firing({ db, root, plan, step, provider, name, dir, tmp, granted
     const built = packet(manifest, prompt, '', issue, dir,
       pending(planDir(root, plan.id), `step-${String(step.step)}${phase === undefined ? '' : `-${phase}`}`), false, [...manifest.write_paths, tmp])
     const fired = await provider.fire({ ...built, refuse: (path) => real(resolve(dir, path)) === real(ATTEMPTS) ? null : built.refuse(path), wall: ceiling - sum.tokens,
-      cost_wall: { ...walls, usd: walls.usd - sum.usd }, env: { ...TIMEOUTS, ...FOREGROUND, TMPDIR: tmp }, reads: [...granted, real(ATTEMPTS)], ...(name === 'fizz_lean_generator' ? { ranged: true } : {}), ...(['fizz_generator', 'fizz_lean_generator'].includes(name) ? { idle: SETUP } : {}) })
+      cost_wall: { ...walls, usd: walls.usd - sum.usd }, env: { ...TIMEOUTS, ...FOREGROUND, TMPDIR: tmp }, reads: [...granted, real(ATTEMPTS)], ...(name === 'fizz_lean_generator' && phase !== 'context' ? { ranged: true } : {}), ...(['fizz_generator', 'fizz_lean_generator'].includes(name) ? { idle: SETUP } : {}) })
     const run = runLogged(db, { plan: plan.id, step: step.step, seat: name, rule_hash: hash, provider: provider.name, model: manifest.model,
       effort: manifest.effort, exit: fired.exit, fired, staffed: name, phase })
     const transcript = byRun(db, run, fired.transcript_path)

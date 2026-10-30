@@ -183,6 +183,8 @@ export function gate(packet: Packet, input: HookInput, fenced = 0): SyncHookJSON
   }
   const away = readOutside(packet.cwd, input.tool_name, input.tool_input, packet.reads)
   if (away !== null) return deny(away)
+  const whole = wholeRead(packet, input.tool_name, input.tool_input)
+  if (whole !== null) return deny(whole)
   const denied = wroteOutside(packet, input.tool_name, input.tool_input)
   if (denied === null) return { continue: true }
   return fenced + 1 < FENCED ? deny(denied) : stop(denied)
@@ -200,6 +202,15 @@ export function readOutside(cwd: string, tool: string, args: unknown, reads: str
   if (rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))) return null
   if (reads.some((dir) => within(real(resolve(dir)), target))) return null
   return `ruling:run.outside_checkout refuses a read of ${path}: read nothing outside the checkout; the brief's Settled facts hold what the change needs from outside it`
+}
+
+function wholeRead(packet: Packet, tool: string, args: unknown): string | null {
+  const given = args as { file_path?: unknown; offset?: unknown; limit?: unknown }
+  if (packet.ranged !== true || tool !== 'Read' || typeof given.file_path !== 'string') return null
+  if (given.offset !== undefined || given.limit !== undefined) return null
+  const rel = relative(real(resolve(packet.cwd)), real(resolve(packet.cwd, given.file_path)))
+  if (!/^(?:src|lib)\/.*\.sol$/.test(rel)) return null
+  return `ruling:run.whole_read refuses a whole read of ${given.file_path}: read the line ranges the handoff's ## Reads names, with offset and limit`
 }
 
 function within(dir: string, target: string): boolean {

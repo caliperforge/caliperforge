@@ -45,8 +45,7 @@
     "lines": 117
   },
   "queue.ts": {
-    "lines": 189,
-    "silent-catch": 1
+    "lines": 189
   },
   "record.ts": {
     "lines": 78
@@ -59,9 +58,6 @@
   },
   "staffing.ts": {
     "lines": 19
-  },
-  "tests/cf.test.ts": {
-    "silent-catch": 1
   },
   "watch-main.ts": {
     "lines": 8

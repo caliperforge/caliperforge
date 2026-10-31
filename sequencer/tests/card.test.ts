@@ -51,7 +51,7 @@ test('D1 outside push: card written, no wire, held on step 8', async () => {
   const held = push(w.db, w.root, plan(w.db, 1), watched(sent, w.root, 1))
   expect(held).toMatchObject({ outcome: 'pass', held: true, spans: ['card'] })
   expect(held.note).toContain('cf approve card 1')
-  expect(get(w.root, 1, 'maintainer.md')).toBe(`plan 1 at ${signed}\npass\tlead\twhole issue, 1 lead(s)\npass\ttests\t+0 test / +1 code lines\npass\tconventions\tmatches the last 1 commits\npass\tsize\t2 code lines (2 in all), limit 400\npass\tprose\tclean\n${TITLE}${NONE}`)
+  expect(get(w.root, 1, 'maintainer.md')).toBe(`plan 1 at ${signed}\npass\tlead\twhole issue, 1 lead(s)\npass\ttests\t+0 test / +1 code lines\npass\tconventions\tmatches the last 1 commits\nflag\tai stance\tnot read at step 0\npass\tsize\t2 code lines (2 in all), limit 400\npass\tprose\tclean\n${TITLE}${NONE}`)
   expect(sent).toEqual([])
   expect(plan(w.db, 1).step).toBe(8)
 })
@@ -128,7 +128,7 @@ test('D4 approving a stale card rewrites it and sends nothing', async () => {
   decide(w.db, 'plan', 1, headDigest(moved), null)
   const before = sent.length
   expect(push(w.db, w.root, plan(w.db, 1), wire)).toMatchObject({ outcome: 'pass', held: true, spans: ['card'] })
-  expect(get(w.root, 1, 'maintainer.md')).toBe(`plan 1 at ${moved}\npass\tlead\twhole issue, 1 lead(s)\npass\ttests\t+0 test / +0 code lines\npass\tconventions\tmatches the last 1 commits\npass\tsize\t0 code lines (0 in all), limit 400\npass\tprose\tclean\n${TITLE}${NONE}`)
+  expect(get(w.root, 1, 'maintainer.md')).toBe(`plan 1 at ${moved}\npass\tlead\twhole issue, 1 lead(s)\npass\ttests\t+0 test / +0 code lines\npass\tconventions\tmatches the last 1 commits\nflag\tai stance\tnot read at step 0\npass\tsize\t0 code lines (0 in all), limit 400\npass\tprose\tclean\n${TITLE}${NONE}`)
   expect(sent.slice(before)).toEqual([])
   approve(w.db, w.root, 1, 'ceo')
   expect(push(w.db, w.root, plan(w.db, 1), wire)).toMatchObject({ note: `pushed widget-12-a1 onto ${PR}` })

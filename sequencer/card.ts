@@ -6,6 +6,7 @@ import type { Holder } from '../store/plans.ts'
 import { conventions } from './conventions.ts'
 import type { Outcome } from './kind.ts'
 import { lead } from './lead.ts'
+import { stance } from './stance.ts'
 import { weight } from './weight.ts'
 import { maybe, put } from './workspace.ts'
 
@@ -13,7 +14,7 @@ export interface Row { check: string; ok: boolean; says: string }
 export interface Target { repo: string; issue_no: number; named_merger: string }
 export type Check = (db: Db, root: string, plan: number, target: Target) => Row
 
-export const CHECKS: Check[] = [lead, weight, conventions]
+export const CHECKS: Check[] = [lead, weight, conventions, stance]
 
 const CARD = 'maintainer.md'
 

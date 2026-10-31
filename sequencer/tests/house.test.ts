@@ -28,16 +28,18 @@ function gh(contributing: string, asked: string[] = []): Read {
       return { number: 12, title: 'hello', body: 'b', state: 'OPEN', url: URL, author: { login: 'keeper' },
         assignees: [], comments: [], closedByPullRequestsReferences: [], projectItems: [] }
     }
+    if (String(args[1]).includes('/git/trees/')) return { tree: [] }
     if (args[0] === 'search' || !args.includes('merged')) return []
     return [{ url: 'https://github.com/acme/widget/pull/2', author: { login: 'outsider' }, mergedBy: { login: 'keeper' },
-      body: 'b', additions: 1, deletions: 0, files: [{ path: 'src/a.ts' }] }]
+      body: 'Generated with Claude Code', additions: 1, deletions: 0, files: [{ path: 'src/a.ts' }] }]
   }
 }
 
 test('D1: unchanged source shas pass step 0', () => {
   const w = world()
   housed(w.root, SOURCED)
-  expect(kernel(w.db, w.root, plan(w.db, 1), undefined, gh(OLD))).toMatchObject({ outcome: 'pass', note: 'acme/widget#12 warm' })
+  expect(kernel(w.db, w.root, plan(w.db, 1), undefined, gh(OLD))).toMatchObject({ outcome: 'pass',
+    note: 'acme/widget#12 warm; ai stance: open — "Generated with Claude Code" https://github.com/acme/widget/pull/2' })
 })
 
 test('D2: a changed sha refuses with house-source-changed', () => {

@@ -20,6 +20,7 @@ import { approved, approvedPlan, batch } from './approve.ts'
 import type { Outcome } from './kind.ts'
 import { preReview } from './rails.ts'
 import { readyGate, proven, repoOf, target, type Target } from './ready.ts'
+import { stood } from './stance.ts'
 import { opened, push, reviewable, type Wire } from './push.ts'
 import { polled } from './unpolled.ts'
 import { diffOf, maybe, put } from './workspace.ts'
@@ -213,10 +214,12 @@ export function measure(db: Db, root: string, plan: PlanRow, read?: Read): Outco
     const quiet = eventsOf(db, plan.id, 'measure').at(-1)?.message === note ? { quiet: true as const } : {}
     return { outcome: 'refuse', held: true, spans: [span], note, ...quiet }
   }
-  const house = read === undefined ? null : moved(root, row.repo, read)
+  const pulse = `${row.repo}#${String(row.issue_no)} ${row.pulse}`
+  if (read === undefined) return { outcome: 'pass', spans: [], note: pulse }
+  const house = moved(root, row.repo, read)
   if (house !== null) return { outcome: 'refuse', spans: [`house/${row.repo}.md`], note: house }
-  const park = read === undefined ? null : checked(root, plan, row, read)
-  if (park === null) return { outcome: 'pass', spans: [], note: `${row.repo}#${String(row.issue_no)} ${row.pulse}` }
+  const park = checked(root, plan, row, read)
+  if (park === null) return stood(db, root, plan, row, read, span, pulse)
   setTargetState(db, plan.target_id, 'parked')
   return { outcome: 'refuse', held: true, spans: [span], note: park }
 }

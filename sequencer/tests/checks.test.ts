@@ -809,6 +809,11 @@ test('1550 D6 a capped suite that printed every file adds nothing', () => {
   expect(failed && capped(failed).note).toBe('npm run test timed out: killed at the cap with no test red')
 })
 
+test('1991 D5 a cap that killed a lone run says so', () => {
+  const outcome = capped({ script: 'test', command: 'npm run test', code: '143', output: '', tests: [], retried: false, capped: true }, true)
+  expect(outcome.note).toBe('npm run test timed out alone: killed at the cap with no test red')
+})
+
 test('1279 D1 npm given a cap kills a longer run as capped', () => {
   const dir = mkdtempSync(join(tmpdir(), 'cf-cap-'))
   expect(npm(['-e', 'setTimeout(() => {}, 5000)'], dir, 'node', 200)).toMatchObject({ ok: false, capped: true })

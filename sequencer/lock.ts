@@ -9,9 +9,9 @@ const MOST = 8
 
 /**
  * Step 3 test runs on the host at once: `CF_CHECK_SLOTS` of them, one when unset.
- * Null when this job holds a place, else a live holder's lease.
+ * Null when this job holds a place, or every place when `alone`, else a live holder's lease.
  */
-export function lock(root: string, plan: number, now: Date = new Date(), width = widthOf()): Lease | null {
+export function lock(root: string, plan: number, now: Date = new Date(), width = widthOf(), alone = false): Lease | null {
   let first: Lease | null = null
   for (const path of places(root, width)) {
     let holder = claim(path, plan, now)
@@ -19,7 +19,11 @@ export function lock(root: string, plan: number, now: Date = new Date(), width =
       rmSync(path, { force: true })
       holder = claim(path, plan, now)
     }
-    if (holder === null) return null
+    if (alone && holder !== null) {
+      unlock(root, plan)
+      return holder
+    }
+    if (!alone && holder === null) return null
     first ??= holder
   }
   return first

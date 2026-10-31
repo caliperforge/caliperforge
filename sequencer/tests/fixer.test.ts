@@ -7,7 +7,7 @@ import { gates } from '../../store/approvals.ts'
 import { appliedOf } from '../../store/decisions.ts'
 import { pushedRow } from '../../store/deliverables.ts'
 import { addSetting } from '../../store/drift.ts'
-import { ofKind, pointers } from '../../store/events.ts'
+import { logged, ofKind, pointers } from '../../store/events.ts'
 import { filesOf, record, recorded, strays } from '../../store/files.ts'
 import { migrate, open } from '../../store/index.ts'
 import { amend } from '../../store/lanes.ts'
@@ -16,7 +16,9 @@ import { runTokens } from '../../store/runs.ts'
 import type { Wire } from '../push.ts'
 import { allPlans, end, planById, planRows, putPlan, terminal, type PlanRow } from '../../store/plans.ts'
 import { lapsed } from '../../store/until.ts'
-import { woke } from '../director.ts'
+import { cooLite, woke } from '../director.ts'
+import { stop } from '../fixed.ts'
+import { hold } from '../hold.ts'
 import { CARRY, checkout, drop, get, git, maybe, put, SELF, srcDir } from '../workspace.ts'
 
 const repo = join(import.meta.dirname, '../..')
@@ -600,4 +602,46 @@ test('the packet lists the other open jobs and the store', async () => {
   expect(prompt).toMatch(/# Open jobs\n\n- plan 8, /)
   expect(prompt).not.toContain('- plan 7,')
   expect(prompt).toMatch(/CREATE TABLE "plans" \([\s\S]*?\);\n/)
+})
+
+const directed = (db: ReturnType<typeof open>, home: string, fix: string, packets: Packet[]) =>
+  cooLite(db, home, planById(db, 7), stub(fix, packets), now, () => undefined, wire([]))
+const lastFix = (home: string) => JSON.parse((maybe(home, 7, 'fixes.jsonl') ?? '').trim().split('\n').at(-1) ?? '') as { why: string; applied: string }
+
+test.each(['return', 'retry'])('D2 a fixer %s on a job parked on plan 8 is refused', async (then) => {
+  const { db, home } = swift('live')
+  second(db)
+  hold(db, home, 7, 'x', now, 8)
+  const packets: Packet[] = []
+  await directed(db, home, RETURN.replace('then: return', `then: ${then}`), packets)
+  expect(state(db)).toEqual({ state: 'blocked_on_ceo', step: 4 })
+  expect(waitsOn(db)).toEqual({ waits_on: 8 })
+  expect(of(packets, 'fixer')).toBeDefined()
+  expect(of(packets, 'fix-')).toBeUndefined()
+  expect(lastFix(home)).toMatchObject({ why: expect.stringMatching(/^the job is parked until plan 8 lands/) as string, applied: 'refused' })
+  expect(ofKind(db, 'director').at(-1)?.message).toMatch(/^fix did not apply, /)
+})
+
+test('D3 a fixer return on a stop already returned on is refused', async () => {
+  const { db, home } = seeded('live')
+  put(home, 7, 'returned.txt', `${stop(home, 7)}\n`)
+  await directed(db, home, RETURN, [])
+  expect(state(db)).toEqual({ state: 'blocked_on_ceo', step: 4 })
+  expect(lastFix(home)).toEqual(expect.objectContaining({ why: `the job was already returned on stop ${stop(home, 7)}`, applied: 'refused' }))
+  expect(ofKind(db, 'return')).toEqual([])
+})
+
+test.each(['file', 'park'])('D4 the fixer leaves a job the director %s alone', async (move) => {
+  const { db, home } = seeded('live')
+  second(db)
+  hold(db, home, 7, 'x', now, 8)
+  logged(db, { plan: 7, kind: 'director', actor: 'director', outcome: 'pass', message: `${move}: x`, pointer: null, run: null })
+  const packets: Packet[] = []
+  await directed(db, home, RETURN, packets)
+  expect(of(packets, 'fixer')).toBeUndefined()
+  expect(ofKind(db, 'fixer')).toEqual([{ plan: 7, kind: 'fixer', actor: 'fixer', outcome: 'pass',
+    message: 'parked: the director filed or parked this job; it waits on that' }])
+  expect(maybe(home, 7, 'fixes.jsonl')).toBeNull()
+  expect(waitsOn(db)).toEqual({ waits_on: 8 })
+  expect(maybe(home, 7, 'parked.md')).not.toBeNull()
 })

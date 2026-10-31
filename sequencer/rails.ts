@@ -134,11 +134,12 @@ function suite(db: Db, root: string, plan: PlanRow, on: Rails, commands: Command
   }
   const heard: string[] = []
   if (local || outside !== null || guide.length > 0) {
-    const holder = lock(root, plan.id)
+    const files = narrow(db, plan)
+    const holder = local && files.length === 0 ? lock(root, plan.id, new Date(), 1) : lock(root, plan.id)
     if (holder !== null) return { outcome: 'pass', held: true, spans: ['checks'], note: `checks wait: plan ${String(holder.plan)} is running its tests` }
     try {
       const diff = diffOf(root, plan.id)
-      const failed = (guide.length > 0 ? gated(srcDir(root, plan.id), guide, noted(db, plan.id), [], (line) => { heard.push(line) }) : checks(srcDir(root, plan.id), commands, noted(db, plan.id), outside === null ? narrow(db, plan) : [],
+      const failed = (guide.length > 0 ? gated(srcDir(root, plan.id), guide, noted(db, plan.id), [], (line) => { heard.push(line) }) : checks(srcDir(root, plan.id), commands, noted(db, plan.id), outside === null ? files : [],
         outside === null ? null : { language: outside, files: filesOf(db, plan.id).map((f) => f.path), ...(base === undefined ? {} : { base }) },
         parse(diff).map((f) => f.path), finishes.minutes, (line) => { heard.push(line) })) ?? finish(srcDir(root, plan.id), finishes.entries, noted(db, plan.id), finishes.minutes)
       if (failed?.fault !== undefined) return faulted(db, root, plan, failed.fault)

@@ -159,7 +159,7 @@ test('writes a verdicts row the store accepts', () => {
     origin_kind: 'rail', origin_ref: 'identifiers' }])
 })
 
-test('resolves a path under a dot-directory and refuses a missing one', () => {
+test('resolves a dot-directory path, refuses a missing one', () => {
   const dir = mkdtempSync(join(tmpdir(), 'cf-ids-'))
   mkdirSync(join(dir, '.github'))
   writeFileSync(join(dir, '.github', 'dependabot.yml'), 'version: 2\n')

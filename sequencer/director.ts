@@ -24,6 +24,7 @@ import { hold, isHeld, unhold } from './hold.ts'
 import { found } from './findings.ts'
 import { fixed, stop } from './fixed.ts'
 import { released } from './fixer.ts'
+import { barred, returned } from './park.ts'
 import { prose } from './prose.ts'
 import { builderWork, outOfReach, WAITING } from './reach.ts'
 import { WIRE, type Wire } from './push.ts'
@@ -76,10 +77,11 @@ export async function cooLite(db: Db, root: string, plan: PlanRow, provider: Pro
   let { m, said } = await ask(db, root, plan, provider, tried)
   const n = failures(db, root, plan)
   const cap = capStop(db, plan.id)
-  const first = refused(m, said, n, root, plan.id, cap)
+  const bar = barred(db, root, plan.id)
+  const first = refused(m, said, n, root, plan.id, cap, bar)
   if (first !== null) {
     ({ m, said } = await ask(db, root, plan, provider, tried, first.fence))
-    const again = refused(m, said, n, root, plan.id, cap)
+    const again = refused(m, said, n, root, plan.id, cap, bar)
     if (again !== null) return m?.move === 'fix' && builderRan(db, plan.id) && builderWork(root, plan.id, m.why) && applying(db) && apply(db, root, plan, { move: 'rule', why: m.why, answer: m.why }, wire, now) === true
       ? told(db, root, plan, now, { outcome: 'pass', message: `rule: ${m.why}${planById(db, plan.id).step <= 2 ? " (out of the fixer's reach, so the builder takes it)" : ''}` })
       : cap ? told(db, root, plan, now, { outcome: 'needs_coo', message: again.message }, post)
@@ -124,10 +126,14 @@ function twice(db: Db, root: string, plan: PlanRow, now: Date, post: Post): stri
   return told(db, root, plan, now, { outcome: 'needs_coo', message: `ask_ceo: ${why}` }, post)
 }
 
-function refused(m: Move | null, said: string, n: number, root: string, plan: number, cap: boolean): { fence: string; message: string } | null {
+function refused(m: Move | null, said: string, n: number, root: string, plan: number, cap: boolean,
+  bar: string | null): { fence: string; message: string } | null {
   if (cap && m !== null && !CAPPED.includes(m.move)) {
     return { fence: `${m.move} is refused: the plan stopped at its build cap. Choose rule, waive, split or park.`,
       message: `${m.move}: refused by the fence, the plan stopped at its build cap` }
+  }
+  if (m?.move === 'return' && bar !== null) {
+    return { fence: `return is refused: ${bar}. Choose file, park or split.`, message: `return: refused by the fence, ${bar}` }
   }
   const lacks = m?.move !== 'rule' && m?.move !== 'waive' ? null
     : m.instruction === undefined ? 'instruction' : m['resume at'] === undefined ? 'resume at' : null
@@ -329,7 +335,7 @@ function apply(db: Db, root: string, plan: PlanRow, m: Move, wire: Wire, now: Da
       return true
     case 'file':
       return ticketed(db, root, plan, m.ticket ?? m.why, `Filed by director on plan ${String(plan.id)}.\n\n${m.why}`, m.why, wire, now)
-    case 'return':
+    case 'return': returned(root, plan.id)
       opened(db, root, plan.id)
       afresh(root, plan.id, fenced(root, plan) ? retry(db, plan) : returnToLane(db, plan.id, 'director'))
       return true

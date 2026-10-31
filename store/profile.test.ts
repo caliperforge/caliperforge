@@ -21,7 +21,7 @@ test('D2 pay-kit: org commit/pr shape, own checks, notes, sources', () => {
   const org = profile(REPO, 'solana-foundation/other')
   const kit = profile(REPO, 'solana-foundation/pay-kit')
   expect(kit).toMatchObject({ commit: org?.commit, pr: org?.pr, checks: { go: ['lint', 'test'] } })
-  expect(Object.keys(kit ?? {}).sort()).toEqual(['checks', 'commands', 'commit', 'greptile_files', 'notes', 'pr', 'sources'])
+  expect(Object.keys(kit ?? {}).sort()).toEqual(['checks', 'commands', 'commit', 'greptile_files', 'notes', 'pr', 'signed', 'sources'])
   expect(kit?.commands).toEqual({ excused: ['-p pay-core --test surfpool_tests'] })
   expect(kit).not.toHaveProperty('intake')
   expect(profile(REPO, 'solana-foundation/surfpool')).not.toHaveProperty('intake')
@@ -157,7 +157,7 @@ test('D3 a stray field or checks not a string list is refused', () => {
 })
 
 test('D6 a repo with no file of its own reads the org file alone', () => {
-  expect(Object.keys(profile(REPO, 'solana-foundation/other') ?? {}).sort()).toEqual(['checks', 'commit', 'pr'])
+  expect(Object.keys(profile(REPO, 'solana-foundation/other') ?? {}).sort()).toEqual(['checks', 'commit', 'pr', 'signed'])
   expect(profile(REPO, 'solana-foundation/other')?.checks).toEqual({ typescript: ['install', 'lint', 'typecheck', 'test'] })
 })
 
@@ -166,7 +166,7 @@ test('kora parses Conventional subjects, Fixes and claim_first', () => {
   const kora = profile(REPO, 'solana-foundation/kora')
   expect(kora).toMatchObject({ subject: 'conventional', issue_ref: 'Fixes', intake: { claim_first: true },
     checks: { rust: ['format', 'test'] }, commit: org?.commit })
-  expect(Object.keys(kora ?? {}).sort()).toEqual(['checks', 'commit', 'disclosure', 'intake', 'issue_ref', 'notes', 'pr', 'sources', 'subject'])
+  expect(Object.keys(kora ?? {}).sort()).toEqual(['checks', 'commit', 'disclosure', 'intake', 'issue_ref', 'notes', 'pr', 'signed', 'sources', 'subject'])
   expect(kora?.pr).not.toBe(org?.pr)
   expect(kora?.pr).toMatch(/^Kora's template, section for section: .* with the second box checked\.$/)
   expect(kora?.disclosure).toMatch(/^## AI disclosure\n- \[x\] AI tooling was used\. .* before I opened it\.$/)

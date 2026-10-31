@@ -591,7 +591,7 @@ export function follow(root: string, plan: number, message: string): string {
   if (!staged && same && ancestor(dir, tip, 'HEAD')) return tip
   const base = git(dir, ['merge-base', 'HEAD', MAIN]).trim()
   if (!ancestor(dir, base, tip)) {
-    const sha = git(dir, [...identity(dir), 'commit-tree', git(dir, ['write-tree']).trim(), '-p', tip, '-p', base, '-m', message]).trim()
+    const sha = git(dir, [...identity(dir), 'commit-tree', ...signing(dir), git(dir, ['write-tree']).trim(), '-p', tip, '-p', base, '-m', message]).trim()
     git(dir, ['update-ref', `refs/heads/${branch}`, sha])
     return tip
   }

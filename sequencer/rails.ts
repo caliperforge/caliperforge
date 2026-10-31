@@ -12,7 +12,7 @@ import { audit, record, undone } from '../rails/completion-audit/index.ts'
 import { identifiers } from '../rails/identifiers/index.ts'
 import { record as recordRail, type Verdict } from '../rails/record.ts'
 import { scan } from '../rails/secret-scan/index.ts'
-import { weakened } from '../rails/test-weakened/index.ts'
+import { retired, weakened } from '../rails/test-weakened/index.ts'
 import { sources, tight } from '../rails/tight/index.ts'
 import { logged } from '../store/events.ts'
 import { filesOf, listed, record as recordFiles } from '../store/files.ts'
@@ -238,7 +238,8 @@ function rest(db: Db, root: string, plan: PlanRow, handback: string, diff: strin
   const outside = ours
     ? strays(parse(diff).map((f) => f.path), filesOf(db, plan.id).map((f) => f.path), handback, get(root, plan.id, 'issue.md'))
     : []
-  const weakenedRail: [string, () => Verdict] = ['test-weakened', () => weakened(diff, 'green', [maybe(root, plan.id, 'ask.md') ?? '', get(root, plan.id, 'issue.md'), maybe(root, plan.id, 'rulings.md') ?? '', maybe(root, plan.id, 'pr.md') ?? ''].join('\n'))]
+  const weakenedRail: [string, () => Verdict] = ['test-weakened', () => weakened(diff, 'green', [maybe(root, plan.id, 'ask.md') ?? '', get(root, plan.id, 'issue.md'), maybe(root, plan.id, 'rulings.md') ?? '', maybe(root, plan.id, 'pr.md') ?? ''].join('\n'),
+    retired(maybe(root, plan.id, 'removed-tests.md') ?? '', handback))]
   const scope: [string, () => Verdict][] = [
     ['secret-scan', () => scan(diff)],
     ['authority', () => authority(root, name, diff, ours, fence, outside, ours ? renumbered(src, diff) : [])],

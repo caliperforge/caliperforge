@@ -308,6 +308,19 @@ const senior = async (reply: string): Promise<Judged> => {
   return out.outcome
 }
 
+test('D7 one not confirmed line makes a senior pass a refuse', async () => {
+  const { db, plan } = bench(root)
+  const reply = (lines: string): string => `${lines}\n\n---\noutcome: pass\n---\n`
+  const judged = async (lines: string): Promise<{ verdict: number; outcome: Judged }> =>
+    judge(db, root, 'senior_review', plan, seeded({ verdict: fixture('senior_review', 'first.verdict.md') }), replies(reply(lines)), TRANSCRIPT)
+  const out = await judged('- confirmed: one\n- not confirmed: two | the diff adds no \'three\'')
+  expect(out.outcome).toMatchObject({ outcome: 'refuse', defect_class: 'correctness', spans: ['removed-tests.md'],
+    findings: [{ span: 'removed-tests.md', kind: 'real', fix: null }], origin_kind: 'ruling', origin_ref: 'reviewers.verdict' })
+  expect(out.outcome.message).toContain('- not confirmed: two')
+  expect(verdictRows(db, plan).find((v) => v.id === out.verdict)).toMatchObject({ gate: 'senior_review', outcome: 'refuse' })
+  expect((await judged('- confirmed: one\n- confirmed: two')).outcome).toMatchObject({ outcome: 'pass', spans: [] })
+})
+
 test('D1 a Swift idiom reads as a pass with a language note', async () => {
   expect(await senior('swift.reply.md')).toMatchObject({ outcome: 'pass', spans: [], notes: [{
     file: 'Sources/Stats/Median.swift', line: 3, old: 'if let first = xs.first {',

@@ -8,9 +8,17 @@ export const TEST_FILE = /(?:^|\/)[Tt]ests?\/|\.(?:test|spec)\.[jt]sx?$|_test\.(
 const STRICT = /\.(?:toBe|toEqual|toStrictEqual|toMatchObject|toMatchInlineSnapshot|toHaveBeenCalledWith|toThrowError|toContain)\s*\(/
 const LOOSE = /\.(?:toBeDefined|toBeTruthy|toBeFalsy|toBeUndefined|toBeNull)\s*\(\s*\)|\bexpect\.(?:anything|any)\s*\(/
 const TITLE = /\b(?:test|it|describe)\s*\(\s*(['"`])(.+?)\1/
+const REMOVED = /^- removed: (.+?) \| file: (\S+) \| why: (?:replaced by '.+'|retired by brief line '.+')\s*$/gm
+const RETIRE = "a test retired on purpose goes in the hand-back or removed-tests.md as `- removed: <exact test title> | file: <path> | why: replaced by '<new title>'` (or `why: retired by brief line '<quote>'`), one line per removed title in that file, and a skip is never spared"
 
-export function weakened(diff: string, suite: 'green' | 'red', named = ''): Verdict {
-  const spans = parse(diff).filter((f) => TEST_FILE.test(f.path) || f.path.endsWith('.rs')).flatMap((f) => judge(f, named))
+export function retired(...texts: string[]): string {
+  return texts.flatMap((t) => [...t.matchAll(REMOVED)].map((m) => m[0].trimEnd())).join('\n')
+}
+
+export function weakened(diff: string, suite: 'green' | 'red', named = '', removed = ''): Verdict {
+  const blocks = [...removed.matchAll(REMOVED)]
+  const listed = (path: string): string[] => blocks.flatMap((m) => m[2] === path ? [m[1] ?? ''] : [])
+  const spans = parse(diff).filter((f) => TEST_FILE.test(f.path) || f.path.endsWith('.rs')).flatMap((f) => judge(f, named, listed(f.path)))
   const subject_digest = createHash('sha256').update(`${diff}\n${suite}`).digest('hex')
   if (spans.length === 0 || suite === 'red') {
     return { outcome: 'pass', defect_class: null, origin_kind: null, origin_ref: null, subject_digest, spans, message: message(spans.length, suite) }
@@ -21,12 +29,15 @@ export function weakened(diff: string, suite: 'green' | 'red', named = ''): Verd
     origin_ref: 'test-weakened',
     subject_digest,
     spans,
-    message: `${String(spans.length)} assertion(s) removed, loosened or skipped while the suite went green`,
+    message: `${String(spans.length)} assertion(s) removed, loosened or skipped while the suite went green; ${RETIRE}`,
   }
 }
 
-function judge(file: FileDiff, named: string): string[] {
+function judge(file: FileDiff, named: string, listed: string[]): string[] {
   const { assert, skip } = conventionsOf(file.path)
+  const skipped = file.added.filter((l) => skip.test(l.text)).map((l) => span(l, 'test.weakened.skipped'))
+  const titles = file.removed.flatMap((l) => TITLE.exec(l.text)?.[2] ?? [])
+  if (titles.length > 0 && titles.every((t) => listed.includes(t))) return skipped
   if (file.deleted) {
     const asserted = TEST_FILE.test(file.path) || file.removed.some((l) => assert.test(l.text))
     return asserted && !named.includes(file.path) ? [gone(file, assert)] : []
@@ -39,7 +50,7 @@ function judge(file: FileDiff, named: string): string[] {
   return [
     ...(removed.length > added.length ? [span(removed[0], 'test.weakened.removed')] : []),
     ...(downgraded ? [span(loose[0], 'test.weakened.loosened')] : []),
-    ...file.added.filter((l) => skip.test(l.text)).map((l) => span(l, 'test.weakened.skipped')),
+    ...skipped,
   ]
 }
 

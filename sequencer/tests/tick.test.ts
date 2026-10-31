@@ -1486,7 +1486,7 @@ const reproved = async (w: World, lap: () => Promise<Fired | undefined>, line: s
   return lap()
 }
 
-test('D6 D7 a new head asks Greptile once; a fourth goes to COO', { timeout: 90_000 }, async () => {
+test('D6 D7 a new head asks Greptile once; a fourth skips it', { timeout: 90_000 }, async () => {
   const log: string[] = []
   const [w, lap] = await atReady(() => undefined, log)
   const asked = (): string[] => log.filter((l) => l.startsWith('review '))
@@ -1498,9 +1498,10 @@ test('D6 D7 a new head asks Greptile once; a fourth goes to COO', { timeout: 90_
   await round('export const three = 3')
   expect(asked()).toHaveLength(3)
   expect(get(w.root, 1, 'greptile.asked').trim().split('\n')).toHaveLength(3)
-  expect(await round('export const four = 4')).toMatchObject({ step: 6, outcome: 'needs_ceo', state: 'blocked_on_ceo', spans: ['greptile.requests'] })
+  expect(await round('export const four = 4')).toMatchObject({ step: 6, outcome: 'pass',
+    note: expect.stringContaining('; Greptile skipped: asked 3 times on this job') as unknown })
   expect(asked()).toHaveLength(3)
-  expect(plan(w.db, 1).state).toBe('blocked_on_ceo')
+  expect(plan(w.db, 1).step).toBe(7)
 })
 
 /** An outside job at ready with its first head asked, while another job holds `others` of this month's requests. */
@@ -1517,9 +1518,10 @@ const month = async (others: number): Promise<[World, () => string[], (line: str
 
 test('D2 at 40 this month only the first head is asked', async () => {
   const [w, asked, round] = await month(40)
-  expect(await round('export const two = 2')).toMatchObject({ step: 6, outcome: 'needs_ceo', state: 'blocked_on_ceo', spans: ['greptile.month'] })
+  expect(await round('export const two = 2')).toMatchObject({ step: 6, outcome: 'pass',
+    note: expect.stringContaining('; Greptile skipped: monthly quota spent (41/50)') as unknown })
   expect(asked()).toHaveLength(1)
-  expect(plan(w.db, 1).state).toBe('blocked_on_ceo')
+  expect(plan(w.db, 1).step).toBe(7)
 })
 
 test('D3 at 39 this month the second head is asked', async () => {

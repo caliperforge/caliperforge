@@ -5,6 +5,7 @@ import type { Reading } from '../../store/lanes.ts'
 import { credential } from '../credential.ts'
 import { admitted, bare, type CostWall, type Fired, type Packet, type Provider } from '../kind.ts'
 import { ghWrite } from './gh.ts'
+import { cut, sealed } from './offline.ts'
 
 const WRITES = new Set(['Write', 'Edit', 'NotebookEdit'])
 
@@ -28,6 +29,7 @@ async function fire(packet: Packet): Promise<Fired> {
   const spent = new Map<string, number>()
   const cost = new Map<string, number>()
   const pace = { turns: new Set<string>(), wrote: false, fenced: 0, reads: new Map<string, number>() }
+  const offline: string[] = []
   const transcript = openTranscript(packet)
   const run = query({
     prompt: `${packet.prompt}\n\n# Working folder\n\n${packet.cwd}`,
@@ -40,8 +42,8 @@ async function fire(packet: Packet): Promise<Fired> {
       allowedTools: packet.tools,
       ...(packet.steps === undefined ? {} : { maxTurns: packet.steps }), ...(packet.servers === undefined ? {} : { mcpServers: packet.servers }),
       settingSources: [], systemPrompt: { type: 'preset', preset: 'claude_code', excludeDynamicSections: true },
-      permissionMode: 'default',
-      hooks: { PreToolUse: [{ hooks: [(input) => {
+      permissionMode: 'default', ...(packet.offline === true ? sealed(packet.env?.TMPDIR) : {}),
+      hooks: { ...(packet.offline === true ? cut(offline) : {}), PreToolUse: [{ hooks: [(input) => {
         count(pace.reads, input)
         const over = walled(packet.wall, total(spent)) ?? costWalled(packet.cost_wall, total(cost))
           ?? idle(packet.tools, pace.wrote, pace.turns.size, packet.idle) ?? repeated(packet.tools, pace.reads)
@@ -56,7 +58,7 @@ async function fire(packet: Packet): Promise<Fired> {
     transcript(message)
     if (message.type === 'assistant') charge(message, pace.turns, { spent, cost }, packet.cost_wall)
     if (message.type === 'rate_limit_event') limits.push(...readings(message.rate_limit_info, new Date().toISOString()))
-    if (message.type === 'result') return { ...fired(message, started, refused), limits, transcript_path: packet.transcript }
+    if (message.type === 'result') return { ...fired(message, started, refused), limits, transcript_path: packet.transcript, ...(offline.length === 0 ? {} : { offline }) }
   }
   throw new Error('claude-agent-sdk closed without a result message')
 }

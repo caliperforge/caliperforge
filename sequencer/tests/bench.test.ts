@@ -627,6 +627,15 @@ test('D4 generate.json counts the sub-agents the run spawned', async () => {
   expect(runRows(db)).toMatchObject([{ transcript_path: join(planDir(root, 1), 'run-1.transcript.jsonl') }])
 })
 
+test('1994 D4 generate is offline and logs each refused command', async () => {
+  const fired = stub(1000, 'completed', true)
+  const command = "bash -c 'curl https://github.com'"
+  const { db } = await generated({ ...fired, provider: { ...fired.provider, fire: async (packet) => ({ ...await fired.provider.fire(packet), offline: [command] }) } })
+  expect(fired.packets).toMatchObject([{ offline: true }])
+  expect(eventsAfter(db, 0).filter((e) => e.kind === 'run.offline'))
+    .toEqual([{ plan: 1, kind: 'run.offline', actor: 'fizz_generator', outcome: 'refuse', message: command, pointer: null, run: runRows(db)[0]?.id }])
+})
+
 test('D4 a completed run with no suite is refused', async () => {
   const { root, outcome } = await generated(stub(1000, 'completed', false))
   expect(outcome).toMatchObject({ outcome: 'refuse', spans: ['bench.no_suite'], note: 'fizz_generator (completed, 1000 tokens) wrote no .sol under test/fizz outside fizz_data' })

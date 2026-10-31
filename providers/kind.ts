@@ -29,6 +29,8 @@ export interface Packet {
   idle?: number
   /** Reads of `.sol` under `src/` or `lib/` must carry `offset` or `limit`. A packet without it reads whole files. */
   ranged?: boolean
+  /** Bash runs under the SDK sandbox with no network. A packet without it keeps the network. */
+  offline?: boolean
   refuse: (path: string) => Refusal | null
   /** Folders outside the checkout this run may read, never write. */
   reads?: string[]
@@ -77,6 +79,8 @@ export interface Fired {
   session?: string
   /** The subscription windows the provider reported during the run: what the usage band steps the lanes by. */
   limits?: Reading[]
+  /** Each Bash command whose network attempt the sandbox refused, on an offline packet that saw one. */
+  offline?: string[]
 }
 
 export interface Provider {

@@ -1,9 +1,17 @@
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import type { HookCallback, HookInput, Options } from '@anthropic-ai/claude-agent-sdk'
 
+/** Where forge keeps its compilers and caches; crytic-compile and medusa write inside the checkout. */
+export const CACHES = ['.foundry', '.svm'].map((dir) => join(homedir(), dir))
+
 /** Bash in the sandbox with no host allowed and no unsandboxed retry; a sandbox that cannot start ends the run with an error result. */
-export const SEALED: Pick<Options, 'sandbox' | 'canUseTool'> = {
-  sandbox: { enabled: true, failIfUnavailable: true, allowUnsandboxedCommands: false, network: { allowedDomains: [], strictAllowlist: true }, filesystem: { disabled: true } },
-  canUseTool: (tool) => Promise.resolve({ behavior: 'deny', message: `ruling:run.offline refuses ${tool}: an offline run is asked nothing` }),
+export function sealed(tmp: string | undefined): Pick<Options, 'sandbox' | 'canUseTool'> {
+  return {
+    sandbox: { enabled: true, failIfUnavailable: true, allowUnsandboxedCommands: false, network: { allowedDomains: [], strictAllowlist: true },
+      filesystem: { allowWrite: [...(tmp === undefined ? [] : [tmp]), ...CACHES] } },
+    canUseTool: (tool) => Promise.resolve({ behavior: 'deny', message: `ruling:run.offline refuses ${tool}: an offline run is asked nothing` }),
+  }
 }
 
 /** Every host is refused on an offline run, so a Bash call that failed to reach one met the sandbox. */

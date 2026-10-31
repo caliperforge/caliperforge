@@ -5,7 +5,7 @@ import type { Reading } from '../../store/lanes.ts'
 import { credential } from '../credential.ts'
 import { admitted, bare, type CostWall, type Fired, type Packet, type Provider } from '../kind.ts'
 import { ghWrite } from './gh.ts'
-import { cut, SEALED } from './offline.ts'
+import { cut, sealed } from './offline.ts'
 
 const WRITES = new Set(['Write', 'Edit', 'NotebookEdit'])
 
@@ -42,7 +42,7 @@ async function fire(packet: Packet): Promise<Fired> {
       allowedTools: packet.tools,
       ...(packet.steps === undefined ? {} : { maxTurns: packet.steps }), ...(packet.servers === undefined ? {} : { mcpServers: packet.servers }),
       settingSources: [], systemPrompt: { type: 'preset', preset: 'claude_code', excludeDynamicSections: true },
-      permissionMode: 'default', ...(packet.offline === true ? SEALED : {}),
+      permissionMode: 'default', ...(packet.offline === true ? sealed(packet.env?.TMPDIR) : {}),
       hooks: { ...(packet.offline === true ? cut(offline) : {}), PreToolUse: [{ hooks: [(input) => {
         count(pace.reads, input)
         const over = walled(packet.wall, total(spent)) ?? costWalled(packet.cost_wall, total(cost))

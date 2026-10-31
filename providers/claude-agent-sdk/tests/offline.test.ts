@@ -21,18 +21,17 @@ vi.mock('@anthropic-ai/claude-agent-sdk', async (original) => {
 })
 
 const { claudeAgentSdk } = await import('../index.ts')
+const { CACHES } = await import('../offline.ts')
 
 function packet(cwd: string, tools: string[], prompt = 'p'): Packet {
   return { prompt, cwd, transcript: join(cwd, '..', 'run.transcript.jsonl'), model: 'claude-haiku-4-5-20251001', effort: 'low', tools, refuse: () => null }
 }
 
-const SEALED = { enabled: true, failIfUnavailable: true, allowUnsandboxedCommands: false, network: { allowedDomains: [], strictAllowlist: true },
-  filesystem: { disabled: true } }
-
 test('D3 D5 an offline packet seals Bash; others send neither', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'cf-offline-'))
-  await claudeAgentSdk.fire({ ...packet(dir, ['Read']), offline: true })
-  expect(sent.at(-1)?.sandbox).toEqual(SEALED)
+  await claudeAgentSdk.fire({ ...packet(dir, ['Read']), offline: true, env: { TMPDIR: dir } })
+  expect(sent.at(-1)?.sandbox).toEqual({ enabled: true, failIfUnavailable: true, allowUnsandboxedCommands: false,
+    network: { allowedDomains: [], strictAllowlist: true }, filesystem: { allowWrite: [dir, ...CACHES] } })
   const asked = sent.at(-1)?.canUseTool
   const options = { signal: new AbortController().signal, toolUseID: 't', requestId: 'r' }
   expect(await asked?.('Bash', { command: 'curl https://github.com' }, options)).toMatchObject({ behavior: 'deny' })
@@ -76,7 +75,8 @@ test.runIf(LIVE)('D1 D2 D6 an offline session cuts the network', async () => {
   const { cwd, tmp } = fixture()
   const fired = await claudeAgentSdk.fire({ ...packet(cwd, ['Bash(bash:*)', 'Bash(node:*)', 'Bash(forge:*)', 'Bash(medusa:*)', 'Agent'], PROMPT),
     offline: true, env: { TMPDIR: tmp } })
-  expect(fired.offline).toEqual(expect.arrayContaining([...TOP, ...SUB]))
+  const why = JSON.stringify({ stop_reason: fired.stop_reason, denials: fired.denials, text: fired.text })
+  expect(fired.offline, why).toEqual(expect.arrayContaining([...TOP, ...SUB]))
   for (const command of LOCAL) expect(fired.offline).not.toContain(command)
   for (const marker of ['reached-1', 'reached-2']) expect(existsSync(join(cwd, marker))).toBe(false)
   const made = { forge: join(cwd, 'out/Counter.sol/Counter.json'), medusa: join(cwd, 'corpus'), node: join(cwd, 'local.txt'), tmpdir: join(tmp, 'written') }

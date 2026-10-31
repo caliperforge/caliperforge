@@ -14,7 +14,7 @@ import { approve as approvePublish } from '../card.ts'
 import { tick } from '../index.ts'
 import { ruled, signoffs, verdict } from '../signoff.ts'
 import { UNRUN } from '../triggers.ts'
-import { drop, git, OPERATOR, put, SELF, SIGNOFF, srcDir } from '../workspace.ts'
+import { drop, git, headSha, OPERATOR, put, SELF, SIGNOFF, srcDir } from '../workspace.ts'
 import { TEX } from './bases.ts'
 import { approve, CARRIED, plan, scored, stub, TYPESCRIPT, watched, world, type World } from './world.ts'
 
@@ -386,12 +386,18 @@ test('D6 the card names each rework round\'s review mode, else none', async () =
     + '- Review mode: review full: src/parse.ts is not in the passed diff; senior_review skipped: 1 delta lines, comments and docs only\n')
 })
 
-test('D4 the card shows Greptile\'s score at this head, or none', async () => {
+test('D4 the card shows Greptile\'s score, a skip, or none', async () => {
   const w = await atBatch()
   dropSignals(w.db)
   const unscored = fake()
   signoffs(w.db, w.root, unscored, none)
   expect(unscored.cards.get(100)?.body).toContain('- Greptile on our fork: no score at this head; ready went on after 45 ticks without one\n')
+
+  put(w.root, 1, 'greptile.skipped', `${headSha(srcDir(w.root, 1))} monthly quota spent (50/50)\n`)
+  drop(w.root, 1, 'signoff')
+  const skipped = fake()
+  signoffs(w.db, w.root, skipped, none)
+  expect(skipped.cards.get(100)?.body).toContain('- Greptile on our fork: skipped: monthly quota spent (50/50)\n')
 
   scored(w.root, 1, 4, 'Confidence Score: 4/5')
   drop(w.root, 1, 'signoff')

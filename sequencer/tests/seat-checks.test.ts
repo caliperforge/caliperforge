@@ -10,7 +10,10 @@ import { addRule, type Db } from '../../store/index.ts'
 import { planById, putPlan, type PlanRow } from '../../store/plans.ts'
 import { addAccount, addTarget } from '../../store/targets.ts'
 import type { Verdict } from '../../store/verdict.ts'
+import type { Ran } from '../checks.ts'
+import { live } from '../live.ts'
 import { checked } from '../seat.ts'
+import { srcDir } from '../workspace.ts'
 
 const REPO = join(import.meta.dirname, '../..')
 
@@ -135,6 +138,44 @@ test('1898 D5 a python-only kernel plan lists no npm tests', () => {
   expect(checked(db, REPO, kernel, src, PY)).toEqual({
     checks: ['- typescript | . | every script the checkout names (npm, no tests: the diff sits in its python subprojects) | pass', ...UV].join('\n'),
   })
+})
+
+const LIVE = 'tools/a.test.ts'
+
+const TS = `--- a/${LIVE}\n+++ b/${LIVE}\n@@ -1,1 +1,1 @@\n+x\n`
+
+/** A green kernel plan on TS with its gated test in the checkout, the step 3 rows, and a live run of `diff` that returned `ran`. */
+function lives(ran: Ran, diff = TS): { db: Db; root: string; plan: PlanRow; src: string; rows: string | undefined } {
+  const { db, plan } = target([LIVE], 'pass', TS)
+  const root = mkdtempSync(join(tmpdir(), 'cf-live-'))
+  const src = srcDir(root, 1)
+  writeFileSync(join(src, 'package.json'), '{}')
+  mkdirSync(join(src, 'tools'))
+  writeFileSync(join(src, LIVE), "test.runIf(process.env.CF_BENCH_LIVE === '1')('x', () => {})\n")
+  const kernel = { ...plan, target_id: null, origin: 'https://github.com/caliperforge/caliperforge/issues/1' }
+  const rows = checked(db, root, kernel, src, TS).checks
+  live(root, kernel, diff, () => ran)
+  return { db, root, plan: kernel, src, rows }
+}
+
+const COMMAND = `CF_BENCH_LIVE=1 npm exec -- vitest run ${LIVE}`
+
+test('2022 D2 a green live run is listed after the step 3 rows', () => {
+  const { db, root, plan, src, rows } = lives({ ok: true, output: 'green' })
+  expect(checked(db, root, plan, src, TS)).toEqual({ checks: `${String(rows)}\n- live | . | ${COMMAND} | pass` })
+})
+
+test('2022 D3 a capped live run fails with its last 80 lines', () => {
+  const output = [...Array(100).keys()].map((i) => `line ${String(i)}`)
+  const { db, root, plan, src, rows } = lives({ ok: false, code: '1', output: output.join('\n'), capped: true })
+  expect(checked(db, root, plan, src, TS)).toEqual({
+    checks: `${String(rows)}\n- live | . | ${COMMAND} | fail\n\nLive run output:\n\n${output.slice(-80).join('\n')}`,
+  })
+})
+
+test('2022 D6 a live run of another diff adds no row', () => {
+  const { db, root, plan, src, rows } = lives({ ok: true, output: 'green' }, `${TS}+y\n`)
+  expect(checked(db, root, plan, src, TS)).toEqual({ checks: rows })
 })
 
 test('D6 no seat language and no gate, no section', () => {

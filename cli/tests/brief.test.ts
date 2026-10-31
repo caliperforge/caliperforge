@@ -29,6 +29,7 @@ import { held, holdOn, needsCeo, parked, planById, type PlanRow, putPlan, waitin
 import { putRecord, tally } from '../../store/record.ts'
 import { record } from '../../store/signals.ts'
 import { addAccount, addTarget } from '../../store/targets.ts'
+import { recordListing } from '../../store/tickets.ts'
 
 const schema = join(import.meta.dirname, '../../schema')
 
@@ -123,16 +124,34 @@ test('D5 a full page of merged PRs throws, naming the repo', () => {
 })
 
 test('D6 the fixture day renders the expected section exactly', () => {
-  expect(actorSection(actors(day24(), NOW), hands(NOW, () => merged))).toBe('last 24 h by actor, held/missed/open over 7 d\n' +
-    '  ceo\t2 intervention(s)\tretry 1, return 1\theld 0 missed 0 open 3\n' +
-    '  coo\t0 intervention(s)\t-\theld 0 missed 0 open 0\n' +
-    '  director\t1 intervention(s)\tcoo_lite 1\t2 run(s)\t$1.50\theld 0 missed 0 open 1\n' +
-    '  orchestrator\t1 intervention(s)\treturn 1\t0 run(s)\t$0.00\theld 0 missed 0 open 1\n' +
-    '  fixer\t0 intervention(s)\t-\t2 run(s)\t$0.25\theld 0 missed 0 open 0\n' +
+  const none = 'missed 0 (came back 0, wrong ticket 0)'
+  expect(actorSection(actors(day24(), NOW), hands(NOW, () => merged))).toBe('last 24 h by actor, held/missed/open/cancelled over 7 d\n' +
+    `  ceo\t2 intervention(s)\tretry 1, return 1\theld 0 ${none} open 3 cancelled 0\n` +
+    `  coo\t0 intervention(s)\t-\theld 0 ${none} open 0 cancelled 0\n` +
+    `  director\t1 intervention(s)\tcoo_lite 1\t2 run(s)\t$1.50\theld 0 ${none} open 1 cancelled 0\n` +
+    `  orchestrator\t1 intervention(s)\treturn 1\t0 run(s)\t$0.00\theld 0 ${none} open 1 cancelled 0\n` +
+    `  fixer\t0 intervention(s)\t-\t2 run(s)\t$0.25\theld 0 ${none} open 0 cancelled 0\n` +
     '  hand PRs merged\t14\n')
 })
 
 const IN = '2026-09-20 11:00:00'
+
+test('D5 cancelled, came back and wrong ticket count apart', () => {
+  const db = world()
+  plan(db, 1, 'running', 25)
+  plan(db, 2, 'refused', 30)
+  plan(db, 3, 'running', 31)
+  event(db, 'director', 'director', IN, 1)
+  event(db, 'coo', 'close', '2026-09-20 11:30:00', 1, 'refuse')
+  event(db, 'director', 'director', IN, 2)
+  const url = 'https://github.com/caliperforge/caliperforge/issues/31'
+  recordListing(db, 'caliperforge/caliperforge', [{ number: 31, title: 't', body: '', url, labels: [{ name: 'lane:machine' }],
+    createdAt: '2026-09-19', closedAt: '2026-09-20', stateReason: 'NOT_PLANNED' }], false)
+  logged(db, { plan: 3, kind: 'director', actor: 'director', outcome: 'pass', message: '', pointer: url, run: null }, IN)
+  const rows = actors(db, NOW)
+  expect(rows.find((r) => r.actor === 'director')?.scored).toEqual({ held: 0, missed: 2, open: 0, cancelled: 1, stop: 1, ticket: 1 })
+  expect(actorSection(rows, 0)).toContain('\theld 0 missed 2 (came back 1, wrong ticket 1) open 0 cancelled 1\n')
+})
 
 test('D1 director line: decided, handed up, rate over 7 d', () => {
   const db = world()
@@ -204,7 +223,8 @@ test('each actor scores the past week, not an event 8 days old', () => {
     for (const id of [1, 2, 3]) event(db, actor, 'retry', '2026-09-14 12:00:00', id)
   }
   event(db, 'ceo', 'retry', '2026-09-12 12:00:00', 3)
-  expect(actors(db, NOW).map((r) => r.scored)).toEqual(Array.from({ length: 5 }, () => ({ held: 1, missed: 1, open: 1 })))
+  expect(actors(db, NOW).map((r) => r.scored)).toEqual(Array.from({ length: 5 }, () =>
+    ({ held: 1, missed: 1, open: 1, cancelled: 0, stop: 1, ticket: 0 })))
 })
 
 test('oldActorScored', () => {

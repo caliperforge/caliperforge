@@ -36,11 +36,12 @@ function actorLine(r: ActorRow): string {
   const runs = r.runs === null ? '' : `\t${String(r.runs.runs)} run(s)\t$${r.runs.cost.toFixed(2)}`
   const s = r.scored
   return `  ${r.actor}\t${String(n)} intervention(s)\t${kinds}${runs}` +
-    `\theld ${String(s.held)} missed ${String(s.missed)} open ${String(s.open)}\n`
+    `\theld ${String(s.held)} missed ${String(s.missed)} (came back ${String(s.stop)}, wrong ticket ${String(s.ticket)})` +
+    ` open ${String(s.open)} cancelled ${String(s.cancelled)}\n`
 }
 
 export function actorSection(rows: ActorRow[], hands: number): string {
-  return `last 24 h by actor, held/missed/open over 7 d\n${rows.map(actorLine).join('')}  hand PRs merged\t${String(hands)}\n`
+  return `last 24 h by actor, held/missed/open/cancelled over 7 d\n${rows.map(actorLine).join('')}  hand PRs merged\t${String(hands)}\n`
 }
 
 function ticketLine(t: Ticket): string {

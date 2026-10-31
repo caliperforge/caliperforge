@@ -21,12 +21,14 @@ function refuse(db: Db, fingerprint: string, at: string, blip = 0): void {
   db.prepare('INSERT INTO refusals (plan, step, fingerprint, diff, blip, at) VALUES (1, 3, ?, NULL, ?, ?)').run(fingerprint, blip, at)
 }
 
-function event(db: Db, actor: string, kind: string, at: string): void {
-  db.prepare("INSERT INTO events (plan, at, kind, actor, outcome, message) VALUES (1, ?, ?, ?, 'pass', '')").run(at, kind, actor)
+function event(db: Db, actor: string, kind: string, at: string, message = '', outcome = 'pass'): void {
+  db.prepare('INSERT INTO events (plan, at, kind, actor, outcome, message) VALUES (1, ?, ?, ?, ?, ?)').run(at, kind, actor, outcome, message)
 }
 
 const scored = (db: Db): unknown[] =>
   db.prepare('SELECT event, actor, outcome, refusal, close FROM outcomes ORDER BY event').all()
+
+const missed = (db: Db): unknown[] => db.prepare('SELECT outcome, miss FROM outcomes ORDER BY event').all()
 
 test('D1 a retry whose refusal comes back is missed by it', () => {
   const db = plan('running')
@@ -44,14 +46,54 @@ test.each([['done', 'held'], ['running', 'open']])('D2 a later refusal with anot
   expect(scored(db)).toEqual([{ event: 1, actor: 'ceo', outcome, refusal: null, close: null }])
 })
 
-test('D3 a refused close misses the return before it and is open', () => {
+test('D3 a refused close cancels the return before it, is open', () => {
   const db = plan('halted')
   returnToLane(db, 1)
   closed(db, 1, 'refused', 'ceo', 'no')
   expect(scored(db)).toEqual([
-    { event: 1, actor: 'orchestrator', outcome: 'missed', refusal: null, close: 2 },
+    { event: 1, actor: 'orchestrator', outcome: 'cancelled', refusal: null, close: 2 },
     { event: 2, actor: 'ceo', outcome: 'open', refusal: null, close: null },
   ])
+})
+
+test('D1 a coo refused close cancels a director event, came back', () => {
+  const db = plan('running')
+  refuse(db, X, '2026-09-20 10:00:00')
+  event(db, 'director', 'director', '2026-09-20 11:00:00')
+  refuse(db, X, '2026-09-20 12:00:00')
+  closed(db, 1, 'refused', 'coo', 'no')
+  expect(scored(db)[0]).toEqual({ event: 1, actor: 'director', outcome: 'cancelled', refusal: 2, close: 2 })
+  expect(missed(db)[0]).toEqual({ outcome: 'cancelled', miss: null })
+})
+
+test.each(['director', 'tick'])('D6 a refused close by %s cancels nothing', (actor) => {
+  const db = plan('running')
+  refuse(db, X, '2026-09-20 10:00:00')
+  event(db, 'ceo', 'retry', '2026-09-20 11:00:00')
+  refuse(db, X, '2026-09-20 12:00:00')
+  event(db, actor, 'close', '2026-09-20 13:00:00', 'redundant', 'refuse')
+  expect(scored(db)[0]).toEqual({ event: 1, actor: 'ceo', outcome: 'missed', refusal: 2, close: 2 })
+})
+
+test('D3 left alone, look and github_read add no outcomes row', () => {
+  const db = plan('running')
+  event(db, 'director', 'director', '2026-09-20 11:00:00', 'left alone: plan is running, waiting on ready_proof')
+  event(db, 'coo_lite', 'look', '2026-09-20 11:00:00')
+  event(db, 'director', 'github_read', '2026-09-20 11:00:00')
+  event(db, 'director', 'director', '2026-09-20 11:00:00', 'retried')
+  expect(scored(db)).toEqual([{ event: 4, actor: 'director', outcome: 'open', refusal: null, close: null }])
+})
+
+test('D4 a plan refused after its event misses as stop', () => {
+  const db = plan('refused')
+  event(db, 'ceo', 'retry', '2026-09-20 11:00:00')
+  expect(missed(db)).toEqual([{ outcome: 'missed', miss: 'stop' }])
+})
+
+test.each([['done', 'held'], ['running', 'open']])('D4 a %s plan reads %s with no miss', (state, outcome) => {
+  const db = plan(state)
+  event(db, 'ceo', 'retry', '2026-09-20 11:00:00')
+  expect(missed(db)).toEqual([{ outcome, miss: null }])
 })
 
 test('D4 a release on a done-closed plan holds, citing the close', () => {
@@ -110,6 +152,21 @@ test('D5 an open diagnosis:wrong ticket misses its intervention', () => {
   const db = plan('running')
   filed(db, null, 1)
   expect(ticketed(db)).toEqual([{ outcome: 'missed', refusal: null, ticket: FILED }])
+})
+
+test('D4 a returned refusal misses as stop, a bad ticket as ticket', () => {
+  const db = plan('running')
+  refuse(db, X, '2026-09-20 10:00:00')
+  event(db, 'ceo', 'retry', '2026-09-20 11:00:00')
+  refuse(db, X, '2026-09-20 12:00:00')
+  filed(db, 'NOT_PLANNED', 0)
+  expect(missed(db)).toEqual([{ outcome: 'missed', miss: 'stop' }, { outcome: 'missed', miss: 'ticket' }])
+})
+
+test('D4 a diagnosis:wrong ticket misses as ticket', () => {
+  const db = plan('running')
+  filed(db, null, 1)
+  expect(missed(db)).toEqual([{ outcome: 'missed', miss: 'ticket' }])
 })
 
 test.each([['done', 'held'], ['running', 'open']])('D6 a ticket closed COMPLETED leaves a %s plan %s', (state, outcome) => {

@@ -64,7 +64,7 @@ export interface ActorRow {
   actor: Actor
   kinds: { kind: string; n: number }[]
   runs: { runs: number; cost: number } | null
-  scored: { held: number; missed: number; open: number }
+  scored: { held: number; missed: number; open: number; cancelled: number; stop: number; ticket: number }
 }
 
 export function actors(db: Db, now: Date): ActorRow[] {
@@ -76,14 +76,18 @@ export function actors(db: Db, now: Date): ActorRow[] {
     coalesce(sum(cost_usd), 0) AS cost FROM runs
     WHERE NOT (${BUILT}) AND julianday(at) >= julianday(?, '-1 day') GROUP BY 1`)
     .all(at) as { seat: string; runs: number; cost: number }[]
-  const scored = db.prepare(`SELECT CASE actor WHEN 'coo_lite' THEN 'director' ELSE actor END AS actor, outcome, count(*) AS n FROM outcomes
-    WHERE julianday(at) >= julianday(?, '-7 day') GROUP BY 1, outcome`)
-    .all(at) as { actor: string; outcome: 'held' | 'missed' | 'open'; n: number }[]
+  const scored = db.prepare(`SELECT CASE actor WHEN 'coo_lite' THEN 'director' ELSE actor END AS actor, outcome, miss, count(*) AS n FROM outcomes
+    WHERE julianday(at) >= julianday(?, '-7 day') GROUP BY 1, outcome, miss`)
+    .all(at) as { actor: string; outcome: 'held' | 'missed' | 'open' | 'cancelled'; miss: 'stop' | 'ticket' | null; n: number }[]
   return ACTORS.map((actor) => ({
     actor,
     kinds: kinds.filter((k) => k.actor === actor).map(({ kind, n }) => ({ kind, n })),
     runs: SEATED.includes(actor) ? runs.find((r) => r.seat === actor) ?? { runs: 0, cost: 0 } : null,
-    scored: scored.filter((s) => s.actor === actor).reduce((sum, s) => ({ ...sum, [s.outcome]: s.n }), { held: 0, missed: 0, open: 0 }),
+    scored: scored.filter((s) => s.actor === actor).reduce((sum, s) => {
+      sum[s.outcome] += s.n
+      if (s.miss !== null) sum[s.miss] += s.n
+      return sum
+    }, { held: 0, missed: 0, open: 0, cancelled: 0, stop: 0, ticket: 0 }),
   }))
 }
 

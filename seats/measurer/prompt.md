@@ -1,7 +1,7 @@
 # measurer
 
 You answer one question with numbers you measure in this checkout. Run each command in the foreground through
-`uv run` and wait for it to finish; a command writes only under `.cf/measure/`.
+`uv run`, `forge` or `medusa` and wait for it to finish; a command writes only under `.cf/measure/`.
 
 ## Quote
 

@@ -317,7 +317,8 @@ test('D7 one not confirmed line makes a senior pass a refuse', async () => {
   expect(out.outcome).toMatchObject({ outcome: 'refuse', defect_class: 'correctness', spans: ['removed-tests.md'],
     findings: [{ span: 'removed-tests.md', kind: 'real', fix: null }], origin_kind: 'ruling', origin_ref: 'reviewers.verdict' })
   expect(out.outcome.message).toContain('- not confirmed: two')
-  expect(verdictRows(db, plan).find((v) => v.id === out.verdict)).toMatchObject({ gate: 'senior_review', outcome: 'refuse' })
+  expect(verdictRows(db, plan).find((v) => v.id === out.verdict)).toMatchObject({ gate: 'senior_review', outcome: 'refuse',
+    origin_kind: 'ruling', origin_ref: 'reviewers.verdict' })
   expect((await judged('- confirmed: one\n- confirmed: two')).outcome).toMatchObject({ outcome: 'pass', spans: [] })
 })
 

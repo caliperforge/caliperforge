@@ -104,9 +104,10 @@ test('D6 step 5 carries # Removed tests, step 4 does not', async () => {
   const handed = "- removed: two | file: t/a.test.ts | why: replaced by 'three'"
   put(w.root, 1, 'removed-tests.md', `${kept}\n- removed: four\n`)
   put(w.root, 1, 'step-2.handback.md', `HANDBACK_MARKER\n${handed}\n`)
+  const row = { ...plan(w.db, 1), origin: 'https://github.com/caliperforge/cf/issues/1' }
   const prompt = async (step: number): Promise<string> => {
     const seen: Packet[] = []
-    await fireLanded(w.db, w.root, plan(w.db, 1), at(step), stub(CARRIED, 0, PASS, (p) => seen.push(p)))
+    await fireLanded(w.db, w.root, row, at(step), stub(CARRIED, 0, PASS, (p) => seen.push(p)))
     return seen[0]?.prompt ?? ''
   }
   expect(await prompt(4)).not.toContain('# Removed tests')

@@ -110,7 +110,7 @@ function unasked(db: Db, root: string, plan: PlanRow, now: Date, post: Post): st
     return WAITING.has(plan.wait_reason ?? '') ? told(db, root, plan, now, { outcome: 'pass', message: `left alone: plan is ${plan.state}, waiting on ${plan.wait_reason ?? ''}` })
       : told(db, root, plan, now, { outcome: 'needs_coo', message: `ask_ceo: plan is ${plan.state}, not stopped` }, post)
   }
-  if (plan.state !== 'blocked_on_ceo' || !eventsOf(db, plan.id, 'ready').slice(-1).some((e) => e.outcome === 'escalate' && QUOTA.test(e.message))) return null
+  if (plan.state !== 'blocked_on_ceo' || plan.step !== 6 || !eventsOf(db, plan.id, 'ready').slice(-1).some((e) => e.outcome === 'escalate' && QUOTA.test(e.message))) return null
   returnToLane(db, plan.id, 'director')
   return told(db, root, plan, now, { outcome: 'pass', message: 'return: Greptile\'s quota is spent, so ready goes on without it' })
 }

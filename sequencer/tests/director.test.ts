@@ -265,6 +265,15 @@ test('D5 a stale Greptile escalation goes back to ready', async () => {
   expect(told(db)).toEqual([{ actor: 'director', outcome: 'pass', message: 'return: Greptile\'s quota is spent, so ready goes on without it' }])
 })
 
+test('D5 a stop past ready is asked despite an old escalation', async () => {
+  const { db, home } = seeded('1')
+  logged(db, { plan: 7, kind: 'ready', actor: 'kernel', outcome: 'escalate', pointer: null, run: null,
+    message: 'Greptile was asked 3 times on this job; asking again at abc is the COO\'s call' })
+  await run(db, home, REPLY.ask_ceo ?? '')
+  expect(row(db)).toMatchObject({ state: 'blocked_on_ceo', step: 4 })
+  expect(told(db).map((t) => t.message)).not.toContain('return: Greptile\'s quota is spent, so ready goes on without it')
+})
+
 test('D3: a rails stop or no open ids writes no rulings.md', async () => {
   const rails = seeded('1')
   await run(rails.db, rails.home, REPLY.rule ?? '')

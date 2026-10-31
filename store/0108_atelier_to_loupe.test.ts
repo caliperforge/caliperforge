@@ -38,7 +38,7 @@ it('D1 the atelier pipe is renamed loupe and keeps its id', () => {
   const db = at0107(['atelier'])
   plan(db, 'atelier', 'atelier', web(1))
   const before = pipes(db)
-  expect(migrate(db, join(root, 'schema'))).toEqual(['0108_atelier_to_loupe.sql', '0109_retire_atelier_lane.sql', '0110_bench_x_ray.sql', '0111_science_lanes.sql', '0112_bench_untested_nullable.sql', '0113_bench_score_busy.sql', '0114_bench_rescore.sql', '0115_records_outside.sql', '0116_records_ball.sql', '0117_bench_calls.sql', '0118_bench_not_powered.sql', '0119_bench_few_properties.sql', '0120_bench_compile_failed.sql', '0121_refuzz_pipe.sql', '0122_bench_night.sql', '0123_runs_phase.sql', '0124_refusal_base.sql', '0125_prices_sonnet.sql'])
+  expect(migrate(db, join(root, 'schema'))).toEqual(['0108_atelier_to_loupe.sql', '0109_retire_atelier_lane.sql', '0110_bench_x_ray.sql', '0111_science_lanes.sql', '0112_bench_untested_nullable.sql', '0113_bench_score_busy.sql', '0114_bench_rescore.sql', '0115_records_outside.sql', '0116_records_ball.sql', '0117_bench_calls.sql', '0118_bench_not_powered.sql', '0119_bench_few_properties.sql', '0120_bench_compile_failed.sql', '0121_refuzz_pipe.sql', '0122_bench_night.sql', '0123_runs_phase.sql', '0124_refusal_base.sql', '0125_prices_sonnet.sql', '0126_outcomes_cancelled.sql'])
   expect(pipes(db)).toEqual([...before.map((p) => (p.name === 'atelier' ? { ...p, name: 'loupe' } : p)), ...science(before)])
   expect(plans(db)).toEqual([{ pipe_id: id(db, 'loupe'), lane: 'loupe' }])
 })

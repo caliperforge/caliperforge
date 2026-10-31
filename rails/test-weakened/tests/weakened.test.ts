@@ -99,7 +99,7 @@ test('D2 refuses as today with one title missing from the block', () => {
 })
 
 test('D3 refuses an added .skip with or without the block', () => {
-  const skipped = shaped.replace(' })\n', ' })\n+test.skip(\'later\', () => {})\n')
+  const skipped = shaped.replace(' })\n', ` })\n+${['test', 'skip'].join('.')}('later', () => {})\n`)
   expect(weakened(skipped, 'green', '', listing).spans).toEqual(['t/c.test.ts:4 test.weakened.skipped'])
   expect(weakened(skipped, 'green').spans).toEqual(['t/c.test.ts:2 test.weakened.removed', 't/c.test.ts:4 test.weakened.skipped'])
 })

@@ -55,6 +55,7 @@ import { kernelPlan } from './home.ts'
 import { live, lived } from './live.ts'
 import { READ, SERVER, server } from './upstream.ts'
 import { audit } from '../rails/completion-audit/index.ts'
+import { retired } from '../rails/test-weakened/index.ts'
 
 const FENCE = /^---\r?\n[\s\S]*?\r?\n---\s*$/m
 
@@ -370,7 +371,7 @@ async function fireReview(db: Db, root: string, plan: PlanRow, step: Step, provi
   if (manifest.gate === 'review') live(root, plan, diffOf(root, plan.id))
   const input: Bench = manifest.gate === 'blind_review' ? blind(db, root, plan) : {
     repo: src,
-    issue: issue + rulings(root, plan.id),
+    issue: issue + rulings(root, plan.id) + (manifest.gate === 'senior_review' ? removedTests(root, plan.id) : ''),
     diff: diffOf(root, plan.id),
     ...(cloned(src) ? { tree: snapshot(src) } : {}),
     ...(internal(plan) && maybe(root, plan.id, 'step-2.handback.md') !== null ? { handback: get(root, plan.id, 'step-2.handback.md') } : {}),
@@ -400,6 +401,11 @@ async function fireReview(db: Db, root: string, plan: PlanRow, step: Step, provi
     if (note.includes(LOCKED)) throw error
     return { outcome: { outcome: 'refuse', spans: ['reviewers.verdict_fence'], note: `${step.runs} ${note}` }, notes: [] }
   }
+}
+
+function removedTests(root: string, plan: number): string {
+  const block = retired(maybe(root, plan, 'removed-tests.md') ?? '', maybe(root, plan, 'step-2.handback.md') ?? '')
+  return block === '' ? '' : `\n\n# Removed tests\n\n${block}`
 }
 
 function landable(db: Db, plan: PlanRow, step: Step, notes: Note[]): Note[] {

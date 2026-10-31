@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process'
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { expect, test } from 'vitest'
+import { afterEach, expect, test, vi } from 'vitest'
 import { unread } from '../../cli/inbox.ts'
 import { checked } from '../../rails/checks/index.ts'
 import { addRun } from '../../store/brief.ts'
@@ -24,6 +24,8 @@ import { ATELIER, BROKEN, GREEN, GREETED, NAPPING, ORPHANED, pkg, RED, TIMEOUT }
 import { approve, built as edited, CARRIED, internalPlan, ours, plan, stub, watched, world, type World } from './world.ts'
 
 const ID = 2
+
+afterEach(() => { vi.unstubAllEnvs() })
 
 const BOUND = '   × a lap 1066ms\n     → expected 1066 to be less than 1000\n'
 const ASSERTED = ' FAIL x.test.ts > a call\nAssertionError: expected "hi" to be "ho"\n'
@@ -263,9 +265,9 @@ test('#77: a failed narrow run is named by the script, not a path', () => {
 const HASH = '0'.repeat(64)
 
 /** A step-2 run row, which is all `narrow` reads to tell a first build from a rebuild. */
-function built(w: World, at: number): void {
+function built(w: World, at: number, id = 1): void {
   addRun(w.db, {
-    plan: 1, step: 2, seat: 'typescript_specialist', rule_hash: HASH, provider: 'anthropic-api', model: 'm', effort: 'low',
+    plan: id, step: 2, seat: 'typescript_specialist', rule_hash: HASH, provider: 'anthropic-api', model: 'm', effort: 'low',
     input_tokens: 0, cache_write_tokens: null, cache_write_1h_tokens: null, cache_read_tokens: 0, output_tokens: 0,
     seconds: 0, exit: 0, at: '2026-09-22T00:00:00.000Z', transcript_path: `step-2.${String(at)}.transcript.jsonl`, cost_usd: null,
   })
@@ -976,8 +978,8 @@ test('#352 D6 a host exit twice goes to step 2 on checks:test', async () => {
 }, SLOW)
 
 /** A step 3 checks lock another plan's tick left, naming `pid`. */
-function locked(w: World, pid: number): string {
-  const path = join(w.root, '.cf', 'checks.lock')
+function locked(w: World, pid: number, place = 'checks.lock'): string {
+  const path = join(w.root, '.cf', place)
   mkdirSync(dirname(path), { recursive: true })
   writeFileSync(path, JSON.stringify({ plan: 9, pid, taken_at: new Date().toISOString() }))
   return path
@@ -1002,6 +1004,47 @@ test('a dead holder\'s checks lock is taken, then released', async () => {
     expect(plan(w.db, ID).step).toBe(step)
     expect(existsSync(path)).toBe(false)
   }
+}, SLOW)
+
+/** Two step 3 places, and `npm()`'s slots in a temp dir rather than the host's. */
+function two(): void {
+  vi.stubEnv('CF_CHECK_SLOTS', '2')
+  vi.stubEnv('CF_CHECK_SLOTS_DIR', mkdtempSync(join(tmpdir(), 'cf-slots-')))
+}
+
+test('D1 a whole suite waits on place 0 though place 1 is free', async () => {
+  two()
+  const w = mine(GREEN)
+  locked(w, process.ppid)
+  for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED))
+
+  const fired = (await tick(w.db, w.root, stub(CARRIED)))[0]
+  expect(fired).toMatchObject({ step: 3, note: 'checks wait: plan 9 is running its tests' })
+  expect(plan(w.db, ID).step).toBe(3)
+  expect(verdictRows(w.db, ID).filter((v) => v.rail_id === 'checks')).toEqual([])
+  expect(existsSync(join(w.root, '.cf', 'checks.lock.1'))).toBe(false)
+}, SLOW)
+
+test('D2 a rebuild takes place 1 while place 0 is held', async () => {
+  two()
+  const w = mine(GREEN)
+  locked(w, process.ppid)
+  for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  built(w, 1, ID)
+  built(w, 2, ID)
+  record(w.db, ID, [{ path: 'store/plans.ts', is_new: false }])
+
+  await tick(w.db, w.root, stub(CARRIED))
+  expect(plan(w.db, ID).step).not.toBe(3)
+  expect(existsSync(join(w.root, '.cf', 'checks.lock.1'))).toBe(false)
+}, SLOW)
+
+test('D3 a whole suite takes place 0 while place 1 is held', async () => {
+  two()
+  const w = mine(GREEN)
+  locked(w, process.ppid, 'checks.lock.1')
+  for (let at = 0; at < 4; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  expect(plan(w.db, ID).step).toBe(4)
 }, SLOW)
 
 test('D3 a kotlin checkout runs gradle check', () => {

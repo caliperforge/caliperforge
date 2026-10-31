@@ -8,8 +8,9 @@ import { newest, pushedRow } from '../../store/deliverables.ts'
 import { allEvents } from '../../store/events.ts'
 import type { Db } from '../../store/index.ts'
 import { last, receipt, type Receipt } from '../../store/ticks.ts'
+import { drift, mechanisms } from '../drift.ts'
 import { tick } from '../index.ts'
-import { behind, upgrade, upgraded } from '../upgrade.ts'
+import { behind, halted, upgrade, upgraded } from '../upgrade.ts'
 import { SELF, srcDir } from '../workspace.ts'
 import { built, CARRIED, internalPlan, landing, moveMain, ours, stub, watched, world, type World } from './world.ts'
 
@@ -112,6 +113,39 @@ test('a detached tick tree with its own commit is refused, unmoved', () => {
 
   expect(upgrade(store(), live, sha)).toContain(`HEAD cannot fast-forward to ${sha.slice(0, 12)}`)
   expect(git(live, ['rev-parse', 'HEAD'])).toBe(head)
+})
+
+/** A detached tick tree behind a landing, with a hand edit to the file the landing changes. */
+async function edited(): Promise<{ w: World; live: string; sha: string; head: string; note: string | null }> {
+  const { w, live, sha } = await lands('CREATE TABLE live (id INTEGER PRIMARY KEY);\n', true)
+  const head = git(live, ['rev-parse', 'HEAD'])
+  writeFileSync(join(live, 'src/hello.ts'), 'export const edited = true\n')
+  return { w, live, sha, head, note: halted(w.db, live) }
+}
+
+test('a clean tree behind a landing moves before it halts', async () => {
+  const { w, live, sha } = await lands('CREATE TABLE live (id INTEGER PRIMARY KEY);\n', true)
+
+  expect(halted(w.db, live)).toBeNull()
+  expect(git(live, ['rev-parse', 'HEAD'])).toBe(sha)
+  expect(version(w.db)).toBe(18)
+})
+
+test('a hand edit halts the tick unmoved and names the file', async () => {
+  const { w, live, sha, head, note } = await edited()
+
+  const short = sha.slice(0, 12)
+  expect(note).toBe(`live tree is behind ${short}: HEAD cannot fast-forward to ${short}: Aborting; local change in src/hello.ts`)
+  expect(git(live, ['rev-parse', 'HEAD'])).toBe(head)
+  expect(behind(w.db, live)).toBe(sha)
+})
+
+test('a halt receipt is seen by the live_tree_behind drift', async () => {
+  const { w, note } = await edited()
+  receipt(w.db, { ...LAP, fired: 0, exit: 1, note: note ?? '' })
+
+  const registry = mechanisms(join(import.meta.dirname, '../..')).filter((e) => e.name === 'live_tree_behind')
+  expect(drift(w.db, registry, new Date(LAP.at))).toMatchObject([{ name: 'live_tree_behind', state: 'seen' }])
 })
 
 test('a throwing schema file puts the sqlite error in the receipt', async () => {

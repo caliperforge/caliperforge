@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { join } from 'node:path'
 import { logged } from '../store/events.ts'
 import { migrate, type Db } from '../store/index.ts'
-import type { Receipt } from '../store/ticks.ts'
+import { BEHIND, type Receipt } from '../store/ticks.ts'
 import { SELF } from './workspace.ts'
 
 const COMMIT = `https://github.com/${SELF}/commit/`
@@ -47,6 +47,16 @@ export function upgraded(db: Db, root: string, lap: Receipt): Receipt {
   if (sha === null) return lap
   const reason = upgrade(db, root, sha)
   return reason === null ? lap : { ...lap, exit: 1, note: `${lap.note}; ${reason}` }
+}
+
+/** The note a tick halts on when the tree cannot move to a landing, naming the local changes `said()` cuts from git's refusal. */
+export function halted(db: Db, root: string): string | null {
+  const sha = behind(db, root)
+  if (sha === null) return null
+  const reason = upgrade(db, root, sha)
+  if (reason === null) return null
+  const paths = git(root, ['status', '--porcelain']).split('\n').filter((line) => line !== '').map((line) => line.slice(3))
+  return `${BEHIND} ${sha.slice(0, 12)}: ${reason}${paths.length === 0 ? '' : `; local change in ${paths.join(', ')}`}`
 }
 
 /**

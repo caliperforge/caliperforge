@@ -1,0 +1,6 @@
+- name: live_tree_behind
+  table: ticks
+  column: at
+  where: "note LIKE 'live tree is behind%'"
+  gap: 1h
+  expected: 0

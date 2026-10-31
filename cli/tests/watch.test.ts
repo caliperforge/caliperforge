@@ -34,8 +34,8 @@ function tickAt(db: Db, minutesAgo: number, note = 'nothing to fire', dry = fals
 interface Row { fired: number; exit: number; note: string }
 
 const NORMAL = { fired: 0, exit: 0, note: 'nothing to fire' }
-const HALT = { fired: 0, exit: 1, note: 'live tree is behind 0123456789ab; it fires nothing until it holds that commit' }
-const REFUSED = { fired: 2, exit: 1, note: 'refused' }
+const HALT = { fired: 0, exit: 1,
+  note: 'live tree is behind 0123456789ab: HEAD cannot fast-forward to 0123456789ab: Aborting; local change in src/hello.ts' }
 const CRASH = { fired: 0, exit: 1, note: `${CRASHED}tick failed` }
 
 /** One receipt a minute, the last `ago` minutes before NOW. */
@@ -50,8 +50,8 @@ function halts(n: number): Row[] {
   return Array.from({ length: n }, () => HALT)
 }
 
-function watched(rows: Row[]): string[] {
-  const db = world()
+function watched(rows: Row[], open = true): string[] {
+  const db = world(open)
   const root = mkdtempSync(join(tmpdir(), 'cf-halt-'))
   const posted: string[] = []
   receipts(db, rows)
@@ -60,25 +60,27 @@ function watched(rows: Row[]): string[] {
   return posted
 }
 
-test('haltAlerts', () => {
-  expect(watched(halts(30))).toEqual(['CaliperForge · the tick is halted'])
-  expect(watched([NORMAL, ...halts(29)])).toEqual([])
-  expect(watched([...halts(15), REFUSED, ...halts(14)])).toEqual([])
-  expect(watched([...halts(15), CRASH, ...halts(14)])).toEqual([])
-})
-
-test('haltClears', () => {
+test('a lasting halt is down once with its note, then up once', () => {
   const db = world()
   const root = mkdtempSync(join(tmpdir(), 'cf-halt-'))
-  const posted: string[] = []
-  const post = (title: string): void => void posted.push(title)
-  receipts(db, halts(30), 1)
+  const posted: { title: string; body: string }[] = []
+  const post = (title: string, body: string): void => void posted.push({ title, body })
+  receipts(db, [NORMAL, ...halts(31)], 1)
+  expect(liveness(db, NOW)).toMatchObject({ stale: true, minutes: 32, halt: HALT.note })
   watch(db, root, NOW, post)
-  receipts(db, [NORMAL])
+  watch(db, root, NOW, post)
+  expect(posted.map((p) => p.title)).toEqual(['CaliperForge · the machine is down'])
+  expect(posted[0]?.body).toContain(HALT.note)
+  receipts(db, [{ fired: 1, exit: 0, note: 'pr-path plan 2 step 7 batch pass' }])
   watch(db, root, NOW, post)
   watch(db, root, NOW, post)
-  expect(posted).toEqual(['CaliperForge · the tick is halted', 'CaliperForge · the tick is firing again'])
-  expect(existsSync(join(root, '.cf/watch.halted'))).toBe(false)
+  expect(posted.slice(1).map((p) => p.title)).toEqual(['CaliperForge · the machine is running again'])
+  expect(existsSync(join(root, '.cf/watch.alerted'))).toBe(false)
+})
+
+test('nine halts, or halts in a closed window, post nothing', () => {
+  expect(watched([NORMAL, ...halts(9)])).toEqual([])
+  expect(watched([NORMAL, ...halts(31)], false)).toEqual([])
 })
 
 test('crashUnchanged', () => {

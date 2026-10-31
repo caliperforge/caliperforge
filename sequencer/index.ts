@@ -45,8 +45,7 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
   ripe(db, now)
   relane(db)
   if (registry !== undefined) await watched(db, root, registry, now, read, labels)
-  if (labels !== undefined) (lines ?? []).push(...intake(db, root, labels), ...refill(db, root, labels, now))
-  if (labels !== undefined) harvested(db, now, labels)
+  if (labels !== undefined) { (lines ?? []).push(...intake(db, root, labels), ...refill(db, root, labels, now)); harvested(db, now, labels) }
   reap(root, terminal(db))
   reprice(db, labels)
   rescored(db, root)

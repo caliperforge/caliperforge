@@ -97,6 +97,7 @@ VALUES
   ('rules/registry/84-waive_resumes_stop.yaml', 'card', 'rules/registry/84-waive_resumes_stop.yaml', 'c1e2bcc3cf950d892c3ca154901d1db5ef1f9e8bbe5ba252661d3f0024bf6211', '2026-10-28'),
   ('rules/registry/85-bench_night.yaml', 'card', 'rules/registry/85-bench_night.yaml', '1a72c3c5fb0286e1a44237fd0fb4969fa5a82cc1afb1351c21a29a8bccafef2c', '2026-10-29'),
   ('rules/registry/86-brief_title_set.yaml', 'card', 'rules/registry/86-brief_title_set.yaml', '680fb7acefd84a44a240bfa73db02fd5e02eebe0336e11af35683b6604b735a8', '2026-10-29'),
+  ('rules/registry/87-ai_stance.yaml', 'card', 'rules/registry/87-ai_stance.yaml', 'ea2e2cff6b6d318c35abc090da983acbb30534e3eb91caadca79a577baf8b55b', '2026-10-31'),
   ('rules/repo-classes.yaml', 'card', 'rules/repo-classes.yaml', 'deaf34870d419639a3eda3e17120eb257ee7b8549ed429bf431c1e6f623a29cb', '2026-10-16'),
   ('rules/staffing.yaml', 'card', 'rules/staffing.yaml', '5cf1dac1e7d334a6cd3bfcab8b322a44e93f57b721297d72c6d4ed31865bfc2e', '2026-10-05'),
   ('completion-audit', 'rail', 'rules/rails.yaml', 'b46b445806d399b61887a5259eb0a6893444efcbe5acf2e6dd534507bc0882f3', '2026-09-17'),

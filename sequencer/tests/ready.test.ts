@@ -5,15 +5,16 @@ import { refusalsOf } from '../../store/refusals.ts'
 import { verdictRows } from '../../store/verdict.ts'
 import { tick } from '../index.ts'
 import type { Fired } from '../kind.ts'
-import { proved } from '../ready.ts'
+import type { Wire } from '../push.ts'
+import { ASKED, CREDITS, proved, SKIPPED } from '../ready.ts'
 import { mapOf } from '../steps.ts'
-import { cloned, srcDir } from '../workspace.ts'
+import { cloned, get, headSha, put, srcDir } from '../workspace.ts'
 import { approve, built, CARRIED, plan, stub, watched, world, type World } from './world.ts'
 
-const atReady = async (log: string[]): Promise<[World, () => Promise<Fired | undefined>]> => {
+const atReady = async (log: string[], over: Partial<Wire> = {}): Promise<[World, () => Promise<Fired | undefined>]> => {
   const w = world()
   approve(w.db, w.target)
-  const wire = watched(log, w.root, 1)
+  const wire = { ...watched(log, w.root, 1), ...over }
   const lap = async (): Promise<Fired | undefined> => (await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire))[0]
   for (let at = 0; at < 6; at += 1) await lap()
   expect(plan(w.db, 1).step).toBe(6)
@@ -66,4 +67,15 @@ test('D2 D3 bytes changed after senior are proved again', async () => {
   expect(plan(w.db, 1).step).toBe(6)
   await lap()
   expect(readyVerdicts(w)).toBe(1)
+})
+
+test('D1 a spent month passes ready without asking Greptile', async () => {
+  const log: string[] = []
+  const [w, lap] = await atReady(log, { rehearse: () => undefined })
+  put(w.root, 2, ASKED, `${'f'.repeat(40)} ${new Date().toISOString()}\n`.repeat(CREDITS))
+  expect(await lap()).toMatchObject({ step: 6, name: 'ready', outcome: 'pass',
+    note: expect.stringContaining('; Greptile skipped: monthly quota spent (50/50)') as unknown })
+  expect(log.filter((l) => l.startsWith('review '))).toEqual([])
+  expect(plan(w.db, 1).step).toBe(7)
+  expect(get(w.root, 1, SKIPPED)).toBe(`${headSha(srcDir(w.root, 1))} monthly quota spent (50/50)\n`)
 })

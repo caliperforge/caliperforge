@@ -254,6 +254,17 @@ test('D1 D2: a rule on a Greptile stop accepts its open ids', async () => {
   expect(ofKind(db, 'return').map((e) => e.message)).toEqual(['step 6'])
 })
 
+test('D5 a stale Greptile escalation goes back to ready', async () => {
+  const { db, home } = seeded('1')
+  db.exec('UPDATE plans SET step = 6 WHERE id = 7')
+  logged(db, { plan: 7, kind: 'ready', actor: 'kernel', outcome: 'escalate', pointer: null, run: null,
+    message: 'Greptile was asked 3 times on this job; asking again at abc is the COO\'s call' })
+  const unfired: Provider = { name: 'claude-agent-sdk', fire: () => { throw new Error(REPLY.rule) } }
+  await cooLite(db, home, row(db), unfired, now, () => undefined, wire())
+  expect(row(db)).toMatchObject({ state: 'queued', step: 6 })
+  expect(told(db)).toEqual([{ actor: 'director', outcome: 'pass', message: 'return: Greptile\'s quota is spent, so ready goes on without it' }])
+})
+
 test('D3: a rails stop or no open ids writes no rulings.md', async () => {
   const rails = seeded('1')
   await run(rails.db, rails.home, REPLY.rule ?? '')

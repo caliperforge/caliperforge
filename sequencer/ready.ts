@@ -31,6 +31,8 @@ const FIRST_ONLY = 40
 
 export const ASKED = 'greptile.asked'
 
+export const SKIPPED = 'greptile.skipped'
+
 export function monthly(root: string, now: Date): number {
   const month = now.toISOString().slice(0, 7)
   const work = join(root, '.cf/work')
@@ -100,21 +102,19 @@ function greptile(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire,
   return `; Greptile scored ${at} ${String(score)}/5; the COO accepted ${ruled.join(', ')}`
 }
 
-/** Greptile's plan gives {@link CREDITS} credits a month, so a job asks for at most this many reviews. */
+/** Greptile's plan gives {@link CREDITS} credits a month, so a job asks for at most this many reviews; past the cap, the job skips Greptile. */
 const ASKS = 3
 
-function asked(root: string, plan: number, sha: string, repo: string, wire: Wire): Outcome | null {
+function asked(root: string, plan: number, sha: string, repo: string, wire: Wire): string | null {
   const text = maybe(root, plan, ASKED) ?? ''
   const heads = text.split('\n').filter((l) => l !== '').map((l) => l.split(' ')[0])
   if (heads.includes(sha)) return null
-  if (heads.length >= ASKS) {
-    return { outcome: 'needs_ceo', spans: ['greptile.requests'],
-      note: `Greptile was asked ${String(ASKS)} times on this job; asking again at ${sha.slice(0, 12)} is the COO's call` }
-  }
-  const month = heads.length === 0 ? 0 : monthly(root, new Date())
-  if (month >= FIRST_ONLY) {
-    return { outcome: 'needs_ceo', spans: ['greptile.month'],
-      note: `Greptile was asked ${String(month)}/${String(CREDITS)} times this month; another review at ${sha.slice(0, 12)} is the COO's call` }
+  const month = monthly(root, new Date())
+  const why = heads.length >= ASKS ? `asked ${String(ASKS)} times on this job`
+    : month >= (heads.length === 0 ? CREDITS : FIRST_ONLY) ? `monthly quota spent (${String(month)}/${String(CREDITS)})` : null
+  if (why !== null) {
+    put(root, plan, SKIPPED, `${sha} ${why}\n`)
+    return `; Greptile skipped: ${why}`
   }
   wire.review(`${FORK}/${repoName(repo)}`, rehearsalBranch(root, plan))
   put(root, plan, ASKED, `${text}${sha} ${new Date().toISOString()}\n`)

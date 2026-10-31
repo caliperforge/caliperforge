@@ -8,7 +8,7 @@ import { decision } from '../store/ask.ts'
 import { appliedOf, decided, decisions } from '../store/decisions.ts'
 import { pushed } from '../store/deliverables.ts'
 import { asked, setting } from '../store/drift.ts'
-import { kindsOf, logged } from '../store/events.ts'
+import { eventsOf, kindsOf, logged } from '../store/events.ts'
 import { resumed, retried, returnToLane } from '../store/holds.ts'
 import type { Db } from '../store/index.ts'
 import { wall } from '../store/lanes.ts'
@@ -56,6 +56,7 @@ const Said = z.object({
 
 const CAPPED = ['rule', 'waive', 'split', 'park']
 const DESIGN = /^step 4 review refused by \S+\n\ndesign[: ]/
+const QUOTA = /^Greptile was asked .* is the COO's call$/
 
 type Move = z.infer<typeof Said> | { move: 'split'; why: string; parts: Part[] }
 
@@ -67,10 +68,8 @@ export function applying(db: Db): boolean {
 
 export async function cooLite(db: Db, root: string, plan: PlanRow, provider: Provider, now: Date, post: Post,
   wire: Wire = WIRE, tried?: string): Promise<string> {
-  if (plan.state !== 'blocked_on_ceo' && plan.state !== 'halted') {
-    return WAITING.has(plan.wait_reason ?? '') ? told(db, root, plan, now, { outcome: 'pass', message: `left alone: plan is ${plan.state}, waiting on ${plan.wait_reason ?? ''}` })
-      : told(db, root, plan, now, { outcome: 'needs_coo', message: `ask_ceo: plan is ${plan.state}, not stopped` }, post)
-  }
+  const left = unasked(db, root, plan, now, post)
+  if (left !== null) return left
   if (plan.wait_reason === 'token_ceiling' && sentOnce(db, plan.id)) return twice(db, root, plan, now, post)
   const filed = applying(db) ? repeated(db, root, plan, wire, now) : null
   if (filed !== null) return told(db, root, plan, now, { outcome: 'pass', message: `file: ${filed.why}`, pointer: filed.url })
@@ -104,6 +103,16 @@ export async function cooLite(db: Db, root: string, plan: PlanRow, provider: Pro
   if (m.move !== 'fix') return handUp(db, root, plan, { outcome: 'needs_coo', message: failed }, said, provider, now, post, wire, stuck)
   stuck()
   return told(db, root, plan, now, { outcome: 'needs_coo', message: failed }, post)
+}
+
+function unasked(db: Db, root: string, plan: PlanRow, now: Date, post: Post): string | null {
+  if (plan.state !== 'blocked_on_ceo' && plan.state !== 'halted') {
+    return WAITING.has(plan.wait_reason ?? '') ? told(db, root, plan, now, { outcome: 'pass', message: `left alone: plan is ${plan.state}, waiting on ${plan.wait_reason ?? ''}` })
+      : told(db, root, plan, now, { outcome: 'needs_coo', message: `ask_ceo: plan is ${plan.state}, not stopped` }, post)
+  }
+  if (plan.state !== 'blocked_on_ceo' || !eventsOf(db, plan.id, 'ready').slice(-1).some((e) => e.outcome === 'escalate' && QUOTA.test(e.message))) return null
+  returnToLane(db, plan.id, 'director')
+  return told(db, root, plan, now, { outcome: 'pass', message: 'return: Greptile\'s quota is spent, so ready goes on without it' })
 }
 
 function twice(db: Db, root: string, plan: PlanRow, now: Date, post: Post): string {

@@ -18,7 +18,7 @@ import type { Board } from '../rails/ci-green/index.ts'
 import { carried as rows } from '../rails/completion-audit/index.ts'
 import { prTitle } from './pr.ts'
 import { BOARD, headOf, opened, rehearsalBranch, title } from './push.ts'
-import { GRADING } from './ready.ts'
+import { GRADING, SKIPPED } from './ready.ts'
 import { checked } from './seat.ts'
 import { work, type Hit } from './theirs.ts'
 import { UNRUN } from './triggers.ts'
@@ -176,7 +176,7 @@ function bodyFor(db: Db, root: string, card: Card, desk: Desk, read: Read): stri
     `- Gates: ${card.marks.map((m) => `${m.name} ${m.ok ? 'pass' : 'NOT PASSED'}`).join(', ')}`,
     ...modes(root, card.id),
     ci === null ? `- ${maybe(root, card.id, 'ci.unrun') === head.sha ? UNRUN : 'this repo has no CI'}; checked with: ${ranAt(db, root, card.id)}` : `- Their CI on our fork: ${ciLine(ci)}`,
-    `- Greptile on our fork: ${greptileLine(db, card.id, head.sha)}`,
+    `- Greptile on our fork: ${greptileLine(db, root, card.id, head.sha)}`,
     open === null
       ? `- Goes out as: a new pull request titled ${code(prTitle(root, card.id))}`
       : `- Goes out as: a follow-up commit on our open pull request ${code(open)}`,
@@ -286,8 +286,10 @@ function headline(passed: boolean, ci: Board[] | null): string {
   return `Waiting on you. The four gates passed, but ${String(off)} of their workflows ${off === 1 ? 'is' : 'are'} not green: read the CI line first.`
 }
 
-function greptileLine(db: Db, plan: number, sha: string): string {
+function greptileLine(db: Db, root: string, plan: number, sha: string): string {
   const score = graded(db, plan, sha)?.score ?? null
+  const [at, ...why] = (maybe(root, plan, SKIPPED) ?? '').trim().split(' ')
+  if (score === null && at === sha) return `skipped: ${why.join(' ')}`
   return score === null ? `no score at this head; ready went on after ${String(GRADING)} ticks without one` : `${String(score)}/5 at this head`
 }
 

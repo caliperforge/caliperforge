@@ -65,7 +65,7 @@ export async function judge(
   if (last.outcome === null) throw new Error(last.reason === null ? 'reviewers.verdict_fence' : `reviewers.verdict_fence: ${last.reason}`)
   const tokens = first.tokens + (refired?.tokens ?? 0)
   const seconds = first.seconds + (refired?.seconds ?? 0)
-  const stands = narrowed(last.outcome, built.bench)
+  const stands = unconfirmed(narrowed(last.outcome, built.bench))
   return { run: last.run, verdict: record(db, root, name, plan, stands, tokens, seconds, tree), outcome: stands }
 }
 
@@ -113,6 +113,14 @@ function narrowed(v: Judged, bench: Bench): Judged {
   const message = `${v.message}\n\nNoted, not refused, unchanged since my last verdict:\n${noted.map((s) => `  - ${s}`).join('\n')}`
   if (spans.length > 0) return { ...v, spans, findings: v.findings.filter((f) => spans.includes(f.span)), message }
   return { ...v, outcome: 'pass', spans: [], findings: [], defect_class: null, origin_kind: null, origin_ref: null, message }
+}
+
+/** One `- not confirmed:` line on a `# Removed tests` entry refuses the pass it sits in. */
+function unconfirmed(v: Judged): Judged {
+  if (v.outcome !== 'pass' || !/^- not confirmed: /m.test(v.message)) return v
+  const span = 'removed-tests.md'
+  return { ...v, outcome: 'refuse', defect_class: 'correctness', spans: [span], findings: [{ span, kind: 'real', fix: null }], notes: [],
+    origin_kind: 'ruling', origin_ref: 'reviewers.verdict' }
 }
 
 function builderRan(db: Db, plan: number, seat: string, step: number): boolean {

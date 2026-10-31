@@ -95,6 +95,25 @@ async function reviewed(language: string, origin: string | null = null):
   return { prompt: seen[0]?.prompt ?? '', root: w.root, seat: runRows(w.db).at(-1)?.seat, mode: newestMode(w.db) }
 }
 
+test('D6 step 5 carries # Removed tests, step 4 does not', async () => {
+  const w = world()
+  checkout(w.root, 1, 'acme/widget', 'widget-12-a1')
+  built(w.root, 1, 'export const two = 2')
+  put(w.root, 1, 'issue.md', '# hello\n\n- D1 add `hello()` in `src/hello.ts`\n')
+  const kept = "- removed: one | file: t/a.test.ts | why: retired by brief line 'drop one'"
+  const handed = "- removed: two | file: t/a.test.ts | why: replaced by 'three'"
+  put(w.root, 1, 'removed-tests.md', `${kept}\n- removed: four\n`)
+  put(w.root, 1, 'step-2.handback.md', `HANDBACK_MARKER\n${handed}\n`)
+  const row = { ...plan(w.db, 1), origin: 'https://github.com/caliperforge/cf/issues/1' }
+  const prompt = async (step: number): Promise<string> => {
+    const seen: Packet[] = []
+    await fireLanded(w.db, w.root, row, at(step), stub(CARRIED, 0, PASS, (p) => seen.push(p)))
+    return seen[0]?.prompt ?? ''
+  }
+  expect(await prompt(4)).not.toContain('# Removed tests')
+  expect(await prompt(5)).toContain(`# Removed tests\n\n${kept}\n${handed}`)
+})
+
 test.each(['swift', 'kotlin'])('D2 D3 outside %s step 4 fires its seat in review', async (language) => {
   const r = await reviewed(language)
   const own = readFileSync(join(r.root, 'seats', `${language}_specialist`, 'prompt.md'), 'utf8')

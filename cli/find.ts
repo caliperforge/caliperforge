@@ -36,14 +36,16 @@ interface Answer { yes: boolean; says: string }
 
 interface Checked { section: string; park: string | null }
 
-export function find(repo: string, no: number, carded: boolean, read: Read): Checked {
+interface Signed { target: number; digest: string }
+
+export function find(repo: string, no: number, carded: boolean, signed: Signed | null, read: Read): Checked {
   const row = Issue.parse(read(['issue', 'view', String(no), '--repo', repo, '--json',
     'number,title,body,state,url,author,assignees,comments,closedByPullRequestsReferences,projectItems']))
   const merged = Merged.parse(read(['pr', 'list', '--repo', repo, '--state', 'merged', '--limit', String(WINDOW),
     '--json', 'url,author,mergedBy,body,additions,deletions,files']))
   const mergers = logins(merged.map((p) => p.mergedBy))
   const answers = Object.entries({
-    wanted: wanted(row, mergers),
+    wanted: wanted(row, mergers, signed),
     unclaimed: unclaimed(repo, row, carded, read),
     shape: shape(merged, mergers),
   })
@@ -52,12 +54,13 @@ export function find(repo: string, no: number, carded: boolean, read: Read): Che
   return { section: `${CHECK}\n\n${lines.join('\n')}\n`, park: refused === undefined ? null : `${refused[0]}: ${refused[1].says}` }
 }
 
-function wanted(row: z.infer<typeof Issue>, mergers: string[]): Answer {
+function wanted(row: z.infer<typeof Issue>, mergers: string[], signed: Signed | null): Answer {
   if (mergers.includes(row.author.login)) return { yes: true, says: `a maintainer opened it ${row.url}` }
   const said = row.comments.find((c) => mergers.includes(c.author.login))
   if (said !== undefined) return { yes: true, says: `a maintainer commented ${said.url}` }
   const board = row.projectItems[0]
   if (board !== undefined) return { yes: true, says: `on the board "${board.title}" ${row.url}` }
+  if (signed !== null) return { yes: true, says: `the CEO approved target ${String(signed.target)} (${signed.digest.slice(0, 12)})` }
   return { yes: false, says: `no maintainer opened or commented on it, and it is on no board ${row.url}` }
 }
 

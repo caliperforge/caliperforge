@@ -14,6 +14,7 @@ import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import type { PlanRow } from '../store/plans.ts'
 import { clamp, quieted } from './balances.ts'
+import { critic } from './critic.ts'
 import { deps } from './deps.ts'
 import { costWall, written } from './generated.ts'
 import { inBare, listedIn } from './listed.ts'
@@ -130,7 +131,8 @@ export async function generate(db: Db, root: string, plan: PlanRow, step: Step, 
   const tmp = real(join(planDir(root, plan.id), 'scratch'))
   const issue = ask(granted[0], granted.find((path) => basename(path) === 'x-ray'), tmp)
   const fire = firing({ db, root, plan, step, provider, name, dir, tmp, granted, walls, ceiling: CEILING }, manifest, hash)
-  const sum = name === 'fizz_lean_generator' ? await phased(fire, granted[0] ?? '', join(dir, SUITE, META, 'handoff'), issue) : await fire(prompt, issue, START)
+  const sum = name === 'fizz_lean_generator' ? await phased(fire, granted[0] ?? '', join(dir, SUITE, META, 'handoff'), issue,
+    () => critic(join(granted.find((path) => basename(path) === 'fizz') ?? '', 'references/critic-pass.md'), dir)) : await fire(prompt, issue, START)
   if ('outcome' in sum) return sum
   const { tokens, seconds, transcripts, wall } = sum
   if (wall !== null) return written(root, plan.id, dir, transcripts, { suite: SUITE, tokens, seconds, wall }, wall)

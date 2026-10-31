@@ -11,6 +11,7 @@
 - Fill your handoff's fact sections (## Signatures, ## Guards, ## Roles, ## Limits) with what the next phase needs, each row naming the file and line range you read it at, or - none when there is nothing to carry.
 - Before you end, write {META_DIR}/handoff/invariants.md, the path the issue names, from its `# Handoff: invariants` block, with {PROJECT_ROOT}/{META_DIR}/context.md and each file the next phase needs under `## Reads`.
 - Before you end, write your own report to {PROJECT_ROOT}/{META_DIR}/reports/invariants-phase.md and return a summary of at most 300 words.
+- Before you write the handoff, run both checks in {SKILL_PATH}/references/critic-pass.md and clear every hit the way that file says.
 
 ## Step 9: Generate Invariants (5 Parallel Discovery Agents + Synthesizer + 2 Implementers)
 

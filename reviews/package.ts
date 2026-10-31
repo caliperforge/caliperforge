@@ -14,7 +14,7 @@ export interface Gated {
   language: string
   dir: string
   command: string
-  outcome?: 'skipped'
+  outcome?: 'skipped' | 'fail'
 }
 
 export function coverage(gates: Gated[], diff: string): string | undefined {

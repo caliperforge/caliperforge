@@ -85,6 +85,12 @@ export function targetSigned(db: Db, target: number, digest: string): boolean {
   return true
 }
 
+/** The signer is the `signoff` event's actor: `approvals.who` is `ceo` on every target row, whoever signed. */
+export function ceoSigned(db: Db, target: number, digest: string): boolean {
+  return targetSigned(db, target, digest) && db.prepare(`SELECT 1 FROM events WHERE kind = 'signoff' AND actor = 'ceo'
+    AND outcome = 'pass' AND pointer = ? AND message = ?`).get(`target:${String(target)}`, digest.slice(0, 12)) !== undefined
+}
+
 export function planSigned(db: Db, plan: number, digest: string): boolean {
   return db.prepare("SELECT 1 FROM approvals WHERE subject_kind = 'plan' AND subject_id = ? AND subject_digest = ? AND decision = 'approved'")
     .get(plan, digest) !== undefined

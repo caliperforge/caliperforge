@@ -1,7 +1,7 @@
-import { appendFileSync, cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { appendFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { expect, test } from 'vitest'
+import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import { fresh } from '../../../checks/sqlite.ts'
 import type { Packet, Provider } from '../../../providers/kind.ts'
 import { real } from '../../../runner/index.ts'
@@ -38,6 +38,17 @@ const FILLED: Record<string, string> = {
 const PHASES = Object.keys(FILLED)
 const SPAWN = JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Agent', input: {} }] } })
 const HANDOFFS = 'test/fizz/fizz_data/handoff'
+
+const CLEAN = "## Share-Converted Comparisons\n\n```sh\ngrep -rn 'assertEq(.*convertToAssets' {SUITE_DIR}\n```\n\n## Unbounded Stand-ins\n\n```sh\ngrep -rln 'contract Mock' {SUITE_DIR}\n```\n"
+
+beforeEach(() => {
+  const home = mkdtempSync(join(tmpdir(), 'cf-fizz-home-'))
+  mkdirSync(join(home, '.claude/skills/fizz/references'), { recursive: true })
+  writeFileSync(join(home, '.claude/skills/fizz/references/critic-pass.md'), CLEAN)
+  vi.stubEnv('HOME', home)
+})
+
+afterEach(() => { vi.unstubAllEnvs() })
 
 const phaseOf = (packet: Packet | undefined): string | undefined => /^# Fizz lean: (\w+)/m.exec(packet?.prompt ?? '')?.[1]
 
@@ -116,6 +127,13 @@ test('D1 D5: lean fires each phase but campaigns, one run each', async () => {
   expect(paths).toHaveLength(4)
   expect(new Set(paths).size).toBe(4)
   for (const path of paths) expect(path).toMatch(/run-\d+\.transcript\.jsonl$/)
+  expect(readFileSync(join(packets[3]?.cwd ?? '', HANDOFFS, 'critic.md'), 'utf8')).toBe('')
+})
+
+test('D8: a plain fizz run fires once and writes no critic.md', async () => {
+  const { packets } = await generated('fizz')
+  expect(packets).toHaveLength(1)
+  expect(existsSync(join(packets[0]?.cwd ?? '', HANDOFFS, 'critic.md'))).toBe(false)
 })
 
 test('D1: each lean run records its phase, fizz records none', async () => {

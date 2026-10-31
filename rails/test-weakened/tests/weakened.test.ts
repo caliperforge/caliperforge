@@ -6,7 +6,7 @@ import { planRow } from '../../../runner/index.ts'
 import { load } from '../../../runner/rules.ts'
 import { verdictRows } from '../../../store/verdict.ts'
 import { record } from '../../record.ts'
-import { weakened } from '../index.ts'
+import { retired, weakened } from '../index.ts'
 
 const root = join(import.meta.dirname, '../../..')
 
@@ -79,6 +79,42 @@ test('passes a loose assertion added beside a named removal', () => {
 
 test('refuses a loose assertion beside a removal named for another', () => {
   expect(weakened(loosened, 'green', 'remove other').spans).toEqual(['t/b.test.ts:2 test.weakened.loosened'])
+})
+
+const TITLES = ['one', 'two', 'three', 'four']
+const retiring = (t: string): string => `-test('${t}', () => {\n-  const a = parse(F)\n \n-  expect(a).toBe(1)\n-})\n`
+const shaped = `--- a/t/c.test.ts\n+++ b/t/c.test.ts\n@@ -1,20 +1,7 @@\n test('kept', () => {\n-  expect(two()).toBe(2)\n+  expect(two()).toBe(6)\n })\n${TITLES.map(retiring).join('')}`
+const removal = (t: string): string => `- removed: ${t} | file: t/c.test.ts | why: retired by brief line 'drop ${t}'`
+const listing = TITLES.map(removal).join('\n')
+
+test('D1 passes a 1978-shaped diff whose every title is listed', () => {
+  expect(weakened(shaped, 'green', TITLES.join(' ')).outcome).toBe('refuse')
+  expect(weakened(shaped, 'green', '', listing)).toMatchObject({ outcome: 'pass', spans: [] })
+})
+
+test('D2 refuses as today with one title missing from the block', () => {
+  const verdict = weakened(shaped, 'green', '', TITLES.slice(1).map(removal).join('\n'))
+  expect(verdict.outcome).toBe('refuse')
+  expect(verdict.spans).toEqual(['t/c.test.ts:2 test.weakened.removed'])
+})
+
+test('D3 refuses an added .skip with or without the block', () => {
+  const skipped = shaped.replace(' })\n', ` })\n+${['test', 'skip'].join('.')}('later', () => {})\n`)
+  expect(weakened(skipped, 'green', '', listing).spans).toEqual(['t/c.test.ts:4 test.weakened.skipped'])
+  expect(weakened(skipped, 'green').spans).toEqual(['t/c.test.ts:2 test.weakened.removed', 't/c.test.ts:4 test.weakened.skipped'])
+})
+
+test('D4 lines off the shape and a titleless file judge as today', () => {
+  const off = ['- removed: one | file: t/c.test.ts', '- removed: one | file: t/c.test.ts | why: replaced by two'].join('\n')
+  expect(retired(`${off}\nprose\n${removal('one')}\n`, removal('two'))).toBe(`${removal('one')}\n${removal('two')}`)
+  expect(weakened(shaped, 'green', '', TITLES.map((t) => off.replaceAll('one', t)).join('\n')).spans).toEqual(['t/c.test.ts:2 test.weakened.removed'])
+  const titleless = `${header}-  expect(keep()).toBe(1)\n })\n`
+  const stays = '- removed: stays | file: t/b.test.ts | why: retired by brief line \'x\''
+  expect(weakened(titleless, 'green', '', stays).spans).toEqual(['t/b.test.ts:2 test.weakened.removed'])
+})
+
+test('D5 the refuse names removed-tests.md and the line shape', () => {
+  expect(weakened(shaped, 'green').message).toContain('removed-tests.md as `- removed: <exact test title> | file: <path> | why: replaced by \'<new title>\'`')
 })
 
 test('refuses a removed XCTAssert under a Swift Tests folder', () => {

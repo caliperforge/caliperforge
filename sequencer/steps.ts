@@ -16,7 +16,7 @@ import { nullChecked, scored, scratch, steps as bench } from '../templates/bench
 import { capture, desk, facts, gather, pack, score, steps as comms } from '../templates/comms.ts'
 import { at, last, steps, type Step } from '../templates/pr-path.ts'
 import { question, record, steps as research } from '../templates/research.ts'
-import { approved, approvedPlan, batch } from './approve.ts'
+import { approved, approvedPlan, batch, ceoApproved } from './approve.ts'
 import type { Outcome } from './kind.ts'
 import { preReview } from './rails.ts'
 import { readyGate, proven, repoOf, target, type Target } from './ready.ts'
@@ -215,15 +215,15 @@ export function measure(db: Db, root: string, plan: PlanRow, read?: Read): Outco
   }
   const house = read === undefined ? null : moved(root, row.repo, read)
   if (house !== null) return { outcome: 'refuse', spans: [`house/${row.repo}.md`], note: house }
-  const park = read === undefined ? null : checked(root, plan, row, read)
+  const park = read === undefined ? null : checked(db, root, plan, row, read)
   if (park === null) return { outcome: 'pass', spans: [], note: `${row.repo}#${String(row.issue_no)} ${row.pulse}` }
   setTargetState(db, plan.target_id, 'parked')
   return { outcome: 'refuse', held: true, spans: [span], note: park }
 }
 
-function checked(root: string, plan: PlanRow, row: Target, read: Read): string | null {
+function checked(db: Db, root: string, plan: PlanRow, row: Target, read: Read): string | null {
   const ask = maybe(root, plan.id, 'ask.md') ?? ''
-  const found = find(row.repo, row.issue_no, ask.includes(CARD), read)
+  const found = find(row.repo, row.issue_no, ask.includes(CARD), ceoApproved(db, plan), read)
   const at = ask.lastIndexOf(`\n${CHECK}\n`)
   put(root, plan.id, 'ask.md', `${at === -1 ? ask : ask.slice(0, at)}\n${found.section}`)
   return found.park

@@ -28,7 +28,7 @@ const Merged = z.array(z.object({
   files: z.array(z.object({ path: z.string() })),
 }))
 
-const Siblings = z.array(z.object({ url: z.string(), repository: z.object({ nameWithOwner: z.string() }) }))
+const Siblings = z.array(z.object({ url: z.string(), title: z.string(), body: z.string(), repository: z.object({ nameWithOwner: z.string() }) }))
 
 export const CHECK = '## Target check'
 
@@ -69,8 +69,11 @@ function unclaimed(repo: string, row: z.infer<typeof Issue>, carded: boolean, re
   if (claim !== null) return { yes: false, says: `${claim} ${row.url}` }
   const shipped = carded ? null : implemented(repo, row, read)
   if (shipped !== null) return { yes: false, says: `${shipped} ${shipped.replace(/^\D*#(\d+)\D*$/, `https://github.com/${repo}/pull/$1`)}` }
+  const escaped = repo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const names = new RegExp(`(?:${escaped}#|https://github\\.com/${escaped}/issues/)${String(row.number)}(?!\\d)`, 'i')
   const sibling = Siblings.parse(read(['search', 'prs', `${repo}#${String(row.number)}`, '--owner', repo.slice(0, repo.indexOf('/')),
-    '--state', 'open', '--json', 'url,repository'])).find((p) => p.repository.nameWithOwner !== repo)
+    '--state', 'open', '--json', 'url,title,body,repository']))
+    .find((p) => p.repository.nameWithOwner !== repo && names.test(`${p.title}\n${p.body}`))
   if (sibling !== undefined) return { yes: false, says: `an open pull request in ${sibling.repository.nameWithOwner} names it ${sibling.url}` }
   return { yes: true, says: `no assignee, claim, closer or sibling pull request ${row.url}` }
 }

@@ -1,12 +1,9 @@
 import type { HookCallback, HookInput, Options } from '@anthropic-ai/claude-agent-sdk'
 
 /** Bash in the sandbox with no host allowed and no unsandboxed retry; a sandbox that cannot start ends the run with an error result. */
-export function sealed(tmp: string | undefined): Pick<Options, 'sandbox' | 'canUseTool'> {
-  return {
-    sandbox: { enabled: true, failIfUnavailable: true, allowUnsandboxedCommands: false, network: { allowedDomains: [], strictAllowlist: true },
-      ...(tmp === undefined ? {} : { filesystem: { allowWrite: [tmp] } }) },
-    canUseTool: (tool) => Promise.resolve({ behavior: 'deny', message: `ruling:run.offline refuses ${tool}: an offline run is asked nothing` }),
-  }
+export const SEALED: Pick<Options, 'sandbox' | 'canUseTool'> = {
+  sandbox: { enabled: true, failIfUnavailable: true, allowUnsandboxedCommands: false, network: { allowedDomains: [], strictAllowlist: true }, filesystem: { disabled: true } },
+  canUseTool: (tool) => Promise.resolve({ behavior: 'deny', message: `ruling:run.offline refuses ${tool}: an offline run is asked nothing` }),
 }
 
 /** Every host is refused on an offline run, so a Bash call that failed to reach one met the sandbox. */

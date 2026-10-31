@@ -9,6 +9,7 @@ import { record as recordFiles } from '../store/files.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { allPlans, internal, stampHead, type PlanRow } from '../store/plans.ts'
+import { profile } from '../store/profile.ts'
 import { evidenceOf, lastCi, passed, railedParts, target, targetRepo, unanswered } from '../store/ready.ts'
 import { diffAt } from '../store/refusals.ts'
 import { graded, greptiled } from '../store/signals.ts'
@@ -16,7 +17,7 @@ import type { Step } from '../templates/pr-path.ts'
 import { writable } from './brief.ts'
 import type { Outcome } from './kind.ts'
 import { forkCi, GRADES, headOf, holding, rehearsalBranch, title, WIRE, type Wire } from './push.ts'
-import { cloned, diffOf, FORK, get, headSha, maybe, put, repoName, srcDir } from './workspace.ts'
+import { cloned, diffOf, FORK, get, git, headSha, MAIN, maybe, put, repoName, srcDir, tried } from './workspace.ts'
 import { forkOf, homeOf } from './home.ts'
 import { learned } from './learn.ts'
 import { baseMoved } from './merge.ts'
@@ -57,6 +58,8 @@ export function readyGate(db: Db, root: string, plan: PlanRow, wire?: Wire): Out
   if (row.state === 'built' || row.diff_digest !== digestOf(diffOf(root, plan.id))) {
     return { outcome: 'pass', spans: ['ready.unproven'], rewind: 3, note: 'the head\'s bytes are not the ones senior passed; back to the rails' }
   }
+  const bare = unsigned(root, plan, repo)
+  if (bare !== null) return bare
   const stack = stacked(root, plan, repo, (wire ?? WIRE).merged)
   if (stack !== null) return stack
   const fork = forkOf(root, plan)
@@ -69,6 +72,18 @@ export function readyGate(db: Db, root: string, plan: PlanRow, wire?: Wire): Out
   const verdict = readyRail(proofOf(db, root, plan, repo, { ...row, bot_clean: Number(fresh) }))
   recordRail(db, join(root, 'rails/ready'), plan.id, verdict, 0)
   return { outcome: verdict.outcome, spans: verdict.spans, note: `ready: ${verdict.message}${bot}${fork === null ? '' : `; ${lastCi(db, plan.id)?.message ?? ''}`}` }
+}
+
+/** Upstream's commits and those our fork already shows are never judged: neither can be re-signed without a force push. */
+function unsigned(root: string, plan: PlanRow, repo: string): Outcome | null {
+  if (profile(root, repo)?.signed !== true) return null
+  const dir = srcDir(root, plan.id)
+  const shown = `refs/remotes/origin/${git(dir, ['rev-parse', '--abbrev-ref', 'HEAD']).trim()}`
+  const fork = tried(dir, ['rev-parse', '-q', '--verify', shown]) === null ? [] : [`^${shown}`]
+  const sha = git(dir, ['rev-list', 'HEAD', `^${MAIN}`, ...fork]).split('\n').filter((s) => s !== '')
+    .find((s) => !/^gpgsig /m.test(git(dir, ['cat-file', 'commit', s])))
+  return sha === undefined ? null
+    : { outcome: 'refuse', spans: ['ready.unsigned'], note: `${sha.slice(0, 12)} is unsigned and ${repo} requires signed commits` }
 }
 
 /** Ticks an outside head waits for Greptile's score before ready goes on without one. */

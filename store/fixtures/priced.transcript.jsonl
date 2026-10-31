@@ -1,0 +1,2 @@
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"done"}]}}
+{"type":"result","subtype":"success","is_error":false,"result":"done","total_cost_usd":14.06,"modelUsage":{"claude-opus-5-5":{"inputTokens":15177,"outputTokens":1234,"cacheReadInputTokens":2139,"cacheCreationInputTokens":20089,"costUSD":0.25},"claude-sonnet-5":{"inputTokens":402,"outputTokens":418656,"cacheReadInputTokens":29640196,"cacheCreationInputTokens":1480800,"costUSD":13.81}}}

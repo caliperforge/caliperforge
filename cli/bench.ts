@@ -12,13 +12,18 @@ import { addPlan, briefed, holderOf, pipeNamed, planById, plansOf, rewind, type 
 import { refusalRows } from '../store/refusals.ts'
 import { generated, lastTranscript } from '../store/runs.ts'
 import { copied } from '../templates/bench.ts'
+import { phasesOf } from '../templates/phases.ts'
 import { profiled } from '../templates/profile.ts'
 import type { Cli } from './cf-lanes.ts'
 
-export function fileBench(db: Db, root: string, target: string | undefined, all: boolean, seat: string, at: string): number[] {
+export function fileBench(db: Db, root: string, target: string | undefined, all: boolean, seat: string, at: string, stop?: string): number[] {
   const key = staffing(root).find((r) => r.template === 'bench' && r.step === 1 && r.seat === seat)?.key
   if (key === undefined) throw new Error(`${seat} is not a bench generator in rules/staffing.yaml`)
   if (all === (target !== undefined)) throw new Error('cf bench file takes <target> or --all')
+  if (stop !== undefined) {
+    const list = phasesOf(join(root, 'seats/fizz_lean_generator/skill')).slice(0, -1)
+    if (seat !== 'fizz_lean_generator' || !list.includes(stop)) throw new Error(`--stop-after takes one of ${list.join(', ')} on fizz_lean_generator`)
+  }
   const pipe = pipeNamed(db, 'bench')
   if (pipe === null) throw new Error('no pipe "bench"')
   const dir = mkdtempSync(join(tmpdir(), 'cf-fuzz-bench-'))
@@ -33,7 +38,7 @@ export function fileBench(db: Db, root: string, target: string | undefined, all:
     return names.filter((name) => noSuite(db, root, name, key) === undefined).map((name) => {
       const id = addPlan(db, { pipe_id: pipe.id, target_id: null, template: 'bench', state: 'queued', queued_at: at, lane: null, seat: null, origin: null, step: 0 })
       briefed(db, id, { title: `Bench: score ${key} on ${name} (catch / miss / false alarm)`, what: null, why: null, ends: null })
-      put(root, id, 'target.yml', copied(readFileSync(join(targets, `${name}.yml`), 'utf8'), name, key))
+      put(root, id, 'target.yml', `${copied(readFileSync(join(targets, `${name}.yml`), 'utf8'), name, key)}${stop === undefined ? '' : `stop_after: ${stop}\n`}`)
       return id
     })
   } finally {
@@ -121,8 +126,9 @@ export function registerBench(cf: Command, { root, db, out }: Cli): void {
   const bench = cf.command('bench')
   bench.command('file').argument('[target]').option('--all', 'one plan per targets/*.yml')
     .requiredOption('--generator <seat>', 'a bench generator in rules/staffing.yaml')
-    .action((target: string | undefined, options: { all?: boolean; generator: string }) => {
-      for (const id of fileBench(db(), root, target, options.all === true, options.generator, new Date().toISOString())) {
+    .option('--stop-after <phase>', 'park a fizz_lean_generator run once this phase hands off')
+    .action((target: string | undefined, options: { all?: boolean; generator: string; stopAfter?: string }) => {
+      for (const id of fileBench(db(), root, target, options.all === true, options.generator, new Date().toISOString(), options.stopAfter)) {
         out(`plan ${String(id)}\t${[...get(root, id, 'target.yml').matchAll(/^target: (.*)$/gm)].at(-1)?.[1] ?? ''}\n`)
       }
     })

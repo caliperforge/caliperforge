@@ -1,4 +1,4 @@
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import { z } from 'zod'
@@ -22,6 +22,7 @@ import { refusalRows } from '../store/refusals.ts'
 import { transcripts } from '../store/runs.ts'
 import { byRun, outputs, pending } from '../store/transcript.ts'
 import { DEFAULT_BUILDER, type Step } from './pr-path.ts'
+import { planted } from './rooted.ts'
 import { verified, type Ran } from './verified.ts'
 
 export const FENCE = /(?:^|\n)(?:```\w*\n)?---[ \t]*\n(sources:[\s\S]*?)\n---[ \t]*(?:\n```[ \t]*)?\s*$/
@@ -172,10 +173,7 @@ function suited(db: Db, root: string, plan: PlanRow): Outcome | null {
   const named = askOf(root, plan).split('\n').find((l) => l.startsWith(SUITE))?.slice(SUITE.length).trim()
   if (named === undefined) return null
   try {
-    const { suites } = scoredSuite(db, root, Number(named))
-    const into = join(srcDir(root, plan.id), '.cf/measure/suite')
-    rmSync(into, { recursive: true, force: true })
-    cpSync(suites, into, { recursive: true })
+    planted(root, Number(named), join(srcDir(root, plan.id), '.cf/measure/suite'), scoredSuite(db, root, Number(named)))
     return null
   } catch (error) {
     const why = error instanceof Error ? error.message : String(error)

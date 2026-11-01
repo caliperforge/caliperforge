@@ -1,6 +1,6 @@
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { git, planDir, srcDir, tried } from '../sequencer/workspace.ts'
+import { git, gitBase, maybe, planDir, remote, srcDir, tried } from '../sequencer/workspace.ts'
 
 /** Copies an untracked foundry.toml with lib/forge-std to `into/root/`, which run_pair copies onto each checkout's root. */
 export function rooted(src: string, into: string): void {
@@ -8,6 +8,22 @@ export function rooted(src: string, into: string): void {
   mkdirSync(join(into, 'root'), { recursive: true })
   cpSync(join(src, 'foundry.toml'), join(into, 'root/foundry.toml'))
   if (existsSync(join(src, 'lib/forge-std'))) cpSync(join(src, 'lib/forge-std'), join(into, 'root/lib/forge-std'), { recursive: true })
+}
+
+/** Checks plan `id`'s repo out afresh into `into` at its pre_fix with its submodules, and installs `suites` as run_pair does: at `test/<target>/`, its `root/` onto the checkout's root. */
+export function planted(root: string, id: number, into: string, { suites, target }: { suites: string; target: string }): void {
+  const made = maybe(root, id, 'checkout.json')
+  if (made === null) throw new Error(`plan ${String(id)} has no checkout.json`)
+  const { repo, pre_fix: preFix } = JSON.parse(made) as { repo: string; pre_fix: string }
+  rmSync(into, { recursive: true, force: true })
+  mkdirSync(into, { recursive: true })
+  git(into, ['init', '-q'])
+  git(into, ['fetch', '-q', '--depth', '1', remote(gitBase(root), repo), preFix])
+  git(into, ['checkout', '-q', 'FETCH_HEAD'])
+  git(into, ['submodule', 'update', '--init', '--recursive'])
+  const kept = join(suites, 'root')
+  cpSync(suites, join(into, 'test', target), { recursive: true, filter: (from) => from !== kept })
+  if (existsSync(kept)) cpSync(kept, into, { recursive: true })
 }
 
 /** Clones `url` afresh into `bench`, keeping the `<suites>/root/` generate wrote, which `src/` loses to reap. */

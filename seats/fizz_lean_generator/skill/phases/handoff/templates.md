@@ -25,6 +25,18 @@ agent_model: <sonnet or opus>
 
 - <contract and value> | bound: <the bound the code enforces: cap, max per call, minimum, delay> | at: <file under PROJECT_ROOT> L<start>-L<end>
 
+## Conversion points
+
+- <Contract.function> | converts: <from what to what, and where it rounds> | at: <file under PROJECT_ROOT> L<start>-L<end>
+
+## Aggregates
+
+- <Contract.variable> | parts: <the parts it should equal> | movers: <each public or external Contract.function that writes it> | at: <file under PROJECT_ROOT> L<start>-L<end>
+
+## Not tracked
+
+- <Contract.function or Contract.variable> | reason: <why no row tracks it>
+
 # Handoff: scaffold
 
 phase: scaffold

@@ -44,7 +44,10 @@ export function queuePart(db: Db, parent: PlanRow, n: number, url: string, lane:
   const inserted = db.prepare(`INSERT INTO plans (pipe_id, target_id, template, state, queued_at, step, retries, priority, lane, seat, origin)
     VALUES (?, ?, ?, 'queued', ?, 0, 0, ?, ?, ?, ?)`)
     .run(parent.pipe_id, parent.target_id, parent.template, new Date().toISOString(), parent.priority, lane, seat, url)
-  const id = Number(inserted.lastInsertRowid)
-  db.prepare('UPDATE parts SET plan = ? WHERE parent = ? AND n = ?').run(id, parent.id, n)
-  return id
+  return linkPart(db, parent.id, n, Number(inserted.lastInsertRowid))
+}
+
+export function linkPart(db: Db, parent: number, n: number, plan: number): number {
+  db.prepare('UPDATE parts SET plan = ? WHERE parent = ? AND n = ?').run(plan, parent, n)
+  return plan
 }

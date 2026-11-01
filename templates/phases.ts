@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import type { CostWall, Fired, Provider } from '../providers/kind.ts'
 import { packet, real } from '../runner/index.ts'
@@ -12,7 +12,8 @@ import type { PlanRow } from '../store/plans.ts'
 import { byRun, pending } from '../store/transcript.ts'
 import { compiled, extract } from './extract.ts'
 import { costWalled } from './generated.ts'
-import { handoff, ranged, type Refused } from './handoff.ts'
+import { handoff, layered, ranged, type Refused } from './handoff.ts'
+import { drawn, excerpts } from './map.ts'
 import type { Step } from './pr-path.ts'
 
 export interface Sum { tokens: number; seconds: number; usd: number; transcripts: string[]; wall: string | null }
@@ -30,6 +31,10 @@ const FOREGROUND = { CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1' }
 const ATTEMPTS = '/tmp/x-ray-attempts.md'
 
 const TEMPLATES = 'phases/handoff/templates.md'
+
+const MAP = 'map.md'
+
+const EXCERPTS = 'excerpts'
 
 interface Bench { db: Db; root: string; plan: PlanRow; step: Step; provider: Provider; name: string; dir: string; tmp: string; granted: string[]; walls: CostWall; ceiling: number }
 
@@ -56,20 +61,31 @@ function added(sum: Sum, fired: Fired, transcript: string, who: string, ceiling:
   return next
 }
 
-interface Phase { phase: string; skill: string; root: string; path: string; prompt: string; issue: string; critics: () => Refused[] }
+interface Phase { phase: string; skill: string; root: string; path: string; prompt: string; issue: string; critics: () => Refused[]; map?: string }
 
-function facts({ phase, root }: Phase, text: string): Refused[] {
+const read = (path: string): string => existsSync(path) ? readFileSync(path, 'utf8') : ''
+
+function facts({ phase, root, path, map }: Phase): Refused[] {
+  const at = join(dirname(path), MAP)
+  if (map !== undefined) return layered(phase, map, read(at))
   if (phase !== 'context' || !existsSync(join(root, 'src'))) return []
   const failed = compiled(root)
-  return failed.length > 0 ? failed : ranged(root, text, extract(root))
+  if (failed.length > 0) return failed
+  const selection = join(dirname(path), '../entry-point-selection.json')
+  if (!existsSync(selection)) return [{ rule: 'handoff.map', note: `context: ${selection} is missing` }]
+  const extracted = extract(root)
+  const text = drawn(extracted, readFileSync(selection, 'utf8'), read(at))
+  writeFileSync(at, text)
+  const refused = ranged(root, text, extracted)
+  if (refused.length === 0) excerpts(root, text, join(dirname(path), EXCERPTS))
+  return refused
 }
 
 async function checked(fire: Fire, at: Phase, sum: Sum, refused: Refused[] = []): Promise<Sum | Outcome> {
   const issue = refused.length === 0 ? at.issue : `${at.issue}\nYour handoff was refused:\n${refused.map((r) => `- ${r.rule}: ${r.note}`).join('\n')}`
   const ran = await fire(at.prompt, issue, sum, at.phase)
   if ('outcome' in ran || ran.wall !== null) return ran
-  const text = existsSync(at.path) ? readFileSync(at.path, 'utf8') : ''
-  const handed = [...handoff(at.skill, at.phase, text), ...facts(at, text)]
+  const handed = [...handoff(at.skill, at.phase, read(at.path)), ...facts(at)]
   const found = handed.length === 0 && at.phase === 'invariants' ? at.critics() : handed
   if (found.length > 0 && refused.length === 0) return checked(fire, at, ran, found)
   if (handed.length > 0) return { outcome: 'refuse', spans: [...new Set(handed.map((r) => r.rule))], note: `${at.phase} handoff refused twice: ${handed.map((r) => r.note).join('; ')}` }
@@ -85,6 +101,7 @@ export async function phased(fire: Fire, skill: string, handoffs: string, issue:
   const phases = phasesOf(skill)
   const root = resolve(handoffs, '../../../..')
   const stopped = join(handoffs, 'stopped.json')
+  const [map, cut] = [join(handoffs, MAP), join(handoffs, EXCERPTS)]
   const resumed = existsSync(stopped) ? JSON.parse(readFileSync(stopped, 'utf8')) as { phase: string; sum: Sum } : null
   rmSync(stopped, { force: true })
   const done = resumed === null ? -1 : phases.indexOf(resumed.phase)
@@ -93,8 +110,10 @@ export async function phased(fire: Fire, skill: string, handoffs: string, issue:
     if (at <= done) continue
     const path = join(handoffs, `${phase}.md`)
     const start = at === 0 ? [] : [`Start from ${join(handoffs, `${phases[at - 1] ?? ''}.md`)}.`]
-    const ran = await checked(fire, { phase, skill, root, path, critics, prompt: readFileSync(join(skill, 'phases', `${phase}.md`), 'utf8'),
-      issue: [issue, `Before you end, write ${path} filled from the \`# Handoff: ${phase}\` block of ${join(skill, TEMPLATES)}.`, ...start].join('\n') }, sum)
+    const later = phase !== 'context' && existsSync(map)
+    const named = later ? [`Read ${map} and the excerpts it cites: ${readdirSync(cut).map((f) => join(cut, f)).join(', ')}.`] : []
+    const ran = await checked(fire, { phase, skill, root, path, critics, prompt: readFileSync(join(skill, 'phases', `${phase}.md`), 'utf8'), ...(later ? { map: read(map) } : {}),
+      issue: [issue, `Before you end, write ${path} filled from the \`# Handoff: ${phase}\` block of ${join(skill, TEMPLATES)}.`, ...start, ...named].join('\n') }, sum)
     if ('outcome' in ran || ran.wall !== null) return ran
     sum = ran
     if (phase === stop) {

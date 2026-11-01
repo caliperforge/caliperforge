@@ -1,6 +1,7 @@
 import { readFileSync, statSync } from 'node:fs'
 import { join, resolve, sep } from 'node:path'
 import { type At, type Extracted, lineCount } from './extract.ts'
+import { LAYERS, RANGE } from './map.ts'
 
 export interface Refused { rule: string; note: string }
 
@@ -10,7 +11,6 @@ interface Cited { section: string; name: string; cells: Map<string, string>; at:
 
 const FIELD = /^(\w+):\s*(.*)$/
 const PLACEHOLDER = /<\w[^<>]*>/
-const RANGE = /^(\S+) L(\d+)-L(\d+)$/
 const READS = 'Reads'
 const NONE = 'none'
 const CONTEXT = 'context'
@@ -124,10 +124,19 @@ export function ranged(root: string, text: string, facts: Extracted): Refused[] 
   const given = parsed(text)
   const cited = cites(root, given, facts)
   return [
+    ...refuse('handoff.field', LAYERS.filter(([layer]) => layer === CONTEXT).flatMap(([, names]) => names)
+      .filter((name) => !given.sections.get(name)?.length).map((name) => `${CONTEXT}: ## ${name} is missing from map.md or has no row`)),
     ...refuse('handoff.range', cited.flatMap(({ section, name, cells, at }) => typeof at === 'string'
       ? [`${CONTEXT}: ${name} under ## ${section} cites ${cells.get('at') ?? ''}, ${at}`] : [])),
     ...refuse('handoff.cited', cited.flatMap((c) => uncited(facts, c))),
     ...refuse('handoff.movers', cited.flatMap((c) => moved(facts, c))),
     ...refuse('handoff.untracked', untracked(given, facts)),
   ]
+}
+
+export function layered(phase: string, before: string, after: string): Refused[] {
+  const [was, now] = [parsed(before).sections, parsed(after).sections]
+  return refuse('handoff.layer', LAYERS.filter(([layer]) => layer !== phase).flatMap(([layer, names]) => names
+    .filter((name) => (was.get(name) ?? []).join('\n') !== (now.get(name) ?? []).join('\n'))
+    .map((name) => `${phase}: ## ${name} is the ${layer} layer's and changed`)))
 }

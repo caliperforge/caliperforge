@@ -53,7 +53,7 @@ function handover(name: string, file: string, block: string): void {
   expect(head).toContain(written(name))
   if (name !== 'context') expect(head).toContain(READ)
   if (name === 'scaffold') expect(head).toContain(CLAMPED)
-  if (name !== 'campaigns') expect(head).toContain(FILL)
+  if (!['context', 'campaigns'].includes(name)) expect(head).toContain(FILL)
   expect(head?.includes(FROM)).toBe(!['context', 'campaigns'].includes(name))
   expect(head?.includes(SUB)).toBe(name === 'invariants')
   expect(head?.includes(CRITIC)).toBe(name === 'invariants')

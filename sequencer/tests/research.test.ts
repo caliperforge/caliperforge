@@ -694,31 +694,90 @@ test('measure D1: a Measure line fires measurer with HEAD', async () => {
 
 const SCORED = 'fuzz-bench/suites/fizz/euler-earn-m01'
 
+const TOML = '[profile.default]\nsrc = "src"\n'
+
+const committed = (cwd: string): string => {
+  git(cwd, ['-c', 'user.email=t@t', '-c', 'user.name=t', '-c', 'commit.gpgsign=false', 'commit', '-q', '-m', 'c'])
+  return headSha(cwd)
+}
+
+/** `remotes/org/proj` with `lib/dep` a submodule of `remotes/org/dep`; its HEAD. */
+const proj = (w: World): string => {
+  const [dep, at] = [join(w.root, 'remotes/org/dep'), join(w.root, 'remotes/org/proj')]
+  for (const dir of [dep, at]) {
+    mkdirSync(dir, { recursive: true })
+    git(dir, ['init', '-q'])
+  }
+  writeFileSync(join(dep, 'Dep.sol'), 'contract Dep {}\n')
+  git(dep, ['add', 'Dep.sol'])
+  committed(dep)
+  git(at, ['submodule', 'add', '-q', dep, 'lib/dep'])
+  return committed(at)
+}
+
 const suited = (scored = true): World => {
+  vi.stubEnv('GIT_CONFIG_COUNT', '1')
+  vi.stubEnv('GIT_CONFIG_KEY_0', 'protocol.file.allow')
+  vi.stubEnv('GIT_CONFIG_VALUE_0', 'always')
   const w = researching(`${MEASURE}**Suite:** 2\n`)
   putPlan(w.db, { id: 2, pipe_id: 1, target_id: null, template: 'bench', state: 'done', queued_at: plan(w.db, 1).queued_at, step: 4, retries: 0 })
   put(w.root, 2, 'target.yml', 'target: euler-earn-m01\ngenerator: fizz\n')
   put(w.root, 2, 'generate.json', JSON.stringify({ suite: 'test/fizz', tokens: 1, seconds: 1 }))
+  put(w.root, 2, 'checkout.json', JSON.stringify({ repo: 'org/proj', fix: 'x', pre_fix: proj(w) }))
   if (scored) {
-    mkdirSync(join(planDir(w.root, 2), SCORED), { recursive: true })
+    mkdirSync(join(planDir(w.root, 2), SCORED, 'root'), { recursive: true })
     put(w.root, 2, `${SCORED}/FizzTest.sol`, 'contract FizzTest {}\n')
+    put(w.root, 2, `${SCORED}/root/foundry.toml`, TOML)
   }
   return w
 }
 
-test('suite D3: a Suite line copies the scored suite in', async () => {
-  const w = suited()
+const installed = async (w: World): Promise<string> => {
   const head = headed(w)
-  let copied = false
-  const seen = (): void => { copied = existsSync(join(srcDir(w.root, 1), '.cf/measure/suite/FizzTest.sol')) }
-  expect(await gather(w.db, w.root, plan(w.db, 1), mapOf('research').at(1), measuring(fence(entry(head)), seen)))
+  expect(await gather(w.db, w.root, plan(w.db, 1), mapOf('research').at(1), measuring(fence(entry(head)), () => undefined)))
     .toMatchObject({ outcome: 'pass' })
-  expect(copied).toBe(true)
   expect(ran(w)).toEqual(['measurer'])
-  expect(existsSync(join(planDir(w.root, 2), SCORED, 'FizzTest.sol'))).toBe(true)
+  return join(srcDir(w.root, 1), '.cf/measure/suite')
+}
+
+const unsuited = async (w: World): Promise<unknown> => {
+  const got = await gather(w.db, w.root, plan(w.db, 1), mapOf('research').at(1), measuring(fence(entry('x')), () => undefined))
+  expect(ran(w)).toEqual([])
+  return got
+}
+
+test('suite D1: a Suite line clones the plan at its pre_fix', async () => {
+  const w = suited()
+  const into = await installed(w)
+  expect(headSha(into)).toBe((JSON.parse(maybe(w.root, 2, 'checkout.json') ?? '') as { pre_fix: string }).pre_fix)
+  expect(readFileSync(join(into, 'lib/dep/Dep.sol'), 'utf8')).toBe('contract Dep {}\n')
 })
 
-test('suite D4: a Suite plan with no scored suite is refused', async () => {
+test('suite D2: the suite lands at test/<target>, root/ on top', async () => {
+  const w = suited()
+  const into = await installed(w)
+  expect(readFileSync(join(into, 'test/euler-earn-m01/FizzTest.sol'), 'utf8')).toBe('contract FizzTest {}\n')
+  expect(readFileSync(join(into, 'foundry.toml'), 'utf8')).toBe(TOML)
+  expect(existsSync(join(into, 'test/euler-earn-m01/root'))).toBe(false)
+  for (const name of ['FizzTest.sol', 'root/foundry.toml']) expect(existsSync(join(planDir(w.root, 2), SCORED, name))).toBe(true)
+})
+
+test('suite D3: a Suite plan with no checkout.json is refused', async () => {
+  const w = suited()
+  rmSync(join(planDir(w.root, 2), 'checkout.json'))
+  expect(await unsuited(w)).toEqual({ outcome: 'refuse', spans: ['ask.md'], note: 'plan 2 has no checkout.json' })
+  expect(eventsOf(w.db, 1, 'research.unsuited')).toMatchObject([{ message: '**Suite:** 2: plan 2 has no checkout.json' }])
+})
+
+test('suite D4: a pre_fix the remote lacks is refused', async () => {
+  const w = suited()
+  put(w.root, 2, 'checkout.json', JSON.stringify({ repo: 'org/proj', fix: 'x', pre_fix: 'f'.repeat(40) }))
+  expect(await unsuited(w)).toMatchObject({ outcome: 'refuse', spans: ['ask.md'], note: expect.stringContaining('fetch -q --depth 1') as unknown })
+  expect(eventsOf(w.db, 1, 'research.unsuited')).toHaveLength(1)
+  expect(existsSync(join(srcDir(w.root, 1), '.cf/measure/suite/test'))).toBe(false)
+})
+
+test('suite: a Suite plan with no scored suite is refused', async () => {
   const w = suited(false)
   expect(await gather(w.db, w.root, plan(w.db, 1), mapOf('research').at(1), measuring(fence(entry('x')), () => undefined)))
     .toEqual({ outcome: 'refuse', spans: ['ask.md'], note: 'plan 2 has no fuzz-bench/suites/fizz/euler-earn-m01' })

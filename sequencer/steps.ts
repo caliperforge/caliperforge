@@ -71,7 +71,7 @@ export function blocked(db: Db, plan: PlanRow, now: Date = new Date()): Wait | n
   if (step.fires === 'ceo') return internal(plan) || approvedPlan(db, plan) ? null : 'ceo_batch'
   if (step.name === 'ruling') return internal(plan) || approved(db, plan) || up(db, plan) ? null : 'target_approval'
   if (step.name === 'ready') return proven(db, plan) && waitsFor(db, plan) === null ? null : 'ready_proof'
-  if (target(db, plan)?.state === 'parked') return 'target_parked'
+  if (target(db, plan)?.state === 'parked' && !rechecks(db, plan)) return 'target_parked'
   return benchWait(db, plan, step, now) ?? (overlapping(db, plan) === null ? null : 'file_overlap')
 }
 
@@ -205,7 +205,8 @@ export function measure(db: Db, root: string, plan: PlanRow, read?: Read): Outco
   const row = target(db, plan)
   if (row === null) return { outcome: 'refuse', spans: ['targets'], note: `plan ${String(plan.id)} has no target row` }
   const span = `targets/${row.repo}#${String(row.issue_no)}`
-  if (row.state !== 'ready' && row.state !== 'queued') return { outcome: 'refuse', spans: [span], note: `target state ${row.state}` }
+  const again = read !== undefined && rechecks(db, plan)
+  if (row.state !== 'ready' && row.state !== 'queued' && !again) return { outcome: 'refuse', spans: [span], note: `target state ${row.state}` }
   const rule = waits(db, root, row.repo, row.issue_no, read)
   if (rule !== null) {
     waiting(db, [{ plan: plan.id, why: 'target_parked' }])
@@ -216,9 +217,18 @@ export function measure(db: Db, root: string, plan: PlanRow, read?: Read): Outco
   const house = read === undefined ? null : moved(root, row.repo, read)
   if (house !== null) return { outcome: 'refuse', spans: [`house/${row.repo}.md`], note: house }
   const park = read === undefined ? null : checked(db, root, plan, row, read)
-  if (park === null) return { outcome: 'pass', spans: [], note: `${row.repo}#${String(row.issue_no)} ${row.pulse}` }
+  if (park === null) {
+    if (row.state === 'parked') setTargetState(db, plan.target_id, 'ready')
+    return { outcome: 'pass', spans: [], note: `${row.repo}#${String(row.issue_no)} ${row.pulse}` }
+  }
   setTargetState(db, plan.target_id, 'parked')
-  return { outcome: 'refuse', held: true, spans: [span], note: park }
+  const quiet = eventsOf(db, plan.id, 'measure').at(-1)?.message === park ? { quiet: true as const } : {}
+  return { outcome: 'refuse', held: true, spans: [span], note: park, ...quiet }
+}
+
+/** A target `checked()` parked: its newest step 0 note is one of the questions `find()` parks on. */
+function rechecks(db: Db, plan: PlanRow): boolean {
+  return target(db, plan)?.state === 'parked' && /^(?:wanted|unclaimed|shape): /.test(eventsOf(db, plan.id, 'measure').at(-1)?.message ?? '')
 }
 
 function checked(db: Db, root: string, plan: PlanRow, row: Target, read: Read): string | null {

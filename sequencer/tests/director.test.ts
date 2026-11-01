@@ -24,7 +24,7 @@ import { addPart } from '../../store/parts.ts'
 import { allPlans, held, needsCeo, pipeNamed, pipeOf, planById, planRows, putPlan, requeue, retry } from '../../store/plans.ts'
 import { alike, clear, fingerprint, overBudget } from '../../store/refusals.ts'
 import { runTokens } from '../../store/runs.ts'
-import { question } from '../../templates/research.ts'
+import { gather, question } from '../../templates/research.ts'
 import { split } from '../brief.ts'
 import { byHand, cooLite, read, woke } from '../director.ts'
 import { mechanisms } from '../drift.ts'
@@ -36,6 +36,7 @@ import type { Wire } from '../push.ts'
 import { rule } from '../rule.ts'
 import { capped } from '../refusal.ts'
 import { parted } from '../split.ts'
+import { mapOf } from '../steps.ts'
 import { unruled } from '../unruled.ts'
 import { afresh, drop, git, headSha, maybe, planDir, put, snapshot, srcDir } from '../workspace.ts'
 
@@ -1085,6 +1086,22 @@ test('D1 D2: research moves an unbuilt plan to the research lane', async () => {
   expect([maybe(home, 7, 'refusal.prev.md'), maybe(home, 7, 'refusal.md')]).toEqual(['step 3 rails refused\n', null])
   expect(question(home, row(db)).outcome).toBe('pass')
   expect(told(db)).toEqual([{ actor: 'director', outcome: 'pass', message: 'research: the ask only measures' }])
+})
+
+test('D1 D2: a research answer with no Output fires the measurer', async () => {
+  const { db, home } = seeded('1')
+  db.exec(UNBUILT)
+  await run(db, home, researched(LINES.replace(/\n\*\*Output:\*\*.*$/, '')))
+  expect(plan7(db)).toMatchObject({ template: 'research', lane: 'research', step: 0, waits_on: null })
+  question(home, row(db))
+  const src = srcDir(home, 7)
+  mkdirSync(src, { recursive: true })
+  git(src, ['init', '-q'])
+  git(src, ['-c', 'user.email=t@t', '-c', 'user.name=t', '-c', 'commit.gpgsign=false', 'commit', '-q', '--allow-empty', '-m', 'base'])
+  const prompts: string[] = []
+  await gather(db, home, row(db), mapOf('research').at(1), inTurn(['no fence'], prompts))
+  expect(prompts.at(-1)).toMatch(/# measurer\n/)
+  expect(runRows(db).at(-1)?.seat).toBe('measurer')
 })
 
 test.each([

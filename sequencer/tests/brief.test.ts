@@ -190,6 +190,35 @@ test('D1-D3: a Files row on a file over 300 lines names its range', () => {
   expect(row('- a/long.ts (new)')).toMatchObject({ span: 'a/long.ts', reason: holding('already in the tree') })
 })
 
+test('D1-D4: a dependency name cites its .d.ts line', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'settled-'))
+  const sdk = '@anthropic-ai/claude-agent-sdk'
+  const token = 'sandbox.network.strictAllowlist'
+  mkdirSync(join(dir, 'a'))
+  mkdirSync(join(dir, 'node_modules', sdk), { recursive: true })
+  writeFileSync(join(dir, 'a/short.ts'), 'export const x = 1\n')
+  writeFileSync(join(dir, 'a/short.py'), '')
+  writeFileSync(join(dir, 'node_modules', sdk, 'sdk.d.ts'),
+    ['// sdk', '', '', 'export type SandboxSettings = {', '  network?: {', '    strictAllowlist?: boolean', '  }', '}', ''].join('\n'))
+  const listing = (deps: Record<string, string>): void => { writeFileSync(join(dir, 'package.json'), JSON.stringify({ dependencies: deps })) }
+  const named = (name: string, file = 'a/short.ts', facts = ['- none: every name the change uses is in this checkout']): Refused | null =>
+    shape(swap(swap(swap(brief, '## Files', [`- ${file}`]), '## Files to read', ['- a/short.ts — read']), '## Settled facts', facts)
+      .replace('`issue.md`', `\`${name}\``), ask, dir)
+  listing({ [sdk]: '1' })
+  expect(named(token)).toEqual({ span: token,
+    reason: `${token} is SandboxSettings at node_modules/${sdk}/sdk.d.ts:4, cited nowhere under ## Settled facts; paste that definition there` })
+  expect(named(token, 'a/short.ts', [`- SandboxSettings — node_modules/${sdk}/sdk.d.ts:4 \`network?: { strictAllowlist?: boolean }\``])).toBeNull()
+  expect(named(token, 'a/short.py')).toBeNull()
+  expect(named('sandbox.network.loose')).toBeNull()
+  listing({})
+  expect(named(token)).toBeNull()
+  listing({ [sdk]: '1' })
+  expect(on(brief)).toBeNull()
+  expect(named('x')).toBeNull()
+  writeFileSync(join(dir, 'a/short.ts'), 'export interface Local {\n  strictAllowlist: boolean\n}\n')
+  expect(named(token)).toBeNull()
+})
+
 test('D1-D4: an off-tree path names tracked files ending with it', () => {
   const refusal = (tracked: string[], path: string): Refused | null => {
     const dir = mkdtempSync(join(tmpdir(), 'meant-'))

@@ -164,6 +164,10 @@ test('D4: every lean packet is ranged, a fizz packet is not', async () => {
   expect((await generated('fizz')).packets[0]?.ranged).not.toBe(true)
 })
 
+test('1994 D4: every lean packet is offline', async () => {
+  for (const packet of (await generated('fizz_lean')).packets) expect(packet.offline).toBe(true)
+})
+
 test('D6: generate.json agents adds up every phase transcript', async () => {
   const { tree } = await generated('fizz_lean', 1000, FILLED, { context: 1, scaffold: 2 })
   expect(JSON.parse(maybe(tree, 1, 'generate.json') ?? '{}')).toMatchObject({ agents: 3, tokens: 4000, seconds: 4, properties: 1 })

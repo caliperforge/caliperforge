@@ -52,8 +52,10 @@ import { landed } from './notes.ts'
 import { COMMIT, commitMessage } from './push.ts'
 import { carried, cloned, diffOf, diffSince, doneIds, drop, get, headSha, holds, MAIN, maybe, merging, move, narrowing, planDir, put, ruled, rulings, snapshot, srcDir } from './workspace.ts'
 import { kernelPlan } from './home.ts'
+import { live, lived } from './live.ts'
 import { READ, SERVER, server } from './upstream.ts'
 import { audit } from '../rails/completion-audit/index.ts'
+import { retired } from '../rails/test-weakened/index.ts'
 
 const FENCE = /^---\r?\n[\s\S]*?\r?\n---\s*$/m
 
@@ -366,9 +368,10 @@ async function fireReview(db: Db, root: string, plan: PlanRow, step: Step, provi
   const manifest = reviewManifest(root, step.runs)
   const src = srcDir(root, plan.id)
   const issue = get(root, plan.id, 'issue.md')
+  if (manifest.gate === 'review') live(root, plan, diffOf(root, plan.id))
   const input: Bench = manifest.gate === 'blind_review' ? blind(db, root, plan) : {
     repo: src,
-    issue: issue + rulings(root, plan.id),
+    issue: issue + rulings(root, plan.id) + (manifest.gate === 'senior_review' ? removedTests(root, plan.id) : ''),
     diff: diffOf(root, plan.id),
     ...(cloned(src) ? { tree: snapshot(src) } : {}),
     ...(internal(plan) && maybe(root, plan.id, 'step-2.handback.md') !== null ? { handback: get(root, plan.id, 'step-2.handback.md') } : {}),
@@ -398,6 +401,11 @@ async function fireReview(db: Db, root: string, plan: PlanRow, step: Step, provi
     if (note.includes(LOCKED)) throw error
     return { outcome: { outcome: 'refuse', spans: ['reviewers.verdict_fence'], note: `${step.runs} ${note}` }, notes: [] }
   }
+}
+
+function removedTests(root: string, plan: number): string {
+  const block = retired(maybe(root, plan, 'removed-tests.md') ?? '', maybe(root, plan, 'step-2.handback.md') ?? '')
+  return block === '' ? '' : `\n\n# Removed tests\n\n${block}`
 }
 
 function landable(db: Db, plan: PlanRow, step: Step, notes: Note[]): Note[] {
@@ -464,8 +472,10 @@ function referenced(src: string, issue: string): Pick<Bench, 'reference'> {
 export function checked(db: Db, root: string, plan: PlanRow, src: string, diff: string): { checks?: string } {
   const ran = gated(db, root, plan, src, diff)
   const finish = Object.values(profile(root, repoOf(db, plan) ?? '')?.finish ?? {}).map((argv) => ({ language: 'finish', dir: '', command: argv.join(' '), ...(missing(src, argv) ? { outcome: 'skipped' as const } : {}) }))
-  const checks = coverage(ran === null ? [] : [...ran, ...finish], diff)
-  return checks === undefined ? {} : { checks }
+  const row = ran === null ? null : lived(root, plan, diff)
+  const checks = coverage(ran === null ? [] : [...ran, ...finish, ...(row === null ? [] : [row])], diff)
+  if (checks === undefined) return {}
+  return { checks: row?.outcome === 'fail' ? `${checks}\n\nLive run output:\n\n${row.output}` : checks }
 }
 
 const LANGUAGE: Partial<Record<Mode, string>> = { npm: 'typescript', xcodebuild: 'swift', gradle: 'kotlin' }

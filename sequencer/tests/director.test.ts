@@ -254,6 +254,26 @@ test('D1 D2: a rule on a Greptile stop accepts its open ids', async () => {
   expect(ofKind(db, 'return').map((e) => e.message)).toEqual(['step 6'])
 })
 
+test('D5 a stale Greptile escalation goes back to ready', async () => {
+  const { db, home } = seeded('1')
+  db.exec('UPDATE plans SET step = 6 WHERE id = 7')
+  logged(db, { plan: 7, kind: 'ready', actor: 'kernel', outcome: 'escalate', pointer: null, run: null,
+    message: 'Greptile was asked 3 times on this job; asking again at abc is the COO\'s call' })
+  const unfired: Provider = { name: 'claude-agent-sdk', fire: () => { throw new Error(REPLY.rule) } }
+  await cooLite(db, home, row(db), unfired, now, () => undefined, wire())
+  expect(row(db)).toMatchObject({ state: 'queued', step: 6 })
+  expect(told(db)).toEqual([{ actor: 'director', outcome: 'pass', message: 'return: Greptile\'s quota is spent, so ready goes on without it' }])
+})
+
+test('D5 a stop past ready is asked despite an old escalation', async () => {
+  const { db, home } = seeded('1')
+  logged(db, { plan: 7, kind: 'ready', actor: 'kernel', outcome: 'escalate', pointer: null, run: null,
+    message: 'Greptile was asked 3 times on this job; asking again at abc is the COO\'s call' })
+  await run(db, home, REPLY.ask_ceo ?? '')
+  expect(row(db)).toMatchObject({ state: 'blocked_on_ceo', step: 4 })
+  expect(told(db).map((t) => t.message)).not.toContain('return: Greptile\'s quota is spent, so ready goes on without it')
+})
+
 test('D3: a rails stop or no open ids writes no rulings.md', async () => {
   const rails = seeded('1')
   await run(rails.db, rails.home, REPLY.rule ?? '')
@@ -1670,4 +1690,50 @@ test('D6: a finding answered today waits a day', async () => {
   expect(fires).toHaveLength(1)
   await decide(db, home, reply, new Date(now.getTime() + 86_400_001), wire())
   expect(fires).toHaveLength(2)
+})
+
+test('D1 a director file parks the job on the filed plan', async () => {
+  const { db, home } = seeded('1')
+  await run(db, home, REPLY.file ?? '')
+  expect(plan7(db)?.waits_on).toBe(allPlans(db).find((p) => p.origin === FILED)?.id)
+  expect(maybe(home, 7, 'parked.md')).toContain(FILED)
+  expect(ofKind(db, 'return')).toEqual([])
+})
+
+test('D3 a second return on the same stop is fenced twice', async () => {
+  const { db, home } = seeded('1')
+  await run(db, home, RETURN)
+  needsCeo(db, row(db))
+  const prompts: string[] = []
+  await cooLite(db, home, row(db), inTurn([RETURN, RETURN], prompts), now, () => undefined, wire())
+  const why = `the job was already returned on stop ${stop(home, 7)}`
+  expect(prompts.map((p) => p.includes(`# Fence\n\nreturn is refused: ${why}. Choose file, park or split.`))).toEqual([false, true])
+  expect(told(db).at(-1)).toEqual({ actor: 'director', outcome: 'needs_coo', message: `return: refused by the fence, ${why}` })
+  expect(decisions(db, 7).map((d) => d.verb)).toEqual(['ask_coo'])
+  expect(ofKind(db, 'return')).toHaveLength(1)
+})
+
+test('D5 the 1807 replay ends parked after the first file', async () => {
+  const { db, home } = seeded('1')
+  fixLive(db)
+  committed(home)
+  db.exec('UPDATE plans SET step = 2 WHERE id = 7')
+  put(home, 7, 'refusal.md', 'step 2 build refused\n\nyarn: command not found\n')
+  await run(db, home, REPLY.file ?? '')
+  const on = plan7(db)?.waits_on
+  const packets: Packet[] = []
+  await cooLite(db, home, row(db), bySeat(packets), new Date(now.getTime() + 3_600_000), () => undefined, wire())
+  expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', waits_on: on })
+  expect(maybe(home, 7, 'parked.md')).toContain(FILED)
+  expect(ofKind(db, 'return')).toEqual([])
+})
+
+test('D6 a return on a different stop applies', async () => {
+  const { db, home } = seeded('1')
+  await run(db, home, RETURN)
+  needsCeo(db, row(db))
+  put(home, 7, 'refusal.md', 'step 4 review refused\n')
+  await run(db, home, RETURN)
+  expect(row(db)).toMatchObject({ state: 'queued', step: 4 })
+  expect(ofKind(db, 'return')).toHaveLength(2)
 })

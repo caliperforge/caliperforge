@@ -173,9 +173,10 @@ function ours(open: number, created: number[] = [], sent: string[][] = []): Read
       return { number: 12, title: 'hello', body: 'b', state: 'OPEN', url: WIDGET, author: { login: 'keeper' },
         assignees: [], comments: [], closedByPullRequestsReferences: [], projectItems: [] }
     }
+    if (String(args[1]).includes('/git/trees/')) return { tree: [] }
     if (args[0] === 'search' || !args.includes('merged')) return []
     return [{ url: 'https://github.com/acme/widget/pull/2', author: { login: 'outsider' }, mergedBy: { login: 'keeper' },
-      body: 'b', additions: 1, deletions: 0, files: [{ path: 'src/a.ts' }] }]
+      body: 'Generated with Claude Code', additions: 1, deletions: 0, files: [{ path: 'src/a.ts' }] }]
   }
 }
 
@@ -183,7 +184,7 @@ function rule(w: ReturnType<typeof world>, value: string): void {
   addRuling(w.db, { subject: 'claim.acme/widget#12', value, origin_kind: 'ruling', origin_ref: 'test', who: 'ceo', date: '2026-09-27', issue_no: 12, supersedes: null })
 }
 
-const PASS = { outcome: 'pass', note: 'acme/widget#12 warm' }
+const PASS = { outcome: 'pass', note: 'acme/widget#12 warm; ai stance: open — "Generated with Claude Code" https://github.com/acme/widget/pull/2' }
 
 it('holds a claim_first target at step 0 on target_parked, ready', () => {
   const w = intake('{ claim_first: true }')

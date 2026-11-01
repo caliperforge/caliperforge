@@ -10,11 +10,12 @@ import { proofed } from '../../store/desk.ts'
 import { addSetting } from '../../store/drift.ts'
 import { logged, runAt } from '../../store/events.ts'
 import { addRule, type Db } from '../../store/index.ts'
-import { briefed, planById, putPlan } from '../../store/plans.ts'
+import { advance, briefed, planById, putPlan } from '../../store/plans.ts'
 import { addReview, type Verdict } from '../../store/verdict.ts'
 import { drift, Entry, mechanisms } from '../drift.ts'
 import { git } from '../workspace.ts'
 import { db, NOW, REGISTRY } from './drifting.ts'
+import { world } from './world.ts'
 
 const FIXER = REGISTRY.filter((e) => e.name === 'fixer')
 
@@ -265,6 +266,20 @@ test('waiveResumesStopStale D2 D3 D4', () => {
   expect(drift(waived('2026-09-20 10:00:00', '2026-09-20 10:30:00'), entry, NOW))
     .toMatchObject([{ name: 'waive_resumes_stop', state: 'stale', newest: '2026-09-20 10:00:00' }])
   expect(drift(waived('2026-10-02 10:00:00', null), entry, NOW)).toMatchObject([{ name: 'waive_resumes_stop', state: 'silent' }])
+})
+
+test('aiStanceSeen D8', () => {
+  const entry = REGISTRY.filter((e) => e.name === 'ai_stance')
+  const w = world('warm', '2026-11-02')
+  advance(w.db, planById(w.db, 1), 1)
+  const now = new Date('2026-11-03T10:00:00Z')
+  const measured = (message: string): void => {
+    logged(w.db, { plan: 1, kind: 'measure', actor: 'measure', outcome: 'pass', message, pointer: null, run: null }, '2026-11-02 10:00:00')
+  }
+  measured('acme/widget#12 warm')
+  expect(drift(w.db, entry, now)).toMatchObject([{ name: 'ai_stance', state: 'seen' }])
+  measured('acme/widget#12 warm; ai stance: open — x')
+  expect(drift(w.db, entry, now)).toEqual([])
 })
 
 test('catchupRangeClearsSilent D4', () => {

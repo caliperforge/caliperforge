@@ -15,9 +15,10 @@ function gh(wanted: boolean): Read {
       return { number: 12, title: 'hello', body: 'b', state: 'OPEN', url: URL, author: { login: wanted ? 'keeper' : 'reporter' },
         assignees: [], comments: [], closedByPullRequestsReferences: [], projectItems: [] }
     }
+    if (String(args[1]).includes('/git/trees/')) return { tree: [] }
     if (args[0] === 'search' || !args.includes('merged')) return []
     return [{ url: 'https://github.com/acme/widget/pull/2', author: { login: 'outsider' }, mergedBy: { login: 'keeper' },
-      body: 'b', additions: 1, deletions: 0, files: [{ path: 'src/a.ts' }] }]
+      body: 'Generated with Claude Code', additions: 1, deletions: 0, files: [{ path: 'src/a.ts' }] }]
   }
 }
 
@@ -35,7 +36,8 @@ function parkedByCheck(): World {
 test('D1: a check-parked target that now passes goes back to ready', () => {
   const w = parkedByCheck()
   expect(route(w.db, plan(w.db, 1), new Date())).toMatchObject({ fire: { name: 'measure' } })
-  expect(kernel(w.db, w.root, plan(w.db, 1), undefined, gh(true))).toMatchObject({ outcome: 'pass', note: 'acme/widget#12 warm' })
+  expect(kernel(w.db, w.root, plan(w.db, 1), undefined, gh(true))).toMatchObject({ outcome: 'pass',
+    note: 'acme/widget#12 warm; ai stance: open — "Generated with Claude Code" https://github.com/acme/widget/pull/2' })
   expect(targetRow(w.db, 1).state).toBe('ready')
 })
 

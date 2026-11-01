@@ -4,7 +4,8 @@ import { LANE } from '../cli/plan.ts'
 import { logged } from '../store/events.ts'
 import { filesOf, record } from '../store/files.ts'
 import type { Db } from '../store/index.ts'
-import { addPart, claimedPart, partAt, partOf, partsOf, queuePart, releasable, waitingOn } from '../store/parts.ts'
+import { planOfOrigin } from '../store/origins.ts'
+import { addPart, claimedPart, linkPart, partAt, partOf, partsOf, queuePart, releasable, waitingOn } from '../store/parts.ts'
 import { internal, originIssue, planById, type PlanRow, rewind } from '../store/plans.ts'
 import type { SignalRow } from '../store/signals.ts'
 import { human, type Part, writable } from './brief.ts'
@@ -211,6 +212,8 @@ function queue(db: Db, root: string, parent: PlanRow, n: number): number | null 
   const row = partAt(db, parent.id, n)
   if (row === undefined) return null
   if (row.plan !== null) return row.plan
+  const held = planOfOrigin(db, row.url)
+  if (held !== null) return linkPart(db, parent.id, n, held)
   return made(db, root, parent, n, row)
 }
 

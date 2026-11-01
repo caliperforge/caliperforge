@@ -17,7 +17,7 @@ import { ofKind, runLogged, runRows } from '../../store/events.ts'
 import { priority } from '../../store/lanes.ts'
 import { setLimit } from '../../store/limits.ts'
 import { addPart, allParts } from '../../store/parts.ts'
-import { dropPlan, finish } from '../../store/plans.ts'
+import { allPlans, dropPlan, finish } from '../../store/plans.ts'
 import { afterOf, recordListing } from '../../store/tickets.ts'
 import { approve, CARRIED, internalPlan, ours, plan, stub, watched, world, type World } from './world.ts'
 
@@ -297,6 +297,26 @@ test('D1, D2: a re-split part closes and its grandparent goes on', async () => {
   expect(following(w.db, w.root, plan(w.db, b), 'b'.repeat(40), watched(log, w.root, b)))
     .toMatch(/^the last part landed; #34 closed; part b queued as plan \d+$/)
   expect(log.at(-1)).toBe('close caliperforge/caliperforge#34 bbbbbbb')
+})
+
+test('D1-D3: a re-split part takes the plan its issue has', async () => {
+  const w = mine()
+  internalPlan(w.db, w.root, 3, 'the parent', 33)
+  addPart(w.db, { parent: 3, n: 0, url: 'https://github.com/caliperforge/caliperforge/issues/34', title: 't', body: 'b', plan: ID })
+  addPart(w.db, { parent: 3, n: 1, url: 'https://github.com/caliperforge/caliperforge/issues/35', title: 't', body: 'b', after: 0 })
+  finish(w.db, plan(w.db, 3))
+  await briefed(w, ID, PARTS, [])
+  landing(w, 0, [])
+  const b = partPlan(w, 1) ?? 0
+  pushed(w, b)
+  internalPlan(w.db, w.root, 9, 'already queued', 35)
+  const ask = maybe(w.root, 9, 'ask.md')
+  expect(following(w.db, w.root, plan(w.db, b), 'b'.repeat(40), watched([], w.root, b))).toMatch(/; part b queued as plan 9$/)
+  expect(allParts(w.db).find((p) => p.parent === 3 && p.n === 1)?.plan).toBe(9)
+  expect(allPlans(w.db).filter((p) => p.origin?.endsWith('/issues/35'))).toHaveLength(1)
+  expect(plan(w.db, 9)).toMatchObject({ state: 'queued', step: 0 })
+  expect(maybe(w.root, 9, 'ask.md')).toBe(ask)
+  expect(ofKind(w.db, 'filed').filter((e) => e.plan === 9)).toEqual([])
 })
 
 test('D1, D2, D6: free parts start; only waiters name their issue', async () => {

@@ -18,9 +18,10 @@ function gh(wanted: boolean): Read {
       return { number: 12, title: 'hello', body: 'b', state: 'OPEN', url: URL, author: { login: wanted ? 'keeper' : 'reporter' },
         assignees: [], comments: [], closedByPullRequestsReferences: [], projectItems: [] }
     }
+    if (String(args[1]).includes('/git/trees/')) return { tree: [] }
     if (args[0] === 'search' || !args.includes('merged')) return []
     return [{ url: 'https://github.com/acme/widget/pull/2', author: { login: 'outsider' }, mergedBy: { login: 'keeper' },
-      body: 'b', additions: 1, deletions: 0, files: [{ path: 'src/a.ts' }] }]
+      body: 'Generated with Claude Code', additions: 1, deletions: 0, files: [{ path: 'src/a.ts' }] }]
   }
 }
 
@@ -56,7 +57,8 @@ test.each([
 test('D5: a CEO sign-off passes step 0 and names itself',() => {
   const w = world()
   signed(w, 'ceo')
-  expect(kernel(w.db, w.root, plan(w.db, 1), undefined, gh(false))).toMatchObject({ outcome: 'pass', note: 'acme/widget#12 warm' })
+  expect(kernel(w.db, w.root, plan(w.db, 1), undefined, gh(false))).toMatchObject({ outcome: 'pass',
+    note: 'acme/widget#12 warm; ai stance: open — "Generated with Claude Code" https://github.com/acme/widget/pull/2' })
   expect(state(w)).toBe('ready')
   expect(get(w.root, 1, 'ask.md')).toContain('\n- wanted: yes — the CEO approved target 1 (')
 })
@@ -64,10 +66,11 @@ test('D5: a CEO sign-off passes step 0 and names itself',() => {
 test('D5: step 0 again replaces its section and leaves it ready',() => {
   const w = world()
   kernel(w.db, w.root, plan(w.db, 1), undefined, gh(true))
-  expect(kernel(w.db, w.root, plan(w.db, 1), undefined, gh(true))).toMatchObject({ outcome: 'pass', note: 'acme/widget#12 warm' })
+  expect(kernel(w.db, w.root, plan(w.db, 1), undefined, gh(true))).toMatchObject({ outcome: 'pass',
+    note: 'acme/widget#12 warm; ai stance: open — "Generated with Claude Code" https://github.com/acme/widget/pull/2' })
   const ask = get(w.root, 1, 'ask.md')
   expect(ask.split('## Target check')).toHaveLength(2)
-  expect(ask).toMatch(/^# hello\n\n- \*\*D1\*\* add `hello\(\)` in `src\/hello\.ts`\n\n## Target check\n\n- wanted: yes .*\n- unclaimed: yes .*\n- shape: yes .*\n$/)
+  expect(ask).toMatch(/^# hello\n\n- \*\*D1\*\* add `hello\(\)` in `src\/hello\.ts`\n\n## Target check\n\n- wanted: yes .*\n- unclaimed: yes .*\n- shape: yes .*\n- ai stance: open .*\n$/)
   expect(state(w)).toBe('ready')
 })
 

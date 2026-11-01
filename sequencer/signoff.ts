@@ -17,11 +17,12 @@ import { targetRef } from '../store/targets.ts'
 import type { Board } from '../rails/ci-green/index.ts'
 import { carried as rows } from '../rails/completion-audit/index.ts'
 import { prTitle } from './pr.ts'
-import { BOARD, headOf, opened, rehearsalBranch, title } from './push.ts'
-import { GRADING, SKIPPED } from './ready.ts'
+import { BOARD, headOf, opened, rehearsalBranch, reviewedWith, title } from './push.ts'
+import { ASKED, GRADING, SKIPPED } from './ready.ts'
 import { checked } from './seat.ts'
 import { work, type Hit } from './theirs.ts'
 import { UNRUN } from './triggers.ts'
+import { listed, settled } from './unruled.ts'
 import { diffOf, drop, FORK, get, maybe, put, repoName, srcDir } from './workspace.ts'
 
 /**
@@ -176,7 +177,7 @@ function bodyFor(db: Db, root: string, card: Card, desk: Desk, read: Read): stri
     `- Gates: ${card.marks.map((m) => `${m.name} ${m.ok ? 'pass' : 'NOT PASSED'}`).join(', ')}`,
     ...modes(root, card.id),
     ci === null ? `- ${maybe(root, card.id, 'ci.unrun') === head.sha ? UNRUN : 'this repo has no CI'}; checked with: ${ranAt(db, root, card.id)}` : `- Their CI on our fork: ${ciLine(ci)}`,
-    `- Greptile on our fork: ${greptileLine(db, root, card.id, head.sha)}`,
+    ...forkPass(db, root, card.id, head.sha),
     open === null
       ? `- Goes out as: a new pull request titled ${code(prTitle(root, card.id))}`
       : `- Goes out as: a follow-up commit on our open pull request ${code(open)}`,
@@ -291,6 +292,16 @@ function greptileLine(db: Db, root: string, plan: number, sha: string): string {
   const [at, ...why] = (maybe(root, plan, SKIPPED) ?? '').trim().split(' ')
   if (score === null && at === sha) return `skipped: ${why.join(' ')}`
   return score === null ? `no score at this head; ready went on after ${String(GRADING)} ticks without one` : `${String(score)}/5 at this head`
+}
+
+function forkPass(db: Db, root: string, plan: number, sha: string): string[] {
+  const line = `- Greptile on our fork: ${greptileLine(db, root, plan, sha)}`
+  const first = (maybe(root, plan, ASKED) ?? '').split(' ')[0] ?? ''
+  if (first === '') return [line, `- Greptile config: ${maybe(root, plan, SKIPPED) === null ? 'not asked' : 'skipped: quota'}`]
+  const ruled = settled(root, plan, first)
+  const kept = listed(root, plan, first).filter((f) => f.text.includes('alt="P2"') && (ruled.get(f.id)?.startsWith('accepted:') ?? true))
+    .map((f) => `${f.id} ${code(f.text.split(' ')[2] ?? '')}: ${code(ruled.get(f.id) ?? 'open')}`)
+  return [line, `- Greptile config: ${reviewedWith(root, plan, first)}`, ...(kept.length === 0 ? [] : [`- P2s carried to the maintainer: ${kept.join('; ')}`])]
 }
 
 function ciLine(ci: Board[]): string {

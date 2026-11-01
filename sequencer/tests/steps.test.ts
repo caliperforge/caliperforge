@@ -3,14 +3,17 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
+import type { Read } from '../../cli/gh.ts'
 import { gates } from '../../store/approvals.ts'
 import { pushedRow } from '../../store/deliverables.ts'
 import { addRule, migrate, open } from '../../store/index.ts'
+import { returnToLane } from '../../store/holds.ts'
 import { dial, hours } from '../../store/lanes.ts'
 import { addPart } from '../../store/parts.ts'
 import type { Provider } from '../../providers/kind.ts'
 import { eventsOf, logged, runRows } from '../../store/events.ts'
 import { addPipe, addPlan, briefed, dropPipes, dropPlan, end, pipeNamed, planById, planRows, putPlan, requeue, type PlanRow } from '../../store/plans.ts'
+import { targetRow } from '../../store/targets.ts'
 import { afterOf, allTickets, recordListing } from '../../store/tickets.ts'
 import { steps as comms, draft } from '../../templates/comms.ts'
 import { at, steps } from '../../templates/pr-path.ts'
@@ -251,4 +254,44 @@ test('D6 bench_night reports a bench.fired at 14:00, not 23:00', () => {
   expect(drift(db, night, now)).toEqual([])
   logged(db, fired, local(14))
   expect(drift(db, night, now)).toMatchObject([{ name: 'bench_night', state: 'seen' }])
+})
+
+const NO_AI = 'Please, no AI-generated contributions.'
+
+function widget(contributing: string): Read {
+  return (args) => {
+    if (String(args[1]).includes('/git/trees/')) return { tree: [{ path: 'CONTRIBUTING.md', type: 'blob', sha: 'c' }] }
+    if (String(args[1]).includes('/git/blobs/')) return { content: Buffer.from(contributing).toString('base64') }
+    if (args[0] === 'issue') {
+      return { number: 12, title: 'hello', body: 'b', state: 'OPEN', url: 'https://github.com/acme/widget/issues/12', author: { login: 'keeper' },
+        assignees: [], comments: [], closedByPullRequestsReferences: [], projectItems: [] }
+    }
+    if (args[0] === 'search' || !args.includes('merged')) return []
+    return [{ url: 'https://github.com/acme/widget/pull/2', author: { login: 'outsider' }, mergedBy: { login: 'keeper' },
+      body: 'b', additions: 1, deletions: 0, files: [{ path: 'src/a.ts' }] }]
+  }
+}
+
+test('D2 a closed stance refuses step 0 and refuses the target', () => {
+  const w = world()
+  expect(measure(w.db, w.root, planOf(w.db, 1), widget(`${NO_AI}\n`))).toMatchObject({ outcome: 'refuse', held: true,
+    note: `ai stance: closed — "${NO_AI}" https://github.com/acme/widget/blob/HEAD/CONTRIBUTING.md#L1` })
+  expect(targetRow(w.db, 1).state).toBe('refused')
+  expect(maybe(w.root, 1, 'ask.md')).not.toContain('## Ask first')
+})
+
+test('D3 an unstated stance holds for the ceo with the draft', () => {
+  const w = world()
+  expect(measure(w.db, w.root, planOf(w.db, 1), widget('Run the tests.\n'))).toMatchObject({ outcome: 'pass', held: true })
+  expect(planRows(w.db).find((r) => r.id === 1)).toMatchObject({ state: 'blocked_on_ceo', held_by: 'ceo', held_why: 'ai stance unstated' })
+  expect(maybe(w.root, 1, 'ask.md')).toMatch(/\n- ai stance: unstated — .*\n\n## Ask first\n\nDraft for the CEO to post on https:\/\/github\.com\/acme\/widget\/issues\/12;/)
+})
+
+test('D4 once the ceo returns it, the unstated plan passes', () => {
+  const w = world()
+  measure(w.db, w.root, planOf(w.db, 1), widget('Run the tests.\n'))
+  returnToLane(w.db, 1, 'ceo')
+  expect(measure(w.db, w.root, planOf(w.db, 1), widget('Run the tests.\n'))).toEqual({ outcome: 'pass', spans: [],
+    note: 'acme/widget#12 warm; ai stance: unstated — no statement in 1 files, 0 maintainer comments, 1 outside merges in 90 days' })
+  expect(maybe(w.root, 1, 'ask.md')).not.toContain('## Ask first')
 })

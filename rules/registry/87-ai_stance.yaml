@@ -1,0 +1,6 @@
+- name: ai_stance
+  table: plans
+  column: queued_at
+  where: "origin IS NULL AND target_id IS NOT NULL AND template = 'pr_path' AND step > 0 AND queued_at >= '2026-11-01' AND NOT EXISTS (SELECT 1 FROM events e WHERE e.plan = plans.id AND e.kind = 'measure' AND e.message LIKE '%ai stance: %')"
+  gap: 7d
+  expected: 0

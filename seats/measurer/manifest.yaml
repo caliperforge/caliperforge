@@ -6,5 +6,7 @@ tools:
   - Grep
   - Glob
   - Bash(uv run:*)
+  - Bash(forge:*)
+  - Bash(medusa:*)
 write_paths:
   - .cf/measure

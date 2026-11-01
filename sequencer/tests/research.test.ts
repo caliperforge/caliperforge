@@ -14,7 +14,7 @@ import { tick } from '../index.ts'
 import type { Wire } from '../push.ts'
 import { rule } from '../rule.ts'
 import { mapOf } from '../steps.ts'
-import { drop, headSha, maybe, put, srcDir } from '../workspace.ts'
+import { drop, headSha, maybe, planDir, put, srcDir } from '../workspace.ts'
 import { git } from './bases.ts'
 import { PASS, plan, stub, watched, world, type World } from './world.ts'
 
@@ -689,6 +689,41 @@ test('measure D1: a Measure line fires measurer with HEAD', async () => {
   expect(idle).toBeUndefined()
   expect(ran(w)).toEqual(['measurer'])
   expect(JSON.parse(maybe(w.root, 1, 'runs.json') ?? '')).toEqual([{ command: RUN, output: 'cold start:\n  41 ms' }])
+  expect(existsSync(join(srcDir(w.root, 1), '.cf/measure/suite'))).toBe(false)
+})
+
+const SCORED = 'fuzz-bench/suites/fizz/euler-earn-m01'
+
+const suited = (scored = true): World => {
+  const w = researching(`${MEASURE}**Suite:** 2\n`)
+  putPlan(w.db, { id: 2, pipe_id: 1, target_id: null, template: 'bench', state: 'done', queued_at: plan(w.db, 1).queued_at, step: 4, retries: 0 })
+  put(w.root, 2, 'target.yml', 'target: euler-earn-m01\ngenerator: fizz\n')
+  put(w.root, 2, 'generate.json', JSON.stringify({ suite: 'test/fizz', tokens: 1, seconds: 1 }))
+  if (scored) {
+    mkdirSync(join(planDir(w.root, 2), SCORED), { recursive: true })
+    put(w.root, 2, `${SCORED}/FizzTest.sol`, 'contract FizzTest {}\n')
+  }
+  return w
+}
+
+test('suite D3: a Suite line copies the scored suite in', async () => {
+  const w = suited()
+  const head = headed(w)
+  let copied = false
+  const seen = (): void => { copied = existsSync(join(srcDir(w.root, 1), '.cf/measure/suite/FizzTest.sol')) }
+  expect(await gather(w.db, w.root, plan(w.db, 1), mapOf('research').at(1), measuring(fence(entry(head)), seen)))
+    .toMatchObject({ outcome: 'pass' })
+  expect(copied).toBe(true)
+  expect(ran(w)).toEqual(['measurer'])
+  expect(existsSync(join(planDir(w.root, 2), SCORED, 'FizzTest.sol'))).toBe(true)
+})
+
+test('suite D4: a Suite plan with no scored suite is refused', async () => {
+  const w = suited(false)
+  expect(await gather(w.db, w.root, plan(w.db, 1), mapOf('research').at(1), measuring(fence(entry('x')), () => undefined)))
+    .toEqual({ outcome: 'refuse', spans: ['ask.md'], note: 'plan 2 has no fuzz-bench/suites/fizz/euler-earn-m01' })
+  expect(ran(w)).toEqual([])
+  expect(eventsOf(w.db, 1, 'research.unsuited')).toMatchObject([{ message: '**Suite:** 2: plan 2 has no fuzz-bench/suites/fizz/euler-earn-m01' }])
 })
 
 const UNBASHED = `${JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'Kept the rest.' }] } })}\n`

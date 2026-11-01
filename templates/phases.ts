@@ -10,8 +10,9 @@ import type { Db } from '../store/index.ts'
 import { observed } from '../store/lanes.ts'
 import type { PlanRow } from '../store/plans.ts'
 import { byRun, pending } from '../store/transcript.ts'
+import { compiled, extract } from './extract.ts'
 import { costWalled } from './generated.ts'
-import { handoff, type Refused } from './handoff.ts'
+import { handoff, ranged, type Refused } from './handoff.ts'
 import type { Step } from './pr-path.ts'
 
 export interface Sum { tokens: number; seconds: number; usd: number; transcripts: string[]; wall: string | null }
@@ -55,13 +56,20 @@ function added(sum: Sum, fired: Fired, transcript: string, who: string, ceiling:
   return next
 }
 
-interface Phase { phase: string; skill: string; path: string; prompt: string; issue: string; critics: () => Refused[] }
+interface Phase { phase: string; skill: string; root: string; path: string; prompt: string; issue: string; critics: () => Refused[] }
+
+function facts({ phase, root }: Phase, text: string): Refused[] {
+  if (phase !== 'context' || !existsSync(join(root, 'src'))) return []
+  const failed = compiled(root)
+  return failed.length > 0 ? failed : ranged(root, text, extract(root))
+}
 
 async function checked(fire: Fire, at: Phase, sum: Sum, refused: Refused[] = []): Promise<Sum | Outcome> {
   const issue = refused.length === 0 ? at.issue : `${at.issue}\nYour handoff was refused:\n${refused.map((r) => `- ${r.rule}: ${r.note}`).join('\n')}`
   const ran = await fire(at.prompt, issue, sum, at.phase)
   if ('outcome' in ran || ran.wall !== null) return ran
-  const handed = handoff(at.skill, at.phase, existsSync(at.path) ? readFileSync(at.path, 'utf8') : '')
+  const text = existsSync(at.path) ? readFileSync(at.path, 'utf8') : ''
+  const handed = [...handoff(at.skill, at.phase, text), ...facts(at, text)]
   const found = handed.length === 0 && at.phase === 'invariants' ? at.critics() : handed
   if (found.length > 0 && refused.length === 0) return checked(fire, at, ran, found)
   if (handed.length > 0) return { outcome: 'refuse', spans: [...new Set(handed.map((r) => r.rule))], note: `${at.phase} handoff refused twice: ${handed.map((r) => r.note).join('; ')}` }
@@ -71,11 +79,12 @@ async function checked(fire: Fire, at: Phase, sum: Sum, refused: Refused[] = [])
 
 export async function phased(fire: Fire, skill: string, handoffs: string, issue: string, critics: () => Refused[]): Promise<Sum | Outcome> {
   const phases = [...readFileSync(join(skill, TEMPLATES), 'utf8').matchAll(/^# Handoff: (.+)$/gm)].map((m) => m[1] ?? '').filter((phase) => phase !== 'campaigns')
+  const root = resolve(handoffs, '../../../..')
   let sum = START
   for (const [at, phase] of phases.entries()) {
     const path = join(handoffs, `${phase}.md`)
     const start = at === 0 ? [] : [`Start from ${join(handoffs, `${phases[at - 1] ?? ''}.md`)}.`]
-    const ran = await checked(fire, { phase, skill, path, critics, prompt: readFileSync(join(skill, 'phases', `${phase}.md`), 'utf8'),
+    const ran = await checked(fire, { phase, skill, root, path, critics, prompt: readFileSync(join(skill, 'phases', `${phase}.md`), 'utf8'),
       issue: [issue, `Before you end, write ${path} filled from the \`# Handoff: ${phase}\` block of ${join(skill, TEMPLATES)}.`, ...start].join('\n') }, sum)
     if ('outcome' in ran || ran.wall !== null) return ran
     sum = ran

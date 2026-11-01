@@ -2,10 +2,12 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, extname, join } from 'node:path'
 import { git, repoName } from './workspace.ts'
 
+export const EXPORTED = /^export\s+(?:(?:default|declare|abstract|async)\s+)*(?:function\*?|class|(?:const\s+)?enum|const|let|var|interface|type|namespace)\s+([A-Za-z_$][\w$]*)/
+
 const patterns: [string[], RegExp][] = [
   [
     ['ts', 'tsx', 'mts', 'cts', 'js', 'jsx', 'mjs', 'cjs'],
-    /^export\s+(?:(?:default|declare|abstract|async)\s+)*(?:function\*?|class|(?:const\s+)?enum|const|let|var|interface|type|namespace)\s+([A-Za-z_$][\w$]*)/,
+    EXPORTED,
   ],
   [['rs'], /^pub(?:\([^)]*\))?\s+(?:(?:async|unsafe|const)\s+)*(?:fn|struct|enum|trait|type|const|static|mod|union)\s+([A-Za-z_]\w*)/],
   [['go'], /^(?:func(?:\s*\([^)]*\))?|type|var|const)\s+([A-Z]\w*)/],

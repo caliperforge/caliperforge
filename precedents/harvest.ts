@@ -14,7 +14,9 @@ export const RECENT = 30
 
 const Login = z.object({ login: z.string() })
 
-const Said = z.object({ author: Login.nullable(), body: z.string() })
+const Said = z.object({ author: Login.nullable(), body: z.string(), url: z.string() })
+
+const Reviews = z.array(z.object({ user: Login.nullable(), body: z.string(), html_url: z.string() }))
 
 const Merged = z.array(z.object({
   number: z.int(),
@@ -23,7 +25,6 @@ const Merged = z.array(z.object({
   mergedBy: Login.nullable(),
   files: z.array(z.object({ path: z.string() })),
   closingIssuesReferences: z.array(z.object({ number: z.int() })),
-  reviews: z.array(Said),
   comments: z.array(Said),
 }))
 
@@ -43,7 +44,7 @@ export function harvest(db: Db, repo: string, since: string | null, read: Read =
   const after = [newestMerged(db, repo), since].filter((d) => d !== null).sort().at(-1)
   const listed = Merged.parse(twice(() => read(['pr', 'list', '--repo', repo, '--state', 'merged', '--limit', String(LIMIT),
     ...(after === undefined ? [] : ['--search', `merged:>${after}`]),
-    '--json', 'number,title,mergedAt,mergedBy,files,closingIssuesReferences,reviews,comments'])))
+    '--json', 'number,title,mergedAt,mergedBy,files,closingIssuesReferences,comments'])))
   if (listed.length === LIMIT) throw new Error(`${repo} lists ${String(LIMIT)} merged PRs, the limit; the rest are unread`)
   if (listed.length === 0) return 0
   const mergers = logins(Mergers.parse(twice(() => read(['pr', 'list', '--repo', repo, '--state', 'merged', '--limit', String(WINDOW),
@@ -54,11 +55,14 @@ export function harvest(db: Db, repo: string, since: string | null, read: Read =
     try {
       const lines = twice(() => inline(repo, p.number, read))
       if (lines.length >= WINDOW) throw new Error(`inline comments reach the cap of ${String(WINDOW)}; the rest are unread`)
+      const reviews = Reviews.parse(twice(() => read(['api', `repos/${repo}/pulls/${String(p.number)}/reviews?per_page=100`])))
+      if (reviews.length >= WINDOW) throw new Error(`reviews reach the cap of ${String(WINDOW)}; the rest are unread`)
       const said = (kind: string, rows: z.infer<typeof Said>[]): Thread[] => rows.filter((r) => r.body.trim() !== '')
-        .map((r) => ({ kind, author: r.author?.login ?? '', role: role(r.author?.login ?? ''), text: r.body, path: null, line: null }))
-      const threads = [...said('review', p.reviews), ...lines.map((c) => {
+        .map((r) => ({ kind, author: r.author?.login ?? '', role: role(r.author?.login ?? ''), text: r.body, path: null, line: null, url: r.url }))
+      const threads = [...said('review', reviews.map((r) => ({ author: r.user, body: r.body, url: r.html_url }))), ...lines.map((c) => {
         const at = c.line ?? c.original_line
-        return { kind: 'inline', author: c.user.login, role: role(c.user.login), text: c.body, path: at === null ? null : c.path, line: at }
+        return { kind: 'inline', author: c.user.login, role: role(c.user.login), text: c.body, path: at === null ? null : c.path, line: at,
+          url: `https://github.com/${repo}/pull/${String(p.number)}#discussion_r${String(c.id)}` }
       }), ...said('comment', p.comments)]
       if (lines.length < 3 && !threads.some((t) => t.kind === 'review' || t.role === 'maintainer')) continue
       keep(db, { repo, number: p.number, title: p.title, merged_at: p.mergedAt, merger: p.mergedBy?.login ?? null,

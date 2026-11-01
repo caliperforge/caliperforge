@@ -13,8 +13,10 @@ const fresh = () => {
 }
 
 const pr: Source = { repo: 'o/r', number: 7, title: 'Fix', merged_at: '2026-10-01T00:00:00Z', merger: null, files: ['a.ts'], issues: [3] }
-const review: Thread = { kind: 'review', author: 'x', role: 'MEMBER', text: 'ok', path: null, line: null }
-const inline: Thread = { kind: 'inline', author: 'y', role: 'NONE', text: 'nit', path: 'a.ts', line: 4 }
+const review: Thread = { kind: 'review', author: 'x', role: 'MEMBER', text: 'ok', path: null, line: null,
+  url: 'https://github.com/o/r/pull/7#pullrequestreview-80' }
+const inline: Thread = { kind: 'inline', author: 'y', role: 'NONE', text: 'nit', path: 'a.ts', line: 4,
+  url: 'https://github.com/o/r/pull/7#discussion_r1' }
 
 it('D1 a fresh migrate creates both tables', () => {
   const db = fresh()

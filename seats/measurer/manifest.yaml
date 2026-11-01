@@ -5,6 +5,7 @@ tools:
   - Read
   - Grep
   - Glob
+  - Write
   - Bash(uv run:*)
   - Bash(forge:*)
   - Bash(medusa:*)

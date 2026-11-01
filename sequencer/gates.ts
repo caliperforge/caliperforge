@@ -201,7 +201,7 @@ function rust(src: string, files: string[], excused: string[]): Gate[] {
   return [
     { script: 'format', bin: 'cargo', args: formatLine(src), dir: root },
     { script: 'test', bin: 'cargo', args: ['test', ...crates.flatMap((c) => ['-p', c.name]),
-      ...(features.length === 0 ? [] : ['--features', features.join(',')]), ...(through ? ['--no-fail-fast'] : [])], dir: root },
+      ...(features.length === 0 ? [] : ['--features', features.join(',')]), ...(through ? ['--no-fail-fast'] : []), '--', '--test-threads=4'], dir: root },
   ]
 }
 

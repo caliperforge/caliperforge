@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { targetDigest } from '../sequencer/approve.ts'
 import type { Check } from '../sequencer/card.ts'
 import { picked } from '../sequencer/theirs.ts'
-import { branchOf, checkout, put } from '../sequencer/workspace.ts'
+import { branchOf, checkout, FORK, put } from '../sequencer/workspace.ts'
 import { decide } from '../store/approvals.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
@@ -69,6 +69,7 @@ const PART = /^[a-z0-9][a-z0-9-]{0,31}$/
  */
 export function add(db: Db, root: string, repo: string, url: string, pipe: string, today: string, scope: Scope = {}): Added {
   const no = parse(repo, url)
+  if (repo.split('/')[0] === FORK) throw new Error(`${repo} is ours: cf plan add --issue ${repo}#${String(no)}`)
   const part = scope.part ?? ''
   if (part !== '' && !PART.test(part)) throw new Error(`part "${part}" is not a lowercase slug of at most 32 characters`)
   if (part !== '' && scope.card === undefined) throw new Error('a part is one item of the issue; name it with --ask')

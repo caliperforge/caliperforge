@@ -1,0 +1,5 @@
+seat: precedent_writer
+model: claude-sonnet-5
+effort: medium
+tools: []
+write_paths: []

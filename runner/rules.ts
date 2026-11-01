@@ -26,7 +26,7 @@ export const Seat = z.object({
   seat: z.string(),
   model: z.string(),
   effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']),
-  tools: z.array(z.string()).min(1),
+  tools: z.array(z.string()),
   reads: z.array(z.string()).optional(),
   write_paths: z.array(z.string()),
 }).refine((s) => s.write_paths.length > 0 || !s.tools.some((t) => t !== LOOK && t !== GH && WRITERS.has(bare(t))), {

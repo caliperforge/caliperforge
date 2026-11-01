@@ -488,6 +488,56 @@ test('D3 only asks on their PR since the last push show', async () => {
   expect(body.split('\n').filter((l) => l.startsWith('- `R'))).toEqual([`- \`R${String(late)}\` maintainer: \`After the push.\` — open`])
 })
 
+/** The single fork pass asked at the card's head, read off the -next tip `tips` lists for it. */
+function askedAt(w: World, tips?: string): string {
+  const head = headSha(srcDir(w.root, 1))
+  put(w.root, 1, 'greptile.asked', `${head} 2026-11-01T00:00:00.000Z\n`)
+  if (tips !== undefined) put(w.root, 1, 'next.tips', `${tips} ${head}\n`)
+  return head
+}
+
+test('D1 a tip holding .greptile/rules.md says mirrored', async () => {
+  const w = await atBatch()
+  const tree = join(mkdtempSync(join(tmpdir(), 'cf-mirror-')), 'tip')
+  git(srcDir(w.root, 1), ['worktree', 'add', '-q', '--detach', tree, 'HEAD'])
+  mkdirSync(join(tree, '.greptile'))
+  writeFileSync(join(tree, '.greptile/rules.md'), 'their rules\n')
+  git(tree, ['add', '-f', '.greptile/rules.md'])
+  git(tree, ['-c', 'user.email=t@t', '-c', 'user.name=t', '-c', 'commit.gpgsign=false', 'commit', '-qm', 'mirror'])
+  askedAt(w, headSha(tree))
+  expect(cardWith(w, CARRIED)).toContain('- Greptile on our fork: 5/5 at this head\n- Greptile config: mirrored\n')
+})
+
+test('D2 a tip carrying greptile.json says generic', async () => {
+  const w = await atBatch()
+  askedAt(w)
+  const body = cardWith(w, CARRIED)
+  expect(body).toContain('\n- Greptile config: generic\n')
+  expect(body).not.toContain('P2s carried')
+})
+
+test('D3 no ask and a quota skip says skipped: quota', async () => {
+  const w = await atBatch()
+  dropSignals(w.db)
+  drop(w.root, 1, 'greptile.asked')
+  put(w.root, 1, 'greptile.skipped', `${headSha(srcDir(w.root, 1))} monthly quota spent (50/50)\n`)
+  expect(cardWith(w, CARRIED)).toContain('- Greptile on our fork: skipped: monthly quota spent (50/50)\n- Greptile config: skipped: quota\n')
+})
+
+test('D4 D5 only open and accepted P2s are carried', async () => {
+  const w = await atBatch()
+  const head = askedAt(w)
+  const p = (n: number): string => `<img alt="P${String(n)}" src="https://greptile.com/p${String(n)}.svg">`
+  put(w.root, 1, `findings-${head}.md`, `- G1 src/hello.ts:1 ${p(2)} open\n- G2 src/hello.ts:2 ${p(2)} accepted\n`
+    + `- G3 src/hello.ts:3 ${p(2)} overruled\n- G4 src/hello.ts:4 ${p(2)} fixed\n- G5 src/hello.ts:5 ${p(1)} severe\n`)
+  put(w.root, 1, 'rulings.md', `accepted:\n  head: ${head.slice(0, 12)}\n  ids: G2\n  reason: recorded upstream\n\nG3 overruled: src/hello.ts:1 refuses it\n`)
+  const fixed = CARRIED.replace(/---\n$/, '  - id: G4\n    status: done\n    pointer: src/hello.ts:1\n---\n')
+  expect(cardWith(w, fixed).split('\n').filter((l) => l.startsWith('- P2s carried'))).toEqual([
+    '- P2s carried to the maintainer: G1 `src/hello.ts:1`: `open`; G2 `src/hello.ts:2`: `accepted: recorded upstream`'])
+  put(w.root, 1, `findings-${head}.md`, `- G3 src/hello.ts:3 ${p(2)} overruled\n- G4 src/hello.ts:4 ${p(2)} fixed\n- G5 src/hello.ts:5 ${p(1)} severe\n`)
+  expect(cardWith(w, fixed)).not.toContain('P2s carried')
+})
+
 /** The cards carry unposted PR text and sign-off answers, so they live apart from our public repo. */
 test('the cards live on the private sign-off repo, not ours', () => {
   expect(SIGNOFF).toBe('caliperforge/signoff')

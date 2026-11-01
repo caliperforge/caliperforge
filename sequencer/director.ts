@@ -310,7 +310,6 @@ function waiving(db: Db, root: string, plan: PlanRow, m: z.infer<typeof Said>): 
   return true
 }
 
-/** Each move is the call its `cf` command makes; false leaves the stop with a person. */
 function parked(db: Db, root: string, plan: PlanRow, m: z.infer<typeof Said>, now: Date): boolean {
   if (plan.wait_reason === 'over_cap') {
     afresh(root, plan.id, returnToLane(db, plan.id, 'director'))
@@ -322,6 +321,7 @@ function parked(db: Db, root: string, plan: PlanRow, m: z.infer<typeof Said>, no
   return true
 }
 
+/** Each move is the call its `cf` command makes; false leaves the stop with a person. */
 function apply(db: Db, root: string, plan: PlanRow, m: Move, wire: Wire, now: Date): boolean | string {
   switch (m.move) {
     case 'rule': {

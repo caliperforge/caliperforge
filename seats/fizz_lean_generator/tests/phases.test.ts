@@ -92,9 +92,10 @@ test('D5: the lean skill holds no copied fizz folders', () => {
 })
 
 const FACTS = ['Signatures', 'Guards', 'Roles', 'Limits'].map((name) => `\n## ${name}\n\n- none\n`).join('')
+const TRACKED = ['Conversion points', 'Aggregates', 'Not tracked'].map((name) => `\n## ${name}\n\n- none\n`).join('')
 const HANDED = `\n## Reads\n\n- x-ray/x-ray.md, Vault.deposit — the entry point to call\n${FACTS}`
 const FILLED: Record<string, string> = {
-  context: `phase: context\nnext: scaffold\nmode: automatic\nagent_model: opus\n${HANDED}`,
+  context: `phase: context\nnext: scaffold\nmode: automatic\nagent_model: opus\n${HANDED}${TRACKED}`,
   scaffold: `phase: scaffold\nnext: coverage\n${HANDED}\n## Stand-ins\n\n- MockStrategy | limits: max interest 1e15 per call\n`,
   coverage: `phase: coverage\nnext: invariants\nfuzz_build_cmd: forge build\n${HANDED}`,
   invariants: `phase: invariants\nnext: campaigns\n${HANDED}\n## Converted values\n\n- property_redeemConserves | tolerance: 2 wei\n`,

@@ -1,7 +1,8 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
+import { parseDocument } from 'yaml'
 import { workflows } from '../push.ts'
 import { dispatchable, fired } from '../triggers.ts'
 
@@ -46,6 +47,22 @@ test('D1 a bare push, a matched path or a bad yml fires', () => {
   expect(fired(tree({ 'ci.yml': 'on: push\n' }), 'x-next', HELLO)).toBe(true)
   expect(fired(tree({ 'ci.yml': "on:\n  pull_request:\n    paths: ['**.tex']\n" }), 'x-next', ['docs/a.tex'])).toBe(true)
   expect(fired(tree({ 'ci.yml': 'on:\n  push:\n    branches: [main]\n', 'broken.yml': 'on: [push\n' }), 'x-next', HELLO)).toBe(true)
+})
+
+const repoRoot = join(import.meta.dirname, '../..')
+
+test('D1 D3 our ci frees disk before the exact test step', () => {
+  const ci = parseDocument(readFileSync(join(repoRoot, '.github/workflows/ci.yml'), 'utf8'))
+    .toJS() as { jobs: { check: { steps: { run?: string }[] } } }
+  const runs = ci.jobs.check.steps.map(step => step.run)
+  const disk = runs.findIndex(run => run?.startsWith('sudo rm -rf /usr/share/dotnet'))
+  expect(disk).toBeGreaterThan(-1)
+  expect(disk).toBeLessThan(runs.indexOf('npm run test'))
+})
+
+test('D2 our own ci still fires on a push of any branch', () => {
+  expect(fired(repoRoot, 'x-next', ['src/a.ts'])).toBe(true)
+  expect(workflows(repoRoot)).toBe(true)
 })
 
 test('dispatchable names push or pull request files with dispatch', () => {

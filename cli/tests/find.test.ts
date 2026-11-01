@@ -13,6 +13,10 @@ const merge = (no: number, author: string): object => ({ url: `https://github.co
   author: { login: author }, mergedBy: { login: 'keeper' }, body: 'one\ntwo', additions: 10, deletions: 2,
   files: [{ path: 'src/a.ts' }, { path: 'src/a.test.ts' }] })
 
+const sibling = (over: object = {}): object => ({ url: 'https://github.com/acme/widget-py/pull/3', title: 'x', body: '',
+  repository: { nameWithOwner: 'acme/widget-py' }, ...over })
+const SIBLING = 'unclaimed: an open pull request in acme/widget-py names it https://github.com/acme/widget-py/pull/3'
+
 interface Canned { issue?: object; merged?: object[]; open?: object[]; siblings?: object[] }
 
 function gh(c: Canned = {}): Read {
@@ -45,10 +49,33 @@ test.each([
     park: `unclaimed: a comment claims the issue ${URL}` },
   { why: 'a linked closer', canned: { issue: issue({ closedByPullRequestsReferences: [{ number: 9 }] }) },
     park: 'unclaimed: pull request #9 implements it https://github.com/acme/widget/pull/9' },
-  { why: 'an open sibling-repo PR', canned: { siblings: [{ url: 'https://github.com/acme/widget-py/pull/3', repository: { nameWithOwner: 'acme/widget-py' } }] },
-    park: 'unclaimed: an open pull request in acme/widget-py names it https://github.com/acme/widget-py/pull/3' },
+  { why: 'an open sibling-repo PR', canned: { siblings: [sibling({ body: 'fixes acme/widget#12' })] }, park: SIBLING },
 ])('D2: $why parks the target, naming the question', ({ canned, park }) => {
   expect(find('acme/widget', 12, false, null, gh(canned)).park).toBe(park)
+})
+
+test('D1: a sibling with only an image width is no claim', () => {
+  const found = find('acme/widget', 12, false, null, gh({ siblings: [sibling({ body: '<img width="12" src="x">' })] }))
+  expect(found.park).toBeNull()
+  expect(found.section).toContain(`\n- unclaimed: yes — no assignee, claim, closer or sibling pull request ${URL}\n`)
+})
+
+test.each([
+  { why: 'the issue URL', over: { body: URL } },
+  { why: 'a trailing slash', over: { body: `${URL}/` } },
+  { why: 'a fragment', over: { body: `${URL}#issuecomment-1` } },
+  { why: 'another case in the title', over: { title: 'ACME/Widget#12' } },
+])('D3: a sibling naming it by $why parks', ({ over }) => {
+  expect(find('acme/widget', 12, false, null, gh({ siblings: [sibling(over)] })).park).toBe(SIBLING)
+})
+
+test.each(['acme/widget#123', `${URL}3`])('D4: a sibling naming only #123 does not park', (body) => {
+  expect(find('acme/widget', 12, false, null, gh({ siblings: [sibling({ body })] })).park).toBeNull()
+})
+
+test('D5: a hit in the target repo itself never counts', () => {
+  const own = sibling({ body: 'fixes acme/widget#12', repository: { nameWithOwner: 'acme/widget' } })
+  expect(find('acme/widget', 12, false, null, gh({ siblings: [own] })).park).toBeNull()
 })
 
 test.each([

@@ -51,6 +51,11 @@ Its commands, write fence and answer fence are the builder's, not yours. On a pl
 a line that breaks a rule is a span, and the finding quotes the rule's text. On an outside plan, a broken
 rule on idiom or toolchain is a `language` note quoting the rule.
 
+When the packet carries `# Removed tests`, answer each of its lines in the prose before the fence:
+`- confirmed: <title>` or `- not confirmed: <title> | <why>`. Confirmed means the diff removes or
+rewrites that title in that file and its why holds: the `replaced by` title is one the diff adds, or the
+quoted line is in the issue. One `not confirmed` refuses.
+
 Close with this fence and nothing after it:
 
 ```

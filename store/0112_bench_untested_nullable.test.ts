@@ -20,7 +20,7 @@ it('D4 0112 keeps an 0111 row and admits untested NULL', () => {
   db.prepare(`INSERT INTO bench_scorecard (plan, target, generator, catches, false_positives, untested, tokens, seconds, x_ray)
     VALUES (?, 'a', 'fizz', 1, 0, 0, 10, 1.5, 1)`).run(plan)
   const before = db.prepare('SELECT * FROM bench_scorecard').all()
-  expect(migrate(db, join(root, 'schema'))).toEqual(['0112_bench_untested_nullable.sql', '0113_bench_score_busy.sql', '0114_bench_rescore.sql', '0115_records_outside.sql', '0116_records_ball.sql', '0117_bench_calls.sql', '0118_bench_not_powered.sql', '0119_bench_few_properties.sql', '0120_bench_compile_failed.sql', '0121_refuzz_pipe.sql', '0122_bench_night.sql', '0123_runs_phase.sql', '0124_refusal_base.sql', '0125_prices_sonnet.sql', '0126_outcomes_cancelled.sql'])
+  expect(migrate(db, join(root, 'schema'))).toEqual(['0112_bench_untested_nullable.sql', '0113_bench_score_busy.sql', '0114_bench_rescore.sql', '0115_records_outside.sql', '0116_records_ball.sql', '0117_bench_calls.sql', '0118_bench_not_powered.sql', '0119_bench_few_properties.sql', '0120_bench_compile_failed.sql', '0121_refuzz_pipe.sql', '0122_bench_night.sql', '0123_runs_phase.sql', '0124_refusal_base.sql', '0125_prices_sonnet.sql', '0126_outcomes_cancelled.sql', '0127_precedents.sql'])
   expect(db.prepare('SELECT * FROM bench_scorecard').all()).toEqual(before.map((row) => ({ ...(row as object), superseded: 0, pre_fix_calls: null, fix_calls: null,
     not_powered: 'pre_fix_calls' })))
   const next = { plan: planRow(db), target: 'b', generator: 'fizz', catches: 0, false_positives: 0, untested: null, tokens: 0, seconds: 0, x_ray: null,

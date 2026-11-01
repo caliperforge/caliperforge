@@ -517,3 +517,9 @@
   where: "step = 1 AND note LIKE '%the title is not the ask%' AND plan IN (SELECT id FROM plans WHERE origin IS NOT NULL)"
   gap: 7d
   expected: 0
+- name: live_tree_behind
+  table: ticks
+  column: at
+  where: "note LIKE 'live tree is behind%'"
+  gap: 1h
+  expected: 0

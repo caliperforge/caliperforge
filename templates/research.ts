@@ -1,7 +1,8 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import { z } from 'zod'
+import { scoredSuite } from '../cli/bench.ts'
 import { gh, type Read } from '../cli/gh.ts'
 import type { Provider } from '../providers/kind.ts'
 import { loadReviews, specHash } from '../reviews/bench.ts'
@@ -165,6 +166,24 @@ export function question(root: string, plan: PlanRow): Outcome {
 
 const OUTPUT = '**Output:**'
 
+const SUITE = '**Suite:**'
+
+function suited(db: Db, root: string, plan: PlanRow): Outcome | null {
+  const named = askOf(root, plan).split('\n').find((l) => l.startsWith(SUITE))?.slice(SUITE.length).trim()
+  if (named === undefined) return null
+  try {
+    const { suites } = scoredSuite(db, root, Number(named))
+    const into = join(srcDir(root, plan.id), '.cf/measure/suite')
+    rmSync(into, { recursive: true, force: true })
+    cpSync(suites, into, { recursive: true })
+    return null
+  } catch (error) {
+    const why = error instanceof Error ? error.message : String(error)
+    logged(db, { plan: plan.id, kind: 'research.unsuited', actor: 'research', outcome: 'refuse', message: `${SUITE} ${named}: ${why}`, pointer: null, run: null })
+    return { outcome: 'refuse', spans: ['ask.md'], note: why }
+  }
+}
+
 /** `named` made absolute when it is a folder strictly under ~/cf_work/. */
 export function work(named: string): string | null {
   const out = resolve(named.startsWith('~/') ? join(homedir(), named.slice(2)) : named)
@@ -186,6 +205,8 @@ const BEFORE = '\n\n# Before you hand in\n\nWrite the answer and its closing fen
 export async function gather(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider, read: Read = gh): Promise<Outcome> {
   const asked = question(root, plan)
   if (asked.outcome === 'refuse') return asked
+  const suite = suited(db, root, plan)
+  if (suite !== null) return suite
   const got = await gathering(db, root, plan, step, provider, read)
   return asked.note === WRITTEN ? got : { ...got, note: `${asked.note}; ${got.note}` }
 }

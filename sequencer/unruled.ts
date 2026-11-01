@@ -8,7 +8,7 @@ import { diffOf, maybe, srcDir } from './workspace.ts'
 const OVERRULED = /\b((?:G\d+[ \t,]*)+)overruled:(?=[ \t]*\S)(.*?)(?=\b(?:G\d+[ \t,]*)+overruled:|$)/gm
 
 /** A finding with no `P<n>` badge stays open, so a change to Greptile's format holds plans rather than passing them. */
-export function unruled(root: string, plan: number, sha: string, summary = ''): { found: number; ruled: string[]; open: string[]; refused: string[] } {
+export function unruled(root: string, plan: number, sha: string, summary = ''): { found: number; ruled: string[]; open: string[]; refused: string[]; severe: string[] } {
   const linked = [...summary.matchAll(/^.*#discussion_r(\d+).*$/gm)].map(([text, n = '']) => ({ id: `G${n}`, text }))
   const findings = [...listed(root, plan, sha), ...linked].filter((f, i, all) => all.findIndex((g) => g.id === f.id) === i)
   const rank = (f: { text: string }): number => Number(/alt="P(\d)"/.exec(f.text)?.[1] ?? 0)
@@ -21,7 +21,7 @@ export function unruled(root: string, plan: number, sha: string, summary = ''): 
   const diffed = paths.size === 0 ? [] : parse(diffOf(root, plan)).map((f) => f.path)
   const off = (id: string): boolean => paths.has(id) && !diffed.includes(paths.get(id) ?? '')
   const open = findings.filter((f) => !ruled.includes(f) && !off(f.id) && rank(f) <= 2)
-  return { found: findings.length, ruled: ruled.map((f) => f.id), open: open.map((f) => f.id), refused: open.filter((f) => ok.has(f.id)).map((f) => f.id) }
+  return { found: findings.length, ruled: ruled.map((f) => f.id), open: open.map((f) => f.id), refused: open.filter((f) => ok.has(f.id)).map((f) => f.id), severe: open.filter((f) => rank(f) <= 1).map((f) => f.id) }
 }
 
 export function settled(root: string, plan: number, sha: string): Map<string, string> {

@@ -24,7 +24,7 @@ import { addPart } from '../../store/parts.ts'
 import { allPlans, held, needsCeo, pipeNamed, pipeOf, planById, planRows, putPlan, requeue, retry } from '../../store/plans.ts'
 import { alike, clear, fingerprint, overBudget } from '../../store/refusals.ts'
 import { runTokens } from '../../store/runs.ts'
-import { question } from '../../templates/research.ts'
+import { gather, question } from '../../templates/research.ts'
 import { split } from '../brief.ts'
 import { byHand, cooLite, read, woke } from '../director.ts'
 import { mechanisms } from '../drift.ts'
@@ -36,6 +36,7 @@ import type { Wire } from '../push.ts'
 import { rule } from '../rule.ts'
 import { capped } from '../refusal.ts'
 import { parted } from '../split.ts'
+import { mapOf } from '../steps.ts'
 import { unruled } from '../unruled.ts'
 import { afresh, drop, git, headSha, maybe, planDir, put, snapshot, srcDir } from '../workspace.ts'
 
@@ -1087,6 +1088,22 @@ test('D1 D2: research moves an unbuilt plan to the research lane', async () => {
   expect(told(db)).toEqual([{ actor: 'director', outcome: 'pass', message: 'research: the ask only measures' }])
 })
 
+test('D1 D2: a research answer with no Output fires the measurer', async () => {
+  const { db, home } = seeded('1')
+  db.exec(UNBUILT)
+  await run(db, home, researched(LINES.replace(/\n\*\*Output:\*\*.*$/, '')))
+  expect(plan7(db)).toMatchObject({ template: 'research', lane: 'research', step: 0, waits_on: null })
+  question(home, row(db))
+  const src = srcDir(home, 7)
+  mkdirSync(src, { recursive: true })
+  git(src, ['init', '-q'])
+  git(src, ['-c', 'user.email=t@t', '-c', 'user.name=t', '-c', 'commit.gpgsign=false', 'commit', '-q', '--allow-empty', '-m', 'base'])
+  const prompts: string[] = []
+  await gather(db, home, row(db), mapOf('research').at(1), inTurn(['no fence'], prompts))
+  expect(prompts.at(-1)).toMatch(/# measurer\n/)
+  expect(runRows(db).at(-1)?.seat).toBe('measurer')
+})
+
 test.each([
   { name: 'a built plan', sql: 'UPDATE plans SET step = 1 WHERE id = 7', lines: LINES },
   { name: 'a research plan', sql: `${UNBUILT}; UPDATE plans SET template = 'research' WHERE id = 7`, lines: LINES },
@@ -1247,6 +1264,37 @@ test('D4: park holds plan 7 until its time', async () => {
   expect(plan7(db)).toMatchObject({ state: 'blocked_on_ceo', held_until: '2026-10-01T00:00:00.000Z' })
   expect(maybe(home, 7, 'parked.md')).toMatch(/^# Held .*\n\nnot worth a build yet\n/)
   expect(read('---\nmove: park\nwhy: not worth a build yet\n---\n')).toBeNull()
+})
+
+test('D1: park on an over_cap plan returns it to its lane', async () => {
+  const { db, home } = seeded('1')
+  db.exec("UPDATE plans SET wait_reason = 'over_cap' WHERE id = 7")
+  await run(db, home, REPLY.park ?? '')
+  expect(plan7(db)).toMatchObject({ state: 'queued', held_until: null })
+  expect(maybe(home, 7, 'parked.md')).toBeNull()
+  expect(ofKind(db, 'return')).toHaveLength(1)
+})
+
+const ON_8 = '---\nmove: park\nwhy: parts it reads in plan 8 have not landed\nuntil: 2026-10-01T00:00:00.000Z\n---\n'
+
+function withPlan8(state: 'queued' | 'done') {
+  const seed = seeded('1')
+  putPlan(seed.db, { id: 8, pipe_id: 99, target_id: null, template: 'pr_path', state, queued_at: '2026-09-24', step: 2, retries: 0,
+    lane: 'machine', seat: 'typescript_specialist', origin: 'https://github.com/caliperforge/caliperforge/issues/140' })
+  return seed
+}
+
+test('D2: park naming an open plan waits on it', async () => {
+  const { db, home } = withPlan8('queued')
+  await run(db, home, ON_8)
+  expect(plan7(db)).toMatchObject({ waits_on: 8, held_until: null })
+  expect(maybe(home, 7, 'parked.md')).toContain('waits on plan 8')
+})
+
+test('D3: park naming a done plan holds until its time', async () => {
+  const { db, home } = withPlan8('done')
+  await run(db, home, ON_8)
+  expect(plan7(db)).toMatchObject({ waits_on: null, held_until: '2026-10-01T00:00:00.000Z' })
 })
 
 test.each(FAULTS)('D1: decision refuses %s', (refused, block) => {

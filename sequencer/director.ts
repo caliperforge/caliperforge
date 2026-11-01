@@ -16,7 +16,7 @@ import { clear as unlease, take } from '../store/leases.ts'
 import { busy, current, idle } from '../store/now.ts'
 import { builderRan, end, held, needsCeo, originRef, planById, PlanRow, retry } from '../store/plans.ts'
 import { clear, sentOnce } from '../store/refusals.ts'
-import { kin, runs, stopped, waking, type Stop } from '../store/stops.ts'
+import { kin, runs, stopped, waitable, waking, type Stop } from '../store/stops.ts'
 import { pending } from '../store/transcript.ts'
 import { split, type Part } from './brief.ts'
 import { waive } from './design.ts'
@@ -310,6 +310,17 @@ function waiving(db: Db, root: string, plan: PlanRow, m: z.infer<typeof Said>): 
   return true
 }
 
+function parked(db: Db, root: string, plan: PlanRow, m: z.infer<typeof Said>, now: Date): boolean {
+  if (plan.wait_reason === 'over_cap') {
+    afresh(root, plan.id, returnToLane(db, plan.id, 'director'))
+    return true
+  }
+  const on = /\bplan (\d+)\b/.exec(m.why)?.[1]
+  if (on !== undefined && waitable(db, Number(on), plan.id)) hold(db, root, plan.id, m.why, now, Number(on), null)
+  else hold(db, root, plan.id, m.why, now, null, new Date(m.until ?? ''))
+  return true
+}
+
 /** Each move is the call its `cf` command makes; false leaves the stop with a person. */
 function apply(db: Db, root: string, plan: PlanRow, m: Move, wire: Wire, now: Date): boolean | string {
   switch (m.move) {
@@ -342,8 +353,7 @@ function apply(db: Db, root: string, plan: PlanRow, m: Move, wire: Wire, now: Da
     case 'widen':
       return widen(db, root, plan, m.why)
     case 'park':
-      hold(db, root, plan.id, m.why, now, null, new Date(m.until ?? ''))
-      return true
+      return parked(db, root, plan, m, now)
     case 'research':
       return rerouted(db, root, plan, m.answer ?? '')
     case 'fix':

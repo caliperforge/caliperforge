@@ -1126,7 +1126,7 @@ test('#192 outside rust runs CI\'s fmt check, then touched crates', () => {
   const { run, calls } = heard()
   const files = ['crates/types/src/types.rs', 'crates/core/src/rpc/a.rs', 'crates/core/src/b.rs', 'crates/sdk-node/kit/generated/index.ts']
   expect(checks(src, {}, run, [], { language: 'rust', files })).toBeNull()
-  expect(calls).toEqual([`cargo +nightly fmt --all -- --check @${src}`, `cargo test -p surfpool-types -p surfpool-core @${src}`])
+  expect(calls).toEqual([`cargo +nightly fmt --all -- --check @${src}`, `cargo test -p surfpool-types -p surfpool-core -- --test-threads=4 @${src}`])
 })
 
 test('#192 no CI fmt line falls back to cargo fmt --all --check', () => {
@@ -1134,7 +1134,7 @@ test('#192 no CI fmt line falls back to cargo fmt --all --check', () => {
   const { run, calls } = heard()
   expect(checks(src, {}, run, [], { language: 'rust', files: ['rust/crates/kit/src/lib.rs'] })).toBeNull()
   const at = join(src, 'rust')
-  expect(calls).toEqual([`cargo fmt --all -- --check @${at}`, `cargo test -p pay-kit @${at}`])
+  expect(calls).toEqual([`cargo fmt --all -- --check @${at}`, `cargo test -p pay-kit -- --test-threads=4 @${at}`])
 })
 
 test('#192 a red fmt check refuses with the diff, named by folder', () => {
@@ -1219,7 +1219,7 @@ test('#204 rust tests take CI features, less services, per crate', () => {
   expect(ciFeatures(src)).toEqual(['ignore_tests_ci'])
   const { run, calls } = heard()
   expect(checks(src, {}, run, [], { language: 'rust', files: ['crates/types/src/types.rs', 'crates/core/src/types.rs'] })).toBeNull()
-  expect(calls[1]).toBe(`cargo test -p surfpool-types -p surfpool-core --features surfpool-core/ignore_tests_ci @${src}`)
+  expect(calls[1]).toBe(`cargo test -p surfpool-types -p surfpool-core --features surfpool-core/ignore_tests_ci -- --test-threads=4 @${src}`)
 })
 
 const BINDINGS = 'jobs:\n  bindings:\n    steps:\n      - name: Verify committed bindings are up to date\n        run: |\n'
@@ -1238,7 +1238,7 @@ test('#221 outside rust stages, runs CI\'s generator, then diffs', () => {
   const src = surfpool(BINDINGS)
   const { run, calls } = heard()
   expect(checks(src, {}, run, [], { language: 'rust', files: ['crates/core/src/a.rs'] })).toBeNull()
-  expect(calls).toEqual([`cargo +nightly fmt --all -- --check @${src}`, `cargo test -p surfpool-core @${src}`, `git add -A @${src}`,
+  expect(calls).toEqual([`cargo +nightly fmt --all -- --check @${src}`, `cargo test -p surfpool-core -- --test-threads=4 @${src}`, `git add -A @${src}`,
     `node crates/sdk-node/scripts/generate-kit-types.js @${src}`, `git diff --exit-code @${src}`])
 })
 
@@ -1253,7 +1253,7 @@ test('#221 a diff step with no generator or a shell adds no gate', () => {
   const src = surfpool('jobs:\n  a:\n    steps:\n      - run: |\n          cd x && node gen.js\n          git diff --exit-code\n      - run: git diff --exit-code\n')
   const { run, calls } = heard()
   expect(checks(src, {}, run, [], { language: 'rust', files: ['crates/core/src/a.rs'] })).toBeNull()
-  expect(calls).toEqual([`cargo +nightly fmt --all -- --check @${src}`, `cargo test -p surfpool-core @${src}`])
+  expect(calls).toEqual([`cargo +nightly fmt --all -- --check @${src}`, `cargo test -p surfpool-core -- --test-threads=4 @${src}`])
 })
 
 const PAY = { 'rust/Cargo.toml': '[workspace]\n', 'rust/crates/core/Cargo.toml': '[package]\nname = "pay-core"\n' }
@@ -1273,7 +1273,7 @@ function cargoRed(output: string): { run: Run; calls: string[] } {
 test('1122 D3 an excused crate under test adds --no-fail-fast', () => {
   const src = nested(PAY)
   const at = join(src, 'rust')
-  for (const [excused, args] of [[[SURFPOOL], 'test -p pay-core --no-fail-fast'], [[], 'test -p pay-core'], [['-p pay-kit --test x'], 'test -p pay-core']] as const) {
+  for (const [excused, args] of [[[SURFPOOL], 'test -p pay-core --no-fail-fast -- --test-threads=4'], [[], 'test -p pay-core -- --test-threads=4'], [['-p pay-kit --test x'], 'test -p pay-core -- --test-threads=4']] as const) {
     const { run, calls } = heard()
     expect(checks(src, { excused: [...excused] }, run, [], KIT)).toBeNull()
     expect(calls[1]).toBe(`cargo ${args} @${at}`)
@@ -1284,7 +1284,7 @@ test('1122 D4 a red run of only excused spans runs on', () => {
   const src = nested({ ...PAY, '.github/workflows/sdk.yml': BINDINGS })
   const { run, calls } = cargoRed(SURFPOOL_RED)
   expect(checks(src, { excused: [SURFPOOL] }, run, [], KIT)).toBeNull()
-  expect(calls.slice(1)).toEqual(['cargo test -p pay-core --no-fail-fast', 'git add -A', 'node crates/sdk-node/scripts/generate-kit-types.js', 'git diff --exit-code'])
+  expect(calls.slice(1)).toEqual(['cargo test -p pay-core --no-fail-fast -- --test-threads=4', 'git add -A', 'node crates/sdk-node/scripts/generate-kit-types.js', 'git diff --exit-code'])
 })
 
 test('1122 D5 an unexcused span, or none, still refuses', () => {
@@ -1292,7 +1292,7 @@ test('1122 D5 an unexcused span, or none, still refuses', () => {
   for (const output of [`${SURFPOOL_RED}error: test failed, to rerun pass \`-p pay-core --test server_tests\`\n`, 'error: could not compile `pay-core`\n']) {
     const { run } = cargoRed(output)
     expect(checks(src, { excused: [SURFPOOL] }, run, [], KIT))
-      .toEqual({ script: 'test', command: 'cargo test -p pay-core --no-fail-fast (in rust/)', code: '101', output, tests: [], retried: false })
+      .toEqual({ script: 'test', command: 'cargo test -p pay-core --no-fail-fast -- --test-threads=4 (in rust/)', code: '101', output, tests: [], retried: false })
   }
 })
 

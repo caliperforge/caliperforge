@@ -1,14 +1,25 @@
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { check } from '../../../cli/digests.ts'
+import { refuse } from '../../../runner/index.ts'
 import { rules, seat } from '../../../runner/rules.ts'
 
 const root = join(import.meta.dirname, '../../..')
 
 test('D7: the manifest runs uv and writes only .cf/measure', () => {
   expect(seat(root, 'measurer').manifest).toEqual({
-    seat: 'measurer', model: 'claude-opus-5-5', effort: 'medium', tools: ['Read', 'Grep', 'Glob', 'Bash(uv run:*)', 'Bash(forge:*)', 'Bash(medusa:*)'], write_paths: ['.cf/measure'],
+    seat: 'measurer', model: 'claude-opus-5-5', effort: 'medium', tools: ['Read', 'Grep', 'Glob', 'Write', 'Bash(uv run:*)', 'Bash(forge:*)', 'Bash(medusa:*)'], write_paths: ['.cf/measure'],
   })
+})
+
+test('D2: a write under .cf/measure is admitted', () => {
+  const fence = seat(root, 'measurer').manifest.write_paths
+  expect(refuse(root, fence, '.cf/measure/suite/test/euler-earn-m01/invariant_Vault.sol')).toBeNull()
+})
+
+test('D3: a write outside .cf/measure is refused', () => {
+  const fence = seat(root, 'measurer').manifest.write_paths
+  for (const path of ['src/EulerEarn.sol', '.cf/draft.md']) expect(refuse(root, fence, path)).toMatchObject({ origin_ref: 'seat.write_paths' })
 })
 
 test('D7: the prompt opens with its name and closes on a run fence', () => {

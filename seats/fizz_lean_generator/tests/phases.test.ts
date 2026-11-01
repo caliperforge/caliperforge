@@ -156,6 +156,45 @@ test('D5: a twice-refused invariants handoff skips the critic', async () => {
   expect(existsSync(path)).toBe(false)
 })
 
+function legs(stop?: string) {
+  const handoffs = join(mkdtempSync(join(tmpdir(), 'cf-fizz-stop-')), 'test/fizz/fizz_data/handoff')
+  mkdirSync(handoffs, { recursive: true })
+  const fires: { phase: string; issue: string }[] = []
+  const fire: Fire = (...args) => {
+    const [, issue, sum, phase = ''] = args
+    fires.push({ phase, issue })
+    writeFileSync(join(handoffs, `${phase}.md`), FILLED[phase] ?? '')
+    return Promise.resolve({ ...sum, tokens: sum.tokens + 10, seconds: sum.seconds + 2, transcripts: [...sum.transcripts, phase] })
+  }
+  return { handoffs, fires, run: () => phased(fire, skill, handoffs, 'Generate.', () => [], stop) }
+}
+
+test('stop D1: stop after context fires context alone and holds', async () => {
+  const { handoffs, fires, run } = legs('context')
+  expect(await run()).toEqual({ outcome: 'pass', held: true, spans: ['bench.stop_after'], note: 'stopped after context for a look' })
+  expect(fires.map((f) => f.phase)).toEqual(['context'])
+  expect(existsSync(join(handoffs, 'context.md'))).toBe(true)
+  expect(existsSync(join(handoffs, 'stopped.json'))).toBe(true)
+})
+
+test('stop D2 D3: a resumed run starts at scaffold, sums both legs', async () => {
+  const { handoffs, fires, run } = legs('context')
+  await run()
+  const resumed = await run()
+  expect(fires.map((f) => f.phase)).toEqual(['context', 'scaffold', 'coverage', 'invariants'])
+  expect(fires[1]?.issue).toContain(`Start from ${join(handoffs, 'context.md')}.`)
+  expect(existsSync(join(handoffs, 'stopped.json'))).toBe(false)
+  expect(resumed).toEqual(await legs().run())
+  expect(resumed).toMatchObject({ tokens: 40, seconds: 8, transcripts: ['context', 'scaffold', 'coverage', 'invariants'] })
+})
+
+test('stop D6: no stop fires all four, writes no stopped.json', async () => {
+  const { handoffs, fires, run } = legs()
+  expect(await run()).toMatchObject({ tokens: 40, wall: null })
+  expect(fires.map((f) => f.phase)).toEqual(['context', 'scaffold', 'coverage', 'invariants'])
+  expect(existsSync(join(handoffs, 'stopped.json'))).toBe(false)
+})
+
 test.each(CHECKS.map(([heading]) => heading))('D6: a critic pass with no sh block under %s throws', (heading) => {
   const dir = mkdtempSync(join(tmpdir(), 'cf-fizz-critic-'))
   writeFileSync(join(dir, 'critic-pass.md'), pass(heading))

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import type { CostWall, Fired, Provider } from '../providers/kind.ts'
 import { packet, real } from '../runner/index.ts'
@@ -77,17 +77,30 @@ async function checked(fire: Fire, at: Phase, sum: Sum, refused: Refused[] = [])
   return ran
 }
 
-export async function phased(fire: Fire, skill: string, handoffs: string, issue: string, critics: () => Refused[]): Promise<Sum | Outcome> {
-  const phases = [...readFileSync(join(skill, TEMPLATES), 'utf8').matchAll(/^# Handoff: (.+)$/gm)].map((m) => m[1] ?? '').filter((phase) => phase !== 'campaigns')
+export function phasesOf(skill: string): string[] {
+  return [...readFileSync(join(skill, TEMPLATES), 'utf8').matchAll(/^# Handoff: (.+)$/gm)].map((m) => m[1] ?? '').filter((phase) => phase !== 'campaigns')
+}
+
+export async function phased(fire: Fire, skill: string, handoffs: string, issue: string, critics: () => Refused[], stop?: string): Promise<Sum | Outcome> {
+  const phases = phasesOf(skill)
   const root = resolve(handoffs, '../../../..')
-  let sum = START
+  const stopped = join(handoffs, 'stopped.json')
+  const resumed = existsSync(stopped) ? JSON.parse(readFileSync(stopped, 'utf8')) as { phase: string; sum: Sum } : null
+  rmSync(stopped, { force: true })
+  const done = resumed === null ? -1 : phases.indexOf(resumed.phase)
+  let sum = resumed?.sum ?? START
   for (const [at, phase] of phases.entries()) {
+    if (at <= done) continue
     const path = join(handoffs, `${phase}.md`)
     const start = at === 0 ? [] : [`Start from ${join(handoffs, `${phases[at - 1] ?? ''}.md`)}.`]
     const ran = await checked(fire, { phase, skill, root, path, critics, prompt: readFileSync(join(skill, 'phases', `${phase}.md`), 'utf8'),
       issue: [issue, `Before you end, write ${path} filled from the \`# Handoff: ${phase}\` block of ${join(skill, TEMPLATES)}.`, ...start].join('\n') }, sum)
     if ('outcome' in ran || ran.wall !== null) return ran
     sum = ran
+    if (phase === stop) {
+      writeFileSync(stopped, JSON.stringify({ phase, sum }))
+      return { outcome: 'pass', held: true, spans: ['bench.stop_after'], note: `stopped after ${phase} for a look` }
+    }
   }
   return sum
 }

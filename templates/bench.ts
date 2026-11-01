@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 import type { Provider } from '../providers/kind.ts'
@@ -12,7 +12,7 @@ import { cloned, get, git, gitBase, maybe, planDir, put, remote, srcDir } from '
 import { setUntested } from '../store/bench.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
-import type { PlanRow } from '../store/plans.ts'
+import { needsCeo, type PlanRow } from '../store/plans.ts'
 import { clamp, quieted } from './balances.ts'
 import { critic } from './critic.ts'
 import { deps } from './deps.ts'
@@ -113,10 +113,16 @@ export function scratch(root: string, plan: PlanRow): Outcome {
 }
 
 export async function generate(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider): Promise<Outcome> {
-  const { generator = '', target = '' } = fields(maybe(root, plan.id, 'target.yml') ?? '')
+  const { generator = '', target = '', stop_after: stop } = fields(maybe(root, plan.id, 'target.yml') ?? '')
   if (generator === '') return { outcome: 'refuse', spans: ['target.yml'], note: 'target.yml has no generator' }
   const name = staffed(root, 'bench', step.step, generator)?.seat
   if (name === undefined) return { outcome: 'needs_ceo', spans: ['staffing'], note: `no bench generator "${generator}" in rules/staffing.yaml` }
+  const src = join(planDir(root, plan.id), 'src')
+  const aside = `${src}.stopped`
+  if (existsSync(aside)) {
+    rmSync(src, { recursive: true, force: true })
+    renameSync(aside, src)
+  }
   const dir = real(scrapped(root, plan.id, step.step))
   const unchecked = checkedOut(db, root, plan.id, dir)
   if (unchecked !== null) return { outcome: 'refuse', spans: ['bench.no_checkout'], note: unchecked, to: 0 }
@@ -132,7 +138,11 @@ export async function generate(db: Db, root: string, plan: PlanRow, step: Step, 
   const issue = ask(granted[0], granted.find((path) => basename(path) === 'x-ray'), tmp)
   const fire = firing({ db, root, plan, step, provider, name, dir, tmp, granted, walls, ceiling: CEILING }, manifest, hash)
   const sum = name === 'fizz_lean_generator' ? await phased(fire, granted[0] ?? '', join(dir, SUITE, META, 'handoff'), issue,
-    () => critic(join(granted.find((path) => basename(path) === 'fizz') ?? '', 'references/critic-pass.md'), dir)) : await fire(prompt, issue, START)
+    () => critic(join(granted.find((path) => basename(path) === 'fizz') ?? '', 'references/critic-pass.md'), dir), stop) : await fire(prompt, issue, START)
+  if ('outcome' in sum && sum.held === true) {
+    renameSync(src, aside)
+    needsCeo(db, plan, sum.note)
+  }
   if ('outcome' in sum) return sum
   const { tokens, seconds, transcripts, wall } = sum
   if (wall !== null) return written(root, plan.id, dir, transcripts, { suite: SUITE, tokens, seconds, wall }, wall)

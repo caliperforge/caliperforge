@@ -73,7 +73,7 @@ export function harvest(db: Db, repo: string, since: string | null, read: Read =
   return stored
 }
 
-/** Each repo with an open or recent target, harvested once per local date; a throw is logged and not retried that date. */
+
 export function harvested(db: Db, now: Date, read: Read): void {
   const day = new Date(now.getTime() + zone(db) * 60000).toISOString().slice(0, 10)
   const done = pointers(db, 'precedent_harvest')

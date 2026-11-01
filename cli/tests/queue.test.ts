@@ -46,6 +46,26 @@ test('a ready target files one filed event for its plan', () => {
     .toEqual([{ plan: added.plan, kind: 'filed', actor: 'cf queue add', outcome: 'pass', message: URL }])
 })
 
+test('D1, D2: a caliperforge issue throws and writes nothing', () => {
+  const db = world()
+  for (const [repo, no] of [['caliperforge/caliperforge', 1738], ['caliperforge/atelier-web', 1736]] as const) {
+    const url = `https://github.com/${repo}/issues/${String(no)}`
+    expect(() => add(db, mkdtempSync(join(tmpdir(), 'cf-queue-')), repo, url, 'pr-path', TODAY))
+      .toThrow(`cf plan add --issue ${repo}#${String(no)}`)
+  }
+  expect([targetRows(db), allPlans(db), allEvents(db)]).toEqual([[], [], []])
+})
+
+test('D3: an outside repo still queues', () => {
+  const db = world()
+  const repo = 'solana-foundation/surfpool'
+  addAccount(db, { id: 2, repo, measured_at: TODAY, maintainers: 2, doors: 1, last_outsider_merge: TODAY,
+    open_pr_age_p50_days: 3, cross_repo_activity: 4, pulse: 'warm', evidence: `https://github.com/${repo}` })
+  const added = add(db, mkdtempSync(join(tmpdir(), 'cf-queue-')), repo, `https://github.com/${repo}/issues/7`, 'pr-path', TODAY)
+  expect(added.state).toBe('ready')
+  expect(added.plan).not.toBeNull()
+})
+
 test('D1: an unmeasured repo records the re-measure, then files', () => {
   const db = fresh(schema)
   vi.mocked(measure).mockImplementationOnce(() => {

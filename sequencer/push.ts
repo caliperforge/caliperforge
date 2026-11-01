@@ -240,6 +240,12 @@ export function carried(root: string, plan: number, sha: string): string {
   return tips(root, plan).find(([tip]) => tip === sha)?.[1] ?? sha
 }
 
+/** The Greptile config on the -next tip that carried plan HEAD `sha`; a head with no listed tip is its own tip. */
+export function reviewedWith(root: string, plan: number, sha: string): 'mirrored' | 'generic' {
+  const tip = tips(root, plan).find(([, of]) => of === sha)?.[0] ?? sha
+  return tried(srcDir(root, plan), ['cat-file', '-e', `${tip}:.greptile/rules.md`]) === null ? 'generic' : 'mirrored'
+}
+
 /** A head sent again keeps its tip, so its CI is not restarted. */
 function tipOf(root: string, plan: number, head: Head, ci: string, repo: string, wire: Wire): string {
   const [known, of] = tips(root, plan).at(-1) ?? []

@@ -19,7 +19,7 @@ export async function distill(db: Db, root: string, repo: string, provider: Prov
   const dir = join(root, '.cf/precedents')
   mkdirSync(dir, { recursive: true })
   const said = threads(db, repo, pr.number)
-  const issue = `# ${pr.title}\n\n## Files\n\n${pr.files.join('\n')}\n\n## Threads\n\n${said.map((t) => JSON.stringify(t)).join('\n')}`
+  const issue = `# ${pr.title}\n\n## Paths\n\n${pr.files.join('\n')}\n\n## Threads\n\n${said.map((t) => JSON.stringify(t)).join('\n')}`
   const built = packet(manifest, prompt, tight(root), issue, dir, pending(dir, `${repo.replace('/', '-')}-${String(pr.number)}`))
   const fired = await provider.fire({ ...built, wall: wall(db) })
   if (fired.ended !== 'completed') refused(db, pr, 'stopped')

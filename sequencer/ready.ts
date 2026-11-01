@@ -28,8 +28,6 @@ export { proven, target, unanswered, type Target } from '../store/ready.ts'
 
 export const CREDITS = 50
 
-const FIRST_ONLY = 40
-
 export const ASKED = 'greptile.asked'
 
 export const SKIPPED = 'greptile.skipped'
@@ -95,21 +93,25 @@ function greptile(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire,
   const at = `${FORK}/${repoName(repo)}@${sha.slice(0, 12)}`
   const row = graded(db, plan.id, sha)
   if (row === null) {
+    const first = (maybe(root, plan.id, ASKED) ?? '').split(' ')[0] ?? ''
+    if (first !== '' && first !== sha) return `; Greptile reviewed ${first.slice(0, 12)} once; ${sha.slice(0, 12)} is not asked again`
     const fork = `${FORK}/${repoName(repo)}`
     if (wire.greptile?.(fork) === false) {
       return { outcome: 'refuse', spans: ['greptile.installed'], to: plan.step, note: `Greptile is not installed on ${fork}` }
     }
-    return asked(root, plan.id, sha, repo, wire)
+    return (first === '' ? asked(root, plan.id, sha, repo, wire) : null)
       ?? holding(root, plan.id, sha, ['greptile.missing'], `${at} has no Greptile score yet`, GRADING, GRADES)
       ?? `; Greptile gave no score in ${String(GRADING)} ticks`
   }
   const score = row.score ?? 0
-  const { found, ruled, open, refused } = unruled(root, plan.id, sha, row.body ?? '')
+  const { found, ruled, open, refused, severe } = unruled(root, plan.id, sha, row.body ?? '')
   if (open.length > 0 || (score < 4 && found === 0)) {
     const same = diffAt(db, plan.id, plan.step) === diff
+    const back = refused.length > 0 || (!same && (severe.length > 0 || (score < 4 && found === 0)))
     const why = refused.length > 0 ? `the COO accepted ${refused.join(', ')}, but a P1 needs a ruling citing the code; back to the builder with its findings`
-      : same ? 'the diff is unchanged since the last ready refusal' : 'back to the builder with its findings'
-    return { outcome: 'refuse', spans: [`greptile:${String(score)}/5`], message: row.body ?? '', to: same && refused.length === 0 ? plan.step : 2,
+      : same ? 'the diff is unchanged since the last ready refusal'
+        : back ? 'back to the builder with its findings' : 'P2s are fixed in one batch before sign-off; Greptile is not asked again'
+    return { outcome: 'refuse', spans: [`greptile:${String(score)}/5`], message: row.body ?? '', to: back ? 2 : plan.step,
       note: `Greptile scored ${at} ${String(score)}/5; ${why}` }
   }
   if (ruled.length === 0) return ''
@@ -117,22 +119,15 @@ function greptile(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire,
   return `; Greptile scored ${at} ${String(score)}/5; the COO accepted ${ruled.join(', ')}`
 }
 
-/** Greptile's plan gives {@link CREDITS} credits a month, so a job asks for at most this many reviews; past the cap, the job skips Greptile. */
-const ASKS = 3
-
 function asked(root: string, plan: number, sha: string, repo: string, wire: Wire): string | null {
-  const text = maybe(root, plan, ASKED) ?? ''
-  const heads = text.split('\n').filter((l) => l !== '').map((l) => l.split(' ')[0])
-  if (heads.includes(sha)) return null
   const month = monthly(root, new Date())
-  const why = heads.length >= ASKS ? `asked ${String(ASKS)} times on this job`
-    : month >= (heads.length === 0 ? CREDITS : FIRST_ONLY) ? `monthly quota spent (${String(month)}/${String(CREDITS)})` : null
-  if (why !== null) {
+  if (month >= CREDITS) {
+    const why = `monthly quota spent (${String(month)}/${String(CREDITS)})`
     put(root, plan, SKIPPED, `${sha} ${why}\n`)
     return `; Greptile skipped: ${why}`
   }
   wire.review(`${FORK}/${repoName(repo)}`, rehearsalBranch(root, plan))
-  put(root, plan, ASKED, `${text}${sha} ${new Date().toISOString()}\n`)
+  put(root, plan, ASKED, `${sha} ${new Date().toISOString()}\n`)
   return null
 }
 

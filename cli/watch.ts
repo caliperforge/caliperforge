@@ -5,7 +5,7 @@ import { hostValue } from '../providers/credential.ts'
 import type { Db } from '../store/index.ts'
 import { hhmm, pipes, zone } from '../store/lanes.ts'
 import { clock, inWindow, live, openPipes } from '../store/plans.ts'
-import { real, receipt, type Receipt } from '../store/ticks.ts'
+import { BEHIND, real, receipt, unhalted } from '../store/ticks.ts'
 import { crashed } from './inbox.ts'
 
 /** Inside an open window a real tick lands every minute; ten without one means the machine is down, not idle. */
@@ -19,31 +19,31 @@ const MARK = '.cf/watch.alerted'
 
 const LANES = '.cf/watch.lanes'
 
-const HALTED = '.cf/watch.halted'
-
-const HALTS = 30
-
 interface Liveness {
   at: string | null
   minutes: number | null
   crash: string | null
+  halt: string | null
   stale: boolean
 }
 
 export function liveness(db: Db, now: Date): Liveness {
   const open = openPipes(db, hhmm(db, now)).length > 0
-  const row = real(db, 1)[0]
-  if (row === undefined) return { at: null, minutes: null, crash: null, stale: open }
+  const newest = real(db, 1)[0]?.note
+  const halt = newest?.startsWith(BEHIND) === true ? newest : null
+  const row = unhalted(db)
+  if (row === undefined) return { at: null, minutes: null, crash: null, halt, stale: open }
   const minutes = Math.floor((now.getTime() - Date.parse(row.at)) / 60000)
   const crash = row.note.startsWith(CRASHED) ? row.note.slice(CRASHED.length) : null
-  return { at: row.at, minutes, crash, stale: open && (crash !== null || minutes > STALE_MINUTES) }
+  return { at: row.at, minutes, crash, halt, stale: open && (crash !== null || minutes > STALE_MINUTES) }
 }
 
 export function livenessLine(db: Db, l: Liveness): string {
-  if (l.at === null) return `tick\t${l.stale ? 'DOWN: no real tick on record' : 'no real tick on record'}\n`
+  const halt = l.halt === null ? '' : `; ${l.halt.split('\n')[0] ?? ''}`
+  if (l.at === null) return `tick\t${l.stale ? 'DOWN: no real tick on record' : 'no real tick on record'}${halt}\n`
   const when = `${clock(new Date(l.at), zone(db))} (${String(l.minutes)} min ago)`
-  if (l.crash !== null) return `tick\tDOWN: last real tick ${when} crashed: ${l.crash.split('\n')[0] ?? ''}\n`
-  return `tick\t${l.stale ? 'DOWN: ' : ''}last real tick ${when}\n`
+  if (l.crash !== null) return `tick\tDOWN: last real tick ${when} crashed: ${l.crash.split('\n')[0] ?? ''}${halt}\n`
+  return `tick\t${l.stale ? 'DOWN: ' : ''}last real tick ${when}${halt}\n`
 }
 
 export type Post = (title: string, body: string) => void
@@ -69,7 +69,6 @@ export function watch(db: Db, root: string, now: Date, post: Post): Liveness {
     rmSync(mark)
   }
   lanes(db, root, now, post)
-  halts(db, root, post)
   return l
 }
 
@@ -96,26 +95,6 @@ function lanes(db: Db, root: string, now: Date, post: Post): void {
     mkdirSync(dirname(mark), { recursive: true })
     writeFileSync(mark, off.join('\n'))
   } else if (off.length === 0 && was) {
-    rmSync(mark)
-  }
-}
-
-/** A halt is what `halt()` in cf.ts writes: a refused lap fired something, and a crash is the machine-down alert's. */
-function halt({ exit, fired, note }: Receipt): boolean {
-  return exit === 1 && fired === 0 && !note.startsWith(CRASHED)
-}
-
-function halts(db: Db, root: string, post: Post): void {
-  const rows = real(db, HALTS)
-  const halted = rows.length === HALTS && rows.every(halt)
-  const mark = join(root, HALTED)
-  const was = existsSync(mark)
-  if (halted && !was) {
-    post('CaliperForge · the tick is halted', `${String(HALTS)} ticks in a row: ${rows[0]?.note.split('\n')[0] ?? ''}`)
-    mkdirSync(dirname(mark), { recursive: true })
-    writeFileSync(mark, rows[0]?.at ?? '')
-  } else if (!halted && was) {
-    post('CaliperForge · the tick is firing again', '')
     rmSync(mark)
   }
 }

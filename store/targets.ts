@@ -63,6 +63,11 @@ export function loopOpen(db: Db, repo: string): boolean {
     WHERE targets.repo = ? AND plans.state IN ${LIVE} LIMIT 1`).get(repo) !== undefined
 }
 
+export function targetedRepos(db: Db, since: string): string[] {
+  return db.prepare(`SELECT DISTINCT targets.repo FROM targets JOIN plans ON plans.target_id = targets.id
+    WHERE plans.state IN ${LIVE} OR julianday(plans.queued_at) >= julianday(?) ORDER BY targets.repo`).pluck().all(since) as string[]
+}
+
 export function accountRows(db: Db): Record<string, unknown>[] {
   return db.prepare('SELECT * FROM accounts ORDER BY id').all() as Record<string, unknown>[]
 }

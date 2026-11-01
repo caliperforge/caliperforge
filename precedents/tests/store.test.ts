@@ -2,7 +2,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { expect, it } from 'vitest'
 import { migrate, open } from '../../store/index.ts'
-import { keep, newestMerged, source, threads, type Source, type Thread } from '../store.ts'
+import { distilled, keep, newestMerged, precedents, source, threads, type Precedent, type Source, type Thread } from '../store.ts'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 
@@ -53,4 +53,13 @@ it('D5 storing a PR again leaves only the new threads', () => {
   keep(db, { ...pr, title: 'Fix again' }, [inline])
   expect(source(db, 'o/r', 7)?.title).toBe('Fix again')
   expect(threads(db, 'o/r', 7)).toEqual([inline])
+})
+
+it('distilled rows read back, and distilling again replaces them', () => {
+  const db = fresh()
+  const row: Precedent = { area: 'a.ts', decision: 'd', why: 'w', said_by: 'x', role: 'maintainer', source: review.url }
+  distilled(db, pr, [row, { ...row, decision: 'e' }], 18)
+  expect(precedents(db, 'o/r')).toEqual([row, { ...row, decision: 'e' }])
+  distilled(db, pr, [{ ...row, role: 'contributor' }], 4)
+  expect(precedents(db, 'o/r')).toEqual([{ ...row, role: 'contributor' }])
 })

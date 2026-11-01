@@ -427,6 +427,22 @@ test.each([
   expect(got.events).toEqual(DROPPED(path))
 })
 
+const SOURCE = 'the source is `.cf/work/1942/run-12735.transcript.jsonl`; keep the guard'
+const transcript = ({ home }: { home: string }) => { put(home, 1942, 'run-12735.transcript.jsonl', '{}\n') }
+
+test('D1 a ruling citing a file in another job folder applies', async () => {
+  const seen: Db[] = []
+  const got = await aliased(() => SOURCE, (s) => { transcript(s); seen.push(s.db) })
+  expect(got.events).toEqual(PASS)
+  expect(got.issue).toContain(`\n\n${SOURCE}\n\n${CARRIES}\n\n## Standing\n`)
+  expect(seen.map((db) => [filesOf(db, 7), fenceFor(db, 7, ['brief:files'])])).toEqual([[[], []]])
+})
+
+test('D2 that file cited by absolute path and line applies', async () => {
+  const got = await aliased((a) => `the source is ${a}/.cf/work/1942/run-12735.transcript.jsonl:12.`, transcript)
+  expect(got.events).toEqual(PASS)
+})
+
 test.each([
   'the SODA service takes the cutout at `/sync` (`/async` for jobs)',
 ])('D1 a ruling naming %s applies', async (answer) => {

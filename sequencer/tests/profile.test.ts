@@ -60,11 +60,11 @@ const CASES: { src: string; repo: string; language: OutsideLanguage; file: strin
   { src: PAY_KIT, repo: 'pay-kit', language: 'swift', file: 'swift/Sources/PayKit/Memo.swift', gates: justGates('swift', 'lint', 'test') },
   { src: PAY_KIT, repo: 'pay-kit', language: 'rust', file: 'rust/crates/kit/src/lib.rs', gates: [
     { script: 'format', bin: 'cargo', args: ['fmt', '--all', '--', '--check'], dir: 'rust' },
-    { script: 'test', bin: 'cargo', args: ['test', '-p', 'pay-kit'], dir: 'rust' },
+    { script: 'test', bin: 'cargo', args: ['test', '-p', 'pay-kit', '--', '--test-threads=4'], dir: 'rust' },
   ] },
   { src: SURFPOOL, repo: 'surfpool', language: 'rust', file: 'crates/core/src/rpc/a.rs', gates: [
     { script: 'format', bin: 'cargo', args: ['+nightly', 'fmt', '--all', '--', '--check'], dir: '' },
-    { script: 'test', bin: 'cargo', args: ['test', '-p', 'surfpool-core', '--features', 'surfpool-core/ignore_tests_ci'], dir: '' },
+    { script: 'test', bin: 'cargo', args: ['test', '-p', 'surfpool-core', '--features', 'surfpool-core/ignore_tests_ci', '--', '--test-threads=4'], dir: '' },
     { script: 'stage', bin: 'git', args: ['add', '-A'], dir: '' },
     { script: 'generate', bin: 'node', args: ['crates/sdk-node/scripts/generate-kit-types.js'], dir: '' },
     { script: 'diff', bin: 'git', args: ['diff', '--exit-code'], dir: '' },
@@ -84,8 +84,8 @@ const PAY = nested({
 })
 
 test.each([
-  { file: 'rust/crates/core/src/lib.rs', test: ['test', '-p', 'pay-core', '--no-fail-fast'] },
-  { file: 'rust/crates/cli/src/main.rs', test: ['test', '-p', 'pay'] },
+  { file: 'rust/crates/core/src/lib.rs', test: ['test', '-p', 'pay-core', '--no-fail-fast', '--', '--test-threads=4'] },
+  { file: 'rust/crates/cli/src/main.rs', test: ['test', '-p', 'pay', '--', '--test-threads=4'] },
 ])('1133 D2 D3 caliperforge/pay gates for $file', (c) => {
   const pay = profile(REPO, 'caliperforge/pay')
   const found = gates(PAY, { language: 'rust', files: [c.file] }, pay?.commands?.excused)

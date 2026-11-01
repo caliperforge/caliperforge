@@ -1,6 +1,6 @@
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, relative } from 'node:path'
 import { expect, test } from 'vitest'
 import { compiled, extract } from '../../../templates/extract.ts'
 import { handoff, ranged } from '../../../templates/handoff.ts'
@@ -133,12 +133,19 @@ test('1753a D3: an untracked aggregate needs a reason', () => {
   expect(ranged(root, reason(' read only by the conversion'), facts)).toEqual([])
 })
 
+test('1753a D3: a total* user-defined value type is a candidate', () => {
+  const typed = AST.replace('"nodeType": "ElementaryTypeName", "src": "115:7:0"', '"nodeType": "UserDefinedTypeName", "src": "115:7:0"')
+  expect(typed).not.toBe(AST)
+  expect(extract(project(V, typed)).aggregates).toEqual(['V.totalAssets'])
+})
+
 test('1753a D4: movers missing V.withdraw is handoff.movers', () => {
   expect(ranged(root, cut('movers: V.deposit, V.withdraw', 'movers: V.deposit'), facts))
     .toEqual([{ rule: 'handoff.movers', note: expect.stringContaining('missing movers V.withdraw') as string }])
 })
 
-test.each(['src/V.sol L0-L3', 'src/V.sol L9-L99', 'src/W.sol L1-L1'])('1753a D5: Guards at %s is handoff.range', (at) => {
+const outside = `${relative(root, join(fixtures, 'V.sol'))} L1-L1`
+test.each(['src/V.sol L0-L3', 'src/V.sol L9-L99', 'src/W.sol L1-L1', 'src L1-L1', outside])('1753a D5: Guards at %s is handoff.range', (at) => {
   expect(ranged(root, cut('src/V.sol L9-L9', at), facts)).toEqual([{ rule: 'handoff.range', note: expect.stringContaining(at) as string }])
 })
 

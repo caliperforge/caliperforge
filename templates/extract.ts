@@ -36,6 +36,7 @@ const WRITE = new Set(['++', '--', 'delete'])
 const ADD = new Set(['+=', '-=', '++', '--'])
 const CALLS = new Map<string, Check>([['require', 'require'], ['revert', 'revert']])
 const AGGREGATE = /^(total|sum)/i
+const REFERENCE = new Set(['Mapping', 'ArrayTypeName'])
 
 export function compiled(root: string): Refused[] {
   const built = spawnSync('forge', ['build', '--ast'], { cwd: root, encoding: 'utf8' })
@@ -99,7 +100,7 @@ function entries(functions: Member[]): Entry[] {
 
 function aggregate(v: Member, writers: Entry[]): boolean {
   const { constant, typeName, typeDescriptions, name = '' } = v.node
-  if (constant === true || typeName?.nodeType !== 'ElementaryTypeName' || /^(string|bytes)$/.test(typeDescriptions?.typeString ?? '')) return false
+  if (constant === true || REFERENCE.has(typeName?.nodeType ?? '') || /^(string|bytes|struct)\b/.test(typeDescriptions?.typeString ?? '')) return false
   return AGGREGATE.test(name) || writers.filter((e) => e.writes.some((w) => w.id === v.node.id && w.additive)).length >= 2
 }
 
@@ -116,7 +117,7 @@ const conversionsOf = (f: Member): Extracted['conversions'] => {
   const inner = below(f.node)
   const divisions = inner.filter((n) => (n.nodeType === 'BinaryOperation' && n.operator === '/') || called(n).startsWith('mulDiv')).map((n) => f.at(n).start)
   const converts = STANDARD.has(f.node.name ?? '') || (inner.some((n) => STANDARD.has(called(n))) && divisions.length > 0)
-  return f.node.implemented === true && converts ?[{ ...f.at(f.node), name: f.name, divisions }] : []
+  return f.node.implemented === true && converts ? [{ ...f.at(f.node), name: f.name, divisions }] : []
 }
 
 const typed = (list: { parameters: Node[] } | undefined): string =>

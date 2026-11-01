@@ -1,5 +1,5 @@
-import { existsSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { readFileSync, statSync } from 'node:fs'
+import { join, resolve, sep } from 'node:path'
 import { type At, type Extracted, lineCount } from './extract.ts'
 
 export interface Refused { rule: string; note: string }
@@ -70,7 +70,9 @@ export function handoff(skill: string, phase: string, text: string): Refused[] {
 function span(root: string, cited: string, facts: Extracted): At | string {
   const [, file = '', start = '', end = ''] = RANGE.exec(cited) ?? []
   if (file === '') return 'not <file> L<start>-L<end>'
-  const last = facts.sources[file] ?? (existsSync(join(root, file)) ? lineCount(readFileSync(join(root, file))) : undefined)
+  const path = resolve(root, file)
+  const inside = path.startsWith(`${resolve(root)}${sep}`) && statSync(path, { throwIfNoEntry: false })?.isFile() === true
+  const last = facts.sources[file] ?? (inside ? lineCount(readFileSync(path)) : undefined)
   if (last === undefined) return `a file not under ${root}`
   const [s, e] = [Number(start), Number(end)]
   return s < 1 || s > e || e > last ? `not a range inside its ${String(last)} lines` : { file, start: s, end: e }

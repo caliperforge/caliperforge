@@ -85,7 +85,7 @@ VALUES
   ('rules/registry/72-ruling_unmoved.yaml', 'card', 'rules/registry/72-ruling_unmoved.yaml', '05523275f4f654095ab535c2552abaf9797959230619cae15645d8ee7b586d41', '2026-10-21'),
   ('rules/registry/73-director_to_fixer.yaml', 'card', 'rules/registry/73-director_to_fixer.yaml', 'cc86eba79ae30ed63429b3a4a7d87d8d68eb351e3914cec4827d6d9904e8dd34', '2026-10-22'),
   ('rules/registry/74-return_at.yaml', 'card', 'rules/registry/74-return_at.yaml', '6d68a19908b915064dbafb29db93f91d5c605ec16e7bc95ada9f823bdacc2a81', '2026-10-22'),
-  ('rules/registry/75-bench_score_hold.yaml', 'card', 'rules/registry/75-bench_score_hold.yaml', '6746688ad68ad2f2817ec32e6ec4b8fb0b16060d9b7166f28011b4a076850756', '2026-10-22'),
+  ('rules/registry/75-bench_score_hold.yaml', 'card', 'rules/registry/75-bench_score_hold.yaml', '6a10163ac5b0f243151e21fbfded8b656a648de1abe65813ae1bd70cbaebeece', '2026-10-22'),
   ('rules/registry/76-director_close_unbuilt.yaml', 'card', 'rules/registry/76-director_close_unbuilt.yaml', '000894af8e9f2c56fce595ba32242d728dfd8e4b92cb27620723c52ec80d838a', '2026-10-23'),
   ('rules/registry/77-waits_closed_released.yaml', 'card', 'rules/registry/77-waits_closed_released.yaml', 'f7ef1100b7d7cdd017397719a0aff39879bbc7eda1ebf3bfe49a76ea42918e04', '2026-10-23'),
   ('rules/registry/79-outside_records.yaml', 'card', 'rules/registry/79-outside_records.yaml', '39693d035e7c5ef67f77cad18ae07deecbc7928ccaae551ada573cf2c5424752', '2026-10-23'),

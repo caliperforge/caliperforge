@@ -31,12 +31,13 @@ function ruled(issue: string): string {
   return issue.split(/^(?=## )/m).findLast((s) => RULED.test(s)) ?? ''
 }
 
-export function stray(plan: PlanRow, text: string): string | null {
-  return [...text.matchAll(/\.cf\/work\/(\d+)\/[^\s`'"()]+/g)].find((m) => m[1] !== String(plan.id))?.[0] ?? null
+export function stray(root: string, plan: PlanRow, text: string): string | null {
+  const file = (path: string) => statSync(join(root, path.replace(/(?::\d+(?:-\d+)?)?[.,;:]*$/, '')), { throwIfNoEntry: false })?.isFile() === true
+  return [...text.matchAll(/\.cf\/work\/(\d+)\/[^\s`'"()]+/g)].find((m) => m[1] !== String(plan.id) && !file(m[0]))?.[0] ?? null
 }
 
 export function rule(db: Db, root: string, plan: PlanRow, who: string, text: string): 'ask.md' | 'issue.md' | null {
-  if (stray(plan, text) !== null) return null
+  if (stray(root, plan, text) !== null) return null
   const section = `## Answer from the ${who} (${new Date().toISOString().slice(0, 10)})\n\n${text.trim()}\n`
   if (!builderRan(db, plan.id)) {
     put(root, plan.id, 'ask.md', `${maybe(root, plan.id, 'ask.md') ?? ''}\n${section}`)

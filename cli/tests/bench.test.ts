@@ -133,6 +133,19 @@ test('file D3 another generator still files a no_suite target', () => {
   expect(fileBench(d, dir, 'smoke-01', false, 'house_generator', AT)).toHaveLength(1)
 })
 
+test.each([['nope', 'fizz_lean_generator'], ['invariants', 'fizz_lean_generator'], ['context', 'fizz_generator']])('file D5 --stop-after %s on %s is refused', (stop, seat) => {
+  const d = fresh(schema)
+  expect(() => fileBench(d, benchRoot(), 'euler-earn-m01', false, seat, AT, stop))
+    .toThrow('--stop-after takes one of context, scaffold, coverage on fizz_lean_generator')
+  expect(allPlans(d)).toEqual([])
+})
+
+test('file D5 --stop-after context lands in target.yml', () => {
+  const dir = benchRoot()
+  const id = Number(fileBench(fresh(schema), dir, 'euler-earn-m01', false, 'fizz_lean_generator', AT, 'context')[0])
+  expect(get(dir, id, 'target.yml')).toBe(`${YML}target: euler-earn-m01\ngenerator: fizz_lean\nstop_after: context\n`)
+})
+
 const SCORED = 'fuzz-bench/suites/fizz/euler-earn-m01'
 
 const ROW = { plan: 1, target: 'euler-earn-m01', generator: 'fizz', catches: 0, false_positives: 0, untested: null, tokens: 1, seconds: 1, x_ray: null,

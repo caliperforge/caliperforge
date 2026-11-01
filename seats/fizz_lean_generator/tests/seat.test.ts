@@ -8,7 +8,8 @@ import { real } from '../../../runner/index.ts'
 import { seat } from '../../../runner/rules.ts'
 import { staffed } from '../../../sequencer/staffing.ts'
 import { mapOf } from '../../../sequencer/steps.ts'
-import { git, maybe, put, srcDir } from '../../../sequencer/workspace.ts'
+import { unhold } from '../../../sequencer/hold.ts'
+import { git, maybe, planDir, put, srcDir } from '../../../sequencer/workspace.ts'
 import { runRows } from '../../../store/events.ts'
 import { pipeNamed, planById, putPlan } from '../../../store/plans.ts'
 import { generated as generatedRuns } from '../../../store/runs.ts'
@@ -67,7 +68,7 @@ function stub(tokens: number, filled: Record<string, string>, spawns: Record<str
   } } }
 }
 
-async function generated(generator: string, tokens = 1000, filled = FILLED, spawns: Record<string, number> = {}) {
+async function generated(generator: string, tokens = 1000, filled = FILLED, spawns: Record<string, number> = {}, yml = '') {
   const tree = copied()
   const dir = srcDir(tree, 1)
   git(dir, ['init', '-q'])
@@ -75,7 +76,7 @@ async function generated(generator: string, tokens = 1000, filled = FILLED, spaw
   git(dir, ['add', '-A'])
   git(dir, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'vault'])
   put(tree, 1, 'checkout.json', JSON.stringify({ pre_fix: git(dir, ['rev-parse', 'HEAD']).trim() }))
-  put(tree, 1, 'target.yml', `generator: ${generator}`)
+  put(tree, 1, 'target.yml', `generator: ${generator}${yml}`)
   const db = fresh(schema)
   putPlan(db, { id: 1, pipe_id: Number(pipeNamed(db, 'bench')?.id), target_id: null, template: 'bench', state: 'queued', queued_at: AT, step: 1, retries: 0 })
   const fired = stub(tokens, filled, spawns)
@@ -172,6 +173,20 @@ test('1994 D4: every lean packet is offline', async () => {
 test('D6: generate.json agents adds up every phase transcript', async () => {
   const { tree } = await generated('fizz_lean', 1000, FILLED, { context: 1, scaffold: 2 })
   expect(JSON.parse(maybe(tree, 1, 'generate.json') ?? '{}')).toMatchObject({ agents: 3, tokens: 4000, seconds: 4, properties: 1 })
+})
+
+test('D4: stop_after context parks, unhold fires the rest', async () => {
+  const { tree, db, outcome } = await generated('fizz_lean', 1000, FILLED, {}, '\nstop_after: context')
+  expect(outcome).toMatchObject({ outcome: 'pass', held: true, note: 'stopped after context for a look' })
+  expect(planById(db, 1).state).toBe('blocked_on_ceo')
+  expect(existsSync(join(planDir(tree, 1), 'src.stopped'))).toBe(true)
+  expect(existsSync(join(planDir(tree, 1), 'src'))).toBe(false)
+  unhold(db, tree, 1, 'ceo')
+  const rest = stub(1000, FILLED, {})
+  expect(await generate(db, tree, planById(db, 1), mapOf('bench').at(1), rest.provider)).toMatchObject({ outcome: 'pass' })
+  expect(rest.packets.map(phaseOf)).toEqual(['scaffold', 'coverage', 'invariants'])
+  expect(JSON.parse(maybe(tree, 1, 'generate.json') ?? '{}')).toMatchObject({ tokens: 4000, seconds: 4 })
+  expect(existsSync(join(planDir(tree, 1), 'src.stopped'))).toBe(false)
 })
 
 test('D6: a drifted fizz_lean_generator prompt is refused', () => {

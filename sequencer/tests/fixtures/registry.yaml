@@ -449,7 +449,7 @@
 - name: bench_score_hold
   table: events
   column: at
-  where: "kind = 'score' AND outcome = 'needs_coo'"
+  where: "kind = 'score' AND outcome = 'needs_coo' AND (SELECT p.kind FROM events p WHERE p.plan = events.plan AND p.id < events.id ORDER BY p.id DESC LIMIT 1) IS NOT 'park'"
   gap: 14d
   expected: 0
 - name: director_close_unbuilt

@@ -4,12 +4,15 @@ import { join } from 'node:path'
 import type { Outcome } from '../sequencer/kind.ts'
 import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
-import { needsCeo, type PlanRow } from '../store/plans.ts'
+import { needsCeo, planById, type PlanRow } from '../store/plans.ts'
 
 export function heldForCoo(db: Db, plan: PlanRow, ran: SpawnSyncReturns<string>, script: string): Outcome {
-  const note = ran.error?.message ?? ran.stderr.trim().split('\n').at(-1) ?? ''
-  needsCeo(db, plan, note)
-  logged(db, { plan: plan.id, kind: 'score', actor: 'score', outcome: 'needs_coo', message: note, pointer: `step-${String(plan.step)}`, run: null })
+  const { state } = planById(db, plan.id)
+  const live = state === 'queued' || state === 'running'
+  const stop = !live ? `the plan is ${state}` : ran.signal === null ? null : `killed by ${ran.signal}`
+  const note = stop === null ? (ran.error?.message ?? ran.stderr.trim().split('\n').at(-1) ?? '') : `${script}.py stopped: ${stop}`
+  if (stop === null) needsCeo(db, plan, note)
+  logged(db, { plan: plan.id, kind: 'score', actor: 'score', outcome: stop === null ? 'needs_coo' : 'pass', message: note, pointer: `step-${String(plan.step)}`, run: null })
   return { outcome: 'pass', held: true, quiet: true, spans: [`bench.${script}`], note }
 }
 

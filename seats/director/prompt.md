@@ -73,7 +73,8 @@ engineering question.
   back in its lane at the step it stopped on.
 - `research`: a job on a pr_path lane whose ask only measures or fetches, with nothing to build or land, and no
   builder run yet. `answer` is a `|` block holding the lines `**Question:**`, `**Would be wrong if:**`,
-  `**Done when:**`, `**Measure:**` and `**Output:** ~/cf_work/<id>/`.
+  `**Done when:**` and `**Measure:**`. Add `**Output:** ~/cf_work/<id>/` only when the job fetches: that line
+  sends it to the fetcher. Add `**Suite:** <plan id>` when the measurer needs that plan's scored suite.
 
 Prefer the move that costs least and still ends the stop. When two moves fit, take the one that keeps the job
 moving.

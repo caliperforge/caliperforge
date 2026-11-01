@@ -54,7 +54,7 @@ function noSuite(db: Db, root: string, name: string, key: string): number | unde
 }
 
 /** The suites folder is the only copy left: the tick reaps `src/` from every done plan. */
-function scoredSuite(db: Db, root: string, id: number): { made: string; yml: string; target: string; generator: string; suites: string } {
+export function scoredSuite(db: Db, root: string, id: number): { made: string; yml: string; target: string; generator: string; suites: string } {
   const plan = planById(db, id)
   if (plan.template !== 'bench' || plan.state !== 'done') throw new Error(`plan ${String(id)} is not a done bench plan`)
   const made = maybe(root, id, 'generate.json')

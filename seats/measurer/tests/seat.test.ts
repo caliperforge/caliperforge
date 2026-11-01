@@ -7,7 +7,7 @@ const root = join(import.meta.dirname, '../../..')
 
 test('D7: the manifest runs uv and writes only .cf/measure', () => {
   expect(seat(root, 'measurer').manifest).toEqual({
-    seat: 'measurer', model: 'claude-opus-5-5', effort: 'medium', tools: ['Read', 'Grep', 'Glob', 'Bash(uv run:*)'], write_paths: ['.cf/measure'],
+    seat: 'measurer', model: 'claude-opus-5-5', effort: 'medium', tools: ['Read', 'Grep', 'Glob', 'Bash(uv run:*)', 'Bash(forge:*)', 'Bash(medusa:*)'], write_paths: ['.cf/measure'],
   })
 })
 
@@ -15,6 +15,11 @@ test('D7: the prompt opens with its name and closes on a run fence', () => {
   const prompt = seat(root, 'measurer').prompt
   expect(prompt.startsWith('# measurer\n')).toBe(true)
   for (const part of ['## Citing', '## Quote', '- run:', 'command:', 'commit:', 'quote:', 'claim:', '# HEAD', '.cf/measure/']) expect(prompt).toContain(part)
+})
+
+test('D2: the prompt runs forge and medusa', () => {
+  const prompt = seat(root, 'measurer').prompt
+  for (const part of ['`uv run`', '`forge`', '`medusa`']) expect(prompt).toContain(part)
 })
 
 test('D3: the prompt answers needs_build for network or writes', () => {

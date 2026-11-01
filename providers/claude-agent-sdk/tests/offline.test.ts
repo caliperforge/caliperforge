@@ -68,8 +68,8 @@ const SUB = ["bash -c 'curl https://example.com'", 'node probe2.mjs']
 const LOCAL = ['forge build', 'medusa fuzz --timeout 10', 'node local.mjs', 'node write.mjs']
 
 const PROMPT = [`Run each of these Bash commands exactly as written, one per call, and go on when one fails: ${[...TOP, ...LOCAL].join(', ')}.`,
-  `Then spawn one Agent sub-agent and have it run each of these Bash commands exactly as written, one per call: ${SUB.join(', ')}.`,
-  'End with the word done.'].join('\n')
+  `Then spawn one Agent sub-agent in the foreground (run_in_background false, never in the background), have it run each of these Bash commands exactly as written, one per call: ${SUB.join(', ')}, and wait for its result before you answer.`,
+  'Only after the sub-agent has returned, end with the word done.'].join('\n')
 
 test.runIf(LIVE)('D1 D2 D6 an offline session cuts the network', async () => {
   const { cwd, tmp } = fixture()

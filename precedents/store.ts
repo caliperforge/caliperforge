@@ -4,7 +4,7 @@ export const KINDS = ['review', 'inline', 'comment'] as const
 
 export interface Source { repo: string; number: number; title: string; merged_at: string; merger: string | null; files: string[]; issues: number[] }
 
-export interface Thread { kind: string; author: string; role: string; text: string; path: string | null; line: number | null }
+export interface Thread { kind: string; author: string; role: string; text: string; path: string | null; line: number | null; url: string }
 
 export function keep(db: Db, source: Source, threads: Thread[]): void {
   const unknown = threads.find((t) => !(KINDS as readonly string[]).includes(t.kind))
@@ -15,8 +15,8 @@ export function keep(db: Db, source: Source, threads: Thread[]): void {
     db.prepare(`INSERT OR REPLACE INTO precedent_sources (repo, number, title, merged_at, merger, files, issues)
       VALUES (@repo, @number, @title, @merged_at, @merger, @files, @issues)`)
       .run({ ...source, files: JSON.stringify(source.files), issues: JSON.stringify(source.issues) })
-    const insert = db.prepare(`INSERT INTO precedent_threads (repo, number, kind, author, role, text, path, line)
-      VALUES (@repo, @number, @kind, @author, @role, @text, @path, @line)`)
+    const insert = db.prepare(`INSERT INTO precedent_threads (repo, number, kind, author, role, text, path, line, url)
+      VALUES (@repo, @number, @kind, @author, @role, @text, @path, @line, @url)`)
     for (const thread of threads) insert.run({ ...thread, repo, number })
   })()
 }
@@ -28,7 +28,7 @@ export function source(db: Db, repo: string, number: number): Source | undefined
 }
 
 export function threads(db: Db, repo: string, number: number): Thread[] {
-  return db.prepare('SELECT kind, author, role, text, path, line FROM precedent_threads WHERE repo = ? AND number = ? ORDER BY id')
+  return db.prepare('SELECT kind, author, role, text, path, line, url FROM precedent_threads WHERE repo = ? AND number = ? ORDER BY id')
     .all(repo, number) as Thread[]
 }
 

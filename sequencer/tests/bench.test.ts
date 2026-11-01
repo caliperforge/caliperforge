@@ -707,6 +707,18 @@ test('D6 a score pass on a live degraded row is seen', () => {
   expect(degraded('few_properties', true)).toEqual([])
 })
 
+test('D4 a score needs_coo is seen unless a park precedes it', () => {
+  const held = (parked: boolean) => {
+    const db = fresh(schema)
+    queued(db, 'bench', 2)
+    if (parked) logged(db, { plan: 1, kind: 'park', actor: 'coo', outcome: 'pass', message: 'parked', pointer: null, run: null }, AT)
+    logged(db, { plan: 1, kind: 'score', actor: 'score', outcome: 'needs_coo', message: '', pointer: 'step-2', run: null }, AT)
+    return drift(db, mechanisms(REPO).filter((e) => e.name === 'bench_score_hold'), OPENS)
+  }
+  expect(held(true)).toEqual([])
+  expect(held(false)).toMatchObject([{ name: 'bench_score_hold', state: 'seen' }])
+})
+
 test('D5 a stop under the ceiling is refused on its reason', async () => {
   const why = 'ruling:seat.write_paths refuses a write to src/vault.sol'
   const { root, outcome } = await generated(stub(1000, 'stopped', true, why))
@@ -1257,6 +1269,28 @@ test('score D2 a failing run_pair.py holds the plan for the coo', () => {
   const { root, db } = scoring(FAILS)
   expect(scored(db, root, planById(db, 1))).toEqual({ outcome: 'pass', held: true, quiet: true, spans: ['bench.run_pair'], note: 'forge build failed' })
   heldAtScore(db, root)
+})
+
+test('D1 a run_pair.py failing after a park logs the stop', () => {
+  const { root, db } = scoring(FAILS)
+  const stale = planById(db, 1)
+  holdOn(db, 1, 'parked', null, '2026-11-02T00:00:00.000Z')
+  const park = holdOf(db, 1)
+  expect(scored(db, root, stale))
+    .toEqual({ outcome: 'pass', held: true, quiet: true, spans: ['bench.run_pair'], note: 'run_pair.py stopped: the plan is blocked_on_ceo' })
+  expect(eventsOf(db, 1, 'score')).toMatchObject([{ outcome: 'pass', message: 'run_pair.py stopped: the plan is blocked_on_ceo' }])
+  expect(holdOf(db, 1)).toEqual(park)
+  expect(scores(db)).toEqual([])
+})
+
+test('D2 a run_pair.py killed by SIGTERM logs the stop', () => {
+  const { root, db } = scoring('import os, signal\nos.kill(os.getpid(), signal.SIGTERM)\n')
+  const before = planById(db, 1)
+  expect(scored(db, root, before)).toMatchObject({ outcome: 'pass', held: true, note: 'run_pair.py stopped: killed by SIGTERM' })
+  expect(planById(db, 1)).toMatchObject({ state: before.state, step: 2 })
+  expect(eventsOf(db, 1, 'score')).toMatchObject([{ outcome: 'pass', message: 'run_pair.py stopped: killed by SIGTERM' }])
+  expect(holdOf(db, 1)?.held_by).not.toBe('coo')
+  expect(scores(db)).toEqual([])
 })
 
 const KEYS = { target: 'euler-earn-m01', generator: 'fizz' }

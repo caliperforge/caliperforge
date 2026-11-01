@@ -1275,10 +1275,11 @@ test('D1 a run_pair.py failing after a park logs the stop', () => {
   const { root, db } = scoring(FAILS)
   const stale = planById(db, 1)
   holdOn(db, 1, 'parked', null, '2026-11-02T00:00:00.000Z')
+  const park = holdOf(db, 1)
   expect(scored(db, root, stale))
     .toEqual({ outcome: 'pass', held: true, quiet: true, spans: ['bench.run_pair'], note: 'run_pair.py stopped: the plan is blocked_on_ceo' })
   expect(eventsOf(db, 1, 'score')).toMatchObject([{ outcome: 'pass', message: 'run_pair.py stopped: the plan is blocked_on_ceo' }])
-  expect(holdOf(db, 1)?.held_by).not.toBe('coo')
+  expect(holdOf(db, 1)).toEqual(park)
   expect(scores(db)).toEqual([])
 })
 
@@ -1292,7 +1293,7 @@ test('D2 a run_pair.py killed by SIGTERM logs the stop', () => {
   expect(scores(db)).toEqual([])
 })
 
-const KEYS ={ target: 'euler-earn-m01', generator: 'fizz' }
+const KEYS = { target: 'euler-earn-m01', generator: 'fizz' }
 
 const ON = { ...KEYS, null_check: 'true' }
 

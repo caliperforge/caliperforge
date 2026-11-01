@@ -9,7 +9,7 @@ import { mechanisms } from '../sequencer/drift.ts'
 import { CHAIN_MINUTES, dry, EACH, lap, tick } from '../sequencer/index.ts'
 import { garden } from '../sequencer/garden.ts'
 import { CHECK_SLOTS } from '../sequencer/checks.ts'
-import { behind, upgraded } from '../sequencer/upgrade.ts'
+import { halted, upgraded } from '../sequencer/upgrade.ts'
 import { late } from '../sequencer/signals.ts'
 import { signoffs } from '../sequencer/signoff.ts'
 import { byHand } from '../sequencer/director.ts'
@@ -32,6 +32,7 @@ import { registerLook } from './look.ts'
 import { registerPaydesk } from './paydesk.ts'
 import { registerRefile } from './refile.ts'
 import { registerResearch } from './research.ts'
+import { registerPrecedents } from './cf-precedents.ts'
 import { registerRestore } from './restore.ts'
 import { registerSite } from './site.ts'
 import { desk, fileIssue, gh } from './gh.ts'
@@ -70,6 +71,7 @@ registerPaydesk(cf, cli)
 registerExport(cf, cli)
 registerBench(cf, cli)
 registerResearch(cf, cli)
+registerPrecedents(cf, cli)
 
 cf.command('health').action(() => {
   out(health(db(), root, new Date().toISOString().slice(0, 10)))
@@ -113,9 +115,9 @@ async function ticked(options: { dry?: boolean }, now: Date): Promise<void> {
     dryTick(handle, now)
     return
   }
-  const sha = behind(handle, root)
-  if (sha !== null) {
-    halt(handle, now, sha)
+  const note = halted(handle, root)
+  if (note !== null) {
+    halt(handle, now, note)
     return
   }
   const { auth } = credential()
@@ -165,8 +167,7 @@ function cards(handle: Db, now: Date): void {
 }
 
 /** Until the tree holds what it merged it would fire a lap of a version it has already replaced. */
-function halt(handle: Db, now: Date, sha: string): void {
-  const note = `live tree is behind ${sha.slice(0, 12)}; it fires nothing until it holds that commit`
+function halt(handle: Db, now: Date, note: string): void {
   process.stderr.write(`cf: ${note}\n`)
   receipt(handle, { at: now.toISOString(), hhmm: hhmm(handle, now), dry: false,
     pipes: openPipes(handle, hhmm(handle, now)).length, fired: 0, exit: 1, note })

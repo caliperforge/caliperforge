@@ -26,6 +26,7 @@ import { coder, repaired } from './coder.ts'
 import { hold, unhold } from './hold.ts'
 import { CUT, moved } from './moved.ts'
 import { output } from './output.ts'
+import { barred, filed, returned } from './park.ts'
 import { prose } from './prose.ts'
 import { WIRE, type Wire } from './push.ts'
 import { rule } from './rule.ts'
@@ -89,6 +90,10 @@ export async function fixer(db: Db, root: string, plan: PlanRow, decision: { id:
   const m = mode(db)
   if (m === 'off') return false
   if (m === 'live' && fixesToday(root, plan.id, now) >= FIXES) return false
+  if (m === 'live' && filed(db, root, plan.id)) {
+    event(db, { plan: plan.id, kind: 'fixer', actor: 'fixer', outcome: 'pass', message: 'parked: the director filed or parked this job; it waits on that', pointer: null, run: null })
+    return true
+  }
   const to = gone(root, plan) ? null : coder(db, root, plan)
   const was = maybe(root, plan.id, 'base.sha')
   const brief = maybe(root, plan.id, 'issue.md')
@@ -101,10 +106,7 @@ export async function fixer(db: Db, root: string, plan: PlanRow, decision: { id:
     log(db, root, plan.id, { at: now.toISOString(), mode: m, ...got, tokens, applied: 'shadow' })
     return false
   }
-  if (moved(root, plan.id, was)) {
-    log(db, root, plan.id, { at: now.toISOString(), mode: m, ...got, why: CUT, tokens, applied: 'refused' })
-    return false
-  }
+  if (refused(db, root, plan.id, was, { at: now.toISOString(), mode: m, ...got, tokens })) return false
   const stop = `# Diagnosis\n\n${got.did}\n\n${got.why}\n\n# Stop\n\n${cut(maybe(root, plan.id, 'refusal.md') ?? '', TEXT_CHARS)}`
   if (to !== null && !(await repaired(db, root, plan, to, stop, Math.min(wall(db), FIX_WALL), provider))) {
     log(db, root, plan.id, { at: now.toISOString(), mode: m, ...got, tokens, applied: 'unrepaired' })
@@ -122,6 +124,12 @@ export async function fixer(db: Db, root: string, plan: PlanRow, decision: { id:
   record(root, [{ at: now.toISOString(), plan: plan.id, ticket, kind: 'refused', step: plan.step, name: 'fixer', note }])
   mark(db, decision.id, 'applied')
   return true
+}
+
+function refused(db: Db, root: string, plan: number, was: string | null, l: Omit<Logged, 'applied'>): boolean {
+  const why = moved(root, plan, was) ? CUT : l.then === 'return' || l.then === 'retry' ? barred(db, root, plan) : null
+  if (why !== null) log(db, root, plan, { ...l, why, applied: 'refused' })
+  return why !== null
 }
 
 async function ask(db: Db, root: string, plan: PlanRow, decision: { why: string }, m: Mode, to: string | null, provider: Provider):
@@ -220,8 +228,9 @@ function apply(db: Db, root: string, plan: PlanRow, f: Fix, wire: Wire, now: Dat
   const to = f.answer === undefined ? undefined : rule(db, root, plan, 'fixer', f.answer)
   if (to === null) return 'escalated'
   switch (to === 'issue.md' && f.then === 'return' ? 'retry' : f.then) {
-    case 'return': afresh(root, plan.id, returnToLane(db, plan.id, 'fixer')); return 'return'
+    case 'return': returned(root, plan.id); afresh(root, plan.id, returnToLane(db, plan.id, 'fixer')); return 'return'
     case 'retry': {
+      returned(root, plan.id)
       const step = db.transaction(() => { clear(db, plan.id); return retry(db, plan) })()
       afresh(root, plan.id, step)
       return 'retry'

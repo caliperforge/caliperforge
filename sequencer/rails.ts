@@ -12,7 +12,7 @@ import { audit, record, undone } from '../rails/completion-audit/index.ts'
 import { identifiers } from '../rails/identifiers/index.ts'
 import { record as recordRail, type Verdict } from '../rails/record.ts'
 import { scan } from '../rails/secret-scan/index.ts'
-import { weakened } from '../rails/test-weakened/index.ts'
+import { retired, weakened } from '../rails/test-weakened/index.ts'
 import { sources, tight } from '../rails/tight/index.ts'
 import { logged } from '../store/events.ts'
 import { filesOf, listed, record as recordFiles } from '../store/files.ts'
@@ -34,7 +34,7 @@ import { lock, unlock } from './lock.ts'
 import { seat } from '../runner/rules.ts'
 import { broken, renumbered, strays } from './fence.ts'
 import { fenceFor, languageFor } from './route.ts'
-import { diffOf, doneIds, get, maybe, PR_BRANCH, put, srcDir } from './workspace.ts'
+import { diffOf, doneIds, drop, get, maybe, PR_BRANCH, put, srcDir } from './workspace.ts'
 import type { Wire } from './push.ts'
 import { repoOf } from './ready.ts'
 
@@ -135,7 +135,8 @@ function suite(db: Db, root: string, plan: PlanRow, on: Rails, commands: Command
   const heard: string[] = []
   if (local || outside !== null || guide.length > 0) {
     const files = narrow(db, plan)
-    const holder = local && files.length === 0 ? lock(root, plan.id, new Date(), 1) : lock(root, plan.id)
+    const alone = maybe(root, plan.id, 'step-3.capped') !== null
+    const holder = alone ? lock(root, plan.id, new Date(), undefined, true) : local && files.length === 0 ? lock(root, plan.id, new Date(), 1) : lock(root, plan.id)
     if (holder !== null) return { outcome: 'pass', held: true, spans: ['checks'], note: `checks wait: plan ${String(holder.plan)} is running its tests` }
     try {
       const diff = diffOf(root, plan.id)
@@ -143,7 +144,8 @@ function suite(db: Db, root: string, plan: PlanRow, on: Rails, commands: Command
         outside === null ? null : { language: outside, files: filesOf(db, plan.id).map((f) => f.path), ...(base === undefined ? {} : { base }) },
         parse(diff).map((f) => f.path), finishes.minutes, (line) => { heard.push(line) })) ?? finish(srcDir(root, plan.id), finishes.entries, noted(db, plan.id), finishes.minutes)
       if (failed?.fault !== undefined) return faulted(db, root, plan, failed.fault)
-      if (failed?.capped === true) return capped(failed)
+      if (failed?.capped === true) { put(root, plan.id, 'step-3.capped', ''); return capped(failed, alone) }
+      drop(root, plan.id, 'step-3.capped')
       const blip = failed === null ? null : offline(failed)
       if (blip !== null) return blip
       recordRail(db, join(root, 'rails', 'checks'), plan.id, checked(failed, diff), 0)
@@ -165,9 +167,9 @@ export function faulted(db: Db, root: string, plan: PlanRow, fault: string): Out
 }
 
 /** A run the cap killed before any test went red is the gate's blip: it stays on step 3 until `BLIPS` in a row. */
-export function capped(failed: Failure): Outcome {
+export function capped(failed: Failure, alone = false): Outcome {
   const left = failed.unfinished ?? []
-  return { outcome: 'refuse', blip: true, spans: ['checks:cap'], note: `${failed.command} timed out: killed at the cap with no test red${left.length === 0 ? '' : `; unfinished: ${left.join(', ')}`}`, message: failed.output }
+  return { outcome: 'refuse', blip: true, spans: ['checks:cap'], note: `${failed.command} timed out${alone ? ' alone' : ''}: killed at the cap with no test red${left.length === 0 ? '' : `; unfinished: ${left.join(', ')}`}`, message: failed.output }
 }
 
 /** A check that names no red test but a failed network line is the host's blip, as `capped()` is. */
@@ -238,7 +240,7 @@ function rest(db: Db, root: string, plan: PlanRow, handback: string, diff: strin
   const outside = ours
     ? strays(parse(diff).map((f) => f.path), filesOf(db, plan.id).map((f) => f.path), handback, get(root, plan.id, 'issue.md'))
     : []
-  const weakenedRail: [string, () => Verdict] = ['test-weakened', () => weakened(diff, 'green', [maybe(root, plan.id, 'ask.md') ?? '', get(root, plan.id, 'issue.md'), maybe(root, plan.id, 'rulings.md') ?? '', maybe(root, plan.id, 'pr.md') ?? ''].join('\n'))]
+  const weakenedRail: [string, () => Verdict] = ['test-weakened', () => weakened(diff, 'green', [maybe(root, plan.id, 'ask.md') ?? '', get(root, plan.id, 'issue.md'), maybe(root, plan.id, 'rulings.md') ?? '', maybe(root, plan.id, 'pr.md') ?? ''].join('\n'), retired(maybe(root, plan.id, 'removed-tests.md') ?? '', handback))]
   const scope: [string, () => Verdict][] = [
     ['secret-scan', () => scan(diff)],
     ['authority', () => authority(root, name, diff, ours, fence, outside, ours ? renumbered(src, diff) : [])],

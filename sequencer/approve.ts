@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { gates, signedLatest, targetSigned } from '../store/approvals.ts'
+import { ceoSigned, gates, signedLatest, targetSigned } from '../store/approvals.ts'
 import { newest, approved as settle } from '../store/deliverables.ts'
 import type { Db } from '../store/index.ts'
 import { internal, type PlanRow } from '../store/plans.ts'
@@ -48,6 +48,12 @@ export function targetDigest(t: { repo: string; issue_no: number; evidence_measu
 export function approved(db: Db, plan: PlanRow): boolean {
   if (plan.target_id === null) return false
   return targetSigned(db, plan.target_id, targetDigest(targetRow(db, plan.target_id)))
+}
+
+export function ceoApproved(db: Db, plan: PlanRow): { target: number; digest: string } | null {
+  if (plan.target_id === null) return null
+  const digest = targetDigest(targetRow(db, plan.target_id))
+  return ceoSigned(db, plan.target_id, digest) ? { target: plan.target_id, digest } : null
 }
 
 /**

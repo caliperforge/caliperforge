@@ -14,7 +14,7 @@ import { dropPlan, pipeOf } from '../../store/plans.ts'
 import { profile } from '../../store/profile.ts'
 import { refusalRows, WHY } from '../../store/refusals.ts'
 import { verdictRows } from '../../store/verdict.ts'
-import { checks, excluded, finish, mode, network, npm, type Ran, type Run } from '../checks.ts'
+import { checks, excluded, finish, mode, network, npm, own, type Ran, type Run } from '../checks.ts'
 import { ciFeatures, formatLine, type Outside, recipes } from '../gates.ts'
 import { tick } from '../index.ts'
 import { capped, faulted, narrow, offline } from '../rails.ts'
@@ -1099,6 +1099,29 @@ function nested(files: Record<string, string>): string {
   }
   return dir
 }
+
+const PHASES = 'seats/fizz_lean_generator/tests/phases.test.ts'
+
+test('2058 D4 a test list runs only those files', () => {
+  const src = nested({ ...THREE, [PHASES]: '', 'templates/phases.ts': '' })
+  const paths = ['templates/phases.ts', PHASES]
+  const tests = own(src, paths, paths)
+  expect(tests).toEqual([PHASES])
+  const some = recorder()
+  expect(checks(src, OWN, some.run, [], null, paths, undefined, undefined, tests)).toBeNull()
+  expect(some.seen).toEqual(['run typecheck', 'run lint', `exec -- vitest run ${PHASES}`])
+})
+
+test('2058 D4 own() finds tests beside a file and under tests/', () => {
+  const src = nested({ 'store/x.ts': '', 'store/x.test.ts': '', 'sequencer/y.ts': '', 'sequencer/tests/y.test.ts': '' })
+  expect(own(src, [], ['store/x.ts', 'sequencer/y.ts'])).toEqual(['store/x.test.ts', 'sequencer/tests/y.test.ts'])
+})
+
+test('2058 D5 an empty test list runs no test command', () => {
+  const none = recorder()
+  expect(checks(tree(THREE), OWN, none.run, [], null, [], undefined, undefined, [])).toBeNull()
+  expect(none.seen).toEqual(['run typecheck', 'run lint'])
+})
 
 function heard(ran: Ran = { ok: true, output: '' }): { run: Run; calls: string[] } {
   const calls: string[] = []

@@ -36,6 +36,16 @@ export async function distill(db: Db, root: string, repo: string, provider: Prov
   return rows.length
 }
 
+export async function drained(db: Db, root: string, repo: string, provider: Provider): Promise<{ prs: number; rows: number }> {
+  let prs = 0
+  let rows = 0
+  for (let got = await distill(db, root, repo, provider); got !== null; got = await distill(db, root, repo, provider)) {
+    prs++
+    rows += got
+  }
+  return { prs, rows }
+}
+
 function rowOf(line: string, said: Thread[]): Precedent | null {
   const got = ROW.exec(line)?.groups
   if (got === undefined || !said.some((t) => t.url === got.source)) return null

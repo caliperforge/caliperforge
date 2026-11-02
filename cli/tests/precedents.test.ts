@@ -1,4 +1,4 @@
-import { cpSync, mkdtempSync } from 'node:fs'
+import { cpSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Command } from 'commander'
@@ -6,7 +6,10 @@ import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import { distilled, keep, precedents, type Source, type Thread } from '../../precedents/store.ts'
 import type { Provider } from '../../providers/kind.ts'
+import { planDir } from '../../sequencer/workspace.ts'
 import type { Db } from '../../store/index.ts'
+import { addPipe, addPlan, pipeNamed } from '../../store/plans.ts'
+import { addAccount, addTarget } from '../../store/targets.ts'
 import { registerPrecedents } from '../cf-precedents.ts'
 import type { Read } from '../gh.ts'
 
@@ -70,4 +73,25 @@ test('D6 for prints each match as its stored row, or nothing', async () => {
   expect(printed).toBe(`${ROW}\n`)
   await cf.parseAsync(['precedents', 'for', 'o/r', 'b.ts'], { from: 'user' })
   expect(printed).toBe(`${ROW}\n`)
+})
+
+test('D7 escapes prints each PR count and its escapes', async () => {
+  const db = fresh(join(repo, 'schema'))
+  const root = mkdtempSync(join(tmpdir(), 'cf-escapes-'))
+  addAccount(db, { id: 1, repo: 'o/r', measured_at: '2026-10-01', maintainers: 1, doors: 1, last_outsider_merge: '2026-09-01',
+    open_pr_age_p50_days: 0, cross_repo_activity: 0, pulse: 'cold', evidence: 'https://github.com/o/r/pulse' })
+  addPipe(db, { name: 'escapes', enabled: 1, window_start: '00:00', window_end: '23:59', max_concurrent: 1 })
+  const target = addTarget(db, { account_id: 1, repo: 'o/r', issue_no: 7, named_merger: 'm', state: 'queued',
+    evidence_measured_at: '2026-10-01', evidence: 'https://github.com/o/r/pull/7' })
+  const plan = addPlan(db, { pipe_id: Number(pipeNamed(db, 'escapes')?.id), target_id: target, template: 'pr_path', state: 'queued',
+    queued_at: '2026-10-01T00:00:00.000Z', lane: null, seat: null, origin: null, step: 0 })
+  mkdirSync(planDir(root, plan), { recursive: true })
+  writeFileSync(join(planDir(root, plan), 'findings-abc.md'), '- G1 src/a.rs:4 x\n')
+  const nine = { ...said, path: 'src/a.rs', line: 9, url: 'https://github.com/o/r/pull/7#discussion_r2' }
+  keep(db, pr(7, 'Fix', '2026-10-01T00:00:00Z'), [{ ...said, path: 'src/a.rs', line: 4 }, nine])
+  let printed = ''
+  const cf = new Command().exitOverride()
+  registerPrecedents(cf, { root, db: () => db, out: (text) => { printed += text } }, replies([]))
+  await cf.parseAsync(['precedents', 'escapes', 'o/r'], { from: 'user' })
+  expect(printed).toBe(`o/r#7\t1\n  src/a.rs:9\t${nine.url}\n`)
 })

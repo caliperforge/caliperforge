@@ -3,9 +3,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, it } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
+import type { Read } from '../../cli/gh.ts'
 import type { Provider } from '../../providers/kind.ts'
 import { ofKind } from '../../store/events.ts'
 import { dump } from '../../store/index.ts'
+import { flagged } from '../../store/precedent-findings.ts'
 import { distill } from '../distill.ts'
 import { keep, precedents, type Source, type Thread } from '../store.ts'
 
@@ -123,4 +125,66 @@ it('D6 the next call takes the next-oldest, then none fires', async () => {
   expect(fired.map((p) => p.includes('# Later'))).toEqual([false, true])
   expect(await distill(db, root, 'o/r', replies('none', fired))).toBeNull()
   expect(fired).toHaveLength(2)
+})
+
+const bot: Thread = { kind: 'inline', author: 'greptile-apps[bot]', role: 'bot', text: 'the cache goes stale', path: 'a.ts', line: 4,
+  url: 'https://github.com/o/r/pull/7#discussion_r5' }
+
+const finding = (acted_on: string, source = bot.url) => `- bot: the cache goes stale | area: a.ts | acted_on: ${acted_on} | source: ${source}`
+
+function reads(patch: string): Read {
+  const got: Record<string, unknown> = {
+    'repos/o/r/pulls/7/comments?per_page=100': [{ id: 5, commit_id: 'c2', original_commit_id: 'c1', path: 'a.ts', line: 4, original_line: 4,
+      body: bot.text, user: { login: bot.author } }],
+    'repos/o/r/pulls/7/commits?per_page=100': [{ sha: 'c1' }, { sha: 'c2' }],
+    'repos/o/r/commits/c2': { files: [{ filename: 'a.ts', patch }] },
+  }
+  return (args) => got[args[1] ?? '']
+}
+
+const never: Read = () => {
+  throw new Error('read')
+}
+
+const refusal = (message: string) => [{ plan: null, kind: 'precedent_refused', actor: 'cf', outcome: 'refuse', message }]
+
+it('bot D1 a fixed row the next commit leaves alone is refused', async () => {
+  const db = stored([bot])
+  expect(await distill(db, root, 'o/r', replies(finding('fixed')), reads('@@ -10,2 +10,2 @@\n-x\n+y\n z'))).toBe(0)
+  expect(flagged(db, 'o/r')).toEqual([])
+  expect(ofKind(db, 'precedent_refused')).toEqual(refusal(finding('fixed')))
+})
+
+it('bot D2 a fixed row the next commit changes is stored', async () => {
+  const db = stored([bot])
+  await distill(db, root, 'o/r', replies(finding('fixed')), reads('@@ -3,3 +3,3 @@\n a\n-b\n+c\n d'))
+  expect(flagged(db, 'o/r')).toEqual([{ number: 7, finding: 'the cache goes stale', area: 'a.ts', acted_on: 'fixed', source: bot.url }])
+  expect(ofKind(db, 'precedent_refused')).toEqual([])
+})
+
+it('bot D3 an ignored row is stored without a read', async () => {
+  const db = stored([bot])
+  await distill(db, root, 'o/r', replies(finding('ignored')), never)
+  expect(flagged(db, 'o/r').map((f) => f.acted_on)).toEqual(['ignored'])
+})
+
+it('bot D4 an agreed row with a maintainer at its line is stored', async () => {
+  const db = stored([bot, explains])
+  await distill(db, root, 'o/r', replies(finding('agreed')), never)
+  expect(flagged(db, 'o/r').map((f) => f.acted_on)).toEqual(['agreed'])
+})
+
+it('bot D4 an agreed row with no maintainer there is refused', async () => {
+  const db = stored([bot, later])
+  await distill(db, root, 'o/r', replies(finding('agreed')), never)
+  expect(flagged(db, 'o/r')).toEqual([])
+  expect(ofKind(db, 'precedent_refused')).toEqual(refusal(finding('agreed')))
+})
+
+it('bot D5 a row whose source names no thread is refused', async () => {
+  const db = stored([bot])
+  const line = finding('ignored', 'https://github.com/o/r/pull/7#discussion_r9')
+  await distill(db, root, 'o/r', replies(line), never)
+  expect(flagged(db, 'o/r')).toEqual([])
+  expect(ofKind(db, 'precedent_refused')).toEqual(refusal(line))
 })

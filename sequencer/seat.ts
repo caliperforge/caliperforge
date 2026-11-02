@@ -27,7 +27,7 @@ import { parse } from '../rails/diff.ts'
 import { claimed, estimate, formats, human, pointed, references, retitled, section, shape, split, TEMPLATE, wide, WIDE, type Part } from './brief.ts'
 import { overlong, trim, trimmed } from './trim.ts'
 import { repoOf } from './ready.ts'
-import { precedented } from './precedented.ts'
+import { precedented, reviewed } from './precedented.ts'
 import { limitOf } from './size.ts'
 import { handout, long, touched, type Handed } from './handout.ts'
 import { capped, enclosed, handover, type Handover } from './handover.ts'
@@ -378,6 +378,7 @@ async function fireReview(db: Db, root: string, plan: PlanRow, step: Step, provi
     ...(internal(plan) && maybe(root, plan.id, 'step-2.handback.md') !== null ? { handback: get(root, plan.id, 'step-2.handback.md') } : {}),
     ...outside(db, root, plan, src),
     ...(manifest.gate === 'senior_review' ? referenced(src, issue) : {}),
+    ...(manifest.gate === 'senior_review' ? reviewed(db, plan) : {}),
     ...checked(db, root, plan, src, diffOf(root, plan.id)),
     ...(manifest.reads_verdict ? { verdict: priorVerdict(root, plan.id) } : {}),
     ...(manifest.gate === 'review' ? senior(db, step.seat, plan.id) : {}),

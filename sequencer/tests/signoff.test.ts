@@ -390,7 +390,7 @@ test('D6 the card names each rework round\'s review mode, else none', async () =
 const [KEPT, CHANGED] = ['https://github.com/acme/widget/pull/3', 'https://github.com/acme/widget/issues/9']
 
 function senior(w: World, id: number): void {
-  addReview(w.db, 'senior_review', 5, id, { outcome: 'pass', subject_digest: 'd', spans: [], origin_kind: null, origin_ref: null,
+  addReview(w.db, 'senior_review', 5, id, { outcome: 'pass', subject_digest: 'd'.repeat(64), spans: [], origin_kind: null, origin_ref: null,
     defect_class: null, message: `passes\n- ${KEPT} | kept\n- ${CHANGED} | changed: the issue asks for it` }, 0, 0, null)
 }
 

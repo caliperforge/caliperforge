@@ -391,8 +391,7 @@ export async function woke(db: Db, root: string, provider: Provider, now: Date, 
     const head = headOf(root, plan)
     const again = lasts(db, plan, now)
     const parked = isHeld(root, plan.id)
-    const last = eventsOf(db, plan.id, 'director').at(-1)
-    if (parked && !(again && last?.outcome === 'pass' && last.message.startsWith('park: '))) continue
+    if (parked && !(again && ownPark(db, root, plan.id))) continue
     if (circling(db, plan.id)) continue
     if (!again && (plan.wait_reason === 'over_cap' || maybe(root, plan.id, 'orchestrator.md')?.split('\n')[0] === head)) continue
     if (take(db, plan.id, now) === null) continue
@@ -408,6 +407,14 @@ export async function woke(db: Db, root: string, provider: Provider, now: Date, 
 function headOf(root: string, plan: PlanRow): string {
   const reason = woken(plan)
   return `step ${String(plan.step)} ${reason === 'blocked_on_ceo' ? `blocked ${stop(root, plan.id)}` : reason}`
+}
+
+function ownPark(db: Db, root: string, plan: number): boolean {
+  const last = eventsOf(db, plan, 'director').at(-1)
+  const held = /^# Held (\S+)/.exec(maybe(root, plan, 'parked.md') ?? '')?.[1]
+  // events.at is CURRENT_TIMESTAMP in whole seconds, so a look in the note's own second is after it.
+  return last?.outcome === 'pass' && last.message.startsWith('park: ') && held !== undefined
+    && lookedSince(db, plan, new Date(Date.parse(held) - 1000).toISOString())
 }
 
 function lasts(db: Db, plan: PlanRow, now: Date): boolean {

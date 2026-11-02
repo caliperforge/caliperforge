@@ -1515,18 +1515,19 @@ test.each([{ priority: 1, fired: 1 }, { priority: 2, fired: 0 }])('D2 an over_ca
 })
 
 test.each([
-  { name: 'its own park', said: 'park: the pipe is full', outcome: 'pass' as const, fired: 1 },
-  { name: 'a fenced park', said: 'park: refused by the fence', outcome: 'needs_coo' as const, fired: 0 },
-  { name: 'someone else', said: null, outcome: 'pass' as const, fired: 0 },
-])('D3 a stop parked by $name', async ({ said, outcome, fired }) => {
+  { name: 'its own park', said: 'park: the pipe is full', outcome: 'pass' as const, held: '2026-09-24T13:59:00.400Z', fired: 1 },
+  { name: 'a fenced park', said: 'park: refused by the fence', outcome: 'needs_coo' as const, held: '2026-09-24T13:59:00.400Z', fired: 0 },
+  { name: 'someone else', said: null, outcome: 'pass' as const, held: '2026-09-24T13:59:00.400Z', fired: 0 },
+  { name: 'someone after its released park', said: 'park: the pipe is full', outcome: 'pass' as const, held: '2026-09-24T13:59:01.000Z', fired: 0 },
+])('D3 a stop parked by $name', async ({ said, outcome, held, fired }) => {
   const { db, home } = wokeSeeded()
   blocked(db, home)
-  put(home, 7, 'parked.md', '# Held\n')
+  put(home, 7, 'parked.md', `# Held ${held}\n`)
   if (said !== null) lookAt(db, said, '2026-09-24 13:59:00', outcome)
   const fires: string[] = []
   await woke(db, home, wokeStub(ASK_CEO, fires), day, () => undefined)
   expect(fires).toHaveLength(fired)
-  expect(maybe(home, 7, 'parked.md')).toBe(fired === 1 ? null : '# Held\n')
+  expect(maybe(home, 7, 'parked.md')).toBe(fired === 1 ? null : `# Held ${held}\n`)
 })
 
 test('ceilingOnce', async () => {

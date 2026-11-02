@@ -15,11 +15,13 @@ import { compiled, extract } from './extract.ts'
 import { type Check, FIX, fixed, type Fixed } from './fixturn.ts'
 import { costWalled } from './generated.ts'
 import { handoff, layered, ranged, type Refused } from './handoff.ts'
-import { drawn, excerpts, ranges, sections, suited } from './map.ts'
+import { drawn, excerpts, LAYERS, ranges, sections, suited } from './map.ts'
+import { duplicated, packets, planned } from './plan.ts'
 import type { Step } from './pr-path.ts'
 import { readings, trackers } from './probes.ts'
 import { met, reach, unmet, written } from './reach.ts'
 import { KINDS } from './report.ts'
+import { callee, rows, slices } from './slices.ts'
 import { packed, smoke, type Smoked, unrun } from './smoke.ts'
 import { harnessed, probed, suite, unsourced } from './suite.ts'
 
@@ -156,6 +158,40 @@ async function reached(bench: Bench, manifest: Seat, hash: string, skill: string
   return fixes.sum
 }
 
+const ending = ({ path, phase, skill }: Pick<Phase, 'path' | 'phase' | 'skill'>): string => `Before you end, write ${path} filled from the \`# Handoff: ${phase}\` block of ${join(skill, TEMPLATES)}.`
+
+const LAID = LAYERS.filter(([layer]) => ['suite', 'reach'].includes(layer)).flatMap(([, names]) => names)
+
+const ENTRY = 'Selected entry points '
+
+async function invariant(bench: Bench, manifest: Seat, hash: string, skill: string, root: string, handoffs: string, at: Phase, sum: Sum): Promise<Sum | Outcome> {
+  const [map, cut, plan, reports] = [join(handoffs, MAP), join(handoffs, EXCERPTS), join(handoffs, 'plan.md'), join(handoffs, '../reports')]
+  slices(read(map), cut, sections(read(map)).filter(([name]) => LAID.includes(name)).map(([, s]) => s.trimEnd()).join('\n\n'), join(reports, 'slices'))
+  const fire = firing(bench, manifest, hash, ranges(read(map)))
+  const planning = `Run Steps 9a-9c only, and end once the Synthesizer has written ${plan} from the \`# Plan\` block of ${join(skill, TEMPLATES)}.`
+  const first = await fire(at.prompt, at.issue.replace(ending(at), planning), sum, 'invariants-plan')
+  if ('outcome' in first || first.wall !== null) return first
+  const found = suite(root)
+  const names = [...found.trackers, ...found.handlers].map((t) => t.name)
+  const unreached = (rows(read(map)).get('Reach') ?? []).filter((r) => r.name.startsWith(ENTRY) && r.cells.get('met') === 'no').map((r) => callee(r.name.slice(ENTRY.length)))
+  const fixes = fixing(bench, manifest, hash, handoffs, 'invariants', first)
+  const got = await fixes.fix({ name: 'synthesizer', rules: machine(skill, 'invariants'), facts: '', run: () => planned(read(plan), read(map), names, unreached).refused })
+  if (!('turns' in got)) return got
+  for (const name of planned(read(plan), read(map), names, unreached).flagged) fixes.log('plan.flagged', 'pass', name)
+  const fizz = bench.granted.find((path) => basename(path) === 'fizz') ?? ''
+  const { global, specific } = packets(read(plan), read(map), cut, read(join(fizz, 'references/property-generation.md')), names)
+  const leg: Phase = { ...at, map: read(map), issue: [at.issue, 'Run Steps 9d-9e.', `## Global packet\n\n${global}`, `## Specific packet\n\n${specific}`].join('\n') }
+  const ran = await checked(fire, leg, fixes.sum)
+  if ('outcome' in ran || ran.wall !== null) return ran
+  const doubled = (): Refused[] => duplicated(read(join(reports, 'invariants-global-property-implementer.md')), read(join(reports, 'invariants-specific-property-implementer.md')))
+  const hits = doubled()
+  if (hits.length === 0) return ran
+  const again = await checked(fire, leg, ran, hits)
+  if ('outcome' in again || again.wall !== null) return again
+  for (const hit of doubled()) fixes.log('plan.duplicate', 'refuse', hit.note)
+  return again
+}
+
 export function phasesOf(skill: string): string[] {
   return [...readFileSync(join(skill, TEMPLATES), 'utf8').matchAll(/^# Handoff: (.+)$/gm)].map((m) => m[1] ?? '').filter((phase) => phase !== 'campaigns')
 }
@@ -176,8 +212,9 @@ export async function phased(bench: Bench, manifest: Seat, hash: string, skill: 
     const later = phase !== 'context' && existsSync(cut)
     const named = later ? [`Read ${map} and the excerpts it cites: ${readdirSync(cut).map((f) => join(cut, f)).join(', ')}.`] : []
     const fire = firing(bench, manifest, hash, later ? ranges(read(map)) : undefined)
-    const ran = await checked(fire, { phase, skill, root, path, critics, prompt: readFileSync(join(skill, 'phases', `${phase}.md`), 'utf8'), ...(later ? { map: read(map) } : {}),
-      issue: [issue, `Before you end, write ${path} filled from the \`# Handoff: ${phase}\` block of ${join(skill, TEMPLATES)}.`, ...start, ...named, ...(phase === 'coverage' && smoked !== '' ? [smoked] : [])].join('\n') }, sum)
+    const stage: Phase = { phase, skill, root, path, critics, prompt: readFileSync(join(skill, 'phases', `${phase}.md`), 'utf8'), ...(later ? { map: read(map) } : {}),
+      issue: [issue, ending({ path, phase, skill }), ...start, ...named, ...(phase === 'coverage' && smoked !== '' ? [smoked] : [])].join('\n') }
+    const ran = phase === 'invariants' && later ? await invariant(bench, manifest, hash, skill, root, handoffs, stage, sum) : await checked(fire, stage, sum)
     if ('outcome' in ran || ran.wall !== null) return ran
     sum = ran
     if (phase === 'scaffold' && later) {

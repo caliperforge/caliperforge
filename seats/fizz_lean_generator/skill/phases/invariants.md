@@ -12,6 +12,9 @@
 - Before you end, write {META_DIR}/handoff/invariants.md, the path the issue names, from its `# Handoff: invariants` block, with {PROJECT_ROOT}/{META_DIR}/context.md and each file the next phase needs under `## Reads`.
 - Before you end, write your own report to {PROJECT_ROOT}/{META_DIR}/reports/invariants-phase.md and return a summary of at most 300 words.
 - Before you write the handoff, run both checks in {SKILL_PATH}/references/critic-pass.md and clear every hit the way that file says.
+- In Step 9b, each discovery agent's `{INVARIANT_CONTEXT}` is the path `{PROJECT_ROOT}/{META_DIR}/reports/slices/<agent>.md`, `<agent>` being the stem of its agent file.
+- The first leg runs Steps 9a-9c and stops when the Synthesizer has written `{META_DIR}/handoff/plan.md` from the `# Plan` block. The second leg runs Steps 9d-9e, gives 7A the issue's `## Global packet` and 7B its `## Specific packet`, and stops on the handoff.
+- The machine checks plan.md after the first leg: each Aggregates and Conversion points row of map.md sits in some row's relies: or in a ## Skipped row with a reason (plan.unused); each reads: name is a tracker or handler the suite holds (plan.tracker); each converted: yes row fills tolerance: or delta: (plan.converted); each implementer: is global or specific (plan.implementer).
 
 ## Step 9: Generate Invariants (5 Parallel Discovery Agents + Synthesizer + 2 Implementers)
 

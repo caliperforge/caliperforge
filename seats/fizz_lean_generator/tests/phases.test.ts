@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test, vi } from 'vitest'
@@ -6,6 +6,7 @@ import type { Miss, Packet } from '../../../providers/kind.ts'
 import { get } from '../../../sequencer/workspace.ts'
 import { eventsAfter } from '../../../store/events.ts'
 import { critic } from '../../../templates/critic.ts'
+import { packets } from '../../../templates/plan.ts'
 import { type Item, reach } from '../../../templates/reach.ts'
 import { report } from '../../../templates/report.ts'
 import { packed, smoke, type Smoked } from '../../../templates/smoke.ts'
@@ -207,7 +208,7 @@ test('stop D2 D3: a resumed run starts at scaffold, sums both legs', async () =>
 const AT = [{ file: 'src/V.sol', start: 9, end: 9 }]
 const MISSES: Miss[] = [{ kind: 'read.map_miss', file: 'src/V.sol', lines: 'L1-end' }, { kind: 'read.slice_miss', file: 'src/V.sol', lines: 'L12-L30' }]
 
-async function mapped(map = '## Guards\n\n- V.deposit | reverts: cap | at: src/V.sol L9-L9\n', appended: Record<string, string> = {}) {
+async function mapped(map = '## Guards\n\n- V.deposit | reverts: cap | at: src/V.sol L9-L9\n', appended: Record<string, string> = {}, wrote: Record<string, Record<string, string>> = {}) {
   const handoffs = join(mkdtempSync(join(tmpdir(), 'cf-fizz-mapped-')), 'test/fizz/fizz_data/handoff')
   mkdirSync(join(handoffs, 'excerpts'), { recursive: true })
   writeFileSync(join(handoffs, 'map.md'), map)
@@ -221,6 +222,7 @@ async function mapped(map = '## Guards\n\n- V.deposit | reverts: cap | at: src/V
     fires.push({ phase, issue: packet.prompt, map: readFileSync(join(handoffs, 'map.md'), 'utf8') })
     appendFileSync(join(handoffs, 'map.md'), appended[phase] ?? '')
     writeFileSync(join(handoffs, `${phase}.md`), FILLED[phase] ?? '')
+    for (const [file, text] of Object.entries(wrote[phase] ?? {})) writeFileSync(join(handoffs, file), text)
     return phase === 'scaffold' ? { misses: MISSES } : {}
   }, [fizz])
   return { db, root, handoffs, packets, fires, sum: await run(skill, handoffs, () => []) }
@@ -228,8 +230,8 @@ async function mapped(map = '## Guards\n\n- V.deposit | reverts: cap | at: src/V
 
 test('D2: context is ranged, later phases carry map.md ranges', async () => {
   const { packets, sum } = await mapped()
-  expect(sum).toMatchObject({ tokens: 4, wall: null })
-  expect(packets.map((p) => [p.ranged, p.map])).toEqual([[true, undefined], ...Array<unknown>(3).fill([undefined, { ranges: AT, slice: AT }])])
+  expect(sum).toMatchObject({ tokens: 5, wall: null })
+  expect(packets.map((p) => [p.ranged, p.map])).toEqual([[true, undefined], ...Array<unknown>(4).fill([undefined, { ranges: AT, slice: AT }])])
 })
 
 test('D3 D4: two scaffold misses log as events report() counts', async () => {
@@ -250,7 +252,7 @@ test('D2-D4: a suite refusal fires a fix turn before coverage', async () => {
   vi.mocked(suite).mockReturnValueOnce(EMPTY).mockReturnValueOnce({ ...EMPTY, handlers: [RAW] })
   vi.mocked(smoke).mockReturnValueOnce(SMOKED)
   const { db, handoffs, fires } = await mapped('## Selected entry points\n\n- V.deposit(uint256 assets) | tier: 1\n\n## Unclamped\n\n- V.deposit | reason: any amount\n')
-  expect(fires.map((f) => f.phase)).toEqual(['context', 'scaffold', 'scaffold-fix-suite-1', 'coverage', 'invariants'])
+  expect(fires.map((f) => f.phase)).toEqual(['context', 'scaffold', 'scaffold-fix-suite-1', 'coverage', 'invariants-plan', 'invariants'])
   expect(fires[2]?.issue).toContain('scaffold: V.deposit has no raw handler')
   expect(fires[3]?.issue).toContain(packed(SMOKED))
   expect(readFileSync(join(handoffs, 'map.md'), 'utf8')).toContain('## Handlers\n\n- V_deposit | target: V.deposit | clamps: none | at: test/fizz/H.sol L1-L1\n')
@@ -266,16 +268,16 @@ const LEAN = ['context', 'scaffold', 'coverage']
 test('reach D1 D2: an unmet item fires one fix before invariants', async () => {
   vi.mocked(reach).mockReturnValueOnce([UNMET])
   const { handoffs, fires } = await mapped(undefined, { 'coverage-fix-reach-1': UNREACHABLE('only the bridge calls it') })
-  expect(fires.map((f) => f.phase)).toEqual([...LEAN, 'coverage-fix-reach-1', 'invariants'])
+  expect(fires.map((f) => f.phase)).toEqual([...LEAN, 'coverage-fix-reach-1', 'invariants-plan', 'invariants'])
   expect(fires[3]?.issue).toContain(`reach found:\n- ${UNMET.note}`)
-  expect(fires[4]?.map).toContain('## Reach\n\n- Guards V.deposit | met: no | passing: no | reverting: yes\n')
-  expect(fires[4]?.issue).toContain(`Read ${join(handoffs, 'map.md')} and the excerpts`)
+  expect(fires[5]?.map).toContain('## Reach\n\n- Guards V.deposit | met: no | passing: no | reverting: yes\n')
+  expect(fires[5]?.issue).toContain(`Read ${join(handoffs, 'map.md')} and the excerpts`)
 })
 
 test.each([{ name: 'nothing', text: '' }, { name: 'a placeholder', text: UNREACHABLE('<why no input reaches it>') }])('reach D3: a fix writing $name refuses', async ({ text }) => {
   vi.mocked(reach).mockReturnValueOnce([UNMET])
   const { db, fires } = await mapped(undefined, { 'coverage-fix-reach-1': text })
-  expect(fires.map((f) => f.phase)).toEqual([...LEAN, 'coverage-fix-reach-1', 'coverage-fix-reach-2', 'invariants'])
+  expect(fires.map((f) => f.phase)).toEqual([...LEAN, 'coverage-fix-reach-1', 'coverage-fix-reach-2', 'invariants-plan', 'invariants'])
   expect(eventsAfter(db, 0).filter((e) => ['reach.boundary', 'critic'].includes(e.kind)).map((e) => [e.kind, e.outcome, e.message])).toEqual([
     ['critic', 'refuse', 'not_clean: reach'], ['reach.boundary', 'refuse', JSON.stringify({ met: false, reasons: [UNMET.note] })],
   ])
@@ -284,7 +286,7 @@ test.each([{ name: 'nothing', text: '' }, { name: 'a placeholder', text: UNREACH
 test('reach D4: all met logs one pass and fires no fix', async () => {
   vi.mocked(reach).mockReturnValueOnce([{ ...UNMET, met: true, note: '' }])
   const { db, handoffs, fires } = await mapped()
-  expect(fires.map((f) => f.phase)).toEqual([...LEAN, 'invariants'])
+  expect(fires.map((f) => f.phase)).toEqual([...LEAN, 'invariants-plan', 'invariants'])
   expect(vi.mocked(reach).mock.lastCall?.slice(2, 4)).toEqual(['coverage/lcov.info', 'coverage/revert_report.json'].map((f) => join(handoffs, '../corpus_medusa', f)))
   expect(eventsAfter(db, 0).filter((e) => e.kind === 'reach.boundary').map((e) => [e.outcome, e.message])).toEqual([['pass', '{"met":true,"reasons":[]}']])
 })
@@ -294,6 +296,34 @@ test('reach D5: coverage.md and the # Map block carry reach', () => {
     + '- The machine checks each met: no row of ## Reach: make it reachable, or write a map.md ## Unreachable row <that row\'s first cell> | reason: <why no input reaches it>.\n')
   expect(readFileSync(join(skill, 'phases/handoff/templates.md'), 'utf8')).toContain('## Unclamped\n\n- <Contract.function> | reason: <why it has no clamped handler>\n\n'
     + '## Unreachable\n\n- <the ## Reach row\'s first cell> | reason: <why no input reaches it>\n\n# Candidates')
+})
+
+const AGGREGATE = '## Aggregates\n\n- V.totalAssets | movers: V.deposit | at: src/V.sol L9-L9\n'
+const planOf = (relies: string): string => `## Rows\n\n- p1 | relies: ${relies} | implementer: global\n\n## Skipped\n\n- none\n`
+const REPORTS = ['global', 'specific'].map((who) => `../reports/invariants-${who}-property-implementer.md`)
+
+test('invariants D3 D5: an unused aggregate fixes the plan first', async () => {
+  const relied = planOf('aggregates-1')
+  const { db, handoffs, fires } = await mapped(AGGREGATE, {}, { 'invariants-plan': { 'plan.md': planOf('guards-1') }, 'invariants-fix-synthesizer-1': { 'plan.md': relied } })
+  expect(fires.map((f) => f.phase)).toEqual([...LEAN, 'invariants-plan', 'invariants-fix-synthesizer-1', 'invariants'])
+  expect(fires[3]?.issue).toContain(`Run Steps 9a-9c only, and end once the Synthesizer has written ${join(handoffs, 'plan.md')}`)
+  expect(fires[4]?.issue).toContain('synthesizer found:\n- plan: aggregates-1 is in no row\'s relies:')
+  const { global, specific } = packets(relied, fires[5]?.map ?? '', join(handoffs, 'excerpts'), '', [])
+  expect(fires[5]?.issue).toContain(`Run Steps 9d-9e.\n## Global packet\n\n${global}\n## Specific packet\n\n${specific}`)
+  expect(eventsAfter(db, 0).filter((e) => e.kind === 'fix.turn')).toHaveLength(1)
+})
+
+test('invariants D1: a mapped run writes five slices', async () => {
+  const { handoffs } = await mapped()
+  expect(readdirSync(join(handoffs, '../reports/slices'))).toHaveLength(5)
+})
+
+test('invariants D6: a ghost both implementers declare is resent', async () => {
+  const { db, fires } = await mapped(undefined, {}, { invariants: Object.fromEntries(REPORTS.map((report) => [report, 'function ghost() {}\n'])) })
+  const invariants = fires.filter((f) => f.phase === 'invariants')
+  expect(invariants).toHaveLength(2)
+  expect(invariants[1]?.issue).toContain('Your handoff was refused:\n- plan.duplicate: plan: function ghost is declared by both implementers')
+  expect(eventsAfter(db, 0).filter((e) => e.kind === 'plan.duplicate').map((e) => e.outcome)).toEqual(['refuse'])
 })
 
 test('no src: a map.md the agent writes checks no layer', async () => {

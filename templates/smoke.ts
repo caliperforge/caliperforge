@@ -13,9 +13,12 @@ const TAIL = 2000
 
 export function smoked(map: string, report: string): Smoked[] {
   const metrics = measured(JSON.parse(readFileSync(report, 'utf8')) as Revert)
-  return (rows(map).get('Selected entry points') ?? []).filter((r) => r.name !== NONE).map(({ name }) => {
-    const { totalCalls, totalReverts } = metrics(name)
-    return { name, calls: totalCalls, successes: totalCalls - totalReverts }
+  const mapped = rows(map)
+  const handlers = mapped.get('Handlers') ?? []
+  return (mapped.get('Selected entry points') ?? []).filter((r) => r.name !== NONE).map(({ name }) => {
+    const read = handlers.filter((h) => h.cells.get('target') === callee(name)).map((h) => metrics(h.name))
+    const calls = read.reduce((n, m) => n + m.totalCalls, 0)
+    return { name, calls, successes: calls - read.reduce((n, m) => n + m.totalReverts, 0) }
   })
 }
 

@@ -9,7 +9,9 @@ const fixtures = join(import.meta.dirname, 'fixtures')
 const REPORT = join(fixtures, 'revert_report.json')
 const SELECTION = readFileSync(join(fixtures, 'entry-point-selection.json'), 'utf8')
 const MAP = `## Selected entry points\n\n${selected(SELECTION).map((r) => `- ${r}\n`).join('')}\n`
-  + '## Unclamped\n\n- V.withdraw | reason: any amount the vault holds is valid\n'
+  + '## Unclamped\n\n- V.withdraw | reason: any amount the vault holds is valid\n\n'
+  + '## Handlers\n\n- Harness.v_deposit | target: V.deposit\n- Harness.v_deposit_clamped | target: V.deposit\n- Harness.v_withdraw | target: V.withdraw\n'
+const WITHDRAWN = { contractRevertMetrics: { Harness: { functionRevertMetrics: { v_withdraw: { totalCalls: 3, totalReverts: 2, revertReasonMetrics: {} } } } } }
 const [DEPOSIT, WITHDRAW, CONVERT] = ['V.deposit(uint256 assets)', 'V.withdraw(uint256 assets)', 'V.convertToAssets(uint256 shares)']
 const META = 'test/fizz/fizz_data'
 const MEDUSA = { fuzzing: { targetContracts: ['Harness'], corpusDirectory: `${META}/corpus_medusa` },
@@ -25,7 +27,9 @@ test('6/9 D5: unrun flags only an Unclamped row with no success', () => {
   expect(unrun(MAP, smoked(MAP, REPORT))).toEqual([
     { rule: 'smoke.unclamped', note: `smoke: ${WITHDRAW} is raw-only and made 0 successful calls in 25; it needs a clamped handler` },
   ])
-  expect(unrun(MAP, smoked(MAP, join(fixtures, 'reach_revert_report.json')))).toEqual([])
+  const report = join(mkdtempSync(join(tmpdir(), 'cf-fizz-smoke-')), 'revert_report.json')
+  writeFileSync(report, JSON.stringify(WITHDRAWN))
+  expect(unrun(MAP, smoked(MAP, report))).toEqual([])
 })
 
 test.runIf(process.env.CF_BENCH_LIVE === '1')('6/9 D8: smoke runs medusa, restores medusa.json', () => {

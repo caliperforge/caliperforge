@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { type At, below, called, entries, type Member, membersOf, type Node } from './extract.ts'
-import type { Refused } from './handoff.ts'
+import { FIELD, filled, parsed, type Refused } from './handoff.ts'
 
 export interface Suite {
   deployed: (At & { contract: string; args: string[] })[]
@@ -28,7 +28,7 @@ const PROPERTY = /^(?:invariant|property|echidna)_/
 const LIMITS = /^\s*\/\/ stand-in limits:(.*)$/
 const LIMIT = /^\s*\/\/ - (.*)$/
 const MAPPED = / \| map: (.+)$/
-const PLACEHOLDER = /<\w[^<>]*>/
+const NONE = 'none'
 const CLAMPS = new Set(['bound', 'between'])
 const ACTORS = new Set(['address', 'address[]'])
 
@@ -133,16 +133,15 @@ export function suite(root: string): Suite {
   }
 }
 
-const rows = (map: string, section: string): string[][] => (map.split(/^## /m).find((s) => s.startsWith(`${section}\n`)) ?? '').split('\n')
-  .filter((l) => l.startsWith('- ') && l.trimEnd() !== '- none').map((l) => l.slice(2).trimEnd().split(' | '))
+const listed = (map: string, section: string): string[] => (parsed(map).sections.get(section) ?? []).filter((r) => r !== NONE)
 
-const named = (map: string, section: string): string[] => rows(map, section).map(([name = '']) => name)
+const named = (map: string, section: string): string[] => listed(map, section).map((r) => r.split(' | ')[0] ?? '')
 
-const reasoned = (map: string, section: string): string[] => rows(map, section)
-  .filter(([, ...cells]) => cells.some((c) => /^reason:\s*\S/.test(c) && !PLACEHOLDER.test(c))).map(([name = '']) => name)
+const excused = (map: string, section: string): string[] => listed(map, section).map((r) => r.split(' | '))
+  .filter(([, ...cells]) => cells.some((c) => { const m = FIELD.exec(c); return m?.[1] === 'reason' && filled(m[2]) })).map(([name = '']) => name)
 
 export function harnessed(found: Suite, map: string): Refused[] {
-  const [skipped, unclamped, outside] = [reasoned(map, 'Skipped entry points'), reasoned(map, 'Unclamped'), named(map, 'Outside dependencies')]
+  const [skipped, unclamped, outside] = [excused(map, 'Skipped entry points'), excused(map, 'Unclamped'), named(map, 'Outside dependencies')]
   const cited = [...named(map, 'Limits'), ...outside]
   const aimed = (name: string, clamped: boolean): boolean => found.handlers.some((h) => h.target === name && h.clamped === clamped)
   return [
@@ -158,7 +157,7 @@ export function harnessed(found: Suite, map: string): Refused[] {
 }
 
 export function unsourced(found: Suite, map: string): string[] {
-  const sources = [...rows(map, 'Limits'), ...rows(map, 'Outside dependencies')].map((r) => r.join(' | '))
+  const sources = [...listed(map, 'Limits'), ...listed(map, 'Outside dependencies')]
   const word = (text: string): RegExp => new RegExp(`(?<!\\w)${text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?!\\w)`)
   return found.handlers.flatMap((h) => h.clamps.filter((c) => !sources.some((s) => word(c.range).test(s))).map((c) => `${h.name}: ${c.text}`))
 }

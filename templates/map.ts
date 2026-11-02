@@ -35,13 +35,6 @@ export function laid(text: string, name: string, rows: string[]): string {
 
 export const idOf = (section: string, n: number): string => `${section.toLowerCase().replaceAll(' ', '-')}-${String(n)}`
 
-const layer = (names: string[], rows: Record<string, string[]>): string[] =>
-  names.map((name) => `## ${name}\n\n${(rows[name] ?? []).map((r) => `- ${r}\n`).join('') || '- none\n'}`)
-
-const others = (names: string[], text: string): string[] => sections(text).filter(([name]) => !names.includes(name)).map(([, s]) => `${s.trimEnd()}\n`)
-
-const listed = (items: string[], by = ', '): string => items.join(by) || 'none'
-
 export function selected(json: string): string[] {
   return (JSON.parse(json) as Selection[]).flatMap((c) => c.functions.map((f) =>
     `${c.name}.${f.name}(${f.inputs.map((i) => [i.type, i.name].filter((s) => s !== '').join(' ')).join(', ')}) | tier: ${f.tier}`))
@@ -53,19 +46,23 @@ export function drawn(facts: Extracted, selection: string, text: string): string
     'Selected entry points': selected(selection),
     Modifiers: facts.modifiers.map((m) => `${m.name} | ${cited(m)}`),
   }
-  return [...layer(MACHINE, rows), ...others(MACHINE, text)].join('\n')
+  const machine = MACHINE.map((name) => `## ${name}\n\n${(rows[name] ?? []).map((r) => `- ${r}\n`).join('') || '- none\n'}`)
+  const kept = sections(text).filter(([name]) => !MACHINE.includes(name)).map(([, s]) => `${s.trimEnd()}\n`)
+  return [...machine, ...kept].join('\n')
 }
 
 export function suited(found: Suite, text: string): string {
   const rows: Record<string, string[]> = {
-    Deployed: found.deployed.map((d) => `${d.contract} | args: ${listed(d.args)} | ${cited(d)}`),
-    Actors: found.actors.map((a) => `${a.name} | roles: ${listed(a.roles)} | ${cited(a)}`),
-    Handlers: found.handlers.map((h) => `${h.name} | target: ${h.target ?? 'none'} | clamps: ${listed(h.clamps.map((c) => c.text), '; ')} | ${cited(h)}`),
+    Deployed: found.deployed.map((d) => `${d.contract} | args: ${d.args.join(', ') || 'none'} | ${cited(d)}`),
+    Actors: found.actors.map((a) => `${a.name} | roles: ${a.roles.join(', ') || 'none'} | ${cited(a)}`),
+    Handlers: found.handlers.map((h) => `${h.name} | target: ${h.target ?? 'none'} | clamps: ${h.clamps.map((c) => c.text).join('; ') || 'none'} | ${cited(h)}`),
     'Stand-ins': found.standIns.map((s) => `${s.name} | replaces: ${s.replaces} | limits: ${s.limits.map((l) => `${l.limit} (map: ${l.map ?? 'none'})`).join('; ')} | ${cited(s)}`),
-    Trackers: found.trackers.map((t) => `${t.name} | type: ${t.type} | writers: ${listed(t.writers)} | ${cited(t)}`),
+    Trackers: found.trackers.map((t) => `${t.name} | type: ${t.type} | writers: ${t.writers.join(', ') || 'none'} | ${cited(t)}`),
     Build: Object.entries(found.build).map(([key, value]) => `${key} | value: ${value ?? 'none'}`),
   }
-  return [...others(SUITE, text), ...layer(SUITE, rows)].join('\n')
+  const suite = SUITE.map((name) => `## ${name}\n\n${(rows[name] ?? []).map((r) => `- ${r}\n`).join('') || '- none\n'}`)
+  const kept = sections(text).filter(([name]) => !SUITE.includes(name)).map(([, s]) => `${s.trimEnd()}\n`)
+  return [...kept, ...suite].join('\n')
 }
 
 export function excerpts(root: string, text: string, dir: string): void {

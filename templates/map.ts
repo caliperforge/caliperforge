@@ -20,6 +20,8 @@ const cited = ({ file, start, end }: At): string => `at: ${file} L${String(start
 const sections = (text: string): [string, string][] =>
   text.split(/^(?=## )/m).filter((s) => s.startsWith('## ')).map((s) => [s.slice(3).split('\n')[0]?.trimEnd() ?? '', s])
 
+export const idOf = (section: string, n: number): string => `${section.toLowerCase().replaceAll(' ', '-')}-${String(n)}`
+
 export function selected(json: string): string[] {
   return (JSON.parse(json) as Selection[]).flatMap((c) => c.functions.map((f) =>
     `${c.name}.${f.name}(${f.inputs.map((i) => [i.type, i.name].filter((s) => s !== '').join(' ')).join(', ')}) | tier: ${f.tier}`))
@@ -47,7 +49,7 @@ export function excerpts(root: string, text: string, dir: string): void {
       if (file === '') continue
       const source = readFileSync(join(root, file))
       const starts = [0, ...[...source.keys()].filter((b) => source[b] === 0x0a).map((b) => b + 1)]
-      writeFileSync(join(dir, `${name.toLowerCase().replaceAll(' ', '-')}-${String(i + 1)}.sol.txt`), source.subarray(starts[Number(start) - 1], starts[Number(end)]))
+      writeFileSync(join(dir, `${idOf(name, i + 1)}.sol.txt`), source.subarray(starts[Number(start) - 1], starts[Number(end)]))
     }
   }
 }

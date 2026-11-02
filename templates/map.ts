@@ -17,7 +17,7 @@ const AT = /^at:\s*(.*)$/
 
 const cited = ({ file, start, end }: At): string => `at: ${file} L${String(start)}-L${String(end)}`
 
-const sections = (text: string): [string, string][] =>
+export const sections = (text: string): [string, string][] =>
   text.split(/^(?=## )/m).filter((s) => s.startsWith('## ')).map((s) => [s.slice(3).split('\n')[0]?.trimEnd() ?? '', s])
 
 export function selected(json: string): string[] {

@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest'
 import type { Read } from '../../cli/gh.ts'
+import { opened } from '../../precedents/openings.ts'
 import { decide } from '../../store/approvals.ts'
 import { logged } from '../../store/events.ts'
 import { targetRow } from '../../store/targets.ts'
@@ -12,10 +13,10 @@ import { CARRIED, plan, stub, world, type World } from './world.ts'
 
 const URL = 'https://github.com/acme/widget/issues/12'
 
-function gh(wanted: boolean): Read {
+function gh(wanted: boolean, body = 'b'): Read {
   return (args) => {
     if (args[0] === 'issue') {
-      return { number: 12, title: 'hello', body: 'b', state: 'OPEN', url: URL, author: { login: wanted ? 'keeper' : 'reporter' },
+      return { number: 12, title: 'hello', body, state: 'OPEN', url: URL, author: { login: wanted ? 'keeper' : 'reporter' },
         assignees: [], comments: [], closedByPullRequestsReferences: [], projectItems: [] }
     }
     if (String(args[1]).includes('/git/trees/')) return { tree: [] }
@@ -72,6 +73,18 @@ test('D5: step 0 again replaces its section and leaves it ready',() => {
   expect(ask.split('## Target check')).toHaveLength(2)
   expect(ask).toMatch(/^# hello\n\n- \*\*D1\*\* add `hello\(\)` in `src\/hello\.ts`\n\n## Target check\n\n- wanted: yes .*\n- unclaimed: yes .*\n- shape: yes .*\n- ai stance: open .*\n$/)
   expect(state(w)).toBe('ready')
+})
+
+test('D5: a parked target passes once its opening exists', () => {
+  const w = world()
+  const parked = kernel(w.db, w.root, plan(w.db, 1), undefined, gh(false))
+  logged(w.db, { plan: 1, kind: 'measure', actor: 'kernel', outcome: 'refuse', message: parked.note, pointer: null, run: null })
+  const source = 'https://github.com/acme/widget/pull/2#discussion_r1'
+  opened(w.db, { repo: 'acme/widget', number: 2, title: 'x', merged_at: '2026-10-01T00:00:00Z', merger: null, files: [], issues: [] },
+    [{ kind: 'deferred', area: 'src/a.ts', quote: 'later', said_by: 'keeper', source }])
+  expect(kernel(w.db, w.root, plan(w.db, 1), undefined, gh(false, `see ${source}`))).toMatchObject({ outcome: 'pass' })
+  expect(state(w)).toBe('ready')
+  expect(get(w.root, 1, 'ask.md')).toContain(`\n- wanted: yes — a maintainer deferred it in review ${source}\n`)
 })
 
 test('a lap with no Read passes step 0 and leaves the ask alone',async () => {

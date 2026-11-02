@@ -1,4 +1,5 @@
 import { expect, test } from 'vitest'
+import type { Opening } from '../../precedents/openings.ts'
 import { find } from '../find.ts'
 import type { Read } from '../gh.ts'
 
@@ -29,16 +30,36 @@ function gh(c: Canned = {}): Read {
 }
 
 test('maintainer comment, no claim, outsider merge: 3 linked yes', () => {
-  expect(find('acme/widget', 12, false, null, gh())).toEqual({ park: null, section: ['## Target check', '',
+  expect(find('acme/widget', 12, false, null, [], gh())).toEqual({ park: null, section: ['## Target check', '',
     `- wanted: yes — a maintainer commented ${URL}#issuecomment-1`,
     `- unclaimed: yes — no assignee, claim, closer or sibling pull request ${URL}`,
     '- shape: yes — match p50 2 files, 12 lines, 1 test files, 2 body lines: https://github.com/acme/widget/pull/2', ''].join('\n') })
 })
 
 test('D1: a CEO sign-off answers wanted with no maintainer', () => {
-  const found = find('acme/widget', 12, false, SIGNED, gh({ issue: issue({ comments: [] }) }))
+  const found = find('acme/widget', 12, false, SIGNED, [], gh({ issue: issue({ comments: [] }) }))
   expect(found.park).toBeNull()
   expect(found.section).toContain('\n- wanted: yes — the CEO approved target 57 (0123456789ab)\n')
+})
+
+const SOURCE = 'https://github.com/acme/widget/pull/4#discussion_r9'
+const opening = (over: Partial<Opening> = {}): Opening =>
+  ({ kind: 'deferred', area: 'src/a.ts:run', quote: 'later', said_by: 'keeper', source: SOURCE, ...over })
+
+test('D1: a deferred opening source in the body answers wanted', () => {
+  const found = find('acme/widget', 12, false, null, [opening()], gh({ issue: issue({ comments: [], body: `see ${SOURCE}` }) }))
+  expect(found.park).toBeNull()
+  expect(found.section).toContain(`\n- wanted: yes — a maintainer deferred it in review ${SOURCE}\n`)
+})
+
+test('D2: an asked opening on the file the title names', () => {
+  const found = find('acme/widget', 12, false, null, [opening({ kind: 'asked' })], gh({ issue: issue({ comments: [], title: 'speed up src/a.ts' }) }))
+  expect(found.section).toContain(`\n- wanted: yes — a maintainer asked for it in review ${SOURCE}\n`)
+})
+
+test('D3: an opening file inside a longer path does not match', () => {
+  const found = find('acme/widget', 12, false, null, [opening({ area: 'a.ts' })], gh({ issue: issue({ comments: [], title: 'fix src/data.ts' }) }))
+  expect(found.park).toBe(`wanted: no maintainer opened or commented on it, and it is on no board ${URL}`)
 })
 
 test.each([
@@ -51,11 +72,11 @@ test.each([
     park: 'unclaimed: pull request #9 implements it https://github.com/acme/widget/pull/9' },
   { why: 'an open sibling-repo PR', canned: { siblings: [sibling({ body: 'fixes acme/widget#12' })] }, park: SIBLING },
 ])('D2: $why parks the target, naming the question', ({ canned, park }) => {
-  expect(find('acme/widget', 12, false, null, gh(canned)).park).toBe(park)
+  expect(find('acme/widget', 12, false, null, [], gh(canned)).park).toBe(park)
 })
 
 test('D1: a sibling with only an image width is no claim', () => {
-  const found = find('acme/widget', 12, false, null, gh({ siblings: [sibling({ body: '<img width="12" src="x">' })] }))
+  const found = find('acme/widget', 12, false, null, [], gh({ siblings: [sibling({ body: '<img width="12" src="x">' })] }))
   expect(found.park).toBeNull()
   expect(found.section).toContain(`\n- unclaimed: yes — no assignee, claim, closer or sibling pull request ${URL}\n`)
 })
@@ -66,16 +87,16 @@ test.each([
   { why: 'a fragment', over: { body: `${URL}#issuecomment-1` } },
   { why: 'another case in the title', over: { title: 'ACME/Widget#12' } },
 ])('D3: a sibling naming it by $why parks', ({ over }) => {
-  expect(find('acme/widget', 12, false, null, gh({ siblings: [sibling(over)] })).park).toBe(SIBLING)
+  expect(find('acme/widget', 12, false, null, [], gh({ siblings: [sibling(over)] })).park).toBe(SIBLING)
 })
 
 test.each(['acme/widget#123', `${URL}3`])('D4: a sibling naming only #123 does not park', (body) => {
-  expect(find('acme/widget', 12, false, null, gh({ siblings: [sibling({ body })] })).park).toBeNull()
+  expect(find('acme/widget', 12, false, null, [], gh({ siblings: [sibling({ body })] })).park).toBeNull()
 })
 
 test('D5: a hit in the target repo itself never counts', () => {
   const own = sibling({ body: 'fixes acme/widget#12', repository: { nameWithOwner: 'acme/widget' } })
-  expect(find('acme/widget', 12, false, null, gh({ siblings: [own] })).park).toBeNull()
+  expect(find('acme/widget', 12, false, null, [], gh({ siblings: [own] })).park).toBeNull()
 })
 
 test.each([
@@ -84,25 +105,25 @@ test.each([
   { why: 'shape', canned: { issue: issue({ comments: [] }), merged: [merge(1, 'keeper')] },
     park: 'shape: no merged outsider PR in the last 100 merges' },
 ])('D3: a CEO sign-off still parks on $why', ({ canned, park }) => {
-  expect(find('acme/widget', 12, false, SIGNED, gh(canned)).park).toBe(park)
+  expect(find('acme/widget', 12, false, SIGNED, [], gh(canned)).park).toBe(park)
 })
 
 test('D3: no merged outsider PR parks; a small, odd shape does not', () => {
-  expect(find('acme/widget', 12, false, null, gh({ merged: [merge(1, 'keeper')] })).park)
+  expect(find('acme/widget', 12, false, null, [], gh({ merged: [merge(1, 'keeper')] })).park)
     .toBe('shape: no merged outsider PR in the last 100 merges')
   const odd = { ...merge(2, 'outsider'), files: [], additions: 0, deletions: 0, body: '' }
-  expect(find('acme/widget', 12, false, null, gh({ merged: [merge(1, 'keeper'), odd] })).park).toBeNull()
+  expect(find('acme/widget', 12, false, null, [], gh({ merged: [merge(1, 'keeper'), odd] })).park).toBeNull()
 })
 
 test('foreign referencing PR parks an uncarded ask, not a carded', () => {
   const open = [{ number: 5, title: 'x', body: 'fixes #12', headRepositoryOwner: { login: 'stranger' } }]
-  expect(find('acme/widget', 12, true, null, gh({ open })).park).toBeNull()
-  expect(find('acme/widget', 12, false, null, gh({ open })).park)
+  expect(find('acme/widget', 12, true, null, [], gh({ open })).park).toBeNull()
+  expect(find('acme/widget', 12, false, null, [], gh({ open })).park)
     .toBe('unclaimed: open pull request #5 references it https://github.com/acme/widget/pull/5')
 })
 
 test('our own assignment and claim leave it unclaimed', () => {
   const ours = issue({ assignees: [{ login: 'michael-moffett' }],
     comments: [SAID, { author: { login: 'michael-moffett' }, body: "I'd like to take this one", url: `${URL}#c3` }] })
-  expect(find('acme/widget', 12, false, null, gh({ issue: ours })).park).toBeNull()
+  expect(find('acme/widget', 12, false, null, [], gh({ issue: ours })).park).toBeNull()
 })

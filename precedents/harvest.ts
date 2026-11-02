@@ -89,17 +89,14 @@ export async function harvested(db: Db, root: string, provider: Provider, now: D
     try {
       logged(db, { ...event, outcome: 'pass', message: `${String(harvest(db, repo, null, read))} stored` })
     } catch (error) {
-      logged(db, { ...event, outcome: 'refuse', message: messageOf(error) })
+      logged(db, { ...event, outcome: 'refuse', message: error instanceof Error ? error.message : String(error) })
       continue
     }
     try {
       await drained(db, root, repo, provider)
     } catch (error) {
-      logged(db, { plan: null, kind: 'precedent_refused', actor: 'cf', outcome: 'refuse', message: messageOf(error), pointer: repo, run: null })
+      logged(db, { plan: null, kind: 'precedent_refused', actor: 'cf', outcome: 'refuse',
+        message: error instanceof Error ? error.message : String(error), pointer: repo, run: null })
     }
   }
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }

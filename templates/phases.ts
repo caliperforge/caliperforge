@@ -71,7 +71,7 @@ function added(sum: Sum, fired: Fired, transcript: string, who: string, ceiling:
   return next
 }
 
-interface Phase { phase: string; skill: string; root: string; path: string; prompt: string; issue: string; critics: () => Refused[]; map?: string }
+interface Phase { phase: string; skill: string; root: string; path: string; prompt: string; issue: string; map?: string }
 
 const read = (path: string): string => existsSync(path) ? readFileSync(path, 'utf8') : ''
 
@@ -96,10 +96,8 @@ async function checked(fire: Fire, at: Phase, sum: Sum, refused: Refused[] = [])
   const ran = await fire(at.prompt, issue, sum, at.phase)
   if ('outcome' in ran || ran.wall !== null) return ran
   const handed = [...handoff(at.skill, at.phase, read(at.path)), ...facts(at)]
-  const found = handed.length === 0 && at.phase === 'invariants' ? at.critics() : handed
-  if (found.length > 0 && refused.length === 0) return checked(fire, at, ran, found)
+  if (handed.length > 0 && refused.length === 0) return checked(fire, at, ran, handed)
   if (handed.length > 0) return { outcome: 'refuse', spans: [...new Set(handed.map((r) => r.rule))], note: `${at.phase} handoff refused twice: ${handed.map((r) => r.note).join('; ')}` }
-  if (at.phase === 'invariants') writeFileSync(join(dirname(at.path), 'critic.md'), found.map((r) => `${r.rule}: ${r.note}\n`).join(''))
   return ran
 }
 
@@ -158,6 +156,15 @@ async function reached(bench: Bench, manifest: Seat, hash: string, skill: string
   return fixes.sum
 }
 
+async function criticised(bench: Bench, manifest: Seat, hash: string, handoffs: string, phase: string, rule: string, sum: Sum): Promise<Sum | Outcome> {
+  const fizz = bench.granted.find((path) => basename(path) === 'fizz') ?? ''
+  const fixes = fixing(bench, manifest, hash, handoffs, phase, sum)
+  const got = await fixes.fix(criticCheck(join(fizz, 'references/critic-pass.md'), bench.dir, rule, read(join(handoffs, MAP))))
+  if (!('turns' in got)) return got
+  if (got.not_clean === null) fixes.log(KINDS.critic, 'pass', rule)
+  return fixes.sum
+}
+
 const ending = ({ path, phase, skill }: Pick<Phase, 'path' | 'phase' | 'skill'>): string => `Before you end, write ${path} filled from the \`# Handoff: ${phase}\` block of ${join(skill, TEMPLATES)}.`
 
 const LAID = LAYERS.filter(([layer]) => ['suite', 'reach'].includes(layer)).flatMap(([, names]) => names)
@@ -196,7 +203,7 @@ export function phasesOf(skill: string): string[] {
   return [...readFileSync(join(skill, TEMPLATES), 'utf8').matchAll(/^# Handoff: (.+)$/gm)].map((m) => m[1] ?? '').filter((phase) => phase !== 'campaigns')
 }
 
-export async function phased(bench: Bench, manifest: Seat, hash: string, skill: string, handoffs: string, issue: string, critics: () => Refused[], stop?: string): Promise<Sum | Outcome> {
+export async function phased(bench: Bench, manifest: Seat, hash: string, skill: string, handoffs: string, issue: string, stop?: string): Promise<Sum | Outcome> {
   const phases = phasesOf(skill)
   const root = resolve(handoffs, '../../../..')
   const stopped = join(handoffs, 'stopped.json')
@@ -212,7 +219,7 @@ export async function phased(bench: Bench, manifest: Seat, hash: string, skill: 
     const later = phase !== 'context' && existsSync(cut)
     const named = later ? [`Read ${map} and the excerpts it cites: ${readdirSync(cut).map((f) => join(cut, f)).join(', ')}.`] : []
     const fire = firing(bench, manifest, hash, later ? ranges(read(map)) : undefined)
-    const stage: Phase = { phase, skill, root, path, critics, prompt: readFileSync(join(skill, 'phases', `${phase}.md`), 'utf8'), ...(later ? { map: read(map) } : {}),
+    const stage: Phase = { phase, skill, root, path, prompt: readFileSync(join(skill, 'phases', `${phase}.md`), 'utf8'), ...(later ? { map: read(map) } : {}),
       issue: [issue, ending({ path, phase, skill }), ...start, ...named, ...(phase === 'coverage' && smoked !== '' ? [smoked] : [])].join('\n') }
     const ran = phase === 'invariants' && later ? await invariant(bench, manifest, hash, skill, root, handoffs, stage, sum) : await checked(fire, stage, sum)
     if ('outcome' in ran || ran.wall !== null) return ran
@@ -222,8 +229,8 @@ export async function phased(bench: Bench, manifest: Seat, hash: string, skill: 
       if (!('smoked' in repaired)) return repaired
       ;({ sum, smoked } = repaired)
     }
-    if (phase === 'coverage' && later) {
-      const got = await reached(bench, manifest, hash, skill, root, handoffs, sum)
+    if ((phase === 'coverage' && later) || phase === 'invariants') {
+      const got = phase === 'coverage' ? await reached(bench, manifest, hash, skill, root, handoffs, sum) : await criticised(bench, manifest, hash, handoffs, phase, 'critic.share_converted', sum)
       if ('outcome' in got || got.wall !== null) return got
       sum = got
     }
@@ -232,5 +239,5 @@ export async function phased(bench: Bench, manifest: Seat, hash: string, skill: 
       return { outcome: 'pass', held: true, spans: ['bench.stop_after'], note: `stopped after ${phase} for a look` }
     }
   }
-  return sum
+  return criticised(bench, manifest, hash, handoffs, 'end', 'critic.stand_in', sum)
 }

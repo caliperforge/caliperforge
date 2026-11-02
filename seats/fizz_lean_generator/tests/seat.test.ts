@@ -129,7 +129,7 @@ test('D1 D5: lean fires each phase but campaigns, one run each', async () => {
   expect(paths).toHaveLength(4)
   expect(new Set(paths).size).toBe(4)
   for (const path of paths) expect(path).toMatch(/run-\d+\.transcript\.jsonl$/)
-  expect(readFileSync(join(packets[3]?.cwd ?? '', HANDOFFS, 'critic.md'), 'utf8')).toBe('')
+  expect(existsSync(join(packets[3]?.cwd ?? '', HANDOFFS, 'critic.md'))).toBe(false)
 })
 
 test('D8: a plain fizz run fires once and writes no critic.md', async () => {

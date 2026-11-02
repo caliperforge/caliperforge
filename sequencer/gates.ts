@@ -19,6 +19,8 @@ export interface Outside {
   /** The brief's files, repo-relative: the first one in the language finds the folder its gates run in. */
   files: string[]
   base?: string
+  /** A ruling's `verify:` cargo args, which replace the crate-wide `cargo test`. */
+  test?: string[]
 }
 
 export interface Gate {
@@ -137,7 +139,7 @@ export function sushi(src: string, base?: string): Gate[] {
 }
 
 function own(src: string, outside: Outside, excused: string[]): Gate[] {
-  if (outside.language === 'rust') return rust(src, outside.files, excused)
+  if (outside.language === 'rust') return rust(src, outside.files, excused, outside.test)
   const recipe = RECIPES[outside.language]
   const near = home(src, first(outside), (name) => name === JUSTFILE || recipe.markers.test(name))
   const found = recipes(join(src, near, JUSTFILE))
@@ -191,7 +193,7 @@ export function recipes(path: string): Set<string> | null {
  * is what keeps its mainnet-fetching tests off a runner. A feature named for a service their CI starts
  * (surfpool's `postgres`) is left off, as this host runs no such service.
  */
-function rust(src: string, files: string[], excused: string[]): Gate[] {
+function rust(src: string, files: string[], excused: string[], test?: string[]): Gate[] {
   const own = files.filter((f) => f.endsWith('.rs'))
   const root = workspace(src, own[0] ?? files[0] ?? '')
   const crates = unique(own.map((f) => crate(src, f)).filter((c): c is Crate => c !== null))
@@ -200,7 +202,7 @@ function rust(src: string, files: string[], excused: string[]): Gate[] {
   const through = excused.some((span) => crates.some((c) => c.name === /^-p (\S+)/.exec(span)?.[1]))
   return [
     { script: 'format', bin: 'cargo', args: formatLine(src), dir: root },
-    { script: 'test', bin: 'cargo', args: ['test', ...crates.flatMap((c) => ['-p', c.name]),
+    { script: 'test', bin: 'cargo', args: test ?? ['test', ...crates.flatMap((c) => ['-p', c.name]),
       ...(features.length === 0 ? [] : ['--features', features.join(',')]), ...(through ? ['--no-fail-fast'] : []), '--', '--test-threads=4'], dir: root },
   ]
 }
@@ -222,7 +224,7 @@ function workflows(src: string): string[] {
 const Workflow = z.object({ jobs: z.record(z.string(), z.object({ steps: z.array(z.object({ run: z.string().optional() })).default([]) })) })
 
 /** `npm()` spawns without a shell, so a line needing one cannot become a gate. */
-const SHELL = /&&|[|;$`<>]/
+export const SHELL = /&&|[|;$`<>]/
 
 /** Each workflow step that runs a generator then `git diff --exit-code`, at the root. */
 function regenerated(src: string): Gate[] {

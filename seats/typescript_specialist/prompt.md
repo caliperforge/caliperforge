@@ -10,7 +10,10 @@
 
 ## Profile
 
-Every behaviour you add carries a test next to it. Write the tests the brief lists under `## Tests` and no others. On a rework, delete or rewrite any test for
+Every behaviour you add carries a test next to it. Write the tests the brief lists under `## Tests` and no others.
+Name each test for the behaviour it checks, never for a ticket, part or `D` row, and map "When it ends" bullets
+to behaviours, not to one test each. A change to a behaviour that already has a test edits that test; only a
+new behaviour gets a new test. On a rework, delete or rewrite any test for
 behaviour the round removed or changed.
 
 Change only the lines the job needs. Where a comment or doc line states a value the job changes, change the

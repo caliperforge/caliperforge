@@ -8,9 +8,9 @@ import type { Provider } from '../providers/kind.ts'
 import { packet } from '../runner/index.ts'
 import { load, seat, tight } from '../runner/rules.ts'
 import { CAP } from '../sequencer/upstream.ts'
-import { logged } from '../store/events.ts'
+import { logged, pointers } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
-import { wall } from '../store/lanes.ts'
+import { wall, zone } from '../store/lanes.ts'
 import { drifted, hashes } from '../store/parity.ts'
 import { pending } from '../store/transcript.ts'
 import { driftOf, type Opening } from './openings.ts'
@@ -19,9 +19,27 @@ const Entries = z.record(z.string(), z.object({ contract: z.string(), files: z.r
 
 const File = z.object({ size: z.number().max(CAP), content: z.string() })
 
+const entries = (root: string) => Entries.parse(parse(readFileSync(join(root, 'precedents/parity.yaml'), 'utf8')))
+
+export async function parities(db: Db, root: string, provider: Provider, now: Date, read: Read): Promise<void> {
+  const local = new Date(now.getTime() + zone(db) * 60000)
+  const monday = new Date(local.getTime() - ((local.getUTCDay() + 6) % 7) * 86400000).toISOString().slice(0, 10)
+  if (pointers(db, 'parity_week').includes(monday)) return
+  const event = { plan: null, kind: 'parity_week', actor: 'cf', pointer: monday, run: null }
+  try {
+    const ran: string[] = []
+    for (const repo of Object.keys(entries(root))) {
+      ran.push(`${repo} ${String(await parity(db, root, repo, provider, read, now.toISOString()) ?? 'unchanged')}`)
+    }
+    logged(db, { ...event, outcome: 'pass', message: ran.join(', ') })
+  } catch (error) {
+    logged(db, { ...event, outcome: 'refuse', message: error instanceof Error ? error.message : String(error) })
+  }
+}
+
 export async function parity(db: Db, root: string, repo: string, provider: Provider, read: Read = gh,
   at = new Date().toISOString()): Promise<number | null> {
-  const entry = Entries.parse(parse(readFileSync(join(root, 'precedents/parity.yaml'), 'utf8')))[repo]
+  const entry = entries(root)[repo]
   if (entry === undefined) throw new Error(`${repo} has no entry in precedents/parity.yaml`)
   const files = Object.entries(entry.files).map(([lang, path]) => {
     const got = Buffer.from(File.parse(read(['api', `repos/${repo}/contents/${path}`])).content.replace(/\n/g, ''), 'base64')

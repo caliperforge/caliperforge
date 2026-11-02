@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { Command } from 'commander'
 import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
-import { type Opening, opened } from '../../precedents/openings.ts'
+import { type Opening, opened, openings } from '../../precedents/openings.ts'
 import { distilled, keep, precedents, type Source, type Thread } from '../../precedents/store.ts'
 import type { Provider } from '../../providers/kind.ts'
 import { planDir } from '../../sequencer/workspace.ts'
@@ -21,12 +21,12 @@ const said: Thread = { kind: 'inline', author: 'm', role: 'maintainer', text: 'k
   url: 'https://github.com/o/r/pull/7#discussion_r1' }
 const ROW = `- area: a.ts | decision: keep the cache | why: callers rely on it | said_by: m (maintainer) | source: ${said.url}`
 
-function replies(fired: string[]): Provider {
+function replies(fired: string[], text = ROW): Provider {
   return {
     name: 'claude-agent-sdk',
     fire: (p) => {
       fired.push(p.prompt)
-      return Promise.resolve({ text: ROW, transcript_path: p.transcript, usage: { input: 1, cache: 1, output: 1 }, seconds: 0.5,
+      return Promise.resolve({ text, transcript_path: p.transcript, usage: { input: 1, cache: 1, output: 1 }, seconds: 0.5,
         ended: 'completed', exit: 0, stop_reason: 'end_turn', denials: 0 })
     },
   }
@@ -113,4 +113,28 @@ test('D1 D2 openings lists open rows newest first, one repo or all', async () =>
   printed = ''
   await cf.parseAsync(['openings'], { from: 'user' })
   expect(printed).toBe(line('2026-10-05T00:00:00Z', 'x/y', 'd.ts') + line('2026-10-03T00:00:00Z', 'o/r', 'c.ts') + line('2026-10-01T00:00:00Z', 'o/r', 'a.ts'))
+})
+
+test('D1 D2 openings parity prints drift, a rerun fires nothing', async () => {
+  const db = fresh(join(repo, 'schema'))
+  const root = mkdtempSync(join(tmpdir(), 'cf-parity-'))
+  for (const dir of ['rules', 'seats']) cpSync(join(repo, dir), join(root, dir), { recursive: true })
+  mkdirSync(join(root, 'precedents'))
+  writeFileSync(join(root, 'precedents/parity.yaml'), 'o/r:\n  contract: Signer\n  files:\n    rust: a.rs\n    go: a.go\n')
+  const files: Record<string, string> = { 'a.rs': 'trait Signer {\n  async fn sign();\n}\n', 'a.go': 'type Signer interface {\n\tSign()\n}\n' }
+  const read: Read = (args) => {
+    const text = files[(args[1] ?? '').replace('repos/o/r/contents/', '')] ?? ''
+    return { size: text.length, content: Buffer.from(text).toString('base64') }
+  }
+  const quote = 'sign | rust: async fn sign | go: func Sign | kind: sync-async | files: a.rs:2, a.go:2'
+  const fired: string[] = []
+  let printed = ''
+  const cf = new Command().exitOverride()
+  registerPrecedents(cf, { root, db: () => db, out: (text) => { printed += text } }, replies(fired, `- drift: ${quote}`), read)
+  await cf.parseAsync(['openings', 'parity', 'o/r'], { from: 'user' })
+  const row = `${String(openings(db, 'o/r')[0]?.first_seen)}\to/r\tdrift\tsign (sync-async)\tshape_compare\ta.rs, a.go\t${quote}\n`
+  expect(printed).toBe(row)
+  await cf.parseAsync(['openings', 'parity', 'o/r'], { from: 'user' })
+  expect(printed).toBe(row + row)
+  expect(fired).toHaveLength(1)
 })

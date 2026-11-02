@@ -1,5 +1,6 @@
 import { pr as readPr, type Pr, type Read } from '../cli/gh.ts'
 import { harvested } from '../precedents/harvest.ts'
+import { parities } from '../precedents/parity.ts'
 import type { Provider } from '../providers/kind.ts'
 import { type Db, lapping } from '../store/index.ts'
 import { clear as unlease, handOver, held, holding, take, type Lease, type Taken } from '../store/leases.ts'
@@ -46,6 +47,7 @@ export async function tick(db: Db, root: string, provider: Provider, now: Date =
   relane(db)
   if (registry !== undefined) await watched(db, root, registry, now, read, labels)
   if (labels !== undefined) { (lines ?? []).push(...intake(db, root, labels), ...refill(db, root, labels, now)); await harvested(db, root, provider, now, labels) }
+  if (labels !== undefined) await parities(db, root, provider, now, labels)
   reap(root, terminal(db))
   reprice(db, labels)
   rescored(db, root)

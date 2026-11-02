@@ -2,9 +2,11 @@ import { z } from 'zod'
 import { gh, inline, WINDOW, type Read } from '../cli/gh.ts'
 import { logins } from '../cli/measure.ts'
 import { logged, pointers } from '../store/events.ts'
+import type { Provider } from '../providers/kind.ts'
 import type { Db } from '../store/index.ts'
 import { zone } from '../store/lanes.ts'
 import { targetedRepos } from '../store/targets.ts'
+import { drained } from './distill.ts'
 import { keep, newestMerged, type Thread } from './store.ts'
 
 export const LIMIT = 1000
@@ -78,7 +80,7 @@ export function harvest(db: Db, repo: string, since: string | null, read: Read =
 }
 
 
-export function harvested(db: Db, now: Date, read: Read): void {
+export async function harvested(db: Db, root: string, provider: Provider, now: Date, read: Read): Promise<void> {
   const day = new Date(now.getTime() + zone(db) * 60000).toISOString().slice(0, 10)
   const done = pointers(db, 'precedent_harvest')
   for (const repo of targetedRepos(db, new Date(now.getTime() - RECENT * 86400000).toISOString())) {
@@ -88,6 +90,13 @@ export function harvested(db: Db, now: Date, read: Read): void {
       logged(db, { ...event, outcome: 'pass', message: `${String(harvest(db, repo, null, read))} stored` })
     } catch (error) {
       logged(db, { ...event, outcome: 'refuse', message: error instanceof Error ? error.message : String(error) })
+      continue
+    }
+    try {
+      await drained(db, root, repo, provider)
+    } catch (error) {
+      logged(db, { plan: null, kind: 'precedent_refused', actor: 'cf', outcome: 'refuse',
+        message: error instanceof Error ? error.message : String(error), pointer: repo, run: null })
     }
   }
 }

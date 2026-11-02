@@ -1,0 +1,117 @@
+import { spawnSync } from 'node:child_process'
+import { readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import type { ProbeReadings } from './reach.ts'
+import { type Suite, suite } from './suite.ts'
+
+type Value = bigint | boolean
+
+interface Layout { storage: { label: string; slot: string; offset: number; type: string }[]; types: Record<string, { numberOfBytes: string }> }
+
+type Sequence = { call: { from: string; data: string } }[]
+
+const TEST = 'test/fizz/ProbeReadings.t.sol'
+const TRACKED = /^t_(?:uint\d+|bool)$/
+const LOGGED = /^\s*(\w+\.\w+)= (\d+|true|false)$/gm
+const TAIL = 2000
+
+const bare = (tracker: string): string => tracker.slice(tracker.indexOf('.') + 1)
+
+const larger = (a: bigint, b: bigint): bigint => a > b ? a : b
+
+const smaller = (a: bigint, b: bigint): bigint => a < b ? a : b
+
+export function readings(probes: Suite['probes'], values: Map<string, Value>): ProbeReadings {
+  const read: ProbeReadings = { limits: {}, conversions: {} }
+  for (const cite of new Set(probes.flatMap((p) => p.cites ?? []))) {
+    const seen = probes.filter((p) => p.cites === cite).flatMap((p) => p.trackers).flatMap((t) => { const v = values.get(t); return v === undefined ? [] : [{ t: bare(t), v }] })
+    const ints = (prefix: string): bigint[] => seen.flatMap(({ t, v }) => typeof v === 'bigint' && t.startsWith(prefix) ? [v] : [])
+    const [maxes, mins, saws] = [ints('max'), ints('min'), seen.flatMap(({ v }) => typeof v === 'boolean' ? [v] : [])]
+    const max = maxes.reduce(larger, 0n)
+    if (mins.length + saws.length === 0) read.limits[cite] = { max }
+    else read.conversions[cite] = { min: mins.length === 0 ? 0n : mins.reduce(smaller), max, saw1Wei: saws.includes(true) }
+  }
+  return read
+}
+
+function forge(root: string, args: string[]): string {
+  const ran = spawnSync('forge', args, { cwd: root, encoding: 'utf8' })
+  if (ran.status !== 0) throw new Error(`forge ${args.join(' ')} exited ${String(ran.status)}: ${ran.error?.message ?? ran.stderr.slice(-TAIL)}`)
+  return ran.stdout
+}
+
+const layout = (root: string, contract: string): Layout => JSON.parse(forge(root, ['inspect', contract, 'storageLayout', '--json'])) as Layout
+
+const replayed = (sequence: Sequence): string => `        vm.revertToState(snap);\n${sequence.map(({ call }) => `        vm.prank(address(uint160(${BigInt(call.from).toString()})));\n`
+  + `        address(harness).call(hex"${call.data.slice(2)}");\n`).join('')}        logged(address(harness));\n`
+
+const source = (replays: string, reads: string): string => `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import {Harness} from "./Harness.sol";
+
+interface Vm {
+    function load(address target, bytes32 slot) external view returns (bytes32);
+    function prank(address sender) external;
+    function snapshotState() external returns (uint256);
+    function revertToState(uint256 id) external returns (bool);
+}
+
+contract Readings {
+    Vm constant vm = Vm(0x7109709ECfa91a80626fF3989D68f67F5b1DD12D);
+    address constant CONSOLE = 0x000000000000000000636F6e736F6c652e6c6f67;
+
+    function testReadings() public {
+        Harness harness = new Harness();
+        harness.setup();
+        uint256 snap = vm.snapshotState();
+${replays}    }
+
+    function logged(address h) internal view {
+        address p;
+${reads}    }
+
+    function word(address a, uint256 slot, uint256 offset, uint256 size) internal view returns (uint256) {
+        uint256 w = uint256(vm.load(a, bytes32(slot))) >> (offset * 8);
+        return size == 32 ? w : w & ((1 << (size * 8)) - 1);
+    }
+
+    function log(string memory key, uint256 value) internal view {
+        CONSOLE.staticcall(abi.encodeWithSignature("log(string,uint256)", key, value));
+    }
+
+    function log(string memory key, bool value) internal view {
+        CONSOLE.staticcall(abi.encodeWithSignature("log(string,bool)", key, value));
+    }
+}
+`
+
+export function trackers(root: string, corpus: string): Map<string, Value> {
+  const dir = join(corpus, 'call_sequences')
+  const sequences = readdirSync(dir, { recursive: true, encoding: 'utf8' }).filter((p) => p.endsWith('.json'))
+    .map((p) => JSON.parse(readFileSync(join(dir, p), 'utf8')) as Sequence)
+  const probes = suite(root).probes.map((p) => ({ ...p, layout: layout(root, p.name) }))
+  const harness = layout(root, 'Harness')
+  const reads = probes.flatMap((p) => harness.storage.filter((e) => e.type.startsWith(`t_contract(${p.name})`)).flatMap((held) => [
+    `        p = address(uint160(word(h, ${held.slot}, ${String(held.offset)}, 20)));\n`,
+    ...p.layout.storage.filter((e) => p.trackers.includes(`${p.name}.${e.label}`) && TRACKED.test(e.type)).map((e) => {
+      const value = `word(p, ${e.slot}, ${String(e.offset)}, ${p.layout.types[e.type]?.numberOfBytes ?? ''})`
+      return `        log("${p.name}.${e.label}=", ${e.type === 't_bool' ? `${value} != 0` : value});\n`
+    }),
+  ]))
+  let out: string
+  try {
+    writeFileSync(join(root, TEST), source(sequences.map(replayed).join(''), reads.join('')))
+    out = forge(root, ['test', '-vv', '--match-path', TEST])
+  } finally {
+    rmSync(join(root, TEST), { force: true })
+    rmSync(join(root, 'out/ProbeReadings.t.sol'), { recursive: true, force: true })
+  }
+  const values = new Map<string, Value>()
+  for (const [, name = '', raw = ''] of out.matchAll(LOGGED)) {
+    const [was, max] = [values.get(name), bare(name).startsWith('max')]
+    if (raw === 'true' || raw === 'false') values.set(name, raw === 'true' || was === true)
+    else if (max || bare(name).startsWith('min')) values.set(name, typeof was !== 'bigint' ? BigInt(raw) : (max ? larger : smaller)(was, BigInt(raw)))
+  }
+  return values
+}

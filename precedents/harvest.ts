@@ -118,7 +118,7 @@ export async function harvested(db: Db, root: string, provider: Provider, now: D
         message: error instanceof Error ? error.message : String(error), pointer: repo, run: null })
     }
     try {
-      await drained(db, root, repo, provider)
+      await drained(db, root, repo, provider, read)
     } catch (error) {
       logged(db, { plan: null, kind: 'precedent_refused', actor: 'cf', outcome: 'refuse',
         message: error instanceof Error ? error.message : String(error), pointer: repo, run: null })

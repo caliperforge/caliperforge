@@ -14,4 +14,4 @@ export function scoped(): () => void {
   }
 }
 
-afterAll(scoped())
+afterAll(scoped(), 120_000)

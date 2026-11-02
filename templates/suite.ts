@@ -8,6 +8,7 @@ export interface Suite {
   actors: (At & { name: string; roles: string[] })[]
   handlers: (At & { name: string; clamped: boolean; target: string | null; clamps: { text: string; range: string }[] })[]
   standIns: (At & { name: string; replaces: string; limits: { limit: string; map: string | null }[] })[]
+  probes: (At & { name: string; cites: string | null; trackers: string[]; calls: string[] })[]
   trackers: (At & { name: string; type: string; writers: string[] })[]
   build: { command: string | null; via_ir: string | null; optimizer: string | null }
 }
@@ -24,6 +25,9 @@ const HARNESS = 'test/fizz/'
 const CONTRACT = 'contract '
 const CLAMPED = '_clamped'
 const STAND_IN = /^(?:Mock|StandIn)(.+)$/
+const PROBE = /^Probe./
+const CITES = /^\s*\/\/ probe:\s*(\S.*?)\s*$/m
+const ADDRESS = /^address(?: payable)?$/
 const PROPERTY = /^(?:invariant|property|echidna)_/
 const LIMITS = /^\s*\/\/ stand-in limits:(.*)$/
 const LIMIT = /^\s*\/\/ - (.*)$/
@@ -101,6 +105,13 @@ function limitsOf(text: string): string[] {
 const standIn = (c: Contract): Suite['standIns'][number] => ({ ...c.at, name: c.name, replaces: STAND_IN.exec(c.name)?.[1] ?? '',
   limits: limitsOf(c.text).map((l) => { const m = MAPPED.exec(l); return { limit: m === null ? l : l.slice(0, m.index), map: m?.[1] ?? null } }) })
 
+const external = (n: Solc): boolean => n.expression?.nodeType === 'MemberAccess'
+  && (contractOf(n.expression.expression) !== '' || ADDRESS.test(type(n.expression.expression)))
+
+const probe = (c: Contract): Suite['probes'][number] => ({ ...c.at, name: c.name, cites: CITES.exec(c.text)?.[1] ?? null,
+  trackers: c.members.filter((m) => m.node.nodeType === 'VariableDeclaration' && m.node.constant !== true && contractOf(m.node) === '').map((m) => m.name),
+  calls: c.members.flatMap((m) => calls(m.node).filter(external).map(m.bytes)) })
+
 const profile = (toml: string, name: string, key: string): string | undefined => toml.split(/^(?=[ \t]*\[)/m)
   .find((s) => s.trimStart().startsWith(`[profile.${name}]`))?.match(new RegExp(`^[ \\t]*${key}[ \\t]*=[ \\t]*(.*?)[ \\t]*$`, 'm'))?.[1]
 
@@ -114,7 +125,8 @@ function build(root: string): Suite['build'] {
 export function suite(root: string): Suite {
   const found = harness(root)
   const standIns = found.filter((c) => STAND_IN.test(c.name))
-  const parts = found.filter((c) => !standIns.includes(c)).flatMap((c) => c.members)
+  const probes = found.filter((c) => PROBE.test(c.name))
+  const parts = found.filter((c) => !standIns.includes(c) && !probes.includes(c)).flatMap((c) => c.members)
   const functions = parts.filter((p) => p.node.nodeType === 'FunctionDefinition' && p.node.kind === 'function')
   const setups = functions.filter((f) => f.node.name === 'setup')
   const deployed = setups.flatMap(deploys)
@@ -127,6 +139,7 @@ export function suite(root: string): Suite {
     actors: actors.map((a) => ({ ...a.at(a.node), name: a.name, roles: setups.flatMap((s) => roles(s, a.node.name ?? '')) })),
     handlers: functions.filter(handler).map((h) => ({ ...h.at(h.node), name: h.name, clamped: h.name.endsWith(CLAMPED), target: aimed(h, functions, live), clamps: clamps(h) })),
     standIns: standIns.map(standIn),
+    probes: probes.map(probe),
     trackers: vars.filter((v) => v.node.constant !== true && !actors.includes(v) && contractOf(v.node) === '').map((v) => ({ ...v.at(v.node), name: v.name, type: type(v.node),
       writers: writers.filter((e) => e.writes.some((w) => w.id === v.node.id)).map((e) => e.name) })),
     build: build(root),
@@ -153,6 +166,16 @@ export function harnessed(found: Suite, map: string): Refused[] {
       .map((name) => ({ rule: 'suite.outside', note: `scaffold: ${name} under ## Outside dependencies has no stand-in and is not deployed in setup()` })),
     ...found.standIns.flatMap((s) => s.limits.filter((l) => l.map === null || !cited.includes(l.map))
       .map((l) => ({ rule: 'suite.stand_in', note: `scaffold: ${s.name} limit "${l.limit}" cites no ## Limits or ## Outside dependencies row` }))),
+  ]
+}
+
+export function probed(found: Suite, map: string): Refused[] {
+  const cited = found.probes.map((p) => p.cites)
+  return [
+    ...['Limits', 'Conversion points'].flatMap((section) => named(map, section).filter((row) => !cited.includes(row))
+      .map((row) => ({ rule: 'suite.probe', note: `scaffold: ## ${section} ${row} has no probe` }))),
+    ...found.probes.filter((p) => p.calls.length > 0)
+      .map((p) => ({ rule: 'suite.probe_call', note: `scaffold: ${p.name} calls ${p.calls.join(', ')}; a probe makes no external call` })),
   ]
 }
 

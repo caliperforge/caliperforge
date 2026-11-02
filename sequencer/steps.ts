@@ -2,6 +2,7 @@ import { CHECK, find } from '../cli/find.ts'
 import type { Read } from '../cli/gh.ts'
 import { moved } from '../cli/house.ts'
 import { CARD, waits } from '../cli/queue.ts'
+import { vouched } from '../precedents/openings.ts'
 import { parse } from '../rails/diff.ts'
 import { building, filesOf, recorded, sharing, strays as recordStrays } from '../store/files.ts'
 import { eventsOf } from '../store/events.ts'
@@ -236,7 +237,7 @@ function rechecks(db: Db, plan: PlanRow): boolean {
 
 function checked(db: Db, root: string, plan: PlanRow, row: Target, read: Read): string | null {
   const ask = maybe(root, plan.id, 'ask.md') ?? ''
-  const found = find(row.repo, row.issue_no, ask.includes(CARD), ceoApproved(db, plan), read)
+  const found = find(row.repo, row.issue_no, ask.includes(CARD), ceoApproved(db, plan), vouched(db, row.repo), read)
   const at = ask.lastIndexOf(`\n${CHECK}\n`)
   put(root, plan.id, 'ask.md', `${at === -1 ? ask : ask.slice(0, at)}\n${found.section}`)
   return found.park

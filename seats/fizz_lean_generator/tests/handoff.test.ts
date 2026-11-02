@@ -163,7 +163,7 @@ test('1753a D6: a multi-byte comment leaves the lines', () => {
 
 test('1753b D3: a scaffold editing ## Guards is handoff.layer', () => {
   expect(layered('scaffold', HANDED, cut('L9-L9', 'L9-L10'))).toEqual([{ rule: 'handoff.layer', note: 'scaffold: ## Guards is the context layer\'s and changed' }])
-  expect(layered('scaffold', HANDED, `${HANDED}\n## Stand-ins\n\n- MockStrategy | limits: only vault mints\n`)).toEqual([])
+  expect(layered('scaffold', HANDED, `${HANDED}\n## Known holes\n\n- MockStrategy interest | reason: only vault mints\n`)).toEqual([])
 })
 
 test('1753b D4: a map with no ## Outside dependencies is refused', () => {

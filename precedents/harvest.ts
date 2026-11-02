@@ -8,6 +8,8 @@ import type { Db } from '../store/index.ts'
 import { zone } from '../store/lanes.ts'
 import { targetedRepos } from '../store/targets.ts'
 import { drained } from './distill.ts'
+import { counted } from './escapes.ts'
+import { finished } from './openings.ts'
 import { keep, newestMerged, type Thread } from './store.ts'
 
 export const LIMIT = 1000
@@ -29,7 +31,7 @@ const Listed = z.object({
   comments: z.array(Said),
 })
 
-const Merged = z.array(Listed.extend({ mergedAt: z.string(), mergedBy: Login.nullable() }))
+const Merged = z.array(Listed.extend({ mergedAt: z.string(), mergedBy: Login.nullable(), body: z.string() }))
 
 const Open = z.array(Listed.extend({ headRepositoryOwner: Login.nullable() }))
 
@@ -51,11 +53,15 @@ export function harvest(db: Db, repo: string, since: string | null, read: Read =
   const after = [newestMerged(db, repo), since].filter((d) => d !== null).sort().at(-1)
   const merged = Merged.parse(twice(() => read(['pr', 'list', '--repo', repo, '--state', 'merged', '--limit', String(LIMIT),
     ...(after === undefined ? [] : ['--search', `merged:>${after}`]),
-    '--json', 'number,title,mergedAt,mergedBy,files,closingIssuesReferences,comments'])))
+    '--json', 'number,title,mergedAt,mergedBy,body,files,closingIssuesReferences,comments'])))
   if (merged.length === LIMIT) throw new Error(`${repo} lists ${String(LIMIT)} merged PRs, the limit; the rest are unread`)
   const open = Open.parse(twice(() => read(['pr', 'list', '--repo', repo, '--author', '@me', '--state', 'open', '--limit', String(WINDOW),
     '--json', 'number,title,headRepositoryOwner,files,closingIssuesReferences,comments'])))
   if (open.length === WINDOW) throw new Error(`${repo} lists ${String(WINDOW)} open PRs of ours, the cap; the rest are unread`)
+  for (const p of merged) {
+    finished(db, repo, { merged_at: p.mergedAt, files: p.files.map((f) => f.path), issues: p.closingIssuesReferences.map((i) => i.number),
+      text: [p.body, ...p.comments.map((c) => c.body)].join('\n') })
+  }
   const listed: Pr[] = [...merged, ...open.filter((p) => ours(p.headRepositoryOwner?.login)).map((p) => ({ ...p, mergedAt: null, mergedBy: null }))]
   if (listed.length === 0) return 0
   const mergers = logins(Mergers.parse(twice(() => read(['pr', 'list', '--repo', repo, '--state', 'merged', '--limit', String(WINDOW),
@@ -104,6 +110,12 @@ export async function harvested(db: Db, root: string, provider: Provider, now: D
     } catch (error) {
       logged(db, { ...event, outcome: 'refuse', message: error instanceof Error ? error.message : String(error) })
       continue
+    }
+    try {
+      counted(db, root, repo)
+    } catch (error) {
+      logged(db, { plan: null, kind: 'precedent_escapes', actor: 'cf', outcome: 'refuse',
+        message: error instanceof Error ? error.message : String(error), pointer: repo, run: null })
     }
     try {
       await drained(db, root, repo, provider)

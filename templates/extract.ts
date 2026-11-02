@@ -17,7 +17,7 @@ export interface Extracted {
   aggregates: string[]
 }
 
-interface Node {
+export interface Node {
   nodeType: string; src: string; id: number; name?: string; memberName?: string; kind?: string; visibility?: string; operator?: string
   constant?: boolean; stateVariable?: boolean; implemented?: boolean; referencedDeclaration?: number; absolutePath?: string; nodes?: Node[]
   typeName?: Node; typeDescriptions?: { typeString?: string }; modifiers?: { modifierName: { name: string } }[]
@@ -25,7 +25,7 @@ interface Node {
   leftHandSide?: Node; subExpression?: Node; baseExpression?: Node; expression?: Node
 }
 
-interface Member { node: Node; name: string; at: (node: Node) => At }
+export interface Member { node: Node; name: string; at: (node: Node) => At }
 
 interface Write { id: number; additive: boolean; at: At }
 
@@ -50,12 +50,12 @@ export const lineCount = (source: Buffer): number => breaks(source).length + (so
 
 const isNode = (value: unknown): value is Node => typeof value === 'object' && value !== null && 'nodeType' in value
 
-const below = (node: Node): Node[] =>
+export const below = (node: Node): Node[] =>
   Object.values(node).flatMap((value: unknown) => (Array.isArray(value) ? value as unknown[] : [value])).filter(isNode).flatMap((child) => [child, ...below(child)])
 
-const called = (node: Node): string => node.nodeType === 'FunctionCall' ? node.expression?.name ?? node.expression?.memberName ?? '' : ''
+export const called = (node: Node): string => node.nodeType === 'FunctionCall' ? node.expression?.name ?? node.expression?.memberName ?? '' : ''
 
-function membersOf(file: string, source: Buffer, unit: Node): Member[] {
+export function membersOf(file: string, source: Buffer, unit: Node): Member[] {
   const newlines = breaks(source)
   const line = (offset: number): number => newlines.filter((b) => b < offset).length + 1
   const at = (node: Node): At => {
@@ -89,7 +89,7 @@ function reached(id: number, calls: Map<number, number[]>, seen = new Set<number
   return seen
 }
 
-function entries(functions: Member[]): Entry[] {
+export function entries(functions: Member[]): Entry[] {
   const inner = new Set(functions.filter((f) => ['internal', 'private'].includes(f.node.visibility ?? '')).map((f) => f.node.id))
   const calls = new Map(functions.map((f) => [f.node.id, below(f.node).filter((n) => n.nodeType === 'FunctionCall')
     .map((n) => n.expression?.referencedDeclaration ?? 0).filter((id) => inner.has(id))]))

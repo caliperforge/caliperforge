@@ -27,6 +27,7 @@ import { parse } from '../rails/diff.ts'
 import { claimed, estimate, formats, human, pointed, references, retitled, section, shape, split, TEMPLATE, wide, WIDE, type Part } from './brief.ts'
 import { overlong, trim, trimmed } from './trim.ts'
 import { repoOf } from './ready.ts'
+import { precedented } from './precedented.ts'
 import { limitOf } from './size.ts'
 import { handout, long, touched, type Handed } from './handout.ts'
 import { capped, enclosed, handover, type Handover } from './handover.ts'
@@ -173,7 +174,7 @@ function byHand(runs: string, brief: string | null): Outcome | null {
 async function written(db: Db, root: string, plan: PlanRow, step: Step, provider: Provider, ask: string, src: string): Promise<{ fired: Fired; cut: string | null }> {
   const last = maybe(root, plan.id, 'brief.refused.md')
   const lines = last === null || maybe(root, plan.id, 'refusal.md') === null || oversized(db, plan, last) !== null ? null : overlong(last, ask, src, !internal(plan))
-  return { fired: await ran(db, root, plan, step, provider, last === null || lines === null ? again(db, root, plan.id, ask) + store(root, plan) + seams(root, plan.seat) + formats(ask) + long(src) + wideAsk(ask) : trim(last, lines), false, lines === null), cut: lines === null ? null : last }
+  return { fired: await ran(db, root, plan, step, provider, last === null || lines === null ? again(db, root, plan.id, ask) + store(root, plan) + seams(root, plan.seat) + precedented(db, root, plan) + formats(ask) + long(src) + wideAsk(ask) : trim(last, lines), false, lines === null), cut: lines === null ? null : last }
 }
 
 function oversized(db: Db, plan: PlanRow, brief: string): string | null {

@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process'
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { isAbsolute, join } from 'node:path'
+import { basename, dirname, isAbsolute, join } from 'node:path'
 import { alive } from '../store/leases.ts'
 import type { Profile } from '../store/profile.ts'
 import { exitedOutside } from './exited.ts'
@@ -74,8 +74,9 @@ function project(src: string): string | null {
  * `narrow` is the plan's own file list. Given one, the tests run is `vitest related` over those
  * paths -- every test the import graph says they can reach -- instead of the whole suite. The first pass
  * through step 3 passes none, so every job still runs the suite whole once, against the tree it built on.
+ * `tests`, given, are the only test files a vitest suite runs, and none runs on an empty list.
  */
-export function checks(src: string, given: Commands, run: Run = npm, narrow: string[] = [], outside: Outside | null = null, touched: string[] = [], minutes?: number, said?: (line: string) => void): Failure | null {
+export function checks(src: string, given: Commands, run: Run = npm, narrow: string[] = [], outside: Outside | null = null, touched: string[] = [], minutes?: number, said?: (line: string) => void, tests?: string[]): Failure | null {
   if (outside !== null) return gated(src, gates(src, outside, given.excused), run, given.excused ?? [], said)
   const parsed = given.node === undefined ? null : gated(src, syntax(src, given.node, touched), run)
   if (parsed !== null) return parsed
@@ -85,7 +86,7 @@ export function checks(src: string, given: Commands, run: Run = npm, narrow: str
   if (python !== null) return python
   const bin = mode(src)
   if (bin === 'xcodebuild') excluded(src)
-  for (const [script, args, program = bin] of commands(src, given, narrow, touched)) {
+  for (const [script, args, program = bin] of commands(src, given, narrow, touched, tests)) {
     const cap = program === 'npm' && script === 'test' ? SUITE_CAP : program === 'python3' && minutes !== undefined ? minutes * 60_000 : undefined
     const first = run(args, src, program, cap)
     if (first.ok) continue
@@ -232,15 +233,15 @@ function alone(output: string, script: string, args: string[]): string[] {
 /** A test script that is vitest takes `related`; anything else is run whole, narrow list or not. */
 const VITEST = /(^|\s)vitest(\s|$)/
 
-function commands(src: string, given: Commands, narrow: string[], touched: string[]): [string, string[], string?][] {
+function commands(src: string, given: Commands, narrow: string[], touched: string[], tests?: string[]): [string, string[], string?][] {
   if (project(src) !== null) return given.xcodebuild === undefined ? [] : [['test', given.xcodebuild]]
   if (mode(src) === 'gradle') return [['check', GRADLE]]
   const scripts = read(src)
   if (scripts === null) return tools(src, given, touched)
-  const named = (given.npm ?? []).filter((s) => scripts[s] !== undefined && (s !== 'test' || !contained(src, touched)))
+  const named = (given.npm ?? []).filter((s) => scripts[s] !== undefined && (s !== 'test' || (!contained(src, touched) && tests?.length !== 0)))
   return [
     ...(bare(src) && (named.length > 0 || given.tsc !== undefined) ? [['ci', ['ci']] as [string, string[]]] : []),
-    ...named.map((s): [string, string[]] => [s, related(scripts[s] ?? '', s, narrow) ?? ['run', s]]),
+    ...named.map((s): [string, string[]] => [s, related(scripts[s] ?? '', s, narrow, tests) ?? ['run', s]]),
     ...tools(src, given, touched),
   ]
 }
@@ -254,9 +255,17 @@ export function tools(src: string, given: Commands, touched: string[]): [string,
     ...(given.node_test === true ? nodeTests(src) : [])]
 }
 
-function related(script: string, name: string, narrow: string[]): string[] | null {
-  if (name !== 'test' || narrow.length === 0 || !VITEST.test(script)) return null
-  return ['exec', '--', 'vitest', 'related', '--run', ...narrow]
+function related(script: string, name: string, narrow: string[], tests?: string[]): string[] | null {
+  if (name !== 'test' || !VITEST.test(script)) return null
+  if (tests !== undefined) return ['exec', '--', 'vitest', 'run', ...tests]
+  return narrow.length === 0 ? null : ['exec', '--', 'vitest', 'related', '--run', ...narrow]
+}
+
+/** The job's own test files under `src`: the ones it lists, and the ones named for each source file it touched. */
+export function own(src: string, listed: string[], touched: string[]): string[] {
+  const named = touched.filter((path) => path.endsWith('.ts') && !path.endsWith('.test.ts'))
+    .flatMap((path) => [`${path.slice(0, -3)}.test.ts`, join(dirname(path), 'tests', `${basename(path, '.ts')}.test.ts`)])
+  return [...new Set([...listed.filter((path) => path.endsWith('.test.ts')), ...named])].filter((path) => existsSync(join(src, path)))
 }
 
 export function bare(src: string): boolean {

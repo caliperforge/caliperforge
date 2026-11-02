@@ -92,6 +92,38 @@ test('no run past the window runs the suite on the laptop', async () => {
   expect((await rails(w, wire))?.note).toBe(LOCAL)
 })
 
+/** A run in progress for the first `reads` listings of the head, then green. */
+function going(w: World, reads: number): Gh {
+  const running = runsOn(w.root, ID, 'in_progress', '')
+  const green = runsOn(w.root, ID)
+  let read = 0
+  return (args) => {
+    if (args.includes('main')) return '[]'
+    read += 1
+    return read <= reads ? running(args) : green(args)
+  }
+}
+
+test('2058 D1 a run going at tick 21 waits, then green passes', async () => {
+  const w = mine()
+  const wire = watched([], w.root, ID, going(w, 29))
+  await toRails(w, wire)
+  const seen = Array.from({ length: 30 }, () => ciChecks(w.db, w.root, plan(w.db, ID), wire))
+  expect(seen[20]).toHaveProperty('wait')
+  expect(seen[28]).toHaveProperty('wait')
+  expect(seen[29]).toMatchObject({ failed: null })
+})
+
+test('2058 D2 a run still going at tick 61 falls back', async () => {
+  const w = mine()
+  const wire = watched([], w.root, ID, runsOn(w.root, ID, 'in_progress', ''))
+  await toRails(w, wire)
+  const seen = Array.from({ length: 61 }, () => ciChecks(w.db, w.root, plan(w.db, ID), wire))
+  expect(seen.slice(0, 60).every((ci) => ci !== null && 'wait' in ci)).toBe(true)
+  expect(seen[60]).toEqual({ fallback: true })
+  expect((await rails(w, wire))?.note).toBe(LOCAL)
+})
+
 test('a push that fails runs the suite on the laptop', async () => {
   const w = mine()
   const wire: Wire = { ...watched([], w.root, ID), send: () => { throw new Error('offline') } }

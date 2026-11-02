@@ -8,6 +8,7 @@ import { registerLanes } from '../cf-lanes.ts'
 import { registerPlans } from '../cf-plans.ts'
 import { actors, actorSection, costs, costSection, fileWaits, greptileLine, hands, heldBy, line, misses, missSection, rulings, section, ticketSection,
   tickets, unpriced, waitLine, waits, caught, caughtSection } from '../brief.ts'
+import { openingLines } from '../openings.ts'
 import { outsideSection } from '../outside.ts'
 import { refusalDays, refusalSection } from '../refusals.ts'
 import { benchSection } from '../underpowered.ts'
@@ -16,6 +17,7 @@ import { decisionSection, driftSection } from '../drift.ts'
 import { hold } from '../../sequencer/hold.ts'
 import { monthly, reviewed } from '../../sequencer/ready.ts'
 import { put } from '../../sequencer/workspace.ts'
+import type { Listed } from '../../precedents/openings.ts'
 import { record as addScore, underpowered } from '../../store/bench.ts'
 import { decided, directorDays } from '../../store/decisions.ts'
 import { addFinding, closeFinding, type Finding, overdue, week } from '../../store/drift.ts'
@@ -749,4 +751,13 @@ test('with no waiting live plan the waits line reads none', () => {
   const db = world()
   plan(db, 1, 'queued', 25)
   expect(waitLine(waits(db))).toBe('waits\tnone\n')
+})
+
+test('D3 D4 openings: one line per repo with new rows in 7 days', () => {
+  const opening = (repo: string, days: number, source: string): Listed => ({ repo, kind: 'deferred', area: 'a.ts', quote: 'later', said_by: 'm',
+    source, first_seen: new Date(NOW.getTime() - days * 86_400_000).toISOString() })
+  const rows = [opening('x/y', 1, 'x1'), opening('o/r', 1, 's1'), opening('o/r', 2, 's2'), opening('o/r', 3, 's3'), opening('o/r', 6, 's4'),
+    opening('o/r', 8, 's5'), opening('z/z', 8, 'z1')]
+  expect(openingLines(rows, NOW)).toBe('openings\to/r\t4 new\ts1 s2 s3\nopenings\tx/y\t1 new\tx1\n')
+  expect(openingLines([], NOW)).toBe('')
 })

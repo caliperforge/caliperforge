@@ -10,6 +10,10 @@ export interface Refusal {
 /** `usd` is the run's cost ceiling; every price is dollars per million tokens, named like the `prices` columns. */
 export interface CostWall { usd: number; input: number; cache_write: number; cache_write_1h: number; cache_read: number; output: number }
 
+export interface Range { file: string; start: number; end: number }
+
+export interface Miss { kind: 'read.map_miss' | 'read.slice_miss'; file: string; lines: string }
+
 export interface Packet {
   prompt: string
   cwd: string
@@ -29,6 +33,8 @@ export interface Packet {
   idle?: number
   /** Reads of `.sol` under `src/` or `lib/` must carry `offset` or `limit`. A packet without it reads whole files. */
   ranged?: boolean
+  /** The map's ranges and this run's slice of them: a `.sol` read under `src/` or `lib/` outside either is logged, never denied. */
+  map?: { ranges: Range[]; slice: Range[] }
   /** Bash runs under the SDK sandbox with no network. A packet without it keeps the network. */
   offline?: boolean
   refuse: (path: string) => Refusal | null
@@ -81,6 +87,8 @@ export interface Fired {
   limits?: Reading[]
   /** Each Bash command whose network attempt the sandbox refused, on an offline packet that saw one. */
   offline?: string[]
+  /** Each read that fell outside the map or the slice, on a mapped packet that saw one. */
+  misses?: Miss[]
 }
 
 export interface Provider {

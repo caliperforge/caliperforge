@@ -1,11 +1,12 @@
-import { appendFileSync, existsSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs'
-import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
+import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs'
+import { dirname, isAbsolute, relative, resolve } from 'node:path'
 import { query, type HookInput, type SDKMessage, type SDKRateLimitInfo, type SDKResultMessage, type SyncHookJSONOutput } from '@anthropic-ai/claude-agent-sdk'
 import type { Reading } from '../../store/lanes.ts'
 import { credential } from '../credential.ts'
-import { admitted, bare, type CostWall, type Fired, type Packet, type Provider } from '../kind.ts'
+import { admitted, bare, type CostWall, type Fired, type Miss, type Packet, type Provider } from '../kind.ts'
 import { ghWrite } from './gh.ts'
 import { cut, sealed } from './offline.ts'
+import { judged, real } from './read.ts'
 
 const WRITES = new Set(['Write', 'Edit', 'NotebookEdit'])
 
@@ -28,7 +29,7 @@ async function fire(packet: Packet): Promise<Fired> {
   const limits: Reading[] = []
   const spent = new Map<string, number>()
   const cost = new Map<string, number>()
-  const pace = { turns: new Set<string>(), wrote: false, fenced: 0, reads: new Map<string, number>() }
+  const pace = { turns: new Set<string>(), wrote: false, fenced: 0, reads: new Map<string, number>(), misses: [] as Miss[] }
   const offline: string[] = []
   const transcript = openTranscript(packet)
   const run = query({
@@ -44,7 +45,7 @@ async function fire(packet: Packet): Promise<Fired> {
       settingSources: [], systemPrompt: { type: 'preset', preset: 'claude_code', excludeDynamicSections: true },
       permissionMode: 'default', ...(packet.offline === true ? sealed(packet.env?.TMPDIR) : {}),
       hooks: { ...(packet.offline === true ? cut(offline) : {}), PreToolUse: [{ hooks: [(input) => {
-        count(pace.reads, input)
+        count(pace, packet, input)
         const over = walled(packet.wall, total(spent)) ?? costWalled(packet.cost_wall, total(cost))
           ?? idle(packet.tools, pace.wrote, pace.turns.size, packet.idle) ?? repeated(packet.tools, pace.reads)
         const decision = over === null ? gate(packet, input, pace.fenced) : stop(over)
@@ -58,7 +59,7 @@ async function fire(packet: Packet): Promise<Fired> {
     transcript(message)
     if (message.type === 'assistant') charge(message, pace.turns, { spent, cost }, packet.cost_wall)
     if (message.type === 'rate_limit_event') limits.push(...readings(message.rate_limit_info, new Date().toISOString()))
-    if (message.type === 'result') return { ...fired(message, started, refused), limits, transcript_path: packet.transcript, ...(offline.length === 0 ? {} : { offline }) }
+    if (message.type === 'result') return { ...fired(message, started, refused), limits, transcript_path: packet.transcript, ...(offline.length === 0 ? {} : { offline }), ...(pace.misses.length === 0 ? {} : { misses: pace.misses }) }
   }
   throw new Error('claude-agent-sdk closed without a result message')
 }
@@ -90,10 +91,12 @@ export function repeated(tools: string[], reads: Map<string, number>, limit = RE
   return null
 }
 
-function count(reads: Map<string, number>, input: HookInput): void {
+function count(pace: { reads: Map<string, number>; misses: Miss[] }, packet: Packet, input: HookInput): void {
   if (input.hook_event_name !== 'PreToolUse' || input.tool_name !== 'Read') return
   const path = (input.tool_input as { file_path?: unknown }).file_path
-  if (typeof path === 'string') reads.set(path, (reads.get(path) ?? 0) + 1)
+  if (typeof path === 'string') pace.reads.set(path, (pace.reads.get(path) ?? 0) + 1)
+  const miss = packet.map === undefined ? null : judged(packet.map, packet.cwd, input.tool_name, input.tool_input)
+  if (miss !== null) pace.misses.push(miss)
 }
 
 function writing(input: HookInput): boolean {
@@ -208,7 +211,7 @@ export function readOutside(cwd: string, tool: string, args: unknown, reads: str
 
 function wholeRead(packet: Packet, tool: string, args: unknown): string | null {
   const given = args as { file_path?: unknown; offset?: unknown; limit?: unknown }
-  if (packet.ranged !== true || tool !== 'Read' || typeof given.file_path !== 'string') return null
+  if (packet.ranged !== true || packet.map !== undefined || tool !== 'Read' || typeof given.file_path !== 'string') return null
   if (given.offset !== undefined || given.limit !== undefined) return null
   const rel = relative(real(resolve(packet.cwd)), real(resolve(packet.cwd, given.file_path)))
   if (!/^(?:src|lib)\/.*\.sol$/.test(rel)) return null
@@ -225,17 +228,6 @@ const SPILLED = /\/\.claude\/projects\/[^/]+\/[^/]+\/tool-results\//
 
 /** Where the harness writes a backgrounded command's output, under `/tmp` or macOS's `/private/tmp`. */
 const TASKS = /\/tmp\/claude[^/]*\/[^/]+\/tasks\/[^/]+\.output$/
-
-/**
- * The tick runs from a worktree whose `.cf` is a symlink, so a seat's cwd and the paths it reads can name
- * one checkout two ways. Both sides are compared as the disk resolves them; a path not yet on disk
- * resolves through its nearest existing parent.
- */
-function real(path: string): string {
-  if (existsSync(path)) return realpathSync(path)
-  const parent = dirname(path)
-  return parent === path ? path : join(real(parent), basename(path))
-}
 
 function wroteOutside(packet: Packet, tool: string, args: unknown): string | null {
   if (!WRITES.has(tool)) return null

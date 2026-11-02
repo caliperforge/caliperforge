@@ -7,7 +7,15 @@ import { get } from '../../../sequencer/workspace.ts'
 import { eventsAfter } from '../../../store/events.ts'
 import { critic } from '../../../templates/critic.ts'
 import { report } from '../../../templates/report.ts'
+import { packed, smoke, type Smoked } from '../../../templates/smoke.ts'
+import { suite, type Suite } from '../../../templates/suite.ts'
 import { benched, transcripts } from './benched.ts'
+
+const EMPTY = vi.hoisted((): Suite => ({ deployed: [], actors: [], handlers: [], standIns: [], probes: [], trackers: [], build: { command: null, via_ir: null, optimizer: null } }))
+
+vi.mock('../../../templates/suite.ts', async (importOriginal) => ({ ...await importOriginal<object>(), suite: vi.fn(() => EMPTY) }))
+
+vi.mock('../../../templates/smoke.ts', async (importOriginal) => ({ ...await importOriginal<object>(), smoke: vi.fn(() => []) }))
 
 const root = join(import.meta.dirname, '../../..')
 const skill = join(root, 'seats/fizz_lean_generator/skill')
@@ -194,17 +202,22 @@ test('stop D2 D3: a resumed run starts at scaffold, sums both legs', async () =>
 const AT = [{ file: 'src/V.sol', start: 9, end: 9 }]
 const MISSES: Miss[] = [{ kind: 'read.map_miss', file: 'src/V.sol', lines: 'L1-end' }, { kind: 'read.slice_miss', file: 'src/V.sol', lines: 'L12-L30' }]
 
-async function mapped() {
+async function mapped(map = '## Guards\n\n- V.deposit | reverts: cap | at: src/V.sol L9-L9\n') {
   const handoffs = join(mkdtempSync(join(tmpdir(), 'cf-fizz-mapped-')), 'test/fizz/fizz_data/handoff')
   mkdirSync(join(handoffs, 'excerpts'), { recursive: true })
-  writeFileSync(join(handoffs, 'map.md'), '## Guards\n\n- V.deposit | reverts: cap | at: src/V.sol L9-L9\n')
+  writeFileSync(join(handoffs, 'map.md'), map)
+  const fizz = join(mkdtempSync(join(tmpdir(), 'cf-fizz-skill-')), 'fizz')
+  mkdirSync(join(fizz, 'references'), { recursive: true })
+  writeFileSync(join(fizz, 'references/critic-pass.md'), pass())
   const packets: Packet[] = []
+  const fires: { phase: string; issue: string }[] = []
   const { db, root, run } = benched((packet, phase) => {
     packets.push(packet)
+    fires.push({ phase, issue: packet.prompt })
     writeFileSync(join(handoffs, `${phase}.md`), FILLED[phase] ?? '')
     return phase === 'scaffold' ? { misses: MISSES } : {}
-  })
-  return { db, root, packets, sum: await run(skill, handoffs, () => []) }
+  }, [fizz])
+  return { db, root, handoffs, packets, fires, sum: await run(skill, handoffs, () => []) }
 }
 
 test('D2: context is ranged, later phases carry map.md ranges', async () => {
@@ -222,6 +235,22 @@ test('D3 D4: two scaffold misses log as events report() counts', async () => {
   ])
   report(db, root, 1, [], null)
   expect(JSON.parse(get(root, 1, 'report.json'))).toMatchObject({ map: { map_miss: 1, slice_miss: 1 } })
+})
+
+const RAW: Suite['handlers'][number] = { file: 'test/fizz/H.sol', start: 1, end: 1, name: 'V_deposit', clamped: false, target: 'V.deposit', clamps: [] }
+const SMOKED: Smoked[] = [{ name: 'V.deposit(uint256 assets)', calls: 10, successes: 4 }]
+
+test('D2-D4: a suite refusal fires a fix turn before coverage', async () => {
+  vi.mocked(suite).mockReturnValueOnce(EMPTY).mockReturnValueOnce({ ...EMPTY, handlers: [RAW] })
+  vi.mocked(smoke).mockReturnValueOnce(SMOKED)
+  const { db, handoffs, fires } = await mapped('## Selected entry points\n\n- V.deposit(uint256 assets) | tier: 1\n\n## Unclamped\n\n- V.deposit | reason: any amount\n')
+  expect(fires.map((f) => f.phase)).toEqual(['context', 'scaffold', 'scaffold-fix-suite-1', 'coverage', 'invariants'])
+  expect(fires[2]?.issue).toContain('scaffold: V.deposit has no raw handler')
+  expect(fires[3]?.issue).toContain(packed(SMOKED))
+  expect(readFileSync(join(handoffs, 'map.md'), 'utf8')).toContain('## Handlers\n\n- V_deposit | target: V.deposit | clamps: none | at: test/fizz/H.sol L1-L1\n')
+  expect(eventsAfter(db, 0).filter((e) => e.kind === 'fix.turn')).toEqual([
+    { plan: 1, kind: 'fix.turn', actor: 'fizz_lean_generator', outcome: 'pass', message: '{"turn":1,"tokens":1,"usd":0}', pointer: null, run: null },
+  ])
 })
 
 test('no src: a map.md the agent writes checks no layer', async () => {

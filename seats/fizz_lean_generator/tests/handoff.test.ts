@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { expect, test } from 'vitest'
-import { compiled, extract } from '../../../templates/extract.ts'
+import { type At, compiled, extract, type Node } from '../../../templates/extract.ts'
 import { handoff, layered, ranged } from '../../../templates/handoff.ts'
 
 const skill = join(import.meta.dirname, '../skill')
@@ -99,12 +99,12 @@ const CITED = {
 }
 const HANDED = Object.entries(CITED).map(([name, row]) => `## ${name}\n\n${row}\n`).join('\n')
 
-function project(source: Buffer = V, ast = AST): string {
+function project(source: Buffer = V, ast = AST, name = 'V'): string {
   const root = mkdtempSync(join(tmpdir(), 'cf-fizz-extract-'))
-  mkdirSync(join(root, 'out/V.sol'), { recursive: true })
+  mkdirSync(join(root, `out/${name}.sol`), { recursive: true })
   mkdirSync(join(root, 'src'))
-  writeFileSync(join(root, 'src/V.sol'), source)
-  writeFileSync(join(root, 'out/V.sol/V.json'), ast)
+  writeFileSync(join(root, `src/${name}.sol`), source)
+  writeFileSync(join(root, `out/${name}.sol/${name}.json`), ast)
   return root
 }
 
@@ -177,4 +177,54 @@ test.runIf(process.env.CF_BENCH_LIVE === '1')('1753a D7: forge on a fresh V.sol 
   writeFileSync(join(fresh, 'src/V.sol'), V)
   expect(compiled(fresh)).toEqual([])
   expect(extract(fresh)).toMatchObject(ROWS)
+})
+
+const P = readFileSync(join(fixtures, 'P.sol'))
+const P_AST = readFileSync(join(fixtures, 'P.ast.json'), 'utf8')
+const pRoot = project(P, P_AST, 'P')
+const pFacts = extract(pRoot)
+const MOVERS = 'P.accept, P.reallocate, A.reallocateTo'
+const pMap = (movers: string, at = 'src/P.sol L14-L14'): string => ['Roles', 'Guards', 'Limits', 'Outside dependencies', 'Conversion points', 'Not tracked']
+  .map((name) => `## ${name}\n\n- none\n`).join('\n') + `\n## Aggregates\n\n- P.cfg | parts: caps and balances | movers: ${movers} | at: ${at}\n`
+const line = (n: number): At => ({ file: 'src/P.sol', start: n, end: n })
+
+test('2065 D1: a write through a storage local is a write', () => {
+  expect(pFacts.state.find((v) => v.name === 'P.cfg')?.writes).toEqual([line(23), line(27)])
+})
+
+test('2065 D2: a call through an interface is a mover', () => {
+  expect(pFacts.state.find((v) => v.name === 'P.cfg')?.writers).toEqual(MOVERS.split(', '))
+  expect(ranged(pRoot, pMap(MOVERS), pFacts)).toEqual([])
+})
+
+test('2065 D3: movers stay one exact set', () => {
+  expect(ranged(pRoot, pMap('P.accept, P.reallocate'), pFacts))
+    .toEqual([{ rule: 'handoff.movers', note: expect.stringContaining('missing movers A.reallocateTo and has extra movers none') as string }])
+  expect(ranged(pRoot, pMap(`${MOVERS}, A.peek`), pFacts))
+    .toEqual([{ rule: 'handoff.movers', note: expect.stringContaining('missing movers none and has extra movers A.peek') as string }])
+})
+
+test('2065 D4: an Aggregates row at the aliased write is cited', () => {
+  expect(ranged(pRoot, pMap(MOVERS, 'src/P.sol L23-L23'), pFacts)).toEqual([])
+})
+
+test('2065 D5: a caller in another contract is no second path', () => {
+  expect(pFacts.state.find((v) => v.name === 'P.moves')?.writers).toEqual(['P.reallocate', 'A.reallocateTo'])
+  expect(pFacts.aggregates).toEqual([])
+})
+
+test('2065 D5: a writer inherited from a base contract counts', () => {
+  const { ast } = JSON.parse(P_AST) as { ast: Node }
+  const p = ast.nodes?.find((n) => n.name === 'P')?.nodes ?? []
+  p.push(...p.filter((n) => n.name === 'reallocate').map((n) => ({ ...n, id: 160, name: 'rebalance', functionSelector: '5e6f7a8b' })))
+  ast.nodes?.push({ id: 90, name: 'Base', nodeType: 'ContractDefinition', src: '0:0:0', nodes: p.splice(p.findIndex((n) => n.name === 'moves'), 1) })
+  expect(extract(project(P, JSON.stringify({ ast }), 'P')).aggregates).toEqual(['Base.moves'])
+})
+
+test.runIf(process.env.CF_BENCH_LIVE === '1')('2065: forge on a fresh P.sol gives the D1/D2 writers', () => {
+  const fresh = mkdtempSync(join(tmpdir(), 'cf-fizz-forge-'))
+  mkdirSync(join(fresh, 'src'))
+  writeFileSync(join(fresh, 'src/P.sol'), P)
+  expect(compiled(fresh)).toEqual([])
+  expect(extract(fresh).state.find((v) => v.name === 'P.cfg')).toMatchObject({ writers: MOVERS.split(', '), writes: [line(23), line(27)] })
 })

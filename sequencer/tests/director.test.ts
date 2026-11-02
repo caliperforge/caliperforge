@@ -1521,7 +1521,7 @@ test.each([
   const { db, home } = wokeSeeded()
   blocked(db, home)
   put(home, 7, 'parked.md', '# Held\n')
-  if (said !== null) lookAt(db, said,'2026-09-24 13:59:00')
+  if (said !== null) lookAt(db, said, '2026-09-24 13:59:00')
   const fires: string[] = []
   await woke(db, home, wokeStub(ASK_CEO, fires), day, () => undefined)
   expect(fires).toHaveLength(fired)

@@ -43,6 +43,7 @@ function reader(down?: string): { harvested: string[]; read: Read } {
   return { harvested, read: (args) => {
     if (args[0] !== 'pr' || args[1] !== 'list') throw new Error(`unread: ${args.join(' ')}`)
     const repo = String(args[3])
+    if (args.includes('open')) return []
     harvested.push(repo)
     if (repo === down) throw new Error(`${repo} is down`)
     return []

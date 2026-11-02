@@ -2,7 +2,7 @@ import type { Db } from '../store/index.ts'
 
 export const KINDS = ['review', 'inline', 'comment'] as const
 
-export interface Source { repo: string; number: number; title: string; merged_at: string; merger: string | null; files: string[]; issues: number[] }
+export interface Source { repo: string; number: number; title: string; merged_at: string | null; merger: string | null; files: string[]; issues: number[] }
 
 export interface Thread { kind: string; author: string; role: string; text: string; path: string | null; line: number | null; url: string }
 
@@ -40,7 +40,7 @@ export interface Precedent { area: string; decision: string; why: string; said_b
 
 export function undistilled(db: Db, repo: string): Source | undefined {
   const number = db.prepare(`SELECT s.number FROM precedent_sources s
-    WHERE s.repo = ? AND NOT EXISTS (SELECT 1 FROM precedent_distilled d WHERE d.repo = s.repo AND d.number = s.number)
+    WHERE s.repo = ? AND s.merged_at IS NOT NULL AND NOT EXISTS (SELECT 1 FROM precedent_distilled d WHERE d.repo = s.repo AND d.number = s.number)
     ORDER BY s.merged_at, s.number LIMIT 1`).pluck().get(repo) as number | undefined
   return number === undefined ? undefined : source(db, repo, number)
 }

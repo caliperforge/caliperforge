@@ -2,6 +2,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { expect, it } from 'vitest'
 import { ofKind } from '../../store/events.ts'
+import { FORK } from '../../sequencer/workspace.ts'
 import { migrate, open } from '../../store/index.ts'
 import { harvest, LIMIT } from '../harvest.ts'
 import { source, threads } from '../store.ts'
@@ -27,8 +28,11 @@ const pr = (number: number, over: object = {}) => ({ number, title: `PR ${String
 const line = (body: string, at: number | null, id = 1) => ({ id, commit_id: 'c', original_commit_id: 'c', path: 'a.ts', line: at,
   original_line: null, body, user: login('dev') })
 
+const mine = (number: number, owner = FORK) => ({ number, title: `PR ${String(number)}`, headRepositoryOwner: login(owner),
+  files: [{ path: 'b.ts' }], closingIssuesReferences: [], comments: [] })
+
 function stub(prs: ReturnType<typeof pr>[], reviews: Record<number, ReturnType<typeof review>[]> = {},
-  lines: Record<number, ReturnType<typeof line>[]> = {}, fails: Record<string, number> = {}) {
+  lines: Record<number, ReturnType<typeof line>[]> = {}, fails: Record<string, number> = {}, opened: ReturnType<typeof mine>[] = []) {
   const calls: string[][] = []
   const read = (args: string[]): unknown => {
     calls.push(args)
@@ -42,6 +46,7 @@ function stub(prs: ReturnType<typeof pr>[], reviews: Record<number, ReturnType<t
       return (key.endsWith('reviews') ? reviews[no] : lines[no]) ?? []
     }
     if (args.includes('mergedBy')) return [{ mergedBy: login('boss') }]
+    if (args.includes('open')) return opened
     const bound = args[args.indexOf('--search') + 1]?.replace('merged:>', '') ?? ''
     return prs.filter((p) => !args.includes('--search') || p.mergedAt > bound)
   }
@@ -81,7 +86,33 @@ it('D3 a second run with nothing new reads no PR', () => {
   calls.length = 0
   expect(harvest(db, 'o/r', '2026-09-01', read)).toBe(0)
   expect(calls).toEqual([['pr', 'list', '--repo', 'o/r', '--state', 'merged', '--limit', String(LIMIT), '--search',
-    'merged:>2026-10-07T00:00:00Z', '--json', 'number,title,mergedAt,mergedBy,files,closingIssuesReferences,comments']])
+    'merged:>2026-10-07T00:00:00Z', '--json', 'number,title,mergedAt,mergedBy,files,closingIssuesReferences,comments'],
+  ['pr', 'list', '--repo', 'o/r', '--author', '@me', '--state', 'open', '--limit', '100', '--json',
+    'number,title,headRepositoryOwner,files,closingIssuesReferences,comments']])
+})
+
+it('D1 a bot inline thread has role bot and keeps the PR', () => {
+  const db = fresh()
+  const { read } = stub([pr(7)], {}, { 7: [{ ...line('Null check missing', 4, 31), user: login('greptile-apps[bot]') }] })
+  expect(harvest(db, 'o/r', null, read)).toBe(1)
+  expect(threads(db, 'o/r', 7)).toEqual([{ kind: 'inline', author: 'greptile-apps[bot]', role: 'bot', text: 'Null check missing',
+    path: 'a.ts', line: 4, url: 'https://github.com/o/r/pull/7#discussion_r31' }])
+})
+
+it('D2 our open PR is stored unmerged; another fork\'s is not', () => {
+  const db = fresh()
+  const { read } = stub([], {}, {}, {}, [mine(12), mine(13, 'someone')])
+  expect(harvest(db, 'o/r', null, read)).toBe(1)
+  expect(source(db, 'o/r', 12)).toEqual({ repo: 'o/r', number: 12, title: 'PR 12', merged_at: null, merger: null, files: ['b.ts'], issues: [] })
+  expect(threads(db, 'o/r', 12)).toEqual([])
+  expect(source(db, 'o/r', 13)).toBeUndefined()
+})
+
+it('D3 an open list at the cap throws and stores nothing', () => {
+  const db = fresh()
+  const { read } = stub([pr(7)], { 7: [review('rev', 'why')] }, {}, {}, [...Array(100).keys()].map((i) => mine(i + 1)))
+  expect(() => harvest(db, 'o/r', null, read)).toThrow('o/r lists 100 open PRs of ours, the cap; the rest are unread')
+  expect(source(db, 'o/r', 7)).toBeUndefined()
 })
 
 it('D4 an inline read that fails once is retried and stored', () => {

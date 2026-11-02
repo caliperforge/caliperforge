@@ -40,7 +40,7 @@ export interface Failure {
   fault?: string
   /** The cap killed a run other than xcodebuild's before it named a red test, or killed a finish entry. */
   capped?: true
-  /** On a capped whole vitest suite, the test files it never printed as finished. */
+  /** On a capped whole vitest suite, the test files it never printed as finished; on a capped `cargo test`, the binaries it never ended. */
   unfinished?: string[]
 }
 
@@ -113,6 +113,12 @@ function cappedOf(bin: Mode, ran: Extract<Ran, { ok: false }>, src: string, scri
   return args[0] === 'run' && VITEST.test(read(src)?.[script] ?? '') ? { capped: true, unfinished: unfinished(src, ran.output) } : { capped: true }
 }
 
+/** A capped `cargo test` with no red test: each binary it printed `Running` for and never ended with `test result:`. */
+function stalled(gate: Gate, ran: Extract<Ran, { ok: false }>): string[] | null {
+  if (ran.capped !== true || gate.bin !== 'cargo' || gate.args[0] !== 'test' || /FAILED|panicked/.test(ran.output)) return null
+  return ran.output.split(/^[ \t]*Running /m).slice(1).filter((part) => !/^[ \t]*test result:/m.test(part)).map((part) => (part.split('\n')[0] ?? '').trim())
+}
+
 /**
  * A stranger's repo in a language with its own seat runs that language's gates in the language's own folder.
  * A gate marked `quiet` fails on any output, as `gofmt -l` exits zero and prints the files it would change.
@@ -121,8 +127,11 @@ export function gated(src: string, list: Gate[], run: Run, excused: string[] = [
   for (const gate of list) {
     const first = settled(gate, run(gate.args, join(src, gate.dir), gate.bin), excused)
     if (first.ok || waived(src, gate, first.code, said)) continue
+    const command = `${gate.bin} ${gate.args.join(' ')}${gate.dir === '' ? '' : ` (in ${gate.dir}/)`}`
+    const unfinished = stalled(gate, first)
+    if (unfinished !== null) return { script: gate.script, command, code: first.code, output: tail(first.output), tests: [], retried: false, capped: true, unfinished }
     const left = fresh(src, gate, first.output, run, said)
-    if (left?.length !== 0) return { script: gate.script, command: `${gate.bin} ${gate.args.join(' ')}${gate.dir === '' ? '' : ` (in ${gate.dir}/)`}`, code: first.code, output: left === null ? tail(first.output) : left.join('\n'), tests: [], retried: false }
+    if (left?.length !== 0) return { script: gate.script, command, code: first.code, output: left === null ? tail(first.output) : left.join('\n'), tests: [], retried: false }
   }
   return null
 }

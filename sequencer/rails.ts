@@ -26,7 +26,7 @@ import { rebuilt } from '../store/runs.ts'
 import { builder } from '../templates/pr-path.ts'
 import { checks, finish, gated, mode, network, npm, type Commands, type Failure, type Run } from './checks.ts'
 import { ciChecks } from './ci.ts'
-import { newest } from './cited.ts'
+import { newest, ruled } from './cited.ts'
 import { outsideLanguage, sushi } from './gates.ts'
 import { forkOf } from './home.ts'
 import type { Outcome } from './kind.ts'
@@ -141,7 +141,7 @@ function suite(db: Db, root: string, plan: PlanRow, on: Rails, commands: Command
     try {
       const diff = diffOf(root, plan.id)
       const failed = (guide.length > 0 ? gated(srcDir(root, plan.id), guide, noted(db, plan.id), [], (line) => { heard.push(line) }) : checks(srcDir(root, plan.id), commands, noted(db, plan.id), outside === null ? files : [],
-        outside === null ? null : { language: outside, files: filesOf(db, plan.id).map((f) => f.path), ...(base === undefined ? {} : { base }) },
+        outside === null ? null : { language: outside, files: filesOf(db, plan.id).map((f) => f.path), ...(base === undefined ? {} : { base }), ...ruled(root, plan.id) },
         parse(diff).map((f) => f.path), finishes.minutes, (line) => { heard.push(line) })) ?? finish(srcDir(root, plan.id), finishes.entries, noted(db, plan.id), finishes.minutes)
       if (failed?.fault !== undefined) return faulted(db, root, plan, failed.fault)
       if (failed?.capped === true) { put(root, plan.id, 'step-3.capped', ''); return capped(failed, alone) }

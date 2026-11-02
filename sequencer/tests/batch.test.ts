@@ -343,6 +343,7 @@ test('D1 a -next tip is signed where the checkout signs', async () => {
   const git = signer(w, SIGNS)
   const { tip: signed } = next(w.db, w.root, plan(w.db, 1), 'acme/widget', watched([], w.root, 1))
   expect(get(w.root, 1, 'next.tips')).toContain(`${signed} ${git(['rev-parse', 'HEAD'])}\n`)
+  expect(get(w.root, 1, 'next.rules')).toContain(`${signed} escapes 0, their reviewer 0, maintainer decisions 0, ours 0\n`)
   expect(git(['cat-file', 'commit', signed])).toMatch(/^gpgsig /m)
   expect(JSON.parse(git(['show', `${signed}:greptile.json`])) as unknown).toEqual(QUIET)
 })
@@ -358,6 +359,7 @@ test('D8 a target running Greptile gets its .greptile tip', async () => {
   const { tip: made } = next(w.db, w.root, plan(w.db, 1), 'acme/widget', { ...watched([], w.root, 1), harvest })
   expect(git(['ls-tree', '-r', '--name-only', made, '--', 'greptile.json', '.greptile'])).toBe('.greptile/config.json\n.greptile/rules.md')
   expect(git(['log', '-1', '--format=%s', made])).toBe('.greptile/rules.md, .greptile/config.json: review on request only')
+  expect(maybe(w.root, 1, 'next.rules')).toBeNull()
 })
 
 test('D4 a signature that fails sends no unsigned tip', async () => {

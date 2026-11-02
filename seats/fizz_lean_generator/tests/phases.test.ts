@@ -2,8 +2,12 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test, vi } from 'vitest'
+import type { Miss, Packet } from '../../../providers/kind.ts'
+import { get } from '../../../sequencer/workspace.ts'
+import { eventsAfter } from '../../../store/events.ts'
 import { critic } from '../../../templates/critic.ts'
-import { type Fire, phased } from '../../../templates/phases.ts'
+import { report } from '../../../templates/report.ts'
+import { benched, transcripts } from './benched.ts'
 
 const root = join(import.meta.dirname, '../../..')
 const skill = join(root, 'seats/fizz_lean_generator/skill')
@@ -115,13 +119,12 @@ async function ran(suite: Record<string, string>, filled = FILLED) {
   writeFileSync(join(dir, 'critic-pass.md'), pass())
   const fires: { phase: string; issue: string }[] = []
   const critics = vi.fn(() => critic(join(dir, 'critic-pass.md'), dir))
-  const fire: Fire = (...args) => {
-    const [, issue, sum, phase = ''] = args
-    fires.push({ phase, issue })
+  const { run } = benched((packet, phase) => {
+    fires.push({ phase, issue: packet.prompt })
     writeFileSync(join(handoffs, `${phase}.md`), filled[phase] ?? '')
-    return Promise.resolve({ ...sum, tokens: sum.tokens + 1 })
-  }
-  const sum = await phased(fire, skill, handoffs, 'Generate.', critics)
+    return {}
+  })
+  const sum = await run(skill, handoffs, critics)
   const invariants = fires.filter((f) => f.phase === 'invariants')
   return { sum, invariants, critics, critic: join(handoffs, 'critic.md') }
 }
@@ -160,14 +163,13 @@ function legs(stop?: string, mapped = false) {
   const handoffs = join(mkdtempSync(join(tmpdir(), 'cf-fizz-stop-')), 'test/fizz/fizz_data/handoff')
   mkdirSync(handoffs, { recursive: true })
   const fires: { phase: string; issue: string }[] = []
-  const fire: Fire = (...args) => {
-    const [, issue, sum, phase = ''] = args
-    fires.push({ phase, issue })
+  const { run } = benched((packet, phase) => {
+    fires.push({ phase, issue: packet.prompt })
     writeFileSync(join(handoffs, `${phase}.md`), FILLED[phase] ?? '')
     if (mapped) writeFileSync(join(handoffs, 'map.md'), `## Guards\n\n- V.deposit | reverts: ${phase}\n`)
-    return Promise.resolve({ ...sum, tokens: sum.tokens + 10, seconds: sum.seconds + 2, transcripts: [...sum.transcripts, phase] })
-  }
-  return { handoffs, fires, run: () => phased(fire, skill, handoffs, 'Generate.', () => [], stop) }
+    return { usage: { input: 0, cache: 0, output: 10 }, seconds: 2 }
+  })
+  return { handoffs, fires, run: () => run(skill, handoffs, () => [], stop) }
 }
 
 test('stop D1: stop after context fires context alone and holds', async () => {
@@ -186,7 +188,40 @@ test('stop D2 D3: a resumed run starts at scaffold, sums both legs', async () =>
   expect(fires[1]?.issue).toContain(`Start from ${join(handoffs, 'context.md')}.`)
   expect(existsSync(join(handoffs, 'stopped.json'))).toBe(false)
   expect(resumed).toEqual(await legs().run())
-  expect(resumed).toMatchObject({ tokens: 40, seconds: 8, transcripts: ['context', 'scaffold', 'coverage', 'invariants'] })
+  expect(resumed).toMatchObject({ tokens: 40, seconds: 8, transcripts: transcripts(4) })
+})
+
+const AT = [{ file: 'src/V.sol', start: 9, end: 9 }]
+const MISSES: Miss[] = [{ kind: 'read.map_miss', file: 'src/V.sol', lines: 'L1-end' }, { kind: 'read.slice_miss', file: 'src/V.sol', lines: 'L12-L30' }]
+
+async function mapped() {
+  const handoffs = join(mkdtempSync(join(tmpdir(), 'cf-fizz-mapped-')), 'test/fizz/fizz_data/handoff')
+  mkdirSync(join(handoffs, 'excerpts'), { recursive: true })
+  writeFileSync(join(handoffs, 'map.md'), '## Guards\n\n- V.deposit | reverts: cap | at: src/V.sol L9-L9\n')
+  const packets: Packet[] = []
+  const { db, root, run } = benched((packet, phase) => {
+    packets.push(packet)
+    writeFileSync(join(handoffs, `${phase}.md`), FILLED[phase] ?? '')
+    return phase === 'scaffold' ? { misses: MISSES } : {}
+  })
+  return { db, root, packets, sum: await run(skill, handoffs, () => []) }
+}
+
+test('D2: context is ranged, later phases carry map.md ranges', async () => {
+  const { packets, sum } = await mapped()
+  expect(sum).toMatchObject({ tokens: 4, wall: null })
+  expect(packets.map((p) => [p.ranged, p.map])).toEqual([[true, undefined], ...Array<unknown>(3).fill([undefined, { ranges: AT, slice: AT }])])
+})
+
+test('D3 D4: two scaffold misses log as events report() counts', async () => {
+  const { db, root } = await mapped()
+  const event = { plan: 1, actor: 'fizz_lean_generator', outcome: 'pass', pointer: null, run: 2 }
+  expect(eventsAfter(db, 0).filter((e) => e.kind.startsWith('read.'))).toEqual([
+    { ...event, kind: 'read.map_miss', message: '{"file":"src/V.sol","line":1}' },
+    { ...event, kind: 'read.slice_miss', message: '{"file":"src/V.sol","line":12}' },
+  ])
+  report(db, root, 1, [], null)
+  expect(JSON.parse(get(root, 1, 'report.json'))).toMatchObject({ map: { map_miss: 1, slice_miss: 1 } })
 })
 
 test('no src: a map.md the agent writes checks no layer', async () => {

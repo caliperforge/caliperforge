@@ -38,15 +38,14 @@ export async function distill(db: Db, root: string, repo: string, provider: Prov
     : []
   const rows: Precedent[] = []
   const found: Opening[] = []
-  const findings = lines.filter((l) => l.startsWith('- bot: ')).flatMap((line) => {
-    const got = findingOf(line, said, pr, read)
-    if (got === null) refused(db, pr, line)
-    return got === null ? [] : [got]
-  })
+  const findings: Finding[] = []
   for (const line of lines) {
-    if (line.startsWith('- bot: ')) continue
-    const got = line.startsWith('- opening: ') ? openingOf(line, said) : rowOf(line, said)
-    if (got === null) refused(db, pr, line)
+    const got = line.startsWith('- bot: ') ? findingOf(line, said, pr, read) : line.startsWith('- opening: ') ? openingOf(line, said) : rowOf(line, said)
+    if (got === null) {
+      refused(db, pr, line)
+      continue
+    }
+    if ('acted_on' in got) findings.push(got)
     else if ('quote' in got) found.push(got)
     else rows.push(got)
   }

@@ -22,6 +22,14 @@ export const RANGE = /^(\S+) L(\d+)-L(\d+)$/
 
 const AT = /^at:\s*(.*)$/
 
+export function ranges(text: string): At[] {
+  return text.split('\n').filter((l) => l.startsWith('- ')).flatMap((row) => {
+    const at = row.trimEnd().split(' | ').map((pair) => AT.exec(pair)?.[1]).find((a) => a !== undefined)
+    const [, file = '', start = '', end = ''] = RANGE.exec(at ?? '') ?? []
+    return file === '' ? [] : [{ file, start: Number(start), end: Number(end) }]
+  })
+}
+
 const cited = ({ file, start, end }: At): string => `at: ${file} L${String(start)}-L${String(end)}`
 
 export const sections = (text: string): [string, string][] =>

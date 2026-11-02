@@ -13,7 +13,7 @@ type Judged = Pick<Item, 'met' | 'cells' | 'note'>
 
 interface Metrics { totalCalls: number; totalReverts: number; revertReasonMetrics: Record<string, { count: number }> }
 
-interface Revert { contractRevertMetrics: Partial<Record<string, { functionRevertMetrics: Record<string, Metrics> }>> }
+export interface Revert { contractRevertMetrics: Partial<Record<string, { functionRevertMetrics: Record<string, Metrics> }>> }
 
 interface Read { root: string; rows: Map<string, Row[]>; hits: (file: string) => Map<number, number>; metrics: (name: string) => Metrics; probes: ProbeReadings }
 
@@ -48,7 +48,7 @@ const covered = (lcov: string) => (file: string): Map<number, number> => {
   return hits
 }
 
-const measured = (report: Revert) => (name: string): Metrics => {
+export const measured = (report: Revert) => (name: string): Metrics => {
   const [contract = '', fn = ''] = (name.split('(')[0] ?? '').split('.')
   return Object.entries(report.contractRevertMetrics[contract]?.functionRevertMetrics ?? {}).find(([k]) => k === fn || k.startsWith(`${fn}(`))?.[1] ?? UNCALLED
 }

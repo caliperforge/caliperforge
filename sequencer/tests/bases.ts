@@ -53,9 +53,12 @@ export const SCHEDULED = {
 
 export const MANUAL = { ...TYPESCRIPT, [WORKFLOW]: 'on:\n  push:\n    branches: [main]\n  workflow_dispatch:\n' }
 export const TEX = { ...TYPESCRIPT, [WORKFLOW]: "on:\n  pull_request:\n    paths: ['**.tex']\n" }
+export const THEIR_RULE = { rule: 'keep it short', scope: ['src/**'] }
+export const GREPTILED = { ...TYPESCRIPT, '.greptile/config.json': JSON.stringify({ strictness: 2, rules: [THEIR_RULE] }) }
+export const RULED = { ...TYPESCRIPT, '.greptile/rules.md': '- keep it short\n' }
 
 export const WORLDS: [Tree, boolean][] = [[TYPESCRIPT, true], [TYPESCRIPT, false], [KOTLIN, true], [HANDOUT, true], [RED, true],
-  [MANUAL, false], [TEX, false], [SCHEDULED, false]]
+  [MANUAL, false], [TEX, false], [SCHEDULED, false], [GREPTILED, true], [RULED, true]]
 export const OURS: [Tree, boolean][] = [[TYPESCRIPT, true], [TYPESCRIPT, false], [RED, true], [GREEN, true], [NAPPING, true], [OOPS, true],
   [BROKEN, true], [ORPHANED, true], [ATELIER, true], [SCHEDULED, false], [GREETED, true]]
 

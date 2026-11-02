@@ -22,7 +22,7 @@ import { CHECKS, waiting, type Check, type Row } from './card.ts'
 import { npm } from './checks.ts'
 import { bind, prMessage, signedAt } from './folded.ts'
 import { red } from './failures.ts'
-import { config } from './greptile.ts'
+import { rehearsal } from './greptile.ts'
 import { mirrored } from './greptile-mirror.ts'
 import { refresh } from './install.ts'
 import { rerun as cancelled } from './rerun.ts'
@@ -251,7 +251,7 @@ function tipOf(db: Db, root: string, plan: number, head: Head, ci: string, repo:
   const [known, of] = tips(root, plan).at(-1) ?? []
   if (known !== undefined && of === head.sha) return known
   const files = (wire.harvest === undefined ? null : mirrored(root, repo, head.dir, wire.harvest))
-    ?? { 'greptile.json': config(db, root, repo, touched(root, plan), wire.merged) }
+    ?? rehearsal(db, root, repo, head.dir, touched(root, plan), wire.merged)
   const tip = quiet(head.dir, ci, files)
   put(root, plan, TIPS, `${maybe(root, plan, TIPS) ?? ''}${tip} ${head.sha}\n`)
   return tip

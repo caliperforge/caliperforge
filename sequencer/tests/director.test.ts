@@ -1397,7 +1397,7 @@ test.each([
     blocked(db, home)
     take(db, 7, wokeAt, process.ppid)
   } },
-  { name: 'a reason outside WAKE', leased: 0, set: (db: Db) => db.exec("UPDATE plans SET wait_reason = 'over_cap' WHERE id = 7") },
+  { name: 'over_cap outside 07:00–20:00', leased: 0, set: (db: Db) => db.exec("UPDATE plans SET wait_reason = 'over_cap' WHERE id = 7") },
 ])('D3 a plan $name is not woken', async ({ leased, set }) => {
   const { db, home } = wokeSeeded()
   set(db, home)
@@ -1450,6 +1450,51 @@ test('D4 a running plan at its ceiling: one post per head', async () => {
   expect(posted).toHaveLength(1)
   expect(wokeTold(db).at(-1)).toEqual({ outcome: 'pass', message: 'left alone: plan is running, waiting on ready_proof' })
   expect(maybe(home, 7, 'orchestrator.md')?.split('\n')[0]).toBe('step 4 ready_proof')
+})
+
+const day = new Date('2026-09-24T15:00:00.000Z')
+const lookAt = (db: Db, message: string, at: string) =>
+  logged(db, { plan: 7, kind: 'director', actor: 'director', outcome: 'pass', message, pointer: null, run: null }, at)
+
+test.each([
+  { name: '61 minutes old', at: '2026-09-24 13:59:00', now: day, priority: 1, fired: 1 },
+  { name: '59 minutes old', at: '2026-09-24 14:01:00', now: day, priority: 1, fired: 0 },
+  { name: 'before 07:00', at: '2026-09-24 11:00:00', now: new Date('2026-09-24T12:59:00.000Z'), priority: 1, fired: 0 },
+  { name: 'from 20:00', at: '2026-09-24 13:59:00', now: new Date('2026-09-25T02:00:00.000Z'), priority: 1, fired: 0 },
+  { name: 'at P2', at: '2026-09-24 13:59:00', now: day, priority: 2, fired: 0 },
+])('D1 an unchanged stop, last look $name', async ({ at, now, priority, fired }) => {
+  const { db, home } = wokeSeeded()
+  blocked(db, home)
+  db.exec(`UPDATE plans SET priority = ${String(priority)} WHERE id = 7`)
+  put(home, 7, 'orchestrator.md', `step 4 blocked ${stop(home, 7)}\n\n${SAID}\n`)
+  lookAt(db, SAID, at)
+  const fires: string[] = []
+  await woke(db, home, wokeStub(ASK_CEO, fires), now, () => undefined)
+  expect(fires).toHaveLength(fired)
+})
+
+test.each([{ priority: 1, fired: 1 }, { priority: 2, fired: 0 }])('D2 an over_cap P$priority wait in the day', async ({ priority, fired }) => {
+  const { db, home } = wokeSeeded()
+  db.exec(`UPDATE plans SET state = 'queued', wait_reason = 'over_cap', priority = ${String(priority)} WHERE id = 7`)
+  const fires: string[] = []
+  await woke(db, home, wokeStub(ASK_CEO, fires), day, () => undefined)
+  expect(fires).toHaveLength(fired)
+  expect(fires.every((f) => f.includes(', waiting on over_cap\n\n# Stop'))).toBe(true)
+  expect(wokeTold(db)).toEqual(fired === 1 ? [{ outcome: 'needs_coo', message: SAID }] : [])
+})
+
+test.each([
+  { name: 'its own park', said: 'park: the pipe is full', fired: 1 },
+  { name: 'someone else', said: null, fired: 0 },
+])('D3 a stop parked by $name', async ({ said, fired }) => {
+  const { db, home } = wokeSeeded()
+  blocked(db, home)
+  put(home, 7, 'parked.md', '# Held\n')
+  if (said !== null) lookAt(db, said,'2026-09-24 13:59:00')
+  const fires: string[] = []
+  await woke(db, home, wokeStub(ASK_CEO, fires), day, () => undefined)
+  expect(fires).toHaveLength(fired)
+  expect(maybe(home, 7, 'parked.md')).toBe(fired === 1 ? null : '# Held\n')
 })
 
 test('ceilingOnce', async () => {

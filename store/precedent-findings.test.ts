@@ -29,7 +29,7 @@ it('D2 flag replaces one PR and leaves the others', () => {
 it('D3 a bad acted_on throws and keeps the earlier rows', () => {
   const db = fresh()
   flag(db, 'o/r', 7, [row])
-  expect(() => { flag(db, 'o/r', 7, [row, { ...row, acted_on: 'maybe' as 'fixed' }]) }).toThrow('CHECK constraint failed')
+  expect(() => { flag(db, 'o/r', 7, [{ ...row, finding: 'other' }, { ...row, acted_on: 'maybe' as 'fixed' }]) }).toThrow('CHECK constraint failed')
   expect(flagged(db, 'o/r')).toEqual([{ ...row, number: 7 }])
 })
 

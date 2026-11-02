@@ -15,6 +15,7 @@ import { profile } from '../../store/profile.ts'
 import { refusalRows, WHY } from '../../store/refusals.ts'
 import { verdictRows } from '../../store/verdict.ts'
 import { checks, excluded, finish, mode, network, npm, type Ran, type Run } from '../checks.ts'
+import { ruledTest } from '../cited.ts'
 import { ciFeatures, formatLine, type Outside, recipes } from '../gates.ts'
 import { tick } from '../index.ts'
 import { capped, faulted, narrow, offline } from '../rails.ts'
@@ -1294,6 +1295,42 @@ test('1122 D5 an unexcused span, or none, still refuses', () => {
     expect(checks(src, { excused: [SURFPOOL] }, run, [], KIT))
       .toEqual({ script: 'test', command: 'cargo test -p pay-core --no-fail-fast -- --test-threads=4 (in rust/)', code: '101', output, tests: [], retried: false })
   }
+})
+
+const UNITTESTS = 'unittests src/lib.rs (target/debug/deps/pay_core-1a2b)'
+
+function cargoCapped(output: string): Run {
+  return (args) => (args[0] === 'test' ? { ok: false, code: '1', output, capped: true } : { ok: true, output: '' })
+}
+
+test('2057 D1 a capped cargo test with no red test is a blip', () => {
+  const output = `     Running unittests src/main.rs (target/debug/deps/pay-9f)\ntest a ... ok\ntest result: ok. 1 passed\n     Running ${UNITTESTS}\ntest b ... ok\n`
+  const failed = checks(nested(PAY), {}, cargoCapped(output), [], KIT)
+  expect(failed).toMatchObject({ script: 'test', capped: true, unfinished: [UNITTESTS] })
+  expect(failed && capped(failed)).toMatchObject({ blip: true, spans: ['checks:cap'],
+    note: `cargo test -p pay-core -- --test-threads=4 (in rust/) timed out: killed at the cap with no test red; unfinished: ${UNITTESTS}` })
+})
+
+test('2057 D2 a capped cargo test with a red test is not capped', () => {
+  for (const red of ['test b ... FAILED', "thread 'b' panicked at src/lib.rs:3:5", 'test result: FAILED. 0 passed; 1 failed']) {
+    const failed = checks(nested(PAY), {}, cargoCapped(`     Running ${UNITTESTS}\n${red}\n`), [], KIT)
+    expect(failed).toMatchObject({ script: 'test', code: '1' })
+    expect(failed?.capped).toBeUndefined()
+  }
+})
+
+test('2057 D4 a ruled test replaces the crate-wide cargo test', () => {
+  const src = surfpool(BINDINGS)
+  const { run, calls } = heard()
+  expect(checks(src, {}, run, [], { language: 'rust', files: ['crates/core/src/a.rs'], test: ['test', '-p', 'surfpool-core', '--lib', 'remote::tests::'] })).toBeNull()
+  expect(calls).toEqual([`cargo +nightly fmt --all -- --check @${src}`, `cargo test -p surfpool-core --lib remote::tests:: @${src}`, `git add -A @${src}`,
+    `node crates/sdk-node/scripts/generate-kit-types.js @${src}`, `git diff --exit-code @${src}`])
+})
+
+test('2057 D5 ruledTest takes the last cargo verify, no shell', () => {
+  expect(ruledTest('verify: cargo test -p a\nverify: npm test\nverify: `cargo test -p surfpool-core --lib remote::tests::`\n'))
+    .toEqual(['test', '-p', 'surfpool-core', '--lib', 'remote::tests::'])
+  for (const text of ['verify: npm test', 'verify: cargo test -p a && cargo fmt', 'verify: `cargo test -p a | tail`', 'no ruling']) expect(ruledTest(text)).toBeUndefined()
 })
 
 test('a program that never starts is named', () => {

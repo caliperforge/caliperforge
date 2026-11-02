@@ -1,10 +1,13 @@
+import { mkdtempSync, readFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { expect, it } from 'vitest'
 import { ofKind } from '../../store/events.ts'
 import { FORK } from '../../sequencer/workspace.ts'
-import { migrate, open } from '../../store/index.ts'
+import { dump, migrate, open } from '../../store/index.ts'
 import { harvest, LIMIT } from '../harvest.ts'
+import { opened } from '../openings.ts'
 import { source, threads } from '../store.ts'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
@@ -23,7 +26,7 @@ const review = (who: string, body: string, id = 80) => ({ user: login(who), body
   html_url: `https://github.com/o/r/pull/7#pullrequestreview-${String(id)}` })
 
 const pr = (number: number, over: object = {}) => ({ number, title: `PR ${String(number)}`, mergedAt: `2026-10-0${String(number % 10)}T00:00:00Z`,
-  mergedBy: login('boss'), files: [{ path: 'a.ts' }], closingIssuesReferences: [{ number: 3 }], comments: [], ...over })
+  mergedBy: login('boss'), body: '', files: [{ path: 'a.ts' }], closingIssuesReferences: [{ number: 3 }], comments: [], ...over })
 
 const line = (body: string, at: number | null, id = 1) => ({ id, commit_id: 'c', original_commit_id: 'c', path: 'a.ts', line: at,
   original_line: null, body, user: login('dev') })
@@ -52,6 +55,35 @@ function stub(prs: ReturnType<typeof pr>[], reviews: Record<number, ReturnType<t
   }
   return { read, calls }
 }
+
+const asked = 'https://github.com/o/r/pull/5#discussion_r1'
+
+function opening(db: ReturnType<typeof fresh>): () => string | undefined {
+  opened(db, { repo: 'o/r', number: 5, title: 'Old', merged_at: '2026-09-01T00:00:00Z', merger: null, files: ['a.ts'], issues: [] },
+    [{ kind: 'deferred', area: 'a.ts:12', quote: 'later', said_by: 'm', source: asked }])
+  const out = join(mkdtempSync(join(tmpdir(), 'cf-harvest-')), 'dump.sql')
+  return () => {
+    dump(db, out)
+    return /'(\w+)'\);$/m.exec(readFileSync(out, 'utf8').split('\n').filter((l) => l.startsWith('INSERT INTO "openings"')).join('\n'))?.[1]
+  }
+}
+
+it('D3 a later PR touching and linking an opening marks it done', () => {
+  const db = fresh()
+  const status = opening(db)
+  const { read } = stub([pr(7, { body: `Follows ${asked}` })], { 7: [review('rev', 'why')] })
+  harvest(db, 'o/r', null, read)
+  expect(status()).toBe('done')
+})
+
+it('D7 a merged PR skipped for no discussion still marks done', () => {
+  const db = fresh()
+  const status = opening(db)
+  const { read } = stub([pr(7, { comments: [said('dev', `Follows ${asked}`)] })])
+  expect(harvest(db, 'o/r', null, read)).toBe(0)
+  expect(source(db, 'o/r', 7)).toBeUndefined()
+  expect(status()).toBe('done')
+})
 
 it('D1 a PR with review discussion is stored with its threads', () => {
   const db = fresh()
@@ -86,7 +118,7 @@ it('D3 a second run with nothing new reads no PR', () => {
   calls.length = 0
   expect(harvest(db, 'o/r', '2026-09-01', read)).toBe(0)
   expect(calls).toEqual([['pr', 'list', '--repo', 'o/r', '--state', 'merged', '--limit', String(LIMIT), '--search',
-    'merged:>2026-10-07T00:00:00Z', '--json', 'number,title,mergedAt,mergedBy,files,closingIssuesReferences,comments'],
+    'merged:>2026-10-07T00:00:00Z', '--json', 'number,title,mergedAt,mergedBy,body,files,closingIssuesReferences,comments'],
   ['pr', 'list', '--repo', 'o/r', '--author', '@me', '--state', 'open', '--limit', '100', '--json',
     'number,title,headRepositoryOwner,files,closingIssuesReferences,comments']])
 })

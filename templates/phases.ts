@@ -110,7 +110,7 @@ export async function phased(fire: Fire, skill: string, handoffs: string, issue:
     if (at <= done) continue
     const path = join(handoffs, `${phase}.md`)
     const start = at === 0 ? [] : [`Start from ${join(handoffs, `${phases[at - 1] ?? ''}.md`)}.`]
-    const later = phase !== 'context' && existsSync(map)
+    const later = phase !== 'context' && existsSync(cut)
     const named = later ? [`Read ${map} and the excerpts it cites: ${readdirSync(cut).map((f) => join(cut, f)).join(', ')}.`] : []
     const ran = await checked(fire, { phase, skill, root, path, critics, prompt: readFileSync(join(skill, 'phases', `${phase}.md`), 'utf8'), ...(later ? { map: read(map) } : {}),
       issue: [issue, `Before you end, write ${path} filled from the \`# Handoff: ${phase}\` block of ${join(skill, TEMPLATES)}.`, ...start, ...named].join('\n') }, sum)

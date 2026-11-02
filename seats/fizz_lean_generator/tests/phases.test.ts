@@ -156,7 +156,7 @@ test('D5: a twice-refused invariants handoff skips the critic', async () => {
   expect(existsSync(path)).toBe(false)
 })
 
-function legs(stop?: string) {
+function legs(stop?: string, mapped = false) {
   const handoffs = join(mkdtempSync(join(tmpdir(), 'cf-fizz-stop-')), 'test/fizz/fizz_data/handoff')
   mkdirSync(handoffs, { recursive: true })
   const fires: { phase: string; issue: string }[] = []
@@ -164,6 +164,7 @@ function legs(stop?: string) {
     const [, issue, sum, phase = ''] = args
     fires.push({ phase, issue })
     writeFileSync(join(handoffs, `${phase}.md`), FILLED[phase] ?? '')
+    if (mapped) writeFileSync(join(handoffs, 'map.md'), `## Guards\n\n- V.deposit | reverts: ${phase}\n`)
     return Promise.resolve({ ...sum, tokens: sum.tokens + 10, seconds: sum.seconds + 2, transcripts: [...sum.transcripts, phase] })
   }
   return { handoffs, fires, run: () => phased(fire, skill, handoffs, 'Generate.', () => [], stop) }
@@ -186,6 +187,12 @@ test('stop D2 D3: a resumed run starts at scaffold, sums both legs', async () =>
   expect(existsSync(join(handoffs, 'stopped.json'))).toBe(false)
   expect(resumed).toEqual(await legs().run())
   expect(resumed).toMatchObject({ tokens: 40, seconds: 8, transcripts: ['context', 'scaffold', 'coverage', 'invariants'] })
+})
+
+test('no src: a map.md the agent writes checks no layer', async () => {
+  const { fires, run } = legs(undefined, true)
+  expect(await run()).toMatchObject({ tokens: 40, wall: null })
+  expect(fires.map((f) => f.phase)).toEqual(['context', 'scaffold', 'coverage', 'invariants'])
 })
 
 test('stop D6: no stop fires all four, writes no stopped.json', async () => {

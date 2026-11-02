@@ -1,0 +1,7 @@
+solana-foundation/solana-keychain:
+  contract: SolanaSigner
+  files:
+    rust: rust/src/traits.rs
+    go: go/core/types.go
+    python: python/src/solana_keychain/core/signer.py
+    typescript: typescript/packages/core/src/types.ts

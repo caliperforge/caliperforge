@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { expect, test, vi } from 'vitest'
 import { extract } from '../../../templates/extract.ts'
 import { drawn, excerpts } from '../../../templates/map.ts'
-import { type Fire, phased } from '../../../templates/phases.ts'
+import { benched } from './benched.ts'
 
 vi.mock('../../../templates/extract.ts', async (importOriginal) => ({ ...await importOriginal<object>(), compiled: () => [] }))
 
@@ -45,14 +45,13 @@ const lines = (start: number, end: number): Buffer => Buffer.from(V.toString().s
 
 async function ran(handoffs: string, maps: Record<string, string>) {
   const fires: { phase: string; issue: string }[] = []
-  const fire: Fire = (...args) => {
-    const [, issue, sum, phase = ''] = args
-    fires.push({ phase, issue })
+  const { run } = benched((packet, phase) => {
+    fires.push({ phase, issue: packet.prompt })
     writeFileSync(join(handoffs, `${phase}.md`), HANDED[phase as keyof typeof HANDED])
     if (maps[phase] !== undefined) writeFileSync(join(handoffs, 'map.md'), maps[phase])
-    return Promise.resolve({ ...sum, tokens: sum.tokens + 1 })
-  }
-  return { fires, outcome: await phased(fire, skill, handoffs, 'Generate.', () => [], 'scaffold') }
+    return {}
+  })
+  return { fires, outcome: await run(skill, handoffs, () => [], 'scaffold') }
 }
 
 test('D1: drawn writes the machine layer, keeps the agent\'s', () => {

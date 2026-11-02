@@ -137,9 +137,9 @@ export async function generate(db: Db, root: string, plan: PlanRow, step: Step, 
   mkdirSync(join(planDir(root, plan.id), 'scratch'), { recursive: true })
   const tmp = real(join(planDir(root, plan.id), 'scratch'))
   const issue = ask(granted[0], granted.find((path) => basename(path) === 'x-ray'), tmp)
-  const fire = firing({ db, root, plan, step, provider, name, dir, tmp, granted, walls, ceiling: CEILING }, manifest, hash)
-  const sum = name === 'fizz_lean_generator' ? await phased(fire, granted[0] ?? '', join(dir, SUITE, META, 'handoff'), issue,
-    () => critic(join(granted.find((path) => basename(path) === 'fizz') ?? '', 'references/critic-pass.md'), dir), stop) : await fire(prompt, issue, START)
+  const bench = { db, root, plan, step, provider, name, dir, tmp, granted, walls, ceiling: CEILING }
+  const sum = name === 'fizz_lean_generator' ? await phased(bench, manifest, hash, granted[0] ?? '', join(dir, SUITE, META, 'handoff'), issue,
+    () => critic(join(granted.find((path) => basename(path) === 'fizz') ?? '', 'references/critic-pass.md'), dir), stop) : await firing(bench, manifest, hash)(prompt, issue, START)
   if ('outcome' in sum && sum.held === true) {
     renameSync(src, aside)
     needsCeo(db, plan, sum.note)

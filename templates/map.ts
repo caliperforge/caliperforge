@@ -1,14 +1,19 @@
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { At, Extracted } from './extract.ts'
+import type { Suite } from './suite.ts'
 
 interface Selection { name: string; functions: { name: string; inputs: { type: string; name: string }[]; tier: string }[] }
 
 const MACHINE = ['Signatures', 'Selected entry points', 'Modifiers']
 
+const SUITE = ['Deployed', 'Actors', 'Handlers', 'Stand-ins', 'Trackers', 'Build']
+
 export const LAYERS: [string, string[]][] = [
   ['machine', MACHINE],
   ['context', ['Roles', 'Guards', 'Limits', 'Outside dependencies', 'Conversion points', 'Aggregates', 'Not tracked']],
+  ['suite', SUITE],
+  ['scaffold', ['Known holes', 'Skipped entry points', 'Unclamped']],
   ['reach', ['Reach']],
   ['coverage', ['Unreachable']],
 ]
@@ -44,6 +49,20 @@ export function drawn(facts: Extracted, selection: string, text: string): string
   const machine = MACHINE.map((name) => `## ${name}\n\n${(rows[name] ?? []).map((r) => `- ${r}\n`).join('') || '- none\n'}`)
   const kept = sections(text).filter(([name]) => !MACHINE.includes(name)).map(([, s]) => `${s.trimEnd()}\n`)
   return [...machine, ...kept].join('\n')
+}
+
+export function suited(found: Suite, text: string): string {
+  const rows: Record<string, string[]> = {
+    Deployed: found.deployed.map((d) => `${d.contract} | args: ${d.args.join(', ') || 'none'} | ${cited(d)}`),
+    Actors: found.actors.map((a) => `${a.name} | roles: ${a.roles.join(', ') || 'none'} | ${cited(a)}`),
+    Handlers: found.handlers.map((h) => `${h.name} | target: ${h.target ?? 'none'} | clamps: ${h.clamps.map((c) => c.text).join('; ') || 'none'} | ${cited(h)}`),
+    'Stand-ins': found.standIns.map((s) => `${s.name} | replaces: ${s.replaces} | limits: ${s.limits.map((l) => `${l.limit} (map: ${l.map ?? 'none'})`).join('; ')} | ${cited(s)}`),
+    Trackers: found.trackers.map((t) => `${t.name} | type: ${t.type} | writers: ${t.writers.join(', ') || 'none'} | ${cited(t)}`),
+    Build: Object.entries(found.build).map(([key, value]) => `${key} | value: ${value ?? 'none'}`),
+  }
+  const suite = SUITE.map((name) => `## ${name}\n\n${(rows[name] ?? []).map((r) => `- ${r}\n`).join('') || '- none\n'}`)
+  const kept = sections(text).filter(([name]) => !SUITE.includes(name)).map(([, s]) => `${s.trimEnd()}\n`)
+  return [...kept, ...suite].join('\n')
 }
 
 export function excerpts(root: string, text: string, dir: string): void {

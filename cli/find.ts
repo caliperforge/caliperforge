@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { Opening } from '../precedents/openings.ts'
 import { TEST } from '../sequencer/brief.ts'
 import { claimed, implemented, WINDOW, type Read } from './gh.ts'
 import { logins, p50 } from './measure.ts'
@@ -38,14 +39,14 @@ interface Checked { section: string; park: string | null }
 
 interface Signed { target: number; digest: string }
 
-export function find(repo: string, no: number, carded: boolean, signed: Signed | null, read: Read): Checked {
+export function find(repo: string, no: number, carded: boolean, signed: Signed | null, openings: Opening[], read: Read): Checked {
   const row = Issue.parse(read(['issue', 'view', String(no), '--repo', repo, '--json',
     'number,title,body,state,url,author,assignees,comments,closedByPullRequestsReferences,projectItems']))
   const merged = Merged.parse(read(['pr', 'list', '--repo', repo, '--state', 'merged', '--limit', String(WINDOW),
     '--json', 'url,author,mergedBy,body,additions,deletions,files']))
   const mergers = logins(merged.map((p) => p.mergedBy))
   const answers = Object.entries({
-    wanted: wanted(row, mergers, signed),
+    wanted: wanted(row, mergers, signed, openings),
     unclaimed: unclaimed(repo, row, carded, read),
     shape: shape(merged, mergers),
   })
@@ -54,10 +55,14 @@ export function find(repo: string, no: number, carded: boolean, signed: Signed |
   return { section: `${CHECK}\n\n${lines.join('\n')}\n`, park: refused === undefined ? null : `${refused[0]}: ${refused[1].says}` }
 }
 
-function wanted(row: z.infer<typeof Issue>, mergers: string[], signed: Signed | null): Answer {
+function wanted(row: z.infer<typeof Issue>, mergers: string[], signed: Signed | null, openings: Opening[]): Answer {
   if (mergers.includes(row.author.login)) return { yes: true, says: `a maintainer opened it ${row.url}` }
   const said = row.comments.find((c) => mergers.includes(c.author.login))
   if (said !== undefined) return { yes: true, says: `a maintainer commented ${said.url}` }
+  const bodies = [row.body, ...row.comments.map((c) => c.body)].join('\n')
+  const vouched = openings.find((o) => bodies.includes(o.source)
+    || new RegExp(`(?<![\\w/-])${escape(o.area.replace(/:.*/s, ''))}(?![\\w/-])`).test(`${row.title}\n${row.body}`))
+  if (vouched !== undefined) return { yes: true, says: `a maintainer ${vouched.kind === 'deferred' ? 'deferred' : 'asked for'} it in review ${vouched.source}` }
   const board = row.projectItems[0]
   if (board !== undefined) return { yes: true, says: `on the board "${board.title}" ${row.url}` }
   if (signed !== null) return { yes: true, says: `the CEO approved target ${String(signed.target)} (${signed.digest.slice(0, 12)})` }
@@ -69,13 +74,17 @@ function unclaimed(repo: string, row: z.infer<typeof Issue>, carded: boolean, re
   if (claim !== null) return { yes: false, says: `${claim} ${row.url}` }
   const shipped = carded ? null : implemented(repo, row, read)
   if (shipped !== null) return { yes: false, says: `${shipped} ${shipped.replace(/^\D*#(\d+)\D*$/, `https://github.com/${repo}/pull/$1`)}` }
-  const escaped = repo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const escaped = escape(repo)
   const names = new RegExp(`(?:${escaped}#|https://github\\.com/${escaped}/issues/)${String(row.number)}(?!\\d)`, 'i')
   const sibling = Siblings.parse(read(['search', 'prs', `${repo}#${String(row.number)}`, '--owner', repo.slice(0, repo.indexOf('/')),
     '--state', 'open', '--json', 'url,title,body,repository']))
     .find((p) => p.repository.nameWithOwner !== repo && names.test(`${p.title}\n${p.body}`))
   if (sibling !== undefined) return { yes: false, says: `an open pull request in ${sibling.repository.nameWithOwner} names it ${sibling.url}` }
   return { yes: true, says: `no assignee, claim, closer or sibling pull request ${row.url}` }
+}
+
+function escape(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 function shape(merged: z.infer<typeof Merged>, mergers: string[]): Answer {

@@ -20,3 +20,8 @@ export function opened(db: Db, pr: Source, rows: Opening[]): void {
     for (const row of rows) insert.run({ ...row, repo, first_seen: merged_at })
   })()
 }
+
+export function vouched(db: Db, repo: string): Opening[] {
+  return db.prepare(`SELECT kind, area, quote, said_by, source FROM openings
+    WHERE repo = ? AND status = 'open' AND kind IN ('deferred', 'asked') ORDER BY first_seen DESC, id DESC`).all(repo) as Opening[]
+}

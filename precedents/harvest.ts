@@ -8,6 +8,7 @@ import type { Db } from '../store/index.ts'
 import { zone } from '../store/lanes.ts'
 import { targetedRepos } from '../store/targets.ts'
 import { drained } from './distill.ts'
+import { counted } from './escapes.ts'
 import { keep, newestMerged, type Thread } from './store.ts'
 
 export const LIMIT = 1000
@@ -104,6 +105,12 @@ export async function harvested(db: Db, root: string, provider: Provider, now: D
     } catch (error) {
       logged(db, { ...event, outcome: 'refuse', message: error instanceof Error ? error.message : String(error) })
       continue
+    }
+    try {
+      counted(db, root, repo)
+    } catch (error) {
+      logged(db, { plan: null, kind: 'precedent_escapes', actor: 'cf', outcome: 'refuse',
+        message: error instanceof Error ? error.message : String(error), pointer: repo, run: null })
     }
     try {
       await drained(db, root, repo, provider)

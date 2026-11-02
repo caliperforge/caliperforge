@@ -128,7 +128,7 @@ VALUES
   ('measurer', 'card', 'rules/roster/measurer.yaml', '6b5140f30e7ee9d3799545ffcf61cee9acd238a0538f3ef5671d5f70b8aa1db3', '2026-10-20'),
   ('outside_specialist', 'card', 'rules/roster/outside_specialist.yaml', 'dd1d8955289708786b23ae3b9e246e68285a36d10644e7500cbb48fd1684ab19', '2026-09-21'),
   ('php_specialist', 'card', 'rules/roster/php_specialist.yaml', '1a20a776d704a471370aeebd04f72490f31873d5e7ccd4b9b7221f6f4710c7b7', '2026-09-24'),
-  ('precedent_writer', 'card', 'rules/roster/precedent_writer.yaml', '1ad2073e32ed1882953265126cfd4ef140c8e8eb5f1f5842d2bc8252e4aebbae', '2026-11-01'),
+  ('precedent_writer', 'card', 'rules/roster/precedent_writer.yaml', '8b1558465d1e02b826b6007d328456abf859a8bee419d41c7444b1d669d5a386', '2026-11-01'),
   ('python_specialist', 'card', 'rules/roster/python_specialist.yaml', '493d57fa20f355832a7903d5f42c9527f6daf7768b598cd78abb9f239d9f16c6', '2026-09-24'),
   ('researcher', 'card', 'rules/roster/researcher.yaml', '7d8435ba0eb86c5bbce5d6efdf64e692036227d51937e71cab65bd69340f3fcd', '2026-10-04'),
   ('ruby_specialist', 'card', 'rules/roster/ruby_specialist.yaml', '3fd8e9c16d5a728c3711b83566ee619da5e4e360fd529fd91f64a6fc995e3e34', '2026-09-24'),

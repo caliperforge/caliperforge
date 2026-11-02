@@ -23,7 +23,7 @@ it('D1 0128 empties the precedent rows 0127 held', () => {
     VALUES ('o/r', 7, 't', '2026-10-07T00:00:00Z', NULL, '[]', '[]')`).run()
   db.prepare(`INSERT INTO precedent_threads (repo, number, kind, author, role, text, path, line)
     VALUES ('o/r', 7, 'review', 'x', 'contributor', 'why', NULL, NULL)`).run()
-  expect(migrate(db, join(root, 'schema'))).toEqual(['0128_precedent_url.sql', '0129_precedent_rows.sql'])
+  expect(migrate(db, join(root, 'schema'))).toEqual(['0128_precedent_url.sql', '0129_precedent_rows.sql', '0130_precedent_open.sql', '0131_openings.sql', '0132_escapes.sql', '0133_precedent_findings.sql'])
   expect(db.prepare('SELECT count(*) FROM precedent_sources').pluck().get()).toBe(0)
   expect(db.prepare('SELECT count(*) FROM precedent_threads').pluck().get()).toBe(0)
 })

@@ -78,6 +78,42 @@ it('D5 the PR records input + cache + output tokens', async () => {
   expect(dumped(db, 'precedent_distilled')).toEqual([`INSERT INTO "precedent_distilled" VALUES ('o/r', 7, 18);`])
 })
 
+const later: Thread = { kind: 'inline', author: 'm', role: 'maintainer', text: "let's do that in a follow-up", path: 'a.ts', line: 9,
+  url: 'https://github.com/o/r/pull/7#discussion_r3' }
+const echoed: Thread = { kind: 'comment', author: 'c', role: 'contributor', text: "let's do that in a follow-up", path: null, line: null,
+  url: 'https://github.com/o/r/pull/7#issuecomment-4' }
+
+const opening = (said_by: string, source: string) =>
+  `- opening: deferred | area: a.ts | quote: "do that in a follow-up" | said_by: ${said_by} | source: ${source}`
+
+it('opening D1 a maintainer deferral stores one open row', async () => {
+  const db = stored([later, echoed])
+  expect(await distill(db, root, 'o/r', replies(opening('m', later.url)))).toBe(0)
+  expect(dumped(db, 'openings')).toEqual([
+    `INSERT INTO "openings" VALUES (1, 'o/r', 'deferred', 'a.ts', '"do that in a follow-up"', 'm', '${later.url}', '2026-10-01T00:00:00Z', 'open');`])
+  expect(ofKind(db, 'precedent_refused')).toEqual([])
+})
+
+it.each([
+  { from: 'the contributor', said_by: 'c', source: echoed.url },
+  { from: 'an empty source', said_by: 'm', source: '' },
+  { from: 'a source no thread holds', said_by: 'm', source: 'https://github.com/o/r/pull/7#discussion_r9' },
+  { from: "another author's thread", said_by: 'm', source: echoed.url },
+])('opening D2/D3 $from is refused', async ({ said_by, source }) => {
+  const db = stored([later, echoed])
+  const line = opening(said_by, source).trim()
+  await distill(db, root, 'o/r', replies(line))
+  expect(dumped(db, 'openings')).toEqual([])
+  expect(ofKind(db, 'precedent_refused')).toEqual([{ plan: null, kind: 'precedent_refused', actor: 'cf', outcome: 'refuse', message: line }])
+})
+
+it('opening D4 a decision and an opening store one of each', async () => {
+  const db = stored([explains, later])
+  expect(await distill(db, root, 'o/r', replies(`${row('m', 'maintainer', explains.url)}\n${opening('m', later.url)}`))).toBe(1)
+  expect(precedents(db, 'o/r')).toHaveLength(1)
+  expect(dumped(db, 'openings')).toHaveLength(1)
+})
+
 it('D6 the next call takes the next-oldest, then none fires', async () => {
   const db = stored([explains])
   keep(db, { ...pr, number: 9, title: 'Later', merged_at: '2026-10-03T00:00:00Z' }, [])

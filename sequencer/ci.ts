@@ -19,8 +19,8 @@ export const WHERE = 'checks.where'
 /** Ticks a pushed head is given for its first run to show before the laptop runs the suite instead. */
 export const SHOWS = 5
 
-/** Ticks a run is given to finish. Our suite takes about two minutes on GitHub. */
-const RUNS = 20
+/** Ticks a run is given to finish. Our suite takes about 23 minutes on GitHub. */
+const RUNS = 60
 
 const WAITS = 'ci.waits.checks'
 
@@ -37,14 +37,15 @@ const SCRIPT = /npm run (\w+)/
 
 const EXIT = /exit code (\d+)/
 
-type Ci = { wait: Outcome } | { failed: Failure | null; at: string }
+type Ci = { wait: Outcome } | { failed: Failure | null; at: string } | { fallback: true }
 
 /**
  * Our own repo's suite runs on GitHub at the branch head instead of on the laptop. The head is committed and
  * force-sent to the job's own branch, which carries no pull request and is re-cut from main when main moves
- * under it, and the runs at that sha are the checks. Null hands the checks back to the laptop: the switch is
- * off, the repo runs no workflow, the push or the listing failed, no run showed within `SHOWS` ticks, one
- * ran past `RUNS`, or the diff touches a Python subproject, whose gates CI does not run.
+ * under it, and the runs at that sha are the checks. Null hands the whole suite back to the laptop: the switch
+ * is off, the repo runs no workflow, or the diff touches a Python subproject, whose gates CI does not run.
+ * `fallback` runs only the job's own tests there: the push or the listing failed, no run showed within `SHOWS`
+ * ticks, or one ran past `RUNS`.
  */
 export function ciChecks(db: Db, root: string, plan: PlanRow, wire: Wire = WIRE): Ci | null {
   if (setting(db, WHERE) !== 'ci' || !kernelPlan(plan) || !workflows(srcDir(root, plan.id))) return null
@@ -54,7 +55,7 @@ export function ciChecks(db: Db, root: string, plan: PlanRow, wire: Wire = WIRE)
     const fork = forkOf(root, plan) ?? homeOf(plan)
     const head = headOf(root, plan.id)
     pointer = `${fork}:${head.branch}`
-    if (pointers(db, 'gone').includes(pointer)) return null
+    if (pointers(db, 'gone').includes(pointer)) return { fallback: true }
     wire.send(head.dir, `+${head.branch}`)
     const { verdict } = judge({ fork, branch: head.branch, sha: head.sha }, { body: '', commits: [] }, [], wire.runs)
     const at = `${fork}@${head.sha.slice(0, 12)}`
@@ -62,17 +63,17 @@ export function ciChecks(db: Db, root: string, plan: PlanRow, wire: Wire = WIRE)
     if (waiting !== null) {
       const window = carries(verdict.spans, MISSING) ? SHOWS : RUNS
       const hold = holding(root, plan.id, head.sha, verdict.spans, `${at} ${waiting}`, window, WAITS)
-      if (hold === null) return null
+      if (hold === null) return { fallback: true }
       busy(db, plan.id, 'waiting on CI', hold.note)
       return { wait: hold }
     }
-    if (carries(verdict.spans, 'ci.unreadable')) return null
+    if (carries(verdict.spans, 'ci.unreadable')) return { fallback: true }
     return { failed: verdict.outcome === 'pass' ? null : failure(srcDir(root, plan.id), fork, verdict.spans, wire.runs), at }
   } catch (error) {
     if (!gone(db, plan.id, pointer, error)) {
       logged(db, { plan: plan.id, kind: 'swallowed', actor: 'ciChecks', outcome: 'pass', message: firstLine(error), pointer: null, run: null })
     }
-    return null
+    return { fallback: true }
   }
 }
 

@@ -41,6 +41,10 @@ export function loggedSince(db: Db, kind: string, at: string): boolean {
   return db.prepare('SELECT 1 FROM events WHERE kind = ? AND julianday(at) >= julianday(?)').get(kind, at) !== undefined
 }
 
+export function lookedSince(db: Db, plan: number, at: string): boolean {
+  return db.prepare("SELECT 1 FROM events WHERE plan = ? AND kind = 'director' AND julianday(at) > julianday(?)").get(plan, at) !== undefined
+}
+
 export function lastSince(db: Db, kind: string, at: string): Pick<Event, 'outcome' | 'message'> | undefined {
   return db.prepare('SELECT outcome, message FROM events WHERE kind = ? AND julianday(at) > julianday(?) ORDER BY id DESC LIMIT 1')
     .get(kind, at) as Pick<Event, 'outcome' | 'message'> | undefined

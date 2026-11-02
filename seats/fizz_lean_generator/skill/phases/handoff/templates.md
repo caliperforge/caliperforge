@@ -28,6 +28,34 @@
 
 - <Contract.function or Contract.variable> | reason: <why no row tracks it>
 
+## Known holes
+
+- <what the suite cannot reach> | reason: <why>
+
+## Skipped entry points
+
+- <Contract.function> | reason: <why it has no handler>
+
+## Unclamped
+
+- <Contract.function> | reason: <why it has no clamped handler>
+
+# Candidates
+
+## Candidates
+
+- <id> | says: <plain words> | relies: <map row ids> | reads: <trackers and handlers> | converted: <yes or no> | tolerance: <wei per conversion × conversions> | delta: <token>.balanceOf(<holder>) | fails: <what failure would mean>
+
+# Plan
+
+## Rows
+
+- <id> | says: <plain words> | relies: <map row ids> | reads: <trackers and handlers> | converted: <yes or no> | tolerance: <wei per conversion × conversions> | delta: <token>.balanceOf(<holder>) | fails: <what failure would mean> | implementer: <global or specific>
+
+## Skipped
+
+- <map row id> | reason: <why>
+
 # Handoff: context
 
 phase: context

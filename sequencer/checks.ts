@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process'
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { isAbsolute, join } from 'node:path'
+import { basename, dirname, isAbsolute, join } from 'node:path'
 import { alive } from '../store/leases.ts'
 import type { Profile } from '../store/profile.ts'
 import { exitedOutside } from './exited.ts'
@@ -40,7 +40,7 @@ export interface Failure {
   fault?: string
   /** The cap killed a run other than xcodebuild's before it named a red test, or killed a finish entry. */
   capped?: true
-  /** On a capped whole vitest suite, the test files it never printed as finished. */
+  /** On a capped whole vitest suite, the test files it never printed as finished; on a capped `cargo test`, the binaries it never ended. */
   unfinished?: string[]
 }
 
@@ -74,8 +74,9 @@ function project(src: string): string | null {
  * `narrow` is the plan's own file list. Given one, the tests run is `vitest related` over those
  * paths -- every test the import graph says they can reach -- instead of the whole suite. The first pass
  * through step 3 passes none, so every job still runs the suite whole once, against the tree it built on.
+ * `tests`, given, are the only test files a vitest suite runs, and none runs on an empty list.
  */
-export function checks(src: string, given: Commands, run: Run = npm, narrow: string[] = [], outside: Outside | null = null, touched: string[] = [], minutes?: number, said?: (line: string) => void): Failure | null {
+export function checks(src: string, given: Commands, run: Run = npm, narrow: string[] = [], outside: Outside | null = null, touched: string[] = [], minutes?: number, said?: (line: string) => void, tests?: string[]): Failure | null {
   if (outside !== null) return gated(src, gates(src, outside, given.excused), run, given.excused ?? [], said)
   const parsed = given.node === undefined ? null : gated(src, syntax(src, given.node, touched), run)
   if (parsed !== null) return parsed
@@ -85,7 +86,7 @@ export function checks(src: string, given: Commands, run: Run = npm, narrow: str
   if (python !== null) return python
   const bin = mode(src)
   if (bin === 'xcodebuild') excluded(src)
-  for (const [script, args, program = bin] of commands(src, given, narrow, touched)) {
+  for (const [script, args, program = bin] of commands(src, given, narrow, touched, tests)) {
     const cap = program === 'npm' && script === 'test' ? SUITE_CAP : program === 'python3' && minutes !== undefined ? minutes * 60_000 : undefined
     const first = run(args, src, program, cap)
     if (first.ok) continue
@@ -113,6 +114,12 @@ function cappedOf(bin: Mode, ran: Extract<Ran, { ok: false }>, src: string, scri
   return args[0] === 'run' && VITEST.test(read(src)?.[script] ?? '') ? { capped: true, unfinished: unfinished(src, ran.output) } : { capped: true }
 }
 
+/** A capped `cargo test` with no red test: each binary it printed `Running` for and never ended with `test result:`. */
+function stalled(gate: Gate, ran: Extract<Ran, { ok: false }>): string[] | null {
+  if (ran.capped !== true || gate.bin !== 'cargo' || gate.args[0] !== 'test' || /FAILED|panicked/.test(ran.output)) return null
+  return ran.output.split(/^[ \t]*Running /m).slice(1).filter((part) => !/^[ \t]*test result:/m.test(part)).map((part) => (part.split('\n')[0] ?? '').trim())
+}
+
 /**
  * A stranger's repo in a language with its own seat runs that language's gates in the language's own folder.
  * A gate marked `quiet` fails on any output, as `gofmt -l` exits zero and prints the files it would change.
@@ -121,8 +128,11 @@ export function gated(src: string, list: Gate[], run: Run, excused: string[] = [
   for (const gate of list) {
     const first = settled(gate, run(gate.args, join(src, gate.dir), gate.bin), excused)
     if (first.ok || waived(src, gate, first.code, said)) continue
+    const command = `${gate.bin} ${gate.args.join(' ')}${gate.dir === '' ? '' : ` (in ${gate.dir}/)`}`
+    const unfinished = stalled(gate, first)
+    if (unfinished !== null) return { script: gate.script, command, code: first.code, output: tail(first.output), tests: [], retried: false, capped: true, unfinished }
     const left = fresh(src, gate, first.output, run, said)
-    if (left?.length !== 0) return { script: gate.script, command: `${gate.bin} ${gate.args.join(' ')}${gate.dir === '' ? '' : ` (in ${gate.dir}/)`}`, code: first.code, output: left === null ? tail(first.output) : left.join('\n'), tests: [], retried: false }
+    if (left?.length !== 0) return { script: gate.script, command, code: first.code, output: left === null ? tail(first.output) : left.join('\n'), tests: [], retried: false }
   }
   return null
 }
@@ -223,15 +233,15 @@ function alone(output: string, script: string, args: string[]): string[] {
 /** A test script that is vitest takes `related`; anything else is run whole, narrow list or not. */
 const VITEST = /(^|\s)vitest(\s|$)/
 
-function commands(src: string, given: Commands, narrow: string[], touched: string[]): [string, string[], string?][] {
+function commands(src: string, given: Commands, narrow: string[], touched: string[], tests?: string[]): [string, string[], string?][] {
   if (project(src) !== null) return given.xcodebuild === undefined ? [] : [['test', given.xcodebuild]]
   if (mode(src) === 'gradle') return [['check', GRADLE]]
   const scripts = read(src)
   if (scripts === null) return tools(src, given, touched)
-  const named = (given.npm ?? []).filter((s) => scripts[s] !== undefined && (s !== 'test' || !contained(src, touched)))
+  const named = (given.npm ?? []).filter((s) => scripts[s] !== undefined && (s !== 'test' || (!contained(src, touched) && tests?.length !== 0)))
   return [
     ...(bare(src) && (named.length > 0 || given.tsc !== undefined) ? [['ci', ['ci']] as [string, string[]]] : []),
-    ...named.map((s): [string, string[]] => [s, related(scripts[s] ?? '', s, narrow) ?? ['run', s]]),
+    ...named.map((s): [string, string[]] => [s, related(scripts[s] ?? '', s, narrow, tests) ?? ['run', s]]),
     ...tools(src, given, touched),
   ]
 }
@@ -245,9 +255,17 @@ export function tools(src: string, given: Commands, touched: string[]): [string,
     ...(given.node_test === true ? nodeTests(src) : [])]
 }
 
-function related(script: string, name: string, narrow: string[]): string[] | null {
-  if (name !== 'test' || narrow.length === 0 || !VITEST.test(script)) return null
-  return ['exec', '--', 'vitest', 'related', '--run', ...narrow]
+function related(script: string, name: string, narrow: string[], tests?: string[]): string[] | null {
+  if (name !== 'test' || !VITEST.test(script)) return null
+  if (tests !== undefined) return ['exec', '--', 'vitest', 'run', ...tests]
+  return narrow.length === 0 ? null : ['exec', '--', 'vitest', 'related', '--run', ...narrow]
+}
+
+/** The job's own test files under `src`: the ones it lists, and the ones named for each source file it touched. */
+export function own(src: string, listed: string[], touched: string[]): string[] {
+  const named = touched.filter((path) => path.endsWith('.ts') && !path.endsWith('.test.ts'))
+    .flatMap((path) => [`${path.slice(0, -3)}.test.ts`, join(dirname(path), 'tests', `${basename(path, '.ts')}.test.ts`)])
+  return [...new Set([...listed.filter((path) => path.endsWith('.test.ts')), ...named])].filter((path) => existsSync(join(src, path)))
 }
 
 export function bare(src: string): boolean {

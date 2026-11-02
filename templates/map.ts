@@ -1,14 +1,21 @@
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { At, Extracted } from './extract.ts'
+import type { Suite } from './suite.ts'
 
 interface Selection { name: string; functions: { name: string; inputs: { type: string; name: string }[]; tier: string }[] }
 
 const MACHINE = ['Signatures', 'Selected entry points', 'Modifiers']
 
+const SUITE = ['Deployed', 'Actors', 'Handlers', 'Stand-ins', 'Trackers', 'Build']
+
 export const LAYERS: [string, string[]][] = [
   ['machine', MACHINE],
   ['context', ['Roles', 'Guards', 'Limits', 'Outside dependencies', 'Conversion points', 'Aggregates', 'Not tracked']],
+  ['suite', SUITE],
+  ['scaffold', ['Known holes', 'Skipped entry points', 'Unclamped']],
+  ['reach', ['Reach']],
+  ['coverage', ['Unreachable']],
 ]
 
 export const RANGE = /^(\S+) L(\d+)-L(\d+)$/
@@ -25,8 +32,16 @@ export function ranges(text: string): At[] {
 
 const cited = ({ file, start, end }: At): string => `at: ${file} L${String(start)}-L${String(end)}`
 
-const sections = (text: string): [string, string][] =>
+export const sections = (text: string): [string, string][] =>
   text.split(/^(?=## )/m).filter((s) => s.startsWith('## ')).map((s) => [s.slice(3).split('\n')[0]?.trimEnd() ?? '', s])
+
+export function laid(text: string, name: string, rows: string[]): string {
+  const section = `## ${name}\n\n${rows.map((r) => `- ${r}\n`).join('') || '- none\n'}`
+  const at = sections(text).find(([n]) => n === name)?.[1]
+  return at === undefined ? `${text.trimEnd()}\n\n${section}` : text.replace(at, () => `${section}${at.slice(at.trimEnd().length + 1)}`)
+}
+
+export const idOf = (section: string, n: number): string => `${section.toLowerCase().replaceAll(' ', '-')}-${String(n)}`
 
 export function selected(json: string): string[] {
   return (JSON.parse(json) as Selection[]).flatMap((c) => c.functions.map((f) =>
@@ -44,6 +59,20 @@ export function drawn(facts: Extracted, selection: string, text: string): string
   return [...machine, ...kept].join('\n')
 }
 
+export function suited(found: Suite, text: string): string {
+  const rows: Record<string, string[]> = {
+    Deployed: found.deployed.map((d) => `${d.contract} | args: ${d.args.join(', ') || 'none'} | ${cited(d)}`),
+    Actors: found.actors.map((a) => `${a.name} | roles: ${a.roles.join(', ') || 'none'} | ${cited(a)}`),
+    Handlers: found.handlers.map((h) => `${h.name} | target: ${h.target ?? 'none'} | clamps: ${h.clamps.map((c) => c.text).join('; ') || 'none'} | ${cited(h)}`),
+    'Stand-ins': found.standIns.map((s) => `${s.name} | replaces: ${s.replaces} | limits: ${s.limits.map((l) => `${l.limit} (map: ${l.map ?? 'none'})`).join('; ')} | ${cited(s)}`),
+    Trackers: found.trackers.map((t) => `${t.name} | type: ${t.type} | writers: ${t.writers.join(', ') || 'none'} | ${cited(t)}`),
+    Build: Object.entries(found.build).map(([key, value]) => `${key} | value: ${value ?? 'none'}`),
+  }
+  const suite = SUITE.map((name) => `## ${name}\n\n${(rows[name] ?? []).map((r) => `- ${r}\n`).join('') || '- none\n'}`)
+  const kept = sections(text).filter(([name]) => !SUITE.includes(name)).map(([, s]) => `${s.trimEnd()}\n`)
+  return [...kept, ...suite].join('\n')
+}
+
 export function excerpts(root: string, text: string, dir: string): void {
   rmSync(dir, { recursive: true, force: true })
   mkdirSync(dir, { recursive: true })
@@ -55,7 +84,7 @@ export function excerpts(root: string, text: string, dir: string): void {
       if (file === '') continue
       const source = readFileSync(join(root, file))
       const starts = [0, ...[...source.keys()].filter((b) => source[b] === 0x0a).map((b) => b + 1)]
-      writeFileSync(join(dir, `${name.toLowerCase().replaceAll(' ', '-')}-${String(i + 1)}.sol.txt`), source.subarray(starts[Number(start) - 1], starts[Number(end)]))
+      writeFileSync(join(dir, `${idOf(name, i + 1)}.sol.txt`), source.subarray(starts[Number(start) - 1], starts[Number(end)]))
     }
   }
 }

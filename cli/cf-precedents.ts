@@ -3,7 +3,8 @@ import { drained } from '../precedents/distill.ts'
 import { counted } from '../precedents/escapes.ts'
 import { harvest } from '../precedents/harvest.ts'
 import { precedentsFor, row } from '../precedents/lookup.ts'
-import { openings } from '../precedents/openings.ts'
+import { type Listed, openings } from '../precedents/openings.ts'
+import { parity } from '../precedents/parity.ts'
 import { claudeAgentSdk } from '../providers/claude-agent-sdk/index.ts'
 import type { Provider } from '../providers/kind.ts'
 import { escapesOf } from '../store/escapes.ts'
@@ -27,7 +28,12 @@ export function registerPrecedents(cf: Command, { root, db, out }: Cli, provider
   precedents.command('for').argument('<repo>').argument('<files...>').action((repo: string, files: string[]) => {
     for (const p of precedentsFor(db(), repo, files, read)) out(`${row(p)}\n`)
   })
-  cf.command('openings').argument('[repo]').action((repo: string | undefined) => {
-    for (const o of openings(db(), repo ?? null)) out(`${o.first_seen}\t${o.repo}\t${o.kind}\t${o.area}\t${o.said_by}\t${o.source}\t${o.quote}\n`)
+  const line = (o: Listed): string => `${o.first_seen}\t${o.repo}\t${o.kind}\t${o.area}\t${o.said_by}\t${o.source}\t${o.quote}\n`
+  const opens = cf.command('openings').argument('[repo]').action((repo: string | undefined) => {
+    for (const o of openings(db(), repo ?? null)) out(line(o))
+  })
+  opens.command('parity').argument('<repo>').action(async (repo: string) => {
+    await parity(db(), root, repo, provider, read)
+    for (const o of openings(db(), repo).filter((r) => r.kind === 'drift')) out(line(o))
   })
 }

@@ -367,6 +367,9 @@ const TWO_AFTERS = ['---', 'outcome: split', 'parts:',
 
 test('D1, D3, D4: a split fence that fails is refused on its own', () => {
   expect(on(TWO_AFTERS)).toEqual({ span: 'after:', reason: holding("part c's after: a, b") })
+  expect(on(TWO_AFTERS.replace('a, b', '[a, b]'))).toEqual({ span: 'after:', reason: holding("part c's after: a,b") })
+  expect(split(TWO_AFTERS)).toBeNull()
+  expect(split(TWO_AFTERS.replace('a, b', '[a, b]'))).toBeNull()
   expect(on(TWO_AFTERS.replace('    ends: e\n    after: a, b\n', '    after: b\n'))?.span).toBe('split fence')
   expect(split(TWO_AFTERS.replace('a, b', 'b'))).not.toBeNull()
   expect(on(TWO_AFTERS.replace('a, b', 'b'))).toEqual({ span: '# <title>', reason: "the title is not the ask's" })

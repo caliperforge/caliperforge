@@ -40,6 +40,10 @@
 
 - <Contract.function> | reason: <why it has no clamped handler>
 
+## Unreachable
+
+- <the ## Reach row's first cell> | reason: <why no input reaches it>
+
 # Candidates
 
 ## Candidates

@@ -20,14 +20,14 @@ import { unhold } from '../hold.ts'
 import { blocked } from '../steps.ts'
 import { WHOLE } from '../handout.ts'
 import { afresh, drop, maybe, move, put, SELF, srcDir, titleOf } from '../workspace.ts'
-import { git, RUST } from './bases.ts'
+import { git, HANDOUT } from './bases.ts'
 import { approve, briefFor, CARRIED, internalPlan, moveMain, ours, plan, reads, stub, world, type World } from './world.ts'
 
 vi.mock('../../cli/gh.ts', async (importOriginal) => ({
   ...await importOriginal<object>(),
   gh: (args: string[]) => {
     if (args[1] === 'repos/acme/widget') return { default_branch: 'main' }
-    if (args[1] === 'repos/acme/widget/git/trees/main?recursive=1') return { tree: [{ path: 'src/a.rs' }], truncated: false }
+    if (args[1] === 'repos/acme/widget/git/trees/main?recursive=1') return { tree: [{ path: 'src/bye.ts' }], truncated: false }
     throw new Error(`unread ${args.join(' ')}`)
   },
 }))
@@ -446,9 +446,9 @@ function stored(w: World, repo: string, file: string): Precedent {
 }
 
 test('D1 an outside packet carries the row on its file', async () => {
-  const w = world('warm', undefined, RUST)
-  const precedent = stored(w, 'acme/widget', 'src/a.rs')
-  put(w.root, 1, 'ask.md', '# hello\n\n- **D1** change `src/a.rs`\n')
+  const w = world('warm', undefined, HANDOUT)
+  const precedent = stored(w, 'acme/widget', 'src/bye.ts')
+  put(w.root, 1, 'ask.md', '# hello\n\n- **D1** change `src/bye.ts`\n')
   const packets: Packet[] = []
   await tick(w.db, w.root, stub(CARRIED))
   approve(w.db, w.target)

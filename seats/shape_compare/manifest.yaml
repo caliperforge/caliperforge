@@ -1,0 +1,5 @@
+seat: shape_compare
+model: claude-sonnet-5
+effort: medium
+tools: []
+write_paths: []

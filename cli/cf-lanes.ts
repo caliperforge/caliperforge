@@ -15,6 +15,7 @@ import { underpowered } from '../store/bench.ts'
 import { directorDays } from '../store/decisions.ts'
 import { overdue, week } from '../store/drift.ts'
 import { fixes, handUps, logged, repriced } from '../store/events.ts'
+import { escapesWeek } from '../store/escapes.ts'
 import { holderOf, HOLDERS, overlapWaits, parked, pipeNamed } from '../store/plans.ts'
 import { tally } from '../store/record.ts'
 import { backfillTickets } from '../store/tickets.ts'
@@ -24,6 +25,7 @@ import { actors, actorSection, byType, type ByType, caught, caughtSection, costs
 import { check, fill } from './digests.ts'
 import { directorSection, fixerLine, handUpLine } from './director.ts'
 import { decisionSection, driftSection } from './drift.ts'
+import { escapeSection } from './escapes.ts'
 import { flow } from './flow.ts'
 import { gh } from './gh.ts'
 import { write as writeMap } from './map.ts'
@@ -221,6 +223,7 @@ function briefs(cf: Command, { root, db, out }: Cli): void {
     out(caughtSection(caught(handle, root, new Date())))
     out(benchSection(underpowered(handle)))
     out(outsideSection(tally(handle), new Date()))
+    out(escapeSection(escapesWeek(handle, new Date())))
     out(openingLines(openings(handle, null), new Date()))
     out(section('open plans', openPlans(handle)))
     out(section('halted', halted(handle)))

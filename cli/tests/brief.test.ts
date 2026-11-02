@@ -14,6 +14,7 @@ import { refusalDays, refusalSection } from '../refusals.ts'
 import { benchSection } from '../underpowered.ts'
 import { directorSection, fixerLine, handUpLine } from '../director.ts'
 import { decisionSection, driftSection } from '../drift.ts'
+import { escapeSection } from '../escapes.ts'
 import { hold } from '../../sequencer/hold.ts'
 import { monthly, reviewed } from '../../sequencer/ready.ts'
 import { put } from '../../sequencer/workspace.ts'
@@ -22,6 +23,7 @@ import { record as addScore, underpowered } from '../../store/bench.ts'
 import { decided, directorDays } from '../../store/decisions.ts'
 import { addFinding, closeFinding, type Finding, overdue, week } from '../../store/drift.ts'
 import { addPrice, addRun } from '../../store/brief.ts'
+import { escapesWeek, keepEscapes } from '../../store/escapes.ts'
 import { type Event, fixes, handUps, logged, repriced } from '../../store/events.ts'
 import { record as listFiles } from '../../store/files.ts'
 import { holdOf } from '../../store/holds.ts'
@@ -513,6 +515,32 @@ test('D1 D2 D3 open PRs count ball us and the oldest quiet', () => {
 
 test('D4 no open outside PR prints none', () => {
   expect(outsideSection(tally(world()), new Date('2026-10-22T12:00:00.000Z'))).toBe('outside PRs open (0)\n  none\n')
+})
+
+const ESCAPES = 'escapes per outside PR by repo, last 7 d'
+
+test('D1 D2 escapes per outside PR sit under their repo', () => {
+  const db = world()
+  const now = new Date('2026-10-22T12:00:00.000Z')
+  const row = { plan: null, merged_at: null, word_by: null, word_at: null, word: null, read_at: '2026-10-22T09:00:00Z',
+    title: null, opened_at: '2026-09-01T09:00:00Z', url: 'u', state: 'OPEN' }
+  const escape = { area: 'a.ts', line: 1, author: 'r', role: 'MEMBER', text: 't', url: 'u' }
+  putRecord(db, { ...row, repo: 'acme/widget', pr: 1 })
+  putRecord(db, { ...row, repo: 'acme/widget', pr: 2, state: 'MERGED', merged_at: '2026-10-20T12:00:00.000Z' })
+  putRecord(db, { ...row, repo: 'other/lib', pr: 5 })
+  putRecord(db, { ...row, repo: 'acme/widget', pr: 9, state: 'MERGED', merged_at: '2026-10-12T12:00:00.000Z' })
+  keepEscapes(db, 'acme/widget', 1, 1, [escape, escape])
+  keepEscapes(db, 'acme/widget', 2, 2, [])
+  keepEscapes(db, 'other/lib', 5, 5, [escape])
+  keepEscapes(db, 'acme/widget', 9, 9, [escape, escape, escape])
+  expect(escapeSection(escapesWeek(db, now))).toBe(`${ESCAPES} (3)\n  acme/widget\n    #1\t2 escape(s)\n    #2\t0 escape(s)\n` +
+    '  other/lib\n    #5\t1 escape(s)\n')
+})
+
+test('D3 an escape count with no record is left out', () => {
+  const db = world()
+  keepEscapes(db, 'acme/widget', 1, 1, [])
+  expect(escapeSection(escapesWeek(db, new Date('2026-10-22T12:00:00.000Z')))).toBe(`${ESCAPES} (0)\n  none\n`)
 })
 
 test('cf brief names only plans whose ask.md drifted from brief', () => {

@@ -1266,6 +1266,37 @@ test('D4: park holds plan 7 until its time', async () => {
   expect(read('---\nmove: park\nwhy: not worth a build yet\n---\n')).toBeNull()
 })
 
+test('D1: park on an over_cap plan returns it to its lane', async () => {
+  const { db, home } = seeded('1')
+  db.exec("UPDATE plans SET wait_reason = 'over_cap' WHERE id = 7")
+  await run(db, home, REPLY.park ?? '')
+  expect(plan7(db)).toMatchObject({ state: 'queued', held_until: null })
+  expect(maybe(home, 7, 'parked.md')).toBeNull()
+  expect(ofKind(db, 'return')).toHaveLength(1)
+})
+
+const ON_8 = '---\nmove: park\nwhy: parts it reads in plan 8 have not landed\nuntil: 2026-10-01T00:00:00.000Z\n---\n'
+
+function withPlan8(state: 'queued' | 'done') {
+  const seed = seeded('1')
+  putPlan(seed.db, { id: 8, pipe_id: 99, target_id: null, template: 'pr_path', state, queued_at: '2026-09-24', step: 2, retries: 0,
+    lane: 'machine', seat: 'typescript_specialist', origin: 'https://github.com/caliperforge/caliperforge/issues/140' })
+  return seed
+}
+
+test('D2: park naming an open plan waits on it', async () => {
+  const { db, home } = withPlan8('queued')
+  await run(db, home, ON_8)
+  expect(plan7(db)).toMatchObject({ waits_on: 8, held_until: null })
+  expect(maybe(home, 7, 'parked.md')).toContain('waits on plan 8')
+})
+
+test('D3: park naming a done plan holds until its time', async () => {
+  const { db, home } = withPlan8('done')
+  await run(db, home, ON_8)
+  expect(plan7(db)).toMatchObject({ waits_on: null, held_until: '2026-10-01T00:00:00.000Z' })
+})
+
 test.each(FAULTS)('D1: decision refuses %s', (refused, block) => {
   expect(decision(askCeo(block))).toEqual({ refused })
 })

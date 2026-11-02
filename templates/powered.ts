@@ -1,6 +1,7 @@
 import { FLOOR } from '../cli/underpowered.ts'
 import type { Outcome } from '../sequencer/kind.ts'
 import { put } from '../sequencer/workspace.ts'
+import type { Event } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { record, type Score } from '../store/bench.ts'
 
@@ -17,6 +18,15 @@ export function powered(properties: number, agents = 0, { pre_fix = null, fix = 
   if (refuzz) return null
   if (pre_fix === null || pre_fix < FLOOR) return 'pre_fix_calls'
   return fix === null || fix < FLOOR ? 'fix_calls' : null
+}
+
+const UNCOUNTED: Score['not_powered'][] = ['compile_failed', 'wall', 'reduced_generate', 'few_properties']
+
+/** Why a run does not count, or null when it compiled, is powered and every critic event passed. */
+export function counted(notPowered: Score['not_powered'], critic: Event['outcome'][]): string | null {
+  if (UNCOUNTED.includes(notPowered)) return notPowered
+  if (critic.length === 0) return 'no_critic'
+  return critic.includes('refuse') ? 'not_clean' : null
 }
 
 export function buildError(rows: { build_log_tail?: unknown }[]): string | null {

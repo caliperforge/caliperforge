@@ -23,6 +23,7 @@ export interface Node {
   typeName?: Node; typeDescriptions?: { typeString?: string }; modifiers?: { modifierName: { name: string } }[]
   parameters?: { parameters: Node[] }; returnParameters?: { parameters: Node[] }
   leftHandSide?: Node; subExpression?: Node; baseExpression?: Node; expression?: Node
+  functionSelector?: string; storageLocation?: string; declarations?: (Node | null)[]; initialValue?: Node
 }
 
 export interface Member { node: Node; name: string; at: (node: Node) => At }
@@ -66,10 +67,20 @@ export function membersOf(file: string, source: Buffer, unit: Node): Member[] {
     .flatMap((c) => (c.nodes ?? []).map((node) => ({ node, name: `${c.name ?? ''}.${node.name === '' ? node.kind ?? '' : node.name ?? ''}`, at })))
 }
 
-function target(node: Node | undefined): number | undefined {
-  if (node?.nodeType === 'Identifier') return node.referencedDeclaration
-  if (node?.nodeType === 'IndexAccess') return target(node.baseExpression)
-  return node?.nodeType === 'MemberAccess' ? target(node.expression) : undefined
+function target(node: Node | undefined, aliases: Map<number, number>): number | undefined {
+  if (node?.nodeType === 'Identifier') return aliases.get(node.referencedDeclaration ?? 0) ?? node.referencedDeclaration
+  if (node?.nodeType === 'IndexAccess') return target(node.baseExpression, aliases)
+  return node?.nodeType === 'MemberAccess' ? target(node.expression, aliases) : undefined
+}
+
+function aliasesOf(functions: Member[]): Map<number, number> {
+  const aliases = new Map<number, number>()
+  for (const n of functions.flatMap((f) => below(f.node)).filter((n) => n.nodeType === 'VariableDeclarationStatement')) {
+    const [local, ...rest] = n.declarations ?? []
+    const id = target(n.initialValue, aliases)
+    if (local?.storageLocation === 'storage' && rest.length === 0 && id !== undefined) aliases.set(local.id, id)
+  }
+  return aliases
 }
 
 function written(node: Node): Node | undefined {
@@ -77,8 +88,8 @@ function written(node: Node): Node | undefined {
   return node.nodeType === 'UnaryOperation' && WRITE.has(node.operator ?? '') ? node.subExpression : undefined
 }
 
-const writesOf = (f: Member): Write[] => below(f.node).flatMap((n) => {
-  const id = target(written(n))
+const writesOf = (f: Member, aliases: Map<number, number>): Write[] => below(f.node).flatMap((n) => {
+  const id = target(written(n), aliases)
   return id === undefined ? [] : [{ id, additive: ADD.has(n.operator ?? ''), at: f.at(n) }]
 })
 
@@ -89,11 +100,18 @@ function reached(id: number, calls: Map<number, number[]>, seen = new Set<number
   return seen
 }
 
-export function entries(functions: Member[]): Entry[] {
-  const inner = new Set(functions.filter((f) => ['internal', 'private'].includes(f.node.visibility ?? '')).map((f) => f.node.id))
+function callees(functions: Member[], id: number, across: boolean): number[] {
+  const callee = functions.find((f) => f.node.id === id)?.node
+  if (callee === undefined) return []
+  if (['internal', 'private'].includes(callee.visibility ?? '') || (across && callee.implemented === true)) return [id]
+  const selector = callee.functionSelector
+  return across && selector !== undefined ? functions.filter((f) => f.node.implemented === true && f.node.functionSelector === selector).map((f) => f.node.id) : []
+}
+
+export function entries(functions: Member[], aliases = new Map<number, number>(), across = false): Entry[] {
   const calls = new Map(functions.map((f) => [f.node.id, below(f.node).filter((n) => n.nodeType === 'FunctionCall')
-    .map((n) => n.expression?.referencedDeclaration ?? 0).filter((id) => inner.has(id))]))
-  const writes = new Map(functions.map((f) => [f.node.id, writesOf(f)]))
+    .flatMap((n) => callees(functions, n.expression?.referencedDeclaration ?? 0, across))]))
+  const writes = new Map(functions.map((f) => [f.node.id, writesOf(f, aliases)]))
   return functions.filter((f) => ['public', 'external'].includes(f.node.visibility ?? '') && f.node.kind !== 'constructor')
     .map((f) => ({ name: f.name, writes: [...reached(f.node.id, calls)].flatMap((id) => writes.get(id) ?? []) }))
 }
@@ -140,7 +158,8 @@ export function extract(root: string): Extracted {
   const of = (type: string): Member[] => members.filter((m) => m.node.nodeType === type)
   const [functions, modifiers] = [of('FunctionDefinition'), of('ModifierDefinition')]
   const vars = of('VariableDeclaration').filter((m) => m.node.stateVariable === true)
-  const [writers, writes] = [entries(functions), functions.flatMap(writesOf)]
+  const aliases = aliasesOf(functions)
+  const [writers, direct, writes] = [entries(functions, aliases, true), entries(functions, aliases), functions.flatMap((f) => writesOf(f, aliases))]
   return {
     sources: Object.fromEntries(sources.map(({ file, source }) => [file, lineCount(source)])),
     signatures: functions.map(signatureOf),
@@ -149,6 +168,6 @@ export function extract(root: string): Extracted {
     state: vars.map((v) => ({ ...v.at(v.node), name: v.name, constant: v.node.constant === true,
       writers: writers.filter((e) => e.writes.some((w) => w.id === v.node.id)).map((e) => e.name), writes: writes.filter((w) => w.id === v.node.id).map((w) => w.at) })),
     conversions: functions.flatMap(conversionsOf),
-    aggregates: vars.filter((v) => aggregate(v, writers)).map((v) => v.name),
+    aggregates: vars.filter((v) => aggregate(v, direct)).map((v) => v.name),
   }
 }

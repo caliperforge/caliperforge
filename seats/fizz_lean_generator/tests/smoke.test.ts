@@ -12,7 +12,7 @@ const MAP = `## Selected entry points\n\n${selected(SELECTION).map((r) => `- ${r
   + '## Unclamped\n\n- V.withdraw | reason: any amount the vault holds is valid\n'
 const [DEPOSIT, WITHDRAW, CONVERT] = ['V.deposit(uint256 assets)', 'V.withdraw(uint256 assets)', 'V.convertToAssets(uint256 shares)']
 const META = 'test/fizz/fizz_data'
-const MEDUSA = { fuzzing: { targetContracts: ['Harness'] },
+const MEDUSA = { fuzzing: { targetContracts: ['Harness'], corpusDirectory: `${META}/corpus_medusa` },
   compilation: { platform: 'crytic-compile', platformConfig: { target: '.', args: ['--foundry-compile-all'] } } }
 
 test('6/9 D4: smoked reads successes per entry point', () => {
@@ -36,6 +36,7 @@ test.runIf(process.env.CF_BENCH_LIVE === '1')('6/9 D8: smoke runs medusa, restor
   writeFileSync(join(root, 'foundry.toml'), '[profile.default]\n')
   const config = JSON.stringify(MEDUSA)
   writeFileSync(join(root, 'medusa.json'), config)
-  expect(smoke(root, join(homedir(), '.claude/skills/fizz'), META, MAP).map((r) => r.name)).toEqual([DEPOSIT, WITHDRAW, CONVERT])
+  const results = smoke(root, join(homedir(), '.claude/skills/fizz'), META, MAP)
+  expect(results.map((r) => [r.name, r.calls > 0, r.successes > 0])).toEqual([[DEPOSIT, true, true], [WITHDRAW, true, true], [CONVERT, false, false]])
   expect(readFileSync(join(root, 'medusa.json'), 'utf8')).toBe(config)
 }, 300_000)

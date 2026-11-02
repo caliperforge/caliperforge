@@ -360,6 +360,20 @@ test('a fence wrapped in a code block still splits', () => {
   expect(unclear(`Two jobs.\n\n\`\`\`\n${parts}\n\`\`\``)).toBeNull()
 })
 
+/** A three-part split fence whose part c follows two parts, which the one-letter `after` refuses. */
+const TWO_AFTERS = ['---', 'outcome: split', 'parts:',
+  ...['a', 'b', 'c'].flatMap((t) => [`  - title: ${t}`, '    what: w', '    why: y', '    ends: e']), '    after: a, b',
+  '---', ''].join('\n')
+
+test('D1, D3, D4: a split fence that fails is refused on its own', () => {
+  expect(on(TWO_AFTERS)).toEqual({ span: 'after:', reason: holding("part c's after: a, b") })
+  expect(on(TWO_AFTERS.replace('    ends: e\n    after: a, b\n', '    after: b\n'))?.span).toBe('split fence')
+  expect(split(TWO_AFTERS.replace('a, b', 'b'))).not.toBeNull()
+  expect(on(TWO_AFTERS.replace('a, b', 'b'))).toEqual({ span: '# <title>', reason: "the title is not the ask's" })
+  expect(on(asks('which?'))?.span).toBe('# <title>')
+  expect(on(claims(COVERED))?.span).toBe('# <title>')
+})
+
 test('step 1 fires the seat once, saves the brief, goes to build', async () => {
   const w = mine()
   const packets: Packet[] = []
@@ -493,6 +507,18 @@ test('a misshapen reply refuses step 1 and writes no brief', async () => {
     expect(fired).toMatchObject({ step: 1, outcome: 'refuse', state: 'retried', spans: [span] })
     expect(maybe(w.root, ID, 'issue.md')).toBeNull()
     expect(titles(w.db, 'pr_path')).toEqual([null])
+  }
+})
+
+test('D2 a split fence that fails refuses step 1 on its own', async () => {
+  for (const [reply, span] of [[TWO_AFTERS, 'after:'], [TWO_AFTERS.replace('    ends: e\n    after: a, b\n', ''), 'split fence']]) {
+    const w = mine()
+    await tick(w.db, w.root, stub(CARRIED))
+    const fired = (await tick(w.db, w.root, stub(CARRIED, 0, undefined, undefined, reply)))[0]
+    expect(fired).toMatchObject({ step: 1, outcome: 'refuse', spans: [span], note: holding('brief_writer: ') })
+    expect(fired?.note).not.toContain('the title is not the ask')
+    expect(maybe(w.root, ID, 'split.md')).toBeNull()
+    expect(maybe(w.root, ID, 'issue.md')).toBeNull()
   }
 })
 

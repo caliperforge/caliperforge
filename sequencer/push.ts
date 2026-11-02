@@ -122,7 +122,7 @@ export function forkCi(db: Db, root: string, plan: PlanRow, repo: string, wire: 
   if (internal(plan) && (assembly(db, plan) !== null || !workflows(srcDir(root, plan.id)))) return checked(db, root, plan, repo)
   const holder = waitsFor(db, plan)
   if (holder !== null) return { outcome: 'pass', held: true, spans: ['fork.slot'], note: `waits for plan ${String(holder)}'s fork CI` }
-  const { fork, head, ci, tip, base: onto, rejected } = sent(root, plan, repo, wire)
+  const { fork, head, ci, tip, base: onto, rejected } = sent(db, root, plan, repo, wire)
   if (rejected !== null) return { outcome: 'refuse', spans: ['fork.sent'], to: 6, note: rejected }
   const off = onto === null ? null : unfolded(head.dir, onto, messageOf(root, plan.id, profile(root, repo)))
   if (off !== null) return { outcome: 'refuse', spans: ['fold'], to: 2, note: off }
@@ -194,13 +194,13 @@ function stalled(spans: string[], board: Board[], at: string, fork: string, tip:
 /** Step 3's pass opens the rehearsal: a review bot reads only an open pull request. */
 export function reviewable(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire = WIRE): void {
   if (internal(plan)) return
-  const { fork, ci, rejected } = sent(root, plan, repo, wire)
+  const { fork, ci, rejected } = sent(db, root, plan, repo, wire)
   if (rejected !== null) return
   wire.rehearse?.(fork, ci)
   took(db, plan)
 }
 
-export function sent(root: string, plan: PlanRow, repo: string, wire: Wire): { fork: string; head: Head; ci: string; tip: string; base: string | null; rejected: string | null } {
+export function sent(db: Db, root: string, plan: PlanRow, repo: string, wire: Wire): { fork: string; head: Head; ci: string; tip: string; base: string | null; rejected: string | null } {
   const outside = !internal(plan)
   const fork = `${FORK}/${repoName(repo)}`
   const dir = srcDir(root, plan.id)
@@ -209,7 +209,7 @@ export function sent(root: string, plan: PlanRow, repo: string, wire: Wire): { f
   const rules = profile(root, repo)
   const base = !outside ? null : onFork(dir, branch) ? follow(root, plan.id, messageOf(root, plan.id, rules)) : squash(root, plan.id, rules)
   const head = outside ? headOf(root, plan.id) : onward(headOf(root, plan.id))
-  const tip = outside ? tipOf(root, plan.id, head, ci, repo, wire) : head.sha
+  const tip = outside ? tipOf(db, root, plan.id, head, ci, repo, wire) : head.sha
   if (outside) based(root, plan.id, fork, wire)
   if (wire.at?.(head.dir, `refs/heads/${ci}`) !== tip) wire.send(head.dir, outside ? `${tip}:refs/heads/${ci}` : head.branch)
   const at = wire.at?.(head.dir, `refs/heads/${ci}`) ?? tip
@@ -247,10 +247,11 @@ export function reviewedWith(root: string, plan: number, sha: string): 'mirrored
 }
 
 /** A head sent again keeps its tip, so its CI is not restarted. */
-function tipOf(root: string, plan: number, head: Head, ci: string, repo: string, wire: Wire): string {
+function tipOf(db: Db, root: string, plan: number, head: Head, ci: string, repo: string, wire: Wire): string {
   const [known, of] = tips(root, plan).at(-1) ?? []
   if (known !== undefined && of === head.sha) return known
-  const files = (wire.harvest === undefined ? null : mirrored(root, repo, head.dir, wire.harvest)) ?? { 'greptile.json': config(root, repo) }
+  const files = (wire.harvest === undefined ? null : mirrored(root, repo, head.dir, wire.harvest))
+    ?? { 'greptile.json': config(db, root, repo, touched(root, plan), wire.merged) }
   const tip = quiet(head.dir, ci, files)
   put(root, plan, TIPS, `${maybe(root, plan, TIPS) ?? ''}${tip} ${head.sha}\n`)
   return tip

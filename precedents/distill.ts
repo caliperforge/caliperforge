@@ -7,6 +7,7 @@ import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { wall } from '../store/lanes.ts'
 import { pending } from '../store/transcript.ts'
+import { type Opening, opened, openingOf } from './openings.ts'
 import { distilled, type Precedent, type Source, type Thread, threads, undistilled } from './store.ts'
 
 const ROW = /^- area: (?<area>.+?) \| decision: (?<decision>.+?) \| why: (?<why>.+?) \| said_by: (?<said_by>\S+) \((?:maintainer|contributor)\) \| source: (?<source>\S+)$/
@@ -27,11 +28,14 @@ export async function distill(db: Db, root: string, repo: string, provider: Prov
     ? fired.text.split('\n').map((l) => l.trim()).filter((l) => l !== '')
     : []
   const rows: Precedent[] = []
+  const found: Opening[] = []
   for (const line of lines) {
-    const row = rowOf(line, said)
-    if (row === null) refused(db, pr, line)
-    else rows.push(row)
+    const got = line.startsWith('- opening: ') ? openingOf(line, said) : rowOf(line, said)
+    if (got === null) refused(db, pr, line)
+    else if ('quote' in got) found.push(got)
+    else rows.push(got)
   }
+  opened(db, pr, found)
   distilled(db, pr, rows, fired.usage.input + fired.usage.cache + fired.usage.output)
   return rows.length
 }

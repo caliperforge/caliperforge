@@ -9,13 +9,13 @@ interface Parsed { fields: Map<string, string>; sections: Map<string, string[]> 
 
 interface Cited { section: string; name: string; cells: Map<string, string>; at: At | string | undefined }
 
-const FIELD = /^(\w+):\s*(.*)$/
+export const FIELD = /^(\w+):\s*(.*)$/
 const PLACEHOLDER = /<\w[^<>]*>/
 const READS = 'Reads'
 const NONE = 'none'
 const CONTEXT = 'context'
 
-function parsed(text: string): Parsed {
+export function parsed(text: string): Parsed {
   const lines = (part: string): string[] => part.split('\n').map((l) => l.trimEnd())
   const [, ...sections] = text.split(/^## /m)
   return {
@@ -31,7 +31,7 @@ function block(skill: string, phase: string): Parsed {
   return parsed(found)
 }
 
-const filled = (value: string | undefined): boolean => value !== undefined && value !== '' && !PLACEHOLDER.test(value)
+export const filled = (value: string | undefined): boolean => value !== undefined && value !== '' && !PLACEHOLDER.test(value)
 
 function field(phase: string, key: string, want: string, got: string | undefined): string[] {
   if (got === undefined || got === '') return [`${phase}: ${key} is missing or empty`]

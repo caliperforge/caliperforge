@@ -24,9 +24,9 @@ import { laneOff, type PlanRow } from '../store/plans.ts'
 import { profile, type Profile } from '../store/profile.ts'
 import { rebuilt } from '../store/runs.ts'
 import { builder } from '../templates/pr-path.ts'
-import { checks, finish, gated, mode, network, npm, type Commands, type Failure, type Run } from './checks.ts'
+import { checks, finish, gated, mode, network, npm, own, type Commands, type Failure, type Run } from './checks.ts'
 import { ciChecks } from './ci.ts'
-import { newest } from './cited.ts'
+import { newest, ruled } from './cited.ts'
 import { outsideLanguage, sushi } from './gates.ts'
 import { forkOf } from './home.ts'
 import type { Outcome } from './kind.ts'
@@ -127,7 +127,7 @@ function suite(db: Db, root: string, plan: PlanRow, on: Rails, commands: Command
   const guide = local || outside !== null ? [] : sushi(srcDir(root, plan.id), base)
   const ci = on?.checks === 'ci' ? ciChecks(db, root, plan, wire) : null
   if (ci !== null && 'wait' in ci) return ci.wait
-  if (ci !== null) {
+  if (ci !== null && 'failed' in ci) {
     recordRail(db, join(root, 'rails', 'checks'), plan.id, checked(ci.failed, diffOf(root, plan.id)), 0)
     if (ci.failed !== null) return broke(db, root, plan, ci.failed)
     return { outcome: 'pass', spans: [], note: `pre-review: six rails pass; checks ran on GitHub CI at ${ci.at}` }
@@ -141,8 +141,8 @@ function suite(db: Db, root: string, plan: PlanRow, on: Rails, commands: Command
     try {
       const diff = diffOf(root, plan.id)
       const failed = (guide.length > 0 ? gated(srcDir(root, plan.id), guide, noted(db, plan.id), [], (line) => { heard.push(line) }) : checks(srcDir(root, plan.id), commands, noted(db, plan.id), outside === null ? files : [],
-        outside === null ? null : { language: outside, files: filesOf(db, plan.id).map((f) => f.path), ...(base === undefined ? {} : { base }) },
-        parse(diff).map((f) => f.path), finishes.minutes, (line) => { heard.push(line) })) ?? finish(srcDir(root, plan.id), finishes.entries, noted(db, plan.id), finishes.minutes)
+        outside === null ? null : { language: outside, files: filesOf(db, plan.id).map((f) => f.path), ...(base === undefined ? {} : { base }), ...ruled(root, plan.id) },
+        parse(diff).map((f) => f.path), finishes.minutes, (line) => { heard.push(line) }, ci === null ? undefined : own(srcDir(root, plan.id), filesOf(db, plan.id).map((f) => f.path), parse(diff).map((f) => f.path)))) ?? finish(srcDir(root, plan.id), finishes.entries, noted(db, plan.id), finishes.minutes)
       if (failed?.fault !== undefined) return faulted(db, root, plan, failed.fault)
       if (failed?.capped === true) { put(root, plan.id, 'step-3.capped', ''); return capped(failed, alone) }
       drop(root, plan.id, 'step-3.capped')

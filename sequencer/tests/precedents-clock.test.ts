@@ -1,9 +1,11 @@
-import { mkdtempSync } from 'node:fs'
+import { cpSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
 import type { Read } from '../../cli/gh.ts'
+import { keep, precedents, type Thread } from '../../precedents/store.ts'
+import type { Provider } from '../../providers/kind.ts'
 import { ofKind, pointers } from '../../store/events.ts'
 import type { Db } from '../../store/index.ts'
 import { set } from '../../store/lanes.ts'
@@ -13,6 +15,9 @@ import { tick } from '../index.ts'
 import { CARRIED, stub } from './world.ts'
 
 const schema = join(import.meta.dirname, '../../schema')
+const repo = join(import.meta.dirname, '../..')
+const said: Thread = { kind: 'inline', author: 'm', role: 'maintainer', text: 'keep the cache', path: 'a.ts', line: 4,
+  url: 'https://github.com/o/live/pull/1#discussion_r1' }
 
 const REPOS: [string, PlanRow['state'], string][] = [['o/live', 'queued', '2026-08-01'], ['o/recent', 'done', '2026-10-21'],
   ['o/stale', 'done', '2026-09-01']]
@@ -38,14 +43,35 @@ function reader(down?: string): { harvested: string[]; read: Read } {
   return { harvested, read: (args) => {
     if (args[0] !== 'pr' || args[1] !== 'list') throw new Error(`unread: ${args.join(' ')}`)
     const repo = String(args[3])
+    if (args.includes('open')) return []
     harvested.push(repo)
     if (repo === down) throw new Error(`${repo} is down`)
     return []
   } }
 }
 
-const at = (db: Db, when: string, read?: Read): Promise<unknown> =>
-  tick(db, mkdtempSync(join(tmpdir(), 'cf-precedents-')), stub(CARRIED), new Date(when), undefined, undefined, 0, read)
+const at = (db: Db, when: string, read?: Read, provider: Provider = stub(CARRIED)): Promise<unknown> => {
+  const root = mkdtempSync(join(tmpdir(), 'cf-precedents-'))
+  for (const dir of ['rules', 'seats']) cpSync(join(repo, dir), join(root, dir), { recursive: true })
+  return tick(db, root, provider, new Date(when), undefined, undefined, 0, read)
+}
+
+function sourced(db: Db, ...repos: string[]): void {
+  for (const r of repos) keep(db, { repo: r, number: 1, title: r, merged_at: '2026-10-01T00:00:00Z', merger: null, files: ['a.ts'], issues: [] }, [said])
+}
+
+function writer(fired: string[], fails = false): Provider {
+  return {
+    name: 'claude-agent-sdk',
+    fire: (p) => {
+      fired.push(p.prompt)
+      if (fails) return Promise.reject(new Error('the writer is down'))
+      return Promise.resolve({ text: `- area: a.ts | decision: keep the cache | why: callers rely on it | said_by: m (maintainer) | source: ${said.url}`,
+        transcript_path: p.transcript, usage: { input: 1, cache: 1, output: 1 }, seconds: 0.5, ended: 'completed', exit: 0,
+        stop_reason: 'end_turn', denials: 0 })
+    },
+  }
+}
 
 test('D1-D3 each targeted repo is harvested once per local day', async () => {
   const db = world()
@@ -72,4 +98,32 @@ test('D5 a tick with no reader harvests nothing', async () => {
   const db = world()
   await at(db, '2026-10-31T12:00:00Z')
   expect(ofKind(db, 'precedent_harvest')).toEqual([])
+})
+
+test('distill D3 a passed harvest distills its repo', async () => {
+  const db = world()
+  sourced(db, 'o/live')
+  const fired: string[] = []
+  await at(db, '2026-10-31T12:00:00Z', reader().read, writer(fired))
+  expect(fired).toHaveLength(1)
+  expect(precedents(db, 'o/live').map((p) => p.source)).toEqual([said.url])
+})
+
+test('distill D4 a refused harvest leaves its repo undistilled', async () => {
+  const db = world()
+  sourced(db, 'o/live', 'o/recent')
+  const fired: string[] = []
+  await at(db, '2026-10-31T12:00:00Z', reader('o/live').read, writer(fired))
+  expect(fired.map((p) => p.includes('# o/live'))).toEqual([false])
+  expect(precedents(db, 'o/live')).toEqual([])
+})
+
+test('distill D5 a thrown distill is logged, the next repo read', async () => {
+  const db = world()
+  sourced(db, 'o/live')
+  const { harvested, read } = reader()
+  await at(db, '2026-10-31T12:00:00Z', read, writer([], true))
+  expect(harvested).toEqual(['o/live', 'o/recent'])
+  expect(ofKind(db, 'precedent_refused').map((e) => e.message)).toEqual(['the writer is down'])
+  expect(pointers(db, 'precedent_refused')).toEqual(['o/live'])
 })

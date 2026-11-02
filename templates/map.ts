@@ -9,6 +9,8 @@ const MACHINE = ['Signatures', 'Selected entry points', 'Modifiers']
 export const LAYERS: [string, string[]][] = [
   ['machine', MACHINE],
   ['context', ['Roles', 'Guards', 'Limits', 'Outside dependencies', 'Conversion points', 'Aggregates', 'Not tracked']],
+  ['reach', ['Reach']],
+  ['coverage', ['Unreachable']],
 ]
 
 export const RANGE = /^(\S+) L(\d+)-L(\d+)$/
@@ -19,6 +21,14 @@ const cited = ({ file, start, end }: At): string => `at: ${file} L${String(start
 
 export const sections = (text: string): [string, string][] =>
   text.split(/^(?=## )/m).filter((s) => s.startsWith('## ')).map((s) => [s.slice(3).split('\n')[0]?.trimEnd() ?? '', s])
+
+export function laid(text: string, name: string, rows: string[]): string {
+  const section = `## ${name}\n\n${rows.map((r) => `- ${r}\n`).join('') || '- none\n'}`
+  const at = sections(text).find(([n]) => n === name)?.[1]
+  return at === undefined ? `${text.trimEnd()}\n\n${section}` : text.replace(at, () => `${section}${at.slice(at.trimEnd().length + 1)}`)
+}
+
+export const idOf = (section: string, n: number): string => `${section.toLowerCase().replaceAll(' ', '-')}-${String(n)}`
 
 export function selected(json: string): string[] {
   return (JSON.parse(json) as Selection[]).flatMap((c) => c.functions.map((f) =>
@@ -47,7 +57,7 @@ export function excerpts(root: string, text: string, dir: string): void {
       if (file === '') continue
       const source = readFileSync(join(root, file))
       const starts = [0, ...[...source.keys()].filter((b) => source[b] === 0x0a).map((b) => b + 1)]
-      writeFileSync(join(dir, `${name.toLowerCase().replaceAll(' ', '-')}-${String(i + 1)}.sol.txt`), source.subarray(starts[Number(start) - 1], starts[Number(end)]))
+      writeFileSync(join(dir, `${idOf(name, i + 1)}.sol.txt`), source.subarray(starts[Number(start) - 1], starts[Number(end)]))
     }
   }
 }

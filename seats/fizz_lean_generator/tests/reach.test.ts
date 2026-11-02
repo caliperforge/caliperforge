@@ -1,0 +1,88 @@
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { expect, test } from 'vitest'
+import { layered } from '../../../templates/handoff.ts'
+import { sections } from '../../../templates/map.ts'
+import { type Item, met, type ProbeReadings, reach, unmet, written } from '../../../templates/reach.ts'
+
+const fixtures = join(import.meta.dirname, 'fixtures')
+const REPORT = join(fixtures, 'reach_revert_report.json')
+const MAP = [
+  '## Signatures\n\n- V.deposit(uint256 assets) | at: src/V.sol L8-L11\n- V.withdraw(uint256 assets) | at: src/V.sol L13-L15\n'
+  + '- V.convertToAssets(uint256 shares) returns (uint256) | at: src/V.sol L17-L19\n',
+  '## Selected entry points\n\n- V.deposit(uint256 assets) | tier: primary\n- V.withdraw(uint256 assets) | tier: primary\n'
+  + '- V.convertToAssets(uint256 shares) | tier: secondary\n',
+  '## Guards\n\n- V.deposit | reverts: totalAssets + assets > CAP with "cap" | at: src/V.sol L9-L9\n'
+  + '- V.withdraw | reverts: assets > totalAssets on underflow | at: src/V.sol L14-L14\n',
+  '## Limits\n\n- V.CAP | bound: totalAssets at most 1e24 | at: src/V.sol L5-L5\n',
+  '## Conversion points\n\n- V.convertToAssets | converts: shares to assets, rounding down at the division | at: src/V.sol L17-L19\n',
+].join('\n')
+const PROBES: ProbeReadings = { limits: { 'V.CAP': { max: 5n * 10n ** 23n } }, conversions: { 'V.convertToAssets': { min: 0n, max: 2n * 10n ** 24n, saw1Wei: false } } }
+const WITHDRAW = 'Selected entry points V.withdraw(uint256 assets)'
+
+function judged(probes = PROBES, report = REPORT): Item[] {
+  const root = mkdtempSync(join(tmpdir(), 'cf-fizz-reach-'))
+  mkdirSync(join(root, 'src'))
+  copyFileSync(join(fixtures, 'V.sol'), join(root, 'src/V.sol'))
+  return reach(root, MAP, join(fixtures, 'lcov.info'), report, probes)
+}
+
+const at = (items: Item[], key: string): Item | undefined => items.find((i) => i.key === key)
+const keys = (items: Item[]): string[] => items.map((i) => i.key)
+const unreachable = (map: string, rows: string[]): string => `${map}\n## Unreachable\n\n${rows.map((r) => `- ${r}\n`).join('')}`
+
+test('D1: a guard seen only passing is not met', () => {
+  expect(at(judged(), 'Guards V.deposit')).toMatchObject({ met: false, cells: ['passing: yes', 'reverting: no'], note: 'Guards V.deposit: reverting never seen' })
+})
+
+test('D2: a limit is met within 1% of its bound', () => {
+  const limit = (limits: ProbeReadings['limits']): Item | undefined => at(judged({ ...PROBES, limits }), 'Limits V.CAP')
+  expect(limit({ 'V.CAP': { max: 5n * 10n ** 23n } })?.met).toBe(false)
+  expect(limit({ 'V.CAP': { max: 995n * 10n ** 21n } })?.met).toBe(true)
+  expect(limit({})).toMatchObject({ met: false, note: 'Limits V.CAP: no probe reading' })
+})
+
+test('D3: a conversion missing its 1-wei case is not met', () => {
+  expect(at(judged(), 'Conversion points V.convertToAssets')).toMatchObject({ met: false, note: 'Conversion points V.convertToAssets: no 1-wei case' })
+})
+
+test('D4: entry rows carry typed reverts, line and success %', () => {
+  const report = join(mkdtempSync(join(tmpdir(), 'cf-fizz-reach-')), 'revert_report.json')
+  writeFileSync(report, readFileSync(REPORT, 'utf8').replace('{ "panic: arithmetic underflow/overflow": { "count": 28',
+    '{ "paused": { "count": 3, "pct": 11 }, "panic: arithmetic underflow/overflow": { "count": 25'))
+  const items = judged(PROBES, report)
+  expect(at(items, WITHDRAW)).toMatchObject({ met: true, cells: ['calls: 30', 'successes: 2', 'success: 7% (below 10)', 'lines: 33% (below 50)',
+    'reverts: panic: arithmetic underflow/overflow [other] 25, paused [paused] 3'] })
+  expect(at(items, 'Selected entry points V.deposit(uint256 assets)')?.cells).toEqual(['calls: 40', 'successes: 40', 'success: 100%', 'lines: 100%', 'reverts: none'])
+  expect(keys(unmet(MAP, items))).not.toContain(WITHDRAW)
+})
+
+test('D5: unmet drops only a filled Unreachable reason', () => {
+  const items = judged()
+  expect(unmet(MAP, items).map(({ key, reverts }) => ({ key, reverts }))).toEqual([{ key: 'Guards V.deposit', reverts: [] },
+    { key: 'Guards V.withdraw', reverts: ['panic: arithmetic underflow/overflow [other] 28'] }, { key: 'Limits V.CAP', reverts: [] },
+    { key: 'Conversion points V.convertToAssets', reverts: [] }])
+  expect(keys(unmet(unreachable(MAP, ['Guards V.deposit | reason: CAP needs 1e24 of deposits']), items))).not.toContain('Guards V.deposit')
+  for (const reason of ['', '<why>']) expect(keys(unmet(unreachable(MAP, [`Guards V.deposit | reason: ${reason}`]), items))).toContain('Guards V.deposit')
+  expect(met(MAP, items)).toMatchObject({ met: false, reasons: expect.arrayContaining(['Guards V.withdraw: passing never seen']) as string[] })
+  expect(met(unreachable(MAP, unmet(MAP, items).map((i) => `${i.key} | reason: no input reaches it`)), items)).toEqual({ met: true, reasons: [] })
+})
+
+test('D6: coverage may change ## Unreachable, not ## Reach', () => {
+  const map = written(MAP, judged())
+  const reasoned = unreachable(map, ['Guards V.deposit | reason: CAP needs 1e24 of deposits'])
+  expect(layered('coverage', map, written(map, []))).toEqual([{ rule: 'handoff.layer', note: 'coverage: ## Reach is the reach layer\'s and changed' }])
+  expect(layered('coverage', map, reasoned)).toEqual([])
+  expect(layered('invariants', map, reasoned)).toEqual([{ rule: 'handoff.layer', note: 'invariants: ## Unreachable is the coverage layer\'s and changed' }])
+})
+
+test('D7: written replaces ## Reach, keeps every other section', () => {
+  const before = `${MAP}\n## Reach\n\n- stale | met: no\n\n${unreachable('', ['none']).trimStart()}`
+  const after = written(before, judged())
+  const others = (text: string): [string, string][] => sections(text).filter(([name]) => name !== 'Reach')
+  expect(others(after)).toEqual(others(before))
+  const reached = sections(after).find(([name]) => name === 'Reach')?.[1]
+  expect(reached).toContain('- Guards V.deposit | met: no | passing: yes | reverting: no\n')
+  expect(reached).not.toContain('stale')
+})

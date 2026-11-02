@@ -28,6 +28,22 @@
 
 - <Contract.function or Contract.variable> | reason: <why no row tracks it>
 
+# Candidates
+
+## Candidates
+
+- <id> | says: <plain words> | relies: <map row ids> | reads: <trackers and handlers> | converted: <yes or no> | tolerance: <wei per conversion × conversions> | delta: <token>.balanceOf(<holder>) | fails: <what failure would mean>
+
+# Plan
+
+## Rows
+
+- <id> | says: <plain words> | relies: <map row ids> | reads: <trackers and handlers> | converted: <yes or no> | tolerance: <wei per conversion × conversions> | delta: <token>.balanceOf(<holder>) | fails: <what failure would mean> | implementer: <global or specific>
+
+## Skipped
+
+- <map row id> | reason: <why>
+
 # Handoff: context
 
 phase: context

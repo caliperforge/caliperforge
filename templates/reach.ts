@@ -1,7 +1,9 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { laid, RANGE, sections } from './map.ts'
+import { filled } from './handoff.ts'
+import { laid, RANGE } from './map.ts'
 import type { Reach } from './report.ts'
+import { NONE, type Row, rows } from './slices.ts'
 
 export interface ProbeReadings { limits: Record<string, { max: bigint }>; conversions: Record<string, { min: bigint; max: bigint; saw1Wei: boolean }> }
 
@@ -13,16 +15,12 @@ interface Metrics { totalCalls: number; totalReverts: number; revertReasonMetric
 
 interface Revert { contractRevertMetrics: Partial<Record<string, { functionRevertMetrics: Record<string, Metrics> }>> }
 
-interface Row { name: string; cells: Map<string, string> }
-
 interface Read { root: string; rows: Map<string, Row[]>; hits: (file: string) => Map<number, number>; metrics: (name: string) => Metrics; probes: ProbeReadings }
 
-const FIELD = /^(\w+):\s*(.*)$/
 const DA = /^DA:(\d+),(\d+)/
 const INTEGER = /\b(\d[\d_]*)(?:e(\d+)|\*\*(\d+))?\b/
 const LITERAL = /"([^"]*)"/
 const ERROR = /\b(?:revert\s+|,\s*)([A-Z]\w*)\s*\(/
-const PLACEHOLDER = /<\w[^<>]*>/
 const TYPES: [string, RegExp][] = [['allowance/balance', /allowance|balance/i], ['cap/limit', /cap|limit|max|exceed/i],
   ['access', /owner|role|auth|access|only/i], ['paused', /paus/i]]
 const FLOORS = { lines: 50, success: 10 }
@@ -34,12 +32,6 @@ const yes = (b: boolean): string => b ? 'yes' : 'no'
 const pct = (part: number, whole: number): number => whole === 0 ? 0 : Math.round(part * 100 / whole)
 
 const floored = (key: keyof typeof FLOORS, n: number): string => `${key}: ${String(n)}%${n < FLOORS[key] ? ` (below ${String(FLOORS[key])})` : ''}`
-
-function rows(map: string): Map<string, Row[]> {
-  return new Map(sections(map).map(([section, text]) => [section, text.split('\n').map((l) => l.trimEnd()).filter((l) => l.startsWith('- ') && l !== '- none')
-    .map((l) => l.slice(2).split(' | ')).map(([name = '', ...pairs]) =>
-      ({ name, cells: new Map(pairs.map((p) => FIELD.exec(p)).filter((m) => m !== null).map((m) => [m[1] ?? '', m[2] ?? ''])) }))]))
-}
 
 function span(row: Row | undefined, name: string): [string, number, number] {
   const [, file, start, end] = RANGE.exec(row?.cells.get('at') ?? '') ?? []
@@ -110,7 +102,7 @@ const JUDGES: Record<string, (read: Read, row: Row) => Judged> = { 'Selected ent
 
 export function reach(root: string, map: string, lcov: string, report: string, probes: ProbeReadings): Item[] {
   const read: Read = { root, rows: rows(map), hits: covered(readFileSync(lcov, 'utf8')), metrics: measured(JSON.parse(readFileSync(report, 'utf8')) as Revert), probes }
-  return Object.entries(JUDGES).flatMap(([section, judge]) => (read.rows.get(section) ?? []).map((row) => {
+  return Object.entries(JUDGES).flatMap(([section, judge]) => (read.rows.get(section) ?? []).filter((row) => row.name !== NONE).map((row) => {
     const [key, judged] = [`${section} ${row.name}`, judge(read, row)]
     return { ...judged, key, note: judged.met ? '' : `${key}: ${judged.note}`, reverts: reverts(read.metrics(row.name)) }
   }))
@@ -121,7 +113,7 @@ export function written(map: string, items: Item[]): string {
 }
 
 export function unmet(map: string, items: Item[]): Item[] {
-  const reasoned = (rows(map).get('Unreachable') ?? []).filter(({ cells }) => /\S/.test(cells.get('reason') ?? '') && !PLACEHOLDER.test(cells.get('reason') ?? '')).map((r) => r.name)
+  const reasoned = (rows(map).get('Unreachable') ?? []).filter(({ cells }) => filled(cells.get('reason'))).map((r) => r.name)
   return items.filter((i) => !i.met && !reasoned.includes(i.key))
 }
 

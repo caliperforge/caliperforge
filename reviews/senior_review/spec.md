@@ -56,6 +56,10 @@ When the packet carries `# Removed tests`, answer each of its lines in the prose
 rewrites that title in that file and its why holds: the `replaced by` title is one the diff adds, or the
 quoted line is in the issue. One `not confirmed` refuses.
 
+When the packet carries `# Precedents`, answer each row in the prose before the fence, one line per row:
+`- <source URL> | kept` when the diff keeps that decision, or `- <source URL> | changed: <one line why>`
+when it departs from it. A row left without its line refuses.
+
 Close with this fence and nothing after it:
 
 ```

@@ -1,5 +1,6 @@
+import Database from 'better-sqlite3'
 import { execFileSync } from 'node:child_process'
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
@@ -207,6 +208,20 @@ export function world(pulse: 'warm' | 'cold' = 'warm', day = new Date().toISOStr
   putPlan(db, { id: 1, pipe_id: 1, target_id: 1, template: 'pr_path', state: 'queued', queued_at: `${day}T00:00:00.000Z`, step: 0, retries: 0 })
   put(root, 1, 'ask.md', '# hello\n\n- **D1** add `hello()` in `src/hello.ts`\n')
   return { db, root, pipe: pipeOf(db, 1), plan: 1, target: 1 }
+}
+
+/** `w` copied whole, its remotes and checkouts aimed at the copy: a tick on the copy leaves `w` as it was. */
+export function copied(w: World): World {
+  const root = mkdtempSync(join(tmpdir(), 'cf-seq-'))
+  const file = (dir: string): string => join(dir, 'world.db')
+  cpSync(w.root, root, { recursive: true, filter: (path) => path !== file(w.root) })
+  const work = join(root, '.cf/work')
+  const configs = readdirSync(work).map((id) => join(work, id, 'src/.git/config')).filter((path) => existsSync(path))
+  for (const path of [join(root, '.cf/git-base'), ...configs]) writeFileSync(path, readFileSync(path, 'utf8').replaceAll(w.root, root))
+  w.db.exec(`VACUUM INTO '${file(root)}'`)
+  const db = new Database(file(root))
+  opened.set(root, db)
+  return { ...w, db, root }
 }
 
 /**

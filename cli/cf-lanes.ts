@@ -1,6 +1,7 @@
 import type { Command } from 'commander'
 import { readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
+import { openings } from '../precedents/openings.ts'
 import { claudeAgentSdk } from '../providers/claude-agent-sdk/index.ts'
 import { self } from '../rails/tight/index.ts'
 import { fire } from '../runner/index.ts'
@@ -27,6 +28,7 @@ import { flow } from './flow.ts'
 import { gh } from './gh.ts'
 import { write as writeMap } from './map.ts'
 import { ack, line, unread } from './inbox.ts'
+import { openingLines } from './openings.ts'
 import { outsideSection } from './outside.ts'
 import { refusalDays, refusalSection } from './refusals.ts'
 import { close } from './session.ts'
@@ -219,6 +221,7 @@ function briefs(cf: Command, { root, db, out }: Cli): void {
     out(caughtSection(caught(handle, root, new Date())))
     out(benchSection(underpowered(handle)))
     out(outsideSection(tally(handle), new Date()))
+    out(openingLines(openings(handle, null), new Date()))
     out(section('open plans', openPlans(handle)))
     out(section('halted', halted(handle)))
     out(section('waiting on the CEO', heldBy(handle, 'ceo')))

@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { Command } from 'commander'
 import { expect, test } from 'vitest'
 import { fresh } from '../../checks/sqlite.ts'
+import { type Opening, opened } from '../../precedents/openings.ts'
 import { distilled, keep, precedents, type Source, type Thread } from '../../precedents/store.ts'
 import type { Provider } from '../../providers/kind.ts'
 import { planDir } from '../../sequencer/workspace.ts'
@@ -94,4 +95,22 @@ test('D7 escapes prints each PR count and its escapes', async () => {
   registerPrecedents(cf, { root, db: () => db, out: (text) => { printed += text } }, replies([]))
   await cf.parseAsync(['precedents', 'escapes', 'o/r'], { from: 'user' })
   expect(printed).toBe(`o/r#7\t1\n  src/a.rs:9\t${nine.url}\n`)
+})
+
+test('D1 D2 openings lists open rows newest first, one repo or all', async () => {
+  const db = fresh(join(repo, 'schema'))
+  const opening = (area: string): Opening => ({ kind: 'deferred', area, quote: 'later', said_by: 'm', source: said.url })
+  opened(db, pr(7, 'Old', '2026-10-01T00:00:00Z'), [opening('a.ts'), opening('b.ts')])
+  opened(db, pr(9, 'New', '2026-10-03T00:00:00Z'), [opening('c.ts')])
+  opened(db, { ...pr(2, 'Theirs', '2026-10-05T00:00:00Z'), repo: 'x/y' }, [opening('d.ts')])
+  db.exec("UPDATE openings SET status = 'taken' WHERE area = 'b.ts'")
+  let printed = ''
+  const cf = new Command().exitOverride()
+  registerPrecedents(cf, { root: repo, db: () => db, out: (text) => { printed += text } }, replies([]))
+  const line = (at: string, r: string, area: string): string => `${at}\t${r}\tdeferred\t${area}\tm\t${said.url}\tlater\n`
+  await cf.parseAsync(['openings', 'o/r'], { from: 'user' })
+  expect(printed).toBe(line('2026-10-03T00:00:00Z', 'o/r', 'c.ts') + line('2026-10-01T00:00:00Z', 'o/r', 'a.ts'))
+  printed = ''
+  await cf.parseAsync(['openings'], { from: 'user' })
+  expect(printed).toBe(line('2026-10-05T00:00:00Z', 'x/y', 'd.ts') + line('2026-10-03T00:00:00Z', 'o/r', 'c.ts') + line('2026-10-01T00:00:00Z', 'o/r', 'a.ts'))
 })

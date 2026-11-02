@@ -17,6 +17,13 @@ export function escapeCounts(db: Db, repo: string): { number: number; plan: numb
     .all(repo) as { number: number; plan: number; escapes: number }[]
 }
 
+export function escapesWeek(db: Db, now: Date): { repo: string; number: number; escapes: number }[] {
+  const since = new Date(now.getTime() - 7 * 86_400_000).toISOString()
+  return db.prepare(`SELECT e.repo, e.number, e.escapes FROM escape_counts e JOIN records r ON r.repo = e.repo AND r.pr = e.number
+    WHERE (r.state = 'OPEN' AND r.merged_at IS NULL) OR r.opened_at >= @since OR r.merged_at >= @since
+    ORDER BY e.repo, e.number`).all({ since }) as { repo: string; number: number; escapes: number }[]
+}
+
 export function escapesOf(db: Db, repo: string, number: number): Escape[] {
   return db.prepare('SELECT area, line, author, role, text, url FROM escapes WHERE repo = ? AND number = ? ORDER BY id')
     .all(repo, number) as Escape[]

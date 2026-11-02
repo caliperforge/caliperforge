@@ -32,6 +32,10 @@ folder (`sequencer/tests/`), never an absolute path, never a path starting `../`
 `## Tests` for an Atelier ticket names service and model tests, and names an accessibility-tree test only
 for a control.
 
+A `## Tests` row's test is named for the behaviour it checks, never for a ticket, part or `D` row (`D1`,
+`1567a`), and "When it ends" bullets map to behaviours, not to one test each. A change to a behaviour that
+already has a test edits that test; only a new behaviour gets a new test.
+
 A file you read from the machine's own tree for context (an Atelier brief reading `schema/` or `cli/`) is
 not in the checkout: what you read there goes under `## Settled facts`, never under `## Files`.
 

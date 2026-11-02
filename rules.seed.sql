@@ -112,7 +112,7 @@ VALUES
   ('ci-green', 'rail', 'rules/rails.yaml', 'b46b445806d399b61887a5259eb0a6893444efcbe5acf2e6dd534507bc0882f3', '2026-09-17'),
   ('ready', 'rail', 'rules/rails.yaml', 'b46b445806d399b61887a5259eb0a6893444efcbe5acf2e6dd534507bc0882f3', '2026-09-17'),
   ('account_lead', 'card', 'rules/roster/account_lead.yaml', '11c673ed88e2d18c6c88f19d271782ba7845a74f20a214de2caf10b4080a6e0d', '2026-10-14'),
-  ('brief_writer', 'card', 'rules/roster/brief_writer.yaml', 'ed719dd54a20506dbff8ac8aace2721439d913aed249325fd51a2170308c0e6e', '2026-09-17'),
+  ('brief_writer', 'card', 'rules/roster/brief_writer.yaml', '4f2c1c6fb7699019c3264b18a3f510a58402c066105e514cbb25d566e617e702', '2026-09-17'),
   ('claims_checker', 'card', 'rules/roster/claims_checker.yaml', 'b9abab1c779495ee547d4096962a7d8c36b628e08339c6fb2ebb7a41b21fbc88', '2026-10-20'),
   ('design_lead', 'card', 'rules/roster/design_lead.yaml', 'cd6c8c262f9a50f3bc0c15ebaa4fc33a0cab0809d13d51c9680cb79257ea3c46', '2026-10-11'),
   ('director', 'card', 'rules/roster/director.yaml', '4e0c9bf0cf5f9a96ef6ff47f4428019f7f5cbe00a71f6d9d6b6cc44153c66a87', '2026-10-04'),
@@ -138,6 +138,6 @@ VALUES
   ('solidity_specialist', 'card', 'rules/roster/solidity_specialist.yaml', 'b1b7bc93d0620fe45222fe3ad65341e5c469d1d8db627962454854baa6bc9f30', '2026-09-27'),
   ('swift_specialist', 'card', 'rules/roster/swift_specialist.yaml', 'e82952d468c6fc4e19ae0a8d1e32a0f6d8867fa635c7d9c0b666dc029d1dc6a3', '2026-09-23'),
   ('text_review', 'card', 'rules/roster/text_review.yaml', '1fdabb7364e8a38ff71a59296d2d893746bc8b2cd3d79c969fc3e13dcb64c611', '2026-09-27'),
-  ('typescript_specialist', 'card', 'rules/roster/typescript_specialist.yaml', '13099aba8dbc98e3f6877c691685a035451f0b6492072711b9eab524a0fec252', '2026-09-17'),
+  ('typescript_specialist', 'card', 'rules/roster/typescript_specialist.yaml', '878e57bb80652afae055a82a2c13e2a9fa0c3edbce28aee9ea607e21d987ffd3', '2026-09-17'),
   ('web_specialist', 'card', 'rules/roster/web_specialist.yaml', '98043cc10380f84790c4c973b1724af9b929404759dfcded2dab893798359425', '2026-10-04'),
   ('writer', 'card', 'rules/roster/writer.yaml', '3296261439073faf44d291efe74b0f2964e936137b65edd64fda7126eb156008', '2026-09-27');

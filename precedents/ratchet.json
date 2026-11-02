@@ -1,4 +1,8 @@
 {
+  "openings.ts": {
+    "lines": 22,
+    "prepare": 1
+  },
   "store.ts": {
     "lines": 68,
     "prepare": 12

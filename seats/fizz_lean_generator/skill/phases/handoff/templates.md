@@ -28,6 +28,18 @@
 
 - <Contract.function or Contract.variable> | reason: <why no row tracks it>
 
+## Known holes
+
+- <what the suite cannot reach> | reason: <why>
+
+## Skipped entry points
+
+- <Contract.function> | reason: <why it has no handler>
+
+## Unclamped
+
+- <Contract.function> | reason: <why it has no clamped handler>
+
 # Candidates
 
 ## Candidates

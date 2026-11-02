@@ -59,3 +59,10 @@ export function distilled(db: Db, pr: Source, rows: Precedent[], tokens: number)
 export function precedents(db: Db, repo: string): Precedent[] {
   return db.prepare('SELECT area, decision, why, said_by, role, source FROM precedents WHERE repo = ? ORDER BY id').all(repo) as Precedent[]
 }
+
+export function filed(db: Db, repo: string): (Precedent & { merged_at: string; files: string[] })[] {
+  const rows = db.prepare(`SELECT p.area, p.decision, p.why, p.said_by, p.role, p.source, p.merged_at, s.files FROM precedents p
+    JOIN precedent_sources s ON s.repo = p.repo AND s.number = p.number WHERE p.repo = ? ORDER BY p.id`)
+    .all(repo) as (Precedent & { merged_at: string; files: string })[]
+  return rows.map((row) => ({ ...row, files: JSON.parse(row.files) as string[] }))
+}

@@ -8,6 +8,7 @@ import { distilled, keep, precedents, type Source, type Thread } from '../../pre
 import type { Provider } from '../../providers/kind.ts'
 import type { Db } from '../../store/index.ts'
 import { registerPrecedents } from '../cf-precedents.ts'
+import type { Read } from '../gh.ts'
 
 const repo = join(import.meta.dirname, '../..')
 const pr = (number: number, title: string, merged_at: string): Source =>
@@ -54,4 +55,19 @@ test('D2 with nothing undistilled distill fires nothing', async () => {
   const fired: string[] = []
   expect(await distilling(fresh(join(repo, 'schema')), fired)).toBe('o/r\t0 distilled, 0 stored\n')
   expect(fired).toEqual([])
+})
+
+test('D6 for prints each match as its stored row, or nothing', async () => {
+  const db = fresh(join(repo, 'schema'))
+  const source = pr(7, 'Fix', '2026-10-01T00:00:00Z')
+  keep(db, source, [said])
+  distilled(db, source, [{ area: 'a.ts', decision: 'keep the cache', why: 'callers rely on it', said_by: 'm', role: 'maintainer', source: said.url }], 0)
+  const read: Read = (args) => (args[1] === 'repos/o/r' ? { default_branch: 'main' } : { tree: [{ path: 'a.ts' }], truncated: false })
+  let printed = ''
+  const cf = new Command().exitOverride()
+  registerPrecedents(cf, { root: repo, db: () => db, out: (text) => { printed += text } }, replies([]), read)
+  await cf.parseAsync(['precedents', 'for', 'o/r', 'a.ts'], { from: 'user' })
+  expect(printed).toBe(`${ROW}\n`)
+  await cf.parseAsync(['precedents', 'for', 'o/r', 'b.ts'], { from: 'user' })
+  expect(printed).toBe(`${ROW}\n`)
 })

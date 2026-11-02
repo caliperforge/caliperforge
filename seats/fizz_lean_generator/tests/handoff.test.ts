@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { expect, test } from 'vitest'
 import { compiled, extract } from '../../../templates/extract.ts'
-import { handoff, ranged } from '../../../templates/handoff.ts'
+import { handoff, layered, ranged } from '../../../templates/handoff.ts'
 
 const skill = join(import.meta.dirname, '../skill')
 const READ = '- x-ray/x-ray.md, Vault.deposit and Vault.redeem — the entry points to call'
@@ -95,6 +95,7 @@ const CITED = {
   'Conversion points': '- V.convertToAssets | converts: shares to assets, rounding down at the division | at: src/V.sol L17-L19',
   Aggregates: '- V.totalAssets | parts: deposits less withdrawals | movers: V.deposit, V.withdraw | at: src/V.sol L6-L6',
   'Not tracked': '- none',
+  'Outside dependencies': '- none',
 }
 const HANDED = Object.entries(CITED).map(([name, row]) => `## ${name}\n\n${row}\n`).join('\n')
 
@@ -158,6 +159,16 @@ test('1753a D6: a multi-byte comment leaves the lines', () => {
     return `${String(start >= blank ? start + comment.length : start)}:${String(start < blank && start + length > blank ? length + comment.length : length)}`
   })
   expect(extract(project(Buffer.concat([V.subarray(0, blank), comment, V.subarray(blank)]), ast))).toMatchObject(ROWS)
+})
+
+test('1753b D3: a scaffold editing ## Guards is handoff.layer', () => {
+  expect(layered('scaffold', HANDED, cut('L9-L9', 'L9-L10'))).toEqual([{ rule: 'handoff.layer', note: 'scaffold: ## Guards is the context layer\'s and changed' }])
+  expect(layered('scaffold', HANDED, `${HANDED}\n## Stand-ins\n\n- MockStrategy | limits: only vault mints\n`)).toEqual([])
+})
+
+test('1753b D4: a map with no ## Outside dependencies is refused', () => {
+  expect(ranged(root, cut(`## Outside dependencies\n\n${CITED['Outside dependencies']}\n`, ''), facts))
+    .toEqual([{ rule: 'handoff.field', note: 'context: ## Outside dependencies is missing from map.md or has no row' }])
 })
 
 test.runIf(process.env.CF_BENCH_LIVE === '1')('1753a D7: forge on a fresh V.sol gives the D1 rows', () => {

@@ -1,11 +1,12 @@
-import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { expect, test, vi } from 'vitest'
+import { afterEach, expect, test, vi } from 'vitest'
 import type { Miss, Packet } from '../../../providers/kind.ts'
 import { get } from '../../../sequencer/workspace.ts'
 import { eventsAfter } from '../../../store/events.ts'
-import { critic } from '../../../templates/critic.ts'
+import type { Db } from '../../../store/index.ts'
+import { critic, criticCheck } from '../../../templates/critic.ts'
 import { packets } from '../../../templates/plan.ts'
 import { type Item, reach } from '../../../templates/reach.ts'
 import { report } from '../../../templates/report.ts'
@@ -22,6 +23,11 @@ vi.mock('../../../templates/smoke.ts', async (importOriginal) => ({ ...await imp
 vi.mock('../../../templates/reach.ts', async (importOriginal) => ({ ...await importOriginal<object>(), reach: vi.fn(() => []) }))
 
 vi.mock('../../../templates/probes.ts', async (importOriginal) => ({ ...await importOriginal<object>(), trackers: vi.fn(() => new Map()) }))
+
+vi.mock('../../../templates/critic.ts', async (importOriginal) => {
+  const original = await importOriginal<{ criticCheck: typeof criticCheck }>()
+  return { ...original, criticCheck: vi.fn(original.criticCheck) }
+})
 
 const root = join(import.meta.dirname, '../../..')
 const skill = join(root, 'seats/fizz_lean_generator/skill')
@@ -125,66 +131,81 @@ const CONVERTED = 'assertEq(vault.convertToAssets(s), a);\n'
 const MOCK = 'contract MockOracle {}\n'
 const CLEAN = { 'Suite.sol': 'assertApproxEqAbs(vault.convertToAssets(s), a, 2);\n', 'Mock.sol': 'contract MockOracle {} // stand-in limits: 1e6 of start\n' }
 
-async function ran(suite: Record<string, string>, filled = FILLED) {
-  const dir = mkdtempSync(join(tmpdir(), 'cf-fizz-critic-'))
-  const handoffs = join(dir, 'test/fizz/fizz_data/handoff')
-  mkdirSync(handoffs, { recursive: true })
-  for (const [name, text] of Object.entries(suite)) writeFileSync(join(dir, 'test/fizz', name), text)
-  writeFileSync(join(dir, 'critic-pass.md'), pass())
-  const fires: { phase: string; issue: string }[] = []
-  const critics = vi.fn(() => critic(join(dir, 'critic-pass.md'), dir))
-  const { run } = benched((packet, phase) => {
-    fires.push({ phase, issue: packet.prompt })
-    writeFileSync(join(handoffs, `${phase}.md`), filled[phase] ?? '')
-    return {}
-  })
-  const sum = await run(skill, handoffs, critics)
-  const invariants = fires.filter((f) => f.phase === 'invariants')
-  return { sum, invariants, critics, critic: join(handoffs, 'critic.md') }
+const suites = new Set<string>()
+
+afterEach(() => {
+  for (const dir of suites) rmSync(dir, { recursive: true, force: true })
+  suites.clear()
+})
+
+function fizzed(): string {
+  const fizz = join(mkdtempSync(join(tmpdir(), 'cf-fizz-skill-')), 'fizz')
+  mkdirSync(join(fizz, 'references'), { recursive: true })
+  writeFileSync(join(fizz, 'references/critic-pass.md'), pass())
+  return fizz
 }
 
-test('D1: an untolerated convertToAssets assertEq is sent back', async () => {
-  const { invariants } = await ran({ 'Suite.sol': CONVERTED })
-  expect(invariants[1]?.issue).toContain('Your handoff was refused:\n- critic.share_converted: test/fizz/Suite.sol:1:assertEq(')
-})
+function suited(bench: string, files: Record<string, string>): void {
+  const dir = join(bench, 'test/fizz')
+  suites.add(dir)
+  mkdirSync(dir, { recursive: true })
+  for (const [name, text] of Object.entries(files)) writeFileSync(join(dir, name), text)
+}
 
-test('D2: a MockOracle with no stand-in limits is sent back', async () => {
-  const { invariants } = await ran({ 'Mock.sol': MOCK })
-  expect(invariants[1]?.issue).toContain('Your handoff was refused:\n- critic.stand_in: test/fizz/Mock.sol')
-})
-
-test('D3: a clean suite fires invariants once, empty critic.md', async () => {
-  const { invariants, critic: path } = await ran(CLEAN)
-  expect(invariants).toHaveLength(1)
-  expect(readFileSync(path, 'utf8')).toBe('')
-})
-
-test('D4: hits left on the retry land in critic.md, run goes on', async () => {
-  const { sum, invariants, critic: path } = await ran({ 'Suite.sol': CONVERTED, 'Mock.sol': MOCK })
-  expect(sum).toMatchObject({ tokens: 5, wall: null })
-  expect(invariants).toHaveLength(2)
-  expect(readFileSync(path, 'utf8')).toBe(`critic.share_converted: test/fizz/Suite.sol:1:${CONVERTED}critic.stand_in: test/fizz/Mock.sol\n`)
-})
-
-test('D5: a twice-refused invariants handoff skips the critic', async () => {
-  const { sum, critics, critic: path } = await ran({ 'Mock.sol': MOCK }, { ...FILLED, invariants: '' })
-  expect(sum).toMatchObject({ outcome: 'refuse', note: expect.stringContaining('invariants handoff refused twice') as string })
-  expect(critics).not.toHaveBeenCalled()
-  expect(existsSync(path)).toBe(false)
-})
-
-function legs(stop?: string, mapped = false) {
+function legs(stop?: string, mapped = false, suite: Record<string, string> = {}, filled = FILLED, fixes: Record<string, Record<string, string>> = {}) {
   const handoffs = join(mkdtempSync(join(tmpdir(), 'cf-fizz-stop-')), 'test/fizz/fizz_data/handoff')
   mkdirSync(handoffs, { recursive: true })
   const fires: { phase: string; issue: string }[] = []
-  const { run } = benched((packet, phase) => {
+  const { db, root: bench, run } = benched((packet, phase) => {
     fires.push({ phase, issue: packet.prompt })
-    writeFileSync(join(handoffs, `${phase}.md`), FILLED[phase] ?? '')
+    writeFileSync(join(handoffs, `${phase}.md`), filled[phase] ?? '')
     if (mapped) writeFileSync(join(handoffs, 'map.md'), `## Guards\n\n- V.deposit | reverts: ${phase}\n`)
+    suited(bench, fixes[phase] ?? {})
     return { usage: { input: 0, cache: 0, output: 10 }, seconds: 2 }
-  })
-  return { handoffs, fires, run: () => run(skill, handoffs, () => [], stop) }
+  }, [fizzed()])
+  suited(bench, suite)
+  return { db, handoffs, fires, run: () => run(skill, handoffs, stop) }
 }
+
+const critics = (db: Db): string[][] => eventsAfter(db, 0).filter((e) => e.kind === 'critic').map((e) => [e.outcome, e.message])
+
+test('D2: an untolerated convertToAssets assertEq fires a fix', async () => {
+  const { db, fires, run } = legs(undefined, false, { 'Suite.sol': CONVERTED })
+  await run()
+  expect(fires.map((f) => f.phase)).toEqual(['context', 'scaffold', 'coverage', 'invariants', 'invariants-fix-critic-1', 'invariants-fix-critic-2'])
+  expect(fires[4]?.issue).toContain('critic found:\n- test/fizz/Suite.sol:1:')
+  expect(critics(db)).toEqual([['refuse', 'not_clean: critic'], ['pass', 'critic.stand_in']])
+})
+
+test('D3: a MockOracle with no stand-in limits fixes at the end', async () => {
+  const { fires, run } = legs(undefined, false, { 'Mock.sol': MOCK }, FILLED, { 'end-fix-critic-1': CLEAN })
+  await run()
+  expect(fires.map((f) => f.phase)).toEqual(['context', 'scaffold', 'coverage', 'invariants', 'end-fix-critic-1'])
+  expect(fires[4]?.issue).toContain('critic found:\n- test/fizz/Mock.sol')
+})
+
+test('D4: hits a fix leaves land in critic.md, run goes on', async () => {
+  const { db, handoffs, run } = legs(undefined, false, { 'Suite.sol': CONVERTED })
+  expect(await run()).toMatchObject({ tokens: 60, wall: null })
+  expect(eventsAfter(db, 0).filter((e) => e.kind === 'fix.turn').map((e) => e.message)).toEqual([1, 2].map((turn) => JSON.stringify({ turn, tokens: 10, usd: 0 })))
+  expect(critics(db)[0]).toEqual(['refuse', 'not_clean: critic'])
+  expect(readFileSync(join(handoffs, 'critic.md'), 'utf8')).toBe(`critic.share_converted: test/fizz/Suite.sol:1:${CONVERTED}`)
+})
+
+test('D5: a clean suite fires no fix, logs two critic passes', async () => {
+  const { db, handoffs, fires, run } = legs(undefined, false, CLEAN)
+  await run()
+  expect(fires).toHaveLength(4)
+  expect(critics(db)).toEqual([['pass', 'critic.share_converted'], ['pass', 'critic.stand_in']])
+  expect(existsSync(join(handoffs, 'critic.md'))).toBe(false)
+})
+
+test('D6: a twice-refused invariants handoff skips the critic', async () => {
+  const { handoffs, fires, run } = legs(undefined, false, { 'Mock.sol': MOCK }, { ...FILLED, invariants: '' })
+  expect(await run()).toMatchObject({ outcome: 'refuse', note: expect.stringContaining('invariants handoff refused twice') as string })
+  expect(fires.filter((f) => f.phase.includes('-fix-critic-'))).toEqual([])
+  expect(existsSync(join(handoffs, 'critic.md'))).toBe(false)
+})
 
 test('stop D1: stop after context fires context alone and holds', async () => {
   const { handoffs, fires, run } = legs('context')
@@ -212,9 +233,6 @@ async function mapped(map = '## Guards\n\n- V.deposit | reverts: cap | at: src/V
   const handoffs = join(mkdtempSync(join(tmpdir(), 'cf-fizz-mapped-')), 'test/fizz/fizz_data/handoff')
   mkdirSync(join(handoffs, 'excerpts'), { recursive: true })
   writeFileSync(join(handoffs, 'map.md'), map)
-  const fizz = join(mkdtempSync(join(tmpdir(), 'cf-fizz-skill-')), 'fizz')
-  mkdirSync(join(fizz, 'references'), { recursive: true })
-  writeFileSync(join(fizz, 'references/critic-pass.md'), pass())
   const packets: Packet[] = []
   const fires: { phase: string; issue: string; map: string }[] = []
   const { db, root, run } = benched((packet, phase) => {
@@ -224,9 +242,20 @@ async function mapped(map = '## Guards\n\n- V.deposit | reverts: cap | at: src/V
     writeFileSync(join(handoffs, `${phase}.md`), FILLED[phase] ?? '')
     for (const [file, text] of Object.entries(wrote[phase] ?? {})) writeFileSync(join(handoffs, file), text)
     return phase === 'scaffold' ? { misses: MISSES } : {}
-  }, [fizz])
-  return { db, root, handoffs, packets, fires, sum: await run(skill, handoffs, () => []) }
+  }, [fizzed()])
+  return { db, root, handoffs, packets, fires, sum: await run(skill, handoffs) }
 }
+
+test('D7: a mapped run calls each check once, in phase order', async () => {
+  vi.clearAllMocks()
+  await mapped()
+  const at = (f: (...args: never[]) => unknown): number[] => vi.mocked(f).mock.invocationCallOrder
+  expect([at(smoke).length, at(reach).length]).toEqual([1, 1])
+  expect(vi.mocked(criticCheck).mock.calls.map((call) => call[2])).toEqual(['critic.stand_in', 'critic.share_converted', 'critic.stand_in'])
+  const [[smoked], [reached], [stood, shared, ended]] = [at(smoke), at(reach), at(criticCheck)]
+  const order = [smoked, stood, reached, shared, ended]
+  expect(order).toEqual([...order].sort((a, b) => Number(a) - Number(b)))
+})
 
 test('D2: context is ranged, later phases carry map.md ranges', async () => {
   const { packets, sum } = await mapped()
@@ -280,6 +309,7 @@ test.each([{ name: 'nothing', text: '' }, { name: 'a placeholder', text: UNREACH
   expect(fires.map((f) => f.phase)).toEqual([...LEAN, 'coverage-fix-reach-1', 'coverage-fix-reach-2', 'invariants-plan', 'invariants'])
   expect(eventsAfter(db, 0).filter((e) => ['reach.boundary', 'critic'].includes(e.kind)).map((e) => [e.kind, e.outcome, e.message])).toEqual([
     ['critic', 'refuse', 'not_clean: reach'], ['reach.boundary', 'refuse', JSON.stringify({ met: false, reasons: [UNMET.note] })],
+    ['critic', 'pass', 'critic.share_converted'], ['critic', 'pass', 'critic.stand_in'],
   ])
 })
 

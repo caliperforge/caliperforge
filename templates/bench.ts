@@ -14,7 +14,6 @@ import { logged } from '../store/events.ts'
 import type { Db } from '../store/index.ts'
 import { needsCeo, type PlanRow } from '../store/plans.ts'
 import { clamp, quieted } from './balances.ts'
-import { critic } from './critic.ts'
 import { deps } from './deps.ts'
 import { costWall, written } from './generated.ts'
 import { inBare, listedIn } from './listed.ts'
@@ -138,8 +137,8 @@ export async function generate(db: Db, root: string, plan: PlanRow, step: Step, 
   const tmp = real(join(planDir(root, plan.id), 'scratch'))
   const issue = ask(granted[0], granted.find((path) => basename(path) === 'x-ray'), tmp)
   const bench = { db, root, plan, step, provider, name, dir, tmp, granted, walls, ceiling: CEILING }
-  const sum = name === 'fizz_lean_generator' ? await phased(bench, manifest, hash, granted[0] ?? '', join(dir, SUITE, META, 'handoff'), issue,
-    () => critic(join(granted.find((path) => basename(path) === 'fizz') ?? '', 'references/critic-pass.md'), dir), stop) : await firing(bench, manifest, hash)(prompt, issue, START)
+  const sum = name === 'fizz_lean_generator' ? await phased(bench, manifest, hash, granted[0] ?? '', join(dir, SUITE, META, 'handoff'), issue, stop)
+    : await firing(bench, manifest, hash)(prompt, issue, START)
   if ('outcome' in sum && sum.held === true) {
     renameSync(src, aside)
     needsCeo(db, plan, sum.note)

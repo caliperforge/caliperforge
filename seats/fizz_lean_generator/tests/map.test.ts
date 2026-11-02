@@ -51,7 +51,7 @@ async function ran(handoffs: string, maps: Record<string, string>) {
     if (maps[phase] !== undefined) writeFileSync(join(handoffs, 'map.md'), maps[phase])
     return {}
   })
-  return { fires, outcome: await run(skill, handoffs, () => [], 'scaffold') }
+  return { fires, outcome: await run(skill, handoffs, 'scaffold') }
 }
 
 test('D1: drawn writes the machine layer, keeps the agent\'s', () => {

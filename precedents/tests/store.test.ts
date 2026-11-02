@@ -2,7 +2,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { expect, it } from 'vitest'
 import { migrate, open } from '../../store/index.ts'
-import { distilled, keep, newestMerged, precedents, source, threads, type Precedent, type Source, type Thread } from '../store.ts'
+import { distilled, keep, newestMerged, precedents, source, threads, undistilled, type Precedent, type Source, type Thread } from '../store.ts'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 
@@ -53,6 +53,15 @@ it('D5 storing a PR again leaves only the new threads', () => {
   keep(db, { ...pr, title: 'Fix again' }, [inline])
   expect(source(db, 'o/r', 7)?.title).toBe('Fix again')
   expect(threads(db, 'o/r', 7)).toEqual([inline])
+})
+
+it('D4 an open PR reads back and is never undistilled', () => {
+  const db = fresh()
+  const unmerged: Source = { ...pr, number: 3, merged_at: null }
+  keep(db, unmerged, [])
+  keep(db, pr, [])
+  expect(source(db, 'o/r', 3)).toEqual(unmerged)
+  expect(undistilled(db, 'o/r')).toEqual(pr)
 })
 
 it('distilled rows read back, and distilling again replaces them', () => {

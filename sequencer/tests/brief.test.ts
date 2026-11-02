@@ -1,9 +1,11 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
-import { expect, test } from 'vitest'
+import { expect, test, vi } from 'vitest'
 import { walk } from '../../checks/tree.ts'
 import { MAP } from '../../cli/map.ts'
+import { row } from '../../precedents/lookup.ts'
+import { distilled, keep, type Precedent, type Source } from '../../precedents/store.ts'
 import type { Packet, Provider } from '../../providers/kind.ts'
 import { ofKind, runRows } from '../../store/events.ts'
 import { recorded } from '../../store/files.ts'
@@ -17,9 +19,18 @@ import { tick } from '../index.ts'
 import { unhold } from '../hold.ts'
 import { blocked } from '../steps.ts'
 import { WHOLE } from '../handout.ts'
-import { afresh, drop, maybe, move, put, srcDir, titleOf } from '../workspace.ts'
-import { git } from './bases.ts'
+import { afresh, drop, maybe, move, put, SELF, srcDir, titleOf } from '../workspace.ts'
+import { git, RUST } from './bases.ts'
 import { approve, briefFor, CARRIED, internalPlan, moveMain, ours, plan, reads, stub, world, type World } from './world.ts'
+
+vi.mock('../../cli/gh.ts', async (importOriginal) => ({
+  ...await importOriginal<object>(),
+  gh: (args: string[]) => {
+    if (args[1] === 'repos/acme/widget') return { default_branch: 'main' }
+    if (args[1] === 'repos/acme/widget/git/trees/main?recursive=1') return { tree: [{ path: 'src/a.rs' }], truncated: false }
+    throw new Error(`unread ${args.join(' ')}`)
+  },
+}))
 
 const repo = join(import.meta.dirname, '../..')
 
@@ -423,6 +434,38 @@ test('D1-D3 an ask naming a format file lists its readers', async () => {
   const plain = await fired(mine())
   expect(plain).toContain(TEMPLATE)
   expect(plain).not.toContain('# Shared formats')
+})
+
+/** One maintainer row on `file`, kept and distilled for `repo` in the world's store. */
+function stored(w: World, repo: string, file: string): Precedent {
+  const source: Source = { repo, number: 3, title: 'T', merged_at: '2026-10-01T00:00:00Z', merger: null, files: [file], issues: [] }
+  const precedent: Precedent = { area: file, decision: 'd', why: 'w', said_by: 'm', role: 'maintainer', source: `https://github.com/${repo}/pull/3` }
+  keep(w.db, source, [])
+  distilled(w.db, source, [precedent], 0)
+  return precedent
+}
+
+test('D1 an outside packet carries the row on its file', async () => {
+  const w = world('warm', undefined, RUST)
+  const precedent = stored(w, 'acme/widget', 'src/a.rs')
+  put(w.root, 1, 'ask.md', '# hello\n\n- **D1** change `src/a.rs`\n')
+  const packets: Packet[] = []
+  await tick(w.db, w.root, stub(CARRIED))
+  approve(w.db, w.target)
+  await tick(w.db, w.root, stub(CARRIED, 0, undefined, (p) => packets.push(p)))
+
+  expect(packets[0]?.prompt).toContain(`## Precedents\n\n${row(precedent)}`)
+})
+
+test('D2 an internal packet carries no ## Precedents', async () => {
+  const w = mine()
+  stored(w, SELF, 'src/hello.ts')
+  const packets: Packet[] = []
+  await tick(w.db, w.root, stub(CARRIED))
+  await tick(w.db, w.root, stub(CARRIED, 0, undefined, (p) => packets.push(p)))
+
+  expect(packets[0]?.prompt).toContain('# brief_writer')
+  expect(packets[0]?.prompt).not.toContain('## Precedents')
 })
 
 test('the packet opens on the checkout map; no MAP.md is written', async () => {

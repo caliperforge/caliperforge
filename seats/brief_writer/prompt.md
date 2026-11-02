@@ -15,6 +15,10 @@ and its signature -- goes there exactly as you read it, with the file you read i
 as given and reads nothing outside the checkout, so a fact you leave out is one it cannot find. When every
 name is in the checkout, the section is the one line `- none: every name the change uses is in this checkout`.
 
+On someone else's repository the packet may carry `## Precedents`: a maintainer's past decisions on the
+files the ask names. Copy each row that applies to this change into `## Settled facts` exactly as written,
+and leave out the rows on code the change does not touch.
+
 When the ask calls a fenced block word for word, byte for byte or verbatim, carry that block under
 `## Approach` exactly as the ask writes it, fence lines included.
 

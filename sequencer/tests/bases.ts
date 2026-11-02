@@ -18,6 +18,7 @@ export const pkg = (scripts: Record<string, string>): string => JSON.stringify({
 
 export const TYPESCRIPT = { 'src/hello.ts': 'export const hello = (): string => "hi"\n' }
 export const KOTLIN = { 'kotlin/build.gradle.kts': 'plugins { kotlin("jvm") }\n' }
+export const RUST = { ...TYPESCRIPT, 'src/a.rs': 'pub fn a() {}\n' }
 export const HANDOUT = {
   'src/hello.ts': 'export const hello = (): string => "hi"\n',
   'src/bye.ts': 'export const bye = (): string => "bye"\n',
@@ -55,7 +56,7 @@ export const MANUAL = { ...TYPESCRIPT, [WORKFLOW]: 'on:\n  push:\n    branches: 
 export const TEX = { ...TYPESCRIPT, [WORKFLOW]: "on:\n  pull_request:\n    paths: ['**.tex']\n" }
 
 export const WORLDS: [Tree, boolean][] = [[TYPESCRIPT, true], [TYPESCRIPT, false], [KOTLIN, true], [HANDOUT, true], [RED, true],
-  [MANUAL, false], [TEX, false], [SCHEDULED, false]]
+  [MANUAL, false], [TEX, false], [SCHEDULED, false], [RUST, true]]
 export const OURS: [Tree, boolean][] = [[TYPESCRIPT, true], [TYPESCRIPT, false], [RED, true], [GREEN, true], [NAPPING, true], [OOPS, true],
   [BROKEN, true], [ORPHANED, true], [ATELIER, true], [SCHEDULED, false], [GREETED, true]]
 

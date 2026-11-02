@@ -10,13 +10,14 @@ import { eventsOf, logged, type Event } from '../../store/events.ts'
 import { amend, width } from '../../store/lanes.ts'
 import { putPlan, rewind } from '../../store/plans.ts'
 import { dropSignals, record as signal, type SignalRow } from '../../store/signals.ts'
+import { addReview } from '../../store/verdict.ts'
 import { approve as approvePublish } from '../card.ts'
 import { tick } from '../index.ts'
 import { ruled, signoffs, verdict } from '../signoff.ts'
 import { UNRUN } from '../triggers.ts'
 import { drop, git, headSha, OPERATOR, put, SELF, SIGNOFF, srcDir } from '../workspace.ts'
 import { TEX } from './bases.ts'
-import { approve, CARRIED, plan, scored, stub, TYPESCRIPT, watched, world, type World } from './world.ts'
+import { approve, CARRIED, internalPlan, plan, scored, stub, TYPESCRIPT, watched, world, type World } from './world.ts'
 
 /** Their pull request as the tick reads it, offline: open and quiet. */
 const quiet = (): Pr => ({
@@ -384,6 +385,41 @@ test('D6 the card names each rework round\'s review mode, else none', async () =
   signoffs(w.db, w.root, desk, none)
   expect(desk.cards.get(100)?.body).toContain('- Gates: pre_review pass, review pass, senior_review pass, ready pass\n'
     + '- Review mode: review full: src/parse.ts is not in the passed diff; senior_review skipped: 1 delta lines, comments and docs only\n')
+})
+
+const [KEPT, CHANGED] = ['https://github.com/acme/widget/pull/3', 'https://github.com/acme/widget/issues/9']
+
+function senior(w: World, id: number): void {
+  addReview(w.db, 'senior_review', 5, id, { outcome: 'pass', subject_digest: 'd'.repeat(64), spans: [], origin_kind: null, origin_ref: null,
+    defect_class: null, message: `passes\n- ${KEPT} | kept\n- ${CHANGED} | changed: the issue asks for it` }, 0, 0, null)
+}
+
+test('D1 D4 the card counts precedents and codes the changed url', async () => {
+  const w = await atBatch()
+  senior(w, 1)
+  const desk = fake()
+  signoffs(w.db, w.root, desk, none)
+  const body = desk.cards.get(100)?.body ?? ''
+  const line = body.split('\n').find((l) => l.startsWith('- precedents:'))
+  expect(line).toBe(`- precedents: 2 checked, 1 changed: \`${CHANGED}\``)
+  expect(line).not.toContain(KEPT)
+  expect(body.replace(/```markdown[\s\S]*?\n```\n/, '').replace(/`[^`]*`/g, '')).not.toMatch(/#\d|acme\/widget|github\.com\/acme/)
+})
+
+test('D2 a senior verdict with no answer line adds no precedents', async () => {
+  const w = await atBatch()
+  const desk = fake()
+  signoffs(w.db, w.root, desk, none)
+  expect((desk.cards.get(100)?.body ?? '').split('\n').some((l) => l.startsWith('- precedents:'))).toBe(false)
+})
+
+test('D3 an internal plan gets no card, so no precedents line', async () => {
+  const w = await atBatch()
+  internalPlan(w.db, w.root, 2)
+  senior(w, 2)
+  const desk = fake()
+  expect(signoffs(w.db, w.root, desk, none)).toEqual([{ plan: 1, card: 100, did: 'opened' }])
+  expect([...desk.cards.values()].filter((c) => c.title.includes('internal plan') || c.body.includes('<sub>plan 2,'))).toEqual([])
 })
 
 test('D4 the card shows Greptile\'s score, a skip, or none', async () => {

@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import { basename, dirname, join, resolve } from 'node:path'
 import type { CostWall, Fired, Provider, Range } from '../providers/kind.ts'
 import { packet, real } from '../runner/index.ts'
 import type { Seat } from '../runner/rules.ts'
@@ -10,11 +10,16 @@ import type { Db } from '../store/index.ts'
 import { observed } from '../store/lanes.ts'
 import type { PlanRow } from '../store/plans.ts'
 import { byRun, pending } from '../store/transcript.ts'
+import { criticCheck } from './critic.ts'
 import { compiled, extract } from './extract.ts'
+import { type Check, FIX, fixed, type Fixed } from './fixturn.ts'
 import { costWalled } from './generated.ts'
 import { handoff, layered, ranged, type Refused } from './handoff.ts'
-import { drawn, excerpts, ranges } from './map.ts'
+import { drawn, excerpts, ranges, sections, suited } from './map.ts'
 import type { Step } from './pr-path.ts'
+import { KINDS } from './report.ts'
+import { packed, smoke, type Smoked, unrun } from './smoke.ts'
+import { harnessed, probed, suite, unsourced } from './suite.ts'
 
 export interface Sum { tokens: number; seconds: number; usd: number; transcripts: string[]; wall: string | null }
 
@@ -94,6 +99,38 @@ async function checked(fire: Fire, at: Phase, sum: Sum, refused: Refused[] = [])
   return ran
 }
 
+const FACTS = ['Limits', 'Outside dependencies', 'Conversion points']
+
+async function scaffolded(bench: Bench, manifest: Seat, hash: string, skill: string, root: string, handoffs: string, sum: Sum): Promise<{ sum: Sum; smoked: string } | Sum | Outcome> {
+  const { db, plan, name, dir, granted } = bench
+  const [map, fizz] = [join(handoffs, MAP), granted.find((path) => basename(path) === 'fizz') ?? '']
+  const at = { fire: firing(bench, { ...manifest, ...FIX }, hash), dir, handoffs }
+  const log = (kind: string, outcome: 'pass' | 'refuse', message: string): void => { logged(db, { plan: plan.id, kind, actor: name, outcome, message, pointer: null, run: null }) }
+  const fix = async (check: Check): Promise<Fixed | Sum | Outcome> => {
+    const got = await fixed(at, check, 'scaffold', sum)
+    if ('outcome' in got || got.sum.wall !== null) return 'outcome' in got ? got : got.sum
+    for (const row of got.turns) log(KINDS.fix_turns, 'pass', JSON.stringify(row))
+    if (got.not_clean !== null) log(KINDS.critic, 'refuse', got.not_clean)
+    sum = got.sum
+    return got
+  }
+  const rules = read(join(skill, 'phases/scaffold.md')).split('\n').filter((l) => l.startsWith('- The machine checks')).join('\n')
+  const facts = sections(read(map)).filter(([section]) => FACTS.includes(section)).map(([, s]) => s.trimEnd()).join('\n\n')
+  let [lines, last]: [string[], Smoked[]] = [[], []]
+  const built = await fix({ name: 'suite', rules, facts, run: () => {
+    const found = suite(root)
+    writeFileSync(map, suited(found, read(map)))
+    lines = unsourced(found, read(map))
+    return [...harnessed(found, read(map)), ...probed(found, read(map))]
+  } })
+  if (!('turns' in built)) return built
+  for (const line of lines) log('suite.unsourced', 'pass', line)
+  const ran = built.not_clean === null ? await fix({ name: 'smoke', rules, facts, run: () => unrun(read(map), last = smoke(root, fizz, 'test/fizz/fizz_data', read(map))) }) : built
+  if (!('turns' in ran)) return ran
+  const stood = await fix(criticCheck(join(fizz, 'references/critic-pass.md'), dir, 'critic.stand_in', read(map)))
+  return 'turns' in stood ? { sum, smoked: packed(last) } : stood
+}
+
 export function phasesOf(skill: string): string[] {
   return [...readFileSync(join(skill, TEMPLATES), 'utf8').matchAll(/^# Handoff: (.+)$/gm)].map((m) => m[1] ?? '').filter((phase) => phase !== 'campaigns')
 }
@@ -106,7 +143,7 @@ export async function phased(bench: Bench, manifest: Seat, hash: string, skill: 
   const resumed = existsSync(stopped) ? JSON.parse(readFileSync(stopped, 'utf8')) as { phase: string; sum: Sum } : null
   rmSync(stopped, { force: true })
   const done = resumed === null ? -1 : phases.indexOf(resumed.phase)
-  let sum = resumed?.sum ?? START
+  let [sum, smoked] = [resumed?.sum ?? START, '']
   for (const [at, phase] of phases.entries()) {
     if (at <= done) continue
     const path = join(handoffs, `${phase}.md`)
@@ -115,9 +152,14 @@ export async function phased(bench: Bench, manifest: Seat, hash: string, skill: 
     const named = later ? [`Read ${map} and the excerpts it cites: ${readdirSync(cut).map((f) => join(cut, f)).join(', ')}.`] : []
     const fire = firing(bench, manifest, hash, later ? ranges(read(map)) : undefined)
     const ran = await checked(fire, { phase, skill, root, path, critics, prompt: readFileSync(join(skill, 'phases', `${phase}.md`), 'utf8'), ...(later ? { map: read(map) } : {}),
-      issue: [issue, `Before you end, write ${path} filled from the \`# Handoff: ${phase}\` block of ${join(skill, TEMPLATES)}.`, ...start, ...named].join('\n') }, sum)
+      issue: [issue, `Before you end, write ${path} filled from the \`# Handoff: ${phase}\` block of ${join(skill, TEMPLATES)}.`, ...start, ...named, ...(phase === 'coverage' && smoked !== '' ? [smoked] : [])].join('\n') }, sum)
     if ('outcome' in ran || ran.wall !== null) return ran
     sum = ran
+    if (phase === 'scaffold' && later) {
+      const repaired = await scaffolded(bench, manifest, hash, skill, root, handoffs, sum)
+      if (!('smoked' in repaired)) return repaired
+      ;({ sum, smoked } = repaired)
+    }
     if (phase === stop) {
       writeFileSync(stopped, JSON.stringify({ phase, sum }))
       return { outcome: 'pass', held: true, spans: ['bench.stop_after'], note: `stopped after ${phase} for a look` }

@@ -29,6 +29,16 @@ export function config(db: Db, root: string, repo: string, files: string[], read
   return `${JSON.stringify({ autoReview: [], strictness: 1, customContext: { rules, files: documents } }, null, 2)}\n`
 }
 
+/** `config` as greptile.json, or its rules after theirs in `.greptile/config.json`, which Greptile reads instead where `dir` holds `.greptile/`. */
+export function rehearsal(db: Db, root: string, repo: string, dir: string, files: string[], read: Read): Record<string, string> {
+  const text = config(db, root, repo, files, read)
+  if (!existsSync(join(dir, '.greptile'))) return { 'greptile.json': text }
+  const at = join(dir, '.greptile', 'config.json')
+  const theirs = (existsSync(at) ? JSON.parse(readFileSync(at, 'utf8')) : {}) as { rules?: unknown[] }
+  const ours = (JSON.parse(text) as { customContext: { rules: unknown[] } }).customContext.rules
+  return { '.greptile/config.json': `${JSON.stringify({ ...theirs, autoReview: [], rules: [...(theirs.rules ?? []), ...ours] }, null, 2)}\n` }
+}
+
 function examples(root: string, repo: string): string[] {
   return [join(root, 'reviews', 'examples'), join(root, '.cf', 'examples')]
     .flatMap((dir) => existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith('.md')).sort().map((f) => readFileSync(join(dir, f), 'utf8')) : [])

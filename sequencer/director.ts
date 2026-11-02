@@ -391,7 +391,8 @@ export async function woke(db: Db, root: string, provider: Provider, now: Date, 
     const head = headOf(root, plan)
     const again = lasts(db, plan, now)
     const parked = isHeld(root, plan.id)
-    if (parked && !(again && eventsOf(db, plan.id, 'director').at(-1)?.message.startsWith('park: ') === true)) continue
+    const last = eventsOf(db, plan.id, 'director').at(-1)
+    if (parked && !(again && last?.outcome === 'pass' && last.message.startsWith('park: '))) continue
     if (circling(db, plan.id)) continue
     if (!again && (plan.wait_reason === 'over_cap' || maybe(root, plan.id, 'orchestrator.md')?.split('\n')[0] === head)) continue
     if (take(db, plan.id, now) === null) continue

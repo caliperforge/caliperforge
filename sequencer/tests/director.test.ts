@@ -14,7 +14,7 @@ import { decision } from '../../store/ask.ts'
 import { appliedOf, decided, decisions, touches, type Decision, type Verb } from '../../store/decisions.ts'
 import { pushedRow } from '../../store/deliverables.ts'
 import { addFinding, addSetting, findings, setting } from '../../store/drift.ts'
-import { eventsOf, logged, ofKind, pointers, runAt, runRows } from '../../store/events.ts'
+import { eventsOf, logged, ofKind, pointers, runAt, runRows, type Event } from '../../store/events.ts'
 import { retried, returnToLane } from '../../store/holds.ts'
 import { migrate, open, type Db } from '../../store/index.ts'
 import { cap, width } from '../../store/lanes.ts'
@@ -1484,8 +1484,8 @@ test('D4 a running plan at its ceiling: one post per head', async () => {
 })
 
 const day = new Date('2026-09-24T15:00:00.000Z')
-const lookAt = (db: Db, message: string, at: string) =>
-  logged(db, { plan: 7, kind: 'director', actor: 'director', outcome: 'pass', message, pointer: null, run: null }, at)
+const lookAt = (db: Db, message: string, at: string, outcome: Event['outcome'] = 'pass') =>
+  logged(db, { plan: 7, kind: 'director', actor: 'director', outcome, message, pointer: null, run: null }, at)
 
 test.each([
   { name: '61 minutes old', at: '2026-09-24 13:59:00', now: day, priority: 1, fired: 1 },
@@ -1515,13 +1515,14 @@ test.each([{ priority: 1, fired: 1 }, { priority: 2, fired: 0 }])('D2 an over_ca
 })
 
 test.each([
-  { name: 'its own park', said: 'park: the pipe is full', fired: 1 },
-  { name: 'someone else', said: null, fired: 0 },
-])('D3 a stop parked by $name', async ({ said, fired }) => {
+  { name: 'its own park', said: 'park: the pipe is full', outcome: 'pass' as const, fired: 1 },
+  { name: 'a fenced park', said: 'park: refused by the fence', outcome: 'needs_coo' as const, fired: 0 },
+  { name: 'someone else', said: null, outcome: 'pass' as const, fired: 0 },
+])('D3 a stop parked by $name', async ({ said, outcome, fired }) => {
   const { db, home } = wokeSeeded()
   blocked(db, home)
   put(home, 7, 'parked.md', '# Held\n')
-  if (said !== null) lookAt(db, said, '2026-09-24 13:59:00')
+  if (said !== null) lookAt(db, said, '2026-09-24 13:59:00', outcome)
   const fires: string[] = []
   await woke(db, home, wokeStub(ASK_CEO, fires), day, () => undefined)
   expect(fires).toHaveLength(fired)

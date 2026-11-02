@@ -21,7 +21,7 @@ import { capped, faulted, narrow, offline } from '../rails.ts'
 import { streak } from '../refusal.ts'
 import { get, put, srcDir } from '../workspace.ts'
 import { ATELIER, BROKEN, GREEN, GREETED, NAPPING, ORPHANED, pkg, RED, TIMEOUT } from './bases.ts'
-import { approve, built as edited, CARRIED, internalPlan, ours, plan, stub, watched, world, type World } from './world.ts'
+import { approve, built as edited, CARRIED, internalPlan, moveMain, ours, plan, stub, watched, world, type World } from './world.ts'
 
 const ID = 2
 
@@ -225,6 +225,34 @@ async function ungreeted(ruling?: string): Promise<{ w: World; fired: Awaited<Re
   if (ruling !== undefined) put(w.root, ID, 'rulings.md', ruling)
   return { w, fired: (await tick(w.db, w.root, stub(CARRIED)))[0] }
 }
+
+/** A plan whose build renamed `greets with hi` to `greets` and dropped its assertion a context line below, with `ruling` as its `rulings.md` where one is given, and its step-3 lap. */
+async function renamed(ruling?: string): Promise<{ w: World; fired: Awaited<ReturnType<typeof tick>>[number] | undefined }> {
+  const w = mine(GREETED)
+  moveMain(w.root, 'src/tests/hello.test.ts', "import { expect, test } from 'vitest'\nimport { hello } from '../hello.ts'\n\ntest('greets with hi', () => {\n  const said = hello()\n  expect(said).toBe('hi')\n})\n")
+  for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED))
+  listed(w.db, ID, 'src/tests/hello.test.ts')
+  writeFileSync(join(srcDir(w.root, ID), 'src/tests/hello.test.ts'), "import { expect, test } from 'vitest'\nimport { hello } from '../hello.ts'\n\ntest('greets', () => {\n  const said = hello()\n})\n")
+  if (ruling !== undefined) put(w.root, ID, 'rulings.md', ruling)
+  return { w, fired: (await tick(w.db, w.root, stub(CARRIED)))[0] }
+}
+
+const RULED = (file: string): string => `- removed: greets with hi | file: ${file} | why: replaced by 'greets'\n`
+
+test('#1742 D1 a test retired in rulings.md passes', async () => {
+  const { w, fired } = await renamed(RULED('src/tests/hello.test.ts'))
+  expect(fired).toMatchObject({ plan: ID, step: 3, name: 'rails', outcome: 'pass' })
+  expect(plan(w.db, ID).step).toBe(4)
+}, SLOW)
+
+test('#1742 D2 D3 unruled or wrong-file retirement is refused', async () => {
+  for (const ruling of [undefined, RULED('src/tests/other.test.ts')]) {
+    const { w, fired } = await renamed(ruling)
+    expect(fired).toMatchObject({ plan: ID, step: 3, outcome: 'refuse', spans: ['src/tests/hello.test.ts:6 test.weakened.removed'] })
+    expect(fired?.note.startsWith('test-weakened: ')).toBe(true)
+    expect(plan(w.db, ID).step).toBe(2)
+  }
+}, SLOW)
 
 test('#628 D1 a removed test named in rulings.md passes', async () => {
   const { w, fired } = await ungreeted("- the 'greets with hi' test goes\n")

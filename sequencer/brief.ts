@@ -5,6 +5,7 @@ import { z } from 'zod'
 import type { PlanFile } from '../store/files.ts'
 import { CONVENTIONAL } from './conventions.ts'
 import { WHOLE } from './handout.ts'
+import { LETTERS, named, ordered } from './ordered.ts'
 import { reproduced } from './reproduced.ts'
 import { settled } from './settled.ts'
 import { copied, kept } from './verbatim.ts'
@@ -128,11 +129,8 @@ const Claimed = z.object({ outcome: z.literal('claimed'), evidence: z.string().m
 const Part = z.object({ title: z.string().min(1), what: z.string().min(1), why: z.string().min(1), ends: z.string().min(1),
   after: z.string().optional() })
 
-const LETTERS = 'abcdefghijklmnopqrstuvwxyz'
-
 const Split = z.object({ outcome: z.literal('split'), parts: z.array(Part).min(2) })
-  .refine((v) => v.parts.every((p, i) => p.after === undefined || p.after.toLowerCase() === 'none' ||
-    (p.after.length === 1 && LETTERS.slice(0, i).includes(p.after.toLowerCase()))))
+  .refine((v) => v.parts.every((p, i) => named(p.after, i)))
 
 export type Part = z.infer<typeof Part> & { after: string }
 
@@ -172,7 +170,7 @@ export function split(reply: string): Part[] | null {
 }
 
 /** The fence a reply ends with, whether or not the seat wrapped it in a code block. */
-function fenceOf(reply: string): string | null {
+export function fenceOf(reply: string): string | null {
   const bare = reply.trimEnd().replace(/\n```\s*$/, '').replace(/```[a-z]*\r?\n(?=---\r?\n(?:(?!```)[\s\S])*$)/, '')
   return /---\r?\n([\s\S]*?)\r?\n---$/.exec(bare.trimEnd())?.[1] ?? null
 }
@@ -196,6 +194,8 @@ export function estimate(brief: string): number | null {
 
 /** The span of the brief a builder cannot work from, with the ground it is turned back on; null is a brief that stands. */
 export function shape(brief: string, ask: string, src: string, outside = false, ceiling = CEILING): Refused | null {
+  const misordered = ordered(brief)
+  if (misordered !== null) return misordered
   const title = titleOf(brief)
   if (title === null || (title !== titleOf(ask) && !(outside && CONVENTIONAL.test(title)))) return { span: '# <title>', reason: "the title is not the ask's" }
   const checks: ((b: string) => Refused | null)[] =
@@ -452,7 +452,7 @@ export function human(brief: string): Record<'title' | 'what' | 'why' | 'ends', 
  * Each known key's value is read as one quoted string first, since as plain YAML `: ` breaks the parse and ` #`
  * ends the value. A value that runs onto a second line does not survive the quoting, and is read as plain YAML.
  */
-function yamlOf(text: string): unknown {
+export function yamlOf(text: string): unknown {
   const quoted = text.replace(/^(\s*(?:- )?(?:title|what|why|ends|question|evidence|outcome):[ \t]+)(?!["'|>])(.+)$/gm,
     (...m: string[]) => `${m[1] ?? ''}${JSON.stringify((m[2] ?? '').trim())}`)
   for (const each of [quoted, text]) {

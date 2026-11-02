@@ -6,7 +6,7 @@ import { fresh } from '../checks/sqlite.ts'
 import type { Fired } from '../providers/kind.ts'
 import { planRow } from '../runner/index.ts'
 import { load, seat } from '../runner/rules.ts'
-import { logged, ofKind, repriced, runAt, runLogged, type Event, type Run } from './events.ts'
+import { logged, lookedSince, ofKind, repriced, runAt, runLogged, type Event, type Run } from './events.ts'
 import type { Db } from './index.ts'
 
 const root = join(import.meta.dirname, '..')
@@ -233,6 +233,18 @@ test('D1 D2 events take escalate and needs_coo, refuse others', () => {
   log('needs_coo')
   expect(ofKind(db, 'director').map((e) => e.outcome)).toEqual(['escalate', 'needs_coo'])
   expect(() => log('maybe' as Event['outcome'])).toThrow(/CHECK constraint failed/)
+})
+
+test('lookedSince: a director event on the plan after at', () => {
+  const db = fresh(join(root, 'schema'))
+  load(db, root)
+  const plan = planRow(db)
+  const log = (kind: string, at: string): number => logged(db, { plan, kind, actor: 'director', outcome: 'pass', message: kind, pointer: null, run: null }, at)
+  log('director', '2026-09-24 14:00:00')
+  log('retry', '2026-09-24 15:00:00')
+  expect(lookedSince(db, plan, '2026-09-24T13:59:00.000Z')).toBe(true)
+  expect(lookedSince(db, plan, '2026-09-24T14:00:00.000Z')).toBe(false)
+  expect(lookedSince(db, plan + 1, '2026-09-24T13:59:00.000Z')).toBe(false)
 })
 
 test('D2 D3 cache_write_tokens: NULL if absent, negative refused', () => {

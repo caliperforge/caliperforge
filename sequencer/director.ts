@@ -8,10 +8,10 @@ import { decision } from '../store/ask.ts'
 import { appliedOf, decided, decisions } from '../store/decisions.ts'
 import { pushed } from '../store/deliverables.ts'
 import { asked, setting } from '../store/drift.ts'
-import { eventsOf, kindsOf, logged } from '../store/events.ts'
+import { eventsOf, kindsOf, logged, lookedSince } from '../store/events.ts'
 import { resumed, retried, returnToLane } from '../store/holds.ts'
 import type { Db } from '../store/index.ts'
-import { wall } from '../store/lanes.ts'
+import { hhmm, wall } from '../store/lanes.ts'
 import { clear as unlease, take } from '../store/leases.ts'
 import { busy, current, idle } from '../store/now.ts'
 import { builderRan, end, held, needsCeo, originRef, planById, PlanRow, retry } from '../store/plans.ts'
@@ -37,7 +37,7 @@ import { repeated, ticketed } from './ticket.ts'
 import { history, parentAsk } from './record.ts'
 import { READ, SERVER, server } from './upstream.ts'
 import { widen } from './widen.ts'
-import { afresh, cloned, maybe, move, planDir, put, snapshot, srcDir } from './workspace.ts'
+import { afresh, cloned, drop, maybe, move, planDir, put, snapshot, srcDir } from './workspace.ts'
 
 const FIELDS = ['applies to', 'instruction', 'files', 'resume at', 'verify'] as const
 const field = z.string().trim().min(1).optional()
@@ -108,7 +108,7 @@ export async function cooLite(db: Db, root: string, plan: PlanRow, provider: Pro
 }
 
 function unasked(db: Db, root: string, plan: PlanRow, now: Date, post: Post): string | null {
-  if (plan.state !== 'blocked_on_ceo' && plan.state !== 'halted') {
+  if (plan.state !== 'blocked_on_ceo' && plan.state !== 'halted' && plan.wait_reason !== 'over_cap') {
     return WAITING.has(plan.wait_reason ?? '') ? told(db, root, plan, now, { outcome: 'pass', message: `left alone: plan is ${plan.state}, waiting on ${plan.wait_reason ?? ''}` })
       : told(db, root, plan, now, { outcome: 'needs_coo', message: `ask_ceo: plan is ${plan.state}, not stopped` }, post)
   }
@@ -223,7 +223,7 @@ async function ask(db: Db, root: string, plan: PlanRow, provider: Provider, trie
 function text(db: Db, root: string, plan: PlanRow, tried?: string, fence?: string): string {
   const at = (name: string): string => maybe(root, plan.id, name) ?? 'none'
   return [
-    `# Job\n\nplan ${String(plan.id)}, state ${plan.state}, step ${String(plan.step)}, lane ${plan.lane ?? '-'}, ${plan.origin ?? 'no ticket'}`,
+    `# Job\n\nplan ${String(plan.id)}, state ${plan.state}, step ${String(plan.step)}, lane ${plan.lane ?? '-'}, ${plan.origin ?? 'no ticket'}${plan.wait_reason === null ? '' : `, waiting on ${plan.wait_reason}`}`,
     `# Stop\n\n${maybe(root, plan.id, 'refusal.md') ?? at('question.md')}`,
     ...(capStop(db, plan.id) ? [at('director.md')] : []),
     `# Findings\n\n${found(db, root, plan.id)}`,
@@ -380,7 +380,7 @@ async function handUp(db: Db, root: string, plan: PlanRow, t: Told, said: string
   return told(db, root, plan, now, t, taken ? undefined : post)
 }
 
-export const WAKE = ['token_ceiling', 'ready_proof', 'target_parked', 'no_step_map'] as const
+export const WAKE = ['token_ceiling', 'ready_proof', 'target_parked', 'no_step_map', 'over_cap'] as const
 
 type Woken = (typeof WAKE)[number] | 'blocked_on_ceo'
 
@@ -388,18 +388,38 @@ type Woken = (typeof WAKE)[number] | 'blocked_on_ceo'
 export async function woke(db: Db, root: string, provider: Provider, now: Date, post: Post = alerter(), wire: Wire = WIRE): Promise<void> {
   released(db, root, now, post, wire.merged)
   for (const plan of waking(db, WAKE)) {
-    const reason = woken(plan)
-    const head = `step ${String(plan.step)} ${reason === 'blocked_on_ceo' ? `blocked ${stop(root, plan.id)}` : reason}`
-    if (isHeld(root, plan.id)) continue
+    const head = headOf(root, plan)
+    const again = lasts(db, plan, now)
+    const parked = isHeld(root, plan.id)
+    if (parked && !(again && ownPark(db, root, plan.id))) continue
     if (circling(db, plan.id)) continue
-    if (maybe(root, plan.id, 'orchestrator.md')?.split('\n')[0] === head) continue
+    if (!again && (plan.wait_reason === 'over_cap' || maybe(root, plan.id, 'orchestrator.md')?.split('\n')[0] === head)) continue
     if (take(db, plan.id, now) === null) continue
     try {
+      if (parked) drop(root, plan.id, 'parked.md')
       put(root, plan.id, 'orchestrator.md', `${head}\n\n${await cooLite(db, root, plan, provider, now, post, wire)}\n`)
     } finally {
       unlease(db, plan.id)
     }
   }
+}
+
+function headOf(root: string, plan: PlanRow): string {
+  const reason = woken(plan)
+  return `step ${String(plan.step)} ${reason === 'blocked_on_ceo' ? `blocked ${stop(root, plan.id)}` : reason}`
+}
+
+function ownPark(db: Db, root: string, plan: number): boolean {
+  const last = eventsOf(db, plan, 'director').at(-1)
+  const held = /^# Held (\S+)/.exec(maybe(root, plan, 'parked.md') ?? '')?.[1]
+  // events.at is CURRENT_TIMESTAMP in whole seconds, so a look in the note's own second is after it.
+  return last?.outcome === 'pass' && last.message.startsWith('park: ') && held !== undefined
+    && lookedSince(db, plan, new Date(Date.parse(held) - 1000).toISOString())
+}
+
+function lasts(db: Db, plan: PlanRow, now: Date): boolean {
+  const at = hhmm(db, now)
+  return plan.priority <= 1 && at >= '07:00' && at < '20:00' && !lookedSince(db, plan.id, new Date(now.getTime() - 3600000).toISOString())
 }
 
 function woken(plan: PlanRow): Woken {

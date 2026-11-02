@@ -12,8 +12,10 @@ import type { Db } from '../store/index.ts'
 import { allPlans, needsCeo, planById, resume, rewind } from '../store/plans.ts'
 import { pushTarget } from '../store/ready.ts'
 import { clear } from '../store/refusals.ts'
+import { reviewSince } from '../store/reviewed.ts'
 import { asks, graded } from '../store/signals.ts'
 import { targetRef } from '../store/targets.ts'
+import { verdictMessage } from '../store/trail.ts'
 import type { Board } from '../rails/ci-green/index.ts'
 import { carried as rows } from '../rails/completion-audit/index.ts'
 import { prTitle } from './pr.ts'
@@ -175,7 +177,7 @@ function bodyFor(db: Db, root: string, card: Card, desk: Desk, read: Read): stri
     `- Upstream: ${code(s.repo)} issue ${code(String(s.issue_no))}, written as code so this card leaves no mark on their thread`,
     `- Change: ${card.change.trim().split('\t').join(', ')}; ${files}[the commit on our fork](https://github.com/${fork}/commit/${head.sha})`,
     `- Gates: ${card.marks.map((m) => `${m.name} ${m.ok ? 'pass' : 'NOT PASSED'}`).join(', ')}`,
-    ...modes(root, card.id),
+    ...modes(root, card.id), ...precedents(db, card.id),
     ci === null ? `- ${maybe(root, card.id, 'ci.unrun') === head.sha ? UNRUN : 'this repo has no CI'}; checked with: ${ranAt(db, root, card.id)}` : `- Their CI on our fork: ${ciLine(ci)}`,
     ...forkPass(db, root, card.id, head.sha),
     open === null
@@ -276,6 +278,14 @@ function modes(root: string, plan: number): string[] {
     return mode === null ? [] : [`${gate} ${mode.trim()}`]
   })
   return named.length === 0 ? [] : [`- Review mode: ${named.join('; ')}`]
+}
+
+function precedents(db: Db, plan: number): string[] {
+  const id = reviewSince(db, plan, 5, 0)
+  const answered = id === null ? [] : [...(verdictMessage(db, id) ?? '').matchAll(/^- (\S+) \| (kept|changed: .+)$/gm)]
+  if (answered.length === 0) return []
+  const changed = answered.filter((m) => m[2] !== 'kept').map((m) => code(m[1] ?? ''))
+  return [`- precedents: ${String(answered.length)} checked, ${String(changed.length)} changed${changed.length === 0 ? '' : `: ${changed.join(', ')}`}`]
 }
 
 /** Green is said only of what finished green: a workflow the gate did not judge is still on the card, and still counts here. */

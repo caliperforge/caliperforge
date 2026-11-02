@@ -1,0 +1,16 @@
+{
+  "contractRevertMetrics": {
+    "Harness": {
+      "functionRevertMetrics": {
+        "v_deposit": { "totalCalls": 30, "totalReverts": 0, "pct": 0, "revertReasonMetrics": {} },
+        "v_deposit_clamped": { "totalCalls": 10, "totalReverts": 0, "pct": 0, "revertReasonMetrics": {} },
+        "v_withdraw": {
+          "totalCalls": 25,
+          "totalReverts": 25,
+          "pct": 100,
+          "revertReasonMetrics": { "panic: arithmetic underflow/overflow": { "count": 25, "pct": 100 } }
+        }
+      }
+    }
+  }
+}

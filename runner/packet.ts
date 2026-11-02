@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { parse } from 'yaml'
 import { z } from 'zod'
+import { row } from '../precedents/lookup.ts'
 import { bare, type Packet, type Refusal } from '../providers/kind.ts'
 import { refuse } from './index.ts'
 import { inlined } from './inlined.ts'
@@ -41,6 +42,15 @@ export const Narrowing = z.object({
 
 export type Narrowing = z.infer<typeof Narrowing>
 
+const Precedent = z.object({
+  area: z.string(),
+  decision: z.string(),
+  why: z.string(),
+  said_by: z.string(),
+  role: z.enum(['maintainer', 'contributor']),
+  source: z.string(),
+}).strict()
+
 export const Bench = z.object({
   repo: z.string(),
   issue: z.string().optional(),
@@ -63,6 +73,7 @@ export const Bench = z.object({
   defects: z.string().optional(),
   mockup: z.string().optional(),
   system: z.string().optional(),
+  precedents: z.array(Precedent).min(1).optional(),
 }).strict().refine((b) => b.since === undefined || b.prior !== undefined, { path: ['since'] })
   .refine((b) => b.refusal === undefined || b.prior !== undefined, { path: ['refusal'] })
 
@@ -127,6 +138,7 @@ export function assembled(root: string, name: string, manifest: Review, bench: B
     ['Files around the change', framed(bench.map, 'Every file in each touched directory, its length and its head comment; * marks a changed file.')],
     ['Symbols at the branch base', framed(bench.symbols, SYMBOLS_LEAD)],
     ['Reference the brief names', bench.reference],
+    ['Precedents', bench.precedents?.map(row).join('\n')],
     ['First verdict', bench.verdict],
     ['Language notes from senior review', bench.language],
     ['Greptile on this head', bench.bot],

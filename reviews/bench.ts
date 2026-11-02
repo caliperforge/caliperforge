@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { map } from '../cli/map.ts'
+import type { Precedent } from '../precedents/store.ts'
 import { CAPPED, type Packet, type Provider } from '../providers/kind.ts'
 import { assembled, benchPacket, reviewManifest, type Bench, type Review } from '../runner/packet.ts'
 import { seat } from '../runner/rules.ts'
@@ -65,7 +66,7 @@ export async function judge(
   if (last.outcome === null) throw new Error(last.reason === null ? 'reviewers.verdict_fence' : `reviewers.verdict_fence: ${last.reason}`)
   const tokens = first.tokens + (refired?.tokens ?? 0)
   const seconds = first.seconds + (refired?.seconds ?? 0)
-  const stands = unconfirmed(narrowed(last.outcome, built.bench))
+  const stands = unanswered(unconfirmed(narrowed(last.outcome, built.bench)), built.bench.precedents ?? [])
   return { run: last.run, verdict: record(db, root, name, plan, stands, tokens, seconds, tree), outcome: stands }
 }
 
@@ -121,6 +122,19 @@ function unconfirmed(v: Judged): Judged {
   const span = 'removed-tests.md'
   return { ...v, outcome: 'refuse', defect_class: 'correctness', spans: [span], findings: [{ span, kind: 'real', fix: null }], notes: [],
     origin_kind: 'ruling', origin_ref: 'reviewers.verdict' }
+}
+
+/** A pass refuses unless each precedent row has its `- <source> | kept` or `- <source> | changed: <why>` line. */
+function unanswered(v: Judged, rows: Precedent[]): Judged {
+  if (v.outcome !== 'pass') return v
+  const lines = v.message.split('\n')
+  const changed = (line: string, source: string): boolean =>
+    line.startsWith(`- ${source} | changed: `) && line.slice(`- ${source} | changed: `.length).trim() !== ''
+  const spans = rows.map((r) => r.source).filter((s) => !lines.some((l) => l === `- ${s} | kept` || changed(l, s)))
+  if (spans.length === 0) return v
+  return { ...v, outcome: 'refuse', defect_class: 'correctness', spans, findings: spans.map((span) => ({ span, kind: 'real', fix: null })),
+    notes: [], origin_kind: 'ruling', origin_ref: 'reviewers.verdict',
+    message: `${v.message}\n\nPrecedents left unanswered:\n${spans.map((s) => `  - ${s}`).join('\n')}` }
 }
 
 function builderRan(db: Db, plan: number, seat: string, step: number): boolean {

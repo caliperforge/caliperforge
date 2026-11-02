@@ -1,0 +1,41 @@
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { homedir, tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { expect, test } from 'vitest'
+import { selected } from '../../../templates/map.ts'
+import { packed, smoke, smoked, unrun } from '../../../templates/smoke.ts'
+
+const fixtures = join(import.meta.dirname, 'fixtures')
+const REPORT = join(fixtures, 'revert_report.json')
+const SELECTION = readFileSync(join(fixtures, 'entry-point-selection.json'), 'utf8')
+const MAP = `## Selected entry points\n\n${selected(SELECTION).map((r) => `- ${r}\n`).join('')}\n`
+  + '## Unclamped\n\n- V.withdraw | reason: any amount the vault holds is valid\n'
+const [DEPOSIT, WITHDRAW, CONVERT] = ['V.deposit(uint256 assets)', 'V.withdraw(uint256 assets)', 'V.convertToAssets(uint256 shares)']
+const META = 'test/fizz/fizz_data'
+const MEDUSA = { fuzzing: { targetContracts: ['Harness'] },
+  compilation: { platform: 'crytic-compile', platformConfig: { target: '.', args: ['--foundry-compile-all'] } } }
+
+test('6/9 D4: smoked reads successes per entry point', () => {
+  const results = smoked(MAP, REPORT)
+  expect(results).toEqual([{ name: DEPOSIT, calls: 40, successes: 40 }, { name: WITHDRAW, calls: 25, successes: 0 }, { name: CONVERT, calls: 0, successes: 0 }])
+  expect(packed(results)).toBe(`- ${DEPOSIT} | calls: 40 | successes: 40\n- ${WITHDRAW} | calls: 25 | successes: 0\n- ${CONVERT} | calls: 0 | successes: 0\n`)
+})
+
+test('6/9 D5: unrun flags only an Unclamped row with no success', () => {
+  expect(unrun(MAP, smoked(MAP, REPORT))).toEqual([
+    { rule: 'smoke.unclamped', note: `smoke: ${WITHDRAW} is raw-only and made 0 successful calls in 25; it needs a clamped handler` },
+  ])
+  expect(unrun(MAP, smoked(MAP, join(fixtures, 'reach_revert_report.json')))).toEqual([])
+})
+
+test.runIf(process.env.CF_BENCH_LIVE === '1')('6/9 D8: smoke runs medusa, restores medusa.json', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cf-fizz-smoke-'))
+  for (const dir of ['src', META]) mkdirSync(join(root, dir), { recursive: true })
+  copyFileSync(join(fixtures, 'V.sol'), join(root, 'src/V.sol'))
+  copyFileSync(join(fixtures, 'Harness.sol'), join(root, 'test/fizz/Harness.sol'))
+  writeFileSync(join(root, 'foundry.toml'), '[profile.default]\n')
+  const config = JSON.stringify(MEDUSA)
+  writeFileSync(join(root, 'medusa.json'), config)
+  expect(smoke(root, join(homedir(), '.claude/skills/fizz'), META, MAP).map((r) => r.name)).toEqual([DEPOSIT, WITHDRAW, CONVERT])
+  expect(readFileSync(join(root, 'medusa.json'), 'utf8')).toBe(config)
+}, 300_000)

@@ -5,7 +5,7 @@ import { expect, test } from 'vitest'
 import { compiled } from '../../../templates/extract.ts'
 import { layered } from '../../../templates/handoff.ts'
 import { selected, suited } from '../../../templates/map.ts'
-import { harnessed, type Suite, suite, unsourced } from '../../../templates/suite.ts'
+import { harnessed, probed, type Suite, suite, unsourced } from '../../../templates/suite.ts'
 
 const fixtures = join(import.meta.dirname, 'fixtures')
 const SELECTION = readFileSync(join(fixtures, 'entry-point-selection.json'), 'utf8')
@@ -23,10 +23,15 @@ const FOUND: Suite = {
   ],
   standIns: [{ ...at(6, 14), name: 'MockOracle', replaces: 'Oracle',
     limits: [{ limit: 'price within 1e6 of start', map: 'Oracle' }, { limit: 'deposits under 1e24', map: 'V.CAP' }] }],
+  probes: [],
   trackers: [{ ...at(20, 20), name: 'Harness.ghostDeposits', type: 'uint256', writers: ['Harness.v_deposit'] }],
   build: { command: 'crytic-compile . --foundry-compile-all', via_ir: 'false', optimizer: 'true' },
 }
 const STAND_IN = [{ rule: 'suite.stand_in', note: 'scaffold: MockOracle limit "deposits under 1e24" cites no ## Limits or ## Outside dependencies row' }]
+const CONVERT = { 'Conversion points': '- V.convertToAssets | at: src/V.sol L17-L19' }
+const probe = (name: string, cites: string, calls: string[] = []): Suite['probes'][number] => ({ ...at(1, 1), name, cites, trackers: [], calls })
+const [CAP, CONVERTS] = [probe('ProbeCap', 'V.CAP'), probe('ProbeConvert', 'V.convertToAssets')]
+const PROBES = 'test/fizz/Probes.sol'
 
 function project(built = true): string {
   const root = mkdtempSync(join(tmpdir(), 'cf-fizz-suite-'))
@@ -96,4 +101,33 @@ test.runIf(process.env.CF_BENCH_LIVE === '1')('D7: a fresh forge build reads as 
   const root = project(false)
   expect(compiled(root)).toEqual([])
   expect(suite(root)).toEqual(FOUND)
+}, 300_000)
+
+test('6/9 D1: a probe per limit and conversion passes', () => {
+  expect(probed({ ...FOUND, probes: [CAP, CONVERTS] }, map(CONVERT))).toEqual([])
+})
+
+test('6/9 D2: a conversion point with no probe is refused', () => {
+  expect(probed({ ...FOUND, probes: [CAP] }, map(CONVERT))).toEqual([
+    { rule: 'suite.probe', note: 'scaffold: ## Conversion points V.convertToAssets has no probe' },
+  ])
+})
+
+test('6/9 D3: a probe that makes a call is refused', () => {
+  expect(probed({ ...FOUND, probes: [CAP, CONVERTS, probe('ProbeCalls', 'V.convertToAssets', ['v.convertToAssets(x)'])] }, map(CONVERT))).toEqual([
+    { rule: 'suite.probe_call', note: 'scaffold: ProbeCalls calls v.convertToAssets(x); a probe makes no external call' },
+  ])
+})
+
+test.runIf(process.env.CF_BENCH_LIVE === '1')('6/9 D7: a fresh forge build reads each probe', () => {
+  const root = project(false)
+  copyFileSync(join(fixtures, 'Probes.sol'), join(root, PROBES))
+  expect(compiled(root)).toEqual([])
+  const found = suite(root)
+  expect(found.probes).toEqual([
+    { file: PROBES, start: 6, end: 13, name: 'ProbeCap', cites: 'V.CAP', trackers: ['ProbeCap.maxTotal'], calls: [] },
+    { file: PROBES, start: 15, end: 25, name: 'ProbeConvert', cites: 'V.convertToAssets', trackers: ['ProbeConvert.maxAssets', 'ProbeConvert.saw1Wei'], calls: [] },
+    { file: PROBES, start: 27, end: 35, name: 'ProbeCalls', cites: 'V.convertToAssets', trackers: ['ProbeCalls.lastAssets'], calls: ['v.convertToAssets(shares)'] },
+  ])
+  expect([found.handlers, found.trackers]).toEqual([FOUND.handlers, FOUND.trackers])
 }, 300_000)

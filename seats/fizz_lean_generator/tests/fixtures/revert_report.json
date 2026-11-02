@@ -1,0 +1,15 @@
+{
+  "contractRevertMetrics": {
+    "V": {
+      "functionRevertMetrics": {
+        "deposit(uint256)": { "totalCalls": 40, "totalReverts": 0, "pct": 0, "revertReasonMetrics": {} },
+        "withdraw(uint256)": {
+          "totalCalls": 25,
+          "totalReverts": 25,
+          "pct": 100,
+          "revertReasonMetrics": { "panic: arithmetic underflow/overflow": { "count": 25, "pct": 100 } }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "contractRevertMetrics": {
+    "V": {
+      "functionRevertMetrics": {
+        "deposit(uint256)": { "totalCalls": 40, "totalReverts": 0, "pct": 0, "revertReasonMetrics": {} },
+        "withdraw(uint256)": {
+          "totalCalls": 30,
+          "totalReverts": 28,
+          "pct": 93.33,
+          "revertReasonMetrics": { "panic: arithmetic underflow/overflow": { "count": 28, "pct": 100 } }
+        },
+        "convertToAssets(uint256)": { "totalCalls": 10, "totalReverts": 0, "pct": 0, "revertReasonMetrics": {} }
+      }
+    }
+  }
+}

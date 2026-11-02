@@ -16,10 +16,12 @@ contract ProbeConvert {
     // probe: V.convertToAssets
     uint256 constant WEI = 1;
     uint256 maxAssets;
+    uint256 minAssets = type(uint256).max;
     bool saw1Wei;
 
     function seen(uint256 shares, uint256 assets) external {
         if (assets > maxAssets) maxAssets = assets;
+        if (assets < minAssets) minAssets = assets;
         if (shares == WEI) saw1Wei = true;
     }
 }

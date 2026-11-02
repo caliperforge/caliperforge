@@ -126,8 +126,8 @@ test.runIf(process.env.CF_BENCH_LIVE === '1')('6/9 D7: a fresh forge build reads
   const found = suite(root)
   expect(found.probes).toEqual([
     { file: PROBES, start: 6, end: 13, name: 'ProbeCap', cites: 'V.CAP', trackers: ['ProbeCap.maxTotal'], calls: [] },
-    { file: PROBES, start: 15, end: 25, name: 'ProbeConvert', cites: 'V.convertToAssets', trackers: ['ProbeConvert.maxAssets', 'ProbeConvert.saw1Wei'], calls: [] },
-    { file: PROBES, start: 27, end: 35, name: 'ProbeCalls', cites: 'V.convertToAssets', trackers: ['ProbeCalls.lastAssets'], calls: ['v.convertToAssets(shares)'] },
+    { file: PROBES, start: 15, end: 27, name: 'ProbeConvert', cites: 'V.convertToAssets', trackers: ['ProbeConvert.maxAssets', 'ProbeConvert.minAssets', 'ProbeConvert.saw1Wei'], calls: [] },
+    { file: PROBES, start: 29, end: 37, name: 'ProbeCalls', cites: 'V.convertToAssets', trackers: ['ProbeCalls.lastAssets'], calls: ['v.convertToAssets(shares)'] },
   ])
   expect([found.handlers, found.trackers]).toEqual([FOUND.handlers, FOUND.trackers])
 }, 300_000)

@@ -74,11 +74,13 @@ test('D2 a pass answering one of two rows is refused', async () => {
 
 test('D3 kept and changed answers stand, an empty change refuses', async () => {
   expect((await senior(pass(`- ${ONE} | kept\n- ${TWO} | changed: the issue asks for it`))).outcome).toMatchObject({ outcome: 'pass', spans: [] })
-  expect((await senior(pass(`- ${ONE} | kept\n- ${TWO} | changed: `))).outcome).toMatchObject({ outcome: 'refuse', spans: [TWO] })
+  expect((await senior(pass(`- ${ONE} | kept\n- ${TWO} | changed: `))).outcome).toMatchObject({ outcome: 'refuse', spans: [TWO],
+    origin_kind: 'ruling', origin_ref: 'reviewers.verdict' })
 })
 
 test('D4 a refuse with no answers comes through unchanged', async () => {
-  expect((await senior(REFUSE)).outcome).toMatchObject({ outcome: 'refuse', defect_class: 'scope', spans: ['src/stats.ts:2'] })
+  expect((await senior(REFUSE)).outcome).toMatchObject({ outcome: 'refuse', defect_class: 'scope', spans: ['src/stats.ts:2'],
+    origin_kind: 'ruling', origin_ref: 'reviewers.verdict' })
 })
 
 test('D5 an outside plan gets its row, an internal plan reads none', async () => {

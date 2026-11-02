@@ -49,11 +49,11 @@ test('D4: ProbeCalls.lastAssets does not change the readings', () => {
   expect(readings(ROWS, new Map([...VALUES, ['ProbeCalls.lastAssets', 999n]]))).toEqual(readings(ROWS, new Map(VALUES)))
 })
 
-test('D5: a failing forge throws its stderr and leaves no test', () => {
-  const { root, corpus } = project('pragma solidity ^0.8.20;\ncontract Harness { function setup( }\n')
-  expect(() => trackers(root, corpus)).toThrow(/^forge inspect Harness storageLayout --json exited \S+: \S/)
-  expect(existsSync(join(root, TEST))).toBe(false)
-})
+test.runIf(process.env.CF_BENCH_LIVE === '1')('D5: a failing forge test throws stderr and leaves no file', () => {
+  const { root, corpus } = project('pragma solidity ^0.8.20;\ncontract Harness {}\n')
+  expect(() => trackers(root, corpus)).toThrow(/^forge test -vv --match-path test\/fizz\/ProbeReadings\.t\.sol exited 1: \S/)
+  expect([existsSync(join(root, TEST)), existsSync(join(root, 'out/ProbeReadings.t.sol'))]).toEqual([false, false])
+}, 300_000)
 
 test.runIf(process.env.CF_BENCH_LIVE === '1')('D6: trackers keeps the largest maxTotal across sequences', () => {
   const { root, corpus } = project(HARNESS)

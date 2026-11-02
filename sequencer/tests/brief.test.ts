@@ -459,13 +459,14 @@ test('D1 an outside packet carries the row on its file', async () => {
 
 test('D2 an internal packet carries no ## Precedents', async () => {
   const w = mine()
-  stored(w, SELF, 'src/hello.ts')
+  const precedent = stored(w, SELF, 'src/hello.ts')
   const packets: Packet[] = []
   await tick(w.db, w.root, stub(CARRIED))
   await tick(w.db, w.root, stub(CARRIED, 0, undefined, (p) => packets.push(p)))
 
   expect(packets[0]?.prompt).toContain('# brief_writer')
-  expect(packets[0]?.prompt).not.toContain('## Precedents')
+  expect(packets[0]?.prompt).not.toContain('\n## Precedents\n')
+  expect(packets[0]?.prompt).not.toContain(row(precedent))
 })
 
 test('the packet opens on the checkout map; no MAP.md is written', async () => {

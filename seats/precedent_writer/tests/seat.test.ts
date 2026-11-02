@@ -1,10 +1,13 @@
 import { join } from 'node:path'
 import { expect, test } from 'vitest'
+import { check } from '../../../cli/digests.ts'
 import { Seat, rules, seat } from '../../../runner/rules.ts'
 
 const root = join(import.meta.dirname, '../../..')
+const TODAY = '2026-11-01'
 const ROW = '- area: <file or file:function> | decision: <one line> | why: <one line, quoting the thread where possible> | said_by: <login> (<maintainer|contributor>) | source: <comment URL>'
 const OPENING = "- opening: <deferred|asked> | area: <file or file:function> | quote: <the maintainer's words> | said_by: <login> | source: <comment URL>"
+const BOT = '- bot: <finding> | area: <file or file:function> | acted_on: <fixed|agreed|ignored> | source: <comment URL>'
 
 test('D1: the manifest is Sonnet with no tools and no write path', () => {
   expect(seat(root, 'precedent_writer').manifest).toEqual({ seat: 'precedent_writer', model: 'claude-sonnet-5', effort: 'medium', tools: [], write_paths: [] })
@@ -22,4 +25,13 @@ test('D3: the prompt holds the row line and its roles', () => {
 test('D4: a write tool with no write paths is still refused', () => {
   const manifest = seat(root, 'precedent_writer').manifest
   expect(() => Seat.parse({ ...manifest, tools: ['Write'] })).toThrow(/save Bash\(cf look:\*\)/)
+})
+
+test('D5: the prompt holds the bot row, its role and outcomes', () => {
+  const prompt = seat(root, 'precedent_writer').prompt
+  for (const part of [BOT, '`bot`', '`fixed`', '`agreed`', '`ignored`']) expect(prompt).toContain(part)
+})
+
+test('D6: the digests hold', () => {
+  expect(check(root, TODAY)).toEqual([])
 })

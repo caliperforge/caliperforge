@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
-import type { CostWall, Fired, Provider } from '../providers/kind.ts'
+import type { CostWall, Fired, Provider, Range } from '../providers/kind.ts'
 import { packet, real } from '../runner/index.ts'
 import type { Seat } from '../runner/rules.ts'
 import type { Outcome } from '../sequencer/kind.ts'
@@ -13,7 +13,7 @@ import { byRun, pending } from '../store/transcript.ts'
 import { compiled, extract } from './extract.ts'
 import { costWalled } from './generated.ts'
 import { handoff, layered, ranged, type Refused } from './handoff.ts'
-import { drawn, excerpts } from './map.ts'
+import { drawn, excerpts, ranges } from './map.ts'
 import type { Step } from './pr-path.ts'
 
 export interface Sum { tokens: number; seconds: number; usd: number; transcripts: string[]; wall: string | null }
@@ -36,17 +36,18 @@ const MAP = 'map.md'
 
 const EXCERPTS = 'excerpts'
 
-interface Bench { db: Db; root: string; plan: PlanRow; step: Step; provider: Provider; name: string; dir: string; tmp: string; granted: string[]; walls: CostWall; ceiling: number }
+export interface Bench { db: Db; root: string; plan: PlanRow; step: Step; provider: Provider; name: string; dir: string; tmp: string; granted: string[]; walls: CostWall; ceiling: number }
 
-export function firing({ db, root, plan, step, provider, name, dir, tmp, granted, walls, ceiling }: Bench, manifest: Seat, hash: string): Fire {
+export function firing({ db, root, plan, step, provider, name, dir, tmp, granted, walls, ceiling }: Bench, manifest: Seat, hash: string, map?: Range[]): Fire {
   return async (prompt, issue, sum, phase) => {
     const built = packet(manifest, prompt, '', issue, dir,
       pending(planDir(root, plan.id), `step-${String(step.step)}${phase === undefined ? '' : `-${phase}`}`), false, [...manifest.write_paths, tmp])
     const fired = await provider.fire({ ...built, refuse: (path) => real(resolve(dir, path)) === real(ATTEMPTS) ? null : built.refuse(path), wall: ceiling - sum.tokens,
-      cost_wall: { ...walls, usd: walls.usd - sum.usd }, env: { ...TIMEOUTS, ...FOREGROUND, TMPDIR: tmp }, reads: [...granted, real(ATTEMPTS)], offline: true, ...(name === 'fizz_lean_generator' ? { ranged: true } : {}), ...(['fizz_generator', 'fizz_lean_generator'].includes(name) ? { idle: SETUP } : {}) })
+      cost_wall: { ...walls, usd: walls.usd - sum.usd }, env: { ...TIMEOUTS, ...FOREGROUND, TMPDIR: tmp }, reads: [...granted, real(ATTEMPTS)], offline: true, ...(map !== undefined ? { map: { ranges: map, slice: map } } : name === 'fizz_lean_generator' ? { ranged: true } : {}), ...(['fizz_generator', 'fizz_lean_generator'].includes(name) ? { idle: SETUP } : {}) })
     const run = runLogged(db, { plan: plan.id, step: step.step, seat: name, rule_hash: hash, provider: provider.name, model: manifest.model,
       effort: manifest.effort, exit: fired.exit, fired, staffed: name, phase })
     for (const command of fired.offline ?? []) logged(db, { plan: plan.id, kind: 'run.offline', actor: name, outcome: 'refuse', message: command, pointer: null, run })
+    for (const { kind, file, lines } of fired.misses ?? []) logged(db, { plan: plan.id, kind, actor: name, outcome: 'pass', message: JSON.stringify({ file, line: parseInt(lines.slice(1), 10) }), pointer: null, run })
     const transcript = byRun(db, run, fired.transcript_path)
     observed(db, fired.limits)
     return added(sum, fired, transcript, phase === undefined ? name : `${name} ${phase}`, ceiling)
@@ -97,7 +98,7 @@ export function phasesOf(skill: string): string[] {
   return [...readFileSync(join(skill, TEMPLATES), 'utf8').matchAll(/^# Handoff: (.+)$/gm)].map((m) => m[1] ?? '').filter((phase) => phase !== 'campaigns')
 }
 
-export async function phased(fire: Fire, skill: string, handoffs: string, issue: string, critics: () => Refused[], stop?: string): Promise<Sum | Outcome> {
+export async function phased(bench: Bench, manifest: Seat, hash: string, skill: string, handoffs: string, issue: string, critics: () => Refused[], stop?: string): Promise<Sum | Outcome> {
   const phases = phasesOf(skill)
   const root = resolve(handoffs, '../../../..')
   const stopped = join(handoffs, 'stopped.json')
@@ -112,6 +113,7 @@ export async function phased(fire: Fire, skill: string, handoffs: string, issue:
     const start = at === 0 ? [] : [`Start from ${join(handoffs, `${phases[at - 1] ?? ''}.md`)}.`]
     const later = phase !== 'context' && existsSync(cut)
     const named = later ? [`Read ${map} and the excerpts it cites: ${readdirSync(cut).map((f) => join(cut, f)).join(', ')}.`] : []
+    const fire = firing(bench, manifest, hash, later ? ranges(read(map)) : undefined)
     const ran = await checked(fire, { phase, skill, root, path, critics, prompt: readFileSync(join(skill, 'phases', `${phase}.md`), 'utf8'), ...(later ? { map: read(map) } : {}),
       issue: [issue, `Before you end, write ${path} filled from the \`# Handoff: ${phase}\` block of ${join(skill, TEMPLATES)}.`, ...start, ...named].join('\n') }, sum)
     if ('outcome' in ran || ran.wall !== null) return ran

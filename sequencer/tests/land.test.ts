@@ -388,12 +388,12 @@ test('a re-cut keeps the pushed head, so the push fast-forwards',async () => {
   const tree = git(src, ['rev-parse', `${headOf(w.root, ID).sha}^{tree}`])
   expect(() => git(src, ['push', 'origin', BRANCH])).toThrow()
 
-  const { head } = sent(w.root, plan(w.db, ID), SELF, WIRE)
+  const { head } = sent(w.db, w.root, plan(w.db, ID), SELF, WIRE)
   expect(git(remote, ['rev-parse', BRANCH])).toBe(git(src, ['rev-parse', 'HEAD']))
   expect(head.sha).toBe(git(src, ['rev-parse', 'HEAD']))
   expect(() => git(src, ['merge-base', '--is-ancestor', old, 'HEAD'])).not.toThrow()
   expect(git(src, ['rev-parse', 'HEAD^{tree}'])).toBe(tree)
-  expect(sent(w.root, plan(w.db, ID), SELF, WIRE).head.sha).toBe(head.sha)
+  expect(sent(w.db, w.root, plan(w.db, ID), SELF, WIRE).head.sha).toBe(head.sha)
 })
 
 /**

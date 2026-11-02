@@ -310,7 +310,7 @@ test('D1 D2 D3 pre-pr rounds move -next; push sends the branch', async () => {
   tips.reduce((older, newer) => { git(['merge-base', '--is-ancestor', older, newer]); return newer })
   expect(git(['ls-tree', '-r', 'widget-12-a1', 'greptile.json'])).toBe('')
   expect(git(['log', '--format=%H', 'widget-12-a1']).split('\n').filter((h) => tips.includes(h))).toEqual([])
-  const held = (): string => next(w.root, plan(w.db, 1), 'acme/widget', wire).tip
+  const held = (): string => next(w.db, w.root, plan(w.db, 1), 'acme/widget', wire).tip
   expect([held(), held()]).toEqual([tip(w.root, 1), tip(w.root, 1)])
   approveCard(w.db, w.root, 'plan', 1, 'ceo')
   advance(w.db, plan(w.db, 1), 8)
@@ -341,7 +341,7 @@ function signer(w: World, gpg: string): (args: string[]) => string {
 test('D1 a -next tip is signed where the checkout signs', async () => {
   const w = await atBatch()
   const git = signer(w, SIGNS)
-  const { tip: signed } = next(w.root, plan(w.db, 1), 'acme/widget', watched([], w.root, 1))
+  const { tip: signed } = next(w.db, w.root, plan(w.db, 1), 'acme/widget', watched([], w.root, 1))
   expect(get(w.root, 1, 'next.tips')).toContain(`${signed} ${git(['rev-parse', 'HEAD'])}\n`)
   expect(git(['cat-file', 'commit', signed])).toMatch(/^gpgsig /m)
   expect(JSON.parse(git(['show', `${signed}:greptile.json`])) as unknown).toEqual(QUIET)
@@ -355,7 +355,7 @@ test('D8 a target running Greptile gets its .greptile tip', async () => {
   git(['-c', 'commit.gpgsign=false', '-c', 'user.email=cf@caliperforge.dev', '-c', 'user.name=caliperforge',
     'commit', '-qa', '--amend', '--no-edit'])
   const harvest = (args: string[]): unknown => args[0] === 'pr' ? [{ number: 1, statusCheckRollup: [{ name: 'Greptile Review' }] }] : []
-  const { tip: made } = next(w.root, plan(w.db, 1), 'acme/widget', { ...watched([], w.root, 1), harvest })
+  const { tip: made } = next(w.db, w.root, plan(w.db, 1), 'acme/widget', { ...watched([], w.root, 1), harvest })
   expect(git(['ls-tree', '-r', '--name-only', made, '--', 'greptile.json', '.greptile'])).toBe('.greptile/config.json\n.greptile/rules.md')
   expect(git(['log', '-1', '--format=%s', made])).toBe('.greptile/rules.md, .greptile/config.json: review on request only')
 })
@@ -365,7 +365,7 @@ test('D4 a signature that fails sends no unsigned tip', async () => {
   signer(w, 'exit 1')
   const tips = get(w.root, 1, 'next.tips')
   const sent: string[] = []
-  expect(() => next(w.root, plan(w.db, 1), 'acme/widget', watched(sent, w.root, 1))).toThrow()
+  expect(() => next(w.db, w.root, plan(w.db, 1), 'acme/widget', watched(sent, w.root, 1))).toThrow()
   expect([sent, get(w.root, 1, 'next.tips')]).toEqual([[], tips])
 })
 
@@ -383,7 +383,7 @@ async function refollowed(handback: string): Promise<{ w: World; wire: Wire; git
   put(w.root, 1, 'step-2.handback.md', handback)
   rewind(w.db, 1, 4)
   await round(w, wire, 'hello', 3)
-  return { w, wire, git, again: () => { next(w.root, plan(w.db, 1), 'acme/widget', wire) } }
+  return { w, wire, git, again: () => { next(w.db, w.root, plan(w.db, 1), 'acme/widget', wire) } }
 }
 
 /** Two rounds signed at step 8, then a first push whose `open` throws once, after the fold went out. */
@@ -495,7 +495,7 @@ test('D1 a moved main is the parent of a one-commit head', { timeout: 90_000 }, 
   expect(git(['log', '--no-merges', '--format=%s', 'refs/remotes/upstream/main..HEAD'])).not.toContain('main moves on')
   const head = git(['rev-parse', 'HEAD'])
   const shown = git(['ls-remote', 'origin', 'refs/heads/widget-12-a1-next'])
-  next(w.root, plan(w.db, 1), 'acme/widget', wire)
+  next(w.db, w.root, plan(w.db, 1), 'acme/widget', wire)
   expect([git(['rev-parse', 'HEAD']), git(['ls-remote', 'origin', 'refs/heads/widget-12-a1-next'])]).toEqual([head, shown])
   expect(refs.filter((r) => r.startsWith('+') || r.includes('--force'))).toEqual([])
 })

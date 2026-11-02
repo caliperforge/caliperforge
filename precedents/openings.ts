@@ -3,6 +3,8 @@ import type { Source, Thread } from './store.ts'
 
 export interface Opening { kind: 'deferred' | 'asked'; area: string; quote: string; said_by: string; source: string }
 
+export type Listed = Opening & { repo: string; first_seen: string }
+
 const OPENING = /^- opening: (?<kind>deferred|asked) \| area: (?<area>.+?) \| quote: (?<quote>.+?) \| said_by: (?<said_by>\S+) \| source: (?<source>\S+)$/
 
 export function openingOf(line: string, said: Thread[]): Opening | null {
@@ -40,4 +42,9 @@ export function finished(db: Db, repo: string, pr: { merged_at: string; files: s
 export function vouched(db: Db, repo: string): Opening[] {
   return db.prepare(`SELECT kind, area, quote, said_by, source FROM openings
     WHERE repo = ? AND status = 'open' AND kind IN ('deferred', 'asked') ORDER BY first_seen DESC, id DESC`).all(repo) as Opening[]
+}
+
+export function openings(db: Db, repo: string | null): Listed[] {
+  return db.prepare(`SELECT repo, kind, area, quote, said_by, source, first_seen FROM openings
+    WHERE status = 'open' AND (? IS NULL OR repo = ?) ORDER BY first_seen DESC, id DESC`).all(repo, repo) as Listed[]
 }

@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { split, STANDING, unclear, wide } from '../brief.ts'
+import { shape, split, STANDING, unclear, wide } from '../brief.ts'
 import { tick } from '../index.ts'
 import { assembly } from '../home.ts'
 import { following, languages, parted, released } from '../split.ts'
@@ -89,6 +89,28 @@ test('D3: an after on itself, a later part or no part is no split', () => {
   for (const after of [['none', 'c', 'none'], ['a', 'none', 'none'], ['none', 'none', 'c'], ['none', 'z', 'none'], ['none', 'none', 'ab'],
     ['none', 'none', 'C'], ['B', 'none', 'none'], ['none', "''", 'none']]) {
     expect(split(AFTER(after))).toBeNull()
+  }
+})
+
+test('D1: a list on after: is refused for that line', () => {
+  const refused = shape(AFTER(['none', 'a, b']), '# t\n', '')
+  expect(refused?.span).toBe('after:')
+  expect(refused?.reason).toMatch(/^part b's after: a, b /)
+})
+
+test('D2: an after split() rejects is refused for its line', () => {
+  for (const after of [['none', 'c', 'none'], ['a', 'none', 'none'], ['none', 'none', 'c'], ['none', 'z', 'none'], ['none', 'none', 'ab'],
+    ['none', 'none', 'C'], ['B', 'none', 'none'], ['none', "''", 'none'], ['none', '[a, b]']]) {
+    const refused = shape(AFTER(after), '# t\n', '')
+    expect(refused?.span).toBe('after:')
+    expect(refused?.reason).not.toContain('title')
+  }
+})
+
+test('D4: an after split() reads is not refused for it', () => {
+  for (const reply of [AFTER(['none', 'A', 'none']), AFTER([null, 'none', null]), PARTS]) {
+    expect(split(reply)).not.toBeNull()
+    expect(shape(reply, '# t\n', '')?.span).not.toBe('after:')
   }
 })
 
@@ -419,6 +441,18 @@ test('a wide internal brief goes back to the brief writer', async () => {
   const fired = await tick(w.db, w.root, stub(CARRIED, 0, undefined, undefined, wideBrief(paths)), undefined, undefined, watched(log, w.root, ID))
   expect(fired[0]).toMatchObject({ step: 1, outcome: 'refuse', spans: ['brief.wide'] })
   expect(maybe(w.root, ID, 'refusal.md')).toContain('answer with the split fence')
+  expect(maybe(w.root, ID, 'issue.md')).toBeNull()
+})
+
+test('D3: a step-1 split with after: a, b is refused for it', async () => {
+  const w = mine()
+  const log: string[] = []
+  await tick(w.db, w.root, stub(CARRIED), undefined, undefined, watched(log, w.root, ID))
+  const fired = await tick(w.db, w.root, stub(CARRIED, 0, undefined, undefined, AFTER(['none', 'a, b'])), undefined, undefined, watched(log, w.root, ID))
+  expect(fired[0]).toMatchObject({ step: 1, outcome: 'refuse', spans: ['after:'] })
+  expect(maybe(w.root, ID, 'refusal.md')).toContain("part b's after: a, b")
+  expect(maybe(w.root, ID, 'refusal.md')).not.toContain("the title is not the ask's")
+  expect(maybe(w.root, ID, 'split.md')).toBeNull()
   expect(maybe(w.root, ID, 'issue.md')).toBeNull()
 })
 

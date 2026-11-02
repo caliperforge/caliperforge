@@ -1,0 +1,281 @@
+{
+  "ast": {
+    "absolutePath": "src/P.sol",
+    "id": 100,
+    "nodeType": "SourceUnit",
+    "src": "0:772:0",
+    "nodes": [
+      {
+        "id": 10,
+        "name": "IP",
+        "nodeType": "ContractDefinition",
+        "src": "58:61:0",
+        "nodes": [
+          {
+            "functionSelector": "1a2b3c4d",
+            "id": 11,
+            "implemented": false,
+            "kind": "function",
+            "modifiers": [],
+            "name": "reallocate",
+            "nodeType": "FunctionDefinition",
+            "parameters": { "id": 12, "nodeType": "ParameterList", "src": "96:11:0", "parameters": [
+              { "id": 13, "name": "k", "nodeType": "VariableDeclaration", "src": "97:9:0", "stateVariable": false, "storageLocation": "default", "typeDescriptions": { "typeString": "uint256" } }
+            ] },
+            "returnParameters": { "id": 14, "nodeType": "ParameterList", "src": "117:0:0", "parameters": [] },
+            "src": "77:40:0",
+            "visibility": "external"
+          }
+        ]
+      },
+      {
+        "id": 20,
+        "name": "P",
+        "nodeType": "ContractDefinition",
+        "src": "121:441:0",
+        "nodes": [
+          {
+            "id": 21,
+            "members": [
+              { "id": 22, "name": "cap", "nodeType": "VariableDeclaration", "src": "159:11:0", "stateVariable": false, "storageLocation": "default", "typeDescriptions": { "typeString": "uint256" } },
+              { "id": 23, "name": "balance", "nodeType": "VariableDeclaration", "src": "180:15:0", "stateVariable": false, "storageLocation": "default", "typeDescriptions": { "typeString": "uint256" } }
+            ],
+            "name": "Cfg",
+            "nodeType": "StructDefinition",
+            "src": "138:64:0"
+          },
+          {
+            "constant": false,
+            "id": 24,
+            "name": "cfg",
+            "nodeType": "VariableDeclaration",
+            "src": "208:34:0",
+            "stateVariable": true,
+            "storageLocation": "default",
+            "typeDescriptions": { "typeString": "mapping(uint256 => struct P.Cfg storage ref)" },
+            "typeName": { "id": 25, "nodeType": "Mapping", "src": "208:23:0" },
+            "visibility": "public"
+          },
+          {
+            "constant": false,
+            "id": 26,
+            "name": "moves",
+            "nodeType": "VariableDeclaration",
+            "src": "248:20:0",
+            "stateVariable": true,
+            "storageLocation": "default",
+            "typeDescriptions": { "typeString": "uint256" },
+            "typeName": { "id": 27, "name": "uint256", "nodeType": "ElementaryTypeName", "src": "248:7:0" },
+            "visibility": "public"
+          },
+          {
+            "body": { "id": 35, "nodeType": "Block", "src": "322:27:0", "statements": [
+              { "id": 36, "nodeType": "ExpressionStatement", "src": "332:11:0", "expression": {
+                "arguments": [
+                  { "id": 39, "name": "k", "nodeType": "Identifier", "referencedDeclaration": 32, "src": "337:1:0" },
+                  { "id": 49, "name": "v", "nodeType": "Identifier", "referencedDeclaration": 33, "src": "340:1:0" }
+                ],
+                "expression": { "id": 38, "name": "_set", "nodeType": "Identifier", "referencedDeclaration": 40, "src": "332:4:0" },
+                "id": 37,
+                "kind": "functionCall",
+                "nodeType": "FunctionCall",
+                "src": "332:10:0"
+              } }
+            ] },
+            "id": 30,
+            "implemented": true,
+            "kind": "function",
+            "modifiers": [],
+            "name": "accept",
+            "nodeType": "FunctionDefinition",
+            "parameters": { "id": 31, "nodeType": "ParameterList", "src": "290:22:0", "parameters": [
+              { "id": 32, "name": "k", "nodeType": "VariableDeclaration", "src": "291:9:0", "stateVariable": false, "storageLocation": "default", "typeDescriptions": { "typeString": "uint256" } },
+              { "id": 33, "name": "v", "nodeType": "VariableDeclaration", "src": "302:9:0", "stateVariable": false, "storageLocation": "default", "typeDescriptions": { "typeString": "uint256" } }
+            ] },
+            "returnParameters": { "id": 34, "nodeType": "ParameterList", "src": "322:0:0", "parameters": [] },
+            "src": "275:74:0",
+            "visibility": "external"
+          },
+          {
+            "body": { "id": 45, "nodeType": "Block", "src": "400:58:0", "statements": [
+              {
+                "declarations": [
+                  { "id": 47, "name": "c", "nodeType": "VariableDeclaration", "src": "410:13:0", "stateVariable": false, "storageLocation": "storage", "typeDescriptions": { "typeString": "struct P.Cfg" } }
+                ],
+                "id": 46,
+                "initialValue": {
+                  "baseExpression": { "id": 48, "name": "cfg", "nodeType": "Identifier", "referencedDeclaration": 24, "src": "426:3:0" },
+                  "id": 50,
+                  "indexExpression": { "id": 56, "name": "k", "nodeType": "Identifier", "referencedDeclaration": 42, "src": "430:1:0" },
+                  "nodeType": "IndexAccess",
+                  "src": "426:6:0"
+                },
+                "nodeType": "VariableDeclarationStatement",
+                "src": "410:23:0"
+              },
+              { "id": 51, "nodeType": "ExpressionStatement", "src": "442:10:0", "expression": {
+                "id": 52,
+                "leftHandSide": {
+                  "expression": { "id": 54, "name": "c", "nodeType": "Identifier", "referencedDeclaration": 47, "src": "442:1:0" },
+                  "id": 53,
+                  "memberName": "cap",
+                  "nodeType": "MemberAccess",
+                  "src": "442:5:0"
+                },
+                "nodeType": "Assignment",
+                "operator": "=",
+                "rightHandSide": { "id": 55, "name": "v", "nodeType": "Identifier", "referencedDeclaration": 43, "src": "450:1:0" },
+                "src": "442:9:0"
+              } }
+            ] },
+            "id": 40,
+            "implemented": true,
+            "kind": "function",
+            "modifiers": [],
+            "name": "_set",
+            "nodeType": "FunctionDefinition",
+            "parameters": { "id": 41, "nodeType": "ParameterList", "src": "368:22:0", "parameters": [
+              { "id": 42, "name": "k", "nodeType": "VariableDeclaration", "src": "369:9:0", "stateVariable": false, "storageLocation": "default", "typeDescriptions": { "typeString": "uint256" } },
+              { "id": 43, "name": "v", "nodeType": "VariableDeclaration", "src": "380:9:0", "stateVariable": false, "storageLocation": "default", "typeDescriptions": { "typeString": "uint256" } }
+            ] },
+            "returnParameters": { "id": 44, "nodeType": "ParameterList", "src": "400:0:0", "parameters": [] },
+            "src": "355:103:0",
+            "visibility": "internal"
+          },
+          {
+            "body": { "id": 64, "nodeType": "Block", "src": "504:56:0", "statements": [
+              { "id": 65, "nodeType": "ExpressionStatement", "src": "514:20:0", "expression": {
+                "id": 66,
+                "leftHandSide": {
+                  "expression": {
+                    "baseExpression": { "id": 69, "name": "cfg", "nodeType": "Identifier", "referencedDeclaration": 24, "src": "514:3:0" },
+                    "id": 68,
+                    "indexExpression": { "id": 70, "name": "k", "nodeType": "Identifier", "referencedDeclaration": 62, "src": "518:1:0" },
+                    "nodeType": "IndexAccess",
+                    "src": "514:6:0"
+                  },
+                  "id": 67,
+                  "memberName": "balance",
+                  "nodeType": "MemberAccess",
+                  "src": "514:14:0"
+                },
+                "nodeType": "Assignment",
+                "operator": "+=",
+                "rightHandSide": { "id": 71, "kind": "number", "nodeType": "Literal", "src": "532:1:0", "value": "1" },
+                "src": "514:19:0"
+              } },
+              { "id": 72, "nodeType": "ExpressionStatement", "src": "543:11:0", "expression": {
+                "id": 73,
+                "leftHandSide": { "id": 74, "name": "moves", "nodeType": "Identifier", "referencedDeclaration": 26, "src": "543:5:0" },
+                "nodeType": "Assignment",
+                "operator": "+=",
+                "rightHandSide": { "id": 75, "kind": "number", "nodeType": "Literal", "src": "552:1:0", "value": "1" },
+                "src": "543:10:0"
+              } }
+            ] },
+            "functionSelector": "1a2b3c4d",
+            "id": 60,
+            "implemented": true,
+            "kind": "function",
+            "modifiers": [],
+            "name": "reallocate",
+            "nodeType": "FunctionDefinition",
+            "parameters": { "id": 61, "nodeType": "ParameterList", "src": "483:11:0", "parameters": [
+              { "id": 62, "name": "k", "nodeType": "VariableDeclaration", "src": "484:9:0", "stateVariable": false, "storageLocation": "default", "typeDescriptions": { "typeString": "uint256" } }
+            ] },
+            "returnParameters": { "id": 63, "nodeType": "ParameterList", "src": "504:0:0", "parameters": [] },
+            "src": "464:96:0",
+            "visibility": "external"
+          }
+        ]
+      },
+      {
+        "id": 80,
+        "name": "A",
+        "nodeType": "ContractDefinition",
+        "src": "564:207:0",
+        "nodes": [
+          {
+            "body": { "id": 86, "nodeType": "Block", "src": "634:36:0", "statements": [
+              { "id": 87, "nodeType": "ExpressionStatement", "src": "644:20:0", "expression": {
+                "arguments": [{ "id": 93, "name": "k", "nodeType": "Identifier", "referencedDeclaration": 84, "src": "661:1:0" }],
+                "expression": {
+                  "expression": {
+                    "arguments": [{ "id": 92, "name": "p", "nodeType": "Identifier", "referencedDeclaration": 83, "src": "647:1:0" }],
+                    "expression": { "id": 91, "name": "IP", "nodeType": "Identifier", "referencedDeclaration": 10, "src": "644:2:0" },
+                    "id": 90,
+                    "kind": "typeConversion",
+                    "nodeType": "FunctionCall",
+                    "src": "644:5:0"
+                  },
+                  "id": 89,
+                  "memberName": "reallocate",
+                  "nodeType": "MemberAccess",
+                  "referencedDeclaration": 11,
+                  "src": "644:16:0"
+                },
+                "id": 88,
+                "kind": "functionCall",
+                "nodeType": "FunctionCall",
+                "src": "644:19:0"
+              } }
+            ] },
+            "id": 81,
+            "implemented": true,
+            "kind": "function",
+            "modifiers": [],
+            "name": "reallocateTo",
+            "nodeType": "FunctionDefinition",
+            "parameters": { "id": 82, "nodeType": "ParameterList", "src": "602:22:0", "parameters": [
+              { "id": 83, "name": "p", "nodeType": "VariableDeclaration", "src": "603:9:0", "stateVariable": false, "storageLocation": "default", "typeDescriptions": { "typeString": "address" } },
+              { "id": 84, "name": "k", "nodeType": "VariableDeclaration", "src": "614:9:0", "stateVariable": false, "storageLocation": "default", "typeDescriptions": { "typeString": "uint256" } }
+            ] },
+            "returnParameters": { "id": 85, "nodeType": "ParameterList", "src": "634:0:0", "parameters": [] },
+            "src": "581:89:0",
+            "visibility": "external"
+          },
+          {
+            "body": { "id": 101, "nodeType": "Block", "src": "733:36:0", "statements": [
+              { "id": 102, "nodeType": "Return", "src": "743:20:0", "expression": {
+                "arguments": [],
+                "expression": {
+                  "expression": {
+                    "arguments": [{ "id": 107, "name": "p", "nodeType": "Identifier", "referencedDeclaration": 97, "src": "752:1:0" }],
+                    "expression": { "id": 106, "name": "P", "nodeType": "Identifier", "referencedDeclaration": 20, "src": "750:1:0" },
+                    "id": 105,
+                    "kind": "typeConversion",
+                    "nodeType": "FunctionCall",
+                    "src": "750:4:0"
+                  },
+                  "id": 104,
+                  "memberName": "moves",
+                  "nodeType": "MemberAccess",
+                  "referencedDeclaration": 26,
+                  "src": "750:10:0"
+                },
+                "id": 103,
+                "kind": "functionCall",
+                "nodeType": "FunctionCall",
+                "src": "750:12:0"
+              } }
+            ] },
+            "id": 95,
+            "implemented": true,
+            "kind": "function",
+            "modifiers": [],
+            "name": "peek",
+            "nodeType": "FunctionDefinition",
+            "parameters": { "id": 96, "nodeType": "ParameterList", "src": "689:11:0", "parameters": [
+              { "id": 97, "name": "p", "nodeType": "VariableDeclaration", "src": "690:9:0", "stateVariable": false, "storageLocation": "default", "typeDescriptions": { "typeString": "address" } }
+            ] },
+            "returnParameters": { "id": 98, "nodeType": "ParameterList", "src": "723:9:0", "parameters": [
+              { "id": 99, "name": "", "nodeType": "VariableDeclaration", "src": "724:7:0", "stateVariable": false, "storageLocation": "default", "typeDescriptions": { "typeString": "uint256" } }
+            ] },
+            "src": "676:93:0",
+            "visibility": "external"
+          }
+        ]
+      }
+    ]
+  }
+}

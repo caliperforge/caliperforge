@@ -17,6 +17,8 @@ import { costWalled } from './generated.ts'
 import { handoff, layered, ranged, type Refused } from './handoff.ts'
 import { drawn, excerpts, ranges, sections, suited } from './map.ts'
 import type { Step } from './pr-path.ts'
+import { readings, trackers } from './probes.ts'
+import { met, reach, unmet, written } from './reach.ts'
 import { KINDS } from './report.ts'
 import { packed, smoke, type Smoked, unrun } from './smoke.ts'
 import { harnessed, probed, suite, unsourced } from './suite.ts'
@@ -101,20 +103,31 @@ async function checked(fire: Fire, at: Phase, sum: Sum, refused: Refused[] = [])
 
 const FACTS = ['Limits', 'Outside dependencies', 'Conversion points']
 
-async function scaffolded(bench: Bench, manifest: Seat, hash: string, skill: string, root: string, handoffs: string, sum: Sum): Promise<{ sum: Sum; smoked: string } | Sum | Outcome> {
-  const { db, plan, name, dir, granted } = bench
-  const [map, fizz] = [join(handoffs, MAP), granted.find((path) => basename(path) === 'fizz') ?? '']
+function fixing(bench: Bench, manifest: Seat, hash: string, handoffs: string, phase: string, sum: Sum) {
+  const { db, plan, name, dir } = bench
   const at = { fire: firing(bench, { ...manifest, ...FIX }, hash), dir, handoffs }
-  const log = (kind: string, outcome: 'pass' | 'refuse', message: string): void => { logged(db, { plan: plan.id, kind, actor: name, outcome, message, pointer: null, run: null }) }
-  const fix = async (check: Check): Promise<Fixed | Sum | Outcome> => {
-    const got = await fixed(at, check, 'scaffold', sum)
-    if ('outcome' in got || got.sum.wall !== null) return 'outcome' in got ? got : got.sum
-    for (const row of got.turns) log(KINDS.fix_turns, 'pass', JSON.stringify(row))
-    if (got.not_clean !== null) log(KINDS.critic, 'refuse', got.not_clean)
-    sum = got.sum
-    return got
+  const fixes = {
+    sum,
+    log: (kind: string, outcome: 'pass' | 'refuse', message: string): void => { logged(db, { plan: plan.id, kind, actor: name, outcome, message, pointer: null, run: null }) },
+    fix: async (check: Check): Promise<Fixed | Sum | Outcome> => {
+      const got = await fixed(at, check, phase, fixes.sum)
+      if ('outcome' in got || got.sum.wall !== null) return 'outcome' in got ? got : got.sum
+      for (const row of got.turns) fixes.log(KINDS.fix_turns, 'pass', JSON.stringify(row))
+      if (got.not_clean !== null) fixes.log(KINDS.critic, 'refuse', got.not_clean)
+      fixes.sum = got.sum
+      return got
+    },
   }
-  const rules = read(join(skill, 'phases/scaffold.md')).split('\n').filter((l) => l.startsWith('- The machine checks')).join('\n')
+  return fixes
+}
+
+const machine = (skill: string, phase: string): string => read(join(skill, `phases/${phase}.md`)).split('\n').filter((l) => l.startsWith('- The machine')).join('\n')
+
+async function scaffolded(bench: Bench, manifest: Seat, hash: string, skill: string, root: string, handoffs: string, sum: Sum): Promise<{ sum: Sum; smoked: string } | Sum | Outcome> {
+  const [map, fizz] = [join(handoffs, MAP), bench.granted.find((path) => basename(path) === 'fizz') ?? '']
+  const fixes = fixing(bench, manifest, hash, handoffs, 'scaffold', sum)
+  const { log, fix } = fixes
+  const rules = machine(skill, 'scaffold')
   const facts = sections(read(map)).filter(([section]) => FACTS.includes(section)).map(([, s]) => s.trimEnd()).join('\n\n')
   let [lines, last]: [string[], Smoked[]] = [[], []]
   const built = await fix({ name: 'suite', rules, facts, run: () => {
@@ -127,8 +140,20 @@ async function scaffolded(bench: Bench, manifest: Seat, hash: string, skill: str
   for (const line of lines) log('suite.unsourced', 'pass', line)
   const ran = built.not_clean === null ? await fix({ name: 'smoke', rules, facts, run: () => unrun(read(map), last = smoke(root, fizz, 'test/fizz/fizz_data', read(map))) }) : built
   if (!('turns' in ran)) return ran
-  const stood = await fix(criticCheck(join(fizz, 'references/critic-pass.md'), dir, 'critic.stand_in', read(map)))
-  return 'turns' in stood ? { sum, smoked: packed(last) } : stood
+  const stood = await fix(criticCheck(join(fizz, 'references/critic-pass.md'), bench.dir, 'critic.stand_in', read(map)))
+  return 'turns' in stood ? { sum: fixes.sum, smoked: packed(last) } : stood
+}
+
+async function reached(bench: Bench, manifest: Seat, hash: string, skill: string, root: string, handoffs: string, sum: Sum): Promise<Sum | Outcome> {
+  const [map, corpus] = [join(handoffs, MAP), join(handoffs, '../corpus_medusa')]
+  const items = reach(root, read(map), join(corpus, 'coverage/lcov.info'), join(corpus, 'coverage/revert_report.json'), readings(suite(root).probes, trackers(root, corpus)))
+  writeFileSync(map, written(read(map), items))
+  const fixes = fixing(bench, manifest, hash, handoffs, 'coverage', sum)
+  const got = await fixes.fix({ name: 'reach', rules: machine(skill, 'coverage'), facts: '', run: () => unmet(read(map), items).map((i) => ({ rule: 'reach.unmet', note: i.note })) })
+  if (!('turns' in got)) return got
+  const left = met(read(map), items)
+  fixes.log(KINDS.reach, left.met ? 'pass' : 'refuse', JSON.stringify(left))
+  return fixes.sum
 }
 
 export function phasesOf(skill: string): string[] {
@@ -159,6 +184,11 @@ export async function phased(bench: Bench, manifest: Seat, hash: string, skill: 
       const repaired = await scaffolded(bench, manifest, hash, skill, root, handoffs, sum)
       if (!('smoked' in repaired)) return repaired
       ;({ sum, smoked } = repaired)
+    }
+    if (phase === 'coverage' && later) {
+      const got = await reached(bench, manifest, hash, skill, root, handoffs, sum)
+      if ('outcome' in got || got.wall !== null) return got
+      sum = got
     }
     if (phase === stop) {
       writeFileSync(stopped, JSON.stringify({ phase, sum }))

@@ -11,13 +11,14 @@ import { real } from '../../runner/index.ts'
 import { seat } from '../../runner/rules.ts'
 import { rescore } from '../../cli/bench.ts'
 import { record, scores, supersede, type Score } from '../../store/bench.ts'
-import { eventsAfter, eventsOf, logged, runRows } from '../../store/events.ts'
+import { eventsAfter, eventsOf, logged, runRows, type Event } from '../../store/events.ts'
 import { holdOf } from '../../store/holds.ts'
 import type { Db } from '../../store/index.ts'
 import { dial } from '../../store/lanes.ts'
 import { allPlans, end, holdOn, pipeNamed, planById, putPlan, requeue, waiting, type PlanRow } from '../../store/plans.ts'
 import { CEILING, generate, nullChecked, scored, scratch } from '../../templates/bench.ts'
-import { powered } from '../../templates/powered.ts'
+import { counted, powered } from '../../templates/powered.ts'
+import { KINDS } from '../../templates/report.ts'
 import { drift, mechanisms } from '../drift.ts'
 import { evict } from '../evict.ts'
 import { unhold } from '../hold.ts'
@@ -831,6 +832,10 @@ function scoring(pair = writes('.jsonl', PAIRS), keys: Record<string, string> = 
 const SCORE = { catches: 2, false_positives: 1, untested: null, tokens: 1234, seconds: 56.5, pre_fix_calls: null, fix_calls: null,
   not_powered: 'reduced_generate' }
 
+/** The seeds and union score.json carries for PAIRS on each of the two seeds. */
+const SEEDED = { seeds: [1, 2].map((seed) => ({ seed, catch: 2, fp_candidate: 1, silent: 1, calls: { pre_fix: null, fix: null }, seconds: expect.any(Number) as number })),
+  union: { catch: 2, fp_candidate: 1, silent: 1 } }
+
 const NULLCHECK = 'fuzz-bench/results/euler-earn-m01/euler-earn-m01.nullcheck.jsonl'
 
 test('score D1 kernel scores the suite at the fuzz-bench HEAD', () => {
@@ -842,7 +847,7 @@ test('score D1 kernel scores the suite at the fuzz-bench HEAD', () => {
   expect(existsSync(join(srcDir(root, 1), 'test/fizz/FizzTest.sol'))).toBe(true)
   expect(existsSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/medusa.json'))).toBe(false)
   expect(existsSync(join(planDir(root, 1), 'fuzz-bench/suites/fizz/euler-earn-m01/root'))).toBe(false)
-  expect(JSON.parse(get(root, 1, 'score.json'))).toEqual({ fuzz_bench: sha, ...SCORE, x_ray: null })
+  expect(JSON.parse(get(root, 1, 'score.json'))).toEqual({ fuzz_bench: sha, ...SCORE, x_ray: null, ...SEEDED })
 })
 
 test('D1 scored rewrites target.yml from fuzz-bench HEAD', () => {
@@ -1219,7 +1224,7 @@ function retried(pair: string, toml?: string) {
 
 test('D1 a stack-too-deep build reruns once via IR and scores', () => {
   const { row, json, seen } = retried(deep(true))
-  expect(seen).toEqual(['- -', 'true -'])
+  expect(seen).toEqual(['- -', '- -', 'true -', 'true -'])
   expect(row).toMatchObject({ catches: 2, false_positives: 1 })
   expect(json).toMatchObject({ catches: 2, false_positives: 1, via_ir_retry: true })
   expect(json).not.toHaveProperty('build_error')
@@ -1227,7 +1232,7 @@ test('D1 a stack-too-deep build reruns once via IR and scores', () => {
 
 test('D2 other compile errors or via IR already set run once', () => {
   for (const { json, seen } of [retried(`open('runs', 'a').write('-\\n')\n${writes('.jsonl', ERRORS)}`), retried(deep(false), `${TOML}[profile.fuzz]\nvia_ir = true\n`)]) {
-    expect(seen).toHaveLength(1)
+    expect(seen).toHaveLength(2)
     expect(json).toMatchObject({ not_powered: 'compile_failed' })
     expect(json).not.toHaveProperty('via_ir_retry')
   }
@@ -1235,7 +1240,7 @@ test('D2 other compile errors or via IR already set run once', () => {
 
 test('D3 a rerun still too deep is compile_failed from the rerun', () => {
   const { row, json, seen } = retried(deep(false))
-  expect(seen).toEqual(['- -', 'true -'])
+  expect(seen).toEqual(['- -', '- -', 'true -', 'true -'])
   expect(row?.not_powered).toBe('compile_failed')
   expect(json).toMatchObject({ not_powered: 'compile_failed', build_error: 'Error: Variable memPtr_102 is 1 too deep in the stack: true -', via_ir_retry: true })
 })
@@ -1252,6 +1257,7 @@ test('D5 generate at the wall records one wall row, no pair', () => {
   expect(scores(db)).toEqual([{ plan: 1, target: 'euler-earn-m01', generator: 'fizz', catches: 0, false_positives: 0, untested: null, tokens: CEILING,
     seconds: 56.5, x_ray: null, pre_fix_calls: null, fix_calls: null, not_powered: 'wall' }])
   expect(JSON.parse(get(root, 1, 'score.json'))).toMatchObject({ not_powered: 'wall' })
+  expect(JSON.parse(get(root, 1, 'report.json'))).toMatchObject({ result: '-', counted: { counted: 'no', why: 'wall' } })
 })
 
 const FAILS = 'import sys\nsys.stderr.write("forge build failed")\nsys.exit(1)\n'
@@ -1327,7 +1333,7 @@ test('D3 a null_check.py past the cap is stopped and counted', () => {
   expect(nullChecked(db, root, planById(db, 1), 2000))
     .toEqual({ outcome: 'pass', spans: [], note: 'null_check.py stopped at the 2000 ms cap: 1 untested in 2 rows' })
   expect(scores(db)).toEqual([{ plan: 1, ...KEYS, ...SCORE, untested: 1, x_ray: null }])
-  expect(JSON.parse(get(root, 1, 'score.json'))).toEqual({ fuzz_bench: sha, ...SCORE, untested: 1, x_ray: null })
+  expect(JSON.parse(get(root, 1, 'score.json'))).toEqual({ fuzz_bench: sha, ...SCORE, untested: 1, x_ray: null, ...SEEDED })
 })
 
 test('D4 a failing null_check.py holds step 3, its row kept', () => {
@@ -1358,7 +1364,7 @@ test('D2 no null_check.py passes step 3 with untested null', () => {
   const { root, db, sha } = nullChecking(ON, null)
   expect(nullChecked(db, root, planById(db, 1))).toEqual({ outcome: 'pass', spans: [], note: 'fuzz-bench has no bench/null_check.py' })
   expect(scores(db)).toEqual([{ plan: 1, ...KEYS, ...SCORE, x_ray: null }])
-  expect(JSON.parse(get(root, 1, 'score.json'))).toEqual({ fuzz_bench: sha, ...SCORE, x_ray: null })
+  expect(JSON.parse(get(root, 1, 'score.json'))).toEqual({ fuzz_bench: sha, ...SCORE, x_ray: null, ...SEEDED })
 })
 
 test('D3 an empty results file is refused and not recorded', () => {
@@ -1463,7 +1469,7 @@ test('D3 a run that wrote x-ray.md is scored with x_ray 1', async () => {
     .toMatchObject({ outcome: 'pass' })
   expect(kernel(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
   expect(scores(db)).toMatchObject([{ plan: 1, x_ray: 1 }])
-  expect(JSON.parse(get(root, 1, 'score.json'))).toEqual({ fuzz_bench: sha, ...SCORE, seconds: 1, x_ray: 1 })
+  expect(JSON.parse(get(root, 1, 'score.json'))).toEqual({ fuzz_bench: sha, ...SCORE, seconds: 1, x_ray: 1, ...SEEDED })
 })
 
 const REFUZZ = { ...KEYS, files: FILES, refuzz: '7', hours: '4', seeds: '2' }
@@ -1508,8 +1514,9 @@ test('refuzz D5 D6 each seed scores on the corpus the last grew', () => {
   const score = { catches: 3, false_positives: 0, untested: null, tokens: 0, seconds: 0, x_ray: null, pre_fix_calls: 20, fix_calls: 40, not_powered: null }
   expect(scores(db)).toEqual([{ plan: 1, ...KEYS, ...score }])
   const calls = { pre_fix: 10, fix: 20 }
+  const seconds = expect.any(Number) as number
   expect(JSON.parse(get(root, 1, 'score.json'))).toEqual({ fuzz_bench: sha, ...score, mode: 'refuzz', source: 7,
-    seeds: [{ seed: 1, catch: 0, fp_candidate: 0, silent: 3, calls }, { seed: 2, catch: 3, fp_candidate: 0, silent: 0, calls }],
+    seeds: [{ seed: 1, catch: 0, fp_candidate: 0, silent: 3, calls, seconds }, { seed: 2, catch: 3, fp_candidate: 0, silent: 0, calls, seconds }],
     union: { catch: 3, fp_candidate: 0, silent: 0 } })
   expect(runRows(db)).toEqual([])
 })
@@ -1542,6 +1549,103 @@ test('refuzz D7 null_check on hours 4 is capped at 4 × cap', () => {
   const { root, db } = nullChecking({ ...ON, hours: '4' }, `import time\ntime.sleep(1)\n${writes('.nullcheck.jsonl', KILLS)}`)
   expect(nullChecked(db, root, planById(db, 1), 500))
     .toEqual({ outcome: 'pass', spans: [], note: 'null_check.py finished: 1 untested in 2 rows' })
+})
+
+test('seeds D1 a score runs run_pair twice, timing each seed', () => {
+  const { root, db } = scoring(`import time\ntime.sleep(0.2)\n${writes('.jsonl', PAIRS)}`)
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  expect(readdirSync(join(planDir(root, 1), 'fuzz-bench/results/euler-earn-m01')).sort()).toEqual(['euler-earn-m01.seed-1.jsonl', 'euler-earn-m01.seed-2.jsonl'])
+  const score = JSON.parse(get(root, 1, 'score.json')) as typeof SEEDED
+  expect(score).toMatchObject(SEEDED)
+  for (const { seconds } of score.seeds) expect(seconds).toBeGreaterThanOrEqual(0.2)
+})
+
+/** A run_pair whose first seed catches p1 and whose second flags p2, each at its own calls. */
+const SPLIT = `import json, os
+open('seeded', 'a').write('x')
+k = len(open('seeded').read()) - 1
+rows = [{'property': 'p1', 'verdict': ['catch', 'silent'][k], 'calls': {'pre_fix': [600000, 400000][k], 'fix': [300000, 200000][k]}},
+  {'property': 'p2', 'verdict': ['silent', 'fp_candidate'][k]}]
+os.makedirs('results/euler-earn-m01', exist_ok=True)
+open('results/euler-earn-m01/euler-earn-m01.jsonl', 'w').write('\\n'.join(json.dumps(r) for r in rows))
+`
+
+test('seeds D2 the union counts, the smallest seed is powered', () => {
+  const { root, db } = scoring(SPLIT)
+  put(root, 1, 'generate.json', JSON.stringify({ suite: 'test/fizz', tokens: 1234, seconds: 56.5, agents: 8, properties: 3 }))
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  expect(scores(db)).toMatchObject([{ catches: 1, false_positives: 1, pre_fix_calls: 400000, fix_calls: 200000, not_powered: 'fix_calls' }])
+  expect(JSON.parse(get(root, 1, 'score.json'))).toMatchObject({ union: { catch: 1, fp_candidate: 1, silent: 0 },
+    seeds: [{ seed: 1, catch: 1, fp_candidate: 0, silent: 1, calls: { pre_fix: 600000, fix: 300000 } }, { seed: 2, catch: 0, fp_candidate: 1, silent: 1, calls: { pre_fix: 400000, fix: 200000 } }] })
+})
+
+function said(db: Db, kind: string, message: unknown, outcome: Event['outcome'] = 'pass'): void {
+  logged(db, { plan: 1, kind, actor: 'test', outcome, message: typeof message === 'string' ? message : JSON.stringify(message), pointer: null, run: null })
+}
+
+/** The report.json and report.md `scored` writes for a powered PAIRS run, once `log` has logged its events. */
+function reported(log: (db: Db) => void) {
+  const { root, db } = sided(8, 505660, 505660)
+  log(db)
+  expect(scored(db, root, planById(db, 1))).toMatchObject({ outcome: 'pass' })
+  return { json: JSON.parse(get(root, 1, 'report.json')) as Record<string, unknown>, md: get(root, 1, 'report.md') }
+}
+
+const RESULT = { p1: ['catch', 'catch'], p2: ['catch', 'catch'], p3: ['false alarm', 'false alarm'], p4: ['silent', 'silent'] }
+
+const TITLES = ['Result', 'Cost', 'Map health', 'Reach', 'Checks', 'Counted']
+
+test('report D3 D6 every section is built from its events', () => {
+  const { json, md } = reported((db) => {
+    for (const miss of [{ file: 'a.sol', line: 4 }, { file: 'b.sol', line: 9 }, { file: 'a.sol', line: 4 }]) said(db, KINDS.map_miss, miss)
+    said(db, KINDS.slice_miss, { file: 'c.sol', line: 1 })
+    said(db, KINDS.map_unused, { row: 'Vault.deposit' })
+    said(db, KINDS.reach, { met: false, reasons: ['no boundary test'] })
+    for (const hit of [{ check: 'critic.stand_in', state: 'found' }, { check: 'critic.stand_in', state: 'fixed' }, { check: 'critic.share_converted', state: 'left' }]) said(db, KINDS.checks, hit)
+    said(db, KINDS.reach_fixes, { file: 'test/fizz/Properties.sol', note: 'bounded amount' })
+    said(db, KINDS.fix_turns, { turn: 1, tokens: 100, usd: 0.5 })
+    said(db, KINDS.network, 'curl https://example.com')
+    said(db, KINDS.cost, { phase: 'context', tokens: 1000, usd: 2 })
+    said(db, KINDS.critic, 'clean')
+  })
+  expect(json).toEqual({ result: RESULT,
+    cost: { phases: [{ phase: 'context', tokens: 1000, usd: 2 }], fix_turns: [{ turn: 1, tokens: 100, usd: 0.5 }] },
+    map: { map_miss: 3, map_miss_top: [{ file: 'a.sol', line: 4, count: 2 }, { file: 'b.sol', line: 9, count: 1 }],
+      slice_miss: 1, slice_miss_top: [{ file: 'c.sol', line: 1, count: 1 }], unused: ['Vault.deposit'] },
+    reach: { met: false, reasons: ['no boundary test'] },
+    checks: { hits: [{ check: 'critic.stand_in', found: 1, fixed: 1, left: 0 }, { check: 'critic.share_converted', found: 0, fixed: 0, left: 1 }],
+      reach_fixes: [{ file: 'test/fizz/Properties.sol', note: 'bounded amount' }], network: ['curl https://example.com'] },
+    counted: { counted: 'yes', why: '-', critic: ['pass'] } })
+  expect([...md.matchAll(/^## (.+)$/gm)].map((m) => m[1])).toEqual(TITLES)
+  expect(md).toContain('- p3: false alarm; false alarm\n')
+  expect(md).toContain('- map_miss_top: file a.sol, line 4, count 2; file b.sol, line 9, count 1\n')
+  expect(md).toContain('- counted: yes\n')
+})
+
+test('report D4 no events shows -, counted no with critic -', () => {
+  const { json, md } = reported(() => undefined)
+  expect(json).toEqual({ result: RESULT, cost: { phases: '-', fix_turns: '-' },
+    map: { map_miss: '-', map_miss_top: '-', slice_miss: '-', slice_miss_top: '-', unused: '-' }, reach: '-',
+    checks: { hits: '-', reach_fixes: '-', network: '-' }, counted: { counted: 'no', why: 'no_critic', critic: '-' } })
+  expect(md).toContain('## Reach\n\n-\n')
+  expect(md).toContain('- counted: no\n- why: no_critic\n- critic: -\n')
+})
+
+test('report D5 a refused critic is not_clean, report kept', () => {
+  const { json, md } = reported((db) => {
+    said(db, KINDS.critic, 'clean')
+    said(db, KINDS.critic, 'critic.stand_in: amount unbounded', 'refuse')
+  })
+  expect(json).toMatchObject({ result: RESULT, counted: { counted: 'no', why: 'not_clean', critic: ['pass', 'refuse'] } })
+  expect([...md.matchAll(/^## (.+)$/gm)].map((m) => m[1])).toEqual(TITLES)
+  expect(md).toContain('- counted: no\n- why: not_clean\n')
+})
+
+test('counted D6 only an unbuilt or unpowered run is not counted', () => {
+  for (const reason of ['compile_failed', 'wall', 'reduced_generate', 'few_properties'] as const) expect(counted(reason, ['pass'])).toBe(reason)
+  expect(counted(null, ['pass'])).toBeNull()
+  expect(counted('pre_fix_calls', ['pass'])).toBeNull()
+  expect(counted('fix_calls', ['pass', 'refuse'])).toBe('not_clean')
 })
 
 test('score D5 a comms plan still reaches the comms scorer', () => {

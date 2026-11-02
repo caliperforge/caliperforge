@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { expect, test } from 'vitest'
-import { type At, compiled, extract } from '../../../templates/extract.ts'
+import { type At, compiled, extract, type Node } from '../../../templates/extract.ts'
 import { handoff, layered, ranged } from '../../../templates/handoff.ts'
 
 const skill = join(import.meta.dirname, '../skill')
@@ -180,7 +180,8 @@ test.runIf(process.env.CF_BENCH_LIVE === '1')('1753a D7: forge on a fresh V.sol 
 })
 
 const P = readFileSync(join(fixtures, 'P.sol'))
-const pRoot = project(P, readFileSync(join(fixtures, 'P.ast.json'), 'utf8'), 'P')
+const P_AST = readFileSync(join(fixtures, 'P.ast.json'), 'utf8')
+const pRoot = project(P, P_AST, 'P')
 const pFacts = extract(pRoot)
 const MOVERS = 'P.accept, P.reallocate, A.reallocateTo'
 const pMap = (movers: string, at = 'src/P.sol L14-L14'): string => ['Roles', 'Guards', 'Limits', 'Outside dependencies', 'Conversion points', 'Not tracked']
@@ -210,6 +211,14 @@ test('2065 D4: an Aggregates row at the aliased write is cited', () => {
 test('2065 D5: a caller in another contract is no second path', () => {
   expect(pFacts.state.find((v) => v.name === 'P.moves')?.writers).toEqual(['P.reallocate', 'A.reallocateTo'])
   expect(pFacts.aggregates).toEqual([])
+})
+
+test('2065 D5: a writer inherited from a base contract counts', () => {
+  const { ast } = JSON.parse(P_AST) as { ast: Node }
+  const p = ast.nodes?.find((n) => n.name === 'P')?.nodes ?? []
+  p.push(...p.filter((n) => n.name === 'reallocate').map((n) => ({ ...n, id: 160, name: 'rebalance', functionSelector: '5e6f7a8b' })))
+  ast.nodes?.push({ id: 90, name: 'Base', nodeType: 'ContractDefinition', src: '0:0:0', nodes: p.splice(p.findIndex((n) => n.name === 'moves'), 1) })
+  expect(extract(project(P, JSON.stringify({ ast }), 'P')).aggregates).toEqual(['Base.moves'])
 })
 
 test.runIf(process.env.CF_BENCH_LIVE === '1')('2065: forge on a fresh P.sol gives the D1/D2 writers', () => {

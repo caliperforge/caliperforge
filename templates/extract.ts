@@ -119,8 +119,7 @@ export function entries(functions: Member[], aliases = new Map<number, number>()
 function aggregate(v: Member, writers: Entry[]): boolean {
   const { constant, typeName, typeDescriptions, name = '' } = v.node
   if (constant === true || REFERENCE.has(typeName?.nodeType ?? '') || /^(string|bytes|struct)\b/.test(typeDescriptions?.typeString ?? '')) return false
-  const own = v.name.slice(0, v.name.indexOf('.') + 1)
-  return AGGREGATE.test(name) || writers.filter((e) => e.name.startsWith(own) && e.writes.some((w) => w.id === v.node.id && w.additive)).length >= 2
+  return AGGREGATE.test(name) || writers.filter((e) => e.writes.some((w) => w.id === v.node.id && w.additive)).length >= 2
 }
 
 function kindOf(node: Node): Check | undefined {
@@ -160,7 +159,7 @@ export function extract(root: string): Extracted {
   const [functions, modifiers] = [of('FunctionDefinition'), of('ModifierDefinition')]
   const vars = of('VariableDeclaration').filter((m) => m.node.stateVariable === true)
   const aliases = aliasesOf(functions)
-  const [writers, writes] = [entries(functions, aliases, true),functions.flatMap((f) => writesOf(f, aliases))]
+  const [writers, direct, writes] = [entries(functions, aliases, true), entries(functions, aliases), functions.flatMap((f) => writesOf(f, aliases))]
   return {
     sources: Object.fromEntries(sources.map(({ file, source }) => [file, lineCount(source)])),
     signatures: functions.map(signatureOf),
@@ -169,6 +168,6 @@ export function extract(root: string): Extracted {
     state: vars.map((v) => ({ ...v.at(v.node), name: v.name, constant: v.node.constant === true,
       writers: writers.filter((e) => e.writes.some((w) => w.id === v.node.id)).map((e) => e.name), writes: writes.filter((w) => w.id === v.node.id).map((w) => w.at) })),
     conversions: functions.flatMap(conversionsOf),
-    aggregates: vars.filter((v) => aggregate(v, writers)).map((v) => v.name),
+    aggregates: vars.filter((v) => aggregate(v, direct)).map((v) => v.name),
   }
 }

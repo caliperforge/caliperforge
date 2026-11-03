@@ -118,6 +118,23 @@ test('D5 the refuse names removed-tests.md and the line shape', () => {
   expect(weakened(shaped, 'green').message).toContain('removed-tests.md as `- removed: <exact test title> | file: <path> | why: replaced by \'<new title>\'`')
 })
 
+const escaped = (source: string): string => `--- a/t/c.test.ts\n+++ b/t/c.test.ts\n@@ -1,4 +1,1 @@\n test('kept', () => {\n-test(${source}, () => {\n-  expect(a).toBe(1)\n-})\n`
+
+test.each([
+  ["'a job\\'s files stay'", "a job's files stay"],
+  ['"say \\"hi\\" stays"', 'say "hi" stays'],
+  ['`the \\`job\\` stays`', 'the `job` stays'],
+])('reads the escaped-quote title %s whole', (source, title) => {
+  expect(weakened(escaped(source), 'green', '', removal(title))).toMatchObject({ outcome: 'pass', spans: [] })
+  const verdict = weakened(escaped(source), 'green')
+  expect(verdict.spans).toEqual(['t/c.test.ts:2 test.weakened.removed'])
+  expect(verdict.message).toContain(`not listed: '${title}'`)
+})
+
+test('refuses a listing of the title cut at its escaped quote', () => {
+  expect(weakened(escaped("'a job\\'s files stay'"), 'green', '', removal('a job\\')).outcome).toBe('refuse')
+})
+
 test('refuses a removed XCTAssert under a Swift Tests folder', () => {
   const diff = '--- a/swift/Tests/A/B.swift\n+++ b/swift/Tests/A/B.swift\n@@ -1,2 +1,1 @@\n func testB() {\n-  XCTAssertEqual(a, b)\n'
   expect(weakened(diff, 'green').spans).toEqual(['swift/Tests/A/B.swift:2 test.weakened.removed'])

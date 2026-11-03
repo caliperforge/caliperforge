@@ -175,7 +175,7 @@ async function rpc(answer: (method: string, params: unknown[]) => unknown): Prom
   return { url: `http://127.0.0.1:${String((server.address() as AddressInfo).port)}`, close: () => { server.closeAllConnections(); server.close() } }
 }
 
-test('D1 D6 parity starts surfpool, prints the run, stops it', async () => {
+test('parity starts surfpool, prints the run, stops it', async () => {
   const db = fresh(join(repo, 'schema'))
   const checkout = mkdtempSync(join(tmpdir(), 'cf-surfpool-'))
   mkdirSync(join(checkout, 'crates/core/src/rpc'), { recursive: true })
@@ -198,11 +198,20 @@ test('D1 D6 parity starts surfpool, prints the run, stops it', async () => {
   expect(stopped).toBe(1)
 })
 
-test('D7 parity throws when surfpool does not start', async () => {
+test('parity throws when surfpool does not start', async () => {
   let printed = ''
   const cf = new Command().exitOverride()
   registerPrecedents(cf, { root: repo, db: () => fresh(join(repo, 'schema')), out: (text) => { printed += text } }, replies([]), () => [],
     { start: () => Promise.reject(new Error('surfpool from /c exited before getHealth answered')), gap: 0 })
   await expect(cf.parseAsync(['parity', '/c'], { from: 'user' })).rejects.toThrow('surfpool from /c exited before getHealth answered')
   expect(printed).toBe('')
+})
+
+test('parity stops surfpool when the run throws', async () => {
+  let stopped = 0
+  const cf = new Command().exitOverride()
+  registerPrecedents(cf, { root: repo, db: () => { throw new Error('database is locked') }, out: () => undefined }, replies([]), () => [],
+    { start: () => Promise.resolve({ url: 'http://127.0.0.1:1', stop: () => { stopped++ } }), gap: 0 })
+  await expect(cf.parseAsync(['parity', '/c'], { from: 'user' })).rejects.toThrow('database is locked')
+  expect(stopped).toBe(1)
 })

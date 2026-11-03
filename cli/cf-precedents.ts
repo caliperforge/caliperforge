@@ -42,9 +42,11 @@ export function registerPrecedents(cf: Command, { root, db, out }: Cli, provider
   cf.command('parity').argument('<checkout>').option('--rpc <url>', 'mainnet RPC to compare and fork', 'https://api.mainnet-beta.solana.com')
     .action(async (checkout: string, options: { rpc: string }) => {
       const fork = await surfpool.start(checkout, options.rpc)
-      const run = await mismatches(db(), checkout, { mainnet: options.rpc, surfpool: fork.url }, read, surfpool.gap).finally(fork.stop)
-      out(`solana-foundation/surfpool\t${String(run.filed)} filed, ${String(run.flaky)} flaky, ${String(run.claimed)} claimed\n`)
-      for (const method of run.disabled) out(`${method}\tmainnet-disabled\n`)
-      for (const o of openings(db(), 'solana-foundation/surfpool').filter((r) => r.said_by === 'parity_compare')) out(line(o))
+      try {
+        const run = await mismatches(db(), checkout, { mainnet: options.rpc, surfpool: fork.url }, read, surfpool.gap)
+        out(`solana-foundation/surfpool\t${String(run.filed)} filed, ${String(run.flaky)} flaky, ${String(run.claimed)} claimed\n`)
+        for (const method of run.disabled) out(`${method}\tmainnet-disabled\n`)
+        for (const o of openings(db(), 'solana-foundation/surfpool').filter((r) => r.said_by === 'parity_compare')) out(line(o))
+      } finally { fork.stop() }
     })
 }

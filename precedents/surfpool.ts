@@ -11,6 +11,7 @@ const healthy = (): Promise<boolean> => fetch(URL, { method: 'POST', headers: { 
   .then((r) => r.json()).then((b) => (b as { result?: unknown }).result === 'ok', () => false)
 
 export async function started(checkout: string, rpc: string): Promise<{ url: string; stop: () => void }> {
+  if (await healthy()) throw new Error(`surfpool from ${checkout} cannot start: ${URL} is already in use`)
   execFileSync('cargo', ['build', '--release', '--bin', 'surfpool'], { cwd: checkout })
   const child = spawn(join(checkout, 'target/release/surfpool'), ['start', '--no-tui', '--no-deploy', '-u', rpc], { cwd: checkout, stdio: 'ignore' })
   const run = { exited: false }

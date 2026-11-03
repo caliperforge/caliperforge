@@ -71,6 +71,12 @@ export function runSince(db: Db, plan: number, step: number, after: number): num
     .get(plan, step, after) as { id: number | null }).id
 }
 
+/** The plan was stopped, or sent round by a person or the director, at or after its newest refusal; `at` is to the second. */
+export function sentRound(db: Db, plan: number): boolean {
+  return db.prepare(`SELECT 1 FROM events WHERE plan = ? AND kind IN ('retry', 'return', 'director', 'build_cap', 'needs_ceo')
+    AND julianday(at) >= (SELECT max(julianday(at)) FROM refusals WHERE plan = ?)`).get(plan, plan) !== undefined
+}
+
 export interface Run {
   plan: number
   step: number
@@ -81,7 +87,7 @@ export interface Run {
   effort: string
   exit: number
   fired: Pick<Fired, 'usage' | 'seconds' | 'transcript_path' | 'session'>
-  mode?: 'build' | 'review' | 'fix' | 'log' | 'ship' | 'weekly' | 'catchup' | undefined
+  mode?: 'build' | 'review' | 'fix' | 'log' | 'ship' | 'weekly' | 'catchup' | 'handback' | undefined
   staffed?: string | undefined
   phase?: string | undefined
 }

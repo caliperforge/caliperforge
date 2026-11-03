@@ -45,7 +45,7 @@ it('D7 0134 keeps 0133 openings and checks the kind', () => {
   insert.run(5, 'deferred', 'taken')
   insert.run(9, 'repeated', 'open')
   const before = rows(db)
-  expect(migrate(db, join(root, 'schema'))).toEqual(['0134_parity.sql'])
+  expect(migrate(db, join(root, 'schema'))).toEqual(['0134_parity.sql', '0135_runs_mode_handback.sql'])
   expect(rows(db)).toEqual(before)
   insert.run(10, 'drift', 'open')
   expect(() => insert.run(11, 'other', 'open')).toThrow('CHECK constraint failed')

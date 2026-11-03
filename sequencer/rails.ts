@@ -34,7 +34,7 @@ import { lock, unlock } from './lock.ts'
 import { seat } from '../runner/rules.ts'
 import { broken, renumbered, strays } from './fence.ts'
 import { fenceFor, languageFor } from './route.ts'
-import { diffOf, doneIds, drop, get, handedBack, maybe, PR_BRANCH, put, srcDir } from './workspace.ts'
+import { diffOf, doneIds, drop, get, handedBack as handbackOf, maybe, PR_BRANCH, put, srcDir } from './workspace.ts'
 import type { Wire } from './push.ts'
 import { repoOf } from './ready.ts'
 
@@ -57,7 +57,7 @@ export function preReview(db: Db, root: string, plan: PlanRow, wire?: Wire): Out
   const refusal = on?.digests === true && forkOf(root, plan) === null ? unfilled(srcDir(root, plan.id)) : null
   if (refusal !== null) return refusal
   const bare = unbuilt(root, plan.id)
-  const handback = bare ? '' : handedBack(root, plan.id)
+  const handback = bare ? '' : handbackOf(root, plan.id)
   const diff = diffOf(root, plan.id)
   if (bare && filesOf(db, plan.id).length === 0) recordFiles(db, plan.id, parse(diff).map((f) => ({ path: f.path, is_new: false })))
   const unaudited = bare ? null : completed(db, root, plan.id, handback, diff)
@@ -258,6 +258,13 @@ function rest(db: Db, root: string, plan: PlanRow, handback: string, diff: strin
 function unfinishedFirst(root: string, plan: number, outcome: Outcome): Outcome {
   const command = maybe(root, plan, 'step-2.unfinished.md')
   return command === null ? outcome : { ...outcome, note: `the builder's test run did not finish: ${command.replace(/\s+/g, ' ').trim()}; ${outcome.note}` }
+}
+
+/** A step-3 refusal of the hand-back's text alone. `preReview` stops at the first refusing rail, so the note names one rail. */
+export function handedBack(refusal: string): boolean {
+  const note = refusal.split('\n')[2] ?? ''
+  return refusal.startsWith('step 3 rails refused by pre_review\n')
+    && (note.startsWith('identifiers: ') || (note.startsWith('completion-audit: ') && !note.includes(' open from the last review refuse, ')))
 }
 
 function named(rail: string, verdict: Verdict): Outcome {

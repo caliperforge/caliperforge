@@ -60,15 +60,19 @@ test('D3 our fork, an outside fork and a hit in the repo pass', () => {
   const read = canned([
     pr({ headRepositoryOwner: { login: 'caliperforge' }, files }),
     pr({ author: { login: 'outsider' }, headRepositoryOwner: { login: 'outsider' }, files }),
-  ], [{ url: URL, repository: { nameWithOwner: 'acme/widget' } }])
+  ], [{ url: URL, title: 't', body: 'fixes acme/widget#12', repository: { nameWithOwner: 'acme/widget' } }])
   expect(theirs(read)(w.db, w.root, 1, TARGET)).toEqual(PASS)
 })
 
-test('D4 an open PR in another org repo naming the issue flags', () => {
+test('D4 a PR in another repo flags only when it cites the issue', () => {
   const w = ours()
   const other = 'https://github.com/acme/gadget/pull/3'
-  const read = canned([], [{ url: other, repository: { nameWithOwner: 'acme/gadget' } }])
-  expect(theirs(read)(w.db, w.root, 1, TARGET)).toMatchObject({ ok: false, says: `pr ${other} names #12` })
+  const sibling = (body: string): ReturnType<typeof canned> =>
+    canned([], [{ url: other, title: 't', body, repository: { nameWithOwner: 'acme/gadget' } }])
+  expect(theirs(sibling('fixes ACME/Widget#12'))(w.db, w.root, 1, TARGET)).toMatchObject({ ok: false, says: `pr ${other} names #12` })
+  expect(theirs(sibling('see https://github.com/acme/widget/issues/12'))(w.db, w.root, 1, TARGET).ok).toBe(false)
+  expect(theirs(sibling('#12 <img width="12">'))(w.db, w.root, 1, TARGET)).toEqual(PASS)
+  expect(theirs(sibling('acme/widget#123'))(w.db, w.root, 1, TARGET)).toEqual(PASS)
 })
 
 test('D5 a recent upstream branch on our file flags, main never', () => {

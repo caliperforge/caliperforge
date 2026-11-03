@@ -115,6 +115,17 @@ test('D4 a named branch on generated code is listed, not first', async () => {
   expect(body).toContain(`\n- Their work: named: \`${says}\` (open)\n`)
 })
 
+test('a sibling PR with the issue number only bare is not named', async () => {
+  const w = await atBatch()
+  const desk = fake()
+  const sibling = { url: 'https://github.com/acme/gadget/pull/3', title: 't', body: '<img width="12">',
+    repository: { nameWithOwner: 'acme/gadget' } }
+  signoffs(w.db, w.root, desk, (args) => args[0] === 'search' ? [sibling] : [])
+  const body = desk.cards.get(100)?.body ?? ''
+  expect(body).toContain('\n- Their work: none: ')
+  expect(body).not.toContain('named:')
+})
+
 test('D2 the verdict is taste only when every fact is ok', () => {
   const clean = [{ name: 'files', ok: true, says: '1 files' }, { name: 'assigned', ok: true, says: 'assigned to us' }]
   expect(verdict(clean)).toBe('All checks clean; your call is taste only')

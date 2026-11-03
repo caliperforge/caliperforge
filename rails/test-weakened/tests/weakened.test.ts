@@ -107,6 +107,7 @@ test('D3 refuses an added .skip with or without the block', () => {
 test('D4 lines off the shape and a titleless file judge as today', () => {
   const off = ['- removed: one | file: t/c.test.ts', '- removed: one | file: t/c.test.ts | why: replaced by two'].join('\n')
   expect(retired(`${off}\nprose\n${removal('one')}\n`, removal('two'))).toBe(`${removal('one')}\n${removal('two')}`)
+  expect(retired([removal('one'), ...off.split('\n')].map((l) => `- \`${l}\``).join('\n'), `* \`${removal('two')}\``)).toBe(`${removal('one')}\n${removal('two')}`)
   expect(weakened(shaped, 'green', '', TITLES.map((t) => off.replaceAll('one', t)).join('\n')).spans).toEqual(['t/c.test.ts:2 test.weakened.removed'])
   const titleless = `${header}-  expect(keep()).toBe(1)\n })\n`
   const stays = '- removed: stays | file: t/b.test.ts | why: retired by brief line \'x\''

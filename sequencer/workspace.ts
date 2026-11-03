@@ -67,6 +67,15 @@ export function move(root: string, plan: number, from: string, to: string): stri
   return body
 }
 
+/** The builder's hand-back, once a `removed-tests.md` it wrote in the checkout has joined the plan folder's, so no diff, rail or push carries it. */
+export function handedBack(root: string, plan: number): string {
+  const moved = maybe(root, plan, 'src/removed-tests.md')
+  const kept = maybe(root, plan, 'removed-tests.md')
+  if (moved !== null) put(root, plan, 'removed-tests.md', kept === null ? moved : `${kept}\n${moved}`)
+  drop(root, plan, 'src/removed-tests.md')
+  return get(root, plan, 'step-2.handback.md')
+}
+
 /** Only step 1 starts from the ask: the builder at step 2 still reads `refusal.md` for a signal's words. */
 export function afresh(root: string, plan: number, step: number): void {
   if (step !== 1) return

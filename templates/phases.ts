@@ -217,10 +217,9 @@ export async function phased(bench: Bench, manifest: Seat, hash: string, skill: 
   const root = resolve(handoffs, '../../../..')
   const stopped = join(handoffs, 'stopped.json')
   const [map, cut] = [join(handoffs, MAP), join(handoffs, EXCERPTS)]
-  const resumed = existsSync(stopped) ? JSON.parse(readFileSync(stopped, 'utf8')) as { phase: string; sum: Sum } : null
-  rmSync(stopped, { force: true })
+  const resumed = existsSync(stopped) ? JSON.parse(readFileSync(stopped, 'utf8')) as { phase: string; sum: Sum; smoked: string } : null
   const done = resumed === null ? -1 : phases.indexOf(resumed.phase)
-  let [sum, smoked] = [resumed?.sum ?? START, '']
+  let [sum, smoked] = [resumed?.sum ?? START, resumed?.smoked ?? '']
   for (const [at, phase] of phases.entries()) {
     if (at <= done) continue
     const path = join(handoffs, `${phase}.md`)
@@ -243,10 +242,10 @@ export async function phased(bench: Bench, manifest: Seat, hash: string, skill: 
       if ('outcome' in got || got.wall !== null) return got
       sum = got
     }
-    if (phase === stop) {
-      writeFileSync(stopped, JSON.stringify({ phase, sum }))
-      return { outcome: 'pass', held: true, spans: ['bench.stop_after'], note: `stopped after ${phase} for a look` }
-    }
+    writeFileSync(stopped, JSON.stringify({ phase, sum, smoked }))
+    if (phase === stop) return { outcome: 'pass', held: true, spans: ['bench.stop_after'], note: `stopped after ${phase} for a look` }
   }
-  return criticised(bench, manifest, hash, handoffs, 'end', 'critic.stand_in', sum)
+  const ended = await criticised(bench, manifest, hash, handoffs, 'end', 'critic.stand_in', sum)
+  if (!('outcome' in ended)) rmSync(stopped, { force: true })
+  return ended
 }

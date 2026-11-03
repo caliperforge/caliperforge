@@ -229,6 +229,17 @@ test('stop D2 D3: a resumed run starts at scaffold, sums both legs', async () =>
   expect(resumed).toMatchObject({ tokens: 40, seconds: 8, transcripts: transcripts(4) })
 })
 
+test('a retry resumes at the first phase not yet passed', async () => {
+  const filled = { ...FILLED, coverage: '' }
+  const { handoffs, fires, run } = legs(undefined, false, {}, filled)
+  expect(await run()).toMatchObject({ outcome: 'refuse' })
+  filled.coverage = FILLED.coverage ?? ''
+  const before = fires.length
+  expect(await run()).toMatchObject({ tokens: 40, seconds: 8, wall: null })
+  expect(fires.slice(before).map((f) => f.phase)).toEqual(['coverage', 'invariants'])
+  expect(existsSync(join(handoffs, 'stopped.json'))).toBe(false)
+})
+
 const AT = [{ file: 'src/V.sol', start: 9, end: 9 }]
 const MISSES: Miss[] = [{ kind: 'read.map_miss', file: 'src/V.sol', lines: 'L1-end' }, { kind: 'read.slice_miss', file: 'src/V.sol', lines: 'L12-L30' }]
 

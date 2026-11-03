@@ -1499,7 +1499,7 @@ test('a deletion the fence allows goes before the rails read', async () => {
   for (const [n, row] of PASSED.entries()) {
     const { w, src, out } = await deleted(row, n === 0)
     if (n === 0) expect(out).toMatchObject({ step: 2, name: 'build', outcome: 'pass' })
-    else expect(out, row.gone).toBeNull()
+    else expect(out, row.gone).toBe(null)
     expect(existsSync(join(src, row.gone)), row.gone).toBe(false)
     if (row.diff?.has !== undefined) expect(diffOf(w.root, row.id), row.gone).toContain(row.diff.has)
     if (row.diff?.lacks !== undefined) expect(diffOf(w.root, row.id), row.gone).not.toContain(row.diff.lacks)

@@ -13,7 +13,7 @@ const healthy = (): Promise<boolean> => fetch(URL, { method: 'POST', headers: { 
 export async function started(checkout: string, rpc: string): Promise<{ url: string; stop: () => void }> {
   if (await healthy()) throw new Error(`surfpool from ${checkout} cannot start: ${URL} is already in use`)
   execFileSync('cargo', ['build', '--release', '--bin', 'surfpool'], { cwd: checkout })
-  const child = spawn(resolve(checkout,'target/release/surfpool'), ['start', '--no-tui', '--no-deploy', '-u', rpc], { cwd: checkout, stdio: 'ignore' })
+  const child = spawn(resolve(checkout, 'target/release/surfpool'), ['start', '--no-tui', '--no-deploy', '-u', rpc], { cwd: checkout, stdio: 'ignore' })
   const run = { exited: false }
   for (const event of ['exit', 'error']) child.once(event, () => { run.exited = true })
   const stop = (): void => { child.kill() }

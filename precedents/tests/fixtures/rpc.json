@@ -1,0 +1,34 @@
+{
+  "version": {
+    "mainnet": {"jsonrpc":"2.0","error":{"code":-32015,"message":"Transaction version (1) is not supported by the requesting client. Please try the request again with the following configuration parameter: \"maxSupportedTransactionVersion\": 1"},"id":1},
+    "surfpool": {"jsonrpc":"2.0","error":{"code":-32603,"message":"Internal error","data":"Failed to fetch transaction 2QjM3fup… from remote: datasource RPC response error -32015 from https://api.mainnet-beta.solana.com"},"id":1}
+  },
+  "balance": {
+    "mainnet": {"jsonrpc":"2.0","result":{"context":{"apiVersion":"2.3.6","slot":312345678},"value":1461600},"id":1},
+    "surfpool": {"jsonrpc":"2.0","result":{"context":{"apiVersion":"2.3.6","slot":376},"value":0},"id":1}
+  },
+  "apiVersion": {
+    "mainnet": {"jsonrpc":"2.0","result":{"context":{"apiVersion":"2.3.6","slot":312345678},"value":1461600},"id":1},
+    "surfpool": {"jsonrpc":"2.0","result":{"context":{"slot":376},"value":0},"id":1}
+  },
+  "disabled": {
+    "mainnet": {"jsonrpc":"2.0","error":{"code":410,"message":"The RPC call or parameters have been disabled."},"id":1},
+    "surfpool": {"jsonrpc":"2.0","result":{"context":{"apiVersion":"2.3.6","slot":376},"value":0},"id":1}
+  },
+  "slot": {
+    "mainnet": {"jsonrpc":"2.0","error":{"code":-32007,"message":"Slot 312345678 was skipped, or missing due to ledger jump to recent snapshot"},"id":1},
+    "surfpool": {"jsonrpc":"2.0","error":{"code":-32007,"message":"Slot 376 was skipped, or missing due to ledger jump to recent snapshot"},"id":1}
+  },
+  "pubkey": {
+    "mainnet": {"jsonrpc":"2.0","error":{"code":-32010,"message":"9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin excluded from account secondary indexes; this RPC method unavailable for key"},"id":1},
+    "surfpool": {"jsonrpc":"2.0","error":{"code":-32010,"message":"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA excluded from account secondary indexes; this RPC method unavailable for key"},"id":1}
+  },
+  "param": {
+    "mainnet": {"jsonrpc":"2.0","error":{"code":-32602,"message":"Invalid param: WrongSize"},"id":1},
+    "surfpool": {"jsonrpc":"2.0","error":{"code":-32602,"message":"Invalid params: expected 1 to 2 parameters, got 0"},"id":1}
+  },
+  "errorResult": {
+    "mainnet": {"jsonrpc":"2.0","error":{"code":-32004,"message":"Block not available for slot 312345678"},"id":1},
+    "surfpool": {"jsonrpc":"2.0","result":null,"id":1}
+  }
+}

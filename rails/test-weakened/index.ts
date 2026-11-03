@@ -8,16 +8,16 @@ export const TEST_FILE = /(?:^|\/)[Tt]ests?\/|\.(?:test|spec)\.[jt]sx?$|_test\.(
 const STRICT = /\.(?:toBe|toEqual|toStrictEqual|toMatchObject|toMatchInlineSnapshot|toHaveBeenCalledWith|toThrowError|toContain)\s*\(/
 const LOOSE = /\.(?:toBeDefined|toBeTruthy|toBeFalsy|toBeUndefined|toBeNull)\s*\(\s*\)|\bexpect\.(?:anything|any)\s*\(/
 const TITLE = /\b(?:test|it|describe)\s*\(\s*(['"`])(.+?)\1/
-const REMOVED = /^- removed: (.+?) \| file: (\S+) \| why: (?:replaced by '.+'|retired by brief line '.+')\s*$/gm
+const REMOVED = /^[ \t]*(?:[-*][ \t]+)?`?(- removed: (.+?) \| file: (\S+) \| why: (?:replaced by '.+'|retired by brief line '.+'))`?\s*$/gm
 const RETIRE = "a test retired on purpose goes in the hand-back or removed-tests.md as `- removed: <exact test title> | file: <path> | why: replaced by '<new title>'` (or `why: retired by brief line '<quote>'`), one line per removed title in that file, and a skip is never spared"
 
 export function retired(...texts: string[]): string {
-  return texts.flatMap((t) => [...t.matchAll(REMOVED)].map((m) => m[0].trimEnd())).join('\n')
+  return texts.flatMap((t) => [...t.matchAll(REMOVED)].map((m) => m[1] ?? '')).join('\n')
 }
 
 export function weakened(diff: string, suite: 'green' | 'red', named = '', removed = ''): Verdict {
   const blocks = [...removed.matchAll(REMOVED)]
-  const listed = (path: string): string[] => blocks.flatMap((m) => m[2] === path ? [m[1] ?? ''] : [])
+  const listed = (path: string): string[] => blocks.flatMap((m) => m[3] === path ? [m[2] ?? ''] : [])
   const spans = parse(diff).filter((f) => TEST_FILE.test(f.path) || f.path.endsWith('.rs')).flatMap((f) => judge(f, named, listed(f.path)))
   const subject_digest = createHash('sha256').update(`${diff}\n${suite}`).digest('hex')
   if (spans.length === 0 || suite === 'red') {

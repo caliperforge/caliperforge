@@ -3,7 +3,7 @@ import { vetted } from '../cli/queue.ts'
 import { API_ERROR, type Provider } from '../providers/kind.ts'
 import { digestOf } from '../store/approvals.ts'
 import { hold } from '../store/holds.ts'
-import { kindsOf, logged, newestRun, runSince } from '../store/events.ts'
+import { eventsOf, kindsOf, logged, newestRun, runSince } from '../store/events.ts'
 import { type Db, LOCKED } from '../store/index.ts'
 import type { Taken } from '../store/leases.ts'
 import { busy } from '../store/now.ts'
@@ -101,7 +101,7 @@ export function ceilinged(db: Db, root: string, pipe: PipeRow, plan: PlanRow, ov
 /** A pr_path plan that has run `BUILDS` builds since a ceo or coo last sent it round stops before the next, with every reason it was refused in director.md. */
 function overBuilt(db: Db, root: string, pipe: PipeRow, plan: PlanRow, lease: Taken): Fired | null {
   const n = sinceSent(db, plan.id)
-  if (plan.template !== 'pr_path' || plan.step !== BUILD || n < BUILDS) return null
+  if (plan.template !== 'pr_path' || plan.step !== BUILD || n < BUILDS || ruledPast(db, plan.id)) return null
   const why = `${String(n)} builds ran; the next waits for the director`
   const note = stillCapped(db, plan.id) ? why : capped(db, root, plan.id, why)
   needsCeo(db, plan, note)
@@ -122,6 +122,11 @@ function overBriefed(db: Db, root: string, pipe: PipeRow, plan: PlanRow, lease: 
 
 function stillCapped(db: Db, plan: number): boolean {
   return kindsOf(db, plan).filter((e) => ['build', 'build_cap', 'director'].includes(e.kind)).at(-1)?.kind === 'build_cap'
+}
+
+function ruledPast(db: Db, plan: number): boolean {
+  return kindsOf(db, plan).filter((e) => ['build', 'build_cap', 'director'].includes(e.kind)).slice(-1).some((e) => e.kind === 'director' && e.outcome === 'pass')
+    && eventsOf(db, plan, 'director').at(-1)?.message.startsWith('rule: ') === true
 }
 
 /**

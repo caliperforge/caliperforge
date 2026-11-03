@@ -1,5 +1,8 @@
+import { once } from 'node:events'
 import { writeFileSync } from 'node:fs'
+import { type AddressInfo, connect, createServer, Socket } from 'node:net'
 import { join } from 'node:path'
+import { connect as tlsConnect } from 'node:tls'
 import { expect, test } from 'vitest'
 import type { Packet } from '../../providers/kind.ts'
 import { eventsOf } from '../../store/events.ts'
@@ -9,6 +12,8 @@ import { at } from '../../templates/pr-path.ts'
 import { tick } from '../index.ts'
 import { HELD, thrown } from '../settle.ts'
 import { checkout, planDir } from '../workspace.ts'
+import { cut } from './bases.ts'
+import { guard, reached, swept } from './sockets.ts'
 import { approve, CARRIED, plan, stub, watched, world } from './world.ts'
 
 const FETCH = "Command failed: git fetch --no-tags origin +main:refs/remotes/origin/main\nfatal: unable to access 'https://github.com/caliperforge/caliperforge.git/': Could not resolve host: github.com"
@@ -143,4 +148,41 @@ test.each([
 
 test('1532 D2 a 404 throw still refuses', () => {
   expect(thrown(at(2), 'gh: Not Found (HTTP 404)')).toMatchObject({ outcome: 'refuse', spans: ['threw: gh: Not Found (HTTP 404)'] })
+})
+
+test('2062 D1 cut points the proxies at a dead port', () => {
+  const env: NodeJS.ProcessEnv = { GH_TOKEN: 'x' }
+  cut(env)
+  expect(env).toEqual({ HTTPS_PROXY: 'http://127.0.0.1:9', HTTP_PROXY: 'http://127.0.0.1:9' })
+})
+
+test('2062 D2 a live run keeps the network', () => {
+  const env: NodeJS.ProcessEnv = { CF_BENCH_LIVE: '1', GH_TOKEN: 'x' }
+  cut(env)
+  expect(env).toEqual({ CF_BENCH_LIVE: '1', GH_TOKEN: 'x' })
+  const before: unknown = Reflect.get(Socket.prototype, 'connect')
+  guard(env)
+  expect(Reflect.get(Socket.prototype, 'connect')).toBe(before)
+})
+
+test('2062 D3 a socket to github.com throws the test name', () => {
+  const line = `${String(expect.getState().currentTestName)} opened a socket to github.com:443`
+  expect(() => connect(443, 'github.com')).toThrow(line)
+  expect(() => tlsConnect(443, 'github.com')).toThrow(line)
+  expect(reached.splice(0)).toEqual([line, line])
+})
+
+test('2062 D4 a caught fetch still fails the sweep', async () => {
+  await expect(fetch('https://github.com')).rejects.toThrow()
+  expect(swept).toThrow(`${String(expect.getState().currentTestName)} opened a socket to github.com:443`)
+})
+
+test('2062 D5 a socket to 127.0.0.1 opens', async () => {
+  const server = createServer().listen(0, '127.0.0.1')
+  await once(server, 'listening')
+  const socket = connect((server.address() as AddressInfo).port, '127.0.0.1')
+  await once(socket, 'connect')
+  socket.destroy()
+  server.close()
+  expect(reached).toEqual([])
 })

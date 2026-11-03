@@ -104,6 +104,35 @@ test('D3 a director event makes the next cap stop a new one', async () => {
   expect(pointers(w.db, 'build_cap')).toEqual(Array<string>(3).fill('director.md'))
 })
 
+test('a director rule at the cap gets exactly one build', async () => {
+  const w = world()
+  approve(w.db, w.target)
+  let fired = 0
+  const provider = stub(CARRIED, 0, undefined, (p) => { if (!p.transcript.includes('director')) fired += 1 })
+  while (builds(w.db, 1) === 0) await tick(w.db, w.root, provider)
+  for (let n = 0; n < 4; n += 1) {
+    logged(w.db, { plan: 1, kind: 'build', actor: 'typescript_specialist', outcome: 'pass', message: '', pointer: null, run: newestRun(w.db) })
+  }
+  retry(w.db, plan(w.db, 1))
+  await tick(w.db, w.root, provider)
+  const before = fired
+  for (const message of ['ask_ceo: no readable answer', 'retry: again']) {
+    logged(w.db, { plan: 1, kind: 'director', actor: 'director', outcome: message.startsWith('retry') ? 'pass' : 'needs_coo', message, pointer: null, run: null })
+    retry(w.db, plan(w.db, 1))
+    await tick(w.db, w.root, provider)
+    expect(fired).toBe(before)
+  }
+  logged(w.db, { plan: 1, kind: 'director', actor: 'director', outcome: 'pass', message: 'rule: the retirement stands', pointer: null, run: null })
+  retry(w.db, plan(w.db, 1))
+  await tick(w.db, w.root, provider)
+  expect(fired).toBe(before + 1)
+  const caps = pointers(w.db, 'build_cap').length
+  retry(w.db, plan(w.db, 1))
+  await tick(w.db, w.root, provider)
+  expect(fired).toBe(before + 1)
+  expect(pointers(w.db, 'build_cap')).toHaveLength(caps + 1)
+})
+
 test('D3 D4 a coo return lets 5 more builds run', async () => {
   const w = world()
   approve(w.db, w.target)

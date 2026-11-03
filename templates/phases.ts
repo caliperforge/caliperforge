@@ -121,6 +121,11 @@ function fixing(bench: Bench, manifest: Seat, hash: string, handoffs: string, ph
   return fixes
 }
 
+function rebuilt(root: string, phase: string, check: () => Refused[]): Refused[] {
+  const broken = compiled(root, phase)
+  return broken.length > 0 ? broken : check()
+}
+
 const machine = (skill: string, phase: string): string => read(join(skill, `phases/${phase}.md`)).split('\n').filter((l) => l.startsWith('- The machine')).join('\n')
 
 async function scaffolded(bench: Bench, manifest: Seat, hash: string, skill: string, root: string, handoffs: string, sum: Sum): Promise<{ sum: Sum; smoked: string } | Sum | Outcome> {
@@ -130,15 +135,15 @@ async function scaffolded(bench: Bench, manifest: Seat, hash: string, skill: str
   const rules = machine(skill, 'scaffold')
   const facts = sections(read(map)).filter(([section]) => FACTS.includes(section)).map(([, s]) => s.trimEnd()).join('\n\n')
   let [lines, last]: [string[], Smoked[]] = [[], []]
-  const built = await fix({ name: 'suite', rules, facts, run: () => {
+  const built = await fix({ name: 'suite', rules, facts, run: () => rebuilt(root, 'scaffold', () => {
     const found = suite(root)
     writeFileSync(map, suited(found, read(map)))
     lines = unsourced(found, read(map))
     return [...harnessed(found, read(map)), ...probed(found, read(map))]
-  } })
+  }) })
   if (!('turns' in built)) return built
   for (const line of lines) log('suite.unsourced', 'pass', line)
-  const ran = built.not_clean === null ? await fix({ name: 'smoke', rules, facts, run: () => unrun(read(map), last = smoke(root, fizz, 'test/fizz/fizz_data', read(map))) }) : built
+  const ran = built.not_clean === null ? await fix({ name: 'smoke', rules, facts, run: () => rebuilt(root, 'smoke', () => unrun(read(map), last = smoke(root, fizz, 'test/fizz/fizz_data', read(map)))) }) : built
   if (!('turns' in ran)) return ran
   const stood = await fix(criticCheck(join(fizz, 'references/critic-pass.md'), bench.dir, 'critic.stand_in', read(map)))
   return 'turns' in stood ? { sum: fixes.sum, smoked: packed(last) } : stood
@@ -146,6 +151,8 @@ async function scaffolded(bench: Bench, manifest: Seat, hash: string, skill: str
 
 async function reached(bench: Bench, manifest: Seat, hash: string, skill: string, root: string, handoffs: string, sum: Sum): Promise<Sum | Outcome> {
   const [map, corpus] = [join(handoffs, MAP), join(handoffs, '../corpus_medusa')]
+  const [broken] = compiled(root, 'coverage')
+  if (broken !== undefined) return { outcome: 'refuse', spans: [broken.rule], note: broken.note }
   const items = reach(root, read(map), join(corpus, 'coverage/lcov.info'), join(corpus, 'coverage/revert_report.json'), readings(suite(root).probes, trackers(root, corpus)))
   writeFileSync(map, written(read(map), items))
   const fixes = fixing(bench, manifest, hash, handoffs, 'coverage', sum)
@@ -178,6 +185,8 @@ async function invariant(bench: Bench, manifest: Seat, hash: string, skill: stri
   const planning = `Run Steps 9a-9c only, and end once the Synthesizer has written ${plan} from the \`# Plan\` block of ${join(skill, TEMPLATES)}.`
   const first = await fire(at.prompt, at.issue.replace(ending(at), planning), sum, 'invariants-plan')
   if ('outcome' in first || first.wall !== null) return first
+  const [broken] = compiled(root, 'invariants')
+  if (broken !== undefined) return { outcome: 'refuse', spans: [broken.rule], note: broken.note }
   const found = suite(root)
   const names = [...found.trackers, ...found.handlers].map((t) => t.name)
   const unreached = (rows(read(map)).get('Reach') ?? []).filter((r) => r.name.startsWith(ENTRY) && r.cells.get('met') === 'no').map((r) => callee(r.name.slice(ENTRY.length)))
@@ -208,10 +217,9 @@ export async function phased(bench: Bench, manifest: Seat, hash: string, skill: 
   const root = resolve(handoffs, '../../../..')
   const stopped = join(handoffs, 'stopped.json')
   const [map, cut] = [join(handoffs, MAP), join(handoffs, EXCERPTS)]
-  const resumed = existsSync(stopped) ? JSON.parse(readFileSync(stopped, 'utf8')) as { phase: string; sum: Sum } : null
-  rmSync(stopped, { force: true })
+  const resumed = existsSync(stopped) ? JSON.parse(readFileSync(stopped, 'utf8')) as { phase: string; sum: Sum; smoked: string } : null
   const done = resumed === null ? -1 : phases.indexOf(resumed.phase)
-  let [sum, smoked] = [resumed?.sum ?? START, '']
+  let [sum, smoked] = [resumed?.sum ?? START, resumed?.smoked ?? '']
   for (const [at, phase] of phases.entries()) {
     if (at <= done) continue
     const path = join(handoffs, `${phase}.md`)
@@ -234,10 +242,10 @@ export async function phased(bench: Bench, manifest: Seat, hash: string, skill: 
       if ('outcome' in got || got.wall !== null) return got
       sum = got
     }
-    if (phase === stop) {
-      writeFileSync(stopped, JSON.stringify({ phase, sum }))
-      return { outcome: 'pass', held: true, spans: ['bench.stop_after'], note: `stopped after ${phase} for a look` }
-    }
+    writeFileSync(stopped, JSON.stringify({ phase, sum, smoked }))
+    if (phase === stop) return { outcome: 'pass', held: true, spans: ['bench.stop_after'], note: `stopped after ${phase} for a look` }
   }
-  return criticised(bench, manifest, hash, handoffs, 'end', 'critic.stand_in', sum)
+  const ended = await criticised(bench, manifest, hash, handoffs, 'end', 'critic.stand_in', sum)
+  if (!('outcome' in ended)) rmSync(stopped, { force: true })
+  return ended
 }

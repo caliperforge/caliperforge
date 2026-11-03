@@ -2,11 +2,12 @@ import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFi
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, expect, test, vi } from 'vitest'
-import type { Miss, Packet } from '../../../providers/kind.ts'
+import { admitted, type Miss, type Packet } from '../../../providers/kind.ts'
 import { get } from '../../../sequencer/workspace.ts'
 import { eventsAfter } from '../../../store/events.ts'
 import type { Db } from '../../../store/index.ts'
 import { critic, criticCheck } from '../../../templates/critic.ts'
+import { compiled } from '../../../templates/extract.ts'
 import { packets } from '../../../templates/plan.ts'
 import { type Item, reach } from '../../../templates/reach.ts'
 import { report } from '../../../templates/report.ts'
@@ -23,6 +24,8 @@ vi.mock('../../../templates/smoke.ts', async (importOriginal) => ({ ...await imp
 vi.mock('../../../templates/reach.ts', async (importOriginal) => ({ ...await importOriginal<object>(), reach: vi.fn(() => []) }))
 
 vi.mock('../../../templates/probes.ts', async (importOriginal) => ({ ...await importOriginal<object>(), trackers: vi.fn(() => new Map()) }))
+
+vi.mock('../../../templates/extract.ts', async (importOriginal) => ({ ...await importOriginal<object>(), compiled: vi.fn(() => []) }))
 
 vi.mock('../../../templates/critic.ts', async (importOriginal) => {
   const original = await importOriginal<{ criticCheck: typeof criticCheck }>()
@@ -226,6 +229,17 @@ test('stop D2 D3: a resumed run starts at scaffold, sums both legs', async () =>
   expect(resumed).toMatchObject({ tokens: 40, seconds: 8, transcripts: transcripts(4) })
 })
 
+test('a retry resumes at the first phase not yet passed', async () => {
+  const filled = { ...FILLED, coverage: '' }
+  const { handoffs, fires, run } = legs(undefined, false, {}, filled)
+  expect(await run()).toMatchObject({ outcome: 'refuse' })
+  filled.coverage = FILLED.coverage ?? ''
+  const before = fires.length
+  expect(await run()).toMatchObject({ tokens: 40, seconds: 8, wall: null })
+  expect(fires.slice(before).map((f) => f.phase)).toEqual(['coverage', 'invariants'])
+  expect(existsSync(join(handoffs, 'stopped.json'))).toBe(false)
+})
+
 const AT = [{ file: 'src/V.sol', start: 9, end: 9 }]
 const MISSES: Miss[] = [{ kind: 'read.map_miss', file: 'src/V.sol', lines: 'L1-end' }, { kind: 'read.slice_miss', file: 'src/V.sol', lines: 'L12-L30' }]
 
@@ -255,6 +269,7 @@ test('D7: a mapped run calls each check once, in phase order', async () => {
   const [[smoked], [reached], [stood, shared, ended]] = [at(smoke), at(reach), at(criticCheck)]
   const order = [smoked, stood, reached, shared, ended]
   expect(order).toEqual([...order].sort((a, b) => Number(a) - Number(b)))
+  expect(vi.mocked(compiled).mock.calls.map((call) => call[1])).toEqual(['scaffold', 'smoke', 'coverage', 'invariants'])
 })
 
 test('D2: context is ranged, later phases carry map.md ranges', async () => {
@@ -280,14 +295,36 @@ const SMOKED: Smoked[] = [{ name: 'V.deposit(uint256 assets)', calls: 10, succes
 test('D2-D4: a suite refusal fires a fix turn before coverage', async () => {
   vi.mocked(suite).mockReturnValueOnce(EMPTY).mockReturnValueOnce({ ...EMPTY, handlers: [RAW] })
   vi.mocked(smoke).mockReturnValueOnce(SMOKED)
-  const { db, handoffs, fires } = await mapped('## Selected entry points\n\n- V.deposit(uint256 assets) | tier: 1\n\n## Unclamped\n\n- V.deposit | reason: any amount\n')
+  const { db, handoffs, packets, fires } = await mapped('## Selected entry points\n\n- V.deposit(uint256 assets) | tier: 1\n\n## Unclamped\n\n- V.deposit | reason: any amount\n')
   expect(fires.map((f) => f.phase)).toEqual(['context', 'scaffold', 'scaffold-fix-suite-1', 'coverage', 'invariants-plan', 'invariants'])
   expect(fires[2]?.issue).toContain('scaffold: V.deposit has no raw handler')
+  expect(['forge build --force', 'forge clean', 'forge build'].map((command) => admitted(packets[2]?.tools ?? [], command))).toEqual([false, false, true])
+  expect(fires[2]?.issue).toContain('Never run forge build --force or forge clean')
   expect(fires[3]?.issue).toContain(packed(SMOKED))
   expect(readFileSync(join(handoffs, 'map.md'), 'utf8')).toContain('## Handlers\n\n- V_deposit | target: V.deposit | clamps: none | at: test/fizz/H.sol L1-L1\n')
   expect(eventsAfter(db, 0).filter((e) => e.kind === 'fix.turn')).toEqual([
     { plan: 1, kind: 'fix.turn', actor: 'fizz_lean_generator', outcome: 'pass', message: '{"turn":1,"tokens":1,"usd":0}', pointer: null, run: null },
   ])
+})
+
+test('a missing out/ is rebuilt before the scaffold check reads it', async () => {
+  vi.clearAllMocks()
+  vi.mocked(compiled).mockImplementationOnce((dir) => {
+    mkdirSync(join(dir, 'out'))
+    suites.add(join(dir, 'out'))
+    return []
+  })
+  vi.mocked(suite).mockImplementationOnce((await vi.importActual<{ suite: typeof suite }>('../../../templates/suite.ts')).suite)
+  const { handoffs, fires } = await mapped()
+  expect(fires.map((f) => f.phase)).not.toContain('scaffold-fix-suite-1')
+  expect(vi.mocked(compiled)).toHaveBeenCalledWith(join(handoffs, '../../../..'), 'scaffold')
+})
+
+test("a broken build is the scaffold fix turn's hit", async () => {
+  vi.mocked(compiled).mockReturnValueOnce([{ rule: 'handoff.ast', note: 'scaffold: forge build --ast failed: boom' }])
+  const { fires } = await mapped()
+  expect(fires.map((f) => f.phase)).toEqual(['context', 'scaffold', 'scaffold-fix-suite-1', 'coverage', 'invariants-plan', 'invariants'])
+  expect(fires[2]?.issue).toContain('suite found:\n- scaffold: forge build --ast failed: boom')
 })
 
 const UNMET: Item = { key: 'Guards V.deposit', met: false, cells: ['passing: no', 'reverting: yes'], note: 'Guards V.deposit: passing never seen', reverts: [] }

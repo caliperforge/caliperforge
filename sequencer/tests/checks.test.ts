@@ -227,14 +227,16 @@ async function ungreeted(ruling?: string): Promise<{ w: World; fired: Awaited<Re
   return { w, fired: (await tick(w.db, w.root, stub(CARRIED)))[0] }
 }
 
-/** A plan whose build renamed `greets with hi` to `greets` and dropped its assertion a context line below, with `ruling` as its `rulings.md` where one is given, and its step-3 lap. */
-async function renamed(ruling?: string): Promise<{ w: World; fired: Awaited<ReturnType<typeof tick>>[number] | undefined }> {
+/** A plan whose build renamed `greets with hi` to `greets` and dropped its assertion a context line below, with `ruling` written where `at` says, and its step-3 lap. */
+async function renamed(ruling?: string, at: 'rulings' | 'checkout' | 'handback' = 'rulings'): Promise<{ w: World; fired: Awaited<ReturnType<typeof tick>>[number] | undefined }> {
   const w = mine(GREETED)
   moveMain(w.root, 'src/tests/hello.test.ts', "import { expect, test } from 'vitest'\nimport { hello } from '../hello.ts'\n\ntest('greets with hi', () => {\n  const said = hello()\n  expect(said).toBe('hi')\n})\n")
   for (let at = 0; at < 3; at += 1) await tick(w.db, w.root, stub(CARRIED))
   listed(w.db, ID, 'src/tests/hello.test.ts')
   writeFileSync(join(srcDir(w.root, ID), 'src/tests/hello.test.ts'), "import { expect, test } from 'vitest'\nimport { hello } from '../hello.ts'\n\ntest('greets', () => {\n  const said = hello()\n})\n")
-  if (ruling !== undefined) put(w.root, ID, 'rulings.md', ruling)
+  if (ruling !== undefined && at === 'rulings') put(w.root, ID, 'rulings.md', ruling)
+  if (ruling !== undefined && at === 'checkout') put(w.root, ID, 'src/removed-tests.md', ruling)
+  if (ruling !== undefined && at === 'handback') put(w.root, ID, 'step-2.handback.md', `- \`${ruling.trim()}\`\n\n${get(w.root, ID, 'step-2.handback.md')}`)
   return { w, fired: (await tick(w.db, w.root, stub(CARRIED)))[0] }
 }
 
@@ -253,6 +255,20 @@ test('#1742 D2 D3 unruled or wrong-file retirement is refused', async () => {
     expect(fired?.note.startsWith('test-weakened: ')).toBe(true)
     expect(plan(w.db, ID).step).toBe(2)
   }
+}, SLOW)
+
+test('a retirement in the checkout moves to the plan folder', async () => {
+  const { w, fired } = await renamed(RULED('src/tests/hello.test.ts'), 'checkout')
+  expect(fired).toMatchObject({ plan: ID, step: 3, name: 'rails', outcome: 'pass' })
+  expect(existsSync(join(srcDir(w.root, ID), 'removed-tests.md'))).toBe(false)
+  expect(get(w.root, ID, 'removed-tests.md')).toBe(RULED('src/tests/hello.test.ts'))
+}, SLOW)
+
+test('a backticked hand-back bullet retires a test for its file', async () => {
+  const { fired } = await renamed(RULED('src/tests/hello.test.ts'), 'handback')
+  expect(fired).toMatchObject({ plan: ID, step: 3, name: 'rails', outcome: 'pass' })
+  const other = await renamed(RULED('src/tests/other.test.ts'), 'handback')
+  expect(other.fired).toMatchObject({ outcome: 'refuse', spans: ['src/tests/hello.test.ts:6 test.weakened.removed'] })
 }, SLOW)
 
 test('#628 D1 a removed test named in rulings.md passes', async () => {

@@ -359,7 +359,7 @@ test('D8 a target running Greptile gets its .greptile tip', async () => {
   const { tip: made } = next(w.db, w.root, plan(w.db, 1), 'acme/widget', { ...watched([], w.root, 1), harvest })
   expect(git(['ls-tree', '-r', '--name-only', made, '--', 'greptile.json', '.greptile'])).toBe('.greptile/config.json\n.greptile/rules.md')
   expect(git(['log', '-1', '--format=%s', made])).toBe('.greptile/rules.md, .greptile/config.json: review on request only')
-  expect(maybe(w.root, 1, 'next.rules')).toBeNull()
+  expect(get(w.root, 1, 'next.rules')).not.toContain(made)
 })
 
 test('D4 a signature that fails sends no unsigned tip', async () => {

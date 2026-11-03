@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import type { HookInput } from '@anthropic-ai/claude-agent-sdk'
@@ -497,29 +497,41 @@ function yarned(synced: boolean): (root: string) => void {
   }
 }
 
-test('D1 a yarn.lock src/ is yarn installed, scripts unrun, fired', async () => {
+/** `npx yarn@1` would fetch yarn from the registry, so an `npx` first on PATH logs its words and cache, prints `out` and exits `code`. */
+async function npxed<T>(out: string, code: number, run: () => Promise<T>): Promise<{ got: T; calls: string[] }> {
+  const bin = mkdtempSync(join(tmpdir(), 'cf-npx-'))
+  writeFileSync(join(bin, 'out'), out)
+  writeFileSync(join(bin, 'npx'), `#!/bin/sh\necho "$* $YARN_CACHE_FOLDER" >> '${bin}/log'\ncat '${bin}/out'\nexit ${String(code)}\n`)
+  chmodSync(join(bin, 'npx'), 0o755)
+  const path = process.env.PATH ?? ''
+  process.env.PATH = `${bin}:${path}`
+  const got = await run().finally(() => { process.env.PATH = path })
+  return { got, calls: readFileSync(join(bin, 'log'), 'utf8').trimEnd().split('\n') }
+}
+
+const RESOLVING = 'yarn install v1.22.22\n[1/4] Resolving packages...\n'
+
+test('D1 yarn.lock src/ runs yarn@1 frozen, scripts unrun, fired', async () => {
   const fired = stub(1000, 'completed', true)
   let before = ''
   const kept = (root: string) => {
     yarned(true)(root)
     before = readFileSync(join(srcDir(root, 1), 'package.json'), 'utf8')
   }
-  const shared = mkdtempSync(join(tmpdir(), 'cf-shared-'))
   const host = process.env.YARN_CACHE_FOLDER
   const caches = yarnCaches()
-  process.env.YARN_CACHE_FOLDER = shared
+  process.env.YARN_CACHE_FOLDER = mkdtempSync(join(tmpdir(), 'cf-shared-'))
   try {
-    const { root, outcome } = await generated(fired, undefined, kept)
-    expect(outcome).toMatchObject({ outcome: 'pass' })
+    const { got, calls } = await npxed(RESOLVING, 0, () => generated(fired, undefined, kept))
+    expect(got.outcome).toMatchObject({ outcome: 'pass' })
     expect(fired.packets).toHaveLength(1)
-    expect(existsSync(join(srcDir(root, 1), 'node_modules/dep'))).toBe(true)
-    expect(existsSync(join(srcDir(root, 1), 'ran'))).toBe(false)
-    expect(readFileSync(join(srcDir(root, 1), 'package.json'), 'utf8')).toBe(before)
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.startsWith(`yarn@1 install --frozen-lockfile --ignore-scripts ${join(tmpdir(), 'cf-yarn-')}`)).toBe(true)
+    expect(readFileSync(join(srcDir(got.root, 1), 'package.json'), 'utf8')).toBe(before)
   } finally {
     if (host === undefined) delete process.env.YARN_CACHE_FOLDER
     else process.env.YARN_CACHE_FOLDER = host
   }
-  expect(readdirSync(shared)).toEqual([])
   expect(yarnCaches()).toBe(caches)
 })
 
@@ -528,7 +540,8 @@ const yarnCaches = () => readdirSync(tmpdir()).filter((f) => f.startsWith('cf-ya
 test('D2 a failed yarn install is refused unfired, no run row', async () => {
   const fired = stub(1000, 'completed', true)
   const caches = yarnCaches()
-  const { db, outcome } = await generated(fired, undefined, yarned(false))
+  const stale = `${RESOLVING}error Your lockfile needs to be updated, but yarn was run with \`--frozen-lockfile\`.\n`
+  const { got: { db, outcome } } = await npxed(stale, 1, () => generated(fired, undefined, yarned(false)))
   expect(outcome).toMatchObject({ outcome: 'refuse', spans: ['bench.install'], note: expect.stringMatching(/^npx yarn@1 exited \d+/) as string })
   expect(fired.packets).toEqual([])
   expect(runRows(db)).toEqual([])
@@ -536,17 +549,11 @@ test('D2 a failed yarn install is refused unfired, no run row', async () => {
 })
 
 test('D1 a failed yarn git step keeps its block in the note', async () => {
-  const gitted = (root: string) => {
-    locked(false)(root)
-    rmSync(join(srcDir(root, 1), 'package-lock.json'))
-    writeFileSync(join(srcDir(root, 1), 'yarn.lock'), YARN)
-    writeFileSync(join(srcDir(root, 1), 'package.json'), JSON.stringify({ name: 'target', version: '1.0.0',
-      dependencies: { dep: `git+file://${mkdtempSync(join(tmpdir(), 'cf-dep-'))}` } }))
-  }
+  const block = 'error Command failed.\nExit code: 128\nCommand: git\nArguments: ls-remote --tags --heads file:///tmp/cf-dep-x'
+  const out = `${RESOLVING}${block}\nDirectory: /tmp/src\nOutput:\nfatal: '/tmp/cf-dep-x' does not appear to be a git repository\n`
   const fired = stub(1000, 'completed', true)
-  const { db, outcome } = await generated(fired, undefined, gitted)
-  expect(outcome).toMatchObject({ outcome: 'refuse', spans: ['bench.install'],
-    note: expect.stringMatching(/^npx yarn@1 exited \d+: error .*\nExit code: .*\nCommand: git\nArguments: /) as string })
+  const { got: { db, outcome } } = await npxed(out, 1, () => generated(fired, undefined, yarned(false)))
+  expect(outcome).toMatchObject({ outcome: 'refuse', spans: ['bench.install'], note: `npx yarn@1 exited 1: ${block}` })
   expect(fired.packets).toEqual([])
   expect(runRows(db)).toEqual([])
 })

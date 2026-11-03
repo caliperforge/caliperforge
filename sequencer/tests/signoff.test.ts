@@ -7,12 +7,15 @@ import { desk as ghDesk, type Answer, type Desk, type Issue, type Pr, type Seen 
 import { unread } from '../../cli/inbox.ts'
 import { approvalsOf, signersOf } from '../../store/approvals.ts'
 import { eventsOf, logged, type Event } from '../../store/events.ts'
+import { keepEscapes } from '../../store/escapes.ts'
 import { amend, width } from '../../store/lanes.ts'
 import { putPlan, rewind } from '../../store/plans.ts'
+import { flag } from '../../store/precedent-findings.ts'
 import { dropSignals, record as signal, type SignalRow } from '../../store/signals.ts'
 import { addReview } from '../../store/verdict.ts'
 import { approve as approvePublish } from '../card.ts'
 import { tick } from '../index.ts'
+import { sent } from '../push.ts'
 import { ruled, signoffs, verdict } from '../signoff.ts'
 import { UNRUN } from '../triggers.ts'
 import { drop, git, headSha, OPERATOR, put, SELF, SIGNOFF, srcDir } from '../workspace.ts'
@@ -541,7 +544,9 @@ test('D1 a tip holding .greptile/rules.md says mirrored', async () => {
   git(tree, ['add', '-f', '.greptile/rules.md'])
   git(tree, ['-c', 'user.email=t@t', '-c', 'user.name=t', '-c', 'commit.gpgsign=false', 'commit', '-qm', 'mirror'])
   askedAt(w, headSha(tree))
-  expect(cardWith(w, CARRIED)).toContain('- Greptile on our fork: 5/5 at this head\n- Greptile config: mirrored\n')
+  const body = cardWith(w, CARRIED)
+  expect(body).toContain('- Greptile on our fork: 5/5 at this head\n- Greptile config: mirrored\n')
+  expect(body).not.toContain('- Greptile rules:')
 })
 
 test('D2 a tip carrying greptile.json says generic', async () => {
@@ -557,7 +562,28 @@ test('D3 no ask and a quota skip says skipped: quota', async () => {
   dropSignals(w.db)
   drop(w.root, 1, 'greptile.asked')
   put(w.root, 1, 'greptile.skipped', `${headSha(srcDir(w.root, 1))} monthly quota spent (50/50)\n`)
-  expect(cardWith(w, CARRIED)).toContain('- Greptile on our fork: skipped: monthly quota spent (50/50)\n- Greptile config: skipped: quota\n')
+  const body = cardWith(w, CARRIED)
+  expect(body).toContain('- Greptile on our fork: skipped: monthly quota spent (50/50)\n- Greptile config: skipped: quota\n')
+  expect(body).not.toContain('- Greptile rules:')
+})
+
+test('D4 a generic tip shows its rule counts by source', async () => {
+  const w = await atBatch()
+  const url = 'https://github.com/acme/widget/pull/3#discussion_r1'
+  flag(w.db, 'acme/widget', 3, ['f', 'g'].map((finding) => ({ finding, area: 'src/hello.ts:1', acted_on: 'fixed' as const, source: url })))
+  keepEscapes(w.db, 'acme/widget', 3, 1, [{ area: 'src/hello.ts', line: 1, author: 'm', role: 'maintainer', text: 'too wide', url }])
+  drop(w.root, 1, 'next.tips')
+  sent(w.db, w.root, plan(w.db, 1), 'acme/widget', watched([], w.root, 1))
+  askedAt(w)
+  expect(cardWith(w, CARRIED))
+    .toContain('- Greptile config: generic\n- Greptile rules: escapes 1, their reviewer 2, maintainer decisions 0, ours 0\n')
+})
+
+test('D5 a tip with no recorded counts shows no rules line', async () => {
+  const w = await atBatch()
+  drop(w.root, 1, 'next.rules')
+  askedAt(w)
+  expect(cardWith(w, CARRIED)).not.toContain('- Greptile rules:')
 })
 
 test('D4 D5 only open and accepted P2s are carried', async () => {

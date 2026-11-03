@@ -31,10 +31,10 @@ const tree = (paths: string[]): Read => (args) => {
   throw new Error(`unread ${args.join(' ')}`)
 }
 
-const read = (dir: string, repo: string): unknown => JSON.parse(config(db(), dir, repo, [], unread))
+const read = (dir: string, repo: string): unknown => JSON.parse(config(db(), dir, repo, [], unread).json)
 
 const rules = (d: Db, files: string[], gh: Read = unread, dir = root()): unknown =>
-  (JSON.parse(config(d, dir, 'o/r', files, gh)) as { customContext: { rules: unknown } }).customContext.rules
+  (JSON.parse(config(d, dir, 'o/r', files, gh).json) as { customContext: { rules: unknown } }).customContext.rules
 
 const finding = (acted_on: Finding['acted_on']): Finding => ({ finding: 'f', area: 'src/a.rs:parse', acted_on, source: SOURCE })
 
@@ -105,6 +105,15 @@ test('D5 an escape gives a rule scoped to its file', () => {
 test('D6 a learned line is scoped to its span path', () => {
   const dir = learned(root(), '- r#1 `o/r@abc1234:src/a.rs:3`: one (l1).\n- r#2 `a`: two (l2).\n')
   expect(rules(db(), ['src/a.rs'], unread, dir)).toEqual([{ rule: 'r#1 `o/r@abc1234:src/a.rs:3`: one (l1).', scope: ['src/a.rs'] }])
+})
+
+test('D1 counts are by source and follow the scope filter', () => {
+  const d = db()
+  escape(d)
+  flag(d, 'o/r', 1, [finding('fixed'), { ...finding('fixed'), finding: 'g' }])
+  const counts = (files: string[]): string => config(d, root(), 'o/r', files, unread).counts
+  expect(counts(['src/a.rs'])).toBe('escapes 1, their reviewer 2, maintainer decisions 0, ours 0')
+  expect(counts(['src/b.rs'])).toBe('escapes 0, their reviewer 0, maintainer decisions 0, ours 0')
 })
 
 test('D7 a repo with no filed precedent never reads', () => {

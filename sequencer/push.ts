@@ -246,14 +246,26 @@ export function reviewedWith(root: string, plan: number, sha: string): 'mirrored
   return tried(srcDir(root, plan), ['cat-file', '-e', `${tip}:.greptile/rules.md`]) === null ? 'generic' : 'mirrored'
 }
 
+/** `<tip> <counts>`: a generic tip's rules by source. */
+const RULES = 'next.rules'
+
+/** The rule counts on the -next tip that carried plan HEAD `sha`, or null when none were recorded. */
+export function rulesOn(root: string, plan: number, sha: string): string | null {
+  const tip = tips(root, plan).find(([, of]) => of === sha)?.[0] ?? sha
+  const line = (maybe(root, plan, RULES) ?? '').split('\n').find((l) => l.startsWith(`${tip} `))
+  return line === undefined ? null : line.slice(tip.length + 1)
+}
+
 /** A head sent again keeps its tip, so its CI is not restarted. */
 function tipOf(db: Db, root: string, plan: number, head: Head, ci: string, repo: string, wire: Wire): string {
   const [known, of] = tips(root, plan).at(-1) ?? []
   if (known !== undefined && of === head.sha) return known
-  const files = (wire.harvest === undefined ? null : mirrored(root, repo, head.dir, wire.harvest))
-    ?? rehearsal(db, root, repo, head.dir, touched(root, plan), wire.merged)
-  const tip = quiet(head.dir, ci, files)
-  put(root, plan, TIPS, `${maybe(root, plan, TIPS) ?? ''}${tip} ${head.sha}\n`)
+  const list = (tip: string): string => { put(root, plan, TIPS, `${maybe(root, plan, TIPS) ?? ''}${tip} ${head.sha}\n`); return tip }
+  const mirror = wire.harvest === undefined ? null : mirrored(root, repo, head.dir, wire.harvest)
+  if (mirror !== null) return list(quiet(head.dir, ci, mirror))
+  const made = rehearsal(db, root, repo, head.dir, touched(root, plan), wire.merged)
+  const tip = list(quiet(head.dir, ci, made.files))
+  put(root, plan, RULES, `${maybe(root, plan, RULES) ?? ''}${tip} ${made.counts}\n`)
   return tip
 }
 

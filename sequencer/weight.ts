@@ -1,12 +1,11 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { parse, type FileDiff } from '../rails/diff.ts'
-import { ASSERT, TEST_FILE } from '../rails/test-weakened/index.ts'
+import { ASSERT, TEST, TEST_FILE, titleOf } from '../rails/test-weakened/index.ts'
 import type { Check, Row } from './card.ts'
 import { diffOf, srcDir } from './workspace.ts'
 
 const HEAVY = 2
-const TEST = /\b(?:test|it)\s*\(\s*(['"`])(.+?)\1/
 
 interface Assertion { path: string; line: number; title: string; key: string }
 
@@ -35,7 +34,7 @@ function lines(files: FileDiff[]): number {
 function assertions(path: string, text: string): Assertion[] {
   let title: string | undefined
   return text.split('\n').flatMap((raw, i) => {
-    title = TEST.exec(raw)?.[2] ?? title
+    title = titleOf(raw, TEST) ?? title
     return title !== undefined && ASSERT.test(raw) ? [{ path, line: i + 1, title, key: raw.trim() }] : []
   })
 }

@@ -15,16 +15,12 @@ tools:
   - Bash(echidna:*)
   - Bash(node:*)
   - Bash(bash:*)
-  - Bash(rm -f /tmp/x-ray-attempts.md)
-  - Bash(mkdir -p x-ray)
   - Bash(python3:*)
 reads:
   - seats/fizz_lean_generator/skill
   - ~/.claude/skills/fizz
-  - ~/.claude/skills/x-ray
 write_paths:
   - test/fizz
-  - x-ray
   - medusa.json
   - PROPERTIES.md
   - echidna.yaml

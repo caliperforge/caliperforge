@@ -69,7 +69,7 @@ agent_model: <sonnet or opus>
 
 ## Reads
 
-- <file under PROJECT_ROOT, with the x-ray section or functions the next phase needs> — <what it reads it for>
+- <file under PROJECT_ROOT, with the section or functions the next phase needs> — <what it reads it for>
 
 # Handoff: scaffold
 
@@ -78,7 +78,7 @@ next: coverage
 
 ## Reads
 
-- <file under PROJECT_ROOT, with the x-ray section or functions the next phase needs> — <what it reads it for>
+- <file under PROJECT_ROOT, with the section or functions the next phase needs> — <what it reads it for>
 
 ## Signatures
 
@@ -108,7 +108,7 @@ fuzz_build_cmd: <the command Step 8.0 set>
 
 ## Reads
 
-- <file under PROJECT_ROOT, with the x-ray section or functions the next phase needs> — <what it reads it for>
+- <file under PROJECT_ROOT, with the section or functions the next phase needs> — <what it reads it for>
 
 ## Signatures
 
@@ -133,7 +133,7 @@ next: campaigns
 
 ## Reads
 
-- <file under PROJECT_ROOT, with the x-ray section or functions the next phase needs> — <what it reads it for>
+- <file under PROJECT_ROOT, with the section or functions the next phase needs> — <what it reads it for>
 
 ## Signatures
 

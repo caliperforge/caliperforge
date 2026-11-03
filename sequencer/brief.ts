@@ -8,7 +8,7 @@ import { WHOLE } from './handout.ts'
 import { LETTERS, named, ordered } from './ordered.ts'
 import { reproduced } from './reproduced.ts'
 import { settled } from './settled.ts'
-import { copied, kept } from './verbatim.ts'
+import { caps, copied, kept } from './verbatim.ts'
 import { git } from './workspace.ts'
 
 export const CEILING = 100
@@ -199,7 +199,7 @@ export function shape(brief: string, ask: string, src: string, outside = false, 
   const title = titleOf(brief)
   if (title === null || (title !== titleOf(ask) && !(outside && CONVENTIONAL.test(title)))) return { span: '# <title>', reason: "the title is not the ask's" }
   const checks: ((b: string) => Refused | null)[] =
-    [order, empty, carried, cases, (b) => caps(b, ceiling), folders, forbidden, (b) => shared(b, src), (b) => paths(b, src), (b) => ranged(b, src), (b) => kept(b, ask), (b) => copied(b, ask), (b) => settled(b, src),
+    [order, empty, carried, cases, (b) => caps(b, ask, ceiling), folders, forbidden, (b) => shared(b, src), (b) => paths(b, src), (b) => ranged(b, src), (b) => kept(b, ask), (b) => copied(b, ask), (b) => settled(b, src),
       ...(outside ? [(b: string) => reproduced(section(b, '## Reproduced'), files(b).map((f) => f.path))] : [])]
   for (const check of checks) {
     const refused = check(brief)
@@ -243,11 +243,6 @@ function cases(brief: string): Refused | null {
   return (section(brief, '## Cases').match(ROW) ?? []).length < 2
     ? { span: '## Cases', reason: '## Cases holds fewer than two D rows' }
     : null
-}
-
-function caps(brief: string, ceiling = CEILING): Refused | null {
-  const lines = brief.trimEnd().split('\n').length
-  return lines > ceiling ? { span: `${String(ceiling)} lines`, reason: `the brief is ${String(lines)} lines` } : null
 }
 
 /** A row that names no file is a folder or a sentence; dropped silently, it leaves the builder fenced out of what it must write. */

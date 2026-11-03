@@ -122,13 +122,13 @@ export async function fireBrief(db: Db, root: string, plan: PlanRow, step: Step,
   if (ticket === null && maybe(root, plan.id, 'ask.md') === null) {
     return { outcome: 'needs_ceo', spans: ['ask.md'], note: `plan ${String(plan.id)} has no ask.md or issue.md: write the ask to ask.md, then cf retry ${String(plan.id)}` }
   }
-  const held = byHand(step.runs, ticket)
+  const held = ruled(root, plan.id) === null || builderRan(db, plan.id) ? byHand(step.runs, ticket) : null
   if (held !== null || (ticket !== null && builderRan(db, plan.id))) return held ?? stands()
   const saved = split(maybe(root, plan.id, 'split.md') ?? '')
   if (saved !== null) return splitting(step, saved)
   const ask = askOf(root, plan.id)
   const src = srcDir(root, plan.id)
-  if (ticket !== null && shape(unran(ticket), ask, src, !internal(plan)) === null) return stands()
+  if (ticket !== null && ruled(root, plan.id) === null && shape(unran(ticket), ask, src, !internal(plan)) === null) return stands()
   const { fired, cut } = await written(db, root, plan, step, provider, ask, src)
   drop(root, plan.id, 'brief.refused.md')
   if (fired.ended !== 'completed') return exited(step, fired)

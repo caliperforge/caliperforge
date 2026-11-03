@@ -698,6 +698,31 @@ test('D3: a standing 0-line brief holds a built plan at step 1', async () => {
   expect(builds(w)).toBe(1)
 })
 
+test('D1: a ruling on a held 0-line brief fires the writer', async () => {
+  const w = mine()
+  await tick(w.db, w.root, stub(CARRIED))
+  await tick(w.db, w.root, estimating(0))
+  const ask = `${maybe(w.root, ID, 'ask.md') ?? ''}\n## Answer from the director (2026-11-02)\n\nwrite it\n`
+  put(w.root, ID, 'ask.md', ask)
+  returnToLane(w.db, ID, 'director')
+
+  expect((await tick(w.db, w.root, estimating(3)))[0]).toMatchObject({ step: 1, outcome: 'pass', note: 'brief_writer: brief written' })
+  expect(estimate(briefOf(w))).toBe(3)
+  expect(maybe(w.root, ID, 'ask.briefed.md')).toBe(ask)
+})
+
+test('D2: a held 0-line brief with no ruling stays held', async () => {
+  const w = mine()
+  await tick(w.db, w.root, stub(CARRIED))
+  await tick(w.db, w.root, estimating(0))
+  const writes = (): number => runRows(w.db).filter((r) => r.seat === 'brief_writer').length
+  const before = writes()
+  returnToLane(w.db, ID, 'director')
+
+  expect((await tick(w.db, w.root, estimating(3)))[0]).toMatchObject({ step: 1, outcome: 'needs_ceo', note: HAND_RUN })
+  expect(writes()).toBe(before)
+})
+
 test('D4: a brief estimating 3 lines is written as before', async () => {
   const w = mine()
   await tick(w.db, w.root, stub(CARRIED))

@@ -997,6 +997,7 @@ test('a scheduled-only tree runs no workflows, undispatched', async () => {
   const w = await SCHEDULED_CI()
   const sent: string[] = []
   expect(forkCi(w.db, w.root, plan(w.db, 1), 'acme/widget', { ...watched([], w.root, 1, () => '[]'), dispatch: dispatching(sent) })).toBeNull()
+  expect(ciGreen(w)).toEqual([{ outcome: 'pass' }])
   expect(ciVerdict()).toMatchObject({ message: expect.stringMatching(/^acme\/widget runs no workflows; /) as unknown })
   expect(sent).toEqual([])
   expect(maybe(w.root, 1, 'ci.unrun')).toBeNull()

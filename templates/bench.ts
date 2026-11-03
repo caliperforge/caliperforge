@@ -15,6 +15,7 @@ import type { Db } from '../store/index.ts'
 import { needsCeo, type PlanRow } from '../store/plans.ts'
 import { clamp, quieted } from './balances.ts'
 import { deps } from './deps.ts'
+import { CAP } from './extract.ts'
 import { costWall, written } from './generated.ts'
 import { inBare, listedIn } from './listed.ts'
 import { heldForCoo, profiled, rows, seedsOf } from './paired.ts'
@@ -40,8 +41,6 @@ const PROPERTY = /\bfunction\s+(?:invariant|property|echidna)_\w*\s*\(/g
 const COMMENT = /\/\*[\s\S]*?\*\/|\/\/.*/g
 
 const PROPERTIES = 'Properties.sol'
-
-const CAP = 60 * 60 * 1000
 
 const CARRIED = ['null_check', 'refuzz', 'hours', 'seeds']
 

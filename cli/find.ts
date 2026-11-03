@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import type { Opening } from '../precedents/openings.ts'
 import { TEST } from '../sequencer/brief.ts'
+import { cites, escape } from './cites.ts'
 import { claimed, implemented, WINDOW, type Read } from './gh.ts'
 import { logins, p50 } from './measure.ts'
 
@@ -74,17 +75,11 @@ function unclaimed(repo: string, row: z.infer<typeof Issue>, carded: boolean, re
   if (claim !== null) return { yes: false, says: `${claim} ${row.url}` }
   const shipped = carded ? null : implemented(repo, row, read)
   if (shipped !== null) return { yes: false, says: `${shipped} ${shipped.replace(/^\D*#(\d+)\D*$/, `https://github.com/${repo}/pull/$1`)}` }
-  const escaped = escape(repo)
-  const names = new RegExp(`(?:${escaped}#|https://github\\.com/${escaped}/issues/)${String(row.number)}(?!\\d)`, 'i')
   const sibling = Siblings.parse(read(['search', 'prs', `${repo}#${String(row.number)}`, '--owner', repo.slice(0, repo.indexOf('/')),
     '--state', 'open', '--json', 'url,title,body,repository']))
-    .find((p) => p.repository.nameWithOwner !== repo && names.test(`${p.title}\n${p.body}`))
+    .find((p) => p.repository.nameWithOwner !== repo && cites(`${p.title}\n${p.body}`, repo, row.number))
   if (sibling !== undefined) return { yes: false, says: `an open pull request in ${sibling.repository.nameWithOwner} names it ${sibling.url}` }
   return { yes: true, says: `no assignee, claim, closer or sibling pull request ${row.url}` }
-}
-
-function escape(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 function shape(merged: z.infer<typeof Merged>, mergers: string[]): Answer {

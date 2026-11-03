@@ -39,10 +39,12 @@ const CALLS = new Map<string, Check>([['require', 'require'], ['revert', 'revert
 const AGGREGATE = /^(total|sum)/i
 const REFERENCE = new Set(['Mapping', 'ArrayTypeName'])
 
-export function compiled(root: string): Refused[] {
-  const built = spawnSync('forge', ['build', '--ast'], { cwd: root, encoding: 'utf8' })
+export const CAP = 60 * 60 * 1000
+
+export function compiled(root: string, phase = 'context'): Refused[] {
+  const built = spawnSync('forge', ['build', '--ast'], { cwd: root, encoding: 'utf8', timeout: CAP })
   if (built.status === 0) return []
-  return [{ rule: 'handoff.ast', note: `context: forge build --ast failed: ${built.error?.message ?? built.stderr.split('\n')[0] ?? ''}` }]
+  return [{ rule: 'handoff.ast', note: `${phase}: forge build --ast failed: ${built.error?.message ?? built.stderr.split('\n')[0] ?? ''}` }]
 }
 
 const breaks = (source: Buffer): number[] => [...source.keys()].filter((i) => source[i] === 0x0a)

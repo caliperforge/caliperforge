@@ -3,13 +3,14 @@ import { dirname, join } from 'node:path'
 import { expect, test } from 'vitest'
 import { CHECK } from '../../cli/find.ts'
 import { CARD } from '../../cli/queue.ts'
+import { setPart } from '../../store/targets.ts'
 import { lead } from '../lead.ts'
 import { put, srcDir } from '../workspace.ts'
 import { world, type World } from './world.ts'
 
 function at(part: string, ask: string, paths: string[] = []): World {
   const w = world()
-  w.db.prepare('UPDATE targets SET part = ? WHERE id = 1').run(part)
+  setPart(w.db, 1, part)
   put(w.root, 1, 'ask.md', ask)
   for (const path of paths) {
     const file = join(srcDir(w.root, 1), path)

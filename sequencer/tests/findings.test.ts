@@ -37,7 +37,7 @@ async function built(score: number | null, handback = CARRIED, ask = false): Pro
 }
 
 function audited(w: World): { outcome: string }[] {
-  return w.db.prepare("SELECT outcome FROM verdicts WHERE rail_id = 'completion-audit'").all() as { outcome: string }[]
+  return verdictRows(w.db, 1).filter((v) => v.rail_id === 'completion-audit').map(({ outcome }) => ({ outcome }))
 }
 
 test('D2 a 4/5 review at HEAD puts both findings in the packet', async () => {

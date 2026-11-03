@@ -155,15 +155,6 @@
   "symbols.ts": {
     "lines": 43
   },
-  "tests/findings.test.ts": {
-    "prepare": 1
-  },
-  "tests/handout.test.ts": {
-    "prepare": 1
-  },
-  "tests/lead.test.ts": {
-    "prepare": 1
-  },
   "tests/park.test.ts": {
     "prepare": 1
   },

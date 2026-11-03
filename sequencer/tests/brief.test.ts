@@ -14,7 +14,8 @@ import { get, priority } from '../../store/lanes.ts'
 import { advance, briefed, dropPlan, end, needsCeo, requeue, retry, titles } from '../../store/plans.ts'
 import { refusalRows, WHY } from '../../store/refusals.ts'
 import { claimed, estimate, files, pointed, references, retitled, shape, SHARED, split, STANDING, TEMPLATE, unclear, writable, type Refused } from '../brief.ts'
-import { trimmed } from '../trim.ts'
+import { overlong, trimmed } from '../trim.ts'
+import { counted } from '../verbatim.ts'
 import { tick } from '../index.ts'
 import { unhold } from '../hold.ts'
 import { blocked } from '../steps.ts'
@@ -156,8 +157,48 @@ test('shell: code that runs a command is not an ask', () => {
   expect(on(saying('1. Then run npm test'))?.reason).toContain('the builder holds no shell')
 })
 
+/** `text` with `n` more lines under `## Out of scope`. */
+const padded = (text: string, n: number): string => text.replace('- posting', `${Array.from({ length: n }, () => '- a line').join('\n')}\n- posting`)
+
 test('a brief over the line ceiling is refused on the cap', () => {
-  expect(on(saying(Array.from({ length: 60 }, () => '- a line').join('\n')))).toMatchObject({ span: '100 lines' })
+  expect(on(padded(brief, 51))).toEqual({ span: '100 lines', reason: 'the brief is 101 lines' })
+})
+
+const twice = fixture('ruled-ask.md')
+
+/** The ruled ask with each ruling again under another D row: four 5-line blocks. */
+const ruled = `${twice}${twice.slice(twice.indexOf('\n## ')).replaceAll('applies to: D', 'applies to: D1')}`
+
+/** A brief of `own` lines of its own, carrying the four ruling blocks under `## Rulings`. */
+const ruling = (own: number): string => {
+  const blocks = ruled.split(/^(?=## )/m).slice(1).map((s) => s.split('\n').filter((l) => /^[a-z ]+: /.test(l)).join('\n'))
+  return padded(brief.replace('\n## Settled facts', `\n## Rulings\n\n${blocks.join('\n\n')}\n\n## Settled facts`), own - 56)
+}
+
+test('ruling lines copied from the ask are not counted', () => {
+  expect(counted(ruling(90), ruled)).toBe(90)
+  expect(shape(ruling(90), ruled, repo)).toBeNull()
+})
+
+const verbatim = fixture('verbatim-ask.md')
+
+/** A brief of `own` lines besides `block`, which it carries at the end of `## Approach`. */
+const carrying = (block: string, own: number): string => padded(brief.replace('\n## Settled facts', `\n${block}\n\n## Settled facts`), own - 51)
+
+const BLOCK = '```yaml\nseat: brief_writer\neffort: high\n```'
+
+test('a word-for-word block carried whole is not counted', () => {
+  expect(shape(carrying(BLOCK, 100), verbatim, repo)).toBeNull()
+  expect(shape(carrying(BLOCK, 101), verbatim, repo))
+    .toEqual({ span: '100 lines', reason: 'the brief is 101 lines, besides the 4 it copies from the ask' })
+})
+
+test('the block with one byte changed counts toward the cap', () => {
+  expect(shape(carrying(BLOCK.replace('high', 'low'), 100), verbatim, repo)).toEqual({ span: '100 lines', reason: 'the brief is 104 lines' })
+})
+
+test('overlong measures the lines a brief does not copy', () => {
+  expect(overlong(ruling(110), ruled, repo, false)).toBe(110)
 })
 
 test('a handback format change names both readers or is refused', () => {

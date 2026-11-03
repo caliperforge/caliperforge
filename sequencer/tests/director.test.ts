@@ -750,6 +750,12 @@ async function widens() {
   pipe.db.exec("UPDATE plans SET wait_reason = 'over_cap' WHERE id = 7")
   await run(pipe.db, pipe.home, WIDEN)
   expect(pipeOf(pipe.db, 99).max_concurrent).toBe(2)
+  const queued = seeded('1')
+  queued.db.exec("UPDATE plans SET state = 'queued', wait_reason = 'over_cap' WHERE id = 7")
+  await run(queued.db, queued.home, WIDEN)
+  expect(pipeOf(queued.db, 99).max_concurrent).toBe(2)
+  expect(widened(queued.db)).toHaveLength(1)
+  expect(row(queued.db).state).toBe('queued')
 }
 
 describe('widen', () => {

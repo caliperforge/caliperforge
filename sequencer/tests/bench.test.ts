@@ -1693,7 +1693,7 @@ function bare(root: string): void {
   put(root, 1, 'checkout.json', JSON.stringify({ pre_fix: commit(dir, 'Vault.sol', 'contract Vault {}\n', 'vault') }))
 }
 
-test('2084 D1 D2 a stop waits for a ceo or coo return', async () => {
+test('a stop_after hold waits for a ceo or coo return', async () => {
   const home = mkdtempSync(join(tmpdir(), 'cf-fizz-home-'))
   mkdirSync(join(home, '.claude/skills/fizz/references'), { recursive: true })
   writeFileSync(join(home, '.claude/skills/fizz/references/critic-pass.md'), CRITIC)

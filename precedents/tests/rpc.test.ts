@@ -17,6 +17,8 @@ it.each([
   { row: 'D6', pair: 'pubkey', want: { verdict: 'same' } },
   { row: 'D7', pair: 'param', want: differs('message', 'Invalid param: WrongSize', 'Invalid params: expected <n> to <n> parameters, got <n>') },
   { row: 'D8', pair: 'errorResult', want: differs('code', '-32004', 'result') },
+  { row: 'D2', pair: 'emptyArray', want: { verdict: 'same' } },
+  { row: 'D2', pair: 'nestedArray', want: { verdict: 'same' } },
 ])('$row the $pair pair gives $want.verdict', ({ pair, want }) => {
   const got = pairs[pair]
   if (got === undefined) throw new Error(`rpc.json has no ${pair} pair`)

@@ -30,5 +30,13 @@
   "errorResult": {
     "mainnet": {"jsonrpc":"2.0","error":{"code":-32004,"message":"Block not available for slot 312345678"},"id":1},
     "surfpool": {"jsonrpc":"2.0","result":null,"id":1}
+  },
+  "emptyArray": {
+    "mainnet": {"jsonrpc":"2.0","result":[1],"id":1},
+    "surfpool": {"jsonrpc":"2.0","result":[],"id":1}
+  },
+  "nestedArray": {
+    "mainnet": {"jsonrpc":"2.0","result":[{"a":[1]},{"a":[]}],"id":1},
+    "surfpool": {"jsonrpc":"2.0","result":[{"a":[]}],"id":1}
   }
 }

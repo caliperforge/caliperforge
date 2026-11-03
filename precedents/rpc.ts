@@ -32,7 +32,9 @@ function shape(value: unknown): Shape {
 }
 
 function alike(a: Shape | undefined, b: Shape | undefined): boolean {
-  if (Array.isArray(a) && Array.isArray(b)) return a.length === 0 || b.length === 0 || JSON.stringify(a) === JSON.stringify(b)
+  if (Array.isArray(a) && Array.isArray(b)) {
+    return a.length === 0 || b.length === 0 || (a.every((x) => b.some((y) => alike(x, y))) && b.every((y) => a.some((x) => alike(x, y))))
+  }
   if (typeof a !== 'object' || typeof b !== 'object' || Array.isArray(a) || Array.isArray(b)) return a === b
   const keys = Object.keys(a)
   return JSON.stringify(keys) === JSON.stringify(Object.keys(b)) && keys.every((k) => alike(a[k], b[k]))

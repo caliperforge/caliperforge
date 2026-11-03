@@ -204,7 +204,7 @@ export function builderRan(db: Db, plan: number): boolean {
  * `on` is the plan a `file_overlap` waits for; every other reason names none.
  */
 export function waiting(db: Db, rows: { plan: number; why: Wait | null; on?: number | null }[]): void {
-  const set = db.prepare(`UPDATE plans SET wait_reason = @why, waits_on = @on,
+  const set = db.prepare(`UPDATE plans SET wait_reason = @why, waits_on = CASE WHEN state = 'blocked_on_ceo' THEN waits_on ELSE @on END,
     held_by = CASE WHEN state = 'blocked_on_ceo' THEN held_by WHEN ${ON_CEO} THEN 'ceo' WHEN held_by = 'ceo' THEN NULL ELSE held_by END,
     held_why = CASE WHEN state = 'blocked_on_ceo' THEN held_why WHEN ${ON_CEO} THEN @why WHEN held_by = 'ceo' THEN NULL ELSE held_why END
     WHERE id = @plan`)

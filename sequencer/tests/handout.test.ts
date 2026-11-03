@@ -6,7 +6,7 @@ import type { Packet, Provider } from '../../providers/kind.ts'
 import { pointed, STANDING } from '../brief.ts'
 import { handout, long, WHOLE } from '../handout.ts'
 import { tick } from '../index.ts'
-import { PlanRow } from '../../store/plans.ts'
+import { planById } from '../../store/plans.ts'
 import { rule } from '../rule.ts'
 import { stopped } from '../seat.ts'
 import { maybe, put, ruled } from '../workspace.ts'
@@ -150,7 +150,7 @@ test('D2 a fixer answer in issue.md reaches the next builder', async () => {
   const packets: Packet[] = []
   const provider = builds(packets, (cwd) => { writeFileSync(join(cwd, 'src/extra.ts'), 'export const extra = 1\n') }, RETURN)
   for (let at = 0; at < 5 && packets.length < 1; at += 1) await tick(w.db, w.root, provider)
-  expect(rule(w.db, w.root, PlanRow.parse(w.db.prepare('SELECT * FROM plans WHERE id = 1').get()), 'fixer', 'use bye()')).toBe('issue.md')
+  expect(rule(w.db, w.root, planById(w.db, 1), 'fixer', 'use bye()')).toBe('issue.md')
   for (let at = 0; at < 5 && packets.length < 2; at += 1) await tick(w.db, w.root, provider)
   expect(packets[1]?.prompt).toMatch(/## Answer from the fixer \(\d{4}-\d{2}-\d{2}\)\n\nuse bye\(\)\n\n## Standing/)
   expect(packets[0]?.prompt).not.toContain('use bye()')

@@ -511,17 +511,23 @@ async function npxed<T>(out: string, code: number, run: () => Promise<T>): Promi
 
 const RESOLVING = 'yarn install v1.22.22\n[1/4] Resolving packages...\n'
 
-test('D1 a yarn.lock src/ is yarn installed, scripts unrun, fired', async () => {
+test('D1 yarn.lock src/ runs yarn@1 frozen, scripts unrun, fired', async () => {
   const fired = stub(1000, 'completed', true)
+  let before = ''
+  const kept = (root: string) => {
+    yarned(true)(root)
+    before = readFileSync(join(srcDir(root, 1), 'package.json'), 'utf8')
+  }
   const host = process.env.YARN_CACHE_FOLDER
   const caches = yarnCaches()
   process.env.YARN_CACHE_FOLDER = mkdtempSync(join(tmpdir(), 'cf-shared-'))
   try {
-    const { got, calls } = await npxed(RESOLVING, 0, () => generated(fired, undefined, yarned(true)))
+    const { got, calls } = await npxed(RESOLVING, 0, () => generated(fired, undefined, kept))
     expect(got.outcome).toMatchObject({ outcome: 'pass' })
     expect(fired.packets).toHaveLength(1)
     expect(calls).toHaveLength(1)
     expect(calls[0]?.startsWith(`yarn@1 install --frozen-lockfile --ignore-scripts ${join(tmpdir(), 'cf-yarn-')}`)).toBe(true)
+    expect(readFileSync(join(srcDir(got.root, 1), 'package.json'), 'utf8')).toBe(before)
   } finally {
     if (host === undefined) delete process.env.YARN_CACHE_FOLDER
     else process.env.YARN_CACHE_FOLDER = host

@@ -3,15 +3,18 @@ import { drained } from '../precedents/distill.ts'
 import { counted } from '../precedents/escapes.ts'
 import { harvest } from '../precedents/harvest.ts'
 import { precedentsFor, row } from '../precedents/lookup.ts'
+import { mismatches } from '../precedents/mismatch.ts'
 import { type Listed, openings } from '../precedents/openings.ts'
 import { parity } from '../precedents/parity.ts'
+import { started } from '../precedents/surfpool.ts'
 import { claudeAgentSdk } from '../providers/claude-agent-sdk/index.ts'
 import type { Provider } from '../providers/kind.ts'
 import { escapesOf } from '../store/escapes.ts'
 import type { Cli } from './cf-lanes.ts'
 import { gh, type Read } from './gh.ts'
 
-export function registerPrecedents(cf: Command, { root, db, out }: Cli, provider: Provider = claudeAgentSdk, read: Read = gh): void {
+export function registerPrecedents(cf: Command, { root, db, out }: Cli, provider: Provider = claudeAgentSdk, read: Read = gh,
+  surfpool: { start: typeof started; gap: number } = { start: started, gap: 1000 }): void {
   const precedents = cf.command('precedents')
   precedents.command('harvest').argument('<repo>').option('--since <date>', 'harvest PRs merged after this date')
     .action((repo: string, options: { since?: string }) => { out(`${repo}\t${String(harvest(db(), repo, options.since ?? null))} stored\n`) })
@@ -36,4 +39,12 @@ export function registerPrecedents(cf: Command, { root, db, out }: Cli, provider
     await parity(db(), root, repo, provider, read)
     for (const o of openings(db(), repo).filter((r) => r.kind === 'drift')) out(line(o))
   })
+  cf.command('parity').argument('<checkout>').option('--rpc <url>', 'mainnet RPC to compare and fork', 'https://api.mainnet-beta.solana.com')
+    .action(async (checkout: string, options: { rpc: string }) => {
+      const fork = await surfpool.start(checkout, options.rpc)
+      const run = await mismatches(db(), checkout, { mainnet: options.rpc, surfpool: fork.url }, read, surfpool.gap).finally(fork.stop)
+      out(`solana-foundation/surfpool\t${String(run.filed)} filed, ${String(run.flaky)} flaky, ${String(run.claimed)} claimed\n`)
+      for (const method of run.disabled) out(`${method}\tmainnet-disabled\n`)
+      for (const o of openings(db(), 'solana-foundation/surfpool').filter((r) => r.said_by === 'parity_compare')) out(line(o))
+    })
 }

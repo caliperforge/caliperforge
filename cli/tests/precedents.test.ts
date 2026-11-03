@@ -1,4 +1,6 @@
 import { cpSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { createServer } from 'node:http'
+import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Command } from 'commander'
@@ -137,4 +139,54 @@ test('D1 D2 openings parity prints drift, a rerun fires nothing', async () => {
   await cf.parseAsync(['openings', 'parity', 'o/r'], { from: 'user' })
   expect(printed).toBe(row + row)
   expect(fired).toHaveLength(1)
+})
+
+const SEEDS: Record<string, unknown> = {
+  getSlot: 5000, getBlocksWithLimit: [4000], getTransaction: { transaction: ['AQID', 'base64'] }, getVersion: 1,
+  getBlock: { transactions: [{ version: 'legacy', transaction: { signatures: ['L'] } }, { version: 0, transaction: { signatures: ['V'] } }] },
+}
+
+async function rpc(answer: (method: string, params: unknown[]) => unknown): Promise<{ url: string; close: () => void }> {
+  const server = createServer((req, res) => {
+    let text = ''
+    req.on('data', (chunk: Buffer) => { text += chunk.toString() })
+    req.on('end', () => {
+      const { method, params } = JSON.parse(text) as { method: string; params: unknown[] }
+      res.setHeader('Content-Type', 'application/json').end(JSON.stringify(answer(method, params)))
+    })
+  })
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+  return { url: `http://127.0.0.1:${String((server.address() as AddressInfo).port)}`, close: () => { server.closeAllConnections(); server.close() } }
+}
+
+test('D1 D6 parity starts surfpool, prints the run, stops it', async () => {
+  const db = fresh(join(repo, 'schema'))
+  const checkout = mkdtempSync(join(tmpdir(), 'cf-surfpool-'))
+  mkdirSync(join(checkout, 'crates/core/src/rpc'), { recursive: true })
+  writeFileSync(join(checkout, 'crates/core/src/rpc/full.rs'), '#[rpc]\npub trait Full {\n    #[rpc(name = "getHealth")]\n'
+    + '    fn get_health(&self) -> Result<String>;\n\n    #[rpc(name = "getVersion")]\n    fn get_version(&self) -> Result<RpcVersionInfo>;\n}\n')
+  const mainnet = await rpc((method) => method === 'getHealth' ? { error: { code: -32601, message: 'disabled' } } : { result: SEEDS[method] })
+  const surfpool = await rpc((method, params) => ({ result: method === 'getVersion' && params.length === 0 ? 'x' : 1 }))
+  let stopped = 0
+  let printed = ''
+  const cf = new Command().exitOverride()
+  registerPrecedents(cf, { root: repo, db: () => db, out: (text) => { printed += text } }, replies([]), () => [],
+    { start: () => Promise.resolve({ url: surfpool.url, stop: () => { stopped++ } }), gap: 0 })
+  await cf.parseAsync(['parity', checkout, '--rpc', mainnet.url], { from: 'user' })
+  mainnet.close()
+  surfpool.close()
+  const [o] = openings(db, 'solana-foundation/surfpool')
+  expect(o?.area).toBe('getVersion valid')
+  expect(printed).toBe('solana-foundation/surfpool\t1 filed, 0 flaky, 0 claimed\ngetHealth\tmainnet-disabled\n'
+    + `${String(o?.first_seen)}\tsolana-foundation/surfpool\t${String(o?.kind)}\tgetVersion valid\tparity_compare\t${String(o?.source)}\t${String(o?.quote)}\n`)
+  expect(stopped).toBe(1)
+})
+
+test('D7 parity throws when surfpool does not start', async () => {
+  let printed = ''
+  const cf = new Command().exitOverride()
+  registerPrecedents(cf, { root: repo, db: () => fresh(join(repo, 'schema')), out: (text) => { printed += text } }, replies([]), () => [],
+    { start: () => Promise.reject(new Error('surfpool from /c exited before getHealth answered')), gap: 0 })
+  await expect(cf.parseAsync(['parity', '/c'], { from: 'user' })).rejects.toThrow('surfpool from /c exited before getHealth answered')
+  expect(printed).toBe('')
 })

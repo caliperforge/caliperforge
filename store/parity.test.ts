@@ -51,7 +51,7 @@ it('D7 0134 keeps 0133 openings and checks the kind', () => {
   expect(() => insert.run(11, 'other', 'open')).toThrow('CHECK constraint failed')
 })
 
-it('D1 0136 keeps 0135 openings and accepts mismatch', () => {
+it('0136 keeps 0135 openings and accepts mismatch', () => {
   const db = below('0136')
   const insert = db.prepare(`INSERT INTO openings (id, repo, kind, area, quote, said_by, source, first_seen, status)
     VALUES (?, 'o/r', ?, 'a.ts', 'q', 'm', 's', '2026-10-01', ?)`)
@@ -70,7 +70,7 @@ const mismatch = (method: string, mainnet: string): Mismatch =>
 const mismatches = (db: ReturnType<typeof open>) =>
   db.prepare('SELECT id, repo, kind, area, quote, said_by, source, first_seen, status FROM openings ORDER BY id').all()
 
-it('D2 D3 mismatched upserts a four-line quote and keeps its row', () => {
+it('mismatched upserts a four-line quote and keeps its row', () => {
   const db = open(':memory:')
   migrate(db, join(root, 'schema'))
   mismatched(db, 'solana-foundation/surfpool', '2026-11-01', [mismatch('getSlot', '1')])
@@ -81,7 +81,7 @@ it('D2 D3 mismatched upserts a four-line quote and keeps its row', () => {
   expect(mismatches(db)).toEqual([{ ...first, quote: 'mainnet: 2\nsurfpool: null\ncurl mainnet\ncurl surfpool' }])
 })
 
-it('D4 an unreported mismatch goes done, drift and others stay', () => {
+it('an unreported mismatch goes done, drift and others stay', () => {
   const db = open(':memory:')
   migrate(db, join(root, 'schema'))
   mismatched(db, 'o/r', '2026-11-01', [mismatch('a', '1'), mismatch('b', '1'), mismatch('c', '1')])

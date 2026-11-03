@@ -116,7 +116,7 @@ test('D1 D2 openings lists open rows newest first, one repo or all', async () =>
   expect(printed).toBe(line('2026-10-05T00:00:00Z', 'x/y', 'd.ts') + line('2026-10-03T00:00:00Z', 'o/r', 'c.ts') + line('2026-10-01T00:00:00Z', 'o/r', 'a.ts'))
 })
 
-test('D5 openings prints a mismatch and its curls until dropped', async () => {
+test('openings prints a mismatch and its curls until dropped', async () => {
   const db = fresh(join(repo, 'schema'))
   const surfpool = 'solana-foundation/surfpool'
   mismatched(db, surfpool, '2026-11-01', [{ method: 'getSlot', case: 'empty', mainnet: '1', surfpool: '2', curls: ['curl a', 'curl b'] }])

@@ -44,7 +44,7 @@ async function atRails(w: World, wire: Wire, id = ID): Promise<void> {
   built(w.root, id, 'export const landed = true')
 }
 
-/** Steps 3 to 6: the builder's bytes land at step 2, and step 6 sends the branch to the fork. */
+/** Steps 3 to 6: step 6 sends the branch to the fork. */
 async function toBatch(w: World, wire: Wire): Promise<void> {
   for (let at = 0; at < 4; at += 1) await tick(w.db, w.root, stub(CARRIED), undefined, undefined, wire)
 }

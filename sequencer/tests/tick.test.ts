@@ -390,6 +390,7 @@ test('a rail refusal names spans, steps back, then blocks on ceo', async () => {
   expect(holdOf(w.db, 1)).toEqual({ held_by: 'coo', held_why: stopped?.note })
   const verdict = verdictRows(w.db, 1).find((v) => v.rail_id === 'completion-audit')
   expect(verdict).toMatchObject({ outcome: 'refuse', origin_ref: 'completion-audit' })
+  expect(stopped?.spans).toEqual(['D1', 'D2'])
 })
 
 /** An outside plan whose rails refused the same unpointed hand-back twice, held for the ceo. */

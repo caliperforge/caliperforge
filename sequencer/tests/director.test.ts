@@ -149,6 +149,12 @@ const plan7 = (db: Db) => planRows(db).find((p) => p.id === 7)
 const plans = (db: Db) => planRows(db)
 const told = (db: Db) => ofKind(db, 'director').map(({ actor, outcome, message }) => ({ actor, outcome, message }))
 
+function queuedOverCap() {
+  const seed = seeded('1')
+  seed.db.exec("UPDATE plans SET state = 'queued', wait_reason = 'over_cap' WHERE id = 7")
+  return seed
+}
+
 const run = (db: Db, home: string, reply: string, posted: string[] = []) =>
   cooLite(db, home, row(db), stub(reply), now, (t) => void posted.push(t), wire())
 
@@ -750,12 +756,13 @@ async function widens() {
   pipe.db.exec("UPDATE plans SET wait_reason = 'over_cap' WHERE id = 7")
   await run(pipe.db, pipe.home, WIDEN)
   expect(pipeOf(pipe.db, 99).max_concurrent).toBe(2)
-  const queued = seeded('1')
-  queued.db.exec("UPDATE plans SET state = 'queued', wait_reason = 'over_cap' WHERE id = 7")
+  const queued = queuedOverCap()
   await run(queued.db, queued.home, WIDEN)
   expect(pipeOf(queued.db, 99).max_concurrent).toBe(2)
   expect(widened(queued.db)).toHaveLength(1)
   expect(row(queued.db).state).toBe('queued')
+  expect(told(queued.db)).toEqual([{ actor: 'director', outcome: 'pass', message: 'widen: the wake pipe is full' }])
+  expect(ofKind(queued.db, 'return')).toEqual([])
 }
 
 describe('widen', () => {
@@ -1220,6 +1227,12 @@ async function overCap() {
   expect(plan7(db)).toMatchObject({ state: 'queued', held_until: null })
   expect(maybe(home, 7, 'parked.md')).toBeNull()
   expect(ofKind(db, 'return')).toHaveLength(1)
+  const queued = queuedOverCap()
+  await run(queued.db, queued.home, REPLY.park ?? '')
+  expect(told(queued.db)).toEqual([{ actor: 'director', outcome: 'pass', message: 'park: not worth a build yet' }])
+  expect(ofKind(queued.db, 'return')).toEqual([])
+  expect(plan7(queued.db)).toMatchObject({ state: 'queued', held_until: null })
+  expect(maybe(queued.home, 7, 'parked.md')).toBeNull()
 }
 
 const ON_8 = '---\nmove: park\nwhy: parts it reads in plan 8 have not landed\nuntil: 2026-10-01T00:00:00.000Z\n---\n'

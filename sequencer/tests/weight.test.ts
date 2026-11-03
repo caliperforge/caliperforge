@@ -39,6 +39,15 @@ test('D2 tests over twice the code lines flag; twice is a pass', () => {
   expect(weigh(src + tests(20), read)).toEqual({ check: 'tests', ok: true, says: '+20 test / +10 code lines' })
 })
 
+test('names a repeat by its whole escaped-quote titles', () => {
+  const suite = ["test('a job\\'s x', () => {", '  expect(job()).toBe(1)', '})', "test('a job\\'s y', () => {", '  expect(job()).toBe(1)', '})'].join('\n')
+  expect(weigh(code + hunk('src/job.test.ts', 5, ['  expect(job()).toBe(1)']), () => suite)).toEqual({
+    check: 'tests',
+    ok: false,
+    says: `+1 test / +1 code lines; src/job.test.ts:2 "a job's x" and src/job.test.ts:5 "a job's y" both assert expect(job()).toBe(1)`,
+  })
+})
+
 test('D3 a repeat within one test or on unadded lines is no flag', () => {
   const inOne = [
     "test('greets', () => {",

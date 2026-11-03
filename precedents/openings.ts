@@ -1,7 +1,7 @@
 import type { Thread } from './store.ts'
 export { finished, opened, openings, vouched } from '../store/precedents.ts'
 
-export interface Opening { kind: 'deferred' | 'asked' | 'drift'; area: string; quote: string; said_by: string; source: string }
+export interface Opening { kind: 'deferred' | 'asked' | 'drift' | 'mismatch'; area: string; quote: string; said_by: string; source: string }
 
 export type Listed = Opening & { repo: string; first_seen: string }
 

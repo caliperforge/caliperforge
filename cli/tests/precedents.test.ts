@@ -11,6 +11,7 @@ import { distilled, keep, precedents, type Source, type Thread } from '../../pre
 import type { Provider } from '../../providers/kind.ts'
 import { planDir } from '../../sequencer/workspace.ts'
 import type { Db } from '../../store/index.ts'
+import { mismatched } from '../../store/parity.ts'
 import { addPipe, addPlan, pipeNamed } from '../../store/plans.ts'
 import { addAccount, addTarget } from '../../store/targets.ts'
 import { registerPrecedents } from '../cf-precedents.ts'
@@ -115,6 +116,21 @@ test('D1 D2 openings lists open rows newest first, one repo or all', async () =>
   printed = ''
   await cf.parseAsync(['openings'], { from: 'user' })
   expect(printed).toBe(line('2026-10-05T00:00:00Z', 'x/y', 'd.ts') + line('2026-10-03T00:00:00Z', 'o/r', 'c.ts') + line('2026-10-01T00:00:00Z', 'o/r', 'a.ts'))
+})
+
+test('openings prints a mismatch and its curls until dropped', async () => {
+  const db = fresh(join(repo, 'schema'))
+  const surfpool = 'solana-foundation/surfpool'
+  mismatched(db, surfpool, '2026-11-01', [{ method: 'getSlot', case: 'empty', mainnet: '1', surfpool: '2', curls: ['curl a', 'curl b'] }])
+  let printed = ''
+  const cf = new Command().exitOverride()
+  registerPrecedents(cf, { root: repo, db: () => db, out: (text) => { printed += text } }, replies([]))
+  await cf.parseAsync(['openings', surfpool], { from: 'user' })
+  expect(printed).toBe(`2026-11-01\t${surfpool}\tmismatch\tgetSlot empty\tparity_compare\tmainnet, surfpool\tmainnet: 1\nsurfpool: 2\ncurl a\ncurl b\n`)
+  mismatched(db, surfpool, '2026-11-02', [])
+  printed = ''
+  await cf.parseAsync(['openings', surfpool], { from: 'user' })
+  expect(printed).toBe('')
 })
 
 test('D1 D2 openings parity prints drift, a rerun fires nothing', async () => {

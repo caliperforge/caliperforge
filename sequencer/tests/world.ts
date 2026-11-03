@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3'
 import { execFileSync } from 'node:child_process'
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
@@ -190,11 +190,12 @@ export function internalPlan(db: Db, root: string, id: number, title = 'let an i
 }
 
 const opened = new Map<string, Db>()
+const KERNEL = ['rules', 'seats', 'reviews', 'rails', 'profiles']
 
 export function world(pulse: 'warm' | 'cold' = 'warm', day = new Date().toISOString().slice(0, 10),
   files: Record<string, string> = TYPESCRIPT, ci = true): World {
   const root = mkdtempSync(join(tmpdir(), 'cf-seq-'))
-  for (const dir of ['rules', 'seats', 'reviews', 'rails', 'profiles']) cpSync(join(repo, dir), join(root, dir), { recursive: true })
+  for (const dir of KERNEL) cpSync(join(repo, dir), join(root, dir), { recursive: true })
   remotes(root, files, ci)
   const db = fresh(join(repo, 'schema'))
   opened.set(root, db)
@@ -210,16 +211,18 @@ export function world(pulse: 'warm' | 'cold' = 'warm', day = new Date().toISOStr
   return { db, root, pipe: pipeOf(db, 1), plan: 1, target: 1 }
 }
 
-/** `w` copied whole, its remotes and checkouts aimed at the copy: a tick on the copy leaves `w` as it was. */
+/** `w` copied, its kernel dirs linked as a tick only reads them, its remotes and checkouts aimed at the copy: a tick on the copy leaves `w` as it was. */
 export function copied(w: World): World {
   const root = mkdtempSync(join(tmpdir(), 'cf-seq-'))
   const file = (dir: string): string => join(dir, 'world.db')
-  cpSync(w.root, root, { recursive: true, filter: (path) => path !== file(w.root) })
+  cpSync(w.root, root, { recursive: true, filter: (path) => path !== file(w.root) && !KERNEL.some((dir) => path === join(w.root, dir)) })
+  for (const dir of KERNEL) symlinkSync(realpathSync(join(w.root, dir)), join(root, dir))
   const work = join(root, '.cf/work')
   const configs = readdirSync(work).map((id) => join(work, id, 'src/.git/config')).filter((path) => existsSync(path))
   for (const path of [join(root, '.cf/git-base'), ...configs]) writeFileSync(path, readFileSync(path, 'utf8').replaceAll(w.root, root))
   w.db.exec(`VACUUM INTO '${file(root)}'`)
   const db = new Database(file(root))
+  db.exec('PRAGMA journal_mode = MEMORY; PRAGMA synchronous = OFF')
   opened.set(root, db)
   return { ...w, db, root }
 }

@@ -1,6 +1,6 @@
 - name: weakened_ruled
   table: events
   column: at
-  where: "kind = 'rails' AND message LIKE 'test-weakened%' AND EXISTS (SELECT 1 FROM events e WHERE e.plan = events.plan AND e.kind IN ('ruling', 'park') AND e.actor IN ('coo', 'director') AND julianday(e.at) < julianday(events.at))"
+  where: "kind = 'rails' AND message LIKE 'test-weakened%' AND EXISTS (SELECT 1 FROM events e WHERE e.plan = events.plan AND julianday(e.at) < julianday(events.at) AND ((e.kind = 'director' AND e.outcome = 'pass' AND (e.message GLOB 'rule:*' OR e.message GLOB 'waive:*')) OR (e.kind = 'ruling' AND e.actor IN ('coo', 'director')) OR (e.kind = 'park' AND e.actor IN ('coo', 'director') AND julianday(e.at) >= julianday((SELECT min(r.at) FROM runs r WHERE r.plan = events.plan AND r.step = 2 AND r.seat NOT IN ('fixer', 'orchestrator', 'coo_lite', 'director'))))))"
   gap: 7d
   expected: 0
